@@ -76,7 +76,21 @@ in-flight状態を作る。Cancelだけを除外したりrouter契約を弱め�
 製品出荷用既定Gestureを決めない。製品builtin base内容とpresetは別の製品内容決定であり、
 U0d-3で推測して追加しない。
 
-U0d-3のraw input監査は次の機械境界に限定する。
+> **2026-08-09改訂 — source-wide raw input scanner退役**
+>
+> `crates/motolii-ui/tests/raw_input_boundary.rs`と、この節以下で定めたexact file／event
+> allowlistによるAST配置監査は退役した。native window／surface／sessionのprivate ownerが
+> 増えた現在、raw型の置き場所を固定するscannerは製品挙動でなくsource topologyを審判し、
+> wrapperで迂回できる一方で正当なprivate ownerを拒否するためである。以下の旧機械境界は
+> 来歴として残すが、現行の実装・発注・validation authorityではない。
+>
+> 現行で維持するのは、toolkit型をDocument／plugin／wire／公開domain契約へ流出させないこと、
+> commandをstable `CommandId`と既存`InputRouter`へ通すこと、IME優先とcancelのsemantic write 0を
+> behavior oracleで検査することだけである。Motolii UI／Hostのprivate ownerは担当するnative
+> eventを直接読める。別のglobal scannerやfile allowlistへ置換せず、具体的な製品回帰が生じた時だけ
+> その挙動へ狭い回帰testを置く。
+
+U0d-3のraw input監査は次の機械境界に限定していた。
 
 - 対象はworkspace memberの`crates/*/src/**/*.rs`と`plugins/*/src/**/*.rs`にある
   全product source。`tests/`、`examples/`、build scriptは対象外だが、`src/`内の

@@ -12,7 +12,8 @@ use motolii_core::RationalTime;
 use motolii_doc::journal::{
     generation_path_for_document, journal_path_for_document, motolii_dir_for_document,
     restore_attempted_path, scan_journal, FaultInjectingFs, FaultPlan, JournalEdit, JournalFs,
-    JournalRecordKind,
+    JournalRecordKind, HEADER_LEN, V1_JOURNAL_FORMAT_VERSION, V2_JOURNAL_FORMAT_VERSION,
+    V3_EDIT_FORMAT_VERSION,
 };
 use motolii_doc::{
     load_catalog, Bpm, Clip, ClipSource, Command, DocParam, Document, ItemEnvelope, LayerId,
@@ -125,6 +126,64 @@ fn roundtrip_checkpoint_open() {
 }
 
 #[test]
+fn v1_container_first_v3_edit_migrates_and_replays_as_one_file() {
+    let dir = unique_dir("container-v1-v3");
+    let path = dir.join("proj.json");
+    let (doc, layer) = doc_with_clip();
+    common::session::save_journal(&path, &doc, &SaveProjectOptions::default());
+
+    let journal = journal_path_for_document(&path);
+    let mut before = fs::read(&journal).unwrap();
+    before[8..12].copy_from_slice(&V1_JOURNAL_FORMAT_VERSION.to_le_bytes());
+    fs::write(&journal, &before).unwrap();
+    let legacy_scan = scan_journal(&journal, &Default::default()).unwrap();
+    assert_eq!(legacy_scan.header.version, V1_JOURNAL_FORMAT_VERSION);
+
+    let edit = set_opacity_cmd(layer, 1.0, 0.25);
+    let mut candidate = doc.clone();
+    edit.command.apply(&mut candidate).unwrap();
+    common::session::save_journal(
+        &path,
+        &candidate,
+        &SaveProjectOptions {
+            journal_edit: Some(edit),
+            checkpoint: false,
+            ..Default::default()
+        },
+    );
+
+    let after = fs::read(&journal).unwrap();
+    let migrated_scan = scan_journal(&journal, &Default::default()).unwrap();
+    assert_eq!(migrated_scan.header.version, V2_JOURNAL_FORMAT_VERSION);
+    assert_eq!(
+        migrated_scan.header.project_id,
+        legacy_scan.header.project_id
+    );
+    assert_eq!(
+        migrated_scan.header.generation_salt,
+        legacy_scan.header.generation_salt
+    );
+    assert_eq!(
+        &after[HEADER_LEN..before.len()],
+        &before[HEADER_LEN..],
+        "accepted legacy frame bytes must be preserved exactly"
+    );
+    assert_eq!(migrated_scan.frames.len(), legacy_scan.frames.len() + 2);
+    let edit_frame = migrated_scan
+        .frames
+        .iter()
+        .rev()
+        .find(|frame| frame.kind == JournalRecordKind::Edit)
+        .unwrap();
+    let payload: serde_json::Value = serde_json::from_slice(&edit_frame.payload).unwrap();
+    assert_eq!(payload["format_version"], V3_EDIT_FORMAT_VERSION);
+
+    let (_session, opened) = common::session::open_recovered(&path);
+    assert_eq!(opened.document, candidate);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn replay_applies_committed_edits_when_main_behind() {
     let dir = unique_dir("replay");
     let path = dir.join("proj.json");
@@ -132,9 +191,11 @@ fn replay_applies_committed_edits_when_main_behind() {
     common::session::save_journal(&path, &doc, &SaveProjectOptions::default());
 
     let edit = set_opacity_cmd(layer, 1.0, 0.25);
+    let mut candidate = doc.clone();
+    edit.command.apply(&mut candidate).unwrap();
     common::session::save_journal(
         &path,
-        &doc,
+        &candidate,
         &SaveProjectOptions {
             journal_edit: Some(edit),
             checkpoint: false,
@@ -174,9 +235,11 @@ fn stale_catalog_committed_edit_tail_is_not_served_from_main_file() {
     let stale_catalog = fs::read(&catalog_path).unwrap();
 
     let edit = set_opacity_cmd(layer, 1.0, 0.25);
+    let mut candidate = doc.clone();
+    edit.command.apply(&mut candidate).unwrap();
     common::session::save_journal(
         &path,
-        &doc,
+        &candidate,
         &SaveProjectOptions {
             journal_edit: Some(edit),
             checkpoint: false,
@@ -216,11 +279,14 @@ fn edit_between_two_checkpoints_still_recovers_from_main_file() {
     let (doc, layer) = doc_with_clip();
     common::session::save_journal(&path, &doc, &SaveProjectOptions::default());
 
+    let edit = set_opacity_cmd(layer, 1.0, 0.5);
+    let mut candidate = doc.clone();
+    edit.command.apply(&mut candidate).unwrap();
     common::session::save_journal(
         &path,
-        &doc,
+        &candidate,
         &SaveProjectOptions {
-            journal_edit: Some(set_opacity_cmd(layer, 1.0, 0.5)),
+            journal_edit: Some(edit),
             checkpoint: false,
             ..Default::default()
         },
@@ -334,9 +400,11 @@ fn journal_limits_return_typed_errors() {
 
     let mut tiny = tiny_limits();
     tiny.max_command_payload_bytes = 1;
+    let base = Document::new_current();
+    common::session::save_journal(&path, &base, &SaveProjectOptions::default());
     let err = common::session::save_journal_result(
         &path,
-        &Document::new_current(),
+        &base,
         &SaveProjectOptions {
             limits: tiny,
             journal_edit: Some(set_opacity_cmd(LayerId::from_raw(1), 1.0, 0.5)),
@@ -535,11 +603,14 @@ fn marker_remount_does_not_prefer_stale_main_over_journal_edits() {
     let (doc, layer) = doc_with_clip();
     common::session::save_journal(&path, &doc, &SaveProjectOptions::default());
 
+    let edit = set_opacity_cmd(layer, 1.0, 0.4);
+    let mut candidate = doc.clone();
+    edit.command.apply(&mut candidate).unwrap();
     common::session::save_journal(
         &path,
-        &doc,
+        &candidate,
         &SaveProjectOptions {
-            journal_edit: Some(set_opacity_cmd(layer, 1.0, 0.4)),
+            journal_edit: Some(edit),
             checkpoint: false,
             ..Default::default()
         },

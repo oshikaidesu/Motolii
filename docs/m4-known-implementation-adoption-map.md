@@ -1,6 +1,6 @@
 # M4 既知実装採択・並列実装地図
 
-状態: **初版採択地図／runtime未発注**（2026-08-02）
+状態: **直列核契約追補済み／runtime未発注**（2026-08-08）
 
 ## 1. この地図が置き換えるもの
 
@@ -21,7 +21,7 @@
 2. `REUSE / ADOPT / WRAP / PATTERN`を親で一度裁定し、子は再選定しない。
 3. 外部型をDocument、公開plugin API、serde、journalへ漏らさない。adapterはprivateな一方向写像にする。
 4. cache miss、破損、不完全writeは作品failureにせず再計算へ落とす。key漏れはpurge UIで隠さない。
-5. budget admissionはallocation前、GPU waitとUI thread blockingは禁止、previewとFinalは同じ評価関数を使う。
+5. budget admissionはallocationまたはbounded write chunkの前、GPU waitとUI thread blockingは禁止、previewとFinalは同じ評価関数を使う。
 6. 並列施工はDocument writer、GPU device、artifact commit、製品runtime合流だけを直列点にする。
 7. probe不合格は`BUILD`許可ではない。同じ成果を`REMAP / REDUCE`し、独自DB、WAL、scheduler runtime、
    SVG parser、invalidation frameworkを作らない。
@@ -31,10 +31,10 @@
 | 親ID | 検索key | 利用者成果 | 採択route | M4範囲 |
 |---|---|---|---|---|
 | `M4-P01-REGION` | RoD RoI tile extent unknown propagation | 必要領域だけを安全に評価し、未知は全域fallbackする | K0 fixtureを`REUSE`、OpenFXを`PATTERN` | K0、K2 |
-| `M4-P02-IDENTITY` | recipe key content digest generation snapshot source fingerprint | 再起動やrename後も正しい成果だけを再利用する | Bazel action/CASを`PATTERN`、`sha2`を`REUSE` | K1b、K2、K4、GAP-3 |
+| `M4-P02-IDENTITY` | recipe key content digest generation snapshot source fingerprint | 再起動やrename後も正しい成果だけを再利用する | Bazel action/CASを`PATTERN`、`sha2`を`REUSE` | K1b、K2、K4、GAP-3のrelink／offline route |
 | `M4-P03-RAM` | weighted cache handle refs pin eviction usage | 参照中成果を壊さずRAM hard cap内で再利用する | `foyer-memory 0.22.3`を`REMAP / VERIFIED`。外部生存量はprivate owner | K1a〜K1c |
-| `M4-P04-RESOURCE` | VRAM RAM disk admission descriptor allocator report watermark | allocation前に三tierの上限を守る | wgpu descriptor/reportを`REUSE/PATTERN`、`fs4 1.1.0`を`VERIFIED (observation)` | K1a、K1c、K1d |
-| `M4-P05-DISK` | artifact store generated media render cache proxy integrity atomic corrupt miss LRU | 再起動後も壊れていない成果だけをdiskから読む | Blender/AE/Premiere/Resolve/FCPの再生成mediaを`PATTERN`、`sha2/std::fs`を`REUSE`、sccache/D1 persistを`PATTERN`、`tempfile 3.27.0`を`VERIFIED (V1)`。V2以降はruntime absent STOP | K1c、K7、K8 |
+| `M4-P04-RESOURCE` | VRAM RAM disk admission descriptor allocator report watermark | allocation／bounded write chunk前に三tierの上限を守る | wgpu descriptor/reportを`REUSE/PATTERN`、`fs4 1.1.0`を`VERIFIED (observation)` | K1a、K1c、K1d |
+| `M4-P05-DISK` | artifact store generated media render cache proxy integrity atomic corrupt miss LRU | 再起動後も壊れていない成果だけをdiskから読む | Blender/AE/Premiere/Resolve/FCPの再生成mediaを`PATTERN`、`sha2/std::fs`を`REUSE`、sccache/D1 persistを`PATTERN`、`tempfile 3.27.0`を`VERIFIED (V1 BASELINE ONLY)`。kill／ENOSPC／race／Windows runtimeを含むV2以降はruntime absent STOP | K1c、K7、K8 |
 | `M4-P06-INTERVAL` | half-open range coverage gaps invalidation coalesce | 変更の影響区間だけを再計算する | `rangemap 1.7.1`を`REMAP / VERIFIED` | K2、K7b、K8a |
 | `M4-P07-SCHEDULE` | priority bounded queue reprioritize cancel heartbeat latest | 編集を止めず、必要なbackground成果から作る | `priority-queue 2.7.0`を`REMAP / VERIFIED`、`LatestWorker`を`REUSE/PATTERN` | K1d、K4、K7、K8 |
 | `M4-P08-PROXY` | ffmpeg ffprobe VFR CFR proxy PTS source id | 重い素材を決定的proxyへ置換して編集する | 現行FFmpeg sidecarを`REUSE/WRAP` | K4、GAP-3、GAP-26 |
@@ -50,14 +50,15 @@
 |---|---|---|
 | `P03-C1` | `REMAP / VERIFIED` | `foyer-memory 0.22.3`のweight／handle／resize／filter／並行操作、3 target cross-build。外部handle生存量はprivate ownerへREMAP |
 | `P04-C4` | `VERIFIED` | `fs4 1.1.0`のfree-space／allocation granularity観測、missing path typed error、3 target cross-build |
-| `P05-C1` | `VERIFIED (V1)` | `tempfile 3.27.0` same-dir temp／persist、FFmpeg temp artifact、atomic visibility、path-independent SHA-256、stale temp隔離。V2/V3は別検証層 |
+| `P05-C1` | `VERIFIED (V1 BASELINE ONLY)` | `tempfile 3.27.0` same-dir temp／persist、FFmpeg temp artifact、atomic visibility fixture、path-independent SHA-256、stale temp隔離。kill／ENOSPC／same-recipe race／Windows runtime visibilityは未検証でV2/V3へ残る |
 | `P06-C1` | `REMAP / VERIFIED` | half-open integer timebase、coalesce、gap、境界overflow。raw empty rangeはpanicするためprivate guardを必須化 |
 | `P07-C1` | `REMAP / VERIFIED` | MPL-2.0選択、reprioritize/remove/pop、composite priorityによるdeterministic ordering。bounded admissionとgeneration filterはprivate owner |
 | `P13-C1` | `REMAP / VERIFIED` | `vello_svg 0.10.0`のpath/group/fill/stroke、typed parse error、pattern diagnostic、3 target cross-build。外部fileはusvg段で無言dropするためprivate preflightへREMAP |
-| `P02-C1` | `STOP / GAP-3` | 完全recipe keyのfield順は既知だが、source／parameter encodingとversioned fingerprint authorityが未閉鎖。runtime keyを発明しない |
-| `P02-C2` | `STOP / GAP-3` | version付きsource fingerprint未決。path/mtimeで代用しない |
+| `P02-C1` | `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED` | [直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)でHost-private canonical `RecipeKeyV1`と別`ArtifactDigest`を決定。codec／mutation oracle／runtime keyは別ticket |
+| `P02-C2` | `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED` | `SourceFingerprintV1`をprovenance tag付きsource exact bytes SHA-256+sizeへ決定。shapeだけのlegacy opaque hashを自動昇格せず、strict codec／M2-ASSET-1C SourceBinding／relinkは別ticket |
+| `M4-P02-C3` | `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED` | exhaustive Command classifierとatomic state envelopeの唯一のowner。K1b storeとK2統合は別ticket |
 | `P09-C1` | `STOP / GAP-29` | 現行baselineの同期1-buffer readback guardは確認済み。copy/map/encode/disk原因分離とring数採択は未計測のため固定しない |
-| `P05-C2` | `STOP / RUNTIME ABSENT` | V1後のrestart/generation/store handleを接続するprivate disk storeが現行codeにない。新しいstore ownerをこの検証branchで発明しない |
+| `P05-C2` | `STOP / RUNTIME ABSENT` | V1後のrestart／recipe・store-format・catalog version／store handleを接続するprivate disk storeが現行codeにない。新しいstore ownerをこの検証branchで発明しない |
 | `P05-C3` | `STOP / RUNTIME ABSENT` | ResourceLedger、disk hard budget、pin/committing eviction routeが未実装。P04観測だけでresource integrationを証明しない |
 | `K7a/K8b` | `STOP / RUNTIME ABSENT` | group bake／full-composition Draft／cache playbackのproduct producerとE2E routeが未実装。現行PipelineCache/exportを完成証拠にしない |
 | その他 | `STOP / DEPENDENCY` | 停止したauthority／runtime absentに依存する後続粒。新しいownerや意味を発明せず、実装branchで再入場 |
@@ -90,20 +91,21 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 - **結果**: node/version/parameter/input digest/time/Quality/platform saltを正本順でencodeし、recipe keyとartifact digestを分ける方針を確認した。
 - **再利用target**: `sha2`、既存typed IDs、render graph入力。
 - **oracle**: 各fieldの単独変異でmiss、並べ替え非同値、path/label/display名の混入0。
-- **判定**: `STOP / GAP-3`。現行`Asset.content_hash`は任意文字列で、version・algorithm・chunk／encoding・collision照合が正本化されていない。exact encoderやprivate key helperをこのprobeで発明しない。
-- **cutover**: ad-hoc文字列key、`semantic_fingerprint()`転用、cache別key helperをretireするのはGAP-3決定後。
+- **判定**: `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED`。[直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)でdomain-separated、tag+length-prefixのHost-private canonical `RecipeKeyV1`と別`ArtifactDigest`を決定した。exact codec、mutation oracle、runtime key helperは別ticketで実装する。
+- **cutover**: ad-hoc文字列key、`semantic_fingerprint()`転用、cache別key helperはcanonical codec acceptance後にretireする。
 
 #### `P02-C2` source identity closure
 
-- **結果**: GAP-3のversion付きfingerprintを先に仕様化し、proxy/cacheへ同じ`source_id`を渡す方針を確認した。
-- **状態**: `STOP / GAP-3`。未決のままruntime実装しない。
-- **oracle**: rename同一、内容差異は不一致、旧形式migration/拒否が明示される。
+- **結果**: `SourceFingerprintV1`をsource exact bytesの`motolii-source-v1:sha256:<64 lowercase hex>`+sizeへ決定し、proxy/cache/relinkへ同じcontent identityを渡す。
+- **状態**: `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED`。prefixなしlegacy opaque hashは文字列shapeだけでauthorityへ昇格せず、strict再hashを要求する。strict codec、Asset admission、M2-ASSET-1C product admit／SourceBinding、relink adapterは別ticket。
+- **oracle**: rename同一、内容差異は不一致、full SHA-256形のlegacy値もV1へ自動昇格せず、loaded V1 tagも最初のbinding一致前はpersistent-cache hit authorityにしない。source-consuming workerへraw locatorを渡さず、Host-owned immutable bindingのexact bytesと保存済みfingerprintを一致させる。full-copy bindingはsource全長を事前予約し、queued／running job中はpin、最終capability drop後にだけreleaseする。
 
-#### `P02-C3` immutable generation snapshot
+#### `M4-P02-C3` immutable generation snapshot
 
-- **結果**: writer publishごとに新key空間へ移り、既存handleは旧snapshotを読み切る。
-- **薄い残余**: generation番号とpublished snapshotのprivate結合だけ。
-- **oracle**: purge/全走査なし、stale結果publish拒否、参照中artifactの早期解放0。
+- **結果／owner**: 本cutだけがexhaustive Command classifierとatomic state envelopeを所有する。Document edit threadがvalidated candidateをaccepted Commandで分類し、journal acceptance後に`(immutable snapshot, CacheEpoch, InvalidationFootprint)`を一つのHost-private state envelopeとしてserialized atomic publishする。render-relevant／unknown時だけepochを進め、reader／jobは一つのenvelopeを一回だけ取得する。current-state transient resultだけをepoch不一致で拒否し、完全key付きartifactは旧keyの下へpublishできる。K1bはcache store、K2は接続consumerでありclassifier／envelopeを再実装しない。P06-C2は本cutが分類済みのaffected identityを区間へ写すpure helper、P06-C3はpublished footprintをcoverageへ反映するconsumerに限る。
+- **依存／並列**: M2-D3、M2-D3e、対象target／source Command意味のacceptance後。K1bとは別ownerで並列可、K2、P06-C2/C3、P07-C2は本cutを待つ。
+- **薄い残余**: 非永続`CacheEpoch { session_identity, counter }`、immutable snapshot、footprint、job candidate receiptのprivate結合だけ。checked counter exhaustion前にfresh non-reused session identity／counter 0／whole-composition invalidationをatomic installし、Document edit failureやepoch衝突にしない。
+- **oracle**: 新snapshot／旧epoch観測0、単一envelope capture、unknown全域fallback、epoch不一致のcurrent-state result publish拒否、完全key付き旧snapshot artifactの旧key publish許可、session renewal衝突0、参照中artifactの早期解放0。
 
 ### M4-P03-RAM — 参照handle付きRAM cache
 
@@ -118,7 +120,7 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 - **結果**: recipe key→content digest→bufferの二段参照をRAMにも通し、digest/weight/admissionを
   `foyer-memory::Cache`へprivateに写してtyped handleを返す。
-- **依存／並列**: P03-C1/P04-C1/P02-C1後。disk adapterと並列。
+- **依存／並列**: K1a/P03-C1/P04-C1/M4-P02-CODEC acceptance後。disk adapterと並列。
 - **oracle**: single lock order、lookup時GPU wait 0、pin中evict後もread可、missは再計算。同一source区間・
   同一parameterのN sliceでcontent bufferは一つ。
 - **cutover**: cache別HashMap/LRU、同義Arc registryをretire。
@@ -126,6 +128,7 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 #### `P03-C3` audio cache migration
 
 - **結果**: `AudioProgram`へ外から渡す無制限HashMapを共通RAM admissionへ接続する。
+- **依存／並列**: M2-ASSET-1CとP03-C2 acceptance後。K1cと並列可だが、K8b通し再生E2Eは本cutを待つ。
 - **oracle**: audio clock非blocking、同一PCM、budget accounting、旧二重owner 0。
 
 ### M4-P04-RESOURCE — 三tier admission
@@ -138,9 +141,10 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P04-C2` unified hard admission
 
-- **結果**: owner/tier/resident/pinned/requested bytesを一つのHost policyへ渡す。
+- **結果／owner**: owner/tier/resident/pinned/requested bytesをK1aが所有する一つのHost policyへ渡すprivate tier adapter。本cutは第二policy、permit identity、allocator frameworkを所有しない。
+- **依存／並列**: K1a + P04-C1 acceptance後。P04-C3 diagnosticとは別consumerとして進められるが、P05-C2/C3とK1cは本cutを待つ。
 - **薄い残余**: 製品policyとtyped refusalだけ。allocatorやresource frameworkを作らない。
-- **oracle**: allocation-before-admission 0、全pin時typed refusal、VRAM/RAM/disk二重計上0。
+- **oracle**: allocation／bounded write chunk前の保守的上限予約、上限不明typed refusal、事後追加admission 0、全pin時typed refusal、VRAM/RAM/disk二重計上0。
 
 #### `P04-C3` diagnostic snapshots
 
@@ -159,23 +163,24 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 - **結果**: `tempfile 3.27.0`のsame-directory temp／persist、workspace `sha2`、現行FFmpeg `Encoder`の通常file出力を隔離fixtureで確認した。
 - **証拠**: `crates/motolii-media/tests/m4_p05_artifact_compatibility.rs`の4 fixtureがmacOS hostでgreen。tempとfinalの同一filesystem、publish前の旧final保持、FFmpeg tempのprobe、path-independent SHA-256とbit-flip検出、stale tempのfinal非可視を確認し、3 target cross-buildも通過した。
-- **判定**: `VERIFIED (V1 compatibility)`。V2 store model（restart／generation／handle）、V3 resource integration（ENOSPC／hard budget／lazy scan）、V4 K7/K8 product E2Eはこのfixtureの完了へ読み替えず、別層として残す。
+- **判定**: `VERIFIED (V1 BASELINE ONLY)`。実証済みはcross-build、通常Rust／FFmpeg same-dir temp／persist、atomic visibility fixture、SHA-256、stale temp隔離だけ。V2 store model（restart／kill／corruption／same-recipe race／Windows runtime／handle）、V3 resource integration（ENOSPC／hard budget／lazy scan）、V4 K7/K8 product E2Eはこのfixtureの完了へ読み替えず、別層として残す。
 - **証明分界**: 先行製品は通常file／再生成／明示削除の妥協範囲だけを証明する。process kill、同一recipe競合、allocation前hard budget、Windows runtime atomic visibilityは後続層の未検証責任である。
 - **STOP**: fork、独自DB/WAL、cache format migration、常駐runtime、global content dedupを採択前提にしない。
 
 #### `P05-C2` private disk store adapter
 
-- **結果**: 完全recipe key digest→通常artifact file、size/content digest、volatile LRU metadataをprivate
-  APIへ閉じる方針を確認した。
-- **依存／並列**: P05-C1/P02-C1/P04-C2後。RAM adapterと並列。
-- **oracle**: restart hit、rename hit、wrong generation miss、外部storage型の公開面0。同一process内で
+- **結果**: project／cache-local immutable artifact object、完全recipe key→result metadata+content digest、volatile LRU metadataをprivate
+  APIへ閉じる方針を確認した。global CAS／cross-project dedupへ広げない。
+- **依存／並列**: K1a/P05-C1/P04-C2/M4-P02-CODEC acceptance後。RAM adapterと並列。
+- **oracle**: restart hit、rename hit、wrong recipe／store-format／catalog version miss、外部storage型の公開面0。同一process内で
   検証済みhandleを再利用し、frameごとの全file再hash 0。
-- **判定**: `STOP / RUNTIME ABSENT`。現行repoにこのstore owner／routeがなく、P02-C1の完全keyもGAP-3で停止中。test-only storeを製品adapterの代替として発明しない。
+- **判定**: `STOP / RUNTIME ABSENT`。P02-C1の意味は閉じたが、現行repoにcanonical codec、store owner／routeがない。test-only storeを製品adapterの代替として発明しない。
 - **cutover**: 独自DB/WAL/catalog/repair protocolを作らない。
 
 #### `P05-C3` disk budget and retirement
 
 - **結果**: watermarkとvolatile access metadataでeviction候補を選び、content digestは不変に保つ方針を確認した。
+- **依存／並列**: P05-C2、P04-C2、P04-C4 acceptance後。K1cのdisk tier合流は本cutを待つ。
 - **oracle**: pinned/committing artifact削除0、削除失敗はtyped diagnostic、再起動後missから回復。
 - **判定**: `STOP / RUNTIME ABSENT`。ResourceLedger／disk admission／eviction ownerが未実装で、`fs4`観測やV1 fixtureから統合済みと推論しない。
 
@@ -195,14 +200,16 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P06-C2` affected-window projection
 
-- **結果**: typed Document変異とnode temporal footprintから影響node/区間を求める。
-- **oracle**: Unknownは全区間、無関係node保持、削除/並替/parameter変異corpus。
+- **結果**: M4-P02-C3がexhaustive Command classifierで既に確定したaffected identity／known-unknownとnode temporal footprintを入力に、half-open影響区間を求めるprivate pure projection helper。`Command` variant match、render relevance、epoch、state publicationを所有しない。
+- **依存／並列**: M4-P02-C3 acceptance後。rangemapのpure interval fixtureはP06-C1として独立済みだが、製品projectionはclassifier入力型を推測して先行しない。
+- **oracle**: Unknown入力は全区間、無関係node保持、削除／並替／parameter分類corpusから渡されたidentityの区間写像、M4-P02-C3以外の`Command` match 0。
 - **cutover**: Salsa DB、汎用dependency framework、全cache purgeを採らない。
 
 #### `P06-C3` generation coverage switch
 
-- **結果**: 新generationのinvalid rangeだけを欠落としてpublishし、旧成果を安全に読む。
-- **oracle**: overlap edit競合、stale job拒否、旧generation handle保持、coverage偽陽性0。
+- **結果**: accepted state envelopeの`InvalidationFootprint`をK1bのtransient coverageへ反映し、invalid rangeだけを欠落へ戻して旧artifact handleを安全に読む。coverage generationはstore-local identityであり、`CacheEpoch`、Document revision、第二state envelopeの別名ではない。
+- **依存／並列**: M4-P02-C3 + P06-C2 + K1b acceptance後。snapshot／epoch／footprintのpublishは行わない。
+- **oracle**: overlap edit競合、epoch不一致のcurrent-state job拒否、旧coverage handle保持、coverage偽陽性0、第二classifier／epoch publisher 0。
 
 ### M4-P07-SCHEDULE — bounded background job
 
@@ -219,31 +226,35 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 
 #### `P07-C2` bounded worker lifecycle
 
-- **結果**: 既存`LatestWorker`のthread/Condvar/generation/closeを複数jobへ拡張する。
-- **依存／並列**: P07-C1後。media/GPU job adapterは別moduleで並列。
-- **oracle**: editor thread block 0、shutdown join、panic typed failure、queueからDocument write 0。
+- **結果**: 既存`LatestWorker`のthread/Condvar/generation/closeを複数jobへ拡張し、queued/running/candidate-ready各段のfailure／cancel、Host-only exactly-once terminal、owner寿命中に再利用しないprivate `JobId`、job／state envelope／recipe／targetへ結合したreceipt、late receipt回収を閉じる。
+- **依存／並列**: P07-C1とM4-P02-C3 acceptance後。media/GPU job adapterは別moduleで並列。
+- **oracle**: editor thread block 0、shutdown join、panic typed failure、owner寿命中JobId再利用0、receipt binding不一致publish 0、terminal exactly once、queueからDocument write 0。
 - **cutover**: Tokio runtime、独自async executor、OS thread priorityを導入しない。
 
 #### `P07-C3` cooperative cancel and heartbeat
 
-- **結果**: mediaは既存kill/cancel、CPU/GPUはtile/数frame境界のtokenとheartbeatを使う。
+- **結果**: media branchはP08-C1の既存kill/cancel oracleへ吸収し、別cancel frameworkを作らない。残るCPU/GPU adapterはtile/数frame境界のtokenとheartbeatを使う。
+- **依存／並列**: P07-C2 acceptance後。CPU/GPU cutはP09-C2とK8aを解放し、K7aへはP09-C2経由で推移する。
 - **oracle**: cancel latency、GPU command途中強制停止0、stale completion publish 0。
 
 ### M4-P08-PROXY — media正規化
 
 #### `P08-C1` proxy recipe and sidecar job
 
-- **結果**: source identity、scale、fps、codec versionをrecipeにし、既存sidecarへjobを追加する。
-- **oracle**: 色/LUT/Document parameter混入0、cancel/finish/stderr、atomic artifact commit。
+- **結果**: Host-private SourceBindingのexact bytes identity、scale、fps、codec versionをrecipeにし、既存sidecarへjobを追加する。sidecarへraw source locatorを渡さない。
+- **依存／並列**: M2-ASSET-1C、M4-P02-CODEC、P05-C2/C3、P07-C2 acceptance後。K4 umbrellaのproduct producer開始点とする。
+- **oracle**: 色/LUT/Document parameter混入0、cancel/finish/stderr、atomic artifact commit。sidecar出力はwhole-outputの保守的上限を先に予約するか、Host-owned bounded writerで各chunk前に予約し、cap到達前にchildを停止して未公開tempを回収する。unbounded path出力、事後admission、receipt後writeは0。
 
 #### `P08-C2` VFR to CFR verification
 
 - **結果**: ffprobe PTS/durationを基準にFFmpeg `fps`/`fps_mode`出力を検査する。
+- **依存／並列**: P08-C1後。product substitutionとは別oracleで検証する。
 - **oracle**: representative VFR、30000/1001、seek frame identity、duration drift上限。
 
 #### `P08-C3` product substitution
 
 - **結果**: proxy hit時だけdecoder inputを置換し、miss/failureはsourceへ戻る。
+- **依存／並列**: P08-C1/P08-C2 acceptance後。K4はこのP08-C3 product merge cutそのものであり、別ownerではない。通常product decode routeへの唯一の合流点とする。
 - **oracle**: Finalはsource、Offline意味不変、purge不要、path/mtime key 0。
 
 ### M4-P09-COPYOUT — GPUからartifactへの非同期境界
@@ -258,6 +269,7 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 #### `P09-C2` admitted copy-out pipeline
 
 - **結果**: P04 admission後だけcopyし、P05 commitへbounded resultを渡す。
+- **依存／並列**: P09-C1の原因分離と方式採択、K1a、P04-C1/C2、P05-C2/C3、P07-C2、M4-P07-C3 acceptance後。GAP-29が残る間は実装しない。
 - **oracle**: loop内resource新設0、premul/color変換追加0、cancel後partial publish 0。
 
 ### M4-P10-BAKE — Group仮出力
@@ -334,12 +346,12 @@ probeは互いにruntime ownerを書かない小fixtureとして並列化でき�
 | wave | 並列可能な成果 | 直列点 |
 |---|---|---|
 | `A: adoption probes` | P03-C1、P04-C4、P05-C1、P06-C1、P07-C1、P13-C1、P09-C1 | Cargo dependency/lock publication、各候補の採否記録 |
-| `B: private foundations` | P01-C1、P02-C1/C3、P03-C2、P04-C1/C3、P05-C2、P07-C2 | P04-C2 unified admission、GAP-3 P02-C2 |
-| `C: product producers` | P06-C2/C3、P08-C1/C2、P09-C2、P12-C1/C2、P13-C2/C3 | artifact commitとproduct runtime合流 |
+| `B: private foundations` | M2-ASSET-1A、K1a、P01-C1、P02 canonical encoder／mutation corpus準備、P04-C1/C3 | M2-ASSET-1Cは1A+K1a後。M4-P02-CODECはstrict SourceFingerprint後。M4-P02-C3はM2-D3/D3e/accepted Command semantics後。P07-C2はM4-P02-C3後。K1bはK1a+codec+M2-D8後。P03-C2はK1a+P03-C1+P04-C1+codec後。P05-C2はK1a+P05-C1+P04-C2+codec後、P05-C3はP05-C2+P04-C2/C4後 |
+| `C: product producers` | P06-C2/C3、M4-P03-C3、M4-P07-C3、P12-C1/C2、P13-C2/C3 | P06-C2はM4-P02-C3後、P06-C3はM4-P02-C3+P06-C2+K1b後。M4-P03-C3はM2-ASSET-1C+P03-C2後でK1cと並列、K8bは本cutを待つ。M4-P07-C3のmedia branchはP08-C1へ吸収し、CPU/GPU cutはP07-C2後。P08-C1はM2-ASSET-1C+codec+P05-C2/C3+P07-C2後、P08-C2はP08-C1後。P09-C2はGAP-29のP09-C1採択+K1a+P04-C1/C2+P05-C2/C3+P07-C2+M4-P07-C3後。K1cはK1a+K1b+P03-C2+P04-C2+P05-C2/C3後。K7aはK1b+K1c+M2-D3+P07-C2+P09-C2後。K4はP08-C3そのもので、M2-D1+M2-ASSET-1C+codec+P05-C2/C3+P07-C2+P08-C1/C2後。K8aはK1b+K1c+K1d+K2+M2-D3+P06-C2/C3+P07-C2+M4-P07-C3後。artifact commitとproduct runtime合流 |
 | `D: composed outcomes` | P08-C3、P10、P11、P12-C3 | 通常製品route E2E、human/hardware acceptance |
 
 Waveは一括発注ではない。各子を一契約境界として検収し、共有fileへの合流だけownerが直列化する。
-`SPEC_ONLY`のGAP-3やGAP-29を別候補で迂回しない。
+GAP-3の残るrelink／offline product routeや`SPEC_ONLY`のGAP-29を別候補で迂回しない。
 
 ### P05の検証梯子
 

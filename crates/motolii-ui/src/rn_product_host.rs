@@ -4,9 +4,12 @@
 //! lifecycle/read intent だけを RN へ投影する。
 
 use std::collections::{HashMap, HashSet};
+#[cfg(target_os = "macos")]
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
-use std::sync::{Arc, Mutex, OnceLock};
+#[cfg(target_os = "macos")]
+use std::sync::Arc;
+use std::sync::{Mutex, OnceLock};
 
 use motolii_core::RationalTime;
 use motolii_doc::{EvaluationTime, LayerId};
@@ -43,6 +46,7 @@ const MAX_STAGE_BOUNDS: usize = 16;
 const MAX_STAGE_SELECTION: usize = 16;
 const MAX_DIAGNOSTICS: usize = 8;
 const MAX_JSON_BYTES: usize = 16_384;
+#[cfg(target_os = "macos")]
 const MAX_PROJECT_PATH_BYTES: usize = 4_096;
 
 #[derive(Debug, Error)]
@@ -1495,6 +1499,7 @@ fn reject(
     }
 }
 
+#[cfg(target_os = "macos")]
 fn write_bytes(out: *mut u8, out_cap: usize, payload: &str) -> i64 {
     if out.is_null() || out_cap == 0 {
         return -1;
@@ -1509,10 +1514,12 @@ fn write_bytes(out: *mut u8, out_cap: usize, payload: &str) -> i64 {
     bytes.len() as i64
 }
 
+#[cfg(target_os = "macos")]
 fn output_usable(out: *mut u8, out_cap: usize) -> bool {
     !out.is_null() && out_cap > 0
 }
 
+#[cfg(target_os = "macos")]
 fn accept_no_snapshot() -> WireIntentResponse {
     WireIntentResponse {
         version: WIRE_VERSION,
@@ -1522,10 +1529,12 @@ fn accept_no_snapshot() -> WireIntentResponse {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn encode_response(response: &WireIntentResponse) -> Result<String, RnHostError> {
     encode_json(response)
 }
 
+#[cfg(target_os = "macos")]
 fn write_response(out: *mut u8, out_cap: usize, response: &WireIntentResponse) -> i64 {
     match encode_response(response) {
         Ok(json) => write_bytes(out, out_cap, &json),
@@ -1533,6 +1542,7 @@ fn write_response(out: *mut u8, out_cap: usize, response: &WireIntentResponse) -
     }
 }
 
+#[cfg(target_os = "macos")]
 fn write_reject(
     out: *mut u8,
     out_cap: usize,
@@ -1550,6 +1560,7 @@ fn write_reject(
     )
 }
 
+#[cfg(target_os = "macos")]
 fn map_create_error(error: &RnHostError) -> Option<RnHostReasonCode> {
     match error {
         RnHostError::HostAlreadyExists => Some(RnHostReasonCode::HostAlreadyExists),
@@ -1560,6 +1571,7 @@ fn map_create_error(error: &RnHostError) -> Option<RnHostReasonCode> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn map_host_lookup_error(error: &RnHostError) -> Option<RnHostReasonCode> {
     match error {
         RnHostError::UnknownHost(_) => Some(RnHostReasonCode::UnknownHostHandle),
@@ -1568,6 +1580,7 @@ fn map_host_lookup_error(error: &RnHostError) -> Option<RnHostReasonCode> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn map_destroy_host_error(error: &RnHostError) -> Option<RnHostReasonCode> {
     match error {
         RnHostError::UnknownHost(_) => Some(RnHostReasonCode::UnknownHostHandle),
@@ -1576,6 +1589,7 @@ fn map_destroy_host_error(error: &RnHostError) -> Option<RnHostReasonCode> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn map_destroy_stage_error(error: &RnHostError) -> Option<RnHostReasonCode> {
     match error {
         RnHostError::UnknownStage(_) => Some(RnHostReasonCode::UnknownStageHandle),
@@ -1586,6 +1600,7 @@ fn map_destroy_stage_error(error: &RnHostError) -> Option<RnHostReasonCode> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn read_utf8(ptr: *const u8, len: usize, max_len: usize) -> Result<String, RnHostError> {
     if ptr.is_null() || len == 0 {
         return Err(RnHostError::InvalidUtf8);

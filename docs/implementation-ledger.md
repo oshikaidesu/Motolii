@@ -1,14 +1,13 @@
 # 実装進行台帳
 
-最終確認: **2026-08-01**
+最終確認: **2026-08-09**
 
 このファイルは、実装者が「次に何をするか」を1枚で判断するための現場用台帳。M0〜M5の意味や完了条件を再定義せず、現在の依存関係と発注順だけを示す。
 
 ## 使い方
 
-1. まず本ページの「現在の並列レーン」を確認する。M3の複数`DO`は地図の親・子・衝突表がfile-disjointと判定した時だけ並列にする。
-2. M3は[既知技術採択・並列実装地図](m3-parallel-implementation-map.md)で検索親を選び、
-   [実行可能発注地図](m3-executable-dispatch-map.md)でexact target、擬似コード、正負oracle、利用者出口が閉じた子だけを`DO`候補にする。
+1. まず本ページの「現在の並列レーン」を確認する。M3の複数`DO`はowner、contract、allowlist、oracleがfile-disjointな時だけ並列にする。
+2. M3は[現行M3仕様](specs/M3-ui-integration.md)のR0〜R4から成果waveを選び、[RN runtime実行地図](m3-rn-runtime-execution-map.md)で施工node、依存、oracleを判定する。旧[既知技術採択地図](m3-parallel-implementation-map.md)と[実行可能地図](m3-executable-dispatch-map.md)は、既存owner、semantic oracle、未閉鎖gapの検索にだけ使い、新runtimeのdispatch authorityにしない。
 3. Issueと該当する[マイルストーン仕様](specs/README.md)のタスク行・実装ガードを読む。
 4. 依存が1件でも未mergeなら着手しない。
 5. 完了時は、実装PR内で仕様のタスク表と本ページを同時に更新する。
@@ -39,6 +38,7 @@
 
 | Phase | 状態 | 現在の出口 |
 |---|---|---|
+| M3/M4/M5全体並列開始 | **`DO / WAVE 1A ACTIVE`** | [統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)と停止耐性gateを通過してcampaignを開始した。第一短waveではK1a ResourceLedgerをcommit `c9cab8e8`でlocal mainへ統合し、[R0-ACCEPT](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md)を`DONE`とした。M2-ASSET-1Aはqualified diffなしでbounded `RESEARCH_RETURN`とし、同じorderを再投入せず分割して再選定する。R2 spine／N-OVERLAYは未採用candidateのまま。24時間scaleとremote pushは未実施 |
 | M3/P07-C1D | **`DONE / ACCEPTED / EXTERNAL_GATE_PENDING`** | commit `ea69f5ca`でReact Stage `#play`→typed Host intent→ProductApp-owned one PlaybackSession→audio-device Transport time→existing editor_playhead/Stage/native Timelineの一本を接続した。Inspector React assetとfixed Timeline marker geometryは維持。real device/audio/visualとP07-C3はM3-final保留 |
 | M3/U4b-0V | **`DONE / ACCEPTED / EXTERNAL_GATE_PENDING`** | commit `c404a050`でexisting explicit Add Position Key後のexact current Vec2 keyをReact Inspector X/Yから編集する一本を接続した。dedicated key-local CAS、clone preview、one durable terminal、Undo/Redo/reopenを受入。Const/off-key read-only、Auto Key拒否、fixed Timeline geometryを維持 |
 | M3/P07-C1C | **`DONE / ACCEPTED / MAIN`** | commit `b1b2c4df`でcanonical `start_frame`をexact `RationalTime` originへ変換し、negotiated-device elapsed timeへ加える。48 kHz / 44.1 kHzを閉じ、ProductApp/React/controlは含めない |
@@ -46,15 +46,16 @@
 | M0 | `DONE` | spike完了。S2は`ffmpeg-sidecar`クレート不採用、自前子process pipe／CFR seek成立まで。VFR、長尺／4K、pool、停止中readのkillは製品完成証拠にせずK4／GAP-26へ分離 |
 | M1 | `DONE` | exit demo・E2E golden・凍結ゲート宣言済み。RenderTargetPoolは直列2枚を下限にbranch livenessで伸長するが、O(n²)未来scan最適化、fp16／path fusion、40-layer性能は未成立。R9/T11は当時の歴史sign-offで、現行製品Stage／実素材release受入はGAP-32。出荷hardening候補G1〜G8は完了条件外で、2026-07-23再照合の未到達process/artifact reliabilityはGAP-26、GPU health分類はGAP-27、同期export readbackの原因分離／staging採択はGAP-29、GPU RGB→YUV export接続はGAP-31。G7の同期1-frame boundedをcopy重畳完成、decode側GPU色変換や出力tagをinverse変換完成とみなさない |
 | M2 | **基盤再締結済み / narrow follow-up pending** | D1lのDocument／lifecycle意味、D3e、D1m、CAM-G0→D1j→D1k-S→D1k→D3fとA〜C証跡はmain発効済み。2026-07-23監査で`new_v1` enforcement driftをGAP-23、known Edit apply failureのsnapshot fallback driftをGAP-24、semantic oracle gate自己保護をGAP-25として狭く再開。Param Pipeline／Element Domain／Constraint GraphはM2-GAP-15の解凍gate前は未実装のままが正しい。D5は骨格到達・統合審判pendingで、AG-2 mixer coreと`PlaybackSession` mixed adapterは成立したが、製品lifetime／construction／control／time handoffはGAP-28。D1n external revisionも未実装で、cloud-safe公約不可 |
-| M3 | **VS-1 Rectangle配置とUndo `DONE` / VS-2 U4a-1 `DONE` / U4b-0/V `DONE / ACCEPTED / MAIN` / CU-0A08ITIB `DONE / ACCEPTED / EXTERNAL_GATE_PENDING` / P07-C1A/B/C/D `DONE / ACCEPTED / MAIN` / CU-0B02R `DONE` / CU-0B02C-P/V `DONE` / CU-203 `DONE` / CU-204S/A `DONE` / CU-205S/B1G/B1I/B2/B/T/P/W/E `DONE`** | `CU-108`で通常製品routeのBrowser Rectangle→D2/journal→Stage/Timeline/Inspector同一snapshot→Undo/Redoを実Mac完走した。`U4a-1`はparameter control model、`U4b-0`はPosition専用durable commandとsame-time/Bezier/Undo/Redo/journal v2をcode/mainまで閉じた。通常製品Add Position Keyの入口はInspector Position行、current-playhead carrierはcommit `75ccd5e7`、read-only row `CU-0A08ITIA`はcommit `2c20e88e`、typed Host intent `CU-0A08ITIB`はcommit `98e38925`でDONE / ACCEPTED。U4b-0Vは[implementation acceptance](reviews/2026-08-04-u4b0v-position-key-value-edit-implementation-acceptance.md)どおりcommit `c404a050`でexact current Vec2 keyのReact Inspector X/Y、key-local CAS、clone preview、one durable terminal、Undo/Redo/reopenを接続した。P07-C1Dはcommit `ea69f5ca`でReact Stage play、ProductApp-owned one PlaybackSession、Transport sole clock、existing editor_playhead/Stage/native Timelineを接続した。Inspector React assetとfixed Timeline marker geometryを維持し、Auto Key、second clock、Document/Export変更を含めない。human visual、real audio device、P07-C3はM3-final `EXTERNAL_GATE_PENDING`。M3全体の既存DONE群、Motolii Studio Preview未実装、G0-9D、plugin UI停止線は変更しない |
-| M4 | **K0契約凍結済み(test-only) / P03-C1・P04-C4・P05-C1(V1)・P06-C1・P07-C1・P13-C1 `REMAP / VERIFIED` / P02・P09・P05-C2/C3・K7a/K8bは`STOP`** | K0はRoD/RoIの契約意味をtest-only spikeで凍結済み、K1〜K8は未実装。[調査](reviews/2026-08-02-m4-known-implementation-survey.md)と[13親の採択地図](m4-known-implementation-adoption-map.md)は作成済み。[disk再検索](reviews/2026-08-02-m4-disk-artifact-store-resurvey.md)でglobal CASを過剰仕様として外し、映像編集製品で成立済みの再生成可能な通常artifact fileへREDUCEした。P03-C1は`foyer-memory 0.22.3`のweight／handle／resize／filter／並行操作を4 fixture、3 target cross-buildで確認したが、remove後も外部handleが生存する場合の実メモリ量は`Cache::usage()`に含まれないためprivate ownerへREMAPした。P04-C4は`fs4 1.1.0`のfree-space／allocation-granularity観測とtyped errorを3 fixture、3 target cross-buildで確認し、hard budget／admission／evictionはprivate ownerへ残した。P05-C1は`tempfile 3.27.0` same-dir temp／persist、FFmpeg temp artifact、atomic visibility、SHA-256、stale temp隔離を4 fixture、3 target cross-buildで確認しV1を閉じたが、process kill／ENOSPC／同一recipe競合／Windows runtime visibilityは未検証である。P06-C1は`rangemap 1.7.1`のhalf-open/coalesce/gapsを6 fixtureで確認し、empty raw insert panicをprivate guardへREMAPした。P07-C1は`priority-queue 2.7.0`のreprioritize/remove/popとcomposite tie-breakを4 fixtureで確認し、bounded admission／generation filterをprivate ownerへREMAPした。P13-C1は`vello_svg 0.10.0`のpath/group/fill/stroke、unsupported callback、typed parse errorを4 fixture、3 target cross-buildで確認したが、external fileはusvg段で無言dropするためnetwork/file preflightをprivate ownerへREMAPした。P02-C1/C2はGAP-3未決のためruntime key／source fingerprintを発明せず`STOP`、P09-C1はorigin guard baselineのみでGAP-29原因分離を計測せず`STOP`とした。P05-C2/C3はprivate disk store／ResourceLedgerが現行repoにないため、K7a/K8bはgroup bake／full Draft producerがないため、いずれも`STOP / RUNTIME ABSENT`とした。現行`PipelineCache`／dynamic target pool／wgpu budget thresholdをResourceLedger、copy-out、disk store完成と数えない |
+| M3 | **UI runtime再基線 `DONE` / R0-ACCEPT `DONE` / R1 `READY-RECHECK` / 旧route outcomeはaccepted oracleとして保持** | [2026-08-07再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)でReact Native shell、rust-skia Timeline／Curve、wgpu + rust-skia Stageを標準にした。[R0受入](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md)で`R0-HOST / R0-MAC-SEAT / R0-STAGE-LIFECYCLE / R0-ACCEPT`を責任別に閉じた。隣接するR1 GPU／draw候補は未受入であり、current mainから一契約ずつ再compileする。旧routeのVS-1、U4a-1、U4b-0/V、CU-0A08ITIB、P07-C1A/B/C/D、Opacity、Timeline move／trim、D2／Undo／projectionは各acceptanceどおり意味・command・oracle資産として維持する。macOS操作体系を先行し、Windows common Rust target compileは`DONE`、RNW実機は`EXTERNAL_GATE_PENDING`。plugin UI公開契約はG0-3 / GAP-13まで停止する |
+| M4 | **K0契約凍結済み(test-only) / K1a ResourceLedger `DONE` / P02-C1/C2 `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED` / P03-C1・P04-C4・P05-C1(V1 baseline only)・P06-C1・P07-C1・P13-C1 `REMAP / VERIFIED` / P09・P05-C2/C3・K7a/K8bは`STOP`** | K0はRoD/RoIの契約意味をtest-only spikeで凍結済み、K1aのthin hard-budget ResourceLedgerはcommit `c9cab8e8`でlocal mainへ到達し、focused 13 test、`motolii-gpu`全test、fmt、clippyを通過した。K1b〜K8は未実装。[直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)でP02を止めていたsource identityをexact source bytesのSHA-256+size、canonical recipe、別ArtifactDigestへ締結し、Asset lifecycle、hard-budget policy、artifact/job、invalidation publicationの順序を閉じたが、codec／Command／classifierは未実装。[調査](reviews/2026-08-02-m4-known-implementation-survey.md)と[13親の採択地図](m4-known-implementation-adoption-map.md)は作成済み。[disk再検索](reviews/2026-08-02-m4-disk-artifact-store-resurvey.md)でglobal CASを過剰仕様として外し、映像編集製品で成立済みの再生成可能な通常artifact fileへREDUCEした。P03-C1は`foyer-memory 0.22.3`のweight／handle／resize／filter／並行操作を4 fixture、3 target cross-buildで確認したが、remove後も外部handleが生存する場合の実メモリ量は`Cache::usage()`に含まれないためprivate ownerへREMAPした。P04-C4は`fs4 1.1.0`のfree-space／allocation-granularity観測とtyped errorを3 fixture、3 target cross-buildで確認し、hard budget／admission／evictionはprivate ownerへ残した。P05-C1は`tempfile 3.27.0` same-dir temp／persist、FFmpeg temp artifact、atomic visibility fixture、SHA-256、stale temp隔離を4 fixture、3 target cross-buildで確認したV1 baselineに限る。process kill／ENOSPC／同一recipe競合／Windows runtime visibilityは未検証でV2/V3へ残る。P06-C1は`rangemap 1.7.1`のhalf-open/coalesce/gapsを6 fixtureで確認し、empty raw insert panicをprivate guardへREMAPした。P07-C1は`priority-queue 2.7.0`のreprioritize/remove/popとcomposite tie-breakを4 fixtureで確認し、bounded admission／generation filterをprivate ownerへREMAPした。P13-C1は`vello_svg 0.10.0`のpath/group/fill/stroke、unsupported callback、typed parse errorを4 fixture、3 target cross-buildで確認したが、external fileはusvg段で無言dropするためnetwork/file preflightをprivate ownerへREMAPした。P09-C1はorigin guard baselineのみでGAP-29原因分離を計測せず`STOP`とした。P05-C2/C3はprivate disk store、K7a/K8bはgroup bake／full Draft producerがないため、いずれも`STOP / RUNTIME ABSENT`とした。K1a ResourceLedgerをcopy-out、disk store、cache完成と数えない |
 | M5 | **3D import-render境界・技術採択・private検証 DONE / 製品runtime `WAIT`（M3意味開放待ち）** | [M5 3D import／render境界](reviews/2026-08-01-m5-3d-import-rendering-boundary-decision.md)でOSS leaf parser、faithful imported assetとrenderer-compiled派生物のprivate二段境界、core PBR＋fixed neutral environment、同一renderer責任を決定した。[M5採択地図](m5-known-implementation-adoption-map.md)とA1/A2/R0/T0/P0/I0/D0/C0のprivate receiptでimport、renderer、text、post、picking、identity、Observationを検証したが、製品schema／runtime／resource接続は未実装。[M5休止契約](reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)により、M3の共有writer・通常製品route・snapshot／Stage／Preview／Export・独立受入／main統合が意味論として閉じるまで休止し、再開後は共有resource/hard budget→C0 schema/provider identity/migration→M5 runtimeの順に進む |
 
 Repository validationは[validation topology決定](reviews/2026-07-31-repository-validation-topology-decision.md)で
 `cargo test`単独ownerを撤回し、`docs / policy / tooling / rust / web-build / web-contract /
-web-visual`へ分離した。dispatcherと`docs`／`tooling`／`rust`／`web-build`のCI接続を本粒で行う。
-`web-contract`／`web-visual`は固定browserをclean CI runnerへ用意してgreenを固定するまでblocking
-CIへ昇格せず、未実行／未完走をgreenまたは製品完成と記録しない。
+web-visual`へ分離した。2026-08-09に`.github/workflows/ci.yml`を退役し、remote checkを採否条件や
+完了証拠から外した。dispatcherと各test／guardはlocalな明示commandとして維持する。
+`web-contract`／`web-visual`、Windows、platform gateはticketごとに個別検収し、未実行／未完走を
+greenまたは製品完成と記録しない。
 
 [M2基盤再締結ゲート](reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。M3はU0a入場済みで、[UI runtime責任境界](ui-runtime-architecture.md)と[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)も決定済み。G0-9Lは固定Macのplatform prerequisite evidenceだけを限定確定したが、W0b、H1b、Motolii Studio Preview、window結合を解禁しない。G0-6Hは人間`ACCEPT`で完了し、U0e-3だけを解禁した。W0bの他の製品前提は別途閉じる。G0-9DまでDistribution Readyを名乗らない。plugin UI公開契約はG0-9合格と分離し、G0-3 / GAP-13の決定まで発注しない。headlessなTimeline/Stage projectionもSelected U seriesの前枝番がmainへ到達した時だけ次の1枝番を発注する。
 
@@ -100,22 +101,39 @@ RR-0 inventory → RR-1〜RR-8 asset判定 → RR-9統合縦切り
 
 Editor scripting:
 U2a → U2b → U9a → U9b → U9c
-F-11 + K0 → K1b + K1c → K7 → SCR-4 (Accumulation/Feedback Canvas)
+K0 + K1a + M4-P02-CODEC + M2-D8 → K1b
+K1a + K1b + P03-C2 + P04-C2 + P05-C2 + P05-C3 → K1c
+M2-ASSET-1C + P03-C2 → M4-P03-C3
+P07-C2 → M4-P07-C3 → P09-C2
+K1b + K1c + M2-D3 + P07-C2 + P09-C2 → K7a
+K7a + K2 → K7b → K7c
+U9b + F-11 + K0 + K7c → SCR-4 (Accumulation/Feedback Canvas)
 
 Bounds / cache:
-D3 → K0 #167 → K1b → K2
+D3 → K0 #167
+M2-ASSET-1A + K1a → M2-ASSET-1C
+M2-ASSET-1A → M4-P02-CODEC
+K0 #167 + K1a + M4-P02-CODEC + M2-D8 → K1b
+M2-D3 + M2-D3e + accepted target/source Command semantics → M4-P02-C3
+M4-P02-C3 → P06-C2
+K1b + M4-P02-C3 + P06-C2 → P06-C3
+K1b + M4-P02-C3 + P06-C2 + P06-C3 → K2
 
 Resource pressure / preview:
-K0 → K1a → K1b → K1c
+K0 → K1a
+K1a + M4-P02-CODEC + M2-D8 → K1b
+K1a + K1b + P03-C2 + P04-C2 + P05-C2 + P05-C3 → K1c
+M2-ASSET-1C + P03-C2 → M4-P03-C3
 K1c + K4 → K1d
 G0-8 + K1a → U0f
 U1b + U1c + U5 + K1d → U1g → U1h
 
 MV whole-song cache / freeze:
-K1b + K1c + D3 → K7a
+P07-C2 → M4-P07-C3 → P09-C2
+K1b + K1c + D3 + P07-C2 + P09-C2 → K7a
 K7a + K2 → K7b → K7c → U8b
-K1d + D3 → K8a
-K7c + K8a + D5 → K8b
+K1b + K1c + K1d + K2 + D3 + P06-C2 + P06-C3 + P07-C2 + M4-P07-C3 → K8a
+K7c + K8a + M2-D5 + M4-P03-C3 → K8b
 
 Duplicator:
 P0I #170 → P7a → P7b → P7c → P7U
@@ -123,13 +141,17 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-現在sliceは**VS-2 parameter editing / timeline interval editing**で、正常系`CU-205E`、move command実装`CU-201M-C`、trim command実装`CU-201T-C`、Timeline bounded projection確認`P03-C1`まで`DONE`。[HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md)でraw ownerとlogical Escape/focus cancelを再締結し`CU-201P-MOVE`をtechnical reclose、[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)で`CU-201P-TRIM`、[CU-201R受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で2,048-step random oracleを閉じた。`CU-201E`はE2E PASS。通常製品Undo/Redo/reopenは完了。pointer-lossは`EXTERNAL_POINTER_GATE_PENDING`、ユーザー目視はM3最終HUMAN checklistに残す。`CU-204P`は通常source 0の再確認後、新source成立まで再監査・実装を反復しない。`P06-C1-MAC`は固定Macのrfd外部gateだけを`DONE / FIXED_MAC_GATE_PASS`へ閉じたが、P06-C1全体、Linux portal、製品import接続は未完了である。
-現在の全lane、変更path、STOP、Human Response Frontierは
-[並列レーン着手地図](reviews/2026-07-25-parallel-lane-readiness-map.md)を正とする。
-旧night 3分岐は直接統合しない。
+開始gateは[統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)と[cold-replaceable監督と停止封じ込め](reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md)で通過済みである。第一短waveはK1aをlocal mainへ統合し、[R0受入](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md)を閉じ、M2-ASSET-1Aをbounded returnへ戻した。次waveはこのreturnと新しいmainから一契約ずつ再選定する。旧direct-wgpu/Vello surfaceへの新機能追加や旧task列の継続を同時に`DO`へしない。
+
+[M3 baseline-required自走checkpoint](reviews/2026-08-07-m3-baseline-required-autonomy-checkpoint.md)は、一般的なdesktop NLEの必須outcomeを利用者再確認なしで一契約へcompileする方針を決定したが、現時点の採用itemは0である。baseline抽出は非OpenAI研究者、別family challenge、Codexのevidence整理／authority写像／最終採否へ分離し、直前のWeb調査失敗runに現れたsample、feature row、thresholdを採用しない。Claude directのempty-workspace 1-query capability probeはWebSearchと公式body取得まで通過したためfresh本調査へ進めるが、probeはbaseline evidence、runner機能、一般permissionではない。baseline本調査とR0三候補のread-only再検収は別laneとして並行可能だが、どちらもR1以降の製品施工許可ではない。
 
 | lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
+| PRODUCT-RUNTIME | M3-R0-CANDIDATE | M3 / RN product runtime seat / acceptance | `DONE` | — | [R0 product runtime seat受入](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md)。通常RN Release artifact、同read-only revision、write 0を確認 | R1以降を自動採用しない。隣接するGPU／draw候補は別契約へ残す |
+| PRODUCT-RUNTIME | M3-R1 | M3 / RN VS-1 reclosure | `READY-RECHECK` | — | [R0 product runtime seat受入](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md) `DONE` | [RN runtime実行地図 R1](m3-rn-runtime-execution-map.md#4-wave-r1--vs-1再閉鎖)の`COMPILE` nodeをcurrent mainから一つずつclosed orderへ上げる。Browser Rectangle→D2→RN Inspector + rust-skia Timeline + Stage同revision→Undo/Redo。Stage/Timelineより先に`R1-GPU-BINDING`で単一Device/Queueとsurface lifecycleを閉じ、app root／registration／publicationは`R1-SHELL`だけが合流する |
+| PRODUCT-RUNTIME | M3-R2 | M3 / production editing | `WAIT` | — | `R1-E2E DONE` | [RN runtime実行地図 R2](m3-rn-runtime-execution-map.md#5-wave-r2--制作操作)。Timeline、Stage、Inspector、Key、Curveを別nodeへ分ける。成立済みselectionと未特定focus/playhead consumerを分離し、現行`CommandKind`にないkeyframe編集familyは`R2-KEY-COMMAND TARGET_MISSING`としてUI担当へ渡さない |
+| PRODUCT-RUNTIME | M3-R3 | M3 / project workflow | `WAIT` | — | nodeごとは地図の依存、統合受入は`R2-E2E DONE` | [RN runtime実行地図 R3](m3-rn-runtime-execution-map.md#6-wave-r3--project-workflow)。project、media、transport、export、desktop/recoveryを分離。Delete／Duplicate／Renameを別familyにし、seek-only routeをmixed audio待ちから外す。Rename、normal diagnostic source、mixed Playback、async Export、activity/telemetryのtarget不足を隠さない |
+| PRODUCT-RUNTIME | M3-R4 | M3 / platform and distribution | `WAIT` | — | common adapterはsemantic ABI、product/human/distribution gateは`R3-E2E DONE` | [RN runtime実行地図 R4](m3-rn-runtime-execution-map.md#7-wave-r4--platformhuman-distribution)。Mac/Windows code adapterとhuman/hardware gateを分離し、一platformの遅れでfile-disjointな共通実装を止めない |
 | PRODUCT-ASSET | U4a-1 | M3 / VS-2 / B / parameter control model | `DONE` | `eb4e6658` | `U2b-1` `DONE`。Grok `ACCEPT` P0/P1=0、`cargo test --locked --workspace`、fmt、motolii-ui clippy、docs整合が全緑 | F64 domain保持、Vec2/Vec3/Color対応、AssetRef typed rejection、全first-party保存param conformance、SetProperty/EffectParam routeを固定。Inspector生成、preview、gesture、製品UI接続は後続 |
 | PRODUCT-ASSET | CU-0A08IP | M3 / VS-1 / B / Inspector fixture decoder | `DONE` | — | [Inspector read-model inventory](reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)でCU-0A08IS閉包とCU-0A08IP着手境界を固定。`node --test docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs` 39/39、`npm run test:reference-guard` 172/172 | product-owned・非export pure decoder module。fixture/testのみ。Host transport・intent・JSX binding・`S`行・Rust/schema/plugin変更は非目標 |
 | PRODUCT-ASSET | CU-G02 | M3 / VS-1 / SPEC / Selected U series order | `DONE` | — | CU-G01は[G0-9段階化](reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)で完了済み。本変更でSelected U seriesの次実装粒をU3a-1に固定した | 当時の次PRODUCT-ASSET粒は`U3a-1`。U4a-1/U2h-1は未選択、Rectangle blocking decisionは個別粒へ分離した。現行状態は本表の各粒を正とする |
@@ -265,13 +287,13 @@ P0I #170 → P7a → P7b → P7c → P7U
 | CORE | INTERP-COMMAND | M3 / VS-2 / DONE / Position outgoing interpolation D2 command | `DONE / ACCEPTED` | [implementation acceptance](reviews/2026-08-04-interp-command-d2-implementation-acceptance.md) | commit `03667b7d`。dedicated `Command` + `DocumentWriter` prepare、old/new inverse、same layer/key merge、JournalEdit v2/WAL replay、terminal/one-key admission、typed negativeをexact 5-file scopeで閉鎖。fmt、full `motolii-doc`、strict clippy、diff-check PASS、fresh Opus 5 medium ACCEPT | P04-C2 parent/U4b-1/M3 remain incomplete outside accepted `P04-C2-EASING-C7A DONE / ACCEPTED / EXTERNAL_GATE_PENDING`. Inspector Add Position Key is separate `CU-0A08ITIB DONE / ACCEPTED / EXTERNAL_GATE_PENDING`; manual native z-order/focus/DPI/a11y/visual/second-monitor gates remain M3-final `EXTERNAL_GATE_PENDING` |
 | PRODUCT-ASSET | P04-C2-DIAGNOSTIC-CORRECTION | M3 / VS-2 / exhaustive diagnostic `CommandKind` consumer correction | `DONE / ACCEPTED` | [implementation acceptance](reviews/2026-08-04-p04-c2-diagnostic-correction-implementation-acceptance.md) | commit `58b84e22` adds only `SetPositionKeyInterp => "Set position key interpolation"` and one focused test in existing `diagnostic_projection::command_kind_copy`; focused test 5 passed, `--no-run`/strict clippy/fmt/diff-check PASS | no product semantics, popup, queue, React/IPC, public API, dependency, or Document work; no next implementation `DO` |
 | PRODUCT | P04-C2-EASING-C7A | M3 / VS-2 / private native child popup/session renderer → Position-only D2 request | `DONE / ACCEPTED / EXTERNAL_GATE_PENDING` | [implementation acceptance](reviews/2026-08-04-p04-c2-easing-c7a-implementation-acceptance.md) | commits `bb0624d8`/`87bf026e`/`56f61e7b` connect React anchor/layout-only inbound, Host current-interval re-derivation, one private child `WindowId` egui popup on ProductApp sole EventLoop/shared GPU, basic/custom terminal, and narrow `SetPositionKeyInterp` → existing D2. focused UI lib 218/218, strict clippy, codec 2/2, Host check, docs/diff PASS; local validation is not green only for base-existing protected-assets scanner `expected_failure` | zero writes for no interval/stale/cancel/duplicate/same-value; reload/epoch resync and late child isolation are covered. Reject G0-9 stores/counters/PopupGfx, NativeTimelineRenderer changes/copy, partial React/IPC, second App/EventLoop/WebView/device, generic framework/trait/registry. Opus final ACCEPT P0=0/P1=0; P2 remains finding only. Manual z-order/focus/DPI/a11y/visual/second monitor remain M3-final EXTERNAL_GATE_PENDING |
-| PRODUCT-ASSET | P01-C1 | M3 / VS-2 / VERIFY / runtime integration seam | `DONE` | [HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md) | 単一`ApplicationHandler<ProductEvent>`と単一`run_app`を保持し、approved raw ownerを`product_runtime_adapter.rs`一箇所へ再締結 | adapter外raw型0、coordinator追加0 |
+| PRODUCT-ASSET | P01-C1 | M3 / VS-2 / VERIFY / runtime integration seam | `DONE` | [HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md) | 単一`ApplicationHandler<ProductEvent>`と単一`run_app`を保持。exact raw owner file topologyとsource-wide AST scannerは2026-08-09退役 | coordinator追加0。toolkit型をDocument／plugin／wire／公開domain契約へ流さない |
 | PRODUCT-ASSET | P06-C1-MAC | M3 / P06 / ADOPTION_PROBE / fixed Mac native file-dialog seam | `DONE / FIXED_MAC_GATE_PASS` | [P06-C1-MAC rfd採択probe観察](reviews/2026-08-03-p06-c1-mac-rfd-adoption-probe-observation.md) | `rfd` 0.17.2 `FileDialog::set_parent`を既存`motolii_media::probe_container`へ接続した隔離probe。macOS 15.5 arm64でparent `open-panel` sheet、Cancel、valid MP4、typed corrupt `MediaError::Probe`、exitを実行確認。Spark実装、Grok再検収`ACCEPT / P0=0 / P1=0 / P2=1 / SCOPE PASS`。P2はdeprecated winit APIとunused `Result`のdisposable probe debtで製品転記禁止 | product Cargo、runtime、Document/Undo、public API、persistence、shared writer変更0。P06-C1全体、Linux portal、製品Import、P06-C2は未完了 |
 | PRODUCT-ASSET | CU-201P-MOVE-S | M3 / VS-2 / SPEC / native Timeline body-drag known semantics | `DONE / REDUCE` | [CU-201P-MOVE known-semantics adoption](reviews/2026-08-03-cu-201p-move-known-semantics-adoption-decision.md) | Blender/Adobe/Resolveの収束意味を`PATTERN`採択。既存`TimelineProjection`、`ProductApp`、`SetClipStart`、CU-201N-Sへ限定接続 | trim edge hit-zone、slip/slide/roll/ripple、multi-select、lane変更、playhead/marker/frame-grid snapは非目標 |
 | PRODUCT | CU-201P-MOVE | M3 / VS-2 / B / native Timeline body-drag → SetClipStart | `IMPLEMENTED / RECLOSED / EXTERNAL_POINTER_GATE_PENDING / HUMAN_DEFERRED` | [CU-201P-MOVE known-semantics adoption](reviews/2026-08-03-cu-201p-move-known-semantics-adoption-decision.md)、[HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md) | commit `65c54dea`の実装へcommit `f79625b8`のraw ownerとEscape/focus cancelを接続。pointer-lossと通常Undo/RedoはCU-201Eへ送る | move意味、public API、Document schema、Browser Place capture、generic gesture frameworkを変更しない |
 | PRODUCT-ASSET | CU-201P-TRIM-S | M3 / VS-2 / SPEC / native Timeline trim-edge known semantics | `DONE / REDUCE` | [CU-201P-TRIM known-semantics adoption](reviews/2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md) | Blender固定commit `6e15da15`のhandle hitをPATTERN採択。cutoffは`sequencer_select.cc` L883-L945、left-before-right順序はL1017-L1035。Key優先、Left/Right/Body、`min(15 logical px, width/4)`、width 25 / derived height 16未満はbody縮退、既存Trim prepareへ限定 | outside padding、dual-handle、GPL code、snap、generic gestureを持ち込まない |
-| PRODUCT-ASSET | CU-201P-HOST-INPUT-S | M3 / VS-2 / SPEC / Product Host input spine | `DONE / ADOPT・WRAP` | [CU-201P-HOST-INPUT-S](reviews/2026-08-04-cu-201p-host-input-spine-decision.md) | winit logical keyをADOPT、egui-winit一箇所正規化・synthetic/repeat/IME除外、Qt Cancel、Blender modal EscapeをPATTERN採択。raw owner、既存型付きseam、zero-write cancelを固定 | 新input framework、physical key、AppKit history変更、Document意味変更0 |
-| PRODUCT | CU-201P-HOST-INPUT | M3 / VS-2 / B / Product Host raw input → existing InputRouter | `IMPLEMENTED / REVIEW ACCEPT / EXTERNAL_POINTER_GATE_PENDING / HUMAN_DEFERRED` | [HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md) | commit `f79625b8`。approved raw owner、builtin base v2 Escape、InputRouter lifecycle、cancel write 0を接続。independent review P0/P1 0 | pointer-loss/通常Undo/RedoはCU-201E、ユーザー目視はM3最終へ集約 |
+| PRODUCT-ASSET | CU-201P-HOST-INPUT-S | M3 / VS-2 / SPEC / Product Host input spine | `DONE / ADOPT・WRAP` | [CU-201P-HOST-INPUT-S](reviews/2026-08-04-cu-201p-host-input-spine-decision.md) | winit logical keyをADOPTし、synthetic/repeat/IME除外、Qt Cancel、Blender modal EscapeをPATTERN採択。既存型付きseamとzero-write cancelを固定。exact raw owner配置は2026-08-09退役 | 新input framework、physical key、AppKit history変更、Document意味変更0 |
+| PRODUCT | CU-201P-HOST-INPUT | M3 / VS-2 / B / Product Host raw input → existing InputRouter | `IMPLEMENTED / REVIEW ACCEPT / EXTERNAL_POINTER_GATE_PENDING / HUMAN_DEFERRED` | [HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md) | commit `f79625b8`。builtin base v2 Escape、InputRouter lifecycle、cancel write 0を接続。independent review P0/P1 0。source-wide raw input scannerは2026-08-09退役 | pointer-loss/通常Undo/RedoはCU-201E、ユーザー目視はM3最終へ集約 |
 | PRODUCT | CU-201P-TRIM | M3 / VS-2 / B / native Timeline trim-edge → TrimClipIn/Out | `IMPLEMENTED / REVIEW ACCEPT / HUMAN_DEFERRED` | [TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md) | commit `da4dcf75`。private hit、delta gesture、read-only preview、既存trim writer一回commitを接続。targeted 4/37/26、lib 186、fmt/clippy green。fresh Opus closure P0/P1/P2 0、mutation 0 | HOST-INPUT、残余CU-201P、snap、generic gesture、公開hit API、schemaを変更しない |
 | PRODUCT | CU-201P | M3 / VS-2 / native Timeline interval gesture | `SPLIT / WAIT_TARGET` | [CU-201P target gap observation](reviews/2026-08-03-cu-201p-target-gap-observation.md) | HOST-INPUTとTRIMは実装受入、MOVEはtechnical reclose。snap threshold、slip/slide/roll/ripple、multi-select等の残余targetは未閉鎖 | 受理済みMOVE/TRIMだけはR→Eへ進める。残余を同粒へ束ねない |
 | ORACLE-GUARD | CU-201R | M3 / VS-2 / random move trim sequence | `DONE / REVIEW ACCEPT` | [CU-201R受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md) | commit `d0f7dfec`。既存fixed-seed proptestとWriterをREUSEし2,048 accepted step。fresh Opus closure P0/P1/P2 0、mutation 0 | identity重複0、sentinel/no-ripple、全Undo、既存Cancel lane green。snap/group/ripple 0 |
@@ -567,17 +589,29 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | 2 | U2b-1 | M3 | `DONE` | U1b-2 merge | prepared requestをsingle writerへ配送し、成功snapshotをUI/render workerへ購読 |
 | 3 | U3a-1S | M3 | `DONE` | 本変更で完了。後続docs粒を作らない | owner=`motolii-ui`内module、`motolii-timeline` crate=`REJECT`、visibility=pub再export+integration test（制約6点）を[U3a-1 owner/visibility分割決定](reviews/2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md)で確定済み |
 | 3 | U3a-1I | M3 | `DONE` | `U3a-1S` `DONE`。論理依存の`U0a`/`U0b`は`DONE`。G0-6H/U0e-3/U2c-3/U2c-5/G0-9は入場条件にしない | toolkit/renderer非依存のDocument→Timeline projection/layout/cull/hit-testを小さなfixtureで閉じる。G0-9や100k再実測を入場条件にしない |
+| 3P | UI-PLACEMENT-STAGING | M3 Host UI / M4-M5 consumer | `WAIT / CONTRACT CLOSED` | [UI配置保留決定](reviews/2026-08-09-ui-placement-deferral-staging-surface-decision.md)をcurrent mainで再照合し、既存`PanelLayout`／`LayoutAuthority`のexact target、既存product-owned component、最初のclosed bindingのread projectionとtyped intent／Command、active placement 1とretirement oracleを一つのallowlistへcompileする | final surfaceだけが未決のeligible controlを接続可能にするprivate presentation。Settings／generic registry／public ControlId／plugin UI／Document field／第二writerは作らない。空間・contextual interactionとUI未確定意味は各edgeを`RESEARCH_RETURN`する |
 | 4 | U3a-2 | M3 | `WAIT` | U3a-1I + G0-9 platform受入 | direct wgpu+Vello候補をwindowed fixture、input、WebView同居、presentまで閉じる。Canvas/browser WebGPUは先例baselineで製品枝にしない |
 | 5 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a-2 merge | Effect常時接続線 |
-| 6 | K1a | M4 | `WAIT / ADOPTION-PROBE` | K0凍結(test-only)。[M4採択地図](m4-known-implementation-adoption-map.md)のP03-C1/P04-C4/P05-C1/P06-C1/P07-C1/P13-C1/P09-C1を独立fixtureで閉じ、採択依存を直列publicationするまで製品runtimeを起票しない | probe合格後の薄い接続だけを再度起票判定。独自ResourceLedgerを前提にしない |
-| 7 | K1b | M4 | `WAIT` | K1a merge | cache同一性/LRU/並行store |
-| 8 | K1c | M4 | `WAIT` | K1a + K1b merge | VRAM/RAM/disk階層admissionと退避 |
+| 6A | M2-ASSET-1A | M2 | `RESEARCH_RETURN / SPLIT REQUIRED` | 第一短waveの3 observed sessionはいずれもqualified diffを返さなかった。同じwide orderを4回目へ再投入せず、current mainでread setとowner境界を縮小してfresh orderへcompileし直す | K1aとは別owner。product import／source binding／relink adapter、P02 runtime codec、Replace Source、Purge UIを同じticketへ入れない |
+| 6B | K1a | M4 | `DONE` | commit `c9cab8e8`でthin hard-budget ResourceLedger policy ownerをlocal mainへ統合。focused 13 test、`motolii-gpu`全test、fmt、clippy、diff checkを通過し、fresh Opus reviewは`ACCEPT`、P0/P1なし | tier adapter、cache store、M5接続は非目標のまま。return後のconsumerはcurrent mainから再選定する |
+| 6C | P04-C2 | M4 | `WAIT(P04-C1) / CONTRACT CLOSED` | K1a `DONE` + P04-C1 merge | owner／tier／resident／pinned／requested bytesをK1aの唯一のResourceLedger policyへ渡すprivate tier adapter。第二policy／allocator frameworkを所有しない |
+| 7A | M2-ASSET-1C | M2/M3 product adapter | `WAIT / CONTRACT CLOSED` | M2-ASSET-1A + K1a merge | probe receiptをfresh full hashで再照合してからCommandをprepareし、loaded V1 tagを最初のbinding一致前にcache authorityにせず、SourceBinding full-copyを事前予約してjob中pinする。`resolve_asset_path`を直接使う現行audio／export source収集と後続media decode／probe／muxを含むcallsite inventoryを固定して、source-consuming workerへは保存済みfingerprintとexact bytesを結合したbudgeted Host-private SourceBindingだけを渡す。relink／Replace Source／proxy生成を同じticketへ入れない |
+| 7B | M4-P02-CODEC | M4 | `WAIT` | M2-ASSET-1A merge | canonical `RecipeKeyV1`／`ArtifactDigest` codecとmutation corpus。K1b/storeを同じticketへ入れない |
+| 7C | M4-P02-C3 | M4 | `WAIT / CONTRACT CLOSED` | M2-D3 + M2-D3e + accepted target/source Command semantics | exhaustive classifierと`(snapshot, CacheEpoch, InvalidationFootprint)` atomic state envelopeの唯一のowner。K1b store／K2統合を同じticketへ入れない |
+| 7D | K1b | M4 | `WAIT` | K1a + M4-P02-CODEC + M2-D8 merge | cache同一性/LRU/並行store。classifier／state envelopeを所有しない |
+| 7E | P06-C2 | M4 | `WAIT / CONTRACT CLOSED` | M4-P02-C3 merge | classifier済みaffected identity／temporal footprintをhalf-open区間へ写すprivate pure projection。Command分類／epoch／publishを所有しない |
+| 7F | P06-C3 | M4 | `WAIT / CONTRACT CLOSED` | K1b + M4-P02-C3 + P06-C2 merge | accepted footprintをK1b coverageへ反映するconsumer。coverage generationをCacheEpoch／第二state publishにしない |
+| 7G | M4-P03-C3 | M4 product audio adapter | `WAIT / CONTRACT CLOSED` | M2-ASSET-1C + P03-C2 merge | `AudioProgram`のcaller-owned無制限HashMapを共通RAM admissionへ移し、旧二重ownerを0にする。K1cと並列可、K8bが待つ |
+| 7H | M4-P07-C3 | M4 CPU/GPU task adapter | `WAIT / CONTRACT CLOSED` | P07-C2 merge | CPU/GPU cooperative token／heartbeatだけを閉じ、P09-C2とK8aを解放する。media branchはP08-C1の既存kill/cancel oracleへ吸収し、第二scheduler/cancel frameworkを作らない |
+| 8A | K2 | M4 | `WAIT` | K1b + M4-P02-C3 + P06-C2 + P06-C3 merge | accepted target/source Command意味をcache store、唯一のclassifier、pure interval projection／coverage consumerへ接続し、第二classifier／epoch publisherなしで部分無効化を閉じる |
+| 8B | K1c | M4 | `WAIT` | K1a + K1b + P03-C2 + P04-C2 + P05-C2 + P05-C3 merge | VRAM/RAM/disk階層admissionと退避。GPU copy-outはP09-C2へ残す |
+| 8C | K4 = P08-C3 | M4 | `WAIT` | M2-D1 + M2-ASSET-1C + M4-P02-CODEC + P05-C2 + P05-C3 + P07-C2 + P08-C1 + P08-C2 merge | SourceBindingからのproxy生成／CFR正規化／product substitution。通常product decode routeの唯一の合流点で、第二ownerとraw locator sidecar handoffを許さない |
 | 9 | K1d | M4 | `WAIT` | K1c + K4 merge | 容量pressureとdeadlineを分離したpreview縮退signal |
-| 10 | K7a | M4 | `WAIT` | K1b + K1c + D3 merge | group子合成のatomic bake成果物境界 |
+| 10 | K7a | M4 | `WAIT` | K1b + K1c + M2-D3 + P07-C2 + P09-C2 merge | group子合成のatomic bake成果物境界。GAP-29のP09-C1未採択中はP09-C2とともにWAIT |
 | 11 | K7b | M4 | `WAIT` | K7a + K2 merge | 依存時間区間だけの無効化と旧世代再利用 |
 | 12 | K7c | M4 | `WAIT` | K7a + K7b merge | bake hit時の内部graph置換と再freeze |
-| 13 | K8a | M4 | `WAIT` | K1b + K1c + K1d + D3 merge | 全曲Draft coverage planner |
-| 14 | K8b | M4 | `WAIT` | K7c + K8a + D5 merge | 100GB accounting fixtureと通し再生E2E |
+| 13 | K8a | M4 | `WAIT` | K1b + K1c + K1d + K2 + M2-D3 + P06-C2 + P06-C3 + P07-C2 + M4-P07-C3 merge | 全曲Draft coverage planner |
+| 14 | K8b | M4 | `WAIT` | K7c + K8a + M2-D5 + M4-P03-C3 merge | 100GB accounting fixtureと通し再生E2E |
 | 14 | U0f | M3 | `WAIT` | G0-2 + G0-8 + U0b + K1a merge | resource policyをUser settingsへ。Documentへ入れない |
 | 15 | U1g | M3 | `WAIT` | U1b + U1c + U5 + K1d merge | Transport時刻不変の最新frame表示/コマ落ち |
 | 16 | U1h | M3 | `WAIT` | U0e + U0f + U1g merge | Performance/Memory settingsとpressure HUD |
@@ -585,7 +619,7 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | 18 | U9a | M3 | `WAIT` | U2b merge | 汎用one-shot Generator hook。script runtime型を公開契約へ焼かない |
 | 19 | U9b | M3/v1.x | `WAIT` | U9a merge | Motolii ShapeScript。Paper.js互換やp5.js互換を名乗らない |
 | 20 | U9c | M3/v1.x | `WAIT` | U9b merge | SVG materialize adapter。DOM/XMLをDocument意味へしない |
-| 21 | SCR-4 | M4/v1.x | `WAIT` | U9b + F-11 + K0/K1b/K1c/K7 | 非clear drawをホスト所有Feedbackへ翻訳。隠しcanvasを作らない |
+| 21 | SCR-4 | M4/v1.x | `WAIT` | U9b + F-11 + K0 + K7c | 非clear drawをホスト所有Feedbackへ翻訳。K7a／K7b／K7cのartifact境界・区間無効化・再freeze後に入り、隠しcanvasを作らない |
 
 ## 凍結済みだが依存待ちのIssue
 
@@ -622,7 +656,7 @@ U0a(egui骨格+依存方向CI)は本入場で完了。M2基盤再締結は解除
 | 編集時Generator hookを作る | U2b。まずruntime非依存のD2 command batch境界だけを固定 |
 | ShapeScriptを作る | U9a + D1i-2。正準座標・object/path/group・拒否表を先に固定 |
 | SVG adapterを作る | U9b。viewport/Y-down変換と安全な採用subsetを先に固定 |
-| 蓄積描画を作る | U9b + F-11 + K0/K1b/K1c/K7。畳めるshape履歴を先にmaterializeし、残りだけFeedbackへ昇格 |
+| 蓄積描画を作る | U9b + F-11 + K0 + K7c。K7a／K7b／K7cのartifact境界・区間無効化・再freeze後に入り、畳めるshape履歴を先にmaterializeして残りだけFeedbackへ昇格 |
 | resource設定を出す | G0-2 + G0-8 + U0b + K1a → U0f。設定はUser settings、pressure実測値はTransient |
 | 重いpreviewを追従させる | U1b + U1c + U5 + K1d → U1g。project fps/audio clockを変えず表示frameだけ落とす |
 

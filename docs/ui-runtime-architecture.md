@@ -1,248 +1,185 @@
 # UI runtime責任境界
 
-状態: **責任境界・surface topology・標準egui製品runtime不採用を決定**（2026-07-21、2026-07-24追補、2026-08-04 C7A局所例外）。platform受入とdirect wgpu／Vello局所利用のrenderer採否はG0-9実機spike待ち。
+状態: **React Native + Rust/rust-skia + wgpuへ再基線化済み / 製品移行は未完了**（2026-08-07）
 
-2026-07-22追補: 本書のnative／Reactは**presentation runtime**の分担であり、Core、bundled first-party Host module、first-party plugin、third-party pluginの分類ではない。OS window、surface実装、architectural role、provenance / trustは[軸分離決定](reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従って独立に判定する。
+正本決定: [M3 React Native + Rust/Skia UI runtime再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)
 
-Motoliiの製品UIは、Reactとnativeのどちらか一方へ全面統一しない。ReactはDOMが強い領域、
-native Rust/wgpuは高頻度GPU workspaceを所有する。この分割は採択済みであり、G0-9が今後比較するのは
-責任境界そのものではなく、WebViewとnative surfaceを安全に同居させる実装方式である。
+MotoliiはUIを一つのtoolkitへ統一しない。通常UIをReact Native、高密度canvasと直接操作をRust/rust-skia、Stageのbase previewとGPU処理をwgpu、編集・再生・保存をRust coreが所有する。
 
-2026-07-24追補: eguiは標準製品runtimeの候補から外す。既存のegui shell、native texture preview、
-layout投影、render worker、IME/lifecycle証拠は比較・回帰・診断baselineとして保持するが、新しい製品panel、
-Timeline、Stage、theme、componentをeguiへ実装しない。React所有面をeguiへ再実装せず、native所有面を
-egui widget/callbackで包まない。既存baselineの物理撤去はG0-9のplatform受入と代替診断経路が成立した後の
-独立作業とし、direct wgpu枝の不合格だけでeguiを自動的に製品候補へ戻さない。再採用には本決定の明示改訂を要する。
-2026-08-04の明示改訂は`P04-C2-EASING-C7A`だけである。これは`ProductApp`所有の一つのprivate native child
-popup/session rendererに既存direct egui依存を局所再利用する例外であり、main shell、Stage、Timeline、React
-chrome、汎用panel/theme/component、公開popup frameworkへeguiを採用しない。C7A以外のegui製品採用には別の明示改訂を要する。
+旧React/WebView islands + 1 top-level wgpu Surface + direct wgpu/Vello UIは新規製品実装の標準ではない。既存実装は移行oracleとして保持し、新routeが同じ利用者outcomeを閉じた後にだけretireする。
 
-## 1. 所有境界
-
-以下は標準製品面の**surface所有**を示す。React面とnative面はいずれもbundled first-party Host moduleであり、公開pluginまたは第三者差替え点を意味しない。一つのOS window内へnative viewportとchild WebViewを同居させるため、`native window`／`React window`という呼称で責任を決めない。
+## 1. runtime topology
 
 ```text
-Native coordinator
-├─ React / WebView chrome
-│  ├─ Asset Browser
-│  ├─ Inspector / parameters / forms
-│  ├─ Easing trigger / accessible object-channel and pressed-disabled state
-│  ├─ panel / toolbar / dialog / search / settings
-│  └─ product-owned versioned UI kit
-├─ native wgpu Stage
-│  ├─ canonical display texture
-│  └─ handle / gizmo / roto presentation overlay
-└─ native wgpu Timeline
-   ├─ time ruler / Z(depth) rail / row-synchronous controls
-   ├─ lanes / clips / keys / playhead
-   └─ selection / marquee / graph / transient preview
+React Native application/window
+├─ product shell / dock / tabs / toolbar / menus
+├─ Browser / Inspector / settings / forms / text / dialogs
+├─ product-owned normal-density and custom panels
+├─ Native Timeline Component
+│  └─ Rust interaction + rust-skia canvas
+├─ Native Curve Editor Component
+│  └─ Rust interaction + rust-skia canvas
+└─ Native Stage Component
+   ├─ wgpu base preview texture
+   ├─ rust-skia transparent overlay, dirty update
+   └─ wgpu composite / present
 
-Native popup surface
-└─ Easing frame / preset library / form / curve / handles / drag preview
+Rust Host / core
+├─ revisioned read-only projection
+├─ transient interaction/session state
+├─ D2 single writer / Undo / journal
+├─ playback / media / render / resource
+└─ platform adapters
+   ├─ macOS AppKit + Fabric native view
+   └─ Windows RNW Fabric Component View + Composition
 ```
 
-React採択の理由は、CSS layout、form、text input、IME、a11y、component資産、hot reload、
-Storybook/Playwright、LLM生成容易性、community作者の入口である。Canvasやbrowser WebGPUを
-React componentへ包めること自体はReact所有の理由にしない。
+OS window数、dock、detachはRN shellのlayout責任であり、Documentへ保存しない。native componentは割り当てられたrectangle、scale、visibility、focus、lifecycleを受ける。surface数を製品意味にせず、componentごとのplatform adapterへ閉じる。
 
-この作者入口は[Creator / Developer連続体](reviews/2026-07-22-creator-developer-continuum-decision.md)の一部である。製品作者だけが理解できる専用UI言語を増やさず、creatorが既存componentをinspectし、fixture上で変え、testし、将来の公開境界が定まった後にcommunity成果へ進める余地を保つ。ただしproduct packageへの到達可能性と、untrusted pluginへ同じorigin／process／権限を与えることは同義ではない。
+## 2. React Nativeが所有するもの
 
-StageとTimelineは、一つのzoom/scroll/focus/gestureへ高頻度同期する要素を領域内で分割しない。
-特にtrack headerだけをReact、key surfaceだけをnativeにする構成は採らない。Reactは外側のtoolbar、
-menu、popover、parameter編集を所有する。Timeline dock左の`KEYS / LAYERS`切替とAlign、Stagger、
-Stretch等のtool panelはtrack headerではなく、mode/formを選ぶReact chromeとする。一方、各rowと同じ
-scroll/zoom/selectionへ同期するS/M rail、time ruler、bar、key、playhead、およびZ軸Timeline / depth railは
-nativeが一体で所有する。
+- application shell、dock、tabs、split、toolbar、menu、popover、dialog
+- Asset／Create／Effects Browser
+- Inspector、parameter form、numeric/text input、search、settings
+- Stage／Timeline／Curveの外側chromeとstatus
+- 通常密度のproduct-owned custom panel
+- IME、focus traversal、standard controls、semantic labelsの第一責任
+- React component test、visual fixture、開発時hot reload
 
-Stage panel自体は複合panelとする。Preview canvas、Output Frame、object bounds、path、handle、gizmoはnative wgpu
-viewportが所有し、panel header、Fit / magnification / view mode、transport button、timecode、quality/status表示は
-React chromeが所有する。React帯とnative viewportは同じStage panelの子として一緒にdock / detach / resizeし、互いに
-重ならないopaque rectangleへ配置する。透明WebViewをPreview上へ被せず、pointer captureが必要なscrubや直接操作は
-nativeへ残す。React controlはtyped command intentだけをHostへ送り、playback、playhead、selectionの正本を持たない。
-表示更新はHostの最新snapshotを一方向に投影し、frameごとのmessage backlogを作らない。
+既存React mockは画面concept、情報階層、component分割、文言、状態表現、test oracleとして移す。DOM、CSS、HTML event、WebView bridgeをそのまま製品契約にはしない。React web componentをRNへ移す際は、意味と操作を保ち、RN primitives、StyleSheet、native component props/eventsへ変換する。
 
-将来のKBar型command stripや追加transport controlもこのReact chrome seamへ置ける。ただし特定library、JS component、
-command配置、第三者拡張APIを現時点の製品契約へ焼かず、既存`CommandId` / typed intent境界を再利用する。
+RNはDocument、selection、Undo、playhead、terminal gestureの正本を持たない。local hover、focus-visible、open/closed、未確定form bufferはpresentation stateとして持てる。
 
-ただし高頻度curve操作を伴うEasing popupは一般popoverの例外である。`P04-C2-EASING-C7A`に限り、
-このprivate native child popup/session rendererは既存direct egui依存を局所利用できる。これは標準native
-rendererの置換でもegui shellの復活でもない。
-[native Easing popup受入契約](reviews/2026-07-22-m3-native-easing-popup-acceptance.md)に従い、Reactは入口と
-object・channel・pressed/disabledのaccessible stateだけを所有し、visible summary chromeは別のUI判断まで
-実装しない。native wgpuはpopup frame、preset/user library、数値form、curve、grid、handle、
-drag previewを一体で所有する。Host coordinatorはnative popup windowのanchor、z-order、focus、dismiss、
-DPI/layout epochとUser settings codecを所有する。Reactモックから幅、枠、余白、情報階層を借りるが、
-React/nativeへcurve、preset thumbnail、Undoを二重所有させない。
+## 3. native canvasが所有するもの
 
-Web所有panel内の小さなvisualizationは、DOMのform/a11y/component資産が主体で、native側へ
-semantic stateやinteraction stateを複製しない場合に限ってCanvasを使える。Stage、Timeline、roto、
-大量object/keyの直接操作面をこの例外へ入れない。
+### Timeline
 
-### 1.1 React実装資産の所有
+track header、ruler、lane、clip、key、playhead、selection、marquee、scroll、zoom、drag、trim、snap、edge scrollを一つのcanvas interactionとして所有する。clipやkeyごとにRN componentを生成しない。短いclipはsemantic zoomでlabel、thumbnail、waveform、handleを段階的に省略する。
 
-React所有面は固定モックを外観だけの参考にして再実装せず、
-[React製品資産の直接移管契約](reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)に従って
-component、CSS、stable ID、ARIA、Storybook、Playwrightをproduct packageへ直接所有移管する。
-モックはproduct exportをfixtureで組み立てるconsumerへ反転し、mock/productへ同じcomponentの独立copyを残さない。
+### Curve Editor
 
-交換するのはmock固有state、legacy HTML/script bridge、fixture adapterであり、Hostのrevision付きprojectionと
-typed intentへ一方向接続する。正しい独立React sourceが無いlegacy領域は、固定モック内で同形React化とparityを
-先に完了する。縮約component、skeleton、CSS後追い修理を製品面の代替にしない。
+curve、key、tangent、grid、marquee、pan、zoom、preset previewをrust-skiaで描く。Timelineとviewport transform、pointer lifecycle、selection gestureのheadless語彙を共有できるが、巨大な汎用widget frameworkへ統合しない。
 
-このsource ownershipは内部実装の決定であり、DOM/CSSをDocument、永続形式、公開API、community互換契約へ
-昇格するものではない。またproduct-owned React packageの成立だけでWebView Host、sandbox、platform受入を
-合格にしない。
+### Stage
 
-## 2. native surfaceは汎用UI toolkitを再実装しない
+base previewはwgpuが所有する。rust-skia overlayはgrid、safe area、selection bounds、path、gizmo、snap補助だけを描く。overlayはdirty時だけraster/uploadし、CPU readbackなしでwgpu previewとcomposeする。
 
-native側で自作するのはMotolii固有のdomain surfaceであり、flex、form、text editor、dialog、theme、
-community runtimeを備えた汎用widget frameworkではない。
+100〜500 gizmoは上限stressであり、通常表示目標ではない。visible、selected、group root、semantic importanceで情報を間引く。inactive objectはboundsだけ、active selectionはfull gizmoを基本とする。
+
+## 4. interactionとsingle writer
 
 ```text
-platform input adapter
+platform pointer/key/focus/lifecycle
         ↓
-NormalizedInput
+normalized native component input
         ↓
-headless interaction kernel
-├─ pointer lifecycle / capture / drag threshold
-├─ pan / zoom / marquee / multi-selection
-├─ snap候補照会 / edge scroll / cancel / focus loss
-└─ deterministic gesture state machine
+headless Rust gesture state
         ↓
-toolkit非依存projection / transient preview
+transient preview + dirty canvas
         ↓ release
-D2 command / single writer / Undo 1回
+typed semantic intent / existing D2 command
         ↓
-direct wgpu primitive batch + 必要箇所だけVello
+single writer / journal / one Undo
+        ↓
+new revisioned snapshot
+        ↓
+RN + Timeline + Curve + Stage reprojection
 ```
 
-headless libraryや既存実装は、新規自作より先に検索して使う。ただし採用単位は次を全て満たすものに限る。
+- pointer moveをframeごとにJSへ往復させない。
+- drag中のDocument writeは0、terminal commitは高々1回。
+- cancel、focus loss、capture loss、stale revision、invalid targetは0 write。
+- group selection／group layerも一つのgestureからbounded command setまたは既存macroへ変換し、各objectが独立ownerにならない。
+- Inspector編集も同じtyped intent → D2 → snapshot経路を使う。canvasだけを特別なwriterにしない。
 
-- window、event loop、renderer、scene graphを所有しない
-- 独自Document、selection正本、history、Undoを持ち込まない
-- pointer cancel、focus loss、capture喪失を入力として扱える
-- 固定入力列をwindow/GPUなしでdeterministicに再生できる
-- library固有型をDocument、domain公開API、plugin契約へ出さない
-- adapterで交換可能であり、React/nativeの状態二重所有を要求しない
+## 5. RN/native boundary
 
-外部へ委ねられるのはpointer lifecycle、drag開始距離、viewport操作、geometry、text shaping/layout、
-path rasterization、a11y基盤である。Motoliiが所有するのはclip/key/objectの意味、RationalTime、snap優先度、
-Edit Space、selection、transient preview、D2 commit、Undo/Cancelである。
+境界で許可するもの:
 
-新規nativeコードがclip/key/snap等のdomain語彙ではなく、汎用widget/layout/style/theme語彙を公開し始めたら
-UI framework再発明として停止する。
+- component identity、logical bounds、scale factor、visibility、focus request
+- revision／generation付きread-only snapshotまたはbounded projection
+- viewport、tool mode、selection summary、quality/status
+- terminal typed intent、cancel、diagnostic counters
+- visible／selected／focused中心のbounded accessibility projection
 
-## 3. rendererの現在位置
+境界へ出さないもの:
 
-- 大量rect/line/key/gizmo: core-owned device上のdirect wgpu primitive batchが第一候補
-- 複雑path、curve、roto、採択済みglyph描画: Velloを局所rendererとして再利用
-- font discovery/shaping: 採択済みfontique + harfrust。単純layoutで不足する実例が出た時だけParleyを比較
-- accessibility: AccessKitを基盤にし、全keyをnode化しないbounded semantic projectionを作る
-- egui: 標準製品runtimeには不採用。成立済みbaseline/debug・回帰比較として、G0-9のplatform受入と代替診断経路が閉じるまで削除しない。唯一の明示例外は`P04-C2-EASING-C7A`のprivate child popup/session rendererであり、同ticketのallowlist外へ一般化しない
+- DOM event、CSS pixel、RN internal node、Skia scene、wgpu handle
+- per-object component同期、per-pointer-move bridge message
+- Document mutable reference、Undo stack、surface別selection owner
+- platform固有handleを含むpublic plugin API
 
-direct wgpuは採択候補であって、headless benchmarkだけで製品renderer確定とはしない。Velloの「局所」は
-呼出頻度でなく、所有語彙、描画面積、primitive数、allocation、GPU時間で判定する。毎frame呼ばれても
-scene/input/Documentを所有せず予算内なら境界違反ではない。
+props/events/C ABIはmacOS／Windowsで同じsemantic contractにする。platform adapterだけがAppKit、C++/WinRT、CAMetalLayer、Composition surfaceを知る。
 
-## 4. surface topologyとcoordinator境界
+### 4.1 built-in WebView Hostの再入場条件（履歴互換anchor）
 
-React/native間を流せるのは、typed bounds、domain intent、read-only semantic projection、focus移譲、
-pointer capture境界、DPI epoch、bounded a11y projectionである。DOM event、CSS px、Canvas scene、
-toolkit object、raw GPU handleをDocumentやplugin契約へ流さない。
+旧文書からの参照互換のため見出しを保持する。built-in WebView Hostは2026-08-07以降の標準product runtimeではない。旧routeのoffline bundle、closed codec、epoch、bounded inbox、fail-closed lifecycleは回帰oracleとして残す。将来限定WebViewが必要になった場合は、対象surface、RNでは成立しない理由、process／focus／DnD／a11y負債、security contractを独立decisionで閉じるまで再入場させない。
 
-通常windowはcore-owned device/queueへ接続した**トップレベル`wgpu::Surface`を1枚だけ**持つ。StageとTimelineは
-同じsurface texture、同じframe submission内のviewport/scissor rectangleとして描く。React chromeはdock/tab
-stackごとのopaque child WebView rectangleとしてOS compositorが上へ合成する。1 panelごとにWebViewを増やさず、
-同じversioned React bundleをrole付きで起動する。native rectangleをまたぐDOM popupだけ、必要寸法の一時opaque
-child WebViewを使える。
+## 6. GPUとrenderer
 
-coordinatorは単調増加`layout_epoch`ごとにchild WebViewのlogical bounds、native viewportのphysical bounds、
-hit-test transform、a11y rectangleを一括反映する。古いepochを部分反映せず、CSS px、AppKit point、Win32 pixel、
-DPIをDocument、D2、plugin契約へ流さない。
+- rust-skiaをTimeline、Curve Editor、Stage overlayの既定2D rendererとする。
+- wgpuをStage preview、media/composite、final Stage compositionのownerとする。
+- 同じStage component内でdevice、queue、surface、resource lifecycle ownerを一意にする。
+- rust-skiaはまずCPU raster + dirty uploadを採用する。実製品計測で不足した面だけGPU-backed Skiaを比較する。
+- direct wgpu primitive UIとVelloは新規標準ではない。既存codeはbenchmark、fixture、visual oracle、特殊render資産として保持する。
+- renderer変更はDocument、semantic command、interaction fixtureを変更理由にしない。
 
-Stage/Timeline別の複数surface、全画面transparent WebView、browser/native GPU texture共有、Windows
-CompositionControllerは正規経路にしない。通常のwindowed child WebViewがWindows実機で修正不能な失敗を再現した
-時だけCompositionController、別window、最後にCEF OSRの順で再審判する。証拠と停止線は
-[surface topology決定](reviews/2026-07-21-ui-surface-topology-decision.md)を正とする。
+## 7. focus、IME、DnD、DPI、a11y
 
-### 4.1 built-in WebView Hostの再入場条件
+- text compositionはRN standard TextInputをownerとし、composition中shortcutを発火しない。
+- native canvasへfocusを移してもRN form bufferを破棄しない。
+- native dragはcomponent外release、window focus loss、unmountをterminal/cancelとして受ける。
+- external file DnDと内部object dragを別contractにする。
+- logical coordinateとphysical pixelを明示し、scale変更時はresourceとhit-testを同じepochで更新する。
+- RN standard controlsはRN/OS semanticsを使う。native canvasは全要素を無制限にAX node化せず、visible、selected、focused、navigation targetをbounded projectionする。
+- IME composition、VoiceOver/NVDA、outside-window drag、DPI、device lostは実OS gateで判定し、unit testへ代用しない。
 
-[historical React / WebView lineage回収](reviews/2026-07-23-historical-react-webview-lineage-recovery.md)で、
-現行treeから失われていたbuilt-in Host foundationの不変条件を再採択した。これはproduct-owned React面を載せる
-bundled first-party Host moduleだけの条件であり、community custom UIや公開plugin runtimeを許可しない。
+## 8. product-owned panelとplugin UI
 
-- R0〜R6の固定source直接移管とmock consumer化を先行し、docs、mock、dev server、diagnostic routeをrelease sourceにしない
-- productionはnetwork 0の決定的offline bundleと閉じたasset manifestから起動し、CDN、localhost、HMR、file URL、未掲載assetを拒否する
-- Host所有のclosed typed schemaからWeb側型とconformance vectorを生成し、role、direction、instance epoch、sequence、size/depthをfail closedで検査する
-- IPC callbackはdecode、session gate、bounded event-loop inboxへのenqueueだけを行い、Document/D2へreentrant mutationしない
-- Host coordinatorがlayout/instance epoch、focus、reload、process lost、bounded retryを所有し、再生成時は最新Host snapshotから再投影する
-- navigation、new window、download、form、外部network、任意evalは既定denyとし、必要能力は後続のtyped capabilityで個別追加する
+RN採択により、bundled first-partyのproduct-owned custom panelをReact componentとして追加できる。ただしthird-party plugin custom UIの公開は別問題である。
 
-旧H1 exact contractのpackage、dependency version、4 role、wire field、byte/depth/queue上限、custom schemeは現在の
-実装契約ではない。current source assetとprojection / intent、platform adapterが固まった後にclosed contractを
-再作成し、現行依存と一次資料で値を再固定する。React package成立だけでWebView/native統合、platform受入、
-community sandboxを合格にしない。
+- NodeDesc等からのHost-generated panelは安全なfallbackとして維持する。
+- product-owned RN componentはbundled Host moduleであり、untrusted plugin ABIではない。
+- third-party code loading、sandbox、permission、version、crash isolation、distributionはG0-3 / GAP-13で別途決定する。
+- RN採択を理由に任意JS bundle、network、eval、同process権限をpluginへ開かない。
 
-## 5. 決定済みと未決の境界
+## 9. platform strategy
 
-### 決定済み
+macOSで操作体系を先に成立させる。共通Rust renderer coreはWindows targetでcompile済みであるため、Windows実機未検証をmacOS implementationの停止条件にはしない。
 
-- React/WebView chrome + native Stage/Timelineという責任分担
-- StageはReact header/transport + native Preview canvasを一つのdockable複合panelとして扱う。透明overlayは使わない
-- ReactはDOMの優位性がある領域へ使い、高密度Canvas workspaceのownerにしない
-- Timelineの`KEYS / LAYERS` tool panelはReact、time/Z軸に同期するrail・bar・key・playheadはnative
-- Stage/Timelineのlayout、hit-test、interaction modelはtoolkit/renderer非依存に置く
-- native interactionはheadless部品を優先し、Motolii固有意味だけを自作する
-- React/nativeの両側へselection、snap、Undo、semantic stateを二重所有させない
-- Hostとcommunityがcomponent/test語彙を再利用できる長期原則。ただし公開runtime、origin、process、権限、window topologyの同一化ではない
-- 1 top-level wgpu Surface + Stage/Timeline 2 viewport + opaque child WebView islandsという通常window topology
-- Timeline / Stage / Browser / Inspectorはbundled first-party Host moduleであり、surface runtimeからplugin分類を推論しない
-- eguiは製品runtimeへ採用せず、新しい製品surfaceを実装しない。既存shellは比較・診断baselineとして撤去条件成立まで保持する
+一方で次を守る。
 
-二重所有の禁止は最適化方針ではなく不変条件である。Document編集はD2 single writerだけ、Transient selectionと
-sessionはHost coordinatorだけが所有する。React Inspector、native Preview、native Timelineは同じrevision付き
-snapshotのread-only projectionであり、独自writer、独自Undo、surface別selection正本を持たない。reload、detach、
-crash復旧では最新Host snapshotから再投影し、surface間の双方向state syncを追加しない。
+- Metal/AppKit固有型を共通interaction、projection、C ABIへ漏らさない。
+- WindowsはRNW Fabric Component View + Microsoft.UI.Composition/DX12 adapterとして接続する。
+- 最初の製品vertical slice後にWindowsでrender、resize、DPI、outside release、focus、remount、device lostを実行する。
+- Windows gate未通過の状態をcross-platform完成またはDistribution Readyと呼ばない。
 
-通常製品panelのplacement能力もrole別に分けない。Stage / Timeline / Graph / Browser / Inspectorは同じdock treeで
-tab化、horizontal / vertical split、divider resize、top-level detach / re-dock、window resizeを行える。modal、popover、
-toastはdock panelではない。headless layoutはlogical rectangleだけを計算し、window位置、DPI、split比をDocumentへ
-書かず、panelを移してもHost snapshot、selection、Undo ownerを増やさない。isolated fixtureの合否と未証明範囲は
-[detachable panel / multi-window契約](reviews/2026-07-22-m3-detachable-panel-window-contract.md)を正とする。
+## 10. migration
 
-### G0-9L限定確定 / G0-9D未決
+1. 既存routeをfreezeし、意味fixtureと製品outcome oracleを保全する。
+2. RN shell + Rust Host lifecycleを製品routeへ置く。
+3. VS-1をRN shellで再閉鎖する。
+4. Stage、Timeline、Curve Editorをoutcome単位でcutoverする。
+5. Inspector／Browser等のReact conceptをRN product componentへ移す。
+6. 新routeでautomated、macOS product、human gateを通した面だけ旧presentationをretireする。
+7. Windows product gateを通してからcross-platform UI基盤を完了扱いにする。
 
-- macOS/Windowsのfocus、DPI、resize、z-order、pointer capture、surface/device lost、a11y tree接合の受入
-- direct wgpu枝とdirect wgpu + Vello局所pass枝の製品採択
-- egui baselineの撤去条件を満たすplatform証拠と代替診断経路
-- Linuxでsystem WebViewを使うかCEF比較へ進むか
+全面書き直し、旧codeの一括削除、二つのUI基盤の恒久並走は行わない。移行中の二routeは比較のためだけに存在し、同じ製品windowでsemantic ownerを二重化しない。
 
-G0-9Lは固定した主開発Mac構成のplatform prerequisite evidenceだけを限定確定し、G0-9DはWindowsと追加hardwareを含む
-Distribution Readyを判定する。G0-6Hは2026-07-29の人間`ACCEPT`で完了してU0e-3だけを解禁した。
-parent G0-9、G0-9D、G0-3は未完了のまま残し、egui baselineを削除しない。
-G0-9LまたはG0-6H単独ではW0b、H1b、Motolii Studio Preview、通常製品window結合を解禁しない。
-G0-9Lは固定Macのplatform prerequisite evidenceに限って実機合格したが、これらの製品結合を実装しない。
+## 11. status
 
-### G0-3 / GAP-13で未決
+決定済み:
 
-- first-party pluginとthird-party pluginのcustom UI公開境界
-- community UIのsandbox、権限、互換、配布、署名、障害隔離
-- product-owned component/test語彙のうち、何を公開kitとしてversion保証するか
+- RN shell + rust-skia Timeline/Curve + wgpu/rust-skia Stage
+- Rust core/D2/snapshotの継続利用
+- macOS先行、Windows early external gate
+- direct-wgpu/Vello/eguiの新規product UI凍結とoracle保持
 
-G0-9のplatform証拠はG0-3へ入力できるが、G0-9合格だけでplugin UI公開契約を許可しない。逆にplugin sandbox未決を理由に、依存を満たしたbundled first-party製品surfaceまで第三者pluginと同じ停止線へ置かない。
+未完了:
 
-未決項目を理由に決定済み責任境界やegui製品不採用を再び「全面egui対全面React」の比較へ戻さない。逆に責任境界の決定を、
-未合格のWebView/native合成やplugin公開契約の実装許可として扱わない。
-
-## 6. 証拠と後続
-
-- [React / WebView再選定](reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)
-- [native surface renderer再選定](reviews/2026-07-21-native-surface-renderer-reselection.md)
-- [拡張サーチ](reviews/2026-07-21-native-surface-renderer-extended-search.md)
-- [Fable反対側レビュー](reviews/2026-07-21-native-surface-renderer-counter-review.md)
-- [Fable伸長レビュー](reviews/2026-07-21-native-surface-renderer-growth-review.md)
-- [surface topology決定](reviews/2026-07-21-ui-surface-topology-decision.md)
-- [G0-9部分スパイク](spikes/g0-9-ui-runtime.md)と[確認点マトリクス](spikes/g0-9-verification-matrix.md)
-
-実装合否と停止線は[M3仕様 G0-9/U3a](specs/M3-ui-integration.md)を正本とする。本書は設計責任を固定するが、
-新しい公開API、Document field、永続layout形式、plugin GPU/UI契約を許可しない。
+- Motolii製品repoへのRN runtime導入
+- RN shellでのVS-1再閉鎖
+- product Stage／Timeline／Curve移行
+- full IME composition、VoiceOver、NVDA、device lost
+- Windows native component実機受入
+- third-party custom panel公開契約

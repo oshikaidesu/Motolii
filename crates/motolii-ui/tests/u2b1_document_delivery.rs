@@ -39,34 +39,6 @@ fn private_runtime_is_the_only_ui_module_that_stores_the_writer() {
 }
 
 #[test]
-fn browser_lifecycle_reprojection_cannot_reach_document_edits() {
-    let product = include_str!("../src/product_runtime.rs");
-    let browser = include_str!("../src/browser_host_runtime.rs");
-    let lifecycle = product
-        .split("pub(crate) fn handle_product_event")
-        .nth(1)
-        .expect("product lifecycle handler exists")
-        .split("fn set_idle_control_flow")
-        .next()
-        .expect("lifecycle and replacement path are bounded");
-
-    for forbidden in [
-        ".process_next(",
-        ".apply_macro(",
-        ".undo(",
-        ".redo(",
-        "push_place_rectangle",
-        "DocumentEditQueue",
-        "DocumentWriter",
-    ] {
-        assert!(
-            !lifecycle.contains(forbidden) && !browser.contains(forbidden),
-            "Browser lifecycle path reached Document/history operation: {forbidden}"
-        );
-    }
-}
-
-#[test]
 fn browser_replacement_drops_old_island_before_building_the_new_one() {
     let product = include_str!("../src/product_runtime.rs");
     let replacement = product

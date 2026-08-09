@@ -154,11 +154,12 @@ U0d-3時点のraw toolkit input許可fileゼロは、U1a-2の局所separator操�
   EscapeはIME非active時だけprivate cancel actionへ変換し、どのIME状態でも
   `SafetyInterrupt`へ読み替えない
 - `CommandId`、keymap resolver、Document command、作品意味へ接続しない
-- adapter外のraw egui/winit inputは引き続きAST監査でゼロを要求する
+- adapter外raw inputゼロを要求したsource-wide AST監査は2026-08-09に退役した。layoutの
+  IME優先、SafetyInterrupt、Document write 0はbehavior契約として維持する
 - toolkit型をlayout intent、公開signature、他crateへ出さない
 
-実装PRは許可fileを固定し、別module、alias、helper、macro経由のraw inputを拒否する
-負例を追加する。製品global shortcutの例外として本節を一般化しない。
+exact許可fileとraw pathの負例は2026-08-09改訂後の実装条件ではない。layout actionを
+製品global shortcutへ一般化しない意味上の境界は維持する。
 
 ## 8. Statusと構造入口
 

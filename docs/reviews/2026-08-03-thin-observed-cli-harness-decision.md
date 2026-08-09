@@ -79,27 +79,29 @@ environmentを使う。harnessはenvironmentを記録・消去・補完しない
 heartbeatはprocessの生存とbyte進捗を示すだけで、stall判定、無回答判定、timeout短縮、採用資格には使わない。寡黙なmodelは
 heartbeatとwall timeoutの間で正常に待ち、回答の有無はprocess完了後に呼出側がprovider出力と終了状態から判定する。
 
-## 2026-08-03確認済みprovider接続
+## 2026-08-07再確認済みprovider接続
 
 以下はharnessへ内蔵するprofileではなく、各CLIの一次資料と実機helpを照合した呼出側の構成要素である。CLI更新時は
-その時点のhelpと一次資料へ再照合する。
+その時点のhelpと一次資料へ再照合する。role、主要model、limit group、可変配分と一runのexecution envelopeは
+[外部LLM発注の観測・実行・可変配分runbook](../llm-dispatch-observation-and-allocation-runbook.md)を正本とする。
 
-- Claude Code 2.1.216: `-p --model <exact> --effort <level> --permission-mode plan --setting-sources ''
+- Claude Code 2.1.223: `-p --model <exact> --effort <level> --permission-mode plan --setting-sources '' --safe-mode
   --strict-mcp-config --mcp-config '{"mcpServers":{}}' --tools '' --disable-slash-commands --no-chrome
-  --no-session-persistence --max-turns 1 --output-format stream-json --include-partial-messages --verbose`。hook lifecycle自体が
-  観測対象の時だけ`--include-hook-events`を加える。subscription認証時はAPI key専用の`--bare`へ
-  黙って置換しない。[CLI reference](https://code.claude.com/docs/en/cli-reference)
+  --no-session-persistence --output-format stream-json --include-partial-messages --verbose`。現行helpにhard turn capは無い。
+  hook lifecycle自体が観測対象の時だけ`--include-hook-events`を加える。`--fallback-model`は確認できるがMotoliiでは使わず、
+  subscription認証時はAPI key専用の`--bare`へ黙って置換しない。[CLI reference](https://code.claude.com/docs/en/cli-reference)
 - Codex CLI 0.146.0-alpha.3.1: `exec --json --ephemeral --ignore-user-config --ignore-rules --strict-config
   --skip-git-repo-check --model <exact> -c 'model_reasoning_effort="<level>"' -c 'project_doc_max_bytes=0'
   --sandbox <mode>`に、不要な
   MCP/web/apps/browser/memory/multi-agent/plugin/skill機能のdisableを明示する。`project_doc_max_bytes=0`は総監督が必要文脈を
-  promptへ渡した場合だけ使う。[Non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode.md)
-- Cursor Agent 2026.07.23-e383d2b: `-p --workspace <absolute> --trust --mode ask --sandbox enabled
+  promptへ渡した場合だけ使う。`gpt-5.3-codex-spark`は2026-08-07にexact ID、JSONL、usage、exit 0を
+  [実機確認済み](2026-08-07-codex-spark-cli-smoke-observation.md)。[Non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode.md)
+- Cursor Agent 2026.08.04-aaa8809: `-p --workspace <absolute> --trust --mode ask --sandbox enabled
   --model <exact> --output-format stream-json --stream-partial-output`。ambient ruleを完全無効化するCLI optionは確認できないため、
   空staging cwdを使う。genericな`agent`名でなくCursor binaryのabsolute pathを渡す。
   [Output format](https://docs.cursor.com/en/cli/reference/output-format)
 
-Claudeの`--max-turns`以外に共通のwall timeoutはなく、途中streamのevent形も三者で異なる。この差をharness内で正規化せず、
+三CLIに共通のhard turn capはなく、途中streamのevent形も異なる。この差をharness内で正規化せず、
 raw byte保存とprocess lifecycleだけを共通化する。呼出側observerはClaudeのpartial/result event、CodexのJSON event、Cursorの
 thinking／assistant／result／tool callを実行中に読み、provider固有のterminal statusと最終回答位置を確認する。特にCursorの
 plan modeでは結論がchat textでなく`createPlanToolCall.args`に入る実測があるため、両方を検査する。根拠は
@@ -108,7 +110,7 @@ plan modeでは結論がchat textでなく`createPlanToolCall.args`に入る実�
 ## 検証と負例
 
 専用testは、引数中の空白を含むexact argv、生NUL byteを含むstderr、非zero exitの保存、親終了後もpipeを保持する場合を含む
-process group内grandchildのtimeout回収、既存log directoryの上書き拒否、cwd/log tree重複、relative executable、
+process group内grandchildのtimeout回収（OS process-group reclamation）、既存log directoryの上書き拒否、cwd/log tree重複、relative executable、
 非positive timeout／grace／heartbeatの拒否を固定する。さらに、子が少量stdoutをflushしてから寡黙になるfixtureで、
 終了前heartbeatにprocess生存、経過時間、byte進捗、idle時間が記録され、そのheartbeatがprocessを終了しないことを確認する。
 

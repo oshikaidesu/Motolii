@@ -1,6 +1,8 @@
 # M3 既知技術採択・並列実装地図
 
-状態: **現行M3実装入口**（2026-08-01）
+状態: **旧runtimeの実装検索・oracle地図 / 新規dispatch authorityではない**（2026-08-07）
+
+2026-08-07に標準UI runtimeをReact Native + rust-skia + wgpuへ再基線化した。現行の実装waveと`DO`は[M3仕様](specs/M3-ui-integration.md)と[implementation ledger](implementation-ledger.md)を正とする。本書の12親・33子は、旧routeで成立したowner、semantic contract、oracle、未閉鎖gapを検索するために保持する。`React/Vite/winit/wry`、direct-wgpu/Vello、WebView等の旧供給routeを新製品runtimeへそのままdispatchしない。
 
 ## 1. この地図が置き換えるもの
 
@@ -11,8 +13,8 @@ oracleの単位である。施工step数では分割しない。
 基線`555a9ab5`の[旧粒度化](reviews/2026-07-22-m3-comfortable-use-granulation.md)には152行、うち
 `DO / WAIT / SPLIT`が71行ある。そこには実装だけでなく、選定範囲、owner候補、再確認、mirror同期が
 別IDとして残り、実装済み`CU-109`を`WAIT`と記すdriftもある。旧IDは本書の来歴・oracle参照へ吸収し、
-現行dispatch queueとして使わない。実状態は[implementation ledger](implementation-ledger.md)、製品意味は
-[M3仕様](specs/M3-ui-integration.md)、供給routeと並列境界は本書を正とする。
+現行dispatch queueとして使わない。実状態は[implementation ledger](implementation-ledger.md)、製品意味と新供給routeは
+[M3仕様](specs/M3-ui-integration.md)と[UI runtime責任境界](ui-runtime-architecture.md)を正とする。
 
 本書は新しいledger、transport schema、機械gateではない。主担当Codexは
 `implementation-ledger.md`の「現在の並列レーン」にある`DO`行を施工前に確認する。各実装taskは

@@ -52,17 +52,16 @@ Mock、Native Shell Baseline、Native Surface Spike、egui比較baseline等の�
 単独の「プレビュー」がPreview buildとPreview viewportのどちらか判別できない場合だけ、起動前に対象を確認する。
 `Motolii Studio Preview`のように固有名が完全一致している場合は曖昧扱いせず、この表に従う。
 
-## `native`、`React`、`WebView`、`hybrid`
+## `native`、`React Native`、`WebView`、`hybrid`
 
 - **native desktop製品**は、OSのdesktop applicationとして起動する製品形態を指す。全surfaceをRust widgetだけで
   描くという意味ではない。
-- **React surface**はproduct-owned React componentが所有する表示・操作面を指す。製品ではembedded WebView island
-  内で動き得るが、外部browserで動くMotolii Studio Mockとは別の実行物である。
-- **native surface**はRust / wgpu側が所有するStage、Timeline time surface、Graph等の描画・高頻度操作面を指す。
-- **hybrid**はReact/WebView chromeとnative surfaceを組み合わせるruntime architectureの説明であり、
+- **React Native surface**はproduct-owned RN componentが所有するshell、panel、form等の表示・操作面を指す。外部browserで動くMotolii Studio Mockや旧WebView product routeとは別の実行物である。
+- **native canvas**はRust/rust-skia/wgpu側が所有するStage、Timeline、Curve等の描画・高頻度操作面を指す。
+- **WebView surface**は旧product routeまたは履歴資料のembedded React web面を指す。新規標準runtimeではない。
+- **hybrid**はReact Native surfaceとnative canvasを組み合わせるruntime architectureの説明であり、
   build名や完成状態ではない。
-- React assetをそのまま再利用できても、product packageへの所有移管、Host projection / typed intent接続、
-  WebView/native結合が済むまでは製品結合済みと呼ばない。
+- React web assetのconceptを再利用できても、RN product component化、Host projection / typed intent接続、native component結合が済むまでは製品結合済みと呼ばない。
 
 ## `Preview`の二つの用法
 

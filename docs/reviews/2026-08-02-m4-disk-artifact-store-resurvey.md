@@ -21,7 +21,7 @@ M4 K1b/K1c/K7/K8が要求するdisk側の成果は次である。
 1. 完全recipe keyからartifactを再起動後もlookupできる。
 2. 同一filesystem内の一意tempへ書き、検証後のrenameでだけ可視化する。
 3. 欠落、partial、hash不一致、読取失敗をcache missへ写す。
-4. Host single writer、allocation前hard budget、watermark、LRU、pinを守る。
+4. Host single writer、allocation／bounded write chunk前hard budget、watermark、LRU、pinを守る。
 5. proxy等はFFmpegが直接開ける通常fileとして保持できる。
 6. cache削除時にDocument、Undo、Project、Final意味が変わらない。
 
@@ -93,19 +93,19 @@ disk entryのidentityは完全recipe keyのdigestである。raw path、mtime、
 
 ### 4.2 publication
 
-1. Host cache writerがhard budgetとwatermarkをadmitする。
-2. finalと同一directory／filesystemの一意tempへproducerが書く。
-3. producer finish後にsize、content digest、必要なcodec probeを検証する。
-4. single writerがtempをfinal recipe pathへpersistする。
-5. publish後だけRAM index／coverageへmessageを反映する。
+1. Host cache writerがhard budgetとwatermarkをadmitし、same-filesystemの一意tempとwrite capabilityをproducerへ貸す。
+2. producerはtask固有検証を行い、candidate receipt前にwrite phase／sidecar subprocess／全write handleを閉じてtempの唯一所有権をHostへ返す。receipt後のproducer mutationを許さない。
+3. Host ownerがcandidateを再openし、実際にcommitするexact bytesのsize、`ArtifactDigest`、必要なcodec invariantを権威ある最終検証として照合する。
+4. single writerが検証済みbytesをproject／cache-local immutable objectとして先に耐久化する。
+5. `RecipeKeyV1 -> result metadata + ArtifactDigest`の小さいresult recordをunique temp→file sync→atomic replace→可能ならdirectory syncでcommitする。このreplaceだけをpublication commit pointとする。
+6. commit済みrecordをreaderとするRAM catalog／coverageへ、publish後だけmessageを反映する。
 
-process kill、ENOSPC、producer failureでtempが残ってもentryとして列挙しない。cacheはDocumentほどのdurabilityを
-要求せず、renameやdir syncが失われた場合は次回missで再生成する。
+process kill、ENOSPC、producer failureでtempまたは未参照immutable objectが残ってもentryとして列挙しない。result record commit前のcrashは旧recordを残し、commit後のrecordは既に耐久化済みobjectだけを参照する。record欠落、object欠落、digest不一致、decode失敗、platformのdurability不足は次回missへ縮退して再生成する。recipe path自体をartifact／commit pointにせず、in-memory indexをauthorityにしない。
 
 ### 4.3 lookupとretirement
 
 - startup scanはbackground/lazyに行い、editor entryを待たせない。
-- publish前と再起動後の初回admissionでsize/content digestを検証し、不一致はmiss＋retirement候補とする。
+- publish前と再起動後の初回admissionでresult record、object size／content digestを検証し、不一致はmiss＋retirement候補とする。
   検証済みhandleをprocess内で再利用し、frameごとに全fileを再hashしない。
 - mtime／volatile access metadataはeviction順だけに使い、identityへ使わない。
 - hard budget超過前にLRU候補を同期選定し、pin／open中entryは飛ばす。
@@ -120,7 +120,7 @@ filesystem hard-linkまたはcontent blob層を独立`PATTERN`比較する。こ
 
 ## 6. 採択probe
 
-`P05-C1`はCAS crate比較でなく、次のfilesystem artifact fixtureを閉じる。
+P05の検証梯子はCAS crate比較でなく、次のfilesystem artifact fixtureを段階的に閉じる。2026-08-02の`P05-C1` baselineが実証したのは1〜2とstale temp隔離／digestの通常系だけで、3〜6を同じ`VERIFIED`へ含めない。
 
 1. `tempfile 3.27.0` exact dependency、license、Mac／Windows build。
 2. Rust writerとFFmpeg producerのsame-directory temp→finish→verify→persist。
@@ -136,9 +136,9 @@ filesystem hard-linkまたはcontent blob層を独立`PATTERN`比較する。こ
 
 | 層 | 対象 | 必須oracle | 合格後に許すもの |
 |---|---|---|---|
-| `V1 compatibility` | P05-C1 isolated fixture | Mac／Windows build、Rust／FFmpeg通常file、same-dir publish、kill／ENOSPC／bit-flip／truncate／missing／stale temp、同一recipe競合、partial final 0 | `tempfile`採択とprivate adapter起票 |
-| `V2 store model` | P05-C2 unit／model test | restart hit、wrong generation miss、検証済みhandle再利用、shard衝突0、公開型漏出0 | recipe file storeをK1b/K1cへ接続 |
-| `V3 resource integration` | P05-C3 + P04-C2 stress | allocation前hard admission、1GB sparse/fake budget `+ epsilon`以内、pin／open／committing削除0、削除失敗を未回収計上、watermark refusal | disk tierの製品route接続 |
+| `V1 baseline (observed)` | P05-C1 isolated fixture | Mac／Windows cross-build、Rust／FFmpeg通常file、same-directory temp／persist、atomic visibility fixture、SHA-256、stale temp隔離 | `tempfile`採択とP05-C2 private model起票。kill／ENOSPC／race／Windows runtimeを閉じたとは扱わない |
+| `V2 store model` | P05-C2 unit／model test | restart hit、process kill、bit-flip／truncate／missing、wrong recipe／store-format／catalog version miss、同一recipe競合、partial final 0、Windows runtime old-or-new visibility、検証済みhandle再利用、shard衝突0、公開型漏出0 | result-record／immutable-object storeをK1b/K1cへ接続 |
+| `V3 resource integration` | P05-C3 + P04-C2 stress | ENOSPC、allocation／bounded write chunk前hard admission、1GB sparse/fake budget `+ epsilon`以内、pin／open／committing削除0、削除失敗を未回収計上、watermark refusal | disk tierの製品route接続 |
 | `V4 product E2E` | K7a／K8b | process kill後restart、破損cacheから透明再生成、FFmpeg実読込、cache有無のFinal bit一致、全曲Draft coverage、実file 100GB生成0 | 旧disk routeの`FROZEN → RETIRE` |
 
 `V1`〜`V4`は期待値更新、purge後だけ成功する試験、mock codec、実fileの巨大生成で代用しない。現時点は

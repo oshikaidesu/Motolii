@@ -6,7 +6,7 @@ use std::fs;
 use motolii_core::RationalTime;
 use motolii_doc::journal::{
     replay_from_base, JournalEdit, JournalRecordKind, JournalScanOutcome, ReplayFailure,
-    V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION,
+    V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION, V3_EDIT_FORMAT_VERSION,
 };
 use motolii_doc::{
     migrate_bytes, Clip, ClipSource, Command, DocParam, Document, EffectDefinition,
@@ -933,16 +933,17 @@ fn v1_decode_does_not_use_direct_command_serde_path() {
 }
 
 #[test]
-fn new_journal_edit_writes_format_version_two() {
+fn new_journal_edit_writes_format_version_three() {
     let edit = JournalEdit::new(Command::SetProperty {
         target: LayerId::from_raw(0),
         property: ScalarPropertyId::Opacity,
         old_value: DocParam::const_f64(1.0),
         new_value: DocParam::const_f64(0.5),
     });
-    assert_eq!(edit.format_version, V2_EDIT_FORMAT_VERSION);
+    assert_eq!(edit.format_version, V3_EDIT_FORMAT_VERSION);
     let bytes = motolii_doc::journal::edit_payload(&edit).unwrap();
     let v: JsonValue = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(v["format_version"], V2_EDIT_FORMAT_VERSION);
+    assert_eq!(v["format_version"], V3_EDIT_FORMAT_VERSION);
     assert_ne!(v["format_version"], V1_EDIT_FORMAT_VERSION);
+    assert_ne!(v["format_version"], V2_EDIT_FORMAT_VERSION);
 }

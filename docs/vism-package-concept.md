@@ -150,13 +150,35 @@ Hostへ残すもの:
 
 自由なscript panel、任意Document mutation、名前検索、独自Undo、隠れ状態を「Vismだから」と許可しない。[小さなコアと探索可能な拡張 §8](extensible-core-model.md#8-表現の種類をコアへ列挙しない)の憲法を配布面へ延長したものがVismである。
 
-### 5.1 Vism間接続はKitへ置く
+### 5.1 圧縮映像を表現素材として読む探索メモ
+
+状態: **観察・比較中**。P-frame改竄を入口として、圧縮済み映像を単に復号後の`Frame`列へ還元せず、予測の痕跡を表現素材として読める可能性を記録する。候補は motion vector、residual、reference relation、bit allocation、decode順とpresentation timelineの差である。
+
+- 破損だけを目的にしない候補として、residualだけの上映、圧縮由来のmotionを別の映像／文字／空間表現へ移植すること、motion fieldの演算、reference relationまたはtimelineの作曲を比較する。
+- この観察は「codec」「P-frame」「datamosh」を新しい`PluginKind`、公開SDK型、manifest field、Document payload、package capability、M6 taskとして確定しない。既存のcodec／encoderをVismへ再分類せず、v1の`ExportJob`と完成映像出力の境界も変更しない。
+- 後続で一つの表現席として検討する場合は、対象profileと既知実装、型付き入力／出力、Hostのdemux・mux・resource・失敗所有、Preview／Export同一評価、再生可能な出力または明示的typed failure、第三者conformanceを別仕様で閉じる。未定義bitstreamの破損やHost非公開実装への依存を第三者authoringの入口にしない。
+
+これは、Vismが未知の表現を既存Filterへ押し込めず、第三者が公開契約を通じて持ち込める余地を保つという長期原則の一例である。実装、公開面、採択順は未決である。
+
+同じ探索には、Blenderのような完全な世界構築とは別の**撮影起点の空間表現**も含む。depth、camera track、point／plane／billboard、view-dependentな再投影を、撮影された像の空間的な痕跡として比較できる。候補は次の通り。
+
+- 画面の一本のslitでなく空間のdepth帯またはplaneごとに異なる時刻を採る、4D slit-scan。
+- depthをkeyとして、手前／奥、または文字との距離ごとに別時刻の像を置くtime replacement。
+- cameraが見たpointだけを残し、視線で空間が記憶／忘却されるcamera-memory point cloud。
+- 現在のrenderを少しずらしたcamera poseからpoint cloud／depth surfaceへ再投影して反復するspatial feedback。
+- geometryとtexture、または形状とappearanceを別時刻から採るspatial temporal mismatch。
+
+目的は任意のscene、物理、照明、未観測領域をVismが発明することではなく、ショットのcamera-relativeな奥行き、限られた視点移動、空間への追従、視差、遮蔽を表現へ使える余地を残すことにある。未観測のgeometry／appearanceを既知の世界として黙って補うこと、3D world authoringを通常Vismの既定責任にすることは非目標とする。後続では、観測由来と不確実性、許すcamera変位、coverage／hole、Hostのcamera・depth・resource所有を別仕様で閉じる。
+
+関連する観察として、Live2D Cubism AE Pluginはmodelの特定ArtMeshへattach pointを置き、AE側の任意layer／effectを追従させる。Motoliiが比較するのはLive2D model、AE expression、生成`.jsx`、そのruntimeを採用することではなく、**表現が意味のある追従先を宣言し、Hostが文字、particle、映像、effect等を接続する**という責任分離である。手首、視線、glyph、point cloudの局所、圧縮由来motion等を同じ既定型へ早期に統合せず、追従先のidentity、space、time、coverage、失効、Host評価所有を別仕様で閉じるまで、`Attachment`型、tracking API、Document schema、専用UI、公開SDK面を追加しない。
+
+### 5.2 Vism間接続はKitへ置く
 
 Vismは別Vismの実装identityを直接要求しない。`BeatEvents`、texture、DataTrack等の型付きinputを要求し、Kitが具体的なprovider、consumer、接続、初期値、assetを選ぶ。
 
 v1のKitは宣言をProjectへ1 macroでmaterializeし、展開後は通常のVism instanceと接続として編集する。Kit runtimeを常駐させず、Kit更新で既存Projectを自動変更しない。詳しい責任とBPM例は[Vism / Kitモデル](vism-kit-model.md)を正本とする。
 
-### 5.2 外向きDeliveryはv1映像だけに閉じ、能力席だけ残す
+### 5.3 外向きDeliveryはv1映像だけに閉じ、能力席だけ残す
 
 v1の製品出力は、既存`ExportJob`が同じ`render_frame(t, Quality)`を通して作る**音声mux込みの完成映像**に限定する。Lottie、animated SVG、OTIO、別Host project、Web runtime package、外部serviceへのpublishをVism完成条件へ含めず、`.vism` loaderより先にExporter APIを実装しない。
 

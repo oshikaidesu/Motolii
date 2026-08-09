@@ -1,6 +1,8 @@
 # M3 実行可能task地図
 
-状態: **現行再コンパイル正本 / 2026-08-04再コンパイル**
+状態: **旧runtime施工前snapshot / 新規dispatch authorityではない**（2026-08-07）
+
+2026-08-07のReact Native + rust-skia + wgpu再基線化により、本書の33子は旧routeのexact target、semantic oracle、gapを検索する履歴snapshotへ移った。新runtimeの意味とwaveは[M3仕様](specs/M3-ui-integration.md)、施工nodeと依存は[M3 RN runtime実行地図](m3-rn-runtime-execution-map.md)、現在状態は[implementation ledger](implementation-ledger.md)を正とする。本書の`IMPLEMENT`、`TARGET_MISSING`、旧「次task」を新runtimeへ自動継承しない。
 
 ## 1. 目的
 
@@ -122,29 +124,29 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 ## 4. 33子の現在コンパイル結果
 
 `555a9ab5`は2026-08-01 simulation時点の初期simulation baselineとしてのみ保持し、本表全体を現時点で再検証したことは示さない。
-現在の`P03-C2`の`DONE / REDUCE` overrideは、§5.4の現行authority、commit `da4dcf75`、
-[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)に裏付けられる。`CU-201R`はcommit `d0f7dfec`と[oracle受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で閉じ、`CU-201E`は通常製品E2Eまで`DONE`、`U4b-0`もcontract/code/mainまで`DONE`である。通常Add Position Keyの入口はPosition行、current-playhead carrierはcommit `75ccd5e7`、normal row/projection `CU-0A08ITIA`はcommit `2c20e88e`でcode/main `DONE / ACCEPTED`、typed Host intent/queue `CU-0A08ITIB`は[implementation acceptance](reviews/2026-08-04-inspector-position-key-one-shot-intent-implementation-acceptance.md)どおりcommit `98e38925`でcode/main `DONE / ACCEPTED`となった。Bはexact sequence-only message、separate Host FIFO、Wake時のcurrent primary/playhead、one queue action、existing prepare/commit/publishだけを接続する。これは`P04-C2-EASING-C7A`と別である。P04-C2 diagnostic correctionはhistorical `DONE / ACCEPTED`、`P04-C2-EASING-C7A`はcommits `bb0624d8`/`87bf026e`/`56f61e7b`でcode/main `DONE / ACCEPTED`である。C7Aは標準egui製品runtimeを再採用せず、このprivate child popup/sessionだけでdirect egui 0.35/wgpu 29、sole EventLoop、existing ProductGpuParts/GpuCtx、real WindowId dispatch、one private popup module、one Position-only requestへ限定する。human visualはM3 final `EXTERNAL_GATE_PENDING`である。
+現在の`P03-C2`の`REDUCE / IMPLEMENT` overrideは、§5.3の現行authorityとimplementation ledgerの一意な
+`CU-201P-TRIM` `DO`行に裏付けられる。`IMPLEMENT`への昇格はimplementation ledgerへ一意な`DO`行を追加した時だけ発効する。
 
 | 子 | 現在状態 | exact次task | 通常製品routeの出口 |
 |---|---|---|---|
-| `P01-C1` | `DONE` | commit `f79625b8`で単一`ApplicationHandler<ProductEvent>`と単一`run_app`を保持し、raw ownerを`product_runtime_adapter.rs`一箇所へ再締結 | event-loop/surface ownerが一意、adapter外raw型0 |
+| `P01-C1` | `DONE` | `product_runtime_adapter.rs`の単一`ApplicationHandler<ProductEvent>`と`product_runtime.rs`の単一`run_app`、`u1a1_static_viewport` 3/3を確認。旧source-wide raw input scannerは2026-08-09退役 | event-loop/surface ownerが一意。private ownerのraw型配置は審判しない |
 | `P01-C2` | `TARGET_MISSING` | 固定sourceの未移管componentをsurface別に一件特定し、実コードからdynamic transitionのowner/input/intent/stale ruleを埋める | product単一owner、mockはconsumer |
 | `P01-C3` | `TARGET_MISSING` | Browser以外で欠けるrole別epoch/reload callbackを一件特定 | crash/reload後に同じsnapshotを再投影 |
 | `P01-C4` | `SPEC_ONLY` | detach時のWorkspace codecとtop-level再生成境界を一問で固定 | layoutを復元してDocument不変 |
 | `P02-C1` | `DONE` | `CU-201T-C`で`CU-201T-S`の`TrimClipIn` / `TrimClipOut`を既存D2へ接続済み。`d1l_writer_prepare` 41/41、`motolii-ui` 170/170、fmt/clippy green | trimがjournal replay可能で1 Undo |
 | `P02-C2` | `DONE` | `document_edit_runtime` 33/33、製品Place/Timeline/Inspector/Undo delivery 9/9、writer境界 4/4を再実行。既存routeのみ | 全surfaceが同じpublished snapshotを読む |
-| `P02-C3` | `DONE`（ruler producer/carrier sub-boundaryのみ） | commit `75ccd5e7`でexisting native ruler→private `ProductApp` Project-session playhead→native Timeline/Stage current-time consumerを接続。press/move/release/cancelを扱い、専用revisionは増やさない | UI stateをDocumentへ保存せず、ruler/Stageが同一current timeを読む。親P02-C3、focus/visible range、Inspector normal row/wiring、P04-C2、playback/audio/snapは未完了 |
+| `P02-C3` | `TARGET_MISSING` | selection成立済み部分を除き、essential focusまたはplayhead consumerを一件特定 | UI stateをDocumentへ保存せず一方向publish |
 | `P03-C1` | `DONE` | `crates/motolii-ui/tests/timeline_projection.rs::p12_hundred_thousand_keys_cull_to_visible_identity`で100k keyの狭域projectionとtyped identityを確認。renderer本体は変更しない | visible outputがbounded |
-| `P03-C2` | `DONE / REDUCE` | HOST-INPUTでraw ownerとEscape/focus cancelを再締結しMOVEをtechnical reclose。Blender既知handle hitを縮小採択した`CU-201P-TRIM`をcommit `da4dcf75`で実装・独立review受入 | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
+| `P03-C2` | `REDUCE / IMPLEMENT` | `CU-201P-MOVE`のcompletionは下記proseとimplementation ledgerに残す。`CU-201P-TRIM-S`でBlender固定sourceの内部handle hitをPATTERN採択し、public `TimelineHit`／`TimelineProjection::hit_test`は不変のまま、private `ProductTimelineHit`でKey優先後のBarをLeft/Right/Bodyへ精密化する。bar width 25 / derived height 16 logical px未満はbody-only、次は`CU-201P-TRIM`だけ | drag中write 0、release 1 Undo、cancel/stale/invalid 0 |
 | `P03-C3` | `TARGET_MISSING` | visible-range consumerとnavigation CommandIdを一つ特定 | selection/focus/playheadが同一projection |
 | `P04-C1` | `DONE` | なし。`U4a-1`〜`CU-205E`を再実装しない | first-party parameterの通常編集route |
-| `P04-C2-EASING-C7A` | `DONE / ACCEPTED / EXTERNAL_GATE_PENDING` | commits `bb0624d8`/`87bf026e`/`56f61e7b`で、React anchor/layout-only → current interval re-derivation → private child `WindowId` egui popup on sole EventLoop/shared GPU → basic/custom terminal → Position-only existing D2 を接続。zero-write negatives、reload/epoch resync、late child isolationを持つ。focused UI lib 218/218、strict clippy、codec 2/2、Host check、docs/diff PASS、Opus final ACCEPT P0=0/P1=0。Inspector Position Add Keyは別routeの`CU-0A08ITIA DONE / ACCEPTED`（read-only）/ `CU-0A08ITIB DONE / ACCEPTED / EXTERNAL_GATE_PENDING`（typed write）であり混同しない | G0-9 stores/counters/PopupGfx、NativeTimelineRenderer変更/copy、partial React/IPC、second App/EventLoop/WebView/device、generic framework、main shell/Stage/Timeline/React chromeへのegui拡張は非目標。P2 generation/retry nuanceはfindingのみ。manual z-order/focus/DPI/a11y/visual/second monitorはM3 final `EXTERNAL_GATE_PENDING` |
+| `P04-C2` | `TARGET_MISSING` | active interval read model、outgoing Interp D2 command、Host codec、React consumerを前ownerへ分離 | easing変更が1 command / 1 Undo |
 | `P04-C3` | `TARGET_MISSING` | `CU-204P`へ渡す実在normal operation source | 実providerの診断を既存Feedbackへ投影 |
 | `P05-C1` | `TARGET_MISSING` | 現行Stage表示を除き、off-frame/Stage Viewの未成立targetを一つ特定 | 同じcamera/worldでframe内外を表示 |
 | `P05-C2` | `SPEC_ONLY` | camera/object targetと既存D2 commandの写像を一問で固定 | 直接操作が1 gesture / 1 Undo |
 | `P06-C1` | `ADOPTION_PROBE / FIXED_MAC_GATE_PASS` | 固定Macのrfd main-thread、parent sheet、selection、Cancel、typed failureは確認済み。Linux portalは未完了 | 製品接続を数えず、dialogからread-only media probeへ到達 |
 | `P06-C2` | `SPEC_ONLY` | 動画配置とSoundtrackを分離し、まず動画placement defaultを固定 | valid confirmだけ1 Undo |
-| `P07-C1` | `TARGET_MISSING / PREFLIGHT ONLY` | [P07-C1 preflight](reviews/2026-08-04-p07-c1-playback-session-product-route-preflight.md)の4経路（AudioProgram/MixProducer construction、PlaybackSession lifetime、Transport current-time handoff、actual UI/Host typed control source）を同一baseで閉じる。seek-only は将来の明示 `REDUCE` 候補だが現行DOではない | audio主clockでmixed seek/play/pause、UI/repaint clock 0 |
+| `P07-C1` | `TARGET_MISSING` | GAP-28の`PlaybackSession`→mixed `AudioProgram`接続。seek-onlyならREDUCE | audio主clockでseek/play/pause |
 | `P07-C2` | `WAIT_CONFLICT` | P07-C1、raw measurement、M4 provider後 | deadline時だけ古いpreviewをdrop |
 | `P07-C3` | `MEASURE` | 10分実素材のclock/drift/drop raw測定 | 長時間再生の同期証拠 |
 | `P08-C1` | `TARGET_MISSING` | Export provider snapshotとproduct source assetを一つずつ特定 | settings/start/progress/cancelが通常面に出る |
@@ -161,11 +163,11 @@ terminal時だけ既存D2へ一回commitする。playback tick、Host reload、W
 | `P11-C3` | `HARDWARE` | 所有Windows/Mac、DPI、NVDA/VoiceOver、配布artifact | Distribution Ready |
 | `P12-C1` | `SPEC_ONLY` | lifecycle採択は `NSDocument` / FCP意味論前提で journal durability を採用済み。残りgap: `OpenMode`入場、close ordering + in-flight失敗投影、Save-As identity/path移譲、rfd接続 | 新規保存成功/失敗導線を実装しない |
 
-## 5. 現在開始できるtask（なし）
+## 5. 現在開始できるtask
 
 `CU-201T-S`の意味閉鎖により開始された`CU-201T-C`は、実装 `a860e10e`、oracle補強 `c2eda847`、targeted test/fmt/clippy greenをもって完了した。
 `CU-201N-S`で既存`TimelineKey`/`TimelineBar`だけを候補へ採用し、key優先、stable identity tie-break、transient `RationalTime` threshold、no-snapを固定した。
-`P02-C1`、`P03-C1-VERIFY`、P02-C2は既存routeの実装・確認として閉じた。[HOST-INPUT実装受入](reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md)でraw ownerとlogical Escape/focus cancelを再締結しMOVEをtechnical reclose、[TRIM実装受入](reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)で既知handle hitから既存trim writer、[CU-201R受入](reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)で2,048-step系列を閉じた。`CU-201E`は通常製品MOVE/TRIM/Undo/Redo/reopenを`PRODUCT_E2E_PASS`で閉じ、pointer-lossは`EXTERNAL_POINTER_GATE_PENDING`、ユーザー目視はM3最終HUMAN checklistへ集約する。[P02-C3 playhead implementation acceptance](reviews/2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md)でruler producer/carrierはcommit `75ccd5e7`にてcode/main `DONE`となった。current implementation `DO`はなし。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
+`P02-C1`、`P03-C1-VERIFY`、P02-C2、P01-C1は既存routeの実装・確認として閉じた。`CU-201P-MOVE`は、既知NLEのbody-drag収束意味を既存native event／Transient projection／single writerへREDUCE接続して閉じた。[CU-201P-TRIM-S](reviews/2026-08-03-cu-201p-trim-edge-known-semantics-adoption-decision.md)でtrim edge targetも閉じ、次の実装粒は`CU-201P-TRIM`だけとする。snap threshold、slip/slide/roll/ripple、multi-selectを含む広い親`CU-201P`の残余は`WAIT_TARGET`を維持する。Stage placementのpointer captureを流用しない。
 
 ### 5.1 `CU-201T-C` — trim command接続
 
@@ -225,58 +227,10 @@ EXIT:
 ```
 
 `P03-C1-VERIFY`は製品機能の進捗ではなく、既存routeを再施工しないための確認である。確認済みのため、
-製品実装の本線は`HOST-INPUT実装受入 → MOVE technical reclose → CU-201P-TRIM実装受入 → CU-201R → CU-201E PRODUCT_E2E_PASS`まで閉じており、
-残余親`CU-201P`は`SPLIT / WAIT_TARGET`に留まる。
+製品実装の本線は`CU-201N-S DONE → CU-201P-MOVE DONE → CU-201P-TRIM`のみであり、残余親`CU-201P`は
+`SPLIT / WAIT_TARGET`に留まる。
 
-### 5.3 `CU-201P-HOST-INPUT` — Product Host input spine capsule
-
-```text
-INPUT:
-  CU-201P-HOST-INPUT-S decision
-  existing ProductApp / product_runtime_adapter.rs / InputRouter / KeyToken::Escape
-
-MECHANISM_CLASS:
-  desktop window input normalization and modal cancel delivery
-KNOWN_IMPLEMENTATION_SEARCH:
-  repo InputRouter/KeyToken/EffectiveTrigger/layout adapter;
-  winit 0.30.13; egui-winit 0.35.0; Qt StandardKey::Cancel; Blender modal cancel
-ADOPTION_ROUTE: ADOPT / WRAP / PORT
-BUILD_JUSTIFICATION: NONE
-BUILD: FORBIDDEN
-
-ALLOWLIST:
-  crates/motolii-ui/src/product_runtime_adapter.rs
-  crates/motolii-ui/src/product_runtime.rs
-  crates/motolii-ui/tests/raw_input_boundary.rs
-  inline tests in changed src files only
-
-POSITIVE_ORACLE:
-  one approved raw adapter emits existing typed input only;
-  product BuiltinKeymap version 2 maps modifier-free Escape to the existing cancel command;
-  source builtin version 1 delta remains a typed mismatch without implicit migration;
-  active gesture + logical Escape/focus loss/pointer loss cancels Transient once with semantic write 0;
-  release still commits the existing move/trim command once
-NEGATIVE_ORACLE:
-  synthetic/repeat/release/Process/preedit/unknown key emits no command;
-  no gesture and duplicate cancel events write 0;
-  raw winit input outside product_runtime_adapter.rs fails the guard;
-  AppKit history route remains outside the diff
-STOP:
-  if logical Escape cannot reach the existing cancel command through InputRouter without a new framework,
-  stop this grain and return to Sol; do not widen into trim, history commands, or residual CU-201P targets
-VALIDATION:
-  cargo test --locked -p motolii-ui --test raw_input_boundary
-  cargo test --locked -p motolii-ui input_router
-  cargo test --locked -p motolii-ui product_runtime
-  cargo test --locked -p motolii-ui
-  cargo clippy --locked -p motolii-ui --all-targets -- -D warnings
-  cargo fmt --all --check
-  git diff --check
-NEXT_HANDOFF:
-  DONE; CU-201P-MOVE reclosed and CU-201P-TRIM accepted; continue to CU-201R
-```
-
-### 5.4 `CU-201P-TRIM` — native Timeline trim-edge dispatch capsule
+### 5.3 `CU-201P-TRIM` — native Timeline trim-edge dispatch capsule
 
 ```text
 INPUT:
@@ -355,55 +309,7 @@ VALIDATION:
   this specification-edit grain remains validated outside this implementation capsule by
   ./scripts/check-docs.sh and git diff --check.
 NEXT_HANDOFF:
-  DONE at commit da4dcf75 with independent review P0/P1/P2 0 and mutation 0;
-  CU-201R is DO for the accepted MOVE/TRIM route only; parent CU-201P remains SPLIT / WAIT_TARGET
-```
-
-### 5.5 `CU-201R` — bounded random MOVE / TRIM oracle capsule
-
-```text
-INPUT:
-  CU-201R random MOVE / TRIM oracle decision
-  accepted CU-201P-MOVE / CU-201P-TRIM
-  existing d2_command fixed-seed proptest pattern
-
-MECHANISM_CLASS:
-  stateful property-based command sequence testing
-KNOWN_IMPLEMENTATION_SEARCH:
-  repo random_multi_gesture_sequence_undo_redo_restores_semantic_state;
-  workspace proptest / RngSeed::Fixed / shrinking;
-  existing DocumentWriter prepare_set_clip_start / prepare_trim_clip_in / prepare_trim_clip_out
-ADOPTION_ROUTE: REUSE / REDUCE
-BUILD_JUSTIFICATION: NONE
-BUILD: FORBIDDEN
-
-ALLOWLIST:
-  crates/motolii-doc/tests/d2_command.rs
-
-POSITIVE_ORACLE:
-  at least 2,000 fixed-seed valid MOVE/left-TRIM/right-TRIM steps;
-  stable LayerId multiset has duplicates 0; Track item count/order unchanged;
-  non-target sentinel Clips and their relative intervals unchanged;
-  target envelope/source unchanged; Document validates after every accepted step;
-  all accepted gestures Undo to byte-equivalent initial Document and undo length 0
-NEGATIVE_ORACLE:
-  no new dependency, PRNG, simulator, production helper, public API, schema, journal change;
-  no snap/group/ripple/slip/slide/roll/multi-select expectation;
-  existing MOVE/TRIM/HOST cancel tests remain green; no fake random no-op cancel proof
-STOP:
-  if valid sequence requires new product meaning or production code, return to Sol and REDUCE;
-  do not infer that meaning from the property expectation
-VALIDATION:
-  cargo test --locked -p motolii-doc --test d2_command cu_201r
-  cargo test --locked -p motolii-ui timeline_move
-  cargo test --locked -p motolii-ui timeline_trim
-  cargo test --locked -p motolii-ui product_runtime
-  cargo fmt --all -- --check
-  cargo clippy --locked -p motolii-doc --test d2_command -- -D warnings
-  git diff --check
-NEXT_HANDOFF:
-  DONE at commit d0f7dfec with 2048 accepted steps and fresh Opus closure P0/P1/P2 0;
-  CU-201E is DONE / PRODUCT_E2E_PASS; parent CU-201P remains SPLIT / WAIT_TARGET
+  PRODUCT CU-201P-TRIM implementation owner; parent CU-201P remains SPLIT / WAIT_TARGET
 ```
 
 ## 6. ゴールへ至る依存IR
@@ -419,22 +325,8 @@ NODE CU-201T-C       requires=[trim_semantics]           emits=[trim_d2_command]
 NODE P03-C2-TRIM     requires=[trim_d2_command]          emits=[native_trim_gesture]
 
 NODE ACTIVE-INTERVAL requires=[]                         emits=[active_interval_identity]
-  state=DONE/ACCEPTED/EXTERNAL_GATE_PENDING; commit=68ab4b9d; existing P04-C2 decomposition/graph names this node
-  contract=reviews/2026-08-04-position-active-interval-read-model-contract.md
-  consumer=reviews/2026-08-04-stage-transport-easing-trigger-consumer-contract.md
-  acceptance=reviews/2026-08-04-stage-transport-easing-trigger-implementation-acceptance.md
-  history=reviews/2026-08-04-position-active-interval-implementation-admissibility-rejection.md
-  scope=private ProductApp strict-interior Position read -> private Stage transport activeInterval output only; C7A separately supplies its input/write/popup terminal; external visual/focus/accessibility is pending
 NODE INTERP-COMMAND  requires=[active_interval_identity] emits=[outgoing_interp_command]
-  state=DONE/ACCEPTED; commit=03667b7d; contract=reviews/2026-08-04-interp-command-d2-contract.md; acceptance=reviews/2026-08-04-interp-command-d2-implementation-acceptance.md
-  scope=Position existing key outgoing Interp dedicated D2/Undo/JournalEdit v2/WAL replay only; C7A separately supplies the popup terminal; parent P04-C2/U4b-1 remains incomplete
-NODE P04-C2-DIAGNOSTIC-CORRECTION requires=[outgoing_interp_command] emits=[interp_diagnostic_label]
-  state=DONE/ACCEPTED; commit=58b84e22; contract=reviews/2026-08-04-p04-c2-easing-product-route-contract.md#6-2026-08-04-terminal-adoption-amendment
-  acceptance=reviews/2026-08-04-p04-c2-diagnostic-correction-implementation-acceptance.md
-  scope=diagnostic_projection::command_kind_copy exhaustive SetPositionKeyInterp label and one focused test only; this diagnostic node authorizes no popup work; the separate C7A implementation DO is NODE P04-C2-EASING-C7A below
-NODE P04-C2-EASING-C7A requires=[active_interval_identity,outgoing_interp_command] emits=[easing_edit_route]
-  state=DONE/ACCEPTED/EXTERNAL_GATE_PENDING; commits=bb0624d8,87bf026e,56f61e7b; contract=reviews/2026-08-04-p04-c2-easing-product-route-contract.md#6-2026-08-04-terminal-adoption-amendment; acceptance=reviews/2026-08-04-p04-c2-easing-c7a-implementation-acceptance.md
-  scope=React anchor/layout-only -> current interval re-derivation -> popup-local exception to standard egui-runtime exclusion: direct egui::Context + egui_winit::State + egui_wgpu::Renderer 0.35/wgpu 29 over ProductApp sole EventLoop, existing ProductGpuParts/GpuCtx, real WindowId dispatch, one private module, and one Position-only request -> SetPositionKeyInterp. C7b is rejected as a route by UI runtime §4's opaque child-WebView composition, not a visual-test FAIL; no second device/loop/WebView, framework, Timeline renderer copy, G0-9 state, partial React/IPC route, or egui main shell/Stage/Timeline expansion
+NODE P04-C2-EASING   requires=[outgoing_interp_command]  emits=[easing_edit_route]
 
 NODE P01-RESIDUAL    requires=[]                         emits=[role_host_routes]
 NODE SURFACE-JOIN    requires=[role_host_routes]         emits=[shared_surface_snapshot]
@@ -502,7 +394,7 @@ NEXT_HANDOFF:
 |---|---|---|
 | Runtime Seam | `ApplicationHandler`を`product_runtime.rs`へ物理移動しようとした | `REJECT`。一意ownerは物理同居ではない。P01-C1を`VERIFY_ONLY`へ変更 |
 | Timeline Residual | 100k key狭域projectionとtyped identityのtestだけが閉じた | 実装本体は再施工せず`VERIFY_ONLY`。停止commitは未採用 |
-| Inspector/Easing (2026-08-01 historical / superseded) | active interval、outgoing Interp command、Host codec、React consumerが不在 | 当時の正しい`TARGET_MISSING`。後続のaccepted ACTIVE-INTERVAL/INTERP-COMMANDとC7A contractを否定せず、UIから推測しない |
+| Inspector/Easing | active interval、outgoing Interp command、Host codec、React consumerが不在 | 正しい`TARGET_MISSING`。UIから推測しない |
 | Raw Telemetry | numeric traceは文字列、renderer statsは局所値でtyped snapshot不在 | 正しい`TARGET_MISSING`。汎用telemetry frameworkを新設しない |
 
 このsimulation以後、親地図の「前段依存を満たせば既定でREADY」という推定は使わない。本書の33行を

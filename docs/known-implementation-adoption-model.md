@@ -28,6 +28,11 @@ oracle、license、platform、security、maintenance、実測lead time、rework�
 薄く保つ」という目的を維持しながら、欄の統合、順序、採択route、検証方法を軽くすることを許す。
 凍結解除手続きは不要だが、会話や一時的なmodel都合だけで黙って迂回・撤回しない。
 
+M3の操作grammar、semantic owner、writer境界にも同じ区別を適用する。これらは通常施工で使う
+反証可能な現行authorityであり、未検索の可能性だけを理由に毎回開き直さない一方、利用者outcomeを
+閉じられないcurrent-code事実やoracle不成立などの具体的反証が出た時は再調査できる。M3固有の
+再入場条件と不足根拠は[M3 RN runtime実行地図](m3-rn-runtime-execution-map.md#22-current-authorityの維持と証拠付き再入場)が所有する。
+
 ## 2. なぜ最小コアに必要か
 
 新機構は初期差分だけでなく、owner、状態、identity、failure mode、migration、platform対応、
@@ -57,6 +62,11 @@ M3〜M5の各phaseは、次を順番どおり閉じる。
 
 `ADOPTION MAP`が無いphaseで、遠いtask列を先に詳細化したり、既存IDを順番に実装したりしない。
 調査結果から必要な子項目が減ることは成功であり、古い粒数を残量として維持しない。
+
+採択地図からclosed orderを作り、実装または調査返却を受け、現行codeから次edgeを再選定する反復は
+[利用者成果からの発注コンパイルと調査返却ループ](reviews/2026-08-07-outcome-order-compilation-and-research-return-loop.md)を正本とする。
+`TARGET_MISSING`は候補無しという状態名だけで閉じず、検索場所、候補、採否、不適合理由、exact gap、再入場条件を
+返す。主担当はreturn後に古い`next`や残粒数を使わず、背骨上の未接続edgeを測り直す。
 
 ### 3.1 既知実装優先 — 新設前に探索・採択する
 

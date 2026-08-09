@@ -3,9 +3,9 @@
 作成日: 2026-07-07
 前提資料: [concept.md](concept.md)(決定事項の台帳)、[performance-model.md](performance-model.md)。初期検討資料(design-memo 2026-07-05 / discussion-log 2026-07-06)は現決定と矛盾する旧仕様を含むため削除済み(2026-07-08整理。経緯はgit履歴参照)。生きた決定はすべてconcept.mdに移植済み
 
-このドキュメントの目的: **現在の設計(Rust + wgpu コア / React chrome + native wgpu Stage/Timeline / 最小コア+全機能プラグイン / ノード依存キャッシュ / 2.5D統一シーングラフ / 並列エージェント開発)をこのまま実装した場合に踏む可能性が高い落とし穴**を洗い出し、それらを潰す順序としてロードマップを定義する。
+このドキュメントの目的: **現在の設計(Rust + wgpu コア / React Native shell + rust-skia Timeline/Curve + wgpu/rust-skia Stage / 最小コア+全機能プラグイン / ノード依存キャッシュ / 2.5D統一シーングラフ / 並列エージェント開発)をこのまま実装した場合に踏む可能性が高い落とし穴**を洗い出し、それらを潰す順序としてロードマップを定義する。
 
-2026-07-08にWebView/Tauri案からSlintへ転換し、2026-07-18に[eguiへ変更](reviews/2026-07-18-m3-egui-selection.md)した後、2026-07-24にeguiの製品runtime採用を撤回した。現行は[React chrome + native wgpu Stage/Timeline](ui-runtime-architecture.md)であり、eguiは比較・診断baselineだけに残す。
+2026-07-08にWebView/Tauri案からSlint、2026-07-18に[egui](reviews/2026-07-18-m3-egui-selection.md)、2026-07-24にReact/WebView + direct-wgpu/Velloへ移った後、2026-08-07に[React Native + rust-skia + wgpu](ui-runtime-architecture.md)へ再基線化した。旧routeは比較・意味・回帰oracleだけに残す。
 
 ---
 
@@ -15,11 +15,11 @@
 
 ### A. アーキテクチャ境界の落とし穴
 
-#### A-1. WebView UI ↔ Rust ネイティブ描画の橋渡し【リスク: topology決定／platform受入中】
+#### A-1. React Native ↔ Rust native canvasの境界【リスク: 構成決定／製品・platform受入中】
 
-初期構想(WebView UI案)段階ではプロジェクト全体の成立可否を握る単一最大リスクだった。2026-07-18のegui採用で一度は構造的に回避し、同一`wgpu::Device`のnative texture表示を実証した。この測定事実はbaselineとして残すが、2026-07-24にeguiを製品runtimeから外したため、現行リスクはWebViewへ映像textureを渡すことではなく、opaque child WebView islandsと1 top-level wgpu SurfaceをOS compositor上で安全に同居させるplatform受入である。
+初期WebView案ではprocess、navigation、opaque island、DOM/native pointer ownerが製品全体の成立可否を握った。2026-08-07にReact Native shell + native Fabric componentsへ再基線化し、隔離probeでRN macOS app内のwgpu preview + rust-skia overlay present、Retina resize、outside release、focus transfer、unmount/remountを確認した。したがって現行リスクはtexture bridgeの方式選定ではなく、同じsemantic contractをMotolii製品routeとWindows RNWへ接続し、IME/a11y/device-lostまで閉じることである。
 
-**現行の対策(M3)**: core-owned device/queueと1 top-level `wgpu::Surface`内にStage/Timeline viewportを置き、React chromeはopaque child WebViewとして合成する。render thread、latest-value mailbox、generation破棄、CPU readback禁止を維持し、macOS/Windowsのfocus、IME/AX、resize/DPI/capture/lost、WebView failureをG0-9で受け入れる。egui shellはこの経路の製品候補ではなく、撤去条件成立までの比較・診断baselineである。詳細は[M3仕様](specs/M3-ui-integration.md)と[UI runtime責任境界](ui-runtime-architecture.md)。
+**現行の対策(M3)**: shell／通常panelはRN、Timeline／Curveはrust-skia、Stageはwgpu preview + dirty rust-skia overlay、編集は既存Rust core／D2へ置く。pointer moveをJSへ往復させず、native component内のheadless gestureからterminal intentだけをD2へ送る。macOS製品routeを先に閉じ、Windows RNW、IME composition、VoiceOver/NVDA、DPI/capture/device lostを非代替gateにする。旧WebView/direct-wgpu/Vello/egui routeは移行oracleとして保持する。詳細は[M3仕様](specs/M3-ui-integration.md)と[UI runtime責任境界](ui-runtime-architecture.md)。
 
 以下は**廃止したWebView/Tauri検討経路の記録**(後から同判断を繰り返さないため):
 
@@ -515,11 +515,11 @@ M1で実際に動いた形に基づき、以下を凍結してから並列化を
 
 ### M3: UI統合(並列レーン2)
 
-内容: React/WebView chrome、1 top-level wgpu Surface内のnative Stage/Timeline、headless interaction、Host projection/intentを統合する。[egui採用判断](reviews/2026-07-18-m3-egui-selection.md)で検証した既存device/native texture+render thread分離は比較・診断baselineとして保持する。固定canvasでないStage、単一cameraのOutput Frame、枠外object編集、Timeline、parameter panel、利用者可変panel、Document直結の状態管理を作る。Direct/Tool/Advancedは同じDomain Intent/Document意味へ正規化し、Advancedを閉じても非既定の由来・scope・policyを隠さない。
+内容: React Native shell／通常panel、rust-skia Timeline／Curve、wgpu preview + rust-skia overlay Stage、headless interaction、Host projection/intentを統合する。既存Rust core、D2、render worker、React concept、旧route oracleを再利用する。固定canvasでないStage、単一cameraのOutput Frame、枠外object編集、Timeline、parameter panel、利用者可変panelを同じrevisionへ接続する。Direct/Tool/Advancedは同じDomain Intent/Document意味へ正規化し、Advancedを閉じても非既定の由来・scope・policyを隠さない。
 
 完了条件: frame内外でobject配置、camera/Output Frame編集、keyframe編集、scrubができ、Stage View操作は書き出しを変えない。代表操作は入口違いでserialize意味同値、Undo 1回、hidden helperなし。Draft表示が基準機の測定手順で追従する。
 
-退治する落とし穴: A-1(platform受入), A-3(wgpu/vello/WebView結合と既存egui baseline隔離), D-3
+退治する落とし穴: A-1(RN/native製品・platform受入), A-3(wgpu/Skia合成と旧route隔離), D-3
 
 ### M4: キャッシュ層と解析の拡充(並列レーン3)
 

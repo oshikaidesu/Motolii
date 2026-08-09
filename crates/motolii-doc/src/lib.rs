@@ -47,13 +47,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 pub use affine::{compose_local, compose_transform, resolve_transform, Affine2D};
-pub use asset::{Asset, AssetError, AssetId, AssetTable};
+pub use asset::{
+    Asset, AssetDraft, AssetError, AssetId, AssetTable, SourceFingerprintDecode,
+    SourceFingerprintError, SourceFingerprintV1,
+};
 pub use audio_edit::{build_import_clip_source, plan_detach_audio, ImportAvMode};
 pub use bpm::{Bpm, BpmError};
 pub use camera_eval::CameraEvalError;
 pub use command::{
     collect_layer_ids, layer_names_for_item, Command, CommandError, CommandKind, GestureId,
-    MergeKey, ParentLocator, PropertyId, ScalarPropertyId,
+    MergeKey, ParentLocator, PreparedAssetAdmission, PropertyId, ScalarPropertyId,
 };
 pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
@@ -567,6 +570,29 @@ impl DocumentWriter {
     /// D1l B-3: 対象 Use の Definition をローカル複製する。
     pub fn prepare_copy_local_effect(&self, use_id: EffectId) -> Result<Command, PrepareError> {
         effect_prepare::prepare_copy_local_effect(&self.doc, use_id)
+    }
+
+    /// 新規Assetのtable-local IDをsnapshotから決め、Document不変でCommandを準備する。
+    pub fn prepare_admit_asset(
+        &self,
+        draft: AssetDraft,
+    ) -> Result<PreparedAssetAdmission, CommandError> {
+        command::prepare_admit_asset(&self.doc, draft)
+    }
+
+    /// prepared時のtable-local nextがlive値と一致する時だけfresh admitを適用する。
+    pub fn apply_prepared_asset_admission(
+        &mut self,
+        gesture: GestureId,
+        prepared: PreparedAssetAdmission,
+    ) -> Result<(), CommandError> {
+        let command = prepared.into_command_if_current(&self.doc)?;
+        self.apply_command(gesture, command)
+    }
+
+    /// 参照0の既存Assetを完全payload付きで除去するCommandを準備する。
+    pub fn prepare_remove_asset(&self, id: AssetId) -> Result<Command, CommandError> {
+        command::prepare_remove_asset(&self.doc, id)
     }
 
     /// CU-201M-S: 対象 Clip の `start` を準備する。same-value は `None`。

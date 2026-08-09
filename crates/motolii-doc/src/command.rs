@@ -14,6 +14,7 @@ use thiserror::Error;
 
 use motolii_core::{RationalTime, TimeMap};
 
+use crate::asset::{Asset, AssetDraft, AssetError, AssetId};
 use crate::doc_keyframe::{validate_interp, DocKeyframeError};
 use crate::doc_value::DocValue;
 use crate::duplicate::{definition_semantic_body_eq, remint_order_keyframe_ids};
@@ -57,6 +58,7 @@ pub enum PropertyId {
     EffectDefinitionLifecycle(EffectDefinitionId),
     /// D1l: `CopyLocalEffect`/`UndoCopyLocalEffect`(1つのUseのdefinition_id付け替え)。
     EffectDefinitionLink(EffectId),
+    AssetLifecycle(AssetId),
     AudioEnabled(usize),
     AudioGain(usize),
     ChildList,
@@ -122,6 +124,8 @@ pub enum CommandKind {
     DeleteEffectDefinition,
     /// D1l v2: `CopyLocalEffect` / `UndoCopyLocalEffect`(inverse)共用。
     CopyLocalEffect,
+    /// M2 Asset: `AdmitAsset` / `RemoveAsset`(inverse)共用。
+    AssetLifecycle,
     SetAudioComponentEnabled,
     SetAudioComponentGain,
     AddTrackItem,
@@ -243,6 +247,17 @@ pub enum CommandError {
     StableIdReservationCounterMismatch { next: u64, before: u64, after: u64 },
     #[error("stable id {id} is outside reservation interval [{before}, {after})")]
     StableIdOutsideReservation { id: u64, before: u64, after: u64 },
+    #[error("asset admission id {id} is ahead of live AssetTable next {next}")]
+    AssetAdmissionCounterMismatch { id: u64, next: u64 },
+    #[error("stale asset admission (prepared next={expected_next}, live next={actual_next})")]
+    StaleAssetAdmission {
+        expected_next: u64,
+        actual_next: u64,
+    },
+    #[error("asset {id} is still referenced {use_count} time(s)")]
+    AssetInUse { id: u64, use_count: usize },
+    #[error("removed asset payload does not match live AssetTable entry {id}")]
+    RemoveAssetPayloadMismatch { id: u64 },
     #[error(transparent)]
     Validate(#[from] crate::validate::DocumentError),
     #[error(transparent)]
@@ -258,6 +273,8 @@ pub enum CommandError {
     LayerIdAlloc(#[from] crate::LayerIdError),
     #[error(transparent)]
     StableIdAlloc(#[from] crate::stable_id::StableIdError),
+    #[error(transparent)]
+    Asset(#[from] AssetError),
 }
 
 /// atomic command(実装ガード5: 決定済みの値を記録)。
@@ -371,6 +388,10 @@ pub enum Command {
         new_definition: EffectDefinition,
         stable_id_reservation: StableIdReservation,
     },
+    /// 新規admitと`RemoveAsset`のinverse/Redo/replayで同じ完全payloadを使う。
+    AdmitAsset { asset: Asset },
+    /// 参照0かつlive payload一致時だけ台帳から除去する。
+    RemoveAsset { asset: Asset },
     SetAudioComponentEnabled {
         target: LayerId,
         /// `ClipSource::Asset.audio` Vec内のindex(ordinalではない)。
@@ -446,6 +467,30 @@ pub enum Command {
     },
 }
 
+/// fresh admitだけが使う非永続prepared値。Undo/Redo/replayの復元とは分離する。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreparedAssetAdmission {
+    expected_next: u64,
+    asset: Asset,
+}
+
+impl PreparedAssetAdmission {
+    pub fn asset(&self) -> &Asset {
+        &self.asset
+    }
+
+    pub fn into_command_if_current(self, doc: &Document) -> Result<Command, CommandError> {
+        let actual_next = doc.assets.peek_next();
+        if actual_next != self.expected_next {
+            return Err(CommandError::StaleAssetAdmission {
+                expected_next: self.expected_next,
+                actual_next,
+            });
+        }
+        Ok(Command::AdmitAsset { asset: self.asset })
+    }
+}
+
 impl Command {
     pub fn kind(&self) -> CommandKind {
         match self {
@@ -471,6 +516,7 @@ impl Command {
             Command::CopyLocalEffect { .. } | Command::UndoCopyLocalEffect { .. } => {
                 CommandKind::CopyLocalEffect
             }
+            Command::AdmitAsset { .. } | Command::RemoveAsset { .. } => CommandKind::AssetLifecycle,
             Command::SetAudioComponentEnabled { .. } => CommandKind::SetAudioComponentEnabled,
             Command::SetAudioComponentGain { .. } => CommandKind::SetAudioComponentGain,
             Command::AddTrackItem { .. } => CommandKind::AddTrackItem,
@@ -515,6 +561,7 @@ impl Command {
             | Command::UndoCopyLocalEffect { use_id, .. } => use_id.get(),
             Command::DeleteEffectDefinition { definition }
             | Command::AddEffectDefinition { definition } => definition.id.get(),
+            Command::AdmitAsset { asset } | Command::RemoveAsset { asset } => asset.id.get(),
             Command::AddTrackItem { item, .. } | Command::RemoveTrackItem { item, .. } => {
                 envelope_of(item).layer_id.get()
             }
@@ -544,6 +591,9 @@ impl Command {
             Command::CopyLocalEffect { use_id, .. }
             | Command::UndoCopyLocalEffect { use_id, .. } => {
                 PropertyId::EffectDefinitionLink(*use_id)
+            }
+            Command::AdmitAsset { asset } | Command::RemoveAsset { asset } => {
+                PropertyId::AssetLifecycle(asset.id)
             }
             Command::AddPositionKey { .. } | Command::UndoAddPositionKey { .. } => {
                 PropertyId::Position
@@ -614,6 +664,8 @@ impl Command {
             | Command::AddEffectDefinition { .. }
             | Command::UnlinkEffectUse { .. }
             | Command::RestoreEffectUse { .. }
+            | Command::AdmitAsset { .. }
+            | Command::RemoveAsset { .. }
             | Command::SetAudioComponentEnabled { .. }
             | Command::SetAudioComponentGain { .. }
             | Command::AddTrackItem { .. }
@@ -944,6 +996,8 @@ impl Command {
                 new_definition.clone(),
                 *stable_id_reservation,
             ),
+            Command::AdmitAsset { asset } => apply_admit_asset(doc, asset),
+            Command::RemoveAsset { asset } => apply_remove_asset(doc, asset),
             Command::SetAudioComponentEnabled {
                 target, index, new, ..
             } => {
@@ -1291,6 +1345,14 @@ impl Command {
                 new_definition,
                 stable_id_reservation,
             },
+            Command::AdmitAsset { mut asset } => {
+                asset.normalize_self();
+                Command::RemoveAsset { asset }
+            }
+            Command::RemoveAsset { mut asset } => {
+                asset.normalize_self();
+                Command::AdmitAsset { asset }
+            }
             Command::SetAudioComponentEnabled {
                 target,
                 index,
@@ -1416,6 +1478,80 @@ impl Command {
             },
         }
     }
+}
+
+pub(crate) fn prepare_admit_asset(
+    doc: &Document,
+    draft: AssetDraft,
+) -> Result<PreparedAssetAdmission, CommandError> {
+    let expected_next = doc.assets.peek_next();
+    let asset = draft.into_asset(AssetId::from_raw(expected_next));
+    let command = Command::AdmitAsset {
+        asset: asset.clone(),
+    };
+    let mut candidate = doc.clone();
+    command.apply(&mut candidate)?;
+    Ok(PreparedAssetAdmission {
+        expected_next,
+        asset,
+    })
+}
+
+pub(crate) fn prepare_remove_asset(doc: &Document, id: AssetId) -> Result<Command, CommandError> {
+    let asset = doc
+        .assets
+        .get(id)
+        .cloned()
+        .ok_or(AssetError::NotFound { id: id.get() })?;
+    let command = Command::RemoveAsset { asset };
+    let mut candidate = doc.clone();
+    command.apply(&mut candidate)?;
+    Ok(command)
+}
+
+fn apply_admit_asset(doc: &mut Document, asset: &Asset) -> Result<(), CommandError> {
+    let mut asset = asset.clone();
+    asset.normalize_self();
+    let id = asset.id;
+    let next = doc.assets.peek_next();
+    if doc.assets.get(id).is_some() {
+        return Err(AssetError::Duplicate { id: id.get() }.into());
+    }
+    if id.get() > next {
+        return Err(CommandError::AssetAdmissionCounterMismatch { id: id.get(), next });
+    }
+
+    let mut candidate = doc.clone();
+    if id.get() == next {
+        candidate.assets.insert(asset)?;
+    } else {
+        candidate.assets.restore(asset)?;
+    }
+    swap_if_valid(doc, candidate)
+}
+
+fn apply_remove_asset(doc: &mut Document, asset: &Asset) -> Result<(), CommandError> {
+    let mut expected = asset.clone();
+    expected.normalize_self();
+    let id = expected.id;
+    let existing = doc
+        .assets
+        .get(id)
+        .ok_or(AssetError::NotFound { id: id.get() })?;
+    if existing != &expected {
+        return Err(CommandError::RemoveAssetPayloadMismatch { id: id.get() });
+    }
+    let use_count = doc.asset_use_count(id);
+    if use_count != 0 {
+        return Err(CommandError::AssetInUse {
+            id: id.get(),
+            use_count,
+        });
+    }
+
+    let mut candidate = doc.clone();
+    candidate.assets.remove(id)?;
+    swap_if_valid(doc, candidate)
 }
 
 /// `item` subtreeのLayerId集合と`layer_names`のキーが一致することを要求する。

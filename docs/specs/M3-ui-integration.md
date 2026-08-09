@@ -1,316 +1,260 @@
 # M3: UI統合
 
-ステータス: **ドラフト / UI責任境界・surface topology・標準egui製品runtime不採用を決定、platform受入比較中**([M2基盤再締結ゲート](../reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。[UI runtime責任境界](../ui-runtime-architecture.md)はReact chrome + native Stage/Timeline + headless interactionへ固定し、通常windowは[1 top-level wgpu Surface + 2 native viewport + opaque child WebView islands](../reviews/2026-07-21-ui-surface-topology-decision.md)へ固定した。React所有面は[直接移管契約](../reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)R0〜R6に従うproduct-owned packageとmock consumer化だけ先行可。eguiは標準製品runtimeへ採用せず、現行mainのshell等を比較・診断baselineとして保持する。唯一の明示例外は`P04-C2-EASING-C7A`のprivate native child popup/session rendererであり、main shell、Stage、Timeline、React chrome、汎用component/frameworkへは拡張しない。G0-9実機spikeまではWebView/native製品統合と既存baseline撤去を停止する。plugin UI公開契約はG0-9と分離したG0-3 / GAP-13の判断まで停止する。toolkit/renderer非依存の状態所有、layout/hit-test、domain intent、Command境界、Rust coreは各既存依存に従い進行可)
+ステータス: **ACTIVE / React Native + Rust/rust-skia + wgpuへ再基線化、製品移行開始前**（2026-08-07）
 
-> **着手前規約**: [M3 UI境界汚染の予防](../reviews/2026-07-14-m3-ui-boundary-prevention.md)のうち、後掲「GR-UI審判割当表」で対象タスクへ割り当てた項目を先に通す。全製品UIは[UI操作言語](../ui-interaction-language.md)、外観を伴うタスクは[UI視覚言語](../ui-visual-language.md)、[UI参照地図](../ui-reference-map.md)、[React製品資産の直接移管契約](../reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)、時間面・Timelineを伴うタスクは[時間面UI構成モデル](../ui-score-model.md)も適用する。React所有面は固定source assetを直接移管し、縮約再実装しない。モックの具体値・未決機能の意味論はDocument/公開契約ではない。非該当項目を形式的にYesにしない。Documentスキーマへ触る場合は[M2恒久焼き込みの予防](../reviews/2026-07-12-m2-permanence-prevention.md)も同時適用する。
+M3は、M0〜M2で成立したDocument、D2 single writer、Undo／Redo、journal、projection、render、playbackを、制作に耐える一つの製品UIへ接続する段階である。UI技術の比較を続ける段階ではない。
 
-## 目的(退治する落とし穴)
+runtime責任の正本は[UI runtime責任境界](../ui-runtime-architecture.md)、採択根拠と旧routeの処分は[2026-08-07 runtime再基線決定](../reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)を読む。R0〜R4を実在target、owner、oracle、依存へ分解する現在のdispatch authorityは[M3 RN runtime実行地図](../m3-rn-runtime-execution-map.md)とする。
 
-A-1(egui baselineは既存device/native texture共有を[採用時の実機証拠](../reviews/2026-07-18-m3-egui-selection.md)で確認済みだが製品runtimeには不採用。React/WebView/hybrid製品構成は[G0-9](../reviews/2026-07-21-m3-react-webview-runtime-reconsideration.md)でCPU bridgeなしのStage接合を再審判)、D-3(OpenCut流用の期待値管理)。
+## 1. 製品完成線
 
-## M3-A〜D: 統合の背骨
+M3の完成は、個別fixture、isolated probe、renderer benchmark、特定gestureのgreenではない。通常製品routeで利用者が次を連続して行えることを問う。
 
-> **2026-07-24運用改訂**: この見出しは既存リンクとの互換のため残すが、A〜DはM3全体の
-> 進捗段階ではない。M3の進捗と完成判定は
-> [縦slice実行方針](../reviews/2026-07-24-m3-vertical-slice-execution-decision.md)に従い、
-> 通常製品routeから利用者成果までを完走する縦sliceで管理する。A〜Dは各enabling orderで
-> 該当する接続境界を確認するchecklistであり、全surfaceをA→B→C→Dと横断完了させない。
+```text
+project open/new
+  → media / object discovery
+  → StageまたはTimelineへ配置
+  → Stage / Timeline / Inspectorが同じrevisionを表示
+  → selection / parameter edit / key / move / trim / snap / curve
+  → seek / playback / pause
+  → Undo / Redo / reopen
+  → save / export / cancel / recovery
+```
 
-M3を一つの巨大な「UI実装」として扱わず、所有境界が異なる次の4項目を接続checklistにする。
-これは既存のG/UタスクIDを改名・再定義する新しいチケット体系ではなく、各orderが
-どの境界を閉じ、どの境界を閉じないかを示す確認名である。一つの発注へ束ねず、一面・一境界ずつ実装する。
+最初の移行oracleは既に意味が閉じているVS-1とする。
 
-| 段階 | 閉じる境界 | 完成条件 | この段階へ含めないもの | 既存地図との対応 |
-|---|---|---|---|---|
-| **M3-A — Presentation Ownership** | 固定React source assetをproduct-owned packageへ直接所有移管し、mockをproduct exportのconsumerへ反転する | provenance、DOM/class/stable ID/ARIA、visual/interaction oracle、product→mock/legacy runtime import 0、二重copy 0 | Host transport、WebView製品window接続、Document編集、D2 commit | R0〜R6、CU-0A、W0a |
-| **M3-B — Host Projection / Intent** | mock/legacy stateをrevision付きread-only projectionとtyped intent/codecへ一方向に交換する | state ownerが明示され、React/nativeにDocument・selection・Undo正本がなく、stale/unknown入力を型付き拒否する | product windowへの実機結合、semantic write、Undo成立をprojection/codecだけで完了扱いすること | U0b/U0c/U0d/U2a/U2b、U2c-1/4、CU-G系 |
-| **M3-C — Product Runtime Integration** | React/WebView chrome、native Stage/Timeline、Host coordinatorを通常製品windowで結合する | G0-9の該当platform gate、1 surface/2 viewport/opaque WebView islands、focus/IME/AX、resize/DPI/capture/lost、WebView failure復旧 | plugin UI公開契約、全platform配布合格、制作機能の意味をwindow結合で発明すること | G0-9段階化、CU-0G/CU-0B、W0g/W0b |
-| **M3-D — Editing Loop** | typed intentをTransient preview、D2 single writer、commit/cancel、Undo/Redo、同revision再投影へ接続する | 一つの対象がStage/Timeline/Inspectorを貫き、1 gesture=1 Undo、Cancel/失敗=変更0、save/reopen/ExportまでLocal Alpha fixtureを完走する | 新しいDocument意味・公開API・plugin契約の発明、Distribution ReadyをLocal Alphaで代用すること | U2c-2、CU-1/CU-2、W1/W2、Local Alpha fixture |
+```text
+Browser Rectangle
+  → Place
+  → D2 single writer
+  → RN Inspector + rust-skia Timeline + Stage が同じrevision / LayerIdを表示
+  → Undo
+  → Redo
+```
 
-A〜Dは順序や全体barrierではない。一つの縦sliceについて該当する証拠を追跡できるようにし、
-別の面をまとめて先取りしない。M3全体の残作業である
-実素材、日常操作、高負荷時縮退、配布品質は[快適利用ワークマップ](../reviews/2026-07-22-m3-comfortable-use-work-map.md)の
-W3〜W6を正とし、M3-D完了やLocal Alphaと混同しない。Issue化、closed order、検収、main反映では
-[縦slice実行方針§6](../reviews/2026-07-24-m3-vertical-slice-execution-decision.md#6-adと既存規律の扱い)の
-handoff contractを使い、実装とcommitは一つの契約境界に保つ。
-表の「既存地図との対応」は親IDを一括分類するものではない。現在sliceとorderは
-[implementation ledger](../implementation-ledger.md)、意味と完了条件は既存G/U IDを正とする。
+旧winit/WebView/direct-wgpu/Vello routeのVS-1成功は意味oracleであり、新RN routeの成功を代用しない。
 
-M3残作業の実装分解は[既知技術採択・並列実装地図](../m3-parallel-implementation-map.md)を入口とする。
-同地図の親は検索・供給route、子はtarget/oracle/cutover、衝突表は直列合流点を示す。旧快適利用粒度化の
-施工step、owner候補、再確認、mirror行を新しい実装粒として再発行しない。実際のdispatch可否は引き続き
-implementation ledgerの`DO`行、製品意味と完成条件は本仕様の既存G/U taskが正本である。
-各子を実装orderへ変換する前に[実行可能発注地図](../m3-executable-dispatch-map.md)で
-`exact target / allowlist / pseudocode / positive oracle / negative oracle / user-visible exit / next handoff`を閉じる。
-`TARGET_MISSING`を新しい汎用機構で埋めず、前ownerのSPEC/TARGET粒へ返す。
+## 2. 標準runtime
 
-### 最初の製品完成線: VS-1 Rectangle配置とUndo
+| 領域 | owner |
+|---|---|
+| shell、dock、tabs、Browser、Inspector、settings、forms、text、dialogs | React Native |
+| Timeline | Rust headless interaction + rust-skia |
+| Curve Editor | Rust headless interaction + rust-skia |
+| Stage preview | wgpu |
+| Stage grid／path／gizmo overlay | rust-skia、wgpu final composite |
+| Document／D2／Undo／journal／projection／playback／media／render | Rust core |
+| native view／surface／capture／focus／DPI／lifecycle | platform adapter |
 
-M3の現在sliceは、通常製品routeからproduct-owned BrowserでRectangleを選び、native Stageへ配置し、
-D2 single writerで確定した同じrevisionと`LayerId`をStage / Timeline / React Inspectorへ投影し、
-Undo一回で三面から消え、Redo一回で戻るところまでとする。asset移管、projection、platform証拠、
-D2接続等は別々のenabling orderへ分け、どれか一件の完了をVS-1完成とは数えない。
+React Nativeは既存React mockのconceptと通常panel資産を引き継ぐが、DOM/CSS/WebView bridgeを製品runtimeへ残すことを要求しない。TimelineとStageをRN component treeの大量objectへ分解しない。
 
-VS-1の正負oracle、blocking decision、後続のVS-2/VS-3は
-[縦slice実行方針§4〜5](../reviews/2026-07-24-m3-vertical-slice-execution-decision.md#4-最初の縦slice)を正本とする。
-現在sliceだけをblocking decisionと発注可能な精度にし、次の二sliceは出口と主依存まで、それ以降は
-[快適利用ワークマップ](../reviews/2026-07-22-m3-comfortable-use-work-map.md)の成果地点だけを保持する。
+## 3. M3の不変条件
 
-## M3仕様確定ゲート(G0)
+1. Document mutationはD2 single writerだけが行う。
+2. 全surfaceは同じrevision／generation付きsnapshotをread-only投影する。
+3. selection、playhead、gesture、focus、panel layoutをDocumentへ混ぜない。
+4. drag中write 0、release時commit高々1、cancel／stale／invalidはwrite 0。
+5. RN/native間へper-frame、per-object、per-pointer-move message backlogを作らない。
+6. renderer、toolkit、platform型をDocument、persistence、plugin public contractへ漏らさない。
+7. OS window、native component、GPU device、pointer owner、Undo ownerを暗黙に増やさない。
+8. macOS先行実装でもlogical／physical、lifecycle、semantic ABIをWindows移植可能に保つ。
+9. fixed mock、probe、benchmark、isolated testを製品route completionと呼ばない。
+10. 旧presentation routeは新route合格前に削除せず、新route合格後に恒久二重所有を残さない。
 
-| ID | 内容 | 状態 | 確定条件 |
-|---|---|---|---|
-| G0-1 | eguiと既存wgpu共有の成立性 | **測定完了 / 製品runtime採用は撤回** | [egui採用判断](../reviews/2026-07-18-m3-egui-selection.md)。Apple M4 / Metalでcore-first device、native texture、lifecycle、日本語IMEを実機確認。証拠と既存実装はG0-9の比較・診断baselineとして保持し、新規製品面をeguiへ実装しない |
-| G0-2 | 入力/キーマップ/アクセシビリティ最小意味論(GAP-6) | **完了** | [着手前決定§2](../reviews/2026-07-16-m3-preflight-decisions.md#2-g0-2-inputとui状態の意味)。全shortcut再割当、安定Command、状態寿命、version付きJSON keymap、v1保証/非保証を固定 |
-| G0-3 | plugin UIモデル(GAP-13) | **再評価中 / 自動panel fallbackは維持** | [軸分離決定](../reviews/2026-07-22-m3-surface-extension-axis-separation.md)に従い、first/third-party pluginの公開kit、sandbox、権限、互換、配布をG0-9の製品surface合否と分離して比較する。G0-9証拠は入力にできるが完了だけで解除しない。`NodeDesc`自動panelだけで全保存paramを編集できる条件は維持し、比較前に自由UI公開契約を実装しない |
-| G0-4 | 性能測定プロトコル | **完了** | [着手前決定§4](../reviews/2026-07-16-m3-preflight-decisions.md#4-g0-4-性能測定プロトコル)。絶対閾値は初回実測後の独立改訂 |
-| G0-5 | UI境界規約の反対側レビュー | **完了** | [R1〜R9](../reviews/2026-07-14-m3-ui-boundary-counter-review.md)を予防文書・本仕様へ反映 |
-| G0-6 | 視覚言語tokenと認知審判 | **人間審判ACCEPT / U0e-3分割・T完了** | [着手前決定§5](../reviews/2026-07-16-m3-preflight-decisions.md#5-g0-6-見た目はuxの投影として導出する)。U0e-1生成機構、U0e-2R固定React比較baseline、現行routeの5画面×6 variant=30 PNGとread-only再現checkまで完了。[G0-6H人間審判ACCEPT](../reviews/2026-07-29-g0-6h-human-acceptance-decision.md)でUI作者がlive `#plugin-browser-candidate`を最終承認し、`CU-0B01`をDONE、親`CU-0B02` / `U0e-3`を解禁した。[CU-0B02S分割決定](../reviews/2026-07-29-cu-0b02s-product-token-ownership-split-decision.md)後、[CU-0B02T](../reviews/2026-07-29-cu-0b02t-product-token-authority-implementation-decision.md)でDark DTCG単一正本とRust/CSS生成を完了した。token後続R/N/C/IはPlace縦切り完了まで`WAIT`。派生bitmapの個別人間閲覧やlatest sourceとのbyte同一性は主張せず、旧generationは不変の回帰証拠として保存する。 |
-| G0-7 | 操作単純化・共通componentゲート | **完了** | [UI操作言語](../ui-interaction-language.md)と[着手前決定§6](../reviews/2026-07-16-m3-preflight-decisions.md#6-g0-7-操作文法を共通部品の契約にする)をU2c conformanceへ固定 |
-| G0-8 | resource予算presetとpreview縮退設定 | **意味完了・実測待ち** | [着手前決定§7](../reviews/2026-07-16-m3-preflight-decisions.md#7-g0-8-resource値はm4の事実から決める)。具体値だけG0-4+M4-K1a後に決定 |
-| G0-9 | React chrome + native Stage/Timelineのsurface統合 | **G0-9L固定Mac prerequisite evidence PASS / G0-9D WAIT-HARDWARE / 製品統合は別order** | [G0-9段階化](../reviews/2026-07-23-m3-g0-9-staged-platform-gates.md)、[UI runtime責任境界](../ui-runtime-architecture.md)、[React直接移管契約](../reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)、[surface topology決定](../reviews/2026-07-21-ui-surface-topology-decision.md)を正本とする。固定Macのdirect wgpu(+Vello局所)比較、IME/VoiceOver、focus、resize/DPI/capture/lost、bounded GPU timestamp等のplatform prerequisite evidenceはG0-9Lで限定確定済み。これはW0b、H1b、Motolii Studio Preview、通常製品window、egui baseline削除、Windows/追加hardwareを解禁・完了しない。R0〜R6のproduct-owned React packageとmock consumer化を一境界ずつ進め、その後のbuilt-in WebView Hostもoffline bundle、closed typed transport、Host epoch、strict origin/lifecycleを別orderで再契約する。G0-9DはWindows・追加hardware・配布対象MacのDistribution Ready gateとして残す。plugin sandbox／公開契約はG0-3で別判定し、G0-9L/G0-9Dの合格へ含めない |
+## 4. interaction backbone
 
-以下は**M3入場(U0a完了)後**の論理依存表である。G0自体はM3全コードを一括停止する門ではない。U1aはU0bの5層所有とdomain intentを待ち、custom UI追加タスクはG0-3の判定後に初めて起票する。U0〜U9を一括発注せず、[M3既知技術採択・並列実装地図](../m3-parallel-implementation-map.md)でowner、contract、file、oracleが独立した子だけを別orderとして並走させる。
+```text
+OS/RN input
+  → platform adapter
+  → normalized event
+  → headless Rust gesture
+  → transient projection / dirty canvas
+  → terminal typed intent
+  → existing D2 prepare/apply
+  → journal / Undo
+  → published snapshot
+  → RN / Timeline / Curve / Stage reprojection
+```
 
-## 方針(2026-07-24: UI責任境界・surface topology・egui標準製品runtime不採用・C7A private child popup限定例外、G0-9 platform受入比較中)
+Timeline、Curve、Stageはpointer lifecycle、capture、cancel、viewport transform、marquee、multi-selectionのheadless語彙を再利用できる。ただしdomain meaningを一つの巨大gesture frameworkへ抽象化しない。clip trim、curve tangent、Stage gizmoはそれぞれ既存command／semantic ownerへ接続する。
 
-以下のegui節は2026-07-18採用時の歴史的baseline仕様と成立証拠として保持する。eguiは標準製品runtimeへ採用せず、新しい製品面を実装しない。責任境界は[正本](../ui-runtime-architecture.md)へ移り、G0-9完了前のWebView/native統合や既存baseline撤去の許可ではない。toolkit横断のDocument/command/thread/座標/preview規律は引き続き現行である。
+Inspectorの数値・text編集も同じterminal intentとsingle writerへ接続する。canvas操作だけを特別扱いしない。
 
-- **egui歴史baseline**。[採用判断](../reviews/2026-07-18-m3-egui-selection.md)時の初期統合はegui/eframe/egui-wgpu/egui-winit 0.35、egui_tiles 0.16、wgpu 29の組合せをadapter内で固定した。versionはDocument/plugin契約へ出さず、新規製品面へ広げない
-- プレビューは同一device上の`Rgba8Unorm` `TextureView`を`egui_wgpu::Renderer::register_native_texture`へ登録して表示する。display slot生成時にtextureと安定viewを一度作り、rendererを得られる`eframe::CreationContext`で一度だけnative texture登録する。frame更新、resize、DPI変更、minimize/restoreごとに登録し直さない
-- Stage上の2D handle、selection outline、3D gizmo、Depth rail/axisは、toolkitにかかわらずcanonical display texture後段のnative wgpu presentation overlayで描く。canonical render/exportへ焼かず、少数固定形状のhit-testはCPU解析幾何、確定はD2とする。Webはtoolbar/control/a11y proxyを所有できるが、transparent WebViewをgizmo要件にしない。実装許可ではなく、合格条件は[native Stage所有境界](../reviews/2026-07-21-native-stage-gizmo-ownership.md)を正とする
-- **wgpuバージョンはcoreとegui-wgpuで単一化**する。更新PRではCargo treeの重複拒否、既存device共有、native texture、resize/minimize/restoreを再検証する
-- egui/eframe/winitのAPI変更は`motolii-ui`内のadapterで吸収する。0.35で実際に発生した`App::update`→`App::ui`等の変更をdomain modelや他製品crateへ波及させない
-- OpenCut(MIT)はコード流用不可となった(React前提のため)。**操作仕様・レイアウトの参考のみ**に格下げ。操作動線はOpenCut、Flow/Alight Motion、一般的なトラック型UIを参照する。既知の外殻、操作トポロジー、共通component契約は[UI操作言語](../ui-interaction-language.md)を正本とする
-- 外観は[UI視覚言語](../ui-visual-language.md)を正本とする。Abletonは一画面、固定されたView役割、選択→詳細、Info View、評価順と配置の一致という**操作トポロジー**と、Timeline Viewの視覚言語だけを参照し、Arrangement Viewの画面構成やDAW意味論は参照しない。Ableton/Apple風とはdark neutral、抑制した面、明確な階層、一貫したicon、意味色を指し、装飾gradient/glass/neon/card乱用を指さない
-- 制作機能を大きな余白や段階的開示の奥へ隠さない。asset、preview、property、effect stack、driver、timeline、transportを高密度に一覧でき、右下/status領域へ短いcontext説明を出せる構造にする。Blenderは文脈ヘルプだけの先例で、全体UIは模倣しない
-- AEのように無彩色と文字だけへ識別を寄せない。選択・種別・mute/disabled・keyframe・data mapping・bake・warning等は文字を読む前に位置/形/icon/意味色で識別でき、かつ色だけにも依存しない
-- UIの色値は固定実装にしない。組み込みLight/Darkと将来のcustom themeを同じsemantic token schemaで解決し、設定画面から選択・永続化する。初回既定はDark(土台dark neutralの規約と一致)、theme異常時も診断してDarkへfallbackする
-- タイムラインUIの状態管理はM2ドキュメントモデルに直結(UI独自の編集状態を二重に持たない)。編集操作は全てM2コマンドを発行する形
-- キーフレーム編集UIは**AE式の値グラフエディタを作らない**。**Flow/アライトモーション式の区間イージングエディタ**を採る: 2キーフレーム間を選択→ボタン→cubic-bezierイージングをポップアップ編集(プリセット+ハンドル)。データは`motolii-eval`の`Interp::Bezier{x1,y1,x2,y2}`(区間正規化位置に対する連続曲線=fps/解像度非依存)を編集するだけでスキーマ変更不要。オーバーシュートはyの[0,1]外で表現(y非クランプ維持)。詳細と根拠はconcept.md決定事項。シーケンス操作の参考にTheatre.jsは見てよい(AGPLのstudioコードは読まない・流用しない)。**空間モーションパス(位置の2D曲線)は時間イージングとは別概念**で、v1コアには入れない(プラグイン領域/v1後半)
-- AM公式再確認で見つかったcurrent/context key、Overshoot操作、Curve Copy/Pasteの差分は[AMキーフレームグラフ観察台帳](../reviews/2026-07-19-am-keyframe-graph-observation.md)で追跡する。Bounce / Elastic / Cyclic(Sine) / Random / Steps / Elastic Stepsは`concept.md`で採用済みの**区間補間**として表示し、適用時もkeyframeの個数・時刻・値は不変、選択区間のoutgoing interpolationだけを1 command／1 Undoで変更する。M3モックから未決のparameter既定値や永続形式を発明しない
-- パネルレイアウトは利用者が分割、tab化、resize、表示/非表示、復帰を選べる。`egui_tiles`をruntime投影先の第一候補とするが、その`Tree`/`TileId`/serde形を正本へせず、Motolii所有の安定layout modelから投影する。panelの初期配置は組み込みpresetであり固定契約ではない
+## 5. Stage
 
-## デバイスとスレッドの規約(第2回レビュー#1/#2を受けた確定事項)
+Stage native componentは次の一つのpresentation chainを持つ。
 
-1. **歴史baselineではデバイスをコアが作り、egui shellは借りる**: `GpuCtx::new_for_ui()`がコンポジタ要件
-   (`motolii_gpu::required_features()`/`check_minimum_limits()` — 単一の情報源。limitは最低ライン4096を検証した上でアダプタ実力値を要求する)を明示してデバイスを生成し、
-   `egui_wgpu::WgpuSetup::Existing`でshellに渡す。逆(shellが作ったデバイスをコアが借りる)は通常経路にしない
-   — feature/limitは生成時に確定し後から足せないため、M3統合直前に「必要featureが無い」で
-   詰む。要件を増やす時は`required_features()`/`check_minimum_limits()`を更新する
-2. **UIスレッドはMotolii frameをレンダしない**: `render_frame()`はレンダ専用スレッドで実行する(egui自身のUI paintはevent-loop threadで行ってよい)。render requestは
-   blockしない最新値置換mailbox(Tokio `watch`相当の意味。依存採用は未決)で渡し、各request/resultに
-   単調増加generationを付ける。UIは最新要求より古い結果を表示せず、event-loop threadで最新display
-   poolの`TextureId`だけを投影する。wgpuのDevice/Queue/TextureはSend+Syncだが、eguiのUI状態をworkerから
-   直接更新しない
-3. **共有デバイスでの同期読み戻し禁止**: `download_rgba`(`device.poll(Wait)`)はUIと共有中の
-   デバイスではUIごと止める。プレビュー中の読み戻しは行わない。**書き出しは別のヘッドレス
-   デバイス(`new_headless()`)で実行する**(プレビューと書き出しの分離はB-4の設計と整合)
-4. **GPU健全性監視とコールバック所有者**: レンダ専用スレッドの毎フレーム入口
-   (`render_graph_cached`等)で`GpuCtx::check_health()`を呼び、device lost / uncaptured error
-   を型付き`GpuRuntimeError`として検出する。wgpuの`set_device_lost_callback` /
-   `on_uncaptured_error`は**デバイスあたり1スロット**のため、**コア(`GpuCtx::new_for_ui` /
-   `from_device_queue`)が唯一の登録者**とし、egui/eframe側での別登録は禁止(後登録は黙って置換する)
+```text
+render/media result
+  → wgpu preview texture
+  → rust-skia transparent overlay (dirty時だけ更新)
+  → wgpu composite
+  → native surface present
+```
 
-## Stage / Output Frame / 統一Camera
+overlay対象:
 
-正本は[統一カメラ設計](../reviews/2026-07-14-unified-stage-camera-design.md)、旧schema案と現行UI境界の分別は[Unit 4Q歴史回収](../reviews/2026-07-23-historical-unified-stage-camera-ui-lineage-recovery.md)。M3は完成画像だけを表示するpreview panelではなく、固定サイズを持たないStage上で同じworld/cameraを編集する。
+- output frame、safe area、grid、guide、snap補助
+- selected／visible object bounds
+- active gizmo、group root gizmo
+- path、control point、camera／depth補助
 
-- 全CompositionにM2-D1jの`CompCamera`が常在する。通常UIで「3D cameraを追加する」操作は作らない
-- `Output Frame`は`CompCamera`のprojection aperture。frameの移動・ズーム・回転はDocument cameraをD2 commandで編集し、書き出しへ影響する
-- 上記2項はM3が実装済みM2 Planar互換cameraを編集する現行入口である。将来のcamera modelは[Camera Object / Provider決定](../reviews/2026-07-24-camera-object-provider-decision.md)に従い換装可能Camera Objectへ出すが、M3 U2dから未決のprovider schema／公開intentを発明しない。Camera toolがHost UIであることをcamera実装のHost固定根拠にしない
-- `Stage View`のpan/zoom/`Fit Output / Selection / All`はworkspace/session候補で、Document serializeと書き出しへ影響しない。別preview cameraとしてdomainへ出さない
-- 2D objectも`z=0`の同じworld objectで、Output Frame外でもbounds、anchor、選択、hit-test、snapを維持する
-- 枠外は不透明グレーで隠さず、同じ時刻・camera・world評価の保守的Draftへ半透明scrimを重ねる。RoD/RoI最適化はM4-K0で後付けし、U1fの見た目をK0待ちにしない。Final出力範囲を広げず、GPU同期readbackでvisible boundsを求めない
-- Camera toolとHand/Stage View toolはicon、frame形状、操作結果で識別でき、色だけ/labelだけへ依存しない
-- UIでは平面配置の`Position X/Y`と前後配置の`Depth Z`を独立した操作groupへ投影する。これは同じ正準XYZの`position.z`を編集するUI上の意味分離であり、Depth専用field、第二の所有者、暗黙の3D modeを追加しない。`Depth Z`の平行移動と`Rotation Z`（Z軸まわりの回転）も別control・別automation channelとして識別可能にする
-- Depth Railは現在時刻の評価へ追従し、明示的に開いた時だけ直接操作できる。automation中のdragは現在時刻のZ keyを更新または追加し、静的Depthのdragだけではautomationを開始しない。Cameraはworld上の文脈marker、Particle系はEmitter／生成元をmarkerとして扱い、camera-space depthやParticle個体群を第二の編集正本にしない。詳細と負例は[時間面UI構成モデル](../ui-score-model.md)を正本とする
-- Timeline barの選択は開いているDepth Railの同じstable IDへfocusするが、通常bar clickだけではRailを自動展開しない。bar内または時間面headerの明示Depth iconからRailを開いて対象へfocusできるようにする。同一Zは件数付きstackとして表示し、hover／選択だけの扇状展開や表示衝突回避のための自動Z変更を行わない
-- 同じparentの選択Objectを指定した奥端・手前端へauthoring orderで等間隔配置する`Layer Order Distribute`を、context menuではなくDepth Railの常設iconから使えるようにする。Groupは親側の1 markerと`Edit Children`中のparent-local子scopeを混在させず、mixed-parent選択は変更ゼロで拒否理由を示す
+毎frame CPU readback、全object full gizmo、第二GPU device、第二event loopを採らない。100〜500 gizmoはstress上限であり、通常はsemantic importanceとvisibilityで間引く。
 
-## プレビュー出力の寿命(`RenderedFrame` / G-1)
+直接操作はcanonical display transformの同一epochでdrawとhit-testを行う。resize、scale change、occlusion、unmount/remount、surface/device lostをlifecycleとして扱う。
 
-`render_graph_cached`（およびそれを呼ぶ `render_frame` / `render_graph`）が返す `RenderedFrame` について:
+3D gizmoは汎用UI部品ではなく、active camera、world/object transform、depth／pickingと同じStage viewport境界に属する。したがってRN/Skiaのpanel側へ操作意味論を移さず、Rust headless interactionが同一camera／display transform epochで軸・平面のhit-test、capture、drag previewを所有する。表示は通常どおりcanonical output外のrust-skia overlayでよいが、3D handleの描画だけをnative GPU presentation overlayへ差し替える余地を残す。この差し替えはrendererの選択であり、selection、preview、D2 commitの所有者を増やさない。
 
-1. **セッション中間プールとの分離**: `RenderSession` の ping-pong 中間バッファは次フレームで再利用される。
-   `RenderedFrame.texture` は中間プールのエイリアスを返してはならず、**専用の出力コピー**を返す（現実装: `create_owned_output_texture` + GPU copy）。
-2. **呼び出し側の保持**: 同一 `RenderSession` で連続 `render_graph_cached` しても、**直前に返した `RenderedFrame` のピクセル内容は上書きされない**（出力コピー契約）。
-3. **2026-07-18 egui候補でのU1義務**: レンダスレッドからUIへdisplay textureを公開する前に、**表示用の独立コピー**を確保する（TextureIdを渡すだけでは不十分 — UIがsample中に次フレームが同じ面を触るtearingを防ぐ）。display slotの安定viewはslot生成時に作り、rendererを得られる`eframe::CreationContext`で一度だけnative texture登録する。frame更新、resize、DPI変更、minimize/restoreごとに登録し直さない。G0-9の別候補もCPU pixel bridgeなし、tearingなし、generation破棄、色/alpha一致を同じfixtureで満たす。GR-1 refcountプール前倒し時はこの節を更新する。
+## 6. Timeline
 
-製品プレビュー経路の正規入口は `render_graph_cached`（監査 G-3）。
+TimelineはAbleton ArrangementやNLEに近い高密度canvasである。track headerは左に置き、time directionとtrack directionのscrollを分離する。
 
-## プラグインパネルの拡張方式(2026-07-22 G0-3 / GAP-13再評価中)
+必須操作:
 
-2026-07-12の縮小判断では、v1公開境界を`NodeDesc`からの自動生成パネルだけとした。2026-07-21にHost/コミュニティでcomponent/test語彙を再利用する長期原則を採ったが、2026-07-22の[軸分離決定](../reviews/2026-07-22-m3-surface-extension-axis-separation.md)で標準製品surfaceのG0-9とplugin UI公開判断のG0-3 / GAP-13を分離した。G0-3完了までは従来どおりプラグインUIコードをロードせず、新しい公開契約も実装しない。G0-9完了だけでは解除しない。
+- continuous scroll、cursor-centered zoom、fit/visible-range navigation
+- primary／multi／marquee selection
+- playhead seek、drag scrub
+- clip move、trim in/out、lane move
+- snap、guide、modifier override
+- group layer展開／折畳みとgroup selection
+- edge scroll、cancel、outside release、focus loss
+- semantic zoomによるlabel、thumbnail、waveform、handleの段階省略
 
-**不変条件(将来拡張しても崩さない)**: 標準(自動生成)パネルだけで全パラメータを操作できること。カスタムUI固有にしか存在しない必須操作は禁止。
+visible projectionをboundedにし、offscreen clip/keyを描画・AX node・RN componentとして生成しない。1000 rich clipは安全余裕のprobeであり常時フル情報表示要件ではない。
 
-### G0-3 / GAP-13決定まで公開しないもの
+既存`TimelineProjection`、typed identity、move／trim command、snap contract、Undo oracleを再利用する。旧direct-wgpu/Vello rendererの見た目やcode structureを新rendererへ強制しない。
 
-| 候補 | 扱い | 理由(要約) |
+## 7. Curve Editor
+
+Curve EditorはTimelineと同じrust-skia canvas familyとして実装する。
+
+- multiple curves、active interval、key／tangent selection
+- add/remove key、marquee、pan、zoom、fit
+- Bezier handle、linked/broken tangent、preset
+- drag中transient preview、release時Interp／key command高々1回
+- same revision、same channel identity、stale rejection
+- selected／visible中心のbounded accessibility projection
+
+Easing popupを別native windowへ固定しない。RN popover／panel chrome内のnative Curve component、dockable Curve panel、inline editorのどれでも同じsemantic contractを使える。window topologyはpresentation choiceであり、curve state ownerを増やさない。
+
+## 8. React Native shellとReact資産移行
+
+React mockから直接再利用するもの:
+
+- information architecture、panel roles、labels、icon meaning
+- component boundaries、empty/loading/error/disabled states
+- Browser／Inspectorのread modelとtyped intent概念
+- fixture、visual oracle、interaction test scenario
+
+変換するもの:
+
+- HTML element → RN primitive／product component
+- CSS layout → RN StyleSheet／layout component
+- DOM event → RN callback／native component typed event
+- WebView bridge → Host-owned RN native module／component contract
+- browser Canvas → native rust-skia component
+
+mock data、legacy fixture adapter、DOM stable ID、localhost、HMRはrelease sourceにしない。product componentを正本とし、必要ならmock側がproduct componentをfixtureとして消費する。
+
+## 9. product custom panelとplugin UI
+
+bundled first-party panelはRN componentとして実装できる。これは既存React資産と将来のproduct custom panelを保つための内部拡張軸である。
+
+third-party plugin UIは別gateとする。v1既定はHost-generated parameter panelと宣言的hint／gizmoであり、任意JS bundle、同process native code、network、eval、raw GPU textureをRN採択から自動的に許可しない。sandbox、permission、version、crash isolation、distributionはG0-3 / GAP-13で閉じる。
+
+### UI配置保留と未配置control staging surface
+
+M3／M4／M5の接続で、user-facingな操作意味、read projection、typed intentまたはD2 Command、owner、Undo／failureが閉じている一方、最終surfaceの配置だけが未決の場合は、[UI配置保留決定](../reviews/2026-08-09-ui-placement-deferral-staging-surface-decision.md)に従いHost-owned staging surfaceへ一時配置してよい。これはSettings、debug panel、万能Inspector、plugin UI frameworkではなく、既存`PanelLayout`／`LayoutAuthority`と既存control routeを再利用する任意表示panelである。panelの開閉、dock／detach、寸法はWorkspace profileまたはProject sessionに置き、Document、journal、render recipeへ入れない。
+
+stagingは値やCommandのownerにならず、一つのbindingにactive placementを一つだけ持つ。final surfaceがacceptedになったcutでstaging配置を除去し、同じread projectionとtyped routeのままpresentationだけを移す。操作意味、owner、command、consumer、Undo、failureのいずれかが未決ならstagingへ仮置きせず、そのedgeを`RESEARCH_RETURN`する。
+
+Timeline trim／key drag、Stage gizmo、Depth Rail direct manipulation、drag and drop、pointer captureなど、位置やgesture自体が操作意味であるinteractionは対象外とする。staging routeのgreenはruntimeの`product-connected`候補に限り、final placement、visual、density、focus、keyboard、a11y、human judgmentを完了扱いにしない。
+
+## 10. 実装wave
+
+以下は利用者成果のwaveであって、一wave一発注を意味しない。施工境界、並列可否、現在状態は[M3 RN runtime実行地図](../m3-rn-runtime-execution-map.md)で判定する。
+
+### Wave R0 — product runtime seat
+
+- RN application/window lifecycle
+- Rust Host native module/component contract
+- revisioned snapshot、typed intent、diagnostic envelope
+- one macOS Stage placeholder native component
+- zero Document semantics change
+
+出口: offline Release appが起動し、resize、focus、unmount/remount後も同じread-only snapshotを表示する。
+
+### Wave R1 — VS-1再閉鎖
+
+- Browser Rectangle conceptをRNへ移す
+- Stage wgpu preview + rust-skia overlay
+- rust-skia Timeline read projection
+- RN Inspector read projection
+- Place、Undo、Redoを既存D2へ接続
+
+出口: 通常RN product routeでVS-1を一つのLayerId／revisionで完走する。
+
+### Wave R2 — 制作操作
+
+- Timeline selection／scrub／move／trim／snap／lane
+- Stage selection／gizmo／group／grid／snap／path
+- Inspector parameter edit／key
+- Curve Editor
+
+出口: 一つのfixtureで同じobjectを三面から編集し、Undo／Redo／reopenできる。
+
+### Wave R3 — project workflow
+
+- media import、save／save as、recovery
+- playback／audio clock／degraded preview
+- export settings／progress／cancel／atomic artifact
+- keyboard operations、clipboard、menu、DnD
+
+出口: new/openからexportまで通常routeで完走する。
+
+### Wave R4 — platform/distribution
+
+- macOS human IME／VoiceOver／DPI／device lost
+- Windows RNW Component View／Composition/DX12／capture／focus／DPI／NVDA
+- arm64/x64 artifacts、offline resources、license notice、crash recovery
+
+出口: Local AlphaとDistribution Readyを別々に判定できる。
+
+## 11. gate
+
+| Gate | 必須証拠 | synthetic代用 |
 |---|---|---|
-| plugin所有のegui/native UI code | 非公開。v1.xへ自動繰越ししない | Rust/native codeのABI、event、theme、a11y、resource ownershipを第三者契約にし、Host共通componentを迂回するため |
-| wgpu自由描画(スコープ・カーブ等) | 延期(同上) | wgpu/WGSLは安全なRust APIでもGPU資源のDoS隔離にはならない。AE Effect UI級の描画・イベント契約を背負う |
-| 宣言レイアウト(Blender UILayout型) / ギズモ | 延期(同上) | ホスト所有部品でのレイアウトは有力だが、`NodeDesc`とは別の公開語彙。v1へ急がない |
+| automated semantic | deterministic event sequence、one commit、zero-write reject、revision一致 | 可 |
+| renderer | raw CPU/GPU/upload/frame値、bounded visible set、resize resource | 可 |
+| macOS product | real RN app、surface present、outside release、focus、remount、recovery | 不可 |
+| human | IME composition、keyboard-only、VoiceOver、drag feel、visual density | 不可 |
+| Windows product | real RNW app、Composition/DX12、DPI、capture、focus、device lost、NVDA | 不可 |
+| distribution | signed/package artifact、offline、notice、reopen/crash recovery | 不可 |
 
-旧案の「3段構え」(自動生成 / toolkit所有UI / wgpu描画)をそのまま復活させない。自由UI候補は公開kit、sandbox、権限、互換、fallbackをG0-3 / GAP-13で満たす場合だけ仕様改訂へ進める。G0-9の製品surface合格を代用しない。
+Windows共通coreのcompile成功はplatform根幹riskを下げるが、Windows product gateの代用ではない。Windows gateはmacOS操作体系の実装開始を止めないが、cross-platform完成、旧route全面撤去、Distribution Readyを止める。
 
-## プラグインパネルの拡張方式(v1)
+## 12. license
 
-GAP-13の2026-07-16縮小判断は安全なfallbackとして残すが、最終的な公開UI runtimeはG0-3 / GAP-13で再評価中である。G0-9の製品surface証拠は入力にできるが、合否を共用しない。
+rust-skiaはMIT、SkiaはBSD 3-clause系である。commercial runtime fee／copyleftはない。配布artifactへ両license noticeとdisclaimerを含め、依存更新時にnotice closureを検査する。
 
-1. **自動生成パネル(必須fallback・既定体験の大半)**: エフェクトプラグインはパラメータ定義(`NodeDesc`)を宣言するだけで、汎用プロパティパネル(Rustモデル駆動の行リスト: スライダー/カラーピッカー等)が自動生成される。**全保存パラメータはこのパネルだけで編集可能**でなければならない。カスタムUIは操作可能性を追加せず、速度・可視化・専用体験だけを改善する
-2. **宣言語彙は型ごとに解凍する**: Host所有のgizmo、curve、gradient、visualization等は、能力不足が実例で確認され、座標/保存/Undo/a11yを宣言できる場合だけ追加する。`ParamDef`/`ValueType`の互換と意味論をM3だけで発明しない
-3. **比較前に自由UIを公開しない**: plugin所有のegui/native UI code、wgpu UI texture、任意Web codeは実装しない。Hostと同じkitを使う案も、sandbox・権限・互換・配布の比較を通してから公開範囲を決める
+## 13. 非目標
 
-## 編集時Generator hook(one-shot)
+- RN／Rust／Skiaのどれか一つへ全面統一
+- WebView islandsの問題を別の埋め込みbrowserで再現すること
+- Timeline clip／keyを大量RN componentとして表現すること
+- native側でdock、form、theme、text editor、汎用widget toolkitを作ること
+- direct-wgpu/Vello／eguiを即時削除すること
+- mock、probe、focused greenをM3完成と呼ぶこと
+- Windows実機未通過を黙ってmacOS結果へ一般化すること
 
-上位の製品境界、Shape/SVGの分界、p5.js型表現の翻訳、Materialize/Live/Bakeの責任分担は[ジェネラティブユーザー境界](../generative-user-boundary.md)を正本とする。本節はそのうちMaterialize経路だけをM3の実装契約へ落とす。
+## 14. 現在地
 
-JS/p5.jsをDocument・評価器・レンダ契約へ直接入れず、まず**編集時Generatorが型付きD2コマンドbatchを返す汎用hook**を置く。ホストは開始時snapshotに対してbatch全体をpreflightし、単一writerへ1 macroとしてcommitする。成功時は通常のGroup/Clip/VectorRecipeだけが残り、失敗・cancel・制限超過時はDocumentとUndo履歴を一切変えない。Generatorへ`&mut Document`は渡さない。
-
-最初のprogram adapterは**MTS-1 TypeScript one-shot Shape recipe adapter**とする。旧称`Motolii ShapeScript`を独自言語としては棄却し、Paper.jsの`Project/Layer/Item/Path/Group`型object modelを設計参照にしたHost SDKとして再配置する。Paper.js互換を名乗らず、座標はMotolii正準空間(原点中央・Y-up・高さ=1.0)、shape配置は中心基準、回転保存はradianに固定する。曖昧な位置引数を避け、`center`/`size`等のnamed fieldを使う。命令を通常のvector layer群へ変換し、1実行=1 Group=1 Undoとする。生成物は実行後に通常の編集UIで変更でき、保存・再読込・preview・exportにscript engineを必要としない。TypeScript source、runtime名、実行event stream、生成元provenanceはv1 Documentの必須意味にしない。[言語境界決定](../reviews/2026-08-01-vism-authoring-language-boundary-decision.md)の`LANG-TS-F0`と`VSM-C2`前に実装しない。
-
-LLM向けの第2入口として**SVG materialize adapter**を分離する。SVGの公開語彙を入力に利用するが、左上原点・Y-down・viewport単位は入口で正準座標へ変換し、SVG DOM/XMLをDocumentの実行意味にせず通常のGroup/VectorRecipeへ実体化する。
-
-これは**編集操作の量産口**であり、毎frame評価するlive JS layer、AE式expression、WASM Param Pipeline、plugin custom UIとは別境界である。p5.jsで一般的な「canvasをclearせず前frameの画素へ追描きする」表現も、scriptが隠しcanvasを所有する形では模倣しない。ただし表現自体は捨てず、有限loopを事前記録して通常shapeの出現時刻へ畳める場合はone-shot materialize、前出力そのものが必要な場合は[F-11 Feedback](../plugin-resources.md#6-時間参照-lookbehind--フィードバックf-11口の予約のみ)の明示的なホスト所有状態+チェックポイントBakeへ送る。JS engine/sandbox実装の選定はU9aの公開契約へ焼かない。
-
-## タスク分割
-
-この表のIDは能力単位であり、そのまま1 PRにしない。U0b〜U4aの実装は、[UIコンセプトから実装チケットへの分解](../reviews/2026-07-16-m3-ui-concept-to-tickets.md)の枝番を **1 Issue = 1 commit** で発注する。親IDの完了は必要な枝番がすべてmainへ到達した時だけ記録する。
-
-**入場**: [M2基盤再締結ゲート](../reviews/2026-07-15-m2-foundation-reclosure-gate.md)はmainで解除済み。**U0a(egui骨格+依存方向CI)は本入場で完了**。下表はU0b〜U9の論理依存を示すが、初回Uシリーズの発注許可は本書末尾の直列運用で現在選択された1枝番だけに与える。#180/#191≠入場完了の歴史注記は維持する。
-
-| ID | 内容 | 依存 | 完了条件(概要) |
-|---|---|---|---|
-| U4b-0V | **`DONE / ACCEPTED / EXTERNAL_GATE_PENDING`**: exact current-playhead Position Vec2 key value editing | U4b-0, CU-0A08ITIB, P02-C3 | [implementation acceptance](../reviews/2026-08-04-u4b0v-position-key-value-edit-implementation-acceptance.md)とcommit `c404a050`でexisting explicit Add後のon-keyだけを既存React Inspector X/Yから編集し、dedicated D2 key-local CAS、clone preview、one durable terminal、Undo/Redo/reopenを閉じた。Const/off-keyはread-onlyでAdd Keyをrecoveryとし、Auto Key、whole-curve SetProperty、Timeline redesign/dynamic marker widthを拒否する。human visual/focus/keyboard/a11yはM3-final `EXTERNAL_GATE_PENDING` |
-| U0a | `motolii-ui`クレート骨格+UI toolkit依存方向CI | G0-1 | **完了**: `motolii-ui`以外の製品クレートのegui/eframe/egui-winit/egui-wgpu/egui_tiles直接依存を、Cargo metadataの直接依存検査（`package = "…"` renameを含む解決済みpackage名、`motolii_testkit::ui_toolkit_dep_policy`）が拒否。domain公開型へtoolkit型が無い。egui骨格へ置換済み |
-| U0b | UI状態所有表+toolkit非依存domain intent | G0-2, M2-D2 | 代表状態をDocument/User settings/Workspace profile/Project session/Transientの5層へ分類。toolkit型なしintentの単体テスト。新しい所有寿命や恒久workspace/session形式はこのタスクで発明しない |
-| U0c | input router+安定`CommandId`+event種別 | U0b, G0-2 | press/release/click/dragを区別し、IME preedit中のshortcut抑止を自動試験。shortcutを持つ全登録commandに安定IDがあり、機能crateの[raw key/modifier分岐](../reviews/2026-07-16-m3-preflight-decisions.md#23-keymap保存)を拒否。物理入力からdomain intentまでtoolkit型なし |
-| U0d | **完了: 全shortcutを変更できる**keymap base+user delta JSON永続化 | U0c | builtin base不変。全bindingの追加/置換/複数割当/無効化、[documented JSON](../reviews/2026-07-20-m3-keymap-codec-contract.md) read/validate/write、roundtrip。初版は出荷済み旧版が無いためcurrent v1恒等migration枠+移行前原本面の冪等を固定し、実在しないv0変換を作らない。未知`CommandId`を保持。U0d-3は製品builtin baseを発明せず、合成baseの無効化→別bindingを`InputRouter`へ通して同じintentを発行する全command conformance。競合/OS予約は型付き診断 |
-| U0e | DTCG theme token generator+component state+icon体系 | U0a。具体値と製品導入はG0-6H | token JSONからRust/egui adapterへ決定的生成し手編集を拒否。5 reference screenの人間審判後にだけ具体値を製品へ入れ、text/non-text/focus contrast、gradient許可list、component state、icon grid、motion数値検査を通す |
-| U0f | **resource policy User settings model+永続化**: VRAM/RAM/disk予算preset/custom、preview解像度auto/fixed、縮退許可をDocument外で保持 | G0-2, G0-8, U0b, M4-K1a | (1)version付きroundtrip/migration冪等 (2)未知field原本保全 (3)設定変更でDocument serialize/journal/Undo不変 (4)custom hard capをK1aへ反映 (5)共有メモリ合算capの矛盾を型付き拒否 (6)egui/backend型を保存形式へ入れない |
-| U1a | eguiアプリシェル+既存device共有+静止preview | U0a, U0b, G0-1, M2-D3 | [U1a-1契約](../reviews/2026-07-21-m3-u1a-1-static-viewport-contract.md)どおり同じfixture Documentの独立display slotを中央Stageへ投影し、[U1a-2契約](../reviews/2026-07-21-m3-u1a-2-layout-projection-contract.md)どおりprivate・非serdeの固定5 role layout intentから決定的runtimeを作る。runtime編集はproposalとして全体検証し、Document不変。保存codecはU1a-3、自由dock/別window実機受け入れはU1e |
-| U1b | **完了**: render worker+最新値mailbox+generation破棄 | U1a | 100連続seekで送信がblockせず、取得済みresultの配送順を反転しても最新generationだけ表示。共有deviceで同期readbackなし。ownerはevent loop外でjoinし、既存display slotの登録は1回 |
-| U1c | 起動/idle memory/input latency計測+開発HUD | U1b, G0-4 | 測定環境とraw結果を保存し、drop/latency/generationをHUD表示。閾値の採択は独立仕様改訂 |
-| U1d | 日本語IME深部受け入れ | U1a, U0c | preedit下線、候補位置、変換中Enter非奪取、長文歌詞を対象OS実機で記録。失敗時は入力経路の仕様改訂へ戻る |
-| U1e | 別window/別monitor preview spike | U1b | 同一Textureを別surfaceへ表示し、scale/monitor移動でDocument・評価結果不変。成立性と制約を記録 |
-| U1f | [#169](https://github.com/oshikaidesu/Motolii/issues/169) Stage View+Output Frame+off-frame透過Draft | U1b, U0e, M2-D1k, M2-D3 | (1)同じcamera/worldからframe内+枠外を保守的に表示 (2)Stage View pan/zoom/fitでDocument serializeとFinal frame pixel不変 (3)Output Frame外を不透明塗潰しせず半透明scrim+形で識別 (4)frame外objectが無言で消えず選択可能 (5)UI thread readbackなし (6)overscan負荷をG0-4手順で測定。最適化なしでも成立し、K0導入後に見た目不変 |
-| U1g | **PreviewDeadlineController**: audio/Transport主クロックを保ち、render deadline超過時は古い要求を捨てて最新時刻だけを表示。容量pressureとは別入力 | U1b, U1c, U5, M4-K1d | (1)遅延注入でproject fps/time/audio clock不変 (2)表示frameだけ15/10fps相当へ落ち追いつく (3)旧generationを表示しない (4)容量pressureだけではframe dropしない (5)固定解像度でscale不変 (6)Finalは全frameを評価 (7)UI thread/blocking sendなし |
-| U1h | **Performance/Memory settings+pressure HUD**: preset/custom予算、auto/fixed解像度、現在scale・実表示fps・予算使用量・縮退理由を既存settings/HUD語彙で表示 | U0e, U0f, U1g | (1)自動縮退の理由をwarning icon+文言で表示し色だけに依存しない (2)固定設定違反なし (3)HUD非表示でも制御同一 (4)設定操作でDocument/Undo/Final不変 (5)100連続telemetry更新でUI送信非blocking (6)theme外raw color/独自spacingなし |
-| U1i | **Activity projection**: background処理を既存status/diagnostic領域へ投影 | U0e, U2c, 各providerの型付きsnapshot | providerを正本にqueued/running/completed/failed/cancelled、進捗不明、cancel可否、typed reason、次の一手をBrief/Context/Inspectへ投影。UI所有queueを作らず、cancel不能処理をcancel可能に見せず、閉じても処理結果不変。export/import-proxy/bake/cache coverageはprovider完成分だけ接続し、未実装分を偽装しない |
-| U2a | **完了**: [D2 one-shot atomic macroと、決定済みD2 commandを伴うDocument intent adapter](../reviews/2026-07-20-m3-u2a-1-command-adapter-contract.md) | U0b, M2-D2 | U2a-0で空列／途中失敗を全状態不変にし、U2a-1はrequestごとにatomic macroを1回使う。代表gestureがUndo 1回、異request/異targetはmergeせず、初回適用前Cancelは変更ゼロ。公開gesture lifecycle、適用後Cancel、target解決は個別の型宣言前に実装しない |
-| U2b | **U2b-1完了 / U2b-2 Place private core実装済み・製品E2E未完 / CU-G03D/CU-G03R完了**: normalized UI event→private single writer→`Arc<Document>`購読、次にRectangle Place | U1a, U2a。U2b-2はU2b-1/U2c-1 | U2b-1はApply/Undo/Redo成功時だけsnapshotをpublish。U2b-2は[歴史回収 §3](../reviews/2026-07-23-historical-d2-selection-timeline-lineage-recovery.md#3-u2b-2-place-product-core再採択)どおり、accepted terminal dropだけwriter snapshotのLayerIdTable clone→fresh live-next→既存AddTrackItem 1件→apply_macro 1回を同じprivate同期call stackで行う。durabilityは[CU-G03決定](../reviews/2026-07-26-cu-g03-edit-durability-ordering-decision.md)どおり、単一command preflight→journal→live apply/undo/redo→revision→selection reconcile→1 publish。journal/post-durable failureはpublishせずsession poison+recover/reopenとする。start/preview/cancel/stale/duplicateはDocument/revision/history/ID/journal/publish 0。top-level compatible selection、first Track top fallback、canonical Y-up、Rect size 0.2、playhead〜composition endをGUI command意味として固定する。Rectのv1 appearanceとD3 loweringは[M2 D3 CU-103追補](M2-document-model.md)で不透明白fill・strokeなしに固定し、複数command macro耐久は別ゲート |
-| U2c | Direct/Tool/Advanced + 共通component/診断conformance harness | G0-7, U2b。枝番の追加依存は[Uシリーズ枝番表](../reviews/2026-07-16-m3-ui-concept-to-tickets.md#34-編集境界と共通操作文法) | 代表操作を存在する複数入口から実行し、同じDocument意味/Undo 1回/Cancel変更ゼロ。U2c-2はU4a-2 DirectとU4c Advancedの実製品入口完成後に実行し、未実装Toolを偽装しない。領域固有rejectionをTransient Diagnostic Envelopeへ適応し、Brief/Context/Inspectで同じreason/subject/factsを保持する。U2c-3のReact source不在は[CU-203S](../reviews/2026-07-31-cu-203-feedback-source-ownership-split-decision.md)でS/M/Pへ分割し、mock-side source確立後にproductへ直接移管する。UIイベント列や診断をserializeしない。gray/dimだけのsilent disabled、外部検索必須、Document objectのUI文言依存、巨大error enum、診断componentの直接mutation、同じIntentの局所picker/popup、独自hover/focus/Cancel/error投影をfixtureで拒否する |
-| U2d | Camera/Output Frame直接操作+枠外object選択 | U1f, U2c | Camera toolはM2-D1j cameraだけをD2 command化し1 gesture=1 Undo。Hand/Fitはworkspaceだけを変更。frame外objectを選択・移動・snapでき、camera/object操作を混同しない。DPI差で同じ正規化gestureが同じdomain値 |
-| U2e | LookAt/Follow/Parent向け**説明付き共通Connection Target Picker** | U2c, U2d, M2-D3 | (1)button/whip/Canvas・Timeline clickを同じConnection Intentへ正規化 (2)選択mode中はカーソル近傍へ「何を・何へ・どう繋ぐか」を常時文表示 (3)期待型、valid強調、invalid dim+理由、hover仮線/from-to手掛かり、確定後semantic badgeを表示し色/iconだけへ依存しない (4)`Idle/Picking/HoverValid/HoverInvalid/Commit/Cancel`はTransientでDocument非保存 (5)`LayerId`だけをD2 command化し、表示名変更で参照不変、自己参照/循環/削除済みtargetを型付き拒否、Cancel変更ゼロ、1選択=1 Undo (6)layer名/property path文字列、pick-whip式、隠れhelper、`force connect`を作らない (7)Advancedは同じ参照の由来/評価順/失敗を検査し、型検査を外す別意味にしない。具体的な高度例外は[操作単純化モデル S-3a](../interaction-simplicity-model.md#s-3a-接続操作はカーソル自身が意味を説明する)の境界を通す |
-| U2f | [#168](https://github.com/oshikaidesu/Motolii/issues/168) **modifier+drag one-shot Relative Move**: 安定gesture intentをkeymapから呼び、Position Const/全keyへ同じEdit-Space差分を適用するD2 macro | U0c, U0d, U2a, U2c, M2-D2 | (1)通常drag=現在値、modifier+drag=軌跡全体をHUD/ghostで識別 (2)pointer-upまでtransient、Undo 1回、Escape/capture loss変更ゼロ (3)混合型/削除済み/編集不可を開始前に型付き拒否し部分適用なし (4)時刻/補間/接線不変、既存値だけが変わりhelper/offset/Modifier/expressionを生成しない (5)DataTrack/FollowをBakeしない (6)専用Tool/panelなし (7)物理modifierはkeymapで変更可能 |
-| U2g | **Timeline Effect Link**: Effect Definition `out`→各Layer effect-stack Use `in`の常時表示connection gutter | U0e, U2b, U3a, M2-D1l, M2-D3e | (1)非選択時も全接続線をgutter内に表示 (2)from/inをsocket形状+arrowheadで識別し色だけに依存しない (3)折畳み先はstub+件数badgeで接続存在を隠さない (4)drag中は型不一致をdimしstack挿入位置を表示 (5)1 drag=1 Use=Undo 1回、Cancel変更ゼロ (6)timeline順/renameで参照不変 (7)線はclip/key領域を横断しない (8)Group=合成後1回、Explicit=各layer個別適用をUIで混同しない (9)500 use fixtureのrouting/hit-testがUI threadをblockせず、全線またはbundle stubが常時存在 |
-| U2h | **U2h-1 DONE**（[implementation split決定](../reviews/2026-07-27-u2h-1-primary-selection-implementation-split-decision.md)で`U2h-1S` / `U2h-1I`、[CU-106P実装決定](../reviews/2026-07-30-cu-106p-native-timeline-primary-selection-implementation-decision.md)で`U2h-1P` `DONE`）/ **U2h-2 additive以後**: Selection/focus+essential command surface | U2h-1はU0c,U2a,U2b,U2c-1,U2c-4。U2h-2はU2h-1,U3a-1 | U2h-1は[歴史回収 §5](../reviews/2026-07-23-historical-d2-selection-timeline-lineage-recovery.md#5-u2h-1-host-transient-primary-selection再採択)どおりHost Transient `primary: Option<LayerId>`だけを所有し、recursive envelope存在oracle、Document+selection atomic publish、Document revisionとprojection generation分離、Apply/Undo/Redo後publish前reconcile、Redo非復元を実装する。`projection_generation`更新条件・reconcile後publish時点は[CU-104 selection publish envelope決定](../reviews/2026-07-27-cu-104-selection-publish-envelope-decision.md)で決定済み。`u64::MAX`枯渇境界（preflight typed拒否・action消費・publish 0）は[CU-104E projection generation枯渇境界決定](../reviews/2026-07-27-cu-104e-projection-generation-exhaustion-decision.md)で決定済み。producer-only U2h-1Pは[selection入力到達性決定](../reviews/2026-07-27-u2h-1p-selection-input-reachability-decision.md)で停止後、CU-106Pへ統合し、native Timelineのproduction click→既存typed hit→private Replace/Clear→published primary / generationとして完了した。U2h-2でadditive/range/marquee/bounded AXへ拡張し、focusはhoverと分離する。全段でDocument/Undo/journal/second storeへselectionを入れない |
-| U3a | **U3a-1 SPLIT**（[owner/visibility分割決定](../reviews/2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md)で`U3a-1S` owner/visibility `DONE`、`U3a-1I` headless実装 `DONE`）/ **U3a-2 windowedはG0-9待ち**（[U3a-2S readiness分割](../reviews/2026-07-27-u3a-2s-windowed-timeline-readiness-split-decision.md)で`U3a-2S` `DONE`、G0-9を(A)固定Mac証拠〜(D)renderer採択範囲へ分割、[U3a-2R renderer採択範囲](../reviews/2026-07-27-u3a-2r-renderer-adoption-scope-decision.md)で`U3a-2R` `DONE`、[U3a-2Z semantic zoom責任所在](../reviews/2026-07-27-u3a-2z-semantic-zoom-responsibility-decision.md)で`U3a-2Z` `DONE`、[U3a-2A renderer採択](../reviews/2026-07-27-u3a-2a-renderer-adoption-decision.md)で`U3a-2A` `DONE`、[U3a-2P playhead visible range範囲](../reviews/2026-07-27-u3a-2p-playhead-visible-range-scope-decision.md)で`U3a-2P` `DONE`、[U3a-2Q playhead visible range owner採択分割](../reviews/2026-07-27-u3a-2q-playhead-visible-range-owner-split-decision.md)で`U3a-2Q` `DONE`（分割判断・owner未決維持）、`U3a-2Q-P` `DONE`（補遺・owner未決維持）、[U3a-2Q-P2 playhead再open lifetime](../reviews/2026-07-27-u3a-2q-p2-playhead-reopen-lifetime-decision.md)で`U3a-2Q-P2` `DONE`（fresh Host coordinatorでは以前の値を復元しない）、[U3a-2Q-P3 将来復元posture](../reviews/2026-07-27-u3a-2q-p3-playhead-future-restore-posture-decision.md)で`U3a-2Q-P3` `DONE`（将来best-effort復元は延期・追加可能）、[U3a-2Q-P4 playhead五層state owner採択](../reviews/2026-07-27-u3a-2q-p4-playhead-five-layer-owner-adoption-decision.md)で`U3a-2Q-P4` `DONE`（`Project session`をplayhead state ownerとして採択）、後続`CU-109S0`で次PRODUCT-ASSET `DO`はdocs-only `CU-109S`へ更新（`U3a-2Q-V` `WAIT`））: timeline projection/layout/hit-test+dense surface | U3a-1はU0a,U0b。U3a-2はU3a-1,G0-9 | U3a-1はtop-level Clip/Position keyを同じLayerId/KeyframeId/RationalTimeからread-only投影し、first-fit、viewport cull、Manhattan diamond優先hit-testをtoolkit/renderer非依存にする。CU-105再確認ではlayout/hit-test=`PASS`、既存1k/100k=`REDUCE` capacity evidence、semantic zoom=`STOP` U3a-2、selection/playhead/range=`STOP` CU-106-familyと処分した。U3a-2SはG0-9Lで閉じる(A)隔離証拠とheadless再利用、(B)G0-9D閉集合待ち、(C)製品window/consumer入力待ち、(D)renderer採択範囲を`U3a-2R`で`DONE`、semantic zoom責任所在を`U3a-2Z`で`DONE`、renderer採択をdocs-only `U3a-2A`で`DONE`（confirmation型・性能勝者判定ではなくegui baseline保持）、playhead / visible range owner判断範囲をdocs-only `U3a-2P`で`DONE`、owner採択分割をdocs-only `U3a-2Q`で`DONE`、owner証拠補遺を`U3a-2Q-P`で`DONE`、再open lifetimeを`U3a-2Q-P2`で`DONE`、将来復元postureを`U3a-2Q-P3`で`DONE`、playhead state ownerを`U3a-2Q-P4`で`Project session`採択済み。後続`CU-109S0`で次PRODUCT-ASSET `DO`はdocs-only `CU-109S`へ更新（`U3a-2Q-V` `WAIT`）。既存1k/100kはheadless正しさやD2の証明ではない |
-| U3b | timeline配置/移動/trim操作。親CU-201は`SPLIT` | U0c, U2b, U3a | [CU-201S](../reviews/2026-08-01-cu-201-u3b-move-trim-snap-responsibility-split-decision.md)でmove command spec/core、trim spec/core、snap spec、product gesture、random oracle、E2Eへ分割。moveは`SetClipStart`、trimは[CU-201T-S](../reviews/2026-08-01-cu-201t-s-clip-trim-timemap-contract-decision.md)で明示的な`TrimClipIn` / `TrimClipOut`へ固定し、`CU-201T-C`で既存Writer/journal/Undo経路へ接続済み。[HOST-INPUT実装受入](../reviews/2026-08-04-cu-201p-host-input-implementation-acceptance.md)でraw ownerとlogical Escape/focus cancelを再締結しMOVEをtechnical reclose、[TRIM実装受入](../reviews/2026-08-04-cu-201p-trim-implementation-acceptance.md)で既知handle hitから既存trim writer、[CU-201R受入](../reviews/2026-08-04-cu-201r-random-move-trim-oracle-acceptance.md)でidentity重複0、sentinel/no-ripple、全Undo、既存Cancel 0 laneを2,048 stepで閉じた。[CU-201E](../reviews/2026-08-04-cu-201e-normal-product-route-e2e-receipt.md)は`DONE` / `PRODUCT_E2E_PASS` / `EXTERNAL_POINTER_GATE_PENDING` / `HUMAN_DEFERRED`。pointer-lossは`EXTERNAL_POINTER_GATE_PENDING`。通常製品MOVE/TRIM/Undo/Redo/reopenは`PRODUCT_E2E_PASS`。ユーザー目視はM3最終HUMAN checklistへ集約する。inは右端と残存source写像、outはstart/TimeMapを保つ。全edgeは`RationalTime`、duration > 0、delta永続化0、source bounds推測0。beat/user markerはU7まで入れない |
-| U3c | 波形表示用derived cache+timeline描画 | U3a, M2-D4 | cacheの持ち場・無効化・上限を仕様化してから実装。波形データをDocumentへ焼かず、seek/zoom fixtureで一致 |
-| U3d | timeline視覚統合+認知reference screen | U0e, U3a | 固定fixtureのgolden/lightness差分。5秒識別、grayscale、既存componentとの馴染み、Timeline Viewとの同条件比較を記録 |
-| U3e | **Timeline navigation/search/filter** | U0c, U2h, U3a | Fit All/Selection、Go to Playhead、前後のclip/key/snap point、名前/型/animated/error/hidden filterを共通`CommandId`で操作。結果から同じTimeline/Inspectorへ戻り、Document/Undo不変。1000 clip+100000 key fixtureで検索・移動・filterがUI threadをblockせず、filtered selectionを無言で失わない。表示名検索を参照identityへ使わない |
-| U3f | **Time-local readiness projection** | U0e, U3a, U1h, M4-K1b/K7/K8 | Timelineへready/rendering/stale/unavailableとDraft/Final-equivalentの由来を既存overlay/diagnostic語彙で投影し、色だけに依存しない。provider snapshotと表示区間が一致し、1000区間更新がnonblocking。表示はcache/bake policy、Document、Final結果を変えず、未取得をreadyとして見せない |
-| U4a | `NodeDesc`自動parameter panel。U4a-1は`DONE`、U4a-2は`SPLIT / WAIT` | U2b, U0e, U1b | U4a-1はcommit `eb4e6658`で`motolii-ui::parameter_control`所有のtoolkit非依存modelを実装。crate root公開面は`HostParameterControl`、`ParameterControlSpec`、`ParameterControlError::UnsupportedValueType`、`map_parameter_control(&ParamDef)`の4項目だけ。`F64` domain保持、`Vec2`/`Vec3`/`Color`対応、`AssetRef` typed拒否、全first-party保存param conformance、既存`SetProperty` / `EffectParam` routeを固定し、plugin ABI・serde・Document command意味・`DocumentCommandRequest`は不変。[CU-205S](../reviews/2026-07-31-cu-205s-opacity-direct-route-split-decision.md)でU4a-2正常系を`CU-205B1G → B1I → B2 → T → P → W → E`へ分割した。B/T/P/W/Eは`DONE`で、first-party Opacityの追加、active Effect exact read-only `amount` control、100回連続update非blocking/latest preview、release 1 Undo、通常Mac製品windowのRectangle→Opacity→amount→Undo/Redo→reopenを接続済み。Effect/paramは保持し、Host Transientのactive Effectはreopen後未選択へ戻る。invalid/read-only共通診断はCU-204P待ちで、正常系だけで親をDONEにしない |
-| U4b | **U4b-0/V `DONE / ACCEPTED / MAIN` / Inspector Position Add Position Key route `DONE / ACCEPTED / EXTERNAL_GATE_PENDING` / U4b-1 INTERP-COMMAND `DONE / ACCEPTED`・P04-C2 diagnostic correction `DONE / ACCEPTED` / Easing C7A `DONE / ACCEPTED / EXTERNAL_GATE_PENDING`**: keyframe作成・編集+区間Easing Graph View | U4b-0はU2a,M2-D2。U4b-1はU4a,U4b-0 | U4b-0は[closed contract](../reviews/2026-08-04-u4b0-durable-position-key-closed-contract.md)どおりPosition専用durable command、same-time no-op、既存solver+de Casteljau、Undo/Redo/journal v2をcode/mainまで閉じた。通常製品入口はInspector Position行、current-playhead carrierはcommit `75ccd5e7`、read-only row Aはcommit `2c20e88e`、typed intent/Host Bは[implementation acceptance](../reviews/2026-08-04-inspector-position-key-one-shot-intent-implementation-acceptance.md)どおりcommit `98e38925`で成立した。U4b-0Vはcommit `c404a050`でexact current Vec2 keyのReact Inspector X/Y、key-local CAS、clone preview、one durable terminal、Undo/Redo/reopenを接続した。Const/off-keyはread-onlyで明示Addをrecoveryとし、Auto Keyを作らない。Position outgoing Interp専用D2とdiagnostic correctionはDONE / ACCEPTED。C7Aはdirect egui 0.35/wgpu 29、sole EventLoop、existing ProductGpuParts/GpuCtx、real child WindowId dispatch、one private module、one Position-only request→existing D2を接続し、opaque Stage child WebView上のin-surface overlay、NativeTimelineRenderer変更/copy、G0-9 state、second GPU/loop/WebView、framework、partial React/IPCは含めない。manual z-order/focus/DPI/a11y/visualはM3 final `EXTERNAL_GATE_PENDING` |
-| U4c | Advanced意味検査+round-trip | U2c-1, U2c-3, U2c-4, U2c-5, U4a, M2-D1l | 現行DocParamのConst/Keyframes/Data/Vec2Axes/LookAt/Follow、plugin source/version、Effect Definition/Use ID、target、Owned/Explicit scope、policyを検査できる。Direct/Toolで作った状態を開閉してserialize不変。Simple時も非既定意味をbadge表示。未実装Param Pipeline、Composite Set、Backdrop地点をUIだけで捏造しない。U4a-2のDirect入口と本タスクのAdvanced入口が揃った後、U2c-2 conformanceへ渡す |
-| U5 | scrub/再生transport UI | U0c, U0e, U1b, U3b, M2-D5 | vsync暴走／render遅延注入でもaudio device clockとTransport速度不変。videoは古い要求を捨て、最新seekだけ表示。preview都合の自動varispeed／pitch変更を拒否 |
-| U6 | Project Explorer+素材preview内source range+Inbox受取+import/D&D配置 | U0e, U2b | Project assetと外部filesystemを別popupへ分けず、既存Browserの`Project` tab内にある同じExplorer UIで`PROJECT / FILES`を明示切替する。FILESの検索・選択・preview・In/OutはDocument外で、`Add to Inbox`は未配置参照を受け取るだけとする。PROJECTから配置確定した時だけ既存の`Clip.duration = out - in`と`TimeMap.source_start = in`へ変換し、1 Undo。同じrangeからの再配置は明示変更まで同じ結果になり、配置前のrange変更ではDocument/Undo不変。Inboxはasset所有者や全履歴にならず、未配置・未確認状態だけを参照し処理後に外す。動画/SVGを配置し楽曲1本を設定。欠落/不正asset・空/逆転/素材尺外rangeをtyped error表示し、UI threadでdecodeしない |
-| U7 | beat grid+ユーザーmarker snap | U3b, GAP-16意味決定+M2実装 | 有理BPM/beat origin/meterから生成したbeat gridに加え、ユーザーが決めたtimeline markerをsnap対象にできる。clip/keyframe snapがfps非依存のRationalTimeで一致し、markerなしでは従来のbeat grid結果と同一。markerの永続型・点/範囲・identity・編集意味はGAP-16とGR-PVを通す前にM3で発明しない |
-| U8a | group/clip mask UI | U3b, M2-D7 | grouping/ungrouping/clip modeがD2 command経由でUndo可能 |
-| U8b | group仮出力toggle | U8a, M4-K7c | bake発動・区間無効化・再freezeがUIからE2Eで確認でき、toggle前後でDocument/Undo/serialize不変 |
-| U9a | **Editor Generator command hook**: 外部generator結果を型付きD2 command batchとして受けるtoolkit/runtime非依存境界 | U2b, M2-D2 | (1)generatorへ`&mut Document`を渡さない (2)開始snapshotに対するbatch全体preflight後だけ単一writerへ1 macro commitし、commit時に現行Documentと一致しない結果はstaleとして拒否 (3)成功=Undo 1回、失敗/cancel/制限超過/stale=Document・履歴変更ゼロ (4)journal/serializeには解決済み通常編集だけが残る (5)script engine無しでsave/reload/preview/export同一 (6)domain公開型にegui/JS/runtime固有型なし |
-| U9b | **MTS-1 TypeScript one-shot Shape recipe adapter**（旧称ShapeScript）: Paper.js型object/path/group思想をHost SDKとして正準座標で再構成し、通常Group+vector layerへ変換 | U9a, M2-D1i-2, LANG-TS-F0, VSM-C2 | (1)原点中央/Y-up/高さ1.0、center基準shape、radian、named fieldの固定表 (2)Path/Shape/Group/style/transform stack/unsupported APIの固定表 (3)同一source+明示`u64 seed`で同一command batch、時計/OS entropyなし (4)1実行=1 Group=1 Undo、生成物を通常編集可能 (5)network/filesystem/process/GPU textureへ非接続 (6)実行時間・command数・path点数・nest深度の上限超過を型付き拒否し部分生成なし (7)JS engineをDocument/renderer/plugin契約へ露出しない (8)editor buffer/sourceの持ち場を分類し、恒久保存形式はこのタスクで発明しない (9)`draw()`/前frame画素/暗黙canvas蓄積が構文不能 (10)独自syntax、別runtime、別source extensionを追加しない |
-| U9c | **SVG materialize adapter**: LLM生成SVG→通常Group/VectorRecipe | U9b | (1)SVG viewport/左上原点/Y-downを正準座標へ決定的変換 (2)採用element/style/transformと拒否表を固定 (3)DOM/XML/script/event/外部URLをDocumentへ残さず、外部参照と実行要素を型付き拒否 (4)materialize後はSVG parser/runtime無しでsave/reload/preview/export同一 (5)同じSVGから同じD2 batch、1 import=1 Undo |
-| AG-3 | **domain完了／製品UI未実装のv1.x追加レーン**: React import dialog／gain form、native Timelineのaudio component展開／waveform／mute／音声分離intent | AG-1, AG-2, U6, U2c, U3a | 同じClipのmove/trim/retimeでA/V追従、分離前後PCM一致、1 gesture=1 Undo、別project mode/別timeline schemaを作らない。React/nativeは同じHost projectionを読み、Document／selection／Undoを二重所有しない。現行U6のMV最短導線を置換せず追加する |
-
-運用順（U0a完了後）: U0aはegui骨格+依存方向CIで完了。ここまでの初回Uシリーズは
-ファイル競合の有無にかかわらず1チケットずつ進め、`U0b-1→U0b-2→U0c-1→U0c-2
-→U0d-1→U0d-2→U0d-3→U2a-0→U2a-1→U1a-1/2→U1b-1/2→U2b-1→U2c-1→U2c-4`
-の順に意味・入力・編集・shell境界を閉じた。実在する複数製品入口が無いU2c-2は
-空harnessで完了させず、U0e-3依存のU2c-3/5も先行しない。次にPR #184から生成機構だけを
-`U0e-1`へ抽出し、`U0e-2R`で固定React比較baselineをmainへ再結合してから
-`U0e-2`のreference fixtureを作った。U0e-2R/U0e-2とG0-9Lは完了済みで再実行しない。
-CU-0A03/R0からCU-0A07C/R4Cまで完了した。R2Bは[#344](https://github.com/oshikaidesu/Motolii/pull/344)でEasing trigger/CSSを、R3Bは[#350](https://github.com/oshikaidesu/Motolii/pull/350)でR3AのKEYS/LAYERS JSX/CSSをbyte同一でproduct ownerへ移し、mockを単一package importのconsumerへ反転して二重copy 0を閉じた。R4Cは[#357](https://github.com/oshikaidesu/Motolii/pull/357)でInspectorをproduct単一ownerへ移した。CU-0A08ISは[Inspector read-model inventory](../reviews/2026-07-26-cu-0a08is-inspector-read-model-inventory.md)で全表示分類とfixture拒否契約を固定した。CU-0A08IPは`DONE`（fixture由来 read-only projection decoder、product-owned・非export、fixture/testのみ）。`U3a-1S`/`U3a-1I`、`CU-G03D`/`CU-G03R`、親`CU-G03`、`CU-101`、`CU-102`、`CU-G09`（[Browser catalog projection契約決定](../reviews/2026-07-26-cu-g09-browser-catalog-projection-contract-decision.md)）、`CU-G09O`（[Browser decoder output契約決定](../reviews/2026-07-26-cu-g09o-browser-decoder-output-contract-decision.md)）、`CU-G09R`（[Browser decoder拒否優先順決定](../reviews/2026-07-26-cu-g09r-browser-decoder-rejection-precedence-decision.md)）、`CU-0A08BP`は`DONE`（product-owned・非export の Browser catalog decoder、fixture/testのみ）。docs-only `CU-104`も[selection publish envelope決定](../reviews/2026-07-27-cu-104-selection-publish-envelope-decision.md)を`DONE`とし、docs-only `U2h-1S`も[primary selection implementation split決定](../reviews/2026-07-27-u2h-1-primary-selection-implementation-split-decision.md)を`DONE`とした。CU-104はowner・visibility・`projection_generation`更新条件・Apply/Undo/Redo後publish前reconcile時点だけを決定した。`CU-0A08BTR`は`DONE`、親`CU-0A08BT`は`SPLIT`。`CU-0A08BTP`は`DONE`（R5 component入力、`U4a-2`非依存）、`CU-0A08BTI`は既決Place chain待ち。`CU-0A08ITP-P`は`DONE`。親`CU-0A08IT`は`SPLIT`し、`CU-0A08ITP`は`DONE`、`CU-0A08ITI`はDirect製品入口待ち。R6親`CU-0A09`はsurface別へ`SPLIT`し、Browser子粒`CU-0A09B`は`DONE`。CU-109 runtime配線とU2h-1実装はCU-104へ束ねない。`U4a-1`/`U4a-2`はVS-1の未決順序を追い越さない。`U2h-1`は[primary selection implementation split決定](../reviews/2026-07-27-u2h-1-primary-selection-implementation-split-decision.md)で`SPLIT`し、実装は`U2h-1I`→`U2h-1P`へ分離した。docs-only `CU-104E`は[projection generation枯渇境界決定](../reviews/2026-07-27-cu-104e-projection-generation-exhaustion-decision.md)を`DONE`とし、`U2h-1I`実装も`DONE`とした。`U2c-2`はU4a-2（Direct）+ U4c（Advanced）待ち。Host transport、typed intent、drag payload、`S`行、Rust/schema/plugin変更はCU-0A08BTP/CU-0A08ITPの非目標とする。ITPの限定目標はInspector target identity透過だけである。Motolii Studio Previewはまだ未実装である。G0-6Hは人間`ACCEPT`で完了し、U0e-3を解禁した。G0-9DはDistribution Readyまで待つ。
-PRODUCT-ASSET laneの本筋はU2b-2 Place接続である。BrowserのCSP offline bundleからnative `wry` WebView、Rust exact codec、instance/sequence/source gate、容量16のprivate inboxまでは`CU-0B03`で成立した。private Place coreでは、表示済みcameraに対するStage releaseのcanonical Y-up変換、clone上のfresh `LayerId`候補、live-next照合、journal→`apply_macro`一回、同じ`LayerId`のprimary publish、cancel/invalid時の変更0を自動試験で固定した。`CU-103`で正本`VectorRecipe::StandardShape::Rect`を不透明白fill・strokeなしとしてcanonical GPU renderへlowerし、fixture plugin代用0、非Rect typed rejectを閉じた。`CU-0B04S`から`CU-0B05`でHost platform capture、same-device native Stage/Timeline、Browser island focus/geometry、lifecycle再投影を閉じた。`CU-107PV`から`CU-107TD`でpreview、terminal分類、admission、single deliveryを閉じ、親`CU-107`を完了した。`CU-110`で通常製品dropをsession-backed D2へ接続し、fresh `LayerId`、journal、published snapshot / primaryを実Macで確認した。[CU-110P分割](../reviews/2026-07-29-cu-110p-product-published-snapshot-projection-split-decision.md)後、[CU-110PS](../reviews/2026-07-29-cu-110ps-native-stage-published-snapshot-projection-implementation-decision.md)でStageを、[CU-110PT](../reviews/2026-07-29-cu-110pt-native-timeline-published-snapshot-projection-implementation-decision.md)でTimelineを同じpublished snapshotへ接続し、実Macでdrop直後・再起動なしのRectangleと1→2 bar更新を確認した。[CU-110PI分割](../reviews/2026-07-29-cu-110pi-inspector-product-connection-split-decision.md)後、`CU-110PIR`と`CU-110PIH`を`DONE`とした。[CU-106P](../reviews/2026-07-30-cu-106p-native-timeline-primary-selection-implementation-decision.md)でnative Timeline clickから既存typed hit、private selection producer、Inspector primary再投影まで成立した。[CU-111](../reviews/2026-07-30-cu-111-product-undo-redo-implementation-decision.md)でHost shortcutからstable CommandId、既存resolver / router、journal-first single writer、Stage / Timeline / Inspector再投影まで接続した。[CU-108](../reviews/2026-07-30-cu-108-rectangle-product-spine-e2e-decision.md)で実Mac通常製品Place→三面→Undo→Redoを完走し、journal Add/Remove/Addの同一`LayerId`を確認した。VS-1と`Browser typed intent→Host→Place→Stage/Timeline/Inspector→Undo/Redo` spineは`DONE`。次PRODUCT-ASSET `DO`は未選定で、token後続は選定まで`WAIT`。以後の旧列は自動的な強制順ではない。未決の順序を追い越して
-はならない。上段の「次PRODUCT-ASSET未選定 / token後続WAIT」はCU-108完了時点の歴史記述である。現行は`U4a-1` / `CU-202`、`CU-0B02R`、`CU-0B02C-S / P / V`、`CU-203S / M / P`と親`CU-203`が`DONE`。`CU-204`は[CU-204S分割決定](../reviews/2026-07-31-cu-204-staged-diagnostic-projection-split-decision.md)でS/A/Pへ分割し、S/Aは`DONE`、`CU-204P`は実在通常source待ち。[CU-205S](../reviews/2026-07-31-cu-205s-opacity-direct-route-split-decision.md)は正常系をB1G/B1I/B2/T/P/W/Eへ分割し、全子粒を`DONE`とした。Eは通常Mac製品windowでRectangle→Opacity→amount→Undo/Redo→reopenを完走した。親`CU-205` / `U4a-2`は`SPLIT / WAIT`で、正常系とCU-204P診断接続の両方が閉じるまでDONEにしない。`CU-204A`は[実装決定](../reviews/2026-07-31-cu-204a-diagnostic-projection-adapter-implementation-decision.md)どおり5 reason × 4 densityのprivate純粋投影だけを閉じた。`CU-0B02C-V`は第二consumer比較後も非color値とraw markerをcomponent-privateへ維持し、公開tokenを追加していない。2026-07-30に[比較面のnative Timeline移管](../reviews/2026-07-30-native-timeline-product-asset-transfer-implementation-decision.md)も完了し、既存React `KeyToolsCandidate`とnative header/ruler/S-M rail/row/bar/key/playhead/labelを通常製品windowへ接続した。Document / selection / Undo ownerとvisible range停止線は変更しない。
-
-U2h、Rectangle D2、製品surfaceを実装しない。G0-8+K1a後のU0f、M4依存の
-U1g/U1h/U3f/U8b、D5依存のU5、GAP-16依存のU7、未統一Browser P41、
-U9bのengine/sandbox/保存判断等へ到達したら、`LANG-TS-F0`と`VSM-C2`を迂回せずSTOPする。
-
-[P02-C3 native Timeline editor playhead contract](../reviews/2026-08-04-native-timeline-editor-playhead-contract.md)のnative ruler→private `ProductApp` editor playhead→native Timeline/Stage producer/carrierはcommit `75ccd5e7`でcode/main `DONE`となった（[implementation acceptance](../reviews/2026-08-04-native-timeline-editor-playhead-implementation-acceptance.md)）。親P02-C3は未完である。Inspector Position の A read-only row はcommit `2c20e88e`、B typed wiring は[implementation acceptance](../reviews/2026-08-04-inspector-position-key-one-shot-intent-implementation-acceptance.md)どおりcommit `98e38925`でcode/main `DONE / ACCEPTED`となり、normal Add Position Key route は接続済みである。B は sequence-only private message、separate Host inbox、Wake時のcurrent primary/playhead、existing prepare/commit/publishに限る。focus/visible range、playback/audio Transport、snap、Document意味は本境界に入れない。Aは有限`Const(Vec2)`値またはtag-only `Keyframes` presenceを読むだけで、keyframe評価・contents・countは持たず、human visualはM3 final `EXTERNAL_GATE_PENDING`である。P04-C2のACTIVE-INTERVAL read-only projectionとoutgoing `INTERP-COMMAND`はDONE / ACCEPTED、`P04-C2-EASING-C7A`はcommits `bb0624d8`/`87bf026e`/`56f61e7b`でcode/main `DONE / ACCEPTED / EXTERNAL_GATE_PENDING`である。C7Aは標準egui製品runtimeを再採用せず、既存direct `egui::Context` + `egui_winit::State` + `egui_wgpu::Renderer` 0.35 / wgpu 29をこのprivate native child popup/session rendererだけに局所再利用する。React anchor/layout-onlyからHostがcurrent Position intervalを再導出し、ProductApp sole EventLoop、existing ProductGpuParts/GpuCtx、real child `WindowId` dispatch、one private popup module、one Position-only request→existing `SetPositionKeyInterp`を接続する。通常topologyではopaque Stage child WebViewがnative surfaceの上にOS compositorで合成されるため、C7b in-surface overlayはrouteとして採らない（[UI runtime §4](../ui-runtime-architecture.md#4-surface-topologyとcoordinator境界)）。これはvisual実測FAILの主張ではない。manual z-order/focus/DPI/a11y/visual/second monitorはM3 final `EXTERNAL_GATE_PENDING`。historical [compiler rejection](../reviews/2026-08-04-position-active-interval-implementation-admissibility-rejection.md)はconsumer不在の観察として保存する。
-
-`P07-C1` は [mixed AudioProgram product PlaybackSession route preflight](../reviews/2026-08-04-p07-c1-playback-session-product-route-preflight.md) により `TARGET_MISSING / PREFLIGHT ONLY` である。native ruler の `editor_playhead` は transient scrub carrier であり、continuous playback clock ではない。既存 D5 の audio-device sole clock、`AudioProgram`／`MixProducer`、`Transport` は再利用し、製品 `PlaybackSession` のsingle-cache adapterはP07-C1Bでmixed programへ置換済みだが、production caller 0、`ProductApp` は transport/audio 非依存である。AudioProgram construction、session product lifetime、Transport current-time handoff、actual UI/Host typed control source の4経路が同じbaseで実在 source とoracleにより閉じるまで、seek-only、fixed ZERO、UI/repaint/vsync、または新しい Space command/controllerを代替routeにせず、親implementation `DO` を発行しない。P07-C3 の10分実素材測定とM3-final manual control/affordance gateも未実行のまま分離する。
-
-局所前提 `P07-C1A` は [video-only AudioProgram supply contract](../reviews/2026-08-04-p07-c1a-video-only-program-supply-contract.md) とcommit `d14010ad`でcode/main `DONE / ACCEPTED`となった。既存 `Document::composition.duration` を `AudioProgram` へ写し、identity/resample共通のproducer終端に対する供給floorとした。zero／short-source区間の正規mix無音はringを通るため既存 `frames_supplied` を進める。second clock、callback padding、Document/schema/Export変更、製品route接続は含めず、親4経路の `TARGET_MISSING` を変更しない。
-
-局所adapter `P07-C1B` は [mixed PlaybackSession contract and acceptance](../reviews/2026-08-04-p07-c1b-mixed-playback-session-contract.md) とcommit `25365aa8`でcode/main `DONE / ACCEPTED`となった。既存sessionのsingle `PcmCache` / `AudioProducer`を`AudioProgram` / `MixProducer`へ置換し、output/counters/device-wait/Transportを単一のまま保つ。ProductApp lifetime、program構築caller、React control、current-time handoffは含めず、親P07-C1を完了にしない。
-
-局所前提 `P07-C1C` は [playback-origin audio clock contract and acceptance](../reviews/2026-08-04-p07-c1c-playback-origin-clock-contract.md) とcommit `b1b2c4df`でcode/main `DONE / ACCEPTED`となった。existing `PlaybackSession::start_frame`をcanonical rateからexact `RationalTime` originへ変換してexisting `Transport`へ渡し、raw supplied/device-waitはnegotiated-device elapsedのままnonZERO再生の`perceptual_time`とframe planを正しいabsolute timeへ置く。48 kHz / 44.1 kHzとZERO回帰を固定し、canonical/device frame整数の直足し、counter pre-advance、second clock、UI offset、ProductApp/React接続は含めない。
-
-backbone `P07-C1D` は [implementation acceptance](../reviews/2026-08-04-p07-c1d-product-playback-spine-implementation-acceptance.md) とcommit `ea69f5ca`でcode/main `DONE / ACCEPTED / EXTERNAL_GATE_PENDING`となった。実在React Stage `#play`をtyped one-shotでexisting `ProductApp`へ渡し、one `PlaybackSession` lifetimeとaudio-device `Transport` absolute timeをexisting `editor_playhead`、Stage render/transport、native Timelineへ接続する。pause/end/document mutationはsessionをretireする。Inspector React assetとfixed Timeline marker geometryを維持し、React timer/store、second clock、汎用controller、Space/seek/JKL、parallel output、dynamic Timeline marker widthは含めない。real device/audio/visualとP07-C3はM3-final `EXTERNAL_GATE_PENDING`である。
-
-## GR-UI審判割当表
-
-| 規律 | 対象タスク | 自動審判 | 人間実機審判 |
-|---|---|---|---|
-| GR-UI-1 状態所有 | U0b, U0d, U0f, U1a, U1f, U1h, U1i, U2b, U2d, U2h, U3c, U3e, U3f, U9b, U9c | 状態分類fixture、panel layout操作とStage View/preview resource設定変更時のDocument/Final不変、provider/selection/search/readiness非Document検査、keymap/resource settings roundtrip、script/SVG source非Document検査 | workspace/script復元UXは保存方針決定後 |
-| GR-UI-2 command境界 | U0c, U2a, U2b, U2c, U2d, U2e, U2f, U2g, U2h, U3b, U4a, U4b, U4c, U6, U8a, U9a, U9b, U9c, AG-3 | input→intent、入口意味同値、selection/target/definition/use ID、macro/merge/Undo property test、generator batch原子性、`&mut Document`依存検査 | — |
-| GR-UI-3 thread/latest | U1a, U1b, U1e, U1f, U1g, U1h, U1i, U3e, U3f, U4a, U5, U6, U9b, AG-3 | non-blocking seek/parameter/overscan/activity/search/readiness/telemetry、deadline時の最新frame、generator実行中のUI応答、generation逆順、同期readback禁止 | 長時間scrub/parameter/camera drag、pressure縮退、generator cancelの体感 |
-| GR-UI-4 単位 | U1e, U1f, U2b, U2d, U4a, U4b, U7 | scale注入時domain command一致、UI degree↔Document radian、RationalTime、Stage View非永続 | 別monitor/DPI移動 |
-| GR-UI-5 UI toolkit隔離 | U0a, U0b, U1a, U1f, U1i, U2c, U2h, U3a, U3e, U3f, U9a, U9b, U9c | Cargo metadata直接依存検査（rename含む、`ui_toolkit_dep_policy`）+公開型走査、panel layout/provider/selection/search/readiness model、generator/SVG hookのruntime/egui非依存test、windowなしlayout/hit-test test | — |
-| GR-UI-6 performance | U1c, U1f, U1g, U2h, U3a, U3e, U3f | 固定fixture/overscan/deadline遅延注入、large selection/search/readiness更新の基準比 | 基準機p50/p95、起動、idle memory、Stage pan/zoom、preview縮退 |
-| GR-UI-7 plugin fallback | U4a | 全登録plugin conformance | widget操作性 |
-| GR-UI-8 視覚認知 | U0e, U1f, U1h, U1i, U2d, U2e, U2f, U2g, U2h, U3d, U3e, U3f, U4a, U4c, U5, U6 | token生成差分、Output Frame/Stage View/Camera/pressure warning/activity/selection/filtered selection/readiness/target-pick/Relative HUD/from-in接続状態、raw color、contrast、icon/state、通常+lightness/CVD reference画像 | 5秒識別、frame内外/Camera対Hand/pressure理由/activity/selection/readiness/通常drag対Relative/from対in、grayscale/CVD、既存UIとの馴染み |
-| GR-UI-9 数値証跡 | layout、座標、DPI、hit-test、drag、render viewport、性能、resource量を変更する全UI実装 | 同一generation / revision / layout epochの構造化数値ログ、代表点・境界・異scaleの期待値assert、性能raw sample | 同じ操作列の数値ログと対応づけた実機表示確認 |
-
-表にない横断変更を行う場合は、PR前に本表へ審判を追加する。人間実機審判だけで「完了」にせず、自動審判と別の証跡として残す。
-
-## 実装ガード(先行ツールの失敗・ユーザー不満クロスチェック 2026-07-11)
-
-過去のSlint実運用問題、egui採用時の実機調査、出荷済みエディタのタイムライン/プレビュー苦情(FCPX/AE/Kdenlive/Shotcut/Resolve/AviUtl)からガードを抽出した。**先頭2項目は「M3後半に発覚すると設計が覆る」種類のリスクなので、U1d/U3aへ独立割当する。**
-
-本節の「着手前」「最初」はM3入場(U0a完了)を起点とする。U0a以前は、製品コード・公開API・永続形式を変更するスパイクを含めて発注しない。
-
-受容側の対照先例は[reviews/2026-07-16-m3-ui-rapid-acceptance-prior-art.md](../reviews/2026-07-16-m3-ui-rapid-acceptance-prior-art.md): 第一部=プロダクト単位の受容事例(Flow/AviUtl2/VOICEVOX/FCPX両面等 — 界隈の期待リスト)、第二部=**業界収斂した操作語彙の台帳**(本節ガード5の「業界標準の操作」の具体的な中身)とUX原理の一次資料、第三部=後発の勝ち筋「どの操作も直感的」(Ableton先例のAEカウンター分解 — 直感性の要件「結果が100ms以内に見え可逆」は性能の関数であり、performance-modelが前提条件)。仮説メモであり本節のガード・完了条件は変更しない(転移候補は個別M3チケット採択時に判断)。
-
-以下は個別タスクのガードである。横断する状態所有・コマンド境界・GPU/スレッド・単位・UI toolkit隔離・公開契約の停止条件は[GR-UI](../reviews/2026-07-14-m3-ui-boundary-prevention.md)を正本とし、適用先は審判割当表で限定する。
-
-1. **日本語IME受け入れをU1dへ分離する**: [egui採用判断](../reviews/2026-07-18-m3-egui-selection.md)でmacOSの単一行/複数行、Preedit 37件、Commit 5件、候補位置、変換中shortcut漏れ0を実機確認した。製品U1dでも (1) preedit表示 (2) 候補がcaretへ追従 (3) **変換中のEnter/Esc/Spaceがアプリshortcutへ漏れない** (4) 長文連続入力を固定する。Windows MS-IMEとLinux IMEは採用停止線にせず、各platformの最初の配布候補で同じchecklistを運用する。落ちたらshortcut special-caseで隠さず入力adapterを修復する
-2. **タイムライン・波形・グラフ類を無仮想化の大量widget/DOMで組まない**: project全量でUI要素数が増える構成はCPU負荷と操作不整合を生む。layout/hit-test/time mappingをtoolkit非依存に置き、WebのCanvas/browser WebGPU結果はbaselineとして保持するが、製品の高頻度Timeline surfaceはdirect wgpuを第一候補、Velloをpath/text局所利用とする。clips 1,000+keys 100,000の同一fixtureをwindow present/input/WebView同居まで測り、**60fpsはG0-4で基準機・操作列・p50/p95を決めた後の製品目標で、hardware未指定のCI閾値にしない**
-3. **再生のフレームペースをvsync/egui repaintへ依存させない**: 主クロックは音声(M2 Transport)で、eguiのrepaintは投影要求にすぎない。repaintが過剰でも停止してもフレームペースと音声同期が崩れず、idleでは連続repaintしないことをU5で固定する
-4. **egui APIに触れるのは`motolii-ui`だけ(依存方向をCIで強制)**: ArdourはGTK2から移行できず自前フォーク(YTK)を生涯保守する道を選んだ。メディアアプリはカスタムwidget比率が高く、toolkit APIが全域に染みると移行コスト=全書き直しになる。タイムライン/preview描画modelはegui非依存に置き、egui event→domain intent変換adapterだけを`motolii-ui`内に置く。禁止対象は他製品crateのegui family依存とdomain公開型へのegui/eframe/winit型流出
-5. **タイムラインの革新的挙動は必ずオプトインし、全shortcutを変更可能にする**: FCPXのマグネティックタイムライン強制は3,700筆超の抗議署名とプロ層の恒久流出を生んだ(「概念として優れていても、訓練されてきた全てに反する」)。既定は業界標準の操作(トラック型、スペース再生、スナップのキートグル)とするが、Space、Delete、tool、modifier+dragを含む全shortcutは初日から追加/置換/無効化可能にする。専用UIが間に合わなくてもversion付きJSONをfallbackとし、機能側のraw key/modifier判定を禁止する
-6. **「キーフレームを追加しても既存区間のカーブ形状が変わらない」を不変条件に**: AEグラフエディタの「イージングを入れるとスパイク/ループが出る」「予測可能な調整がほぼ不可能」という定番苦情は、キー追加・移動時に近傍カーブが暗黙に変わることが根因。区間イージング方式(採用済み)はこの罠を大きく回避するが、この性質自体をmotolii-evalのプロパティテストとして固定する → U4b
-7. **ランダム編集操作列のプロパティテスト**: Kdenliveは「保存→再起動でクリップが複製され、後続クリップがまとめてズレて音ズレ」等のモデル不整合で「不安定」の評判が定着した(単発操作でなく操作の合成で壊れる)。「ランダムな操作列(配置/移動/トリム/グループ/undo-redo)を数千回適用しても (a)クリップ重複なし (b)グループ内相対位置維持 (c)undo全巻き戻しで初期状態一致」を、M2-D2の単発プロパティテストの系列版としてU2a/U3bのCIに置く
-8. **スクラブは「最新要求だけ保持」+generationで旧結果を捨てる+観測可能に**: render requestはblocking容量1 channelでなく最新値置換mailboxにする。実行中GPU workの強制cancelは要求せず、完了した旧generationをUIが表示しない。開発ビルドにdrop/latency/generation HUDを置く — 再生系苦情の大半は「間に合わない時のポリシー未定義」に還元される
-9. **可変panelとプレビュー別ウィンドウをU1eでスパイク**: Resolveの「パネル取り外し不可」は10年級の不満。egui_tilesによる分割/tab/resize/hide/restoreと、プレビューの別window/別monitor fullscreenを早期確認する。layout正本をegui_tilesの生serializeにせず、別surfaceでも同じdisplay pool/device ownershipを崩さない
-10. **起動時間・アイドルメモリはU1cで測ってから数値目標を採択する**: AviUtl層のユーザーは重さに敏感だが、測定前のN秒/M MBを公約しない。G0-4の基準機と手順でraw値を取り、閾値は独立仕様改訂で固定する
-11. **アクセシビリティはG0-2の保証範囲を維持する**: egui/eframeのAccessKit連携を使っても、カスタム描画timelineは自動ではaccessibility treeに乗らない。やらない範囲を明記し、標準controlのlabel/focusとキーボード完結操作を保証する範囲を決めてからU0b/U3bへ配線する
-
-12. **Param PipelineをUIから先に発明しない**: U4a/U4cは現行`DocParam`の出所を編集・検査する範囲なら進めてよい。常設Relative Offset、Generator/Modifier列、DataTrack+手補正の同時適用、評価列並べ替え、汎用parameter pluginのいずれかが必要になった時点で[PP-Gate](../interaction-simplicity-model.md#4-param-pipeline-gatepp-gate)を開始し、M1/M2解凍・migration・意味論golden・反対側レビュー前は実装を止める
-
-    One-Knob Macro Controlは有力なv1.x候補だが、一対多の永続parameter driverでありM3のノブ部品として先行実装しない。[操作単純化モデル§4.1](../interaction-simplicity-model.md#41-v1x候補-one-knob-macro-control)とbacklog MC-0〜2へ送り、PP-Gate後に意味→評価→UIの順で追加する
-
-13. **one-shot Generatorをlive runtimeへ拡張しない**: U9a〜U9cが許すのは、制限付きworkerでcommand batchを生成し、開始snapshotと現行Documentをcommit時に照合して全体preflight後に通常編集として1回だけcommitする経路だけ。新しいtransaction/revision公開APIをこのタスクで発明しない。script/SVG source、runtime、provenanceを必須Document意味へ追加しない。毎frame JS、expression、Param Pipeline、部分commit、暗黙の乱数/時計、未対応APIの黙示fallbackが必要になったら実装を止める。前frame画素への追描きはU9内で隠し状態化せず、F-11 Feedback+K1/K7後のSCR-4へ送る
-
-14. **preview縮退を作品意味へしない**: U0f/U1g/U1hの予算・auto/fixed・実表示fps・pressure reasonはUser settingsまたはTransientであり、Document、journal、Undo、plugin parameter、cache keyへ入れない。frame dropはaudio/Transport時刻へ追いつくための表示省略で、project fps変更・低速再生・Final frame省略として実装しない。自動scale変更は許可設定時だけ行い、固定中は明示的なコマ落ち/拒否へ縮退する
-
-15. **Rerun転移と接合部の後半発覚を枝番内で先に潰す**: [M3 / Rerun実装後半発覚プレモーテム](../reviews/2026-07-20-m3-rerun-late-discovery-premortem.md)に従い、U0e-2のfixture単一正本と保存形式確定、U1a-1の色/alpha/display pool寿命、U1a-2のstable panel identity、U1b-2のpool generation、U3aのsemantic zoom境界を各枝番の負例へ含める。fixture manifestへU0b-1の所有層を与えず、registration/resource計器はtest-only accessorに限る。Rerun調査全体を無関係なUタスクの一括ゲートにせず、参照する枝番だけfile/API単位のjust-in-time transfer packetを持つ
-
-16. **React所有面を製品用に縮約再実装しない**: [直接移管契約](../reviews/2026-07-22-m3-react-product-asset-promotion-contract.md)に従い、固定commitのcomponent/CSS/stable ID/ARIA/testをproduct packageへ直接所有移管し、mockをconsumerへ反転する。sourceが無いInspector等は固定モック内で同形React化とparityを先に通す。別leaf、CSS後追い、skeleton代用、opaque ID分岐、mock/product二重copy、React semantic state、diagnostic routeによる製品画面代用、visual threshold/golden変更が発生した時点でSTOPする
-
-17. **通常Product Host入力を一つの既知adapterへ閉じる**: [CU-201P-HOST-INPUT-S](../reviews/2026-08-04-cu-201p-host-input-spine-decision.md)に従い、raw winit入力を読むownerは`product_runtime_adapter.rs`一箇所とする。logical Escape、current modifiers、primary pointer、focus/pointer loss、IMEだけを既存`KeyToken` / `Modifiers` / `EffectiveTrigger` / `InputPhase` / `SafetyInterrupt` / `ImeGateState`へ正規化し、機能側へraw型を出さない。synthetic/repeat/release/Process/文字・不明keyとphysical fallbackを拒否し、preedit中のEscapeをshortcutへ漏らさない。product builtin baseは不変version 2へ上げ、modifierなしEscapeを既存cancel commandへ割り当てる。wire codec v1は不変、source builtin version 1 deltaは既存typed mismatchで拒否し暗黙migrationしない。Timeline gestureは既存`InputRouter`へstart/end/cancelを配送し、cancelはTransient破棄だけでDocument/journal/history/revision write 0。新input framework、AppKit history route変更、trim意味を同粒へ混ぜない
-
-出典: slint-ui/slint#1644・#4097・#8693・#2895 / rust-windowing/winit#2888 / warpdotdev/warp#9383 / variety.com(FCPX抗議署名) / creativecow.net(AEグラフエディタ苦情) / KDE Bug 369505(Kdenliveクリップ複製) / forum.blackmagicdesign.com(Resolveパネル分離) / phoronix.com(Ardour YTK) / theregister.com(Qt LTS商用化) / forum.shotcut.org(プレビューラグ)
-
-## 未決事項
-
-- 2026-07-18のegui調査は既存device/native texture、lifecycle、日本語IMEの比較baselineであり、現行製品runtimeの採用決定ではない。製品UIはReact / WebView chrome + native Rust/wgpu Stage/Timelineで、egui shellは比較・診断baselineとして保持する。Slint S1も歴史証拠としてのみ維持する
-- OpenCutからコードは取り込まない。操作仕様・レイアウトのどの観察を採るかだけをU3a着手前に棚卸しする
-- Param Pipelineの具体型は未決。U4cは現行意味の可視化までで、Modifier UIの採否判断ではない
-- 枠外overscanの距離別品質・bounds cache・VRAM予算の固定値はU1f着手前spikeで決める。Stage全域を無制限Final描画するdefaultは採らない
-- U9bのJS engine、sandbox方式、TypeScript source保存場所は未決。p5.js互換はv1要件にせず、独自ShapeScript syntax／別runtimeは作らない
+- runtime選定: `DONE`
+- isolated dense canvas／real-surface／RN native component probe: `DONE / PRODUCT NOT IMPLEMENTED`
+- Windows common Rust target compile: `DONE`
+- RN product runtime seat: `READY-RECHECK / UNINTEGRATED CANDIDATE`
+- VS-1 RN route: `WAIT_R0`
+- Stage／Timeline／Curve product cutover: `WAIT_R1`
+- macOS human gate: `EXTERNAL_GATE_PENDING`
+- Windows product gate: `EXTERNAL_GATE_PENDING`
+- third-party custom UI: `G0-3 / GAP-13 PENDING`

@@ -4,6 +4,10 @@
 
 日付: 2026-08-03
 
+## 2026-08-09追補
+
+本書のrunner非依存責任配置を維持したまま、M3〜M5全体並列campaignの開始線、top seatのcold replacement、下位seatのpreauthorization、停止・復旧failure injectionは[cold-replaceable監督と停止封じ込め](2026-08-09-cold-replaceable-supervision-failure-containment-decision.md)へ具体化した。これは旧runner、receipt DB、lease schema、固定pipelineの復活ではない。campaign開始前の候補状態とgateは[統一並列開始baseline](2026-08-09-unified-parallel-start-baseline-decision.md)を正とする。
+
 ## 決定
 
 Motoliiの監督は主担当Codexの責任であり、transport、order schema、receipt DB、固定model routeの責任ではない。
@@ -56,14 +60,24 @@ modelとsessionはharnessでなく総監督`gpt-5.6-sol`が[履歴較正によ�
 capsuleを作る。一sessionは一契約境界または同じoutcome、owner、scope、oracleの短いwaveだけを扱い、終了後の会話履歴を
 project memoryへしない。長期状態はGit、正本、decision/ledger、raw logが所有する。
 
-閉じた初回の機械施工は`gpt-5.3-codex-spark`のfresh session、複雑な初回施工は`gpt-5.6-luna` maxを第一候補とする。review findingを
-Solが正本とoracleへ再照合し、同じ契約境界内の修正と判断した場合はfreshなLuna Maxを第一候補とし、単純修正はfreshなSparkも
-選べる。Claudeはsemanticな反対側、Grokはscope・exact target・負例・実diffの列挙監査へ使う。同じtaskの設計・施工へ深く関与した
-model familyを独立最終reviewerへ再利用しない。Spark、Luna、Solは同じOpenAI familyなので相互の独立検収を兼ねない。この選択は
-固定stage、fallback順、receipt資格を新設しない。
+閉じた極小の機械施工は`gpt-5.3-codex-spark`、通常〜重めのclosed implementationはCursor Grok 4.5 non-fastを第一候補とする。
+orderが未閉鎖だが探索範囲はboundedならCodex directのTerraで候補orderをcompileする。Composer 2.5 standardは価格、capacity、
+task実測の明示理由がある時の代替施工で、自動fallbackにしない。review findingを主担当が正本とoracleへ再照合し、同じ契約境界内の
+修正と判断した場合はfreshなGrok 4.5またはLunaを選べ、単純修正はfresh Sparkも使える。詳細は
+[Terra / Grok / Composer役割再配置](2026-08-07-terra-grok-composer-role-reallocation-decision.md)に従う。同じtaskの設計・施工へ深く
+関与したmodel familyを独立最終reviewerへ再利用しない。Spark、Luna、Sol、TerraはOpenAI familyなので相互の独立検収を兼ねず、
+Grok施工後にGrokをreviewerへ再利用しない。この選択は固定stage、fallback順、receipt資格を新設しない。
 
 modelの利用不能時はCodexが同じbase、scope、allowlist、oracleを再確認し、CLIで完全IDを確認できたmodelをfresh sessionで
 明示選択する。失敗したsessionを別modelへ引き継がず、選択変更と理由をlogへ残す。これは黙ったfallbackや固定fallback順ではない。
+
+短wave内のmodel配分は[外部LLM発注の観測・実行・可変配分runbook](../llm-dispatch-observation-and-allocation-runbook.md)の
+`ALLOCATION_PROFILE`で調整する。これは固定stageではなく、role、独立性、permission、実在availabilityを満たした候補間のsoft targetである。
+どの契約枠を消費するかという`limit group`と、独立reviewを判定する`model family`を分離する。たとえばCursor経由のOpusは
+Cursor枠を使うAnthropic familyであり、Cursor経由のSolはCursor枠を使うOpenAI familyである。利用枠逼迫時もweightを理由に
+不適格modelへ割り当てたり、不要なcallを増やしたり、Codexのauthorityと最終採否を移譲したりしない。
+通常channelはOpenAI系をCodex direct、Anthropic系をClaude direct、Cursor first-partyのGrok／ComposerをCursorとする。
+Cursor上のthird-party modelは対応direct channelが実際に利用不能な時だけ、fresh runへ理由とexact IDを記録した明示代用にする。
 
 Claude系のeffortは[履歴較正によるLLM役割選択](2026-08-03-history-calibrated-llm-role-selection-decision.md)の
 `CLOSED / ADJACENT / WIDE / CONFLICTING`から算出する。高effortをread scope拡大の許可にせず、Luna Maxも同じcapsule／read set／

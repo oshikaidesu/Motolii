@@ -145,7 +145,7 @@ Glowは[Vism concept](../vism-package-concept.md)が未知の表現動詞とfirs
 
 最終探索で新しく残ったのは**外向きのDelivery Adapter**である。Vism packageは未知の動詞、要求capability、型付きinput/output、artifact、trustを概念上保持できるため箱の再設計は不要だが、現行の`Filter / Composite / LayerSource / ParamDriver / Generator / Simulation / Authoring Tool`列挙だけではBodymovin型を正しく分類できない。
 
-v1の製品出力は既存の音声mux込み完成映像だけに閉じ、Delivery Adapterは将来capabilityの席だけを[Vism concept §5.2](../vism-package-concept.md#52-外向きdeliveryはv1映像だけに閉じ能力席だけ残す)へ置く。Lottie、animated SVG、OTIO等を実装せず、次を将来の比較条件として残す。
+v1の製品出力は既存の音声mux込み完成映像だけに閉じ、Delivery Adapterは将来capabilityの席だけを[Vism concept §5.3](../vism-package-concept.md#53-外向きdeliveryはv1映像だけに閉じ能力席だけ残す)へ置く。Lottie、animated SVG、OTIO等を実装せず、次を将来の比較条件として残す。
 
 - read-only Project／selection／rendered frameのどこまでを入力にできるか
 - 出力artifactの型、destination、上書き、取消、atomic publishを誰が所有するか
