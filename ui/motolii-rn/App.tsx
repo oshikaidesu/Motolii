@@ -1,6 +1,7 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 
+import BrowserPanel from './src/browser/BrowserPanel';
 import InspectorInitialReadPanel from './src/inspector/InspectorInitialReadPanel';
 import MotoliiStageView from './src/specs/MotoliiStageNativeComponent';
 
@@ -19,6 +20,11 @@ export default function App({
 }: MotoliiProductProps) {
   const hasHost = /^[1-9][0-9]*$/.test(hostHandle);
 
+  // RN側からRust hostへのdispatchは未実装のため、ここで受け取ったintentは捨てる。
+  const handlePlaceIntent = () => {
+    return;
+  };
+
   return (
     <View style={styles.root} testID="motolii-rn-product-root">
       <View style={styles.titlebar}>
@@ -27,7 +33,7 @@ export default function App({
       </View>
       <View style={styles.workspace}>
         <View style={styles.browserSlot} testID="browser-slot">
-          <Text style={styles.slotLabel}>Browser</Text>
+          <BrowserPanel onPlaceIntent={handlePlaceIntent} />
         </View>
         <View style={styles.stageSlot} testID="stage-slot">
           {hasHost ? (

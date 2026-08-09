@@ -55,6 +55,26 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 prepared.output_path.display()
             );
         }
+        Command::ExportDocument(args) => {
+            motolii_media_tools_hint();
+            let gpu = GpuCtx::new_headless()?;
+            let report = motolii_cli::export_document(
+                &gpu,
+                &args.document,
+                &args.output,
+                args.frame_count,
+                args.qp0,
+            )?;
+            println!(
+                "wrote {} frames: {}x{} @ {}/{} fps -> {}",
+                report.frames_written,
+                report.desc.width,
+                report.desc.height,
+                report.fps.num(),
+                report.fps.den(),
+                args.output.display()
+            );
+        }
         Command::VerifyB4(args) => {
             motolii_media_tools_hint();
             let gpu = GpuCtx::new_headless()?;
