@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
-use motolii_core::RationalTime;
+use motolii_core::{PixelSize, RationalTime};
 use motolii_doc::{EvaluationTime, LayerId};
 use motolii_eval::DataTracks;
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,8 @@ use crate::stage_hit_test::{
     hit_test_projected_layers, view_local_in_stage, view_local_to_canonical, StageHit,
     StageHitTestReject,
 };
+use crate::stage_overlay_gpu::{overlay_dimensions_match, overlay_dirty, OverlayUploadKey};
+use crate::stage_overlay_raster::{raster_selection_outline, StageOverlayRaster};
 #[cfg(target_os = "macos")]
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 use crate::{CommandId, DomainIntent, InputPhase, RouterOutput};
@@ -232,6 +234,18 @@ struct HostGpuBundle {
     _preview: StaticPreview,
     preview_pipeline: wgpu::RenderPipeline,
     preview_bind_group: wgpu::BindGroup,
+    overlay_pipeline: wgpu::RenderPipeline,
+    overlay_bind_group_layout: wgpu::BindGroupLayout,
+}
+
+#[cfg(target_os = "macos")]
+struct StageOverlayGpu {
+    texture: wgpu::Texture,
+    _view: wgpu::TextureView,
+    _sampler: wgpu::Sampler,
+    bind_group: wgpu::BindGroup,
+    width: u32,
+    height: u32,
 }
 
 #[cfg(target_os = "macos")]
@@ -244,6 +258,8 @@ struct StageGpuBinding {
     surface: Option<Surface<'static>>,
     needs_reconfigure: bool,
     poisoned: bool,
+    overlay: Option<StageOverlayGpu>,
+    overlay_upload_key: Option<OverlayUploadKey>,
 }
 
 #[cfg(target_os = "macos")]
@@ -258,6 +274,8 @@ impl StageGpuBinding {
             surface: None,
             needs_reconfigure: false,
             poisoned: false,
+            overlay: None,
+            overlay_upload_key: None,
         }
     }
 
@@ -286,6 +304,9 @@ impl StageGpuBinding {
     }
 
     fn configured(&mut self, width: u32, height: u32) {
+        if self.physical_width != width || self.physical_height != height {
+            self.overlay_upload_key = None;
+        }
         self.physical_width = width;
         self.physical_height = height;
         self.needs_reconfigure = false;
@@ -310,6 +331,8 @@ impl StageGpuBinding {
         self.physical_height = 0;
         self.needs_reconfigure = false;
         self.surface_epoch = self.surface_epoch.saturating_add(1);
+        self.overlay = None;
+        self.overlay_upload_key = None;
     }
 
     fn validation_failed(&mut self) {
@@ -504,6 +527,7 @@ impl RnProductHost {
                 };
                 self.current_time = time;
                 self.projection_generation = next_generation;
+                self.refresh_stage_overlays().ok();
                 accept(self.snapshot_wire(host_handle))
             }
             "place_rectangle" => {
@@ -553,6 +577,7 @@ impl RnProductHost {
                     Ok(Some(published)) => {
                         self.primary = published.primary;
                         self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
                         accept(self.snapshot_wire(host_handle))
                     }
                     Ok(None) => accept(self.snapshot_wire(host_handle)),
@@ -600,6 +625,7 @@ impl RnProductHost {
                     Ok(Some(published)) => {
                         self.primary = published.primary;
                         self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
                         accept(self.snapshot_wire(host_handle))
                     }
                     Ok(None) => accept(self.snapshot_wire(host_handle)),
@@ -727,6 +753,10 @@ impl RnProductHost {
                         stage.height = intent.height.expect("validated resize height");
                         stage.scale_factor =
                             intent.scale_factor.expect("validated resize scale factor");
+                        #[cfg(target_os = "macos")]
+                        {
+                            stage.gpu.overlay_upload_key = None;
+                        }
                         None
                     }
                     "stage_focus" => {
@@ -867,6 +897,7 @@ impl RnProductHost {
                 // accepted 変更だけを Host transient へ反映する（直接代入で意図を捏造しない）。
                 self.primary = published.primary;
                 self.projection_generation = published.projection_generation;
+                self.refresh_stage_overlays().ok();
                 None
             }
             Err(DocumentEditRuntimeError::SelectionTargetNotFound(_))
@@ -946,6 +977,8 @@ impl RnProductHost {
                     TextureFormat::Bgra8Unorm,
                     preview.slot().view(),
                 );
+            let (overlay_pipeline, overlay_bind_group_layout) =
+                create_overlay_pipeline(&ctx.device, TextureFormat::Bgra8Unorm);
             self.gpu = Some(HostGpuBundle {
                 ctx,
                 instance: parts.instance,
@@ -953,9 +986,61 @@ impl RnProductHost {
                 _preview: preview,
                 preview_pipeline,
                 preview_bind_group,
+                overlay_pipeline,
+                overlay_bind_group_layout,
             });
         }
         Ok(self.gpu.as_mut().expect("gpu bundle initialized"))
+    }
+
+    #[cfg(target_os = "macos")]
+    fn refresh_stage_overlays(&mut self) -> Result<(), RnHostReasonCode> {
+        let Some(gpu) = self.gpu.as_ref() else {
+            return Ok(());
+        };
+        let projection = project_stage_geometry(
+            self.runtime.snapshot().as_ref(),
+            EvaluationTime::new(self.current_time),
+            &DataTracks::new(),
+        )
+        .map_err(|_| RnHostReasonCode::InvalidIntent)?;
+        let device = &gpu.ctx.device;
+        let queue = &gpu.ctx.queue;
+        let layout = &gpu.overlay_bind_group_layout;
+        for stage in self.stages.values_mut() {
+            let next_key = OverlayUploadKey {
+                selected: self.primary,
+                projection_generation: self.projection_generation,
+            };
+            if !overlay_dirty(stage.gpu.overlay_upload_key, next_key) {
+                continue;
+            }
+            stage.gpu.overlay_upload_key = Some(next_key);
+            let Some(selected) = self.primary else {
+                stage.gpu.overlay = None;
+                continue;
+            };
+            let raster = raster_selection_outline(
+                &projection,
+                Some(selected),
+                PixelSize {
+                    width: stage.width as f64,
+                    height: stage.height as f64,
+                },
+                stage.scale_factor,
+            );
+            if !overlay_dimensions_match(
+                raster.width,
+                raster.height,
+                stage.gpu.physical_width,
+                stage.gpu.physical_height,
+            ) {
+                stage.gpu.overlay = None;
+                continue;
+            }
+            upload_stage_overlay(device, queue, layout, &mut stage.gpu.overlay, raster);
+        }
+        Ok(())
     }
 
     #[cfg(target_os = "macos")]
@@ -999,6 +1084,7 @@ impl RnProductHost {
         stage.gpu.physical_height = 0;
         stage.gpu.last_presented_epoch = None;
         stage.gpu.needs_reconfigure = true;
+        stage.gpu.overlay_upload_key = None;
         Ok(stage.gpu.surface_epoch)
     }
 
@@ -1067,6 +1153,7 @@ impl RnProductHost {
             stage.gpu.physical_width = width;
             stage.gpu.physical_height = height;
             stage.gpu.needs_reconfigure = true;
+            stage.gpu.overlay_upload_key = None;
             return Ok(());
         }
         self.configure_stage_surface(stage_handle, width, height)
@@ -1100,18 +1187,20 @@ impl RnProductHost {
         if needs_reconfigure {
             self.configure_stage_surface(stage_handle, width, height)?;
         }
+        self.refresh_stage_overlays().ok();
         let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
-        let surface = self
+        let stage = self
             .stages
             .get(&stage_handle)
-            .ok_or(RnHostReasonCode::UnknownStageHandle)?
+            .ok_or(RnHostReasonCode::UnknownStageHandle)?;
+        let surface = stage
             .gpu
             .surface
             .as_ref()
             .ok_or(RnHostReasonCode::InvalidIntent)?;
         match surface.get_current_texture() {
             CurrentSurfaceTexture::Success(frame) => {
-                draw_stage_preview(gpu, frame);
+                draw_stage_preview(gpu, frame, stage.gpu.overlay.as_ref());
                 self.stages
                     .get_mut(&stage_handle)
                     .ok_or(RnHostReasonCode::UnknownStageHandle)?
@@ -1120,7 +1209,7 @@ impl RnProductHost {
                 Ok(())
             }
             CurrentSurfaceTexture::Suboptimal(frame) => {
-                draw_stage_preview(gpu, frame);
+                draw_stage_preview(gpu, frame, stage.gpu.overlay.as_ref());
                 self.stages
                     .get_mut(&stage_handle)
                     .ok_or(RnHostReasonCode::UnknownStageHandle)?
@@ -1204,7 +1293,11 @@ impl RnProductHost {
 }
 
 #[cfg(target_os = "macos")]
-fn draw_stage_preview(gpu: &HostGpuBundle, frame: wgpu::SurfaceTexture) {
+fn draw_stage_preview(
+    gpu: &HostGpuBundle,
+    frame: wgpu::SurfaceTexture,
+    overlay: Option<&StageOverlayGpu>,
+) {
     let view = frame
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
@@ -1235,8 +1328,172 @@ fn draw_stage_preview(gpu: &HostGpuBundle, frame: wgpu::SurfaceTexture) {
         pass.set_bind_group(0, &gpu.preview_bind_group, &[]);
         pass.draw(0..3, 0..1);
     }
+    if let Some(overlay) = overlay {
+        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("motolii-rn-stage-overlay-pass"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Load,
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&gpu.overlay_pipeline);
+        pass.set_bind_group(0, &overlay.bind_group, &[]);
+        pass.draw(0..3, 0..1);
+    }
     gpu.ctx.queue.submit(Some(encoder.finish()));
     frame.present();
+}
+
+#[cfg(target_os = "macos")]
+fn upload_stage_overlay(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    current: &mut Option<StageOverlayGpu>,
+    raster: StageOverlayRaster,
+) {
+    let recreate = current
+        .as_ref()
+        .is_none_or(|overlay| overlay.width != raster.width || overlay.height != raster.height);
+    if recreate {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("motolii-rn-stage-overlay-texture"),
+            size: wgpu::Extent3d {
+                width: raster.width,
+                height: raster.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("motolii-rn-stage-overlay-sampler"),
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("motolii-rn-stage-overlay-bind-group"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+        *current = Some(StageOverlayGpu {
+            texture,
+            _view: view,
+            _sampler: sampler,
+            bind_group,
+            width: raster.width,
+            height: raster.height,
+        });
+    }
+    let overlay = current.as_ref().expect("overlay texture initialized");
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &overlay.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &raster.pixels,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(raster.width * 4),
+            rows_per_image: Some(raster.height),
+        },
+        wgpu::Extent3d {
+            width: raster.width,
+            height: raster.height,
+            depth_or_array_layers: 1,
+        },
+    );
+}
+
+#[cfg(target_os = "macos")]
+fn create_overlay_pipeline(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout) {
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("motolii-rn-stage-overlay-layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("motolii-rn-stage-overlay-shader"),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(
+            "struct V { @builtin(position) p: vec4<f32>, @location(0) uv: vec2<f32> }\n@vertex fn vs(@builtin(vertex_index) i: u32) -> V { var p = array<vec2<f32>, 3>(vec2(-1., -1.), vec2(3., -1.), vec2(-1., 3.)); var u = array<vec2<f32>, 3>(vec2(0., 1.), vec2(2., 1.), vec2(0., -1.)); var o: V; o.p = vec4(p[i], 0., 1.); o.uv = u[i]; return o; }\n@group(0) @binding(0) var t: texture_2d<f32>;\n@group(0) @binding(1) var s: sampler;\n@fragment fn fs(i: V) -> @location(0) vec4<f32> { return textureSample(t, s, i.uv); }\n",
+        )),
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("motolii-rn-stage-overlay-pipeline-layout"),
+        bind_group_layouts: &[Some(&layout)],
+        immediate_size: 0,
+    });
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("motolii-rn-stage-overlay-pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    (pipeline, layout)
 }
 
 #[cfg(target_os = "macos")]
@@ -1276,6 +1533,8 @@ impl RnStageSurface {
             self.gpu.last_presented_epoch = None;
             self.gpu.needs_reconfigure = false;
             self.gpu.poisoned = false;
+            self.gpu.overlay = None;
+            self.gpu.overlay_upload_key = None;
             self.gpu.surface_epoch = self.gpu.surface_epoch.saturating_add(1);
         }
     }
@@ -3831,6 +4090,8 @@ mod tests {
                 surface: None,
                 needs_reconfigure: false,
                 poisoned: false,
+                overlay: None,
+                overlay_upload_key: None,
             },
         };
         assert!(stage.gpu.is_attached());
@@ -3958,6 +4219,24 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    fn stage_gpu_size_change_invalidates_overlay_upload() {
+        let mut binding = StageGpuBinding::detached();
+        binding.configured(640, 360);
+        let key = OverlayUploadKey {
+            selected: Some(LayerId::from_raw(1)),
+            projection_generation: 2,
+        };
+        binding.overlay_upload_key = Some(key);
+
+        binding.configured(640, 360);
+        assert_eq!(binding.overlay_upload_key, Some(key));
+
+        binding.configured(1280, 720);
+        assert_eq!(binding.overlay_upload_key, None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn stage_gpu_validation_poison_recovers_only_through_detach() {
         let mut stage = RnStageSurface {
             host_handle: 1,
@@ -3977,6 +4256,8 @@ mod tests {
                 surface: None,
                 needs_reconfigure: false,
                 poisoned: false,
+                overlay: None,
+                overlay_upload_key: None,
             },
         };
 
