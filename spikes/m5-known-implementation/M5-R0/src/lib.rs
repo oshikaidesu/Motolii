@@ -1,6 +1,8 @@
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
 
+pub mod glow;
+
 pub const WIDTH: u32 = 32;
 pub const HEIGHT: u32 = 32;
 pub const READBACK_BYTES_PER_ROW: u32 = 256;

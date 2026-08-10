@@ -34,6 +34,8 @@ cargo test --locked --manifest-path spikes/m5-known-implementation/M5-R0/Cargo.t
 - CPU referenceとの差分は各channel 2以内。既存goldenや製品thresholdは変更していない
 - 投影済みmaterial RGBAを別fullscreen halftone passへ渡し、silhouette外alpha 0、内部dot／hole、
   composition正規化座標の解像度非依存判定を自動確認
+- `Rgba16Float` bright-pass→半径2 separable blur→additive compositeを確認。Host役fixtureが固定texture／
+  pipeline／bind groupを連続評価で再利用し、1.0超中間、halo extent、radius外透明を自動確認
 
 ## Negative oracle and boundaries
 
@@ -50,6 +52,7 @@ cargo test --locked --manifest-path spikes/m5-known-implementation/M5-R0/Cargo.t
 - Khronos Sample Renderer／Blender: **PATTERN**。数値・shader・scene ownerを移植しない
 - このprobeのshader／CPU reference: **probe-only**。製品material systemへ移植しない
 - halftoneの二pass／readback: **probe-only**。製品では既存GPU texture ownerへ接続し、CPU pixel routeを作らない
+- Glowのmulti-pass／FP16／readback: **probe-only**。製品format、tone mapping、pyramid、M4 resource ownerを固定しない
 
 ## Remaining gates
 
