@@ -58,7 +58,7 @@
 | `P06-C1` | `REMAP / VERIFIED` | half-open integer timebase、coalesce、gap、境界overflow。raw empty rangeはpanicするためprivate guardを必須化 |
 | `P07-C1` | `REMAP / VERIFIED` | MPL-2.0選択、reprioritize/remove/pop、composite priorityによるdeterministic ordering。bounded admissionとgeneration filterはprivate owner |
 | `P13-C1` | `REMAP / VERIFIED` | `vello_svg 0.10.0`のpath/group/fill/stroke、typed parse error、pattern diagnostic、3 target cross-build。外部fileはusvg段で無言dropするためprivate preflightへREMAP |
-| `P02-C1` | `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED` | [直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)でHost-private canonical `RecipeKeyV1`と別`ArtifactDigest`を決定。codec／mutation oracle／runtime keyは別ticket |
+| `P02-C1` | `CONTRACT CLOSED / CODEC IMPLEMENTED 2026-08-10` | [直列核4契約](reviews/2026-08-08-serial-core-known-contracts-decision.md)でHost-private canonical `RecipeKeyV1`と別`ArtifactDigest`を決定。codec+mutation corpusは`f731384c`で`crates/motolii-render/src/recipe_key.rs`へmain到達(8 test)。runtime key helper(render graph実値収集)のみ別ticket |
 | `P02-C2` | `CONTRACT CLOSED / IMPLEMENTED 2026-08-09` | `SourceFingerprintV1`をprovenance tag付きsource exact bytes SHA-256+sizeへ決定し、producer/decodeが`crates/motolii-doc/src/asset.rs`(`d273061d`/`260bcfde`)、budgeted SourceBindingが`crates/motolii-media/src/source_binding.rs`(`a287c828`)としてmain到達。legacy opaque hashの非昇格・strict再hashも実装済み。relink adapter(M2-ASSET-1C)は別ticketのまま |
 | `M4-P02-C3` | `CONTRACT CLOSED / IMPLEMENTATION NOT STARTED` | exhaustive Command classifierとatomic state envelopeの唯一のowner。K1b storeとK2統合は別ticket |
 | `P09-C1` | `STOP / GAP-29` | 現行baselineの同期1-buffer readback guardは確認済み。copy/map/encode/disk原因分離とring数採択は未計測のため固定しない |
