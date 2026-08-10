@@ -140,6 +140,11 @@ R0はcurrent main上で受入済みである。同じfileに隣接するR1 GPU�
 
 ## 4. Wave R1 — VS-1再閉鎖
 
+> **concept oracle(2026-08-10移管)**: RN製品UI再現probeは[`spikes/motolii-rn-probe/`](../spikes/motolii-rn-probe/README.md)
+> (App.tsx 660行: Browser 3タブ、Extensions、panel registry、Timeline 3モード、Fabric spec)、
+> rust-skia実証は[`spikes/skia-timeline-probe/`](../spikes/skia-timeline-probe/README.md)にリポ内正本がある。
+> R1/R2粒の発注は両probeを読んでから行い、存在するUIを再発明しない。probeコードの直接importは製品化ではない。
+
 R1の利用者出口は、RN BrowserのRectangleから既存D2へ一度だけPlaceし、Stage、Timeline、Inspectorが同じ`LayerId`／revisionを表示し、Undoで三面から消え、Redoで戻ること。
 
 | node | owner / exact source | 閉じる契約 | positive / negative oracle | 状態 / 依存 |

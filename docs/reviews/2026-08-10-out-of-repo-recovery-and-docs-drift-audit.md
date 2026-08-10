@@ -38,7 +38,7 @@
 ## 次手(本監査からの発注候補)
 
 1. ~~skia-timeline-probeの`spikes/`への移管~~ → **完了(2026-08-10)**: `spikes/skia-timeline-probe/`。
-2. MotoliiRnProbeは`spikes/motolii-rn-probe/`へ**参照資産として移管完了(2026-08-10)**。`ui/motolii-rn`への製品移管(R1/R2粒)は引き続き発注対象。
+2. MotoliiRnProbeは[`spikes/motolii-rn-probe/`](../../spikes/motolii-rn-probe/README.md)へ**参照資産として移管完了(2026-08-10)**(skia側は[`spikes/skia-timeline-probe/`](../../spikes/skia-timeline-probe/README.md))。`ui/motolii-rn`への製品移管(R1/R2粒)は引き続き発注対象。
 3. ~~台帳・地図の一括同期~~ → **完了(2026-08-10)**: ledger 6A/7A/7B、m4地図P02-C2、統合地図N-OVERLAY、RN地図R1×2、ui-reference-map、backlog。同日、未mergeブランチ238本を検証の上217本削除(全内容main到達済みを機械証明)、残21本が回収判断対象。
 4. check-docs.shへ「docs内のリポ外絶対パス参照」検出を追加(事後観測lane)。
 5. `protected_assets.rs:178`のfixture文字列を退役済みでないパスへ差し替え。
