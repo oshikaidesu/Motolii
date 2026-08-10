@@ -222,6 +222,36 @@ runtime identity と installation path が存在せず、実在するのは comp
 `concept.md`は解析駆動生成を「優先度=最終フェーズ、M1〜M5完成後」と定めており、
 作者・配布枝の後置は既決の踏襲である。**本地図はこれらを実装nodeへ昇格させない。**
 
+## 5.10 鎖のgateが検出した「完成条件を塞ぐ8件」の node 化（2026-08-10登録）
+
+[鎖のgate 6区間](reviews/2026-08-09-chain-gate-results-and-audio-path.md)は完成条件
+（3〜5分・音楽同期のMVを1本書き出す）を塞ぐ8件を確定したが、**本地図にも
+[implementation-ledger](implementation-ledger.md)にもnodeとして登録されていなかった。**
+§5.9の3件は登録され、こちらは登録されなかった — 記録層の欠陥であり、
+2026-08-10に本節で是正する。
+
+**登録にあたり、8件すべてを現行mainのコードで再確認した。**
+仮コードは[器具境界決定](reviews/2026-08-07-provisional-call-site-sketch-instrument-decision.md)により
+非authorityであり、gate結果をそのまま転記するとauthorityへ昇格させたことになる。
+下表の判定根拠は仮コードではなく**再確認したコードの実在**である。
+
+| node | gate #番 | 状態 | 現行mainでの再確認 |
+|---|---|---|---|
+| — | 1 | **解決済み** | CLI subcommandは`ExportOverlay` / `ExportProject` / **`ExportDocument`** / `VerifyB4` / `Help`。`ExportDocument`が`export_document_file`→`export_document_video`（`resolve_audio_export`→`mux_soundtrack` / `mux_mixed_pcm`）へ到達する。commit `97830975`（2026-08-10）で配線済み |
+| `N-IMPORT-AUDIO` | 2 | `BUILT_UNWIRED` | `build_import_clip_source(asset, ImportAvMode::VideoAndAudio{..})`は`crates/motolii-doc/src/audio_edit.rs:21`に実在し`lib.rs:54`でpub。**製品呼び出しは0件**（呼ぶのは`tests/ag3_audio_commands.rs`だけ）。製品route `crates/motolii-ui/src/document_edit_runtime.rs`は8箇所すべてで`ClipSource::asset_video_only`を直接構築し、`audio: Vec::new()`になる |
+| `N-MEDIA-PICK` | 3 | `ABSENT` | 素材を選ぶ入口が`crates/` `ui/`のどこにも無い（file dialog／`rfd`／`pick_media`の実装0件）。リポ外probeのrfd実装は[回収監査](reviews/2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md)により**disposable probe debt・製品転記禁止として意図的に非コミット**であり、`UNKNOWN_OUTSIDE_REPO`ではなく`ABSENT`で確定 |
+| `N-MEDIA-PLACE` | 4 | `PARTIAL` | Asset admissionは`Command::AdmitAsset`（`command.rs:392`）としてCommand境界に実在しUndo可能。欠けているのは**挿入位置とtarget track を決める製品intent**。RN側の既存intentは`BrowserPlaceRectangleIntent`（`ui/motolii-rn/App.tsx:32`）で、mediaを置くintentではない |
+| `N-PROJECT-NEW` | 5 | `PARTIAL` | 低水準の初回永続化は実在（`ProjectSession::acquire` `crates/motolii-doc/src/journal/session.rs:88` + `save_with_journal`）。`crates/motolii-ui`側の呼び出しは**test fixtureのみ**で、製品Newの入口が無い |
+| （既存 `T1`） | 6 | 既登録 | §5.9 `T1`と同一。RN Inspectorに編集routeが無い（`ui/motolii-rn/src/inspector/InspectorInitialReadPanel.tsx`にgesture／onChange 0件）。write routeは`ui/motolii-web/src/candidates/InspectorCandidate.jsx`側にあり再基線が凍結している。**重複nodeを立てない** |
+| （既存 `T3`） | 7 | 既登録 | §5.9 `T3`と同一。`Command::SetEffectEnabled`（`command.rs:319`）は実在するが`ui/`配下の呼び出しは0件（`diagnostic_projection.rs:261`の表示名のみ）。**重複nodeを立てない** |
+| `N-SOUNDTRACK-WRITE` | 8 | `ABSENT` | `Document.soundtrack: Option<Soundtrack>`（`crates/motolii-doc/src/lib.rs:137`）は実在し、validate・`AudioProgram`（`crates/motolii-audio/src/program.rs:39`）・mux側は揃っている。**`command.rs`にsoundtrackを設定するvariantが1件も無い** — 楽曲bedを作品へ据える編集操作が存在しない |
+
+### この節が変えないもの
+
+- **実装許可でも発注でもない。** 状態語彙（§2）に載せただけである
+- 仮コード6区間の`NEEDS_REVISION`は未解消のまま。本節は**gate結果のうちコードで再確認できた事実だけ**を昇格させたもので、鎖本体を通過扱いにしない
+- 優先度・実装順は§6の原則に従う。`BUILT_UNWIRED`（`N-IMPORT-AUDIO`）は接続、`PARTIAL`は不足特定、`ABSENT`は既知実装調査からであり、本節はこれを繰り上げない
+
 ## 6. 実装順の原則
 
 1. `WIRED`は受入だけ。再実装しない

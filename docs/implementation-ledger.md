@@ -145,6 +145,34 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 [M3 baseline-required自走checkpoint](reviews/2026-08-07-m3-baseline-required-autonomy-checkpoint.md)は、一般的なdesktop NLEの必須outcomeを利用者再確認なしで一契約へcompileする方針を決定したが、現時点の採用itemは0である。baseline抽出は非OpenAI研究者、別family challenge、Codexのevidence整理／authority写像／最終採否へ分離し、直前のWeb調査失敗runに現れたsample、feature row、thresholdを採用しない。Claude directのempty-workspace 1-query capability probeはWebSearchと公式body取得まで通過したためfresh本調査へ進めるが、probeはbaseline evidence、runner機能、一般permissionではない。baseline本調査とR0三候補のread-only再検収は別laneとして並行可能だが、どちらもR1以降の製品施工許可ではない。
 
+### 完成条件を塞ぐnode（2026-08-10 登録）
+
+[鎖のgate 6区間](reviews/2026-08-09-chain-gate-results-and-audio-path.md)が確定した「完成条件
+（3〜5分・音楽同期のMVを1本書き出す）を塞ぐ8件」は、**本台帳にも統合地図にも登録されていなかった**。
+gate結果は`docs/reviews/README.md`に索引されていたが、そこから台帳の発注順へ翻訳されないまま
+1日経過した。**findingがnodeへ翻訳される工程が本台帳側に無い**という記録層の欠陥である。
+2026-08-10に[統合地図§5.10](outcome-driven-integration-map.md)へnode化し、本節から引く。
+
+登録時に8件すべてを現行mainのコードで再確認した。仮コードは
+[器具境界決定](reviews/2026-08-07-provisional-call-site-sketch-instrument-decision.md)により
+非authorityであり、**下表の根拠はgate結果ではなく再確認したコードの実在**である。
+発注時はさらにclosed order側でcurrent mainを再確認する。
+
+| node | 状態 | 現在地 | 次の一手 |
+|---|---|---|---|
+| （gate #1 CLI音声mux到達） | `DONE` | commit `97830975`(2026-08-10)で`export-document` subcommandが`export_document_video`へ到達。gate指摘は解決済み | 追加作業なし。**未解決として再発注しない** |
+| `N-IMPORT-AUDIO` | `ISSUE / BUILT_UNWIRED` | `build_import_clip_source` + `ImportAvMode::VideoAndAudio`は`crates/motolii-doc/src/audio_edit.rs:21`に実在・pub。製品呼び出し0件で、`crates/motolii-ui/src/document_edit_runtime.rs`は8箇所すべて`ClipSource::asset_video_only`（`audio: Vec::new()`）。**製品importは常に音声を落とす** | 呼び分けの一契約。新実装を起こさない。8箇所のうちどれが製品importかを先に確定する |
+| `N-MEDIA-PICK` | `DECIDE / ABSENT` | 素材を選ぶ入口が`crates/` `ui/`に0件。リポ外probeのrfd実装は製品転記禁止で意図的に非コミット | 既知実装調査から。probeを製品へ転記しない |
+| `N-MEDIA-PLACE` | `DECIDE / PARTIAL` | `Command::AdmitAsset`（`command.rs:392`）はCommand境界に実在・Undo可能。挿入位置とtarget trackを決める製品intentが無い | 意味を先に閉じる。`N-MEDIA-PICK`とは別粒 |
+| `N-PROJECT-NEW` | `DECIDE / PARTIAL` | 低水準の初回永続化は実在（`journal/session.rs:88` + `save_with_journal`）。`motolii-ui`側の呼び出しはtest fixtureのみ | 製品Newの入口の意味を閉じる |
+| `N-SOUNDTRACK-WRITE` | `DECIDE / ABSENT` | `Document.soundtrack`（`motolii-doc/src/lib.rs:137`）・validate・`AudioProgram`・muxは揃うが、`command.rs`にsoundtrackを設定するvariantが0件 | 完成条件の「音楽同期」の入口。M2 Document ownerへ返す粒であり、M3接続粒として修理しない |
+
+gate #6／#7は[統合地図§5.9](outcome-driven-integration-map.md)の`T1`（RN Inspector編集route）と
+`T3`（`SetEffectEnabled`呼び出し0件）に既登録である。**重複nodeを立てない。**
+
+本節は**実装許可でも発注でもない**。仮コード6区間の`NEEDS_REVISION`も未解消のままであり、
+本節をもって鎖を通過扱いにしない。
+
 | lane | 現在粒 | Phase / slice / checklist | 状態 | Issue | 依存確認 | 完了後 |
 |---|---|---|---|---|---|---|
 | PRODUCT-RUNTIME | M3-R0-CANDIDATE | M3 / RN product runtime seat / acceptance | `DONE` | — | [R0 product runtime seat受入](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md)。通常RN Release artifact、同read-only revision、write 0を確認 | R1以降を自動採用しない。隣接するGPU／draw候補は別契約へ残す |
