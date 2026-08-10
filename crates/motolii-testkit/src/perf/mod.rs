@@ -15,19 +15,22 @@
 //!   cargo test -p motolii-testkit --test perf_harness -- --nocapture
 //! ```
 //!
-//! # 将来の外部ベンチ拡張点
+//! # 外部ベンチ拡張点
 //!
-//! [`EXTERNAL_BENCH_SLOTS`] にスロットを宣言し、配線時は各 `env_var` で
-//! `cargo test` / CI から起動する想定。現時点では定義と記録のみ。
+//! [`EXTERNAL_BENCH_SLOTS`] は実装済み／未実装を含む外部ベンチ入口を記録する。
+//! M4の機種別再実行recipeは [`m4_validation_manifest`] がshell非依存のargvとして返す。
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 pub const BASELINE_OUT_ENV: &str = "MOTOLII_PERF_BASELINE_OUT";
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
+pub const M4_VALIDATION_BUNDLE_SCHEMA_VERSION: u32 = 5;
+pub const M4_VALIDATION_CONTEXT_SCHEMA_VERSION: u32 = 1;
 
 /// 外部ベンチの呼び出し口(未配線スロット — M3E-2)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -54,7 +57,325 @@ pub const EXTERNAL_BENCH_SLOTS: &[ExternalBenchSlot] = &[
         env_var: "MOTOLII_PERF_EXTERNAL_RENDER_1080P_40",
         invoke_hint: "(not implemented — U1 measurement will define PerfScenario)",
     },
+    ExternalBenchSlot {
+        id: "decode-demand-matrix",
+        description: "M4 validation: sequential/seek-storm/parallel clip decode demand",
+        env_var: "MOTOLII_PERF_EXTERNAL_DECODE_MATRIX",
+        invoke_hint: "cargo test -p motolii-media --test decode_demand_bench record_decode_demand_matrix_without_thresholds -- --ignored --nocapture",
+    },
+    ExternalBenchSlot {
+        id: "audio-mad-edit-density",
+        description:
+            "M4 validation: many short clips/effects aligned to audio without timeline stalls",
+        env_var: "MOTOLII_PERF_EXTERNAL_AUDIO_MAD",
+        invoke_hint: "cargo test --release -p motolii-doc --test audio_mad_density_bench record_audio_mad_graph_demand_without_thresholds -- --ignored --nocapture",
+    },
 ];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValidationKind {
+    Observation,
+    Contract,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ValidationCommand {
+    pub id: &'static str,
+    pub kind: ValidationKind,
+    pub program: &'static str,
+    pub args: &'static [&'static str],
+    pub working_directory: &'static str,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub env: BTreeMap<&'static str, String>,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub required_user_env: &'static [&'static str],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    pub optional_user_env: &'static [&'static str],
+    pub artifact: Option<&'static str>,
+    pub proves: &'static str,
+    pub does_not_prove: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UnresolvedPolicyInput {
+    pub id: &'static str,
+    pub selected_value: Option<u64>,
+    pub unit: &'static str,
+    pub evidence_required: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ExternalValidationGate {
+    pub id: &'static str,
+    pub status: &'static str,
+    pub required_evidence: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct M4ValidationContext {
+    pub schema_version: u32,
+    pub machine_label: String,
+    pub intended_persona: String,
+    pub power_source: String,
+    pub power_mode: String,
+    pub display_width_px: u32,
+    pub display_height_px: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct M4ValidationManifest {
+    pub schema_version: u32,
+    pub repository_revision: Option<String>,
+    pub generated_artifacts: &'static [&'static str],
+    pub commands: Vec<ValidationCommand>,
+    pub unresolved_policy_inputs: &'static [UnresolvedPolicyInput],
+    pub external_gates: &'static [ExternalValidationGate],
+}
+
+const DECODE_ARGS: &[&str] = &[
+    "test",
+    "-p",
+    "motolii-media",
+    "--test",
+    "decode_demand_bench",
+    "record_decode_demand_matrix_without_thresholds",
+    "--",
+    "--ignored",
+    "--nocapture",
+];
+const AUDIO_MAD_ARGS: &[&str] = &[
+    "test",
+    "--release",
+    "-p",
+    "motolii-doc",
+    "--test",
+    "audio_mad_density_bench",
+    "record_audio_mad_graph_demand_without_thresholds",
+    "--",
+    "--ignored",
+    "--nocapture",
+];
+const LEDGER_ARGS: &[&str] = &["test", "-p", "motolii-gpu", "resource_ledger"];
+const TIER_TRANSFER_ARGS: &[&str] = &[
+    "test",
+    "-p",
+    "motolii-testkit",
+    "--test",
+    "m4_tier_transfer_contract",
+];
+const YUV_PLAN_ARGS: &[&str] = &[
+    "test",
+    "-p",
+    "motolii-testkit",
+    "--test",
+    "m4_yuv_materialization_plan",
+];
+
+const UNRESOLVED_POLICY_INPUTS: &[UnresolvedPolicyInput] = &[
+    UnresolvedPolicyInput {
+        id: "vram_hard_budget",
+        selected_value: None,
+        unit: "bytes",
+        evidence_required: "low-spec Windows working-set observations plus explicit product policy",
+    },
+    UnresolvedPolicyInput {
+        id: "texture_allocation_alignment",
+        selected_value: None,
+        unit: "bytes",
+        evidence_required: "backend allocation observations and a conservative accounting policy",
+    },
+    UnresolvedPolicyInput {
+        id: "yuv_live_lane_cap",
+        selected_value: None,
+        unit: "lanes",
+        evidence_required:
+            "corrected product lifetime owner plus mixed-resolution active-set measurements",
+    },
+];
+
+const EXTERNAL_VALIDATION_GATES: &[ExternalValidationGate] = &[
+    ExternalValidationGate {
+        id: "low_spec_windows",
+        status: "pending",
+        required_evidence: "same bundle and fixture revision on the target low-spec Windows persona",
+    },
+    ExternalValidationGate {
+        id: "native_decoder_surface_import",
+        status: "pending",
+        required_evidence:
+            "native decoder surface and device identity without a CPU raw-frame pipe",
+    },
+    ExternalValidationGate {
+        id: "wgpu_external_texture_lowering",
+        status: "pending",
+        required_evidence:
+            "imported plane views lowered through wgpu with an explicit color descriptor",
+    },
+    ExternalValidationGate {
+        id: "surface_lifetime_fence",
+        status: "pending",
+        required_evidence:
+            "negative tests prevent decoder-pool reuse and ledger release before GPU completion",
+    },
+    ExternalValidationGate {
+        id: "gpu_surface_pixel_oracle",
+        status: "pending",
+        required_evidence:
+            "same source, time, rotation, and color descriptor pass the declared pixel oracle",
+    },
+    ExternalValidationGate {
+        id: "product_preview_path",
+        status: "pending",
+        required_evidence: "decode, upload/import, render, display, cancellation, and queue depth in Motolii Studio Preview",
+    },
+];
+
+pub fn m4_validation_manifest(
+    repository_revision: Option<String>,
+    _artifact_dir: impl AsRef<Path>,
+) -> M4ValidationManifest {
+    let software_env = BTreeMap::from([(
+        "MOTOLII_DECODE_DEMAND_OUT",
+        "decode-software.json".to_owned(),
+    )]);
+    let hardware_env = BTreeMap::from([(
+        "MOTOLII_DECODE_DEMAND_OUT",
+        "decode-hardware-download.json".to_owned(),
+    )]);
+    let audio_mad_env = BTreeMap::from([(
+        "MOTOLII_AUDIO_MAD_DEMAND_OUT",
+        "audio-mad-graph.json".to_owned(),
+    )]);
+    M4ValidationManifest {
+        schema_version: M4_VALIDATION_BUNDLE_SCHEMA_VERSION,
+        repository_revision,
+        generated_artifacts: &["manifest.json", "hardware.json", "context.json"],
+        commands: vec![
+            ValidationCommand {
+                id: "decode-software",
+                kind: ValidationKind::Observation,
+                program: "cargo",
+                args: DECODE_ARGS,
+                working_directory: "repository_root",
+                env: software_env,
+                required_user_env: &[],
+                optional_user_env: &["MOTOLII_DECODE_FIXTURE"],
+                artifact: Some("decode-software.json"),
+                proves: "software decode demand for sequential, seek, and parallel requests",
+                does_not_prove: "hardware decode, GPU import, preview latency, or a minimum specification",
+            },
+            ValidationCommand {
+                id: "decode-hardware-download",
+                kind: ValidationKind::Observation,
+                program: "cargo",
+                args: DECODE_ARGS,
+                working_directory: "repository_root",
+                env: hardware_env,
+                required_user_env: &[
+                    "MOTOLII_DECODE_HWACCEL",
+                    "MOTOLII_DECODE_HW_OUTPUT_FORMAT",
+                ],
+                optional_user_env: &[
+                    "MOTOLII_DECODE_FIXTURE",
+                    "MOTOLII_DECODE_HW_SURFACE_FORMAT",
+                ],
+                artifact: Some("decode-hardware-download.json"),
+                proves: "an explicitly configured hardware-surface-to-CPU-download comparison",
+                does_not_prove: "zero-copy GPU import or that hardware decode is faster",
+            },
+            ValidationCommand {
+                id: "audio-mad-graph-demand",
+                kind: ValidationKind::Observation,
+                program: "cargo",
+                args: AUDIO_MAD_ARGS,
+                working_directory: "repository_root",
+                env: audio_mad_env,
+                required_user_env: &[],
+                optional_user_env: &[],
+                artifact: Some("audio-mad-graph.json"),
+                proves: "Document-to-render-graph demand for the fixed 1,000-clip fixture",
+                does_not_prove: "decode, GPU render, display, UI responsiveness, or preview latency",
+            },
+            ValidationCommand {
+                id: "resource-ledger-contract",
+                kind: ValidationKind::Contract,
+                program: "cargo",
+                args: LEDGER_ARGS,
+                working_directory: "repository_root",
+                env: BTreeMap::new(),
+                required_user_env: &[],
+                optional_user_env: &[],
+                artifact: None,
+                proves: "typed hard-cap and accounting invariants",
+                does_not_prove: "a safe numeric budget for any device",
+            },
+            ValidationCommand {
+                id: "tier-transfer-contract",
+                kind: ValidationKind::Contract,
+                program: "cargo",
+                args: TIER_TRANSFER_ARGS,
+                working_directory: "repository_root",
+                env: BTreeMap::new(),
+                required_user_env: &[],
+                optional_user_env: &[],
+                artifact: None,
+                proves: "source retention, double-residency, LRU, cancellation, and stale-generation negatives",
+                does_not_prove: "product transfer throughput or eviction thresholds",
+            },
+            ValidationCommand {
+                id: "yuv-materialization-plan-contract",
+                kind: ValidationKind::Contract,
+                program: "cargo",
+                args: YUV_PLAN_ARGS,
+                working_directory: "repository_root",
+                env: BTreeMap::new(),
+                required_user_env: &[],
+                optional_user_env: &[],
+                artifact: None,
+                proves: "size-keyed lane reuse and atomic refusal in the test-only planner",
+                does_not_prove: "that the product YUV lifetime alias is fixed",
+            },
+        ],
+        unresolved_policy_inputs: UNRESOLVED_POLICY_INPUTS,
+        external_gates: EXTERNAL_VALIDATION_GATES,
+    }
+}
+
+pub fn write_m4_validation_bundle(
+    output_dir: impl AsRef<Path>,
+    repository_revision: Option<String>,
+    context: &M4ValidationContext,
+) -> Result<M4ValidationManifest, BaselineError> {
+    let output_dir = output_dir.as_ref();
+    std::fs::create_dir_all(output_dir).map_err(|source| BaselineError::CreateDir {
+        path: output_dir.to_path_buf(),
+        source,
+    })?;
+    let output_dir =
+        std::fs::canonicalize(output_dir).map_err(|source| BaselineError::Canonicalize {
+            path: output_dir.to_path_buf(),
+            source,
+        })?;
+    let hardware = run_harness();
+    write_baseline_json(output_dir.join("hardware.json"), &hardware)?;
+    write_serialized_json(output_dir.join("context.json"), context)?;
+    let manifest = m4_validation_manifest(repository_revision, &output_dir);
+    write_serialized_json(output_dir.join("manifest.json"), &manifest)?;
+    Ok(manifest)
+}
+
+fn write_serialized_json(
+    path: impl AsRef<Path>,
+    value: &impl Serialize,
+) -> Result<(), BaselineError> {
+    let path = path.as_ref();
+    let json = serde_json::to_string_pretty(value).map_err(BaselineError::Serialize)?;
+    std::fs::write(path, json).map_err(|source| BaselineError::Write {
+        path: path.to_path_buf(),
+        source,
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -81,8 +402,17 @@ pub struct PerfReport {
     pub schema_version: u32,
     pub harness: &'static str,
     pub recorded_at_unix_ms: u64,
+    pub hardware: HardwareProfile,
     pub samples: Vec<PerfSample>,
     pub external_bench_slots: &'static [ExternalBenchSlot],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HardwareProfile {
+    pub os: &'static str,
+    pub arch: &'static str,
+    pub logical_cpu_count: Option<usize>,
+    pub total_memory_bytes: Option<u64>,
 }
 
 /// 初期化クロージャの所要時間[ms]を計測する。
@@ -96,22 +426,66 @@ where
     (value, startup_ms)
 }
 
-/// Linux `/proc/self/status` の VmRSS を bytes で返す。他OSは `None`。
+/// 対応OSのprocess working set/RSSをbytesで返す。
 pub fn current_rss_bytes() -> Option<u64> {
-    parse_vm_rss_kb(&read_proc_status()?).map(|kb| kb * 1024)
-}
-
-fn read_proc_status() -> Option<String> {
     #[cfg(target_os = "linux")]
     {
-        std::fs::read_to_string("/proc/self/status").ok()
+        parse_vm_rss_kb(&read_proc_status()?).and_then(|kb| kb.checked_mul(1024))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        let pid = std::process::id().to_string();
+        let output = Command::new("ps")
+            .args(["-o", "rss=", "-p", &pid])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8(output.stdout)
+            .ok()?
+            .trim()
+            .parse::<u64>()
+            .ok()?
+            .checked_mul(1024)
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_current_working_set_bytes()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         None
     }
 }
 
+#[cfg(target_os = "windows")]
+fn windows_current_working_set_bytes() -> Option<u64> {
+    use windows_sys::Win32::System::ProcessStatus::{
+        K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS,
+    };
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+
+    let cb = u32::try_from(std::mem::size_of::<PROCESS_MEMORY_COUNTERS>()).ok()?;
+    let mut counters = PROCESS_MEMORY_COUNTERS {
+        cb,
+        ..PROCESS_MEMORY_COUNTERS::default()
+    };
+    // SAFETY: Windowsが要求するsizeをcbとbuffer長の両方へ渡し、呼出中bufferを占有する。
+    let succeeded =
+        unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut counters, counters.cb) };
+    if succeeded == 0 {
+        return None;
+    }
+    u64::try_from(counters.WorkingSetSize).ok()
+}
+
+#[cfg(target_os = "linux")]
+fn read_proc_status() -> Option<String> {
+    std::fs::read_to_string("/proc/self/status").ok()
+}
+
+#[cfg(any(target_os = "linux", test))]
 fn parse_vm_rss_kb(status: &str) -> Option<u64> {
     for line in status.lines() {
         if let Some(rest) = line.strip_prefix("VmRSS:") {
@@ -120,6 +494,69 @@ fn parse_vm_rss_kb(status: &str) -> Option<u64> {
         }
     }
     None
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_mem_total_kb(meminfo: &str) -> Option<u64> {
+    for line in meminfo.lines() {
+        if let Some(rest) = line.strip_prefix("MemTotal:") {
+            return rest.trim().trim_end_matches(" kB").trim().parse().ok();
+        }
+    }
+    None
+}
+
+fn total_memory_bytes() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+        parse_mem_total_kb(&meminfo)?.checked_mul(1024)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("sysctl")
+            .args(["-n", "hw.memsize"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8(output.stdout).ok()?.trim().parse().ok()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_total_memory_bytes()
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        None
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_total_memory_bytes() -> Option<u64> {
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+
+    let length = u32::try_from(std::mem::size_of::<MEMORYSTATUSEX>()).ok()?;
+    let mut status = MEMORYSTATUSEX {
+        dwLength: length,
+        ..MEMORYSTATUSEX::default()
+    };
+    // SAFETY: dwLengthをABIのstruct sizeへ固定し、呼出中bufferを占有する。
+    let succeeded = unsafe { GlobalMemoryStatusEx(&mut status) };
+    if succeeded == 0 {
+        return None;
+    }
+    Some(status.ullTotalPhys)
+}
+
+fn hardware_profile() -> HardwareProfile {
+    HardwareProfile {
+        os: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
+        logical_cpu_count: std::thread::available_parallelism().ok().map(usize::from),
+        total_memory_bytes: total_memory_bytes(),
+    }
 }
 
 /// 初期化直後に短いアイドル待ちを入れてRSSを読む。
@@ -151,13 +588,21 @@ fn headless_gpu_ctx() -> PerfSample {
     let (result, startup_ms) = measure_startup(motolii_gpu::GpuCtx::new_headless);
     match result {
         Ok(gpu) => {
+            let mut notes = HashMap::new();
+            if let Some(info) = &gpu.adapter_info {
+                notes.insert("adapter_name".into(), info.name.clone());
+                notes.insert("backend".into(), format!("{:?}", info.backend));
+                notes.insert("device_type".into(), format!("{:?}", info.device_type));
+                notes.insert("driver".into(), info.driver.clone());
+                notes.insert("driver_info".into(), info.driver_info.clone());
+            }
             drop(gpu);
             PerfSample {
                 id: id.into(),
                 status: SampleStatus::Ok,
                 startup_ms: Some(startup_ms),
                 idle_rss_bytes: idle_rss_after_init(Duration::from_millis(50)),
-                notes: HashMap::new(),
+                notes,
             }
         }
         Err(e) => {
@@ -171,6 +616,72 @@ fn headless_gpu_ctx() -> PerfSample {
                 notes,
             }
         }
+    }
+}
+
+fn ffmpeg_capabilities() -> PerfSample {
+    let id = "ffmpeg_capabilities";
+    let start = Instant::now();
+    let version = Command::new("ffmpeg").arg("-version").output();
+    let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
+    let Ok(version) = version else {
+        return PerfSample {
+            id: id.into(),
+            status: SampleStatus::Unavailable,
+            startup_ms: Some(elapsed_ms),
+            idle_rss_bytes: current_rss_bytes(),
+            notes: HashMap::new(),
+        };
+    };
+    if !version.status.success() {
+        let mut notes = HashMap::new();
+        notes.insert(
+            "error".into(),
+            String::from_utf8_lossy(&version.stderr).into(),
+        );
+        return PerfSample {
+            id: id.into(),
+            status: SampleStatus::Unavailable,
+            startup_ms: Some(elapsed_ms),
+            idle_rss_bytes: current_rss_bytes(),
+            notes,
+        };
+    }
+
+    let mut notes = HashMap::new();
+    let version_text = String::from_utf8_lossy(&version.stdout);
+    if let Some(line) = version_text.lines().next() {
+        notes.insert("version".into(), line.to_owned());
+    }
+    match Command::new("ffmpeg")
+        .args(["-hide_banner", "-hwaccels"])
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let accelerators = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with("Hardware acceleration"))
+                .collect::<Vec<_>>()
+                .join(",");
+            notes.insert("hwaccels".into(), accelerators);
+        }
+        Ok(output) => {
+            notes.insert(
+                "hwaccels_error".into(),
+                String::from_utf8_lossy(&output.stderr).into(),
+            );
+        }
+        Err(error) => {
+            notes.insert("hwaccels_error".into(), error.to_string());
+        }
+    }
+    PerfSample {
+        id: id.into(),
+        status: SampleStatus::Ok,
+        startup_ms: Some(elapsed_ms),
+        idle_rss_bytes: current_rss_bytes(),
+        notes,
     }
 }
 
@@ -192,12 +703,14 @@ pub fn run_harness() -> PerfReport {
     let samples = vec![
         harness_self_check(),
         plugin_registry_init(),
+        ffmpeg_capabilities(),
         headless_gpu_ctx(),
     ];
     PerfReport {
         schema_version: SCHEMA_VERSION,
         harness: "motolii-testkit/perf",
         recorded_at_unix_ms: unix_ms_now(),
+        hardware: hardware_profile(),
         samples,
         external_bench_slots: EXTERNAL_BENCH_SLOTS,
     }
@@ -208,6 +721,13 @@ pub fn log_report_summary(report: &PerfReport) {
     eprintln!("=== motolii perf harness (M3E-2) ===");
     eprintln!("schema_version={}", report.schema_version);
     eprintln!("recorded_at_unix_ms={}", report.recorded_at_unix_ms);
+    eprintln!(
+        "hardware os={} arch={} logical_cpu_count={:?} total_memory_bytes={:?}",
+        report.hardware.os,
+        report.hardware.arch,
+        report.hardware.logical_cpu_count,
+        report.hardware.total_memory_bytes
+    );
     for sample in &report.samples {
         eprintln!(
             "  [{}] status={:?} startup_ms={:?} idle_rss_bytes={:?}",
@@ -266,6 +786,12 @@ pub enum BaselineError {
         #[source]
         source: std::io::Error,
     },
+    #[error("failed to canonicalize baseline directory {path}: {source}")]
+    Canonicalize {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("failed to serialize perf baseline: {0}")]
     Serialize(#[from] serde_json::Error),
     #[error("failed to write baseline to {path}: {source}")]
@@ -287,6 +813,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_total_memory_from_meminfo_text() {
+        let meminfo = "MemTotal:       16384256 kB\nMemFree:         1024 kB\n";
+        assert_eq!(parse_mem_total_kb(meminfo), Some(16_384_256));
+    }
+
+    #[test]
     fn measure_startup_returns_elapsed() {
         let (_, ms) = measure_startup(|| std::thread::sleep(Duration::from_millis(5)));
         assert!(ms >= 4.0);
@@ -296,6 +828,9 @@ mod tests {
     fn run_harness_includes_self_check_ok() {
         let report = run_harness();
         assert_eq!(report.schema_version, SCHEMA_VERSION);
+        assert_eq!(report.hardware.os, std::env::consts::OS);
+        assert_eq!(report.hardware.arch, std::env::consts::ARCH);
+        assert!(report.hardware.logical_cpu_count.is_some());
         let self_check = report
             .samples
             .iter()
@@ -303,6 +838,13 @@ mod tests {
             .expect("self check sample");
         assert_eq!(self_check.status, SampleStatus::Ok);
         assert!(self_check.startup_ms.is_some());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_hardware_facts_include_memory_and_working_set() {
+        assert!(total_memory_bytes().is_some_and(|bytes| bytes > 0));
+        assert!(current_rss_bytes().is_some_and(|bytes| bytes > 0));
     }
 
     #[test]

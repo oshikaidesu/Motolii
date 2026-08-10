@@ -562,3 +562,4 @@
 | [2026-08-05-m3-dock-and-native-drag-technology-transfer-decision.md](2026-08-05-m3-dock-and-native-drag-technology-transfer-decision.md) | M3 Dock Host / OS native drag技術移管決定(2026-08-10歴史回収: ローカル専用ブランチから。後続決定がある場合はそちらが正) |
 | [2026-07-27-wgsl-hot-reload-author-journey.md](2026-07-27-wgsl-hot-reload-author-journey.md) | WGSL hot reload作者経路 — INF-8具体化(2026-08-10歴史回収: ローカル専用ブランチから。後続決定がある場合はそちらが正) |
 | [2026-07-22-all-docs-reclosure-inventory.md](2026-07-22-all-docs-reclosure-inventory.md) | 全docs再締結監査・第0単位 — read-only棚卸し報告(REWOR(2026-08-10歴史回収: ローカル専用ブランチから。後続決定がある場合はそちらが正) |
+| [2026-07-20-m3-browser-panel-egui-taffy-spike.md](2026-07-20-m3-browser-panel-egui-taffy-spike.md) | M3 Browser panelをReactモックからeguiへ翻訳する�(2026-08-10歴史回収: ローカル専用ブランチから。egui方向は2026-08-07 RN再基線で退役済み) |
