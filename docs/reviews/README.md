@@ -536,3 +536,5 @@
 | [2026-08-04-stage-transport-easing-trigger-consumer-contract.md](2026-08-04-stage-transport-easing-trigger-consumer-contract.md) | P04-C2 ACTIVE-INTERVAL のStage transport既存slot→Easing trigger read-only consumer契約 |
 | [2026-08-04-stage-transport-easing-trigger-implementation-acceptance.md](2026-08-04-stage-transport-easing-trigger-implementation-acceptance.md) | P04-C2 ACTIVE-INTERVAL Stage transport Easing trigger実装受入・EXTERNAL_GATE_PENDING |
 | [2026-08-04-position-active-interval-implementation-admissibility-rejection.md](2026-08-04-position-active-interval-implementation-admissibility-rejection.md) | P04-C2 ACTIVE-INTERVAL compiler oracleによるconsumer不在の歴史観察・REMAPPED |
+| [2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md](2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md) | リポ外資産回収・docs乖離監査。MotoliiRnProbe回収2割/skia-timeline-probe回収0%%、リポ外パス参照13本、台帳・地図の08-09/08-10乖離、退役テスト復活はgit実体ゼロ |
+| [2026-08-10-main-merge-friction-removal-decision.md](2026-08-10-main-merge-friction-removal-decision.md) | mainマージ条件から全検証段差を撤廃、laneは事後観測・fix-forwardへ降格。虚偽green報告禁止とtest意味保護は維持 |
