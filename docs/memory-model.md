@@ -72,6 +72,26 @@ MVでは現在位置の数秒だけでなく、曲頭から曲末まで展開・
 
 P4はM4の製品要件であり、現行codeにdisk store、K7 freeze、K8 coverage、100GB accounting fixtureはない。37GB／100GBは非圧縮上限と審判fixtureの歴史的試算で、実format、既定budget、性能保証ではない。
 
+### P4a. storage-to-GPU direct I/O観察と既決境界の維持（2026-08-06）
+
+storageとGPU memory間のdirect DMAを持つNVIDIA GPUDirect Storage／cuFileと、そのAPI／垂直stackを
+複数vendor／platformへ開くxio-sigの発表は、disk artifactをCPU system memoryのbounce bufferへ恒久固定せず
+Host所有GPU resourceへ昇格できる機構classの実在を裏付ける。ただし2026-08-06時点のxio-sigは予定4 projectの
+実コードを未公開で、現行GDSもCUDA、対応NVIDIA GPU、pinned memory、Linux deployment責任を持つ。
+これはMotoliiへのdependency採択またはwgpu texture接続の証拠ではなく、P1〜P4、Host専権cache、
+vendor／OS非依存契約へ整合する外部観察に限る
+([一次資料照合](reviews/2026-08-06-storage-to-gpu-direct-io-design-observation.md))。
+
+Motoliiではartifact identity、descriptor、time／Quality、color／premul、成功／failure意味をCore側の正本とし、
+portable stagingかplatform direct I/OかはHost privateな実行policyに閉じる。backend名、OS／vendor handle、
+direct pathの有無をDocument、journal、公開plugin API、Vism package、作品cache keyへ入れず、backend差でpixel、
+Preview／Export、永続形式を変えない。将来のdirect pathもK1cのhard admission、K7／K8のverified artifact、
+GpuAssetCacheのHost所有へ接続し、第二resource ownerを作らない。
+
+具体trait、設定UI、M4 taskは、source／license／platform matrix、wgpuへの安全な接続、代表MV workloadの実測が
+揃うまで作らない。将来設定が必要でもHost選択の`Auto`を既定とし、portable強制はUser settingsの診断／互換用途に
+限る。vendor名付きtoggleを作品設定へ保存しない。
+
 ## 試算の読み方(performance-model §7 への注記)
 
 §7の40レイヤー試算は検算済みで、算術はすべて正しい(2026-07-09検算: ソース40×8.3MB≈330MB、合成帯域1.7GB/フレーム=50GB/s@30fps、YUVアップロード3.7GB/s、いずれも再計算一致)。ただし**下限(floor)として読む**:
