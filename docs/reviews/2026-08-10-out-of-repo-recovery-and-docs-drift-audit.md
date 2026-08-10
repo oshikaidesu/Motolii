@@ -35,6 +35,26 @@
 - `pv1-texture-lifecycle`: PV-1 pass(Metal)の結論があるのに決定文書からの参照ゼロ、docs/READMEのspike一覧にも不掲載。
 - `ime-acceptance`: 結論なしのまま対象toolkit(Slint)がegui転換で消滅。退役tombstoneが無い永久pending。
 
+## 5. 第二の滞留層 — ローカル専用ブランチ/worktree(2026-08-10追記)
+
+リモートブランチ走査だけでは足りなかった。`git worktree list`と`git for-each-ref refs/heads`で
+**originに存在しないローカル専用ブランチ**に成果が滞留していた。
+
+- **回収済み**: `codex/m3-collaborative-bringup-20260810`(同日のClaude Code協働セッション成果、
+  6コミット+2,437行: `timeline_skia_raster.rs` 314行、`stage_overlay_gpu/raster.rs`、
+  `MotoliiTimelineComponentView.mm`、Fabric spec、ledger/decision-index更新)を`2354a5e7`でmainへ
+  マージ。サブ4ブランチ(timeline-port/seat/stage/rn-panels)のパッチ等価包含と、origin
+  `n-overlay-composite`/`minimal`との内容同一を確認して重複2本を削除。`cargo check -p motolii-ui`
+  PASS(skia含む)。
+- **未裁定のローカル一意ブランチ約40本**(全てのdetached worktree HEADはmain到達済み):
+  - `p2d-rc*`系12本(07-29、supervised-runner研究loop) — runner体系は退役済み。tombstone候補
+  - `m3-p06-c1-mac`(+r2〜r6)/`m3-p06-c1-selection`/`m3-local-alpha`計8本(08-02、code 65ファイル、
+    ほぼ同一リトライ) — P06-C1-MACの結論はdecision-indexへ縮小採用済み。代表1本の保持判断のみ残る
+  - `m3-g0-9-h1a-product-react`(v1〜v3)/`m3-tonight-product-slice`(07-22) — RN再基線で経路ごと退役
+  - `vism-a1`系3本(07-17)、`m5-render-common-foundation`(07-29)、`m4-k1a-validation`(07-29)、
+    `uncommitted-docs-20260718`/`m3-pv1-preview-lifecycle`(07-18) — 結論の回収状況を個別確認してから
+    merge/tombstoneを二分する
+
 ## 次手(本監査からの発注候補)
 
 1. ~~skia-timeline-probeの`spikes/`への移管~~ → **完了(2026-08-10)**: `spikes/skia-timeline-probe/`。
