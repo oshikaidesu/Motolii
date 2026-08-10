@@ -110,7 +110,7 @@ pub(crate) fn save_project_with_journal_fs(
         WalSession::open_or_create(fs, document_path, project_id, salt, max_unpinned)?;
 
     if let Some(edit) = &options.journal_edit {
-        commit_edit(fs, &mut session, edit, &options.limits)?;
+        commit_edit(fs, document_path, &mut session, edit, &options.limits, doc)?;
         // editのみではfingerprintを進めない — main未更新のままtipが進むため、
         // open時に必ずcommitted Editをリプレイする。
         save_catalog_fs(fs, document_path, &session.catalog)?;
@@ -246,14 +246,18 @@ pub(crate) fn inject_salt_mismatch_frame(document_path: &Path) -> Result<(), Pro
 ///
 /// durable payload は通常の versioned `JournalEdit`/`Command` envelope のみ。
 /// テスト専用の故障用 variant はオンディスク形式へ載せない。
+/// migration の apply 検証を迂回し、replay 時の失敗を試験する。
 #[cfg(test)]
 pub(crate) fn inject_unapplicable_committed_edit(
     document_path: &Path,
     limits: &ResourceLimits,
 ) -> Result<(), ProjectError> {
-    use super::replay::JournalEdit;
-    use super::session::ProjectSession;
-    use crate::{Command, DocParam, Document, LayerId, ScalarPropertyId};
+    use super::catalog::{load_catalog_fs, save_catalog_fs};
+    use super::format::{encode_frame, JournalFrame, JournalRecordKind};
+    use super::fs::{DurabilityStage, JournalFs, StdFs};
+    use super::replay::{edit_payload, JournalEdit};
+    use super::wal::{WalError, WalSession};
+    use crate::{Command, DocParam, LayerId, ScalarPropertyId};
 
     let edit = JournalEdit::new(Command::SetProperty {
         target: LayerId::from_raw(u64::MAX),
@@ -261,17 +265,59 @@ pub(crate) fn inject_unapplicable_committed_edit(
         old_value: DocParam::const_f64(1.0),
         new_value: DocParam::const_f64(0.0),
     });
-    let mut session = ProjectSession::acquire(document_path, limits)?;
-    session
-        .save_with_journal(
-            &Document::new_current(),
-            &SaveProjectOptions {
-                limits: *limits,
-                journal_edit: Some(edit),
-                checkpoint: false,
-                ..Default::default()
-            },
-        )
-        .map_err(|e| *e)?;
+    let payload = edit_payload(&edit).map_err(|e| {
+        ProjectError::Persist(crate::PersistError::Io(std::io::Error::other(e.to_string())))
+    })?;
+    if payload.len() as u32 > limits.max_command_payload_bytes {
+        return Err(WalError::RecordPayloadLimit {
+            observed: payload.len() as u32,
+            limit: limits.max_command_payload_bytes,
+        }
+        .into());
+    }
+
+    let mut fs = StdFs;
+    let catalog = load_catalog_fs(&mut fs, document_path)?.ok_or_else(|| {
+        ProjectError::Persist(crate::PersistError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "journal catalog missing; save project first",
+        )))
+    })?;
+    let mut session = WalSession::open_or_create(
+        &mut fs,
+        document_path,
+        catalog.project_id,
+        catalog.generation_salt,
+        catalog.max_unpinned,
+    )?;
+    let record_id = Uuid::new_v4();
+    let edit_frame = JournalFrame {
+        record_id,
+        prev_id: session.last_record,
+        snapshot_ref: None,
+        record_salt: session.header.generation_salt,
+        kind: JournalRecordKind::Edit,
+        payload,
+    };
+    fs.append(&session.journal_path, &encode_frame(&edit_frame))?;
+    fs.note_stage(DurabilityStage::JournalAppend)?;
+    fs.sync_file(&session.journal_path)?;
+    fs.note_stage(DurabilityStage::JournalFsync)?;
+    let commit_id = Uuid::new_v4();
+    let commit_frame = JournalFrame {
+        record_id: commit_id,
+        prev_id: Some(record_id),
+        snapshot_ref: None,
+        record_salt: session.header.generation_salt,
+        kind: JournalRecordKind::Commit,
+        payload: Vec::new(),
+    };
+    fs.append(&session.journal_path, &encode_frame(&commit_frame))?;
+    fs.note_stage(DurabilityStage::JournalAppend)?;
+    fs.sync_file(&session.journal_path)?;
+    fs.note_stage(DurabilityStage::JournalFsync)?;
+    session.last_record = Some(commit_id);
+    session.catalog.edits_since_snapshot = session.catalog.edits_since_snapshot.saturating_add(1);
+    save_catalog_fs(&mut fs, document_path, &session.catalog)?;
     Ok(())
 }

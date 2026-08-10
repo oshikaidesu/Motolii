@@ -47,7 +47,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 pub use affine::{compose_local, compose_transform, resolve_transform, Affine2D};
-pub use asset::{Asset, AssetError, AssetId, AssetTable};
+pub use asset::{Asset, AssetError, AssetId, AssetTable, SourceFingerprintError, SourceFingerprintV1};
 pub use audio_edit::{build_import_clip_source, plan_detach_audio, ImportAvMode};
 pub use bpm::{Bpm, BpmError};
 pub use camera_eval::CameraEvalError;
@@ -244,6 +244,11 @@ impl Document {
             .effects
             .iter()
             .find(|u| u.id == use_id)
+    }
+
+    /// typed `AssetRef` carrier 全体での参照回数（M2-ASSET-1A）。
+    pub fn asset_use_count(&self, id: AssetId) -> usize {
+        validate::count_asset_refs(self, id)
     }
 }
 
@@ -623,6 +628,20 @@ impl DocumentWriter {
         new: [f64; 2],
     ) -> Result<Option<Command>, CommandError> {
         command::prepare_set_position_key_value(&self.doc, target, key, new)
+    }
+
+    pub fn prepare_admit_asset(
+        &self,
+        asset: Asset,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_admit_asset(&self.doc, asset)
+    }
+
+    pub fn prepare_remove_asset(
+        &self,
+        id: AssetId,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_remove_asset(&self.doc, id)
     }
 }
 

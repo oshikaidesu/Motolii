@@ -23,9 +23,10 @@ pub use catalog::{
 pub use format::{
     journal_path_for_document, legacy_shared_motolii_dir_for_document,
     legacy_staging_dir_for_document, motolii_dir_for_document, project_lock_path_for_document,
-    project_sidecar_dir_for_document, read_or_create_header, scan_journal, JournalFormatError,
-    JournalFrame, JournalHeader, JournalRecordKind, JournalScanOutcome, JournalScanStop,
-    ScanJournalOptions, HEADER_LEN,
+    project_sidecar_dir_for_document, read_header_v1_reader, read_or_create_header, scan_journal,
+    JournalFormatError, JournalFrame, JournalHeader, JournalRecordKind, JournalScanOutcome,
+    JournalScanStop, ScanJournalOptions, JOURNAL_FORMAT_VERSION, JOURNAL_FORMAT_VERSION_V2,
+    HEADER_LEN,
 };
 pub use fs::{
     DurabilityStage, FaultInjectingFs, FaultPlan, FsError, FsOp, FsOpKind, JournalFs, RecordingFs,
@@ -39,7 +40,7 @@ pub use recover::{
 };
 pub use replay::{
     document_fingerprint, edit_payload, replay_from_base, JournalEdit, ReplayFailure,
-    ReplayOutcome, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION,
+    ReplayOutcome, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION, V3_EDIT_FORMAT_VERSION,
 };
 pub use session::{LegacySidecarMigrationDisposition, LegacySidecarMigrationReport};
 pub use session::{ProjectSession, SessionError};

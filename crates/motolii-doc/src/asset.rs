@@ -8,6 +8,73 @@ use std::collections::BTreeMap;
 use serde::de::{self, Deserialize, Deserializer};
 use serde::{Deserialize as DeserializeDerive, Serialize};
 
+/// strict codec が認める source fingerprint（M2-ASSET-1A）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceFingerprintV1 {
+    /// `motolii-source-v1:sha256:<64 lowercase hex>`
+    pub content_hash: String,
+    pub size_bytes: u64,
+}
+
+/// V1 provenance tag 付き fingerprint の厳格パースエラー。
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum SourceFingerprintError {
+    #[error("missing content_hash")]
+    MissingContentHash,
+    #[error("missing size_bytes")]
+    MissingSizeBytes,
+    #[error("content_hash must use prefix `{expected}`")]
+    WrongPrefix { expected: &'static str },
+    #[error("sha256 digest must be exactly 64 lowercase hex digits")]
+    InvalidDigestShape,
+    #[error("digest contains uppercase hex")]
+    UppercaseDigest,
+    #[error("legacy untagged hash is not SourceFingerprintV1 authority")]
+    UntaggedLegacyHash,
+}
+
+impl SourceFingerprintV1 {
+    pub const PREFIX: &'static str = "motolii-source-v1:sha256:";
+
+    /// exact tag + 64桁小文字hex + size_bytes が揃った時だけ有効。
+    pub fn try_from_parts(
+        content_hash: &str,
+        size_bytes: Option<u64>,
+    ) -> Result<Self, SourceFingerprintError> {
+        let size_bytes = size_bytes.ok_or(SourceFingerprintError::MissingSizeBytes)?;
+        if content_hash.is_empty() {
+            return Err(SourceFingerprintError::MissingContentHash);
+        }
+        if !content_hash.starts_with(Self::PREFIX) {
+            if content_hash.starts_with("sha256:") {
+                return Err(SourceFingerprintError::UntaggedLegacyHash);
+            }
+            return Err(SourceFingerprintError::WrongPrefix {
+                expected: Self::PREFIX,
+            });
+        }
+        let digest = &content_hash[Self::PREFIX.len()..];
+        if digest.len() != 64 {
+            return Err(SourceFingerprintError::InvalidDigestShape);
+        }
+        if !digest.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) {
+            if digest.bytes().any(|b| b.is_ascii_uppercase()) {
+                return Err(SourceFingerprintError::UppercaseDigest);
+            }
+            return Err(SourceFingerprintError::InvalidDigestShape);
+        }
+        Ok(Self {
+            content_hash: content_hash.to_string(),
+            size_bytes,
+        })
+    }
+
+    /// 保存済み `Asset` から strict V1 を解釈する（legacy field は自動昇格しない）。
+    pub fn try_from_asset(asset: &Asset) -> Result<Self, SourceFingerprintError> {
+        Self::try_from_parts(&asset.content_hash, asset.size_bytes)
+    }
+}
+
 /// アセットの恒久ID。表示名は別フィールド。
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, DeserializeDerive,
@@ -162,6 +229,11 @@ impl AssetTable {
         self.entries.get(&id)
     }
 
+    /// 次に採番される生値(エントリは作らない)。Command構築前の予約確認用。
+    pub fn peek_next(&self) -> u64 {
+        self.next
+    }
+
     /// 全エントリを走査する(#101 ResourceLimits の string bytes 検査用)。
     pub fn iter(&self) -> impl Iterator<Item = &Asset> {
         self.entries.values()
@@ -206,6 +278,21 @@ impl AssetTable {
                 id: asset.id.0,
                 next: self.next,
             });
+        }
+        let floor = asset.id.0.checked_add(1).ok_or(AssetError::Exhausted)?;
+        asset.normalize_self();
+        self.entries.insert(asset.id, asset);
+        if floor > self.next {
+            self.next = floor;
+        }
+        Ok(())
+    }
+
+    /// Undo/Redo用: 退役済み(`id < next`)でも台帳へ戻す。採番カウンタは戻さない。
+    /// `insert`と違い再利用禁止の退役チェックをしない — accepted Commandのjournal replay専用。
+    pub fn restore(&mut self, mut asset: Asset) -> Result<(), AssetError> {
+        if self.entries.contains_key(&asset.id) {
+            return Err(AssetError::Duplicate { id: asset.id.0 });
         }
         let floor = asset.id.0.checked_add(1).ok_or(AssetError::Exhausted)?;
         asset.normalize_self();

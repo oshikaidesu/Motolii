@@ -13,7 +13,8 @@ use crate::journal::project::{
 };
 use crate::journal::replay::JournalEdit;
 use crate::{
-    Bpm, Command, DocParam, Document, LayerId, RecoverySource, ResourceLimits, ScalarPropertyId,
+    Bpm, Clip, ClipSource, Command, DocParam, Document, ItemEnvelope, LayerId, RecoverySource,
+    ResourceLimits, ScalarPropertyId, Track, TrackItem,
 };
 
 fn unique_dir(tag: &str) -> PathBuf {
@@ -41,6 +42,27 @@ fn set_opacity_cmd(layer: LayerId, old: f64, new: f64) -> JournalEdit {
         old_value: DocParam::const_f64(old),
         new_value: DocParam::const_f64(new),
     })
+}
+
+fn doc_with_clip() -> (Document, LayerId) {
+    use motolii_core::RationalTime;
+
+    let mut doc = Document::new_current();
+    let layer = doc.layers.allocate("a").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(5, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        })],
+    });
+    doc.validate().expect("fixture must validate");
+    (doc, layer)
 }
 
 #[test]
@@ -134,17 +156,14 @@ fn replay_failure_falls_back_to_snapshot() {
 fn fault_enospace_on_journal_append() {
     let dir = unique_dir("enospc");
     let path = dir.join("proj.json");
-    save_journal(
-        &path,
-        &Document::new_current(),
-        &SaveProjectOptions::default(),
-    );
+    let (doc, layer) = doc_with_clip();
+    save_journal(&path, &doc, &SaveProjectOptions::default());
 
     let err = checkpoint_with_fault_plan(
         &path,
-        &Document::new_current(),
+        &doc,
         &SaveProjectOptions {
-            journal_edit: Some(set_opacity_cmd(LayerId::from_raw(1), 1.0, 0.5)),
+            journal_edit: Some(set_opacity_cmd(layer, 1.0, 0.5)),
             checkpoint: false,
             ..Default::default()
         },

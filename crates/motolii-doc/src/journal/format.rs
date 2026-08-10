@@ -11,7 +11,11 @@ use uuid::Uuid;
 use super::fs::{FsError, JournalFs};
 
 pub const JOURNAL_MAGIC: &[u8; 8] = b"MOTOLIIJ";
+/// 旧readerが理解する container version（v2 header は replay 前に拒否）。
 pub const JOURNAL_FORMAT_VERSION: u32 = 1;
+/// 現行writerが新規migration後に書く container version。
+pub const JOURNAL_FORMAT_VERSION_V2: u32 = 2;
+const SUPPORTED_JOURNAL_FORMAT_VERSIONS: &[u32] = &[JOURNAL_FORMAT_VERSION, JOURNAL_FORMAT_VERSION_V2];
 pub const HEADER_LEN: usize = 48;
 /// checksum(4)+ids(16*3)+salt(8)+kind(1)+pad(3)+payload_len(4)
 pub const FRAME_PREFIX_LEN: usize = 4 + 16 + 16 + 16 + 8 + 1 + 3 + 4;
@@ -175,7 +179,25 @@ pub fn encode_header(header: &JournalHeader) -> [u8; HEADER_LEN] {
     out
 }
 
+pub fn encode_header_v2(header: &JournalHeader) -> [u8; HEADER_LEN] {
+    let mut out = encode_header(header);
+    out[8..12].copy_from_slice(&JOURNAL_FORMAT_VERSION_V2.to_le_bytes());
+    out
+}
+
 pub fn read_header(data: &[u8]) -> Result<JournalHeader, JournalFormatError> {
+    read_header_with_supported_versions(data, SUPPORTED_JOURNAL_FORMAT_VERSIONS)
+}
+
+/// v1 container reader gate: unsupported container version は scan/replay 前に hard refusal。
+pub fn read_header_v1_reader(data: &[u8]) -> Result<JournalHeader, JournalFormatError> {
+    read_header_with_supported_versions(data, &[JOURNAL_FORMAT_VERSION])
+}
+
+fn read_header_with_supported_versions(
+    data: &[u8],
+    supported: &[u32],
+) -> Result<JournalHeader, JournalFormatError> {
     if data.len() < HEADER_LEN {
         return Err(JournalFormatError::PartialFrame(0));
     }
@@ -183,7 +205,7 @@ pub fn read_header(data: &[u8]) -> Result<JournalHeader, JournalFormatError> {
         return Err(JournalFormatError::BadMagic);
     }
     let version = u32::from_le_bytes(data[8..12].try_into().expect("version"));
-    if version != JOURNAL_FORMAT_VERSION {
+    if !supported.contains(&version) {
         return Err(JournalFormatError::UnsupportedVersion(version));
     }
     let generation_salt = u64::from_le_bytes(data[12..20].try_into().expect("salt"));

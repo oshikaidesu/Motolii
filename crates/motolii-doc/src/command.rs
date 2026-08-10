@@ -14,6 +14,7 @@ use thiserror::Error;
 
 use motolii_core::{RationalTime, TimeMap};
 
+use crate::asset::{Asset, AssetError, AssetId};
 use crate::doc_keyframe::{validate_interp, DocKeyframeError};
 use crate::doc_value::DocValue;
 use crate::duplicate::{definition_semantic_body_eq, remint_order_keyframe_ids};
@@ -65,6 +66,8 @@ pub enum PropertyId {
     ClipStart,
     ClipIn,
     ClipOut,
+    /// M2-ASSET-1A: `AdmitAsset` / `RemoveAsset`(inverse)共用。
+    AssetLifecycle(AssetId),
 }
 
 impl From<ScalarPropertyId> for PropertyId {
@@ -132,6 +135,8 @@ pub enum CommandKind {
     SetClipStart,
     TrimClipIn,
     TrimClipOut,
+    AdmitAsset,
+    RemoveAsset,
 }
 
 /// S18: `gesture_id + command_kind + target_stable_id + property_id`。
@@ -258,6 +263,14 @@ pub enum CommandError {
     LayerIdAlloc(#[from] crate::LayerIdError),
     #[error(transparent)]
     StableIdAlloc(#[from] crate::stable_id::StableIdError),
+    #[error("stale asset admission: expected next id {expected}, found {found}")]
+    StaleAssetAdmission { expected: u64, found: u64 },
+    #[error("asset {id} is in use ({count} typed reference(s))")]
+    AssetInUse { id: u64, count: usize },
+    #[error("removed asset payload does not match ledger (id {id})")]
+    RemoveAssetMismatch { id: u64 },
+    #[error(transparent)]
+    Asset(#[from] AssetError),
 }
 
 /// atomic command(実装ガード5: 決定済みの値を記録)。
@@ -444,6 +457,10 @@ pub enum Command {
         old_duration: RationalTime,
         new_duration: RationalTime,
     },
+    /// M2-ASSET-1A: 新規admit。`peek_next`と一致する完全な`Asset`値だけを受ける。
+    AdmitAsset { asset: Asset },
+    /// M2-ASSET-1A: 参照0かつpayload一致時のみ台帳から除去。`AdmitAsset`のinverse。
+    RemoveAsset { asset: Asset },
 }
 
 impl Command {
@@ -483,6 +500,8 @@ impl Command {
             Command::SetClipStart { .. } => CommandKind::SetClipStart,
             Command::TrimClipIn { .. } => CommandKind::TrimClipIn,
             Command::TrimClipOut { .. } => CommandKind::TrimClipOut,
+            Command::AdmitAsset { .. } => CommandKind::AdmitAsset,
+            Command::RemoveAsset { .. } => CommandKind::RemoveAsset,
         }
     }
 
@@ -518,6 +537,7 @@ impl Command {
             Command::AddTrackItem { item, .. } | Command::RemoveTrackItem { item, .. } => {
                 envelope_of(item).layer_id.get()
             }
+            Command::AdmitAsset { asset } | Command::RemoveAsset { asset } => asset.id.get(),
         }
     }
 
@@ -556,6 +576,9 @@ impl Command {
             Command::SetClipStart { .. } => PropertyId::ClipStart,
             Command::TrimClipIn { .. } => PropertyId::ClipIn,
             Command::TrimClipOut { .. } => PropertyId::ClipOut,
+            Command::AdmitAsset { asset } | Command::RemoveAsset { asset } => {
+                PropertyId::AssetLifecycle(asset.id)
+            }
         }
     }
 
@@ -622,7 +645,9 @@ impl Command {
             | Command::SetPositionKeyValue { .. }
             | Command::SetClipStart { .. }
             | Command::TrimClipIn { .. }
-            | Command::TrimClipOut { .. } => None,
+            | Command::TrimClipOut { .. }
+            | Command::AdmitAsset { .. }
+            | Command::RemoveAsset { .. } => None,
         }
     }
 
@@ -1132,6 +1157,8 @@ impl Command {
                 clip.duration = *new_duration;
                 Ok(())
             }
+            Command::AdmitAsset { asset } => apply_admit_asset(doc, asset),
+            Command::RemoveAsset { asset } => apply_remove_asset(doc, asset),
         }
     }
 
@@ -1414,6 +1441,8 @@ impl Command {
                 old_duration: new_duration,
                 new_duration: old_duration,
             },
+            Command::AdmitAsset { asset } => Command::RemoveAsset { asset },
+            Command::RemoveAsset { asset } => Command::AdmitAsset { asset },
         }
     }
 }
@@ -2712,4 +2741,92 @@ fn validate_add_position_key_payload(
         return Err(mismatch());
     }
     Ok(t)
+}
+
+fn apply_admit_asset(doc: &mut Document, asset: &Asset) -> Result<(), CommandError> {
+    if doc.assets.get(asset.id).is_some() {
+        return Err(AssetError::Duplicate {
+            id: asset.id.get(),
+        }
+        .into());
+    }
+    let mut next = doc.clone();
+    if asset.id.get() < next.assets.peek_next() {
+        next.assets.restore(asset.clone())?;
+    } else if asset.id.get() == next.assets.peek_next() {
+        next.assets.insert(asset.clone())?;
+    } else {
+        return Err(CommandError::StaleAssetAdmission {
+            expected: doc.assets.peek_next(),
+            found: asset.id.get(),
+        });
+    }
+    swap_if_valid(doc, next)
+}
+
+fn apply_remove_asset(doc: &mut Document, asset: &Asset) -> Result<(), CommandError> {
+    let use_count = validate::count_asset_refs(doc, asset.id);
+    if use_count > 0 {
+        return Err(CommandError::AssetInUse {
+            id: asset.id.get(),
+            count: use_count,
+        });
+    }
+    let live = doc
+        .assets
+        .get(asset.id)
+        .ok_or(AssetError::NotFound {
+            id: asset.id.get(),
+        })?;
+    if live != asset {
+        return Err(CommandError::RemoveAssetMismatch {
+            id: asset.id.get(),
+        });
+    }
+    let mut next = doc.clone();
+    next.assets.remove(asset.id)?;
+    swap_if_valid(doc, next)
+}
+
+/// 新規admit command を構築する。live `peek_next` 不一致は Document 不変で拒否。
+pub fn prepare_admit_asset(
+    doc: &Document,
+    asset: Asset,
+) -> Result<Option<Command>, CommandError> {
+    if doc.assets.get(asset.id).is_some() {
+        return Err(AssetError::Duplicate {
+            id: asset.id.get(),
+        }
+        .into());
+    }
+    if asset.id.get() != doc.assets.peek_next() {
+        return Err(CommandError::StaleAssetAdmission {
+            expected: doc.assets.peek_next(),
+            found: asset.id.get(),
+        });
+    }
+    let mut trial = doc.clone();
+    trial.assets.insert(asset.clone())?;
+    trial.validate()?;
+    Ok(Some(Command::AdmitAsset { asset }))
+}
+
+/// unused Asset 除去 command を構築する。参照中・payload不一致は Document 不変で拒否。
+pub fn prepare_remove_asset(
+    doc: &Document,
+    id: AssetId,
+) -> Result<Option<Command>, CommandError> {
+    let asset = doc
+        .assets
+        .get(id)
+        .ok_or(AssetError::NotFound { id: id.get() })?
+        .clone();
+    let use_count = validate::count_asset_refs(doc, id);
+    if use_count > 0 {
+        return Err(CommandError::AssetInUse {
+            id: id.get(),
+            count: use_count,
+        });
+    }
+    Ok(Some(Command::RemoveAsset { asset }))
 }

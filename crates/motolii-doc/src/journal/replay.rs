@@ -15,8 +15,10 @@ use super::v1_edit::{apply_v1_journal_command, LegacyJournalCommand};
 
 /// v1 journal Edit の format_version(読取専用互換)。
 pub const V1_EDIT_FORMAT_VERSION: u32 = 1;
-/// 新規書込みの journal Edit format_version(D1l §3.1)。
+/// D1l 世代の journal Edit format_version(読取専用互換)。
 pub const V2_EDIT_FORMAT_VERSION: u32 = 2;
+/// M2-ASSET-1A cutover 後の新規 writer format_version。
+pub const V3_EDIT_FORMAT_VERSION: u32 = 3;
 
 /// Editレコードのオンディスクpayload(恒久面)。`Command`を版付きで包む。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -26,7 +28,7 @@ pub struct JournalEdit {
 }
 
 impl JournalEdit {
-    pub const FORMAT_VERSION: u32 = V2_EDIT_FORMAT_VERSION;
+    pub const FORMAT_VERSION: u32 = V3_EDIT_FORMAT_VERSION;
 
     pub fn new(command: Command) -> Self {
         Self {
@@ -44,6 +46,7 @@ impl From<Command> for JournalEdit {
 
 #[derive(Debug, Clone)]
 enum DecodedJournalEdit {
+    V3(Box<Command>),
     V2(Box<Command>),
     V1(LegacyJournalCommand),
 }
@@ -69,6 +72,8 @@ pub enum ReplayApplyError {
     Command(#[from] CommandError),
     #[error(transparent)]
     Document(#[from] DocumentError),
+    #[error("invalid edit payload: {0}")]
+    InvalidEditPayload(String),
     #[error("legacy journal adapter: {0}")]
     LegacyJournal(String),
 }
@@ -123,12 +128,20 @@ pub fn document_fingerprint(doc: &Document) -> u64 {
     h
 }
 
-fn apply_decoded_edit(
+pub(crate) fn apply_edit_payload(
+    doc: &mut Document,
+    payload: &[u8],
+) -> Result<(), ReplayApplyError> {
+    let decoded = decode_edit(payload).map_err(ReplayApplyError::InvalidEditPayload)?;
+    apply_decoded_edit(doc, &decoded)
+}
+
+pub(crate) fn apply_decoded_edit(
     doc: &mut Document,
     edit: &DecodedJournalEdit,
 ) -> Result<(), ReplayApplyError> {
     match edit {
-        DecodedJournalEdit::V2(command) => {
+        DecodedJournalEdit::V3(command) | DecodedJournalEdit::V2(command) => {
             command.apply(doc)?;
             doc.validate()?;
         }
@@ -140,7 +153,7 @@ fn apply_decoded_edit(
     Ok(())
 }
 
-fn decode_edit(payload: &[u8]) -> Result<DecodedJournalEdit, String> {
+pub(crate) fn decode_edit(payload: &[u8]) -> Result<DecodedJournalEdit, String> {
     let value: serde_json::Value =
         serde_json::from_slice(payload).map_err(|e| format!("invalid edit json: {e}"))?;
     let format_version = value
@@ -161,9 +174,14 @@ fn decode_edit(payload: &[u8]) -> Result<DecodedJournalEdit, String> {
                 .map_err(|e| format!("invalid v2 journal edit: {e}"))?;
             Ok(DecodedJournalEdit::V2(Box::new(edit.command)))
         }
+        v if v == u64::from(V3_EDIT_FORMAT_VERSION) => {
+            let edit: JournalEdit = serde_json::from_value(value)
+                .map_err(|e| format!("invalid v3 journal edit: {e}"))?;
+            Ok(DecodedJournalEdit::V3(Box::new(edit.command)))
+        }
         other => Err(format!(
-            "unsupported journal edit format_version {other} (expected {} or {})",
-            V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION
+            "unsupported journal edit format_version {other} (expected {}, {}, or {})",
+            V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION, V3_EDIT_FORMAT_VERSION
         )),
     }
 }
@@ -292,7 +310,7 @@ mod replay_tests {
     use crate::journal::{
         generation_path_for_document, load_catalog, open_project, replay_from_base,
         save_project_with_journal, JournalEdit, JournalRecordKind, JournalScanOutcome,
-        ReplayFailure, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION,
+        ReplayFailure, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION, V3_EDIT_FORMAT_VERSION,
     };
     use crate::{
         migrate_bytes, Clip, ClipSource, Command, DocParam, DocValue, Document, EffectUse,
@@ -491,7 +509,7 @@ mod replay_tests {
             assert!(fields.contains_key(field), "missing {field}");
         }
         let edit = JournalEdit::new(command.clone());
-        assert_eq!(edit.format_version, V2_EDIT_FORMAT_VERSION);
+        assert_eq!(edit.format_version, V3_EDIT_FORMAT_VERSION);
 
         let mut live = keyed.clone();
         command.apply(&mut live).unwrap();
@@ -543,7 +561,7 @@ mod replay_tests {
         }
         assert_eq!(
             JournalEdit::new(command.clone()).format_version,
-            V2_EDIT_FORMAT_VERSION
+            V3_EDIT_FORMAT_VERSION
         );
 
         let mut live = keyed.clone();

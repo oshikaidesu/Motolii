@@ -188,6 +188,194 @@ pub const MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS: u32 = 4;
 /// D1j: `composition.camera`を含む文書が宣言すべき最小`min_reader_version`。
 pub const MIN_READER_VERSION_FOR_COMP_CAMERA: u32 = 5;
 
+/// 文書内の全 `AssetRef` carrier を列挙する（validate と use count の共有入口）。
+pub(crate) fn for_each_asset_ref(doc: &Document, f: &mut impl FnMut(AssetId)) {
+    if let Some(st) = &doc.soundtrack {
+        f(st.asset);
+    }
+    for def in &doc.effect_definitions {
+        for param in def.params.values() {
+            for_each_asset_ref_in_param(param, f);
+        }
+    }
+    for_each_asset_ref_in_comp_camera(&doc.composition.camera, f);
+    for track in &doc.tracks {
+        for item in &track.items {
+            for_each_asset_ref_in_item(item, f);
+        }
+    }
+}
+
+pub(crate) fn count_asset_refs(doc: &Document, id: AssetId) -> usize {
+    let mut count = 0usize;
+    for_each_asset_ref(doc, &mut |candidate| {
+        if candidate == id {
+            count += 1;
+        }
+    });
+    count
+}
+
+fn for_each_asset_ref_in_comp_camera(camera: &CompCameraDoc, f: &mut impl FnMut(AssetId)) {
+    match camera {
+        CompCameraDoc::PlanarOrthographic {
+            center,
+            roll_radians,
+            height,
+        } => {
+            for_each_asset_ref_in_param(center, f);
+            for_each_asset_ref_in_param(roll_radians, f);
+            for_each_asset_ref_in_param(height, f);
+        }
+    }
+}
+
+fn for_each_asset_ref_in_item(item: &TrackItem, f: &mut impl FnMut(AssetId)) {
+    match item {
+        TrackItem::Clip(clip) => {
+            for_each_asset_ref_in_envelope(&clip.envelope, f);
+            for_each_asset_ref_in_clip_source(&clip.source, f);
+        }
+        TrackItem::Group(group) => {
+            for_each_asset_ref_in_envelope(&group.envelope, f);
+            for child in &group.children {
+                for_each_asset_ref_in_item(child, f);
+            }
+        }
+    }
+}
+
+fn for_each_asset_ref_in_envelope(env: &ItemEnvelope, f: &mut impl FnMut(AssetId)) {
+    for_each_asset_ref_in_param(&env.transform.position, f);
+    for_each_asset_ref_in_param(&env.transform.anchor, f);
+    for_each_asset_ref_in_param(&env.transform.scale, f);
+    for_each_asset_ref_in_param(&env.transform.rotation, f);
+    for_each_asset_ref_in_param(&env.opacity, f);
+}
+
+fn for_each_asset_ref_in_clip_source(source: &ClipSource, f: &mut impl FnMut(AssetId)) {
+    match source {
+        ClipSource::Asset { asset, audio, .. } => {
+            f(*asset);
+            for comp in audio {
+                for_each_asset_ref_in_param(&comp.gain, f);
+            }
+        }
+        ClipSource::Plugin { params, .. } => {
+            for param in params.values() {
+                for_each_asset_ref_in_param(param, f);
+            }
+        }
+        ClipSource::Vector { recipe } => {
+            for_each_asset_ref_in_vector_content(&recipe.content, f);
+            for op in &recipe.modifiers {
+                for_each_asset_ref_in_path_op(op, f);
+            }
+        }
+    }
+}
+
+fn for_each_asset_ref_in_vector_content(content: &VectorContent, f: &mut impl FnMut(AssetId)) {
+    match content {
+        VectorContent::StandardShape { shape } => match shape {
+            StandardShape::Rect { width, height } | StandardShape::Ellipse { width, height } => {
+                for_each_asset_ref_in_param(width, f);
+                for_each_asset_ref_in_param(height, f);
+            }
+        },
+        VectorContent::SvgAsset { asset } => f(*asset),
+        VectorContent::TextPath { font_asset, .. } => f(*font_asset),
+        VectorContent::Group { children } => {
+            for child in children {
+                for_each_asset_ref_in_vector_content(child, f);
+            }
+        }
+    }
+}
+
+fn for_each_asset_ref_in_path_op(op: &PathOp, f: &mut impl FnMut(AssetId)) {
+    match op {
+        PathOp::PuckerBloat { amount } => for_each_asset_ref_in_param(amount, f),
+        PathOp::ZigZag {
+            amount,
+            ridges,
+            point_type: _,
+        } => {
+            for_each_asset_ref_in_param(amount, f);
+            for_each_asset_ref_in_param(ridges, f);
+        }
+        PathOp::Offset {
+            distance,
+            line_join: _,
+            miter_limit: _,
+        } => for_each_asset_ref_in_param(distance, f),
+        PathOp::RoundCorners { radius } => for_each_asset_ref_in_param(radius, f),
+        PathOp::Trim {
+            start,
+            end,
+            offset,
+            mode: _,
+        } => {
+            for_each_asset_ref_in_param(start, f);
+            for_each_asset_ref_in_param(end, f);
+            for_each_asset_ref_in_param(offset, f);
+        }
+        PathOp::Twist { angle, center } => {
+            for_each_asset_ref_in_param(angle, f);
+            for_each_asset_ref_in_param(center, f);
+        }
+        PathOp::Wiggle { amp, freq, seed: _ } => {
+            for_each_asset_ref_in_param(amp, f);
+            for_each_asset_ref_in_param(freq, f);
+        }
+        PathOp::Repeater {
+            copies,
+            offset,
+            transform,
+            composite: _,
+            start_opacity,
+            end_opacity,
+        } => {
+            for_each_asset_ref_in_param(copies, f);
+            for_each_asset_ref_in_param(offset, f);
+            for_each_asset_ref_in_transform2d(transform, f);
+            for_each_asset_ref_in_param(start_opacity, f);
+            for_each_asset_ref_in_param(end_opacity, f);
+        }
+    }
+}
+
+fn for_each_asset_ref_in_transform2d(transform: &Transform2D, f: &mut impl FnMut(AssetId)) {
+    for_each_asset_ref_in_param(&transform.position, f);
+    for_each_asset_ref_in_param(&transform.anchor, f);
+    for_each_asset_ref_in_param(&transform.scale, f);
+    for_each_asset_ref_in_param(&transform.rotation, f);
+}
+
+fn for_each_asset_ref_in_param(param: &DocParam, f: &mut impl FnMut(AssetId)) {
+    match param {
+        DocParam::Const(value) | DocParam::Data { fallback: value, .. } => {
+            for_each_asset_ref_in_value(value, f);
+        }
+        DocParam::Keyframes(track) => {
+            for key in track.keys() {
+                for_each_asset_ref_in_value(&key.value, f);
+            }
+        }
+        DocParam::Vec2Axes { x, y } => {
+            for_each_asset_ref_in_param(x, f);
+            for_each_asset_ref_in_param(y, f);
+        }
+        DocParam::LookAt { .. } | DocParam::Follow { .. } => {}
+    }
+}
+
+fn for_each_asset_ref_in_value(value: &DocValue, f: &mut impl FnMut(AssetId)) {
+    if let DocValue::AssetRef(id) = value {
+        f(*id);
+    }
+}
+
 impl Document {
     /// 保存前不変条件。失敗しても`self`は変更しない(検証のみ)。
     pub fn validate(&self) -> Result<(), DocumentError> {

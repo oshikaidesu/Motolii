@@ -24,8 +24,9 @@ use super::catalog::{
     generation_path_for_document, save_catalog_fs, GenerationCatalog, RotateOptions,
 };
 use super::format::{
-    encode_frame, encode_header, journal_path_for_document, motolii_dir_for_document,
-    read_or_create_header, JournalFrame, JournalHeader, JournalRecordKind, HEADER_LEN,
+    encode_frame, encode_header, encode_header_v2, journal_path_for_document,
+    motolii_dir_for_document, read_or_create_header, scan_journal_bytes, JournalFrame,
+    JournalHeader, JournalRecordKind, JOURNAL_FORMAT_VERSION, JOURNAL_FORMAT_VERSION_V2, HEADER_LEN,
 };
 
 /// Checkpoint frame 走査後の実効 generation salt。
@@ -40,7 +41,9 @@ pub(crate) fn tip_generation_salt_from_frames(header_salt: u64, frames: &[Journa
 }
 use super::fs::{DurabilityStage, FsError, JournalFs};
 use super::replay::{
-    checkpoint_payload, document_fingerprint, edit_payload, snapshot_payload, JournalEdit,
+    apply_edit_payload, checkpoint_payload, document_fingerprint, edit_payload,
+    frames_through_last_commit, replay_from_base, snapshot_payload, JournalEdit,
+    V3_EDIT_FORMAT_VERSION,
 };
 
 #[derive(Debug, Error)]
@@ -150,13 +153,41 @@ fn check_payload_limits(
 /// Editを追記しCommit recordで閉じる。
 pub fn commit_edit(
     fs: &mut dyn JournalFs,
+    document_path: &Path,
     session: &mut WalSession,
     edit: &JournalEdit,
     limits: &ResourceLimits,
+    base_doc: &Document,
 ) -> Result<Uuid, WalError> {
     let payload = edit_payload(edit)?;
     check_payload_limits(&payload, &session.journal_path, fs, limits)?;
 
+    let (record_id, commit_id) = if session.header.version < JOURNAL_FORMAT_VERSION_V2
+        && edit.format_version >= V3_EDIT_FORMAT_VERSION
+    {
+        migrate_v1_container_and_append_edit(
+            fs,
+            document_path,
+            session,
+            &payload,
+            base_doc,
+            edit,
+            limits,
+        )?
+    } else {
+        append_edit_and_commit(fs, session, &payload)?
+    };
+
+    session.last_record = Some(commit_id);
+    session.catalog.edits_since_snapshot = session.catalog.edits_since_snapshot.saturating_add(1);
+    Ok(record_id)
+}
+
+fn append_edit_and_commit(
+    fs: &mut dyn JournalFs,
+    session: &mut WalSession,
+    payload: &[u8],
+) -> Result<(Uuid, Uuid), WalError> {
     let record_id = Uuid::new_v4();
     let edit_frame = JournalFrame {
         record_id,
@@ -164,7 +195,7 @@ pub fn commit_edit(
         snapshot_ref: None,
         record_salt: session.header.generation_salt,
         kind: JournalRecordKind::Edit,
-        payload,
+        payload: payload.to_vec(),
     };
     fs.append(&session.journal_path, &encode_frame(&edit_frame))?;
     fs.note_stage(DurabilityStage::JournalAppend)?;
@@ -184,10 +215,128 @@ pub fn commit_edit(
     fs.note_stage(DurabilityStage::JournalAppend)?;
     fs.sync_file(&session.journal_path)?;
     fs.note_stage(DurabilityStage::JournalFsync)?;
+    Ok((record_id, commit_id))
+}
 
-    session.last_record = Some(commit_id);
-    session.catalog.edits_since_snapshot = session.catalog.edits_since_snapshot.saturating_add(1);
-    Ok(record_id)
+fn replay_committed_document(
+    fs: &mut dyn JournalFs,
+    document_path: &Path,
+    base_doc: &Document,
+    scan: &super::format::JournalScanOutcome,
+    limits: &ResourceLimits,
+) -> Result<Document, WalError> {
+    let committed = frames_through_last_commit(&scan.frames);
+    let committed_scan = super::format::JournalScanOutcome {
+        header: scan.header.clone(),
+        frames: committed.to_vec(),
+        valid_bytes: scan.valid_bytes,
+        file_len: scan.file_len,
+        stopped: scan.stopped.clone(),
+    };
+    let outcome = replay_from_base(
+        base_doc.clone(),
+        &committed_scan,
+        &mut |generation_id| {
+            let path = generation_path_for_document(document_path, generation_id);
+            super::replay::load_generation_via_fs(fs, &path, limits).map_err(|_| {
+                super::replay::ReplayFailure::MissingSnapshot {
+                    generation_id,
+                }
+            })
+        },
+        false,
+    );
+    if !outcome.replay_failures.is_empty() {
+        return Err(WalError::Persist(PersistError::Io(std::io::Error::other(
+            "v1 container migration refused: wal replay failures",
+        ))));
+    }
+    Ok(outcome.document)
+}
+
+fn migrate_v1_container_and_append_edit(
+    fs: &mut dyn JournalFs,
+    document_path: &Path,
+    session: &mut WalSession,
+    payload: &[u8],
+    base_doc: &Document,
+    edit: &JournalEdit,
+    limits: &ResourceLimits,
+) -> Result<(Uuid, Uuid), WalError> {
+    let journal_path = &session.journal_path;
+    let old_bytes = fs.read(journal_path)?;
+    let old_scan = scan_journal_bytes(&old_bytes, &Default::default())?;
+    if old_scan.header.version != JOURNAL_FORMAT_VERSION {
+        return Err(WalError::Format(
+            super::format::JournalFormatError::UnsupportedVersion(old_scan.header.version),
+        ));
+    }
+    let prefix_end = old_scan.valid_bytes as usize;
+    if prefix_end < HEADER_LEN {
+        return Err(WalError::Format(
+            super::format::JournalFormatError::PartialFrame(0),
+        ));
+    }
+
+    let mut candidate =
+        replay_committed_document(fs, document_path, base_doc, &old_scan, limits)?;
+    apply_edit_payload(&mut candidate, payload).map_err(|source| {
+        WalError::Persist(PersistError::Io(std::io::Error::other(format!(
+            "v1 container migration refused: command apply failed: {source}"
+        ))))
+    })?;
+    candidate.validate().map_err(|e| WalError::Persist(PersistError::Validate(e)))?;
+
+    let record_id = Uuid::new_v4();
+    let edit_frame = JournalFrame {
+        record_id,
+        prev_id: session.last_record,
+        snapshot_ref: None,
+        record_salt: session.header.generation_salt,
+        kind: JournalRecordKind::Edit,
+        payload: payload.to_vec(),
+    };
+    let commit_id = Uuid::new_v4();
+    let commit_frame = JournalFrame {
+        record_id: commit_id,
+        prev_id: Some(record_id),
+        snapshot_ref: None,
+        record_salt: session.header.generation_salt,
+        kind: JournalRecordKind::Commit,
+        payload: Vec::new(),
+    };
+
+    let v2_header = JournalHeader {
+        version: JOURNAL_FORMAT_VERSION_V2,
+        generation_salt: old_scan.header.generation_salt,
+        project_id: session.header.project_id,
+    };
+    let mut new_bytes = Vec::new();
+    new_bytes.extend_from_slice(&encode_header_v2(&v2_header));
+    new_bytes.extend_from_slice(&old_bytes[HEADER_LEN..prefix_end]);
+    new_bytes.extend_from_slice(&encode_frame(&edit_frame));
+    new_bytes.extend_from_slice(&encode_frame(&commit_frame));
+
+    let new_scan = scan_journal_bytes(&new_bytes, &Default::default())?;
+    let new_replay =
+        replay_committed_document(fs, document_path, base_doc, &new_scan, limits)?;
+    if new_replay != candidate {
+        return Err(WalError::Persist(PersistError::Io(std::io::Error::other(
+            "v1 container migration refused: candidate document mismatch",
+        ))));
+    }
+
+    let tmp = journal_path.with_extension("wal.migrate.tmp");
+    fs.write_create(&tmp, &new_bytes)?;
+    fs.sync_file(&tmp)?;
+    fs.rename(&tmp, journal_path)?;
+    if let Some(parent) = journal_path.parent() {
+        fs.sync_dir(parent)?;
+    }
+    fs.note_stage(DurabilityStage::JournalFsync)?;
+
+    session.header.version = JOURNAL_FORMAT_VERSION_V2;
+    Ok((record_id, commit_id))
 }
 
 #[derive(Debug, Clone, Default)]
@@ -402,12 +551,21 @@ mod fs_order_tests {
         let project_id = Uuid::new_v4();
         let salt = 0x1111_2222_3333_4444;
         let mut session = WalSession::open_or_create(&mut fs, &path, project_id, salt, 5).unwrap();
+        let v2_header = JournalHeader {
+            version: JOURNAL_FORMAT_VERSION_V2,
+            generation_salt: session.header.generation_salt,
+            project_id: session.header.project_id,
+        };
+        write_fresh_header(&mut fs, &session.journal_path, &v2_header).unwrap();
+        session.header.version = JOURNAL_FORMAT_VERSION_V2;
 
         commit_edit(
             &mut fs,
+            &path,
             &mut session,
             &set_opacity_cmd(layer, 1.0, 0.5),
             &ResourceLimits::production(),
+            &doc,
         )
         .unwrap();
 
