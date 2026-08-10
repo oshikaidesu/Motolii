@@ -897,6 +897,86 @@ fn render_rerun_stage(
     context.begin_frame();
     stage.video.begin_frame();
 
+    let shape_commands = encode_rerun_stage_shapes(context, target, width, height)?;
+
+    let mut encoder = context
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Motolii embedded Rerun video overlay"),
+        });
+    let timescale = stage
+        .video
+        .data_descr()
+        .timescale
+        .unwrap_or(re_video::Timescale::NANOSECOND);
+    let requested_seconds = stage.video_started.elapsed().as_secs_f64() % stage.video_duration;
+    let video_frame = stage.video.frame_at(
+        context,
+        re_video::player::VideoPlayerStreamId(0),
+        re_video::Time::from_secs(requested_seconds, timescale),
+        &re_video::player::VideoSliceSource(CHROMA_VIDEO_BYTES),
+    );
+    if let Some(error) = video_frame.error {
+        return Err(format!("decode B002 chroma fixture: {error}"));
+    }
+    if let Some(texture) = video_frame.output.and_then(|frame| frame.texture) {
+        if stage.chroma_bind_group.is_none() {
+            stage.chroma_bind_group = Some(context.device.create_bind_group(
+                &wgpu::BindGroupDescriptor {
+                    label: Some("Motolii B002 chroma bind group"),
+                    layout: &stage.chroma_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(
+                                &texture.as_ref().default_view,
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&stage.chroma_sampler),
+                        },
+                    ],
+                },
+            ));
+        }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Motolii B002 chroma pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&stage.chroma_pipeline);
+        pass.set_bind_group(
+            0,
+            stage.chroma_bind_group.as_ref().expect("created above"),
+            &[],
+        );
+        pass.draw(0..3, 0..1);
+    }
+    context.before_submit();
+    context
+        .queue
+        .submit(shape_commands.into_iter().chain([encoder.finish()]));
+    Ok(())
+}
+
+fn encode_rerun_stage_shapes(
+    context: &mut re_renderer::RenderContext,
+    target: &wgpu::TextureView,
+    width: u32,
+    height: u32,
+) -> Result<[wgpu::CommandBuffer; 2], String> {
     let mut lines = LineDrawableBuilder::new(context);
     lines
         .batch("Motolii rectangle")
@@ -967,74 +1047,15 @@ fn render_rerun_stage(
         });
         view.composite(context, &mut pass);
     }
-    let timescale = stage
-        .video
-        .data_descr()
-        .timescale
-        .unwrap_or(re_video::Timescale::NANOSECOND);
-    let requested_seconds = stage.video_started.elapsed().as_secs_f64() % stage.video_duration;
-    let video_frame = stage.video.frame_at(
-        context,
-        re_video::player::VideoPlayerStreamId(0),
-        re_video::Time::from_secs(requested_seconds, timescale),
-        &re_video::player::VideoSliceSource(CHROMA_VIDEO_BYTES),
-    );
-    if let Some(error) = video_frame.error {
-        return Err(format!("decode B002 chroma fixture: {error}"));
-    }
-    if let Some(texture) = video_frame.output.and_then(|frame| frame.texture) {
-        if stage.chroma_bind_group.is_none() {
-            stage.chroma_bind_group = Some(context.device.create_bind_group(
-                &wgpu::BindGroupDescriptor {
-                    label: Some("Motolii B002 chroma bind group"),
-                    layout: &stage.chroma_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(
-                                &texture.as_ref().default_view,
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&stage.chroma_sampler),
-                        },
-                    ],
-                },
-            ));
-        }
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Motolii B002 chroma pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        pass.set_pipeline(&stage.chroma_pipeline);
-        pass.set_bind_group(
-            0,
-            stage.chroma_bind_group.as_ref().expect("created above"),
-            &[],
-        );
-        pass.draw(0..3, 0..1);
-    }
-    context.before_submit();
-    context.queue.submit([draw, encoder.finish()]);
-    Ok(())
+    Ok([draw, encoder.finish()])
 }
 
 #[cfg(test)]
 mod chroma_tests {
-    use super::CHROMA_VIDEO_BYTES;
+    use super::{CHROMA_VIDEO_BYTES, encode_rerun_stage_shapes};
+
+    const WIDTH: u32 = 320;
+    const HEIGHT: u32 = 192;
 
     #[test]
     fn b002_fixture_seek_selects_the_same_sample_twice() {
@@ -1053,6 +1074,127 @@ mod chroma_tests {
             .latest_sample_index_at_presentation_timestamp(seek)
             .unwrap();
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn rerun_stage_shapes_are_identical_across_two_output_targets() {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        }))
+        .expect("Rerun Stage parity probe requires a GPU adapter");
+        let adapter_limits = adapter.limits();
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("Motolii Rerun Stage parity probe"),
+            required_features: wgpu::Features::empty(),
+            required_limits: adapter_limits,
+            memory_hints: wgpu::MemoryHints::Performance,
+            trace: wgpu::Trace::Off,
+            experimental_features: wgpu::ExperimentalFeatures::disabled(),
+        }))
+        .expect("create parity probe device");
+        let mut context = re_renderer::RenderContext::new(
+            &adapter,
+            device.clone(),
+            queue.clone(),
+            wgpu::TextureFormat::Rgba8Unorm,
+            re_renderer::RenderConfig::best_for_device_caps,
+        )
+        .expect("create Rerun renderer");
+
+        let first = parity_target(&device, "Motolii Rerun Stage first output target");
+        let second = parity_target(&device, "Motolii Rerun Stage second output target");
+        for target in [&first, &second] {
+            context.begin_frame();
+            let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+            let commands = encode_rerun_stage_shapes(&mut context, &view, WIDTH, HEIGHT)
+                .expect("encode shared Rerun Stage evaluation");
+            context.before_submit();
+            context.queue.submit(commands);
+        }
+
+        let first_rgba = read_back(&device, &queue, &first);
+        let second_rgba = read_back(&device, &queue, &second);
+        assert_eq!(first_rgba, second_rgba);
+        assert!(
+            first_rgba
+                .chunks_exact(4)
+                .any(|pixel| pixel[0] > 40 || pixel[1] > 40 || pixel[2] > 40),
+            "the parity oracle must observe rendered shapes, not only the clear color"
+        );
+    }
+
+    fn parity_target(device: &wgpu::Device, label: &'static str) -> wgpu::Texture {
+        device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d {
+                width: WIDTH,
+                height: HEIGHT,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        })
+    }
+
+    fn read_back(device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) -> Vec<u8> {
+        let unpadded = WIDTH * 4;
+        let padded = unpadded.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
+            * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Motolii Rerun Stage parity readback"),
+            size: (padded * HEIGHT) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Motolii Rerun Stage parity copy"),
+        });
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(HEIGHT),
+                },
+            },
+            wgpu::Extent3d {
+                width: WIDTH,
+                height: HEIGHT,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit([encoder.finish()]);
+        let slice = buffer.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |result| {
+            result.expect("map parity readback")
+        });
+        device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .expect("wait for parity readback");
+        let mapped = slice.get_mapped_range();
+        let mut rgba = Vec::with_capacity((unpadded * HEIGHT) as usize);
+        for row in 0..HEIGHT {
+            let start = (row * padded) as usize;
+            rgba.extend_from_slice(&mapped[start..start + unpadded as usize]);
+        }
+        rgba
     }
 }
 
