@@ -318,6 +318,10 @@ impl DocumentEditRuntime {
         self.writer.snapshot()
     }
 
+    pub(crate) fn document_revision(&self) -> u64 {
+        self.writer.revision
+    }
+
     fn poison(&mut self) {
         self.health = RuntimeHealth::Poisoned;
     }

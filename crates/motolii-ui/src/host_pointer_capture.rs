@@ -93,7 +93,7 @@ impl HostPointerCaptureState {
         self.active.is_some()
     }
 
-    fn active_generation(&self) -> Option<u64> {
+    pub(crate) fn active_generation(&self) -> Option<u64> {
         self.active.as_ref().map(|active| active.generation)
     }
 
@@ -106,6 +106,44 @@ impl HostPointerCaptureState {
             arm_sequence,
         });
         true
+    }
+
+    pub(crate) fn move_for_generation(
+        &self,
+        generation: u64,
+        position: [f64; 2],
+    ) -> Option<HostPointerCandidate> {
+        (self.active_generation() == Some(generation)).then_some(HostPointerCandidate::Moved {
+            generation,
+            position,
+        })
+    }
+
+    pub(crate) fn release_for_generation(
+        &mut self,
+        generation: u64,
+        position: [f64; 2],
+    ) -> Option<HostPointerCandidate> {
+        if self.active_generation() != Some(generation) {
+            return None;
+        }
+        self.active = None;
+        Some(HostPointerCandidate::Released {
+            generation,
+            position,
+        })
+    }
+
+    pub(crate) fn cancel_for_generation(
+        &mut self,
+        generation: u64,
+        reason: HostPointerCancel,
+    ) -> Option<HostPointerCandidate> {
+        if self.active_generation() != Some(generation) {
+            return None;
+        }
+        self.active = None;
+        Some(HostPointerCandidate::Cancelled { generation, reason })
     }
 
     fn update(
