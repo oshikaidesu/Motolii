@@ -103,3 +103,32 @@ Skia描画に替えた。**参照が出来れば以後はCodexが引き継ぐ**�
 ただし今日の登録誤り3件はPRにしていても捕まらなかった（捕まえたのは実装なぞり）。
 [段差撤廃決定](2026-08-10-main-merge-friction-removal-decision.md)により
 **PRをマージ条件にはしない**。慣習化するならその一文を同時に書くこと。
+
+## 7. 追補 — RN Stage B001（2026-08-11）
+
+§4の未確認事項を実機で閉じ、同じRN window内で次を同時表示した。
+
+- 既存RN Browser／Inspector／shell
+- 固定commit `954bf95a`の`re_renderer`が描くRect／Circle
+- 既存rust-skia Stage overlay
+- 既存rust-skia Timeline（`NATIVE` mode）
+
+RerunはRN Stageが既に持つ`wgpu::Device / Queue`から`RenderContext`を作り、offscreen textureへ描く。
+Motoliiの既存compositeが同じtop-level surfaceへSkia overlayと合成するため、第二device／queue／surfaceは作らない。
+これは`spikes/motolii-rn-probe`の接続probeであり、製品Stage、Document投影、Rerun Viewer全体の採用完了ではない。
+
+### Build ID（用語凍結）
+
+このprobeの連番は **Build ID**、表記は`Bnnn`とする。他の呼称を作らない。
+Build IDは依存と描画構成を固定した実機確認単位で、同じ構成の再compileでは変えず、構成を変えた時に進める。
+画面にはBuild IDとRN／Rerun／Skiaの実値を併記する。
+
+**B001 = RN `0.81.2` / Rerun `954bf95a` / Skia `0.99.0`**。
+
+初回の白浮きは二つの境界を分けて解消した。Rerun出力textureは`Rgba8Unorm`のままrender targetとし、
+Motolii compositeでは許可した`Rgba8UnormSrgb` viewからsampleする。またXcodeは
+`native-renderer/target/release/libmotolii_native_renderer.a`をlinkするため、Rust変更後は
+`cargo build --release`を先に実行する。debugの`cargo check / test`だけでは古いarchiveが残り、実画面判定にならない。
+
+B001でrelease build、Xcode Debug build、Rust test、Jest、ESLint、`plutil`、実画面の暗色Stageを確認した。
+M5-PATH2D-S1は`DONE / PROBE ONLY`へ進む。製品runtime接続は未成立のまま維持する。

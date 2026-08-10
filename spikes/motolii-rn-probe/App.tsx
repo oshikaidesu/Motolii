@@ -17,6 +17,8 @@ type BrowserTab = 'MEDIA' | 'EFFECTS' | 'CREATE';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
 type TimelineMode = 'PACKING' | 'DENSITY' | 'NATIVE';
 
+const BUILD_LABEL = 'B001 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0';
+
 type EffectItem = {
   id: string;
   name: string;
@@ -485,6 +487,7 @@ function App() {
       <View style={styles.titlebar}>
         <Text style={styles.brand}>MOTOLII</Text>
         <Text style={styles.project}>night_drive.mtl / Main composition</Text>
+        <Text style={styles.buildLabel}>{BUILD_LABEL}</Text>
         <View style={styles.grow} />
         {['Settings', '↶ Undo', '↷ Redo', 'Export'].map(label => <Text key={label} style={styles.titleAction}>{label}</Text>)}
       </View>
@@ -531,6 +534,7 @@ const styles = StyleSheet.create({
   titlebar: {height: 34, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#36393d', backgroundColor: '#202224'},
   brand: {fontSize: 12, fontWeight: '800', letterSpacing: 1.4, color: '#f2f2f0'},
   project: {marginLeft: 14, fontSize: 11, color: '#d5d6d3'},
+  buildLabel: {marginLeft: 14, fontSize: 8, color: '#858a8d'},
   grow: {flex: 1},
   titleAction: {fontSize: 10, color: '#d8d8d5', paddingVertical: 6, paddingHorizontal: 10, marginLeft: 6, borderWidth: 1, borderColor: '#414448'},
   commandbar: {height: 32, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#36393d', backgroundColor: '#151719'},
@@ -590,15 +594,15 @@ const styles = StyleSheet.create({
   gpuStageOff: {position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center'},
   frameGrid: {position: 'absolute', inset: 0, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)'},
   outputLabel: {position: 'absolute', top: 8, left: 10, fontSize: 7, letterSpacing: 1, color: '#bfc3c5'},
-  titleBounds: {position: 'absolute', left: '7%', top: '16%', width: '38%', height: '45%', padding: 8, borderWidth: 1, borderColor: '#c3b88b'},
-  stageTitle: {fontSize: 30, lineHeight: 27, fontWeight: '800', letterSpacing: 5, color: '#f1f1ee'},
-  stageSubtitle: {marginTop: 8, fontSize: 7, letterSpacing: 1.2, color: '#c6c8c7'},
-  rings: {position: 'absolute', right: '10%', top: '14%', width: 210, height: 210, alignItems: 'center', justifyContent: 'center'},
+  titleBounds: {position: 'absolute', left: 10, top: 22, width: 126, height: 80, padding: 6, borderWidth: 1, borderColor: '#c3b88b'},
+  stageTitle: {fontSize: 16, lineHeight: 15, fontWeight: '800', letterSpacing: 3, color: '#f1f1ee'},
+  stageSubtitle: {marginTop: 6, fontSize: 5.5, letterSpacing: 0.8, color: '#c6c8c7'},
+  rings: {position: 'absolute', left: 144, top: 22, width: 80, height: 80, alignItems: 'center', justifyContent: 'center'},
   ring: {position: 'absolute', borderWidth: 1, borderColor: 'rgba(235,238,232,0.42)', borderRadius: 200},
-  ringLarge: {width: 200, height: 200},
-  ringMedium: {width: 140, height: 140},
-  ringSmall: {width: 84, height: 84},
-  ringCore: {width: 38, height: 38, borderRadius: 19, backgroundColor: '#ebebe7'},
+  ringLarge: {width: 76, height: 76},
+  ringMedium: {width: 52, height: 52},
+  ringSmall: {width: 30, height: 30},
+  ringCore: {width: 14, height: 14, borderRadius: 7, backgroundColor: '#ebebe7'},
   transport: {height: 31, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderTopWidth: 1, borderTopColor: '#3a3d41', backgroundColor: '#1b1d20'},
   transportButton: {width: 34, fontSize: 10, color: '#dbdcda'},
   timecode: {fontSize: 9, fontWeight: '600', color: '#e4e4e1'},

@@ -1,5 +1,7 @@
 use std::time::Instant;
 
+use re_renderer::view_builder::{OrthographicCameraMode, Projection, TargetConfiguration};
+use re_renderer::{Color32, LineDrawableBuilder, PointCloudBuilder, Size, ViewBuilder};
 use skia_safe::{AlphaType, Color, ColorType, ImageInfo, Paint, PaintStyle, Rect, surfaces};
 use wgpu::util::DeviceExt;
 
@@ -44,7 +46,7 @@ struct TimelineResources {
 struct StageResources {
     preview: wgpu::Texture,
     overlay: wgpu::Texture,
-    preview_pipeline: wgpu::RenderPipeline,
+    rerun: re_renderer::RenderContext,
     composite_pipeline: wgpu::RenderPipeline,
     composite_bind_group: wgpu::BindGroup,
     pixels: Vec<u8>,
@@ -207,7 +209,17 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         });
 
         let stage = (scene == SceneKind::Stage)
-            .then(|| create_stage_resources(&device, format, config.width, config.height));
+            .then(|| {
+                create_stage_resources(
+                    &adapter,
+                    &device,
+                    &queue,
+                    format,
+                    config.width,
+                    config.height,
+                )
+            })
+            .transpose()?;
         let timeline = (scene == SceneKind::Timeline)
             .then(|| create_timeline_resources(&device, format, config.width, config.height));
         Ok(Self {
@@ -239,12 +251,17 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
         if self.scene == SceneKind::Stage {
-            self.stage = Some(create_stage_resources(
-                &self.device,
-                self.config.format,
-                width,
-                height,
-            ));
+            self.stage = Some(
+                create_stage_resources(
+                    &self._adapter,
+                    &self.device,
+                    &self.queue,
+                    self.config.format,
+                    width,
+                    height,
+                )
+                .expect("Rerun Stage resources were valid at startup"),
+            );
         }
         if self.scene == SceneKind::Timeline {
             self.timeline = Some(create_timeline_resources(
@@ -389,27 +406,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 self.stats.overlay_last_us = overlay_started.elapsed().as_micros() as u64;
             }
             let preview_view = stage.preview.create_view(&Default::default());
-            {
-                let attachments = [Some(wgpu::RenderPassColorAttachment {
-                    view: &preview_view,
-                    resolve_target: None,
-                    depth_slice: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })];
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Motolii preview texture"),
-                    color_attachments: &attachments,
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-                pass.set_pipeline(&stage.preview_pipeline);
-                pass.draw(0..3, 0..1);
-            }
+            render_rerun_stage(
+                &mut stage.rerun,
+                &preview_view,
+                self.config.width,
+                self.config.height,
+            )?;
             {
                 let attachments = [Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -519,7 +521,6 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         self.stats.vertex_bytes = (vertices.len() * std::mem::size_of::<Vertex>()) as u64;
         Ok(())
     }
-
 }
 
 /// Skia rasterを1枚受け取って全画面へblitするだけの資源。
@@ -637,12 +638,14 @@ fn create_timeline_resources(
 }
 
 fn create_stage_resources(
+    adapter: &wgpu::Adapter,
     device: &wgpu::Device,
+    queue: &wgpu::Queue,
     surface_format: wgpu::TextureFormat,
     width: u32,
     height: u32,
-) -> StageResources {
-    let texture = |label, format, usage| {
+) -> Result<StageResources, String> {
+    let texture = |label, format, usage, view_formats: &[wgpu::TextureFormat]| {
         device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
@@ -655,57 +658,21 @@ fn create_stage_resources(
             dimension: wgpu::TextureDimension::D2,
             format,
             usage,
-            view_formats: &[],
+            view_formats,
         })
     };
     let preview = texture(
         "Motolii product preview texture",
         wgpu::TextureFormat::Rgba8Unorm,
         wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        &[wgpu::TextureFormat::Rgba8UnormSrgb],
     );
     let overlay = texture(
         "Motolii cached Skia overlay",
         wgpu::TextureFormat::Rgba8Unorm,
         wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+        &[],
     );
-    let fullscreen = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("Motolii preview shader"),
-        source: wgpu::ShaderSource::Wgsl(r#"
-            struct O { @builtin(position) p:vec4<f32>, @location(0) uv:vec2<f32> };
-            @vertex fn vs(@builtin(vertex_index) i:u32)->O { var p=array<vec2<f32>,3>(vec2(-1.,-3.),vec2(3.,1.),vec2(-1.,1.)); var o:O; o.p=vec4(p[i],0.,1.); o.uv=vec2((p[i].x+1.)*.5,(1.-p[i].y)*.5); return o; }
-            @fragment fn preview_fs(i:O)->@location(0) vec4<f32> { let q=i.uv*2.-1.; let glow=.11/max(length(q-vec2(.18,-.12)),.12); let checker=select(.025,.055,((u32(i.uv.x*24.)+u32(i.uv.y*14.))&1u)==1u); return vec4(.035+checker+glow*.22,.045+checker+glow*.10,.065+checker+glow*.28,1.); }
-        "#.into()),
-    });
-    let preview_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: None,
-        bind_group_layouts: &[],
-        immediate_size: 0,
-    });
-    let preview_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("Motolii preview pipeline"),
-        layout: Some(&preview_layout),
-        vertex: wgpu::VertexState {
-            module: &fullscreen,
-            entry_point: Some("vs"),
-            buffers: &[],
-            compilation_options: Default::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &fullscreen,
-            entry_point: Some("preview_fs"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        primitive: Default::default(),
-        depth_stencil: None,
-        multisample: Default::default(),
-        multiview_mask: None,
-        cache: None,
-    });
     let texture_entry = |binding| wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::FRAGMENT,
@@ -776,7 +743,10 @@ fn create_stage_resources(
             wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::TextureView(
-                    &preview.create_view(&Default::default()),
+                    &preview.create_view(&wgpu::TextureViewDescriptor {
+                        format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+                        ..Default::default()
+                    }),
                 ),
             },
             wgpu::BindGroupEntry {
@@ -791,10 +761,18 @@ fn create_stage_resources(
             },
         ],
     });
-    StageResources {
+    let rerun = re_renderer::RenderContext::new(
+        adapter,
+        device.clone(),
+        queue.clone(),
+        wgpu::TextureFormat::Rgba8Unorm,
+        re_renderer::RenderConfig::best_for_device_caps,
+    )
+    .map_err(|error| format!("create embedded Rerun renderer: {error}"))?;
+    Ok(StageResources {
         preview,
         overlay,
-        preview_pipeline,
+        rerun,
         composite_pipeline,
         composite_bind_group,
         pixels: vec![0; width as usize * height as usize * 4],
@@ -802,7 +780,90 @@ fn create_stage_resources(
         gizmo: [width as f32 * 0.34, height as f32 * 0.32],
         drag_offset: [0.0; 2],
         dragging: false,
+    })
+}
+
+fn render_rerun_stage(
+    context: &mut re_renderer::RenderContext,
+    target: &wgpu::TextureView,
+    width: u32,
+    height: u32,
+) -> Result<(), String> {
+    context.begin_frame();
+
+    let mut lines = LineDrawableBuilder::new(context);
+    lines
+        .batch("Motolii rectangle")
+        .add_rectangle_outline_2d(
+            [width as f32 * 0.20, height as f32 * 0.24].into(),
+            [width as f32 * 0.42, 0.0].into(),
+            [0.0, height as f32 * 0.46].into(),
+        )
+        .radius(Size::new_ui_points(4.0))
+        .color(Color32::from_rgb(82, 214, 255));
+    let lines = lines
+        .into_draw_data()
+        .map_err(|error| format!("build Rerun rectangle: {error}"))?;
+
+    let mut points = PointCloudBuilder::new(context);
+    points.batch("Motolii circle").add_points_2d(
+        &[([width as f32 * 0.58, height as f32 * 0.48, 0.0]).into()],
+        &[Size::new_scene_units(height as f32 * 0.16)],
+        &[Color32::from_rgba_premultiplied(255, 82, 139, 210)],
+        &[re_renderer::PickingLayerInstanceId::default()],
+    );
+    let points = points
+        .into_draw_data()
+        .map_err(|error| format!("build Rerun circle: {error}"))?;
+
+    let mut view = ViewBuilder::new(
+        context,
+        TargetConfiguration {
+            name: "Motolii RN embedded Rerun Stage".into(),
+            resolution_in_pixel: [width, height],
+            projection_from_view: Projection::Orthographic {
+                camera_mode: OrthographicCameraMode::TopLeftCornerAndExtendZ,
+                vertical_world_size: height as f32,
+                far_plane_distance: 1_000.0,
+            },
+            pixels_per_point: 1.0,
+            ..Default::default()
+        },
+        re_renderer::ViewBuilderId::new(0),
+    )
+    .map_err(|error| format!("build embedded Rerun view: {error}"))?;
+    view.queue_draw(context, lines).queue_draw(context, points);
+    let draw = view
+        .draw(context, re_renderer::Rgba::from_rgb(0.035, 0.041, 0.050))
+        .map_err(|error| format!("draw embedded Rerun view: {error}"))?;
+
+    let mut encoder = context
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Motolii embedded Rerun composite"),
+        });
+    {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Motolii embedded Rerun Stage pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        view.composite(context, &mut pass);
     }
+    context.before_submit();
+    context.queue.submit([draw, encoder.finish()]);
+    Ok(())
 }
 
 fn draw_stage_overlay(bytes: &mut [u8], width: u32, height: u32, gizmo: [f32; 2], dragging: bool) {
@@ -871,4 +932,3 @@ fn draw_stage_overlay(bytes: &mut [u8], width: u32, height: u32, gizmo: [f32; 2]
         &paint,
     );
 }
-
