@@ -1,0 +1,13 @@
+[package]
+name = "rerun-path2d-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+motolii-doc = { path = "../../crates/motolii-doc" }
+rerun = { git = "https://github.com/rerun-io/rerun", rev = "954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e", default-features = false, features = ["native_viewer", "run"] }
+thiserror = "2"
+
+[workspace]

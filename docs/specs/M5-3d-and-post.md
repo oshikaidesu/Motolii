@@ -9,6 +9,11 @@ Preview／Export authorityを維持し、Rerun store／Blueprint／selection／p
 Motoliiに残すのはsnapshot／identity／time projection、authoring操作、遮蔽・合成policy、faithful PBR／unlit、
 ResourceLedger接続であり、独自spatial renderer／camera／picking frameworkを新設しない。
 
+最初の可視成果は[Path2D custom visualizer決定](../reviews/2026-08-10-m5-path2d-rerun-custom-visualizer-probe-and-dispatch-route.md)に従う。
+RectとCircleを別rendererへ分けず、作者向けparameter recipeから既存`pathgeom::Path`へlowerし、同じ`z=0`で
+明示draw orderのpremultiplied source-overを行う。private Rerun proofは成立したが製品Stage接続ではないため、
+次はRN Stageの同一wgpu device／surface seatだけをcompileし、SVG editor、公開Path2D schema、複雑pathを同じ粒へ入れない。
+
 ## 実装前の既知実装調査
 
 現行の調査・検証入口は[M5 既知実装採択・検証地図](../m5-known-implementation-adoption-map.md)とする。

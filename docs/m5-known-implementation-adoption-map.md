@@ -74,8 +74,9 @@ M5の最初の通常製品成果を、次の4本へ分ける。
 
 ### 3.3 未決
 
-- Rerun Spatial Viewerを現在のM3 Stageへ接続する最初の一契約境界。exact crate集合、Rerun storeを
-  runtime projectionに使うかdirect projectionへ縮めるか、既存wgpu device／surface共有方法。
+- Rerun custom visualizerによるz=0 Rect／Circle／source-overのprivate proofは成立した。最初の製品契約は
+  `M5-PATH2D-S1`としてRN Stageの既存device／queue／surfaceへ載るexact seat、exact crate／feature閉包、
+  Rerun storeをruntime projectionに使うかdirect projectionへ縮めるかだけをcompileする。
 - spatial Observationの具体公開形、camera capability閉集合、provider pinningのschema。
 - faithful importの初期入力をGLBだけにするか、外部URIを持つ`.gltf`まで同時に許すか。
 - 具体scene-color GPU format、copy／alias method、hard budget。
@@ -199,6 +200,9 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 | M5-P0 | Blur/LGG/grain algorithm survey＋fixture | wgpu `REUSE`、既知shader `PATTERN` | filter graph／pipeline cache | RoI radius、Unknown全域、linear、Draft/Final | **DONE / KEEP（algorithm contract）**。[receipt](reviews/evidence/m5-known-implementation/M5-P0/README.md)。GPU pass／M4 ownerは未接続 |
 | M5-I0 | dense object picking比較 | `obvhs`／owned flat BVH／Rerun-style async GPU | Stage projection→Transient selection | 10k object moving camera、stale generation、readback stall 0、same semantic ID | **DONE / KEEP + REDUCE**。[receipt](reviews/evidence/m5-known-implementation/M5-I0/README.md)。CPU semantic一致とstale拒否まで。GPU readback／Stage接続は未完了 |
 | M5-D0 | stable instance evaluator | P0I/P7 decision、`rand_pcg`、owned stable mixer | input shape→slot key→InstanceId→channels | **DONE / KEEP（test-only meaning fixture）**。[receipt](reviews/evidence/m5-known-implementation/M5-D0/README.md)。count増減／reorder／nested／thread順／golden vectorを確認。schema／3 OSは未接続 |
+| M5-PATH2D-P0 | z=0 filled Path2Dのprivate proof | Rerun custom visualizer `ADOPT / WRAP`、現行`pathgeom::Path`を`REUSE` | recipe→Path→probe payload→Spatial2D draw | Rect／Circle、同一z=0、draw order source-over、payload往復 | **DONE / PROBE ONLY**。[決定と実画面](reviews/2026-08-10-m5-path2d-rerun-custom-visualizer-probe-and-dispatch-route.md)。RN Stage／Document／Preview／Export未接続 |
+| M5-PATH2D-S1 | RN Stage product seat compile | P0と固定Rerun公開extension API | existing RN Stage device／queue／surface | 同一surface表示、P0 overlap一致、第二device／surface 0、既存Stage画素不変 | **ISSUE**。exact call siteとcrate／feature閉包をreturnするまでcode発注しない |
+| M5-PATH2D-S2 | product Path2D projection | S1で採択したseat、既存Path／Velloを再選定 | evaluated Path→Rerun runtime projection | Document write 0、Preview／Export意味を発明しない、probe codec／fan退役 | **WAIT**。S1 return後にcurrent codeから再選定 |
 
 ## 8. 推奨順序
 
@@ -208,7 +212,8 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 3. **意味decision recovery**: `M5-A0S`で`416aa2c2`と`33e957df`を処分した。**DONE（docs-only）**。
 4. **意味decision**: 検証証拠からP1/P2境界、`M5-C0` Observation、scene-color format／resource gateを閉じる。ここが次のgate。
 5. **薄い接続**: Layer Orderを先に通常製品routeへ接続し、Group Depth、picking、Duplicatorを後続にする。
-6. **cutover**: test-only adapterや旧局所copyを、同一oracleが成立した子ごとに`FROZEN → RETIRE`する。
+6. **最初の可視edge**: `M5-PATH2D-P0`はprobeとしてDONE。次は`S1`のRN Stage seat compileだけをIssue化し、return後に`S2`を再選定する。
+7. **cutover**: test-only adapterや旧局所copyを、同一oracleが成立した子ごとに`FROZEN → RETIRE`する。
 
 3D import、renderer、camera、depth、Document schema、UIを一つの発注へ束ねない。
 

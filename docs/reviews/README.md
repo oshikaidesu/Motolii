@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-10-m5-path2d-rerun-custom-visualizer-probe-and-dispatch-route.md](2026-08-10-m5-path2d-rerun-custom-visualizer-probe-and-dispatch-route.md) | M5最初の可視成果をz=0 Path2DのRect／Circle／source-overとし、Rerun custom visualizer proof、probe限定事項、次のRN Stage seat compile発注capsuleを固定する決定 |
 | [2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md](2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md) | 固定Rerun実コードのView／camera／visualizer／wgpu／picking閉包を確認し、M5 spatial主部を機構別PATTERNからSpatial Viewer subsystemのADOPT／WRAPへ再締結する決定 |
 | [2026-08-10-m3-map-node-state-measurement.md](2026-08-10-m3-map-node-state-measurement.md) | M3実行地図の全54 nodeをcurrent codeへ照合し、状態語の乖離8件を特定して更新した実測。WIRED 5／BUILT_UNWIRED 19／PARTIAL 16／ABSENT 10／EXTERNAL 4 |
 | [2026-08-09-supervisor-handoff-pr-operation-first-wave.md](2026-08-09-supervisor-handoff-pr-operation-first-wave.md) | PR運用の初merge 2件とclose 1件、4 lane並列waveの実測コスト、「前提を疑えるか」を軸とした総監督席のClaude移管理由とCodexとの役割分離、未記録だった読み口分離線とGPU群抽出、intent 2種の欠落だけがR1を止めている実測を次のsupervisorとCodexへ渡す引継ぎ |
