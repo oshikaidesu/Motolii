@@ -42,7 +42,8 @@
     "jsSrcsDir": "src/specs",
     "ios": {
       "componentProvider": {
-        "MotoliiStageView": "MotoliiStageComponentView"
+        "MotoliiStageView": "MotoliiStageComponentView",
+        "MotoliiTimelineView": "MotoliiTimelineComponentView"
       }
     }
   },

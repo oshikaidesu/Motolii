@@ -395,6 +395,19 @@ struct RnTimelineSurface {
     destroyed: bool,
     #[cfg(target_os = "macos")]
     gpu: StageGpuBinding,
+    #[cfg(target_os = "macos")]
+    raster_key: Option<TimelineRasterKey>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TimelineRasterKey {
+    revision: u64,
+    projection_generation: u64,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+    width: u32,
+    height: u32,
 }
 
 #[cfg(target_os = "macos")]
@@ -1019,6 +1032,8 @@ impl RnProductHost {
                 destroyed: false,
                 #[cfg(target_os = "macos")]
                 gpu: StageGpuBinding::detached(),
+                #[cfg(target_os = "macos")]
+                raster_key: None,
             },
         );
         Ok(())
@@ -1409,6 +1424,7 @@ impl RnProductHost {
         timeline.gpu.physical_height = 0;
         timeline.gpu.last_presented_epoch = None;
         timeline.gpu.needs_reconfigure = true;
+        timeline.raster_key = None;
         Ok(timeline.gpu.surface_epoch)
     }
 
@@ -1438,6 +1454,9 @@ impl RnProductHost {
             .timelines
             .get_mut(&timeline_handle)
             .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+        if timeline.gpu.physical_width != width || timeline.gpu.physical_height != height {
+            timeline.raster_key = None;
+        }
         let surface = timeline
             .gpu
             .surface
@@ -1483,6 +1502,57 @@ impl RnProductHost {
     }
 
     #[cfg(target_os = "macos")]
+    fn refresh_timeline_raster(
+        &mut self,
+        timeline_handle: u64,
+        frame: &TimelineFrameBorrow,
+    ) -> Result<(), RnHostReasonCode> {
+        let (width, height, current_key) = {
+            let timeline = self
+                .timelines
+                .get(&timeline_handle)
+                .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+            (
+                timeline.gpu.physical_width,
+                timeline.gpu.physical_height,
+                timeline.raster_key,
+            )
+        };
+        let next_key = TimelineRasterKey {
+            revision: frame.revision,
+            projection_generation: frame.projection_generation,
+            primary: frame.primary,
+            playhead: frame.playhead,
+            width,
+            height,
+        };
+        if current_key == Some(next_key) {
+            return Ok(());
+        }
+        let raster = crate::timeline_skia_raster::raster_timeline(frame, width, height)
+            .ok_or(RnHostReasonCode::InvalidIntent)?;
+        let _stats = raster.stats;
+        let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
+        let timeline = self
+            .timelines
+            .get_mut(&timeline_handle)
+            .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+        upload_stage_overlay(
+            &gpu.ctx.device,
+            &gpu.ctx.queue,
+            &gpu.overlay_bind_group_layout,
+            &mut timeline.gpu.overlay,
+            StageOverlayRaster {
+                pixels: raster.pixels,
+                width: raster.width,
+                height: raster.height,
+            },
+        );
+        timeline.raster_key = Some(next_key);
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
     fn timeline_draw(&mut self, timeline_handle: u64) -> Result<(), RnHostReasonCode> {
         require_main_thread()?;
         let (width, height, attached, needs_reconfigure) = {
@@ -1511,18 +1581,20 @@ impl RnProductHost {
             self.configure_timeline_surface(timeline_handle, width, height)?;
         }
         let frame_borrow = self.timeline_frame_borrow()?;
+        self.refresh_timeline_raster(timeline_handle, &frame_borrow)?;
         let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
-        let surface = self
+        let timeline = self
             .timelines
             .get(&timeline_handle)
-            .ok_or(RnHostReasonCode::UnknownTimelineHandle)?
+            .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+        let surface = timeline
             .gpu
             .surface
             .as_ref()
             .ok_or(RnHostReasonCode::InvalidIntent)?;
         match surface.get_current_texture() {
             CurrentSurfaceTexture::Success(frame) => {
-                draw_timeline_seat(gpu, frame, &frame_borrow);
+                draw_timeline_seat(gpu, frame, timeline.gpu.overlay.as_ref());
                 self.timelines
                     .get_mut(&timeline_handle)
                     .ok_or(RnHostReasonCode::UnknownTimelineHandle)?
@@ -1531,7 +1603,7 @@ impl RnProductHost {
                 Ok(())
             }
             CurrentSurfaceTexture::Suboptimal(frame) => {
-                draw_timeline_seat(gpu, frame, &frame_borrow);
+                draw_timeline_seat(gpu, frame, timeline.gpu.overlay.as_ref());
                 self.timelines
                     .get_mut(&timeline_handle)
                     .ok_or(RnHostReasonCode::UnknownTimelineHandle)?
@@ -1682,17 +1754,8 @@ fn draw_stage_preview(
 fn draw_timeline_seat(
     gpu: &HostGpuBundle,
     frame: wgpu::SurfaceTexture,
-    frame_borrow: &TimelineFrameBorrow,
+    raster: Option<&StageOverlayGpu>,
 ) {
-    // Timeline renderer は次契約。ここでは同一revisionのprojection借用とsurface lifecycleだけを閉じる。
-    let _ = (
-        frame_borrow.revision,
-        frame_borrow.projection_generation,
-        &frame_borrow.document,
-        &frame_borrow.projection,
-        frame_borrow.primary,
-        frame_borrow.playhead,
-    );
     let view = frame
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
@@ -1703,7 +1766,7 @@ fn draw_timeline_seat(
             label: Some("motolii-rn-timeline-seat"),
         });
     {
-        let _pass = encoder.begin_render_pass(&RenderPassDescriptor {
+        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("motolii-rn-timeline-seat-pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
                 view: &view,
@@ -1724,6 +1787,11 @@ fn draw_timeline_seat(
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        if let Some(raster) = raster {
+            pass.set_pipeline(&gpu.overlay_pipeline);
+            pass.set_bind_group(0, &raster.bind_group, &[]);
+            pass.draw(0..3, 0..1);
+        }
     }
     gpu.ctx.queue.submit(Some(encoder.finish()));
     frame.present();
@@ -1909,6 +1977,7 @@ impl RnStageSurface {
 impl RnTimelineSurface {
     fn gpu_detach_surface(&mut self) {
         self.gpu.detach();
+        self.raster_key = None;
     }
 }
 
@@ -4619,6 +4688,7 @@ mod tests {
             host_handle: 1,
             destroyed: false,
             gpu: StageGpuBinding::detached(),
+            raster_key: None,
         };
         timeline.gpu.layer_ptr = 7;
         timeline.gpu.physical_width = 640;

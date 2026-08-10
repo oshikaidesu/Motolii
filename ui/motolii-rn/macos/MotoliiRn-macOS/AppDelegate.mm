@@ -2,6 +2,7 @@
 
 #import "MotoliiHostBridge.h"
 #import "MotoliiStageComponentView.h"
+#import "MotoliiTimelineComponentView.h"
 
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTBridgeModule.h>
@@ -132,6 +133,7 @@ RCT_REMAP_METHOD(dispatchIntent,
 {
   NSMutableDictionary *components = [[super thirdPartyFabricComponents] mutableCopy];
   components[@"MotoliiStageView"] = MotoliiStageComponentView.class;
+  components[@"MotoliiTimelineView"] = MotoliiTimelineComponentView.class;
   return components;
 }
 

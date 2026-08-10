@@ -6,6 +6,10 @@ jest.mock('../src/specs/MotoliiStageNativeComponent', () => ({
   __esModule: true,
   default: 'MotoliiStageView',
 }));
+jest.mock('../src/specs/MotoliiTimelineNativeComponent', () => ({
+  __esModule: true,
+  default: 'MotoliiTimelineView',
+}));
 
 import App from '../App';
 
@@ -50,6 +54,7 @@ describe('Motolii R0 product root', () => {
     expect(countOccurrences(serialized, '"inspector-slot"')).toBe(1);
     expect(countOccurrences(serialized, '"timeline-slot"')).toBe(1);
     expect(countOccurrences(serialized, 'MotoliiStageView')).toBe(1);
+    expect(countOccurrences(serialized, 'MotoliiTimelineView')).toBe(1);
     expect(countOccurrences(serialized, 'inspector-initial-read-panel')).toBe(
       1,
     );
@@ -74,6 +79,7 @@ describe('Motolii R0 product root', () => {
     expect(countOccurrences(serialized, '"inspector-slot"')).toBe(1);
     expect(countOccurrences(serialized, '"timeline-slot"')).toBe(1);
     expect(countOccurrences(serialized, 'MotoliiStageView')).toBe(0);
+    expect(countOccurrences(serialized, 'MotoliiTimelineView')).toBe(0);
     expect(countOccurrences(serialized, '"host-create-failure"')).toBe(1);
     expect(serialized).toContain('project path missing');
     expect(serialized).toContain('Host unavailable');
