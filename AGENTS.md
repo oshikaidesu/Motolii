@@ -85,5 +85,6 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 
 - 各粒へ`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を固定する。`cargo test`はRust laneであり、React、docs、製品E2E、実機、人間審判を代替しない
 - mainへのマージに事前gateを課さない([段差撤廃決定](docs/reviews/2026-08-10-main-merge-friction-removal-decision.md))。conflictなく成立するmergeは即実行してよい。`./scripts/validate.sh local`や`./scripts/check-docs.sh`は事後観測として実行し、redはmain上でfix-forwardする。成果は当日中にmainへ入れ、ブランチ・リポ外workdirに滞留する成果は完了と数えない
+- 作業終了時は`./scripts/check-stray-work.sh`で滞留5層(ローカル/リモートブランチ、worktree、リポ外workdir、docsのリポ外パス参照)を観測し、**自分の成果がSTRAYに残っていない状態で終える**。過去の滞留を調べる歴史調査を自分で再発明しない — このスクリプトの出力が正本
 - 一つのlaneが既知不具合でredでも全体をgreenと報告しない。実diff、製品route、validation／review、integration、blocker、未実行gateを分離して報告する
 - 完了時は実行commandと結果、commit、main統合有無、残存dirty差分、次の一粒と非目標を示す。「動くはず」「たぶん完了」を使わない
