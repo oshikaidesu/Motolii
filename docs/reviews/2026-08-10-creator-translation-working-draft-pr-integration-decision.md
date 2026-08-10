@@ -93,3 +93,7 @@ PR作成やreview approvalをマージgateにはしない。integration ownerは
 | 大きすぎるPR | file数でなく利用者成果と意味ownerで境界を判定する | ownerまたは利用者成果が増えた地点で別Issueへ返す |
 
 このrailは新しいscheduler、lock service、receipt database、merge queueを要求しない。GitHub Issue、branch、worktree、PR、mainと既存の事後観測だけを使う。
+
+## PR席候補の入口
+
+次にIssue化し得る利用者成果は[PR席候補一覧](../pr-seat-candidate-catalog.md)へ置く。この一覧は予約、queue、実装許可、第二implementation ledgerではない。候補はcurrent mainでclosed orderへ再compileし、`READY_TO_OPEN`になった一行だけを既存Closed contract Issueへ翻訳する。IssueまたはPRが開いた後の状態はGitHubとmainを正とし、同じshared seatへ次Issueを重ねない。
