@@ -87,8 +87,55 @@ impl ShapeRecipe {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FillContribution {
     pub path: Path,
-    pub color: [f32; 4],
+    pub paint: PlanarPaint,
     pub draw_order: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlanarPaint {
+    pub start: [f32; 2],
+    pub end: [f32; 2],
+    pub start_color: [f32; 4],
+    pub end_color: [f32; 4],
+}
+
+impl PlanarPaint {
+    pub fn solid(color: [f32; 4]) -> Self {
+        Self {
+            start: [0.0, 0.0],
+            end: [1.0, 0.0],
+            start_color: color,
+            end_color: color,
+        }
+    }
+
+    #[cfg(test)]
+    fn sample_premultiplied(self, position: [f32; 2], coverage: f32) -> [f32; 4] {
+        let direction = [self.end[0] - self.start[0], self.end[1] - self.start[1]];
+        let length_squared = direction[0] * direction[0] + direction[1] * direction[1];
+        let t = if length_squared > f32::EPSILON {
+            (((position[0] - self.start[0]) * direction[0]
+                + (position[1] - self.start[1]) * direction[1])
+                / length_squared)
+                .clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let premultiply = |color: [f32; 4]| {
+            [
+                color[0] * color[3],
+                color[1] * color[3],
+                color[2] * color[3],
+                color[3],
+            ]
+        };
+        let start = premultiply(self.start_color);
+        let end = premultiply(self.end_color);
+        let coverage = coverage.clamp(0.0, 1.0);
+        std::array::from_fn(|channel| {
+            (start[channel] + (end[channel] - start[channel]) * t) * coverage
+        })
+    }
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -110,12 +157,22 @@ impl FillContribution {
             return Err(ContributionError::UnsupportedContour);
         }
 
-        let mut bytes = Vec::with_capacity(28 + contour.vertices.len() * 48);
+        let mut bytes = Vec::with_capacity(64 + contour.vertices.len() * 48);
         bytes.extend_from_slice(b"M2DP");
-        bytes.extend_from_slice(&1_u32.to_le_bytes());
+        bytes.extend_from_slice(&2_u32.to_le_bytes());
         bytes.extend_from_slice(&self.draw_order.to_le_bytes());
-        for channel in self.color {
-            bytes.extend_from_slice(&channel.to_le_bytes());
+        for value in [
+            self.paint.start[0],
+            self.paint.start[1],
+            self.paint.end[0],
+            self.paint.end[1],
+        ] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        for color in [self.paint.start_color, self.paint.end_color] {
+            for channel in color {
+                bytes.extend_from_slice(&channel.to_le_bytes());
+            }
         }
         bytes.extend_from_slice(&(contour.vertices.len() as u32).to_le_bytes());
         for vertex in &contour.vertices {
@@ -135,11 +192,16 @@ impl FillContribution {
 
     pub fn decode(bytes: &[u8]) -> Result<Self, ContributionError> {
         let mut reader = Reader::new(bytes);
-        if reader.take(4)? != b"M2DP" || reader.u32()? != 1 {
+        if reader.take(4)? != b"M2DP" || reader.u32()? != 2 {
             return Err(ContributionError::UnsupportedVersion);
         }
         let draw_order = reader.f32()?;
-        let color = [reader.f32()?, reader.f32()?, reader.f32()?, reader.f32()?];
+        let paint = PlanarPaint {
+            start: [reader.f32()?, reader.f32()?],
+            end: [reader.f32()?, reader.f32()?],
+            start_color: [reader.f32()?, reader.f32()?, reader.f32()?, reader.f32()?],
+            end_color: [reader.f32()?, reader.f32()?, reader.f32()?, reader.f32()?],
+        };
         let count = reader.u32()? as usize;
         if count < 3 {
             return Err(ContributionError::UnsupportedContour);
@@ -171,7 +233,7 @@ impl FillContribution {
                     closed: true,
                 }],
             },
-            color,
+            paint,
             draw_order,
         })
     }
@@ -306,7 +368,7 @@ mod tests {
         ] {
             let contribution = FillContribution {
                 path: recipe.lower(),
-                color: [0.2, 0.4, 0.8, 0.6],
+                paint: PlanarPaint::solid([0.2, 0.4, 0.8, 0.6]),
                 draw_order: 3.0,
             };
             let decoded = FillContribution::decode(&contribution.encode().unwrap()).unwrap();
@@ -350,5 +412,21 @@ mod tests {
         let points = sample_outline(&path).unwrap();
         assert_eq!(points.first(), points.last());
         assert!(points.len() > path.contours[0].vertices.len());
+    }
+
+    #[test]
+    fn planar_gradient_is_clipped_by_path_coverage() {
+        let paint = PlanarPaint {
+            start: [-1.0, 0.0],
+            end: [1.0, 0.0],
+            start_color: [1.0, 0.0, 0.0, 1.0],
+            end_color: [0.0, 0.0, 1.0, 1.0],
+        };
+
+        assert_eq!(paint.sample_premultiplied([0.0, 0.0], 0.0), [0.0; 4]);
+        assert_eq!(
+            paint.sample_premultiplied([0.0, 0.0], 1.0),
+            [0.5, 0.0, 0.5, 1.0]
+        );
     }
 }

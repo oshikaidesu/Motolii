@@ -14,6 +14,11 @@ RectとCircleを別rendererへ分けず、作者向けparameter recipeから既�
 明示draw orderのpremultiplied source-overを行う。private Rerun proofは成立したが製品Stage接続ではないため、
 次はRN Stageの同一wgpu device／surface seatだけをcompileし、SVG editor、公開Path2D schema、複雑pathを同じ粒へ入れない。
 
+最初の2D filter／mask proofは[平面gradient／Path clip mask決定](../reviews/2026-08-10-m5-planar-gradient-path-clip-mask-rerun-proof.md)に従う。
+gradient contentとPath coverageを既存fill fragment passで融合し、一回だけ使うvector maskのために別mask textureを作らない。
+mask再利用、image／video／luma source、feather／blur／invert、nested maskが実在した時だけderived GPU maskを再選定する。
+halftoneは同じcoverageを使える候補だが、座標空間とpixel-frequency oracleを閉じる前に実装しない。
+
 ## 実装前の既知実装調査
 
 現行の調査・検証入口は[M5 既知実装採択・検証地図](../m5-known-implementation-adoption-map.md)とする。

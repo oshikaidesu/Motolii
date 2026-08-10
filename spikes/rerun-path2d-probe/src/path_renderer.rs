@@ -14,11 +14,13 @@ mod gpu_data {
     #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
     pub struct UniformBuffer {
         pub world_from_obj: wgpu_buffer_types::Mat4,
-        pub color: [f32; 4],
+        pub gradient_line: [f32; 4],
+        pub start_color: [f32; 4],
+        pub end_color: [f32; 4],
         pub picking_object_id: re_renderer::PickingLayerObjectId,
         pub picking_instance_id: re_renderer::PickingLayerInstanceId,
         pub outline_mask: wgpu_buffer_types::UVec2RowPadded,
-        pub _padding: [wgpu_buffer_types::PaddingRow; 16 - 7],
+        pub _padding: [wgpu_buffer_types::PaddingRow; 16 - 9],
     }
 }
 
@@ -32,7 +34,7 @@ pub struct Path2DRenderer {
 pub struct PathConfig<'a> {
     pub world_from_obj: glam::Affine3A,
     pub mesh: &'a TriangleMesh,
-    pub color: [f32; 4],
+    pub paint: crate::path2d::PlanarPaint,
     pub draw_order: f32,
     pub picking_object_id: re_renderer::PickingLayerObjectId,
     pub outline_mask: re_renderer::OutlineMaskPreference,
@@ -91,15 +93,24 @@ impl Path2DDrawData {
             return;
         }
         let renderer = ctx.renderer::<Path2DRenderer>();
-        let premultiplied = [
-            config.color[0] * config.color[3],
-            config.color[1] * config.color[3],
-            config.color[2] * config.color[3],
-            config.color[3],
-        ];
+        let premultiply = |color: [f32; 4]| {
+            [
+                color[0] * color[3],
+                color[1] * color[3],
+                color[2] * color[3],
+                color[3],
+            ]
+        };
         let uniform = gpu_data::UniformBuffer {
             world_from_obj: config.world_from_obj.into(),
-            color: premultiplied,
+            gradient_line: [
+                config.paint.start[0],
+                config.paint.start[1],
+                config.paint.end[0],
+                config.paint.end[1],
+            ],
+            start_color: premultiply(config.paint.start_color),
+            end_color: premultiply(config.paint.end_color),
             picking_object_id: config.picking_object_id,
             picking_instance_id: re_renderer::PickingLayerInstanceId(0),
             outline_mask: config.outline_mask.0.unwrap_or_default().into(),

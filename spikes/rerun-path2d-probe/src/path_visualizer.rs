@@ -80,7 +80,7 @@ impl VisualizerSystem for Path2DVisualizer {
                     PathConfig {
                         world_from_obj: transform,
                         mesh: &mesh,
-                        color: contribution.color,
+                        paint: contribution.paint,
                         draw_order: contribution.draw_order,
                         picking_object_id,
                         outline_mask,

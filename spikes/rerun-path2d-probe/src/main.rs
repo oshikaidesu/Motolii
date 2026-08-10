@@ -12,7 +12,7 @@ mod path_visualizer;
 
 use path_archetype::Path2DFill;
 use path_visualizer::Path2DVisualizer;
-use path2d::{FillContribution, ShapeRecipe, sample_outline};
+use path2d::{FillContribution, PlanarPaint, ShapeRecipe, sample_outline};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -54,7 +54,7 @@ fn builtin_recording() -> Result<re_log_channel::LogReceiver, rerun::RecordingSt
             size: Point { x: 1.2, y: 0.8 },
         }
         .lower(),
-        color: [1.0, 0.2, 0.4, 0.80],
+        paint: PlanarPaint::solid([1.0, 0.2, 0.4, 0.80]),
         draw_order: 0.0,
     };
     let circle = FillContribution {
@@ -63,7 +63,12 @@ fn builtin_recording() -> Result<re_log_channel::LogReceiver, rerun::RecordingSt
             radius: 0.48,
         }
         .lower(),
-        color: [0.1, 0.6, 1.0, 0.65],
+        paint: PlanarPaint {
+            start: [-0.25, -0.18],
+            end: [0.72, 0.78],
+            start_color: [0.08, 0.32, 1.0, 0.82],
+            end_color: [1.0, 0.25, 0.52, 0.82],
+        },
         draw_order: 1.0,
     };
 
