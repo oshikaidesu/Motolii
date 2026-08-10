@@ -38,9 +38,9 @@ BUILD: FORBIDDEN
 
 `COMPILE`は実装発注状態ではない。候補をIssueへ上げる直前に、`MECHANISM CLASS / KNOWN IMPLEMENTATION SEARCH / CANDIDATES / ADOPTION ROUTE / REJECTED CANDIDATES / THIN MOTOLII SEAM / THIN MOTOLII RESIDUAL / RETIREMENT / BUILD JUSTIFICATION / BUILD: FORBIDDEN`を閉じる。
 
-## Rectangleの既存製品spine
+## Rectangleの正準意味と分散したprojection
 
-Rectangleの意味ownerを新設しない。通常製品routeの本体は既に次の一本へ閉じている。
+Rectangleの正準な永続意味とUndo ownerを新設しない。ただし「一型、一moduleへ製品意味が集約済み」とも扱わない。現状は次の背骨とsurface別projectionへ分かれている。
 
 ```text
 RN Browser place_rectangle
@@ -56,11 +56,21 @@ RN Browser place_rectangle
        StandardShape::Rect(width, height)
        transform.position
   -> accepted revision / projection_generation
-  -> Stage / Timeline / Inspector read projection
+  -> surface別のStage / Timeline / Inspector read projection
   -> Undoで三面から消える / Redoで同じ意味が戻る
 ```
 
-Timelineは既存`timeline_projection.rs`がDocumentのClipを`LayerId / start / end / band`へ投影する。RN InspectorはHost snapshotの`primary_layer_id`とStage boundsを同じrevisionで読む。Stageも同じDocument／LayerIdから描画入力を導出するのが既決の`R1-STAGE`である。Rerunのentity pathやcustom visualizerはStageへの派生address／描画機構であり、Rectangle、identity、時間、Undoのownerではない。
+| 意味／翻訳 | 現在のowner | current code fact |
+|---|---|---|
+| identity、Clip時間、Rect width／height、position、永続化 | `motolii-doc::Document` | `LayerId`付き`ClipSource::Vector / VectorRecipe / StandardShape::Rect` |
+| 作成、revision、selection reconcile、Undo/Redo | `DocumentEditRuntime` | D2 `Command::AddTrackItem`と`PublishedDocument { snapshot, primary, projection_generation }` |
+| Preview／Export評価 | `motolii-doc::graph`から既存render graph | Vector Rectを評価して不透明白`OverlayRect`へlower済み |
+| Timeline時間表示 | `motolii-ui::timeline_projection` | Document Clipを`TimelineBar { layer, start, end, band }`へ投影済み。shape値は持たない |
+| RN Inspector／selection carrier | `RnProductHost::snapshot_wire` | revision、time、primary、`layer_id / display_name`まで。Rect width／height／positionはwireへ未投影 |
+| Stage編集幾何／hit-test | `motolii-ui::stage_geometry_projection` | `ClipSource::Vector`は現在`StageGeometryUnavailable::VectorSource`。旧plugin Rectだけが幾何化される |
+| Rerun Stage表示 | Rerun Spatial Viewer + Motolii Host seam | custom Path2D表示はprobe済み。Document snapshot／time／LayerIdからRerun入力への製品projectionは未接続 |
+
+管理上の合流点は新しい永続Shape schemaやRerun storeではなく、既存`PublishedDocument`相当のaccepted snapshot／primary／revision／projection generationである。そこから各surfaceが必要なbounded read modelだけを導出し、同じDocument clone、selection store、historyをsurface別に持たない。surface出力自体は既決どおりStage／Timeline／Inspectorへ分け、巨大な共通UI objectや三面同時pixel barrierへ再統合しない。
 
 Draft PR #470のB003はこのspineをまだ読まない。Reactのbooleanからnative renderer内の固定5点pathへ直結した表示probeで、`LayerId`、Clip時間、Rect parameter、accepted revision、Undo/Redoを持たない。したがってB003の着地をM3 Rectangle本体の成立や、下記R1 consumerのdependency解除として数えない。
 
@@ -70,7 +80,7 @@ Draft PR #470のB003はこのspineをまだ読まない。Reactのbooleanからn
 |---|---|---|---|---|---|
 | `RN-B003-RECTANGLE` | 既存probe BrowserのCreateから矩形を選び、既存probe Stageへpath rectangleを表示する | `IN_PR / SCOPE DELTA` [Issue #469](https://github.com/oshikaidesu/Motolii/issues/469) / [Draft PR #470](https://github.com/oshikaidesu/Motolii/pull/470)。新Issueを作らない。IssueのB002合成維持と利用者指示による判別用単独表示の差を着地前にIssue／PRへ同期する | probe内RN App state。`App.tsx`、Fabric component、C ABI、`RendererCore`。M3のsemantic ownerではない | 既存RN probe shellとRerun `LineDrawableBuilder`を`REUSE`。Motolii残余はCreate操作、bool translation、判別用fixture | 実アプリでpath単独表示、targeted Jest、Rust test、Xcode build。固定5点pathで、`LayerId`／Clip時間／Rect parameter／accepted revision／Undo/Redoは0。M3 VS-1へ繰り上げない |
 | `M3-R1-HOST-RECTANGLE` | BrowserのRectangleを一度だけD2へ置き、同じ`LayerId`／revisionをpublishし、Undo/Redoする | `LANDED`。`R1-BROWSER`=`5b6e6c56`、`R1-HOST-EDIT`=`37d88be0`。再発注しない | `rn_product_host`、`DocumentEditRuntime`、D2 single writer、Documentの`VectorRecipe / StandardShape::Rect` | 既存`PlaceRectangleRequest`、`Command::AddTrackItem`、published snapshotを`REUSE`。Rerun entityやRN stateへ意味を移さない | `r1_rn_product_edit_intents`、`cu110_product_place_commit`、`cu111_product_undo_redo`。本体は成立済みだがRN三面の製品表示完走は未成立 |
-| `M3-R1-STAGE-RECTANGLE` | accepted DocumentのRectangleを、同じ`LayerId`／revisionでRN Stageへ表示する | `WAIT(R1-GPU-BINDING)`。[RN runtime実行地図](m3-rn-runtime-execution-map.md#4-wave-r1--vs-1再閉鎖)の既存`R1-STAGE`だけをcurrent mainから再compileする | `ProductStageProjection` oracle、R0 native Stage、単一Host GPU binding。Document writer 0 | DocumentのVector recipeを既存Stage／Rerun描画入力へlowerする薄いconsumer。固定bool、第二scene owner、第二deviceを作らない | `cu110ps`系、same LayerId/revision、stale frame reject、resize、第二device 0。#470の固定path表示を代用しない |
+| `M3-R1-STAGE-RECTANGLE` | accepted DocumentのRectangleを、同じ`LayerId`／revisionでRN Stageへ表示する | `WAIT(R1-GPU-BINDING)`。[RN runtime実行地図](m3-rn-runtime-execution-map.md#4-wave-r1--vs-1再閉鎖)の既存`R1-STAGE`とM5 S2のsnapshot/time/identity projection境界をcurrent mainから一契約へcompileする | `ProductStageProjection` oracle、R0 native Stage、単一Host GPU binding、Rerun Spatial Viewer。Document writer 0 | Preview評価の既存Vector Rect→`OverlayRect` loweringとRerun Path2D probeを調べ、accepted snapshotからRerun描画入力へ写す薄いconsumerを閉じる。固定bool、第二scene owner、第二deviceを作らない | `cu110ps`系、same LayerId/revision、stale frame reject、resize、第二device 0。Stage編集幾何ではVectorがtyped unavailableであり、#470の固定path表示を代用しない |
 | `M3-R1-TIMELINE-RECTANGLE` | 同じRectangleのClip区間をRN Timelineへ表示し、Undoで消えRedoで戻す | `WAIT(R1-GPU-BINDING)`。既存`R1-TIMELINE`だけをcurrent mainから再compileする | `timeline_projection.rs`、`ProductTimelineProjection`、native rust-skia Timeline。Document writer 0 | 既存Document→`TimelineBar { layer, start, end, band }`投影を`REUSE`し、RN componentへ渡す。Rerun entity pathから時間意味を逆生成しない | `cu110pt`系、same LayerId/revision、visible bound、resize／zoom read-only、Undo/Redo再投影 |
 | `M3-R1-INSPECTOR-RECTANGLE` | 選択中Rectangleのidentityと値を、同じaccepted snapshotから既存RN Inspectorへ表示する | `COMPILE / EXISTING PARTIAL`。panel新設は禁止。initial snapshot固定からの更新とRect値表示のexact gapだけを閉じる | 既存RN Inspector、Host snapshot、primary selection、Document read projection。D2 mutationは後続の既存R2契約 | `primary_layer_id`／boundsの既存decoderとDocumentのRect／position値を`REUSE`。mock reducer、第二Inspector、汎用parameter frameworkを作らない | `cu110pih`／primary-selection consumer、same LayerId/revision、none/stale表示、write 0。現状はidentity/nameまででRect値は未投影 |
 | `M3-R1-E2E-RECTANGLE` | Browser→D2→Stage／Timeline／Inspector→Undo→Redoを一つのRN製品artifactで完走する | `WAIT(R1-SHELL..INSPECTOR)`。実装Issueではなく既存`R1-E2E`統合受入 | 一つのRN product artifact。新しいsemantic ownerを持たない | 上記LANDED／consumerを統合し、既存deterministic sequenceを`REUSE` | same LayerId／revision列／journal、Undoで三面から消失、Redoで復帰、second owner 0、reopen前提を壊さない |
