@@ -53,7 +53,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 - 新規helper、依存、一般機構、UI componentを書く前に同等物を検索する。React source assetが存在する時は縮約copyを作らず、Rerunを参照する時はMotolii仕様から逆算しない
 - test、golden、threshold、期待値を実装都合で変更してgreenにしない。testが誤りに見える場合は施工を止め、独立した仕様・oracle変更として扱う
 - 会話で新しい意味、状態owner、操作、配布形式が生じたら、観察／比較中／決定／棄却／停止と非目標をコードより先に正本へ回収する。会話だけをauthorityにしない
-- 新規施工は **1 Issue = 1契約境界 = 1 owner = 1 commit = 1 PR**。既存成果へIssue新設、history rewrite、PR分割、再reviewを遡及要求しない。仕様・decisionを変更したら同じcommitでdecision indexと必要なledgerを更新する
+- 新規施工は **1 Issue = 1契約境界 = 1 owner = 1 commit = 1 PR**。ここでいう契約境界は一つの利用者成果と意味ownerであり、それを通すRust、React Native、shader、fixture、test、docsをfile数だけで分割しない。PRは良い塊を運ぶlanding envelopeであってapproval gateではない。既存成果へIssue新設、history rewrite、PR分割、再reviewを遡及要求しない。仕様・decisionを変更したら同じcommitでdecision indexと必要なledgerを更新する
 
 ## 外部LLMと検収
 
@@ -84,7 +84,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 ## 検証と完了報告
 
 - 各粒へ`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を固定する。`cargo test`はRust laneであり、React、docs、製品E2E、実機、人間審判を代替しない
-- mainへのマージに事前gateを課さない([段差撤廃決定](docs/reviews/2026-08-10-main-merge-friction-removal-decision.md))。conflictなく成立するmergeは即実行してよい。`./scripts/validate.sh local`や`./scripts/check-docs.sh`は事後観測として実行し、redはmain上でfix-forwardする。成果は当日中にmainへ入れ、ブランチ・リポ外workdirに滞留する成果は完了と数えない
+- mainへのマージに事前gateを課さない([段差撤廃決定](docs/reviews/2026-08-10-main-merge-friction-removal-decision.md))。conflict-free mergeは即実行し、Git上の機械的conflictはintegration ownerが解消してよい。stable identity、Document意味、single writer、GPU owner、公開／永続contractのsemantic conflictだけは当該統合を止める。PRは良い塊のlanding envelopeとして使えるがapproval gateにしない。`./scripts/validate.sh local`や`./scripts/check-docs.sh`は事後観測として実行し、redはmain上でfix-forwardする。成果は当日中にmainへ入れ、ブランチ・リポ外workdirに滞留する成果は完了と数えない
 - 作業終了時は`./scripts/check-stray-work.sh`で滞留5層(ローカル/リモートブランチ、worktree、リポ外workdir、docsのリポ外パス参照)を観測し、**自分の成果がSTRAYに残っていない状態で終える**。過去の滞留を調べる歴史調査を自分で再発明しない — このスクリプトの出力が正本
 - 一つのlaneが既知不具合でredでも全体をgreenと報告しない。実diff、製品route、validation／review、integration、blocker、未実行gateを分離して報告する
 - 完了時は実行commandと結果、commit、main統合有無、残存dirty差分、次の一粒と非目標を示す。「動くはず」「たぶん完了」を使わない

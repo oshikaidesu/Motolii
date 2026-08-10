@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-10-creator-translation-working-draft-pr-integration-decision.md](2026-08-10-creator-translation-working-draft-pr-integration-decision.md) | Motoliiをクリエイター意図の翻訳Hostとし、理論を通す叩き台、良い塊のPR、機械的conflict許容とsemantic conflict停止を定める決定 |
 | [2026-08-10-m5-glow-multipass-hdr-transient-proof.md](2026-08-10-m5-glow-multipass-hdr-transient-proof.md) | M5-R0でFP16 bright-pass、separable blur、additive composite、Host所有transient再利用とalpha／extent負例を確認する縮小採用 |
 | [2026-08-10-m5-feedback-trail-host-ping-pong-proof.md](2026-08-10-m5-feedback-trail-host-ping-pong-proof.md) | 再帰FeedbackをStatefulFilterにせずHost所有2 textureの明示clear／ping-pong／fresh replayで成立確認し、SCR-4のWAITを維持する決定 |
 | [2026-08-10-m5-datamosh-codec-domain-private-proof.md](2026-08-10-m5-datamosh-codec-domain-private-proof.md) | FFmpeg標準packet dropで固定MP4のkey packetだけを除去し、再生可能出力、決定性、元asset不変を確認したcodec-domain private proof |

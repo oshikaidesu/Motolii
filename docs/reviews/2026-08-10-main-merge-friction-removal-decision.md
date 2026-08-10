@@ -18,7 +18,7 @@
 
 ## 決定
 
-1. **mainへのマージ条件から検証段差を全廃する。** `./scripts/validate.sh local`、task固有test、policy laneの事前通過をマージ条件にしない。マージを止める条件は「conflictなく成立すること」のみ。
+1. **mainへのマージ条件から検証段差を全廃する。** `./scripts/validate.sh local`、task固有test、policy laneの事前通過をマージ条件にしない。conflict-free mergeは即実行し、Git上の機械的conflictはintegration ownerが解消してよい。マージを止めるのは、stable identity、Document意味、single writer、GPU owner、公開／永続contractの未解決semantic conflictである。
 2. **検証laneは事後観測へ降格する。** lane redはmain上でfix-forwardする。マージ拒否・差し戻しの根拠にしない。
 3. **成果は当日中にmainへ。** ブランチは短命に保つ。リポ外workdirの成果とブランチ滞留分は、mainに入るまで「完了」と数えない([回収監査](2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md)の未回収一覧が初期対象)。
 4. 既存の未mergeブランチ208本は、本決定後に回収(merge)または破棄(tombstone)へ二分する。塩漬け第三状態を作らない。
@@ -36,6 +36,12 @@
 ## GitHub ruleset撤回追記(2026-08-10、利用者承認)
 
 GitHub ruleset「M2E-2 require code owner review」(ID 18817145、main対象・承認レビュー1件+CODEOWNERSレビュー必須)を削除した。単独オーナー体制では自己承認が不可能なため全PRが構造的にマージ不能となり、毎回のadmin上書きがブランチ208本滞留の根だった。[M2E-2 ruleset活性化](2026-07-12-M2E-2-ruleset-activation.md)の当初目的(golden・CPU参照実装の保護)は、`scripts/check-protected-diff.sh`/`check-golden-update-policy.sh`(policy lane、事後観測)とtest意味保護規律が引き続き担う。以後mainへは直接push可。
+
+## 良い塊のPRとconflict許容追記(2026-08-10、利用者承認)
+
+PRを禁止するのではなく、Rerunのような既知実装や一つの利用者成果を**良い塊**としてmainへ運ぶlanding envelopeにする。PR approvalや全lane greenはマージ条件に戻さず、直接pushも引き続き許可する。一つの利用者成果と一つの意味ownerへ閉じていれば、Rust、React Native、shader、fixture、test、docsを横断してよい。
+
+また、上記決定1の「conflictなく成立することのみ」という旧文言を改訂した。Gitの機械的conflict、module登録、索引・台帳・app rootの追記競合はintegration ownerが解消する通常作業とする。意味ownerや絶対規律が競合するsemantic conflictだけを停止条件とする。詳細は[クリエイター翻訳機構・叩き台PR統合決定](2026-08-10-creator-translation-working-draft-pr-integration-decision.md)を正本とする。
 
 ## 見直しトリガー
 

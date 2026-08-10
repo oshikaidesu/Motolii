@@ -40,6 +40,12 @@ Draft Previewは知覚可能な品質差を許して即時性と試行回数を�
 
 要約は**「意味は厳密に、計算は大胆に近似し、品質は目的に応じて落とし、最後は画で裁く」**とする。Rerunは開発用観測器へ縮小せず、時間、view、selection、density、GPU scene、高密度viewer shellを映像制作言語へ再翻訳する主要な製品先例として扱う。詳細、非目標、実装審判は[知覚表現の翻訳決定](reviews/2026-07-20-perceptual-expression-translation-decision.md)を正本とする。
 
+### 理論を通す叩き台をmainへ現像する
+
+Motoliiの開発は、一発で完成形を当てることではなく、クリエイターの意図を型付き意味へ翻訳し、採択済みの実装を通して知覚可能な結果へ戻す理論を、一つずつ実物にする。Rerunのように責任と内部整合性を既に持つsubsystemは細片へ再発明せず、良い塊として採択する。PRは一つの利用者成果を運ぶlanding envelopeとして使え、承認待ちのgateにはしない。
+
+事前にconflictを完全排除することは開始条件にしない。Git上の機械的conflictは統合担当が解消し、stable identity、Document意味、single writer、GPU owner、公開／永続contractのsemantic conflictだけを止める。共有seatは直列、そのseatへ接続するStage、Timeline、panel、Vism表現等の縦sliceは並列に進める。叩き台、probe、main統合、通常製品route、完成の状態は混同しない。詳細は[クリエイター翻訳機構・叩き台PR統合決定](reviews/2026-08-10-creator-translation-working-draft-pr-integration-decision.md)を正本とする。
+
 ### コンセプトが課すこと
 
 - **作品の主役は手順ではなく表現の意図**: ユーザーに原子nodeの配線、隠れNull、文字列expression、再現不能な操作列を組ませない。「グロー」「反復」「追従」「歌詞組版」のような意図を、検査・保存・再利用できる単位として見せる。
