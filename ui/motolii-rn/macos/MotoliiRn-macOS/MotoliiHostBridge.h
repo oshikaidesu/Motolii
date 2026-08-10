@@ -19,6 +19,15 @@ int64_t motolii_rn_stage_register(
     uint8_t *out,
     size_t out_cap);
 int64_t motolii_rn_stage_destroy(uint64_t stage_handle, uint8_t *out, size_t out_cap);
+int64_t motolii_rn_timeline_register(
+    uint64_t host_handle,
+    uint64_t *out_timeline_handle,
+    uint8_t *out,
+    size_t out_cap);
+int64_t motolii_rn_timeline_destroy(
+    uint64_t timeline_handle,
+    uint8_t *out,
+    size_t out_cap);
 int64_t motolii_rn_host_read_snapshot_json(
     uint64_t host_handle,
     uint8_t *out,
@@ -50,6 +59,29 @@ int64_t motolii_rn_stage_draw(
 int64_t motolii_rn_stage_detach(
     uint64_t host_handle,
     uint64_t stage_handle,
+    uint8_t *out,
+    size_t out_cap);
+int64_t motolii_rn_timeline_attach(
+    uint64_t host_handle,
+    uint64_t timeline_handle,
+    void *metal_layer,
+    uint8_t *out,
+    size_t out_cap);
+int64_t motolii_rn_timeline_resize_physical(
+    uint64_t host_handle,
+    uint64_t timeline_handle,
+    uint32_t width,
+    uint32_t height,
+    uint8_t *out,
+    size_t out_cap);
+int64_t motolii_rn_timeline_draw(
+    uint64_t host_handle,
+    uint64_t timeline_handle,
+    uint8_t *out,
+    size_t out_cap);
+int64_t motolii_rn_timeline_detach(
+    uint64_t host_handle,
+    uint64_t timeline_handle,
     uint8_t *out,
     size_t out_cap);
 
