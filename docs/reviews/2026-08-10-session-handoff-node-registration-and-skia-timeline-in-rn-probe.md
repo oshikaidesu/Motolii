@@ -132,3 +132,15 @@ Motolii compositeでは許可した`Rgba8UnormSrgb` viewからsampleする。ま
 
 B001でrelease build、Xcode Debug build、Rust test、Jest、ESLint、`plutil`、実画面の暗色Stageを確認した。
 M5-PATH2D-S1は`DONE / PROBE ONLY`へ進む。製品runtime接続は未成立のまま維持する。
+
+## 8. 追補 — RN Stage B002 chroma key（2026-08-11）
+
+B001の既存RN Stageへ、2秒／60 frameの固定MP4 fixtureを追加した。Rerun `re_renderer`のvideo textureを
+同じpreview textureへWGSLでalpha合成し、緑背景を抜く。第二device／queue／surface、CPU色変換、再生UIは追加しない。
+
+実画面では動画前景がマゼンタ矩形（左）からシアン矩形（右）へ進み、両状態で緑背景は透過し、
+背面のRerun Rect／Circleと既存Skia overlayが維持された。同じ1.25秒を二度選ぶtestでは同一sample indexを返した。
+Rust test 6件、Jest 1件、ESLint、release build、Xcode Debug build、`git diff --check`を通過した。
+
+これはchroma key合成能力の`PROBE ONLY`証拠である。直接依存した`re_video`はfixture decodeのpattern利用に限り、
+Motolii製品decoder、media owner、Document意味、Preview／Export routeの採択や完成を示さない。

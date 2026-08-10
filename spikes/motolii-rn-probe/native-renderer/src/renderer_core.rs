@@ -5,6 +5,8 @@ use re_renderer::{Color32, LineDrawableBuilder, PointCloudBuilder, Size, ViewBui
 use skia_safe::{AlphaType, Color, ColorType, ImageInfo, Paint, PaintStyle, Rect, surfaces};
 use wgpu::util::DeviceExt;
 
+const CHROMA_VIDEO_BYTES: &[u8] = include_bytes!("../fixtures/chroma-key.mp4");
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SceneKind {
     Stage,
@@ -47,6 +49,13 @@ struct StageResources {
     preview: wgpu::Texture,
     overlay: wgpu::Texture,
     rerun: re_renderer::RenderContext,
+    video: re_renderer::video::Video,
+    video_started: Instant,
+    video_duration: f64,
+    chroma_pipeline: wgpu::RenderPipeline,
+    chroma_bind_group_layout: wgpu::BindGroupLayout,
+    chroma_sampler: wgpu::Sampler,
+    chroma_bind_group: Option<wgpu::BindGroup>,
     composite_pipeline: wgpu::RenderPipeline,
     composite_bind_group: wgpu::BindGroup,
     pixels: Vec<u8>,
@@ -406,12 +415,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 self.stats.overlay_last_us = overlay_started.elapsed().as_micros() as u64;
             }
             let preview_view = stage.preview.create_view(&Default::default());
-            render_rerun_stage(
-                &mut stage.rerun,
-                &preview_view,
-                self.config.width,
-                self.config.height,
-            )?;
+            render_rerun_stage(stage, &preview_view, self.config.width, self.config.height)?;
             {
                 let attachments = [Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -742,12 +746,12 @@ fn create_stage_resources(
         entries: &[
             wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::TextureView(
-                    &preview.create_view(&wgpu::TextureViewDescriptor {
+                resource: wgpu::BindingResource::TextureView(&preview.create_view(
+                    &wgpu::TextureViewDescriptor {
                         format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
                         ..Default::default()
-                    }),
-                ),
+                    },
+                )),
             },
             wgpu::BindGroupEntry {
                 binding: 1,
@@ -769,10 +773,110 @@ fn create_stage_resources(
         re_renderer::RenderConfig::best_for_device_caps,
     )
     .map_err(|error| format!("create embedded Rerun renderer: {error}"))?;
+    let video_description =
+        re_video::VideoDataDescription::load_mp4(CHROMA_VIDEO_BYTES, "Motolii B002 chroma fixture")
+            .map_err(|error| format!("load B002 chroma fixture: {error}"))?;
+    let video_duration = video_description
+        .duration()
+        .map_or(2.0, |duration| duration.as_secs_f64());
+    let video = re_renderer::video::Video::load(
+        "Motolii B002 chroma fixture".into(),
+        video_description,
+        re_video::DecodeSettings::default(),
+    );
+    let chroma_bind_group_layout =
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Motolii B002 chroma layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+    let chroma_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Motolii B002 chroma shader"),
+        source: wgpu::ShaderSource::Wgsl(
+            r#"
+            @group(0) @binding(0) var video:texture_2d<f32>;
+            @group(0) @binding(1) var samp:sampler;
+            struct O { @builtin(position) p:vec4<f32>, @location(0) uv:vec2<f32> };
+            @vertex fn vs(@builtin(vertex_index) i:u32)->O {
+                var p=array<vec2<f32>,3>(vec2(-1.,-3.),vec2(3.,1.),vec2(-1.,1.));
+                var o:O; o.p=vec4(p[i],0.,1.); o.uv=vec2((p[i].x+1.)*.5,(1.-p[i].y)*.5); return o;
+            }
+            @fragment fn fs(i:O)->@location(0) vec4<f32> {
+                let lo=vec2(.34,.20); let size=vec2(.52,.62); let uv=(i.uv-lo)/size;
+                if (any(uv < vec2(0.)) || any(uv > vec2(1.))) { discard; }
+                let c=textureSample(video,samp,uv);
+                let green=c.g-max(c.r,c.b);
+                let alpha=1.-smoothstep(.08,.24,green);
+                let despilled=vec3(c.r,min(c.g,max(c.r,c.b)+.05),c.b);
+                return vec4(despilled,alpha);
+            }
+            "#
+            .into(),
+        ),
+    });
+    let chroma_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Motolii B002 chroma pipeline layout"),
+        bind_group_layouts: &[Some(&chroma_bind_group_layout)],
+        immediate_size: 0,
+    });
+    let chroma_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Motolii B002 chroma pipeline"),
+        layout: Some(&chroma_layout),
+        vertex: wgpu::VertexState {
+            module: &chroma_shader,
+            entry_point: Some("vs"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &chroma_shader,
+            entry_point: Some("fs"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: Default::default(),
+        depth_stencil: None,
+        multisample: Default::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    let chroma_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("Motolii B002 chroma sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    });
     Ok(StageResources {
         preview,
         overlay,
         rerun,
+        video,
+        video_started: Instant::now(),
+        video_duration,
+        chroma_pipeline,
+        chroma_bind_group_layout,
+        chroma_sampler,
+        chroma_bind_group: None,
         composite_pipeline,
         composite_bind_group,
         pixels: vec![0; width as usize * height as usize * 4],
@@ -784,12 +888,14 @@ fn create_stage_resources(
 }
 
 fn render_rerun_stage(
-    context: &mut re_renderer::RenderContext,
+    stage: &mut StageResources,
     target: &wgpu::TextureView,
     width: u32,
     height: u32,
 ) -> Result<(), String> {
+    let context = &mut stage.rerun;
     context.begin_frame();
+    stage.video.begin_frame();
 
     let mut lines = LineDrawableBuilder::new(context);
     lines
@@ -861,9 +967,93 @@ fn render_rerun_stage(
         });
         view.composite(context, &mut pass);
     }
+    let timescale = stage
+        .video
+        .data_descr()
+        .timescale
+        .unwrap_or(re_video::Timescale::NANOSECOND);
+    let requested_seconds = stage.video_started.elapsed().as_secs_f64() % stage.video_duration;
+    let video_frame = stage.video.frame_at(
+        context,
+        re_video::player::VideoPlayerStreamId(0),
+        re_video::Time::from_secs(requested_seconds, timescale),
+        &re_video::player::VideoSliceSource(CHROMA_VIDEO_BYTES),
+    );
+    if let Some(error) = video_frame.error {
+        return Err(format!("decode B002 chroma fixture: {error}"));
+    }
+    if let Some(texture) = video_frame.output.and_then(|frame| frame.texture) {
+        if stage.chroma_bind_group.is_none() {
+            stage.chroma_bind_group = Some(context.device.create_bind_group(
+                &wgpu::BindGroupDescriptor {
+                    label: Some("Motolii B002 chroma bind group"),
+                    layout: &stage.chroma_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(
+                                &texture.as_ref().default_view,
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&stage.chroma_sampler),
+                        },
+                    ],
+                },
+            ));
+        }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Motolii B002 chroma pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&stage.chroma_pipeline);
+        pass.set_bind_group(
+            0,
+            stage.chroma_bind_group.as_ref().expect("created above"),
+            &[],
+        );
+        pass.draw(0..3, 0..1);
+    }
     context.before_submit();
     context.queue.submit([draw, encoder.finish()]);
     Ok(())
+}
+
+#[cfg(test)]
+mod chroma_tests {
+    use super::CHROMA_VIDEO_BYTES;
+
+    #[test]
+    fn b002_fixture_seek_selects_the_same_sample_twice() {
+        let video = re_video::VideoDataDescription::load_mp4(
+            CHROMA_VIDEO_BYTES,
+            "Motolii B002 chroma fixture",
+        )
+        .unwrap();
+        assert_eq!(video.num_samples(), 60);
+        let timescale = video.timescale.unwrap();
+        let seek = re_video::Time::from_secs(1.25, timescale);
+        let first = video
+            .latest_sample_index_at_presentation_timestamp(seek)
+            .unwrap();
+        let second = video
+            .latest_sample_index_at_presentation_timestamp(seek)
+            .unwrap();
+        assert_eq!(first, second);
+    }
 }
 
 fn draw_stage_overlay(bytes: &mut [u8], width: u32, height: u32, gizmo: [f32; 2], dragging: bool) {

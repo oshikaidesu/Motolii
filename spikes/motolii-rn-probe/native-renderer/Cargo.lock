@@ -1593,6 +1593,7 @@ dependencies = [
  "bytemuck",
  "pollster",
  "re_renderer",
+ "re_video",
  "skia-safe",
  "wgpu",
 ]

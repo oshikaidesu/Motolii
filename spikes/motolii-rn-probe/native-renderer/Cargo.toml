@@ -10,6 +10,7 @@ crate-type = ["staticlib"]
 bytemuck = { version = "1", features = ["derive"] }
 pollster = "0.4"
 re_renderer = { git = "https://github.com/rerun-io/rerun", rev = "954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e", default-features = false }
+re_video = { git = "https://github.com/rerun-io/rerun", rev = "954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e" }
 wgpu = "29"
 
 [target.'cfg(target_os = "macos")'.dependencies]

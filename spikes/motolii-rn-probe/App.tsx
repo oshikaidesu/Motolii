@@ -17,7 +17,7 @@ type BrowserTab = 'MEDIA' | 'EFFECTS' | 'CREATE';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
 type TimelineMode = 'PACKING' | 'DENSITY' | 'NATIVE';
 
-const BUILD_LABEL = 'B001 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0';
+const BUILD_LABEL = 'B002 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA';
 
 type EffectItem = {
   id: string;
