@@ -55,15 +55,18 @@ pub fn run_shell() -> Result<(), ShellError> {
     run_shell_inner(document, None, None, lifecycle_smoke, latest_smoke)
 }
 
-pub fn run_shell_with_project(project_path: &Path) -> Result<(), ShellError> {
+pub(crate) fn open_project_runtime(project_path: &Path) -> Result<DocumentEditRuntime, ShellError> {
     let limits = ResourceLimits::production();
     let (session, opened) = ProjectSession::open(project_path, &limits)?;
-    let document = opened.document;
     let catalog =
         Arc::new(first_party_catalog().map_err(|error| ShellError::Runtime(Box::new(error)))?);
-    let writer = DocumentWriter::new(document, Arc::clone(&catalog))
+    let writer = DocumentWriter::new(opened.document, Arc::clone(&catalog))
         .map_err(|error| ShellError::Runtime(Box::new(error)))?;
-    let runtime = DocumentEditRuntime::new(session, writer, catalog);
+    Ok(DocumentEditRuntime::new(session, writer, catalog))
+}
+
+pub fn run_shell_with_project(project_path: &Path) -> Result<(), ShellError> {
+    let runtime = open_project_runtime(project_path)?;
     let document_edit_request = std::env::var_os(DOCUMENT_EDIT_SMOKE_ENV)
         .is_some()
         .then(|| bootstrap_delete_request(runtime.snapshot().as_ref()))
