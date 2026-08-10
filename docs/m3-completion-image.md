@@ -186,16 +186,14 @@ private fixtureとreceiptまで通っている（`M5-A1` / `M5-A2` / `M5-R0` / `
 | Duplicator seed | `ADOPT`: `rand_pcg` |
 | text | `REUSE/WRAP`: 現行Fontique＋HarfRust＋Vello |
 
-**境界を正確に**: Rerunは採択地図の**全行で `PATTERN`（参照）限定**である。
-`re_renderer` の製品依存、Rerun store、Bevy ECS、renderling ownerの輸入は禁止、
-`rend3` は `REJECT`。
+**境界を正確に**: 2026-08-10の固定実コード再監査により、Rerun Spatial Viewerは
+[subsystem単位で`ADOPT / WRAP`](reviews/2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md)する。
+Rerun store／Blueprintを第二Document／writerにすること、RN shell／Skia Timelineを置換すること、
+固定2灯shaderをfaithful PBR完成とすることは禁止する。
 
-> 「M5はほぼRerunの流用」は、**Rerunが解いた一般機構をMotoliiが再発明しない**
-> という意味では正しく、**Rerunのコードが入る**という意味では正本が明確に否定している。
-
-したがって3Dが解決済みなのは「委託先と裁定が確定していて、残りが薄い接続だから」である。
-そしてM5は[休止契約](reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)により
-**M3の意味開放まで動かない**。M3が閉じないと接続先の製品routeが存在しないためである。
+したがって「M5はほぼRerun」は、View、camera、visualizer、wgpu composite、picking／outlineを
+接続済みのまま採択し、Motolii固有の編集・遮蔽・PBR・resource seamだけを残すという意味で正しい。
+旧M5全面休止は、M5 spatialが主役Stage完成の入力であるため撤回した。
 
 ## 6. その先 — 上限が無い側
 

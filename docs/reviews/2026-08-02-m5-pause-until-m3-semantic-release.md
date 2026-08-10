@@ -1,6 +1,11 @@
 # M5休止・M3意味開放契約
 
-状態: **決定／M5製品runtime休止**（2026-08-02）
+状態: **撤回**（2026-08-10）
+
+2026-08-10の[Rerun Spatial Viewer採択再締結](2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md)により、
+M5 spatialをM3完成後まで全面休止する順序を撤回した。M5はM3 Stageを閉じる入力であり、全面休止は循環する。
+以下は旧決定の記録として残す。第二writer、別world、別Preview／Export、未決公開schemaを作らない負例は
+後続決定へ継承した。
 
 M5の既知実装採択、decision recovery、private fixtureは保持する。一方、M5の製品runtime、公開schema、
 provider接続、GPU resource接続は、M3の製品意味が開放されるまで開始しない。これはM5を放棄する停止ではなく、

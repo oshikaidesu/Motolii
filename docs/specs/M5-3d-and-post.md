@@ -2,24 +2,31 @@
 
 ステータス: **ドラフト**(凍結ゲートで確定)
 
+2026-08-10の固定Rerun実コード再監査により、M5のspatial主部は機構別の`PATTERN`転移ではなく、
+[Rerun Spatial Viewer採択再締結](../reviews/2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md)に従い、
+接続済みsubsystemを`ADOPT / WRAP`する。M3 Stageが製品surface、Host、D2 single writer、
+Preview／Export authorityを維持し、Rerun store／Blueprint／selection／playheadを第二authorityにしない。
+Motoliiに残すのはsnapshot／identity／time projection、authoring操作、遮蔽・合成policy、faithful PBR／unlit、
+ResourceLedger接続であり、独自spatial renderer／camera／picking frameworkを新設しない。
+
 ## 実装前の既知実装調査
 
 現行の調査・検証入口は[M5 既知実装採択・検証地図](../m5-known-implementation-adoption-map.md)とする。
-ただし、M5の製品runtimeは[M5休止・M3意味開放契約](../reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)に従い、
-M3の共有writer、通常製品route、snapshot／Stage／Preview／Export、独立受入・main統合が意味論として閉じるまで休止する。
-チケットIDや枝番の完了数ではなく、同契約の意味境界を開放判定に使う。M5の採択地図、decision recovery、private
-fixtureは保持するが、M3の共有契約をM5のprivate型から推測しない。
+旧[M5休止・M3意味開放契約](../reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)の全面休止は、
+M5 spatialがM3 Stage完成の入力だと実コードで確認したため撤回した。M3 Stageの同じ成果内でRerun接続を
+一契約ずつ進められるが、共有writer、snapshot、Preview／ExportをM5 private型から推測・複製しない。
 
-M5が将来利用するAsset identity、resource／artifact／job、cache invalidationの共有接合部は[直列核4契約](../reviews/2026-08-08-serial-core-known-contracts-decision.md)を正とする。同decisionは共有契約と実装順序だけを閉じ、M5の製品runtime、公開schema、provider、GPU resource接続を解放しない。休止中はprivate fixtureを共有契約の実装済み代替にしない。
+M5が利用するAsset identity、resource／artifact／job、cache invalidationの共有接合部は[直列核4契約](../reviews/2026-08-08-serial-core-known-contracts-decision.md)を正とする。同decisionは共有契約と実装順序だけを閉じ、公開schemaやproviderを自動で解放しない。private fixtureを共有契約の実装済み代替にしない。
 
 M5は[既知実装採択・置換開発モデル](../known-implementation-adoption-model.md)に従う。scene／object
 representation、camera observation、spatial renderer、glTF import、depth、text、Vello局所pass、post
-effect、picking／gizmo／bounds、deterministic duplicationを機構classとして先に調査し、具体file／API／
-algorithm、license、thread model、owner、failure mode、platform条件と採択方式をM5採択地図へ閉じる。
+effect、picking／gizmo／bounds、deterministic duplicationを調査し、Rerunで相互接続済みのspatial機構は
+subsystem単位で採択する。Motolii固有residualだけを具体file／API／algorithm、license、thread model、owner、
+failure mode、platform条件とともにM5採択地図へ閉じる。
 
 P0I〜P7はMotoliiのworld、identity、互換、操作、oracleを保持する入力であり、独自3D engine、scene
 framework、text stack、gizmo frameworkを作る実装列ではない。意味decisionとtest-only fixtureは進められるが、
-**M5の製品runtime実装は、既知実装調査・採択地図・M3意味開放がすべて閉じるまで発注しない。**
+**M5の製品runtime実装は、Rerun採択地図からcurrent Stageへ接続する一契約境界を選ぶ。旧P1→P2列を自動発注しない。**
 候補、具体API、非証明範囲、M4との共通接合部は[M5既知実装調査](../reviews/2026-08-02-m5-known-implementation-survey.md)に集約する。
 
 ## 目的(退治する落とし穴)

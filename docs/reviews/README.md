@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md](2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md) | 固定Rerun実コードのView／camera／visualizer／wgpu／picking閉包を確認し、M5 spatial主部を機構別PATTERNからSpatial Viewer subsystemのADOPT／WRAPへ再締結する決定 |
 | [2026-08-10-m3-map-node-state-measurement.md](2026-08-10-m3-map-node-state-measurement.md) | M3実行地図の全54 nodeをcurrent codeへ照合し、状態語の乖離8件を特定して更新した実測。WIRED 5／BUILT_UNWIRED 19／PARTIAL 16／ABSENT 10／EXTERNAL 4 |
 | [2026-08-09-supervisor-handoff-pr-operation-first-wave.md](2026-08-09-supervisor-handoff-pr-operation-first-wave.md) | PR運用の初merge 2件とclose 1件、4 lane並列waveの実測コスト、「前提を疑えるか」を軸とした総監督席のClaude移管理由とCodexとの役割分離、未記録だった読み口分離線とGPU群抽出、intent 2種の欠落だけがR1を止めている実測を次のsupervisorとCodexへ渡す引継ぎ |
 | [2026-08-09-chain-gate-results-and-audio-path.md](2026-08-09-chain-gate-results-and-audio-path.md) | 仮コード未通過6区間へ鎖のgateを掛けて全区間NEEDS_REVISIONを確定し、完成条件の音声経路が書き出し側・取り込み側とも実装済みで未配線(BUILT_UNWIRED)であることと、完成条件を塞ぐ8件を特定した観察 |
@@ -103,7 +104,7 @@
 | [2026-08-02-m5-c0-observation-preflight.md](2026-08-02-m5-c0-observation-preflight.md) | M5-C0 — Planar／Spatial Observationの実在target、未決公開境界、M4 K1a依存、仕様化前の停止線 |
 | [2026-08-02-m5-c0-observation-contract-decision.md](2026-08-02-m5-c0-observation-contract-decision.md) | M5-C0 — 初期projective Observationの意味、Host／Provider責任、拒否・換装oracle、schema/runtime分割 |
 | [2026-08-02-m5-c0-schema-preflight.md](2026-08-02-m5-c0-schema-preflight.md) | M5-C0 — 公開型・serde／wire・Document version・provider identityの実在target再照合と仕様化停止線 |
-| [2026-08-02-m5-pause-until-m3-semantic-release.md](2026-08-02-m5-pause-until-m3-semantic-release.md) | M5 — M3の意味論が開放されるまで製品runtimeを休止し、IDではなく共有writer・通常route・snapshot・出力・受入意味で再開判定する契約 |
+| [2026-08-02-m5-pause-until-m3-semantic-release.md](2026-08-02-m5-pause-until-m3-semantic-release.md) | M5をM3意味開放まで全面休止した旧契約。2026-08-10に循環を確認して撤回し、第二writer／別world／別Preview・Export禁止の負例だけを継承 |
 | [M5-C0 private Observation semantics receipt](evidence/m5-known-implementation/M5-C0/README.md) | M5-C0 — `glam` private semantic fixtureの射影、typed refusal、provider換装oracle（5/5） |
 | [2026-07-09-R1-export-review.md](2026-07-09-R1-export-review.md) | コードレビュー所見 2026-07-09 (R1/Quality・export・cli周辺) |
 | [2026-07-09-R3-datatrack-review.md](2026-07-09-R3-datatrack-review.md) | コードレビュー所見 2026-07-09 (R3/DataTrack統合) |

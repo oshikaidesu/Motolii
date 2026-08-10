@@ -1,10 +1,15 @@
 # M5 既知実装採択・検証地図
 
-状態: **技術採択・意味decision recovery済み／private検証済み／M3意味開放まで製品runtime休止**（2026-08-02）
+状態: **Rerun Spatial Viewer採択へ再締結／private検証済み／製品runtime未接続**（2026-08-10）
 
-M5の製品runtimeは[M5休止・M3意味開放契約](reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)に従い、
-M3の共有writer、通常製品route、snapshot／Stage／Preview／Export、独立受入・main統合の意味が閉じるまで開放しない。
-開放はチケットIDではなく、同契約の意味境界を現行正本・コード・受入証拠で照合して判定する。
+固定Rerun commitの実コード再監査により、importer、scene、renderer、camera、depth、pickingを
+`PATTERN`へ分解する旧裁定を退役した。現行routeは
+[M5 Rerun Spatial Viewer採択再締結](reviews/2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md)を正とし、
+相互接続済みのSpatial Viewer subsystemを`ADOPT / WRAP`してM3 Stageへ接続する。
+
+旧[M5休止・M3意味開放契約](reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)の全面休止は撤回した。
+M5 spatialはM3 Stage完成の入力として、同じ成果内で一契約ずつ接続できる。共有writer、snapshot、
+Preview／Export、resource ownerを複製せず、current codeで実在targetが閉じたedgeだけを選ぶ。
 
 ## 1. 目的と入力
 
@@ -54,8 +59,9 @@ M5の最初の通常製品成果を、次の4本へ分ける。
 
 ### 3.2 技術採択決定とdecision recoveryの分離
 
-10機構classの技術routeは本書で決定した。これは`M5-A0T`の完了であり、既知実装の再選定を
-各runtime粒で繰り返さない。一方、次の作品意味・公開境界は`M5-A0S`として別に回収する。
+10機構classの旧技術routeは`M5-A0T`で一度決定したが、2026-08-10の固定Rerun実コード再監査で、
+相互接続済みsubsystemを`PATTERN`へ分解していたことが判明した。Spatial Viewer系は`ADOPT / WRAP`へ
+再締結し、text、post、Duplicator等の非spatial classと既存private oracleは維持する。
 
 - `416aa2c2`: faithful import assetとrenderer-compiled assetの分離、core PBR＋neutral environment、
   `gltf`／`tobj` private leaf、bare一灯／自動unlit縮退の拒否。
@@ -68,6 +74,8 @@ M5の最初の通常製品成果を、次の4本へ分ける。
 
 ### 3.3 未決
 
+- Rerun Spatial Viewerを現在のM3 Stageへ接続する最初の一契約境界。exact crate集合、Rerun storeを
+  runtime projectionに使うかdirect projectionへ縮めるか、既存wgpu device／surface共有方法。
 - spatial Observationの具体公開形、camera capability閉集合、provider pinningのschema。
 - faithful importの初期入力をGLBだけにするか、外部URIを持つ`.gltf`まで同時に許すか。
 - 具体scene-color GPU format、copy／alias method、hard budget。
@@ -78,8 +86,8 @@ M5の最初の通常製品成果を、次の4本へ分ける。
 
 ### 3.4 未実装
 
-- glTF／OBJ importer、faithful private asset、GPU compiled asset、3D asset cache。
-- spatial renderer、typed Observation、camera provider、製品Group Depth経路。
+- Rerun Spatial Viewerの製品依存とM3 Stage接続、Document snapshot／time／identity projection、D2 terminal seam。
+- faithful PBR／unlit residual、typed Observation、camera provider、製品Group Depth経路。
 - 汎用`motolii-text`、fallback診断、cluster／variation公開口。
 - 製品post node、dense object picking、bounds derived cache、3D gizmo。
 - Duplicator schema／runtime／Behaviour／製品UI。
@@ -90,11 +98,11 @@ M5の最初の通常製品成果を、次の4本へ分ける。
 |---|---|---|
 | Asset identity | `motolii-doc::Asset`に安定ID、type、content hash、path、size | payload importerとGPU asset cacheなし |
 | Camera | `motolii-core::CompCamera`と`PlanarOrthographic`評価／拒否試験 | perspective／spatial Observationなし |
-| Render | `LayerSourcePlugin`→wgpu texture→`RenderSession` composite | mesh／material／shared depthの製品経路なし |
-| GPU lifecycle | wgpu 29、pipeline cache、dynamic target再利用 | M4 hard budget／owned lifetime未成立 |
+| Render | `LayerSourcePlugin`→wgpu texture→`RenderSession` composite。Rerun固定commitにSpatial View→visualizer→`ViewBuilder`→wgpu compositeの閉じた実装あり | Rerun Spatial Viewerと製品Stage／Preview／Exportの接続なし |
+| GPU lifecycle | Motoliiと固定Rerunがともにwgpu 29／egui 0.35。双方にresource reuse／cacheあり | ResourceLedgerを唯一のhard-budget ownerにする接続なし |
 | Text drawing | UI内にFontique 0.10、HarfRust 0.7、Vello 0.9の局所経路 | fallback／cluster／variationを持つ汎用P6なし |
 | Vello | native Timelineのshape／glyph／overlay | M5 text／vector effect／post ownerではない |
-| Picking／gizmo | ownership decision、CPU解析hit-test方針 | dense scene object pickingと3D overlayなし |
+| Picking／gizmo | ownership decision、CPU解析gizmo hit-test方針。Rerunにasync GPU picking／outline／boundsあり | authoring gizmo／Depth RailとD2 terminal接続なし |
 | Duplicator | 意味decisionとtest条件 | schema／runtime／GPU instanceなし |
 
 UI内の局所text描画やprivate depth fixtureを、M5製品runtimeの完成証拠へ昇格しない。
@@ -116,7 +124,7 @@ fixtureを別途固定する。HEADは調査再現点であり、そのまま製
 | `glam` | `bd172a701971499191b8af85ed4d299e04057b08` | graphics math、SIMD対応vector／matrix／quaternion | Document座標意味、serde／公開型 |
 | `rand_pcg` | `7592cf749b7f5158a37e74533e3428c3341edbac` | portable PCG generatorと参照vector | seed mixing、InstanceId意味 |
 | `obvhs` | `5cb74827ab33c0ab76e3379380344e955ecce1d3` | CPU BVH build／traversal候補 | Motolii dense pickingの勝者、更新費用 |
-| Rerun | 現行監査anchor `954bf95a`、再確認HEAD `4d4333cf3e2c1d97f2b0e26f18b5c87f79d57b99` | importer分割、wgpu renderer、picking／outline、resource poolの実例 | Motoliiのscene、Document、plugin契約 |
+| Rerun | 現行監査anchor `954bf95a`、再確認HEAD `4d4333cf3e2c1d97f2b0e26f18b5c87f79d57b99` | Spatial View登録、time／selection query、camera、visualizer、wgpu composite、picking／outline、custom extensionが接続済みのsubsystem | Motolii Document／D2、遮蔽policy、faithful PBR、Preview／Export、hard budget |
 | Bevy | `25368b78ce5e9b15dc770cdf2af4595602cc8a7b` | PBR、depth、picking、gizmo、post、glTFの比較実例 | ECS／schedule／asset ownerの採用理由 |
 | renderling | `a7b44f796a38cb2c734d69354fa35f1288aa02a1` | headless wgpu、glTF、PBR／IBL、image testの比較候補 | 成熟度、rust-gpu供給責任、Motolii統合適合 |
 | rend3 | `d088a841b0469d07d5a7ff3f4d784e97b4a194d5` | 過去のwgpu renderer分割例 | 新規製品依存の保守性 |
@@ -162,15 +170,15 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 
 | 親 | route | 接続target | Motoliiに残す薄い責任 | 拒否／保留 |
 |---|---|---|---|---|
-| A. glTF／OBJ import | `ADOPT`: `gltf`／`tobj`／`mikktspace` private leaf。`EXTERNAL`: Khronos Validator／Asset Generator／Sample Assets。Rerunは`PATTERN` | `Asset` metadata→Host importer→private faithful asset | admission、URI／size policy、axis／unit／tangent normalization、typed diagnostic、content identity | parser成功を製品成功にしない。Assimp／USD sceneを初期導入しない |
-| B. scene／object representation | `REUSE`: 単一world、既存transform、AssetRef、LayerSource意味。Rerun／Bevy sceneは`PATTERN`のみ | faithful asset＋Document projection→private evaluated object list | stable semantic identity、world transform、source intent、derived bounds | engine scene graph／ECS entity／serdeを第二のDocumentにしない |
-| C. spatial renderer | `REUSE`: wgpu／現行RenderSession。Khronos Sample Renderer／Blender、Rerun／Bevyは`PATTERN`。renderlingは任意の隔離比較 | private compiled asset→既存LayerSource／Render Contribution | single world、Observation consumption、premul linear output、Quality、typed refusal | renderlingをoracleやgateにしない。Bevy ECS、Rerun store、renderling ownerを輸入しない。rend3は`REJECT` |
-| D. camera／Observation | `REUSE`: Planar baselineとCamera Provider決定。`ADOPT`: `glam` private math leaf。engine cameraは`PATTERN`のみ | Host評価→representation非依存typed Observation | active binding、provider pin、capability preflight、bounds／picking参加 | `glam`型をDocument／serde／公開APIへ出さない。P3前のpublic API、具体provider ID分岐を禁止 |
-| E. depth／Render Contribution | `REUSE`: M5 depth decisions、現行composite。Rerun／Bevyは`PATTERN` | Host policy→admitted contributions→shared attachments | whole-request admission、alpha class、ordering、resource owner | historical private seamの公開昇格、soft alphaのopaque化を禁止 |
+| A. glTF／OBJ import | Rerun `Asset3D` importをSpatial subsystemの入力として`ADOPT / WRAP`。`gltf`／`tobj`／`mikktspace`とKhronos fixtureはfaithful residualのleaf／oracle | `Asset` metadata→admission→Rerun spatial input | URI／size policy、source intent、unsupported diagnostic、content identity、PBR不足の補完 | Rerun importer成功や白fallbackを製品成功にしない |
+| B. scene／object representation | Rerun view query／archetype／transform visualizerをruntime projectionとして`ADOPT / WRAP` | Document評価snapshot→Rerun view input | stable semantic identity、single world、D2 writerへのterminal return | Rerun store／Blueprint／entityを第二Document、journal、Undo authorityにしない |
+| C. spatial renderer | Rerun `re_view_spatial`＋`re_renderer`＋`ViewBuilder`系をsubsystemで`ADOPT / WRAP`。現行wgpu Stage／RenderSessionをHostとして`REUSE` | Rerun visualizer draw data→既存Stage／Render Contribution | premul linear output、Quality、Preview／Export、typed refusal | class別再実装、第二device／surface、固定2灯をPBR完成扱いするrouteを拒否 |
+| D. camera／Observation | Rerun Eye／camera navigation／focus／track／projectionを`ADOPT / WRAP`し、Motolii Planar baselineとProvider意味へ接続 | Host評価→Rerun view camera→representation非依存Observation | active binding、provider pin、authoring camera command、capability preflight | Rerun BlueprintをCamera Document authorityにしない |
+| E. depth／Render Contribution | Rerun depth／draw phase／outline／picking attachmentを`ADOPT / WRAP`し、Motolii遮蔽policyとcompositeを`REUSE` | Host policy→Rerun ViewBuilder configuration→shared attachments | Layer Order／Group Depth／AE-style Bins、alpha class、resource owner | Rerun既定draw phaseからMotolii遮蔽意味を逆算しない |
 | F. text | `REUSE/WRAP`: 現行Fontique＋HarfRust＋Vello。ParleyはBiDi／script itemize／fallbackの条件付きprivate比較 | `motolii-text` run API→Vello `draw_glyphs` | 同梱CJK下限、fallback診断、cluster／variation、純関数run | BiDi／script itemizeを自作しない。layout／editing API全体を公開しない |
 | G. Vello局所pass | `REUSE`: 現行Vello dependencyとrenderer setup | text／shapeの局所2D scene→既存GPU合流 | adapter、premul、resource reuse、capability refusal | blur／postの万能backendにしない。frame内resource生成を増やさない |
 | H. post | `REUSE`: wgpu／pipeline cache。Bevy等はalgorithm／fixtureの`PATTERN` | existing filter/render graph→linear GPU pass | RoI padding、Quality ladder、same preview/export、golden | Vello blurは未完成なので採用しない。scene engine post stackを持ち込まない |
-| I. picking／gizmo／bounds | `REUSE`: native Stage overlayとCPU gizmo hit-test。dense pickingは`obvhs`／owned flat BVH／async GPUを比較、Rerunは`PATTERN` | read-only projection→Transient selection→既存D2 commit | semantic ID mapping、async generation、Unknown bounds、no canonical pixels | `parry3d`をpickingだけに採らない。gizmoへGPU ID readback、dense pickingの同期readbackを禁止 |
+| I. picking／gizmo／bounds | Rerun async GPU picking／outline／boundsを`ADOPT / WRAP`。native Stage overlayとCPU解析gizmo hit-testを`REUSE` | Rerun hit／highlight→Transient selection、Motolii gizmo→既存D2 terminal commit | semantic ID mapping、stale generation、authoring handles、Unknown bounds、no canonical pixels | Rerunのview selectionをDocument writerにしない。gizmo drag hot pathへGPU readbackを入れない |
 | J. Duplicator | `REUSE`: P0I/P7決定、GPU instance。`ADOPT`: `rand_pcg` private PCG32。seed mixingは固定したowned SplitMix64-style mixer | stable slot key→InstanceId→typed channels→GPU instance | domain別identity、nested context、seed、Behaviour純関数 | `sha2`をseed mixingに使わない。ECS entity／array indexをidentityにしない |
 
 ## 7. 実装可能な子地図
@@ -186,7 +194,7 @@ read-onlyで相談した。出力は採択authorityや検収判定ではなく�
 | M5-R0 | core PBR／unlit headless検証 | wgpu `REUSE`、Khronos Sample Renderer／Blender `PATTERN` | private compiled asset→offscreen target | Khronos metal／dielectric／normal／emissive、cold／warm、low-spec refusal | **DONE / KEEP**。[receipt](reviews/evidence/m5-known-implementation/M5-R0/README.md)。製品material／renderer未接続 |
 | M5-R1 | Layer Orderへ3D contribution接続 | R0採択route | existing LayerSource／RenderSession | 3D未使用pixel不変、premul、Preview／Export一致 | R0＋M4 resource owner |
 | M5-R2 | Group Depth opaque／cutout | Render Contribution決定を`REUSE` | Host depth policy→same material system | Z交差、cutout、soft alpha typed refusal、group外不変 | P3 Observation＋resource gates |
-| M5-C0 | PlanarとSpatialのObservation decision | Camera Provider決定を`REUSE`、`glam` private leaf | Host camera eval→typed Observation | private fixtureでprovider 2種、capability／version拒否、provider換装、Planar pixel不変。3 OS goldenは未実施 | **意味決定＋private semantic fixture DONE / schema preflight STOP / M3意味開放までruntime休止**。[休止契約](reviews/2026-08-02-m5-pause-until-m3-semantic-release.md)、[決定](reviews/2026-08-02-m5-c0-observation-contract-decision.md)、[schema preflight](reviews/2026-08-02-m5-c0-schema-preflight.md)、[fixture receipt](reviews/evidence/m5-known-implementation/M5-C0/README.md)。public API・M4 K1a前 |
+| M5-C0 | PlanarとSpatialのObservation decision | Camera Provider決定を`REUSE`、`glam` private leaf | Host camera eval→typed Observation | private fixtureでprovider 2種、capability／version拒否、provider換装、Planar pixel不変。3 OS goldenは未実施 | **意味決定＋private semantic fixture DONE / schema preflight STOP**。[決定](reviews/2026-08-02-m5-c0-observation-contract-decision.md)、[schema preflight](reviews/2026-08-02-m5-c0-schema-preflight.md)、[fixture receipt](reviews/evidence/m5-known-implementation/M5-C0/README.md)。Rerun接続に必要なexact seamをcurrent codeから再選定し、public schemaを自動昇格しない |
 | M5-T0 | P6 run APIと条件付きParley採否を比較 | Fontique／HarfRust／Vello `REUSE`、Parley itemize比較 | new private `motolii-text` leaf→Vello | CJK＋Latin＋emoji＋RTL、fallback、cluster、variation、missing glyph diagnostic | **DONE / KEEP + REDUCE**。[receipt](reviews/evidence/m5-known-implementation/M5-T0/README.md)。手書きitemize禁止。variationは固定variable font待ち。公開契約は比較後 |
 | M5-P0 | Blur/LGG/grain algorithm survey＋fixture | wgpu `REUSE`、既知shader `PATTERN` | filter graph／pipeline cache | RoI radius、Unknown全域、linear、Draft/Final | **DONE / KEEP（algorithm contract）**。[receipt](reviews/evidence/m5-known-implementation/M5-P0/README.md)。GPU pass／M4 ownerは未接続 |
 | M5-I0 | dense object picking比較 | `obvhs`／owned flat BVH／Rerun-style async GPU | Stage projection→Transient selection | 10k object moving camera、stale generation、readback stall 0、same semantic ID | **DONE / KEEP + REDUCE**。[receipt](reviews/evidence/m5-known-implementation/M5-I0/README.md)。CPU semantic一致とstale拒否まで。GPU readback／Stage接続は未完了 |
