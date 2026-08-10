@@ -54,6 +54,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 - test、golden、threshold、期待値を実装都合で変更してgreenにしない。testが誤りに見える場合は施工を止め、独立した仕様・oracle変更として扱う
 - 会話で新しい意味、状態owner、操作、配布形式が生じたら、観察／比較中／決定／棄却／停止と非目標をコードより先に正本へ回収する。会話だけをauthorityにしない
 - 新規施工は **1 Issue = 1契約境界 = 1 owner = 1 commit = 1 PR**。ここでいう契約境界は一つの利用者成果と意味ownerであり、それを通すRust、React Native、shader、fixture、test、docsをfile数だけで分割しない。PRは良い塊を運ぶlanding envelopeであってapproval gateではない。既存成果へIssue新設、history rewrite、PR分割、再reviewを遡及要求しない。仕様・decisionを変更したら同じcommitでdecision indexと必要なledgerを更新する
+- 並列発注では各Issue／PRへ`OUTCOME / SEMANTIC OWNER / SHARED SEATS TOUCHED / INTEGRATION OWNER / PRODUCT STATE / ORACLE / KNOWN LIMITS`を明記する。同じshared seatを触る複数PRを同時発注せず、各branchはcurrent mainから独立に作り、feature branch同士をmergeしない。integration ownerがmechanical conflictを解消してmainへ順に着地させ、task起因redは同じoutcomeのfix-forwardをそのseatの次発注より先に入れる。独自queue、lock service、merge frameworkを新設しない。詳細は[叩き台PR統合決定](docs/reviews/2026-08-10-creator-translation-working-draft-pr-integration-decision.md#並列pr発注loop-v0)
 
 ## 外部LLMと検収
 

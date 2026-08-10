@@ -18,9 +18,13 @@ body:
         AUTHORITY:
         CURRENT STATE:
         OWNER:
+        SHARED SEATS TOUCHED:
+        INTEGRATION OWNER:
         EXACT TARGET:
         ALLOWLIST:
         READ SET:
+        PRODUCT STATE:
+        KNOWN LIMITS:
         POSITIVE ORACLE:
         NEGATIVE ORACLE:
         REPO_LANES:
@@ -36,6 +40,10 @@ body:
       label: Closure
       options:
         - label: This issue contains one contract boundary and will produce one commit.
+          required: true
+        - label: Shared seats and their single semantic owner are named; overlapping work is not silently dispatched.
+          required: true
+        - label: The branch starts from current main and will not depend on another feature branch.
           required: true
         - label: Findings outside this contract will be reported, not implemented.
           required: true

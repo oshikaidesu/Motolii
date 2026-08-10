@@ -60,3 +60,36 @@ creator intent
 5. 今回mainへ入る叩き台が通す理論、既知の限界、製品状態、次に観測できるedgeは何か。
 
 この問いが閉じれば施工できる。将来の全panel、全Vism、全conflictを先に閉じることは開始条件にしない。
+
+## 並列PR発注loop v0
+
+全ての実装を一つの直列queueへ入れるのではなく、**閉じた利用者成果ごとに同じloopを並列起動**する。並列化するのはPRの施工であり、共有seatの意味決定とmainへの着地順はintegration ownerが直列に所有する。
+
+```text
+current mainから一つの利用者成果をcompile
+  -> IssueでOUTCOME / OWNER / SHARED SEATS / ORACLE / KNOWN LIMITSを宣言
+  -> current mainから独立branch / worktreeへ発注
+  -> PRへ叩き台、実diff、製品状態、既知の限界を返す
+  -> integration ownerがmechanical / semantic conflictを分類
+  -> current mainへ着地
+  -> main上で事後観測
+  -> task起因redは同じoutcomeのfix-forward
+  -> current mainから次edgeを再選定
+```
+
+同じshared seatを触る複数PRを同時発注しない。異なるseatへ接続するStage、Timeline、panel、Vism等は並列発注できる。feature branch同士のmergeや、未着地branchを次PRのbaseにする依存鎖は作らず、すべてcurrent mainを合流点にする。
+
+PR作成やreview approvalをマージgateにはしない。integration ownerはPR本文と実diffからsemantic conflictの有無だけを着地前に判定し、Git上の機械的conflictは解消してmainへ入れる。validationはmain上の事後観測とし、当該PRが新たに生んだredは、同じowner／outcomeのfix-forwardをそのseatの新規発注より先に着地させる。既知redを無関係なPRへ帰属させない。
+
+## risk rails
+
+| risk | 最小rail | 停止／回復 |
+|---|---|---|
+| 同じ意味の二重発明 | `SEMANTIC OWNER / SHARED SEATS TOUCHED`をIssueとPRへ明記 | 同じseatの同時発注を止め、一ownerへ戻す |
+| stale baseとbranch依存鎖 | 各branchをcurrent mainから作り、mainだけを合流点にする | 着地時にcurrent mainへ合わせ、別feature branch経由を棄却する |
+| probeの製品昇格 | `PRODUCT STATE / KNOWN LIMITS`を返す | 状態を繰り上げず、次の製品edgeを再選定する |
+| redの累積と責任消失 | main上で事後観測し、`FIX-FORWARD OWNER`をPRへ残す | task起因redを同じoutcomeへ戻して先に着地させる |
+| integration ownerの詰まり | 一PRを一成果・一ownerへ閉じ、機械的conflict解消だけを集中させる | semantic conflictだけを返却し、全laneの再設計へ広げない |
+| 大きすぎるPR | file数でなく利用者成果と意味ownerで境界を判定する | ownerまたは利用者成果が増えた地点で別Issueへ返す |
+
+このrailは新しいscheduler、lock service、receipt database、merge queueを要求しない。GitHub Issue、branch、worktree、PR、mainと既存の事後観測だけを使う。
