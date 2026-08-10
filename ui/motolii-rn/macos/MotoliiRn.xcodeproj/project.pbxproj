@@ -281,6 +281,7 @@
 				DEVELOPMENT_LANGUAGE = en;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
+					"DEBUG=1",
 					"RN_FABRIC_ENABLED=1",
 				);
 				INFOPLIST_FILE = "MotoliiRn-macOS/Info.plist";
@@ -366,6 +367,7 @@
 				CLANG_ENABLE_OBJC_ARC = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
+					"DEBUG=1",
 					"RN_FABRIC_ENABLED=1",
 				);
 				INFOPLIST_FILE = "MotoliiRn-macOS/Info.plist";

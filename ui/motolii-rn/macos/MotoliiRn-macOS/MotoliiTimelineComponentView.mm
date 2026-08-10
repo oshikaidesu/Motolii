@@ -84,9 +84,12 @@ BOOL Accepted(int64_t result, const uint8_t *output, size_t capacity)
            oldProps:(Props::Shared const &)oldProps
 {
   const auto &newProps = *std::static_pointer_cast<const MotoliiTimelineViewProps>(props);
-  const auto &previousProps =
-      *std::static_pointer_cast<const MotoliiTimelineViewProps>(oldProps);
-  bool refreshRequested = newProps.refreshToken != previousProps.refreshToken;
+  bool refreshRequested = true;
+  if (oldProps) {
+    const auto &previousProps =
+        *std::static_pointer_cast<const MotoliiTimelineViewProps>(oldProps);
+    refreshRequested = newProps.refreshToken != previousProps.refreshToken;
+  }
   uint64_t nextHostHandle = ParseHandle(newProps.hostHandle);
   if (nextHostHandle != _hostHandle) {
     [self deactivateTimeline];
