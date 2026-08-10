@@ -37,9 +37,9 @@
 
 ## 次手(本監査からの発注候補)
 
-1. skia-timeline-probeの`spikes/`への移管(回収0%かつ決定demo正本)。
-2. MotoliiRnProbe残り8割の移管 or 不採用tombstone。
-3. 台帳・地図の一括同期(§3の各行、08-09/08-10コミットhashを根拠に)。
+1. ~~skia-timeline-probeの`spikes/`への移管~~ → **完了(2026-08-10)**: `spikes/skia-timeline-probe/`。
+2. MotoliiRnProbeは`spikes/motolii-rn-probe/`へ**参照資産として移管完了(2026-08-10)**。`ui/motolii-rn`への製品移管(R1/R2粒)は引き続き発注対象。
+3. ~~台帳・地図の一括同期~~ → **完了(2026-08-10)**: ledger 6A/7A/7B、m4地図P02-C2、統合地図N-OVERLAY、RN地図R1×2、ui-reference-map、backlog。同日、未mergeブランチ238本を検証の上217本削除(全内容main到達済みを機械証明)、残21本が回収判断対象。
 4. check-docs.shへ「docs内のリポ外絶対パス参照」検出を追加(事後観測lane)。
 5. `protected_assets.rs:178`のfixture文字列を退役済みでないパスへ差し替え。
 6. `pv1-texture-lifecycle`結論の回収と`ime-acceptance`退役tombstone。

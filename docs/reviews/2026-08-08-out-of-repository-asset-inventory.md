@@ -18,6 +18,10 @@ survey判定のうち少なくとも1件が誤り、1件が含意の誤りであ
 
 いずれも `~/Documents/Codex/` 配下。**git history、全branch、worktree一覧のどこにも存在しない。**
 
+> **2026-08-10追記**: `skia-timeline-probe`は`spikes/skia-timeline-probe/`へ、`MotoliiRnProbe`は
+> `spikes/motolii-rn-probe/`へ移管済み([回収監査](2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md))。
+> 以後の正本はリポジトリ内。残るリポ外資産はQt/Avalonia比較群、fable調査文書、source不明の`StagePresentProbe.app`。
+
 | 資産 | 場所 | 内容 |
 |---|---|---|
 | **MotoliiRnProbe** | `2026-08-06/ui-rust-ui-c-react/work/` | RN製品UI再現。`App.tsx` 660行。Browser 3タブ(`MEDIA`/`EFFECTS`/`CREATE`)、Inspector/Extensions、Timeline 3モード、effect一覧、panel registry。native `MotoliiGpuComponentView.mm`、Fabric spec `MotoliiGpuView`/`MotoliiTimelineView` |

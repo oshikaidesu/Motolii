@@ -1,0 +1,20 @@
+[package]
+name = "motolii-native-renderer"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+pollster = "0.4"
+wgpu = "29"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+skia-safe = { version = "0.99.0", default-features = false, features = ["binary-cache"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+skia-safe = "0.99.0"
+
+[workspace]

@@ -314,6 +314,7 @@ Abletonが `NotoSansCJKjp` / `NotoSansCJKkr` / `NotoSansCJKsc` / `unifont` を�
 ## 5. skia fixture の所在
 
 `~/Documents/Codex/2026-08-06/motolii-ui-hybrid-research-handoff/work/skia-timeline-probe/src/bin/`
+(2026-08-10移管: 現在の正本は[`spikes/skia-timeline-probe/src/bin/`](../../spikes/skia-timeline-probe/README.md))
 
 | bin | 主題 |
 |---|---|
