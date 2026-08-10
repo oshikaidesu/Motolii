@@ -208,6 +208,35 @@ fn is_under_motolii_doc(rel: &str) -> bool {
     rel == "crates/motolii-doc" || rel.starts_with("crates/motolii-doc/")
 }
 
+/// 明示除外マーカー。fixture が Document を丸ごと所有する試験文脈だけを対象にする。
+const EXEMPT_MARKER: &str = "single-writer-exempt:";
+
+/// 除外は同一行の行コメントだけで宣言する。理由の記述を必須にし、無言の逃げ道を作らない。
+fn exempt_lines(src: &str) -> Vec<usize> {
+    let mut out = Vec::new();
+    for (idx, line) in src.lines().enumerate() {
+        let Some(comment_at) = line.find("//") else {
+            continue;
+        };
+        let comment = &line[comment_at..];
+        let Some(marker_at) = comment.find(EXEMPT_MARKER) else {
+            continue;
+        };
+        let reason = comment[marker_at + EXEMPT_MARKER.len()..].trim();
+        if reason.is_empty() {
+            continue;
+        }
+        out.push(idx + 1);
+    }
+    out
+}
+
+/// 製品moduleへ逃げ道が漏れないよう、除外を honor するfileを試験文脈へ限る。
+/// 括弧対応の解析を持ち込まず、退行時はguardが厳しい側へ倒れる構成にする。
+fn file_allows_exemption(rel: &str, src: &str) -> bool {
+    rel.contains("/tests/") || src.contains("#[cfg(test)]")
+}
+
 fn rust_sources(root: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![root.join("crates")];
@@ -309,6 +338,42 @@ fn fixture_identifier_boundary_avoids_false_positive() {
 }
 
 #[test]
+fn fixture_exempt_marker_needs_reason_and_same_line_comment() {
+    let with_reason = "    doc: &mut Document, // single-writer-exempt: fixture が所有する\n";
+    assert_eq!(exempt_lines(with_reason), vec![1]);
+
+    // 理由なしは逃げ道にしない
+    let bare = "    doc: &mut Document, // single-writer-exempt:\n";
+    assert!(exempt_lines(bare).is_empty());
+
+    // 文字列内のマーカーは効かない
+    let in_string = "    let s = \"single-writer-exempt: nope\";\n";
+    assert!(exempt_lines(in_string).is_empty());
+
+    // 別行の宣言は当該ヒット行を免除しない
+    let other_line = "// single-writer-exempt: 上の行\nfn f(doc: &mut Document) {}\n";
+    assert_eq!(exempt_lines(other_line), vec![1]);
+    assert_eq!(mut_document_hit_lines(other_line), vec![2]);
+}
+
+#[test]
+fn fixture_exemption_is_honored_only_in_test_context() {
+    let src = "    doc: &mut Document, // single-writer-exempt: fixture\n";
+    assert!(!file_allows_exemption(
+        "crates/motolii-ui/src/thing.rs",
+        src
+    ));
+    assert!(file_allows_exemption(
+        "crates/motolii-ui/tests/thing.rs",
+        src
+    ));
+    assert!(file_allows_exemption(
+        "crates/motolii-ui/src/thing.rs",
+        &format!("#[cfg(test)]\nmod tests {{\n{src}}}\n")
+    ));
+}
+
+#[test]
 fn no_mut_document_outside_motolii_doc() {
     let root = workspace_root();
     let mut sources = rust_sources(&root);
@@ -327,6 +392,7 @@ fn no_mut_document_outside_motolii_doc() {
     );
 
     let mut violations = Vec::new();
+    let mut exempted = Vec::new();
     let mut scanned_outside = 0usize;
     for path in &sources {
         let rel = path
@@ -341,10 +407,29 @@ fn no_mut_document_outside_motolii_doc() {
             continue;
         };
         scanned_outside += 1;
+        let exempt = if file_allows_exemption(&rel, &text) {
+            exempt_lines(&text)
+        } else {
+            Vec::new()
+        };
         for line in mut_document_hit_lines(&text) {
+            if exempt.contains(&line) {
+                exempted.push(format!("{rel}:{line}"));
+                continue;
+            }
             violations.push(format!("{rel}:{line}: &mut Document outside motolii-doc"));
         }
     }
+    // 除外は隠さない。件数と場所を常に出し、PRで数えられる状態にする。
+    eprintln!(
+        "single-writer guard: exempted={} sites{}",
+        exempted.len(),
+        if exempted.is_empty() {
+            String::new()
+        } else {
+            format!("\n  {}", exempted.join("\n  "))
+        }
+    );
     assert!(
         scanned_outside > 5,
         "motolii-doc 外の走査が空振り(件数={scanned_outside})"
