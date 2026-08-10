@@ -25,6 +25,10 @@
 6. 並列施工はDocument writer、GPU device、artifact commit、製品runtime合流だけを直列点にする。
 7. probe不合格は`BUILD`許可ではない。同じ成果を`REMAP / REDUCE`し、独自DB、WAL、scheduler runtime、
    SVG parser、invalidation frameworkを作らない。
+8. verified artifactからHost所有GPU resourceへの昇格は作品意味でなくHost privateな実行policyとする。
+   現行portable stagingを`REUSE`し、platform direct I/Oはsource／license／platform matrix、wgpu接続、代表workload
+   実測が揃うまで[観察](reviews/2026-08-06-storage-to-gpu-direct-io-design-observation.md)に留める。backend名、
+   vendor handle、架空trait、設定UIをDocument／公開plugin API／Vismへ予約せず、本地図の新parent／`DO`を増やさない。
 
 ## 3. 親項目の検索入口
 

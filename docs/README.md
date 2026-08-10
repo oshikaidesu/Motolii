@@ -42,6 +42,7 @@
 | [vism-known-implementation-adoption-map.md](vism-known-implementation-adoption-map.md) | Vism全入口の既知解、採用方式、private境界、probe、cutover、retirement | **採択地図決定／依存・runtime実装は未許可**(2026-08-02) |
 | [M4既知実装調査](reviews/2026-08-02-m4-known-implementation-survey.md) | M4のcache／resource／disk artifact／区間／background job／proxy／SVG候補を具体APIまで比較 | **比較中**(採択probe前。候補比較だけFable助言を再照合済み) |
 | [M4 disk artifact store再検索](reviews/2026-08-02-m4-disk-artifact-store-resurvey.md) | dormantなcacache後の候補を再検索し、global CASを過剰仕様としてverified recipe file storeへ縮小 | **縮小採用**(2026-08-02。tempfile採択probe前) |
+| [storage-to-GPU direct I/O観察](reviews/2026-08-06-storage-to-gpu-direct-io-design-observation.md) | cuFile／xio-sig一次資料から、artifact identityをCore、storage→GPU到達経路をHost private policyへ分離する既決境界の補強材料と再入場条件を固定 | **観察／BUILD FORBIDDEN**(2026-08-06。新task・API・設定UIなし) |
 | [M5既知実装調査](reviews/2026-08-02-m5-known-implementation-survey.md) | M5の3D math／import／depth／bounds／text／identity候補を既存ownerへ割り当てる比較 | **比較中**(反対側レビューと採択probe前) |
 | [decision-index.md](decision-index.md) | 決定逆引き台帳: 主題キーワード→既決の正本へのポインタ(状態語彙固定・機械検証対象) | **運用正本**(2026-07-19新設。作業前の逆引き入口) |
 | [performance-model.md](performance-model.md) | 性能の設計根拠と規律 | 現行 |
