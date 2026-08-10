@@ -27,9 +27,13 @@ cargo test --locked --manifest-path spikes/m5-known-implementation/M5-R0/Cargo.t
 
 - `cpu_reference_covers_material_matrix`: PASS
 - `gpu_matches_cpu_reference_or_returns_typed_refusal`: PASS
+- `halftone_cells_are_resolution_independent_in_composition_space`: PASS
+- `gpu_halftone_clips_projected_material_alpha_or_returns_typed_refusal`: PASS
 - macOS 15.5 / Apple arm64でadapter取得とGPU readbackを確認
 - `Rgba8Unorm` 32×32、copy row 256 bytes、single render pipeline
 - CPU referenceとの差分は各channel 2以内。既存goldenや製品thresholdは変更していない
+- 投影済みmaterial RGBAを別fullscreen halftone passへ渡し、silhouette外alpha 0、内部dot／hole、
+  composition正規化座標の解像度非依存判定を自動確認
 
 ## Negative oracle and boundaries
 
@@ -45,6 +49,7 @@ cargo test --locked --manifest-path spikes/m5-known-implementation/M5-R0/Cargo.t
 - renderling: **未実行・任意比較のまま**。R0のgateやoracleにしない
 - Khronos Sample Renderer／Blender: **PATTERN**。数値・shader・scene ownerを移植しない
 - このprobeのshader／CPU reference: **probe-only**。製品material systemへ移植しない
+- halftoneの二pass／readback: **probe-only**。製品では既存GPU texture ownerへ接続し、CPU pixel routeを作らない
 
 ## Remaining gates
 

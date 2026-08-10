@@ -21,6 +21,13 @@ pub struct Pixel {
     pub rgba: [u8; 4],
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Frame {
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<Pixel>,
+}
+
 #[derive(Debug, Error)]
 pub enum RenderError {
     #[error("no compatible wgpu adapter is available")]
@@ -60,6 +67,15 @@ pub fn required_limits(adapter: &wgpu::Adapter) -> Result<GpuLimits, RenderError
 }
 
 pub fn render_case(case: MaterialCase) -> Result<Pixel, RenderError> {
+    let frame = render_frame(case, false)?;
+    Ok(frame.pixels[(HEIGHT / 2 * WIDTH + WIDTH / 2) as usize])
+}
+
+pub fn render_halftone_case(case: MaterialCase) -> Result<Frame, RenderError> {
+    render_frame(case, true)
+}
+
+fn render_frame(case: MaterialCase, halftone: bool) -> Result<Frame, RenderError> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::HighPerformance,
@@ -150,10 +166,82 @@ pub fn render_case(case: MaterialCase) -> Result<Pixel, RenderError> {
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let halftone_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("m5-r0-halftone-target"),
+        size: wgpu::Extent3d {
+            width: WIDTH,
+            height: HEIGHT,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let halftone_view = halftone_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let halftone_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("m5-r0-halftone-shader"),
+        source: wgpu::ShaderSource::Wgsl(HALFTONE_SHADER.into()),
+    });
+    let halftone_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("m5-r0-halftone-layout"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        }],
+    });
+    let halftone_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("m5-r0-halftone-pipeline-layout"),
+        bind_group_layouts: &[Some(&halftone_layout)],
+        immediate_size: 0,
+    });
+    let halftone_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("m5-r0-halftone-pipeline"),
+        layout: Some(&halftone_pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &halftone_shader,
+            entry_point: Some("vs_main"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &halftone_shader,
+            entry_point: Some("fs_main"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        multiview_mask: None,
+        cache: None,
+    });
+    let halftone_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("m5-r0-halftone-bind-group"),
+        layout: &halftone_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::TextureView(&view),
+        }],
+    });
     let buffer = readback_buffer(&device);
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("m5-r0-render-encoder"),
@@ -166,7 +254,7 @@ pub fn render_case(case: MaterialCase) -> Result<Pixel, RenderError> {
                 depth_slice: None,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -179,9 +267,35 @@ pub fn render_case(case: MaterialCase) -> Result<Pixel, RenderError> {
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..3, 0..1);
     }
+    if halftone {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("m5-r0-halftone-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &halftone_view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&halftone_pipeline);
+        pass.set_bind_group(0, &halftone_bind_group, &[]);
+        pass.draw(0..3, 0..1);
+    }
+    let copy_source = if halftone {
+        &halftone_texture
+    } else {
+        &texture
+    };
     encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
-            texture: &texture,
+            texture: copy_source,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
@@ -214,14 +328,25 @@ pub fn render_case(case: MaterialCase) -> Result<Pixel, RenderError> {
         })
         .map_err(|error| RenderError::Readback(error.to_string()))?;
     let mapped = slice.get_mapped_range();
-    let pixel = Pixel {
-        rgba: mapped[0..4]
-            .try_into()
-            .map_err(|_| RenderError::Readback("short mapped range".to_owned()))?,
-    };
+    let mut pixels = Vec::with_capacity((WIDTH * HEIGHT) as usize);
+    for row in 0..HEIGHT as usize {
+        let row_start = row * READBACK_BYTES_PER_ROW as usize;
+        for column in 0..WIDTH as usize {
+            let start = row_start + column * 4;
+            pixels.push(Pixel {
+                rgba: mapped[start..start + 4]
+                    .try_into()
+                    .map_err(|_| RenderError::Readback("short mapped range".to_owned()))?,
+            });
+        }
+    }
     drop(mapped);
     buffer.unmap();
-    Ok(pixel)
+    Ok(Frame {
+        width: WIDTH,
+        height: HEIGHT,
+        pixels,
+    })
 }
 
 fn readback_buffer(device: &wgpu::Device) -> wgpu::Buffer {
@@ -321,6 +446,33 @@ fn reflect(value: [f32; 3], normal: [f32; 3]) -> [f32; 3] {
     add(value, scale(normal, -(2.0 * dot(normal, value))))
 }
 
+#[cfg(test)]
+fn halftone_reference_coverage(
+    sample_position: [f32; 2],
+    dimensions: [u32; 2],
+    cells_per_height: f32,
+    linear_luminance: f32,
+) -> f32 {
+    let uv = [
+        sample_position[0] / dimensions[0] as f32,
+        sample_position[1] / dimensions[1] as f32,
+    ];
+    let grid = [
+        cells_per_height * dimensions[0] as f32 / dimensions[1] as f32,
+        cells_per_height,
+    ];
+    let cell = [
+        (uv[0] * grid[0]).fract() - 0.5,
+        (uv[1] * grid[1]).fract() - 0.5,
+    ];
+    let radius = 0.48 * (1.0 - linear_luminance.clamp(0.0, 1.0)).sqrt();
+    if (cell[0] * cell[0] + cell[1] * cell[1]).sqrt() <= radius {
+        1.0
+    } else {
+        0.0
+    }
+}
+
 const SHADER: &str = r#"
 struct Material {
   base_color: vec4<f32>,
@@ -332,7 +484,7 @@ struct Material {
 
 @vertex
 fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
-  let positions = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
+  let positions = array<vec2<f32>, 3>(vec2<f32>(-0.75, -0.70), vec2<f32>(0.75, -0.70), vec2<f32>(0.0, 0.75));
   return vec4<f32>(positions[index], 0.0, 1.0);
 }
 
@@ -358,6 +510,36 @@ fn fs_main() -> @location(0) vec4<f32> {
   }
   color = color + material.emissive_roughness.rgb;
   return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+}
+"#;
+
+const HALFTONE_SHADER: &str = r#"
+@group(0) @binding(0) var source: texture_2d<f32>;
+
+@vertex
+fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+  let positions = array<vec2<f32>, 3>(vec2<f32>(-1.0, -1.0), vec2<f32>(3.0, -1.0), vec2<f32>(-1.0, 3.0));
+  return vec4<f32>(positions[index], 0.0, 1.0);
+}
+
+@fragment
+fn fs_main(@builtin(position) position: vec4<f32>) -> @location(0) vec4<f32> {
+  let dimensions_u = textureDimensions(source);
+  let dimensions = vec2<f32>(dimensions_u);
+  let input = textureLoad(source, vec2<i32>(position.xy), 0);
+  if input.a <= 0.0 {
+    return vec4<f32>(0.0);
+  }
+
+  let uv = position.xy / dimensions;
+  let cells_per_height = 8.0;
+  let grid = vec2<f32>(cells_per_height * dimensions.x / dimensions.y, cells_per_height);
+  let cell_position = fract(uv * grid) - vec2<f32>(0.5);
+  let straight_rgb = input.rgb / max(input.a, 0.000001);
+  let luminance = dot(straight_rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+  let radius = 0.48 * sqrt(clamp(1.0 - luminance, 0.0, 1.0));
+  let dot_coverage = select(0.0, 1.0, length(cell_position) <= radius);
+  return input * dot_coverage;
 }
 "#;
 
@@ -431,6 +613,48 @@ mod tests {
                 Err(RenderError::AdapterUnavailable | RenderError::InsufficientLimits { .. }) => {}
                 Err(error) => panic!("unexpected GPU failure: {error}"),
             }
+        }
+    }
+
+    #[test]
+    fn halftone_cells_are_resolution_independent_in_composition_space() {
+        let low = halftone_reference_coverage([20.0, 28.0], [64, 64], 8.0, 0.35);
+        let high = halftone_reference_coverage([40.0, 56.0], [128, 128], 8.0, 0.35);
+        assert_eq!(low, high);
+    }
+
+    #[test]
+    fn gpu_halftone_clips_projected_material_alpha_or_returns_typed_refusal() {
+        let case = cases()[1];
+        match (render_frame(case, false), render_halftone_case(case)) {
+            (Ok(source), Ok(output)) => {
+                assert_eq!((source.width, source.height), (output.width, output.height));
+                let mut retained = 0;
+                let mut punched_out = 0;
+                for (input, filtered) in source.pixels.iter().zip(&output.pixels) {
+                    if input.rgba[3] == 0 {
+                        assert_eq!(filtered.rgba, [0, 0, 0, 0]);
+                    } else if filtered.rgba[3] == 0 {
+                        punched_out += 1;
+                    } else {
+                        retained += 1;
+                        assert!(filtered
+                            .rgba
+                            .iter()
+                            .zip(input.rgba)
+                            .all(|(actual, source)| *actual <= source));
+                    }
+                }
+                assert!(retained > 0, "halftone must retain dots inside the mesh");
+                assert!(
+                    punched_out > 0,
+                    "halftone must create holes inside the mesh"
+                );
+            }
+            (Err(RenderError::AdapterUnavailable | RenderError::InsufficientLimits { .. }), _)
+            | (_, Err(RenderError::AdapterUnavailable | RenderError::InsufficientLimits { .. })) => {
+            }
+            (Err(error), _) | (_, Err(error)) => panic!("unexpected GPU failure: {error}"),
         }
     }
 }

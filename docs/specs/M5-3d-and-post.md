@@ -17,7 +17,9 @@ RectとCircleを別rendererへ分けず、作者向けparameter recipeから既�
 最初の2D filter／mask proofは[平面gradient／Path clip mask決定](../reviews/2026-08-10-m5-planar-gradient-path-clip-mask-rerun-proof.md)に従う。
 gradient contentとPath coverageを既存fill fragment passで融合し、一回だけ使うvector maskのために別mask textureを作らない。
 mask再利用、image／video／luma source、feather／blur／invert、nested maskが実在した時だけderived GPU maskを再選定する。
-halftoneは同じcoverageを使える候補だが、座標空間とpixel-frequency oracleを閉じる前に実装しない。
+halftoneは2D／3DをRGBAへ合流した後の同じscreen-space filterとし、object UVやmesh分割へ結び付けない。
+dot座標はcomposition正規化座標、frequencyは出力高さ当たりのcell数で表す。最終coverageは入力alphaとの積にし、
+解像度を変えても同じ正規化位置のcell／dot判定が変わらないことをoracleとする。
 
 ## 実装前の既知実装調査
 

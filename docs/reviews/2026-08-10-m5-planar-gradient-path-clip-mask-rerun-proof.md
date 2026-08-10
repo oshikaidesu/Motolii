@@ -54,11 +54,17 @@ payload roundtrip、既存source-over、Path閉路を固定する。
 
 その場合もmaskはderived GPU resourceであり、Document writer、CPU pixel buffer、第二Preview／Export経路にしない。
 
-## 5. Halftone候補
+## 5. Halftoneと3D RGBAへの適用
 
 halftoneはgradientの色補間を置き換える単純なvertex colorではない。dot frequencyをmesh分割へ依存させず、
-canonical／screen／objectのどの空間で固定するか、zoom／export解像度、anti-alias、luma入力を閉じた
-fragment content functionとして扱う。mask側は今回と同じ`content × coverage`を再利用できる。
+2D Pathと3D meshが投影済みRGBAへ合流した後の同じscreen-space filterとして扱う。座標はcomposition正規化座標、
+frequencyは出力高さ当たりのcell数とするため、Preview／Exportの解像度差でcell配置を変えない。入力のlinear RGB輝度から
+円dot半径を決め、dot coverageと入力alphaを乗算する。object UV、mesh tessellation、camera zoomをdot座標ownerにしない。
 
-`M5-FILTERMASK-H0`は候補として残すが、座標空間とpixel-frequency oracleを閉じる前にshaderを追加しない。
+`M5-R0`のprivate offscreen fixtureでは、透明clear上へ投影した3D material三角形をRGBA textureに保持し、別のfullscreen
+halftone passでtextureをsampleする。自動oracleは、3D silhouette外のalphaが0のまま、silhouette内にdotとholeの両方があり、
+dot画素が入力RGBAを超えないことを固定する。これにより`M5-FILTERMASK-H0`を`DONE / PRIVATE PROBE`とする。
+製品では同じ処理をGPU texture間で行い、CPU readbackや2D／3D別実装を作らない。本probeのreadbackはoracle専用である。
+
+binary edgeのanti-alias、製品scene-color format、実mesh／Rerun Stage接続は未成立であり、本成立を製品runtimeへ繰り上げない。
 製品接続の次edgeは既決どおり`M5-PATH2D-S1` Stage seat compileであり、本probeから別window filter runtimeを作らない。
