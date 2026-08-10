@@ -11,9 +11,11 @@
 
 ## Adoption and state
 
+- Working-draft route exercised once:
 - Known implementation / thin Motolii seam:
 - Product state (`WORKING_DRAFT / PROBE / PRODUCT_SOURCE / MAIN_ROUTE`):
 - Known limits:
+- Unverified gates / known red:
 - Expected mechanical conflicts:
 
 ## Evidence
@@ -32,3 +34,4 @@
 - [ ] Actual diff stays within the issue allowlist
 - [ ] Findings outside the contract were not implemented
 - [ ] This PR remains a candidate until the top seat adopts and integrates it
+- [ ] The Draft records a working basic route; polish, all-platform closure, and zero findings are not prerequisites

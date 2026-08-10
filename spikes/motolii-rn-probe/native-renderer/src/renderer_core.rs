@@ -85,6 +85,7 @@ pub(crate) struct RendererCore {
     scene: SceneKind,
     selected_object_index: i32,
     playhead: f64,
+    show_path_rectangle: bool,
     frame: u64,
     stats: RenderStats,
 }
@@ -244,6 +245,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             scene,
             selected_object_index: 1,
             playhead: 0.54,
+            show_path_rectangle: false,
             frame: 0,
             stats: RenderStats::default(),
         })
@@ -287,6 +289,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         self.playhead = playhead.clamp(0.0, 1.0);
         if let Some(timeline) = &mut self.timeline {
             timeline.dirty = true;
+        }
+    }
+
+    pub(crate) fn set_show_path_rectangle(&mut self, show: bool) {
+        self.show_path_rectangle = show;
+        if let Some(stage) = &mut self.stage {
+            stage.dirty = true;
         }
     }
 
@@ -384,13 +393,17 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             let stage = self.stage.as_mut().expect("stage resources");
             if stage.dirty {
                 let overlay_started = Instant::now();
-                draw_stage_overlay(
-                    &mut stage.pixels,
-                    self.config.width,
-                    self.config.height,
-                    stage.gizmo,
-                    stage.dragging,
-                );
+                if self.show_path_rectangle {
+                    stage.pixels.fill(0);
+                } else {
+                    draw_stage_overlay(
+                        &mut stage.pixels,
+                        self.config.width,
+                        self.config.height,
+                        stage.gizmo,
+                        stage.dragging,
+                    );
+                }
                 self.queue.write_texture(
                     wgpu::TexelCopyTextureInfo {
                         texture: &stage.overlay,
@@ -415,7 +428,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 self.stats.overlay_last_us = overlay_started.elapsed().as_micros() as u64;
             }
             let preview_view = stage.preview.create_view(&Default::default());
-            render_rerun_stage(stage, &preview_view, self.config.width, self.config.height)?;
+            render_rerun_stage(
+                stage,
+                &preview_view,
+                self.config.width,
+                self.config.height,
+                self.show_path_rectangle,
+            )?;
             {
                 let attachments = [Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -892,32 +911,48 @@ fn render_rerun_stage(
     target: &wgpu::TextureView,
     width: u32,
     height: u32,
+    show_path_rectangle: bool,
 ) -> Result<(), String> {
     let context = &mut stage.rerun;
     context.begin_frame();
     stage.video.begin_frame();
 
     let mut lines = LineDrawableBuilder::new(context);
-    lines
-        .batch("Motolii rectangle")
-        .add_rectangle_outline_2d(
-            [width as f32 * 0.20, height as f32 * 0.24].into(),
-            [width as f32 * 0.42, 0.0].into(),
-            [0.0, height as f32 * 0.46].into(),
-        )
-        .radius(Size::new_ui_points(4.0))
-        .color(Color32::from_rgb(82, 214, 255));
+    if !show_path_rectangle {
+        lines
+            .batch("Motolii rectangle")
+            .add_rectangle_outline_2d(
+                [width as f32 * 0.20, height as f32 * 0.24].into(),
+                [width as f32 * 0.42, 0.0].into(),
+                [0.0, height as f32 * 0.46].into(),
+            )
+            .radius(Size::new_ui_points(4.0))
+            .color(Color32::from_rgb(82, 214, 255));
+    }
+    // B002 cyan と別色・別位置の閉路を同じ LineDrawableBuilder へ載せる
+    if let Some(path) = b003_path_rectangle_closed(show_path_rectangle, width, height) {
+        let top_left = path[0];
+        let extent_u = [path[1][0] - path[0][0], path[1][1] - path[0][1]];
+        let extent_v = [path[3][0] - path[0][0], path[3][1] - path[0][1]];
+        lines
+            .batch("Motolii B003 path rectangle")
+            .add_rectangle_outline_2d(top_left.into(), extent_u.into(), extent_v.into())
+            .radius(Size::new_ui_points(3.0))
+            .color(Color32::from_rgb(255, 196, 64));
+    }
     let lines = lines
         .into_draw_data()
         .map_err(|error| format!("build Rerun rectangle: {error}"))?;
 
     let mut points = PointCloudBuilder::new(context);
-    points.batch("Motolii circle").add_points_2d(
-        &[([width as f32 * 0.58, height as f32 * 0.48, 0.0]).into()],
-        &[Size::new_scene_units(height as f32 * 0.16)],
-        &[Color32::from_rgba_premultiplied(255, 82, 139, 210)],
-        &[re_renderer::PickingLayerInstanceId::default()],
-    );
+    if !show_path_rectangle {
+        points.batch("Motolii circle").add_points_2d(
+            &[([width as f32 * 0.58, height as f32 * 0.48, 0.0]).into()],
+            &[Size::new_scene_units(height as f32 * 0.16)],
+            &[Color32::from_rgba_premultiplied(255, 82, 139, 210)],
+            &[re_renderer::PickingLayerInstanceId::default()],
+        );
+    }
     let points = points
         .into_draw_data()
         .map_err(|error| format!("build Rerun circle: {error}"))?;
@@ -967,6 +1002,12 @@ fn render_rerun_stage(
         });
         view.composite(context, &mut pass);
     }
+    if show_path_rectangle {
+        context.before_submit();
+        context.queue.submit([draw, encoder.finish()]);
+        return Ok(());
+    }
+
     let timescale = stage
         .video
         .data_descr()
@@ -1032,6 +1073,18 @@ fn render_rerun_stage(
     Ok(())
 }
 
+/// render_rerun_stage が消費する B003 追加矩形の閉路。false なら追加しない。
+fn b003_path_rectangle_closed(show: bool, width: u32, height: u32) -> Option<[[f32; 2]; 5]> {
+    if !show {
+        return None;
+    }
+    let x0 = width as f32 * 0.68;
+    let y0 = height as f32 * 0.08;
+    let x1 = width as f32 * 0.94;
+    let y1 = height as f32 * 0.22;
+    Some([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]])
+}
+
 #[cfg(test)]
 mod chroma_tests {
     use super::CHROMA_VIDEO_BYTES;
@@ -1053,6 +1106,25 @@ mod chroma_tests {
             .latest_sample_index_at_presentation_timestamp(seek)
             .unwrap();
         assert_eq!(first, second);
+    }
+}
+
+#[cfg(test)]
+mod path_rectangle_tests {
+    use super::b003_path_rectangle_closed;
+
+    #[test]
+    fn b003_path_rectangle_absent_when_false_and_closed_when_true() {
+        assert!(b003_path_rectangle_closed(false, 1000, 800).is_none());
+
+        let path = b003_path_rectangle_closed(true, 1000, 800).expect("present when true");
+        assert_eq!(path[0], path[4], "path must close");
+        assert_eq!(path[0], [680.0, 64.0]);
+        assert_eq!(path[1], [940.0, 64.0]);
+        assert_eq!(path[2], [940.0, 176.0]);
+        assert_eq!(path[3], [680.0, 176.0]);
+        assert_ne!(path[0], path[1]);
+        assert_ne!(path[1], path[2]);
     }
 }
 

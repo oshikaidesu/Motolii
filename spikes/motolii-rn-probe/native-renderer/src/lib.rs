@@ -111,6 +111,21 @@ pub extern "C" fn motolii_macos_stage_renderer_pointer(
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
+pub extern "C" fn motolii_macos_stage_renderer_set_show_path_rectangle(
+    handle: *mut c_void,
+    show: bool,
+) -> bool {
+    if handle.is_null() {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        (&mut *handle.cast::<MacOsSurfaceRenderer>()).set_show_path_rectangle(show);
+    }))
+    .is_ok()
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
 pub extern "C" fn motolii_macos_timeline_renderer_set_state(
     handle: *mut c_void,
     selected_object_index: i32,

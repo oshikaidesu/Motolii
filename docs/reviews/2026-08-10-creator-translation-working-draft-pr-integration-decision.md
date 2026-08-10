@@ -25,6 +25,15 @@ creator intent
 - PRはdiff、根拠、既知の限界、事後観測をまとめる**landing envelope**である。承認待ちの官僚的gateや、一発で完成を証明する容器にはしない。直接mainへ入れる既存許可も維持する。
 - probe、製品source、main統合、通常製品route、製品完成の状態は引き続き分ける。叩き台であることは状態の繰り上げを許さない。
 
+## 叩き台PRの合格線
+
+Draft PRへ最初から完成品の精度を要求しない。合格線は、対象の利用者成果が既存route上で一度動き、次の議論と修正を実diffと知覚可能な結果から始められることである。今回のようなUI→Stage接続なら、既存UIを操作して既存Stageの結果が変わるところまでを一つの動く塊とする。
+
+- 必須なのは、既存root／owner／実行routeを迂回せず、対象outcomeが最低一度通ること、実際に確認した範囲と未確認gateを正直に分けること、既知の限界とfix-forward ownerを残すことである。
+- 初回Draftで、全edge case、最終抽象、全platform、全lane green、独立review指摘0、将来の全panelとの整合まで閉じる必要はない。それらをPR作成の前提へ戻さない。
+- ただし「叩き台」は、起動不能や対象route未接続を動いたと呼ぶ免責ではない。基本routeが未確認なら`PARTIAL`、失敗しているならredとしてそのまま記録する。
+- reviewは完成品だけを選別する門ではなく、動く叩き台へ具体的な修正を積む場所として使う。改善は同じoutcomeの小さな追記またはmain上のfix-forwardで行い、PR前に完全化するためのmeta作業へ戻らない。
+
 ## parallelとconflict
 
 共有seatを先に完全分割してから並列化するのではなく、Stage、Timeline、Browser、Inspector、Vism表現等の**利用者に見える縦slice**を並列に進め、統合担当が順にmainへ着地させる。

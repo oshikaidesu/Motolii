@@ -17,7 +17,7 @@ type BrowserTab = 'MEDIA' | 'EFFECTS' | 'CREATE';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
 type TimelineMode = 'PACKING' | 'DENSITY' | 'NATIVE';
 
-const BUILD_LABEL = 'B002 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA';
+const BUILD_LABEL = 'B003 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA/PATH';
 
 type EffectItem = {
   id: string;
@@ -117,7 +117,13 @@ function PanelHeader({title, detail}: {title: string; detail?: string}) {
   );
 }
 
-function Browser({width}: {width: number}) {
+function Browser({
+  width,
+  onCreateRectangle,
+}: {
+  width: number;
+  onCreateRectangle: () => void;
+}) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('echo');
@@ -217,13 +223,33 @@ function Browser({width}: {width: number}) {
         <View style={styles.emptyPanel}>
           <Text style={styles.emptyTitle}>Create</Text>
           <Text style={styles.muted}>Text · Shape · Adjustment · Camera</Text>
+          <Pressable
+            accessibilityLabel="Create Rectangle"
+            accessibilityRole="button"
+            onPress={onCreateRectangle}
+            style={[styles.effectCard, styles.createCard]}
+            testID="browser-create-rectangle">
+            <View style={[styles.effectThumb, {backgroundColor: '#5a7a6a'}]}>
+              <Text style={styles.effectBadge}>□</Text>
+            </View>
+            <Text numberOfLines={1} style={styles.effectName}>Rectangle</Text>
+            <Text numberOfLines={1} style={styles.effectTags}>#path</Text>
+          </Pressable>
         </View>
       )}
     </View>
   );
 }
 
-function Stage({showGpu, onToggleGpu}: {showGpu: boolean; onToggleGpu: () => void}) {
+function Stage({
+  showGpu,
+  onToggleGpu,
+  showPathRectangle,
+}: {
+  showGpu: boolean;
+  onToggleGpu: () => void;
+  showPathRectangle: boolean;
+}) {
   return (
     <View style={styles.stage} testID="stage-surface">
       <View style={styles.stageTools}>
@@ -239,25 +265,29 @@ function Stage({showGpu, onToggleGpu}: {showGpu: boolean; onToggleGpu: () => voi
           <MotoliiGpuView
             accessible
             accessibilityLabel="Rust wgpu native Stage"
+            key={showPathRectangle ? 'path-rectangle' : 'default-stage'}
+            showPathRectangle={showPathRectangle}
             style={styles.gpuStage}
             testID="rust-wgpu-stage"
           />
         ) : (
           <View style={styles.gpuStageOff}><Text style={styles.muted}>Native Stage unmounted</Text></View>
         )}
-        <View pointerEvents="none" style={styles.frameGrid}>
-          <Text style={styles.outputLabel}>OUTPUT FRAME</Text>
-          <View style={styles.titleBounds}>
-            <Text style={styles.stageTitle}>NIGHT{`\n`}DRIVE</Text>
-            <Text style={styles.stageSubtitle}>54.2 / CITY SIGNAL</Text>
+        {!showPathRectangle && (
+          <View pointerEvents="none" style={styles.frameGrid}>
+            <Text style={styles.outputLabel}>OUTPUT FRAME</Text>
+            <View style={styles.titleBounds}>
+              <Text style={styles.stageTitle}>NIGHT{`\n`}DRIVE</Text>
+              <Text style={styles.stageSubtitle}>54.2 / CITY SIGNAL</Text>
+            </View>
+            <View style={styles.rings}>
+              <View style={[styles.ring, styles.ringLarge]} />
+              <View style={[styles.ring, styles.ringMedium]} />
+              <View style={[styles.ring, styles.ringSmall]} />
+              <View style={styles.ringCore} />
+            </View>
           </View>
-          <View style={styles.rings}>
-            <View style={[styles.ring, styles.ringLarge]} />
-            <View style={[styles.ring, styles.ringMedium]} />
-            <View style={[styles.ring, styles.ringSmall]} />
-            <View style={styles.ringCore} />
-          </View>
-        </View>
+        )}
       </View>
       <View style={styles.transport}>
         <Text style={styles.transportButton}>|‹</Text>
@@ -478,6 +508,7 @@ function App() {
   const [inspectorWidth, setInspectorWidth] = useState(326);
   const [timelineHeight, setTimelineHeight] = useState(270);
   const [showGpuStage, setShowGpuStage] = useState(true);
+  const [showPathRectangle, setShowPathRectangle] = useState(false);
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
@@ -497,7 +528,10 @@ function App() {
         <Text style={styles.breadcrumb}>Pulse rings / <Text style={styles.breadcrumbStrong}>Echo Bloom</Text></Text>
       </View>
       <View style={styles.workspace}>
-        <Browser width={browserWidth} />
+        <Browser
+          width={browserWidth}
+          onCreateRectangle={() => setShowPathRectangle(true)}
+        />
         <Splitter
           label="Browserのサイズを変更"
           orientation="vertical"
@@ -506,7 +540,11 @@ function App() {
           onNudge={() => setBrowserWidth(value => value >= 348 ? 284 : value + 64)}
         />
         <View style={styles.centerColumn}>
-          <Stage showGpu={showGpuStage} onToggleGpu={() => setShowGpuStage(value => !value)} />
+          <Stage
+            showGpu={showGpuStage}
+            onToggleGpu={() => setShowGpuStage(value => !value)}
+            showPathRectangle={showPathRectangle}
+          />
         </View>
         <Splitter
           label="Inspectorのサイズを変更"
@@ -581,6 +619,7 @@ const styles = StyleSheet.create({
   mediaLabel: {fontSize: 7, color: '#aeb1b3'},
   emptyPanel: {padding: 14},
   emptyTitle: {fontSize: 13, color: '#e2e3e1'},
+  createCard: {marginTop: 12, width: '100%'},
   muted: {fontSize: 9, color: '#858a8d'},
   vSplitter: {width: 8, backgroundColor: '#272a2d', borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#3e4246'},
   hSplitter: {height: 8, backgroundColor: '#272a2d', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#3e4246'},
