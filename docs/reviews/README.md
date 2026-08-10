@@ -37,6 +37,7 @@
 | [2026-08-09-chain-gate-results-and-audio-path.md](2026-08-09-chain-gate-results-and-audio-path.md) | 仮コード未通過6区間へ鎖のgateを掛けて全区間NEEDS_REVISIONを確定し、完成条件の音声経路が書き出し側・取り込み側とも実装済みで未配線(BUILT_UNWIRED)であることと、完成条件を塞ぐ8件を特定した観察 |
 | [2026-08-10-stage-hit-test-missing-group-transform.md](2026-08-10-stage-hit-test-missing-group-transform.md) | Stageのhit-test経路の world にグループ変形継承が入っておらず、変形を持つグループ内の子で描画位置とhit領域がずれるfinding。該当testなし。未処分 |
 | [2026-08-10-wire-carries-layer-identity-only.md](2026-08-10-wire-carries-layer-identity-only.md) | RN wireがlayer粒度のidentityしか運ばず、keyframe/effect/paramを指すintentはhost実装が正しくても撃てないfinding。R2編集4 intent中3本が該当。未処分 |
+| [2026-08-10-group-transform-bounds-draft.md](2026-08-10-group-transform-bounds-draft.md) | グループのtransform handleが囲む矩形をcomposition寸法ではなく子の合成範囲とし、Unknownは全域fallback、空グループは全域へ倒さないとする起草。未採択・反対側レビュー未実施 |
 | [2026-08-10-group-drag-call-site-sketch.md](2026-08-10-group-drag-call-site-sketch.md) | グループrootを掴んで動かす鎖の仮コード。???8件のうち本当に未決は group bounds契約と group root選択の2件で、前者が pivot・handle・snap・dirty領域を含む6依存の要石であることを示した |
 | [2026-08-09-m3-r0-product-runtime-seat-acceptance.md](2026-08-09-m3-r0-product-runtime-seat-acceptance.md) | R0-HOST／MAC-SEAT／STAGE-LIFECYCLEを責任別に再照合し、通常RN Release artifactのread-only起動でR0-ACCEPTをDONEとした受入 |
 | [2026-08-10-m3-collaborative-bringup-decision.md](2026-08-10-m3-collaborative-bringup-decision.md) | R0後のM3を全surface一括統合待ちから、起動可能なRN製品artifactへStage／Timeline／Browser／Inspectorを継続統合する共同開発bring-upへ切り替える決定 |
