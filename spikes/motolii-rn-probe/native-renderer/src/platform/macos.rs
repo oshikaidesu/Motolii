@@ -54,6 +54,10 @@ impl MacOsSurfaceRenderer {
         self.core.stage_pointer(phase, x, y);
     }
 
+    pub(crate) fn set_show_path_rectangle(&mut self, show: bool) {
+        self.core.set_show_path_rectangle(show);
+    }
+
     pub(crate) fn stats(&self) -> RenderStats {
         self.core.stats()
     }
