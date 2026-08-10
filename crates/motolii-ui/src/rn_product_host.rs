@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
 use motolii_core::RationalTime;
-use motolii_doc::{EvaluationTime, LayerId};
-use motolii_eval::DataTracks;
+use motolii_doc::{DocParam, DocValue, EvaluationTime, KeyframeId, LayerId, TrackItem};
+use motolii_eval::{DataTracks, Interp};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -27,7 +27,8 @@ use wgpu::{
 };
 
 use crate::document_edit_runtime::{
-    DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError, PlaceRectangleRequest,
+    AddPositionKeyRequest, DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
+    PlaceRectangleRequest, SetPositionKeyInterpRequest, SetPositionKeyValueRequest,
 };
 use crate::shell::{open_project_runtime, ShellError};
 use crate::stage_geometry_projection::project_stage_geometry;
@@ -212,6 +213,14 @@ pub(crate) struct WireIntentEnvelope {
     /// place_rectangle: document playhead time
     #[serde(default, skip_serializing_if = "Option::is_none")]
     playhead: Option<RationalTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    time: Option<RationalTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    new: Option<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    interp: Option<Interp>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -545,6 +554,161 @@ impl RnProductHost {
                 }
                 let mut queue = DocumentEditQueue::default();
                 queue.push_place_rectangle(PlaceRectangleRequest { position, playhead });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "add_position_key" | "set_position_key_value" | "set_position_key_interp" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(time) = intent.time else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let new = match intent.kind.as_str() {
+                    "set_position_key_value" => {
+                        let Some(new) = intent.new else {
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        };
+                        if !new.iter().all(|value| value.is_finite()) {
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        }
+                        Some(new)
+                    }
+                    _ => None,
+                };
+                let interp = if intent.kind == "set_position_key_interp" {
+                    let Some(interp) = intent.interp else {
+                        return reject(
+                            diagnostic(
+                                RnHostReasonCode::InvalidIntent,
+                                Some(host_handle),
+                                None,
+                                None,
+                                None,
+                            ),
+                            None,
+                        );
+                    };
+                    Some(interp)
+                } else {
+                    None
+                };
+
+                if self.primary != Some(target) {
+                    return accept(self.snapshot_wire(host_handle));
+                }
+
+                let mut queue = DocumentEditQueue::default();
+                match intent.kind.as_str() {
+                    "add_position_key" => {
+                        queue.push_add_position_key(AddPositionKeyRequest { target, time });
+                    }
+                    "set_position_key_value" => {
+                        let Some((key, old)) =
+                            position_key_at(self.runtime.snapshot().as_ref(), target, time)
+                        else {
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        };
+                        queue.push_set_position_key_value(SetPositionKeyValueRequest {
+                            target,
+                            key,
+                            old,
+                            new: new.expect("validated position value"),
+                        });
+                    }
+                    "set_position_key_interp" => {
+                        let Some((key, _)) =
+                            position_key_at(self.runtime.snapshot().as_ref(), target, time)
+                        else {
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        };
+                        queue.push_set_position_key_interp(SetPositionKeyInterpRequest {
+                            target,
+                            key,
+                            interp: interp.expect("validated interpolation"),
+                        });
+                    }
+                    _ => unreachable!("matched position key intent"),
+                }
                 match self.runtime.process_next(
                     &mut queue,
                     self.primary,
@@ -1756,6 +1920,54 @@ fn snapshot_for_test(snapshot: WireProductSnapshot) -> RnProductSnapshotForTest 
     }
 }
 
+fn position_key_at(
+    document: &motolii_doc::Document,
+    target: LayerId,
+    time: RationalTime,
+) -> Option<(KeyframeId, [f64; 2])> {
+    fn find_envelope(items: &[TrackItem], target: LayerId) -> Option<&motolii_doc::ItemEnvelope> {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return Some(&clip.envelope);
+                }
+                TrackItem::Group(group) if group.envelope.layer_id == target => {
+                    return Some(&group.envelope);
+                }
+                TrackItem::Group(group) => {
+                    if let Some(envelope) = find_envelope(&group.children, target) {
+                        return Some(envelope);
+                    }
+                }
+                TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+
+    let envelope = document
+        .tracks
+        .iter()
+        .find_map(|track| find_envelope(&track.items, target))?;
+    let DocParam::Keyframes(track) = &envelope.transform.position else {
+        return None;
+    };
+    let keys = track.keys();
+    if keys.is_empty()
+        || track.validate().is_err()
+        || keys.iter().any(|key| {
+            !matches!(key.value, DocValue::Vec2(value) if value.iter().all(|value| value.is_finite()))
+        })
+    {
+        return None;
+    }
+    let key = keys.iter().find(|key| key.t == time)?;
+    let DocValue::Vec2(value) = key.value else {
+        return None;
+    };
+    Some((key.id, value))
+}
+
 fn response_for_test(response: WireIntentResponse) -> RnHostTestResponse {
     RnHostTestResponse {
         accepted: response.accepted,
@@ -2381,6 +2593,10 @@ mod tests {
             frame: None,
             position: None,
             playhead: None,
+            target: None,
+            time: None,
+            new: None,
+            interp: None,
         }
     }
 
