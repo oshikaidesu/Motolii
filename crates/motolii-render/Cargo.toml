@@ -9,6 +9,7 @@ motolii-core.workspace = true
 motolii-gpu.workspace = true
 motolii-nodes.workspace = true
 motolii-plugin.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 wgpu.workspace = true
 

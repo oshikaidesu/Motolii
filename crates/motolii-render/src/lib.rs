@@ -3,6 +3,9 @@
 //! まず固定グラフ(SolidSource -> Overlay(rect) -> Composite(normal))だけを持ち、
 //! 評価順・TimeMap・premultiplied alpha契約を1本の関数に束ねる。
 
+mod recipe_key;
+pub use recipe_key::{ArtifactDigest, RecipeKeyError, RecipeKeyV1, RecipeKeyV1Input};
+
 use motolii_core::{
     premultiply_rgba_f32, ColorSpace, CompCamera, FrameDesc, PixelFormat, Quality, RationalTime,
     TimeMap, TimeMapError,
