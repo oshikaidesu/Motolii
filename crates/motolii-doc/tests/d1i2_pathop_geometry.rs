@@ -108,8 +108,8 @@ fn pucker_bloat_minus_one_doubles_distance_from_centroid() {
 
 #[test]
 fn pucker_bloat_tangent_moves_opposite_to_vertex() {
-    // 接線は頂点と逆向きに補間(意味論表)。頂点が重心へamount*d動くとき、絶対ハンドル位置は
-    // +amount*dだけ動く(頂点の変位と符号が反転する)ことを固定する。
+    // Lottieは絶対ハンドル位置を重心から逆向きへ補間する。Motoliiの相対接線では
+    // (1 + amount) * tangent + 2 * amount * d になることを固定する。
     use motolii_doc::pathgeom::Vertex;
     let centroid = p(0.0, 0.0);
     let vertex = p(1.0, 0.0);
@@ -136,8 +136,7 @@ fn pucker_bloat_tangent_moves_opposite_to_vertex() {
     let v0 = &out.contours[0].vertices[0];
     let d = vertex.x - centroid.x; // 重心はcentroid_of([(1,0),(-1,0)]) = (0,0) なので d=1.0
     approx(v0.point, p(1.0 - amount * d, 0.0));
-    // out_tangent = 元(0,0.2) + handle_shift(2*amount*d, 0) — x成分にのみ逆向きの変位が乗る。
-    approx(v0.out_tangent, p(2.0 * amount * d, 0.2));
+    approx(v0.out_tangent, p(2.0 * amount * d, 0.2 * (1.0 + amount)));
 }
 
 // --- zig_zag ---

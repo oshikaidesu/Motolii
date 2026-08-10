@@ -187,7 +187,7 @@ D1aが焼いた`Transform2D`/`Value::lerp`の意味論を仕様契約として�
 
 | `op` | Lottie `ty` | パラメータ(型・単位・範囲) | 意味 |
 |---|---|---|---|
-| `pucker_bloat` | `pb` | `amount: F64` ∈ **[-1, 1]**。0=恒等。+1=頂点が重心へ(Lottie +100%)。-1=重心から距離2倍(Lottie −100%)。接線は頂点と逆向きに補間 | AE Pucker & Bloat。Lottie百分率意味を正規化 |
+| `pucker_bloat` | `pb` | `amount: F64` ∈ **[-1, 1]**。0=恒等。+1=頂点が重心へ(Lottie +100%)。-1=重心から距離2倍(Lottie −100%)。絶対Bezierハンドルを重心から`-amount`補間する。相対接線では`(1 + amount) * tangent + 2 * amount * (vertex - centroid)` | AE Pucker & Bloat。Lottie百分率意味を正規化 |
 | `zig_zag` | `zz` | `amount: F64` ≥ 0(正準・峰谷距離)。`ridges: F64` ≥ 0(セグメントあたりの峰数)。`point_type`: `corner`\|`smooth` | AE Zig Zag。**Wave派生は入れない** |
 | `offset` | `op` | `distance: F64`(正=外、負=内)。`line_join` + `miter_limit` | AE Offset Paths。**v1は閉路限定**。開路は型付き unsupported error(Clipper2 offset) |
 | `round_corners` | `rd` | `radius: F64` ≥ 0 | 通常filletのみ。Chamfer/点別半径は焼かない |

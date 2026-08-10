@@ -261,8 +261,8 @@ fn centroid_of(vertices: &[Vertex]) -> Point {
 
 // ---------------------------------------------------------------------------
 // pucker_bloat: amount∈[-1,1]。0=恒等、+1=頂点が重心へ、-1=重心から距離2倍。
-// 接線は頂点と逆向きに補間(意味論表) — 頂点の絶対変位が-amount*dなら、ハンドルの
-// 絶対位置は+amount*dだけ動く(d=頂点-重心)。これにより一次実装として自己整合的に固定する。
+// 接線はLottie同様に絶対ハンドル位置を重心から逆向きへ補間する。
+// 相対接線へ戻すと `(1 + amount) * tangent + 2 * amount * (vertex - centroid)` になる。
 // ---------------------------------------------------------------------------
 fn pucker_bloat_contour(c: &Contour, amount: f64) -> Contour {
     if c.vertices.len() <= 1 {
@@ -276,10 +276,11 @@ fn pucker_bloat_contour(c: &Contour, amount: f64) -> Contour {
             let d = v.point.sub(centroid);
             let new_point = centroid.add(d.scale(1.0 - amount));
             let handle_shift = d.scale(2.0 * amount);
+            let tangent_scale = 1.0 + amount;
             Vertex {
                 point: new_point,
-                in_tangent: v.in_tangent.add(handle_shift),
-                out_tangent: v.out_tangent.add(handle_shift),
+                in_tangent: v.in_tangent.scale(tangent_scale).add(handle_shift),
+                out_tangent: v.out_tangent.scale(tangent_scale).add(handle_shift),
             }
         })
         .collect();

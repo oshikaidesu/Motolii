@@ -8,11 +8,14 @@ cargo test --manifest-path spikes/rerun-path2d-probe/Cargo.toml
 cargo run --manifest-path spikes/rerun-path2d-probe/Cargo.toml
 ```
 
-表示するのはz=0の塗りつぶしRectとCircleで、Circleの`draw_order`が高い。
-両者はpremultiplied source-overで重なる。製品Document、公開Vism SDK、Rerun store、
-Preview／Exportの完成を意味しない。
+表示するのはz=0の塗りつぶしRect／Circleと、その下に並ぶSource Circle、Pucker / Bloat、
+Zig Zag burstのoutline。Circleの`draw_order`が高く、fill同士はpremultiplied source-overで重なる。
+outlineは既存`pathgeom::apply`のPath変形結果をRerun標準`LineStrips2D`へ渡す。
+製品Document、公開Vism SDK、Rerun store、Preview／Exportの完成を意味しない。
 
 ![Rerun上のz=0 Rect／Circle overlap](rerun-path2d-z0-overlap.png)
+
+![Rerun上のPucker／BloatとZig Zag burst](rerun-pathfx-pucker-zigzag.png)
 
 このprobeのBlob codec、convex triangle fan、view-fit用の透明`Points2D`、shapeごとのbuffer生成は
 製品採択対象ではない。次の発注境界は

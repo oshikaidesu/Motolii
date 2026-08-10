@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-10-lottie-path-modifier-candidates-and-rerun-proof.md](2026-08-10-lottie-path-modifier-candidates-and-rerun-proof.md) | 固定lottie-web実コードからAE由来Path modifier候補を分類し、Pucker/Bloatのcubic handle式訂正とZig Zag burstのRerun実画面proofを記録する縮小採用 |
 | [2026-08-10-m5-path2d-rerun-custom-visualizer-probe-and-dispatch-route.md](2026-08-10-m5-path2d-rerun-custom-visualizer-probe-and-dispatch-route.md) | M5最初の可視成果をz=0 Path2DのRect／Circle／source-overとし、Rerun custom visualizer proof、probe限定事項、次のRN Stage seat compile発注capsuleを固定する決定 |
 | [2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md](2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md) | 固定Rerun実コードのView／camera／visualizer／wgpu／picking閉包を確認し、M5 spatial主部を機構別PATTERNからSpatial Viewer subsystemのADOPT／WRAPへ再締結する決定 |
 | [2026-08-10-m3-map-node-state-measurement.md](2026-08-10-m3-map-node-state-measurement.md) | M3実行地図の全54 nodeをcurrent codeへ照合し、状態語の乖離8件を特定して更新した実測。WIRED 5／BUILT_UNWIRED 19／PARTIAL 16／ABSENT 10／EXTERNAL 4 |

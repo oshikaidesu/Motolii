@@ -184,27 +184,8 @@ impl FillContribution {
             return Err(ContributionError::UnsupportedContour);
         }
 
-        let mut vertices = Vec::new();
-        for index in 0..contour.vertices.len() {
-            let current = contour.vertices[index];
-            let next = contour.vertices[(index + 1) % contour.vertices.len()];
-            if index == 0 {
-                vertices.push([current.point.x as f32, current.point.y as f32]);
-            }
-            let p0 = current.point;
-            let p1 = add(current.point, current.out_tangent);
-            let p2 = add(next.point, next.in_tangent);
-            let p3 = next.point;
-            let curved = current.out_tangent != Point::ZERO || next.in_tangent != Point::ZERO;
-            let steps = if curved { CUBIC_STEPS } else { 1 };
-            for step in 1..=steps {
-                if index + 1 == contour.vertices.len() && step == steps {
-                    continue;
-                }
-                let point = cubic(p0, p1, p2, p3, step as f64 / steps as f64);
-                vertices.push([point.x as f32, point.y as f32]);
-            }
-        }
+        let mut vertices = sample_outline(&self.path)?;
+        vertices.pop(); // 閉路終点を残すと最後のfanが退化三角形になる。
 
         // ponytail: the first proof only needs convex Rect/Circle fills; replace this fan with
         // the adopted Vello tessellator when concave paths or holes enter the completion contract.
@@ -213,6 +194,36 @@ impl FillContribution {
             .collect();
         Ok(TriangleMesh { vertices, indices })
     }
+}
+
+/// Rerunの既存LineStrips2DでPathOp結果を観察するため、1閉輪郭を折れ線化する。
+pub fn sample_outline(path: &Path) -> Result<Vec<[f32; 2]>, ContributionError> {
+    let [contour] = path.contours.as_slice() else {
+        return Err(ContributionError::UnsupportedContour);
+    };
+    if !contour.closed || contour.vertices.len() < 3 {
+        return Err(ContributionError::UnsupportedContour);
+    }
+
+    let mut points = Vec::new();
+    for index in 0..contour.vertices.len() {
+        let current = contour.vertices[index];
+        let next = contour.vertices[(index + 1) % contour.vertices.len()];
+        if index == 0 {
+            points.push([current.point.x as f32, current.point.y as f32]);
+        }
+        let p0 = current.point;
+        let p1 = add(current.point, current.out_tangent);
+        let p2 = add(next.point, next.in_tangent);
+        let p3 = next.point;
+        let curved = current.out_tangent != Point::ZERO || next.in_tangent != Point::ZERO;
+        let steps = if curved { CUBIC_STEPS } else { 1 };
+        for step in 1..=steps {
+            let point = cubic(p0, p1, p2, p3, step as f64 / steps as f64);
+            points.push([point.x as f32, point.y as f32]);
+        }
+    }
+    Ok(points)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -327,5 +338,17 @@ mod tests {
                 .zip(expected)
                 .all(|(actual, expected)| (actual - expected).abs() < 0.000_01)
         );
+    }
+
+    #[test]
+    fn sampled_outline_is_closed() {
+        let path = ShapeRecipe::Circle {
+            center: Point::ZERO,
+            radius: 0.4,
+        }
+        .lower();
+        let points = sample_outline(&path).unwrap();
+        assert_eq!(points.first(), points.last());
+        assert!(points.len() > path.contours[0].vertices.len());
     }
 }
