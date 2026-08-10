@@ -238,13 +238,30 @@ runtime identity と installation path が存在せず、実在するのは comp
 | node | gate #番 | 状態 | 現行mainでの再確認 |
 |---|---|---|---|
 | — | 1 | **解決済み** | CLI subcommandは`ExportOverlay` / `ExportProject` / **`ExportDocument`** / `VerifyB4` / `Help`。`ExportDocument`が`export_document_file`→`export_document_video`（`resolve_audio_export`→`mux_soundtrack` / `mux_mixed_pcm`）へ到達する。commit `97830975`（2026-08-10）で配線済み |
-| `N-IMPORT-AUDIO` | 2 | `BUILT_UNWIRED` | `build_import_clip_source(asset, ImportAvMode::VideoAndAudio{..})`は`crates/motolii-doc/src/audio_edit.rs:21`に実在し`lib.rs:54`でpub。**製品呼び出しは0件**（呼ぶのは`tests/ag3_audio_commands.rs`だけ）。製品route `crates/motolii-ui/src/document_edit_runtime.rs`は8箇所すべてで`ClipSource::asset_video_only`を直接構築し、`audio: Vec::new()`になる |
+| `N-IMPORT-AUDIO` | 2 | **`ABSENT`**（2026-08-10訂正） | 当初`BUILT_UNWIRED`とし「製品importは常に音声を落とす」と書いたのは**誤り**。`ClipSource::asset_video_only`の8箇所は全て`crates/motolii-ui/src/document_edit_runtime.rs:1135`以降の`#[cfg(test)]`内で、**製品呼び出しは0件**。落としているのではなく**製品import経路が無い**。`build_import_clip_source` + `ImportAvMode::VideoAndAudio`（`crates/motolii-doc/src/audio_edit.rs:21`、`lib.rs:54`でpub）は実在するが呼ぶのは`tests/ag3_audio_commands.rs`だけ。したがって音声の有無は独立nodeではなく**`N-MEDIA-PLACE`施工時の選択事項**である |
 | `N-MEDIA-PICK` | 3 | `ABSENT` | 素材を選ぶ入口が`crates/` `ui/`のどこにも無い（file dialog／`rfd`／`pick_media`の実装0件）。リポ外probeのrfd実装は[回収監査](reviews/2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md)により**disposable probe debt・製品転記禁止として意図的に非コミット**であり、`UNKNOWN_OUTSIDE_REPO`ではなく`ABSENT`で確定 |
-| `N-MEDIA-PLACE` | 4 | `PARTIAL` | Asset admissionは`Command::AdmitAsset`（`command.rs:392`）としてCommand境界に実在しUndo可能。欠けているのは**挿入位置とtarget track を決める製品intent**。RN側の既存intentは`BrowserPlaceRectangleIntent`（`ui/motolii-rn/App.tsx:32`）で、mediaを置くintentではない |
-| `N-PROJECT-NEW` | 5 | `PARTIAL` | 低水準の初回永続化は実在（`ProjectSession::acquire` `crates/motolii-doc/src/journal/session.rs:88` + `save_with_journal`）。`crates/motolii-ui`側の呼び出しは**test fixtureのみ**で、製品Newの入口が無い |
+| `N-MEDIA-PLACE` | 4 | **`BUILT_UNWIRED`**（2026-08-10訂正） | `Command::AdmitAsset`（`command.rs:392`）は型としてCommand境界に実在しUndo可能だが、`prepare_admit_asset`を呼ぶのは`tests/m2_asset_lifecycle_commands.rs`だけで、**`crates/motolii-ui`配下に`AdmitAsset`という文字列が0件**。当初`PARTIAL`として「欠けているのは挿入位置とtarget trackのintent」と書いたが、実際は**admission自体が製品から一度も呼ばれていない**。RN側の既存intentは`BrowserPlaceRectangleIntent`（`ui/motolii-rn/App.tsx:32`）のみで、Browserの品目も`{id:'rectangle'}`固定1件（`ui/motolii-rn/src/browser/BrowserPanel.tsx:19`） |
+| `N-PROJECT-ENTRY` | 5 | **`ABSENT`**（2026-08-10改称・訂正） | 当初`N-PROJECT-NEW` `PARTIAL`としたが範囲が狭すぎた。**NewだけでなくOpenにも入口が無い**。既存projectを開く実装は実在する（`crates/motolii-ui/src/shell.rs:58` `open_project_runtime` → `ProjectSession::open`）が、pathの供給元は`--motolii-project <path>`かenv `MOTOLII_PROJECT_PATH`だけである（`ui/motolii-rn/macos/MotoliiRn-macOS/AppDelegate.mm:23`）。人間がprojectを選ぶ経路が製品に無い |
 | （既存 `T1`） | 6 | 既登録 | §5.9 `T1`と同一。RN Inspectorに編集routeが無い（`ui/motolii-rn/src/inspector/InspectorInitialReadPanel.tsx`にgesture／onChange 0件）。write routeは`ui/motolii-web/src/candidates/InspectorCandidate.jsx`側にあり再基線が凍結している。**重複nodeを立てない** |
 | （既存 `T3`） | 7 | 既登録 | §5.9 `T3`と同一。`Command::SetEffectEnabled`（`command.rs:319`）は実在するが`ui/`配下の呼び出しは0件（`diagnostic_projection.rs:261`の表示名のみ）。**重複nodeを立てない** |
 | `N-SOUNDTRACK-WRITE` | 8 | `ABSENT` | `Document.soundtrack: Option<Soundtrack>`（`crates/motolii-doc/src/lib.rs:137`）は実在し、validate・`AudioProgram`（`crates/motolii-audio/src/program.rs:39`）・mux側は揃っている。**`command.rs`にsoundtrackを設定するvariantが1件も無い** — 楽曲bedを作品へ据える編集操作が存在しない |
+
+### 2026-08-10 実装なぞりによる訂正と収束
+
+登録直後に5 nodeの実装を呼び出し側からなぞり、**3 nodeの記述が誤りだった**ため上表を訂正した
+（`N-IMPORT-AUDIO` / `N-MEDIA-PLACE` / `N-PROJECT-NEW`→`N-PROJECT-ENTRY`）。
+誤りの型はすべて同じで、**型・Command・関数が実在することを「製品にある」と読んだ**ことによる。
+`#[cfg(test)]`の内側か、呼び出し元が0件かを確認していなかった。
+
+その結果、media鎖は**端から端まで製品コードが0**であると分かった。
+素材を選ぶ → Assetを受け入れる → Timelineへ置く → 音声を含める、のどこにも製品呼び出しが無い。
+実在するのは`Command`型層とtest fixtureだけである。
+
+さらに`N-MEDIA-PICK`・`N-PROJECT-ENTRY`（New/Open）・Save Asは
+**「native file dialogの席が無い」1件へ収束する**。§5.9でAuthor/Publish 7件が
+runtime identity 1つへ収束したのと同じ構造であり、別nodeとして数えると4件、実体は1件である。
+`rfd`はgit史全体（`git log --all -S"rfd"`）で0件、リポ外にも製品資産としては無い。
+**この収束を確認してからdialog系のnodeを個別発注しない。**
 
 ### この節が変えないもの
 

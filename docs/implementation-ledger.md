@@ -161,14 +161,21 @@ gate結果は`docs/reviews/README.md`に索引されていたが、そこから�
 | node | 状態 | 現在地 | 次の一手 |
 |---|---|---|---|
 | （gate #1 CLI音声mux到達） | `DONE` | commit `97830975`(2026-08-10)で`export-document` subcommandが`export_document_video`へ到達。gate指摘は解決済み | 追加作業なし。**未解決として再発注しない** |
-| `N-IMPORT-AUDIO` | `ISSUE / BUILT_UNWIRED` | `build_import_clip_source` + `ImportAvMode::VideoAndAudio`は`crates/motolii-doc/src/audio_edit.rs:21`に実在・pub。製品呼び出し0件で、`crates/motolii-ui/src/document_edit_runtime.rs`は8箇所すべて`ClipSource::asset_video_only`（`audio: Vec::new()`）。**製品importは常に音声を落とす** | 呼び分けの一契約。新実装を起こさない。8箇所のうちどれが製品importかを先に確定する |
-| `N-MEDIA-PICK` | `DECIDE / ABSENT` | 素材を選ぶ入口が`crates/` `ui/`に0件。リポ外probeのrfd実装は製品転記禁止で意図的に非コミット | 既知実装調査から。probeを製品へ転記しない |
-| `N-MEDIA-PLACE` | `DECIDE / PARTIAL` | `Command::AdmitAsset`（`command.rs:392`）はCommand境界に実在・Undo可能。挿入位置とtarget trackを決める製品intentが無い | 意味を先に閉じる。`N-MEDIA-PICK`とは別粒 |
-| `N-PROJECT-NEW` | `DECIDE / PARTIAL` | 低水準の初回永続化は実在（`journal/session.rs:88` + `save_with_journal`）。`motolii-ui`側の呼び出しはtest fixtureのみ | 製品Newの入口の意味を閉じる |
+| `N-IMPORT-AUDIO` | `DECIDE / ABSENT`（訂正） | `asset_video_only`の8箇所は全て`document_edit_runtime.rs:1135`以降の`#[cfg(test)]`内。**音声を落としているのではなく製品import経路が無い** | 独立発注しない。`N-MEDIA-PLACE`施工時の選択事項へ畳む |
+| `N-MEDIA-PICK` | `DECIDE / ABSENT` | 素材を選ぶ入口が`crates/` `ui/`に0件。リポ外probeのrfd実装は製品転記禁止で意図的に非コミット | **`N-PROJECT-ENTRY`と同じ「file dialogの席」へ収束**。個別発注しない |
+| `N-MEDIA-PLACE` | `DECIDE / BUILT_UNWIRED`（訂正） | `Command::AdmitAsset`は型として実在・Undo可能だが、`prepare_admit_asset`の呼び出しはtestのみで**`motolii-ui`に`AdmitAsset`が0件**。Browserの品目も`rectangle`固定1件 | admission接続と配置intentを1粒に束ねない。先にどちらが先かを決める |
+| `N-PROJECT-ENTRY` | `DECIDE / ABSENT`（改称・訂正） | Openの実装は実在（`shell.rs:58`）だがpath供給は`--motolii-project`かenvのみ（`AppDelegate.mm:23`）。**NewもOpenも人間が選ぶ入口が無い** | file dialogの席として`N-MEDIA-PICK`と一緒に閉じる |
 | `N-SOUNDTRACK-WRITE` | `DECIDE / ABSENT` | `Document.soundtrack`（`motolii-doc/src/lib.rs:137`）・validate・`AudioProgram`・muxは揃うが、`command.rs`にsoundtrackを設定するvariantが0件 | 完成条件の「音楽同期」の入口。M2 Document ownerへ返す粒であり、M3接続粒として修理しない |
 
 gate #6／#7は[統合地図§5.9](outcome-driven-integration-map.md)の`T1`（RN Inspector編集route）と
 `T3`（`SetEffectEnabled`呼び出し0件）に既登録である。**重複nodeを立てない。**
+
+**2026-08-10訂正**: 登録直後に実装をなぞったところ、上表5行のうち**3行が誤りだった**。
+誤りの型は同一で、型・Command・関数の実在を「製品にある」と読み、`#[cfg(test)]`の内側か
+呼び出し元0件かを確認していなかった。結論として**media鎖は端から端まで製品コードが0**であり、
+`N-MEDIA-PICK`と`N-PROJECT-ENTRY`は**「native file dialogの席が無い」1件へ収束する**。
+経緯と再確認の根拠は[統合地図§5.10](outcome-driven-integration-map.md)にある。
+**発注前に必ず`#[cfg(test)]`境界と呼び出し元数を数えること。**
 
 本節は**実装許可でも発注でもない**。仮コード6区間の`NEEDS_REVISION`も未解消のままであり、
 本節をもって鎖を通過扱いにしない。
