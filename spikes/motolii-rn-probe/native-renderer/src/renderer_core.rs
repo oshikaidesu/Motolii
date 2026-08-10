@@ -31,6 +31,16 @@ pub(crate) enum PointerPhase {
     Cancel,
 }
 
+/// Timelineは頂点quadではなくSkia rasterを1枚上げてblitする。
+/// Stageのoverlayと同じ経路(CPU raster → write_texture → 全画面blit)である。
+struct TimelineResources {
+    surface_texture: wgpu::Texture,
+    blit_pipeline: wgpu::RenderPipeline,
+    blit_bind_group: wgpu::BindGroup,
+    pixels: Vec<u8>,
+    dirty: bool,
+}
+
 struct StageResources {
     preview: wgpu::Texture,
     overlay: wgpu::Texture,
@@ -60,6 +70,7 @@ pub(crate) struct RendererCore {
     config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
     stage: Option<StageResources>,
+    timeline: Option<TimelineResources>,
     scene: SceneKind,
     selected_object_index: i32,
     playhead: f64,
@@ -197,6 +208,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         let stage = (scene == SceneKind::Stage)
             .then(|| create_stage_resources(&device, format, config.width, config.height));
+        let timeline = (scene == SceneKind::Timeline)
+            .then(|| create_timeline_resources(&device, format, config.width, config.height));
         Ok(Self {
             _instance: instance,
             surface,
@@ -206,6 +219,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             config,
             pipeline,
             stage,
+            timeline,
             scene,
             selected_object_index: 1,
             playhead: 0.54,
@@ -232,21 +246,29 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 height,
             ));
         }
+        if self.scene == SceneKind::Timeline {
+            self.timeline = Some(create_timeline_resources(
+                &self.device,
+                self.config.format,
+                width,
+                height,
+            ));
+        }
     }
 
     pub(crate) fn set_timeline_state(&mut self, selected_object_index: i32, playhead: f64) {
-        self.selected_object_index = selected_object_index.clamp(0, 499);
+        self.selected_object_index = selected_object_index.max(0);
         self.playhead = playhead.clamp(0.0, 1.0);
+        if let Some(timeline) = &mut self.timeline {
+            timeline.dirty = true;
+        }
     }
 
     pub(crate) fn timeline_hit_test(&self, x: f64, y: f64) -> Option<(i32, f64)> {
-        if self.scene != SceneKind::Timeline || self.config.width == 0 || self.config.height == 0 {
+        if self.scene != SceneKind::Timeline {
             return None;
         }
-        let time = (x / f64::from(self.config.width)).clamp(0.0, 0.999_999);
-        let track = ((y / f64::from(self.config.height)).clamp(0.0, 0.999_999) * 20.0) as i32;
-        let clip = (time * 25.0) as i32;
-        Some((track * 25 + clip, time))
+        crate::timeline_skia::hit_test(self.config.width, self.config.height, x, y)
     }
 
     pub(crate) fn stats(&self) -> RenderStats {
@@ -310,11 +332,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let vertices = if self.scene == SceneKind::Timeline {
-            self.timeline_vertices()
-        } else {
-            Vec::new()
-        };
+        // Timelineは頂点quadを捨ててSkia rasterへ移した。Stage以外の残りだけがこの経路を使う。
+        let vertices: Vec<Vertex> = Vec::new();
         let vertex_buffer = (!vertices.is_empty()).then(|| {
             self.device
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -413,6 +432,60 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 pass.set_bind_group(0, &stage.composite_bind_group, &[]);
                 pass.draw(0..3, 0..1);
             }
+        } else if self.scene == SceneKind::Timeline {
+            let timeline = self.timeline.as_mut().expect("timeline resources");
+            if timeline.dirty {
+                let raster_started = Instant::now();
+                crate::timeline_skia::draw_timeline(
+                    &mut timeline.pixels,
+                    self.config.width,
+                    self.config.height,
+                    self.playhead,
+                    self.selected_object_index,
+                );
+                self.queue.write_texture(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &timeline.surface_texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    &timeline.pixels,
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(self.config.width * 4),
+                        rows_per_image: Some(self.config.height),
+                    },
+                    wgpu::Extent3d {
+                        width: self.config.width,
+                        height: self.config.height,
+                        depth_or_array_layers: 1,
+                    },
+                );
+                timeline.dirty = false;
+                self.stats.overlay_uploads += 1;
+                self.stats.overlay_last_us = raster_started.elapsed().as_micros() as u64;
+            }
+            let attachments = [Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(clear),
+                    store: wgpu::StoreOp::Store,
+                },
+            })];
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Motolii Skia timeline blit"),
+                color_attachments: &attachments,
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&timeline.blit_pipeline);
+            pass.set_bind_group(0, &timeline.blit_bind_group, &[]);
+            pass.draw(0..3, 0..1);
         } else {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Motolii native frame"),
@@ -447,65 +520,119 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         Ok(())
     }
 
-    fn timeline_vertices(&self) -> Vec<Vertex> {
-        let mut vertices = Vec::with_capacity(9_100);
-        let palette = [
-            [0.35, 0.48, 0.78, 1.0],
-            [0.55, 0.36, 0.69, 1.0],
-            [0.34, 0.58, 0.48, 1.0],
-            [0.65, 0.43, 0.27, 1.0],
-        ];
-        for track in 0..20 {
-            let track_top = track as f32 / 20.0;
-            let track_bottom = (track + 1) as f32 / 20.0;
-            push_rect(
-                &mut vertices,
-                0.0,
-                track_bottom - 0.002,
-                1.0,
-                track_bottom,
-                [0.18, 0.20, 0.23, 1.0],
-            );
-            for clip in 0..25 {
-                let index = track * 25 + clip;
-                let left = clip as f32 / 25.0 + 0.0015;
-                let right = (clip + 1) as f32 / 25.0 - 0.0015;
-                let top = track_top + 0.006;
-                let bottom = track_bottom - 0.006;
-                let color = if index == self.selected_object_index as usize {
-                    [0.88, 0.78, 0.34, 1.0]
-                } else {
-                    palette[index % palette.len()]
-                };
-                push_rect(&mut vertices, left, top, right, bottom, color);
+}
 
-                let inner_width = (right - left) * 0.16;
-                for sample in 0..2 {
-                    let wave_left = left + 0.004 + sample as f32 * inner_width * 1.2;
-                    let amplitude = 0.18 + ((index + sample * 7) % 5) as f32 * 0.09;
-                    let mid = (top + bottom) * 0.5;
-                    let half = (bottom - top) * amplitude * 0.5;
-                    push_rect(
-                        &mut vertices,
-                        wave_left,
-                        mid - half,
-                        (wave_left + inner_width).min(right - 0.003),
-                        mid + half,
-                        [0.92, 0.94, 0.92, 0.36],
-                    );
-                }
-            }
-        }
-        let playhead = self.playhead as f32;
-        push_rect(
-            &mut vertices,
-            (playhead - 0.0012).max(0.0),
-            0.0,
-            (playhead + 0.0012).min(1.0),
-            1.0,
-            [0.96, 0.88, 0.38, 0.95],
-        );
-        vertices
+/// Skia rasterを1枚受け取って全画面へblitするだけの資源。
+///
+/// textureは`Rgba8UnormSrgb`にする。Skiaが書くのはsRGBのbyteであり、
+/// surfaceもsRGBなので、sampling時にsRGB→linear、書き出しでlinear→sRGBへ戻り往復が恒等になる。
+/// `Rgba8Unorm`にすると1回分の変換が余計にかかって全体が白茶ける。
+fn create_timeline_resources(
+    device: &wgpu::Device,
+    surface_format: wgpu::TextureFormat,
+    width: u32,
+    height: u32,
+) -> TimelineResources {
+    let surface_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Motolii Skia timeline raster"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Motolii Skia timeline blit shader"),
+        source: wgpu::ShaderSource::Wgsl(
+            r#"
+            @group(0) @binding(0) var raster:texture_2d<f32>; @group(0) @binding(1) var samp:sampler;
+            struct O { @builtin(position) p:vec4<f32>, @location(0) uv:vec2<f32> };
+            @vertex fn vs(@builtin(vertex_index) i:u32)->O { var p=array<vec2<f32>,3>(vec2(-1.,-3.),vec2(3.,1.),vec2(-1.,1.)); var o:O; o.p=vec4(p[i],0.,1.); o.uv=vec2((p[i].x+1.)*.5,(1.-p[i].y)*.5); return o; }
+            @fragment fn fs(i:O)->@location(0) vec4<f32> { return vec4(textureSample(raster,samp,i.uv).rgb,1.); }
+        "#
+            .into(),
+        ),
+    });
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Motolii Skia timeline blit layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[Some(&bind_group_layout)],
+        immediate_size: 0,
+    });
+    let blit_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Motolii Skia timeline blit pipeline"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: surface_format,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: Default::default(),
+        depth_stencil: None,
+        multisample: Default::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+    let blit_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(
+                    &surface_texture.create_view(&Default::default()),
+                ),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+        ],
+    });
+    TimelineResources {
+        surface_texture,
+        blit_pipeline,
+        blit_bind_group,
+        pixels: vec![0; width as usize * height as usize * 4],
+        dirty: true,
     }
 }
 
@@ -745,42 +872,3 @@ fn draw_stage_overlay(bytes: &mut [u8], width: u32, height: u32, gizmo: [f32; 2]
     );
 }
 
-fn push_rect(
-    vertices: &mut Vec<Vertex>,
-    left: f32,
-    top: f32,
-    right: f32,
-    bottom: f32,
-    color: [f32; 4],
-) {
-    let l = left * 2.0 - 1.0;
-    let r = right * 2.0 - 1.0;
-    let t = 1.0 - top * 2.0;
-    let b = 1.0 - bottom * 2.0;
-    vertices.extend_from_slice(&[
-        Vertex {
-            position: [l, t],
-            color,
-        },
-        Vertex {
-            position: [l, b],
-            color,
-        },
-        Vertex {
-            position: [r, b],
-            color,
-        },
-        Vertex {
-            position: [l, t],
-            color,
-        },
-        Vertex {
-            position: [r, b],
-            color,
-        },
-        Vertex {
-            position: [r, t],
-            color,
-        },
-    ]);
-}

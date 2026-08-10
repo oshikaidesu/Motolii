@@ -1,4 +1,6 @@
 mod renderer_core;
+// renderer_core と同じく skia-safe を前提にする(macOS / Windows のみ依存に入る)。
+mod timeline_skia;
 
 #[cfg(target_os = "macos")]
 mod platform;
