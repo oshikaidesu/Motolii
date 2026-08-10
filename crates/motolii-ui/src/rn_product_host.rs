@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
 use motolii_core::RationalTime;
-use motolii_doc::{EvaluationTime, LayerId};
-use motolii_eval::DataTracks;
+use motolii_doc::{EffectDefinitionId, EffectId, EvaluationTime, KeyframeId, LayerId};
+use motolii_eval::{DataTracks, Interp};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -27,7 +27,9 @@ use wgpu::{
 };
 
 use crate::document_edit_runtime::{
-    DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError, PlaceRectangleRequest,
+    AddPositionKeyRequest, DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
+    PlaceRectangleRequest, SetEffectParamRequest, SetPositionKeyInterpRequest,
+    SetPositionKeyValueRequest,
 };
 use crate::shell::{open_project_runtime, ShellError};
 use crate::stage_geometry_projection::project_stage_geometry;
@@ -212,6 +214,39 @@ pub(crate) struct WireIntentEnvelope {
     /// place_rectangle: document playhead time
     #[serde(default, skip_serializing_if = "Option::is_none")]
     playhead: Option<RationalTime>,
+    /// position key: 対象 layer
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target: Option<LayerId>,
+    /// add_position_key: keyframe time
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    time: Option<RationalTime>,
+    /// position key: 対象 keyframe
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    key: Option<KeyframeId>,
+    /// set_position_key_value: 変更前の値
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    old: Option<[f64; 2]>,
+    /// set_position_key_value: 変更後の値
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    new: Option<[f64; 2]>,
+    /// set_position_key_interp: 補間方法。既存 Interp の serde 表現をそのまま使う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    interp: Option<Interp>,
+    /// set_effect_param: SetEffectParamRequest::new の引数
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    layer_id: Option<LayerId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    effect_use_id: Option<EffectId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    definition_id: Option<EffectDefinitionId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    plugin_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    effect_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    param_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    value: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -545,6 +580,238 @@ impl RnProductHost {
                 }
                 let mut queue = DocumentEditQueue::default();
                 queue.push_place_rectangle(PlaceRectangleRequest { position, playhead });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "add_position_key" => {
+                let (Some(target), Some(time)) = (intent.target, intent.time) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                queue.push_add_position_key(AddPositionKeyRequest { target, time });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "set_position_key_value" => {
+                let (Some(target), Some(key), Some(old), Some(new)) =
+                    (intent.target, intent.key, intent.old, intent.new)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if !old.iter().chain(new.iter()).all(|value| value.is_finite()) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_set_position_key_value(SetPositionKeyValueRequest {
+                    target,
+                    key,
+                    old,
+                    new,
+                });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "set_position_key_interp" => {
+                let (Some(target), Some(key), Some(interp)) =
+                    (intent.target, intent.key, intent.interp)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let interp_is_finite = match interp {
+                    Interp::Hold | Interp::Linear => true,
+                    Interp::Bezier { x1, y1, x2, y2 } => {
+                        [x1, y1, x2, y2].iter().all(|value| value.is_finite())
+                    }
+                };
+                if !interp_is_finite {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_set_position_key_interp(SetPositionKeyInterpRequest {
+                    target,
+                    key,
+                    interp,
+                });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "set_effect_param" => {
+                let (
+                    Some(layer_id),
+                    Some(effect_use_id),
+                    Some(definition_id),
+                    Some(plugin_id),
+                    Some(effect_version),
+                    Some(param_id),
+                    Some(value),
+                ) = (
+                    intent.layer_id,
+                    intent.effect_use_id,
+                    intent.definition_id,
+                    intent.plugin_id,
+                    intent.effect_version,
+                    intent.param_id,
+                    intent.value,
+                )
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if !value.is_finite() {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_set_effect_param(SetEffectParamRequest::new(
+                    layer_id,
+                    effect_use_id,
+                    definition_id,
+                    plugin_id,
+                    effect_version,
+                    param_id,
+                    value,
+                ));
                 match self.runtime.process_next(
                     &mut queue,
                     self.primary,
@@ -2381,6 +2648,19 @@ mod tests {
             frame: None,
             position: None,
             playhead: None,
+            target: None,
+            time: None,
+            key: None,
+            old: None,
+            new: None,
+            interp: None,
+            layer_id: None,
+            effect_use_id: None,
+            definition_id: None,
+            plugin_id: None,
+            effect_version: None,
+            param_id: None,
+            value: None,
         }
     }
 
