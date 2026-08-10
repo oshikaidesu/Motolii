@@ -563,3 +563,4 @@
 | [2026-07-27-wgsl-hot-reload-author-journey.md](2026-07-27-wgsl-hot-reload-author-journey.md) | WGSL hot reload作者経路 — INF-8具体化(2026-08-10歴史回収: ローカル専用ブランチから。後続決定がある場合はそちらが正) |
 | [2026-07-22-all-docs-reclosure-inventory.md](2026-07-22-all-docs-reclosure-inventory.md) | 全docs再締結監査・第0単位 — read-only棚卸し報告(REWOR(2026-08-10歴史回収: ローカル専用ブランチから。後続決定がある場合はそちらが正) |
 | [2026-07-20-m3-browser-panel-egui-taffy-spike.md](2026-07-20-m3-browser-panel-egui-taffy-spike.md) | M3 Browser panel egui/taffy spike観察(2026-08-10歴史回収: ローカル専用ブランチから。egui方向は2026-08-07 RN再基線で退役済み) |
+| [2026-08-10-session-handoff-friction-removal-and-recovery.md](2026-08-10-session-handoff-friction-removal-and-recovery.md) | 段差撤廃・歴史回収セッションの引き継ぎ。回収一覧、rescue保全、未完の次手(M2-ASSET-1C capsule設計ほか)、発注実務メモ |
