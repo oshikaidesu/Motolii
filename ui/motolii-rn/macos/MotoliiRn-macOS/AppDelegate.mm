@@ -4,6 +4,7 @@
 #import "MotoliiStageComponentView.h"
 
 #import <React/RCTBundleURLProvider.h>
+#import <React/RCTBridgeModule.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 
 @interface AppDelegate ()
@@ -72,6 +73,58 @@ NSString *SnapshotJSONFromCreateResponse(NSData *data)
 }
 
 } // namespace
+
+@interface MotoliiHostBridge : NSObject <RCTBridgeModule>
+@end
+
+@implementation MotoliiHostBridge
+
+RCT_EXPORT_MODULE()
+
+RCT_REMAP_METHOD(dispatchIntent,
+                 dispatchIntentWithHostHandle:(NSString *)hostHandle
+                 intentJSON:(NSString *)intentJSON
+                 resolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject)
+{
+  NSScanner *scanner = [NSScanner scannerWithString:hostHandle ?: @""];
+  unsigned long long parsedHostHandle = 0;
+  if (![scanner scanUnsignedLongLong:&parsedHostHandle] || !scanner.isAtEnd ||
+      parsedHostHandle == 0) {
+    reject(@"invalid_host_handle", @"host handle must be a positive integer", nil);
+    return;
+  }
+
+  NSData *intentData = [intentJSON dataUsingEncoding:NSUTF8StringEncoding];
+  if (intentData == nil) {
+    reject(@"invalid_intent", @"intent must be valid UTF-8", nil);
+    return;
+  }
+
+  uint8_t output[kHostBridgeBufferCapacity];
+  int64_t result = motolii_rn_host_dispatch_intent_json(
+      (uint64_t)parsedHostHandle,
+      (const uint8_t *)intentData.bytes,
+      intentData.length,
+      output,
+      sizeof(output));
+  if (result <= 0 || (uint64_t)result > sizeof(output)) {
+    reject(@"host_dispatch_failed", @"host intent dispatch failed", nil);
+    return;
+  }
+
+  NSString *responseJSON =
+      [[NSString alloc] initWithBytes:output
+                              length:(NSUInteger)result
+                            encoding:NSUTF8StringEncoding];
+  if (responseJSON == nil) {
+    reject(@"invalid_host_response", @"host response was not valid UTF-8", nil);
+    return;
+  }
+  resolve(responseJSON);
+}
+
+@end
 
 @implementation AppDelegate
 

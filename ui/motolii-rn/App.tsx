@@ -1,7 +1,9 @@
-import React from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import React, {useState} from 'react';
+import {NativeModules, StyleSheet, Text, View} from 'react-native';
 
-import BrowserPanel from './src/browser/BrowserPanel';
+import BrowserPanel, {
+  BrowserPlaceRectangleIntent,
+} from './src/browser/BrowserPanel';
 import InspectorInitialReadPanel from './src/inspector/InspectorInitialReadPanel';
 import MotoliiStageView from './src/specs/MotoliiStageNativeComponent';
 
@@ -12,6 +14,10 @@ export type MotoliiProductProps = {
   diagnostic?: string;
 };
 
+type MotoliiHostBridge = {
+  dispatchIntent(hostHandle: string, intentJSON: string): Promise<string>;
+};
+
 export default function App({
   hostHandle = '0',
   projectPath,
@@ -19,10 +25,36 @@ export default function App({
   diagnostic,
 }: MotoliiProductProps) {
   const hasHost = /^[1-9][0-9]*$/.test(hostHandle);
+  const [currentSnapshotJSON, setCurrentSnapshotJSON] = useState(snapshotJSON);
 
-  // RN側からRust hostへのdispatchは未実装のため、ここで受け取ったintentは捨てる。
-  const handlePlaceIntent = () => {
-    return;
+  const handlePlaceIntent = async (intent: BrowserPlaceRectangleIntent) => {
+    const bridge = NativeModules.MotoliiHostBridge as
+      | MotoliiHostBridge
+      | undefined;
+    if (!hasHost || bridge === undefined) {
+      return;
+    }
+    try {
+      const responseJSON = await bridge.dispatchIntent(
+        hostHandle,
+        JSON.stringify({
+          version: 1,
+          direction: 'rn-to-host',
+          host_handle: hostHandle,
+          ...intent,
+          playhead: {num: intent.playhead, den: 1},
+        }),
+      );
+      const response = JSON.parse(responseJSON) as {
+        accepted?: boolean;
+        snapshot?: unknown;
+      };
+      if (response.accepted === true && response.snapshot !== undefined) {
+        setCurrentSnapshotJSON(JSON.stringify(response.snapshot));
+      }
+    } catch {
+      return;
+    }
   };
 
   return (
@@ -53,7 +85,7 @@ export default function App({
           )}
         </View>
         <View style={styles.inspectorSlot} testID="inspector-slot">
-          <InspectorInitialReadPanel snapshotJSON={snapshotJSON} />
+          <InspectorInitialReadPanel snapshotJSON={currentSnapshotJSON} />
         </View>
       </View>
       <View style={styles.timelineSlot} testID="timeline-slot">
