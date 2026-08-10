@@ -33,6 +33,10 @@
 
 - `AGENTS.md`「検証と完了報告」: 通常提出の事前gate要件を撤廃し、事後観測+fix-forwardへ差し替え。
 
+## GitHub ruleset撤回追記(2026-08-10、利用者承認)
+
+GitHub ruleset「M2E-2 require code owner review」(ID 18817145、main対象・承認レビュー1件+CODEOWNERSレビュー必須)を削除した。単独オーナー体制では自己承認が不可能なため全PRが構造的にマージ不能となり、毎回のadmin上書きがブランチ208本滞留の根だった。[M2E-2 ruleset活性化](2026-07-12-M2E-2-ruleset-activation.md)の当初目的(golden・CPU参照実装の保護)は、`scripts/check-protected-diff.sh`/`check-golden-update-policy.sh`(policy lane、事後観測)とtest意味保護規律が引き続き担う。以後mainへは直接push可。
+
 ## 見直しトリガー
 
 fix-forwardが機能せずmainのredが3日以上放置される事態が繰り返される場合、「マージは自由・redの放置だけを検知して自動issue化する」等の軽量な観測強化を検討する。事前gateの復活は本決定の撤回としてのみ行う。
