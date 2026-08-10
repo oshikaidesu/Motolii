@@ -42,10 +42,14 @@ mod shell;
 mod stage_chrome_host_runtime;
 mod stage_geometry_projection;
 mod stage_hit_test;
+mod stage_overlay_gpu;
+pub mod stage_overlay_raster;
 mod state_ownership;
 mod static_preview;
 mod timeline_move_gesture;
 mod timeline_projection;
+#[cfg(target_os = "macos")]
+mod timeline_skia_raster;
 mod timeline_tools_host_runtime;
 mod timeline_trim_gesture;
 mod ui_numeric_trace;

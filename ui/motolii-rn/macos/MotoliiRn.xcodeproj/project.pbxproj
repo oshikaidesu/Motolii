@@ -11,6 +11,7 @@
 		010000000000000000000002 /* MotoliiStageComponentView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000005 /* MotoliiStageComponentView.mm */; };
 		010000000000000000000003 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000006 /* main.m */; };
 		010000000000000000000004 /* Main in Resources */ = {isa = PBXBuildFile; fileRef = 030000000000000000000001 /* Main */; };
+		010000000000000000000005 /* MotoliiTimelineComponentView.mm in Sources */ = {isa = PBXBuildFile; fileRef = 02000000000000000000000A /* MotoliiTimelineComponentView.mm */; };
 		F672A93B2FE79C7D7D44241B /* libPods-MotoliiRn-macOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B05F3C04282067DE509D1320 /* libPods-MotoliiRn-macOS.a */; };
 		FD452AFEFC23A946D4618295 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DB3A24136E93269243C5C10C /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
@@ -24,6 +25,8 @@
 		020000000000000000000005 /* MotoliiStageComponentView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MotoliiStageComponentView.mm; sourceTree = "<group>"; };
 		020000000000000000000006 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		020000000000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		020000000000000000000009 /* MotoliiTimelineComponentView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = MotoliiTimelineComponentView.h; sourceTree = "<group>"; };
+		02000000000000000000000A /* MotoliiTimelineComponentView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = MotoliiTimelineComponentView.mm; sourceTree = "<group>"; };
 		02499769A077A4619BB79963 /* Pods-MotoliiRn-macOS.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MotoliiRn-macOS.debug.xcconfig"; path = "Target Support Files/Pods-MotoliiRn-macOS/Pods-MotoliiRn-macOS.debug.xcconfig"; sourceTree = "<group>"; };
 		030000000000000000000001 /* Main */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Main; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		1ED56FF18CC62A50BA2BC93C /* Pods-MotoliiRn-macOS.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MotoliiRn-macOS.release.xcconfig"; path = "Target Support Files/Pods-MotoliiRn-macOS/Pods-MotoliiRn-macOS.release.xcconfig"; sourceTree = "<group>"; };
@@ -61,6 +64,8 @@
 				020000000000000000000003 /* MotoliiHostBridge.h */,
 				020000000000000000000004 /* MotoliiStageComponentView.h */,
 				020000000000000000000005 /* MotoliiStageComponentView.mm */,
+				020000000000000000000009 /* MotoliiTimelineComponentView.h */,
+				02000000000000000000000A /* MotoliiTimelineComponentView.mm */,
 				030000000000000000000001 /* Main */,
 				020000000000000000000008 /* Info.plist */,
 				020000000000000000000006 /* main.m */,
@@ -258,6 +263,7 @@
 			files = (
 				010000000000000000000001 /* AppDelegate.mm in Sources */,
 				010000000000000000000002 /* MotoliiStageComponentView.mm in Sources */,
+				010000000000000000000005 /* MotoliiTimelineComponentView.mm in Sources */,
 				010000000000000000000003 /* main.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

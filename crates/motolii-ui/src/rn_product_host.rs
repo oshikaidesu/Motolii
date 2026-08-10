@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
-use motolii_core::RationalTime;
+use motolii_core::{PixelSize, RationalTime};
 use motolii_doc::{EvaluationTime, LayerId};
 use motolii_eval::DataTracks;
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,8 @@ use crate::stage_hit_test::{
     hit_test_projected_layers, view_local_in_stage, view_local_to_canonical, StageHit,
     StageHitTestReject,
 };
+use crate::stage_overlay_gpu::{overlay_dimensions_match, overlay_dirty, OverlayUploadKey};
+use crate::stage_overlay_raster::{raster_selection_outline, StageOverlayRaster};
 #[cfg(target_os = "macos")]
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
 use crate::{CommandId, DomainIntent, InputPhase, RouterOutput};
@@ -61,6 +63,8 @@ pub enum RnHostError {
     HostHandleExhausted,
     #[error("stage handle space exhausted")]
     StageHandleExhausted,
+    #[error("timeline handle space exhausted")]
+    TimelineHandleExhausted,
     #[error("host registry lock was poisoned")]
     RegistryLockPoisoned,
     #[error(transparent)]
@@ -73,10 +77,14 @@ pub enum RnHostError {
     UnknownHost(u64),
     #[error("stage handle {0} is unknown")]
     UnknownStage(u64),
+    #[error("timeline handle {0} is unknown")]
+    UnknownTimeline(u64),
     #[error("host handle {0} was already destroyed")]
     DestroyedHost(u64),
     #[error("stage handle {0} was already destroyed")]
     DestroyedStage(u64),
+    #[error("timeline handle {0} was already destroyed")]
+    DestroyedTimeline(u64),
     #[error("invalid utf-8 in wire payload")]
     InvalidUtf8,
 }
@@ -89,8 +97,10 @@ pub enum RnHostReasonCode {
     InvalidProjectPath,
     UnknownHostHandle,
     UnknownStageHandle,
+    UnknownTimelineHandle,
     DestroyedHostHandle,
     DestroyedStageHandle,
+    DestroyedTimelineHandle,
     InvalidIntent,
     StaleProjectionGeneration,
     LateLifecycleEvent,
@@ -104,6 +114,8 @@ struct RnHostDiagnostic {
     host_handle: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stage_handle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timeline_handle: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     expected_projection_generation: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -232,6 +244,18 @@ struct HostGpuBundle {
     _preview: StaticPreview,
     preview_pipeline: wgpu::RenderPipeline,
     preview_bind_group: wgpu::BindGroup,
+    overlay_pipeline: wgpu::RenderPipeline,
+    overlay_bind_group_layout: wgpu::BindGroupLayout,
+}
+
+#[cfg(target_os = "macos")]
+struct StageOverlayGpu {
+    texture: wgpu::Texture,
+    _view: wgpu::TextureView,
+    _sampler: wgpu::Sampler,
+    bind_group: wgpu::BindGroup,
+    width: u32,
+    height: u32,
 }
 
 #[cfg(target_os = "macos")]
@@ -244,6 +268,8 @@ struct StageGpuBinding {
     surface: Option<Surface<'static>>,
     needs_reconfigure: bool,
     poisoned: bool,
+    overlay: Option<StageOverlayGpu>,
+    overlay_upload_key: Option<OverlayUploadKey>,
 }
 
 #[cfg(target_os = "macos")]
@@ -258,6 +284,8 @@ impl StageGpuBinding {
             surface: None,
             needs_reconfigure: false,
             poisoned: false,
+            overlay: None,
+            overlay_upload_key: None,
         }
     }
 
@@ -286,6 +314,9 @@ impl StageGpuBinding {
     }
 
     fn configured(&mut self, width: u32, height: u32) {
+        if self.physical_width != width || self.physical_height != height {
+            self.overlay_upload_key = None;
+        }
         self.physical_width = width;
         self.physical_height = height;
         self.needs_reconfigure = false;
@@ -310,11 +341,29 @@ impl StageGpuBinding {
         self.physical_height = 0;
         self.needs_reconfigure = false;
         self.surface_epoch = self.surface_epoch.saturating_add(1);
+        self.overlay = None;
+        self.overlay_upload_key = None;
     }
 
     fn validation_failed(&mut self) {
         self.poisoned = true;
         self.needs_reconfigure = false;
+        self.surface_epoch = self.surface_epoch.saturating_add(1);
+    }
+
+    fn detach(&mut self) {
+        if !self.is_attached() {
+            return;
+        }
+        self.surface = None;
+        self.layer_ptr = 0;
+        self.physical_width = 0;
+        self.physical_height = 0;
+        self.last_presented_epoch = None;
+        self.needs_reconfigure = false;
+        self.poisoned = false;
+        self.overlay = None;
+        self.overlay_upload_key = None;
         self.surface_epoch = self.surface_epoch.saturating_add(1);
     }
 }
@@ -341,6 +390,36 @@ struct RnStageSurface {
     gpu: StageGpuBinding,
 }
 
+struct RnTimelineSurface {
+    host_handle: u64,
+    destroyed: bool,
+    #[cfg(target_os = "macos")]
+    gpu: StageGpuBinding,
+    #[cfg(target_os = "macos")]
+    raster_key: Option<TimelineRasterKey>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TimelineRasterKey {
+    revision: u64,
+    projection_generation: u64,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+    width: u32,
+    height: u32,
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) struct TimelineFrameBorrow {
+    pub(crate) revision: u64,
+    pub(crate) projection_generation: u64,
+    pub(crate) document: Arc<motolii_doc::Document>,
+    pub(crate) projection: crate::timeline_projection::TimelineProjection,
+    pub(crate) primary: Option<LayerId>,
+    pub(crate) playhead: RationalTime,
+}
+
 struct RnProductHost {
     runtime: DocumentEditRuntime,
     projection_generation: u64,
@@ -348,6 +427,7 @@ struct RnProductHost {
     current_time: RationalTime,
     primary: Option<LayerId>,
     stages: HashMap<u64, RnStageSurface>,
+    timelines: HashMap<u64, RnTimelineSurface>,
     destroyed: bool,
     #[cfg(target_os = "macos")]
     gpu: Option<HostGpuBundle>,
@@ -504,6 +584,7 @@ impl RnProductHost {
                 };
                 self.current_time = time;
                 self.projection_generation = next_generation;
+                self.refresh_stage_overlays().ok();
                 accept(self.snapshot_wire(host_handle))
             }
             "place_rectangle" => {
@@ -553,6 +634,7 @@ impl RnProductHost {
                     Ok(Some(published)) => {
                         self.primary = published.primary;
                         self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
                         accept(self.snapshot_wire(host_handle))
                     }
                     Ok(None) => accept(self.snapshot_wire(host_handle)),
@@ -600,6 +682,7 @@ impl RnProductHost {
                     Ok(Some(published)) => {
                         self.primary = published.primary;
                         self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
                         accept(self.snapshot_wire(host_handle))
                     }
                     Ok(None) => accept(self.snapshot_wire(host_handle)),
@@ -727,6 +810,10 @@ impl RnProductHost {
                         stage.height = intent.height.expect("validated resize height");
                         stage.scale_factor =
                             intent.scale_factor.expect("validated resize scale factor");
+                        #[cfg(target_os = "macos")]
+                        {
+                            stage.gpu.overlay_upload_key = None;
+                        }
                         None
                     }
                     "stage_focus" => {
@@ -867,6 +954,7 @@ impl RnProductHost {
                 // accepted 変更だけを Host transient へ反映する（直接代入で意図を捏造しない）。
                 self.primary = published.primary;
                 self.projection_generation = published.projection_generation;
+                self.refresh_stage_overlays().ok();
                 None
             }
             Err(DocumentEditRuntimeError::SelectionTargetNotFound(_))
@@ -929,6 +1017,69 @@ impl RnProductHost {
         Ok(())
     }
 
+    fn register_timeline(
+        &mut self,
+        host_handle: u64,
+        timeline_handle: u64,
+    ) -> Result<(), RnHostError> {
+        if self.destroyed {
+            return Err(RnHostError::DestroyedHost(host_handle));
+        }
+        self.timelines.insert(
+            timeline_handle,
+            RnTimelineSurface {
+                host_handle,
+                destroyed: false,
+                #[cfg(target_os = "macos")]
+                gpu: StageGpuBinding::detached(),
+                #[cfg(target_os = "macos")]
+                raster_key: None,
+            },
+        );
+        Ok(())
+    }
+
+    fn destroy_timeline(&mut self, timeline_handle: u64) -> Result<(), RnHostError> {
+        let Some(timeline) = self.timelines.get_mut(&timeline_handle) else {
+            return Err(RnHostError::UnknownTimeline(timeline_handle));
+        };
+        if timeline.destroyed {
+            return Err(RnHostError::DestroyedTimeline(timeline_handle));
+        }
+        #[cfg(target_os = "macos")]
+        timeline.gpu_detach_surface();
+        timeline.destroyed = true;
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn timeline_frame_borrow(&self) -> Result<TimelineFrameBorrow, RnHostReasonCode> {
+        let document = self.runtime.snapshot();
+        let duration = document.composition.duration;
+        let duration_seconds = duration.as_seconds_f64();
+        let projection = crate::timeline_projection::project_timeline(
+            document.as_ref(),
+            &crate::timeline_projection::TimelineMetrics {
+                band_height: 1.0,
+                units_per_second: duration_seconds.recip(),
+                key_half_extent: 1.0,
+            },
+            &crate::timeline_projection::TimelineViewport {
+                start: RationalTime::ZERO,
+                end: duration,
+            },
+        )
+        .map_err(|_| RnHostReasonCode::InvalidIntent)?;
+        Ok(TimelineFrameBorrow {
+            revision: self.runtime.document_revision(),
+            projection_generation: self.projection_generation,
+            document,
+            projection,
+            primary: self.primary,
+            playhead: self.current_time,
+        })
+    }
+
     #[cfg(target_os = "macos")]
     fn ensure_gpu(&mut self) -> Result<&mut HostGpuBundle, RnHostReasonCode> {
         if self.gpu.is_none() {
@@ -946,6 +1097,8 @@ impl RnProductHost {
                     TextureFormat::Bgra8Unorm,
                     preview.slot().view(),
                 );
+            let (overlay_pipeline, overlay_bind_group_layout) =
+                create_overlay_pipeline(&ctx.device, TextureFormat::Bgra8Unorm);
             self.gpu = Some(HostGpuBundle {
                 ctx,
                 instance: parts.instance,
@@ -953,9 +1106,61 @@ impl RnProductHost {
                 _preview: preview,
                 preview_pipeline,
                 preview_bind_group,
+                overlay_pipeline,
+                overlay_bind_group_layout,
             });
         }
         Ok(self.gpu.as_mut().expect("gpu bundle initialized"))
+    }
+
+    #[cfg(target_os = "macos")]
+    fn refresh_stage_overlays(&mut self) -> Result<(), RnHostReasonCode> {
+        let Some(gpu) = self.gpu.as_ref() else {
+            return Ok(());
+        };
+        let projection = project_stage_geometry(
+            self.runtime.snapshot().as_ref(),
+            EvaluationTime::new(self.current_time),
+            &DataTracks::new(),
+        )
+        .map_err(|_| RnHostReasonCode::InvalidIntent)?;
+        let device = &gpu.ctx.device;
+        let queue = &gpu.ctx.queue;
+        let layout = &gpu.overlay_bind_group_layout;
+        for stage in self.stages.values_mut() {
+            let next_key = OverlayUploadKey {
+                selected: self.primary,
+                projection_generation: self.projection_generation,
+            };
+            if !overlay_dirty(stage.gpu.overlay_upload_key, next_key) {
+                continue;
+            }
+            stage.gpu.overlay_upload_key = Some(next_key);
+            let Some(selected) = self.primary else {
+                stage.gpu.overlay = None;
+                continue;
+            };
+            let raster = raster_selection_outline(
+                &projection,
+                Some(selected),
+                PixelSize {
+                    width: stage.width as f64,
+                    height: stage.height as f64,
+                },
+                stage.scale_factor,
+            );
+            if !overlay_dimensions_match(
+                raster.width,
+                raster.height,
+                stage.gpu.physical_width,
+                stage.gpu.physical_height,
+            ) {
+                stage.gpu.overlay = None;
+                continue;
+            }
+            upload_stage_overlay(device, queue, layout, &mut stage.gpu.overlay, raster);
+        }
+        Ok(())
     }
 
     #[cfg(target_os = "macos")]
@@ -999,6 +1204,7 @@ impl RnProductHost {
         stage.gpu.physical_height = 0;
         stage.gpu.last_presented_epoch = None;
         stage.gpu.needs_reconfigure = true;
+        stage.gpu.overlay_upload_key = None;
         Ok(stage.gpu.surface_epoch)
     }
 
@@ -1067,6 +1273,7 @@ impl RnProductHost {
             stage.gpu.physical_width = width;
             stage.gpu.physical_height = height;
             stage.gpu.needs_reconfigure = true;
+            stage.gpu.overlay_upload_key = None;
             return Ok(());
         }
         self.configure_stage_surface(stage_handle, width, height)
@@ -1100,18 +1307,20 @@ impl RnProductHost {
         if needs_reconfigure {
             self.configure_stage_surface(stage_handle, width, height)?;
         }
+        self.refresh_stage_overlays().ok();
         let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
-        let surface = self
+        let stage = self
             .stages
             .get(&stage_handle)
-            .ok_or(RnHostReasonCode::UnknownStageHandle)?
+            .ok_or(RnHostReasonCode::UnknownStageHandle)?;
+        let surface = stage
             .gpu
             .surface
             .as_ref()
             .ok_or(RnHostReasonCode::InvalidIntent)?;
         match surface.get_current_texture() {
             CurrentSurfaceTexture::Success(frame) => {
-                draw_stage_preview(gpu, frame);
+                draw_stage_preview(gpu, frame, stage.gpu.overlay.as_ref());
                 self.stages
                     .get_mut(&stage_handle)
                     .ok_or(RnHostReasonCode::UnknownStageHandle)?
@@ -1120,7 +1329,7 @@ impl RnProductHost {
                 Ok(())
             }
             CurrentSurfaceTexture::Suboptimal(frame) => {
-                draw_stage_preview(gpu, frame);
+                draw_stage_preview(gpu, frame, stage.gpu.overlay.as_ref());
                 self.stages
                     .get_mut(&stage_handle)
                     .ok_or(RnHostReasonCode::UnknownStageHandle)?
@@ -1178,6 +1387,273 @@ impl RnProductHost {
     }
 
     #[cfg(target_os = "macos")]
+    fn timeline_attach_surface(
+        &mut self,
+        timeline_handle: u64,
+        layer_ptr: usize,
+    ) -> Result<u64, RnHostReasonCode> {
+        require_main_thread()?;
+        {
+            let timeline = self
+                .timelines
+                .get(&timeline_handle)
+                .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+            if timeline.destroyed {
+                return Err(RnHostReasonCode::LateLifecycleEvent);
+            }
+            timeline.gpu.validate_attach(layer_ptr)?;
+        }
+        let surface = {
+            let gpu = self.ensure_gpu()?;
+            unsafe {
+                gpu.instance
+                    .create_surface_unsafe(SurfaceTargetUnsafe::CoreAnimationLayer(
+                        layer_ptr as *mut core::ffi::c_void,
+                    ))
+            }
+            .map_err(|_| RnHostReasonCode::InvalidIntent)?
+        };
+        let timeline = self
+            .timelines
+            .get_mut(&timeline_handle)
+            .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+        timeline.gpu.surface_epoch = timeline.gpu.surface_epoch.saturating_add(1);
+        timeline.gpu.layer_ptr = layer_ptr;
+        timeline.gpu.surface = Some(surface);
+        timeline.gpu.physical_width = 0;
+        timeline.gpu.physical_height = 0;
+        timeline.gpu.last_presented_epoch = None;
+        timeline.gpu.needs_reconfigure = true;
+        timeline.raster_key = None;
+        Ok(timeline.gpu.surface_epoch)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn configure_timeline_surface(
+        &mut self,
+        timeline_handle: u64,
+        width: u32,
+        height: u32,
+    ) -> Result<(), RnHostReasonCode> {
+        let config = {
+            let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
+            let timeline = self
+                .timelines
+                .get(&timeline_handle)
+                .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+            timeline.gpu.reject_if_poisoned()?;
+            let surface = timeline
+                .gpu
+                .surface
+                .as_ref()
+                .ok_or(RnHostReasonCode::InvalidIntent)?;
+            supported_surface_config(surface, &gpu.adapter, width, height)?
+        };
+        let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
+        let timeline = self
+            .timelines
+            .get_mut(&timeline_handle)
+            .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+        if timeline.gpu.physical_width != width || timeline.gpu.physical_height != height {
+            timeline.raster_key = None;
+        }
+        let surface = timeline
+            .gpu
+            .surface
+            .as_ref()
+            .ok_or(RnHostReasonCode::InvalidIntent)?;
+        surface.configure(&gpu.ctx.device, &config);
+        timeline.gpu.configured(width, height);
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn timeline_resize_physical(
+        &mut self,
+        timeline_handle: u64,
+        width: u32,
+        height: u32,
+    ) -> Result<(), RnHostReasonCode> {
+        require_main_thread()?;
+        {
+            let timeline = self
+                .timelines
+                .get(&timeline_handle)
+                .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+            if timeline.destroyed {
+                return Err(RnHostReasonCode::LateLifecycleEvent);
+            }
+            if !timeline.gpu.is_attached() || !timeline.gpu.has_surface() {
+                return Err(RnHostReasonCode::InvalidIntent);
+            }
+            timeline.gpu.reject_if_poisoned()?;
+        }
+        if width == 0 || height == 0 {
+            let timeline = self
+                .timelines
+                .get_mut(&timeline_handle)
+                .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+            timeline.gpu.physical_width = width;
+            timeline.gpu.physical_height = height;
+            timeline.gpu.needs_reconfigure = true;
+            return Ok(());
+        }
+        self.configure_timeline_surface(timeline_handle, width, height)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn refresh_timeline_raster(
+        &mut self,
+        timeline_handle: u64,
+        frame: &TimelineFrameBorrow,
+    ) -> Result<(), RnHostReasonCode> {
+        let (width, height, current_key) = {
+            let timeline = self
+                .timelines
+                .get(&timeline_handle)
+                .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+            (
+                timeline.gpu.physical_width,
+                timeline.gpu.physical_height,
+                timeline.raster_key,
+            )
+        };
+        let next_key = TimelineRasterKey {
+            revision: frame.revision,
+            projection_generation: frame.projection_generation,
+            primary: frame.primary,
+            playhead: frame.playhead,
+            width,
+            height,
+        };
+        if current_key == Some(next_key) {
+            return Ok(());
+        }
+        let raster = crate::timeline_skia_raster::raster_timeline(frame, width, height)
+            .ok_or(RnHostReasonCode::InvalidIntent)?;
+        let _stats = raster.stats;
+        let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
+        let timeline = self
+            .timelines
+            .get_mut(&timeline_handle)
+            .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+        upload_stage_overlay(
+            &gpu.ctx.device,
+            &gpu.ctx.queue,
+            &gpu.overlay_bind_group_layout,
+            &mut timeline.gpu.overlay,
+            StageOverlayRaster {
+                pixels: raster.pixels,
+                width: raster.width,
+                height: raster.height,
+            },
+        );
+        timeline.raster_key = Some(next_key);
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn timeline_draw(&mut self, timeline_handle: u64) -> Result<(), RnHostReasonCode> {
+        require_main_thread()?;
+        let (width, height, attached, needs_reconfigure) = {
+            let timeline = self
+                .timelines
+                .get(&timeline_handle)
+                .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+            if timeline.destroyed {
+                return Err(RnHostReasonCode::LateLifecycleEvent);
+            }
+            timeline.gpu.reject_if_poisoned()?;
+            (
+                timeline.gpu.physical_width,
+                timeline.gpu.physical_height,
+                timeline.gpu.is_attached(),
+                timeline.gpu.needs_reconfigure,
+            )
+        };
+        if !attached {
+            return Err(RnHostReasonCode::InvalidIntent);
+        }
+        if width == 0 || height == 0 {
+            return Ok(());
+        }
+        if needs_reconfigure {
+            self.configure_timeline_surface(timeline_handle, width, height)?;
+        }
+        let frame_borrow = self.timeline_frame_borrow()?;
+        self.refresh_timeline_raster(timeline_handle, &frame_borrow)?;
+        let gpu = self.gpu.as_ref().ok_or(RnHostReasonCode::InvalidIntent)?;
+        let timeline = self
+            .timelines
+            .get(&timeline_handle)
+            .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+        let surface = timeline
+            .gpu
+            .surface
+            .as_ref()
+            .ok_or(RnHostReasonCode::InvalidIntent)?;
+        match surface.get_current_texture() {
+            CurrentSurfaceTexture::Success(frame) => {
+                draw_timeline_seat(gpu, frame, timeline.gpu.overlay.as_ref());
+                self.timelines
+                    .get_mut(&timeline_handle)
+                    .ok_or(RnHostReasonCode::UnknownTimelineHandle)?
+                    .gpu
+                    .presented(false);
+                Ok(())
+            }
+            CurrentSurfaceTexture::Suboptimal(frame) => {
+                draw_timeline_seat(gpu, frame, timeline.gpu.overlay.as_ref());
+                self.timelines
+                    .get_mut(&timeline_handle)
+                    .ok_or(RnHostReasonCode::UnknownTimelineHandle)?
+                    .gpu
+                    .presented(true);
+                Ok(())
+            }
+            CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => Ok(()),
+            CurrentSurfaceTexture::Outdated => {
+                self.timelines
+                    .get_mut(&timeline_handle)
+                    .ok_or(RnHostReasonCode::UnknownTimelineHandle)?
+                    .gpu
+                    .outdated();
+                Ok(())
+            }
+            CurrentSurfaceTexture::Lost => {
+                self.timelines
+                    .get_mut(&timeline_handle)
+                    .ok_or(RnHostReasonCode::UnknownTimelineHandle)?
+                    .gpu
+                    .lost();
+                Err(RnHostReasonCode::InvalidIntent)
+            }
+            CurrentSurfaceTexture::Validation => {
+                self.timelines
+                    .get_mut(&timeline_handle)
+                    .ok_or(RnHostReasonCode::UnknownTimelineHandle)?
+                    .gpu
+                    .validation_failed();
+                Err(RnHostReasonCode::InvalidIntent)
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn timeline_detach_surface(&mut self, timeline_handle: u64) -> Result<u64, RnHostReasonCode> {
+        require_main_thread()?;
+        let timeline = self
+            .timelines
+            .get_mut(&timeline_handle)
+            .ok_or(RnHostReasonCode::UnknownTimelineHandle)?;
+        if timeline.destroyed {
+            return Err(RnHostReasonCode::LateLifecycleEvent);
+        }
+        timeline.gpu_detach_surface();
+        Ok(timeline.gpu.surface_epoch)
+    }
+
+    #[cfg(target_os = "macos")]
     fn detach_all_stage_surfaces(&mut self) {
         let stage_handles = self.stages.keys().copied().collect::<Vec<_>>();
         for stage_handle in stage_handles {
@@ -1187,14 +1663,24 @@ impl RnProductHost {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    fn detach_all_timeline_surfaces(&mut self) {
+        for timeline in self.timelines.values_mut() {
+            timeline.gpu_detach_surface();
+        }
+    }
+
     fn destroy(&mut self, host_handle: u64) -> Result<(), RnHostError> {
         if self.destroyed {
             return Err(RnHostError::DestroyedHost(host_handle));
         }
         #[cfg(target_os = "macos")]
         self.detach_all_stage_surfaces();
+        #[cfg(target_os = "macos")]
+        self.detach_all_timeline_surfaces();
         self.destroyed = true;
         self.stages.clear();
+        self.timelines.clear();
         #[cfg(target_os = "macos")]
         {
             self.gpu = None;
@@ -1204,7 +1690,11 @@ impl RnProductHost {
 }
 
 #[cfg(target_os = "macos")]
-fn draw_stage_preview(gpu: &HostGpuBundle, frame: wgpu::SurfaceTexture) {
+fn draw_stage_preview(
+    gpu: &HostGpuBundle,
+    frame: wgpu::SurfaceTexture,
+    overlay: Option<&StageOverlayGpu>,
+) {
     let view = frame
         .texture
         .create_view(&wgpu::TextureViewDescriptor::default());
@@ -1235,8 +1725,219 @@ fn draw_stage_preview(gpu: &HostGpuBundle, frame: wgpu::SurfaceTexture) {
         pass.set_bind_group(0, &gpu.preview_bind_group, &[]);
         pass.draw(0..3, 0..1);
     }
+    if let Some(overlay) = overlay {
+        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("motolii-rn-stage-overlay-pass"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Load,
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&gpu.overlay_pipeline);
+        pass.set_bind_group(0, &overlay.bind_group, &[]);
+        pass.draw(0..3, 0..1);
+    }
     gpu.ctx.queue.submit(Some(encoder.finish()));
     frame.present();
+}
+
+#[cfg(target_os = "macos")]
+fn draw_timeline_seat(
+    gpu: &HostGpuBundle,
+    frame: wgpu::SurfaceTexture,
+    raster: Option<&StageOverlayGpu>,
+) {
+    let view = frame
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+    let mut encoder = gpu
+        .ctx
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("motolii-rn-timeline-seat"),
+        });
+    {
+        let mut pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("motolii-rn-timeline-seat-pass"),
+            color_attachments: &[Some(RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: Operations {
+                    load: LoadOp::Clear(Color {
+                        r: 0.02,
+                        g: 0.02,
+                        b: 0.025,
+                        a: 1.0,
+                    }),
+                    store: StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        if let Some(raster) = raster {
+            pass.set_pipeline(&gpu.overlay_pipeline);
+            pass.set_bind_group(0, &raster.bind_group, &[]);
+            pass.draw(0..3, 0..1);
+        }
+    }
+    gpu.ctx.queue.submit(Some(encoder.finish()));
+    frame.present();
+}
+
+#[cfg(target_os = "macos")]
+fn upload_stage_overlay(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+    current: &mut Option<StageOverlayGpu>,
+    raster: StageOverlayRaster,
+) {
+    let recreate = current
+        .as_ref()
+        .is_none_or(|overlay| overlay.width != raster.width || overlay.height != raster.height);
+    if recreate {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("motolii-rn-stage-overlay-texture"),
+            size: wgpu::Extent3d {
+                width: raster.width,
+                height: raster.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("motolii-rn-stage-overlay-sampler"),
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("motolii-rn-stage-overlay-bind-group"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+        *current = Some(StageOverlayGpu {
+            texture,
+            _view: view,
+            _sampler: sampler,
+            bind_group,
+            width: raster.width,
+            height: raster.height,
+        });
+    }
+    let overlay = current.as_ref().expect("overlay texture initialized");
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &overlay.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &raster.pixels,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(raster.width * 4),
+            rows_per_image: Some(raster.height),
+        },
+        wgpu::Extent3d {
+            width: raster.width,
+            height: raster.height,
+            depth_or_array_layers: 1,
+        },
+    );
+}
+
+#[cfg(target_os = "macos")]
+fn create_overlay_pipeline(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout) {
+    let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("motolii-rn-stage-overlay-layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("motolii-rn-stage-overlay-shader"),
+        source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(
+            "struct V { @builtin(position) p: vec4<f32>, @location(0) uv: vec2<f32> }\n@vertex fn vs(@builtin(vertex_index) i: u32) -> V { var p = array<vec2<f32>, 3>(vec2(-1., -1.), vec2(3., -1.), vec2(-1., 3.)); var u = array<vec2<f32>, 3>(vec2(0., 1.), vec2(2., 1.), vec2(0., -1.)); var o: V; o.p = vec4(p[i], 0., 1.); o.uv = u[i]; return o; }\n@group(0) @binding(0) var t: texture_2d<f32>;\n@group(0) @binding(1) var s: sampler;\n@fragment fn fs(i: V) -> @location(0) vec4<f32> { return textureSample(t, s, i.uv); }\n",
+        )),
+    });
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("motolii-rn-stage-overlay-pipeline-layout"),
+        bind_group_layouts: &[Some(&layout)],
+        immediate_size: 0,
+    });
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("motolii-rn-stage-overlay-pipeline"),
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: Some("vs"),
+            buffers: &[],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: Some("fs"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+    (pipeline, layout)
 }
 
 #[cfg(target_os = "macos")]
@@ -1268,16 +1969,15 @@ fn supported_surface_config(
 #[cfg(target_os = "macos")]
 impl RnStageSurface {
     fn gpu_detach_surface(&mut self) {
-        if self.gpu.is_attached() {
-            self.gpu.surface = None;
-            self.gpu.layer_ptr = 0;
-            self.gpu.physical_width = 0;
-            self.gpu.physical_height = 0;
-            self.gpu.last_presented_epoch = None;
-            self.gpu.needs_reconfigure = false;
-            self.gpu.poisoned = false;
-            self.gpu.surface_epoch = self.gpu.surface_epoch.saturating_add(1);
-        }
+        self.gpu.detach();
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl RnTimelineSurface {
+    fn gpu_detach_surface(&mut self) {
+        self.gpu.detach();
+        self.raster_key = None;
     }
 }
 
@@ -1380,12 +2080,116 @@ fn write_stage_gpu_op(
     .unwrap_or(-1)
 }
 
+#[cfg(target_os = "macos")]
+fn run_timeline_gpu_op(
+    host_handle: u64,
+    timeline_handle: u64,
+    f: impl FnOnce(&mut RnProductHost, u64) -> Result<(), RnHostReasonCode>,
+) -> Result<String, RnHostReasonCode> {
+    let outcome = with_registry(|registry| {
+        let Some(host) = registry.hosts.get_mut(&host_handle) else {
+            return Ok(Err(if registry.destroyed_hosts.contains(&host_handle) {
+                RnHostReasonCode::DestroyedHostHandle
+            } else {
+                RnHostReasonCode::UnknownHostHandle
+            }));
+        };
+        if host.destroyed {
+            return Ok(Err(RnHostReasonCode::DestroyedHostHandle));
+        }
+        let Some(timeline) = host.timelines.get(&timeline_handle) else {
+            return Ok(Err(
+                if registry.destroyed_timelines.contains(&timeline_handle) {
+                    RnHostReasonCode::DestroyedTimelineHandle
+                } else {
+                    RnHostReasonCode::UnknownTimelineHandle
+                },
+            ));
+        };
+        if timeline.host_handle != host_handle {
+            return Ok(Err(RnHostReasonCode::UnknownTimelineHandle));
+        }
+        if let Err(reason) = f(host, timeline_handle) {
+            return Ok(Err(reason));
+        }
+        match encode_response(&accept_no_snapshot()) {
+            Ok(json) => Ok(Ok(json)),
+            Err(_) => Ok(Err(RnHostReasonCode::InvalidIntent)),
+        }
+    });
+    match outcome {
+        Ok(inner) => inner,
+        Err(_) => Err(RnHostReasonCode::InvalidIntent),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn write_timeline_gpu_op(
+    out: *mut u8,
+    out_cap: usize,
+    host_handle: u64,
+    timeline_handle: u64,
+    f: impl FnOnce(&mut RnProductHost, u64) -> Result<(), RnHostReasonCode>,
+) -> i64 {
+    if !output_usable(out, out_cap) {
+        return -1;
+    }
+    catch_unwind(AssertUnwindSafe(|| {
+        if require_main_thread().is_err() {
+            return write_response(
+                out,
+                out_cap,
+                &reject(
+                    timeline_diagnostic(
+                        RnHostReasonCode::InvalidIntent,
+                        Some(host_handle),
+                        Some(timeline_handle),
+                    ),
+                    None,
+                ),
+            );
+        }
+        if host_handle == 0 || timeline_handle == 0 {
+            return write_response(
+                out,
+                out_cap,
+                &reject(
+                    timeline_diagnostic(
+                        if host_handle == 0 {
+                            RnHostReasonCode::UnknownHostHandle
+                        } else {
+                            RnHostReasonCode::UnknownTimelineHandle
+                        },
+                        Some(host_handle),
+                        Some(timeline_handle),
+                    ),
+                    None,
+                ),
+            );
+        }
+        match run_timeline_gpu_op(host_handle, timeline_handle, f) {
+            Ok(json) => write_bytes(out, out_cap, &json),
+            Err(reason) => write_response(
+                out,
+                out_cap,
+                &reject(
+                    timeline_diagnostic(reason, Some(host_handle), Some(timeline_handle)),
+                    None,
+                ),
+            ),
+        }
+    }))
+    .unwrap_or(-1)
+}
+
 struct RnHostRegistry {
     next_host_handle: u64,
     next_stage_handle: u64,
+    next_timeline_handle: u64,
     hosts: HashMap<u64, RnProductHost>,
     destroyed_hosts: HashSet<u64>,
     destroyed_stages: HashSet<u64>,
+    destroyed_timelines: HashSet<u64>,
 }
 
 impl Default for RnHostRegistry {
@@ -1393,9 +2197,11 @@ impl Default for RnHostRegistry {
         Self {
             next_host_handle: 1,
             next_stage_handle: 1,
+            next_timeline_handle: 1,
             hosts: HashMap::new(),
             destroyed_hosts: HashSet::new(),
             destroyed_stages: HashSet::new(),
+            destroyed_timelines: HashSet::new(),
         }
     }
 }
@@ -1419,6 +2225,7 @@ impl RnHostRegistry {
                 current_time: RationalTime::ZERO,
                 primary: None,
                 stages: HashMap::new(),
+                timelines: HashMap::new(),
                 destroyed: false,
                 #[cfg(target_os = "macos")]
                 gpu: None,
@@ -1464,6 +2271,43 @@ impl RnHostRegistry {
         host.destroy_stage(stage_handle)
     }
 
+    fn register_timeline(&mut self, host_handle: u64) -> Result<u64, RnHostError> {
+        let Some(host) = self.hosts.get_mut(&host_handle) else {
+            return if self.destroyed_hosts.contains(&host_handle) {
+                Err(RnHostError::DestroyedHost(host_handle))
+            } else {
+                Err(RnHostError::UnknownHost(host_handle))
+            };
+        };
+        let timeline_handle = self.next_timeline_handle;
+        self.next_timeline_handle = self
+            .next_timeline_handle
+            .checked_add(1)
+            .ok_or(RnHostError::TimelineHandleExhausted)?;
+        host.register_timeline(host_handle, timeline_handle)?;
+        Ok(timeline_handle)
+    }
+
+    fn destroy_timeline(&mut self, timeline_handle: u64) -> Result<(), RnHostError> {
+        let host_handle = self.hosts.values().find_map(|host| {
+            host.timelines
+                .get(&timeline_handle)
+                .map(|timeline| timeline.host_handle)
+        });
+        let Some(host_handle) = host_handle else {
+            return if self.destroyed_timelines.contains(&timeline_handle) {
+                Err(RnHostError::DestroyedTimeline(timeline_handle))
+            } else {
+                Err(RnHostError::UnknownTimeline(timeline_handle))
+            };
+        };
+        let host = self
+            .hosts
+            .get_mut(&host_handle)
+            .ok_or(RnHostError::UnknownHost(host_handle))?;
+        host.destroy_timeline(timeline_handle)
+    }
+
     fn destroy_host(&mut self, host_handle: u64) -> Result<(), RnHostError> {
         let Some(host) = self.hosts.get_mut(&host_handle) else {
             return if self.destroyed_hosts.contains(&host_handle) {
@@ -1473,6 +2317,8 @@ impl RnHostRegistry {
             };
         };
         self.destroyed_stages.extend(host.stages.keys().copied());
+        self.destroyed_timelines
+            .extend(host.timelines.keys().copied());
         host.destroy(host_handle)?;
         self.hosts.remove(&host_handle);
         self.destroyed_hosts.insert(host_handle);
@@ -1598,8 +2444,24 @@ fn diagnostic(
         reason,
         host_handle: host_handle.map(|value| value.to_string()),
         stage_handle: stage_handle.map(|value| value.to_string()),
+        timeline_handle: None,
         expected_projection_generation,
         actual_projection_generation,
+    }
+}
+
+fn timeline_diagnostic(
+    reason: RnHostReasonCode,
+    host_handle: Option<u64>,
+    timeline_handle: Option<u64>,
+) -> RnHostDiagnostic {
+    RnHostDiagnostic {
+        reason,
+        host_handle: host_handle.map(|value| value.to_string()),
+        stage_handle: None,
+        timeline_handle: timeline_handle.map(|value| value.to_string()),
+        expected_projection_generation: None,
+        actual_projection_generation: None,
     }
 }
 
@@ -1721,6 +2583,17 @@ fn map_destroy_stage_error(error: &RnHostError) -> Option<RnHostReasonCode> {
     match error {
         RnHostError::UnknownStage(_) => Some(RnHostReasonCode::UnknownStageHandle),
         RnHostError::DestroyedStage(_) => Some(RnHostReasonCode::DoubleDestroy),
+        RnHostError::UnknownHost(_) => Some(RnHostReasonCode::UnknownHostHandle),
+        RnHostError::DestroyedHost(_) => Some(RnHostReasonCode::DestroyedHostHandle),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn map_destroy_timeline_error(error: &RnHostError) -> Option<RnHostReasonCode> {
+    match error {
+        RnHostError::UnknownTimeline(_) => Some(RnHostReasonCode::UnknownTimelineHandle),
+        RnHostError::DestroyedTimeline(_) => Some(RnHostReasonCode::DoubleDestroy),
         RnHostError::UnknownHost(_) => Some(RnHostReasonCode::UnknownHostHandle),
         RnHostError::DestroyedHost(_) => Some(RnHostReasonCode::DestroyedHostHandle),
         _ => None,
@@ -2100,6 +2973,145 @@ pub extern "C" fn motolii_rn_stage_destroy(stage_handle: u64, out: *mut u8, out_
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_timeline_register(
+    host_handle: u64,
+    out_timeline_handle: *mut u64,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    if out_timeline_handle.is_null() {
+        return -1;
+    }
+    unsafe {
+        *out_timeline_handle = 0;
+    }
+    if !output_usable(out, out_cap) {
+        return -1;
+    }
+    catch_unwind(AssertUnwindSafe(|| {
+        if host_handle == 0 {
+            return write_response(
+                out,
+                out_cap,
+                &reject(
+                    timeline_diagnostic(RnHostReasonCode::UnknownHostHandle, Some(0), None),
+                    None,
+                ),
+            );
+        }
+        match with_registry(|registry| registry.register_timeline(host_handle)) {
+            Ok(timeline_handle) => {
+                let encoded = with_registry(|registry| {
+                    let snapshot = registry.read_snapshot(host_handle)?;
+                    encode_response(&accept(snapshot))
+                });
+                match encoded {
+                    Ok(json) => {
+                        let written = write_bytes(out, out_cap, &json);
+                        if written <= 0 {
+                            let _ = with_registry(|registry| {
+                                registry.destroy_timeline(timeline_handle)
+                            });
+                            return written;
+                        }
+                        unsafe {
+                            *out_timeline_handle = timeline_handle;
+                        }
+                        written
+                    }
+                    Err(_) => {
+                        let _ =
+                            with_registry(|registry| registry.destroy_timeline(timeline_handle));
+                        -1
+                    }
+                }
+            }
+            Err(error) => match map_host_lookup_error(&error) {
+                Some(reason) => write_response(
+                    out,
+                    out_cap,
+                    &reject(timeline_diagnostic(reason, Some(host_handle), None), None),
+                ),
+                None => -1,
+            },
+        }
+    }))
+    .unwrap_or(-1)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_timeline_destroy(
+    timeline_handle: u64,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    if !output_usable(out, out_cap) {
+        return -1;
+    }
+    catch_unwind(AssertUnwindSafe(|| {
+        if timeline_handle == 0 {
+            return write_response(
+                out,
+                out_cap,
+                &reject(
+                    timeline_diagnostic(RnHostReasonCode::UnknownTimelineHandle, None, Some(0)),
+                    None,
+                ),
+            );
+        }
+        let outcome = with_registry(|registry| {
+            let lookup_error = registry.hosts.values().find_map(|host| {
+                host.timelines.get(&timeline_handle).and_then(|timeline| {
+                    timeline
+                        .destroyed
+                        .then_some(RnHostError::DestroyedTimeline(timeline_handle))
+                })
+            });
+            if let Some(error) = lookup_error {
+                return Ok(Err(error));
+            }
+            if !registry
+                .hosts
+                .values()
+                .any(|host| host.timelines.contains_key(&timeline_handle))
+            {
+                return Ok(Err(
+                    if registry.destroyed_timelines.contains(&timeline_handle) {
+                        RnHostError::DestroyedTimeline(timeline_handle)
+                    } else {
+                        RnHostError::UnknownTimeline(timeline_handle)
+                    },
+                ));
+            }
+            let json = encode_response(&accept_no_snapshot())?;
+            if json.len() > out_cap {
+                return Err(RnHostError::PayloadTooLarge);
+            }
+            registry.destroy_timeline(timeline_handle)?;
+            Ok(Ok(json))
+        });
+        match outcome {
+            Ok(Ok(json)) => write_bytes(out, out_cap, &json),
+            Ok(Err(error)) => match map_destroy_timeline_error(&error) {
+                Some(reason) => write_response(
+                    out,
+                    out_cap,
+                    &reject(
+                        timeline_diagnostic(reason, None, Some(timeline_handle)),
+                        None,
+                    ),
+                ),
+                None => -1,
+            },
+            Err(_) => -1,
+        }
+    }))
+    .unwrap_or(-1)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
 pub extern "C" fn motolii_rn_host_read_snapshot_json(
     host_handle: u64,
     out: *mut u8,
@@ -2250,6 +3262,81 @@ pub extern "C" fn motolii_rn_stage_detach(
 }
 
 #[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_timeline_attach(
+    host_handle: u64,
+    timeline_handle: u64,
+    metal_layer: *mut core::ffi::c_void,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    let layer_ptr = metal_layer as usize;
+    write_timeline_gpu_op(
+        out,
+        out_cap,
+        host_handle,
+        timeline_handle,
+        move |host, timeline| {
+            host.timeline_attach_surface(timeline, layer_ptr)
+                .map(|_| ())
+        },
+    )
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_timeline_resize_physical(
+    host_handle: u64,
+    timeline_handle: u64,
+    width: u32,
+    height: u32,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    write_timeline_gpu_op(
+        out,
+        out_cap,
+        host_handle,
+        timeline_handle,
+        move |host, timeline| host.timeline_resize_physical(timeline, width, height),
+    )
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_timeline_draw(
+    host_handle: u64,
+    timeline_handle: u64,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    write_timeline_gpu_op(
+        out,
+        out_cap,
+        host_handle,
+        timeline_handle,
+        |host, timeline| host.timeline_draw(timeline),
+    )
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_timeline_detach(
+    host_handle: u64,
+    timeline_handle: u64,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    write_timeline_gpu_op(
+        out,
+        out_cap,
+        host_handle,
+        timeline_handle,
+        |host, timeline| host.timeline_detach_surface(timeline).map(|_| ()),
+    )
+}
+
+#[cfg(target_os = "macos")]
 #[allow(dead_code)]
 const _: fn() = || {
     let _ =
@@ -2257,6 +3344,8 @@ const _: fn() = || {
     let _ = motolii_rn_host_destroy as extern "C" fn(u64, *mut u8, usize) -> i64;
     let _ = motolii_rn_stage_register as extern "C" fn(u64, *mut u64, *mut u8, usize) -> i64;
     let _ = motolii_rn_stage_destroy as extern "C" fn(u64, *mut u8, usize) -> i64;
+    let _ = motolii_rn_timeline_register as extern "C" fn(u64, *mut u64, *mut u8, usize) -> i64;
+    let _ = motolii_rn_timeline_destroy as extern "C" fn(u64, *mut u8, usize) -> i64;
     let _ = motolii_rn_host_read_snapshot_json as extern "C" fn(u64, *mut u8, usize) -> i64;
     let _ = motolii_rn_host_dispatch_intent_json
         as extern "C" fn(u64, *const u8, usize, *mut u8, usize) -> i64;
@@ -2266,6 +3355,12 @@ const _: fn() = || {
         as extern "C" fn(u64, u64, u32, u32, *mut u8, usize) -> i64;
     let _ = motolii_rn_stage_draw as extern "C" fn(u64, u64, *mut u8, usize) -> i64;
     let _ = motolii_rn_stage_detach as extern "C" fn(u64, u64, *mut u8, usize) -> i64;
+    let _ = motolii_rn_timeline_attach
+        as extern "C" fn(u64, u64, *mut core::ffi::c_void, *mut u8, usize) -> i64;
+    let _ = motolii_rn_timeline_resize_physical
+        as extern "C" fn(u64, u64, u32, u32, *mut u8, usize) -> i64;
+    let _ = motolii_rn_timeline_draw as extern "C" fn(u64, u64, *mut u8, usize) -> i64;
+    let _ = motolii_rn_timeline_detach as extern "C" fn(u64, u64, *mut u8, usize) -> i64;
 };
 
 #[cfg(test)]
@@ -3543,6 +4638,68 @@ mod tests {
         let _ = host_destroy_for_test(host);
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn timeline_registration_borrows_revisioned_document_projection() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
+            "timeline-seat",
+            [0.0, 0.0],
+            [0.25, 0.25],
+            Transform2D::identity(),
+        );
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("timeline-seat", &fixture.document);
+        let timeline =
+            with_registry(|registry| registry.register_timeline(host)).expect("timeline");
+
+        let frame = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            product
+                .timeline_frame_borrow()
+                .map_err(|_| RnHostError::UnknownTimeline(timeline))
+        })
+        .expect("frame borrow");
+        assert_eq!(frame.revision, 0);
+        assert_eq!(frame.projection_generation, 0);
+        assert_eq!(
+            frame.document.layers.display_name(layer),
+            Some("timeline-seat")
+        );
+        assert_eq!(frame.projection.bars().len(), 1);
+        assert_eq!(frame.projection.bars()[0].layer, layer);
+        assert_eq!(frame.primary, None);
+        assert_eq!(frame.playhead, RationalTime::ZERO);
+
+        with_registry(|registry| registry.destroy_timeline(timeline)).expect("destroy timeline");
+        let double = with_registry(|registry| registry.destroy_timeline(timeline)).unwrap_err();
+        assert!(matches!(double, RnHostError::DestroyedTimeline(_)));
+        host_destroy_for_test(host).expect("destroy host");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn timeline_detach_reuses_surface_binding_lifecycle() {
+        let mut timeline = RnTimelineSurface {
+            host_handle: 1,
+            destroyed: false,
+            gpu: StageGpuBinding::detached(),
+            raster_key: None,
+        };
+        timeline.gpu.layer_ptr = 7;
+        timeline.gpu.physical_width = 640;
+        timeline.gpu.physical_height = 240;
+        timeline.gpu_detach_surface();
+        assert!(!timeline.gpu.is_attached());
+        assert_eq!(timeline.gpu.physical_width, 0);
+        assert_eq!(timeline.gpu.physical_height, 0);
+        assert_eq!(timeline.gpu.surface_epoch, 1);
+    }
+
     #[test]
     fn unknown_and_destroyed_handles_are_rejected_safely() {
         let _lock = test_lock();
@@ -3831,6 +4988,8 @@ mod tests {
                 surface: None,
                 needs_reconfigure: false,
                 poisoned: false,
+                overlay: None,
+                overlay_upload_key: None,
             },
         };
         assert!(stage.gpu.is_attached());
@@ -3958,6 +5117,24 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    fn stage_gpu_size_change_invalidates_overlay_upload() {
+        let mut binding = StageGpuBinding::detached();
+        binding.configured(640, 360);
+        let key = OverlayUploadKey {
+            selected: Some(LayerId::from_raw(1)),
+            projection_generation: 2,
+        };
+        binding.overlay_upload_key = Some(key);
+
+        binding.configured(640, 360);
+        assert_eq!(binding.overlay_upload_key, Some(key));
+
+        binding.configured(1280, 720);
+        assert_eq!(binding.overlay_upload_key, None);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn stage_gpu_validation_poison_recovers_only_through_detach() {
         let mut stage = RnStageSurface {
             host_handle: 1,
@@ -3977,6 +5154,8 @@ mod tests {
                 surface: None,
                 needs_reconfigure: false,
                 poisoned: false,
+                overlay: None,
+                overlay_upload_key: None,
             },
         };
 

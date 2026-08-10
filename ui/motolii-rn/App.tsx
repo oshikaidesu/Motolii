@@ -1,15 +1,22 @@
-import React from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import React, {useState} from 'react';
+import {NativeModules, StyleSheet, Text, View} from 'react-native';
 
-import BrowserPanel from './src/browser/BrowserPanel';
+import BrowserPanel, {
+  BrowserPlaceRectangleIntent,
+} from './src/browser/BrowserPanel';
 import InspectorInitialReadPanel from './src/inspector/InspectorInitialReadPanel';
 import MotoliiStageView from './src/specs/MotoliiStageNativeComponent';
+import MotoliiTimelineView from './src/specs/MotoliiTimelineNativeComponent';
 
 export type MotoliiProductProps = {
   hostHandle?: string;
   projectPath?: string;
   snapshotJSON?: string;
   diagnostic?: string;
+};
+
+type MotoliiHostBridge = {
+  dispatchIntent(hostHandle: string, intentJSON: string): Promise<string>;
 };
 
 export default function App({
@@ -19,10 +26,38 @@ export default function App({
   diagnostic,
 }: MotoliiProductProps) {
   const hasHost = /^[1-9][0-9]*$/.test(hostHandle);
+  const [currentSnapshotJSON, setCurrentSnapshotJSON] = useState(snapshotJSON);
+  const [timelineRefreshToken, setTimelineRefreshToken] = useState(0);
 
-  // RN側からRust hostへのdispatchは未実装のため、ここで受け取ったintentは捨てる。
-  const handlePlaceIntent = () => {
-    return;
+  const handlePlaceIntent = async (intent: BrowserPlaceRectangleIntent) => {
+    const bridge = NativeModules.MotoliiHostBridge as
+      | MotoliiHostBridge
+      | undefined;
+    if (!hasHost || bridge === undefined) {
+      return;
+    }
+    try {
+      const responseJSON = await bridge.dispatchIntent(
+        hostHandle,
+        JSON.stringify({
+          version: 1,
+          direction: 'rn-to-host',
+          host_handle: hostHandle,
+          ...intent,
+          playhead: {num: intent.playhead, den: 1},
+        }),
+      );
+      const response = JSON.parse(responseJSON) as {
+        accepted?: boolean;
+        snapshot?: unknown;
+      };
+      if (response.accepted === true && response.snapshot !== undefined) {
+        setCurrentSnapshotJSON(JSON.stringify(response.snapshot));
+        setTimelineRefreshToken(token => token + 1);
+      }
+    } catch {
+      return;
+    }
   };
 
   return (
@@ -53,11 +88,22 @@ export default function App({
           )}
         </View>
         <View style={styles.inspectorSlot} testID="inspector-slot">
-          <InspectorInitialReadPanel snapshotJSON={snapshotJSON} />
+          <InspectorInitialReadPanel snapshotJSON={currentSnapshotJSON} />
         </View>
       </View>
       <View style={styles.timelineSlot} testID="timeline-slot">
-        <Text style={styles.slotLabel}>Timeline</Text>
+        {hasHost ? (
+          <MotoliiTimelineView
+            accessible
+            accessibilityLabel="Motolii Timeline"
+            hostHandle={hostHandle}
+            refreshToken={String(timelineRefreshToken)}
+            style={styles.timeline}
+            testID="motolii-timeline"
+          />
+        ) : (
+          <Text style={styles.slotLabel}>Timeline unavailable</Text>
+        )}
       </View>
     </View>
   );
@@ -111,10 +157,12 @@ const styles = StyleSheet.create({
   },
   timelineSlot: {
     height: 120,
-    padding: 12,
     borderTopWidth: 1,
     borderTopColor: '#34383c',
     backgroundColor: '#1b1d20',
+  },
+  timeline: {
+    flex: 1,
   },
   slotLabel: {
     color: '#9ca1a4',
