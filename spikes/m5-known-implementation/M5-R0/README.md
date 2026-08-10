@@ -12,12 +12,16 @@ Glowのprivate fixtureは`Rgba16Float` sourceからbright-pass、半径2の横�
 source／2枚のtransient／output、pipeline、bind group、readbackはfixture生成時に一度だけ作り、連続評価で
 再利用する。1.0超highlight、haloによるalpha extent拡張、radius外透明をreadbackで自動確認する。
 
+Feedbackのprivate fixtureはHostが所有する2枚のRGBA textureを明示的に透明clearし、前frame入力と次frame出力を
+ping-pongする。移動する不透明discを前出力へ減衰合成し、clip開始からのfresh replayが同じtarget frameを再現することを
+readbackで確認する。plugin／shaderは履歴を所有しない。
+
 ```sh
 cargo fmt --manifest-path spikes/m5-known-implementation/M5-R0/Cargo.toml -- --check
 cargo clippy --manifest-path spikes/m5-known-implementation/M5-R0/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path spikes/m5-known-implementation/M5-R0/Cargo.toml
 ```
 
-これはglTF PBR conformance、Blender parity、M4 resource budget、Preview／Export接続、binary dot edgeの
-anti-alias、Glow pyramid／tone mappingを証明しない。readbackは自動oracle専用であり、製品filterのCPU
-pixel routeではない。
+これはglTF PBR conformance、Blender parity、M4 resource budget、checkpoint store、任意長seek、
+Preview／Export接続、binary dot edgeのanti-alias、Glow pyramid／tone mappingを証明しない。readbackは
+自動oracle専用であり、製品filterのCPU pixel routeではない。

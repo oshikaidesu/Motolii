@@ -33,6 +33,7 @@
 | ファイル | 表題 |
 |---|---|
 | [2026-08-10-m5-glow-multipass-hdr-transient-proof.md](2026-08-10-m5-glow-multipass-hdr-transient-proof.md) | M5-R0でFP16 bright-pass、separable blur、additive composite、Host所有transient再利用とalpha／extent負例を確認する縮小採用 |
+| [2026-08-10-m5-feedback-trail-host-ping-pong-proof.md](2026-08-10-m5-feedback-trail-host-ping-pong-proof.md) | 再帰FeedbackをStatefulFilterにせずHost所有2 textureの明示clear／ping-pong／fresh replayで成立確認し、SCR-4のWAITを維持する決定 |
 | [2026-08-10-m5-planar-gradient-path-clip-mask-rerun-proof.md](2026-08-10-m5-planar-gradient-path-clip-mask-rerun-proof.md) | 2D平面gradientをPath coverageで切り抜く融合passをクリッピングマスク最小例としてRerun確認し、中間mask textureとhalftoneの再入場条件を分ける決定 |
 | [2026-08-10-lottie-path-modifier-candidates-and-rerun-proof.md](2026-08-10-lottie-path-modifier-candidates-and-rerun-proof.md) | 固定lottie-web実コードからAE由来Path modifier候補を分類し、Pucker/Bloatのcubic handle式訂正とZig Zag burstのRerun実画面proofを記録する縮小採用 |
 | [2026-08-10-m5-path2d-rerun-custom-visualizer-probe-and-dispatch-route.md](2026-08-10-m5-path2d-rerun-custom-visualizer-probe-and-dispatch-route.md) | M5最初の可視成果をz=0 Path2DのRect／Circle／source-overとし、Rerun custom visualizer proof、probe限定事項、次のRN Stage seat compile発注capsuleを固定する決定 |

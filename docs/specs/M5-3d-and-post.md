@@ -21,6 +21,11 @@ halftoneは2D／3DをRGBAへ合流した後の同じscreen-space filterとし、
 dot座標はcomposition正規化座標、frequencyは出力高さ当たりのcell数で表す。最終coverageは入力alphaとの積にし、
 解像度を変えても同じ正規化位置のcell／dot判定が変わらないことをoracleとする。
 
+再帰Feedbackのprivate feasibilityは[Host所有ping-pong proof](../reviews/2026-08-10-m5-feedback-trail-host-ping-pong-proof.md)で
+確認した。2枚のGPU textureを明示clearし、previous入力とnext出力をHost fixtureが交換し、clip開始からのfresh replayを
+同一pixelに固定する。これは製品render経路の自己Feedbackを解禁せず、StateTrack、checkpoint、K7c、SCR-4、
+Preview／Export接続は`WAIT`のままとする。
+
 ## 実装前の既知実装調査
 
 現行の調査・検証入口は[M5 既知実装採択・検証地図](../m5-known-implementation-adoption-map.md)とする。

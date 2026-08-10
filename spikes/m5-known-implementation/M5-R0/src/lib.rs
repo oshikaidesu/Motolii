@@ -1,7 +1,10 @@
 use bytemuck::{Pod, Zeroable};
 use thiserror::Error;
 
+mod feedback;
 pub mod glow;
+
+pub use feedback::render_feedback_trail;
 
 pub const WIDTH: u32 = 32;
 pub const HEIGHT: u32 = 32;
@@ -42,6 +45,8 @@ pub enum RenderError {
     Pipeline(String),
     #[error("GPU readback failed: {0}")]
     Readback(String),
+    #[error("feedback replay target {target_frame} exceeds private proof limit {max_frame}")]
+    ReplayTooLong { target_frame: u32, max_frame: u32 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -317,6 +322,13 @@ fn render_frame(case: MaterialCase, halftone: bool) -> Result<Frame, RenderError
         },
     );
     queue.submit([encoder.finish()]);
+    readback_frame(&device, &buffer)
+}
+
+pub(crate) fn readback_frame(
+    device: &wgpu::Device,
+    buffer: &wgpu::Buffer,
+) -> Result<Frame, RenderError> {
     let slice = buffer.slice(..);
     slice.map_async(wgpu::MapMode::Read, |result| {
         if let Err(error) = result {
@@ -351,7 +363,7 @@ fn render_frame(case: MaterialCase, halftone: bool) -> Result<Frame, RenderError
     })
 }
 
-fn readback_buffer(device: &wgpu::Device) -> wgpu::Buffer {
+pub(crate) fn readback_buffer(device: &wgpu::Device) -> wgpu::Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("m5-r0-readback"),
         size: (READBACK_BYTES_PER_ROW * HEIGHT) as u64,
