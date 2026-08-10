@@ -17,7 +17,7 @@ Motolii is an open, inspectable, plugin-extensible compositor focused on making 
 
 The project does not depend on a new compositing invention. Keyframes, easing, typed parameter links, render graphs, GPU textures, command-based editing, selective caches, 2D/3D projection, and plugins are all known techniques. The work is to compose them into a small, explicit, replaceable system without making historical workarounds part of the product model.
 
-Pre-1.0, under active development. The core is usable from the CLI; the desktop editing experience is the next major layer.
+Pre-1.0, under active development. The core is usable from the CLI, and the desktop runtime seat is now established; the normal desktop creation route is still being connected and is not yet product-complete.
 
 ## Why Motolii
 
@@ -78,7 +78,7 @@ The value is in the composition of these parts, the removal of accidental comple
 
 ## A small core is a long-term capability
 
-Motolii uses Rust, wgpu, WGSL, egui, and ffmpeg today. Those are implementation choices, not project-file semantics or articles of faith.
+Motolii uses Rust, wgpu, WGSL, rust-skia, React Native, and ffmpeg today. Those are implementation choices, not project-file semantics or articles of faith.
 
 ```mermaid
 flowchart LR
@@ -173,12 +173,14 @@ Heavy asset creation, character rigging, simulation authoring, grading, and spec
 |---|---|---|
 | M0 | Complete | GPU/UI, decode, and rational-time risks measured |
 | M1 | Complete and internally frozen | Video → typed animation → GPU composite → mp4 vertical slice |
-| M2 | Final integration | Document model, validation, commands/Undo, audio transport/mux, masks, portability |
-| M3 | Next | Desktop UI, timeline, direct tools, plugin parameter panels |
-| M4 | Planned | Selective cache, proxies, bake integration |
-| M5 | Planned | Shared 2D/3D world, depth tools, post-processing, text foundation |
+| M2 | Foundation reclosed; narrow follow-ups pending | Document model, validation, commands/Undo, audio transport/mux, masks, portability |
+| M3 | R0 accepted; R1 rolling integration | React Native shell with native Stage/Timeline surfaces; the VS-1 product route and later creation/platform gates remain open |
+| M4 | Partial foundations on main | Test-only K0 contract, ResourceLedger, and canonical recipe/artifact codec are present; cache, proxy, and bake runtime remain incomplete |
+| M5 | Subsystem adopted; probes only | Rerun Spatial Viewer is the adopted spatial subsystem and focused visual probes are on main; the product Document/Vism/runtime connection remains open |
 
-The M1 demo above is generated through the real export path and protected by automated tests. Current milestone truth and task dependencies live under [`docs/specs/`](docs/specs/); this README intentionally stays at project level.
+The M1 demo above is generated through the real export path and protected by automated tests. On current main, the M3 R0 product runtime seat is accepted and collaborative R1 integration is active. The repository also contains an RN probe with a Skia Timeline and the B001/B002 Rerun-derived Stage proofs on one device/queue/surface. Those are main-integrated probe evidence, not proof that the M3 creation route or M5 product runtime is complete. Product closure still requires the accepted snapshot/D2 identity path, R1/R2 end-to-end exits, and the named platform and human gates.
+
+Current milestone truth and task dependencies live in the [`implementation ledger`](docs/implementation-ledger.md) and under [`docs/specs/`](docs/specs/); this README intentionally stays at project level and does not assign a speculative completion percentage.
 
 ## Architecture and technology
 
@@ -187,7 +189,7 @@ The M1 demo above is generated through the real export path and protected by aut
 | Language | Rust |
 | Render core | [wgpu](https://github.com/gfx-rs/wgpu) + WGSL, GPU-resident textures |
 | Vector rendering | Vello/usvg boundary |
-| UI | [egui](https://github.com/emilk/egui), sharing the compositor's wgpu device via `motolii-ui` |
+| UI | React Native shell/panels, rust-skia Timeline/Curve/Stage overlay, and wgpu Stage preview; legacy egui/Vello surfaces remain migration oracles rather than the target product UI |
 | Decode / encode | ffmpeg sidecar process, raw tagged frames at the boundary |
 | Project model | serde data, stable IDs, typed validation, command edits |
 | Verification | Rust tests, property tests, semantic and image goldens |
