@@ -1,6 +1,6 @@
 # 実装進行台帳
 
-最終確認: **2026-08-09**
+最終確認: **2026-08-10**
 
 このファイルは、実装者が「次に何をするか」を1枚で判断するための現場用台帳。M0〜M5の意味や完了条件を再定義せず、現在の依存関係と発注順だけを示す。
 
@@ -38,7 +38,7 @@
 
 | Phase | 状態 | 現在の出口 |
 |---|---|---|
-| M3/M4/M5全体並列開始 | **`DO / WAVE 1A ACTIVE`** | [統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)と停止耐性gateを通過してcampaignを開始した。第一短waveではK1a ResourceLedgerをcommit `c9cab8e8`でlocal mainへ統合し、[R0-ACCEPT](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md)を`DONE`とした。M2-ASSET-1Aはqualified diffなしでbounded `RESEARCH_RETURN`とし、同じorderを再投入せず分割して再選定する。R2 spine／N-OVERLAYは未採用candidateのまま。24時間scaleとremote pushは未実施 |
+| M3/M4/M5全体並列開始 | **`DO / WAVE 1A ACTIVE`** | [統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)と停止耐性gateを通過してcampaignを開始した。第一短waveではK1a ResourceLedgerをcommit `c9cab8e8`でlocal mainへ統合し、[R0-ACCEPT](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md)を`DONE`とした。M2-ASSET-1Aは一旦bounded `RESEARCH_RETURN`としたが、2026-08-09にasset基盤7コミットがmain到達し`DONE`へ訂正(行6A参照)。R2 spine／N-OVERLAYは未採用candidateのまま |
 | M3/P07-C1D | **`DONE / ACCEPTED / EXTERNAL_GATE_PENDING`** | commit `ea69f5ca`でReact Stage `#play`→typed Host intent→ProductApp-owned one PlaybackSession→audio-device Transport time→existing editor_playhead/Stage/native Timelineの一本を接続した。Inspector React assetとfixed Timeline marker geometryは維持。real device/audio/visualとP07-C3はM3-final保留 |
 | M3/U4b-0V | **`DONE / ACCEPTED / EXTERNAL_GATE_PENDING`** | commit `c404a050`でexisting explicit Add Position Key後のexact current Vec2 keyをReact Inspector X/Yから編集する一本を接続した。dedicated key-local CAS、clone preview、one durable terminal、Undo/Redo/reopenを受入。Const/off-key read-only、Auto Key拒否、fixed Timeline geometryを維持 |
 | M3/P07-C1C | **`DONE / ACCEPTED / MAIN`** | commit `b1b2c4df`でcanonical `start_frame`をexact `RationalTime` originへ変換し、negotiated-device elapsed timeへ加える。48 kHz / 44.1 kHzを閉じ、ProductApp/React/controlは含めない |
@@ -141,7 +141,7 @@ P0I #170 → P7a → P7b → P7c → P7U
 
 ## 現在の並列レーン
 
-開始gateは[統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)と[cold-replaceable監督と停止封じ込め](reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md)で通過済みである。第一短waveはK1aをlocal mainへ統合し、[R0受入](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md)を閉じ、M2-ASSET-1Aをbounded returnへ戻した。次waveはこのreturnと新しいmainから一契約ずつ再選定する。旧direct-wgpu/Vello surfaceへの新機能追加や旧task列の継続を同時に`DO`へしない。
+開始gateは[統一並列開始baseline](reviews/2026-08-09-unified-parallel-start-baseline-decision.md)と[cold-replaceable監督と停止封じ込め](reviews/2026-08-09-cold-replaceable-supervision-failure-containment-decision.md)で通過済みである。第一短waveはK1aをlocal mainへ統合し、[R0受入](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md)を閉じた。M2-ASSET-1Aは一旦bounded returnとしたが、2026-08-09のasset基盤7コミットmain到達で`DONE`へ訂正した(行6A)。次waveは新しいmainから一契約ずつ再選定する。旧direct-wgpu/Vello surfaceへの新機能追加や旧task列の継続を同時に`DO`へしない。
 
 [M3 baseline-required自走checkpoint](reviews/2026-08-07-m3-baseline-required-autonomy-checkpoint.md)は、一般的なdesktop NLEの必須outcomeを利用者再確認なしで一契約へcompileする方針を決定したが、現時点の採用itemは0である。baseline抽出は非OpenAI研究者、別family challenge、Codexのevidence整理／authority写像／最終採否へ分離し、直前のWeb調査失敗runに現れたsample、feature row、thresholdを採用しない。Claude directのempty-workspace 1-query capability probeはWebSearchと公式body取得まで通過したためfresh本調査へ進めるが、probeはbaseline evidence、runner機能、一般permissionではない。baseline本調査とR0三候補のread-only再検収は別laneとして並行可能だが、どちらもR1以降の製品施工許可ではない。
 
@@ -592,11 +592,11 @@ M2 prerequisite、Vism spec laneを同じ待ち列へ入れない。P0I fixture�
 | 3P | UI-PLACEMENT-STAGING | M3 Host UI / M4-M5 consumer | `WAIT / CONTRACT CLOSED` | [UI配置保留決定](reviews/2026-08-09-ui-placement-deferral-staging-surface-decision.md)をcurrent mainで再照合し、既存`PanelLayout`／`LayoutAuthority`のexact target、既存product-owned component、最初のclosed bindingのread projectionとtyped intent／Command、active placement 1とretirement oracleを一つのallowlistへcompileする | final surfaceだけが未決のeligible controlを接続可能にするprivate presentation。Settings／generic registry／public ControlId／plugin UI／Document field／第二writerは作らない。空間・contextual interactionとUI未確定意味は各edgeを`RESEARCH_RETURN`する |
 | 4 | U3a-2 | M3 | `WAIT` | U3a-1I + G0-9 platform受入 | direct wgpu+Vello候補をwindowed fixture、input、WebView同居、presentまで閉じる。Canvas/browser WebGPUは先例baselineで製品枝にしない |
 | 5 | U2g | M3 | `WAIT` | D1l + D3e + U0e + U2b + U3a-2 merge | Effect常時接続線 |
-| 6A | M2-ASSET-1A | M2 | `RESEARCH_RETURN / SPLIT REQUIRED` | 第一短waveの3 observed sessionはいずれもqualified diffを返さなかった。同じwide orderを4回目へ再投入せず、current mainでread setとowner境界を縮小してfresh orderへcompileし直す | K1aとは別owner。product import／source binding／relink adapter、P02 runtime codec、Replace Source、Purge UIを同じticketへ入れない |
+| 6A | M2-ASSET-1A | M2 | `DONE` | 2026-08-09にasset基盤7コミットがmain到達: `SourceFingerprintV1` producer/decode(`d273061d`/`260bcfde`)、`AssetTable` lifecycle primitives(`c4e5368a`)、typed asset use traversal(`df84ad08`)、durable asset lifecycle commands(`49ef4833`)、journal edit v3(`4cad1fd9`)、budgeted SourceBinding(`a287c828`)。旧`RESEARCH_RETURN / SPLIT REQUIRED`記載は[2026-08-10回収監査](reviews/2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md)で訂正 | K1aとは別owner。product import／source binding／relink adapter、P02 runtime codec、Replace Source、Purge UIを同じticketへ入れない |
 | 6B | K1a | M4 | `DONE` | commit `c9cab8e8`でthin hard-budget ResourceLedger policy ownerをlocal mainへ統合。focused 13 test、`motolii-gpu`全test、fmt、clippy、diff checkを通過し、fresh Opus reviewは`ACCEPT`、P0/P1なし | tier adapter、cache store、M5接続は非目標のまま。return後のconsumerはcurrent mainから再選定する |
 | 6C | P04-C2 | M4 | `WAIT(P04-C1) / CONTRACT CLOSED` | K1a `DONE` + P04-C1 merge | owner／tier／resident／pinned／requested bytesをK1aの唯一のResourceLedger policyへ渡すprivate tier adapter。第二policy／allocator frameworkを所有しない |
-| 7A | M2-ASSET-1C | M2/M3 product adapter | `WAIT / CONTRACT CLOSED` | M2-ASSET-1A + K1a merge | probe receiptをfresh full hashで再照合してからCommandをprepareし、loaded V1 tagを最初のbinding一致前にcache authorityにせず、SourceBinding full-copyを事前予約してjob中pinする。`resolve_asset_path`を直接使う現行audio／export source収集と後続media decode／probe／muxを含むcallsite inventoryを固定して、source-consuming workerへは保存済みfingerprintとexact bytesを結合したbudgeted Host-private SourceBindingだけを渡す。relink／Replace Source／proxy生成を同じticketへ入れない |
-| 7B | M4-P02-CODEC | M4 | `WAIT` | M2-ASSET-1A merge | canonical `RecipeKeyV1`／`ArtifactDigest` codecとmutation corpus。K1b/storeを同じticketへ入れない |
+| 7A | M2-ASSET-1C | M2/M3 product adapter | `ISSUE / CONTRACT CLOSED` | 依存充足済み(M2-ASSET-1A・K1aとも2026-08-09 main到達)。最新mainで型名を再確認してIssue化する | probe receiptをfresh full hashで再照合してからCommandをprepareし、loaded V1 tagを最初のbinding一致前にcache authorityにせず、SourceBinding full-copyを事前予約してjob中pinする。`resolve_asset_path`を直接使う現行audio／export source収集と後続media decode／probe／muxを含むcallsite inventoryを固定して、source-consuming workerへは保存済みfingerprintとexact bytesを結合したbudgeted Host-private SourceBindingだけを渡す。relink／Replace Source／proxy生成を同じticketへ入れない |
+| 7B | M4-P02-CODEC | M4 | `ISSUE` | 依存充足済み(M2-ASSET-1A 2026-08-09 main到達) | canonical `RecipeKeyV1`／`ArtifactDigest` codecとmutation corpus。K1b/storeを同じticketへ入れない |
 | 7C | M4-P02-C3 | M4 | `WAIT / CONTRACT CLOSED` | M2-D3 + M2-D3e + accepted target/source Command semantics | exhaustive classifierと`(snapshot, CacheEpoch, InvalidationFootprint)` atomic state envelopeの唯一のowner。K1b store／K2統合を同じticketへ入れない |
 | 7D | K1b | M4 | `WAIT` | K1a + M4-P02-CODEC + M2-D8 merge | cache同一性/LRU/並行store。classifier／state envelopeを所有しない |
 | 7E | P06-C2 | M4 | `WAIT / CONTRACT CLOSED` | M4-P02-C3 merge | classifier済みaffected identity／temporal footprintをhalf-open区間へ写すprivate pure projection。Command分類／epoch／publishを所有しない |

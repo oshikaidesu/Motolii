@@ -74,15 +74,16 @@
 
 **`PROBE_ONLY`**（2026-08-08訂正。当初`ABSENT`としたのは誤り）。
 
-repository内では rust-skia は `Cargo.toml` に存在せず、実在するのは退役対象の `vello` のみ
-（`crates/motolii-ui/Cargo.toml:32`）。**しかしリポジトリ外の隔離probe
-`skia-timeline-probe` で `skia-safe 0.99.0` + `wgpu 29` が実動しており**、
+（2026-08-10更新）`skia-safe`は`ed9024fc`でworkspace依存として`crates/motolii-ui/Cargo.toml`へ
+追加済みだが、**`skia_safe`を使うRustコードはmainに0行**のまま。リポジトリ外の隔離probe
+`skia-timeline-probe`で`skia-safe 0.99.0` + `wgpu 29`が実動しており(bin 15本、depth-rail v4〜v14)、
 Windows target checkも実施済みである。
-詳細は[リポジトリ外資産の棚卸し](reviews/2026-08-08-out-of-repository-asset-inventory.md)。
+詳細は[リポジトリ外資産の棚卸し](reviews/2026-08-08-out-of-repository-asset-inventory.md)と
+[2026-08-10回収監査](reviews/2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md)。
 
 したがって次手は**既知実装調査ではなく移管・接続**である。
 
-再基線決定はrust-skiaをTimeline／Curve／Stage overlayの標準に定めたが、依存追加は未実行で、
+再基線決定はrust-skiaをTimeline／Curve／Stage overlayの標準に定めたが、実装コードは未移管で、
 旧地図はこれをnodeとして持っていない。にもかかわらず仮コードで背骨を書くと
 **`draw_stage_overlay`と`draw_timeline`の2箇所で必ず現れる**。
 
@@ -230,6 +231,8 @@ runtime identity と installation path が存在せず、実在するのは comp
    確認範囲を判定へ併記し、未確認なら`ABSENT`と書かず`UNKNOWN_OUTSIDE_REPO`とする
    （[リポジトリ外資産の棚卸し](reviews/2026-08-08-out-of-repository-asset-inventory.md)§4）。
    **本地図の`ABSENT`のうち外部確認済みは`N-OVERLAY`と`R1-BROWSER`の2件のみである**
+   （2026-08-10注: この2件はその後repo内へ進んだ。`R1-BROWSER`は`5b6e6c56`でRN実装がmain到達、
+   `N-OVERLAY`は依存のみ着地でコード未移管）
 4. `UNDECIDED`は仕様粒で先に閉じる。UIから発明しない
 5. M4/M5は**outcome側の呼び出しが現れた時にだけ**引く。milestone順で先行実装しない
 
