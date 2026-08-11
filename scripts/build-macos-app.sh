@@ -10,7 +10,7 @@ RN_DIR="$ROOT/ui/motolii-rn"
 MACOS_DIR="$RN_DIR/macos"
 WORKSPACE="$MACOS_DIR/MotoliiRn.xcworkspace"
 SCHEME="MotoliiRn-macOS"
-DESTINATION="generic/platform=macOS,arch=arm64"
+DESTINATION="platform=macOS,arch=arm64"
 # CocoaPods版は固定する。別版で通すとPods生成物が変わり、受入時のbuildを再現できない。
 POD_VERSION="1.15.2"
 
@@ -64,8 +64,6 @@ step "0/3 前提を確認する"
 require_command corepack
 require_command pod
 require_command xcodebuild
-# Rust staticlibはXcodeのbuild phaseが自分で cargo build -p motolii-ui --release --offline を呼ぶ。
-# ここで別途叩かないが、cargo不在ならbuild phase側で落ちるので入口で弾く。
 require_command cargo
 require_path "$RN_DIR"
 require_path "$MACOS_DIR"
@@ -90,6 +88,7 @@ fi
   || fail "pod install が失敗した。$MACOS_DIR/Podfile.lock とstep 1のnode_modulesを確認すること"
 
 step "3/3 arm64 Release appをビルドする (xcodebuild)"
+cargo build --manifest-path "$RN_DIR/native-renderer/Cargo.toml" --release --locked
 xcodebuild \
   -workspace "$WORKSPACE" \
   -scheme "$SCHEME" \

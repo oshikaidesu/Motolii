@@ -290,8 +290,8 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
     _metalView.wantsLayer = YES;
     _metalView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     [_metalView setAccessibilityElement:YES];
-    [_metalView setAccessibilityLabel:@"Skia Stage metrics"];
-    [_metalView setAccessibilityIdentifier:@"skia-stage-metrics"];
+    [_metalView setAccessibilityLabel:@"Rerun Spatial Stage metrics"];
+    [_metalView setAccessibilityIdentifier:@"rerun-spatial-stage-metrics"];
     __weak MotoliiGpuComponentView *weakSelf = self;
     _metalView.stagePointerHandler = ^(uint32_t phase, CGFloat x, CGFloat y) {
       MotoliiGpuComponentView *strongSelf = weakSelf;
@@ -399,7 +399,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
       (uint32_t)MAX(1.0, layer.drawableSize.width),
       (uint32_t)MAX(1.0, layer.drawableSize.height));
   if (!_renderer) {
-    NSLog(@"[MotoliiGpuProbe] Rust/wgpu renderer creation failed");
+    NSLog(@"[MotoliiRerunStage] renderer creation failed");
     return;
   }
   motolii_macos_stage_renderer_set_created_item(_renderer, _createdItemId.c_str());
@@ -418,14 +418,14 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
             [NSString stringWithFormat:@"frames=%llu uploads=%llu overlay=%lluus pointer=%llu/%llu/%llu",
                 stats.frameCount, stats.overlayUploads, stats.overlayLastUs,
                 stats.pointerDowns, stats.pointerMoves, stats.pointerUps]];
-        NSLog(@"[MotoliiSkiaStageProbe] frames=%llu cpu=%lluus max=%lluus overlay_uploads=%llu overlay=%lluus pointer=%llu/%llu/%llu",
+        NSLog(@"[MotoliiRerunStage] frames=%llu cpu=%lluus max=%lluus overlay_uploads=%llu overlay=%lluus pointer=%llu/%llu/%llu",
               stats.frameCount, stats.lastCpuUs, stats.maxCpuUs,
               stats.overlayUploads, stats.overlayLastUs,
               stats.pointerDowns, stats.pointerMoves, stats.pointerUps);
       }
     }
   }];
-  NSLog(@"[MotoliiGpuProbe] renderer mounted %.0fx%.0f @ %.1fx",
+  NSLog(@"[MotoliiRerunStage] renderer mounted %.0fx%.0f @ %.1fx",
         layer.drawableSize.width, layer.drawableSize.height, scale);
 }
 
@@ -449,7 +449,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
                                 (uint32_t)layer.drawableSize.width,
                                 (uint32_t)layer.drawableSize.height);
   if (!CGSizeEqualToSize(oldSize, newSize)) {
-    NSLog(@"[MotoliiGpuProbe] renderer resized %.0fx%.0f @ %.1fx",
+    NSLog(@"[MotoliiRerunStage] renderer resized %.0fx%.0f @ %.1fx",
           newSize.width, newSize.height, scale);
   }
 }
@@ -461,7 +461,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   if (_renderer) {
     motolii_macos_renderer_destroy(_renderer);
     _renderer = nullptr;
-    NSLog(@"[MotoliiGpuProbe] renderer unmounted");
+    NSLog(@"[MotoliiRerunStage] renderer unmounted");
   }
 }
 

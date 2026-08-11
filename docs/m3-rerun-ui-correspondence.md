@@ -24,8 +24,8 @@
 | Browser / Create | Text／Shape／Adjustment／Cameraの作成 | 作成後のshape、image、camera等はSpatial Viewer visualizerの入力になり得る | `MOTOLII` + 表示時`WRAP TARGET` | 作成recipe、stable identity、D2 Add command、既定値 | placeholder表示のみ |
 | panel split／resize、tabs | 制作workspaceの配置 | `re_viewport_blueprint`／`egui_tiles`はdeferred layoutの先例 | `PATTERN ONLY` | RN layout、session／user設定、focus、a11y、native component lifecycle | RN local stateで動作。Rerun Blueprintは使用しない |
 | Stage外側chrome（Fit、倍率、GPU切替、identity） | Stageの表示条件と状態 | camera／viewport state、View identityを内側機構として利用できる | `WRAP TARGET` | creator向け名称、quality、tool状態、表示policy | chromeはRN。GPU mount切替だけ現行native componentへ接続 |
-| Stage base preview | 2D／3D、image、video、shapeを同じ空間で表示 | `re_view_spatial`、store／query、visualizer、camera、picking、outline、`re_renderer`、`re_video` | `ADOPT / WRAP` | Document snapshotのidentity／time／asset翻訳、admission、surface、Preview／Export policy | `DIRECT FIXTURE`。現状は`re_renderer::ViewBuilder`の固定Rectangle／Circleと`re_video` chroma動画。full Spatial Viewer、store／query、Document projectionは未接続 |
-| Stage authoring overlay（frame、bounds、gizmo、path、snap） | 作品を直接選択・編集 | picking／outline／camera結果を入力に使う。overlay UIそのものは採択しない | `MOTOLII` | rust-skia描画、hit／gesture、selection意味、D2 terminal intent | rust-skia固定gizmoをlocal pointerでdrag可能。Document write／Undoは未接続 |
+| Stage base preview | 2D／3D、image、video、shapeを同じ空間で表示 | `re_view_spatial`、store／query、visualizer、camera、picking、outline、`re_renderer` | `ADOPT / WRAP` | Document snapshotのidentity／time／asset翻訳、admission、surface、Preview／Export policy | `DIRECT FIXTURE`。既存surface内でforkした`re_view_spatial::SpatialStage`の同じ`SpatialView3D`をEgui callbackとして実行する。初期cameraは直交投影で、2D入力は正準高さ1.0のz=0 XY平面に置く。別の2D Viewへ切り替えない。直接`re_renderer::ViewBuilder`／`re_video` fixtureは撤去済み。ただしRerun storeへのaccepted Document projectionとDocument cameraからのPerspective接続は未実装で、現時点のstoreは空 |
+| Stage authoring overlay（frame、bounds、gizmo、path、snap） | 作品を直接選択・編集 | picking／outline／camera結果を入力に使う。overlay UIそのものは採択しない | `MOTOLII` | rust-skia描画、hit／gesture、selection意味、D2 terminal intent | 固定Skia gizmoはdirect fixtureとともに撤去済み。Rerun picking結果→`LayerId`／D2 terminal intentと、製品overlayの再接続が残る |
 | Stage transport／timecode／quality | 再生位置とPreview品質 | time query／time control、viewer callbackは下位機構として利用できる | `WRAP TARGET` | audio-clock Transport、RationalTime、Draft／Final、Preview／Export同一路 | static RN表示。Rerun timeと製品Transportへ未接続 |
 | Inspector / Effect | 選択対象の意味とparameter編集 | query／selection結果を表示入力にできる。`re_component_ui`はproperty UIの先例 | runtime `WRAP` + UI `PATTERN ONLY` | primary selection、型付きparameter、form buffer、D2 command、diagnostic | Echo BloomのRN local state。Document snapshot更新／D2へ未接続 |
 | Inspector / Extensions | bundled first-party custom panel | custom visualizerはStage側の描画拡張に使えるが、panel UIやplugin ABIではない | `MOTOLII` + runtime extension | RN panel registry、信頼境界、permission、authoring UI | Tags／Notes panel registryがlocal stateで動作。Rerunとは未接続 |
@@ -39,11 +39,11 @@
 |---|---|---|---|
 | mask authoring | segmentation／opacity表示、Stage output | D7のAlpha／Luminance／InvertAlpha／InvertLuminance、path編集、feather等、D2／Undo、composition | 4種maskのDocument→graph→GPUは実装済み。製品Stageのmask UI／path editorは未接続 |
 | Curve Editor | time／selection query、densityの先例 | key／Bezier handle、tangent編集、同じD2 command | 現行RN shellにsurfaceなし |
-| Stage内の実Document selection | Spatial picking／outline | `LayerId`写像、primary selection、stale拒否、terminal intent | 現行Stageは固定gizmoのlocal hitだけ |
+| Stage内の実Document selection | Spatial picking／outline | `LayerId`写像、primary selection、stale拒否、terminal intent | Rerunのpicking runtimeはmount済みだが、`LayerId`写像／selection／D2への接続は未実装 |
 
 ## 読み方
 
-最も大きい置換点はStage base previewの一箇所である。既存`MotoliiGpuView`、surface、lifecycle、rust-skia overlayを残したまま、その内側の固定`re_renderer` fixtureを、accepted Document snapshotを読むRerun Spatial Viewerへ置き換える。
+最も大きい置換点はStage base previewの一箇所である。既存`MotoliiGpuView`、surface、lifecycleを残したまま、その内側の固定`re_renderer` fixtureを`re_view_spatial::SpatialStage`へ置き換えた。埋め込みtargetにはtable UI／desktop window runtimeを入れない。次の接続は、accepted Document snapshotを読むRerun storeへのprojectionである。
 
 Browser、Inspector、TimelineはRerun UIへ置き換えない。これらは同じDocument revision／`LayerId`／timeを読み、必要なquery、picking、time機構だけRerun runtimeと接続する。Rerun store、Blueprint、selection、playheadを第二の製品authorityにしない。
 
@@ -51,6 +51,7 @@ Browser、Inspector、TimelineはRerun UIへ置き換えない。これらは同
 
 - 現行画面とfixture: [`ui/motolii-rn/App.tsx`](../ui/motolii-rn/App.tsx)
 - Stage／Timeline native ABI: [`ui/motolii-rn/native-renderer/src/lib.rs`](../ui/motolii-rn/native-renderer/src/lib.rs)
-- 現行direct Rerun／video／Skia構成: [`renderer_core.rs`](../ui/motolii-rn/native-renderer/src/renderer_core.rs)
-- 現行依存は`re_renderer`／`re_video`: [`native-renderer/Cargo.toml`](../ui/motolii-rn/native-renderer/Cargo.toml)
+- Stage surface／lifecycleの所有: [`renderer_core.rs`](../ui/motolii-rn/native-renderer/src/renderer_core.rs)
+- Rerun Spatial ViewerのEgui adapter: [`rerun_stage.rs`](../ui/motolii-rn/native-renderer/src/rerun_stage.rs)
+- 現行依存はforkした`re_view_spatial`／`re_renderer`: [`native-renderer/Cargo.toml`](../ui/motolii-rn/native-renderer/Cargo.toml)
 - Rerun source別の転移境界: [Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md)

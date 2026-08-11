@@ -8,9 +8,12 @@ crate-type = ["staticlib"]
 
 [dependencies]
 bytemuck = { version = "1", features = ["derive"] }
+egui = "0.35.0"
+egui-wgpu = "0.35.0"
 pollster = "0.4"
-re_renderer = { git = "https://github.com/rerun-io/rerun", rev = "954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e", default-features = false }
-re_video = { git = "https://github.com/rerun-io/rerun", rev = "954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e" }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949" }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949", default-features = false }
+re_view_spatial = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949", default-features = false }
 wgpu = "29"
 
 [target.'cfg(target_os = "macos")'.dependencies]

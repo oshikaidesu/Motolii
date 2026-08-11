@@ -1,4 +1,5 @@
 mod renderer_core;
+mod rerun_stage;
 // renderer_core と同じく skia-safe を前提にする(macOS / Windows のみ依存に入る)。
 mod timeline_skia;
 

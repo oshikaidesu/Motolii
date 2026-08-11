@@ -372,7 +372,7 @@ function Stage({createdItemId, draggedItemId, showGpu, onDrop, onToggleGpu}: {cr
         {showGpu ? (
           <MotoliiGpuView
             accessible
-            accessibilityLabel="Rust wgpu native Stage"
+            accessibilityLabel="Rerun Spatial Viewer Stage"
             createdItemId={createdItemId}
             draggedItemId={draggedItemId}
             onStageDrop={event => onDrop(event.nativeEvent.x, event.nativeEvent.y)}
