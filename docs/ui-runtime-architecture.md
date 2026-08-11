@@ -4,7 +4,7 @@
 
 正本決定: [M3 React Native + Rust/Skia UI runtime再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)
 
-MotoliiはUIを一つのtoolkitへ統一しない。通常UIをReact Native、Timeline／Curveとauthoring overlayをrust-skia、Stageのspatial runtimeをRerun Spatial Viewer、編集・再生・保存をRust Hostが所有する。Rerunは同じwgpu Device／Queue／surfaceへ載る。
+MotoliiはUIを一つのtoolkitへ統一しない。通常UIをReact Native、Timeline／Curveとauthoring overlayをrust-skia、Stageのspatial runtimeをRerun Spatial Viewer、編集・再生・保存をRust Hostが所有する。Rerunは同じwgpu Device／Queue／surfaceへ載るが、Rerun自体を製品UIにはしない。RN shell、native Stage component、platform lifecycle、入力正規化、authoring overlay、D2への確定操作を合わせた外側がMotoliiの制作レイヤーである。
 
 旧React/WebView islands + 1 top-level wgpu Surface + direct wgpu/Vello UIは新規製品実装の標準ではない。既存実装は移行oracleとして保持し、新routeが同じ利用者outcomeを閉じた後にだけretireする。
 
@@ -62,7 +62,15 @@ curve、key、tangent、grid、marquee、pan、zoom、preset previewをrust-skia
 
 ### Stage
 
-base previewはRerun Spatial Viewerが所有する。MotoliiはDocumentのidentity／time／assetをRerun入力へ翻訳するだけで、scene／view／camera／picking／rendererを複製しない。rust-skia overlayはgrid、safe area、selection bounds、path、gizmo、snap補助だけを描き、dirty時だけRerun outputへcomposeする。
+base previewはRerun Spatial Viewerが所有する。MotoliiはDocumentのidentity／time／assetをRerun入力へ翻訳するだけで、scene／view／camera／picking／rendererを複製しない。一方、既存のnative Stage component、CAMetalLayer／Composition surface、mount／resize／frame lifecycle、normalized inputはRerunの不足を補う代替rendererではなく、Rerunを制作画面へ収めるMotolii固有のHost seamである。これを別appや別Stageへcopyせず、componentの内側にある固定fixtureをDocument projectionへ順次置き換える。
+
+Rerunのcamera／pickingは空間操作の機構を返す。何を選択したか、どのtool操作か、どのD2 commandへ確定するかはMotoliiが決める。rust-skia overlayはgrid、safe area、selection bounds、path、gizmo、snap補助だけを描き、dirty時だけRerun outputへcomposeする。
+
+#### maskの責任境界
+
+Rerunのsegmentation image、opacity、highlightは可視化機構であり、動画編集のmask schema、Undo、合成順の正本にはしない。既存D7のclipping mask（Alpha／Luminance／InvertAlpha／InvertLuminance）はDocument／D2、評価graph、GPU `MaskNode`が所有し、Rerunの出力を含むStage contentへMotoliiのcompositionとして適用する。
+
+Path coverageを使う一回限りのvector clipはprivate proof済みだが、製品Stageのpath editorには未接続である。Bézier／pathの直接編集、feather／blur／expand、mask再利用、image／video／luma source、multiple／nested maskは、実在する利用者操作とDocument意味を一契約ずつ閉じてから接続する。これらをRerun Blueprint／storeの意味として新設しない。
 
 100〜500 gizmoは上限stressであり、通常表示目標ではない。visible、selected、group root、semantic importanceで情報を間引く。inactive objectはboundsだけ、active selectionはfull gizmoを基本とする。
 

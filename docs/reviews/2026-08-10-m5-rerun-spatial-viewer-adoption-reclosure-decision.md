@@ -20,7 +20,7 @@ M5 spatialをM3完成後まで止めると、主役であるStageを閉じるた
 以後はM3 Stageの成果に必要なRerun接続を同じoutcome内で一契約ずつ進められる。第二writer、別world、
 別Preview／Export、未決公開schemaを作らないという旧休止契約の負例は維持する。
 
-この決定はRerunの製品chromeを埋め込むことや、sourceをfile単位で複製することを意味しない。RN shell／panelはMotolii、spatial runtimeはRerun、永続意味とwriteはDocument／D2という三点だけを境界とする。
+この決定はRerunの製品chromeを埋め込むことや、sourceをfile単位で複製することを意味しない。RN shell／panel／native Stage HostはMotolii、spatial runtimeはRerun、永続意味とwriteはDocument／D2という三点だけを境界とする。既存Stage componentのsurface／lifecycle／input adapterはRerunに欠けた機構の再実装ではなく、RerunをMotoliiの制作画面へ収める薄い製品seamである。
 
 ## 2. 実コードで確認した閉包
 
@@ -54,6 +54,12 @@ Rerun採択後にもMotoliiが所有するのは次だけである。
 
 これらはRerunを拒否する理由ではなく、採択済みsubsystemの周囲へ置くMotolii固有のresidualである。
 
+### 3.1 制作UIとmask
+
+Rerunはcamera／picking／highlight／segmentation表示などの空間機構を持つが、creator toolの意味や動画編集maskのauthorityは持たない。selection、tool mode、gizmo、terminal intent、UndoはMotoliiが所有し、Rerunから得たhitを既存D2 commandへ翻訳する。
+
+既存D7のclipping mask（Alpha／Luminance／InvertAlpha／InvertLuminance）はDocument／D2、評価graph、GPU `MaskNode`の製品機能であり、Rerunのsegmentation imageやopacityへ置き換えない。Rerun outputはMotoliiの同一composition routeでmaskされる。Path coverageのprivate proofは再利用できるが、製品StageのBézier／path編集、feather等のauthoring UIが接続されるまでは製品mask完成と数えない。
+
 ## 4. 採択境界
 
 ### MECHANISM CLASS
@@ -86,11 +92,11 @@ M3 Stageの既存Host／device／surface／snapshot ownerを維持し、Rerun Sp
 
 ### THIN MOTOLII SEAM
 
-snapshot/time/identity/asset projection、Host callback、D2 terminal intent、Stage mount、resource admission。
+snapshot/time/identity/asset projection、Host callback、D2 terminal intent、Stage mount／lifecycle／normalized input、resource admission。
 
 ### THIN MOTOLII RESIDUAL
 
-authoring gizmo／Depth Rail、occlusion policy、faithful PBR／unlit、Preview／Export policy、hard budget。
+authoring gizmo／Depth Rail、mask authoring／composition、occlusion policy、faithful PBR／unlit、Preview／Export policy、hard budget。
 
 ### RETIREMENT
 
