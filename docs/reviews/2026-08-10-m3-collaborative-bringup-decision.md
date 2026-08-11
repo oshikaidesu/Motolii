@@ -18,12 +18,12 @@ M3はR0受入後の段階を、全surfaceの整合を先に閉じてから一括
 
 | lane | 既存入力 | 最初の製品出口 |
 |---|---|---|
-| Stage | Rerun固定commitから裁定したviewport／renderer lifecycle／picking／outline／composite pattern、現行RN Stage、単一`GpuCtx` | 通常RN Stageで同revisionのpreview／selection overlayが表示される |
+| Stage | 固定Rerun Spatial Viewer subsystem、現行RN Stage、単一`GpuCtx` | Document入力をRerunへ薄く翻訳し、通常RN Stageで同revisionの結果を表示する |
 | Timeline | 既存Skia実行fixture、Timeline設計決定、現行projection／gesture oracle | 既存fixtureを再設計せずRN native Timeline surfaceで表示する |
 | Browser／Inspector | 現行RN panel、Place／Undo／Redo、initial snapshot projection | Place後の更新snapshotをInspectorへ再投影する |
 | integration seat | RN app root、`rn_product_host` ABI、native registration、単一GPU owner | laneを一つの起動可能なRN artifactへ順次取り込む |
 
-StageでRerunのEntity、Blueprint、store、cache key、View classまたは公開型を採らない。Timelineをゼロから再設計せず、旧Vello routeへ新機能を足さない。
+Rerunのstore／query／View／visualizer／camera／picking／renderer閉包を製品runtimeとして使う。ただしRerun Entity／BlueprintをDocument、Undo、selection、playheadの第二authorityにはしない。Timelineをゼロから再設計せず、旧Vello routeへ新機能を足さない。
 
 ## 3. mergeと停止
 
@@ -39,13 +39,13 @@ StageでRerunのEntity、Blueprint、store、cache key、View classまたは公�
 - **MECHANISM CLASS**: desktop product UI bring-upとGit共同開発
 - **KNOWN IMPLEMENTATION SEARCH**: 現行RN seat、Rerun transfer map、Skia fixture、Git branch／worktree／commit／PR
 - **CANDIDATES**: 既存Stage candidate、既存Timeline fixture、既存RN panels
-- **ADOPTION ROUTE**: `REUSE / VERIFY_CANDIDATE / PORT / PATTERN`
+- **ADOPTION ROUTE**: Rerun Spatial Viewerを`ADOPT / WRAP`、既存RN shell／D2／Skia Timelineを`REUSE`
 - **REJECTED CANDIDATES**: 新しい統合framework、第二Host、第二writer、第二GPU device、全surface一括merge gate
-- **THIN MOTOLII SEAM**: typed intent、revisioned snapshot、native component registration、GPU composite
+- **THIN MOTOLII SEAM**: Document→Rerun identity／time／asset翻訳、typed terminal intent、native Stage mount
 - **THIN MOTOLII RESIDUAL**: 製品固有identity、D2 admission、Undo／Redo、Motolii fixture
 - **RETIREMENT**: R2-E2E後に旧direct-wgpu／Vello製品入口を退役
 - **BUILD JUSTIFICATION**: `NONE`
-- **BUILD**: 既存seamの接続だけを許可
+- **BUILD**: Rerun内部機構を作らず、既存subsystemへの薄い接続だけを許可
 
 ## 5. 非目標
 

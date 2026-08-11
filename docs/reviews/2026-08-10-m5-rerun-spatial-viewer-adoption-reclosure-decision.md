@@ -9,6 +9,8 @@ M5の主部は、Rerunを機構ごとの`PATTERN`として分解して独自実�
 `954bf95a4e1a01de4cb67e0e92b8a5e059ee2b8e`の**Spatial Viewer系を一つの既知実装として
 `ADOPT / WRAP`し、Motolii Stageへ接続する**。
 
+製品構造は **Motolii creator wrapper / Rerun spatial runtime** とする。Rerunの既存store／query／view／visualizer／camera／picking／renderer閉包を既定routeにし、MotoliiはDocumentからRerun入力へのidentity／time／asset翻訳と、確定操作をD2へ戻すseamだけを足す。`re_renderer`へ直接draw dataを積む独自scene routeや、shape別のStage frameを並行して作らない。
+
 M3の主役surfaceはStageである。M3はRN shell、rust-skia overlay、window／input、D2 single writer、
 Preview／Exportの製品ownerを維持し、M5はそのStage内で3D／spatial sceneを評価・表示する中核をRerunから
 採択する。Rerunのstore、Blueprint、selection、playheadを第二のDocument／writer／製品authorityにはしない。
@@ -18,8 +20,7 @@ M5 spatialをM3完成後まで止めると、主役であるStageを閉じるた
 以後はM3 Stageの成果に必要なRerun接続を同じoutcome内で一契約ずつ進められる。第二writer、別world、
 別Preview／Export、未決公開schemaを作らないという旧休止契約の負例は維持する。
 
-この決定は「Rerunの全製品をそのまま埋め込む」ことも「Rerun sourceをfile単位で複製する」ことも意味しない。
-採択単位をrenderer、picking、camera等の断片から、相互接続済みのSpatial Viewer subsystemへ引き上げる。
+この決定はRerunの製品chromeを埋め込むことや、sourceをfile単位で複製することを意味しない。RN shell／panelはMotolii、spatial runtimeはRerun、永続意味とwriteはDocument／D2という三点だけを境界とする。
 
 ## 2. 実コードで確認した閉包
 
@@ -45,7 +46,7 @@ M5 spatialをM3完成後まで止めると、主役であるStageを閉じるた
 
 Rerun採択後にもMotoliiが所有するのは次だけである。
 
-1. Documentの評価snapshot／stable identity／時刻をRerun側のview入力へ写すprojectionと、確定編集をD2 commandへ戻すsingle-writer seam。
+1. Documentの評価snapshot／stable identity／時刻／assetをRerun入力へ写すprojectionと、確定編集をD2 commandへ戻すsingle-writer seam。
 2. `Scale / Depth Move`、Depth Rail、1 gesture = 1 Undo、Escape／stale epoch変更0等のauthoring意味とrust-skia overlay。
 3. `Layer Order / Group Depth / AE-style Bins`、linear-premultiplied合成、Preview／Export同一路の製品policy。
 4. faithful glTF、core metallic-roughness、`KHR_materials_unlit`、neutral environment。固定Rerun commitのmesh shaderはbase color＋固定2灯であり、このPBR範囲を満たさない。
@@ -72,20 +73,20 @@ bounds、mesh／image／video／point／line表示、custom visualizer extension
 
 ### ADOPTION ROUTE
 
-M3 Stageの既存Host／device／surface／snapshot ownerを維持し、Rerun Spatial Viewerの登録・query・visualizer・
-renderer系を採択する。exact crate集合、storeを使うかdirect projectionに縮めるか、device共有方法、cutoverは
-current codeから一契約ずつcompileする。このdecisionだけから依存追加や実装を発注しない。
+M3 Stageの既存Host／device／surface／snapshot ownerを維持し、Rerun Spatial Viewerのstore・登録・query・visualizer・camera・picking・renderer系を一つのruntimeとして採択する。製品施工はDocument値をRerunの既存入力へ翻訳し、Rerun出力を既存Stage surfaceへ載せるseamだけを閉じる。direct `re_renderer` routeを同格候補に戻さない。
 
 ### REJECTED CANDIDATES
 
 - Rerunをclassごとの`PATTERN`へ解体して同等機構をMotoliiで再実装するroute
+- `re_renderer` builderだけを使い、独自scene／view／query／camera／pickingまたはshape別Stage frameを作るroute
+- probeの`encode_rerun_stage_shapes`等を製品runtimeへ昇格するroute
 - Rerun store／BlueprintをDocument、journal、Undo、selection、playheadの第二authorityにするroute
 - Rerun UI全体をRN shell／rust-skia Timeline／Inspectorの代替にするroute
 - 固定2灯mesh shaderをMotoliiのPBR完成として採用するroute
 
 ### THIN MOTOLII SEAM
 
-snapshot/time/identity projection、Host callback、D2 terminal intent、Stage composite、resource admission。
+snapshot/time/identity/asset projection、Host callback、D2 terminal intent、Stage mount、resource admission。
 
 ### THIN MOTOLII RESIDUAL
 
@@ -103,6 +104,4 @@ current codeで確認した後に実装できる。
 
 ## 5. 状態と次の再入場
 
-本変更はauthority再締結だけで、製品runtime完成、Rerun依存追加、Stage接続、PBR完成を意味しない。
-次に実装を始める場合は、Rerun Spatial Viewerを一つの候補subsystemとして、現在のRN + rust-skia + wgpu
-Stageへ接続する最初の一契約境界をcurrent codeから選ぶ。旧P1→P2粒列や旧`PATTERN`別実装を自動再開しない。
+本変更はauthority再締結だけで、製品runtime完成、Stage接続、PBR完成を意味しない。次の施工は固定Rerun Spatial Viewerを候補比較へ戻さず、`Document evaluation -> Rerun input -> existing RN Stage surface`の薄い一本を閉じる。旧P1→P2粒列、旧`PATTERN`別実装、probe製品化を再開しない。

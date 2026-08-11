@@ -6,7 +6,7 @@
 
 ## 決定
 
-Motoliiは、個々の描画・編集技術を第一原理から作り直す製品ではなく、**クリエイターの表現意図を、既知の実装が実行できる型付き意味へ翻訳し、Stage上の結果へ戻すHost**である。
+Motoliiは、個々の描画・編集技術を第一原理から作り直す製品ではなく、**Rerun Spatial Viewerをcreator向け映像制作へ翻訳する薄いwrapper**である。Document／D2、creator意味、identity／time／asset翻訳、admission、Preview／Export policyを持ち、Rerunのscene／view／query／camera／picking／rendererを作り直さない。
 
 M3〜M5の開発では、一発で最終正答を作ることを施工条件にしない。まず一つの制作意図について、操作、型付き意味、既知実装、画または自動oracleまでの理論を実際に通す**叩き台**を作り、製品の現在地と既知の限界を明示したままmainへ現像する。main上の実物を次の修正入力にする。
 
@@ -37,7 +37,7 @@ creator intent
 ## M3・M4・M5への適用
 
 - **M3**は完成し続ける制作面であり、Stageを主役に、Timelineと各panelから制作意図を画へ現像する。
-- **M5**はStageが受け取る表現能力を供給する。Rerun Spatial Viewerと、Path、Filter、Instance等への翻訳を既知実装から採択する。
+- **M5**はRerun Spatial Viewerのcustom visualizer等へPath、Filter、Instanceを載せ、Stageの表現能力を増やす。独自spatial runtimeを増やさない。
 - **M4**はM3とM5の間で同じ評価を時間上に連続させる。独立した主役UIを増やすためではない。
 - Skia Timeline、Rerun Stage、Path morph、clipping filter、particle、glow、feedback、datamosh等のprobeは、個別機能一覧ではなく、この翻訳routeが成立するかを確かめる入力として扱う。
 

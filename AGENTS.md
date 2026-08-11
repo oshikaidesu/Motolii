@@ -30,7 +30,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 | M3製品実装 | [M2基盤再締結gate](docs/reviews/2026-07-15-m2-foundation-reclosure-gate.md)、対象M3正本 |
 | M3 UI、入力、Timeline、panel | [UI境界の規律](docs/reviews/2026-07-14-m3-ui-boundary-prevention.md)、[UI成果物用語](docs/ui-artifact-terminology.md)、[UI参照地図](docs/ui-reference-map.md) |
 | React mock／product source asset | [React製品資産の直接移管契約](docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md) |
-| Rerunのsource、crate、画面、pattern | [Rerun inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md)、[Rerun学習・転移計画 §9](docs/reviews/2026-07-20-rerun-learning-transfer-plan.md#9-rerun参照を発注へ入れる強制動線) |
+| Rerun／M3 Stage／M5 spatial | [Rerun Spatial Viewer採択再締結](docs/reviews/2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md)。source詳細が必要な時だけ[Rerun inventory](docs/reviews/2026-07-20-rerun-source-asset-inventory.md) |
 | pluginの作成・量産 | [plugin authoring](docs/plugin-authoring.md) |
 
 ## Motoliiの絶対規律
@@ -54,6 +54,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 - test、golden、threshold、期待値を実装都合で変更してgreenにしない。testが誤りに見える場合は施工を止め、独立した仕様・oracle変更として扱う
 - 会話で新しい意味、状態owner、操作、配布形式が生じたら、観察／比較中／決定／棄却／停止と非目標をコードより先に正本へ回収する。会話だけをauthorityにしない
 - **M3 RN製品UI target凍結**: 製品shell、app root、Browser、Inspector、通常panel、native componentの唯一の接続先は`ui/motolii-rn/`である。`spikes/motolii-rn-probe/`は検証・visual oracle専用で、製品source、次のapp root、移植元UIにはしない。別RN app／shell／root、既存panelの縮約copy、probe側への製品機能追加を作らない。変更が必要なら、利用者の明示判断と、移行route・cutover・旧target退役を記した解凍decisionを先にmainへ入れ、decision indexとimplementation ledgerを同時更新する
+- **Rerun wrapper既定**: M3 Stage／M5 spatial runtimeは固定Rerun Spatial Viewer subsystemへ相乗りし、MotoliiはDocument／D2、creator向け意味、snapshot／time／identity翻訳、admission、terminal intent、Preview／Export policyだけを薄く持つ。`re_renderer`直結の独自scene／view／query／camera／picking再構築、Rectangle専用frame、probe関数の製品化を行わない。Rerun機構を外すのはnamed product oracleとの実測衝突を示し、利用者が例外を決定した時だけとする
 - 新規施工は **1 Issue = 1契約境界 = 1 owner = 1 commit = 1 PR**。ここでいう契約境界は一つの利用者成果と意味ownerであり、それを通すRust、React Native、shader、fixture、test、docsをfile数だけで分割しない。PRは良い塊を運ぶlanding envelopeであってapproval gateではない。既存成果へIssue新設、history rewrite、PR分割、再reviewを遡及要求しない。仕様・decisionを変更したら同じcommitでdecision indexと必要なledgerを更新する
 - 並列発注では各Issue／PRへ`OUTCOME / SEMANTIC OWNER / SHARED SEATS TOUCHED / INTEGRATION OWNER / PRODUCT STATE / ORACLE / KNOWN LIMITS`を明記する。同じshared seatを触る複数PRを同時発注せず、各branchはcurrent mainから独立に作り、feature branch同士をmergeしない。integration ownerがmechanical conflictを解消してmainへ順に着地させ、task起因redは同じoutcomeのfix-forwardをそのseatの次発注より先に入れる。独自queue、lock service、merge frameworkを新設しない。詳細は[叩き台PR統合決定](docs/reviews/2026-08-10-creator-translation-working-draft-pr-integration-decision.md#並列pr発注loop-v0)
 

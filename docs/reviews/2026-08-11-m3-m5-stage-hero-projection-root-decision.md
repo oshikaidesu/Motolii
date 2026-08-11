@@ -6,7 +6,7 @@
 
 ## 1. 結論
 
-M3の主役surfaceをStageとし、M5から採択したRerun Spatial ViewerをそのHero consumerとする。ここでHeroとは、作品意味を最も豊かに現像し、後続surfaceへ必要な投影を具体化する第一consumerを指す。M5やRerunをDocument、Undo、selection、playheadのownerにする語ではない。
+M3の主役surfaceをStageとし、固定Rerun Spatial Viewerをそのspatial runtimeとする。MotoliiはRerunを包むcreator-facing wrapperであり、作品意味をDocument／D2からRerun入力へ翻訳する。M5やRerunをDocument、Undo、selection、playheadのownerにはしないが、Rerunのscene／view／query／visualizer／camera／picking／rendererをMotolii内で作り直さない。
 
 従来はStageの製品像が弱く、Rectangleの意味がDocument、render graph、Timeline、Inspector、probe rendererへ局所的に現れたまま、どの製品出口へ揃えるかが見えにくかった。以後は次の向きで一つずつ回収する。
 
@@ -20,8 +20,8 @@ projection generation / Host-owned evaluation time
           +-------+-------+
           |               |
           v               v
-M5-derived Stage Hero   bounded side projections
-Rerun spatial/render     Timeline = time/location
+Rerun Spatial Viewer    bounded side projections
+Stage spatial runtime    Timeline = time/location
                         Inspector = meaning/control
 ```
 
@@ -29,7 +29,7 @@ Rerun spatial/render     Timeline = time/location
 
 永続意味の正本は`motolii-doc::Document`、変更ownerはD2 single writer、Undo/Redoは既存Command／journal routeのままとする。Rerun entity path、RN component state、Timeline bar、Inspector fieldを正本にしない。
 
-翻訳根は公開schemaを新設せず、現行の次の値を同じaccepted generationとして扱う論理envelopeである。
+翻訳根は公開schemaやshape別frameを新設せず、現行の次の値を同じaccepted generationとしてRerunの既存入力へ渡す論理envelopeである。
 
 - `PublishedDocument.snapshot: Arc<Document>`
 - Document `revision`
@@ -43,7 +43,7 @@ Rerun spatial/render     Timeline = time/location
 
 | surface | 同じidentityから投影する意味 | 所有しないもの |
 |---|---|---|
-| Stage Hero | 評価済み空間、shape、transform、style、layer order、selection用spatial address。Rerun entity pathは`LayerId`から導出する表示address | Document、history、selection正本、独自playhead |
+| Stage Hero | Rerun Spatial Viewerが評価・表示する空間、shape、transform、style、layer order、selection用spatial address。Rerun entity pathは`LayerId`から導出する表示address | Document、history、selection正本、独自playhead、第二spatial engine |
 | Timeline | Clip interval、track／band、key、現在時刻。Stageで見える対象の時間上の所在 | shape schema、spatial scene、Document clone |
 | Inspector | primary対象のtype、既存parameter、diagnostic、利用可能なtyped operation | mock state、汎用parameter framework、直接Document write |
 
@@ -65,14 +65,13 @@ Draft PR #470の固定5点pathはRerun表示機構のprobeであり、このtran
 
 ## 5. PRへcompileする順序
 
-最初にcompileする候補は、VS-1 Rectangleのaccepted snapshot／time／`LayerId`を既存Rerun Stage入力へ写す一契約である。IssueやPRはまだ開かない。次をcurrent mainで閉じてから`READY_TO_OPEN`へ上げる。
+最初の契約は、VS-1 Rectangleを特別扱いせず、accepted snapshot／time／`LayerId`をRerun Spatial Viewerの既存入力へ翻訳する一本である。
 
-1. `StandardShape::Rect`の製品call siteと`#[cfg(test)]`境界を数える。
-2. 既存Vector Rect→`OverlayRect` loweringとRerun Path2D visualizerの採否を比較する。
-3. exact input、output、owner、entity address導出、stale rejection、failure returnを固定する。
-4. `R1-GPU-BINDING`の残余とwrite setの交差を測り、第二device／surface／rendererを負例にする。
-5. automated oracleを、same `LayerId`／revision／time、固定bool 0、Document write 0として閉じる。
-6. 実RN StageでBrowser Place後にRectangleが見えることをexternal visual gateとする。
+1. Documentの評価結果をRerun entity／component入力へ写す。
+2. scene query、View、visualizer、camera、picking、drawはRerunへ任せる。
+3. 結果を`ui/motolii-rn/`の既存Stageへ載せ、確定操作だけD2へ戻す。
+
+自動oracleはsame `LayerId`／revision／time、stale拒否、Document write 0。外部gateはBrowser Place後に通常RN StageでRectangleが見えることとする。Rerun subsystem自体の再比較や、probe関数の製品化はcompile項目にしない。
 
 このStage契約の入力が固定された後、file allowlistが交差しないTimeline product projectionとInspector bounded read projectionは並列化できる。Undo/Redoで三面から消失／復帰する`R1-E2E`は実装PRでなく、各consumer着地後の統合受入とする。
 
@@ -83,9 +82,10 @@ Draft PR #470の固定5点pathはRerun表示機構のprobeであり、このtran
 - TimelineやInspectorからRerun entityを逆引きして製品意味を作る。
 - Stage Heroを理由にTimeline／Inspector／D2を一PRへ束ねる。
 - #470のbool／固定座標を製品snapshot接続へ拡張し続ける。
+- `RerunStageFrame`等のshape別中間scene、direct `re_renderer` draw route、第二camera／pickingを作る。
+- probeの`encode_rerun_stage_shapes`を製品接続席または共通評価正本にする。
 - Circle、overlap、Path editをRectangleのaccepted snapshot接続より先に製品発注する。
 
 ## 7. 発注前handoff
 
 PR候補は[M3-R1-STAGE-RECTANGLE](../pr-seat-candidate-catalog.md#現在の候補)の一行へ戻す。closed orderには`BASE / AUTHORITY / CURRENT STATE / OWNER / EXACT TARGET / ALLOWLIST / READ SET / POSITIVE AND NEGATIVE ORACLES / NON-GOALS / RETURN`を揃える。exact targetが複数ownerへ割れる場合は一発でまとめず、最初の見えるStage出口を保ったまま一契約へ`REDUCE`する。
-

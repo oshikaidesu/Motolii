@@ -1,6 +1,6 @@
 # M3: UI統合
 
-ステータス: **ACTIVE / React Native + Rust/rust-skia + wgpuへ再基線化、製品移行開始前**（2026-08-07）
+ステータス: **ACTIVE / React Native製品shell + Rerun Spatial Viewer Stage + rust-skia Timeline／overlay**（2026-08-11）
 
 M3は、M0〜M2で成立したDocument、D2 single writer、Undo／Redo、journal、projection、render、playbackを、制作に耐える一つの製品UIへ接続する段階である。UI技術の比較を続ける段階ではない。
 
@@ -41,7 +41,7 @@ Browser Rectangle
 | shell、dock、tabs、Browser、Inspector、settings、forms、text、dialogs | React Native |
 | Timeline | Rust headless interaction + rust-skia |
 | Curve Editor | Rust headless interaction + rust-skia |
-| Stage preview | wgpu |
+| Stage spatial runtime／preview | 固定Rerun Spatial Viewer（wgpu） |
 | Stage grid／path／gizmo overlay | rust-skia、wgpu final composite |
 | Document／D2／Undo／journal／projection／playback／media／render | Rust core |
 | native view／surface／capture／focus／DPI／lifecycle | platform adapter |
@@ -85,8 +85,9 @@ Inspectorの数値・text編集も同じterminal intentとsingle writerへ接続
 Stage native componentは次の一つのpresentation chainを持つ。
 
 ```text
-render/media result
-  → wgpu preview texture
+Document evaluation（identity／time／asset）
+  → Rerun Spatial Viewer input
+  → Rerun output（同一wgpu Device／Queue）
   → rust-skia transparent overlay (dirty時だけ更新)
   → wgpu composite
   → native surface present
@@ -187,7 +188,7 @@ Timeline trim／key drag、Stage gizmo、Depth Rail direct manipulation、drag a
 ### Wave R1 — VS-1再閉鎖
 
 - Browser Rectangle conceptをRNへ移す
-- Stage wgpu preview + rust-skia overlay
+- Stage Rerun Spatial Viewer + rust-skia authoring overlay
 - rust-skia Timeline read projection
 - RN Inspector read projection
 - Place、Undo、Redoを既存D2へ接続

@@ -1,10 +1,10 @@
 # UI runtime責任境界
 
-状態: **React Native + Rust/rust-skia + wgpuへ再基線化済み / 製品移行は未完了**（2026-08-07）
+状態: **React Native製品shell + Rerun Spatial Viewer Stage + rust-skia Timeline／overlay**（2026-08-11）
 
 正本決定: [M3 React Native + Rust/Skia UI runtime再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)
 
-MotoliiはUIを一つのtoolkitへ統一しない。通常UIをReact Native、高密度canvasと直接操作をRust/rust-skia、Stageのbase previewとGPU処理をwgpu、編集・再生・保存をRust coreが所有する。
+MotoliiはUIを一つのtoolkitへ統一しない。通常UIをReact Native、Timeline／Curveとauthoring overlayをrust-skia、Stageのspatial runtimeをRerun Spatial Viewer、編集・再生・保存をRust Hostが所有する。Rerunは同じwgpu Device／Queue／surfaceへ載る。
 
 旧React/WebView islands + 1 top-level wgpu Surface + direct wgpu/Vello UIは新規製品実装の標準ではない。既存実装は移行oracleとして保持し、新routeが同じ利用者outcomeを閉じた後にだけretireする。
 
@@ -62,7 +62,7 @@ curve、key、tangent、grid、marquee、pan、zoom、preset previewをrust-skia
 
 ### Stage
 
-base previewはwgpuが所有する。rust-skia overlayはgrid、safe area、selection bounds、path、gizmo、snap補助だけを描く。overlayはdirty時だけraster/uploadし、CPU readbackなしでwgpu previewとcomposeする。
+base previewはRerun Spatial Viewerが所有する。MotoliiはDocumentのidentity／time／assetをRerun入力へ翻訳するだけで、scene／view／camera／picking／rendererを複製しない。rust-skia overlayはgrid、safe area、selection bounds、path、gizmo、snap補助だけを描き、dirty時だけRerun outputへcomposeする。
 
 100〜500 gizmoは上限stressであり、通常表示目標ではない。visible、selected、group root、semantic importanceで情報を間引く。inactive objectはboundsだけ、active selectionはfull gizmoを基本とする。
 
@@ -118,7 +118,7 @@ props/events/C ABIはmacOS／Windowsで同じsemantic contractにする。platfo
 ## 6. GPUとrenderer
 
 - rust-skiaをTimeline、Curve Editor、Stage overlayの既定2D rendererとする。
-- wgpuをStage preview、media/composite、final Stage compositionのownerとする。
+- Rerun Spatial ViewerをStage previewのspatial ownerとし、wgpuを共有GPU substrate、media/composite、final compositionに使う。
 - 同じStage component内でdevice、queue、surface、resource lifecycle ownerを一意にする。
 - rust-skiaはまずCPU raster + dirty uploadを採用する。実製品計測で不足した面だけGPU-backed Skiaを比較する。
 - direct wgpu primitive UIとVelloは新規標準ではない。既存codeはbenchmark、fixture、visual oracle、特殊render資産として保持する。
