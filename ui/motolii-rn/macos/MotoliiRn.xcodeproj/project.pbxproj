@@ -410,7 +410,7 @@
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
-					"$(PROJECT_DIR)/../native-renderer/target/release/libmotolii_native_renderer.a",
+					"$(PROJECT_DIR)/../native-renderer/target/debug/libmotolii_native_renderer.a",
 					"-framework",
 					Metal,
 					"-framework",
