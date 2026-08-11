@@ -57,7 +57,7 @@ test('renders correctly', async () => {
   expect(
     tree!.root.findByProps({testID: 'create-item-rectangle'}).props.accessibilityState.selected,
   ).toBe(true);
-  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('');
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.500000,0.500000|trim');
 
   await ReactTestRenderer.act(() => {
     rectangle.props.onPointerDown();
@@ -67,13 +67,13 @@ test('renders correctly', async () => {
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageDrop({nativeEvent: {x: 0.25, y: 0.75}});
   });
-  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.250000,0.750000');
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.250000,0.750000|trim');
   expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.draggedItemId).toBe('');
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'create-item-rectangle'}).props.onDoubleClick();
   });
-  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.500000,0.500000');
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.500000,0.500000|trim');
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-mode-THUMBNAILS'}).props.onPress();

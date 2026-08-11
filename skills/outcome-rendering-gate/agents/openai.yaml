@@ -1,0 +1,4 @@
+interface:
+  display_name: "Outcome Rendering Gate"
+  short_description: "Gate UI code on visible behavior"
+  default_prompt: "Use $outcome-rendering-gate to implement this visible product behavior end to end."

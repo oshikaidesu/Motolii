@@ -374,7 +374,7 @@ function Browser({width, onCreateItem, onDragStart, onDragCancel}: {width: numbe
   );
 }
 
-function Stage({createdItemId, draggedItemId, showGpu, onDrop, onToggleGpu}: {createdItemId: string; draggedItemId: string; showGpu: boolean; onDrop: (x: number, y: number) => void; onToggleGpu: () => void}) {
+function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, onToggleGpu}: {createdItemId: string; draggedItemId: string; pathOperationId: string; showGpu: boolean; onDrop: (x: number, y: number) => void; onToggleGpu: () => void}) {
   return (
     <View style={styles.stage} testID="stage-surface">
       <View style={styles.stageTools}>
@@ -390,7 +390,7 @@ function Stage({createdItemId, draggedItemId, showGpu, onDrop, onToggleGpu}: {cr
           <MotoliiGpuView
             accessible
             accessibilityLabel="Rerun Spatial Viewer Stage"
-            createdItemId={createdItemId}
+            createdItemId={`${createdItemId || 'rectangle@0.500000,0.500000'}|${pathOperationId}`}
             draggedItemId={draggedItemId}
             onStageDrop={event => onDrop(event.nativeEvent.x, event.nativeEvent.y)}
             style={styles.gpuStage}
@@ -424,11 +424,10 @@ function Stage({createdItemId, draggedItemId, showGpu, onDrop, onToggleGpu}: {cr
   );
 }
 
-function Inspector({width}: {width: number}) {
+function Inspector({width, pathOperationId, onPathOperationChange}: {width: number; pathOperationId: string; onPathOperationChange: (id: string) => void}) {
   const [panel, setPanel] = useState<RightPanel>('INSPECTOR');
   const [intensity, setIntensity] = useState(64);
   const [spread, setSpread] = useState(42);
-  const [pathOperationId, setPathOperationId] = useState(PATH_OPERATIONS[0].id);
   const [extensionId, setExtensionId] = useState<string>(panelRegistry[0].id);
   const extension = panelRegistry.find(item => item.id === extensionId)!;
   const selectedPathOperation = PATH_OPERATIONS.find(item => item.id === pathOperationId)!;
@@ -456,14 +455,14 @@ function Inspector({width}: {width: number}) {
           <ParameterRow label="Blend" value="Screen" />
           <View style={styles.pathOperationSection} testID="path-operations-panel">
             <Text style={styles.pathOperationTitle}>Lottie Path Operations</Text>
-            <Text style={styles.pathOperationDescription}>Choose an operation for the selected vector path. Document apply and Stage evaluation are not connected yet.</Text>
+            <Text style={styles.pathOperationDescription}>Choose an operation to preview its evaluated vector path on the Stage. This fixture is not saved to Document yet.</Text>
             <View style={styles.pathOperationGrid}>
               {PATH_OPERATIONS.map(item => (
                 <Pressable
                   key={item.id}
                   accessibilityRole="button"
                   accessibilityState={{selected: item.id === pathOperationId}}
-                  onPress={() => setPathOperationId(item.id)}
+                  onPress={() => onPathOperationChange(item.id)}
                   style={[styles.pathOperationButton, item.id === pathOperationId && styles.pathOperationButtonActive]}
                   testID={`path-operation-${item.id}`}>
                   <Text style={styles.pathOperationButtonText}>{item.name}</Text>
@@ -655,6 +654,7 @@ function App() {
   const [showGpuStage, setShowGpuStage] = useState(true);
   const [createdItemId, setCreatedItemId] = useState('');
   const [draggedItemId, setDraggedItemId] = useState('');
+  const [pathOperationId, setPathOperationId] = useState(PATH_OPERATIONS[0].id);
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
@@ -695,7 +695,7 @@ function App() {
           onNudge={() => setBrowserWidth(value => value >= 348 ? 284 : value + 64)}
         />
         <View style={styles.centerColumn}>
-          <Stage createdItemId={createdItemId} draggedItemId={draggedItemId} showGpu={showGpuStage} onDrop={completeStageDrop} onToggleGpu={() => setShowGpuStage(value => !value)} />
+          <Stage createdItemId={createdItemId} draggedItemId={draggedItemId} pathOperationId={pathOperationId} showGpu={showGpuStage} onDrop={completeStageDrop} onToggleGpu={() => setShowGpuStage(value => !value)} />
         </View>
         <Splitter
           label="Inspectorのサイズを変更"
@@ -704,7 +704,7 @@ function App() {
           onDelta={delta => setInspectorWidth(clamp(inspectorStart.current - delta, 240, 440))}
           onNudge={() => setInspectorWidth(value => value >= 390 ? 326 : value + 64)}
         />
-        <Inspector width={inspectorWidth} />
+        <Inspector width={inspectorWidth} pathOperationId={pathOperationId} onPathOperationChange={setPathOperationId} />
       </View>
       <Splitter
         label="Timelineのサイズを変更"
