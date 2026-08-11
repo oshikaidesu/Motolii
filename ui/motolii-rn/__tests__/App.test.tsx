@@ -18,6 +18,13 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'browser-view-EFFECTS'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'packing-timeline'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'inspector-surface'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'path-operations-panel'})).toBeTruthy();
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'path-operation-trim'}).props.onPress();
+  });
+  expect(tree!.root.findByProps({testID: 'path-operation-trim'}).props.accessibilityState.selected).toBe(true);
+  expect(tree!.root.findByProps({testID: 'path-operation-pucker-bloat'}).props.accessibilityState.selected).toBe(false);
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-tab-MEDIA'}).props.onPress();
@@ -50,7 +57,7 @@ test('renders correctly', async () => {
   expect(
     tree!.root.findByProps({testID: 'create-item-rectangle'}).props.accessibilityState.selected,
   ).toBe(true);
-  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.500000,0.500000');
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('');
 
   await ReactTestRenderer.act(() => {
     rectangle.props.onPointerDown();

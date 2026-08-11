@@ -34,6 +34,12 @@ type EffectItem = {
   unavailable?: boolean;
 };
 
+type PathOperationItem = {
+  id: string;
+  name: string;
+  detail: string;
+};
+
 type BrowserItem = {
   id: string;
   name: string;
@@ -59,6 +65,17 @@ const EFFECTS: EffectItem[] = [
   {id: 'echo', name: 'Echo Bloom', badge: 'FX', tags: '#go-to #atmosphere', color: '#746d4b'},
   {id: 'type', name: 'Type Pulse', badge: 'Aa', tags: '#kinetic', color: '#5c6477'},
   {id: 'fold', name: 'Fold Field', badge: 'FX', tags: '#review', color: '#51455f', unavailable: true},
+];
+
+const PATH_OPERATIONS: PathOperationItem[] = [
+  {id: 'pucker-bloat', name: 'Pucker / Bloat', detail: 'Contract or expand the path'},
+  {id: 'zig-zag', name: 'Zig Zag', detail: 'Add ridges along the path'},
+  {id: 'offset', name: 'Offset Paths', detail: 'Inset or outset closed paths'},
+  {id: 'round-corners', name: 'Round Corners', detail: 'Round path corners'},
+  {id: 'trim', name: 'Trim Paths', detail: 'Reveal a path range'},
+  {id: 'twist', name: 'Twist', detail: 'Rotate geometry around a center'},
+  {id: 'wiggle', name: 'Wiggle Paths', detail: 'Add deterministic path variation'},
+  {id: 'repeater', name: 'Repeater', detail: 'Repeat a path with a transform'},
 ];
 
 const CREATE_ITEMS = [
@@ -200,10 +217,7 @@ function BrowserResults({
             accessibilityState={{selected: selectedId === item.id}}
             onDoubleClick={() => onActivate(item.id)}
             onPointerDown={() => onDragStart(item.id)}
-            onPress={() => {
-              onSelect(item.id);
-              onActivate(item.id);
-            }}
+            onPress={() => onSelect(item.id)}
             testID={item.testID}
             style={[
               styles.browserCard,
@@ -414,8 +428,10 @@ function Inspector({width}: {width: number}) {
   const [panel, setPanel] = useState<RightPanel>('INSPECTOR');
   const [intensity, setIntensity] = useState(64);
   const [spread, setSpread] = useState(42);
+  const [pathOperationId, setPathOperationId] = useState(PATH_OPERATIONS[0].id);
   const [extensionId, setExtensionId] = useState<string>(panelRegistry[0].id);
   const extension = panelRegistry.find(item => item.id === extensionId)!;
+  const selectedPathOperation = PATH_OPERATIONS.find(item => item.id === pathOperationId)!;
 
   return (
     <View style={[styles.inspector, {width}]} testID="inspector-surface">
@@ -438,6 +454,25 @@ function Inspector({width}: {width: number}) {
           <ParameterRow label="Intensity" value={`${intensity}%`} onDecrease={() => setIntensity(v => clamp(v - 2, 0, 100))} onIncrease={() => setIntensity(v => clamp(v + 2, 0, 100))} />
           <ParameterRow label="Spread" value={`${spread}%`} onDecrease={() => setSpread(v => clamp(v - 2, 0, 100))} onIncrease={() => setSpread(v => clamp(v + 2, 0, 100))} />
           <ParameterRow label="Blend" value="Screen" />
+          <View style={styles.pathOperationSection} testID="path-operations-panel">
+            <Text style={styles.pathOperationTitle}>Lottie Path Operations</Text>
+            <Text style={styles.pathOperationDescription}>Choose an operation for the selected vector path. Document apply and Stage evaluation are not connected yet.</Text>
+            <View style={styles.pathOperationGrid}>
+              {PATH_OPERATIONS.map(item => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityState={{selected: item.id === pathOperationId}}
+                  onPress={() => setPathOperationId(item.id)}
+                  style={[styles.pathOperationButton, item.id === pathOperationId && styles.pathOperationButtonActive]}
+                  testID={`path-operation-${item.id}`}>
+                  <Text style={styles.pathOperationButtonText}>{item.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <ParameterRow label="Selected" value={selectedPathOperation.name} />
+            <Text style={styles.pathOperationDescription}>{selectedPathOperation.detail}</Text>
+          </View>
           <TextInput
             accessibilityLabel="Inspector note"
             defaultValue="日本語IME / focus probe"
@@ -774,6 +809,13 @@ const styles = StyleSheet.create({
   stepButton: {width: 25, height: 24, alignItems: 'center', justifyContent: 'center'},
   stepText: {fontSize: 11, color: '#c8bc7b'},
   inspectorInput: {height: 30, margin: 9, paddingHorizontal: 7, fontSize: 9, color: '#eeeeeb', borderWidth: 1, borderColor: '#575c61'},
+  pathOperationSection: {borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#383c40', paddingVertical: 8},
+  pathOperationTitle: {paddingHorizontal: 10, fontSize: 10, fontWeight: '700', color: '#e7e7e4'},
+  pathOperationDescription: {paddingHorizontal: 10, paddingTop: 4, fontSize: 8, lineHeight: 12, color: '#aeb2b3'},
+  pathOperationGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: 5, padding: 10},
+  pathOperationButton: {borderWidth: 1, borderColor: '#45494d', paddingHorizontal: 6, paddingVertical: 5},
+  pathOperationButtonActive: {borderColor: '#b4a66a', backgroundColor: '#29291f'},
+  pathOperationButtonText: {fontSize: 8, color: '#d7d8d4'},
   extensionBody: {flex: 1},
   extensionTabs: {flexDirection: 'row', padding: 7, gap: 5},
   extensionTab: {paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: '#44484d'},
