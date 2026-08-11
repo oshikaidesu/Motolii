@@ -8,13 +8,6 @@ Motoliiの唯一のRN製品source。`App.tsx` 660行 — Browser 3タブ(`MEDIA`
 Inspector/Extensions、Timeline 3モード、effect一覧、panel registry、
 native `MotoliiGpuComponentView.mm`、Fabric spec `MotoliiGpuView`/`MotoliiTimelineView`。
 
-## UI version
-
-UIの版番号の正本は`package.json`の`version`だけである。起動した画面のtitle barにも
-`UI <version>`として同じ値を表示する。利用者に見えるUIを変更するコミットでは、同じ
-commitでこのversionを更新し、確認時はsourceの`package.json`と起動画面の表示が一致することを
-先に確かめる。native rendererのbuild identityは別の確認対象であり、UI versionから推測しない。
-
 旧名`MotoliiRnProbe`の資産を `~/Documents/Codex/2026-08-06/ui-rust-ui-c-react/work/MotoliiRnProbe/` から
 [2026-08-10回収監査](../../docs/reviews/2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md)により
 回収し、2026-08-11にこのpathと`MotoliiRn` app identityへcut overした

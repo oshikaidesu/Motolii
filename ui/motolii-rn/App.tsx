@@ -12,7 +12,6 @@ import {
 import {panelRegistry} from './src/panels/registry';
 import MotoliiGpuView from './src/specs/MotoliiGpuViewNativeComponent';
 import MotoliiTimelineView from './src/specs/MotoliiTimelineViewNativeComponent';
-import packageJson from './package.json';
 
 const MacPressable = Pressable as React.ComponentType<
   React.ComponentProps<typeof Pressable> & {onDoubleClick?: () => void}
@@ -24,7 +23,7 @@ type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
 type TimelineMode = 'PACKING' | 'DENSITY' | 'NATIVE';
 
 
-const BUILD_LABEL = `UI ${packageJson.version} · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA`;
+const BUILD_LABEL = 'B002 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA';
 
 type EffectItem = {
   id: string;
@@ -703,7 +702,7 @@ function App() {
       <View style={styles.titlebar}>
         <Text style={styles.brand}>MOTOLII</Text>
         <Text style={styles.project}>night_drive.mtl / Main composition</Text>
-        <Text style={styles.buildLabel} testID="ui-version">{BUILD_LABEL}</Text>
+        <Text style={styles.buildLabel}>{BUILD_LABEL}</Text>
         <View style={styles.grow} />
         {['Settings', '↶ Undo', '↷ Redo', 'Export'].map(label => <Text key={label} style={styles.titleAction}>{label}</Text>)}
       </View>
