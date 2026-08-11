@@ -2747,6 +2747,7 @@ dependencies = [
  "motolii-doc",
  "motolii-eval",
  "motolii-gpu",
+ "motolii-media",
  "motolii-plugin",
  "motolii-plugins-firstparty",
  "motolii-render",
