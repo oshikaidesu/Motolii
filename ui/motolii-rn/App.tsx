@@ -8,7 +8,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {Gesture, GestureDetector, GestureHandlerRootView} from 'react-native-gesture-handler';
 
 import {panelRegistry} from './src/panels/registry';
 import MotoliiGpuView from './src/specs/MotoliiGpuViewNativeComponent';
@@ -92,11 +91,6 @@ const clamp = (value: number, min: number, max: number) =>
 const createdItemValue = (id: string, x: number, y: number) =>
   `${id}@${x.toFixed(6)},${y.toFixed(6)}`;
 
-export const stagePlacement = (x: number, y: number, left: number, top: number, width: number, height: number) =>
-  x < left || y < top || x > left + width || y > top + height || width <= 0 || height <= 0
-    ? null
-    : {x: (x - left) / width, y: 1 - (y - top) / height};
-
 const RAIL_HEADINGS = new Set(['COLLECTIONS', 'TAGS', 'PACKS', 'TYPE', 'PROVIDER']);
 
 function Splitter({
@@ -157,7 +151,7 @@ function BrowserResults({
   selectedId,
   onSelect,
   onActivate,
-  onDragEnd,
+  onDragStart,
   testID,
 }: {
   title: string;
@@ -167,7 +161,7 @@ function BrowserResults({
   selectedId: string | null;
   onSelect: (id: string) => void;
   onActivate: (id: string) => void;
-  onDragEnd: (id: string, x: number, y: number) => void;
+  onDragStart: (id: string) => void;
   testID: string;
 }) {
   const columns = view === 'THUMBNAILS' ? 4 : view === 'GRID' ? 2 : 1;
@@ -200,41 +194,40 @@ function BrowserResults({
         numColumns={columns}
         removeClippedSubviews
         renderItem={({item}) => (
-          <GestureDetector gesture={Gesture.Pan().minDistance(4).runOnJS(true).onEnd(event => onDragEnd(item.id, event.absoluteX, event.absoluteY))}>
-            <MacPressable
-              accessibilityLabel={`${item.name}${item.detail ? `, ${item.detail}` : ''}`}
-              accessibilityRole="button"
-              accessibilityState={{selected: selectedId === item.id}}
-              onDoubleClick={() => onActivate(item.id)}
-              onPress={() => onSelect(item.id)}
-              testID={item.testID}
+          <MacPressable
+            accessibilityLabel={`${item.name}${item.detail ? `, ${item.detail}` : ''}`}
+            accessibilityRole="button"
+            accessibilityState={{selected: selectedId === item.id}}
+            onDoubleClick={() => onActivate(item.id)}
+            onPointerDown={() => onDragStart(item.id)}
+            onPress={() => onSelect(item.id)}
+            testID={item.testID}
+            style={[
+              styles.browserCard,
+              {width: cardWidth},
+              view === 'THUMBNAILS' && styles.thumbnailCard,
+              view === 'LIST' && styles.browserListCard,
+              selectedId === item.id && styles.effectSelected,
+            ]}>
+            <View
               style={[
-                styles.browserCard,
-                {width: cardWidth},
-                view === 'THUMBNAILS' && styles.thumbnailCard,
-                view === 'LIST' && styles.browserListCard,
-                selectedId === item.id && styles.effectSelected,
+                styles.browserThumb,
+                view === 'THUMBNAILS' && styles.thumbnailOnlyThumb,
+                view === 'LIST' && styles.browserListThumb,
+                {backgroundColor: item.color},
               ]}>
-              <View
-                style={[
-                  styles.browserThumb,
-                  view === 'THUMBNAILS' && styles.thumbnailOnlyThumb,
-                  view === 'LIST' && styles.browserListThumb,
-                  {backgroundColor: item.color},
-                ]}>
-                {item.glyph ? <Text style={styles.createGlyph}>{item.glyph}</Text> : null}
-                {item.badge ? <Text style={styles.effectBadge}>{item.badge}</Text> : null}
-                {item.unavailable ? <Text style={styles.unavailable}>UNAVAILABLE</Text> : null}
-                {view !== 'THUMBNAILS' && item.badge ? <Text style={styles.playBadge}>▶</Text> : null}
+              {item.glyph ? <Text style={styles.createGlyph}>{item.glyph}</Text> : null}
+              {item.badge ? <Text style={styles.effectBadge}>{item.badge}</Text> : null}
+              {item.unavailable ? <Text style={styles.unavailable}>UNAVAILABLE</Text> : null}
+              {view !== 'THUMBNAILS' && item.badge ? <Text style={styles.playBadge}>▶</Text> : null}
+            </View>
+            {view !== 'THUMBNAILS' ? (
+              <View style={view === 'LIST' ? styles.browserListCopy : undefined}>
+                <Text numberOfLines={1} style={styles.effectName}>{item.name}</Text>
+                <Text numberOfLines={1} style={styles.effectTags}>{item.detail}</Text>
               </View>
-              {view !== 'THUMBNAILS' ? (
-                <View style={view === 'LIST' ? styles.browserListCopy : undefined}>
-                  <Text numberOfLines={1} style={styles.effectName}>{item.name}</Text>
-                  <Text numberOfLines={1} style={styles.effectTags}>{item.detail}</Text>
-                </View>
-              ) : null}
-            </MacPressable>
-          </GestureDetector>
+            ) : null}
+          </MacPressable>
         )}
         style={styles.results}
         testID={testID === 'MEDIA' ? 'thumbnail-grid' : `browser-results-${testID}`}
@@ -244,7 +237,7 @@ function BrowserResults({
   );
 }
 
-function Browser({width, onCreateItem, onDragEnd}: {width: number; onCreateItem: (id: string) => void; onDragEnd: (id: string, x: number, y: number) => void}) {
+function Browser({width, onCreateItem, onDragStart, onDragCancel}: {width: number; onCreateItem: (id: string) => void; onDragStart: (id: string) => void; onDragCancel: () => void}) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('echo');
@@ -343,10 +336,16 @@ function Browser({width, onCreateItem, onDragEnd}: {width: number; onCreateItem:
         onActivate={id => {
           if (tab === 'CREATE') {
             setSelectedCreateItem(id);
+            onDragCancel();
             onCreateItem(createdItemValue(id, 0.5, 0.5));
           }
         }}
-        onDragEnd={(id, x, y) => tab === 'CREATE' && onDragEnd(id, x, y)}
+        onDragStart={id => {
+          if (tab === 'CREATE') {
+            setSelectedCreateItem(id);
+            onDragStart(id);
+          }
+        }}
         onSelect={id => tab === 'EFFECTS' ? setSelected(id) : tab === 'CREATE' ? setSelectedCreateItem(id) : undefined}
         rail={rail}
         selectedId={selectedId}
@@ -358,7 +357,7 @@ function Browser({width, onCreateItem, onDragEnd}: {width: number; onCreateItem:
   );
 }
 
-function Stage({createdItemId, stageViewport, showGpu, onToggleGpu}: {createdItemId: string; stageViewport: React.RefObject<View | null>; showGpu: boolean; onToggleGpu: () => void}) {
+function Stage({createdItemId, draggedItemId, showGpu, onDrop, onToggleGpu}: {createdItemId: string; draggedItemId: string; showGpu: boolean; onDrop: (x: number, y: number) => void; onToggleGpu: () => void}) {
   return (
     <View style={styles.stage} testID="stage-surface">
       <View style={styles.stageTools}>
@@ -369,13 +368,14 @@ function Stage({createdItemId, stageViewport, showGpu, onToggleGpu}: {createdIte
         </Pressable>
         <Text style={styles.stageIdentity}>STAGE / ECHO BLOOM</Text>
       </View>
-      <View ref={stageViewport} style={styles.stageViewport} testID="stage-viewport">
+      <View style={styles.stageViewport} testID="stage-viewport">
         {showGpu ? (
           <MotoliiGpuView
             accessible
             accessibilityLabel="Rust wgpu native Stage"
             createdItemId={createdItemId}
-            draggedItemId=""
+            draggedItemId={draggedItemId}
+            onStageDrop={event => onDrop(event.nativeEvent.x, event.nativeEvent.y)}
             style={styles.gpuStage}
             testID="rust-wgpu-stage"
           />
@@ -616,18 +616,20 @@ function App() {
   const [timelineHeight, setTimelineHeight] = useState(270);
   const [showGpuStage, setShowGpuStage] = useState(true);
   const [createdItemId, setCreatedItemId] = useState('');
-  const stageViewport = useRef<View>(null);
+  const [draggedItemId, setDraggedItemId] = useState('');
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
-  const completeGestureDrag = (itemId: string, x: number, y: number) =>
-    stageViewport.current?.measureInWindow((left, top, width, height) => {
-      const placement = stagePlacement(x, y, left, top, width, height);
-      if (placement) setCreatedItemId(createdItemValue(itemId, placement.x, placement.y));
-    });
+  const completeStageDrop = (x: number, y: number) => {
+    const itemId = draggedItemId;
+    setDraggedItemId('');
+    if (itemId && x >= 0 && y >= 0) {
+      setCreatedItemId(createdItemValue(itemId, x, y));
+    }
+  };
 
   return (
-    <GestureHandlerRootView style={styles.shell} testID="motolii-rn-shell">
+    <View style={styles.shell} testID="motolii-rn-shell">
       <View style={styles.titlebar}>
         <Text style={styles.brand}>MOTOLII</Text>
         <Text style={styles.project}>night_drive.mtl / Main composition</Text>
@@ -643,7 +645,8 @@ function App() {
       <View style={styles.workspace}>
         <Browser
           onCreateItem={setCreatedItemId}
-          onDragEnd={completeGestureDrag}
+          onDragCancel={() => setDraggedItemId('')}
+          onDragStart={setDraggedItemId}
           width={browserWidth}
         />
         <Splitter
@@ -654,7 +657,7 @@ function App() {
           onNudge={() => setBrowserWidth(value => value >= 348 ? 284 : value + 64)}
         />
         <View style={styles.centerColumn}>
-          <Stage createdItemId={createdItemId} stageViewport={stageViewport} showGpu={showGpuStage} onToggleGpu={() => setShowGpuStage(value => !value)} />
+          <Stage createdItemId={createdItemId} draggedItemId={draggedItemId} showGpu={showGpuStage} onDrop={completeStageDrop} onToggleGpu={() => setShowGpuStage(value => !value)} />
         </View>
         <Splitter
           label="Inspectorのサイズを変更"
@@ -673,7 +676,7 @@ function App() {
         onNudge={() => setTimelineHeight(value => value >= 334 ? 270 : value + 64)}
       />
       <Timeline height={timelineHeight} />
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
