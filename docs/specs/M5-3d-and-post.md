@@ -47,6 +47,32 @@ framework、text stack、gizmo frameworkを作る実装列ではない。意味d
 **M5の製品runtime実装は、Rerun採択地図からcurrent Stageへ接続する一契約境界を選ぶ。旧P1→P2列を自動発注しない。**
 候補、具体API、非証明範囲、M4との共通接合部は[M5既知実装調査](../reviews/2026-08-02-m5-known-implementation-survey.md)に集約する。
 
+## RerunとVismの3D表現責任境界（2026-08-12追補）
+
+Rerunは、Vismが生成した3D表現を受け取り、時系列で表示・更新するspatial runtimeとして採用する。
+Rerunの[`Mesh3D`](https://rerun.io/docs/reference/types/archetypes/mesh3d)は頂点位置、法線、UV、色、
+アルベドテクスチャ等を受け取り、[`Mesh3D`の部分更新](https://rerun.io/docs/howto/logging-and-ingestion/send-partial-updates)
+で各frameの頂点位置を更新できる。これは変形結果の描画機構であり、BlenderのLattice／Mesh Deform／Geometry Nodesの
+ような変形評価器ではない。
+
+同様にRerunの[`DepthImage`](https://rerun.io/docs/reference/types/archetypes/depth_image)は取得済み深度の表示と
+カメラ投影を担う入力型であり、RGB／動画から深度を推定するproviderではない。[`Component mappings`](https://rerun.io/docs/howto/visualization/component-mappings)
+やcustom visualizerは、Vism固有の値をRerunの表示へ接続するために使えるが、Vismの意味・identity・budgetのownerにはしない。
+
+したがって、次の責任分離を固定する。
+
+| Vism／Host側 | Rerun側 |
+|---|---|
+| `DepthProvider`が`DepthField`を生成する。source、model、time、Quality、uncertainty、holeを意味として保持する | `DepthImage`または対応するspatial projectionを表示する |
+| `MeshDeform`が`DeformedMesh`を生成する。path／lattice相当の評価とstable topologyを所有する | `Mesh3D`へ頂点・法線・UVを渡し、時系列更新する |
+| `GeometryFracture`が`PieceSet`を生成する。分割、seed、piece identity、lifetimeを所有する。物理はHost Simulation／Bakeへ分離する | pieceごとのentity／`Mesh3D`を表示・選択する |
+| `GlassSurface`が`SurfaceResponse`を宣言する。IOR、roughness、thickness、normal、scene color／depthの要求を型付きで表す | 標準`Mesh3D`のalbedo／textureをGlass BSDF完成とみなさず、必要なら採択済みcustom renderer／render contributionへ接続する |
+
+標準`Mesh3D`のfieldにはGlass BSDFのIOR・厚み・屈折契約はないため、ガラスはRerunの既存表示型だけで完了とはしない。
+重いdepth／geometry／fractureのderived artifactはM4のrecipe identity、cache、invalidation、hard budget、background jobへ
+接続する。VismはRerun componentやGPU handleを公開契約へ漏らさず、Preview／Exportは同じ評価経路を使う。
+この表は実装完了を意味せず、個別の候補とprobe順は[Vism 3D表現実装リスト](../reviews/2026-07-17-vism-implementation-plan.md#phase-m5--3d表現のvism実装リスト2026-08-12追補)で管理する。
+
 ## 目的(退治する落とし穴)
 
 C-4(2.5Dとブレンドモードの衝突)、F-1(glTFとの軸整合)、F-6(テキスト基盤の分界)。

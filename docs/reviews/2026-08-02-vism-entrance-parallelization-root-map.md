@@ -1,4 +1,4 @@
-# Vism入口・並列解禁の根本マップ（2026-08-02）
+# Vism入口・並列解禁の根本マップ（2026-08-02、2026-08-12追補）
 
 状態: **決定**。
 
@@ -73,7 +73,11 @@ Filter／LayerSource／ParamDriverには既存接続先があるが、§8.1の�
 | Shape2D | 意味SDK決定 | `VectorRecipe`、`VectorContent`、Path2D | Document schema／render lowering | 現行recipeのread-only投影。新しい保存意味はD2＋GR-PV | style／groupを含む作者contractとPath結果のadoption未決 | Path2Dを再利用し、Shape2D作者contractを独立仕様化 | `WAIT`／`RESOLVE` |
 | Text | M5 P6、意味SDK決定 | `VectorContent::TextPath`は保存席のみ | text shaping／font admission owner未閉鎖 | 未決。glyph／path投影からDocument writerを逆算しない | shaping、font asset admission、run／cluster／glyph identityが未閉鎖 | Text shaping ownerとP0Iのdomain identityを先に閉じる | `WAIT`／`RESOLVE` |
 | Instance | M5-P0I／P7、意味SDK決定 | `InstanceIndex`はordinal予約でstable identityではない | M5-P0I docs decision | 現段階はdocs-only。Document／rendererへ接続しない | stable InstanceId、nesting、prototype、channel、domain寿命未決 | `M5-P0I`で意味決定後、fixtureとP7 schemaを別粒化 | `READY-SPEC`／`RESOLVE` |
-| Spatial | M5 camera／geometry／renderer | canonical XYZ world、M5仕様候補 | Host camera／depth／bounds／renderer | 未成立。3D Instance projectionは`LANG-TS-F0`所有でありSpatial runtime routeではない | geometry、space-tagged transform、surface、renderer主要部未実装 | M5の既存順序でcamera／geometry／rendererを閉じる | `WAIT`／`RESOLVE` |
+| Spatial | M5 camera／geometry／renderer、Rerun Spatial Viewer採択 | canonical XYZ world、Rerun `Mesh3D`／`DepthImage` input、M5仕様候補 | Host camera／depth／bounds／renderer | Rerunは表示・更新runtime。3D表現の意味生成とDocument接続は未成立 | deformation、depth generation、fracture、Glass BSDF、surface／renderer contributionが未実装 | M5の既存順序でcamera／geometry／rendererを閉じ、詳細は[Vism 3D表現実装リスト](2026-07-17-vism-implementation-plan.md#phase-m5--3d表現のvism実装リスト2026-08-12追補)へ送る | `READY-SPEC`／`RESOLVE` |
+| Depth provider | Vism意味SDK、M5 camera／geometry、M4 recipe／invalidation | typed `DepthField`、source／model／Quality／uncertainty | Vism provider／Host cache、Rerunは`DepthImage` consumer | RGB／動画からのdepth generator、uncertainty、artifact identity未成立 | `VSM-M5-D0`で表示／投影と推定providerを分離 | known-depth projection、failure／hole、model／budgetのdocs／fixtureを先に閉じる | `READY-SPEC`／`RESOLVE` |
+| Mesh path deformation | M5 canonical geometry、Path／space meaning、Rerun `Mesh3D` | typed `DeformedMesh`、stable topology、normal／UV | Vism／Host geometry、Rerun adapter | path／lattice評価と時系列mesh output未成立 | `VSM-M5-G0`でtyped outputを閉じ、Rerun頂点更新を表示oracleにする | topology、space、normal、budgetのsemantic fixture | `WAIT`／`RESOLVE` |
+| Geometry fracture | canonical mesh、stable identity、必要時SIM-1／VSM-A6 | typed `PieceSet`、seed、piece lifetime | Vism／Host geometry、Simulation／Bake、Rerun display | topology分割、stable piece identity、physics／Bake接続未成立 | `VSM-M5-G1`で分割と物理責任を分離 | 4〜16 piece deterministic fixture、欠落／budget／checkpoint負例 | `WAIT`／`RESOLVE` |
+| Glass surface response | M5 material／render contribution、DepthField／DeformedMesh | typed `SurfaceResponse` | Host render contribution／custom renderer、Vismは宣言 | IOR／thickness／scene input／transparency oracle未成立 | `VSM-M5-S0`で標準Mesh3DとGlass BSDFを分離 | scene color／depth／normal、Preview／Export、色変換のdocs／fixture | `WAIT`／`RESOLVE` |
 | Field | 意味SDK決定、simulation model | 候補はscalar／vector field、mask、collider input | Host SDF正規化／budget | 未成立。collision projectionは`LANG-TS-F0`所有でありField出力routeではない | Field／Collider representationが未決 | simulation／collider fixtureでrepresentationを反証してから仕様化 | `WAIT`／`RESOLVE` |
 | Simulation | simulation model、SIM-1、VSM-A6 | `PluginKind::Simulation`は予約。trait／StateTrack runtimeは未実装 | Host Bake／StateTrack／invalidate／scheduler | render traitへ隠れ状態を入れず、将来はBake結果を既存LayerSource等が読む | SIM-1、StateTrack、checkpoint、collider runtime未成立 | `SIM-1 → VSM-A6`。L0 pureとL3 Bakeを同一Vism identityで後続反証 | `WAIT`／`RESOLVE` |
 
@@ -111,6 +115,7 @@ railは入口に共通する参照軸であり、readiness状態でも独立task
 2. Render capability: `VSM-A8G0`のdocs-only仕様。
 3. M5 identity: `M5-P0I`のdocs-only意味決定。
 4. Path: SDK-S0I main到達後の`LANG-TS-F0`仕様粒。
+5. M5 3D表現: `VSM-M5-D0`を`READY-SPEC`とし、`VSM-M5-G0 → G1 → S0`は依存を閉じてからdocs／fixtureへ進める。
 
 実際の並列量産は`VSM-A9`が二つ以上のfixture pluginで非干渉を証明した後に、合格した対象laneだけを解禁する。
 
@@ -123,6 +128,7 @@ railは入口に共通する参照軸であり、readiness状態でも独立task
 - `InstanceIndex`をstable identity、`TextureRef`をsemantic SDK、`TextPath`をshaping完成、`Simulation`予約をruntime完成として扱う。
 - DataTrack identity、Text shaping owner、Field／Collider representation、unified Mesh、Automation schemaを推測する。
 - Inspector projectionを新しい製品Inspector、custom UI、runtime成功fixtureへ昇格する。
+- Rerun `Mesh3D`を変形solver、`DepthImage`をdepth generator、標準albedo／textureをGlass BSDFと読み替える。
 - Bridge、Generator／Materialize、Automationを同じruntime／package／permission schemaへ畳む。
 - 二つ以上のVism実装を`VSM-A9`前に同時起動する。
 

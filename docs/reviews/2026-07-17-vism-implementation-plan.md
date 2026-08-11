@@ -127,6 +127,23 @@ Vism実装の最初の意味課題はschemaではなく、次の三層を混ぜ�
 | VSM-A8G3 | Glow実装を第三者と同じconformance、予算、性能、欠落経路で反対側検収する | VSM-A8G2 | first-party特例0、P0/P1=0、低予算の型付き拒否、cache/resource解放、preview/export一致を証跡化。合格前にpayload／containerを固定しない | VSM-A8G2待ち |
 | VSM-A9 | catalog量産の並列安全gate。共有lane締結後の複数fixture pluginを独立crateで同時追加して相互非干渉を証明する | VSM-A4, VSM-A5, 対象lane契約 | 他Vism source／test期待値変更0、private依存0、duplicate ID／contract競合をtyped reject、登録差分は追加的、全pluginを同じconformanceで列挙。共有API変更が必要な候補はSTOPして独立境界へ戻る | 対象lane締結後 |
 
+### Phase M5 — 3D表現のVism実装リスト（2026-08-12追補）
+
+この表は、Rerunを表示・更新runtimeとして使い、Vism／Hostが表現意味を生成するための候補順である。
+`READY-SPEC`はdocs／fixtureを閉じられる状態であり、製品runtimeや外部crate実装の許可ではない。
+`VSM-A9`前は複数Vism実装を同時起動せず、各行は一つのsemantic ownerと一つのprobeへ分ける。
+
+| ID | 内容 | 依存 | 自動完了条件 | 状態 |
+|---|---|---|---|---|
+| VSM-M5-D0 | **DepthProvider**。RGB／動画から推定した結果を`DepthField`として返し、source／model／time／Quality／uncertainty／holeを保持する。Rerun `DepthImage`は既知depthの表示／カメラ投影へ限定する | M5 Rerun wrapper、camera／canonical geometry、M4 recipe／invalidation | typed output、source identity、invalid／uncertain拒否、既知depthの投影同値、推定失敗の診断。RGB→depthのalgorithm／modelは本行で採択しない | `READY-SPEC` |
+| VSM-M5-G0 | **MeshDeform**。path／lattice相当の評価からstable topologyの`DeformedMesh`を生成し、頂点位置・法線・UVをRerun `Mesh3D`へ時系列投影する。Blender modifier stackを移植しない | M5 canonical geometry、path／space owner、Rerun adapter | plane／mesh fixture、finite、topology不変、normal／UV整合、時刻更新、GPU readback 0、M4 derived-mesh key | `WAIT` |
+| VSM-M5-G1 | **GeometryFracture**。meshを決定的seedで`PieceSet`へ分割し、piece identity／transform／lifetimeを保持する。collision／rigid stepは必要時だけHost Simulation／Bakeへ送る | canonical mesh、stable identity、必要時SIM-1／VSM-A6、M4 artifact | 4〜16 pieceのsplit、seed再現、stable ID、欠落／budget、physics／Bake分離、Preview／Export同一評価 | `WAIT` |
+| VSM-M5-S0 | **GlassSurface**。IOR、roughness、thickness、normal、scene color／depth要求を`SurfaceResponse`として宣言し、Hostのcustom renderer／render contributionへ接続する。標準`Mesh3D`のalbedo／textureをGlass BSDF完成と数えない | M5 material／render contribution、VSM-M5-D0、VSM-M5-G0、K-WGPU／K-RERUN-SPATIAL | opaque／transparent／refractionの最小fixture、低予算typed refusal、scene input、Preview／Export同値、色変換一元化 | `WAIT` |
+
+共通の接続は `Vism typed output → M4 recipe/cache/invalidation → Rerun adapter → Mesh3D／DepthImage／custom renderer` とする。
+VismへRerun component、GPU handle、scene store、Document writerを公開しない。Rerunに存在するのは結果の受け口と表示機構であり、
+depth生成、mesh変形、破壊、Glass BSDFの意味生成はこのリストのVism／Host側へ置く。
+
 `VSM-A3`ではVism package都合の新traitを足さない。既存公開面で書けないなら、その失敗自体をGAPとして記録し、plugin contractの仕様改訂を先に行う。
 
 Phase Aの出口:

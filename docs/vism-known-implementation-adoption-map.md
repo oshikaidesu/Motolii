@@ -1,6 +1,6 @@
 # Vism既知実装採択マップ
 
-状態: **決定／調査結果固定。依存追加・runtime実装・公開契約の許可ではない**（2026-08-02）。
+状態: **決定／調査結果固定。依存追加・runtime実装・公開契約の許可ではない**（2026-08-02、2026-08-12追補）。
 
 本書は[Vism入口・並列解禁の根本マップ](reviews/2026-08-02-vism-entrance-parallelization-root-map.md)の各入口を、
 [既知実装採択・置換開発モデル](known-implementation-adoption-model.md)の
@@ -24,6 +24,7 @@ compiler、geometry、layout、solver、sandbox、配布保護等の一般機構
 | ID | 固定した既知解 | 参照する具体面 | license／採否の上限 |
 |---|---|---|---|
 | `K-WGPU` | workspace [`wgpu 29`](https://wgpu.rs/doc/wgpu/)＋transitive Naga | shader module、bind group、pipeline、validation | MIT OR Apache-2.0。`REUSE`。GPU ownerはHostのまま |
+| `K-RERUN-SPATIAL` | 固定[Rerun Spatial Viewer](reviews/2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md) | `Mesh3D`、`DepthImage`、store／query／View／visualizer、camera、picking、renderer | `ADOPT / WRAP`。Vismのgeometry／depth／material意味とM4 resource policyは移さない |
 | `K-VECTOR` | workspace [`vello 0.9.0`](https://github.com/linebender/vello)＋transitive [Kurbo](https://github.com/linebender/kurbo) | Vello scene/glyph描画、Kurbo path/stroke/offset | MIT OR Apache-2.0。`REUSE`。Vism公開型へ漏らさない |
 | `K-TEXT` | workspace [`fontique 0.10`](https://github.com/linebender/fontique)＋[`harfrust 0.7`](https://github.com/harfbuzz/harfrust) | font discovery、shaping、glyph ID／position | MIT。`REUSE`候補を継承するがText routeは未成立。[Parley `0.11.0`](https://docs.rs/parley/0.11.0/parley/)は縦書き負例のため全体採用しない |
 | `K-LYON` | [`lyon 1.0.19`](https://docs.rs/lyon/1.0.19/lyon/) | tessellation API | MIT OR Apache-2.0。`WRAP`候補、Path意味の正本にはしない |
@@ -65,7 +66,11 @@ thread safety、state owner、3 OS可搬性、security、製品適合は証明�
 | Shape2D | Path2D、現行`VectorRecipe`、`K-VECTOR`を`REUSE`。`K-LYON`は描画tessellation gapだけ`WRAP`候補 | group/style/operator loweringとtessellation adapterはprivate。外部shape schema／Lyon型をDocument／plugin contractにしない | fill/stroke/group/transform/operator順序、empty、self-intersection、canonical spaceを既存goldenへ。Lyonは同じShape画素oracleで比較 | 現行`VectorRecipe` ownerを`KEEP`。Lyon採用時も実在する重複tessellatorだけ同oracle後に退役 | 新しい保存意味、unsupported operator、tessellation robustness、golden不一致ならD2仕様へ戻す |
 | Text | 採択済み候補`K-TEXT`＋`K-VECTOR`を後続owner決定へ継承するが、接続targetは`ABSENT`。Parley 0.11は水平layoutの`PATTERN`に限定し、whole-stackは`REJECT` | run／cluster／glyphとfont admissionはowner決定までprivate。Parley型を公開しない | owner決定後だけ、横書き、縦書き、ruby、bidi、fallback、variable font、missing fontをHarfRust glyph列とVello描画で別判定 | Text routeは未成立で、現在のcutover／退役対象は0 | text shaping／font admission owner、cluster identity、P0Iとの関係が閉じた時 |
 | Instance | Blender Geometry Nodesを`PATTERN`。実装依存はまだ採らない | stable identity、prototype、nesting、channelはM5-P0I docs fixture内。renderer型をidentityにしない | rename/update/duplicate/missing、ordinal再配置、nested instance、同一prototypeを表だけで反証 | `InstanceIndex`を`FROZEN`なstable identityへ昇格せず、P0I採択後に互換adapterの退役条件を決める | P0Iのdomain identity決定、M5 fixtureの反例、provider lifetime変更時 |
-| Spatial | Blender Geometry Nodesのspace-tagged operationを`PATTERN`。接続targetはM5 camera／geometry／rendererで、現状`ABSENT` | canonical XYZ、camera、depth、bounds、surfaceはHost owner。importer／renderer型を意味SDKへ出さない | M5 owner決定後だけspace、unit、axis、transform、bounds、camera、depthのsemantic fixture | runtime未成立のためcutover／退役対象0 | M5 camera／geometry／renderer ownerと中間形式が閉じた時 |
+| Spatial | `K-RERUN-SPATIAL`を`ADOPT / WRAP`。space-tagged operationの意味は`PATTERN K-GRAPH`から比較し、Rerunのcamera／geometry／rendererへ薄く接続する | canonical XYZ、camera、depth、bounds、surfaceはHost owner。Rerun型を意味SDKへ出さない | space、unit、axis、transform、bounds、camera、depthをsemantic fixtureで比較し、Rerun store／viewerをDocument authorityにしない | Rerun Spatial Viewerを唯一runtimeへ接続する。direct `re_renderer` scene、第二runtime、Vismごとのadapter複製を退役対象にする | M5 camera／geometry／renderer owner、中間形式、Preview／Export接続が変わった時 |
+| Depth provider | 深度の表示・投影は`REUSE K-RERUN-SPATIAL`、RGB／動画からの推定はVism providerの候補として別に閉じる | `DepthField`、source／model／time／Quality／uncertainty／hole、M4 recipe identityをHost／Vism側に置く。`DepthImage`を公開意味にしない | 既知depthの投影、invalid／hole、camera変換、時刻／Quality差、推定失敗のtyped refusal。RGB→depth algorithmは未採択 | providerのderived artifactをM4へ接続し、Rerunは表示consumerに限定する | model／license／3 OS／quality budget、uncertainty表現、実素材oracleが閉じた時 |
+| Mesh path deformation | path／lattice相当の評価は`PATTERN K-GRAPH`、結果の表示・時系列頂点更新は`REUSE K-RERUN-SPATIAL` | Vismはcanonical geometry、path、stable topology、`DeformedMesh`を所有。Rerun `Mesh3D`／GPU handleを公開契約へ漏らさない | plane／meshをpath沿いに変形し、vertex position／normal／UV、時刻更新、finite／budget、topology不変を確認する | M4がderived meshのrecipe／invalidationを所有。Blender modifier stackや第二geometry engineは作らない | canonical geometry、path space、normal更新、large mesh budget、camera／depth接続が変わった時 |
+| Geometry fracture | topology分割はVismのtyped `PieceSet`、collision／rigid stepだけ`WRAP K-PHYSICS`候補、表示は`REUSE K-RERUN-SPATIAL` | piece identity、seed、partition、transform、lifetimeはVism／Host。Rapier worldやRerun entity pathをDocument意味にしない | plane／meshを4〜16 pieceへ決定的分割し、stable ID、seed再現、欠落／budget、物理／Bake分離を確認する | solverはHost Simulation／StateTrack／Bakeへ接続し、Rerunはpieceの表示・選択だけを担う | fracture topology、stable identity、solver determinism、checkpoint、Preview／Exportが閉じた時 |
+| Glass surface response | 標準`Mesh3D`のalbedo／textureは`REUSE`するがGlass BSDFは持ち込まず、`K-WGPU`＋`K-RERUN-SPATIAL`のcustom renderer／render contribution候補へ`WRAP`する | `SurfaceResponse`、IOR、roughness、thickness、normal、scene color／depth要求はHost／Vism側。screen texture、GPU handle、色変換をVismへ渡さない | opaque／transparent／refractionの最小fixture、normal／thickness／IOR、低予算typed refusal、Preview／Export同値を測る | custom rendererは固定Rerun extension seamを通した一回の採択だけ。標準Mesh3D表示をGlass完成と数えない | scene color／depth／normalの供給、transparency oracle、PBR／unlit境界、3 OSが閉じた時 |
 | 3D import adapter | `WRAP K-GLTF`＋Khronos Validatorを`EXTERNAL`。Spatial意味やrenderer採択とは別grain | imported asset→採択済みcanonical Motolii geometryへの変換だけ。gltf型、scene graph、camera、materialを公開面へ漏らさない | M5中間形式決定後だけKhronos sample＋invalid corpus、NaN、bounds、axis、units、missing resource、unknown extension、Validator report同値 | 現在の退役対象は0。採択probeの一時decoderは`DELETE-LATER`を発注時に固定する | unsupported extension、material/color mismatch、streaming、M5中間形式変更時 |
 | Field | Blender Fieldsを`PATTERN`。接続targetとなるField／Collider representationは現状`ABSENT` | scalar／vector field、mask、SDF正規化、budgetのownerはHost。collision engine型をField意味にしない | representation決定後だけpoint sample、space、finite、transform、composition、budgetを解析oracleと比較 | runtime未成立のためcutover／退役対象0 | Field／Collider representationとcanonical-space ownerが閉じた時 |
 | collision query | `parry3d 0.29.0`をcollision queryだけ`WRAP`候補。Field意味やSimulation solverとは別grain | collider adapter、acceleration structureはHost private。Parry型をDocument／public APIへ出さない | collider representation決定後だけdistance、inside/outside、degenerate、NaN、determinismを解析oracleと比較 | 現在の退役対象は0。手製solverを先に作らず、probe artifactは`DELETE-LATER` | 2D/3D差、determinism、representation、platform条件が変わった時 |
@@ -101,7 +106,11 @@ thread safety、state owner、3 OS可搬性、security、製品適合は証明�
 | Shape2D | Path2D、既存VectorRecipe owner、必要ならD2仕様 | native Path oracle、render lowering | Path2D後のdocs-only |
 | Text | shaping／font admission owner、M5 identity整合 | font database、glyph cache、render thread | owner決定docsだけ。corpus probe不可 |
 | Instance | M5-P0I | domain identity、prototype owner | P0I docs-onlyはA8G0と並列可 |
-| Spatial | P0I、M5 camera／geometry／renderer | GPU device、camera／depth／bounds owner | semantic fixture設計だけ |
+| Spatial | P0I、M5 camera／geometry／renderer、K-RERUN-SPATIAL | GPU device、camera／depth／bounds owner | semantic fixture設計だけ。Rerun adapterの製品実装は対象lane契約後 |
+| Depth provider | M5 camera／geometry、DepthField meaning、M4 recipe／invalidation | model／depth artifact、camera、budget | known-depth projectionとfailure corpusのdocs／fixtureだけ |
+| Mesh path deformation | M5 canonical geometry、path space、K-RERUN-SPATIAL | topology、normal／UV、GPU device | plane／meshのtyped outputとRerun vertex updateのfixtureだけ |
+| Geometry fracture | canonical mesh、stable piece identity、必要時SIM-1／VSM-A6 | partition、seed、StateTrack／Bake、solver | deterministic splitのdocs／fixtureだけ。物理実行probe不可 |
+| Glass surface response | M5 material／render contribution、Depth provider、Mesh deformation | scene color／depth／normal、PBR、color boundary | SurfaceResponseとcustom renderer seamのdocs／fixtureだけ |
 | 3D import adapter | P0I、M5 canonical geometry／中間形式 | asset admission、import worker、material owner | invalid corpus設計だけ |
 | Field | Field／Collider representation、canonical-space owner | field evaluator、budget | representation docsだけ |
 | collision query | collider representation、Host SDF正規化／budget owner | acceleration structure、budget | query oracle設計だけ |
@@ -132,6 +141,10 @@ positive／negative fixture、`DELETE-LATER`対象を再掲する。いずれか
 | 7b | Field fixture | `K-GRAPH`のFieldsは`PATTERN`だけ。candidate dependencyを入れずrepresentationを決める | Field／Collider owner待ち、docs-only |
 | 7c | collision query probe | `K-PHYSICS`のParryだけ。Field意味、Simulation solverと別grain | collider representation待ち |
 | 7d | Simulation solver probe | `K-PHYSICS`のRapierだけ。Host StateTrack／Bake ownerを維持 | SIM-1、VSM-A6待ち |
+| 7e | `VSM-M5-D0` DepthField boundary | `DepthImage`は表示／投影へ`REUSE`し、RGB／動画からの推定providerとM4 artifact identityをdocsで分離 | M5 camera／geometry、source identity、depth uncertainty待ち。実装不可 |
+| 7f | `VSM-M5-G0` Mesh path deformation | typed `DeformedMesh`をVism／Host側へ置き、Rerun `Mesh3D`のvertex updateを表示oracleにする | M5 canonical geometry／path space待ち。実装不可 |
+| 7g | `VSM-M5-G1` Geometry fracture | typed `PieceSet`、stable identity、seed、物理／Bake分離をdocsで閉じる | canonical mesh／P0I identity、必要時SIM-1／VSM-A6待ち。実装不可 |
+| 7h | `VSM-M5-S0` Glass surface response | standard `Mesh3D`とGlass BSDFを分離し、`SurfaceResponse`とcustom renderer seamをdocsで閉じる | M5 material／render contribution、Depth／normal入力待ち。実装不可 |
 | 8a | `VSM-C0` | container候補を同じlogical fixtureで比較 | 根本マップ§9の5条件を全充足後。B6だけでは入場不可 |
 | 8b | `VSM-C1 / C2` | source buildと`K-JS / K-WASM` sandboxを別probeで比較 | B4、B6、C0入場後。製品routeへ未接続 |
 | 8c | `VSM-C3` | `K-SUPPLY`をinstall前検査／由来のPATTERNに限定 | C0〜C2後 |
@@ -161,5 +174,7 @@ positive／negative fixture、`DELETE-LATER`対象を再掲する。いずれか
 - `VSM-A4I / A5 / A9`、`B0〜B6`、`C0〜C4`の完了。
 - Vism package、manifest、container、loader、install store、署名、runtime engineの採択。
 - Text／Instance／Spatial／Field／Simulationの公開契約または製品runtime。
+- `VSM-M5-D0 / G0 / G1 / S0`のprovider、deform、fracture、Glass runtime実装。
+- Rerun `Mesh3D`を変形solver、`DepthImage`をdepth generator、標準albedo／textureをGlass BSDFとみなすこと。
 - candidateの性能、安全性、可搬性。ここで固定したのはprobe入口と棄却条件であり、合格結果ではない。
 - 二つ以上のVism実装を同時に開始できること。
