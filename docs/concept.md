@@ -44,7 +44,7 @@ Draft Previewは知覚可能な品質差を許して即時性と試行回数を�
 
 Motoliiは、制作面では **Rerun Spatial Viewerをcreator向け映像制作へ翻訳する薄いwrapper** である。Rerunがscene、view、time query、visualizer、camera、picking、outline、GPU draw／compositeを担い、Motoliiは永続Document、D2 single writer、creator向け操作意味、identity／time翻訳、resource admission、Preview／Export policyを担う。Rerun内部の接続済み機構をMotolii内で再構築しない。
 
-製品shellと通常panelは`ui/motolii-rn/`、Stage／spatial runtimeは固定Rerun subsystem、Timeline／Curveはrust-skia、media／exportは既存HostとFFmpegを使う。Rerunを製品全体の永続authorityにはせず、Motoliiを第二のspatial engineにもしない。Vismは原則Rerun custom visualizerへ載せ、Rerunの機構を外すのはnamed product oracleとの実測衝突がある時だけとする。
+RN、Rerun、Skiaが共存する`spikes/motolii-rn-probe/`をcopyせずその場で製品sourceへ繰り上げる。Stage／spatial runtimeは固定Rerun subsystem、Timeline／Curveはrust-skia、media／exportは既存HostとFFmpegを使う。`ui/motolii-rn/`はread-onlyの旧shellである。Rerunを製品全体の永続authorityにはせず、Motoliiを第二のspatial engineにもしない。Vismは原則Rerun custom visualizerへ載せ、Rerunの機構を外すのはnamed product oracleとの実測衝突がある時だけとする。
 
 開発は、一発で完成形を当てることではなく、この薄い翻訳を一つずつ実物にする。PRは一つの利用者成果を運ぶlanding envelopeとして使え、承認待ちのgateにはしない。
 

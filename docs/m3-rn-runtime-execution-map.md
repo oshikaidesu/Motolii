@@ -52,7 +52,7 @@ RN shell / native surface input
 | Document mutation | `crates/motolii-ui/src/document_edit_runtime.rs` | RN、renderer、platform adapterからの直接write |
 | product semantic oracle | `crates/motolii-ui/src/product_runtime.rs`と`cu110*`／`cu111*` tests | 旧`ProductApp`全体の新RN runtimeへの複製 |
 | RN Host ABI | R0で導入する`crates/motolii-ui/src/rn_product_host.rs` | panel別Host、surface別Document runtime |
-| RN product source | R0で導入する`ui/motolii-rn/` | `ui/motolii-web`をrelease runtimeとして同居させること |
+| RN product source | その場昇格する`spikes/motolii-rn-probe/` | `ui/motolii-rn/`へのcopy／再実装、第二RN app |
 | React concept oracle | `ui/motolii-web/src/candidates/`と`source-provenance.json` | DOM、CSS、fixture stateの意味owner化 |
 | Stage base | `render_worker.rs`、`display_slot.rs`、既存Stage projection oracle | 第二renderer/device/event loop |
 | Timeline meaning | `timeline_projection.rs`、move／trim／snapの既存owner | rust-skia renderer内のDocument意味再実装 |
@@ -132,7 +132,7 @@ R0の利用者出口は、実projectを開くoffline macOS Release appが起動�
 | node | owner / target | 閉じる契約 | 非LLM oracle | 状態 / 次 |
 |---|---|---|---|---|
 | `R0-HOST` | `motolii-ui`の`rn_product_host`、`document_edit_runtime`、Host FFI | project pathから一つのHostを作り、bounded snapshot、lifecycle intent、typed diagnosticを返す。semantic write 0 | host unit/integration test、unknown/stale/late/double-destroy拒否、既存Place/Undo/Redo test不変 | `DONE` |
-| `R0-MAC-SEAT` | `ui/motolii-rn/`、macOS app delegate／Xcode／Pods／Hermes bundle | RN window、offline Release bundle、Rust static library、明示project path、fail-closed bootstrap | TypeScript、Jest、ESLint、arm64 Release build、network 0の実起動 | `DONE` |
+| `R0-MAC-SEAT` | `ui/motolii-rn/`、macOS app delegate／Xcode／Pods／Hermes bundle | RN window、offline Release bundle、Rust static library、明示project path、fail-closed bootstrap | TypeScript、Jest、ESLint、arm64 Release build、network 0の実起動 | `DONE / HISTORICAL SEAT`。受入証拠として保持し、current write targetにはしない |
 | `R0-STAGE-LIFECYCLE` | Fabric `MotoliiStage` component viewとHost lifecycle ABI | 一つのnative child viewをregister/mount/resize/focus/unmount/remountし、late eventを拒否する。描画・編集はしない | lifecycle sequence、handle uniqueness、resize/scale、focus、remount同revision、Document JSON不変 | `DONE` |
 | `R0-ACCEPT` | 上記三nodeの統合artifact | fixture shellではなく通常RN appでR0出口を確認する | 実`project.json`、Release artifact、process launch、同snapshot、write 0 | `DONE`。根拠は[R0 product runtime seat受入](reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md) |
 
@@ -140,23 +140,23 @@ R0はcurrent main上で受入済みである。同じfileに隣接するR1 GPU�
 
 ## 4. Wave R1 — VS-1再閉鎖
 
-> **concept oracle(2026-08-10移管)**: RN製品UI再現probeは[`spikes/motolii-rn-probe/`](../spikes/motolii-rn-probe/README.md)
+> **current product source(2026-08-11再訂正)**: RN製品UI接続probeは[`spikes/motolii-rn-probe/`](../spikes/motolii-rn-probe/README.md)
 > (App.tsx 660行: Browser 3タブ、Extensions、panel registry、Timeline 3モード、Fabric spec)、
 > rust-skia実証は[`spikes/skia-timeline-probe/`](../spikes/skia-timeline-probe/README.md)にリポ内正本がある。
-> R1/R2粒の発注は両probeを読んでから行い、存在するUIを再発明しない。probeコードの直接importは製品化ではない。
+> R1/R2はこのartifact内で接続し、成功時に状態を`PRODUCT_SOURCE`へ繰り上げる。別targetへのimport／copyを製品化と呼ばない。
 
 R1の利用者出口は、RN BrowserのRectangleから既存D2へ一度だけPlaceし、Stage、Timeline、Inspectorが同じ`LayerId`／revisionを表示し、Undoで三面から消え、Redoで戻ること。
 
 | node | owner / exact source | 閉じる契約 | positive / negative oracle | 状態 / 依存 |
 |---|---|---|---|---|
-| `R1-SHELL` | `ui/motolii-rn/App.tsx`とproduct layout components | Browser、Stage、Timeline、Inspectorを一つの製品rootへ配置し、app root配線、native component registration、bundle publicationをwave内の単一ownerとして合流する。fixture data ownerを持たない | RN component test、window resize、missing Host fail-closed、registration/publication重複0 | `COMPILE`。current root、registration、publicationのexact write setを固定する |
-| `R1-BROWSER` | `DiscoveryBrowserCandidate.jsx`、`source-provenance.json`をconcept oracleとするRN Browser component | Rectangleの情報階層、source identity、`browser.place` terminal intentを移す。DOM DnDは移さない | Rectangle選択／intent一回、空identity拒否、Document write 0 | `DONE`(2026-08-09 `5b6e6c56`: `ui/motolii-rn/src/browser/BrowserPanel.tsx`+testがmain到達) |
+| `R1-SHELL` | `spikes/motolii-rn-probe/App.tsx`と既存layout／native registration | 既に同居するBrowser、Stage、Timeline、Inspectorを再構築せず、固定fixtureをHost入力へ置き換える | RN component test、window resize、missing Host fail-closed、registration/publication重複0 | `REUSE / PRODUCT-SOURCE PROMOTION`。第二rootを作らない |
+| `R1-BROWSER` | `spikes/motolii-rn-probe/App.tsx`の既存Browser。`DiscoveryBrowserCandidate.jsx`と`source-provenance.json`はsemantic oracle | Rectangleの情報階層、source identity、`browser.place` terminal intentをHostへ接続する。DOM DnDは移さない | Rectangle選択／intent一回、空identity拒否、Document write 0 | `PRODUCT-SOURCE CONNECTION ACTIVE`。2026-08-09の`ui/motolii-rn/src/browser/BrowserPanel.tsx`着地は`DONE / HISTORICAL ORACLE`で、current write targetにはしない |
 | `R1-HOST-EDIT` | 一つの`rn_product_host`と既存`PlaceRectangleRequest`／`process_next` | RN terminal intentを既存Place、Undo、Redoへ接続し、published snapshotを一度だけ配る | `cu110_product_place_commit`、`cu111_product_undo_redo`、stale/invalid/cancel write 0 | `DONE`(2026-08-09 `37d88be0`: `rn_product_host`接続と`crates/motolii-ui/tests/r1_rn_product_edit_intents.rs`がmain到達) |
 | `R1-GPU-BINDING` | R0 native Stage lifecycle、`GpuCtx`、platform Component View | Stage previewとrust-skia surface/contextを一つのwgpu Device/Queueへ束ね、configure/resize/unmount/device-lostを一つのlifecycle ownerで閉じる | device/queue identity、第二device 0、late surface event 0、remount後同revision | `PARTIAL`(2026-08-10実測)。RN Component ViewからCAMetalLayer→wgpu Surface→Host単一`GpuCtx`まで到達済み。未達はrust-skia overlayのraster/composite接続のみ。**未着手として発注すると第二のsurface/device ownerを作る** |
-| `R1-STAGE` | 固定Rerun Spatial Viewer、R0 native Stage、`ui/motolii-rn/` | Document評価のidentity／time／assetをRerun入力へ翻訳し、Rerun Stageとrust-skia overlayを同じsurfaceへ載せる。scene／view／camera／pickingは作らない | same LayerId／revision／time、stale拒否、Document write 0、第二device 0 | `COMPILE`。wrapper seam以外を発注しない |
+| `R1-STAGE` | 固定Rerun Spatial Viewer、`spikes/motolii-rn-probe/`の既存Stage | Document評価のidentity／time／assetをRerun入力へ翻訳し、既存Rerun Stageとrust-skia overlayを同じsurfaceへ載せる。scene／view／camera／pickingは作らない | same LayerId／revision／time、stale拒否、Document write 0、第二device 0 | `COMPILE`。同artifact内のwrapper seam以外を発注しない |
 | `R1-TIMELINE` | `timeline_projection.rs`と既存`ProductTimelineProjection` oracle、新rust-skia component | bounded visible read projectionを描画し、offscreen objectを生成しない。編集しない | `cu110pt`系、revision一致、visible bound、resize／zoom read-only | `WAIT(R1-GPU-BINDING)` |
 | `R1-INSPECTOR` | `InspectorCandidate.jsx`をconcept oracleとするRN Inspector、既存Inspector projection oracle | primary Rectangleのread-only identity／値を表示する。mock reducerをownerにしない | `cu110pih`／primary-selection consumer、none/stale表示、write 0 | `PARTIAL`(2026-08-10実測)。RN product rootにread-only Inspector panelが実在する。未達はinitial snapshot固定からの更新と値表示。**新設として発注すると二重panelになる** |
-| `R1-E2E` | 一つのRN product artifact | Browser→D2→三面→Undo→Redoを同一identityで完走する | deterministic sequence、revision列、journal、reopen前提を壊さない、second owner 0 | `WAIT(R1-SHELL..INSPECTOR)` |
+| `R1-E2E` | その場昇格する一つのRN artifact | Browser→D2→三面→Undo→Redoを同一identityで完走し、`PRODUCT_SOURCE`へ状態更新する | deterministic sequence、revision列、journal、reopen前提を壊さない、second owner 0 | `WAIT(R1-STAGE..INSPECTOR)` |
 
 並列化できるのは、snapshot schemaと`R1-GPU-BINDING`を凍結した後の`R1-BROWSER`、`R1-STAGE`、`R1-TIMELINE`、`R1-INSPECTOR`のうち、allowlistが交差しない組だけである。Stage/Timeline側でrust-skia backendを個別初期化してはならない。`R1-HOST-EDIT`は一つのHost ABI、`R1-SHELL`はapp root／registration／publicationを所有するため直列、`R1-E2E`は実装nodeではなく統合受入である。
 

@@ -115,7 +115,7 @@ Skia描画に替えた。**参照が出来れば以後はCodexが引き継ぐ**�
 
 RerunはRN Stageが既に持つ`wgpu::Device / Queue`から`RenderContext`を作り、offscreen textureへ描く。
 Motoliiの既存compositeが同じtop-level surfaceへSkia overlayと合成するため、第二device／queue／surfaceは作らない。
-これは`spikes/motolii-rn-probe`の接続probeであり、製品Stage、Document投影、Rerun Viewer全体の採用完了ではない。
+これは`spikes/motolii-rn-probe`の接続probeであり、固定fixtureだけではDocument投影や製品route完成を意味しない。ただし2026-08-11再訂正により、このhost artifact自体は別targetへ移植せず、Document入力接続後に`PRODUCT_SOURCE`へその場で繰り上げる。
 
 ### Build ID（用語凍結）
 
@@ -131,7 +131,7 @@ Motolii compositeでは許可した`Rgba8UnormSrgb` viewからsampleする。ま
 `cargo build --release`を先に実行する。debugの`cargo check / test`だけでは古いarchiveが残り、実画面判定にならない。
 
 B001でrelease build、Xcode Debug build、Rust test、Jest、ESLint、`plutil`、実画面の暗色Stageを確認した。
-M5-PATH2D-S1は`DONE / PROBE ONLY`へ進む。製品runtime接続は未成立のまま維持する。
+M5-PATH2D-S1のhost seatは`DONE`で、同じartifactの製品source昇格を進める。Path2D固定fixtureは`PROBE ONLY`、Document入力接続は未成立のまま分けて記録する。
 
 ## 8. 追補 — RN Stage B002 chroma key（2026-08-11）
 

@@ -12,6 +12,8 @@ UIを呼ぶ時は、次の3軸を混ぜない。
 2. **役割**: 製品 / 開発モック / baseline / spike / headless kernel / source asset
 3. **結合段階**: isolated / product-owned / product-connected / product-integrated / preview-runnable
 
+directory名はこの3軸を決めない。`spikes/`配下のartifactでも、同じcode locationで実入力接続と該当製品oracleを通せば`product-owned`／`product-connected`へ状態更新できる。逆に`ui/`配下でもread-onlyの歴史実装はcurrent product sourceではない。`probe`は検証時の役割であって永久隔離や別packageへの移植を含意しない。
+
 ## 固有名と成果物名
 
 | 用語 | 正しい意味 | 現在の実体 | 含意しないこと |

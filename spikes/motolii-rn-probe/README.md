@@ -1,6 +1,6 @@
 # MotoliiRnProbe(2026-08-10回収)
 
-RN製品UI再現probe。`App.tsx` 660行 — Browser 3タブ(`MEDIA`/`EFFECTS`/`CREATE`)、
+RN製品sourceへその場で繰り上げ中の接続probe。`App.tsx` 660行 — Browser 3タブ(`MEDIA`/`EFFECTS`/`CREATE`)、
 Inspector/Extensions、Timeline 3モード、effect一覧、panel registry、
 native `MotoliiGpuComponentView.mm`、Fabric spec `MotoliiGpuView`/`MotoliiTimelineView`。
 
@@ -9,9 +9,10 @@ native `MotoliiGpuComponentView.mm`、Fabric spec `MotoliiGpuView`/`MotoliiTimel
 リポジトリへ移管した(node_modules/Pods/build/target/vendor/.yarn除外。`yarn install`で復元可)。
 以後の正本はこのディレクトリ。RN標準のREADMEは`README.upstream.md`へ退避。
 
-**状態境界**: 製品RN shellの正本は`ui/motolii-rn`(移管済みはBrowserPanel/Inspector initial read/
-StageComponentViewのみ)。本probeは**未移管部分のconcept oracle**であり、そのまま製品コードとして
-importしない。移管は[RN runtime実行地図](../../docs/m3-rn-runtime-execution-map.md)のR1/R2粒で行う。
+**状態境界**: このdirectoryが現在のRN／Rerun／Skia接続targetである。接続成功時はcodeを別targetへ
+copyせず、同じartifactの状態を`PROBE`から`PRODUCT_SOURCE`へ繰り上げる。directory名は由来を示すだけで、
+製品化前のrename／移植を要求しない。`ui/motolii-rn`は利用者が明示的に解凍するまでread-onlyの旧shellである。
+固定fixtureは製品意味の正本にせず、Document／D2入力へ接続できた箇所から置き換える。
 
 ## Rerun Stage共通評価probe
 
