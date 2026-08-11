@@ -1,6 +1,9 @@
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use egui::{Event, PointerButton, Pos2, RawInput, Rect, Vec2};
+use re_chunk::Chunk;
+use re_log_types::TimePoint;
+use re_sdk_types::archetypes::Mesh3D;
 
 use crate::renderer_core::PointerPhase;
 
@@ -37,7 +40,7 @@ impl EmbeddedSpatialStage {
         .map_err(|error| format!("create Rerun render context: {error}"))?;
         egui_renderer.callback_resources.insert(render_ctx);
 
-        Ok(Self {
+        let mut stage = Self {
             egui_ctx: egui::Context::default(),
             egui_renderer,
             spatial_stage: re_view_spatial::SpatialStage::new(re_log_types::ApplicationId::from(
@@ -46,7 +49,11 @@ impl EmbeddedSpatialStage {
             .map_err(|error| format!("create Rerun spatial stage: {error}"))?,
             input_events: Vec::new(),
             started_at: Instant::now(),
-        })
+        };
+        if !stage.set_created_item("rectangle@0.500000,0.500000") {
+            return Err("seed path rectangle for embedded stage".into());
+        }
+        Ok(stage)
     }
 
     pub(crate) fn pointer(&mut self, phase: PointerPhase, x: f64, y: f64) {
@@ -69,6 +76,46 @@ impl EmbeddedSpatialStage {
             PointerPhase::Cancel => self.input_events.push(Event::PointerGone),
             PointerPhase::Move => {}
         }
+    }
+
+    pub(crate) fn set_created_item(&mut self, item_id: &str) -> bool {
+        if item_id.is_empty() {
+            return true;
+        }
+        let Some((kind, coordinates)) = item_id.split_once('@') else {
+            return false;
+        };
+        if kind != "rectangle" {
+            return false;
+        }
+        let Some((x, y)) = coordinates.split_once(',') else {
+            return false;
+        };
+        let (Ok(x), Ok(y)) = (x.parse::<f32>(), y.parse::<f32>()) else {
+            return false;
+        };
+        if !(0.0..=1.0).contains(&x) || !(0.0..=1.0).contains(&y) {
+            return false;
+        }
+
+        let center = [x - 0.5, y - 0.5, 0.0];
+        let (half_width, half_height) = (0.14, 0.10);
+        let mesh = Mesh3D::new([
+            [center[0] - half_width, center[1] - half_height, center[2]],
+            [center[0] + half_width, center[1] - half_height, center[2]],
+            [center[0] + half_width, center[1] + half_height, center[2]],
+            [center[0] - half_width, center[1] + half_height, center[2]],
+        ])
+        .with_triangle_indices([[0, 1, 2], [0, 2, 3]])
+        .with_vertex_normals([[0.0, 0.0, 1.0]; 4])
+        .with_vertex_colors([0xE9_8C_6AFF; 4]);
+        let Ok(chunk) = Chunk::builder("motolii/fixtures/path-rectangle")
+            .with_archetype_auto_row(TimePoint::default(), &mesh)
+            .build()
+        else {
+            return false;
+        };
+        self.spatial_stage.ingest_chunk(Arc::new(chunk)).is_ok()
     }
 
     pub(crate) fn render(

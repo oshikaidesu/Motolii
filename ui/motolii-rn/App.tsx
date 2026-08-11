@@ -200,7 +200,10 @@ function BrowserResults({
             accessibilityState={{selected: selectedId === item.id}}
             onDoubleClick={() => onActivate(item.id)}
             onPointerDown={() => onDragStart(item.id)}
-            onPress={() => onSelect(item.id)}
+            onPress={() => {
+              onSelect(item.id);
+              onActivate(item.id);
+            }}
             testID={item.testID}
             style={[
               styles.browserCard,

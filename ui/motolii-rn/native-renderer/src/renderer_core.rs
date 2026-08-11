@@ -164,8 +164,10 @@ impl RendererCore {
         }
     }
 
-    pub(crate) fn set_created_item(&mut self, _item_id: &str) -> bool {
-        self.scene == SceneKind::Stage
+    pub(crate) fn set_created_item(&mut self, item_id: &str) -> bool {
+        self.stage
+            .as_mut()
+            .is_some_and(|stage| stage.rerun.set_created_item(item_id))
     }
 
     pub(crate) fn timeline_hit_test(&self, x: f64, y: f64) -> Option<(i32, f64)> {
