@@ -53,3 +53,18 @@ StageでRerunのEntity、Blueprint、store、cache key、View classまたは公�
 - 未検収branchを一括mergeすること
 - 全laneの完了を一つのcommitまたは一つの巨大PRへ束ねること
 - 共同開発管理用の新しいqueue、DB、runner、frameworkを作ること
+
+## 6. RN製品UI target凍結（2026-08-11追補）
+
+M3のRN製品UI接続先を **`ui/motolii-rn/` 一つへ凍結**する。ここが製品shell、app root、Browser、Inspector、通常panel、Fabric native component registrationを所有する。Stage、Timeline、Rerun、Skia、Host snapshot／intentの製品接続は、この既存targetへ追加する。
+
+`spikes/motolii-rn-probe/`は依存共存、描画方式、visual reference、実機成立性を確かめる **`PROBE ONLY`** targetである。probeの画面、`App.tsx`、native registration、renderer fixtureを製品sourceまたは第二app rootへ昇格させず、製品機能をprobe側へ継続実装しない。必要な知見だけを、既存`ui/motolii-rn/`のownerとcontractへ翻訳する。
+
+次を禁止する。
+
+- 新しいRN app、shell、app root、製品entrypointを作る
+- `ui/motolii-rn/`の既存panelまたはcomponentを縮約copyして別targetへ置く
+- `spikes/motolii-rn-probe/`を製品route、製品fallback、feature branch間の中継targetにする
+- buildや接続が難しいことを理由に、別UI、第二Host、第二Document writer、第二GPU ownerへ迂回する
+
+この凍結は「UIを変更しない」意味ではない。製品UIは`ui/motolii-rn/`の内部で継続開発する。target自体を変更する場合だけ、利用者の明示判断を受け、代替target、移行route、cutover oracle、既存targetの退役を閉じた解凍decisionを先にmainへ入れる。同じcommitでdecision indexとimplementation ledgerを更新し、会話、probe成功、局所build failureだけでは解凍しない。

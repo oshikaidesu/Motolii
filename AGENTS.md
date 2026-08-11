@@ -53,6 +53,7 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 - 新規helper、依存、一般機構、UI componentを書く前に同等物を検索する。React source assetが存在する時は縮約copyを作らず、Rerunを参照する時はMotolii仕様から逆算しない
 - test、golden、threshold、期待値を実装都合で変更してgreenにしない。testが誤りに見える場合は施工を止め、独立した仕様・oracle変更として扱う
 - 会話で新しい意味、状態owner、操作、配布形式が生じたら、観察／比較中／決定／棄却／停止と非目標をコードより先に正本へ回収する。会話だけをauthorityにしない
+- **M3 RN製品UI target凍結**: 製品shell、app root、Browser、Inspector、通常panel、native componentの唯一の接続先は`ui/motolii-rn/`である。`spikes/motolii-rn-probe/`は検証・visual oracle専用で、製品source、次のapp root、移植元UIにはしない。別RN app／shell／root、既存panelの縮約copy、probe側への製品機能追加を作らない。変更が必要なら、利用者の明示判断と、移行route・cutover・旧target退役を記した解凍decisionを先にmainへ入れ、decision indexとimplementation ledgerを同時更新する
 - 新規施工は **1 Issue = 1契約境界 = 1 owner = 1 commit = 1 PR**。ここでいう契約境界は一つの利用者成果と意味ownerであり、それを通すRust、React Native、shader、fixture、test、docsをfile数だけで分割しない。PRは良い塊を運ぶlanding envelopeであってapproval gateではない。既存成果へIssue新設、history rewrite、PR分割、再reviewを遡及要求しない。仕様・decisionを変更したら同じcommitでdecision indexと必要なledgerを更新する
 - 並列発注では各Issue／PRへ`OUTCOME / SEMANTIC OWNER / SHARED SEATS TOUCHED / INTEGRATION OWNER / PRODUCT STATE / ORACLE / KNOWN LIMITS`を明記する。同じshared seatを触る複数PRを同時発注せず、各branchはcurrent mainから独立に作り、feature branch同士をmergeしない。integration ownerがmechanical conflictを解消してmainへ順に着地させ、task起因redは同じoutcomeのfix-forwardをそのseatの次発注より先に入れる。独自queue、lock service、merge frameworkを新設しない。詳細は[叩き台PR統合決定](docs/reviews/2026-08-10-creator-translation-working-draft-pr-integration-decision.md#並列pr発注loop-v0)
 
