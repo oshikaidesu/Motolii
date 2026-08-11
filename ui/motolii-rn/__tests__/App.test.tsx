@@ -50,6 +50,12 @@ test('renders correctly', async () => {
   expect(
     tree!.root.findByProps({testID: 'create-item-rectangle'}).props.accessibilityState.selected,
   ).toBe(true);
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('');
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'create-item-rectangle'}).props.onDoubleClick();
+  });
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle');
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-mode-THUMBNAILS'}).props.onPress();

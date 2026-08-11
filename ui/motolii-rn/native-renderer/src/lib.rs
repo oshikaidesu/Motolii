@@ -5,7 +5,7 @@ mod timeline_skia;
 #[cfg(target_os = "macos")]
 mod platform;
 
-use std::ffi::c_void;
+use std::ffi::{CStr, c_char, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 #[cfg(target_os = "macos")]
@@ -107,6 +107,27 @@ pub extern "C" fn motolii_macos_stage_renderer_pointer(
         (&mut *handle.cast::<MacOsSurfaceRenderer>()).stage_pointer(phase, x, y);
     }))
     .is_ok()
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// `handle` must be a live renderer returned by this library and `item_id`
+/// must point to a NUL-terminated UTF-8 string for the duration of this call.
+pub unsafe extern "C" fn motolii_macos_stage_renderer_set_created_item(
+    handle: *mut c_void,
+    item_id: *const c_char,
+) -> bool {
+    if handle.is_null() || item_id.is_null() {
+        return false;
+    }
+    let Ok(item_id) = (unsafe { CStr::from_ptr(item_id) }).to_str() else {
+        return false;
+    };
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        (&mut *handle.cast::<MacOsSurfaceRenderer>()).set_created_item(item_id)
+    }))
+    .unwrap_or(false)
 }
 
 #[cfg(target_os = "macos")]

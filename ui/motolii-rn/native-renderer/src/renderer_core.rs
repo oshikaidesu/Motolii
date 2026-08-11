@@ -13,6 +13,11 @@ pub(crate) enum SceneKind {
     Timeline,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CreatedItem {
+    Rectangle,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RenderStats {
@@ -85,6 +90,7 @@ pub(crate) struct RendererCore {
     scene: SceneKind,
     selected_object_index: i32,
     playhead: f64,
+    created_item: Option<CreatedItem>,
     frame: u64,
     stats: RenderStats,
 }
@@ -244,6 +250,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             scene,
             selected_object_index: 1,
             playhead: 0.54,
+            created_item: None,
             frame: 0,
             stats: RenderStats::default(),
         })
@@ -288,6 +295,15 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         if let Some(timeline) = &mut self.timeline {
             timeline.dirty = true;
         }
+    }
+
+    pub(crate) fn set_created_item(&mut self, item_id: &str) -> bool {
+        self.created_item = match item_id {
+            "" => None,
+            "rectangle" => Some(CreatedItem::Rectangle),
+            _ => return false,
+        };
+        true
     }
 
     pub(crate) fn timeline_hit_test(&self, x: f64, y: f64) -> Option<(i32, f64)> {
@@ -381,6 +397,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             a: 1.0,
         };
         if self.scene == SceneKind::Stage {
+            let created_item = self.created_item;
             let stage = self.stage.as_mut().expect("stage resources");
             if stage.dirty {
                 let overlay_started = Instant::now();
@@ -415,7 +432,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 self.stats.overlay_last_us = overlay_started.elapsed().as_micros() as u64;
             }
             let preview_view = stage.preview.create_view(&Default::default());
-            render_rerun_stage(stage, &preview_view, self.config.width, self.config.height)?;
+            render_rerun_stage(
+                stage,
+                &preview_view,
+                self.config.width,
+                self.config.height,
+                created_item,
+            )?;
             {
                 let attachments = [Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -892,12 +915,13 @@ fn render_rerun_stage(
     target: &wgpu::TextureView,
     width: u32,
     height: u32,
+    created_item: Option<CreatedItem>,
 ) -> Result<(), String> {
     let context = &mut stage.rerun;
     context.begin_frame();
     stage.video.begin_frame();
 
-    let shape_commands = encode_rerun_stage_shapes(context, target, width, height)?;
+    let shape_commands = encode_rerun_stage_shapes(context, target, width, height, created_item)?;
 
     let mut encoder = context
         .device
@@ -976,6 +1000,7 @@ fn encode_rerun_stage_shapes(
     target: &wgpu::TextureView,
     width: u32,
     height: u32,
+    created_item: Option<CreatedItem>,
 ) -> Result<[wgpu::CommandBuffer; 2], String> {
     let mut lines = LineDrawableBuilder::new(context);
     lines
@@ -987,6 +1012,14 @@ fn encode_rerun_stage_shapes(
         )
         .radius(Size::new_ui_points(4.0))
         .color(Color32::from_rgb(82, 214, 255));
+    if created_item == Some(CreatedItem::Rectangle) {
+        let (top_left, horizontal, vertical) = centered_rectangle(width, height);
+        lines
+            .batch("Browser created rectangle")
+            .add_rectangle_outline_2d(top_left.into(), horizontal.into(), vertical.into())
+            .radius(Size::new_ui_points(4.0))
+            .color(Color32::WHITE);
+    }
     let lines = lines
         .into_draw_data()
         .map_err(|error| format!("build Rerun rectangle: {error}"))?;
@@ -1050,12 +1083,29 @@ fn encode_rerun_stage_shapes(
     Ok([draw, encoder.finish()])
 }
 
+fn centered_rectangle(width: u32, height: u32) -> ([f32; 2], [f32; 2], [f32; 2]) {
+    let horizontal = [width as f32 * 0.28, 0.0];
+    let vertical = [0.0, height as f32 * 0.36];
+    let top_left = [
+        width as f32 * 0.5 - horizontal[0] * 0.5,
+        height as f32 * 0.5 - vertical[1] * 0.5,
+    ];
+    (top_left, horizontal, vertical)
+}
+
 #[cfg(test)]
 mod chroma_tests {
-    use super::{CHROMA_VIDEO_BYTES, encode_rerun_stage_shapes};
+    use super::{CHROMA_VIDEO_BYTES, centered_rectangle, encode_rerun_stage_shapes};
 
     const WIDTH: u32 = 320;
     const HEIGHT: u32 = 192;
+
+    #[test]
+    fn browser_rectangle_is_centered_in_the_stage() {
+        let (top_left, horizontal, vertical) = centered_rectangle(WIDTH, HEIGHT);
+        assert_eq!(top_left[0] + horizontal[0] * 0.5, WIDTH as f32 * 0.5);
+        assert_eq!(top_left[1] + vertical[1] * 0.5, HEIGHT as f32 * 0.5);
+    }
 
     #[test]
     fn b002_fixture_seek_selects_the_same_sample_twice() {
@@ -1109,7 +1159,7 @@ mod chroma_tests {
         for target in [&first, &second] {
             context.begin_frame();
             let view = target.create_view(&wgpu::TextureViewDescriptor::default());
-            let commands = encode_rerun_stage_shapes(&mut context, &view, WIDTH, HEIGHT)
+            let commands = encode_rerun_stage_shapes(&mut context, &view, WIDTH, HEIGHT, None)
                 .expect("encode shared Rerun Stage evaluation");
             context.before_submit();
             context.queue.submit(commands);

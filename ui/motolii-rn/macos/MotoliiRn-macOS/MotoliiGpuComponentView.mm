@@ -12,6 +12,7 @@ extern "C" void *motolii_macos_renderer_create_ca_layer(void *layer, uint32_t wi
 extern "C" bool motolii_macos_renderer_resize(void *handle, uint32_t width, uint32_t height);
 extern "C" bool motolii_macos_renderer_render(void *handle);
 extern "C" bool motolii_macos_stage_renderer_pointer(void *handle, uint32_t phase, double x, double y);
+extern "C" bool motolii_macos_stage_renderer_set_created_item(void *handle, const char *itemId);
 extern "C" void motolii_macos_renderer_destroy(void *handle);
 extern "C" void *motolii_macos_timeline_renderer_create_ca_layer(void *layer, uint32_t width, uint32_t height);
 extern "C" bool motolii_macos_timeline_renderer_set_state(void *handle, int32_t selectedObjectIndex, double playhead);
@@ -271,6 +272,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   MotoliiStageMetalView *_metalView;
   NSTimer *_frameTimer;
   void *_renderer;
+  std::string _createdItemId;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
@@ -299,6 +301,16 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
     [self addSubview:_metalView];
   }
   return self;
+}
+
+- (void)updateProps:(const Props::Shared &)props oldProps:(const Props::Shared &)oldProps
+{
+  const auto &newProps = static_cast<const MotoliiGpuViewProps &>(*props);
+  _createdItemId = newProps.createdItemId;
+  if (_renderer) {
+    motolii_macos_stage_renderer_set_created_item(_renderer, _createdItemId.c_str());
+  }
+  [super updateProps:props oldProps:oldProps];
 }
 
 - (void)viewDidMoveToWindow
@@ -347,6 +359,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
     NSLog(@"[MotoliiGpuProbe] Rust/wgpu renderer creation failed");
     return;
   }
+  motolii_macos_stage_renderer_set_created_item(_renderer, _createdItemId.c_str());
 
   __weak MotoliiGpuComponentView *weakSelf = self;
   _frameTimer = [NSTimer scheduledTimerWithTimeInterval:(1.0 / 60.0)

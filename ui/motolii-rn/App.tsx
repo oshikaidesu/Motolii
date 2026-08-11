@@ -13,6 +13,10 @@ import {panelRegistry} from './src/panels/registry';
 import MotoliiGpuView from './src/specs/MotoliiGpuViewNativeComponent';
 import MotoliiTimelineView from './src/specs/MotoliiTimelineViewNativeComponent';
 
+const MacPressable = Pressable as React.ComponentType<
+  React.ComponentProps<typeof Pressable> & {onDoubleClick?: () => void}
+>;
+
 type BrowserTab = 'MEDIA' | 'EFFECTS' | 'CREATE';
 type BrowserViewMode = 'THUMBNAILS' | 'GRID' | 'LIST';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
@@ -142,6 +146,7 @@ function BrowserResults({
   view,
   selectedId,
   onSelect,
+  onActivate,
   testID,
 }: {
   title: string;
@@ -150,6 +155,7 @@ function BrowserResults({
   view: BrowserViewMode;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onActivate: (id: string) => void;
   testID: string;
 }) {
   const columns = view === 'THUMBNAILS' ? 4 : view === 'GRID' ? 2 : 1;
@@ -182,10 +188,11 @@ function BrowserResults({
         numColumns={columns}
         removeClippedSubviews
         renderItem={({item}) => (
-          <Pressable
+          <MacPressable
             accessibilityLabel={`${item.name}${item.detail ? `, ${item.detail}` : ''}`}
             accessibilityRole="button"
             accessibilityState={{selected: selectedId === item.id}}
+            onDoubleClick={() => onActivate(item.id)}
             onPress={() => onSelect(item.id)}
             testID={item.testID}
             style={[
@@ -213,7 +220,7 @@ function BrowserResults({
                 <Text numberOfLines={1} style={styles.effectTags}>{item.detail}</Text>
               </View>
             ) : null}
-          </Pressable>
+          </MacPressable>
         )}
         style={styles.results}
         testID={testID === 'MEDIA' ? 'thumbnail-grid' : `browser-results-${testID}`}
@@ -223,7 +230,7 @@ function BrowserResults({
   );
 }
 
-function Browser({width}: {width: number}) {
+function Browser({width, onCreateItem}: {width: number; onCreateItem: (id: string) => void}) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('echo');
@@ -319,6 +326,12 @@ function Browser({width}: {width: number}) {
       </View>
       <BrowserResults
         items={browserItems}
+        onActivate={id => {
+          if (tab === 'CREATE') {
+            setSelectedCreateItem(id);
+            onCreateItem(id);
+          }
+        }}
         onSelect={id => tab === 'EFFECTS' ? setSelected(id) : tab === 'CREATE' ? setSelectedCreateItem(id) : undefined}
         rail={rail}
         selectedId={selectedId}
@@ -330,7 +343,7 @@ function Browser({width}: {width: number}) {
   );
 }
 
-function Stage({showGpu, onToggleGpu}: {showGpu: boolean; onToggleGpu: () => void}) {
+function Stage({createdItemId, showGpu, onToggleGpu}: {createdItemId: string; showGpu: boolean; onToggleGpu: () => void}) {
   return (
     <View style={styles.stage} testID="stage-surface">
       <View style={styles.stageTools}>
@@ -346,6 +359,7 @@ function Stage({showGpu, onToggleGpu}: {showGpu: boolean; onToggleGpu: () => voi
           <MotoliiGpuView
             accessible
             accessibilityLabel="Rust wgpu native Stage"
+            createdItemId={createdItemId}
             style={styles.gpuStage}
             testID="rust-wgpu-stage"
           />
@@ -585,6 +599,7 @@ function App() {
   const [inspectorWidth, setInspectorWidth] = useState(326);
   const [timelineHeight, setTimelineHeight] = useState(270);
   const [showGpuStage, setShowGpuStage] = useState(true);
+  const [createdItemId, setCreatedItemId] = useState('');
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
@@ -604,7 +619,7 @@ function App() {
         <Text style={styles.breadcrumb}>Pulse rings / <Text style={styles.breadcrumbStrong}>Echo Bloom</Text></Text>
       </View>
       <View style={styles.workspace}>
-        <Browser width={browserWidth} />
+        <Browser onCreateItem={setCreatedItemId} width={browserWidth} />
         <Splitter
           label="Browserのサイズを変更"
           orientation="vertical"
@@ -613,7 +628,7 @@ function App() {
           onNudge={() => setBrowserWidth(value => value >= 348 ? 284 : value + 64)}
         />
         <View style={styles.centerColumn}>
-          <Stage showGpu={showGpuStage} onToggleGpu={() => setShowGpuStage(value => !value)} />
+          <Stage createdItemId={createdItemId} showGpu={showGpuStage} onToggleGpu={() => setShowGpuStage(value => !value)} />
         </View>
         <Splitter
           label="Inspectorのサイズを変更"

@@ -46,6 +46,10 @@ impl MacOsSurfaceRenderer {
             .set_timeline_state(selected_object_index, playhead);
     }
 
+    pub(crate) fn set_created_item(&mut self, item_id: &str) -> bool {
+        self.core.set_created_item(item_id)
+    }
+
     pub(crate) fn timeline_hit_test(&self, x: f64, y: f64) -> Option<(i32, f64)> {
         self.core.timeline_hit_test(x, y)
     }
