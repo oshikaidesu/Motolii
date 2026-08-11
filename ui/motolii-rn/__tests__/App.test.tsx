@@ -15,6 +15,7 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'motolii-rn-shell'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'timeline'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'browser-surface'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'browser-view-EFFECTS'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'packing-timeline'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'inspector-surface'})).toBeTruthy();
 
@@ -25,6 +26,7 @@ test('renders correctly', async () => {
   });
 
   expect(tree!.root.findByProps({testID: 'thumbnail-grid'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'browser-view-MEDIA'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'timeline-density-grid'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'extension-panel-asset-tags'})).toBeTruthy();
 
@@ -38,6 +40,7 @@ test('renders correctly', async () => {
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-tab-CREATE'}).props.onPress();
   });
+  expect(tree!.root.findByProps({testID: 'browser-view-CREATE'})).toBeTruthy();
   const rectangle = tree!.root.findByProps({testID: 'create-item-rectangle'});
   expect(rectangle.props.accessibilityState.selected).toBe(false);
 
@@ -47,4 +50,14 @@ test('renders correctly', async () => {
   expect(
     tree!.root.findByProps({testID: 'create-item-rectangle'}).props.accessibilityState.selected,
   ).toBe(true);
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'browser-mode-THUMBNAILS'}).props.onPress();
+  });
+  expect(tree!.root.findByProps({testID: 'browser-results-CREATE'}).props.numColumns).toBe(4);
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'browser-mode-LIST'}).props.onPress();
+  });
+  expect(tree!.root.findByProps({testID: 'browser-results-CREATE'}).props.numColumns).toBe(1);
 });

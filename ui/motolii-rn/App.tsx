@@ -14,6 +14,7 @@ import MotoliiGpuView from './src/specs/MotoliiGpuViewNativeComponent';
 import MotoliiTimelineView from './src/specs/MotoliiTimelineViewNativeComponent';
 
 type BrowserTab = 'MEDIA' | 'EFFECTS' | 'CREATE';
+type BrowserViewMode = 'THUMBNAILS' | 'GRID' | 'LIST';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
 type TimelineMode = 'PACKING' | 'DENSITY' | 'NATIVE';
 
@@ -26,6 +27,17 @@ type EffectItem = {
   tags: string;
   color: string;
   unavailable?: boolean;
+};
+
+type BrowserItem = {
+  id: string;
+  name: string;
+  detail: string;
+  color: string;
+  badge?: string;
+  glyph?: string;
+  unavailable?: boolean;
+  testID?: string;
 };
 
 type PackingObject = {
@@ -70,6 +82,8 @@ const MEDIA_ITEMS = Array.from({length: 5000}, (_, index) => ({
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, Math.round(value)));
+
+const RAIL_HEADINGS = new Set(['COLLECTIONS', 'TAGS', 'PACKS', 'TYPE', 'PROVIDER']);
 
 function Splitter({
   label,
@@ -121,18 +135,140 @@ function PanelHeader({title, detail}: {title: string; detail?: string}) {
   );
 }
 
+function BrowserResults({
+  title,
+  rail,
+  items,
+  view,
+  selectedId,
+  onSelect,
+  testID,
+}: {
+  title: string;
+  rail: string[];
+  items: BrowserItem[];
+  view: BrowserViewMode;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  testID: string;
+}) {
+  const columns = view === 'THUMBNAILS' ? 4 : view === 'GRID' ? 2 : 1;
+  const cardWidth: '25%' | '50%' | '100%' = view === 'THUMBNAILS' ? '25%' : view === 'GRID' ? '50%' : '100%';
+  return (
+    <View style={styles.discoveryBody} testID={`browser-view-${testID}`}>
+      <View style={styles.sourceRail}>
+        {rail.map(label => (
+          <Text
+            key={label}
+            numberOfLines={1}
+            style={RAIL_HEADINGS.has(label) ? styles.railHeading : styles.railItem}>
+            {label}
+          </Text>
+        ))}
+      </View>
+      <FlatList
+        contentContainerStyle={styles.resultsContent}
+        data={items}
+        initialNumToRender={32}
+        key={`${testID}-${view}`}
+        keyExtractor={item => item.id}
+        ListHeaderComponent={(
+          <View style={styles.resultsHeader}>
+            <Text style={styles.resultTitle}>{title}</Text>
+            <Text style={styles.panelDetail}>{items.length}</Text>
+          </View>
+        )}
+        maxToRenderPerBatch={32}
+        numColumns={columns}
+        removeClippedSubviews
+        renderItem={({item}) => (
+          <Pressable
+            accessibilityLabel={`${item.name}${item.detail ? `, ${item.detail}` : ''}`}
+            accessibilityRole="button"
+            accessibilityState={{selected: selectedId === item.id}}
+            onPress={() => onSelect(item.id)}
+            testID={item.testID}
+            style={[
+              styles.browserCard,
+              {width: cardWidth},
+              view === 'THUMBNAILS' && styles.thumbnailCard,
+              view === 'LIST' && styles.browserListCard,
+              selectedId === item.id && styles.effectSelected,
+            ]}>
+            <View
+              style={[
+                styles.browserThumb,
+                view === 'THUMBNAILS' && styles.thumbnailOnlyThumb,
+                view === 'LIST' && styles.browserListThumb,
+                {backgroundColor: item.color},
+              ]}>
+              {item.glyph ? <Text style={styles.createGlyph}>{item.glyph}</Text> : null}
+              {item.badge ? <Text style={styles.effectBadge}>{item.badge}</Text> : null}
+              {item.unavailable ? <Text style={styles.unavailable}>UNAVAILABLE</Text> : null}
+              {view !== 'THUMBNAILS' && item.badge ? <Text style={styles.playBadge}>▶</Text> : null}
+            </View>
+            {view !== 'THUMBNAILS' ? (
+              <View style={view === 'LIST' ? styles.browserListCopy : undefined}>
+                <Text numberOfLines={1} style={styles.effectName}>{item.name}</Text>
+                <Text numberOfLines={1} style={styles.effectTags}>{item.detail}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        )}
+        style={styles.results}
+        testID={testID === 'MEDIA' ? 'thumbnail-grid' : `browser-results-${testID}`}
+        windowSize={5}
+      />
+    </View>
+  );
+}
+
 function Browser({width}: {width: number}) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('echo');
   const [selectedCreateItem, setSelectedCreateItem] = useState<string | null>(null);
-  const [view, setView] = useState<'GRID' | 'LIST'>('GRID');
+  const [view, setView] = useState<BrowserViewMode>('GRID');
   const filteredEffects = EFFECTS.filter(item =>
     `${item.name} ${item.tags}`.toLowerCase().includes(query.toLowerCase()),
   );
   const filteredCreateItems = CREATE_ITEMS.filter(item =>
     `${item.name} ${item.type} ${item.provider}`.toLowerCase().includes(query.toLowerCase()),
   );
+  const filteredMediaItems = MEDIA_ITEMS.filter(item =>
+    item.id.toLowerCase().includes(query.toLowerCase()),
+  );
+  const browserItems: BrowserItem[] = tab === 'EFFECTS'
+    ? filteredEffects.map(item => ({
+      id: item.id,
+      name: item.name,
+      detail: item.tags,
+      color: item.color,
+      badge: item.badge,
+      unavailable: item.unavailable,
+    }))
+    : tab === 'MEDIA'
+      ? filteredMediaItems.map(item => ({
+        id: item.id,
+        name: item.id,
+        detail: 'Media',
+        color: item.color,
+      }))
+      : filteredCreateItems.map(item => ({
+        id: item.id,
+        name: item.name,
+        detail: `${item.type} · ${item.provider}`,
+        color: '#2d2b25',
+        glyph: item.glyph,
+        testID: `create-item-${item.id}`,
+      }));
+  const rail = tab === 'EFFECTS'
+    ? ['▦  All', '◇  Used', '↺  Recent', 'COLLECTIONS', '◎  Favorites', 'Aa  Type', 'TAGS', '◎  Go-to  1', '◌  Atmosphere  1', '⌁  Kinetic  1', '✓  Review  1', 'PACKS', '▤  Motion Kit α']
+    : tab === 'MEDIA'
+      ? ['▦  All media', '◇  Used', '↺  Recent', 'TYPE', '▣  Video', '♪  Audio', '▧  Image']
+      : ['▦  All', 'TYPE', '□  Shapes', 'PROVIDER', 'M  Built-in'];
+  const title = tab === 'CREATE' ? 'Create items' : 'Results';
+  const selectedId = tab === 'EFFECTS' ? selected : tab === 'CREATE' ? selectedCreateItem : null;
 
   return (
     <View style={[styles.browser, {width}]} testID="browser-surface">
@@ -159,106 +295,37 @@ function Browser({width}: {width: number}) {
           style={styles.search}
           value={query}
         />
-        <Pressable onPress={() => setView('GRID')} style={[styles.iconButton, view === 'GRID' && styles.iconButtonActive]}>
+        <Pressable
+          accessibilityLabel="Thumbnail only view"
+          onPress={() => setView('THUMBNAILS')}
+          style={[styles.iconButton, view === 'THUMBNAILS' && styles.iconButtonActive]}
+          testID="browser-mode-THUMBNAILS">
           <Text style={styles.iconText}>▦</Text>
         </Pressable>
-        <Pressable onPress={() => setView('LIST')} style={[styles.iconButton, view === 'LIST' && styles.iconButtonActive]}>
+        <Pressable
+          accessibilityLabel="Card view"
+          onPress={() => setView('GRID')}
+          style={[styles.iconButton, view === 'GRID' && styles.iconButtonActive]}
+          testID="browser-mode-GRID">
+          <Text style={styles.iconText}>▤</Text>
+        </Pressable>
+        <Pressable
+          accessibilityLabel="List view"
+          onPress={() => setView('LIST')}
+          style={[styles.iconButton, view === 'LIST' && styles.iconButtonActive]}
+          testID="browser-mode-LIST">
           <Text style={styles.iconText}>☷</Text>
         </Pressable>
       </View>
-      {tab === 'EFFECTS' ? (
-        <View style={styles.discoveryBody}>
-          <View style={styles.sourceRail}>
-            {['▦  All', '◇  Used', '↺  Recent', 'COLLECTIONS', '◎  Favorites', 'Aa  Type', 'TAGS', '◎  Go-to  1', '◌  Atmosphere  1', '⌁  Kinetic  1', '✓  Review  1', 'PACKS', '▤  Motion Kit α'].map(label => (
-              <Text key={label} numberOfLines={1} style={label === 'COLLECTIONS' || label === 'TAGS' || label === 'PACKS' ? styles.railHeading : styles.railItem}>
-                {label}
-              </Text>
-            ))}
-          </View>
-          <ScrollView style={styles.results}>
-            <View style={styles.resultsHeader}>
-              <Text style={styles.resultTitle}>Results</Text>
-              <Text style={styles.panelDetail}>{filteredEffects.length}</Text>
-            </View>
-            <View style={view === 'GRID' ? styles.effectGrid : undefined}>
-              {filteredEffects.map(item => (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{selected: selected === item.id}}
-                  key={item.id}
-                  onPress={() => setSelected(item.id)}
-                  style={[
-                    styles.effectCard,
-                    view === 'LIST' && styles.effectListCard,
-                    selected === item.id && styles.effectSelected,
-                  ]}>
-                  <View style={[styles.effectThumb, {backgroundColor: item.color}]}>
-                    <Text style={styles.effectBadge}>{item.badge}</Text>
-                    {item.unavailable ? <Text style={styles.unavailable}>UNAVAILABLE</Text> : null}
-                    <Text style={styles.playBadge}>▶</Text>
-                  </View>
-                  <Text numberOfLines={1} style={styles.effectName}>{item.name}</Text>
-                  <Text numberOfLines={1} style={styles.effectTags}>{item.tags}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-      ) : tab === 'MEDIA' ? (
-        <FlatList
-          data={MEDIA_ITEMS}
-          numColumns={4}
-          initialNumToRender={32}
-          maxToRenderPerBatch={32}
-          removeClippedSubviews
-          testID="thumbnail-grid"
-          windowSize={5}
-          keyExtractor={item => item.id}
-          renderItem={({item}) => (
-            <View style={styles.mediaCell}>
-              <View style={[styles.mediaThumb, {backgroundColor: item.color}]} />
-              <Text numberOfLines={1} style={styles.mediaLabel}>{item.id}</Text>
-            </View>
-          )}
-        />
-      ) : (
-        <View style={styles.discoveryBody}>
-          <View style={styles.sourceRail}>
-            <Text style={styles.railItem}>▦  All</Text>
-            <Text style={styles.railHeading}>TYPE</Text>
-            <Text style={styles.railItem}>□  Shapes</Text>
-            <Text style={styles.railHeading}>PROVIDER</Text>
-            <Text style={styles.railItem}>M  Built-in</Text>
-          </View>
-          <ScrollView style={styles.results}>
-            <View style={styles.resultsHeader}>
-              <Text style={styles.resultTitle}>Create items</Text>
-              <Text style={styles.panelDetail}>{filteredCreateItems.length}</Text>
-            </View>
-            <View style={view === 'GRID' ? styles.effectGrid : undefined}>
-              {filteredCreateItems.map(item => (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{selected: selectedCreateItem === item.id}}
-                  key={item.id}
-                  onPress={() => setSelectedCreateItem(item.id)}
-                  testID={`create-item-${item.id}`}
-                  style={[
-                    styles.effectCard,
-                    view === 'LIST' && styles.effectListCard,
-                    selectedCreateItem === item.id && styles.effectSelected,
-                  ]}>
-                  <View style={styles.createThumb}>
-                    <Text style={styles.createGlyph}>{item.glyph}</Text>
-                  </View>
-                  <Text numberOfLines={1} style={styles.effectName}>{item.name}</Text>
-                  <Text numberOfLines={1} style={styles.effectTags}>{item.type} · {item.provider}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-      )}
+      <BrowserResults
+        items={browserItems}
+        onSelect={id => tab === 'EFFECTS' ? setSelected(id) : tab === 'CREATE' ? setSelectedCreateItem(id) : undefined}
+        rail={rail}
+        selectedId={selectedId}
+        testID={tab}
+        title={title}
+        view={view}
+      />
     </View>
   );
 }
@@ -604,23 +671,23 @@ const styles = StyleSheet.create({
   railItem: {height: 23, paddingHorizontal: 8, paddingTop: 5, fontSize: 9, color: '#b9bcbd'},
   railHeading: {height: 20, paddingHorizontal: 8, paddingTop: 7, fontSize: 7, letterSpacing: 0.8, color: '#74797c'},
   results: {flex: 1},
+  resultsContent: {paddingBottom: 4},
   resultsHeader: {height: 28, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 7},
   resultTitle: {fontSize: 10, fontWeight: '700', color: '#d5d6d3'},
-  effectGrid: {flexDirection: 'row', flexWrap: 'wrap'},
-  effectCard: {width: '50%', padding: 4, opacity: 0.92},
-  effectListCard: {width: '100%', flexDirection: 'row', alignItems: 'center'},
+  browserCard: {padding: 4, opacity: 0.92},
+  thumbnailCard: {padding: 3},
+  browserListCard: {flexDirection: 'row', alignItems: 'center'},
+  browserListCopy: {flex: 1, paddingLeft: 6},
   effectSelected: {backgroundColor: '#393b3b'},
-  effectThumb: {height: 52, padding: 4, justifyContent: 'space-between'},
-  createThumb: {height: 52, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#575347', backgroundColor: '#2d2b25'},
+  browserThumb: {height: 52, padding: 4, justifyContent: 'space-between', borderWidth: 1, borderColor: '#3c4044'},
+  thumbnailOnlyThumb: {height: 42, padding: 3},
+  browserListThumb: {width: 52, height: 36},
   createGlyph: {fontSize: 25, color: '#e8dfb3'},
   effectBadge: {fontSize: 10, color: '#ffffff'},
   unavailable: {fontSize: 7, color: '#f0cfbc'},
   playBadge: {alignSelf: 'flex-end', fontSize: 9, color: '#ffffff'},
   effectName: {marginTop: 3, fontSize: 9, fontWeight: '700', color: '#ededeb'},
   effectTags: {fontSize: 7, color: '#9ca0a2'},
-  mediaCell: {width: '25%', padding: 3},
-  mediaThumb: {height: 42, borderWidth: 1, borderColor: '#3c4044'},
-  mediaLabel: {fontSize: 7, color: '#aeb1b3'},
   emptyPanel: {padding: 14},
   emptyTitle: {fontSize: 13, color: '#e2e3e1'},
   muted: {fontSize: 9, color: '#858a8d'},
