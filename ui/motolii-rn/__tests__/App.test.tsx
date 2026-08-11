@@ -4,7 +4,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import App, {stagePlacement} from '../App';
+import App from '../App';
 
 test('renders correctly', async () => {
   let tree: ReactTestRenderer.ReactTestRenderer;
@@ -53,6 +53,17 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('');
 
   await ReactTestRenderer.act(() => {
+    rectangle.props.onPointerDown();
+  });
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.draggedItemId).toBe('rectangle');
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageDrop({nativeEvent: {x: 0.25, y: 0.75}});
+  });
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.250000,0.750000');
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.draggedItemId).toBe('');
+
+  await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'create-item-rectangle'}).props.onDoubleClick();
   });
   expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.500000,0.500000');
@@ -66,9 +77,4 @@ test('renders correctly', async () => {
     tree!.root.findByProps({testID: 'browser-mode-LIST'}).props.onPress();
   });
   expect(tree!.root.findByProps({testID: 'browser-results-CREATE'}).props.numColumns).toBe(1);
-});
-
-test('maps a Browser drop into normalized Stage coordinates', () => {
-  expect(stagePlacement({x: 300, y: 100, width: 600, height: 400}, 450, 400)).toEqual({x: 0.25, y: 0.75});
-  expect(stagePlacement({x: 300, y: 100, width: 600, height: 400}, 299, 400)).toBeNull();
 });

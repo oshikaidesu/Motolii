@@ -273,6 +273,8 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   NSTimer *_frameTimer;
   void *_renderer;
   std::string _createdItemId;
+  std::string _draggedItemId;
+  id _dropMonitor;
 }
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
@@ -303,12 +305,46 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   return self;
 }
 
+- (void)finishBrowserDrop:(NSEvent *)event
+{
+  if (_dropMonitor) {
+    [NSEvent removeMonitor:_dropMonitor];
+    _dropMonitor = nil;
+  }
+  if (!_eventEmitter) {
+    return;
+  }
+
+  NSPoint point = [_metalView convertPoint:event.locationInWindow fromView:nil];
+  double x = -1.0;
+  double y = -1.0;
+  if (NSPointInRect(point, _metalView.bounds) && NSWidth(_metalView.bounds) > 0 && NSHeight(_metalView.bounds) > 0) {
+    x = point.x / NSWidth(_metalView.bounds);
+    y = 1.0 - point.y / NSHeight(_metalView.bounds);
+  }
+  auto emitter = std::static_pointer_cast<const MotoliiGpuViewEventEmitter>(_eventEmitter);
+  MotoliiGpuViewEventEmitter::OnStageDrop drop = {.x = x, .y = y};
+  emitter->onStageDrop(drop);
+}
+
 - (void)updateProps:(const Props::Shared &)props oldProps:(const Props::Shared &)oldProps
 {
   const auto &newProps = static_cast<const MotoliiGpuViewProps &>(*props);
   _createdItemId = newProps.createdItemId;
+  _draggedItemId = newProps.draggedItemId;
   if (_renderer) {
     motolii_macos_stage_renderer_set_created_item(_renderer, _createdItemId.c_str());
+  }
+  if (!_draggedItemId.empty() && !_dropMonitor) {
+    __weak MotoliiGpuComponentView *weakSelf = self;
+    _dropMonitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseUp handler:^NSEvent *(NSEvent *event) {
+      MotoliiGpuComponentView *strongSelf = weakSelf;
+      [strongSelf finishBrowserDrop:event];
+      return event;
+    }];
+  } else if (_draggedItemId.empty() && _dropMonitor) {
+    [NSEvent removeMonitor:_dropMonitor];
+    _dropMonitor = nil;
   }
   [super updateProps:props oldProps:oldProps];
 }
@@ -332,12 +368,19 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 
 - (void)prepareForRecycle
 {
+  if (_dropMonitor) {
+    [NSEvent removeMonitor:_dropMonitor];
+    _dropMonitor = nil;
+  }
   [self stopRenderer];
   [super prepareForRecycle];
 }
 
 - (void)dealloc
 {
+  if (_dropMonitor) {
+    [NSEvent removeMonitor:_dropMonitor];
+  }
   [self stopRenderer];
 }
 

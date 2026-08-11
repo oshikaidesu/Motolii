@@ -22,12 +22,6 @@ type BrowserViewMode = 'THUMBNAILS' | 'GRID' | 'LIST';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
 type TimelineMode = 'PACKING' | 'DENSITY' | 'NATIVE';
 
-type StageFrame = {x: number; y: number; width: number; height: number};
-type BrowserDrag = {id: string; startX: number; startY: number; moved: boolean};
-type PointerCaptureHandle = {
-  setPointerCapture?: (pointerId: number) => void;
-  releasePointerCapture?: (pointerId: number) => void;
-};
 
 const BUILD_LABEL = 'B002 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA';
 
@@ -94,16 +88,6 @@ const MEDIA_ITEMS = Array.from({length: 5000}, (_, index) => ({
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, Math.round(value)));
 
-export function stagePlacement(frame: StageFrame, x: number, y: number) {
-  if (frame.width <= 0 || frame.height <= 0 || x < frame.x || y < frame.y || x > frame.x + frame.width || y > frame.y + frame.height) {
-    return null;
-  }
-  return {
-    x: (x - frame.x) / frame.width,
-    y: (y - frame.y) / frame.height,
-  };
-}
-
 const createdItemValue = (id: string, x: number, y: number) =>
   `${id}@${x.toFixed(6)},${y.toFixed(6)}`;
 
@@ -168,9 +152,6 @@ function BrowserResults({
   onSelect,
   onActivate,
   onDragStart,
-  onDragMove,
-  onDragEnd,
-  onDragCancel,
   testID,
 }: {
   title: string;
@@ -180,29 +161,13 @@ function BrowserResults({
   selectedId: string | null;
   onSelect: (id: string) => void;
   onActivate: (id: string) => void;
-  onDragStart: (id: string, x: number, y: number) => void;
-  onDragMove: (x: number, y: number) => void;
-  onDragEnd: (x: number, y: number) => void;
-  onDragCancel: () => void;
+  onDragStart: (id: string) => void;
   testID: string;
 }) {
   const columns = view === 'THUMBNAILS' ? 4 : view === 'GRID' ? 2 : 1;
   const cardWidth: '25%' | '50%' | '100%' = view === 'THUMBNAILS' ? '25%' : view === 'GRID' ? '50%' : '100%';
-  const browserSurfaceRef = useRef<PointerCaptureHandle | null>(null);
   return (
-    <View
-      onPointerCancel={event => {
-        browserSurfaceRef.current?.releasePointerCapture?.(event.nativeEvent.pointerId);
-        onDragCancel();
-      }}
-      onPointerMove={event => onDragMove(event.nativeEvent.clientX, event.nativeEvent.clientY)}
-      onPointerUp={event => {
-        browserSurfaceRef.current?.releasePointerCapture?.(event.nativeEvent.pointerId);
-        onDragEnd(event.nativeEvent.clientX, event.nativeEvent.clientY);
-      }}
-      ref={node => { browserSurfaceRef.current = node as unknown as PointerCaptureHandle | null; }}
-      style={styles.discoveryBody}
-      testID={`browser-view-${testID}`}>
+    <View style={styles.discoveryBody} testID={`browser-view-${testID}`}>
       <View style={styles.sourceRail}>
         {rail.map(label => (
           <Text
@@ -234,10 +199,7 @@ function BrowserResults({
             accessibilityRole="button"
             accessibilityState={{selected: selectedId === item.id}}
             onDoubleClick={() => onActivate(item.id)}
-            onPointerDown={event => {
-              browserSurfaceRef.current?.setPointerCapture?.(event.nativeEvent.pointerId);
-              onDragStart(item.id, event.nativeEvent.clientX, event.nativeEvent.clientY);
-            }}
+            onPointerDown={() => onDragStart(item.id)}
             onPress={() => onSelect(item.id)}
             testID={item.testID}
             style={[
@@ -275,7 +237,7 @@ function BrowserResults({
   );
 }
 
-function Browser({width, onCreateItem, onDragStart, onDragMove, onDragEnd, onDragCancel}: {width: number; onCreateItem: (id: string) => void; onDragStart: (id: string, x: number, y: number) => void; onDragMove: (x: number, y: number) => void; onDragEnd: (x: number, y: number) => void; onDragCancel: () => void}) {
+function Browser({width, onCreateItem, onDragStart, onDragCancel}: {width: number; onCreateItem: (id: string) => void; onDragStart: (id: string) => void; onDragCancel: () => void}) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('echo');
@@ -374,18 +336,16 @@ function Browser({width, onCreateItem, onDragStart, onDragMove, onDragEnd, onDra
         onActivate={id => {
           if (tab === 'CREATE') {
             setSelectedCreateItem(id);
+            onDragCancel();
             onCreateItem(createdItemValue(id, 0.5, 0.5));
           }
         }}
-        onDragStart={(id, x, y) => {
+        onDragStart={id => {
           if (tab === 'CREATE') {
             setSelectedCreateItem(id);
-            onDragStart(id, x, y);
+            onDragStart(id);
           }
         }}
-        onDragMove={onDragMove}
-        onDragEnd={onDragEnd}
-        onDragCancel={onDragCancel}
         onSelect={id => tab === 'EFFECTS' ? setSelected(id) : tab === 'CREATE' ? setSelectedCreateItem(id) : undefined}
         rail={rail}
         selectedId={selectedId}
@@ -397,7 +357,7 @@ function Browser({width, onCreateItem, onDragStart, onDragMove, onDragEnd, onDra
   );
 }
 
-function Stage({createdItemId, showGpu, onToggleGpu, viewportRef}: {createdItemId: string; showGpu: boolean; onToggleGpu: () => void; viewportRef: React.RefObject<React.ElementRef<typeof View> | null>}) {
+function Stage({createdItemId, draggedItemId, showGpu, onDrop, onToggleGpu}: {createdItemId: string; draggedItemId: string; showGpu: boolean; onDrop: (x: number, y: number) => void; onToggleGpu: () => void}) {
   return (
     <View style={styles.stage} testID="stage-surface">
       <View style={styles.stageTools}>
@@ -408,12 +368,14 @@ function Stage({createdItemId, showGpu, onToggleGpu, viewportRef}: {createdItemI
         </Pressable>
         <Text style={styles.stageIdentity}>STAGE / ECHO BLOOM</Text>
       </View>
-      <View ref={viewportRef} style={styles.stageViewport} testID="stage-viewport">
+      <View style={styles.stageViewport} testID="stage-viewport">
         {showGpu ? (
           <MotoliiGpuView
             accessible
             accessibilityLabel="Rust wgpu native Stage"
             createdItemId={createdItemId}
+            draggedItemId={draggedItemId}
+            onStageDrop={event => onDrop(event.nativeEvent.x, event.nativeEvent.y)}
             style={styles.gpuStage}
             testID="rust-wgpu-stage"
           />
@@ -654,42 +616,20 @@ function App() {
   const [timelineHeight, setTimelineHeight] = useState(270);
   const [showGpuStage, setShowGpuStage] = useState(true);
   const [createdItemId, setCreatedItemId] = useState('');
+  const [draggedItemId, setDraggedItemId] = useState('');
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
-  const browserDrag = useRef<BrowserDrag | null>(null);
-  const stageViewport = useRef<React.ElementRef<typeof View>>(null);
-  const moveBrowserDrag = (x: number, y: number) => {
-    const drag = browserDrag.current;
-    if (drag && Math.hypot(x - drag.startX, y - drag.startY) > 4) {
-      drag.moved = true;
+  const completeStageDrop = (x: number, y: number) => {
+    const itemId = draggedItemId;
+    setDraggedItemId('');
+    if (itemId && x >= 0 && y >= 0) {
+      setCreatedItemId(createdItemValue(itemId, x, y));
     }
-  };
-  const endBrowserDrag = (dropX: number, dropY: number) => {
-    const drag = browserDrag.current;
-    browserDrag.current = null;
-    if (!drag?.moved) {
-      return;
-    }
-    stageViewport.current?.measureInWindow((x, y, width, height) => {
-      const placement = stagePlacement({x, y, width, height}, dropX, dropY);
-      if (placement) {
-        setCreatedItemId(createdItemValue(drag.id, placement.x, placement.y));
-      }
-    });
   };
 
   return (
-    <View
-      onPointerCancel={() => { browserDrag.current = null; }}
-      onPointerMove={event => {
-        moveBrowserDrag(event.nativeEvent.clientX, event.nativeEvent.clientY);
-      }}
-      onPointerUp={event => {
-        endBrowserDrag(event.nativeEvent.clientX, event.nativeEvent.clientY);
-      }}
-      style={styles.shell}
-      testID="motolii-rn-shell">
+    <View style={styles.shell} testID="motolii-rn-shell">
       <View style={styles.titlebar}>
         <Text style={styles.brand}>MOTOLII</Text>
         <Text style={styles.project}>night_drive.mtl / Main composition</Text>
@@ -705,10 +645,8 @@ function App() {
       <View style={styles.workspace}>
         <Browser
           onCreateItem={setCreatedItemId}
-          onDragCancel={() => { browserDrag.current = null; }}
-          onDragEnd={endBrowserDrag}
-          onDragMove={moveBrowserDrag}
-          onDragStart={(id, startX, startY) => { browserDrag.current = {id, startX, startY, moved: false}; }}
+          onDragCancel={() => setDraggedItemId('')}
+          onDragStart={setDraggedItemId}
           width={browserWidth}
         />
         <Splitter
@@ -719,7 +657,7 @@ function App() {
           onNudge={() => setBrowserWidth(value => value >= 348 ? 284 : value + 64)}
         />
         <View style={styles.centerColumn}>
-          <Stage createdItemId={createdItemId} showGpu={showGpuStage} onToggleGpu={() => setShowGpuStage(value => !value)} viewportRef={stageViewport} />
+          <Stage createdItemId={createdItemId} draggedItemId={draggedItemId} showGpu={showGpuStage} onDrop={completeStageDrop} onToggleGpu={() => setShowGpuStage(value => !value)} />
         </View>
         <Splitter
           label="Inspectorのサイズを変更"
