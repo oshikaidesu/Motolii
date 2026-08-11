@@ -44,6 +44,10 @@ const EFFECTS: EffectItem[] = [
   {id: 'fold', name: 'Fold Field', badge: 'FX', tags: '#review', color: '#51455f', unavailable: true},
 ];
 
+const CREATE_ITEMS = [
+  {id: 'rectangle', name: 'Rectangle', type: 'Shape', provider: 'Built-in', glyph: '□'},
+];
+
 const PACKING_OBJECTS: PackingObject[] = [
   {id: 'song', kind: '♪', name: 'night_drive.wav  ╱╲╱▁╲╱╲▁╱╲', left: 1, width: 98, color: '#75a7a5'},
   {id: 'pulse', kind: 'G', name: 'Pulse rings', left: 4, width: 88, color: '#7770a9', flow: 'IN → Echo Bloom → OUT'},
@@ -121,9 +125,13 @@ function Browser({width}: {width: number}) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('echo');
+  const [selectedCreateItem, setSelectedCreateItem] = useState<string | null>(null);
   const [view, setView] = useState<'GRID' | 'LIST'>('GRID');
   const filteredEffects = EFFECTS.filter(item =>
     `${item.name} ${item.tags}`.toLowerCase().includes(query.toLowerCase()),
+  );
+  const filteredCreateItems = CREATE_ITEMS.filter(item =>
+    `${item.name} ${item.type} ${item.provider}`.toLowerCase().includes(query.toLowerCase()),
   );
 
   return (
@@ -214,9 +222,41 @@ function Browser({width}: {width: number}) {
           )}
         />
       ) : (
-        <View style={styles.emptyPanel}>
-          <Text style={styles.emptyTitle}>Create</Text>
-          <Text style={styles.muted}>Text · Shape · Adjustment · Camera</Text>
+        <View style={styles.discoveryBody}>
+          <View style={styles.sourceRail}>
+            <Text style={styles.railItem}>▦  All</Text>
+            <Text style={styles.railHeading}>TYPE</Text>
+            <Text style={styles.railItem}>□  Shapes</Text>
+            <Text style={styles.railHeading}>PROVIDER</Text>
+            <Text style={styles.railItem}>M  Built-in</Text>
+          </View>
+          <ScrollView style={styles.results}>
+            <View style={styles.resultsHeader}>
+              <Text style={styles.resultTitle}>Create items</Text>
+              <Text style={styles.panelDetail}>{filteredCreateItems.length}</Text>
+            </View>
+            <View style={view === 'GRID' ? styles.effectGrid : undefined}>
+              {filteredCreateItems.map(item => (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{selected: selectedCreateItem === item.id}}
+                  key={item.id}
+                  onPress={() => setSelectedCreateItem(item.id)}
+                  testID={`create-item-${item.id}`}
+                  style={[
+                    styles.effectCard,
+                    view === 'LIST' && styles.effectListCard,
+                    selectedCreateItem === item.id && styles.effectSelected,
+                  ]}>
+                  <View style={styles.createThumb}>
+                    <Text style={styles.createGlyph}>{item.glyph}</Text>
+                  </View>
+                  <Text numberOfLines={1} style={styles.effectName}>{item.name}</Text>
+                  <Text numberOfLines={1} style={styles.effectTags}>{item.type} · {item.provider}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
         </View>
       )}
     </View>
@@ -571,6 +611,8 @@ const styles = StyleSheet.create({
   effectListCard: {width: '100%', flexDirection: 'row', alignItems: 'center'},
   effectSelected: {backgroundColor: '#393b3b'},
   effectThumb: {height: 52, padding: 4, justifyContent: 'space-between'},
+  createThumb: {height: 52, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#575347', backgroundColor: '#2d2b25'},
+  createGlyph: {fontSize: 25, color: '#e8dfb3'},
   effectBadge: {fontSize: 10, color: '#ffffff'},
   unavailable: {fontSize: 7, color: '#f0cfbc'},
   playBadge: {alignSelf: 'flex-end', fontSize: 9, color: '#ffffff'},

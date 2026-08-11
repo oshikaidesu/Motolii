@@ -34,4 +34,17 @@ test('renders correctly', async () => {
 
   expect(tree!.root.findByProps({testID: 'rust-wgpu-timeline'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'native-timeline-feedback'})).toBeTruthy();
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'browser-tab-CREATE'}).props.onPress();
+  });
+  const rectangle = tree!.root.findByProps({testID: 'create-item-rectangle'});
+  expect(rectangle.props.accessibilityState.selected).toBe(false);
+
+  await ReactTestRenderer.act(() => {
+    rectangle.props.onPress();
+  });
+  expect(
+    tree!.root.findByProps({testID: 'create-item-rectangle'}).props.accessibilityState.selected,
+  ).toBe(true);
 });
