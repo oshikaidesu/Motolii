@@ -24,6 +24,10 @@ type TimelineMode = 'PACKING' | 'DENSITY' | 'NATIVE';
 
 type StageFrame = {x: number; y: number; width: number; height: number};
 type BrowserDrag = {id: string; startX: number; startY: number; moved: boolean};
+type PointerCaptureHandle = {
+  setPointerCapture?: (pointerId: number) => void;
+  releasePointerCapture?: (pointerId: number) => void;
+};
 
 const BUILD_LABEL = 'B002 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA';
 
@@ -184,8 +188,21 @@ function BrowserResults({
 }) {
   const columns = view === 'THUMBNAILS' ? 4 : view === 'GRID' ? 2 : 1;
   const cardWidth: '25%' | '50%' | '100%' = view === 'THUMBNAILS' ? '25%' : view === 'GRID' ? '50%' : '100%';
+  const browserSurfaceRef = useRef<PointerCaptureHandle | null>(null);
   return (
-    <View style={styles.discoveryBody} testID={`browser-view-${testID}`}>
+    <View
+      onPointerCancel={event => {
+        browserSurfaceRef.current?.releasePointerCapture?.(event.nativeEvent.pointerId);
+        onDragCancel();
+      }}
+      onPointerMove={event => onDragMove(event.nativeEvent.clientX, event.nativeEvent.clientY)}
+      onPointerUp={event => {
+        browserSurfaceRef.current?.releasePointerCapture?.(event.nativeEvent.pointerId);
+        onDragEnd(event.nativeEvent.clientX, event.nativeEvent.clientY);
+      }}
+      ref={node => { browserSurfaceRef.current = node as unknown as PointerCaptureHandle | null; }}
+      style={styles.discoveryBody}
+      testID={`browser-view-${testID}`}>
       <View style={styles.sourceRail}>
         {rail.map(label => (
           <Text
@@ -217,10 +234,10 @@ function BrowserResults({
             accessibilityRole="button"
             accessibilityState={{selected: selectedId === item.id}}
             onDoubleClick={() => onActivate(item.id)}
-            onPointerCancel={onDragCancel}
-            onPointerDown={event => onDragStart(item.id, event.nativeEvent.clientX, event.nativeEvent.clientY)}
-            onPointerMove={event => onDragMove(event.nativeEvent.clientX, event.nativeEvent.clientY)}
-            onPointerUp={event => onDragEnd(event.nativeEvent.clientX, event.nativeEvent.clientY)}
+            onPointerDown={event => {
+              browserSurfaceRef.current?.setPointerCapture?.(event.nativeEvent.pointerId);
+              onDragStart(item.id, event.nativeEvent.clientX, event.nativeEvent.clientY);
+            }}
             onPress={() => onSelect(item.id)}
             testID={item.testID}
             style={[
@@ -664,7 +681,6 @@ function App() {
 
   return (
     <View
-      onMoveShouldSetResponderCapture={() => browserDrag.current !== null}
       onPointerCancel={() => { browserDrag.current = null; }}
       onPointerMove={event => {
         moveBrowserDrag(event.nativeEvent.clientX, event.nativeEvent.clientY);
@@ -672,13 +688,6 @@ function App() {
       onPointerUp={event => {
         endBrowserDrag(event.nativeEvent.clientX, event.nativeEvent.clientY);
       }}
-      onResponderMove={event => {
-        moveBrowserDrag(event.nativeEvent.pageX, event.nativeEvent.pageY);
-      }}
-      onResponderRelease={event => {
-        endBrowserDrag(event.nativeEvent.pageX, event.nativeEvent.pageY);
-      }}
-      onResponderTerminate={() => { browserDrag.current = null; }}
       style={styles.shell}
       testID="motolii-rn-shell">
       <View style={styles.titlebar}>
