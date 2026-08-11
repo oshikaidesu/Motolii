@@ -164,6 +164,9 @@ function BrowserResults({
   onSelect,
   onActivate,
   onDragStart,
+  onDragMove,
+  onDragEnd,
+  onDragCancel,
   testID,
 }: {
   title: string;
@@ -174,6 +177,9 @@ function BrowserResults({
   onSelect: (id: string) => void;
   onActivate: (id: string) => void;
   onDragStart: (id: string, x: number, y: number) => void;
+  onDragMove: (x: number, y: number) => void;
+  onDragEnd: (x: number, y: number) => void;
+  onDragCancel: () => void;
   testID: string;
 }) {
   const columns = view === 'THUMBNAILS' ? 4 : view === 'GRID' ? 2 : 1;
@@ -211,7 +217,10 @@ function BrowserResults({
             accessibilityRole="button"
             accessibilityState={{selected: selectedId === item.id}}
             onDoubleClick={() => onActivate(item.id)}
+            onPointerCancel={onDragCancel}
             onPointerDown={event => onDragStart(item.id, event.nativeEvent.clientX, event.nativeEvent.clientY)}
+            onPointerMove={event => onDragMove(event.nativeEvent.clientX, event.nativeEvent.clientY)}
+            onPointerUp={event => onDragEnd(event.nativeEvent.clientX, event.nativeEvent.clientY)}
             onPress={() => onSelect(item.id)}
             testID={item.testID}
             style={[
@@ -249,7 +258,7 @@ function BrowserResults({
   );
 }
 
-function Browser({width, onCreateItem, onDragStart}: {width: number; onCreateItem: (id: string) => void; onDragStart: (id: string, x: number, y: number) => void}) {
+function Browser({width, onCreateItem, onDragStart, onDragMove, onDragEnd, onDragCancel}: {width: number; onCreateItem: (id: string) => void; onDragStart: (id: string, x: number, y: number) => void; onDragMove: (x: number, y: number) => void; onDragEnd: (x: number, y: number) => void; onDragCancel: () => void}) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('echo');
@@ -357,6 +366,9 @@ function Browser({width, onCreateItem, onDragStart}: {width: number; onCreateIte
             onDragStart(id, x, y);
           }
         }}
+        onDragMove={onDragMove}
+        onDragEnd={onDragEnd}
+        onDragCancel={onDragCancel}
         onSelect={id => tab === 'EFFECTS' ? setSelected(id) : tab === 'CREATE' ? setSelectedCreateItem(id) : undefined}
         rail={rail}
         selectedId={selectedId}
@@ -379,7 +391,7 @@ function Stage({createdItemId, showGpu, onToggleGpu, viewportRef}: {createdItemI
         </Pressable>
         <Text style={styles.stageIdentity}>STAGE / ECHO BLOOM</Text>
       </View>
-      <View ref={viewportRef} style={styles.stageViewport}>
+      <View ref={viewportRef} style={styles.stageViewport} testID="stage-viewport">
         {showGpu ? (
           <MotoliiGpuView
             accessible
@@ -630,30 +642,34 @@ function App() {
   const timelineStart = useRef(timelineHeight);
   const browserDrag = useRef<BrowserDrag | null>(null);
   const stageViewport = useRef<React.ElementRef<typeof View>>(null);
+  const moveBrowserDrag = (x: number, y: number) => {
+    const drag = browserDrag.current;
+    if (drag && Math.hypot(x - drag.startX, y - drag.startY) > 4) {
+      drag.moved = true;
+    }
+  };
+  const endBrowserDrag = (dropX: number, dropY: number) => {
+    const drag = browserDrag.current;
+    browserDrag.current = null;
+    if (!drag?.moved) {
+      return;
+    }
+    stageViewport.current?.measureInWindow((x, y, width, height) => {
+      const placement = stagePlacement({x, y, width, height}, dropX, dropY);
+      if (placement) {
+        setCreatedItemId(createdItemValue(drag.id, placement.x, placement.y));
+      }
+    });
+  };
 
   return (
     <View
       onPointerCancel={() => { browserDrag.current = null; }}
       onPointerMove={event => {
-        const drag = browserDrag.current;
-        if (drag && Math.hypot(event.nativeEvent.clientX - drag.startX, event.nativeEvent.clientY - drag.startY) > 4) {
-          drag.moved = true;
-        }
+        moveBrowserDrag(event.nativeEvent.clientX, event.nativeEvent.clientY);
       }}
       onPointerUp={event => {
-        const drag = browserDrag.current;
-        browserDrag.current = null;
-        if (!drag?.moved) {
-          return;
-        }
-        const dropX = event.nativeEvent.clientX;
-        const dropY = event.nativeEvent.clientY;
-        stageViewport.current?.measureInWindow((x, y, width, height) => {
-          const placement = stagePlacement({x, y, width, height}, dropX, dropY);
-          if (placement) {
-            setCreatedItemId(createdItemValue(drag.id, placement.x, placement.y));
-          }
-        });
+        endBrowserDrag(event.nativeEvent.clientX, event.nativeEvent.clientY);
       }}
       style={styles.shell}
       testID="motolii-rn-shell">
@@ -672,6 +688,9 @@ function App() {
       <View style={styles.workspace}>
         <Browser
           onCreateItem={setCreatedItemId}
+          onDragCancel={() => { browserDrag.current = null; }}
+          onDragEnd={endBrowserDrag}
+          onDragMove={moveBrowserDrag}
           onDragStart={(id, startX, startY) => { browserDrag.current = {id, startX, startY, moved: false}; }}
           width={browserWidth}
         />
