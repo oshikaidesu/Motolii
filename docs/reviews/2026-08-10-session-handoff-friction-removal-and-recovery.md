@@ -26,7 +26,7 @@
 | 実装 | M4検証ハーネス~3,000行(`allocation.rs`、`m4_validation` module、CLI4本、inventory/yuv-plan test — K1a APIと無改変適合、10/10 pass) | `d80d0c0b` |
 | 発注回収 | `m4_tier_transfer_contract`のK1a API適合(composer-2.5発注、6/6 pass・assertion 28本維持を検収) | `86d5b148` |
 | 発注回収 | **M4-P02-CODEC**: `RecipeKeyV1`/`ArtifactDigest` canonical codec+mutation corpus 8 test(grok-4.5-high発注、検収済み) → ledger 7B `DONE` | `f731384c` |
-| probe | `spikes/skia-timeline-probe/`(bin15本+depth-rail v4〜v14)、`spikes/motolii-rn-probe/`(App.tsx 660行) — リポ外`~/Documents/Codex/`から移管、provenance README付き | `7cc861d7` |
+| probe | `spikes/skia-timeline-probe/`(bin15本+depth-rail v4〜v14)、`ui/motolii-rn/`(App.tsx 660行) — リポ外`~/Documents/Codex/`から移管、provenance README付き | `7cc861d7` |
 
 台帳・地図の実態同期も完了: ledger 6A(M2-ASSET-1A `DONE`訂正)/7A/7B、m4地図P02-C1/C2、
 統合地図N-OVERLAY、RN実行地図R1-BROWSER/R1-HOST-EDIT `DONE`、ui-reference-map、backlog INF-6/GAP-3。

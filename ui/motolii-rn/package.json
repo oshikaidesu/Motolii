@@ -1,17 +1,20 @@
 {
-  "name": "motolii-rn",
-  "version": "0.1.0",
+  "name": "MotoliiRn",
+  "version": "0.0.1",
   "private": true,
   "scripts": {
-    "macos": "react-native run-macos",
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest"
   },
   "dependencies": {
+    "@react-native/new-app-screen": "0.81.2",
     "react": "19.1.0",
     "react-native": "0.81.2",
-    "react-native-macos": "^0.81.0-0"
+    "react-native-macos": "^0.81.0-0",
+    "react-native-safe-area-context": "^5.5.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -37,12 +40,12 @@
     "node": ">=20"
   },
   "codegenConfig": {
-    "name": "MotoliiRnSpec",
+    "name": "MotoliiNativeSpec",
     "type": "components",
     "jsSrcsDir": "src/specs",
     "ios": {
       "componentProvider": {
-        "MotoliiStageView": "MotoliiStageComponentView",
+        "MotoliiGpuView": "MotoliiGpuComponentView",
         "MotoliiTimelineView": "MotoliiTimelineComponentView"
       }
     }

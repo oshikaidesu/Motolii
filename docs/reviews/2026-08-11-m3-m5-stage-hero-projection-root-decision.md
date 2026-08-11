@@ -69,7 +69,7 @@ Draft PR #470の固定5点pathはRerun表示機構のprobeであり、このtran
 
 1. Documentの評価結果をRerun entity／component入力へ写す。
 2. scene query、View、visualizer、camera、picking、drawはRerunへ任せる。
-3. 結果を`spikes/motolii-rn-probe/`の既存Stageへ載せ、確定操作だけD2へ戻す。
+3. 結果を`ui/motolii-rn/`の既存Stageへ載せ、確定操作だけD2へ戻す。
 
 自動oracleはsame `LayerId`／revision／time、stale拒否、Document write 0。外部gateはBrowser Place後に同じRN StageでRectangleが見えることとする。これが通ればartifactをcopyせず`PRODUCT_SOURCE`へ繰り上げる。Rerun subsystem自体の再比較や、固定fixtureを意味authorityへ昇格することはcompile項目にしない。
 

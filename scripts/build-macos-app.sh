@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 # macOS desktop appビルダー: JS依存取得 → CocoaPods → arm64 Release xcodebuild を1本に閉じる。
-# 根拠: 2026-08-09 M3 R0 product runtime seat受入
-#       (docs/reviews/2026-08-09-m3-r0-product-runtime-seat-acceptance.md §3)。
-#       受入で実測した手順が散文にしか無く、scripts/ にentry pointが無かったため、
-#       外部contributorが同じappを組み立て直せなかった再発防止。
+# 対象は唯一のRN製品sourceである ui/motolii-rn/。旧shellへ迂回しない。
 # 対象: macOS arm64 Release の1経路のみ。Debug、x86_64、署名付きbuild、配布は非対象。
 # 使い方: scripts/build-macos-app.sh [--help]   (どこから呼んでもよい)
 set -euo pipefail
@@ -16,7 +13,6 @@ SCHEME="MotoliiRn-macOS"
 DESTINATION="generic/platform=macOS,arch=arm64"
 # CocoaPods版は固定する。別版で通すとPods生成物が変わり、受入時のbuildを再現できない。
 POD_VERSION="1.15.2"
-SAMPLE_PROJECT="$ROOT/samples/exit-demo/project.json"
 
 usage() {
   cat <<EOF
@@ -27,15 +23,8 @@ usage:
 前提コマンド:
   corepack  xcodebuild  cargo  pod (${POD_VERSION}固定)
 
-ビルド後の起動:
-  appは起動時に既存のproject fileのpathを要求する。渡さない／存在しないpathを渡すと
-  typed diagnosticで拒否され、推測で別のprojectを開くことはしない。
-
-  MOTOLII_PROJECT_PATH="${SAMPLE_PROJECT}" \\
-    "<MotoliiRn.app>/Contents/MacOS/MotoliiRn"
-
-  環境変数の代わりに引数でもよい:
-  "<MotoliiRn.app>/Contents/MacOS/MotoliiRn" --motolii-project "${SAMPLE_PROJECT}"
+出力:
+  MotoliiRn.app (Xcodeの既定DerivedData配下)
 EOF
 }
 
@@ -126,10 +115,7 @@ products_dir="$(
 echo
 echo "build-macos-app: BUILD SUCCEEDED"
 if [ -n "$products_dir" ] && [ -d "$products_dir/MotoliiRn.app" ]; then
-  binary="$products_dir/MotoliiRn.app/Contents/MacOS/MotoliiRn"
   echo "  app: $products_dir/MotoliiRn.app"
-  echo "  起動: MOTOLII_PROJECT_PATH=\"$SAMPLE_PROJECT\" \"$binary\""
 else
   echo "  app: MotoliiRn.app (Xcodeの既定DerivedData配下)"
-  echo "  起動方法は scripts/build-macos-app.sh --help を見ること"
 fi

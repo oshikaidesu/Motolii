@@ -19,8 +19,9 @@ survey判定のうち少なくとも1件が誤り、1件が含意の誤りであ
 いずれも `~/Documents/Codex/` 配下。**git history、全branch、worktree一覧のどこにも存在しない。**
 
 > **2026-08-10追記**: `skia-timeline-probe`は`spikes/skia-timeline-probe/`へ、`MotoliiRnProbe`は
-> `spikes/motolii-rn-probe/`へ移管済み([回収監査](2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md))。
+> `ui/motolii-rn/`へ移管済み([回収監査](2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md))。
 > 以後の正本はリポジトリ内。残るリポ外資産はQt/Avalonia比較群、fable調査文書、source不明の`StagePresentProbe.app`。
+> **2026-08-11追記**: 旧名`MotoliiRnProbe`は`ui/motolii-rn/`の製品sourceと`MotoliiRn` app identityへcut overした。
 
 | 資産 | 場所 | 内容 |
 |---|---|---|
@@ -50,7 +51,7 @@ survey判定のうち少なくとも1件が誤り、1件が含意の誤りであ
 
 ### 3.2 `R1-BROWSER` — 判定は正しいが含意が誤り
 
-survey判定`ABSENT`は**製品routeについて正しい**（`ui/motolii-rn/App.tsx`のBrowserは`<Text>` placeholder）。
+survey判定`ABSENT`は**製品routeについて正しい**（`ui/motolii-rn-legacy/App.tsx`のBrowserは`<Text>` placeholder）。
 しかし含意していた「だから構築が必要」は誤りで、**MotoliiRnProbeに660行の実体がある**。
 
 移管routeは既決である。

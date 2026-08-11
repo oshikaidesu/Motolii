@@ -551,7 +551,7 @@ emitProductGesture("start"|"update"|"commit"|"cancel", param, value)
 
 // ???: 上記3経路は全てui/motolii-web(WebView island, CU-110PIH)所属。RN runtime rebaseline
 //      (決定, 2026-08-07)は旧WebView islandへの新規実装を凍結。RN側 InspectorInitialReadPanel
-//      (ui/motolii-rn/src/inspector/InspectorInitialReadPanel.tsx:1-46)は読取専用decodeのみで
+//      (ui/motolii-rn-legacy/src/inspector/InspectorInitialReadPanel.tsx:1-46)は読取専用decodeのみで
 //      gesture/inbox/queueに対応する型が索引にも正本にも無い
 ???_rn_inspector_parameter_edit_route(target, axis, phase, value)
 ```
@@ -590,8 +590,8 @@ SetEffectEnabled { target, effect, old, new }
 ### ??? 一覧
 | # | ??? | 索引/正本を探した範囲 | 真の未決か検索失敗か |
 |---|---|---|---|
-| 1 | `???_rn_inspector_parameter_edit_route` | decision-index.md line60/110(RN rebaseline)、ui/motolii-rn/src/inspector/*、docs/reviews/2026-08-04-inspector-position-key-one-shot-intent-contract.md | 真の未決。WebView側は実装済みだがRN移行先の接続決定が存在しない |
-| 2 | `???_effect_enabled_toggle_ui` | decision-index.md line147(Shared Effect)、ui/motolii-web・ui/motolii-rn全体をgrep | 真の未決。Command実装済みだがUI入口の決定が無い |
+| 1 | `???_rn_inspector_parameter_edit_route` | decision-index.md line60/110(RN rebaseline)、ui/motolii-rn-legacy/src/inspector/*、docs/reviews/2026-08-04-inspector-position-key-one-shot-intent-contract.md | 真の未決。WebView側は実装済みだがRN移行先の接続決定が存在しない |
+| 2 | `???_effect_enabled_toggle_ui` | decision-index.md line147(Shared Effect)、ui/motolii-web・ui/motolii-rn-legacy全体をgrep | 真の未決。Command実装済みだがUI入口の決定が無い |
 | 3 | `???_reorder_effect` | decision-index.md全体(reorder/並べ替え関連行のみ検索)、crates/motolii-doc/src/command.rs CommandKind一覧 | 真の未決。Command/決定とも存在しない |
 | 4 | `???_connect_vism_into_kit` | decision-index.md line42/54/57、crates全体でRack/Kit/TypedConnection grep | 真の未決(索引が明示的にA9まで未着手と宣言) |
 
@@ -599,8 +599,8 @@ SetEffectEnabled { target, effect, old, new }
 | 種別 | 決定A | 決定B | どう噛み合わないか | 根拠 |
 |---|---|---|---|---|
 | 矛盾(索引 vs 正本) | decision-index.md line313 CU-110PIR(2026-07-29)「mock state、S値、editing callback…Document writerなし」 | docs/reviews/2026-08-04-inspector-position-key-one-shot-intent-contract.md / u4b0v-position-key-value-edit-contract.md (未索引) | 索引はInspectorを読取専用と要約するが、3日後の正本と現行コード(InspectorCandidate.jsx:485-577)はwrite route(SetPositionKeyValue/AddPositionKey)を実装済みとして閉じている。索引更新義務(decision-index.md:11)が本チェーン5文書全てで未履行 | InspectorCandidate.jsx:495-576, command.rs:422 SetPositionKeyValue |
-| 順序不能 | decision-index.md line60/110 M3 RN runtime rebaseline(2026-08-07)「旧WebView islands…新規実装を凍結」 | CU-0A08ITIA/ITIB, U4b0V(2026-08-04)によるWebView Inspector上のparameter編集チェーン全体 | RN側Inspector(decodeInspectorInitialRead.ts, InspectorInitialReadPanel.tsx)はread-only decodeのみでgesture/inbox相当が存在しない。RNが新route合格までWebViewは凍結されるが、parameter編集機能はWebView側にしか実装がなく、RNへ移す接続決定が無いため「RN routeでparameterを編集する」が現状どの決定順でも成立しない | ui/motolii-rn/src/inspector/decodeInspectorInitialRead.ts:1-18(gesture型皆無) |
-| 断絶 | crates/motolii-doc/src/command.rs:302 SetEffectEnabled(実装済み、Shared Effect決定line147の対象) | (無し) | Document層のCommandは完成しているが、ui/motolii-web・ui/motolii-rn いずれにも呼び出しが0件。「effectをenable/disableする」呼び出し側の実体が存在しない | grep "SetEffectEnabled\|EffectEnabled" ui/ → No files found |
+| 順序不能 | decision-index.md line60/110 M3 RN runtime rebaseline(2026-08-07)「旧WebView islands…新規実装を凍結」 | CU-0A08ITIA/ITIB, U4b0V(2026-08-04)によるWebView Inspector上のparameter編集チェーン全体 | RN側Inspector(decodeInspectorInitialRead.ts, InspectorInitialReadPanel.tsx)はread-only decodeのみでgesture/inbox相当が存在しない。RNが新route合格までWebViewは凍結されるが、parameter編集機能はWebView側にしか実装がなく、RNへ移す接続決定が無いため「RN routeでparameterを編集する」が現状どの決定順でも成立しない | ui/motolii-rn-legacy/src/inspector/decodeInspectorInitialRead.ts:1-18(gesture型皆無) |
+| 断絶 | crates/motolii-doc/src/command.rs:302 SetEffectEnabled(実装済み、Shared Effect決定line147の対象) | (無し) | Document層のCommandは完成しているが、ui/motolii-web・ui/motolii-rn-legacy いずれにも呼び出しが0件。「effectをenable/disableする」呼び出し側の実体が存在しない | grep "SetEffectEnabled\|EffectEnabled" ui/ → No files found |
 
 ### 実名で埋まったもの
 | 呼び出し | 実体 file:line または 決定 |

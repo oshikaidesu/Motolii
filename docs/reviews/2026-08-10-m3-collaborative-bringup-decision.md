@@ -6,11 +6,11 @@
 
 ## 1. 決定
 
-M3はR0受入後の段階を、全surfaceの整合を先に閉じてから一括統合する候補開発ではなく、`spikes/motolii-rn-probe/`のRN artifactを常に起動可能に保ちながら既存資産を継続統合する**共同開発bring-up**として進める。このpathを別製品UIへの移植元にはしない。
+M3はR0受入後の段階を、全surfaceの整合を先に閉じてから一括統合する候補開発ではなく、`ui/motolii-rn/`のRN artifactを常に起動可能に保ちながら既存資産を継続統合する**共同開発bring-up**として進める。このpathを別製品UIへの移植元にはしない。
 
 共同出口は次である。
 
-> 最新mainの`spikes/motolii-rn-probe/` artifactで、Browser、Stage、Timeline、Inspectorが同じproject、identity、revisionを表示・操作し、Document mutationはD2 single writerだけを通り、Undo／Redoまで動く。
+> 最新mainの`ui/motolii-rn/` artifactで、Browser、Stage、Timeline、Inspectorが同じproject、identity、revisionを表示・操作し、Document mutationはD2 single writerだけを通り、Undo／Redoまで動く。
 
 これはR1-E2E／R2-E2Eを省略する決定ではない。各laneの小さい製品出口をmainへ積み上げ、最後の一括統合までcandidateを隔離し続けないという施工順の変更である。
 
@@ -18,7 +18,7 @@ M3はR0受入後の段階を、全surfaceの整合を先に閉じてから一括
 
 | lane | 既存入力 | 最初の製品出口 |
 |---|---|---|
-| Stage | 固定Rerun Spatial Viewer subsystem、`spikes/motolii-rn-probe/`の現行Stage、単一`GpuCtx` | Document入力をRerunへ薄く翻訳し、同じRN Stageで同revisionの結果を表示する |
+| Stage | 固定Rerun Spatial Viewer subsystem、`ui/motolii-rn/`の現行Stage、単一`GpuCtx` | Document入力をRerunへ薄く翻訳し、同じRN Stageで同revisionの結果を表示する |
 | Timeline | 既存Skia実行fixture、Timeline設計決定、現行projection／gesture oracle | 既存fixtureを再設計せずRN native Timeline surfaceで表示する |
 | Browser／Inspector | 現行RN panel、Place／Undo／Redo、initial snapshot projection | Place後の更新snapshotをInspectorへ再投影する |
 | integration seat | RN app root、`rn_product_host` ABI、native registration、単一GPU owner | laneを一つの起動可能なRN artifactへ順次取り込む |
@@ -54,19 +54,19 @@ Rerunのstore／query／View／visualizer／camera／picking／renderer閉包を
 - 全laneの完了を一つのcommitまたは一つの巨大PRへ束ねること
 - 共同開発管理用の新しいqueue、DB、runner、frameworkを作ること
 
-## 6. RN probeのその場昇格（2026-08-11再訂正）
+## 6. RN製品sourceへのcutover（2026-08-11再訂正）
 
-現在の接続テストは **`spikes/motolii-rn-probe/`** で行っている。ここにはRN shell、Browser、Inspector、Timeline、Rerun、Skia、Fabric native component registrationがすでに同居する。したがって別targetへ移植せず、このartifactへDocument／D2の実入力を一つずつ接続し、製品oracleを通した時点で状態を`PROBE`から`PRODUCT_SOURCE`へ繰り上げる。
+**`ui/motolii-rn/`** を唯一のRN製品source兼write targetとする。ここにはRN shell、Browser、Inspector、Timeline、Rerun、Skia、Fabric native component registrationがすでに同居する。別targetへ移植せず、このartifactへDocument／D2の実入力を一つずつ接続する。
 
-`probe`は現在の成熟状態であって永久的な隔離先ではない。接続成功はcode locationを変えずproduct stateを変える。固定fixtureとBuild IDは局所能力の証拠に限り、Document入力へ接続できた箇所から置き換える。directory名の変更はpackagingやtoolingが実際に要求した時だけ別契約で行う。
+旧名`MotoliiRnProbe`と`spikes/motolii-rn-probe/`は2026-08-11のcutoverで退役した。app identityは`MotoliiRn`、product pathは`ui/motolii-rn/`である。固定fixtureとBuild IDは局所能力の証拠に限り、Document入力へ接続できた箇所から置き換える。
 
-`ui/motolii-rn/`はread-onlyの旧製品shellとする。利用者がexact path付きで明示的に解凍するまで、ここへ製品接続を追加しない。
+`ui/motolii-rn-legacy/`はread-onlyの旧製品shellとする。利用者がexact path付きで明示的に解凍するまで、ここへ製品接続を追加しない。
 
 次を禁止する。
 
 - 新しいRN app、shell、app root、製品entrypointを作る
-- probeの既存画面、registration、rendererを`ui/motolii-rn/`へcopy／再実装する
-- `ui/motolii-rn/`へwriteする、または二つのRN appを並行して製品化する
+- 製品の既存画面、registration、rendererを`ui/motolii-rn-legacy/`へcopy／再実装する
+- `ui/motolii-rn-legacy/`へwriteする、または二つのRN appを並行して製品化する
 - buildや接続が難しいことを理由に、別UI、第二Host、第二Document writer、第二GPU ownerへ迂回する
 
-この凍結はprobe内のUIを変更しない意味ではない。製品接続はprobe内で継続する。`ui/motolii-rn/`を再びtargetにする場合だけ、利用者の明示判断を受け、代替target、移行route、cutover oracle、現targetの退役を閉じた解凍decisionを先にmainへ入れる。
+この凍結は現行製品UIを変更しない意味ではない。製品接続は`ui/motolii-rn/`内で継続する。`ui/motolii-rn-legacy/`を再びtargetにする場合だけ、利用者の明示判断を受け、代替target、移行route、cutover oracle、現targetの退役を閉じた解凍decisionを先にmainへ入れる。

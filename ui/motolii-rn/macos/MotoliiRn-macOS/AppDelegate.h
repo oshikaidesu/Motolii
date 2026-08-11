@@ -2,4 +2,5 @@
 #import <Cocoa/Cocoa.h>
 
 @interface AppDelegate : RCTAppDelegate
+
 @end

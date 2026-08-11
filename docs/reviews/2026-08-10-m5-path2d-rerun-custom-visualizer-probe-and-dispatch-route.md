@@ -64,7 +64,7 @@ exact seatのcompileである。次のcapsuleを満たすまでは実装担当�
 - **AUTHORITY**: 本決定、M5 Rerun再締結、M5仕様、UI runtime責任境界
 - **CURRENT STATE**: P0はRerun別windowで成立。RN `renderer_core.rs`は独自wgpu Stageを所有し、Rerunは未依存
 - **OWNER**: M3 Stage Host。Rerun store／Blueprintはruntime projection readerに限定
-- **EXACT TARGET**: `spikes/motolii-rn-probe/native-renderer/src/renderer_core.rs`の既存Stage render passと、同crateのdevice／queue／surface lifetime。別device／別surfaceを作らずRerun draw outputを同じStageへ渡せる一つのcall siteを特定する
+- **EXACT TARGET**: `ui/motolii-rn/native-renderer/src/renderer_core.rs`の既存Stage render passと、同crateのdevice／queue／surface lifetime。別device／別surfaceを作らずRerun draw outputを同じStageへ渡せる一つのcall siteを特定する
 - **ALLOWLIST**: 最初のdocs／compile粒では本決定、M5採択地図、実装台帳だけ。code allowlistはexact call siteとCargo feature閉包を返した次waveで固定する
 - **READ SET**: `renderer_core.rs`、同crate `Cargo.toml`／`Cargo.lock`、P0の5 Rust／1 WGSL、固定Rerun `custom_visualizer` example、`re_view_spatial`／`re_renderer`の公開re-exportだけ
 - **POSITIVE ORACLE**: 一つのRN Stage surfaceでRect＋Circleがz=0に表示され、重なりpixelがP0 source-over oracleと一致する

@@ -14,7 +14,7 @@
 
 | 資産 | 最終mtime | 回収率 | 備考 |
 |---|---|---|---|
-| MotoliiRnProbe(App.tsx 660行、Browser 3タブ/Extensions/panel registry/Timeline 3モード/Fabric `MotoliiGpuView`・`MotoliiTimelineView`) | 2026-08-06(08-10にも接触あり) | 約2割(`ui/motolii-rn` 149行: BrowserPanel/Inspector initial read/StageComponentView のみ) | [08-08棚卸し](2026-08-08-out-of-repository-asset-inventory.md)が移管を宣言済み |
+| MotoliiRnProbe(App.tsx 660行、Browser 3タブ/Extensions/panel registry/Timeline 3モード/Fabric `MotoliiGpuView`・`MotoliiTimelineView`) | 2026-08-06(08-10にも接触あり) | 約2割(`ui/motolii-rn-legacy` 149行: BrowserPanel/Inspector initial read/StageComponentView のみ) | [08-08棚卸し](2026-08-08-out-of-repository-asset-inventory.md)が移管を宣言済み |
 | skia-timeline-probe(bin 15本: timeline_interactive / curve_editor_interactive / stage_present_interactive / motolii_depth系 ほか、depth-rail v4〜v14) | 2026-08-08 15:53〜17:48(棚卸し文書より後の設計セッション) | **0%**(`skia-safe`のCargo依存のみ着地。`skia_safe`を使うRustコードはorigin/mainに0行) | [depth-rail決定](2026-08-08-depth-rail-selection-focus-decision.md)がv14静止画と対話demoをリポ外絶対パスで正本参照 |
 | 2026-08-07/skia-3d ほか2 dir | — | — | work/outputsとも空。実害なし |
 
@@ -58,7 +58,7 @@
 ## 次手(本監査からの発注候補)
 
 1. ~~skia-timeline-probeの`spikes/`への移管~~ → **完了(2026-08-10)**: `spikes/skia-timeline-probe/`。
-2. MotoliiRnProbeは[`spikes/motolii-rn-probe/`](../../spikes/motolii-rn-probe/README.md)へ**参照資産として移管完了(2026-08-10)**(skia側は[`spikes/skia-timeline-probe/`](../../spikes/skia-timeline-probe/README.md))。`ui/motolii-rn`への製品移管(R1/R2粒)は引き続き発注対象。
+2. 旧名MotoliiRnProbeは2026-08-10に回収し、2026-08-11に[`ui/motolii-rn/`](../../ui/motolii-rn/README.md)へ製品sourceとしてcut overした(skia側は[`spikes/skia-timeline-probe/`](../../spikes/skia-timeline-probe/README.md))。`ui/motolii-rn-legacy`への製品移管は退役した。
 3. ~~台帳・地図の一括同期~~ → **完了(2026-08-10)**: ledger 6A/7A/7B、m4地図P02-C2、統合地図N-OVERLAY、RN地図R1×2、ui-reference-map、backlog。同日、未mergeブランチ238本を検証の上217本削除(全内容main到達済みを機械証明)、残21本が回収判断対象。
 4. ~~check-docs.shへ「docs内のリポ外絶対パス参照」検出を追加~~ → **完了(2026-08-10)**: `scripts/check-stray-work.sh`が滞留5層(ローカル/リモートブランチ、worktree、リポ外workdir、リポ外パス参照)を1コマンドで観測する。AGENTS.md検証節に「作業終了時に実行し、自分の成果をSTRAYに残さない」を追加。本監査級の歴史調査は以後不要。
 5. `protected_assets.rs:178`のfixture文字列を退役済みでないパスへ差し替え。

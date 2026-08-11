@@ -2393,6 +2393,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@react-native/new-app-screen@npm:0.81.2":
+  version: 0.81.2
+  resolution: "@react-native/new-app-screen@npm:0.81.2"
+  peerDependencies:
+    "@types/react": ^19.1.0
+    react: "*"
+    react-native: "*"
+  peerDependenciesMeta:
+    "@types/react":
+      optional: true
+  checksum: 7b5b1aa50112fb5e985d6d1fba99f987da515783a062c4da96be9a934a83410b07bf49485acc4dc0755ee8324d2f4bc10f822f67d67f1f80f4ddce811ecdf27e
+  languageName: node
+  linkType: hard
+
 "@react-native/normalize-colors@npm:0.81.2":
   version: 0.81.2
   resolution: "@react-native/normalize-colors@npm:0.81.2"
@@ -2822,6 +2836,36 @@ __metadata:
   checksum: 811ff9bd99efc3e814e6bd1da8064452a1f2b0057f08d1c7a18428e04c13ac3db356a1cdcf8011a35ac84a47d3d351b8bb8b776dea0f9caac16e6f26b6611496
   languageName: node
   linkType: hard
+
+"MotoliiRn@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "MotoliiRn@workspace:."
+  dependencies:
+    "@babel/core": ^7.25.2
+    "@babel/preset-env": ^7.25.3
+    "@babel/runtime": ^7.25.0
+    "@react-native-community/cli": 20.0.0
+    "@react-native-community/cli-platform-android": 20.0.0
+    "@react-native-community/cli-platform-ios": 20.0.0
+    "@react-native/babel-preset": 0.81.2
+    "@react-native/eslint-config": 0.81.2
+    "@react-native/metro-config": 0.81.2
+    "@react-native/new-app-screen": 0.81.2
+    "@react-native/typescript-config": 0.81.2
+    "@types/jest": ^29.5.13
+    "@types/react": ^19.1.0
+    "@types/react-test-renderer": ^19.1.0
+    eslint: ^8.19.0
+    jest: ^29.6.3
+    prettier: 2.8.8
+    react: 19.1.0
+    react-native: 0.81.2
+    react-native-macos: ^0.81.0-0
+    react-native-safe-area-context: ^5.5.2
+    react-test-renderer: 19.1.0
+    typescript: ^5.8.3
+  languageName: unknown
+  linkType: soft
 
 "abbrev@npm:^5.0.0":
   version: 5.0.0
@@ -3467,9 +3511,9 @@ __metadata:
   linkType: hard
 
 "caniuse-lite@npm:^1.0.30001806":
-  version: 1.0.30001807
-  resolution: "caniuse-lite@npm:1.0.30001807"
-  checksum: b9cd03f9616a27a80de3c961978cba47394c150b430f8ec90983bbd44da0e4d6aad309f9a4fab696d74c6f0bcee8ea5fb01b19fcb061eb52da548dc7f6240181
+  version: 1.0.30001806
+  resolution: "caniuse-lite@npm:1.0.30001806"
+  checksum: 4b4a970fbd7cb7b8ee6b5068336f7afa7d9cc65ff444080630ab363dcb44205994f68897c7685dc3de4f04dd1f65ec395e50790a594d0470db4894bedf5cb379
   languageName: node
   linkType: hard
 
@@ -6718,34 +6762,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"motolii-rn@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "motolii-rn@workspace:."
-  dependencies:
-    "@babel/core": ^7.25.2
-    "@babel/preset-env": ^7.25.3
-    "@babel/runtime": ^7.25.0
-    "@react-native-community/cli": 20.0.0
-    "@react-native-community/cli-platform-android": 20.0.0
-    "@react-native-community/cli-platform-ios": 20.0.0
-    "@react-native/babel-preset": 0.81.2
-    "@react-native/eslint-config": 0.81.2
-    "@react-native/metro-config": 0.81.2
-    "@react-native/typescript-config": 0.81.2
-    "@types/jest": ^29.5.13
-    "@types/react": ^19.1.0
-    "@types/react-test-renderer": ^19.1.0
-    eslint: ^8.19.0
-    jest: ^29.6.3
-    prettier: 2.8.8
-    react: 19.1.0
-    react-native: 0.81.2
-    react-native-macos: ^0.81.0-0
-    react-test-renderer: 19.1.0
-    typescript: ^5.8.3
-  languageName: unknown
-  linkType: soft
-
 "ms@npm:2.0.0":
   version: 2.0.0
   resolution: "ms@npm:2.0.0"
@@ -7420,6 +7436,16 @@ __metadata:
     react-native: cli.js
     react-native-macos: cli.js
   checksum: 3fa842489a2aa186683a11d4637dae36f8fe8ec32abdd5813ef40e6ca2c96af9f7e73a7f488b7e4580f678d9de2b47873347fad3fc23b583d1749288178b3310
+  languageName: node
+  linkType: hard
+
+"react-native-safe-area-context@npm:^5.5.2":
+  version: 5.8.1
+  resolution: "react-native-safe-area-context@npm:5.8.1"
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+  checksum: a2c459427a83251824db16a1d0948b48dc0fc0fc3522632405050f7b7c3b5a4c0573280a364910a79e64581a064953589342d5e8df863c5b9190aef76e587b65
   languageName: node
   linkType: hard
 

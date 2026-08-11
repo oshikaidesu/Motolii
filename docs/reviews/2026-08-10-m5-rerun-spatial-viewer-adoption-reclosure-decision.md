@@ -104,4 +104,4 @@ current codeで確認した後に実装できる。
 
 ## 5. 状態と次の再入場
 
-本変更はauthority再締結だけで、製品runtime完成、Stage接続、PBR完成を意味しない。次の施工は固定Rerun Spatial Viewerを候補比較へ戻さず、`Document evaluation -> Rerun input -> spikes/motolii-rn-probe Stage surface`の薄い一本を閉じる。成功時は同じartifactを`PRODUCT_SOURCE`へ繰り上げる。旧P1→P2粒列、旧`PATTERN`別実装、第二runtimeへのcopyを再開しない。
+本変更はauthority再締結だけで、製品runtime完成、Stage接続、PBR完成を意味しない。次の施工は固定Rerun Spatial Viewerを候補比較へ戻さず、`Document evaluation -> Rerun input -> ui/motolii-rn Stage surface`の薄い一本を閉じる。成功時は同じartifactを`PRODUCT_SOURCE`へ繰り上げる。旧P1→P2粒列、旧`PATTERN`別実装、第二runtimeへのcopyを再開しない。

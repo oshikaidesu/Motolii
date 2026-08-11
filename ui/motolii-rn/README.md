@@ -1,0 +1,31 @@
+# Motolii RN product source
+
+Motoliiの唯一のRN製品source。`App.tsx` 660行 — Browser 3タブ(`MEDIA`/`EFFECTS`/`CREATE`)、
+Inspector/Extensions、Timeline 3モード、effect一覧、panel registry、
+native `MotoliiGpuComponentView.mm`、Fabric spec `MotoliiGpuView`/`MotoliiTimelineView`。
+
+旧名`MotoliiRnProbe`の資産を `~/Documents/Codex/2026-08-06/ui-rust-ui-c-react/work/MotoliiRnProbe/` から
+[2026-08-10回収監査](../../docs/reviews/2026-08-10-out-of-repo-recovery-and-docs-drift-audit.md)により
+回収し、2026-08-11にこのpathと`MotoliiRn` app identityへcut overした
+(node_modules/Pods/build/target/vendor/.yarn除外。`yarn install`で復元可)。RN標準のREADMEは`README.upstream.md`へ退避。
+
+**状態境界**: このdirectoryがRN／Rerun／Skiaを束ねる製品source兼write targetである。
+別RN appや移植先を作らない。`ui/motolii-rn-legacy`は利用者が明示的に解凍するまでread-onlyの旧shellである。
+固定fixtureは製品意味の正本にせず、Document／D2入力へ接続できた箇所から置き換える。
+
+## Rerun Stage共通評価probe
+
+`native-renderer/src/renderer_core.rs`の`encode_rerun_stage_shapes`は、B001のRect／Circleを
+一つのRerun評価関数から既存wgpu textureへencodeする。実StageとGPU testは同じ関数を使う。
+testは同じdevice／queue上の2出力へ同じ入力を描き、直接readbackのbyte完全一致と、clear色以外の
+画素があることを確認する。
+
+```sh
+cargo test --manifest-path ui/motolii-rn/native-renderer/Cargo.toml \
+  renderer_core::chroma_tests::rerun_stage_shapes_are_identical_across_two_output_targets \
+  -- --exact
+```
+
+これはRerun由来のVism visualizerをPreview／Exportの共通評価へ挟める技術的な足場だけを確認する。
+製品の正準評価`build_document_frame_graph`→`render_graph_cached`、Document投影、Quality差、動画、
+Skia overlayまでのPreview／Export同一性を置換・証明しない。

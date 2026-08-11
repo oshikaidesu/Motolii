@@ -2,7 +2,7 @@
 
 ステータス: **ACTIVE / React Native製品shell + Rerun Spatial Viewer Stage + rust-skia Timeline／overlay**（2026-08-11）
 
-M3は、M0〜M2で成立したDocument、D2 single writer、Undo／Redo、journal、projection、render、playbackを、制作に耐える一つの製品UIへ接続する段階である。現在はRN／Rerun／Skiaが共存する`spikes/motolii-rn-probe/`へ接続し、成功時に同じartifactを`PRODUCT_SOURCE`へ繰り上げる。別UIへの移植やUI技術の比較を続ける段階ではない。
+M3は、M0〜M2で成立したDocument、D2 single writer、Undo／Redo、journal、projection、render、playbackを、制作に耐える一つの製品UIへ接続する段階である。現在はRN／Rerun／Skiaが共存する`ui/motolii-rn/`へ接続し、成功時に同じartifactを`PRODUCT_SOURCE`へ繰り上げる。別UIへの移植やUI技術の比較を続ける段階ではない。
 
 runtime責任の正本は[UI runtime責任境界](../ui-runtime-architecture.md)、採択根拠と旧routeの処分は[2026-08-07 runtime再基線決定](../reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)を読む。R0〜R4を実在target、owner、oracle、依存へ分解する現在のdispatch authorityは[M3 RN runtime実行地図](../m3-rn-runtime-execution-map.md)とする。
 

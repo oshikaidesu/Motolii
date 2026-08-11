@@ -117,7 +117,7 @@ mergeされるかどうかに関わらず、作業はPRとして可視物にす�
 
 ### 訂正 — 2点diffでmergeの影響を判定しない（2026-08-10）
 
-本書は当初「`1c80f0a5` をmergeすると `ui/motolii-rn/` が全削除され `ci.yml` が復活し、
+本書は当初「`1c80f0a5` をmergeすると `ui/motolii-rn-legacy/` が全削除され `ci.yml` が復活し、
 mainが退行する」と書いた。**これは誤りである。**
 
 `git diff main..1c80f0a5` は**mainの新しいcommitを削除として表示する**。
@@ -153,7 +153,7 @@ LLMは最初から完成した見た目のコードを出す。良いことだ�
 
 #### 実例 — Jest testMatch
 
-`ui/motolii-rn/src/inspector/` のtest 2本は、書かれ、commitされ、
+`ui/motolii-rn-legacy/src/inspector/` のtest 2本は、書かれ、commitされ、
 **誰も走るところを見ないまま「ある」ことになっていた**。
 `jest.config.js` の `testMatch` が `<rootDir>/__tests__/**` しか指しておらず、
 `src/` 配下を拾わなかったためである。

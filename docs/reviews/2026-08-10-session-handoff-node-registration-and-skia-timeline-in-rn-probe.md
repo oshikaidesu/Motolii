@@ -53,7 +53,7 @@ subcommandが音声muxへ到達）が、**取り込み側は空**である。
 
 ## 4. RN probeのTimelineをSkiaへ差し替えた（`6fc1456c`）
 
-利用者の「見ている物の確かめ」のため、`spikes/motolii-rn-probe`のnative timelineを
+利用者の「見ている物の確かめ」のため、`ui/motolii-rn`のnative timelineを
 Skia描画に替えた。**参照が出来れば以後はCodexが引き継ぐ**という位置づけである。
 
 - 差し替え前は`timeline_vertices`が20×25の色quadを頂点で並べるだけで、
@@ -74,7 +74,7 @@ Skia描画に替えた。**参照が出来れば以後はCodexが引き継ぐ**�
 |---|---|
 | 移植元の静止画bin | `spikes/skia-timeline-probe/src/bin/motolii_full.rs`（+ `motolii_tl.rs` / `motolii_kf.rs`） |
 | 出力PNG | `spikes/skia-timeline-probe/motolii-full.png` / `motolii-tl.png` / `motolii-kf.png` / `timeline-skia-probe.png` |
-| renderer経由の実出力 | `spikes/motolii-rn-probe/native-renderer/timeline-rn-probe-preview.png` |
+| renderer経由の実出力 | `ui/motolii-rn/native-renderer/timeline-rn-probe-preview.png` |
 | 意味の正本 | [Timeline設計決定](2026-08-08-timeline-design-decisions-and-skia-fixtures.md) |
 
 **probe境界は動いていない。** 製品コードではなく、`N-OVERLAY`は統合地図で`PROBE_ONLY`のまま。
@@ -115,7 +115,7 @@ Skia描画に替えた。**参照が出来れば以後はCodexが引き継ぐ**�
 
 RerunはRN Stageが既に持つ`wgpu::Device / Queue`から`RenderContext`を作り、offscreen textureへ描く。
 Motoliiの既存compositeが同じtop-level surfaceへSkia overlayと合成するため、第二device／queue／surfaceは作らない。
-これは`spikes/motolii-rn-probe`の接続probeであり、固定fixtureだけではDocument投影や製品route完成を意味しない。ただし2026-08-11再訂正により、このhost artifact自体は別targetへ移植せず、Document入力接続後に`PRODUCT_SOURCE`へその場で繰り上げる。
+これは`ui/motolii-rn`の接続probeであり、固定fixtureだけではDocument投影や製品route完成を意味しない。ただし2026-08-11再訂正により、このhost artifact自体は別targetへ移植せず、Document入力接続後に`PRODUCT_SOURCE`へその場で繰り上げる。
 
 ### Build ID（用語凍結）
 
