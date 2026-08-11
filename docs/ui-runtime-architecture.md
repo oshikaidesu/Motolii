@@ -4,6 +4,8 @@
 
 正本決定: [M3 React Native + Rust/Skia UI runtime再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)
 
+現行画面ごとのRerun対応、Motolii残余、接続状態は[現行Motolii UIとRerunの対応表](m3-rerun-ui-correspondence.md)に集約する。
+
 MotoliiはUIを一つのtoolkitへ統一しない。通常UIをReact Native、Timeline／Curveとauthoring overlayをrust-skia、Stageのspatial runtimeをRerun Spatial Viewer、編集・再生・保存をRust Hostが所有する。Rerunは同じwgpu Device／Queue／surfaceへ載るが、Rerun自体を製品UIにはしない。RN shell、native Stage component、platform lifecycle、入力正規化、authoring overlay、D2への確定操作を合わせた外側がMotoliiの制作レイヤーである。
 
 旧React/WebView islands + 1 top-level wgpu Surface + direct wgpu/Vello UIは新規製品実装の標準ではない。既存実装は移行oracleとして保持し、新routeが同じ利用者outcomeを閉じた後にだけretireする。
