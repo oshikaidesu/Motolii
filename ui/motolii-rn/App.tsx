@@ -1,6 +1,7 @@
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   FlatList,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,11 +17,20 @@ import MotoliiTimelineView from './src/specs/MotoliiTimelineViewNativeComponent'
 const MacPressable = Pressable as React.ComponentType<
   React.ComponentProps<typeof Pressable> & {onDoubleClick?: () => void}
 >;
+type DialKeyEvent = {
+  nativeEvent: {key: string; shiftKey?: boolean};
+  preventDefault: () => void;
+};
+const DialSurface = Pressable as React.ComponentType<
+  React.ComponentProps<typeof Pressable> & {
+    onKeyDown?: (event: DialKeyEvent) => void;
+    onTouchMoveCapture?: (event: {nativeEvent: {pageX: number}}) => void;
+  }
+>;
 
 type BrowserTab = 'MEDIA' | 'EFFECTS' | 'CREATE';
 type BrowserViewMode = 'THUMBNAILS' | 'GRID' | 'LIST';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
-type TimelineMode = 'PACKING' | 'DENSITY' | 'NATIVE';
 
 
 const BUILD_LABEL = 'B002 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA';
@@ -49,16 +59,6 @@ type BrowserItem = {
   glyph?: string;
   unavailable?: boolean;
   testID?: string;
-};
-
-type PackingObject = {
-  id: string;
-  kind: string;
-  name: string;
-  left: number;
-  width: number;
-  color: string;
-  flow?: string;
 };
 
 type StageTransform = {
@@ -94,21 +94,6 @@ const PATH_OPERATIONS: PathOperationItem[] = [
 const CREATE_ITEMS = [
   {id: 'rectangle', name: 'Rectangle', type: 'Shape', provider: 'Built-in', glyph: '□'},
 ];
-
-const PACKING_OBJECTS: PackingObject[] = [
-  {id: 'song', kind: '♪', name: 'night_drive.wav  ╱╲╱▁╲╱╲▁╱╲', left: 1, width: 98, color: '#75a7a5'},
-  {id: 'pulse', kind: 'G', name: 'Pulse rings', left: 4, width: 88, color: '#7770a9', flow: 'IN → Echo Bloom → OUT'},
-  {id: 'grid', kind: 'S', name: '↳ Pulse rings   City grid', left: 13, width: 75, color: '#62756d'},
-  {id: 'title', kind: 'T', name: 'NIGHT DRIVE', left: 27, width: 38, color: '#a08b64'},
-  {id: 'city', kind: 'V', name: 'city_loop.mp4', left: 16, width: 43, color: '#9b6d69'},
-  {id: 'traffic', kind: 'V', name: 'traffic_pass.mp4', left: 64, width: 34, color: '#68819c'},
-];
-
-const DENSITY_CLIPS = Array.from({length: 500}, (_, index) => ({
-  id: `clip-${index}`,
-  width: 46 + (index % 6) * 10,
-  color: ['#576fbd', '#8b5eaa', '#548d78', '#a36e43'][index % 4],
-}));
 
 const MEDIA_ITEMS = Array.from({length: 5000}, (_, index) => ({
   id: `asset-${index}`,
@@ -463,25 +448,25 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
         ))}
       </View>
       {panel === 'INSPECTOR' ? (
-        <ScrollView>
+        <ScrollView disableScrollViewPanResponder>
           <View style={styles.effectIdentity}>
             <View style={styles.effectIcon}><Text style={styles.effectIconText}>◎</Text></View>
             <View><Text style={styles.inspectorTitle}>Echo Bloom</Text><Text style={styles.muted}>Pulse rings · Effect</Text></View>
           </View>
           <Text style={styles.inspectorDescription}>Layered light pulses that follow the selected object. Adjust while watching the native Stage.</Text>
           <ParameterRow label="Input" value="Pulse rings composite" />
-          <ParameterRow label="Intensity" value={`${intensity}%`} onDecrease={() => setIntensity(v => clamp(v - 2, 0, 100))} onIncrease={() => setIntensity(v => clamp(v + 2, 0, 100))} />
-          <ParameterRow label="Spread" value={`${spread}%`} onDecrease={() => setSpread(v => clamp(v - 2, 0, 100))} onIncrease={() => setSpread(v => clamp(v + 2, 0, 100))} />
+          <DialParameter label="Intensity" value={intensity} unit="%" step={1} dragScale={1} min={0} max={100} onChange={setIntensity} />
+          <DialParameter label="Spread" value={spread} unit="%" step={1} dragScale={1} min={0} max={100} onChange={setSpread} />
           <ParameterRow label="Blend" value="Screen" />
           <View style={styles.transformSection} testID="stage-transform-projection">
             <Text style={styles.pathOperationTitle}>Transform</Text>
             <Text style={styles.pathOperationDescription}>Shared live value with the Stage gizmo. This fixture is not saved to Document yet.</Text>
-            <ParameterRow label="Position X" value={transform.x.toFixed(3)} onDecrease={() => onTransformChange({x: transform.x - 0.025})} onIncrease={() => onTransformChange({x: transform.x + 0.025})} />
-            <ParameterRow label="Position Y" value={transform.y.toFixed(3)} onDecrease={() => onTransformChange({y: transform.y - 0.025})} onIncrease={() => onTransformChange({y: transform.y + 0.025})} />
-            <ParameterRow label="Position Z" value={transform.z.toFixed(3)} onDecrease={() => onTransformChange({z: transform.z - 0.025})} onIncrease={() => onTransformChange({z: transform.z + 0.025})} />
-            <ParameterRow label="Rotation X" value={`${transform.rotationX.toFixed(1)}°`} onDecrease={() => onTransformChange({rotationX: transform.rotationX - 5})} onIncrease={() => onTransformChange({rotationX: transform.rotationX + 5})} />
-            <ParameterRow label="Rotation Y" value={`${transform.rotationY.toFixed(1)}°`} onDecrease={() => onTransformChange({rotationY: transform.rotationY - 5})} onIncrease={() => onTransformChange({rotationY: transform.rotationY + 5})} />
-            <ParameterRow label="Rotation Z" value={`${transform.rotationZ.toFixed(1)}°`} onDecrease={() => onTransformChange({rotationZ: transform.rotationZ - 5})} onIncrease={() => onTransformChange({rotationZ: transform.rotationZ + 5})} />
+            <DialParameter label="Position X" value={transform.x} step={0.025} dragScale={0.01} decimals={3} onChange={value => onTransformChange({x: value})} />
+            <DialParameter label="Position Y" value={transform.y} step={0.025} dragScale={0.01} decimals={3} onChange={value => onTransformChange({y: value})} />
+            <DialParameter label="Position Z" value={transform.z} step={0.025} dragScale={0.01} decimals={3} onChange={value => onTransformChange({z: value})} />
+            <DialParameter label="Rotation X" value={transform.rotationX} unit="°" step={5} dragScale={1} decimals={1} onChange={value => onTransformChange({rotationX: value})} />
+            <DialParameter label="Rotation Y" value={transform.rotationY} unit="°" step={5} dragScale={1} decimals={1} onChange={value => onTransformChange({rotationY: value})} />
+            <DialParameter label="Rotation Z" value={transform.rotationZ} unit="°" step={5} dragScale={1} decimals={1} onChange={value => onTransformChange({rotationZ: value})} />
           </View>
           <View style={styles.pathOperationSection} testID="path-operations-panel">
             <Text style={styles.pathOperationTitle}>Lottie Path Operations</Text>
@@ -535,85 +520,282 @@ function ParameterRow({label, value, onDecrease, onIncrease}: {label: string; va
   );
 }
 
-function PackingTimeline() {
-  const [selected, setSelected] = useState('pulse');
-  const [muted, setMuted] = useState<Set<string>>(() => new Set());
+function DialParameter({label, value, unit = '', step = 1, dragScale = 1, decimals = 0, min, max, onChange}: {label: string; value: number; unit?: string; step?: number; dragScale?: number; decimals?: number; min?: number; max?: number; onChange: (value: number) => void}) {
+  const [draft, setDraft] = useState(formatDialValue(value, decimals));
+  const [dragging, setDragging] = useState(false);
+  const pointerStart = useRef<{pageX: number; value: number} | null>(null);
+  const editing = useRef(false);
+
+  useEffect(() => {
+    if (!editing.current && !pointerStart.current) {
+      setDraft(formatDialValue(value, decimals));
+    }
+  }, [decimals, value]);
+
+  const normalizedValue = useCallback((next: number, snap = false) => {
+    const stepped = snap ? Math.round(next / step) * step : next;
+    const bounded = Math.max(min ?? -Infinity, Math.min(max ?? Infinity, stepped));
+    return Number(bounded.toFixed(Math.max(decimals, 6)));
+  }, [decimals, max, min, step]);
+
+  const finishDrag = () => {
+    pointerStart.current = null;
+    setDragging(false);
+  };
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gestureState) => (
+      Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 1
+    ),
+    onMoveShouldSetPanResponderCapture: (_, gestureState) => (
+      Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 1
+    ),
+    onPanResponderGrant: () => {
+      pointerStart.current = {pageX: 0, value};
+      editing.current = false;
+      setDragging(true);
+    },
+    onPanResponderMove: (_, gestureState) => {
+      const start = pointerStart.current;
+      if (!start) return;
+      const next = normalizedValue(start.value + gestureState.dx * dragScale);
+      setDraft(formatDialValue(next, decimals));
+      onChange(next);
+    },
+    onPanResponderRelease: () => {
+      finishDrag();
+    },
+    onPanResponderTerminate: () => {
+      const start = pointerStart.current;
+      if (start) {
+        onChange(start.value);
+        setDraft(formatDialValue(start.value, decimals));
+      }
+      finishDrag();
+    },
+  }), [decimals, dragScale, normalizedValue, onChange, value]);
+
+  const dialShift = ((value * 2) % 50 + 50) % 50;
+
+  const commitDraft = () => {
+    const parsed = Number(draft.trim());
+    if (Number.isFinite(parsed)) {
+      const next = normalizedValue(parsed, false);
+      onChange(next);
+      setDraft(formatDialValue(next, decimals));
+    } else {
+      setDraft(formatDialValue(value, decimals));
+    }
+    editing.current = false;
+  };
+
+  const applyTouchMove = (pageX: number) => {
+    const start = pointerStart.current;
+    if (!start) return;
+    if (!Number.isFinite(pageX)) {
+      return;
+    }
+    const delta = pageX - start.pageX;
+    const next = normalizedValue(start.value + delta * dragScale);
+    setDraft(formatDialValue(next, decimals));
+    onChange(next);
+  };
+
   return (
-    <View style={styles.packingBody} testID="packing-timeline">
-      <View style={styles.keyTools}>
-        <View style={styles.keyTabs}><Text style={styles.keyTabActive}>KEYS</Text><Text style={styles.keyTab}>LAYERS</Text></View>
-        <Text style={styles.keyToolIcon}>◆ 0</Text>
-        <View style={styles.keyToolRow}><Text style={styles.keyToolButton}>│◆</Text><Text style={styles.keyToolButton}>◆┆◆</Text><Text style={styles.keyToolButton}>◆│</Text></View>
-      </View>
-      <View style={styles.timelineCanvas}>
-        <View style={styles.ruler}><Text style={styles.rulerText}>TIME / BEAT       52              52.2              53              53.2              54</Text></View>
-        {PACKING_OBJECTS.map((object, index) => {
-          const isMuted = muted.has(object.id);
-          return (
-            <View key={object.id} style={styles.packingRow}>
-              <View style={styles.rowControls}>
-                <Text style={styles.kind}>{object.kind}</Text>
-                <Text style={styles.sm}>S</Text>
-                <Pressable
-                  accessibilityLabel={`${object.name}をMute`}
-                  onPress={() => setMuted(current => {
-                    const next = new Set(current);
-                    next.has(object.id) ? next.delete(object.id) : next.add(object.id);
-                    return next;
-                  })}
-                  style={[styles.smButton, isMuted && styles.smActive]}>
-                  <Text style={styles.sm}>M</Text>
-                </Pressable>
+    <View style={styles.parameterRow}>
+      <Text style={styles.parameterLabel}>{label}</Text>
+      <DialSurface
+        {...panResponder.panHandlers}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={`${label} dial`}
+        accessibilityHint="Drag horizontally across the infinite ticks to change the value"
+        style={[styles.dial, dragging && styles.dialDragging]}
+        onTouchStart={event => {
+          pointerStart.current = {pageX: event.nativeEvent.pageX, value};
+          editing.current = false;
+          setDragging(true);
+        }}
+        onTouchMove={event => {
+          applyTouchMove(event.nativeEvent.pageX);
+        }}
+        onTouchMoveCapture={event => {
+          applyTouchMove(event.nativeEvent.pageX);
+        }}
+        onTouchEnd={() => {
+          finishDrag();
+        }}
+        onTouchCancel={() => {
+          const start = pointerStart.current;
+          if (start) {
+            onChange(start.value);
+            setDraft(formatDialValue(start.value, decimals));
+          }
+          finishDrag();
+        }}
+        onKeyDown={event => {
+          if (!['ArrowLeft', 'ArrowRight'].includes(event.nativeEvent.key)) return;
+          event.preventDefault();
+          const direction = event.nativeEvent.key === 'ArrowRight' ? 1 : -1;
+          const multiplier = event.nativeEvent.shiftKey ? 10 : 1;
+          const next = normalizedValue(value + direction * step * multiplier);
+          setDraft(formatDialValue(next, decimals));
+          onChange(next);
+        }}>
+        <View pointerEvents="none" style={styles.dialTicks}>
+          <View pointerEvents="none" style={[styles.dialTickStrip, {transform: [{translateX: -dialShift}]}]}>
+            {Array.from({length: 81}, (_, index) => (
+              <View key={`${label}-tick-${index}`} style={styles.dialTickCell}>
+                <View style={[styles.dialTick, index % 5 === 0 && styles.dialTickMajor]} />
               </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{selected: selected === object.id}}
-                onPress={() => setSelected(object.id)}
-                style={[
-                  styles.objectBar,
-                  {left: `${object.left}%`, width: `${object.width}%`, backgroundColor: object.color},
-                  selected === object.id && styles.objectSelected,
-                  isMuted && styles.objectMuted,
-                  index === 2 && styles.childObject,
-                ]}>
-                <Text numberOfLines={1} style={styles.objectText}>{object.name}</Text>
-                {object.flow ? <Text numberOfLines={1} style={styles.objectFlow}>{object.flow}</Text> : null}
-              </Pressable>
-            </View>
-          );
-        })}
-      </View>
+            ))}
+          </View>
+          <View style={styles.dialPointer} />
+        </View>
+        <TextInput
+          accessibilityLabel={`${label} value`}
+          keyboardType="decimal-pad"
+          onBlur={commitDraft}
+          onChangeText={text => {
+            editing.current = true;
+            setDraft(text);
+          }}
+          onFocus={() => { editing.current = true; }}
+          onSubmitEditing={commitDraft}
+          selectTextOnFocus
+          style={[styles.dialValue, unit ? styles.dialValueWithUnit : null]}
+          value={draft}
+        />
+        {unit ? <Text pointerEvents="none" style={styles.dialUnit}>{unit}</Text> : null}
+      </DialSurface>
     </View>
   );
 }
 
-function DensityTimeline() {
-  const tracks = useMemo(() => Array.from({length: 20}, (_, track) => ({id: `track-${track}`, clips: DENSITY_CLIPS.slice(track * 25, track * 25 + 25)})), []);
+const formatDialValue = (value: number, decimals: number) => value.toFixed(decimals);
+
+function TimelineKeyTools() {
+  const [mode, setMode] = useState<'KEYS' | 'LAYERS'>('KEYS');
+  const [keyScope, setKeyScope] = useState<'OBJECT' | 'CHANNEL' | 'GLOBAL'>('OBJECT');
+  const [keySection, setKeySection] = useState<'ALIGN' | 'STAGGER' | 'STRETCH'>('ALIGN');
+  const [layerSection, setLayerSection] = useState<'ALIGN' | 'STAGGER' | 'SHIFT'>('ALIGN');
+  const [toolHint, setToolHint] = useState('Select keys in the Skia surface');
+  const isKeys = mode === 'KEYS';
+  const section = isKeys ? keySection : layerSection;
+
+  const selectKeySection = (value: 'ALIGN' | 'STAGGER' | 'STRETCH') => {
+    setKeySection(value);
+    setToolHint(`${value.toLowerCase()} keyframes`);
+  };
+  const selectLayerSection = (value: 'ALIGN' | 'STAGGER' | 'SHIFT') => {
+    setLayerSection(value);
+    setToolHint(`${value.toLowerCase()} layers`);
+  };
+
   return (
-    <FlatList
-      data={tracks}
-      initialNumToRender={8}
-      testID="timeline-density-grid"
-      windowSize={5}
-      keyExtractor={item => item.id}
-      renderItem={({item, index}) => (
-        <View style={styles.densityTrack}>
-          <Text style={styles.densityTrackLabel}>V{index + 1}</Text>
-          <FlatList
-            horizontal
-            data={item.clips}
-            initialNumToRender={10}
-            windowSize={3}
-            keyExtractor={clip => clip.id}
-            renderItem={({item: clip}) => (
-              <View style={[styles.densityClip, {width: clip.width, backgroundColor: clip.color}]}>
-                <Text style={styles.densityClipText}>{clip.id.replace('clip-', 'C')}</Text>
-              </View>
-            )}
-          />
-        </View>
+    <View style={styles.timelineKeyTools} testID="timeline-key-tools">
+      <View style={styles.timelineKeyMode}>
+        {(['KEYS', 'LAYERS'] as const).map(value => (
+          <Pressable
+            accessibilityState={{selected: mode === value}}
+            key={value}
+            onPress={() => {
+              setMode(value);
+              setToolHint(value === 'KEYS' ? 'Select keys in the Skia surface' : 'Select layers in the Skia surface');
+            }}
+            style={[styles.timelineKeyModeButton, mode === value && styles.iconButtonActive]}
+            testID={`timeline-key-mode-${value}`}>
+            <Text style={styles.modeText}>{value}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {isKeys ? (
+        <>
+          <View style={styles.timelineKeyToolsHead}>
+            <Text style={styles.timelineKeyCount}>◆ 0</Text>
+            <View style={styles.timelineKeyScope}>
+              {([
+                ['OBJECT', '▤'],
+                ['CHANNEL', '⋮'],
+                ['GLOBAL', '◎'],
+              ] as const).map(([value, glyph]) => (
+                <Pressable
+                  accessibilityLabel={`${value.toLowerCase()} key scope`}
+                  accessibilityState={{selected: keyScope === value}}
+                  key={value}
+                  onPress={() => setKeyScope(value)}
+                  style={[styles.timelineKeyScopeButton, keyScope === value && styles.iconButtonActive]}>
+                  <Text style={styles.modeText}>{glyph}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          <View style={styles.timelineKeySections}>
+            {([
+              ['ALIGN', '┆◆┆'],
+              ['STAGGER', '◆⋰◆'],
+              ['STRETCH', '←◆→'],
+            ] as const).map(([value, glyph]) => (
+              <Pressable
+                accessibilityLabel={`${value.toLowerCase()} key section`}
+                accessibilityState={{selected: keySection === value}}
+                key={value}
+                onPress={() => selectKeySection(value)}
+                style={[styles.timelineKeySectionButton, keySection === value && styles.iconButtonActive]}>
+                <Text style={styles.timelineKeyGlyph}>{glyph}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={styles.timelineKeyToolsHead}>
+            <Text style={styles.timelineKeyCount}>▤ 1</Text>
+          </View>
+          <View style={styles.timelineKeySections}>
+            {([
+              ['ALIGN', '┆▤┆'],
+              ['STAGGER', '▤⋰▤'],
+              ['SHIFT', '←▤→'],
+            ] as const).map(([value, glyph]) => (
+              <Pressable
+                accessibilityLabel={`${value.toLowerCase()} layer section`}
+                accessibilityState={{selected: layerSection === value}}
+                key={value}
+                onPress={() => selectLayerSection(value)}
+                style={[styles.timelineKeySectionButton, layerSection === value && styles.iconButtonActive]}>
+                <Text style={styles.timelineKeyGlyph}>{glyph}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
       )}
-    />
+      <View style={styles.timelineKeyActions}>
+        <Text style={styles.timelineKeyActionTitle}>{section}</Text>
+        {(isKeys
+          ? keySection === 'ALIGN'
+            ? [['開始へ整列', '│◆'], ['Playheadへ整列', '◆┆◆'], ['終了へ整列', '◆│']]
+            : keySection === 'STAGGER'
+              ? [['等間隔に分布', '◆··◆'], ['順序を反転', '⇄']]
+              : [['80% stretch', '80%'], ['120% stretch', '120%']]
+          : layerSection === 'ALIGN'
+            ? [['Layerを開始へ整列', '│▤'], ['Layerを終了へ整列', '▤│']]
+            : layerSection === 'STAGGER'
+              ? [['Layerを等間隔に分布', '▤··▤'], ['Layer順序を反転', '⇄']]
+              : [['Layerを左へ移動', '≪'], ['Layerを右へ移動', '≫']]
+        ).map(([label, glyph]) => (
+          <Pressable
+            accessibilityLabel={label}
+            key={label}
+            onPress={() => setToolHint(`${label} requires a Timeline selection`)}
+            style={styles.timelineKeyActionButton}>
+            <Text style={styles.timelineKeyGlyph}>{glyph}</Text>
+          </Pressable>
+        ))}
+        <Text numberOfLines={2} style={styles.timelineKeyHint} testID="timeline-key-tools-hint">{toolHint}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -625,54 +807,37 @@ function NativeTimeline() {
     <View style={styles.nativeTimelineBody}>
       <View style={styles.nativeTimelineControls}>
         <Text style={styles.nativeTimelineTitle}>Rust / wgpu · 500 clips · 20 tracks</Text>
-        <Pressable
-          accessibilityLabel="Select previous native clip"
-          onPress={() => setSelectedObjectIndex(value => Math.max(0, value - 1))}
-          style={styles.nativeTimelineStep}>
-          <Text style={styles.modeText}>CLIP −</Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Select next native clip"
-          onPress={() => setSelectedObjectIndex(value => Math.min(499, value + 1))}
-          style={styles.nativeTimelineStep}>
-          <Text style={styles.modeText}>CLIP ＋</Text>
-        </Pressable>
         <Text style={styles.nativeTimelineFeedback} testID="native-timeline-feedback">
           clip {selectedObjectIndex} · {(playhead * 100).toFixed(1)}%
         </Text>
       </View>
-      <MotoliiTimelineView
-        accessible
-        accessibilityLabel="Rust wgpu Timeline time surface"
-        onTimelineFeedback={event => {
-          setSelectedObjectIndex(event.nativeEvent.objectIndex);
-          setPlayhead(event.nativeEvent.time);
-        }}
-        playhead={playhead}
-        selectedObjectIndex={selectedObjectIndex}
-        style={styles.nativeTimelineSurface}
-        testID="rust-wgpu-timeline"
-      />
+      <View style={styles.nativeTimelineContent}>
+        <TimelineKeyTools />
+        <MotoliiTimelineView
+          accessible
+          accessibilityLabel="Rust wgpu Timeline time surface"
+          onTimelineFeedback={event => {
+            setSelectedObjectIndex(event.nativeEvent.objectIndex);
+            setPlayhead(event.nativeEvent.time);
+          }}
+          playhead={playhead}
+          selectedObjectIndex={selectedObjectIndex}
+          style={styles.nativeTimelineSurface}
+          testID="rust-wgpu-timeline"
+        />
+      </View>
     </View>
   );
 }
 
 function Timeline({height}: {height: number}) {
-  const [mode, setMode] = useState<TimelineMode>('PACKING');
   return (
     <View style={[styles.timeline, {height}]} testID="timeline">
       <View style={styles.timelineHeader}>
         <Text style={styles.panelTitle}>譜面 / Timeline</Text>
-        <View style={styles.timelineModes}>
-          {(['PACKING', 'DENSITY', 'NATIVE'] as TimelineMode[]).map(value => (
-            <Pressable key={value} onPress={() => setMode(value)} style={[styles.modeButton, mode === value && styles.iconButtonActive]} testID={`timeline-mode-${value}`}>
-              <Text style={styles.modeText}>{value === 'PACKING' ? 'PACKING' : value === 'DENSITY' ? 'RN 500' : 'NATIVE 500'}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={styles.panelDetail}>{mode === 'PACKING' ? 'single time surface' : mode === 'DENSITY' ? '20 RN virtualized tracks' : 'one native time surface'}</Text>
+        <Text style={styles.panelDetail}>Skia time surface</Text>
       </View>
-      {mode === 'PACKING' ? <PackingTimeline /> : mode === 'DENSITY' ? <DensityTimeline /> : <NativeTimeline />}
+      <NativeTimeline />
     </View>
   );
 }
@@ -839,6 +1004,17 @@ const styles = StyleSheet.create({
   parameterValue: {flex: 1, paddingHorizontal: 7, paddingVertical: 4, fontSize: 9, textAlign: 'right', color: '#e7e7e4', borderWidth: 1, borderColor: '#45494d'},
   stepButton: {width: 25, height: 24, alignItems: 'center', justifyContent: 'center'},
   stepText: {fontSize: 11, color: '#c8bc7b'},
+  dial: {flex: 1, height: 24, position: 'relative', overflow: 'hidden', borderWidth: 1, borderColor: '#45494d', backgroundColor: '#111315'},
+  dialDragging: {borderColor: '#c8bc7b'},
+  dialTicks: {position: 'absolute', left: 4, right: 44, top: 3, bottom: 3, overflow: 'hidden'},
+  dialTickStrip: {position: 'absolute', left: '50%', width: 810, height: '100%', marginLeft: -405, flexDirection: 'row', alignItems: 'flex-end'},
+  dialTickCell: {width: 10, height: '100%', alignItems: 'center', justifyContent: 'flex-end'},
+  dialTick: {width: 1, height: 7, backgroundColor: '#686d72'},
+  dialTickMajor: {height: 13, backgroundColor: '#c8bc7b'},
+  dialPointer: {position: 'absolute', top: 0, bottom: 0, left: '50%', width: 1, backgroundColor: '#f0f0ed'},
+  dialValue: {position: 'absolute', right: 4, top: 0, minWidth: 35, height: 22, paddingHorizontal: 2, paddingVertical: 0, fontSize: 8, textAlign: 'center', color: '#c8bc7b', backgroundColor: '#111315', zIndex: 1},
+  dialValueWithUnit: {right: 13},
+  dialUnit: {position: 'absolute', right: 4, top: 5, fontSize: 8, color: '#c8bc7b', zIndex: 2},
   inspectorInput: {height: 30, margin: 9, paddingHorizontal: 7, fontSize: 9, color: '#eeeeeb', borderWidth: 1, borderColor: '#575c61'},
   pathOperationSection: {borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#383c40', paddingVertical: 8},
   transformSection: {borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#33454c', paddingVertical: 8},
@@ -853,41 +1029,26 @@ const styles = StyleSheet.create({
   extensionTab: {paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: '#44484d'},
   timeline: {backgroundColor: '#17191b', borderTopWidth: 1, borderTopColor: '#3a3d41'},
   timelineHeader: {height: 31, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, borderBottomWidth: 1, borderBottomColor: '#3a3d41'},
-  timelineModes: {flexDirection: 'row', marginLeft: 18, gap: 4},
-  modeButton: {paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: '#414549'},
   modeText: {fontSize: 7, color: '#c6c8c7'},
-  packingBody: {flex: 1, flexDirection: 'row'},
-  keyTools: {width: 200, padding: 5, borderRightWidth: 1, borderRightColor: '#55595d'},
-  keyTabs: {height: 25, flexDirection: 'row'},
-  keyTabActive: {flex: 1, paddingTop: 7, textAlign: 'center', fontSize: 7, color: '#d5c77d', borderWidth: 1, borderColor: '#a69b63'},
-  keyTab: {flex: 1, paddingTop: 7, textAlign: 'center', fontSize: 7, color: '#a3a7a8', borderWidth: 1, borderColor: '#45494d'},
-  keyToolIcon: {marginTop: 9, padding: 8, fontSize: 9, color: '#e2d58a', borderWidth: 1, borderColor: '#7a724f'},
-  keyToolRow: {flexDirection: 'row', gap: 3, marginTop: 8},
-  keyToolButton: {flex: 1, padding: 7, textAlign: 'center', fontSize: 9, color: '#c8c9c7', borderWidth: 1, borderColor: '#45494d'},
-  timelineCanvas: {flex: 1, overflow: 'hidden'},
-  ruler: {height: 25, justifyContent: 'center', paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#45494d'},
-  rulerText: {fontSize: 7, color: '#a9a26f'},
-  packingRow: {height: 34, borderBottomWidth: 1, borderBottomColor: '#3b3e41'},
-  rowControls: {position: 'absolute', left: 0, width: 56, height: 34, flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 4, backgroundColor: '#202326', zIndex: 2},
-  kind: {width: 15, fontSize: 8, color: '#d6d7d4'},
-  smButton: {padding: 3},
-  smActive: {backgroundColor: '#85524c'},
-  sm: {fontSize: 7, color: '#e4e5e2'},
-  objectBar: {position: 'absolute', top: 4, height: 26, minWidth: 70, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.34)'},
-  childObject: {marginLeft: 18},
-  objectSelected: {borderWidth: 2, borderColor: '#eee7bf'},
-  objectMuted: {opacity: 0.38},
-  objectText: {fontSize: 8, fontWeight: '700', color: '#17191b'},
-  objectFlow: {fontSize: 7, color: '#1f2020'},
-  densityTrack: {height: 36, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#303337'},
-  densityTrackLabel: {width: 38, paddingLeft: 8, fontSize: 8, color: '#8e9396'},
-  densityClip: {height: 27, justifyContent: 'center', marginRight: 2, paddingHorizontal: 5},
-  densityClipText: {fontSize: 7, color: '#ffffff'},
   nativeTimelineBody: {flex: 1},
-  nativeTimelineControls: {height: 28, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#3b3e41'},
+  nativeTimelineControls: {height: 28, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#3b3e41'},
   nativeTimelineTitle: {fontSize: 8, color: '#b9bcbd'},
-  nativeTimelineStep: {paddingHorizontal: 7, paddingVertical: 4, borderWidth: 1, borderColor: '#555a5e'},
   nativeTimelineFeedback: {marginLeft: 'auto', fontSize: 8, color: '#d8c97f'},
+  nativeTimelineContent: {flex: 1, flexDirection: 'row'},
+  timelineKeyTools: {width: 186, padding: 6, borderRightWidth: 1, borderRightColor: '#3b3e41', backgroundColor: '#17191b'},
+  timelineKeyMode: {height: 23, flexDirection: 'row', gap: 2, marginHorizontal: -6, marginTop: -6, marginBottom: 6, padding: 2, borderBottomWidth: 1, borderBottomColor: '#3b3e41'},
+  timelineKeyModeButton: {flex: 1, alignItems: 'center', justifyContent: 'center'},
+  timelineKeyToolsHead: {height: 22, flexDirection: 'row', alignItems: 'center'},
+  timelineKeyCount: {flex: 1, fontSize: 8, color: '#d8c97f'},
+  timelineKeyScope: {flexDirection: 'row', gap: 2},
+  timelineKeyScopeButton: {width: 21, height: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#45494d'},
+  timelineKeySections: {flexDirection: 'row', gap: 2, marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: '#3b3e41'},
+  timelineKeySectionButton: {flex: 1, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#45494d'},
+  timelineKeyGlyph: {fontSize: 9, color: '#d8c97f'},
+  timelineKeyActions: {flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: '#45494d'},
+  timelineKeyActionTitle: {width: '100%', fontSize: 7, letterSpacing: 0.8, color: '#85898c'},
+  timelineKeyActionButton: {minWidth: 36, height: 22, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#45494d'},
+  timelineKeyHint: {width: '100%', marginTop: 2, fontSize: 7, lineHeight: 10, color: '#85898c'},
   nativeTimelineSurface: {flex: 1},
 });
 

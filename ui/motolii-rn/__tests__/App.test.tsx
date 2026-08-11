@@ -16,7 +16,15 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'timeline'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'browser-surface'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'browser-view-EFFECTS'})).toBeTruthy();
-  expect(tree!.root.findByProps({testID: 'packing-timeline'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-timeline'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'native-timeline-feedback'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'timeline-key-tools'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'timeline-key-mode-KEYS'}).props.accessibilityState.selected).toBe(true);
+  expect(tree!.root.findAllByProps({accessibilityLabel: 'Select previous native clip'})).toHaveLength(0);
+  expect(tree!.root.findAllByProps({accessibilityLabel: 'Select next native clip'})).toHaveLength(0);
+  expect(tree!.root.findAllByProps({testID: 'timeline-mode-PACKING'})).toHaveLength(0);
+  expect(tree!.root.findAllByProps({testID: 'timeline-mode-DENSITY'})).toHaveLength(0);
+  expect(tree!.root.findAllByProps({testID: 'timeline-mode-NATIVE'})).toHaveLength(0);
   expect(tree!.root.findByProps({testID: 'inspector-surface'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'path-operations-panel'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'stage-transform-projection'})).toBeTruthy();
@@ -26,16 +34,35 @@ test('renders correctly', async () => {
       nativeEvent: {x: 0.25, y: -0.5, z: 0.75, rotationX: 10, rotationY: 20, rotationZ: 30},
     });
   });
-  expect(tree!.root.findByProps({children: '0.250'})).toBeTruthy();
-  expect(tree!.root.findByProps({children: '30.0°'})).toBeTruthy();
+  expect(tree!.root.findByProps({value: '0.250'})).toBeTruthy();
+  expect(tree!.root.findByProps({value: '30.0'})).toBeTruthy();
 
   await ReactTestRenderer.act(() => {
-    tree!.root.findByProps({accessibilityLabel: 'Position X increase'}).props.onPress();
-    tree!.root.findByProps({accessibilityLabel: 'Rotation Z decrease'}).props.onPress();
+    const positionDial = tree!.root.findByProps({accessibilityLabel: 'Position X dial'});
+    const startTouch = {
+      touchActive: true,
+      currentTimeStamp: 1,
+      currentPageX: 100,
+      currentPageY: 100,
+      previousPageX: 100,
+      previousPageY: 100,
+    };
+    const moveTouch = {...startTouch, currentTimeStamp: 2, currentPageX: 125};
+    const startEvent = {touchHistory: {numberActiveTouches: 1, indexOfSingleActiveTouch: 0, touchBank: [startTouch], mostRecentTimeStamp: 1}};
+    const moveEvent = {touchHistory: {numberActiveTouches: 1, indexOfSingleActiveTouch: 0, touchBank: [moveTouch], mostRecentTimeStamp: 2}};
+    positionDial.props.onResponderGrant(startEvent);
+    positionDial.props.onResponderMove(moveEvent);
+    positionDial.props.onResponderRelease(moveEvent);
   });
-  expect(tree!.root.findByProps({children: '0.275'})).toBeTruthy();
-  expect(tree!.root.findByProps({children: '25.0°'})).toBeTruthy();
-  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.transformX).toBe(0.275);
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({accessibilityLabel: 'Rotation Z value'}).props.onChangeText('25');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({accessibilityLabel: 'Rotation Z value'}).props.onSubmitEditing();
+  });
+  expect(tree!.root.findByProps({value: '0.500'})).toBeTruthy();
+  expect(tree!.root.findByProps({value: '25.0'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.transformX).toBe(0.5);
   expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.rotationZ).toBe(25);
 
   await ReactTestRenderer.act(() => {
@@ -46,21 +73,24 @@ test('renders correctly', async () => {
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-tab-MEDIA'}).props.onPress();
-    tree!.root.findByProps({testID: 'timeline-mode-DENSITY'}).props.onPress();
     tree!.root.findByProps({testID: 'right-panel-EXTENSIONS'}).props.onPress();
   });
 
   expect(tree!.root.findByProps({testID: 'thumbnail-grid'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'browser-view-MEDIA'})).toBeTruthy();
-  expect(tree!.root.findByProps({testID: 'timeline-density-grid'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'extension-panel-asset-tags'})).toBeTruthy();
 
   await ReactTestRenderer.act(() => {
-    tree!.root.findByProps({testID: 'timeline-mode-NATIVE'}).props.onPress();
+    tree!.root.findByProps({testID: 'timeline-key-mode-LAYERS'}).props.onPress();
   });
-
-  expect(tree!.root.findByProps({testID: 'rust-wgpu-timeline'})).toBeTruthy();
-  expect(tree!.root.findByProps({testID: 'native-timeline-feedback'})).toBeTruthy();
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({accessibilityLabel: 'stagger layer section'}).props.onPress();
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({accessibilityLabel: 'Layerを等間隔に分布'}).props.onPress();
+  });
+  expect(tree!.root.findByProps({testID: 'timeline-key-mode-LAYERS'}).props.accessibilityState.selected).toBe(true);
+  expect(tree!.root.findByProps({testID: 'timeline-key-tools-hint'}).props.children).toBe('Layerを等間隔に分布 requires a Timeline selection');
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-tab-CREATE'}).props.onPress();

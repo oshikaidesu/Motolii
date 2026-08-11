@@ -4,8 +4,8 @@
 `scripts/build-macos-app.sh`でbuildする。旧worktree、DerivedData、リポジトリ外artifact、
 過去appへfallbackしない。current buildが無ければ旧appを開かず、未buildと報告する。
 
-Motoliiの唯一のRN製品source。`App.tsx` 660行 — Browser 3タブ(`MEDIA`/`EFFECTS`/`CREATE`)、
-Inspector/Extensions、Timeline 3モード、effect一覧、panel registry、
+Motoliiの唯一のRN製品source。`App.tsx` — Browser 3タブ(`MEDIA`/`EFFECTS`/`CREATE`)、
+Inspector/Extensions、Skia TimelineとReact所有の`KEYS / LAYERS`操作panel、effect一覧、panel registry、
 native `MotoliiGpuComponentView.mm`、Fabric spec `MotoliiGpuView`/`MotoliiTimelineView`。
 
 旧名`MotoliiRnProbe`の資産を `~/Documents/Codex/2026-08-06/ui-rust-ui-c-react/work/MotoliiRnProbe/` から
