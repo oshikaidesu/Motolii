@@ -1,6 +1,9 @@
 use std::{sync::Arc, time::Instant};
 
-use egui::{Event, PointerButton, Pos2, RawInput, Rect, Vec2};
+use egui::{
+    Event, PointerButton, Pos2, RawInput, Rect, Vec2,
+    epaint::{Mesh, Vertex as EguiVertex},
+};
 use lyon_path::{Path as LyonPath, math::point};
 use lyon_tessellation::{
     FillOptions, FillTessellator, StrokeOptions, StrokeTessellator,
@@ -13,6 +16,10 @@ use motolii_doc::{
 use re_chunk::Chunk;
 use re_log_types::TimePoint;
 use re_sdk_types::archetypes::Mesh3D;
+use transform_gizmo::{
+    Gizmo, GizmoConfig, GizmoInteraction, GizmoMode, GizmoOrientation,
+    math::{DMat4, DQuat, DVec3, Pos2 as GizmoPos2, Rect as GizmoRect, Transform},
+};
 
 use crate::renderer_core::PointerPhase;
 
@@ -25,6 +32,9 @@ pub(crate) struct EmbeddedSpatialStage {
     spatial_stage: re_view_spatial::SpatialStage,
     input_events: Vec<Event>,
     started_at: Instant,
+    gizmo: Gizmo,
+    fixture_transform: Transform,
+    fixture_item_id: String,
 }
 
 impl EmbeddedSpatialStage {
@@ -58,6 +68,9 @@ impl EmbeddedSpatialStage {
             .map_err(|error| format!("create Rerun spatial stage: {error}"))?,
             input_events: Vec::new(),
             started_at: Instant::now(),
+            gizmo: Gizmo::default(),
+            fixture_transform: Transform::default(),
+            fixture_item_id: "rectangle@0.500000,0.500000|pucker-bloat".into(),
         };
         if !stage.set_created_item("rectangle@0.500000,0.500000|pucker-bloat") {
             return Err("seed path rectangle for embedded stage".into());
@@ -110,6 +123,9 @@ impl EmbeddedSpatialStage {
             return false;
         }
 
+        self.fixture_item_id.clear();
+        self.fixture_item_id.push_str(item_id);
+
         let path = rectangle_path(x - 0.5, y - 0.5);
         let Some(path_operation) = preview_path_operation(path_operation_id) else {
             return false;
@@ -117,7 +133,7 @@ impl EmbeddedSpatialStage {
         let Ok(path) = pathgeom::apply(&path, &path_operation, 0.0) else {
             return false;
         };
-        let Ok((fill, stroke)) = tessellate_path(&path) else {
+        let Ok((fill, stroke)) = tessellate_path(&path, self.fixture_transform) else {
             return false;
         };
 
@@ -198,6 +214,7 @@ impl EmbeddedSpatialStage {
                     if let Err(error) = result {
                         stage_error = Some(error.to_string());
                     }
+                    self.show_performance_gizmo(ui);
                 });
         });
         if let Some(error) = stage_error {
@@ -256,6 +273,76 @@ impl EmbeddedSpatialStage {
             self.egui_renderer.free_texture(id);
         }
         Ok(())
+    }
+}
+
+impl EmbeddedSpatialStage {
+    /// 性能評価用の一時3D transform。Document、D2、Undoには接続しない。
+    fn show_performance_gizmo(&mut self, ui: &egui::Ui) {
+        let viewport = ui.clip_rect();
+        if viewport.width() <= 0.0 || viewport.height() <= 0.0 {
+            return;
+        }
+
+        // Rerun embedded stageと同じ正面透視camera（z=0平面の高さは1.0）。
+        let fov_y = 55.0_f64.to_radians();
+        let distance = 0.5 / (fov_y * 0.5).tan();
+        let view_matrix = DMat4::look_at_rh(DVec3::new(0.0, 0.0, distance), DVec3::ZERO, DVec3::Y);
+        let projection_matrix = DMat4::perspective_infinite_rh(
+            fov_y,
+            f64::from(viewport.width() / viewport.height()),
+            0.01,
+        );
+        self.gizmo.update_config(GizmoConfig {
+            view_matrix: view_matrix.into(),
+            projection_matrix: projection_matrix.into(),
+            viewport: GizmoRect::from_min_max(
+                GizmoPos2::new(viewport.min.x, viewport.min.y),
+                GizmoPos2::new(viewport.max.x, viewport.max.y),
+            ),
+            modes: GizmoMode::all_translate() | GizmoMode::all_rotate(),
+            orientation: GizmoOrientation::Global,
+            pixels_per_point: ui.ctx().pixels_per_point(),
+            ..Default::default()
+        });
+
+        let (cursor_pos, drag_started, dragging) = ui.input(|input| {
+            (
+                input.pointer.hover_pos().unwrap_or_default(),
+                input.pointer.button_pressed(PointerButton::Primary),
+                input.pointer.button_down(PointerButton::Primary),
+            )
+        });
+        let interaction = GizmoInteraction {
+            cursor_pos: (cursor_pos.x, cursor_pos.y),
+            hovered: viewport.contains(cursor_pos),
+            drag_started,
+            dragging,
+        };
+        if let Some((_result, transforms)) =
+            self.gizmo.update(interaction, &[self.fixture_transform])
+            && let Some(transform) = transforms.first().copied()
+        {
+            self.fixture_transform = transform;
+            let item_id = self.fixture_item_id.clone();
+            let _ = self.set_created_item(&item_id);
+        }
+
+        let draw_data = self.gizmo.draw();
+        ui.painter().add(Mesh {
+            indices: draw_data.indices,
+            vertices: draw_data
+                .vertices
+                .into_iter()
+                .zip(draw_data.colors)
+                .map(|(position, [r, g, b, a])| EguiVertex {
+                    pos: Pos2::new(position[0], position[1]),
+                    uv: Pos2::ZERO,
+                    color: egui::Rgba::from_rgba_premultiplied(r, g, b, a).into(),
+                })
+                .collect(),
+            ..Default::default()
+        });
     }
 }
 
@@ -377,7 +464,7 @@ fn add_segment(builder: &mut lyon_path::path::Builder, from: Vertex, to: Vertex)
     }
 }
 
-fn tessellate_path(path: &Path) -> Result<(MeshData, MeshData), String> {
+fn tessellate_path(path: &Path, transform: Transform) -> Result<(MeshData, MeshData), String> {
     // 正準座標での誤差上限。固定頂点数ではなく曲率に応じて分割する。
     const TOLERANCE: f32 = 0.000_1;
     let path = lyon_path(path);
@@ -399,7 +486,10 @@ fn tessellate_path(path: &Path) -> Result<(MeshData, MeshData), String> {
             &mut simple_builder(&mut stroke),
         )
         .map_err(|error| format!("tessellate path stroke: {error}"))?;
-    Ok((MeshData::from(fill), MeshData::from(stroke)))
+    Ok((
+        MeshData::from(fill).transformed(transform),
+        MeshData::from(stroke).transformed(transform),
+    ))
 }
 
 #[derive(Debug)]
@@ -428,6 +518,25 @@ impl From<VertexBuffers<lyon_path::math::Point, u16>> for MeshData {
                 })
                 .collect(),
         }
+    }
+}
+
+impl MeshData {
+    fn transformed(mut self, transform: Transform) -> Self {
+        let translation = DVec3::from(transform.translation);
+        let rotation = DQuat::from(transform.rotation);
+        let scale = DVec3::from(transform.scale);
+        for vertex in &mut self.vertices {
+            let point = rotation
+                * (DVec3::new(
+                    f64::from(vertex[0]),
+                    f64::from(vertex[1]),
+                    f64::from(vertex[2]),
+                ) * scale)
+                + translation;
+            *vertex = [point.x as f32, point.y as f32, point.z as f32];
+        }
+        self
     }
 }
 
@@ -467,7 +576,8 @@ mod tests {
             0.0,
         )
         .expect("fixture operation evaluates");
-        let (fill, stroke) = tessellate_path(&path).expect("Bezier path tessellates");
+        let (fill, stroke) =
+            tessellate_path(&path, Transform::default()).expect("Bezier path tessellates");
 
         assert!(
             fill.vertices.len() > 4,
@@ -498,11 +608,30 @@ mod tests {
                 0.0,
             )
             .expect("fixture operation evaluates");
-            let (_, stroke) = tessellate_path(&path).expect("evaluated path tessellates");
+            let (_, stroke) =
+                tessellate_path(&path, Transform::default()).expect("evaluated path tessellates");
             assert!(
                 !stroke.indices.is_empty(),
                 "{id} has a visible Stage outline"
             );
         }
+    }
+
+    #[test]
+    fn performance_gizmo_transform_moves_and_rotates_fixture_vertices() {
+        let mesh = MeshData {
+            vertices: vec![[1.0, 0.0, 0.0]],
+            indices: vec![],
+        }
+        .transformed(Transform::from_scale_rotation_translation(
+            DVec3::ONE,
+            DQuat::from_rotation_z(std::f64::consts::FRAC_PI_2),
+            DVec3::new(0.5, -0.25, 0.75),
+        ));
+
+        let [x, y, z] = mesh.vertices[0];
+        assert!((x - 0.5).abs() < 0.000_1);
+        assert!((y - 0.75).abs() < 0.000_1);
+        assert!((z - 0.75).abs() < 0.000_1);
     }
 }

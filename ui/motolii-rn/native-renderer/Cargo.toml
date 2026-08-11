@@ -14,6 +14,7 @@ lyon_path = "1.0.19"
 lyon_tessellation = "1.0.19"
 motolii-doc = { path = "../../../crates/motolii-doc" }
 pollster = "0.4"
+transform-gizmo = "0.9.0"
 re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949" }
 re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949" }
 re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949", default-features = false }
