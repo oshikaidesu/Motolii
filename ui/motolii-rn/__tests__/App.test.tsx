@@ -20,6 +20,7 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'inspector-surface'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'path-operations-panel'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'stage-transform-projection'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'ui-version'}).props.children).toContain('UI 0.0.2');
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageTransform({
