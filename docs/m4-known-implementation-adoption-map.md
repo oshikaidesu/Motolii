@@ -29,6 +29,10 @@
    現行portable stagingを`REUSE`し、platform direct I/Oはsource／license／platform matrix、wgpu接続、代表workload
    実測が揃うまで[観察](reviews/2026-08-06-storage-to-gpu-direct-io-design-observation.md)に留める。backend名、
    vendor handle、架空trait、設定UIをDocument／公開plugin API／Vismへ予約せず、本地図の新parent／`DO`を増やさない。
+9. Rerun Spatial Viewerはinteractive spatial runtimeとして`ADOPT / WRAP`する。scene／view／query／camera／picking／
+   visualizer／GPU drawをM4で再実装しない。M4はその上のhard budget、cache identity、invalidation、proxy、artifact、
+   pressure／縮退を補完し、Rerunのstore／viewer cacheをDocument、作品cache、ResourceLedger、Preview／Exportの第二authorityにしない。
+   Rerun採択をPBR、Simulation solver、またはcross-tier resource policyの完成証拠とみなさない。
 
 ## 3. 親項目の検索入口
 

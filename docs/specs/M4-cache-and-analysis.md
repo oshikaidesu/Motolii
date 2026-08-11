@@ -22,6 +22,16 @@ K0〜K8はMotoliiの意味、負例、候補依存を保持する入力であり
 2026-08-08に[直列核4契約](../reviews/2026-08-08-serial-core-known-contracts-decision.md)で、Asset lifecycle、`SourceFingerprintV1`／`RecipeKeyV1`／`ArtifactDigest`、Hostの単一hard-budget admission policy、tier別adapter、検証後atomic publication、job終端、accepted Commandのexhaustive invalidation publicationを決定した。これはK1a／K1b／K2／K4のruntime acceptanceではない。1A M2 Assetと1B K1a ResourceLedgerは別ownerで並列に閉じられる。P02 runtime codecは1Aのstrict fingerprint入力を待つが、canonical encoder／mutation corpusの準備は並行できる。tier adapterはK1a、task adapterは該当recipe／publication contractのacceptance後に接続する。
 **地図のWave A adoption probeは`VERIFIED / REMAP`または局所`STOP`として記録済みである。次はimplementation ledgerの1A／1Bからexact owner、allowlist、oracleをcurrent mainで再compileする。probe不合格を独自実装の許可にせず、一意なclosed orderなしに製品runtimeを発注しない。**
 
+## Rerun Spatial Viewerとの責任境界（2026-08-12追補）
+
+Rerun Spatial Viewerの採択により、M4は空間表示runtimeを再構築する層ではなく、RerunのリアルタイムStageを作品編集として破綻させない補完層として扱う。Rerunへ委ねるのはspatial scene、view／query、camera、picking、visualizer、GPU draw／compositeであり、MotoliiはDocument snapshot、stable identity、時刻、assetの翻訳とStageへの薄い接続だけを持つ。
+
+M4が引き続き所有するのは、完全なrecipe／source／artifact identity、VRAM・RAM・diskを跨ぐhard budget admission、cacheの世代と部分無効化、proxy／background job、検証済みartifactのatomic publication、pressure時のPreview縮退である。Rerunのviewer内部cacheやGPU resource lifetimeを、作品cacheのauthority、ResourceLedger、Preview／Exportの製品oracleへ昇格させない。
+
+interactive Stageが同じGPU上でRerun出力を消費できる場合、Previewの一部ではcopy-outや再構成を省ける可能性がある。ただしこれは代表workloadとPreview／Export同一路の実測で決める。Bake、disk artifact、proxy、Final ExportではM4のartifact境界を維持する。
+
+ここでいうRerunの強みはリアルタイム空間viewer／rendererの採択であり、PBRの完成、物理simulation solver、またはMotolii全体の物理資源最適化の採択ではない。faithful PBR、Simulation／StateTrack、低スペック時の資源policyはそれぞれMotolii側の残余として扱う。
+
 ## 目的(退治する落とし穴)
 
 B-5(時系列依存とキャッシュ)、B-6(OpenCV依存)、F-2(キャッシュの並行契約 — Natronがデッドロックした正確なポイント)。
