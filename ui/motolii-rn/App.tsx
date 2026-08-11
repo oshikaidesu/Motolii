@@ -664,6 +664,7 @@ function App() {
 
   return (
     <View
+      onMoveShouldSetResponderCapture={() => browserDrag.current !== null}
       onPointerCancel={() => { browserDrag.current = null; }}
       onPointerMove={event => {
         moveBrowserDrag(event.nativeEvent.clientX, event.nativeEvent.clientY);
@@ -671,6 +672,13 @@ function App() {
       onPointerUp={event => {
         endBrowserDrag(event.nativeEvent.clientX, event.nativeEvent.clientY);
       }}
+      onResponderMove={event => {
+        moveBrowserDrag(event.nativeEvent.pageX, event.nativeEvent.pageY);
+      }}
+      onResponderRelease={event => {
+        endBrowserDrag(event.nativeEvent.pageX, event.nativeEvent.pageY);
+      }}
+      onResponderTerminate={() => { browserDrag.current = null; }}
       style={styles.shell}
       testID="motolii-rn-shell">
       <View style={styles.titlebar}>
