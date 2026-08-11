@@ -61,6 +61,19 @@ type PackingObject = {
   flow?: string;
 };
 
+type StageTransform = {
+  x: number;
+  y: number;
+  z: number;
+  rotationX: number;
+  rotationY: number;
+  rotationZ: number;
+};
+
+const INITIAL_STAGE_TRANSFORM: StageTransform = {
+  x: 0, y: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0,
+};
+
 const EFFECTS: EffectItem[] = [
   {id: 'echo', name: 'Echo Bloom', badge: 'FX', tags: '#go-to #atmosphere', color: '#746d4b'},
   {id: 'type', name: 'Type Pulse', badge: 'Aa', tags: '#kinetic', color: '#5c6477'},
@@ -374,7 +387,7 @@ function Browser({width, onCreateItem, onDragStart, onDragCancel}: {width: numbe
   );
 }
 
-function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, onToggleGpu}: {createdItemId: string; draggedItemId: string; pathOperationId: string; showGpu: boolean; onDrop: (x: number, y: number) => void; onToggleGpu: () => void}) {
+function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, onToggleGpu, onTransform, transform}: {createdItemId: string; draggedItemId: string; pathOperationId: string; showGpu: boolean; onDrop: (x: number, y: number) => void; onToggleGpu: () => void; onTransform: (transform: StageTransform) => void; transform: StageTransform}) {
   return (
     <View style={styles.stage} testID="stage-surface">
       <View style={styles.stageTools}>
@@ -392,7 +405,14 @@ function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, 
             accessibilityLabel="Rerun Spatial Viewer Stage"
             createdItemId={`${createdItemId || 'rectangle@0.500000,0.500000'}|${pathOperationId}`}
             draggedItemId={draggedItemId}
+            transformX={transform.x}
+            transformY={transform.y}
+            transformZ={transform.z}
+            rotationX={transform.rotationX}
+            rotationY={transform.rotationY}
+            rotationZ={transform.rotationZ}
             onStageDrop={event => onDrop(event.nativeEvent.x, event.nativeEvent.y)}
+            onStageTransform={event => onTransform(event.nativeEvent)}
             style={styles.gpuStage}
             testID="rust-wgpu-stage"
           />
@@ -424,7 +444,7 @@ function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, 
   );
 }
 
-function Inspector({width, pathOperationId, onPathOperationChange}: {width: number; pathOperationId: string; onPathOperationChange: (id: string) => void}) {
+function Inspector({width, pathOperationId, onPathOperationChange, transform, onTransformChange}: {width: number; pathOperationId: string; onPathOperationChange: (id: string) => void; transform: StageTransform; onTransformChange: (update: Partial<StageTransform>) => void}) {
   const [panel, setPanel] = useState<RightPanel>('INSPECTOR');
   const [intensity, setIntensity] = useState(64);
   const [spread, setSpread] = useState(42);
@@ -453,6 +473,16 @@ function Inspector({width, pathOperationId, onPathOperationChange}: {width: numb
           <ParameterRow label="Intensity" value={`${intensity}%`} onDecrease={() => setIntensity(v => clamp(v - 2, 0, 100))} onIncrease={() => setIntensity(v => clamp(v + 2, 0, 100))} />
           <ParameterRow label="Spread" value={`${spread}%`} onDecrease={() => setSpread(v => clamp(v - 2, 0, 100))} onIncrease={() => setSpread(v => clamp(v + 2, 0, 100))} />
           <ParameterRow label="Blend" value="Screen" />
+          <View style={styles.transformSection} testID="stage-transform-projection">
+            <Text style={styles.pathOperationTitle}>Transform</Text>
+            <Text style={styles.pathOperationDescription}>Shared live value with the Stage gizmo. This fixture is not saved to Document yet.</Text>
+            <ParameterRow label="Position X" value={transform.x.toFixed(3)} onDecrease={() => onTransformChange({x: transform.x - 0.025})} onIncrease={() => onTransformChange({x: transform.x + 0.025})} />
+            <ParameterRow label="Position Y" value={transform.y.toFixed(3)} onDecrease={() => onTransformChange({y: transform.y - 0.025})} onIncrease={() => onTransformChange({y: transform.y + 0.025})} />
+            <ParameterRow label="Position Z" value={transform.z.toFixed(3)} onDecrease={() => onTransformChange({z: transform.z - 0.025})} onIncrease={() => onTransformChange({z: transform.z + 0.025})} />
+            <ParameterRow label="Rotation X" value={`${transform.rotationX.toFixed(1)}°`} onDecrease={() => onTransformChange({rotationX: transform.rotationX - 5})} onIncrease={() => onTransformChange({rotationX: transform.rotationX + 5})} />
+            <ParameterRow label="Rotation Y" value={`${transform.rotationY.toFixed(1)}°`} onDecrease={() => onTransformChange({rotationY: transform.rotationY - 5})} onIncrease={() => onTransformChange({rotationY: transform.rotationY + 5})} />
+            <ParameterRow label="Rotation Z" value={`${transform.rotationZ.toFixed(1)}°`} onDecrease={() => onTransformChange({rotationZ: transform.rotationZ - 5})} onIncrease={() => onTransformChange({rotationZ: transform.rotationZ + 5})} />
+          </View>
           <View style={styles.pathOperationSection} testID="path-operations-panel">
             <Text style={styles.pathOperationTitle}>Lottie Path Operations</Text>
             <Text style={styles.pathOperationDescription}>Choose an operation to preview its evaluated vector path on the Stage. This fixture is not saved to Document yet.</Text>
@@ -655,6 +685,7 @@ function App() {
   const [createdItemId, setCreatedItemId] = useState('');
   const [draggedItemId, setDraggedItemId] = useState('');
   const [pathOperationId, setPathOperationId] = useState(PATH_OPERATIONS[0].id);
+  const [stageTransform, setStageTransform] = useState<StageTransform>(INITIAL_STAGE_TRANSFORM);
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
@@ -695,7 +726,7 @@ function App() {
           onNudge={() => setBrowserWidth(value => value >= 348 ? 284 : value + 64)}
         />
         <View style={styles.centerColumn}>
-          <Stage createdItemId={createdItemId} draggedItemId={draggedItemId} pathOperationId={pathOperationId} showGpu={showGpuStage} onDrop={completeStageDrop} onToggleGpu={() => setShowGpuStage(value => !value)} />
+          <Stage createdItemId={createdItemId} draggedItemId={draggedItemId} pathOperationId={pathOperationId} showGpu={showGpuStage} onDrop={completeStageDrop} onToggleGpu={() => setShowGpuStage(value => !value)} onTransform={setStageTransform} transform={stageTransform} />
         </View>
         <Splitter
           label="Inspectorのサイズを変更"
@@ -704,7 +735,7 @@ function App() {
           onDelta={delta => setInspectorWidth(clamp(inspectorStart.current - delta, 240, 440))}
           onNudge={() => setInspectorWidth(value => value >= 390 ? 326 : value + 64)}
         />
-        <Inspector width={inspectorWidth} pathOperationId={pathOperationId} onPathOperationChange={setPathOperationId} />
+        <Inspector width={inspectorWidth} pathOperationId={pathOperationId} onPathOperationChange={setPathOperationId} transform={stageTransform} onTransformChange={update => setStageTransform(current => ({...current, ...update}))} />
       </View>
       <Splitter
         label="Timelineのサイズを変更"
@@ -810,6 +841,7 @@ const styles = StyleSheet.create({
   stepText: {fontSize: 11, color: '#c8bc7b'},
   inspectorInput: {height: 30, margin: 9, paddingHorizontal: 7, fontSize: 9, color: '#eeeeeb', borderWidth: 1, borderColor: '#575c61'},
   pathOperationSection: {borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#383c40', paddingVertical: 8},
+  transformSection: {borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#33454c', paddingVertical: 8},
   pathOperationTitle: {paddingHorizontal: 10, fontSize: 10, fontWeight: '700', color: '#e7e7e4'},
   pathOperationDescription: {paddingHorizontal: 10, paddingTop: 4, fontSize: 8, lineHeight: 12, color: '#aeb2b3'},
   pathOperationGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: 5, padding: 10},

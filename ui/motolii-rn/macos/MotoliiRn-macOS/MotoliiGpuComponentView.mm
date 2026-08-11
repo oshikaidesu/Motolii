@@ -1,6 +1,7 @@
 #import "MotoliiGpuComponentView.h"
 
 #import <QuartzCore/CAMetalLayer.h>
+#import <cstring>
 #import <react/renderer/components/MotoliiNativeSpec/ComponentDescriptors.h>
 #import <react/renderer/components/MotoliiNativeSpec/EventEmitters.h>
 #import <react/renderer/components/MotoliiNativeSpec/Props.h>
@@ -13,6 +14,18 @@ extern "C" bool motolii_macos_renderer_resize(void *handle, uint32_t width, uint
 extern "C" bool motolii_macos_renderer_render(void *handle);
 extern "C" bool motolii_macos_stage_renderer_pointer(void *handle, uint32_t phase, double x, double y);
 extern "C" bool motolii_macos_stage_renderer_set_created_item(void *handle, const char *itemId);
+typedef struct {
+  double x;
+  double y;
+  double z;
+  double rotationX;
+  double rotationY;
+  double rotationZ;
+} MotoliiStageTransform;
+extern "C" bool motolii_macos_stage_renderer_get_transform(
+    void *handle, MotoliiStageTransform *transform);
+extern "C" bool motolii_macos_stage_renderer_set_transform(
+    void *handle, MotoliiStageTransform transform);
 extern "C" void motolii_macos_renderer_destroy(void *handle);
 extern "C" void *motolii_macos_timeline_renderer_create_ca_layer(void *layer, uint32_t width, uint32_t height);
 extern "C" bool motolii_macos_timeline_renderer_set_state(void *handle, int32_t selectedObjectIndex, double playhead);
@@ -274,6 +287,8 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   void *_renderer;
   std::string _createdItemId;
   std::string _draggedItemId;
+  MotoliiStageTransform _lastTransform;
+  BOOL _hasLastTransform;
   id _dropMonitor;
 }
 
@@ -327,6 +342,26 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   emitter->onStageDrop(drop);
 }
 
+- (void)emitStageTransformIfChanged
+{
+  if (!_renderer || !_eventEmitter) return;
+  MotoliiStageTransform transform = {};
+  if (!motolii_macos_stage_renderer_get_transform(_renderer, &transform)) return;
+  if (_hasLastTransform && std::memcmp(&_lastTransform, &transform, sizeof(transform)) == 0) return;
+  _lastTransform = transform;
+  _hasLastTransform = YES;
+  auto emitter = std::static_pointer_cast<const MotoliiGpuViewEventEmitter>(_eventEmitter);
+  MotoliiGpuViewEventEmitter::OnStageTransform event = {
+      .x = transform.x,
+      .y = transform.y,
+      .z = transform.z,
+      .rotationX = transform.rotationX,
+      .rotationY = transform.rotationY,
+      .rotationZ = transform.rotationZ,
+  };
+  emitter->onStageTransform(event);
+}
+
 - (void)updateProps:(const Props::Shared &)props oldProps:(const Props::Shared &)oldProps
 {
   const auto &newProps = static_cast<const MotoliiGpuViewProps &>(*props);
@@ -334,6 +369,15 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   _draggedItemId = newProps.draggedItemId;
   if (_renderer) {
     motolii_macos_stage_renderer_set_created_item(_renderer, _createdItemId.c_str());
+    MotoliiStageTransform transform = {
+        .x = newProps.transformX,
+        .y = newProps.transformY,
+        .z = newProps.transformZ,
+        .rotationX = newProps.rotationX,
+        .rotationY = newProps.rotationY,
+        .rotationZ = newProps.rotationZ,
+    };
+    motolii_macos_stage_renderer_set_transform(_renderer, transform);
   }
   if (!_draggedItemId.empty() && !_dropMonitor) {
     __weak MotoliiGpuComponentView *weakSelf = self;
@@ -403,6 +447,16 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
     return;
   }
   motolii_macos_stage_renderer_set_created_item(_renderer, _createdItemId.c_str());
+  const auto &props = static_cast<const MotoliiGpuViewProps &>(*_props);
+  MotoliiStageTransform transform = {
+      .x = props.transformX,
+      .y = props.transformY,
+      .z = props.transformZ,
+      .rotationX = props.rotationX,
+      .rotationY = props.rotationY,
+      .rotationZ = props.rotationZ,
+  };
+  motolii_macos_stage_renderer_set_transform(_renderer, transform);
 
   __weak MotoliiGpuComponentView *weakSelf = self;
   _frameTimer = [NSTimer scheduledTimerWithTimeInterval:(1.0 / 60.0)
@@ -411,6 +465,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
     MotoliiGpuComponentView *strongSelf = weakSelf;
     if (strongSelf && strongSelf->_renderer) {
       motolii_macos_renderer_render(strongSelf->_renderer);
+      [strongSelf emitStageTransformIfChanged];
       MotoliiRenderStats stats = {};
       if (motolii_macos_renderer_get_stats(strongSelf->_renderer, &stats) &&
           stats.frameCount > 0 && stats.frameCount % 120 == 0) {

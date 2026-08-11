@@ -19,6 +19,24 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'packing-timeline'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'inspector-surface'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'path-operations-panel'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'stage-transform-projection'})).toBeTruthy();
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageTransform({
+      nativeEvent: {x: 0.25, y: -0.5, z: 0.75, rotationX: 10, rotationY: 20, rotationZ: 30},
+    });
+  });
+  expect(tree!.root.findByProps({children: '0.250'})).toBeTruthy();
+  expect(tree!.root.findByProps({children: '30.0°'})).toBeTruthy();
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({accessibilityLabel: 'Position X increase'}).props.onPress();
+    tree!.root.findByProps({accessibilityLabel: 'Rotation Z decrease'}).props.onPress();
+  });
+  expect(tree!.root.findByProps({children: '0.275'})).toBeTruthy();
+  expect(tree!.root.findByProps({children: '25.0°'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.transformX).toBe(0.275);
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.rotationZ).toBe(25);
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'path-operation-trim'}).props.onPress();

@@ -4,6 +4,7 @@ use egui::{
     Event, PointerButton, Pos2, RawInput, Rect, Vec2,
     epaint::{Mesh, Vertex as EguiVertex},
 };
+use glam::EulerRot;
 use lyon_path::{Path as LyonPath, math::point};
 use lyon_tessellation::{
     FillOptions, FillTessellator, StrokeOptions, StrokeTessellator,
@@ -35,6 +36,16 @@ pub(crate) struct EmbeddedSpatialStage {
     gizmo: Gizmo,
     fixture_transform: Transform,
     fixture_item_id: String,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct StageTransformProjection {
+    pub(crate) x: f64,
+    pub(crate) y: f64,
+    pub(crate) z: f64,
+    pub(crate) rotation_x: f64,
+    pub(crate) rotation_y: f64,
+    pub(crate) rotation_z: f64,
 }
 
 impl EmbeddedSpatialStage {
@@ -98,6 +109,38 @@ impl EmbeddedSpatialStage {
             PointerPhase::Cancel => self.input_events.push(Event::PointerGone),
             PointerPhase::Move => {}
         }
+    }
+
+    /// 一時gizmo値をInspectorへ投影する。Document値ではない。
+    pub(crate) fn transform_projection(&self) -> StageTransformProjection {
+        let (rotation_x, rotation_y, rotation_z) =
+            DQuat::from(self.fixture_transform.rotation).to_euler(EulerRot::XYZ);
+        let translation = DVec3::from(self.fixture_transform.translation);
+        StageTransformProjection {
+            x: translation.x,
+            y: translation.y,
+            z: translation.z,
+            rotation_x: rotation_x.to_degrees(),
+            rotation_y: rotation_y.to_degrees(),
+            rotation_z: rotation_z.to_degrees(),
+        }
+    }
+
+    /// Inspectorとgizmoが共有する一時値。Documentには書き込まない。
+    pub(crate) fn set_transform_projection(&mut self, projection: StageTransformProjection) -> bool {
+        let transform = Transform::from_scale_rotation_translation(
+            DVec3::ONE,
+            DQuat::from_euler(
+                EulerRot::XYZ,
+                projection.rotation_x.to_radians(),
+                projection.rotation_y.to_radians(),
+                projection.rotation_z.to_radians(),
+            ),
+            DVec3::new(projection.x, projection.y, projection.z),
+        );
+        self.fixture_transform = transform;
+        let item_id = self.fixture_item_id.clone();
+        self.set_created_item(&item_id)
     }
 
     pub(crate) fn set_created_item(&mut self, item_id: &str) -> bool {

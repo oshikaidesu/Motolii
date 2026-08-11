@@ -10,6 +10,7 @@ crate-type = ["staticlib"]
 bytemuck = { version = "1", features = ["derive"] }
 egui = "0.35.0"
 egui-wgpu = "0.35.0"
+glam = "0.32"
 lyon_path = "1.0.19"
 lyon_tessellation = "1.0.19"
 motolii-doc = { path = "../../../crates/motolii-doc" }

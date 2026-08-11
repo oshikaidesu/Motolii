@@ -3061,6 +3061,7 @@ dependencies = [
  "bytemuck",
  "egui",
  "egui-wgpu",
+ "glam 0.32.1",
  "lyon_path",
  "lyon_tessellation",
  "motolii-doc",

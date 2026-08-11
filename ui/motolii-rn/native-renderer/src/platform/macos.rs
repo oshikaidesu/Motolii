@@ -1,6 +1,9 @@
 use std::ffi::c_void;
 
-use crate::renderer_core::{PointerPhase, RenderStats, RendererCore, SceneKind};
+use crate::{
+    renderer_core::{PointerPhase, RenderStats, RendererCore, SceneKind},
+    rerun_stage::StageTransformProjection,
+};
 
 pub(crate) struct MacOsSurfaceRenderer {
     core: RendererCore,
@@ -48,6 +51,14 @@ impl MacOsSurfaceRenderer {
 
     pub(crate) fn set_created_item(&mut self, item_id: &str) -> bool {
         self.core.set_created_item(item_id)
+    }
+
+    pub(crate) fn stage_transform_projection(&self) -> Option<StageTransformProjection> {
+        self.core.stage_transform_projection()
+    }
+
+    pub(crate) fn set_stage_transform_projection(&mut self, projection: StageTransformProjection) -> bool {
+        self.core.set_stage_transform_projection(projection)
     }
 
     pub(crate) fn timeline_hit_test(&self, x: f64, y: f64) -> Option<(i32, f64)> {

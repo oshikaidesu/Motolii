@@ -23,6 +23,17 @@ pub struct MotoliiTimelineFeedback {
     pub time: f64,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MotoliiStageTransform {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    pub rotation_x: f64,
+    pub rotation_y: f64,
+    pub rotation_z: f64,
+}
+
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn motolii_macos_renderer_create_ca_layer(
@@ -127,6 +138,61 @@ pub unsafe extern "C" fn motolii_macos_stage_renderer_set_created_item(
     };
     catch_unwind(AssertUnwindSafe(|| unsafe {
         (&mut *handle.cast::<MacOsSurfaceRenderer>()).set_created_item(item_id)
+    }))
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// `handle` must be a live renderer returned by this library and `transform`
+/// must point to writable storage for one `MotoliiStageTransform`.
+pub unsafe extern "C" fn motolii_macos_stage_renderer_get_transform(
+    handle: *mut c_void,
+    transform: *mut MotoliiStageTransform,
+) -> bool {
+    if handle.is_null() || transform.is_null() {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        let Some(projection) =
+            (&*handle.cast::<MacOsSurfaceRenderer>()).stage_transform_projection()
+        else {
+            return false;
+        };
+        transform.write(MotoliiStageTransform {
+            x: projection.x,
+            y: projection.y,
+            z: projection.z,
+            rotation_x: projection.rotation_x,
+            rotation_y: projection.rotation_y,
+            rotation_z: projection.rotation_z,
+        });
+        true
+    }))
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_macos_stage_renderer_set_transform(
+    handle: *mut c_void,
+    transform: MotoliiStageTransform,
+) -> bool {
+    if handle.is_null() {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        (&mut *handle.cast::<MacOsSurfaceRenderer>()).set_stage_transform_projection(
+            rerun_stage::StageTransformProjection {
+                x: transform.x,
+                y: transform.y,
+                z: transform.z,
+                rotation_x: transform.rotation_x,
+                rotation_y: transform.rotation_y,
+                rotation_z: transform.rotation_z,
+            },
+        )
     }))
     .unwrap_or(false)
 }

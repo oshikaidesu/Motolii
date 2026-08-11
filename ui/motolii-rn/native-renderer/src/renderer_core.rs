@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use crate::rerun_stage::EmbeddedSpatialStage;
+use crate::rerun_stage::{EmbeddedSpatialStage, StageTransformProjection};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SceneKind {
@@ -168,6 +168,18 @@ impl RendererCore {
         self.stage
             .as_mut()
             .is_some_and(|stage| stage.rerun.set_created_item(item_id))
+    }
+
+    pub(crate) fn stage_transform_projection(&self) -> Option<StageTransformProjection> {
+        self.stage
+            .as_ref()
+            .map(|stage| stage.rerun.transform_projection())
+    }
+
+    pub(crate) fn set_stage_transform_projection(&mut self, projection: StageTransformProjection) -> bool {
+        self.stage
+            .as_mut()
+            .is_some_and(|stage| stage.rerun.set_transform_projection(projection))
     }
 
     pub(crate) fn timeline_hit_test(&self, x: f64, y: f64) -> Option<(i32, f64)> {
