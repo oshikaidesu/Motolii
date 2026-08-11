@@ -45,10 +45,10 @@ React資産のRN移行は、固定source assetのcomponent boundary、情報階�
 
 | fixture／領域 | 実装状態 | 現在の用途 |
 |---|---|---|
-| `#plugin-browser-candidate`のBrowser | React product-owned。2026-08-09に`ui/motolii-rn-legacy/src/browser/BrowserPanel.tsx`へ着地した実装はhistorical oracleとして保持するが、同targetはread-only。current接続targetは`ui/motolii-rn/App.tsx` | `ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx`のproduct closureをsemantic oracleとして使い、probe内の既存BrowserへHost入力を接続する。別panelへcopyしない |
+| `#plugin-browser-candidate`のBrowser | React product-owned。current接続targetは`ui/motolii-rn/App.tsx`。2026-08-09の旧R0実装はmainから削除しGit履歴だけへ置く | `ui/motolii-web/src/candidates/DiscoveryBrowserCandidate.jsx`のproduct closureをsemantic oracleとして使い、現行BrowserへHost入力を接続する。別panelへcopyしない |
 | `#plugin-browser-candidate`のEasing入口 / popup | triggerはReact product-owned（R2B完了）、popupはnative oracle | trigger source authorityは`ui/motolii-web/src/candidates/EasingTriggerCandidate.jsx`。object・channelとpressed/disabledのaccessible stateまでを維持する。visible summary chromeは未決。popup frame/preset/form/curve/modelはnative oracleとして維持し、active interval／Interp接続は別粒 |
 | `#plugin-browser-candidate`の`KEYS / LAYERS` | React product-owned tool panel（R3B完了） | source authorityは`ui/motolii-web/src/candidates/KeyToolsCandidate.jsx`。mockの`TimelineCandidate.jsx`はconsumerであり、native time surfaceをReactへ移さない。各operationのHost接続は別粒 |
-| `#plugin-browser-candidate`のInspector | React product-owned。`ui/motolii-rn-legacy/src/inspector/InspectorInitialReadPanel.tsx`はhistorical oracleとして保持するが、current接続targetは`ui/motolii-rn/App.tsx` | source authorityは`ui/motolii-web/src/candidates/InspectorCandidate.jsx`。probe内の既存Inspectorへbounded readを接続し、未接続parameter/easingを画面から推測しない |
+| `#plugin-browser-candidate`のInspector | React product-owned。current接続targetは`ui/motolii-rn/App.tsx`。旧R0実装はmainから削除しGit履歴だけへ置く | source authorityは`ui/motolii-web/src/candidates/InspectorCandidate.jsx`。現行Inspectorへbounded readを接続し、未接続parameter/easingを画面から推測しない |
 | `#plugin-browser-candidate`のStage / Timeline time surface / Settings | legacy bridgeまたはReact比較candidate | native製品面のoracle／周辺文脈。React製品runtimeへ直接持ち込まない |
 | `#archive/all-surfaces`等 | legacy HTMLをparseしたarchive bridge | 旧画面との視覚parity回帰。通常catalogへ出さない |
 | `#skeleton` | React-native分解骨格 | component責務と組立境界の確認。視覚正本でも、Inspector等の代替製品実装でもない |

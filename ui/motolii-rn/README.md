@@ -2,7 +2,7 @@
 
 通常作業の入口はこのdirectoryだけ。macOS appはrepository rootから
 `scripts/build-macos-app.sh`でbuildする。旧worktree、DerivedData、リポジトリ外artifact、
-`ui/motolii-rn-legacy/`へfallbackしない。current buildが無ければ旧appを開かず、未buildと報告する。
+過去appへfallbackしない。current buildが無ければ旧appを開かず、未buildと報告する。
 
 Motoliiの唯一のRN製品source。`App.tsx` 660行 — Browser 3タブ(`MEDIA`/`EFFECTS`/`CREATE`)、
 Inspector/Extensions、Timeline 3モード、effect一覧、panel registry、
@@ -14,8 +14,8 @@ native `MotoliiGpuComponentView.mm`、Fabric spec `MotoliiGpuView`/`MotoliiTimel
 (node_modules/Pods/build/target/vendor/.yarn除外。`yarn install`で復元可)。RN標準のREADMEは`README.upstream.md`へ退避。
 
 **状態境界**: このdirectoryがRN／Rerun／Skiaを束ねる製品source兼write targetである。
-別RN appや移植先、過去版を保持する新しい凍結copyを作らない。`ui/motolii-rn-legacy`は通常routeから除外された
-履歴物であり、通常の実装・確認でread／write／build／launchしない。
+別RN appや移植先、過去版を保持する新しい凍結copyを作らない。旧R0 UI sourceはmainから削除済みで、
+必要な歴史証拠はGit履歴からだけ読む。
 固定fixtureは製品意味の正本にせず、Document／D2入力へ接続できた箇所から置き換える。
 
 ## Rerun Stage共通評価probe

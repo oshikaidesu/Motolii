@@ -60,13 +60,13 @@ Rerunのstore／query／View／visualizer／camera／picking／renderer閉包を
 
 旧名`MotoliiRnProbe`と`spikes/motolii-rn-probe/`は2026-08-11のcutoverで退役した。app identityは`MotoliiRn`、product pathは`ui/motolii-rn/`である。固定fixtureとBuild IDは局所能力の証拠に限り、Document入力へ接続できた箇所から置き換える。
 
-`ui/motolii-rn-legacy/`はread-onlyの旧製品shellとする。利用者がexact path付きで明示的に解凍するまで、ここへ製品接続を追加しない。
+旧R0製品shellは2026-08-11にmainから削除した。必要な歴史証拠はGit履歴だけから読み、source treeとして復元しない。
 
 次を禁止する。
 
 - 新しいRN app、shell、app root、製品entrypointを作る
-- 製品の既存画面、registration、rendererを`ui/motolii-rn-legacy/`へcopy／再実装する
-- `ui/motolii-rn-legacy/`へwriteする、または二つのRN appを並行して製品化する
+- 製品の既存画面、registration、rendererを過去UI sourceへcopy／再実装する
+- 過去UI sourceをmainへ復元する、または二つのRN appを並行して製品化する
 - buildや接続が難しいことを理由に、別UI、第二Host、第二Document writer、第二GPU ownerへ迂回する
 
-この凍結は現行製品UIを変更しない意味ではない。製品接続は`ui/motolii-rn/`内で継続する。`ui/motolii-rn-legacy/`を再びtargetにする場合だけ、利用者の明示判断を受け、代替target、移行route、cutover oracle、現targetの退役を閉じた解凍decisionを先にmainへ入れる。
+製品接続は`ui/motolii-rn/`内で継続する。過去UIをmainへ復元する場合は、利用者の明示判断を受け、代替target、移行route、cutover oracle、現targetの退役を閉じた新decisionを先にmainへ入れる。
