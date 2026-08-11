@@ -808,7 +808,9 @@ function NativeTimeline() {
       <View style={styles.nativeTimelineControls}>
         <Text style={styles.nativeTimelineTitle}>Rust / wgpu · 500 clips · 20 tracks</Text>
         <Text style={styles.nativeTimelineFeedback} testID="native-timeline-feedback">
-          clip {selectedObjectIndex} · {(playhead * 100).toFixed(1)}%
+          {selectedObjectIndex >= 0
+            ? `clip ${selectedObjectIndex} · ${(playhead * 100).toFixed(1)}%`
+            : `no clip · ${(playhead * 100).toFixed(1)}%`}
         </Text>
       </View>
       <View style={styles.nativeTimelineContent}>

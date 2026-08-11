@@ -49,13 +49,16 @@ typedef struct {
 
 extern "C" bool motolii_macos_timeline_renderer_hit_test(
     void *handle, double x, double y, MotoliiTimelineFeedback *feedback);
+extern "C" bool motolii_macos_timeline_renderer_pointer(
+    void *handle, uint32_t phase, double x, double y, MotoliiTimelineFeedback *feedback);
 extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStats *stats);
 
 @interface MotoliiMetalView : NSView
 @end
 
 @interface MotoliiTimelineMetalView : MotoliiMetalView
-@property(nonatomic, copy) void (^timelineClickHandler)(CGFloat x, CGFloat y);
+@property(nonatomic, copy) void (^timelinePointerHandler)(uint32_t phase, CGFloat x, CGFloat y);
+@property(nonatomic, assign) BOOL timelineGestureActive;
 @end
 
 @interface MotoliiStageMetalView : MotoliiMetalView
@@ -85,17 +88,42 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   return YES;
 }
 
-- (void)mouseDown:(NSEvent *)event
+- (void)emitPhase:(uint32_t)phase event:(NSEvent *)event
 {
   NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
-  if (self.timelineClickHandler) {
-    self.timelineClickHandler(point.x, NSHeight(self.bounds) - point.y);
+  if (self.timelinePointerHandler) {
+    self.timelinePointerHandler(phase, point.x, NSHeight(self.bounds) - point.y);
   }
+  if (phase == 0) {
+    self.timelineGestureActive = YES;
+  } else if (phase == 2 || phase == 3) {
+    self.timelineGestureActive = NO;
+  }
+}
+
+- (void)mouseDown:(NSEvent *)event
+{
+  [self.window makeFirstResponder:self];
+  [self emitPhase:0 event:event];
 }
 
 - (void)mouseDragged:(NSEvent *)event
 {
-  [self mouseDown:event];
+  [self emitPhase:1 event:event];
+}
+
+- (void)mouseUp:(NSEvent *)event
+{
+  [self emitPhase:2 event:event];
+}
+
+- (void)viewDidMoveToWindow
+{
+  [super viewDidMoveToWindow];
+  if (!self.window && self.timelineGestureActive && self.timelinePointerHandler) {
+    self.timelinePointerHandler(3, 0, 0);
+    self.timelineGestureActive = NO;
+  }
 }
 
 @end
@@ -139,7 +167,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
     _timelineView.wantsLayer = YES;
     _timelineView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     __weak MotoliiTimelineComponentView *weakSelf = self;
-    _timelineView.timelineClickHandler = ^(CGFloat x, CGFloat y) {
+    _timelineView.timelinePointerHandler = ^(uint32_t phase, CGFloat x, CGFloat y) {
       MotoliiTimelineComponentView *strongSelf = weakSelf;
       if (!strongSelf || !strongSelf->_timelineRenderer) {
         return;
@@ -147,8 +175,8 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
       CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_timelineView.layer;
       CGFloat scale = layer.contentsScale ?: 1.0;
       MotoliiTimelineFeedback feedback = {};
-      if (!motolii_macos_timeline_renderer_hit_test(
-              strongSelf->_timelineRenderer, x * scale, y * scale, &feedback)) {
+      if (!motolii_macos_timeline_renderer_pointer(
+              strongSelf->_timelineRenderer, phase, x * scale, y * scale, &feedback)) {
         return;
       }
       if (!strongSelf->_eventEmitter) {
@@ -267,6 +295,15 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 
 - (void)stopTimelineRenderer
 {
+  if (_timelineRenderer && _timelineView.timelineGestureActive) {
+    if (_timelineView.timelinePointerHandler) {
+      _timelineView.timelinePointerHandler(3, 0, 0);
+    } else {
+      MotoliiTimelineFeedback feedback = {};
+      motolii_macos_timeline_renderer_pointer(_timelineRenderer, 3, 0.0, 0.0, &feedback);
+    }
+    _timelineView.timelineGestureActive = NO;
+  }
   [_timelineTimer invalidate];
   _timelineTimer = nil;
   if (_timelineRenderer) {

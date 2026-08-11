@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use crate::rerun_stage::{EmbeddedSpatialStage, StageTransformProjection};
+use crate::timeline_skia::{TimelinePointerPhase, TimelineSession};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SceneKind {
@@ -51,6 +52,7 @@ pub(crate) struct RendererCore {
     config: wgpu::SurfaceConfiguration,
     stage: Option<StageResources>,
     timeline: Option<TimelineResources>,
+    timeline_session: Option<TimelineSession>,
     scene: SceneKind,
     selected_object_index: i32,
     playhead: f64,
@@ -128,6 +130,7 @@ impl RendererCore {
             config,
             stage,
             timeline,
+            timeline_session: (scene == SceneKind::Timeline).then(TimelineSession::default),
             scene,
             selected_object_index: 1,
             playhead: 0.54,
@@ -157,7 +160,7 @@ impl RendererCore {
     }
 
     pub(crate) fn set_timeline_state(&mut self, selected_object_index: i32, playhead: f64) {
-        self.selected_object_index = selected_object_index.max(0);
+        self.selected_object_index = selected_object_index.max(-1);
         self.playhead = playhead.clamp(0.0, 1.0);
         if let Some(timeline) = &mut self.timeline {
             timeline.dirty = true;
@@ -183,9 +186,60 @@ impl RendererCore {
     }
 
     pub(crate) fn timeline_hit_test(&self, x: f64, y: f64) -> Option<(i32, f64)> {
-        (self.scene == SceneKind::Timeline)
-            .then(|| crate::timeline_skia::hit_test(self.config.width, self.config.height, x, y))
-            .flatten()
+        let Some(session) = &self.timeline_session else {
+            return None;
+        };
+        crate::timeline_skia::hit_test(
+            &session.scene,
+            self.config.width,
+            self.config.height,
+            x,
+            y,
+        )
+    }
+
+    /// Timeline pointer。戻り値trueはselection/playhead変化(feedback対象)。
+    pub(crate) fn timeline_pointer(
+        &mut self,
+        phase: PointerPhase,
+        x: f64,
+        y: f64,
+    ) -> Option<(i32, f64)> {
+        let Some(session) = &mut self.timeline_session else {
+            return None;
+        };
+        let tl_phase = match phase {
+            PointerPhase::Down => {
+                self.stats.pointer_downs += 1;
+                TimelinePointerPhase::Down
+            }
+            PointerPhase::Move => {
+                self.stats.pointer_moves += 1;
+                TimelinePointerPhase::Move
+            }
+            PointerPhase::Up => {
+                self.stats.pointer_ups += 1;
+                TimelinePointerPhase::Up
+            }
+            PointerPhase::Cancel => TimelinePointerPhase::Cancel,
+        };
+        let outcome = session.pointer(
+            &mut self.selected_object_index,
+            &mut self.playhead,
+            self.config.width,
+            self.config.height,
+            tl_phase,
+            x,
+            y,
+        );
+        if outcome.dirty {
+            if let Some(timeline) = &mut self.timeline {
+                timeline.dirty = true;
+            }
+        }
+        outcome
+            .feedback
+            .then_some((self.selected_object_index, self.playhead))
     }
 
     pub(crate) fn stats(&self) -> RenderStats {
@@ -246,15 +300,27 @@ impl RendererCore {
     }
 
     fn render_timeline(&mut self, view: &wgpu::TextureView) {
-        let timeline = self.timeline.as_mut().expect("timeline resources");
-        if timeline.dirty {
+        let needs_raster = self.timeline.as_ref().is_some_and(|t| t.dirty);
+        if needs_raster {
+            let scene = self
+                .timeline_session
+                .as_ref()
+                .expect("timeline session")
+                .scene
+                .clone();
+            let width = self.config.width;
+            let height = self.config.height;
+            let playhead = self.playhead;
+            let selected = self.selected_object_index;
+            let timeline = self.timeline.as_mut().expect("timeline resources");
             let raster_started = Instant::now();
             crate::timeline_skia::draw_timeline(
+                &scene,
                 &mut timeline.pixels,
-                self.config.width,
-                self.config.height,
-                self.playhead,
-                self.selected_object_index,
+                width,
+                height,
+                playhead,
+                selected,
             );
             self.queue.write_texture(
                 wgpu::TexelCopyTextureInfo {
@@ -266,12 +332,12 @@ impl RendererCore {
                 &timeline.pixels,
                 wgpu::TexelCopyBufferLayout {
                     offset: 0,
-                    bytes_per_row: Some(self.config.width * 4),
-                    rows_per_image: Some(self.config.height),
+                    bytes_per_row: Some(width * 4),
+                    rows_per_image: Some(height),
                 },
                 wgpu::Extent3d {
-                    width: self.config.width,
-                    height: self.config.height,
+                    width,
+                    height,
                     depth_or_array_layers: 1,
                 },
             );
@@ -280,6 +346,7 @@ impl RendererCore {
             self.stats.overlay_last_us = raster_started.elapsed().as_micros() as u64;
         }
 
+        let timeline = self.timeline.as_mut().expect("timeline resources");
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {

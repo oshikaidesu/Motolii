@@ -65,6 +65,15 @@ impl MacOsSurfaceRenderer {
         self.core.timeline_hit_test(x, y)
     }
 
+    pub(crate) fn timeline_pointer(
+        &mut self,
+        phase: PointerPhase,
+        x: f64,
+        y: f64,
+    ) -> Option<(i32, f64)> {
+        self.core.timeline_pointer(phase, x, y)
+    }
+
     pub(crate) fn stage_pointer(&mut self, phase: PointerPhase, x: f64, y: f64) {
         self.core.stage_pointer(phase, x, y);
     }

@@ -242,6 +242,38 @@ pub unsafe extern "C" fn motolii_macos_timeline_renderer_hit_test(
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 /// # Safety
+/// `handle` must be a live renderer returned by this library and `feedback`
+/// must point to writable storage for one `MotoliiTimelineFeedback`.
+pub unsafe extern "C" fn motolii_macos_timeline_renderer_pointer(
+    handle: *mut c_void,
+    phase: u32,
+    x: f64,
+    y: f64,
+    feedback: *mut MotoliiTimelineFeedback,
+) -> bool {
+    if handle.is_null() || feedback.is_null() {
+        return false;
+    }
+    let phase = match phase {
+        0 => PointerPhase::Down,
+        1 => PointerPhase::Move,
+        2 => PointerPhase::Up,
+        _ => PointerPhase::Cancel,
+    };
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        let renderer = &mut *handle.cast::<MacOsSurfaceRenderer>();
+        let Some((object_index, time)) = renderer.timeline_pointer(phase, x, y) else {
+            return false;
+        };
+        feedback.write(MotoliiTimelineFeedback { object_index, time });
+        true
+    }))
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
 /// `handle` must be a live renderer returned by this library and `stats`
 /// must point to writable storage for one `RenderStats`.
 pub unsafe extern "C" fn motolii_macos_renderer_get_stats(

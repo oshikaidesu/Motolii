@@ -18,6 +18,9 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'browser-view-EFFECTS'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'rust-wgpu-timeline'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'native-timeline-feedback'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'native-timeline-feedback'}).props.children).toBe(
+    'clip 1 · 54.0%',
+  );
   expect(tree!.root.findByProps({testID: 'timeline-key-tools'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'timeline-key-mode-KEYS'}).props.accessibilityState.selected).toBe(true);
   expect(tree!.root.findAllByProps({accessibilityLabel: 'Select previous native clip'})).toHaveLength(0);
@@ -29,6 +32,14 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'path-operations-panel'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'stage-transform-projection'})).toBeTruthy();
 
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'rust-wgpu-timeline'}).props.onTimelineFeedback({
+      nativeEvent: {objectIndex: -1, time: 0.54},
+    });
+  });
+  expect(tree!.root.findByProps({testID: 'native-timeline-feedback'}).props.children).toBe(
+    'no clip · 54.0%',
+  );
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageTransform({
       nativeEvent: {x: 0.25, y: -0.5, z: 0.75, rotationX: 10, rotationY: 20, rotationZ: 30},
