@@ -24,8 +24,8 @@ project open/new
 最初の移行oracleは既に意味が閉じているVS-1とする。
 
 ```text
-Browser Rectangle（single clickは選択、double clickは正準原点へ作成）
-  → Place at Stage center
+Browser Rectangle（single clickは選択、double clickはStage中央、drag and dropはdrop位置へ作成）
+  → Place in Stage
   → D2 single writer
   → RN Inspector + rust-skia Timeline + Stage が同じrevision / LayerIdを表示
   → Undo
@@ -189,6 +189,7 @@ Timeline trim／key drag、Stage gizmo、Depth Rail direct manipulation、drag a
 
 - Browser Rectangle conceptをRNへ移す
 - Create catalogのdouble clickを明示的な中央作成操作とし、single clickの選択と分離する
+- Create catalogからStageへのdrag and dropはStage内drop位置を正規化して投影し、Stage外release／cancelは何も作らない
 - Stage Rerun Spatial Viewer + rust-skia authoring overlay
 - rust-skia Timeline read projection
 - RN Inspector read projection

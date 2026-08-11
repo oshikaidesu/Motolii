@@ -22,6 +22,9 @@ type BrowserViewMode = 'THUMBNAILS' | 'GRID' | 'LIST';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
 type TimelineMode = 'PACKING' | 'DENSITY' | 'NATIVE';
 
+type StageFrame = {x: number; y: number; width: number; height: number};
+type BrowserDrag = {id: string; startX: number; startY: number; moved: boolean};
+
 const BUILD_LABEL = 'B002 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA';
 
 type EffectItem = {
@@ -87,6 +90,19 @@ const MEDIA_ITEMS = Array.from({length: 5000}, (_, index) => ({
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, Math.round(value)));
 
+export function stagePlacement(frame: StageFrame, x: number, y: number) {
+  if (frame.width <= 0 || frame.height <= 0 || x < frame.x || y < frame.y || x > frame.x + frame.width || y > frame.y + frame.height) {
+    return null;
+  }
+  return {
+    x: (x - frame.x) / frame.width,
+    y: (y - frame.y) / frame.height,
+  };
+}
+
+const createdItemValue = (id: string, x: number, y: number) =>
+  `${id}@${x.toFixed(6)},${y.toFixed(6)}`;
+
 const RAIL_HEADINGS = new Set(['COLLECTIONS', 'TAGS', 'PACKS', 'TYPE', 'PROVIDER']);
 
 function Splitter({
@@ -147,6 +163,7 @@ function BrowserResults({
   selectedId,
   onSelect,
   onActivate,
+  onDragStart,
   testID,
 }: {
   title: string;
@@ -156,6 +173,7 @@ function BrowserResults({
   selectedId: string | null;
   onSelect: (id: string) => void;
   onActivate: (id: string) => void;
+  onDragStart: (id: string, x: number, y: number) => void;
   testID: string;
 }) {
   const columns = view === 'THUMBNAILS' ? 4 : view === 'GRID' ? 2 : 1;
@@ -193,6 +211,7 @@ function BrowserResults({
             accessibilityRole="button"
             accessibilityState={{selected: selectedId === item.id}}
             onDoubleClick={() => onActivate(item.id)}
+            onPointerDown={event => onDragStart(item.id, event.nativeEvent.clientX, event.nativeEvent.clientY)}
             onPress={() => onSelect(item.id)}
             testID={item.testID}
             style={[
@@ -230,7 +249,7 @@ function BrowserResults({
   );
 }
 
-function Browser({width, onCreateItem}: {width: number; onCreateItem: (id: string) => void}) {
+function Browser({width, onCreateItem, onDragStart}: {width: number; onCreateItem: (id: string) => void; onDragStart: (id: string, x: number, y: number) => void}) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState('echo');
@@ -329,7 +348,13 @@ function Browser({width, onCreateItem}: {width: number; onCreateItem: (id: strin
         onActivate={id => {
           if (tab === 'CREATE') {
             setSelectedCreateItem(id);
-            onCreateItem(id);
+            onCreateItem(createdItemValue(id, 0.5, 0.5));
+          }
+        }}
+        onDragStart={(id, x, y) => {
+          if (tab === 'CREATE') {
+            setSelectedCreateItem(id);
+            onDragStart(id, x, y);
           }
         }}
         onSelect={id => tab === 'EFFECTS' ? setSelected(id) : tab === 'CREATE' ? setSelectedCreateItem(id) : undefined}
@@ -343,7 +368,7 @@ function Browser({width, onCreateItem}: {width: number; onCreateItem: (id: strin
   );
 }
 
-function Stage({createdItemId, showGpu, onToggleGpu}: {createdItemId: string; showGpu: boolean; onToggleGpu: () => void}) {
+function Stage({createdItemId, showGpu, onToggleGpu, viewportRef}: {createdItemId: string; showGpu: boolean; onToggleGpu: () => void; viewportRef: React.RefObject<React.ElementRef<typeof View> | null>}) {
   return (
     <View style={styles.stage} testID="stage-surface">
       <View style={styles.stageTools}>
@@ -354,7 +379,7 @@ function Stage({createdItemId, showGpu, onToggleGpu}: {createdItemId: string; sh
         </Pressable>
         <Text style={styles.stageIdentity}>STAGE / ECHO BLOOM</Text>
       </View>
-      <View style={styles.stageViewport}>
+      <View ref={viewportRef} style={styles.stageViewport}>
         {showGpu ? (
           <MotoliiGpuView
             accessible
@@ -603,9 +628,35 @@ function App() {
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
+  const browserDrag = useRef<BrowserDrag | null>(null);
+  const stageViewport = useRef<React.ElementRef<typeof View>>(null);
 
   return (
-    <View style={styles.shell} testID="motolii-rn-shell">
+    <View
+      onPointerCancel={() => { browserDrag.current = null; }}
+      onPointerMove={event => {
+        const drag = browserDrag.current;
+        if (drag && Math.hypot(event.nativeEvent.clientX - drag.startX, event.nativeEvent.clientY - drag.startY) > 4) {
+          drag.moved = true;
+        }
+      }}
+      onPointerUp={event => {
+        const drag = browserDrag.current;
+        browserDrag.current = null;
+        if (!drag?.moved) {
+          return;
+        }
+        const dropX = event.nativeEvent.clientX;
+        const dropY = event.nativeEvent.clientY;
+        stageViewport.current?.measureInWindow((x, y, width, height) => {
+          const placement = stagePlacement({x, y, width, height}, dropX, dropY);
+          if (placement) {
+            setCreatedItemId(createdItemValue(drag.id, placement.x, placement.y));
+          }
+        });
+      }}
+      style={styles.shell}
+      testID="motolii-rn-shell">
       <View style={styles.titlebar}>
         <Text style={styles.brand}>MOTOLII</Text>
         <Text style={styles.project}>night_drive.mtl / Main composition</Text>
@@ -619,7 +670,11 @@ function App() {
         <Text style={styles.breadcrumb}>Pulse rings / <Text style={styles.breadcrumbStrong}>Echo Bloom</Text></Text>
       </View>
       <View style={styles.workspace}>
-        <Browser onCreateItem={setCreatedItemId} width={browserWidth} />
+        <Browser
+          onCreateItem={setCreatedItemId}
+          onDragStart={(id, startX, startY) => { browserDrag.current = {id, startX, startY, moved: false}; }}
+          width={browserWidth}
+        />
         <Splitter
           label="Browserのサイズを変更"
           orientation="vertical"
@@ -628,7 +683,7 @@ function App() {
           onNudge={() => setBrowserWidth(value => value >= 348 ? 284 : value + 64)}
         />
         <View style={styles.centerColumn}>
-          <Stage createdItemId={createdItemId} showGpu={showGpuStage} onToggleGpu={() => setShowGpuStage(value => !value)} />
+          <Stage createdItemId={createdItemId} showGpu={showGpuStage} onToggleGpu={() => setShowGpuStage(value => !value)} viewportRef={stageViewport} />
         </View>
         <Splitter
           label="Inspectorのサイズを変更"

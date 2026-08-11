@@ -13,9 +13,9 @@ pub(crate) enum SceneKind {
     Timeline,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum CreatedItem {
-    Rectangle,
+    Rectangle { center: [f32; 2] },
 }
 
 #[repr(C)]
@@ -298,10 +298,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     pub(crate) fn set_created_item(&mut self, item_id: &str) -> bool {
-        self.created_item = match item_id {
-            "" => None,
-            "rectangle" => Some(CreatedItem::Rectangle),
-            _ => return false,
+        self.created_item = match parse_created_item(item_id) {
+            Ok(item) => item,
+            Err(()) => return false,
         };
         true
     }
@@ -1012,8 +1011,8 @@ fn encode_rerun_stage_shapes(
         )
         .radius(Size::new_ui_points(4.0))
         .color(Color32::from_rgb(82, 214, 255));
-    if created_item == Some(CreatedItem::Rectangle) {
-        let (top_left, horizontal, vertical) = centered_rectangle(width, height);
+    if let Some(CreatedItem::Rectangle { center }) = created_item {
+        let (top_left, horizontal, vertical) = rectangle_at(width, height, center);
         lines
             .batch("Browser created rectangle")
             .add_rectangle_outline_2d(top_left.into(), horizontal.into(), vertical.into())
@@ -1083,28 +1082,66 @@ fn encode_rerun_stage_shapes(
     Ok([draw, encoder.finish()])
 }
 
-fn centered_rectangle(width: u32, height: u32) -> ([f32; 2], [f32; 2], [f32; 2]) {
+fn parse_created_item(value: &str) -> Result<Option<CreatedItem>, ()> {
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value == "rectangle" {
+        return Ok(Some(CreatedItem::Rectangle { center: [0.5; 2] }));
+    }
+    let (kind, position) = value.split_once('@').ok_or(())?;
+    let (x, y) = position.split_once(',').ok_or(())?;
+    let center = [
+        x.parse::<f32>().map_err(|_| ())?,
+        y.parse::<f32>().map_err(|_| ())?,
+    ];
+    if kind != "rectangle"
+        || center
+            .iter()
+            .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
+    {
+        return Err(());
+    }
+    Ok(Some(CreatedItem::Rectangle { center }))
+}
+
+fn rectangle_at(width: u32, height: u32, center: [f32; 2]) -> ([f32; 2], [f32; 2], [f32; 2]) {
     let horizontal = [width as f32 * 0.28, 0.0];
     let vertical = [0.0, height as f32 * 0.36];
     let top_left = [
-        width as f32 * 0.5 - horizontal[0] * 0.5,
-        height as f32 * 0.5 - vertical[1] * 0.5,
+        width as f32 * center[0] - horizontal[0] * 0.5,
+        height as f32 * center[1] - vertical[1] * 0.5,
     ];
     (top_left, horizontal, vertical)
 }
 
 #[cfg(test)]
 mod chroma_tests {
-    use super::{CHROMA_VIDEO_BYTES, centered_rectangle, encode_rerun_stage_shapes};
+    use super::{
+        CHROMA_VIDEO_BYTES, CreatedItem, encode_rerun_stage_shapes, parse_created_item,
+        rectangle_at,
+    };
 
     const WIDTH: u32 = 320;
     const HEIGHT: u32 = 192;
 
     #[test]
     fn browser_rectangle_is_centered_in_the_stage() {
-        let (top_left, horizontal, vertical) = centered_rectangle(WIDTH, HEIGHT);
+        let (top_left, horizontal, vertical) = rectangle_at(WIDTH, HEIGHT, [0.5; 2]);
         assert_eq!(top_left[0] + horizontal[0] * 0.5, WIDTH as f32 * 0.5);
         assert_eq!(top_left[1] + vertical[1] * 0.5, HEIGHT as f32 * 0.5);
+    }
+
+    #[test]
+    fn browser_rectangle_uses_the_drop_position() {
+        let item = parse_created_item("rectangle@0.25,0.75").expect("valid placement");
+        assert_eq!(
+            item,
+            Some(CreatedItem::Rectangle {
+                center: [0.25, 0.75]
+            })
+        );
+        assert!(parse_created_item("rectangle@1.1,0.5").is_err());
     }
 
     #[test]
