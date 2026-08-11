@@ -19,7 +19,7 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'rust-wgpu-timeline'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'native-timeline-feedback'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'native-timeline-feedback'}).props.children).toBe(
-    'clip 1 · 54.0%',
+    'clip 1 · 27.0%',
   );
   expect(tree!.root.findByProps({testID: 'timeline-key-tools'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'timeline-key-mode-KEYS'}).props.accessibilityState.selected).toBe(true);
@@ -34,11 +34,11 @@ test('renders correctly', async () => {
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'rust-wgpu-timeline'}).props.onTimelineFeedback({
-      nativeEvent: {objectIndex: -1, time: 0.54},
+      nativeEvent: {objectIndex: -1, time: 0.27},
     });
   });
   expect(tree!.root.findByProps({testID: 'native-timeline-feedback'}).props.children).toBe(
-    'no clip · 54.0%',
+    'no clip · 27.0%',
   );
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageTransform({

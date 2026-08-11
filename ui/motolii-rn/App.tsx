@@ -801,7 +801,7 @@ function TimelineKeyTools() {
 
 function NativeTimeline() {
   const [selectedObjectIndex, setSelectedObjectIndex] = useState(1);
-  const [playhead, setPlayhead] = useState(0.54);
+  const [playhead, setPlayhead] = useState(0.27);
 
   return (
     <View style={styles.nativeTimelineBody}>

@@ -273,6 +273,33 @@ pub unsafe extern "C" fn motolii_macos_timeline_renderer_pointer(
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
+pub extern "C" fn motolii_macos_timeline_renderer_scroll(
+    handle: *mut c_void,
+    delta_x: f64,
+    delta_y: f64,
+    magnification: f64,
+    modifiers: u32,
+    x: f64,
+    y: f64,
+) -> bool {
+    if handle.is_null() {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        (&mut *handle.cast::<MacOsSurfaceRenderer>()).timeline_scroll(
+            delta_x,
+            delta_y,
+            magnification,
+            modifiers,
+            x,
+            y,
+        )
+    }))
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
 /// # Safety
 /// `handle` must be a live renderer returned by this library and `stats`
 /// must point to writable storage for one `RenderStats`.

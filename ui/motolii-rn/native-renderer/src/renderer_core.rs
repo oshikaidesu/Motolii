@@ -133,7 +133,7 @@ impl RendererCore {
             timeline_session: (scene == SceneKind::Timeline).then(TimelineSession::default),
             scene,
             selected_object_index: 1,
-            playhead: 0.54,
+            playhead: 0.27,
             frame: 0,
             stats: RenderStats::default(),
         })
@@ -240,6 +240,37 @@ impl RendererCore {
         outcome
             .feedback
             .then_some((self.selected_object_index, self.playhead))
+    }
+
+    /// Timeline scroll/pinch。戻り値trueは視覚変化(dirty)。feedbackなし。
+    pub(crate) fn timeline_scroll(
+        &mut self,
+        delta_x: f64,
+        delta_y: f64,
+        magnification: f64,
+        modifiers: u32,
+        x: f64,
+        y: f64,
+    ) -> bool {
+        let Some(session) = &mut self.timeline_session else {
+            return false;
+        };
+        let dirty = session.scroll(
+            self.config.width,
+            self.config.height,
+            delta_x,
+            delta_y,
+            magnification,
+            modifiers,
+            x,
+            y,
+        );
+        if dirty {
+            if let Some(timeline) = &mut self.timeline {
+                timeline.dirty = true;
+            }
+        }
+        dirty
     }
 
     pub(crate) fn stats(&self) -> RenderStats {

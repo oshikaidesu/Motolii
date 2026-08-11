@@ -51,6 +51,9 @@ extern "C" bool motolii_macos_timeline_renderer_hit_test(
     void *handle, double x, double y, MotoliiTimelineFeedback *feedback);
 extern "C" bool motolii_macos_timeline_renderer_pointer(
     void *handle, uint32_t phase, double x, double y, MotoliiTimelineFeedback *feedback);
+extern "C" bool motolii_macos_timeline_renderer_scroll(
+    void *handle, double deltaX, double deltaY, double magnification, uint32_t modifiers, double x,
+    double y);
 extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStats *stats);
 
 @interface MotoliiMetalView : NSView
@@ -58,6 +61,8 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 
 @interface MotoliiTimelineMetalView : MotoliiMetalView
 @property(nonatomic, copy) void (^timelinePointerHandler)(uint32_t phase, CGFloat x, CGFloat y);
+@property(nonatomic, copy) void (^timelineScrollHandler)(
+    CGFloat deltaX, CGFloat deltaY, CGFloat magnification, uint32_t modifiers, CGFloat x, CGFloat y);
 @property(nonatomic, assign) BOOL timelineGestureActive;
 @end
 
@@ -115,6 +120,38 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 - (void)mouseUp:(NSEvent *)event
 {
   [self emitPhase:2 event:event];
+}
+
+- (void)emitScrollDeltaX:(CGFloat)deltaX
+                  deltaY:(CGFloat)deltaY
+           magnification:(CGFloat)magnification
+               modifiers:(uint32_t)modifiers
+                   event:(NSEvent *)event
+{
+  NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+  if (self.timelineScrollHandler) {
+    self.timelineScrollHandler(
+        deltaX, deltaY, magnification, modifiers, point.x, NSHeight(self.bounds) - point.y);
+  }
+}
+
+- (void)scrollWheel:(NSEvent *)event
+{
+  uint32_t modifiers = (event.modifierFlags & NSEventModifierFlagCommand) ? 1u : 0u;
+  [self emitScrollDeltaX:event.scrollingDeltaX
+                  deltaY:event.scrollingDeltaY
+           magnification:0.0
+               modifiers:modifiers
+                   event:event];
+}
+
+- (void)magnifyWithEvent:(NSEvent *)event
+{
+  [self emitScrollDeltaX:0.0
+                  deltaY:0.0
+           magnification:event.magnification
+               modifiers:0u
+                   event:event];
 }
 
 - (void)viewDidMoveToWindow
@@ -190,6 +227,19 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
       };
       emitter->onTimelineFeedback(event);
     };
+    _timelineView.timelineScrollHandler =
+        ^(CGFloat deltaX, CGFloat deltaY, CGFloat magnification, uint32_t modifiers, CGFloat x,
+          CGFloat y) {
+          MotoliiTimelineComponentView *strongSelf = weakSelf;
+          if (!strongSelf || !strongSelf->_timelineRenderer) {
+            return;
+          }
+          CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_timelineView.layer;
+          CGFloat scale = layer.contentsScale ?: 1.0;
+          motolii_macos_timeline_renderer_scroll(
+              strongSelf->_timelineRenderer, deltaX * scale, deltaY * scale, magnification,
+              modifiers, x * scale, y * scale);
+        };
     [self addSubview:_timelineView];
   }
   return self;

@@ -23,8 +23,9 @@ const LOC_H: f32 = 15.0;
 const ROW: f32 = 20.0;
 const TIME_H: f32 = 16.0;
 const SONG_BARS: f32 = 96.0;
-const VIEW_A: f32 = 0.0;
-const VIEW_B: f32 = 48.0;
+const MIN_VIEW_SPAN: f32 = 4.0;
+const DEFAULT_VIEW_A: f32 = 0.0;
+const DEFAULT_VIEW_B: f32 = 48.0;
 
 const DESKTOP: u32 = 0x2a2a2a;
 const SURFACE_BG: u32 = 0x363636;
@@ -68,6 +69,9 @@ struct Band {
 pub(crate) struct TimelineScene {
     bands: Vec<Band>,
     locators: Vec<(f32, &'static str)>,
+    /// 表示範囲[bar]。初期は曲前半48小節。
+    pub view_a: f32,
+    pub view_b: f32,
 }
 
 impl Default for TimelineScene {
@@ -235,6 +239,8 @@ impl Default for TimelineScene {
                 (24.0, "chorus"),
                 (40.0, "verse 2"),
             ],
+            view_a: DEFAULT_VIEW_A,
+            view_b: DEFAULT_VIEW_B,
         }
     }
 }
@@ -257,6 +263,9 @@ struct GestureSnapshot {
 #[derive(Clone, Debug)]
 enum ActiveGesture {
     Scrub {
+        snapshot: GestureSnapshot,
+    },
+    Overview {
         snapshot: GestureSnapshot,
     },
     SelectOrMove {
@@ -335,8 +344,12 @@ impl TimelineSession {
                         playhead: *playhead,
                     };
                     match kind {
+                        HitKind::Overview => {
+                            dirty |= center_view_on(&mut self.scene, overview_bar_at_lx(lx) as f32);
+                            self.gesture = Some(ActiveGesture::Overview { snapshot });
+                        }
                         HitKind::Scrub => {
-                            *playhead = time_at_lx(lx);
+                            *playhead = time_at_lx(&self.scene, lx);
                             self.gesture = Some(ActiveGesture::Scrub { snapshot });
                             dirty = true;
                         }
@@ -418,6 +431,7 @@ impl TimelineSession {
                 if let Some(gesture) = self.gesture.take() {
                     let snapshot = match gesture {
                         ActiveGesture::Scrub { snapshot }
+                        | ActiveGesture::Overview { snapshot }
                         | ActiveGesture::SelectOrMove { snapshot, .. }
                         | ActiveGesture::TrimStart { snapshot, .. }
                         | ActiveGesture::TrimEnd { snapshot, .. }
@@ -446,11 +460,14 @@ impl TimelineSession {
         let mut dirty = false;
         match &mut gesture {
             ActiveGesture::Scrub { .. } => {
-                let next = time_at_lx(lx);
+                let next = time_at_lx(&self.scene, lx);
                 if (next - *playhead).abs() > f64::EPSILON {
                     *playhead = next;
                     dirty = true;
                 }
+            }
+            ActiveGesture::Overview { .. } => {
+                dirty |= center_view_on(&mut self.scene, overview_bar_at_lx(lx) as f32);
             }
             ActiveGesture::SelectOrMove {
                 band,
@@ -467,7 +484,8 @@ impl TimelineSession {
                     *moving = true;
                 }
                 if *moving {
-                    let dx_bars = (dx_logical / surface_width()) * f64::from(VIEW_B - VIEW_A);
+                    let span = f64::from(self.scene.view_b - self.scene.view_a);
+                    let dx_bars = (dx_logical / surface_width()) * span;
                     let (prev_b, next_a) = neighbors(&self.scene, *band, *clip_idx);
                     let len = *origin_b - *origin_a;
                     let new_a = ((*origin_a as f64) + dx_bars)
@@ -494,7 +512,7 @@ impl TimelineSession {
             ActiveGesture::TrimStart {
                 band, clip_idx, ..
             } => {
-                let bar = bar_at_lx(lx) as f32;
+                let bar = bar_at_lx(&self.scene, lx) as f32;
                 let (prev_b, _) = neighbors(&self.scene, *band, *clip_idx);
                 let clip = &mut self.scene.bands[*band].clips[*clip_idx];
                 let new_a = bar.clamp(prev_b, clip.b - MIN_CLIP_BARS);
@@ -506,7 +524,7 @@ impl TimelineSession {
             ActiveGesture::TrimEnd {
                 band, clip_idx, ..
             } => {
-                let bar = bar_at_lx(lx) as f32;
+                let bar = bar_at_lx(&self.scene, lx) as f32;
                 let (_, next_a) = neighbors(&self.scene, *band, *clip_idx);
                 let clip = &mut self.scene.bands[*band].clips[*clip_idx];
                 let new_b = bar.clamp(clip.a + MIN_CLIP_BARS, next_a);
@@ -521,7 +539,7 @@ impl TimelineSession {
                 key_idx,
                 ..
             } => {
-                let bar = bar_at_lx(lx) as f32;
+                let bar = bar_at_lx(&self.scene, lx) as f32;
                 let clip = &mut self.scene.bands[*band].clips[*clip_idx];
                 let new_t = bar.clamp(clip.a, clip.b);
                 if let Some(key) = clip.keys.get_mut(*key_idx) {
@@ -536,10 +554,53 @@ impl TimelineSession {
         self.gesture = Some(gesture);
         dirty
     }
+
+    /// wheel / pinch。戻り値trueは視覚変化(dirty)。feedbackは出さない。
+    pub(crate) fn scroll(
+        &mut self,
+        width: u32,
+        height: u32,
+        delta_x: f64,
+        delta_y: f64,
+        magnification: f64,
+        modifiers: u32,
+        x: f64,
+        y: f64,
+    ) -> bool {
+        if width == 0 || height == 0 {
+            return false;
+        }
+        let _ = (height, y);
+        let scale = f64::from(scale_for(width));
+        let lx = x / scale;
+        let dx_log = delta_x / scale;
+        let dy_log = delta_y / scale;
+        let before = (self.scene.view_a, self.scene.view_b);
+
+        if magnification != 0.0 {
+            zoom_at(&mut self.scene, lx, 1.0 - magnification);
+        } else if modifiers & 1 != 0 {
+            zoom_at(&mut self.scene, lx, (-dy_log * 0.01).exp());
+        } else {
+            let delta = if dx_log.abs() >= dy_log.abs() {
+                dx_log
+            } else {
+                dy_log
+            };
+            let span = f64::from(self.scene.view_b - self.scene.view_a);
+            let dx_bars = (-delta / surface_width() * span) as f32;
+            self.scene.view_a += dx_bars;
+            self.scene.view_b += dx_bars;
+            clamp_view_translate(&mut self.scene);
+        }
+
+        self.scene.view_a != before.0 || self.scene.view_b != before.1
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
 enum HitKind {
+    Overview,
     Scrub,
     Key {
         band: usize,
@@ -567,17 +628,78 @@ fn surface_width() -> f64 {
     f64::from(W - SURF_X - 6.0)
 }
 
-fn bx(b: f32) -> f32 {
-    SURF_X + (b - VIEW_A) / (VIEW_B - VIEW_A) * (W - SURF_X - 6.0)
+fn bx(scene: &TimelineScene, b: f32) -> f32 {
+    SURF_X + (b - scene.view_a) / (scene.view_b - scene.view_a) * (W - SURF_X - 6.0)
 }
 
-fn bar_at_lx(lx: f64) -> f64 {
-    f64::from(VIEW_A) + (lx - f64::from(SURF_X)) / surface_width() * f64::from(VIEW_B - VIEW_A)
+fn bar_at_lx(scene: &TimelineScene, lx: f64) -> f64 {
+    f64::from(scene.view_a)
+        + (lx - f64::from(SURF_X)) / surface_width() * f64::from(scene.view_b - scene.view_a)
 }
 
-fn time_at_lx(lx: f64) -> f64 {
-    let bar = bar_at_lx(lx);
-    ((bar - f64::from(VIEW_A)) / f64::from(VIEW_B - VIEW_A)).clamp(0.0, 1.0)
+fn overview_bar_at_lx(lx: f64) -> f64 {
+    ((lx - f64::from(SURF_X)) / surface_width() * f64::from(SONG_BARS)).clamp(0.0, f64::from(SONG_BARS))
+}
+
+fn time_at_lx(scene: &TimelineScene, lx: f64) -> f64 {
+    (bar_at_lx(scene, lx) / f64::from(SONG_BARS)).clamp(0.0, 1.0)
+}
+
+fn clamp_view_translate(scene: &mut TimelineScene) {
+    let span = scene.view_b - scene.view_a;
+    if scene.view_a < 0.0 {
+        scene.view_a = 0.0;
+        scene.view_b = span;
+    }
+    if scene.view_b > SONG_BARS {
+        scene.view_b = SONG_BARS;
+        scene.view_a = SONG_BARS - span;
+    }
+}
+
+fn center_view_on(scene: &mut TimelineScene, center: f32) -> bool {
+    let span = scene.view_b - scene.view_a;
+    let mut a = center - span * 0.5;
+    let mut b = a + span;
+    if a < 0.0 {
+        a = 0.0;
+        b = span;
+    }
+    if b > SONG_BARS {
+        b = SONG_BARS;
+        a = SONG_BARS - span;
+    }
+    if (scene.view_a - a).abs() > f32::EPSILON || (scene.view_b - b).abs() > f32::EPSILON {
+        scene.view_a = a;
+        scene.view_b = b;
+        true
+    } else {
+        false
+    }
+}
+
+fn zoom_at(scene: &mut TimelineScene, lx: f64, span_factor: f64) {
+    let va = f64::from(scene.view_a);
+    let vb = f64::from(scene.view_b);
+    let span = vb - va;
+    if span <= f64::EPSILON {
+        return;
+    }
+    let anchor = bar_at_lx(scene, lx);
+    let new_span = (span * span_factor).clamp(f64::from(MIN_VIEW_SPAN), f64::from(SONG_BARS));
+    let t = ((anchor - va) / span).clamp(0.0, 1.0);
+    let mut new_a = anchor - t * new_span;
+    let mut new_b = new_a + new_span;
+    if new_a < 0.0 {
+        new_a = 0.0;
+        new_b = new_span;
+    }
+    if new_b > f64::from(SONG_BARS) {
+        new_b = f64::from(SONG_BARS);
+        new_a = new_b - new_span;
+    }
+    scene.view_a = new_a as f32;
+    scene.view_b = new_b as f32;
 }
 
 fn body_top() -> f64 {
@@ -614,6 +736,11 @@ fn clear_all_key_selection(scene: &mut TimelineScene) {
 }
 
 fn hit_gesture(scene: &TimelineScene, lx: f64, ly: f64) -> Option<HitKind> {
+    // 0. overview帯
+    if ly < f64::from(OVER_H) && lx >= f64::from(SURF_X) {
+        return Some(HitKind::Overview);
+    }
+
     let ry = f64::from(OVER_H + 1.0);
     let time_y0 = body_bottom(scene);
     // 1. ruler帯(小節 / 分秒)
@@ -636,7 +763,7 @@ fn hit_gesture(scene: &TimelineScene, lx: f64, ly: f64) -> Option<HitKind> {
     }
     let band = &scene.bands[band_index];
     let row_cy = top + (band_index as f64 + 0.5) * f64::from(ROW) - 0.5;
-    let bar = bar_at_lx(lx);
+    let bar = bar_at_lx(scene, lx);
 
     let mut flat_before = 0i32;
     for (bi, b) in scene.bands.iter().enumerate() {
@@ -652,7 +779,7 @@ fn hit_gesture(scene: &TimelineScene, lx: f64, ly: f64) -> Option<HitKind> {
             if *kt < clip.a || *kt > clip.b {
                 continue;
             }
-            let kx = f64::from(bx(*kt));
+            let kx = f64::from(bx(scene, *kt));
             if (lx - kx).abs() <= KEY_HIT_PX && (ly - row_cy).abs() <= KEY_HIT_PX {
                 return Some(HitKind::Key {
                     band: band_index,
@@ -666,8 +793,8 @@ fn hit_gesture(scene: &TimelineScene, lx: f64, ly: f64) -> Option<HitKind> {
 
     // 3. trim端 / 4. clip本体
     for (clip_idx, clip) in band.clips.iter().enumerate() {
-        let ax = f64::from(bx(clip.a));
-        let bx_ = f64::from(bx(clip.b));
+        let ax = f64::from(bx(scene, clip.a));
+        let bx_ = f64::from(bx(scene, clip.b));
         let d_start = (lx - ax).abs();
         let d_end = (lx - bx_).abs();
         let near_start = d_start <= TRIM_HIT_PX;
@@ -918,7 +1045,7 @@ fn tog(cv: &skia_safe::Canvas, x: f32, cy: f32, l: &str, on: bool, mixed: bool, 
 
 /// timeline 1枚をRGBA8888 premulのbytesへ描く。
 ///
-/// `playhead`は0..1で表示範囲(VIEW_A..VIEW_B)を走る。
+/// `playhead`は0..1で曲全体(0..SONG_BARS)を走る。
 /// `selected < 0`なら選択ringなし。非負は平坦化clip列のindex。
 pub(crate) fn draw_timeline(
     scene: &TimelineScene,
@@ -948,7 +1075,9 @@ pub(crate) fn draw_timeline(
     // 論理座標系。以下は motolii_full.rs と同一。
     let h = logical_height(scene).max(height as f32 / scale);
     let sw = W - SURF_X - 6.0;
-    let bx = |b: f32| SURF_X + (b - VIEW_A) / (VIEW_B - VIEW_A) * sw;
+    let view_a = scene.view_a;
+    let view_b = scene.view_b;
+    let bx = |b: f32| SURF_X + (b - view_a) / (view_b - view_a) * sw;
     let ox = |b: f32| SURF_X + b / SONG_BARS * sw;
 
     let count = clip_count(scene).max(1);
@@ -973,7 +1102,7 @@ pub(crate) fn draw_timeline(
             );
         }
     }
-    let (va, vb) = (ox(VIEW_A), ox(VIEW_B));
+    let (va, vb) = (ox(view_a), ox(view_b));
     let mut p = Paint::default();
     p.set_anti_alias(false);
     p.set_style(PaintStyle::Stroke);
@@ -993,7 +1122,7 @@ pub(crate) fn draw_timeline(
         Rect::from_ltrb(0.0, ry, W, ry + RULER_H),
         rgb(SURFACE_HI),
     );
-    for b in (VIEW_A as i32..=VIEW_B as i32).step_by(4) {
+    for b in (view_a as i32..=view_b as i32).step_by(4) {
         let x = bx(b as f32);
         fill(
             cv,
@@ -1079,7 +1208,7 @@ pub(crate) fn draw_timeline(
     let mut y = by0;
     let mut flat = 0usize;
     for band in &scene.bands {
-        for b in VIEW_A as i32..=VIEW_B as i32 {
+        for b in view_a as i32..=view_b as i32 {
             let x = bx(b as f32);
             fill(
                 cv,
@@ -1126,6 +1255,8 @@ pub(crate) fn draw_timeline(
             glyph(cv, rx + 5.5, cy, g, true, false);
         }
 
+        cv.save();
+        cv.clip_rect(Rect::from_ltrb(SURF_X, y, W, y + ROW), None, false);
         for c in &band.clips {
             let is_selected = selected == Some(flat);
             flat += 1;
@@ -1229,12 +1360,13 @@ pub(crate) fn draw_timeline(
                 );
             }
         }
+        cv.restore();
         y += ROW;
     }
 
     // ── 分秒 ruler ──
     fill(cv, Rect::from_ltrb(0.0, y, W, y + TIME_H), rgb(SURFACE_BG));
-    for b in (VIEW_A as i32..=VIEW_B as i32).step_by(8) {
+    for b in (view_a as i32..=view_b as i32).step_by(8) {
         let x = bx(b as f32);
         let sec = b * 2;
         fill(cv, Rect::from_ltrb(x, y, x + 1.0, y + 5.0), gray(0x6a));
@@ -1260,23 +1392,25 @@ pub(crate) fn draw_timeline(
         rgb(CONTRAST),
     );
 
-    // ── playhead。静止画と違い、ここだけ状態で動く ──
-    let bar = VIEW_A + (playhead.clamp(0.0, 1.0) as f32) * (VIEW_B - VIEW_A);
-    let px = bx(bar);
-    fill(
-        cv,
-        Rect::from_ltrb(px, ry + RULER_H, px + 1.0, y),
-        gray(0xe7),
-    );
-    let mut tri = PathBuilder::new();
-    tri.move_to((px - 4.0, ry + RULER_H - 6.0));
-    tri.line_to((px + 5.0, ry + RULER_H - 6.0));
-    tri.line_to((px + 0.5, ry + RULER_H));
-    tri.close();
-    let mut pp = Paint::default();
-    pp.set_anti_alias(true);
-    pp.set_color(gray(0xe7));
-    cv.draw_path(&tri.detach(), &pp);
+    // ── playhead。曲基準0..1。表示範囲外は描かない ──
+    let bar = (playhead.clamp(0.0, 1.0) as f32) * SONG_BARS;
+    if bar >= view_a && bar <= view_b {
+        let px = bx(bar);
+        fill(
+            cv,
+            Rect::from_ltrb(px, ry + RULER_H, px + 1.0, y),
+            gray(0xe7),
+        );
+        let mut tri = PathBuilder::new();
+        tri.move_to((px - 4.0, ry + RULER_H - 6.0));
+        tri.line_to((px + 5.0, ry + RULER_H - 6.0));
+        tri.line_to((px + 0.5, ry + RULER_H));
+        tri.close();
+        let mut pp = Paint::default();
+        pp.set_anti_alias(true);
+        pp.set_color(gray(0xe7));
+        cv.draw_path(&tri.detach(), &pp);
+    }
 
     cv.restore();
 }
@@ -1306,8 +1440,8 @@ pub(crate) fn hit_test(
     if ly < top || ly >= bottom {
         return None;
     }
-    let bar = bar_at_lx(lx);
-    let time = time_at_lx(lx);
+    let bar = bar_at_lx(scene, lx);
+    let time = time_at_lx(scene, lx);
     let band_index = ((ly - top) / f64::from(ROW)) as usize;
 
     let mut flat = 0i32;
@@ -1327,15 +1461,25 @@ mod tests {
     use super::*;
 
     fn session() -> (TimelineSession, i32, f64) {
-        (TimelineSession::default(), 1, 0.54)
+        (TimelineSession::default(), 1, 0.27)
     }
 
     fn lx_for_bar(bar: f64) -> f64 {
-        f64::from(SURF_X) + bar / f64::from(VIEW_B - VIEW_A) * surface_width()
+        lx_for_bar_in(&TimelineScene::default(), bar)
+    }
+
+    fn lx_for_bar_in(scene: &TimelineScene, bar: f64) -> f64 {
+        f64::from(SURF_X)
+            + (bar - f64::from(scene.view_a)) / f64::from(scene.view_b - scene.view_a)
+                * surface_width()
     }
 
     fn phys(lx: f64, ly: f64) -> (f64, f64) {
         (lx, ly)
+    }
+
+    fn bx_default(b: f32) -> f32 {
+        bx(&TimelineScene::default(), b)
     }
 
     #[test]
@@ -1417,7 +1561,7 @@ mod tests {
         let (mut sess, mut selected, mut playhead) = session();
         let y = body_top() + 5.0; // band0
 
-        let clip0_end_x = f64::from(bx(14.0)) + 1.0;
+        let clip0_end_x = f64::from(bx_default(14.0)) + 1.0;
         sess.pointer(
             &mut selected,
             &mut playhead,
@@ -1440,7 +1584,7 @@ mod tests {
         assert!((clip0.a - 0.0).abs() < 1e-4);
         assert!((clip0.b - 14.0).abs() < 1e-4);
 
-        let clip1_start_x = f64::from(bx(14.0)) + 1.0;
+        let clip1_start_x = f64::from(bx_default(14.0)) + 1.0;
         sess.pointer(
             &mut selected,
             &mut playhead,
@@ -1478,7 +1622,7 @@ mod tests {
         );
         assert!(!out.feedback);
         assert_eq!(selected, 1);
-        assert!((playhead - 0.54).abs() < 1e-9);
+        assert!((playhead - 0.27).abs() < 1e-9);
     }
 
     #[test]
@@ -1495,7 +1639,7 @@ mod tests {
             y,
         );
         assert!(out.feedback);
-        assert!((playhead - 33.0 / 48.0).abs() < 1e-9);
+        assert!((playhead - 33.0 / 96.0).abs() < 1e-9);
     }
 
     #[test]
@@ -1518,7 +1662,7 @@ mod tests {
         }
         let (w, h) = (2480u32, 620u32);
         let mut bytes = vec![0u8; (w * h * 4) as usize];
-        draw_timeline(&TimelineScene::default(), &mut bytes, w, h, 0.44, 1);
+        draw_timeline(&TimelineScene::default(), &mut bytes, w, h, 0.22, 1);
         let info = ImageInfo::new(
             (w as i32, h as i32),
             ColorType::RGBA8888,
@@ -1558,7 +1702,7 @@ mod tests {
         );
         assert!(out.feedback);
         let pressed = playhead;
-        assert!((pressed - 12.0 / 48.0).abs() < 1e-9);
+        assert!((pressed - 12.0 / 96.0).abs() < 1e-9);
 
         let (x1, y1) = phys(lx_for_bar(24.0), f64::from(OVER_H + 1.0) + 4.0);
         sess.pointer(
@@ -1570,7 +1714,7 @@ mod tests {
             x1,
             y1,
         );
-        assert!((playhead - 24.0 / 48.0).abs() < 1e-9);
+        assert!((playhead - 24.0 / 96.0).abs() < 1e-9);
 
         sess.pointer(
             &mut selected,
@@ -1581,7 +1725,7 @@ mod tests {
             x1,
             y1,
         );
-        assert!((playhead - 24.0 / 48.0).abs() < 1e-9);
+        assert!((playhead - 24.0 / 96.0).abs() < 1e-9);
 
         // 新しいscrubをcancelで戻す
         let (mut sess, mut selected, mut playhead) = session();
@@ -1612,7 +1756,7 @@ mod tests {
             x1,
             y1,
         );
-        assert!((playhead - 0.54).abs() < 1e-9);
+        assert!((playhead - 0.27).abs() < 1e-9);
         assert_eq!(selected, 1);
     }
 
@@ -1640,7 +1784,7 @@ mod tests {
             y,
         );
         assert_eq!(selected, 3); // band0 has 3 clips
-        assert!((playhead - 0.54).abs() < 1e-9);
+        assert!((playhead - 0.27).abs() < 1e-9);
     }
 
     #[test]
@@ -1685,7 +1829,8 @@ mod tests {
             y,
         );
         let clip = &sess.scene.bands[1].clips[0];
-        let expected_dx = (10.0 / surface_width() * f64::from(VIEW_B - VIEW_A)) as f32;
+        let expected_dx = (10.0 / surface_width() * f64::from(sess.scene.view_b - sess.scene.view_a))
+            as f32;
         assert!((clip.a - (4.0 + expected_dx)).abs() < 1e-4);
         assert!((clip.b - (22.0 + expected_dx)).abs() < 1e-4);
         assert!((clip.keys[0].0 - (8.0 + expected_dx)).abs() < 1e-4);
@@ -1709,7 +1854,7 @@ mod tests {
     #[test]
     fn cancel_restores_full_scene_selection_playhead_and_key_state_after_clip_move() {
         let (mut sess, mut selected, mut playhead) = session();
-        let key_x = f64::from(bx(8.0));
+        let key_x = f64::from(bx_default(8.0));
         let key_y = body_top() + f64::from(ROW) + f64::from(ROW - 1.0) / 2.0;
         sess.pointer(
             &mut selected,
@@ -1783,7 +1928,7 @@ mod tests {
         let (mut sess, mut selected, mut playhead) = session();
         // band1 clip0 hero 4..22。右端22にkeyは無い。
         let y = body_top() + f64::from(ROW) + 5.0;
-        let end_x = f64::from(bx(22.0));
+        let end_x = f64::from(bx_default(22.0));
         sess.pointer(
             &mut selected,
             &mut playhead,
@@ -1822,7 +1967,7 @@ mod tests {
         // TrimStart: band1 clip1 26..40。左端にkeyは無い。keysは不変。
         let (mut sess, mut selected, mut playhead) = session();
         let keys_before = sess.scene.bands[1].clips[1].keys.clone();
-        let start_x = f64::from(bx(26.0));
+        let start_x = f64::from(bx_default(26.0));
         sess.pointer(
             &mut selected,
             &mut playhead,
@@ -1851,7 +1996,7 @@ mod tests {
     fn key_drag_moves_time_only_and_selects_single_key() {
         let (mut sess, mut selected, mut playhead) = session();
         // band1 hero key at 8.0
-        let kx = f64::from(bx(8.0));
+        let kx = f64::from(bx_default(8.0));
         let ky = body_top() + f64::from(ROW) + f64::from(ROW - 1.0) / 2.0;
         sess.pointer(
             &mut selected,
@@ -1891,5 +2036,218 @@ mod tests {
             ky,
         );
         assert!((sess.scene.bands[1].clips[0].keys[0].0 - 22.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn wheel_pan_moves_view_and_clamps_to_song() {
+        let (mut sess, _, _) = session();
+        // 右へpan(負delta → view増加)。論理48px → span*48/sw bars
+        let dirty = sess.scroll(1240, 400, -48.0, 0.0, 0.0, 0, lx_for_bar(24.0), 100.0);
+        assert!(dirty);
+        let expected = 48.0 / surface_width() as f32 * 48.0;
+        assert!((sess.scene.view_a - expected).abs() < 1e-3);
+        assert!((sess.scene.view_b - (48.0 + expected)).abs() < 1e-3);
+
+        // 大きく右へ飛ばして右端clamp
+        sess.scroll(1240, 400, -10_000.0, 0.0, 0.0, 0, lx_for_bar(24.0), 100.0);
+        assert!((sess.scene.view_a - 48.0).abs() < 1e-3);
+        assert!((sess.scene.view_b - 96.0).abs() < 1e-3);
+
+        // 大きく左へ飛ばして左端clamp
+        sess.scroll(1240, 400, 10_000.0, 0.0, 0.0, 0, lx_for_bar(24.0), 100.0);
+        assert!((sess.scene.view_a - 0.0).abs() < 1e-3);
+        assert!((sess.scene.view_b - 48.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn cmd_wheel_zoom_keeps_anchor_bar_fixed() {
+        let (mut sess, _, _) = session();
+        let anchor_bar = 24.0;
+        let lx = lx_for_bar(anchor_bar);
+        let before_bar = bar_at_lx(&sess.scene, lx);
+        assert!((before_bar - anchor_bar).abs() < 1e-6);
+
+        assert!(sess.scroll(1240, 400, 0.0, 12.0, 0.0, 1, lx, 100.0));
+        assert!((bar_at_lx(&sess.scene, lx) - anchor_bar).abs() < 1e-3);
+    }
+
+    #[test]
+    fn wheel_vertical_delta_has_priority_for_horizontal_pan() {
+        let (mut sess, _, _) = session();
+        sess.scene.view_a = 24.0;
+        sess.scene.view_b = 72.0;
+        let before_a = sess.scene.view_a;
+        let before_b = sess.scene.view_b;
+
+        let dirty = sess.scroll(1240, 400, 1.0, -48.0, 0.0, 0, lx_for_bar(24.0), 100.0);
+        assert!(dirty);
+        let expected = before_a + (-(-48.0) / surface_width() * f64::from(before_b - before_a)) as f32;
+        assert!((sess.scene.view_a - expected).abs() < 1e-3);
+        assert!((sess.scene.view_b - (before_b - before_a + expected)).abs() < 1e-3);
+    }
+
+    #[test]
+    fn draw_timeline_inbox_pixels_stable_after_pan() {
+        let w = 1240u32;
+        let h = 620u32;
+        let mut before = vec![0u8; (w * h * 4) as usize];
+        draw_timeline(&TimelineScene::default(), &mut before, w, h, 0.22, 1);
+
+        let mut sess = TimelineSession::default();
+        let delta = -surface_width() / f64::from(SONG_BARS) * 20.0;
+        sess.scroll(w, h, delta, 0.0, 0.0, 0, lx_for_bar(24.0), 100.0);
+
+        let mut after = vec![0u8; (w * h * 4) as usize];
+        draw_timeline(&sess.scene, &mut after, w, h, 0.22, 1);
+
+        let x = 60usize;
+        let y = body_top() as usize + 5;
+        let idx = (y * w as usize + x) * 4;
+        assert_eq!(&before[idx..idx + 4], &after[idx..idx + 4]);
+    }
+
+    #[test]
+    fn pinch_zoom_keeps_anchor_bar_and_clamps_span() {
+        let (mut sess, _, _) = session();
+        let anchor_bar = 24.0;
+        let lx = lx_for_bar(anchor_bar);
+        // magnification=0.5 → span *= 0.5 → 24
+        assert!(sess.scroll(1240, 400, 0.0, 0.0, 0.5, 0, lx, 100.0));
+        assert!((sess.scene.view_b - sess.scene.view_a - 24.0).abs() < 1e-3);
+        assert!((bar_at_lx(&sess.scene, lx) - anchor_bar).abs() < 1e-3);
+
+        // 大きく拡大してmin span 4
+        assert!(sess.scroll(1240, 400, 0.0, 0.0, 0.9, 0, lx, 100.0));
+        assert!((sess.scene.view_b - sess.scene.view_a - 4.0).abs() < 1e-3);
+
+        // 大きく縮小してmax span 96
+        sess.scene.view_a = 20.0;
+        sess.scene.view_b = 40.0;
+        let lx2 = lx_for_bar_in(&sess.scene, 30.0);
+        assert!(sess.scroll(1240, 400, 0.0, 0.0, -10.0, 0, lx2, 100.0));
+        assert!((sess.scene.view_a - 0.0).abs() < 1e-3);
+        assert!((sess.scene.view_b - 96.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn overview_drag_centers_view_and_clamps() {
+        let (mut sess, mut selected, mut playhead) = session();
+        // overview上で曲中央(bar 48)へ
+        let ox_48 = f64::from(SURF_X) + 48.0 / f64::from(SONG_BARS) * surface_width();
+        let out = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            ox_48,
+            5.0,
+        );
+        assert!(out.dirty);
+        assert!(!out.feedback);
+        assert!((sess.scene.view_a - 24.0).abs() < 1e-3);
+        assert!((sess.scene.view_b - 72.0).abs() < 1e-3);
+
+        // 右端へ → view 48..96
+        let ox_96 = f64::from(SURF_X) + surface_width();
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Move,
+            ox_96,
+            5.0,
+        );
+        assert!((sess.scene.view_a - 48.0).abs() < 1e-3);
+        assert!((sess.scene.view_b - 96.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn playhead_is_song_normalized_and_survives_view_change() {
+        let (mut sess, mut selected, mut playhead) = session();
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            lx_for_bar(24.0),
+            f64::from(OVER_H + 1.0) + 4.0,
+        );
+        assert!((playhead - 24.0 / 96.0).abs() < 1e-9);
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Up,
+            lx_for_bar(24.0),
+            f64::from(OVER_H + 1.0) + 4.0,
+        );
+
+        // viewを後半へ移しても同じpointer barでscrubが正しい
+        sess.scene.view_a = 48.0;
+        sess.scene.view_b = 96.0;
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            lx_for_bar_in(&sess.scene, 72.0),
+            f64::from(OVER_H + 1.0) + 4.0,
+        );
+        assert!((playhead - 72.0 / 96.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn clip_hit_works_after_view_moves_to_second_half() {
+        let (mut sess, mut selected, mut playhead) = session();
+        sess.scene.view_a = 48.0;
+        sess.scene.view_b = 96.0;
+        sess.scene.bands[5].clips[0].a = 60.0;
+        sess.scene.bands[5].clips[0].b = 80.0;
+        let x = lx_for_bar_in(&sess.scene, 70.0);
+        let y = body_top() + f64::from(ROW) * 5.5;
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            x,
+            y,
+        );
+        // band0..4 flat: 3+2+3+2+0 = 10
+        assert_eq!(selected, 10);
+    }
+
+    #[test]
+    fn overview_cancel_restores_view() {
+        let (mut sess, mut selected, mut playhead) = session();
+        let before = (sess.scene.view_a, sess.scene.view_b);
+        let ox_48 = f64::from(SURF_X) + 48.0 / f64::from(SONG_BARS) * surface_width();
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            ox_48,
+            5.0,
+        );
+        assert!((sess.scene.view_a - 24.0).abs() < 1e-3);
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Cancel,
+            ox_48,
+            5.0,
+        );
+        assert!((sess.scene.view_a - before.0).abs() < 1e-6);
+        assert!((sess.scene.view_b - before.1).abs() < 1e-6);
     }
 }

@@ -74,6 +74,19 @@ impl MacOsSurfaceRenderer {
         self.core.timeline_pointer(phase, x, y)
     }
 
+    pub(crate) fn timeline_scroll(
+        &mut self,
+        delta_x: f64,
+        delta_y: f64,
+        magnification: f64,
+        modifiers: u32,
+        x: f64,
+        y: f64,
+    ) -> bool {
+        self.core
+            .timeline_scroll(delta_x, delta_y, magnification, modifiers, x, y)
+    }
+
     pub(crate) fn stage_pointer(&mut self, phase: PointerPhase, x: f64, y: f64) {
         self.core.stage_pointer(phase, x, y);
     }
