@@ -24,8 +24,11 @@ use crate::browser_host_runtime::{
 };
 use crate::document_edit_runtime::{
     AddPositionKeyRequest, AttachEffectRequest, DocumentEditDispatchError, DocumentEditQueue,
-    DocumentEditRuntime, DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
-    SetPositionKeyInterpRequest, SetPositionKeyValueRequest,
+    DocumentEditRuntime, DocumentEditRuntimeError, PlaceMediaRequest, PlaceRectangleRequest,
+    PublishedDocument, SetPositionKeyInterpRequest, SetPositionKeyValueRequest,
+};
+use crate::host_file_drop::{
+    HostFileDropEvent, HostFileDropTerminal, PlatformFileDrop, PlatformFileDropError,
 };
 use crate::host_pointer_capture::{HostPointerCancel, HostPointerCandidate};
 use crate::inspector_host_runtime::{
@@ -66,10 +69,11 @@ use crate::{
     PlatformBindingConstraints, PlatformCommandModifier, RouterOutput, SafetyInterrupt,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) enum ProductEvent {
     Wake,
     BrowserLifecycle(BrowserLifecycleEvent),
+    FileDrop(HostFileDropEvent),
 }
 
 pub(crate) fn run(document_runtime: DocumentEditRuntime) -> Result<(), ProductRuntimeError> {
@@ -164,6 +168,7 @@ pub(crate) struct ProductApp {
     stage_chrome: Option<StageChromeHostRuntime>,
     easing_popup: Option<(ProductEasingPopup, PositionActiveInterval, u64, u64)>,
     timeline_tools: Option<TimelineToolsHostRuntime>,
+    file_drop: Option<PlatformFileDrop>,
     window: Option<Arc<Window>>,
     gpu: Arc<GpuCtx>,
     parts: Option<ProductGpuParts>,
@@ -762,6 +767,7 @@ impl ProductApp {
             stage_chrome: None,
             easing_popup: None,
             timeline_tools: None,
+            file_drop: None,
             window: None,
             gpu,
             parts: Some(parts),
@@ -832,6 +838,7 @@ impl ProductApp {
                     .with_visible(false),
             )?,
         );
+        let file_drop = PlatformFileDrop::new(&window, self.proxy.clone())?;
         crate::ui_numeric_trace::emit(format_args!(
             "kind=startup phase=window-created phase_ms={:.3}",
             elapsed_ms(initialize_started),
@@ -915,6 +922,7 @@ impl ProductApp {
         self.inspector = Some(inspector);
         self.stage_chrome = Some(stage_chrome);
         self.timeline_tools = Some(timeline_tools);
+        self.file_drop = Some(file_drop);
         self.gfx = Some(gfx);
         self.update_layout()?;
         crate::ui_numeric_trace::emit(format_args!(
@@ -1529,6 +1537,69 @@ impl ProductApp {
                 if let Err(error) = self.handle_browser_lifecycle(event) {
                     self.fail(event_loop, error);
                 }
+            }
+            ProductEvent::FileDrop(event) => self.process_file_drop(event_loop, event),
+        }
+    }
+
+    fn process_file_drop(&mut self, event_loop: &ActiveEventLoop, event: HostFileDropEvent) {
+        if event.terminal != HostFileDropTerminal::Perform {
+            trace_media_drop_reject("terminal");
+            return;
+        }
+        if self.active_place.is_some() {
+            trace_media_drop_reject("internal-place-active");
+            return;
+        }
+        let (ndc, position) =
+            match canonical_media_drop_position(self.layout, self.displayed_camera, event.position)
+            {
+                Ok(position) => position,
+                Err(reason) => {
+                    trace_media_drop_reject(reason);
+                    return;
+                }
+            };
+        let prepared = match crate::media_drop::prepare_media_drop(&event.paths) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                trace_media_drop_reject(error.reason());
+                return;
+            }
+        };
+        let duration = prepared.duration;
+        self.document_queue.push_place_media(PlaceMediaRequest {
+            position,
+            playhead: RationalTime::ZERO,
+            asset: prepared.asset,
+            duration,
+        });
+        match self.document_runtime.process_next(
+            &mut self.document_queue,
+            self.primary,
+            self.projection_generation,
+        ) {
+            Ok(Some(published)) => {
+                crate::ui_numeric_trace::emit(format_args!(
+                    "kind=media-drop-accept ndc_x={:.6} ndc_y={:.6} canonical_x={:.6} \
+                     canonical_y={:.6} duration_num={} duration_den={}",
+                    ndc[0],
+                    ndc[1],
+                    position[0],
+                    position[1],
+                    duration.num(),
+                    duration.den(),
+                ));
+                self.adopt_full_publish(event_loop, published, "media-drop");
+            }
+            Ok(None) => trace_media_drop_reject("document-no-op"),
+            Err(error @ DocumentEditRuntimeError::AddClipFailed(_)) => {
+                trace_media_drop_reject("add-clip-failed");
+                self.fail(event_loop, error);
+            }
+            Err(error) => {
+                trace_media_drop_reject("document-edit");
+                self.fail(event_loop, error);
             }
         }
     }
@@ -3827,6 +3898,21 @@ fn rectangle_place_overlay(
     })
 }
 
+fn canonical_media_drop_position(
+    layout: Option<NativeHostLayout>,
+    camera: motolii_core::CompCamera,
+    position: [f64; 2],
+) -> Result<([f64; 2], [f64; 2]), &'static str> {
+    let layout = layout.ok_or("layout-unavailable")?;
+    let ndc = layout.stage_ndc(position).ok_or("outside-stage")?;
+    let canonical = canonical_drop_from_ndc(camera, ndc).ok_or("canonical-conversion")?;
+    Ok((ndc, canonical))
+}
+
+fn trace_media_drop_reject(reason: &str) {
+    crate::ui_numeric_trace::emit(format_args!("kind=media-drop-reject reason={reason}"));
+}
+
 fn draw_rect<'a>(
     pass: &mut wgpu::RenderPass<'a>,
     rect: PhysicalRect,
@@ -4106,6 +4192,8 @@ pub(crate) enum ProductRuntimeError {
     TimelineTools(#[from] TimelineToolsHostRuntimeError),
     #[error(transparent)]
     NativeTimeline(#[from] NativeTimelineRendererError),
+    #[error(transparent)]
+    FileDrop(#[from] PlatformFileDropError),
     #[error(transparent)]
     Layout(#[from] crate::layout::LayoutError),
     #[error(transparent)]
@@ -4750,6 +4838,32 @@ mod tests {
             scope_ref: "builtin-stable".to_owned(),
             item_id: "rectangle".to_owned(),
         }
+    }
+
+    #[test]
+    fn media_drop_outside_stage_is_rejected_before_document_dispatch() {
+        let layout = test_layout(1);
+        let camera =
+            motolii_core::CompCamera::try_new(CanonicalPoint { x: 0.0, y: 0.0 }, 0.0, 1.0, 16, 9)
+                .unwrap();
+        assert_eq!(
+            canonical_media_drop_position(Some(layout), camera, [-1.0, -1.0]),
+            Err("outside-stage")
+        );
+    }
+
+    #[test]
+    fn media_drop_add_clip_failure_has_its_own_reject_reason() {
+        let source = include_str!("product_runtime.rs");
+        let route = source
+            .split("fn process_file_drop(")
+            .nth(1)
+            .unwrap()
+            .split("fn handle_browser_lifecycle(")
+            .next()
+            .unwrap();
+        assert!(route.contains("DocumentEditRuntimeError::AddClipFailed"));
+        assert!(route.contains("trace_media_drop_reject(\"add-clip-failed\")"));
     }
 
     #[test]

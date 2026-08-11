@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use motolii_core::{RationalTime, RationalTimeError};
 use motolii_doc::{
-    AddPositionKeyPreparation, AddPositionKeyPrepareError, Clip, ClipSource, Command, CommandError,
-    Document, DocumentError, DocumentPluginError, DocumentWriter, DraftDocParam,
+    AddPositionKeyPreparation, AddPositionKeyPrepareError, AssetDraft, Clip, ClipSource, Command,
+    CommandError, Document, DocumentError, DocumentPluginError, DocumentWriter, DraftDocParam,
     EffectDefinitionDraft, EffectDefinitionId, EffectId, ItemEnvelope, JournalEdit, KeyframeId,
     LayerId, LayerIdError, ParentLocator, PreparedPluginRecipe, ProjectError, ProjectSession,
     SaveProjectOptions, ScalarPropertyId, StandardShape, TrackItem, UndoError, VectorContent,
@@ -24,6 +24,7 @@ use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 pub(crate) enum DocumentEditAction {
     Apply(DocumentCommandRequest),
     PlaceRectangle(PlaceRectangleRequest),
+    PlaceMedia(PlaceMediaRequest),
     AttachEffect(AttachEffectRequest),
     SetEffectParam(SetEffectParamRequest),
     AddPositionKey(AddPositionKeyRequest),
@@ -42,6 +43,7 @@ impl DocumentEditAction {
         match self {
             Self::Apply(_) => DocumentEditActionKind::Apply,
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
+            Self::PlaceMedia(_) => DocumentEditActionKind::PlaceMedia,
             Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
             Self::AddPositionKey(_) => DocumentEditActionKind::AddPositionKey,
@@ -61,6 +63,7 @@ impl DocumentEditAction {
 pub(crate) enum DocumentEditActionKind {
     Apply,
     PlaceRectangle,
+    PlaceMedia,
     AttachEffect,
     SetEffectParam,
     AddPositionKey,
@@ -83,6 +86,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_place_rectangle(&mut self, request: PlaceRectangleRequest) {
         self.pending
             .push_back(DocumentEditAction::PlaceRectangle(request));
+    }
+
+    pub(crate) fn push_place_media(&mut self, request: PlaceMediaRequest) {
+        self.pending
+            .push_back(DocumentEditAction::PlaceMedia(request));
     }
 
     pub(crate) fn push_attach_effect(&mut self, request: AttachEffectRequest) {
@@ -186,6 +194,14 @@ impl DocumentEditQueue {
 pub(crate) struct PlaceRectangleRequest {
     pub(crate) position: [f64; 2],
     pub(crate) playhead: RationalTime,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PlaceMediaRequest {
+    pub(crate) position: [f64; 2],
+    pub(crate) playhead: RationalTime,
+    pub(crate) asset: AssetDraft,
+    pub(crate) duration: RationalTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -475,6 +491,41 @@ impl DocumentEditRuntime {
                     next_projection_generation,
                     None,
                 )
+            }
+            DocumentEditAction::PlaceMedia(request) => {
+                let next_projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                let (
+                    admit_asset,
+                    add_track_item,
+                    layer_id,
+                    expected_layer_next,
+                    expected_asset_next,
+                ) = prepare_media_actions(&self.writer, &self.catalog, current_primary, request)?;
+                let snapshot = self.writer.snapshot();
+                if snapshot.layers.peek_next() != expected_layer_next {
+                    return Err(DocumentEditRuntimeError::LayerIdReservationChanged);
+                }
+                if snapshot.assets.peek_next() != expected_asset_next {
+                    return Err(DocumentEditRuntimeError::AssetIdReservationChanged);
+                }
+                self.commit_command(
+                    admit_asset,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    next_projection_generation,
+                    None,
+                )?;
+                self.commit_command(
+                    add_track_item,
+                    kind,
+                    current_primary,
+                    Some(layer_id),
+                    next_projection_generation,
+                    None,
+                )
+                .map_err(|source| DocumentEditRuntimeError::AddClipFailed(Box::new(source)))
             }
             DocumentEditAction::AttachEffect(request) => {
                 let Some(target) = current_primary else {
@@ -998,6 +1049,63 @@ fn prepare_rectangle_command(
     ))
 }
 
+fn prepare_media_actions(
+    writer: &DocumentWriter,
+    catalog: &PluginCatalog,
+    current_primary: Option<LayerId>,
+    request: PlaceMediaRequest,
+) -> Result<(Command, Command, LayerId, u64, u64), DocumentEditRuntimeError> {
+    if !request.position[0].is_finite() || !request.position[1].is_finite() {
+        return Err(DocumentEditRuntimeError::NonFiniteDropPosition);
+    }
+    if request.playhead != RationalTime::ZERO {
+        return Err(DocumentEditRuntimeError::MediaPlayheadMustBeZero);
+    }
+
+    let snapshot = writer.snapshot();
+    let expected_asset_next = snapshot.assets.peek_next();
+    let prepared_asset = writer.prepare_admit_asset(request.asset)?;
+    let asset_id = prepared_asset.asset().id;
+    let asset_name = prepared_asset.asset().name.clone();
+    let admit = prepared_asset.into_command_if_current(&snapshot)?;
+
+    let mut layers = snapshot.layers.clone();
+    let expected_layer_next = layers.peek_next();
+    let layer_id = layers.reserve()?;
+    let (track_id, index) = rectangle_insertion(&snapshot, current_primary)
+        .ok_or(DocumentEditRuntimeError::NoTrackForMedia)?;
+    let mut envelope = ItemEnvelope::new(layer_id);
+    envelope.transform.position = motolii_doc::DocParam::const_vec2(request.position);
+    let add = Command::AddTrackItem {
+        parent: ParentLocator::Track(track_id),
+        index,
+        item: TrackItem::Clip(Clip {
+            envelope,
+            start: RationalTime::ZERO,
+            duration: request.duration,
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset_id),
+        }),
+        layer_names: BTreeMap::from([(layer_id, asset_name)]),
+    };
+
+    let mut candidate = (*snapshot).clone();
+    admit.apply(&mut candidate)?;
+    candidate.validate()?;
+    candidate.prepare_plugins(catalog)?;
+    add.apply(&mut candidate)?;
+    candidate.validate()?;
+    candidate.prepare_plugins(catalog)?;
+
+    Ok((
+        admit,
+        add,
+        layer_id,
+        expected_layer_next,
+        expected_asset_next,
+    ))
+}
+
 fn rectangle_insertion(
     snapshot: &Document,
     current_primary: Option<LayerId>,
@@ -1103,6 +1211,14 @@ pub(crate) enum DocumentEditRuntimeError {
     NoTrackForRectangle,
     #[error("Rectangle LayerId reservation changed before live apply")]
     LayerIdReservationChanged,
+    #[error("media drop AssetId reservation changed before live apply")]
+    AssetIdReservationChanged,
+    #[error("media drop clip start must be RationalTime::ZERO")]
+    MediaPlayheadMustBeZero,
+    #[error("media placement requires an existing Track")]
+    NoTrackForMedia,
+    #[error("media asset was admitted but adding its clip failed")]
+    AddClipFailed(#[source] Box<DocumentEditRuntimeError>),
     #[error("prepared attach parameter `{param}` is not Const")]
     AttachDefaultNotConst { param: String },
     #[error("prepare_create_effect returned a non-CreateEffect command")]
@@ -1138,7 +1254,7 @@ mod tests {
     use std::fs;
     use std::sync::Arc;
 
-    use motolii_core::RationalTime;
+    use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, RationalTime};
     use motolii_doc::{
         journal_path_for_document, layer_names_for_item, motolii_dir_for_document, AssetId, Clip,
         ClipSource, Command, Document, DocumentError, DocumentPluginError, DocumentWriter,
@@ -3222,6 +3338,80 @@ mod tests {
     }
 
     #[test]
+    fn probed_media_drop_admits_asset_then_adds_clip_and_undoes_in_two_steps() {
+        if !motolii_testkit::ffmpeg_or_skip() {
+            return;
+        }
+        let dir = unique_tmp("media-drop-actions");
+        let media_path = dir.join("Dropped.MP4");
+        let desc = FrameDesc::packed(64, 48, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, false);
+        let fps = Fps::try_new(30, 1).unwrap();
+        let mut encoder = motolii_media::Encoder::open(&media_path, &desc, fps, true).unwrap();
+        let frame = vec![0_u8; desc.data_size()];
+        encoder.write_frame(&frame).unwrap();
+        encoder.write_frame(&frame).unwrap();
+        encoder.finish().unwrap();
+        let prepared = crate::media_drop::prepare_media_drop(&[media_path]).unwrap();
+
+        let mut document = Document::new_current();
+        let track = document.track_ids.allocate("V1").unwrap();
+        document.tracks.push(Track {
+            id: track,
+            items: Vec::new(),
+        });
+        document.validate().unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_media(PlaceMediaRequest {
+            position: [0.25, -0.125],
+            playhead: RationalTime::ZERO,
+            asset: prepared.asset,
+            duration: prepared.duration,
+        });
+
+        let published = runtime.process_next(&mut queue, None, 0).unwrap().unwrap();
+        assert_eq!(published.kind, DocumentEditActionKind::PlaceMedia);
+        assert_eq!(published.revision, 2);
+        assert_eq!(runtime.history_lengths(), (2, 0));
+        assert_eq!(published.snapshot.assets.len(), 1);
+        assert_eq!(published.snapshot.tracks[0].items.len(), 1);
+        let TrackItem::Clip(clip) = &published.snapshot.tracks[0].items[0] else {
+            panic!("media drop must create one clip");
+        };
+        assert_eq!(clip.start, RationalTime::ZERO);
+        assert_eq!(clip.duration, prepared.duration);
+        assert!(matches!(
+            clip.source,
+            ClipSource::Asset {
+                video: Some(_),
+                ref audio,
+                ..
+            } if audio.is_empty()
+        ));
+        let asset = published.snapshot.assets.iter().next().unwrap();
+        assert_eq!(asset.name, "Dropped");
+        assert_eq!(asset.asset_type, "video/mp4");
+
+        queue.push_undo();
+        let clip_undone = runtime
+            .process_next(&mut queue, published.primary, 1)
+            .unwrap()
+            .unwrap();
+        assert_eq!(clip_undone.snapshot.assets.len(), 1);
+        assert!(clip_undone.snapshot.tracks[0].items.is_empty());
+        assert_eq!(runtime.history_lengths(), (1, 1));
+
+        queue.push_undo();
+        let asset_undone = runtime
+            .process_next(&mut queue, clip_undone.primary, 2)
+            .unwrap()
+            .unwrap();
+        assert!(asset_undone.snapshot.assets.is_empty());
+        assert!(asset_undone.snapshot.tracks[0].items.is_empty());
+        assert_eq!(runtime.history_lengths(), (0, 2));
+    }
+
+    #[test]
     fn move_clip_commits_once_and_undo_restores_the_original_start() {
         let (document, _) = fixture();
         let layer = fixture_layer(&document);
@@ -3404,6 +3594,51 @@ mod tests {
             serde_json::to_vec(&*runtime.snapshot()).unwrap(),
             initial_json
         );
+    }
+
+    #[test]
+    fn rejected_media_drop_changes_no_document_revision_or_journal() {
+        let mut document = Document::new_current();
+        let track = document.track_ids.allocate("V1").unwrap();
+        document.tracks.push(Track {
+            id: track,
+            items: Vec::new(),
+        });
+        document.validate().unwrap();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (path, mut runtime) = open_runtime(document);
+        let journal = journal_path_for_document(&path);
+        let journal_size = fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_media(PlaceMediaRequest {
+            position: [0.0, 0.0],
+            playhead: RationalTime::ZERO,
+            asset: AssetDraft {
+                name: "bad".into(),
+                asset_type: "video/mp4".into(),
+                content_hash: "hash".into(),
+                path_absolute: Some("/tmp/bad.mp4".into()),
+                path_project_relative: None,
+                file_name: Some("bad.mp4".into()),
+                size_bytes: Some(0),
+                head_hash: None,
+                tail_hash: None,
+            },
+            duration: RationalTime::ZERO,
+        });
+
+        assert!(runtime.process_next(&mut queue, None, 0).is_err());
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+        assert_eq!(
+            fs::metadata(&journal).map(|meta| meta.len()).unwrap_or(0),
+            journal_size
+        );
+        assert!(!runtime.is_poisoned());
     }
 
     #[test]
