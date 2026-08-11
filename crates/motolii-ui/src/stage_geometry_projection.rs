@@ -7,7 +7,7 @@ use motolii_core::{CanonicalPoint, CanonicalSize, CompCamera, CompCameraError, R
 use motolii_doc::{
     param_eval, resolve_document_spaces, visible_layers_at, Affine2D, Clip, ClipSource,
     CompCameraDoc, Document, EvaluationTime, LayerId, ParamEvalError, ResolvedLayerParams,
-    TrackItem, RECT_LAYER_SOURCE,
+    StandardShape, TrackItem, VectorContent, RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
 
@@ -146,9 +146,40 @@ fn project_clip(
         ClipSource::Asset { video: Some(_), .. } => Ok(Some(StageLayerProjection::Unavailable(
             StageGeometryUnavailable::VideoSource { layer },
         ))),
-        ClipSource::Vector { .. } => Ok(Some(StageLayerProjection::Unavailable(
-            StageGeometryUnavailable::VectorSource { layer },
-        ))),
+        ClipSource::Vector { recipe } => {
+            let VectorContent::StandardShape {
+                shape: StandardShape::Rect { width, height },
+            } = &recipe.content
+            else {
+                return Ok(Some(StageLayerProjection::Unavailable(
+                    StageGeometryUnavailable::VectorSource { layer },
+                )));
+            };
+            if !recipe.modifiers.is_empty() {
+                return Ok(Some(StageLayerProjection::Unavailable(
+                    StageGeometryUnavailable::VectorSource { layer },
+                )));
+            }
+            let width = param_eval::eval_f64(width, t, tracks, resolved)?;
+            let height = param_eval::eval_f64(height, t, tracks, resolved)?;
+            let world = world_affine
+                .get(&layer.get())
+                .copied()
+                .ok_or(StageGeometryError::LayerMissing { layer })?;
+            if world.try_invert().is_none() || (camera_view * world).try_invert().is_none() {
+                return Ok(Some(StageLayerProjection::Unavailable(
+                    StageGeometryUnavailable::SingularTransform { layer },
+                )));
+            }
+            Ok(Some(StageLayerProjection::Available(StageLayerGeometry {
+                local_rect: StageLocalRect {
+                    center: CanonicalPoint { x: 0.0, y: 0.0 },
+                    size: CanonicalSize { width, height },
+                },
+                world,
+                camera_view,
+            })))
+        }
         ClipSource::Plugin {
             plugin_id, params, ..
         } if plugin_id == RECT_LAYER_SOURCE => {
@@ -355,6 +386,45 @@ mod tests {
         assert_eq!(geo.local_rect.size.height, size[1]);
         assert_eq!(geo.world, Affine2D::IDENTITY);
         assert_eq!(geo.camera_view, Affine2D::IDENTITY);
+    }
+
+    #[test]
+    fn standard_vector_rect_keeps_layer_identity_size_and_transform() {
+        let mut fx = Fixture::new();
+        let layer = fx.doc.layers.allocate("vector").unwrap();
+        let mut envelope = ItemEnvelope::new(layer);
+        envelope.transform.position = DocParam::const_vec2([0.25, -0.1]);
+        fx.doc.tracks[0].items.push(TrackItem::Clip(Clip {
+            envelope,
+            start: RationalTime::ZERO,
+            duration: sec(10),
+            time_map: Default::default(),
+            source: ClipSource::Vector {
+                recipe: motolii_doc::VectorRecipe {
+                    content: VectorContent::StandardShape {
+                        shape: StandardShape::Rect {
+                            width: DocParam::const_f64(0.2),
+                            height: DocParam::const_f64(0.3),
+                        },
+                    },
+                    modifiers: Vec::new(),
+                },
+            },
+        }));
+        fx.doc.validate().unwrap();
+
+        let projection = project_stage_geometry(
+            &fx.doc,
+            EvaluationTime::new(RationalTime::ZERO),
+            &DataTracks::new(),
+        )
+        .unwrap();
+        let StageLayerProjection::Available(geometry) = projection.get(layer).unwrap() else {
+            panic!("expected available vector rect");
+        };
+        assert_eq!(geometry.local_rect.size.width, 0.2);
+        assert_eq!(geometry.local_rect.size.height, 0.3);
+        assert_eq!(geometry.world.transform_point(0.0, 0.0), [0.25, -0.1]);
     }
 
     #[test]
@@ -620,7 +690,7 @@ mod tests {
             source: ClipSource::Vector {
                 recipe: motolii_doc::VectorRecipe {
                     content: motolii_doc::VectorContent::StandardShape {
-                        shape: motolii_doc::StandardShape::Rect {
+                        shape: motolii_doc::StandardShape::Ellipse {
                             width: DocParam::const_f64(1.0),
                             height: DocParam::const_f64(1.0),
                         },

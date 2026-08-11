@@ -58,7 +58,7 @@ Stage spatial runtime    Timeline = time/location
 | Preview／Export評価 | Vector Rectを不透明白`OverlayRect`へlower済み | `REUSE / LANDED` |
 | Timeline | Clipから`TimelineBar { layer, start, end, band }`へ投影済み | `REUSE`。RN製品component接続は別edge |
 | RN Inspector | revision、time、primary、`layer_id / display_name`まで | Rect width／height／positionのbounded projectionが残る |
-| Stage編集幾何 | `ClipSource::Vector`をtyped `Unavailable`にする | 既存plugin Rectの幾何routeを無断流用せず、exact gapとして維持 |
+| Stage編集幾何 | modifierなしの`StandardShape::Rect`を同じ`LayerId`／size／world／cameraで投影 | `REUSE / LANDED`。他のVectorとmodifier付きRectはtyped `Unavailable`を維持 |
 | Rerun Stage | Path2D custom visualizerと固定path表示はprobe済み | accepted Document snapshot／time／LayerIdからの製品projectionが残る |
 
 Draft PR #470の固定5点pathはRerun表示機構のprobeであり、このtranslation rootを通らない。M3 Rectangle完成、Timeline／Inspectorの意味owner、Undo/Redo接続の証拠にはしない。

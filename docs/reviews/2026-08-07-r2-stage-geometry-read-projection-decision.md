@@ -1,7 +1,7 @@
 # R2-STAGE-GEOMETRY-READ — Stage幾何read projectionの縮小採用
 
 日付: 2026-08-07
-状態: **縮小採用 / 実装未着手**
+状態: **縮小採用 / 実装済み（2026-08-11 Vector Rect追補）**
 
 ## 1. この決定が閉じる一問
 
@@ -58,15 +58,20 @@ AABBへ潰すとrotation下でgizmo handleの位置が実際の辺からずれ�
 |---|---|---|
 | `Plugin(RECT_LAYER_SOURCE)` | `size` paramを`eval_vec2`で正準単位のまま取得（`graph.rs:564,584`） | **投影する** |
 | `Asset { video: Some }` | source解像度→正準への換算が未決 | typed unavailable |
-| `Vector { recipe }` | recipe extentの意味が未決 | typed unavailable |
+| `Vector { recipe: StandardShape::Rect }` | M2 D3で局所中心`[0, 0]`と`width`／`height`が確定済み | modifierなしだけ**投影する** |
+| `Vector { recipe: other }` | Rect以外またはmodifier適用後のextent契約は未決 | typed unavailable |
 | `Plugin(other)` | prepared recipeにextent契約なし | typed unavailable |
 | `Asset { video: None }` | visual graphへ参加しない（AG-1） | 投影しない（正しい不在） |
 | `Group` | 固有sizeを持たず、子の合併の意味が未決 | typed unavailable |
 
 v1をRectへ縮小する根拠は、R1／VS-1の利用者出口がRectangleの背骨であり、
-video／vector／pluginのextent正準化とGroup合併は、それぞれ独立した意味決定だからである。
+video／Rect以外のvector／pluginのextent正準化とGroup合併は、それぞれ独立した意味決定だからである。
 **入手できない幾何をfakeせず、typed unavailableで返す。** これは
 [handoff §9](2026-08-07-m3-supervisor-handoff-stage-to-gizmo.md)の非目標「fake geometry」と一致する。
+
+2026-08-11追補: M2 D3で永続意味が確定した`VectorRecipe / StandardShape::Rect`について、
+既存のparameter評価とworld／camera変換を再利用するread projectionを追加した。schema、公開API、
+shape別frameは追加せず、modifier付きRectと他のVectorは従来どおりtyped unavailableとする。
 
 ### 3.3 時刻gate — 今見えているものだけ
 
@@ -97,7 +102,7 @@ negative:
 
 - audio-only Clip（`video: None`）に幾何が出ない
 - `clip_active`が偽の時刻で幾何が出ない
-- Group／video／vector／plugin sourceが**typed unavailable**であり、0や既定値を返さない
+- Group／video／Rect以外またはmodifier付きvector／plugin sourceが**typed unavailable**であり、0や既定値を返さない
 - 投影実行でDocument write 0、revision不変、journal追記0
 - 特異な変換（`try_invert`が`None`）でpanicせず、typed失敗を返す
 
@@ -105,7 +110,7 @@ negative:
 
 - selection producer、pointer route、gizmo、drag、snap
 - Position key書き込み、Timeline投影、Easing接続
-- video／vector／plugin source extentの正準化
+- video／Rect以外またはmodifier付きvector／plugin source extentの正準化
 - Group bounds合併の意味決定
 - AABB／bounding volumeという語をDocumentや公開契約へ入れること
 - motolii-docへの一般的な幾何API新設（3.3の狭い可視述語を除く）
