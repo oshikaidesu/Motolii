@@ -437,6 +437,15 @@ pub(crate) struct TimelinePointerOutcome {
     pub scrub_release: bool,
     /// real行の編集gestureをUpで確定した時の1回dispatch。
     pub edit_commit: Option<TimelineEditCommit>,
+    /// real行のDown選択をhostへ1回dispatchする。
+    pub selection_commit: Option<TimelineSelectionCommit>,
+}
+
+/// real TimelineのDown時にhostへ送る選択intent。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum TimelineSelectionCommit {
+    SelectLayer { layer_id: String },
+    ClearSelection,
 }
 
 /// real Timelineのrelease時にhostへ送る編集intent。
@@ -475,6 +484,7 @@ impl TimelineSession {
         let mut scrub_playhead = None;
         let mut scrub_release = false;
         let mut edit_commit = None;
+        let mut selection_commit = None;
 
         match phase {
             TimelinePointerPhase::Down => {
@@ -509,6 +519,14 @@ impl TimelineSession {
                                 key.2 = true;
                             }
                             *selected = flat;
+                            if self.scene.real {
+                                let layer_id =
+                                    self.scene.bands[band].clips[clip_idx].layer_id.clone();
+                                if !layer_id.is_empty() {
+                                    selection_commit =
+                                        Some(TimelineSelectionCommit::SelectLayer { layer_id });
+                                }
+                            }
                             self.gesture = Some(ActiveGesture::KeyDrag {
                                 snapshot,
                                 band,
@@ -531,6 +549,12 @@ impl TimelineSession {
                                     flat += b.clips.len() as i32;
                                 }
                                 dirty = true;
+                                let layer_id =
+                                    self.scene.bands[band].clips[clip_idx].layer_id.clone();
+                                if !layer_id.is_empty() {
+                                    selection_commit =
+                                        Some(TimelineSelectionCommit::SelectLayer { layer_id });
+                                }
                             }
                             self.gesture = Some(ActiveGesture::TrimStart {
                                 snapshot,
@@ -552,6 +576,12 @@ impl TimelineSession {
                                     flat += b.clips.len() as i32;
                                 }
                                 dirty = true;
+                                let layer_id =
+                                    self.scene.bands[band].clips[clip_idx].layer_id.clone();
+                                if !layer_id.is_empty() {
+                                    selection_commit =
+                                        Some(TimelineSelectionCommit::SelectLayer { layer_id });
+                                }
                             }
                             self.gesture = Some(ActiveGesture::TrimEnd {
                                 snapshot,
@@ -566,6 +596,11 @@ impl TimelineSession {
                         } => {
                             *selected = flat;
                             let clip = &self.scene.bands[band].clips[clip_idx];
+                            if self.scene.real && !clip.layer_id.is_empty() {
+                                selection_commit = Some(TimelineSelectionCommit::SelectLayer {
+                                    layer_id: clip.layer_id.clone(),
+                                });
+                            }
                             self.gesture = Some(ActiveGesture::SelectOrMove {
                                 snapshot,
                                 band,
@@ -580,6 +615,9 @@ impl TimelineSession {
                         }
                         HitKind::EmptyBar => {
                             *selected = -1;
+                            if self.scene.real {
+                                selection_commit = Some(TimelineSelectionCommit::ClearSelection);
+                            }
                             self.gesture = Some(ActiveGesture::Deselect { snapshot });
                             dirty = true;
                         }
@@ -634,6 +672,7 @@ impl TimelineSession {
             scrub_playhead,
             scrub_release,
             edit_commit,
+            selection_commit,
         }
     }
 
@@ -2424,7 +2463,7 @@ mod tests {
         let mut selected = 0;
         let mut playhead = 0.27;
         let y = body_top() + f64::from(ROW) * 0.5 - 0.5;
-        let x = f64::from(bx(&sess.scene, 2.0));
+        let x = f64::from(bx(&sess.scene, sess.scene.bands[0].clips[0].keys[0].0));
         let down = sess.pointer(
             &mut selected,
             &mut playhead,
@@ -2876,5 +2915,111 @@ mod tests {
         );
         assert!((sess.scene.view_a - before.0).abs() < 1e-6);
         assert!((sess.scene.view_b - before.1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn real_clip_down_emits_select_layer_once_and_empty_bar_clears() {
+        let mut sess = TimelineSession::default();
+        sess.scene = TimelineScene::from_snapshot(
+            &[SnapshotLayerInput {
+                layer_id: "42".into(),
+                display_name: "clip".into(),
+                interval_secs: Some((2.0, 8.0)),
+                keys: vec![],
+            }],
+            None,
+        );
+        assert!(sess.scene.real);
+        let mut selected = -1;
+        let mut playhead = 0.1;
+        let y = body_top() + f64::from(ROW) * 0.5 - 0.5;
+        let x = f64::from(bx(&sess.scene, 3.0));
+        let down = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            x,
+            y,
+        );
+        assert_eq!(
+            down.selection_commit,
+            Some(TimelineSelectionCommit::SelectLayer {
+                layer_id: "42".into(),
+            })
+        );
+        assert_eq!(selected, 0);
+
+        let empty_x = f64::from(bx(&sess.scene, 20.0));
+        let clear = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            empty_x,
+            y,
+        );
+        assert_eq!(
+            clear.selection_commit,
+            Some(TimelineSelectionCommit::ClearSelection)
+        );
+        assert_eq!(selected, -1);
+    }
+
+    #[test]
+    fn fixture_clip_down_does_not_emit_selection_commit() {
+        let (mut sess, mut selected, mut playhead) = session();
+        assert!(!sess.scene.real);
+        let y = body_top() + 5.0;
+        let x = lx_for_bar(2.0);
+        let down = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            x,
+            y,
+        );
+        assert!(down.selection_commit.is_none());
+        assert!(selected >= 0);
+    }
+
+    #[test]
+    fn real_key_down_emits_select_layer_for_owner_clip() {
+        let mut sess = TimelineSession::default();
+        sess.scene = TimelineScene::from_snapshot(
+            &[SnapshotLayerInput {
+                layer_id: "11".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![SnapshotKeyInput {
+                    key_id: 7,
+                    time_secs: 4.0,
+                }],
+            }],
+            None,
+        );
+        let mut selected = -1;
+        let mut playhead = 0.27;
+        let y = body_top() + f64::from(ROW) * 0.5 - 0.5;
+        let x = f64::from(bx(&sess.scene, sess.scene.bands[0].clips[0].keys[0].0));
+        let down = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            x,
+            y,
+        );
+        assert_eq!(
+            down.selection_commit,
+            Some(TimelineSelectionCommit::SelectLayer {
+                layer_id: "11".into(),
+            })
+        );
     }
 }

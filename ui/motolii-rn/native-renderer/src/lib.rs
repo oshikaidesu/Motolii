@@ -318,6 +318,11 @@ pub unsafe extern "C" fn motolii_macos_renderer_get_stats(
     .is_ok()
 }
 
+/// keymap用の薄いFFI。実体はhost_bridge。
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// `kind_utf8` must point to `kind_len` UTF-8 bytes naming undo/redo/delete_layer.
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn motolii_macos_renderer_destroy(handle: *mut c_void) {

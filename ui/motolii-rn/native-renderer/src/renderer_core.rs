@@ -418,6 +418,12 @@ impl RendererCore {
                     self.force_next_host_snapshot = true;
                 }
             }
+            if let Some(commit) = outcome.selection_commit {
+                let _ = Self::dispatch_timeline_selection(
+                    &commit,
+                    &mut self.force_next_host_snapshot,
+                );
+            }
             self.scrubbing = self.scrub_time_pump.is_active();
         } else if matches!(phase, PointerPhase::Up | PointerPhase::Cancel) {
             self.scrubbing = false;
@@ -547,6 +553,17 @@ impl RendererCore {
         self.stats.max_cpu_us = self.stats.max_cpu_us.max(cpu_us);
         self.stats.vertex_bytes = 0;
         Ok(())
+    }
+
+    fn dispatch_timeline_selection(
+        commit: &crate::timeline_skia::TimelineSelectionCommit,
+        force_next_host_snapshot: &mut bool,
+    ) -> bool {
+        let accepted = crate::host_bridge::try_dispatch_timeline_selection(commit);
+        if !accepted {
+            *force_next_host_snapshot = true;
+        }
+        accepted
     }
 
     fn sync_host_timeline_projection(&mut self) {
@@ -886,6 +903,93 @@ mod tests {
         assert_eq!(pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 20, 30, 1), None);
         let mut pump = ScrubTimePump::new();
         assert_eq!(pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 20, 30, 1), None);
+    }
+
+    #[test]
+    fn real_clip_down_dispatches_selection_once_via_renderer_path() {
+        let mut real_session = TimelineSession::default();
+        real_session.scene = TimelineScene::from_snapshot(
+            &[crate::timeline_skia::SnapshotLayerInput {
+                layer_id: "clip-real".into(),
+                display_name: "clip".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![],
+            }],
+            None,
+        );
+        let mut selected = -1;
+        let mut playhead = 0.27;
+        let x = 202.0 + (3.0f64 / 48.0) * (1240.0 - 202.0 - 6.0);
+        let y = 66.5;
+        crate::host_bridge::test_reset_timeline_selection_dispatch_count();
+        crate::host_bridge::test_clear_host_slot();
+        let mut force_next_snapshot = false;
+        let down = real_session.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            x,
+            y,
+        );
+        assert!(down.selection_commit.is_some());
+        if let Some(commit) = down.selection_commit {
+            assert!(!RendererCore::dispatch_timeline_selection(
+                &commit,
+                &mut force_next_snapshot
+            ));
+            assert!(force_next_snapshot);
+        }
+        assert_eq!(crate::host_bridge::test_timeline_selection_dispatch_count(), 1);
+    }
+
+    #[test]
+    fn fixture_down_or_trim_down_does_not_dispatch_selection() {
+        let mut session = TimelineSession::default();
+        let down_x = 202.0 + (3.0f64 / 48.0) * (1240.0 - 202.0 - 6.0);
+        let y = 66.5;
+        crate::host_bridge::test_reset_timeline_selection_dispatch_count();
+        crate::host_bridge::test_clear_host_slot();
+        let mut force_next_snapshot = false;
+        let mut selected = -1;
+        let mut playhead = 0.27;
+        let clip_down = session.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            down_x,
+            y,
+        );
+        assert!(clip_down.selection_commit.is_none());
+
+        let trim_down = session.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            202.0 + (14.0f64 / 48.0) * (1240.0 - 202.0 - 6.0),
+            y,
+        );
+        assert!(trim_down.selection_commit.is_none());
+
+        if let Some(commit) = clip_down.selection_commit {
+            assert!(!RendererCore::dispatch_timeline_selection(
+                &commit,
+                &mut force_next_snapshot
+            ));
+        }
+        if let Some(commit) = trim_down.selection_commit {
+            assert!(!RendererCore::dispatch_timeline_selection(
+                &commit,
+                &mut force_next_snapshot
+            ));
+        }
+        assert_eq!(crate::host_bridge::test_timeline_selection_dispatch_count(), 0);
+        assert!(!force_next_snapshot);
     }
 
     #[test]

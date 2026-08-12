@@ -8,6 +8,12 @@ use std::sync::{Mutex, OnceLock};
 const MAX_JSON_BYTES: usize = 16_384;
 const MAX_SNAPSHOT_JSON_BYTES: usize = 131_072;
 
+#[cfg(test)]
+use std::sync::atomic::{AtomicU64, Ordering};
+
+#[cfg(test)]
+static TEST_SELECTION_DISPATCH_COUNT: AtomicU64 = AtomicU64::new(0);
+
 // extern importではなくRust経由で呼ぶ。externで宣言すると同一crate graph内でも
 // motolii-uiの該当objectがarchiveから引かれず、appのlinkで未解決symbolになる(実測)。
 #[cfg(target_os = "macos")]
@@ -405,6 +411,21 @@ pub unsafe extern "C" fn motolii_rnapp_stage_pointer(
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
+/// # Safety
+/// `kind_utf8` must point to `kind_len` UTF-8 bytes naming undo/redo/delete_layer.
+pub unsafe extern "C" fn motolii_rnapp_host_keymap(kind_utf8: *const u8, kind_len: usize) -> bool {
+    if kind_utf8.is_null() || kind_len == 0 || kind_len > 64 {
+        return false;
+    }
+    let Ok(kind) = std::str::from_utf8(unsafe { std::slice::from_raw_parts(kind_utf8, kind_len) })
+    else {
+        return false;
+    };
+    try_dispatch_keymap(kind)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn motolii_rnapp_host_dispatch_json(
     in_utf8: *const u8,
     in_len: usize,
@@ -602,6 +623,112 @@ pub(crate) fn try_dispatch_timeline_edit(
                     slot.handle, layer_id, key_id, num, den
                 )
             }
+        };
+        dispatch_intent_json_accepted(slot.handle, &intent)
+    }
+}
+
+pub(crate) fn try_dispatch_timeline_selection(
+    commit: &crate::timeline_skia::TimelineSelectionCommit,
+) -> bool {
+    #[cfg(test)]
+    TEST_SELECTION_DISPATCH_COUNT.fetch_add(1, Ordering::SeqCst);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = commit;
+        false
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use crate::timeline_skia::TimelineSelectionCommit;
+        let Ok(guard) = host_slot().lock() else {
+            return false;
+        };
+        let Some(slot) = guard.as_ref() else {
+            return false;
+        };
+        let intent = match commit {
+            TimelineSelectionCommit::SelectLayer { layer_id } => format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"select_layer","#,
+                    r#""host_handle":"{}","target":"{}"}}"#
+                ),
+                slot.handle, layer_id
+            ),
+            TimelineSelectionCommit::ClearSelection => format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"clear_selection","#,
+                    r#""host_handle":"{}"}}"#
+                ),
+                slot.handle
+            ),
+        };
+        dispatch_intent_json_accepted(slot.handle, &intent)
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn test_reset_timeline_selection_dispatch_count() {
+    TEST_SELECTION_DISPATCH_COUNT.store(0, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(crate) fn test_timeline_selection_dispatch_count() -> u64 {
+    TEST_SELECTION_DISPATCH_COUNT.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+pub(crate) fn test_clear_host_slot() {
+    if let Ok(mut guard) = host_slot().lock() {
+        *guard = None;
+    }
+}
+
+/// keymap: undo / redo / delete_layer(現primary)。primaryなしのdeleteは何もしない。
+pub(crate) fn try_dispatch_keymap(kind: &str) -> bool {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = kind;
+        false
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(guard) = host_slot().lock() else {
+            return false;
+        };
+        let Some(slot) = guard.as_ref() else {
+            return false;
+        };
+        let intent = match kind {
+            "undo" | "redo" => format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"{kind}","host_handle":"{}"}}"#,
+                slot.handle
+            ),
+            "delete_layer" => {
+                drop(guard);
+                let Some(projection) = try_read_timeline_projection() else {
+                    return false;
+                };
+                let Some(target) = projection.primary_layer_id else {
+                    // primaryなしは何もしない(拒否でも失敗でもない)。
+                    return true;
+                };
+                let Ok(guard) = host_slot().lock() else {
+                    return false;
+                };
+                let Some(slot) = guard.as_ref() else {
+                    return false;
+                };
+                let intent = format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"delete_layer","#,
+                        r#""host_handle":"{}","target":"{}"}}"#
+                    ),
+                    slot.handle, target
+                );
+                return dispatch_intent_json_accepted(slot.handle, &intent);
+            }
+            _ => return false,
         };
         dispatch_intent_json_accepted(slot.handle, &intent)
     }
@@ -1902,6 +2029,39 @@ mod tests {
         assert!(try_stage_resize(800.0, 600.0, 1.0));
         assert!(try_stage_unmount());
         assert!(try_stage_resize(1024.0, 768.0, 1.0));
+
+        clear_slot();
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[test]
+    fn timeline_selection_dispatch_selects_and_clears_via_host_slot() {
+        let _lock = test_lock();
+        clear_slot();
+        let path = temp_project("tl-selection");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+        dispatch_kind(
+            host,
+            "place_rectangle",
+            r#","position":[0.25,-0.125],"playhead":{"num":0,"den":1}"#,
+        );
+        let placed = motolii_ui::host_read_snapshot_for_test(host).expect("placed");
+        let layer_id = placed.primary_layer_id.expect("primary after place");
+
+        assert!(try_dispatch_timeline_selection(
+            &crate::timeline_skia::TimelineSelectionCommit::ClearSelection
+        ));
+        let cleared = try_read_timeline_projection().expect("cleared");
+        assert!(cleared.primary_layer_id.is_none());
+
+        assert!(try_dispatch_timeline_selection(
+            &crate::timeline_skia::TimelineSelectionCommit::SelectLayer {
+                layer_id: layer_id.clone(),
+            }
+        ));
+        let selected = try_read_timeline_projection().expect("selected");
+        assert_eq!(selected.primary_layer_id.as_deref(), Some(layer_id.as_str()));
 
         clear_slot();
         motolii_ui::host_destroy_for_test(host).expect("destroy");

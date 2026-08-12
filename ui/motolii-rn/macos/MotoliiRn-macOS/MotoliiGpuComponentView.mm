@@ -2,6 +2,7 @@
 
 #import <QuartzCore/CAMetalLayer.h>
 #import <cstring>
+#import <cstdint>
 #import <react/renderer/components/MotoliiNativeSpec/ComponentDescriptors.h>
 #import <react/renderer/components/MotoliiNativeSpec/EventEmitters.h>
 #import <react/renderer/components/MotoliiNativeSpec/Props.h>
@@ -59,6 +60,31 @@ extern "C" bool motolii_macos_timeline_renderer_scroll(
     void *handle, double deltaX, double deltaY, double magnification, uint32_t modifiers, double x,
     double y);
 extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStats *stats);
+extern "C" bool motolii_rnapp_host_keymap(const uint8_t *kind_utf8, size_t kind_len);
+
+/// Cmd+Z / Shift+Cmd+Z / Delete|Backspace だけをhostへ転送。認識した鍵はYES(superへ送らない)。
+static BOOL MotoliiDispatchKeymap(NSEvent *event)
+{
+  NSEventModifierFlags mods = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  NSString *chars = event.charactersIgnoringModifiers ?: @"";
+
+  if (mods == NSEventModifierFlagCommand && [chars isEqualToString:@"z"]) {
+    (void)motolii_rnapp_host_keymap((const uint8_t *)"undo", 4);
+    return YES;
+  }
+
+  if (mods == (NSEventModifierFlagCommand | NSEventModifierFlagShift)
+      && [chars isEqualToString:@"z"]) {
+    (void)motolii_rnapp_host_keymap((const uint8_t *)"redo", 4);
+    return YES;
+  }
+
+  if (mods == 0 && (event.keyCode == 51 || event.keyCode == 117)) {
+    (void)motolii_rnapp_host_keymap((const uint8_t *)"delete_layer", 12);
+    return YES;
+  }
+  return NO;
+}
 
 @interface MotoliiMetalView : NSView
 @end
@@ -126,6 +152,13 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 - (void)mouseUp:(NSEvent *)event { [self emitPhase:2 event:event]; }
 - (void)mouseExited:(NSEvent *)event { [self emitPhase:3 event:event]; }
 
+- (void)keyDown:(NSEvent *)event
+{
+  if (!MotoliiDispatchKeymap(event)) {
+    [super keyDown:event];
+  }
+}
+
 - (void)viewDidMoveToWindow
 {
   [super viewDidMoveToWindow];
@@ -170,6 +203,13 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 - (void)mouseUp:(NSEvent *)event
 {
   [self emitPhase:2 event:event];
+}
+
+- (void)keyDown:(NSEvent *)event
+{
+  if (!MotoliiDispatchKeymap(event)) {
+    [super keyDown:event];
+  }
 }
 
 - (void)emitScrollDeltaX:(CGFloat)deltaX

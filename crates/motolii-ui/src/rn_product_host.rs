@@ -13,7 +13,8 @@ use std::sync::{Mutex, OnceLock};
 
 use motolii_core::{Fps, PixelSize, RationalTime};
 use motolii_doc::{
-    Clip, DocParam, DocValue, EvaluationTime, ItemEnvelope, KeyframeId, LayerId, TrackItem,
+    layer_names_for_item, Clip, Command, DocParam, DocValue, EvaluationTime, ItemEnvelope,
+    KeyframeId, LayerId, ParentLocator, TrackItem,
 };
 use motolii_eval::{DataTracks, Interp};
 use serde::{Deserialize, Serialize};
@@ -47,7 +48,7 @@ use crate::stage_overlay_gpu::{overlay_dimensions_match, overlay_dirty, OverlayU
 use crate::stage_overlay_raster::{raster_selection_outline, StageOverlayRaster};
 #[cfg(target_os = "macos")]
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
-use crate::{CommandId, DomainIntent, InputPhase, RouterOutput};
+use crate::{CommandId, DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 
 const WIRE_VERSION: u8 = 1;
 const HOST_TO_RN: &str = "host-to-rn";
@@ -1055,6 +1056,196 @@ impl RnProductHost {
                     Ok(Some(published)) => {
                         self.primary = published.primary;
                         self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "select_layer" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                queue.push_replace_primary(target);
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Err(DocumentEditRuntimeError::SelectionTargetNotFound(_))
+                    | Err(DocumentEditRuntimeError::ProjectionGenerationExhausted) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "clear_selection" => {
+                let mut queue = DocumentEditQueue::default();
+                queue.push_clear_primary();
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "delete_layer" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let document = self.runtime.snapshot();
+                let Some((parent, index, item)) =
+                    find_track_item_location(document.as_ref(), target)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Ok(layer_names) = layer_names_for_item(document.as_ref(), &item) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Ok(request) = DocumentCommandRequest::try_new(
+                    DomainIntent::DeleteTargetedItems,
+                    vec![Command::RemoveTrackItem {
+                        parent,
+                        index,
+                        layer_names,
+                        item,
+                    }],
+                ) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let output = RouterOutput::Intent {
+                    phase: InputPhase::Click,
+                    id: CommandId::try_new("motolii.rn.delete_layer")
+                        .expect("static command id"),
+                    intent: DomainIntent::DeleteTargetedItems,
+                };
+                let mut queue = DocumentEditQueue::default();
+                if queue.push_prepared(output, Some(request)).is_err() {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
                         accept(self.snapshot_wire(host_handle))
                     }
                     Ok(None) => accept(self.snapshot_wire(host_handle)),
@@ -3222,6 +3413,58 @@ fn find_envelope_in_document(
         .tracks
         .iter()
         .find_map(|track| walk(&track.items, target))
+}
+
+/// DeleteTargetedItems用: target層の(parent, index, item)を現Documentから拾う。
+fn find_track_item_location(
+    document: &motolii_doc::Document,
+    target: LayerId,
+) -> Option<(ParentLocator, usize, TrackItem)> {
+    fn envelope_layer(item: &TrackItem) -> LayerId {
+        match item {
+            TrackItem::Clip(clip) => clip.envelope.layer_id,
+            TrackItem::Group(group) => group.envelope.layer_id,
+        }
+    }
+    fn walk_groups(
+        items: &[TrackItem],
+        target: LayerId,
+    ) -> Option<(ParentLocator, usize, TrackItem)> {
+        for item in items {
+            if let TrackItem::Group(group) = item {
+                if let Some((idx, child)) = group
+                    .children
+                    .iter()
+                    .enumerate()
+                    .find(|(_, child)| envelope_layer(child) == target)
+                {
+                    return Some((
+                        ParentLocator::Group(group.envelope.layer_id),
+                        idx,
+                        child.clone(),
+                    ));
+                }
+                if let Some(found) = walk_groups(&group.children, target) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    for track in &document.tracks {
+        if let Some((idx, item)) = track
+            .items
+            .iter()
+            .enumerate()
+            .find(|(_, item)| envelope_layer(item) == target)
+        {
+            return Some((ParentLocator::Track(track.id), idx, item.clone()));
+        }
+        if let Some(found) = walk_groups(&track.items, target) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 fn project_position_keys(
@@ -6528,6 +6771,133 @@ mod tests {
         assert_eq!(restored_layer.start, before_start);
         assert_eq!(restored_layer.duration, before_duration);
         assert!(restored_layer.position_keys.is_empty());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn select_layer_and_clear_selection_update_primary_layer_id() {
+        let _lock = test_lock();
+        let host = create_host("select-clear");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        assert!(baseline.primary_layer_id.is_none());
+
+        let selected = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"select_layer","#,
+                    r#""host_handle":"{host}","target":"{layer}"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(selected.accepted);
+        assert_eq!(
+            selected.snapshot.expect("selected").primary_layer_id,
+            Some(layer_id.clone())
+        );
+        assert_eq!(read_snapshot(host).primary_layer_id, Some(layer_id));
+
+        let cleared = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"clear_selection","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(cleared.accepted);
+        assert!(cleared
+            .snapshot
+            .expect("cleared")
+            .primary_layer_id
+            .is_none());
+        assert!(read_snapshot(host).primary_layer_id.is_none());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn delete_layer_removes_timeline_row_and_undo_restores_id_and_name() {
+        let _lock = test_lock();
+        let host = create_host("delete-layer");
+        let before = read_snapshot(host);
+        let layer_id = before.layer_ids[0].clone();
+        let display_name = before
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer")
+            .display_name
+            .clone();
+
+        let deleted = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"delete_layer","#,
+                    r#""host_handle":"{host}","target":"{layer}"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(deleted.accepted);
+        let after = deleted.snapshot.expect("deleted");
+        assert!(!after
+            .timeline
+            .layers
+            .iter()
+            .any(|layer| layer.layer_id == layer_id));
+        assert!(!after.layer_ids.iter().any(|id| id == &layer_id));
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(undone.accepted);
+        let restored = undone.snapshot.expect("restored");
+        let layer = restored
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("restored layer");
+        assert_eq!(layer.display_name, display_name);
+        assert!(restored.layer_ids.iter().any(|id| id == &layer_id));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn missing_target_selection_and_delete_intents_reject_without_document_mutation() {
+        let _lock = test_lock();
+        let host = create_host("missing-target-reject");
+        let baseline = read_snapshot(host);
+        let missing = "999999";
+
+        for kind in ["select_layer", "delete_layer"] {
+            let rejected = dispatch_raw_json(
+                host,
+                &format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"{kind}","#,
+                        r#""host_handle":"{host}","target":"{missing}"}}"#
+                    ),
+                    kind = kind,
+                    host = host,
+                    missing = missing,
+                ),
+            );
+            assert!(!rejected.accepted, "{kind} must reject missing target");
+            assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+            let after = read_snapshot(host);
+            assert_eq!(after.revision, baseline.revision);
+            assert_eq!(after.projection_generation, baseline.projection_generation);
+            assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
+            assert_eq!(after.layer_ids, baseline.layer_ids);
+        }
         let _ = host_destroy_for_test(host);
     }
 }
