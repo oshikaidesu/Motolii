@@ -577,3 +577,4 @@
 | [2026-08-12-set-position-key-time-contract.md](2026-08-12-set-position-key-time-contract.md) | SetPositionKeyTime(position key時刻移動)の閉じた契約 — SetPositionKeyValue CAS族の鏡映、native Timeline keydragが通常入口。Rerun原本にkeyframe編集不在を確認済み |
 | [2026-08-12-remove-position-key-contract.md](2026-08-12-remove-position-key-contract.md) | RemovePositionKey(position key削除)の閉じた契約 — Add/UndoAdd対の鏡映、最後の1個はConst収束、undoは同一KeyframeId復元。Timeline Deleteが通常入口 |
 | [2026-08-12-pre-handson-ux-decision-demotion.md](2026-08-12-pre-handson-ux-decision-demotion.md) | 実機以前のUX決定を仮説へ一括降格(利用者裁定)。object bar read-onlyを明示撤回、UX authorityは実機裁定>品質バー>文法地図>旧仮説。工学契約(絶対規律/D2)は対象外 |
+| [2026-08-13-pr476-structural-skepticism-audit.md](2026-08-13-pr476-structural-skepticism-audit.md) | PR #476全成果物の構造懐疑監査S1〜S12(利用者裁定「見た目だけ通ればいい話ではない」)。最重症=Stage gizmo迂回(採択済みtransform_gizmo資産をhost接続で迂回し実UXが退化)。検収体系の欠陥(見た目保存の報酬化)を根本原因と認定、PRIOR ART欄義務化を即日施行 |
