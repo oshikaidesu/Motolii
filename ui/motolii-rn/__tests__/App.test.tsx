@@ -587,8 +587,461 @@ test('inspector X empty draft does not dispatch and restores value', async () =>
     const committed = tree!.root.findByProps({testID: 'inspector-position-key-x'});
     committed.props.onSubmitEditing();
   });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.onBlur();
+  });
   expect(mockDispatchIntent).toHaveBeenCalledTimes(0);
   expect(tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.value).toBe('0.1');
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('inspector X non-finite draft does not dispatch and restores value', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 1, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [{key_id: '7', time: {num: 1, den: 1}, value: [0.1, 0.2]}],
+            keys_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const xInput = tree!.root.findByProps({testID: 'inspector-position-key-x'});
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    xInput.props.onChangeText('abc');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.onSubmitEditing();
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.onBlur();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(0);
+  expect(tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.value).toBe('0.1');
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('EFFECTS tab lists host catalog and double-click attaches to primary', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      catalog: {
+        effects: [
+          {plugin_id: 'core.filter.opacity', name: 'Opacity', effect_version: 1},
+          {plugin_id: 'core.param.sine', name: 'Sine', effect_version: 2},
+        ],
+      },
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [],
+            effects_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  expect(tree!.root.findByProps({testID: 'effect-item-core.filter.opacity'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'effect-item-core.param.sine'})).toBeTruthy();
+  expect(
+    tree!.root.findByProps({testID: 'effect-item-core.filter.opacity'}).props.accessibilityState.selected,
+  ).toBe(true);
+  expect(
+    tree!.root.findByProps({testID: 'effect-item-core.param.sine'}).props.accessibilityState.selected,
+  ).toBe(false);
+  expect(tree!.root.findAllByProps({testID: 'effect-item-echo'})).toHaveLength(0);
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'effect-item-core.filter.opacity'}).props.onDoubleClick();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  const payload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(payload.kind).toBe('attach_effect');
+  expect(payload.target).toBe('42');
+  expect(payload.plugin_id).toBe('core.filter.opacity');
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('EFFECTS attach is skipped without primary and fixture remains without catalog', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      stage: {bounds: []},
+      catalog: {
+        effects: [{plugin_id: 'core.filter.opacity', name: 'Opacity', effect_version: 1}],
+      },
+      timeline: {fps: {num: 30, den: 1}, layers: []},
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'effect-item-core.filter.opacity'}).props.onDoubleClick();
+  });
+  expect(mockDispatchIntent).not.toHaveBeenCalled();
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+
+  mockReadSnapshot.mockReturnValue('');
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+  const names = tree!
+    .root.findByProps({testID: 'browser-view-EFFECTS'})
+    .findAllByType(Text)
+    .map(node => {
+      const children = node.props.children;
+      return Array.isArray(children) ? children.join('') : String(children);
+    });
+  expect(names).toContain('Echo Bloom');
+  expect(tree!.root.findAllByProps({testID: 'effect-item-core.filter.opacity'})).toHaveLength(0);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+});
+
+test('inspector effect param commit dispatches set_effect_param once', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      catalog: {
+        effects: [{plugin_id: 'core.filter.opacity', name: 'Opacity', effect_version: 1}],
+      },
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [
+              {
+                effect_use_id: '9',
+                plugin_id: 'core.filter.opacity',
+                params: [{param_id: 'amount', value: 1}],
+              },
+            ],
+            effects_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  expect(tree!.root.findByProps({testID: 'inspector-effects-section'})).toBeTruthy();
+  const input = tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'});
+  expect(input.props.value).toBe('1');
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    input.props.onChangeText('0.4');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onSubmitEditing();
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onBlur();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  const payload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(payload.kind).toBe('set_effect_param');
+  expect(payload.target).toBe('42');
+  expect(payload.effect_use_id).toBe('9');
+  expect(payload.param_id).toBe('amount');
+  expect(payload.value).toBe(0.4);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('inspector effect param empty draft does not dispatch and restores value', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      catalog: {
+        effects: [{plugin_id: 'core.filter.opacity', name: 'Opacity', effect_version: 1}],
+      },
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [
+              {
+                effect_use_id: '9',
+                plugin_id: 'core.filter.opacity',
+                params: [{param_id: 'amount', value: 1}],
+              },
+            ],
+            effects_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const input = tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'});
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    input.props.onChangeText('   ');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onSubmitEditing();
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onBlur();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(0);
+  expect(tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.value).toBe('1');
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('inspector effect param non-finite draft does not dispatch and restores value', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      catalog: {
+        effects: [{plugin_id: 'core.filter.opacity', name: 'Opacity', effect_version: 1}],
+      },
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [
+              {
+                effect_use_id: '9',
+                plugin_id: 'core.filter.opacity',
+                params: [{param_id: 'amount', value: 1}],
+              },
+            ],
+            effects_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const input = tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'});
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    input.props.onChangeText('abc');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onSubmitEditing();
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onBlur();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(0);
+  expect(tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.value).toBe('1');
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('inspector effect param rejected dispatch restores draft and keeps one dispatch', async () => {
+  mockDispatchIntent.mockClear();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":false}');
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      catalog: {
+        effects: [{plugin_id: 'core.filter.opacity', name: 'Opacity', effect_version: 1}],
+      },
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [
+              {
+                effect_use_id: '9',
+                plugin_id: 'core.filter.opacity',
+                params: [{param_id: 'amount', value: 1}],
+              },
+            ],
+            effects_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const input = tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'});
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    input.props.onChangeText('0.4');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onSubmitEditing();
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onBlur();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  expect(tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.value).toBe('1');
 
   await ReactTestRenderer.act(() => {
     tree!.unmount();

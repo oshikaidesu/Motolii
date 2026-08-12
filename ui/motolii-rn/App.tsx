@@ -48,6 +48,18 @@ type HostPositionKey = {
   time: HostRationalTime;
   value?: [number, number];
 };
+type HostEffectParam = {param_id: string; value: number};
+type HostEffectUse = {
+  effect_use_id: string;
+  plugin_id: string;
+  name: string;
+  params: HostEffectParam[];
+};
+type HostCatalogEffect = {
+  plugin_id: string;
+  name: string;
+  effect_version: number;
+};
 type HostLayerSeat = {
   displayName: string;
   positionKeyCount: number;
@@ -55,10 +67,12 @@ type HostLayerSeat = {
   currentTime: HostRationalTime;
   /** playhead exact一致かつ value がある時だけ編集席を出す。 */
   exactKey: {time: HostRationalTime; value: [number, number]} | null;
+  effects: HostEffectUse[];
 };
 type HostSnapshotState = {
   statusLabel: string | null;
   layerSeat: HostLayerSeat | null;
+  catalogEffects: HostCatalogEffect[] | null;
 };
 
 function rationalTimesExactEqual(a: HostRationalTime, b: HostRationalTime): boolean {
@@ -69,11 +83,11 @@ function rationalTimesExactEqual(a: HostRationalTime, b: HostRationalTime): bool
 function readHostSnapshotState(): HostSnapshotState {
   const host = nativeHost();
   if (!host) {
-    return {statusLabel: null, layerSeat: null};
+    return {statusLabel: null, layerSeat: null, catalogEffects: null};
   }
   const snapshot = host.readSnapshot();
   if (!snapshot) {
-    return {statusLabel: null, layerSeat: null};
+    return {statusLabel: null, layerSeat: null, catalogEffects: null};
   }
   try {
     const parsed = JSON.parse(snapshot) as {
@@ -81,11 +95,19 @@ function readHostSnapshotState(): HostSnapshotState {
       current_time?: HostRationalTime;
       revision?: string;
       stage?: {bounds?: unknown[]};
+      catalog?: {
+        effects?: Array<{plugin_id?: string; name?: string; effect_version?: number}>;
+      };
       timeline?: {
         layers?: Array<{
           layer_id: string;
           display_name: string;
           position_keys?: HostPositionKey[];
+          effects?: Array<{
+            effect_use_id?: string;
+            plugin_id?: string;
+            params?: Array<{param_id?: string; value?: number}>;
+          }>;
         }>;
       };
     };
@@ -93,8 +115,17 @@ function readHostSnapshotState(): HostSnapshotState {
     const layerBounds = parsed.stage?.bounds?.length ?? 0;
     const revision = parsed.revision;
     const statusLabel = revision == null ? null : `DOC r${revision} · ${layerBounds} layers`;
+    const catalogEffects = Array.isArray(parsed.catalog?.effects)
+      ? parsed.catalog!.effects!
+          .filter(item => typeof item?.plugin_id === 'string' && item.plugin_id.length > 0)
+          .map(item => ({
+            plugin_id: item.plugin_id!,
+            name: typeof item.name === 'string' && item.name.length > 0 ? item.name : item.plugin_id!,
+            effect_version: typeof item.effect_version === 'number' ? item.effect_version : 0,
+          }))
+      : null;
     if (!parsed.current_time || typeof parsed.current_time.num !== 'number' || typeof parsed.current_time.den !== 'number') {
-      return {statusLabel, layerSeat: null};
+      return {statusLabel, layerSeat: null, catalogEffects};
     }
     const timelineLayers = parsed.timeline?.layers ?? [];
     const primary = primaryLayerId
@@ -111,8 +142,22 @@ function readHostSnapshotState(): HostSnapshotState {
       && Number.isFinite(key.value[0])
       && Number.isFinite(key.value[1]),
     );
+    const nameByPlugin = new Map(
+      (catalogEffects ?? []).map(item => [item.plugin_id, item.name]),
+    );
+    const effects: HostEffectUse[] = (primary?.effects ?? [])
+      .filter(effect => typeof effect?.effect_use_id === 'string' && typeof effect?.plugin_id === 'string')
+      .map(effect => ({
+        effect_use_id: effect.effect_use_id!,
+        plugin_id: effect.plugin_id!,
+        name: nameByPlugin.get(effect.plugin_id!) ?? effect.plugin_id!,
+        params: (effect.params ?? [])
+          .filter(param => typeof param?.param_id === 'string' && Number.isFinite(param?.value))
+          .map(param => ({param_id: param.param_id!, value: param.value as number})),
+      }));
     return {
       statusLabel,
+      catalogEffects,
       layerSeat: {
         displayName: primary?.display_name ?? 'no selection',
         positionKeyCount: positionKeys.length,
@@ -121,10 +166,11 @@ function readHostSnapshotState(): HostSnapshotState {
         exactKey: exact
           ? {time: exact.time, value: [exact.value![0], exact.value![1]]}
           : null,
+        effects,
       },
     };
   } catch {
-    return {statusLabel: null, layerSeat: null};
+    return {statusLabel: null, layerSeat: null, catalogEffects: null};
   }
 }
 
@@ -366,13 +412,47 @@ function BrowserResults({
   );
 }
 
-function Browser({width, onCreateItem, onDragStart, onDragCancel}: {width: number; onCreateItem: (id: string) => void; onDragStart: (id: string) => void; onDragCancel: () => void}) {
+function Browser({
+  width,
+  onCreateItem,
+  onDragStart,
+  onDragCancel,
+  catalogEffects,
+  primaryLayerId,
+}: {
+  width: number;
+  onCreateItem: (id: string) => void;
+  onDragStart: (id: string) => void;
+  onDragCancel: () => void;
+  catalogEffects: HostCatalogEffect[] | null;
+  primaryLayerId: string | null;
+}) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState('echo');
+  const [selected, setSelected] = useState<string | null>(null);
   const [selectedCreateItem, setSelectedCreateItem] = useState<string | null>(null);
   const [view, setView] = useState<BrowserViewMode>('GRID');
-  const filteredEffects = EFFECTS.filter(item =>
+  useEffect(() => {
+    if (!catalogEffects || catalogEffects.length === 0) {
+      setSelected(null);
+      return;
+    }
+    setSelected(current =>
+      current !== null && catalogEffects.some(item => item.plugin_id === current)
+        ? current
+        : catalogEffects[0].plugin_id,
+    );
+  }, [catalogEffects]);
+  const effectSource: EffectItem[] = catalogEffects
+    ? catalogEffects.map((item, index) => ({
+      id: item.plugin_id,
+      name: item.name,
+      badge: 'FX',
+      tags: item.plugin_id,
+      color: EFFECTS[index % EFFECTS.length].color,
+    }))
+    : EFFECTS;
+  const filteredEffects = effectSource.filter(item =>
     `${item.name} ${item.tags}`.toLowerCase().includes(query.toLowerCase()),
   );
   const filteredCreateItems = CREATE_ITEMS.filter(item =>
@@ -389,6 +469,7 @@ function Browser({width, onCreateItem, onDragStart, onDragCancel}: {width: numbe
       color: item.color,
       badge: item.badge,
       unavailable: item.unavailable,
+      testID: catalogEffects ? `effect-item-${item.id}` : undefined,
     }))
     : tab === 'MEDIA'
       ? filteredMediaItems.map(item => ({
@@ -467,6 +548,16 @@ function Browser({width, onCreateItem, onDragStart, onDragCancel}: {width: numbe
             setSelectedCreateItem(id);
             onDragCancel();
             onCreateItem(createdItemValue(id, 0.5, 0.5));
+            return;
+          }
+          if (tab === 'EFFECTS' && catalogEffects) {
+            if (!primaryLayerId) {
+              return;
+            }
+            dispatchHostIntent('attach_effect', {
+              target: primaryLayerId,
+              plugin_id: id,
+            });
           }
         }}
         onDragStart={id => {
@@ -605,6 +696,25 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
               </View>
             </View>
           ) : null}
+          {layerSeat && layerSeat.primaryLayerId && layerSeat.effects.length > 0 ? (
+            <View style={styles.pathOperationSection} testID="inspector-effects-section">
+              <Text style={styles.pathOperationTitle}>Effects</Text>
+              {layerSeat.effects.map(effect => (
+                <View key={effect.effect_use_id} testID={`inspector-effect-${effect.effect_use_id}`}>
+                  <Text style={styles.pathOperationDescription}>{effect.name}</Text>
+                  {effect.params.map(param => (
+                    <EffectParamEditor
+                      key={`${effect.effect_use_id}:${param.param_id}`}
+                      primaryLayerId={layerSeat.primaryLayerId!}
+                      effectUseId={effect.effect_use_id}
+                      paramId={param.param_id}
+                      value={param.value}
+                    />
+                  ))}
+                </View>
+              ))}
+            </View>
+          ) : null}
           <View style={styles.effectIdentity}>
             <View style={styles.effectIcon}><Text style={styles.effectIconText}>◎</Text></View>
             <View><Text style={styles.inspectorTitle}>Echo Bloom</Text><Text style={styles.muted}>Pulse rings · Effect</Text></View>
@@ -672,6 +782,81 @@ function ParameterRow({label, value, onDecrease, onIncrease}: {label: string; va
       {onDecrease ? <Pressable accessibilityLabel={`${label} decrease`} onPress={onDecrease} style={styles.stepButton}><Text style={styles.stepText}>−</Text></Pressable> : null}
       <Text numberOfLines={1} style={styles.parameterValue}>{value}</Text>
       {onIncrease ? <Pressable accessibilityLabel={`${label} increase`} onPress={onIncrease} style={styles.stepButton}><Text style={styles.stepText}>＋</Text></Pressable> : null}
+    </View>
+  );
+}
+
+/** effect f64 param: commit 時1回 set_effect_param。二重送信防止と巻き戻しは exact-on-key と同作法。 */
+function EffectParamEditor({
+  primaryLayerId,
+  effectUseId,
+  paramId,
+  value,
+}: {
+  primaryLayerId: string;
+  effectUseId: string;
+  paramId: string;
+  value: number;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const live = useRef(value);
+  const editing = useRef(false);
+
+  useEffect(() => {
+    live.current = value;
+    if (!editing.current) {
+      setDraft(String(value));
+    }
+  }, [value]);
+
+  const commit = () => {
+    if (!editing.current) {
+      return;
+    }
+    editing.current = false;
+    if (draft.trim().length === 0) {
+      setDraft(String(live.current));
+      return;
+    }
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(live.current));
+      return;
+    }
+    const accepted = dispatchHostIntent('set_effect_param', {
+      target: primaryLayerId,
+      effect_use_id: effectUseId,
+      param_id: paramId,
+      value: parsed,
+    });
+    if (!accepted) {
+      setDraft(String(live.current));
+      return;
+    }
+    live.current = parsed;
+    setDraft(String(parsed));
+  };
+
+  return (
+    <View style={styles.parameterRow} testID={`inspector-effect-param-${effectUseId}-${paramId}`}>
+      <Text style={styles.parameterLabel}>{paramId}</Text>
+      <TextInput
+        accessibilityLabel={`Effect ${paramId}`}
+        keyboardType="decimal-pad"
+        onBlur={commit}
+        onChangeText={text => {
+          editing.current = true;
+          setDraft(text);
+        }}
+        onFocus={() => {
+          editing.current = true;
+        }}
+        onSubmitEditing={() => {}}
+        selectTextOnFocus
+        style={styles.parameterValue}
+        testID={`inspector-effect-param-input-${effectUseId}-${paramId}`}
+        value={draft}
+      />
     </View>
   );
 }
@@ -749,18 +934,18 @@ function ExactOnKeyValueEditor({
           accessibilityLabel="Position key X"
           keyboardType="decimal-pad"
           onBlur={() => commitAxis(0, draftX)}
-          onChangeText={text => {
-            editingX.current = true;
-            setDraftX(text);
-          }}
-          onFocus={() => {
-            editingX.current = true;
-          }}
-          onSubmitEditing={() => commitAxis(0, draftX)}
-          selectTextOnFocus
-          style={styles.parameterValue}
-          testID="inspector-position-key-x"
-          value={draftX}
+        onChangeText={text => {
+          editingX.current = true;
+          setDraftX(text);
+        }}
+        onFocus={() => {
+          editingX.current = true;
+        }}
+        onSubmitEditing={() => {}}
+        selectTextOnFocus
+        style={styles.parameterValue}
+        testID="inspector-position-key-x"
+        value={draftX}
         />
       </View>
       <View style={styles.parameterRow} testID="inspector-position-key-y-row">
@@ -769,17 +954,17 @@ function ExactOnKeyValueEditor({
           accessibilityLabel="Position key Y"
           keyboardType="decimal-pad"
           onBlur={() => commitAxis(1, draftY)}
-          onChangeText={text => {
-            editingY.current = true;
-            setDraftY(text);
-          }}
-          onFocus={() => {
-            editingY.current = true;
-          }}
-          onSubmitEditing={() => commitAxis(1, draftY)}
-          selectTextOnFocus
-          style={styles.parameterValue}
-          testID="inspector-position-key-y"
+        onChangeText={text => {
+          editingY.current = true;
+          setDraftY(text);
+        }}
+        onFocus={() => {
+          editingY.current = true;
+        }}
+        onSubmitEditing={() => {}}
+        selectTextOnFocus
+        style={styles.parameterValue}
+        testID="inspector-position-key-y"
           value={draftY}
         />
       </View>
@@ -1122,6 +1307,7 @@ function App() {
   const [stageTransform, setStageTransform] = useState<StageTransform>(INITIAL_STAGE_TRANSFORM);
   const [hostStatusLabel, setHostStatusLabel] = useState<string | null>(null);
   const [hostLayerSeat, setHostLayerSeat] = useState<HostLayerSeat | null>(null);
+  const [hostCatalogEffects, setHostCatalogEffects] = useState<HostCatalogEffect[] | null>(null);
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
@@ -1130,6 +1316,7 @@ function App() {
       const snapshotState = readHostSnapshotState();
       setHostStatusLabel(snapshotState.statusLabel);
       setHostLayerSeat(snapshotState.layerSeat);
+      setHostCatalogEffects(snapshotState.catalogEffects);
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -1185,9 +1372,11 @@ function App() {
       </View>
       <View style={styles.workspace}>
         <Browser
+          catalogEffects={hostCatalogEffects}
           onCreateItem={setCreatedItemId}
           onDragCancel={() => setDraggedItemId('')}
           onDragStart={setDraggedItemId}
+          primaryLayerId={hostLayerSeat?.primaryLayerId ?? null}
           width={browserWidth}
         />
         <Splitter

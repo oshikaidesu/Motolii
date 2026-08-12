@@ -14,11 +14,11 @@ use std::sync::{Mutex, OnceLock};
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, PixelSize, Quality, RationalTime};
 use motolii_doc::{
     build_document_frame_graph, layer_names_for_item, Affine2D, Clip, Command, DocParam, DocValue,
-    EvaluationTime, ItemEnvelope, KeyframeId, LayerId, ParentLocator, TrackItem,
+    EffectId, EvaluationTime, ItemEnvelope, KeyframeId, LayerId, ParentLocator, TrackItem,
 };
 use motolii_eval::{DataTracks, Interp};
 use motolii_gpu::GpuCtx;
-use motolii_plugins_firstparty::first_party_runtime;
+use motolii_plugins_firstparty::{first_party_catalog, first_party_runtime};
 use motolii_render::{render_graph_cached, RenderGraphInputs, RenderSession};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -31,9 +31,10 @@ use wgpu::{
 };
 
 use crate::document_edit_runtime::{
-    AddPositionKeyRequest, DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
-    PlaceRectangleRequest, RemovePositionKeyRequest, SetPositionConstRequest,
-    SetPositionKeyInterpRequest, SetPositionKeyTimeRequest, SetPositionKeyValueRequest,
+    AddPositionKeyRequest, AttachEffectRequest, DocumentEditQueue, DocumentEditRuntime,
+    DocumentEditRuntimeError, PlaceRectangleRequest, RemovePositionKeyRequest,
+    SetEffectParamRequest, SetPositionConstRequest, SetPositionKeyInterpRequest,
+    SetPositionKeyTimeRequest, SetPositionKeyValueRequest,
 };
 use crate::timeline_move_gesture::TimelineMoveRequest;
 use crate::timeline_trim_gesture::TimelineTrimRequest;
@@ -58,6 +59,7 @@ const PRODUCT_ROLE: &str = "product-runtime-seat";
 const MAX_STAGE_BOUNDS: usize = 16;
 const MAX_STAGE_SELECTION: usize = 16;
 const MAX_POSITION_KEYS: usize = 64;
+const MAX_EFFECTS_PER_LAYER: usize = 8;
 const MAX_DIAGNOSTICS: usize = 8;
 const MAX_JSON_BYTES: usize = 16_384;
 const MAX_SNAPSHOT_JSON_BYTES: usize = 131_072;
@@ -161,7 +163,21 @@ pub(crate) struct WireProductSnapshot {
     /// Available layer の world 適用済み canonical corners（v1・camera 不使用）。
     stage_geometry: WireStageGeometryProjection,
     timeline: WireTimelineProjection,
+    /// session 不変の first-party effect catalog（reference を除く製品 plugin）。
+    catalog: WireCatalogProjection,
     diagnostics: Vec<RnHostDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireCatalogProjection {
+    effects: Vec<WireCatalogEffect>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireCatalogEffect {
+    plugin_id: String,
+    name: String,
+    effect_version: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -198,6 +214,22 @@ struct WireTimelineLayer {
     duration: RationalTime,
     position_keys: Vec<WireTimelinePositionKey>,
     keys_truncated: bool,
+    /// layer の effect 使用列。f64 Const のみ。cap 超過は truncated。
+    effects: Vec<WireTimelineEffect>,
+    effects_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireTimelineEffect {
+    effect_use_id: String,
+    plugin_id: String,
+    params: Vec<WireTimelineEffectParam>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireTimelineEffectParam {
+    param_id: String,
+    value: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -319,6 +351,18 @@ pub(crate) struct WireIntentEnvelope {
     /// move_layer_by: canonical world delta
     #[serde(default, skip_serializing_if = "Option::is_none")]
     delta: Option<[f64; 2]>,
+    /// attach_effect: catalog plugin id
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    plugin_id: Option<String>,
+    /// set_effect_param: EffectUse id（u64 文字列）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    effect_use_id: Option<String>,
+    /// set_effect_param: definition 上の param id
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    param_id: Option<String>,
+    /// set_effect_param: f64 値
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    value: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -591,6 +635,7 @@ impl RnProductHost {
             stage: WireStageProjection { selection, bounds },
             stage_geometry,
             timeline: project_timeline(document.as_ref()),
+            catalog: wire_catalog_projection(),
             diagnostics: Vec::new(),
         }
     }
@@ -753,6 +798,209 @@ impl RnProductHost {
                 }
                 let mut queue = DocumentEditQueue::default();
                 queue.push_place_rectangle(PlaceRectangleRequest { position, playhead });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "attach_effect" => {
+                // runtime は current_primary へ attach する(document_edit_runtime AttachEffect)。
+                // wire は target を明示送付し、primary 不一致は typed 拒否。
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(plugin_id) = intent.plugin_id.filter(|id| !id.is_empty()) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if self.primary != Some(target) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_attach_effect(AttachEffectRequest { plugin_id });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "set_effect_param" => {
+                // definition_id / plugin_id / effect_version は Document から解決し、呼び手に運ばせない。
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(effect_use_id) = intent
+                    .effect_use_id
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(EffectId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(param_id) = intent.param_id.filter(|id| !id.is_empty()) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(value) = intent.value.filter(|v| v.is_finite()) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let document = self.runtime.snapshot();
+                let Some(effect_use) = document.find_effect_use(target, effect_use_id) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(definition) = document.effect_definition(effect_use.definition_id) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(DocParam::Const(DocValue::F64(_))) = definition.params.get(&param_id)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let request = SetEffectParamRequest::new(
+                    target,
+                    effect_use_id,
+                    effect_use.definition_id,
+                    definition.plugin_id.clone(),
+                    definition.effect_version,
+                    param_id,
+                    value,
+                );
+                let mut queue = DocumentEditQueue::default();
+                queue.push_set_effect_param(request);
                 match self.runtime.process_next(
                     &mut queue,
                     self.primary,
@@ -3568,6 +3816,7 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
                 .map(|clip| (clip.start, clip.duration))
                 .unwrap_or((RationalTime::ZERO, RationalTime::ZERO));
             let (position_keys, keys_truncated) = project_position_keys(document, layer_id);
+            let (effects, effects_truncated) = project_layer_effects(document, layer_id);
             WireTimelineLayer {
                 layer_id: layer_id.get().to_string(),
                 display_name: name.to_owned(),
@@ -3575,6 +3824,8 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
                 duration,
                 position_keys,
                 keys_truncated,
+                effects,
+                effects_truncated,
             }
         })
         .collect();
@@ -3583,6 +3834,75 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
         layers,
         layers_truncated,
     }
+}
+
+fn project_layer_effects(
+    document: &motolii_doc::Document,
+    layer_id: LayerId,
+) -> (Vec<WireTimelineEffect>, bool) {
+    let Some(envelope) = find_envelope_in_document(document, layer_id) else {
+        return (Vec::new(), false);
+    };
+    let effects_truncated = envelope.effects.len() > MAX_EFFECTS_PER_LAYER;
+    let effects = envelope
+        .effects
+        .iter()
+        .take(MAX_EFFECTS_PER_LAYER)
+        .filter_map(|effect_use| {
+            let definition = document.effect_definition(effect_use.definition_id)?;
+            let params = definition
+                .params
+                .iter()
+                .filter_map(|(param_id, param)| match param {
+                    DocParam::Const(DocValue::F64(value)) if value.is_finite() => {
+                        Some(WireTimelineEffectParam {
+                            param_id: param_id.clone(),
+                            value: *value,
+                        })
+                    }
+                    _ => None,
+                })
+                .collect();
+            Some(WireTimelineEffect {
+                effect_use_id: effect_use.id.get().to_string(),
+                plugin_id: definition.plugin_id.clone(),
+                params,
+            })
+        })
+        .collect();
+    (effects, effects_truncated)
+}
+
+/// first_party − reference。session 不変なので OnceLock で cache。
+fn wire_catalog_projection() -> WireCatalogProjection {
+    static CACHE: OnceLock<WireCatalogProjection> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            let catalog = first_party_catalog().expect("first-party catalog");
+            let reference = motolii_plugin::reference::reference_catalog().expect("reference catalog");
+            let mut effects = catalog
+                .iter()
+                .filter(|(plugin_id, contract)| {
+                    contract.kind == motolii_plugin::PluginKind::Filter
+                        && reference.get(plugin_id.0).is_none()
+                })
+                .map(|(plugin_id, contract)| {
+                    let name = if contract.node.display_name.trim().is_empty() {
+                        plugin_id.0.to_owned()
+                    } else {
+                        contract.node.display_name.to_owned()
+                    };
+                    WireCatalogEffect {
+                        plugin_id: plugin_id.0.to_owned(),
+                        name,
+                        effect_version: contract.node.version,
+                    }
+                })
+                .collect::<Vec<_>>();
+            effects.sort_by(|a, b| a.plugin_id.cmp(&b.plugin_id));
+            WireCatalogProjection { effects }
+        })
+        .clone()
 }
 
 /// Available だけを corners に畳む。評価失敗は空投影（snapshot 自体は落とさない）。
@@ -4829,6 +5149,10 @@ mod tests {
             new: None,
             interp: None,
             delta: None,
+            plugin_id: None,
+            effect_use_id: None,
+            param_id: None,
+            value: None,
         }
     }
 
@@ -7750,6 +8074,10 @@ mod tests {
             new: None,
             interp: None,
             delta: Some([f64::INFINITY, 0.0]),
+            plugin_id: None,
+            effect_use_id: None,
+            param_id: None,
+            value: None,
         };
         let non_finite = dispatch_wire(host, intent.clone());
         assert!(!non_finite.accepted);
@@ -7914,6 +8242,456 @@ mod tests {
         assert_ne!(center, background);
         assert!(has_non_background_pixel(&bytes, first.width, first.height, background));
 
+        let _ = host_destroy_for_test(host);
+    }
+
+    fn seed_primary(host: u64, target: LayerId) {
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+    }
+
+    fn read_wire(host: u64) -> WireProductSnapshot {
+        with_registry(|registry| registry.read_snapshot(host)).expect("wire snapshot")
+    }
+
+    fn layer_effects<'a>(
+        wire: &'a WireProductSnapshot,
+        layer_id: &str,
+    ) -> &'a [WireTimelineEffect] {
+        &wire
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer")
+            .effects
+    }
+
+    #[test]
+    fn snapshot_catalog_effects_lists_attachable_first_party_plugins() {
+        let _lock = test_lock();
+        let host = create_host("catalog-effects");
+        let wire = read_wire(host);
+        let ids: Vec<_> = wire
+            .catalog
+            .effects
+            .iter()
+            .map(|effect| effect.plugin_id.as_str())
+            .collect();
+        assert!(ids.contains(&"core.filter.opacity"));
+        assert!(!ids.contains(&"core.param.sine"));
+        let opacity = wire
+            .catalog
+            .effects
+            .iter()
+            .find(|effect| effect.plugin_id == "core.filter.opacity")
+            .expect("opacity");
+        assert_eq!(opacity.name, "Opacity");
+        assert_eq!(opacity.effect_version, 1);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_catalog_effects_are_all_attachable_filter_plugins() {
+        let _lock = test_lock();
+        let host = create_host("catalog-attach-loop");
+        let baseline = read_snapshot(host);
+        let wire = read_wire(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert_eq!(
+            read_snapshot(host).primary_layer_id,
+            Some(layer_id.clone()),
+            "primary should be seeded to target before loop"
+        );
+
+        let mut expected = layer_effects(&wire, &layer_id).len();
+        for effect in &wire.catalog.effects {
+            let intent_json = format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"{plugin}"}}"#,
+                ),
+                host = host,
+                layer = layer_id,
+                plugin = effect.plugin_id,
+            );
+            let response = dispatch_raw_json(host, &intent_json);
+            assert!(
+                response.accepted,
+                "attach failed for {}: accepted={} reason={:?}",
+                effect.plugin_id,
+                response.accepted,
+                response.reason,
+            );
+            assert_eq!(response.reason, None);
+            expected += 1;
+            assert_eq!(layer_effects(&read_wire(host), &layer_id).len(), expected);
+        }
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_catalog_effects_mark_projection_truncated_at_eight_plus_nine() {
+        let _lock = test_lock();
+        let host = create_host("catalog-attach-truncation");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert_eq!(
+            read_snapshot(host).primary_layer_id,
+            Some(layer_id.clone()),
+            "primary should be seeded to target before truncation test"
+        );
+        let plugin = read_wire(host)
+            .catalog
+            .effects
+            .first()
+            .expect("catalog should have at least one filter effect")
+            .plugin_id
+            .clone();
+
+        let attach_effect = |host: u64, layer_id: &str| {
+            dispatch_wire(
+                host,
+                WireIntentEnvelope {
+                    version: WIRE_VERSION,
+                    direction: RN_TO_HOST.to_owned(),
+                    kind: "attach_effect".into(),
+                    host_handle: String::new(),
+                    stage_handle: None,
+                    projection_generation: None,
+                    width: None,
+                    height: None,
+                    scale_factor: None,
+                    focused: None,
+                    phase: None,
+                    view_local_x: None,
+                    view_local_y: None,
+                    sequence: None,
+                    frame: None,
+                    position: None,
+                    playhead: None,
+                    target: Some(layer_id.to_string()),
+                    key_id: None,
+                    time: None,
+                    new: None,
+                    interp: None,
+                    delta: None,
+                    plugin_id: Some(plugin.clone()),
+                    effect_use_id: None,
+                    param_id: None,
+                    value: None,
+                },
+            )
+        };
+
+        for index in 1..=8 {
+            let response = attach_effect(host, &layer_id);
+            assert!(
+                response.accepted,
+                "attach failed at {index} plugin={plugin}: accepted={} reason={:?}",
+                response.accepted,
+                response.reason
+            );
+            let wire = read_wire(host);
+            let layer = wire
+                .timeline
+                .layers
+                .iter()
+                .find(|layer| layer.layer_id == layer_id)
+                .expect("layer");
+            assert_eq!(layer.effects.len(), index);
+            assert!(!layer.effects_truncated);
+        }
+
+        assert!(attach_effect(host, &layer_id).accepted);
+        let wire = read_wire(host);
+        let layer = wire
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(layer.effects.len(), 8);
+        assert!(layer.effects_truncated);
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn attach_effect_rejects_when_target_is_not_primary() {
+        let _lock = test_lock();
+        let host = create_host("catalog-target-mismatch");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        let before = read_snapshot(host);
+        let before_wire = read_wire(host);
+        let before_effect_count = layer_effects(&before_wire, &layer_id).len();
+
+        let mismatch_target = if layer_id == "1" { "2" } else { "1" };
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{target}","plugin_id":"core.filter.opacity"}}"#,
+                ),
+                host = host,
+                target = mismatch_target,
+            ),
+        );
+        assert!(!response.accepted);
+        assert_eq!(response.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let after = read_snapshot(host);
+        assert_eq!(after.primary_layer_id, before.primary_layer_id);
+        assert_eq!(after.projection_generation, before.projection_generation);
+        assert_eq!(after.revision, before.revision);
+        assert_eq!(layer_effects(&read_wire(host), &layer_id).len(), before_effect_count);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn attach_effect_grows_layer_effects_and_undo_clears() {
+        let _lock = test_lock();
+        let host = create_host("attach-effect");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert!(layer_effects(&read_wire(host), &layer_id).is_empty());
+
+        let attached = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(attached.accepted);
+        let after = read_wire(host);
+        let effects = layer_effects(&after, &layer_id);
+        assert_eq!(effects.len(), 1);
+        assert_eq!(effects[0].plugin_id, "core.filter.opacity");
+        assert_eq!(effects[0].params.len(), 1);
+        assert_eq!(effects[0].params[0].param_id, "amount");
+        assert_eq!(effects[0].params[0].value, 1.0);
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+        assert!(undone.accepted);
+        assert!(layer_effects(&read_wire(host), &layer_id).is_empty());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_effect_param_updates_value_preserves_others_and_undo_restores() {
+        let _lock = test_lock();
+        let host = create_host("set-effect-param");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        // 第二 effect を足して他 effect 不変を検証する。
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        let before = read_wire(host);
+        let effects_before = layer_effects(&before, &layer_id);
+        assert_eq!(effects_before.len(), 2);
+        let first_id = effects_before[0].effect_use_id.clone();
+        let second_id = effects_before[1].effect_use_id.clone();
+        let second_amount = effects_before[1].params[0].value;
+
+        let changed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_effect_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","effect_use_id":"{use_id}","#,
+                    r#""param_id":"amount","value":0.4}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                use_id = first_id,
+            ),
+        );
+        assert!(changed.accepted);
+        let after = read_wire(host);
+        let effects = layer_effects(&after, &layer_id);
+        assert_eq!(effects.len(), 2);
+        assert_eq!(effects[0].effect_use_id, first_id);
+        assert_eq!(effects[0].params[0].value, 0.4);
+        assert_eq!(effects[1].effect_use_id, second_id);
+        assert_eq!(effects[1].params[0].value, second_amount);
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+        assert!(undone.accepted);
+        let restored_wire = read_wire(host);
+        let restored = layer_effects(&restored_wire, &layer_id);
+        assert_eq!(restored[0].params[0].value, 1.0);
+        assert_eq!(restored[1].params[0].value, second_amount);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn effect_intents_reject_absent_target_plugin_param_and_non_finite_without_mutation() {
+        let _lock = test_lock();
+        let host = create_host("effect-rejects");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        let before = serde_json::to_vec(&read_wire(host)).expect("before json");
+        let before_wire = read_wire(host);
+        let use_id = layer_effects(&before_wire, &layer_id)[0]
+            .effect_use_id
+            .clone();
+
+        let missing_target = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(!missing_target.accepted);
+
+        let missing_plugin = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.missing"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(!missing_plugin.accepted);
+
+        let missing_param = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_effect_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","effect_use_id":"{use_id}","#,
+                    r#""param_id":"nope","value":0.2}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                use_id = use_id,
+            ),
+        );
+        assert!(!missing_param.accepted);
+
+        let non_finite = dispatch_wire(
+            host,
+            WireIntentEnvelope {
+                version: 1,
+                direction: RN_TO_HOST.to_owned(),
+                kind: "set_effect_param".into(),
+                host_handle: host.to_string(),
+                stage_handle: None,
+                projection_generation: None,
+                width: None,
+                height: None,
+                scale_factor: None,
+                focused: None,
+                phase: None,
+                view_local_x: None,
+                view_local_y: None,
+                sequence: None,
+                frame: None,
+                position: None,
+                playhead: None,
+                target: Some(layer_id.clone()),
+                key_id: None,
+                time: None,
+                new: None,
+                interp: None,
+                delta: None,
+                plugin_id: None,
+                effect_use_id: Some(use_id),
+                param_id: Some("amount".into()),
+                value: Some(f64::NAN),
+            },
+        );
+        assert!(!non_finite.accepted);
+
+        let after = serde_json::to_vec(&read_wire(host)).expect("after json");
+        assert_eq!(after, before);
         let _ = host_destroy_for_test(host);
     }
 }
