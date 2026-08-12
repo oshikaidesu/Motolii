@@ -49,7 +49,7 @@ struct Clip {
     a: f32,
     b: f32,
     slot: usize,
-    name: &'static str,
+    name: String,
     fx: (u8, u8),
     mute: bool,
     dev: &'static [&'static str],
@@ -72,6 +72,10 @@ pub(crate) struct TimelineScene {
     /// 表示範囲[bar]。初期は曲前半48小節。
     pub view_a: f32,
     pub view_b: f32,
+    /// Host snapshot投影。trueの時はmove/trim/keydragを成立させない。
+    pub real: bool,
+    /// revision反映時にlocal選択へ載せるflat index。fixtureは未使用。
+    pub selected_flat: i32,
 }
 
 impl Default for TimelineScene {
@@ -87,7 +91,7 @@ impl Default for TimelineScene {
                             a: 0.0,
                             b: 14.0,
                             slot: 0,
-                            name: "sky_plate",
+                            name: "sky_plate".into(),
                             fx: (0, 0),
                             mute: false,
                             dev: &[],
@@ -97,7 +101,7 @@ impl Default for TimelineScene {
                             a: 14.0,
                             b: 27.0,
                             slot: 0,
-                            name: "sky_plate",
+                            name: "sky_plate".into(),
                             fx: (2, 0),
                             mute: false,
                             dev: &[],
@@ -107,7 +111,7 @@ impl Default for TimelineScene {
                             a: 30.0,
                             b: 44.0,
                             slot: 1,
-                            name: "city_a",
+                            name: "city_a".into(),
                             fx: (3, 1),
                             mute: false,
                             dev: &["retime"],
@@ -124,7 +128,7 @@ impl Default for TimelineScene {
                             a: 4.0,
                             b: 22.0,
                             slot: 3,
-                            name: "hero",
+                            name: "hero".into(),
                             fx: (2, 0),
                             mute: false,
                             dev: &[],
@@ -138,7 +142,7 @@ impl Default for TimelineScene {
                             a: 26.0,
                             b: 40.0,
                             slot: 3,
-                            name: "hero",
+                            name: "hero".into(),
                             fx: (2, 0),
                             mute: false,
                             dev: &[],
@@ -155,7 +159,7 @@ impl Default for TimelineScene {
                             a: 0.0,
                             b: 18.0,
                             slot: 2,
-                            name: "grain",
+                            name: "grain".into(),
                             fx: (1, 0),
                             mute: false,
                             dev: &[],
@@ -165,7 +169,7 @@ impl Default for TimelineScene {
                             a: 20.0,
                             b: 35.0,
                             slot: 2,
-                            name: "grain",
+                            name: "grain".into(),
                             fx: (1, 0),
                             mute: true,
                             dev: &[],
@@ -175,7 +179,7 @@ impl Default for TimelineScene {
                             a: 38.0,
                             b: 48.0,
                             slot: 2,
-                            name: "grain",
+                            name: "grain".into(),
                             fx: (1, 0),
                             mute: false,
                             dev: &[],
@@ -192,7 +196,7 @@ impl Default for TimelineScene {
                             a: 6.0,
                             b: 13.0,
                             slot: 5,
-                            name: "title_01",
+                            name: "title_01".into(),
                             fx: (0, 0),
                             mute: false,
                             dev: &["blend", "opacity"],
@@ -202,7 +206,7 @@ impl Default for TimelineScene {
                             a: 24.0,
                             b: 32.0,
                             slot: 5,
-                            name: "title_02",
+                            name: "title_02".into(),
                             fx: (0, 0),
                             mute: false,
                             dev: &["opacity"],
@@ -225,7 +229,7 @@ impl Default for TimelineScene {
                         a: 0.0,
                         b: 48.0,
                         slot: 1,
-                        name: "track_master.wav",
+                        name: "track_master.wav".into(),
                         fx: (0, 0),
                         mute: false,
                         dev: &[],
@@ -241,6 +245,55 @@ impl Default for TimelineScene {
             ],
             view_a: DEFAULT_VIEW_A,
             view_b: DEFAULT_VIEW_B,
+            real: false,
+            selected_flat: -1,
+        }
+    }
+}
+
+impl TimelineScene {
+    pub(crate) fn band_count(&self) -> usize {
+        self.bands.len()
+    }
+
+    /// Host snapshotの実layer投影。1 layer = 1 band。keysなし。
+    pub(crate) fn from_snapshot(
+        bounds: &[(String, String)],
+        primary_layer_id: Option<&str>,
+    ) -> Self {
+        let mut selected_flat = -1i32;
+        let bands = bounds
+            .iter()
+            .enumerate()
+            .map(|(index, (layer_id, display_name))| {
+                let flat = index as i32;
+                if primary_layer_id == Some(layer_id.as_str()) {
+                    selected_flat = flat;
+                }
+                Band {
+                    mute: false,
+                    solo: false,
+                    mixed: false,
+                    clips: vec![Clip {
+                        a: 0.0,
+                        b: SONG_BARS,
+                        slot: index % 6,
+                        name: display_name.clone(),
+                        fx: (0, 0),
+                        mute: false,
+                        dev: &[],
+                        keys: vec![],
+                    }],
+                }
+            })
+            .collect();
+        Self {
+            bands,
+            locators: vec![],
+            view_a: DEFAULT_VIEW_A,
+            view_b: DEFAULT_VIEW_B,
+            real: true,
+            selected_flat,
         }
     }
 }
@@ -366,33 +419,62 @@ impl TimelineSession {
                                 key.2 = true;
                             }
                             *selected = flat;
-                            self.gesture = Some(ActiveGesture::KeyDrag {
-                                snapshot,
-                                band,
-                                clip_idx,
-                                key_idx,
-                            });
+                            if self.scene.real {
+                                // real投影ではkeydragを成立させない(選択のみ)
+                            } else {
+                                self.gesture = Some(ActiveGesture::KeyDrag {
+                                    snapshot,
+                                    band,
+                                    clip_idx,
+                                    key_idx,
+                                });
+                            }
                             dirty = true;
                         }
                         HitKind::TrimStart {
                             band,
                             clip_idx,
                         } => {
-                            self.gesture = Some(ActiveGesture::TrimStart {
-                                snapshot,
-                                band,
-                                clip_idx,
-                            });
+                            if self.scene.real {
+                                // real投影ではtrimを成立させず、当該clipを選択するだけ
+                                let mut flat = 0i32;
+                                for (bi, b) in self.scene.bands.iter().enumerate() {
+                                    if bi == band {
+                                        *selected = flat + clip_idx as i32;
+                                        break;
+                                    }
+                                    flat += b.clips.len() as i32;
+                                }
+                                dirty = true;
+                            } else {
+                                self.gesture = Some(ActiveGesture::TrimStart {
+                                    snapshot,
+                                    band,
+                                    clip_idx,
+                                });
+                            }
                         }
                         HitKind::TrimEnd {
                             band,
                             clip_idx,
                         } => {
-                            self.gesture = Some(ActiveGesture::TrimEnd {
-                                snapshot,
-                                band,
-                                clip_idx,
-                            });
+                            if self.scene.real {
+                                let mut flat = 0i32;
+                                for (bi, b) in self.scene.bands.iter().enumerate() {
+                                    if bi == band {
+                                        *selected = flat + clip_idx as i32;
+                                        break;
+                                    }
+                                    flat += b.clips.len() as i32;
+                                }
+                                dirty = true;
+                            } else {
+                                self.gesture = Some(ActiveGesture::TrimEnd {
+                                    snapshot,
+                                    band,
+                                    clip_idx,
+                                });
+                            }
                         }
                         HitKind::Clip {
                             band,
@@ -400,18 +482,23 @@ impl TimelineSession {
                             flat,
                         } => {
                             *selected = flat;
-                            let clip = &self.scene.bands[band].clips[clip_idx];
-                            self.gesture = Some(ActiveGesture::SelectOrMove {
-                                snapshot,
-                                band,
-                                clip_idx,
-                                press_lx: lx,
-                                origin_a: clip.a,
-                                origin_b: clip.b,
-                                origin_keys: clip.keys.iter().map(|k| k.0).collect(),
-                                moving: false,
-                            });
-                            dirty = true;
+                            if self.scene.real {
+                                // real投影ではmoveを成立させない(down選択のみ)
+                                dirty = true;
+                            } else {
+                                let clip = &self.scene.bands[band].clips[clip_idx];
+                                self.gesture = Some(ActiveGesture::SelectOrMove {
+                                    snapshot,
+                                    band,
+                                    clip_idx,
+                                    press_lx: lx,
+                                    origin_a: clip.a,
+                                    origin_b: clip.b,
+                                    origin_keys: clip.keys.iter().map(|k| k.0).collect(),
+                                    moving: false,
+                                });
+                                dirty = true;
+                            }
                         }
                         HitKind::EmptyBar => {
                             *selected = -1;
@@ -1328,7 +1415,7 @@ pub(crate) fn draw_timeline(
                     glyph(cv, px + 5.5, cy, g, false, quiet);
                 }
             }
-            let nw = measure(c.name, 8.5);
+            let nw = measure(&c.name, 8.5);
             let mut nx = r.left + 5.0;
             for (b, _, _) in &c.keys {
                 if *b < c.a || *b > c.b {
@@ -1340,7 +1427,7 @@ pub(crate) fn draw_timeline(
                 }
             }
             if x - nx > nw * 0.55 {
-                text(cv, c.name, nx, cy + 3.2, 8.5, ink);
+                text(cv, &c.name, nx, cy + 3.2, 8.5, ink);
             }
             for (b, d, s) in &c.keys {
                 if *b < c.a || *b > c.b {

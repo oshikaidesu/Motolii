@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use crate::rerun_stage::{EmbeddedSpatialStage, StageTransformProjection};
-use crate::timeline_skia::{TimelinePointerPhase, TimelineSession};
+use crate::timeline_skia::{TimelinePointerPhase, TimelineScene, TimelineSession};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SceneKind {
@@ -53,11 +53,26 @@ pub(crate) struct RendererCore {
     stage: Option<StageResources>,
     timeline: Option<TimelineResources>,
     timeline_session: Option<TimelineSession>,
+    /// Host snapshotのrevision。変化時だけsceneを差し替える。
+    host_revision: Option<String>,
     scene: SceneKind,
     selected_object_index: i32,
     playhead: f64,
     frame: u64,
     stats: RenderStats,
+}
+
+fn timeline_scene_from_projection(
+    existing_scene: &TimelineScene,
+    projection: &crate::host_bridge::HostTimelineProjection,
+) -> TimelineScene {
+    let mut scene = TimelineScene::from_snapshot(
+        &projection.bounds,
+        projection.primary_layer_id.as_deref(),
+    );
+    scene.view_a = existing_scene.view_a;
+    scene.view_b = existing_scene.view_b;
+    scene
 }
 
 impl RendererCore {
@@ -131,6 +146,7 @@ impl RendererCore {
             stage,
             timeline,
             timeline_session: (scene == SceneKind::Timeline).then(TimelineSession::default),
+            host_revision: None,
             scene,
             selected_object_index: 1,
             playhead: 0.27,
@@ -317,7 +333,10 @@ impl RendererCore {
                 self.config.width,
                 self.config.height,
             )?,
-            SceneKind::Timeline => self.render_timeline(&view),
+            SceneKind::Timeline => {
+                self.sync_host_timeline_projection();
+                self.render_timeline(&view);
+            }
         }
 
         output.present();
@@ -328,6 +347,28 @@ impl RendererCore {
         self.stats.max_cpu_us = self.stats.max_cpu_us.max(cpu_us);
         self.stats.vertex_bytes = 0;
         Ok(())
+    }
+
+    fn sync_host_timeline_projection(&mut self) {
+        #[cfg(target_os = "macos")]
+        {
+            let Some(projection) = crate::host_bridge::try_read_timeline_projection() else {
+                return;
+            };
+            if self.host_revision.as_deref() == Some(projection.revision.as_str()) {
+                return;
+            }
+            let Some(session) = &mut self.timeline_session else {
+                return;
+            };
+            let scene = timeline_scene_from_projection(&session.scene, &projection);
+            self.selected_object_index = scene.selected_flat;
+            session.scene = scene;
+            self.host_revision = Some(projection.revision);
+            if let Some(timeline) = &mut self.timeline {
+                timeline.dirty = true;
+            }
+        }
     }
 
     fn render_timeline(&mut self, view: &wgpu::TextureView) {
@@ -519,5 +560,29 @@ fn create_timeline_resources(
         blit_bind_group,
         pixels: vec![0; width as usize * height as usize * 4],
         dirty: true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timeline_view_is_preserved_when_revision_changes() {
+        let mut scene = TimelineScene::default();
+        scene.view_a = 12.0;
+        scene.view_b = 48.0;
+        let projection = crate::host_bridge::HostTimelineProjection {
+            revision: "r1".into(),
+            primary_layer_id: Some("L2".into()),
+            bounds: vec![
+                ("L1".into(), "Layer 1".into()),
+                ("L2".into(), "Layer 2".into()),
+            ],
+        };
+        let rebuilt = timeline_scene_from_projection(&scene, &projection);
+        assert_eq!(rebuilt.view_a, 12.0);
+        assert_eq!(rebuilt.view_b, 48.0);
+        assert_eq!(rebuilt.selected_flat, 1);
     }
 }

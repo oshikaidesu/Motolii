@@ -7,12 +7,59 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TurboModuleRegistry,
   View,
 } from 'react-native';
 
 import {panelRegistry} from './src/panels/registry';
+import type {Spec as MotoliiHostSpec} from './src/specs/NativeMotoliiHost';
 import MotoliiGpuView from './src/specs/MotoliiGpuViewNativeComponent';
 import MotoliiTimelineView from './src/specs/MotoliiTimelineViewNativeComponent';
+
+function nativeHost(): MotoliiHostSpec | null {
+  return TurboModuleRegistry.get<MotoliiHostSpec>('NativeMotoliiHost');
+}
+
+function dispatchHostIntent(kind: string, extra: Record<string, unknown> = {}): void {
+  const host = nativeHost();
+  if (!host) {
+    return;
+  }
+  host.dispatchIntent(
+    JSON.stringify({
+      version: 1,
+      direction: 'rn-to-host',
+      kind,
+      host_handle: '',
+      ...extra,
+    }),
+  );
+}
+
+function readHostStatusLabel(): string | null {
+  const host = nativeHost();
+  if (!host) {
+    return null;
+  }
+  const snapshot = host.readSnapshot();
+  if (!snapshot) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(snapshot) as {
+      revision?: string;
+      stage?: {bounds?: unknown[]};
+    };
+    const revision = parsed.revision;
+    const layers = parsed.stage?.bounds?.length ?? 0;
+    if (revision == null) {
+      return null;
+    }
+    return `DOC r${revision} · ${layers} layers`;
+  } catch {
+    return null;
+  }
+}
 
 const MacPressable = Pressable as React.ComponentType<
   React.ComponentProps<typeof Pressable> & {onDoubleClick?: () => void}
@@ -853,14 +900,28 @@ function App() {
   const [draggedItemId, setDraggedItemId] = useState('');
   const [pathOperationId, setPathOperationId] = useState(PATH_OPERATIONS[0].id);
   const [stageTransform, setStageTransform] = useState<StageTransform>(INITIAL_STAGE_TRANSFORM);
+  const [hostStatusLabel, setHostStatusLabel] = useState<string | null>(null);
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
+  useEffect(() => {
+    const tick = () => setHostStatusLabel(readHostStatusLabel());
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
   const completeStageDrop = (x: number, y: number) => {
     const itemId = draggedItemId;
     setDraggedItemId('');
     if (itemId && x >= 0 && y >= 0) {
       setCreatedItemId(createdItemValue(itemId, x, y));
+      if (itemId === 'rectangle') {
+        // 正方近似: Stage正規化座標 → canonical (x-0.5, 0.5-y)
+        dispatchHostIntent('place_rectangle', {
+          position: [x - 0.5, 0.5 - y],
+          playhead: {num: 0, den: 1},
+        });
+      }
     }
   };
 
@@ -870,8 +931,28 @@ function App() {
         <Text style={styles.brand}>MOTOLII</Text>
         <Text style={styles.project}>night_drive.mtl / Main composition</Text>
         <Text style={styles.buildLabel}>{BUILD_LABEL}</Text>
+        {hostStatusLabel ? <Text style={styles.buildLabel}>{hostStatusLabel}</Text> : null}
         <View style={styles.grow} />
-        {['Settings', '↶ Undo', '↷ Redo', 'Export'].map(label => <Text key={label} style={styles.titleAction}>{label}</Text>)}
+        {['Settings', '↶ Undo', '↷ Redo', 'Export'].map(label => {
+          if (label === '↶ Undo' || label === '↷ Redo') {
+            const kind = label === '↶ Undo' ? 'undo' : 'redo';
+            return (
+              <Pressable
+                key={label}
+                accessibilityLabel={label}
+                onPress={() => dispatchHostIntent(kind)}
+                style={styles.titleAction}
+                testID={kind === 'undo' ? 'titlebar-undo' : 'titlebar-redo'}>
+                <Text style={styles.titleActionText}>{label}</Text>
+              </Pressable>
+            );
+          }
+          return (
+            <Text key={label} style={styles.titleAction}>
+              {label}
+            </Text>
+          );
+        })}
       </View>
       <View style={styles.commandbar}>
         {['↖', '✥', '◇', 'T', '⌁', 'Δ', '▣'].map((tool, index) => <Text key={`${tool}-${index}`} style={[styles.commandTool, index === 0 && styles.commandToolActive]}>{tool}</Text>)}
@@ -924,6 +1005,7 @@ const styles = StyleSheet.create({
   buildLabel: {marginLeft: 14, fontSize: 8, color: '#858a8d'},
   grow: {flex: 1},
   titleAction: {fontSize: 10, color: '#d8d8d5', paddingVertical: 6, paddingHorizontal: 10, marginLeft: 6, borderWidth: 1, borderColor: '#414448'},
+  titleActionText: {fontSize: 10, color: '#d8d8d5'},
   commandbar: {height: 32, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#36393d', backgroundColor: '#151719'},
   commandTool: {width: 32, textAlign: 'center', fontSize: 12, color: '#b7b9bb'},
   commandToolActive: {borderWidth: 1, borderColor: '#d7d8d5', paddingVertical: 4, color: '#ffffff'},

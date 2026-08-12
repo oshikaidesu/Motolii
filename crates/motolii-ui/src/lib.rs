@@ -37,6 +37,13 @@ pub use rn_product_host::{
     host_dispatch_intent_for_test, host_read_snapshot_for_test, host_register_stage_for_test,
     RnHostError, RnHostReasonCode, RnHostTestIntent, RnHostTestResponse, RnProductSnapshotForTest,
 };
+// RN app staticlibが同一crate graph内からRust経由で呼ぶための再export。
+// extern importで参照するとarchiveから当該objectが引かれずリンクに失敗する。
+#[cfg(target_os = "macos")]
+#[doc(hidden)]
+pub use rn_product_host::{
+    motolii_rn_host_create, motolii_rn_host_dispatch_intent_json, motolii_rn_host_read_snapshot_json,
+};
 mod render_worker;
 mod shell;
 mod stage_chrome_host_runtime;

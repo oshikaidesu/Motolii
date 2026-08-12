@@ -4,6 +4,8 @@ mod rerun_stage;
 mod timeline_skia;
 
 #[cfg(target_os = "macos")]
+mod host_bridge;
+#[cfg(target_os = "macos")]
 mod platform;
 
 use std::ffi::{CStr, c_char, c_void};

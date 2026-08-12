@@ -4,9 +4,35 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import {TurboModuleRegistry} from 'react-native';
 import App from '../App';
 
+const mockDispatchIntent = jest.fn(() => '{"accepted":true}');
+const mockReadSnapshot = jest.fn(() => '');
+const actualGet = TurboModuleRegistry.get.bind(TurboModuleRegistry);
+
+function mockHostGet(name: string) {
+  if (name === 'NativeMotoliiHost') {
+    return {
+      dispatchIntent: mockDispatchIntent,
+      readSnapshot: mockReadSnapshot,
+    };
+  }
+  return actualGet(name);
+}
+
+function mockNullHostGet(name: string) {
+  if (name === 'NativeMotoliiHost') {
+    return null;
+  }
+  return actualGet(name);
+}
+
 test('renders correctly', async () => {
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
   let tree: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(<App />);
@@ -123,11 +149,23 @@ test('renders correctly', async () => {
   });
   expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.draggedItemId).toBe('rectangle');
 
+  mockDispatchIntent.mockClear();
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageDrop({nativeEvent: {x: 0.25, y: 0.75}});
   });
   expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.250000,0.750000|trim');
   expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.draggedItemId).toBe('');
+  expect(mockDispatchIntent).toHaveBeenCalled();
+  const placePayload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(placePayload.kind).toBe('place_rectangle');
+  expect(placePayload.position).toEqual([-0.25, -0.25]);
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'titlebar-undo'}).props.onPress();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalled();
+  expect(JSON.parse(mockDispatchIntent.mock.calls[0][0] as string).kind).toBe('undo');
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'create-item-rectangle'}).props.onDoubleClick();
@@ -143,4 +181,24 @@ test('renders correctly', async () => {
     tree!.root.findByProps({testID: 'browser-mode-LIST'}).props.onPress();
   });
   expect(tree!.root.findByProps({testID: 'browser-results-CREATE'}).props.numColumns).toBe(1);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+});
+
+test('renders without NativeMotoliiHost module', async () => {
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockNullHostGet as typeof TurboModuleRegistry.get);
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+  expect(tree!.root.findByProps({testID: 'motolii-rn-shell'})).toBeTruthy();
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
 });
