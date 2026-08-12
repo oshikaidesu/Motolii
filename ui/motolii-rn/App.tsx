@@ -1,6 +1,7 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   FlatList,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -250,12 +251,32 @@ function hostSnapshotStateFromParsed(raw: unknown): HostSnapshotState | null {
 const MacPressable = Pressable as React.ComponentType<
   React.ComponentProps<typeof Pressable> & {onDoubleClick?: () => void}
 >;
+type DialKeyEvent = {
+  nativeEvent: {key: string; shiftKey?: boolean};
+  preventDefault: () => void;
+};
+const DialSurface = Pressable as React.ComponentType<
+  React.ComponentProps<typeof Pressable> & {
+    onKeyDown?: (event: DialKeyEvent) => void;
+    onTouchMoveCapture?: (event: {nativeEvent: {pageX: number}}) => void;
+  }
+>;
+
 type BrowserTab = 'MEDIA' | 'EFFECTS' | 'CREATE';
 type BrowserViewMode = 'THUMBNAILS' | 'GRID' | 'LIST';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
 
 
 const BUILD_LABEL = 'B002 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA';
+
+type EffectItem = {
+  id: string;
+  name: string;
+  badge: string;
+  tags: string;
+  color: string;
+  unavailable?: boolean;
+};
 
 type PathOperationItem = {
   id: string;
@@ -287,7 +308,11 @@ const INITIAL_STAGE_TRANSFORM: StageTransform = {
   x: 0, y: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0,
 };
 
-const EFFECT_COLORS = ['#746d4b', '#5c6477', '#51455f'];
+const EFFECTS: EffectItem[] = [
+  {id: 'echo', name: 'Echo Bloom', badge: 'FX', tags: '#go-to #atmosphere', color: '#746d4b'},
+  {id: 'type', name: 'Type Pulse', badge: 'Aa', tags: '#kinetic', color: '#5c6477'},
+  {id: 'fold', name: 'Fold Field', badge: 'FX', tags: '#review', color: '#51455f', unavailable: true},
+];
 
 const PATH_OPERATIONS: PathOperationItem[] = [
   {id: 'pucker-bloat', name: 'Pucker / Bloat', detail: 'Contract or expand the path'},
@@ -303,6 +328,11 @@ const PATH_OPERATIONS: PathOperationItem[] = [
 const CREATE_ITEMS = [
   {id: 'rectangle', name: 'Rectangle', type: 'Shape', provider: 'Built-in', glyph: '□'},
 ];
+
+const MEDIA_ITEMS = Array.from({length: 5000}, (_, index) => ({
+  id: `asset-${index}`,
+  color: ['#5d7899', '#746398', '#88704e', '#557f6d', '#8b5962'][index % 5],
+}));
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, Math.round(value)));
@@ -371,7 +401,6 @@ function BrowserResults({
   onSelect,
   onActivate,
   onDragStart,
-  emptyMessage,
   testID,
 }: {
   title: string;
@@ -382,7 +411,6 @@ function BrowserResults({
   onSelect: (id: string) => void;
   onActivate: (id: string) => void;
   onDragStart: (id: string) => void;
-  emptyMessage: string;
   testID: string;
 }) {
   const columns = view === 'THUMBNAILS' ? 4 : view === 'GRID' ? 2 : 1;
@@ -409,11 +437,6 @@ function BrowserResults({
           <View style={styles.resultsHeader}>
             <Text style={styles.resultTitle}>{title}</Text>
             <Text style={styles.panelDetail}>{items.length}</Text>
-          </View>
-        )}
-        ListEmptyComponent={(
-          <View style={styles.emptyPanel} testID={`browser-empty-${testID}`}>
-            <Text style={styles.emptyTitle}>{emptyMessage}</Text>
           </View>
         )}
         maxToRenderPerBatch={32}
@@ -496,14 +519,15 @@ function Browser({
         : catalogEffects[0].plugin_id,
     );
   }, [catalogEffects]);
-  const effectSource = (catalogEffects ?? [])
-    .map((item, index) => ({
+  const effectSource: EffectItem[] = catalogEffects
+    ? catalogEffects.map((item, index) => ({
       id: item.plugin_id,
       name: item.name,
       badge: 'FX',
       tags: item.plugin_id,
-      color: EFFECT_COLORS[index % EFFECT_COLORS.length],
-    }));
+      color: EFFECTS[index % EFFECTS.length].color,
+    }))
+    : EFFECTS;
   const filteredEffects = effectSource.filter(item =>
     `${item.name} ${item.tags}`.toLowerCase().includes(query.toLowerCase()),
   );
@@ -522,6 +546,9 @@ function Browser({
   const filteredCreateItems = createItems.filter(item =>
     `${item.name} ${item.type} ${item.provider}`.toLowerCase().includes(query.toLowerCase()),
   );
+  const filteredMediaItems = MEDIA_ITEMS.filter(item =>
+    item.id.toLowerCase().includes(query.toLowerCase()),
+  );
   const browserItems: BrowserItem[] = tab === 'EFFECTS'
     ? filteredEffects.map(item => ({
       id: item.id,
@@ -529,10 +556,16 @@ function Browser({
       detail: item.tags,
       color: item.color,
       badge: item.badge,
-      testID: `effect-item-${item.id}`,
+      unavailable: item.unavailable,
+      testID: catalogEffects ? `effect-item-${item.id}` : undefined,
     }))
     : tab === 'MEDIA'
-      ? []
+      ? filteredMediaItems.map(item => ({
+        id: item.id,
+        name: item.id,
+        detail: 'Media',
+        color: item.color,
+      }))
       : filteredCreateItems.map(item => ({
         id: item.id,
         name: item.name,
@@ -542,18 +575,11 @@ function Browser({
         testID: `create-item-${item.id}`,
       }));
   const rail = tab === 'EFFECTS'
-    ? ['▦  All effects']
+    ? ['▦  All', '◇  Used', '↺  Recent', 'COLLECTIONS', '◎  Favorites', 'Aa  Type', 'TAGS', '◎  Go-to  1', '◌  Atmosphere  1', '⌁  Kinetic  1', '✓  Review  1', 'PACKS', '▤  Motion Kit α']
     : tab === 'MEDIA'
-      ? ['▦  All media']
-      : ['▦  All items', 'TYPE', '□  Shapes', 'PROVIDER', 'M  Built-in', '□  Vism sources'];
+      ? ['▦  All media', '◇  Used', '↺  Recent', 'TYPE', '▣  Video', '♪  Audio', '▧  Image']
+      : ['▦  All', 'TYPE', '□  Shapes', 'PROVIDER', 'M  Built-in'];
   const title = tab === 'CREATE' ? 'Create items' : 'Results';
-  const emptyMessage = query.trim()
-    ? 'No results'
-    : tab === 'MEDIA'
-      ? 'No media imported'
-      : tab === 'EFFECTS'
-        ? 'No effects available'
-        : 'No create items available';
   const selectedId = tab === 'EFFECTS' ? selected : tab === 'CREATE' ? selectedCreateItem : null;
 
   return (
@@ -605,7 +631,6 @@ function Browser({
       </View>
       <BrowserResults
         items={browserItems}
-        emptyMessage={emptyMessage}
         onActivate={id => {
           if (tab === 'CREATE') {
             setSelectedCreateItem(id);
@@ -657,43 +682,77 @@ function Browser({
   );
 }
 
-function Stage({createdItemId, draggedItemId, pathOperationId, onDrop, onTransform, transform}: {createdItemId: string; draggedItemId: string; pathOperationId: string; onDrop: (x: number, y: number, canonicalX: number, canonicalY: number) => void; onTransform: (transform: StageTransform) => void; transform: StageTransform}) {
+function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, onToggleGpu, onTransform, transform}: {createdItemId: string; draggedItemId: string; pathOperationId: string; showGpu: boolean; onDrop: (x: number, y: number, canonicalX: number, canonicalY: number) => void; onToggleGpu: () => void; onTransform: (transform: StageTransform) => void; transform: StageTransform}) {
   return (
     <View style={styles.stage} testID="stage-surface">
+      <View style={styles.stageTools}>
+        <Text style={styles.stageToolText}>Fit</Text>
+        <Text style={styles.stageToolText}>100%</Text>
+        <Pressable onPress={onToggleGpu} style={styles.stageGpuButton}>
+          <Text style={styles.stageToolText}>{showGpu ? 'GPU ON' : 'GPU OFF'}</Text>
+        </Pressable>
+        <Text style={styles.stageIdentity}>STAGE / ECHO BLOOM</Text>
+      </View>
       <View style={styles.stageViewport} testID="stage-viewport">
-        <MotoliiGpuView
-          accessible
-          accessibilityLabel="Rerun Spatial Viewer Stage"
-          createdItemId={`${createdItemId || 'rectangle@0.500000,0.500000'}|${pathOperationId}`}
-          draggedItemId={draggedItemId}
-          transformX={transform.x}
-          transformY={transform.y}
-          transformZ={transform.z}
-          rotationX={transform.rotationX}
-          rotationY={transform.rotationY}
-          rotationZ={transform.rotationZ}
-          onStageDrop={event =>
-            onDrop(
-              event.nativeEvent.x,
-              event.nativeEvent.y,
-              event.nativeEvent.canonicalX,
-              event.nativeEvent.canonicalY,
-            )
-          }
-          onStageTransform={event => onTransform(event.nativeEvent)}
-          style={styles.gpuStage}
-          testID="rust-wgpu-stage"
-        />
+        {showGpu ? (
+          <MotoliiGpuView
+            accessible
+            accessibilityLabel="Rerun Spatial Viewer Stage"
+            createdItemId={`${createdItemId || 'rectangle@0.500000,0.500000'}|${pathOperationId}`}
+            draggedItemId={draggedItemId}
+            transformX={transform.x}
+            transformY={transform.y}
+            transformZ={transform.z}
+            rotationX={transform.rotationX}
+            rotationY={transform.rotationY}
+            rotationZ={transform.rotationZ}
+            onStageDrop={event =>
+              onDrop(
+                event.nativeEvent.x,
+                event.nativeEvent.y,
+                event.nativeEvent.canonicalX,
+                event.nativeEvent.canonicalY,
+              )
+            }
+            onStageTransform={event => onTransform(event.nativeEvent)}
+            style={styles.gpuStage}
+            testID="rust-wgpu-stage"
+          />
+        ) : (
+          <View style={styles.gpuStageOff}><Text style={styles.muted}>Native Stage unmounted</Text></View>
+        )}
+        <View pointerEvents="none" style={styles.frameGrid}>
+          <Text style={styles.outputLabel}>OUTPUT FRAME</Text>
+          <View style={styles.titleBounds}>
+            <Text style={styles.stageTitle}>NIGHT{`\n`}DRIVE</Text>
+            <Text style={styles.stageSubtitle}>54.2 / CITY SIGNAL</Text>
+          </View>
+          <View style={styles.rings}>
+            <View style={[styles.ring, styles.ringLarge]} />
+            <View style={[styles.ring, styles.ringMedium]} />
+            <View style={[styles.ring, styles.ringSmall]} />
+            <View style={styles.ringCore} />
+          </View>
+        </View>
+      </View>
+      <View style={styles.transport}>
+        <Text style={styles.transportButton}>|‹</Text>
+        <Text style={styles.transportButton}>▶</Text>
+        <Text style={styles.transportButton}>›|</Text>
+        <Text style={styles.timecode}>00:54.2  BAR 54.2.00  120 BPM · SNAP BEAT</Text>
+        <Text style={styles.quality}>DRAFT · FP16 · 1/2</Text>
       </View>
     </View>
   );
 }
 
-function Inspector({width, layerSeat}: {width: number; layerSeat: HostLayerSeat | null}) {
+function Inspector({width, pathOperationId, onPathOperationChange, transform, onTransformChange, layerSeat}: {width: number; pathOperationId: string; onPathOperationChange: (id: string) => void; transform: StageTransform; onTransformChange: (update: Partial<StageTransform>) => void; layerSeat: HostLayerSeat | null}) {
   const [panel, setPanel] = useState<RightPanel>('INSPECTOR');
+  const [intensity, setIntensity] = useState(64);
+  const [spread, setSpread] = useState(42);
   const [extensionId, setExtensionId] = useState<string>(panelRegistry[0].id);
   const extension = panelRegistry.find(item => item.id === extensionId)!;
-  const selectedLayerSeat = layerSeat?.primaryLayerId ? layerSeat : null;
+  const selectedPathOperation = PATH_OPERATIONS.find(item => item.id === pathOperationId)!;
 
   return (
     <View style={[styles.inspector, {width}]} testID="inspector-surface">
@@ -707,28 +766,32 @@ function Inspector({width, layerSeat}: {width: number; layerSeat: HostLayerSeat 
       </View>
       {panel === 'INSPECTOR' ? (
         <ScrollView disableScrollViewPanResponder>
-          {selectedLayerSeat ? (
+          {layerSeat ? (
             <View style={styles.pathOperationSection} testID="inspector-layer-section">
               <Text style={styles.pathOperationTitle}>Layer</Text>
-              <Text style={styles.pathOperationDescription}>{selectedLayerSeat.displayName}</Text>
-              <Text style={styles.pathOperationDescription}>position keys: {selectedLayerSeat.positionKeyCount}</Text>
-              {selectedLayerSeat.exactKey ? (
+              <Text style={styles.pathOperationDescription}>{layerSeat.displayName}</Text>
+              <Text style={styles.pathOperationDescription}>position keys: {layerSeat.positionKeyCount}</Text>
+              {layerSeat.exactKey && layerSeat.primaryLayerId ? (
                 <ExactOnKeyValueEditor
-                  key={`${selectedLayerSeat.primaryLayerId}:${selectedLayerSeat.exactKey.time.num}/${selectedLayerSeat.exactKey.time.den}`}
-                  primaryLayerId={selectedLayerSeat.primaryLayerId!}
-                  keyTime={selectedLayerSeat.exactKey.time}
-                  value={selectedLayerSeat.exactKey.value}
+                  key={`${layerSeat.primaryLayerId}:${layerSeat.exactKey.time.num}/${layerSeat.exactKey.time.den}`}
+                  primaryLayerId={layerSeat.primaryLayerId}
+                  keyTime={layerSeat.exactKey.time}
+                  value={layerSeat.exactKey.value}
                 />
               ) : null}
               <View style={styles.pathOperationGrid}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Add Position Key"
+                  disabled={!layerSeat.primaryLayerId}
                   onPress={() => {
+                    if (!layerSeat.primaryLayerId) {
+                      return;
+                    }
                     // add_position_keyはtarget+time必須(rn_product_host 718-747)。Wake時刻は使わない。
                     dispatchHostIntent('add_position_key', {
-                      target: selectedLayerSeat.primaryLayerId,
-                      time: selectedLayerSeat.currentTime,
+                      target: layerSeat.primaryLayerId,
+                      time: layerSeat.currentTime,
                     });
                   }}
                   style={styles.pathOperationButton}
@@ -737,16 +800,11 @@ function Inspector({width, layerSeat}: {width: number; layerSeat: HostLayerSeat 
                 </Pressable>
               </View>
             </View>
-          ) : (
-            <View style={styles.inspectorEmpty} testID="inspector-empty-state">
-              <Text style={styles.inspectorEmptyTitle}>No layer selected</Text>
-              <Text style={styles.muted}>Select a layer on the Stage or Timeline to edit it.</Text>
-            </View>
-          )}
-          {selectedLayerSeat && selectedLayerSeat.sourceParams.length > 0 ? (
+          ) : null}
+          {layerSeat && layerSeat.primaryLayerId && layerSeat.sourceParams.length > 0 ? (
             <View style={styles.pathOperationSection} testID="inspector-source-params-section">
               <Text style={styles.pathOperationTitle}>Source</Text>
-              {selectedLayerSeat.sourceParams.map(param => (
+              {layerSeat.sourceParams.map(param => (
                 <ParameterRow
                   key={`source:${param.param_id}`}
                   label={param.param_id}
@@ -756,16 +814,16 @@ function Inspector({width, layerSeat}: {width: number; layerSeat: HostLayerSeat 
               ))}
             </View>
           ) : null}
-          {selectedLayerSeat && selectedLayerSeat.effects.length > 0 ? (
+          {layerSeat && layerSeat.primaryLayerId && layerSeat.effects.length > 0 ? (
             <View style={styles.pathOperationSection} testID="inspector-effects-section">
               <Text style={styles.pathOperationTitle}>Effects</Text>
-              {selectedLayerSeat.effects.map(effect => (
+              {layerSeat.effects.map(effect => (
                 <View key={effect.effect_use_id} testID={`inspector-effect-${effect.effect_use_id}`}>
                   <Text style={styles.pathOperationDescription}>{effect.name}</Text>
                   {effect.params.map(param => (
                     <EffectParamEditor
-                      key={`${selectedLayerSeat.primaryLayerId}:${effect.effect_use_id}:${param.param_id}`}
-                      primaryLayerId={selectedLayerSeat.primaryLayerId!}
+                      key={`${layerSeat.primaryLayerId}:${effect.effect_use_id}:${param.param_id}`}
+                      primaryLayerId={layerSeat.primaryLayerId!}
                       effectUseId={effect.effect_use_id}
                       pluginId={effect.plugin_id}
                       paramId={param.param_id}
@@ -776,6 +834,49 @@ function Inspector({width, layerSeat}: {width: number; layerSeat: HostLayerSeat 
               ))}
             </View>
           ) : null}
+          <View style={styles.effectIdentity}>
+            <View style={styles.effectIcon}><Text style={styles.effectIconText}>◎</Text></View>
+            <View><Text style={styles.inspectorTitle}>Echo Bloom</Text><Text style={styles.muted}>Pulse rings · Effect</Text></View>
+          </View>
+          <Text style={styles.inspectorDescription}>Layered light pulses that follow the selected object. Adjust while watching the native Stage.</Text>
+          <ParameterRow label="Input" value="Pulse rings composite" />
+          <DialParameter label="Intensity" value={intensity} unit="%" step={1} dragScale={1} min={0} max={100} onChange={setIntensity} />
+          <DialParameter label="Spread" value={spread} unit="%" step={1} dragScale={1} min={0} max={100} onChange={setSpread} />
+          <ParameterRow label="Blend" value="Screen" />
+          <View style={styles.transformSection} testID="stage-transform-projection">
+            <Text style={styles.pathOperationTitle}>Transform</Text>
+            <Text style={styles.pathOperationDescription}>Shared live value with the Stage gizmo. This fixture is not saved to Document yet.</Text>
+            <DialParameter label="Position X" value={transform.x} step={0.025} dragScale={0.01} decimals={3} onChange={value => onTransformChange({x: value})} />
+            <DialParameter label="Position Y" value={transform.y} step={0.025} dragScale={0.01} decimals={3} onChange={value => onTransformChange({y: value})} />
+            <DialParameter label="Position Z" value={transform.z} step={0.025} dragScale={0.01} decimals={3} onChange={value => onTransformChange({z: value})} />
+            <DialParameter label="Rotation X" value={transform.rotationX} unit="°" step={5} dragScale={1} decimals={1} onChange={value => onTransformChange({rotationX: value})} />
+            <DialParameter label="Rotation Y" value={transform.rotationY} unit="°" step={5} dragScale={1} decimals={1} onChange={value => onTransformChange({rotationY: value})} />
+            <DialParameter label="Rotation Z" value={transform.rotationZ} unit="°" step={5} dragScale={1} decimals={1} onChange={value => onTransformChange({rotationZ: value})} />
+          </View>
+          <View style={styles.pathOperationSection} testID="path-operations-panel">
+            <Text style={styles.pathOperationTitle}>Lottie Path Operations</Text>
+            <Text style={styles.pathOperationDescription}>Choose an operation to preview its evaluated vector path on the Stage. This fixture is not saved to Document yet.</Text>
+            <View style={styles.pathOperationGrid}>
+              {PATH_OPERATIONS.map(item => (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityState={{selected: item.id === pathOperationId}}
+                  onPress={() => onPathOperationChange(item.id)}
+                  style={[styles.pathOperationButton, item.id === pathOperationId && styles.pathOperationButtonActive]}
+                  testID={`path-operation-${item.id}`}>
+                  <Text style={styles.pathOperationButtonText}>{item.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <ParameterRow label="Selected" value={selectedPathOperation.name} />
+            <Text style={styles.pathOperationDescription}>{selectedPathOperation.detail}</Text>
+          </View>
+          <TextInput
+            accessibilityLabel="Inspector note"
+            defaultValue="日本語IME / focus probe"
+            style={styles.inspectorInput}
+          />
         </ScrollView>
       ) : (
         <View style={styles.extensionBody}>
@@ -1014,6 +1115,161 @@ function ExactOnKeyValueEditor({
   );
 }
 
+function DialParameter({label, value, unit = '', step = 1, dragScale = 1, decimals = 0, min, max, onChange}: {label: string; value: number; unit?: string; step?: number; dragScale?: number; decimals?: number; min?: number; max?: number; onChange: (value: number) => void}) {
+  const [draft, setDraft] = useState(formatDialValue(value, decimals));
+  const [dragging, setDragging] = useState(false);
+  const pointerStart = useRef<{pageX: number; value: number} | null>(null);
+  const editing = useRef(false);
+
+  useEffect(() => {
+    if (!editing.current && !pointerStart.current) {
+      setDraft(formatDialValue(value, decimals));
+    }
+  }, [decimals, value]);
+
+  const normalizedValue = useCallback((next: number, snap = false) => {
+    const stepped = snap ? Math.round(next / step) * step : next;
+    const bounded = Math.max(min ?? -Infinity, Math.min(max ?? Infinity, stepped));
+    return Number(bounded.toFixed(Math.max(decimals, 6)));
+  }, [decimals, max, min, step]);
+
+  const finishDrag = () => {
+    pointerStart.current = null;
+    setDragging(false);
+  };
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gestureState) => (
+      Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 1
+    ),
+    onMoveShouldSetPanResponderCapture: (_, gestureState) => (
+      Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 1
+    ),
+    onPanResponderGrant: () => {
+      pointerStart.current = {pageX: 0, value};
+      editing.current = false;
+      setDragging(true);
+    },
+    onPanResponderMove: (_, gestureState) => {
+      const start = pointerStart.current;
+      if (!start) return;
+      const next = normalizedValue(start.value + gestureState.dx * dragScale);
+      setDraft(formatDialValue(next, decimals));
+      onChange(next);
+    },
+    onPanResponderRelease: () => {
+      finishDrag();
+    },
+    onPanResponderTerminate: () => {
+      const start = pointerStart.current;
+      if (start) {
+        onChange(start.value);
+        setDraft(formatDialValue(start.value, decimals));
+      }
+      finishDrag();
+    },
+  }), [decimals, dragScale, normalizedValue, onChange, value]);
+
+  const dialShift = ((value * 2) % 50 + 50) % 50;
+
+  const commitDraft = () => {
+    const parsed = Number(draft.trim());
+    if (Number.isFinite(parsed)) {
+      const next = normalizedValue(parsed, false);
+      onChange(next);
+      setDraft(formatDialValue(next, decimals));
+    } else {
+      setDraft(formatDialValue(value, decimals));
+    }
+    editing.current = false;
+  };
+
+  const applyTouchMove = (pageX: number) => {
+    const start = pointerStart.current;
+    if (!start) return;
+    if (!Number.isFinite(pageX)) {
+      return;
+    }
+    const delta = pageX - start.pageX;
+    const next = normalizedValue(start.value + delta * dragScale);
+    setDraft(formatDialValue(next, decimals));
+    onChange(next);
+  };
+
+  return (
+    <View style={styles.parameterRow}>
+      <Text style={styles.parameterLabel}>{label}</Text>
+      <DialSurface
+        {...panResponder.panHandlers}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={`${label} dial`}
+        accessibilityHint="Drag horizontally across the infinite ticks to change the value"
+        style={[styles.dial, dragging && styles.dialDragging]}
+        onTouchStart={event => {
+          pointerStart.current = {pageX: event.nativeEvent.pageX, value};
+          editing.current = false;
+          setDragging(true);
+        }}
+        onTouchMove={event => {
+          applyTouchMove(event.nativeEvent.pageX);
+        }}
+        onTouchMoveCapture={event => {
+          applyTouchMove(event.nativeEvent.pageX);
+        }}
+        onTouchEnd={() => {
+          finishDrag();
+        }}
+        onTouchCancel={() => {
+          const start = pointerStart.current;
+          if (start) {
+            onChange(start.value);
+            setDraft(formatDialValue(start.value, decimals));
+          }
+          finishDrag();
+        }}
+        onKeyDown={event => {
+          if (!['ArrowLeft', 'ArrowRight'].includes(event.nativeEvent.key)) return;
+          event.preventDefault();
+          const direction = event.nativeEvent.key === 'ArrowRight' ? 1 : -1;
+          const multiplier = event.nativeEvent.shiftKey ? 10 : 1;
+          const next = normalizedValue(value + direction * step * multiplier);
+          setDraft(formatDialValue(next, decimals));
+          onChange(next);
+        }}>
+        <View pointerEvents="none" style={styles.dialTicks}>
+          <View pointerEvents="none" style={[styles.dialTickStrip, {transform: [{translateX: -dialShift}]}]}>
+            {Array.from({length: 81}, (_, index) => (
+              <View key={`${label}-tick-${index}`} style={styles.dialTickCell}>
+                <View style={[styles.dialTick, index % 5 === 0 && styles.dialTickMajor]} />
+              </View>
+            ))}
+          </View>
+          <View style={styles.dialPointer} />
+        </View>
+        <TextInput
+          accessibilityLabel={`${label} value`}
+          keyboardType="decimal-pad"
+          onBlur={commitDraft}
+          onChangeText={text => {
+            editing.current = true;
+            setDraft(text);
+          }}
+          onFocus={() => { editing.current = true; }}
+          onSubmitEditing={commitDraft}
+          selectTextOnFocus
+          style={[styles.dialValue, unit ? styles.dialValueWithUnit : null]}
+          value={draft}
+        />
+        {unit ? <Text pointerEvents="none" style={styles.dialUnit}>{unit}</Text> : null}
+      </DialSurface>
+    </View>
+  );
+}
+
+const formatDialValue = (value: number, decimals: number) => value.toFixed(decimals);
+
 function TimelineKeyTools() {
   const [mode, setMode] = useState<'KEYS' | 'LAYERS'>('KEYS');
   const [keyScope, setKeyScope] = useState<'OBJECT' | 'CHANNEL' | 'GLOBAL'>('OBJECT');
@@ -1187,9 +1443,10 @@ function App() {
   const [browserWidth, setBrowserWidth] = useState(284);
   const [inspectorWidth, setInspectorWidth] = useState(326);
   const [timelineHeight, setTimelineHeight] = useState(270);
+  const [showGpuStage, setShowGpuStage] = useState(true);
   const [createdItemId, setCreatedItemId] = useState('');
   const [draggedItemId, setDraggedItemId] = useState('');
-  const pathOperationId = PATH_OPERATIONS[0].id;
+  const [pathOperationId, setPathOperationId] = useState(PATH_OPERATIONS[0].id);
   const [stageTransform, setStageTransform] = useState<StageTransform>(INITIAL_STAGE_TRANSFORM);
   const [hostStatusLabel, setHostStatusLabel] = useState<string | null>(null);
   const [hostLayerSeat, setHostLayerSeat] = useState<HostLayerSeat | null>(null);
@@ -1283,7 +1540,7 @@ function App() {
           onNudge={() => setBrowserWidth(value => value >= 348 ? 284 : value + 64)}
         />
         <View style={styles.centerColumn}>
-          <Stage createdItemId={createdItemId} draggedItemId={draggedItemId} pathOperationId={pathOperationId} onDrop={completeStageDrop} onTransform={setStageTransform} transform={stageTransform} />
+          <Stage createdItemId={createdItemId} draggedItemId={draggedItemId} pathOperationId={pathOperationId} showGpu={showGpuStage} onDrop={completeStageDrop} onToggleGpu={() => setShowGpuStage(value => !value)} onTransform={setStageTransform} transform={stageTransform} />
         </View>
         <Splitter
           label="Inspectorのサイズを変更"
@@ -1292,7 +1549,7 @@ function App() {
           onDelta={delta => setInspectorWidth(clamp(inspectorStart.current - delta, 240, 440))}
           onNudge={() => setInspectorWidth(value => value >= 390 ? 326 : value + 64)}
         />
-        <Inspector width={inspectorWidth} layerSeat={hostLayerSeat} />
+        <Inspector width={inspectorWidth} pathOperationId={pathOperationId} onPathOperationChange={setPathOperationId} transform={stageTransform} onTransformChange={update => setStageTransform(current => ({...current, ...update}))} layerSeat={hostLayerSeat} />
       </View>
       <Splitter
         label="Timelineのサイズを変更"
@@ -1325,8 +1582,6 @@ const styles = StyleSheet.create({
   centerColumn: {flex: 1, minWidth: 420},
   browser: {backgroundColor: '#202326'},
   inspector: {backgroundColor: '#1b1d20'},
-  inspectorEmpty: {paddingHorizontal: 14, paddingVertical: 18, gap: 5},
-  inspectorEmptyTitle: {fontSize: 11, fontWeight: '600', color: '#d5d6d3'},
   panelHeader: {height: 31, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, borderBottomWidth: 1, borderBottomColor: '#3a3d41'},
   panelTitle: {fontSize: 11, fontWeight: '700', color: '#dedfdd'},
   panelDetail: {marginLeft: 'auto', fontSize: 8, color: '#85898c'},
@@ -1367,8 +1622,28 @@ const styles = StyleSheet.create({
   vSplitter: {width: 8, backgroundColor: '#272a2d', borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#3e4246'},
   hSplitter: {height: 8, backgroundColor: '#272a2d', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#3e4246'},
   stage: {flex: 1, backgroundColor: '#0d0f11'},
+  stageTools: {height: 31, flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 9, borderBottomWidth: 1, borderBottomColor: '#393c40'},
+  stageToolText: {fontSize: 9, color: '#d4d5d3'},
+  stageGpuButton: {paddingHorizontal: 7, paddingVertical: 4, borderWidth: 1, borderColor: '#716a4c'},
+  stageIdentity: {marginLeft: 'auto', fontSize: 7, color: '#b7ac73'},
   stageViewport: {flex: 1, overflow: 'hidden'},
   gpuStage: {position: 'absolute', inset: 0},
+  gpuStageOff: {position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center'},
+  frameGrid: {position: 'absolute', inset: 0, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)'},
+  outputLabel: {position: 'absolute', top: 8, left: 10, fontSize: 7, letterSpacing: 1, color: '#bfc3c5'},
+  titleBounds: {position: 'absolute', left: 10, top: 22, width: 126, height: 80, padding: 6, borderWidth: 1, borderColor: '#c3b88b'},
+  stageTitle: {fontSize: 16, lineHeight: 15, fontWeight: '800', letterSpacing: 3, color: '#f1f1ee'},
+  stageSubtitle: {marginTop: 6, fontSize: 5.5, letterSpacing: 0.8, color: '#c6c8c7'},
+  rings: {position: 'absolute', left: 144, top: 22, width: 80, height: 80, alignItems: 'center', justifyContent: 'center'},
+  ring: {position: 'absolute', borderWidth: 1, borderColor: 'rgba(235,238,232,0.42)', borderRadius: 200},
+  ringLarge: {width: 76, height: 76},
+  ringMedium: {width: 52, height: 52},
+  ringSmall: {width: 30, height: 30},
+  ringCore: {width: 14, height: 14, borderRadius: 7, backgroundColor: '#ebebe7'},
+  transport: {height: 31, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderTopWidth: 1, borderTopColor: '#3a3d41', backgroundColor: '#1b1d20'},
+  transportButton: {width: 34, fontSize: 10, color: '#dbdcda'},
+  timecode: {fontSize: 9, fontWeight: '600', color: '#e4e4e1'},
+  quality: {marginLeft: 'auto', fontSize: 7, color: '#84898c'},
   effectIdentity: {flexDirection: 'row', gap: 10, padding: 10, alignItems: 'center'},
   effectIcon: {width: 38, height: 38, borderWidth: 1, borderColor: '#b6aa70', alignItems: 'center', justifyContent: 'center'},
   effectIconText: {color: '#cabe7d'},
@@ -1379,6 +1654,17 @@ const styles = StyleSheet.create({
   parameterValue: {flex: 1, paddingHorizontal: 7, paddingVertical: 4, fontSize: 9, textAlign: 'right', color: '#e7e7e4', borderWidth: 1, borderColor: '#45494d'},
   stepButton: {width: 25, height: 24, alignItems: 'center', justifyContent: 'center'},
   stepText: {fontSize: 11, color: '#c8bc7b'},
+  dial: {flex: 1, height: 24, position: 'relative', overflow: 'hidden', borderWidth: 1, borderColor: '#45494d', backgroundColor: '#111315'},
+  dialDragging: {borderColor: '#c8bc7b'},
+  dialTicks: {position: 'absolute', left: 4, right: 44, top: 3, bottom: 3, overflow: 'hidden'},
+  dialTickStrip: {position: 'absolute', left: '50%', width: 810, height: '100%', marginLeft: -405, flexDirection: 'row', alignItems: 'flex-end'},
+  dialTickCell: {width: 10, height: '100%', alignItems: 'center', justifyContent: 'flex-end'},
+  dialTick: {width: 1, height: 7, backgroundColor: '#686d72'},
+  dialTickMajor: {height: 13, backgroundColor: '#c8bc7b'},
+  dialPointer: {position: 'absolute', top: 0, bottom: 0, left: '50%', width: 1, backgroundColor: '#f0f0ed'},
+  dialValue: {position: 'absolute', right: 4, top: 0, minWidth: 35, height: 22, paddingHorizontal: 2, paddingVertical: 0, fontSize: 8, textAlign: 'center', color: '#c8bc7b', backgroundColor: '#111315', zIndex: 1},
+  dialValueWithUnit: {right: 13},
+  dialUnit: {position: 'absolute', right: 4, top: 5, fontSize: 8, color: '#c8bc7b', zIndex: 2},
   inspectorInput: {height: 30, margin: 9, paddingHorizontal: 7, fontSize: 9, color: '#eeeeeb', borderWidth: 1, borderColor: '#575c61'},
   pathOperationSection: {borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#383c40', paddingVertical: 8},
   transformSection: {borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#33454c', paddingVertical: 8},

@@ -56,17 +56,8 @@ test('renders correctly', async () => {
   expect(tree!.root.findAllByProps({testID: 'timeline-mode-NATIVE'})).toHaveLength(0);
   expect(tree!.root.findByProps({testID: 'inspector-surface'})).toBeTruthy();
   expect(tree!.root.findAllByProps({testID: 'inspector-layer-section'})).toHaveLength(0);
-  expect(tree!.root.findByProps({testID: 'inspector-empty-state'})).toBeTruthy();
-  expect(tree!.root.findAllByProps({testID: 'path-operations-panel'})).toHaveLength(0);
-  expect(tree!.root.findAllByProps({testID: 'stage-transform-projection'})).toHaveLength(0);
-  const stageTexts = tree!.root
-    .findByProps({testID: 'stage-surface'})
-    .findAllByType(Text)
-    .map(node => String(node.props.children));
-  expect(stageTexts).not.toContain('OUTPUT FRAME');
-  expect(stageTexts).not.toContain('NIGHT\nDRIVE');
-  expect(stageTexts.some(value => value.includes('54.2'))).toBe(false);
-  expect(stageTexts.some(value => value.includes('GPU'))).toBe(false);
+  expect(tree!.root.findByProps({testID: 'path-operations-panel'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'stage-transform-projection'})).toBeTruthy();
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'rust-wgpu-timeline'}).props.onTimelineFeedback({
@@ -77,13 +68,54 @@ test('renders correctly', async () => {
     'no clip · 27.0%',
   );
   await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageTransform({
+      nativeEvent: {x: 0.25, y: -0.5, z: 0.75, rotationX: 10, rotationY: 20, rotationZ: 30},
+    });
+  });
+  expect(tree!.root.findByProps({value: '0.250'})).toBeTruthy();
+  expect(tree!.root.findByProps({value: '30.0'})).toBeTruthy();
+
+  await ReactTestRenderer.act(() => {
+    const positionDial = tree!.root.findByProps({accessibilityLabel: 'Position X dial'});
+    const startTouch = {
+      touchActive: true,
+      currentTimeStamp: 1,
+      currentPageX: 100,
+      currentPageY: 100,
+      previousPageX: 100,
+      previousPageY: 100,
+    };
+    const moveTouch = {...startTouch, currentTimeStamp: 2, currentPageX: 125};
+    const startEvent = {touchHistory: {numberActiveTouches: 1, indexOfSingleActiveTouch: 0, touchBank: [startTouch], mostRecentTimeStamp: 1}};
+    const moveEvent = {touchHistory: {numberActiveTouches: 1, indexOfSingleActiveTouch: 0, touchBank: [moveTouch], mostRecentTimeStamp: 2}};
+    positionDial.props.onResponderGrant(startEvent);
+    positionDial.props.onResponderMove(moveEvent);
+    positionDial.props.onResponderRelease(moveEvent);
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({accessibilityLabel: 'Rotation Z value'}).props.onChangeText('25');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({accessibilityLabel: 'Rotation Z value'}).props.onSubmitEditing();
+  });
+  expect(tree!.root.findByProps({value: '0.500'})).toBeTruthy();
+  expect(tree!.root.findByProps({value: '25.0'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.transformX).toBe(0.5);
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.rotationZ).toBe(25);
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'path-operation-trim'}).props.onPress();
+  });
+  expect(tree!.root.findByProps({testID: 'path-operation-trim'}).props.accessibilityState.selected).toBe(true);
+  expect(tree!.root.findByProps({testID: 'path-operation-pucker-bloat'}).props.accessibilityState.selected).toBe(false);
+
+  await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-tab-MEDIA'}).props.onPress();
     tree!.root.findByProps({testID: 'right-panel-EXTENSIONS'}).props.onPress();
   });
 
   expect(tree!.root.findByProps({testID: 'thumbnail-grid'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'browser-view-MEDIA'})).toBeTruthy();
-  expect(tree!.root.findByProps({testID: 'browser-empty-MEDIA'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'extension-panel-asset-tags'})).toBeTruthy();
 
   await ReactTestRenderer.act(() => {
@@ -111,7 +143,7 @@ test('renders correctly', async () => {
   expect(
     tree!.root.findByProps({testID: 'create-item-rectangle'}).props.accessibilityState.selected,
   ).toBe(true);
-  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.500000,0.500000|pucker-bloat');
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.500000,0.500000|trim');
 
   await ReactTestRenderer.act(() => {
     rectangle.props.onPointerDown();
@@ -124,7 +156,7 @@ test('renders correctly', async () => {
       nativeEvent: {x: 0.25, y: 0.75, canonicalX: 0.333333, canonicalY: -0.777777},
     });
   });
-  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.250000,0.750000|pucker-bloat');
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.250000,0.750000|trim');
   expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.draggedItemId).toBe('');
   expect(mockDispatchIntent).toHaveBeenCalled();
   const placePayload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
@@ -148,7 +180,7 @@ test('renders correctly', async () => {
   expect(centerPayload.kind).toBe('place_rectangle');
   expect(centerPayload.position).toEqual([0, 0]);
   expect(centerPayload.playhead).toEqual({num: 0, den: 1});
-  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.250000,0.750000|pucker-bloat');
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.250000,0.750000|trim');
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-mode-THUMBNAILS'}).props.onPress();
@@ -302,7 +334,7 @@ test('inspector layer section shows snapshot seat and dispatches add_position_ke
   mockReadSnapshot.mockReturnValue('');
 });
 
-test('inspector shows only its empty state when no layer is selected', async () => {
+test('inspector add position key is disabled when no layer is selected', async () => {
   mockDispatchIntent.mockClear();
   mockReadSnapshot.mockReturnValue(
     JSON.stringify({
@@ -325,8 +357,11 @@ test('inspector shows only its empty state when no layer is selected', async () 
     tree = ReactTestRenderer.create(<App />);
   });
 
-  expect(tree!.root.findByProps({testID: 'inspector-empty-state'})).toBeTruthy();
-  expect(tree!.root.findAllByProps({testID: 'inspector-add-position-key'})).toHaveLength(0);
+  const addButton = tree!.root.findByProps({testID: 'inspector-add-position-key'});
+  expect(addButton.props.disabled).toBe(true);
+  await ReactTestRenderer.act(() => {
+    addButton.props.onPress();
+  });
   expect(mockDispatchIntent).not.toHaveBeenCalled();
 
   await ReactTestRenderer.act(() => {
@@ -754,7 +789,7 @@ test('EFFECTS tab lists host catalog and double-click attaches to primary', asyn
   mockReadSnapshot.mockReturnValue('');
 });
 
-test('EFFECTS attach is skipped without primary and missing catalog is empty', async () => {
+test('EFFECTS attach is skipped without primary and fixture remains without catalog', async () => {
   mockDispatchIntent.mockClear();
   mockReadSnapshot.mockReturnValue(
     JSON.stringify({
@@ -799,8 +834,7 @@ test('EFFECTS attach is skipped without primary and missing catalog is empty', a
       const children = node.props.children;
       return Array.isArray(children) ? children.join('') : String(children);
     });
-  expect(names).not.toContain('Echo Bloom');
-  expect(names).toContain('No effects available');
+  expect(names).toContain('Echo Bloom');
   expect(tree!.root.findAllByProps({testID: 'effect-item-core.filter.opacity'})).toHaveLength(0);
 
   await ReactTestRenderer.act(() => {
