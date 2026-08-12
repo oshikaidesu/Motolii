@@ -257,15 +257,6 @@ type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
 
 const BUILD_LABEL = 'B002 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA';
 
-type EffectItem = {
-  id: string;
-  name: string;
-  badge: string;
-  tags: string;
-  color: string;
-  unavailable?: boolean;
-};
-
 type PathOperationItem = {
   id: string;
   name: string;
@@ -296,11 +287,7 @@ const INITIAL_STAGE_TRANSFORM: StageTransform = {
   x: 0, y: 0, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0,
 };
 
-const EFFECTS: EffectItem[] = [
-  {id: 'echo', name: 'Echo Bloom', badge: 'FX', tags: '#go-to #atmosphere', color: '#746d4b'},
-  {id: 'type', name: 'Type Pulse', badge: 'Aa', tags: '#kinetic', color: '#5c6477'},
-  {id: 'fold', name: 'Fold Field', badge: 'FX', tags: '#review', color: '#51455f', unavailable: true},
-];
+const EFFECT_COLORS = ['#746d4b', '#5c6477', '#51455f'];
 
 const PATH_OPERATIONS: PathOperationItem[] = [
   {id: 'pucker-bloat', name: 'Pucker / Bloat', detail: 'Contract or expand the path'},
@@ -316,11 +303,6 @@ const PATH_OPERATIONS: PathOperationItem[] = [
 const CREATE_ITEMS = [
   {id: 'rectangle', name: 'Rectangle', type: 'Shape', provider: 'Built-in', glyph: '□'},
 ];
-
-const MEDIA_ITEMS = Array.from({length: 5000}, (_, index) => ({
-  id: `asset-${index}`,
-  color: ['#5d7899', '#746398', '#88704e', '#557f6d', '#8b5962'][index % 5],
-}));
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, Math.round(value)));
@@ -389,6 +371,7 @@ function BrowserResults({
   onSelect,
   onActivate,
   onDragStart,
+  emptyMessage,
   testID,
 }: {
   title: string;
@@ -399,6 +382,7 @@ function BrowserResults({
   onSelect: (id: string) => void;
   onActivate: (id: string) => void;
   onDragStart: (id: string) => void;
+  emptyMessage: string;
   testID: string;
 }) {
   const columns = view === 'THUMBNAILS' ? 4 : view === 'GRID' ? 2 : 1;
@@ -425,6 +409,11 @@ function BrowserResults({
           <View style={styles.resultsHeader}>
             <Text style={styles.resultTitle}>{title}</Text>
             <Text style={styles.panelDetail}>{items.length}</Text>
+          </View>
+        )}
+        ListEmptyComponent={(
+          <View style={styles.emptyPanel} testID={`browser-empty-${testID}`}>
+            <Text style={styles.emptyTitle}>{emptyMessage}</Text>
           </View>
         )}
         maxToRenderPerBatch={32}
@@ -507,15 +496,14 @@ function Browser({
         : catalogEffects[0].plugin_id,
     );
   }, [catalogEffects]);
-  const effectSource: EffectItem[] = catalogEffects
-    ? catalogEffects.map((item, index) => ({
+  const effectSource = (catalogEffects ?? [])
+    .map((item, index) => ({
       id: item.plugin_id,
       name: item.name,
       badge: 'FX',
       tags: item.plugin_id,
-      color: EFFECTS[index % EFFECTS.length].color,
-    }))
-    : EFFECTS;
+      color: EFFECT_COLORS[index % EFFECT_COLORS.length],
+    }));
   const filteredEffects = effectSource.filter(item =>
     `${item.name} ${item.tags}`.toLowerCase().includes(query.toLowerCase()),
   );
@@ -534,9 +522,6 @@ function Browser({
   const filteredCreateItems = createItems.filter(item =>
     `${item.name} ${item.type} ${item.provider}`.toLowerCase().includes(query.toLowerCase()),
   );
-  const filteredMediaItems = MEDIA_ITEMS.filter(item =>
-    item.id.toLowerCase().includes(query.toLowerCase()),
-  );
   const browserItems: BrowserItem[] = tab === 'EFFECTS'
     ? filteredEffects.map(item => ({
       id: item.id,
@@ -544,16 +529,10 @@ function Browser({
       detail: item.tags,
       color: item.color,
       badge: item.badge,
-      unavailable: item.unavailable,
-      testID: catalogEffects ? `effect-item-${item.id}` : undefined,
+      testID: `effect-item-${item.id}`,
     }))
     : tab === 'MEDIA'
-      ? filteredMediaItems.map(item => ({
-        id: item.id,
-        name: item.id,
-        detail: 'Media',
-        color: item.color,
-      }))
+      ? []
       : filteredCreateItems.map(item => ({
         id: item.id,
         name: item.name,
@@ -563,11 +542,18 @@ function Browser({
         testID: `create-item-${item.id}`,
       }));
   const rail = tab === 'EFFECTS'
-    ? ['▦  All', '◇  Used', '↺  Recent', 'COLLECTIONS', '◎  Favorites', 'Aa  Type', 'TAGS', '◎  Go-to  1', '◌  Atmosphere  1', '⌁  Kinetic  1', '✓  Review  1', 'PACKS', '▤  Motion Kit α']
+    ? ['▦  All effects']
     : tab === 'MEDIA'
-      ? ['▦  All media', '◇  Used', '↺  Recent', 'TYPE', '▣  Video', '♪  Audio', '▧  Image']
-      : ['▦  All', 'TYPE', '□  Shapes', 'PROVIDER', 'M  Built-in'];
+      ? ['▦  All media']
+      : ['▦  All items', 'TYPE', '□  Shapes', 'PROVIDER', 'M  Built-in', '□  Vism sources'];
   const title = tab === 'CREATE' ? 'Create items' : 'Results';
+  const emptyMessage = query.trim()
+    ? 'No results'
+    : tab === 'MEDIA'
+      ? 'No media imported'
+      : tab === 'EFFECTS'
+        ? 'No effects available'
+        : 'No create items available';
   const selectedId = tab === 'EFFECTS' ? selected : tab === 'CREATE' ? selectedCreateItem : null;
 
   return (
@@ -619,6 +605,7 @@ function Browser({
       </View>
       <BrowserResults
         items={browserItems}
+        emptyMessage={emptyMessage}
         onActivate={id => {
           if (tab === 'CREATE') {
             setSelectedCreateItem(id);

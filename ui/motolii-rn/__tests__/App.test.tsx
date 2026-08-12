@@ -83,6 +83,7 @@ test('renders correctly', async () => {
 
   expect(tree!.root.findByProps({testID: 'thumbnail-grid'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'browser-view-MEDIA'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'browser-empty-MEDIA'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'extension-panel-asset-tags'})).toBeTruthy();
 
   await ReactTestRenderer.act(() => {
@@ -753,7 +754,7 @@ test('EFFECTS tab lists host catalog and double-click attaches to primary', asyn
   mockReadSnapshot.mockReturnValue('');
 });
 
-test('EFFECTS attach is skipped without primary and fixture remains without catalog', async () => {
+test('EFFECTS attach is skipped without primary and missing catalog is empty', async () => {
   mockDispatchIntent.mockClear();
   mockReadSnapshot.mockReturnValue(
     JSON.stringify({
@@ -798,7 +799,8 @@ test('EFFECTS attach is skipped without primary and fixture remains without cata
       const children = node.props.children;
       return Array.isArray(children) ? children.join('') : String(children);
     });
-  expect(names).toContain('Echo Bloom');
+  expect(names).not.toContain('Echo Bloom');
+  expect(names).toContain('No effects available');
   expect(tree!.root.findAllByProps({testID: 'effect-item-core.filter.opacity'})).toHaveLength(0);
 
   await ReactTestRenderer.act(() => {
