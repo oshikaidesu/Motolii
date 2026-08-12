@@ -444,6 +444,7 @@ function Browser({
   catalogEffects,
   catalogSources,
   primaryLayerId,
+  currentTime,
 }: {
   width: number;
   onCreateItem: (id: string) => void;
@@ -452,6 +453,7 @@ function Browser({
   catalogEffects: HostCatalogEffect[] | null;
   catalogSources: HostCatalogSource[] | null;
   primaryLayerId: string | null;
+  currentTime: HostRationalTime | null;
 }) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
   const [query, setQuery] = useState('');
@@ -589,7 +591,7 @@ function Browser({
               dispatchHostIntent('place_vism', {
                 plugin_id: id,
                 position: [0, 0],
-                playhead: {num: 0, den: 1},
+                playhead: currentTime ?? {num: 0, den: 1},
               });
               return;
             }
@@ -1395,7 +1397,7 @@ function App() {
       if (itemId === 'rectangle') {
         dispatchHostIntent('place_rectangle', {
           position: [canonicalX, canonicalY],
-          playhead: {num: 0, den: 1},
+          playhead: hostLayerSeat?.currentTime ?? {num: 0, den: 1},
         });
       }
     }
@@ -1443,6 +1445,7 @@ function App() {
           onDragCancel={() => setDraggedItemId('')}
           onDragStart={setDraggedItemId}
           primaryLayerId={hostLayerSeat?.primaryLayerId ?? null}
+          currentTime={hostLayerSeat?.currentTime ?? null}
           width={browserWidth}
         />
         <Splitter

@@ -337,7 +337,7 @@ impl EmbeddedSpatialStage {
             );
         }
 
-        let preview_geom = apply_move_preview_to_geometry(geometry, self.move_preview.as_ref());
+        let preview_geom = apply_move_preview_to_geometry(geometry, None);
         if !self.real_frame_composite {
             for layer in &preview_geom.layers {
                 let mesh =
@@ -356,6 +356,7 @@ impl EmbeddedSpatialStage {
         self.host_layer_ids = next_ids;
         self.host_geometry = Some(geometry.clone());
         self.host_geometry_active = true;
+        self.move_preview = None;
         true
     }
 

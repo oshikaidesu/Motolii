@@ -63,6 +63,8 @@ pub(crate) struct HostTimelineProjection {
     pub primary_layer_id: Option<String>,
     /// wire `current_time` の {num,den}。欠落時は0/1。
     pub current_time: (i64, i64),
+    /// wire `timeline.duration` の {num,den}。
+    pub timeline_duration: Option<(i64, i64)>,
     /// wire `timeline.fps`。timeline欠落時はNone。
     pub fps: Option<(i64, i64)>,
     pub bounds: Vec<(String, String)>,
@@ -206,7 +208,7 @@ pub unsafe extern "C" fn motolii_rnapp_host_ensure(path_utf8: *const u8, path_le
     }
     let path_bytes = path.as_bytes();
     let mut host_handle = 0u64;
-    let mut out = [0u8; MAX_JSON_BYTES];
+    let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
     let written = unsafe {
         motolii_rn_host_create(
             path_bytes.as_ptr(),
@@ -238,7 +240,7 @@ fn ensure_stage_registered(slot: &mut HostSlot) -> bool {
         return true;
     }
     let mut stage_handle = 0u64;
-    let mut out = [0u8; MAX_JSON_BYTES];
+    let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
     let written = unsafe {
         motolii_rn_stage_register(
             slot.handle,
@@ -275,7 +277,7 @@ fn dispatch_stage_intent(slot: &HostSlot, kind: &str, extra: &str) -> bool {
     if intent.len() > MAX_JSON_BYTES {
         return false;
     }
-    let mut out = [0u8; MAX_JSON_BYTES];
+    let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
     let written = unsafe {
         motolii_rn_host_dispatch_intent_json(
             slot.handle,
@@ -593,14 +595,14 @@ pub(crate) fn rational_time_parts_from_bar(bar: f64) -> (i64, i64) {
     (s_fixed as i64, SCALE as i64)
 }
 
-/// host `current_time` → playhead(0..1)。bar = secs/2、曲基準 / SONG_BARS。
-pub(crate) fn playhead_from_current_time(num: i64, den: i64) -> f64 {
-    if den == 0 {
+/// host `current_time` → playhead(0..1)。bar = secs/2、曲基準 / song_bars。
+pub(crate) fn playhead_from_current_time(num: i64, den: i64, song_bars: f32) -> f64 {
+    if den == 0 || song_bars <= 0.0 {
         return 0.0;
     }
     let secs = num as f64 / den as f64;
     let bar = secs / crate::timeline_skia::SECONDS_PER_BAR;
-    (bar / f64::from(crate::timeline_skia::SONG_BARS)).clamp(0.0, 1.0)
+    (bar / f64::from(song_bars)).clamp(0.0, 1.0)
 }
 
 /// process host slot経由でset_timeを送る。host不在はfalse(呼ばない)。
@@ -936,7 +938,7 @@ fn dispatch_intent_json_accepted(handle: u64, intent: &str) -> bool {
     if intent.len() > MAX_JSON_BYTES {
         return false;
     }
-    let mut out = [0u8; MAX_JSON_BYTES];
+    let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
     let written = unsafe {
         motolii_rn_host_dispatch_intent_json(
             handle,
@@ -997,6 +999,7 @@ fn parse_timeline_projection(json: &str) -> Option<HostTimelineProjection> {
         json_string_value(json, "projection_generation").unwrap_or_else(|| "0".into());
     let primary_layer_id = json_string_value(json, "primary_layer_id");
     let current_time = json_rational(json, "current_time").unwrap_or((0, 1));
+    let timeline_duration = find_key_object(json, "timeline").and_then(|timeline| json_rational(timeline, "duration"));
     let fps = find_key_object(json, "timeline").and_then(|timeline| json_rational(timeline, "fps"));
     let bounds = parse_bounds(json)?;
     let timeline_layers = parse_timeline_layers(json);
@@ -1007,6 +1010,7 @@ fn parse_timeline_projection(json: &str) -> Option<HostTimelineProjection> {
         projection_generation,
         primary_layer_id,
         current_time,
+        timeline_duration,
         fps,
         bounds,
         timeline_layers,
@@ -1787,7 +1791,7 @@ mod tests {
         let intent = format!(
             r#"{{"version":1,"direction":"rn-to-host","kind":"{kind}","host_handle":"{host}"{extra}}}"#
         );
-        let mut out = [0u8; MAX_JSON_BYTES];
+        let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
         let written = unsafe {
             motolii_rn_host_dispatch_intent_json(
                 host,
@@ -1909,7 +1913,7 @@ mod tests {
         let path = temp_project("projection-json-wire");
         let host = motolii_ui::host_create_for_test(&path).expect("create host");
         let baseline = motolii_ui::host_read_snapshot_for_test(host).expect("baseline");
-        let mut out = [0u8; MAX_JSON_BYTES];
+        let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
         let written =
             unsafe { motolii_rn_host_read_snapshot_json(host, out.as_mut_ptr(), out.len()) };
         assert!(written > 0, "host snapshot json failed: {written}");
@@ -2010,7 +2014,12 @@ mod tests {
         }"#;
         let proj = parse_timeline_projection(json).expect("parse");
         let layers = snapshot_layers_from_projection(&proj);
-        let scene = TimelineScene::from_snapshot(&layers, proj.primary_layer_id.as_deref());
+        let song_bars = 10.0 / crate::timeline_skia::SECONDS_PER_BAR;
+        let scene = TimelineScene::from_snapshot_with_song_bars(
+            &layers,
+            proj.primary_layer_id.as_deref(),
+            song_bars as f32,
+        );
         let (a, b, keys) = scene.clip0_span_and_keys(0).expect("clip0");
         assert!((a - 0.0).abs() < 1e-6);
         assert!((b - 5.0).abs() < 1e-6); // 10s / 2
@@ -2018,6 +2027,9 @@ mod tests {
         assert!((keys[0].0 - 2.0).abs() < 1e-6); // 4s / 2
         assert_eq!(keys[0].1, 42);
         assert_eq!(scene.selected_flat, 0);
+        assert!((scene.song_bars - 5.0).abs() < 1e-6);
+        assert!((scene.view_a - 0.0).abs() < 1e-6);
+        assert!((scene.view_b - 5.0).abs() < 1e-6);
     }
 
     #[test]
@@ -2080,10 +2092,14 @@ mod tests {
         let proj = parse_timeline_projection(json).expect("parse");
         assert!(proj.timeline_layers.is_none());
         let layers = snapshot_layers_from_projection(&proj);
-        let scene = TimelineScene::from_snapshot(&layers, proj.primary_layer_id.as_deref());
+        let scene = TimelineScene::from_snapshot_with_song_bars(
+            &layers,
+            proj.primary_layer_id.as_deref(),
+            (10.0 / crate::timeline_skia::SECONDS_PER_BAR) as f32,
+        );
         let (a, b, keys) = scene.clip0_span_and_keys(0).expect("clip0");
         assert!((a - 0.0).abs() < 1e-6);
-        assert!((b - 96.0).abs() < 1e-6);
+        assert!((b - 5.0).abs() < 1e-6);
         assert!(keys.is_empty());
         assert_eq!(scene.band_count(), 2);
     }
@@ -2265,10 +2281,46 @@ mod tests {
 
     #[test]
     fn playhead_from_current_time_uses_two_seconds_per_bar() {
-        // 2s = 1 bar → 1/96
-        let ph = playhead_from_current_time(2, 1);
-        assert!((ph - 1.0 / 96.0).abs() < 1e-12);
-        assert_eq!(playhead_from_current_time(0, 1), 0.0);
+        // 2s = 1 bar。fixture曲長96 → 1/96。
+        let ph_fixture = playhead_from_current_time(2, 1, crate::timeline_skia::SONG_BARS);
+        assert!((ph_fixture - 1.0 / 96.0).abs() < 1e-12);
+        let ph_10s = playhead_from_current_time(2, 1, 10.0 / 2.0);
+        assert!((ph_10s - 1.0 / 5.0).abs() < 1e-12);
+        assert_eq!(
+            playhead_from_current_time(0, 1, 10.0 / 2.0),
+            0.0
+        );
+    }
+
+    #[test]
+    fn parse_timeline_projection_parses_timeline_duration() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"7",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "primary_layer_id":"11",
+            "stage":{"selection":[],"bounds":[{"layer_id":"11","display_name":"rect"}]},
+            "timeline":{
+                "duration":{"num":40,"den":1},
+                "fps":{"num":30,"den":1},
+                "layers":[{
+                    "layer_id":"11",
+                    "display_name":"rect",
+                    "start":{"num":0,"den":1},
+                    "duration":{"num":40,"den":1},
+                    "position_keys":[],
+                    "keys_truncated":false
+                }],
+                "layers_truncated":false
+            },
+            "diagnostics":[ ]
+        }"#;
+        let projection = parse_timeline_projection(json).expect("parse");
+        assert_eq!(projection.timeline_duration, Some((40, 1)));
     }
 
     #[test]
@@ -2291,8 +2343,12 @@ mod tests {
         let after = motolii_ui::host_read_snapshot_for_test(host).expect("after");
         assert_eq!(after.current_time.num(), 2);
         assert_eq!(after.current_time.den(), 1);
-        let ph = playhead_from_current_time(after.current_time.num(), after.current_time.den());
-        assert!((ph - 1.0 / 96.0).abs() < 1e-12);
+        let ph = playhead_from_current_time(
+            after.current_time.num(),
+            after.current_time.den(),
+            10.0 / 2.0,
+        );
+        assert!((ph - 1.0 / 5.0).abs() < 1e-12);
 
         clear_slot();
         motolii_ui::host_destroy_for_test(host).expect("destroy");

@@ -28,7 +28,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(dispatchIntent:(NSString *)intentJson)
     return @"{\"accepted\":false}";
   }
   size_t len = strlen(utf8);
-  std::vector<uint8_t> out(16384);
+  std::vector<uint8_t> out(131072);
   int64_t written = motolii_rnapp_host_dispatch_json(
       reinterpret_cast<const uint8_t *>(utf8), len, out.data(), out.size());
   NSLog(@"[MotoliiHost] dispatchIntent in=%zu out=%lld", len, (long long)written);

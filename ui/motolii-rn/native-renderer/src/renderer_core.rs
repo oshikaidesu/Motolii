@@ -393,10 +393,38 @@ fn timeline_scene_from_projection(
     existing_scene: &TimelineScene,
     projection: &crate::host_bridge::HostTimelineProjection,
 ) -> TimelineScene {
+    let fallback_song_bars = (10.0f64 / crate::timeline_skia::SECONDS_PER_BAR) as f32;
+    let song_bars = projection
+        .timeline_duration
+        .and_then(|(num, den)| {
+            if den <= 0 || num < 0 {
+                None
+            } else {
+                Some((num as f64 / den as f64 / crate::timeline_skia::SECONDS_PER_BAR) as f32)
+            }
+        })
+        .filter(|bars| bars.is_finite())
+        .unwrap_or(fallback_song_bars);
     let layers = crate::host_bridge::snapshot_layers_from_projection(projection);
-    let mut scene = TimelineScene::from_snapshot(&layers, projection.primary_layer_id.as_deref());
-    scene.view_a = existing_scene.view_a;
-    scene.view_b = existing_scene.view_b;
+    let mut scene = TimelineScene::from_snapshot_with_song_bars(
+        &layers,
+        projection.primary_layer_id.as_deref(),
+        song_bars,
+    );
+    // real同士の差し替えではlocal viewを維持。fixture→real初回はfrom_snapshotの0..song_bars。
+    if existing_scene.real {
+        scene.view_a = existing_scene.view_a;
+        scene.view_b = existing_scene.view_b;
+        let span = scene.view_b - scene.view_a;
+        if scene.view_a < 0.0 {
+            scene.view_a = 0.0;
+            scene.view_b = span.min(scene.song_bars);
+        }
+        if scene.view_b > scene.song_bars {
+            scene.view_b = scene.song_bars;
+            scene.view_a = (scene.song_bars - span).max(0.0);
+        }
+    }
     scene
 }
 
@@ -572,6 +600,11 @@ impl RendererCore {
         y: f64,
         modifiers: u32,
     ) -> Option<(i32, f64)> {
+        // 並行gesture防御: Downで進行中scrub pumpを先に解除してから新gestureへ。
+        if matches!(phase, PointerPhase::Down) {
+            self.scrub_time_pump = ScrubTimePump::new();
+            self.scrubbing = false;
+        }
         let tl_phase = match phase {
             PointerPhase::Down => {
                 self.stats.pointer_downs += 1;
@@ -632,7 +665,7 @@ impl RendererCore {
                     scrub_playhead,
                 );
             }
-            if matches!(phase, PointerPhase::Up | PointerPhase::Cancel) {
+            if matches!(phase, PointerPhase::Up) && outcome.edit_commit.is_some() {
                 self.force_next_host_snapshot = true;
             }
             if let Some(commit) = outcome.edit_commit {
@@ -646,10 +679,7 @@ impl RendererCore {
                 }
             }
             if let Some(commit) = outcome.selection_commit {
-                let _ = Self::dispatch_timeline_selection(
-                    &commit,
-                    &mut self.force_next_host_snapshot,
-                );
+                let _ = Self::dispatch_timeline_selection(&commit);
             }
             self.scrubbing = self.scrub_time_pump.is_active();
         } else if matches!(phase, PointerPhase::Up | PointerPhase::Cancel) {
@@ -671,7 +701,12 @@ impl RendererCore {
         if fps_num <= 0 || fps_den <= 0 {
             return;
         }
-        let bar = playhead.clamp(0.0, 1.0) * f64::from(crate::timeline_skia::SONG_BARS);
+        let song_bars = self
+            .timeline_session
+            .as_ref()
+            .map(|session| session.scene.song_bars)
+            .unwrap_or(crate::timeline_skia::SONG_BARS);
+        let bar = playhead.clamp(0.0, 1.0) * f64::from(song_bars);
         let Some(frame) = self.scrub_time_pump.next_frame(
             phase,
             bar,
@@ -780,10 +815,7 @@ impl RendererCore {
             StageMoveOutcome::None => {}
             StageMoveOutcome::SelectLayer { .. } | StageMoveOutcome::ClearSelection => {
                 if let Some(commit) = stage_host_move_outcome_to_selection_commit(&outcome) {
-                    let _ = Self::dispatch_timeline_selection(
-                        &commit,
-                        &mut self.force_next_host_snapshot,
-                    );
+                    let _ = Self::dispatch_timeline_selection(&commit);
                 }
             }
             StageMoveOutcome::Preview { layer_id, delta } => {
@@ -793,11 +825,7 @@ impl RendererCore {
                 }
             }
             StageMoveOutcome::Commit { layer_id, delta } => {
-                if !stage.rerun.clear_move_preview(viewport.0, viewport.1) {
-                    self.force_next_host_snapshot = true;
-                    self.stage_move_gesture = None;
-                    return;
-                }
+                // previewは次のhost geometry適用まで維持(一瞬の戻りを避ける)。
                 if !crate::host_bridge::try_dispatch_move_layer_by(&layer_id, delta) {
                     if !stage.rerun.clear_move_preview(viewport.0, viewport.1) {
                         self.force_next_host_snapshot = true;
@@ -872,15 +900,8 @@ impl RendererCore {
         Ok(())
     }
 
-    fn dispatch_timeline_selection(
-        commit: &crate::timeline_skia::TimelineSelectionCommit,
-        force_next_host_snapshot: &mut bool,
-    ) -> bool {
-        let accepted = crate::host_bridge::try_dispatch_timeline_selection(commit);
-        if !accepted {
-            *force_next_host_snapshot = true;
-        }
-        accepted
+    fn dispatch_timeline_selection(commit: &crate::timeline_skia::TimelineSelectionCommit) -> bool {
+        crate::host_bridge::try_dispatch_timeline_selection(commit)
     }
 
     fn sync_host_timeline_projection(&mut self) {
@@ -894,24 +915,52 @@ impl RendererCore {
                 self.host_revision.as_deref() != Some(projection.revision.as_str());
             let generation_changed = self.host_projection_generation.as_deref()
                 != Some(projection.projection_generation.as_str());
-            if revision_changed {
+            let has_active_gesture = self
+                .timeline_session
+                .as_ref()
+                .is_some_and(TimelineSession::has_active_gesture);
+            let force_scene = self.force_next_host_snapshot;
+            let should_reproject = revision_changed
+                || (force_scene && !has_active_gesture);
+            if should_reproject {
                 let Some(session) = &mut self.timeline_session else {
                     return;
                 };
+                // 進行中gestureは復元せず破棄。古いband indexでのpanicを防ぐ。
+                let gesture_dirty = if force_scene {
+                    session.discard_active_gesture()
+                } else {
+                    false
+                };
+                if gesture_dirty {
+                    self.scrub_time_pump = ScrubTimePump::new();
+                    self.scrubbing = false;
+                }
                 let scene = timeline_scene_from_projection(&session.scene, &projection);
                 self.selected_object_index = scene.selected_flat;
                 session.scene = scene;
-                self.host_revision = Some(projection.revision);
+                if revision_changed {
+                    self.host_revision = Some(projection.revision);
+                }
                 if let Some(timeline) = &mut self.timeline {
                     timeline.dirty = true;
                 }
+                if force_scene {
+                    self.force_next_host_snapshot = false;
+                }
             }
             if !self.scrubbing
-                && (generation_changed || revision_changed || self.force_next_host_snapshot)
+                && (generation_changed || revision_changed || force_scene)
             {
+                let song_bars = self
+                    .timeline_session
+                    .as_ref()
+                    .map(|session| session.scene.song_bars)
+                    .unwrap_or(crate::timeline_skia::SONG_BARS);
                 let next = crate::host_bridge::playhead_from_current_time(
                     projection.current_time.0,
                     projection.current_time.1,
+                    song_bars,
                 );
                 if (self.playhead - next).abs() > f64::EPSILON {
                     self.playhead = next;
@@ -919,7 +968,6 @@ impl RendererCore {
                         timeline.dirty = true;
                     }
                 }
-                self.force_next_host_snapshot = false;
             }
             self.host_projection_generation = Some(projection.projection_generation);
         }
@@ -946,6 +994,8 @@ impl RendererCore {
             };
             match command {
                 HostStageGeometryCommand::Apply(geometry) => {
+                    // geometry差し替え時は進行中stage gestureを破棄。
+                    self.stage_move_gesture = None;
                     if stage
                         .rerun
                         .apply_host_stage_geometry(&geometry, viewport.0, viewport.1)
@@ -1580,14 +1630,23 @@ mod tests {
 
     #[test]
     fn timeline_view_is_preserved_when_revision_changes() {
-        let mut scene = TimelineScene::default();
-        scene.view_a = 12.0;
-        scene.view_b = 48.0;
+        let mut scene = TimelineScene::from_snapshot(
+            &[crate::timeline_skia::SnapshotLayerInput {
+                layer_id: "L1".into(),
+                display_name: "Layer 1".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![],
+            }],
+            Some("L1"),
+        );
+        scene.view_a = 1.0;
+        scene.view_b = 4.0;
         let projection = crate::host_bridge::HostTimelineProjection {
             revision: "r1".into(),
             projection_generation: "0".into(),
             primary_layer_id: Some("L2".into()),
             current_time: (0, 1),
+            timeline_duration: Some((10, 1)),
             fps: None,
             bounds: vec![
                 ("L1".into(), "Layer 1".into()),
@@ -1597,9 +1656,158 @@ mod tests {
             stage_geometry: None,
         };
         let rebuilt = timeline_scene_from_projection(&scene, &projection);
-        assert_eq!(rebuilt.view_a, 12.0);
-        assert_eq!(rebuilt.view_b, 48.0);
+        assert_eq!(rebuilt.view_a, 1.0);
+        assert_eq!(rebuilt.view_b, 4.0);
         assert_eq!(rebuilt.selected_flat, 1);
+        let expected_song_bars = 10.0_f32 / crate::timeline_skia::SECONDS_PER_BAR as f32;
+        assert!((rebuilt.song_bars - expected_song_bars).abs() < 1e-6);
+    }
+
+    #[test]
+    fn timeline_projection_scales_song_bars_from_duration_10_and_40_seconds() {
+        let existing = TimelineScene::default();
+
+        for (duration_num, duration_den, expected_song_bars) in
+            [(10_i64, 1_i64, 5.0_f32), (40_i64, 1_i64, 20.0_f32)]
+        {
+            let projection = crate::host_bridge::HostTimelineProjection {
+                revision: "r0".into(),
+                projection_generation: "0".into(),
+                primary_layer_id: Some("L1".into()),
+                current_time: (0, 1),
+                timeline_duration: Some((duration_num, duration_den)),
+                fps: Some((30, 1)),
+                bounds: vec![("L1".to_string(), "Layer 1".to_string())],
+                timeline_layers: Some(vec![crate::host_bridge::HostTimelineLayer {
+                    layer_id: "L1".into(),
+                    display_name: "Layer 1".into(),
+                    start_secs: 0.0,
+                    duration_secs: duration_num as f64 / duration_den as f64,
+                    position_keys: vec![],
+                    effects: vec![],
+                    effects_truncated: false,
+                    source_params: vec![],
+                    source_params_truncated: false,
+                }]),
+                stage_geometry: None,
+            };
+
+            let rebuilt = timeline_scene_from_projection(&existing, &projection);
+            assert_eq!(rebuilt.selected_flat, 0);
+            assert!((rebuilt.song_bars - expected_song_bars).abs() < 1e-6);
+            assert!((rebuilt.view_a - 0.0).abs() < 1e-6);
+            assert!((rebuilt.view_b - rebuilt.song_bars).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn timeline_projection_short_duration_does_not_panic_and_sets_span_to_duration() {
+        let existing = TimelineScene::default();
+        let projection = crate::host_bridge::HostTimelineProjection {
+            revision: "r2".into(),
+            projection_generation: "0".into(),
+            primary_layer_id: Some("L1".into()),
+            current_time: (0, 1),
+            timeline_duration: Some((2, 1)),
+            fps: Some((30, 1)),
+            bounds: vec![("L1".into(), "Layer 1".into())],
+            timeline_layers: Some(vec![crate::host_bridge::HostTimelineLayer {
+                layer_id: "L1".into(),
+                display_name: "Layer 1".into(),
+                start_secs: 0.0,
+                duration_secs: 2.0,
+                position_keys: vec![],
+                effects: vec![],
+                effects_truncated: false,
+                source_params: vec![],
+                source_params_truncated: false,
+            }]),
+            stage_geometry: None,
+        };
+
+        let rebuilt =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                timeline_scene_from_projection(&existing, &projection)
+            }));
+        assert!(rebuilt.is_ok(), "short duration must not panic");
+        let rebuilt = rebuilt.expect("short duration must not panic");
+        assert!((rebuilt.song_bars - 1.0).abs() < 1e-6);
+        assert_eq!(rebuilt.view_a, 0.0);
+        assert_eq!(rebuilt.view_b, 1.0);
+    }
+
+    #[test]
+    fn fixture_to_real_projection_resets_view_to_song_bars() {
+        let existing = TimelineScene::default();
+        assert!(!existing.real);
+        let projection = crate::host_bridge::HostTimelineProjection {
+            revision: "r1".into(),
+            projection_generation: "0".into(),
+            primary_layer_id: Some("L1".into()),
+            current_time: (0, 1),
+            fps: Some((30, 1)),
+            timeline_duration: Some((10, 1)),
+            bounds: vec![("L1".into(), "Layer 1".into())],
+            timeline_layers: Some(vec![crate::host_bridge::HostTimelineLayer {
+                layer_id: "L1".into(),
+                display_name: "Layer 1".into(),
+                start_secs: 0.0,
+                duration_secs: 10.0,
+                position_keys: vec![],
+                effects: vec![],
+                effects_truncated: false,
+                source_params: vec![],
+                source_params_truncated: false,
+            }]),
+            stage_geometry: None,
+        };
+        let rebuilt = timeline_scene_from_projection(&existing, &projection);
+        assert!(rebuilt.real);
+        assert!((rebuilt.view_a - 0.0).abs() < 1e-6);
+        assert!((rebuilt.view_b - rebuilt.song_bars).abs() < 1e-6);
+        assert!((rebuilt.song_bars - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn discard_gesture_on_scene_rebuild_leaves_no_active_gesture() {
+        let mut session = TimelineSession::default();
+        session.scene = TimelineScene::from_snapshot(
+            &[crate::timeline_skia::SnapshotLayerInput {
+                layer_id: "clip-real".into(),
+                display_name: "clip".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![],
+            }],
+            None,
+        );
+        let mut selected = -1;
+        let mut playhead = 0.2;
+        let x = 202.0 + (1.0f64 / 5.0) * (1240.0 - 202.0 - 6.0);
+        let y = 66.5;
+        let down = session.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            x,
+            y,
+            0,
+        );
+        assert!(down.selection_commit.is_some() || selected >= 0);
+        assert!(session.discard_active_gesture());
+        // 差し替え後にUpしてもdispatchなし(gesture無し)。
+        let up = session.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Up,
+            x,
+            y,
+            0,
+        );
+        assert!(up.edit_commit.is_none());
     }
 
     #[test]
@@ -1645,11 +1853,10 @@ mod tests {
         );
         let mut selected = -1;
         let mut playhead = 0.27;
-        let x = 202.0 + (3.0f64 / 48.0) * (1240.0 - 202.0 - 6.0);
+        let x = 202.0 + (3.0f64 / 5.0) * (1240.0 - 202.0 - 6.0);
         let y = 66.5;
         crate::host_bridge::test_reset_timeline_selection_dispatch_count();
         crate::host_bridge::test_clear_host_slot();
-        let mut force_next_snapshot = false;
         let down = real_session.pointer(
             &mut selected,
             &mut playhead,
@@ -1662,11 +1869,7 @@ mod tests {
         );
         assert!(down.selection_commit.is_some());
         if let Some(commit) = down.selection_commit {
-            assert!(!RendererCore::dispatch_timeline_selection(
-                &commit,
-                &mut force_next_snapshot
-            ));
-            assert!(force_next_snapshot);
+            assert!(!RendererCore::dispatch_timeline_selection(&commit));
         }
         assert_eq!(crate::host_bridge::test_timeline_selection_dispatch_count(), 1);
     }
@@ -1678,7 +1881,6 @@ mod tests {
         let y = 66.5;
         crate::host_bridge::test_reset_timeline_selection_dispatch_count();
         crate::host_bridge::test_clear_host_slot();
-        let mut force_next_snapshot = false;
         let mut selected = -1;
         let mut playhead = 0.27;
         let clip_down = session.pointer(
@@ -1706,19 +1908,12 @@ mod tests {
         assert!(trim_down.selection_commit.is_none());
 
         if let Some(commit) = clip_down.selection_commit {
-            assert!(!RendererCore::dispatch_timeline_selection(
-                &commit,
-                &mut force_next_snapshot
-            ));
+            assert!(!RendererCore::dispatch_timeline_selection(&commit));
         }
         if let Some(commit) = trim_down.selection_commit {
-            assert!(!RendererCore::dispatch_timeline_selection(
-                &commit,
-                &mut force_next_snapshot
-            ));
+            assert!(!RendererCore::dispatch_timeline_selection(&commit));
         }
         assert_eq!(crate::host_bridge::test_timeline_selection_dispatch_count(), 0);
-        assert!(!force_next_snapshot);
     }
 
     #[test]
@@ -1743,6 +1938,7 @@ mod tests {
             primary_layer_id: None,
             current_time: (0, 1),
             fps: None,
+            timeline_duration: Some((10, 1)),
             bounds: vec![],
             timeline_layers: None,
             stage_geometry: Some(geometry_a.clone()),
@@ -1753,6 +1949,7 @@ mod tests {
             primary_layer_id: None,
             current_time: (0, 1),
             fps: None,
+            timeline_duration: Some((10, 1)),
             bounds: vec![],
             timeline_layers: None,
             stage_geometry: Some(geometry_b.clone()),

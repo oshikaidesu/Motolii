@@ -162,6 +162,7 @@ test('renders correctly', async () => {
   const placePayload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
   expect(placePayload.kind).toBe('place_rectangle');
   expect(placePayload.position).toEqual([0.333333, -0.777777]);
+  expect(placePayload.playhead).toEqual({num: 0, den: 1});
 
   mockDispatchIntent.mockClear();
   await ReactTestRenderer.act(() => {
@@ -184,6 +185,55 @@ test('renders correctly', async () => {
     tree!.root.findByProps({testID: 'browser-mode-LIST'}).props.onPress();
   });
   expect(tree!.root.findByProps({testID: 'browser-results-CREATE'}).props.numColumns).toBe(1);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+});
+
+test('rectangle place uses non-zero playhead from snapshot current_time', async () => {
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 2, den: 1},
+      stage: {
+        selection: [],
+        bounds: [
+          {layer_id: '10', display_name: 'seed'},
+          {layer_id: '11', display_name: 'other'},
+        ],
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'browser-tab-CREATE'}).props.onPress();
+  });
+  const rectangle = tree!.root.findByProps({testID: 'create-item-rectangle'});
+  await ReactTestRenderer.act(() => {
+    rectangle.props.onPointerDown();
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageDrop({
+      nativeEvent: {x: 0.25, y: 0.75, canonicalX: 0.5, canonicalY: 0.25},
+    });
+  });
+
+  expect(mockDispatchIntent).toHaveBeenCalled();
+  const placePayload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(placePayload.kind).toBe('place_rectangle');
+  expect(placePayload.playhead).toEqual({num: 2, den: 1});
 
   await ReactTestRenderer.act(() => {
     tree!.unmount();
@@ -1056,7 +1106,7 @@ test('CREATE tab lists host sources and double-click places vism', async () => {
     JSON.stringify({
       revision: '3',
       projection_generation: '1',
-      current_time: {num: 0, den: 1},
+      current_time: {num: 3, den: 1},
       primary_layer_id: '42',
       stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
       catalog: {
@@ -1117,7 +1167,7 @@ test('CREATE tab lists host sources and double-click places vism', async () => {
   expect(payload.kind).toBe('place_vism');
   expect(payload.plugin_id).toBe('core.layer_source.radial_repeater');
   expect(payload.position).toEqual([0, 0]);
-  expect(payload.playhead).toEqual({num: 0, den: 1});
+  expect(payload.playhead).toEqual({num: 3, den: 1});
 
   await ReactTestRenderer.act(() => {
     tree!.root

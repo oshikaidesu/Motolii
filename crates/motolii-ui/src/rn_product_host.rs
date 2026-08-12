@@ -215,6 +215,7 @@ struct WireStageProjection {
 struct WireTimelineProjection {
     fps: Fps,
     layers: Vec<WireTimelineLayer>,
+    duration: RationalTime,
     layers_truncated: bool,
 }
 
@@ -3607,7 +3608,7 @@ impl RnHostRegistry {
                     .map(|frame| frame.is_i64())
                     .unwrap_or(false);
                 if value.get("time").is_some() || !frame_is_i64 {
-                    return encode_json(&reject(
+                    return encode_snapshot_json(&reject(
                         diagnostic(
                             RnHostReasonCode::InvalidIntent,
                             Some(host_handle),
@@ -3623,7 +3624,7 @@ impl RnHostRegistry {
         let intent: WireIntentEnvelope = match serde_json::from_str(intent_json) {
             Ok(intent) => intent,
             Err(_) => {
-                return encode_json(&reject(
+                return encode_snapshot_json(&reject(
                     diagnostic(
                         RnHostReasonCode::InvalidIntent,
                         Some(host_handle),
@@ -3649,10 +3650,10 @@ impl RnHostRegistry {
                 ),
                 None,
             );
-            return encode_json(&response);
+            return encode_snapshot_json(&response);
         }
         let response = host.dispatch_intent(host_handle, intent);
-        encode_json(&response)
+        encode_snapshot_json(&response)
     }
 }
 
@@ -3773,7 +3774,7 @@ fn accept_no_snapshot() -> WireIntentResponse {
 
 #[cfg(target_os = "macos")]
 fn encode_response(response: &WireIntentResponse) -> Result<String, RnHostError> {
-    encode_json(response)
+    encode_snapshot_json(response)
 }
 
 #[cfg(target_os = "macos")]
@@ -3937,6 +3938,7 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
         .collect();
     WireTimelineProjection {
         fps: document.composition.fps,
+        duration: document.composition.duration,
         layers,
         layers_truncated,
     }
@@ -5323,7 +5325,7 @@ mod tests {
     fn dispatch_raw_json(host: u64, intent_json: &str) -> RnHostTestResponse {
         #[cfg(target_os = "macos")]
         {
-            let mut out = vec![0u8; MAX_JSON_BYTES];
+            let mut out = vec![0u8; MAX_SNAPSHOT_JSON_BYTES];
             let written = motolii_rn_host_dispatch_intent_json(
                 host,
                 intent_json.as_ptr(),
@@ -7496,6 +7498,40 @@ mod tests {
             assert_eq!(layer.position_keys.len(), 64);
             assert!(!layer.keys_truncated);
         }
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn dispatch_response_with_inflated_layers_keys_effects_fits_snapshot_cap() {
+        let _lock = test_lock();
+        let document = make_16_layers_64_keys_document();
+        let host = create_host_from_document("dispatch-inflated-response", &document);
+        let intent = format!(
+            concat!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","#,
+                r#""host_handle":"{host}","frame":0}}"#
+            ),
+            host = host
+        );
+        let mut out = vec![0_u8; MAX_SNAPSHOT_JSON_BYTES];
+        let written = motolii_rn_host_dispatch_intent_json(
+            host,
+            intent.as_ptr(),
+            intent.len(),
+            out.as_mut_ptr(),
+            out.len(),
+        );
+        assert!(written > 0, "dispatch inflated response failed: {written}");
+        assert!(
+            (written as usize) > MAX_JSON_BYTES,
+            "oracle requires response larger than intent cap: {}",
+            written
+        );
+        assert!((written as usize) <= MAX_SNAPSHOT_JSON_BYTES);
+        let response: WireIntentResponse =
+            serde_json::from_slice(&out[..written as usize]).expect("response json");
+        assert!(response.accepted);
+        assert!(response.snapshot.is_some());
         let _ = host_destroy_for_test(host);
     }
 

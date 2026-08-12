@@ -25,6 +25,7 @@ const TIME_H: f32 = 16.0;
 pub(crate) const SONG_BARS: f32 = 96.0;
 /// 1 bar = 2秒。playhead↔host時刻の換算に使う。
 pub(crate) const SECONDS_PER_BAR: f64 = 2.0;
+/// real投影の曲長[bar]。Composition::new_v1()=10秒 ÷ 2秒/bar。
 const MIN_VIEW_SPAN: f32 = 4.0;
 const DEFAULT_VIEW_A: f32 = 0.0;
 const DEFAULT_VIEW_B: f32 = 48.0;
@@ -95,6 +96,8 @@ pub(crate) struct TimelineScene {
     /// 表示範囲[bar]。初期は曲前半48小節。
     pub view_a: f32,
     pub view_b: f32,
+    /// 曲全体の長さ[bar]。fixture=96、real=composition秒/2。
+    pub song_bars: f32,
     /// Host snapshot投影。trueの時はreleaseでDocumentへdispatchする。
     pub real: bool,
     /// revision反映時にlocal選択へ載せるflat index。fixtureは未使用。
@@ -279,6 +282,7 @@ impl Default for TimelineScene {
             ],
             view_a: DEFAULT_VIEW_A,
             view_b: DEFAULT_VIEW_B,
+            song_bars: SONG_BARS,
             real: false,
             selected_flat: -1,
         }
@@ -292,11 +296,24 @@ impl TimelineScene {
 
     /// Host snapshotの実layer投影。1 layer = 1 band。
     /// `interval_secs`がSomeなら start/duration 秒から bar へ写す(1 bar = 2秒)。
-    /// Noneは旧host互換の full-width(0..SONG_BARS)。
+    /// Noneは旧host互換の full-width(0..song_bars)。
     pub(crate) fn from_snapshot(
         layers: &[SnapshotLayerInput],
         primary_layer_id: Option<&str>,
     ) -> Self {
+        Self::from_snapshot_with_song_bars(layers, primary_layer_id, SONG_BARS)
+    }
+
+    /// Host snapshot由来の1 layer行。`song_bars`を上書きして生成。
+    pub(crate) fn from_snapshot_with_song_bars(
+        layers: &[SnapshotLayerInput],
+        primary_layer_id: Option<&str>,
+        song_bars: f32,
+    ) -> Self {
+        let mut song_bars = song_bars;
+        if !song_bars.is_finite() || song_bars < 0.0 {
+            song_bars = 0.0;
+        }
         let mut selected_flat = -1i32;
         let bands = layers
             .iter()
@@ -308,22 +325,22 @@ impl TimelineScene {
                 }
                 let (a, b) = match layer.interval_secs {
                     Some((start_secs, duration_secs)) => {
-                        let mut a = (start_secs / 2.0) as f32;
-                        let mut b = ((start_secs + duration_secs) / 2.0) as f32;
-                        a = a.clamp(0.0, SONG_BARS);
-                        b = b.clamp(0.0, SONG_BARS);
+                        let mut a = (start_secs / SECONDS_PER_BAR) as f32;
+                        let mut b = ((start_secs + duration_secs) / SECONDS_PER_BAR) as f32;
+                        a = a.clamp(0.0, song_bars);
+                        b = b.clamp(0.0, song_bars);
                         if b < a {
                             b = a;
                         }
                         (a, b)
                     }
-                    None => (0.0, SONG_BARS),
+                    None => (0.0, song_bars),
                 };
                 let keys = layer
                     .keys
                     .iter()
                     .map(|key| {
-                        let bar = (key.time_secs / 2.0) as f32;
+                        let bar = (key.time_secs / SECONDS_PER_BAR) as f32;
                         (bar, SNAPSHOT_KEY_DIAMOND, false, key.key_id)
                     })
                     .collect();
@@ -348,8 +365,10 @@ impl TimelineScene {
         Self {
             bands,
             locators: vec![],
-            view_a: DEFAULT_VIEW_A,
-            view_b: DEFAULT_VIEW_B,
+            // real初期viewはcomposition全体をfit。
+            view_a: 0.0,
+            view_b: song_bars,
+            song_bars,
             real: true,
             selected_flat,
         }
@@ -463,6 +482,15 @@ pub(crate) enum TimelineEditCommit {
 }
 
 impl TimelineSession {
+    /// scene差し替え時: 進行中gestureを復元せず破棄する。trueならdirty。
+    pub(crate) fn discard_active_gesture(&mut self) -> bool {
+        self.gesture.take().is_some()
+    }
+
+    pub(crate) fn has_active_gesture(&self) -> bool {
+        self.gesture.is_some()
+    }
+
     pub(crate) fn pointer(
         &mut self,
         selected: &mut i32,
@@ -499,7 +527,8 @@ impl TimelineSession {
                     };
                     match kind {
                         HitKind::Overview => {
-                            dirty |= center_view_on(&mut self.scene, overview_bar_at_lx(lx) as f32);
+                            let bar = overview_bar_at_lx(&self.scene, lx) as f32;
+                            dirty |= center_view_on(&mut self.scene, bar);
                             self.gesture = Some(ActiveGesture::Overview { snapshot });
                         }
                         HitKind::Scrub => {
@@ -692,7 +721,8 @@ impl TimelineSession {
                 }
             }
             ActiveGesture::Overview { .. } => {
-                dirty |= center_view_on(&mut self.scene, overview_bar_at_lx(lx) as f32);
+                let bar = overview_bar_at_lx(&self.scene, lx) as f32;
+                dirty |= center_view_on(&mut self.scene, bar);
             }
             ActiveGesture::SelectOrMove {
                 band,
@@ -726,18 +756,22 @@ impl TimelineSession {
                     )
                     .clamp(prev_b, next_a - len);
                     let new_b = new_a + len;
-                    let key_times: Vec<f32> = origin_keys
-                        .iter()
-                        .map(|&ot| ot + (new_a - *origin_a))
-                        .collect();
+                    let move_keys = !self.scene.real;
                     let clip = &mut self.scene.bands[*band].clips[*clip_idx];
                     if (clip.a - new_a).abs() > f32::EPSILON
                         || (clip.b - new_b).abs() > f32::EPSILON
                     {
                         clip.a = new_a;
                         clip.b = new_b;
-                        for (key, nt) in clip.keys.iter_mut().zip(key_times) {
-                            key.0 = nt;
+                        // realのcommitはSetClipStartのみ。key同伴はfixtureだけ。
+                        if move_keys {
+                            let key_times: Vec<f32> = origin_keys
+                                .iter()
+                                .map(|&ot| ot + (new_a - *origin_a))
+                                .collect();
+                            for (key, nt) in clip.keys.iter_mut().zip(key_times) {
+                                key.0 = nt;
+                            }
                         }
                         dirty = true;
                     }
@@ -989,37 +1023,42 @@ fn bar_at_lx(scene: &TimelineScene, lx: f64) -> f64 {
         + (lx - f64::from(SURF_X)) / surface_width() * f64::from(scene.view_b - scene.view_a)
 }
 
-fn overview_bar_at_lx(lx: f64) -> f64 {
-    ((lx - f64::from(SURF_X)) / surface_width() * f64::from(SONG_BARS)).clamp(0.0, f64::from(SONG_BARS))
+fn overview_bar_at_lx(scene: &TimelineScene, lx: f64) -> f64 {
+    ((lx - f64::from(SURF_X)) / surface_width() * f64::from(scene.song_bars))
+        .clamp(0.0, f64::from(scene.song_bars))
 }
 
 fn time_at_lx(scene: &TimelineScene, lx: f64) -> f64 {
-    (bar_at_lx(scene, lx) / f64::from(SONG_BARS)).clamp(0.0, 1.0)
+    (bar_at_lx(scene, lx) / f64::from(scene.song_bars)).clamp(0.0, 1.0)
 }
 
 fn clamp_view_translate(scene: &mut TimelineScene) {
-    let span = scene.view_b - scene.view_a;
+    let span = (scene.view_b - scene.view_a).max(0.0).min(scene.song_bars.max(0.0));
     if scene.view_a < 0.0 {
         scene.view_a = 0.0;
         scene.view_b = span;
     }
-    if scene.view_b > SONG_BARS {
-        scene.view_b = SONG_BARS;
-        scene.view_a = SONG_BARS - span;
+    if scene.view_b > scene.song_bars {
+        scene.view_b = scene.song_bars;
+        scene.view_a = (scene.song_bars - span).max(0.0);
+    }
+    if scene.view_a < 0.0 || scene.view_b < scene.view_a {
+        scene.view_a = 0.0;
+        scene.view_b = span;
     }
 }
 
 fn center_view_on(scene: &mut TimelineScene, center: f32) -> bool {
-    let span = scene.view_b - scene.view_a;
+    let span = (scene.view_b - scene.view_a).max(0.0).min(scene.song_bars.max(0.0));
     let mut a = center - span * 0.5;
     let mut b = a + span;
     if a < 0.0 {
         a = 0.0;
         b = span;
     }
-    if b > SONG_BARS {
-        b = SONG_BARS;
-        a = SONG_BARS - span;
+    if b > scene.song_bars {
+        b = scene.song_bars;
+        a = scene.song_bars - span;
     }
     if (scene.view_a - a).abs() > f32::EPSILON || (scene.view_b - b).abs() > f32::EPSILON {
         scene.view_a = a;
@@ -1038,7 +1077,8 @@ fn zoom_at(scene: &mut TimelineScene, lx: f64, span_factor: f64) {
         return;
     }
     let anchor = bar_at_lx(scene, lx);
-    let new_span = (span * span_factor).clamp(f64::from(MIN_VIEW_SPAN), f64::from(SONG_BARS));
+    let min_span = f64::from(scene.song_bars.min(MIN_VIEW_SPAN));
+    let new_span = (span * span_factor).clamp(min_span, f64::from(scene.song_bars.max(MIN_VIEW_SPAN)));
     let t = ((anchor - va) / span).clamp(0.0, 1.0);
     let mut new_a = anchor - t * new_span;
     let mut new_b = new_a + new_span;
@@ -1046,8 +1086,8 @@ fn zoom_at(scene: &mut TimelineScene, lx: f64, span_factor: f64) {
         new_a = 0.0;
         new_b = new_span;
     }
-    if new_b > f64::from(SONG_BARS) {
-        new_b = f64::from(SONG_BARS);
+    if new_b > f64::from(scene.song_bars) {
+        new_b = f64::from(scene.song_bars);
         new_a = new_b - new_span;
     }
     scene.view_a = new_a as f32;
@@ -1070,7 +1110,7 @@ fn neighbors(scene: &TimelineScene, band: usize, clip_idx: usize) -> (f32, f32) 
         clips[clip_idx - 1].b
     };
     let next_a = if clip_idx + 1 >= clips.len() {
-        SONG_BARS
+        scene.song_bars
     } else {
         clips[clip_idx + 1].a
     };
@@ -1144,7 +1184,7 @@ fn snap_bar(
             consider(clip.b);
         }
     }
-    let playhead_bar = (playhead.clamp(0.0, 1.0) as f32) * SONG_BARS;
+    let playhead_bar = (playhead.clamp(0.0, 1.0) as f32) * scene.song_bars;
     consider(playhead_bar);
     if (best - raw).abs() <= threshold {
         best
@@ -1489,7 +1529,7 @@ fn tog(cv: &skia_safe::Canvas, x: f32, cy: f32, l: &str, on: bool, mixed: bool, 
 
 /// timeline 1枚をRGBA8888 premulのbytesへ描く。
 ///
-/// `playhead`は0..1で曲全体(0..SONG_BARS)を走る。
+/// `playhead`は0..1で曲全体(0..song_bars)を走る。
 /// `selected < 0`なら選択ringなし。非負は平坦化clip列のindex。
 pub(crate) fn draw_timeline(
     scene: &TimelineScene,
@@ -1521,8 +1561,9 @@ pub(crate) fn draw_timeline(
     let sw = W - SURF_X - 6.0;
     let view_a = scene.view_a;
     let view_b = scene.view_b;
+    let song_bars = scene.song_bars;
     let bx = |b: f32| SURF_X + (b - view_a) / (view_b - view_a) * sw;
-    let ox = |b: f32| SURF_X + b / SONG_BARS * sw;
+    let ox = |b: f32| SURF_X + b / song_bars * sw;
 
     let count = clip_count(scene).max(1);
     let selected = if selected < 0 {
@@ -1837,7 +1878,7 @@ pub(crate) fn draw_timeline(
     );
 
     // ── playhead。曲基準0..1。表示範囲外は描かない ──
-    let bar = (playhead.clamp(0.0, 1.0) as f32) * SONG_BARS;
+    let bar = (playhead.clamp(0.0, 1.0) as f32) * song_bars;
     if bar >= view_a && bar <= view_b {
         let px = bx(bar);
         fill(
@@ -2577,10 +2618,10 @@ mod tests {
             &[SnapshotLayerInput {
                 layer_id: "12".into(),
                 display_name: "keyed".into(),
-                interval_secs: Some((4.0, 8.0)),
+                interval_secs: Some((4.0, 6.0)), // bars 2..5 (comp 10s)
                 keys: vec![SnapshotKeyInput {
                     key_id: 11,
-                    time_secs: 12.0,
+                    time_secs: 8.0, // bar 4.0
                 }],
             }],
             Some("12"),
@@ -2699,7 +2740,7 @@ mod tests {
             &[SnapshotLayerInput {
                 layer_id: "3".into(),
                 display_name: "a".into(),
-                interval_secs: Some((2.0, 8.0)), // bars 1..5
+                interval_secs: Some((2.0, 4.0)), // bars 1..3、移動余地あり
                 keys: vec![],
             }],
             Some("3"),
@@ -2760,13 +2801,13 @@ mod tests {
                 SnapshotLayerInput {
                     layer_id: "3".into(),
                     display_name: "a".into(),
-                    interval_secs: Some((2.0, 8.0)), // bars 1..5
+                    interval_secs: Some((2.0, 4.0)), // bars 1..3
                     keys: vec![],
                 },
                 SnapshotLayerInput {
                     layer_id: "4".into(),
                     display_name: "b".into(),
-                    interval_secs: Some((12.0, 8.0)), // bars 6..10
+                    interval_secs: Some((0.0, 4.0)), // bars 0..2
                     keys: vec![],
                 },
             ],
@@ -3529,5 +3570,73 @@ mod tests {
         assert!(selected_real_key(&scene).is_none());
         scene.bands[0].clips[0].keys[0].2 = true;
         assert_eq!(selected_real_key(&scene), Some(("11".into(), 7)));
+    }
+
+    #[test]
+    fn real_clip_move_preview_does_not_shift_keys() {
+        let mut sess = TimelineSession::default();
+        sess.scene = TimelineScene::from_snapshot(
+            &[SnapshotLayerInput {
+                layer_id: "k-move".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 8.0)), // bars 0..4
+                keys: vec![SnapshotKeyInput {
+                    key_id: 3,
+                    time_secs: 2.0, // bar 1.0
+                }],
+            }],
+            Some("k-move"),
+        );
+        let key_before = sess.scene.bands[0].clips[0].keys[0].0;
+        let origin_a = sess.scene.bands[0].clips[0].a;
+        let mut selected = 0;
+        let mut playhead = 0.1;
+        let y = body_top() + f64::from(ROW) * 0.5 - 0.5;
+        let mid = f64::from(bx(&sess.scene, (origin_a + sess.scene.bands[0].clips[0].b) * 0.5));
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            mid,
+            y,
+            0,
+        );
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Move,
+            mid + 40.0,
+            y,
+            0,
+        );
+        assert!((sess.scene.bands[0].clips[0].a - origin_a).abs() > f32::EPSILON);
+        assert!((sess.scene.bands[0].clips[0].keys[0].0 - key_before).abs() < 1e-4);
+    }
+
+    #[test]
+    fn discard_active_gesture_drops_without_restore() {
+        let mut sess = TimelineSession::default();
+        let mut selected = 0;
+        let mut playhead = 0.27;
+        let y = body_top() + 5.0;
+        let x = lx_for_bar(2.0);
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            x,
+            y,
+            0,
+        );
+        let before = sess.scene.clone();
+        assert!(sess.discard_active_gesture());
+        assert_eq!(sess.scene, before);
+        assert!(!sess.discard_active_gesture());
     }
 }
