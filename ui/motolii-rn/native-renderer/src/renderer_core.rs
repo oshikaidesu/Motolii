@@ -84,6 +84,27 @@ impl ScrubTimePump {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum HostStageGeometryCommand {
+    Apply(crate::host_bridge::HostStageGeometry),
+    Clear,
+    Noop,
+}
+
+fn host_stage_geometry_command(
+    previous: Option<&crate::host_bridge::HostStageGeometry>,
+    projection: Option<&crate::host_bridge::HostTimelineProjection>,
+) -> HostStageGeometryCommand {
+    let next = projection.and_then(|next| next.stage_geometry.as_ref());
+    match (previous, next) {
+        (Some(current), Some(next)) if current == next => HostStageGeometryCommand::Noop,
+        (Some(_), Some(next)) => HostStageGeometryCommand::Apply(next.clone()),
+        (None, Some(next)) => HostStageGeometryCommand::Apply(next.clone()),
+        (Some(_), None) => HostStageGeometryCommand::Clear,
+        (None, None) => HostStageGeometryCommand::Noop,
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SceneKind {
     Stage,
@@ -138,6 +159,7 @@ pub(crate) struct RendererCore {
     host_revision: Option<String>,
     /// set_timeはrevisionを進めないため、playhead追従はgenerationで見る。
     host_projection_generation: Option<String>,
+    host_stage_geometry: Option<crate::host_bridge::HostStageGeometry>,
     host_fps: Option<(i64, i64)>,
     scrubbing: bool,
     scrub_time_pump: ScrubTimePump,
@@ -234,6 +256,7 @@ impl RendererCore {
             timeline_session: (scene == SceneKind::Timeline).then(TimelineSession::default),
             host_revision: None,
             host_projection_generation: None,
+            host_stage_geometry: None,
             host_fps: None,
             scrubbing: false,
             scrub_time_pump: ScrubTimePump::new(),
@@ -483,13 +506,16 @@ impl RendererCore {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         match self.scene {
-            SceneKind::Stage => self.stage.as_mut().expect("stage resources").rerun.render(
-                &self.device,
-                &self.queue,
-                &view,
-                self.config.width,
-                self.config.height,
-            )?,
+            SceneKind::Stage => {
+                self.sync_host_stage_geometry();
+                self.stage.as_mut().expect("stage resources").rerun.render(
+                    &self.device,
+                    &self.queue,
+                    &view,
+                    self.config.width,
+                    self.config.height,
+                )?
+            }
             SceneKind::Timeline => {
                 self.sync_host_timeline_projection();
                 self.render_timeline(&view);
@@ -545,6 +571,34 @@ impl RendererCore {
                 self.force_next_host_snapshot = false;
             }
             self.host_projection_generation = Some(projection.projection_generation);
+        }
+    }
+
+    fn sync_host_stage_geometry(&mut self) {
+        #[cfg(target_os = "macos")]
+        {
+            let Some(stage) = self.stage.as_mut() else {
+                return;
+            };
+            let command = match crate::host_bridge::try_read_timeline_projection() {
+                Some(projection) => {
+                    host_stage_geometry_command(self.host_stage_geometry.as_ref(), Some(&projection))
+                }
+                None => host_stage_geometry_command(self.host_stage_geometry.as_ref(), None),
+            };
+            match command {
+                HostStageGeometryCommand::Apply(geometry) => {
+                    if stage.rerun.apply_host_stage_geometry(&geometry) {
+                        self.host_stage_geometry = Some(geometry);
+                    }
+                }
+                HostStageGeometryCommand::Clear => {
+                    if stage.rerun.clear_host_projection() {
+                        self.host_stage_geometry = None;
+                    }
+                }
+                HostStageGeometryCommand::Noop => {}
+            }
         }
     }
 
@@ -761,6 +815,7 @@ mod tests {
                 ("L2".into(), "Layer 2".into()),
             ],
             timeline_layers: None,
+            stage_geometry: None,
         };
         let rebuilt = timeline_scene_from_projection(&scene, &projection);
         assert_eq!(rebuilt.view_a, 12.0);
@@ -795,5 +850,64 @@ mod tests {
         assert_eq!(pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 20, 30, 1), None);
         let mut pump = ScrubTimePump::new();
         assert_eq!(pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 20, 30, 1), None);
+    }
+
+    #[test]
+    fn host_stage_geometry_command_transitions_apply_and_clear() {
+        let geometry_a = crate::host_bridge::HostStageGeometry {
+            layers: vec![crate::host_bridge::HostStageGeometryLayer {
+                layer_id: "L1".into(),
+                corners: [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]],
+            }],
+            layers_truncated: false,
+        };
+        let geometry_b = crate::host_bridge::HostStageGeometry {
+            layers: vec![crate::host_bridge::HostStageGeometryLayer {
+                layer_id: "L1".into(),
+                corners: [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]],
+            }],
+            layers_truncated: false,
+        };
+        let projection_a = crate::host_bridge::HostTimelineProjection {
+            revision: "r".into(),
+            projection_generation: "0".into(),
+            primary_layer_id: None,
+            current_time: (0, 1),
+            fps: None,
+            bounds: vec![],
+            timeline_layers: None,
+            stage_geometry: Some(geometry_a.clone()),
+        };
+        let projection_b = crate::host_bridge::HostTimelineProjection {
+            revision: "r".into(),
+            projection_generation: "0".into(),
+            primary_layer_id: None,
+            current_time: (0, 1),
+            fps: None,
+            bounds: vec![],
+            timeline_layers: None,
+            stage_geometry: Some(geometry_b.clone()),
+        };
+
+        let mut cached = None;
+        let apply = host_stage_geometry_command(cached.as_ref(), Some(&projection_a));
+        assert_eq!(apply, HostStageGeometryCommand::Apply(geometry_a.clone()));
+        if let HostStageGeometryCommand::Apply(next) = apply {
+            cached = Some(next);
+        }
+        assert_eq!(cached.as_ref(), Some(&geometry_a));
+
+        let noop = host_stage_geometry_command(cached.as_ref(), Some(&projection_a));
+        assert_eq!(noop, HostStageGeometryCommand::Noop);
+
+        let apply = host_stage_geometry_command(cached.as_ref(), Some(&projection_b));
+        assert_eq!(apply, HostStageGeometryCommand::Apply(geometry_b.clone()));
+        if let HostStageGeometryCommand::Apply(next) = apply {
+            cached = Some(next);
+        }
+        assert_eq!(cached.as_ref(), Some(&geometry_b));
+
+        let clear = host_stage_geometry_command(cached.as_ref(), None);
+        assert_eq!(clear, HostStageGeometryCommand::Clear);
     }
 }

@@ -22,7 +22,12 @@ use transform_gizmo::{
     math::{DMat4, DQuat, DVec3, Pos2 as GizmoPos2, Rect as GizmoRect, Transform},
 };
 
+use crate::host_bridge::HostStageGeometry;
 use crate::renderer_core::PointerPhase;
+
+const FIXTURE_RECT_FILL_COLOR: u32 = 0xE9_8C_6AFF;
+const FIXTURE_RECT_STROKE_COLOR: u32 = 0xEC_D8_FFFF;
+const STAGE_HOST_ERASE_COLOR: u32 = 0x0000_0000;
 
 /// Owns only the adapter from the native Stage surface to Rerun's Spatial View.
 ///
@@ -36,6 +41,9 @@ pub(crate) struct EmbeddedSpatialStage {
     gizmo: Gizmo,
     fixture_transform: Transform,
     fixture_item_id: String,
+    /// Host `stage_geometry` 適用済みなら fixture 再ingestを止める。
+    host_geometry_active: bool,
+    host_layer_ids: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -82,6 +90,8 @@ impl EmbeddedSpatialStage {
             gizmo: Gizmo::default(),
             fixture_transform: Transform::default(),
             fixture_item_id: "rectangle@0.500000,0.500000|pucker-bloat".into(),
+            host_geometry_active: false,
+            host_layer_ids: Vec::new(),
         };
         if !stage.set_created_item("rectangle@0.500000,0.500000|pucker-bloat") {
             return Err("seed path rectangle for embedded stage".into());
@@ -144,6 +154,10 @@ impl EmbeddedSpatialStage {
     }
 
     pub(crate) fn set_created_item(&mut self, item_id: &str) -> bool {
+        if self.host_geometry_active {
+            // host 投影が正本の間は fixture 文字列由来の rect を戻さない。
+            return true;
+        }
         if item_id.is_empty() {
             return true;
         }
@@ -184,13 +198,90 @@ impl EmbeddedSpatialStage {
             &mut self.spatial_stage,
             "motolii/fixtures/path-rectangle/fill",
             fill,
-            0xE9_8C_6AFF,
+            FIXTURE_RECT_FILL_COLOR,
         ) && ingest_mesh(
             &mut self.spatial_stage,
             "motolii/fixtures/path-rectangle/stroke",
             stroke,
-            0xEC_D8_FFFF,
+            FIXTURE_RECT_STROKE_COLOR,
         )
+    }
+
+    pub(crate) fn clear_host_projection(&mut self) -> bool {
+        if !self.host_geometry_active {
+            return true;
+        }
+        let host_layers = std::mem::take(&mut self.host_layer_ids);
+        for old_id in &host_layers {
+            if !ingest_mesh(
+                &mut self.spatial_stage,
+                old_id,
+                MeshData {
+                    vertices: vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+                    indices: vec![[0, 1, 2]],
+                },
+                STAGE_HOST_ERASE_COLOR,
+            ) {
+                self.host_layer_ids = host_layers;
+                return false;
+            }
+        }
+        self.host_geometry_active = false;
+        let item_id = self.fixture_item_id.clone();
+        self.set_created_item(&item_id)
+    }
+
+    /// Host snapshot の stage_geometry で fixture を置換する。revision 側で gate 済み前提。
+    pub(crate) fn apply_host_stage_geometry(&mut self, geometry: &HostStageGeometry) -> bool {
+        // fixture entity を透明メッシュで上書きし、host layer だけを見せる。
+        let cleared = MeshData {
+            vertices: vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            indices: vec![[0, 1, 2]],
+        };
+        if !ingest_mesh(
+            &mut self.spatial_stage,
+            "motolii/fixtures/path-rectangle/fill",
+            cleared.clone(),
+            STAGE_HOST_ERASE_COLOR,
+        ) || !ingest_mesh(
+            &mut self.spatial_stage,
+            "motolii/fixtures/path-rectangle/stroke",
+            cleared,
+            STAGE_HOST_ERASE_COLOR,
+        ) {
+            return false;
+        }
+
+        let next_ids: Vec<String> = geometry.layers.iter().map(|l| l.layer_id.clone()).collect();
+        for old_id in &self.host_layer_ids {
+            if next_ids.iter().any(|id| id == old_id) {
+                continue;
+            }
+            let _ = ingest_mesh(
+                &mut self.spatial_stage,
+                old_id,
+                MeshData {
+                    vertices: vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+                    indices: vec![[0, 1, 2]],
+                },
+                STAGE_HOST_ERASE_COLOR,
+            );
+        }
+
+        for layer in &geometry.layers {
+            let mesh = mesh_from_canonical_corners(layer.corners);
+            if !ingest_mesh(
+                &mut self.spatial_stage,
+                &layer.layer_id,
+                mesh,
+                FIXTURE_RECT_FILL_COLOR,
+            ) {
+                return false;
+            }
+        }
+        self.host_layer_ids = next_ids;
+        self.host_geometry_active = true;
+        true
     }
 
     pub(crate) fn render(
@@ -535,7 +626,7 @@ fn tessellate_path(path: &Path, transform: Transform) -> Result<(MeshData, MeshD
     ))
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct MeshData {
     vertices: Vec<[f32; 3]>,
     indices: Vec<[u32; 3]>,
@@ -607,6 +698,24 @@ fn ingest_mesh(
     stage.ingest_chunk(Arc::new(chunk)).is_ok()
 }
 
+/// canonical corners → fixture と同じ mesh 空間。
+/// `(nx, ny) = (cx + 0.5, 0.5 - cy)` のあと fixture の `(n - 0.5)` 写像。
+pub(crate) fn mesh_vertices_from_canonical_corners(corners: [[f64; 2]; 4]) -> [[f32; 3]; 4] {
+    corners.map(|[cx, cy]| {
+        let nx = cx + 0.5;
+        let ny = 0.5 - cy;
+        [nx as f32 - 0.5, ny as f32 - 0.5, 0.0]
+    })
+}
+
+fn mesh_from_canonical_corners(corners: [[f64; 2]; 4]) -> MeshData {
+    let vertices = mesh_vertices_from_canonical_corners(corners);
+    MeshData {
+        vertices: vertices.to_vec(),
+        indices: vec![[0, 1, 2], [0, 2, 3]],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -676,5 +785,17 @@ mod tests {
         assert!((x - 0.5).abs() < 0.000_1);
         assert!((y - 0.75).abs() < 0.000_1);
         assert!((z - 0.75).abs() < 0.000_1);
+    }
+
+    #[test]
+    fn canonical_corners_map_to_fixture_mesh_space() {
+        // seed unit rect: center(0,0) size(1,1)
+        let corners = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
+        let verts = mesh_vertices_from_canonical_corners(corners);
+        // (nx,ny)=(cx+0.5, 0.5-cy) → (n-0.5) = (cx, -cy)
+        assert_eq!(verts[0], [-0.5, 0.5, 0.0]);
+        assert_eq!(verts[1], [0.5, 0.5, 0.0]);
+        assert_eq!(verts[2], [0.5, -0.5, 0.0]);
+        assert_eq!(verts[3], [-0.5, -0.5, 0.0]);
     }
 }

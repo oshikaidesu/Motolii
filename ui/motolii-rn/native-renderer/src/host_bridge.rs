@@ -38,6 +38,20 @@ pub(crate) struct HostTimelineProjection {
     pub bounds: Vec<(String, String)>,
     /// wire `timeline` がある時だけ。欠落時は旧host互換fallback。
     pub timeline_layers: Option<Vec<HostTimelineLayer>>,
+    /// wire `stage_geometry`。欠落・壊れている時はNone（timeline投影は落とさない）。
+    pub stage_geometry: Option<HostStageGeometry>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct HostStageGeometry {
+    pub layers: Vec<HostStageGeometryLayer>,
+    pub layers_truncated: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct HostStageGeometryLayer {
+    pub layer_id: String,
+    pub corners: [[f64; 2]; 4],
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -346,6 +360,8 @@ fn parse_timeline_projection(json: &str) -> Option<HostTimelineProjection> {
     let fps = find_key_object(json, "timeline").and_then(|timeline| json_rational(timeline, "fps"));
     let bounds = parse_bounds(json)?;
     let timeline_layers = parse_timeline_layers(json);
+    // 壊れていたら stage_geometry 全体を None へ（timeline は維持）。
+    let stage_geometry = parse_stage_geometry(json);
     Some(HostTimelineProjection {
         revision,
         projection_generation,
@@ -354,6 +370,7 @@ fn parse_timeline_projection(json: &str) -> Option<HostTimelineProjection> {
         fps,
         bounds,
         timeline_layers,
+        stage_geometry,
     })
 }
 
@@ -577,6 +594,157 @@ fn parse_timeline_layers(json: &str) -> Option<Vec<HostTimelineLayer>> {
         rest = &rest[end + 1..];
     }
     Some(layers)
+}
+
+fn parse_stage_geometry(json: &str) -> Option<HostStageGeometry> {
+    let obj = find_key_object(json, "stage_geometry")?;
+    let layers_truncated = json_bool_value(obj, "layers_truncated")?;
+    let marker = "\"layers\"";
+    let at = obj.find(marker)?;
+    let after = obj[at + marker.len()..].trim_start().strip_prefix(':')?;
+    let after = after.trim_start().strip_prefix('[')?;
+    let mut layers = Vec::new();
+    let mut rest = after;
+    loop {
+        rest = rest.trim_start();
+        if rest.starts_with(']') {
+            break;
+        }
+        if rest.starts_with(',') {
+            rest = rest[1..].trim_start();
+            continue;
+        }
+        if !rest.starts_with('{') {
+            return None;
+        }
+        let end = find_matching_brace(rest)?;
+        let layer_obj = &rest[..=end];
+        let layer_id = json_string_value(layer_obj, "layer_id")?;
+        let corners = parse_corners(layer_obj)?;
+        layers.push(HostStageGeometryLayer { layer_id, corners });
+        rest = &rest[end + 1..];
+    }
+    Some(HostStageGeometry {
+        layers,
+        layers_truncated,
+    })
+}
+
+fn parse_corners(layer_obj: &str) -> Option<[[f64; 2]; 4]> {
+    let marker = "\"corners\"";
+    let at = layer_obj.find(marker)?;
+    let after = layer_obj[at + marker.len()..]
+        .trim_start()
+        .strip_prefix(':')?;
+    let after = after.trim_start().strip_prefix('[')?;
+    let mut points = Vec::with_capacity(4);
+    let mut rest = after;
+    loop {
+        rest = rest.trim_start();
+        if rest.starts_with(']') {
+            break;
+        }
+        if rest.starts_with(',') {
+            rest = rest[1..].trim_start();
+            continue;
+        }
+        if !rest.starts_with('[') {
+            return None;
+        }
+        let end = find_matching_bracket(rest)?;
+        let pair = &rest[1..end];
+        let (x, after_x) = parse_json_f64(pair)?;
+        if !is_finite_f32_compatible(x) {
+            return None;
+        }
+        let after_x = after_x.trim_start();
+        if !after_x.starts_with(',') {
+            return None;
+        }
+        let (y, after_y) = parse_json_f64(&after_x[1..])?;
+        if !is_finite_f32_compatible(y) {
+            return None;
+        }
+        if !after_y.trim_start().is_empty() {
+            return None;
+        }
+        points.push([x, y]);
+        rest = &rest[end + 1..];
+    }
+    if points.len() != 4 {
+        return None;
+    }
+    Some([points[0], points[1], points[2], points[3]])
+}
+
+fn is_finite_f32_compatible(value: f64) -> bool {
+    value.is_finite() && value.abs() <= f64::from(f32::MAX)
+}
+
+fn parse_json_f64(input: &str) -> Option<(f64, &str)> {
+    let trimmed = input.trim_start();
+    let end = trimmed
+        .find(|ch: char| !(ch.is_ascii_digit() || matches!(ch, '-' | '+' | '.' | 'e' | 'E')))
+        .unwrap_or(trimmed.len());
+    if end == 0 {
+        return None;
+    }
+    let value = trimmed[..end].parse().ok()?;
+    Some((value, &trimmed[end..]))
+}
+
+fn json_bool_value(json: &str, key: &str) -> Option<bool> {
+    let needle = format!("\"{key}\"");
+    let mut search = json;
+    let mut abs = 0usize;
+    while let Some(at) = search.find(&needle) {
+        abs += at;
+        let after = &json[abs + needle.len()..];
+        let trimmed = after.trim_start();
+        if let Some(rest) = trimmed.strip_prefix(':') {
+            let rest = rest.trim_start();
+            if rest.starts_with("true") {
+                return Some(true);
+            }
+            if rest.starts_with("false") {
+                return Some(false);
+            }
+            return None;
+        }
+        abs += needle.len();
+        search = &json[abs..];
+    }
+    None
+}
+
+fn find_matching_bracket(s: &str) -> Option<usize> {
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escape = false;
+    for (i, ch) in s.char_indices() {
+        if in_string {
+            if escape {
+                escape = false;
+            } else if ch == '\\' {
+                escape = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn parse_position_keys(layer_obj: &str) -> Option<Vec<HostTimelineKey>> {
@@ -1017,6 +1185,155 @@ mod tests {
         assert_eq!(frame_from_scrub_bar(0.49 / 48.0, 24, 1), 0);
         assert_eq!(frame_from_scrub_bar(0.5, 30, 0), 0);
         assert_eq!(frame_from_scrub_bar(0.5, 0, 1), 0);
+    }
+
+    #[test]
+    fn parse_stage_geometry_reads_corners() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"3",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "stage":{"selection":[],"bounds":[{"layer_id":"1","display_name":"r"}]},
+            "stage_geometry":{
+                "layers":[{
+                    "layer_id":"1",
+                    "corners":[[-0.5,-0.5],[0.5,-0.5],[0.5,0.5],[-0.5,0.5]]
+                }],
+                "layers_truncated":false
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(json).expect("parse");
+        let geom = proj.stage_geometry.expect("stage_geometry");
+        assert!(!geom.layers_truncated);
+        assert_eq!(geom.layers.len(), 1);
+        assert_eq!(geom.layers[0].layer_id, "1");
+        assert_eq!(
+            geom.layers[0].corners,
+            [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]]
+        );
+    }
+
+    #[test]
+    fn parse_stage_geometry_falls_back_to_none_when_layers_truncated_missing() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"3",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "stage":{"selection":[],"bounds":[{"layer_id":"1","display_name":"r"}]},
+            "stage_geometry":{
+                "layers":[
+                    {"layer_id":"1","corners":[[-0.5,-0.5],[0.5,-0.5],[0.5,0.5],[-0.5,0.5]]}
+                ]
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(json).expect("parse");
+        assert!(proj.stage_geometry.is_none());
+    }
+
+    #[test]
+    fn parse_stage_geometry_falls_back_to_none_when_layers_truncated_is_not_bool() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"3",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "stage":{"selection":[],"bounds":[{"layer_id":"1","display_name":"r"}]},
+            "stage_geometry":{
+                "layers":[
+                    {"layer_id":"1","corners":[[-0.5,-0.5],[0.5,-0.5],[0.5,0.5],[-0.5,0.5]]}
+                ],
+                "layers_truncated":"false"
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(json).expect("parse");
+        assert!(proj.stage_geometry.is_none());
+    }
+
+    #[test]
+    fn parse_stage_geometry_falls_back_to_none_on_three_point_corners() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"3",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "stage":{"selection":[],"bounds":[{"layer_id":"1","display_name":"r"}]},
+            "stage_geometry":{
+                "layers":[{
+                    "layer_id":"1",
+                    "corners":[[-0.5,-0.5],[0.5,-0.5],[0.5,0.5]]
+                }],
+                "layers_truncated":false
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(json).expect("parse");
+        assert!(proj.stage_geometry.is_none());
+    }
+
+    #[test]
+    fn parse_stage_geometry_falls_back_to_none_with_infinite_corner() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"3",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "stage":{"selection":[],"bounds":[{"layer_id":"1","display_name":"r"}]},
+            "stage_geometry":{
+                "layers":[{
+                    "layer_id":"1",
+                    "corners":[[-0.5,-0.5],[0.5,-0.5],[0.5,"inf"],[-0.5,0.5]]
+                }],
+                "layers_truncated":false
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(json).expect("parse");
+        assert!(proj.stage_geometry.is_none());
+    }
+
+    #[test]
+    fn parse_stage_geometry_falls_back_to_none_on_broken_corners() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"3",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "stage":{"selection":[],"bounds":[{"layer_id":"1","display_name":"r"}]},
+            "stage_geometry":{
+                "layers":[{
+                    "layer_id":"1",
+                    "corners":[[-0.5,-0.5],[0.5,-0.5]]
+                }],
+                "layers_truncated":false
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(json).expect("parse");
+        assert!(proj.stage_geometry.is_none());
+        assert_eq!(proj.revision, "3");
     }
 
     #[test]

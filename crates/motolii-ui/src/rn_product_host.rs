@@ -33,7 +33,9 @@ use crate::document_edit_runtime::{
     PlaceRectangleRequest, SetPositionKeyInterpRequest, SetPositionKeyValueRequest,
 };
 use crate::shell::{open_project_runtime, ShellError};
-use crate::stage_geometry_projection::project_stage_geometry;
+use crate::stage_geometry_projection::{
+    project_stage_geometry, StageLayerProjection,
+};
 use crate::stage_hit_test::{
     hit_test_projected_layers, view_local_in_stage, view_local_to_canonical, StageHit,
     StageHitTestReject,
@@ -138,7 +140,7 @@ struct WireStageSelection {
     layer_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct WireProductSnapshot {
     version: u8,
     direction: String,
@@ -151,8 +153,23 @@ pub(crate) struct WireProductSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     primary_layer_id: Option<String>,
     stage: WireStageProjection,
+    /// Available layer の world 適用済み canonical corners（v1・camera 不使用）。
+    stage_geometry: WireStageGeometryProjection,
     timeline: WireTimelineProjection,
     diagnostics: Vec<RnHostDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireStageGeometryProjection {
+    layers: Vec<WireStageGeometryLayer>,
+    layers_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireStageGeometryLayer {
+    layer_id: String,
+    /// CCW・local rect 左下起点。world 適用済み canonical。
+    corners: [[f64; 2]; 4],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -290,7 +307,7 @@ pub(crate) struct WireIntentEnvelope {
     interp: Option<Interp>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct WireIntentResponse {
     version: u8,
     accepted: bool,
@@ -518,6 +535,13 @@ impl RnProductHost {
             })
             .collect::<Vec<_>>();
 
+        // stage seat と同じ評価文脈: current_time + 空 DataTracks。
+        let stage_geometry = project_stage_geometry_wire(
+            document.as_ref(),
+            EvaluationTime::new(self.current_time),
+            &DataTracks::new(),
+        );
+
         WireProductSnapshot {
             version: WIRE_VERSION,
             direction: HOST_TO_RN.to_owned(),
@@ -528,6 +552,7 @@ impl RnProductHost {
             current_time: self.current_time,
             primary_layer_id: self.primary.map(|layer| layer.get().to_string()),
             stage: WireStageProjection { selection, bounds },
+            stage_geometry,
             timeline: project_timeline(document.as_ref()),
             diagnostics: Vec::new(),
         }
@@ -2907,6 +2932,68 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
         layers,
         layers_truncated,
     }
+}
+
+/// Available だけを corners に畳む。評価失敗は空投影（snapshot 自体は落とさない）。
+fn project_stage_geometry_wire(
+    document: &motolii_doc::Document,
+    eval: EvaluationTime,
+    tracks: &DataTracks,
+) -> WireStageGeometryProjection {
+    let Ok(projection) = project_stage_geometry(document, eval, tracks) else {
+        return WireStageGeometryProjection {
+            layers: Vec::new(),
+            layers_truncated: false,
+        };
+    };
+    let mut layers = Vec::new();
+    let mut available = 0usize;
+    let mut layers_truncated = false;
+    for (layer_id, layer) in projection.layers() {
+        let StageLayerProjection::Available(geo) = layer else {
+            continue;
+        };
+        available += 1;
+        if layers.len() >= MAX_STAGE_BOUNDS {
+            layers_truncated = true;
+            continue;
+        }
+        let hw = geo.local_rect.size.width * 0.5;
+        let hh = geo.local_rect.size.height * 0.5;
+        let cx = geo.local_rect.center.x;
+        let cy = geo.local_rect.center.y;
+        // CCW・local 左下起点。v1 は world のみ（camera_view 不使用）。
+        let local = [
+            [cx - hw, cy - hh],
+            [cx + hw, cy - hh],
+            [cx + hw, cy + hh],
+            [cx - hw, cy + hh],
+        ];
+        let corners = world_rect_corners(geo.world, local);
+        layers.push(WireStageGeometryLayer {
+            layer_id: layer_id.get().to_string(),
+            corners,
+        });
+    }
+    if available > MAX_STAGE_BOUNDS {
+        layers_truncated = true;
+    }
+    WireStageGeometryProjection {
+        layers,
+        layers_truncated,
+    }
+}
+
+fn world_rect_corners(world: motolii_doc::Affine2D, local: [[f64; 2]; 4]) -> [[f64; 2]; 4] {
+    let mut corners = local.map(|[x, y]| {
+        let p = world.transform_point(x, y);
+        [p[0], p[1]]
+    });
+    // world determinant が負なら反転して CCW に揃える。
+    if world.m[0] * world.m[4] - world.m[1] * world.m[3] < 0.0 {
+        corners.reverse();
+    }
+    corners
 }
 
 fn find_first_clip(document: &motolii_doc::Document, target: LayerId) -> Option<&Clip> {
@@ -5662,6 +5749,97 @@ mod tests {
         assert!(!snap.timeline.layers_truncated);
         assert_eq!(snap.timeline.fps.num(), 30);
         assert_eq!(snap.timeline.fps.den(), 1);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn seed_snapshot_projects_stage_geometry_corners_for_unit_rect() {
+        let _lock = test_lock();
+        let host = create_host("stage-geom-seed");
+        let wire = with_registry(|registry| registry.read_snapshot(host)).expect("wire");
+        assert_eq!(wire.stage_geometry.layers.len(), 1);
+        assert!(!wire.stage_geometry.layers_truncated);
+        // seed: center(0,0) size(1,1) · identity world → CCW 左下起点
+        assert_eq!(
+            wire.stage_geometry.layers[0].corners,
+            [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]]
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    fn mirror_signed_area(corners: &[[f64; 2]; 4]) -> f64 {
+        let p0 = corners[0];
+        let p1 = corners[1];
+        let p2 = corners[2];
+        let p3 = corners[3];
+        0.5
+            * ((p0[0] * p1[1] - p1[0] * p0[1])
+                + (p1[0] * p2[1] - p2[0] * p1[1])
+                + (p2[0] * p3[1] - p3[0] * p2[1])
+                + (p3[0] * p0[1] - p0[0] * p3[1]))
+    }
+
+    #[test]
+    fn mirrored_world_geometry_is_forced_to_ccw() {
+        let corners = world_rect_corners(
+            motolii_doc::Affine2D::scale(-1.0, 1.0),
+            [
+                [-0.5, -0.5],
+                [0.5, -0.5],
+                [0.5, 0.5],
+                [-0.5, 0.5],
+            ],
+        );
+        assert!(mirror_signed_area(&corners) > 0.0);
+        assert_eq!(
+            corners,
+            [
+                [0.5, 0.5],
+                [-0.5, 0.5],
+                [-0.5, -0.5],
+                [0.5, -0.5]
+            ]
+        );
+    }
+
+    #[test]
+    fn place_rectangle_adds_stage_geometry_layer_at_drop_position() {
+        let _lock = test_lock();
+        let host = create_host("stage-geom-place");
+        let seed = with_registry(|registry| registry.read_snapshot(host)).expect("seed");
+        let seed_layer = seed.stage_geometry.layers[0].layer_id.clone();
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.25,-0.125],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(response.accepted);
+        let wire = with_registry(|registry| registry.read_snapshot(host)).expect("placed");
+        assert_eq!(wire.stage_geometry.layers.len(), 2);
+        let placed = wire
+            .stage_geometry
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id != seed_layer)
+            .expect("placed layer");
+        // place Vector rect 0.2×0.2 at transform.position — world 適用済み corners
+        let expected = [
+            [0.15, -0.225],
+            [0.35, -0.225],
+            [0.35, -0.025],
+            [0.15, -0.025],
+        ];
+        for (got, want) in placed.corners.iter().zip(expected.iter()) {
+            assert!(
+                (got[0] - want[0]).abs() < 1e-12 && (got[1] - want[1]).abs() < 1e-12,
+                "corners {got:?} vs {want:?}"
+            );
+        }
         let _ = host_destroy_for_test(host);
     }
 
