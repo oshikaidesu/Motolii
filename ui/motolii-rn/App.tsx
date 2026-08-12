@@ -476,7 +476,6 @@ function BrowserResults({
 
 function Browser({
   width,
-  onCreateItem,
   onDragStart,
   onDragCancel,
   catalogEffects,
@@ -485,7 +484,6 @@ function Browser({
   currentTime,
 }: {
   width: number;
-  onCreateItem: (id: string) => void;
   onDragStart: (id: string) => void;
   onDragCancel: () => void;
   catalogEffects: HostCatalogEffect[] | null;
@@ -633,7 +631,12 @@ function Browser({
               });
               return;
             }
-            onCreateItem(createdItemValue(id, 0.5, 0.5));
+            if (id === 'rectangle') {
+              dispatchHostIntent('place_rectangle', {
+                position: [0, 0],
+                playhead: currentTime ?? {num: 0, den: 1},
+              });
+            }
             return;
           }
           if (tab === 'EFFECTS' && catalogEffects) {
@@ -1279,7 +1282,6 @@ function App() {
         <Browser
           catalogEffects={hostCatalogEffects}
           catalogSources={hostCatalogSources}
-          onCreateItem={setCreatedItemId}
           onDragCancel={() => setDraggedItemId('')}
           onDragStart={setDraggedItemId}
           primaryLayerId={hostLayerSeat?.primaryLayerId ?? null}

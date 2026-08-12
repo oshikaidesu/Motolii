@@ -138,10 +138,16 @@ test('renders correctly', async () => {
   expect(mockDispatchIntent).toHaveBeenCalled();
   expect(JSON.parse(mockDispatchIntent.mock.calls[0][0] as string).kind).toBe('undo');
 
+  mockDispatchIntent.mockClear();
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'create-item-rectangle'}).props.onDoubleClick();
   });
-  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.500000,0.500000|pucker-bloat');
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  const centerPayload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(centerPayload.kind).toBe('place_rectangle');
+  expect(centerPayload.position).toEqual([0, 0]);
+  expect(centerPayload.playhead).toEqual({num: 0, den: 1});
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.250000,0.750000|pucker-bloat');
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-mode-THUMBNAILS'}).props.onPress();
@@ -159,7 +165,7 @@ test('renders correctly', async () => {
   getSpy.mockRestore();
 });
 
-test('rectangle place uses non-zero playhead from snapshot current_time', async () => {
+test('rectangle center and drop placement use snapshot current_time', async () => {
   mockReadSnapshot.mockReturnValue(
     JSON.stringify({
       revision: '3',
@@ -189,6 +195,15 @@ test('rectangle place uses non-zero playhead from snapshot current_time', async 
   });
   const rectangle = tree!.root.findByProps({testID: 'create-item-rectangle'});
   await ReactTestRenderer.act(() => {
+    rectangle.props.onDoubleClick();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  const centerPayload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(centerPayload.kind).toBe('place_rectangle');
+  expect(centerPayload.position).toEqual([0, 0]);
+  expect(centerPayload.playhead).toEqual({num: 2, den: 1});
+
+  await ReactTestRenderer.act(() => {
     rectangle.props.onPointerDown();
   });
   await ReactTestRenderer.act(() => {
@@ -197,8 +212,8 @@ test('rectangle place uses non-zero playhead from snapshot current_time', async 
     });
   });
 
-  expect(mockDispatchIntent).toHaveBeenCalled();
-  const placePayload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(2);
+  const placePayload = JSON.parse(mockDispatchIntent.mock.calls[1][0] as string);
   expect(placePayload.kind).toBe('place_rectangle');
   expect(placePayload.playhead).toEqual({num: 2, den: 1});
 
