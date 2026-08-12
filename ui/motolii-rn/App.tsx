@@ -20,12 +20,12 @@ function nativeHost(): MotoliiHostSpec | null {
   return TurboModuleRegistry.get<MotoliiHostSpec>('NativeMotoliiHost');
 }
 
-function dispatchHostIntent(kind: string, extra: Record<string, unknown> = {}): void {
+function dispatchHostIntent(kind: string, extra: Record<string, unknown> = {}): boolean {
   const host = nativeHost();
   if (!host) {
-    return;
+    return false;
   }
-  host.dispatchIntent(
+  const response = host.dispatchIntent(
     JSON.stringify({
       version: 1,
       direction: 'rn-to-host',
@@ -34,18 +34,36 @@ function dispatchHostIntent(kind: string, extra: Record<string, unknown> = {}): 
       ...extra,
     }),
   );
+  try {
+    const parsed = JSON.parse(response) as {accepted?: boolean};
+    return parsed.accepted === true;
+  } catch {
+    return false;
+  }
 }
 
+type HostRationalTime = {num: number; den: number};
+type HostPositionKey = {
+  key_id: string;
+  time: HostRationalTime;
+  value?: [number, number];
+};
 type HostLayerSeat = {
   displayName: string;
   positionKeyCount: number;
   primaryLayerId: string | null;
-  currentTime: {num: number; den: number};
+  currentTime: HostRationalTime;
+  /** playhead exact一致かつ value がある時だけ編集席を出す。 */
+  exactKey: {time: HostRationalTime; value: [number, number]} | null;
 };
 type HostSnapshotState = {
   statusLabel: string | null;
   layerSeat: HostLayerSeat | null;
 };
+
+function rationalTimesExactEqual(a: HostRationalTime, b: HostRationalTime): boolean {
+  return BigInt(a.num) * BigInt(b.den) === BigInt(b.num) * BigInt(a.den);
+}
 
 /** host snapshotが読める時だけInspector Layer席へ渡す。 */
 function readHostSnapshotState(): HostSnapshotState {
@@ -60,14 +78,14 @@ function readHostSnapshotState(): HostSnapshotState {
   try {
     const parsed = JSON.parse(snapshot) as {
       primary_layer_id?: string | null;
-      current_time?: {num: number; den: number};
+      current_time?: HostRationalTime;
       revision?: string;
       stage?: {bounds?: unknown[]};
       timeline?: {
         layers?: Array<{
           layer_id: string;
           display_name: string;
-          position_keys?: unknown[];
+          position_keys?: HostPositionKey[];
         }>;
       };
     };
@@ -82,13 +100,27 @@ function readHostSnapshotState(): HostSnapshotState {
     const primary = primaryLayerId
       ? timelineLayers.find(layer => layer.layer_id === primaryLayerId)
       : undefined;
+    const positionKeys = primary?.position_keys ?? [];
+    const exact = positionKeys.find(key =>
+      key
+      && typeof key.time?.num === 'number'
+      && typeof key.time?.den === 'number'
+      && rationalTimesExactEqual(parsed.current_time!, key.time)
+      && Array.isArray(key.value)
+      && key.value.length === 2
+      && Number.isFinite(key.value[0])
+      && Number.isFinite(key.value[1]),
+    );
     return {
       statusLabel,
       layerSeat: {
         displayName: primary?.display_name ?? 'no selection',
-        positionKeyCount: primary?.position_keys?.length ?? 0,
+        positionKeyCount: positionKeys.length,
         primaryLayerId,
         currentTime: parsed.current_time,
+        exactKey: exact
+          ? {time: exact.time, value: [exact.value![0], exact.value![1]]}
+          : null,
       },
     };
   } catch {
@@ -543,6 +575,14 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
               <Text style={styles.pathOperationTitle}>Layer</Text>
               <Text style={styles.pathOperationDescription}>{layerSeat.displayName}</Text>
               <Text style={styles.pathOperationDescription}>position keys: {layerSeat.positionKeyCount}</Text>
+              {layerSeat.exactKey && layerSeat.primaryLayerId ? (
+                <ExactOnKeyValueEditor
+                  key={`${layerSeat.primaryLayerId}:${layerSeat.exactKey.time.num}/${layerSeat.exactKey.time.den}`}
+                  primaryLayerId={layerSeat.primaryLayerId}
+                  keyTime={layerSeat.exactKey.time}
+                  value={layerSeat.exactKey.value}
+                />
+              ) : null}
               <View style={styles.pathOperationGrid}>
                 <Pressable
                   accessibilityRole="button"
@@ -633,6 +673,117 @@ function ParameterRow({label, value, onDecrease, onIncrease}: {label: string; va
       <Text numberOfLines={1} style={styles.parameterValue}>{value}</Text>
       {onIncrease ? <Pressable accessibilityLabel={`${label} increase`} onPress={onIncrease} style={styles.stepButton}><Text style={styles.stepText}>＋</Text></Pressable> : null}
     </View>
+  );
+}
+
+/** U4b-0V: exact-on-key の時だけ X/Y を commit 時1回で送る。Dialは使わない。 */
+function ExactOnKeyValueEditor({
+  primaryLayerId,
+  keyTime,
+  value,
+}: {
+  primaryLayerId: string;
+  keyTime: HostRationalTime;
+  value: [number, number];
+}) {
+  const [draftX, setDraftX] = useState(String(value[0]));
+  const [draftY, setDraftY] = useState(String(value[1]));
+  const live = useRef(value);
+  const editingX = useRef(false);
+  const editingY = useRef(false);
+  const valueX = value[0];
+  const valueY = value[1];
+
+  useEffect(() => {
+    live.current = [valueX, valueY];
+    if (!editingX.current) {
+      setDraftX(String(valueX));
+    }
+    if (!editingY.current) {
+      setDraftY(String(valueY));
+    }
+  }, [valueX, valueY]);
+
+  const commitAxis = (axis: 0 | 1, draft: string) => {
+    const isEditing = axis === 0 ? editingX : editingY;
+    if (!isEditing.current) {
+      return;
+    }
+    isEditing.current = false;
+
+    if (draft.trim().length === 0) {
+      setDraftX(String(live.current[0]));
+      setDraftY(String(live.current[1]));
+      return;
+    }
+
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed)) {
+      setDraftX(String(live.current[0]));
+      setDraftY(String(live.current[1]));
+      return;
+    }
+    const next: [number, number] = [live.current[0], live.current[1]];
+    next[axis] = parsed;
+    // set_position_key_value: target/time/new (rn_product_host 743-849)
+    const accepted = dispatchHostIntent('set_position_key_value', {
+      target: primaryLayerId,
+      time: keyTime,
+      new: next,
+    });
+    if (!accepted) {
+      setDraftX(String(live.current[0]));
+      setDraftY(String(live.current[1]));
+      return;
+    }
+    live.current = next;
+    setDraftX(String(next[0]));
+    setDraftY(String(next[1]));
+  };
+
+  return (
+    <>
+      <View style={styles.parameterRow} testID="inspector-position-key-x-row">
+        <Text style={styles.parameterLabel}>X</Text>
+        <TextInput
+          accessibilityLabel="Position key X"
+          keyboardType="decimal-pad"
+          onBlur={() => commitAxis(0, draftX)}
+          onChangeText={text => {
+            editingX.current = true;
+            setDraftX(text);
+          }}
+          onFocus={() => {
+            editingX.current = true;
+          }}
+          onSubmitEditing={() => commitAxis(0, draftX)}
+          selectTextOnFocus
+          style={styles.parameterValue}
+          testID="inspector-position-key-x"
+          value={draftX}
+        />
+      </View>
+      <View style={styles.parameterRow} testID="inspector-position-key-y-row">
+        <Text style={styles.parameterLabel}>Y</Text>
+        <TextInput
+          accessibilityLabel="Position key Y"
+          keyboardType="decimal-pad"
+          onBlur={() => commitAxis(1, draftY)}
+          onChangeText={text => {
+            editingY.current = true;
+            setDraftY(text);
+          }}
+          onFocus={() => {
+            editingY.current = true;
+          }}
+          onSubmitEditing={() => commitAxis(1, draftY)}
+          selectTextOnFocus
+          style={styles.parameterValue}
+          testID="inspector-position-key-y"
+          value={draftY}
+        />
+      </View>
+    </>
   );
 }
 

@@ -55,7 +55,7 @@ const MAX_STAGE_SELECTION: usize = 16;
 const MAX_POSITION_KEYS: usize = 64;
 const MAX_DIAGNOSTICS: usize = 8;
 const MAX_JSON_BYTES: usize = 16_384;
-const MAX_SNAPSHOT_JSON_BYTES: usize = 65_536;
+const MAX_SNAPSHOT_JSON_BYTES: usize = 131_072;
 #[cfg(target_os = "macos")]
 const MAX_PROJECT_PATH_BYTES: usize = 4_096;
 
@@ -178,14 +178,14 @@ struct WireStageProjection {
     bounds: Vec<WireStageBound>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct WireTimelineProjection {
     fps: Fps,
     layers: Vec<WireTimelineLayer>,
     layers_truncated: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct WireTimelineLayer {
     layer_id: String,
     display_name: String,
@@ -195,13 +195,16 @@ struct WireTimelineLayer {
     keys_truncated: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct WireTimelinePositionKey {
     key_id: String,
     time: RationalTime,
+    /// DocValue::Vec2 のみ投影。他型は field 欠落(編集不可)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    value: Option<[f64; 2]>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[doc(hidden)]
 pub struct RnProductSnapshotForTest {
     pub revision: String,
@@ -212,7 +215,7 @@ pub struct RnProductSnapshotForTest {
     pub timeline: RnTimelineProjectionForTest,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[doc(hidden)]
 pub struct RnTimelineProjectionForTest {
     pub fps: Fps,
@@ -220,7 +223,7 @@ pub struct RnTimelineProjectionForTest {
     pub layers_truncated: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[doc(hidden)]
 pub struct RnTimelineLayerForTest {
     pub layer_id: String,
@@ -231,11 +234,12 @@ pub struct RnTimelineLayerForTest {
     pub keys_truncated: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[doc(hidden)]
 pub struct RnTimelinePositionKeyForTest {
     pub key_id: String,
     pub time: RationalTime,
+    pub value: Option<[f64; 2]>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -250,7 +254,7 @@ pub struct RnHostTestIntent {
     pub focused: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[doc(hidden)]
 pub struct RnHostTestResponse {
     pub accepted: bool,
@@ -2896,6 +2900,7 @@ fn snapshot_for_test(snapshot: WireProductSnapshot) -> RnProductSnapshotForTest 
                         .map(|key| RnTimelinePositionKeyForTest {
                             key_id: key.key_id,
                             time: key.time,
+                            value: key.value,
                         })
                         .collect(),
                     keys_truncated: layer.keys_truncated,
@@ -3066,6 +3071,10 @@ fn project_position_keys(
         .map(|key| WireTimelinePositionKey {
             key_id: key.id.get().to_string(),
             time: key.t,
+            value: match key.value {
+                DocValue::Vec2(value) => Some(value),
+                _ => None,
+            },
         })
         .collect();
     (position_keys, keys_truncated)
@@ -3089,11 +3098,20 @@ fn position_key_at(
     {
         return None;
     }
-    let key = keys.iter().find(|key| key.t == time)?;
+    let key = keys.iter().find(|key| rational_time_eq(key.t, time))?;
     let DocValue::Vec2(value) = key.value else {
         return None;
     };
     Some((key.id, value))
+}
+
+fn rational_time_eq(left: RationalTime, right: RationalTime) -> bool {
+    let lhs = i128::from(left.num()).checked_mul(i128::from(right.den()));
+    let rhs = i128::from(right.num()).checked_mul(i128::from(left.den()));
+    match (lhs, rhs) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
 }
 
 fn response_for_test(response: WireIntentResponse) -> RnHostTestResponse {
@@ -5891,6 +5909,168 @@ mod tests {
     }
 
     #[test]
+    fn add_position_key_snapshot_carries_document_vec2_value() {
+        let _lock = test_lock();
+        let host = create_host("timeline-add-key-value");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].parse::<u64>().expect("layer id");
+        let target = LayerId::from_raw(layer_id);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        let time = RationalTime::try_new(1, 1).expect("1s");
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        let key = &snap.timeline.layers[0].position_keys[0];
+        assert_eq!(key.time, time);
+        assert_eq!(key.value, Some([0.0, 0.0]));
+        let (doc_key, doc_value) = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_key_at(
+                product.runtime.snapshot().as_ref(),
+                target,
+                time,
+            ))
+        })
+        .expect("doc lookup")
+        .expect("doc key");
+        assert_eq!(key.key_id, doc_key.get().to_string());
+        assert_eq!(key.value, Some(doc_value));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_position_key_value_updates_wire_value_and_preserves_identity_other_keys() {
+        let _lock = test_lock();
+        let host = create_host("timeline-set-key-value");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].parse::<u64>().expect("layer id");
+        let target = LayerId::from_raw(layer_id);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        let add = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":2}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(add.accepted);
+        let before = add.snapshot.expect("before");
+        let before_key = before.timeline.layers[0].position_keys[0].clone();
+        assert_eq!(before_key.value, Some([0.0, 0.0]));
+
+        let second = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":2,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(second.accepted);
+        let before_second_key = second
+            .snapshot
+            .expect("before second")
+            .timeline
+            .layers[0]
+            .position_keys
+            .iter()
+            .find(|key| key.key_id != before_key.key_id)
+            .cloned()
+            .expect("other key");
+
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_position_key_value","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":2,"den":4}},"#,
+                    r#""new":[0.25,-0.5]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(response.accepted);
+        let after = response.snapshot.expect("after");
+        assert_eq!(after.timeline.layers[0].position_keys.len(), 2);
+        let after_key = after
+            .timeline
+            .layers[0]
+            .position_keys
+            .iter()
+            .find(|key| key.key_id == before_key.key_id)
+            .expect("target key");
+        let after_other_key = after
+            .timeline
+            .layers[0]
+            .position_keys
+            .iter()
+            .find(|key| key.key_id == before_second_key.key_id)
+            .expect("other key");
+        assert_eq!(after_key.key_id, before_key.key_id);
+        assert_eq!(after_key.time, before_key.time);
+        assert_eq!(after_key.value, Some([0.25, -0.5]));
+        assert_eq!(after_other_key.key_id, before_second_key.key_id);
+        assert_eq!(after_other_key.time, before_second_key.time);
+        assert_eq!(after_other_key.value, Some([0.0, 0.0]));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
     fn timeline_position_keys_cap_at_64_and_mark_truncated() {
         let _lock = test_lock();
         let mut document = Document::new_current();
@@ -5956,7 +6136,7 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_json_of_16_layers_64_keys_stays_under_65536_and_untruncated() {
+    fn snapshot_json_of_16_layers_64_keys_stays_under_the_snapshot_cap_and_untruncated() {
         let _lock = test_lock();
         let document = make_16_layers_64_keys_document();
         let host = create_host_from_document("snapshot-16x64", &document);

@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 const MAX_JSON_BYTES: usize = 16_384;
-const MAX_SNAPSHOT_JSON_BYTES: usize = 65_536;
+const MAX_SNAPSHOT_JSON_BYTES: usize = 131_072;
 
 // extern importではなくRust経由で呼ぶ。externで宣言すると同一crate graph内でも
 // motolii-uiの該当objectがarchiveから引かれず、appのlinkで未解決symbolになる(実測)。
@@ -75,6 +75,8 @@ pub(crate) struct HostTimelineLayer {
 pub(crate) struct HostTimelineKey {
     pub key_id: u64,
     pub time_secs: f64,
+    /// wire `value`。[f64;2] がある時だけ。sceneには載せない。
+    pub value: Option<[f64; 2]>,
 }
 
 /// 欠落documentを開ける最小projectでseedする。
@@ -1020,13 +1022,35 @@ fn parse_position_keys(layer_obj: &str) -> Option<Vec<HostTimelineKey>> {
         if time_den == 0 {
             return None;
         }
+        let value = parse_optional_vec2(obj);
         keys.push(HostTimelineKey {
             key_id,
             time_secs: time_num as f64 / time_den as f64,
+            value,
         });
         rest = &rest[end + 1..];
     }
     Some(keys)
+}
+
+fn parse_optional_vec2(obj: &str) -> Option<[f64; 2]> {
+    let marker = "\"value\"";
+    let at = obj.find(marker)?;
+    let after = obj[at + marker.len()..]
+        .trim_start()
+        .strip_prefix(':')?;
+    let after = after.trim_start().strip_prefix('[')?;
+    let (x, after_x) = parse_json_f64(after)?;
+    let after_x = after_x.trim_start();
+    if !after_x.starts_with(',') {
+        return None;
+    }
+    let (y, after_y) = parse_json_f64(&after_x[1..])?;
+    let after_y = after_y.trim_start();
+    if !after_y.starts_with(']') {
+        return None;
+    }
+    Some([x, y])
 }
 
 fn find_key_object<'a>(json: &'a str, key: &str) -> Option<&'a str> {
@@ -1390,6 +1414,46 @@ mod tests {
         assert!((keys[0].0 - 2.0).abs() < 1e-6); // 4s / 2
         assert_eq!(keys[0].1, 42);
         assert_eq!(scene.selected_flat, 0);
+    }
+
+    #[test]
+    fn position_keys_parse_optional_value_without_requiring_it() {
+        let with_value = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"7",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "primary_layer_id":"11",
+            "stage":{"selection":[],"bounds":[
+                {"layer_id":"11","display_name":"rect"}
+            ]},
+            "timeline":{
+                "fps":{"num":30,"den":1},
+                "layers":[{
+                    "layer_id":"11",
+                    "display_name":"rect",
+                    "start":{"num":0,"den":1},
+                    "duration":{"num":10,"den":1},
+                    "position_keys":[
+                        {"key_id":"42","time":{"num":4,"den":1},"value":[0.25,-0.5]},
+                        {"key_id":"43","time":{"num":5,"den":1}}
+                    ],
+                    "keys_truncated":false
+                }],
+                "layers_truncated":false
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(with_value).expect("parse");
+        let layers = proj.timeline_layers.expect("layers");
+        assert_eq!(layers[0].position_keys.len(), 2);
+        assert_eq!(layers[0].position_keys[0].value, Some([0.25, -0.5]));
+        assert_eq!(layers[0].position_keys[1].value, None);
+        assert_eq!(layers[0].position_keys[0].key_id, 42);
+        assert_eq!(layers[0].position_keys[1].key_id, 43);
     }
 
     #[test]

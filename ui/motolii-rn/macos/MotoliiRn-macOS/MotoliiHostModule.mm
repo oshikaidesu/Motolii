@@ -43,7 +43,7 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(dispatchIntent:(NSString *)intentJson)
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(readSnapshot)
 {
-  std::vector<uint8_t> out(65536);
+  std::vector<uint8_t> out(131072);
   int64_t written = motolii_rnapp_host_snapshot_json(out.data(), out.size());
   static dispatch_once_t once;
   dispatch_once(&once, ^{

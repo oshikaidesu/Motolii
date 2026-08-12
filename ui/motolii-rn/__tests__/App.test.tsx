@@ -305,3 +305,294 @@ test('inspector add position key is disabled when no layer is selected', async (
   getSpy.mockRestore();
   mockReadSnapshot.mockReturnValue('');
 });
+
+test('inspector shows exact-on-key X/Y rows only when playhead matches key time', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 2, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [
+              {key_id: '7', time: {num: 4, den: 2}, value: [0.25, -0.5]},
+            ],
+            keys_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  expect(tree!.root.findByProps({testID: 'inspector-position-key-x'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'inspector-position-key-y'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.value).toBe('0.25');
+  expect(tree!.root.findByProps({testID: 'inspector-position-key-y'}).props.value).toBe('-0.5');
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 2, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [
+              {key_id: '7', time: {num: 0, den: 1}, value: [0.25, -0.5]},
+            ],
+            keys_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+  expect(tree!.root.findAllByProps({testID: 'inspector-position-key-x'})).toHaveLength(0);
+  expect(tree!.root.findAllByProps({testID: 'inspector-position-key-y'})).toHaveLength(0);
+  expect(tree!.root.findByProps({testID: 'inspector-layer-section'})).toBeTruthy();
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('inspector X commit dispatches set_position_key_value once with exact time', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 1, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [
+              {key_id: '7', time: {num: 1, den: 1}, value: [0.1, 0.2]},
+            ],
+            keys_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const xInput = tree!.root.findByProps({testID: 'inspector-position-key-x'});
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    xInput.props.onChangeText('0.75');
+  });
+  await ReactTestRenderer.act(() => {
+    const committed = tree!.root.findByProps({testID: 'inspector-position-key-x'});
+    committed.props.onSubmitEditing();
+  });
+  await ReactTestRenderer.act(() => {
+    const committed = tree!.root.findByProps({testID: 'inspector-position-key-x'});
+    committed.props.onBlur();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  const payload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(payload.kind).toBe('set_position_key_value');
+  expect(payload.target).toBe('42');
+  expect(payload.time).toEqual({num: 1, den: 1});
+  expect(payload.new).toEqual([0.75, 0.2]);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('inspector key editor remounts on primary/key change and stale draft is not committed', async () => {
+  mockDispatchIntent.mockClear();
+  jest.useFakeTimers();
+  const snapshotA = {
+    revision: '3',
+    projection_generation: '1',
+    current_time: {num: 1, den: 1},
+    primary_layer_id: '42',
+    stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+    timeline: {
+      fps: {num: 30, den: 1},
+      layers: [
+        {
+          layer_id: '42',
+          display_name: 'seed-layer',
+          start: {num: 0, den: 1},
+          duration: {num: 10, den: 1},
+          position_keys: [{key_id: 'a', time: {num: 1, den: 1}, value: [0.1, 0.2]}],
+          keys_truncated: false,
+        },
+      ],
+      layers_truncated: false,
+    },
+  };
+  const snapshotB = {
+    revision: '3',
+    projection_generation: '1',
+    current_time: {num: 1, den: 1},
+    primary_layer_id: '43',
+    stage: {bounds: [{layer_id: '43', display_name: 'other-layer'}]},
+    timeline: {
+      fps: {num: 30, den: 1},
+      layers: [
+        {
+          layer_id: '43',
+          display_name: 'other-layer',
+          start: {num: 0, den: 1},
+          duration: {num: 10, den: 1},
+          position_keys: [{key_id: 'b', time: {num: 1, den: 1}, value: [0.5, 0.75]}],
+          keys_truncated: false,
+        },
+      ],
+      layers_truncated: false,
+    },
+  };
+  let readCount = 0;
+  mockReadSnapshot.mockImplementation(() => {
+    const snapshot = readCount === 0 ? snapshotA : snapshotB;
+    readCount += 1;
+    return JSON.stringify(snapshot);
+  });
+
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const staleInput = tree!.root.findByProps({testID: 'inspector-position-key-x'});
+  await ReactTestRenderer.act(() => {
+    staleInput.props.onChangeText('0.75');
+  });
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    jest.advanceTimersByTime(1000);
+  });
+
+  const activeInput = tree!.root.findByProps({testID: 'inspector-position-key-x'});
+  expect(activeInput.props.value).toBe('0.5');
+  await ReactTestRenderer.act(() => {
+    activeInput.props.onSubmitEditing();
+  });
+  await ReactTestRenderer.act(() => {
+    activeInput.props.onBlur();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(0);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+  jest.useRealTimers();
+});
+
+test('inspector X empty draft does not dispatch and restores value', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 1, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [
+              {key_id: '7', time: {num: 1, den: 1}, value: [0.1, 0.2]},
+            ],
+            keys_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const xInput = tree!.root.findByProps({testID: 'inspector-position-key-x'});
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    xInput.props.onChangeText('  ');
+  });
+  await ReactTestRenderer.act(() => {
+    const committed = tree!.root.findByProps({testID: 'inspector-position-key-x'});
+    committed.props.onSubmitEditing();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(0);
+  expect(tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.value).toBe('0.1');
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
