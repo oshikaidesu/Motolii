@@ -424,8 +424,31 @@ fn timeline_scene_from_projection(
             scene.view_b = scene.song_bars;
             scene.view_a = (scene.song_bars - span).max(0.0);
         }
+        // revision再投影でkeyのselが落ちるとDeleteがlayer削除へ化ける。key_id一致で引き継ぐ。
+        if let Some((layer_id, key_id)) = crate::timeline_skia::selected_real_key(existing_scene) {
+            if projection.primary_layer_id.as_deref() == Some(layer_id.as_str()) {
+                let _ = crate::timeline_skia::restore_key_selection(
+                    &mut scene,
+                    layer_id.as_str(),
+                    key_id,
+                );
+            }
+        }
     }
     scene
+}
+
+fn timeline_projection_selected_flat(
+    projection: &crate::host_bridge::HostTimelineProjection,
+) -> i32 {
+    let Some(primary) = projection.primary_layer_id.as_deref() else {
+        return -1;
+    };
+    let position = projection.timeline_layers.as_ref().map_or_else(
+        || projection.bounds.iter().position(|(layer_id, _)| layer_id == primary),
+        |layers| layers.iter().position(|layer| layer.layer_id == primary),
+    );
+    position.and_then(|index| i32::try_from(index).ok()).unwrap_or(-1)
 }
 
 impl RendererCore {
@@ -547,11 +570,14 @@ impl RendererCore {
     }
 
     pub(crate) fn set_timeline_state(&mut self, selected_object_index: i32, playhead: f64) {
-        self.selected_object_index = selected_object_index.max(-1);
         let real = self
             .timeline_session
             .as_ref()
             .is_some_and(|session| session.scene.real);
+        // realの選択正本はhost primary。RN props echoがnative選択を押し戻さない。
+        if !real {
+            self.selected_object_index = selected_object_index.max(-1);
+        }
         // real sceneのplayhead正本はhost current_time。scrub中だけRN echoを受ける。
         if !real || self.scrubbing {
             self.playhead = playhead.clamp(0.0, 1.0);
@@ -915,23 +941,22 @@ impl RendererCore {
                 self.host_revision.as_deref() != Some(projection.revision.as_str());
             let generation_changed = self.host_projection_generation.as_deref()
                 != Some(projection.projection_generation.as_str());
+            let primary_changed =
+                self.selected_object_index != timeline_projection_selected_flat(&projection);
             let has_active_gesture = self
                 .timeline_session
                 .as_ref()
                 .is_some_and(TimelineSession::has_active_gesture);
             let force_scene = self.force_next_host_snapshot;
             let should_reproject = revision_changed
+                || primary_changed
                 || (force_scene && !has_active_gesture);
             if should_reproject {
                 let Some(session) = &mut self.timeline_session else {
                     return;
                 };
                 // 進行中gestureは復元せず破棄。古いband indexでのpanicを防ぐ。
-                let gesture_dirty = if force_scene {
-                    session.discard_active_gesture()
-                } else {
-                    false
-                };
+                let gesture_dirty = session.discard_active_gesture();
                 if gesture_dirty {
                     self.scrub_time_pump = ScrubTimePump::new();
                     self.scrubbing = false;
@@ -1297,14 +1322,12 @@ fn composite_host_stage_frame(
         return;
     }
     let was_composite = stage.rerun.real_frame_composite();
-    let mut fresh = None;
     match crate::host_bridge::try_host_render_frame(
         &stage.gpu_ctx,
         &mut stage.render_session,
-        &mut fresh,
+        &mut stage.frame,
     ) {
         HostRenderFrameResult::Rendered => {
-            stage.frame = fresh;
             stage.rerun.set_real_frame_composite(true);
         }
         HostRenderFrameResult::Failed => {
@@ -1659,8 +1682,13 @@ mod tests {
         assert_eq!(rebuilt.view_a, 1.0);
         assert_eq!(rebuilt.view_b, 4.0);
         assert_eq!(rebuilt.selected_flat, 1);
+        assert_eq!(timeline_projection_selected_flat(&projection), 1);
         let expected_song_bars = 10.0_f32 / crate::timeline_skia::SECONDS_PER_BAR as f32;
         assert!((rebuilt.song_bars - expected_song_bars).abs() < 1e-6);
+
+        let mut missing = projection.clone();
+        missing.primary_layer_id = Some("outside-truncated-projection".into());
+        assert_eq!(timeline_projection_selected_flat(&missing), -1);
     }
 
     #[test]
@@ -2000,6 +2028,79 @@ mod tests {
         let _ = crate::host_bridge::try_timeline_keymap_delete(&scene);
         assert_eq!(crate::host_bridge::test_keymap_remove_position_key_count(), 1);
         assert_eq!(crate::host_bridge::test_keymap_delete_layer_count(), 1);
+    }
+
+    #[test]
+    fn key_selection_survives_revision_reproject_so_delete_removes_key() {
+        crate::host_bridge::test_reset_keymap_dispatch_counts();
+        let mut scene = TimelineScene::from_snapshot(
+            &[crate::timeline_skia::SnapshotLayerInput {
+                layer_id: "11".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![
+                    crate::timeline_skia::SnapshotKeyInput {
+                        key_id: 7,
+                        time_secs: 4.0,
+                    },
+                    crate::timeline_skia::SnapshotKeyInput {
+                        key_id: 8,
+                        time_secs: 6.0,
+                    },
+                ],
+            }],
+            Some("11"),
+        );
+        crate::timeline_skia::test_select_first_real_key(&mut scene);
+        assert_eq!(
+            crate::timeline_skia::selected_real_key(&scene),
+            Some(("11".into(), 7))
+        );
+
+        let mut projection = crate::host_bridge::HostTimelineProjection {
+            revision: "r2".into(),
+            projection_generation: "1".into(),
+            primary_layer_id: Some("11".into()),
+            current_time: (0, 1),
+            timeline_duration: Some((10, 1)),
+            fps: None,
+            bounds: vec![("11".into(), "keyed".into())],
+            timeline_layers: Some(vec![crate::host_bridge::HostTimelineLayer {
+                layer_id: "11".into(),
+                display_name: "keyed".into(),
+                start_secs: 0.0,
+                duration_secs: 10.0,
+                position_keys: vec![
+                    crate::host_bridge::HostTimelineKey {
+                        key_id: 7,
+                        time_secs: 4.0,
+                        value: None,
+                    },
+                    crate::host_bridge::HostTimelineKey {
+                        key_id: 8,
+                        time_secs: 6.0,
+                        value: None,
+                    },
+                ],
+                effects: vec![],
+                effects_truncated: false,
+                source_params: vec![],
+                source_params_truncated: false,
+            }]),
+            stage_geometry: None,
+        };
+        let rebuilt = timeline_scene_from_projection(&scene, &projection);
+        assert_eq!(
+            crate::timeline_skia::selected_real_key(&rebuilt),
+            Some(("11".into(), 7))
+        );
+        let _ = crate::host_bridge::try_timeline_keymap_delete(&rebuilt);
+        assert_eq!(crate::host_bridge::test_keymap_remove_position_key_count(), 1);
+        assert_eq!(crate::host_bridge::test_keymap_delete_layer_count(), 0);
+
+        projection.primary_layer_id = None;
+        let primary_cleared = timeline_scene_from_projection(&scene, &projection);
+        assert_eq!(crate::timeline_skia::selected_real_key(&primary_cleared), None);
     }
 
     #[test]

@@ -20,6 +20,13 @@ function nativeHost(): MotoliiHostSpec | null {
   return TurboModuleRegistry.get<MotoliiHostSpec>('NativeMotoliiHost');
 }
 
+/** dispatch応答snapshotの即時反映先。Appがmount時に登録する。 */
+let hostSnapshotApplier: ((state: HostSnapshotState) => void) | null = null;
+
+function setHostSnapshotApplier(applier: ((state: HostSnapshotState) => void) | null) {
+  hostSnapshotApplier = applier;
+}
+
 function dispatchHostIntent(kind: string, extra: Record<string, unknown> = {}): boolean {
   const host = nativeHost();
   if (!host) {
@@ -35,8 +42,18 @@ function dispatchHostIntent(kind: string, extra: Record<string, unknown> = {}): 
     }),
   );
   try {
-    const parsed = JSON.parse(response) as {accepted?: boolean};
-    return parsed.accepted === true;
+    const parsed = JSON.parse(response) as {accepted?: boolean; snapshot?: unknown};
+    if (parsed.accepted !== true) {
+      return false;
+    }
+    // accepted応答に最新snapshotが同梱されていれば即時反映。失敗時は1s pollへ。
+    if (parsed.snapshot != null) {
+      const state = hostSnapshotStateFromParsed(parsed.snapshot);
+      if (state) {
+        hostSnapshotApplier?.(state);
+      }
+    }
+    return true;
   } catch {
     return false;
   }
@@ -98,33 +115,67 @@ function readHostSnapshotState(): HostSnapshotState {
     return {statusLabel: null, layerSeat: null, catalogEffects: null, catalogSources: null};
   }
   try {
-    const parsed = JSON.parse(snapshot) as {
-      primary_layer_id?: string | null;
-      current_time?: HostRationalTime;
-      revision?: string;
-      stage?: {bounds?: unknown[]};
-      catalog?: {
-        effects?: Array<{plugin_id?: string; name?: string; effect_version?: number}>;
-        sources?: Array<{plugin_id?: string; name?: string; effect_version?: number}>;
-      };
-      timeline?: {
-        layers?: Array<{
-          layer_id: string;
-          display_name: string;
-          position_keys?: HostPositionKey[];
-          effects?: Array<{
-            effect_use_id?: string;
-            plugin_id?: string;
-            params?: Array<{param_id?: string; value?: number}>;
-          }>;
-          source_params?: Array<{param_id?: string; value?: number}>;
-        }>;
-      };
+    return hostSnapshotStateFromParsed(JSON.parse(snapshot)) ?? {
+      statusLabel: null,
+      layerSeat: null,
+      catalogEffects: null,
+      catalogSources: null,
     };
+  } catch {
+    return {statusLabel: null, layerSeat: null, catalogEffects: null, catalogSources: null};
+  }
+}
+
+type ParsedHostSnapshot = {
+  primary_layer_id?: string | null;
+  current_time?: HostRationalTime;
+  revision?: string;
+  stage?: {bounds?: unknown[]};
+  catalog?: {
+    effects?: Array<{plugin_id?: string; name?: string; effect_version?: number}>;
+    sources?: Array<{plugin_id?: string; name?: string; effect_version?: number}>;
+  };
+  timeline?: {
+    layers_truncated?: boolean;
+    layers?: Array<{
+      layer_id: string;
+      display_name: string;
+      position_keys?: HostPositionKey[];
+      keys_truncated?: boolean;
+      effects?: Array<{
+        effect_use_id?: string;
+        plugin_id?: string;
+        params?: Array<{param_id?: string; value?: number}>;
+      }>;
+      effects_truncated?: boolean;
+      source_params?: Array<{param_id?: string; value?: number}>;
+      source_params_truncated?: boolean;
+    }>;
+  };
+};
+
+function hostSnapshotStateFromParsed(raw: unknown): HostSnapshotState | null {
+  if (raw == null || typeof raw !== 'object') {
+    return null;
+  }
+  try {
+    const parsed = raw as ParsedHostSnapshot;
     const primaryLayerId = parsed.primary_layer_id ?? null;
     const layerBounds = parsed.stage?.bounds?.length ?? 0;
     const revision = parsed.revision;
-    const statusLabel = revision == null ? null : `DOC r${revision} · ${layerBounds} layers`;
+    const timelineLayers = parsed.timeline?.layers ?? [];
+    const anyTruncated =
+      parsed.timeline?.layers_truncated === true ||
+      timelineLayers.some(
+        layer =>
+          layer.keys_truncated === true ||
+          layer.effects_truncated === true ||
+          layer.source_params_truncated === true,
+      );
+    const statusLabel =
+      revision == null
+        ? null
+        : `DOC r${revision} · ${layerBounds} layers${anyTruncated ? ' (+)' : ''}`;
     const catalogEffects = Array.isArray(parsed.catalog?.effects)
       ? parsed.catalog!.effects!
           .filter(item => typeof item?.plugin_id === 'string' && item.plugin_id.length > 0)
@@ -146,7 +197,6 @@ function readHostSnapshotState(): HostSnapshotState {
     if (!parsed.current_time || typeof parsed.current_time.num !== 'number' || typeof parsed.current_time.den !== 'number') {
       return {statusLabel, layerSeat: null, catalogEffects, catalogSources};
     }
-    const timelineLayers = parsed.timeline?.layers ?? [];
     const primary = primaryLayerId
       ? timelineLayers.find(layer => layer.layer_id === primaryLayerId)
       : undefined;
@@ -194,7 +244,7 @@ function readHostSnapshotState(): HostSnapshotState {
       },
     };
   } catch {
-    return {statusLabel: null, layerSeat: null, catalogEffects: null, catalogSources: null};
+    return null;
   }
 }
 
@@ -769,9 +819,10 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
                   <Text style={styles.pathOperationDescription}>{effect.name}</Text>
                   {effect.params.map(param => (
                     <EffectParamEditor
-                      key={`${effect.effect_use_id}:${param.param_id}`}
+                      key={`${layerSeat.primaryLayerId}:${effect.effect_use_id}:${param.param_id}`}
                       primaryLayerId={layerSeat.primaryLayerId!}
                       effectUseId={effect.effect_use_id}
+                      pluginId={effect.plugin_id}
                       paramId={param.param_id}
                       value={param.value}
                     />
@@ -855,11 +906,13 @@ function ParameterRow({label, value, onDecrease, onIncrease, testID}: {label: st
 function EffectParamEditor({
   primaryLayerId,
   effectUseId,
+  pluginId,
   paramId,
   value,
 }: {
   primaryLayerId: string;
   effectUseId: string;
+  pluginId: string;
   paramId: string;
   value: number;
 }) {
@@ -888,18 +941,21 @@ function EffectParamEditor({
       setDraft(String(live.current));
       return;
     }
+    const isOpacityAmount = pluginId === 'core.filter.opacity' && paramId === 'amount';
+    // opacity amount のみ 0..1 にクランプして、他paramはそのまま送信。
+    const committed = isOpacityAmount ? Math.max(0, Math.min(1, parsed)) : parsed;
     const accepted = dispatchHostIntent('set_effect_param', {
       target: primaryLayerId,
       effect_use_id: effectUseId,
       param_id: paramId,
-      value: parsed,
+      value: committed,
     });
     if (!accepted) {
       setDraft(String(live.current));
       return;
     }
-    live.current = parsed;
-    setDraft(String(parsed));
+    live.current = committed;
+    setDraft(String(committed));
   };
 
   return (
@@ -962,15 +1018,21 @@ function ExactOnKeyValueEditor({
     isEditing.current = false;
 
     if (draft.trim().length === 0) {
-      setDraftX(String(live.current[0]));
-      setDraftY(String(live.current[1]));
+      if (axis === 0) {
+        setDraftX(String(live.current[0]));
+      } else {
+        setDraftY(String(live.current[1]));
+      }
       return;
     }
 
     const parsed = Number(draft);
     if (!Number.isFinite(parsed)) {
-      setDraftX(String(live.current[0]));
-      setDraftY(String(live.current[1]));
+      if (axis === 0) {
+        setDraftX(String(live.current[0]));
+      } else {
+        setDraftY(String(live.current[1]));
+      }
       return;
     }
     const next: [number, number] = [live.current[0], live.current[1]];
@@ -982,13 +1044,26 @@ function ExactOnKeyValueEditor({
       new: next,
     });
     if (!accepted) {
-      setDraftX(String(live.current[0]));
-      setDraftY(String(live.current[1]));
+      if (axis === 0) {
+        setDraftX(String(live.current[0]));
+      } else {
+        setDraftY(String(live.current[1]));
+      }
       return;
     }
     live.current = next;
-    setDraftX(String(next[0]));
-    setDraftY(String(next[1]));
+    // 他軸が編集中ならその draft を上書きしない。
+    if (axis === 0) {
+      setDraftX(String(next[0]));
+      if (!editingY.current) {
+        setDraftY(String(next[1]));
+      }
+    } else {
+      setDraftY(String(next[1]));
+      if (!editingX.current) {
+        setDraftX(String(next[0]));
+      }
+    }
   };
 
   return (
@@ -1378,16 +1453,23 @@ function App() {
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
   useEffect(() => {
-    const tick = () => {
-      const snapshotState = readHostSnapshotState();
+    const apply = (snapshotState: HostSnapshotState) => {
       setHostStatusLabel(snapshotState.statusLabel);
       setHostLayerSeat(snapshotState.layerSeat);
       setHostCatalogEffects(snapshotState.catalogEffects);
       setHostCatalogSources(snapshotState.catalogSources);
     };
+    setHostSnapshotApplier(apply);
+    const tick = () => {
+      apply(readHostSnapshotState());
+    };
     tick();
+    // 1s pollは補助。dispatch応答snapshotの即時反映が主経路。
     const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      setHostSnapshotApplier(null);
+    };
   }, []);
   const completeStageDrop = (x: number, y: number, canonicalX: number, canonicalY: number) => {
     const itemId = draggedItemId;

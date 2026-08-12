@@ -1277,3 +1277,516 @@ test('inspector shows source params as display-only rows', async () => {
   getSpy.mockRestore();
   mockReadSnapshot.mockReturnValue('');
 });
+
+test('dispatch accepted snapshot applies immediately without waiting for poll', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue('');
+  mockDispatchIntent.mockImplementation(() =>
+    JSON.stringify({
+      accepted: true,
+      snapshot: {
+        revision: '9',
+        projection_generation: '2',
+        current_time: {num: 3, den: 1},
+        primary_layer_id: '42',
+        stage: {bounds: [{layer_id: '42', display_name: 'live-layer'}]},
+        timeline: {
+          fps: {num: 30, den: 1},
+          layers: [
+            {
+              layer_id: '42',
+              display_name: 'live-layer',
+              start: {num: 0, den: 1},
+              duration: {num: 10, den: 1},
+              position_keys: [],
+              keys_truncated: false,
+            },
+          ],
+          layers_truncated: false,
+        },
+      },
+    }),
+  );
+
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'titlebar-undo'}).props.onPress();
+  });
+
+  expect(
+    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r9 · 1 layers'),
+  ).toBe(true);
+  expect(tree!.root.findByProps({testID: 'inspector-layer-section'})).toBeTruthy();
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('DOC status label appends (+) when any position key projection is truncated', async () => {
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '4',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: true,
+            effects_truncated: false,
+            source_params_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  expect(
+    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+)'),
+  ).toBe(true);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('DOC status label appends (+) when layers are truncated', async () => {
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '4',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [],
+            effects_truncated: false,
+            source_params_truncated: false,
+          },
+        ],
+        layers_truncated: true,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  expect(
+    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+)'),
+  ).toBe(true);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('DOC status label appends (+) when effects are truncated', async () => {
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '4',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [{effect_use_id: '1', plugin_id: 'core.filter.opacity', params: []}],
+            effects_truncated: true,
+            source_params_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  expect(
+    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+)'),
+  ).toBe(true);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('DOC status label appends (+) when source params are truncated', async () => {
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '4',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [],
+            effects_truncated: false,
+            source_params: [{param_id: 'p0', value: 0}],
+            source_params_truncated: true,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  expect(
+    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+)'),
+  ).toBe(true);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('inspector X commit preserves Y draft while Y is being edited', async () => {
+  mockDispatchIntent.mockClear();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 1, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [{key_id: 'a', time: {num: 1, den: 1}, value: [0.1, 0.2]}],
+            keys_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const xInput = tree!.root.findByProps({testID: 'inspector-position-key-x'});
+  const yInput = tree!.root.findByProps({testID: 'inspector-position-key-y'});
+  await ReactTestRenderer.act(() => {
+    yInput.props.onFocus();
+    yInput.props.onChangeText('0.88');
+  });
+  await ReactTestRenderer.act(() => {
+    xInput.props.onFocus();
+    xInput.props.onChangeText('0.55');
+  });
+  await ReactTestRenderer.act(() => {
+    xInput.props.onBlur();
+  });
+
+  expect(tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.value).toBe('0.55');
+  expect(tree!.root.findByProps({testID: 'inspector-position-key-y'}).props.value).toBe('0.88');
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('opacity amount commit clamps below 0 and above 1 before dispatch', async () => {
+  mockDispatchIntent.mockClear();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [
+              {
+                effect_use_id: '9',
+                plugin_id: 'core.filter.opacity',
+                params: [{param_id: 'amount', value: 1}],
+              },
+            ],
+            effects_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+      catalog: {
+        effects: [{plugin_id: 'core.filter.opacity', name: 'Opacity', effect_version: 1}],
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const input = tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'});
+  await ReactTestRenderer.act(() => {
+    input.props.onFocus();
+    input.props.onChangeText('1.5');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onBlur();
+  });
+
+  expect(mockDispatchIntent).toHaveBeenCalled();
+  const payload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(payload.kind).toBe('set_effect_param');
+  expect(payload.value).toBe(1);
+  expect(tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.value).toBe(
+    '1',
+  );
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('non-opacity amount is not clamped', async () => {
+  mockDispatchIntent.mockClear();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [
+              {
+                effect_use_id: '9',
+                plugin_id: 'core.filter.contrast',
+                params: [{param_id: 'amount', value: 1}],
+              },
+            ],
+            effects_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+      catalog: {
+        effects: [{plugin_id: 'core.filter.contrast', name: 'Contrast', effect_version: 1}],
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const input = tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'});
+  await ReactTestRenderer.act(() => {
+    input.props.onFocus();
+    input.props.onChangeText('1.5');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onBlur();
+  });
+
+  expect(mockDispatchIntent).toHaveBeenCalled();
+  const payload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(payload.kind).toBe('set_effect_param');
+  expect(payload.value).toBe(1.5);
+  expect(tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.value).toBe(
+    '1.5',
+  );
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('opacity amount clamps below 0 before dispatch', async () => {
+  mockDispatchIntent.mockClear();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [
+              {
+                effect_use_id: '9',
+                plugin_id: 'core.filter.opacity',
+                params: [{param_id: 'amount', value: 1}],
+              },
+            ],
+            effects_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+      catalog: {
+        effects: [{plugin_id: 'core.filter.opacity', name: 'Opacity', effect_version: 1}],
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const input = tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'});
+  await ReactTestRenderer.act(() => {
+    input.props.onFocus();
+    input.props.onChangeText('-0.25');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.onBlur();
+  });
+
+  expect(mockDispatchIntent).toHaveBeenCalled();
+  const payload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(payload.kind).toBe('set_effect_param');
+  expect(payload.value).toBe(0);
+  expect(tree!.root.findByProps({testID: 'inspector-effect-param-input-9-amount'}).props.value).toBe(
+    '0',
+  );
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});

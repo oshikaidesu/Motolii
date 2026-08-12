@@ -153,7 +153,8 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
 }
 - (void)mouseDragged:(NSEvent *)event { [self emitPhase:1 event:event]; }
 - (void)mouseUp:(NSEvent *)event { [self emitPhase:2 event:event]; }
-- (void)mouseExited:(NSEvent *)event { [self emitPhase:3 event:event]; }
+// AppKitはdrag中のmouseDragged/Upをview外でも配送する。mouseExited即cancelしない。
+- (void)mouseExited:(NSEvent *)event { (void)event; }
 
 - (void)keyDown:(NSEvent *)event
 {
@@ -165,6 +166,7 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
 - (void)viewDidMoveToWindow
 {
   [super viewDidMoveToWindow];
+  // window喪失時だけcancelを維持。
   if (!self.window && self.stageGestureActive && self.stagePointerHandler) {
     self.stagePointerHandler(3, 0, 0);
     self.stageGestureActive = NO;

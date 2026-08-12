@@ -412,6 +412,7 @@ enum ActiveGesture {
         snapshot: GestureSnapshot,
         band: usize,
         clip_idx: usize,
+        layer_id: String,
         press_lx: f64,
         origin_a: f32,
         origin_b: f32,
@@ -422,17 +423,21 @@ enum ActiveGesture {
         snapshot: GestureSnapshot,
         band: usize,
         clip_idx: usize,
+        layer_id: String,
     },
     TrimEnd {
         snapshot: GestureSnapshot,
         band: usize,
         clip_idx: usize,
+        layer_id: String,
     },
     KeyDrag {
         snapshot: GestureSnapshot,
         band: usize,
         clip_idx: usize,
         key_idx: usize,
+        key_id: u64,
+        layer_id: String,
     },
     Deselect {
         snapshot: GestureSnapshot,
@@ -550,12 +555,11 @@ impl TimelineSession {
                                 key.2 = true;
                             }
                             *selected = flat;
+                            let layer_id = self.scene.bands[band].clips[clip_idx].layer_id.clone();
                             if self.scene.real {
-                                let layer_id =
-                                    self.scene.bands[band].clips[clip_idx].layer_id.clone();
                                 if !layer_id.is_empty() {
                                     selection_commit =
-                                        Some(TimelineSelectionCommit::SelectLayer { layer_id });
+                                        Some(TimelineSelectionCommit::SelectLayer { layer_id: layer_id.clone() });
                                 }
                             }
                             self.gesture = Some(ActiveGesture::KeyDrag {
@@ -563,6 +567,8 @@ impl TimelineSession {
                                 band,
                                 clip_idx,
                                 key_idx,
+                                key_id: self.scene.bands[band].clips[clip_idx].keys[key_idx].3,
+                                layer_id,
                             });
                             dirty = true;
                         }
@@ -580,8 +586,7 @@ impl TimelineSession {
                                     flat += b.clips.len() as i32;
                                 }
                                 dirty = true;
-                                let layer_id =
-                                    self.scene.bands[band].clips[clip_idx].layer_id.clone();
+                                let layer_id = self.scene.bands[band].clips[clip_idx].layer_id.clone();
                                 if !layer_id.is_empty() {
                                     selection_commit =
                                         Some(TimelineSelectionCommit::SelectLayer { layer_id });
@@ -591,6 +596,7 @@ impl TimelineSession {
                                 snapshot,
                                 band,
                                 clip_idx,
+                                layer_id: self.scene.bands[band].clips[clip_idx].layer_id.clone(),
                             });
                         }
                         HitKind::TrimEnd {
@@ -607,8 +613,7 @@ impl TimelineSession {
                                     flat += b.clips.len() as i32;
                                 }
                                 dirty = true;
-                                let layer_id =
-                                    self.scene.bands[band].clips[clip_idx].layer_id.clone();
+                                let layer_id = self.scene.bands[band].clips[clip_idx].layer_id.clone();
                                 if !layer_id.is_empty() {
                                     selection_commit =
                                         Some(TimelineSelectionCommit::SelectLayer { layer_id });
@@ -618,6 +623,7 @@ impl TimelineSession {
                                 snapshot,
                                 band,
                                 clip_idx,
+                                layer_id: self.scene.bands[band].clips[clip_idx].layer_id.clone(),
                             });
                         }
                         HitKind::Clip {
@@ -625,6 +631,8 @@ impl TimelineSession {
                             clip_idx,
                             flat,
                         } => {
+                            // clip本体クリックでkey選択を外し、Delete意味をlayer削除へ揃える。
+                            clear_all_key_selection(&mut self.scene);
                             *selected = flat;
                             let clip = &self.scene.bands[band].clips[clip_idx];
                             if self.scene.real && !clip.layer_id.is_empty() {
@@ -636,6 +644,7 @@ impl TimelineSession {
                                 snapshot,
                                 band,
                                 clip_idx,
+                                layer_id: self.scene.bands[band].clips[clip_idx].layer_id.clone(),
                                 press_lx: lx,
                                 origin_a: clip.a,
                                 origin_b: clip.b,
@@ -669,7 +678,11 @@ impl TimelineSession {
                 }
                 if self.scene.real {
                     if let Some(gesture) = self.gesture.as_ref() {
+                        if !self.gesture_indices_valid(gesture) {
+                            self.gesture = None;
+                        } else {
                         edit_commit = edit_commit_from_gesture(&self.scene, gesture);
+                        }
                     }
                 }
                 self.gesture = None;
@@ -707,10 +720,75 @@ impl TimelineSession {
         }
     }
 
+
+    /// gestureが指すband/clip/keyのindexが現sceneに実在するか。
+    fn gesture_indices_valid(&self, gesture: &ActiveGesture) -> bool {
+        let check =
+            |band: usize, clip_idx: usize, key_idx: Option<usize>, expected_layer_id: &str, key_id: Option<u64>| -> bool {
+            let Some(b) = self.scene.bands.get(band) else {
+                return false;
+            };
+            let Some(c) = b.clips.get(clip_idx) else {
+                return false;
+            };
+            if c.layer_id.as_str() != expected_layer_id {
+                return false;
+            }
+            match key_idx {
+                Some(k) => {
+                    if key_id.is_none() {
+                        return false;
+                    }
+                    match (c.keys.get(k), key_id) {
+                        (Some(key), Some(expected_key_id)) => key.3 == expected_key_id,
+                        _ => false,
+                    }
+                }
+                None => true,
+            }
+        };
+        match gesture {
+            ActiveGesture::Scrub { .. } | ActiveGesture::Deselect { .. } => true,
+            ActiveGesture::SelectOrMove {
+                band,
+                clip_idx,
+                layer_id,
+                ..
+            }
+            | ActiveGesture::TrimStart {
+                band,
+                clip_idx,
+                layer_id,
+                ..
+            }
+            | ActiveGesture::TrimEnd {
+                band,
+                clip_idx,
+                layer_id,
+                ..
+            } => check(*band, *clip_idx, None, layer_id, None),
+            ActiveGesture::KeyDrag {
+                band,
+                clip_idx,
+                key_idx,
+                key_id,
+                layer_id,
+                ..
+            } => check(*band, *clip_idx, Some(*key_idx), layer_id, Some(*key_id)),
+            #[allow(unreachable_patterns)]
+            _ => true,
+        }
+    }
+
     fn apply_move(&mut self, lx: f64, playhead: &mut f64, modifiers: u32) -> bool {
         let Some(mut gesture) = self.gesture.take() else {
             return false;
         };
+        // scene差し替え等でgestureのindexが現sceneに合わない場合は破棄する
+        // (呼び手の破棄規律に依存せず、session単体でpanic不能を保証する)。
+        if !self.gesture_indices_valid(&gesture) {
+            return false;
+        }
         let mut dirty = false;
         match &mut gesture {
             ActiveGesture::Scrub { .. } => {
@@ -743,9 +821,11 @@ impl TimelineSession {
                     let dx_bars = (dx_logical / surface_width()) * span;
                     let (prev_b, next_a) = neighbors(&self.scene, *band, *clip_idx);
                     let len = *origin_b - *origin_a;
-                    let raw_a = ((*origin_a as f64) + dx_bars)
-                        .clamp(prev_b as f64, (next_a - len) as f64)
-                        as f32;
+                    let raw_a = clamp_ordered(
+                        (*origin_a as f64) + dx_bars,
+                        prev_b as f64,
+                        (next_a - len) as f64,
+                    ) as f32;
                     let new_a = snap_bar(
                         &self.scene,
                         *playhead,
@@ -753,8 +833,8 @@ impl TimelineSession {
                         Some(*clip_idx),
                         raw_a,
                         modifiers,
-                    )
-                    .clamp(prev_b, next_a - len);
+                    );
+                    let new_a = clamp_ordered_f32(new_a, prev_b, next_a - len);
                     let new_b = new_a + len;
                     let move_keys = !self.scene.real;
                     let clip = &mut self.scene.bands[*band].clips[*clip_idx];
@@ -783,7 +863,7 @@ impl TimelineSession {
                 let bar = bar_at_lx(&self.scene, lx) as f32;
                 let (prev_b, _) = neighbors(&self.scene, *band, *clip_idx);
                 let clip_b = self.scene.bands[*band].clips[*clip_idx].b;
-                let raw_a = bar.clamp(prev_b, clip_b - MIN_CLIP_BARS);
+                let raw_a = clamp_ordered_f32(bar, prev_b, clip_b - MIN_CLIP_BARS);
                 let new_a = snap_bar(
                     &self.scene,
                     *playhead,
@@ -791,8 +871,8 @@ impl TimelineSession {
                     Some(*clip_idx),
                     raw_a,
                     modifiers,
-                )
-                .clamp(prev_b, clip_b - MIN_CLIP_BARS);
+                );
+                let new_a = clamp_ordered_f32(new_a, prev_b, clip_b - MIN_CLIP_BARS);
                 let clip = &mut self.scene.bands[*band].clips[*clip_idx];
                 if (clip.a - new_a).abs() > f32::EPSILON {
                     clip.a = new_a;
@@ -805,7 +885,7 @@ impl TimelineSession {
                 let bar = bar_at_lx(&self.scene, lx) as f32;
                 let (_, next_a) = neighbors(&self.scene, *band, *clip_idx);
                 let clip_a = self.scene.bands[*band].clips[*clip_idx].a;
-                let raw_b = bar.clamp(clip_a + MIN_CLIP_BARS, next_a);
+                let raw_b = clamp_ordered_f32(bar, clip_a + MIN_CLIP_BARS, next_a);
                 let new_b = snap_bar(
                     &self.scene,
                     *playhead,
@@ -813,8 +893,8 @@ impl TimelineSession {
                     Some(*clip_idx),
                     raw_b,
                     modifiers,
-                )
-                .clamp(clip_a + MIN_CLIP_BARS, next_a);
+                );
+                let new_b = clamp_ordered_f32(new_b, clip_a + MIN_CLIP_BARS, next_a);
                 let clip = &mut self.scene.bands[*band].clips[*clip_idx];
                 if (clip.b - new_b).abs() > f32::EPSILON {
                     clip.b = new_b;
@@ -832,9 +912,12 @@ impl TimelineSession {
                     let clip = &self.scene.bands[*band].clips[*clip_idx];
                     (clip.a, clip.b)
                 };
-                let raw_t = bar.clamp(clip_a, clip_b);
-                let new_t =
-                    snap_bar(&self.scene, *playhead, *band, Some(*clip_idx), raw_t, modifiers).clamp(clip_a, clip_b);
+                let raw_t = clamp_ordered_f32(bar, clip_a, clip_b);
+                let new_t = clamp_ordered_f32(
+                    snap_bar(&self.scene, *playhead, *band, Some(*clip_idx), raw_t, modifiers),
+                    clip_a,
+                    clip_b,
+                );
                 if let Some(key) = self.scene.bands[*band].clips[*clip_idx]
                     .keys
                     .get_mut(*key_idx)
@@ -927,6 +1010,7 @@ fn edit_commit_from_gesture(
             snapshot,
             band,
             clip_idx,
+            layer_id: _,
         } => {
             let clip = scene.bands.get(*band)?.clips.get(*clip_idx)?;
             let before = snapshot.scene.bands.get(*band)?.clips.get(*clip_idx)?;
@@ -942,6 +1026,7 @@ fn edit_commit_from_gesture(
             snapshot,
             band,
             clip_idx,
+            layer_id: _,
         } => {
             let clip = scene.bands.get(*band)?.clips.get(*clip_idx)?;
             let before = snapshot.scene.bands.get(*band)?.clips.get(*clip_idx)?;
@@ -958,6 +1043,8 @@ fn edit_commit_from_gesture(
             band,
             clip_idx,
             key_idx,
+            layer_id: _,
+            key_id: _,
         } => {
             let clip = scene.bands.get(*band)?.clips.get(*clip_idx)?;
             let key = clip.keys.get(*key_idx)?;
@@ -1008,6 +1095,21 @@ enum HitKind {
         flat: i32,
     },
     EmptyBar,
+}
+
+
+/// 範囲が逆転していてもpanicしないclamp(逆転時はminへ寄せる)。
+/// gesture中のscene差し替え等でclipが隙間より長い縮退があり得るため、
+/// `f64::clamp`のmin>max panicを構造的に排除する。
+fn clamp_ordered(v: f64, lo: f64, hi: f64) -> f64 {
+    if !v.is_finite() || !lo.is_finite() || !hi.is_finite() {
+        return if lo.is_finite() { lo } else { 0.0 };
+    }
+    if hi < lo { lo } else { v.clamp(lo, hi) }
+}
+
+fn clamp_ordered_f32(v: f32, lo: f32, hi: f32) -> f32 {
+    clamp_ordered(f64::from(v), f64::from(lo), f64::from(hi)) as f32
 }
 
 fn surface_width() -> f64 {
@@ -1125,6 +1227,35 @@ fn clear_all_key_selection(scene: &mut TimelineScene) {
             }
         }
     }
+}
+
+/// revision再投影後に旧key_idの選択を復元する。一致なしなら全解除のまま。
+pub(crate) fn restore_key_selection(
+    scene: &mut TimelineScene,
+    primary_layer_id: &str,
+    key_id: u64,
+) -> bool {
+    if primary_layer_id.is_empty() {
+        return false;
+    }
+    clear_all_key_selection(scene);
+    if key_id == 0 {
+        return false;
+    }
+    for band in &mut scene.bands {
+        for clip in &mut band.clips {
+            if clip.layer_id != primary_layer_id {
+                continue;
+            }
+            for key in &mut clip.keys {
+                if key.3 == key_id {
+                    key.2 = true;
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// real行で選択中のposition key。(layer_id, key_id)
@@ -1565,8 +1696,9 @@ pub(crate) fn draw_timeline(
     let bx = |b: f32| SURF_X + (b - view_a) / (view_b - view_a) * sw;
     let ox = |b: f32| SURF_X + b / song_bars * sw;
 
-    let count = clip_count(scene).max(1);
-    let selected = if selected < 0 {
+    // 0 clip時に rem_euclid(·,1) で幽霊番号を作らない。
+    let count = clip_count(scene);
+    let selected = if selected < 0 || count == 0 {
         None
     } else {
         Some(selected.rem_euclid(count as i32) as usize)
@@ -2197,6 +2329,97 @@ mod tests {
                 sess.scene.bands[0].clips[0].b,
                 16.0
             );
+        }
+    }
+
+    /// 決定的疑似乱数のgesture嵐。panicと不変条件破壊を狩る(seed固定で再現可能)。
+    #[test]
+    fn deterministic_gesture_storm_holds_invariants() {
+        // LCG(固定seed)。Date/外部乱数へ依存しない。
+        let mut state: u64 = 0x00C0FFEE_5EED_1234;
+        let mut next = move || {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (state >> 33) as u32
+        };
+        let mut rf = {
+            let mut n = next;
+            move |lo: f64, hi: f64| lo + (n() as f64 / u32::MAX as f64) * (hi - lo)
+        };
+
+        let scenes: Vec<TimelineScene> = vec![
+            TimelineScene::default(),
+            TimelineScene::from_snapshot_with_song_bars(
+                &[
+                    SnapshotLayerInput {
+                        layer_id: "1".into(),
+                        display_name: "a".into(),
+                        interval_secs: Some((0.0, 10.0)),
+                        keys: vec![
+                            SnapshotKeyInput { key_id: 10, time_secs: 2.0 },
+                            SnapshotKeyInput { key_id: 11, time_secs: 7.0 },
+                        ],
+                    },
+                    SnapshotLayerInput {
+                        layer_id: "2".into(),
+                        display_name: "b".into(),
+                        interval_secs: Some((1.0, 4.0)),
+                        keys: vec![],
+                    },
+                ],
+                Some("1"),
+                5.0,
+            ),
+        ];
+
+        for (w, h) in [(1240u32, 400u32), (2480, 620), (620, 200)] {
+            let mut session = TimelineSession::default();
+            let mut selected = 1i32;
+            let mut playhead = 0.5f64;
+            for step in 0..120_000u32 {
+                let roll = next() % 100;
+                if roll < 80 {
+                    let phase = match next() % 4 {
+                        0 => TimelinePointerPhase::Down,
+                        1 => TimelinePointerPhase::Move,
+                        2 => TimelinePointerPhase::Up,
+                        _ => TimelinePointerPhase::Cancel,
+                    };
+                    let x = rf(-200.0, w as f64 + 200.0);
+                    let y = rf(-200.0, h as f64 + 200.0);
+                    let m = next() % 2;
+                    let _ = session.pointer(&mut selected, &mut playhead, w, h, phase, x, y, m);
+                } else if roll < 95 {
+                    let _ = session.scroll(
+                        w,
+                        h,
+                        rf(-500.0, 500.0),
+                        rf(-500.0, 500.0),
+                        if next() % 4 == 0 { rf(-0.5, 0.5) } else { 0.0 },
+                        next() % 2,
+                        rf(0.0, w as f64),
+                        rf(0.0, h as f64),
+                    );
+                } else {
+                    // gesture中も含む任意タイミングのscene差し替え(P0-2経路)。
+                    session.scene = scenes[(next() % scenes.len() as u32) as usize].clone();
+                }
+
+                // 不変条件: viewとplayheadとclip幾何が常に健全。
+                let sb = session.scene.song_bars;
+                assert!(playhead.is_finite() && (0.0..=1.0).contains(&playhead), "step {step}");
+                assert!(session.scene.view_a.is_finite() && session.scene.view_b.is_finite());
+                assert!(session.scene.view_a >= -0.001 && session.scene.view_b <= sb + 0.001);
+                assert!(session.scene.view_b > session.scene.view_a);
+                for band in &session.scene.bands {
+                    for clip in &band.clips {
+                        assert!(clip.a.is_finite() && clip.b.is_finite());
+                        assert!(clip.b >= clip.a, "clip inverted at step {step}");
+                        for key in &clip.keys {
+                            assert!(key.0.is_finite());
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -3570,6 +3793,163 @@ mod tests {
         assert!(selected_real_key(&scene).is_none());
         scene.bands[0].clips[0].keys[0].2 = true;
         assert_eq!(selected_real_key(&scene), Some(("11".into(), 7)));
+    }
+
+    #[test]
+    fn real_clip_body_click_clears_key_selection() {
+        let mut sess = TimelineSession::default();
+        sess.scene = TimelineScene::from_snapshot(
+            &[SnapshotLayerInput {
+                layer_id: "11".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![SnapshotKeyInput {
+                    key_id: 7,
+                    time_secs: 4.0,
+                }],
+            }],
+            Some("11"),
+        );
+        test_select_first_real_key(&mut sess.scene);
+        assert!(selected_real_key(&sess.scene).is_some());
+        let mut selected = 0;
+        let mut playhead = 0.1;
+        let y = body_top() + f64::from(ROW) * 0.5 - 0.5;
+        // keyでないclip本体中央。
+        let x = f64::from(bx(&sess.scene, 3.0));
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            x,
+            y,
+            0,
+        );
+        assert!(selected_real_key(&sess.scene).is_none());
+    }
+
+    #[test]
+    fn restore_key_selection_matches_by_key_id() {
+        let mut scene = TimelineScene::from_snapshot(
+            &[SnapshotLayerInput {
+                layer_id: "11".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![
+                    SnapshotKeyInput {
+                        key_id: 7,
+                        time_secs: 4.0,
+                    },
+                    SnapshotKeyInput {
+                        key_id: 9,
+                        time_secs: 6.0,
+                    },
+                ],
+            }],
+            Some("11"),
+        );
+        assert!(restore_key_selection(&mut scene, "11", 9));
+        assert_eq!(selected_real_key(&scene), Some(("11".into(), 9)));
+        assert!(!scene.bands[0].clips[0].keys[0].2);
+        assert!(scene.bands[0].clips[0].keys[1].2);
+    }
+
+    #[test]
+    fn restore_key_selection_requires_layer_match() {
+        let mut scene = TimelineScene::from_snapshot(
+            &[SnapshotLayerInput {
+                layer_id: "11".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![
+                    SnapshotKeyInput {
+                        key_id: 7,
+                        time_secs: 4.0,
+                    },
+                    SnapshotKeyInput {
+                        key_id: 9,
+                        time_secs: 6.0,
+                    },
+                ],
+            }],
+            Some("11"),
+        );
+        assert!(!restore_key_selection(&mut scene, "12", 9));
+        assert!(selected_real_key(&scene).is_none());
+    }
+
+    #[test]
+    fn real_projection_key_drag_discarded_when_scene_layer_id_changes() {
+        let mut sess = TimelineSession::default();
+        sess.scene = TimelineScene::from_snapshot(
+            &[SnapshotLayerInput {
+                layer_id: "11".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![SnapshotKeyInput {
+                    key_id: 7,
+                    time_secs: 4.0,
+                }],
+            }],
+            Some("11"),
+        );
+        sess.scene.real = true;
+        let mut selected = 0;
+        let mut playhead = 0.27;
+        let y = body_top() + f64::from(ROW) * 0.5 - 0.5;
+        let start_key = sess.scene.bands[0].clips[0].keys[0];
+        let x = f64::from(bx(&sess.scene, start_key.0));
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            x,
+            y,
+            0,
+        );
+        let replaced = TimelineScene::from_snapshot(
+            &[SnapshotLayerInput {
+                layer_id: "12".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![SnapshotKeyInput {
+                    key_id: 7,
+                    time_secs: 4.0,
+                }],
+            }],
+            Some("12"),
+        );
+        sess.scene = replaced;
+        sess.scene.real = true;
+
+        let moved = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Move,
+            x + 12.0,
+            y,
+            0,
+        );
+        let up = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Up,
+            x + 12.0,
+            y,
+            0,
+        );
+        assert!(moved.edit_commit.is_none());
+        assert!(up.edit_commit.is_none());
+        assert!(!sess.has_active_gesture());
+        assert_eq!(sess.scene.bands[0].clips[0].keys[0].0, start_key.0);
     }
 
     #[test]

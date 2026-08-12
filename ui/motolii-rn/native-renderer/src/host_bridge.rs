@@ -977,7 +977,50 @@ fn slice_from_written<'a>(out: &'a [u8], written: i64) -> Option<&'a [u8]> {
 
 fn inject_host_handle(intent: &str, handle: u64) -> Result<String, ()> {
     const KEY: &str = "\"host_handle\"";
-    let key_at = intent.find(KEY).ok_or(())?;
+    // top-level fieldのみ。brace depthで nested `"host_handle"` への誤爆を防ぐ。
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escape = false;
+    let bytes = intent.as_bytes();
+    let mut key_at = None;
+    let mut i = 0usize;
+    while i + KEY.len() <= bytes.len() {
+        let b = bytes[i];
+        if in_string {
+            if escape {
+                escape = false;
+            } else if b == b'\\' {
+                escape = true;
+            } else if b == b'"' {
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
+        match b {
+            b'"' => {
+                if depth == 1 && intent[i..].starts_with(KEY) {
+                    let after = &intent[i + KEY.len()..];
+                    if after.trim_start().starts_with(':') {
+                        key_at = Some(i);
+                        break;
+                    }
+                }
+                in_string = true;
+                i += 1;
+            }
+            b'{' => {
+                depth += 1;
+                i += 1;
+            }
+            b'}' => {
+                depth -= 1;
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    let key_at = key_at.ok_or(())?;
     let after_key = &intent[key_at + KEY.len()..];
     let colon = after_key.find(':').ok_or(())?;
     let after_colon = &after_key[colon + 1..];
@@ -1873,6 +1916,24 @@ mod tests {
         )
         .expect("inject");
         assert!(patched.contains(r#""host_handle":"42""#));
+    }
+
+    #[test]
+    fn inject_host_handle_rewrites_only_top_level_not_nested() {
+        let patched = inject_host_handle(
+            concat!(
+                r#"{"version":1,"direction":"rn-to-host","kind":"set_effect_param","#,
+                r#""host_handle":"","meta":{"host_handle":"nested"},"target":"1"}"#
+            ),
+            99,
+        )
+        .expect("inject");
+        assert!(patched.contains(r#""host_handle":"99""#));
+        assert!(patched.contains(r#""host_handle":"nested""#));
+        // top-levelだけが99。nestedは維持。
+        let top = patched.find(r#""host_handle":"99""#).expect("top");
+        let nested = patched.find(r#""host_handle":"nested""#).expect("nested");
+        assert!(top < nested);
     }
 
     #[test]

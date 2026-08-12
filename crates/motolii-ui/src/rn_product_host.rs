@@ -630,13 +630,12 @@ impl RnProductHost {
         }
         selection.truncate(MAX_STAGE_SELECTION);
 
-        let bounds = document
-            .layers
-            .iter()
+        let bounds = layers_in_track_order(document.as_ref())
+            .into_iter()
             .take(MAX_STAGE_BOUNDS)
             .map(|(layer_id, name)| WireStageBound {
                 layer_id: layer_id.get().to_string(),
-                display_name: name.to_owned(),
+                display_name: name,
             })
             .collect::<Vec<_>>();
 
@@ -3909,10 +3908,10 @@ fn snapshot_for_test(snapshot: WireProductSnapshot) -> RnProductSnapshotForTest 
 }
 
 fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection {
-    let layers_truncated = document.layers.len() > MAX_STAGE_BOUNDS;
-    let layers = document
-        .layers
-        .iter()
+    let ordered = layers_in_track_order(document);
+    let layers_truncated = ordered.len() > MAX_STAGE_BOUNDS;
+    let layers = ordered
+        .into_iter()
         .take(MAX_STAGE_BOUNDS)
         .map(|(layer_id, name)| {
             let (start, duration) = find_first_clip(document, layer_id)
@@ -3924,7 +3923,7 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
                 project_layer_source_params(document, layer_id);
             WireTimelineLayer {
                 layer_id: layer_id.get().to_string(),
-                display_name: name.to_owned(),
+                display_name: name,
                 start,
                 duration,
                 position_keys,
@@ -3942,6 +3941,35 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
         layers,
         layers_truncated,
     }
+}
+
+/// LayerIdTable採番順ではなく Document.tracks の track→item 順。
+/// Groupは半対応(自身+childrenを順に列挙)。
+fn layers_in_track_order(document: &motolii_doc::Document) -> Vec<(LayerId, String)> {
+    fn walk(items: &[TrackItem], document: &motolii_doc::Document, out: &mut Vec<(LayerId, String)>) {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) => {
+                    let id = clip.envelope.layer_id;
+                    if let Some(name) = document.layers.display_name(id) {
+                        out.push((id, name.to_owned()));
+                    }
+                }
+                TrackItem::Group(group) => {
+                    let id = group.envelope.layer_id;
+                    if let Some(name) = document.layers.display_name(id) {
+                        out.push((id, name.to_owned()));
+                    }
+                    walk(&group.children, document, out);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for track in &document.tracks {
+        walk(&track.items, document, &mut out);
+    }
+    out
 }
 
 fn project_layer_effects(
@@ -4350,9 +4378,12 @@ pub fn host_render_frame_for_app(
     let revision = host.runtime.document_revision().to_string();
     let generation = host.projection_generation.to_string();
     let time = host.current_time;
-    if let Some((prev_rev, prev_gen, prev_time)) = host.stage_frame_last.as_ref() {
-        if prev_rev == &revision && prev_gen == &generation && *prev_time == time {
-            return HostRenderFrameResult::Unchanged;
+    // 呼び手がframe未保持なら(rev,gen,time)一致でも再render(renderer再生成後の穴を塞ぐ)。
+    if out.is_some() {
+        if let Some((prev_rev, prev_gen, prev_time)) = host.stage_frame_last.as_ref() {
+            if prev_rev == &revision && prev_gen == &generation && *prev_time == time {
+                return HostRenderFrameResult::Unchanged;
+            }
         }
     }
 
@@ -7478,6 +7509,62 @@ mod tests {
     }
 
     #[test]
+    fn timeline_and_bounds_follow_track_item_order_not_layer_id_allocation() {
+        let _lock = test_lock();
+        let mut document = Document::new_current();
+        // 採番順: first(=低id) → second。track順は逆(second track0, first track1)。
+        let first = document.layers.allocate("first").expect("first");
+        let second = document.layers.allocate("second").expect("second");
+        let track_a = document.track_ids.allocate("V1").expect("V1");
+        let track_b = document.track_ids.allocate("V2").expect("V2");
+        let duration = document.composition.duration;
+        let mk_clip = |layer: LayerId| {
+            TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: RationalTime::ZERO,
+                duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params([0.0, 0.0], [0.2, 0.2]),
+                    extra: Default::default(),
+                },
+            })
+        };
+        document.tracks.push(Track {
+            id: track_a,
+            items: vec![mk_clip(second)],
+        });
+        document.tracks.push(Track {
+            id: track_b,
+            items: vec![mk_clip(first)],
+        });
+        let alloc_order: Vec<_> = document
+            .layers
+            .iter()
+            .map(|(id, _)| id.get().to_string())
+            .collect();
+        assert_eq!(
+            alloc_order,
+            vec![first.get().to_string(), second.get().to_string()]
+        );
+
+        let host = create_host_from_document("track-order-projection", &document);
+        let snap = read_snapshot(host);
+        let expected = vec![second.get().to_string(), first.get().to_string()];
+        assert_eq!(snap.layer_ids, expected);
+        let timeline_ids: Vec<_> = snap
+            .timeline
+            .layers
+            .iter()
+            .map(|layer| layer.layer_id.clone())
+            .collect();
+        assert_eq!(timeline_ids, expected);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
     fn snapshot_json_of_16_layers_64_keys_stays_under_the_snapshot_cap_and_untruncated() {
         let _lock = test_lock();
         let document = make_16_layers_64_keys_document();
@@ -8137,6 +8224,26 @@ mod tests {
     }
 
     #[test]
+    fn set_time_accepts_top_level_host_handle_when_nested_host_handle_appears_first() {
+        let _lock = test_lock();
+        let host = create_host("host-handle-nested-then-top-level");
+        let nested = 999_999_u64;
+        let mut intent = serde_json::Map::<String, serde_json::Value>::new();
+        intent.insert("nested".into(), serde_json::json!({ "host_handle": nested.to_string() }));
+        intent.insert("version".into(), serde_json::json!(1));
+        intent.insert("direction".into(), serde_json::json!("rn-to-host"));
+        intent.insert("kind".into(), serde_json::json!("set_time"));
+        intent.insert("frame".into(), serde_json::json!(0));
+        intent.insert("host_handle".into(), serde_json::json!(host.to_string()));
+        let response = dispatch_raw_json(
+            host,
+            &serde_json::to_string(&serde_json::Value::Object(intent)).expect("intent json"),
+        );
+        assert!(response.accepted);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
     fn move_layer_by_rotated_scaled_layer_uses_world_inverse_delta() {
         let _lock = test_lock();
         let mut fixture = Fixture::new();
@@ -8306,7 +8413,7 @@ mod tests {
             host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
             HostRenderFrameResult::Rendered
         );
-        let first = frame.take().expect("frame");
+        let first = frame.as_ref().expect("frame");
         let draft = Quality::DRAFT
             .render_desc(frame_desc_from_composition(&Document::new_current()).expect("desc"));
         assert_eq!((first.width, first.height), (draft.width, draft.height));
@@ -8314,7 +8421,44 @@ mod tests {
             host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
             HostRenderFrameResult::Unchanged
         );
-        assert!(frame.is_none());
+        assert!(frame.is_some());
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_rerenders_when_caller_dropped_frame() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_host("stage-frame-dropped");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        )
+        .accepted);
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        assert!(frame.is_some());
+        // 呼び手がframeを破棄(= renderer再生成後相当)。(rev,gen,time)一致でも再render。
+        frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        assert!(frame.is_some());
 
         let _ = host_destroy_for_test(host);
     }
