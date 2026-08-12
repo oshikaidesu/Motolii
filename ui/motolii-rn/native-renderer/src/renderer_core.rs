@@ -1,7 +1,13 @@
 use std::time::Instant;
 
-use crate::rerun_stage::{EmbeddedSpatialStage, StageTransformProjection};
+use crate::rerun_stage::{
+    aspect_fit_ndc_rect, canonical_to_fit_ndc, fixture_rect_fill_rgba, fixture_rect_stroke_rgba,
+    apply_move_preview_to_geometry, EmbeddedSpatialStage, StageTransformProjection,
+};
 use crate::timeline_skia::{TimelinePointerPhase, TimelineScene, TimelineSession};
+use motolii_gpu::GpuCtx;
+use motolii_render::RenderSession;
+use motolii_ui::{AppStageFrame, HostRenderFrameResult};
 
 const SET_TIME_THROTTLE_MS: u64 = 32;
 
@@ -337,8 +343,20 @@ struct TimelineResources {
     dirty: bool,
 }
 
+struct StageFramePass {
+    texture_pipeline: wgpu::RenderPipeline,
+    texture_bgl: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+    color_pipeline: wgpu::RenderPipeline,
+    vertex_buffer: wgpu::Buffer,
+}
+
 struct StageResources {
     rerun: EmbeddedSpatialStage,
+    gpu_ctx: GpuCtx,
+    render_session: RenderSession,
+    frame: Option<AppStageFrame>,
+    pass: StageFramePass,
 }
 
 pub(crate) struct RendererCore {
@@ -436,8 +454,17 @@ impl RendererCore {
 
         let stage = (scene == SceneKind::Stage)
             .then(|| {
-                EmbeddedSpatialStage::new(&adapter, &device, &queue, config.format)
-                    .map(|rerun| StageResources { rerun })
+                let gpu_ctx = GpuCtx::from_device_queue(device.clone(), queue.clone());
+                let render_session = RenderSession::new(&gpu_ctx);
+                EmbeddedSpatialStage::new(&adapter, &device, &queue, config.format).map(|rerun| {
+                    StageResources {
+                        rerun,
+                        gpu_ctx,
+                        render_session,
+                        frame: None,
+                        pass: create_stage_frame_pass(&device, config.format),
+                    }
+                })
             })
             .transpose()?;
         let timeline = (scene == SceneKind::Timeline)
@@ -812,13 +839,22 @@ impl RendererCore {
         match self.scene {
             SceneKind::Stage => {
                 self.sync_host_stage_geometry();
-                self.stage.as_mut().expect("stage resources").rerun.render(
+                let stage = self.stage.as_mut().expect("stage resources");
+    stage.rerun.render(
                     &self.device,
                     &self.queue,
                     &view,
                     self.config.width,
                     self.config.height,
-                )?
+                )?;
+                composite_host_stage_frame(
+                    &self.device,
+                    &self.queue,
+                    &view,
+                    self.config.width,
+                    self.config.height,
+                    stage,
+                );
             }
             SceneKind::Timeline => {
                 self.sync_host_timeline_projection();
@@ -898,9 +934,15 @@ impl RendererCore {
             let viewport = (self.config.width, self.config.height);
             let command = match crate::host_bridge::try_read_timeline_projection() {
                 Some(projection) => {
+                    stage
+                        .rerun
+                        .set_host_primary_layer_id(projection.primary_layer_id.clone());
                     host_stage_geometry_command(self.host_stage_geometry.as_ref(), Some(&projection))
                 }
-                None => host_stage_geometry_command(self.host_stage_geometry.as_ref(), None),
+                None => {
+                    stage.rerun.set_host_primary_layer_id(None);
+                    host_stage_geometry_command(self.host_stage_geometry.as_ref(), None)
+                }
             };
             match command {
                 HostStageGeometryCommand::Apply(geometry) => {
@@ -917,6 +959,7 @@ impl RendererCore {
                         self.host_stage_geometry = None;
                         self.host_stage_viewport = None;
                         self.stage_move_gesture = None;
+                        stage.frame = None;
                     }
                 }
                 HostStageGeometryCommand::Noop => {
@@ -1017,6 +1060,407 @@ impl RendererCore {
             pass.draw(0..3, 0..1);
         }
         self.queue.submit(Some(encoder.finish()));
+    }
+}
+
+fn create_stage_frame_pass(
+    device: &wgpu::Device,
+    surface_format: wgpu::TextureFormat,
+) -> StageFramePass {
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("Motolii stage frame sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        ..Default::default()
+    });
+    let texture_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("Motolii stage frame texture layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    });
+    let texture_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Motolii stage frame texture shader"),
+        source: wgpu::ShaderSource::Wgsl(
+            r#"
+struct VOut { @builtin(position) p: vec4<f32>, @location(0) uv: vec2<f32> };
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@vertex fn vs(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VOut {
+    var o: VOut; o.p = vec4(pos, 0.0, 1.0); o.uv = uv; return o;
+}
+@fragment fn fs(i: VOut) -> @location(0) vec4<f32> {
+    return textureSample(tex, samp, i.uv);
+}
+"#
+            .into(),
+        ),
+    });
+    let texture_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Motolii stage frame texture pipeline layout"),
+        bind_group_layouts: &[Some(&texture_bgl)],
+        immediate_size: 0,
+    });
+    let texture_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Motolii stage frame texture pipeline"),
+        layout: Some(&texture_layout),
+        vertex: wgpu::VertexState {
+            module: &texture_shader,
+            entry_point: Some("vs"),
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: 16,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &[
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x2,
+                        offset: 0,
+                        shader_location: 0,
+                    },
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x2,
+                        offset: 8,
+                        shader_location: 1,
+                    },
+                ],
+            }],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &texture_shader,
+            entry_point: Some("fs"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: surface_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+
+    let color_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Motolii stage frame color shader"),
+        source: wgpu::ShaderSource::Wgsl(
+            r#"
+struct VOut { @builtin(position) p: vec4<f32>, @location(0) color: vec4<f32> };
+@vertex fn vs(@location(0) pos: vec2<f32>, @location(1) color: vec4<f32>) -> VOut {
+    var o: VOut; o.p = vec4(pos, 0.0, 1.0); o.color = color; return o;
+}
+@fragment fn fs(i: VOut) -> @location(0) vec4<f32> { return i.color; }
+"#
+            .into(),
+        ),
+    });
+    let color_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Motolii stage frame color pipeline layout"),
+        bind_group_layouts: &[],
+        immediate_size: 0,
+    });
+    let color_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("Motolii stage frame color pipeline"),
+        layout: Some(&color_layout),
+        vertex: wgpu::VertexState {
+            module: &color_shader,
+            entry_point: Some("vs"),
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: 24,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &[
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x2,
+                        offset: 0,
+                        shader_location: 0,
+                    },
+                    wgpu::VertexAttribute {
+                        format: wgpu::VertexFormat::Float32x4,
+                        offset: 8,
+                        shader_location: 1,
+                    },
+                ],
+            }],
+            compilation_options: Default::default(),
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &color_shader,
+            entry_point: Some("fs"),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: surface_format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+            compilation_options: Default::default(),
+        }),
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    });
+
+    let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Motolii stage frame vertices"),
+        size: 4096,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    StageFramePass {
+        texture_pipeline,
+        texture_bgl,
+        sampler,
+        color_pipeline,
+        vertex_buffer,
+    }
+}
+
+fn composite_host_stage_frame(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    target: &wgpu::TextureView,
+    viewport_w: u32,
+    viewport_h: u32,
+    stage: &mut StageResources,
+) {
+    if viewport_w == 0 || viewport_h == 0 {
+        return;
+    }
+    let was_composite = stage.rerun.real_frame_composite();
+    let mut fresh = None;
+    match crate::host_bridge::try_host_render_frame(
+        &stage.gpu_ctx,
+        &mut stage.render_session,
+        &mut fresh,
+    ) {
+        HostRenderFrameResult::Rendered => {
+            stage.frame = fresh;
+            stage.rerun.set_real_frame_composite(true);
+        }
+        HostRenderFrameResult::Failed => {
+            stage.frame = None;
+            stage.rerun.set_real_frame_composite(false);
+            if was_composite {
+                if let Some(geometry) = stage.rerun.host_geometry().cloned() {
+                    let _ = stage.rerun.apply_host_stage_geometry(
+                        &geometry,
+                        viewport_w,
+                        viewport_h,
+                    );
+                }
+            }
+        }
+        HostRenderFrameResult::Unchanged => {}
+    }
+    if !stage.rerun.real_frame_composite() {
+        return;
+    }
+    let Some(frame) = stage.frame.as_ref() else {
+        return;
+    };
+
+    let fit = aspect_fit_ndc_rect(
+        frame.width as f32,
+        frame.height as f32,
+        viewport_w as f32,
+        viewport_h as f32,
+    );
+    let aspect = frame.width as f64 / frame.height as f64;
+
+    // textured quad (2 triangles)
+    let [x, y, w, h] = fit;
+    let tex_verts: [[f32; 4]; 6] = [
+        [x, y, 0.0, 1.0],
+        [x + w, y, 1.0, 1.0],
+        [x + w, y + h, 1.0, 0.0],
+        [x, y, 0.0, 1.0],
+        [x + w, y + h, 1.0, 0.0],
+        [x, y + h, 0.0, 0.0],
+    ];
+    let mut bytes = Vec::with_capacity(6 * 16 + 256);
+    for v in &tex_verts {
+        for c in v {
+            bytes.extend_from_slice(&c.to_ne_bytes());
+        }
+    }
+    let tex_vertex_count = 6u32;
+
+    let mut color_bytes = Vec::new();
+    let mut color_vertex_count = 0u32;
+    let stroke = fixture_rect_stroke_rgba();
+    let mut fill = fixture_rect_fill_rgba();
+    fill[3] *= 0.42; // 半透明 preview（色相は既存定数）
+
+    let geometry = stage.rerun.host_geometry().cloned();
+    let preview = stage.rerun.move_preview().cloned();
+    let primary = stage.rerun.host_primary_layer_id().map(str::to_owned);
+    if let Some(geometry) = geometry.as_ref() {
+        let drawn = apply_move_preview_to_geometry(geometry, preview.as_ref());
+        if let Some((layer_id, _)) = preview.as_ref() {
+            if let Some(layer) = drawn.layers.iter().find(|l| l.layer_id == *layer_id) {
+                append_quad_rgba(&mut color_bytes, &mut color_vertex_count, layer.corners, aspect, fit, fill);
+            }
+        }
+        if let Some(primary_id) = primary.as_deref() {
+            if let Some(layer) = geometry.layers.iter().find(|l| l.layer_id == primary_id) {
+                let corners = if let Some((pid, _)) = preview.as_ref() {
+                    if pid == primary_id {
+                        drawn
+                            .layers
+                            .iter()
+                            .find(|l| l.layer_id == primary_id)
+                            .map(|l| l.corners)
+                            .unwrap_or(layer.corners)
+                    } else {
+                        layer.corners
+                    }
+                } else {
+                    layer.corners
+                };
+                append_outline_rgba(
+                    &mut color_bytes,
+                    &mut color_vertex_count,
+                    corners,
+                    aspect,
+                    fit,
+                    stroke,
+                );
+            }
+        }
+    }
+
+    let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("Motolii stage frame bind group"),
+        layout: &stage.pass.texture_bgl,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&stage.pass.sampler),
+            },
+        ],
+    });
+
+    queue.write_buffer(&stage.pass.vertex_buffer, 0, &bytes);
+    let color_offset = bytes.len() as u64;
+    if !color_bytes.is_empty() {
+        queue.write_buffer(&stage.pass.vertex_buffer, color_offset, &color_bytes);
+    }
+
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("Motolii stage frame composite"),
+    });
+    {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Motolii stage frame composite pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&stage.pass.texture_pipeline);
+        pass.set_bind_group(0, &bind_group, &[]);
+        pass.set_vertex_buffer(0, stage.pass.vertex_buffer.slice(0..color_offset));
+        pass.draw(0..tex_vertex_count, 0..1);
+        if color_vertex_count > 0 {
+            pass.set_pipeline(&stage.pass.color_pipeline);
+            let end = color_offset + color_bytes.len() as u64;
+            pass.set_vertex_buffer(0, stage.pass.vertex_buffer.slice(color_offset..end));
+            pass.draw(0..color_vertex_count, 0..1);
+        }
+    }
+    queue.submit([encoder.finish()]);
+}
+
+fn append_quad_rgba(
+    out: &mut Vec<u8>,
+    count: &mut u32,
+    corners: [[f64; 2]; 4],
+    aspect: f64,
+    fit: [f32; 4],
+    rgba: [f32; 4],
+) {
+    let pts: [[f32; 2]; 4] = corners.map(|[cx, cy]| canonical_to_fit_ndc(cx, cy, aspect, fit));
+    for tri in [[0usize, 1, 2], [0, 2, 3]] {
+        for i in tri {
+            out.extend_from_slice(&pts[i][0].to_ne_bytes());
+            out.extend_from_slice(&pts[i][1].to_ne_bytes());
+            for c in rgba {
+                out.extend_from_slice(&c.to_ne_bytes());
+            }
+            *count += 1;
+        }
+    }
+}
+
+fn append_outline_rgba(
+    out: &mut Vec<u8>,
+    count: &mut u32,
+    corners: [[f64; 2]; 4],
+    aspect: f64,
+    fit: [f32; 4],
+    rgba: [f32; 4],
+) {
+    let pts: [[f32; 2]; 4] = corners.map(|[cx, cy]| canonical_to_fit_ndc(cx, cy, aspect, fit));
+    // 細いクアッド帯で枠を描く（線トポロジを増やさない）。
+    const HALF: f32 = 0.004;
+    for i in 0..4 {
+        let a = pts[i];
+        let b = pts[(i + 1) % 4];
+        let dx = b[0] - a[0];
+        let dy = b[1] - a[1];
+        let len = (dx * dx + dy * dy).sqrt().max(1e-6);
+        let nx = -dy / len * HALF;
+        let ny = dx / len * HALF;
+        let q = [
+            [a[0] - nx, a[1] - ny],
+            [a[0] + nx, a[1] + ny],
+            [b[0] + nx, b[1] + ny],
+            [b[0] - nx, b[1] - ny],
+        ];
+        for tri in [[0usize, 1, 2], [0, 2, 3]] {
+            for vi in tri {
+                out.extend_from_slice(&q[vi][0].to_ne_bytes());
+                out.extend_from_slice(&q[vi][1].to_ne_bytes());
+                for c in rgba {
+                    out.extend_from_slice(&c.to_ne_bytes());
+                }
+                *count += 1;
+            }
+        }
     }
 }
 

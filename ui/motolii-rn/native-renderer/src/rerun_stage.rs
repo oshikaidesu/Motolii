@@ -1,5 +1,8 @@
 use std::{sync::Arc, time::Instant};
 
+#[cfg(test)]
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use egui::{
     Event, PointerButton, Pos2, RawInput, Rect, Vec2,
     epaint::{Mesh, Vertex as EguiVertex},
@@ -29,6 +32,28 @@ const FIXTURE_RECT_FILL_COLOR: u32 = 0xE9_8C_6AFF;
 const FIXTURE_RECT_STROKE_COLOR: u32 = 0xEC_D8_FFFF;
 const STAGE_HOST_ERASE_COLOR: u32 = 0x0000_0000;
 
+#[cfg(test)]
+static LAYER_FILL_INGEST_COUNT: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(test)]
+pub(crate) fn test_reset_layer_fill_ingest_count() {
+    LAYER_FILL_INGEST_COUNT.store(0, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(crate) fn test_layer_fill_ingest_count() -> u64 {
+    LAYER_FILL_INGEST_COUNT.load(Ordering::SeqCst)
+}
+
+/// 実フレーム合成中は fill ingest を数えない（GPU非依存の分岐正本）。
+pub(crate) fn note_layer_fill_ingest(real_frame_composite: bool) {
+    if real_frame_composite {
+        return;
+    }
+    #[cfg(test)]
+    LAYER_FILL_INGEST_COUNT.fetch_add(1, Ordering::SeqCst);
+}
+
 /// Owns only the adapter from the native Stage surface to Rerun's Spatial View.
 ///
 /// Product chrome, persistence, and Document projection stay outside this adapter.
@@ -43,9 +68,13 @@ pub(crate) struct EmbeddedSpatialStage {
     fixture_item_id: String,
     /// Host `stage_geometry` 適用済みなら fixture 再ingestを止める。
     host_geometry_active: bool,
+    /// 実フレーム合成が動くとき layer fill Mesh3D を止める。
+    real_frame_composite: bool,
     host_layer_ids: Vec<String>,
     /// 直近の host 投影（move preview の復元元）。
     host_geometry: Option<HostStageGeometry>,
+    /// primary 選択（outline用）。
+    host_primary_layer_id: Option<String>,
     /// move drag 中の world delta preview（対象 layer のみ）。
     move_preview: Option<(String, [f64; 2])>,
 }
@@ -95,8 +124,10 @@ impl EmbeddedSpatialStage {
             fixture_transform: Transform::default(),
             fixture_item_id: "rectangle@0.500000,0.500000|pucker-bloat".into(),
             host_geometry_active: false,
+            real_frame_composite: false,
             host_layer_ids: Vec::new(),
             host_geometry: None,
+            host_primary_layer_id: None,
             move_preview: None,
         };
         if !stage.set_created_item("rectangle@0.500000,0.500000|pucker-bloat") {
@@ -222,10 +253,7 @@ impl EmbeddedSpatialStage {
             if !ingest_mesh(
                 &mut self.spatial_stage,
                 old_id,
-                MeshData {
-                    vertices: vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
-                    indices: vec![[0, 1, 2]],
-                },
+                hidden_layer_mesh(),
                 STAGE_HOST_ERASE_COLOR,
             ) {
                 self.host_layer_ids = host_layers;
@@ -233,10 +261,40 @@ impl EmbeddedSpatialStage {
             }
         }
         self.host_geometry_active = false;
+        self.real_frame_composite = false;
         self.host_geometry = None;
+        self.host_primary_layer_id = None;
         self.move_preview = None;
         let item_id = self.fixture_item_id.clone();
         self.set_created_item(&item_id)
+    }
+
+    pub(crate) fn set_real_frame_composite(&mut self, active: bool) {
+        if self.real_frame_composite == active {
+            return;
+        }
+        let _ = self.erase_host_layer_fills();
+        self.real_frame_composite = active;
+    }
+
+    pub(crate) fn set_host_primary_layer_id(&mut self, primary: Option<String>) {
+        self.host_primary_layer_id = primary;
+    }
+
+    pub(crate) fn host_primary_layer_id(&self) -> Option<&str> {
+        self.host_primary_layer_id.as_deref()
+    }
+
+    pub(crate) fn host_geometry(&self) -> Option<&HostStageGeometry> {
+        self.host_geometry.as_ref()
+    }
+
+    pub(crate) fn move_preview(&self) -> Option<&(String, [f64; 2])> {
+        self.move_preview.as_ref()
+    }
+
+    pub(crate) fn real_frame_composite(&self) -> bool {
+        self.real_frame_composite
     }
 
     /// Host snapshot の stage_geometry で fixture を置換する。revision 側で gate 済み前提。
@@ -251,10 +309,7 @@ impl EmbeddedSpatialStage {
             return false;
         }
         // fixture entity を透明メッシュで上書きし、host layer だけを見せる。
-        let cleared = MeshData {
-            vertices: vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
-            indices: vec![[0, 1, 2]],
-        };
+        let cleared = hidden_layer_mesh();
         if !ingest_mesh(
             &mut self.spatial_stage,
             "motolii/fixtures/path-rectangle/fill",
@@ -277,24 +332,25 @@ impl EmbeddedSpatialStage {
             let _ = ingest_mesh(
                 &mut self.spatial_stage,
                 old_id,
-                MeshData {
-                    vertices: vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
-                    indices: vec![[0, 1, 2]],
-                },
+                hidden_layer_mesh(),
                 STAGE_HOST_ERASE_COLOR,
             );
         }
 
         let preview_geom = apply_move_preview_to_geometry(geometry, self.move_preview.as_ref());
-        for layer in &preview_geom.layers {
-            let mesh = mesh_from_canonical_corners(layer.corners, viewport_width, viewport_height);
-            if !ingest_mesh(
-                &mut self.spatial_stage,
-                &layer.layer_id,
-                mesh,
-                FIXTURE_RECT_FILL_COLOR,
-            ) {
-                return false;
+        if !self.real_frame_composite {
+            for layer in &preview_geom.layers {
+                let mesh =
+                    mesh_from_canonical_corners(layer.corners, viewport_width, viewport_height);
+                note_layer_fill_ingest(self.real_frame_composite);
+                if !ingest_mesh(
+                    &mut self.spatial_stage,
+                    &layer.layer_id,
+                    mesh,
+                    FIXTURE_RECT_FILL_COLOR,
+                ) {
+                    return false;
+                }
             }
         }
         self.host_layer_ids = next_ids;
@@ -318,6 +374,10 @@ impl EmbeddedSpatialStage {
             return false;
         };
         self.move_preview = Some((layer_id.to_owned(), delta));
+        if self.real_frame_composite {
+            // 実フレーム経路では pass 側で半透明quadを描く。
+            return true;
+        }
         let preview = apply_move_preview_to_geometry(&base, self.move_preview.as_ref());
         let Some(layer) = preview
             .layers
@@ -328,6 +388,7 @@ impl EmbeddedSpatialStage {
             return false;
         };
         let mesh = mesh_from_canonical_corners(layer.corners, viewport_width, viewport_height);
+        note_layer_fill_ingest(self.real_frame_composite);
         ingest_mesh(
             &mut self.spatial_stage,
             layer_id,
@@ -740,6 +801,30 @@ impl MeshData {
     }
 }
 
+fn hidden_layer_mesh() -> MeshData {
+    MeshData {
+        vertices: vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+        indices: vec![[0, 1, 2]],
+    }
+}
+
+impl EmbeddedSpatialStage {
+    fn erase_host_layer_fills(&mut self) -> bool {
+        let mesh = hidden_layer_mesh();
+        for old_id in &self.host_layer_ids {
+            if !ingest_mesh(
+                &mut self.spatial_stage,
+                old_id,
+                mesh.clone(),
+                STAGE_HOST_ERASE_COLOR,
+            ) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
 fn ingest_mesh(
     stage: &mut re_view_spatial::SpatialStage,
     entity_path: &str,
@@ -762,6 +847,44 @@ fn ingest_mesh(
         return false;
     };
     stage.ingest_chunk(Arc::new(chunk)).is_ok()
+}
+
+/// content を viewport に aspect-fit した NDC 矩形 `[x, y, w, h]`（Y-up、中心原点）。
+pub(crate) fn aspect_fit_ndc_rect(
+    content_w: f32,
+    content_h: f32,
+    viewport_w: f32,
+    viewport_h: f32,
+) -> [f32; 4] {
+    let scale = (viewport_w / content_w).min(viewport_h / content_h);
+    let fitted_w = content_w * scale;
+    let fitted_h = content_h * scale;
+    let ndc_w = 2.0 * fitted_w / viewport_w;
+    let ndc_h = 2.0 * fitted_h / viewport_h;
+    [-0.5 * ndc_w, -0.5 * ndc_h, ndc_w, ndc_h]
+}
+
+/// canonical (Y-up, height=1, width=aspect) → aspect-fit NDC。
+pub(crate) fn canonical_to_fit_ndc(cx: f64, cy: f64, aspect: f64, fit: [f32; 4]) -> [f32; 2] {
+    let u = (cx / aspect + 0.5) as f32;
+    let v = (cy + 0.5) as f32;
+    [fit[0] + u * fit[2], fit[1] + v * fit[3]]
+}
+
+pub(crate) fn rgba_from_u32(color: u32) -> [f32; 4] {
+    let r = ((color >> 24) & 0xff) as f32 / 255.0;
+    let g = ((color >> 16) & 0xff) as f32 / 255.0;
+    let b = ((color >> 8) & 0xff) as f32 / 255.0;
+    let a = (color & 0xff) as f32 / 255.0;
+    [r, g, b, a]
+}
+
+pub(crate) fn fixture_rect_fill_rgba() -> [f32; 4] {
+    rgba_from_u32(FIXTURE_RECT_FILL_COLOR)
+}
+
+pub(crate) fn fixture_rect_stroke_rgba() -> [f32; 4] {
+    rgba_from_u32(FIXTURE_RECT_STROKE_COLOR)
 }
 
 /// canonical corners → fixture と同じ mesh 空間（host 投影経路）。
@@ -815,6 +938,43 @@ pub(crate) fn apply_move_preview_to_geometry(
 
 #[cfg(test)]
 mod tests {
+    use crate::host_bridge::HostStageGeometryLayer;
+    fn test_stage_host() -> Option<EmbeddedSpatialStage> {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::LowPower,
+            compatible_surface: None,
+            force_fallback_adapter: true,
+        }))
+        .ok()?;
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("native renderer test"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::default(),
+            memory_hints: wgpu::MemoryHints::Performance,
+            trace: wgpu::Trace::Off,
+            experimental_features: wgpu::ExperimentalFeatures::disabled(),
+        }))
+        .ok()?;
+
+        EmbeddedSpatialStage::new(
+            &adapter,
+            &device,
+            &queue,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+        )
+        .ok()
+        .or_else(|| {
+            EmbeddedSpatialStage::new(
+                &adapter,
+                &device,
+                &queue,
+                wgpu::TextureFormat::Bgra8UnormSrgb,
+            )
+            .ok()
+        })
+    }
+
     use super::*;
 
     #[test]
@@ -903,5 +1063,54 @@ mod tests {
         let verts = mesh_vertices_from_canonical_corners(corners, 2, 1);
         let nx = verts[0][0] as f64 + 0.5;
         assert!((nx - 0.75).abs() < 1e-9);
+    }
+
+    #[test]
+    fn aspect_fit_ndc_rect_for_16x9_viewports() {
+        // 同一比率 → 全面
+        assert_eq!(
+            aspect_fit_ndc_rect(1920.0, 1080.0, 1920.0, 1080.0),
+            [-1.0, -1.0, 2.0, 2.0]
+        );
+        // 正方: 横フル、縦 1080/1920 * 2
+        assert_eq!(
+            aspect_fit_ndc_rect(1920.0, 1080.0, 1920.0, 1920.0),
+            [-1.0, -0.5625, 2.0, 1.125]
+        );
+        // ウルトラワイド: 縦フル、横 1920/3840 * 2
+        assert_eq!(
+            aspect_fit_ndc_rect(1920.0, 1080.0, 3840.0, 1080.0),
+            [-0.5, -1.0, 1.0, 2.0]
+        );
+        // 縦長 9:16 viewport: scale=1080/1920
+        let tall = aspect_fit_ndc_rect(1920.0, 1080.0, 1080.0, 1920.0);
+        assert_eq!(tall[0], -1.0);
+        assert_eq!(tall[2], 2.0);
+        assert!((tall[3] - 0.632_812_5).abs() < 1e-6);
+        assert!((tall[1] + 0.316_406_25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn layer_fill_ingest_count_gates_on_real_frame() {
+        test_reset_layer_fill_ingest_count();
+        let Some(mut stage) = test_stage_host() else {
+            return;
+        };
+        let geometry = HostStageGeometry {
+            layers: vec![HostStageGeometryLayer {
+                layer_id: "layer-a".into(),
+                corners: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+            }],
+            layers_truncated: false,
+        };
+        stage.set_real_frame_composite(false);
+        assert!(stage.apply_host_stage_geometry(&geometry, 128, 128));
+        assert_eq!(test_layer_fill_ingest_count(), 1);
+        stage.set_real_frame_composite(true);
+        assert!(stage.apply_host_stage_geometry(&geometry, 128, 128));
+        assert_eq!(test_layer_fill_ingest_count(), 1);
+        stage.set_real_frame_composite(false);
+        assert!(stage.apply_host_stage_geometry(&geometry, 128, 128));
+        assert_eq!(test_layer_fill_ingest_count(), 2);
     }
 }

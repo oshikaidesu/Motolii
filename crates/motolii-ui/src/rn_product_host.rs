@@ -11,17 +11,18 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
-use motolii_core::{Fps, PixelSize, RationalTime};
+use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, PixelSize, Quality, RationalTime};
 use motolii_doc::{
-    layer_names_for_item, Affine2D, Clip, Command, DocParam, DocValue, EvaluationTime, ItemEnvelope,
-    KeyframeId, LayerId, ParentLocator, TrackItem,
+    build_document_frame_graph, layer_names_for_item, Affine2D, Clip, Command, DocParam, DocValue,
+    EvaluationTime, ItemEnvelope, KeyframeId, LayerId, ParentLocator, TrackItem,
 };
 use motolii_eval::{DataTracks, Interp};
+use motolii_gpu::GpuCtx;
+use motolii_plugins_firstparty::first_party_runtime;
+use motolii_render::{render_graph_cached, RenderGraphInputs, RenderSession};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[cfg(target_os = "macos")]
-use motolii_gpu::GpuCtx;
 #[cfg(target_os = "macos")]
 use wgpu::{
     Color, CompositeAlphaMode, CurrentSurfaceTexture, LoadOp, Operations, PresentMode,
@@ -514,6 +515,26 @@ pub(crate) struct TimelineFrameBorrow {
     pub(crate) playhead: RationalTime,
 }
 
+/// Stage実フレーム。native合成が同一device上でtextureを読む。
+#[derive(Debug)]
+#[doc(hidden)]
+pub struct AppStageFrame {
+    pub texture: wgpu::Texture,
+    pub width: u32,
+    pub height: u32,
+    pub revision: String,
+    pub generation: String,
+    pub time: RationalTime,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[doc(hidden)]
+pub enum HostRenderFrameResult {
+    Unchanged,
+    Rendered,
+    Failed,
+}
+
 struct RnProductHost {
     runtime: DocumentEditRuntime,
     projection_generation: u64,
@@ -523,6 +544,9 @@ struct RnProductHost {
     stages: HashMap<u64, RnStageSurface>,
     timelines: HashMap<u64, RnTimelineSurface>,
     destroyed: bool,
+    stage_frame_runtime: Option<motolii_plugin::PluginRuntime>,
+    /// dirty gate: 前回返した (revision, generation, time)。
+    stage_frame_last: Option<(String, String, RationalTime)>,
     #[cfg(target_os = "macos")]
     gpu: Option<HostGpuBundle>,
 }
@@ -3093,11 +3117,13 @@ impl RnHostRegistry {
                 projection_generation: 0,
                 current_time: RationalTime::ZERO,
                 primary: None,
-                stages: HashMap::new(),
-                timelines: HashMap::new(),
-                destroyed: false,
-                #[cfg(target_os = "macos")]
-                gpu: None,
+            stages: HashMap::new(),
+            timelines: HashMap::new(),
+            destroyed: false,
+            stage_frame_runtime: None,
+            stage_frame_last: None,
+            #[cfg(target_os = "macos")]
+            gpu: None,
             },
         );
         Ok(handle)
@@ -3823,6 +3849,122 @@ fn response_for_test(response: WireIntentResponse) -> RnHostTestResponse {
 
 pub fn host_create_for_test(project_path: &Path) -> Result<u64, RnHostError> {
     with_registry(|registry| registry.create_host(project_path))
+}
+
+/// 評価済み Document の実フレームを Stage 合成へ渡す薄い seam。
+/// dirty gate: 前回と同じ (revision, generation, time) なら再renderせず Unchanged。
+#[doc(hidden)]
+pub fn host_render_frame_for_app(
+    host_handle: u64,
+    gpu: &GpuCtx,
+    session: &mut RenderSession,
+    out: &mut Option<AppStageFrame>,
+) -> HostRenderFrameResult {
+    // Unchanged / Failed では呼び手の既存frameへ触れない(Rendered時のみ上書き)。
+    // 冒頭で無条件にNone化するとUnchanged tickごとに実フレームが消える。
+    let Ok(mut guard) = registry().lock() else {
+        return HostRenderFrameResult::Failed;
+    };
+    let Some(host) = guard.hosts.get_mut(&host_handle) else {
+        return HostRenderFrameResult::Failed;
+    };
+    if host.destroyed {
+        return HostRenderFrameResult::Failed;
+    }
+
+    let revision = host.runtime.document_revision().to_string();
+    let generation = host.projection_generation.to_string();
+    let time = host.current_time;
+    if let Some((prev_rev, prev_gen, prev_time)) = host.stage_frame_last.as_ref() {
+        if prev_rev == &revision && prev_gen == &generation && *prev_time == time {
+            return HostRenderFrameResult::Unchanged;
+        }
+    }
+
+    let document = host.runtime.snapshot();
+    let Some(desc) = frame_desc_from_composition(document.as_ref()) else {
+        return HostRenderFrameResult::Failed;
+    };
+
+    if host.stage_frame_runtime.is_none() {
+        let Ok(runtime) = first_party_runtime() else {
+            return HostRenderFrameResult::Failed;
+        };
+        host.stage_frame_runtime = Some(runtime);
+    }
+
+    // product path / render_worker と同じ: 空 DataTracks、project_root=None、Quality::DRAFT。
+    let tracks = DataTracks::new();
+    let eval = EvaluationTime::new(time);
+    let built = {
+        let runtime = host
+            .stage_frame_runtime
+            .as_ref()
+            .expect("stage_frame_runtime initialized");
+        match build_document_frame_graph(
+            document.as_ref(),
+            eval,
+            desc,
+            &tracks,
+            runtime,
+            None,
+        ) {
+            Ok(built) => built,
+            Err(_) => return HostRenderFrameResult::Failed,
+        }
+    };
+    let rendered = {
+        let runtime = host
+            .stage_frame_runtime
+            .as_ref()
+            .expect("stage_frame_runtime initialized");
+        match render_graph_cached(
+            gpu,
+            session,
+            time,
+            &built.graph,
+            &RenderGraphInputs {
+                camera: built.camera,
+                video_sources: &[],
+                source_time: Some(built.source_time),
+                plugins: Some(runtime.executors()),
+            },
+            Quality::DRAFT,
+        ) {
+            Ok(frame) => frame,
+            Err(_) => return HostRenderFrameResult::Failed,
+        }
+    };
+
+    host.stage_frame_last = Some((revision.clone(), generation.clone(), time));
+    *out = Some(AppStageFrame {
+        texture: rendered.texture,
+        width: rendered.desc.width,
+        height: rendered.desc.height,
+        revision,
+        generation,
+        time,
+    });
+    HostRenderFrameResult::Rendered
+}
+
+/// composition アスペクトから bootstrap 系の FrameDesc を作る（高さ1080固定）。
+fn frame_desc_from_composition(document: &motolii_doc::Document) -> Option<FrameDesc> {
+    const HEIGHT: u32 = 1080;
+    let width = u64::from(HEIGHT)
+        .checked_mul(document.composition.aspect_num() as u64)?
+        .checked_div(document.composition.aspect_den() as u64)? as u32;
+    if width == 0 {
+        return None;
+    }
+    FrameDesc::try_packed(
+        width,
+        HEIGHT,
+        PixelFormat::Rgba8Unorm,
+        ColorSpace::Srgb,
+        true,
+    )
+    .ok()
 }
 
 pub fn host_read_snapshot_for_test(
@@ -4556,6 +4698,8 @@ mod tests {
         Document, ItemEnvelope, KeyframeId, LayerId, ProjectSession, ResourceLimits,
         SaveProjectOptions, Track, TrackItem, Transform2D, RECT_LAYER_SOURCE,
     };
+    use motolii_gpu::download_rgba;
+    use motolii_render::RenderSession;
     use motolii_testkit::tmp_dir;
 
     use super::*;
@@ -4606,6 +4750,27 @@ mod tests {
             )
             .expect("save fixture");
         path
+    }
+
+    fn pixel_at(bytes: &[u8], width: u32, x: u32, y: u32) -> [u8; 4] {
+        let base = ((y * width + x) * 4) as usize;
+        [bytes[base], bytes[base + 1], bytes[base + 2], bytes[base + 3]]
+    }
+
+    fn has_non_background_pixel(
+        bytes: &[u8],
+        width: u32,
+        height: u32,
+        background: [u8; 4],
+    ) -> bool {
+        for y in 0..height {
+            for x in 0..width {
+                if pixel_at(bytes, width, x, y) != background {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     fn create_host(tag: &str) -> u64 {
@@ -7595,6 +7760,160 @@ mod tests {
         let nan = dispatch_wire(host, intent);
         assert!(!nan.accepted);
         assert_eq!(document_json_bytes(host), before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_returns_texture_and_dirty_gates() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            // BLOCKED(GPU): sandboxにadapterが無い場合はsupervisorが実機で回す。
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_host("stage-frame-dirty");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        )
+        .accepted);
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let first = frame.take().expect("frame");
+        let draft = Quality::DRAFT
+            .render_desc(frame_desc_from_composition(&Document::new_current()).expect("desc"));
+        assert_eq!((first.width, first.height), (draft.width, draft.height));
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Unchanged
+        );
+        assert!(frame.is_none());
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_rerenders_on_revision_and_time() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_host("stage-frame-rerender");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.1,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        )
+        .accepted);
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Unchanged
+        );
+        let rev1 = frame.as_ref().expect("f1").revision.clone();
+
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        )
+        .accepted);
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let after_undo = frame.as_ref().expect("undo frame");
+        assert_ne!(after_undo.revision, rev1);
+
+        assert!(dispatch_raw_json(host, &set_time_json(host, "30")).accepted);
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let after_time = frame.as_ref().expect("time frame");
+        assert_eq!(after_time.time, RationalTime::try_new(1, 1).expect("1/1"));
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Unchanged
+        );
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_unknown_handle_is_false() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(9_999, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Failed
+        );
+        assert!(frame.is_none());
+    }
+
+    #[test]
+    fn host_render_frame_after_seed_place_has_non_uniform_pixels() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_host("stage-frame-readback");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        )
+        .accepted);
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let first = frame.take().expect("frame");
+        let draft = Quality::DRAFT
+            .render_desc(frame_desc_from_composition(&Document::new_current()).expect("desc"));
+        assert_eq!((first.width, first.height), (draft.width, draft.height));
+
+        let bytes = download_rgba(&gpu, &first.texture).expect("frame readback");
+        assert_eq!(bytes.len(), (first.width as usize) * (first.height as usize) * 4);
+        let center = pixel_at(&bytes, first.width, first.width / 2, first.height / 2);
+        let background = pixel_at(&bytes, first.width, 0, 0);
+        assert_ne!(center, background);
+        assert!(has_non_background_pixel(&bytes, first.width, first.height, background));
+
         let _ = host_destroy_for_test(host);
     }
 }

@@ -35,7 +35,9 @@ mod rn_product_host;
 pub use rn_product_host::{
     host_create_for_test, host_destroy_for_test, host_destroy_stage_for_test,
     host_dispatch_intent_for_test, host_read_snapshot_for_test, host_register_stage_for_test,
-    RnHostError, RnHostReasonCode, RnHostTestIntent, RnHostTestResponse, RnProductSnapshotForTest,
+    host_render_frame_for_app, AppStageFrame, HostRenderFrameResult, RnHostError,
+    RnHostReasonCode, RnHostTestIntent,
+    RnHostTestResponse, RnProductSnapshotForTest,
 };
 // RN app staticlibが同一crate graph内からRust経由で呼ぶための再export。
 // extern importで参照するとarchiveから当該objectが引かれずリンクに失敗する。

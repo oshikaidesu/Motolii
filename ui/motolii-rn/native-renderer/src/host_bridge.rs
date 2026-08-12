@@ -31,6 +31,10 @@ use motolii_ui::{
     motolii_rn_host_read_snapshot_json, motolii_rn_stage_register,
 };
 
+use motolii_gpu::GpuCtx;
+use motolii_render::RenderSession;
+use motolii_ui::{host_render_frame_for_app, AppStageFrame, HostRenderFrameResult};
+
 struct HostSlot {
     handle: u64,
     /// processに1つだけのStage seat。register後に埋まる。
@@ -753,6 +757,32 @@ pub(crate) fn try_stage_logical_size() -> Option<(f64, f64)> {
     } else {
         None
     }
+}
+
+/// Host 投影があるときだけ実フレーム seam を呼ぶ。slot lock は seam 前に手放す。
+pub(crate) fn try_host_render_frame(
+    gpu: &GpuCtx,
+    session: &mut RenderSession,
+    out: &mut Option<AppStageFrame>,
+) -> HostRenderFrameResult {
+    let handle = {
+        let Ok(guard) = host_slot().lock() else {
+            return HostRenderFrameResult::Failed;
+        };
+        let Some(slot) = guard.as_ref() else {
+            return HostRenderFrameResult::Failed;
+        };
+        slot.handle
+    };
+    host_render_frame_for_app(handle, gpu, session, out)
+}
+
+pub(crate) fn host_slot_present() -> bool {
+    host_slot()
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|_| ()))
+        .is_some()
 }
 
 #[cfg(test)]
