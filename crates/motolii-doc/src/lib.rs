@@ -650,6 +650,16 @@ impl DocumentWriter {
     ) -> Result<Option<Command>, CommandError> {
         command::prepare_set_position_key_value(&self.doc, target, key, new)
     }
+
+    /// Position key の時刻変更commandを準備する。same-time は `None`。
+    pub fn prepare_set_position_key_time(
+        &self,
+        target: LayerId,
+        key: KeyframeId,
+        new: RationalTime,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_position_key_time(&self.doc, target, key, new)
+    }
 }
 
 /// 読み手API: スナップショットだけを受け、書き込めない。

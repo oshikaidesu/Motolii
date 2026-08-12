@@ -408,6 +408,16 @@ impl RendererCore {
             if matches!(phase, PointerPhase::Up | PointerPhase::Cancel) {
                 self.force_next_host_snapshot = true;
             }
+            if let Some(commit) = outcome.edit_commit {
+                let accepted = crate::host_bridge::try_dispatch_timeline_edit(&commit);
+                if !accepted {
+                    // 拒否時は次snapshotで幾何を戻す。dirty再描画だけ先に立てる。
+                    if let Some(timeline) = &mut self.timeline {
+                        timeline.dirty = true;
+                    }
+                    self.force_next_host_snapshot = true;
+                }
+            }
             self.scrubbing = self.scrub_time_pump.is_active();
         } else if matches!(phase, PointerPhase::Up | PointerPhase::Cancel) {
             self.scrubbing = false;

@@ -15,7 +15,7 @@ use thiserror::Error;
 use motolii_core::{RationalTime, TimeMap};
 
 use crate::asset::{Asset, AssetDraft, AssetError, AssetId};
-use crate::doc_keyframe::{validate_interp, DocKeyframeError};
+use crate::doc_keyframe::{validate_interp, DocKeyframe, DocKeyframeError};
 use crate::doc_value::DocValue;
 use crate::duplicate::{definition_semantic_body_eq, remint_order_keyframe_ids};
 use crate::param::DocParam;
@@ -64,6 +64,7 @@ pub enum PropertyId {
     ChildList,
     PositionKeyInterp(KeyframeId),
     PositionKeyValue(KeyframeId),
+    PositionKeyTime(KeyframeId),
     ClipStart,
     ClipIn,
     ClipOut,
@@ -133,6 +134,7 @@ pub enum CommandKind {
     AddPositionKey,
     SetPositionKeyInterp,
     SetPositionKeyValue,
+    SetPositionKeyTime,
     SetClipStart,
     TrimClipIn,
     TrimClipOut,
@@ -222,6 +224,16 @@ pub enum CommandError {
     PositionKeyValueNonFinite { layer: u64, key_id: u64 },
     #[error("position key value payload mismatch for key {key_id} on layer {layer}")]
     PositionKeyValuePayloadMismatch { layer: u64, key_id: u64 },
+    #[error("position key time source unsupported for layer {layer}")]
+    PositionKeyTimeSourceUnsupported { layer: u64 },
+    #[error("position key time not found for key {key_id} on layer {layer}")]
+    PositionKeyTimeNotFound { layer: u64, key_id: u64 },
+    #[error("position key time payload mismatch for key {key_id} on layer {layer}")]
+    PositionKeyTimePayloadMismatch { layer: u64, key_id: u64 },
+    #[error("position key time {key_id} on layer {layer} would collide at destination")]
+    PositionKeyTimeOccupied { layer: u64, key_id: u64 },
+    #[error("position key time for key {key_id} on layer {layer} must be >= 0")]
+    PositionKeyTimeNegative { layer: u64, key_id: u64 },
     #[error("effect use {use_id} not found in document")]
     EffectUseNotFound { use_id: u64 },
     #[error(
@@ -446,6 +458,12 @@ pub enum Command {
         old: [f64; 2],
         new: [f64; 2],
     },
+    SetPositionKeyTime {
+        target: LayerId,
+        key: KeyframeId,
+        old: RationalTime,
+        new: RationalTime,
+    },
     SetClipStart {
         target: LayerId,
         old: RationalTime,
@@ -526,6 +544,7 @@ impl Command {
             }
             Command::SetPositionKeyInterp { .. } => CommandKind::SetPositionKeyInterp,
             Command::SetPositionKeyValue { .. } => CommandKind::SetPositionKeyValue,
+            Command::SetPositionKeyTime { .. } => CommandKind::SetPositionKeyTime,
             Command::SetClipStart { .. } => CommandKind::SetClipStart,
             Command::TrimClipIn { .. } => CommandKind::TrimClipIn,
             Command::TrimClipOut { .. } => CommandKind::TrimClipOut,
@@ -546,6 +565,7 @@ impl Command {
             | Command::SetAudioComponentGain { target, .. }
             | Command::SetPositionKeyInterp { target, .. }
             | Command::SetPositionKeyValue { target, .. }
+            | Command::SetPositionKeyTime { target, .. }
             | Command::SetClipStart { target, .. }
             | Command::TrimClipIn { target, .. }
             | Command::TrimClipOut { target, .. } => target.get(),
@@ -600,6 +620,7 @@ impl Command {
             }
             Command::SetPositionKeyInterp { key, .. } => PropertyId::PositionKeyInterp(*key),
             Command::SetPositionKeyValue { key, .. } => PropertyId::PositionKeyValue(*key),
+            Command::SetPositionKeyTime { key, .. } => PropertyId::PositionKeyTime(*key),
             Command::SetAudioComponentEnabled { index, .. } => PropertyId::AudioEnabled(*index),
             Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
@@ -672,6 +693,7 @@ impl Command {
             | Command::RemoveTrackItem { .. }
             | Command::SetPositionKeyInterp { .. }
             | Command::SetPositionKeyValue { .. }
+            | Command::SetPositionKeyTime { .. }
             | Command::SetClipStart { .. }
             | Command::TrimClipIn { .. }
             | Command::TrimClipOut { .. } => None,
@@ -1113,6 +1135,12 @@ impl Command {
                 old,
                 new,
             } => apply_set_position_key_value(doc, *target, *key, *old, *new),
+            Command::SetPositionKeyTime {
+                target,
+                key,
+                old,
+                new,
+            } => apply_set_position_key_time(doc, *target, *key, *old, *new),
             Command::SetClipStart { target, new, .. } => {
                 let layer = target.get();
                 let duration = {
@@ -1440,6 +1468,17 @@ impl Command {
                 old,
                 new,
             } => Command::SetPositionKeyValue {
+                target,
+                key,
+                old: new,
+                new: old,
+            },
+            Command::SetPositionKeyTime {
+                target,
+                key,
+                old,
+                new,
+            } => Command::SetPositionKeyTime {
                 target,
                 key,
                 old: new,
@@ -1972,6 +2011,25 @@ pub(crate) fn prepare_set_position_key_value(
         return Ok(None);
     }
     Ok(Some(Command::SetPositionKeyValue {
+        target,
+        key,
+        old,
+        new,
+    }))
+}
+
+/// Position key の時刻だけを移す command を構築する。same-time は `None`。
+pub(crate) fn prepare_set_position_key_time(
+    doc: &Document,
+    target: LayerId,
+    key: KeyframeId,
+    new: RationalTime,
+) -> Result<Option<Command>, CommandError> {
+    let old = position_key_time_for_command(doc, target, key, None, new)?;
+    if new == old {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetPositionKeyTime {
         target,
         key,
         old,
@@ -2704,6 +2762,86 @@ fn apply_set_position_key_value(
     swap_if_valid(doc, next)
 }
 
+fn apply_set_position_key_time(
+    doc: &mut Document,
+    target: LayerId,
+    key: KeyframeId,
+    old: RationalTime,
+    new: RationalTime,
+) -> Result<(), CommandError> {
+    position_key_time_for_command(doc, target, key, Some(old), new)?;
+    if old == new {
+        return Ok(());
+    }
+
+    let mut next = doc.clone();
+    let env = find_envelope_mut(&mut next, target)?;
+    let layer = target.get();
+    let DocParam::Keyframes(track) = &mut env.transform.position else {
+        return Err(CommandError::PositionKeyTimeSourceUnsupported { layer });
+    };
+    let removed = track
+        .remove_by_id(key)
+        .ok_or(CommandError::PositionKeyTimeNotFound {
+            layer,
+            key_id: key.get(),
+        })?;
+    track.insert(DocKeyframe {
+        id: removed.id,
+        t: new,
+        value: removed.value,
+        interp: removed.interp,
+    });
+    swap_if_valid(doc, next)
+}
+
+fn position_key_time_for_command(
+    doc: &Document,
+    target: LayerId,
+    key: KeyframeId,
+    expected_old: Option<RationalTime>,
+    new: RationalTime,
+) -> Result<RationalTime, CommandError> {
+    let layer = target.get();
+    if new < RationalTime::ZERO {
+        return Err(CommandError::PositionKeyTimeNegative {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let DocParam::Keyframes(track) = &env.transform.position else {
+        return Err(CommandError::PositionKeyTimeSourceUnsupported { layer });
+    };
+    if track.keys().is_empty() {
+        return Err(CommandError::PositionKeyTimeSourceUnsupported { layer });
+    }
+    let current = track
+        .get_by_id(key)
+        .ok_or(CommandError::PositionKeyTimeNotFound {
+            layer,
+            key_id: key.get(),
+        })?;
+    if expected_old.is_some_and(|old| old != current.t) {
+        return Err(CommandError::PositionKeyTimePayloadMismatch {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    if new != current.t
+        && track
+            .keys()
+            .iter()
+            .any(|candidate| candidate.id != key && candidate.t == new)
+    {
+        return Err(CommandError::PositionKeyTimeOccupied {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    Ok(current.t)
+}
+
 fn position_key_value_for_command(
     doc: &Document,
     target: LayerId,
@@ -2848,4 +2986,141 @@ fn validate_add_position_key_payload(
         return Err(mismatch());
     }
     Ok(t)
+}
+
+#[cfg(test)]
+mod set_position_key_time_tests {
+    use super::*;
+    use crate::position_key_prepare::prepare_add_position_key;
+    use crate::{Clip, ClipSource, Document, ItemEnvelope, Track, TrackItem};
+    use motolii_core::RationalTime;
+
+    fn keyed_doc_two_keys() -> (Document, LayerId, KeyframeId, KeyframeId) {
+        let mut doc = Document::new_current();
+        let layer = doc.layers.allocate("a").unwrap();
+        let track = doc.track_ids.allocate("V1").unwrap();
+        let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+        doc.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: RationalTime::ZERO,
+                duration: RationalTime::try_new(10, 1).unwrap(),
+                time_map: Default::default(),
+                source: ClipSource::asset_video_only(asset),
+            })],
+        });
+        doc.validate().unwrap();
+        let crate::AddPositionKeyPreparation::Prepared {
+            key_id: k0,
+            command: c0,
+        } = prepare_add_position_key(&doc, layer, RationalTime::from_seconds(2)).unwrap()
+        else {
+            panic!("key0");
+        };
+        c0.apply(&mut doc).unwrap();
+        let crate::AddPositionKeyPreparation::Prepared {
+            key_id: k1,
+            command: c1,
+        } = prepare_add_position_key(&doc, layer, RationalTime::from_seconds(5)).unwrap()
+        else {
+            panic!("key1");
+        };
+        c1.apply(&mut doc).unwrap();
+        (doc, layer, k0, k1)
+    }
+
+    fn key_snapshot(doc: &Document, layer: LayerId, key: KeyframeId) -> (RationalTime, DocValue, motolii_eval::Interp) {
+        let env = find_envelope(doc, layer).unwrap();
+        let DocParam::Keyframes(track) = &env.transform.position else {
+            panic!("keyframes");
+        };
+        let k = track.get_by_id(key).unwrap();
+        (k.t, k.value.clone(), k.interp)
+    }
+
+    #[test]
+    fn set_position_key_time_forward_inverse_restores_document() {
+        let (mut doc, layer, k0, k1) = keyed_doc_two_keys();
+        let before = serde_json::to_vec(&doc).unwrap();
+        let (t1, v1, i1) = key_snapshot(&doc, layer, k1);
+        let command = prepare_set_position_key_time(
+            &doc,
+            layer,
+            k0,
+            RationalTime::from_seconds(3),
+        )
+        .unwrap()
+        .unwrap();
+        command.apply(&mut doc).unwrap();
+        let (t0, v0, i0) = key_snapshot(&doc, layer, k0);
+        assert_eq!(t0, RationalTime::from_seconds(3));
+        assert_eq!(v0, DocValue::Vec2([0.0, 0.0]));
+        assert_eq!(i0, motolii_eval::Interp::Linear);
+        assert_eq!(key_snapshot(&doc, layer, k1), (t1, v1, i1));
+        command.inverse().apply(&mut doc).unwrap();
+        assert_eq!(serde_json::to_vec(&doc).unwrap(), before);
+    }
+
+    #[test]
+    fn set_position_key_time_rejects_cas_occupied_missing_without_mutation() {
+        let (doc, layer, k0, k1) = keyed_doc_two_keys();
+        let before = serde_json::to_vec(&doc).unwrap();
+
+        let cas = Command::SetPositionKeyTime {
+            target: layer,
+            key: k0,
+            old: RationalTime::from_seconds(9),
+            new: RationalTime::from_seconds(3),
+        };
+        let mut live = doc.clone();
+        assert!(matches!(
+            cas.apply(&mut live),
+            Err(CommandError::PositionKeyTimePayloadMismatch { .. })
+        ));
+        assert_eq!(serde_json::to_vec(&live).unwrap(), before);
+
+        assert!(matches!(
+            prepare_set_position_key_time(&doc, layer, k0, RationalTime::from_seconds(5)),
+            Err(CommandError::PositionKeyTimeOccupied { .. })
+        ));
+        assert_eq!(serde_json::to_vec(&doc).unwrap(), before);
+
+        let missing = KeyframeId::from_raw(k1.get().saturating_add(99));
+        assert!(matches!(
+            prepare_set_position_key_time(&doc, layer, missing, RationalTime::from_seconds(3)),
+            Err(CommandError::PositionKeyTimeNotFound { .. })
+        ));
+        assert_eq!(serde_json::to_vec(&doc).unwrap(), before);
+
+        assert!(matches!(
+            prepare_set_position_key_time(
+                &doc,
+                layer,
+                k0,
+                RationalTime::try_new(-1, 1).unwrap()
+            ),
+            Err(CommandError::PositionKeyTimeNegative { .. })
+        ));
+        assert_eq!(serde_json::to_vec(&doc).unwrap(), before);
+    }
+
+    #[test]
+    fn set_position_key_time_same_time_is_noop() {
+        let (doc, layer, k0, _) = keyed_doc_two_keys();
+        assert!(prepare_set_position_key_time(&doc, layer, k0, RationalTime::from_seconds(2))
+            .unwrap()
+            .is_none());
+        let mut live = doc.clone();
+        let before = serde_json::to_vec(&doc).unwrap();
+        Command::SetPositionKeyTime {
+            target: layer,
+            key: k0,
+            old: RationalTime::from_seconds(2),
+            new: RationalTime::from_seconds(2),
+        }
+        .apply(&mut live)
+        .unwrap();
+        assert_eq!(serde_json::to_vec(&live).unwrap(), before);
+    }
 }

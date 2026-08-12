@@ -183,7 +183,10 @@ fn ensure_stage_registered(slot: &mut HostSlot) -> bool {
     if written <= 0 || stage_handle == 0 {
         return false;
     }
-    let Ok(response) = std::str::from_utf8(&out[..written as usize]) else {
+    let Some(response_bytes) = slice_from_written(&out, written) else {
+        return false;
+    };
+    let Ok(response) = std::str::from_utf8(response_bytes) else {
         return false;
     };
     if !response_is_accepted(response) {
@@ -218,7 +221,10 @@ fn dispatch_stage_intent(slot: &HostSlot, kind: &str, extra: &str) -> bool {
     if written <= 0 {
         return false;
     }
-    let Ok(response) = std::str::from_utf8(&out[..written as usize]) else {
+    let Some(response_bytes) = slice_from_written(&out, written) else {
+        return false;
+    };
+    let Ok(response) = std::str::from_utf8(response_bytes) else {
         return false;
     };
     response_is_accepted(response)
@@ -470,7 +476,10 @@ pub(crate) fn try_read_timeline_projection() -> Option<HostTimelineProjection> {
         if written <= 0 {
             return None;
         }
-        let Ok(json) = std::str::from_utf8(&out[..written as usize]) else {
+        let Some(json_bytes) = slice_from_written(&out, written) else {
+            return None;
+        };
+        let Ok(json) = std::str::from_utf8(json_bytes) else {
             return None;
         };
         parse_timeline_projection(json)
@@ -489,6 +498,13 @@ pub(crate) fn frame_from_scrub_bar(bar: f64, fps_num: i64, fps_den: i64) -> i64 
     let half = den / 2;
     let signed_half = if num.is_negative() { -half } else { half };
     ((num + signed_half) / den) as i64
+}
+
+/// bar → RationalTime wire `{num,den}`。1 bar = 2秒、SCALE固定小数でf64連鎖丸めを避ける。
+pub(crate) fn rational_time_parts_from_bar(bar: f64) -> (i64, i64) {
+    const SCALE: i128 = 1_000_000;
+    let s_fixed = (bar * crate::timeline_skia::SECONDS_PER_BAR * (SCALE as f64)).round() as i128;
+    (s_fixed as i64, SCALE as i64)
 }
 
 /// host `current_time` → playhead(0..1)。bar = secs/2、曲基準 / SONG_BARS。
@@ -520,27 +536,102 @@ pub(crate) fn try_dispatch_set_time(frame: i64) -> bool {
             r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","host_handle":"{}","frame":{}}}"#,
             slot.handle, frame
         );
-        if intent.len() > MAX_JSON_BYTES {
-            return false;
-        }
-        let mut out = [0u8; MAX_JSON_BYTES];
-        let written = unsafe {
-            motolii_rn_host_dispatch_intent_json(
-                slot.handle,
-                intent.as_ptr(),
-                intent.len(),
-                out.as_mut_ptr(),
-                out.len(),
-            )
-        };
-        if written <= 0 {
-            return false;
-        }
-        let Ok(response) = std::str::from_utf8(&out[..written as usize]) else {
-            return false;
-        };
-        response_is_accepted(response)
+        dispatch_intent_json_accepted(slot.handle, &intent)
     }
+}
+
+pub(crate) fn try_dispatch_timeline_edit(
+    commit: &crate::timeline_skia::TimelineEditCommit,
+) -> bool {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = commit;
+        false
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use crate::timeline_skia::TimelineEditCommit;
+        let Ok(guard) = host_slot().lock() else {
+            return false;
+        };
+        let Some(slot) = guard.as_ref() else {
+            return false;
+        };
+        let intent = match commit {
+            TimelineEditCommit::SetClipStart { layer_id, bar } => {
+                let (num, den) = rational_time_parts_from_bar(f64::from(*bar));
+                format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"set_clip_start","#,
+                        r#""host_handle":"{}","target":"{}","time":{{"num":{},"den":{}}}}}"#
+                    ),
+                    slot.handle, layer_id, num, den
+                )
+            }
+            TimelineEditCommit::TrimClipIn { layer_id, bar } => {
+                let (num, den) = rational_time_parts_from_bar(f64::from(*bar));
+                format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_in","#,
+                        r#""host_handle":"{}","target":"{}","time":{{"num":{},"den":{}}}}}"#
+                    ),
+                    slot.handle, layer_id, num, den
+                )
+            }
+            TimelineEditCommit::TrimClipOut { layer_id, bar } => {
+                let (num, den) = rational_time_parts_from_bar(f64::from(*bar));
+                format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_out","#,
+                        r#""host_handle":"{}","target":"{}","time":{{"num":{},"den":{}}}}}"#
+                    ),
+                    slot.handle, layer_id, num, den
+                )
+            }
+            TimelineEditCommit::SetPositionKeyTime {
+                layer_id,
+                key_id,
+                bar,
+            } => {
+                let (num, den) = rational_time_parts_from_bar(f64::from(*bar));
+                format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"set_position_key_time","#,
+                        r#""host_handle":"{}","target":"{}","key_id":"{}","time":{{"num":{},"den":{}}}}}"#
+                    ),
+                    slot.handle, layer_id, key_id, num, den
+                )
+            }
+        };
+        dispatch_intent_json_accepted(slot.handle, &intent)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn dispatch_intent_json_accepted(handle: u64, intent: &str) -> bool {
+    if intent.len() > MAX_JSON_BYTES {
+        return false;
+    }
+    let mut out = [0u8; MAX_JSON_BYTES];
+    let written = unsafe {
+        motolii_rn_host_dispatch_intent_json(
+            handle,
+            intent.as_ptr(),
+            intent.len(),
+            out.as_mut_ptr(),
+            out.len(),
+        )
+    };
+    if written <= 0 {
+        return false;
+    }
+    let Some(response_bytes) = slice_from_written(&out, written) else {
+        return false;
+    };
+    let Ok(response) = std::str::from_utf8(response_bytes) else {
+        return false;
+    };
+    response_is_accepted(response)
 }
 
 fn response_is_accepted(response: &str) -> bool {
@@ -551,6 +642,11 @@ fn response_is_accepted(response: &str) -> bool {
         return false;
     };
     response[pos + colon_pos + 1..].trim_start().starts_with("true")
+}
+
+fn slice_from_written<'a>(out: &'a [u8], written: i64) -> Option<&'a [u8]> {
+    let written = usize::try_from(written).ok()?;
+    (written <= out.len()).then_some(&out[..written])
 }
 
 fn inject_host_handle(intent: &str, handle: u64) -> Result<String, ()> {
@@ -1175,7 +1271,9 @@ mod tests {
             )
         };
         assert!(written > 0, "dispatch {kind} failed: {written}");
-        let response = std::str::from_utf8(&out[..written as usize]).expect("utf8");
+        let response_bytes =
+            slice_from_written(&out, written).expect("dispatch response within buffer");
+        let response = std::str::from_utf8(response_bytes).expect("utf8");
         assert!(
             response.contains(r#""accepted":true"#),
             "expected accepted: {response}"
@@ -1286,7 +1384,9 @@ mod tests {
         let written =
             unsafe { motolii_rn_host_read_snapshot_json(host, out.as_mut_ptr(), out.len()) };
         assert!(written > 0, "host snapshot json failed: {written}");
-        let json = std::str::from_utf8(&out[..written as usize]).expect("snapshot json");
+        let json_bytes =
+            slice_from_written(&out, written).expect("snapshot response within buffer");
+        let json = std::str::from_utf8(json_bytes).expect("snapshot json");
         let proj = parse_timeline_projection(json).expect("projection parse");
         assert_eq!(proj.revision, baseline.revision);
         assert_eq!(proj.primary_layer_id, baseline.primary_layer_id);

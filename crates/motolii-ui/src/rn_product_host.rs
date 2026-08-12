@@ -30,8 +30,11 @@ use wgpu::{
 
 use crate::document_edit_runtime::{
     AddPositionKeyRequest, DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
-    PlaceRectangleRequest, SetPositionKeyInterpRequest, SetPositionKeyValueRequest,
+    PlaceRectangleRequest, SetPositionKeyInterpRequest, SetPositionKeyTimeRequest,
+    SetPositionKeyValueRequest,
 };
+use crate::timeline_move_gesture::TimelineMoveRequest;
+use crate::timeline_trim_gesture::TimelineTrimRequest;
 use crate::shell::{open_project_runtime, ShellError};
 use crate::stage_geometry_projection::{
     project_stage_geometry, StageLayerProjection,
@@ -303,6 +306,8 @@ pub(crate) struct WireIntentEnvelope {
     playhead: Option<RationalTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     target: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    key_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     time: Option<RationalTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -875,6 +880,172 @@ impl RnProductHost {
                         });
                     }
                     _ => unreachable!("matched position key intent"),
+                }
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "set_position_key_time" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(key) = intent
+                    .key_id
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(KeyframeId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(new) = intent.time else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(old) =
+                    position_key_time_at(self.runtime.snapshot().as_ref(), target, key)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                queue.push_set_position_key_time(SetPositionKeyTimeRequest {
+                    target,
+                    key,
+                    old,
+                    new,
+                });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "set_clip_start" | "trim_clip_in" | "trim_clip_out" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(time) = intent.time else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                match intent.kind.as_str() {
+                    "set_clip_start" => {
+                        queue.push_move_clip(TimelineMoveRequest {
+                            layer: target,
+                            new_start: time,
+                        });
+                    }
+                    "trim_clip_in" => {
+                        queue.push_trim_clip(TimelineTrimRequest::In {
+                            layer: target,
+                            new_start: time,
+                        });
+                    }
+                    "trim_clip_out" => {
+                        queue.push_trim_clip(TimelineTrimRequest::Out {
+                            layer: target,
+                            new_end: time,
+                        });
+                    }
+                    _ => unreachable!("matched clip edit intent"),
                 }
                 match self.runtime.process_next(
                     &mut queue,
@@ -3105,6 +3276,18 @@ fn position_key_at(
     Some((key.id, value))
 }
 
+fn position_key_time_at(
+    document: &motolii_doc::Document,
+    target: LayerId,
+    key: KeyframeId,
+) -> Option<RationalTime> {
+    let envelope = find_envelope_in_document(document, target)?;
+    let DocParam::Keyframes(track) = &envelope.transform.position else {
+        return None;
+    };
+    Some(track.get_by_id(key)?.t)
+}
+
 fn rational_time_eq(left: RationalTime, right: RationalTime) -> bool {
     let lhs = i128::from(left.num()).checked_mul(i128::from(right.den()));
     let rhs = i128::from(right.num()).checked_mul(i128::from(left.den()));
@@ -3963,6 +4146,7 @@ mod tests {
             position: None,
             playhead: None,
             target: None,
+            key_id: None,
             time: None,
             new: None,
             interp: None,
@@ -6156,6 +6340,194 @@ mod tests {
             assert_eq!(layer.position_keys.len(), 64);
             assert!(!layer.keys_truncated);
         }
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_position_key_time_and_clip_edits_update_timeline_projection_and_undo() {
+        let _lock = test_lock();
+        let host = create_host("timeline-edit-intents");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse::<u64>().expect("layer id"));
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        let before = read_snapshot(host);
+        let before_layer = before
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        let before_start = before_layer.start;
+        let before_duration = before_layer.duration;
+
+        let add = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(add.accepted);
+        let key_id = add
+            .snapshot
+            .expect("keyed")
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer")
+            .position_keys[0]
+            .key_id
+            .clone();
+
+        let moved_key = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_position_key_time","#,
+                    r#""host_handle":"{host}","target":"{layer}","key_id":"{key}","#,
+                    r#""time":{{"num":2,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                key = key_id,
+            ),
+        );
+        assert!(moved_key.accepted);
+        let after_key_layer = moved_key
+            .snapshot
+            .expect("key moved")
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(
+            after_key_layer.position_keys[0].time,
+            RationalTime::from_seconds(2)
+        );
+        assert_eq!(after_key_layer.position_keys[0].key_id, key_id);
+
+        // 先に右edgeを短くしてから start を動かす(compositionはみ出しを避ける)。
+        let trimmed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_out","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":3,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(trimmed.accepted);
+        let after_trim_layer = trimmed
+            .snapshot
+            .expect("trimmed")
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(after_trim_layer.start, before_start);
+        assert_eq!(
+            after_trim_layer.duration,
+            RationalTime::from_seconds(3)
+        );
+
+        let moved_clip = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_clip_start","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":2}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(moved_clip.accepted);
+        let after_move_layer = moved_clip
+            .snapshot
+            .expect("clip moved")
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(
+            after_move_layer.start,
+            RationalTime::try_new(1, 2).unwrap()
+        );
+        assert_eq!(after_move_layer.duration, RationalTime::from_seconds(3));
+
+        let trimmed_in = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_in","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(trimmed_in.accepted);
+        let after_in_layer = trimmed_in
+            .snapshot
+            .expect("in")
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(after_in_layer.start, RationalTime::from_seconds(1));
+        // start 1..3.5 → duration 2.5 after left trim from 0.5
+        assert_eq!(
+            after_in_layer.duration,
+            RationalTime::try_new(5, 2).unwrap()
+        );
+
+        for _ in 0..5 {
+            assert!(dispatch_raw_json(
+                host,
+                &format!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+                ),
+            )
+            .accepted);
+        }
+        let restored_layer = read_snapshot(host)
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(restored_layer.start, before_start);
+        assert_eq!(restored_layer.duration, before_duration);
+        assert!(restored_layer.position_keys.is_empty());
         let _ = host_destroy_for_test(host);
     }
 }

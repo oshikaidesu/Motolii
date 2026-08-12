@@ -574,3 +574,4 @@
 | [2026-07-20-m3-browser-panel-egui-taffy-spike.md](2026-07-20-m3-browser-panel-egui-taffy-spike.md) | M3 Browser panel egui/taffy spike観察(2026-08-10歴史回収: ローカル専用ブランチから。egui方向は2026-08-07 RN再基線で退役済み) |
 | [2026-08-10-session-handoff-friction-removal-and-recovery.md](2026-08-10-session-handoff-friction-removal-and-recovery.md) | 段差撤廃・歴史回収セッションの引き継ぎ。回収一覧、rescue保全、未完の次手(M2-ASSET-1C capsule設計ほか)、発注実務メモ |
 | [2026-08-10-session-handoff-node-registration-and-skia-timeline-in-rn-probe.md](2026-08-10-session-handoff-node-registration-and-skia-timeline-in-rn-probe.md) | 完成条件を塞ぐ8件のnode化と、実装なぞりによる自己訂正3件(media鎖は端から端まで製品コード0、file dialogの席1件へ収束)、RN probe timelineのSkia差し替えとvisual reference所在。仮コード先行を止め1つずつ繋ぐ方針へ変更 |
+| [2026-08-12-set-position-key-time-contract.md](2026-08-12-set-position-key-time-contract.md) | SetPositionKeyTime(position key時刻移動)の閉じた契約 — SetPositionKeyValue CAS族の鏡映、native Timeline keydragが通常入口。Rerun原本にkeyframe編集不在を確認済み |
