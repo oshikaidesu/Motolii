@@ -7,7 +7,7 @@ use std::sync::Arc;
 use motolii_core::{RationalTime, RationalTimeError};
 use motolii_doc::{
     AddPositionKeyPreparation, AddPositionKeyPrepareError, Clip, ClipSource, Command, CommandError,
-    Document, DocumentError, DocumentPluginError, DocumentWriter, DraftDocParam,
+    DocParam, DocValue, Document, DocumentError, DocumentPluginError, DocumentWriter, DraftDocParam,
     EffectDefinitionDraft, EffectDefinitionId, EffectId, ItemEnvelope, JournalEdit, KeyframeId,
     LayerId, LayerIdError, ParentLocator, PreparedPluginRecipe, ProjectError, ProjectSession,
     RemovePositionKeyPrepareError, SaveProjectOptions, ScalarPropertyId, StandardShape, TrackItem,
@@ -26,6 +26,7 @@ pub(crate) enum DocumentEditAction {
     PlaceRectangle(PlaceRectangleRequest),
     AttachEffect(AttachEffectRequest),
     SetEffectParam(SetEffectParamRequest),
+    SetPositionConst(SetPositionConstRequest),
     AddPositionKey(AddPositionKeyRequest),
     SetPositionKeyInterp(SetPositionKeyInterpRequest),
     SetPositionKeyValue(SetPositionKeyValueRequest),
@@ -46,6 +47,7 @@ impl DocumentEditAction {
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
             Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
+            Self::SetPositionConst(_) => DocumentEditActionKind::SetPositionConst,
             Self::AddPositionKey(_) => DocumentEditActionKind::AddPositionKey,
             Self::SetPositionKeyInterp(_) => DocumentEditActionKind::SetPositionKeyInterp,
             Self::SetPositionKeyValue(_) => DocumentEditActionKind::SetPositionKeyValue,
@@ -67,6 +69,7 @@ pub(crate) enum DocumentEditActionKind {
     PlaceRectangle,
     AttachEffect,
     SetEffectParam,
+    SetPositionConst,
     AddPositionKey,
     SetPositionKeyInterp,
     SetPositionKeyValue,
@@ -99,6 +102,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_set_effect_param(&mut self, request: SetEffectParamRequest) {
         self.pending
             .push_back(DocumentEditAction::SetEffectParam(request));
+    }
+
+    pub(crate) fn push_set_position_const(&mut self, request: SetPositionConstRequest) {
+        self.pending
+            .push_back(DocumentEditAction::SetPositionConst(request));
     }
 
     pub(crate) fn push_add_position_key(&mut self, request: AddPositionKeyRequest) {
@@ -224,6 +232,13 @@ pub(crate) struct SetEffectParamRequest {
 pub(crate) struct AddPositionKeyRequest {
     pub(crate) target: LayerId,
     pub(crate) time: RationalTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SetPositionConstRequest {
+    pub(crate) target: LayerId,
+    pub(crate) old: [f64; 2],
+    pub(crate) new: [f64; 2],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -537,6 +552,21 @@ impl DocumentEditRuntime {
             }
             DocumentEditAction::SetEffectParam(request) => {
                 let Some(command) = prepare_set_effect_param_command(&self.writer, &request) else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::SetPositionConst(request) => {
+                let Some(command) = prepare_set_position_const_command(&self.writer, request) else {
                     return Ok(None);
                 };
                 let projection_generation =
@@ -985,6 +1015,28 @@ fn prepare_set_effect_param_command(
         property: ScalarPropertyId::EffectParam(request.effect_use_id, request.param_id.clone()),
         old_value: old_value.clone(),
         new_value: motolii_doc::DocParam::const_f64(request.value),
+    })
+}
+
+fn prepare_set_position_const_command(
+    writer: &DocumentWriter,
+    request: SetPositionConstRequest,
+) -> Option<Command> {
+    if !request.new.iter().all(|value| value.is_finite()) {
+        return None;
+    }
+    let envelope = writer.find_envelope(request.target)?;
+    let DocParam::Const(DocValue::Vec2(old)) = &envelope.transform.position else {
+        return None;
+    };
+    if *old != request.old || request.old == request.new {
+        return None;
+    }
+    Some(Command::SetProperty {
+        target: request.target,
+        property: ScalarPropertyId::Position,
+        old_value: DocParam::const_vec2(request.old),
+        new_value: DocParam::const_vec2(request.new),
     })
 }
 

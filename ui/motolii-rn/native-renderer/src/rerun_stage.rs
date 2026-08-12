@@ -44,6 +44,10 @@ pub(crate) struct EmbeddedSpatialStage {
     /// Host `stage_geometry` 適用済みなら fixture 再ingestを止める。
     host_geometry_active: bool,
     host_layer_ids: Vec<String>,
+    /// 直近の host 投影（move preview の復元元）。
+    host_geometry: Option<HostStageGeometry>,
+    /// move drag 中の world delta preview（対象 layer のみ）。
+    move_preview: Option<(String, [f64; 2])>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -92,6 +96,8 @@ impl EmbeddedSpatialStage {
             fixture_item_id: "rectangle@0.500000,0.500000|pucker-bloat".into(),
             host_geometry_active: false,
             host_layer_ids: Vec::new(),
+            host_geometry: None,
+            move_preview: None,
         };
         if !stage.set_created_item("rectangle@0.500000,0.500000|pucker-bloat") {
             return Err("seed path rectangle for embedded stage".into());
@@ -227,6 +233,8 @@ impl EmbeddedSpatialStage {
             }
         }
         self.host_geometry_active = false;
+        self.host_geometry = None;
+        self.move_preview = None;
         let item_id = self.fixture_item_id.clone();
         self.set_created_item(&item_id)
     }
@@ -277,7 +285,8 @@ impl EmbeddedSpatialStage {
             );
         }
 
-        for layer in &geometry.layers {
+        let preview_geom = apply_move_preview_to_geometry(geometry, self.move_preview.as_ref());
+        for layer in &preview_geom.layers {
             let mesh = mesh_from_canonical_corners(layer.corners, viewport_width, viewport_height);
             if !ingest_mesh(
                 &mut self.spatial_stage,
@@ -289,8 +298,56 @@ impl EmbeddedSpatialStage {
             }
         }
         self.host_layer_ids = next_ids;
+        self.host_geometry = Some(geometry.clone());
         self.host_geometry_active = true;
         true
+    }
+
+    /// 対象 layer の corners だけを world delta で仮表示する。他 layer は不変。
+    pub(crate) fn set_move_preview(
+        &mut self,
+        layer_id: &str,
+        delta: [f64; 2],
+        viewport_width: u32,
+        viewport_height: u32,
+    ) -> bool {
+        if viewport_width == 0 || viewport_height == 0 {
+            return false;
+        }
+        let Some(base) = self.host_geometry.clone() else {
+            return false;
+        };
+        self.move_preview = Some((layer_id.to_owned(), delta));
+        let preview = apply_move_preview_to_geometry(&base, self.move_preview.as_ref());
+        let Some(layer) = preview
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+        else {
+            self.move_preview = None;
+            return false;
+        };
+        let mesh = mesh_from_canonical_corners(layer.corners, viewport_width, viewport_height);
+        ingest_mesh(
+            &mut self.spatial_stage,
+            layer_id,
+            mesh,
+            FIXTURE_RECT_FILL_COLOR,
+        )
+    }
+
+    pub(crate) fn clear_move_preview(
+        &mut self,
+        viewport_width: u32,
+        viewport_height: u32,
+    ) -> bool {
+        let Some((_, _)) = self.move_preview.take() else {
+            return true;
+        };
+        let Some(base) = self.host_geometry.clone() else {
+            return true;
+        };
+        self.apply_host_stage_geometry(&base, viewport_width, viewport_height)
     }
 
     pub(crate) fn render(
@@ -735,6 +792,25 @@ fn mesh_from_canonical_corners(
         vertices: vertices.to_vec(),
         indices: vec![[0, 1, 2], [0, 2, 3]],
     }
+}
+
+pub(crate) fn apply_move_preview_to_geometry(
+    geometry: &HostStageGeometry,
+    preview: Option<&(String, [f64; 2])>,
+) -> HostStageGeometry {
+    let Some((layer_id, delta)) = preview else {
+        return geometry.clone();
+    };
+    let mut next = geometry.clone();
+    for layer in &mut next.layers {
+        if layer.layer_id == *layer_id {
+            for corner in &mut layer.corners {
+                corner[0] += delta[0];
+                corner[1] += delta[1];
+            }
+        }
+    }
+    next
 }
 
 #[cfg(test)]

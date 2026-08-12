@@ -20,6 +20,9 @@ static TEST_KEYMAP_REMOVE_POSITION_KEY_COUNT: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
 static TEST_KEYMAP_DELETE_LAYER_COUNT: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(test)]
+static TEST_MOVE_LAYER_BY_DISPATCH_COUNT: AtomicU64 = AtomicU64::new(0);
+
 // extern importではなくRust経由で呼ぶ。externで宣言すると同一crate graph内でも
 // motolii-uiの該当objectがarchiveから引かれず、appのlinkで未解決symbolになる(実測)。
 #[cfg(target_os = "macos")]
@@ -38,6 +41,9 @@ struct HostSlot {
     stage_mounted: bool,
     /// stage_pointer の単調 sequence（bridge内部採番）。
     pointer_sequence: u64,
+    /// 直近の mount/resize 論理寸法（move閾値の logical px 換算用）。
+    stage_logical_width: f64,
+    stage_logical_height: f64,
 }
 
 fn host_slot() -> &'static Mutex<Option<HostSlot>> {
@@ -172,6 +178,8 @@ pub unsafe extern "C" fn motolii_rnapp_host_ensure(path_utf8: *const u8, path_le
         stage_pointer_active: false,
         stage_mounted: false,
         pointer_sequence: 0,
+        stage_logical_width: 0.0,
+        stage_logical_height: 0.0,
     });
     true
 }
@@ -262,6 +270,8 @@ pub(crate) fn try_stage_mount(width: f64, height: f64, scale_factor: f64) -> boo
     }
     slot.stage_mounted = true;
     slot.stage_pointer_active = false;
+    slot.stage_logical_width = width;
+    slot.stage_logical_height = height;
     let w = width.round() as u32;
     let h = height.round() as u32;
     if w == 0 || h == 0 {
@@ -294,6 +304,8 @@ pub(crate) fn try_stage_resize(width: f64, height: f64, scale_factor: f64) -> bo
         slot.stage_mounted = true;
         slot.stage_pointer_active = false;
     }
+    slot.stage_logical_width = width;
+    slot.stage_logical_height = height;
     let w = width.round() as u32;
     let h = height.round() as u32;
     if w == 0 || h == 0 {
@@ -700,6 +712,49 @@ pub(crate) fn try_dispatch_timeline_selection(
     }
 }
 
+pub(crate) fn try_dispatch_move_layer_by(target: &str, delta: [f64; 2]) -> bool {
+    #[cfg(test)]
+    TEST_MOVE_LAYER_BY_DISPATCH_COUNT.fetch_add(1, Ordering::SeqCst);
+    if !delta.iter().all(|value| value.is_finite()) {
+        return false;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = target;
+        false
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(guard) = host_slot().lock() else {
+            return false;
+        };
+        let Some(slot) = guard.as_ref() else {
+            return false;
+        };
+        let intent = format!(
+            concat!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                r#""host_handle":"{}","target":"{}","delta":[{},{}]}}"#
+            ),
+            slot.handle, target, delta[0], delta[1]
+        );
+        dispatch_intent_json_accepted(slot.handle, &intent)
+    }
+}
+
+/// mount/resize 済みの論理 viewport。未設定は None。
+pub(crate) fn try_stage_logical_size() -> Option<(f64, f64)> {
+    let Ok(guard) = host_slot().lock() else {
+        return None;
+    };
+    let slot = guard.as_ref()?;
+    if slot.stage_logical_width > 0.0 && slot.stage_logical_height > 0.0 {
+        Some((slot.stage_logical_width, slot.stage_logical_height))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn test_reset_timeline_selection_dispatch_count() {
     TEST_SELECTION_DISPATCH_COUNT.store(0, Ordering::SeqCst);
@@ -708,6 +763,16 @@ pub(crate) fn test_reset_timeline_selection_dispatch_count() {
 #[cfg(test)]
 pub(crate) fn test_timeline_selection_dispatch_count() -> u64 {
     TEST_SELECTION_DISPATCH_COUNT.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+pub(crate) fn test_reset_move_layer_by_dispatch_count() {
+    TEST_MOVE_LAYER_BY_DISPATCH_COUNT.store(0, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(crate) fn test_move_layer_by_dispatch_count() -> u64 {
+    TEST_MOVE_LAYER_BY_DISPATCH_COUNT.load(Ordering::SeqCst)
 }
 
 #[cfg(test)]
@@ -1474,6 +1539,8 @@ mod tests {
             stage_pointer_active: false,
             stage_mounted: false,
             pointer_sequence: 0,
+            stage_logical_width: 0.0,
+            stage_logical_height: 0.0,
         });
     }
 

@@ -13,7 +13,7 @@ use std::sync::{Mutex, OnceLock};
 
 use motolii_core::{Fps, PixelSize, RationalTime};
 use motolii_doc::{
-    layer_names_for_item, Clip, Command, DocParam, DocValue, EvaluationTime, ItemEnvelope,
+    layer_names_for_item, Affine2D, Clip, Command, DocParam, DocValue, EvaluationTime, ItemEnvelope,
     KeyframeId, LayerId, ParentLocator, TrackItem,
 };
 use motolii_eval::{DataTracks, Interp};
@@ -31,8 +31,8 @@ use wgpu::{
 
 use crate::document_edit_runtime::{
     AddPositionKeyRequest, DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
-    PlaceRectangleRequest, RemovePositionKeyRequest, SetPositionKeyInterpRequest,
-    SetPositionKeyTimeRequest, SetPositionKeyValueRequest,
+    PlaceRectangleRequest, RemovePositionKeyRequest, SetPositionConstRequest,
+    SetPositionKeyInterpRequest, SetPositionKeyTimeRequest, SetPositionKeyValueRequest,
 };
 use crate::timeline_move_gesture::TimelineMoveRequest;
 use crate::timeline_trim_gesture::TimelineTrimRequest;
@@ -315,6 +315,9 @@ pub(crate) struct WireIntentEnvelope {
     new: Option<[f64; 2]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     interp: Option<Interp>,
+    /// move_layer_by: canonical world delta
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    delta: Option<[f64; 2]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1368,6 +1371,201 @@ impl RnProductHost {
                         ),
                         None,
                     ),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "move_layer_by" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(delta) = intent.delta else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if !delta.iter().all(|value| value.is_finite()) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let snapshot = self.runtime.snapshot();
+                let Some(envelope) = find_envelope_in_document(snapshot.as_ref(), target) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let tracks = DataTracks::new();
+                let projection = match project_stage_geometry(
+                    snapshot.as_ref(),
+                    EvaluationTime::new(self.current_time),
+                    &tracks,
+                ) {
+                    Ok(projection) => projection,
+                    Err(_) => {
+                        return reject(
+                            diagnostic(
+                                RnHostReasonCode::InvalidIntent,
+                                Some(host_handle),
+                                None,
+                                None,
+                                None,
+                            ),
+                            None,
+                        );
+                    }
+                };
+                let Some(StageLayerProjection::Available(geo)) = projection.get(target).cloned()
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(local_delta) = world_delta_to_position_local(geo.world, delta) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                match &envelope.transform.position {
+                    DocParam::Const(DocValue::Vec2(old)) => {
+                        let new = [old[0] + local_delta[0], old[1] + local_delta[1]];
+                        if !new.iter().all(|value| value.is_finite()) {
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        }
+                        queue.push_set_position_const(SetPositionConstRequest {
+                            target,
+                            old: *old,
+                            new,
+                        });
+                    }
+                    DocParam::Keyframes(_) => {
+                        let Some((key, old)) =
+                            position_key_at(snapshot.as_ref(), target, self.current_time)
+                        else {
+                            // U4b-0V: off-key は Auto Key せず typed 拒否。
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        };
+                        let new = [old[0] + local_delta[0], old[1] + local_delta[1]];
+                        if !new.iter().all(|value| value.is_finite()) {
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        }
+                        queue.push_set_position_key_value(SetPositionKeyValueRequest {
+                            target,
+                            key,
+                            old,
+                            new,
+                        });
+                    }
+                    _ => {
+                        return reject(
+                            diagnostic(
+                                RnHostReasonCode::InvalidIntent,
+                                Some(host_handle),
+                                None,
+                                None,
+                                None,
+                            ),
+                            None,
+                        );
+                    }
+                }
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
                     Err(_) => reject(
                         diagnostic(
                             RnHostReasonCode::InvalidIntent,
@@ -3423,6 +3621,18 @@ fn world_rect_corners(world: motolii_doc::Affine2D, local: [[f64; 2]; 4]) -> [[f
     corners
 }
 
+/// world 空間 delta を position param の局所 delta へ写す（線形部のみ）。
+/// `Affine2D::try_invert`（affine.rs）の逆行列で delta を変換する。
+fn world_delta_to_position_local(world: Affine2D, delta: [f64; 2]) -> Option<[f64; 2]> {
+    let inv = world.try_invert()?;
+    let m = inv.m;
+    let local = [
+        m[0] * delta[0] + m[1] * delta[1],
+        m[3] * delta[0] + m[4] * delta[1],
+    ];
+    local.iter().all(|value| value.is_finite()).then_some(local)
+}
+
 fn find_first_clip(document: &motolii_doc::Document, target: LayerId) -> Option<&Clip> {
     fn walk<'a>(items: &'a [TrackItem], target: LayerId) -> Option<&'a Clip> {
         for item in items {
@@ -4453,6 +4663,7 @@ mod tests {
             time: None,
             new: None,
             interp: None,
+            delta: None,
         }
     }
 
@@ -7049,6 +7260,341 @@ mod tests {
             assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
             assert_eq!(after.layer_ids, baseline.layer_ids);
         }
+        let _ = host_destroy_for_test(host);
+    }
+
+    fn position_const_at(document: &Document, target: LayerId) -> Option<[f64; 2]> {
+        let envelope = find_envelope_in_document(document, target)?;
+        match &envelope.transform.position {
+            DocParam::Const(DocValue::Vec2(value)) => Some(*value),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn move_layer_by_const_updates_position_and_undo_restores() {
+        let _lock = test_lock();
+        let host = create_host("move-const");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].parse::<u64>().expect("layer id");
+        let target = LayerId::from_raw(layer_id);
+        let before = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_const_at(
+                product.runtime.snapshot().as_ref(),
+                target,
+            ))
+        })
+        .expect("lookup")
+        .expect("const position");
+
+        let delta = [0.1, -0.05];
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"{layer}","delta":[0.1,-0.05]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(response.accepted);
+        let after = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_const_at(
+                product.runtime.snapshot().as_ref(),
+                target,
+            ))
+        })
+        .expect("lookup")
+        .expect("const position");
+        assert!((after[0] - (before[0] + delta[0])).abs() < 1e-12);
+        assert!((after[1] - (before[1] + delta[1])).abs() < 1e-12);
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(undone.accepted);
+        let restored = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_const_at(
+                product.runtime.snapshot().as_ref(),
+                target,
+            ))
+        })
+        .expect("lookup")
+        .expect("const position");
+        assert_eq!(restored, before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn move_layer_by_exact_on_key_updates_only_that_key_value_and_off_key_rejects() {
+        let _lock = test_lock();
+        let host = create_host("move-on-key");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].parse::<u64>().expect("layer id");
+        let target = LayerId::from_raw(layer_id);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":2,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        let before = read_snapshot(host);
+        let before_keys = before.timeline.layers[0].position_keys.clone();
+        assert_eq!(before_keys.len(), 2);
+        let on_key_id = before_keys[0].key_id.clone();
+        let before_doc = document_json_bytes(host);
+
+        // current_time は seed で 0。exact-on-key。
+        let moved = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"{layer}","delta":[0.2,0.1]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(moved.accepted);
+        let after = moved.snapshot.expect("after");
+        let after_keys = &after.timeline.layers[0].position_keys;
+        assert_eq!(after_keys.len(), 2);
+        let mut before_keys_sorted = before_keys.to_vec();
+        before_keys_sorted.sort_by_key(|key| key.key_id.clone());
+        let mut after_keys = after_keys.to_vec();
+        after_keys.sort_by_key(|key| key.key_id.clone());
+        for before_key in before_keys_sorted {
+            let after_key = after_keys
+                .iter()
+                .find(|key| key.key_id == before_key.key_id)
+                .expect("all keys preserved");
+            if before_key.key_id == on_key_id {
+                assert_eq!(after_key.key_id, before_key.key_id);
+                assert_eq!(after_key.time, before_key.time);
+                assert_eq!(after_key.value, Some([0.2, 0.1]));
+            } else {
+                assert_eq!(after_key, &before_key);
+            }
+        }
+        let after_on = after_keys
+            .iter()
+            .find(|key| key.key_id == on_key_id)
+            .expect("on key");
+        assert_eq!(after_on.key_id, on_key_id);
+        assert_eq!(after_on.value, Some([0.2, 0.1]));
+
+        // off-key: frame へ進めて拒否。Document 不変。
+        assert!(dispatch_raw_json(host, &set_time_json(host, "15")).accepted);
+        let before_off = document_json_bytes(host);
+        let rejected = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"{layer}","delta":[0.05,0.0]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert_eq!(document_json_bytes(host), before_off);
+        let _ = before_doc;
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn move_layer_by_rotated_scaled_layer_uses_world_inverse_delta() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
+            "rotScaled",
+            [0.0, 0.0],
+            [0.4, 0.4],
+            Transform2D {
+                position: DocParam::const_vec2([0.1, -0.08]),
+                rotation: DocParam::const_f64(0.55),
+                scale: DocParam::const_vec2([1.25, 0.8]),
+                ..Transform2D::identity()
+            },
+        );
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("move-rot-scale", &fixture.document);
+        let layer_id = layer.get().to_string();
+
+        let tracks = DataTracks::new();
+        let projection = project_stage_geometry(
+            &fixture.document,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .expect("geometry");
+        let crate::stage_geometry_projection::StageLayerProjection::Available(geo) = projection
+            .get(layer)
+            .expect("layer")
+        else {
+            panic!("available");
+        };
+
+        let delta = [0.18, -0.12];
+        let expected_local = world_delta_to_position_local(geo.world, delta)
+            .expect("local inverse exists");
+        let before = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_const_at(
+                product.runtime.snapshot().as_ref(),
+                LayerId::from_raw(layer_id.parse::<u64>().expect("id")),
+            ))
+        })
+        .expect("lookup")
+        .expect("const position");
+
+        let moved = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"{layer}","delta":[{dx},{dy}]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                dx = delta[0],
+                dy = delta[1],
+            ),
+        );
+        assert!(moved.accepted);
+        let after = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_const_at(
+                product.runtime.snapshot().as_ref(),
+                LayerId::from_raw(layer_id.parse::<u64>().expect("id")),
+            ))
+        })
+        .expect("lookup")
+        .expect("const position");
+        assert!((after[0] - (before[0] + expected_local[0])).abs() < 1e-12);
+        assert!((after[1] - (before[1] + expected_local[1])).abs() < 1e-12);
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn move_layer_by_rejects_non_finite_delta_and_missing_target() {
+        let _lock = test_lock();
+        let host = create_host("move-reject");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let before = document_json_bytes(host);
+
+        let missing = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"999999","delta":[0.1,0.0]}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(!missing.accepted);
+        assert_eq!(missing.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert_eq!(document_json_bytes(host), before);
+
+        let mut intent = WireIntentEnvelope {
+            version: WIRE_VERSION,
+            direction: RN_TO_HOST.to_owned(),
+            kind: "move_layer_by".to_owned(),
+            host_handle: String::new(),
+            stage_handle: None,
+            projection_generation: None,
+            width: None,
+            height: None,
+            scale_factor: None,
+            focused: None,
+            phase: None,
+            view_local_x: None,
+            view_local_y: None,
+            sequence: None,
+            frame: None,
+            position: None,
+            playhead: None,
+            target: Some(layer_id),
+            key_id: None,
+            time: None,
+            new: None,
+            interp: None,
+            delta: Some([f64::INFINITY, 0.0]),
+        };
+        let non_finite = dispatch_wire(host, intent.clone());
+        assert!(!non_finite.accepted);
+        assert_eq!(non_finite.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert_eq!(document_json_bytes(host), before);
+
+        intent.delta = Some([0.0, f64::NAN]);
+        let nan = dispatch_wire(host, intent);
+        assert!(!nan.accepted);
+        assert_eq!(document_json_bytes(host), before);
         let _ = host_destroy_for_test(host);
     }
 }

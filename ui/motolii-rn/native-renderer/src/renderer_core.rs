@@ -105,6 +105,202 @@ fn host_stage_geometry_command(
     }
 }
 
+/// Timeline と同じ 3 論理 px。
+const STAGE_MOVE_ARM_PX: f64 = 3.0;
+
+#[derive(Clone, Debug, PartialEq)]
+struct StageMoveGesture {
+    layer_id: String,
+    down_logical: [f64; 2],
+    down_canonical: [f64; 2],
+    armed: bool,
+    last_delta: [f64; 2],
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum StageMoveOutcome {
+    None,
+    SelectLayer {
+        layer_id: String,
+    },
+    ClearSelection,
+    Preview {
+        layer_id: String,
+        delta: [f64; 2],
+    },
+    Commit {
+        layer_id: String,
+        delta: [f64; 2],
+    },
+    CancelRestore,
+}
+
+fn view_local_to_canonical_stage(
+    view_local_x: f64,
+    view_local_y: f64,
+    logical_width: f64,
+    logical_height: f64,
+) -> Option<[f64; 2]> {
+    if !(logical_width > 0.0 && logical_height > 0.0) {
+        return None;
+    }
+    Some([
+        (view_local_x - logical_width * 0.5) / logical_height,
+        (view_local_y - logical_height * 0.5) / logical_height,
+    ])
+}
+
+fn point_in_canonical_quad(point: [f64; 2], corners: [[f64; 2]; 4]) -> bool {
+    let mut area2 = 0.0_f64;
+    for i in 0..4 {
+        let a = corners[i];
+        let b = corners[(i + 1) % 4];
+        area2 += a[0] * b[1] - b[0] * a[1];
+    }
+    if area2.abs() <= 1e-15 {
+        return false;
+    }
+
+    let mut sign = 0.0_f64;
+    for i in 0..4 {
+        let a = corners[i];
+        let b = corners[(i + 1) % 4];
+        let cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
+        if cross.abs() <= 1e-15 {
+            continue;
+        }
+        let s = cross.signum();
+        if sign == 0.0 {
+            sign = s;
+        } else if s != sign {
+            return false;
+        }
+    }
+    true
+}
+
+fn stage_layer_hit(
+    geometry: &crate::host_bridge::HostStageGeometry,
+    canonical: [f64; 2],
+) -> Option<String> {
+    for layer in geometry.layers.iter().rev() {
+        if point_in_canonical_quad(canonical, layer.corners) {
+            return Some(layer.layer_id.clone());
+        }
+    }
+    None
+}
+
+fn stage_move_pointer(
+    gesture: &mut Option<StageMoveGesture>,
+    phase: PointerPhase,
+    logical_x: f64,
+    logical_y: f64,
+    logical_width: f64,
+    logical_height: f64,
+    geometry: &crate::host_bridge::HostStageGeometry,
+) -> StageMoveOutcome {
+    if !(logical_x.is_finite() && logical_y.is_finite()) {
+        *gesture = None;
+        return StageMoveOutcome::CancelRestore;
+    }
+
+    let Some(canonical) =
+        view_local_to_canonical_stage(logical_x, logical_y, logical_width, logical_height)
+    else {
+        *gesture = None;
+        return StageMoveOutcome::CancelRestore;
+    };
+    match phase {
+        PointerPhase::Down => {
+            if let Some(layer_id) = stage_layer_hit(geometry, canonical) {
+                *gesture = Some(StageMoveGesture {
+                    layer_id: layer_id.clone(),
+                    down_logical: [logical_x, logical_y],
+                    down_canonical: canonical,
+                    armed: false,
+                    last_delta: [0.0, 0.0],
+                });
+                StageMoveOutcome::SelectLayer { layer_id }
+            } else {
+                *gesture = None;
+                StageMoveOutcome::ClearSelection
+            }
+        }
+        PointerPhase::Move => {
+            let Some(state) = gesture.as_mut() else {
+                return StageMoveOutcome::None;
+            };
+            let delta = [
+                canonical[0] - state.down_canonical[0],
+                canonical[1] - state.down_canonical[1],
+            ];
+            if !delta.iter().all(|value| value.is_finite()) {
+                *gesture = None;
+                return StageMoveOutcome::CancelRestore;
+            }
+            if !state.armed {
+                let dx = logical_x - state.down_logical[0];
+                let dy = logical_y - state.down_logical[1];
+                if (dx * dx + dy * dy).sqrt() < STAGE_MOVE_ARM_PX {
+                    return StageMoveOutcome::None;
+                }
+                state.armed = true;
+            }
+            state.last_delta = delta;
+            StageMoveOutcome::Preview {
+                layer_id: state.layer_id.clone(),
+                delta,
+            }
+        }
+        PointerPhase::Up => {
+            let Some(state) = gesture.take() else {
+                return StageMoveOutcome::None;
+            };
+            let delta = [
+                canonical[0] - state.down_canonical[0],
+                canonical[1] - state.down_canonical[1],
+            ];
+            if !delta.iter().all(|value| value.is_finite()) {
+                return StageMoveOutcome::CancelRestore;
+            }
+            if !state.armed {
+                return StageMoveOutcome::CancelRestore;
+            }
+            if delta[0] == 0.0 && delta[1] == 0.0 {
+                return StageMoveOutcome::CancelRestore;
+            }
+            StageMoveOutcome::Commit {
+                layer_id: state.layer_id,
+                delta,
+            }
+        }
+        PointerPhase::Cancel => {
+            if gesture.take().is_some() {
+                StageMoveOutcome::CancelRestore
+            } else {
+                StageMoveOutcome::None
+            }
+        }
+    }
+}
+
+fn stage_host_move_outcome_to_selection_commit(
+    outcome: &StageMoveOutcome,
+) -> Option<crate::timeline_skia::TimelineSelectionCommit> {
+    match outcome {
+        StageMoveOutcome::SelectLayer { layer_id } => {
+            Some(crate::timeline_skia::TimelineSelectionCommit::SelectLayer {
+                layer_id: layer_id.clone(),
+            })
+        }
+        StageMoveOutcome::ClearSelection => {
+            Some(crate::timeline_skia::TimelineSelectionCommit::ClearSelection)
+        }
+        _ => None,
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SceneKind {
     Stage,
@@ -163,6 +359,7 @@ pub(crate) struct RendererCore {
     /// host 投影メッシュ適用時の viewport（aspect 再適用判定）。
     host_stage_viewport: Option<(u32, u32)>,
     host_fps: Option<(i64, i64)>,
+    stage_move_gesture: Option<StageMoveGesture>,
     scrubbing: bool,
     scrub_time_pump: ScrubTimePump,
     scrub_clock_start: Instant,
@@ -261,6 +458,7 @@ impl RendererCore {
             host_stage_geometry: None,
             host_stage_viewport: None,
             host_fps: None,
+            stage_move_gesture: None,
             scrubbing: false,
             scrub_time_pump: ScrubTimePump::new(),
             scrub_clock_start: Instant::now(),
@@ -503,8 +701,9 @@ impl RendererCore {
     }
 
     pub(crate) fn stage_pointer(&mut self, phase: PointerPhase, x: f64, y: f64) {
-        // host 投影が正本の間は fixture gizmo probe へ送らない。
+        // host 投影が正本の間は fixture gizmo probe へ送らず、選択済み layer の move を扱う。
         if self.host_stage_geometry.is_some() {
+            self.stage_host_move_pointer(phase, x, y);
             return;
         }
         let Some(stage) = &mut self.stage else { return };
@@ -515,6 +714,78 @@ impl RendererCore {
             PointerPhase::Cancel => {}
         }
         stage.rerun.pointer(phase, x, y);
+    }
+
+    fn stage_host_move_pointer(&mut self, phase: PointerPhase, physical_x: f64, physical_y: f64) {
+        let Some(geometry) = self.host_stage_geometry.clone() else {
+            return;
+        };
+        if !(physical_x.is_finite() && physical_y.is_finite()) {
+            self.stage_move_gesture = None;
+            let Some(stage) = self.stage.as_mut() else {
+                return;
+            };
+            if !stage.rerun.clear_move_preview(self.config.width, self.config.height) {
+                self.force_next_host_snapshot = true;
+            }
+            return;
+        }
+        let (logical_width, logical_height) = crate::host_bridge::try_stage_logical_size()
+            .unwrap_or((f64::from(self.config.width), f64::from(self.config.height)));
+        let scale_x = f64::from(self.config.width) / logical_width.max(1.0);
+        let scale_y = f64::from(self.config.height) / logical_height.max(1.0);
+        let logical_x = physical_x / scale_x.max(f64::EPSILON);
+        let logical_y = physical_y / scale_y.max(f64::EPSILON);
+        let outcome = stage_move_pointer(
+            &mut self.stage_move_gesture,
+            phase,
+            logical_x,
+            logical_y,
+            logical_width,
+            logical_height,
+            &geometry,
+        );
+        let viewport = (self.config.width, self.config.height);
+        let Some(stage) = self.stage.as_mut() else {
+            return;
+        };
+        match outcome {
+            StageMoveOutcome::None => {}
+            StageMoveOutcome::SelectLayer { .. } | StageMoveOutcome::ClearSelection => {
+                if let Some(commit) = stage_host_move_outcome_to_selection_commit(&outcome) {
+                    let _ = Self::dispatch_timeline_selection(
+                        &commit,
+                        &mut self.force_next_host_snapshot,
+                    );
+                }
+            }
+            StageMoveOutcome::Preview { layer_id, delta } => {
+                if !stage.rerun.set_move_preview(&layer_id, delta, viewport.0, viewport.1) {
+                    self.force_next_host_snapshot = true;
+                    self.stage_move_gesture = None;
+                }
+            }
+            StageMoveOutcome::Commit { layer_id, delta } => {
+                if !stage.rerun.clear_move_preview(viewport.0, viewport.1) {
+                    self.force_next_host_snapshot = true;
+                    self.stage_move_gesture = None;
+                    return;
+                }
+                if !crate::host_bridge::try_dispatch_move_layer_by(&layer_id, delta) {
+                    if !stage.rerun.clear_move_preview(viewport.0, viewport.1) {
+                        self.force_next_host_snapshot = true;
+                    }
+                    self.force_next_host_snapshot = true;
+                    self.stage_move_gesture = None;
+                }
+            }
+            StageMoveOutcome::CancelRestore => {
+                if !stage.rerun.clear_move_preview(viewport.0, viewport.1) {
+                    self.force_next_host_snapshot = true;
+                    self.stage_move_gesture = None;
+                }
+            }
+        }
     }
 
     pub(crate) fn render(&mut self) -> Result<(), String> {
@@ -645,6 +916,7 @@ impl RendererCore {
                     if stage.rerun.clear_host_projection() {
                         self.host_stage_geometry = None;
                         self.host_stage_viewport = None;
+                        self.stage_move_gesture = None;
                     }
                 }
                 HostStageGeometryCommand::Noop => {
@@ -1087,5 +1359,287 @@ mod tests {
         let _ = crate::host_bridge::try_timeline_keymap_delete(&scene);
         assert_eq!(crate::host_bridge::test_keymap_remove_position_key_count(), 1);
         assert_eq!(crate::host_bridge::test_keymap_delete_layer_count(), 1);
+    }
+
+    #[test]
+    fn stage_move_primary_drag_commits_once_and_cancel_dispatches_zero() {
+        let geometry = crate::host_bridge::HostStageGeometry {
+            layers: vec![
+                crate::host_bridge::HostStageGeometryLayer {
+                    layer_id: "10".into(),
+                    corners: [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]],
+                },
+                crate::host_bridge::HostStageGeometryLayer {
+                    layer_id: "11".into(),
+                    corners: [[0.3, 0.3], [0.5, 0.3], [0.5, 0.5], [0.3, 0.5]],
+                },
+            ],
+            layers_truncated: false,
+        };
+        let logical_w = 800.0;
+        let logical_h = 600.0;
+
+        crate::host_bridge::test_reset_move_layer_by_dispatch_count();
+        let mut gesture = None;
+        assert_eq!(
+            stage_move_pointer(
+                &mut gesture,
+                PointerPhase::Down,
+                400.0,
+                300.0,
+                logical_w,
+                logical_h,
+                &geometry,
+            ),
+            StageMoveOutcome::SelectLayer {
+                layer_id: "10".into()
+            }
+        );
+        assert!(gesture.is_some());
+        let drag = stage_move_pointer(
+            &mut gesture,
+            PointerPhase::Move,
+            410.0,
+            300.0,
+            logical_w,
+            logical_h,
+            &geometry,
+        );
+        match drag {
+            StageMoveOutcome::Preview { layer_id, delta } => {
+                assert_eq!(layer_id, "10");
+                assert!(delta[0].abs() > 0.0);
+                let preview =
+                    crate::rerun_stage::apply_move_preview_to_geometry(&geometry, Some(&("10".into(), delta)));
+                assert_eq!(preview.layers[1].corners, geometry.layers[1].corners);
+                assert_ne!(preview.layers[0].corners, geometry.layers[0].corners);
+            }
+            other => panic!("expected preview, got {other:?}"),
+        }
+        let commit = stage_move_pointer(
+            &mut gesture,
+            PointerPhase::Up,
+            420.0,
+            305.0,
+            logical_w,
+            logical_h,
+            &geometry,
+        );
+        match commit {
+            StageMoveOutcome::Commit { layer_id, delta } => {
+                assert_eq!(layer_id, "10");
+                assert!(!crate::host_bridge::try_dispatch_move_layer_by(&layer_id, delta));
+            }
+            other => panic!("expected commit, got {other:?}"),
+        }
+        assert_eq!(crate::host_bridge::test_move_layer_by_dispatch_count(), 1);
+        assert!(gesture.is_none());
+
+        crate::host_bridge::test_reset_move_layer_by_dispatch_count();
+        let mut gesture = None;
+        let _ = stage_move_pointer(
+            &mut gesture,
+            PointerPhase::Down,
+            400.0,
+            300.0,
+            logical_w,
+            logical_h,
+            &geometry,
+        );
+        let _ = stage_move_pointer(
+            &mut gesture,
+            PointerPhase::Move,
+            420.0,
+            300.0,
+            logical_w,
+            logical_h,
+            &geometry,
+        );
+        assert_eq!(
+            stage_move_pointer(
+                &mut gesture,
+                PointerPhase::Cancel,
+                420.0,
+                300.0,
+                logical_w,
+                logical_h,
+                &geometry,
+            ),
+            StageMoveOutcome::CancelRestore
+        );
+        assert_eq!(crate::host_bridge::test_move_layer_by_dispatch_count(), 0);
+    }
+
+    #[test]
+    fn stage_move_non_primary_surface_starts_drag() {
+        let geometry = crate::host_bridge::HostStageGeometry {
+            layers: vec![
+                crate::host_bridge::HostStageGeometryLayer {
+                    layer_id: "10".into(),
+                    corners: [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]],
+                },
+                crate::host_bridge::HostStageGeometryLayer {
+                    layer_id: "11".into(),
+                    corners: [[0.3, 0.3], [0.5, 0.3], [0.5, 0.5], [0.3, 0.5]],
+                },
+            ],
+            layers_truncated: false,
+        };
+        let mut gesture = None;
+        let (x, y) = (
+            800.0 * 0.5 + 0.4 * 600.0,
+            600.0 * 0.5 + 0.4 * 600.0,
+        );
+        assert_eq!(
+            stage_move_pointer(
+                &mut gesture,
+                PointerPhase::Down,
+                x,
+                y,
+                800.0,
+                600.0,
+                &geometry,
+            ),
+            StageMoveOutcome::SelectLayer {
+                layer_id: "11".into()
+            }
+        );
+        assert!(gesture.is_some());
+        let expected_delta = [(x + 20.0 - x) / 600.0, 0.0];
+        let drag = stage_move_pointer(
+            &mut gesture,
+            PointerPhase::Move,
+            x + 20.0,
+            y,
+            800.0,
+            600.0,
+            &geometry,
+        );
+        match drag {
+            StageMoveOutcome::Preview { layer_id, delta } => {
+                assert_eq!(layer_id, "11");
+                assert!((delta[0] - expected_delta[0]).abs() < 1e-15);
+                assert!((delta[1] - expected_delta[1]).abs() < 1e-15);
+            }
+            other => panic!("expected preview, got {other:?}"),
+        }
+        let commit = stage_move_pointer(
+            &mut gesture,
+            PointerPhase::Up,
+            x + 20.0,
+            y,
+            800.0,
+            600.0,
+            &geometry,
+        );
+        match commit {
+            StageMoveOutcome::Commit { layer_id, delta } => {
+                assert_eq!(layer_id, "11");
+                assert!((delta[0] - expected_delta[0]).abs() < 1e-15);
+                assert!((delta[1] - expected_delta[1]).abs() < 1e-15);
+            }
+            other => panic!("expected commit, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn move_preview_geometry_translates_only_target_layer() {
+        let geometry = crate::host_bridge::HostStageGeometry {
+            layers: vec![
+                crate::host_bridge::HostStageGeometryLayer {
+                    layer_id: "A".into(),
+                    corners: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                },
+                crate::host_bridge::HostStageGeometryLayer {
+                    layer_id: "B".into(),
+                    corners: [[2.0, 2.0], [3.0, 2.0], [3.0, 3.0], [2.0, 3.0]],
+                },
+            ],
+            layers_truncated: false,
+        };
+        let preview = crate::rerun_stage::apply_move_preview_to_geometry(
+            &geometry,
+            Some(&("A".into(), [0.5, -0.25])),
+        );
+        assert_eq!(
+            preview.layers[0].corners,
+            [[0.5, -0.25], [1.5, -0.25], [1.5, 0.75], [0.5, 0.75]]
+        );
+        assert_eq!(preview.layers[1].corners, geometry.layers[1].corners);
+        let restored =
+            crate::rerun_stage::apply_move_preview_to_geometry(&geometry, None);
+        assert_eq!(restored, geometry);
+    }
+
+    #[test]
+    fn stage_move_miss_down_clears_selection() {
+        let geometry = crate::host_bridge::HostStageGeometry {
+            layers: vec![
+                crate::host_bridge::HostStageGeometryLayer {
+                    layer_id: "10".into(),
+                    corners: [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]],
+                },
+            ],
+            layers_truncated: false,
+        };
+        let mut gesture = Some(StageMoveGesture {
+            layer_id: "10".into(),
+            down_logical: [10.0, 10.0],
+            down_canonical: [0.0, 0.0],
+            armed: true,
+            last_delta: [0.0, 0.0],
+        });
+        assert_eq!(
+            stage_move_pointer(
+                &mut gesture,
+                PointerPhase::Down,
+                700.0,
+                500.0,
+                800.0,
+                600.0,
+                &geometry,
+            ),
+            StageMoveOutcome::ClearSelection
+        );
+        assert!(gesture.is_none());
+        assert_eq!(
+            stage_move_pointer(
+                &mut gesture,
+                PointerPhase::Move,
+                700.0,
+                500.0,
+                800.0,
+                600.0,
+                &geometry,
+            ),
+            StageMoveOutcome::None
+        );
+    }
+
+    #[test]
+    fn stage_move_zero_area_quad_is_no_hit() {
+        let geometry = crate::host_bridge::HostStageGeometry {
+            layers: vec![
+                crate::host_bridge::HostStageGeometryLayer {
+                    layer_id: "zero".into(),
+                    corners: [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                },
+            ],
+            layers_truncated: false,
+        };
+        let mut gesture = None;
+        assert_eq!(
+            stage_move_pointer(
+                &mut gesture,
+                PointerPhase::Down,
+                400.0,
+                300.0,
+                800.0,
+                600.0,
+                &geometry,
+            ),
+            StageMoveOutcome::ClearSelection
+        );
+        assert!(gesture.is_none());
     }
 }
