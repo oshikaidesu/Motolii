@@ -78,13 +78,17 @@
   2. NEGATIVE ORACLEに「**採択済み資産が存在する領域での新実装**」を標準搭載
   3. oracleへ**構造検収**を追加 — 「このseamは既存Xを経由している」ことをdiff上で示させる(見た目不変だけでは合格させない)
 
-## 是正の順番(UX即効順の監督案)
+## 是正の順番(2026-08-13利用者裁定から再導出)
 
-1. **S1 gizmo接続**(退化の回復+scale/rotate開通。D2は既存、接続のみ)
-2. **S5+S6 selection/no-op裁定**(小さいが全操作の誠実さに直結)
-3. **S2 keyframe汎用化**(仕様粒→実装の二段。Inspector全プロパティのキー化=「普通の編集ソフト」の核)
-4. **S3 ベクタ降下の既存経路化**(シェイプ/SVG/テキストへの道)
-5. **S4 time domain移行**(playback campaign前に必須)
-6. S7/S8/S9/S10/S11は各自の粒で(S9は裁定のみ先行可)
+利用者の完了条件は、全操作へ報酬を返し、mockの死んだUIを残さず、意味ある接続の過半数をStage由来にし、StageのDocument表現をRerun流用資産で全て埋めること。この条件から次の依存順に固定する。
+
+1. **Stage根契約**: Document frame／shape／selectionをRerunのstore／query／View／visualizer／camera／picking／rendererへ統一し、独自post-passと近似previewを退役する
+2. **S1+S5**: 採択済みgizmoをprimaryへ接続し、同じD2 Commandのclone評価をdrag preview、releaseを1回commit、拒否を理由表示にする
+3. **Q0 inventory**: 製品面の死んだchrome／fixtureを実接続または撤去する。hint文言だけ変える操作は接続と数えない
+4. **S6+S2**: selectionを`selection[] + primary`へ広げ、プロパティpathをownerにする汎用keyframe契約へposition特化を畳む
+5. **S3+S4**: Vectorを既存Path2D／vello資産へ、TimelineをRationalTime／fps／timecodeへ統一する
+6. **S7〜S11**: 差分投影、stable-ID gesture、renderer一本化、handle所有state、実content warm-upを順に閉じる
+
+各契約のpositive oracleは「結果が変わる」、negative oracleは「採択済み資産を迂回しない」を必須にする。PNG sha不変は意図しない差分の検知にだけ使い、成果判定の主oracleにしない。
 
 本書の各itemは焼却されるまで削除しない。焼却はorder着地のみ。
