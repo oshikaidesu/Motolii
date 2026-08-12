@@ -33,13 +33,48 @@
 | 複数選択(Shift+click/marquee) | selection modelがsingle primary | U2h系譜と整合させる仕様粒 |
 | Copy/Paste | コマンド不在 | duplicate既存が下敷き |
 | I/O点・work area | range概念が未設計 | 台帳の「Preview Range/Loop/Trim比較中」row参照 |
+| M/S(mute/solo)直クリック | layer mute/soloのD2コマンド不在(実測) | 旧「object bar read-only」は2026-08-12裁定で撤回済み |
 
-## Tier 3 — 台帳決定と交差する反射(覆すのは利用者のみ)
+## (旧Tier 3は消滅 — 2026-08-12利用者裁定)
 
-| 反射 | 交差する決定 |
-|---|---|
-| M/S(mute/solo)を行で直クリック | 「object barは読み取り専用、状態変更はInspectorとkeymap」(2026-08-08 Timeline設計)。刻まれた反射との衝突を**反証材料として記録** — 本書は覆さない |
+旧台帳のUX決定は[実機以前UX決定の降格](reviews/2026-08-12-pre-handson-ux-decision-demotion.md)により仮説へ降格済み。M/S直クリックは正当な反射として**Tier 2へ移動**(layer mute/soloのD2コマンドが不在のため仕様粒→実装の二段)。
+
+## App全域の反射(2026-08-12追補 — 利用者裁定「刻まれた文脈は今回の実装外にも及ぶ。UIが見えた今こそ全てのUXを正しくする責任がある」)
+
+編集面(Timeline/Stage/Inspector)に限らず、appの全表面が同じ反射の対象である。
+
+### カーソル言語(最深級・全面共通)
+
+pointerの形が変わること自体がaffordanceの発見手段として刻まれている。trim端=左右resize、clip/Stage物体=move/grab、テキスト=I-beam、splitter=行列resize、無効領域=標準。**現状Timelineはカーソル変化ゼロ**。hit判定は既存(gesture zone)なので配線のみ = Tier 1。
+
+### Window / タイトル
+
+- タイトルの**実project名**表示+未保存dot(●)。現状は `night_drive.mtl` の**ハードコード=嘘**(Q0級)。実名はhostが知っている = Tier 1
+- Cmd+S=保存の手応え(自動永続でも反射は残る。保存済み表示で応える)、Cmd+N/O/Save As/最近使った = file dialog席のTier 2
+
+### Stage
+
+- **選択物のscale/rotateハンドル**(bounding boxの角と辺、回転ハンドル)。`SetProperty{Scale/Rotation/Anchor/Opacity}` は**D2に既存** → wire+UI配線のみ = Tier 1.5
+- Shift+drag=軸拘束/等比、Alt+drag=中心基準 = ハンドルと同粒
+- Stage自体のzoom/pan(pinch・Space+drag・Fit/100%実装) = Tier 1.5(view変換のみ、hit系は逆変換併走)
+
+### Browser
+
+- 項目のdragでStage/Timelineへ配置(CREATE sourceは現状double-clickのみ) = Tier 1
+- Cmd+F=検索focus、リストの矢印キー移動+Enter確定 = Tier 1
+- hover preview、サムネの実内容化 = media campaign従属
+
+### Inspector / text field作法
+
+- **Enter=確定してblur、Esc=打ち消してblur**、Tab=次のfield(X→Y)、focus時全選択(部分実装) = Tier 1
+- 数値fieldの単位表示・矢印キー増減(Shiftで大股) = Tier 1
+
+### 発見可能性
+
+- iconボタンのhover **tooltip**(macOS標準toolTip) = Tier 1
+- 空状態の一行ガイド(空Timelineに「Browserから配置」等、Q7と同件) = Tier 1
+- 右クリックcontext menu(Tier 0再掲) — 全面に同じ献立を出す
 
 ## 検収
 
-Tier 1は一括で1〜2 orderに束ねられる(全て既存intentへの配線)。oracleは品質バーQ0/Q1/Q9を引用。Tier 0は独立campaign、Tier 2は各仕様粒から。
+Tier 1系は面ごとに1 orderへ束ねる(oracleは品質バーQ0/Q1/Q7/Q9引用)。Tier 0は独立campaign、Tier 2は各仕様粒から。**「実装外の面」を後回しの理由にしない** — 全表面が同一の品質バーの下にある。

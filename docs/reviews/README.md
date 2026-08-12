@@ -576,3 +576,4 @@
 | [2026-08-10-session-handoff-node-registration-and-skia-timeline-in-rn-probe.md](2026-08-10-session-handoff-node-registration-and-skia-timeline-in-rn-probe.md) | 完成条件を塞ぐ8件のnode化と、実装なぞりによる自己訂正3件(media鎖は端から端まで製品コード0、file dialogの席1件へ収束)、RN probe timelineのSkia差し替えとvisual reference所在。仮コード先行を止め1つずつ繋ぐ方針へ変更 |
 | [2026-08-12-set-position-key-time-contract.md](2026-08-12-set-position-key-time-contract.md) | SetPositionKeyTime(position key時刻移動)の閉じた契約 — SetPositionKeyValue CAS族の鏡映、native Timeline keydragが通常入口。Rerun原本にkeyframe編集不在を確認済み |
 | [2026-08-12-remove-position-key-contract.md](2026-08-12-remove-position-key-contract.md) | RemovePositionKey(position key削除)の閉じた契約 — Add/UndoAdd対の鏡映、最後の1個はConst収束、undoは同一KeyframeId復元。Timeline Deleteが通常入口 |
+| [2026-08-12-pre-handson-ux-decision-demotion.md](2026-08-12-pre-handson-ux-decision-demotion.md) | 実機以前のUX決定を仮説へ一括降格(利用者裁定)。object bar read-onlyを明示撤回、UX authorityは実機裁定>品質バー>文法地図>旧仮説。工学契約(絶対規律/D2)は対象外 |
