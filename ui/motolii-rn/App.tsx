@@ -667,65 +667,33 @@ function Browser({
   );
 }
 
-function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, onToggleGpu, onTransform, transform}: {createdItemId: string; draggedItemId: string; pathOperationId: string; showGpu: boolean; onDrop: (x: number, y: number, canonicalX: number, canonicalY: number) => void; onToggleGpu: () => void; onTransform: (transform: StageTransform) => void; transform: StageTransform}) {
+function Stage({createdItemId, draggedItemId, pathOperationId, onDrop, onTransform, transform}: {createdItemId: string; draggedItemId: string; pathOperationId: string; onDrop: (x: number, y: number, canonicalX: number, canonicalY: number) => void; onTransform: (transform: StageTransform) => void; transform: StageTransform}) {
   return (
     <View style={styles.stage} testID="stage-surface">
-      <View style={styles.stageTools}>
-        <Text style={styles.stageToolText}>Fit</Text>
-        <Text style={styles.stageToolText}>100%</Text>
-        <Pressable onPress={onToggleGpu} style={styles.stageGpuButton}>
-          <Text style={styles.stageToolText}>{showGpu ? 'GPU ON' : 'GPU OFF'}</Text>
-        </Pressable>
-        <Text style={styles.stageIdentity}>STAGE / ECHO BLOOM</Text>
-      </View>
       <View style={styles.stageViewport} testID="stage-viewport">
-        {showGpu ? (
-          <MotoliiGpuView
-            accessible
-            accessibilityLabel="Rerun Spatial Viewer Stage"
-            createdItemId={`${createdItemId || 'rectangle@0.500000,0.500000'}|${pathOperationId}`}
-            draggedItemId={draggedItemId}
-            transformX={transform.x}
-            transformY={transform.y}
-            transformZ={transform.z}
-            rotationX={transform.rotationX}
-            rotationY={transform.rotationY}
-            rotationZ={transform.rotationZ}
-            onStageDrop={event =>
-              onDrop(
-                event.nativeEvent.x,
-                event.nativeEvent.y,
-                event.nativeEvent.canonicalX,
-                event.nativeEvent.canonicalY,
-              )
-            }
-            onStageTransform={event => onTransform(event.nativeEvent)}
-            style={styles.gpuStage}
-            testID="rust-wgpu-stage"
-          />
-        ) : (
-          <View style={styles.gpuStageOff}><Text style={styles.muted}>Native Stage unmounted</Text></View>
-        )}
-        <View pointerEvents="none" style={styles.frameGrid}>
-          <Text style={styles.outputLabel}>OUTPUT FRAME</Text>
-          <View style={styles.titleBounds}>
-            <Text style={styles.stageTitle}>NIGHT{`\n`}DRIVE</Text>
-            <Text style={styles.stageSubtitle}>54.2 / CITY SIGNAL</Text>
-          </View>
-          <View style={styles.rings}>
-            <View style={[styles.ring, styles.ringLarge]} />
-            <View style={[styles.ring, styles.ringMedium]} />
-            <View style={[styles.ring, styles.ringSmall]} />
-            <View style={styles.ringCore} />
-          </View>
-        </View>
-      </View>
-      <View style={styles.transport}>
-        <Text style={styles.transportButton}>|‹</Text>
-        <Text style={styles.transportButton}>▶</Text>
-        <Text style={styles.transportButton}>›|</Text>
-        <Text style={styles.timecode}>00:54.2  BAR 54.2.00  120 BPM · SNAP BEAT</Text>
-        <Text style={styles.quality}>DRAFT · FP16 · 1/2</Text>
+        <MotoliiGpuView
+          accessible
+          accessibilityLabel="Rerun Spatial Viewer Stage"
+          createdItemId={`${createdItemId || 'rectangle@0.500000,0.500000'}|${pathOperationId}`}
+          draggedItemId={draggedItemId}
+          transformX={transform.x}
+          transformY={transform.y}
+          transformZ={transform.z}
+          rotationX={transform.rotationX}
+          rotationY={transform.rotationY}
+          rotationZ={transform.rotationZ}
+          onStageDrop={event =>
+            onDrop(
+              event.nativeEvent.x,
+              event.nativeEvent.y,
+              event.nativeEvent.canonicalX,
+              event.nativeEvent.canonicalY,
+            )
+          }
+          onStageTransform={event => onTransform(event.nativeEvent)}
+          style={styles.gpuStage}
+          testID="rust-wgpu-stage"
+        />
       </View>
     </View>
   );
@@ -1229,7 +1197,6 @@ function App() {
   const [browserWidth, setBrowserWidth] = useState(284);
   const [inspectorWidth, setInspectorWidth] = useState(326);
   const [timelineHeight, setTimelineHeight] = useState(270);
-  const [showGpuStage, setShowGpuStage] = useState(true);
   const [createdItemId, setCreatedItemId] = useState('');
   const [draggedItemId, setDraggedItemId] = useState('');
   const pathOperationId = PATH_OPERATIONS[0].id;
@@ -1327,7 +1294,7 @@ function App() {
           onNudge={() => setBrowserWidth(value => value >= 348 ? 284 : value + 64)}
         />
         <View style={styles.centerColumn}>
-          <Stage createdItemId={createdItemId} draggedItemId={draggedItemId} pathOperationId={pathOperationId} showGpu={showGpuStage} onDrop={completeStageDrop} onToggleGpu={() => setShowGpuStage(value => !value)} onTransform={setStageTransform} transform={stageTransform} />
+          <Stage createdItemId={createdItemId} draggedItemId={draggedItemId} pathOperationId={pathOperationId} onDrop={completeStageDrop} onTransform={setStageTransform} transform={stageTransform} />
         </View>
         <Splitter
           label="Inspectorのサイズを変更"
@@ -1411,28 +1378,8 @@ const styles = StyleSheet.create({
   vSplitter: {width: 8, backgroundColor: '#272a2d', borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#3e4246'},
   hSplitter: {height: 8, backgroundColor: '#272a2d', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#3e4246'},
   stage: {flex: 1, backgroundColor: '#0d0f11'},
-  stageTools: {height: 31, flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 9, borderBottomWidth: 1, borderBottomColor: '#393c40'},
-  stageToolText: {fontSize: 9, color: '#d4d5d3'},
-  stageGpuButton: {paddingHorizontal: 7, paddingVertical: 4, borderWidth: 1, borderColor: '#716a4c'},
-  stageIdentity: {marginLeft: 'auto', fontSize: 7, color: '#b7ac73'},
   stageViewport: {flex: 1, overflow: 'hidden'},
   gpuStage: {position: 'absolute', inset: 0},
-  gpuStageOff: {position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center'},
-  frameGrid: {position: 'absolute', inset: 0, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)'},
-  outputLabel: {position: 'absolute', top: 8, left: 10, fontSize: 7, letterSpacing: 1, color: '#bfc3c5'},
-  titleBounds: {position: 'absolute', left: 10, top: 22, width: 126, height: 80, padding: 6, borderWidth: 1, borderColor: '#c3b88b'},
-  stageTitle: {fontSize: 16, lineHeight: 15, fontWeight: '800', letterSpacing: 3, color: '#f1f1ee'},
-  stageSubtitle: {marginTop: 6, fontSize: 5.5, letterSpacing: 0.8, color: '#c6c8c7'},
-  rings: {position: 'absolute', left: 144, top: 22, width: 80, height: 80, alignItems: 'center', justifyContent: 'center'},
-  ring: {position: 'absolute', borderWidth: 1, borderColor: 'rgba(235,238,232,0.42)', borderRadius: 200},
-  ringLarge: {width: 76, height: 76},
-  ringMedium: {width: 52, height: 52},
-  ringSmall: {width: 30, height: 30},
-  ringCore: {width: 14, height: 14, borderRadius: 7, backgroundColor: '#ebebe7'},
-  transport: {height: 31, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, borderTopWidth: 1, borderTopColor: '#3a3d41', backgroundColor: '#1b1d20'},
-  transportButton: {width: 34, fontSize: 10, color: '#dbdcda'},
-  timecode: {fontSize: 9, fontWeight: '600', color: '#e4e4e1'},
-  quality: {marginLeft: 'auto', fontSize: 7, color: '#84898c'},
   effectIdentity: {flexDirection: 'row', gap: 10, padding: 10, alignItems: 'center'},
   effectIcon: {width: 38, height: 38, borderWidth: 1, borderColor: '#b6aa70', alignItems: 'center', justifyContent: 'center'},
   effectIconText: {color: '#cabe7d'},

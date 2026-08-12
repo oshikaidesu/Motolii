@@ -59,6 +59,14 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'inspector-empty-state'})).toBeTruthy();
   expect(tree!.root.findAllByProps({testID: 'path-operations-panel'})).toHaveLength(0);
   expect(tree!.root.findAllByProps({testID: 'stage-transform-projection'})).toHaveLength(0);
+  const stageTexts = tree!.root
+    .findByProps({testID: 'stage-surface'})
+    .findAllByType(Text)
+    .map(node => String(node.props.children));
+  expect(stageTexts).not.toContain('OUTPUT FRAME');
+  expect(stageTexts).not.toContain('NIGHT\nDRIVE');
+  expect(stageTexts.some(value => value.includes('54.2'))).toBe(false);
+  expect(stageTexts.some(value => value.includes('GPU'))).toBe(false);
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'rust-wgpu-timeline'}).props.onTimelineFeedback({
