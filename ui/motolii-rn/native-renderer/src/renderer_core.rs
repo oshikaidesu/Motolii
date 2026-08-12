@@ -160,6 +160,8 @@ pub(crate) struct RendererCore {
     /// set_timeはrevisionを進めないため、playhead追従はgenerationで見る。
     host_projection_generation: Option<String>,
     host_stage_geometry: Option<crate::host_bridge::HostStageGeometry>,
+    /// host 投影メッシュ適用時の viewport（aspect 再適用判定）。
+    host_stage_viewport: Option<(u32, u32)>,
     host_fps: Option<(i64, i64)>,
     scrubbing: bool,
     scrub_time_pump: ScrubTimePump,
@@ -257,6 +259,7 @@ impl RendererCore {
             host_revision: None,
             host_projection_generation: None,
             host_stage_geometry: None,
+            host_stage_viewport: None,
             host_fps: None,
             scrubbing: false,
             scrub_time_pump: ScrubTimePump::new(),
@@ -474,6 +477,10 @@ impl RendererCore {
     }
 
     pub(crate) fn stage_pointer(&mut self, phase: PointerPhase, x: f64, y: f64) {
+        // host 投影が正本の間は fixture gizmo probe へ送らない。
+        if self.host_stage_geometry.is_some() {
+            return;
+        }
         let Some(stage) = &mut self.stage else { return };
         match phase {
             PointerPhase::Down => self.stats.pointer_downs += 1,
@@ -580,6 +587,7 @@ impl RendererCore {
             let Some(stage) = self.stage.as_mut() else {
                 return;
             };
+            let viewport = (self.config.width, self.config.height);
             let command = match crate::host_bridge::try_read_timeline_projection() {
                 Some(projection) => {
                     host_stage_geometry_command(self.host_stage_geometry.as_ref(), Some(&projection))
@@ -588,16 +596,34 @@ impl RendererCore {
             };
             match command {
                 HostStageGeometryCommand::Apply(geometry) => {
-                    if stage.rerun.apply_host_stage_geometry(&geometry) {
+                    if stage
+                        .rerun
+                        .apply_host_stage_geometry(&geometry, viewport.0, viewport.1)
+                    {
                         self.host_stage_geometry = Some(geometry);
+                        self.host_stage_viewport = Some(viewport);
                     }
                 }
                 HostStageGeometryCommand::Clear => {
                     if stage.rerun.clear_host_projection() {
                         self.host_stage_geometry = None;
+                        self.host_stage_viewport = None;
                     }
                 }
-                HostStageGeometryCommand::Noop => {}
+                HostStageGeometryCommand::Noop => {
+                    // geometry不変でもviewport aspectが変わったら再投影する。
+                    if self.host_stage_viewport != Some(viewport) {
+                        if let Some(geometry) = self.host_stage_geometry.clone() {
+                            if stage.rerun.apply_host_stage_geometry(
+                                &geometry,
+                                viewport.0,
+                                viewport.1,
+                            ) {
+                                self.host_stage_viewport = Some(viewport);
+                            }
+                        }
+                    }
+                }
             }
         }
     }

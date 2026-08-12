@@ -14,6 +14,10 @@ extern "C" bool motolii_macos_renderer_resize(void *handle, uint32_t width, uint
 extern "C" bool motolii_macos_renderer_render(void *handle);
 extern "C" bool motolii_macos_stage_renderer_pointer(void *handle, uint32_t phase, double x, double y);
 extern "C" bool motolii_macos_stage_renderer_set_created_item(void *handle, const char *itemId);
+extern "C" bool motolii_rnapp_stage_mount(double width, double height, double scale_factor);
+extern "C" bool motolii_rnapp_stage_resize(double width, double height, double scale_factor);
+extern "C" bool motolii_rnapp_stage_unmount(void);
+extern "C" bool motolii_rnapp_stage_pointer(const char *phase, double view_local_x, double view_local_y);
 typedef struct {
   double x;
   double y;
@@ -68,14 +72,50 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 
 @interface MotoliiStageMetalView : MotoliiMetalView
 @property(nonatomic, copy) void (^stagePointerHandler)(uint32_t phase, CGFloat x, CGFloat y);
+@property(nonatomic, strong) NSTrackingArea *trackingArea;
+@property(nonatomic, assign) BOOL stageGestureActive;
 @end
 
 @implementation MotoliiStageMetalView
 - (BOOL)acceptsFirstResponder { return YES; }
+- (void)updateTrackingAreas
+{
+  [super updateTrackingAreas];
+  if (self.trackingArea) {
+    [self removeTrackingArea:self.trackingArea];
+    self.trackingArea = nil;
+  }
+  NSTrackingArea *area = [[NSTrackingArea alloc]
+      initWithRect:self.bounds
+           options:(NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow |
+                    NSTrackingInVisibleRect)
+             owner:self
+          userInfo:nil];
+  self.trackingArea = area;
+  [self addTrackingArea:area];
+}
 - (void)emitPhase:(uint32_t)phase event:(NSEvent *)event
 {
+  if (self.stageGestureActive && (phase == 2 || phase == 3)) {
+    self.stageGestureActive = NO;
+  }
+
   NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
-  if (self.stagePointerHandler) self.stagePointerHandler(phase, point.x, NSHeight(self.bounds) - point.y);
+  if (!self.stagePointerHandler) {
+    return;
+  }
+  if (phase == 0) {
+    if (self.stageGestureActive) {
+      return;
+    }
+    self.stageGestureActive = YES;
+    self.stagePointerHandler(phase, point.x, NSHeight(self.bounds) - point.y);
+    return;
+  }
+  if (!self.stageGestureActive) {
+    return;
+  }
+  self.stagePointerHandler(phase, point.x, NSHeight(self.bounds) - point.y);
 }
 - (void)mouseDown:(NSEvent *)event
 {
@@ -84,6 +124,16 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 }
 - (void)mouseDragged:(NSEvent *)event { [self emitPhase:1 event:event]; }
 - (void)mouseUp:(NSEvent *)event { [self emitPhase:2 event:event]; }
+- (void)mouseExited:(NSEvent *)event { [self emitPhase:3 event:event]; }
+
+- (void)viewDidMoveToWindow
+{
+  [super viewDidMoveToWindow];
+  if (!self.window && self.stageGestureActive && self.stagePointerHandler) {
+    self.stagePointerHandler(3, 0, 0);
+    self.stageGestureActive = NO;
+  }
+}
 @end
 
 @implementation MotoliiTimelineMetalView
@@ -401,6 +451,13 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
     _metalView.stagePointerHandler = ^(uint32_t phase, CGFloat x, CGFloat y) {
       MotoliiGpuComponentView *strongSelf = weakSelf;
       if (!strongSelf || !strongSelf->_renderer) return;
+      // host seat へは view-local logical。sequence は bridge が採番。
+      const char *phaseName = "cancel";
+      if (phase == 0) phaseName = "down";
+      else if (phase == 1) phaseName = "drag";
+      else if (phase == 2) phaseName = "up";
+      (void)motolii_rnapp_stage_pointer(phaseName, x, y);
+      // host 投影 active 時は renderer_core 側で gizmo probe を止める。
       CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_metalView.layer;
       CGFloat scale = layer.contentsScale ?: 1.0;
       motolii_macos_stage_renderer_pointer(strongSelf->_renderer, phase, x * scale, y * scale);
@@ -423,12 +480,24 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   NSPoint point = [_metalView convertPoint:event.locationInWindow fromView:nil];
   double x = -1.0;
   double y = -1.0;
-  if (NSPointInRect(point, _metalView.bounds) && NSWidth(_metalView.bounds) > 0 && NSHeight(_metalView.bounds) > 0) {
-    x = point.x / NSWidth(_metalView.bounds);
-    y = 1.0 - point.y / NSHeight(_metalView.bounds);
+  double canonicalX = 0.0;
+  double canonicalY = 0.0;
+  CGFloat logicalW = NSWidth(_metalView.bounds);
+  CGFloat logicalH = NSHeight(_metalView.bounds);
+  if (NSPointInRect(point, _metalView.bounds) && logicalW > 0 && logicalH > 0) {
+    x = point.x / logicalW;
+    y = 1.0 - point.y / logicalH;
+    // host 正準: cx=(nx-0.5)*(w/h), cy=0.5-ny（logical viewport）
+    canonicalX = (x - 0.5) * (logicalW / logicalH);
+    canonicalY = 0.5 - y;
   }
   auto emitter = std::static_pointer_cast<const MotoliiGpuViewEventEmitter>(_eventEmitter);
-  MotoliiGpuViewEventEmitter::OnStageDrop drop = {.x = x, .y = y};
+  MotoliiGpuViewEventEmitter::OnStageDrop drop = {
+      .x = x,
+      .y = y,
+      .canonicalX = canonicalX,
+      .canonicalY = canonicalY,
+  };
   emitter->onStageDrop(drop);
 }
 
@@ -559,6 +628,9 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   _lastSentTransform = transform;
   _hasLastSentTransform = YES;
 
+  // host stage seat: logical bounds + contentsScale
+  (void)motolii_rnapp_stage_mount(NSWidth(self.bounds), NSHeight(self.bounds), scale);
+
   __weak MotoliiGpuComponentView *weakSelf = self;
   _frameTimer = [NSTimer scheduledTimerWithTimeInterval:(1.0 / 60.0)
                                                 repeats:YES
@@ -604,6 +676,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   motolii_macos_renderer_resize(_renderer,
                                 (uint32_t)layer.drawableSize.width,
                                 (uint32_t)layer.drawableSize.height);
+  (void)motolii_rnapp_stage_resize(NSWidth(self.bounds), NSHeight(self.bounds), scale);
   if (!CGSizeEqualToSize(oldSize, newSize)) {
     NSLog(@"[MotoliiRerunStage] renderer resized %.0fx%.0f @ %.1fx",
           newSize.width, newSize.height, scale);
@@ -615,6 +688,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   [_frameTimer invalidate];
   _frameTimer = nil;
   if (_renderer) {
+    (void)motolii_rnapp_stage_unmount();
     motolii_macos_renderer_destroy(_renderer);
     _renderer = nullptr;
     NSLog(@"[MotoliiRerunStage] renderer unmounted");

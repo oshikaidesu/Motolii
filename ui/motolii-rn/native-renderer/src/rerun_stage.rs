@@ -232,7 +232,16 @@ impl EmbeddedSpatialStage {
     }
 
     /// Host snapshot の stage_geometry で fixture を置換する。revision 側で gate 済み前提。
-    pub(crate) fn apply_host_stage_geometry(&mut self, geometry: &HostStageGeometry) -> bool {
+    /// `viewport_width/height` は host 投影の aspect 写像に使う（正方近似を避ける）。
+    pub(crate) fn apply_host_stage_geometry(
+        &mut self,
+        geometry: &HostStageGeometry,
+        viewport_width: u32,
+        viewport_height: u32,
+    ) -> bool {
+        if viewport_width == 0 || viewport_height == 0 {
+            return false;
+        }
         // fixture entity を透明メッシュで上書きし、host layer だけを見せる。
         let cleared = MeshData {
             vertices: vec![[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
@@ -269,7 +278,7 @@ impl EmbeddedSpatialStage {
         }
 
         for layer in &geometry.layers {
-            let mesh = mesh_from_canonical_corners(layer.corners);
+            let mesh = mesh_from_canonical_corners(layer.corners, viewport_width, viewport_height);
             if !ingest_mesh(
                 &mut self.spatial_stage,
                 &layer.layer_id,
@@ -698,18 +707,30 @@ fn ingest_mesh(
     stage.ingest_chunk(Arc::new(chunk)).is_ok()
 }
 
-/// canonical corners → fixture と同じ mesh 空間。
-/// `(nx, ny) = (cx + 0.5, 0.5 - cy)` のあと fixture の `(n - 0.5)` 写像。
-pub(crate) fn mesh_vertices_from_canonical_corners(corners: [[f64; 2]; 4]) -> [[f32; 3]; 4] {
+/// canonical corners → fixture と同じ mesh 空間（host 投影経路）。
+/// `nx = 0.5 + cx*(h/w)`, `ny = 0.5 - cy` のあと fixture の `(n - 0.5)` 写像。
+/// fixture 単独経路は呼ばない（正方近似を維持）。
+pub(crate) fn mesh_vertices_from_canonical_corners(
+    corners: [[f64; 2]; 4],
+    viewport_width: u32,
+    viewport_height: u32,
+) -> [[f32; 3]; 4] {
+    let w = f64::from(viewport_width.max(1));
+    let h = f64::from(viewport_height.max(1));
+    let aspect = h / w;
     corners.map(|[cx, cy]| {
-        let nx = cx + 0.5;
+        let nx = 0.5 + cx * aspect;
         let ny = 0.5 - cy;
         [nx as f32 - 0.5, ny as f32 - 0.5, 0.0]
     })
 }
 
-fn mesh_from_canonical_corners(corners: [[f64; 2]; 4]) -> MeshData {
-    let vertices = mesh_vertices_from_canonical_corners(corners);
+fn mesh_from_canonical_corners(
+    corners: [[f64; 2]; 4],
+    viewport_width: u32,
+    viewport_height: u32,
+) -> MeshData {
+    let vertices = mesh_vertices_from_canonical_corners(corners, viewport_width, viewport_height);
     MeshData {
         vertices: vertices.to_vec(),
         indices: vec![[0, 1, 2], [0, 2, 3]],
@@ -789,13 +810,22 @@ mod tests {
 
     #[test]
     fn canonical_corners_map_to_fixture_mesh_space() {
-        // seed unit rect: center(0,0) size(1,1)
+        // seed unit rect: center(0,0) size(1,1) / 正方 viewport では旧写像と一致
         let corners = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
-        let verts = mesh_vertices_from_canonical_corners(corners);
+        let verts = mesh_vertices_from_canonical_corners(corners, 1, 1);
         // (nx,ny)=(cx+0.5, 0.5-cy) → (n-0.5) = (cx, -cy)
         assert_eq!(verts[0], [-0.5, 0.5, 0.0]);
         assert_eq!(verts[1], [0.5, 0.5, 0.0]);
         assert_eq!(verts[2], [0.5, -0.5, 0.0]);
         assert_eq!(verts[3], [-0.5, -0.5, 0.0]);
+    }
+
+    #[test]
+    fn canonical_to_normalized_uses_viewport_aspect() {
+        // w=2h → h/w=0.5。cx=0.5 → nx=0.5+0.25=0.75
+        let corners = [[0.5, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]];
+        let verts = mesh_vertices_from_canonical_corners(corners, 2, 1);
+        let nx = verts[0][0] as f64 + 0.5;
+        assert!((nx - 0.75).abs() < 1e-9);
     }
 }

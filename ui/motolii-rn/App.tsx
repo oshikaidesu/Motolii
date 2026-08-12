@@ -454,7 +454,7 @@ function Browser({width, onCreateItem, onDragStart, onDragCancel}: {width: numbe
   );
 }
 
-function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, onToggleGpu, onTransform, transform}: {createdItemId: string; draggedItemId: string; pathOperationId: string; showGpu: boolean; onDrop: (x: number, y: number) => void; onToggleGpu: () => void; onTransform: (transform: StageTransform) => void; transform: StageTransform}) {
+function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, onToggleGpu, onTransform, transform}: {createdItemId: string; draggedItemId: string; pathOperationId: string; showGpu: boolean; onDrop: (x: number, y: number, canonicalX: number, canonicalY: number) => void; onToggleGpu: () => void; onTransform: (transform: StageTransform) => void; transform: StageTransform}) {
   return (
     <View style={styles.stage} testID="stage-surface">
       <View style={styles.stageTools}>
@@ -478,7 +478,14 @@ function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, 
             rotationX={transform.rotationX}
             rotationY={transform.rotationY}
             rotationZ={transform.rotationZ}
-            onStageDrop={event => onDrop(event.nativeEvent.x, event.nativeEvent.y)}
+            onStageDrop={event =>
+              onDrop(
+                event.nativeEvent.x,
+                event.nativeEvent.y,
+                event.nativeEvent.canonicalX,
+                event.nativeEvent.canonicalY,
+              )
+            }
             onStageTransform={event => onTransform(event.nativeEvent)}
             style={styles.gpuStage}
             testID="rust-wgpu-stage"
@@ -977,15 +984,14 @@ function App() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
-  const completeStageDrop = (x: number, y: number) => {
+  const completeStageDrop = (x: number, y: number, canonicalX: number, canonicalY: number) => {
     const itemId = draggedItemId;
     setDraggedItemId('');
     if (itemId && x >= 0 && y >= 0) {
       setCreatedItemId(createdItemValue(itemId, x, y));
       if (itemId === 'rectangle') {
-        // 正方近似: Stage正規化座標 → canonical (x-0.5, 0.5-y)
         dispatchHostIntent('place_rectangle', {
-          position: [x - 0.5, 0.5 - y],
+          position: [canonicalX, canonicalY],
           playhead: {num: 0, den: 1},
         });
       }

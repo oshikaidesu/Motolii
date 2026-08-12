@@ -152,14 +152,16 @@ test('renders correctly', async () => {
 
   mockDispatchIntent.mockClear();
   await ReactTestRenderer.act(() => {
-    tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageDrop({nativeEvent: {x: 0.25, y: 0.75}});
+    tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.onStageDrop({
+      nativeEvent: {x: 0.25, y: 0.75, canonicalX: 0.333333, canonicalY: -0.777777},
+    });
   });
   expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.createdItemId).toBe('rectangle@0.250000,0.750000|trim');
   expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.draggedItemId).toBe('');
   expect(mockDispatchIntent).toHaveBeenCalled();
   const placePayload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
   expect(placePayload.kind).toBe('place_rectangle');
-  expect(placePayload.position).toEqual([-0.25, -0.25]);
+  expect(placePayload.position).toEqual([0.333333, -0.777777]);
 
   mockDispatchIntent.mockClear();
   await ReactTestRenderer.act(() => {

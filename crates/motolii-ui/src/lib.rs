@@ -43,6 +43,7 @@ pub use rn_product_host::{
 #[doc(hidden)]
 pub use rn_product_host::{
     motolii_rn_host_create, motolii_rn_host_dispatch_intent_json, motolii_rn_host_read_snapshot_json,
+    motolii_rn_stage_register,
 };
 mod render_worker;
 mod shell;

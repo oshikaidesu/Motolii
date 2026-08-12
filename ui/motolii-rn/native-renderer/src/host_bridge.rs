@@ -13,11 +13,19 @@ const MAX_SNAPSHOT_JSON_BYTES: usize = 65_536;
 #[cfg(target_os = "macos")]
 use motolii_ui::{
     motolii_rn_host_create, motolii_rn_host_dispatch_intent_json,
-    motolii_rn_host_read_snapshot_json,
+    motolii_rn_host_read_snapshot_json, motolii_rn_stage_register,
 };
 
 struct HostSlot {
     handle: u64,
+    /// processに1つだけのStage seat。register後に埋まる。
+    stage_handle: Option<u64>,
+    /// stage_pointer がdown状態かどうか（Rust内状態機械）。
+    stage_pointer_active: bool,
+    /// stage seat が現在mount状態か。
+    stage_mounted: bool,
+    /// stage_pointer の単調 sequence（bridge内部採番）。
+    pointer_sequence: u64,
 }
 
 fn host_slot() -> &'static Mutex<Option<HostSlot>> {
@@ -173,8 +181,245 @@ pub unsafe extern "C" fn motolii_rnapp_host_ensure(path_utf8: *const u8, path_le
     }
     *guard = Some(HostSlot {
         handle: host_handle,
+        stage_handle: None,
+        stage_pointer_active: false,
+        stage_mounted: false,
+        pointer_sequence: 0,
     });
     true
+}
+
+/// Host投影のStage seatを1つだけregisterする。既登録はreuse。
+#[cfg(target_os = "macos")]
+fn ensure_stage_registered(slot: &mut HostSlot) -> bool {
+    if slot.stage_handle.is_some() {
+        return true;
+    }
+    let mut stage_handle = 0u64;
+    let mut out = [0u8; MAX_JSON_BYTES];
+    let written = unsafe {
+        motolii_rn_stage_register(
+            slot.handle,
+            &mut stage_handle,
+            out.as_mut_ptr(),
+            out.len(),
+        )
+    };
+    if written <= 0 || stage_handle == 0 {
+        return false;
+    }
+    let Ok(response) = std::str::from_utf8(&out[..written as usize]) else {
+        return false;
+    };
+    if !response_is_accepted(response) {
+        return false;
+    }
+    slot.stage_handle = Some(stage_handle);
+    true
+}
+
+#[cfg(target_os = "macos")]
+fn dispatch_stage_intent(slot: &HostSlot, kind: &str, extra: &str) -> bool {
+    let Some(stage) = slot.stage_handle else {
+        return false;
+    };
+    let intent = format!(
+        r#"{{"version":1,"direction":"rn-to-host","kind":"{kind}","host_handle":"{}","stage_handle":"{stage}"{extra}}}"#,
+        slot.handle,
+    );
+    if intent.len() > MAX_JSON_BYTES {
+        return false;
+    }
+    let mut out = [0u8; MAX_JSON_BYTES];
+    let written = unsafe {
+        motolii_rn_host_dispatch_intent_json(
+            slot.handle,
+            intent.as_ptr(),
+            intent.len(),
+            out.as_mut_ptr(),
+            out.len(),
+        )
+    };
+    if written <= 0 {
+        return false;
+    }
+    let Ok(response) = std::str::from_utf8(&out[..written as usize]) else {
+        return false;
+    };
+    response_is_accepted(response)
+}
+
+/// logical viewport 寸法で mount→resize。host不在・拒否はfalse。
+#[cfg(target_os = "macos")]
+pub(crate) fn try_stage_mount(width: f64, height: f64, scale_factor: f64) -> bool {
+    if !(width > 0.0 && height > 0.0 && scale_factor.is_finite() && scale_factor > 0.0) {
+        return false;
+    }
+    let Ok(mut guard) = host_slot().lock() else {
+        return false;
+    };
+    let Some(slot) = guard.as_mut() else {
+        return false;
+    };
+    if !ensure_stage_registered(slot) {
+        return false;
+    }
+    if !dispatch_stage_intent(slot, "stage_mount", "") {
+        return false;
+    }
+    slot.stage_mounted = true;
+    slot.stage_pointer_active = false;
+    let w = width.round() as u32;
+    let h = height.round() as u32;
+    if w == 0 || h == 0 {
+        return false;
+    }
+    let extra = format!(r#","width":{w},"height":{h},"scale_factor":{scale_factor}"#);
+    dispatch_stage_intent(slot, "stage_resize", &extra)
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn try_stage_resize(width: f64, height: f64, scale_factor: f64) -> bool {
+    if !(width > 0.0 && height > 0.0 && scale_factor.is_finite() && scale_factor > 0.0) {
+        return false;
+    }
+    let Ok(mut guard) = host_slot().lock() else {
+        return false;
+    };
+    let Some(slot) = guard.as_mut() else {
+        return false;
+    };
+    if slot.stage_handle.is_none() {
+        if !ensure_stage_registered(slot) {
+            return false;
+        }
+    }
+    if !slot.stage_mounted {
+        if !dispatch_stage_intent(slot, "stage_mount", "") {
+            return false;
+        }
+        slot.stage_mounted = true;
+        slot.stage_pointer_active = false;
+    }
+    let w = width.round() as u32;
+    let h = height.round() as u32;
+    if w == 0 || h == 0 {
+        return false;
+    }
+    let extra = format!(r#","width":{w},"height":{h},"scale_factor":{scale_factor}"#);
+    dispatch_stage_intent(slot, "stage_resize", &extra)
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn try_stage_unmount() -> bool {
+    let Ok(mut guard) = host_slot().lock() else {
+        return false;
+    };
+    let Some(slot) = guard.as_mut() else {
+        return false;
+    };
+    if slot.stage_handle.is_none() {
+        return false;
+    }
+    if !dispatch_stage_intent(slot, "stage_unmount", "") {
+        return false;
+    }
+    slot.stage_mounted = false;
+    slot.stage_pointer_active = false;
+    true
+}
+
+/// view-local logical 座標で stage_pointer。accepted:true のみ成功。
+#[cfg(target_os = "macos")]
+pub(crate) fn try_stage_pointer(phase: &str, view_local_x: f64, view_local_y: f64) -> bool {
+    if !matches!(phase, "down" | "drag" | "up" | "cancel") {
+        return false;
+    }
+    if !(view_local_x.is_finite() && view_local_y.is_finite()) {
+        return false;
+    }
+    let Ok(mut guard) = host_slot().lock() else {
+        return false;
+    };
+    let Some(slot) = guard.as_mut() else {
+        return false;
+    };
+    if slot.stage_handle.is_none() {
+        return false;
+    }
+    match phase {
+        "down" => {
+            if slot.stage_pointer_active {
+                return false;
+            }
+            slot.stage_pointer_active = true;
+        }
+        "drag" | "up" | "cancel" => {
+            if !slot.stage_pointer_active {
+                return false;
+            }
+        }
+        _ => {
+            return false;
+        }
+    }
+    slot.pointer_sequence = slot.pointer_sequence.saturating_add(1);
+    let sequence = slot.pointer_sequence;
+    let extra = format!(
+        r#","phase":"{phase}","view_local_x":{view_local_x},"view_local_y":{view_local_y},"sequence":{sequence}"#
+    );
+    let accepted = dispatch_stage_intent(slot, "stage_pointer", &extra);
+    if !accepted && phase == "down" {
+        slot.stage_pointer_active = false;
+    }
+    if accepted && (phase == "up" || phase == "cancel") {
+        slot.stage_pointer_active = false;
+    }
+    accepted
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn motolii_rnapp_stage_mount(
+    width: f64,
+    height: f64,
+    scale_factor: f64,
+) -> bool {
+    try_stage_mount(width, height, scale_factor)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn motolii_rnapp_stage_resize(
+    width: f64,
+    height: f64,
+    scale_factor: f64,
+) -> bool {
+    try_stage_resize(width, height, scale_factor)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn motolii_rnapp_stage_unmount() -> bool {
+    try_stage_unmount()
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// `phase` は NUL 終端 UTF-8（"down"|"drag"|"up"|"cancel"）。
+pub unsafe extern "C" fn motolii_rnapp_stage_pointer(
+    phase: *const std::ffi::c_char,
+    view_local_x: f64,
+    view_local_y: f64,
+) -> bool {
+    if phase.is_null() {
+        return false;
+    }
+    let Ok(phase) = (unsafe { std::ffi::CStr::from_ptr(phase) }).to_str() else {
+        return false;
+    };
+    try_stage_pointer(phase, view_local_x, view_local_y)
 }
 
 #[cfg(target_os = "macos")]
@@ -942,7 +1187,13 @@ mod tests {
 
     fn install_slot(host: u64) {
         let mut guard = host_slot().lock().expect("slot");
-        *guard = Some(HostSlot { handle: host });
+        *guard = Some(HostSlot {
+            handle: host,
+            stage_handle: None,
+            stage_pointer_active: false,
+            stage_mounted: false,
+            pointer_sequence: 0,
+        });
     }
 
     fn clear_slot() {
@@ -1428,4 +1679,93 @@ mod tests {
 
         motolii_ui::host_destroy_for_test(host).expect("destroy");
     }
+
+    #[test]
+    fn stage_seat_mount_pointer_selects_seed_layer_at_center() {
+        let _lock = test_lock();
+        clear_slot();
+        let path = temp_project("stage-ptr-hit");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+        let baseline = motolii_ui::host_read_snapshot_for_test(host).expect("baseline");
+        let seed_id = baseline.layer_ids[0].clone();
+        assert!(baseline.primary_layer_id.is_none());
+
+        let (width, height) = (1600.0_f64, 900.0_f64);
+        assert!(try_stage_mount(width, height, 1.0));
+        // seed rect center=[0,0] → view-local (w/2, h/2)
+        assert!(try_stage_pointer("down", width * 0.5, height * 0.5));
+        let after = try_read_timeline_projection().expect("projection");
+        assert_eq!(after.primary_layer_id.as_deref(), Some(seed_id.as_str()));
+
+        clear_slot();
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[test]
+    fn stage_pointer_rejects_when_unmounted_and_keeps_selection() {
+        let _lock = test_lock();
+        clear_slot();
+        let path = temp_project("stage-ptr-unmounted");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+        assert!(try_stage_mount(1600.0, 900.0, 1.0));
+        assert!(try_stage_pointer("down", 800.0, 450.0));
+        let selected = try_read_timeline_projection()
+            .expect("selected")
+            .primary_layer_id
+            .clone();
+        assert!(selected.is_some());
+        assert!(try_stage_unmount());
+        assert!(!try_stage_pointer("down", 800.0, 450.0));
+        let after = try_read_timeline_projection().expect("after");
+        assert_eq!(after.primary_layer_id, selected);
+
+        clear_slot();
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[test]
+    fn stage_pointer_state_machine_blocks_invalid_transitions_and_reopens_after_cancel() {
+        let _lock = test_lock();
+        clear_slot();
+        let path = temp_project("stage-ptr-seq");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+        assert!(try_stage_mount(800.0, 600.0, 1.0));
+        assert!(!try_stage_pointer("drag", 12.0, 14.0));
+        assert!(!try_stage_pointer("up", 12.0, 14.0));
+        assert!(try_stage_pointer("down", 10.0, 10.0));
+        assert!(try_stage_pointer("drag", 12.0, 14.0));
+        assert!(try_stage_pointer("cancel", 12.0, 14.0));
+        assert!(!try_stage_pointer("drag", 12.0, 14.0));
+        assert!(!try_stage_pointer("up", 12.0, 14.0));
+        assert!(try_stage_pointer("down", 10.0, 10.0));
+        assert!(try_stage_pointer("drag", 12.0, 14.0));
+        assert!(try_stage_pointer("up", 12.0, 14.0));
+        let seq = {
+            let guard = host_slot().lock().expect("slot");
+            guard.as_ref().expect("slot").pointer_sequence
+        };
+        assert_eq!(seq, 6);
+
+        clear_slot();
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[test]
+    fn stage_resize_registers_and_mounts_when_unregistered_or_unmounted() {
+        let _lock = test_lock();
+        clear_slot();
+        let path = temp_project("stage-resize-retry");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+        assert!(try_stage_resize(800.0, 600.0, 1.0));
+        assert!(try_stage_unmount());
+        assert!(try_stage_resize(1024.0, 768.0, 1.0));
+
+        clear_slot();
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
 }
