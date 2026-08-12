@@ -5,18 +5,9 @@
 
 ## 在庫(2026-08-12制定時点)
 
-### 掃討wave A(interaction — 発注済みで焼却中)
+### 掃討wave A(interaction) — **焼却済み 2026-08-13**
 
-| # | 段差 | 根拠 |
-|---|---|---|
-| F1 | **playheadを直接掴めない**(頭/線にhitが無く、rulerからしかscrubできない) — 一般編集ソフトはplayhead頭を掴む | 地図漏れの反射 |
-| F2 | **カーソル言語ゼロ+hover状態ゼロ**(trim端でresizeカーソルが出ない、clipでgrabが出ない) | 文法地図Tier 1 |
-| F3 | Undo/Redoが**履歴空でも押せて沈黙**(Q3違反) | hunter#3系 |
-| F4 | ruler目盛がfractional pan後に**位相ずれ**(固定小節の倍数に乗らない) | review P2(第二弾) |
-| F5 | scrub通過中にexact-on-key編集行が**チラつく** | 構造帰結 |
-| F6 | 空Timelineが**無言**(何をすればいいか一行も言わない、Q7) | 品質バーQ7 |
-| F7 | key菱形のhit半径(6px)と視覚(4.2〜5.6px)の**不一致** | 計測 |
-| F8 | truncated表示`(+)`が**暗号**(何が何件隠れたか分からない) | 第十八弾FINDING |
+F1(playhead直接掴み)/F2(カーソル言語: trim=resizeLR・clip=open/closedHand・key=pointingHand・drag中はhit外でも維持・mouseUp後再計算)/F3(Undo/Redo文脈disabled、wire `history`)/F4(ruler目盛の絶対位相)/F5(exact-on-key行のgesture実信号凍結+凍結identity commit)/F6(空Timeline一行ガイド)/F7(key hit半径5.6px視覚一致+境界test)/F8(`(+N)` 実件数、`truncated_total` saturating集計) — order 19+fix19で全焼却。PNG sha `43ec101c` 不変。
 
 ### 掃討wave B(performance — B違反、次order)
 

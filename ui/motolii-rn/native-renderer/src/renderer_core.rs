@@ -618,6 +618,50 @@ impl RendererCore {
         )
     }
 
+    /// hover位置のhit種→cursor。clip drag中はclosedHand。
+    pub(crate) fn timeline_hover_cursor(&self, x: f64, y: f64) -> i32 {
+        let Some(session) = &self.timeline_session else {
+            return crate::timeline_skia::CursorKind::Arrow.as_i32();
+        };
+        let hit = crate::timeline_skia::timeline_hover_hit(
+            &session.scene,
+            self.playhead,
+            self.config.width,
+            self.config.height,
+            x,
+            y,
+        );
+        let clip_dragging = matches!(
+            session.gesture_kind_for_cursor(),
+            Some(crate::timeline_skia::CursorDragKind::Clip)
+        );
+        crate::timeline_skia::cursor_for_timeline_hover(hit, clip_dragging).as_i32()
+    }
+
+    /// Stage上のlayer hover → cursor。x/yはtimeline同様の物理座標。
+    pub(crate) fn stage_hover_cursor(&self, x: f64, y: f64) -> i32 {
+        let dragging = self.stage_move_gesture.as_ref().is_some_and(|g| g.armed);
+        let Some(geometry) = &self.host_stage_geometry else {
+            return crate::timeline_skia::cursor_for_stage_hover(false, dragging).as_i32();
+        };
+        let Some(stage) = &self.stage else {
+            return crate::timeline_skia::cursor_for_stage_hover(false, dragging).as_i32();
+        };
+        let Some(primary_layer_id) = stage.rerun.host_primary_layer_id() else {
+            return crate::timeline_skia::cursor_for_stage_hover(false, dragging).as_i32();
+        };
+        let (logical_width, logical_height) = crate::host_bridge::try_stage_logical_size()
+            .unwrap_or((f64::from(self.config.width), f64::from(self.config.height)));
+        let scale_x = f64::from(self.config.width) / logical_width.max(1.0);
+        let scale_y = f64::from(self.config.height) / logical_height.max(1.0);
+        let logical_x = x / scale_x.max(f64::EPSILON);
+        let logical_y = y / scale_y.max(f64::EPSILON);
+        let over = view_local_to_canonical_stage(logical_x, logical_y, logical_width, logical_height)
+            .and_then(|canonical| stage_layer_hit(geometry, canonical))
+            .is_some_and(|layer_id| layer_id == primary_layer_id);
+        crate::timeline_skia::cursor_for_stage_hover(over, dragging).as_i32()
+    }
+
     /// Timeline pointer。戻り値trueはselection/playhead変化(feedback対象)。
     pub(crate) fn timeline_pointer(
         &mut self,
@@ -708,8 +752,13 @@ impl RendererCore {
                 let _ = Self::dispatch_timeline_selection(&commit);
             }
             self.scrubbing = self.scrub_time_pump.is_active();
+        }
+        if matches!(phase, PointerPhase::Down) {
+            crate::host_bridge::set_timeline_interacting(true);
         } else if matches!(phase, PointerPhase::Up | PointerPhase::Cancel) {
+            crate::host_bridge::set_timeline_interacting(false);
             self.scrubbing = false;
+            self.scrub_time_pump = ScrubTimePump::new();
         }
         outcome
             .feedback
@@ -960,6 +1009,7 @@ impl RendererCore {
                 if gesture_dirty {
                     self.scrub_time_pump = ScrubTimePump::new();
                     self.scrubbing = false;
+                    crate::host_bridge::set_timeline_interacting(false);
                 }
                 let scene = timeline_scene_from_projection(&session.scene, &projection);
                 self.selected_object_index = scene.selected_flat;
@@ -1809,7 +1859,8 @@ mod tests {
             None,
         );
         let mut selected = -1;
-        let mut playhead = 0.2;
+        // clip中心(bar1)からplayheadを離す — F1でplayhead優先になると選択がscrubになる。
+        let mut playhead = 0.0;
         let x = 202.0 + (1.0f64 / 5.0) * (1240.0 - 202.0 - 6.0);
         let y = 66.5;
         let down = session.pointer(

@@ -20,6 +20,26 @@ function nativeHost(): MotoliiHostSpec | null {
   return TurboModuleRegistry.get<MotoliiHostSpec>('NativeMotoliiHost');
 }
 
+type MotoliiHostSpecWithTimeline = MotoliiHostSpec & {
+  isTimelineInteracting: () => boolean;
+};
+
+function nativeHostWithTimelineSignal(): MotoliiHostSpecWithTimeline | null {
+  return TurboModuleRegistry.get<MotoliiHostSpecWithTimeline>('NativeMotoliiHost');
+}
+
+function nativeHostIsTimelineInteracting(): boolean {
+  const host = nativeHostWithTimelineSignal();
+  if (!host || typeof host.isTimelineInteracting !== 'function') {
+    return false;
+  }
+  try {
+    return host.isTimelineInteracting();
+  } catch {
+    return false;
+  }
+}
+
 /** dispatch応答snapshotの即時反映先。Appがmount時に登録する。 */
 let hostSnapshotApplier: ((state: HostSnapshotState) => void) | null = null;
 
@@ -65,6 +85,11 @@ type HostPositionKey = {
   time: HostRationalTime;
   value?: [number, number];
 };
+type HostPositionKeyValue = {
+  keyId: string;
+  time: HostRationalTime;
+  value: [number, number];
+};
 type HostEffectParam = {param_id: string; value: number};
 type HostEffectUse = {
   effect_use_id: string;
@@ -89,7 +114,7 @@ type HostLayerSeat = {
   primaryLayerId: string | null;
   currentTime: HostRationalTime;
   /** playhead exact一致かつ value がある時だけ編集席を出す。 */
-  exactKey: {time: HostRationalTime; value: [number, number]} | null;
+  exactKey: HostPositionKeyValue | null;
   effects: HostEffectUse[];
   sourceParams: HostSourceParam[];
 };
@@ -98,31 +123,54 @@ type HostSnapshotState = {
   layerSeat: HostLayerSeat | null;
   catalogEffects: HostCatalogEffect[] | null;
   catalogSources: HostCatalogSource[] | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  revision: string | null;
+  currentTime: HostRationalTime | null;
 };
 
 function rationalTimesExactEqual(a: HostRationalTime, b: HostRationalTime): boolean {
   return BigInt(a.num) * BigInt(b.den) === BigInt(b.num) * BigInt(a.den);
 }
 
+const EMPTY_HOST_SNAPSHOT: HostSnapshotState = {
+  statusLabel: null,
+  layerSeat: null,
+  catalogEffects: null,
+  catalogSources: null,
+  canUndo: false,
+  canRedo: false,
+  revision: null,
+  currentTime: null,
+};
+
+const toSaturatingNonNegativeTotal = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  if (value <= 0) {
+    return 0;
+  }
+  if (value >= Number.MAX_SAFE_INTEGER) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  return Math.floor(value);
+};
+
 /** host snapshotが読める時だけInspector Layer席へ渡す。 */
 function readHostSnapshotState(): HostSnapshotState {
   const host = nativeHost();
   if (!host) {
-    return {statusLabel: null, layerSeat: null, catalogEffects: null, catalogSources: null};
+    return EMPTY_HOST_SNAPSHOT;
   }
   const snapshot = host.readSnapshot();
   if (!snapshot) {
-    return {statusLabel: null, layerSeat: null, catalogEffects: null, catalogSources: null};
+    return EMPTY_HOST_SNAPSHOT;
   }
   try {
-    return hostSnapshotStateFromParsed(JSON.parse(snapshot)) ?? {
-      statusLabel: null,
-      layerSeat: null,
-      catalogEffects: null,
-      catalogSources: null,
-    };
+    return hostSnapshotStateFromParsed(JSON.parse(snapshot)) ?? EMPTY_HOST_SNAPSHOT;
   } catch {
-    return {statusLabel: null, layerSeat: null, catalogEffects: null, catalogSources: null};
+    return EMPTY_HOST_SNAPSHOT;
   }
 }
 
@@ -130,6 +178,8 @@ type ParsedHostSnapshot = {
   primary_layer_id?: string | null;
   current_time?: HostRationalTime;
   revision?: string;
+  truncated_total?: number;
+  history?: {can_undo?: boolean; can_redo?: boolean};
   stage?: {bounds?: unknown[]};
   catalog?: {
     effects?: Array<{plugin_id?: string; name?: string; effect_version?: number}>;
@@ -164,7 +214,12 @@ function hostSnapshotStateFromParsed(raw: unknown): HostSnapshotState | null {
     const layerBounds = parsed.stage?.bounds?.length ?? 0;
     const revision = parsed.revision;
     const timelineLayers = parsed.timeline?.layers ?? [];
+    const truncatedTotal =
+      typeof parsed.truncated_total === 'number'
+        ? toSaturatingNonNegativeTotal(parsed.truncated_total)
+        : 0;
     const anyTruncated =
+      truncatedTotal > 0 ||
       parsed.timeline?.layers_truncated === true ||
       timelineLayers.some(
         layer =>
@@ -175,7 +230,11 @@ function hostSnapshotStateFromParsed(raw: unknown): HostSnapshotState | null {
     const statusLabel =
       revision == null
         ? null
-        : `DOC r${revision} · ${layerBounds} layers${anyTruncated ? ' (+)' : ''}`;
+        : `DOC r${revision} · ${layerBounds} layers${
+            anyTruncated ? ` (+${truncatedTotal > 0 ? truncatedTotal : ''})` : ''
+          }`;
+    const canUndo = parsed.history?.can_undo === true;
+    const canRedo = parsed.history?.can_redo === true;
     const catalogEffects = Array.isArray(parsed.catalog?.effects)
       ? parsed.catalog!.effects!
           .filter(item => typeof item?.plugin_id === 'string' && item.plugin_id.length > 0)
@@ -195,7 +254,16 @@ function hostSnapshotStateFromParsed(raw: unknown): HostSnapshotState | null {
           }))
       : null;
     if (!parsed.current_time || typeof parsed.current_time.num !== 'number' || typeof parsed.current_time.den !== 'number') {
-      return {statusLabel, layerSeat: null, catalogEffects, catalogSources};
+      return {
+        statusLabel,
+        layerSeat: null,
+        catalogEffects,
+        catalogSources,
+        canUndo,
+        canRedo,
+        revision: revision ?? null,
+        currentTime: null,
+      };
     }
     const primary = primaryLayerId
       ? timelineLayers.find(layer => layer.layer_id === primaryLayerId)
@@ -205,6 +273,7 @@ function hostSnapshotStateFromParsed(raw: unknown): HostSnapshotState | null {
       key
       && typeof key.time?.num === 'number'
       && typeof key.time?.den === 'number'
+      && typeof key.key_id === 'string'
       && rationalTimesExactEqual(parsed.current_time!, key.time)
       && Array.isArray(key.value)
       && key.value.length === 2
@@ -231,13 +300,21 @@ function hostSnapshotStateFromParsed(raw: unknown): HostSnapshotState | null {
       statusLabel,
       catalogEffects,
       catalogSources,
+      canUndo,
+      canRedo,
+      revision: revision ?? null,
+      currentTime: parsed.current_time,
       layerSeat: {
         displayName: primary?.display_name ?? 'no selection',
         positionKeyCount: positionKeys.length,
         primaryLayerId,
         currentTime: parsed.current_time,
         exactKey: exact
-          ? {time: exact.time, value: [exact.value![0], exact.value![1]]}
+          ? {
+              keyId: exact.key_id,
+              time: exact.time,
+              value: [exact.value![0], exact.value![1]],
+            }
           : null,
         effects,
         sourceParams,
@@ -746,11 +823,28 @@ function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, 
   );
 }
 
-function Inspector({width, pathOperationId, onPathOperationChange, transform, onTransformChange, layerSeat}: {width: number; pathOperationId: string; onPathOperationChange: (id: string) => void; transform: StageTransform; onTransformChange: (update: Partial<StageTransform>) => void; layerSeat: HostLayerSeat | null}) {
+function Inspector({width, pathOperationId, onPathOperationChange, transform, onTransformChange, layerSeat, scrubFreeze}: {width: number; pathOperationId: string; onPathOperationChange: (id: string) => void; transform: StageTransform; onTransformChange: (update: Partial<StageTransform>) => void; layerSeat: HostLayerSeat | null; scrubFreeze: boolean}) {
   const [panel, setPanel] = useState<RightPanel>('INSPECTOR');
   const [intensity, setIntensity] = useState(64);
   const [spread, setSpread] = useState(42);
   const [extensionId, setExtensionId] = useState<string>(panelRegistry[0].id);
+  // 凍結は(key, layer)のpairで行う。凍結中にprimaryが変わっても別layerへdispatchしない。
+  const frozenExactSeat = useRef<{layerId: string; exactKey: HostPositionKeyValue} | null>(
+    layerSeat?.exactKey && layerSeat.primaryLayerId
+      ? {layerId: layerSeat.primaryLayerId, exactKey: layerSeat.exactKey}
+      : null,
+  );
+  if (!scrubFreeze) {
+    frozenExactSeat.current =
+      layerSeat?.exactKey && layerSeat.primaryLayerId
+        ? {layerId: layerSeat.primaryLayerId, exactKey: layerSeat.exactKey}
+        : null;
+  }
+  const displayedExactSeat = scrubFreeze
+    ? frozenExactSeat.current
+    : layerSeat?.exactKey && layerSeat?.primaryLayerId
+      ? {layerId: layerSeat.primaryLayerId, exactKey: layerSeat.exactKey}
+      : null;
   const extension = panelRegistry.find(item => item.id === extensionId)!;
   const selectedPathOperation = PATH_OPERATIONS.find(item => item.id === pathOperationId)!;
 
@@ -767,17 +861,17 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
       {panel === 'INSPECTOR' ? (
         <ScrollView disableScrollViewPanResponder>
           {layerSeat ? (
-            <View style={styles.pathOperationSection} testID="inspector-layer-section">
-              <Text style={styles.pathOperationTitle}>Layer</Text>
-              <Text style={styles.pathOperationDescription}>{layerSeat.displayName}</Text>
-              <Text style={styles.pathOperationDescription}>position keys: {layerSeat.positionKeyCount}</Text>
-              {layerSeat.exactKey && layerSeat.primaryLayerId ? (
-                <ExactOnKeyValueEditor
-                  key={`${layerSeat.primaryLayerId}:${layerSeat.exactKey.time.num}/${layerSeat.exactKey.time.den}`}
-                  primaryLayerId={layerSeat.primaryLayerId}
-                  keyTime={layerSeat.exactKey.time}
-                  value={layerSeat.exactKey.value}
-                />
+        <View style={styles.pathOperationSection} testID="inspector-layer-section">
+          <Text style={styles.pathOperationTitle}>Layer</Text>
+          <Text style={styles.pathOperationDescription}>{layerSeat.displayName}</Text>
+          <Text style={styles.pathOperationDescription}>position keys: {layerSeat.positionKeyCount}</Text>
+          {displayedExactSeat ? (
+            <ExactOnKeyValueEditor
+              key={`${displayedExactSeat.layerId}:${displayedExactSeat.exactKey.keyId}:${displayedExactSeat.exactKey.time.num}/${displayedExactSeat.exactKey.time.den}`}
+              primaryLayerId={displayedExactSeat.layerId}
+              keyTime={displayedExactSeat.exactKey.time}
+              value={displayedExactSeat.exactKey.value}
+            />
               ) : null}
               <View style={styles.pathOperationGrid}>
                 <Pressable
@@ -1452,15 +1546,31 @@ function App() {
   const [hostLayerSeat, setHostLayerSeat] = useState<HostLayerSeat | null>(null);
   const [hostCatalogEffects, setHostCatalogEffects] = useState<HostCatalogEffect[] | null>(null);
   const [hostCatalogSources, setHostCatalogSources] = useState<HostCatalogSource[] | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [scrubFreeze, setScrubFreeze] = useState(false);
+  const lastSnapshotMeta = useRef<{revision: string | null; currentTime: HostRationalTime | null}>({
+    revision: null,
+    currentTime: null,
+  });
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
   useEffect(() => {
     const apply = (snapshotState: HostSnapshotState) => {
-      setHostStatusLabel(snapshotState.statusLabel);
+      // F5: 凍結はnativeのgesture実信号で判定する(snapshot差分heuristicは廃止)。
+      // 新しいデータがUIを変え得るのはapplyの瞬間だけなので、その瞬間の実信号が正。
+      setScrubFreeze(nativeHostIsTimelineInteracting());
       setHostLayerSeat(snapshotState.layerSeat);
+      setHostStatusLabel(snapshotState.statusLabel);
       setHostCatalogEffects(snapshotState.catalogEffects);
       setHostCatalogSources(snapshotState.catalogSources);
+      setCanUndo(snapshotState.canUndo);
+      setCanRedo(snapshotState.canRedo);
+      lastSnapshotMeta.current = {
+        revision: snapshotState.revision,
+        currentTime: snapshotState.currentTime,
+      };
     };
     setHostSnapshotApplier(apply);
     const tick = () => {
@@ -1499,12 +1609,19 @@ function App() {
         {['Settings', '↶ Undo', '↷ Redo', 'Export'].map(label => {
           if (label === '↶ Undo' || label === '↷ Redo') {
             const kind = label === '↶ Undo' ? 'undo' : 'redo';
+            const enabled = kind === 'undo' ? canUndo : canRedo;
             return (
               <Pressable
                 key={label}
                 accessibilityLabel={label}
-                onPress={() => dispatchHostIntent(kind)}
-                style={styles.titleAction}
+                disabled={!enabled}
+                onPress={() => {
+                  if (!enabled) {
+                    return;
+                  }
+                  dispatchHostIntent(kind);
+                }}
+                style={[styles.titleAction, !enabled && styles.titleActionDisabled]}
                 testID={kind === 'undo' ? 'titlebar-undo' : 'titlebar-redo'}>
                 <Text style={styles.titleActionText}>{label}</Text>
               </Pressable>
@@ -1549,7 +1666,7 @@ function App() {
           onDelta={delta => setInspectorWidth(clamp(inspectorStart.current - delta, 240, 440))}
           onNudge={() => setInspectorWidth(value => value >= 390 ? 326 : value + 64)}
         />
-        <Inspector width={inspectorWidth} pathOperationId={pathOperationId} onPathOperationChange={setPathOperationId} transform={stageTransform} onTransformChange={update => setStageTransform(current => ({...current, ...update}))} layerSeat={hostLayerSeat} />
+        <Inspector width={inspectorWidth} pathOperationId={pathOperationId} onPathOperationChange={setPathOperationId} transform={stageTransform} onTransformChange={update => setStageTransform(current => ({...current, ...update}))} layerSeat={hostLayerSeat} scrubFreeze={scrubFreeze} />
       </View>
       <Splitter
         label="Timelineのサイズを変更"
@@ -1571,6 +1688,7 @@ const styles = StyleSheet.create({
   buildLabel: {marginLeft: 14, fontSize: 8, color: '#858a8d'},
   grow: {flex: 1},
   titleAction: {fontSize: 10, color: '#d8d8d5', paddingVertical: 6, paddingHorizontal: 10, marginLeft: 6, borderWidth: 1, borderColor: '#414448'},
+  titleActionDisabled: {opacity: 0.4},
   titleActionText: {fontSize: 10, color: '#d8d8d5'},
   commandbar: {height: 32, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#36393d', backgroundColor: '#151719'},
   commandTool: {width: 32, textAlign: 'center', fontSize: 12, color: '#b7b9bb'},

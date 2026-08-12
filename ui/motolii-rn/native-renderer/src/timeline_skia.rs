@@ -42,8 +42,11 @@ const ON_BAR: u32 = 0x141414;
 const ACCENT: u32 = 0xffad56;
 const P: [u32; 6] = [0x96aadb, 0x6fb9c1, 0xbfa973, 0x89b992, 0xd69a8b, 0xc39bc5];
 
-const KEY_HIT_PX: f64 = 6.0;
+/// 菱形外stroke(path 5.6)と一致させる。視覚は変えない。
+const KEY_HIT_PX: f64 = 5.6;
 const TRIM_HIT_PX: f64 = 4.0;
+/// playhead頭+線の掴み半幅(論理px)。
+const PLAYHEAD_HIT_PX: f64 = 4.0;
 const MOVE_ARM_PX: f64 = 3.0;
 const SNAP_THRESHOLD_LOGICAL_PX: f64 = 6.0;
 const MIN_CLIP_BARS: f32 = 1.0;
@@ -444,6 +447,12 @@ enum ActiveGesture {
     },
 }
 
+/// cursor写像で必要なgesture粗分類。
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CursorDragKind {
+    Clip,
+}
+
 /// scene + 進行中gesture。selection/playheadはcallerが所有する。
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TimelineSession {
@@ -496,6 +505,14 @@ impl TimelineSession {
         self.gesture.is_some()
     }
 
+    /// cursor用: clip本体drag中かどうかだけ公開する。
+    pub(crate) fn gesture_kind_for_cursor(&self) -> Option<CursorDragKind> {
+        match &self.gesture {
+            Some(ActiveGesture::SelectOrMove { moving: true, .. }) => Some(CursorDragKind::Clip),
+            _ => None,
+        }
+    }
+
     pub(crate) fn pointer(
         &mut self,
         selected: &mut i32,
@@ -524,7 +541,7 @@ impl TimelineSession {
         match phase {
             TimelinePointerPhase::Down => {
                 self.gesture = None;
-                if let Some(kind) = hit_gesture(&self.scene, lx, ly) {
+                if let Some(kind) = hit_gesture(&self.scene, *playhead, lx, ly) {
                     let snapshot = GestureSnapshot {
                         scene: self.scene.clone(),
                         selected: *selected,
@@ -536,7 +553,7 @@ impl TimelineSession {
                             dirty |= center_view_on(&mut self.scene, bar);
                             self.gesture = Some(ActiveGesture::Overview { snapshot });
                         }
-                        HitKind::Scrub => {
+                        HitKind::Scrub | HitKind::Playhead => {
                             *playhead = time_at_lx(&self.scene, lx);
                             self.gesture = Some(ActiveGesture::Scrub { snapshot });
                             scrub_playhead = Some(*playhead);
@@ -1074,6 +1091,8 @@ fn edit_commit_from_gesture(
 #[derive(Clone, Copy, Debug)]
 enum HitKind {
     Overview,
+    /// playhead頭/線。Scrubと同じ文法へ落とす。
+    Playhead,
     Scrub,
     Key {
         band: usize,
@@ -1095,6 +1114,57 @@ enum HitKind {
         flat: i32,
     },
     EmptyBar,
+}
+
+/// hover/cursor用の粗いhit種。gesture内部indexは持たない。
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TimelineHoverHit {
+    None,
+    PlayheadOrRuler,
+    Key,
+    Trim,
+    Clip,
+}
+
+/// OSカーソル写像の閉集合。ObjC側は薄い分岐だけ。
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CursorKind {
+    Arrow = 0,
+    ResizeLeftRight = 1,
+    OpenHand = 2,
+    ClosedHand = 3,
+    PointingHand = 4,
+}
+
+impl CursorKind {
+    pub(crate) fn as_i32(self) -> i32 {
+        self as i32
+    }
+}
+
+/// Timeline hover hit → cursor。clip drag中はhitを外れてもclosedHand維持(gesture active優先)。
+pub(crate) fn cursor_for_timeline_hover(hit: TimelineHoverHit, clip_dragging: bool) -> CursorKind {
+    if clip_dragging {
+        return CursorKind::ClosedHand;
+    }
+    match hit {
+        TimelineHoverHit::None => CursorKind::Arrow,
+        TimelineHoverHit::PlayheadOrRuler | TimelineHoverHit::Trim => CursorKind::ResizeLeftRight,
+        TimelineHoverHit::Key => CursorKind::PointingHand,
+        TimelineHoverHit::Clip => CursorKind::OpenHand,
+    }
+}
+
+/// Stage上の選択可能物hover → cursor。drag中は物体を外れてもclosedHand維持。
+pub(crate) fn cursor_for_stage_hover(over_layer: bool, dragging: bool) -> CursorKind {
+    if dragging {
+        return CursorKind::ClosedHand;
+    }
+    if over_layer {
+        CursorKind::OpenHand
+    } else {
+        CursorKind::Arrow
+    }
 }
 
 
@@ -1201,7 +1271,8 @@ fn body_top() -> f64 {
 }
 
 fn body_bottom(scene: &TimelineScene) -> f64 {
-    body_top() + f64::from(scene.bands.len() as f32 * ROW)
+    body_top()
+        + f64::from(scene.bands.len() as f32 * ROW + empty_real_guide_rows(scene))
 }
 
 fn neighbors(scene: &TimelineScene, band: usize, clip_idx: usize) -> (f32, f32) {
@@ -1350,15 +1421,20 @@ pub(crate) fn test_select_first_real_key(scene: &mut TimelineScene) {
     }
 }
 
-fn hit_gesture(scene: &TimelineScene, lx: f64, ly: f64) -> Option<HitKind> {
+fn hit_gesture(scene: &TimelineScene, playhead: f64, lx: f64, ly: f64) -> Option<HitKind> {
     // 0. overview帯
     if ly < f64::from(OVER_H) && lx >= f64::from(SURF_X) {
         return Some(HitKind::Overview);
     }
 
+    // 1. playhead(頭+線) — ruler/key/trim/clipより先
+    if playhead_hit(scene, playhead, lx, ly) {
+        return Some(HitKind::Playhead);
+    }
+
     let ry = f64::from(OVER_H + 1.0);
     let time_y0 = body_bottom(scene);
-    // 1. ruler帯(小節 / 分秒)
+    // 2. ruler帯(小節 / 分秒)
     if ((ly >= ry && ly < ry + f64::from(RULER_H))
         || (ly >= time_y0 && ly < time_y0 + f64::from(TIME_H)))
         && lx >= f64::from(SURF_X)
@@ -1374,7 +1450,12 @@ fn hit_gesture(scene: &TimelineScene, lx: f64, ly: f64) -> Option<HitKind> {
 
     let band_index = ((ly - top) / f64::from(ROW)) as usize;
     if band_index >= scene.bands.len() {
-        return None;
+        // 空realのガイド帯など、band無しのbodyはEmptyBar扱いにしない(選択解除のみ)。
+        return if scene.real && scene.bands.is_empty() {
+            Some(HitKind::EmptyBar)
+        } else {
+            None
+        };
     }
     let band = &scene.bands[band_index];
     let row_cy = top + (band_index as f64 + 0.5) * f64::from(ROW) - 0.5;
@@ -1388,7 +1469,7 @@ fn hit_gesture(scene: &TimelineScene, lx: f64, ly: f64) -> Option<HitKind> {
         flat_before += b.clips.len() as i32;
     }
 
-    // 2. key中心±6
+    // 3. key中心±KEY_HIT_PX
     for (clip_idx, clip) in band.clips.iter().enumerate() {
         for (key_idx, (kt, _, _, _)) in clip.keys.iter().enumerate() {
             if *kt < clip.a || *kt > clip.b {
@@ -1406,7 +1487,7 @@ fn hit_gesture(scene: &TimelineScene, lx: f64, ly: f64) -> Option<HitKind> {
         }
     }
 
-    // 3. trim端 / 4. clip本体
+    // 4. trim端 / 5. clip本体
     for (clip_idx, clip) in band.clips.iter().enumerate() {
         let ax = f64::from(bx(scene, clip.a));
         let bx_ = f64::from(bx(scene, clip.b));
@@ -1447,13 +1528,83 @@ fn hit_gesture(scene: &TimelineScene, lx: f64, ly: f64) -> Option<HitKind> {
         }
     }
 
-    // 5. 空きbar面
+    // 6. 空きbar面
     Some(HitKind::EmptyBar)
+}
+
+fn playhead_hit(scene: &TimelineScene, playhead: f64, lx: f64, ly: f64) -> bool {
+    if lx < f64::from(SURF_X) {
+        return false;
+    }
+    let bar = (playhead.clamp(0.0, 1.0) as f32) * scene.song_bars;
+    if bar < scene.view_a || bar > scene.view_b {
+        return false;
+    }
+    let px = f64::from(bx(scene, bar));
+    if (lx - px).abs() > PLAYHEAD_HIT_PX {
+        return false;
+    }
+    let ry = f64::from(OVER_H + 1.0);
+    let tri_top = ry + f64::from(RULER_H) - 6.0;
+    let time_y0 = body_bottom(scene);
+    let line_bottom = time_y0; // 描画線は分秒ruler上端まで
+    ly >= tri_top && ly < line_bottom.max(tri_top + 1.0)
+}
+
+/// hover位置のhit種。gesture判定と同じ優先順位をpureに返す。
+pub(crate) fn timeline_hover_hit(
+    scene: &TimelineScene,
+    playhead: f64,
+    width: u32,
+    height: u32,
+    x: f64,
+    y: f64,
+) -> TimelineHoverHit {
+    if width == 0 || height == 0 {
+        return TimelineHoverHit::None;
+    }
+    let scale = f64::from(scale_for(width));
+    let lx = x / scale;
+    let ly = y / scale;
+    match hit_gesture(scene, playhead, lx, ly) {
+        Some(HitKind::Playhead) | Some(HitKind::Scrub) => TimelineHoverHit::PlayheadOrRuler,
+        Some(HitKind::Key { .. }) => TimelineHoverHit::Key,
+        Some(HitKind::TrimStart { .. }) | Some(HitKind::TrimEnd { .. }) => TimelineHoverHit::Trim,
+        Some(HitKind::Clip { .. }) => TimelineHoverHit::Clip,
+        Some(HitKind::Overview) | Some(HitKind::EmptyBar) | None => TimelineHoverHit::None,
+    }
+}
+
+/// view_aからの相対ではなく、絶対barの倍数へ切り上げた最初の目盛。
+fn first_absolute_tick(view_a: f32, step: i32) -> i32 {
+    let step = step.max(1);
+    let start = view_a.ceil() as i32;
+    let rem = start.rem_euclid(step);
+    if rem == 0 {
+        start
+    } else {
+        start + (step - rem)
+    }
+}
+
+fn empty_real_guide_rows(scene: &TimelineScene) -> f32 {
+    if scene.real && scene.bands.is_empty() {
+        ROW
+    } else {
+        0.0
+    }
 }
 
 /// 描画に使う論理座標系の高さ。
 fn logical_height(scene: &TimelineScene) -> f32 {
-    OVER_H + RULER_H + LOC_H + 1.0 + scene.bands.len() as f32 * ROW + TIME_H + 2.0
+    OVER_H
+        + RULER_H
+        + LOC_H
+        + 1.0
+        + scene.bands.len() as f32 * ROW
+        + empty_real_guide_rows(scene)
+        + TIME_H
+        + 2.0
 }
 
 /// surface幅へ合わせたscale。probeの静止画は幅1240固定なので、幅で合わせる。
@@ -1743,7 +1894,7 @@ pub(crate) fn draw_timeline(
         Rect::from_ltrb(0.0, ry, W, ry + RULER_H),
         rgb(SURFACE_HI),
     );
-    for b in (view_a as i32..=view_b as i32).step_by(4) {
+    for b in (first_absolute_tick(view_a, 4)..=view_b as i32).step_by(4) {
         let x = bx(b as f32);
         fill(
             cv,
@@ -1985,9 +2136,18 @@ pub(crate) fn draw_timeline(
         y += ROW;
     }
 
+    // 空real: 一行ガイド(fixtureはbands非空のため描画不変)。
+    if scene.real && scene.bands.is_empty() {
+        let guide = "Create の □ Rectangle をダブルクリックで配置";
+        let text_w = measure(guide, 9.0);
+        let tx = SURF_X + ((sw - text_w) * 0.5).max(0.0);
+        text(cv, guide, tx, y + ROW * 0.5 + 3.0, 9.0, rgb(DIM));
+        y += ROW;
+    }
+
     // ── 分秒 ruler ──
     fill(cv, Rect::from_ltrb(0.0, y, W, y + TIME_H), rgb(SURFACE_BG));
-    for b in (view_a as i32..=view_b as i32).step_by(8) {
+    for b in (first_absolute_tick(view_a, 8)..=view_b as i32).step_by(8) {
         let x = bx(b as f32);
         let sec = b * 2;
         fill(cv, Rect::from_ltrb(x, y, x + 1.0, y + 5.0), gray(0x6a));
@@ -2760,7 +2920,9 @@ mod tests {
         assert!((clip.b - 5.0).abs() < 1e-4);
 
         // TrimStart: band1 clip1 26..40。左端にkeyは無い。keysは不変。
+        // playhead既定0.27≈bar25.92がTRIM端に重なるため遠ざける(F1優先)。
         let (mut sess, mut selected, mut playhead) = session();
+        playhead = 12.0 / 96.0;
         let keys_before = sess.scene.bands[1].clips[1].keys.clone();
         let start_x = f64::from(bx_default(26.0));
         sess.pointer(
@@ -4022,5 +4184,178 @@ mod tests {
         assert!(sess.discard_active_gesture());
         assert_eq!(sess.scene, before);
         assert!(!sess.discard_active_gesture());
+    }
+
+    #[test]
+    fn playhead_near_down_starts_scrub_distant_clip_does_not() {
+        let (mut sess, mut selected, mut playhead) = session();
+        playhead = 12.0 / 96.0;
+        let px = f64::from(bx(&sess.scene, 12.0));
+        let body_y = body_top() + f64::from(ROW) + 5.0;
+        let near = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            px + 2.0,
+            body_y,
+            0,
+        );
+        assert!(near.scrub_playhead.is_some());
+        assert!(matches!(sess.gesture, Some(ActiveGesture::Scrub { .. })));
+        sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Up,
+            px + 2.0,
+            body_y,
+            0,
+        );
+
+        let (mut sess, mut selected, mut playhead) = session();
+        playhead = 12.0 / 96.0;
+        // band1 hero本体。key(8/13/18)とplayhead(12)から離す。
+        let clip_x = lx_for_bar(10.0);
+        let clip_down = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            clip_x,
+            body_y,
+            0,
+        );
+        assert!(clip_down.scrub_playhead.is_none());
+        assert!(matches!(
+            sess.gesture,
+            Some(ActiveGesture::SelectOrMove { .. })
+        ));
+        assert!((playhead - 12.0 / 96.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn hover_hit_maps_to_cursor_kinds() {
+        assert_eq!(
+            cursor_for_timeline_hover(TimelineHoverHit::Trim, false),
+            CursorKind::ResizeLeftRight
+        );
+        assert_eq!(
+            cursor_for_timeline_hover(TimelineHoverHit::PlayheadOrRuler, false),
+            CursorKind::ResizeLeftRight
+        );
+        assert_eq!(
+            cursor_for_timeline_hover(TimelineHoverHit::Key, false),
+            CursorKind::PointingHand
+        );
+        assert_eq!(
+            cursor_for_timeline_hover(TimelineHoverHit::Clip, false),
+            CursorKind::OpenHand
+        );
+        assert_eq!(
+            cursor_for_timeline_hover(TimelineHoverHit::Clip, true),
+            CursorKind::ClosedHand
+        );
+        assert_eq!(
+            cursor_for_timeline_hover(TimelineHoverHit::None, false),
+            CursorKind::Arrow
+        );
+        // drag中はhitを外れてもclosedHand維持(gesture active優先)。
+        assert_eq!(
+            cursor_for_timeline_hover(TimelineHoverHit::None, true),
+            CursorKind::ClosedHand
+        );
+        assert_eq!(
+            cursor_for_timeline_hover(TimelineHoverHit::Trim, true),
+            CursorKind::ClosedHand
+        );
+        assert_eq!(cursor_for_stage_hover(true, false), CursorKind::OpenHand);
+        assert_eq!(cursor_for_stage_hover(true, true), CursorKind::ClosedHand);
+        assert_eq!(cursor_for_stage_hover(false, true), CursorKind::ClosedHand);
+        assert_eq!(cursor_for_stage_hover(false, false), CursorKind::Arrow);
+
+        let scene = TimelineScene::default();
+        let playhead = 12.0 / 96.0;
+        let px = f64::from(bx(&scene, 12.0));
+        let body_y = body_top() + f64::from(ROW) + 5.0;
+        assert_eq!(
+            timeline_hover_hit(&scene, playhead, 1240, 400, px, body_y),
+            TimelineHoverHit::PlayheadOrRuler
+        );
+        assert_eq!(
+            timeline_hover_hit(&scene, playhead, 1240, 400, lx_for_bar(10.0), body_y),
+            TimelineHoverHit::Clip
+        );
+        let ruler_y = f64::from(OVER_H + 1.0) + 4.0;
+        assert_eq!(
+            timeline_hover_hit(&scene, 0.0, 1240, 400, lx_for_bar(20.0), ruler_y),
+            TimelineHoverHit::PlayheadOrRuler
+        );
+    }
+
+    #[test]
+    fn first_absolute_tick_snaps_fractional_view_to_bar_multiples() {
+        assert_eq!(first_absolute_tick(0.0, 4), 0);
+        assert_eq!(first_absolute_tick(0.1, 4), 4);
+        assert_eq!(first_absolute_tick(2.3, 4), 4);
+        assert_eq!(first_absolute_tick(4.0, 4), 4);
+        assert_eq!(first_absolute_tick(4.01, 4), 8);
+        assert_eq!(first_absolute_tick(1.0, 8), 8);
+    }
+
+    #[test]
+    fn key_hit_radius_matches_outer_stroke_5_6() {
+        assert!((KEY_HIT_PX - 5.6).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn key_hit_boundary_is_5_6px() {
+        let scene = TimelineScene::default();
+        // band 0 clip 1のkey(bar 20.0)。playheadは遠くへ置き優先順位の干渉を避ける。
+        let playhead = 0.9;
+        let kx = f64::from(bx(&scene, 20.0));
+        let row_cy = body_top() + 0.5 * f64::from(ROW) - 0.5;
+        assert_eq!(
+            timeline_hover_hit(&scene, playhead, 1240, 400, kx + 5.5, row_cy),
+            TimelineHoverHit::Key
+        );
+        assert_eq!(
+            timeline_hover_hit(&scene, playhead, 1240, 400, kx, row_cy + 5.5),
+            TimelineHoverHit::Key
+        );
+        // 5.6pxの外はkeyではない(clip本体へ落ちる)。
+        assert_ne!(
+            timeline_hover_hit(&scene, playhead, 1240, 400, kx + 5.7, row_cy),
+            TimelineHoverHit::Key
+        );
+        assert_ne!(
+            timeline_hover_hit(&scene, playhead, 1240, 400, kx, row_cy + 5.7),
+            TimelineHoverHit::Key
+        );
+    }
+
+    #[test]
+    fn empty_real_scene_reserves_guide_row_and_filled_scene_does_not() {
+        let mut scene = TimelineScene::default();
+        scene.real = true;
+        scene.bands.clear();
+        assert!((empty_real_guide_rows(&scene) - ROW).abs() < f32::EPSILON);
+
+        // layerが1件でも入れば消える。
+        let filled = TimelineScene::default();
+        if !filled.bands.is_empty() {
+            let mut real_filled = filled;
+            real_filled.real = true;
+            assert_eq!(empty_real_guide_rows(&real_filled), 0.0);
+        }
+
+        // fixture(real=false)では空でも出さない(PNG sha不変の根拠)。
+        let mut fixture = TimelineScene::default();
+        fixture.real = false;
+        fixture.bands.clear();
+        assert_eq!(empty_real_guide_rows(&fixture), 0.0);
     }
 }

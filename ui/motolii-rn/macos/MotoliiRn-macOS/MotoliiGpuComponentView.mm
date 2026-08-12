@@ -54,6 +54,8 @@ typedef struct {
 
 extern "C" bool motolii_macos_timeline_renderer_hit_test(
     void *handle, double x, double y, MotoliiTimelineFeedback *feedback);
+extern "C" int32_t motolii_macos_timeline_renderer_hover_cursor(void *handle, double x, double y);
+extern "C" int32_t motolii_macos_stage_renderer_hover_cursor(void *handle, double x, double y);
 extern "C" bool motolii_macos_timeline_renderer_pointer(
     void *handle, uint32_t phase, double x, double y, uint32_t modifiers,
     MotoliiTimelineFeedback *feedback);
@@ -63,6 +65,29 @@ extern "C" bool motolii_macos_timeline_renderer_scroll(
 extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStats *stats);
 extern "C" bool motolii_rnapp_host_keymap(const uint8_t *kind_utf8, size_t kind_len);
 extern "C" bool motolii_macos_timeline_renderer_keymap_delete(void *handle);
+
+/// Rust cursor code → NSCursor。0 arrow / 1 resizeLR / 2 openHand / 3 closedHand / 4 pointingHand
+static void MotoliiApplyCursor(int32_t code)
+{
+  NSCursor *cursor = [NSCursor arrowCursor];
+  switch (code) {
+    case 1:
+      cursor = [NSCursor resizeLeftRightCursor];
+      break;
+    case 2:
+      cursor = [NSCursor openHandCursor];
+      break;
+    case 3:
+      cursor = [NSCursor closedHandCursor];
+      break;
+    case 4:
+      cursor = [NSCursor pointingHandCursor];
+      break;
+    default:
+      break;
+  }
+  [cursor set];
+}
 
 /// Cmd+Z / Shift+Cmd+Z / Delete|Backspace だけをhostへ転送。認識した鍵はYES(superへ送らない)。
 static BOOL MotoliiDispatchKeymap(NSEvent *event)
@@ -96,11 +121,14 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
 @property(nonatomic, copy) void (^timelineScrollHandler)(
     CGFloat deltaX, CGFloat deltaY, CGFloat magnification, uint32_t modifiers, CGFloat x, CGFloat y);
 @property(nonatomic, copy) void (^timelineDeleteHandler)(void);
+@property(nonatomic, copy) void (^timelineHoverHandler)(CGFloat x, CGFloat y);
+@property(nonatomic, strong) NSTrackingArea *trackingArea;
 @property(nonatomic, assign) BOOL timelineGestureActive;
 @end
 
 @interface MotoliiStageMetalView : MotoliiMetalView
 @property(nonatomic, copy) void (^stagePointerHandler)(uint32_t phase, CGFloat x, CGFloat y);
+@property(nonatomic, copy) void (^stageHoverHandler)(CGFloat x, CGFloat y);
 @property(nonatomic, strong) NSTrackingArea *trackingArea;
 @property(nonatomic, assign) BOOL stageGestureActive;
 @end
@@ -116,8 +144,8 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
   }
   NSTrackingArea *area = [[NSTrackingArea alloc]
       initWithRect:self.bounds
-           options:(NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow |
-                    NSTrackingInVisibleRect)
+           options:(NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved |
+                    NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect)
              owner:self
           userInfo:nil];
   self.trackingArea = area;
@@ -151,10 +179,37 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
   [self.window makeFirstResponder:self];
   [self emitPhase:0 event:event];
 }
-- (void)mouseDragged:(NSEvent *)event { [self emitPhase:1 event:event]; }
-- (void)mouseUp:(NSEvent *)event { [self emitPhase:2 event:event]; }
+- (void)mouseDragged:(NSEvent *)event
+{
+  [self emitPhase:1 event:event];
+  if (self.stageHoverHandler) {
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    self.stageHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+  }
+}
+- (void)mouseUp:(NSEvent *)event
+{
+  [self emitPhase:2 event:event];
+  // gesture終了後、現在位置でcursorを再計算(closedHand残留を防ぐ)。
+  if (self.stageHoverHandler) {
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    self.stageHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+  }
+}
+- (void)mouseMoved:(NSEvent *)event
+{
+  if (!self.stageHoverHandler) {
+    return;
+  }
+  NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+  self.stageHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+}
 // AppKitはdrag中のmouseDragged/Upをview外でも配送する。mouseExited即cancelしない。
-- (void)mouseExited:(NSEvent *)event { (void)event; }
+- (void)mouseExited:(NSEvent *)event
+{
+  (void)event;
+  MotoliiApplyCursor(0);
+}
 
 - (void)keyDown:(NSEvent *)event
 {
@@ -181,6 +236,23 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
   return YES;
 }
 
+- (void)updateTrackingAreas
+{
+  [super updateTrackingAreas];
+  if (self.trackingArea) {
+    [self removeTrackingArea:self.trackingArea];
+    self.trackingArea = nil;
+  }
+  NSTrackingArea *area = [[NSTrackingArea alloc]
+      initWithRect:self.bounds
+           options:(NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved |
+                    NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect)
+             owner:self
+          userInfo:nil];
+  self.trackingArea = area;
+  [self addTrackingArea:area];
+}
+
 - (void)emitPhase:(uint32_t)phase event:(NSEvent *)event
 {
   NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
@@ -204,11 +276,35 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
 - (void)mouseDragged:(NSEvent *)event
 {
   [self emitPhase:1 event:event];
+  if (self.timelineHoverHandler) {
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    self.timelineHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+  }
 }
 
 - (void)mouseUp:(NSEvent *)event
 {
   [self emitPhase:2 event:event];
+  // gesture終了後、現在位置でcursorを再計算(closedHand残留を防ぐ)。
+  if (self.timelineHoverHandler) {
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    self.timelineHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+  }
+}
+
+- (void)mouseMoved:(NSEvent *)event
+{
+  if (!self.timelineHoverHandler) {
+    return;
+  }
+  NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+  self.timelineHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+}
+
+- (void)mouseExited:(NSEvent *)event
+{
+  (void)event;
+  MotoliiApplyCursor(0);
 }
 
 - (void)keyDown:(NSEvent *)event
@@ -348,6 +444,17 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
               strongSelf->_timelineRenderer, deltaX * scale, deltaY * scale, magnification,
               modifiers, x * scale, y * scale);
         };
+    _timelineView.timelineHoverHandler = ^(CGFloat x, CGFloat y) {
+      MotoliiTimelineComponentView *strongSelf = weakSelf;
+      if (!strongSelf || !strongSelf->_timelineRenderer) {
+        return;
+      }
+      CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_timelineView.layer;
+      CGFloat scale = layer.contentsScale ?: 1.0;
+      int32_t code = motolii_macos_timeline_renderer_hover_cursor(
+          strongSelf->_timelineRenderer, x * scale, y * scale);
+      MotoliiApplyCursor(code);
+    };
     [self addSubview:_timelineView];
   }
   return self;
@@ -519,6 +626,17 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
       CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_metalView.layer;
       CGFloat scale = layer.contentsScale ?: 1.0;
       motolii_macos_stage_renderer_pointer(strongSelf->_renderer, phase, x * scale, y * scale);
+    };
+    _metalView.stageHoverHandler = ^(CGFloat x, CGFloat y) {
+      MotoliiGpuComponentView *strongSelf = weakSelf;
+      if (!strongSelf || !strongSelf->_renderer) {
+        return;
+      }
+      CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_metalView.layer;
+      CGFloat scale = layer.contentsScale ?: 1.0;
+      int32_t code =
+          motolii_macos_stage_renderer_hover_cursor(strongSelf->_renderer, x * scale, y * scale);
+      MotoliiApplyCursor(code);
     };
     [self addSubview:_metalView];
   }

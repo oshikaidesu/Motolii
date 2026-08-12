@@ -8,6 +8,7 @@ extern "C" bool motolii_rnapp_host_ensure(const uint8_t *path_utf8, size_t path_
 extern "C" int64_t motolii_rnapp_host_dispatch_json(
     const uint8_t *in_utf8, size_t in_len, uint8_t *out, size_t out_cap);
 extern "C" int64_t motolii_rnapp_host_snapshot_json(uint8_t *out, size_t out_cap);
+extern "C" bool motolii_rnapp_is_timeline_interacting(void);
 
 @implementation MotoliiHostModule
 
@@ -39,6 +40,11 @@ RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(dispatchIntent:(NSString *)intentJson)
                                   length:(NSUInteger)written
                                 encoding:NSUTF8StringEncoding]
       ?: @"{\"accepted\":false}";
+}
+
+RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(isTimelineInteracting)
+{
+  return @(motolii_rnapp_is_timeline_interacting());
 }
 
 RCT_EXPORT_BLOCKING_SYNCHRONOUS_METHOD(readSnapshot)

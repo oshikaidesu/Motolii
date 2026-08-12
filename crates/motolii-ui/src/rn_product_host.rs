@@ -162,6 +162,12 @@ pub(crate) struct WireProductSnapshot {
     current_time: RationalTime,
     #[serde(skip_serializing_if = "Option::is_none")]
     primary_layer_id: Option<String>,
+    /// Undo/Redo入口の文脈無効化用。NothingToUndo/Redoの事前投影。
+    #[serde(default)]
+    history: WireHistoryProjection,
+    /// 各capで隠れた件数の合計。`(+)→(+N)`表示用。
+    #[serde(default)]
+    truncated_total: u32,
     stage: WireStageProjection,
     /// Available layer の world 適用済み canonical corners（v1・camera 不使用）。
     stage_geometry: WireStageGeometryProjection,
@@ -169,6 +175,12 @@ pub(crate) struct WireProductSnapshot {
     /// session 不変の first-party effect catalog（reference を除く製品 plugin）。
     catalog: WireCatalogProjection,
     diagnostics: Vec<RnHostDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+struct WireHistoryProjection {
+    can_undo: bool,
+    can_redo: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -645,6 +657,7 @@ impl RnProductHost {
             EvaluationTime::new(self.current_time),
             &DataTracks::new(),
         );
+        let (timeline, truncated_total) = project_timeline(document.as_ref());
 
         WireProductSnapshot {
             version: WIRE_VERSION,
@@ -655,9 +668,14 @@ impl RnProductHost {
             projection_generation: self.projection_generation.to_string(),
             current_time: self.current_time,
             primary_layer_id: self.primary.map(|layer| layer.get().to_string()),
+            history: WireHistoryProjection {
+                can_undo: self.runtime.can_undo(),
+                can_redo: self.runtime.can_redo(),
+            },
+            truncated_total,
             stage: WireStageProjection { selection, bounds },
             stage_geometry,
-            timeline: project_timeline(document.as_ref()),
+            timeline,
             catalog: wire_catalog_projection(),
             diagnostics: Vec::new(),
         }
@@ -3907,8 +3925,13 @@ fn snapshot_for_test(snapshot: WireProductSnapshot) -> RnProductSnapshotForTest 
     }
 }
 
-fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection {
+fn project_timeline(document: &motolii_doc::Document) -> (WireTimelineProjection, u32) {
     let ordered = layers_in_track_order(document);
+    let mut truncated_total: u32 = 0;
+    if ordered.len() > MAX_STAGE_BOUNDS {
+        truncated_total = truncated_total
+            .saturating_add(u32::try_from(ordered.len() - MAX_STAGE_BOUNDS).unwrap_or(u32::MAX));
+    }
     let layers_truncated = ordered.len() > MAX_STAGE_BOUNDS;
     let layers = ordered
         .into_iter()
@@ -3917,10 +3940,16 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
             let (start, duration) = find_first_clip(document, layer_id)
                 .map(|clip| (clip.start, clip.duration))
                 .unwrap_or((RationalTime::ZERO, RationalTime::ZERO));
-            let (position_keys, keys_truncated) = project_position_keys(document, layer_id);
-            let (effects, effects_truncated) = project_layer_effects(document, layer_id);
-            let (source_params, source_params_truncated) =
+            let (position_keys, keys_truncated, keys_hidden) =
+                project_position_keys(document, layer_id);
+            let (effects, effects_truncated, effects_hidden) =
+                project_layer_effects(document, layer_id);
+            let (source_params, source_params_truncated, source_hidden) =
                 project_layer_source_params(document, layer_id);
+            truncated_total = truncated_total
+                .saturating_add(keys_hidden)
+                .saturating_add(effects_hidden)
+                .saturating_add(source_hidden);
             WireTimelineLayer {
                 layer_id: layer_id.get().to_string(),
                 display_name: name,
@@ -3935,12 +3964,15 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
             }
         })
         .collect();
-    WireTimelineProjection {
-        fps: document.composition.fps,
-        duration: document.composition.duration,
-        layers,
-        layers_truncated,
-    }
+    (
+        WireTimelineProjection {
+            fps: document.composition.fps,
+            duration: document.composition.duration,
+            layers,
+            layers_truncated,
+        },
+        truncated_total,
+    )
 }
 
 /// LayerIdTable採番順ではなく Document.tracks の track→item 順。
@@ -3975,11 +4007,15 @@ fn layers_in_track_order(document: &motolii_doc::Document) -> Vec<(LayerId, Stri
 fn project_layer_effects(
     document: &motolii_doc::Document,
     layer_id: LayerId,
-) -> (Vec<WireTimelineEffect>, bool) {
+) -> (Vec<WireTimelineEffect>, bool, u32) {
     let Some(envelope) = find_envelope_in_document(document, layer_id) else {
-        return (Vec::new(), false);
+        return (Vec::new(), false, 0);
     };
-    let effects_truncated = envelope.effects.len() > MAX_EFFECTS_PER_LAYER;
+    let hidden = envelope
+        .effects
+        .len()
+        .saturating_sub(MAX_EFFECTS_PER_LAYER) as u32;
+    let effects_truncated = hidden > 0;
     let effects = envelope
         .effects
         .iter()
@@ -4006,18 +4042,18 @@ fn project_layer_effects(
             })
         })
         .collect();
-    (effects, effects_truncated)
+    (effects, effects_truncated, hidden)
 }
 
 fn project_layer_source_params(
     document: &motolii_doc::Document,
     layer_id: LayerId,
-) -> (Vec<WireTimelineSourceParam>, bool) {
+) -> (Vec<WireTimelineSourceParam>, bool, u32) {
     let Some(clip) = find_first_clip(document, layer_id) else {
-        return (Vec::new(), false);
+        return (Vec::new(), false, 0);
     };
     let ClipSource::Plugin { params, .. } = &clip.source else {
-        return (Vec::new(), false);
+        return (Vec::new(), false, 0);
     };
     let all: Vec<_> = params
         .iter()
@@ -4031,9 +4067,10 @@ fn project_layer_source_params(
             _ => None,
         })
         .collect();
-    let source_params_truncated = all.len() > MAX_SOURCE_PARAMS_PER_LAYER;
+    let hidden = all.len().saturating_sub(MAX_SOURCE_PARAMS_PER_LAYER) as u32;
+    let source_params_truncated = hidden > 0;
     let source_params = all.into_iter().take(MAX_SOURCE_PARAMS_PER_LAYER).collect();
-    (source_params, source_params_truncated)
+    (source_params, source_params_truncated, hidden)
 }
 
 /// first_party − reference。session 不変なので OnceLock で cache。
@@ -4269,15 +4306,16 @@ fn find_track_item_location(
 fn project_position_keys(
     document: &motolii_doc::Document,
     target: LayerId,
-) -> (Vec<WireTimelinePositionKey>, bool) {
+) -> (Vec<WireTimelinePositionKey>, bool, u32) {
     let Some(envelope) = find_envelope_in_document(document, target) else {
-        return (Vec::new(), false);
+        return (Vec::new(), false, 0);
     };
     let DocParam::Keyframes(track) = &envelope.transform.position else {
-        return (Vec::new(), false);
+        return (Vec::new(), false, 0);
     };
     let keys = track.keys();
-    let keys_truncated = keys.len() > MAX_POSITION_KEYS;
+    let hidden = keys.len().saturating_sub(MAX_POSITION_KEYS) as u32;
+    let keys_truncated = hidden > 0;
     let position_keys = keys
         .iter()
         .take(MAX_POSITION_KEYS)
@@ -4290,7 +4328,7 @@ fn project_position_keys(
             },
         })
         .collect();
-    (position_keys, keys_truncated)
+    (position_keys, keys_truncated, hidden)
 }
 
 fn position_key_at(
@@ -7490,6 +7528,41 @@ mod tests {
             layer.position_keys[63].time,
             RationalTime::try_new(63, 10).expect("64th")
         );
+        let wire = read_wire(host);
+        assert_eq!(wire.truncated_total, 1);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_history_flags_project_nothing_to_undo_redo() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("history-empty");
+        let empty = read_wire(host);
+        assert!(!empty.history.can_undo);
+        assert!(!empty.history.can_redo);
+        assert_eq!(empty.truncated_total, 0);
+
+        let placed = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+            ),
+        );
+        assert!(placed.accepted);
+        let after = read_wire(host);
+        assert!(after.history.can_undo);
+        assert!(!after.history.can_redo);
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(undone.accepted);
+        let restored = read_wire(host);
+        assert!(!restored.history.can_undo);
+        assert!(restored.history.can_redo);
         let _ = host_destroy_for_test(host);
     }
 
@@ -9217,11 +9290,12 @@ mod tests {
             })],
         });
         document.validate().expect("structurally valid");
-        let timeline = project_timeline(&document);
+        let (timeline, truncated_total) = project_timeline(&document);
         assert_eq!(timeline.layers.len(), 1);
         let projected = &timeline.layers[0];
         assert_eq!(projected.source_params.len(), 8);
         assert!(projected.source_params_truncated);
+        assert_eq!(truncated_total, 1);
         assert_eq!(projected.source_params[0].param_id, "p0");
         assert_eq!(projected.source_params[7].param_id, "p7");
         assert_eq!(projected.source_params[7].value, 7.0);

@@ -4,12 +4,13 @@
 
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const MAX_JSON_BYTES: usize = 16_384;
 const MAX_SNAPSHOT_JSON_BYTES: usize = 131_072;
 
 #[cfg(test)]
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 
 #[cfg(test)]
 static TEST_SELECTION_DISPATCH_COUNT: AtomicU64 = AtomicU64::new(0);
@@ -50,9 +51,19 @@ struct HostSlot {
     stage_logical_height: f64,
 }
 
+static TIMELINE_INTERACTING: AtomicBool = AtomicBool::new(false);
+
 fn host_slot() -> &'static Mutex<Option<HostSlot>> {
     static SLOT: OnceLock<Mutex<Option<HostSlot>>> = OnceLock::new();
     SLOT.get_or_init(|| Mutex::new(None))
+}
+
+pub(crate) fn is_timeline_interacting() -> bool {
+    TIMELINE_INTERACTING.load(Ordering::Acquire)
+}
+
+pub(crate) fn set_timeline_interacting(interacting: bool) {
+    TIMELINE_INTERACTING.store(interacting, Ordering::Release);
 }
 
 /// Host投影。revision変化時だけTimelineへ適用する。
@@ -430,6 +441,14 @@ pub(crate) fn try_stage_pointer(phase: &str, view_local_x: f64, view_local_y: f6
         slot.stage_pointer_active = false;
     }
     accepted
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// No pointer input required; returns current timeline scrub/interact status.
+pub unsafe extern "C" fn motolii_rnapp_is_timeline_interacting() -> bool {
+    is_timeline_interacting()
 }
 
 #[cfg(target_os = "macos")]

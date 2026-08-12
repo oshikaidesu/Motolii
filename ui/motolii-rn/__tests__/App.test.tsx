@@ -9,6 +9,7 @@ import App from '../App';
 
 const mockDispatchIntent = jest.fn(() => '{"accepted":true}');
 const mockReadSnapshot = jest.fn(() => '');
+const mockIsTimelineInteracting = jest.fn(() => false);
 const actualGet = TurboModuleRegistry.get.bind(TurboModuleRegistry);
 
 function mockHostGet(name: string) {
@@ -16,6 +17,7 @@ function mockHostGet(name: string) {
     return {
       dispatchIntent: mockDispatchIntent,
       readSnapshot: mockReadSnapshot,
+      isTimelineInteracting: mockIsTimelineInteracting,
     };
   }
   return actualGet(name);
@@ -29,6 +31,7 @@ function mockNullHostGet(name: string) {
 }
 
 test('renders correctly', async () => {
+  mockReadSnapshot.mockReturnValue('');
   const getSpy = jest
     .spyOn(TurboModuleRegistry, 'get')
     .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
@@ -165,6 +168,26 @@ test('renders correctly', async () => {
   expect(placePayload.playhead).toEqual({num: 0, den: 1});
 
   mockDispatchIntent.mockClear();
+  // F3: 履歴ありsnapshotを即時適用してからUndoを撃つ。
+  mockDispatchIntent.mockImplementation(() =>
+    JSON.stringify({
+      accepted: true,
+      snapshot: {
+        revision: '1',
+        projection_generation: '1',
+        current_time: {num: 0, den: 1},
+        history: {can_undo: true, can_redo: false},
+        truncated_total: 0,
+        stage: {bounds: []},
+        timeline: {layers: [], layers_truncated: false},
+      },
+    }),
+  );
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'create-item-rectangle'}).props.onDoubleClick();
+  });
+  mockDispatchIntent.mockClear();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'titlebar-undo'}).props.onPress();
   });
@@ -196,6 +219,7 @@ test('renders correctly', async () => {
     tree!.unmount();
   });
   getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
 });
 
 test('rectangle center and drop placement use snapshot current_time', async () => {
@@ -1295,7 +1319,17 @@ test('inspector shows source params as display-only rows', async () => {
 
 test('dispatch accepted snapshot applies immediately without waiting for poll', async () => {
   mockDispatchIntent.mockClear();
-  mockReadSnapshot.mockReturnValue('');
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '1',
+      projection_generation: '0',
+      current_time: {num: 0, den: 1},
+      history: {can_undo: true, can_redo: false},
+      truncated_total: 0,
+      stage: {bounds: []},
+      timeline: {layers: [], layers_truncated: false},
+    }),
+  );
   mockDispatchIntent.mockImplementation(() =>
     JSON.stringify({
       accepted: true,
@@ -1304,6 +1338,8 @@ test('dispatch accepted snapshot applies immediately without waiting for poll', 
         projection_generation: '2',
         current_time: {num: 3, den: 1},
         primary_layer_id: '42',
+        history: {can_undo: true, can_redo: false},
+        truncated_total: 0,
         stage: {bounds: [{layer_id: '42', display_name: 'live-layer'}]},
         timeline: {
           fps: {num: 30, den: 1},
@@ -1345,7 +1381,43 @@ test('dispatch accepted snapshot applies immediately without waiting for poll', 
     tree!.unmount();
   });
   getSpy.mockRestore();
-  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('titlebar undo and redo stay disabled without history and do not dispatch', async () => {
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '1',
+      projection_generation: '0',
+      current_time: {num: 0, den: 1},
+      history: {can_undo: false, can_redo: false},
+      truncated_total: 0,
+      stage: {bounds: []},
+      timeline: {layers: [], layers_truncated: false},
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  expect(tree!.root.findByProps({testID: 'titlebar-undo'}).props.disabled).toBe(true);
+  expect(tree!.root.findByProps({testID: 'titlebar-redo'}).props.disabled).toBe(true);
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'titlebar-undo'}).props.onPress?.();
+    tree!.root.findByProps({testID: 'titlebar-redo'}).props.onPress?.();
+  });
+  expect(mockDispatchIntent).not.toHaveBeenCalled();
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
   mockReadSnapshot.mockReturnValue('');
 });
 
@@ -1356,6 +1428,7 @@ test('DOC status label appends (+) when any position key projection is truncated
       projection_generation: '1',
       current_time: {num: 0, den: 1},
       primary_layer_id: '42',
+      truncated_total: 1,
       stage: {bounds: [{layer_id: '42', display_name: 'seed'}]},
       timeline: {
         fps: {num: 30, den: 1},
@@ -1385,7 +1458,7 @@ test('DOC status label appends (+) when any position key projection is truncated
   });
 
   expect(
-    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+)'),
+    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+1)'),
   ).toBe(true);
 
   await ReactTestRenderer.act(() => {
@@ -1402,6 +1475,7 @@ test('DOC status label appends (+) when layers are truncated', async () => {
       projection_generation: '1',
       current_time: {num: 0, den: 1},
       primary_layer_id: '42',
+      truncated_total: 2,
       stage: {bounds: [{layer_id: '42', display_name: 'seed'}]},
       timeline: {
         fps: {num: 30, den: 1},
@@ -1432,7 +1506,7 @@ test('DOC status label appends (+) when layers are truncated', async () => {
   });
 
   expect(
-    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+)'),
+    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+2)'),
   ).toBe(true);
 
   await ReactTestRenderer.act(() => {
@@ -1449,6 +1523,7 @@ test('DOC status label appends (+) when effects are truncated', async () => {
       projection_generation: '1',
       current_time: {num: 0, den: 1},
       primary_layer_id: '42',
+      truncated_total: 1,
       stage: {bounds: [{layer_id: '42', display_name: 'seed'}]},
       timeline: {
         fps: {num: 30, den: 1},
@@ -1479,7 +1554,7 @@ test('DOC status label appends (+) when effects are truncated', async () => {
   });
 
   expect(
-    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+)'),
+    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+1)'),
   ).toBe(true);
 
   await ReactTestRenderer.act(() => {
@@ -1496,6 +1571,7 @@ test('DOC status label appends (+) when source params are truncated', async () =
       projection_generation: '1',
       current_time: {num: 0, den: 1},
       primary_layer_id: '42',
+      truncated_total: 3,
       stage: {bounds: [{layer_id: '42', display_name: 'seed'}]},
       timeline: {
         fps: {num: 30, den: 1},
@@ -1527,13 +1603,108 @@ test('DOC status label appends (+) when source params are truncated', async () =
   });
 
   expect(
-    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+)'),
+    tree!.root.findAllByType(Text).some(node => node.props.children === 'DOC r4 · 1 layers (+3)'),
   ).toBe(true);
 
   await ReactTestRenderer.act(() => {
     tree!.unmount();
   });
   getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('inspector freezes exact-on-key row while playhead time-motion continues', async () => {
+  jest.useFakeTimers();
+  mockDispatchIntent.mockClear();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+  const snapshotAt = (num: number) =>
+    JSON.stringify({
+      revision: '3',
+      projection_generation: String(num + 1),
+      current_time: {num, den: 30},
+      primary_layer_id: '42',
+      history: {can_undo: false, can_redo: false},
+      truncated_total: 0,
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [
+              {key_id: 'a', time: {num: 0, den: 30}, value: [0.1, 0.2]},
+              {key_id: 'b', time: {num: 2, den: 30}, value: [0.3, 0.4]},
+            ],
+            keys_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    });
+  mockReadSnapshot.mockReturnValue(snapshotAt(0));
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+  expect(tree!.root.findByProps({testID: 'inspector-position-key-x'})).toBeTruthy();
+
+  // gesture実信号がtrueの間は、off-key時刻のsnapshotが来ても行は凍結されたまま。
+  mockIsTimelineInteracting.mockReturnValue(true);
+  mockReadSnapshot.mockReturnValue(snapshotAt(1));
+  await ReactTestRenderer.act(() => {
+    jest.advanceTimersByTime(1000);
+  });
+  expect(tree!.root.findByProps({testID: 'inspector-position-key-x'})).toBeTruthy();
+
+  // 凍結中にprimaryが差し替わっても、commitはcaptureしたidentity(layer 42)へ飛ぶ。
+  const swapped = JSON.parse(snapshotAt(2));
+  swapped.primary_layer_id = '77';
+  swapped.timeline.layers.push({
+    ...swapped.timeline.layers[0],
+    layer_id: '77',
+    display_name: 'other-layer',
+  });
+  mockReadSnapshot.mockReturnValue(JSON.stringify(swapped));
+  await ReactTestRenderer.act(() => {
+    jest.advanceTimersByTime(1000);
+  });
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.onChangeText('0.9');
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.onSubmitEditing();
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-position-key-x'}).props.onBlur();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  const frozenPayload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(frozenPayload.kind).toBe('set_position_key_value');
+  expect(frozenPayload.target).toBe('42');
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+  mockReadSnapshot.mockReturnValue(snapshotAt(1));
+
+  // gesture終了(実信号false)で確定し、off-keyの行は消える。
+  mockIsTimelineInteracting.mockReturnValue(false);
+  await ReactTestRenderer.act(() => {
+    jest.advanceTimersByTime(1000);
+  });
+  expect(tree!.root.findAllByProps({testID: 'inspector-position-key-x'})).toHaveLength(0);
+  mockIsTimelineInteracting.mockReturnValue(false);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  jest.useRealTimers();
   mockReadSnapshot.mockReturnValue('');
 });
 

@@ -241,6 +241,44 @@ pub unsafe extern "C" fn motolii_macos_timeline_renderer_hit_test(
     .unwrap_or(false)
 }
 
+/// hover hit種に応じたcursor code。0=arrow 1=resizeLR 2=openHand 3=closedHand 4=pointingHand
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// `handle` must be a live renderer returned by this library.
+pub unsafe extern "C" fn motolii_macos_timeline_renderer_hover_cursor(
+    handle: *mut c_void,
+    x: f64,
+    y: f64,
+) -> i32 {
+    if handle.is_null() {
+        return 0;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        (&*handle.cast::<MacOsSurfaceRenderer>()).timeline_hover_cursor(x, y)
+    }))
+    .unwrap_or(0)
+}
+
+/// Stage hover → cursor code。同上。
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// `handle` must be a live renderer returned by this library.
+pub unsafe extern "C" fn motolii_macos_stage_renderer_hover_cursor(
+    handle: *mut c_void,
+    x: f64,
+    y: f64,
+) -> i32 {
+    if handle.is_null() {
+        return 0;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        (&*handle.cast::<MacOsSurfaceRenderer>()).stage_hover_cursor(x, y)
+    }))
+    .unwrap_or(0)
+}
+
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 /// # Safety

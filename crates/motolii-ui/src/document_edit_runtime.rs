@@ -439,6 +439,15 @@ impl DocumentEditRuntime {
         self.writer.revision
     }
 
+    /// NothingToUndo/Redo の事前投影。空履歴時の沈黙入口を塞ぐ。
+    pub(crate) fn can_undo(&self) -> bool {
+        self.writer.can_undo()
+    }
+
+    pub(crate) fn can_redo(&self) -> bool {
+        self.writer.can_redo()
+    }
+
     pub(crate) fn project_root(&self) -> Option<PathBuf> {
         self.session.document_path().parent().map(PathBuf::from)
     }

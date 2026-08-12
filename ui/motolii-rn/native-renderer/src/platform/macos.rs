@@ -65,6 +65,14 @@ impl MacOsSurfaceRenderer {
         self.core.timeline_hit_test(x, y)
     }
 
+    pub(crate) fn timeline_hover_cursor(&self, x: f64, y: f64) -> i32 {
+        self.core.timeline_hover_cursor(x, y)
+    }
+
+    pub(crate) fn stage_hover_cursor(&self, x: f64, y: f64) -> i32 {
+        self.core.stage_hover_cursor(x, y)
+    }
+
     pub(crate) fn timeline_pointer(
         &mut self,
         phase: PointerPhase,
