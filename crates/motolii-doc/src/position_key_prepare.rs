@@ -247,10 +247,91 @@ fn vec2_position_value(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum RemovePositionKeyPrepareError {
+    #[error(transparent)]
+    Command(#[from] CommandError),
+    #[error(transparent)]
+    Keyframe(#[from] DocKeyframeError),
+    #[error("position source unsupported for layer {layer}")]
+    PositionSourceUnsupported { layer: u64 },
+    #[error("position value type mismatch for layer {layer}")]
+    PositionValueTypeMismatch { layer: u64 },
+    #[error("position key {key_id} not found on layer {layer}")]
+    KeyNotFound { layer: u64, key_id: u64 },
+    #[error(transparent)]
+    StableId(#[from] StableIdError),
+}
+
+/// 対象keyを除いたcurve(最後の1個はConstへ収束)を構築する。
+pub fn prepare_remove_position_key(
+    doc: &Document,
+    target: LayerId,
+    key_id: KeyframeId,
+) -> Result<Command, RemovePositionKeyPrepareError> {
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    let old_value = env.transform.position.clone();
+    let new_value = deterministic_remove_position(&old_value, target, key_id)?;
+    let before = key_id.get();
+    let after = before
+        .checked_add(1)
+        .ok_or(StableIdError::Exhausted)?;
+    let stable_id_reservation = StableIdReservation::new(before, after);
+    Ok(Command::RemovePositionKey {
+        target,
+        old_value,
+        new_value,
+        removed_key_id: key_id,
+        stable_id_reservation,
+    })
+}
+
+pub(crate) fn deterministic_remove_position(
+    old_value: &DocParam,
+    target: LayerId,
+    key_id: KeyframeId,
+) -> Result<DocParam, RemovePositionKeyPrepareError> {
+    let layer = target.get();
+    match old_value {
+        DocParam::Keyframes(track) => {
+            if track.keys().is_empty() {
+                return Err(RemovePositionKeyPrepareError::PositionSourceUnsupported { layer });
+            }
+            for key in track.keys() {
+                if !matches!(key.value, DocValue::Vec2(_)) {
+                    return Err(RemovePositionKeyPrepareError::PositionValueTypeMismatch {
+                        layer,
+                    });
+                }
+            }
+            let Some(removed) = track.get_by_id(key_id) else {
+                return Err(RemovePositionKeyPrepareError::KeyNotFound {
+                    layer,
+                    key_id: key_id.get(),
+                });
+            };
+            if track.keys().len() == 1 {
+                return Ok(DocParam::Const(removed.value.clone()));
+            }
+            let mut new_track = track.clone();
+            new_track.remove_by_id(key_id);
+            new_track.validate()?;
+            Ok(DocParam::Keyframes(new_track))
+        }
+        DocParam::Const(_)
+        | DocParam::Data { .. }
+        | DocParam::Vec2Axes { .. }
+        | DocParam::LookAt { .. }
+        | DocParam::Follow { .. } => {
+            Err(RemovePositionKeyPrepareError::PositionSourceUnsupported { layer })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::command::{find_envelope_mut, CommandError as CmdErr};
+    use crate::command::{find_envelope, find_envelope_mut, CommandError as CmdErr};
     use crate::{Clip, ClipSource, ItemEnvelope, Track, TrackItem};
 
     fn minimal_doc(position: DocParam) -> (Document, LayerId) {
@@ -783,5 +864,170 @@ mod tests {
             .expect_err("tampered payload");
         assert!(matches!(err, CmdErr::AddPositionKeyPayloadMismatch { .. }));
         assert_eq!(tampered, before_tampered);
+    }
+
+    #[test]
+    fn prepare_remove_position_key_rejects_stable_id_overflow_for_u64_max_key_id() {
+        let mut doc = Document::new_current();
+        let layer = doc.layers.allocate("target").unwrap();
+        let track_id = doc.track_ids.allocate("V_overflow").unwrap();
+        let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+
+        let mut track = DocKeyframeTrack::new();
+        track.insert(keyframe(
+            u64::MAX,
+            RationalTime::from_seconds(1),
+            [1.0, 2.0],
+            Interp::Hold,
+        ));
+
+        let mut envelope = ItemEnvelope::new(layer);
+        envelope.transform.position = DocParam::Keyframes(track);
+        doc.tracks.push(Track {
+            id: track_id,
+            items: vec![TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: RationalTime::from_seconds(10),
+                time_map: Default::default(),
+                source: ClipSource::asset_video_only(asset),
+            })],
+        });
+
+        assert!(matches!(
+            prepare_remove_position_key(&doc, layer, KeyframeId::from_raw(u64::MAX)),
+            Err(RemovePositionKeyPrepareError::StableId(StableIdError::Exhausted))
+        ));
+    }
+
+    #[test]
+    fn remove_position_key_roundtrip_restores_same_id_value_interp() {
+        let t0 = RationalTime::from_seconds(1);
+        let t1 = RationalTime::from_seconds(3);
+        let (mut doc, target) = minimal_doc(keyframe_track(vec![
+            (10, t0, [1.0, 2.0], Interp::Linear),
+            (11, t1, [3.0, 4.0], Interp::Hold),
+        ]));
+        let key = KeyframeId::from_raw(11);
+        let before = serde_json::to_vec(&doc).unwrap();
+        let command = prepare_remove_position_key(&doc, target, key).unwrap();
+        let Command::RemovePositionKey {
+            removed_key_id,
+            old_value,
+            new_value,
+            ..
+        } = &command
+        else {
+            panic!("expected remove");
+        };
+        assert_eq!(*removed_key_id, key);
+        let DocParam::Keyframes(old_track) = old_value else {
+            panic!("old must be keyframes");
+        };
+        assert_eq!(old_track.keys().len(), 2);
+        let DocParam::Keyframes(new_track) = new_value else {
+            panic!("new must remain keyframes");
+        };
+        assert_eq!(new_track.keys().len(), 1);
+        assert!(new_track.get_by_id(key).is_none());
+
+        command.apply(&mut doc).unwrap();
+        let env = find_envelope(&doc, target).unwrap();
+        let DocParam::Keyframes(live) = &env.transform.position else {
+            panic!("live keyframes");
+        };
+        assert!(live.get_by_id(key).is_none());
+        assert_eq!(live.keys().len(), 1);
+        assert_eq!(live.keys()[0].id, KeyframeId::from_raw(10));
+
+        command.inverse().apply(&mut doc).unwrap();
+        assert_eq!(serde_json::to_vec(&doc).unwrap(), before);
+        let env = find_envelope(&doc, target).unwrap();
+        let DocParam::Keyframes(restored) = &env.transform.position else {
+            panic!("restored keyframes");
+        };
+        let k = restored.get_by_id(key).unwrap();
+        assert_eq!(k.t, t1);
+        assert_eq!(k.value, DocValue::Vec2([3.0, 4.0]));
+        assert_eq!(k.interp, Interp::Hold);
+    }
+
+    #[test]
+    fn remove_last_key_converges_to_const_and_undo_restores_one_key_curve() {
+        let t = RationalTime::from_seconds(2);
+        let (mut doc, target) =
+            minimal_doc(keyframe_track(vec![(7, t, [5.0, 6.0], Interp::Linear)]));
+        let key = KeyframeId::from_raw(7);
+        let before = serde_json::to_vec(&doc).unwrap();
+        let command = prepare_remove_position_key(&doc, target, key).unwrap();
+        let Command::RemovePositionKey { new_value, .. } = &command else {
+            panic!("expected remove");
+        };
+        assert_eq!(new_value, &DocParam::const_vec2([5.0, 6.0]));
+        command.apply(&mut doc).unwrap();
+        let env = find_envelope(&doc, target).unwrap();
+        assert_eq!(
+            env.transform.position,
+            DocParam::const_vec2([5.0, 6.0])
+        );
+        command.inverse().apply(&mut doc).unwrap();
+        assert_eq!(serde_json::to_vec(&doc).unwrap(), before);
+        let env = find_envelope(&doc, target).unwrap();
+        let DocParam::Keyframes(track) = &env.transform.position else {
+            panic!("undo must restore keyframes");
+        };
+        assert_eq!(track.keys().len(), 1);
+        assert_eq!(track.keys()[0].id, key);
+        assert_eq!(track.keys()[0].value, DocValue::Vec2([5.0, 6.0]));
+    }
+
+    #[test]
+    fn remove_position_key_rejects_without_mutation() {
+        let (doc, target) = minimal_doc(keyframe_track(vec![
+            (1, RationalTime::from_seconds(1), [0.0, 0.0], Interp::Linear),
+            (2, RationalTime::from_seconds(2), [1.0, 1.0], Interp::Linear),
+        ]));
+        let before = serde_json::to_vec(&doc).unwrap();
+
+        assert!(matches!(
+            prepare_remove_position_key(&doc, target, KeyframeId::from_raw(99)),
+            Err(RemovePositionKeyPrepareError::KeyNotFound { .. })
+        ));
+        assert_eq!(serde_json::to_vec(&doc).unwrap(), before);
+
+        let (const_doc, const_target) = minimal_doc(DocParam::const_vec2([1.0, 2.0]));
+        let const_before = serde_json::to_vec(&const_doc).unwrap();
+        assert!(matches!(
+            prepare_remove_position_key(&const_doc, const_target, KeyframeId::from_raw(1)),
+            Err(RemovePositionKeyPrepareError::PositionSourceUnsupported { .. })
+        ));
+        assert_eq!(serde_json::to_vec(&const_doc).unwrap(), const_before);
+
+        let command = prepare_remove_position_key(&doc, target, KeyframeId::from_raw(2)).unwrap();
+        let Command::RemovePositionKey {
+            old_value,
+            new_value,
+            removed_key_id,
+            stable_id_reservation,
+            ..
+        } = command
+        else {
+            panic!("expected remove");
+        };
+        let mut stale = doc.clone();
+        set_position(&mut stale, target, DocParam::const_vec2([9.0, 9.0]));
+        let stale_before = serde_json::to_vec(&stale).unwrap();
+        let stale_cmd = Command::RemovePositionKey {
+            target,
+            old_value,
+            new_value,
+            removed_key_id,
+            stable_id_reservation,
+        };
+        assert!(matches!(
+            stale_cmd.apply(&mut stale),
+            Err(CmdErr::RemovePositionKeyPayloadMismatch { .. })
+        ));
+        assert_eq!(serde_json::to_vec(&stale).unwrap(), stale_before);
     }
 }

@@ -345,6 +345,7 @@ impl RendererCore {
         phase: PointerPhase,
         x: f64,
         y: f64,
+        modifiers: u32,
     ) -> Option<(i32, f64)> {
         let tl_phase = match phase {
             PointerPhase::Down => {
@@ -376,6 +377,7 @@ impl RendererCore {
                 tl_phase,
                 x,
                 y,
+                modifiers,
             );
             (is_real, outcome)
         };
@@ -486,6 +488,14 @@ impl RendererCore {
             }
         }
         dirty
+    }
+
+    /// Timeline Delete/Backspace: 選択keyがあれば remove、なければ layer削除。
+    pub(crate) fn timeline_keymap_delete(&self) -> bool {
+        let Some(session) = &self.timeline_session else {
+            return crate::host_bridge::try_dispatch_keymap("delete_layer");
+        };
+        crate::host_bridge::try_timeline_keymap_delete(&session.scene)
     }
 
     pub(crate) fn stats(&self) -> RenderStats {
@@ -932,6 +942,7 @@ mod tests {
             TimelinePointerPhase::Down,
             x,
             y,
+        0,
         );
         assert!(down.selection_commit.is_some());
         if let Some(commit) = down.selection_commit {
@@ -962,6 +973,7 @@ mod tests {
             TimelinePointerPhase::Down,
             down_x,
             y,
+        0,
         );
         assert!(clip_down.selection_commit.is_none());
 
@@ -973,6 +985,7 @@ mod tests {
             TimelinePointerPhase::Down,
             202.0 + (14.0f64 / 48.0) * (1240.0 - 202.0 - 6.0),
             y,
+        0,
         );
         assert!(trim_down.selection_commit.is_none());
 
@@ -1049,5 +1062,30 @@ mod tests {
 
         let clear = host_stage_geometry_command(cached.as_ref(), None);
         assert_eq!(clear, HostStageGeometryCommand::Clear);
+    }
+
+    #[test]
+    fn timeline_keymap_delete_branches_on_selected_real_key() {
+        crate::host_bridge::test_reset_keymap_dispatch_counts();
+        let mut scene = TimelineScene::from_snapshot(
+            &[crate::timeline_skia::SnapshotLayerInput {
+                layer_id: "11".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![crate::timeline_skia::SnapshotKeyInput {
+                    key_id: 7,
+                    time_secs: 4.0,
+                }],
+            }],
+            None,
+        );
+        let _ = crate::host_bridge::try_timeline_keymap_delete(&scene);
+        assert_eq!(crate::host_bridge::test_keymap_remove_position_key_count(), 0);
+        assert_eq!(crate::host_bridge::test_keymap_delete_layer_count(), 1);
+
+        crate::timeline_skia::test_select_first_real_key(&mut scene);
+        let _ = crate::host_bridge::try_timeline_keymap_delete(&scene);
+        assert_eq!(crate::host_bridge::test_keymap_remove_position_key_count(), 1);
+        assert_eq!(crate::host_bridge::test_keymap_delete_layer_count(), 1);
     }
 }

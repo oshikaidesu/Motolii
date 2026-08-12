@@ -10,8 +10,8 @@ use motolii_doc::{
     Document, DocumentError, DocumentPluginError, DocumentWriter, DraftDocParam,
     EffectDefinitionDraft, EffectDefinitionId, EffectId, ItemEnvelope, JournalEdit, KeyframeId,
     LayerId, LayerIdError, ParentLocator, PreparedPluginRecipe, ProjectError, ProjectSession,
-    SaveProjectOptions, ScalarPropertyId, StandardShape, TrackItem, UndoError, VectorContent,
-    VectorRecipe,
+    RemovePositionKeyPrepareError, SaveProjectOptions, ScalarPropertyId, StandardShape, TrackItem,
+    UndoError, VectorContent, VectorRecipe,
 };
 use motolii_eval::Interp;
 use motolii_plugin::{PluginCatalog, PluginKind};
@@ -30,6 +30,7 @@ pub(crate) enum DocumentEditAction {
     SetPositionKeyInterp(SetPositionKeyInterpRequest),
     SetPositionKeyValue(SetPositionKeyValueRequest),
     SetPositionKeyTime(SetPositionKeyTimeRequest),
+    RemovePositionKey(RemovePositionKeyRequest),
     MoveClip(TimelineMoveRequest),
     TrimClip(TimelineTrimRequest),
     ReplacePrimary(LayerId),
@@ -49,6 +50,7 @@ impl DocumentEditAction {
             Self::SetPositionKeyInterp(_) => DocumentEditActionKind::SetPositionKeyInterp,
             Self::SetPositionKeyValue(_) => DocumentEditActionKind::SetPositionKeyValue,
             Self::SetPositionKeyTime(_) => DocumentEditActionKind::SetPositionKeyTime,
+            Self::RemovePositionKey(_) => DocumentEditActionKind::RemovePositionKey,
             Self::MoveClip(_) => DocumentEditActionKind::MoveClip,
             Self::TrimClip(_) => DocumentEditActionKind::TrimClip,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
@@ -69,6 +71,7 @@ pub(crate) enum DocumentEditActionKind {
     SetPositionKeyInterp,
     SetPositionKeyValue,
     SetPositionKeyTime,
+    RemovePositionKey,
     MoveClip,
     TrimClip,
     ReplacePrimary,
@@ -116,6 +119,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_set_position_key_time(&mut self, request: SetPositionKeyTimeRequest) {
         self.pending
             .push_back(DocumentEditAction::SetPositionKeyTime(request));
+    }
+
+    pub(crate) fn push_remove_position_key(&mut self, request: RemovePositionKeyRequest) {
+        self.pending
+            .push_back(DocumentEditAction::RemovePositionKey(request));
     }
 
     pub(crate) fn push_move_clip(&mut self, request: TimelineMoveRequest) {
@@ -239,6 +247,12 @@ pub(crate) struct SetPositionKeyTimeRequest {
     pub(crate) key: KeyframeId,
     pub(crate) old: RationalTime,
     pub(crate) new: RationalTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RemovePositionKeyRequest {
+    pub(crate) target: LayerId,
+    pub(crate) key: KeyframeId,
 }
 
 impl SetEffectParamRequest {
@@ -667,6 +681,31 @@ impl DocumentEditRuntime {
                 if *old != request.old {
                     return Ok(None);
                 }
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::RemovePositionKey(request) => {
+                let command = match self
+                    .writer
+                    .prepare_remove_position_key(request.target, request.key)
+                {
+                    Ok(command) => command,
+                    Err(
+                        RemovePositionKeyPrepareError::Command(CommandError::LayerNotFound(_))
+                        | RemovePositionKeyPrepareError::PositionSourceUnsupported { .. }
+                        | RemovePositionKeyPrepareError::PositionValueTypeMismatch { .. }
+                        | RemovePositionKeyPrepareError::KeyNotFound { .. },
+                    ) => return Ok(None),
+                    Err(error) => return Err(error.into()),
+                };
                 let projection_generation =
                     next_projection_generation(current_projection_generation)?;
                 self.commit_command(
@@ -1174,6 +1213,8 @@ pub(crate) enum DocumentEditRuntimeError {
     EffectPrepare(#[from] motolii_doc::PrepareError),
     #[error(transparent)]
     PositionKeyPrepare(#[from] AddPositionKeyPrepareError),
+    #[error(transparent)]
+    RemovePositionKeyPrepare(#[from] RemovePositionKeyPrepareError),
     #[error("journal durable commit failed")]
     JournalCommit(#[source] Box<ProjectError>),
     #[error("live apply failed after durable journal commit")]

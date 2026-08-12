@@ -14,6 +14,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(test)]
 static TEST_SELECTION_DISPATCH_COUNT: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(test)]
+static TEST_KEYMAP_REMOVE_POSITION_KEY_COUNT: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(test)]
+static TEST_KEYMAP_DELETE_LAYER_COUNT: AtomicU64 = AtomicU64::new(0);
+
 // extern importではなくRust経由で呼ぶ。externで宣言すると同一crate graph内でも
 // motolii-uiの該当objectがarchiveから引かれず、appのlinkで未解決symbolになる(実測)。
 #[cfg(target_os = "macos")]
@@ -628,6 +634,33 @@ pub(crate) fn try_dispatch_timeline_edit(
     }
 }
 
+pub(crate) fn try_dispatch_remove_position_key(layer_id: &str, key_id: u64) -> bool {
+    #[cfg(test)]
+    TEST_KEYMAP_REMOVE_POSITION_KEY_COUNT.fetch_add(1, Ordering::SeqCst);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (layer_id, key_id);
+        false
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(guard) = host_slot().lock() else {
+            return false;
+        };
+        let Some(slot) = guard.as_ref() else {
+            return false;
+        };
+        let intent = format!(
+            concat!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"remove_position_key","#,
+                r#""host_handle":"{}","target":"{}","key_id":"{}"}}"#
+            ),
+            slot.handle, layer_id, key_id
+        );
+        dispatch_intent_json_accepted(slot.handle, &intent)
+    }
+}
+
 pub(crate) fn try_dispatch_timeline_selection(
     commit: &crate::timeline_skia::TimelineSelectionCommit,
 ) -> bool {
@@ -678,10 +711,36 @@ pub(crate) fn test_timeline_selection_dispatch_count() -> u64 {
 }
 
 #[cfg(test)]
+pub(crate) fn test_reset_keymap_dispatch_counts() {
+    TEST_KEYMAP_REMOVE_POSITION_KEY_COUNT.store(0, Ordering::SeqCst);
+    TEST_KEYMAP_DELETE_LAYER_COUNT.store(0, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(crate) fn test_keymap_remove_position_key_count() -> u64 {
+    TEST_KEYMAP_REMOVE_POSITION_KEY_COUNT.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+pub(crate) fn test_keymap_delete_layer_count() -> u64 {
+    TEST_KEYMAP_DELETE_LAYER_COUNT.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
 pub(crate) fn test_clear_host_slot() {
     if let Ok(mut guard) = host_slot().lock() {
         *guard = None;
     }
+}
+
+/// Timeline Delete: real key選択中なら remove_position_key、否則 delete_layer。
+pub(crate) fn try_timeline_keymap_delete(scene: &crate::timeline_skia::TimelineScene) -> bool {
+    if let Some((layer_id, key_id)) = crate::timeline_skia::selected_real_key(scene) {
+        return try_dispatch_remove_position_key(&layer_id, key_id);
+    }
+    #[cfg(test)]
+    TEST_KEYMAP_DELETE_LAYER_COUNT.fetch_add(1, Ordering::SeqCst);
+    try_dispatch_keymap("delete_layer")
 }
 
 /// keymap: undo / redo / delete_layer(現primary)。primaryなしのdeleteは何もしない。

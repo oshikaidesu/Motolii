@@ -31,8 +31,8 @@ use wgpu::{
 
 use crate::document_edit_runtime::{
     AddPositionKeyRequest, DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
-    PlaceRectangleRequest, SetPositionKeyInterpRequest, SetPositionKeyTimeRequest,
-    SetPositionKeyValueRequest,
+    PlaceRectangleRequest, RemovePositionKeyRequest, SetPositionKeyInterpRequest,
+    SetPositionKeyTimeRequest, SetPositionKeyValueRequest,
 };
 use crate::timeline_move_gesture::TimelineMoveRequest;
 use crate::timeline_trim_gesture::TimelineTrimRequest;
@@ -973,6 +973,66 @@ impl RnProductHost {
                     old,
                     new,
                 });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "remove_position_key" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(key) = intent
+                    .key_id
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(KeyframeId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                queue.push_remove_position_key(RemovePositionKeyRequest { target, key });
                 match self.runtime.process_next(
                     &mut queue,
                     self.primary,
@@ -6813,6 +6873,97 @@ mod tests {
             .primary_layer_id
             .is_none());
         assert!(read_snapshot(host).primary_layer_id.is_none());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn remove_position_key_clears_timeline_projection_and_undo_restores() {
+        let _lock = test_lock();
+        let host = create_host("remove-position-key");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse::<u64>().expect("layer id"));
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        let add = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(add.accepted);
+        let key_id = add
+            .snapshot
+            .expect("keyed")
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer")
+            .position_keys[0]
+            .key_id
+            .clone();
+
+        let removed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"remove_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","key_id":"{key}"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                key = key_id,
+            ),
+        );
+        assert!(removed.accepted);
+        let after_remove = removed.snapshot.expect("removed");
+        let after_layer = after_remove
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert!(after_layer.position_keys.is_empty());
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(undone.accepted);
+        let restored = undone
+            .snapshot
+            .expect("restored")
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(restored.position_keys.len(), 1);
+        assert_eq!(restored.position_keys[0].key_id, key_id);
         let _ = host_destroy_for_test(host);
     }
 

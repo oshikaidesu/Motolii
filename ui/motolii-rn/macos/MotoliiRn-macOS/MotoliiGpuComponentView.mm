@@ -55,12 +55,14 @@ typedef struct {
 extern "C" bool motolii_macos_timeline_renderer_hit_test(
     void *handle, double x, double y, MotoliiTimelineFeedback *feedback);
 extern "C" bool motolii_macos_timeline_renderer_pointer(
-    void *handle, uint32_t phase, double x, double y, MotoliiTimelineFeedback *feedback);
+    void *handle, uint32_t phase, double x, double y, uint32_t modifiers,
+    MotoliiTimelineFeedback *feedback);
 extern "C" bool motolii_macos_timeline_renderer_scroll(
     void *handle, double deltaX, double deltaY, double magnification, uint32_t modifiers, double x,
     double y);
 extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStats *stats);
 extern "C" bool motolii_rnapp_host_keymap(const uint8_t *kind_utf8, size_t kind_len);
+extern "C" bool motolii_macos_timeline_renderer_keymap_delete(void *handle);
 
 /// Cmd+Z / Shift+Cmd+Z / Delete|Backspace だけをhostへ転送。認識した鍵はYES(superへ送らない)。
 static BOOL MotoliiDispatchKeymap(NSEvent *event)
@@ -90,9 +92,10 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
 @end
 
 @interface MotoliiTimelineMetalView : MotoliiMetalView
-@property(nonatomic, copy) void (^timelinePointerHandler)(uint32_t phase, CGFloat x, CGFloat y);
+@property(nonatomic, copy) void (^timelinePointerHandler)(uint32_t phase, CGFloat x, CGFloat y, uint32_t modifiers);
 @property(nonatomic, copy) void (^timelineScrollHandler)(
     CGFloat deltaX, CGFloat deltaY, CGFloat magnification, uint32_t modifiers, CGFloat x, CGFloat y);
+@property(nonatomic, copy) void (^timelineDeleteHandler)(void);
 @property(nonatomic, assign) BOOL timelineGestureActive;
 @end
 
@@ -179,8 +182,9 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
 - (void)emitPhase:(uint32_t)phase event:(NSEvent *)event
 {
   NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+  uint32_t modifiers = (event.modifierFlags & NSEventModifierFlagCommand) ? 1u : 0u;
   if (self.timelinePointerHandler) {
-    self.timelinePointerHandler(phase, point.x, NSHeight(self.bounds) - point.y);
+    self.timelinePointerHandler(phase, point.x, NSHeight(self.bounds) - point.y, modifiers);
   }
   if (phase == 0) {
     self.timelineGestureActive = YES;
@@ -207,6 +211,11 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
 
 - (void)keyDown:(NSEvent *)event
 {
+  NSEventModifierFlags mods = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  if (mods == 0 && (event.keyCode == 51 || event.keyCode == 117) && self.timelineDeleteHandler) {
+    self.timelineDeleteHandler();
+    return;
+  }
   if (!MotoliiDispatchKeymap(event)) {
     [super keyDown:event];
   }
@@ -248,7 +257,7 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
 {
   [super viewDidMoveToWindow];
   if (!self.window && self.timelineGestureActive && self.timelinePointerHandler) {
-    self.timelinePointerHandler(3, 0, 0);
+    self.timelinePointerHandler(3, 0, 0, 0);
     self.timelineGestureActive = NO;
   }
 }
@@ -294,7 +303,7 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
     _timelineView.wantsLayer = YES;
     _timelineView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     __weak MotoliiTimelineComponentView *weakSelf = self;
-    _timelineView.timelinePointerHandler = ^(uint32_t phase, CGFloat x, CGFloat y) {
+    _timelineView.timelinePointerHandler = ^(uint32_t phase, CGFloat x, CGFloat y, uint32_t modifiers) {
       MotoliiTimelineComponentView *strongSelf = weakSelf;
       if (!strongSelf || !strongSelf->_timelineRenderer) {
         return;
@@ -303,7 +312,7 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
       CGFloat scale = layer.contentsScale ?: 1.0;
       MotoliiTimelineFeedback feedback = {};
       if (!motolii_macos_timeline_renderer_pointer(
-              strongSelf->_timelineRenderer, phase, x * scale, y * scale, &feedback)) {
+              strongSelf->_timelineRenderer, phase, x * scale, y * scale, modifiers, &feedback)) {
         return;
       }
       if (!strongSelf->_eventEmitter) {
@@ -316,6 +325,13 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
           .time = feedback.time,
       };
       emitter->onTimelineFeedback(event);
+    };
+    _timelineView.timelineDeleteHandler = ^{
+      MotoliiTimelineComponentView *strongSelf = weakSelf;
+      if (!strongSelf || !strongSelf->_timelineRenderer) {
+        return;
+      }
+      (void)motolii_macos_timeline_renderer_keymap_delete(strongSelf->_timelineRenderer);
     };
     _timelineView.timelineScrollHandler =
         ^(CGFloat deltaX, CGFloat deltaY, CGFloat magnification, uint32_t modifiers, CGFloat x,
@@ -437,10 +453,10 @@ static BOOL MotoliiDispatchKeymap(NSEvent *event)
 {
   if (_timelineRenderer && _timelineView.timelineGestureActive) {
     if (_timelineView.timelinePointerHandler) {
-      _timelineView.timelinePointerHandler(3, 0, 0);
+      _timelineView.timelinePointerHandler(3, 0, 0, 0);
     } else {
       MotoliiTimelineFeedback feedback = {};
-      motolii_macos_timeline_renderer_pointer(_timelineRenderer, 3, 0.0, 0.0, &feedback);
+      motolii_macos_timeline_renderer_pointer(_timelineRenderer, 3, 0.0, 0.0, 0u, &feedback);
     }
     _timelineView.timelineGestureActive = NO;
   }

@@ -251,6 +251,7 @@ pub unsafe extern "C" fn motolii_macos_timeline_renderer_pointer(
     phase: u32,
     x: f64,
     y: f64,
+    modifiers: u32,
     feedback: *mut MotoliiTimelineFeedback,
 ) -> bool {
     if handle.is_null() || feedback.is_null() {
@@ -264,7 +265,7 @@ pub unsafe extern "C" fn motolii_macos_timeline_renderer_pointer(
     };
     catch_unwind(AssertUnwindSafe(|| unsafe {
         let renderer = &mut *handle.cast::<MacOsSurfaceRenderer>();
-        let Some((object_index, time)) = renderer.timeline_pointer(phase, x, y) else {
+        let Some((object_index, time)) = renderer.timeline_pointer(phase, x, y, modifiers) else {
             return false;
         };
         feedback.write(MotoliiTimelineFeedback { object_index, time });
@@ -318,11 +319,21 @@ pub unsafe extern "C" fn motolii_macos_renderer_get_stats(
     .is_ok()
 }
 
-/// keymap用の薄いFFI。実体はhost_bridge。
+/// keymap用の薄いFFI。実体はhost_bridge / renderer scene判定。
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 /// # Safety
-/// `kind_utf8` must point to `kind_len` UTF-8 bytes naming undo/redo/delete_layer.
+/// `handle` must be a live timeline renderer returned by this library.
+pub unsafe extern "C" fn motolii_macos_timeline_renderer_keymap_delete(handle: *mut c_void) -> bool {
+    if handle.is_null() {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        (&*handle.cast::<MacOsSurfaceRenderer>()).timeline_keymap_delete()
+    }))
+    .unwrap_or(false)
+}
+
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn motolii_macos_renderer_destroy(handle: *mut c_void) {

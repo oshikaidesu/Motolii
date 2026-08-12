@@ -44,6 +44,7 @@ const P: [u32; 6] = [0x96aadb, 0x6fb9c1, 0xbfa973, 0x89b992, 0xd69a8b, 0xc39bc5]
 const KEY_HIT_PX: f64 = 6.0;
 const TRIM_HIT_PX: f64 = 4.0;
 const MOVE_ARM_PX: f64 = 3.0;
+const SNAP_THRESHOLD_LOGICAL_PX: f64 = 6.0;
 const MIN_CLIP_BARS: f32 = 1.0;
 const SNAPSHOT_KEY_DIAMOND: f32 = 0.42;
 
@@ -471,6 +472,7 @@ impl TimelineSession {
         phase: TimelinePointerPhase,
         x: f64,
         y: f64,
+        modifiers: u32,
     ) -> TimelinePointerOutcome {
         if width == 0 || height == 0 {
             return TimelinePointerOutcome::default();
@@ -626,7 +628,7 @@ impl TimelineSession {
             }
             TimelinePointerPhase::Move => {
                 let scrubbing = matches!(self.gesture, Some(ActiveGesture::Scrub { .. }));
-                dirty |= self.apply_move(lx, playhead);
+                dirty |= self.apply_move(lx, playhead, modifiers);
                 if scrubbing {
                     scrub_playhead = Some(*playhead);
                 }
@@ -676,7 +678,7 @@ impl TimelineSession {
         }
     }
 
-    fn apply_move(&mut self, lx: f64, playhead: &mut f64) -> bool {
+    fn apply_move(&mut self, lx: f64, playhead: &mut f64, modifiers: u32) -> bool {
         let Some(mut gesture) = self.gesture.take() else {
             return false;
         };
@@ -711,9 +713,18 @@ impl TimelineSession {
                     let dx_bars = (dx_logical / surface_width()) * span;
                     let (prev_b, next_a) = neighbors(&self.scene, *band, *clip_idx);
                     let len = *origin_b - *origin_a;
-                    let new_a = ((*origin_a as f64) + dx_bars)
+                    let raw_a = ((*origin_a as f64) + dx_bars)
                         .clamp(prev_b as f64, (next_a - len) as f64)
                         as f32;
+                    let new_a = snap_bar(
+                        &self.scene,
+                        *playhead,
+                        *band,
+                        Some(*clip_idx),
+                        raw_a,
+                        modifiers,
+                    )
+                    .clamp(prev_b, next_a - len);
                     let new_b = new_a + len;
                     let key_times: Vec<f32> = origin_keys
                         .iter()
@@ -737,8 +748,18 @@ impl TimelineSession {
             } => {
                 let bar = bar_at_lx(&self.scene, lx) as f32;
                 let (prev_b, _) = neighbors(&self.scene, *band, *clip_idx);
+                let clip_b = self.scene.bands[*band].clips[*clip_idx].b;
+                let raw_a = bar.clamp(prev_b, clip_b - MIN_CLIP_BARS);
+                let new_a = snap_bar(
+                    &self.scene,
+                    *playhead,
+                    *band,
+                    Some(*clip_idx),
+                    raw_a,
+                    modifiers,
+                )
+                .clamp(prev_b, clip_b - MIN_CLIP_BARS);
                 let clip = &mut self.scene.bands[*band].clips[*clip_idx];
-                let new_a = bar.clamp(prev_b, clip.b - MIN_CLIP_BARS);
                 if (clip.a - new_a).abs() > f32::EPSILON {
                     clip.a = new_a;
                     dirty = true;
@@ -749,8 +770,18 @@ impl TimelineSession {
             } => {
                 let bar = bar_at_lx(&self.scene, lx) as f32;
                 let (_, next_a) = neighbors(&self.scene, *band, *clip_idx);
+                let clip_a = self.scene.bands[*band].clips[*clip_idx].a;
+                let raw_b = bar.clamp(clip_a + MIN_CLIP_BARS, next_a);
+                let new_b = snap_bar(
+                    &self.scene,
+                    *playhead,
+                    *band,
+                    Some(*clip_idx),
+                    raw_b,
+                    modifiers,
+                )
+                .clamp(clip_a + MIN_CLIP_BARS, next_a);
                 let clip = &mut self.scene.bands[*band].clips[*clip_idx];
-                let new_b = bar.clamp(clip.a + MIN_CLIP_BARS, next_a);
                 if (clip.b - new_b).abs() > f32::EPSILON {
                     clip.b = new_b;
                     dirty = true;
@@ -763,9 +794,17 @@ impl TimelineSession {
                 ..
             } => {
                 let bar = bar_at_lx(&self.scene, lx) as f32;
-                let clip = &mut self.scene.bands[*band].clips[*clip_idx];
-                let new_t = bar.clamp(clip.a, clip.b);
-                if let Some(key) = clip.keys.get_mut(*key_idx) {
+                let (clip_a, clip_b) = {
+                    let clip = &self.scene.bands[*band].clips[*clip_idx];
+                    (clip.a, clip.b)
+                };
+                let raw_t = bar.clamp(clip_a, clip_b);
+                let new_t =
+                    snap_bar(&self.scene, *playhead, *band, Some(*clip_idx), raw_t, modifiers).clamp(clip_a, clip_b);
+                if let Some(key) = self.scene.bands[*band].clips[*clip_idx]
+                    .keys
+                    .get_mut(*key_idx)
+                {
                     if (key.0 - new_t).abs() > f32::EPSILON {
                         key.0 = new_t;
                         dirty = true;
@@ -1045,6 +1084,98 @@ fn clear_all_key_selection(scene: &mut TimelineScene) {
                 key.2 = false;
             }
         }
+    }
+}
+
+/// real行で選択中のposition key。(layer_id, key_id)
+pub(crate) fn selected_real_key(scene: &TimelineScene) -> Option<(String, u64)> {
+    if !scene.real {
+        return None;
+    }
+    for band in &scene.bands {
+        for clip in &band.clips {
+            if clip.layer_id.is_empty() {
+                continue;
+            }
+            for key in &clip.keys {
+                if key.2 && key.3 != 0 {
+                    return Some((clip.layer_id.clone(), key.3));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn snap_threshold_bars(scene: &TimelineScene) -> f64 {
+    let span = f64::from(scene.view_b - scene.view_a);
+    SNAP_THRESHOLD_LOGICAL_PX / surface_width() * span
+}
+
+/// 整数bar・同band他clip端・playheadへ、画面6論理px閾値で吸着。Cmd中は無効。
+fn snap_bar(
+    scene: &TimelineScene,
+    playhead: f64,
+    band: usize,
+    exclude_clip: Option<usize>,
+    raw: f32,
+    modifiers: u32,
+) -> f32 {
+    if modifiers & 1 != 0 {
+        return raw;
+    }
+    let threshold = snap_threshold_bars(scene) as f32;
+    let mut best_dist = threshold;
+    let mut best = raw;
+    let mut consider = |candidate: f32| {
+        let dist = (candidate - raw).abs();
+        if dist <= best_dist {
+            best_dist = dist;
+            best = candidate;
+        }
+    };
+    consider(raw.round());
+    if let Some(band_ref) = scene.bands.get(band) {
+        for (idx, clip) in band_ref.clips.iter().enumerate() {
+            if Some(idx) == exclude_clip {
+                continue;
+            }
+            consider(clip.a);
+            consider(clip.b);
+        }
+    }
+    let playhead_bar = (playhead.clamp(0.0, 1.0) as f32) * SONG_BARS;
+    consider(playhead_bar);
+    if (best - raw).abs() <= threshold {
+        best
+    } else {
+        raw
+    }
+}
+
+/// test用: snap候補の閾値判定を直接検証する。
+#[cfg(test)]
+pub(crate) fn test_snap_bar(
+    scene: &TimelineScene,
+    playhead: f64,
+    band: usize,
+    exclude_clip: Option<usize>,
+    raw: f32,
+    modifiers: u32,
+) -> f32 {
+    snap_bar(scene, playhead, band, exclude_clip, raw, modifiers)
+}
+
+/// test用: 先頭real keyのsel flagを立てる。
+#[cfg(test)]
+pub(crate) fn test_select_first_real_key(scene: &mut TimelineScene) {
+    if let Some(key) = scene
+        .bands
+        .get_mut(0)
+        .and_then(|b| b.clips.get_mut(0))
+        .and_then(|c| c.keys.get_mut(0))
+    {
+        key.2 = true;
     }
 }
 
@@ -1826,6 +1957,7 @@ mod tests {
             TimelinePointerPhase::Down,
             press_x,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -1835,6 +1967,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar(-20.0),
             y,
+        0,
         );
         let clip = &sess.scene.bands[0].clips[0];
         assert!((clip.a - 0.0).abs() < 1e-4);
@@ -1854,6 +1987,7 @@ mod tests {
             TimelinePointerPhase::Down,
             press_x,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -1863,6 +1997,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar(1.0),
             y,
+        0,
         );
         let clip = &sess.scene.bands[0].clips[1];
         assert!((clip.a - 14.0).abs() < 1e-4);
@@ -1883,6 +2018,7 @@ mod tests {
             TimelinePointerPhase::Down,
             clip0_end_x,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -1892,6 +2028,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar(20.0),
             y,
+        0,
         );
         let clip0 = &sess.scene.bands[0].clips[0];
         assert!((clip0.a - 0.0).abs() < 1e-4);
@@ -1906,6 +2043,7 @@ mod tests {
             TimelinePointerPhase::Down,
             clip1_start_x,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -1915,6 +2053,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar(1.0),
             y,
+        0,
         );
         let clip1 = &sess.scene.bands[0].clips[1];
         assert!((clip1.a - 14.0).abs() < 1e-4);
@@ -1932,6 +2071,7 @@ mod tests {
             TimelinePointerPhase::Down,
             50.0,
             f64::from(OVER_H + 1.0) + 4.0,
+        0,
         );
         assert!(!out.feedback);
         assert_eq!(selected, 1);
@@ -1950,6 +2090,7 @@ mod tests {
             TimelinePointerPhase::Down,
             lx_for_bar(33.0),
             y,
+        0,
         );
         assert!(out.feedback);
         assert!(out.scrub_playhead.is_some());
@@ -1963,6 +2104,7 @@ mod tests {
             TimelinePointerPhase::Up,
             lx_for_bar(33.0),
             y,
+        0,
         );
         assert!(up.scrub_release);
         assert!((up.scrub_playhead.unwrap() - 33.0 / 96.0).abs() < 1e-9);
@@ -2000,6 +2142,7 @@ mod tests {
                 TimelinePointerPhase::Down,
                 x,
                 y,
+            0,
             );
             assert!(!out.feedback);
             assert!(!out.dirty);
@@ -2062,6 +2205,7 @@ mod tests {
             TimelinePointerPhase::Down,
             x0,
             y0,
+        0,
         );
         assert!(out.feedback);
         let pressed = playhead;
@@ -2076,6 +2220,7 @@ mod tests {
             TimelinePointerPhase::Move,
             x1,
             y1,
+        0,
         );
         assert!((playhead - 24.0 / 96.0).abs() < 1e-9);
 
@@ -2087,6 +2232,7 @@ mod tests {
             TimelinePointerPhase::Up,
             x1,
             y1,
+        0,
         );
         assert!((playhead - 24.0 / 96.0).abs() < 1e-9);
 
@@ -2100,6 +2246,7 @@ mod tests {
             TimelinePointerPhase::Down,
             x0,
             y0,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2109,6 +2256,7 @@ mod tests {
             TimelinePointerPhase::Move,
             x1,
             y1,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2118,6 +2266,7 @@ mod tests {
             TimelinePointerPhase::Cancel,
             x1,
             y1,
+        0,
         );
         assert!((playhead - 0.27).abs() < 1e-9);
         assert_eq!(selected, 1);
@@ -2136,6 +2285,7 @@ mod tests {
             TimelinePointerPhase::Down,
             x,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2145,6 +2295,7 @@ mod tests {
             TimelinePointerPhase::Up,
             x,
             y,
+        0,
         );
         assert_eq!(selected, 3); // band0 has 3 clips
         assert!((playhead - 0.27).abs() < 1e-9);
@@ -2162,6 +2313,7 @@ mod tests {
             TimelinePointerPhase::Down,
             lx_for_bar(10.0),
             y,
+        0,
         );
         assert_eq!(selected, -1);
     }
@@ -2180,6 +2332,7 @@ mod tests {
             TimelinePointerPhase::Down,
             press_x,
             y,
+        0,
         );
         let move_x = press_x + 10.0; // >3px, ~0.465 bars
         sess.pointer(
@@ -2190,6 +2343,7 @@ mod tests {
             TimelinePointerPhase::Move,
             move_x,
             y,
+        0,
         );
         let clip = &sess.scene.bands[1].clips[0];
         let expected_dx = (10.0 / surface_width() * f64::from(sess.scene.view_b - sess.scene.view_a))
@@ -2207,6 +2361,7 @@ mod tests {
             TimelinePointerPhase::Move,
             press_x + 500.0,
             y,
+        0,
         );
         let clip = &sess.scene.bands[1].clips[0];
         assert!((clip.a - 8.0).abs() < 1e-4); // 26 - 18
@@ -2227,6 +2382,7 @@ mod tests {
             TimelinePointerPhase::Down,
             key_x,
             key_y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2236,6 +2392,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar(9.0),
             key_y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2245,6 +2402,7 @@ mod tests {
             TimelinePointerPhase::Up,
             lx_for_bar(9.0),
             key_y,
+        0,
         );
 
         let snapshot_scene = sess.scene.clone();
@@ -2261,6 +2419,7 @@ mod tests {
             TimelinePointerPhase::Down,
             press_x,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2270,6 +2429,7 @@ mod tests {
             TimelinePointerPhase::Move,
             press_x - 200.0,
             y,
+        0,
         );
 
         sess.pointer(
@@ -2280,6 +2440,7 @@ mod tests {
             TimelinePointerPhase::Cancel,
             press_x - 200.0,
             y,
+        0,
         );
         assert_eq!(sess.scene, snapshot_scene);
         assert_eq!(selected, snapshot_selected);
@@ -2300,6 +2461,7 @@ mod tests {
             TimelinePointerPhase::Down,
             end_x,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2309,6 +2471,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar(10.0),
             y,
+        0,
         );
         let clip = &sess.scene.bands[1].clips[0];
         assert!((clip.a - 4.0).abs() < 1e-4);
@@ -2323,6 +2486,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar(4.2),
             y,
+        0,
         );
         let clip = &sess.scene.bands[1].clips[0];
         assert!((clip.b - 5.0).abs() < 1e-4);
@@ -2339,6 +2503,7 @@ mod tests {
             TimelinePointerPhase::Down,
             start_x,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2348,6 +2513,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar(28.0),
             y,
+        0,
         );
         let clip = &sess.scene.bands[1].clips[1];
         assert!((clip.a - 28.0).abs() < 1e-4);
@@ -2369,6 +2535,7 @@ mod tests {
             TimelinePointerPhase::Down,
             kx,
             ky,
+        0,
         );
         assert_eq!(selected, 3);
         assert!(sess.scene.bands[1].clips[0].keys[0].2);
@@ -2383,6 +2550,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar(11.0),
             ky + 40.0,
+        0,
         );
         let key = &sess.scene.bands[1].clips[0].keys[0];
         assert!((key.0 - 11.0).abs() < 1e-4);
@@ -2397,6 +2565,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar(40.0),
             ky,
+        0,
         );
         assert!((sess.scene.bands[1].clips[0].keys[0].0 - 22.0).abs() < 1e-4);
     }
@@ -2430,6 +2599,7 @@ mod tests {
             TimelinePointerPhase::Down,
             x,
             y,
+        0,
         );
         let left_x = lx_for_bar_in(&sess.scene, f64::from(clip.a) - 10.0);
         sess.pointer(
@@ -2440,6 +2610,7 @@ mod tests {
             TimelinePointerPhase::Move,
             left_x,
             y,
+        0,
         );
         assert!((sess.scene.bands[0].clips[0].keys[0].0 - 2.0).abs() < 1e-4);
     }
@@ -2472,6 +2643,7 @@ mod tests {
             TimelinePointerPhase::Down,
             x,
             y,
+        0,
         );
         assert!(down.edit_commit.is_none());
         let moved = sess.pointer(
@@ -2482,6 +2654,7 @@ mod tests {
             TimelinePointerPhase::Move,
             lx_for_bar_in(&sess.scene, 40.0),
             y,
+        0,
         );
         assert!(moved.edit_commit.is_none());
         // clip span bars 0..5 (10s / 2)。clamp to clip.b=5
@@ -2495,6 +2668,7 @@ mod tests {
             TimelinePointerPhase::Up,
             lx_for_bar_in(&sess.scene, 40.0),
             y,
+        0,
         );
         assert_eq!(
             up.edit_commit,
@@ -2513,6 +2687,7 @@ mod tests {
             TimelinePointerPhase::Up,
             lx_for_bar_in(&sess.scene, 40.0),
             y,
+        0,
         );
         assert!(up2.edit_commit.is_none());
     }
@@ -2547,6 +2722,7 @@ mod tests {
             TimelinePointerPhase::Down,
             mid,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2556,6 +2732,7 @@ mod tests {
             TimelinePointerPhase::Move,
             mid + 24.0,
             y,
+        0,
         );
         assert_ne!(sess.scene.bands[0].clips[0].a, before.bands[0].clips[0].a);
 
@@ -2567,6 +2744,7 @@ mod tests {
             TimelinePointerPhase::Cancel,
             mid + 24.0,
             y,
+        0,
         );
         assert!(cancel.edit_commit.is_none());
         assert_eq!(sess.scene, before);
@@ -2610,6 +2788,7 @@ mod tests {
             TimelinePointerPhase::Down,
             mid,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2619,6 +2798,7 @@ mod tests {
             TimelinePointerPhase::Move,
             mid + 40.0,
             y,
+        0,
         );
         assert!((sess.scene.bands[0].clips[0].a - origin_a).abs() > f32::EPSILON);
         let up = sess.pointer(
@@ -2629,6 +2809,7 @@ mod tests {
             TimelinePointerPhase::Up,
             mid + 40.0,
             y,
+        0,
         );
         assert!(matches!(
             up.edit_commit,
@@ -2646,6 +2827,7 @@ mod tests {
             TimelinePointerPhase::Down,
             left,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2655,6 +2837,7 @@ mod tests {
             TimelinePointerPhase::Move,
             left + 24.0,
             y,
+        0,
         );
         let cancel = sess.pointer(
             &mut selected,
@@ -2664,6 +2847,7 @@ mod tests {
             TimelinePointerPhase::Cancel,
             left + 24.0,
             y,
+        0,
         );
         assert!(cancel.edit_commit.is_none());
         assert_eq!(sess.scene.bands[0].clips[0].a, before.bands[0].clips[0].a);
@@ -2679,6 +2863,7 @@ mod tests {
             TimelinePointerPhase::Down,
             right,
             y,
+        0,
         );
         sess.pointer(
             &mut selected,
@@ -2688,6 +2873,7 @@ mod tests {
             TimelinePointerPhase::Move,
             right - 20.0,
             y,
+        0,
         );
         let trim_up = sess.pointer(
             &mut selected,
@@ -2697,6 +2883,7 @@ mod tests {
             TimelinePointerPhase::Up,
             right - 20.0,
             y,
+        0,
         );
         assert!(matches!(
             trim_up.edit_commit,
@@ -2808,6 +2995,7 @@ mod tests {
             TimelinePointerPhase::Down,
             ox_48,
             5.0,
+        0,
         );
         assert!(out.dirty);
         assert!(!out.feedback);
@@ -2824,6 +3012,7 @@ mod tests {
             TimelinePointerPhase::Move,
             ox_96,
             5.0,
+        0,
         );
         assert!((sess.scene.view_a - 48.0).abs() < 1e-3);
         assert!((sess.scene.view_b - 96.0).abs() < 1e-3);
@@ -2840,6 +3029,7 @@ mod tests {
             TimelinePointerPhase::Down,
             lx_for_bar(24.0),
             f64::from(OVER_H + 1.0) + 4.0,
+        0,
         );
         assert!((playhead - 24.0 / 96.0).abs() < 1e-9);
         sess.pointer(
@@ -2850,6 +3040,7 @@ mod tests {
             TimelinePointerPhase::Up,
             lx_for_bar(24.0),
             f64::from(OVER_H + 1.0) + 4.0,
+        0,
         );
 
         // viewを後半へ移しても同じpointer barでscrubが正しい
@@ -2863,6 +3054,7 @@ mod tests {
             TimelinePointerPhase::Down,
             lx_for_bar_in(&sess.scene, 72.0),
             f64::from(OVER_H + 1.0) + 4.0,
+        0,
         );
         assert!((playhead - 72.0 / 96.0).abs() < 1e-9);
     }
@@ -2884,6 +3076,7 @@ mod tests {
             TimelinePointerPhase::Down,
             x,
             y,
+        0,
         );
         // band0..4 flat: 3+2+3+2+0 = 10
         assert_eq!(selected, 10);
@@ -2902,6 +3095,7 @@ mod tests {
             TimelinePointerPhase::Down,
             ox_48,
             5.0,
+        0,
         );
         assert!((sess.scene.view_a - 24.0).abs() < 1e-3);
         sess.pointer(
@@ -2912,6 +3106,7 @@ mod tests {
             TimelinePointerPhase::Cancel,
             ox_48,
             5.0,
+        0,
         );
         assert!((sess.scene.view_a - before.0).abs() < 1e-6);
         assert!((sess.scene.view_b - before.1).abs() < 1e-6);
@@ -2942,6 +3137,7 @@ mod tests {
             TimelinePointerPhase::Down,
             x,
             y,
+        0,
         );
         assert_eq!(
             down.selection_commit,
@@ -2960,6 +3156,7 @@ mod tests {
             TimelinePointerPhase::Down,
             empty_x,
             y,
+        0,
         );
         assert_eq!(
             clear.selection_commit,
@@ -2982,6 +3179,7 @@ mod tests {
             TimelinePointerPhase::Down,
             x,
             y,
+        0,
         );
         assert!(down.selection_commit.is_none());
         assert!(selected >= 0);
@@ -3014,6 +3212,7 @@ mod tests {
             TimelinePointerPhase::Down,
             x,
             y,
+        0,
         );
         assert_eq!(
             down.selection_commit,
@@ -3021,5 +3220,314 @@ mod tests {
                 layer_id: "11".into(),
             })
         );
+    }
+
+    #[test]
+    fn real_projection_move_snaps_to_other_clip_edge_and_commits_snapped_start() {
+        let mut sess = TimelineSession::default();
+        let mut scene = TimelineScene::default();
+        scene.real = true;
+        scene.bands[0].clips[0].a = 0.0;
+        scene.bands[0].clips[0].b = 7.3;
+        scene.bands[0].clips[0].layer_id = "move-neighbor".into();
+        scene.bands[0].clips[1].a = 9.0;
+        scene.bands[0].clips[1].b = 15.0;
+        scene.bands[0].clips[1].layer_id = "move-neighbor".into();
+        scene.bands[0].clips[2].a = 18.0;
+        scene.bands[0].clips[2].b = 25.0;
+        sess.scene = scene;
+
+        let mut selected = 0;
+        let mut playhead = 0.27;
+        let y = body_top() + f64::from(ROW) * 0.5 - 0.5;
+        let down = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            lx_for_bar_in(&sess.scene, 10.0),
+            y,
+            0,
+        );
+        assert!(down.edit_commit.is_none());
+
+        let moved = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Move,
+            lx_for_bar_in(&sess.scene, 7.5),
+            y,
+            0,
+        );
+        assert!(moved.edit_commit.is_none());
+        assert!((sess.scene.bands[0].clips[1].a - 7.3).abs() < 1e-3);
+
+        let up = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Up,
+            lx_for_bar_in(&sess.scene, 7.5),
+            y,
+            0,
+        );
+        assert_eq!(
+            up.edit_commit,
+            Some(TimelineEditCommit::SetClipStart {
+                layer_id: "move-neighbor".into(),
+                bar: 7.3,
+            })
+        );
+    }
+
+    #[test]
+    fn real_projection_move_snap_ignores_cmd_key_modifier() {
+        let mut sess = TimelineSession::default();
+        let mut scene = TimelineScene::default();
+        scene.real = true;
+        scene.bands[0].clips[0].a = 0.0;
+        scene.bands[0].clips[0].b = 7.3;
+        scene.bands[0].clips[0].layer_id = "move-neighbor".into();
+        scene.bands[0].clips[1].a = 9.0;
+        scene.bands[0].clips[1].b = 15.0;
+        scene.bands[0].clips[1].layer_id = "move-neighbor".into();
+        sess.scene = scene;
+
+        let mut selected = 0;
+        let mut playhead = 9.7 / f64::from(SONG_BARS);
+        let y = body_top() + f64::from(ROW) * 0.5 - 0.5;
+        let down_bar = 10.0;
+        let move_bar = 10.6;
+        let down = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            lx_for_bar_in(&sess.scene, down_bar),
+            y,
+            0,
+        );
+        assert!(down.edit_commit.is_none());
+        assert_eq!(selected, 1);
+        let moved = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Move,
+            lx_for_bar_in(&sess.scene, move_bar),
+            y,
+            1,
+        );
+        assert!(moved.edit_commit.is_none());
+        let expected_bar = 9.6_f32;
+        assert!((sess.scene.bands[0].clips[1].a - expected_bar).abs() < 1e-3);
+
+        let up = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Up,
+            lx_for_bar_in(&sess.scene, move_bar),
+            y,
+            1,
+        );
+        assert_eq!(
+            up.edit_commit,
+            Some(TimelineEditCommit::SetClipStart {
+                layer_id: "move-neighbor".into(),
+                bar: expected_bar,
+            })
+        );
+    }
+
+    #[test]
+    fn real_projection_trim_snaps_to_integer_bar_and_commits() {
+        let mut sess = TimelineSession::default();
+        let mut scene = TimelineScene::default();
+        scene.real = true;
+        scene.bands[0].clips[0].a = 0.0;
+        scene.bands[0].clips[0].b = 7.3;
+        scene.bands[0].clips[0].layer_id = "trim-int".into();
+        scene.bands[0].clips[1].a = 9.0;
+        scene.bands[0].clips[1].b = 16.0;
+        scene.bands[0].clips[1].layer_id = "trim-int".into();
+        scene.bands[0].clips[2].a = 18.0;
+        scene.bands[0].clips[2].b = 22.0;
+        sess.scene = scene;
+
+        let mut selected = 0;
+        let mut playhead = 0.27;
+        let y = body_top() + f64::from(ROW) * 0.5 - 0.5;
+        let down = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            f64::from(bx(&sess.scene, 16.0)),
+            y,
+            0,
+        );
+        assert!(down.edit_commit.is_none());
+        let moved = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Move,
+            lx_for_bar_in(&sess.scene, 17.9),
+            y,
+            0,
+        );
+        assert!(moved.edit_commit.is_none());
+        assert!((sess.scene.bands[0].clips[1].b - 18.0).abs() < 1e-3);
+
+        let up = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Up,
+            lx_for_bar_in(&sess.scene, 17.9),
+            y,
+            0,
+        );
+        assert_eq!(
+            up.edit_commit,
+            Some(TimelineEditCommit::TrimClipOut {
+                layer_id: "trim-int".into(),
+                bar: 18.0,
+            })
+        );
+    }
+
+    #[test]
+    fn real_projection_key_drag_snaps_to_playhead_and_commits() {
+        let mut sess = TimelineSession::default();
+        let mut scene = TimelineScene::default();
+        scene.real = true;
+        scene.bands[1].clips[0].layer_id = "11".into();
+        sess.scene = scene;
+
+        let mut selected = 0;
+        let mut playhead = 4.7 / f64::from(SONG_BARS);
+        let y = body_top() + f64::from(ROW) + f64::from(ROW - 1.0) / 2.0;
+        let key_id = sess.scene.bands[1].clips[0].keys[0].3;
+        let down = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            f64::from(bx(&sess.scene, sess.scene.bands[1].clips[0].keys[0].0)),
+            y,
+            0,
+        );
+        assert!(down.edit_commit.is_none());
+
+        let moved = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Move,
+            lx_for_bar_in(&sess.scene, 4.6),
+            y,
+            0,
+        );
+        assert!(moved.edit_commit.is_none());
+        assert!((sess.scene.bands[1].clips[0].keys[0].0 - 4.7).abs() < 1e-3);
+
+        let up = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Up,
+            lx_for_bar_in(&sess.scene, 4.6),
+            y,
+            0,
+        );
+        let edit_bar = match up.edit_commit {
+            Some(TimelineEditCommit::SetPositionKeyTime {
+                layer_id,
+                key_id: up_key_id,
+                bar,
+            }) if layer_id.as_str() == "11" && up_key_id == key_id => bar,
+            _ => {
+                panic!("expected key drag commit for layer 11 key {key_id}, got {:?}", up.edit_commit)
+            }
+        };
+        assert!(
+            (edit_bar - 4.7).abs() < 1e-3
+        );
+    }
+
+    #[test]
+    fn snap_threshold_tracks_6px_distance_under_zoom_changes_bar_delta() {
+        let base = TimelineScene::default();
+        let band = 4usize;
+        let integer_bar = 10.0f32;
+        let near6_base = 6.0 / surface_width() as f32 * (base.view_b - base.view_a);
+        let far7_base = 7.0 / surface_width() as f32 * (base.view_b - base.view_a);
+        assert!(
+            (test_snap_bar(
+                &base,
+                0.0,
+                band,
+                None,
+                integer_bar + near6_base * 0.9,
+                0,
+            ) - integer_bar)
+                .abs()
+                < 2e-3
+        );
+        assert!(
+            (test_snap_bar(&base, 0.0, band, None, integer_bar + far7_base, 0) - (integer_bar + far7_base)).abs()
+                < 2e-3
+        );
+
+        let mut sess = TimelineSession::default();
+        sess.scroll(1240, 400, 0.0, 0.0, 0.5, 0, lx_for_bar(24.0), 100.0);
+        let half = &sess.scene;
+        let near6_half = 6.0 / surface_width() as f32 * (half.view_b - half.view_a);
+        let far7_half = 7.0 / surface_width() as f32 * (half.view_b - half.view_a);
+        assert!(near6_base > near6_half);
+        assert!(
+            (test_snap_bar(half, 0.0, band, None, integer_bar + near6_half * 0.9, 0)
+                - integer_bar)
+                .abs()
+                < 2e-3
+        );
+        assert!(
+            (test_snap_bar(half, 0.0, band, None, integer_bar + far7_half, 0) - (integer_bar + far7_half)).abs()
+                < 2e-3
+        );
+    }
+
+    #[test]
+    fn selected_real_key_tracks_sel_flag() {
+        let mut scene = TimelineScene::from_snapshot(
+            &[SnapshotLayerInput {
+                layer_id: "11".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![SnapshotKeyInput {
+                    key_id: 7,
+                    time_secs: 4.0,
+                }],
+            }],
+            None,
+        );
+        assert!(selected_real_key(&scene).is_none());
+        scene.bands[0].clips[0].keys[0].2 = true;
+        assert_eq!(selected_real_key(&scene), Some(("11".into(), 7)));
     }
 }

@@ -102,7 +102,9 @@ pub use plugin_resolution::{
     PluginDiagnosticReason, PluginSlotId, PreparedDocumentPlugins, PreparedPluginRecipe,
     ResolvedOpenProjectOutcome,
 };
-pub use position_key_prepare::{AddPositionKeyPreparation, AddPositionKeyPrepareError};
+pub use position_key_prepare::{
+    AddPositionKeyPreparation, AddPositionKeyPrepareError, RemovePositionKeyPrepareError,
+};
 pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
     ClipSource, ClippingMaskSettings, CompCameraDoc, CompositeOrder, Composition, CompositionError,
@@ -629,6 +631,15 @@ impl DocumentWriter {
         t: RationalTime,
     ) -> Result<AddPositionKeyPreparation, AddPositionKeyPrepareError> {
         position_key_prepare::prepare_add_position_key(&self.doc, target, t)
+    }
+
+    /// Position keyを削除するcommandを準備する。最後の1個はConstへ収束する。
+    pub fn prepare_remove_position_key(
+        &self,
+        target: LayerId,
+        key: KeyframeId,
+    ) -> Result<Command, RemovePositionKeyPrepareError> {
+        position_key_prepare::prepare_remove_position_key(&self.doc, target, key)
     }
 
     /// Position key の outgoing interpolation 変更commandを準備する。same-value は `None`。
