@@ -43,12 +43,8 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'browser-surface'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'browser-view-EFFECTS'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'rust-wgpu-timeline'})).toBeTruthy();
-  expect(tree!.root.findByProps({testID: 'native-timeline-feedback'})).toBeTruthy();
-  expect(tree!.root.findByProps({testID: 'native-timeline-feedback'}).props.children).toBe(
-    'clip 1 · 27.0%',
-  );
-  expect(tree!.root.findByProps({testID: 'timeline-key-tools'})).toBeTruthy();
-  expect(tree!.root.findByProps({testID: 'timeline-key-mode-KEYS'}).props.accessibilityState.selected).toBe(true);
+  expect(tree!.root.findAllByProps({testID: 'native-timeline-feedback'})).toHaveLength(0);
+  expect(tree!.root.findAllByProps({testID: 'timeline-key-tools'})).toHaveLength(0);
   expect(tree!.root.findAllByProps({accessibilityLabel: 'Select previous native clip'})).toHaveLength(0);
   expect(tree!.root.findAllByProps({accessibilityLabel: 'Select next native clip'})).toHaveLength(0);
   expect(tree!.root.findAllByProps({testID: 'timeline-mode-PACKING'})).toHaveLength(0);
@@ -73,9 +69,8 @@ test('renders correctly', async () => {
       nativeEvent: {objectIndex: -1, time: 0.27},
     });
   });
-  expect(tree!.root.findByProps({testID: 'native-timeline-feedback'}).props.children).toBe(
-    'no clip · 27.0%',
-  );
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-timeline'}).props.selectedObjectIndex).toBe(-1);
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-timeline'}).props.playhead).toBe(0.27);
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-tab-MEDIA'}).props.onPress();
     tree!.root.findByProps({testID: 'right-panel-EXTENSIONS'}).props.onPress();
@@ -86,17 +81,11 @@ test('renders correctly', async () => {
   expect(tree!.root.findByProps({testID: 'browser-empty-MEDIA'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'extension-panel-asset-tags'})).toBeTruthy();
 
-  await ReactTestRenderer.act(() => {
-    tree!.root.findByProps({testID: 'timeline-key-mode-LAYERS'}).props.onPress();
-  });
-  await ReactTestRenderer.act(() => {
-    tree!.root.findByProps({accessibilityLabel: 'stagger layer section'}).props.onPress();
-  });
-  await ReactTestRenderer.act(() => {
-    tree!.root.findByProps({accessibilityLabel: 'Layerを等間隔に分布'}).props.onPress();
-  });
-  expect(tree!.root.findByProps({testID: 'timeline-key-mode-LAYERS'}).props.accessibilityState.selected).toBe(true);
-  expect(tree!.root.findByProps({testID: 'timeline-key-tools-hint'}).props.children).toBe('Layerを等間隔に分布 requires a Timeline selection');
+  const visibleTexts = tree!.root.findAllByType(Text).map(node => String(node.props.children));
+  expect(visibleTexts).not.toContain('night_drive.mtl / Main composition');
+  expect(visibleTexts).not.toContain('Settings');
+  expect(visibleTexts).not.toContain('Export');
+  expect(visibleTexts).not.toContain('Rust / wgpu · 500 clips · 20 tracks');
 
   await ReactTestRenderer.act(() => {
     tree!.root.findByProps({testID: 'browser-tab-CREATE'}).props.onPress();

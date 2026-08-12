@@ -255,8 +255,6 @@ type BrowserViewMode = 'THUMBNAILS' | 'GRID' | 'LIST';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
 
 
-const BUILD_LABEL = 'B002 · RN 0.81.2 · RERUN 954bf95 · SKIA 0.99.0 · CHROMA';
-
 type PathOperationItem = {
   id: string;
   name: string;
@@ -1014,159 +1012,24 @@ function ExactOnKeyValueEditor({
   );
 }
 
-function TimelineKeyTools() {
-  const [mode, setMode] = useState<'KEYS' | 'LAYERS'>('KEYS');
-  const [keyScope, setKeyScope] = useState<'OBJECT' | 'CHANNEL' | 'GLOBAL'>('OBJECT');
-  const [keySection, setKeySection] = useState<'ALIGN' | 'STAGGER' | 'STRETCH'>('ALIGN');
-  const [layerSection, setLayerSection] = useState<'ALIGN' | 'STAGGER' | 'SHIFT'>('ALIGN');
-  const [toolHint, setToolHint] = useState('Select keys in the Skia surface');
-  const isKeys = mode === 'KEYS';
-  const section = isKeys ? keySection : layerSection;
-
-  const selectKeySection = (value: 'ALIGN' | 'STAGGER' | 'STRETCH') => {
-    setKeySection(value);
-    setToolHint(`${value.toLowerCase()} keyframes`);
-  };
-  const selectLayerSection = (value: 'ALIGN' | 'STAGGER' | 'SHIFT') => {
-    setLayerSection(value);
-    setToolHint(`${value.toLowerCase()} layers`);
-  };
-
-  return (
-    <View style={styles.timelineKeyTools} testID="timeline-key-tools">
-      <View style={styles.timelineKeyMode}>
-        {(['KEYS', 'LAYERS'] as const).map(value => (
-          <Pressable
-            accessibilityState={{selected: mode === value}}
-            key={value}
-            onPress={() => {
-              setMode(value);
-              setToolHint(value === 'KEYS' ? 'Select keys in the Skia surface' : 'Select layers in the Skia surface');
-            }}
-            style={[styles.timelineKeyModeButton, mode === value && styles.iconButtonActive]}
-            testID={`timeline-key-mode-${value}`}>
-            <Text style={styles.modeText}>{value}</Text>
-          </Pressable>
-        ))}
-      </View>
-      {isKeys ? (
-        <>
-          <View style={styles.timelineKeyToolsHead}>
-            <Text style={styles.timelineKeyCount}>◆ 0</Text>
-            <View style={styles.timelineKeyScope}>
-              {([
-                ['OBJECT', '▤'],
-                ['CHANNEL', '⋮'],
-                ['GLOBAL', '◎'],
-              ] as const).map(([value, glyph]) => (
-                <Pressable
-                  accessibilityLabel={`${value.toLowerCase()} key scope`}
-                  accessibilityState={{selected: keyScope === value}}
-                  key={value}
-                  onPress={() => setKeyScope(value)}
-                  style={[styles.timelineKeyScopeButton, keyScope === value && styles.iconButtonActive]}>
-                  <Text style={styles.modeText}>{glyph}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-          <View style={styles.timelineKeySections}>
-            {([
-              ['ALIGN', '┆◆┆'],
-              ['STAGGER', '◆⋰◆'],
-              ['STRETCH', '←◆→'],
-            ] as const).map(([value, glyph]) => (
-              <Pressable
-                accessibilityLabel={`${value.toLowerCase()} key section`}
-                accessibilityState={{selected: keySection === value}}
-                key={value}
-                onPress={() => selectKeySection(value)}
-                style={[styles.timelineKeySectionButton, keySection === value && styles.iconButtonActive]}>
-                <Text style={styles.timelineKeyGlyph}>{glyph}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </>
-      ) : (
-        <>
-          <View style={styles.timelineKeyToolsHead}>
-            <Text style={styles.timelineKeyCount}>▤ 1</Text>
-          </View>
-          <View style={styles.timelineKeySections}>
-            {([
-              ['ALIGN', '┆▤┆'],
-              ['STAGGER', '▤⋰▤'],
-              ['SHIFT', '←▤→'],
-            ] as const).map(([value, glyph]) => (
-              <Pressable
-                accessibilityLabel={`${value.toLowerCase()} layer section`}
-                accessibilityState={{selected: layerSection === value}}
-                key={value}
-                onPress={() => selectLayerSection(value)}
-                style={[styles.timelineKeySectionButton, layerSection === value && styles.iconButtonActive]}>
-                <Text style={styles.timelineKeyGlyph}>{glyph}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </>
-      )}
-      <View style={styles.timelineKeyActions}>
-        <Text style={styles.timelineKeyActionTitle}>{section}</Text>
-        {(isKeys
-          ? keySection === 'ALIGN'
-            ? [['開始へ整列', '│◆'], ['Playheadへ整列', '◆┆◆'], ['終了へ整列', '◆│']]
-            : keySection === 'STAGGER'
-              ? [['等間隔に分布', '◆··◆'], ['順序を反転', '⇄']]
-              : [['80% stretch', '80%'], ['120% stretch', '120%']]
-          : layerSection === 'ALIGN'
-            ? [['Layerを開始へ整列', '│▤'], ['Layerを終了へ整列', '▤│']]
-            : layerSection === 'STAGGER'
-              ? [['Layerを等間隔に分布', '▤··▤'], ['Layer順序を反転', '⇄']]
-              : [['Layerを左へ移動', '≪'], ['Layerを右へ移動', '≫']]
-        ).map(([label, glyph]) => (
-          <Pressable
-            accessibilityLabel={label}
-            key={label}
-            onPress={() => setToolHint(`${label} requires a Timeline selection`)}
-            style={styles.timelineKeyActionButton}>
-            <Text style={styles.timelineKeyGlyph}>{glyph}</Text>
-          </Pressable>
-        ))}
-        <Text numberOfLines={2} style={styles.timelineKeyHint} testID="timeline-key-tools-hint">{toolHint}</Text>
-      </View>
-    </View>
-  );
-}
-
 function NativeTimeline() {
-  const [selectedObjectIndex, setSelectedObjectIndex] = useState(1);
-  const [playhead, setPlayhead] = useState(0.27);
+  const [selectedObjectIndex, setSelectedObjectIndex] = useState(-1);
+  const [playhead, setPlayhead] = useState(0);
 
   return (
     <View style={styles.nativeTimelineBody}>
-      <View style={styles.nativeTimelineControls}>
-        <Text style={styles.nativeTimelineTitle}>Rust / wgpu · 500 clips · 20 tracks</Text>
-        <Text style={styles.nativeTimelineFeedback} testID="native-timeline-feedback">
-          {selectedObjectIndex >= 0
-            ? `clip ${selectedObjectIndex} · ${(playhead * 100).toFixed(1)}%`
-            : `no clip · ${(playhead * 100).toFixed(1)}%`}
-        </Text>
-      </View>
-      <View style={styles.nativeTimelineContent}>
-        <TimelineKeyTools />
-        <MotoliiTimelineView
-          accessible
-          accessibilityLabel="Rust wgpu Timeline time surface"
-          onTimelineFeedback={event => {
-            setSelectedObjectIndex(event.nativeEvent.objectIndex);
-            setPlayhead(event.nativeEvent.time);
-          }}
-          playhead={playhead}
-          selectedObjectIndex={selectedObjectIndex}
-          style={styles.nativeTimelineSurface}
-          testID="rust-wgpu-timeline"
-        />
-      </View>
+      <MotoliiTimelineView
+        accessible
+        accessibilityLabel="Timeline editing surface"
+        onTimelineFeedback={event => {
+          setSelectedObjectIndex(event.nativeEvent.objectIndex);
+          setPlayhead(event.nativeEvent.time);
+        }}
+        playhead={playhead}
+        selectedObjectIndex={selectedObjectIndex}
+        style={styles.nativeTimelineSurface}
+        testID="rust-wgpu-timeline"
+      />
     </View>
   );
 }
@@ -1175,8 +1038,7 @@ function Timeline({height}: {height: number}) {
   return (
     <View style={[styles.timeline, {height}]} testID="timeline">
       <View style={styles.timelineHeader}>
-        <Text style={styles.panelTitle}>譜面 / Timeline</Text>
-        <Text style={styles.panelDetail}>Skia time surface</Text>
+        <Text style={styles.panelTitle}>Timeline</Text>
       </View>
       <NativeTimeline />
     </View>
@@ -1235,35 +1097,18 @@ function App() {
     <View style={styles.shell} testID="motolii-rn-shell">
       <View style={styles.titlebar}>
         <Text style={styles.brand}>MOTOLII</Text>
-        <Text style={styles.project}>night_drive.mtl / Main composition</Text>
-        <Text style={styles.buildLabel}>{BUILD_LABEL}</Text>
-        {hostStatusLabel ? <Text style={styles.buildLabel}>{hostStatusLabel}</Text> : null}
+        {hostStatusLabel ? <Text style={styles.statusLabel}>{hostStatusLabel}</Text> : null}
         <View style={styles.grow} />
-        {['Settings', '↶ Undo', '↷ Redo', 'Export'].map(label => {
-          if (label === '↶ Undo' || label === '↷ Redo') {
-            const kind = label === '↶ Undo' ? 'undo' : 'redo';
-            return (
-              <Pressable
-                key={label}
-                accessibilityLabel={label}
-                onPress={() => dispatchHostIntent(kind)}
-                style={styles.titleAction}
-                testID={kind === 'undo' ? 'titlebar-undo' : 'titlebar-redo'}>
-                <Text style={styles.titleActionText}>{label}</Text>
-              </Pressable>
-            );
-          }
-          return (
-            <Text key={label} style={styles.titleAction}>
-              {label}
-            </Text>
-          );
-        })}
-      </View>
-      <View style={styles.commandbar}>
-        {['↖', '✥', '◇', 'T', '⌁', 'Δ', '▣'].map((tool, index) => <Text key={`${tool}-${index}`} style={[styles.commandTool, index === 0 && styles.commandToolActive]}>{tool}</Text>)}
-        <Text style={styles.colorBook}>COLOR BOOK</Text>
-        <Text style={styles.breadcrumb}>Pulse rings / <Text style={styles.breadcrumbStrong}>Echo Bloom</Text></Text>
+        {([['undo', '↶ Undo'], ['redo', '↷ Redo']] as const).map(([kind, label]) => (
+          <Pressable
+            accessibilityLabel={label}
+            key={kind}
+            onPress={() => dispatchHostIntent(kind)}
+            style={styles.titleAction}
+            testID={`titlebar-${kind}`}>
+            <Text style={styles.titleActionText}>{label}</Text>
+          </Pressable>
+        ))}
       </View>
       <View style={styles.workspace}>
         <Browser
@@ -1310,17 +1155,10 @@ const styles = StyleSheet.create({
   shell: {flex: 1, minWidth: 980, minHeight: 650, backgroundColor: '#111315'},
   titlebar: {height: 34, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#36393d', backgroundColor: '#202224'},
   brand: {fontSize: 12, fontWeight: '800', letterSpacing: 1.4, color: '#f2f2f0'},
-  project: {marginLeft: 14, fontSize: 11, color: '#d5d6d3'},
-  buildLabel: {marginLeft: 14, fontSize: 8, color: '#858a8d'},
+  statusLabel: {marginLeft: 14, fontSize: 8, color: '#858a8d'},
   grow: {flex: 1},
   titleAction: {fontSize: 10, color: '#d8d8d5', paddingVertical: 6, paddingHorizontal: 10, marginLeft: 6, borderWidth: 1, borderColor: '#414448'},
   titleActionText: {fontSize: 10, color: '#d8d8d5'},
-  commandbar: {height: 32, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#36393d', backgroundColor: '#151719'},
-  commandTool: {width: 32, textAlign: 'center', fontSize: 12, color: '#b7b9bb'},
-  commandToolActive: {borderWidth: 1, borderColor: '#d7d8d5', paddingVertical: 4, color: '#ffffff'},
-  colorBook: {marginLeft: 8, paddingLeft: 14, borderLeftWidth: 1, borderLeftColor: '#414448', fontSize: 11, color: '#d1d2d0'},
-  breadcrumb: {marginLeft: 14, fontSize: 10, color: '#999d9f'},
-  breadcrumbStrong: {fontWeight: '700', color: '#e7e7e4'},
   workspace: {flex: 1, flexDirection: 'row', minHeight: 260},
   centerColumn: {flex: 1, minWidth: 420},
   browser: {backgroundColor: '#202326'},
@@ -1393,26 +1231,7 @@ const styles = StyleSheet.create({
   extensionTab: {paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: '#44484d'},
   timeline: {backgroundColor: '#17191b', borderTopWidth: 1, borderTopColor: '#3a3d41'},
   timelineHeader: {height: 31, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, borderBottomWidth: 1, borderBottomColor: '#3a3d41'},
-  modeText: {fontSize: 7, color: '#c6c8c7'},
   nativeTimelineBody: {flex: 1},
-  nativeTimelineControls: {height: 28, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: '#3b3e41'},
-  nativeTimelineTitle: {fontSize: 8, color: '#b9bcbd'},
-  nativeTimelineFeedback: {marginLeft: 'auto', fontSize: 8, color: '#d8c97f'},
-  nativeTimelineContent: {flex: 1, flexDirection: 'row'},
-  timelineKeyTools: {width: 186, padding: 6, borderRightWidth: 1, borderRightColor: '#3b3e41', backgroundColor: '#17191b'},
-  timelineKeyMode: {height: 23, flexDirection: 'row', gap: 2, marginHorizontal: -6, marginTop: -6, marginBottom: 6, padding: 2, borderBottomWidth: 1, borderBottomColor: '#3b3e41'},
-  timelineKeyModeButton: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  timelineKeyToolsHead: {height: 22, flexDirection: 'row', alignItems: 'center'},
-  timelineKeyCount: {flex: 1, fontSize: 8, color: '#d8c97f'},
-  timelineKeyScope: {flexDirection: 'row', gap: 2},
-  timelineKeyScopeButton: {width: 21, height: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#45494d'},
-  timelineKeySections: {flexDirection: 'row', gap: 2, marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: '#3b3e41'},
-  timelineKeySectionButton: {flex: 1, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#45494d'},
-  timelineKeyGlyph: {fontSize: 9, color: '#d8c97f'},
-  timelineKeyActions: {flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 4, paddingTop: 4, borderTopWidth: 1, borderTopColor: '#45494d'},
-  timelineKeyActionTitle: {width: '100%', fontSize: 7, letterSpacing: 0.8, color: '#85898c'},
-  timelineKeyActionButton: {minWidth: 36, height: 22, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#45494d'},
-  timelineKeyHint: {width: '100%', marginTop: 2, fontSize: 7, lineHeight: 10, color: '#85898c'},
   nativeTimelineSurface: {flex: 1},
 });
 
