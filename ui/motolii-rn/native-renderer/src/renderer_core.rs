@@ -382,6 +382,10 @@ pub(crate) struct RendererCore {
     scrub_time_pump: ScrubTimePump,
     scrub_clock_start: Instant,
     force_next_host_snapshot: bool,
+    /// F9: 前回読んだhost stamp。(revision, generation)。未取得はNone。
+    host_projection_stamp: Option<(u64, u64)>,
+    /// F11: mount時warm-upを1回だけ先払いしたか。resizeでは再実行しない。
+    mount_warmup_done: bool,
     scene: SceneKind,
     selected_object_index: i32,
     playhead: f64,
@@ -521,7 +525,7 @@ impl RendererCore {
         let timeline = (scene == SceneKind::Timeline)
             .then(|| create_timeline_resources(&device, format, config.width, config.height));
 
-        Ok(Self {
+        let mut core = Self {
             _instance: instance,
             surface,
             _adapter: adapter,
@@ -541,12 +545,17 @@ impl RendererCore {
             scrub_time_pump: ScrubTimePump::new(),
             scrub_clock_start: Instant::now(),
             force_next_host_snapshot: false,
+            host_projection_stamp: None,
+            mount_warmup_done: false,
             scene,
             selected_object_index: 1,
             playhead: 0.27,
             frame: 0,
             stats: RenderStats::default(),
-        })
+        };
+        // mount完了直後・初回present前にshader/Skia初期化を先払い(F11 / B6)。
+        core.run_mount_warmup();
+        Ok(core)
     }
 
     pub(crate) fn resize(&mut self, width: u32, height: u32) {
@@ -979,12 +988,124 @@ impl RendererCore {
         crate::host_bridge::try_dispatch_timeline_selection(commit)
     }
 
+    /// F9: stamp不変かつforceでなく初回でもないtickはfull JSON読みを飛ばす。
+    /// 引数 `current` はtick冒頭で1回だけ採るstamp。gateと保存で同じ値を使う。
+    pub(crate) fn host_snapshot_read_needed(
+        last: Option<(u64, u64)>,
+        current: Option<(u64, u64)>,
+        force: bool,
+    ) -> bool {
+        if force || last.is_none() {
+            return true;
+        }
+        match current {
+            Some(stamp) => last != Some(stamp),
+            // stamp取得失敗時は従来どおりfull読みへ落とす(挙動維持)。
+            None => true,
+        }
+    }
+
+    /// mount時1回だけ。resize/scene切替では呼ばない。
+    fn run_mount_warmup(&mut self) {
+        if self.mount_warmup_done {
+            return;
+        }
+        self.mount_warmup_done = true;
+        let started = Instant::now();
+        let ok = match self.scene {
+            SceneKind::Stage => self.warmup_stage_offscreen(),
+            SceneKind::Timeline => self.warmup_timeline_skia(),
+        };
+        let warmup_us = started.elapsed().as_micros().min(u128::from(u64::MAX)) as u64;
+        // telemetry 1行。ObjC ABIは触らない。
+        eprintln!(
+            "[MotoliiRenderProbe] warmup_us={warmup_us} scene={:?} ok={}",
+            self.scene,
+            u8::from(ok),
+        );
+    }
+
+    fn warmup_stage_offscreen(&mut self) -> bool {
+        let width = self.config.width.max(1);
+        let height = self.config.height.max(1);
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Motolii stage mount warmup"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.config.format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        // 既存Stage描画経路をpresent無しで1回(submit+poll)。
+        self.sync_host_stage_geometry();
+        let Some(stage) = self.stage.as_mut() else {
+            return true;
+        };
+        let ok = stage
+            .rerun
+            .render(&self.device, &self.queue, &view, width, height)
+            .is_ok();
+        if ok {
+            composite_host_stage_frame(
+                &self.device,
+                &self.queue,
+                &view,
+                width,
+                height,
+                stage,
+            );
+        }
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+        ok
+    }
+
+    fn warmup_timeline_skia(&mut self) -> bool {
+        let width = self.config.width.max(1);
+        let height = self.config.height.max(1);
+        let scene = self
+            .timeline_session
+            .as_ref()
+            .map(|session| session.scene.clone())
+            .unwrap_or_default();
+        let playhead = self.playhead;
+        let selected = self.selected_object_index;
+        let Some(timeline) = self.timeline.as_mut() else {
+            return true;
+        };
+        // font/typeface/surface初期化を実サイズbufferへ先払い。
+        crate::timeline_skia::draw_timeline(
+            &scene,
+            &mut timeline.pixels,
+            width,
+            height,
+            playhead,
+            selected,
+        );
+        // 次の可視frameでも再rasterしてよい(dirty維持)。warm-upは初期化コスト払いが目的。
+        timeline.dirty = true;
+        true
+    }
+
     fn sync_host_timeline_projection(&mut self) {
         #[cfg(target_os = "macos")]
         {
+            let read_stamp = crate::host_bridge::try_read_projection_stamp();
+            let force_scene = self.force_next_host_snapshot;
+            if !Self::host_snapshot_read_needed(self.host_projection_stamp, read_stamp, force_scene) {
+                return;
+            }
             let Some(projection) = crate::host_bridge::try_read_timeline_projection() else {
+                self.host_projection_stamp = None;
                 return;
             };
+            self.host_projection_stamp = read_stamp;
             self.host_fps = projection.fps;
             let revision_changed =
                 self.host_revision.as_deref() != Some(projection.revision.as_str());
@@ -996,7 +1117,6 @@ impl RendererCore {
                 .timeline_session
                 .as_ref()
                 .is_some_and(TimelineSession::has_active_gesture);
-            let force_scene = self.force_next_host_snapshot;
             let should_reproject = revision_changed
                 || primary_changed
                 || (force_scene && !has_active_gesture);
@@ -1051,20 +1171,48 @@ impl RendererCore {
     fn sync_host_stage_geometry(&mut self) {
         #[cfg(target_os = "macos")]
         {
-            let Some(stage) = self.stage.as_mut() else {
+            if self.stage.is_none() {
                 return;
-            };
+            }
             let viewport = (self.config.width, self.config.height);
-            let command = match crate::host_bridge::try_read_timeline_projection() {
-                Some(projection) => {
+            // stampゲートはstage/timeline共通。forceと初回はfull読み。
+            let read_stamp = crate::host_bridge::try_read_projection_stamp();
+            let force = self.force_next_host_snapshot;
+            let read_needed = Self::host_snapshot_read_needed(
+                self.host_projection_stamp,
+                read_stamp,
+                force,
+            );
+            let projection = if read_needed {
+                let projection = crate::host_bridge::try_read_timeline_projection();
+                if projection.is_some() {
+                    self.host_projection_stamp = read_stamp;
+                    if force {
+                        // Stageはforceをscene再投影に使わないが、消費して無限full読みを防ぐ。
+                        self.force_next_host_snapshot = false;
+                    }
+                } else {
+                    self.host_projection_stamp = None;
+                }
+                projection
+            } else {
+                None
+            };
+            let stage = self.stage.as_mut().expect("stage present");
+            let command = match projection {
+                Some(ref projection) => {
                     stage
                         .rerun
                         .set_host_primary_layer_id(projection.primary_layer_id.clone());
-                    host_stage_geometry_command(self.host_stage_geometry.as_ref(), Some(&projection))
+                    host_stage_geometry_command(self.host_stage_geometry.as_ref(), Some(projection))
                 }
-                None => {
+                None if read_needed => {
                     stage.rerun.set_host_primary_layer_id(None);
                     host_stage_geometry_command(self.host_stage_geometry.as_ref(), None)
+                }
+                None => {
+                    // stamp不変: 既存geometryのviewport再適用だけ。
+                    HostStageGeometryCommand::Noop
                 }
             };
             match command {
@@ -2434,5 +2582,27 @@ mod tests {
             StageMoveOutcome::ClearSelection
         );
         assert!(gesture.is_none());
+    }
+
+    #[test]
+    fn host_snapshot_read_needed_force_and_first_read_and_missing_stamp() {
+        // force / 初回(None)は読む。host不在でstamp取得失敗もfull読みへ落とす。
+        assert!(RendererCore::host_snapshot_read_needed(None, Some((1, 2)), false));
+        assert!(RendererCore::host_snapshot_read_needed(
+            Some((1, 2)),
+            Some((1, 2)),
+            true
+        ));
+        assert!(RendererCore::host_snapshot_read_needed(
+            Some((1, 2)),
+            Some((0, 3)),
+            false
+        ));
+        assert!(!RendererCore::host_snapshot_read_needed(
+            Some((1, 2)),
+            Some((1, 2)),
+            false
+        ));
+        assert!(RendererCore::host_snapshot_read_needed(Some((1, 2)), None, false));
     }
 }

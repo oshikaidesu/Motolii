@@ -7,9 +7,7 @@ use std::collections::{HashMap, HashSet};
 #[cfg(target_os = "macos")]
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
-#[cfg(target_os = "macos")]
-use std::sync::Arc;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, PixelSize, Quality, RationalTime};
 use motolii_doc::{
@@ -624,7 +622,8 @@ struct RnProductHost {
     stages: HashMap<u64, RnStageSurface>,
     timelines: HashMap<u64, RnTimelineSurface>,
     destroyed: bool,
-    stage_frame_runtime: Option<motolii_plugin::PluginRuntime>,
+    /// Arc: GPU submitをregistry lock外で回すためcloneして持ち出す(F10)。
+    stage_frame_runtime: Option<Arc<motolii_plugin::PluginRuntime>>,
     /// dirty gate: 前回返した (revision, generation, time)。
     stage_frame_last: Option<(String, String, RationalTime)>,
     #[cfg(target_os = "macos")]
@@ -4394,6 +4393,9 @@ pub fn host_create_for_test(project_path: &Path) -> Result<u64, RnHostError> {
 
 /// 評価済み Document の実フレームを Stage 合成へ渡す薄い seam。
 /// dirty gate: 前回と同じ (revision, generation, time) なら再renderせず Unchanged。
+///
+/// F10: registry mutexは取り出し/書き戻しだけに閉じる。graph構築とGPU submitはlock外。
+/// 並行renderは単一render thread前提のため二重render対策は持たない。
 #[doc(hidden)]
 pub fn host_render_frame_for_app(
     host_handle: u64,
@@ -4403,84 +4405,97 @@ pub fn host_render_frame_for_app(
 ) -> HostRenderFrameResult {
     // Unchanged / Failed では呼び手の既存frameへ触れない(Rendered時のみ上書き)。
     // 冒頭で無条件にNone化するとUnchanged tickごとに実フレームが消える。
-    let Ok(mut guard) = registry().lock() else {
-        return HostRenderFrameResult::Failed;
-    };
-    let Some(host) = guard.hosts.get_mut(&host_handle) else {
-        return HostRenderFrameResult::Failed;
-    };
-    if host.destroyed {
-        return HostRenderFrameResult::Failed;
-    }
 
-    let revision = host.runtime.document_revision().to_string();
-    let generation = host.projection_generation.to_string();
-    let time = host.current_time;
-    // 呼び手がframe未保持なら(rev,gen,time)一致でも再render(renderer再生成後の穴を塞ぐ)。
-    if out.is_some() {
-        if let Some((prev_rev, prev_gen, prev_time)) = host.stage_frame_last.as_ref() {
-            if prev_rev == &revision && prev_gen == &generation && *prev_time == time {
-                return HostRenderFrameResult::Unchanged;
+    // 第一lock: destroyed確認・Unchanged判定・snapshot/runtime取り出し。ここまででguardを落とす。
+    let (revision, generation, time, document, runtime) = {
+        let Ok(mut guard) = registry().lock() else {
+            return HostRenderFrameResult::Failed;
+        };
+        let Some(host) = guard.hosts.get_mut(&host_handle) else {
+            return HostRenderFrameResult::Failed;
+        };
+        if host.destroyed {
+            return HostRenderFrameResult::Failed;
+        }
+
+        let revision = host.runtime.document_revision().to_string();
+        let generation = host.projection_generation.to_string();
+        let time = host.current_time;
+        // 呼び手がframe未保持なら(rev,gen,time)一致でも再render(renderer再生成後の穴を塞ぐ)。
+        if out.is_some() {
+            if let Some((prev_rev, prev_gen, prev_time)) = host.stage_frame_last.as_ref() {
+                if prev_rev == &revision && prev_gen == &generation && *prev_time == time {
+                    return HostRenderFrameResult::Unchanged;
+                }
             }
         }
-    }
 
-    let document = host.runtime.snapshot();
+        let document = host.runtime.snapshot();
+        if host.stage_frame_runtime.is_none() {
+            let Ok(created) = first_party_runtime() else {
+                return HostRenderFrameResult::Failed;
+            };
+            host.stage_frame_runtime = Some(Arc::new(created));
+        }
+        let runtime = host
+            .stage_frame_runtime
+            .as_ref()
+            .expect("stage_frame_runtime initialized")
+            .clone();
+        (revision, generation, time, document, runtime)
+    };
+
     let Some(desc) = frame_desc_from_composition(document.as_ref()) else {
         return HostRenderFrameResult::Failed;
     };
 
-    if host.stage_frame_runtime.is_none() {
-        let Ok(runtime) = first_party_runtime() else {
-            return HostRenderFrameResult::Failed;
-        };
-        host.stage_frame_runtime = Some(runtime);
-    }
-
     // product path / render_worker と同じ: 空 DataTracks、project_root=None、Quality::DRAFT。
+    // lock外: build + GPU submit。UI dispatchはこの間registryを取れる。
     let tracks = DataTracks::new();
     let eval = EvaluationTime::new(time);
-    let built = {
-        let runtime = host
-            .stage_frame_runtime
-            .as_ref()
-            .expect("stage_frame_runtime initialized");
-        match build_document_frame_graph(
-            document.as_ref(),
-            eval,
-            desc,
-            &tracks,
-            runtime,
-            None,
-        ) {
-            Ok(built) => built,
-            Err(_) => return HostRenderFrameResult::Failed,
-        }
+    let built = match build_document_frame_graph(
+        document.as_ref(),
+        eval,
+        desc,
+        &tracks,
+        runtime.as_ref(),
+        None,
+    ) {
+        Ok(built) => built,
+        Err(_) => return HostRenderFrameResult::Failed,
     };
-    let rendered = {
-        let runtime = host
-            .stage_frame_runtime
-            .as_ref()
-            .expect("stage_frame_runtime initialized");
-        match render_graph_cached(
-            gpu,
-            session,
-            time,
-            &built.graph,
-            &RenderGraphInputs {
-                camera: built.camera,
-                video_sources: &[],
-                source_time: Some(built.source_time),
-                plugins: Some(runtime.executors()),
-            },
-            Quality::DRAFT,
-        ) {
-            Ok(frame) => frame,
-            Err(_) => return HostRenderFrameResult::Failed,
-        }
+    let rendered = match render_graph_cached(
+        gpu,
+        session,
+        time,
+        &built.graph,
+        &RenderGraphInputs {
+            camera: built.camera,
+            video_sources: &[],
+            source_time: Some(built.source_time),
+            plugins: Some(runtime.executors()),
+        },
+        Quality::DRAFT,
+    ) {
+        Ok(frame) => frame,
+        Err(_) => return HostRenderFrameResult::Failed,
     };
 
-    host.stage_frame_last = Some((revision.clone(), generation.clone(), time));
+    // 第二lock: host生存を再確認してstage_frame_lastを書き戻す。消えていたらFailed、outは触らない。
+    // revisionが進んでいても書き戻してよい(次tickのUnchangedが正しく外れるだけ)。
+    {
+        let Ok(mut guard) = registry().lock() else {
+            return HostRenderFrameResult::Failed;
+        };
+        let Some(host) = guard.hosts.get_mut(&host_handle) else {
+            return HostRenderFrameResult::Failed;
+        };
+        if host.destroyed {
+            return HostRenderFrameResult::Failed;
+        }
+        host.stage_frame_last = Some((revision.clone(), generation.clone(), time));
+    }
+
     *out = Some(AppStageFrame {
         texture: rendered.texture,
         width: rendered.desc.width,
@@ -5011,6 +5026,38 @@ pub extern "C" fn motolii_rn_host_read_snapshot_json(
     .unwrap_or(-1)
 }
 
+/// 軽量stamp: snapshot JSONが変わり得る変更で必ず revision か generation が動く。
+/// serialize禁止。registry lock下で2つのu64を書くだけ(F9 / B7)。
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_host_projection_stamp(
+    handle: u64,
+    out_revision: *mut u64,
+    out_generation: *mut u64,
+) -> bool {
+    if out_revision.is_null() || out_generation.is_null() || handle == 0 {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| {
+        let Ok(guard) = registry().lock() else {
+            return false;
+        };
+        let Some(host) = guard.hosts.get(&handle) else {
+            return false;
+        };
+        if host.destroyed {
+            return false;
+        }
+        // SAFETY: 呼び出し側がwritableな非nullポインタを渡す契約。
+        unsafe {
+            *out_revision = host.runtime.document_revision();
+            *out_generation = host.projection_generation;
+        }
+        true
+    }))
+    .unwrap_or(false)
+}
+
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn motolii_rn_host_dispatch_intent_json(
@@ -5214,6 +5261,7 @@ const _: fn() = || {
     let _ = motolii_rn_timeline_register as extern "C" fn(u64, *mut u64, *mut u8, usize) -> i64;
     let _ = motolii_rn_timeline_destroy as extern "C" fn(u64, *mut u8, usize) -> i64;
     let _ = motolii_rn_host_read_snapshot_json as extern "C" fn(u64, *mut u8, usize) -> i64;
+    let _ = motolii_rn_host_projection_stamp as extern "C" fn(u64, *mut u64, *mut u64) -> bool;
     let _ = motolii_rn_host_dispatch_intent_json
         as extern "C" fn(u64, *const u8, usize, *mut u8, usize) -> i64;
     let _ = motolii_rn_stage_attach
@@ -6897,6 +6945,299 @@ mod tests {
             double_host_response.diagnostics[0].reason,
             RnHostReasonCode::DoubleDestroy
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    fn read_projection_stamp(host: u64) -> (u64, u64) {
+        let mut revision = 0u64;
+        let mut generation = 0u64;
+        assert!(
+            motolii_rn_host_projection_stamp(host, &mut revision, &mut generation),
+            "stamp ffi"
+        );
+        (revision, generation)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn read_snapshot_json_bytes(host: u64) -> Vec<u8> {
+        let mut out = vec![0u8; MAX_SNAPSHOT_JSON_BYTES];
+        let written = motolii_rn_host_read_snapshot_json(host, out.as_mut_ptr(), out.len());
+        assert!(written > 0, "snapshot read failed: {written}");
+        out[..written as usize].to_vec()
+    }
+
+    /// F9: stampはsnapshot JSONが変わり得る全変更で必ず動く。no-opでは不変、stamp不変⇒snapshot不変。
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn projection_stamp_tracks_snapshot_mutating_intents_and_stays_on_noop() {
+        let _lock = test_lock();
+        let host = create_host("projection-stamp");
+        let mut previous_stamp = read_projection_stamp(host);
+        let mut previous_json = read_snapshot_json_bytes(host);
+        assert_eq!(previous_stamp, (0, 0));
+
+        let mut check_mutating = |name: &str, json: String| {
+            let response = dispatch_raw_json(host, &json);
+            assert!(response.accepted, "{name} must be accepted");
+            let next_stamp = read_projection_stamp(host);
+            let next_json = read_snapshot_json_bytes(host);
+            assert_ne!(next_stamp, previous_stamp, "{name} should mutate stamp");
+            assert_ne!(next_json, previous_json, "{name} should mutate snapshot");
+            previous_stamp = next_stamp;
+            previous_json = next_json;
+            response
+        };
+
+        let baseline_wire = read_wire(host);
+        let baseline_layer_id = baseline_wire
+            .timeline
+            .layers
+            .first()
+            .expect("baseline layer")
+            .layer_id
+            .clone();
+
+        let _ = check_mutating(
+            "set_time",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","#,
+                    r#""host_handle":"{host}","frame":12}}"#
+                ),
+                host = host,
+            ),
+        );
+
+        let _ = check_mutating(
+            "place_rectangle",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        );
+
+        // move_layer_by用: rect layer(この時点のprimary)を捕まえておく。
+        let rect_target = read_wire(host)
+            .primary_layer_id
+            .expect("primary after place_rectangle");
+
+        let vism_source = read_wire(host)
+            .catalog
+            .sources
+            .first()
+            .expect("vism source exists")
+            .plugin_id
+            .clone();
+        let _ = check_mutating(
+            "place_vism",
+            place_vism_json(host, &vism_source, [0.0, 0.0], r#"{"num":0,"den":1}"#),
+        );
+
+        // AddPositionKey系はprimary限定(非primaryはaccepted no-op)なので、
+        // place後の現primary(=配置layer)を対象にする。
+        let key_target = read_wire(host)
+            .primary_layer_id
+            .unwrap_or_else(|| baseline_layer_id.clone());
+        // moveはAvailableなConst rectへ(明示targetなのでprimary不要)。
+        // key化後のoff-key moveはU4b-0Vでtyped拒否が正仕様。
+        let _ = check_mutating(
+            "move_layer_by",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"{layer}","delta":[0.1,-0.05]}}"#
+                ),
+                host = host,
+                layer = rect_target,
+            ),
+        );
+        let add_key = check_mutating(
+            "add_position_key",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = key_target,
+            ),
+        );
+        let key_id = add_key
+            .snapshot
+            .as_ref()
+            .expect("snapshot after add_position_key")
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == key_target)
+            .expect("layer for key")
+            .position_keys
+            .first()
+            .expect("added key")
+            .key_id
+            .clone();
+        let _ = check_mutating(
+            "set_position_key_value",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_position_key_value","#,
+                    r#""host_handle":"{host}","target":"{layer}","key_id":"{key}","new":[0.25,-0.5],"time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = key_target,
+                key = key_id,
+            ),
+        );
+        let _ = check_mutating(
+            "set_position_key_time",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_position_key_time","#,
+                    r#""host_handle":"{host}","target":"{layer}","key_id":"{key}","time":{{"num":2,"den":1}}}}"#
+                ),
+                host = host,
+                layer = key_target,
+                key = key_id,
+            ),
+        );
+        let _ = check_mutating(
+            "remove_position_key",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"remove_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","key_id":"{key}"}}"#
+                ),
+                host = host,
+                layer = key_target,
+                key = key_id,
+            ),
+        );
+
+        // 配置直後のclipはcomposition一杯なので、先にtrimして縮めてからstartを動かす。
+        let _ = check_mutating(
+            "trim_clip_in",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_in","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = key_target,
+            ),
+        );
+        let _ = check_mutating(
+            "set_clip_start",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_clip_start","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":2}}}}"#
+                ),
+                host = host,
+                layer = key_target,
+            ),
+        );
+
+        let select_target = read_wire(host)
+            .timeline
+            .layers
+            .into_iter()
+            .map(|layer| layer.layer_id)
+            .find(|id| id != &key_target)
+            .unwrap_or_else(|| key_target.clone());
+        let _ = check_mutating(
+            "select_layer",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"select_layer","#,
+                    r#""host_handle":"{host}","target":"{target}"}}"#
+                ),
+                host = host,
+                target = select_target,
+            ),
+        );
+        let _ = check_mutating(
+            "clear_selection",
+            format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"clear_selection","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+        let _ = check_mutating(
+            "delete_layer",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"delete_layer","#,
+                    r#""host_handle":"{host}","target":"{target}"}}"#
+                ),
+                host = host,
+                target = select_target,
+            ),
+        );
+
+        let effect_target = read_wire(host)
+            .primary_layer_id
+            .or_else(|| {
+                read_wire(host)
+                    .timeline
+                    .layers
+                    .first()
+                    .map(|layer| layer.layer_id.clone())
+            })
+            .unwrap_or_else(|| baseline_layer_id.clone());
+        seed_primary(
+            host,
+            LayerId::from_raw(effect_target.parse::<u64>().expect("layer id")),
+        );
+        let _ = check_mutating(
+            "attach_effect",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = effect_target,
+            ),
+        );
+        let effect_use_id = layer_effects(&read_wire(host), &effect_target)[0].effect_use_id.clone();
+        let _ = check_mutating(
+            "set_effect_param",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_effect_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","effect_use_id":"{effect}","param_id":"amount","value":0.4}}"#
+                ),
+                host = host,
+                layer = effect_target,
+                effect = effect_use_id,
+            ),
+        );
+
+        let _ = check_mutating(
+            "undo",
+            format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+        let _ = check_mutating(
+            "redo",
+            format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"redo","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+
+        // no-op: dispatchなし2回読んでもstamp/snapshot不変
+        assert_eq!(read_projection_stamp(host), previous_stamp);
+        assert_eq!(read_snapshot_json_bytes(host), previous_json);
+        assert_eq!(read_projection_stamp(host), previous_stamp);
+        assert_eq!(read_snapshot_json_bytes(host), previous_json);
+
+        let _ = host_destroy_for_test(host);
     }
 
     #[cfg(target_os = "macos")]

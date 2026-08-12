@@ -24,11 +24,14 @@ static TEST_KEYMAP_DELETE_LAYER_COUNT: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
 static TEST_MOVE_LAYER_BY_DISPATCH_COUNT: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(test)]
+static TEST_SNAPSHOT_READ_COUNT: AtomicU64 = AtomicU64::new(0);
+
 // extern importではなくRust経由で呼ぶ。externで宣言すると同一crate graph内でも
 // motolii-uiの該当objectがarchiveから引かれず、appのlinkで未解決symbolになる(実測)。
 #[cfg(target_os = "macos")]
 use motolii_ui::{
-    motolii_rn_host_create, motolii_rn_host_dispatch_intent_json,
+    motolii_rn_host_create, motolii_rn_host_dispatch_intent_json, motolii_rn_host_projection_stamp,
     motolii_rn_host_read_snapshot_json, motolii_rn_stage_register,
 };
 
@@ -571,6 +574,8 @@ pub(crate) fn try_read_timeline_projection() -> Option<HostTimelineProjection> {
     }
     #[cfg(target_os = "macos")]
     {
+        #[cfg(test)]
+        TEST_SNAPSHOT_READ_COUNT.fetch_add(1, Ordering::SeqCst);
         let Ok(guard) = host_slot().lock() else {
             return None;
         };
@@ -590,6 +595,31 @@ pub(crate) fn try_read_timeline_projection() -> Option<HostTimelineProjection> {
             return None;
         };
         parse_timeline_projection(json)
+    }
+}
+
+/// 軽量stamp。(revision, generation)。不在・失敗はNone。serializeしない。
+pub(crate) fn try_read_projection_stamp() -> Option<(u64, u64)> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        None
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(guard) = host_slot().lock() else {
+            return None;
+        };
+        let Some(slot) = guard.as_ref() else {
+            return None;
+        };
+        let mut revision = 0u64;
+        let mut generation = 0u64;
+        if !unsafe {
+            motolii_rn_host_projection_stamp(slot.handle, &mut revision, &mut generation)
+        } {
+            return None;
+        }
+        Some((revision, generation))
     }
 }
 
@@ -867,6 +897,16 @@ pub(crate) fn test_reset_move_layer_by_dispatch_count() {
 #[cfg(test)]
 pub(crate) fn test_move_layer_by_dispatch_count() -> u64 {
     TEST_MOVE_LAYER_BY_DISPATCH_COUNT.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+pub(crate) fn test_reset_snapshot_read_count() {
+    TEST_SNAPSHOT_READ_COUNT.store(0, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(crate) fn test_snapshot_read_count() -> u64 {
+    TEST_SNAPSHOT_READ_COUNT.load(Ordering::SeqCst)
 }
 
 #[cfg(test)]
@@ -1800,6 +1840,7 @@ fn find_matching_brace(s: &str) -> Option<usize> {
 #[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
+    use crate::renderer_core::RendererCore;
     use crate::timeline_skia::TimelineScene;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Mutex, MutexGuard};
@@ -2856,6 +2897,43 @@ mod tests {
         let layers = proj.timeline_layers.expect("layers kept");
         assert!(layers[0].source_params.is_empty());
         assert!(!layers[0].source_params_truncated);
+    }
+
+    /// F9: stamp不変tickではsnapshot読みFFI(=try_read_timeline_projection)を呼ばない。
+    #[test]
+    fn unchanged_projection_stamp_skips_snapshot_json_read() {
+        let _lock = test_lock();
+        let path = temp_project("stamp-skip-read");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+        test_reset_snapshot_read_count();
+
+        let stamp = try_read_projection_stamp().expect("stamp");
+        assert_eq!(stamp, (0, 0));
+        let before = test_snapshot_read_count();
+
+        // stamp一致ならgateはfull読み不要 → カウンタ不変
+        assert!(!RendererCore::host_snapshot_read_needed(
+            Some(stamp),
+            Some(stamp),
+            false
+        ));
+        assert_eq!(test_snapshot_read_count(), before);
+
+        // 変化時だけ読む
+        dispatch_kind(host, "set_time", r#","frame":12"#);
+        let next = try_read_projection_stamp().expect("stamp after set_time");
+        assert_ne!(next, stamp);
+        assert!(RendererCore::host_snapshot_read_needed(
+            Some(stamp),
+            Some(next),
+            false
+        ));
+        let _ = try_read_timeline_projection().expect("projection");
+        assert_eq!(test_snapshot_read_count(), before + 1);
+
+        clear_slot();
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
     }
 
 }

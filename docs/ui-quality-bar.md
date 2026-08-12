@@ -79,7 +79,7 @@ UI変更のorderは、意図した変更以外の見た目差ゼロを機械で�
 | B6 起動系スパイク | 初回shader/pipeline構築を除き、定常運転で**50ms超のフレームを出さない**。初回も500ms以内(warm-up先払い) | max telemetry |
 | B7 メインthread停止 | UI入力threadを**4ms超**塞ぐ同期処理を置かない(JSON parse・lock待ち含む) | 計測+review |
 
-制定時点の既知B違反(修正grain): ①毎render tickの最大131KB snapshot JSONパース(`try_read_timeline_projection`)→(revision,generation)軽量getterで変化時のみへ、②registry mutexのGPU submit跨ぎ保持→graph構築までに縮小、③maxスパイク実測 Stage 489ms/Timeline 175ms→初回warm-up先払い。
+制定時点の既知B違反①②③は2026-08-13の段差掃討wave Bで解消済み(実機実測: 初回スパイクStage 489ms/Timeline 175ms → max 20.7ms/1.3ms。経緯は[段差台帳](ui-friction-ledger.md)のwave B焼却記録)。
 
 ## 非目標
 

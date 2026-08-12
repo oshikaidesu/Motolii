@@ -9,13 +9,9 @@
 
 F1(playhead直接掴み)/F2(カーソル言語: trim=resizeLR・clip=open/closedHand・key=pointingHand・drag中はhit外でも維持・mouseUp後再計算)/F3(Undo/Redo文脈disabled、wire `history`)/F4(ruler目盛の絶対位相)/F5(exact-on-key行のgesture実信号凍結+凍結identity commit)/F6(空Timeline一行ガイド)/F7(key hit半径5.6px視覚一致+境界test)/F8(`(+N)` 実件数、`truncated_total` saturating集計) — order 19+fix19で全焼却。PNG sha `43ec101c` 不変。
 
-### 掃討wave B(performance — B違反、次order)
+### 掃討wave B(performance) — **焼却済み 2026-08-13**
 
-| # | 段差 | 根拠 |
-|---|---|---|
-| F9 | **毎render tickの最大131KB JSONパース**(B7違反) → (revision,generation)軽量getterで変化時のみ | 品質バー既知違反① |
-| F10 | **registry mutexのGPU submit跨ぎ保持**(入力停止の原因) | 同② |
-| F11 | **初回フレームスパイク**(実測489ms) → 起動時warm-up先払い | 同③ |
+F9(毎tick最大128KiB JSONパース → `motolii_rn_host_projection_stamp` 軽量stamp FFIで変化時のみfull読み。stampはtick冒頭1回読みで判定と保存に同値を使いTOCTOUなし、失敗時はstamp破棄で次tick必ず再読)/F10(registry mutexを「取り出し/書き戻し」2区間へ分割、graph構築とGPU submitはlock外)/F11(mount時warm-up先払い、telemetry `warmup_us=… ok=…`) — order 20+fix20で全焼却。実機実測(30秒run全体max、初回可視フレーム込み): 初回スパイクStage 489ms/Timeline 175ms → **Stage 20.7ms/Timeline 1.3ms**(50ms超ゼロ=B6充足)、warm-up自体はStage 29.6ms/Timeline 11.7ms(ok=1)。
 
 ### 台帳残(grain/campaign従属 — 対応先が決まっているもの)
 
