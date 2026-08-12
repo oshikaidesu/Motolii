@@ -43,6 +43,23 @@ const KEY_HIT_PX: f64 = 6.0;
 const TRIM_HIT_PX: f64 = 4.0;
 const MOVE_ARM_PX: f64 = 3.0;
 const MIN_CLIP_BARS: f32 = 1.0;
+const SNAPSHOT_KEY_DIAMOND: f32 = 0.42;
+
+/// Host snapshot由来の1 layer行。
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SnapshotLayerInput {
+    pub layer_id: String,
+    pub display_name: String,
+    /// `(start_secs, duration_secs)`。Noneは旧host互換の full-width。
+    pub interval_secs: Option<(f64, f64)>,
+    pub keys: Vec<SnapshotKeyInput>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SnapshotKeyInput {
+    pub key_id: u64,
+    pub time_secs: f64,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 struct Clip {
@@ -53,7 +70,8 @@ struct Clip {
     fx: (u8, u8),
     mute: bool,
     dev: &'static [&'static str],
-    keys: Vec<(f32, f32, bool)>,
+    /// (bar, diamond size, selected, key_id)。fixtureのkey_idは0。
+    keys: Vec<(f32, f32, bool, u64)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -105,7 +123,7 @@ impl Default for TimelineScene {
                             fx: (2, 0),
                             mute: false,
                             dev: &[],
-                            keys: vec![(14.0, 0.42, false), (20.0, 0.03, true)],
+                            keys: vec![(14.0, 0.42, false, 0), (20.0, 0.03, true, 0)],
                         },
                         Clip {
                             a: 30.0,
@@ -133,9 +151,9 @@ impl Default for TimelineScene {
                             mute: false,
                             dev: &[],
                             keys: vec![
-                                (8.0, 0.71, false),
-                                (13.0, 0.02, false),
-                                (18.0, 0.15, false),
+                                (8.0, 0.71, false, 0),
+                                (13.0, 0.02, false, 0),
+                                (18.0, 0.15, false, 0),
                             ],
                         },
                         Clip {
@@ -146,7 +164,7 @@ impl Default for TimelineScene {
                             fx: (2, 0),
                             mute: false,
                             dev: &[],
-                            keys: vec![(31.0, 0.30, false)],
+                            keys: vec![(31.0, 0.30, false, 0)],
                         },
                     ],
                 },
@@ -210,7 +228,7 @@ impl Default for TimelineScene {
                             fx: (0, 0),
                             mute: false,
                             dev: &["opacity"],
-                            keys: vec![(24.0, 0.5, false)],
+                            keys: vec![(24.0, 0.5, false, 0)],
                         },
                     ],
                 },
@@ -256,33 +274,56 @@ impl TimelineScene {
         self.bands.len()
     }
 
-    /// Host snapshotの実layer投影。1 layer = 1 band。keysなし。
+    /// Host snapshotの実layer投影。1 layer = 1 band。
+    /// `interval_secs`がSomeなら start/duration 秒から bar へ写す(1 bar = 2秒)。
+    /// Noneは旧host互換の full-width(0..SONG_BARS)。
     pub(crate) fn from_snapshot(
-        bounds: &[(String, String)],
+        layers: &[SnapshotLayerInput],
         primary_layer_id: Option<&str>,
     ) -> Self {
         let mut selected_flat = -1i32;
-        let bands = bounds
+        let bands = layers
             .iter()
             .enumerate()
-            .map(|(index, (layer_id, display_name))| {
+            .map(|(index, layer)| {
                 let flat = index as i32;
-                if primary_layer_id == Some(layer_id.as_str()) {
+                if primary_layer_id == Some(layer.layer_id.as_str()) {
                     selected_flat = flat;
                 }
+                let (a, b) = match layer.interval_secs {
+                    Some((start_secs, duration_secs)) => {
+                        let mut a = (start_secs / 2.0) as f32;
+                        let mut b = ((start_secs + duration_secs) / 2.0) as f32;
+                        a = a.clamp(0.0, SONG_BARS);
+                        b = b.clamp(0.0, SONG_BARS);
+                        if b < a {
+                            b = a;
+                        }
+                        (a, b)
+                    }
+                    None => (0.0, SONG_BARS),
+                };
+                let keys = layer
+                    .keys
+                    .iter()
+                    .map(|key| {
+                        let bar = (key.time_secs / 2.0) as f32;
+                        (bar, SNAPSHOT_KEY_DIAMOND, false, key.key_id)
+                    })
+                    .collect();
                 Band {
                     mute: false,
                     solo: false,
                     mixed: false,
                     clips: vec![Clip {
-                        a: 0.0,
-                        b: SONG_BARS,
+                        a,
+                        b,
                         slot: index % 6,
-                        name: display_name.clone(),
+                        name: layer.display_name.clone(),
                         fx: (0, 0),
                         mute: false,
                         dev: &[],
-                        keys: vec![],
+                        keys,
                     }],
                 }
             })
@@ -295,6 +336,16 @@ impl TimelineScene {
             real: true,
             selected_flat,
         }
+    }
+
+    /// 実投影clipの span と key(bar, key_id)。test / bridge検証用。
+    pub(crate) fn clip0_span_and_keys(&self, band: usize) -> Option<(f32, f32, Vec<(f32, u64)>)> {
+        let clip = self.bands.get(band)?.clips.first()?;
+        Some((
+            clip.a,
+            clip.b,
+            clip.keys.iter().map(|key| (key.0, key.3)).collect(),
+        ))
     }
 }
 
@@ -862,7 +913,7 @@ fn hit_gesture(scene: &TimelineScene, lx: f64, ly: f64) -> Option<HitKind> {
 
     // 2. key中心±6
     for (clip_idx, clip) in band.clips.iter().enumerate() {
-        for (key_idx, (kt, _, _)) in clip.keys.iter().enumerate() {
+        for (key_idx, (kt, _, _, _)) in clip.keys.iter().enumerate() {
             if *kt < clip.a || *kt > clip.b {
                 continue;
             }
@@ -1417,7 +1468,7 @@ pub(crate) fn draw_timeline(
             }
             let nw = measure(&c.name, 8.5);
             let mut nx = r.left + 5.0;
-            for (b, _, _) in &c.keys {
+            for (b, _, _, _) in &c.keys {
                 if *b < c.a || *b > c.b {
                     continue;
                 }
@@ -1429,7 +1480,7 @@ pub(crate) fn draw_timeline(
             if x - nx > nw * 0.55 {
                 text(cv, &c.name, nx, cy + 3.2, 8.5, ink);
             }
-            for (b, d, s) in &c.keys {
+            for (b, d, s, _) in &c.keys {
                 if *b < c.a || *b > c.b {
                     continue;
                 }
@@ -2123,6 +2174,59 @@ mod tests {
             ky,
         );
         assert!((sess.scene.bands[1].clips[0].keys[0].0 - 22.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn real_projection_key_drag_is_disabled() {
+        let mut session_scene = TimelineScene::from_snapshot(
+            &[SnapshotLayerInput {
+                layer_id: "L1".into(),
+                display_name: "keyed".into(),
+                interval_secs: Some((0.0, 10.0)),
+                keys: vec![SnapshotKeyInput {
+                    key_id: 1,
+                    time_secs: 8.0,
+                }],
+            }],
+            Some("L1"),
+        );
+        let mut sess = TimelineSession::default();
+        sess.scene = session_scene;
+        let mut selected = 0;
+        let mut playhead = 0.27;
+        let y = body_top() + f64::from(ROW) * 0.5 - 0.5;
+        let x = f64::from(bx(&sess.scene, 4.0));
+        let key_before = sess.scene.bands[0].clips[0].keys[0].0;
+        let down = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Down,
+            x,
+            y,
+        );
+        assert!(!down.feedback);
+        assert_eq!(selected, 0);
+
+        let out = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Move,
+            x + 32.0,
+            y,
+        );
+        assert!(!out.feedback);
+        assert!(!out.dirty);
+        assert_eq!(selected, 0);
+        assert_eq!(playhead, 0.27);
+        assert_eq!(
+            sess.scene.bands[0].clips[0].keys[0].0,
+            key_before,
+            "real projection should not allow keydrag"
+        );
     }
 
     #[test]

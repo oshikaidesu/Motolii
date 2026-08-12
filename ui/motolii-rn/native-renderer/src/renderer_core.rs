@@ -66,10 +66,8 @@ fn timeline_scene_from_projection(
     existing_scene: &TimelineScene,
     projection: &crate::host_bridge::HostTimelineProjection,
 ) -> TimelineScene {
-    let mut scene = TimelineScene::from_snapshot(
-        &projection.bounds,
-        projection.primary_layer_id.as_deref(),
-    );
+    let layers = crate::host_bridge::snapshot_layers_from_projection(projection);
+    let mut scene = TimelineScene::from_snapshot(&layers, projection.primary_layer_id.as_deref());
     scene.view_a = existing_scene.view_a;
     scene.view_b = existing_scene.view_b;
     scene
@@ -579,6 +577,7 @@ mod tests {
                 ("L1".into(), "Layer 1".into()),
                 ("L2".into(), "Layer 2".into()),
             ],
+            timeline_layers: None,
         };
         let rebuilt = timeline_scene_from_projection(&scene, &projection);
         assert_eq!(rebuilt.view_a, 12.0);

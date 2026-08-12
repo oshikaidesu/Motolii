@@ -6,6 +6,7 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 const MAX_JSON_BYTES: usize = 16_384;
+const MAX_SNAPSHOT_JSON_BYTES: usize = 65_536;
 
 // extern importではなくRust経由で呼ぶ。externで宣言すると同一crate graph内でも
 // motolii-uiの該当objectがarchiveから引かれず、appのlinkで未解決symbolになる(実測)。
@@ -25,11 +26,28 @@ fn host_slot() -> &'static Mutex<Option<HostSlot>> {
 }
 
 /// Host投影。revision変化時だけTimelineへ適用する。
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HostTimelineProjection {
     pub revision: String,
     pub primary_layer_id: Option<String>,
     pub bounds: Vec<(String, String)>,
+    /// wire `timeline` がある時だけ。欠落時は旧host互換fallback。
+    pub timeline_layers: Option<Vec<HostTimelineLayer>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct HostTimelineLayer {
+    pub layer_id: String,
+    pub display_name: String,
+    pub start_secs: f64,
+    pub duration_secs: f64,
+    pub position_keys: Vec<HostTimelineKey>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct HostTimelineKey {
+    pub key_id: u64,
+    pub time_secs: f64,
 }
 
 /// 欠落documentを開ける最小projectでseedする。
@@ -207,7 +225,7 @@ pub(crate) fn try_read_timeline_projection() -> Option<HostTimelineProjection> {
         let Some(slot) = guard.as_ref() else {
             return None;
         };
-        let mut out = [0u8; MAX_JSON_BYTES];
+        let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
         let written =
             unsafe { motolii_rn_host_read_snapshot_json(slot.handle, out.as_mut_ptr(), out.len()) };
         if written <= 0 {
@@ -242,11 +260,47 @@ fn parse_timeline_projection(json: &str) -> Option<HostTimelineProjection> {
     let revision = json_string_value(json, "revision")?;
     let primary_layer_id = json_string_value(json, "primary_layer_id");
     let bounds = parse_bounds(json)?;
+    let timeline_layers = parse_timeline_layers(json);
     Some(HostTimelineProjection {
         revision,
         primary_layer_id,
         bounds,
+        timeline_layers,
     })
+}
+
+pub(crate) fn snapshot_layers_from_projection(
+    projection: &HostTimelineProjection,
+) -> Vec<crate::timeline_skia::SnapshotLayerInput> {
+    use crate::timeline_skia::{SnapshotKeyInput, SnapshotLayerInput};
+    if let Some(layers) = &projection.timeline_layers {
+        return layers
+            .iter()
+            .map(|layer| SnapshotLayerInput {
+                layer_id: layer.layer_id.clone(),
+                display_name: layer.display_name.clone(),
+                interval_secs: Some((layer.start_secs, layer.duration_secs)),
+                keys: layer
+                    .position_keys
+                    .iter()
+                    .map(|key| SnapshotKeyInput {
+                        key_id: key.key_id,
+                        time_secs: key.time_secs,
+                    })
+                    .collect(),
+            })
+            .collect();
+    }
+    projection
+        .bounds
+        .iter()
+        .map(|(layer_id, display_name)| SnapshotLayerInput {
+            layer_id: layer_id.clone(),
+            display_name: display_name.clone(),
+            interval_secs: None,
+            keys: Vec::new(),
+        })
+        .collect()
 }
 
 fn json_string_value(json: &str, key: &str) -> Option<String> {
@@ -393,6 +447,139 @@ fn parse_bounds(json: &str) -> Option<Vec<(String, String)>> {
     Some(bounds)
 }
 
+fn parse_timeline_layers(json: &str) -> Option<Vec<HostTimelineLayer>> {
+    let timeline = find_key_object(json, "timeline")?;
+    let marker = "\"layers\"";
+    let at = timeline.find(marker)?;
+    let after = timeline[at + marker.len()..]
+        .trim_start()
+        .strip_prefix(':')?;
+    let after = after.trim_start().strip_prefix('[')?;
+    let mut layers = Vec::new();
+    let mut rest = after;
+    loop {
+        rest = rest.trim_start();
+        if rest.starts_with(']') {
+            break;
+        }
+        if rest.starts_with(',') {
+            rest = rest[1..].trim_start();
+            continue;
+        }
+        if !rest.starts_with('{') {
+            return None;
+        }
+        let end = find_matching_brace(rest)?;
+        let obj = &rest[..=end];
+        let layer_id = json_string_value(obj, "layer_id")?.to_owned();
+        let display_name = json_string_value(obj, "display_name")?.to_owned();
+        let (start_num, start_den) = json_rational(obj, "start")?;
+        let (duration_num, duration_den) = json_rational(obj, "duration")?;
+        if start_den == 0 || duration_den == 0 {
+            return None;
+        }
+        let position_keys = parse_position_keys(obj)?;
+        layers.push(HostTimelineLayer {
+            layer_id,
+            display_name,
+            start_secs: start_num as f64 / start_den as f64,
+            duration_secs: duration_num as f64 / duration_den as f64,
+            position_keys,
+        });
+        rest = &rest[end + 1..];
+    }
+    Some(layers)
+}
+
+fn parse_position_keys(layer_obj: &str) -> Option<Vec<HostTimelineKey>> {
+    let marker = "\"position_keys\"";
+    let at = layer_obj.find(marker)?;
+    let after = layer_obj[at + marker.len()..]
+        .trim_start()
+        .strip_prefix(':')?;
+    let after = after.trim_start().strip_prefix('[')?;
+    let mut keys = Vec::new();
+    let mut rest = after;
+    loop {
+        rest = rest.trim_start();
+        if rest.starts_with(']') {
+            break;
+        }
+        if rest.starts_with(',') {
+            rest = rest[1..].trim_start();
+            continue;
+        }
+        if !rest.starts_with('{') {
+            return None;
+        }
+        let end = find_matching_brace(rest)?;
+        let obj = &rest[..=end];
+        let key_id = json_string_value(obj, "key_id")?.parse::<u64>().ok()?;
+        let (time_num, time_den) = json_rational(obj, "time")?;
+        if time_den == 0 {
+            return None;
+        }
+        keys.push(HostTimelineKey {
+            key_id,
+            time_secs: time_num as f64 / time_den as f64,
+        });
+        rest = &rest[end + 1..];
+    }
+    Some(keys)
+}
+
+fn find_key_object<'a>(json: &'a str, key: &str) -> Option<&'a str> {
+    let needle = format!("\"{key}\"");
+    let mut search = json;
+    let mut abs = 0usize;
+    while let Some(at) = search.find(&needle) {
+        abs += at;
+        let after = &json[abs + needle.len()..];
+        let trimmed = after.trim_start();
+        if let Some(rest) = trimmed.strip_prefix(':') {
+            let rest = rest.trim_start();
+            if rest.starts_with('{') {
+                let end = find_matching_brace(rest)?;
+                return Some(&rest[..=end]);
+            }
+        }
+        abs += needle.len();
+        search = &json[abs..];
+    }
+    None
+}
+
+fn json_rational(json: &str, key: &str) -> Option<(i64, i64)> {
+    let obj = find_key_object(json, key)?;
+    let num = json_i64_value(obj, "num")?;
+    let den = json_i64_value(obj, "den")?;
+    Some((num, den))
+}
+
+fn json_i64_value(json: &str, key: &str) -> Option<i64> {
+    let needle = format!("\"{key}\"");
+    let mut search = json;
+    let mut abs = 0usize;
+    while let Some(at) = search.find(&needle) {
+        abs += at;
+        let after = &json[abs + needle.len()..];
+        let trimmed = after.trim_start();
+        if let Some(rest) = trimmed.strip_prefix(':') {
+            let rest = rest.trim_start();
+            let end = rest
+                .find(|ch: char| !(ch.is_ascii_digit() || ch == '-' || ch == '+'))
+                .unwrap_or(rest.len());
+            if end == 0 {
+                return None;
+            }
+            return rest[..end].parse().ok();
+        }
+        abs += needle.len();
+        search = &json[abs..];
+    }
+    None
+}
+
 fn find_matching_brace(s: &str) -> Option<usize> {
     let mut depth = 0i32;
     let mut in_string = false;
@@ -449,10 +636,29 @@ mod tests {
 
     fn bounds_from_snapshot(
         snap: &motolii_ui::RnProductSnapshotForTest,
-    ) -> Vec<(String, String)> {
-        snap.layer_ids
+    ) -> Vec<crate::timeline_skia::SnapshotLayerInput> {
+        use crate::timeline_skia::{SnapshotKeyInput, SnapshotLayerInput};
+        snap.timeline
+            .layers
             .iter()
-            .map(|id| (id.clone(), id.clone()))
+            .map(|layer| SnapshotLayerInput {
+                layer_id: layer.layer_id.clone(),
+                display_name: layer.display_name.clone(),
+                interval_secs: Some((
+                    layer.start.as_seconds_f64(),
+                    layer.duration.as_seconds_f64(),
+                )),
+                keys: layer
+                    .position_keys
+                    .iter()
+                    .filter_map(|key| {
+                        Some(SnapshotKeyInput {
+                            key_id: key.key_id.parse().ok()?,
+                            time_secs: key.time.as_seconds_f64(),
+                        })
+                    })
+                    .collect(),
+            })
             .collect()
     }
 
@@ -571,7 +777,115 @@ mod tests {
         for (idx, layer_id) in baseline.layer_ids.iter().enumerate() {
             assert_eq!(proj.bounds[idx].0, *layer_id);
         }
+        let timeline = proj.timeline_layers.expect("timeline from host");
+        assert_eq!(timeline.len(), baseline.timeline.layers.len());
+        assert_eq!(timeline[0].layer_id, baseline.timeline.layers[0].layer_id);
 
         motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[test]
+    fn parse_projection_parses_layer_ids_and_falls_back_without_timeline_on_bad_key() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"9",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "primary_layer_id":"L1",
+            "stage":{"selection":[],"bounds":[
+                {"layer_id":"L1","display_name":"rect"}
+            ]},
+            "timeline":{
+                "fps":{"num":30,"den":1},
+                "layers":[
+                    {
+                        "layer_id":"L1",
+                        "display_name":"rect",
+                        "start":{"num":0,"den":1},
+                        "duration":{"num":10,"den":1},
+                        "position_keys":[
+                            {"key_id":"NaN","time":{"num":4,"den":1}}
+                        ],
+                        "keys_truncated":false
+                    }
+                ],
+                "layers_truncated":false
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(json).expect("parse");
+        assert_eq!(proj.bounds, vec![("L1".into(), "rect".into())]);
+        assert!(proj.timeline_layers.is_none());
+    }
+
+    #[test]
+    fn timeline_json_maps_to_scene_bars_and_keeps_key_id() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"7",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "primary_layer_id":"11",
+            "stage":{"selection":[],"bounds":[
+                {"layer_id":"11","display_name":"rect"}
+            ]},
+            "timeline":{
+                "fps":{"num":30,"den":1},
+                "layers":[{
+                    "layer_id":"11",
+                    "display_name":"rect",
+                    "start":{"num":0,"den":1},
+                    "duration":{"num":10,"den":1},
+                    "position_keys":[{"key_id":"42","time":{"num":4,"den":1}}],
+                    "keys_truncated":false
+                }],
+                "layers_truncated":false
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(json).expect("parse");
+        let layers = snapshot_layers_from_projection(&proj);
+        let scene = TimelineScene::from_snapshot(&layers, proj.primary_layer_id.as_deref());
+        let (a, b, keys) = scene.clip0_span_and_keys(0).expect("clip0");
+        assert!((a - 0.0).abs() < 1e-6);
+        assert!((b - 5.0).abs() < 1e-6); // 10s / 2
+        assert_eq!(keys.len(), 1);
+        assert!((keys[0].0 - 2.0).abs() < 1e-6); // 4s / 2
+        assert_eq!(keys[0].1, 42);
+        assert_eq!(scene.selected_flat, 0);
+    }
+
+    #[test]
+    fn missing_timeline_falls_back_to_full_width_rows() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"3",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "primary_layer_id":"L1",
+            "stage":{"selection":[],"bounds":[
+                {"layer_id":"L1","display_name":"rect \"A\""},
+                {"layer_id":"L2","display_name":"rect \n"}
+            ]},
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(json).expect("parse");
+        assert!(proj.timeline_layers.is_none());
+        let layers = snapshot_layers_from_projection(&proj);
+        let scene = TimelineScene::from_snapshot(&layers, proj.primary_layer_id.as_deref());
+        let (a, b, keys) = scene.clip0_span_and_keys(0).expect("clip0");
+        assert!((a - 0.0).abs() < 1e-6);
+        assert!((b - 96.0).abs() < 1e-6);
+        assert!(keys.is_empty());
+        assert_eq!(scene.band_count(), 2);
     }
 }

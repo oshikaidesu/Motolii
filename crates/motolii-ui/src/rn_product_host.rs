@@ -11,8 +11,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
 
-use motolii_core::{PixelSize, RationalTime};
-use motolii_doc::{DocParam, DocValue, EvaluationTime, KeyframeId, LayerId, TrackItem};
+use motolii_core::{Fps, PixelSize, RationalTime};
+use motolii_doc::{
+    Clip, DocParam, DocValue, EvaluationTime, ItemEnvelope, KeyframeId, LayerId, TrackItem,
+};
 use motolii_eval::{DataTracks, Interp};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -48,8 +50,10 @@ const RN_TO_HOST: &str = "rn-to-host";
 const PRODUCT_ROLE: &str = "product-runtime-seat";
 const MAX_STAGE_BOUNDS: usize = 16;
 const MAX_STAGE_SELECTION: usize = 16;
+const MAX_POSITION_KEYS: usize = 64;
 const MAX_DIAGNOSTICS: usize = 8;
 const MAX_JSON_BYTES: usize = 16_384;
+const MAX_SNAPSHOT_JSON_BYTES: usize = 65_536;
 #[cfg(target_os = "macos")]
 const MAX_PROJECT_PATH_BYTES: usize = 4_096;
 
@@ -147,6 +151,7 @@ pub(crate) struct WireProductSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     primary_layer_id: Option<String>,
     stage: WireStageProjection,
+    timeline: WireTimelineProjection,
     diagnostics: Vec<RnHostDiagnostic>,
 }
 
@@ -154,6 +159,29 @@ pub(crate) struct WireProductSnapshot {
 struct WireStageProjection {
     selection: Vec<WireStageSelection>,
     bounds: Vec<WireStageBound>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireTimelineProjection {
+    fps: Fps,
+    layers: Vec<WireTimelineLayer>,
+    layers_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireTimelineLayer {
+    layer_id: String,
+    display_name: String,
+    start: RationalTime,
+    duration: RationalTime,
+    position_keys: Vec<WireTimelinePositionKey>,
+    keys_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireTimelinePositionKey {
+    key_id: String,
+    time: RationalTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,6 +192,33 @@ pub struct RnProductSnapshotForTest {
     pub current_time: RationalTime,
     pub primary_layer_id: Option<String>,
     pub layer_ids: Vec<String>,
+    pub timeline: RnTimelineProjectionForTest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[doc(hidden)]
+pub struct RnTimelineProjectionForTest {
+    pub fps: Fps,
+    pub layers: Vec<RnTimelineLayerForTest>,
+    pub layers_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[doc(hidden)]
+pub struct RnTimelineLayerForTest {
+    pub layer_id: String,
+    pub display_name: String,
+    pub start: RationalTime,
+    pub duration: RationalTime,
+    pub position_keys: Vec<RnTimelinePositionKeyForTest>,
+    pub keys_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[doc(hidden)]
+pub struct RnTimelinePositionKeyForTest {
+    pub key_id: String,
+    pub time: RationalTime,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -473,6 +528,7 @@ impl RnProductHost {
             current_time: self.current_time,
             primary_layer_id: self.primary.map(|layer| layer.get().to_string()),
             stage: WireStageProjection { selection, bounds },
+            timeline: project_timeline(document.as_ref()),
             diagnostics: Vec::new(),
         }
     }
@@ -2597,6 +2653,14 @@ fn encode_json<T: Serialize>(value: &T) -> Result<String, RnHostError> {
     Ok(json)
 }
 
+fn encode_snapshot_json<T: Serialize>(snapshot: &T) -> Result<String, RnHostError> {
+    let json = serde_json::to_string(snapshot)?;
+    if json.len() > MAX_SNAPSHOT_JSON_BYTES {
+        return Err(RnHostError::PayloadTooLarge);
+    }
+    Ok(json)
+}
+
 fn diagnostic(
     reason: RnHostReasonCode,
     host_handle: Option<u64>,
@@ -2790,15 +2854,89 @@ fn snapshot_for_test(snapshot: WireProductSnapshot) -> RnProductSnapshotForTest 
             .into_iter()
             .map(|bound| bound.layer_id)
             .collect(),
+        timeline: RnTimelineProjectionForTest {
+            fps: snapshot.timeline.fps,
+            layers: snapshot
+                .timeline
+                .layers
+                .into_iter()
+                .map(|layer| RnTimelineLayerForTest {
+                    layer_id: layer.layer_id,
+                    display_name: layer.display_name,
+                    start: layer.start,
+                    duration: layer.duration,
+                    position_keys: layer
+                        .position_keys
+                        .into_iter()
+                        .map(|key| RnTimelinePositionKeyForTest {
+                            key_id: key.key_id,
+                            time: key.time,
+                        })
+                        .collect(),
+                    keys_truncated: layer.keys_truncated,
+                })
+                .collect(),
+            layers_truncated: snapshot.timeline.layers_truncated,
+        },
     }
 }
 
-fn position_key_at(
+fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection {
+    let layers_truncated = document.layers.len() > MAX_STAGE_BOUNDS;
+    let layers = document
+        .layers
+        .iter()
+        .take(MAX_STAGE_BOUNDS)
+        .map(|(layer_id, name)| {
+            let (start, duration) = find_first_clip(document, layer_id)
+                .map(|clip| (clip.start, clip.duration))
+                .unwrap_or((RationalTime::ZERO, RationalTime::ZERO));
+            let (position_keys, keys_truncated) = project_position_keys(document, layer_id);
+            WireTimelineLayer {
+                layer_id: layer_id.get().to_string(),
+                display_name: name.to_owned(),
+                start,
+                duration,
+                position_keys,
+                keys_truncated,
+            }
+        })
+        .collect();
+    WireTimelineProjection {
+        fps: document.composition.fps,
+        layers,
+        layers_truncated,
+    }
+}
+
+fn find_first_clip(document: &motolii_doc::Document, target: LayerId) -> Option<&Clip> {
+    fn walk<'a>(items: &'a [TrackItem], target: LayerId) -> Option<&'a Clip> {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return Some(clip);
+                }
+                TrackItem::Group(group) => {
+                    if let Some(clip) = walk(&group.children, target) {
+                        return Some(clip);
+                    }
+                }
+                TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+    document
+        .tracks
+        .iter()
+        .find_map(|track| walk(&track.items, target))
+}
+
+fn find_envelope_in_document(
     document: &motolii_doc::Document,
     target: LayerId,
-    time: RationalTime,
-) -> Option<(KeyframeId, [f64; 2])> {
-    fn find_envelope(items: &[TrackItem], target: LayerId) -> Option<&motolii_doc::ItemEnvelope> {
+) -> Option<&ItemEnvelope> {
+    fn walk<'a>(items: &'a [TrackItem], target: LayerId) -> Option<&'a ItemEnvelope> {
         for item in items {
             match item {
                 TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
@@ -2808,7 +2946,7 @@ fn position_key_at(
                     return Some(&group.envelope);
                 }
                 TrackItem::Group(group) => {
-                    if let Some(envelope) = find_envelope(&group.children, target) {
+                    if let Some(envelope) = walk(&group.children, target) {
                         return Some(envelope);
                     }
                 }
@@ -2817,11 +2955,41 @@ fn position_key_at(
         }
         None
     }
-
-    let envelope = document
+    document
         .tracks
         .iter()
-        .find_map(|track| find_envelope(&track.items, target))?;
+        .find_map(|track| walk(&track.items, target))
+}
+
+fn project_position_keys(
+    document: &motolii_doc::Document,
+    target: LayerId,
+) -> (Vec<WireTimelinePositionKey>, bool) {
+    let Some(envelope) = find_envelope_in_document(document, target) else {
+        return (Vec::new(), false);
+    };
+    let DocParam::Keyframes(track) = &envelope.transform.position else {
+        return (Vec::new(), false);
+    };
+    let keys = track.keys();
+    let keys_truncated = keys.len() > MAX_POSITION_KEYS;
+    let position_keys = keys
+        .iter()
+        .take(MAX_POSITION_KEYS)
+        .map(|key| WireTimelinePositionKey {
+            key_id: key.id.get().to_string(),
+            time: key.t,
+        })
+        .collect();
+    (position_keys, keys_truncated)
+}
+
+fn position_key_at(
+    document: &motolii_doc::Document,
+    target: LayerId,
+    time: RationalTime,
+) -> Option<(KeyframeId, [f64; 2])> {
+    let envelope = find_envelope_in_document(document, target)?;
     let DocParam::Keyframes(track) = &envelope.transform.position else {
         return None;
     };
@@ -3343,7 +3511,7 @@ pub extern "C" fn motolii_rn_host_read_snapshot_json(
             );
         }
         match with_registry(|registry| registry.read_snapshot(host_handle)) {
-            Ok(snapshot) => match encode_json(&snapshot) {
+            Ok(snapshot) => match encode_snapshot_json(&snapshot) {
                 Ok(json) => write_bytes(out, out_cap, &json),
                 Err(_) => -1,
             },
@@ -3583,8 +3751,9 @@ mod tests {
 
     use motolii_core::{RationalTime, TimeMap};
     use motolii_doc::{
-        Clip, ClipSource, CompCameraDoc, DocParam, Document, ItemEnvelope, LayerId, ProjectSession,
-        ResourceLimits, SaveProjectOptions, Track, TrackItem, Transform2D, RECT_LAYER_SOURCE,
+        Clip, ClipSource, CompCameraDoc, DocKeyframe, DocKeyframeTrack, DocParam, DocValue,
+        Document, ItemEnvelope, KeyframeId, LayerId, ProjectSession, ResourceLimits,
+        SaveProjectOptions, Track, TrackItem, Transform2D, RECT_LAYER_SOURCE,
     };
     use motolii_testkit::tmp_dir;
 
@@ -3940,6 +4109,47 @@ mod tests {
         })
         .ok()
         .flatten()
+    }
+
+    fn make_16_layers_64_keys_document() -> Document {
+        let mut document = Document::new_current();
+        let track = document.track_ids.allocate("stress").expect("track");
+        document.tracks.push(Track {
+            id: track,
+            items: vec![],
+        });
+        for layer_idx in 0_u64..16 {
+            let layer = document
+                .layers
+                .allocate(&format!("layer-{layer_idx}"))
+                .expect("layer");
+            let mut keyframes = DocKeyframeTrack::new();
+            for key_idx in 0_u64..64 {
+                let key_id = document.next_stable_id.allocate().expect("key id");
+                keyframes.insert(DocKeyframe {
+                    id: KeyframeId::from_raw(key_id),
+                    t: RationalTime::try_new(key_idx as i64, 1).expect("key time"),
+                    value: DocValue::Vec2([0.0, key_idx as f64]),
+                    interp: Interp::Linear,
+                });
+            }
+            let mut envelope = ItemEnvelope::new(layer);
+            envelope.transform.position = DocParam::Keyframes(keyframes);
+            document.tracks[0].items.push(TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params([0.0, 0.0], [1.0, 1.0]),
+                    extra: Default::default(),
+                },
+            }));
+        }
+        document.validate().expect("valid");
+        document
     }
 
     #[test]
@@ -5432,5 +5642,162 @@ mod tests {
             response.diagnostics[0].reason,
             RnHostReasonCode::InvalidIntent
         );
+    }
+
+    #[test]
+    fn seed_snapshot_projects_timeline_layer_interval_without_keys() {
+        let _lock = test_lock();
+        let host = create_host("timeline-seed");
+        let snap = read_snapshot(host);
+        assert_eq!(snap.timeline.layers.len(), 1);
+        let layer = &snap.timeline.layers[0];
+        assert_eq!(layer.layer_id, snap.layer_ids[0]);
+        assert_eq!(layer.start, RationalTime::ZERO);
+        assert_eq!(
+            layer.duration,
+            RationalTime::try_new(10, 1).expect("composition duration")
+        );
+        assert!(layer.position_keys.is_empty());
+        assert!(!layer.keys_truncated);
+        assert!(!snap.timeline.layers_truncated);
+        assert_eq!(snap.timeline.fps.num(), 30);
+        assert_eq!(snap.timeline.fps.den(), 1);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn add_position_key_appears_in_timeline_projection() {
+        let _lock = test_lock();
+        let host = create_host("timeline-add-key");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].parse::<u64>().expect("layer id");
+        let target = LayerId::from_raw(layer_id);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        let time = RationalTime::try_new(1, 1).expect("1s");
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        let layer = &snap.timeline.layers[0];
+        assert_eq!(layer.position_keys.len(), 1);
+        assert!(!layer.position_keys[0].key_id.is_empty());
+        assert_eq!(layer.position_keys[0].time, time);
+        assert!(!layer.keys_truncated);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn timeline_position_keys_cap_at_64_and_mark_truncated() {
+        let _lock = test_lock();
+        let mut document = Document::new_current();
+        let layer = document.layers.allocate("keyed").expect("layer");
+        let track = document.track_ids.allocate("track").expect("track");
+        let mut keyframes = DocKeyframeTrack::new();
+        for i in 0..65 {
+            let id = document.next_stable_id.allocate().expect("key id");
+            keyframes.insert(DocKeyframe {
+                id: KeyframeId::from_raw(id),
+                t: RationalTime::try_new(i, 10).expect("key time"),
+                value: DocValue::Vec2([0.0, 0.0]),
+                interp: Interp::Linear,
+            });
+        }
+        let mut envelope = ItemEnvelope::new(layer);
+        envelope.transform.position = DocParam::Keyframes(keyframes);
+        document.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params([0.0, 0.0], [1.0, 1.0]),
+                    extra: Default::default(),
+                },
+            })],
+        });
+        document.validate().expect("valid keyed document");
+        let host = create_host_from_document("timeline-keys-cap", &document);
+        let snap = read_snapshot(host);
+        let layer = &snap.timeline.layers[0];
+        assert_eq!(layer.position_keys.len(), 64);
+        assert!(layer.keys_truncated);
+        assert_eq!(
+            layer.position_keys[0].time,
+            RationalTime::try_new(0, 10).expect("first")
+        );
+        assert_eq!(
+            layer.position_keys[63].time,
+            RationalTime::try_new(63, 10).expect("64th")
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_stage_bounds_and_timeline_layers_share_layer_ids_in_order() {
+        let _lock = test_lock();
+        let host = create_host("bounds-timeline-alignment");
+        let snap = read_snapshot(host);
+        let timeline_ids: Vec<String> = snap
+            .timeline
+            .layers
+            .iter()
+            .map(|layer| layer.layer_id.clone())
+            .collect();
+        assert_eq!(snap.layer_ids, timeline_ids);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_json_of_16_layers_64_keys_stays_under_65536_and_untruncated() {
+        let _lock = test_lock();
+        let document = make_16_layers_64_keys_document();
+        let host = create_host_from_document("snapshot-16x64", &document);
+        let mut out = vec![0_u8; MAX_SNAPSHOT_JSON_BYTES];
+        let written = motolii_rn_host_read_snapshot_json(
+            host,
+            out.as_mut_ptr(),
+            out.len(),
+        );
+        assert!(written > 0);
+        assert!((written as usize) < MAX_SNAPSHOT_JSON_BYTES);
+
+        let snapshot: WireProductSnapshot =
+            serde_json::from_slice(&out[..written as usize]).expect("snapshot json parse");
+        assert_eq!(snapshot.timeline.layers.len(), 16);
+        for layer in snapshot.timeline.layers.iter() {
+            assert_eq!(layer.position_keys.len(), 64);
+            assert!(!layer.keys_truncated);
+        }
+        let _ = host_destroy_for_test(host);
     }
 }
