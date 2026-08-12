@@ -1,7 +1,6 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   FlatList,
-  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -251,17 +250,6 @@ function hostSnapshotStateFromParsed(raw: unknown): HostSnapshotState | null {
 const MacPressable = Pressable as React.ComponentType<
   React.ComponentProps<typeof Pressable> & {onDoubleClick?: () => void}
 >;
-type DialKeyEvent = {
-  nativeEvent: {key: string; shiftKey?: boolean};
-  preventDefault: () => void;
-};
-const DialSurface = Pressable as React.ComponentType<
-  React.ComponentProps<typeof Pressable> & {
-    onKeyDown?: (event: DialKeyEvent) => void;
-    onTouchMoveCapture?: (event: {nativeEvent: {pageX: number}}) => void;
-  }
->;
-
 type BrowserTab = 'MEDIA' | 'EFFECTS' | 'CREATE';
 type BrowserViewMode = 'THUMBNAILS' | 'GRID' | 'LIST';
 type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
@@ -743,13 +731,11 @@ function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, 
   );
 }
 
-function Inspector({width, pathOperationId, onPathOperationChange, transform, onTransformChange, layerSeat}: {width: number; pathOperationId: string; onPathOperationChange: (id: string) => void; transform: StageTransform; onTransformChange: (update: Partial<StageTransform>) => void; layerSeat: HostLayerSeat | null}) {
+function Inspector({width, layerSeat}: {width: number; layerSeat: HostLayerSeat | null}) {
   const [panel, setPanel] = useState<RightPanel>('INSPECTOR');
-  const [intensity, setIntensity] = useState(64);
-  const [spread, setSpread] = useState(42);
   const [extensionId, setExtensionId] = useState<string>(panelRegistry[0].id);
   const extension = panelRegistry.find(item => item.id === extensionId)!;
-  const selectedPathOperation = PATH_OPERATIONS.find(item => item.id === pathOperationId)!;
+  const selectedLayerSeat = layerSeat?.primaryLayerId ? layerSeat : null;
 
   return (
     <View style={[styles.inspector, {width}]} testID="inspector-surface">
@@ -763,32 +749,28 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
       </View>
       {panel === 'INSPECTOR' ? (
         <ScrollView disableScrollViewPanResponder>
-          {layerSeat ? (
+          {selectedLayerSeat ? (
             <View style={styles.pathOperationSection} testID="inspector-layer-section">
               <Text style={styles.pathOperationTitle}>Layer</Text>
-              <Text style={styles.pathOperationDescription}>{layerSeat.displayName}</Text>
-              <Text style={styles.pathOperationDescription}>position keys: {layerSeat.positionKeyCount}</Text>
-              {layerSeat.exactKey && layerSeat.primaryLayerId ? (
+              <Text style={styles.pathOperationDescription}>{selectedLayerSeat.displayName}</Text>
+              <Text style={styles.pathOperationDescription}>position keys: {selectedLayerSeat.positionKeyCount}</Text>
+              {selectedLayerSeat.exactKey ? (
                 <ExactOnKeyValueEditor
-                  key={`${layerSeat.primaryLayerId}:${layerSeat.exactKey.time.num}/${layerSeat.exactKey.time.den}`}
-                  primaryLayerId={layerSeat.primaryLayerId}
-                  keyTime={layerSeat.exactKey.time}
-                  value={layerSeat.exactKey.value}
+                  key={`${selectedLayerSeat.primaryLayerId}:${selectedLayerSeat.exactKey.time.num}/${selectedLayerSeat.exactKey.time.den}`}
+                  primaryLayerId={selectedLayerSeat.primaryLayerId!}
+                  keyTime={selectedLayerSeat.exactKey.time}
+                  value={selectedLayerSeat.exactKey.value}
                 />
               ) : null}
               <View style={styles.pathOperationGrid}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Add Position Key"
-                  disabled={!layerSeat.primaryLayerId}
                   onPress={() => {
-                    if (!layerSeat.primaryLayerId) {
-                      return;
-                    }
                     // add_position_keyはtarget+time必須(rn_product_host 718-747)。Wake時刻は使わない。
                     dispatchHostIntent('add_position_key', {
-                      target: layerSeat.primaryLayerId,
-                      time: layerSeat.currentTime,
+                      target: selectedLayerSeat.primaryLayerId,
+                      time: selectedLayerSeat.currentTime,
                     });
                   }}
                   style={styles.pathOperationButton}
@@ -797,11 +779,16 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
                 </Pressable>
               </View>
             </View>
-          ) : null}
-          {layerSeat && layerSeat.primaryLayerId && layerSeat.sourceParams.length > 0 ? (
+          ) : (
+            <View style={styles.inspectorEmpty} testID="inspector-empty-state">
+              <Text style={styles.inspectorEmptyTitle}>No layer selected</Text>
+              <Text style={styles.muted}>Select a layer on the Stage or Timeline to edit it.</Text>
+            </View>
+          )}
+          {selectedLayerSeat && selectedLayerSeat.sourceParams.length > 0 ? (
             <View style={styles.pathOperationSection} testID="inspector-source-params-section">
               <Text style={styles.pathOperationTitle}>Source</Text>
-              {layerSeat.sourceParams.map(param => (
+              {selectedLayerSeat.sourceParams.map(param => (
                 <ParameterRow
                   key={`source:${param.param_id}`}
                   label={param.param_id}
@@ -811,16 +798,16 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
               ))}
             </View>
           ) : null}
-          {layerSeat && layerSeat.primaryLayerId && layerSeat.effects.length > 0 ? (
+          {selectedLayerSeat && selectedLayerSeat.effects.length > 0 ? (
             <View style={styles.pathOperationSection} testID="inspector-effects-section">
               <Text style={styles.pathOperationTitle}>Effects</Text>
-              {layerSeat.effects.map(effect => (
+              {selectedLayerSeat.effects.map(effect => (
                 <View key={effect.effect_use_id} testID={`inspector-effect-${effect.effect_use_id}`}>
                   <Text style={styles.pathOperationDescription}>{effect.name}</Text>
                   {effect.params.map(param => (
                     <EffectParamEditor
-                      key={`${layerSeat.primaryLayerId}:${effect.effect_use_id}:${param.param_id}`}
-                      primaryLayerId={layerSeat.primaryLayerId!}
+                      key={`${selectedLayerSeat.primaryLayerId}:${effect.effect_use_id}:${param.param_id}`}
+                      primaryLayerId={selectedLayerSeat.primaryLayerId!}
                       effectUseId={effect.effect_use_id}
                       pluginId={effect.plugin_id}
                       paramId={param.param_id}
@@ -831,49 +818,6 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
               ))}
             </View>
           ) : null}
-          <View style={styles.effectIdentity}>
-            <View style={styles.effectIcon}><Text style={styles.effectIconText}>◎</Text></View>
-            <View><Text style={styles.inspectorTitle}>Echo Bloom</Text><Text style={styles.muted}>Pulse rings · Effect</Text></View>
-          </View>
-          <Text style={styles.inspectorDescription}>Layered light pulses that follow the selected object. Adjust while watching the native Stage.</Text>
-          <ParameterRow label="Input" value="Pulse rings composite" />
-          <DialParameter label="Intensity" value={intensity} unit="%" step={1} dragScale={1} min={0} max={100} onChange={setIntensity} />
-          <DialParameter label="Spread" value={spread} unit="%" step={1} dragScale={1} min={0} max={100} onChange={setSpread} />
-          <ParameterRow label="Blend" value="Screen" />
-          <View style={styles.transformSection} testID="stage-transform-projection">
-            <Text style={styles.pathOperationTitle}>Transform</Text>
-            <Text style={styles.pathOperationDescription}>Shared live value with the Stage gizmo. This fixture is not saved to Document yet.</Text>
-            <DialParameter label="Position X" value={transform.x} step={0.025} dragScale={0.01} decimals={3} onChange={value => onTransformChange({x: value})} />
-            <DialParameter label="Position Y" value={transform.y} step={0.025} dragScale={0.01} decimals={3} onChange={value => onTransformChange({y: value})} />
-            <DialParameter label="Position Z" value={transform.z} step={0.025} dragScale={0.01} decimals={3} onChange={value => onTransformChange({z: value})} />
-            <DialParameter label="Rotation X" value={transform.rotationX} unit="°" step={5} dragScale={1} decimals={1} onChange={value => onTransformChange({rotationX: value})} />
-            <DialParameter label="Rotation Y" value={transform.rotationY} unit="°" step={5} dragScale={1} decimals={1} onChange={value => onTransformChange({rotationY: value})} />
-            <DialParameter label="Rotation Z" value={transform.rotationZ} unit="°" step={5} dragScale={1} decimals={1} onChange={value => onTransformChange({rotationZ: value})} />
-          </View>
-          <View style={styles.pathOperationSection} testID="path-operations-panel">
-            <Text style={styles.pathOperationTitle}>Lottie Path Operations</Text>
-            <Text style={styles.pathOperationDescription}>Choose an operation to preview its evaluated vector path on the Stage. This fixture is not saved to Document yet.</Text>
-            <View style={styles.pathOperationGrid}>
-              {PATH_OPERATIONS.map(item => (
-                <Pressable
-                  key={item.id}
-                  accessibilityRole="button"
-                  accessibilityState={{selected: item.id === pathOperationId}}
-                  onPress={() => onPathOperationChange(item.id)}
-                  style={[styles.pathOperationButton, item.id === pathOperationId && styles.pathOperationButtonActive]}
-                  testID={`path-operation-${item.id}`}>
-                  <Text style={styles.pathOperationButtonText}>{item.name}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <ParameterRow label="Selected" value={selectedPathOperation.name} />
-            <Text style={styles.pathOperationDescription}>{selectedPathOperation.detail}</Text>
-          </View>
-          <TextInput
-            accessibilityLabel="Inspector note"
-            defaultValue="日本語IME / focus probe"
-            style={styles.inspectorInput}
-          />
         </ScrollView>
       ) : (
         <View style={styles.extensionBody}>
@@ -1112,161 +1056,6 @@ function ExactOnKeyValueEditor({
   );
 }
 
-function DialParameter({label, value, unit = '', step = 1, dragScale = 1, decimals = 0, min, max, onChange}: {label: string; value: number; unit?: string; step?: number; dragScale?: number; decimals?: number; min?: number; max?: number; onChange: (value: number) => void}) {
-  const [draft, setDraft] = useState(formatDialValue(value, decimals));
-  const [dragging, setDragging] = useState(false);
-  const pointerStart = useRef<{pageX: number; value: number} | null>(null);
-  const editing = useRef(false);
-
-  useEffect(() => {
-    if (!editing.current && !pointerStart.current) {
-      setDraft(formatDialValue(value, decimals));
-    }
-  }, [decimals, value]);
-
-  const normalizedValue = useCallback((next: number, snap = false) => {
-    const stepped = snap ? Math.round(next / step) * step : next;
-    const bounded = Math.max(min ?? -Infinity, Math.min(max ?? Infinity, stepped));
-    return Number(bounded.toFixed(Math.max(decimals, 6)));
-  }, [decimals, max, min, step]);
-
-  const finishDrag = () => {
-    pointerStart.current = null;
-    setDragging(false);
-  };
-
-  const panResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: (_, gestureState) => (
-      Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 1
-    ),
-    onMoveShouldSetPanResponderCapture: (_, gestureState) => (
-      Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 1
-    ),
-    onPanResponderGrant: () => {
-      pointerStart.current = {pageX: 0, value};
-      editing.current = false;
-      setDragging(true);
-    },
-    onPanResponderMove: (_, gestureState) => {
-      const start = pointerStart.current;
-      if (!start) return;
-      const next = normalizedValue(start.value + gestureState.dx * dragScale);
-      setDraft(formatDialValue(next, decimals));
-      onChange(next);
-    },
-    onPanResponderRelease: () => {
-      finishDrag();
-    },
-    onPanResponderTerminate: () => {
-      const start = pointerStart.current;
-      if (start) {
-        onChange(start.value);
-        setDraft(formatDialValue(start.value, decimals));
-      }
-      finishDrag();
-    },
-  }), [decimals, dragScale, normalizedValue, onChange, value]);
-
-  const dialShift = ((value * 2) % 50 + 50) % 50;
-
-  const commitDraft = () => {
-    const parsed = Number(draft.trim());
-    if (Number.isFinite(parsed)) {
-      const next = normalizedValue(parsed, false);
-      onChange(next);
-      setDraft(formatDialValue(next, decimals));
-    } else {
-      setDraft(formatDialValue(value, decimals));
-    }
-    editing.current = false;
-  };
-
-  const applyTouchMove = (pageX: number) => {
-    const start = pointerStart.current;
-    if (!start) return;
-    if (!Number.isFinite(pageX)) {
-      return;
-    }
-    const delta = pageX - start.pageX;
-    const next = normalizedValue(start.value + delta * dragScale);
-    setDraft(formatDialValue(next, decimals));
-    onChange(next);
-  };
-
-  return (
-    <View style={styles.parameterRow}>
-      <Text style={styles.parameterLabel}>{label}</Text>
-      <DialSurface
-        {...panResponder.panHandlers}
-        accessible
-        accessibilityRole="adjustable"
-        accessibilityLabel={`${label} dial`}
-        accessibilityHint="Drag horizontally across the infinite ticks to change the value"
-        style={[styles.dial, dragging && styles.dialDragging]}
-        onTouchStart={event => {
-          pointerStart.current = {pageX: event.nativeEvent.pageX, value};
-          editing.current = false;
-          setDragging(true);
-        }}
-        onTouchMove={event => {
-          applyTouchMove(event.nativeEvent.pageX);
-        }}
-        onTouchMoveCapture={event => {
-          applyTouchMove(event.nativeEvent.pageX);
-        }}
-        onTouchEnd={() => {
-          finishDrag();
-        }}
-        onTouchCancel={() => {
-          const start = pointerStart.current;
-          if (start) {
-            onChange(start.value);
-            setDraft(formatDialValue(start.value, decimals));
-          }
-          finishDrag();
-        }}
-        onKeyDown={event => {
-          if (!['ArrowLeft', 'ArrowRight'].includes(event.nativeEvent.key)) return;
-          event.preventDefault();
-          const direction = event.nativeEvent.key === 'ArrowRight' ? 1 : -1;
-          const multiplier = event.nativeEvent.shiftKey ? 10 : 1;
-          const next = normalizedValue(value + direction * step * multiplier);
-          setDraft(formatDialValue(next, decimals));
-          onChange(next);
-        }}>
-        <View pointerEvents="none" style={styles.dialTicks}>
-          <View pointerEvents="none" style={[styles.dialTickStrip, {transform: [{translateX: -dialShift}]}]}>
-            {Array.from({length: 81}, (_, index) => (
-              <View key={`${label}-tick-${index}`} style={styles.dialTickCell}>
-                <View style={[styles.dialTick, index % 5 === 0 && styles.dialTickMajor]} />
-              </View>
-            ))}
-          </View>
-          <View style={styles.dialPointer} />
-        </View>
-        <TextInput
-          accessibilityLabel={`${label} value`}
-          keyboardType="decimal-pad"
-          onBlur={commitDraft}
-          onChangeText={text => {
-            editing.current = true;
-            setDraft(text);
-          }}
-          onFocus={() => { editing.current = true; }}
-          onSubmitEditing={commitDraft}
-          selectTextOnFocus
-          style={[styles.dialValue, unit ? styles.dialValueWithUnit : null]}
-          value={draft}
-        />
-        {unit ? <Text pointerEvents="none" style={styles.dialUnit}>{unit}</Text> : null}
-      </DialSurface>
-    </View>
-  );
-}
-
-const formatDialValue = (value: number, decimals: number) => value.toFixed(decimals);
-
 function TimelineKeyTools() {
   const [mode, setMode] = useState<'KEYS' | 'LAYERS'>('KEYS');
   const [keyScope, setKeyScope] = useState<'OBJECT' | 'CHANNEL' | 'GLOBAL'>('OBJECT');
@@ -1443,7 +1232,7 @@ function App() {
   const [showGpuStage, setShowGpuStage] = useState(true);
   const [createdItemId, setCreatedItemId] = useState('');
   const [draggedItemId, setDraggedItemId] = useState('');
-  const [pathOperationId, setPathOperationId] = useState(PATH_OPERATIONS[0].id);
+  const pathOperationId = PATH_OPERATIONS[0].id;
   const [stageTransform, setStageTransform] = useState<StageTransform>(INITIAL_STAGE_TRANSFORM);
   const [hostStatusLabel, setHostStatusLabel] = useState<string | null>(null);
   const [hostLayerSeat, setHostLayerSeat] = useState<HostLayerSeat | null>(null);
@@ -1547,7 +1336,7 @@ function App() {
           onDelta={delta => setInspectorWidth(clamp(inspectorStart.current - delta, 240, 440))}
           onNudge={() => setInspectorWidth(value => value >= 390 ? 326 : value + 64)}
         />
-        <Inspector width={inspectorWidth} pathOperationId={pathOperationId} onPathOperationChange={setPathOperationId} transform={stageTransform} onTransformChange={update => setStageTransform(current => ({...current, ...update}))} layerSeat={hostLayerSeat} />
+        <Inspector width={inspectorWidth} layerSeat={hostLayerSeat} />
       </View>
       <Splitter
         label="Timelineのサイズを変更"
@@ -1580,6 +1369,8 @@ const styles = StyleSheet.create({
   centerColumn: {flex: 1, minWidth: 420},
   browser: {backgroundColor: '#202326'},
   inspector: {backgroundColor: '#1b1d20'},
+  inspectorEmpty: {paddingHorizontal: 14, paddingVertical: 18, gap: 5},
+  inspectorEmptyTitle: {fontSize: 11, fontWeight: '600', color: '#d5d6d3'},
   panelHeader: {height: 31, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, borderBottomWidth: 1, borderBottomColor: '#3a3d41'},
   panelTitle: {fontSize: 11, fontWeight: '700', color: '#dedfdd'},
   panelDetail: {marginLeft: 'auto', fontSize: 8, color: '#85898c'},
@@ -1652,17 +1443,6 @@ const styles = StyleSheet.create({
   parameterValue: {flex: 1, paddingHorizontal: 7, paddingVertical: 4, fontSize: 9, textAlign: 'right', color: '#e7e7e4', borderWidth: 1, borderColor: '#45494d'},
   stepButton: {width: 25, height: 24, alignItems: 'center', justifyContent: 'center'},
   stepText: {fontSize: 11, color: '#c8bc7b'},
-  dial: {flex: 1, height: 24, position: 'relative', overflow: 'hidden', borderWidth: 1, borderColor: '#45494d', backgroundColor: '#111315'},
-  dialDragging: {borderColor: '#c8bc7b'},
-  dialTicks: {position: 'absolute', left: 4, right: 44, top: 3, bottom: 3, overflow: 'hidden'},
-  dialTickStrip: {position: 'absolute', left: '50%', width: 810, height: '100%', marginLeft: -405, flexDirection: 'row', alignItems: 'flex-end'},
-  dialTickCell: {width: 10, height: '100%', alignItems: 'center', justifyContent: 'flex-end'},
-  dialTick: {width: 1, height: 7, backgroundColor: '#686d72'},
-  dialTickMajor: {height: 13, backgroundColor: '#c8bc7b'},
-  dialPointer: {position: 'absolute', top: 0, bottom: 0, left: '50%', width: 1, backgroundColor: '#f0f0ed'},
-  dialValue: {position: 'absolute', right: 4, top: 0, minWidth: 35, height: 22, paddingHorizontal: 2, paddingVertical: 0, fontSize: 8, textAlign: 'center', color: '#c8bc7b', backgroundColor: '#111315', zIndex: 1},
-  dialValueWithUnit: {right: 13},
-  dialUnit: {position: 'absolute', right: 4, top: 5, fontSize: 8, color: '#c8bc7b', zIndex: 2},
   inspectorInput: {height: 30, margin: 9, paddingHorizontal: 7, fontSize: 9, color: '#eeeeeb', borderWidth: 1, borderColor: '#575c61'},
   pathOperationSection: {borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#383c40', paddingVertical: 8},
   transformSection: {borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#33454c', paddingVertical: 8},
