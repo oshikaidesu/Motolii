@@ -29,7 +29,12 @@ fn host_slot() -> &'static Mutex<Option<HostSlot>> {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HostTimelineProjection {
     pub revision: String,
+    pub projection_generation: String,
     pub primary_layer_id: Option<String>,
+    /// wire `current_time` の {num,den}。欠落時は0/1。
+    pub current_time: (i64, i64),
+    /// wire `timeline.fps`。timeline欠落時はNone。
+    pub fps: Option<(i64, i64)>,
     pub bounds: Vec<(String, String)>,
     /// wire `timeline` がある時だけ。欠落時は旧host互換fallback。
     pub timeline_layers: Option<Vec<HostTimelineLayer>>,
@@ -238,6 +243,82 @@ pub(crate) fn try_read_timeline_projection() -> Option<HostTimelineProjection> {
     }
 }
 
+/// scrub bar → set_time frame。`frame = round(bar * 2 * fps.num / fps.den)`。
+pub(crate) fn frame_from_scrub_bar(bar: f64, fps_num: i64, fps_den: i64) -> i64 {
+    if fps_num <= 0 || fps_den <= 0 {
+        return 0;
+    }
+    const SCALE: i128 = 1_000_000;
+    let s_fixed = (bar * crate::timeline_skia::SECONDS_PER_BAR * (SCALE as f64)).round() as i128;
+    let num = s_fixed * (fps_num as i128);
+    let den = (fps_den as i128) * SCALE;
+    let half = den / 2;
+    let signed_half = if num.is_negative() { -half } else { half };
+    ((num + signed_half) / den) as i64
+}
+
+/// host `current_time` → playhead(0..1)。bar = secs/2、曲基準 / SONG_BARS。
+pub(crate) fn playhead_from_current_time(num: i64, den: i64) -> f64 {
+    if den == 0 {
+        return 0.0;
+    }
+    let secs = num as f64 / den as f64;
+    let bar = secs / crate::timeline_skia::SECONDS_PER_BAR;
+    (bar / f64::from(crate::timeline_skia::SONG_BARS)).clamp(0.0, 1.0)
+}
+
+/// process host slot経由でset_timeを送る。host不在はfalse(呼ばない)。
+pub(crate) fn try_dispatch_set_time(frame: i64) -> bool {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = frame;
+        false
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(guard) = host_slot().lock() else {
+            return false;
+        };
+        let Some(slot) = guard.as_ref() else {
+            return false;
+        };
+        let intent = format!(
+            r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","host_handle":"{}","frame":{}}}"#,
+            slot.handle, frame
+        );
+        if intent.len() > MAX_JSON_BYTES {
+            return false;
+        }
+        let mut out = [0u8; MAX_JSON_BYTES];
+        let written = unsafe {
+            motolii_rn_host_dispatch_intent_json(
+                slot.handle,
+                intent.as_ptr(),
+                intent.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            )
+        };
+        if written <= 0 {
+            return false;
+        }
+        let Ok(response) = std::str::from_utf8(&out[..written as usize]) else {
+            return false;
+        };
+        response_is_accepted(response)
+    }
+}
+
+fn response_is_accepted(response: &str) -> bool {
+    let Some(pos) = response.find("\"accepted\"") else {
+        return false;
+    };
+    let Some(colon_pos) = response[pos..].find(':') else {
+        return false;
+    };
+    response[pos + colon_pos + 1..].trim_start().starts_with("true")
+}
+
 fn inject_host_handle(intent: &str, handle: u64) -> Result<String, ()> {
     const KEY: &str = "\"host_handle\"";
     let key_at = intent.find(KEY).ok_or(())?;
@@ -258,12 +339,19 @@ fn inject_host_handle(intent: &str, handle: u64) -> Result<String, ()> {
 
 fn parse_timeline_projection(json: &str) -> Option<HostTimelineProjection> {
     let revision = json_string_value(json, "revision")?;
+    let projection_generation =
+        json_string_value(json, "projection_generation").unwrap_or_else(|| "0".into());
     let primary_layer_id = json_string_value(json, "primary_layer_id");
+    let current_time = json_rational(json, "current_time").unwrap_or((0, 1));
+    let fps = find_key_object(json, "timeline").and_then(|timeline| json_rational(timeline, "fps"));
     let bounds = parse_bounds(json)?;
     let timeline_layers = parse_timeline_layers(json);
     Some(HostTimelineProjection {
         revision,
+        projection_generation,
         primary_layer_id,
+        current_time,
+        fps,
         bounds,
         timeline_layers,
     })
@@ -684,6 +772,16 @@ mod tests {
         );
     }
 
+    fn install_slot(host: u64) {
+        let mut guard = host_slot().lock().expect("slot");
+        *guard = Some(HostSlot { handle: host });
+    }
+
+    fn clear_slot() {
+        let mut guard = host_slot().lock().expect("slot");
+        *guard = None;
+    }
+
     #[test]
     fn place_then_undo_changes_from_snapshot_band_count() {
         let _lock = test_lock();
@@ -749,6 +847,9 @@ mod tests {
         }"#;
         let proj = parse_timeline_projection(json).expect("parse");
         assert_eq!(proj.revision, "3");
+        assert_eq!(proj.projection_generation, "0");
+        assert_eq!(proj.current_time, (0, 1));
+        assert!(proj.fps.is_none());
         assert_eq!(proj.primary_layer_id.as_deref(), Some("L1"));
         assert_eq!(
             proj.bounds,
@@ -780,6 +881,17 @@ mod tests {
         let timeline = proj.timeline_layers.expect("timeline from host");
         assert_eq!(timeline.len(), baseline.timeline.layers.len());
         assert_eq!(timeline[0].layer_id, baseline.timeline.layers[0].layer_id);
+        assert_eq!(
+            proj.fps,
+            Some((
+                baseline.timeline.fps.num(),
+                baseline.timeline.fps.den()
+            ))
+        );
+        assert_eq!(
+            proj.current_time,
+            (baseline.current_time.num(), baseline.current_time.den())
+        );
 
         motolii_ui::host_destroy_for_test(host).expect("destroy");
     }
@@ -887,5 +999,116 @@ mod tests {
         assert!((b - 96.0).abs() < 1e-6);
         assert!(keys.is_empty());
         assert_eq!(scene.band_count(), 2);
+    }
+
+    #[test]
+    fn frame_from_scrub_bar_rounds_at_fps_30_and_24_boundaries() {
+        // bar=1 → 2s。fps30 → frame 60、fps24 → frame 48。
+        assert_eq!(frame_from_scrub_bar(1.0, 30, 1), 60);
+        assert_eq!(frame_from_scrub_bar(1.0, 24, 1), 48);
+        // 半端: bar=0.5 → 1s → fps30 frame 30、fps24 frame 24。
+        assert_eq!(frame_from_scrub_bar(0.5, 30, 1), 30);
+        assert_eq!(frame_from_scrub_bar(0.5, 24, 1), 24);
+        // 丸め境界: bar * 2 * 30 = 0.5 → frame 1 (round half away from zero via f64::round)
+        assert_eq!(frame_from_scrub_bar(0.5 / 60.0, 30, 1), 1);
+        assert_eq!(frame_from_scrub_bar(0.5 / 48.0, 24, 1), 0);
+        // 直前は0
+        assert_eq!(frame_from_scrub_bar(0.49 / 60.0, 30, 1), 0);
+        assert_eq!(frame_from_scrub_bar(0.49 / 48.0, 24, 1), 0);
+        assert_eq!(frame_from_scrub_bar(0.5, 30, 0), 0);
+        assert_eq!(frame_from_scrub_bar(0.5, 0, 1), 0);
+    }
+
+    #[test]
+    fn set_time_dispatch_requires_accepted_response() {
+        assert!(response_is_accepted(r#"{"accepted":true}"#));
+        assert!(!response_is_accepted(r#"{"accepted":false}"#));
+        assert!(!response_is_accepted(r#"{"foo":true}"#));
+        assert!(!response_is_accepted(r#"not-json"#));
+    }
+
+    #[test]
+    fn playhead_from_current_time_uses_two_seconds_per_bar() {
+        // 2s = 1 bar → 1/96
+        let ph = playhead_from_current_time(2, 1);
+        assert!((ph - 1.0 / 96.0).abs() < 1e-12);
+        assert_eq!(playhead_from_current_time(0, 1), 0.0);
+    }
+
+    #[test]
+    fn set_time_dispatch_moves_current_time_via_host_slot() {
+        let _lock = test_lock();
+        clear_slot();
+        let path = temp_project("set-time-scrub");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+
+        let baseline = motolii_ui::host_read_snapshot_for_test(host).expect("baseline");
+        let fps_num = baseline.timeline.fps.num();
+        let fps_den = baseline.timeline.fps.den();
+        assert_eq!((fps_num, fps_den), (30, 1));
+
+        // bar=1 → 2s → frame 60。既定fpsで往復一致。
+        let frame = frame_from_scrub_bar(1.0, fps_num, fps_den);
+        assert_eq!(frame, 60);
+        assert!(try_dispatch_set_time(frame));
+        let after = motolii_ui::host_read_snapshot_for_test(host).expect("after");
+        assert_eq!(after.current_time.num(), 2);
+        assert_eq!(after.current_time.den(), 1);
+        let ph = playhead_from_current_time(after.current_time.num(), after.current_time.den());
+        assert!((ph - 1.0 / 96.0).abs() < 1e-12);
+
+        clear_slot();
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[test]
+    fn set_time_is_not_dispatched_without_host_slot() {
+        let _lock = test_lock();
+        clear_slot();
+        assert!(!try_dispatch_set_time(60));
+    }
+
+    #[test]
+    fn add_position_key_grows_wire_timeline_keys() {
+        let _lock = test_lock();
+        let path = temp_project("add-pos-key");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        let baseline = motolii_ui::host_read_snapshot_for_test(host).expect("baseline");
+        assert!(baseline.timeline.layers[0].position_keys.is_empty());
+
+        // placeでprimaryを載せ、add_position_keyはtarget+time必須(rn_product_host 718-747)。
+        dispatch_kind(
+            host,
+            "place_rectangle",
+            r#","position":[0.25,-0.125],"playhead":{"num":0,"den":1}"#,
+        );
+        let placed = motolii_ui::host_read_snapshot_for_test(host).expect("placed");
+        let layer_id = placed.primary_layer_id.expect("primary after place");
+        let before_keys = placed
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .map(|layer| layer.position_keys.len())
+            .unwrap_or(0);
+
+        dispatch_kind(
+            host,
+            "add_position_key",
+            &format!(r#","target":"{layer_id}","time":{{"num":1,"den":1}}"#),
+        );
+        let after = motolii_ui::host_read_snapshot_for_test(host).expect("after");
+        let layer = after
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("keyed layer");
+        assert_eq!(layer.position_keys.len(), before_keys + 1);
+        assert_eq!(layer.position_keys.last().unwrap().time.num(), 1);
+        assert_eq!(layer.position_keys.last().unwrap().time.den(), 1);
+
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
     }
 }

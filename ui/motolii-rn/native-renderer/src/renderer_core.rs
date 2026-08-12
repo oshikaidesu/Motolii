@@ -3,6 +3,87 @@ use std::time::Instant;
 use crate::rerun_stage::{EmbeddedSpatialStage, StageTransformProjection};
 use crate::timeline_skia::{TimelinePointerPhase, TimelineScene, TimelineSession};
 
+const SET_TIME_THROTTLE_MS: u64 = 32;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ScrubPointerPhase {
+    Down,
+    Move,
+    Up,
+    Cancel,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ScrubTimePump {
+    down_frame: Option<i64>,
+    last_dispatch_ms: Option<u64>,
+    sent_since_down: bool,
+}
+
+impl ScrubTimePump {
+    fn new() -> Self {
+        Self {
+            down_frame: None,
+            last_dispatch_ms: None,
+            sent_since_down: false,
+        }
+    }
+
+    fn is_active(&self) -> bool {
+        self.down_frame.is_some()
+    }
+
+    fn should_send_throttled(&self, now_ms: u64) -> bool {
+        self.last_dispatch_ms
+            .is_none_or(|last| now_ms.saturating_sub(last) >= SET_TIME_THROTTLE_MS)
+    }
+
+    fn next_frame(
+        &mut self,
+        phase: ScrubPointerPhase,
+        bar: f64,
+        now_ms: u64,
+        fps_num: i64,
+        fps_den: i64,
+    ) -> Option<i64> {
+        if fps_num <= 0 || fps_den <= 0 {
+            return None;
+        }
+        let frame = crate::host_bridge::frame_from_scrub_bar(bar, fps_num, fps_den);
+        match phase {
+            ScrubPointerPhase::Down => {
+                self.down_frame = Some(frame);
+                self.last_dispatch_ms = Some(now_ms);
+                self.sent_since_down = true;
+                Some(frame)
+            }
+            ScrubPointerPhase::Move => {
+                if !self.should_send_throttled(now_ms) {
+                    return None;
+                }
+                self.last_dispatch_ms = Some(now_ms);
+                self.sent_since_down = true;
+                Some(frame)
+            }
+            ScrubPointerPhase::Up => {
+                self.last_dispatch_ms = Some(now_ms);
+                self.sent_since_down = true;
+                self.down_frame = None;
+                Some(frame)
+            }
+            ScrubPointerPhase::Cancel => {
+                let dispatch_frame = self.down_frame;
+                self.down_frame = None;
+                if self.sent_since_down {
+                    self.sent_since_down = false;
+                    return dispatch_frame;
+                }
+                None
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SceneKind {
     Stage,
@@ -55,6 +136,13 @@ pub(crate) struct RendererCore {
     timeline_session: Option<TimelineSession>,
     /// Host snapshotのrevision。変化時だけsceneを差し替える。
     host_revision: Option<String>,
+    /// set_timeはrevisionを進めないため、playhead追従はgenerationで見る。
+    host_projection_generation: Option<String>,
+    host_fps: Option<(i64, i64)>,
+    scrubbing: bool,
+    scrub_time_pump: ScrubTimePump,
+    scrub_clock_start: Instant,
+    force_next_host_snapshot: bool,
     scene: SceneKind,
     selected_object_index: i32,
     playhead: f64,
@@ -145,6 +233,12 @@ impl RendererCore {
             timeline,
             timeline_session: (scene == SceneKind::Timeline).then(TimelineSession::default),
             host_revision: None,
+            host_projection_generation: None,
+            host_fps: None,
+            scrubbing: false,
+            scrub_time_pump: ScrubTimePump::new(),
+            scrub_clock_start: Instant::now(),
+            force_next_host_snapshot: false,
             scene,
             selected_object_index: 1,
             playhead: 0.27,
@@ -175,7 +269,14 @@ impl RendererCore {
 
     pub(crate) fn set_timeline_state(&mut self, selected_object_index: i32, playhead: f64) {
         self.selected_object_index = selected_object_index.max(-1);
-        self.playhead = playhead.clamp(0.0, 1.0);
+        let real = self
+            .timeline_session
+            .as_ref()
+            .is_some_and(|session| session.scene.real);
+        // real sceneのplayhead正本はhost current_time。scrub中だけRN echoを受ける。
+        if !real || self.scrubbing {
+            self.playhead = playhead.clamp(0.0, 1.0);
+        }
         if let Some(timeline) = &mut self.timeline {
             timeline.dirty = true;
         }
@@ -219,9 +320,6 @@ impl RendererCore {
         x: f64,
         y: f64,
     ) -> Option<(i32, f64)> {
-        let Some(session) = &mut self.timeline_session else {
-            return None;
-        };
         let tl_phase = match phase {
             PointerPhase::Down => {
                 self.stats.pointer_downs += 1;
@@ -237,23 +335,84 @@ impl RendererCore {
             }
             PointerPhase::Cancel => TimelinePointerPhase::Cancel,
         };
-        let outcome = session.pointer(
-            &mut self.selected_object_index,
-            &mut self.playhead,
-            self.config.width,
-            self.config.height,
-            tl_phase,
-            x,
-            y,
-        );
+        let width = self.config.width;
+        let height = self.config.height;
+        let (is_real, outcome) = {
+            let Some(session) = &mut self.timeline_session else {
+                return None;
+            };
+            let is_real = session.scene.real;
+            let outcome = session.pointer(
+                &mut self.selected_object_index,
+                &mut self.playhead,
+                width,
+                height,
+                tl_phase,
+                x,
+                y,
+            );
+            (is_real, outcome)
+        };
         if outcome.dirty {
             if let Some(timeline) = &mut self.timeline {
                 timeline.dirty = true;
             }
         }
+        if is_real {
+            let maybe_scrub_playhead = outcome.scrub_playhead.or(if matches!(phase, PointerPhase::Cancel) {
+                if self.scrub_time_pump.is_active() {
+                    Some(self.playhead)
+                } else {
+                    None
+                }
+            } else {
+                None
+            });
+            if let Some(scrub_playhead) = maybe_scrub_playhead {
+                self.dispatch_set_time_for_scrub(
+                    match phase {
+                        PointerPhase::Down => ScrubPointerPhase::Down,
+                        PointerPhase::Move => ScrubPointerPhase::Move,
+                        PointerPhase::Up => ScrubPointerPhase::Up,
+                        PointerPhase::Cancel => ScrubPointerPhase::Cancel,
+                    },
+                    scrub_playhead,
+                );
+            }
+            if matches!(phase, PointerPhase::Up | PointerPhase::Cancel) {
+                self.force_next_host_snapshot = true;
+            }
+            self.scrubbing = self.scrub_time_pump.is_active();
+        } else if matches!(phase, PointerPhase::Up | PointerPhase::Cancel) {
+            self.scrubbing = false;
+        }
         outcome
             .feedback
             .then_some((self.selected_object_index, self.playhead))
+    }
+
+    fn now_ms(&self) -> u64 {
+        self.scrub_clock_start.elapsed().as_millis() as u64
+    }
+
+    fn dispatch_set_time_for_scrub(&mut self, phase: ScrubPointerPhase, playhead: f64) {
+        let Some((fps_num, fps_den)) = self.host_fps else {
+            return;
+        };
+        if fps_num <= 0 || fps_den <= 0 {
+            return;
+        }
+        let bar = playhead.clamp(0.0, 1.0) * f64::from(crate::timeline_skia::SONG_BARS);
+        let Some(frame) = self.scrub_time_pump.next_frame(
+            phase,
+            bar,
+            self.now_ms(),
+            fps_num,
+            fps_den,
+        ) else {
+            return;
+        };
+        let _ = crate::host_bridge::try_dispatch_set_time(frame);
     }
 
     /// Timeline scroll/pinch。戻り値trueは視覚変化(dirty)。feedbackなし。
@@ -353,19 +512,39 @@ impl RendererCore {
             let Some(projection) = crate::host_bridge::try_read_timeline_projection() else {
                 return;
             };
-            if self.host_revision.as_deref() == Some(projection.revision.as_str()) {
-                return;
+            self.host_fps = projection.fps;
+            let revision_changed =
+                self.host_revision.as_deref() != Some(projection.revision.as_str());
+            let generation_changed = self.host_projection_generation.as_deref()
+                != Some(projection.projection_generation.as_str());
+            if revision_changed {
+                let Some(session) = &mut self.timeline_session else {
+                    return;
+                };
+                let scene = timeline_scene_from_projection(&session.scene, &projection);
+                self.selected_object_index = scene.selected_flat;
+                session.scene = scene;
+                self.host_revision = Some(projection.revision);
+                if let Some(timeline) = &mut self.timeline {
+                    timeline.dirty = true;
+                }
             }
-            let Some(session) = &mut self.timeline_session else {
-                return;
-            };
-            let scene = timeline_scene_from_projection(&session.scene, &projection);
-            self.selected_object_index = scene.selected_flat;
-            session.scene = scene;
-            self.host_revision = Some(projection.revision);
-            if let Some(timeline) = &mut self.timeline {
-                timeline.dirty = true;
+            if !self.scrubbing
+                && (generation_changed || revision_changed || self.force_next_host_snapshot)
+            {
+                let next = crate::host_bridge::playhead_from_current_time(
+                    projection.current_time.0,
+                    projection.current_time.1,
+                );
+                if (self.playhead - next).abs() > f64::EPSILON {
+                    self.playhead = next;
+                    if let Some(timeline) = &mut self.timeline {
+                        timeline.dirty = true;
+                    }
+                }
+                self.force_next_host_snapshot = false;
             }
+            self.host_projection_generation = Some(projection.projection_generation);
         }
     }
 
@@ -564,6 +743,7 @@ fn create_timeline_resources(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::host_bridge::frame_from_scrub_bar;
 
     #[test]
     fn timeline_view_is_preserved_when_revision_changes() {
@@ -572,7 +752,10 @@ mod tests {
         scene.view_b = 48.0;
         let projection = crate::host_bridge::HostTimelineProjection {
             revision: "r1".into(),
+            projection_generation: "0".into(),
             primary_layer_id: Some("L2".into()),
+            current_time: (0, 1),
+            fps: None,
             bounds: vec![
                 ("L1".into(), "Layer 1".into()),
                 ("L2".into(), "Layer 2".into()),
@@ -583,5 +766,34 @@ mod tests {
         assert_eq!(rebuilt.view_a, 12.0);
         assert_eq!(rebuilt.view_b, 48.0);
         assert_eq!(rebuilt.selected_flat, 1);
+    }
+
+    #[test]
+    fn scrub_time_pump_throttle_moves_and_always_dispatches_release() {
+        let mut pump = ScrubTimePump::new();
+        assert_eq!(
+            pump.next_frame(ScrubPointerPhase::Down, 4.0, 0, 30, 1),
+            Some(frame_from_scrub_bar(4.0, 30, 1))
+        );
+        assert_eq!(pump.next_frame(ScrubPointerPhase::Move, 8.0, 16, 30, 1), None);
+        assert_eq!(pump.next_frame(ScrubPointerPhase::Move, 8.0, 31, 30, 1), None);
+        assert_eq!(
+            pump.next_frame(ScrubPointerPhase::Move, 8.0, 32, 30, 1),
+            Some(frame_from_scrub_bar(8.0, 30, 1))
+        );
+        assert_eq!(
+            pump.next_frame(ScrubPointerPhase::Up, 24.0, 40, 30, 1),
+            Some(frame_from_scrub_bar(24.0, 30, 1))
+        );
+    }
+
+    #[test]
+    fn scrub_time_pump_restores_down_frame_only_after_dispatch() {
+        let mut pump = ScrubTimePump::new();
+        assert_eq!(pump.next_frame(ScrubPointerPhase::Down, 11.0, 0, 30, 1), Some(frame_from_scrub_bar(11.0, 30, 1)));
+        assert_eq!(pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 10, 30, 1), Some(frame_from_scrub_bar(11.0, 30, 1)));
+        assert_eq!(pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 20, 30, 1), None);
+        let mut pump = ScrubTimePump::new();
+        assert_eq!(pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 20, 30, 1), None);
     }
 }

@@ -36,28 +36,63 @@ function dispatchHostIntent(kind: string, extra: Record<string, unknown> = {}): 
   );
 }
 
-function readHostStatusLabel(): string | null {
+type HostLayerSeat = {
+  displayName: string;
+  positionKeyCount: number;
+  primaryLayerId: string | null;
+  currentTime: {num: number; den: number};
+};
+type HostSnapshotState = {
+  statusLabel: string | null;
+  layerSeat: HostLayerSeat | null;
+};
+
+/** host snapshotが読める時だけInspector Layer席へ渡す。 */
+function readHostSnapshotState(): HostSnapshotState {
   const host = nativeHost();
   if (!host) {
-    return null;
+    return {statusLabel: null, layerSeat: null};
   }
   const snapshot = host.readSnapshot();
   if (!snapshot) {
-    return null;
+    return {statusLabel: null, layerSeat: null};
   }
   try {
     const parsed = JSON.parse(snapshot) as {
+      primary_layer_id?: string | null;
+      current_time?: {num: number; den: number};
       revision?: string;
       stage?: {bounds?: unknown[]};
+      timeline?: {
+        layers?: Array<{
+          layer_id: string;
+          display_name: string;
+          position_keys?: unknown[];
+        }>;
+      };
     };
+    const primaryLayerId = parsed.primary_layer_id ?? null;
+    const layerBounds = parsed.stage?.bounds?.length ?? 0;
     const revision = parsed.revision;
-    const layers = parsed.stage?.bounds?.length ?? 0;
-    if (revision == null) {
-      return null;
+    const statusLabel = revision == null ? null : `DOC r${revision} · ${layerBounds} layers`;
+    if (!parsed.current_time || typeof parsed.current_time.num !== 'number' || typeof parsed.current_time.den !== 'number') {
+      return {statusLabel, layerSeat: null};
     }
-    return `DOC r${revision} · ${layers} layers`;
+    const timelineLayers = parsed.timeline?.layers ?? [];
+    const primary = primaryLayerId
+      ? timelineLayers.find(layer => layer.layer_id === primaryLayerId)
+      : undefined;
+    return {
+      statusLabel,
+      layerSeat: {
+        displayName: primary?.display_name ?? 'no selection',
+        positionKeyCount: primary?.position_keys?.length ?? 0,
+        primaryLayerId,
+        currentTime: parsed.current_time,
+      },
+    };
   } catch {
-    return null;
+    return {statusLabel: null, layerSeat: null};
   }
 }
 
@@ -476,7 +511,7 @@ function Stage({createdItemId, draggedItemId, pathOperationId, showGpu, onDrop, 
   );
 }
 
-function Inspector({width, pathOperationId, onPathOperationChange, transform, onTransformChange}: {width: number; pathOperationId: string; onPathOperationChange: (id: string) => void; transform: StageTransform; onTransformChange: (update: Partial<StageTransform>) => void}) {
+function Inspector({width, pathOperationId, onPathOperationChange, transform, onTransformChange, layerSeat}: {width: number; pathOperationId: string; onPathOperationChange: (id: string) => void; transform: StageTransform; onTransformChange: (update: Partial<StageTransform>) => void; layerSeat: HostLayerSeat | null}) {
   const [panel, setPanel] = useState<RightPanel>('INSPECTOR');
   const [intensity, setIntensity] = useState(64);
   const [spread, setSpread] = useState(42);
@@ -496,6 +531,33 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
       </View>
       {panel === 'INSPECTOR' ? (
         <ScrollView disableScrollViewPanResponder>
+          {layerSeat ? (
+            <View style={styles.pathOperationSection} testID="inspector-layer-section">
+              <Text style={styles.pathOperationTitle}>Layer</Text>
+              <Text style={styles.pathOperationDescription}>{layerSeat.displayName}</Text>
+              <Text style={styles.pathOperationDescription}>position keys: {layerSeat.positionKeyCount}</Text>
+              <View style={styles.pathOperationGrid}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Add Position Key"
+                  disabled={!layerSeat.primaryLayerId}
+                  onPress={() => {
+                    if (!layerSeat.primaryLayerId) {
+                      return;
+                    }
+                    // add_position_keyはtarget+time必須(rn_product_host 718-747)。Wake時刻は使わない。
+                    dispatchHostIntent('add_position_key', {
+                      target: layerSeat.primaryLayerId,
+                      time: layerSeat.currentTime,
+                    });
+                  }}
+                  style={styles.pathOperationButton}
+                  testID="inspector-add-position-key">
+                  <Text style={styles.pathOperationButtonText}>◆ Add Position Key</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
           <View style={styles.effectIdentity}>
             <View style={styles.effectIcon}><Text style={styles.effectIconText}>◎</Text></View>
             <View><Text style={styles.inspectorTitle}>Echo Bloom</Text><Text style={styles.muted}>Pulse rings · Effect</Text></View>
@@ -901,11 +963,16 @@ function App() {
   const [pathOperationId, setPathOperationId] = useState(PATH_OPERATIONS[0].id);
   const [stageTransform, setStageTransform] = useState<StageTransform>(INITIAL_STAGE_TRANSFORM);
   const [hostStatusLabel, setHostStatusLabel] = useState<string | null>(null);
+  const [hostLayerSeat, setHostLayerSeat] = useState<HostLayerSeat | null>(null);
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
   useEffect(() => {
-    const tick = () => setHostStatusLabel(readHostStatusLabel());
+    const tick = () => {
+      const snapshotState = readHostSnapshotState();
+      setHostStatusLabel(snapshotState.statusLabel);
+      setHostLayerSeat(snapshotState.layerSeat);
+    };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
@@ -983,7 +1050,7 @@ function App() {
           onDelta={delta => setInspectorWidth(clamp(inspectorStart.current - delta, 240, 440))}
           onNudge={() => setInspectorWidth(value => value >= 390 ? 326 : value + 64)}
         />
-        <Inspector width={inspectorWidth} pathOperationId={pathOperationId} onPathOperationChange={setPathOperationId} transform={stageTransform} onTransformChange={update => setStageTransform(current => ({...current, ...update}))} />
+        <Inspector width={inspectorWidth} pathOperationId={pathOperationId} onPathOperationChange={setPathOperationId} transform={stageTransform} onTransformChange={update => setStageTransform(current => ({...current, ...update}))} layerSeat={hostLayerSeat} />
       </View>
       <Splitter
         label="Timelineのサイズを変更"

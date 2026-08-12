@@ -22,7 +22,9 @@ const RULER_H: f32 = 18.0;
 const LOC_H: f32 = 15.0;
 const ROW: f32 = 20.0;
 const TIME_H: f32 = 16.0;
-const SONG_BARS: f32 = 96.0;
+pub(crate) const SONG_BARS: f32 = 96.0;
+/// 1 bar = 2秒。playhead↔host時刻の換算に使う。
+pub(crate) const SECONDS_PER_BAR: f64 = 2.0;
 const MIN_VIEW_SPAN: f32 = 4.0;
 const DEFAULT_VIEW_A: f32 = 0.0;
 const DEFAULT_VIEW_B: f32 = 48.0;
@@ -415,6 +417,10 @@ pub(crate) struct TimelineSession {
 pub(crate) struct TimelinePointerOutcome {
     pub feedback: bool,
     pub dirty: bool,
+    /// scrub中のplayhead(0..1)。Cancelでは出さない。
+    pub scrub_playhead: Option<f64>,
+    /// scrubのUp確定。set_timeはthrottle無視で必発。
+    pub scrub_release: bool,
 }
 
 impl TimelineSession {
@@ -437,6 +443,8 @@ impl TimelineSession {
         let before_sel = *selected;
         let before_ph = *playhead;
         let mut dirty = false;
+        let mut scrub_playhead = None;
+        let mut scrub_release = false;
 
         match phase {
             TimelinePointerPhase::Down => {
@@ -455,6 +463,7 @@ impl TimelineSession {
                         HitKind::Scrub => {
                             *playhead = time_at_lx(&self.scene, lx);
                             self.gesture = Some(ActiveGesture::Scrub { snapshot });
+                            scrub_playhead = Some(*playhead);
                             dirty = true;
                         }
                         HitKind::Key {
@@ -560,9 +569,17 @@ impl TimelineSession {
                 }
             }
             TimelinePointerPhase::Move => {
+                let scrubbing = matches!(self.gesture, Some(ActiveGesture::Scrub { .. }));
                 dirty |= self.apply_move(lx, playhead);
+                if scrubbing {
+                    scrub_playhead = Some(*playhead);
+                }
             }
             TimelinePointerPhase::Up => {
+                if matches!(self.gesture, Some(ActiveGesture::Scrub { .. })) {
+                    scrub_playhead = Some(*playhead);
+                    scrub_release = true;
+                }
                 self.gesture = None;
             }
             TimelinePointerPhase::Cancel => {
@@ -588,7 +605,12 @@ impl TimelineSession {
 
         let _ = height; // surface高さはhit範囲に使わず、論理layout定数で判定する
         let feedback = *selected != before_sel || (*playhead - before_ph).abs() > f64::EPSILON;
-        TimelinePointerOutcome { feedback, dirty }
+        TimelinePointerOutcome {
+            feedback,
+            dirty,
+            scrub_playhead,
+            scrub_release,
+        }
     }
 
     fn apply_move(&mut self, lx: f64, playhead: &mut f64) -> bool {
@@ -1766,7 +1788,7 @@ mod tests {
     #[test]
     fn scrub_follows_time_ruler() {
         let (mut sess, mut selected, mut playhead) = session();
-        let mut y = body_bottom(&TimelineScene::default()) + 4.0;
+        let y = body_bottom(&TimelineScene::default()) + 4.0;
         let out = sess.pointer(
             &mut selected,
             &mut playhead,
@@ -1777,7 +1799,20 @@ mod tests {
             y,
         );
         assert!(out.feedback);
+        assert!(out.scrub_playhead.is_some());
+        assert!(!out.scrub_release);
         assert!((playhead - 33.0 / 96.0).abs() < 1e-9);
+        let up = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Up,
+            lx_for_bar(33.0),
+            y,
+        );
+        assert!(up.scrub_release);
+        assert!((up.scrub_playhead.unwrap() - 33.0 / 96.0).abs() < 1e-9);
     }
 
     #[test]

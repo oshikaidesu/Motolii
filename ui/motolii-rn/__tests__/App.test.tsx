@@ -4,7 +4,7 @@
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import {TurboModuleRegistry} from 'react-native';
+import {Text, TurboModuleRegistry} from 'react-native';
 import App from '../App';
 
 const mockDispatchIntent = jest.fn(() => '{"accepted":true}');
@@ -55,6 +55,7 @@ test('renders correctly', async () => {
   expect(tree!.root.findAllByProps({testID: 'timeline-mode-DENSITY'})).toHaveLength(0);
   expect(tree!.root.findAllByProps({testID: 'timeline-mode-NATIVE'})).toHaveLength(0);
   expect(tree!.root.findByProps({testID: 'inspector-surface'})).toBeTruthy();
+  expect(tree!.root.findAllByProps({testID: 'inspector-layer-section'})).toHaveLength(0);
   expect(tree!.root.findByProps({testID: 'path-operations-panel'})).toBeTruthy();
   expect(tree!.root.findByProps({testID: 'stage-transform-projection'})).toBeTruthy();
 
@@ -197,8 +198,108 @@ test('renders without NativeMotoliiHost module', async () => {
     tree = ReactTestRenderer.create(<App />);
   });
   expect(tree!.root.findByProps({testID: 'motolii-rn-shell'})).toBeTruthy();
+  expect(tree!.root.findAllByProps({testID: 'inspector-layer-section'})).toHaveLength(0);
   await ReactTestRenderer.act(() => {
     tree!.unmount();
   });
   getSpy.mockRestore();
+});
+
+test('inspector layer section shows snapshot seat and dispatches add_position_key', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 2, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [{key_id: '7', time: {num: 0, den: 1}}],
+            keys_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  expect(tree!.root.findByProps({testID: 'inspector-layer-section'})).toBeTruthy();
+  const layerTexts = tree!.root
+    .findByProps({testID: 'inspector-layer-section'})
+    .findAllByType(Text)
+    .map(node => {
+      const children = node.props.children;
+      return Array.isArray(children) ? children.join('') : String(children);
+    });
+  expect(layerTexts).toContain('seed-layer');
+  expect(layerTexts).toContain('position keys: 1');
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'inspector-add-position-key'}).props.onPress();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalled();
+  const payload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(payload.kind).toBe('add_position_key');
+  expect(payload.target).toBe('42');
+  expect(payload.time).toEqual({num: 2, den: 1});
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('inspector add position key is disabled when no layer is selected', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 2, den: 1},
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [],
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const addButton = tree!.root.findByProps({testID: 'inspector-add-position-key'});
+  expect(addButton.props.disabled).toBe(true);
+  await ReactTestRenderer.act(() => {
+    addButton.props.onPress();
+  });
+  expect(mockDispatchIntent).not.toHaveBeenCalled();
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
 });
