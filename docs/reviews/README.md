@@ -79,7 +79,7 @@
 | [2026-08-07-r2-rn-transient-time-seat-decision.md](2026-08-07-r2-rn-transient-time-seat-decision.md) | RN Hostへ背骨に必要な最小のtransient評価時刻席だけを置き、`R2-FOCUS-PLAYHEAD-AUTHORITY`と旧`EditorPlayhead`流用は未決のまま維持する縮小採用 |
 | [2026-08-07-r2-stage-geometry-read-projection-decision.md](2026-08-07-r2-stage-geometry-read-projection-decision.md) | Stage幾何を`TARGET_MISSING`から`REMAP`へ訂正し、AABBでなく(正準局所rect + world/camera Affine2D)をRect source限定・可視時刻限定で投影する縮小採用 |
 | [2026-08-07-m3-supervisor-handoff-stage-to-gizmo.md](2026-08-07-m3-supervisor-handoff-stage-to-gizmo.md) | Stage初回pixelsのlocal main到達、gizmo直行を止めたidentity gap、Browser回り道候補の未採用処分を次のfresh supervisorへ渡す引継ぎ |
-| [2026-08-07-terra-grok-composer-role-reallocation-decision.md](2026-08-07-terra-grok-composer-role-reallocation-decision.md) | Terraをbounded order compile、Grok 4.5を通常〜重施工、Composer 2.5を明示理由のある代替施工へ再配置する決定 |
+| [2026-08-07-terra-grok-composer-role-reallocation-decision.md](2026-08-07-terra-grok-composer-role-reallocation-decision.md) | Terraをbounded order compile、Grok 4.6 medium／high／xhighを通常・複雑・長時間agenticなbounded施工へ再配置し、Composer 2.5を明示理由のある代替施工に保つ決定 |
 | [2026-08-07-codex-spark-cli-smoke-observation.md](2026-08-07-codex-spark-cli-smoke-observation.md) | `gpt-5.3-codex-spark`の現行Codex CLI起動、JSONL、usage、4.864秒完了と小context向け運用境界を記録する観察 |
 | [2026-08-07-outcome-order-compilation-and-research-return-loop.md](2026-08-07-outcome-order-compilation-and-research-return-loop.md) | 利用者成果からclosed orderをcompileし、実装／調査返却後にcurrent codeから次edgeを再選定する横断発注ループ |
 | [2026-08-07-m3-baseline-required-autonomy-checkpoint.md](2026-08-07-m3-baseline-required-autonomy-checkpoint.md) | M3 baseline必要性の自動承認、非OpenAI抽出、別family challenge、Codexの整理・写像・採否責任、Web調査再入場条件を分離するcheckpoint決定 |

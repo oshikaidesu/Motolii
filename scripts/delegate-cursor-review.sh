@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CURSOR_AGENT_BIN="${CURSOR_AGENT_BIN:-cursor-agent}"
 COMPOSER_MODEL="${CURSOR_COMPOSER_MODEL:-composer-2.5-fast}"
-GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.5-high}"
+GROK_MODEL="${CURSOR_GROK_MODEL:-cursor-grok-4.6-high}"
 TIMEOUT_SECONDS="${CURSOR_DELEGATE_TIMEOUT_SECONDS:-180}"
 
 usage() {
@@ -132,14 +132,14 @@ wait "$grok_watchdog_pid" 2>/dev/null
 set -e
 
 echo
-echo "## Grok 4.5 (${GROK_MODEL})"
+echo "## Grok 4.6 (${GROK_MODEL})"
 cat "$tmp_dir/grok.txt"
 if [[ -s "$tmp_dir/grok.err" ]]; then
   echo "[stderr]" >&2
   cat "$tmp_dir/grok.err" >&2
 fi
 if [[ -f "$tmp_dir/grok.timeout" ]]; then
-  echo "delegate-cursor-review: Grok 4.5は${TIMEOUT_SECONDS}秒でタイムアウトしました" >&2
+  echo "delegate-cursor-review: Grok 4.6は${TIMEOUT_SECONDS}秒でタイムアウトしました" >&2
   grok_status=124
 fi
 

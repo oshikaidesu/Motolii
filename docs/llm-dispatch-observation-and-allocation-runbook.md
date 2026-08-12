@@ -1,6 +1,6 @@
 # 外部LLM発注の観測・実行・可変配分runbook
 
-日付: 2026-08-07
+日付: 2026-08-07（2026-08-13 Grok 4.6へ更新）
 状態: **運用正本／CLI snapshotは起動前更新**
 対象: Motoliiの外部LLM相談、調査、発注、施工、correction、review
 
@@ -26,7 +26,7 @@ model名、CLI flag、利用可能枠は変わる。closed orderへ埋め込ま�
 `BASE / AUTHORITY / CURRENT STATE / OWNER / EXACT TARGET / ALLOWLIST / READ SET / POSITIVE AND NEGATIVE ORACLES / NON-GOALS / RETURN`
 の一つでも無い、開始fingerprintが古い、またはauthority競合があれば起動せず、§2の通常動線へ戻る。
 
-1. 極小closed施工はCodex directのfresh Spark、通常〜重めのclosed施工はCursor first-partyのfresh Grok 4.5 non-fast mediumを第一候補にする。候補compileが必要な時だけCodex directのTerraを使う。Composer 2.5 standardは価格、capacity、task実測の理由を記録した代替であり、自動fallbackではない。
+1. 極小closed施工はCodex directのfresh Spark、通常のclosed施工はCursor first-partyのfresh Grok 4.6 medium non-fastを第一候補にする。複雑な一境界はhigh、長時間agenticなbounded施工やvisual／interactive成果はxhighを候補にできる。候補compileが必要な時だけCodex directのTerraを使う。Composer 2.5 standardは価格、capacity、task実測の理由を記録した代替であり、自動fallbackではない。
 2. §5のexecution envelopeへread set、動的予算、想定usage、capsule外read禁止、`CONTEXT_GAP`返却を記録する。起動直前に実binaryの`--version`、`--help`、利用可能ならcatalogでexact IDとstream flagを再確認する。別model、`auto`、fast variantへ黙って変えない。
 3. 通常サイズのCursor施工は、許可済みの隔離worktreeとdisjoint log dirに対して次の形で一回だけ起動する。`-p`はwrite／shellを持つため、capsuleのallowlist、read set、sandboxで拘束する。
 
@@ -39,7 +39,7 @@ python3 scripts/run-observed-cli.py \
   --heartbeat-seconds 10 \
   -- /Users/member_ottoto/.local/bin/cursor-agent -p \
   --workspace /absolute/prepared-worktree --trust --sandbox enabled \
-  --model cursor-grok-4.5-high \
+  --model cursor-grok-4.6-medium \
   --output-format stream-json --stream-partial-output \
   "$(< /absolute/closed-order-prompt.txt)"
 ```
@@ -70,7 +70,7 @@ Spark、read-only、Claude、代替model、独立review、未閉鎖orderはこ�
 どの利用上限、契約、請求枠を消費するか。初期語彙は次の三つとする。
 
 - `codex_direct`: 現在のCodex taskと、同じ上限へ算入されると利用者が判断したCodex CLI
-- `cursor`: Cursor Agent経由。通常はCursor first-partyのGrok 4.5／Composer 2.5だけを使う
+- `cursor`: Cursor Agent経由。通常はCursor first-partyのGrok 4.6／Composer 2.5だけを使う
 - `claude_direct`: Claude Code直接経由
 
 実際の課金・limit共有関係を製品名から推測しない。契約表示で別枠と確認した時だけ新しいlimit groupへ分ける。
@@ -87,7 +87,7 @@ Cursor経由のOpusは`limit group=cursor`かつ`family=Anthropic`、Cursor経�
 
 - OpenAI系のTerra／Luna／Sol／Spark: `codex_direct`
 - Anthropic系のOpus／Fable／Sonnet: `claude_direct`
-- Cursor first-partyのGrok 4.5／Composer 2.5: `cursor`
+- Cursor first-partyのGrok 4.6／Composer 2.5: `cursor`
 
 Cursor catalogにあるGPT／Claude／Gemini等のthird-party modelは通常候補にしない。対応するdirect channelがlimit、capacity、障害で
 実際に利用不能になり、同じtaskを継続する必要がある時だけ、fresh runのexecution envelopeへ
@@ -185,21 +185,21 @@ python3 scripts/run-observed-cli.py \
 
 promptや認証情報をargvに置くと`meta.json`へ残る。secretをargvへ入れない。証跡の保存先、保持期間、機密区分は利用者の環境規則に従う。
 
-## 7. 2026-08-09実機CLI snapshot
+## 7. 2026-08-13実機CLI snapshot
 
 起動前に毎回再確認する。ここに無いflagやmodel IDを推測しない。
 
 | channel | 実binary／version | 構造化途中stream | catalog |
 |---|---|---|---|
-| Cursor Agent | `/Users/member_ottoto/.local/bin/cursor-agent` / `2026.08.04-aaa8809` | `-p --output-format stream-json --stream-partial-output` | `--list-models`あり |
+| Cursor Agent | `/Users/member_ottoto/.local/bin/cursor-agent` / `2026.08.11-e8db854` | `-p --output-format stream-json --stream-partial-output` | `--list-models`あり |
 | Claude Code | `/Users/member_ottoto/.npm-global/bin/claude` / `2.1.226` | `-p --output-format stream-json --include-partial-messages --verbose` | account catalog一覧flagなし。exact IDを起動前記録 |
 | Codex CLI | `/Users/member_ottoto/.npm-global/bin/codex` / `0.147.0` | `exec --json` | `exec --help`に一覧flagなし。exact IDを起動前記録 |
 
-2026-08-09に`--list-models`で再確認したCursor catalogに**`cursor-grok-4.5-medium`は存在しない**。
-Grok 4.5は`cursor-grok-4.5-high` / `cursor-grok-4.5-high-fast`の2つだけで、effortはmodel IDへ焼かれている。
-Grokへmediumを指定できないため、視野幅がmedium相当のreviewでもhighを使うか、別modelへ落とす。
-どちらを選んだかを起動logへ記録する。同catalogのその他first-partyは`composer-2.5`、`gpt-5.3-codex`系、
-`gpt-5.2`、`claude-opus-5-thinking-high/xhigh`(±fast)である。
+2026-08-13に`--list-models`で再確認したCursor catalogには、Grok 4.6の
+`cursor-grok-4.6-low` / `cursor-grok-4.6-medium` / `cursor-grok-4.6-high` / `cursor-grok-4.6-xhigh`と、
+各`-fast` variantが存在する。通常施工はmedium non-fast、複雑な一境界はhigh non-fast、長時間agenticなbounded施工や
+visual／interactive成果はxhigh non-fastを候補にし、lowとfastはcost／latencyを優先する明示理由がある時だけ選ぶ。
+2026-08-09時点のGrok 4.5 catalogにmediumが無かった観測は履歴として正しいが、現行IDの選択根拠にはしない。
 
 Codex directは`~/.codex/models_cache.json`で`gpt-5.6-sol` / `gpt-5.6-sol-wm` / `gpt-5.6-terra` /
 `gpt-5.6-luna` / `gpt-5.5` / `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.3-codex-spark`を確認した。
@@ -256,7 +256,7 @@ OpenAI familyのmodelが施工したdiffを別のOpenAI modelでreviewしても�
 
 | model／系列 | 主な候補role | 注意 |
 |---|---|---|
-| Cursor Grok 4.5 low／medium／high | 通常〜重めのclosed implementation、指定test、exact diff audit | exact IDは`cursor-grok-4.5-*`。non-fast mediumを通常施工、highを複雑な一境界の候補にする。自己施工のreviewと採否は行わない |
+| Cursor Grok 4.6 low／medium／high／xhigh | 通常〜重めのclosed implementation、長時間agenticなbounded施工、visual／interactive成果、指定test、exact diff audit | exact IDは`cursor-grok-4.6-*`。mediumを通常施工、highを複雑な一境界、xhighを長期・統合的だがauthorityとread setが閉じた施工の候補にする。Sol級のbenchmark結果をauthority移譲や自己reviewの根拠にしない |
 | Codex Spark | 閉じた一契約境界の超高速施工 | exact ID `gpt-5.3-codex-spark`をCodex CLIで起動確認済み。context保持が小さいため短いcapsule、exact target／read set、指定oracleに限定 |
 | Composer 2.5 | 安価な代替施工、capacity回避、task適合が観測済みの通常施工 | standardの`composer-2.5`を候補にし、Fastやfallbackを暗黙defaultにしない |
 | GPT-5.6 Terra | current fact整理、候補order、負例、return条件のcompile | Codex directの完全IDを確認して使う。closed orderへ毎回挟む固定副監督にしない。Cursor版はdirect不能時の明示代用だけ |
@@ -271,7 +271,7 @@ effortはroleの代替ではない。lowでも閉じた契約とexact evidence�
 解決しない。
 
 通常選択は[Terra / Grok / Composer役割再配置決定](reviews/2026-08-07-terra-grok-composer-role-reallocation-decision.md)に従う。
-orderが既に閉じていればTerraを省略し、極小はSpark、通常〜重めはGrok 4.5 non-fastを第一候補にする。Composer 2.5 standardは
+orderが既に閉じていればTerraを省略し、極小はSpark、通常はGrok 4.6 medium non-fast、複雑な一境界はhigh、長時間agenticなbounded施工やvisual／interactive成果はxhighを候補にする。Composer 2.5 standardは
 価格、capacity、task実測の理由がある時の明示候補であり、Grok失敗時の自動fallbackではない。
 
 ### Sparkの専用契約

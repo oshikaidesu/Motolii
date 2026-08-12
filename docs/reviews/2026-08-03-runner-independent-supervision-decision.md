@@ -60,10 +60,10 @@ modelとsessionはharnessでなく総監督`gpt-5.6-sol`が[履歴較正によ�
 capsuleを作る。一sessionは一契約境界または同じoutcome、owner、scope、oracleの短いwaveだけを扱い、終了後の会話履歴を
 project memoryへしない。長期状態はGit、正本、decision/ledger、raw logが所有する。
 
-閉じた極小の機械施工は`gpt-5.3-codex-spark`、通常〜重めのclosed implementationはCursor Grok 4.5 non-fastを第一候補とする。
+閉じた極小の機械施工は`gpt-5.3-codex-spark`、通常のclosed implementationはCursor Grok 4.6 medium non-fast、複雑な一境界はhigh、長時間agenticなbounded施工やvisual／interactive成果はxhighを候補とする。
 orderが未閉鎖だが探索範囲はboundedならCodex directのTerraで候補orderをcompileする。Composer 2.5 standardは価格、capacity、
 task実測の明示理由がある時の代替施工で、自動fallbackにしない。review findingを主担当が正本とoracleへ再照合し、同じ契約境界内の
-修正と判断した場合はfreshなGrok 4.5またはLunaを選べ、単純修正はfresh Sparkも使える。詳細は
+修正と判断した場合はfreshなGrok 4.6またはLunaを選べ、単純修正はfresh Sparkも使える。詳細は
 [Terra / Grok / Composer役割再配置](2026-08-07-terra-grok-composer-role-reallocation-decision.md)に従う。同じtaskの設計・施工へ深く
 関与したmodel familyを独立最終reviewerへ再利用しない。Spark、Luna、Sol、TerraはOpenAI familyなので相互の独立検収を兼ねず、
 Grok施工後にGrokをreviewerへ再利用しない。この選択は固定stage、fallback順、receipt資格を新設しない。

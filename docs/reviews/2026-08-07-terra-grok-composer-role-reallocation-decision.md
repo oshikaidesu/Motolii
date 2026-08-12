@@ -1,6 +1,6 @@
-# Terra / Grok 4.5 / Composer 2.5 役割再配置決定
+# Terra / Grok 4.6 / Composer 2.5 役割再配置決定
 
-日付: 2026-08-07
+日付: 2026-08-07（2026-08-13 Grok 4.6へ更新）
 状態: **決定／固定pipelineではない**
 対象: 外部LLMの発注compile、施工、correction、review、Cursor first-party pool活用
 
@@ -12,9 +12,10 @@
 |---|---|---|
 | orderが未閉鎖だがoutcomeと探索範囲は閉じている | Codex directのTerra | current fact、候補、反証、exact target、allowlist、負例、return条件を持つ候補orderを作る |
 | 極小で機械的なclosed order | Codex Spark | exact path／symbolと短いcapsuleだけで超高速施工する |
-| 通常〜重めのclosed implementation | Cursor Grok 4.5 non-fast | 実装、指定test、`IMPLEMENTED / PARTIAL / CONTEXT_GAP`返却 |
+| 通常のclosed implementation | Cursor Grok 4.6 medium non-fast | 実装、指定test、`IMPLEMENTED / PARTIAL / CONTEXT_GAP`返却 |
+| 複雑な一境界、長時間agenticなbounded施工、visual／interactive成果 | Cursor Grok 4.6 high／xhigh non-fast | highは複雑な一境界、xhighは長期・統合的だがauthorityとread setが閉じた施工 |
 | Grokより安価な通常施工を優先する、またはtask実測で適合した場合 | Composer 2.5 standard | 代替施工。既定fallbackにしない |
-| 同一境界の複雑correction | Grok 4.5またはLuna | findingのexact closure。実装担当と同じsessionを継続しない |
+| 同一境界の複雑correction | Grok 4.6またはLuna | findingのexact closure。実装担当と同じsessionを継続しない |
 | semantic final review | 未関与のClaude Opus等 | fresh read-only、別family、実diffと非LLM oracleを監査 |
 
 TerraとGrokを毎回直列にしない。主担当が既にclosed orderを作れる場合はTerraを省略し、Spark／Grok／Composerの適格な一つへ
@@ -25,17 +26,25 @@ TerraとGrokを毎回直列にしない。主担当が既にclosed orderを作�
 
 Composerには閉じたM2施工を完了し、独立reviewと非LLM oracleで採用へ到達した実績がある。一方、歴史reviewでは次も観測した。
 
-- Composerが`P0/P1=0`とした後、Grok 4.5 Fastが`P0=1 / P1=2`を検出した
+- Composerが`P0/P1=0`とした後、旧Grok 4.5 Fastが`P0=1 / P1=2`を検出した
 - Composerだけがtimeoutし、Grokが判定を完了した回が複数ある
 - U0e-2縮約stub事故の主因はmodel名でなく、base／authority照合不足、stubでも通る弱い因果oracle、timeout時証跡喪失だった
 
-したがってComposerを不採用にはしないが、通常施工の無条件defaultにも置かない。Grok 4.5をCursor first-party poolの第一施工候補へ
-上げ、Composerは価格、capacity、task適合の理由がある時の明示候補とする。監督不備をmodel交換で隠さず、どの施工modelにも
+したがってComposerを不採用にはしないが、通常施工の無条件defaultにも置かない。GrokをCursor first-party poolの第一施工候補とし、
+Composerは価格、capacity、task適合の理由がある時の明示候補とする。監督不備をmodel交換で隠さず、どの施工modelにも
 closed order、allowlist、因果oracle、raw log、別family reviewを要求する。
 
-Cursorの2026-08-07公開価格（[Composer](https://cursor.com/en-US/composer)、[Grok](https://cursor.com/grok)）では、Composer 2.5 standardはinput `$0.50/M`、output `$2.50/M`、Grok 4.5 standardは
-input `$2/M`、output `$6/M`で、standard同士ならComposerが安い。Composer Fastは`$3/M`／`$15/M`、Grok Fastは
-`$4/M`／`$18/M`である。価格差だけで品質や総task costを決めず、実案件のstep、token、wall、rework、採用結果を見る。
+Cursorの2026-08-13公開価格（[Models & Pricing](https://cursor.com/docs/models-and-pricing)）では、Grok 4.6 standardは
+input `$2/M`、cache read `$0.50/M`、output `$6/M`、Fastはそれぞれ`$4/M`、`$1/M`、`$12/M`である。
+期間限定割引や単価だけで品質や総task costを決めず、実案件のstep、token、wall、rework、採用結果を見る。
+
+## 2026-08-13 Grok 4.6更新根拠
+
+[Cursor公式発表](https://cursor.com/ja/blog/grok-4-6)はGrok 4.6を長時間agent、複雑な複数step、codebase全体、
+visual／interactive成果へ最適化し、Artificial Analysis Intelligence IndexでGPT-5.6 Solと同等と報告している。
+[CursorBench](https://cursor.com/cursorbench)の同日snapshotでもGrok 4.6 mediumは67.1%、highは69.9%、xhighは70.8%、
+GPT-5.6 Sol maxは67.2%だった。これにより4.6 high／xhighをboundedな長期・統合施工へ広げるが、benchmarkはMotoliiの
+authority、最終採否、独立reviewを代替しない。4.5の過去実績は改変せず、4.6のtask固有wall、usage、rework、採用率は別に自然観測する。
 
 ## 選択規則
 
@@ -45,15 +54,15 @@ orderは閉じているか?
   yes -> 極小・機械的か?
            yes -> Spark
            no  -> 通常〜重い施工か?
-                    yes -> Grok 4.5 non-fast
+                    yes -> Grok 4.6 medium/high/xhigh non-fast
                     price/capacity/task実測でComposer適合 -> Composer 2.5 standard
 ```
 
-- Grokの通常候補は`cursor-grok-4.5-medium`、複雑な一境界は`cursor-grok-4.5-high`。`-fast`は経過時間を優先する明示理由がある時だけ
+- Grokの通常候補は`cursor-grok-4.6-medium`、複雑な一境界は`cursor-grok-4.6-high`、長時間agenticなbounded施工やvisual／interactive成果は`cursor-grok-4.6-xhigh`。`-fast`は経過時間を優先する明示理由がある時だけ
 - TerraはCodex directの完全IDを現行CLIで確認し、effortをread scope拡大許可にしない。Cursor版TerraはCodex directのlimit／capacity／障害時だけ明示代用する
 - Composerは`composer-2.5`を通常候補とし、`composer-2.5-fast`を暗黙defaultにしない
 - model不能時は別候補へ黙ってfallbackせず、fresh runのexecution envelopeへ変更理由を残す
-- Cursorは通常Grok 4.5／Composer 2.5のfirst-partyだけを使い、GPT／Claude等のthird-party modelは対応direct channelが実際に利用不能な時の明示代用だけにする
+- Cursorは通常Grok 4.6／Composer 2.5のfirst-partyだけを使い、GPT／Claude等のthird-party modelは対応direct channelが実際に利用不能な時の明示代用だけにする
 - Grok施工後にGrok自身をreviewerへ再利用しない。Spark／Terra／Luna／SolはOpenAI familyなので相互を独立reviewと数えない
 - LLMの自己test greenだけで採用せず、主担当が実diffとtask固有oracleを再実行する
 
