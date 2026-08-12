@@ -4131,6 +4131,8 @@ dependencies = [
  "lyon_path",
  "lyon_tessellation",
  "motolii-doc",
+ "motolii-gpu",
+ "motolii-render",
  "motolii-ui",
  "pollster",
  "re_chunk",
