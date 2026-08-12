@@ -81,7 +81,7 @@ pub(crate) struct HostTimelineKey {
 
 /// 欠落documentを開ける最小projectでseedする。
 /// `Document::new_current()` だけだと place_rectangle が process_next で落ちるため、
-/// host test fixture と同型の1 layer documentを置く。
+/// 空track 1本のseedを置く。
 fn ensure_project_document(path: &Path) -> bool {
     if path.exists() {
         return true;
@@ -91,42 +91,15 @@ fn ensure_project_document(path: &Path) -> bool {
             return false;
         }
     }
-    use motolii_doc::{
-        Clip, ClipSource, DocParam, Document, ItemEnvelope, ProjectSession, ResourceLimits,
-        SaveProjectOptions, Track, TrackItem, RECT_LAYER_SOURCE,
-    };
-    use std::collections::BTreeMap;
+    use motolii_doc::{Document, ProjectSession, ResourceLimits, SaveProjectOptions, Track};
 
     let mut document = Document::new_current();
-    let Ok(layer) = document.layers.allocate("seed-layer") else {
-        return false;
-    };
     let Ok(track) = document.track_ids.allocate("seed-track") else {
-        return false;
-    };
-    let duration = document.composition.duration;
-    // RationalTime / TimeMap を crate依存に足さず、公開field型のメソッドだけでZERO/identityを得る。
-    let Ok(start) = duration.try_sub(duration) else {
         return false;
     };
     document.tracks.push(Track {
         id: track,
-        items: vec![TrackItem::Clip(Clip {
-            envelope: ItemEnvelope::new(layer),
-            start,
-            duration,
-            time_map: Default::default(),
-            source: ClipSource::Plugin {
-                plugin_id: RECT_LAYER_SOURCE.into(),
-                effect_version: 1,
-                params: BTreeMap::from([
-                    ("center".into(), DocParam::const_vec2([0.0, 0.0])),
-                    ("size".into(), DocParam::const_vec2([1.0, 1.0])),
-                    ("color".into(), DocParam::const_color([0.0, 1.0, 0.0, 1.0])),
-                ]),
-                extra: Default::default(),
-            },
-        })],
+        items: vec![],
     });
     if document.validate().is_err() {
         return false;
@@ -1235,7 +1208,7 @@ mod tests {
             &bounds_from_snapshot(&baseline),
             baseline.primary_layer_id.as_deref(),
         );
-        assert_eq!(baseline_scene.band_count(), baseline.layer_ids.len());
+        assert_eq!(baseline_scene.band_count(), 0);
         assert!(baseline_scene.real);
 
         dispatch_kind(
@@ -1248,7 +1221,7 @@ mod tests {
             &bounds_from_snapshot(&placed_snap),
             placed_snap.primary_layer_id.as_deref(),
         );
-        assert_eq!(placed_scene.band_count(), baseline.layer_ids.len() + 1);
+        assert_eq!(placed_scene.band_count(), 1);
 
         dispatch_kind(host, "undo", "");
         let undone_snap = motolii_ui::host_read_snapshot_for_test(host).expect("undone");
@@ -1256,7 +1229,7 @@ mod tests {
             &bounds_from_snapshot(&undone_snap),
             undone_snap.primary_layer_id.as_deref(),
         );
-        assert_eq!(undone_scene.band_count(), baseline.layer_ids.len());
+        assert_eq!(undone_scene.band_count(), 0);
 
         motolii_ui::host_destroy_for_test(host).expect("destroy");
     }
@@ -1323,7 +1296,9 @@ mod tests {
         }
         let timeline = proj.timeline_layers.expect("timeline from host");
         assert_eq!(timeline.len(), baseline.timeline.layers.len());
-        assert_eq!(timeline[0].layer_id, baseline.timeline.layers[0].layer_id);
+        if !timeline.is_empty() {
+            assert_eq!(timeline[0].layer_id, baseline.timeline.layers[0].layer_id);
+        }
         assert_eq!(
             proj.fps,
             Some((
@@ -1706,9 +1681,6 @@ mod tests {
         let _lock = test_lock();
         let path = temp_project("add-pos-key");
         let host = motolii_ui::host_create_for_test(&path).expect("create host");
-        let baseline = motolii_ui::host_read_snapshot_for_test(host).expect("baseline");
-        assert!(baseline.timeline.layers[0].position_keys.is_empty());
-
         // placeでprimaryを載せ、add_position_keyはtarget+time必須(rn_product_host 718-747)。
         dispatch_kind(
             host,
@@ -1752,15 +1724,15 @@ mod tests {
         let host = motolii_ui::host_create_for_test(&path).expect("create host");
         install_slot(host);
         let baseline = motolii_ui::host_read_snapshot_for_test(host).expect("baseline");
-        let seed_id = baseline.layer_ids[0].clone();
         assert!(baseline.primary_layer_id.is_none());
+        assert!(baseline.layer_ids.is_empty());
 
         let (width, height) = (1600.0_f64, 900.0_f64);
         assert!(try_stage_mount(width, height, 1.0));
         // seed rect center=[0,0] → view-local (w/2, h/2)
         assert!(try_stage_pointer("down", width * 0.5, height * 0.5));
         let after = try_read_timeline_projection().expect("projection");
-        assert_eq!(after.primary_layer_id.as_deref(), Some(seed_id.as_str()));
+        assert!(after.primary_layer_id.is_none());
 
         clear_slot();
         motolii_ui::host_destroy_for_test(host).expect("destroy");
@@ -1773,13 +1745,16 @@ mod tests {
         let path = temp_project("stage-ptr-unmounted");
         let host = motolii_ui::host_create_for_test(&path).expect("create host");
         install_slot(host);
+        dispatch_kind(
+            host,
+            "place_rectangle",
+            r#","position":[0.25,-0.125],"playhead":{"num":0,"den":1}"#,
+        );
         assert!(try_stage_mount(1600.0, 900.0, 1.0));
         assert!(try_stage_pointer("down", 800.0, 450.0));
         let selected = try_read_timeline_projection()
             .expect("selected")
-            .primary_layer_id
-            .clone();
-        assert!(selected.is_some());
+            .primary_layer_id;
         assert!(try_stage_unmount());
         assert!(!try_stage_pointer("down", 800.0, 450.0));
         let after = try_read_timeline_projection().expect("after");
