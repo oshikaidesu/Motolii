@@ -1499,10 +1499,14 @@ fn fill(cv: &skia_safe::Canvas, r: Rect, c: Color) {
     cv.draw_rect(r, &p);
 }
 
-fn tf() -> skia_safe::Typeface {
-    FontMgr::default()
+thread_local! {
+    static TIMELINE_TYPEFACE: skia_safe::Typeface = FontMgr::default()
         .legacy_make_typeface(None, FontStyle::normal())
-        .expect("system typeface")
+        .expect("system typeface");
+}
+
+fn tf() -> skia_safe::Typeface {
+    TIMELINE_TYPEFACE.with(Clone::clone)
 }
 
 fn text(cv: &skia_safe::Canvas, s: &str, x: f32, y: f32, sz: f32, c: Color) {
