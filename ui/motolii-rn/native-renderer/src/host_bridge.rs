@@ -75,10 +75,18 @@ pub(crate) struct HostTimelineProjection {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HostCatalogProjection {
     pub effects: Vec<HostCatalogEffect>,
+    pub sources: Vec<HostCatalogSource>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HostCatalogEffect {
+    pub plugin_id: String,
+    pub name: String,
+    pub effect_version: u32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct HostCatalogSource {
     pub plugin_id: String,
     pub name: String,
     pub effect_version: u32,
@@ -105,6 +113,8 @@ pub(crate) struct HostTimelineLayer {
     pub position_keys: Vec<HostTimelineKey>,
     pub effects: Vec<HostTimelineEffect>,
     pub effects_truncated: bool,
+    pub source_params: Vec<HostTimelineSourceParam>,
+    pub source_params_truncated: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -116,6 +126,12 @@ pub(crate) struct HostTimelineEffect {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HostTimelineEffectParam {
+    pub param_id: String,
+    pub value: f64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct HostTimelineSourceParam {
     pub param_id: String,
     pub value: f64,
 }
@@ -1215,6 +1231,8 @@ fn parse_timeline_layers(json: &str) -> Option<Vec<HostTimelineLayer>> {
         let position_keys = parse_position_keys(obj)?;
         // effects 欠落は空。壊れ値は空へ fallback（layer 自体は落とさない）。
         let (effects, effects_truncated) = parse_layer_effects(obj).unwrap_or_default();
+        let (source_params, source_params_truncated) =
+            parse_layer_source_params(obj).unwrap_or_default();
         layers.push(HostTimelineLayer {
             layer_id,
             display_name,
@@ -1223,6 +1241,8 @@ fn parse_timeline_layers(json: &str) -> Option<Vec<HostTimelineLayer>> {
             position_keys,
             effects,
             effects_truncated,
+            source_params,
+            source_params_truncated,
         });
         rest = &rest[end + 1..];
     }
@@ -1231,11 +1251,32 @@ fn parse_timeline_layers(json: &str) -> Option<Vec<HostTimelineLayer>> {
 
 fn parse_catalog(json: &str) -> Option<HostCatalogProjection> {
     let obj = find_key_object(json, "catalog")?;
-    let marker = "\"effects\"";
-    let at = obj.find(marker)?;
+    let effects = parse_catalog_entries(obj, "effects")?;
+    // sources 壊れは sources だけ空へ。effects / catalog 全体は落とさない。
+    let sources = match obj.find("\"sources\"") {
+        None => Vec::new(),
+        Some(_) => parse_catalog_entries(obj, "sources")
+            .map(|entries| {
+                entries
+                    .into_iter()
+                    .map(|entry| HostCatalogSource {
+                        plugin_id: entry.plugin_id,
+                        name: entry.name,
+                        effect_version: entry.effect_version,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+    };
+    Some(HostCatalogProjection { effects, sources })
+}
+
+fn parse_catalog_entries(obj: &str, key: &str) -> Option<Vec<HostCatalogEffect>> {
+    let marker = format!("\"{key}\"");
+    let at = obj.find(&marker)?;
     let after = obj[at + marker.len()..].trim_start().strip_prefix(':')?;
     let after = after.trim_start().strip_prefix('[')?;
-    let mut effects = Vec::new();
+    let mut entries = Vec::new();
     let mut rest = after;
     loop {
         rest = rest.trim_start();
@@ -1250,18 +1291,18 @@ fn parse_catalog(json: &str) -> Option<HostCatalogProjection> {
             return None;
         }
         let end = find_matching_brace(rest)?;
-        let effect_obj = &rest[..=end];
-        let plugin_id = json_string_value(effect_obj, "plugin_id")?.to_owned();
-        let name = json_string_value(effect_obj, "name")?.to_owned();
-        let effect_version = json_u32_value(effect_obj, "effect_version")?;
-        effects.push(HostCatalogEffect {
+        let entry_obj = &rest[..=end];
+        let plugin_id = json_string_value(entry_obj, "plugin_id")?.to_owned();
+        let name = json_string_value(entry_obj, "name")?.to_owned();
+        let effect_version = json_u32_value(entry_obj, "effect_version")?;
+        entries.push(HostCatalogEffect {
             plugin_id,
             name,
             effect_version,
         });
         rest = &rest[end + 1..];
     }
-    Some(HostCatalogProjection { effects })
+    Some(entries)
 }
 
 fn parse_layer_effects(layer_obj: &str) -> Option<(Vec<HostTimelineEffect>, bool)> {
@@ -1301,6 +1342,44 @@ fn parse_layer_effects(layer_obj: &str) -> Option<(Vec<HostTimelineEffect>, bool
         rest = &rest[end + 1..];
     }
     Some((effects, effects_truncated))
+}
+
+fn parse_layer_source_params(layer_obj: &str) -> Option<(Vec<HostTimelineSourceParam>, bool)> {
+    let marker = "\"source_params\"";
+    let Some(at) = layer_obj.find(marker) else {
+        return Some((Vec::new(), false));
+    };
+    let after = layer_obj[at + marker.len()..]
+        .trim_start()
+        .strip_prefix(':')?;
+    let after = after.trim_start().strip_prefix('[')?;
+    let source_params_truncated =
+        json_bool_value(layer_obj, "source_params_truncated").unwrap_or(false);
+    let mut source_params = Vec::new();
+    let mut rest = after;
+    loop {
+        rest = rest.trim_start();
+        if rest.starts_with(']') {
+            break;
+        }
+        if rest.starts_with(',') {
+            rest = rest[1..].trim_start();
+            continue;
+        }
+        if !rest.starts_with('{') {
+            return None;
+        }
+        let end = find_matching_brace(rest)?;
+        let obj = &rest[..=end];
+        let param_id = json_string_value(obj, "param_id")?.to_owned();
+        let value = json_f64_value(obj, "value")?;
+        if !value.is_finite() {
+            return None;
+        }
+        source_params.push(HostTimelineSourceParam { param_id, value });
+        rest = &rest[end + 1..];
+    }
+    Some((source_params, source_params_truncated))
 }
 
 fn parse_effect_params(effect_obj: &str) -> Option<Vec<HostTimelineEffectParam>> {
@@ -2402,10 +2481,15 @@ mod tests {
             "current_time":{"num":0,"den":1},
             "primary_layer_id":"11",
             "stage":{"selection":[],"bounds":[{"layer_id":"11","display_name":"L"}]},
-            "catalog":{"effects":[
-                {"plugin_id":"core.filter.opacity","name":"Opacity","effect_version":1},
-                {"plugin_id":"core.param.sine","name":"Sine","effect_version":2}
-            ]},
+            "catalog":{
+                "effects":[
+                    {"plugin_id":"core.filter.opacity","name":"Opacity","effect_version":1},
+                    {"plugin_id":"core.param.sine","name":"Sine","effect_version":2}
+                ],
+                "sources":[
+                    {"plugin_id":"core.layer_source.radial_repeater","name":"Radial Repeater","effect_version":1}
+                ]
+            },
             "timeline":{
                 "fps":{"num":30,"den":1},
                 "layers":[{
@@ -2420,7 +2504,9 @@ mod tests {
                         "plugin_id":"core.filter.opacity",
                         "params":[{"param_id":"amount","value":0.5}]
                     }],
-                    "effects_truncated":false
+                    "effects_truncated":false,
+                    "source_params":[{"param_id":"count","value":12.0}],
+                    "source_params_truncated":false
                 }],
                 "layers_truncated":false
             },
@@ -2431,12 +2517,22 @@ mod tests {
         assert_eq!(catalog.effects[0].plugin_id, "core.filter.opacity");
         assert_eq!(catalog.effects[0].name, "Opacity");
         assert_eq!(catalog.effects[0].effect_version, 1);
+        assert_eq!(catalog.sources.len(), 1);
+        assert_eq!(
+            catalog.sources[0].plugin_id,
+            "core.layer_source.radial_repeater"
+        );
+        assert_eq!(catalog.sources[0].name, "Radial Repeater");
         let proj = parse_timeline_projection(json).expect("parse");
         let layers = proj.timeline_layers.expect("layers");
         assert_eq!(layers[0].effects.len(), 1);
         assert_eq!(layers[0].effects[0].effect_use_id, "7");
         assert_eq!(layers[0].effects[0].params[0].value, 0.5);
         assert!(!layers[0].effects_truncated);
+        assert_eq!(layers[0].source_params.len(), 1);
+        assert_eq!(layers[0].source_params[0].param_id, "count");
+        assert_eq!(layers[0].source_params[0].value, 12.0);
+        assert!(!layers[0].source_params_truncated);
     }
 
     #[test]
@@ -2571,6 +2667,59 @@ mod tests {
         let layers = proj.timeline_layers.expect("layers kept");
         assert!(layers[0].effects.is_empty());
         assert!(!layers[0].effects_truncated);
+
+        let broken_sources = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"3",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "stage":{"selection":[],"bounds":[]},
+            "catalog":{
+                "effects":[{"plugin_id":"core.filter.opacity","name":"Opacity","effect_version":1}],
+                "sources":[{"plugin_id":1}]
+            },
+            "timeline":{"fps":{"num":30,"den":1},"layers":[],"layers_truncated":false},
+            "diagnostics":[]
+        }"#;
+        let catalog = parse_catalog_projection(broken_sources).expect("catalog kept");
+        assert_eq!(catalog.effects.len(), 1);
+        assert_eq!(catalog.effects[0].plugin_id, "core.filter.opacity");
+        assert!(catalog.sources.is_empty());
+
+        let broken_source_params = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"3",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "stage":{"selection":[],"bounds":[]},
+            "timeline":{
+                "fps":{"num":30,"den":1},
+                "layers":[{
+                    "layer_id":"11",
+                    "display_name":"L",
+                    "start":{"num":0,"den":1},
+                    "duration":{"num":10,"den":1},
+                    "position_keys":[],
+                    "keys_truncated":false,
+                    "effects":[],
+                    "effects_truncated":false,
+                    "source_params":"bad",
+                    "source_params_truncated":false
+                }],
+                "layers_truncated":false
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(broken_source_params).expect("parse");
+        let layers = proj.timeline_layers.expect("layers kept");
+        assert!(layers[0].source_params.is_empty());
+        assert!(!layers[0].source_params_truncated);
     }
 
 }

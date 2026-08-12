@@ -60,6 +60,12 @@ type HostCatalogEffect = {
   name: string;
   effect_version: number;
 };
+type HostCatalogSource = {
+  plugin_id: string;
+  name: string;
+  effect_version: number;
+};
+type HostSourceParam = {param_id: string; value: number};
 type HostLayerSeat = {
   displayName: string;
   positionKeyCount: number;
@@ -68,11 +74,13 @@ type HostLayerSeat = {
   /** playhead exact一致かつ value がある時だけ編集席を出す。 */
   exactKey: {time: HostRationalTime; value: [number, number]} | null;
   effects: HostEffectUse[];
+  sourceParams: HostSourceParam[];
 };
 type HostSnapshotState = {
   statusLabel: string | null;
   layerSeat: HostLayerSeat | null;
   catalogEffects: HostCatalogEffect[] | null;
+  catalogSources: HostCatalogSource[] | null;
 };
 
 function rationalTimesExactEqual(a: HostRationalTime, b: HostRationalTime): boolean {
@@ -83,11 +91,11 @@ function rationalTimesExactEqual(a: HostRationalTime, b: HostRationalTime): bool
 function readHostSnapshotState(): HostSnapshotState {
   const host = nativeHost();
   if (!host) {
-    return {statusLabel: null, layerSeat: null, catalogEffects: null};
+    return {statusLabel: null, layerSeat: null, catalogEffects: null, catalogSources: null};
   }
   const snapshot = host.readSnapshot();
   if (!snapshot) {
-    return {statusLabel: null, layerSeat: null, catalogEffects: null};
+    return {statusLabel: null, layerSeat: null, catalogEffects: null, catalogSources: null};
   }
   try {
     const parsed = JSON.parse(snapshot) as {
@@ -97,6 +105,7 @@ function readHostSnapshotState(): HostSnapshotState {
       stage?: {bounds?: unknown[]};
       catalog?: {
         effects?: Array<{plugin_id?: string; name?: string; effect_version?: number}>;
+        sources?: Array<{plugin_id?: string; name?: string; effect_version?: number}>;
       };
       timeline?: {
         layers?: Array<{
@@ -108,6 +117,7 @@ function readHostSnapshotState(): HostSnapshotState {
             plugin_id?: string;
             params?: Array<{param_id?: string; value?: number}>;
           }>;
+          source_params?: Array<{param_id?: string; value?: number}>;
         }>;
       };
     };
@@ -124,8 +134,17 @@ function readHostSnapshotState(): HostSnapshotState {
             effect_version: typeof item.effect_version === 'number' ? item.effect_version : 0,
           }))
       : null;
+    const catalogSources = Array.isArray(parsed.catalog?.sources)
+      ? parsed.catalog!.sources!
+          .filter(item => typeof item?.plugin_id === 'string' && item.plugin_id.length > 0)
+          .map(item => ({
+            plugin_id: item.plugin_id!,
+            name: typeof item.name === 'string' && item.name.length > 0 ? item.name : item.plugin_id!,
+            effect_version: typeof item.effect_version === 'number' ? item.effect_version : 0,
+          }))
+      : null;
     if (!parsed.current_time || typeof parsed.current_time.num !== 'number' || typeof parsed.current_time.den !== 'number') {
-      return {statusLabel, layerSeat: null, catalogEffects};
+      return {statusLabel, layerSeat: null, catalogEffects, catalogSources};
     }
     const timelineLayers = parsed.timeline?.layers ?? [];
     const primary = primaryLayerId
@@ -155,9 +174,13 @@ function readHostSnapshotState(): HostSnapshotState {
           .filter(param => typeof param?.param_id === 'string' && Number.isFinite(param?.value))
           .map(param => ({param_id: param.param_id!, value: param.value as number})),
       }));
+    const sourceParams: HostSourceParam[] = (primary?.source_params ?? [])
+      .filter(param => typeof param?.param_id === 'string' && Number.isFinite(param?.value))
+      .map(param => ({param_id: param.param_id!, value: param.value as number}));
     return {
       statusLabel,
       catalogEffects,
+      catalogSources,
       layerSeat: {
         displayName: primary?.display_name ?? 'no selection',
         positionKeyCount: positionKeys.length,
@@ -167,10 +190,11 @@ function readHostSnapshotState(): HostSnapshotState {
           ? {time: exact.time, value: [exact.value![0], exact.value![1]]}
           : null,
         effects,
+        sourceParams,
       },
     };
   } catch {
-    return {statusLabel: null, layerSeat: null, catalogEffects: null};
+    return {statusLabel: null, layerSeat: null, catalogEffects: null, catalogSources: null};
   }
 }
 
@@ -418,6 +442,7 @@ function Browser({
   onDragStart,
   onDragCancel,
   catalogEffects,
+  catalogSources,
   primaryLayerId,
 }: {
   width: number;
@@ -425,6 +450,7 @@ function Browser({
   onDragStart: (id: string) => void;
   onDragCancel: () => void;
   catalogEffects: HostCatalogEffect[] | null;
+  catalogSources: HostCatalogSource[] | null;
   primaryLayerId: string | null;
 }) {
   const [tab, setTab] = useState<BrowserTab>('EFFECTS');
@@ -455,7 +481,19 @@ function Browser({
   const filteredEffects = effectSource.filter(item =>
     `${item.name} ${item.tags}`.toLowerCase().includes(query.toLowerCase()),
   );
-  const filteredCreateItems = CREATE_ITEMS.filter(item =>
+  const createItems = catalogSources
+    ? [
+      ...CREATE_ITEMS,
+      ...catalogSources.map(item => ({
+        id: item.plugin_id,
+        name: item.name,
+        type: 'Vism',
+        provider: 'Plugin',
+        glyph: '□',
+      })),
+    ]
+    : CREATE_ITEMS;
+  const filteredCreateItems = createItems.filter(item =>
     `${item.name} ${item.type} ${item.provider}`.toLowerCase().includes(query.toLowerCase()),
   );
   const filteredMediaItems = MEDIA_ITEMS.filter(item =>
@@ -547,6 +585,14 @@ function Browser({
           if (tab === 'CREATE') {
             setSelectedCreateItem(id);
             onDragCancel();
+            if (catalogSources?.some(item => item.plugin_id === id)) {
+              dispatchHostIntent('place_vism', {
+                plugin_id: id,
+                position: [0, 0],
+                playhead: {num: 0, den: 1},
+              });
+              return;
+            }
             onCreateItem(createdItemValue(id, 0.5, 0.5));
             return;
           }
@@ -563,6 +609,10 @@ function Browser({
         onDragStart={id => {
           if (tab === 'CREATE') {
             setSelectedCreateItem(id);
+            // Stage drop は Rectangle のみ。CREATE の source カードは drag 開始しない。
+            if (catalogSources?.some(item => item.plugin_id === id)) {
+              return;
+            }
             onDragStart(id);
           }
         }}
@@ -696,6 +746,19 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
               </View>
             </View>
           ) : null}
+          {layerSeat && layerSeat.primaryLayerId && layerSeat.sourceParams.length > 0 ? (
+            <View style={styles.pathOperationSection} testID="inspector-source-params-section">
+              <Text style={styles.pathOperationTitle}>Source</Text>
+              {layerSeat.sourceParams.map(param => (
+                <ParameterRow
+                  key={`source:${param.param_id}`}
+                  label={param.param_id}
+                  value={String(param.value)}
+                  testID={`inspector-source-param-${param.param_id}`}
+                />
+              ))}
+            </View>
+          ) : null}
           {layerSeat && layerSeat.primaryLayerId && layerSeat.effects.length > 0 ? (
             <View style={styles.pathOperationSection} testID="inspector-effects-section">
               <Text style={styles.pathOperationTitle}>Effects</Text>
@@ -775,9 +838,9 @@ function Inspector({width, pathOperationId, onPathOperationChange, transform, on
   );
 }
 
-function ParameterRow({label, value, onDecrease, onIncrease}: {label: string; value: string; onDecrease?: () => void; onIncrease?: () => void}) {
+function ParameterRow({label, value, onDecrease, onIncrease, testID}: {label: string; value: string; onDecrease?: () => void; onIncrease?: () => void; testID?: string}) {
   return (
-    <View style={styles.parameterRow}>
+    <View style={styles.parameterRow} testID={testID}>
       <Text style={styles.parameterLabel}>{label}</Text>
       {onDecrease ? <Pressable accessibilityLabel={`${label} decrease`} onPress={onDecrease} style={styles.stepButton}><Text style={styles.stepText}>−</Text></Pressable> : null}
       <Text numberOfLines={1} style={styles.parameterValue}>{value}</Text>
@@ -1308,6 +1371,7 @@ function App() {
   const [hostStatusLabel, setHostStatusLabel] = useState<string | null>(null);
   const [hostLayerSeat, setHostLayerSeat] = useState<HostLayerSeat | null>(null);
   const [hostCatalogEffects, setHostCatalogEffects] = useState<HostCatalogEffect[] | null>(null);
+  const [hostCatalogSources, setHostCatalogSources] = useState<HostCatalogSource[] | null>(null);
   const browserStart = useRef(browserWidth);
   const inspectorStart = useRef(inspectorWidth);
   const timelineStart = useRef(timelineHeight);
@@ -1317,6 +1381,7 @@ function App() {
       setHostStatusLabel(snapshotState.statusLabel);
       setHostLayerSeat(snapshotState.layerSeat);
       setHostCatalogEffects(snapshotState.catalogEffects);
+      setHostCatalogSources(snapshotState.catalogSources);
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -1373,6 +1438,7 @@ function App() {
       <View style={styles.workspace}>
         <Browser
           catalogEffects={hostCatalogEffects}
+          catalogSources={hostCatalogSources}
           onCreateItem={setCreatedItemId}
           onDragCancel={() => setDraggedItemId('')}
           onDragStart={setDraggedItemId}

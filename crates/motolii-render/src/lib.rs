@@ -410,6 +410,16 @@ pub fn render_graph_cached(
     render_graph_cached_inner(gpu, session, timeline_time, graph, inputs, quality, true)
 }
 
+/// GPU不要: `render_graph_cached` と同じ `validate_linear_graph`（UnusedTextureWrite 含む）。
+#[doc(hidden)]
+pub fn validate_render_graph_wiring(
+    graph: &LinearRenderGraph,
+    timeline_time: RationalTime,
+    inputs: &RenderGraphInputs<'_>,
+) -> Result<(), RenderError> {
+    validate_linear_graph(graph, timeline_time, inputs).map(|_| ())
+}
+
 /// テスト専用: 中間 ping-pong バッファをそのまま返す（契約違反の負例審判用）。
 #[doc(hidden)]
 pub fn render_graph_cached_pool_alias_for_test(

@@ -1049,3 +1049,181 @@ test('inspector effect param rejected dispatch restores draft and keeps one disp
   getSpy.mockRestore();
   mockReadSnapshot.mockReturnValue('');
 });
+
+test('CREATE tab lists host sources and double-click places vism', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'seed-layer'}]},
+      catalog: {
+        effects: [{plugin_id: 'core.filter.opacity', name: 'Opacity', effect_version: 1}],
+        sources: [
+          {
+            plugin_id: 'core.layer_source.radial_repeater',
+            name: 'Radial Repeater',
+            effect_version: 1,
+          },
+        ],
+      },
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'seed-layer',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [],
+            effects_truncated: false,
+            source_params: [],
+            source_params_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'browser-tab-CREATE'}).props.onPress();
+  });
+  expect(tree!.root.findByProps({testID: 'create-item-rectangle'})).toBeTruthy();
+  expect(
+    tree!.root.findByProps({testID: 'create-item-core.layer_source.radial_repeater'}),
+  ).toBeTruthy();
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    tree!.root
+      .findByProps({testID: 'create-item-core.layer_source.radial_repeater'})
+      .props.onDoubleClick();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  const payload = JSON.parse(mockDispatchIntent.mock.calls[0][0] as string);
+  expect(payload.kind).toBe('place_vism');
+  expect(payload.plugin_id).toBe('core.layer_source.radial_repeater');
+  expect(payload.position).toEqual([0, 0]);
+  expect(payload.playhead).toEqual({num: 0, den: 1});
+
+  await ReactTestRenderer.act(() => {
+    tree!.root
+      .findByProps({testID: 'create-item-core.layer_source.radial_repeater'})
+      .props.onPointerDown();
+  });
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.draggedItemId).toBe('');
+
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'create-item-rectangle'}).props.onPointerDown();
+  });
+  expect(tree!.root.findByProps({testID: 'rust-wgpu-stage'}).props.draggedItemId).toBe(
+    'rectangle',
+  );
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
+test('CREATE fixture remains without host catalog sources', async () => {
+  mockReadSnapshot.mockReturnValue('');
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockNullHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({testID: 'browser-tab-CREATE'}).props.onPress();
+  });
+  expect(tree!.root.findByProps({testID: 'create-item-rectangle'})).toBeTruthy();
+  expect(
+    tree!.root.findAllByProps({testID: 'create-item-core.layer_source.radial_repeater'}),
+  ).toHaveLength(0);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+});
+
+test('inspector shows source params as display-only rows', async () => {
+  mockDispatchIntent.mockClear();
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      revision: '3',
+      projection_generation: '1',
+      current_time: {num: 0, den: 1},
+      primary_layer_id: '42',
+      stage: {bounds: [{layer_id: '42', display_name: 'Radial Repeater'}]},
+      catalog: {
+        effects: [],
+        sources: [
+          {
+            plugin_id: 'core.layer_source.radial_repeater',
+            name: 'Radial Repeater',
+            effect_version: 1,
+          },
+        ],
+      },
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [
+          {
+            layer_id: '42',
+            display_name: 'Radial Repeater',
+            start: {num: 0, den: 1},
+            duration: {num: 10, den: 1},
+            position_keys: [],
+            keys_truncated: false,
+            effects: [],
+            effects_truncated: false,
+            source_params: [
+              {param_id: 'count', value: 12},
+              {param_id: 'radius', value: 0.3},
+            ],
+            source_params_truncated: false,
+          },
+        ],
+        layers_truncated: false,
+      },
+    }),
+  );
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  expect(tree!.root.findByProps({testID: 'inspector-source-params-section'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'inspector-source-param-count'})).toBeTruthy();
+  expect(tree!.root.findByProps({testID: 'inspector-source-param-radius'})).toBeTruthy();
+  mockDispatchIntent.mockClear();
+  expect(mockDispatchIntent).not.toHaveBeenCalled();
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});

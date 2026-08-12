@@ -24,6 +24,7 @@ use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 pub(crate) enum DocumentEditAction {
     Apply(DocumentCommandRequest),
     PlaceRectangle(PlaceRectangleRequest),
+    PlaceVism(PlaceVismRequest),
     AttachEffect(AttachEffectRequest),
     SetEffectParam(SetEffectParamRequest),
     SetPositionConst(SetPositionConstRequest),
@@ -45,6 +46,7 @@ impl DocumentEditAction {
         match self {
             Self::Apply(_) => DocumentEditActionKind::Apply,
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
+            Self::PlaceVism(_) => DocumentEditActionKind::PlaceVism,
             Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
             Self::SetPositionConst(_) => DocumentEditActionKind::SetPositionConst,
@@ -67,6 +69,7 @@ impl DocumentEditAction {
 pub(crate) enum DocumentEditActionKind {
     Apply,
     PlaceRectangle,
+    PlaceVism,
     AttachEffect,
     SetEffectParam,
     SetPositionConst,
@@ -92,6 +95,11 @@ impl DocumentEditQueue {
     pub(crate) fn push_place_rectangle(&mut self, request: PlaceRectangleRequest) {
         self.pending
             .push_back(DocumentEditAction::PlaceRectangle(request));
+    }
+
+    pub(crate) fn push_place_vism(&mut self, request: PlaceVismRequest) {
+        self.pending
+            .push_back(DocumentEditAction::PlaceVism(request));
     }
 
     pub(crate) fn push_attach_effect(&mut self, request: AttachEffectRequest) {
@@ -208,6 +216,13 @@ impl DocumentEditQueue {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct PlaceRectangleRequest {
+    pub(crate) position: [f64; 2],
+    pub(crate) playhead: RationalTime,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PlaceVismRequest {
+    pub(crate) plugin_id: String,
     pub(crate) position: [f64; 2],
     pub(crate) playhead: RationalTime,
 }
@@ -509,6 +524,27 @@ impl DocumentEditRuntime {
                     next_projection_generation(current_projection_generation)?;
                 let (command, layer_id, expected_live_next) =
                     prepare_rectangle_command(&self.writer.snapshot(), current_primary, request)?;
+                if self.writer.snapshot().layers.peek_next() != expected_live_next {
+                    return Err(DocumentEditRuntimeError::LayerIdReservationChanged);
+                }
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    Some(layer_id),
+                    next_projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::PlaceVism(request) => {
+                let next_projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                let (command, layer_id, expected_live_next) = prepare_vism_command(
+                    &self.writer.snapshot(),
+                    &self.catalog,
+                    current_primary,
+                    request,
+                )?;
                 if self.writer.snapshot().layers.peek_next() != expected_live_next {
                     return Err(DocumentEditRuntimeError::LayerIdReservationChanged);
                 }
@@ -1136,6 +1172,80 @@ fn prepare_rectangle_command(
             index,
             item,
             layer_names: BTreeMap::from([(layer_id, "Rectangle".to_owned())]),
+        },
+        layer_id,
+        expected_live_next,
+    ))
+}
+
+fn prepare_vism_command(
+    snapshot: &Document,
+    catalog: &PluginCatalog,
+    current_primary: Option<LayerId>,
+    request: PlaceVismRequest,
+) -> Result<(Command, LayerId, u64), DocumentEditRuntimeError> {
+    if !request.position[0].is_finite() || !request.position[1].is_finite() {
+        return Err(DocumentEditRuntimeError::NonFiniteDropPosition);
+    }
+    if request.playhead < RationalTime::ZERO {
+        return Err(DocumentEditRuntimeError::PlayheadOutsideComposition);
+    }
+    let duration = snapshot.composition.duration.try_sub(request.playhead)?;
+    if duration < snapshot.composition.fps.frame_duration() {
+        return Err(DocumentEditRuntimeError::RemainingDurationBelowOneFrame);
+    }
+
+    let current_version = catalog
+        .get(&request.plugin_id)
+        .ok_or_else(|| DocumentPluginError::ContractMissing {
+            plugin_id: request.plugin_id.clone(),
+        })?
+        .node
+        .version;
+    let recipe = motolii_doc::prepare_plugin_recipe(
+        &request.plugin_id,
+        PluginKind::LayerSource,
+        current_version,
+        &BTreeMap::new(),
+        catalog,
+    )?;
+    let layer_name = catalog
+        .get(&request.plugin_id)
+        .map(|contract| {
+            if contract.node.display_name.trim().is_empty() {
+                request.plugin_id.clone()
+            } else {
+                contract.node.display_name.to_owned()
+            }
+        })
+        .unwrap_or_else(|| request.plugin_id.clone());
+
+    let mut layers = snapshot.layers.clone();
+    let expected_live_next = layers.peek_next();
+    let layer_id = layers.reserve()?;
+    let (track_id, index) = rectangle_insertion(snapshot, current_primary)
+        .ok_or(DocumentEditRuntimeError::NoTrackForRectangle)?;
+
+    let mut envelope = ItemEnvelope::new(layer_id);
+    envelope.transform.position = motolii_doc::DocParam::const_vec2(request.position);
+    let item = TrackItem::Clip(Clip {
+        envelope,
+        start: request.playhead,
+        duration,
+        time_map: Default::default(),
+        source: ClipSource::Plugin {
+            plugin_id: recipe.plugin_id,
+            effect_version: recipe.current_version,
+            params: recipe.params,
+            extra: Default::default(),
+        },
+    });
+    Ok((
+        Command::AddTrackItem {
+            parent: ParentLocator::Track(track_id),
+            index,
+            item,
+            layer_names: BTreeMap::from([(layer_id, layer_name)]),
         },
         layer_id,
         expected_live_next,

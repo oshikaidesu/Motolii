@@ -13,13 +13,15 @@ use std::sync::{Mutex, OnceLock};
 
 use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, PixelSize, Quality, RationalTime};
 use motolii_doc::{
-    build_document_frame_graph, layer_names_for_item, Affine2D, Clip, Command, DocParam, DocValue,
-    EffectId, EvaluationTime, ItemEnvelope, KeyframeId, LayerId, ParentLocator, TrackItem,
+    build_document_frame_graph, layer_names_for_item, Affine2D, Clip, ClipSource, Command, DocParam,
+    DocValue, EffectId, EvaluationTime, ItemEnvelope, KeyframeId, LayerId, ParentLocator, TrackItem,
 };
 use motolii_eval::{DataTracks, Interp};
 use motolii_gpu::GpuCtx;
 use motolii_plugins_firstparty::{first_party_catalog, first_party_runtime};
-use motolii_render::{render_graph_cached, RenderGraphInputs, RenderSession};
+use motolii_render::{
+    render_graph_cached, validate_render_graph_wiring, RenderGraphInputs, RenderSession,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -32,7 +34,7 @@ use wgpu::{
 
 use crate::document_edit_runtime::{
     AddPositionKeyRequest, AttachEffectRequest, DocumentEditQueue, DocumentEditRuntime,
-    DocumentEditRuntimeError, PlaceRectangleRequest, RemovePositionKeyRequest,
+    DocumentEditRuntimeError, PlaceRectangleRequest, PlaceVismRequest, RemovePositionKeyRequest,
     SetEffectParamRequest, SetPositionConstRequest, SetPositionKeyInterpRequest,
     SetPositionKeyTimeRequest, SetPositionKeyValueRequest,
 };
@@ -60,6 +62,7 @@ const MAX_STAGE_BOUNDS: usize = 16;
 const MAX_STAGE_SELECTION: usize = 16;
 const MAX_POSITION_KEYS: usize = 64;
 const MAX_EFFECTS_PER_LAYER: usize = 8;
+const MAX_SOURCE_PARAMS_PER_LAYER: usize = 8;
 const MAX_DIAGNOSTICS: usize = 8;
 const MAX_JSON_BYTES: usize = 16_384;
 const MAX_SNAPSHOT_JSON_BYTES: usize = 131_072;
@@ -171,10 +174,19 @@ pub(crate) struct WireProductSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct WireCatalogProjection {
     effects: Vec<WireCatalogEffect>,
+    #[serde(default)]
+    sources: Vec<WireCatalogSource>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct WireCatalogEffect {
+    plugin_id: String,
+    name: String,
+    effect_version: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireCatalogSource {
     plugin_id: String,
     name: String,
     effect_version: u32,
@@ -217,6 +229,11 @@ struct WireTimelineLayer {
     /// layer の effect 使用列。f64 Const のみ。cap 超過は truncated。
     effects: Vec<WireTimelineEffect>,
     effects_truncated: bool,
+    /// ClipSource::Plugin の f64 Const params。cap 超過は truncated。
+    #[serde(default)]
+    source_params: Vec<WireTimelineSourceParam>,
+    #[serde(default)]
+    source_params_truncated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -228,6 +245,12 @@ struct WireTimelineEffect {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct WireTimelineEffectParam {
+    param_id: String,
+    value: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireTimelineSourceParam {
     param_id: String,
     value: f64,
 }
@@ -798,6 +821,85 @@ impl RnProductHost {
                 }
                 let mut queue = DocumentEditQueue::default();
                 queue.push_place_rectangle(PlaceRectangleRequest { position, playhead });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.primary = published.primary;
+                        self.projection_generation = published.projection_generation;
+                        self.refresh_stage_overlays().ok();
+                        accept(self.snapshot_wire(host_handle))
+                    }
+                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Err(_) => reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    ),
+                }
+            }
+            "place_vism" => {
+                let Some(plugin_id) = intent.plugin_id.filter(|id| !id.is_empty()) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(position) = intent.position else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(playhead) = intent.playhead else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if !position.iter().all(|value| value.is_finite()) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_place_vism(PlaceVismRequest {
+                    plugin_id,
+                    position,
+                    playhead,
+                });
                 match self.runtime.process_next(
                     &mut queue,
                     self.primary,
@@ -3817,6 +3919,8 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
                 .unwrap_or((RationalTime::ZERO, RationalTime::ZERO));
             let (position_keys, keys_truncated) = project_position_keys(document, layer_id);
             let (effects, effects_truncated) = project_layer_effects(document, layer_id);
+            let (source_params, source_params_truncated) =
+                project_layer_source_params(document, layer_id);
             WireTimelineLayer {
                 layer_id: layer_id.get().to_string(),
                 display_name: name.to_owned(),
@@ -3826,6 +3930,8 @@ fn project_timeline(document: &motolii_doc::Document) -> WireTimelineProjection 
                 keys_truncated,
                 effects,
                 effects_truncated,
+                source_params,
+                source_params_truncated,
             }
         })
         .collect();
@@ -3873,6 +3979,33 @@ fn project_layer_effects(
     (effects, effects_truncated)
 }
 
+fn project_layer_source_params(
+    document: &motolii_doc::Document,
+    layer_id: LayerId,
+) -> (Vec<WireTimelineSourceParam>, bool) {
+    let Some(clip) = find_first_clip(document, layer_id) else {
+        return (Vec::new(), false);
+    };
+    let ClipSource::Plugin { params, .. } = &clip.source else {
+        return (Vec::new(), false);
+    };
+    let all: Vec<_> = params
+        .iter()
+        .filter_map(|(param_id, param)| match param {
+            DocParam::Const(DocValue::F64(value)) if value.is_finite() => {
+                Some(WireTimelineSourceParam {
+                    param_id: param_id.clone(),
+                    value: *value,
+                })
+            }
+            _ => None,
+        })
+        .collect();
+    let source_params_truncated = all.len() > MAX_SOURCE_PARAMS_PER_LAYER;
+    let source_params = all.into_iter().take(MAX_SOURCE_PARAMS_PER_LAYER).collect();
+    (source_params, source_params_truncated)
+}
+
 /// first_party − reference。session 不変なので OnceLock で cache。
 fn wire_catalog_projection() -> WireCatalogProjection {
     static CACHE: OnceLock<WireCatalogProjection> = OnceLock::new();
@@ -3900,7 +4033,27 @@ fn wire_catalog_projection() -> WireCatalogProjection {
                 })
                 .collect::<Vec<_>>();
             effects.sort_by(|a, b| a.plugin_id.cmp(&b.plugin_id));
-            WireCatalogProjection { effects }
+            let mut sources = catalog
+                .iter()
+                .filter(|(plugin_id, contract)| {
+                    contract.kind == motolii_plugin::PluginKind::LayerSource
+                        && reference.get(plugin_id.0).is_none()
+                })
+                .map(|(plugin_id, contract)| {
+                    let name = if contract.node.display_name.trim().is_empty() {
+                        plugin_id.0.to_owned()
+                    } else {
+                        contract.node.display_name.to_owned()
+                    };
+                    WireCatalogSource {
+                        plugin_id: plugin_id.0.to_owned(),
+                        name,
+                        effect_version: contract.node.version,
+                    }
+                })
+                .collect::<Vec<_>>();
+            sources.sort_by(|a, b| a.plugin_id.cmp(&b.plugin_id));
+            WireCatalogProjection { effects, sources }
         })
         .clone()
 }
@@ -8692,6 +8845,364 @@ mod tests {
 
         let after = serde_json::to_vec(&read_wire(host)).expect("after json");
         assert_eq!(after, before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    fn create_empty_track_host(tag: &str) -> u64 {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = tmp_dir(&format!("rn-product-host-{tag}-{id}")).join("project.json");
+        let mut document = Document::new_current();
+        let track = document.track_ids.allocate("seed-track").expect("track");
+        document.tracks.push(Track {
+            id: track,
+            items: vec![],
+        });
+        document.validate().expect("valid empty track document");
+        let limits = ResourceLimits::production();
+        {
+            let mut session = ProjectSession::acquire(&path, &limits).expect("acquire");
+            session
+                .save_with_journal(
+                    &document,
+                    &SaveProjectOptions {
+                        limits,
+                        checkpoint: true,
+                        ..SaveProjectOptions::default()
+                    },
+                )
+                .expect("save");
+        }
+        host_create_for_test(&path).expect("host")
+    }
+
+    fn place_vism_json(host: u64, plugin_id: &str, position: [f64; 2], playhead: &str) -> String {
+        format!(
+            concat!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"place_vism","#,
+                r#""host_handle":"{host}","plugin_id":"{plugin}","position":[{x},{y}],"playhead":{playhead}}}"#
+            ),
+            host = host,
+            plugin = plugin_id,
+            x = position[0],
+            y = position[1],
+            playhead = playhead,
+        )
+    }
+
+    #[test]
+    fn snapshot_catalog_sources_lists_radial_repeater_and_all_place_vism() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("catalog-sources-place-loop");
+        let wire = read_wire(host);
+        assert!(
+            wire.catalog
+                .sources
+                .iter()
+                .any(|source| source.plugin_id == "core.layer_source.radial_repeater")
+        );
+        assert!(
+            !wire
+                .catalog
+                .sources
+                .iter()
+                .any(|source| source.plugin_id == "core.layer_source.clear")
+        );
+        assert!(wire.timeline.layers.is_empty());
+
+        for source in wire.catalog.sources.clone() {
+            let response = dispatch_raw_json(
+                host,
+                &place_vism_json(host, &source.plugin_id, [0.0, 0.0], r#"{"num":0,"den":1}"#),
+            );
+            assert!(
+                response.accepted,
+                "place_vism failed for {}: accepted={} reason={:?}",
+                source.plugin_id,
+                response.accepted,
+                response.reason,
+            );
+        }
+        let after_place = read_wire(host);
+        assert_eq!(after_place.timeline.layers.len(), wire.catalog.sources.len());
+        let placed_ids: Vec<String> = after_place
+            .timeline
+            .layers
+            .iter()
+            .map(|layer| layer.layer_id.clone())
+            .collect();
+        assert!(
+            after_place
+                .primary_layer_id
+                .as_ref()
+                .is_some_and(|id| placed_ids.contains(id)),
+            "place_vism should select a live layer"
+        );
+
+        for _ in 0..wire.catalog.sources.len() {
+            let before_undo = read_wire(host);
+            let removed = before_undo.primary_layer_id.clone();
+            let undone = dispatch_raw_json(
+                host,
+                &format!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#,
+                    host = host,
+                ),
+            );
+            assert!(undone.accepted);
+            let after_undo = read_wire(host);
+            if let Some(removed_id) = removed {
+                assert_ne!(
+                    after_undo.primary_layer_id.as_deref(),
+                    Some(removed_id.as_str()),
+                    "undo must not keep deleted LayerId as primary"
+                );
+                assert!(
+                    after_undo
+                        .primary_layer_id
+                        .as_ref()
+                        .map(|id| after_undo
+                            .timeline
+                            .layers
+                            .iter()
+                            .any(|layer| layer.layer_id == *id))
+                        .unwrap_or(true),
+                    "primary_layer_id must be absent or live"
+                );
+            }
+        }
+        assert!(read_wire(host).timeline.layers.is_empty());
+        assert!(read_wire(host).primary_layer_id.is_none());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn place_vism_projects_source_params_defaults_on_timeline() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("place-vism-source-params");
+        assert!(dispatch_raw_json(
+            host,
+            &place_vism_json(
+                host,
+                "core.layer_source.radial_repeater",
+                [0.0, 0.0],
+                r#"{"num":0,"den":1}"#
+            ),
+        )
+        .accepted);
+        let wire = read_wire(host);
+        assert_eq!(wire.timeline.layers.len(), 1);
+        let layer = &wire.timeline.layers[0];
+        assert_eq!(layer.display_name, "Radial Repeater");
+        assert!(!layer.source_params_truncated);
+        let by_id: BTreeMap<_, _> = layer
+            .source_params
+            .iter()
+            .map(|param| (param.param_id.as_str(), param.value))
+            .collect();
+        assert_eq!(by_id.get("count"), Some(&12.0));
+        assert_eq!(by_id.get("radius"), Some(&0.30));
+        assert_eq!(by_id.get("dot_radius"), Some(&0.04));
+        assert_eq!(by_id.get("phase"), Some(&0.0));
+        assert_eq!(by_id.get("angular_speed"), Some(&0.0));
+        assert!(!by_id.contains_key("color"));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn timeline_source_params_cap_at_eight_and_mark_truncated() {
+        let _lock = test_lock();
+        let mut document = Document::new_current();
+        let layer = document.layers.allocate("many-params").expect("layer");
+        let track = document.track_ids.allocate("track").expect("track");
+        let mut params = BTreeMap::new();
+        for i in 0..9 {
+            params.insert(
+                format!("p{i}"),
+                DocParam::Const(DocValue::F64(i as f64)),
+            );
+        }
+        document.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: RationalTime::ZERO,
+                duration: document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: "core.layer_source.radial_repeater".into(),
+                    effect_version: 1,
+                    params,
+                    extra: Default::default(),
+                },
+            })],
+        });
+        document.validate().expect("structurally valid");
+        let timeline = project_timeline(&document);
+        assert_eq!(timeline.layers.len(), 1);
+        let projected = &timeline.layers[0];
+        assert_eq!(projected.source_params.len(), 8);
+        assert!(projected.source_params_truncated);
+        assert_eq!(projected.source_params[0].param_id, "p0");
+        assert_eq!(projected.source_params[7].param_id, "p7");
+        assert_eq!(projected.source_params[7].value, 7.0);
+    }
+
+    #[test]
+    fn place_vism_rejects_missing_filter_kind_and_non_finite_without_mutation() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("place-vism-rejects");
+        let before = serde_json::to_vec(&read_wire(host)).expect("before");
+
+        let missing = dispatch_raw_json(
+            host,
+            &place_vism_json(
+                host,
+                "core.layer_source.missing",
+                [0.0, 0.0],
+                r#"{"num":0,"den":1}"#
+            ),
+        );
+        assert!(!missing.accepted);
+        assert_eq!(missing.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let filter_kind = dispatch_raw_json(
+            host,
+            &place_vism_json(
+                host,
+                "core.filter.opacity",
+                [0.0, 0.0],
+                r#"{"num":0,"den":1}"#
+            ),
+        );
+        assert!(!filter_kind.accepted);
+        assert_eq!(filter_kind.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let non_finite = dispatch_wire(
+            host,
+            WireIntentEnvelope {
+                version: 1,
+                direction: RN_TO_HOST.to_owned(),
+                kind: "place_vism".into(),
+                host_handle: host.to_string(),
+                stage_handle: None,
+                projection_generation: None,
+                width: None,
+                height: None,
+                scale_factor: None,
+                focused: None,
+                phase: None,
+                view_local_x: None,
+                view_local_y: None,
+                sequence: None,
+                frame: None,
+                position: Some([f64::NAN, 0.0]),
+                playhead: Some(RationalTime::ZERO),
+                target: None,
+                key_id: None,
+                time: None,
+                new: None,
+                interp: None,
+                delta: None,
+                plugin_id: Some("core.layer_source.radial_repeater".into()),
+                effect_use_id: None,
+                param_id: None,
+                value: None,
+            },
+        );
+        assert!(!non_finite.accepted);
+        assert_eq!(non_finite.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let after = serde_json::to_vec(&read_wire(host)).expect("after");
+        assert_eq!(after, before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn place_vism_frame_graph_passes_unused_texture_write_wiring() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("place-vism-graph-wiring");
+        assert!(dispatch_raw_json(
+            host,
+            &place_vism_json(
+                host,
+                "core.layer_source.radial_repeater",
+                [0.0, 0.0],
+                r#"{"num":0,"den":1}"#
+            ),
+        )
+        .accepted);
+
+        let document = with_registry(|registry| {
+            Ok(registry
+                .hosts
+                .get(&host)
+                .expect("host")
+                .runtime
+                .snapshot())
+        })
+        .expect("snapshot");
+        let runtime = first_party_runtime().expect("first_party_runtime");
+        let desc = frame_desc_from_composition(document.as_ref()).expect("desc");
+        let built = build_document_frame_graph(
+            document.as_ref(),
+            EvaluationTime::new(RationalTime::ZERO),
+            desc,
+            &DataTracks::new(),
+            &runtime,
+            None,
+        )
+        .expect("build graph after place_vism");
+        validate_render_graph_wiring(
+            &built.graph,
+            RationalTime::ZERO,
+            &RenderGraphInputs {
+                camera: built.camera,
+                video_sources: &[],
+                source_time: Some(built.source_time),
+                plugins: Some(runtime.executors()),
+            },
+        )
+        .expect("place_vism graph must pass UnusedTextureWrite wiring");
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_after_place_vism_has_non_uniform_pixels() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_empty_track_host("place-vism-frame-readback");
+        assert!(dispatch_raw_json(
+            host,
+            &place_vism_json(
+                host,
+                "core.layer_source.radial_repeater",
+                [0.0, 0.0],
+                r#"{"num":0,"den":1}"#
+            ),
+        )
+        .accepted);
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let first = frame.take().expect("frame");
+        let bytes = download_rgba(&gpu, &first.texture).expect("frame readback");
+        assert_eq!(
+            bytes.len(),
+            (first.width as usize) * (first.height as usize) * 4
+        );
+        let background = pixel_at(&bytes, first.width, 0, 0);
+        assert!(has_non_background_pixel(
+            &bytes,
+            first.width,
+            first.height,
+            background
+        ));
         let _ = host_destroy_for_test(host);
     }
 }
