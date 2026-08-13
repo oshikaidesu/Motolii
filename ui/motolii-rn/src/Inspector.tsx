@@ -19,6 +19,52 @@ import {
 import {styles} from './productStyles';
 
 export type RightPanel = 'INSPECTOR' | 'EXTENSIONS';
+type KeyAffordanceState = 'unkeyed' | 'animated' | 'current';
+type InspectorKeySeat = {
+  layerId: string;
+  time: HostRationalTime;
+  positionKeyCount: number;
+  exactKey: HostPositionKeyValue | null;
+  paramKeys: HostParamKey[];
+};
+
+function KeyAffordance({
+  label,
+  state,
+  onPress,
+  testID,
+}: {
+  label: string;
+  state: KeyAffordanceState;
+  onPress?: () => void;
+  testID: string;
+}) {
+  const stateLabel = state === 'current'
+    ? 'Key at playhead'
+    : state === 'animated'
+      ? 'Animated; no key at playhead'
+      : 'Not animated';
+  const action = state === 'current' ? undefined : onPress;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label} key`}
+      accessibilityState={{disabled: !action, selected: state === 'current'}}
+      accessibilityValue={{text: stateLabel}}
+      disabled={!action}
+      onPress={action}
+      style={[
+        styles.keyButton,
+        state === 'animated' && styles.keyButtonAnimated,
+        state === 'current' && styles.keyButtonCurrent,
+      ]}
+      testID={testID}>
+      <Text style={[styles.keyGlyph, state === 'unkeyed' && styles.keyGlyphUnkeyed]}>
+        {state === 'unkeyed' ? '◇' : '◆'}
+      </Text>
+    </Pressable>
+  );
+}
 
 export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: {width: number; transform: StageTransform; layerSeat: HostLayerSeat | null; scrubFreeze: boolean; revision: string | null}) {
   const [panel, setPanel] = useState<RightPanel>('INSPECTOR');
@@ -45,37 +91,43 @@ export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: 
       scaleY: transform.scaleY,
     };
   }
-  // 凍結は(key, layer)のpairで行う。凍結中にprimaryが変わっても別layerへdispatchしない。
-  const frozenExactSeat = useRef<{layerId: string; exactKey: HostPositionKeyValue} | null>(
-    layerSeat?.exactKey && selectedLayerId
-      ? {layerId: selectedLayerId, exactKey: layerSeat.exactKey}
-      : null,
-  );
+  const liveKeySeat: InspectorKeySeat | null = selectedLayerId && layerSeat
+    ? {
+        layerId: selectedLayerId,
+        time: layerSeat.currentTime,
+        positionKeyCount: layerSeat.positionKeyCount,
+        exactKey: layerSeat.exactKey,
+        paramKeys: layerSeat.paramKeys,
+      }
+    : null;
+  // 凍結中は状態・表示・dispatch先を同じseatに保ち、別layer/timeを混ぜない。
+  const frozenKeySeat = useRef<InspectorKeySeat | null>(liveKeySeat);
   if (!scrubFreeze) {
-    frozenExactSeat.current =
-      layerSeat?.exactKey && selectedLayerId
-        ? {layerId: selectedLayerId, exactKey: layerSeat.exactKey}
-        : null;
+    frozenKeySeat.current = liveKeySeat;
   }
-  const displayedExactSeat = scrubFreeze
-    ? frozenExactSeat.current
-    : layerSeat?.exactKey && selectedLayerId
-      ? {layerId: selectedLayerId, exactKey: layerSeat.exactKey}
-      : null;
-  const liveExactParams =
-    selectedLayerId && layerSeat
-      ? {
-          layerId: selectedLayerId,
-          scale: exactParamKeyFor(layerSeat.paramKeys, layerSeat.currentTime, 'scale'),
-          rotation: exactParamKeyFor(layerSeat.paramKeys, layerSeat.currentTime, 'rotation'),
-          opacity: exactParamKeyFor(layerSeat.paramKeys, layerSeat.currentTime, 'opacity'),
-        }
-      : null;
-  const frozenExactParams = useRef(liveExactParams);
-  if (!scrubFreeze) {
-    frozenExactParams.current = liveExactParams;
-  }
-  const displayedExactParams = scrubFreeze ? frozenExactParams.current : liveExactParams;
+  const displayedKeySeat = scrubFreeze ? frozenKeySeat.current : liveKeySeat;
+  const displayedExactSeat = displayedKeySeat?.exactKey
+    ? {layerId: displayedKeySeat.layerId, exactKey: displayedKeySeat.exactKey}
+    : null;
+  const displayedExactParams = displayedKeySeat
+    ? {
+        layerId: displayedKeySeat.layerId,
+        scale: exactParamKeyFor(displayedKeySeat.paramKeys, displayedKeySeat.time, 'scale'),
+        rotation: exactParamKeyFor(displayedKeySeat.paramKeys, displayedKeySeat.time, 'rotation'),
+        opacity: exactParamKeyFor(displayedKeySeat.paramKeys, displayedKeySeat.time, 'opacity'),
+      }
+    : null;
+  const positionKeyState: KeyAffordanceState = displayedKeySeat?.exactKey
+    ? 'current'
+    : (displayedKeySeat?.positionKeyCount ?? 0) > 0
+      ? 'animated'
+      : 'unkeyed';
+  const paramKeyState = (property: HostParamKey['property']): KeyAffordanceState =>
+    displayedExactParams?.[property]
+      ? 'current'
+      : displayedKeySeat?.paramKeys.some(key => key.property === property)
+        ? 'animated'
+        : 'unkeyed';
   const extension = panelRegistry.find(item => item.id === extensionId)!;
 
   return (
@@ -95,7 +147,10 @@ export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: 
         <ScrollView disableScrollViewPanResponder>
           {selectedLayerId && layerSeat ? (
             <>
-              <View style={styles.pathOperationSection} testID="inspector-layer-section">
+              <View
+                accessibilityLabel={`Selected layer ${layerSeat.displayName}`}
+                style={styles.pathOperationSection}
+                testID="inspector-layer-section">
                 <Text style={styles.inspectorTitle}>{layerSeat.displayName}</Text>
                 <Text style={styles.pathOperationDescription}>position keys: {layerSeat.positionKeyCount}</Text>
                 {layerSeat.opacity != null ? (
@@ -104,13 +159,14 @@ export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: 
                     value={String(layerSeat.opacity)}
                     testID="inspector-layer-opacity"
                     addKeyTestID="inspector-add-key-opacity"
-                    onAddKey={() => {
+                    keyState={paramKeyState('opacity')}
+                    onAddKey={displayedKeySeat ? () => {
                       dispatchHostIntent('add_param_key', {
-                        target: selectedLayerId,
-                        time: layerSeat.currentTime,
+                        target: displayedKeySeat.layerId,
+                        time: displayedKeySeat.time,
                         property: 'opacity',
                       });
-                    }}
+                    } : undefined}
                     onChange={value => {
                       if (!selectedLayerId || !Number.isFinite(value)) {
                         return;
@@ -226,14 +282,14 @@ export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: 
                   {layerSeat.sourceParams.map(param =>
                     param.color ? (
                       <SourceColorParamEditor
-                        key={`source:${param.param_id}`}
+                        key={`${selectedLayerId}:source:${param.param_id}`}
                         primaryLayerId={selectedLayerId}
                         paramId={param.param_id}
                         color={param.color}
                       />
                     ) : (
                       <SourceParamEditor
-                        key={`source:${param.param_id}`}
+                        key={`${selectedLayerId}:source:${param.param_id}`}
                         primaryLayerId={selectedLayerId}
                         paramId={param.param_id}
                         value={param.value}
@@ -271,25 +327,27 @@ export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: 
                   ))}
                 </View>
               ) : null}
-              <View style={styles.transformSection} testID="stage-transform-projection">
+              <View key={`transform:${selectedLayerId}`} style={styles.transformSection} testID="stage-transform-projection">
                 <Text style={styles.pathOperationTitle}>Transform</Text>
-                <DialParameter label="Position X" value={transform.x} step={0.025} dragScale={0.01} decimals={3} addKeyTestID="inspector-add-key-position" onAddKey={() => {
+                <DialParameter label="Position X" keyLabel="Position" keyState={positionKeyState} value={transform.x} step={0.025} dragScale={0.01} decimals={3} addKeyTestID="inspector-add-key-position" onAddKey={displayedKeySeat ? () => {
                   // add_position_keyはtarget+time必須(rn_product_host 718-747)。Wake時刻は使わない。
                   dispatchHostIntent('add_position_key', {
-                    target: selectedLayerId,
-                    time: layerSeat.currentTime,
+                    target: displayedKeySeat.layerId,
+                    time: displayedKeySeat.time,
                   });
-                }} onChange={value => {
+                } : undefined} onChange={value => {
                   if (!selectedLayerId || !layerSeat?.transform) {
-                    return;
+                    return false;
                   }
                   const delta = value - committed.current.x;
                   if (delta === 0 || !Number.isFinite(delta)) {
-                    return;
+                    return delta === 0;
                   }
-                  if (dispatchHostIntent('move_layer_by', {target: selectedLayerId, delta: [delta, 0]})) {
+                  const accepted = dispatchHostIntent('move_layer_by', {target: selectedLayerId, delta: [delta, 0]});
+                  if (accepted) {
                     committed.current.x = value;
                   }
+                  return accepted;
                 }} onDragPreview={value => {
                   if (!selectedLayerId || !layerSeat?.transform) {
                     return false;
@@ -320,15 +378,17 @@ export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: 
                 }} onDragCancel={() => cancelHostStageTransform().accepted} />
                 <DialParameter label="Position Y" value={transform.y} step={0.025} dragScale={0.01} decimals={3} onChange={value => {
                   if (!selectedLayerId || !layerSeat?.transform) {
-                    return;
+                    return false;
                   }
                   const delta = value - committed.current.y;
                   if (delta === 0 || !Number.isFinite(delta)) {
-                    return;
+                    return delta === 0;
                   }
-                  if (dispatchHostIntent('move_layer_by', {target: selectedLayerId, delta: [0, delta]})) {
+                  const accepted = dispatchHostIntent('move_layer_by', {target: selectedLayerId, delta: [0, delta]});
+                  if (accepted) {
                     committed.current.y = value;
                   }
+                  return accepted;
                 }} onDragPreview={value => {
                   if (!selectedLayerId || !layerSeat?.transform) {
                     return false;
@@ -357,29 +417,31 @@ export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: 
                   }
                   return accepted;
                 }} onDragCancel={() => cancelHostStageTransform().accepted} />
-                <DialParameter label="Rotation Z" value={transform.rotationZ} unit="°" step={5} dragScale={1} decimals={1} addKeyTestID="inspector-add-key-rotation" onAddKey={() => {
+                <DialParameter label="Rotation Z" keyLabel="Rotation" keyState={paramKeyState('rotation')} value={transform.rotationZ} unit="°" step={5} dragScale={1} decimals={1} addKeyTestID="inspector-add-key-rotation" onAddKey={displayedKeySeat ? () => {
                   dispatchHostIntent('add_param_key', {
-                    target: selectedLayerId,
-                    time: layerSeat.currentTime,
+                    target: displayedKeySeat.layerId,
+                    time: displayedKeySeat.time,
                     property: 'rotation',
                   });
-                }} onChange={value => {
+                } : undefined} onChange={value => {
                   if (!selectedLayerId || !layerSeat?.transform) {
-                    return;
+                    return false;
                   }
                   const deltaDeg = value - committed.current.rotationZ;
                   if (deltaDeg === 0 || !Number.isFinite(deltaDeg)) {
-                    return;
+                    return deltaDeg === 0;
                   }
-                  if (commitHostStageTransform(
+                  const accepted = commitHostStageTransform(
                     selectedLayerId,
                     revision,
                     1,
                     deltaDeg * (Math.PI / 180),
                     0,
-                  )) {
+                  );
+                  if (accepted) {
                     committed.current.rotationZ = value;
                   }
+                  return accepted;
                 }} onDragPreview={value => {
                   if (!selectedLayerId || !layerSeat?.transform) {
                     return false;
@@ -414,26 +476,28 @@ export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: 
                   }
                   return accepted;
                 }} onDragCancel={() => cancelHostStageTransform().accepted} />
-                <DialParameter label="Scale X" value={transform.scaleX} step={0.025} dragScale={0.01} decimals={3} addKeyTestID="inspector-add-key-scale" onAddKey={() => {
+                <DialParameter label="Scale X" keyLabel="Scale" keyState={paramKeyState('scale')} value={transform.scaleX} step={0.025} dragScale={0.01} decimals={3} addKeyTestID="inspector-add-key-scale" onAddKey={displayedKeySeat ? () => {
                   dispatchHostIntent('add_param_key', {
-                    target: selectedLayerId,
-                    time: layerSeat.currentTime,
+                    target: displayedKeySeat.layerId,
+                    time: displayedKeySeat.time,
                     property: 'scale',
                   });
-                }} onChange={value => {
+                } : undefined} onChange={value => {
                   if (!selectedLayerId || !layerSeat?.transform || committed.current.scaleX === 0) {
-                    return;
+                    return false;
                   }
                   if (value === committed.current.scaleX || !Number.isFinite(value)) {
-                    return;
+                    return value === committed.current.scaleX;
                   }
                   const factor = value / committed.current.scaleX;
                   if (!Number.isFinite(factor) || factor === 1) {
-                    return;
+                    return factor === 1;
                   }
-                  if (commitHostStageTransform(selectedLayerId, revision, 2, factor, 1)) {
+                  const accepted = commitHostStageTransform(selectedLayerId, revision, 2, factor, 1);
+                  if (accepted) {
                     committed.current.scaleX = value;
                   }
+                  return accepted;
                 }} onDragPreview={value => {
                   if (!selectedLayerId || !layerSeat?.transform || committed.current.scaleX === 0) {
                     return false;
@@ -464,18 +528,20 @@ export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: 
                 }} onDragCancel={() => cancelHostStageTransform().accepted} />
                 <DialParameter label="Scale Y" value={transform.scaleY} step={0.025} dragScale={0.01} decimals={3} onChange={value => {
                   if (!selectedLayerId || !layerSeat?.transform || committed.current.scaleY === 0) {
-                    return;
+                    return false;
                   }
                   if (value === committed.current.scaleY || !Number.isFinite(value)) {
-                    return;
+                    return value === committed.current.scaleY;
                   }
                   const factor = value / committed.current.scaleY;
                   if (!Number.isFinite(factor) || factor === 1) {
-                    return;
+                    return factor === 1;
                   }
-                  if (commitHostStageTransform(selectedLayerId, revision, 2, 1, factor)) {
+                  const accepted = commitHostStageTransform(selectedLayerId, revision, 2, 1, factor);
+                  if (accepted) {
                     committed.current.scaleY = value;
                   }
+                  return accepted;
                 }} onDragPreview={value => {
                   if (!selectedLayerId || !layerSeat?.transform || committed.current.scaleY === 0) {
                     return false;
@@ -547,22 +613,20 @@ export function Inspector({width, transform, layerSeat, scrubFreeze, revision}: 
   );
 }
 
-export function ParameterRow({label, value, onChange, onDecrease, onIncrease, testID, onAddKey, addKeyTestID}: {label: string; value: string; onChange?: (value: number) => void; onDecrease?: () => void; onIncrease?: () => void; testID?: string; onAddKey?: () => void; addKeyTestID?: string}) {
+export function ParameterRow({label, value, onChange, onDecrease, onIncrease, testID, onAddKey, addKeyTestID, keyState}: {label: string; value: string; onChange?: (value: number) => void; onDecrease?: () => void; onIncrease?: () => void; testID?: string; onAddKey?: () => void; addKeyTestID?: string; keyState?: KeyAffordanceState}) {
   const numeric = Number(value);
   const decrease = onDecrease ?? (onChange && Number.isFinite(numeric) ? () => onChange(numeric - 0.05) : undefined);
   const increase = onIncrease ?? (onChange && Number.isFinite(numeric) ? () => onChange(numeric + 0.05) : undefined);
   return (
     <View style={styles.parameterRow} testID={testID}>
       <Text style={styles.parameterLabel}>{label}</Text>
-      {onAddKey && addKeyTestID ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Add ${label} key`}
+      {addKeyTestID && (onAddKey || keyState) ? (
+        <KeyAffordance
+          label={label}
           onPress={onAddKey}
-          style={styles.stepButton}
-          testID={addKeyTestID}>
-          <Text style={styles.stepText}>◆</Text>
-        </Pressable>
+          state={keyState ?? 'unkeyed'}
+          testID={addKeyTestID}
+        />
       ) : null}
       {decrease ? <Pressable accessibilityLabel={`${label} decrease`} onPress={decrease} style={styles.stepButton}><Text style={styles.stepText}>−</Text></Pressable> : null}
       <Text numberOfLines={1} style={styles.parameterValue}>{value}</Text>
@@ -1326,7 +1390,7 @@ export function ExactOnKeyValueEditor({
   );
 }
 
-export function DialParameter({label, value, unit = '', step = 1, dragScale = 1, decimals = 0, min, max, onChange, onDragPreview, onDragCommit, onDragCancel, onAddKey, addKeyTestID}: {label: string; value: number; unit?: string; step?: number; dragScale?: number; decimals?: number; min?: number; max?: number; onChange: (value: number) => void; onDragPreview?: (value: number) => boolean; onDragCommit?: (value: number) => boolean; onDragCancel?: () => boolean; onAddKey?: () => void; addKeyTestID?: string}) {
+export function DialParameter({label, keyLabel = label, keyState, value, unit = '', step = 1, dragScale = 1, decimals = 0, min, max, onChange, onDragPreview, onDragCommit, onDragCancel, onAddKey, addKeyTestID}: {label: string; keyLabel?: string; keyState?: KeyAffordanceState; value: number; unit?: string; step?: number; dragScale?: number; decimals?: number; min?: number; max?: number; onChange: (value: number) => boolean | void; onDragPreview?: (value: number) => boolean; onDragCommit?: (value: number) => boolean; onDragCancel?: () => boolean; onAddKey?: () => void; addKeyTestID?: string}) {
   const [draft, setDraft] = useState(formatDialValue(value, decimals));
   const [dragging, setDragging] = useState(false);
   const pointerStart = useRef<{
@@ -1432,8 +1496,7 @@ export function DialParameter({label, value, unit = '', step = 1, dragScale = 1,
     const parsed = Number(draft.trim());
     if (Number.isFinite(parsed)) {
       const next = normalizedValue(parsed, false);
-      onChange(next);
-      setDraft(formatDialValue(next, decimals));
+      setDraft(formatDialValue(onChange(next) === false ? value : next, decimals));
     } else {
       setDraft(formatDialValue(value, decimals));
     }
@@ -1454,15 +1517,13 @@ export function DialParameter({label, value, unit = '', step = 1, dragScale = 1,
   return (
     <View style={styles.parameterRow}>
       <Text style={styles.parameterLabel}>{label}</Text>
-      {onAddKey && addKeyTestID ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Add ${label} key`}
+      {addKeyTestID && (onAddKey || keyState) ? (
+        <KeyAffordance
+          label={keyLabel}
           onPress={onAddKey}
-          style={styles.stepButton}
-          testID={addKeyTestID}>
-          <Text style={styles.stepText}>◆</Text>
-        </Pressable>
+          state={keyState ?? 'unkeyed'}
+          testID={addKeyTestID}
+        />
       ) : null}
       <DialSurface
         {...panResponder.panHandlers}
@@ -1500,8 +1561,7 @@ export function DialParameter({label, value, unit = '', step = 1, dragScale = 1,
           const direction = event.nativeEvent.key === 'ArrowRight' ? 1 : -1;
           const multiplier = event.nativeEvent.shiftKey ? 10 : 1;
           const next = normalizedValue(value + direction * step * multiplier);
-          setDraft(formatDialValue(next, decimals));
-          onChange(next);
+          setDraft(formatDialValue(onChange(next) === false ? value : next, decimals));
         }}>
         <View pointerEvents="none" style={styles.dialTicks}>
           <View pointerEvents="none" style={[styles.dialTickStrip, {transform: [{translateX: -dialShift}]}]}>

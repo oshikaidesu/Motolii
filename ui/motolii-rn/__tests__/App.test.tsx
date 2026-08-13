@@ -98,6 +98,54 @@ function inspectorSurfaceText(
   ).join('\n');
 }
 
+function inspectorPropertySnapshot({
+  layerId = '42',
+  displayName = 'seed-layer',
+  currentTime = {num: 1, den: 1},
+  positionKeys = [],
+  paramKeys = [],
+  position = [0.25, -0.5],
+  sourceValue = 1,
+}: {
+  layerId?: string;
+  displayName?: string;
+  currentTime?: {num: number; den: number};
+  positionKeys?: Array<Record<string, unknown>>;
+  paramKeys?: Array<Record<string, unknown>>;
+  position?: [number, number];
+  sourceValue?: number;
+} = {}) {
+  return {
+    revision: '3',
+    projection_generation: '1',
+    current_time: currentTime,
+    primary_layer_id: layerId,
+    stage: {bounds: [{layer_id: layerId, display_name: displayName}]},
+    selected_doc_params: {
+      layer_id: layerId,
+      opacity: 1,
+      effects: [],
+      source_params: [{param_id: 'count', value: sourceValue}],
+    },
+    stage_geometry: {
+      layers: [{layer_id: layerId, position, rotation: 0, scale: [1, 1]}],
+    },
+    timeline: {
+      fps: {num: 30, den: 1},
+      layers: [{
+        layer_id: layerId,
+        display_name: displayName,
+        start: {num: 0, den: 1},
+        duration: {num: 10, den: 1},
+        position_keys: positionKeys,
+        param_keys: paramKeys,
+        keys_truncated: false,
+      }],
+      layers_truncated: false,
+    },
+  };
+}
+
 function mockNullHostGet(name: string) {
   if (name === 'NativeMotoliiHost') {
     return null;
@@ -1099,6 +1147,74 @@ test('inspector on-key scale rotation opacity commit set_param_key_value', async
   mockReadSnapshot.mockReturnValue('');
 });
 
+test('inspector key affordances expose snapshot tri-state and dispatch add once', async () => {
+  mockDispatchIntent.mockClear();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+  mockReadSnapshot.mockReturnValue(JSON.stringify(inspectorPropertySnapshot({
+    positionKeys: [
+      {key_id: 'p-current', time: {num: 1, den: 1}, value: [0.25, -0.5]},
+    ],
+    paramKeys: [
+      {property: 'scale', key_id: 's-current', time: {num: 1, den: 1}, vec: [1, 1]},
+      {property: 'rotation', key_id: 'r-elsewhere', time: {num: 0, den: 1}, value: 0},
+    ],
+  })));
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const position = tree!.root.findByProps({accessibilityLabel: 'Position key'});
+  const scale = tree!.root.findByProps({accessibilityLabel: 'Scale key'});
+  const rotation = tree!.root.findByProps({accessibilityLabel: 'Rotation key'});
+  const opacity = tree!.root.findByProps({accessibilityLabel: 'Opacity key'});
+  expect(position.props.accessibilityValue).toEqual({text: 'Key at playhead'});
+  expect(position.props.accessibilityState).toEqual({disabled: true, selected: true});
+  expect(position.props.onPress).toBeUndefined();
+  expect(scale.props.accessibilityValue).toEqual({text: 'Key at playhead'});
+  expect(rotation.props.accessibilityValue).toEqual({text: 'Animated; no key at playhead'});
+  expect(rotation.props.accessibilityState).toEqual({disabled: false, selected: false});
+  expect(opacity.props.accessibilityValue).toEqual({text: 'Not animated'});
+  expect(collectText(rotation)).toContain('◆');
+  expect(collectText(opacity)).toContain('◇');
+  expect(scale.props.style).not.toEqual(rotation.props.style);
+  expect(rotation.props.style).not.toEqual(opacity.props.style);
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    rotation.props.onPress();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(mockDispatchIntent.mock.calls[0][0] as string)).toMatchObject({
+    kind: 'add_param_key',
+    target: '42',
+    time: {num: 1, den: 1},
+    property: 'rotation',
+  });
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    opacity.props.onPress();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(mockDispatchIntent.mock.calls[0][0] as string)).toMatchObject({
+    kind: 'add_param_key',
+    target: '42',
+    time: {num: 1, den: 1},
+    property: 'opacity',
+  });
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+});
+
 test('inspector X commit dispatches set_position_key_value once with exact time', async () => {
   mockDispatchIntent.mockClear();
   mockReadSnapshot.mockReturnValue(
@@ -1324,6 +1440,68 @@ test('inspector key editor remounts on primary/key change and stale draft is not
     activeInput.props.onBlur();
   });
   expect(mockDispatchIntent).toHaveBeenCalledTimes(0);
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+  jest.useRealTimers();
+});
+
+test('inspector discards transform and source drafts when layer identity changes', async () => {
+  jest.useFakeTimers();
+  mockDispatchIntent.mockClear();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+  const snapshotA = inspectorPropertySnapshot({
+    layerId: '42',
+    position: [0.25, -0.5],
+    sourceValue: 1,
+  });
+  const snapshotB = inspectorPropertySnapshot({
+    layerId: '43',
+    displayName: 'other-layer',
+    position: [0.5, 0.75],
+    sourceValue: 2,
+  });
+  let readCount = 0;
+  mockReadSnapshot.mockImplementation(() => {
+    const snapshot = readCount === 0 ? snapshotA : snapshotB;
+    readCount += 1;
+    return JSON.stringify(snapshot);
+  });
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+  const positionInput = tree!.root.findByProps({accessibilityLabel: 'Position X value'});
+  const sourceInput = tree!.root.findByProps({testID: 'inspector-source-param-input-count'});
+  await ReactTestRenderer.act(() => {
+    positionInput.props.onFocus();
+    positionInput.props.onChangeText('0.9');
+    sourceInput.props.onFocus();
+    sourceInput.props.onChangeText('9');
+  });
+
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    jest.advanceTimersByTime(1000);
+  });
+  const activePosition = tree!.root.findByProps({accessibilityLabel: 'Position X value'});
+  const activeSource = tree!.root.findByProps({testID: 'inspector-source-param-input-count'});
+  expect(activePosition.props.value).toBe('0.500');
+  expect(activeSource.props.value).toBe('2');
+  await ReactTestRenderer.act(() => {
+    activePosition.props.onSubmitEditing();
+    activePosition.props.onBlur();
+    activeSource.props.onSubmitEditing();
+    activeSource.props.onBlur();
+  });
+  expect(mockDispatchIntent).not.toHaveBeenCalled();
 
   await ReactTestRenderer.act(() => {
     tree!.unmount();
@@ -1996,6 +2174,48 @@ test('inspector shows selected layer opacity and gizmo transform without bloom f
   });
   getSpy.mockRestore();
   mockReadSnapshot.mockReturnValue('');
+});
+
+test('inspector dial reject restores authoritative value and dispatches once', async () => {
+  mockDispatchIntent.mockClear();
+  mockDispatchIntent.mockImplementation(() => '{"accepted":false}');
+  mockReadSnapshot.mockReturnValue(JSON.stringify(inspectorPropertySnapshot()));
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+  const input = tree!.root.findByProps({accessibilityLabel: 'Position X value'});
+  await ReactTestRenderer.act(() => {
+    input.props.onFocus();
+    input.props.onChangeText('0.75');
+  });
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({accessibilityLabel: 'Position X value'}).props.onSubmitEditing();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(mockDispatchIntent.mock.calls[0][0] as string)).toMatchObject({
+    kind: 'move_layer_by',
+    target: '42',
+    delta: [0.5, 0],
+  });
+  expect(tree!.root.findByProps({accessibilityLabel: 'Position X value'}).props.value).toBe('0.250');
+  await ReactTestRenderer.act(() => {
+    tree!.root.findByProps({accessibilityLabel: 'Position X value'}).props.onBlur();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  expect(tree!.root.findByProps({accessibilityLabel: 'Position X value'}).props.value).toBe('0.250');
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+  mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
 });
 
 test('inspector effect param empty draft does not dispatch and restores value', async () => {
@@ -3432,6 +3652,9 @@ test('inspector freezes exact-on-key row while playhead time-motion continues', 
               { key_id: 'a', time: { num: 0, den: 30 }, value: [0.1, 0.2] },
               { key_id: 'b', time: { num: 2, den: 30 }, value: [0.3, 0.4] },
             ],
+            param_keys: [
+              {property: 'rotation', key_id: 'r', time: {num: 2, den: 30}, value: 0},
+            ],
             keys_truncated: false,
           },
         ],
@@ -3472,6 +3695,21 @@ test('inspector freezes exact-on-key row while playhead time-motion continues', 
   mockReadSnapshot.mockReturnValue(JSON.stringify(swapped));
   await ReactTestRenderer.act(() => {
     jest.advanceTimersByTime(1000);
+  });
+  const frozenRotationKey = tree!.root.findByProps({accessibilityLabel: 'Rotation key'});
+  expect(frozenRotationKey.props.accessibilityValue).toEqual({
+    text: 'Animated; no key at playhead',
+  });
+  mockDispatchIntent.mockClear();
+  await ReactTestRenderer.act(() => {
+    frozenRotationKey.props.onPress();
+  });
+  expect(mockDispatchIntent).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(mockDispatchIntent.mock.calls[0][0] as string)).toMatchObject({
+    kind: 'add_param_key',
+    target: '42',
+    time: {num: 0, den: 30},
+    property: 'rotation',
   });
   mockDispatchIntent.mockClear();
   await ReactTestRenderer.act(() => {
