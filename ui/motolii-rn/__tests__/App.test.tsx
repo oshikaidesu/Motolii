@@ -2909,11 +2909,12 @@ test('inspector color effect param commit dispatches set_effect_param with color
   mockReadSnapshot.mockReturnValue('');
 });
 
-test('dispatch accepted snapshot applies immediately without waiting for poll', async () => {
+test('dispatch accepted same-revision higher-generation snapshot applies immediately', async () => {
   mockDispatchIntent.mockClear();
   mockReadSnapshot.mockReturnValue(
     JSON.stringify({
-      revision: '1',
+      host_handle: '7',
+      revision: '9',
       projection_generation: '0',
       current_time: { num: 0, den: 1 },
       history: { can_undo: true, can_redo: false },
@@ -2926,6 +2927,7 @@ test('dispatch accepted snapshot applies immediately without waiting for poll', 
     JSON.stringify({
       accepted: true,
       snapshot: {
+        host_handle: '7',
         revision: '9',
         projection_generation: '2',
         current_time: { num: 3, den: 1 },
@@ -2968,6 +2970,7 @@ test('dispatch accepted snapshot applies immediately without waiting for poll', 
     version: 1,
     direction: 'rn-to-host',
     kind: 'undo',
+    projection_generation: '0',
   });
   expect(
     tree!.root
@@ -2977,6 +2980,16 @@ test('dispatch accepted snapshot applies immediately without waiting for poll', 
   expect(
     tree!.root.findByProps({ testID: 'inspector-layer-section' }),
   ).toBeTruthy();
+
+  await ReactTestRenderer.act(() => {
+    dispatchHostIntentResult('redo');
+  });
+  expect(JSON.parse(mockDispatchIntent.mock.calls[1][0])).toEqual({
+    version: 1,
+    direction: 'rn-to-host',
+    kind: 'redo',
+    projection_generation: '2',
+  });
 
   await ReactTestRenderer.act(() => {
     tree!.unmount();
@@ -2989,6 +3002,7 @@ test('dispatch rejected snapshot applies immediately and preserves typed reason'
   mockDispatchIntent.mockClear();
   mockReadSnapshot.mockReturnValue(
     JSON.stringify({
+      host_handle: '7',
       revision: '1',
       projection_generation: '0',
       current_time: { num: 0, den: 1 },
@@ -3004,6 +3018,7 @@ test('dispatch rejected snapshot applies immediately and preserves typed reason'
       message: 'journal durable commit failed: disk unavailable',
       diagnostics: [{ reason: 'journal_commit' }],
       snapshot: {
+        host_handle: '7',
         revision: '9',
         projection_generation: '2',
         current_time: { num: 3, den: 1 },
@@ -3033,6 +3048,14 @@ test('dispatch rejected snapshot applies immediately and preserves typed reason'
     message: 'journal durable commit failed: disk unavailable',
     reason: 'journal_commit',
   });
+  expect(JSON.parse(mockDispatchIntent.mock.calls[0][0])).toEqual({
+    version: 1,
+    direction: 'rn-to-host',
+    kind: 'place_ellipse',
+    x: 0,
+    y: 0,
+    projection_generation: '0',
+  });
   expect(
     tree!.root
       .findAllByType(Text)
@@ -3045,6 +3068,96 @@ test('dispatch rejected snapshot applies immediately and preserves typed reason'
   getSpy.mockRestore();
   mockReadSnapshot.mockReturnValue('');
   mockDispatchIntent.mockImplementation(() => '{"accepted":true}');
+});
+
+test('poll and dispatch response ignore lower-generation and older-host snapshots', async () => {
+  jest.useFakeTimers();
+  mockDispatchIntent.mockClear();
+  const current = {
+    host_handle: '7',
+    revision: '9',
+    projection_generation: '5',
+    current_time: { num: 3, den: 1 },
+    primary_layer_id: '42',
+    history: { can_undo: true, can_redo: false },
+    truncated_total: 0,
+    stage: { bounds: [{ layer_id: '42', display_name: 'live-layer' }] },
+    timeline: {
+      layers: [
+        {
+          layer_id: '42',
+          display_name: 'live-layer',
+          position_keys: [],
+          keys_truncated: false,
+        },
+      ],
+      layers_truncated: false,
+    },
+  };
+  mockReadSnapshot.mockReturnValue(JSON.stringify(current));
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+
+  const stale = {
+    ...current,
+    revision: '1',
+    projection_generation: '4',
+    primary_layer_id: null,
+    stage: { bounds: [] },
+    timeline: { layers: [], layers_truncated: false },
+  };
+  mockReadSnapshot.mockReturnValue(JSON.stringify(stale));
+  await ReactTestRenderer.act(() => {
+    jest.advanceTimersByTime(1000);
+  });
+  expect(collectText(tree!.root)).toContain('DOC r9 · 1 layers');
+  expect(tree!.root.findByProps({ testID: 'inspector-layer-section' })).toBeTruthy();
+
+  mockDispatchIntent.mockImplementationOnce(() =>
+    JSON.stringify({
+      accepted: true,
+      snapshot: {
+        ...stale,
+        host_handle: '6',
+        projection_generation: '99',
+      },
+    }),
+  );
+  await ReactTestRenderer.act(() => {
+    dispatchHostIntentResult('undo');
+  });
+  expect(JSON.parse(mockDispatchIntent.mock.calls[0][0])).toMatchObject({
+    kind: 'undo',
+    projection_generation: '5',
+  });
+  expect(collectText(tree!.root)).toContain('DOC r9 · 1 layers');
+  expect(tree!.root.findByProps({ testID: 'inspector-layer-section' })).toBeTruthy();
+
+  mockReadSnapshot.mockReturnValue(
+    JSON.stringify({
+      ...stale,
+      host_handle: '6',
+      projection_generation: '99',
+    }),
+  );
+  await ReactTestRenderer.act(() => {
+    jest.advanceTimersByTime(1000);
+  });
+  expect(collectText(tree!.root)).toContain('DOC r9 · 1 layers');
+  expect(tree!.root.findByProps({ testID: 'inspector-layer-section' })).toBeTruthy();
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+  jest.useRealTimers();
 });
 
 test('titlebar undo and redo stay disabled without history and do not dispatch', async () => {

@@ -28,6 +28,7 @@ import {
   type HostLibrary,
   type HostRationalTime,
   type HostSnapshotState,
+  type HostSnapshotIdentity,
 } from './src/host';
 import {Inspector} from './src/Inspector';
 import {styles} from './src/productStyles';
@@ -61,6 +62,7 @@ function App() {
     revision: null,
     currentTime: null,
   });
+  const lastSnapshotIdentity = useRef<HostSnapshotIdentity | null>(null);
   const transportClock = useRef<{fps: HostRationalTime | null; duration: HostRationalTime | null}>({
     fps: null,
     duration: null,
@@ -70,6 +72,29 @@ function App() {
   const timelineStart = useRef(timelineHeight);
   useEffect(() => {
     const apply = (snapshotState: HostSnapshotState) => {
+      const nextIdentity =
+        snapshotState.hostHandle && snapshotState.projectionGeneration
+          ? {
+              hostHandle: snapshotState.hostHandle,
+              projectionGeneration: snapshotState.projectionGeneration,
+            }
+          : null;
+      const currentIdentity = lastSnapshotIdentity.current;
+      if (currentIdentity && !nextIdentity) {
+        return;
+      }
+      if (currentIdentity && nextIdentity) {
+        const sameHost = currentIdentity.hostHandle === nextIdentity.hostHandle;
+        const olderHost =
+          BigInt(nextIdentity.hostHandle) < BigInt(currentIdentity.hostHandle);
+        const olderGeneration =
+          BigInt(nextIdentity.projectionGeneration) <
+          BigInt(currentIdentity.projectionGeneration);
+        if (olderHost || (sameHost && olderGeneration)) {
+          return;
+        }
+      }
+      lastSnapshotIdentity.current = nextIdentity;
       // F5: 凍結はnativeのgesture実信号で判定する(snapshot差分heuristicは廃止)。
       // 新しいデータがUIを変え得るのはapplyの瞬間だけなので、その瞬間の実信号が正。
       setScrubFreeze(nativeHostIsTimelineInteracting());
@@ -87,7 +112,7 @@ function App() {
         currentTime: snapshotState.currentTime,
       };
     };
-    setHostSnapshotApplier(apply);
+    setHostSnapshotApplier(apply, () => lastSnapshotIdentity.current);
     setHostRejectApplier(setRejectLabel);
     const tick = () => {
       apply(readHostSnapshotState());

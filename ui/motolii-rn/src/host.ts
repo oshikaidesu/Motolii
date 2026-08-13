@@ -179,12 +179,15 @@ export function cancelHostStageTransform(): HostIntentResult {
 
 /** dispatch応答snapshotの即時反映先。Appがmount時に登録する。 */
 let hostSnapshotApplier: ((state: HostSnapshotState) => void) | null = null;
+let hostSnapshotIdentityReader: (() => HostSnapshotIdentity | null) | null = null;
 let hostRejectApplier: ((reason: string | null) => void) | null = null;
 
 export function setHostSnapshotApplier(
   applier: ((state: HostSnapshotState) => void) | null,
+  identityReader: (() => HostSnapshotIdentity | null) | null = null,
 ) {
   hostSnapshotApplier = applier;
+  hostSnapshotIdentityReader = identityReader;
 }
 
 export function setHostRejectApplier(
@@ -199,6 +202,11 @@ export type HostIntentResult = {
   reason: string | null;
 };
 
+export type HostSnapshotIdentity = {
+  hostHandle: string;
+  projectionGeneration: string;
+};
+
 export function dispatchHostIntentResult(
   kind: string,
   extra: Record<string, unknown> = {},
@@ -208,12 +216,16 @@ export function dispatchHostIntentResult(
     return { accepted: false, message: 'host unavailable', reason: null };
   }
   try {
+    const identity = hostSnapshotIdentityReader?.();
     const response = host.dispatchIntent(
       JSON.stringify({
         version: 1,
         direction: 'rn-to-host',
         kind,
         ...extra,
+        ...(identity
+          ? {projection_generation: identity.projectionGeneration}
+          : {}),
       }),
     );
     const parsed = JSON.parse(response) as {
@@ -438,6 +450,8 @@ export type HostLayerSeat = {
   solo: boolean;
 };
 export type HostSnapshotState = {
+  hostHandle: string | null;
+  projectionGeneration: string | null;
   statusLabel: string | null;
   layerSeat: HostLayerSeat | null;
   catalogEffects: HostCatalogEffect[] | null;
@@ -505,6 +519,8 @@ export function lastInclusiveFrame(
 }
 
 export const EMPTY_HOST_SNAPSHOT: HostSnapshotState = {
+  hostHandle: null,
+  projectionGeneration: null,
   statusLabel: null,
   layerSeat: null,
   catalogEffects: null,
@@ -552,6 +568,8 @@ export function readHostSnapshotState(): HostSnapshotState {
 }
 
 export type ParsedHostSnapshot = {
+  host_handle?: string;
+  projection_generation?: string;
   primary_layer_id?: string | null;
   current_time?: HostRationalTime;
   revision?: string;
@@ -656,6 +674,10 @@ export function hostSnapshotStateFromParsed(
   }
   try {
     const parsed = raw as ParsedHostSnapshot;
+    const hostHandle = parseWireCounter(parsed.host_handle);
+    const projectionGeneration = parseWireCounter(
+      parsed.projection_generation,
+    );
     const primaryLayerId = parsed.primary_layer_id ?? null;
     const layerBounds = parsed.stage?.bounds?.length ?? 0;
     const revision = parsed.revision;
@@ -724,6 +746,8 @@ export function hostSnapshotStateFromParsed(
       typeof parsed.current_time.den !== 'number'
     ) {
       return {
+        hostHandle,
+        projectionGeneration,
         statusLabel,
         layerSeat: null,
         catalogEffects,
@@ -810,6 +834,8 @@ export function hostSnapshotStateFromParsed(
           : { param_id: param.param_id!, value: param.value as number };
       });
     return {
+      hostHandle,
+      projectionGeneration,
       statusLabel,
       catalogEffects,
       catalogSources,
@@ -850,6 +876,12 @@ export function hostSnapshotStateFromParsed(
   } catch {
     return null;
   }
+}
+
+function parseWireCounter(value: unknown): string | null {
+  return typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value)
+    ? value
+    : null;
 }
 
 export function parseFiniteNumber(value: unknown): number | null {
