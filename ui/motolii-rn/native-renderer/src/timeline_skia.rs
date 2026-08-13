@@ -105,6 +105,10 @@ pub(crate) struct TimelineScene {
     pub real: bool,
     /// revision反映時にlocal選択へ載せるflat index。fixtureは未使用。
     pub selected_flat: i32,
+    /// gesture中だけ描く吸着位置。Document投影へは載せない。
+    snap_guide: Option<f32>,
+    /// clip lane drag中だけ描く移動先行。Document投影へは載せない。
+    lane_preview_band: Option<usize>,
 }
 
 impl Default for TimelineScene {
@@ -290,6 +294,8 @@ impl Default for TimelineScene {
             fps_den: DEFAULT_FPS_DEN,
             real: false,
             selected_flat: -1,
+            snap_guide: None,
+            lane_preview_band: None,
         }
     }
 }
@@ -383,6 +389,8 @@ impl TimelineScene {
             fps_den: DEFAULT_FPS_DEN,
             real: true,
             selected_flat,
+            snap_guide: None,
+            lane_preview_band: None,
         }
     }
 
@@ -581,7 +589,9 @@ impl TimelineSession {
 
     /// scene差し替え時: 進行中gestureを復元せず破棄する。trueならdirty。
     pub(crate) fn discard_active_gesture(&mut self) -> bool {
-        self.gesture.take().is_some()
+        let gesture = self.gesture.take().is_some();
+        let feedback = self.clear_drag_feedback();
+        gesture || feedback
     }
 
     pub(crate) fn has_active_gesture(&self) -> bool {
@@ -624,6 +634,7 @@ impl TimelineSession {
         match phase {
             TimelinePointerPhase::Down => {
                 self.gesture = None;
+                dirty |= self.clear_drag_feedback();
                 if let Some(kind) = hit_gesture(&self.scene, *playhead, lx, ly) {
                     let snapshot = GestureSnapshot {
                         scene: self.scene.clone(),
@@ -799,6 +810,7 @@ impl TimelineSession {
                     }
                 }
                 self.gesture = None;
+                dirty |= self.clear_drag_feedback();
             }
             TimelinePointerPhase::Cancel => {
                 if let Some(gesture) = self.gesture.take() {
@@ -835,13 +847,19 @@ impl TimelineSession {
         }
     }
 
+    fn clear_drag_feedback(&mut self) -> bool {
+        let snap = self.scene.snap_guide.take().is_some();
+        let lane = self.scene.lane_preview_band.take().is_some();
+        snap || lane
+    }
+
     fn apply_move(&mut self, lx: f64, ly: f64, playhead: &mut f64, modifiers: u32) -> bool {
         let Some(mut gesture) = self.gesture.take() else {
             return false;
         };
         // 対象は LayerId/KeyframeId。indexは描画用にその場解決する。
         if !gesture_target_present(&self.scene, &gesture) {
-            return false;
+            return self.clear_drag_feedback();
         }
         refresh_gesture_indices(&self.scene, &mut gesture);
         let mut dirty = false;
@@ -858,8 +876,10 @@ impl TimelineSession {
                 dirty |= center_view_on(&mut self.scene, bar);
             }
             ActiveGesture::SelectOrMove {
+                snapshot,
                 band,
                 clip_idx,
+                layer_id,
                 press_lx,
                 press_ly,
                 origin_a,
@@ -874,6 +894,12 @@ impl TimelineSession {
                     *moving = true;
                 }
                 if *moving {
+                    let lane_preview_band =
+                        reparent_destination_band(&self.scene, snapshot, layer_id, *press_ly, ly);
+                    if self.scene.lane_preview_band != lane_preview_band {
+                        self.scene.lane_preview_band = lane_preview_band;
+                        dirty = true;
+                    }
                     let span = f64::from(self.scene.view_b - self.scene.view_a);
                     let dx_bars = (dx_logical / surface_width()) * span;
                     let (prev_b, next_a) = neighbors(&self.scene, *band, *clip_idx);
@@ -883,7 +909,7 @@ impl TimelineSession {
                         prev_b as f64,
                         (next_a - len) as f64,
                     ) as f32;
-                    let new_a = snap_bar(
+                    let (snapped_a, snap_guide) = snap_bar_with_guide(
                         &self.scene,
                         *playhead,
                         *band,
@@ -891,7 +917,17 @@ impl TimelineSession {
                         raw_a,
                         modifiers,
                     );
-                    let new_a = clamp_ordered_f32(new_a, prev_b, next_a - len);
+                    let new_a = clamp_ordered_f32(snapped_a, prev_b, next_a - len);
+                    let snap_guide = if dx_logical.abs() > MOVE_ARM_PX && snap_guide == Some(new_a)
+                    {
+                        snap_guide
+                    } else {
+                        None
+                    };
+                    if self.scene.snap_guide != snap_guide {
+                        self.scene.snap_guide = snap_guide;
+                        dirty = true;
+                    }
                     let new_b = new_a + len;
                     let move_keys = !self.scene.real;
                     let clip = &mut self.scene.bands[*band].clips[*clip_idx];
@@ -920,7 +956,7 @@ impl TimelineSession {
                 let clip_b = self.scene.bands[*band].clips[*clip_idx].b;
                 let min_clip = min_clip_units(&self.scene);
                 let raw_a = clamp_ordered_f32(bar, prev_b, clip_b - min_clip);
-                let new_a = snap_bar(
+                let (snapped_a, snap_guide) = snap_bar_with_guide(
                     &self.scene,
                     *playhead,
                     *band,
@@ -928,7 +964,12 @@ impl TimelineSession {
                     raw_a,
                     modifiers,
                 );
-                let new_a = clamp_ordered_f32(new_a, prev_b, clip_b - min_clip);
+                let new_a = clamp_ordered_f32(snapped_a, prev_b, clip_b - min_clip);
+                let snap_guide = snap_guide.filter(|guide| *guide == new_a);
+                if self.scene.snap_guide != snap_guide {
+                    self.scene.snap_guide = snap_guide;
+                    dirty = true;
+                }
                 let clip = &mut self.scene.bands[*band].clips[*clip_idx];
                 if (clip.a - new_a).abs() > f32::EPSILON {
                     clip.a = new_a;
@@ -941,7 +982,7 @@ impl TimelineSession {
                 let clip_a = self.scene.bands[*band].clips[*clip_idx].a;
                 let min_clip = min_clip_units(&self.scene);
                 let raw_b = clamp_ordered_f32(bar, clip_a + min_clip, next_a);
-                let new_b = snap_bar(
+                let (snapped_b, snap_guide) = snap_bar_with_guide(
                     &self.scene,
                     *playhead,
                     *band,
@@ -949,7 +990,12 @@ impl TimelineSession {
                     raw_b,
                     modifiers,
                 );
-                let new_b = clamp_ordered_f32(new_b, clip_a + min_clip, next_a);
+                let new_b = clamp_ordered_f32(snapped_b, clip_a + min_clip, next_a);
+                let snap_guide = snap_guide.filter(|guide| *guide == new_b);
+                if self.scene.snap_guide != snap_guide {
+                    self.scene.snap_guide = snap_guide;
+                    dirty = true;
+                }
                 let clip = &mut self.scene.bands[*band].clips[*clip_idx];
                 if (clip.b - new_b).abs() > f32::EPSILON {
                     clip.b = new_b;
@@ -968,18 +1014,20 @@ impl TimelineSession {
                     (clip.a, clip.b)
                 };
                 let raw_t = clamp_ordered_f32(bar, clip_a, clip_b);
-                let new_t = clamp_ordered_f32(
-                    snap_bar(
-                        &self.scene,
-                        *playhead,
-                        *band,
-                        Some(*clip_idx),
-                        raw_t,
-                        modifiers,
-                    ),
-                    clip_a,
-                    clip_b,
+                let (snapped_t, snap_guide) = snap_bar_with_guide(
+                    &self.scene,
+                    *playhead,
+                    *band,
+                    Some(*clip_idx),
+                    raw_t,
+                    modifiers,
                 );
+                let new_t = clamp_ordered_f32(snapped_t, clip_a, clip_b);
+                let snap_guide = snap_guide.filter(|guide| *guide == new_t);
+                if self.scene.snap_guide != snap_guide {
+                    self.scene.snap_guide = snap_guide;
+                    dirty = true;
+                }
                 if let Some(key) = self.scene.bands[*band].clips[*clip_idx]
                     .keys
                     .get_mut(*key_idx)
@@ -1512,6 +1560,32 @@ fn band_index_at_ly(scene: &TimelineScene, ly: f64) -> Option<usize> {
     }
 }
 
+fn reparent_destination_band(
+    scene: &TimelineScene,
+    snapshot: &GestureSnapshot,
+    source_layer_id: &str,
+    press_ly: f64,
+    current_ly: f64,
+) -> Option<usize> {
+    if !scene.real || source_layer_id.is_empty() {
+        return None;
+    }
+    let source_band = band_index_at_ly(&snapshot.scene, press_ly)?;
+    let destination_band = band_index_at_ly(scene, current_ly)?;
+    if source_band == destination_band {
+        return None;
+    }
+    let destination_layer_id = scene
+        .bands
+        .get(destination_band)?
+        .clips
+        .first()?
+        .layer_id
+        .as_str();
+    (!destination_layer_id.is_empty() && destination_layer_id != source_layer_id)
+        .then_some(destination_band)
+}
+
 fn neighbors(scene: &TimelineScene, band: usize, clip_idx: usize) -> (f32, f32) {
     let clips = &scene.bands[band].clips;
     let prev_b = if clip_idx == 0 {
@@ -1633,8 +1707,19 @@ fn snap_bar(
     raw: f32,
     modifiers: u32,
 ) -> f32 {
+    snap_bar_with_guide(scene, playhead, band, exclude_clip, raw, modifiers).0
+}
+
+fn snap_bar_with_guide(
+    scene: &TimelineScene,
+    playhead: f64,
+    band: usize,
+    exclude_clip: Option<usize>,
+    raw: f32,
+    modifiers: u32,
+) -> (f32, Option<f32>) {
     if modifiers & 1 != 0 {
-        return raw;
+        return (raw, None);
     }
     let threshold = snap_threshold_bars(scene) as f32;
     let mut best_dist = threshold;
@@ -1659,9 +1744,9 @@ fn snap_bar(
     let playhead_bar = (playhead.clamp(0.0, 1.0) as f32) * scene.song_bars;
     consider(playhead_bar);
     if (best - raw).abs() <= threshold {
-        best
+        (best, Some(best))
     } else {
-        raw
+        (raw, None)
     }
 }
 
@@ -2316,7 +2401,14 @@ pub(crate) fn draw_timeline(
     // ── bands ──
     let mut y = by0;
     let mut flat = 0usize;
-    for band in &scene.bands {
+    for (band_index, band) in scene.bands.iter().enumerate() {
+        if scene.lane_preview_band == Some(band_index) {
+            fill(
+                cv,
+                Rect::from_ltrb(INBOX_W, y, W, y + ROW - 1.0),
+                argb(0x24, ACCENT),
+            );
+        }
         for b in view_a as i32..=view_b as i32 {
             let x = bx(b as f32);
             // realは秒格子。fixtureだけ旧4拍強調を残す。
@@ -2472,6 +2564,18 @@ pub(crate) fn draw_timeline(
             }
         }
         cv.restore();
+        if scene.lane_preview_band == Some(band_index) {
+            fill(
+                cv,
+                Rect::from_ltrb(INBOX_W, y, W, y + 1.0),
+                argb(0xd0, ACCENT),
+            );
+            fill(
+                cv,
+                Rect::from_ltrb(INBOX_W, y + ROW - 2.0, W, y + ROW - 1.0),
+                argb(0xd0, ACCENT),
+            );
+        }
         y += ROW;
     }
 
@@ -2530,6 +2634,19 @@ pub(crate) fn draw_timeline(
         Rect::from_ltrb(INBOX_W, OVER_H, INBOX_W + 1.0, h),
         rgb(CONTRAST),
     );
+
+    // gesture中のsnap位置だけを表示し、release後のDocument投影には残さない。
+    if let Some(guide) = scene
+        .snap_guide
+        .filter(|guide| *guide >= view_a && *guide <= view_b)
+    {
+        let x = bx(guide);
+        fill(
+            cv,
+            Rect::from_ltrb(x, ry + RULER_H, x + 1.0, y),
+            argb(0xd8, ACCENT),
+        );
+    }
 
     // ── playhead。曲基準0..1。表示範囲外は描かない ──
     let bar = (playhead.clamp(0.0, 1.0) as f32) * song_bars;
@@ -3223,8 +3340,9 @@ mod tests {
             y,
             0,
         );
+        assert!(sess.scene.snap_guide.is_some());
 
-        sess.pointer(
+        let cancel = sess.pointer(
             &mut selected,
             &mut playhead,
             1240,
@@ -3234,6 +3352,7 @@ mod tests {
             y,
             0,
         );
+        assert!(cancel.edit_commit.is_none());
         assert_eq!(sess.scene, snapshot_scene);
         assert_eq!(selected, snapshot_selected);
         assert!((playhead - snapshot_playhead).abs() < 1e-9);
@@ -4212,6 +4331,25 @@ mod tests {
             0,
         );
         assert!(moved.edit_commit.is_none());
+        assert_eq!(sess.scene.lane_preview_band, Some(1));
+        assert!(sess.scene.snap_guide.is_none());
+        let mut without_preview = sess.scene.clone();
+        without_preview.lane_preview_band = None;
+        let mut baseline = vec![0u8; 1240 * 400 * 4];
+        let mut preview = vec![0u8; 1240 * 400 * 4];
+        draw_timeline(
+            &without_preview,
+            &mut baseline,
+            1240,
+            400,
+            playhead,
+            selected,
+        );
+        draw_timeline(&sess.scene, &mut preview, 1240, 400, playhead, selected);
+        assert_ne!(
+            preview, baseline,
+            "destination lane feedback must be visible"
+        );
         let up = sess.pointer(
             &mut selected,
             &mut playhead,
@@ -4234,6 +4372,19 @@ mod tests {
             }
             other => panic!("expected ReparentClip, got {other:?}"),
         }
+        assert!(sess.scene.lane_preview_band.is_none());
+        assert!(sess.scene.snap_guide.is_none());
+        let second_up = sess.pointer(
+            &mut selected,
+            &mut playhead,
+            1240,
+            400,
+            TimelinePointerPhase::Up,
+            x,
+            y1,
+            0,
+        );
+        assert!(second_up.edit_commit.is_none());
     }
 
     #[test]
@@ -4320,6 +4471,14 @@ mod tests {
             "got {}",
             sess.scene.bands[0].clips[1].a
         );
+        assert_eq!(sess.scene.snap_guide, Some(7.3));
+        let mut without_guide = sess.scene.clone();
+        without_guide.snap_guide = None;
+        let mut baseline = vec![0u8; 1240 * 400 * 4];
+        let mut preview = vec![0u8; 1240 * 400 * 4];
+        draw_timeline(&without_guide, &mut baseline, 1240, 400, playhead, selected);
+        draw_timeline(&sess.scene, &mut preview, 1240, 400, playhead, selected);
+        assert_ne!(preview, baseline, "snap guide must be visible during drag");
 
         let up = sess.pointer(
             &mut selected,
@@ -4338,6 +4497,7 @@ mod tests {
                 bar: 7.3,
             })
         );
+        assert!(sess.scene.snap_guide.is_none());
     }
 
     #[test]
@@ -4381,6 +4541,7 @@ mod tests {
             1,
         );
         assert!(moved.edit_commit.is_none());
+        assert!(sess.scene.snap_guide.is_none());
         let expected_bar = 9.6_f32;
         assert!(
             (sess.scene.bands[0].clips[1].a - expected_bar).abs() < 1e-3,
