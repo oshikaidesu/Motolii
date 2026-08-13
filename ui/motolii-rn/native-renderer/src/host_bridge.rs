@@ -94,6 +94,7 @@ pub(crate) fn set_timeline_interacting(interacting: bool) {
 /// Host投影。revision変化時だけTimelineへ適用する。
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HostTimelineProjection {
+    pub host_handle: Option<String>,
     pub revision: String,
     pub projection_generation: String,
     pub primary_layer_id: Option<String>,
@@ -1629,6 +1630,7 @@ fn inject_host_handle(intent: &str, handle: u64) -> Result<String, ()> {
 }
 
 fn parse_timeline_projection(json: &str) -> Option<HostTimelineProjection> {
+    let host_handle = json_string_value(json, "host_handle");
     let revision = json_string_value(json, "revision")?;
     let projection_generation =
         json_string_value(json, "projection_generation").unwrap_or_else(|| "0".into());
@@ -1642,6 +1644,7 @@ fn parse_timeline_projection(json: &str) -> Option<HostTimelineProjection> {
     // 壊れていたら stage_geometry 全体を None へ（timeline は維持）。
     let stage_geometry = parse_stage_geometry(json);
     Some(HostTimelineProjection {
+        host_handle,
         revision,
         projection_generation,
         primary_layer_id,
@@ -2951,6 +2954,7 @@ mod tests {
             "diagnostics":[]
         }"#;
         let proj = parse_timeline_projection(json).expect("parse");
+        assert_eq!(proj.host_handle.as_deref(), Some("1"));
         assert_eq!(proj.revision, "3");
         assert_eq!(proj.projection_generation, "0");
         assert_eq!(proj.current_time, (0, 1));

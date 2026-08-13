@@ -3,6 +3,7 @@ import {Pressable, Text, View} from 'react-native';
 
 import MotoliiTimelineView from './specs/MotoliiTimelineViewNativeComponent';
 import {
+  applyNativeHostTerminal,
   dispatchHostIntent,
   formatPlayhead,
   playheadFraction,
@@ -157,6 +158,10 @@ export function NativeTimeline({
                 ? `Clip ${objectIndex + 1} · ${timecode}`
                 : timecode,
             );
+          }}
+          onHostTerminal={event => {
+            const {accepted, message} = event.nativeEvent;
+            applyNativeHostTerminal(accepted, message);
           }}
           playhead={playhead}
           selectedObjectIndex={-1}

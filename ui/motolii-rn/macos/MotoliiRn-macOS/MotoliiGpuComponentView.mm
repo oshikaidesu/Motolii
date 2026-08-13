@@ -67,6 +67,8 @@ extern "C" bool motolii_macos_timeline_renderer_scroll(
     void *handle, double deltaX, double deltaY, double magnification, uint32_t modifiers, double x,
     double y);
 extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStats *stats);
+extern "C" int64_t motolii_macos_renderer_take_host_terminal(
+    void *handle, bool *accepted, uint8_t *message, size_t messageCap);
 extern "C" int32_t motolii_rnapp_host_key_event(
     uint16_t keyCode, uint32_t modifierBits, const uint8_t *charsUtf8, size_t charsLen,
     bool isRepeat, bool timelineFocused);
@@ -539,6 +541,7 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
 @end
 
 @interface MotoliiTimelineComponentView () <RCTMotoliiTimelineViewViewProtocol>
+- (void)emitHostTerminalIfPending;
 @end
 
 @implementation MotoliiTimelineComponentView {
@@ -573,8 +576,10 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
       CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_timelineView.layer;
       CGFloat scale = layer.contentsScale ?: 1.0;
       MotoliiTimelineFeedback feedback = {};
-      if (!motolii_macos_timeline_renderer_pointer(
-              strongSelf->_timelineRenderer, phase, x * scale, y * scale, modifiers, &feedback)) {
+      bool hasFeedback = motolii_macos_timeline_renderer_pointer(
+          strongSelf->_timelineRenderer, phase, x * scale, y * scale, modifiers, &feedback);
+      [strongSelf emitHostTerminalIfPending];
+      if (!hasFeedback) {
         return;
       }
       if (!strongSelf->_eventEmitter) {
@@ -622,6 +627,26 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
     [self addSubview:_timelineView];
   }
   return self;
+}
+
+- (void)emitHostTerminalIfPending
+{
+  if (!_timelineRenderer || !_eventEmitter) {
+    return;
+  }
+  bool accepted = false;
+  uint8_t message[4096] = {};
+  int64_t length = motolii_macos_renderer_take_host_terminal(
+      _timelineRenderer, &accepted, message, sizeof(message));
+  if (length < 0) {
+    return;
+  }
+  auto emitter = std::static_pointer_cast<const MotoliiTimelineViewEventEmitter>(_eventEmitter);
+  MotoliiTimelineViewEventEmitter::OnHostTerminal event = {
+      .accepted = accepted,
+      .message = std::string((const char *)message, (size_t)length),
+  };
+  emitter->onHostTerminal(event);
 }
 
 - (void)updateProps:(const Props::Shared &)props oldProps:(const Props::Shared &)oldProps
@@ -760,6 +785,7 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
 @end
 
 @interface MotoliiGpuComponentView () <RCTMotoliiGpuViewViewProtocol>
+- (void)emitHostTerminalIfPending;
 @end
 
 @implementation MotoliiGpuComponentView {
@@ -828,6 +854,26 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
     [self addSubview:_metalView];
   }
   return self;
+}
+
+- (void)emitHostTerminalIfPending
+{
+  if (!_renderer || !_eventEmitter) {
+    return;
+  }
+  bool accepted = false;
+  uint8_t message[4096] = {};
+  int64_t length = motolii_macos_renderer_take_host_terminal(
+      _renderer, &accepted, message, sizeof(message));
+  if (length < 0) {
+    return;
+  }
+  auto emitter = std::static_pointer_cast<const MotoliiGpuViewEventEmitter>(_eventEmitter);
+  MotoliiGpuViewEventEmitter::OnHostTerminal event = {
+      .accepted = accepted,
+      .message = std::string((const char *)message, (size_t)length),
+  };
+  emitter->onHostTerminal(event);
 }
 
 - (void)finishBrowserDrop:(NSEvent *)event
@@ -1017,6 +1063,7 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
     MotoliiGpuComponentView *strongSelf = weakSelf;
     if (strongSelf && strongSelf->_renderer) {
       motolii_macos_renderer_render(strongSelf->_renderer);
+      [strongSelf emitHostTerminalIfPending];
       [strongSelf emitStageTransformIfChanged];
       MotoliiRenderStats stats = {};
       if (motolii_macos_renderer_get_stats(strongSelf->_renderer, &stats) &&

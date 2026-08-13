@@ -196,6 +196,21 @@ export function setHostRejectApplier(
   hostRejectApplier = applier;
 }
 
+/** native rendererの終端通知だけが呼ぶ。snapshot JSONはこの場で最大1回読む。 */
+export function applyNativeHostTerminal(
+  accepted: boolean,
+  message: string,
+) {
+  const snapshotApplier = hostSnapshotApplier;
+  if (!snapshotApplier) {
+    return;
+  }
+  hostRejectApplier?.(
+    accepted ? null : message || 'Native edit rejected',
+  );
+  snapshotApplier(readHostSnapshotState());
+}
+
 export type HostIntentResult = {
   accepted: boolean;
   message: string | null;

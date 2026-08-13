@@ -17,6 +17,11 @@ export type StageTransformEvent = Readonly<{
   rotationZ: CodegenTypes.Double;
 }>;
 
+export type HostTerminalEvent = Readonly<{
+  accepted: boolean;
+  message: string;
+}>;
+
 export interface NativeProps extends ViewProps {
   createdItemId: string;
   draggedItemId: string;
@@ -28,6 +33,7 @@ export interface NativeProps extends ViewProps {
   rotationZ: CodegenTypes.Double;
   onStageDrop?: CodegenTypes.DirectEventHandler<StageDropEvent>;
   onStageTransform?: CodegenTypes.DirectEventHandler<StageTransformEvent>;
+  onHostTerminal?: CodegenTypes.DirectEventHandler<HostTerminalEvent>;
 }
 
 export default codegenNativeComponent<NativeProps>(

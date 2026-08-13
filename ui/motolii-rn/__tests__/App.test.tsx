@@ -6,7 +6,10 @@ import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { Text, TurboModuleRegistry } from 'react-native';
 import App from '../App';
-import { dispatchHostIntentResult } from '../src/host';
+import {
+  applyNativeHostTerminal,
+  dispatchHostIntentResult,
+} from '../src/host';
 
 const mockDispatchIntent = jest.fn<string, [string]>(() => '{"accepted":true}');
 const mockReadSnapshot = jest.fn(() => '');
@@ -3375,6 +3378,90 @@ test('poll and dispatch response ignore lower-generation and older-host snapshot
   await ReactTestRenderer.act(() => {
     tree!.unmount();
   });
+  getSpy.mockRestore();
+  mockReadSnapshot.mockReturnValue('');
+  jest.useRealTimers();
+});
+
+test('native terminal events read once, apply immediately, reject authoritatively, and ignore preview or stale delivery', async () => {
+  jest.useFakeTimers();
+  const snapshot = (generation: string, layerId: string) =>
+    JSON.stringify({
+      host_handle: '7',
+      revision: generation,
+      projection_generation: generation,
+      current_time: {num: Number(generation), den: 1},
+      primary_layer_id: layerId,
+      history: {can_undo: true, can_redo: false},
+      truncated_total: 0,
+      stage: {bounds: [{layer_id: layerId, display_name: `layer-${layerId}`}]},
+      timeline: {
+        fps: {num: 30, den: 1},
+        layers: [{
+          layer_id: layerId,
+          display_name: `layer-${layerId}`,
+          start: {num: 0, den: 1},
+          duration: {num: 10, den: 1},
+          position_keys: [],
+          keys_truncated: false,
+        }],
+        layers_truncated: false,
+      },
+    });
+  mockReadSnapshot.mockReturnValue(snapshot('1', 'A'));
+  const getSpy = jest
+    .spyOn(TurboModuleRegistry, 'get')
+    .mockImplementation(mockHostGet as typeof TurboModuleRegistry.get);
+
+  let tree: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(<App />);
+  });
+  mockReadSnapshot.mockClear();
+
+  const stage = tree!.root.findByProps({testID: 'rust-wgpu-stage'});
+  await ReactTestRenderer.act(() => {
+    stage.props.onStageTransform({
+      nativeEvent: {x: 1, y: 2, z: 0, rotationX: 0, rotationY: 0, rotationZ: 0},
+    });
+  });
+  expect(mockReadSnapshot).not.toHaveBeenCalled();
+
+  mockReadSnapshot.mockReturnValue(snapshot('2', 'B'));
+  await ReactTestRenderer.act(() => {
+    stage.props.onHostTerminal({nativeEvent: {accepted: true, message: ''}});
+  });
+  expect(mockReadSnapshot).toHaveBeenCalledTimes(1);
+  expect(collectText(tree!.root)).toContain('DOC r2 · 1 layers');
+  expect(inspectorSurfaceText(tree!)).toContain('layer-B');
+
+  mockReadSnapshot.mockClear();
+  mockReadSnapshot.mockReturnValue(snapshot('1', 'STALE'));
+  await ReactTestRenderer.act(() => {
+    stage.props.onHostTerminal({nativeEvent: {accepted: true, message: ''}});
+  });
+  expect(mockReadSnapshot).toHaveBeenCalledTimes(1);
+  expect(collectText(tree!.root)).toContain('DOC r2 · 1 layers');
+  expect(inspectorSurfaceText(tree!)).toContain('layer-B');
+
+  mockReadSnapshot.mockClear();
+  mockReadSnapshot.mockReturnValue(snapshot('3', 'C'));
+  const timeline = tree!.root.findByProps({testID: 'rust-wgpu-timeline'});
+  await ReactTestRenderer.act(() => {
+    timeline.props.onHostTerminal({
+      nativeEvent: {accepted: false, message: 'stale_projection_generation'},
+    });
+  });
+  expect(mockReadSnapshot).toHaveBeenCalledTimes(1);
+  expect(collectText(tree!.root)).toContain('stale_projection_generation');
+  expect(inspectorSurfaceText(tree!)).toContain('layer-C');
+
+  await ReactTestRenderer.act(() => {
+    tree!.unmount();
+  });
+  mockReadSnapshot.mockClear();
+  applyNativeHostTerminal(true, 'late terminal');
+  expect(mockReadSnapshot).not.toHaveBeenCalled();
   getSpy.mockRestore();
   mockReadSnapshot.mockReturnValue('');
   jest.useRealTimers();

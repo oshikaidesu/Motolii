@@ -581,6 +581,40 @@ pub unsafe extern "C" fn motolii_macos_renderer_get_stats(
     .is_ok()
 }
 
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// Renderer instanceが保持するnative terminal resultを一度だけ取り出す。
+///
+/// # Safety
+/// `handle` must be a live renderer, `accepted` writable, and `message` writable for
+/// `message_cap` bytes. Returns -1 when no terminal result is pending.
+pub unsafe extern "C" fn motolii_macos_renderer_take_host_terminal(
+    handle: *mut c_void,
+    accepted: *mut bool,
+    message: *mut u8,
+    message_cap: usize,
+) -> i64 {
+    if handle.is_null() || accepted.is_null() || (message.is_null() && message_cap > 0) {
+        return -1;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        let renderer = &mut *handle.cast::<MacOsSurfaceRenderer>();
+        let Some(event) = renderer.take_host_terminal_event() else {
+            return -1;
+        };
+        let bytes = event.message.as_bytes();
+        if bytes.len() > message_cap {
+            return -1;
+        }
+        accepted.write(event.accepted);
+        if !bytes.is_empty() {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), message, bytes.len());
+        }
+        i64::try_from(bytes.len()).unwrap_or(-1)
+    }))
+    .unwrap_or(-1)
+}
+
 /// keymap用の薄いFFI。実体はhost_bridge / renderer scene判定。
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]

@@ -183,6 +183,69 @@ struct StageResources {
     frame: Option<AppStageFrame>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct NativeHostTerminalEvent {
+    pub(crate) accepted: bool,
+    pub(crate) message: String,
+}
+
+fn terminal_projection_is_stale(
+    current_host_handle: Option<&str>,
+    current_generation: Option<&str>,
+    projection: &crate::host_bridge::HostTimelineProjection,
+) -> bool {
+    let (Some(current_host), Some(next_host)) = (
+        current_host_handle.and_then(|value| value.parse::<u64>().ok()),
+        projection
+            .host_handle
+            .as_deref()
+            .and_then(|value| value.parse::<u64>().ok()),
+    ) else {
+        return false;
+    };
+    if next_host != current_host {
+        return next_host < current_host;
+    }
+    let (Some(current_generation), Some(next_generation)) = (
+        current_generation.and_then(|value| value.parse::<u64>().ok()),
+        projection.projection_generation.parse::<u64>().ok(),
+    ) else {
+        return false;
+    };
+    next_generation < current_generation
+}
+
+#[derive(Default)]
+struct HostTerminalLatch(Option<NativeHostTerminalEvent>);
+
+impl HostTerminalLatch {
+    fn record(&mut self, result: &crate::host_bridge::HostTerminalResult) {
+        self.0 = Some(NativeHostTerminalEvent {
+            accepted: result.accepted,
+            message: result.feedback().unwrap_or_default().to_owned(),
+        });
+    }
+
+    fn take(&mut self) -> Option<NativeHostTerminalEvent> {
+        self.0.take()
+    }
+
+    fn record_if_current(
+        &mut self,
+        current_host_handle: Option<&str>,
+        current_generation: Option<&str>,
+        result: &crate::host_bridge::HostTerminalResult,
+    ) -> bool {
+        if result.projection.as_ref().is_some_and(|projection| {
+            terminal_projection_is_stale(current_host_handle, current_generation, projection)
+        }) {
+            return false;
+        }
+        self.record(result);
+        true
+    }
+}
+
 pub(crate) struct RendererCore {
     _instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
@@ -195,6 +258,8 @@ pub(crate) struct RendererCore {
     timeline_session: Option<TimelineSession>,
     /// Host snapshotのrevision。変化時だけsceneを差し替える。
     host_revision: Option<String>,
+    /// process内host再生成とterminal遅配を区別するstable identity。
+    host_handle: Option<String>,
     /// set_timeはrevisionを進めないため、playhead追従はgenerationで見る。
     host_projection_generation: Option<String>,
     host_stage_geometry: Option<crate::host_bridge::HostStageGeometry>,
@@ -210,6 +275,8 @@ pub(crate) struct RendererCore {
     host_projection_stamp: Option<(u64, u64)>,
     /// F11: mount時warm-upを1回だけ先払いしたか。resizeでは再実行しない。
     mount_warmup_done: bool,
+    /// native操作の終端だけをRNへ一度返す。preview moveは記録しない。
+    host_terminal_latch: HostTerminalLatch,
     scene: SceneKind,
     selected_object_index: i32,
     playhead: f64,
@@ -378,6 +445,7 @@ impl RendererCore {
             // 製品初期はfixture defaultではない。host空ならempty_host、warmup/presentがsnapshotを載せる。
             timeline_session: (scene == SceneKind::Timeline).then(TimelineSession::host_product),
             host_revision: None,
+            host_handle: None,
             host_projection_generation: None,
             host_stage_geometry: None,
             host_stage_viewport: None,
@@ -389,6 +457,7 @@ impl RendererCore {
             force_next_host_snapshot: false,
             host_projection_stamp: None,
             mount_warmup_done: false,
+            host_terminal_latch: HostTerminalLatch::default(),
             scene,
             selected_object_index: -1,
             playhead: 0.0,
@@ -963,6 +1032,13 @@ impl RendererCore {
     }
 
     fn apply_terminal_timeline_result(&mut self, result: crate::host_bridge::HostTerminalResult) {
+        if !self.host_terminal_latch.record_if_current(
+            self.host_handle.as_deref(),
+            self.host_projection_generation.as_deref(),
+            &result,
+        ) {
+            return;
+        }
         let stamp = result.stamp();
         let Some(projection) = result.projection else {
             if !result.accepted {
@@ -993,6 +1069,9 @@ impl RendererCore {
             session.scene = scene;
         }
         self.host_revision = Some(projection.revision.clone());
+        if let Some(host_handle) = projection.host_handle.clone() {
+            self.host_handle = Some(host_handle);
+        }
         self.host_projection_generation = Some(projection.projection_generation.clone());
         if !self.scrubbing && (generation_changed || revision_changed || !result.accepted) {
             let song_bars = self
@@ -1015,6 +1094,13 @@ impl RendererCore {
     }
 
     fn apply_terminal_stage_result(&mut self, result: crate::host_bridge::HostTerminalResult) {
+        if !self.host_terminal_latch.record_if_current(
+            self.host_handle.as_deref(),
+            self.host_projection_generation.as_deref(),
+            &result,
+        ) {
+            return;
+        }
         let stamp = result.stamp();
         let feedback = result.feedback().map(str::to_owned);
         let accepted = result.accepted;
@@ -1027,6 +1113,9 @@ impl RendererCore {
         };
         self.host_projection_stamp = stamp;
         self.host_revision = Some(projection.revision.clone());
+        if let Some(host_handle) = projection.host_handle.clone() {
+            self.host_handle = Some(host_handle);
+        }
         self.host_projection_generation = Some(projection.projection_generation.clone());
         let Some(stage) = self.stage.as_mut() else {
             return;
@@ -1061,6 +1150,10 @@ impl RendererCore {
             );
         }
         self.force_next_host_snapshot = false;
+    }
+
+    pub(crate) fn take_host_terminal_event(&mut self) -> Option<NativeHostTerminalEvent> {
+        self.host_terminal_latch.take()
     }
 
     /// F9: stamp不変かつforceでなく初回でもないtickはfull JSON読みを飛ばす。
@@ -1166,6 +1259,9 @@ impl RendererCore {
                 self.host_projection_stamp = None;
                 return;
             };
+            if let Some(host_handle) = projection.host_handle.clone() {
+                self.host_handle = Some(host_handle);
+            }
             self.host_projection_stamp = read_stamp;
             self.host_fps = projection.fps;
             let revision_changed =
@@ -1306,6 +1402,9 @@ impl RendererCore {
             let stage = self.stage.as_mut().expect("stage present");
             let command = match projection {
                 Some(ref projection) => {
+                    if let Some(host_handle) = projection.host_handle.clone() {
+                        self.host_handle = Some(host_handle);
+                    }
                     self.host_revision = Some(projection.revision.clone());
                     self.host_projection_generation =
                         Some(projection.projection_generation.clone());
@@ -1609,6 +1708,7 @@ mod tests {
         scene.view_a = 1.0;
         scene.view_b = 4.0;
         let projection = crate::host_bridge::HostTimelineProjection {
+            host_handle: None,
             revision: "r1".into(),
             projection_generation: "0".into(),
             primary_layer_id: Some("L2".into()),
@@ -1643,6 +1743,7 @@ mod tests {
             [(10_i64, 1_i64, 10.0_f32), (40_i64, 1_i64, 40.0_f32)]
         {
             let projection = crate::host_bridge::HostTimelineProjection {
+                host_handle: None,
                 revision: "r0".into(),
                 projection_generation: "0".into(),
                 primary_layer_id: Some("L1".into()),
@@ -1679,6 +1780,7 @@ mod tests {
     fn timeline_projection_short_duration_does_not_panic_and_sets_span_to_duration() {
         let existing = TimelineScene::default();
         let projection = crate::host_bridge::HostTimelineProjection {
+            host_handle: None,
             revision: "r2".into(),
             projection_generation: "0".into(),
             primary_layer_id: Some("L1".into()),
@@ -1718,6 +1820,7 @@ mod tests {
         let existing = TimelineScene::default();
         assert!(!existing.real);
         let projection = crate::host_bridge::HostTimelineProjection {
+            host_handle: None,
             revision: "r1".into(),
             projection_generation: "0".into(),
             primary_layer_id: Some("L1".into()),
@@ -1764,6 +1867,7 @@ mod tests {
         assert!(!existing.real);
         assert!(existing.band_count() > 0);
         let projection = crate::host_bridge::HostTimelineProjection {
+            host_handle: None,
             revision: "0".into(),
             projection_generation: "0".into(),
             primary_layer_id: None,
@@ -1787,6 +1891,7 @@ mod tests {
     fn host_projection_exposes_the_same_layer_id() {
         let existing = TimelineScene::empty_host();
         let projection = crate::host_bridge::HostTimelineProjection {
+            host_handle: None,
             revision: "1".into(),
             projection_generation: "1".into(),
             primary_layer_id: Some("42".into()),
@@ -1837,6 +1942,7 @@ mod tests {
     #[test]
     fn empty_host_stage_geometry_applies_instead_of_leaving_fixture() {
         let projection = crate::host_bridge::HostTimelineProjection {
+            host_handle: None,
             revision: "0".into(),
             projection_generation: "0".into(),
             primary_layer_id: None,
@@ -2055,6 +2161,7 @@ mod tests {
             layers_truncated: false,
         };
         let projection_a = crate::host_bridge::HostTimelineProjection {
+            host_handle: None,
             revision: "r".into(),
             projection_generation: "0".into(),
             primary_layer_id: None,
@@ -2066,6 +2173,7 @@ mod tests {
             stage_geometry: Some(geometry_a.clone()),
         };
         let projection_b = crate::host_bridge::HostTimelineProjection {
+            host_handle: None,
             revision: "r".into(),
             projection_generation: "0".into(),
             primary_layer_id: None,
@@ -2158,6 +2266,7 @@ mod tests {
         );
 
         let mut projection = crate::host_bridge::HostTimelineProjection {
+            host_handle: None,
             revision: "r2".into(),
             projection_generation: "1".into(),
             primary_layer_id: Some("11".into()),
@@ -2274,5 +2383,75 @@ mod tests {
             None,
             false
         ));
+    }
+
+    #[test]
+    fn host_terminal_latch_returns_latest_terminal_once() {
+        let mut latch = HostTerminalLatch::default();
+        latch.record(&crate::host_bridge::HostTerminalResult {
+            accepted: true,
+            diagnostics: vec![],
+            message: None,
+            projection: None,
+        });
+        latch.record(&crate::host_bridge::HostTerminalResult {
+            accepted: false,
+            diagnostics: vec![crate::host_bridge::HostTerminalDiagnostic {
+                reason: "stale_projection_generation".into(),
+                host_handle: Some("7".into()),
+                stage_handle: None,
+                timeline_handle: Some("8".into()),
+                expected_projection_generation: Some("5".into()),
+                actual_projection_generation: Some("4".into()),
+            }],
+            message: None,
+            projection: None,
+        });
+
+        assert_eq!(
+            latch.take(),
+            Some(NativeHostTerminalEvent {
+                accepted: false,
+                message: "stale_projection_generation".into(),
+            })
+        );
+        assert_eq!(latch.take(), None);
+    }
+
+    #[test]
+    fn host_terminal_latch_ignores_late_old_host_and_lower_generation() {
+        let projection =
+            |host: &str, generation: &str| crate::host_bridge::HostTimelineProjection {
+                host_handle: Some(host.into()),
+                revision: "9".into(),
+                projection_generation: generation.into(),
+                primary_layer_id: None,
+                current_time: (0, 1),
+                timeline_duration: None,
+                fps: None,
+                bounds: vec![],
+                timeline_layers: None,
+                stage_geometry: None,
+            };
+        let terminal = |projection| crate::host_bridge::HostTerminalResult {
+            accepted: true,
+            diagnostics: vec![],
+            message: None,
+            projection: Some(projection),
+        };
+        let mut latch = HostTerminalLatch::default();
+
+        assert!(!latch.record_if_current(Some("7"), Some("5"), &terminal(projection("6", "99")),));
+        assert!(!latch.record_if_current(Some("7"), Some("5"), &terminal(projection("7", "4")),));
+        assert_eq!(latch.take(), None);
+
+        assert!(latch.record_if_current(Some("7"), Some("5"), &terminal(projection("8", "0")),));
+        assert_eq!(
+            latch.take(),
+            Some(NativeHostTerminalEvent {
+                accepted: true,
+                message: String::new(),
+            })
+        );
     }
 }

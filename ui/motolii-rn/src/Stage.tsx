@@ -3,6 +3,7 @@ import {Pressable, Text, View} from 'react-native';
 
 import MotoliiGpuView from './specs/MotoliiGpuViewNativeComponent';
 import {
+  applyNativeHostTerminal,
   formatPlayhead,
   nativeHostFitStageView,
   nativeHostStageOneToOne,
@@ -48,6 +49,10 @@ export function Stage({draggedItemId, showGpu, onDrop, onToggleGpu, transform, c
               )
             }
             onStageTransform={() => {}}
+            onHostTerminal={event => {
+              const {accepted, message} = event.nativeEvent;
+              applyNativeHostTerminal(accepted, message);
+            }}
             style={styles.gpuStage}
             testID="rust-wgpu-stage"
           />

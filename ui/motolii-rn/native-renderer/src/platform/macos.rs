@@ -200,6 +200,12 @@ impl MacOsSurfaceRenderer {
     pub(crate) fn stats(&self) -> RenderStats {
         self.core.stats()
     }
+
+    pub(crate) fn take_host_terminal_event(
+        &mut self,
+    ) -> Option<crate::renderer_core::NativeHostTerminalEvent> {
+        self.core.take_host_terminal_event()
+    }
 }
 
 /// `motolii_rnapp_host_key_event` は再定義しない。renderer 経由の受け口。
