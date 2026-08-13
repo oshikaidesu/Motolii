@@ -314,6 +314,248 @@ fn invalid_phases_are_not_executable() {
 }
 
 #[test]
+fn ableton_default_connects_existing_play_undo_delete_without_new_commands() {
+    let registry = builtin_command_registry().unwrap();
+    let none = modifiers(&[]);
+    let meta = modifiers(&[Modifier::Meta]);
+    let meta_shift = modifiers(&[Modifier::Meta, Modifier::Shift]);
+    let platform = PlatformCommandModifier::Meta;
+
+    let space = EffectiveTrigger::Keyboard {
+        key: KeyToken::Space,
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let delete = EffectiveTrigger::Keyboard {
+        key: KeyToken::Delete,
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let backspace = EffectiveTrigger::Keyboard {
+        key: KeyToken::Backspace,
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let undo = EffectiveTrigger::Keyboard {
+        key: key('z'),
+        modifiers: meta,
+        phase: InputPhase::Press,
+    };
+    let redo = EffectiveTrigger::Keyboard {
+        key: key('z'),
+        modifiers: meta_shift,
+        phase: InputPhase::Press,
+    };
+    let duplicate = EffectiveTrigger::Keyboard {
+        key: key('d'),
+        modifiers: modifiers(&[Modifier::Meta]),
+        phase: InputPhase::Press,
+    };
+    let split = EffectiveTrigger::Keyboard {
+        key: key('k'),
+        modifiers: modifiers(&[Modifier::Meta]),
+        phase: InputPhase::Press,
+    };
+    let solo = EffectiveTrigger::Keyboard {
+        key: key('s'),
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let mute = EffectiveTrigger::Keyboard {
+        key: key('m'),
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let shuttle_forward = EffectiveTrigger::Keyboard {
+        key: key('l'),
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let shuttle_reverse = EffectiveTrigger::Keyboard {
+        key: key('j'),
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let shuttle_stop = EffectiveTrigger::Keyboard {
+        key: key('k'),
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let mark_in = EffectiveTrigger::Keyboard {
+        key: key('i'),
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let mark_out = EffectiveTrigger::Keyboard {
+        key: key('o'),
+        modifiers: none,
+        phase: InputPhase::Press,
+    };
+
+    assert_eq!(motolii_ui::PRODUCT_KEYMAP_PROFILE_ID, "ableton");
+    assert_eq!(
+        motolii_ui::resolve_product_action(&space, &registry, &empty_delta(), platform),
+        Some(motolii_ui::ProductAction::HostKind(
+            motolii_ui::PRODUCT_HOST_KIND_TOGGLE_PLAYBACK.into()
+        ))
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&space, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some("toggle_playback")
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&delete, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some("delete_layer")
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&backspace, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some("delete_layer")
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&undo, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some("undo")
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&redo, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some("redo")
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&duplicate, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some(motolii_ui::PRODUCT_HOST_KIND_DUPLICATE)
+    );
+    assert_eq!(
+        motolii_ui::PRODUCT_UNWIRED_DUPLICATE,
+        motolii_ui::PRODUCT_HOST_KIND_DUPLICATE
+    );
+    assert_eq!(
+        motolii_ui::resolve_product_action(&split, &registry, &empty_delta(), platform),
+        Some(motolii_ui::ProductAction::HostKind(
+            motolii_ui::PRODUCT_UNWIRED_SPLIT.into()
+        ))
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&split, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some(motolii_ui::PRODUCT_UNWIRED_SPLIT)
+    );
+    assert_eq!(motolii_ui::PRODUCT_UNWIRED_SPLIT, "split");
+    assert_eq!(
+        motolii_ui::PRODUCT_UNWIRED_SOLO,
+        motolii_ui::PRODUCT_HOST_KIND_SOLO
+    );
+    assert_eq!(
+        motolii_ui::PRODUCT_UNWIRED_MUTE,
+        motolii_ui::PRODUCT_HOST_KIND_MUTE
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&solo, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some(motolii_ui::PRODUCT_HOST_KIND_SOLO)
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&mute, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some(motolii_ui::PRODUCT_HOST_KIND_MUTE)
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(
+                &shuttle_forward,
+                &registry,
+                &empty_delta(),
+                platform
+            )
+            .unwrap()
+        ),
+        Some(motolii_ui::PRODUCT_HOST_KIND_SHUTTLE_FORWARD)
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(
+                &shuttle_reverse,
+                &registry,
+                &empty_delta(),
+                platform
+            )
+            .unwrap()
+        ),
+        Some(motolii_ui::PRODUCT_HOST_KIND_SHUTTLE_REVERSE)
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&shuttle_stop, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some(motolii_ui::PRODUCT_HOST_KIND_SHUTTLE_STOP)
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&mark_in, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some(motolii_ui::PRODUCT_HOST_KIND_TRIM_CLIP_IN)
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &motolii_ui::resolve_product_action(&mark_out, &registry, &empty_delta(), platform)
+                .unwrap()
+        ),
+        Some(motolii_ui::PRODUCT_HOST_KIND_TRIM_CLIP_OUT)
+    );
+}
+
+#[test]
+fn user_delta_can_disable_space_play_without_new_command() {
+    let registry = builtin_command_registry().unwrap();
+    let space_gesture = Gesture::Keyboard {
+        key: KeyToken::Space,
+        modifiers: Modifiers::default(),
+        phase: InputPhase::Press,
+    };
+    let space = EffectiveTrigger::Keyboard {
+        key: KeyToken::Space,
+        modifiers: Modifiers::default(),
+        phase: InputPhase::Press,
+    };
+    let delta = KeymapDelta::new(vec![DeltaOperation::Disable {
+        gesture: space_gesture,
+    }]);
+    assert_eq!(
+        motolii_ui::resolve_product_action(
+            &space,
+            &registry,
+            &delta,
+            PlatformCommandModifier::Meta
+        ),
+        None
+    );
+}
+
+#[test]
 fn keymap_source_has_no_persistence_or_toolkit_contract() {
     let source = include_str!("../src/keymap.rs");
     for token in [

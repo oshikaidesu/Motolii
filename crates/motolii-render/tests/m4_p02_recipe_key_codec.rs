@@ -107,10 +107,7 @@ fn input_digests_order_is_significant() {
 #[test]
 fn duplicate_param_id_is_typed_error() {
     let mut input = base_input();
-    input.params = vec![
-        ("color".into(), vec![0x01]),
-        ("color".into(), vec![0x02]),
-    ];
+    input.params = vec![("color".into(), vec![0x01]), ("color".into(), vec![0x02])];
     assert_eq!(
         RecipeKeyV1::encode(&input).unwrap_err(),
         RecipeKeyError::DuplicateParamId

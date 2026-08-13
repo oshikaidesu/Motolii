@@ -3,8 +3,8 @@
 //! processに最大1 host。ObjC/RNは薄いcarrierとしてここへ委譲する。
 
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 const MAX_JSON_BYTES: usize = 16_384;
 const MAX_SNAPSHOT_JSON_BYTES: usize = 131_072;
@@ -27,6 +27,9 @@ static TEST_MOVE_LAYER_BY_DISPATCH_COUNT: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
 static TEST_SNAPSHOT_READ_COUNT: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(test)]
+static TEST_SET_POSITION_KEY_TIME_DISPATCH_COUNT: AtomicU64 = AtomicU64::new(0);
+
 // extern importではなくRust経由で呼ぶ。externで宣言すると同一crate graph内でも
 // motolii-uiの該当objectがarchiveから引かれず、appのlinkで未解決symbolになる(実測)。
 #[cfg(target_os = "macos")]
@@ -35,9 +38,13 @@ use motolii_ui::{
     motolii_rn_host_read_snapshot_json, motolii_rn_stage_register,
 };
 
-use motolii_gpu::GpuCtx;
-use motolii_render::RenderSession;
-use motolii_ui::{host_render_frame_for_app, AppStageFrame, HostRenderFrameResult};
+use motolii_ui::{
+    AppStageGeometry, AppStageTransformEdit, AsciiKey, EffectiveTrigger, InputPhase, KeyToken,
+    Modifier, Modifiers, PlatformCommandModifier, ProductAction, builtin_command_registry,
+    default_user_keymap_override_path, host_commit_stage_transform_for_app,
+    host_preview_stage_transform_for_app, load_user_keymap_override, product_action_host_kind,
+    product_builtin_keymap, resolve_product_action,
+};
 
 struct HostSlot {
     handle: u64,
@@ -55,10 +62,18 @@ struct HostSlot {
 }
 
 static TIMELINE_INTERACTING: AtomicBool = AtomicBool::new(false);
+static IME_PREEDIT: AtomicBool = AtomicBool::new(false);
 
 fn host_slot() -> &'static Mutex<Option<HostSlot>> {
     static SLOT: OnceLock<Mutex<Option<HostSlot>>> = OnceLock::new();
     SLOT.get_or_init(|| Mutex::new(None))
+}
+
+/// Host生成に失敗したprocessでも、RN操作へcoreのtyped rejectを返す。
+#[cfg(target_os = "macos")]
+fn host_startup_reject() -> &'static Mutex<Option<String>> {
+    static REJECT: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+    REJECT.get_or_init(|| Mutex::new(None))
 }
 
 pub(crate) fn is_timeline_interacting() -> bool {
@@ -118,6 +133,40 @@ pub(crate) struct HostStageGeometry {
 pub(crate) struct HostStageGeometryLayer {
     pub layer_id: String,
     pub corners: [[f64; 2]; 4],
+    pub position: [f64; 2],
+    pub rotation: f64,
+    pub scale: [f64; 2],
+}
+
+impl HostStageGeometryLayer {
+    pub(crate) fn from_corners(layer_id: impl Into<String>, corners: [[f64; 2]; 4]) -> Self {
+        Self {
+            layer_id: layer_id.into(),
+            corners,
+            position: [0.0, 0.0],
+            rotation: 0.0,
+            scale: [1.0, 1.0],
+        }
+    }
+}
+
+impl From<AppStageGeometry> for HostStageGeometry {
+    fn from(geometry: AppStageGeometry) -> Self {
+        Self {
+            layers: geometry
+                .layers
+                .into_iter()
+                .map(|layer| HostStageGeometryLayer {
+                    layer_id: layer.layer_id,
+                    corners: layer.corners,
+                    position: layer.position,
+                    rotation: layer.rotation,
+                    scale: layer.scale,
+                })
+                .collect(),
+            layers_truncated: geometry.layers_truncated,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -127,10 +176,14 @@ pub(crate) struct HostTimelineLayer {
     pub start_secs: f64,
     pub duration_secs: f64,
     pub position_keys: Vec<HostTimelineKey>,
+    /// wire `param_keys`。欠落は空。scene keys へ position_keys と union。
+    pub param_keys: Vec<HostTimelineKey>,
     pub effects: Vec<HostTimelineEffect>,
     pub effects_truncated: bool,
     pub source_params: Vec<HostTimelineSourceParam>,
     pub source_params_truncated: bool,
+    pub visible: bool,
+    pub solo: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -233,7 +286,18 @@ pub unsafe extern "C" fn motolii_rnapp_host_ensure(path_utf8: *const u8, path_le
         )
     };
     if written <= 0 || host_handle == 0 {
+        if let Some(response) = slice_from_written(&out, written)
+            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+            .filter(|response| !response_is_accepted(response))
+        {
+            if let Ok(mut reject) = host_startup_reject().lock() {
+                *reject = Some(response.to_owned());
+            }
+        }
         return false;
+    }
+    if let Ok(mut reject) = host_startup_reject().lock() {
+        *reject = None;
     }
     *guard = Some(HostSlot {
         handle: host_handle,
@@ -256,12 +320,7 @@ fn ensure_stage_registered(slot: &mut HostSlot) -> bool {
     let mut stage_handle = 0u64;
     let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
     let written = unsafe {
-        motolii_rn_stage_register(
-            slot.handle,
-            &mut stage_handle,
-            out.as_mut_ptr(),
-            out.len(),
-        )
+        motolii_rn_stage_register(slot.handle, &mut stage_handle, out.as_mut_ptr(), out.len())
     };
     if written <= 0 || stage_handle == 0 {
         return false;
@@ -501,7 +560,7 @@ pub unsafe extern "C" fn motolii_rnapp_stage_pointer(
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 /// # Safety
-/// `kind_utf8` must point to `kind_len` UTF-8 bytes naming undo/redo/delete_layer.
+/// `kind_utf8` must point to `kind_len` UTF-8 bytes naming undo/redo/delete_layer/toggle_playback.
 pub unsafe extern "C" fn motolii_rnapp_host_keymap(kind_utf8: *const u8, kind_len: usize) -> bool {
     if kind_utf8.is_null() || kind_len == 0 || kind_len > 64 {
         return false;
@@ -511,6 +570,112 @@ pub unsafe extern "C" fn motolii_rnapp_host_keymap(kind_utf8: *const u8, kind_le
         return false;
     };
     try_dispatch_keymap(kind)
+}
+
+const MOD_SHIFT: u32 = 1;
+const MOD_CONTROL: u32 = 2;
+const MOD_ALT: u32 = 4;
+const MOD_META: u32 = 8;
+
+fn mac_key_token(key_code: u16, chars: &str) -> Option<KeyToken> {
+    match key_code {
+        49 => Some(KeyToken::Space),
+        36 => Some(KeyToken::Enter),
+        53 => Some(KeyToken::Escape),
+        117 => Some(KeyToken::Delete),
+        51 => Some(KeyToken::Backspace),
+        48 => Some(KeyToken::Tab),
+        126 => Some(KeyToken::ArrowUp),
+        125 => Some(KeyToken::ArrowDown),
+        123 => Some(KeyToken::ArrowLeft),
+        124 => Some(KeyToken::ArrowRight),
+        115 => Some(KeyToken::Home),
+        119 => Some(KeyToken::End),
+        116 => Some(KeyToken::PageUp),
+        121 => Some(KeyToken::PageDown),
+        _ => {
+            let value = chars.chars().next()?.to_ascii_lowercase();
+            AsciiKey::try_new(value).ok().map(KeyToken::Ascii)
+        }
+    }
+}
+
+fn mac_modifiers(bits: u32) -> Option<Modifiers> {
+    let mut modifiers = Vec::new();
+    if bits & MOD_SHIFT != 0 {
+        modifiers.push(Modifier::Shift);
+    }
+    if bits & MOD_CONTROL != 0 {
+        modifiers.push(Modifier::Control);
+    }
+    if bits & MOD_ALT != 0 {
+        modifiers.push(Modifier::Alt);
+    }
+    if bits & MOD_META != 0 {
+        modifiers.push(Modifier::Meta);
+    }
+    Modifiers::try_new(modifiers).ok()
+}
+
+fn resolve_mac_key_action(key_code: u16, modifier_bits: u32, chars: &str) -> Option<ProductAction> {
+    let key = mac_key_token(key_code, chars)?;
+    let modifiers = mac_modifiers(modifier_bits)?;
+    let trigger = EffectiveTrigger::Keyboard {
+        key,
+        modifiers,
+        phase: InputPhase::Press,
+    };
+    let registry = builtin_command_registry().ok()?;
+    let base = product_builtin_keymap();
+    let delta = load_user_keymap_override(default_user_keymap_override_path().as_deref(), &base);
+    resolve_product_action(&trigger, &registry, &delta, PlatformCommandModifier::Meta)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// `chars_utf8` may be null when `chars_len` is 0.
+/// 戻り: 0=未束縛, 1=消費, 2=timeline既存deleteへ。
+pub unsafe extern "C" fn motolii_rnapp_host_key_event(
+    key_code: u16,
+    modifier_bits: u32,
+    chars_utf8: *const u8,
+    chars_len: usize,
+    is_repeat: bool,
+    timeline_focused: bool,
+) -> i32 {
+    let chars = if chars_utf8.is_null() || chars_len == 0 {
+        ""
+    } else if chars_len > 16 {
+        return 0;
+    } else {
+        match std::str::from_utf8(unsafe { std::slice::from_raw_parts(chars_utf8, chars_len) }) {
+            Ok(value) => value,
+            Err(_) => return 0,
+        }
+    };
+    let Some(action) = resolve_mac_key_action(key_code, modifier_bits, chars) else {
+        return 0;
+    };
+    let Some(kind) = product_action_host_kind(&action) else {
+        return i32::from(matches!(action, ProductAction::Unwired(_)));
+    };
+    if is_repeat
+        && matches!(
+            kind,
+            "toggle_playback"
+                | "shuttle_forward"
+                | "shuttle_stop"
+                | "trim_clip_in"
+                | "trim_clip_out"
+        )
+    {
+        return 1;
+    }
+    if kind == "delete_layer" && timeline_focused {
+        return 2;
+    }
+    i32::from(try_dispatch_keymap(kind))
 }
 
 #[cfg(target_os = "macos")]
@@ -532,7 +697,19 @@ pub unsafe extern "C" fn motolii_rnapp_host_dispatch_json(
         return -1;
     };
     let Some(slot) = guard.as_ref() else {
-        return -1;
+        let Ok(reject) = host_startup_reject().lock() else {
+            return -1;
+        };
+        let Some(reject) = reject.as_deref() else {
+            return -1;
+        };
+        if reject.len() > out_cap {
+            return -(reject.len() as i64);
+        }
+        unsafe {
+            std::ptr::copy_nonoverlapping(reject.as_ptr(), out, reject.len());
+        }
+        return reject.len() as i64;
     };
     let Ok(patched) = inject_host_handle(intent, slot.handle) else {
         return -1;
@@ -564,6 +741,41 @@ pub unsafe extern "C" fn motolii_rnapp_host_snapshot_json(out: *mut u8, out_cap:
         return -1;
     };
     unsafe { motolii_rn_host_read_snapshot_json(slot.handle, out, out_cap) }
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn motolii_rnapp_commit_stage_transform(
+    target_utf8: *const u8,
+    target_len: usize,
+    revision_utf8: *const u8,
+    revision_len: usize,
+    kind: i32,
+    a: f64,
+    b: f64,
+) -> bool {
+    if target_utf8.is_null() || revision_utf8.is_null() {
+        return false;
+    }
+    let Ok(target) =
+        std::str::from_utf8(unsafe { std::slice::from_raw_parts(target_utf8, target_len) })
+    else {
+        return false;
+    };
+    let Ok(revision) =
+        std::str::from_utf8(unsafe { std::slice::from_raw_parts(revision_utf8, revision_len) })
+    else {
+        return false;
+    };
+    let Ok(expected_revision) = revision.parse::<u64>() else {
+        return false;
+    };
+    let edit = match kind {
+        1 => AppStageTransformEdit::RotateZ(a),
+        2 => AppStageTransformEdit::Scale([a, b]),
+        _ => return false,
+    };
+    try_commit_stage_transform(expected_revision, target, edit).is_ok()
 }
 
 /// Hostが在る時だけsnapshotを読む。不在・失敗はNone。
@@ -614,44 +826,52 @@ pub(crate) fn try_read_projection_stamp() -> Option<(u64, u64)> {
         };
         let mut revision = 0u64;
         let mut generation = 0u64;
-        if !unsafe {
-            motolii_rn_host_projection_stamp(slot.handle, &mut revision, &mut generation)
-        } {
+        if !unsafe { motolii_rn_host_projection_stamp(slot.handle, &mut revision, &mut generation) }
+        {
             return None;
         }
         Some((revision, generation))
     }
 }
 
-/// scrub bar → set_time frame。`frame = round(bar * 2 * fps.num / fps.den)`。
+/// scrub 秒 → set_time frame。`bar` は Skia 凍結名で中身は秒。
+/// `frame = round(secs * fps.num / fps.den)`。
 pub(crate) fn frame_from_scrub_bar(bar: f64, fps_num: i64, fps_den: i64) -> i64 {
     if fps_num <= 0 || fps_den <= 0 {
         return 0;
     }
     const SCALE: i128 = 1_000_000;
-    let s_fixed = (bar * crate::timeline_skia::SECONDS_PER_BAR * (SCALE as f64)).round() as i128;
-    let num = s_fixed * (fps_num as i128);
+    // なぜ: 秒を先にµs丸めすると 24fps の 0.5 frame が 0 になる
+    let frames_fixed =
+        (bar * crate::timeline_skia::SECONDS_PER_BAR * (fps_num as f64) * (SCALE as f64)).round()
+            as i128;
     let den = (fps_den as i128) * SCALE;
     let half = den / 2;
-    let signed_half = if num.is_negative() { -half } else { half };
-    ((num + signed_half) / den) as i64
+    let signed_half = if frames_fixed.is_negative() {
+        -half
+    } else {
+        half
+    };
+    ((frames_fixed + signed_half) / den) as i64
 }
 
-/// bar → RationalTime wire `{num,den}`。1 bar = 2秒、SCALE固定小数でf64連鎖丸めを避ける。
+/// 秒 → RationalTime wire `{num,den}`。`bar` は Skia 凍結名で中身は秒。
+/// SCALE固定小数でf64連鎖丸めを避ける。
 pub(crate) fn rational_time_parts_from_bar(bar: f64) -> (i64, i64) {
     const SCALE: i128 = 1_000_000;
     let s_fixed = (bar * crate::timeline_skia::SECONDS_PER_BAR * (SCALE as f64)).round() as i128;
     (s_fixed as i64, SCALE as i64)
 }
 
-/// host `current_time` → playhead(0..1)。bar = secs/2、曲基準 / song_bars。
+/// host `current_time`(秒) → playhead(0..1)。
+/// `song_bars` は Skia 凍結名。SECONDS_PER_BAR=1 なので曲長秒。
 pub(crate) fn playhead_from_current_time(num: i64, den: i64, song_bars: f32) -> f64 {
     if den == 0 || song_bars <= 0.0 {
         return 0.0;
     }
     let secs = num as f64 / den as f64;
-    let bar = secs / crate::timeline_skia::SECONDS_PER_BAR;
-    (bar / f64::from(song_bars)).clamp(0.0, 1.0)
+    let scene_secs = secs / crate::timeline_skia::SECONDS_PER_BAR;
+    (scene_secs / f64::from(song_bars)).clamp(0.0, 1.0)
 }
 
 /// process host slot経由でset_timeを送る。host不在はfalse(呼ばない)。
@@ -730,6 +950,12 @@ pub(crate) fn try_dispatch_timeline_edit(
                 key_id,
                 bar,
             } => {
+                // param_keys は diamond だけ。position_keys に無い id は commit しない。
+                if !snapshot_has_position_key(slot.handle, layer_id, *key_id) {
+                    return false;
+                }
+                #[cfg(test)]
+                TEST_SET_POSITION_KEY_TIME_DISPATCH_COUNT.fetch_add(1, Ordering::SeqCst);
                 let (num, den) = rational_time_parts_from_bar(f64::from(*bar));
                 format!(
                     concat!(
@@ -737,6 +963,47 @@ pub(crate) fn try_dispatch_timeline_edit(
                         r#""host_handle":"{}","target":"{}","key_id":"{}","time":{{"num":{},"den":{}}}}}"#
                     ),
                     slot.handle, layer_id, key_id, num, den
+                )
+            }
+            TimelineEditCommit::ReparentClip {
+                layer_id,
+                dest_layer_id,
+                bar,
+            } => {
+                let (num, den) = rational_time_parts_from_bar(f64::from(*bar));
+                format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"reparent_clip","#,
+                        r#""host_handle":"{}","target":"{}","dest":"{}","time":{{"num":{},"den":{}}}}}"#
+                    ),
+                    slot.handle, layer_id, dest_layer_id, num, den
+                )
+            }
+            TimelineEditCommit::ToggleMute { layer_id } => format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"mute","#,
+                    r#""host_handle":"{}","target":"{}"}}"#
+                ),
+                slot.handle, layer_id
+            ),
+            TimelineEditCommit::ToggleSolo { layer_id } => format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"solo","#,
+                    r#""host_handle":"{}","target":"{}"}}"#
+                ),
+                slot.handle, layer_id
+            ),
+            TimelineEditCommit::RemovePositionKey { layer_id, key_id } => {
+                // param_keys diamond の Delete を Position 削除へ流さない。
+                if !snapshot_has_position_key(slot.handle, layer_id, *key_id) {
+                    return false;
+                }
+                format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"remove_position_key","#,
+                        r#""host_handle":"{}","target":"{}","key_id":"{}"}}"#
+                    ),
+                    slot.handle, layer_id, key_id
                 )
             }
         };
@@ -747,28 +1014,12 @@ pub(crate) fn try_dispatch_timeline_edit(
 pub(crate) fn try_dispatch_remove_position_key(layer_id: &str, key_id: u64) -> bool {
     #[cfg(test)]
     TEST_KEYMAP_REMOVE_POSITION_KEY_COUNT.fetch_add(1, Ordering::SeqCst);
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (layer_id, key_id);
-        false
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let Ok(guard) = host_slot().lock() else {
-            return false;
-        };
-        let Some(slot) = guard.as_ref() else {
-            return false;
-        };
-        let intent = format!(
-            concat!(
-                r#"{{"version":1,"direction":"rn-to-host","kind":"remove_position_key","#,
-                r#""host_handle":"{}","target":"{}","key_id":"{}"}}"#
-            ),
-            slot.handle, layer_id, key_id
-        );
-        dispatch_intent_json_accepted(slot.handle, &intent)
-    }
+    try_dispatch_timeline_edit(
+        &crate::timeline_skia::TimelineEditCommit::RemovePositionKey {
+            layer_id: layer_id.to_string(),
+            key_id,
+        },
+    )
 }
 
 pub(crate) fn try_dispatch_timeline_selection(
@@ -853,30 +1104,49 @@ pub(crate) fn try_stage_logical_size() -> Option<(f64, f64)> {
     }
 }
 
-/// Host 投影があるときだけ実フレーム seam を呼ぶ。slot lock は seam 前に手放す。
-pub(crate) fn try_host_render_frame(
-    gpu: &GpuCtx,
-    session: &mut RenderSession,
-    out: &mut Option<AppStageFrame>,
-) -> HostRenderFrameResult {
-    let handle = {
-        let Ok(guard) = host_slot().lock() else {
-            return HostRenderFrameResult::Failed;
-        };
-        let Some(slot) = guard.as_ref() else {
-            return HostRenderFrameResult::Failed;
-        };
-        slot.handle
-    };
-    host_render_frame_for_app(handle, gpu, session, out)
+pub(crate) fn try_preview_stage_transform(
+    expected_revision: u64,
+    target: &str,
+    edit: AppStageTransformEdit,
+) -> Result<HostStageGeometry, String> {
+    let target = target
+        .parse::<u64>()
+        .map_err(|_| "The selected layer identity is invalid".to_owned())?;
+    let handle = host_slot()
+        .lock()
+        .map_err(|_| "Stage host is unavailable".to_owned())?
+        .as_ref()
+        .map(|slot| slot.handle)
+        .ok_or_else(|| "Stage host is unavailable".to_owned())?;
+    let preview = host_preview_stage_transform_for_app(handle, expected_revision, target, edit)
+        .map_err(|error| error.to_string())?;
+    Ok(preview.geometry.into())
+}
+
+pub(crate) fn try_commit_stage_transform(
+    expected_revision: u64,
+    target: &str,
+    edit: AppStageTransformEdit,
+) -> Result<(), String> {
+    let target = target
+        .parse::<u64>()
+        .map_err(|_| "The selected layer identity is invalid".to_owned())?;
+    let handle = host_slot()
+        .lock()
+        .map_err(|_| "Stage host is unavailable".to_owned())?
+        .as_ref()
+        .map(|slot| slot.handle)
+        .ok_or_else(|| "Stage host is unavailable".to_owned())?;
+    host_commit_stage_transform_for_app(handle, expected_revision, target, edit)
+        .map_err(|error| error.to_string())
+}
+
+pub(crate) fn try_host_handle() -> Option<u64> {
+    host_slot().lock().ok()?.as_ref().map(|slot| slot.handle)
 }
 
 pub(crate) fn host_slot_present() -> bool {
-    host_slot()
-        .lock()
-        .ok()
-        .and_then(|guard| guard.as_ref().map(|_| ()))
-        .is_some()
+    try_host_handle().is_some()
 }
 
 #[cfg(test)]
@@ -934,7 +1204,9 @@ pub(crate) fn test_clear_host_slot() {
 
 /// Timeline Delete: real key選択中なら remove_position_key、否則 delete_layer。
 pub(crate) fn try_timeline_keymap_delete(scene: &crate::timeline_skia::TimelineScene) -> bool {
-    if let Some((layer_id, key_id)) = crate::timeline_skia::selected_real_key(scene) {
+    if let Some(crate::timeline_skia::TimelineEditCommit::RemovePositionKey { layer_id, key_id }) =
+        crate::timeline_skia::remove_position_key_commit(scene)
+    {
         return try_dispatch_remove_position_key(&layer_id, key_id);
     }
     #[cfg(test)]
@@ -942,7 +1214,7 @@ pub(crate) fn try_timeline_keymap_delete(scene: &crate::timeline_skia::TimelineS
     try_dispatch_keymap("delete_layer")
 }
 
-/// keymap: undo / redo / delete_layer(現primary)。primaryなしのdeleteは何もしない。
+/// keymap: undo / redo / delete_layer(現primary=RemoveTrackItem) / duplicate(現primary) / toggle_playback。primaryなしのdelete/duplicateは何もしない。
 pub(crate) fn try_dispatch_keymap(kind: &str) -> bool {
     #[cfg(not(target_os = "macos"))]
     {
@@ -958,17 +1230,18 @@ pub(crate) fn try_dispatch_keymap(kind: &str) -> bool {
             return false;
         };
         let intent = match kind {
-            "undo" | "redo" => format!(
+            "undo" | "redo" | "toggle_playback" | "shuttle_forward" | "shuttle_reverse"
+            | "shuttle_stop" => format!(
                 r#"{{"version":1,"direction":"rn-to-host","kind":"{kind}","host_handle":"{}"}}"#,
                 slot.handle
             ),
-            "delete_layer" => {
+            "delete_layer" | "duplicate" | "split" | "mute" | "solo" | "trim_clip_in"
+            | "trim_clip_out" => {
                 drop(guard);
                 let Some(projection) = try_read_timeline_projection() else {
                     return false;
                 };
                 let Some(target) = projection.primary_layer_id else {
-                    // primaryなしは何もしない(拒否でも失敗でもない)。
                     return true;
                 };
                 let Ok(guard) = host_slot().lock() else {
@@ -977,13 +1250,25 @@ pub(crate) fn try_dispatch_keymap(kind: &str) -> bool {
                 let Some(slot) = guard.as_ref() else {
                     return false;
                 };
-                let intent = format!(
-                    concat!(
-                        r#"{{"version":1,"direction":"rn-to-host","kind":"delete_layer","#,
-                        r#""host_handle":"{}","target":"{}"}}"#
-                    ),
-                    slot.handle, target
-                );
+                let intent = if kind == "split" || kind == "trim_clip_in" || kind == "trim_clip_out"
+                {
+                    let (num, den) = projection.current_time;
+                    format!(
+                        concat!(
+                            r#"{{"version":1,"direction":"rn-to-host","kind":"{}","#,
+                            r#""host_handle":"{}","target":"{}","time":{{"num":{},"den":{}}}}}"#
+                        ),
+                        kind, slot.handle, target, num, den
+                    )
+                } else {
+                    format!(
+                        concat!(
+                            r#"{{"version":1,"direction":"rn-to-host","kind":"{}","#,
+                            r#""host_handle":"{}","target":"{}"}}"#
+                        ),
+                        kind, slot.handle, target
+                    )
+                };
                 return dispatch_intent_json_accepted(slot.handle, &intent);
             }
             _ => return false,
@@ -1026,7 +1311,9 @@ fn response_is_accepted(response: &str) -> bool {
     let Some(colon_pos) = response[pos..].find(':') else {
         return false;
     };
-    response[pos + colon_pos + 1..].trim_start().starts_with("true")
+    response[pos + colon_pos + 1..]
+        .trim_start()
+        .starts_with("true")
 }
 
 fn slice_from_written<'a>(out: &'a [u8], written: i64) -> Option<&'a [u8]> {
@@ -1042,8 +1329,10 @@ fn inject_host_handle(intent: &str, handle: u64) -> Result<String, ()> {
     let mut escape = false;
     let bytes = intent.as_bytes();
     let mut key_at = None;
+    let mut root_open = None;
+    let mut root_end = None;
     let mut i = 0usize;
-    while i + KEY.len() <= bytes.len() {
+    while i < bytes.len() {
         let b = bytes[i];
         if in_string {
             if escape {
@@ -1069,17 +1358,38 @@ fn inject_host_handle(intent: &str, handle: u64) -> Result<String, ()> {
                 i += 1;
             }
             b'{' => {
+                if depth == 0 {
+                    root_open = Some(i);
+                }
                 depth += 1;
                 i += 1;
             }
             b'}' => {
+                if depth == 1 {
+                    root_end = Some(i);
+                    break;
+                }
                 depth -= 1;
                 i += 1;
             }
             _ => i += 1,
         }
     }
-    let key_at = key_at.ok_or(())?;
+    let Some(key_at) = key_at else {
+        let root_open = root_open.ok_or(())?;
+        let root_end = root_end.ok_or(())?;
+        let separator = if intent[root_open + 1..root_end].trim().is_empty() {
+            ""
+        } else {
+            ","
+        };
+        let mut out = String::with_capacity(intent.len() + 40);
+        out.push_str(&intent[..root_end]);
+        out.push_str(separator);
+        out.push_str(&format!(r#""host_handle":"{handle}""#));
+        out.push_str(&intent[root_end..]);
+        return Ok(out);
+    };
     let after_key = &intent[key_at + KEY.len()..];
     let colon = after_key.find(':').ok_or(())?;
     let after_colon = &after_key[colon + 1..];
@@ -1101,7 +1411,8 @@ fn parse_timeline_projection(json: &str) -> Option<HostTimelineProjection> {
         json_string_value(json, "projection_generation").unwrap_or_else(|| "0".into());
     let primary_layer_id = json_string_value(json, "primary_layer_id");
     let current_time = json_rational(json, "current_time").unwrap_or((0, 1));
-    let timeline_duration = find_key_object(json, "timeline").and_then(|timeline| json_rational(timeline, "duration"));
+    let timeline_duration =
+        find_key_object(json, "timeline").and_then(|timeline| json_rational(timeline, "duration"));
     let fps = find_key_object(json, "timeline").and_then(|timeline| json_rational(timeline, "fps"));
     let bounds = parse_bounds(json)?;
     let timeline_layers = parse_timeline_layers(json);
@@ -1139,6 +1450,7 @@ pub(crate) fn snapshot_layers_from_projection(
                 keys: layer
                     .position_keys
                     .iter()
+                    .chain(layer.param_keys.iter())
                     .map(|key| SnapshotKeyInput {
                         key_id: key.key_id,
                         time_secs: key.time_secs,
@@ -1335,6 +1647,8 @@ fn parse_timeline_layers(json: &str) -> Option<Vec<HostTimelineLayer>> {
             return None;
         }
         let position_keys = parse_position_keys(obj)?;
+        // param_keys 欠落・壊れは空。layer 自体は落とさない。
+        let param_keys = parse_param_keys(obj).unwrap_or_default();
         // effects 欠落は空。壊れ値は空へ fallback（layer 自体は落とさない）。
         let (effects, effects_truncated) = parse_layer_effects(obj).unwrap_or_default();
         let (source_params, source_params_truncated) =
@@ -1345,10 +1659,13 @@ fn parse_timeline_layers(json: &str) -> Option<Vec<HostTimelineLayer>> {
             start_secs: start_num as f64 / start_den as f64,
             duration_secs: duration_num as f64 / duration_den as f64,
             position_keys,
+            param_keys,
             effects,
             effects_truncated,
             source_params,
             source_params_truncated,
+            visible: json_bool_value(obj, "visible").unwrap_or(true),
+            solo: json_bool_value(obj, "solo").unwrap_or(false),
         });
         rest = &rest[end + 1..];
     }
@@ -1570,7 +1887,16 @@ fn parse_stage_geometry(json: &str) -> Option<HostStageGeometry> {
         let layer_obj = &rest[..=end];
         let layer_id = json_string_value(layer_obj, "layer_id")?;
         let corners = parse_corners(layer_obj)?;
-        layers.push(HostStageGeometryLayer { layer_id, corners });
+        let position = parse_vec2_field(layer_obj, "position").unwrap_or([0.0, 0.0]);
+        let rotation = json_f64_value(layer_obj, "rotation").unwrap_or(0.0);
+        let scale = parse_vec2_field(layer_obj, "scale").unwrap_or([1.0, 1.0]);
+        layers.push(HostStageGeometryLayer {
+            layer_id,
+            corners,
+            position,
+            rotation,
+            scale,
+        });
         rest = &rest[end + 1..];
     }
     Some(HostStageGeometry {
@@ -1624,6 +1950,25 @@ fn parse_corners(layer_obj: &str) -> Option<[[f64; 2]; 4]> {
         return None;
     }
     Some([points[0], points[1], points[2], points[3]])
+}
+
+fn parse_vec2_field(layer_obj: &str, key: &str) -> Option<[f64; 2]> {
+    let needle = format!("\"{key}\"");
+    let at = layer_obj.find(&needle)?;
+    let after = layer_obj[at + needle.len()..]
+        .trim_start()
+        .strip_prefix(':')?;
+    let after = after.trim_start().strip_prefix('[')?;
+    let (x, rest) = parse_json_f64(after)?;
+    if !is_finite_f32_compatible(x) {
+        return None;
+    }
+    let rest = rest.trim_start().strip_prefix(',')?;
+    let (y, _) = parse_json_f64(rest)?;
+    if !is_finite_f32_compatible(y) {
+        return None;
+    }
+    Some([x, y])
 }
 
 fn is_finite_f32_compatible(value: f64) -> bool {
@@ -1697,7 +2042,14 @@ fn find_matching_bracket(s: &str) -> Option<usize> {
 }
 
 fn parse_position_keys(layer_obj: &str) -> Option<Vec<HostTimelineKey>> {
-    let marker = "\"position_keys\"";
+    parse_key_array(layer_obj, "\"position_keys\"")
+}
+
+fn parse_param_keys(layer_obj: &str) -> Option<Vec<HostTimelineKey>> {
+    parse_key_array(layer_obj, "\"param_keys\"")
+}
+
+fn parse_key_array(layer_obj: &str, marker: &str) -> Option<Vec<HostTimelineKey>> {
     let at = layer_obj.find(marker)?;
     let after = layer_obj[at + marker.len()..]
         .trim_start()
@@ -1735,12 +2087,39 @@ fn parse_position_keys(layer_obj: &str) -> Option<Vec<HostTimelineKey>> {
     Some(keys)
 }
 
+#[cfg(target_os = "macos")]
+fn snapshot_has_position_key(handle: u64, layer_id: &str, key_id: u64) -> bool {
+    let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
+    let written =
+        unsafe { motolii_rn_host_read_snapshot_json(handle, out.as_mut_ptr(), out.len()) };
+    if written <= 0 {
+        return false;
+    }
+    let Some(json_bytes) = slice_from_written(&out, written) else {
+        return false;
+    };
+    let Ok(json) = std::str::from_utf8(json_bytes) else {
+        return false;
+    };
+    let Some(proj) = parse_timeline_projection(json) else {
+        return false;
+    };
+    let Some(layers) = proj.timeline_layers.as_deref() else {
+        return false;
+    };
+    layer_has_position_key(layers, layer_id, key_id)
+}
+
+fn layer_has_position_key(layers: &[HostTimelineLayer], layer_id: &str, key_id: u64) -> bool {
+    layers.iter().any(|layer| {
+        layer.layer_id == layer_id && layer.position_keys.iter().any(|key| key.key_id == key_id)
+    })
+}
+
 fn parse_optional_vec2(obj: &str) -> Option<[f64; 2]> {
     let marker = "\"value\"";
     let at = obj.find(marker)?;
-    let after = obj[at + marker.len()..]
-        .trim_start()
-        .strip_prefix(':')?;
+    let after = obj[at + marker.len()..].trim_start().strip_prefix(':')?;
     let after = after.trim_start().strip_prefix('[')?;
     let (x, after_x) = parse_json_f64(after)?;
     let after_x = after_x.trim_start();
@@ -1968,6 +2347,183 @@ mod tests {
         motolii_ui::host_destroy_for_test(host).expect("destroy");
     }
 
+    fn read_host_projection(host: u64) -> HostTimelineProjection {
+        let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
+        let written =
+            unsafe { motolii_rn_host_read_snapshot_json(host, out.as_mut_ptr(), out.len()) };
+        assert!(written > 0, "host snapshot json failed: {written}");
+        let json_bytes =
+            slice_from_written(&out, written).expect("snapshot response within buffer");
+        let json = std::str::from_utf8(json_bytes).expect("snapshot json");
+        parse_timeline_projection(json).expect("projection parse")
+    }
+
+    #[test]
+    fn place_rectangle_snapshot_json_feeds_stage_geometry_identity() {
+        let _lock = test_lock();
+        let path = temp_project("place-rect-stage-geom");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        let before = read_host_projection(host);
+        assert!(before.primary_layer_id.is_none());
+        assert!(
+            before
+                .stage_geometry
+                .as_ref()
+                .is_none_or(|geometry| geometry.layers.is_empty())
+        );
+
+        dispatch_kind(
+            host,
+            "place_rectangle",
+            r#","position":[0.25,-0.125],"playhead":{"num":0,"den":1}"#,
+        );
+        let after = read_host_projection(host);
+        let primary = after.primary_layer_id.expect("placed rectangle is primary");
+        let geometry = after.stage_geometry.expect("stage_geometry after place");
+        assert_eq!(geometry.layers.len(), 1);
+        assert_eq!(geometry.layers[0].layer_id, primary);
+        assert_eq!(geometry.layers[0].position, [0.25, -0.125]);
+        assert_eq!(geometry.layers[0].rotation, 0.0);
+        assert_eq!(geometry.layers[0].scale, [1.0, 1.0]);
+        assert_eq!(after.bounds.len(), 1);
+        assert_eq!(after.bounds[0].0, primary);
+        let snap = motolii_ui::host_read_snapshot_for_test(host).expect("placed document layer");
+        assert!(
+            snap.layer_ids.iter().any(|id| id == &primary),
+            "place_rectangle must write a Document layer, not only a snapshot field"
+        );
+        assert!(
+            crate::rerun_stage::host_layer_fill_is_visible(
+                geometry.layers[0].corners,
+                false,
+                false
+            ),
+            "placed rectangle must keep Stage fill until evaluated Image"
+        );
+        assert!(
+            !crate::rerun_stage::host_layer_fill_is_visible(
+                geometry.layers[0].corners,
+                true,
+                false
+            ),
+            "evaluated Image must hide the opaque fill"
+        );
+        assert!(
+            crate::rerun_stage::host_layer_fill_is_visible(geometry.layers[0].corners, true, true),
+            "gizmo preview must keep fill while the evaluated Image is stale"
+        );
+
+        install_slot(host);
+        let revision = after.revision.parse::<u64>().expect("revision");
+        let preview = try_preview_stage_transform(
+            revision,
+            &primary,
+            AppStageTransformEdit::TranslateWorld([0.1, 0.0]),
+        )
+        .expect("host preview");
+        assert_eq!(preview.layers.len(), 1);
+        assert_ne!(
+            preview.layers[0].corners, geometry.layers[0].corners,
+            "gizmo preview must move Document path corners"
+        );
+        assert!((preview.layers[0].position[0] - 0.35).abs() < 1e-12);
+        let unchanged = read_host_projection(host)
+            .stage_geometry
+            .expect("preview must not mutate live Document");
+        assert_eq!(unchanged.layers[0].corners, geometry.layers[0].corners);
+        try_commit_stage_transform(
+            revision,
+            &primary,
+            AppStageTransformEdit::TranslateWorld([0.1, 0.0]),
+        )
+        .expect("host commit");
+        let committed = read_host_projection(host)
+            .stage_geometry
+            .expect("stage_geometry after gizmo commit");
+        assert_eq!(committed.layers[0].corners, preview.layers[0].corners);
+        assert!((committed.layers[0].position[0] - 0.35).abs() < 1e-12);
+        assert_eq!(committed.layers[0].rotation, 0.0);
+
+        let committed_rev = read_host_projection(host)
+            .revision
+            .parse::<u64>()
+            .expect("revision after commit");
+        try_commit_stage_transform(
+            committed_rev,
+            &primary,
+            AppStageTransformEdit::RotateZ(0.25),
+        )
+        .expect("gizmo rotate commit");
+        let rotated = read_host_projection(host)
+            .stage_geometry
+            .expect("stage_geometry after rotate");
+        assert!((rotated.layers[0].rotation - 0.25).abs() < 1e-12);
+        assert!((rotated.layers[0].position[0] - 0.35).abs() < 1e-12);
+        clear_slot();
+
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn handle_free_rn_ellipse_intent_reaches_document_and_stage_projection() {
+        let _lock = test_lock();
+        clear_slot();
+        let path = temp_project("handle-free-place-ellipse");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+        let intent = br#"{"version":1,"direction":"rn-to-host","kind":"place_ellipse","position":[0.25,-0.125],"playhead":{"num":0,"den":1}}"#;
+        let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
+
+        let written = unsafe {
+            motolii_rnapp_host_dispatch_json(
+                intent.as_ptr(),
+                intent.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            )
+        };
+
+        assert!(written > 0);
+        let response = std::str::from_utf8(
+            slice_from_written(&out, written).expect("dispatch response within buffer"),
+        )
+        .expect("utf8 response");
+        assert!(response.contains(r#""accepted":true"#), "{response}");
+        let after = read_host_projection(host);
+        assert_eq!(after.revision, "1");
+        assert_eq!(after.bounds.len(), 1);
+        assert_eq!(after.bounds[0].1, "Ellipse");
+        let primary = after.primary_layer_id.expect("placed ellipse primary");
+        assert_eq!(after.bounds[0].0, primary);
+        let geometry = after.stage_geometry.expect("stage geometry");
+        assert_eq!(geometry.layers.len(), 1);
+        assert_eq!(geometry.layers[0].layer_id, primary);
+        assert_eq!(geometry.layers[0].position, [0.25, -0.125]);
+
+        clear_slot();
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[test]
+    fn place_vism_snapshot_json_feeds_stage_identity() {
+        let _lock = test_lock();
+        let path = temp_project("place-vism-stage-id");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+
+        dispatch_kind(
+            host,
+            "place_vism",
+            r#","plugin_id":"core.layer_source.radial_repeater","position":[0.0,0.0],"playhead":{"num":0,"den":1}"#,
+        );
+        let after = read_host_projection(host);
+        let primary = after.primary_layer_id.expect("placed vism is primary");
+        assert_eq!(after.bounds.len(), 1);
+        assert_eq!(after.bounds[0].0, primary);
+
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
     #[test]
     fn inject_host_handle_replaces_empty_value() {
         let patched = inject_host_handle(
@@ -1976,6 +2532,55 @@ mod tests {
         )
         .expect("inject");
         assert!(patched.contains(r#""host_handle":"42""#));
+    }
+
+    #[test]
+    fn inject_host_handle_adds_missing_top_level_field() {
+        let patched = inject_host_handle(
+            r#"{"version":1,"direction":"rn-to-host","kind":"undo"}"#,
+            42,
+        )
+        .expect("inject");
+        assert_eq!(
+            patched,
+            r#"{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"42"}"#
+        );
+    }
+
+    #[test]
+    fn inject_host_handle_does_not_rewrite_nested_only_field() {
+        let patched = inject_host_handle(
+            r#"{"version":1,"direction":"rn-to-host","kind":"undo","meta":{"host_handle":"nested"}}"#,
+            42,
+        )
+        .expect("inject");
+        assert!(patched.contains(r#""meta":{"host_handle":"nested"}"#));
+        assert!(patched.ends_with(r#","host_handle":"42"}"#));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn dispatch_without_host_returns_the_typed_startup_reject() {
+        let _lock = test_lock();
+        clear_slot();
+        let expected =
+            r#"{"version":1,"accepted":false,"diagnostics":[{"reason":"project_already_open"}]}"#;
+        *host_startup_reject().lock().expect("startup reject") = Some(expected.to_owned());
+        let intent = br#"{"version":1,"direction":"rn-to-host","kind":"place_ellipse"}"#;
+        let mut out = [0u8; 256];
+
+        let written = unsafe {
+            motolii_rnapp_host_dispatch_json(
+                intent.as_ptr(),
+                intent.len(),
+                out.as_mut_ptr(),
+                out.len(),
+            )
+        };
+
+        assert!(written > 0);
+        assert_eq!(&out[..written as usize], expected.as_bytes());
+        *host_startup_reject().lock().expect("startup reject") = None;
     }
 
     #[test]
@@ -2055,10 +2660,7 @@ mod tests {
         }
         assert_eq!(
             proj.fps,
-            Some((
-                baseline.timeline.fps.num(),
-                baseline.timeline.fps.den()
-            ))
+            Some((baseline.timeline.fps.num(), baseline.timeline.fps.den()))
         );
         assert_eq!(
             proj.current_time,
@@ -2135,7 +2737,10 @@ mod tests {
         }"#;
         let proj = parse_timeline_projection(json).expect("parse");
         let layers = snapshot_layers_from_projection(&proj);
-        let song_bars = 10.0 / crate::timeline_skia::SECONDS_PER_BAR;
+        assert_eq!(crate::timeline_skia::SECONDS_PER_BAR, 1.0);
+        let duration_secs = 10.0;
+        let song_bars = duration_secs / crate::timeline_skia::SECONDS_PER_BAR;
+        assert!((song_bars - duration_secs).abs() < 1e-12);
         let scene = TimelineScene::from_snapshot_with_song_bars(
             &layers,
             proj.primary_layer_id.as_deref(),
@@ -2143,14 +2748,17 @@ mod tests {
         );
         let (a, b, keys) = scene.clip0_span_and_keys(0).expect("clip0");
         assert!((a - 0.0).abs() < 1e-6);
-        assert!((b - 5.0).abs() < 1e-6); // 10s / 2
+        assert!((f64::from(b) - duration_secs).abs() < 1e-6);
         assert_eq!(keys.len(), 1);
-        assert!((keys[0].0 - 2.0).abs() < 1e-6); // 4s / 2
+        assert!((keys[0].0 - 4.0).abs() < 1e-6);
         assert_eq!(keys[0].1, 42);
         assert_eq!(scene.selected_flat, 0);
-        assert!((scene.song_bars - 5.0).abs() < 1e-6);
+        assert!((f64::from(scene.song_bars) - duration_secs).abs() < 1e-6);
         assert!((scene.view_a - 0.0).abs() < 1e-6);
-        assert!((scene.view_b - 5.0).abs() < 1e-6);
+        assert!((f64::from(scene.view_b) - duration_secs).abs() < 1e-6);
+        assert_eq!(proj.fps, Some((30, 1)));
+        assert_eq!(frame_from_scrub_bar(duration_secs, 30, 1), 300);
+        assert_eq!(frame_from_scrub_bar(f64::from(keys[0].0), 30, 1), 120);
     }
 
     #[test]
@@ -2194,6 +2802,130 @@ mod tests {
     }
 
     #[test]
+    fn param_keys_union_into_scene_keys() {
+        let json = r#"{
+            "version":1,
+            "direction":"host-to-rn",
+            "role":"product",
+            "host_handle":"1",
+            "revision":"7",
+            "projection_generation":"0",
+            "current_time":{"num":0,"den":1},
+            "primary_layer_id":"11",
+            "stage":{"selection":[],"bounds":[
+                {"layer_id":"11","display_name":"rect"}
+            ]},
+            "timeline":{
+                "fps":{"num":30,"den":1},
+                "layers":[{
+                    "layer_id":"11",
+                    "display_name":"rect",
+                    "start":{"num":0,"den":1},
+                    "duration":{"num":10,"den":1},
+                    "position_keys":[{"key_id":"42","time":{"num":4,"den":1}}],
+                    "param_keys":[
+                        {"property":"scale","key_id":"99","time":{"num":2,"den":1},"vec":[1.0,1.0]},
+                        {"property":"opacity","key_id":"100","time":{"num":6,"den":1},"value":0.5}
+                    ],
+                    "keys_truncated":false
+                }],
+                "layers_truncated":false
+            },
+            "diagnostics":[]
+        }"#;
+        let proj = parse_timeline_projection(json).expect("parse");
+        let host_layers = proj.timeline_layers.as_ref().expect("layers");
+        assert_eq!(host_layers[0].position_keys.len(), 1);
+        assert_eq!(host_layers[0].param_keys.len(), 2);
+        assert_eq!(host_layers[0].param_keys[0].key_id, 99);
+        assert_eq!(host_layers[0].param_keys[1].key_id, 100);
+        assert!(super::layer_has_position_key(host_layers, "11", 42));
+        assert!(!super::layer_has_position_key(host_layers, "11", 99));
+        assert!(!super::layer_has_position_key(host_layers, "11", 100));
+        let layers = snapshot_layers_from_projection(&proj);
+        let scene = TimelineScene::from_snapshot_with_song_bars(
+            &layers,
+            proj.primary_layer_id.as_deref(),
+            10.0,
+        );
+        let (_, _, keys) = scene.clip0_span_and_keys(0).expect("clip0");
+        assert_eq!(keys.len(), 3);
+        assert!(
+            keys.iter()
+                .any(|key| key.1 == 42 && (key.0 - 4.0).abs() < 1e-6)
+        );
+        assert!(
+            keys.iter()
+                .any(|key| key.1 == 99 && (key.0 - 2.0).abs() < 1e-6)
+        );
+        assert!(
+            keys.iter()
+                .any(|key| key.1 == 100 && (key.0 - 6.0).abs() < 1e-6)
+        );
+    }
+
+    #[test]
+    fn param_key_id_does_not_dispatch_set_position_key_time() {
+        let _lock = test_lock();
+        clear_slot();
+        let path = temp_project("param-key-drag-noop");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+        dispatch_kind(
+            host,
+            "place_rectangle",
+            r#","position":[0.25,-0.125],"playhead":{"num":0,"den":1}"#,
+        );
+        let placed = motolii_ui::host_read_snapshot_for_test(host).expect("placed");
+        let layer_id = placed.primary_layer_id.expect("primary after place");
+        dispatch_kind(
+            host,
+            "add_position_key",
+            &format!(r#","target":"{layer_id}","time":{{"num":1,"den":1}}"#),
+        );
+        let keyed = motolii_ui::host_read_snapshot_for_test(host).expect("keyed");
+        let position_key_id = keyed
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("keyed layer")
+            .position_keys
+            .last()
+            .expect("added key")
+            .key_id
+            .parse::<u64>()
+            .expect("key id");
+        let param_key_id = position_key_id.wrapping_add(1_000_003);
+        super::TEST_SET_POSITION_KEY_TIME_DISPATCH_COUNT.store(0, Ordering::SeqCst);
+        assert!(!try_dispatch_timeline_edit(
+            &crate::timeline_skia::TimelineEditCommit::SetPositionKeyTime {
+                layer_id: layer_id.clone(),
+                key_id: param_key_id,
+                bar: 2.0,
+            }
+        ));
+        assert_eq!(
+            super::TEST_SET_POSITION_KEY_TIME_DISPATCH_COUNT.load(Ordering::SeqCst),
+            0
+        );
+        let _ = try_dispatch_timeline_edit(
+            &crate::timeline_skia::TimelineEditCommit::SetPositionKeyTime {
+                layer_id,
+                key_id: position_key_id,
+                bar: 2.0,
+            },
+        );
+        assert_eq!(
+            super::TEST_SET_POSITION_KEY_TIME_DISPATCH_COUNT.load(Ordering::SeqCst),
+            1
+        );
+
+        clear_slot();
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[test]
     fn missing_timeline_falls_back_to_full_width_rows() {
         let json = r#"{
             "version":1,
@@ -2220,27 +2952,37 @@ mod tests {
         );
         let (a, b, keys) = scene.clip0_span_and_keys(0).expect("clip0");
         assert!((a - 0.0).abs() < 1e-6);
-        assert!((b - 5.0).abs() < 1e-6);
+        assert!((b - 10.0).abs() < 1e-6);
         assert!(keys.is_empty());
         assert_eq!(scene.band_count(), 2);
     }
 
     #[test]
     fn frame_from_scrub_bar_rounds_at_fps_30_and_24_boundaries() {
-        // bar=1 → 2s。fps30 → frame 60、fps24 → frame 48。
-        assert_eq!(frame_from_scrub_bar(1.0, 30, 1), 60);
-        assert_eq!(frame_from_scrub_bar(1.0, 24, 1), 48);
-        // 半端: bar=0.5 → 1s → fps30 frame 30、fps24 frame 24。
-        assert_eq!(frame_from_scrub_bar(0.5, 30, 1), 30);
-        assert_eq!(frame_from_scrub_bar(0.5, 24, 1), 24);
-        // 丸め境界: bar * 2 * 30 = 0.5 → frame 1 (round half away from zero via f64::round)
-        assert_eq!(frame_from_scrub_bar(0.5 / 60.0, 30, 1), 1);
-        assert_eq!(frame_from_scrub_bar(0.5 / 48.0, 24, 1), 0);
+        assert_eq!(crate::timeline_skia::SECONDS_PER_BAR, 1.0);
+        // 1s → fps30 frame 30、fps24 frame 24。
+        assert_eq!(frame_from_scrub_bar(1.0, 30, 1), 30);
+        assert_eq!(frame_from_scrub_bar(1.0, 24, 1), 24);
+        // 0.5s → fps30 frame 15、fps24 frame 12。
+        assert_eq!(frame_from_scrub_bar(0.5, 30, 1), 15);
+        assert_eq!(frame_from_scrub_bar(0.5, 24, 1), 12);
+        // 0.5 frame は最近傍で 1（24fps も同じ。µs先丸めだと 0 になっていた）
+        assert_eq!(frame_from_scrub_bar(0.5 / 30.0, 30, 1), 1);
+        assert_eq!(frame_from_scrub_bar(0.5 / 24.0, 24, 1), 1);
         // 直前は0
-        assert_eq!(frame_from_scrub_bar(0.49 / 60.0, 30, 1), 0);
-        assert_eq!(frame_from_scrub_bar(0.49 / 48.0, 24, 1), 0);
+        assert_eq!(frame_from_scrub_bar(0.49 / 30.0, 30, 1), 0);
+        assert_eq!(frame_from_scrub_bar(0.49 / 24.0, 24, 1), 0);
         assert_eq!(frame_from_scrub_bar(0.5, 30, 0), 0);
         assert_eq!(frame_from_scrub_bar(0.5, 0, 1), 0);
+    }
+
+    #[test]
+    fn rational_time_parts_from_bar_emits_seconds_not_ableton_bars() {
+        assert_eq!(crate::timeline_skia::SECONDS_PER_BAR, 1.0);
+        assert_eq!(rational_time_parts_from_bar(0.0), (0, 1_000_000));
+        assert_eq!(rational_time_parts_from_bar(1.0), (1_000_000, 1_000_000));
+        assert_eq!(rational_time_parts_from_bar(0.5), (500_000, 1_000_000));
+        assert_eq!(rational_time_parts_from_bar(10.0), (10_000_000, 1_000_000));
     }
 
     #[test]
@@ -2401,16 +3143,14 @@ mod tests {
     }
 
     #[test]
-    fn playhead_from_current_time_uses_two_seconds_per_bar() {
-        // 2s = 1 bar。fixture曲長96 → 1/96。
+    fn playhead_from_current_time_uses_seconds_not_bars() {
+        assert_eq!(crate::timeline_skia::SECONDS_PER_BAR, 1.0);
+        // 2s / fixture曲長96秒 → 2/96。Ableton 1bar=2s なら 1/96 になる。
         let ph_fixture = playhead_from_current_time(2, 1, crate::timeline_skia::SONG_BARS);
-        assert!((ph_fixture - 1.0 / 96.0).abs() < 1e-12);
-        let ph_10s = playhead_from_current_time(2, 1, 10.0 / 2.0);
-        assert!((ph_10s - 1.0 / 5.0).abs() < 1e-12);
-        assert_eq!(
-            playhead_from_current_time(0, 1, 10.0 / 2.0),
-            0.0
-        );
+        assert!((ph_fixture - 2.0 / 96.0).abs() < 1e-12);
+        let ph_10s = playhead_from_current_time(2, 1, 10.0);
+        assert!((ph_10s - 2.0 / 10.0).abs() < 1e-12);
+        assert_eq!(playhead_from_current_time(0, 1, 10.0), 0.0);
     }
 
     #[test]
@@ -2457,19 +3197,41 @@ mod tests {
         let fps_den = baseline.timeline.fps.den();
         assert_eq!((fps_num, fps_den), (30, 1));
 
-        // bar=1 → 2s → frame 60。既定fpsで往復一致。
+        // 1s → frame 30。既定fpsで往復一致。
         let frame = frame_from_scrub_bar(1.0, fps_num, fps_den);
-        assert_eq!(frame, 60);
+        assert_eq!(frame, 30);
         assert!(try_dispatch_set_time(frame));
         let after = motolii_ui::host_read_snapshot_for_test(host).expect("after");
-        assert_eq!(after.current_time.num(), 2);
+        assert_eq!(after.current_time.num(), 1);
         assert_eq!(after.current_time.den(), 1);
-        let ph = playhead_from_current_time(
-            after.current_time.num(),
-            after.current_time.den(),
-            10.0 / 2.0,
+        let ph =
+            playhead_from_current_time(after.current_time.num(), after.current_time.den(), 10.0);
+        assert!((ph - 1.0 / 10.0).abs() < 1e-12);
+
+        clear_slot();
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[test]
+    fn shuttle_reverse_keymap_steps_playhead_via_host_slot() {
+        let _lock = test_lock();
+        clear_slot();
+        let path = temp_project("shuttle-reverse-keymap");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+
+        assert!(try_dispatch_set_time(45));
+        let chars = b"j";
+        let consumed = unsafe {
+            motolii_rnapp_host_key_event(38, 0, chars.as_ptr(), chars.len(), false, false)
+        };
+        assert_eq!(
+            consumed, 1,
+            "J must reach host_key_event → try_dispatch_keymap"
         );
-        assert!((ph - 1.0 / 5.0).abs() < 1e-12);
+        let after = motolii_ui::host_read_snapshot_for_test(host).expect("after");
+        assert_eq!(after.current_time.num(), 22);
+        assert_eq!(after.current_time.den(), 15);
 
         clear_slot();
         motolii_ui::host_destroy_for_test(host).expect("destroy");
@@ -2519,6 +3281,57 @@ mod tests {
         assert_eq!(layer.position_keys.last().unwrap().time.num(), 1);
         assert_eq!(layer.position_keys.last().unwrap().time.den(), 1);
 
+        motolii_ui::host_destroy_for_test(host).expect("destroy");
+    }
+
+    #[test]
+    fn timeline_edit_commit_remove_position_key_clears_wire_keys() {
+        let _lock = test_lock();
+        clear_slot();
+        let path = temp_project("remove-pos-key-commit");
+        let host = motolii_ui::host_create_for_test(&path).expect("create host");
+        install_slot(host);
+        dispatch_kind(
+            host,
+            "place_rectangle",
+            r#","position":[0.25,-0.125],"playhead":{"num":0,"den":1}"#,
+        );
+        let placed = motolii_ui::host_read_snapshot_for_test(host).expect("placed");
+        let layer_id = placed.primary_layer_id.expect("primary after place");
+        dispatch_kind(
+            host,
+            "add_position_key",
+            &format!(r#","target":"{layer_id}","time":{{"num":1,"den":1}}"#),
+        );
+        let keyed = motolii_ui::host_read_snapshot_for_test(host).expect("keyed");
+        let key_id = keyed
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("keyed layer")
+            .position_keys
+            .last()
+            .expect("added key")
+            .key_id
+            .parse::<u64>()
+            .expect("key id");
+        assert!(try_dispatch_timeline_edit(
+            &crate::timeline_skia::TimelineEditCommit::RemovePositionKey {
+                layer_id: layer_id.clone(),
+                key_id,
+            }
+        ));
+        let after = motolii_ui::host_read_snapshot_for_test(host).expect("after");
+        let layer = after
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert!(layer.position_keys.is_empty());
+
+        clear_slot();
         motolii_ui::host_destroy_for_test(host).expect("destroy");
     }
 
@@ -2640,7 +3453,10 @@ mod tests {
             }
         ));
         let selected = try_read_timeline_projection().expect("selected");
-        assert_eq!(selected.primary_layer_id.as_deref(), Some(layer_id.as_str()));
+        assert_eq!(
+            selected.primary_layer_id.as_deref(),
+            Some(layer_id.as_str())
+        );
 
         clear_slot();
         motolii_ui::host_destroy_for_test(host).expect("destroy");
@@ -2936,4 +3752,97 @@ mod tests {
         motolii_ui::host_destroy_for_test(host).expect("destroy");
     }
 
+    #[test]
+    fn mac_key_table_maps_space_delete_undo_to_existing_kinds() {
+        let space = super::resolve_mac_key_action(49, 0, " ");
+        assert_eq!(
+            space
+                .as_ref()
+                .and_then(motolii_ui::product_action_host_kind),
+            Some("toggle_playback")
+        );
+        let delete = super::resolve_mac_key_action(117, 0, "");
+        assert_eq!(
+            delete
+                .as_ref()
+                .and_then(motolii_ui::product_action_host_kind),
+            Some("delete_layer")
+        );
+        let backspace = super::resolve_mac_key_action(51, 0, "");
+        assert_eq!(
+            backspace
+                .as_ref()
+                .and_then(motolii_ui::product_action_host_kind),
+            Some("delete_layer")
+        );
+        let undo = super::resolve_mac_key_action(6, super::MOD_META, "z");
+        assert_eq!(
+            undo.as_ref().and_then(motolii_ui::product_action_host_kind),
+            Some("undo")
+        );
+        let redo = super::resolve_mac_key_action(6, super::MOD_META | super::MOD_SHIFT, "z");
+        assert_eq!(
+            redo.as_ref().and_then(motolii_ui::product_action_host_kind),
+            Some("redo")
+        );
+        let duplicate = super::resolve_mac_key_action(2, super::MOD_META, "d");
+        assert_eq!(
+            duplicate
+                .as_ref()
+                .and_then(motolii_ui::product_action_host_kind),
+            Some("duplicate")
+        );
+        let shuttle_forward = super::resolve_mac_key_action(37, 0, "l");
+        assert_eq!(
+            shuttle_forward
+                .as_ref()
+                .and_then(motolii_ui::product_action_host_kind),
+            Some("shuttle_forward")
+        );
+        let shuttle_reverse = super::resolve_mac_key_action(38, 0, "j");
+        assert_eq!(
+            shuttle_reverse
+                .as_ref()
+                .and_then(motolii_ui::product_action_host_kind),
+            Some("shuttle_reverse")
+        );
+        let shuttle_stop = super::resolve_mac_key_action(40, 0, "k");
+        assert_eq!(
+            shuttle_stop
+                .as_ref()
+                .and_then(motolii_ui::product_action_host_kind),
+            Some("shuttle_stop")
+        );
+        let split = super::resolve_mac_key_action(40, super::MOD_META, "k");
+        assert_eq!(
+            split
+                .as_ref()
+                .and_then(motolii_ui::product_action_host_kind),
+            Some("split")
+        );
+        let mark_in = super::resolve_mac_key_action(34, 0, "i");
+        assert_eq!(
+            mark_in
+                .as_ref()
+                .and_then(motolii_ui::product_action_host_kind),
+            Some("trim_clip_in")
+        );
+        let mark_out = super::resolve_mac_key_action(31, 0, "o");
+        assert_eq!(
+            mark_out
+                .as_ref()
+                .and_then(motolii_ui::product_action_host_kind),
+            Some("trim_clip_out")
+        );
+        let mute = super::resolve_mac_key_action(46, 0, "m");
+        assert_eq!(
+            mute.as_ref().and_then(motolii_ui::product_action_host_kind),
+            Some(motolii_ui::PRODUCT_HOST_KIND_MUTE)
+        );
+        let solo = super::resolve_mac_key_action(1, 0, "s");
+        assert_eq!(
+            solo.as_ref().and_then(motolii_ui::product_action_host_kind),
+            Some(motolii_ui::PRODUCT_HOST_KIND_SOLO)
+        );
+    }
 }

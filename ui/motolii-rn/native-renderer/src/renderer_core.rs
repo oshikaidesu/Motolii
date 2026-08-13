@@ -1,13 +1,10 @@
 use std::time::Instant;
 
-use crate::rerun_stage::{
-    aspect_fit_ndc_rect, canonical_to_fit_ndc, fixture_rect_fill_rgba, fixture_rect_stroke_rgba,
-    apply_move_preview_to_geometry, EmbeddedSpatialStage, StageTransformProjection,
-};
+use crate::rerun_stage::{EmbeddedSpatialStage, StageGizmoAction, StageTransformProjection};
 use crate::timeline_skia::{TimelinePointerPhase, TimelineScene, TimelineSession};
 use motolii_gpu::GpuCtx;
 use motolii_render::RenderSession;
-use motolii_ui::{AppStageFrame, HostRenderFrameResult};
+use motolii_ui::{AppStageFrame, AppStageTransformEdit, host_render_frame_for_app};
 
 const SET_TIME_THROTTLE_MS: u64 = 32;
 
@@ -111,200 +108,17 @@ fn host_stage_geometry_command(
     }
 }
 
-/// Timeline と同じ 3 論理 px。
-const STAGE_MOVE_ARM_PX: f64 = 3.0;
-
-#[derive(Clone, Debug, PartialEq)]
-struct StageMoveGesture {
-    layer_id: String,
-    down_logical: [f64; 2],
-    down_canonical: [f64; 2],
-    armed: bool,
-    last_delta: [f64; 2],
-}
-
-#[derive(Clone, Debug, PartialEq)]
-enum StageMoveOutcome {
-    None,
-    SelectLayer {
-        layer_id: String,
-    },
-    ClearSelection,
-    Preview {
-        layer_id: String,
-        delta: [f64; 2],
-    },
-    Commit {
-        layer_id: String,
-        delta: [f64; 2],
-    },
-    CancelRestore,
-}
-
-fn view_local_to_canonical_stage(
-    view_local_x: f64,
-    view_local_y: f64,
-    logical_width: f64,
-    logical_height: f64,
-) -> Option<[f64; 2]> {
-    if !(logical_width > 0.0 && logical_height > 0.0) {
-        return None;
-    }
-    Some([
-        (view_local_x - logical_width * 0.5) / logical_height,
-        (view_local_y - logical_height * 0.5) / logical_height,
-    ])
-}
-
-fn point_in_canonical_quad(point: [f64; 2], corners: [[f64; 2]; 4]) -> bool {
-    let mut area2 = 0.0_f64;
-    for i in 0..4 {
-        let a = corners[i];
-        let b = corners[(i + 1) % 4];
-        area2 += a[0] * b[1] - b[0] * a[1];
-    }
-    if area2.abs() <= 1e-15 {
-        return false;
-    }
-
-    let mut sign = 0.0_f64;
-    for i in 0..4 {
-        let a = corners[i];
-        let b = corners[(i + 1) % 4];
-        let cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
-        if cross.abs() <= 1e-15 {
-            continue;
-        }
-        let s = cross.signum();
-        if sign == 0.0 {
-            sign = s;
-        } else if s != sign {
-            return false;
-        }
-    }
-    true
-}
-
-fn stage_layer_hit(
-    geometry: &crate::host_bridge::HostStageGeometry,
-    canonical: [f64; 2],
-) -> Option<String> {
-    for layer in geometry.layers.iter().rev() {
-        if point_in_canonical_quad(canonical, layer.corners) {
-            return Some(layer.layer_id.clone());
-        }
-    }
-    None
-}
-
-fn stage_move_pointer(
-    gesture: &mut Option<StageMoveGesture>,
-    phase: PointerPhase,
-    logical_x: f64,
-    logical_y: f64,
-    logical_width: f64,
-    logical_height: f64,
-    geometry: &crate::host_bridge::HostStageGeometry,
-) -> StageMoveOutcome {
-    if !(logical_x.is_finite() && logical_y.is_finite()) {
-        *gesture = None;
-        return StageMoveOutcome::CancelRestore;
-    }
-
-    let Some(canonical) =
-        view_local_to_canonical_stage(logical_x, logical_y, logical_width, logical_height)
-    else {
-        *gesture = None;
-        return StageMoveOutcome::CancelRestore;
-    };
-    match phase {
-        PointerPhase::Down => {
-            if let Some(layer_id) = stage_layer_hit(geometry, canonical) {
-                *gesture = Some(StageMoveGesture {
-                    layer_id: layer_id.clone(),
-                    down_logical: [logical_x, logical_y],
-                    down_canonical: canonical,
-                    armed: false,
-                    last_delta: [0.0, 0.0],
-                });
-                StageMoveOutcome::SelectLayer { layer_id }
-            } else {
-                *gesture = None;
-                StageMoveOutcome::ClearSelection
-            }
-        }
-        PointerPhase::Move => {
-            let Some(state) = gesture.as_mut() else {
-                return StageMoveOutcome::None;
-            };
-            let delta = [
-                canonical[0] - state.down_canonical[0],
-                canonical[1] - state.down_canonical[1],
-            ];
-            if !delta.iter().all(|value| value.is_finite()) {
-                *gesture = None;
-                return StageMoveOutcome::CancelRestore;
-            }
-            if !state.armed {
-                let dx = logical_x - state.down_logical[0];
-                let dy = logical_y - state.down_logical[1];
-                if (dx * dx + dy * dy).sqrt() < STAGE_MOVE_ARM_PX {
-                    return StageMoveOutcome::None;
-                }
-                state.armed = true;
-            }
-            state.last_delta = delta;
-            StageMoveOutcome::Preview {
-                layer_id: state.layer_id.clone(),
-                delta,
-            }
-        }
-        PointerPhase::Up => {
-            let Some(state) = gesture.take() else {
-                return StageMoveOutcome::None;
-            };
-            let delta = [
-                canonical[0] - state.down_canonical[0],
-                canonical[1] - state.down_canonical[1],
-            ];
-            if !delta.iter().all(|value| value.is_finite()) {
-                return StageMoveOutcome::CancelRestore;
-            }
-            if !state.armed {
-                return StageMoveOutcome::CancelRestore;
-            }
-            if delta[0] == 0.0 && delta[1] == 0.0 {
-                return StageMoveOutcome::CancelRestore;
-            }
-            StageMoveOutcome::Commit {
-                layer_id: state.layer_id,
-                delta,
-            }
-        }
-        PointerPhase::Cancel => {
-            if gesture.take().is_some() {
-                StageMoveOutcome::CancelRestore
-            } else {
-                StageMoveOutcome::None
-            }
-        }
-    }
-}
-
-fn stage_host_move_outcome_to_selection_commit(
-    outcome: &StageMoveOutcome,
-) -> Option<crate::timeline_skia::TimelineSelectionCommit> {
-    match outcome {
-        StageMoveOutcome::SelectLayer { layer_id } => {
-            Some(crate::timeline_skia::TimelineSelectionCommit::SelectLayer {
-                layer_id: layer_id.clone(),
-            })
-        }
-        StageMoveOutcome::ClearSelection => {
-            Some(crate::timeline_skia::TimelineSelectionCommit::ClearSelection)
-        }
-        _ => None,
-    }
+fn stage_selection_commit(
+    selected_entity_path: Option<&str>,
+) -> crate::timeline_skia::TimelineSelectionCommit {
+    selected_entity_path
+        .and_then(crate::rerun_stage::host_layer_id_from_entity_path)
+        .map_or(
+            crate::timeline_skia::TimelineSelectionCommit::ClearSelection,
+            |layer_id| crate::timeline_skia::TimelineSelectionCommit::SelectLayer {
+                layer_id: layer_id.to_owned(),
+            },
+        )
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -335,6 +149,24 @@ pub(crate) enum PointerPhase {
     Cancel,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StagePointerButton {
+    Primary,
+    Secondary,
+    Middle,
+}
+
+impl StagePointerButton {
+    pub(crate) fn from_raw(raw: u32) -> Option<Self> {
+        match raw {
+            0 => Some(Self::Primary),
+            1 => Some(Self::Secondary),
+            2 => Some(Self::Middle),
+            _ => None,
+        }
+    }
+}
+
 struct TimelineResources {
     surface_texture: wgpu::Texture,
     blit_pipeline: wgpu::RenderPipeline,
@@ -343,20 +175,12 @@ struct TimelineResources {
     dirty: bool,
 }
 
-struct StageFramePass {
-    texture_pipeline: wgpu::RenderPipeline,
-    texture_bgl: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
-    color_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-}
-
 struct StageResources {
     rerun: EmbeddedSpatialStage,
-    gpu_ctx: GpuCtx,
-    render_session: RenderSession,
+    preview_active: bool,
+    gpu: GpuCtx,
+    session: RenderSession,
     frame: Option<AppStageFrame>,
-    pass: StageFramePass,
 }
 
 pub(crate) struct RendererCore {
@@ -377,7 +201,7 @@ pub(crate) struct RendererCore {
     /// host 投影メッシュ適用時の viewport（aspect 再適用判定）。
     host_stage_viewport: Option<(u32, u32)>,
     host_fps: Option<(i64, i64)>,
-    stage_move_gesture: Option<StageMoveGesture>,
+    stage_gizmo_pointer_active: bool,
     scrubbing: bool,
     scrub_time_pump: ScrubTimePump,
     scrub_clock_start: Instant,
@@ -415,6 +239,16 @@ fn timeline_scene_from_projection(
         projection.primary_layer_id.as_deref(),
         song_bars,
     );
+    if let Some((num, den)) = projection.fps {
+        scene = scene.with_fps(num, den);
+    }
+    if let Some(timeline_layers) = &projection.timeline_layers {
+        scene.apply_layer_mute_solo(
+            timeline_layers
+                .iter()
+                .map(|layer| (layer.visible, layer.solo, layer.effects.len())),
+        );
+    }
     // real同士の差し替えではlocal viewを維持。fixture→real初回はfrom_snapshotの0..song_bars。
     if existing_scene.real {
         scene.view_a = existing_scene.view_a;
@@ -449,10 +283,17 @@ fn timeline_projection_selected_flat(
         return -1;
     };
     let position = projection.timeline_layers.as_ref().map_or_else(
-        || projection.bounds.iter().position(|(layer_id, _)| layer_id == primary),
+        || {
+            projection
+                .bounds
+                .iter()
+                .position(|(layer_id, _)| layer_id == primary)
+        },
         |layers| layers.iter().position(|layer| layer.layer_id == primary),
     );
-    position.and_then(|index| i32::try_from(index).ok()).unwrap_or(-1)
+    position
+        .and_then(|index| i32::try_from(index).ok())
+        .unwrap_or(-1)
 }
 
 impl RendererCore {
@@ -509,15 +350,15 @@ impl RendererCore {
 
         let stage = (scene == SceneKind::Stage)
             .then(|| {
-                let gpu_ctx = GpuCtx::from_device_queue(device.clone(), queue.clone());
-                let render_session = RenderSession::new(&gpu_ctx);
                 EmbeddedSpatialStage::new(&adapter, &device, &queue, config.format).map(|rerun| {
+                    let gpu = GpuCtx::from_device_queue(device.clone(), queue.clone());
+                    let session = RenderSession::new(&gpu);
                     StageResources {
                         rerun,
-                        gpu_ctx,
-                        render_session,
+                        preview_active: false,
+                        gpu,
+                        session,
                         frame: None,
-                        pass: create_stage_frame_pass(&device, config.format),
                     }
                 })
             })
@@ -534,13 +375,14 @@ impl RendererCore {
             config,
             stage,
             timeline,
-            timeline_session: (scene == SceneKind::Timeline).then(TimelineSession::default),
+            // 製品初期はfixture defaultではない。host空ならempty_host、warmup/presentがsnapshotを載せる。
+            timeline_session: (scene == SceneKind::Timeline).then(TimelineSession::host_product),
             host_revision: None,
             host_projection_generation: None,
             host_stage_geometry: None,
             host_stage_viewport: None,
             host_fps: None,
-            stage_move_gesture: None,
+            stage_gizmo_pointer_active: false,
             scrubbing: false,
             scrub_time_pump: ScrubTimePump::new(),
             scrub_clock_start: Instant::now(),
@@ -548,8 +390,8 @@ impl RendererCore {
             host_projection_stamp: None,
             mount_warmup_done: false,
             scene,
-            selected_object_index: 1,
-            playhead: 0.27,
+            selected_object_index: -1,
+            playhead: 0.0,
             frame: 0,
             stats: RenderStats::default(),
         };
@@ -602,29 +444,136 @@ impl RendererCore {
             .is_some_and(|stage| stage.rerun.set_created_item(item_id))
     }
 
+    pub(crate) fn fit_stage_view(&mut self) -> bool {
+        let Some(stage) = self.stage.as_mut() else {
+            return false;
+        };
+        stage.rerun.fit_view(self.config.width, self.config.height)
+    }
+
+    pub(crate) fn set_stage_one_to_one(&mut self) -> bool {
+        let Some(stage) = self.stage.as_mut() else {
+            return false;
+        };
+        stage
+            .rerun
+            .set_one_to_one(self.config.width, self.config.height)
+    }
+
     pub(crate) fn stage_transform_projection(&self) -> Option<StageTransformProjection> {
         self.stage
             .as_ref()
             .map(|stage| stage.rerun.transform_projection())
     }
 
-    pub(crate) fn set_stage_transform_projection(&mut self, projection: StageTransformProjection) -> bool {
-        self.stage
-            .as_mut()
-            .is_some_and(|stage| stage.rerun.set_transform_projection(projection))
+    pub(crate) fn set_stage_transform_projection(
+        &mut self,
+        projection: StageTransformProjection,
+    ) -> bool {
+        let Some(stage) = self.stage.as_mut() else {
+            return false;
+        };
+        let Some(layer_id) = stage.rerun.host_primary_layer_id().map(str::to_owned) else {
+            return stage.rerun.set_transform_projection(projection);
+        };
+        let current = stage.rerun.transform_projection();
+        let delta = [projection.x - current.x, projection.y - current.y];
+        let rotate = (projection.rotation_z - current.rotation_z).to_radians();
+        let edit = if delta[0].abs() > f64::EPSILON || delta[1].abs() > f64::EPSILON {
+            AppStageTransformEdit::TranslateWorld(delta)
+        } else if rotate.abs() > f64::EPSILON {
+            AppStageTransformEdit::RotateZ(rotate)
+        } else {
+            return true;
+        };
+        let Some(expected_revision) = self
+            .host_revision
+            .as_deref()
+            .and_then(|revision| revision.parse::<u64>().ok())
+        else {
+            self.restore_stage_preview("The live Document revision is unavailable");
+            return false;
+        };
+        match crate::host_bridge::try_commit_stage_transform(expected_revision, &layer_id, edit) {
+            Ok(()) => {
+                self.force_next_host_snapshot = true;
+                true
+            }
+            Err(error) => {
+                self.restore_stage_preview(&error);
+                false
+            }
+        }
+    }
+
+    pub(crate) fn preview_stage_transform_from_app(
+        &mut self,
+        expected_revision: u64,
+        layer_id: &str,
+        edit: AppStageTransformEdit,
+    ) -> Result<(), String> {
+        let result = (|| {
+            let geometry =
+                crate::host_bridge::try_preview_stage_transform(expected_revision, layer_id, edit)?;
+            let stage = self
+                .stage
+                .as_mut()
+                .ok_or_else(|| "Stage renderer is unavailable".to_owned())?;
+            if !stage.rerun.apply_host_stage_geometry(
+                &geometry,
+                self.config.width,
+                self.config.height,
+            ) {
+                return Err("The preview path could not be projected".to_owned());
+            }
+            stage.preview_active = true;
+            stage
+                .rerun
+                .set_feedback("Previewing Document transform", false);
+            Ok(())
+        })();
+        if let Err(error) = &result {
+            self.restore_stage_preview(error);
+        }
+        result
+    }
+
+    pub(crate) fn commit_stage_transform_from_app(
+        &mut self,
+        expected_revision: u64,
+        layer_id: &str,
+        edit: AppStageTransformEdit,
+    ) -> Result<(), String> {
+        let result =
+            crate::host_bridge::try_commit_stage_transform(expected_revision, layer_id, edit);
+        match &result {
+            Ok(()) => {
+                if let Some(stage) = self.stage.as_mut() {
+                    stage.preview_active = false;
+                    stage
+                        .rerun
+                        .set_feedback("Transform applied · Undo available", false);
+                }
+                self.force_next_host_snapshot = true;
+            }
+            Err(error) => self.restore_stage_preview(error),
+        }
+        result
+    }
+
+    pub(crate) fn cancel_stage_transform_from_app(&mut self) -> Result<(), String> {
+        if self.stage.is_none() {
+            return Err("Stage renderer is unavailable".to_owned());
+        }
+        self.restore_stage_preview("Transform cancelled · Document unchanged");
+        Ok(())
     }
 
     pub(crate) fn timeline_hit_test(&self, x: f64, y: f64) -> Option<(i32, f64)> {
         let Some(session) = &self.timeline_session else {
             return None;
         };
-        crate::timeline_skia::hit_test(
-            &session.scene,
-            self.config.width,
-            self.config.height,
-            x,
-            y,
-        )
+        crate::timeline_skia::hit_test(&session.scene, self.config.width, self.config.height, x, y)
     }
 
     /// hover位置のhit種→cursor。clip drag中はclosedHand。
@@ -649,25 +598,11 @@ impl RendererCore {
 
     /// Stage上のlayer hover → cursor。x/yはtimeline同様の物理座標。
     pub(crate) fn stage_hover_cursor(&self, x: f64, y: f64) -> i32 {
-        let dragging = self.stage_move_gesture.as_ref().is_some_and(|g| g.armed);
-        let Some(geometry) = &self.host_stage_geometry else {
-            return crate::timeline_skia::cursor_for_stage_hover(false, dragging).as_i32();
-        };
-        let Some(stage) = &self.stage else {
-            return crate::timeline_skia::cursor_for_stage_hover(false, dragging).as_i32();
-        };
-        let Some(primary_layer_id) = stage.rerun.host_primary_layer_id() else {
-            return crate::timeline_skia::cursor_for_stage_hover(false, dragging).as_i32();
-        };
-        let (logical_width, logical_height) = crate::host_bridge::try_stage_logical_size()
-            .unwrap_or((f64::from(self.config.width), f64::from(self.config.height)));
-        let scale_x = f64::from(self.config.width) / logical_width.max(1.0);
-        let scale_y = f64::from(self.config.height) / logical_height.max(1.0);
-        let logical_x = x / scale_x.max(f64::EPSILON);
-        let logical_y = y / scale_y.max(f64::EPSILON);
-        let over = view_local_to_canonical_stage(logical_x, logical_y, logical_width, logical_height)
-            .and_then(|canonical| stage_layer_hit(geometry, canonical))
-            .is_some_and(|layer_id| layer_id == primary_layer_id);
+        let dragging = self.stage_gizmo_pointer_active;
+        let over = self
+            .stage
+            .as_ref()
+            .is_some_and(|stage| stage.rerun.gizmo_wants_pointer(x, y));
         crate::timeline_skia::cursor_for_stage_hover(over, dragging).as_i32()
     }
 
@@ -724,15 +659,18 @@ impl RendererCore {
             }
         }
         if is_real {
-            let maybe_scrub_playhead = outcome.scrub_playhead.or(if matches!(phase, PointerPhase::Cancel) {
-                if self.scrub_time_pump.is_active() {
-                    Some(self.playhead)
-                } else {
-                    None
-                }
-            } else {
-                None
-            });
+            let maybe_scrub_playhead =
+                outcome
+                    .scrub_playhead
+                    .or(if matches!(phase, PointerPhase::Cancel) {
+                        if self.scrub_time_pump.is_active() {
+                            Some(self.playhead)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    });
             if let Some(scrub_playhead) = maybe_scrub_playhead {
                 self.dispatch_set_time_for_scrub(
                     match phase {
@@ -791,13 +729,10 @@ impl RendererCore {
             .map(|session| session.scene.song_bars)
             .unwrap_or(crate::timeline_skia::SONG_BARS);
         let bar = playhead.clamp(0.0, 1.0) * f64::from(song_bars);
-        let Some(frame) = self.scrub_time_pump.next_frame(
-            phase,
-            bar,
-            self.now_ms(),
-            fps_num,
-            fps_den,
-        ) else {
+        let Some(frame) =
+            self.scrub_time_pump
+                .next_frame(phase, bar, self.now_ms(), fps_num, fps_den)
+        else {
             return;
         };
         let _ = crate::host_bridge::try_dispatch_set_time(frame);
@@ -846,85 +781,99 @@ impl RendererCore {
         self.stats
     }
 
-    pub(crate) fn stage_pointer(&mut self, phase: PointerPhase, x: f64, y: f64) {
-        // host 投影が正本の間は fixture gizmo probe へ送らず、選択済み layer の move を扱う。
-        if self.host_stage_geometry.is_some() {
-            self.stage_host_move_pointer(phase, x, y);
+    pub(crate) fn stage_pointer(
+        &mut self,
+        phase: PointerPhase,
+        button: StagePointerButton,
+        modifiers: u32,
+        x: f64,
+        y: f64,
+    ) {
+        let gizmo_hit = button == StagePointerButton::Primary
+            && matches!(phase, PointerPhase::Down)
+            && self
+                .stage
+                .as_ref()
+                .is_some_and(|stage| stage.rerun.gizmo_wants_pointer(x, y));
+        if (self.stage_gizmo_pointer_active && button == StagePointerButton::Primary) || gizmo_hit {
+            self.stage_gizmo_pointer_active =
+                !matches!(phase, PointerPhase::Up | PointerPhase::Cancel);
+            if let Some(stage) = &mut self.stage {
+                // gizmo capture中のprimaryはRerun camera/pickingへ二重配送しない。
+                stage.rerun.gizmo_pointer(phase, x, y);
+            }
+        } else if let Some(stage) = &mut self.stage {
+            stage.rerun.pointer(phase, button, modifiers, x, y);
+        } else {
             return;
         }
-        let Some(stage) = &mut self.stage else { return };
         match phase {
             PointerPhase::Down => self.stats.pointer_downs += 1,
             PointerPhase::Move => self.stats.pointer_moves += 1,
             PointerPhase::Up => self.stats.pointer_ups += 1,
             PointerPhase::Cancel => {}
         }
-        stage.rerun.pointer(phase, x, y);
     }
 
-    fn stage_host_move_pointer(&mut self, phase: PointerPhase, physical_x: f64, physical_y: f64) {
-        let Some(geometry) = self.host_stage_geometry.clone() else {
+    pub(crate) fn stage_scroll(
+        &mut self,
+        delta_x: f64,
+        delta_y: f64,
+        magnification: f64,
+        modifiers: u32,
+        x: f64,
+        y: f64,
+    ) -> bool {
+        self.stage.as_mut().is_some_and(|stage| {
+            stage
+                .rerun
+                .scroll(delta_x, delta_y, magnification, modifiers, x, y)
+        })
+    }
+
+    fn process_stage_gizmo_action(&mut self) {
+        let action = self
+            .stage
+            .as_mut()
+            .and_then(|stage| stage.rerun.take_gizmo_action());
+        let Some(action) = action else {
             return;
         };
-        if !(physical_x.is_finite() && physical_y.is_finite()) {
-            self.stage_move_gesture = None;
-            let Some(stage) = self.stage.as_mut() else {
-                return;
-            };
-            if !stage.rerun.clear_move_preview(self.config.width, self.config.height) {
-                self.force_next_host_snapshot = true;
-            }
+        let Some(expected_revision) = self
+            .host_revision
+            .as_deref()
+            .and_then(|revision| revision.parse::<u64>().ok())
+        else {
+            self.restore_stage_preview("The live Document revision is unavailable");
             return;
+        };
+
+        match action {
+            StageGizmoAction::Preview { layer_id, edit } => {
+                let _ = self.preview_stage_transform_from_app(expected_revision, &layer_id, edit);
+            }
+            StageGizmoAction::Commit { layer_id, edit } => {
+                let _ = self.commit_stage_transform_from_app(expected_revision, &layer_id, edit);
+            }
+            StageGizmoAction::Cancel => {
+                let _ = self.cancel_stage_transform_from_app();
+            }
         }
-        let (logical_width, logical_height) = crate::host_bridge::try_stage_logical_size()
-            .unwrap_or((f64::from(self.config.width), f64::from(self.config.height)));
-        let scale_x = f64::from(self.config.width) / logical_width.max(1.0);
-        let scale_y = f64::from(self.config.height) / logical_height.max(1.0);
-        let logical_x = physical_x / scale_x.max(f64::EPSILON);
-        let logical_y = physical_y / scale_y.max(f64::EPSILON);
-        let outcome = stage_move_pointer(
-            &mut self.stage_move_gesture,
-            phase,
-            logical_x,
-            logical_y,
-            logical_width,
-            logical_height,
-            &geometry,
-        );
-        let viewport = (self.config.width, self.config.height);
+    }
+
+    fn restore_stage_preview(&mut self, message: &str) {
         let Some(stage) = self.stage.as_mut() else {
             return;
         };
-        match outcome {
-            StageMoveOutcome::None => {}
-            StageMoveOutcome::SelectLayer { .. } | StageMoveOutcome::ClearSelection => {
-                if let Some(commit) = stage_host_move_outcome_to_selection_commit(&outcome) {
-                    let _ = Self::dispatch_timeline_selection(&commit);
-                }
-            }
-            StageMoveOutcome::Preview { layer_id, delta } => {
-                if !stage.rerun.set_move_preview(&layer_id, delta, viewport.0, viewport.1) {
-                    self.force_next_host_snapshot = true;
-                    self.stage_move_gesture = None;
-                }
-            }
-            StageMoveOutcome::Commit { layer_id, delta } => {
-                // previewは次のhost geometry適用まで維持(一瞬の戻りを避ける)。
-                if !crate::host_bridge::try_dispatch_move_layer_by(&layer_id, delta) {
-                    if !stage.rerun.clear_move_preview(viewport.0, viewport.1) {
-                        self.force_next_host_snapshot = true;
-                    }
-                    self.force_next_host_snapshot = true;
-                    self.stage_move_gesture = None;
-                }
-            }
-            StageMoveOutcome::CancelRestore => {
-                if !stage.rerun.clear_move_preview(viewport.0, viewport.1) {
-                    self.force_next_host_snapshot = true;
-                    self.stage_move_gesture = None;
-                }
-            }
+        stage.preview_active = false;
+        if let Some(geometry) = self.host_stage_geometry.as_ref() {
+            let _ = stage.rerun.apply_host_stage_geometry(
+                geometry,
+                self.config.width,
+                self.config.height,
+            );
         }
+        stage.rerun.set_feedback(message, true);
     }
 
     pub(crate) fn render(&mut self) -> Result<(), String> {
@@ -950,25 +899,11 @@ impl RendererCore {
 
         match self.scene {
             SceneKind::Stage => {
-                self.sync_host_stage_geometry();
-                let stage = self.stage.as_mut().expect("stage resources");
-    stage.rerun.render(
-                    &self.device,
-                    &self.queue,
-                    &view,
-                    self.config.width,
-                    self.config.height,
-                )?;
-                composite_host_stage_frame(
-                    &self.device,
-                    &self.queue,
-                    &view,
-                    self.config.width,
-                    self.config.height,
-                    stage,
-                );
+                self.process_stage_gizmo_action();
+                self.present_stage(&view)?;
             }
             SceneKind::Timeline => {
+                // 可視frameでもhost snapshotを載せる。warmup未達・stamp更新の両方を拾う。
                 self.sync_host_timeline_projection();
                 self.render_timeline(&view);
             }
@@ -1044,36 +979,21 @@ impl RendererCore {
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         // 既存Stage描画経路をpresent無しで1回(submit+poll)。
-        self.sync_host_stage_geometry();
-        let Some(stage) = self.stage.as_mut() else {
-            return true;
-        };
-        let ok = stage
-            .rerun
-            .render(&self.device, &self.queue, &view, width, height)
-            .is_ok();
-        if ok {
-            composite_host_stage_frame(
-                &self.device,
-                &self.queue,
-                &view,
-                width,
-                height,
-                stage,
-            );
-        }
+        let ok = self.present_stage(&view).is_ok();
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         ok
     }
 
     fn warmup_timeline_skia(&mut self) -> bool {
+        // 初回Skia画素をhost snapshotにする。未syncだとempty/fixtureが製品mountに残る。
+        self.sync_host_timeline_projection();
         let width = self.config.width.max(1);
         let height = self.config.height.max(1);
         let scene = self
             .timeline_session
             .as_ref()
             .map(|session| session.scene.clone())
-            .unwrap_or_default();
+            .unwrap_or_else(TimelineScene::empty_host);
         let playhead = self.playhead;
         let selected = self.selected_object_index;
         let Some(timeline) = self.timeline.as_mut() else {
@@ -1098,7 +1018,8 @@ impl RendererCore {
         {
             let read_stamp = crate::host_bridge::try_read_projection_stamp();
             let force_scene = self.force_next_host_snapshot;
-            if !Self::host_snapshot_read_needed(self.host_projection_stamp, read_stamp, force_scene) {
+            if !Self::host_snapshot_read_needed(self.host_projection_stamp, read_stamp, force_scene)
+            {
                 return;
             }
             let Some(projection) = crate::host_bridge::try_read_timeline_projection() else {
@@ -1117,9 +1038,8 @@ impl RendererCore {
                 .timeline_session
                 .as_ref()
                 .is_some_and(TimelineSession::has_active_gesture);
-            let should_reproject = revision_changed
-                || primary_changed
-                || (force_scene && !has_active_gesture);
+            let should_reproject =
+                revision_changed || primary_changed || (force_scene && !has_active_gesture);
             if should_reproject {
                 let Some(session) = &mut self.timeline_session else {
                     return;
@@ -1144,9 +1064,7 @@ impl RendererCore {
                     self.force_next_host_snapshot = false;
                 }
             }
-            if !self.scrubbing
-                && (generation_changed || revision_changed || force_scene)
-            {
+            if !self.scrubbing && (generation_changed || revision_changed || force_scene) {
                 let song_bars = self
                     .timeline_session
                     .as_ref()
@@ -1168,21 +1086,68 @@ impl RendererCore {
         }
     }
 
+    fn present_stage(&mut self, view: &wgpu::TextureView) -> Result<(), String> {
+        self.sync_host_stage_geometry();
+        self.sync_host_stage_frame();
+        let width = self.config.width;
+        let height = self.config.height;
+        let Some(stage) = self.stage.as_mut() else {
+            return Ok(());
+        };
+        let StageResources {
+            rerun, frame, gpu, ..
+        } = stage;
+        let selected_entity_path = rerun.render(
+            &gpu.device,
+            &gpu.queue,
+            view,
+            width,
+            height,
+            frame.as_ref().map(|frame| &frame.texture),
+        )?;
+        if let Some(selected_entity_path) = selected_entity_path {
+            let commit = stage_selection_commit(selected_entity_path.as_deref());
+            let _ = Self::dispatch_timeline_selection(&commit);
+        }
+        Ok(())
+    }
+
+    fn sync_host_stage_frame(&mut self) {
+        #[cfg(target_os = "macos")]
+        {
+            let Some(stage) = self.stage.as_mut() else {
+                return;
+            };
+            if stage.preview_active {
+                return;
+            }
+            let Some(handle) = crate::host_bridge::try_host_handle() else {
+                return;
+            };
+            let _ =
+                host_render_frame_for_app(handle, &stage.gpu, &mut stage.session, &mut stage.frame);
+        }
+    }
+
     fn sync_host_stage_geometry(&mut self) {
         #[cfg(target_os = "macos")]
         {
             if self.stage.is_none() {
                 return;
             }
+            if self
+                .stage
+                .as_ref()
+                .is_some_and(|stage| stage.preview_active)
+            {
+                return;
+            }
             let viewport = (self.config.width, self.config.height);
             // stampゲートはstage/timeline共通。forceと初回はfull読み。
             let read_stamp = crate::host_bridge::try_read_projection_stamp();
             let force = self.force_next_host_snapshot;
-            let read_needed = Self::host_snapshot_read_needed(
-                self.host_projection_stamp,
-                read_stamp,
-                force,
-            );
+            let read_needed =
+                Self::host_snapshot_read_needed(self.host_projection_stamp, read_stamp, force);
             let projection = if read_needed {
                 let projection = crate::host_bridge::try_read_timeline_projection();
                 if projection.is_some() {
@@ -1201,6 +1166,9 @@ impl RendererCore {
             let stage = self.stage.as_mut().expect("stage present");
             let command = match projection {
                 Some(ref projection) => {
+                    self.host_revision = Some(projection.revision.clone());
+                    self.host_projection_generation =
+                        Some(projection.projection_generation.clone());
                     stage
                         .rerun
                         .set_host_primary_layer_id(projection.primary_layer_id.clone());
@@ -1217,8 +1185,6 @@ impl RendererCore {
             };
             match command {
                 HostStageGeometryCommand::Apply(geometry) => {
-                    // geometry差し替え時は進行中stage gestureを破棄。
-                    self.stage_move_gesture = None;
                     if stage
                         .rerun
                         .apply_host_stage_geometry(&geometry, viewport.0, viewport.1)
@@ -1231,19 +1197,17 @@ impl RendererCore {
                     if stage.rerun.clear_host_projection() {
                         self.host_stage_geometry = None;
                         self.host_stage_viewport = None;
-                        self.stage_move_gesture = None;
-                        stage.frame = None;
+                        stage.preview_active = false;
                     }
                 }
                 HostStageGeometryCommand::Noop => {
                     // geometry不変でもviewport aspectが変わったら再投影する。
                     if self.host_stage_viewport != Some(viewport) {
                         if let Some(geometry) = self.host_stage_geometry.clone() {
-                            if stage.rerun.apply_host_stage_geometry(
-                                &geometry,
-                                viewport.0,
-                                viewport.1,
-                            ) {
+                            if stage
+                                .rerun
+                                .apply_host_stage_geometry(&geometry, viewport.0, viewport.1)
+                            {
                                 self.host_stage_viewport = Some(viewport);
                             }
                         }
@@ -1333,405 +1297,6 @@ impl RendererCore {
             pass.draw(0..3, 0..1);
         }
         self.queue.submit(Some(encoder.finish()));
-    }
-}
-
-fn create_stage_frame_pass(
-    device: &wgpu::Device,
-    surface_format: wgpu::TextureFormat,
-) -> StageFramePass {
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("Motolii stage frame sampler"),
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        ..Default::default()
-    });
-    let texture_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("Motolii stage frame texture layout"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
-    });
-    let texture_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("Motolii stage frame texture shader"),
-        source: wgpu::ShaderSource::Wgsl(
-            r#"
-struct VOut { @builtin(position) p: vec4<f32>, @location(0) uv: vec2<f32> };
-@group(0) @binding(0) var tex: texture_2d<f32>;
-@group(0) @binding(1) var samp: sampler;
-@vertex fn vs(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VOut {
-    var o: VOut; o.p = vec4(pos, 0.0, 1.0); o.uv = uv; return o;
-}
-@fragment fn fs(i: VOut) -> @location(0) vec4<f32> {
-    return textureSample(tex, samp, i.uv);
-}
-"#
-            .into(),
-        ),
-    });
-    let texture_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Motolii stage frame texture pipeline layout"),
-        bind_group_layouts: &[Some(&texture_bgl)],
-        immediate_size: 0,
-    });
-    let texture_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("Motolii stage frame texture pipeline"),
-        layout: Some(&texture_layout),
-        vertex: wgpu::VertexState {
-            module: &texture_shader,
-            entry_point: Some("vs"),
-            buffers: &[wgpu::VertexBufferLayout {
-                array_stride: 16,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &[
-                    wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x2,
-                        offset: 0,
-                        shader_location: 0,
-                    },
-                    wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x2,
-                        offset: 8,
-                        shader_location: 1,
-                    },
-                ],
-            }],
-            compilation_options: Default::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &texture_shader,
-            entry_point: Some("fs"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: surface_format,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview_mask: None,
-        cache: None,
-    });
-
-    let color_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("Motolii stage frame color shader"),
-        source: wgpu::ShaderSource::Wgsl(
-            r#"
-struct VOut { @builtin(position) p: vec4<f32>, @location(0) color: vec4<f32> };
-@vertex fn vs(@location(0) pos: vec2<f32>, @location(1) color: vec4<f32>) -> VOut {
-    var o: VOut; o.p = vec4(pos, 0.0, 1.0); o.color = color; return o;
-}
-@fragment fn fs(i: VOut) -> @location(0) vec4<f32> { return i.color; }
-"#
-            .into(),
-        ),
-    });
-    let color_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Motolii stage frame color pipeline layout"),
-        bind_group_layouts: &[],
-        immediate_size: 0,
-    });
-    let color_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("Motolii stage frame color pipeline"),
-        layout: Some(&color_layout),
-        vertex: wgpu::VertexState {
-            module: &color_shader,
-            entry_point: Some("vs"),
-            buffers: &[wgpu::VertexBufferLayout {
-                array_stride: 24,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &[
-                    wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x2,
-                        offset: 0,
-                        shader_location: 0,
-                    },
-                    wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32x4,
-                        offset: 8,
-                        shader_location: 1,
-                    },
-                ],
-            }],
-            compilation_options: Default::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &color_shader,
-            entry_point: Some("fs"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: surface_format,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        multiview_mask: None,
-        cache: None,
-    });
-
-    let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Motolii stage frame vertices"),
-        size: 4096,
-        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    StageFramePass {
-        texture_pipeline,
-        texture_bgl,
-        sampler,
-        color_pipeline,
-        vertex_buffer,
-    }
-}
-
-fn composite_host_stage_frame(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    target: &wgpu::TextureView,
-    viewport_w: u32,
-    viewport_h: u32,
-    stage: &mut StageResources,
-) {
-    if viewport_w == 0 || viewport_h == 0 {
-        return;
-    }
-    let was_composite = stage.rerun.real_frame_composite();
-    match crate::host_bridge::try_host_render_frame(
-        &stage.gpu_ctx,
-        &mut stage.render_session,
-        &mut stage.frame,
-    ) {
-        HostRenderFrameResult::Rendered => {
-            stage.rerun.set_real_frame_composite(true);
-        }
-        HostRenderFrameResult::Failed => {
-            stage.frame = None;
-            stage.rerun.set_real_frame_composite(false);
-            if was_composite {
-                if let Some(geometry) = stage.rerun.host_geometry().cloned() {
-                    let _ = stage.rerun.apply_host_stage_geometry(
-                        &geometry,
-                        viewport_w,
-                        viewport_h,
-                    );
-                }
-            }
-        }
-        HostRenderFrameResult::Unchanged => {}
-    }
-    if !stage.rerun.real_frame_composite() {
-        return;
-    }
-    let Some(frame) = stage.frame.as_ref() else {
-        return;
-    };
-
-    let fit = aspect_fit_ndc_rect(
-        frame.width as f32,
-        frame.height as f32,
-        viewport_w as f32,
-        viewport_h as f32,
-    );
-    let aspect = frame.width as f64 / frame.height as f64;
-
-    // textured quad (2 triangles)
-    let [x, y, w, h] = fit;
-    let tex_verts: [[f32; 4]; 6] = [
-        [x, y, 0.0, 1.0],
-        [x + w, y, 1.0, 1.0],
-        [x + w, y + h, 1.0, 0.0],
-        [x, y, 0.0, 1.0],
-        [x + w, y + h, 1.0, 0.0],
-        [x, y + h, 0.0, 0.0],
-    ];
-    let mut bytes = Vec::with_capacity(6 * 16 + 256);
-    for v in &tex_verts {
-        for c in v {
-            bytes.extend_from_slice(&c.to_ne_bytes());
-        }
-    }
-    let tex_vertex_count = 6u32;
-
-    let mut color_bytes = Vec::new();
-    let mut color_vertex_count = 0u32;
-    let stroke = fixture_rect_stroke_rgba();
-    let mut fill = fixture_rect_fill_rgba();
-    fill[3] *= 0.42; // 半透明 preview（色相は既存定数）
-
-    let geometry = stage.rerun.host_geometry().cloned();
-    let preview = stage.rerun.move_preview().cloned();
-    let primary = stage.rerun.host_primary_layer_id().map(str::to_owned);
-    if let Some(geometry) = geometry.as_ref() {
-        let drawn = apply_move_preview_to_geometry(geometry, preview.as_ref());
-        if let Some((layer_id, _)) = preview.as_ref() {
-            if let Some(layer) = drawn.layers.iter().find(|l| l.layer_id == *layer_id) {
-                append_quad_rgba(&mut color_bytes, &mut color_vertex_count, layer.corners, aspect, fit, fill);
-            }
-        }
-        if let Some(primary_id) = primary.as_deref() {
-            if let Some(layer) = geometry.layers.iter().find(|l| l.layer_id == primary_id) {
-                let corners = if let Some((pid, _)) = preview.as_ref() {
-                    if pid == primary_id {
-                        drawn
-                            .layers
-                            .iter()
-                            .find(|l| l.layer_id == primary_id)
-                            .map(|l| l.corners)
-                            .unwrap_or(layer.corners)
-                    } else {
-                        layer.corners
-                    }
-                } else {
-                    layer.corners
-                };
-                append_outline_rgba(
-                    &mut color_bytes,
-                    &mut color_vertex_count,
-                    corners,
-                    aspect,
-                    fit,
-                    stroke,
-                );
-            }
-        }
-    }
-
-    let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("Motolii stage frame bind group"),
-        layout: &stage.pass.texture_bgl,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(&stage.pass.sampler),
-            },
-        ],
-    });
-
-    queue.write_buffer(&stage.pass.vertex_buffer, 0, &bytes);
-    let color_offset = bytes.len() as u64;
-    if !color_bytes.is_empty() {
-        queue.write_buffer(&stage.pass.vertex_buffer, color_offset, &color_bytes);
-    }
-
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Motolii stage frame composite"),
-    });
-    {
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Motolii stage frame composite pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        pass.set_pipeline(&stage.pass.texture_pipeline);
-        pass.set_bind_group(0, &bind_group, &[]);
-        pass.set_vertex_buffer(0, stage.pass.vertex_buffer.slice(0..color_offset));
-        pass.draw(0..tex_vertex_count, 0..1);
-        if color_vertex_count > 0 {
-            pass.set_pipeline(&stage.pass.color_pipeline);
-            let end = color_offset + color_bytes.len() as u64;
-            pass.set_vertex_buffer(0, stage.pass.vertex_buffer.slice(color_offset..end));
-            pass.draw(0..color_vertex_count, 0..1);
-        }
-    }
-    queue.submit([encoder.finish()]);
-}
-
-fn append_quad_rgba(
-    out: &mut Vec<u8>,
-    count: &mut u32,
-    corners: [[f64; 2]; 4],
-    aspect: f64,
-    fit: [f32; 4],
-    rgba: [f32; 4],
-) {
-    let pts: [[f32; 2]; 4] = corners.map(|[cx, cy]| canonical_to_fit_ndc(cx, cy, aspect, fit));
-    for tri in [[0usize, 1, 2], [0, 2, 3]] {
-        for i in tri {
-            out.extend_from_slice(&pts[i][0].to_ne_bytes());
-            out.extend_from_slice(&pts[i][1].to_ne_bytes());
-            for c in rgba {
-                out.extend_from_slice(&c.to_ne_bytes());
-            }
-            *count += 1;
-        }
-    }
-}
-
-fn append_outline_rgba(
-    out: &mut Vec<u8>,
-    count: &mut u32,
-    corners: [[f64; 2]; 4],
-    aspect: f64,
-    fit: [f32; 4],
-    rgba: [f32; 4],
-) {
-    let pts: [[f32; 2]; 4] = corners.map(|[cx, cy]| canonical_to_fit_ndc(cx, cy, aspect, fit));
-    // 細いクアッド帯で枠を描く（線トポロジを増やさない）。
-    const HALF: f32 = 0.004;
-    for i in 0..4 {
-        let a = pts[i];
-        let b = pts[(i + 1) % 4];
-        let dx = b[0] - a[0];
-        let dy = b[1] - a[1];
-        let len = (dx * dx + dy * dy).sqrt().max(1e-6);
-        let nx = -dy / len * HALF;
-        let ny = dx / len * HALF;
-        let q = [
-            [a[0] - nx, a[1] - ny],
-            [a[0] + nx, a[1] + ny],
-            [b[0] + nx, b[1] + ny],
-            [b[0] - nx, b[1] - ny],
-        ];
-        for tri in [[0usize, 1, 2], [0, 2, 3]] {
-            for vi in tri {
-                out.extend_from_slice(&q[vi][0].to_ne_bytes());
-                out.extend_from_slice(&q[vi][1].to_ne_bytes());
-                for c in rgba {
-                    out.extend_from_slice(&c.to_ne_bytes());
-                }
-                *count += 1;
-            }
-        }
     }
 }
 
@@ -1850,6 +1415,47 @@ mod tests {
     use crate::host_bridge::frame_from_scrub_bar;
 
     #[test]
+    fn stage_pointer_buttons_accept_only_rerun_standard_buttons() {
+        assert_eq!(
+            StagePointerButton::from_raw(0),
+            Some(StagePointerButton::Primary)
+        );
+        assert_eq!(
+            StagePointerButton::from_raw(1),
+            Some(StagePointerButton::Secondary)
+        );
+        assert_eq!(
+            StagePointerButton::from_raw(2),
+            Some(StagePointerButton::Middle)
+        );
+        assert_eq!(StagePointerButton::from_raw(3), None);
+    }
+
+    #[test]
+    fn rerun_entity_selection_remaps_to_existing_document_selection_intent() {
+        assert_eq!(
+            stage_selection_commit(Some("motolii/document/layers/42/fill")),
+            crate::timeline_skia::TimelineSelectionCommit::SelectLayer {
+                layer_id: "42".into()
+            }
+        );
+        assert_eq!(
+            stage_selection_commit(Some("motolii/document/layers/42/path")),
+            crate::timeline_skia::TimelineSelectionCommit::SelectLayer {
+                layer_id: "42".into()
+            }
+        );
+        assert_eq!(
+            stage_selection_commit(Some("motolii/document/frame")),
+            crate::timeline_skia::TimelineSelectionCommit::ClearSelection
+        );
+        assert_eq!(
+            stage_selection_commit(None),
+            crate::timeline_skia::TimelineSelectionCommit::ClearSelection
+        );
+    }
+
+    #[test]
     fn timeline_view_is_preserved_when_revision_changes() {
         let mut scene = TimelineScene::from_snapshot(
             &[crate::timeline_skia::SnapshotLayerInput {
@@ -1894,7 +1500,7 @@ mod tests {
         let existing = TimelineScene::default();
 
         for (duration_num, duration_den, expected_song_bars) in
-            [(10_i64, 1_i64, 5.0_f32), (40_i64, 1_i64, 20.0_f32)]
+            [(10_i64, 1_i64, 10.0_f32), (40_i64, 1_i64, 40.0_f32)]
         {
             let projection = crate::host_bridge::HostTimelineProjection {
                 revision: "r0".into(),
@@ -1910,10 +1516,13 @@ mod tests {
                     start_secs: 0.0,
                     duration_secs: duration_num as f64 / duration_den as f64,
                     position_keys: vec![],
+                    param_keys: vec![],
                     effects: vec![],
                     effects_truncated: false,
                     source_params: vec![],
                     source_params_truncated: false,
+                    visible: true,
+                    solo: false,
                 }]),
                 stage_geometry: None,
             };
@@ -1943,23 +1552,25 @@ mod tests {
                 start_secs: 0.0,
                 duration_secs: 2.0,
                 position_keys: vec![],
+                param_keys: vec![],
                 effects: vec![],
                 effects_truncated: false,
                 source_params: vec![],
                 source_params_truncated: false,
+                visible: true,
+                solo: false,
             }]),
             stage_geometry: None,
         };
 
-        let rebuilt =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                timeline_scene_from_projection(&existing, &projection)
-            }));
+        let rebuilt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            timeline_scene_from_projection(&existing, &projection)
+        }));
         assert!(rebuilt.is_ok(), "short duration must not panic");
         let rebuilt = rebuilt.expect("short duration must not panic");
-        assert!((rebuilt.song_bars - 1.0).abs() < 1e-6);
+        assert!((rebuilt.song_bars - 2.0).abs() < 1e-6);
         assert_eq!(rebuilt.view_a, 0.0);
-        assert_eq!(rebuilt.view_b, 1.0);
+        assert_eq!(rebuilt.view_b, 2.0);
     }
 
     #[test]
@@ -1980,10 +1591,13 @@ mod tests {
                 start_secs: 0.0,
                 duration_secs: 10.0,
                 position_keys: vec![],
+                param_keys: vec![],
                 effects: vec![],
                 effects_truncated: false,
                 source_params: vec![],
                 source_params_truncated: false,
+                visible: true,
+                solo: false,
             }]),
             stage_geometry: None,
         };
@@ -1991,7 +1605,118 @@ mod tests {
         assert!(rebuilt.real);
         assert!((rebuilt.view_a - 0.0).abs() < 1e-6);
         assert!((rebuilt.view_b - rebuilt.song_bars).abs() < 1e-6);
-        assert!((rebuilt.song_bars - 5.0).abs() < 1e-6);
+        assert!((rebuilt.song_bars - 10.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn product_timeline_session_starts_empty_host_not_fixture() {
+        let session = TimelineSession::host_product();
+        assert!(session.scene.real);
+        assert_eq!(session.scene.band_count(), 0);
+        let fixture = TimelineScene::default();
+        assert!(!fixture.real);
+        assert!(fixture.band_count() > 0);
+    }
+
+    #[test]
+    fn empty_host_projection_clears_fixture_bands() {
+        let existing = TimelineScene::default();
+        assert!(!existing.real);
+        assert!(existing.band_count() > 0);
+        let projection = crate::host_bridge::HostTimelineProjection {
+            revision: "0".into(),
+            projection_generation: "0".into(),
+            primary_layer_id: None,
+            current_time: (0, 1),
+            fps: Some((30, 1)),
+            timeline_duration: Some((10, 1)),
+            bounds: vec![],
+            timeline_layers: Some(vec![]),
+            stage_geometry: Some(crate::host_bridge::HostStageGeometry {
+                layers: vec![],
+                layers_truncated: false,
+            }),
+        };
+        let rebuilt = timeline_scene_from_projection(&existing, &projection);
+        assert!(rebuilt.real);
+        assert_eq!(rebuilt.band_count(), 0);
+        assert!(rebuilt.clip0_layer_id(0).is_none());
+    }
+
+    #[test]
+    fn host_projection_exposes_the_same_layer_id() {
+        let existing = TimelineScene::empty_host();
+        let projection = crate::host_bridge::HostTimelineProjection {
+            revision: "1".into(),
+            projection_generation: "1".into(),
+            primary_layer_id: Some("42".into()),
+            current_time: (0, 1),
+            fps: Some((30, 1)),
+            timeline_duration: Some((10, 1)),
+            bounds: vec![("42".into(), "Rectangle".into())],
+            timeline_layers: Some(vec![crate::host_bridge::HostTimelineLayer {
+                layer_id: "42".into(),
+                display_name: "Rectangle".into(),
+                start_secs: 0.0,
+                duration_secs: 10.0,
+                position_keys: vec![],
+                param_keys: vec![],
+                effects: vec![],
+                effects_truncated: false,
+                source_params: vec![],
+                source_params_truncated: false,
+                visible: true,
+                solo: false,
+            }]),
+            stage_geometry: Some(crate::host_bridge::HostStageGeometry {
+                layers: vec![crate::host_bridge::HostStageGeometryLayer {
+                    layer_id: "42".into(),
+                    corners: [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]],
+                    position: [0.0, 0.0],
+                    rotation: 0.0,
+                    scale: [1.0, 1.0],
+                }],
+                layers_truncated: false,
+            }),
+        };
+        let rebuilt = timeline_scene_from_projection(&existing, &projection);
+        assert!(rebuilt.real);
+        assert_eq!(rebuilt.band_count(), 1);
+        assert_eq!(rebuilt.clip0_layer_id(0), Some("42"));
+        assert_eq!(rebuilt.selected_flat, 0);
+        let apply = host_stage_geometry_command(None, Some(&projection));
+        match apply {
+            HostStageGeometryCommand::Apply(geometry) => {
+                assert_eq!(geometry.layers.len(), 1);
+                assert_eq!(geometry.layers[0].layer_id, "42");
+            }
+            other => panic!("expected Apply, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn empty_host_stage_geometry_applies_instead_of_leaving_fixture() {
+        let projection = crate::host_bridge::HostTimelineProjection {
+            revision: "0".into(),
+            projection_generation: "0".into(),
+            primary_layer_id: None,
+            current_time: (0, 1),
+            fps: None,
+            timeline_duration: Some((10, 1)),
+            bounds: vec![],
+            timeline_layers: Some(vec![]),
+            stage_geometry: Some(crate::host_bridge::HostStageGeometry {
+                layers: vec![],
+                layers_truncated: false,
+            }),
+        };
+        let apply = host_stage_geometry_command(None, Some(&projection));
+        match apply {
+            HostStageGeometryCommand::Apply(geometry) => {
+                assert!(geometry.layers.is_empty());
+            }
+            other => panic!("empty host must Apply empty geometry, got {other:?}"),
+        }
     }
 
     #[test]
@@ -2044,8 +1769,14 @@ mod tests {
             pump.next_frame(ScrubPointerPhase::Down, 4.0, 0, 30, 1),
             Some(frame_from_scrub_bar(4.0, 30, 1))
         );
-        assert_eq!(pump.next_frame(ScrubPointerPhase::Move, 8.0, 16, 30, 1), None);
-        assert_eq!(pump.next_frame(ScrubPointerPhase::Move, 8.0, 31, 30, 1), None);
+        assert_eq!(
+            pump.next_frame(ScrubPointerPhase::Move, 8.0, 16, 30, 1),
+            None
+        );
+        assert_eq!(
+            pump.next_frame(ScrubPointerPhase::Move, 8.0, 31, 30, 1),
+            None
+        );
         assert_eq!(
             pump.next_frame(ScrubPointerPhase::Move, 8.0, 32, 30, 1),
             Some(frame_from_scrub_bar(8.0, 30, 1))
@@ -2059,11 +1790,23 @@ mod tests {
     #[test]
     fn scrub_time_pump_restores_down_frame_only_after_dispatch() {
         let mut pump = ScrubTimePump::new();
-        assert_eq!(pump.next_frame(ScrubPointerPhase::Down, 11.0, 0, 30, 1), Some(frame_from_scrub_bar(11.0, 30, 1)));
-        assert_eq!(pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 10, 30, 1), Some(frame_from_scrub_bar(11.0, 30, 1)));
-        assert_eq!(pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 20, 30, 1), None);
+        assert_eq!(
+            pump.next_frame(ScrubPointerPhase::Down, 11.0, 0, 30, 1),
+            Some(frame_from_scrub_bar(11.0, 30, 1))
+        );
+        assert_eq!(
+            pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 10, 30, 1),
+            Some(frame_from_scrub_bar(11.0, 30, 1))
+        );
+        assert_eq!(
+            pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 20, 30, 1),
+            None
+        );
         let mut pump = ScrubTimePump::new();
-        assert_eq!(pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 20, 30, 1), None);
+        assert_eq!(
+            pump.next_frame(ScrubPointerPhase::Cancel, 24.0, 20, 30, 1),
+            None
+        );
     }
 
     #[test]
@@ -2092,13 +1835,16 @@ mod tests {
             TimelinePointerPhase::Down,
             x,
             y,
-        0,
+            0,
         );
         assert!(down.selection_commit.is_some());
         if let Some(commit) = down.selection_commit {
             assert!(!RendererCore::dispatch_timeline_selection(&commit));
         }
-        assert_eq!(crate::host_bridge::test_timeline_selection_dispatch_count(), 1);
+        assert_eq!(
+            crate::host_bridge::test_timeline_selection_dispatch_count(),
+            1
+        );
     }
 
     #[test]
@@ -2118,7 +1864,7 @@ mod tests {
             TimelinePointerPhase::Down,
             down_x,
             y,
-        0,
+            0,
         );
         assert!(clip_down.selection_commit.is_none());
 
@@ -2130,7 +1876,7 @@ mod tests {
             TimelinePointerPhase::Down,
             202.0 + (14.0f64 / 48.0) * (1240.0 - 202.0 - 6.0),
             y,
-        0,
+            0,
         );
         assert!(trim_down.selection_commit.is_none());
 
@@ -2140,7 +1886,10 @@ mod tests {
         if let Some(commit) = trim_down.selection_commit {
             assert!(!RendererCore::dispatch_timeline_selection(&commit));
         }
-        assert_eq!(crate::host_bridge::test_timeline_selection_dispatch_count(), 0);
+        assert_eq!(
+            crate::host_bridge::test_timeline_selection_dispatch_count(),
+            0
+        );
     }
 
     #[test]
@@ -2149,6 +1898,9 @@ mod tests {
             layers: vec![crate::host_bridge::HostStageGeometryLayer {
                 layer_id: "L1".into(),
                 corners: [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]],
+                position: [0.0, 0.0],
+                rotation: 0.0,
+                scale: [1.0, 1.0],
             }],
             layers_truncated: false,
         };
@@ -2156,6 +1908,9 @@ mod tests {
             layers: vec![crate::host_bridge::HostStageGeometryLayer {
                 layer_id: "L1".into(),
                 corners: [[-0.4, -0.4], [0.4, -0.4], [0.4, 0.4], [-0.4, 0.4]],
+                position: [0.0, 0.0],
+                rotation: 0.0,
+                scale: [1.0, 1.0],
             }],
             layers_truncated: false,
         };
@@ -2220,12 +1975,18 @@ mod tests {
             None,
         );
         let _ = crate::host_bridge::try_timeline_keymap_delete(&scene);
-        assert_eq!(crate::host_bridge::test_keymap_remove_position_key_count(), 0);
+        assert_eq!(
+            crate::host_bridge::test_keymap_remove_position_key_count(),
+            0
+        );
         assert_eq!(crate::host_bridge::test_keymap_delete_layer_count(), 1);
 
         crate::timeline_skia::test_select_first_real_key(&mut scene);
         let _ = crate::host_bridge::try_timeline_keymap_delete(&scene);
-        assert_eq!(crate::host_bridge::test_keymap_remove_position_key_count(), 1);
+        assert_eq!(
+            crate::host_bridge::test_keymap_remove_position_key_count(),
+            1
+        );
         assert_eq!(crate::host_bridge::test_keymap_delete_layer_count(), 1);
     }
 
@@ -2281,10 +2042,13 @@ mod tests {
                         value: None,
                     },
                 ],
+                param_keys: vec![],
                 effects: vec![],
                 effects_truncated: false,
                 source_params: vec![],
                 source_params_truncated: false,
+                visible: true,
+                solo: false,
             }]),
             stage_geometry: None,
         };
@@ -2294,193 +2058,18 @@ mod tests {
             Some(("11".into(), 7))
         );
         let _ = crate::host_bridge::try_timeline_keymap_delete(&rebuilt);
-        assert_eq!(crate::host_bridge::test_keymap_remove_position_key_count(), 1);
+        assert_eq!(
+            crate::host_bridge::test_keymap_remove_position_key_count(),
+            1
+        );
         assert_eq!(crate::host_bridge::test_keymap_delete_layer_count(), 0);
 
         projection.primary_layer_id = None;
         let primary_cleared = timeline_scene_from_projection(&scene, &projection);
-        assert_eq!(crate::timeline_skia::selected_real_key(&primary_cleared), None);
-    }
-
-    #[test]
-    fn stage_move_primary_drag_commits_once_and_cancel_dispatches_zero() {
-        let geometry = crate::host_bridge::HostStageGeometry {
-            layers: vec![
-                crate::host_bridge::HostStageGeometryLayer {
-                    layer_id: "10".into(),
-                    corners: [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]],
-                },
-                crate::host_bridge::HostStageGeometryLayer {
-                    layer_id: "11".into(),
-                    corners: [[0.3, 0.3], [0.5, 0.3], [0.5, 0.5], [0.3, 0.5]],
-                },
-            ],
-            layers_truncated: false,
-        };
-        let logical_w = 800.0;
-        let logical_h = 600.0;
-
-        crate::host_bridge::test_reset_move_layer_by_dispatch_count();
-        let mut gesture = None;
         assert_eq!(
-            stage_move_pointer(
-                &mut gesture,
-                PointerPhase::Down,
-                400.0,
-                300.0,
-                logical_w,
-                logical_h,
-                &geometry,
-            ),
-            StageMoveOutcome::SelectLayer {
-                layer_id: "10".into()
-            }
+            crate::timeline_skia::selected_real_key(&primary_cleared),
+            None
         );
-        assert!(gesture.is_some());
-        let drag = stage_move_pointer(
-            &mut gesture,
-            PointerPhase::Move,
-            410.0,
-            300.0,
-            logical_w,
-            logical_h,
-            &geometry,
-        );
-        match drag {
-            StageMoveOutcome::Preview { layer_id, delta } => {
-                assert_eq!(layer_id, "10");
-                assert!(delta[0].abs() > 0.0);
-                let preview =
-                    crate::rerun_stage::apply_move_preview_to_geometry(&geometry, Some(&("10".into(), delta)));
-                assert_eq!(preview.layers[1].corners, geometry.layers[1].corners);
-                assert_ne!(preview.layers[0].corners, geometry.layers[0].corners);
-            }
-            other => panic!("expected preview, got {other:?}"),
-        }
-        let commit = stage_move_pointer(
-            &mut gesture,
-            PointerPhase::Up,
-            420.0,
-            305.0,
-            logical_w,
-            logical_h,
-            &geometry,
-        );
-        match commit {
-            StageMoveOutcome::Commit { layer_id, delta } => {
-                assert_eq!(layer_id, "10");
-                assert!(!crate::host_bridge::try_dispatch_move_layer_by(&layer_id, delta));
-            }
-            other => panic!("expected commit, got {other:?}"),
-        }
-        assert_eq!(crate::host_bridge::test_move_layer_by_dispatch_count(), 1);
-        assert!(gesture.is_none());
-
-        crate::host_bridge::test_reset_move_layer_by_dispatch_count();
-        let mut gesture = None;
-        let _ = stage_move_pointer(
-            &mut gesture,
-            PointerPhase::Down,
-            400.0,
-            300.0,
-            logical_w,
-            logical_h,
-            &geometry,
-        );
-        let _ = stage_move_pointer(
-            &mut gesture,
-            PointerPhase::Move,
-            420.0,
-            300.0,
-            logical_w,
-            logical_h,
-            &geometry,
-        );
-        assert_eq!(
-            stage_move_pointer(
-                &mut gesture,
-                PointerPhase::Cancel,
-                420.0,
-                300.0,
-                logical_w,
-                logical_h,
-                &geometry,
-            ),
-            StageMoveOutcome::CancelRestore
-        );
-        assert_eq!(crate::host_bridge::test_move_layer_by_dispatch_count(), 0);
-    }
-
-    #[test]
-    fn stage_move_non_primary_surface_starts_drag() {
-        let geometry = crate::host_bridge::HostStageGeometry {
-            layers: vec![
-                crate::host_bridge::HostStageGeometryLayer {
-                    layer_id: "10".into(),
-                    corners: [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]],
-                },
-                crate::host_bridge::HostStageGeometryLayer {
-                    layer_id: "11".into(),
-                    corners: [[0.3, 0.3], [0.5, 0.3], [0.5, 0.5], [0.3, 0.5]],
-                },
-            ],
-            layers_truncated: false,
-        };
-        let mut gesture = None;
-        let (x, y) = (
-            800.0 * 0.5 + 0.4 * 600.0,
-            600.0 * 0.5 + 0.4 * 600.0,
-        );
-        assert_eq!(
-            stage_move_pointer(
-                &mut gesture,
-                PointerPhase::Down,
-                x,
-                y,
-                800.0,
-                600.0,
-                &geometry,
-            ),
-            StageMoveOutcome::SelectLayer {
-                layer_id: "11".into()
-            }
-        );
-        assert!(gesture.is_some());
-        let expected_delta = [(x + 20.0 - x) / 600.0, 0.0];
-        let drag = stage_move_pointer(
-            &mut gesture,
-            PointerPhase::Move,
-            x + 20.0,
-            y,
-            800.0,
-            600.0,
-            &geometry,
-        );
-        match drag {
-            StageMoveOutcome::Preview { layer_id, delta } => {
-                assert_eq!(layer_id, "11");
-                assert!((delta[0] - expected_delta[0]).abs() < 1e-15);
-                assert!((delta[1] - expected_delta[1]).abs() < 1e-15);
-            }
-            other => panic!("expected preview, got {other:?}"),
-        }
-        let commit = stage_move_pointer(
-            &mut gesture,
-            PointerPhase::Up,
-            x + 20.0,
-            y,
-            800.0,
-            600.0,
-            &geometry,
-        );
-        match commit {
-            StageMoveOutcome::Commit { layer_id, delta } => {
-                assert_eq!(layer_id, "11");
-                assert!((delta[0] - expected_delta[0]).abs() < 1e-15);
-                assert!((delta[1] - expected_delta[1]).abs() < 1e-15);
-            }
-            other => panic!("expected commit, got {other:?}"),
-        }
     }
 
     #[test]
@@ -2490,10 +2079,16 @@ mod tests {
                 crate::host_bridge::HostStageGeometryLayer {
                     layer_id: "A".into(),
                     corners: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                    position: [0.0, 0.0],
+                    rotation: 0.0,
+                    scale: [1.0, 1.0],
                 },
                 crate::host_bridge::HostStageGeometryLayer {
                     layer_id: "B".into(),
                     corners: [[2.0, 2.0], [3.0, 2.0], [3.0, 3.0], [2.0, 3.0]],
+                    position: [0.0, 0.0],
+                    rotation: 0.0,
+                    scale: [1.0, 1.0],
                 },
             ],
             layers_truncated: false,
@@ -2507,87 +2102,18 @@ mod tests {
             [[0.5, -0.25], [1.5, -0.25], [1.5, 0.75], [0.5, 0.75]]
         );
         assert_eq!(preview.layers[1].corners, geometry.layers[1].corners);
-        let restored =
-            crate::rerun_stage::apply_move_preview_to_geometry(&geometry, None);
+        let restored = crate::rerun_stage::apply_move_preview_to_geometry(&geometry, None);
         assert_eq!(restored, geometry);
-    }
-
-    #[test]
-    fn stage_move_miss_down_clears_selection() {
-        let geometry = crate::host_bridge::HostStageGeometry {
-            layers: vec![
-                crate::host_bridge::HostStageGeometryLayer {
-                    layer_id: "10".into(),
-                    corners: [[-0.2, -0.2], [0.2, -0.2], [0.2, 0.2], [-0.2, 0.2]],
-                },
-            ],
-            layers_truncated: false,
-        };
-        let mut gesture = Some(StageMoveGesture {
-            layer_id: "10".into(),
-            down_logical: [10.0, 10.0],
-            down_canonical: [0.0, 0.0],
-            armed: true,
-            last_delta: [0.0, 0.0],
-        });
-        assert_eq!(
-            stage_move_pointer(
-                &mut gesture,
-                PointerPhase::Down,
-                700.0,
-                500.0,
-                800.0,
-                600.0,
-                &geometry,
-            ),
-            StageMoveOutcome::ClearSelection
-        );
-        assert!(gesture.is_none());
-        assert_eq!(
-            stage_move_pointer(
-                &mut gesture,
-                PointerPhase::Move,
-                700.0,
-                500.0,
-                800.0,
-                600.0,
-                &geometry,
-            ),
-            StageMoveOutcome::None
-        );
-    }
-
-    #[test]
-    fn stage_move_zero_area_quad_is_no_hit() {
-        let geometry = crate::host_bridge::HostStageGeometry {
-            layers: vec![
-                crate::host_bridge::HostStageGeometryLayer {
-                    layer_id: "zero".into(),
-                    corners: [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
-                },
-            ],
-            layers_truncated: false,
-        };
-        let mut gesture = None;
-        assert_eq!(
-            stage_move_pointer(
-                &mut gesture,
-                PointerPhase::Down,
-                400.0,
-                300.0,
-                800.0,
-                600.0,
-                &geometry,
-            ),
-            StageMoveOutcome::ClearSelection
-        );
-        assert!(gesture.is_none());
     }
 
     #[test]
     fn host_snapshot_read_needed_force_and_first_read_and_missing_stamp() {
         // force / 初回(None)は読む。host不在でstamp取得失敗もfull読みへ落とす。
-        assert!(RendererCore::host_snapshot_read_needed(None, Some((1, 2)), false));
+        assert!(RendererCore::host_snapshot_read_needed(
+            None,
+            Some((1, 2)),
+            false
+        ));
         assert!(RendererCore::host_snapshot_read_needed(
             Some((1, 2)),
             Some((1, 2)),
@@ -2603,6 +2129,10 @@ mod tests {
             Some((1, 2)),
             false
         ));
-        assert!(RendererCore::host_snapshot_read_needed(Some((1, 2)), None, false));
+        assert!(RendererCore::host_snapshot_read_needed(
+            Some((1, 2)),
+            None,
+            false
+        ));
     }
 }

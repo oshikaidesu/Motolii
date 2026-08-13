@@ -42,6 +42,10 @@ impl ParameterControlSpec {
     pub fn effect_property(&self, effect: EffectId) -> ScalarPropertyId {
         ScalarPropertyId::EffectParam(effect, self.param_id.to_owned())
     }
+
+    pub fn source_property(&self) -> ScalarPropertyId {
+        ScalarPropertyId::SourceParam(self.param_id.to_owned())
+    }
 }
 
 pub fn map_parameter_control(

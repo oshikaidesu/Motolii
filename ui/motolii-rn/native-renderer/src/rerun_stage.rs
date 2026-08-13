@@ -1,10 +1,8 @@
 use std::{sync::Arc, time::Instant};
 
-#[cfg(test)]
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use egui::{
-    Event, PointerButton, Pos2, RawInput, Rect, Vec2,
+    Align2, Color32, Event, FontId, Modifiers, MouseWheelUnit, PointerButton, Pos2, RawInput, Rect,
+    TouchPhase, Vec2,
     epaint::{Mesh, Vertex as EguiVertex},
 };
 use glam::EulerRot;
@@ -17,42 +15,23 @@ use motolii_doc::{
     CompositeOrder, LineJoin, PointType, TrimMode,
     pathgeom::{self, Contour, Path, Point, ResolvedPathOp, ResolvedTransform, Vertex},
 };
+use motolii_ui::AppStageTransformEdit;
 use re_chunk::Chunk;
 use re_log_types::TimePoint;
 use re_sdk_types::archetypes::Mesh3D;
 use transform_gizmo::{
-    Gizmo, GizmoConfig, GizmoInteraction, GizmoMode, GizmoOrientation,
+    Gizmo, GizmoConfig, GizmoInteraction, GizmoMode, GizmoOrientation, GizmoResult,
     math::{DMat4, DQuat, DVec3, Pos2 as GizmoPos2, Rect as GizmoRect, Transform},
 };
 
 use crate::host_bridge::HostStageGeometry;
-use crate::renderer_core::PointerPhase;
+use crate::renderer_core::{PointerPhase, StagePointerButton};
 
 const FIXTURE_RECT_FILL_COLOR: u32 = 0xE9_8C_6AFF;
 const FIXTURE_RECT_STROKE_COLOR: u32 = 0xEC_D8_FFFF;
+const DOCUMENT_RECT_FILL_COLOR: u32 = 0xFFFF_FFFF;
 const STAGE_HOST_ERASE_COLOR: u32 = 0x0000_0000;
-
-#[cfg(test)]
-static LAYER_FILL_INGEST_COUNT: AtomicU64 = AtomicU64::new(0);
-
-#[cfg(test)]
-pub(crate) fn test_reset_layer_fill_ingest_count() {
-    LAYER_FILL_INGEST_COUNT.store(0, Ordering::SeqCst);
-}
-
-#[cfg(test)]
-pub(crate) fn test_layer_fill_ingest_count() -> u64 {
-    LAYER_FILL_INGEST_COUNT.load(Ordering::SeqCst)
-}
-
-/// 実フレーム合成中は fill ingest を数えない（GPU非依存の分岐正本）。
-pub(crate) fn note_layer_fill_ingest(real_frame_composite: bool) {
-    if real_frame_composite {
-        return;
-    }
-    #[cfg(test)]
-    LAYER_FILL_INGEST_COUNT.fetch_add(1, Ordering::SeqCst);
-}
+const DOCUMENT_FRAME_ENTITY: &str = "motolii/document/frame";
 
 /// Owns only the adapter from the native Stage surface to Rerun's Spatial View.
 ///
@@ -62,14 +41,11 @@ pub(crate) struct EmbeddedSpatialStage {
     egui_renderer: egui_wgpu::Renderer,
     spatial_stage: re_view_spatial::SpatialStage,
     input_events: Vec<Event>,
+    input_modifiers: Modifiers,
     started_at: Instant,
     gizmo: Gizmo,
-    fixture_transform: Transform,
-    fixture_item_id: String,
-    /// Host `stage_geometry` 適用済みなら fixture 再ingestを止める。
+    /// Host `stage_geometry` 適用済み。
     host_geometry_active: bool,
-    /// 実フレーム合成が動くとき layer fill Mesh3D を止める。
-    real_frame_composite: bool,
     host_layer_ids: Vec<String>,
     /// 直近の host 投影（move preview の復元元）。
     host_geometry: Option<HostStageGeometry>,
@@ -77,6 +53,30 @@ pub(crate) struct EmbeddedSpatialStage {
     host_primary_layer_id: Option<String>,
     /// move drag 中の world delta preview（対象 layer のみ）。
     move_preview: Option<(String, [f64; 2])>,
+    gizmo_gesture: Option<(String, AppStageTransformEdit)>,
+    pending_gizmo_action: Option<StageGizmoAction>,
+    gizmo_cancel_requested: bool,
+    gizmo_pointer_position: Pos2,
+    gizmo_pointer_down: bool,
+    gizmo_pointer_pressed: bool,
+    gizmo_pointer_released: bool,
+    feedback: Option<(String, bool)>,
+    /// 評価済み Document frame を Image visualizer へ載せているか。
+    evaluated_frame_active: bool,
+    host_viewport: Option<(u32, u32)>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum StageGizmoAction {
+    Preview {
+        layer_id: String,
+        edit: AppStageTransformEdit,
+    },
+    Commit {
+        layer_id: String,
+        edit: AppStageTransformEdit,
+    },
+    Cancel,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -111,7 +111,7 @@ impl EmbeddedSpatialStage {
         .map_err(|error| format!("create Rerun render context: {error}"))?;
         egui_renderer.callback_resources.insert(render_ctx);
 
-        let mut stage = Self {
+        let stage = Self {
             egui_ctx: egui::Context::default(),
             egui_renderer,
             spatial_stage: re_view_spatial::SpatialStage::new(re_log_types::ApplicationId::from(
@@ -119,50 +119,119 @@ impl EmbeddedSpatialStage {
             ))
             .map_err(|error| format!("create Rerun spatial stage: {error}"))?,
             input_events: Vec::new(),
+            input_modifiers: Modifiers::NONE,
             started_at: Instant::now(),
             gizmo: Gizmo::default(),
-            fixture_transform: Transform::default(),
-            fixture_item_id: "rectangle@0.500000,0.500000|pucker-bloat".into(),
             host_geometry_active: false,
-            real_frame_composite: false,
             host_layer_ids: Vec::new(),
             host_geometry: None,
             host_primary_layer_id: None,
             move_preview: None,
+            gizmo_gesture: None,
+            pending_gizmo_action: None,
+            gizmo_cancel_requested: false,
+            gizmo_pointer_position: Pos2::ZERO,
+            gizmo_pointer_down: false,
+            gizmo_pointer_pressed: false,
+            gizmo_pointer_released: false,
+            feedback: None,
+            evaluated_frame_active: false,
+            host_viewport: None,
         };
-        if !stage.set_created_item("rectangle@0.500000,0.500000|pucker-bloat") {
-            return Err("seed path rectangle for embedded stage".into());
-        }
+        // 製品マウントでは fixture rect を出さない。host snapshot / 評価フレームが正本。
         Ok(stage)
     }
 
-    pub(crate) fn pointer(&mut self, phase: PointerPhase, x: f64, y: f64) {
+    pub(crate) fn pointer(
+        &mut self,
+        phase: PointerPhase,
+        button: StagePointerButton,
+        modifiers: u32,
+        x: f64,
+        y: f64,
+    ) {
         let position = Pos2::new(x as f32, y as f32);
+        let modifiers = stage_modifiers(modifiers);
+        self.input_modifiers = modifiers;
         self.input_events.push(Event::PointerMoved(position));
 
         match phase {
             PointerPhase::Down => self.input_events.push(Event::PointerButton {
                 pos: position,
-                button: PointerButton::Primary,
+                button: egui_pointer_button(button),
                 pressed: true,
-                modifiers: Default::default(),
+                modifiers,
             }),
             PointerPhase::Up => self.input_events.push(Event::PointerButton {
                 pos: position,
-                button: PointerButton::Primary,
+                button: egui_pointer_button(button),
                 pressed: false,
-                modifiers: Default::default(),
+                modifiers,
             }),
             PointerPhase::Cancel => self.input_events.push(Event::PointerGone),
             PointerPhase::Move => {}
         }
     }
 
-    /// 一時gizmo値をInspectorへ投影する。Document値ではない。
+    pub(crate) fn gizmo_pointer(&mut self, phase: PointerPhase, x: f64, y: f64) {
+        self.gizmo_pointer_position = Pos2::new(x as f32, y as f32);
+        match phase {
+            PointerPhase::Down => {
+                self.gizmo_pointer_pressed = true;
+                self.gizmo_pointer_down = true;
+            }
+            PointerPhase::Move => {}
+            PointerPhase::Up => {
+                self.gizmo_pointer_down = false;
+                self.gizmo_pointer_released = true;
+            }
+            PointerPhase::Cancel => {
+                self.gizmo_pointer_down = false;
+                self.gizmo_cancel_requested = true;
+            }
+        }
+    }
+
+    pub(crate) fn scroll(
+        &mut self,
+        delta_x: f64,
+        delta_y: f64,
+        magnification: f64,
+        modifiers: u32,
+        x: f64,
+        y: f64,
+    ) -> bool {
+        let modifiers = stage_modifiers(modifiers);
+        let Some(events) =
+            stage_navigation_events(delta_x, delta_y, magnification, modifiers, x, y)
+        else {
+            return false;
+        };
+        self.input_modifiers = modifiers;
+        self.input_events.extend(events);
+        true
+    }
+
+    pub(crate) fn gizmo_wants_pointer(&self, x: f64, y: f64) -> bool {
+        self.selected_gizmo_transform().is_some() && self.gizmo.pick_preview((x as f32, y as f32))
+    }
+
+    pub(crate) fn take_gizmo_action(&mut self) -> Option<StageGizmoAction> {
+        self.pending_gizmo_action.take()
+    }
+
+    pub(crate) fn set_feedback(&mut self, message: impl Into<String>, rejected: bool) {
+        self.feedback = Some((message.into(), rejected));
+    }
+
+    /// 選択中 Document layer の TRS。未選択は零。Inspector 正本ではない。
     pub(crate) fn transform_projection(&self) -> StageTransformProjection {
+        let Some((_, transform)) = self.selected_gizmo_transform() else {
+            return StageTransformProjection::default();
+        };
         let (rotation_x, rotation_y, rotation_z) =
-            DQuat::from(self.fixture_transform.rotation).to_euler(EulerRot::XYZ);
-        let translation = DVec3::from(self.fixture_transform.translation);
+            DQuat::from(transform.rotation).to_euler(EulerRot::XYZ);
+        let translation = DVec3::from(transform.translation);
         StageTransformProjection {
             x: translation.x,
             y: translation.y,
@@ -173,78 +242,24 @@ impl EmbeddedSpatialStage {
         }
     }
 
-    /// Inspectorとgizmoが共有する一時値。Documentには書き込まない。
-    pub(crate) fn set_transform_projection(&mut self, projection: StageTransformProjection) -> bool {
-        let transform = Transform::from_scale_rotation_translation(
-            DVec3::ONE,
-            DQuat::from_euler(
-                EulerRot::XYZ,
-                projection.rotation_x.to_radians(),
-                projection.rotation_y.to_radians(),
-                projection.rotation_z.to_radians(),
-            ),
-            DVec3::new(projection.x, projection.y, projection.z),
-        );
-        self.fixture_transform = transform;
-        let item_id = self.fixture_item_id.clone();
-        self.set_created_item(&item_id)
+    /// RN props echo。Document 書きは gizmo → host_preview/commit。
+    pub(crate) fn set_transform_projection(
+        &mut self,
+        projection: StageTransformProjection,
+    ) -> bool {
+        let _ = projection;
+        true
     }
 
     pub(crate) fn set_created_item(&mut self, item_id: &str) -> bool {
-        if self.host_geometry_active {
-            // host 投影が正本の間は fixture 文字列由来の rect を戻さない。
-            return true;
-        }
-        if item_id.is_empty() {
-            return true;
-        }
-        let Some((item, path_operation_id)) = item_id.split_once('|') else {
-            return false;
-        };
-        let Some((kind, coordinates)) = item.split_once('@') else {
-            return false;
-        };
-        if kind != "rectangle" {
-            return false;
-        }
-        let Some((x, y)) = coordinates.split_once(',') else {
-            return false;
-        };
-        let (Ok(x), Ok(y)) = (x.parse::<f32>(), y.parse::<f32>()) else {
-            return false;
-        };
-        if !(0.0..=1.0).contains(&x) || !(0.0..=1.0).contains(&y) {
-            return false;
-        }
-
-        self.fixture_item_id.clear();
-        self.fixture_item_id.push_str(item_id);
-
-        let path = rectangle_path(x - 0.5, y - 0.5);
-        let Some(path_operation) = preview_path_operation(path_operation_id) else {
-            return false;
-        };
-        let Ok(path) = pathgeom::apply(&path, &path_operation, 0.0) else {
-            return false;
-        };
-        let Ok((fill, stroke)) = tessellate_path(&path, self.fixture_transform) else {
-            return false;
-        };
-
-        ingest_mesh(
-            &mut self.spatial_stage,
-            "motolii/fixtures/path-rectangle/fill",
-            fill,
-            FIXTURE_RECT_FILL_COLOR,
-        ) && ingest_mesh(
-            &mut self.spatial_stage,
-            "motolii/fixtures/path-rectangle/stroke",
-            stroke,
-            FIXTURE_RECT_STROKE_COLOR,
-        )
+        let _ = item_id;
+        true
     }
 
     pub(crate) fn clear_host_projection(&mut self) -> bool {
+        let _ = self.spatial_stage.clear_gpu_image(DOCUMENT_FRAME_ENTITY);
+        self.evaluated_frame_active = false;
+        self.host_viewport = None;
         if !self.host_geometry_active {
             return true;
         }
@@ -261,20 +276,14 @@ impl EmbeddedSpatialStage {
             }
         }
         self.host_geometry_active = false;
-        self.real_frame_composite = false;
         self.host_geometry = None;
         self.host_primary_layer_id = None;
         self.move_preview = None;
-        let item_id = self.fixture_item_id.clone();
-        self.set_created_item(&item_id)
-    }
-
-    pub(crate) fn set_real_frame_composite(&mut self, active: bool) {
-        if self.real_frame_composite == active {
-            return;
-        }
-        let _ = self.erase_host_layer_fills();
-        self.real_frame_composite = active;
+        self.gizmo_gesture = None;
+        self.pending_gizmo_action = None;
+        self.gizmo_cancel_requested = false;
+        // host が空なら Stage も空。fixture を製品へ戻さない。
+        true
     }
 
     pub(crate) fn set_host_primary_layer_id(&mut self, primary: Option<String>) {
@@ -285,19 +294,7 @@ impl EmbeddedSpatialStage {
         self.host_primary_layer_id.as_deref()
     }
 
-    pub(crate) fn host_geometry(&self) -> Option<&HostStageGeometry> {
-        self.host_geometry.as_ref()
-    }
-
-    pub(crate) fn move_preview(&self) -> Option<&(String, [f64; 2])> {
-        self.move_preview.as_ref()
-    }
-
-    pub(crate) fn real_frame_composite(&self) -> bool {
-        self.real_frame_composite
-    }
-
-    /// Host snapshot の stage_geometry で fixture を置換する。revision 側で gate 済み前提。
+    /// Host snapshot の stage_geometry を tessellate して載せる。
     /// `viewport_width/height` は host 投影の aspect 写像に使う（正方近似を避ける）。
     pub(crate) fn apply_host_stage_geometry(
         &mut self,
@@ -308,23 +305,12 @@ impl EmbeddedSpatialStage {
         if viewport_width == 0 || viewport_height == 0 {
             return false;
         }
-        // fixture entity を透明メッシュで上書きし、host layer だけを見せる。
-        let cleared = hidden_layer_mesh();
-        if !ingest_mesh(
-            &mut self.spatial_stage,
-            "motolii/fixtures/path-rectangle/fill",
-            cleared.clone(),
-            STAGE_HOST_ERASE_COLOR,
-        ) || !ingest_mesh(
-            &mut self.spatial_stage,
-            "motolii/fixtures/path-rectangle/stroke",
-            cleared,
-            STAGE_HOST_ERASE_COLOR,
-        ) {
-            return false;
-        }
 
-        let next_ids: Vec<String> = geometry.layers.iter().map(|l| l.layer_id.clone()).collect();
+        let next_ids: Vec<String> = geometry
+            .layers
+            .iter()
+            .flat_map(|layer| host_layer_mesh_paths(&layer.layer_id))
+            .collect();
         for old_id in &self.host_layer_ids {
             if next_ids.iter().any(|id| id == old_id) {
                 continue;
@@ -337,24 +323,20 @@ impl EmbeddedSpatialStage {
             );
         }
 
-        let preview_geom = apply_move_preview_to_geometry(geometry, None);
-        if !self.real_frame_composite {
-            for layer in &preview_geom.layers {
-                let mesh =
-                    mesh_from_canonical_corners(layer.corners, viewport_width, viewport_height);
-                note_layer_fill_ingest(self.real_frame_composite);
-                if !ingest_mesh(
-                    &mut self.spatial_stage,
-                    &layer.layer_id,
-                    mesh,
-                    FIXTURE_RECT_FILL_COLOR,
-                ) {
-                    return false;
-                }
+        let previewing = self.gizmo_gesture.is_some();
+        for layer in &geometry.layers {
+            if !ingest_host_layer_meshes(
+                &mut self.spatial_stage,
+                &layer.layer_id,
+                layer.corners,
+                !host_layer_fill_is_visible(layer.corners, self.evaluated_frame_active, previewing),
+            ) {
+                return false;
             }
         }
         self.host_layer_ids = next_ids;
         self.host_geometry = Some(geometry.clone());
+        self.host_viewport = Some((viewport_width, viewport_height));
         self.host_geometry_active = true;
         self.move_preview = None;
         true
@@ -375,10 +357,6 @@ impl EmbeddedSpatialStage {
             return false;
         };
         self.move_preview = Some((layer_id.to_owned(), delta));
-        if self.real_frame_composite {
-            // 実フレーム経路では pass 側で半透明quadを描く。
-            return true;
-        }
         let preview = apply_move_preview_to_geometry(&base, self.move_preview.as_ref());
         let Some(layer) = preview
             .layers
@@ -388,21 +366,19 @@ impl EmbeddedSpatialStage {
             self.move_preview = None;
             return false;
         };
-        let mesh = mesh_from_canonical_corners(layer.corners, viewport_width, viewport_height);
-        note_layer_fill_ingest(self.real_frame_composite);
-        ingest_mesh(
+        if !ingest_host_layer_meshes(
             &mut self.spatial_stage,
             layer_id,
-            mesh,
-            FIXTURE_RECT_FILL_COLOR,
-        )
+            layer.corners,
+            !host_layer_fill_is_visible(layer.corners, self.evaluated_frame_active, true),
+        ) {
+            self.move_preview = None;
+            return false;
+        }
+        true
     }
 
-    pub(crate) fn clear_move_preview(
-        &mut self,
-        viewport_width: u32,
-        viewport_height: u32,
-    ) -> bool {
+    pub(crate) fn clear_move_preview(&mut self, viewport_width: u32, viewport_height: u32) -> bool {
         let Some((_, _)) = self.move_preview.take() else {
             return true;
         };
@@ -412,6 +388,23 @@ impl EmbeddedSpatialStage {
         self.apply_host_stage_geometry(&base, viewport_width, viewport_height)
     }
 
+    pub(crate) fn fit_view(&mut self, viewport_width: u32, viewport_height: u32) -> bool {
+        if viewport_width == 0 || viewport_height == 0 {
+            return false;
+        }
+        self.spatial_stage.reset_view();
+        true
+    }
+
+    pub(crate) fn set_one_to_one(&mut self, viewport_width: u32, viewport_height: u32) -> bool {
+        if viewport_width == 0 || viewport_height == 0 {
+            return false;
+        }
+        // 100% は2D composition固有の倍率。Rerun標準cameraを迂回する固定Eyeへ戻さない。
+        self.set_feedback("100% is not available with the standard Stage camera", true);
+        false
+    }
+
     pub(crate) fn render(
         &mut self,
         device: &wgpu::Device,
@@ -419,7 +412,8 @@ impl EmbeddedSpatialStage {
         target: &wgpu::TextureView,
         width: u32,
         height: u32,
-    ) -> Result<(), String> {
+        evaluated_frame: Option<&wgpu::Texture>,
+    ) -> Result<Option<Option<String>>, String> {
         // Rerunのcallback command bufferより先にsurfaceを初期化する。
         // 後からClearすると、Rerunが同じsurfaceへ描いたMeshまで消してしまう。
         let mut clear_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -456,6 +450,7 @@ impl EmbeddedSpatialStage {
                 Vec2::new(width as f32, height as f32),
             )),
             time: Some(self.started_at.elapsed().as_secs_f64()),
+            modifiers: self.input_modifiers,
             events: std::mem::take(&mut self.input_events),
             ..Default::default()
         };
@@ -471,12 +466,16 @@ impl EmbeddedSpatialStage {
                         .callback_resources
                         .remove::<re_renderer::RenderContext>()
                         .expect("Rerun render context is registered for the native Stage");
+                    if let Some(texture) = evaluated_frame {
+                        self.present_evaluated_frame(&render_ctx, texture);
+                    }
                     let result = self.spatial_stage.show(ui, &mut render_ctx);
                     self.egui_renderer.callback_resources.insert(render_ctx);
                     if let Err(error) = result {
                         stage_error = Some(error.to_string());
                     }
-                    self.show_performance_gizmo(ui);
+                    self.show_transform_gizmo(ui);
+                    self.show_feedback(ui);
                 });
         });
         if let Some(error) = stage_error {
@@ -534,22 +533,121 @@ impl EmbeddedSpatialStage {
         for id in &full_output.textures_delta.free {
             self.egui_renderer.free_texture(id);
         }
-        Ok(())
+        Ok(self.spatial_stage.take_selected_entity_path())
+    }
+
+    fn present_evaluated_frame(
+        &mut self,
+        render_ctx: &re_renderer::RenderContext,
+        texture: &wgpu::Texture,
+    ) {
+        if self
+            .spatial_stage
+            .copy_gpu_image(render_ctx, DOCUMENT_FRAME_ENTITY, texture)
+            .is_err()
+        {
+            return;
+        }
+        if self.evaluated_frame_active {
+            return;
+        }
+        self.evaluated_frame_active = true;
+        if let (Some(geometry), Some((width, height))) =
+            (self.host_geometry.clone(), self.host_viewport)
+        {
+            let _ = self.apply_host_stage_geometry(&geometry, width, height);
+        }
+    }
+}
+
+fn stage_navigation_events(
+    delta_x: f64,
+    delta_y: f64,
+    magnification: f64,
+    modifiers: Modifiers,
+    x: f64,
+    y: f64,
+) -> Option<[Event; 2]> {
+    if ![delta_x, delta_y, magnification, x, y]
+        .into_iter()
+        .all(f64::is_finite)
+    {
+        return None;
+    }
+    let navigation = if magnification == 0.0 {
+        Event::MouseWheel {
+            unit: MouseWheelUnit::Point,
+            delta: Vec2::new(delta_x as f32, delta_y as f32),
+            phase: TouchPhase::Move,
+            modifiers,
+        }
+    } else {
+        let zoom = (magnification as f32).exp();
+        if !zoom.is_finite() {
+            return None;
+        }
+        Event::Zoom(zoom)
+    };
+    Some([
+        Event::PointerMoved(Pos2::new(x as f32, y as f32)),
+        navigation,
+    ])
+}
+
+fn stage_modifiers(bits: u32) -> Modifiers {
+    Modifiers {
+        shift: bits & 1 != 0,
+        ctrl: bits & 2 != 0,
+        alt: bits & 4 != 0,
+        mac_cmd: bits & 8 != 0,
+        command: bits & 8 != 0,
+    }
+}
+
+fn egui_pointer_button(button: StagePointerButton) -> PointerButton {
+    match button {
+        StagePointerButton::Primary => PointerButton::Primary,
+        StagePointerButton::Secondary => PointerButton::Secondary,
+        StagePointerButton::Middle => PointerButton::Middle,
     }
 }
 
 impl EmbeddedSpatialStage {
-    /// 性能評価用の一時3D transform。Document、D2、Undoには接続しない。
-    fn show_performance_gizmo(&mut self, ui: &egui::Ui) {
+    fn show_transform_gizmo(&mut self, ui: &egui::Ui) {
+        let cursor_pos = self.gizmo_pointer_position;
+        let drag_started = std::mem::take(&mut self.gizmo_pointer_pressed);
+        let dragging = self.gizmo_pointer_down;
+        let released = std::mem::take(&mut self.gizmo_pointer_released);
         let viewport = ui.clip_rect();
         if viewport.width() <= 0.0 || viewport.height() <= 0.0 {
             return;
         }
 
-        // Rerun embedded stageと同じ正面透視camera（z=0平面の高さは1.0）。
-        let fov_y = 55.0_f64.to_radians();
-        let distance = 0.5 / (fov_y * 0.5).tan();
-        let view_matrix = DMat4::look_at_rh(DVec3::new(0.0, 0.0, distance), DVec3::ZERO, DVec3::Y);
+        let Some((selected_layer, target_transform)) = self.selected_gizmo_transform() else {
+            return;
+        };
+
+        // なぜ: authoring gizmoもRerun標準cameraが実際に評価したEyeをそのまま使う。
+        let Some(eye) = self.spatial_stage.last_eye() else {
+            return;
+        };
+        let eye_translation = eye.world_from_rub_view.translation();
+        let eye_rotation = eye.world_from_rub_view.rotation();
+        let world_from_view = DMat4::from_rotation_translation(
+            DQuat::from_xyzw(
+                f64::from(eye_rotation.x),
+                f64::from(eye_rotation.y),
+                f64::from(eye_rotation.z),
+                f64::from(eye_rotation.w),
+            ),
+            DVec3::new(
+                f64::from(eye_translation.x),
+                f64::from(eye_translation.y),
+                f64::from(eye_translation.z),
+            ),
+        );
+        let view_matrix = world_from_view.inverse();
+        let fov_y = f64::from(eye.fov_y.unwrap_or(re_view_spatial::Eye::DEFAULT_FOV_Y));
         let projection_matrix = DMat4::perspective_infinite_rh(
             fov_y,
             f64::from(viewport.width() / viewport.height()),
@@ -562,32 +660,44 @@ impl EmbeddedSpatialStage {
                 GizmoPos2::new(viewport.min.x, viewport.min.y),
                 GizmoPos2::new(viewport.max.x, viewport.max.y),
             ),
-            modes: GizmoMode::all_translate() | GizmoMode::all_rotate(),
-            orientation: GizmoOrientation::Global,
+            // なぜ: all_* は RotateX/Y/View が None、ScaleZ が XY noop、Uniform が RotateView と排他。
+            modes: GizmoMode::TranslateX
+                | GizmoMode::TranslateY
+                | GizmoMode::TranslateXY
+                | GizmoMode::RotateZ
+                | GizmoMode::ScaleX
+                | GizmoMode::ScaleY
+                | GizmoMode::ScaleUniform,
+            orientation: GizmoOrientation::Local,
             pixels_per_point: ui.ctx().pixels_per_point(),
             ..Default::default()
         });
 
-        let (cursor_pos, drag_started, dragging) = ui.input(|input| {
-            (
-                input.pointer.hover_pos().unwrap_or_default(),
-                input.pointer.button_pressed(PointerButton::Primary),
-                input.pointer.button_down(PointerButton::Primary),
-            )
-        });
         let interaction = GizmoInteraction {
             cursor_pos: (cursor_pos.x, cursor_pos.y),
             hovered: viewport.contains(cursor_pos),
             drag_started,
             dragging,
         };
-        if let Some((_result, transforms)) =
-            self.gizmo.update(interaction, &[self.fixture_transform])
-            && let Some(transform) = transforms.first().copied()
-        {
-            self.fixture_transform = transform;
-            let item_id = self.fixture_item_id.clone();
-            let _ = self.set_created_item(&item_id);
+        if let Some((result, _transforms)) = self.gizmo.update(interaction, &[target_transform]) {
+            if let Some(edit) = stage_transform_edit(result, DQuat::from(target_transform.rotation))
+                && !stage_transform_edit_is_noop(edit)
+            {
+                self.gizmo_gesture = Some((selected_layer.clone(), edit));
+                self.pending_gizmo_action = Some(StageGizmoAction::Preview {
+                    layer_id: selected_layer.clone(),
+                    edit,
+                });
+            }
+        }
+
+        if self.gizmo_cancel_requested {
+            self.gizmo_cancel_requested = false;
+            if self.gizmo_gesture.take().is_some() {
+                self.pending_gizmo_action = Some(StageGizmoAction::Cancel);
+            }
+        } else if released && let Some((layer_id, edit)) = self.gizmo_gesture.take() {
+            self.pending_gizmo_action = Some(StageGizmoAction::Commit { layer_id, edit });
         }
 
         let draw_data = self.gizmo.draw();
@@ -605,6 +715,76 @@ impl EmbeddedSpatialStage {
                 .collect(),
             ..Default::default()
         });
+    }
+
+    fn selected_gizmo_transform(&self) -> Option<(String, Transform)> {
+        let layer_id = self.host_primary_layer_id.as_ref()?;
+        let layer = self
+            .host_geometry
+            .as_ref()?
+            .layers
+            .iter()
+            .find(|layer| &layer.layer_id == layer_id)?;
+        if layer.scale[0].abs() <= f64::EPSILON || layer.scale[1].abs() <= f64::EPSILON {
+            return None;
+        }
+        Some((
+            layer_id.clone(),
+            Transform::from_scale_rotation_translation(
+                DVec3::new(layer.scale[0], layer.scale[1], 1.0),
+                DQuat::from_rotation_z(layer.rotation),
+                DVec3::new(layer.position[0], layer.position[1], 0.0),
+            ),
+        ))
+    }
+
+    fn show_feedback(&self, ui: &egui::Ui) {
+        let Some((message, rejected)) = &self.feedback else {
+            return;
+        };
+        let color = if *rejected {
+            Color32::from_rgb(255, 145, 145)
+        } else {
+            Color32::from_rgb(170, 240, 196)
+        };
+        ui.painter().text(
+            ui.clip_rect().left_top() + Vec2::new(12.0, 12.0),
+            Align2::LEFT_TOP,
+            message,
+            FontId::proportional(13.0),
+            color,
+        );
+    }
+}
+
+fn stage_transform_edit(
+    result: GizmoResult,
+    local_rotation: DQuat,
+) -> Option<AppStageTransformEdit> {
+    match result {
+        GizmoResult::Translation { total, .. } => {
+            // なぜ: Local の total はローカル。host の TranslateWorld は world delta を要求する。
+            let world = local_rotation * DVec3::from(total);
+            Some(AppStageTransformEdit::TranslateWorld([world.x, world.y]))
+        }
+        GizmoResult::Rotation { total, axis, .. } if axis.z.abs() >= 0.5 => {
+            // なぜ: gizmo の applied は from_axis_angle(axis, -total)。Document +Z へ合わせる。
+            Some(AppStageTransformEdit::RotateZ(-total * axis.z.signum()))
+        }
+        GizmoResult::Scale { total } => Some(AppStageTransformEdit::Scale([total.x, total.y])),
+        GizmoResult::Rotation { .. } | GizmoResult::Arcball { .. } => None,
+    }
+}
+
+fn stage_transform_edit_is_noop(edit: AppStageTransformEdit) -> bool {
+    match edit {
+        AppStageTransformEdit::TranslateWorld(delta) => {
+            delta[0].abs() <= f64::EPSILON && delta[1].abs() <= f64::EPSILON
+        }
+        AppStageTransformEdit::RotateZ(delta) => delta.abs() <= f64::EPSILON,
+        AppStageTransformEdit::Scale(scale) => {
+            (scale[0] - 1.0).abs() <= f64::EPSILON && (scale[1] - 1.0).abs() <= f64::EPSILON
+        }
     }
 }
 
@@ -682,6 +862,90 @@ fn rectangle_path(center_x: f32, center_y: f32) -> Path {
             closed: true,
         }],
     }
+}
+
+fn path_from_canonical_corners(corners: [[f64; 2]; 4]) -> Path {
+    Path {
+        contours: vec![Contour {
+            vertices: corners
+                .into_iter()
+                .map(|[x, y]| Vertex::corner(Point { x, y }))
+                .collect(),
+            closed: true,
+        }],
+    }
+}
+
+fn path_meshes_from_canonical_corners(
+    corners: [[f64; 2]; 4],
+) -> Result<(MeshData, MeshData), String> {
+    tessellate_path(&path_from_canonical_corners(corners), Transform::default())
+}
+
+fn path_stroke_from_canonical_corners(corners: [[f64; 2]; 4]) -> Result<MeshData, String> {
+    path_meshes_from_canonical_corners(corners).map(|(_, stroke)| stroke)
+}
+
+fn host_layer_path(layer_id: &str) -> String {
+    format!("motolii/document/layers/{layer_id}/path")
+}
+
+fn host_layer_fill_path(layer_id: &str) -> String {
+    format!("motolii/document/layers/{layer_id}/fill")
+}
+
+fn host_layer_mesh_paths(layer_id: &str) -> [String; 2] {
+    [host_layer_fill_path(layer_id), host_layer_path(layer_id)]
+}
+
+pub(crate) fn host_layer_id_from_entity_path(entity_path: &str) -> Option<&str> {
+    let layer = entity_path
+        .strip_prefix('/')
+        .unwrap_or(entity_path)
+        .strip_prefix("motolii/document/layers/")?;
+    let (layer_id, visualizer_leaf) = layer.rsplit_once('/')?;
+    (!layer_id.is_empty() && matches!(visualizer_leaf, "fill" | "path")).then_some(layer_id)
+}
+
+/// Image 未着なら fill を出す。gizmo preview 中は stale Image の上に fill を残す。
+pub(crate) fn host_layer_fill_is_visible(
+    corners: [[f64; 2]; 4],
+    evaluated_frame_active: bool,
+    previewing: bool,
+) -> bool {
+    if evaluated_frame_active && !previewing {
+        return false;
+    }
+    path_meshes_from_canonical_corners(corners)
+        .map(|(fill, _)| !fill.indices.is_empty() && fill.vertices != hidden_layer_mesh().vertices)
+        .unwrap_or(false)
+}
+
+fn ingest_host_layer_meshes(
+    stage: &mut re_view_spatial::SpatialStage,
+    layer_id: &str,
+    corners: [[f64; 2]; 4],
+    hide_fill: bool,
+) -> bool {
+    let Ok((fill, stroke)) = path_meshes_from_canonical_corners(corners) else {
+        return false;
+    };
+    let (fill_mesh, fill_color) = if hide_fill {
+        (hidden_layer_mesh(), STAGE_HOST_ERASE_COLOR)
+    } else {
+        (fill, DOCUMENT_RECT_FILL_COLOR)
+    };
+    ingest_mesh(
+        stage,
+        &host_layer_fill_path(layer_id),
+        fill_mesh,
+        fill_color,
+    ) && ingest_mesh(
+        stage,
+        &host_layer_path(layer_id),
+        stroke,
+        FIXTURE_RECT_STROKE_COLOR,
+    )
 }
 
 fn lyon_path(path: &Path) -> LyonPath {
@@ -809,23 +1073,6 @@ fn hidden_layer_mesh() -> MeshData {
     }
 }
 
-impl EmbeddedSpatialStage {
-    fn erase_host_layer_fills(&mut self) -> bool {
-        let mesh = hidden_layer_mesh();
-        for old_id in &self.host_layer_ids {
-            if !ingest_mesh(
-                &mut self.spatial_stage,
-                old_id,
-                mesh.clone(),
-                STAGE_HOST_ERASE_COLOR,
-            ) {
-                return false;
-            }
-        }
-        true
-    }
-}
-
 fn ingest_mesh(
     stage: &mut re_view_spatial::SpatialStage,
     entity_path: &str,
@@ -906,18 +1153,6 @@ pub(crate) fn mesh_vertices_from_canonical_corners(
     })
 }
 
-fn mesh_from_canonical_corners(
-    corners: [[f64; 2]; 4],
-    viewport_width: u32,
-    viewport_height: u32,
-) -> MeshData {
-    let vertices = mesh_vertices_from_canonical_corners(corners, viewport_width, viewport_height);
-    MeshData {
-        vertices: vertices.to_vec(),
-        indices: vec![[0, 1, 2], [0, 2, 3]],
-    }
-}
-
 pub(crate) fn apply_move_preview_to_geometry(
     geometry: &HostStageGeometry,
     preview: Option<&(String, [f64; 2])>,
@@ -932,6 +1167,8 @@ pub(crate) fn apply_move_preview_to_geometry(
                 corner[0] += delta[0];
                 corner[1] += delta[1];
             }
+            layer.position[0] += delta[0];
+            layer.position[1] += delta[1];
         }
     }
     next
@@ -939,44 +1176,52 @@ pub(crate) fn apply_move_preview_to_geometry(
 
 #[cfg(test)]
 mod tests {
-    use crate::host_bridge::HostStageGeometryLayer;
-    fn test_stage_host() -> Option<EmbeddedSpatialStage> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::LowPower,
-            compatible_surface: None,
-            force_fallback_adapter: true,
-        }))
-        .ok()?;
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("native renderer test"),
-            required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::default(),
-            memory_hints: wgpu::MemoryHints::Performance,
-            trace: wgpu::Trace::Off,
-            experimental_features: wgpu::ExperimentalFeatures::disabled(),
-        }))
-        .ok()?;
-
-        EmbeddedSpatialStage::new(
-            &adapter,
-            &device,
-            &queue,
-            wgpu::TextureFormat::Rgba8UnormSrgb,
-        )
-        .ok()
-        .or_else(|| {
-            EmbeddedSpatialStage::new(
-                &adapter,
-                &device,
-                &queue,
-                wgpu::TextureFormat::Bgra8UnormSrgb,
-            )
-            .ok()
-        })
-    }
-
     use super::*;
+
+    #[test]
+    fn stage_navigation_maps_wheel_and_pinch_to_egui_events() {
+        let [
+            Event::PointerMoved(position),
+            Event::MouseWheel {
+                unit,
+                delta,
+                modifiers,
+                ..
+            },
+        ] = stage_navigation_events(3.0, -4.0, 0.0, stage_modifiers(5), 20.0, 30.0)
+            .expect("wheel event")
+        else {
+            panic!("wheel must include pointer position and MouseWheel");
+        };
+        assert_eq!(position, Pos2::new(20.0, 30.0));
+        assert_eq!(unit, MouseWheelUnit::Point);
+        assert_eq!(delta, Vec2::new(3.0, -4.0));
+        assert!(modifiers.shift && modifiers.alt);
+
+        let [Event::PointerMoved(_), Event::Zoom(zoom)] =
+            stage_navigation_events(0.0, 0.0, 0.2, Modifiers::NONE, 20.0, 30.0)
+                .expect("pinch event")
+        else {
+            panic!("pinch must include pointer position and Zoom");
+        };
+        assert!((zoom - 0.2_f32.exp()).abs() < f32::EPSILON);
+        assert!(stage_navigation_events(f64::NAN, 0.0, 0.0, Modifiers::NONE, 0.0, 0.0).is_none());
+        let modifiers = stage_modifiers(1 | 2 | 4 | 8);
+        assert!(modifiers.shift && modifiers.ctrl && modifiers.alt);
+        assert!(modifiers.mac_cmd && modifiers.command);
+        assert_eq!(
+            egui_pointer_button(StagePointerButton::Primary),
+            PointerButton::Primary
+        );
+        assert_eq!(
+            egui_pointer_button(StagePointerButton::Secondary),
+            PointerButton::Secondary
+        );
+        assert_eq!(
+            egui_pointer_button(StagePointerButton::Middle),
+            PointerButton::Middle
+        );
+    }
 
     #[test]
     fn pucker_preview_is_tessellated_as_curved_fill_and_stroke() {
@@ -1092,26 +1337,214 @@ mod tests {
     }
 
     #[test]
-    fn layer_fill_ingest_count_gates_on_real_frame() {
-        test_reset_layer_fill_ingest_count();
-        let Some(mut stage) = test_stage_host() else {
-            return;
+    fn host_path_stroke_vertices_follow_projected_corners() {
+        let before = path_stroke_from_canonical_corners([
+            [-0.5, -0.5],
+            [0.5, -0.5],
+            [0.5, 0.5],
+            [-0.5, 0.5],
+        ])
+        .expect("baseline path");
+        let after = path_stroke_from_canonical_corners([
+            [-0.4, -0.5],
+            [0.6, -0.5],
+            [0.6, 0.5],
+            [-0.4, 0.5],
+        ])
+        .expect("translated path");
+        assert_ne!(
+            before.vertices, after.vertices,
+            "Stage path mesh must move when Document corners move"
+        );
+    }
+
+    #[test]
+    fn host_path_fill_and_stroke_tessellate_from_corners() {
+        let (fill, stroke) = path_meshes_from_canonical_corners([
+            [-0.5, -0.5],
+            [0.5, -0.5],
+            [0.5, 0.5],
+            [-0.5, 0.5],
+        ])
+        .expect("rect path tessellates");
+        assert!(
+            !fill.indices.is_empty(),
+            "Stage layer fill must reach Mesh3D"
+        );
+        assert!(
+            !stroke.indices.is_empty(),
+            "Stage layer stroke must reach Mesh3D"
+        );
+    }
+
+    #[test]
+    fn rerun_layer_entity_paths_remap_to_document_layer_identity() {
+        assert_eq!(
+            host_layer_id_from_entity_path("motolii/document/layers/42/fill"),
+            Some("42")
+        );
+        assert_eq!(
+            host_layer_id_from_entity_path("motolii/document/layers/42/path"),
+            Some("42")
+        );
+        assert_eq!(
+            host_layer_id_from_entity_path("/motolii/document/layers/42/path"),
+            Some("42")
+        );
+        assert_eq!(
+            host_layer_id_from_entity_path("motolii/document/frame"),
+            None
+        );
+        assert_eq!(
+            host_layer_id_from_entity_path("motolii/document/layers/42/other"),
+            None
+        );
+    }
+
+    #[test]
+    fn evaluated_frame_hides_opaque_fill_so_image_is_visible() {
+        let corners = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
+        let (fill, _) = path_meshes_from_canonical_corners(corners).expect("fill");
+        let hidden = hidden_layer_mesh();
+        assert!(
+            host_layer_fill_is_visible(corners, false, false),
+            "place must keep fill until evaluated Image"
+        );
+        assert!(
+            !host_layer_fill_is_visible(corners, true, false),
+            "evaluated frame must hide the opaque fill in front of the Image"
+        );
+        assert!(
+            host_layer_fill_is_visible(corners, true, true),
+            "gizmo preview must keep fill while the evaluated Image is stale"
+        );
+        assert_ne!(
+            fill.vertices, hidden.vertices,
+            "evaluated frame must not keep the opaque fill mesh in front of the Image"
+        );
+        assert_eq!(DOCUMENT_FRAME_ENTITY, "motolii/document/frame");
+    }
+
+    #[test]
+    fn stage_transform_edit_maps_translate_rotate_z_and_scale() {
+        assert_eq!(
+            stage_transform_edit(
+                GizmoResult::Translation {
+                    delta: DVec3::ZERO.into(),
+                    total: DVec3::new(0.1, -0.2, 0.9).into(),
+                },
+                DQuat::IDENTITY,
+            ),
+            Some(AppStageTransformEdit::TranslateWorld([0.1, -0.2]))
+        );
+        assert_eq!(
+            stage_transform_edit(
+                GizmoResult::Rotation {
+                    axis: DVec3::Z.into(),
+                    delta: 0.0,
+                    total: 0.25,
+                    is_view_axis: false,
+                },
+                DQuat::IDENTITY,
+            ),
+            Some(AppStageTransformEdit::RotateZ(-0.25))
+        );
+        assert_eq!(
+            stage_transform_edit(
+                GizmoResult::Scale {
+                    total: DVec3::new(1.5, 0.5, 3.0).into(),
+                },
+                DQuat::IDENTITY,
+            ),
+            Some(AppStageTransformEdit::Scale([1.5, 0.5]))
+        );
+    }
+
+    #[test]
+    fn stage_transform_edit_maps_local_translation_to_world() {
+        let rotated = DQuat::from_rotation_z(std::f64::consts::FRAC_PI_2);
+        let Some(AppStageTransformEdit::TranslateWorld(delta)) = stage_transform_edit(
+            GizmoResult::Translation {
+                delta: DVec3::ZERO.into(),
+                total: DVec3::new(0.1, 0.0, 0.0).into(),
+            },
+            rotated,
+        ) else {
+            panic!("local X translation must map to world XY");
         };
-        let geometry = HostStageGeometry {
-            layers: vec![HostStageGeometryLayer {
-                layer_id: "layer-a".into(),
-                corners: [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
-            }],
-            layers_truncated: false,
-        };
-        stage.set_real_frame_composite(false);
-        assert!(stage.apply_host_stage_geometry(&geometry, 128, 128));
-        assert_eq!(test_layer_fill_ingest_count(), 1);
-        stage.set_real_frame_composite(true);
-        assert!(stage.apply_host_stage_geometry(&geometry, 128, 128));
-        assert_eq!(test_layer_fill_ingest_count(), 1);
-        stage.set_real_frame_composite(false);
-        assert!(stage.apply_host_stage_geometry(&geometry, 128, 128));
-        assert_eq!(test_layer_fill_ingest_count(), 2);
+        assert!(delta[0].abs() < 1e-12);
+        assert!((delta[1] - 0.1).abs() < 1e-12);
+    }
+
+    #[test]
+    fn stage_transform_edit_rejects_unsupported_rotation() {
+        assert_eq!(
+            stage_transform_edit(
+                GizmoResult::Rotation {
+                    axis: DVec3::X.into(),
+                    delta: 0.1,
+                    total: 0.4,
+                    is_view_axis: false,
+                },
+                DQuat::IDENTITY,
+            ),
+            None
+        );
+        assert_eq!(
+            stage_transform_edit(
+                GizmoResult::Rotation {
+                    axis: DVec3::Y.into(),
+                    delta: 0.1,
+                    total: 0.4,
+                    is_view_axis: false,
+                },
+                DQuat::IDENTITY,
+            ),
+            None
+        );
+        assert_eq!(
+            stage_transform_edit(
+                GizmoResult::Arcball {
+                    delta: DQuat::IDENTITY.into(),
+                    total: DQuat::IDENTITY.into(),
+                },
+                DQuat::IDENTITY,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn stage_transform_edit_filters_noop() {
+        let translate = stage_transform_edit(
+            GizmoResult::Translation {
+                delta: DVec3::ZERO.into(),
+                total: DVec3::ZERO.into(),
+            },
+            DQuat::IDENTITY,
+        )
+        .expect("zero translation still maps");
+        assert!(stage_transform_edit_is_noop(translate));
+
+        let rotate = stage_transform_edit(
+            GizmoResult::Rotation {
+                axis: DVec3::Z.into(),
+                delta: 0.0,
+                total: 0.0,
+                is_view_axis: false,
+            },
+            DQuat::IDENTITY,
+        )
+        .expect("zero rotation still maps");
+        assert!(stage_transform_edit_is_noop(rotate));
+
+        let scale = stage_transform_edit(
+            GizmoResult::Scale {
+                total: DVec3::ONE.into(),
+            },
+            DQuat::IDENTITY,
+        )
+        .expect("identity scale still maps");
+        assert!(stage_transform_edit_is_noop(scale));
     }
 }

@@ -15,7 +15,9 @@ use super::format::JournalFormatError;
 use super::fs::{FsError, JournalFs};
 use super::recover::{RecoveryError, RecoveryResult};
 use super::replay::{load_generation_via_fs, JournalEdit};
-use super::wal::{checkpoint, commit_edit, CheckpointOptions, WalError, WalSession};
+use super::wal::{
+    checkpoint, commit_edit, CheckpointOptions, JournalCommitReceipt, WalError, WalSession,
+};
 
 #[derive(Debug, Clone)]
 pub struct SaveProjectOptions {
@@ -66,6 +68,28 @@ pub enum ProjectError {
     Plugin(#[from] crate::DocumentPluginError),
     #[error(transparent)]
     Session(#[from] super::session::SessionError),
+    #[error("journal commit completed but its follow-up failed: {receipt:?}")]
+    AfterJournalCommit {
+        receipt: JournalCommitReceipt,
+        #[source]
+        source: Box<ProjectError>,
+    },
+    #[error("journal commit tip differs from both the previous and candidate tip (expected={expected}, previous={previous:?}, observed={observed:?})")]
+    CommitTipConflict {
+        expected: Uuid,
+        previous: Option<Uuid>,
+        observed: Option<Uuid>,
+    },
+}
+
+impl ProjectError {
+    pub fn uncertain_commit_receipt(&self) -> Option<JournalCommitReceipt> {
+        match self {
+            Self::Wal(WalError::CommitStateUncertain { receipt, .. })
+            | Self::AfterJournalCommit { receipt, .. } => Some(*receipt),
+            _ => None,
+        }
+    }
 }
 
 pub type OpenProjectOutcome = RecoveryResult;
@@ -104,6 +128,15 @@ pub(crate) fn save_project_with_journal_fs(
     doc: &Document,
     options: &SaveProjectOptions,
 ) -> Result<(), ProjectError> {
+    save_project_with_journal_outcome_fs(fs, document_path, doc, options).map(|_| ())
+}
+
+pub(crate) fn save_project_with_journal_outcome_fs(
+    fs: &mut dyn JournalFs,
+    document_path: &Path,
+    doc: &Document,
+    options: &SaveProjectOptions,
+) -> Result<Option<JournalCommitReceipt>, ProjectError> {
     doc.validate().map_err(PersistError::from)?;
     if options.journal_edit.is_some() {
         if fs.exists(document_path) {
@@ -122,11 +155,18 @@ pub(crate) fn save_project_with_journal_fs(
     let mut session =
         WalSession::open_or_create(fs, document_path, project_id, salt, max_unpinned)?;
 
+    let mut journal_receipt = None;
     if let Some(edit) = &options.journal_edit {
-        commit_edit(fs, document_path, &mut session, edit, doc, &options.limits)?;
+        let receipt = commit_edit(fs, document_path, &mut session, edit, doc, &options.limits)?;
         // editのみではfingerprintを進めない — main未更新のままtipが進むため、
         // open時に必ずcommitted Editをリプレイする。
-        save_catalog_fs(fs, document_path, &session.catalog)?;
+        if let Err(source) = save_catalog_fs(fs, document_path, &session.catalog) {
+            return Err(ProjectError::AfterJournalCommit {
+                receipt,
+                source: Box::new(ProjectError::Catalog(source)),
+            });
+        }
+        journal_receipt = Some(receipt);
     }
 
     // ピンはcheckpointのrotateより先(ガード6)。
@@ -148,7 +188,7 @@ pub(crate) fn save_project_with_journal_fs(
         let _gen_id = checkpoint(fs, document_path, &mut session, doc, &ckpt, &options.limits)?;
     }
 
-    Ok(())
+    Ok(journal_receipt)
 }
 
 /// プロジェクトを開く(非破壊recovery込み)。crate内部・故障注入専用。
@@ -473,9 +513,10 @@ mod v3_commit_tests {
         .unwrap_err();
         assert!(matches!(
             error,
-            ProjectError::Wal(WalError::Fs(FsError::Aborted(
-                DurabilityStage::JournalReplace
-            )))
+            ProjectError::Wal(WalError::CommitStateUncertain {
+                source: FsError::Aborted(DurabilityStage::JournalReplace),
+                ..
+            })
         ));
         faulty.flush_durable_to_disk().unwrap();
 

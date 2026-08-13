@@ -14,12 +14,19 @@ use crate::persist::SaveOptions;
 use crate::{Document, PersistError};
 
 use super::catalog::{CATALOG_FILENAME, GENERATIONS_DIR};
-use super::format::JournalFormatError;
-use super::fs::StdFs;
-use super::project::{save_project_with_journal_fs, OpenProjectOutcome, SaveProjectOptions};
+use super::format::{
+    journal_path_for_document, motolii_dir_for_document, scan_journal_fs, JournalFormatError,
+    JournalRecordKind, ScanJournalOptions,
+};
+use super::fs::{JournalFs, StdFs};
+use super::project::{
+    save_project_with_journal_fs, save_project_with_journal_outcome_fs, OpenProjectOutcome,
+    ProjectError, SaveProjectOptions,
+};
 use super::recover::{
     recover_project, verify_sidecar_family_at_root, RecoveryError, RESTORE_ATTEMPTED_FILENAME,
 };
+use super::wal::JournalCommitReceipt;
 
 #[derive(Debug, Error)]
 pub enum SessionError {
@@ -73,6 +80,12 @@ pub struct ProjectSession {
     document_path: PathBuf,
     lock_file: File,
     limits: ResourceLimits,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum JournalCommitReconcileOutcome {
+    Committed(OpenProjectOutcome),
+    NotCommitted,
 }
 
 impl ProjectSession {
@@ -133,6 +146,59 @@ impl ProjectSession {
     ) -> Result<(), Box<super::project::ProjectError>> {
         let mut fs = StdFs;
         save_project_with_journal_fs(&mut fs, &self.document_path, doc, options).map_err(Box::new)
+    }
+
+    pub fn save_with_journal_outcome(
+        &mut self,
+        doc: &Document,
+        options: &SaveProjectOptions,
+    ) -> Result<Option<JournalCommitReceipt>, Box<ProjectError>> {
+        let mut fs = StdFs;
+        save_project_with_journal_outcome_fs(&mut fs, &self.document_path, doc, options)
+            .map_err(Box::new)
+    }
+
+    /// Atomic replace後の不明状態だけを、同じsession lock内のaccepted tipで再照合する。
+    pub fn reconcile_journal_commit(
+        &mut self,
+        receipt: JournalCommitReceipt,
+    ) -> Result<JournalCommitReconcileOutcome, Box<ProjectError>> {
+        let mut fs = StdFs;
+        let family = motolii_dir_for_document(&self.document_path);
+        fs.sync_dir(&family).map_err(ProjectError::from)?;
+        let scan = scan_journal_fs(
+            &mut fs,
+            &journal_path_for_document(&self.document_path),
+            &ScanJournalOptions {
+                verify_prev_chain: true,
+                expected_project_id: Some(receipt.project_id),
+            },
+        )
+        .map_err(ProjectError::from)?;
+        let observed = scan
+            .frames
+            .iter()
+            .rev()
+            .find(|frame| {
+                matches!(
+                    frame.kind,
+                    JournalRecordKind::Commit | JournalRecordKind::Checkpoint
+                )
+            })
+            .map(|frame| frame.record_id);
+        if observed == receipt.previous_tip {
+            return Ok(JournalCommitReconcileOutcome::NotCommitted);
+        }
+        if observed != Some(receipt.commit_tip) {
+            return Err(Box::new(ProjectError::CommitTipConflict {
+                expected: receipt.commit_tip,
+                previous: receipt.previous_tip,
+                observed,
+            }));
+        }
+        let recovered = recover_project(&mut fs, &self.document_path, &self.limits)
+            .map_err(ProjectError::from)?;
+        Ok(JournalCommitReconcileOutcome::Committed(recovered))
     }
 
     pub fn migrate_document_file(

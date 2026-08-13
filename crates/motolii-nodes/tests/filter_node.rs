@@ -3,13 +3,13 @@ use motolii_eval::Value;
 use motolii_gpu::{download_rgba, upload_rgba, GpuCtx, PipelineCache};
 use motolii_nodes::{
     create_rgba_render_target, CanonicalPoint, CanonicalSize, CircleOverlay, CompositeMode,
-    CompositeNode, FilterNode, LineOverlay, OverlayNode, RectOverlay,
+    CompositeNode, EllipseOverlay, FilterNode, LineOverlay, OverlayNode, RectOverlay,
 };
 use motolii_plugin::reference::CLEAR_FILTER;
 use motolii_plugin::{RenderCtx, TextureRef};
 use motolii_testkit::cpu_reference::{
-    expected_circle_over_pattern, expected_line_over_pattern, expected_rect_over_pattern,
-    premul_add_u8, premul_multiply_u8, premul_over_u8,
+    expected_circle_over_pattern, expected_ellipse_over_pattern, expected_line_over_pattern,
+    expected_rect_over_pattern, premul_add_u8, premul_multiply_u8, premul_over_u8,
 };
 use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
 
@@ -342,6 +342,69 @@ fn overlay_circle_uses_canonical_space_across_resolutions() {
         );
         assert_rgba_close(
             &format!("overlay-circle-{width}x{height}"),
+            RgbaImageDesc { width, height },
+            &actual,
+            &expected,
+            tol::EXACT,
+        );
+    }
+}
+
+#[test]
+fn overlay_ellipse_uses_canonical_space_across_resolutions() {
+    let Some(gpu) = gpu_or_skip() else { return };
+    let cases = [
+        (16, 8, CanonicalPoint::CENTER, [0.25, 0.15]),
+        (32, 16, CanonicalPoint::CENTER, [0.25, 0.15]),
+        (15, 9, CanonicalPoint { x: 0.1, y: 0.25 }, [1.0 / 6.0, 0.1]),
+        (30, 18, CanonicalPoint { x: 0.1, y: 0.25 }, [1.0 / 6.0, 0.1]),
+    ];
+
+    for (width, height, center, radii) in cases {
+        let desc = FrameDesc::packed(
+            width,
+            height,
+            PixelFormat::Rgba8Unorm,
+            ColorSpace::Srgb,
+            false,
+        );
+        let input_data = gradient_pattern(desc);
+        let input = upload_rgba(&gpu, &desc, &input_data);
+        let output = create_rgba_render_target(&gpu, desc, "overlay-ellipse-output");
+        prefill_with_magenta(&gpu, desc, &output);
+
+        OverlayNode::with_ellipse(
+            &gpu,
+            EllipseOverlay {
+                center,
+                radius_x: radii[0],
+                radius_y: radii[1],
+                color: [0.0, 0.0, 1.0, 1.0],
+            },
+        )
+        .render(
+            &gpu,
+            TextureRef {
+                texture: &input,
+                desc,
+            },
+            TextureRef {
+                texture: &output,
+                desc,
+            },
+        )
+        .unwrap();
+
+        let actual = download_rgba(&gpu, &output).unwrap();
+        let expected = expected_ellipse_over_pattern(
+            desc,
+            &input_data,
+            [0, 0, 255, 255],
+            [center.x, center.y],
+            radii,
+        );
+        assert_rgba_close(
+            &format!("overlay-ellipse-{width}x{height}"),
             RgbaImageDesc { width, height },
             &actual,
             &expected,

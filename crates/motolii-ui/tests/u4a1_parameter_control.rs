@@ -97,6 +97,10 @@ fn map_parameter_control_returns_set_property_and_effect_property_route() {
         mapped.effect_property(EffectId::from_raw(123)),
         ScalarPropertyId::EffectParam(EffectId::from_raw(123), "amount".to_owned())
     );
+    assert_eq!(
+        mapped.source_property(),
+        ScalarPropertyId::SourceParam("amount".to_owned())
+    );
 }
 
 #[test]

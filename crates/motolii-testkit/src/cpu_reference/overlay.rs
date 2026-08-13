@@ -97,6 +97,51 @@ pub fn expected_circle_over_pattern(
     out
 }
 
+/// 既存パターン上に正準楕円(非一様半径)を上書きした期待値。
+pub fn expected_ellipse_over_pattern(
+    desc: FrameDesc,
+    base: &[u8],
+    color: [u8; 4],
+    center: [f64; 2],
+    radii: [f64; 2],
+) -> Vec<u8> {
+    let mut out = base.to_vec();
+    let h = desc.height as f64;
+    let center_x = desc.width as f64 * 0.5 + center[0] * h;
+    let center_y = desc.height as f64 * 0.5 - center[1] * h;
+    let rx = radii[0] * h;
+    let ry = radii[1] * h;
+
+    for y in 0..desc.height {
+        for x in 0..desc.width {
+            let px = x as f64 + 0.5;
+            let py = y as f64 + 0.5;
+            let dx = (px - center_x) / rx;
+            let dy = (py - center_y) / ry;
+            if dx * dx + dy * dy < 1.0 {
+                let i = ((y * desc.width + x) * 4) as usize;
+                out[i..i + 4].copy_from_slice(&color);
+            }
+        }
+    }
+    out
+}
+
+/// 正準楕円を背景色の上へ焼き込んだ期待値(`expected_rect_frame`の楕円版)。
+pub fn expected_ellipse_frame(
+    desc: FrameDesc,
+    bg: [u8; 4],
+    fg: [u8; 4],
+    center: [f64; 2],
+    radii: [f64; 2],
+) -> Vec<u8> {
+    let mut base = vec![0u8; desc.data_size()];
+    for chunk in base.chunks_exact_mut(4) {
+        chunk.copy_from_slice(&bg);
+    }
+    expected_ellipse_over_pattern(desc, &base, fg, center, radii)
+}
+
 /// 既存パターン上に正準線分を上書きした期待値。
 ///
 /// しきい値±EPSの不定域は`actual`を採用して比較から外す(mesa丸め対策)。

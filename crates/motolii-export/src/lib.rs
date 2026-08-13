@@ -16,7 +16,7 @@ use motolii_core::{
 };
 use motolii_doc::{
     build_document_frame_graph, resolve_asset_path, AssetId, ClipSource, Document, EvaluationTime,
-    GraphError, PluginDiagnostic, TrackItem,
+    GraphError, PluginDiagnostic, TrackItem, VideoSlot,
 };
 use motolii_eval::DataTracks;
 use motolii_gpu::{GpuCtx, RgbaDownloader, YuvToRgba};
@@ -243,12 +243,11 @@ pub fn export_document_video(
     };
     let encode_path: &Path = video_only_path.as_deref().unwrap_or(job.output_path);
 
-    let mut yuv = YuvToRgba::new(gpu);
+    let mut video_binder = VideoSourceBinder::new(gpu);
     let mut downloader = RgbaDownloader::new();
     let mut encoder = Encoder::open(encode_path, &desc, timeline_fps, job.qp0)?;
     let mut render_session = RenderSession::new(gpu);
     let tracks = job.data_tracks.clone();
-    let mut readers: HashMap<u64, CachedAssetReader> = HashMap::new();
     let mut frames_written = 0usize;
     let mut loop_error = None;
     while job.frame_count.map(|n| frames_written < n).unwrap_or(true) {
@@ -272,29 +271,15 @@ pub fn export_document_video(
                 job.runtime,
                 job.project_root,
             )?;
-            // スロットごとに独立デコード。テクスチャ寿命をループ末まで延ばす。
-            let mut backgrounds = Vec::with_capacity(built.video_slots.len());
-            for slot in &built.video_slots {
-                let cached = ensure_asset_reader(job, slot.asset, &mut readers)?;
-                if cached.info.width != desc.width || cached.info.height != desc.height {
-                    return Err(ExportError::VideoDimensionMismatch {
-                        asset: slot.asset.get(),
-                        got_w: cached.info.width,
-                        got_h: cached.info.height,
-                        want_w: desc.width,
-                        want_h: desc.height,
-                    });
-                }
-                let source_frame = freeze_source_frame(slot.source_time, &cached.info)?;
-                let frame = cached.read_at(source_frame)?;
-                backgrounds.push(yuv.convert(gpu, &frame)?);
-            }
-            let video_inputs: Vec<(TextureId, TextureRef<'_>)> = built
-                .video_slots
-                .iter()
-                .zip(backgrounds.iter())
-                .map(|(slot, tex)| (slot.texture_id, TextureRef { texture: tex, desc }))
-                .collect();
+            video_binder.require_export_dimensions(
+                job.doc,
+                job.project_root,
+                &built.video_slots,
+                desc,
+            )?;
+            let bound =
+                video_binder.bind(gpu, job.doc, job.project_root, &built.video_slots, desc)?;
+            let video_inputs = bound.as_inputs();
             let rendered = render_graph_cached(
                 gpu,
                 &mut render_session,
@@ -512,6 +497,96 @@ pub fn freeze_source_frame(
     Ok(source_frame)
 }
 
+/// Export と同じ `FrameReader` → `YuvToRgba` 束。Preview もここだけを使う。
+pub struct VideoSourceBinder {
+    yuv: YuvToRgba,
+    readers: HashMap<u64, CachedAssetReader>,
+}
+
+/// `render_graph_cached` へ渡すまでテクスチャを保持する。
+pub struct BoundVideoSources {
+    textures: Vec<wgpu::Texture>,
+    ids: Vec<TextureId>,
+    desc: FrameDesc,
+}
+
+impl VideoSourceBinder {
+    pub fn new(gpu: &GpuCtx) -> Self {
+        Self {
+            yuv: YuvToRgba::new(gpu),
+            readers: HashMap::new(),
+        }
+    }
+
+    pub fn require_export_dimensions(
+        &mut self,
+        doc: &Document,
+        project_root: Option<&Path>,
+        slots: &[VideoSlot],
+        desc: FrameDesc,
+    ) -> Result<(), ExportError> {
+        for slot in slots {
+            let cached = ensure_asset_reader(doc, project_root, slot.asset, &mut self.readers)?;
+            if cached.info.width != desc.width || cached.info.height != desc.height {
+                return Err(ExportError::VideoDimensionMismatch {
+                    asset: slot.asset.get(),
+                    got_w: cached.info.width,
+                    got_h: cached.info.height,
+                    want_w: desc.width,
+                    want_h: desc.height,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    pub fn bind(
+        &mut self,
+        gpu: &GpuCtx,
+        doc: &Document,
+        project_root: Option<&Path>,
+        slots: &[VideoSlot],
+        texture_desc: FrameDesc,
+    ) -> Result<BoundVideoSources, ExportError> {
+        let mut textures = Vec::with_capacity(slots.len());
+        let mut ids = Vec::with_capacity(slots.len());
+        for slot in slots {
+            let cached = ensure_asset_reader(doc, project_root, slot.asset, &mut self.readers)?;
+            let source_frame = freeze_source_frame(slot.source_time, &cached.info)?;
+            let frame = cached.read_at(source_frame)?;
+            textures.push(self.yuv.convert(gpu, &frame)?);
+            ids.push(slot.texture_id);
+        }
+        Ok(BoundVideoSources {
+            textures,
+            ids,
+            desc: texture_desc,
+        })
+    }
+}
+
+impl BoundVideoSources {
+    pub fn is_empty(&self) -> bool {
+        self.textures.is_empty()
+    }
+
+    pub fn as_inputs(&self) -> Vec<(TextureId, TextureRef<'_>)> {
+        self.ids
+            .iter()
+            .zip(self.textures.iter())
+            .map(|(id, texture)| {
+                (
+                    *id,
+                    TextureRef {
+                        texture,
+                        desc: self.desc,
+                    },
+                )
+            })
+            .collect()
+    }
+}
+
 struct CachedAssetReader {
     path: PathBuf,
     info: MediaInfo,
@@ -560,7 +635,8 @@ impl CachedAssetReader {
 }
 
 fn ensure_asset_reader<'a>(
-    job: &ExportJob<'_>,
+    doc: &Document,
+    project_root: Option<&Path>,
     asset_id: AssetId,
     readers: &'a mut HashMap<u64, CachedAssetReader>,
 ) -> Result<&'a mut CachedAssetReader, ExportError> {
@@ -568,12 +644,11 @@ fn ensure_asset_reader<'a>(
     match readers.entry(asset_id.get()) {
         Entry::Occupied(e) => Ok(e.into_mut()),
         Entry::Vacant(e) => {
-            let asset = job
-                .doc
+            let asset = doc
                 .assets
                 .get(asset_id)
                 .ok_or(ExportError::UnresolvedAsset(asset_id.get()))?;
-            let path = resolve_asset_path(asset, job.project_root)
+            let path = resolve_asset_path(asset, project_root)
                 .ok_or(ExportError::UnresolvedAsset(asset_id.get()))?;
             let info = probe(&path)?;
             let cached = CachedAssetReader::open(path, info, 0)?;

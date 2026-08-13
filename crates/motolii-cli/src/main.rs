@@ -55,6 +55,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 prepared.output_path.display()
             );
         }
+        Command::Dump(args) => {
+            println!("{}", motolii_cli::dump_document(&args.document)?);
+        }
+        Command::Apply(args) => {
+            motolii_cli::apply_document(&args.document, &args.command_json, args.out.as_deref())?;
+        }
+        Command::New(args) => {
+            motolii_cli::new_document(&args.document)?;
+        }
         Command::ExportDocument(args) => {
             motolii_media_tools_hint();
             let gpu = GpuCtx::new_headless()?;

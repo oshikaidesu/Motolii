@@ -115,6 +115,159 @@ pub struct Path {
     pub contours: Vec<Contour>,
 }
 
+/// 局所原点中央の軸平行矩形。Vector Rect の退化 Path。
+pub fn rect(width: f64, height: f64) -> Path {
+    let hx = width * 0.5;
+    let hy = height * 0.5;
+    Path {
+        contours: vec![Contour::closed([
+            Point { x: -hx, y: -hy },
+            Point { x: hx, y: -hy },
+            Point { x: hx, y: hy },
+            Point { x: -hx, y: hy },
+        ])],
+    }
+}
+
+/// 4-cubic 楕円。M5 Path2D 採択の Circle lower を幅・高さへ一般化したもの。
+pub fn ellipse(width: f64, height: f64) -> Path {
+    const KAPPA: f64 = 0.552_284_749_830_793_6;
+    let rx = width * 0.5;
+    let ry = height * 0.5;
+    let kx = rx * KAPPA;
+    let ky = ry * KAPPA;
+    Path {
+        contours: vec![Contour {
+            closed: true,
+            vertices: vec![
+                Vertex {
+                    point: Point { x: rx, y: 0.0 },
+                    in_tangent: Point { x: 0.0, y: -ky },
+                    out_tangent: Point { x: 0.0, y: ky },
+                },
+                Vertex {
+                    point: Point { x: 0.0, y: ry },
+                    in_tangent: Point { x: kx, y: 0.0 },
+                    out_tangent: Point { x: -kx, y: 0.0 },
+                },
+                Vertex {
+                    point: Point { x: -rx, y: 0.0 },
+                    in_tangent: Point { x: 0.0, y: ky },
+                    out_tangent: Point { x: 0.0, y: -ky },
+                },
+                Vertex {
+                    point: Point { x: 0.0, y: -ry },
+                    in_tangent: Point { x: -kx, y: 0.0 },
+                    out_tangent: Point { x: kx, y: 0.0 },
+                },
+            ],
+        }],
+    }
+}
+
+/// 単一閉輪郭・接線なし・辺が軸平行なら (center, width, height)。
+/// GPU OverlayRect へ落とせる退化だけを返す。楕円や PathOp 後の非矩形は None。
+pub fn axis_aligned_rect(path: &Path) -> Option<(Point, f64, f64)> {
+    let [contour] = path.contours.as_slice() else {
+        return None;
+    };
+    if !contour.closed || contour.vertices.len() != 4 {
+        return None;
+    }
+    if contour
+        .vertices
+        .iter()
+        .any(|v| v.in_tangent != Point::ZERO || v.out_tangent != Point::ZERO)
+    {
+        return None;
+    }
+    for i in 0..4 {
+        let a = contour.vertices[i].point;
+        let b = contour.vertices[(i + 1) % 4].point;
+        let axis_aligned = a.x == b.x || a.y == b.y;
+        let degenerate = a.x == b.x && a.y == b.y;
+        if !axis_aligned || degenerate {
+            return None;
+        }
+    }
+    let mut min_x = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for v in &contour.vertices {
+        min_x = min_x.min(v.point.x);
+        max_x = max_x.max(v.point.x);
+        min_y = min_y.min(v.point.y);
+        max_y = max_y.max(v.point.y);
+    }
+    Some((
+        Point {
+            x: (min_x + max_x) * 0.5,
+            y: (min_y + max_y) * 0.5,
+        },
+        max_x - min_x,
+        max_y - min_y,
+    ))
+}
+
+/// 単一閉輪郭・4頂点すべてが接線を持ち、頂点がAABBの軸平行4極値なら (center, width, height)。
+/// GPU Overlay Ellipse へ落とせる退化だけを返す。矩形(接線ゼロ)や PathOp 後の非楕円は None。
+pub fn axis_aligned_ellipse(path: &Path) -> Option<(Point, f64, f64)> {
+    let [contour] = path.contours.as_slice() else {
+        return None;
+    };
+    if !contour.closed || contour.vertices.len() != 4 {
+        return None;
+    }
+    if contour
+        .vertices
+        .iter()
+        .any(|v| v.in_tangent == Point::ZERO || v.out_tangent == Point::ZERO)
+    {
+        return None;
+    }
+    let mut min_x = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for v in &contour.vertices {
+        min_x = min_x.min(v.point.x);
+        max_x = max_x.max(v.point.x);
+        min_y = min_y.min(v.point.y);
+        max_y = max_y.max(v.point.y);
+    }
+    let width = max_x - min_x;
+    let height = max_y - min_y;
+    if width <= 0.0 || height <= 0.0 {
+        return None;
+    }
+    let center = Point {
+        x: (min_x + max_x) * 0.5,
+        y: (min_y + max_y) * 0.5,
+    };
+    // 頂点が4つの基本方位(AABBの軸平行極値)に1つずつ載っているときだけ楕円と認める。
+    let mut cardinals = [false; 4];
+    for v in &contour.vertices {
+        let d = v.point.sub(center);
+        let index = if d.y == 0.0 && d.x == width * 0.5 {
+            0
+        } else if d.x == 0.0 && d.y == height * 0.5 {
+            1
+        } else if d.y == 0.0 && d.x == -width * 0.5 {
+            2
+        } else if d.x == 0.0 && d.y == -height * 0.5 {
+            3
+        } else {
+            return None;
+        };
+        if cardinals[index] {
+            return None;
+        }
+        cardinals[index] = true;
+    }
+    Some((center, width, height))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 pub enum PathOpError {
     /// v1のOffsetは閉路限定(Clipper2 offset。意味論表)。

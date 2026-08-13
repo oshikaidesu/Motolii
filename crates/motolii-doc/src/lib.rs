@@ -39,6 +39,7 @@ mod stable_id;
 mod track_id;
 mod undo;
 mod validate;
+mod vector_path;
 
 use std::sync::Arc;
 
@@ -55,8 +56,9 @@ pub use audio_edit::{build_import_clip_source, plan_detach_audio, ImportAvMode};
 pub use bpm::{Bpm, BpmError};
 pub use camera_eval::CameraEvalError;
 pub use command::{
-    collect_layer_ids, layer_names_for_item, Command, CommandError, CommandKind, GestureId,
-    MergeKey, ParentLocator, PreparedAssetAdmission, PropertyId, ScalarPropertyId,
+    collect_layer_ids, find_item_location, layer_names_for_item, Command, CommandError,
+    CommandKind, GestureId, MergeKey, ParentLocator, PreparedAssetAdmission, PropertyId,
+    ScalarPropertyId,
 };
 pub use doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 pub use doc_value::DocValue;
@@ -75,10 +77,11 @@ pub use journal::{
     legacy_shared_motolii_dir_for_document, legacy_staging_dir_for_document, load_catalog,
     motolii_dir_for_document, project_lock_path_for_document, project_sidecar_dir_for_document,
     restore_attempted_path, DurabilityStage, FaultPlan, FsOpKind, GenerationCatalog,
-    GenerationEntry, JournalEdit, JournalRecordKind, JournalScanStop,
-    LegacySidecarMigrationDisposition, LegacySidecarMigrationReport, OpenProjectOutcome,
-    PinGenerationOptions, ProjectError, ProjectSession, RecordingFs, RecoveryError, RecoverySource,
-    RotateOptions, SaveProjectOptions, SessionError, StdFs, WalError,
+    GenerationEntry, JournalCommitReceipt, JournalCommitReconcileOutcome, JournalEdit,
+    JournalRecordKind, JournalScanStop, LegacySidecarMigrationDisposition,
+    LegacySidecarMigrationReport, OpenProjectOutcome, PinGenerationOptions, ProjectError,
+    ProjectSession, RecordingFs, RecoveryError, RecoverySource, RotateOptions, SaveProjectOptions,
+    SessionError, StdFs, WalError,
 };
 pub use limits::{ResourceLimitError, ResourceLimits};
 pub use migrate::{
@@ -103,7 +106,11 @@ pub use plugin_resolution::{
     ResolvedOpenProjectOutcome,
 };
 pub use position_key_prepare::{
-    AddPositionKeyPreparation, AddPositionKeyPrepareError, RemovePositionKeyPrepareError,
+    prepare_add_transform_param_key, prepare_remove_transform_param_key,
+    prepare_set_transform_param_key_value, AddPositionKeyPreparation, AddPositionKeyPrepareError,
+    AddTransformParamKeyPreparation, AddTransformParamKeyPrepareError,
+    RemovePositionKeyPrepareError, RemoveTransformParamKeyPrepareError,
+    SetTransformParamKeyValuePrepareError,
 };
 pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
@@ -122,6 +129,7 @@ pub use validate::{
     DocumentError, MIN_READER_VERSION_FOR_ASSET_COMPONENTS, MIN_READER_VERSION_FOR_COMP_CAMERA,
     MIN_READER_VERSION_FOR_EFFECT_DEFINITIONS,
 };
+pub use vector_path::{eval_vector_recipe_path, VectorPathError};
 
 fn default_min_reader_version() -> u32 {
     1
@@ -349,7 +357,7 @@ pub enum WriterMessage {
 /// _owned::<DraftKeyframe>();
 /// # }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DocumentWriter {
     doc: Document,
     catalog: Arc<motolii_plugin::PluginCatalog>,
@@ -537,6 +545,14 @@ impl DocumentWriter {
         Ok(gesture)
     }
 
+    /// 複製 Command を構築する。ID予約だけ live Document を進め、適用は呼び出し側。
+    pub fn prepare_duplicate_track_item(
+        &mut self,
+        source: LayerId,
+    ) -> Result<Command, DuplicateError> {
+        duplicate::duplicate_track_item(&mut self.doc, source)
+    }
+
     /// 読み取り専用: コマンド構築側が現在の`ItemEnvelope`を読むためのヘルパ。
     pub fn find_envelope(&self, target: LayerId) -> Option<&ItemEnvelope> {
         command::find_envelope(&self.doc, target)
@@ -624,6 +640,40 @@ impl DocumentWriter {
         command::prepare_trim_clip_out(&self.doc, target, new_end)
     }
 
+    pub fn prepare_split_clip(
+        &mut self,
+        target: LayerId,
+        at: RationalTime,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_split_clip(&mut self.doc, target, at)
+    }
+
+    pub fn prepare_reparent_clip(
+        &self,
+        target: LayerId,
+        new_parent: ParentLocator,
+        new_index: usize,
+        new_start: Option<RationalTime>,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_reparent_clip(&self.doc, target, new_parent, new_index, new_start)
+    }
+
+    pub fn prepare_set_item_visible(
+        &self,
+        target: LayerId,
+        new: bool,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_item_visible(&self.doc, target, new)
+    }
+
+    pub fn prepare_set_item_solo(
+        &self,
+        target: LayerId,
+        new: bool,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_item_solo(&self.doc, target, new)
+    }
+
     /// Positionへplayhead時刻のkeyを追加するcommandを準備する。
     pub fn prepare_add_position_key(
         &self,
@@ -631,6 +681,40 @@ impl DocumentWriter {
         t: RationalTime,
     ) -> Result<AddPositionKeyPreparation, AddPositionKeyPrepareError> {
         position_key_prepare::prepare_add_position_key(&self.doc, target, t)
+    }
+
+    /// Scale / Rotation / Opacity へplayhead時刻のkeyを追加する SetProperty を準備する。
+    /// Positionは `prepare_add_position_key` を使う。
+    pub fn prepare_add_transform_param_key(
+        &self,
+        target: LayerId,
+        property: ScalarPropertyId,
+        t: RationalTime,
+    ) -> Result<AddTransformParamKeyPreparation, AddTransformParamKeyPrepareError> {
+        position_key_prepare::prepare_add_transform_param_key(&self.doc, target, property, t)
+    }
+
+    /// Scale / Rotation / Opacity の既存key値だけを差し替える SetProperty を準備する。same-value は `None`。
+    pub fn prepare_set_transform_param_key_value(
+        &self,
+        target: LayerId,
+        property: ScalarPropertyId,
+        key: KeyframeId,
+        new: DocValue,
+    ) -> Result<Option<Command>, SetTransformParamKeyValuePrepareError> {
+        position_key_prepare::prepare_set_transform_param_key_value(
+            &self.doc, target, property, key, new,
+        )
+    }
+
+    /// Scale / Rotation / Opacity の既存keyを除く SetProperty を準備する。最後の1個はConstへ収束する。
+    pub fn prepare_remove_transform_param_key(
+        &self,
+        target: LayerId,
+        property: ScalarPropertyId,
+        key: KeyframeId,
+    ) -> Result<Command, RemoveTransformParamKeyPrepareError> {
+        position_key_prepare::prepare_remove_transform_param_key(&self.doc, target, property, key)
     }
 
     /// Position keyを削除するcommandを準備する。最後の1個はConstへ収束する。

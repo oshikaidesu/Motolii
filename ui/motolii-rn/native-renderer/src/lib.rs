@@ -10,13 +10,35 @@ mod platform;
 
 use std::ffi::{CStr, c_char, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
+#[cfg(target_os = "macos")]
+use std::sync::atomic::{AtomicPtr, Ordering};
 
+#[cfg(target_os = "macos")]
+use motolii_ui::AppStageTransformEdit;
 #[cfg(target_os = "macos")]
 use platform::macos::MacOsSurfaceRenderer;
 #[cfg(target_os = "macos")]
-use renderer_core::PointerPhase;
-#[cfg(target_os = "macos")]
 use renderer_core::RenderStats;
+#[cfg(target_os = "macos")]
+use renderer_core::{PointerPhase, StagePointerButton};
+
+#[cfg(target_os = "macos")]
+static ACTIVE_STAGE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+#[cfg(target_os = "macos")]
+fn register_active_stage(handle: *mut c_void) {
+    ACTIVE_STAGE.store(handle, Ordering::Release);
+}
+
+#[cfg(target_os = "macos")]
+fn unregister_active_stage(handle: *mut c_void) {
+    let _ = ACTIVE_STAGE.compare_exchange(
+        handle,
+        std::ptr::null_mut(),
+        Ordering::AcqRel,
+        Ordering::Acquire,
+    );
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -49,7 +71,11 @@ pub extern "C" fn motolii_macos_renderer_create_ca_layer(
     .ok()
     .and_then(Result::ok)
     .map_or(std::ptr::null_mut(), |renderer| {
-        Box::into_raw(Box::new(renderer)).cast()
+        let handle = Box::into_raw(Box::new(renderer)).cast();
+        register_active_stage(handle);
+        // 製品マウントでhost snapshotをnativeへ届ける。テスト直呼びでは製品経路が空のまま。
+        let _ = crate::host_bridge::try_read_timeline_projection();
+        handle
     })
 }
 
@@ -66,7 +92,10 @@ pub extern "C" fn motolii_macos_timeline_renderer_create_ca_layer(
     .ok()
     .and_then(Result::ok)
     .map_or(std::ptr::null_mut(), |renderer| {
-        Box::into_raw(Box::new(renderer)).cast()
+        let handle = Box::into_raw(Box::new(renderer)).cast();
+        // 製品マウントでhost snapshotをnativeへ届ける。テスト直呼びでは製品経路が空のまま。
+        let _ = crate::host_bridge::try_read_timeline_projection();
+        handle
     })
 }
 
@@ -105,6 +134,8 @@ pub extern "C" fn motolii_macos_renderer_render(handle: *mut c_void) -> bool {
 pub extern "C" fn motolii_macos_stage_renderer_pointer(
     handle: *mut c_void,
     phase: u32,
+    button: u32,
+    modifiers: u32,
     x: f64,
     y: f64,
 ) -> bool {
@@ -117,10 +148,40 @@ pub extern "C" fn motolii_macos_stage_renderer_pointer(
         2 => PointerPhase::Up,
         _ => PointerPhase::Cancel,
     };
+    let Some(button) = StagePointerButton::from_raw(button) else {
+        return false;
+    };
     catch_unwind(AssertUnwindSafe(|| unsafe {
-        (&mut *handle.cast::<MacOsSurfaceRenderer>()).stage_pointer(phase, x, y);
+        (&mut *handle.cast::<MacOsSurfaceRenderer>()).stage_pointer(phase, button, modifiers, x, y);
     }))
     .is_ok()
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_macos_stage_renderer_scroll(
+    handle: *mut c_void,
+    delta_x: f64,
+    delta_y: f64,
+    magnification: f64,
+    modifiers: u32,
+    x: f64,
+    y: f64,
+) -> bool {
+    if handle.is_null() {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        (&mut *handle.cast::<MacOsSurfaceRenderer>()).stage_scroll(
+            delta_x,
+            delta_y,
+            magnification,
+            modifiers,
+            x,
+            y,
+        )
+    }))
+    .unwrap_or(false)
 }
 
 #[cfg(target_os = "macos")]
@@ -142,6 +203,169 @@ pub unsafe extern "C" fn motolii_macos_stage_renderer_set_created_item(
         (&mut *handle.cast::<MacOsSurfaceRenderer>()).set_created_item(item_id)
     }))
     .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_macos_active_stage_renderer() -> *mut c_void {
+    ACTIVE_STAGE.load(Ordering::Acquire)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_macos_stage_renderer_fit_view(handle: *mut c_void) -> bool {
+    if handle.is_null() {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        (&mut *handle.cast::<MacOsSurfaceRenderer>()).fit_stage_view()
+    }))
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_macos_stage_renderer_one_to_one(handle: *mut c_void) -> bool {
+    if handle.is_null() {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| unsafe {
+        (&mut *handle.cast::<MacOsSurfaceRenderer>()).set_stage_one_to_one()
+    }))
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "macos")]
+fn app_stage_transform_edit(kind: i32, a: f64, b: f64) -> Result<AppStageTransformEdit, String> {
+    if !(a.is_finite() && b.is_finite()) {
+        return Err("The transform result is not finite".to_owned());
+    }
+    match kind {
+        0 => Ok(AppStageTransformEdit::TranslateWorld([a, b])),
+        1 => Ok(AppStageTransformEdit::RotateZ(a)),
+        2 => Ok(AppStageTransformEdit::Scale([a, b])),
+        _ => Err("The transform kind is invalid".to_owned()),
+    }
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn stage_transform_request_parts(
+    target_utf8: *const u8,
+    target_len: usize,
+    revision_utf8: *const u8,
+    revision_len: usize,
+) -> Result<(String, u64), String> {
+    if target_utf8.is_null() || revision_utf8.is_null() {
+        return Err("The Stage transform request is invalid".to_owned());
+    }
+    let target =
+        std::str::from_utf8(unsafe { std::slice::from_raw_parts(target_utf8, target_len) })
+            .map_err(|_| "The selected layer identity is invalid".to_owned())?
+            .to_owned();
+    let revision =
+        std::str::from_utf8(unsafe { std::slice::from_raw_parts(revision_utf8, revision_len) })
+            .map_err(|_| "The live Document revision is invalid".to_owned())?
+            .parse::<u64>()
+            .map_err(|_| "The live Document revision is invalid".to_owned())?;
+    Ok((target, revision))
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn write_stage_transform_result(
+    result: Result<(), String>,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    let Err(error) = result else {
+        return 0;
+    };
+    let bytes = error.as_bytes();
+    if out.is_null() || bytes.is_empty() || bytes.len() > out_cap {
+        return -1;
+    }
+    unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), out, bytes.len()) };
+    bytes.len() as i64
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// String inputs must be valid for their lengths and `out` must be writable for `out_cap` bytes.
+pub unsafe extern "C" fn motolii_macos_active_stage_preview_transform(
+    target_utf8: *const u8,
+    target_len: usize,
+    revision_utf8: *const u8,
+    revision_len: usize,
+    kind: i32,
+    a: f64,
+    b: f64,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let (target, revision) = unsafe {
+            stage_transform_request_parts(target_utf8, target_len, revision_utf8, revision_len)
+        }?;
+        let edit = app_stage_transform_edit(kind, a, b)?;
+        let handle = ACTIVE_STAGE.load(Ordering::Acquire);
+        if handle.is_null() {
+            return Err("Stage renderer is unavailable".to_owned());
+        }
+        unsafe { (&mut *handle.cast::<MacOsSurfaceRenderer>()) }
+            .preview_stage_transform_from_app(revision, &target, edit)
+    }))
+    .unwrap_or_else(|_| Err("Stage preview failed".to_owned()));
+    unsafe { write_stage_transform_result(result, out, out_cap) }
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// String inputs must be valid for their lengths and `out` must be writable for `out_cap` bytes.
+pub unsafe extern "C" fn motolii_macos_active_stage_commit_transform(
+    target_utf8: *const u8,
+    target_len: usize,
+    revision_utf8: *const u8,
+    revision_len: usize,
+    kind: i32,
+    a: f64,
+    b: f64,
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let (target, revision) = unsafe {
+            stage_transform_request_parts(target_utf8, target_len, revision_utf8, revision_len)
+        }?;
+        let edit = app_stage_transform_edit(kind, a, b)?;
+        let handle = ACTIVE_STAGE.load(Ordering::Acquire);
+        if handle.is_null() {
+            return Err("Stage renderer is unavailable".to_owned());
+        }
+        unsafe { (&mut *handle.cast::<MacOsSurfaceRenderer>()) }
+            .commit_stage_transform_from_app(revision, &target, edit)
+    }))
+    .unwrap_or_else(|_| Err("Stage commit failed".to_owned()));
+    unsafe { write_stage_transform_result(result, out, out_cap) }
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+/// # Safety
+/// `out` must be writable for `out_cap` bytes.
+pub unsafe extern "C" fn motolii_macos_active_stage_cancel_transform(
+    out: *mut u8,
+    out_cap: usize,
+) -> i64 {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let handle = ACTIVE_STAGE.load(Ordering::Acquire);
+        if handle.is_null() {
+            return Err("Stage renderer is unavailable".to_owned());
+        }
+        unsafe { (&mut *handle.cast::<MacOsSurfaceRenderer>()) }.cancel_stage_transform_from_app()
+    }))
+    .unwrap_or_else(|_| Err("Stage cancel failed".to_owned()));
+    unsafe { write_stage_transform_result(result, out, out_cap) }
 }
 
 #[cfg(target_os = "macos")]
@@ -362,7 +586,9 @@ pub unsafe extern "C" fn motolii_macos_renderer_get_stats(
 #[unsafe(no_mangle)]
 /// # Safety
 /// `handle` must be a live timeline renderer returned by this library.
-pub unsafe extern "C" fn motolii_macos_timeline_renderer_keymap_delete(handle: *mut c_void) -> bool {
+pub unsafe extern "C" fn motolii_macos_timeline_renderer_keymap_delete(
+    handle: *mut c_void,
+) -> bool {
     if handle.is_null() {
         return false;
     }
@@ -379,6 +605,7 @@ pub extern "C" fn motolii_macos_renderer_destroy(handle: *mut c_void) {
         return;
     }
     let _ = catch_unwind(AssertUnwindSafe(|| unsafe {
+        unregister_active_stage(handle);
         drop(Box::from_raw(handle.cast::<MacOsSurfaceRenderer>()));
     }));
 }

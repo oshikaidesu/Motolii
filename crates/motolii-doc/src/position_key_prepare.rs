@@ -2,10 +2,11 @@ use motolii_core::RationalTime;
 use motolii_eval::{Interp, TrackError, Value};
 use thiserror::Error;
 
-use crate::command::{find_envelope, Command, CommandError};
+use crate::command::{find_envelope, Command, CommandError, ScalarPropertyId};
 use crate::doc_keyframe::{DocKeyframe, DocKeyframeError, DocKeyframeTrack};
 use crate::doc_value::DocValue;
 use crate::param::DocParam;
+use crate::schema::ItemEnvelope;
 use crate::stable_id::{KeyframeId, StableIdError, StableIdReservation};
 use crate::{Document, LayerId};
 
@@ -102,14 +103,379 @@ pub(crate) fn deterministic_new_position(
     id: KeyframeId,
 ) -> Result<DocParam, AddPositionKeyPrepareError> {
     let layer = target.get();
+    deterministic_new_param_key(old_value, t, id, is_vec2).map_err(|err| match err {
+        InsertKeyError::SourceUnsupported => {
+            AddPositionKeyPrepareError::PositionSourceUnsupported { layer }
+        }
+        InsertKeyError::ValueTypeMismatch => {
+            AddPositionKeyPrepareError::PositionValueTypeMismatch { layer }
+        }
+        InsertKeyError::Keyframe(source) => AddPositionKeyPrepareError::Keyframe(source),
+        InsertKeyError::Track(source) => AddPositionKeyPrepareError::Track(source),
+    })
+}
 
+#[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::large_enum_variant)] // 閉じた公開契約がCommand値保持を要求するため、Box化でshapeを変えない。
+pub enum AddTransformParamKeyPreparation {
+    Prepared {
+        key_id: KeyframeId,
+        command: Command,
+    },
+    AlreadyPresent {
+        key_id: KeyframeId,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum AddTransformParamKeyPrepareError {
+    #[error(transparent)]
+    Command(#[from] CommandError),
+    #[error(transparent)]
+    StableId(#[from] StableIdError),
+    #[error(transparent)]
+    Keyframe(#[from] DocKeyframeError),
+    #[error(transparent)]
+    Track(#[from] TrackError),
+    #[error("transform param {property:?} is not a Scale/Rotation/Opacity key target")]
+    PropertyUnsupported { property: ScalarPropertyId },
+    #[error("transform param {property:?} source unsupported for layer {layer}")]
+    SourceUnsupported {
+        layer: u64,
+        property: ScalarPropertyId,
+    },
+    #[error("transform param {property:?} value type mismatch for layer {layer}")]
+    ValueTypeMismatch {
+        layer: u64,
+        property: ScalarPropertyId,
+    },
+}
+
+fn transform_key_target(
+    property: &ScalarPropertyId,
+) -> Result<fn(&DocValue) -> bool, ScalarPropertyId> {
+    match property {
+        ScalarPropertyId::Scale => Ok(is_vec2),
+        ScalarPropertyId::Rotation | ScalarPropertyId::Opacity => Ok(is_f64),
+        other => Err(other.clone()),
+    }
+}
+
+fn clone_transform_param(env: &ItemEnvelope, property: &ScalarPropertyId) -> DocParam {
+    match property {
+        ScalarPropertyId::Scale => env.transform.scale.clone(),
+        ScalarPropertyId::Rotation => env.transform.rotation.clone(),
+        ScalarPropertyId::Opacity => env.opacity.clone(),
+        _ => unreachable!("rejected by transform_key_target"),
+    }
+}
+
+pub fn prepare_add_transform_param_key(
+    doc: &Document,
+    target: LayerId,
+    property: ScalarPropertyId,
+    t: RationalTime,
+) -> Result<AddTransformParamKeyPreparation, AddTransformParamKeyPrepareError> {
+    let type_ok = transform_key_target(&property)
+        .map_err(|property| AddTransformParamKeyPrepareError::PropertyUnsupported { property })?;
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    let old_value = clone_transform_param(env, &property);
+    match &old_value {
+        DocParam::Const(value) => {
+            if !type_ok(value) {
+                return Err(AddTransformParamKeyPrepareError::ValueTypeMismatch {
+                    layer: target.get(),
+                    property,
+                });
+            }
+        }
+        DocParam::Keyframes(track) => {
+            if track.keys().is_empty() {
+                return Err(AddTransformParamKeyPrepareError::SourceUnsupported {
+                    layer: target.get(),
+                    property,
+                });
+            }
+            for key in track.keys() {
+                if !type_ok(&key.value) {
+                    return Err(AddTransformParamKeyPrepareError::ValueTypeMismatch {
+                        layer: target.get(),
+                        property,
+                    });
+                }
+            }
+            if let Some(found) = track.keys().iter().find(|key| key.t == t) {
+                return Ok(AddTransformParamKeyPreparation::AlreadyPresent { key_id: found.id });
+            }
+        }
+        DocParam::Data { .. }
+        | DocParam::Vec2Axes { .. }
+        | DocParam::LookAt { .. }
+        | DocParam::Follow { .. } => {
+            return Err(AddTransformParamKeyPrepareError::SourceUnsupported {
+                layer: target.get(),
+                property,
+            });
+        }
+    }
+
+    let mut next = doc.next_stable_id;
+    let key_id = KeyframeId::from_raw(next.allocate()?);
+    let new_value =
+        deterministic_new_param_key(&old_value, t, key_id, type_ok).map_err(|err| match err {
+            InsertKeyError::SourceUnsupported => {
+                AddTransformParamKeyPrepareError::SourceUnsupported {
+                    layer: target.get(),
+                    property: property.clone(),
+                }
+            }
+            InsertKeyError::ValueTypeMismatch => {
+                AddTransformParamKeyPrepareError::ValueTypeMismatch {
+                    layer: target.get(),
+                    property: property.clone(),
+                }
+            }
+            InsertKeyError::Keyframe(source) => AddTransformParamKeyPrepareError::Keyframe(source),
+            InsertKeyError::Track(source) => AddTransformParamKeyPrepareError::Track(source),
+        })?;
+    Ok(AddTransformParamKeyPreparation::Prepared {
+        key_id,
+        command: Command::SetProperty {
+            target,
+            property,
+            old_value,
+            new_value,
+        },
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum SetTransformParamKeyValuePrepareError {
+    #[error(transparent)]
+    Command(#[from] CommandError),
+    #[error("transform param {property:?} is not a Scale/Rotation/Opacity key target")]
+    PropertyUnsupported { property: ScalarPropertyId },
+    #[error("transform param {property:?} source unsupported for layer {layer}")]
+    SourceUnsupported {
+        layer: u64,
+        property: ScalarPropertyId,
+    },
+    #[error("transform param {property:?} value type mismatch for layer {layer}")]
+    ValueTypeMismatch {
+        layer: u64,
+        property: ScalarPropertyId,
+    },
+    #[error("transform param {property:?} key {key_id} not found on layer {layer}")]
+    KeyNotFound {
+        layer: u64,
+        property: ScalarPropertyId,
+        key_id: u64,
+    },
+}
+
+pub fn prepare_set_transform_param_key_value(
+    doc: &Document,
+    target: LayerId,
+    property: ScalarPropertyId,
+    key_id: KeyframeId,
+    new: DocValue,
+) -> Result<Option<Command>, SetTransformParamKeyValuePrepareError> {
+    let type_ok = transform_key_target(&property).map_err(|property| {
+        SetTransformParamKeyValuePrepareError::PropertyUnsupported { property }
+    })?;
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    if !type_ok(&new) {
+        return Err(SetTransformParamKeyValuePrepareError::ValueTypeMismatch {
+            layer: target.get(),
+            property,
+        });
+    }
+    let old_value = clone_transform_param(env, &property);
+    let (track, existing) =
+        keyed_transform_track(&old_value, key_id, type_ok).map_err(|err| match err {
+            KeyedTrackError::SourceUnsupported => {
+                SetTransformParamKeyValuePrepareError::SourceUnsupported {
+                    layer: target.get(),
+                    property: property.clone(),
+                }
+            }
+            KeyedTrackError::ValueTypeMismatch => {
+                SetTransformParamKeyValuePrepareError::ValueTypeMismatch {
+                    layer: target.get(),
+                    property: property.clone(),
+                }
+            }
+            KeyedTrackError::KeyNotFound => SetTransformParamKeyValuePrepareError::KeyNotFound {
+                layer: target.get(),
+                property: property.clone(),
+                key_id: key_id.get(),
+            },
+        })?;
+    if existing.value == new {
+        return Ok(None);
+    }
+    let mut new_track = track.clone();
+    new_track.insert(DocKeyframe {
+        id: existing.id,
+        t: existing.t,
+        value: new,
+        interp: existing.interp,
+    });
+    Ok(Some(Command::SetProperty {
+        target,
+        property,
+        old_value,
+        new_value: DocParam::Keyframes(new_track),
+    }))
+}
+
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum RemoveTransformParamKeyPrepareError {
+    #[error(transparent)]
+    Command(#[from] CommandError),
+    #[error(transparent)]
+    Keyframe(#[from] DocKeyframeError),
+    #[error("transform param {property:?} is not a Scale/Rotation/Opacity key target")]
+    PropertyUnsupported { property: ScalarPropertyId },
+    #[error("transform param {property:?} source unsupported for layer {layer}")]
+    SourceUnsupported {
+        layer: u64,
+        property: ScalarPropertyId,
+    },
+    #[error("transform param {property:?} value type mismatch for layer {layer}")]
+    ValueTypeMismatch {
+        layer: u64,
+        property: ScalarPropertyId,
+    },
+    #[error("transform param {property:?} key {key_id} not found on layer {layer}")]
+    KeyNotFound {
+        layer: u64,
+        property: ScalarPropertyId,
+        key_id: u64,
+    },
+}
+
+pub fn prepare_remove_transform_param_key(
+    doc: &Document,
+    target: LayerId,
+    property: ScalarPropertyId,
+    key_id: KeyframeId,
+) -> Result<Command, RemoveTransformParamKeyPrepareError> {
+    let type_ok = transform_key_target(&property).map_err(|property| {
+        RemoveTransformParamKeyPrepareError::PropertyUnsupported { property }
+    })?;
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    let old_value = clone_transform_param(env, &property);
+    let (track, removed) =
+        keyed_transform_track(&old_value, key_id, type_ok).map_err(|err| match err {
+            KeyedTrackError::SourceUnsupported => {
+                RemoveTransformParamKeyPrepareError::SourceUnsupported {
+                    layer: target.get(),
+                    property: property.clone(),
+                }
+            }
+            KeyedTrackError::ValueTypeMismatch => {
+                RemoveTransformParamKeyPrepareError::ValueTypeMismatch {
+                    layer: target.get(),
+                    property: property.clone(),
+                }
+            }
+            KeyedTrackError::KeyNotFound => RemoveTransformParamKeyPrepareError::KeyNotFound {
+                layer: target.get(),
+                property: property.clone(),
+                key_id: key_id.get(),
+            },
+        })?;
+    let new_value = if track.keys().len() == 1 {
+        DocParam::Const(removed.value.clone())
+    } else {
+        let mut new_track = track.clone();
+        new_track.remove_by_id(key_id);
+        new_track.validate()?;
+        DocParam::Keyframes(new_track)
+    };
+    Ok(Command::SetProperty {
+        target,
+        property,
+        old_value,
+        new_value,
+    })
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum KeyedTrackError {
+    SourceUnsupported,
+    ValueTypeMismatch,
+    KeyNotFound,
+}
+
+fn keyed_transform_track<'a>(
+    old_value: &'a DocParam,
+    key_id: KeyframeId,
+    type_ok: fn(&DocValue) -> bool,
+) -> Result<(&'a DocKeyframeTrack, &'a DocKeyframe), KeyedTrackError> {
     match old_value {
-        DocParam::Const(DocValue::Vec2(value)) => {
+        DocParam::Keyframes(track) => {
+            if track.keys().is_empty() {
+                return Err(KeyedTrackError::SourceUnsupported);
+            }
+            if track.keys().iter().any(|key| !type_ok(&key.value)) {
+                return Err(KeyedTrackError::ValueTypeMismatch);
+            }
+            let existing = track
+                .get_by_id(key_id)
+                .ok_or(KeyedTrackError::KeyNotFound)?;
+            Ok((track, existing))
+        }
+        DocParam::Const(_)
+        | DocParam::Data { .. }
+        | DocParam::Vec2Axes { .. }
+        | DocParam::LookAt { .. }
+        | DocParam::Follow { .. } => Err(KeyedTrackError::SourceUnsupported),
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum InsertKeyError {
+    SourceUnsupported,
+    ValueTypeMismatch,
+    Keyframe(DocKeyframeError),
+    Track(TrackError),
+}
+
+impl From<DocKeyframeError> for InsertKeyError {
+    fn from(value: DocKeyframeError) -> Self {
+        Self::Keyframe(value)
+    }
+}
+
+impl From<TrackError> for InsertKeyError {
+    fn from(value: TrackError) -> Self {
+        Self::Track(value)
+    }
+}
+
+fn is_vec2(value: &DocValue) -> bool {
+    matches!(value, DocValue::Vec2(_))
+}
+
+fn is_f64(value: &DocValue) -> bool {
+    matches!(value, DocValue::F64(_))
+}
+
+fn deterministic_new_param_key(
+    old_value: &DocParam,
+    t: RationalTime,
+    id: KeyframeId,
+    type_ok: fn(&DocValue) -> bool,
+) -> Result<DocParam, InsertKeyError> {
+    match old_value {
+        DocParam::Const(value) if type_ok(value) => {
             let mut track = DocKeyframeTrack::new();
             track.insert(DocKeyframe {
                 id,
                 t,
-                value: DocValue::Vec2(*value),
+                value: value.clone(),
                 interp: Interp::Linear,
             });
             track.validate()?;
@@ -117,19 +483,19 @@ pub(crate) fn deterministic_new_position(
         }
         DocParam::Keyframes(track) => {
             if track.keys().is_empty() {
-                return Err(AddPositionKeyPrepareError::PositionSourceUnsupported { layer });
+                return Err(InsertKeyError::SourceUnsupported);
             }
             if track.keys().iter().any(|key| key.t == t) {
-                return Err(AddPositionKeyPrepareError::Keyframe(
+                return Err(InsertKeyError::Keyframe(
                     DocKeyframeError::UnsortedOrDuplicateKeys,
                 ));
             }
 
             let mut new_track = track.clone();
-            let keys = new_track.keys();
+            let keys = track.keys();
             for key in keys {
-                if !matches!(key.value, DocValue::Vec2(_)) {
-                    return Err(AddPositionKeyPrepareError::PositionValueTypeMismatch { layer });
+                if !type_ok(&key.value) {
+                    return Err(InsertKeyError::ValueTypeMismatch);
                 }
             }
 
@@ -137,11 +503,11 @@ pub(crate) fn deterministic_new_position(
             let last = &keys[keys.len() - 1];
 
             if t <= first.t {
-                let value = vec2_position_value(&first.value, layer)?;
+                let value = first.value.clone();
                 new_track.insert(DocKeyframe {
                     id,
                     t,
-                    value: DocValue::Vec2(value),
+                    value,
                     interp: Interp::Linear,
                 });
                 new_track.validate()?;
@@ -149,43 +515,45 @@ pub(crate) fn deterministic_new_position(
             }
 
             if t >= last.t {
-                let value = vec2_position_value(&last.value, layer)?;
+                let value = last.value.clone();
                 new_track.insert(DocKeyframe {
                     id,
                     t,
-                    value: DocValue::Vec2(value),
+                    value,
                     interp: Interp::Linear,
                 });
                 new_track.validate()?;
                 return Ok(DocParam::Keyframes(new_track));
             }
 
-            let right_index = keys.iter().position(|key| t < key.t).ok_or(
-                AddPositionKeyPrepareError::Keyframe(DocKeyframeError::UnsortedOrDuplicateKeys),
-            )?;
+            let right_index =
+                keys.iter()
+                    .position(|key| t < key.t)
+                    .ok_or(InsertKeyError::Keyframe(
+                        DocKeyframeError::UnsortedOrDuplicateKeys,
+                    ))?;
             if right_index == 0 {
-                return Err(AddPositionKeyPrepareError::Track(
-                    TrackError::UnsortedOrDuplicateKeys,
-                ));
+                return Err(InsertKeyError::Track(TrackError::UnsortedOrDuplicateKeys));
             }
             let left_index = right_index - 1;
             let left = &keys[left_index];
             let right = &keys[right_index];
 
-            let left_value = vec2_position_value(&left.value, layer)?;
-            let right_value = vec2_position_value(&right.value, layer)?;
+            if !type_ok(&left.value) || !type_ok(&right.value) {
+                return Err(InsertKeyError::ValueTypeMismatch);
+            }
 
-            let (left_interp, inserted_interp, value) = if left_value == right_value {
-                (Interp::Hold, Interp::Hold, left_value)
+            let (left_interp, inserted_interp, value) = if left.value == right.value {
+                (Interp::Hold, Interp::Hold, left.value.clone())
             } else {
                 match left.interp {
-                    Interp::Hold => (Interp::Hold, Interp::Hold, left_value),
+                    Interp::Hold => (Interp::Hold, Interp::Hold, left.value.clone()),
                     Interp::Linear => {
-                        let value = eval_position(track, t, layer)?;
+                        let value = eval_typed_key(track, t, type_ok)?;
                         (Interp::Linear, Interp::Linear, value)
                     }
                     Interp::Bezier { .. } => {
-                        let value = eval_position(track, t, layer)?;
+                        let value = eval_typed_key(track, t, type_ok)?;
                         let progress = split_progress(left.t, right.t, t);
                         let (left_interp, inserted_interp) = left.interp.split_at(progress)?;
                         (left_interp, inserted_interp, value)
@@ -193,24 +561,27 @@ pub(crate) fn deterministic_new_position(
                 }
             };
 
+            let left_id = left.id;
+            let left_t = left.t;
+            let left_value = left.value.clone();
             new_track.insert(DocKeyframe {
-                id: left.id,
-                t: left.t,
-                value: DocValue::Vec2(left_value),
+                id: left_id,
+                t: left_t,
+                value: left_value,
                 interp: left_interp,
             });
 
             let inserted = DocKeyframe {
                 id,
                 t,
-                value: DocValue::Vec2(value),
+                value,
                 interp: inserted_interp,
             };
             new_track.insert(inserted);
             new_track.validate()?;
             Ok(DocParam::Keyframes(new_track))
         }
-        _ => Err(AddPositionKeyPrepareError::PositionValueTypeMismatch { layer }),
+        _ => Err(InsertKeyError::ValueTypeMismatch),
     }
 }
 
@@ -226,24 +597,22 @@ fn split_progress(a: RationalTime, b: RationalTime, t: RationalTime) -> f64 {
     progress_num / progress_den
 }
 
-fn eval_position(
+fn eval_typed_key(
     track: &DocKeyframeTrack,
     t: RationalTime,
-    layer: u64,
-) -> Result<[f64; 2], AddPositionKeyPrepareError> {
-    match track.eval(t) {
-        Value::Vec2(v) => Ok(v),
-        _ => Err(AddPositionKeyPrepareError::PositionValueTypeMismatch { layer }),
-    }
-}
-
-fn vec2_position_value(
-    value: &DocValue,
-    layer: u64,
-) -> Result<[f64; 2], AddPositionKeyPrepareError> {
-    match value {
-        DocValue::Vec2(value) => Ok(*value),
-        _ => Err(AddPositionKeyPrepareError::PositionValueTypeMismatch { layer }),
+    type_ok: fn(&DocValue) -> bool,
+) -> Result<DocValue, InsertKeyError> {
+    let value = match track.eval(t) {
+        Value::F64(v) => DocValue::F64(v),
+        Value::Vec2(v) => DocValue::Vec2(v),
+        Value::Vec3(v) => DocValue::Vec3(v),
+        Value::Color(v) => DocValue::Color(v),
+        Value::AssetRef(_) => return Err(InsertKeyError::ValueTypeMismatch),
+    };
+    if type_ok(&value) {
+        Ok(value)
+    } else {
+        Err(InsertKeyError::ValueTypeMismatch)
     }
 }
 
@@ -273,9 +642,7 @@ pub fn prepare_remove_position_key(
     let old_value = env.transform.position.clone();
     let new_value = deterministic_remove_position(&old_value, target, key_id)?;
     let before = key_id.get();
-    let after = before
-        .checked_add(1)
-        .ok_or(StableIdError::Exhausted)?;
+    let after = before.checked_add(1).ok_or(StableIdError::Exhausted)?;
     let stable_id_reservation = StableIdReservation::new(before, after);
     Ok(Command::RemovePositionKey {
         target,
@@ -299,9 +666,7 @@ pub(crate) fn deterministic_remove_position(
             }
             for key in track.keys() {
                 if !matches!(key.value, DocValue::Vec2(_)) {
-                    return Err(RemovePositionKeyPrepareError::PositionValueTypeMismatch {
-                        layer,
-                    });
+                    return Err(RemovePositionKeyPrepareError::PositionValueTypeMismatch { layer });
                 }
             }
             let Some(removed) = track.get_by_id(key_id) else {
@@ -896,7 +1261,9 @@ mod tests {
 
         assert!(matches!(
             prepare_remove_position_key(&doc, layer, KeyframeId::from_raw(u64::MAX)),
-            Err(RemovePositionKeyPrepareError::StableId(StableIdError::Exhausted))
+            Err(RemovePositionKeyPrepareError::StableId(
+                StableIdError::Exhausted
+            ))
         ));
     }
 
@@ -966,10 +1333,7 @@ mod tests {
         assert_eq!(new_value, &DocParam::const_vec2([5.0, 6.0]));
         command.apply(&mut doc).unwrap();
         let env = find_envelope(&doc, target).unwrap();
-        assert_eq!(
-            env.transform.position,
-            DocParam::const_vec2([5.0, 6.0])
-        );
+        assert_eq!(env.transform.position, DocParam::const_vec2([5.0, 6.0]));
         command.inverse().apply(&mut doc).unwrap();
         assert_eq!(serde_json::to_vec(&doc).unwrap(), before);
         let env = find_envelope(&doc, target).unwrap();

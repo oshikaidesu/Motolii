@@ -131,6 +131,36 @@ fn prepare(doc: &Document, f: impl FnOnce(&mut Document)) -> Document {
     d
 }
 
+fn plugin_clip_doc(f: &Fixture, params: BTreeMap<String, DocParam>) -> Document {
+    prepare(&f.doc, |d| {
+        let TrackItem::Clip(c) = &mut d.tracks[0].items[0] else {
+            panic!("expected clip")
+        };
+        c.source = ClipSource::Plugin {
+            plugin_id: "core.layer_source.radial_repeater".into(),
+            effect_version: 1,
+            params,
+            extra: Default::default(),
+        };
+    })
+}
+
+fn plugin_params<'a>(doc: &'a Document, layer: LayerId) -> &'a BTreeMap<String, DocParam> {
+    for track in &doc.tracks {
+        for item in &track.items {
+            if let TrackItem::Clip(clip) = item {
+                if clip.envelope.layer_id == layer {
+                    let ClipSource::Plugin { params, .. } = &clip.source else {
+                        panic!("expected plugin source")
+                    };
+                    return params;
+                }
+            }
+        }
+    }
+    panic!("layer not found")
+}
+
 // ---------------------------------------------------------------------------
 // 完了条件1: 全editコマンドのapply->revert->状態一致 property test
 // ---------------------------------------------------------------------------
@@ -174,6 +204,19 @@ proptest! {
         let cmd = Command::SetProperty {
             target: f.layer,
             property: ScalarPropertyId::EffectParam(f.effect, "amount".into()),
+            old_value: DocParam::const_f64(old),
+            new_value: DocParam::const_f64(new),
+        };
+        assert_roundtrip(&doc, cmd);
+    }
+
+    #[test]
+    fn set_property_source_param_f64_roundtrip(old in -10.0f64..10.0, new in -10.0f64..10.0) {
+        let f = fixture();
+        let doc = plugin_clip_doc(&f, BTreeMap::from([("count".into(), DocParam::const_f64(old))]));
+        let cmd = Command::SetProperty {
+            target: f.layer,
+            property: ScalarPropertyId::SourceParam("count".into()),
             old_value: DocParam::const_f64(old),
             new_value: DocParam::const_f64(new),
         };
@@ -306,6 +349,60 @@ proptest! {
         };
         assert_roundtrip(&f.doc, cmd);
     }
+}
+
+#[test]
+fn set_property_source_param_writes_color_without_f64_ceiling() {
+    let f = fixture();
+    let old = DocParam::const_color([1.0, 1.0, 1.0, 1.0]);
+    let new = DocParam::const_color([0.2, 0.4, 0.6, 1.0]);
+    let doc = plugin_clip_doc(&f, BTreeMap::from([("color".into(), old.clone())]));
+    let cmd = Command::SetProperty {
+        target: f.layer,
+        property: ScalarPropertyId::SourceParam("color".into()),
+        old_value: old,
+        new_value: new.clone(),
+    };
+    let mut working = doc.clone();
+    cmd.apply(&mut working).expect("color source param apply");
+    assert_eq!(plugin_params(&working, f.layer).get("color"), Some(&new));
+    cmd.inverse().apply(&mut working).expect("color inverse");
+    assert_eq!(&working, &doc);
+}
+
+#[test]
+fn set_property_source_param_rejects_missing_vector_and_unknown_key() {
+    let f = fixture();
+    let missing = Command::SetProperty {
+        target: f.layer,
+        property: ScalarPropertyId::SourceParam("count".into()),
+        old_value: DocParam::const_f64(12.0),
+        new_value: DocParam::const_f64(8.0),
+    };
+    let mut asset_doc = f.doc.clone();
+    assert!(matches!(
+        missing.apply(&mut asset_doc),
+        Err(CommandError::SourceNotPlugin { layer }) if layer == f.layer.get()
+    ));
+    assert_eq!(asset_doc, f.doc);
+
+    let plugin = plugin_clip_doc(
+        &f,
+        BTreeMap::from([("count".into(), DocParam::const_f64(12.0))]),
+    );
+    let mut working = plugin.clone();
+    let unknown = Command::SetProperty {
+        target: f.layer,
+        property: ScalarPropertyId::SourceParam("missing".into()),
+        old_value: DocParam::const_f64(0.0),
+        new_value: DocParam::const_f64(1.0),
+    };
+    assert!(matches!(
+        unknown.apply(&mut working),
+        Err(CommandError::SourceParamNotFound { layer, param })
+            if layer == f.layer.get() && param == "missing"
+    ));
+    assert_eq!(working, plugin);
 }
 
 // ---------------------------------------------------------------------------
@@ -1350,6 +1447,144 @@ fn duplicate_track_item_allocates_fresh_ids_via_writer() {
     writer
         .validate()
         .expect("duplicated document must validate");
+}
+
+#[test]
+fn split_clip_splits_window_without_stretching_source_and_inverse_restores() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc);
+    let at = RationalTime::try_new(2, 1).unwrap();
+    let original_source = writer.snapshot().tracks[0].items[0]
+        .as_clip()
+        .unwrap()
+        .source
+        .clone();
+    let original_time_map = writer.snapshot().tracks[0].items[0]
+        .as_clip()
+        .unwrap()
+        .time_map;
+    let cmd = writer
+        .prepare_split_clip(f.layer, at)
+        .expect("split prepare")
+        .expect("split must change");
+    assert_eq!(cmd.kind(), motolii_doc::CommandKind::SplitClip);
+    let json = serde_json::to_string(&cmd).unwrap();
+    assert!(json.contains("SplitClip"), "{json}");
+    let before = writer.snapshot();
+    assert_roundtrip(before.as_ref(), cmd.clone());
+
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, cmd).expect("split apply");
+    let after = writer.snapshot();
+    let left = after.tracks[0].items[0].as_clip().expect("left");
+    let right = after.tracks[0].items[1].as_clip().expect("right");
+    assert_eq!(left.envelope.layer_id, f.layer);
+    assert_ne!(right.envelope.layer_id, f.layer);
+    assert_eq!(left.start, RationalTime::ZERO);
+    assert_eq!(left.duration, RationalTime::try_new(2, 1).unwrap());
+    assert_eq!(left.time_map, original_time_map);
+    assert_eq!(right.start, at);
+    assert_eq!(right.duration, RationalTime::try_new(3, 1).unwrap());
+    assert_eq!(
+        right.time_map.source_start,
+        RationalTime::try_new(2, 1).unwrap()
+    );
+    assert_eq!(left.source, original_source);
+    assert_eq!(left.source, right.source);
+
+    writer.undo().expect("split undo");
+    let restored = writer.snapshot();
+    let left = restored.tracks[0].items[0].as_clip().expect("restored");
+    assert_eq!(restored.tracks[0].items.len(), 2);
+    assert_eq!(left.envelope.layer_id, f.layer);
+    assert_eq!(left.duration, RationalTime::try_new(5, 1).unwrap());
+    assert_eq!(left.time_map, original_time_map);
+}
+
+#[test]
+fn split_clip_rejects_boundary_and_leaves_document_unchanged() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc.clone());
+    let before = writer.snapshot();
+    let err = writer
+        .prepare_split_clip(f.layer, RationalTime::ZERO)
+        .expect_err("start is not interior");
+    assert!(matches!(err, CommandError::SplitNotInterior { .. }));
+    assert_eq!(writer.snapshot().as_ref(), before.as_ref());
+
+    let mut writer = reference_writer(f.doc);
+    let before = writer.snapshot();
+    let end = RationalTime::try_new(5, 1).unwrap();
+    let err = writer
+        .prepare_split_clip(f.layer, end)
+        .expect_err("end is not interior");
+    assert!(matches!(err, CommandError::SplitNotInterior { .. }));
+    assert_eq!(writer.snapshot().as_ref(), before.as_ref());
+}
+
+#[test]
+fn reparent_clip_moves_clip_to_dest_lane_and_inverse_restores() {
+    let f = fixture();
+    let mut doc = f.doc;
+    let track_b = doc.track_ids.allocate("V2").unwrap();
+    doc.tracks.push(Track {
+        id: track_b,
+        items: vec![],
+    });
+    doc.validate().expect("two-track fixture");
+    let writer = reference_writer(doc);
+    let none = writer
+        .prepare_reparent_clip(f.layer, ParentLocator::Track(f.track), 0, None)
+        .expect("same seat");
+    assert!(none.is_none());
+
+    let cmd = writer
+        .prepare_reparent_clip(f.layer, ParentLocator::Track(track_b), 0, None)
+        .expect("reparent prepare")
+        .expect("must move");
+    assert_eq!(cmd.kind(), motolii_doc::CommandKind::ReparentClip);
+    let json = serde_json::to_string(&cmd).unwrap();
+    assert!(json.contains("ReparentClip"), "{json}");
+    assert_roundtrip(writer.snapshot().as_ref(), cmd.clone());
+    let mut working = writer.snapshot().as_ref().clone();
+    cmd.apply(&mut working).expect("apply");
+    assert!(working.tracks[0].items.iter().all(|item| match item {
+        TrackItem::Clip(clip) => clip.envelope.layer_id != f.layer,
+        TrackItem::Group(group) => group.envelope.layer_id != f.layer,
+    }));
+    let moved = working.tracks[1].items[0].as_clip().unwrap();
+    assert_eq!(moved.envelope.layer_id, f.layer);
+    assert_eq!(moved.start, RationalTime::ZERO);
+}
+
+#[test]
+fn reparent_clip_rejects_missing_dest_track_and_leaves_document_unchanged() {
+    let f = fixture();
+    let writer = reference_writer(f.doc);
+    let before = writer.snapshot();
+    let missing = motolii_doc::TrackId::from_raw(u64::MAX);
+    let err = writer
+        .prepare_reparent_clip(f.layer, ParentLocator::Track(missing), 0, None)
+        .expect_err("missing dest track");
+    assert!(matches!(err, CommandError::TrackNotFound(_)));
+    assert_eq!(writer.snapshot().as_ref(), before.as_ref());
+}
+
+#[test]
+fn set_item_visible_and_solo_roundtrip() {
+    let f = fixture();
+    let visible = Command::SetItemVisible {
+        target: f.layer,
+        old: true,
+        new: false,
+    };
+    assert_roundtrip(&f.doc, visible);
+    let solo = Command::SetItemSolo {
+        target: f.layer,
+        old: false,
+        new: true,
+    };
+    assert_roundtrip(&f.doc, solo);
 }
 
 // ---------------------------------------------------------------------------

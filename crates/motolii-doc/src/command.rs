@@ -4,8 +4,9 @@
 //! 持たず、apply/revertはold_value/new_valueの単純な書き込みで成立する(対称設計)。
 //! 選択・hover・IME中間状態はこのenumに入れない(#103⑨、UI状態のまま)。
 //!
-//! **スコープ外(本PR)**: `ClipSource::Plugin`/`VectorContent`/`PathOp`配下のDocParam編集
-//! コマンドはD1i-2(#100)と並走のため対象外。複製時のID再写像は`duplicate`が担当する。
+//! **スコープ外**: `VectorContent` / `PathOp` 配下の DocParam 編集。複製時のID再写像は
+//! `duplicate`が担当する。`ClipSource::Plugin.params` は `ScalarPropertyId::SourceParam`
+//! で既存キーへ任意`DocParam`を書く(vism param の型天井にしない)。
 
 use std::collections::BTreeMap;
 
@@ -17,7 +18,9 @@ use motolii_core::{RationalTime, TimeMap};
 use crate::asset::{Asset, AssetDraft, AssetError, AssetId};
 use crate::doc_keyframe::{validate_interp, DocKeyframe, DocKeyframeError};
 use crate::doc_value::DocValue;
-use crate::duplicate::{definition_semantic_body_eq, remint_order_keyframe_ids};
+use crate::duplicate::{
+    definition_semantic_body_eq, duplicate_track_item, remint_order_keyframe_ids, DuplicateError,
+};
 use crate::param::DocParam;
 use crate::position_key_prepare::{deterministic_new_position, deterministic_remove_position};
 use crate::schema::{
@@ -38,6 +41,8 @@ pub enum ScalarPropertyId {
     Rotation,
     Opacity,
     EffectParam(EffectId, String),
+    /// `ClipSource::Plugin.params` の既存キー。値型は `DocParam` が正本。
+    SourceParam(String),
 }
 
 /// merge key(S18)の`property_id`成分。全コマンド種別を横断する。
@@ -53,6 +58,7 @@ pub enum PropertyId {
     TransformParent,
     EffectEnabled(EffectId),
     EffectParam(EffectId, String),
+    SourceParam(String),
     EffectList(EffectId),
     /// D1l: `DeleteEffectDefinition`/`AddEffectDefinition`(台帳の生存)。
     EffectDefinitionLifecycle(EffectDefinitionId),
@@ -68,6 +74,10 @@ pub enum PropertyId {
     ClipStart,
     ClipIn,
     ClipOut,
+    Split,
+    Reparent,
+    ItemVisible,
+    ItemSolo,
 }
 
 impl From<ScalarPropertyId> for PropertyId {
@@ -79,6 +89,7 @@ impl From<ScalarPropertyId> for PropertyId {
             ScalarPropertyId::Rotation => PropertyId::Rotation,
             ScalarPropertyId::Opacity => PropertyId::Opacity,
             ScalarPropertyId::EffectParam(id, name) => PropertyId::EffectParam(id, name),
+            ScalarPropertyId::SourceParam(name) => PropertyId::SourceParam(name),
         }
     }
 }
@@ -139,6 +150,10 @@ pub enum CommandKind {
     SetClipStart,
     TrimClipIn,
     TrimClipOut,
+    SplitClip,
+    ReparentClip,
+    SetItemVisible,
+    SetItemSolo,
 }
 
 /// S18: `gesture_id + command_kind + target_stable_id + property_id`。
@@ -158,6 +173,8 @@ pub enum CommandError {
     LayerNotFound(u64),
     #[error("track item {layer} is not a Clip")]
     TrackItemNotClip { layer: u64 },
+    #[error("split time must be strictly inside clip {layer}")]
+    SplitNotInterior { layer: u64 },
     #[error("invalid clip in-trim payload for layer {layer}")]
     InvalidClipTrim { layer: u64 },
     #[error("track {0} not found")]
@@ -166,6 +183,10 @@ pub enum CommandError {
     GroupNotFound(u64),
     #[error("effect {effect} not found on layer {layer}")]
     EffectNotFound { effect: u64, layer: u64 },
+    #[error("layer {layer} source is not ClipSource::Plugin")]
+    SourceNotPlugin { layer: u64 },
+    #[error("source param `{param}` not found on layer {layer}")]
+    SourceParamNotFound { layer: u64, param: String },
     #[error("audio component index {index} not found on layer {layer}")]
     AudioComponentNotFound { layer: u64, index: usize },
     #[error("detach audio destination must be a different track/group lane than the source")]
@@ -500,6 +521,47 @@ pub enum Command {
         old_duration: RationalTime,
         new_duration: RationalTime,
     },
+    /// 1 Clip の in/out 窓を playhead で二つに割る。右片は新 LayerId。ソースは共有。
+    /// host kind は既存の `split`。skia はまだ撃たない。
+    SplitClip {
+        target: LayerId,
+        old_duration: RationalTime,
+        new_duration: RationalTime,
+        right_parent: ParentLocator,
+        right_index: usize,
+        right_item: TrackItem,
+        right_layer_names: BTreeMap<LayerId, String>,
+    },
+    UnsplitClip {
+        target: LayerId,
+        old_duration: RationalTime,
+        new_duration: RationalTime,
+        right_parent: ParentLocator,
+        right_index: usize,
+        right_item: TrackItem,
+        right_layer_names: BTreeMap<LayerId, String>,
+    },
+    /// TrackItem の親/index を変える。host kind `reparent_clip` の viseme。
+    /// `new_index` は old から外したあとの挿入位置。`SetClipStart` は同レーン用のまま触らない。
+    ReparentClip {
+        target: LayerId,
+        old_parent: ParentLocator,
+        old_index: usize,
+        new_parent: ParentLocator,
+        new_index: usize,
+        old_start: Option<RationalTime>,
+        new_start: Option<RationalTime>,
+    },
+    SetItemVisible {
+        target: LayerId,
+        old: bool,
+        new: bool,
+    },
+    SetItemSolo {
+        target: LayerId,
+        old: bool,
+        new: bool,
+    },
 }
 
 /// fresh admitだけが使う非永続prepared値。Undo/Redo/replayの復元とは分離する。
@@ -568,6 +630,10 @@ impl Command {
             Command::SetClipStart { .. } => CommandKind::SetClipStart,
             Command::TrimClipIn { .. } => CommandKind::TrimClipIn,
             Command::TrimClipOut { .. } => CommandKind::TrimClipOut,
+            Command::SplitClip { .. } | Command::UnsplitClip { .. } => CommandKind::SplitClip,
+            Command::ReparentClip { .. } => CommandKind::ReparentClip,
+            Command::SetItemVisible { .. } => CommandKind::SetItemVisible,
+            Command::SetItemSolo { .. } => CommandKind::SetItemSolo,
         }
     }
 
@@ -588,7 +654,12 @@ impl Command {
             | Command::SetPositionKeyTime { target, .. }
             | Command::SetClipStart { target, .. }
             | Command::TrimClipIn { target, .. }
-            | Command::TrimClipOut { target, .. } => target.get(),
+            | Command::TrimClipOut { target, .. }
+            | Command::SplitClip { target, .. }
+            | Command::UnsplitClip { target, .. }
+            | Command::ReparentClip { target, .. }
+            | Command::SetItemVisible { target, .. }
+            | Command::SetItemSolo { target, .. } => target.get(),
             Command::AddPositionKey { added_key_id, .. }
             | Command::UndoAddPositionKey { added_key_id, .. } => added_key_id.get(),
             Command::RemovePositionKey { removed_key_id, .. }
@@ -652,6 +723,10 @@ impl Command {
             Command::SetClipStart { .. } => PropertyId::ClipStart,
             Command::TrimClipIn { .. } => PropertyId::ClipIn,
             Command::TrimClipOut { .. } => PropertyId::ClipOut,
+            Command::SplitClip { .. } | Command::UnsplitClip { .. } => PropertyId::Split,
+            Command::ReparentClip { .. } => PropertyId::Reparent,
+            Command::SetItemVisible { .. } => PropertyId::ItemVisible,
+            Command::SetItemSolo { .. } => PropertyId::ItemSolo,
         }
     }
 
@@ -729,7 +804,12 @@ impl Command {
             | Command::SetPositionKeyTime { .. }
             | Command::SetClipStart { .. }
             | Command::TrimClipIn { .. }
-            | Command::TrimClipOut { .. } => None,
+            | Command::TrimClipOut { .. }
+            | Command::SplitClip { .. }
+            | Command::UnsplitClip { .. }
+            | Command::ReparentClip { .. }
+            | Command::SetItemVisible { .. }
+            | Command::SetItemSolo { .. } => None,
         }
     }
 
@@ -763,10 +843,10 @@ impl Command {
                     def.params.insert(name.clone(), new_value.clone());
                     Ok(())
                 }
-                _ => {
-                    let env = find_envelope_mut(doc, *target)?;
-                    write_property(env, property, new_value.clone())
+                ScalarPropertyId::SourceParam(name) => {
+                    write_source_param(doc, *target, name, new_value.clone())
                 }
+                _ => apply_envelope_set_property(doc, *target, property, new_value),
             },
             Command::SetBlendMode { target, new, .. } => {
                 find_envelope_mut(doc, *target)?.blend = *new;
@@ -1275,6 +1355,67 @@ impl Command {
                 clip.duration = *new_duration;
                 Ok(())
             }
+            Command::SplitClip {
+                target,
+                old_duration,
+                new_duration,
+                right_parent,
+                right_index,
+                right_item,
+                right_layer_names,
+            } => apply_split_clip(
+                doc,
+                *target,
+                *old_duration,
+                *new_duration,
+                *right_parent,
+                *right_index,
+                right_item,
+                right_layer_names,
+            ),
+            Command::UnsplitClip {
+                target,
+                old_duration,
+                new_duration,
+                right_parent,
+                right_index,
+                right_item,
+                right_layer_names,
+            } => apply_unsplit_clip(
+                doc,
+                *target,
+                *old_duration,
+                *new_duration,
+                *right_parent,
+                *right_index,
+                right_item,
+                right_layer_names,
+            ),
+            Command::ReparentClip {
+                target,
+                old_parent,
+                old_index,
+                new_parent,
+                new_index,
+                new_start,
+                ..
+            } => apply_reparent_track_item(
+                doc,
+                *target,
+                *old_parent,
+                *old_index,
+                *new_parent,
+                *new_index,
+                *new_start,
+            ),
+            Command::SetItemVisible { target, new, .. } => {
+                find_envelope_mut(doc, *target)?.visible = *new;
+                Ok(())
+            }
+            Command::SetItemSolo { target, new, .. } => {
+                find_envelope_mut(doc, *target)?.solo = *new;
+                Ok(())
+            }
         }
     }
 
@@ -1602,6 +1743,67 @@ impl Command {
                 old_duration: new_duration,
                 new_duration: old_duration,
             },
+            Command::SplitClip {
+                target,
+                old_duration,
+                new_duration,
+                right_parent,
+                right_index,
+                right_item,
+                right_layer_names,
+            } => Command::UnsplitClip {
+                target,
+                old_duration: new_duration,
+                new_duration: old_duration,
+                right_parent,
+                right_index,
+                right_item,
+                right_layer_names,
+            },
+            Command::UnsplitClip {
+                target,
+                old_duration,
+                new_duration,
+                right_parent,
+                right_index,
+                right_item,
+                right_layer_names,
+            } => Command::SplitClip {
+                target,
+                old_duration: new_duration,
+                new_duration: old_duration,
+                right_parent,
+                right_index,
+                right_item,
+                right_layer_names,
+            },
+            Command::ReparentClip {
+                target,
+                old_parent,
+                old_index,
+                new_parent,
+                new_index,
+                old_start,
+                new_start,
+            } => Command::ReparentClip {
+                target,
+                old_parent: new_parent,
+                old_index: new_index,
+                new_parent: old_parent,
+                new_index: old_index,
+                old_start: new_start,
+                new_start: old_start,
+            },
+            Command::SetItemVisible { target, old, new } => Command::SetItemVisible {
+                target,
+                old: new,
+                new: old,
+            },
+            Command::SetItemSolo { target, old, new } => Command::SetItemSolo {
+                target,
+                old: new,
+                new: old,
+            },
         }
     }
 }
@@ -1725,6 +1927,62 @@ pub fn layer_names_for_item(
     Ok(names)
 }
 
+fn keyframe_ids(param: &DocParam) -> Vec<u64> {
+    match param {
+        DocParam::Keyframes(track) => track.keys().iter().map(|key| key.id.get()).collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn live_envelope_param<'a>(
+    env: &'a ItemEnvelope,
+    property: &ScalarPropertyId,
+) -> Option<&'a DocParam> {
+    match property {
+        ScalarPropertyId::Position => Some(&env.transform.position),
+        ScalarPropertyId::Anchor => Some(&env.transform.anchor),
+        ScalarPropertyId::Scale => Some(&env.transform.scale),
+        ScalarPropertyId::Rotation => Some(&env.transform.rotation),
+        ScalarPropertyId::Opacity => Some(&env.opacity),
+        ScalarPropertyId::EffectParam(_, _) | ScalarPropertyId::SourceParam(_) => None,
+    }
+}
+
+fn apply_envelope_set_property(
+    doc: &mut Document,
+    target: LayerId,
+    property: &ScalarPropertyId,
+    new_value: &DocParam,
+) -> Result<(), CommandError> {
+    let live_ids = {
+        let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+        let live =
+            live_envelope_param(env, property).ok_or(CommandError::LayerNotFound(target.get()))?;
+        keyframe_ids(live)
+    };
+    let introduced: Vec<u64> = keyframe_ids(new_value)
+        .into_iter()
+        .filter(|id| !live_ids.contains(id))
+        .collect();
+    for id in &introduced {
+        if stable_id_in_use(doc, *id) {
+            return Err(CommandError::StableIdCollision { id: *id });
+        }
+    }
+    let env = find_envelope_mut(doc, target)?;
+    write_property(env, property, new_value.clone())?;
+    // なぜ: SetProperty は reservation を持たない。導入した KeyframeId まで next を進めないと validate が落ちる。
+    if let Some(max_id) = introduced.iter().copied().max() {
+        let after = max_id
+            .checked_add(1)
+            .ok_or(crate::stable_id::StableIdError::Exhausted)?;
+        if after > doc.next_stable_id.peek_next() {
+            doc.next_stable_id.commit_validated_reservation(after);
+        }
+    }
+    Ok(())
+}
+
 /// `ScalarPropertyId::EffectParam`は`Command::apply`側で`Document.effect_definitions`を
 /// 直接書き換える(D1l: paramsはUseではなくDefinitionが持つ)。ここには到達しない防御的分岐。
 fn write_property(
@@ -1744,7 +2002,37 @@ fn write_property(
                 layer: env.layer_id.get(),
             });
         }
+        ScalarPropertyId::SourceParam(name) => {
+            return Err(CommandError::SourceParamNotFound {
+                layer: env.layer_id.get(),
+                param: name.clone(),
+            });
+        }
     }
+    Ok(())
+}
+
+fn write_source_param(
+    doc: &mut Document,
+    target: LayerId,
+    name: &str,
+    value: DocParam,
+) -> Result<(), CommandError> {
+    let layer = target.get();
+    let item = find_track_item_mut(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let TrackItem::Clip(clip) = item else {
+        return Err(CommandError::TrackItemNotClip { layer });
+    };
+    let ClipSource::Plugin { params, .. } = &mut clip.source else {
+        return Err(CommandError::SourceNotPlugin { layer });
+    };
+    let Some(slot) = params.get_mut(name) else {
+        return Err(CommandError::SourceParamNotFound {
+            layer,
+            param: name.to_owned(),
+        });
+    };
+    *slot = value;
     Ok(())
 }
 
@@ -2225,6 +2513,345 @@ pub fn prepare_trim_clip_out(
         old_duration: clip.duration,
         new_duration,
     }))
+}
+
+/// 既存 TrackItem の in/out 窓を `at` で二つに割る。ソースは共有、右片だけ新 LayerId。
+pub fn prepare_split_clip(
+    doc: &mut Document,
+    target: LayerId,
+    at: RationalTime,
+) -> Result<Option<Command>, CommandError> {
+    let layer = target.get();
+    let (start, old_duration, end) = {
+        let (_, _, item) =
+            find_item_location(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+        let TrackItem::Clip(clip) = item else {
+            return Err(CommandError::TrackItemNotClip { layer });
+        };
+        let end = clip
+            .start
+            .try_add(clip.duration)
+            .map_err(|_| clip_interval_overflow(layer))?;
+        (clip.start, clip.duration, end)
+    };
+    if at <= start || at >= end {
+        return Err(CommandError::SplitNotInterior { layer });
+    }
+    let new_duration = at
+        .try_sub(start)
+        .map_err(|_| clip_interval_overflow(layer))?;
+    validate_clip_duration(doc, layer, start, new_duration)?;
+
+    let add = duplicate_track_item(doc, target).map_err(|error| match error {
+        DuplicateError::Command(command) => command,
+        DuplicateError::LayerId(error) => CommandError::LayerIdAlloc(error),
+        DuplicateError::StableId(error) => CommandError::StableIdAlloc(error),
+    })?;
+    let Command::AddTrackItem {
+        parent: right_parent,
+        index: right_index,
+        mut item,
+        layer_names,
+    } = add
+    else {
+        return Err(CommandError::TrackItemNotClip { layer });
+    };
+    let TrackItem::Clip(right) = &mut item else {
+        return Err(CommandError::TrackItemNotClip { layer });
+    };
+    let delta = at
+        .try_sub(start)
+        .map_err(|_| clip_interval_overflow(layer))?;
+    let new_source_start = right
+        .time_map
+        .try_map(delta)
+        .map_err(|_| clip_interval_overflow(layer))?;
+    right.time_map = TimeMap::try_new(
+        new_source_start,
+        right.time_map.speed_num(),
+        right.time_map.speed_den(),
+        right.time_map.overrun_mode,
+    )
+    .map_err(|_| clip_interval_overflow(layer))?;
+    right.start = at;
+    right.duration = end.try_sub(at).map_err(|_| clip_interval_overflow(layer))?;
+    Ok(Some(Command::SplitClip {
+        target,
+        old_duration,
+        new_duration,
+        right_parent,
+        right_index,
+        right_item: item,
+        right_layer_names: layer_names,
+    }))
+}
+
+/// dest の `(parent, index)` は「外したあとの挿入位置」。同じ親なら dest の現在indexでよい。
+pub fn prepare_reparent_clip(
+    doc: &Document,
+    target: LayerId,
+    new_parent: ParentLocator,
+    new_index: usize,
+    new_start: Option<RationalTime>,
+) -> Result<Option<Command>, CommandError> {
+    let layer = target.get();
+    let (old_parent, old_index, item) =
+        find_item_location(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let old_start = match item {
+        TrackItem::Clip(clip) => Some(clip.start),
+        TrackItem::Group(_) => {
+            if new_start.is_some() {
+                return Err(CommandError::TrackItemNotClip { layer });
+            }
+            None
+        }
+    };
+    let resolved_start = match (old_start, new_start) {
+        (Some(_old), Some(new)) => Some(new),
+        (Some(old), None) => Some(old),
+        (None, None) => None,
+        (None, Some(_)) => return Err(CommandError::TrackItemNotClip { layer }),
+    };
+
+    if old_parent == new_parent {
+        let len_after = find_items_vec(doc, old_parent)?.len() - 1;
+        if new_index > len_after {
+            return Err(CommandError::IndexOutOfRange {
+                index: new_index,
+                len: len_after,
+            });
+        }
+    } else {
+        let dest_len = find_items_vec(doc, new_parent)?.len();
+        if new_index > dest_len {
+            return Err(CommandError::IndexOutOfRange {
+                index: new_index,
+                len: dest_len,
+            });
+        }
+    }
+
+    if old_parent == new_parent && old_index == new_index && old_start == resolved_start {
+        return Ok(None);
+    }
+    if let (TrackItem::Clip(clip), Some(start)) = (item, resolved_start) {
+        if Some(start) != old_start {
+            validate_clip_start(doc, layer, start, clip.duration)?;
+        }
+    }
+    Ok(Some(Command::ReparentClip {
+        target,
+        old_parent,
+        old_index,
+        new_parent,
+        new_index,
+        old_start,
+        new_start: resolved_start,
+    }))
+}
+
+pub fn prepare_set_item_visible(
+    doc: &Document,
+    target: LayerId,
+    new: bool,
+) -> Result<Option<Command>, CommandError> {
+    let layer = target.get();
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    if env.visible == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetItemVisible {
+        target,
+        old: env.visible,
+        new,
+    }))
+}
+
+pub fn prepare_set_item_solo(
+    doc: &Document,
+    target: LayerId,
+    new: bool,
+) -> Result<Option<Command>, CommandError> {
+    let layer = target.get();
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    if env.solo == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetItemSolo {
+        target,
+        old: env.solo,
+        new,
+    }))
+}
+
+fn apply_split_clip(
+    doc: &mut Document,
+    target: LayerId,
+    old_duration: RationalTime,
+    new_duration: RationalTime,
+    right_parent: ParentLocator,
+    right_index: usize,
+    right_item: &TrackItem,
+    right_layer_names: &BTreeMap<LayerId, String>,
+) -> Result<(), CommandError> {
+    let layer = target.get();
+    ensure_layer_names_match_item(right_item, right_layer_names)?;
+    let len = find_items_vec(doc, right_parent)?.len();
+    if right_index > len {
+        return Err(CommandError::IndexOutOfRange {
+            index: right_index,
+            len,
+        });
+    }
+    for id in right_layer_names.keys() {
+        if !doc.layers.contains(*id) && id.get() == u64::MAX {
+            return Err(CommandError::LayerIdAlloc(crate::LayerIdError::Exhausted));
+        }
+    }
+    let start = {
+        let item = find_track_item_mut(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+        let TrackItem::Clip(clip) = item else {
+            return Err(CommandError::TrackItemNotClip { layer });
+        };
+        if clip.duration != old_duration {
+            return Err(CommandError::InvalidClipTrim { layer });
+        }
+        clip.start
+    };
+    validate_clip_duration(doc, layer, start, new_duration)?;
+    for (id, name) in right_layer_names {
+        if !doc.layers.contains(*id) {
+            doc.layers.restore(*id, name.clone())?;
+        }
+    }
+    let item = find_track_item_mut(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let TrackItem::Clip(clip) = item else {
+        return Err(CommandError::TrackItemNotClip { layer });
+    };
+    clip.duration = new_duration;
+    find_items_vec_mut(doc, right_parent)?.insert(right_index, right_item.clone());
+    Ok(())
+}
+
+fn apply_unsplit_clip(
+    doc: &mut Document,
+    target: LayerId,
+    old_duration: RationalTime,
+    new_duration: RationalTime,
+    right_parent: ParentLocator,
+    right_index: usize,
+    right_item: &TrackItem,
+    right_layer_names: &BTreeMap<LayerId, String>,
+) -> Result<(), CommandError> {
+    let layer = target.get();
+    ensure_layer_names_match_item(right_item, right_layer_names)?;
+    let items = find_items_vec(doc, right_parent)?;
+    if right_index >= items.len() {
+        return Err(CommandError::IndexOutOfRange {
+            index: right_index,
+            len: items.len(),
+        });
+    }
+    let found = envelope_of(&items[right_index]).layer_id;
+    let expected = envelope_of(right_item).layer_id;
+    if found != expected {
+        return Err(CommandError::RemoveItemMismatch {
+            expected: expected.get(),
+            found: found.get(),
+        });
+    }
+    for id in right_layer_names.keys() {
+        if !doc.layers.contains(*id) {
+            return Err(CommandError::LayerNotFound(id.get()));
+        }
+    }
+    let start = {
+        let item = find_track_item_mut(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+        let TrackItem::Clip(clip) = item else {
+            return Err(CommandError::TrackItemNotClip { layer });
+        };
+        if clip.duration != old_duration {
+            return Err(CommandError::InvalidClipTrim { layer });
+        }
+        clip.start
+    };
+    validate_clip_duration(doc, layer, start, new_duration)?;
+    find_items_vec_mut(doc, right_parent)?.remove(right_index);
+    for id in right_layer_names.keys() {
+        doc.layers.remove(*id)?;
+    }
+    let item = find_track_item_mut(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let TrackItem::Clip(clip) = item else {
+        return Err(CommandError::TrackItemNotClip { layer });
+    };
+    clip.duration = new_duration;
+    Ok(())
+}
+
+fn apply_reparent_track_item(
+    doc: &mut Document,
+    target: LayerId,
+    old_parent: ParentLocator,
+    old_index: usize,
+    new_parent: ParentLocator,
+    new_index: usize,
+    new_start: Option<RationalTime>,
+) -> Result<(), CommandError> {
+    let layer = target.get();
+    let old_items = find_items_vec(doc, old_parent)?;
+    if old_index >= old_items.len() {
+        return Err(CommandError::IndexOutOfRange {
+            index: old_index,
+            len: old_items.len(),
+        });
+    }
+    if envelope_of(&old_items[old_index]).layer_id != target {
+        return Err(CommandError::RemoveItemMismatch {
+            expected: layer,
+            found: envelope_of(&old_items[old_index]).layer_id.get(),
+        });
+    }
+    if old_parent == new_parent {
+        let len_after = old_items.len() - 1;
+        if new_index > len_after {
+            return Err(CommandError::IndexOutOfRange {
+                index: new_index,
+                len: len_after,
+            });
+        }
+    } else {
+        let dest_len = find_items_vec(doc, new_parent)?.len();
+        if new_index > dest_len {
+            return Err(CommandError::IndexOutOfRange {
+                index: new_index,
+                len: dest_len,
+            });
+        }
+    }
+    if let Some(start) = new_start {
+        let duration = match &old_items[old_index] {
+            TrackItem::Clip(clip) => clip.duration,
+            TrackItem::Group(_) => return Err(CommandError::TrackItemNotClip { layer }),
+        };
+        validate_clip_start(doc, layer, start, duration)?;
+    }
+
+    if old_parent == new_parent {
+        let items = find_items_vec_mut(doc, old_parent)?;
+        let item = items.remove(old_index);
+        items.insert(new_index, item);
+    } else {
+        let item = find_items_vec_mut(doc, old_parent)?.remove(old_index);
+        find_items_vec_mut(doc, new_parent)?.insert(new_index, item);
+    }
+    if let Some(start) = new_start {
+        let item = find_track_item_mut(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+        let TrackItem::Clip(clip) = item else {
+            return Err(CommandError::TrackItemNotClip { layer });
+        };
+        clip.start = start;
+    }
+    Ok(())
 }
 
 struct ReservationCommit {
@@ -3154,8 +3781,8 @@ fn validate_remove_position_key_payload(
         }
     }
 
-    let expected = deterministic_remove_position(old_value, target, removed_key_id)
-        .map_err(|_| mismatch())?;
+    let expected =
+        deterministic_remove_position(old_value, target, removed_key_id).map_err(|_| mismatch())?;
     if expected != *new_value {
         return Err(mismatch());
     }
@@ -3204,7 +3831,11 @@ mod set_position_key_time_tests {
         (doc, layer, k0, k1)
     }
 
-    fn key_snapshot(doc: &Document, layer: LayerId, key: KeyframeId) -> (RationalTime, DocValue, motolii_eval::Interp) {
+    fn key_snapshot(
+        doc: &Document,
+        layer: LayerId,
+        key: KeyframeId,
+    ) -> (RationalTime, DocValue, motolii_eval::Interp) {
         let env = find_envelope(doc, layer).unwrap();
         let DocParam::Keyframes(track) = &env.transform.position else {
             panic!("keyframes");
@@ -3218,14 +3849,9 @@ mod set_position_key_time_tests {
         let (mut doc, layer, k0, k1) = keyed_doc_two_keys();
         let before = serde_json::to_vec(&doc).unwrap();
         let (t1, v1, i1) = key_snapshot(&doc, layer, k1);
-        let command = prepare_set_position_key_time(
-            &doc,
-            layer,
-            k0,
-            RationalTime::from_seconds(3),
-        )
-        .unwrap()
-        .unwrap();
+        let command = prepare_set_position_key_time(&doc, layer, k0, RationalTime::from_seconds(3))
+            .unwrap()
+            .unwrap();
         command.apply(&mut doc).unwrap();
         let (t0, v0, i0) = key_snapshot(&doc, layer, k0);
         assert_eq!(t0, RationalTime::from_seconds(3));
@@ -3268,12 +3894,7 @@ mod set_position_key_time_tests {
         assert_eq!(serde_json::to_vec(&doc).unwrap(), before);
 
         assert!(matches!(
-            prepare_set_position_key_time(
-                &doc,
-                layer,
-                k0,
-                RationalTime::try_new(-1, 1).unwrap()
-            ),
+            prepare_set_position_key_time(&doc, layer, k0, RationalTime::try_new(-1, 1).unwrap()),
             Err(CommandError::PositionKeyTimeNegative { .. })
         ));
         assert_eq!(serde_json::to_vec(&doc).unwrap(), before);
@@ -3282,9 +3903,11 @@ mod set_position_key_time_tests {
     #[test]
     fn set_position_key_time_same_time_is_noop() {
         let (doc, layer, k0, _) = keyed_doc_two_keys();
-        assert!(prepare_set_position_key_time(&doc, layer, k0, RationalTime::from_seconds(2))
-            .unwrap()
-            .is_none());
+        assert!(
+            prepare_set_position_key_time(&doc, layer, k0, RationalTime::from_seconds(2))
+                .unwrap()
+                .is_none()
+        );
         let mut live = doc.clone();
         let before = serde_json::to_vec(&doc).unwrap();
         Command::SetPositionKeyTime {

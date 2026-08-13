@@ -181,6 +181,49 @@ fn physical_rect(
     })
 }
 
+// Timeline hit-test用の固定chrome寸法。描画rendererから独立して残す。
+const KEY_TOOLS_WIDTH: f64 = 202.0;
+const BAND_RAIL_WIDTH: f64 = 54.0;
+const HEADER_HEIGHT: f64 = 30.0;
+const RULER_HEIGHT: f64 = 25.0;
+
+pub(crate) fn key_tools_logical_rect(layout: NativeHostLayout) -> Option<LogicalRect> {
+    layout.timeline.map(|timeline| LogicalRect {
+        x: timeline.x,
+        y: timeline.y,
+        width: KEY_TOOLS_WIDTH.min(timeline.width),
+        height: timeline.height,
+    })
+}
+
+pub(crate) fn timeline_time_surface_logical_rect(layout: NativeHostLayout) -> Option<LogicalRect> {
+    let timeline = layout.timeline?;
+    let x_offset = (KEY_TOOLS_WIDTH + BAND_RAIL_WIDTH).min(timeline.width);
+    let y_offset = (HEADER_HEIGHT + RULER_HEIGHT).min(timeline.height);
+    let width = timeline.width - x_offset;
+    let height = timeline.height - y_offset;
+    (width > 0.0 && height > 0.0).then_some(LogicalRect {
+        x: timeline.x + x_offset,
+        y: timeline.y + y_offset,
+        width,
+        height,
+    })
+}
+
+pub(crate) fn timeline_ruler_logical_rect(layout: NativeHostLayout) -> Option<LogicalRect> {
+    let timeline = layout.timeline?;
+    let x_offset = (KEY_TOOLS_WIDTH + BAND_RAIL_WIDTH).min(timeline.width);
+    let y_offset = HEADER_HEIGHT.min(timeline.height);
+    let width = timeline.width - x_offset;
+    let height = RULER_HEIGHT.min(timeline.height - y_offset);
+    (width > 0.0 && height > 0.0).then_some(LogicalRect {
+        x: timeline.x + x_offset,
+        y: timeline.y + y_offset,
+        width,
+        height,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

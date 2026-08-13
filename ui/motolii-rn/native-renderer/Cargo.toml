@@ -19,11 +19,11 @@ motolii-gpu = { path = "../../../crates/motolii-gpu" }
 motolii-render = { path = "../../../crates/motolii-render" }
 pollster = "0.4"
 transform-gizmo = "0.9.0"
-re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949" }
-re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949" }
-re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949", default-features = false }
-re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949" }
-re_view_spatial = { git = "https://github.com/oshikaidesu/rerun", rev = "0b2be857bea452f3b7a9d9c7d74d9250bb7e9949", default-features = false }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "8c6865acb9770d7f0ea50319fc985d9c7ceac055" }
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "8c6865acb9770d7f0ea50319fc985d9c7ceac055" }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "8c6865acb9770d7f0ea50319fc985d9c7ceac055", default-features = false }
+re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "8c6865acb9770d7f0ea50319fc985d9c7ceac055" }
+re_view_spatial = { git = "https://github.com/oshikaidesu/rerun", rev = "8c6865acb9770d7f0ea50319fc985d9c7ceac055", default-features = false }
 wgpu = "29"
 
 [target.'cfg(target_os = "macos")'.dependencies]

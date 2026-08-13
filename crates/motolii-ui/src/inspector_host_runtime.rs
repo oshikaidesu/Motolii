@@ -1384,6 +1384,20 @@ mod tests {
     }
 
     #[test]
+    fn selected_snapshot_uses_document_params_not_echo_bloom() {
+        let (document, primary, _, _, _) = document_with_effects();
+        let snapshot = snapshot_json(&document, Some(primary), None).unwrap();
+        let text = snapshot.to_string();
+        assert!(!text.contains("Echo Bloom"));
+        assert!(!text.contains("demo.echo-bloom"));
+        assert_eq!(snapshot["target"]["layer_id"], primary.get());
+        assert_eq!(
+            snapshot["document"],
+            serde_json::to_value(&document).unwrap()
+        );
+    }
+
+    #[test]
     fn position_projection_admits_only_an_exact_current_vec2_key() {
         let (mut document, primary, _, _, _) = document_with_effects();
         let key_time = RationalTime::from_seconds(1);

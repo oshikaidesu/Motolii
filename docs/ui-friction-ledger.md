@@ -13,11 +13,14 @@ F1(playhead直接掴み)/F2(カーソル言語: trim=resizeLR・clip=open/closed
 
 F9(毎tick最大128KiB JSONパース → `motolii_rn_host_projection_stamp` 軽量stamp FFIで変化時のみfull読み。stampはtick冒頭1回読みで判定と保存に同値を使いTOCTOUなし、失敗時はstamp破棄で次tick必ず再読)/F10(registry mutexを「取り出し/書き戻し」2区間へ分割、graph構築とGPU submitはlock外)/F11(mount時warm-up先払い、telemetry `warmup_us=… ok=…`) — order 20+fix20で全焼却。実機実測(30秒run全体max、初回可視フレーム込み): 初回スパイクStage 489ms/Timeline 175ms → **Stage 20.7ms/Timeline 1.3ms**(50ms超ゼロ=B6充足)、warm-up自体はStage 29.6ms/Timeline 11.7ms(ok=1)。
 
+### 掃討wave C(vism source write) — **焼却済み 2026-08-13**
+
+F12(source paramが表示のみ) — `SetProperty` + `ScalarPropertyId::SourceParam` が既存 `ClipSource::Plugin.params` キーへ任意 `DocParam` を書く。RN Inspector の第一consumerは f64 Const。Color/Vec は同じ command。vism の型天井は置かない。
+
 ### 台帳残(grain/campaign従属 — 対応先が決まっているもの)
 
 | # | 段差 | 行き先 |
 |---|---|---|
-| F12 | source paramが表示のみ | SetSourceParam鏡映grain |
 | F13 | 17件目以降のlayer/65個目のkey/9個目のeffectがUIから触れない(capの沈黙は(+)で緩和済みだが操作不能は残る) | cap設計grain |
 | F14 | DOC status labelの開発者臭(`DOC r42`) | Q0 inventory掃除(Sol) |
 | F15 | keydragが隣接clip境界のkeyでtrimに先勝ちされる | 判定順の再考(小粒) |

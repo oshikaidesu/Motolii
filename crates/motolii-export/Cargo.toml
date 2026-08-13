@@ -15,6 +15,7 @@ motolii-nodes.workspace = true
 motolii-plugin.workspace = true
 motolii-render.workspace = true
 thiserror.workspace = true
+wgpu.workspace = true
 
 [dev-dependencies]
 motolii-plugins-firstparty.workspace = true

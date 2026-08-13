@@ -21,6 +21,7 @@ extern "C" bool motolii_rnapp_host_ensure(const uint8_t *path_utf8, size_t path_
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
+  MotoliiInstallProductKeymapMonitor();
   self.moduleName = @"MotoliiRn";
   // You can add your custom initial props in the dictionary below.
   // They will be passed down to the ViewController used by React Native.

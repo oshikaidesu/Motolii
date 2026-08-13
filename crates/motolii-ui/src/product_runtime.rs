@@ -35,10 +35,9 @@ use crate::inspector_host_runtime::{
     InspectorPositionGestureTerminalCause,
 };
 use crate::layout_authority::LayoutAuthority;
-use crate::native_host_layout::{LogicalRect, NativeHostLayout, PhysicalRect};
-use crate::native_timeline_renderer::{
+use crate::native_host_layout::{
     key_tools_logical_rect, timeline_ruler_logical_rect, timeline_time_surface_logical_rect,
-    NativeTimelineRenderState, NativeTimelineRenderer, NativeTimelineRendererError,
+    LogicalRect, NativeHostLayout, PhysicalRect,
 };
 use crate::product_easing_popup::{
     PopupTerminal, ProductEasingPopup, ProductEasingPopupError, ProductEasingPopupOpen,
@@ -59,10 +58,10 @@ use crate::timeline_projection::{
 use crate::timeline_tools_host_runtime::{TimelineToolsHostRuntime, TimelineToolsHostRuntimeError};
 use crate::timeline_trim_gesture::{TimelineTrimEdge, TimelineTrimGesture};
 use crate::{
-    builtin_command_registry, resolve_keymap, AsciiKey, Binding, BuiltinKeymap, CommandId,
-    CommandIdError, CommandRegistry, CommandRegistryError, DomainIntent, EffectiveTrigger, Gesture,
-    ImeGateState, InputPhase, InputRouter, InputRouterError, KeyToken, KeymapDelta,
-    KeymapResolution, Modifier, ModifierError, Modifiers, NormalizedInput,
+    builtin_command_registry, default_user_keymap_override_path, load_user_keymap_override,
+    product_builtin_keymap, resolve_keymap, CommandIdError, CommandRegistry, CommandRegistryError,
+    DomainIntent, EffectiveTrigger, ImeGateState, InputPhase, InputRouter, InputRouterError,
+    KeyToken, KeymapResolution, ModifierError, Modifiers, NormalizedInput,
     PlatformBindingConstraints, PlatformCommandModifier, RouterOutput, SafetyInterrupt,
 };
 
@@ -1136,7 +1135,7 @@ impl ProductApp {
             preparation.start_frame,
             self.current_document.composition.fps,
             Quality::DRAFT,
-            Some(&self.gpu),
+            Some(self.gpu.as_ref()),
         )
         .map_err(ProductPlaybackError::from)?;
         self.playback_lifecycle.activate(received.generation)?;
@@ -2758,6 +2757,7 @@ impl ProductApp {
         self.retire_editor_playhead("published-generation-changed");
         trace_document_publish(route, &published);
         self.reconcile_active_effect_use(&published);
+        // RN 製品の snapshot 口は rn_product_host。ここは winit seat の PublishedDocument 採用。
         self.current_document = published.snapshot;
         self.primary = published.primary;
         self.projection_generation = published.projection_generation;
@@ -2949,17 +2949,7 @@ impl ProductApp {
         else {
             return;
         };
-        match gfx.render(
-            layout,
-            window,
-            &self.current_document,
-            &self.timeline_projection,
-            NativeTimelineRenderState {
-                primary: self.primary,
-                playhead: self.editor_playhead.current,
-            },
-            place_overlay.as_ref(),
-        ) {
+        match gfx.render(layout, window, place_overlay.as_ref()) {
             Ok(()) => {}
             Err(ProductSurfaceError::Recover) => {
                 crate::ui_numeric_trace::emit(format_args!(
@@ -2979,7 +2969,6 @@ impl ProductApp {
                 event_loop.set_control_flow(ControlFlow::WaitUntil(retry_at));
             }
             Err(ProductSurfaceError::Skip) => {}
-            Err(ProductSurfaceError::NativeTimeline(error)) => self.fail(event_loop, error),
             Err(ProductSurfaceError::Fatal(reason)) => self.fail(event_loop, reason),
         }
     }
@@ -3127,10 +3116,11 @@ fn build_browser_runtime(
 fn product_command_keymap(
     registry: &CommandRegistry,
 ) -> Result<KeymapResolution, ProductRuntimeError> {
-    let base = product_builtin_keymap()?;
+    let base = product_builtin_keymap();
+    let delta = load_user_keymap_override(default_user_keymap_override_path().as_deref(), &base);
     let resolution = resolve_keymap(
         &base,
-        &KeymapDelta::default(),
+        &delta,
         &PlatformBindingConstraints::new(PlatformCommandModifier::Meta, Vec::new()),
         registry,
     );
@@ -3139,41 +3129,6 @@ fn product_command_keymap(
     } else {
         Err(ProductRuntimeError::CommandKeymap)
     }
-}
-
-fn product_builtin_keymap() -> Result<BuiltinKeymap, ProductRuntimeError> {
-    let primary = Modifiers::try_new([Modifier::Primary])?;
-    let primary_shift = Modifiers::try_new([Modifier::Primary, Modifier::Shift])?;
-    let z = KeyToken::Ascii(AsciiKey::try_new('z')?);
-    Ok(BuiltinKeymap::new(
-        2,
-        vec![
-            Binding {
-                gesture: Gesture::Keyboard {
-                    key: z,
-                    modifiers: primary,
-                    phase: InputPhase::Press,
-                },
-                command: CommandId::try_new("motolii.edit.undo")?,
-            },
-            Binding {
-                gesture: Gesture::Keyboard {
-                    key: z,
-                    modifiers: primary_shift,
-                    phase: InputPhase::Press,
-                },
-                command: CommandId::try_new("motolii.edit.redo")?,
-            },
-            Binding {
-                gesture: Gesture::Keyboard {
-                    key: KeyToken::Escape,
-                    modifiers: Modifiers::default(),
-                    phase: InputPhase::Press,
-                },
-                command: CommandId::try_new("motolii.gesture.cancel")?,
-            },
-        ],
-    ))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3542,8 +3497,6 @@ struct ProductSurface {
     config: wgpu::SurfaceConfiguration,
     preview_pipeline: wgpu::RenderPipeline,
     preview_bind_group: wgpu::BindGroup,
-    native_timeline_renderer: NativeTimelineRenderer,
-    last_timeline_scene_trace: Option<(u64, usize, usize, usize, usize)>,
     place_overlay_pipeline: wgpu::RenderPipeline,
     place_overlay_vertices: wgpu::Buffer,
     occluded: bool,
@@ -3591,13 +3544,6 @@ impl ProductSurface {
         surface.configure(&parts.device, &config);
         let (preview_pipeline, preview_bind_group) =
             create_preview_pipeline(&parts.device, format, preview.slot().view());
-        let native_timeline_renderer = NativeTimelineRenderer::new(
-            &parts.device,
-            &gpu.queue,
-            format,
-            size.width,
-            size.height,
-        )?;
         let place_overlay_pipeline = create_place_overlay_pipeline(&parts.device, format);
         let place_overlay_vertices = parts.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("motolii-product-place-overlay-vertices"),
@@ -3613,8 +3559,6 @@ impl ProductSurface {
             config,
             preview_pipeline,
             preview_bind_group,
-            native_timeline_renderer,
-            last_timeline_scene_trace: None,
             place_overlay_pipeline,
             place_overlay_vertices,
             occluded: false,
@@ -3627,8 +3571,6 @@ impl ProductSurface {
         }
         self.config.width = width;
         self.config.height = height;
-        self.native_timeline_renderer
-            .resize(&self.gpu.device, width, height);
         self.reconfigure();
     }
 
@@ -3640,46 +3582,10 @@ impl ProductSurface {
         &mut self,
         layout: NativeHostLayout,
         window: &Window,
-        document: &motolii_doc::Document,
-        timeline_projection: &ProductTimelineProjection,
-        timeline_state: NativeTimelineRenderState,
         place_overlay: Option<&RectanglePlaceOverlay>,
     ) -> Result<(), ProductSurfaceError> {
         if self.occluded || self.config.width == 0 || self.config.height == 0 {
             return Err(ProductSurfaceError::Skip);
-        }
-        let timeline_stats = self.native_timeline_renderer.prepare(
-            &self.gpu.device,
-            &self.gpu.queue,
-            layout,
-            document,
-            timeline_projection.render_projection(),
-            timeline_state,
-        )?;
-        let trace_key = (
-            layout.epoch,
-            timeline_stats.rows,
-            timeline_stats.bars,
-            timeline_stats.keys,
-            timeline_stats.text_runs,
-        );
-        if self.last_timeline_scene_trace != Some(trace_key) {
-            if let Some(timeline) = layout.timeline_physical {
-                crate::ui_numeric_trace::emit(format_args!(
-                    "kind=timeline-scene layout_epoch={} rows={} bars={} keys={} text_runs={} \
-                     physical_x={} physical_y={} physical_width={} physical_height={}",
-                    layout.epoch,
-                    timeline_stats.rows,
-                    timeline_stats.bars,
-                    timeline_stats.keys,
-                    timeline_stats.text_runs,
-                    timeline.x,
-                    timeline.y,
-                    timeline.width,
-                    timeline.height,
-                ));
-                self.last_timeline_scene_trace = Some(trace_key);
-            }
         }
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
@@ -3759,7 +3665,6 @@ impl ProductSurface {
                 );
                 pass.draw(0..6, 0..1);
             }
-            self.native_timeline_renderer.composite(&mut pass);
         }
         self.gpu.queue.submit([encoder.finish()]);
         window.pre_present_notify();
@@ -4024,8 +3929,6 @@ enum ProductSurfaceError {
     Skip,
     #[error("native product Surface failed: {0}")]
     Fatal(String),
-    #[error(transparent)]
-    NativeTimeline(#[from] NativeTimelineRendererError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -4105,8 +4008,6 @@ pub(crate) enum ProductRuntimeError {
     #[error(transparent)]
     TimelineTools(#[from] TimelineToolsHostRuntimeError),
     #[error(transparent)]
-    NativeTimeline(#[from] NativeTimelineRendererError),
-    #[error(transparent)]
     Layout(#[from] crate::layout::LayoutError),
     #[error(transparent)]
     NativeHostLayout(#[from] crate::native_host_layout::NativeHostLayoutError),
@@ -4151,6 +4052,7 @@ pub(crate) enum ProductRuntimeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{AsciiKey, CommandId, KeymapDelta, Modifier, PlatformBindingConstraints};
     use motolii_audio::{DeviceWaitLatency, PlaybackCounters};
     use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat};
     use motolii_doc::{DocKeyframe, DocKeyframeTrack};
@@ -4697,6 +4599,23 @@ mod tests {
     }
 
     #[test]
+    fn rn_product_snapshot_mouths_are_not_reimplemented_in_winit_runtime() {
+        let production = include_str!("product_runtime.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        assert!(!production.contains("WireProductSnapshot"));
+        assert!(!production.contains("motolii_rn_host_read_snapshot_json"));
+        assert!(!production.contains("motolii_rn_host_create"));
+        assert!(production.contains("self.current_document = published.snapshot;"));
+        let rn = include_str!("rn_product_host.rs");
+        assert!(rn.contains("fn motolii_rn_host_create"));
+        assert!(rn.contains("fn motolii_rn_host_read_snapshot_json"));
+        assert!(rn.contains("fn motolii_rn_host_dispatch_intent_json"));
+        assert!(rn.contains("fn accept_live_snapshot"));
+    }
+
+    #[test]
     fn inspector_position_key_wake_route_resolves_current_primary_and_playhead_before_browser_poll()
     {
         let source = include_str!("product_runtime.rs");
@@ -5083,9 +5002,15 @@ mod tests {
     #[test]
     fn product_shortcuts_resolve_to_stable_command_ids() {
         let registry = builtin_command_registry().unwrap();
-        let base = product_builtin_keymap().unwrap();
-        let keymap = product_command_keymap(&registry).unwrap();
+        let base = product_builtin_keymap();
+        let keymap = resolve_keymap(
+            &base,
+            &KeymapDelta::default(),
+            &PlatformBindingConstraints::new(PlatformCommandModifier::Meta, Vec::new()),
+            &registry,
+        );
         let z = KeyToken::Ascii(AsciiKey::try_new('z').unwrap());
+        let none = Modifiers::default();
         let undo = EffectiveTrigger::Keyboard {
             key: z,
             modifiers: Modifiers::try_new([Modifier::Meta]).unwrap(),
@@ -5098,7 +5023,7 @@ mod tests {
         };
         let cancel = EffectiveTrigger::Keyboard {
             key: KeyToken::Escape,
-            modifiers: Modifiers::default(),
+            modifiers: none.clone(),
             phase: InputPhase::Press,
         };
         let modified_cancel = EffectiveTrigger::Keyboard {
@@ -5106,8 +5031,18 @@ mod tests {
             modifiers: Modifiers::try_new([Modifier::Shift]).unwrap(),
             phase: InputPhase::Press,
         };
+        let delete = EffectiveTrigger::Keyboard {
+            key: KeyToken::Delete,
+            modifiers: none.clone(),
+            phase: InputPhase::Press,
+        };
+        let backspace = EffectiveTrigger::Keyboard {
+            key: KeyToken::Backspace,
+            modifiers: none,
+            phase: InputPhase::Press,
+        };
 
-        assert_eq!(base.version, 2);
+        assert_eq!(base.version, crate::PRODUCT_BUILTIN_KEYMAP_VERSION);
         assert_eq!(
             keymap.get(&undo).map(CommandId::as_str),
             Some("motolii.edit.undo")
@@ -5119,6 +5054,14 @@ mod tests {
         assert_eq!(
             keymap.get(&cancel).map(CommandId::as_str),
             Some("motolii.gesture.cancel")
+        );
+        assert_eq!(
+            keymap.get(&delete).map(CommandId::as_str),
+            Some("motolii.edit.delete_targeted_items")
+        );
+        assert_eq!(
+            keymap.get(&backspace).map(CommandId::as_str),
+            Some("motolii.edit.delete_targeted_items")
         );
         assert_eq!(keymap.get(&modified_cancel), None);
         assert!(keymap.diagnostics().is_empty());

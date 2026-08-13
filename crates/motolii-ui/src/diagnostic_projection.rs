@@ -274,6 +274,10 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::SetClipStart => "Set clip start",
         CommandKind::TrimClipIn => "Trim clip in",
         CommandKind::TrimClipOut => "Trim clip out",
+        CommandKind::SplitClip => "Split clip",
+        CommandKind::ReparentClip => "Reparent clip",
+        CommandKind::SetItemVisible => "Set item visible",
+        CommandKind::SetItemSolo => "Set item solo",
     }
 }
 

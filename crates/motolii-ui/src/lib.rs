@@ -23,8 +23,8 @@ mod layout_authority;
 mod layout_geometry;
 mod layout_runtime;
 mod layout_runtime_adapter;
+mod media_library;
 mod native_host_layout;
-mod native_timeline_renderer;
 mod parameter_control;
 mod product_easing_popup;
 mod product_runtime;
@@ -33,11 +33,13 @@ mod rn_product_host;
 
 #[doc(hidden)]
 pub use rn_product_host::{
-    host_create_for_test, host_destroy_for_test, host_destroy_stage_for_test,
-    host_dispatch_intent_for_test, host_read_snapshot_for_test, host_register_stage_for_test,
-    host_render_frame_for_app, AppStageFrame, HostRenderFrameResult, RnHostError,
-    RnHostReasonCode, RnHostTestIntent,
-    RnHostTestResponse, RnProductSnapshotForTest,
+    host_commit_stage_transform_for_app, host_create_for_test, host_destroy_for_test,
+    host_destroy_stage_for_test, host_dispatch_intent_for_test,
+    host_preview_stage_transform_for_app, host_read_snapshot_for_test,
+    host_register_stage_for_test, host_render_frame_for_app, AppStageFrame, AppStageGeometry,
+    AppStageGeometryLayer, AppStageTransformEdit, AppStageTransformError, AppStageTransformPreview,
+    HostRenderFrameResult, RnHostError, RnHostReasonCode, RnHostTestIntent, RnHostTestResponse,
+    RnProductSnapshotForTest,
 };
 // RN app staticlibが同一crate graph内からRust経由で呼ぶための再export。
 // extern importで参照するとarchiveから当該objectが引かれずリンクに失敗する。
@@ -63,6 +65,7 @@ mod timeline_skia_raster;
 mod timeline_tools_host_runtime;
 mod timeline_trim_gesture;
 mod ui_numeric_trace;
+mod user_keymap_prefs;
 
 pub use command_registry::{
     builtin_command_registry, CommandId, CommandIdError, CommandMetadata, CommandRegistry,
@@ -83,9 +86,15 @@ pub use interaction_state::{
     InteractionState, InteractionStateMachine, InteractionTransitionError,
 };
 pub use keymap::{
-    resolve_keymap, AsciiKey, AsciiKeyError, Binding, BuiltinKeymap, DeltaOperation,
-    EffectiveTrigger, Gesture, KeyToken, KeymapDelta, KeymapDiagnostic, KeymapResolution, Modifier,
-    ModifierError, Modifiers, PlatformBindingConstraints, PlatformCommandModifier, PointerButton,
+    product_action_host_kind, product_builtin_keymap, resolve_keymap, resolve_product_action,
+    AsciiKey, AsciiKeyError, Binding, BuiltinKeymap, DeltaOperation, EffectiveTrigger, Gesture,
+    KeyToken, KeymapDelta, KeymapDiagnostic, KeymapResolution, Modifier, ModifierError, Modifiers,
+    PlatformBindingConstraints, PlatformCommandModifier, PointerButton, ProductAction,
+    PRODUCT_BUILTIN_KEYMAP_VERSION, PRODUCT_HOST_KIND_DUPLICATE, PRODUCT_HOST_KIND_MUTE,
+    PRODUCT_HOST_KIND_SHUTTLE_FORWARD, PRODUCT_HOST_KIND_SHUTTLE_REVERSE,
+    PRODUCT_HOST_KIND_SHUTTLE_STOP, PRODUCT_HOST_KIND_SOLO, PRODUCT_HOST_KIND_TOGGLE_PLAYBACK,
+    PRODUCT_HOST_KIND_TRIM_CLIP_IN, PRODUCT_HOST_KIND_TRIM_CLIP_OUT, PRODUCT_KEYMAP_PROFILE_ID,
+    PRODUCT_UNWIRED_DUPLICATE, PRODUCT_UNWIRED_MUTE, PRODUCT_UNWIRED_SOLO, PRODUCT_UNWIRED_SPLIT,
 };
 pub use keymap_codec::{
     decode_keymap_json, encode_keymap_json, KeymapApplyError, KeymapCodecDiagnostic,
@@ -105,6 +114,9 @@ pub use static_preview::StaticPreviewError;
 pub use timeline_projection::{
     project_timeline, TimelineBar, TimelineHit, TimelineKey, TimelineMetrics, TimelineProjection,
     TimelineProjectionError, TimelineUnsupported, TimelineViewport,
+};
+pub use user_keymap_prefs::{
+    default_user_keymap_override_path, load_user_keymap_override, USER_KEYMAP_FILE_NAME,
 };
 
 /// 製品 UI クレートの識別子。依存方向 CI の許可リストと一致させる。

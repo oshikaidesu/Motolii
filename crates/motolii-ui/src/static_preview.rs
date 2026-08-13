@@ -53,6 +53,8 @@ pub enum StaticPreviewError {
     #[error(transparent)]
     Gpu(#[from] motolii_gpu::GpuRuntimeError),
     #[error(transparent)]
+    Export(#[from] motolii_export::ExportError),
+    #[error(transparent)]
     Serialize(#[from] serde_json::Error),
     #[error("failed to spawn static preview setup worker: {0}")]
     SetupThreadSpawn(#[from] std::io::Error),
@@ -221,6 +223,7 @@ fn map_worker_error(error: RenderWorkerError) -> StaticPreviewError {
         RenderWorkerError::Graph(error) => StaticPreviewError::Graph(error),
         RenderWorkerError::Render(error) => StaticPreviewError::Render(error),
         RenderWorkerError::Gpu(error) => StaticPreviewError::Gpu(error),
+        RenderWorkerError::Export(error) => StaticPreviewError::Export(error),
         RenderWorkerError::WorkerPanicked => StaticPreviewError::SetupThreadPanic,
     }
 }
