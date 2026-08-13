@@ -2,11 +2,12 @@
 
 use motolii_doc::Document;
 use motolii_ui::{
-    builtin_command_registry, decode_keymap_json, encode_keymap_json, resolve_keymap, AsciiKey,
-    Binding, BuiltinKeymap, CommandId, DeltaOperation, Gesture, InputPhase, KeyToken,
-    KeymapApplyError, KeymapCodecDiagnostic, KeymapCodecError, KeymapCodecLimits, KeymapDelta,
-    KeymapDiagnostic, LimitKind, Modifier, Modifiers, OpaqueOperationReason,
-    PlatformBindingConstraints, PlatformCommandModifier, PointerButton, KEYMAP_CODEC_VERSION,
+    builtin_command_registry, decode_keymap_json, encode_keymap_json, resolve_keymap,
+    resolve_product_action, AsciiKey, Binding, BuiltinKeymap, CommandId, DeltaOperation,
+    EffectiveTrigger, Gesture, InputPhase, KeyToken, KeymapApplyError, KeymapCodecDiagnostic,
+    KeymapCodecError, KeymapCodecLimits, KeymapDelta, KeymapDiagnostic, LimitKind, Modifier,
+    Modifiers, OpaqueOperationReason, PlatformBindingConstraints, PlatformCommandModifier,
+    PointerButton, KEYMAP_CODEC_VERSION,
 };
 
 const DOCUMENTED_JSON: &str = r#"{
@@ -497,4 +498,119 @@ fn pointer_and_toggle_wire_forms_roundtrip_without_toolkit_types() {
     let encoded = encode_keymap_json(4, &delta).unwrap();
     let decoded = decode_keymap_json(&encoded, limits()).unwrap();
     assert_eq!(decoded.to_resolver_delta(&base(4)).unwrap(), delta);
+}
+
+#[test]
+fn missing_user_keymap_file_keeps_empty_delta() {
+    let delta = motolii_ui::load_user_keymap_override(
+        Some(std::path::Path::new("/no/such/motolii-keymap.json")),
+        &base(motolii_ui::PRODUCT_BUILTIN_KEYMAP_VERSION),
+    );
+    assert!(delta.operations().is_empty());
+    assert!(motolii_ui::default_user_keymap_override_path()
+        .unwrap()
+        .ends_with(motolii_ui::USER_KEYMAP_FILE_NAME));
+}
+
+#[test]
+fn product_table_applies_existing_delta_onto_command_and_host_kind_rows() {
+    let product = motolii_ui::product_builtin_keymap();
+    let delta = KeymapDelta::new(vec![
+        DeltaOperation::Replace(Binding {
+            gesture: Gesture::Keyboard {
+                key: key('z'),
+                modifiers: modifiers(&[Modifier::Primary]),
+                phase: InputPhase::Press,
+            },
+            command: id("motolii.edit.redo"),
+        }),
+        DeltaOperation::Disable {
+            gesture: Gesture::Keyboard {
+                key: KeyToken::Space,
+                modifiers: Modifiers::default(),
+                phase: InputPhase::Press,
+            },
+        },
+        DeltaOperation::Disable {
+            gesture: Gesture::Keyboard {
+                key: key('k'),
+                modifiers: modifiers(&[Modifier::Primary]),
+                phase: InputPhase::Press,
+            },
+        },
+    ]);
+    let encoded = encode_keymap_json(product.version, &delta).unwrap();
+    let loaded = decode_keymap_json(&encoded, limits()).unwrap();
+    let applied = loaded.to_resolver_delta(&product).unwrap();
+    assert_eq!(applied.operations().len(), delta.operations().len());
+
+    let path = std::env::temp_dir().join(format!(
+        "motolii-keymap-product-delta-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::write(&path, &encoded).unwrap();
+    let from_file = motolii_ui::load_user_keymap_override(Some(&path), &product);
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(from_file, applied);
+
+    let registry = builtin_command_registry().unwrap();
+    let platform = PlatformCommandModifier::Meta;
+    let none = modifiers(&[]);
+    let meta = modifiers(&[Modifier::Meta]);
+    let space = EffectiveTrigger::Keyboard {
+        key: KeyToken::Space,
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let undo = EffectiveTrigger::Keyboard {
+        key: key('z'),
+        modifiers: meta.clone(),
+        phase: InputPhase::Press,
+    };
+    let split = EffectiveTrigger::Keyboard {
+        key: key('k'),
+        modifiers: meta,
+        phase: InputPhase::Press,
+    };
+    let shuttle_stop = EffectiveTrigger::Keyboard {
+        key: key('k'),
+        modifiers: none.clone(),
+        phase: InputPhase::Press,
+    };
+    let delete = EffectiveTrigger::Keyboard {
+        key: KeyToken::Delete,
+        modifiers: none,
+        phase: InputPhase::Press,
+    };
+
+    assert_eq!(
+        resolve_product_action(&space, &registry, &applied, platform),
+        None
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &resolve_product_action(&undo, &registry, &applied, platform).unwrap()
+        ),
+        Some("redo")
+    );
+    assert_eq!(
+        resolve_product_action(&split, &registry, &applied, platform),
+        None
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &resolve_product_action(&shuttle_stop, &registry, &applied, platform).unwrap()
+        ),
+        Some(motolii_ui::PRODUCT_HOST_KIND_SHUTTLE_STOP)
+    );
+    assert_eq!(
+        motolii_ui::product_action_host_kind(
+            &resolve_product_action(&delete, &registry, &applied, platform).unwrap()
+        ),
+        Some("delete_layer")
+    );
 }

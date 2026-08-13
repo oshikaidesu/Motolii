@@ -459,3 +459,205 @@ fn expand_modifiers(
     });
     Modifiers::try_new(expanded).map_err(|_| ())
 }
+
+/// 仮の default profile。後から同じ owner へ Premiere 等を載せる。
+pub const PRODUCT_KEYMAP_PROFILE_ID: &str = "ableton";
+pub const PRODUCT_BUILTIN_KEYMAP_VERSION: u32 = 3;
+
+/// 既存 RN host kind。CommandId ではない。
+pub const PRODUCT_HOST_KIND_TOGGLE_PLAYBACK: &str = "toggle_playback";
+pub const PRODUCT_HOST_KIND_SHUTTLE_FORWARD: &str = "shuttle_forward";
+pub const PRODUCT_HOST_KIND_SHUTTLE_REVERSE: &str = "shuttle_reverse";
+pub const PRODUCT_HOST_KIND_SHUTTLE_STOP: &str = "shuttle_stop";
+pub const PRODUCT_HOST_KIND_TRIM_CLIP_IN: &str = "trim_clip_in";
+pub const PRODUCT_HOST_KIND_TRIM_CLIP_OUT: &str = "trim_clip_out";
+pub const PRODUCT_HOST_KIND_DUPLICATE: &str = "duplicate";
+pub const PRODUCT_HOST_KIND_SOLO: &str = "solo";
+pub const PRODUCT_HOST_KIND_MUTE: &str = "mute";
+pub const PRODUCT_HOST_KIND_SPLIT: &str = "split";
+/// 互換 alias。Cmd+D / S / M / Cmd+K の正は HOST_KIND。
+pub const PRODUCT_UNWIRED_DUPLICATE: &str = PRODUCT_HOST_KIND_DUPLICATE;
+pub const PRODUCT_UNWIRED_SOLO: &str = PRODUCT_HOST_KIND_SOLO;
+pub const PRODUCT_UNWIRED_MUTE: &str = PRODUCT_HOST_KIND_MUTE;
+pub const PRODUCT_UNWIRED_SPLIT: &str = PRODUCT_HOST_KIND_SPLIT;
+
+/// キー表の解決結果。新しい command ではなく既存意味への接続。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProductAction {
+    Command(CommandId),
+    HostKind(Box<str>),
+    Unwired(Box<str>),
+}
+
+fn static_ascii(value: char) -> KeyToken {
+    KeyToken::Ascii(AsciiKey::try_new(value).expect("static ascii key"))
+}
+
+fn static_mods(modifiers: &[Modifier]) -> Modifiers {
+    Modifiers::try_new(modifiers.iter().copied()).expect("static modifiers")
+}
+
+fn press(key: KeyToken, modifiers: Modifiers) -> Gesture {
+    Gesture::Keyboard {
+        key,
+        modifiers,
+        phase: InputPhase::Press,
+    }
+}
+
+fn command_binding(gesture: Gesture, id: &str) -> Binding {
+    Binding {
+        gesture,
+        command: CommandId::try_new(id).expect("static command id"),
+    }
+}
+
+/// Ableton 仮 default。登録済み CommandId だけを builtin に載せる。
+pub fn product_builtin_keymap() -> BuiltinKeymap {
+    let primary = static_mods(&[Modifier::Primary]);
+    let primary_shift = static_mods(&[Modifier::Primary, Modifier::Shift]);
+    let none = Modifiers::default();
+    let z = static_ascii('z');
+    BuiltinKeymap::new(
+        PRODUCT_BUILTIN_KEYMAP_VERSION,
+        vec![
+            command_binding(press(z, primary), "motolii.edit.undo"),
+            command_binding(press(z, primary_shift), "motolii.edit.redo"),
+            command_binding(
+                press(KeyToken::Escape, none.clone()),
+                "motolii.gesture.cancel",
+            ),
+            command_binding(
+                press(KeyToken::Delete, none.clone()),
+                "motolii.edit.delete_targeted_items",
+            ),
+            command_binding(
+                press(KeyToken::Backspace, none),
+                "motolii.edit.delete_targeted_items",
+            ),
+        ],
+    )
+}
+
+fn host_kind_rows() -> Vec<(Gesture, &'static str)> {
+    let primary = static_mods(&[Modifier::Primary]);
+    let none = Modifiers::default();
+    vec![
+        (
+            press(KeyToken::Space, none.clone()),
+            PRODUCT_HOST_KIND_TOGGLE_PLAYBACK,
+        ),
+        (
+            press(static_ascii('l'), none.clone()),
+            PRODUCT_HOST_KIND_SHUTTLE_FORWARD,
+        ),
+        (
+            press(static_ascii('j'), none.clone()),
+            PRODUCT_HOST_KIND_SHUTTLE_REVERSE,
+        ),
+        (
+            press(static_ascii('k'), none.clone()),
+            PRODUCT_HOST_KIND_SHUTTLE_STOP,
+        ),
+        (
+            press(static_ascii('i'), none.clone()),
+            PRODUCT_HOST_KIND_TRIM_CLIP_IN,
+        ),
+        (
+            press(static_ascii('o'), none.clone()),
+            PRODUCT_HOST_KIND_TRIM_CLIP_OUT,
+        ),
+        (
+            press(static_ascii('d'), primary.clone()),
+            PRODUCT_HOST_KIND_DUPLICATE,
+        ),
+        (press(static_ascii('k'), primary), PRODUCT_HOST_KIND_SPLIT),
+        (
+            press(static_ascii('s'), none.clone()),
+            PRODUCT_HOST_KIND_SOLO,
+        ),
+        (press(static_ascii('m'), none), PRODUCT_HOST_KIND_MUTE),
+    ]
+}
+
+fn unwired_rows() -> Vec<(Gesture, &'static str)> {
+    Vec::new()
+}
+
+fn expand_rows(
+    rows: Vec<(Gesture, &'static str)>,
+    delta: &KeymapDelta,
+    platform: PlatformCommandModifier,
+) -> BTreeMap<EffectiveTrigger, &'static str> {
+    let disabled: BTreeSet<Gesture> = delta
+        .operations()
+        .iter()
+        .filter_map(|operation| match operation {
+            DeltaOperation::Disable { gesture } => Some(gesture.clone()),
+            _ => None,
+        })
+        .collect();
+    let mut map = BTreeMap::new();
+    for (gesture, action) in rows {
+        if disabled.contains(&gesture) {
+            continue;
+        }
+        if let Ok(triggers) = expand_gesture(&gesture, platform) {
+            for trigger in triggers {
+                map.insert(trigger, action);
+            }
+        }
+    }
+    map
+}
+
+/// builtin CommandId 行と既存 host kind 行を合成する。
+pub fn resolve_product_action(
+    trigger: &EffectiveTrigger,
+    registry: &CommandRegistry,
+    delta: &KeymapDelta,
+    platform: PlatformCommandModifier,
+) -> Option<ProductAction> {
+    let resolution = resolve_keymap(
+        &product_builtin_keymap(),
+        delta,
+        &PlatformBindingConstraints::new(platform, Vec::new()),
+        registry,
+    );
+    if let Some(command) = resolution.get(trigger) {
+        return Some(ProductAction::Command(command.clone()));
+    }
+    if let Some(kind) = expand_rows(host_kind_rows(), delta, platform).get(trigger) {
+        return Some(ProductAction::HostKind((*kind).into()));
+    }
+    expand_rows(unwired_rows(), delta, platform)
+        .get(trigger)
+        .map(|kind| ProductAction::Unwired((*kind).into()))
+}
+
+/// 既存 `try_dispatch_keymap` kind へ。未接続は None。
+pub fn product_action_host_kind(action: &ProductAction) -> Option<&'static str> {
+    match action {
+        ProductAction::Command(id) => match id.as_str() {
+            "motolii.edit.undo" => Some("undo"),
+            "motolii.edit.redo" => Some("redo"),
+            "motolii.edit.delete_targeted_items" => Some("delete_layer"),
+            _ => None,
+        },
+        ProductAction::HostKind(kind) => [
+            PRODUCT_HOST_KIND_TOGGLE_PLAYBACK,
+            PRODUCT_HOST_KIND_SHUTTLE_FORWARD,
+            PRODUCT_HOST_KIND_SHUTTLE_REVERSE,
+            PRODUCT_HOST_KIND_SHUTTLE_STOP,
+            PRODUCT_HOST_KIND_TRIM_CLIP_IN,
+            PRODUCT_HOST_KIND_TRIM_CLIP_OUT,
+            PRODUCT_HOST_KIND_DUPLICATE,
+            PRODUCT_HOST_KIND_SOLO,
+            PRODUCT_HOST_KIND_MUTE,
+            PRODUCT_HOST_KIND_SPLIT,
+        ]
+        .into_iter()
+        .find(|candidate| kind.as_ref() == *candidate),
+        ProductAction::Unwired(_) => None,
+    }
+}

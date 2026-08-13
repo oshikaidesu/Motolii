@@ -67,6 +67,16 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         return base;
     }
 
+    if overlay.shape_kind == 3u {
+        let center = overlay.params0.xy;
+        let radii = overlay.params0.zw;
+        let d = (px - center) / radii;
+        if dot(d, d) < 1.0 {
+            return overlay.color;
+        }
+        return base;
+    }
+
     let start = overlay.params0.xy;
     let half_width = overlay.params0.z * 0.5;
     let end = overlay.params1.xy;

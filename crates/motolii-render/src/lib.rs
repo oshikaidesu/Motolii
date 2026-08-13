@@ -13,7 +13,7 @@ use motolii_core::{
 use motolii_gpu::{upload_rgba, GpuCtx, GpuRuntimeError, PipelineCache};
 use motolii_nodes::{
     create_rgba_render_target, AffinePlaceNode, ClippingMaskMode, CompositeMode, CompositeNode,
-    MaskNode, NodeError, OverlayNode, RectOverlay,
+    MaskNode, NodeError, OverlayNode, OverlayShape, RectOverlay,
 };
 use motolii_plugin::{
     LayerSourceContext, PluginError, PluginId, PluginRegistry, RenderCtx, ResolvedParams,
@@ -86,6 +86,12 @@ pub enum RenderStep {
         input: TextureId,
         output: TextureId,
         overlay: RectOverlay,
+    },
+    /// 矩形以外の退化Path(円・楕円)を同じOverlayNodeでラスタする段。配線契約はOverlayRectと同じ。
+    Overlay {
+        input: TextureId,
+        output: TextureId,
+        shape: OverlayShape,
     },
     CompositeNormal {
         background: TextureId,
@@ -410,6 +416,16 @@ pub fn render_graph_cached(
     render_graph_cached_inner(gpu, session, timeline_time, graph, inputs, quality, true)
 }
 
+/// GPU不要: `render_graph_cached` と同じ `validate_linear_graph`（UnusedTextureWrite 含む）。
+#[doc(hidden)]
+pub fn validate_render_graph_wiring(
+    graph: &LinearRenderGraph,
+    timeline_time: RationalTime,
+    inputs: &RenderGraphInputs<'_>,
+) -> Result<(), RenderError> {
+    validate_linear_graph(graph, timeline_time, inputs).map(|_| ())
+}
+
 /// テスト専用: 中間 ping-pong バッファをそのまま返す（契約違反の負例審判用）。
 #[doc(hidden)]
 pub fn render_graph_cached_pool_alias_for_test(
@@ -472,6 +488,24 @@ fn render_graph_cached_inner(
                 let input_texture = texture_ref(&textures, desc, *input)?;
                 let output_texture = session.acquire_render_target(gpu, desc, &avoid);
                 session.overlay.set_rect(*overlay);
+                session.overlay.render(
+                    gpu,
+                    input_texture,
+                    TextureRef {
+                        texture: &output_texture,
+                        desc,
+                    },
+                )?;
+                textures[output.0] = Some(output_texture);
+            }
+            RenderStep::Overlay {
+                input,
+                output,
+                shape,
+            } => {
+                let input_texture = texture_ref(&textures, desc, *input)?;
+                let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                session.overlay.set_shape(*shape);
                 session.overlay.render(
                     gpu,
                     input_texture,
@@ -742,7 +776,8 @@ fn validate_linear_graph(
                     });
                 }
             }
-            RenderStep::OverlayRect { input, output, .. } => {
+            RenderStep::OverlayRect { input, output, .. }
+            | RenderStep::Overlay { input, output, .. } => {
                 mark_read(*input, &mut read)?;
                 validate_input(*input, &written)?;
                 match producer.get(input.0).and_then(|p| *p) {
@@ -932,7 +967,8 @@ fn texture_slot_count(graph: &LinearRenderGraph) -> Result<usize, RenderError> {
         .flat_map(|step| match step {
             RenderStep::VideoSource { output } => vec![output.0],
             RenderStep::SolidSource { output, .. } => vec![output.0],
-            RenderStep::OverlayRect { input, output, .. } => vec![input.0, output.0],
+            RenderStep::OverlayRect { input, output, .. }
+            | RenderStep::Overlay { input, output, .. } => vec![input.0, output.0],
             RenderStep::CompositeNormal {
                 background,
                 foreground,
@@ -1144,7 +1180,7 @@ fn live_textures<'a>(
 
 fn step_input_ids(step: &RenderStep) -> Vec<TextureId> {
     match step {
-        RenderStep::OverlayRect { input, .. } => vec![*input],
+        RenderStep::OverlayRect { input, .. } | RenderStep::Overlay { input, .. } => vec![*input],
         RenderStep::CompositeNormal {
             background,
             foreground,

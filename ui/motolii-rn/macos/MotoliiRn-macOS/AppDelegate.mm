@@ -4,6 +4,11 @@
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import "MotoliiGpuComponentView.h"
 
+#include <cstdint>
+#include <cstring>
+
+extern "C" bool motolii_rnapp_host_ensure(const uint8_t *path_utf8, size_t path_len);
+
 @implementation AppDelegate
 
 - (NSDictionary<NSString *, Class<RCTComponentViewProtocol>> *)thirdPartyFabricComponents
@@ -16,11 +21,31 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification
 {
+  MotoliiInstallProductKeymapMonitor();
   self.moduleName = @"MotoliiRn";
   // You can add your custom initial props in the dictionary below.
   // They will be passed down to the ViewController used by React Native.
   self.initialProps = @{};
   self.dependencyProvider = [RCTAppDependencyProvider new];
+
+  NSArray<NSURL *> *supports = [[NSFileManager defaultManager]
+      URLsForDirectory:NSApplicationSupportDirectory
+             inDomains:NSUserDomainMask];
+  NSURL *supportRoot = supports.firstObject;
+  if (supportRoot != nil) {
+    NSURL *motoliiDir = [supportRoot URLByAppendingPathComponent:@"MotoliiRn" isDirectory:YES];
+    [[NSFileManager defaultManager] createDirectoryAtURL:motoliiDir
+                             withIntermediateDirectories:YES
+                                              attributes:nil
+                                                   error:nil];
+    // ProjectSession::open は document file identity を取る(dirではない)。
+    NSURL *projectFile = [motoliiDir URLByAppendingPathComponent:@"live-project"];
+    NSString *path = projectFile.path;
+    const char *utf8 = path.UTF8String;
+    if (utf8 != NULL) {
+      (void)motolii_rnapp_host_ensure(reinterpret_cast<const uint8_t *>(utf8), strlen(utf8));
+    }
+  }
 
   return [super applicationDidFinishLaunching:notification];
 }

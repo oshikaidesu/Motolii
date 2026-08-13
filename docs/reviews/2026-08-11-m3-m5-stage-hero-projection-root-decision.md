@@ -8,6 +8,10 @@
 
 M3の主役surfaceをStageとし、固定Rerun Spatial Viewerをそのspatial runtimeとする。MotoliiはRerunを包むcreator-facing wrapperであり、作品意味をDocument／D2からRerun入力へ翻訳する。M5やRerunをDocument、Undo、selection、playheadのownerにはしないが、Rerunのscene／view／query／visualizer／camera／picking／rendererをMotolii内で作り直さない。
 
+2026-08-13の利用者裁定により、Stage Heroは配置上の主役だけでなく、製品接続の主役でもある。通常creation routeで見える意味ある接続を棚卸しした時、**過半数はaccepted Documentのidentity／time／selection／評価結果からStageへ生じる接続**でなければならない。周辺panelの独立fixtureやchromeを数へ含めて満たしたことにしない。
+
+Stage内に見えるDocument表現は、固定Rerun Spatial Viewerのstore／query／View／visualizer／camera／picking／rendererを通して全て埋める。Motolii側に残せる描画はgizmo、drag中のterminal intent、拒否理由などの一時的なcreator overlayだけであり、Documentの合成frame、shape、selection outlineをRerun後段の独自scene／quad／shape特例として描いてはならない。pixelをCPUへ戻すことも禁止する。既存のGPU textureをRerun visualizerへ渡す薄いGPU seamが不足する場合は、そのexact gapをRerun採択境界で閉じる。
+
 従来はStageの製品像が弱く、Rectangleの意味がDocument、render graph、Timeline、Inspector、probe rendererへ局所的に現れたまま、どの製品出口へ揃えるかが見えにくかった。以後は次の向きで一つずつ回収する。
 
 ```text
@@ -71,6 +75,8 @@ Draft PR #470の固定5点pathはRerun表示機構のprobeであり、このtran
 2. scene query、View、visualizer、camera、picking、drawはRerunへ任せる。
 3. 結果を`ui/motolii-rn/`の既存Stageへ載せ、確定操作だけD2へ戻す。
 
+drag previewはDocument cloneへ同じD2 `Command`を一時適用し、Preview／Exportと同じ評価graphで得た結果を同じRerun入力へ載せる。boundsや色面だけを動かす近似previewは、release後の結果と同じ意味を保証できないため採用しない。成功時は結果そのもの、拒否時は理由を同じStageで即時に見せる。
+
 自動oracleはsame `LayerId`／revision／time、stale拒否、Document write 0。外部gateはBrowser Place後に同じRN StageでRectangleが見えることとする。これが通ればartifactをcopyせず`PRODUCT_SOURCE`へ繰り上げる。Rerun subsystem自体の再比較や、固定fixtureを意味authorityへ昇格することはcompile項目にしない。
 
 このStage契約の入力が固定された後、file allowlistが交差しないTimeline product projectionとInspector bounded read projectionは並列化できる。Undo/Redoで三面から消失／復帰する`R1-E2E`は実装PRでなく、各consumer着地後の統合受入とする。
@@ -83,6 +89,8 @@ Draft PR #470の固定5点pathはRerun表示機構のprobeであり、このtran
 - Stage Heroを理由にTimeline／Inspector／D2を一PRへ束ねる。
 - #470のbool／固定座標を製品snapshot接続へ拡張し続ける。
 - `RerunStageFrame`等のshape別中間scene、direct `re_renderer` draw route、第二camera／pickingを作る。
+- Rerun描画後にDocument frameやselectionを独自wgpu quad／色meshとして合成する。
+- drag中だけboundsを動かし、Document cloneの同一評価結果を表示しない。
 - probeの`encode_rerun_stage_shapes`をDocument意味の正本にする。artifact内の一時fixtureとしては、実入力に置換されるまで保持できる。
 - Circle、overlap、Path editをRectangleのaccepted snapshot接続より先に製品発注する。
 

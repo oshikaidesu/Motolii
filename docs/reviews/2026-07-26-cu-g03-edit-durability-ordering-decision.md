@@ -1,6 +1,6 @@
 # CU-G03 edit durability / publish順序決定
 
-ステータス: **親DONE / CU-G03D 決定・DONE / CU-G03R 実装・DONE**
+ステータス: **親DONE / CU-G03D 決定・DONE / CU-G03R 実装・DONE / 2026-08-13 live再照合追補**
 対象: M3 VS-1 Rectangle配置とUndo/Redo  
 親粒: `CU-G03`  
 子粒: `CU-G03D`（本決定）、`CU-G03R`（catalog未反映committed tail recovery guard）  
@@ -173,3 +173,31 @@ stale-catalog負例を閉じた。`CU-109`は本決定を直接authorityにで�
 Undo/Redo prepared-action順序を再確認するまで自動着手せず、他のVS-1 blocking decisionと
 同じ粒へ束ねない。後続`CU-101`と`CU-102`は完了済みであり、現行の
 次PRODUCT-ASSET粒は別選定とする。
+
+## 10. 2026-08-13追補: terminal poisonをcommit-tip再照合へ置換
+
+実機で、WAL candidate tempを残したedit失敗が`DocumentEditRuntime`全体の`Poisoned`へ
+変換され、Document read、Stage描画、非書込UIまで停止することを観測した。UI source、shape、
+Vismごとのretryや第二writerは作らず、既存`ProjectSession` / WAL / `DocumentWriter`の境界を
+次のように改訂する。
+
+1. `DocumentWriter`のclone上でforward / Undo / Redoとplugin prepareを完了し、live authorityは
+   変更しない。このprepared writerのDocumentを既存WALへcommitする。
+2. WALはreplace前tip、candidate edit id、candidate commit tipをtransient receiptとして返す。
+   永続形式、Document schema、`JournalEdit` payloadは変更しない。
+3. replace前の失敗はtyped rejectとしてlive不変のまま次のwriteを許す。candidate tempの存在や
+   file sizeからcommit成否を推測しない。
+4. replace後のdir sync失敗、またはcommit後のcatalog更新失敗は、receiptのcandidate tipと
+   現在のaccepted WAL tipを同じ`ProjectSession` lock内で照合する。candidate tipが一致し、
+   既存recoveryのDocumentがprepared candidateと一致した時だけcommit済みとして扱う。
+5. commit済みならprepared writerをliveへ一度swapし、revision / history / snapshotを一度だけ
+   publishする。liveで同じCommandを再適用しない。
+6. 再照合自体が一時的に失敗した間だけwriteをblockする。Document read、Stage描画、Timeline、
+   Inspector、transportなどの非書込操作は継続し、次のsnapshot readで同じreceiptを再照合する。
+   解決後はruntimeを再生成せずwriteを再開する。Host registryの標準`Mutex` poison flagも
+   全UIの停止authorityにはせず、guardを回収して各操作のtyped validationを続ける。
+7. block中の新規writeは消費せずtyped rejectする。`accepted: true`への読み替え、同一Commandの
+   自動再送、UI／Vism別writer、第二snapshot authorityは作らない。
+
+この追補は§4のterminal poison、§8 item 4を置換する。再起動後Undo履歴、複数Commandを一つの
+durable actionにする形式、Save As、ReadOnlyNewer、close handoffは引き続き別境界である。

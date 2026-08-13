@@ -8,7 +8,10 @@ use std::path::{Path, PathBuf};
 
 use motolii_core::{CompCamera, FrameDesc, RationalTime, TimeMapError};
 use motolii_eval::{DataTracks, Value};
-use motolii_nodes::{CanonicalPoint, CanonicalSize, ClippingMaskMode, CompositeMode, RectOverlay};
+use motolii_nodes::{
+    CanonicalPoint, CanonicalSize, CircleOverlay, ClippingMaskMode, CompositeMode, EllipseOverlay,
+    OverlayShape, RectOverlay,
+};
 use motolii_plugin::{NodeDesc, PluginId, PluginRegistry, PluginRuntime, ResolvedParams};
 use motolii_render::{LinearRenderGraph, RenderStep, SolidSource, TextureId};
 
@@ -19,8 +22,7 @@ use crate::param_eval::{
     eval_color, eval_doc_param, eval_f64, eval_vec2, ParamEvalError, ResolvedLayerParams,
 };
 use crate::schema::{
-    BlendMode, Clip, ClipSource, Group, ItemEnvelope, MaskMode, StandardShape, TrackItem,
-    VectorContent, VectorRecipe,
+    BlendMode, Clip, ClipSource, Group, ItemEnvelope, MaskMode, TrackItem, VectorRecipe,
 };
 use crate::spatial_resolve::resolve_document_spaces;
 use crate::{
@@ -276,7 +278,9 @@ impl<'a> GraphBuilder<'a> {
         self.resolved_layers = resolved;
         self.world_affines = worlds;
 
-        let mut acc = self.transparent();
+        // 最初の描画層が Overlay 以外(一般 Plugin 等)のとき、先に書いた transparent が
+        // 誰にも読まれず UnusedTextureWrite になる。必要になるまで作らない。
+        let mut acc: Option<TextureId> = None;
         let mut prev_mask = None;
         let items: Vec<&TrackItem> = self
             .doc
@@ -299,15 +303,14 @@ impl<'a> GraphBuilder<'a> {
             let tex = self.build_item(item, Affine2D::IDENTITY, prev_mask, layer)?;
             let fg = self.apply_envelope_opacity(tex, env, layer)?;
             if draw {
-                if acc == self.transparent_id.unwrap() {
-                    acc = fg;
-                } else {
-                    acc = self.composite(acc, fg, env.blend);
-                }
+                acc = Some(match acc {
+                    None => fg,
+                    Some(bg) => self.composite(bg, fg, env.blend),
+                });
             }
             prev_mask = Some(fg);
         }
-        Ok(acc)
+        Ok(acc.unwrap_or_else(|| self.transparent()))
     }
 
     fn ensure_video_slot(
@@ -349,7 +352,8 @@ impl<'a> GraphBuilder<'a> {
         // 子への継承は事前解決済み world アフィンを使う(描画時の再評価で LookAt 順依存を起こさない)。
         let _ = inherited;
         let child_xform = self.world_affine(layer)?;
-        let mut acc = self.transparent();
+        // build_document と同じ: 未読 transparent を先に書かない。
+        let mut acc: Option<TextureId> = None;
         let mut prev_child = None;
         for (i, child) in group.children.iter().enumerate() {
             let child_layer = item_layer_id(child);
@@ -366,16 +370,15 @@ impl<'a> GraphBuilder<'a> {
             let tex = self.build_item(child, child_xform, prev_child, child_layer)?;
             let fg = self.apply_envelope_opacity(tex, env, child_layer)?;
             if draw {
-                if acc == self.transparent_id.unwrap() {
-                    acc = fg;
-                } else {
-                    acc = self.composite(acc, fg, env.blend);
-                }
+                acc = Some(match acc {
+                    None => fg,
+                    Some(bg) => self.composite(bg, fg, env.blend),
+                });
             }
             prev_child = Some(fg);
         }
         // F-3: 子合成 → グループ effect stack → clipping mask。変形は継承済み。
-        let mut tex = acc;
+        let mut tex = acc.unwrap_or_else(|| self.transparent());
         for effect in &group.envelope.effects {
             let def = self.resolve_effect_definition(effect, layer)?;
             if def.enabled {
@@ -511,34 +514,61 @@ impl<'a> GraphBuilder<'a> {
         recipe: &VectorRecipe,
         layer: LayerId,
     ) -> Result<TextureId, GraphError> {
-        let VectorContent::StandardShape {
-            shape: StandardShape::Rect { width, height },
-        } = &recipe.content
-        else {
-            return Err(GraphError::UnsupportedVectorSource(layer.get()));
-        };
-        if !recipe.modifiers.is_empty() {
-            return Err(GraphError::UnsupportedVectorSource(layer.get()));
+        // Vector の意味は Path。OverlayRect は軸平行矩形 Path の GPU ラスタに限る。
+        let path = crate::eval_vector_recipe_path(
+            recipe,
+            self.timeline_time,
+            self.tracks,
+            &self.resolved_layers,
+        )
+        .map_err(|err| match err {
+            crate::VectorPathError::Unsupported => GraphError::UnsupportedVectorSource(layer.get()),
+            crate::VectorPathError::Param(source) => GraphError::ParamEval {
+                layer: layer.get(),
+                source,
+            },
+        })?;
+        if let Some((center, width, height)) = crate::pathgeom::axis_aligned_rect(&path) {
+            return Ok(self.push_rect_overlay(
+                [center.x, center.y],
+                [width, height],
+                [1.0, 1.0, 1.0, 1.0],
+            ));
         }
-        let pe = |source| GraphError::ParamEval {
-            layer: layer.get(),
-            source,
+        let Some((center, width, height)) = crate::pathgeom::axis_aligned_ellipse(&path) else {
+            return Err(GraphError::UnsupportedVectorSource(layer.get()));
         };
-        let width = eval_f64(
-            width,
-            self.timeline_time,
-            self.tracks,
-            &self.resolved_layers,
-        )
-        .map_err(pe)?;
-        let height = eval_f64(
-            height,
-            self.timeline_time,
-            self.tracks,
-            &self.resolved_layers,
-        )
-        .map_err(pe)?;
-        Ok(self.push_rect_overlay([0.0, 0.0], [width, height], [1.0, 1.0, 1.0, 1.0]))
+        let center = CanonicalPoint {
+            x: center.x,
+            y: center.y,
+        };
+        // 真円は既存のCircleラスタ(等方半径)へ落とす。非一様だけEllipseを使う。
+        let shape = if width == height {
+            OverlayShape::Circle(CircleOverlay {
+                center,
+                radius: width * 0.5,
+                color: [1.0, 1.0, 1.0, 1.0],
+            })
+        } else {
+            OverlayShape::Ellipse(EllipseOverlay {
+                center,
+                radius_x: width * 0.5,
+                radius_y: height * 0.5,
+                color: [1.0, 1.0, 1.0, 1.0],
+            })
+        };
+        Ok(self.push_overlay_shape(shape))
+    }
+
+    fn push_overlay_shape(&mut self, shape: OverlayShape) -> TextureId {
+        let pre = self.transparent();
+        let out = self.alloc_id();
+        self.steps.push(RenderStep::Overlay {
+            input: pre,
+            output: out,
+            shape,
+        });
+        out
     }
 
     fn build_rect_overlay(

@@ -10,9 +10,9 @@
 //!
 //! M3E-2 / INF-2: 性能ハーネス枠は [`perf`] に集約する。
 
-pub mod m4_validation;
 pub mod clipping_mask;
 pub mod cpu_reference;
+pub mod m4_validation;
 pub mod perf;
 pub mod tol;
 pub mod ui_toolkit_dep_policy;

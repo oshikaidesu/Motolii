@@ -52,6 +52,16 @@ pub struct CircleOverlay {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EllipseOverlay {
+    pub center: CanonicalPoint,
+    /// 正準空間の半径(高さ=1.0基準)。X/Yとも同じ等方単位で、非一様楕円を表す。
+    pub radius_x: f64,
+    pub radius_y: f64,
+    /// 非線形sRGB・straight・0..1(M2E-13。合成前にpremulへ)
+    pub color: [f32; 4],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LineOverlay {
     pub start: CanonicalPoint,
     pub end: CanonicalPoint,
@@ -65,6 +75,7 @@ pub struct LineOverlay {
 pub enum OverlayShape {
     Rect(RectOverlay),
     Circle(CircleOverlay),
+    Ellipse(EllipseOverlay),
     Line(LineOverlay),
 }
 
@@ -221,6 +232,7 @@ struct OverlayUniform {
 const OVERLAY_SHAPE_RECT: u32 = 0;
 const OVERLAY_SHAPE_CIRCLE: u32 = 1;
 const OVERLAY_SHAPE_LINE: u32 = 2;
+const OVERLAY_SHAPE_ELLIPSE: u32 = 3;
 
 pub struct OverlayNode {
     pipeline: wgpu::RenderPipeline,
@@ -341,6 +353,10 @@ impl OverlayNode {
         Self::with_shape(gpu, OverlayShape::Circle(circle))
     }
 
+    pub fn with_ellipse(gpu: &GpuCtx, ellipse: EllipseOverlay) -> Self {
+        Self::with_shape(gpu, OverlayShape::Ellipse(ellipse))
+    }
+
     pub fn with_line(gpu: &GpuCtx, line: LineOverlay) -> Self {
         Self::with_shape(gpu, OverlayShape::Line(line))
     }
@@ -355,6 +371,10 @@ impl OverlayNode {
 
     pub fn set_circle(&mut self, circle: CircleOverlay) {
         self.shape = OverlayShape::Circle(circle);
+    }
+
+    pub fn set_ellipse(&mut self, ellipse: EllipseOverlay) {
+        self.shape = OverlayShape::Ellipse(ellipse);
     }
 
     pub fn set_line(&mut self, line: LineOverlay) {
@@ -480,6 +500,22 @@ fn overlay_uniform(
                 params0: [center.x as f32, center.y as f32, radius, 0.0],
                 params1: [0.0; 4],
                 color: color(circle.color),
+            }
+        }
+        OverlayShape::Ellipse(ellipse) => {
+            let center = viewport.point_to_px(ellipse.center);
+            let height_px = viewport.height_px() as f64;
+            OverlayUniform {
+                shape_kind: OVERLAY_SHAPE_ELLIPSE,
+                _pad0: [0; 3],
+                params0: [
+                    center.x as f32,
+                    center.y as f32,
+                    (ellipse.radius_x * height_px) as f32,
+                    (ellipse.radius_y * height_px) as f32,
+                ],
+                params1: [0.0; 4],
+                color: color(ellipse.color),
             }
         }
         OverlayShape::Line(line) => {
@@ -1129,7 +1165,8 @@ impl AffinePlaceNode {
         input: TextureRef<'_>,
         output: TextureRef<'_>,
     ) -> Result<(), NodeError> {
-        require_same_dimensions("affine_place", input.desc, output.desc)?;
+        // Draft 縮小の VideoSource は整数倍。UV サンプリングなので画素一致は不要。
+        require_compatible_background("affine_place", input.desc, output.desc)?;
         if input.desc.premultiplied || output.desc.premultiplied {
             require_premultiplied("affine_place", "input", input.desc)?;
             require_premultiplied("affine_place", "output", output.desc)?;

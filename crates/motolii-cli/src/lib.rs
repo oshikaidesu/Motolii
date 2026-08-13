@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use motolii_nodes::{CanonicalPoint, CanonicalSize, ParamRectOverlay, RectOverlay};
 
+mod document_debug;
 mod document_export;
 mod project;
 mod verify_b4;
@@ -11,6 +12,9 @@ pub enum Command {
     ExportOverlay(Box<ExportOverlayArgs>),
     ExportProject(ExportProjectArgs),
     ExportDocument(ExportDocumentArgs),
+    Dump(DumpDocumentArgs),
+    Apply(ApplyDocumentArgs),
+    New(NewDocumentArgs),
     VerifyB4(VerifyB4Args),
     Help,
 }
@@ -39,6 +43,23 @@ pub struct ExportDocumentArgs {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct DumpDocumentArgs {
+    pub document: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewDocumentArgs {
+    pub document: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ApplyDocumentArgs {
+    pub document: PathBuf,
+    pub command_json: String,
+    pub out: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct VerifyB4Args {
     pub project: PathBuf,
     /// 検証前に書き出しを実行する。
@@ -61,6 +82,9 @@ Commands:
   export-overlay --input <mp4> --output <mp4> [options]
   export-project --project <json> [options]
   export-document --document <json> --output <mp4> [options]
+  dump --document <json>
+  apply --document <json> --command <json-or-file> [--out <json>]
+  new --document <json>
   verify-b4 --project <json> [options]
 
 Options:
@@ -90,6 +114,9 @@ where
         }
         Some("export-project") => parse_export_project(&args[1..]).map(Command::ExportProject),
         Some("export-document") => parse_export_document(&args[1..]).map(Command::ExportDocument),
+        Some("dump") => parse_dump(&args[1..]).map(Command::Dump),
+        Some("apply") => parse_apply(&args[1..]).map(Command::Apply),
+        Some("new") => parse_new(&args[1..]).map(Command::New),
         Some("verify-b4") => parse_verify_b4(&args[1..]).map(Command::VerifyB4),
         Some(other) => Err(CliError::Usage(format!(
             "unknown command: {other}\n\n{HELP}"
@@ -157,6 +184,95 @@ fn parse_export_document(args: &[String]) -> Result<ExportDocumentArgs, CliError
         frame_count,
         qp0,
     })
+}
+
+fn parse_dump(args: &[String]) -> Result<DumpDocumentArgs, CliError> {
+    let mut document: Option<PathBuf> = None;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => return Err(CliError::Usage(HELP.to_string())),
+            "--document" => {
+                document = Some(PathBuf::from(take_one(args, &mut i, "--document")?));
+            }
+            other => {
+                return Err(CliError::Usage(format!(
+                    "unknown dump option: {other}\n\n{HELP}"
+                )))
+            }
+        }
+    }
+
+    Ok(DumpDocumentArgs {
+        document: document.ok_or_else(|| CliError::Usage("--document is required".into()))?,
+    })
+}
+
+fn parse_new(args: &[String]) -> Result<NewDocumentArgs, CliError> {
+    let mut document: Option<PathBuf> = None;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => return Err(CliError::Usage(HELP.to_string())),
+            "--document" => {
+                document = Some(PathBuf::from(take_one(args, &mut i, "--document")?));
+            }
+            other => {
+                return Err(CliError::Usage(format!(
+                    "unknown new option: {other}\n\n{HELP}"
+                )))
+            }
+        }
+    }
+
+    Ok(NewDocumentArgs {
+        document: document.ok_or_else(|| CliError::Usage("--document is required".into()))?,
+    })
+}
+
+fn parse_apply(args: &[String]) -> Result<ApplyDocumentArgs, CliError> {
+    let mut document: Option<PathBuf> = None;
+    let mut command_json: Option<String> = None;
+    let mut out: Option<PathBuf> = None;
+
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => return Err(CliError::Usage(HELP.to_string())),
+            "--document" => {
+                document = Some(PathBuf::from(take_one(args, &mut i, "--document")?));
+            }
+            "--command" => {
+                command_json = Some(take_command_json(args, &mut i)?);
+            }
+            "--out" => {
+                out = Some(PathBuf::from(take_one(args, &mut i, "--out")?));
+            }
+            other => {
+                return Err(CliError::Usage(format!(
+                    "unknown apply option: {other}\n\n{HELP}"
+                )))
+            }
+        }
+    }
+
+    Ok(ApplyDocumentArgs {
+        document: document.ok_or_else(|| CliError::Usage("--document is required".into()))?,
+        command_json: command_json
+            .ok_or_else(|| CliError::Usage("--command is required".into()))?,
+        out,
+    })
+}
+
+fn take_command_json(args: &[String], i: &mut usize) -> Result<String, CliError> {
+    let value = take_one(args, i, "--command")?;
+    if value.starts_with('{') || value.starts_with('[') {
+        Ok(value)
+    } else {
+        std::fs::read_to_string(&value).map_err(|e| CliError::Usage(e.to_string()))
+    }
 }
 
 fn parse_verify_b4(args: &[String]) -> Result<VerifyB4Args, CliError> {
@@ -320,6 +436,7 @@ where
         .map_err(|_| CliError::Usage(format!("{name} has invalid value: {raw}")))
 }
 
+pub use document_debug::{apply_document, dump_document, new_document};
 pub use document_export::export_document_file as export_document;
 pub use project::{
     build_data_tracks, load_project_v1, load_project_v1_from_str, prepare_project_export,

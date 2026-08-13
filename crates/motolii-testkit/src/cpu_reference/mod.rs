@@ -13,7 +13,7 @@ pub use composite::{premul_add_u8, premul_multiply_u8, premul_over_u8, to_u8};
 pub use graph::expected_fixed_graph;
 pub use luma::expected_luma;
 pub use overlay::{
-    expected_circle_over_pattern, expected_line_over_pattern, expected_rect_frame,
-    expected_rect_over_pattern,
+    expected_circle_over_pattern, expected_ellipse_frame, expected_ellipse_over_pattern,
+    expected_line_over_pattern, expected_rect_frame, expected_rect_over_pattern,
 };
 pub use yuv::yuv_to_rgba_reference;

@@ -46,6 +46,14 @@ use super::replay::{
     replay_from_base, snapshot_payload, JournalEdit, ReplayFailure, V3_EDIT_FORMAT_VERSION,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct JournalCommitReceipt {
+    pub project_id: Uuid,
+    pub previous_tip: Option<Uuid>,
+    pub edit_record: Uuid,
+    pub commit_tip: Uuid,
+}
+
 #[derive(Debug, Error)]
 pub enum WalError {
     #[error(transparent)]
@@ -83,6 +91,12 @@ pub enum WalError {
     CandidateDocumentMismatch,
     #[error("journal temp write changed bytes (expected={expected}, observed={observed})")]
     TempWriteMismatch { expected: usize, observed: usize },
+    #[error("journal commit state requires tip reconciliation after atomic replace: {receipt:?}")]
+    CommitStateUncertain {
+        receipt: JournalCommitReceipt,
+        #[source]
+        source: FsError,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -214,7 +228,7 @@ pub fn commit_edit(
     edit: &JournalEdit,
     candidate: &Document,
     limits: &ResourceLimits,
-) -> Result<Uuid, WalError> {
+) -> Result<JournalCommitReceipt, WalError> {
     if edit.format_version != V3_EDIT_FORMAT_VERSION {
         return Err(WalError::UnsupportedEditFormat {
             observed: edit.format_version,
@@ -252,6 +266,7 @@ pub fn commit_edit(
         });
     }
 
+    let previous_tip = original_scan.frames.last().map(|frame| frame.record_id);
     let record_id = Uuid::new_v4();
     let tip_salt = tip_generation_salt_from_frames(
         original_scan.header.generation_salt,
@@ -259,7 +274,7 @@ pub fn commit_edit(
     );
     let edit_frame = JournalFrame {
         record_id,
-        prev_id: original_scan.frames.last().map(|frame| frame.record_id),
+        prev_id: previous_tip,
         snapshot_ref: None,
         record_salt: tip_salt,
         kind: JournalRecordKind::Edit,
@@ -274,6 +289,12 @@ pub fn commit_edit(
         record_salt: tip_salt,
         kind: JournalRecordKind::Commit,
         payload: Vec::new(),
+    };
+    let receipt = JournalCommitReceipt {
+        project_id: session.header.project_id,
+        previous_tip,
+        edit_record: record_id,
+        commit_tip: commit_id,
     };
 
     let mut candidate_bytes = original;
@@ -320,15 +341,18 @@ pub fn commit_edit(
     fs.sync_file(&temp_path)?;
     fs.note_stage(DurabilityStage::JournalTempFsync)?;
     fs.rename(&temp_path, &session.journal_path)?;
-    fs.note_stage(DurabilityStage::JournalReplace)?;
-    fs.sync_dir(parent)?;
-    fs.note_stage(DurabilityStage::JournalDirFsync)?;
+    fs.note_stage(DurabilityStage::JournalReplace)
+        .map_err(|source| WalError::CommitStateUncertain { receipt, source })?;
+    fs.sync_dir(parent)
+        .map_err(|source| WalError::CommitStateUncertain { receipt, source })?;
+    fs.note_stage(DurabilityStage::JournalDirFsync)
+        .map_err(|source| WalError::CommitStateUncertain { receipt, source })?;
 
     session.header.version = V2_JOURNAL_FORMAT_VERSION;
     session.header.generation_salt = tip_salt;
     session.last_record = Some(commit_id);
     session.catalog.edits_since_snapshot = session.catalog.edits_since_snapshot.saturating_add(1);
-    Ok(record_id)
+    Ok(receipt)
 }
 
 #[derive(Debug, Clone, Default)]

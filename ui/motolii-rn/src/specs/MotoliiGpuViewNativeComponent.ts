@@ -4,6 +4,8 @@ import type {CodegenTypes, HostComponent, ViewProps} from 'react-native';
 export type StageDropEvent = Readonly<{
   x: CodegenTypes.Double;
   y: CodegenTypes.Double;
+  canonicalX: CodegenTypes.Double;
+  canonicalY: CodegenTypes.Double;
 }>;
 
 export type StageTransformEvent = Readonly<{

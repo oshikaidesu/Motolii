@@ -1,17 +1,21 @@
 //! 確定済みDocument編集をsingle writerへ直列配送するprivate runtime。
 
 use std::collections::{BTreeMap, VecDeque};
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use motolii_core::{RationalTime, RationalTimeError};
 use motolii_doc::{
-    AddPositionKeyPreparation, AddPositionKeyPrepareError, Clip, ClipSource, Command, CommandError,
-    Document, DocumentError, DocumentPluginError, DocumentWriter, DraftDocParam,
-    EffectDefinitionDraft, EffectDefinitionId, EffectId, ItemEnvelope, JournalEdit, KeyframeId,
-    LayerId, LayerIdError, ParentLocator, PreparedPluginRecipe, ProjectError, ProjectSession,
-    SaveProjectOptions, ScalarPropertyId, StandardShape, TrackItem, UndoError, VectorContent,
-    VectorRecipe,
+    build_import_clip_source, AddPositionKeyPreparation, AddPositionKeyPrepareError,
+    AddTransformParamKeyPreparation, AddTransformParamKeyPrepareError, Asset, AssetId,
+    AudioComponent, Clip, ClipSource, Command, CommandError, DocParam, DocValue, Document,
+    DocumentError, DocumentPluginError, DocumentWriter, DraftDocParam, DuplicateError,
+    EffectDefinitionDraft, EffectDefinitionId, EffectId, ImportAvMode, ItemEnvelope,
+    JournalCommitReceipt, JournalCommitReconcileOutcome, JournalEdit, KeyframeId, LayerId,
+    LayerIdError, ParentLocator, PreparedPluginRecipe, ProjectError, ProjectSession,
+    RemovePositionKeyPrepareError, SaveProjectOptions, ScalarPropertyId, SourceFingerprintV1,
+    StandardShape, TrackItem, UndoError, VectorContent, VectorRecipe,
 };
 use motolii_eval::Interp;
 use motolii_plugin::{PluginCatalog, PluginKind};
@@ -24,13 +28,44 @@ use crate::{DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 pub(crate) enum DocumentEditAction {
     Apply(DocumentCommandRequest),
     PlaceRectangle(PlaceRectangleRequest),
+    PlaceEllipse(PlaceEllipseRequest),
+    PlaceVism(PlaceVismRequest),
+    PlaceMedia(PlaceMediaRequest),
     AttachEffect(AttachEffectRequest),
     SetEffectParam(SetEffectParamRequest),
+    SetSourceParam(SetSourceParamRequest),
+    SetPositionConst(SetPositionConstRequest),
+    SetOpacity {
+        request: SetOpacityRequest,
+        time: RationalTime,
+    },
+    StageTransform(Command),
     AddPositionKey(AddPositionKeyRequest),
+    AddTransformParamKey(AddTransformParamKeyRequest),
     SetPositionKeyInterp(SetPositionKeyInterpRequest),
     SetPositionKeyValue(SetPositionKeyValueRequest),
+    SetPositionKeyTime(SetPositionKeyTimeRequest),
+    RemovePositionKey(RemovePositionKeyRequest),
     MoveClip(TimelineMoveRequest),
     TrimClip(TimelineTrimRequest),
+    SplitClip {
+        layer: LayerId,
+        at: RationalTime,
+    },
+    ReparentClip {
+        layer: LayerId,
+        dest_layer: LayerId,
+        new_start: Option<RationalTime>,
+    },
+    DuplicateLayer {
+        layer: LayerId,
+    },
+    ToggleVisible {
+        layer: LayerId,
+    },
+    ToggleSolo {
+        layer: LayerId,
+    },
     ReplacePrimary(LayerId),
     ClearPrimary,
     Undo,
@@ -42,13 +77,28 @@ impl DocumentEditAction {
         match self {
             Self::Apply(_) => DocumentEditActionKind::Apply,
             Self::PlaceRectangle(_) => DocumentEditActionKind::PlaceRectangle,
+            Self::PlaceEllipse(_) => DocumentEditActionKind::PlaceEllipse,
+            Self::PlaceVism(_) => DocumentEditActionKind::PlaceVism,
+            Self::PlaceMedia(_) => DocumentEditActionKind::PlaceMedia,
             Self::AttachEffect(_) => DocumentEditActionKind::AttachEffect,
             Self::SetEffectParam(_) => DocumentEditActionKind::SetEffectParam,
+            Self::SetSourceParam(_) => DocumentEditActionKind::SetSourceParam,
+            Self::SetPositionConst(_) => DocumentEditActionKind::SetPositionConst,
+            Self::SetOpacity { .. } => DocumentEditActionKind::SetOpacity,
+            Self::StageTransform(_) => DocumentEditActionKind::StageTransform,
             Self::AddPositionKey(_) => DocumentEditActionKind::AddPositionKey,
+            Self::AddTransformParamKey(_) => DocumentEditActionKind::AddTransformParamKey,
             Self::SetPositionKeyInterp(_) => DocumentEditActionKind::SetPositionKeyInterp,
             Self::SetPositionKeyValue(_) => DocumentEditActionKind::SetPositionKeyValue,
+            Self::SetPositionKeyTime(_) => DocumentEditActionKind::SetPositionKeyTime,
+            Self::RemovePositionKey(_) => DocumentEditActionKind::RemovePositionKey,
             Self::MoveClip(_) => DocumentEditActionKind::MoveClip,
             Self::TrimClip(_) => DocumentEditActionKind::TrimClip,
+            Self::SplitClip { .. } => DocumentEditActionKind::SplitClip,
+            Self::ReparentClip { .. } => DocumentEditActionKind::ReparentClip,
+            Self::DuplicateLayer { .. } => DocumentEditActionKind::DuplicateLayer,
+            Self::ToggleVisible { .. } => DocumentEditActionKind::ToggleVisible,
+            Self::ToggleSolo { .. } => DocumentEditActionKind::ToggleSolo,
             Self::ReplacePrimary(_) => DocumentEditActionKind::ReplacePrimary,
             Self::ClearPrimary => DocumentEditActionKind::ClearPrimary,
             Self::Undo => DocumentEditActionKind::Undo,
@@ -61,13 +111,28 @@ impl DocumentEditAction {
 pub(crate) enum DocumentEditActionKind {
     Apply,
     PlaceRectangle,
+    PlaceEllipse,
+    PlaceVism,
+    PlaceMedia,
     AttachEffect,
     SetEffectParam,
+    SetSourceParam,
+    SetPositionConst,
+    SetOpacity,
+    StageTransform,
     AddPositionKey,
+    AddTransformParamKey,
     SetPositionKeyInterp,
     SetPositionKeyValue,
+    SetPositionKeyTime,
+    RemovePositionKey,
     MoveClip,
     TrimClip,
+    SplitClip,
+    ReparentClip,
+    DuplicateLayer,
+    ToggleVisible,
+    ToggleSolo,
     ReplacePrimary,
     ClearPrimary,
     Undo,
@@ -85,6 +150,21 @@ impl DocumentEditQueue {
             .push_back(DocumentEditAction::PlaceRectangle(request));
     }
 
+    pub(crate) fn push_place_ellipse(&mut self, request: PlaceEllipseRequest) {
+        self.pending
+            .push_back(DocumentEditAction::PlaceEllipse(request));
+    }
+
+    pub(crate) fn push_place_vism(&mut self, request: PlaceVismRequest) {
+        self.pending
+            .push_back(DocumentEditAction::PlaceVism(request));
+    }
+
+    pub(crate) fn push_place_media(&mut self, request: PlaceMediaRequest) {
+        self.pending
+            .push_back(DocumentEditAction::PlaceMedia(request));
+    }
+
     pub(crate) fn push_attach_effect(&mut self, request: AttachEffectRequest) {
         self.pending
             .push_back(DocumentEditAction::AttachEffect(request));
@@ -95,9 +175,50 @@ impl DocumentEditQueue {
             .push_back(DocumentEditAction::SetEffectParam(request));
     }
 
+    pub(crate) fn push_set_source_param(&mut self, request: SetSourceParamRequest) {
+        self.pending
+            .push_back(DocumentEditAction::SetSourceParam(request));
+    }
+
+    pub(crate) fn push_set_position_const(&mut self, request: SetPositionConstRequest) {
+        self.pending
+            .push_back(DocumentEditAction::SetPositionConst(request));
+    }
+
+    pub(crate) fn push_set_opacity(&mut self, request: SetOpacityRequest) {
+        self.push_set_opacity_at(request, RationalTime::ZERO);
+    }
+
+    pub(crate) fn push_set_opacity_at(&mut self, request: SetOpacityRequest, time: RationalTime) {
+        self.pending
+            .push_back(DocumentEditAction::SetOpacity { request, time });
+    }
+
+    pub(crate) fn push_stage_transform(&mut self, command: Command) -> bool {
+        let accepted = matches!(
+            &command,
+            Command::SetProperty {
+                property: ScalarPropertyId::Position
+                    | ScalarPropertyId::Scale
+                    | ScalarPropertyId::Rotation,
+                ..
+            } | Command::SetPositionKeyValue { .. }
+        );
+        if accepted {
+            self.pending
+                .push_back(DocumentEditAction::StageTransform(command));
+        }
+        accepted
+    }
+
     pub(crate) fn push_add_position_key(&mut self, request: AddPositionKeyRequest) {
         self.pending
             .push_back(DocumentEditAction::AddPositionKey(request));
+    }
+
+    pub(crate) fn push_add_transform_param_key(&mut self, request: AddTransformParamKeyRequest) {
+        self.pending
+            .push_back(DocumentEditAction::AddTransformParamKey(request));
     }
 
     pub(crate) fn push_set_position_key_interp(&mut self, request: SetPositionKeyInterpRequest) {
@@ -110,6 +231,16 @@ impl DocumentEditQueue {
             .push_back(DocumentEditAction::SetPositionKeyValue(request));
     }
 
+    pub(crate) fn push_set_position_key_time(&mut self, request: SetPositionKeyTimeRequest) {
+        self.pending
+            .push_back(DocumentEditAction::SetPositionKeyTime(request));
+    }
+
+    pub(crate) fn push_remove_position_key(&mut self, request: RemovePositionKeyRequest) {
+        self.pending
+            .push_back(DocumentEditAction::RemovePositionKey(request));
+    }
+
     pub(crate) fn push_move_clip(&mut self, request: TimelineMoveRequest) {
         self.pending
             .push_back(DocumentEditAction::MoveClip(request));
@@ -118,6 +249,39 @@ impl DocumentEditQueue {
     pub(crate) fn push_trim_clip(&mut self, request: TimelineTrimRequest) {
         self.pending
             .push_back(DocumentEditAction::TrimClip(request));
+    }
+
+    pub(crate) fn push_split_clip(&mut self, layer: LayerId, at: RationalTime) {
+        self.pending
+            .push_back(DocumentEditAction::SplitClip { layer, at });
+    }
+
+    pub(crate) fn push_reparent_clip(
+        &mut self,
+        layer: LayerId,
+        dest_layer: LayerId,
+        new_start: Option<RationalTime>,
+    ) {
+        self.pending.push_back(DocumentEditAction::ReparentClip {
+            layer,
+            dest_layer,
+            new_start,
+        });
+    }
+
+    pub(crate) fn push_duplicate_layer(&mut self, layer: LayerId) {
+        self.pending
+            .push_back(DocumentEditAction::DuplicateLayer { layer });
+    }
+
+    pub(crate) fn push_toggle_visible(&mut self, layer: LayerId) {
+        self.pending
+            .push_back(DocumentEditAction::ToggleVisible { layer });
+    }
+
+    pub(crate) fn push_toggle_solo(&mut self, layer: LayerId) {
+        self.pending
+            .push_back(DocumentEditAction::ToggleSolo { layer });
     }
 
     pub(crate) fn push_replace_primary(&mut self, target: LayerId) {
@@ -188,6 +352,26 @@ pub(crate) struct PlaceRectangleRequest {
     pub(crate) playhead: RationalTime,
 }
 
+/// Ellipse配置はRectangleと同じdrop位置とplayheadだけで決まるため、requestを共有する。
+pub(crate) type PlaceEllipseRequest = PlaceRectangleRequest;
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PlaceVismRequest {
+    pub(crate) plugin_id: String,
+    pub(crate) position: [f64; 2],
+    pub(crate) playhead: RationalTime,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PlaceMediaRequest {
+    pub(crate) path: PathBuf,
+    pub(crate) name: String,
+    pub(crate) kind: String,
+    pub(crate) asset_type: String,
+    pub(crate) position: [f64; 2],
+    pub(crate) playhead: RationalTime,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AttachEffectRequest {
     pub(crate) plugin_id: String,
@@ -201,13 +385,40 @@ pub(crate) struct SetEffectParamRequest {
     plugin_id: String,
     effect_version: u32,
     param_id: String,
-    value: f64,
+    new_value: DocParam,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SetSourceParamRequest {
+    layer_id: LayerId,
+    param_id: String,
+    new_value: DocParam,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct AddPositionKeyRequest {
     pub(crate) target: LayerId,
     pub(crate) time: RationalTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AddTransformParamKeyRequest {
+    pub(crate) target: LayerId,
+    pub(crate) property: ScalarPropertyId,
+    pub(crate) time: RationalTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SetPositionConstRequest {
+    pub(crate) target: LayerId,
+    pub(crate) old: [f64; 2],
+    pub(crate) new: [f64; 2],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SetOpacityRequest {
+    pub(crate) target: LayerId,
+    pub(crate) value: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -223,6 +434,20 @@ pub(crate) struct SetPositionKeyValueRequest {
     pub(crate) key: KeyframeId,
     pub(crate) old: [f64; 2],
     pub(crate) new: [f64; 2],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SetPositionKeyTimeRequest {
+    pub(crate) target: LayerId,
+    pub(crate) key: KeyframeId,
+    pub(crate) old: RationalTime,
+    pub(crate) new: RationalTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RemovePositionKeyRequest {
+    pub(crate) target: LayerId,
+    pub(crate) key: KeyframeId,
 }
 
 impl SetEffectParamRequest {
@@ -242,15 +467,45 @@ impl SetEffectParamRequest {
             plugin_id,
             effect_version,
             param_id,
-            value,
+            new_value: DocParam::const_f64(value),
+        }
+    }
+
+    pub(crate) fn with_param(
+        layer_id: LayerId,
+        effect_use_id: EffectId,
+        definition_id: EffectDefinitionId,
+        plugin_id: String,
+        effect_version: u32,
+        param_id: String,
+        new_value: DocParam,
+    ) -> Self {
+        Self {
+            layer_id,
+            effect_use_id,
+            definition_id,
+            plugin_id,
+            effect_version,
+            param_id,
+            new_value,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+impl SetSourceParamRequest {
+    pub(crate) fn new(layer_id: LayerId, param_id: String, new_value: DocParam) -> Self {
+        Self {
+            layer_id,
+            param_id,
+            new_value,
+        }
+    }
+}
+
+#[derive(Debug)]
 enum RuntimeHealth {
     Healthy,
-    Poisoned,
+    WriteBlocked(Box<PendingCommit>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -265,7 +520,7 @@ struct PreparedHistoryAction {
     durable_command: Command,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 struct HistoryProjection {
     undo: Vec<Command>,
     redo: Vec<Command>,
@@ -328,8 +583,8 @@ impl HistoryProjection {
 
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RuntimeTestFailpoint {
-    PostDurableLiveApply,
+pub(crate) enum RuntimeTestFailpoint {
+    DeferAfterDurableCommit,
     Reconcile,
 }
 
@@ -337,6 +592,23 @@ enum RuntimeTestFailpoint {
 #[derive(Debug, Default)]
 struct RuntimeTestHooks {
     failpoint: Option<RuntimeTestFailpoint>,
+}
+
+#[derive(Debug)]
+struct PreparedCommit {
+    writer: DocumentWriter,
+    history_projection: HistoryProjection,
+    kind: DocumentEditActionKind,
+    primary: Option<LayerId>,
+    projection_generation: u64,
+    created_effect_use: Option<EffectId>,
+}
+
+#[derive(Debug)]
+struct PendingCommit {
+    receipt: JournalCommitReceipt,
+    prepared: PreparedCommit,
+    initial_error: Option<Box<ProjectError>>,
 }
 
 pub(crate) struct DocumentEditRuntime {
@@ -367,7 +639,7 @@ impl DocumentEditRuntime {
     }
 
     #[cfg(test)]
-    fn set_test_failpoint(&mut self, failpoint: RuntimeTestFailpoint) {
+    pub(crate) fn set_test_failpoint(&mut self, failpoint: RuntimeTestFailpoint) {
         self.test_hooks.failpoint = Some(failpoint);
     }
 
@@ -379,6 +651,31 @@ impl DocumentEditRuntime {
         self.writer.revision
     }
 
+    pub(crate) fn is_write_blocked(&self) -> bool {
+        matches!(self.health, RuntimeHealth::WriteBlocked(_))
+    }
+
+    pub(crate) fn blocked_commit_receipt(&self) -> Option<JournalCommitReceipt> {
+        match &self.health {
+            RuntimeHealth::Healthy => None,
+            RuntimeHealth::WriteBlocked(pending) => Some(pending.receipt),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_reconcile_for_test(&mut self) {
+        self.test_hooks.failpoint = Some(RuntimeTestFailpoint::Reconcile);
+    }
+
+    /// NothingToUndo/Redo の事前投影。空履歴時の沈黙入口を塞ぐ。
+    pub(crate) fn can_undo(&self) -> bool {
+        self.writer.can_undo()
+    }
+
+    pub(crate) fn can_redo(&self) -> bool {
+        self.writer.can_redo()
+    }
+
     pub(crate) fn project_root(&self) -> Option<PathBuf> {
         self.session.document_path().parent().map(PathBuf::from)
     }
@@ -387,9 +684,6 @@ impl DocumentEditRuntime {
         &self,
         request: TimelineTrimRequest,
     ) -> Result<Option<Arc<Document>>, DocumentEditRuntimeError> {
-        if self.health == RuntimeHealth::Poisoned {
-            return Err(DocumentEditRuntimeError::SessionPoisoned);
-        }
         let command = match request {
             TimelineTrimRequest::In { layer, new_start } => {
                 self.writer.prepare_trim_clip_in(layer, new_start)?
@@ -407,8 +701,28 @@ impl DocumentEditRuntime {
         Ok(Some(Arc::new(preview)))
     }
 
-    fn poison(&mut self) {
-        self.health = RuntimeHealth::Poisoned;
+    fn commit_vector_shape(
+        &mut self,
+        request: PlaceRectangleRequest,
+        shape: VectorShapeKind,
+        kind: DocumentEditActionKind,
+        current_primary: Option<LayerId>,
+        current_projection_generation: u64,
+    ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
+        let next_projection_generation = next_projection_generation(current_projection_generation)?;
+        let (command, layer_id, expected_live_next) =
+            prepare_vector_shape_command(&self.writer.snapshot(), current_primary, request, shape)?;
+        if self.writer.snapshot().layers.peek_next() != expected_live_next {
+            return Err(DocumentEditRuntimeError::LayerIdReservationChanged);
+        }
+        self.commit_command(
+            command,
+            kind,
+            current_primary,
+            Some(layer_id),
+            next_projection_generation,
+            None,
+        )
     }
 
     pub(crate) fn process_next(
@@ -417,13 +731,20 @@ impl DocumentEditRuntime {
         current_primary: Option<LayerId>,
         current_projection_generation: u64,
     ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
-        if self.health == RuntimeHealth::Poisoned {
-            return Err(DocumentEditRuntimeError::SessionPoisoned);
-        }
-
-        let Some(action) = queue.pop_front() else {
+        let Some(next_action) = queue.pending.front() else {
             return Ok(None);
         };
+        let selection_only = matches!(
+            next_action,
+            DocumentEditAction::ReplacePrimary(_) | DocumentEditAction::ClearPrimary
+        );
+        if !selection_only {
+            if let Some(receipt) = self.blocked_commit_receipt() {
+                return Err(DocumentEditRuntimeError::DocumentWriteBlocked { receipt });
+            }
+        }
+
+        let action = queue.pop_front().expect("front was checked above");
         let kind = action.kind();
         match action {
             DocumentEditAction::Undo => {
@@ -459,11 +780,29 @@ impl DocumentEditRuntime {
                     None,
                 )
             }
-            DocumentEditAction::PlaceRectangle(request) => {
+            DocumentEditAction::PlaceRectangle(request) => self.commit_vector_shape(
+                request,
+                VectorShapeKind::Rectangle,
+                kind,
+                current_primary,
+                current_projection_generation,
+            ),
+            DocumentEditAction::PlaceEllipse(request) => self.commit_vector_shape(
+                request,
+                VectorShapeKind::Ellipse,
+                kind,
+                current_primary,
+                current_projection_generation,
+            ),
+            DocumentEditAction::PlaceVism(request) => {
                 let next_projection_generation =
                     next_projection_generation(current_projection_generation)?;
-                let (command, layer_id, expected_live_next) =
-                    prepare_rectangle_command(&self.writer.snapshot(), current_primary, request)?;
+                let (command, layer_id, expected_live_next) = prepare_vism_command(
+                    &self.writer.snapshot(),
+                    &self.catalog,
+                    current_primary,
+                    request,
+                )?;
                 if self.writer.snapshot().layers.peek_next() != expected_live_next {
                     return Err(DocumentEditRuntimeError::LayerIdReservationChanged);
                 }
@@ -476,16 +815,45 @@ impl DocumentEditRuntime {
                     None,
                 )
             }
+            DocumentEditAction::PlaceMedia(request) => {
+                let next_projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                let (commands, layer_id, expected_live_next) =
+                    prepare_media_commands(&self.writer.snapshot(), current_primary, request)?;
+                if self.writer.snapshot().layers.peek_next() != expected_live_next {
+                    return Err(DocumentEditRuntimeError::LayerIdReservationChanged);
+                }
+                // ponytail: AdmitAsset と AddTrackItem は既存 1 command commit を直列する。
+                // 1 undo で clip が消え、未使用 Asset は次の undo。macro 化は journal 面が要る。
+                let last = commands.len().saturating_sub(1);
+                let mut published = None;
+                for (index, command) in commands.into_iter().enumerate() {
+                    let success_primary = if index == last {
+                        Some(layer_id)
+                    } else {
+                        current_primary
+                    };
+                    published = self.commit_command(
+                        command,
+                        kind,
+                        current_primary,
+                        success_primary,
+                        next_projection_generation,
+                        None,
+                    )?;
+                }
+                Ok(published)
+            }
             DocumentEditAction::AttachEffect(request) => {
                 let Some(target) = current_primary else {
-                    return Ok(None);
+                    return Err(DocumentEditRuntimeError::NoPrimarySelection);
                 };
                 let Some(index) = self
                     .writer
                     .find_envelope(target)
                     .map(|envelope| envelope.effects.len())
                 else {
-                    return Ok(None);
+                    return Err(DocumentEditRuntimeError::SelectionTargetNotFound(target));
                 };
                 let projection_generation =
                     next_projection_generation(current_projection_generation)?;
@@ -506,8 +874,10 @@ impl DocumentEditRuntime {
                 )
             }
             DocumentEditAction::SetEffectParam(request) => {
-                let Some(command) = prepare_set_effect_param_command(&self.writer, &request) else {
-                    return Ok(None);
+                let Some(command) =
+                    prepare_set_effect_param_command(self.writer.snapshot().as_ref(), &request)
+                else {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
                 };
                 let projection_generation =
                     next_projection_generation(current_projection_generation)?;
@@ -520,24 +890,82 @@ impl DocumentEditRuntime {
                     None,
                 )
             }
-            DocumentEditAction::AddPositionKey(request) => {
-                if current_primary != Some(request.target) {
-                    return Ok(None);
+            DocumentEditAction::SetSourceParam(request) => {
+                if current_primary.is_none() {
+                    return Err(DocumentEditRuntimeError::NoPrimarySelection);
                 }
-                let preparation = match self
-                    .writer
-                    .prepare_add_position_key(request.target, request.time)
-                {
-                    Ok(preparation) => preparation,
-                    Err(
-                        AddPositionKeyPrepareError::Command(CommandError::LayerNotFound(_))
-                        | AddPositionKeyPrepareError::PositionSourceUnsupported { .. }
-                        | AddPositionKeyPrepareError::PositionValueTypeMismatch { .. },
-                    ) => {
-                        return Ok(None);
-                    }
-                    Err(error) => return Err(error.into()),
+                let Some(command) =
+                    prepare_set_source_param_command(self.writer.snapshot().as_ref(), &request)
+                else {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
                 };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::SetPositionConst(request) => {
+                let Some(command) = prepare_set_position_const_command(&self.writer, request)
+                else {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::SetOpacity { request, time } => {
+                if current_primary.is_none() {
+                    return Err(DocumentEditRuntimeError::NoPrimarySelection);
+                }
+                let Some(command) = prepare_set_opacity_command(&self.writer, request, time) else {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::StageTransform(command) => {
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::AddPositionKey(request) => {
+                let Some(primary) = current_primary else {
+                    return Err(DocumentEditRuntimeError::NoPrimarySelection);
+                };
+                if primary != request.target {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
+                }
+                let preparation = self
+                    .writer
+                    .prepare_add_position_key(request.target, request.time)?;
                 let AddPositionKeyPreparation::Prepared { command, .. } = preparation else {
                     return Ok(None);
                 };
@@ -552,25 +980,52 @@ impl DocumentEditRuntime {
                     None,
                 )
             }
-            DocumentEditAction::SetPositionKeyInterp(request) => {
-                if current_primary != Some(request.target) {
-                    return Ok(None);
+            DocumentEditAction::AddTransformParamKey(request) => {
+                let Some(primary) = current_primary else {
+                    return Err(DocumentEditRuntimeError::NoPrimarySelection);
+                };
+                if primary != request.target {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
                 }
-                let command = match self.writer.prepare_set_position_key_interp(
+                if !matches!(
+                    request.property,
+                    ScalarPropertyId::Scale
+                        | ScalarPropertyId::Rotation
+                        | ScalarPropertyId::Opacity
+                ) {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
+                }
+                let preparation = self.writer.prepare_add_transform_param_key(
+                    request.target,
+                    request.property,
+                    request.time,
+                )?;
+                let AddTransformParamKeyPreparation::Prepared { command, .. } = preparation else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::SetPositionKeyInterp(request) => {
+                let Some(primary) = current_primary else {
+                    return Err(DocumentEditRuntimeError::NoPrimarySelection);
+                };
+                if primary != request.target {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
+                }
+                let command = self.writer.prepare_set_position_key_interp(
                     request.target,
                     request.key,
                     request.interp,
-                ) {
-                    Ok(command) => command,
-                    Err(
-                        CommandError::LayerNotFound(_)
-                        | CommandError::PositionKeyInterpSourceUnsupported { .. }
-                        | CommandError::PositionKeyInterpValueTypeMismatch { .. }
-                        | CommandError::PositionKeyNotFound { .. }
-                        | CommandError::PositionKeyInterpInvalid { .. },
-                    ) => return Ok(None),
-                    Err(error) => return Err(error.into()),
-                };
+                )?;
                 let Some(command) = command else {
                     return Ok(None);
                 };
@@ -586,25 +1041,17 @@ impl DocumentEditRuntime {
                 )
             }
             DocumentEditAction::SetPositionKeyValue(request) => {
-                if current_primary != Some(request.target) {
-                    return Ok(None);
+                let Some(primary) = current_primary else {
+                    return Err(DocumentEditRuntimeError::NoPrimarySelection);
+                };
+                if primary != request.target {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
                 }
-                let command = match self.writer.prepare_set_position_key_value(
+                let command = self.writer.prepare_set_position_key_value(
                     request.target,
                     request.key,
                     request.new,
-                ) {
-                    Ok(command) => command,
-                    Err(
-                        CommandError::LayerNotFound(_)
-                        | CommandError::PositionKeyValueSourceUnsupported { .. }
-                        | CommandError::PositionKeyValueTypeMismatch { .. }
-                        | CommandError::PositionKeyValueNotFound { .. }
-                        | CommandError::PositionKeyValueNonFinite { .. }
-                        | CommandError::PositionKeyValuePayloadMismatch { .. },
-                    ) => return Ok(None),
-                    Err(error) => return Err(error.into()),
-                };
+                )?;
                 let Some(command) = command else {
                     return Ok(None);
                 };
@@ -612,8 +1059,49 @@ impl DocumentEditRuntime {
                     return Err(DocumentEditRuntimeError::PositionKeyPrepareMismatch);
                 };
                 if *old != request.old {
-                    return Ok(None);
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
                 }
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::SetPositionKeyTime(request) => {
+                let command = self.writer.prepare_set_position_key_time(
+                    request.target,
+                    request.key,
+                    request.new,
+                )?;
+                let Some(command) = command else {
+                    return Ok(None);
+                };
+                let Command::SetPositionKeyTime { old, .. } = &command else {
+                    return Err(DocumentEditRuntimeError::PositionKeyPrepareMismatch);
+                };
+                if *old != request.old {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
+                }
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::RemovePositionKey(request) => {
+                let command = self
+                    .writer
+                    .prepare_remove_position_key(request.target, request.key)?;
                 let projection_generation =
                     next_projection_generation(current_projection_generation)?;
                 self.commit_command(
@@ -666,6 +1154,100 @@ impl DocumentEditRuntime {
                     None,
                 )
             }
+            DocumentEditAction::SplitClip { layer, at } => {
+                let Some(command) = self.writer.prepare_split_clip(layer, at)? else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::ReparentClip {
+                layer,
+                dest_layer,
+                new_start,
+            } => {
+                let snapshot = self.writer.snapshot();
+                let Some((new_parent, new_index, _)) =
+                    motolii_doc::find_item_location(snapshot.as_ref(), dest_layer)
+                else {
+                    return Err(DocumentEditRuntimeError::SelectionTargetNotFound(
+                        dest_layer,
+                    ));
+                };
+                let Some(command) = self
+                    .writer
+                    .prepare_reparent_clip(layer, new_parent, new_index, new_start)?
+                else {
+                    return Ok(None);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::DuplicateLayer { layer } => {
+                let command = self.writer.prepare_duplicate_track_item(layer)?;
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::ToggleVisible { layer } => {
+                let Some(visible) = self.writer.find_envelope(layer).map(|env| env.visible) else {
+                    return Err(DocumentEditRuntimeError::SelectionTargetNotFound(layer));
+                };
+                let Some(command) = self.writer.prepare_set_item_visible(layer, !visible)? else {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
+            DocumentEditAction::ToggleSolo { layer } => {
+                let Some(solo) = self.writer.find_envelope(layer).map(|env| env.solo) else {
+                    return Err(DocumentEditRuntimeError::SelectionTargetNotFound(layer));
+                };
+                let Some(command) = self.writer.prepare_set_item_solo(layer, !solo)? else {
+                    return Err(DocumentEditRuntimeError::PrepareRejected);
+                };
+                let projection_generation =
+                    next_projection_generation(current_projection_generation)?;
+                self.commit_command(
+                    command,
+                    kind,
+                    current_primary,
+                    current_primary,
+                    projection_generation,
+                    None,
+                )
+            }
             DocumentEditAction::ReplacePrimary(target) => {
                 if self.writer.find_envelope(target).is_none() {
                     return Err(DocumentEditRuntimeError::SelectionTargetNotFound(target));
@@ -675,6 +1257,7 @@ impl DocumentEditRuntime {
                 }
                 let projection_generation =
                     next_projection_generation(current_projection_generation)?;
+                self.sync_pending_selection(Some(target), projection_generation);
                 Ok(Some(PublishedDocument {
                     kind,
                     revision: self.writer.revision,
@@ -690,6 +1273,7 @@ impl DocumentEditRuntime {
                 }
                 let projection_generation =
                     next_projection_generation(current_projection_generation)?;
+                self.sync_pending_selection(None, projection_generation);
                 Ok(Some(PublishedDocument {
                     kind,
                     revision: self.writer.revision,
@@ -702,6 +1286,15 @@ impl DocumentEditRuntime {
         }
     }
 
+    fn sync_pending_selection(&mut self, primary: Option<LayerId>, projection_generation: u64) {
+        let RuntimeHealth::WriteBlocked(pending) = &mut self.health else {
+            return;
+        };
+        pending.prepared.primary =
+            primary.filter(|layer| pending.prepared.writer.find_envelope(*layer).is_some());
+        pending.prepared.projection_generation = projection_generation;
+    }
+
     fn commit_command(
         &mut self,
         command: Command,
@@ -711,42 +1304,26 @@ impl DocumentEditRuntime {
         projection_generation: u64,
         created_effect_use: Option<EffectId>,
     ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
-        self.commit_durable(&command)?;
-
-        #[cfg(test)]
-        if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::PostDurableLiveApply) {
-            self.poison();
-            return Err(DocumentEditRuntimeError::PostDurableLiveApply(
-                PostDurableLiveApplyError::InjectedInvariant,
-            ));
-        }
-
-        if let Err(error) = self.writer.apply_macro(vec![command.clone()]) {
-            self.poison();
-            return Err(DocumentEditRuntimeError::PostDurableLiveApply(
-                PostDurableLiveApplyError::Command(error),
-            ));
-        }
-        self.history_projection.record_forward(command);
-
-        #[cfg(test)]
-        if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::Reconcile) {
-            self.poison();
-            return Err(DocumentEditRuntimeError::ReconcileFailed);
-        }
-
-        let snapshot = self.writer.snapshot();
+        let mut validated_candidate = (*self.writer.snapshot()).clone();
+        command.apply(&mut validated_candidate)?;
+        validated_candidate.validate()?;
+        validated_candidate.prepare_plugins(&self.catalog)?;
+        let mut writer = self.writer.clone();
+        writer.apply_macro(vec![command.clone()])?;
+        let mut history_projection = self.history_projection.clone();
+        history_projection.record_forward(command.clone());
         let primary = success_primary
             .or(current_primary)
-            .filter(|id| self.writer.find_envelope(*id).is_some());
-        Ok(Some(PublishedDocument {
+            .filter(|id| writer.find_envelope(*id).is_some());
+        let prepared = PreparedCommit {
+            writer,
+            history_projection,
             kind,
-            revision: self.writer.revision,
-            snapshot,
             primary,
             projection_generation,
             created_effect_use,
-        }))
+        };
+        self.commit_prepared(command, prepared)
     }
 
     fn commit_history_action(
@@ -756,41 +1333,14 @@ impl DocumentEditRuntime {
         current_primary: Option<LayerId>,
         projection_generation: u64,
     ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
-        self.commit_durable(&action.durable_command)?;
-
-        #[cfg(test)]
-        if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::PostDurableLiveApply) {
-            self.poison();
-            return Err(DocumentEditRuntimeError::PostDurableLiveApply(
-                PostDurableLiveApplyError::InjectedInvariant,
-            ));
+        let mut writer = self.writer.clone();
+        match action.direction {
+            HistoryDirection::Undo => writer.undo()?,
+            HistoryDirection::Redo => writer.redo()?,
         }
-
-        let live_result = match action.direction {
-            HistoryDirection::Undo => self.writer.undo(),
-            HistoryDirection::Redo => self.writer.redo(),
-        };
-        if let Err(error) = live_result {
-            self.poison();
-            return Err(DocumentEditRuntimeError::PostDurableLiveApply(
-                PostDurableLiveApplyError::History(error),
-            ));
-        }
-        if self.history_projection.accept(action.direction).is_err() {
-            self.poison();
-            return Err(DocumentEditRuntimeError::PostDurableLiveApply(
-                PostDurableLiveApplyError::HistoryProjection,
-            ));
-        }
-
-        #[cfg(test)]
-        if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::Reconcile) {
-            self.poison();
-            return Err(DocumentEditRuntimeError::ReconcileFailed);
-        }
-
-        let snapshot = self.writer.snapshot();
-        let primary = current_primary.filter(|id| self.writer.find_envelope(*id).is_some());
+        let mut history_projection = self.history_projection.clone();
+        history_projection.accept(action.direction)?;
+        let primary = current_primary.filter(|id| writer.find_envelope(*id).is_some());
         let created_effect_use = if let HistoryDirection::Redo = action.direction {
             match &action.durable_command {
                 Command::CreateEffect { target, use_, .. }
@@ -803,33 +1353,121 @@ impl DocumentEditRuntime {
         } else {
             None
         };
-        Ok(Some(PublishedDocument {
+        let durable_command = action.durable_command;
+        let prepared = PreparedCommit {
+            writer,
+            history_projection,
             kind,
-            revision: self.writer.revision,
-            snapshot,
             primary,
             projection_generation,
             created_effect_use,
-        }))
+        };
+        self.commit_prepared(durable_command, prepared)
     }
 
-    fn commit_durable(&mut self, command: &Command) -> Result<(), DocumentEditRuntimeError> {
-        let mut candidate: Document = (*self.writer.snapshot()).clone();
-        command.apply(&mut candidate)?;
+    fn commit_prepared(
+        &mut self,
+        command: Command,
+        prepared: PreparedCommit,
+    ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
+        let candidate = prepared.writer.snapshot();
         candidate.validate()?;
         candidate.prepare_plugins(&self.catalog)?;
-
         let options = SaveProjectOptions {
             limits: *self.session.limits(),
-            journal_edit: Some(JournalEdit::new(command.clone())),
+            journal_edit: Some(JournalEdit::new(command)),
             checkpoint: false,
             ..SaveProjectOptions::default()
         };
-        if let Err(error) = self.session.save_with_journal(&candidate, &options) {
-            self.poison();
-            return Err(DocumentEditRuntimeError::JournalCommit(error));
+        match self
+            .session
+            .save_with_journal_outcome(candidate.as_ref(), &options)
+        {
+            Ok(Some(_receipt)) => {
+                #[cfg(test)]
+                if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::DeferAfterDurableCommit)
+                {
+                    self.test_hooks.failpoint = None;
+                    self.health = RuntimeHealth::WriteBlocked(Box::new(PendingCommit {
+                        receipt: _receipt,
+                        prepared,
+                        initial_error: None,
+                    }));
+                    return Err(DocumentEditRuntimeError::DocumentWriteBlocked {
+                        receipt: _receipt,
+                    });
+                }
+                Ok(Some(self.accept_prepared(prepared)))
+            }
+            Ok(None) => Err(DocumentEditRuntimeError::MissingJournalCommitReceipt),
+            Err(error) => {
+                let Some(receipt) = error.uncertain_commit_receipt() else {
+                    return Err(DocumentEditRuntimeError::JournalCommit(error));
+                };
+                self.health = RuntimeHealth::WriteBlocked(Box::new(PendingCommit {
+                    receipt,
+                    prepared,
+                    initial_error: Some(error),
+                }));
+                self.reconcile_pending_commit()
+            }
         }
-        Ok(())
+    }
+
+    fn accept_prepared(&mut self, prepared: PreparedCommit) -> PublishedDocument {
+        self.writer = prepared.writer;
+        self.history_projection = prepared.history_projection;
+        PublishedDocument {
+            kind: prepared.kind,
+            revision: self.writer.revision,
+            snapshot: self.writer.snapshot(),
+            primary: prepared.primary,
+            projection_generation: prepared.projection_generation,
+            created_effect_use: prepared.created_effect_use,
+        }
+    }
+
+    pub(crate) fn reconcile_pending_commit(
+        &mut self,
+    ) -> Result<Option<PublishedDocument>, DocumentEditRuntimeError> {
+        let RuntimeHealth::WriteBlocked(pending) =
+            std::mem::replace(&mut self.health, RuntimeHealth::Healthy)
+        else {
+            return Ok(None);
+        };
+        let mut pending = *pending;
+
+        #[cfg(test)]
+        if self.test_hooks.failpoint == Some(RuntimeTestFailpoint::Reconcile) {
+            self.test_hooks.failpoint = None;
+            let receipt = pending.receipt;
+            self.health = RuntimeHealth::WriteBlocked(Box::new(pending));
+            return Err(DocumentEditRuntimeError::DocumentWriteBlocked { receipt });
+        }
+
+        match self.session.reconcile_journal_commit(pending.receipt) {
+            Ok(JournalCommitReconcileOutcome::NotCommitted) => {
+                let Some(error) = pending.initial_error.take() else {
+                    return Err(DocumentEditRuntimeError::CommitReceiptNotObserved {
+                        receipt: pending.receipt,
+                    });
+                };
+                Err(DocumentEditRuntimeError::JournalCommit(error))
+            }
+            Ok(JournalCommitReconcileOutcome::Committed(recovered)) => {
+                if recovered.document != *pending.prepared.writer.snapshot() {
+                    let receipt = pending.receipt;
+                    self.health = RuntimeHealth::WriteBlocked(Box::new(pending));
+                    return Err(DocumentEditRuntimeError::ReconciledDocumentMismatch { receipt });
+                }
+                Ok(Some(self.accept_prepared(pending.prepared)))
+            }
+            Err(source) => {
+                let receipt = pending.receipt;
+                self.health = RuntimeHealth::WriteBlocked(Box::new(pending));
+                Err(DocumentEditRuntimeError::JournalReconcile { receipt, source })
+            }
+        }
     }
 
     #[cfg(test)]
@@ -841,11 +1479,6 @@ impl DocumentEditRuntime {
     fn revision(&self) -> u64 {
         self.writer.revision
     }
-
-    #[cfg(test)]
-    fn is_poisoned(&self) -> bool {
-        self.health == RuntimeHealth::Poisoned
-    }
 }
 
 fn next_projection_generation(current: u64) -> Result<u64, DocumentEditRuntimeError> {
@@ -854,46 +1487,168 @@ fn next_projection_generation(current: u64) -> Result<u64, DocumentEditRuntimeEr
         .ok_or(DocumentEditRuntimeError::ProjectionGenerationExhausted)
 }
 
-fn prepare_set_effect_param_command(
-    writer: &DocumentWriter,
+pub(crate) fn prepare_set_effect_param_command(
+    document: &Document,
     request: &SetEffectParamRequest,
 ) -> Option<Command> {
-    if request.plugin_id != "core.filter.opacity"
-        || request.effect_version != 1
-        || request.param_id != "amount"
-        || !request.value.is_finite()
-        || !(0.0..=1.0).contains(&request.value)
-    {
+    if !doc_param_numeric_finite(&request.new_value) {
         return None;
     }
-    let snapshot = writer.snapshot();
-    let effect_use = snapshot.find_effect_use(request.layer_id, request.effect_use_id)?;
+    let effect_use = document.find_effect_use(request.layer_id, request.effect_use_id)?;
     if effect_use.definition_id != request.definition_id {
         return None;
     }
-    let definition = snapshot.effect_definition(effect_use.definition_id)?;
+    let definition = document.effect_definition(effect_use.definition_id)?;
     if definition.plugin_id != request.plugin_id
         || definition.effect_version != request.effect_version
-        || definition.params.len() != 1
     {
         return None;
     }
-    let old_value = definition.params.get("amount")?;
-    let motolii_doc::DocParam::Const(motolii_doc::DocValue::F64(old_f64)) = old_value else {
-        return None;
-    };
-    if !old_f64.is_finite() || !(0.0..=1.0).contains(old_f64) {
+    let old_value = definition.params.get(&request.param_id)?;
+    if !effect_param_types_match(old_value, &request.new_value) {
         return None;
     }
-    if *old_f64 == request.value {
+    if old_value == &request.new_value {
         return None;
     }
     Some(Command::SetProperty {
         target: request.layer_id,
         property: ScalarPropertyId::EffectParam(request.effect_use_id, request.param_id.clone()),
         old_value: old_value.clone(),
-        new_value: motolii_doc::DocParam::const_f64(request.value),
+        new_value: request.new_value.clone(),
     })
+}
+
+fn effect_param_types_match(old: &DocParam, new: &DocParam) -> bool {
+    matches!(
+        (old, new),
+        (
+            DocParam::Const(DocValue::F64(_)),
+            DocParam::Const(DocValue::F64(_))
+        ) | (
+            DocParam::Const(DocValue::Color(_)),
+            DocParam::Const(DocValue::Color(_))
+        )
+    )
+}
+
+pub(crate) fn prepare_set_source_param_command(
+    document: &Document,
+    request: &SetSourceParamRequest,
+) -> Option<Command> {
+    if request.param_id.is_empty() || !doc_param_numeric_finite(&request.new_value) {
+        return None;
+    }
+    let old_value = clip_plugin_param(document, request.layer_id, &request.param_id)?;
+    if old_value == request.new_value {
+        return None;
+    }
+    Some(Command::SetProperty {
+        target: request.layer_id,
+        property: ScalarPropertyId::SourceParam(request.param_id.clone()),
+        old_value,
+        new_value: request.new_value.clone(),
+    })
+}
+
+fn clip_plugin_param(document: &Document, layer: LayerId, param_id: &str) -> Option<DocParam> {
+    fn walk<'a>(items: &'a [TrackItem], layer: LayerId, param_id: &str) -> Option<DocParam> {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == layer => {
+                    let ClipSource::Plugin { params, .. } = &clip.source else {
+                        return None;
+                    };
+                    return params.get(param_id).cloned();
+                }
+                TrackItem::Group(group) => {
+                    if let Some(found) = walk(&group.children, layer, param_id) {
+                        return Some(found);
+                    }
+                }
+                TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+    document
+        .tracks
+        .iter()
+        .find_map(|track| walk(&track.items, layer, param_id))
+}
+
+fn doc_param_numeric_finite(param: &DocParam) -> bool {
+    match param {
+        DocParam::Const(DocValue::F64(value)) => value.is_finite(),
+        DocParam::Const(DocValue::Vec2(value)) => {
+            value.iter().all(|component| component.is_finite())
+        }
+        DocParam::Const(DocValue::Vec3(value)) => {
+            value.iter().all(|component| component.is_finite())
+        }
+        DocParam::Const(DocValue::Color(value)) => {
+            value.iter().all(|component| component.is_finite())
+        }
+        _ => true,
+    }
+}
+
+fn prepare_set_position_const_command(
+    writer: &DocumentWriter,
+    request: SetPositionConstRequest,
+) -> Option<Command> {
+    if !request.new.iter().all(|value| value.is_finite()) {
+        return None;
+    }
+    let envelope = writer.find_envelope(request.target)?;
+    let DocParam::Const(DocValue::Vec2(old)) = &envelope.transform.position else {
+        return None;
+    };
+    if *old != request.old || request.old == request.new {
+        return None;
+    }
+    Some(Command::SetProperty {
+        target: request.target,
+        property: ScalarPropertyId::Position,
+        old_value: DocParam::const_vec2(request.old),
+        new_value: DocParam::const_vec2(request.new),
+    })
+}
+
+fn prepare_set_opacity_command(
+    writer: &DocumentWriter,
+    request: SetOpacityRequest,
+    time: RationalTime,
+) -> Option<Command> {
+    if !request.value.is_finite() || !(0.0..=1.0).contains(&request.value) {
+        return None;
+    }
+    let envelope = writer.find_envelope(request.target)?;
+    match &envelope.opacity {
+        DocParam::Const(DocValue::F64(old)) => {
+            if !old.is_finite() || !(0.0..=1.0).contains(old) || *old == request.value {
+                return None;
+            }
+            Some(Command::SetProperty {
+                target: request.target,
+                property: ScalarPropertyId::Opacity,
+                old_value: DocParam::const_f64(*old),
+                new_value: DocParam::const_f64(request.value),
+            })
+        }
+        DocParam::Keyframes(track) => {
+            let key = track.keys().iter().find(|key| key.t == time)?;
+            writer
+                .prepare_set_transform_param_key_value(
+                    request.target,
+                    ScalarPropertyId::Opacity,
+                    key.id,
+                    DocValue::F64(request.value),
+                )
+                .ok()?
+        }
+        _ => None,
+    }
 }
 
 fn prepare_attach_effect_command(
@@ -945,10 +1700,36 @@ fn attach_effect_draft(
     })
 }
 
-fn prepare_rectangle_command(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VectorShapeKind {
+    Rectangle,
+    Ellipse,
+}
+
+impl VectorShapeKind {
+    /// 既定サイズは正準座標(高さ1.0)基準の0.2角。Rectangleと同値にして初期見えを揃える。
+    fn standard_shape(self) -> StandardShape {
+        let width = DocParam::const_f64(0.2);
+        let height = DocParam::const_f64(0.2);
+        match self {
+            Self::Rectangle => StandardShape::Rect { width, height },
+            Self::Ellipse => StandardShape::Ellipse { width, height },
+        }
+    }
+
+    const fn layer_name(self) -> &'static str {
+        match self {
+            Self::Rectangle => "Rectangle",
+            Self::Ellipse => "Ellipse",
+        }
+    }
+}
+
+fn prepare_vector_shape_command(
     snapshot: &Document,
     current_primary: Option<LayerId>,
     request: PlaceRectangleRequest,
+    shape: VectorShapeKind,
 ) -> Result<(Command, LayerId, u64), DocumentEditRuntimeError> {
     if !request.position[0].is_finite() || !request.position[1].is_finite() {
         return Err(DocumentEditRuntimeError::NonFiniteDropPosition);
@@ -977,10 +1758,7 @@ fn prepare_rectangle_command(
         source: ClipSource::Vector {
             recipe: VectorRecipe {
                 content: VectorContent::StandardShape {
-                    shape: StandardShape::Rect {
-                        width: motolii_doc::DocParam::const_f64(0.2),
-                        height: motolii_doc::DocParam::const_f64(0.2),
-                    },
+                    shape: shape.standard_shape(),
                 },
                 modifiers: Vec::new(),
             },
@@ -991,11 +1769,174 @@ fn prepare_rectangle_command(
             parent: ParentLocator::Track(track_id),
             index,
             item,
-            layer_names: BTreeMap::from([(layer_id, "Rectangle".to_owned())]),
+            layer_names: BTreeMap::from([(layer_id, shape.layer_name().to_owned())]),
         },
         layer_id,
         expected_live_next,
     ))
+}
+
+fn prepare_vism_command(
+    snapshot: &Document,
+    catalog: &PluginCatalog,
+    current_primary: Option<LayerId>,
+    request: PlaceVismRequest,
+) -> Result<(Command, LayerId, u64), DocumentEditRuntimeError> {
+    if !request.position[0].is_finite() || !request.position[1].is_finite() {
+        return Err(DocumentEditRuntimeError::NonFiniteDropPosition);
+    }
+    if request.playhead < RationalTime::ZERO {
+        return Err(DocumentEditRuntimeError::PlayheadOutsideComposition);
+    }
+    let duration = snapshot.composition.duration.try_sub(request.playhead)?;
+    if duration < snapshot.composition.fps.frame_duration() {
+        return Err(DocumentEditRuntimeError::RemainingDurationBelowOneFrame);
+    }
+
+    let current_version = catalog
+        .get(&request.plugin_id)
+        .ok_or_else(|| DocumentPluginError::ContractMissing {
+            plugin_id: request.plugin_id.clone(),
+        })?
+        .node
+        .version;
+    let recipe = motolii_doc::prepare_plugin_recipe(
+        &request.plugin_id,
+        PluginKind::LayerSource,
+        current_version,
+        &BTreeMap::new(),
+        catalog,
+    )?;
+    let layer_name = catalog
+        .get(&request.plugin_id)
+        .map(|contract| {
+            if contract.node.display_name.trim().is_empty() {
+                request.plugin_id.clone()
+            } else {
+                contract.node.display_name.to_owned()
+            }
+        })
+        .unwrap_or_else(|| request.plugin_id.clone());
+
+    let mut layers = snapshot.layers.clone();
+    let expected_live_next = layers.peek_next();
+    let layer_id = layers.reserve()?;
+    let (track_id, index) = rectangle_insertion(snapshot, current_primary)
+        .ok_or(DocumentEditRuntimeError::NoTrackForRectangle)?;
+
+    let mut envelope = ItemEnvelope::new(layer_id);
+    envelope.transform.position = motolii_doc::DocParam::const_vec2(request.position);
+    let item = TrackItem::Clip(Clip {
+        envelope,
+        start: request.playhead,
+        duration,
+        time_map: Default::default(),
+        source: ClipSource::Plugin {
+            plugin_id: recipe.plugin_id,
+            effect_version: recipe.current_version,
+            params: recipe.params,
+            extra: Default::default(),
+        },
+    });
+    Ok((
+        Command::AddTrackItem {
+            parent: ParentLocator::Track(track_id),
+            index,
+            item,
+            layer_names: BTreeMap::from([(layer_id, layer_name)]),
+        },
+        layer_id,
+        expected_live_next,
+    ))
+}
+
+fn prepare_media_commands(
+    snapshot: &Document,
+    current_primary: Option<LayerId>,
+    request: PlaceMediaRequest,
+) -> Result<(Vec<Command>, LayerId, u64), DocumentEditRuntimeError> {
+    if !request.position[0].is_finite() || !request.position[1].is_finite() {
+        return Err(DocumentEditRuntimeError::NonFiniteDropPosition);
+    }
+    if request.playhead < RationalTime::ZERO {
+        return Err(DocumentEditRuntimeError::PlayheadOutsideComposition);
+    }
+    let duration = snapshot.composition.duration.try_sub(request.playhead)?;
+    if duration < snapshot.composition.fps.frame_duration() {
+        return Err(DocumentEditRuntimeError::RemainingDurationBelowOneFrame);
+    }
+    let canonical = request
+        .path
+        .canonicalize()
+        .map_err(|_| DocumentEditRuntimeError::LibraryFileUnreadable)?;
+    if !canonical.is_file() {
+        return Err(DocumentEditRuntimeError::LibraryFileUnreadable);
+    }
+    let abs = Asset::normalize_path(&canonical.to_string_lossy());
+    let file =
+        fs::File::open(&canonical).map_err(|_| DocumentEditRuntimeError::LibraryFileUnreadable)?;
+    let fingerprint = SourceFingerprintV1::from_reader(file)
+        .map_err(|_| DocumentEditRuntimeError::LibraryFileUnreadable)?;
+
+    let mut commands = Vec::new();
+    let asset_id = if let Some(existing) = existing_asset_for_path(snapshot, &abs) {
+        existing
+    } else {
+        let asset = Asset {
+            id: AssetId::from_raw(snapshot.assets.peek_next()),
+            name: request.name.clone(),
+            asset_type: request.asset_type.clone(),
+            content_hash: fingerprint.content_hash(),
+            path_absolute: Some(abs),
+            path_project_relative: None,
+            file_name: Some(request.name.clone()),
+            size_bytes: Some(fingerprint.size_bytes()),
+            head_hash: None,
+            tail_hash: None,
+        };
+        let id = asset.id;
+        commands.push(Command::AdmitAsset { asset });
+        id
+    };
+
+    let source = match request.kind.as_str() {
+        "audio" => ClipSource::Asset {
+            asset: asset_id,
+            video: None,
+            audio: vec![AudioComponent::ordinal(0)],
+        },
+        "video" | "image" => build_import_clip_source(asset_id, ImportAvMode::VideoOnly),
+        _ => return Err(DocumentEditRuntimeError::LibraryFileUnreadable),
+    };
+
+    let mut layers = snapshot.layers.clone();
+    let expected_live_next = layers.peek_next();
+    let layer_id = layers.reserve()?;
+    let (track_id, index) = rectangle_insertion(snapshot, current_primary)
+        .ok_or(DocumentEditRuntimeError::NoTrackForRectangle)?;
+    let mut envelope = ItemEnvelope::new(layer_id);
+    envelope.transform.position = motolii_doc::DocParam::const_vec2(request.position);
+    commands.push(Command::AddTrackItem {
+        parent: ParentLocator::Track(track_id),
+        index,
+        item: TrackItem::Clip(Clip {
+            envelope,
+            start: request.playhead,
+            duration,
+            time_map: Default::default(),
+            source,
+        }),
+        layer_names: BTreeMap::from([(layer_id, request.name)]),
+    });
+    Ok((commands, layer_id, expected_live_next))
+}
+
+fn existing_asset_for_path(snapshot: &Document, abs: &str) -> Option<AssetId> {
+    let normalized = Asset::normalize_path(abs);
+    snapshot.assets.iter().find_map(|asset| {
+        let path = asset.path_absolute.as_deref()?;
+        (Asset::normalize_path(path) == normalized).then_some(asset.id)
+    })
 }
 
 fn rectangle_insertion(
@@ -1043,23 +1984,11 @@ fn rectangle_selection_is_compatible(item: &TrackItem) -> bool {
 pub(crate) struct PublishedDocument {
     pub(crate) kind: DocumentEditActionKind,
     pub(crate) revision: u64,
+    /// writer の live snapshot。RN `read_snapshot` / dispatch はこれを投影する。
     pub(crate) snapshot: Arc<Document>,
     pub(crate) primary: Option<LayerId>,
     pub(crate) projection_generation: u64,
     pub(crate) created_effect_use: Option<EffectId>,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum PostDurableLiveApplyError {
-    #[error(transparent)]
-    Command(#[from] CommandError),
-    #[error(transparent)]
-    History(#[from] UndoError),
-    #[error("private history projection diverged after durable commit")]
-    HistoryProjection,
-    #[cfg(test)]
-    #[error("injected post-durable live apply invariant")]
-    InjectedInvariant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -1083,8 +2012,10 @@ pub(crate) enum DocumentEditRuntimeError {
     ProjectionGenerationExhausted,
     #[error("selection target does not exist in the live Document: {0:?}")]
     SelectionTargetNotFound(LayerId),
-    #[error("document edit runtime session is poisoned")]
-    SessionPoisoned,
+    #[error("user edit requires a primary selection")]
+    NoPrimarySelection,
+    #[error("prepared user edit was rejected")]
+    PrepareRejected,
     #[error("nothing to undo")]
     NothingToUndo,
     #[error("nothing to redo")]
@@ -1103,6 +2034,8 @@ pub(crate) enum DocumentEditRuntimeError {
     NoTrackForRectangle,
     #[error("Rectangle LayerId reservation changed before live apply")]
     LayerIdReservationChanged,
+    #[error("media library file is unreadable")]
+    LibraryFileUnreadable,
     #[error("prepared attach parameter `{param}` is not Const")]
     AttachDefaultNotConst { param: String },
     #[error("prepare_create_effect returned a non-CreateEffect command")]
@@ -1121,15 +2054,36 @@ pub(crate) enum DocumentEditRuntimeError {
     EffectPrepare(#[from] motolii_doc::PrepareError),
     #[error(transparent)]
     PositionKeyPrepare(#[from] AddPositionKeyPrepareError),
-    #[error("journal durable commit failed")]
+    #[error(transparent)]
+    TransformParamKeyPrepare(#[from] AddTransformParamKeyPrepareError),
+    #[error(transparent)]
+    RemovePositionKeyPrepare(#[from] RemovePositionKeyPrepareError),
+    #[error("journal durable commit failed: {0}")]
     JournalCommit(#[source] Box<ProjectError>),
-    #[error("live apply failed after durable journal commit")]
-    PostDurableLiveApply(#[source] PostDurableLiveApplyError),
-    #[error("transient primary reconcile failed after durable commit and live apply")]
-    #[cfg(test)]
-    ReconcileFailed,
+    #[error("journal commit receipt was not returned for an edit-only save")]
+    MissingJournalCommitReceipt,
+    #[error(
+        "document writes are temporarily blocked while journal commit {receipt:?} is reconciled"
+    )]
+    DocumentWriteBlocked { receipt: JournalCommitReceipt },
+    #[error(
+        "journal commit receipt {receipt:?} was not observed after a successful commit result"
+    )]
+    CommitReceiptNotObserved { receipt: JournalCommitReceipt },
+    #[error("recovered Document does not match prepared journal commit {receipt:?}")]
+    ReconciledDocumentMismatch { receipt: JournalCommitReceipt },
+    #[error("journal commit {receipt:?} could not yet be reconciled: {source}")]
+    JournalReconcile {
+        receipt: JournalCommitReceipt,
+        #[source]
+        source: Box<ProjectError>,
+    },
+    #[error(transparent)]
+    Undo(#[from] UndoError),
     #[error(transparent)]
     Command(#[from] CommandError),
+    #[error(transparent)]
+    Duplicate(#[from] DuplicateError),
 }
 
 #[cfg(test)]
@@ -1371,7 +2325,7 @@ mod tests {
             serde_json::to_vec(&*runtime.snapshot()).unwrap(),
             initial_json
         );
-        assert!(!runtime.is_poisoned());
+        assert!(!runtime.is_write_blocked());
     }
 
     fn assert_add_position_key_noop(
@@ -1387,10 +2341,16 @@ mod tests {
         let mut queue = DocumentEditQueue::default();
         queue.push_add_position_key(request);
 
-        assert!(runtime
+        let error = runtime
             .process_next(&mut queue, current_primary, u64::MAX)
-            .unwrap()
-            .is_none());
+            .expect_err("add position key negative must not silent-accept");
+        assert!(matches!(
+            error,
+            DocumentEditRuntimeError::NoPrimarySelection
+                | DocumentEditRuntimeError::PrepareRejected
+                | DocumentEditRuntimeError::PositionKeyPrepare(_)
+                | DocumentEditRuntimeError::Command(_)
+        ));
         assert_preflight_rejection_invariants(&runtime, &queue, &initial_json, 0, (0, 0));
         assert_eq!(
             runtime.snapshot().next_stable_id.peek_next(),
@@ -1587,6 +2547,149 @@ mod tests {
     }
 
     #[test]
+    fn add_transform_param_key_commits_const_scale_to_keyframes() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let time = RationalTime::try_new(1, 2).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_add_transform_param_key(AddTransformParamKeyRequest {
+            target: primary,
+            property: ScalarPropertyId::Scale,
+            time,
+        });
+
+        let published = runtime
+            .process_next(&mut queue, Some(primary), 0)
+            .unwrap()
+            .expect("const Scale must publish a key");
+        assert_eq!(published.kind, DocumentEditActionKind::AddTransformParamKey);
+        match &runtime
+            .writer
+            .find_envelope(primary)
+            .expect("primary envelope")
+            .transform
+            .scale
+        {
+            motolii_doc::DocParam::Keyframes(track) => {
+                let key = track
+                    .keys()
+                    .iter()
+                    .find(|key| key.t == time)
+                    .expect("request time Scale key");
+                assert_eq!(key.value, motolii_doc::DocValue::Vec2([1.0, 1.0]));
+            }
+            other => panic!("expected Scale keyframes, got {other:?}"),
+        }
+
+        queue.push_add_transform_param_key(AddTransformParamKeyRequest {
+            target: primary,
+            property: ScalarPropertyId::Scale,
+            time,
+        });
+        assert!(runtime
+            .process_next(&mut queue, Some(primary), published.projection_generation)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn add_transform_param_key_without_primary_is_no_primary_selection() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_add_transform_param_key(AddTransformParamKeyRequest {
+            target: primary,
+            property: ScalarPropertyId::Scale,
+            time: RationalTime::try_new(1, 2).unwrap(),
+        });
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::NoPrimarySelection)
+        ));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+    }
+
+    #[test]
+    fn set_opacity_on_keyframes_updates_on_key_and_rejects_off_key() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let time = RationalTime::try_new(1, 2).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_add_transform_param_key(AddTransformParamKeyRequest {
+            target: primary,
+            property: ScalarPropertyId::Opacity,
+            time,
+        });
+        let keyed = runtime
+            .process_next(&mut queue, Some(primary), 0)
+            .unwrap()
+            .expect("opacity key");
+
+        queue.push_set_opacity_at(
+            SetOpacityRequest {
+                target: primary,
+                value: 0.25,
+            },
+            time,
+        );
+        let changed = runtime
+            .process_next(&mut queue, Some(primary), keyed.projection_generation)
+            .unwrap()
+            .expect("on-key opacity dial must write");
+        match &changed
+            .snapshot
+            .tracks
+            .iter()
+            .flat_map(|track| track.items.iter())
+            .find_map(|item| match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == primary => {
+                    Some(&clip.envelope.opacity)
+                }
+                _ => None,
+            })
+            .expect("primary opacity")
+        {
+            motolii_doc::DocParam::Keyframes(track) => {
+                let key = track
+                    .keys()
+                    .iter()
+                    .find(|key| key.t == time)
+                    .expect("opacity key at request time");
+                assert_eq!(key.value, motolii_doc::DocValue::F64(0.25));
+                assert_eq!(track.keys().len(), 1);
+            }
+            other => panic!("opacity dial must not collapse Keyframes, got {other:?}"),
+        }
+
+        let after = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        queue.push_set_opacity_at(
+            SetOpacityRequest {
+                target: primary,
+                value: 0.5,
+            },
+            RationalTime::ZERO,
+        );
+        assert!(matches!(
+            runtime.process_next(&mut queue, Some(primary), changed.projection_generation),
+            Err(DocumentEditRuntimeError::PrepareRejected)
+        ));
+        assert_eq!(serde_json::to_vec(&*runtime.snapshot()).unwrap(), after);
+        match &runtime.writer.find_envelope(primary).unwrap().opacity {
+            motolii_doc::DocParam::Keyframes(_) => {}
+            other => panic!("off-key must leave Keyframes, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn position_interp_queue_commits_once_and_same_value_is_a_durable_noop() {
         let (document, _) = fixture();
         let primary = fixture_layer(&document);
@@ -1771,10 +2874,10 @@ mod tests {
             old: [9.0, 9.0],
             new: [0.8, 0.9],
         });
-        assert!(runtime
-            .process_next(&mut queue, Some(primary), redone.projection_generation)
-            .unwrap()
-            .is_none());
+        assert!(matches!(
+            runtime.process_next(&mut queue, Some(primary), redone.projection_generation),
+            Err(DocumentEditRuntimeError::PrepareRejected)
+        ));
         assert_eq!(runtime.revision(), stale_revision);
         assert_eq!(runtime.history_lengths(), stale_history);
         assert_eq!(fs::metadata(&journal).unwrap().len(), stale_journal);
@@ -1953,10 +3056,10 @@ mod tests {
             time: RationalTime::try_new(1, 2).unwrap(),
         });
 
-        assert!(runtime
-            .process_next(&mut queue, Some(primary), u64::MAX)
-            .unwrap()
-            .is_none());
+        assert!(matches!(
+            runtime.process_next(&mut queue, Some(primary), u64::MAX),
+            Err(DocumentEditRuntimeError::PositionKeyPrepare(_))
+        ));
         assert_preflight_rejection_invariants(
             &runtime,
             &queue,
@@ -2223,10 +3326,10 @@ mod tests {
         let changed_json = serde_json::to_vec(&*changed.snapshot).unwrap();
         let journal_size = fs::metadata(&journal).unwrap().len();
         queue.push_set_effect_param(request);
-        assert!(runtime
-            .process_next(&mut queue, Some(primary), u64::MAX)
-            .unwrap()
-            .is_none());
+        assert!(matches!(
+            runtime.process_next(&mut queue, Some(primary), u64::MAX),
+            Err(DocumentEditRuntimeError::PrepareRejected)
+        ));
         assert_eq!(runtime.revision(), 2);
         assert_eq!(runtime.history_lengths(), (2, 0));
         assert_eq!(
@@ -2250,6 +3353,209 @@ mod tests {
                 .params
                 .get("amount"),
             Some(&motolii_doc::DocParam::const_f64(1.0))
+        );
+    }
+
+    fn clip_source_param(document: &Document, layer: LayerId, param: &str) -> DocParam {
+        for track in &document.tracks {
+            for item in &track.items {
+                if let TrackItem::Clip(clip) = item {
+                    if clip.envelope.layer_id == layer {
+                        let ClipSource::Plugin { params, .. } = &clip.source else {
+                            panic!("expected plugin source");
+                        };
+                        return params
+                            .get(param)
+                            .cloned()
+                            .unwrap_or_else(|| panic!("missing param {param}"));
+                    }
+                }
+            }
+        }
+        panic!("layer not found");
+    }
+
+    #[test]
+    fn set_source_param_writes_f64_and_color_and_undo_restores() {
+        let (document, _) = fixture();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_vism(PlaceVismRequest {
+            plugin_id: "core.layer_source.radial_repeater".into(),
+            position: [0.0, 0.0],
+            playhead: RationalTime::ZERO,
+        });
+        let placed = runtime
+            .process_next(&mut queue, None, 0)
+            .unwrap()
+            .expect("place vism");
+        let layer = placed.primary.expect("placed layer");
+        assert_eq!(
+            clip_source_param(&placed.snapshot, layer, "count"),
+            DocParam::const_f64(12.0)
+        );
+        assert_eq!(
+            clip_source_param(&placed.snapshot, layer, "color"),
+            DocParam::const_color([1.0, 1.0, 1.0, 1.0])
+        );
+
+        queue.push_set_source_param(SetSourceParamRequest::new(
+            layer,
+            "count".into(),
+            DocParam::const_f64(8.0),
+        ));
+        let counted = runtime
+            .process_next(&mut queue, Some(layer), 1)
+            .unwrap()
+            .expect("count write");
+        assert_eq!(counted.kind, DocumentEditActionKind::SetSourceParam);
+        assert_eq!(
+            clip_source_param(&counted.snapshot, layer, "count"),
+            DocParam::const_f64(8.0)
+        );
+        assert_eq!(
+            clip_source_param(&counted.snapshot, layer, "color"),
+            DocParam::const_color([1.0, 1.0, 1.0, 1.0])
+        );
+
+        queue.push_set_source_param(SetSourceParamRequest::new(
+            layer,
+            "color".into(),
+            DocParam::const_color([0.2, 0.4, 0.6, 1.0]),
+        ));
+        let colored = runtime
+            .process_next(&mut queue, Some(layer), 2)
+            .unwrap()
+            .expect("color write");
+        assert_eq!(
+            clip_source_param(&colored.snapshot, layer, "color"),
+            DocParam::const_color([0.2, 0.4, 0.6, 1.0])
+        );
+        assert_eq!(
+            clip_source_param(&colored.snapshot, layer, "count"),
+            DocParam::const_f64(8.0)
+        );
+
+        queue.push_undo();
+        let undone_color = runtime
+            .process_next(&mut queue, Some(layer), 3)
+            .unwrap()
+            .expect("undo color");
+        assert_eq!(
+            clip_source_param(&undone_color.snapshot, layer, "color"),
+            DocParam::const_color([1.0, 1.0, 1.0, 1.0])
+        );
+        queue.push_undo();
+        let undone_count = runtime
+            .process_next(&mut queue, Some(layer), 4)
+            .unwrap()
+            .expect("undo count");
+        assert_eq!(
+            clip_source_param(&undone_count.snapshot, layer, "count"),
+            DocParam::const_f64(12.0)
+        );
+    }
+
+    #[test]
+    fn set_source_param_invalid_requests_write_nothing() {
+        let (document, _) = fixture();
+        let asset_layer = fixture_layer(&document);
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_vism(PlaceVismRequest {
+            plugin_id: "core.layer_source.radial_repeater".into(),
+            position: [0.0, 0.0],
+            playhead: RationalTime::ZERO,
+        });
+        let placed = runtime
+            .process_next(&mut queue, None, 0)
+            .unwrap()
+            .expect("place vism");
+        let layer = placed.primary.expect("placed layer");
+        let initial = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        let history = runtime.history_lengths();
+        let revision = runtime.revision();
+
+        for request in [
+            SetSourceParamRequest::new(asset_layer, "count".into(), DocParam::const_f64(8.0)),
+            SetSourceParamRequest::new(layer, "missing".into(), DocParam::const_f64(8.0)),
+            SetSourceParamRequest::new(layer, "count".into(), DocParam::const_f64(12.0)),
+            SetSourceParamRequest::new(layer, "count".into(), DocParam::const_f64(f64::NAN)),
+            SetSourceParamRequest::new(
+                layer,
+                "color".into(),
+                DocParam::const_color([f64::INFINITY, 0.0, 0.0, 1.0]),
+            ),
+        ] {
+            queue.push_set_source_param(request);
+            assert!(matches!(
+                runtime.process_next(&mut queue, Some(layer), revision),
+                Err(DocumentEditRuntimeError::PrepareRejected)
+            ));
+        }
+        assert_eq!(runtime.history_lengths(), history);
+        assert_eq!(runtime.revision(), revision);
+        assert_eq!(serde_json::to_vec(&*runtime.snapshot()).unwrap(), initial);
+    }
+
+    #[test]
+    fn no_primary_attach_effect_set_opacity_set_source_param_are_typed_errors() {
+        let (document, _) = fixture();
+        let layer = fixture_layer(&document);
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let initial_peek = document.layers.peek_next();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+
+        queue.push_attach_effect(AttachEffectRequest {
+            plugin_id: "core.filter.opacity".into(),
+        });
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::NoPrimarySelection)
+        ));
+
+        queue.push_set_opacity(SetOpacityRequest {
+            target: layer,
+            value: 0.25,
+        });
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::NoPrimarySelection)
+        ));
+        assert_eq!(runtime.snapshot().layers.peek_next(), initial_peek);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+
+        queue.push_place_vism(PlaceVismRequest {
+            plugin_id: "core.layer_source.radial_repeater".into(),
+            position: [0.0, 0.0],
+            playhead: RationalTime::ZERO,
+        });
+        let placed = runtime
+            .process_next(&mut queue, None, 0)
+            .unwrap()
+            .expect("place vism");
+        let vism = placed.primary.expect("placed layer");
+        let after_place = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        let after_peek = runtime.snapshot().layers.peek_next();
+        queue.push_set_source_param(SetSourceParamRequest::new(
+            vism,
+            "count".into(),
+            DocParam::const_f64(8.0),
+        ));
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, placed.projection_generation),
+            Err(DocumentEditRuntimeError::NoPrimarySelection)
+        ));
+        assert_eq!(runtime.snapshot().layers.peek_next(), after_peek);
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            after_place
         );
     }
 
@@ -2308,10 +3614,10 @@ mod tests {
             ),
         ] {
             queue.push_set_effect_param(request);
-            assert!(runtime
-                .process_next(&mut queue, Some(primary), u64::MAX)
-                .unwrap()
-                .is_none());
+            assert!(matches!(
+                runtime.process_next(&mut queue, Some(primary), u64::MAX),
+                Err(DocumentEditRuntimeError::PrepareRejected)
+            ));
             assert_eq!(runtime.revision(), initial_revision);
             assert_eq!(runtime.history_lengths(), initial_history);
             assert_eq!(
@@ -2320,6 +3626,151 @@ mod tests {
             );
             assert_eq!(fs::metadata(&journal).unwrap().len(), initial_journal_size);
         }
+    }
+
+    #[test]
+    fn set_effect_param_writes_amount_on_two_param_definition() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_attach_effect(AttachEffectRequest {
+            plugin_id: "core.filter.opacity".into(),
+        });
+        let attached = runtime
+            .process_next(&mut queue, Some(primary), 0)
+            .unwrap()
+            .expect("opacity attach");
+        let effect_use_id = attached.created_effect_use.expect("effect use");
+        let definition_id = attached
+            .snapshot
+            .find_effect_use(primary, effect_use_id)
+            .expect("attached effect")
+            .definition_id;
+        runtime.writer.edit(|document| {
+            document
+                .effect_definition_mut(definition_id)
+                .expect("definition")
+                .params
+                .insert("mix".into(), DocParam::const_f64(0.5));
+        });
+        let request = SetEffectParamRequest::new(
+            primary,
+            effect_use_id,
+            definition_id,
+            "core.filter.opacity".into(),
+            1,
+            "amount".into(),
+            0.4,
+        );
+        let command =
+            prepare_set_effect_param_command(runtime.writer.snapshot().as_ref(), &request)
+                .expect("2-param amount must prepare");
+        match command {
+            Command::SetProperty {
+                property: ScalarPropertyId::EffectParam(use_id, param_id),
+                new_value,
+                ..
+            } => {
+                assert_eq!(use_id, effect_use_id);
+                assert_eq!(param_id, "amount");
+                assert_eq!(new_value, DocParam::const_f64(0.4));
+            }
+            other => panic!("expected EffectParam SetProperty, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn set_effect_param_writes_color_const() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_attach_effect(AttachEffectRequest {
+            plugin_id: "core.filter.tint".into(),
+        });
+        let attached = runtime
+            .process_next(&mut queue, Some(primary), 0)
+            .unwrap()
+            .expect("tint attach");
+        let effect_use_id = attached.created_effect_use.expect("effect use");
+        let definition_id = attached
+            .snapshot
+            .find_effect_use(primary, effect_use_id)
+            .expect("attached effect")
+            .definition_id;
+        let f64_on_color = SetEffectParamRequest::new(
+            primary,
+            effect_use_id,
+            definition_id,
+            "core.filter.tint".into(),
+            1,
+            "color".into(),
+            0.2,
+        );
+        assert!(prepare_set_effect_param_command(
+            runtime.writer.snapshot().as_ref(),
+            &f64_on_color
+        )
+        .is_none());
+        queue.push_set_effect_param(SetEffectParamRequest::with_param(
+            primary,
+            effect_use_id,
+            definition_id,
+            "core.filter.tint".into(),
+            1,
+            "color".into(),
+            DocParam::const_color([0.2, 1.0, 1.0, 1.0]),
+        ));
+        let changed = runtime
+            .process_next(&mut queue, Some(primary), attached.projection_generation)
+            .unwrap()
+            .expect("color effect param must write");
+        assert_eq!(
+            changed
+                .snapshot
+                .effect_definition(definition_id)
+                .unwrap()
+                .params
+                .get("color"),
+            Some(&DocParam::const_color([0.2, 1.0, 1.0, 1.0]))
+        );
+    }
+
+    #[test]
+    fn set_effect_param_unknown_param_id_is_prepare_rejected() {
+        let (document, _) = fixture();
+        let primary = fixture_layer(&document);
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_attach_effect(AttachEffectRequest {
+            plugin_id: "core.filter.opacity".into(),
+        });
+        let attached = runtime
+            .process_next(&mut queue, Some(primary), 0)
+            .unwrap()
+            .expect("opacity attach");
+        let effect_use_id = attached.created_effect_use.expect("effect use");
+        let definition_id = attached
+            .snapshot
+            .find_effect_use(primary, effect_use_id)
+            .expect("attached effect")
+            .definition_id;
+        let before = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        queue.push_set_effect_param(SetEffectParamRequest::new(
+            primary,
+            effect_use_id,
+            definition_id,
+            "core.filter.opacity".into(),
+            1,
+            "missing".into(),
+            0.4,
+        ));
+        assert!(matches!(
+            runtime.process_next(&mut queue, Some(primary), attached.projection_generation),
+            Err(DocumentEditRuntimeError::PrepareRejected)
+        ));
+        assert_eq!(serde_json::to_vec(&*runtime.snapshot()).unwrap(), before);
     }
 
     #[test]
@@ -2355,10 +3806,19 @@ mod tests {
                 plugin_id: "core.filter.opacity".into(),
             });
 
-            assert!(runtime
+            let error = runtime
                 .process_next(&mut queue, primary, u64::MAX)
-                .unwrap()
-                .is_none());
+                .expect_err("attach without a live primary must not silent-accept");
+            match primary {
+                None => assert!(matches!(
+                    error,
+                    DocumentEditRuntimeError::NoPrimarySelection
+                )),
+                Some(target) => assert!(matches!(
+                    error,
+                    DocumentEditRuntimeError::SelectionTargetNotFound(id) if id == target
+                )),
+            }
             assert_unchanged(
                 &runtime,
                 &queue,
@@ -2928,7 +4388,7 @@ mod tests {
             Err(DocumentEditRuntimeError::MultiCommandActionRejected)
         ));
         assert_eq!(runtime.revision(), 0);
-        assert!(!runtime.is_poisoned());
+        assert!(!runtime.is_write_blocked());
         assert_eq!(
             serde_json::to_vec(&*runtime.snapshot()).unwrap(),
             initial_json
@@ -2936,11 +4396,12 @@ mod tests {
     }
 
     #[test]
-    fn journal_commit_failure_poisons_without_live_apply() {
+    fn pre_replace_journal_failure_rejects_without_blocking_the_next_write() {
         let (document, request) = fixture();
         let initial_json = serde_json::to_vec(&document).unwrap();
         let (path, mut runtime) = open_runtime(document);
         let journal = journal_path_for_document(&path);
+        let journal_before = fs::read(&journal).unwrap();
         drop(fs::remove_file(&journal));
         fs::create_dir_all(&journal).unwrap();
 
@@ -2951,33 +4412,7 @@ mod tests {
             runtime.process_next(&mut queue, None, 0),
             Err(DocumentEditRuntimeError::JournalCommit(_))
         ));
-        assert!(runtime.is_poisoned());
-        assert_eq!(runtime.revision(), 0);
-        assert_eq!(runtime.history_lengths(), (0, 0));
-        assert_eq!(queue.len(), 0);
-        assert_eq!(
-            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
-            initial_json
-        );
-    }
-
-    #[test]
-    fn post_durable_live_apply_failure_poisons_and_leaves_journal_durable() {
-        let (document, request) = fixture();
-        let initial_json = serde_json::to_vec(&document).unwrap();
-        let (path, mut runtime) = open_runtime(document);
-        runtime.set_test_failpoint(RuntimeTestFailpoint::PostDurableLiveApply);
-
-        let mut queue = DocumentEditQueue::default();
-        queue.push_prepared(delete_output(), Some(request)).unwrap();
-
-        assert!(matches!(
-            runtime.process_next(&mut queue, None, 0),
-            Err(DocumentEditRuntimeError::PostDurableLiveApply(
-                PostDurableLiveApplyError::InjectedInvariant
-            ))
-        ));
-        assert!(runtime.is_poisoned());
+        assert!(!runtime.is_write_blocked());
         assert_eq!(runtime.revision(), 0);
         assert_eq!(runtime.history_lengths(), (0, 0));
         assert_eq!(queue.len(), 0);
@@ -2986,54 +4421,148 @@ mod tests {
             initial_json
         );
 
-        drop(runtime);
-        let limits = ResourceLimits::production();
-        let (_session, opened) = ProjectSession::open(&path, &limits).expect("reopen");
-        assert!(opened.document.tracks[0].items.is_empty());
+        fs::remove_dir_all(&journal).unwrap();
+        fs::write(&journal, journal_before).unwrap();
+        let (_document, request) = fixture();
+        queue.push_prepared(delete_output(), Some(request)).unwrap();
+        let published = runtime
+            .process_next(&mut queue, None, 0)
+            .unwrap()
+            .expect("retry after a rejected pre-replace failure");
+        assert_eq!(published.revision, 1);
+        assert!(!runtime.is_write_blocked());
     }
 
     #[test]
-    fn reconcile_failure_poisons_without_publish() {
-        let (document, request) = fixture();
-        let (path, mut runtime) = open_runtime(document);
-        runtime.set_test_failpoint(RuntimeTestFailpoint::Reconcile);
+    fn durable_commit_is_reconciled_into_the_same_live_writer() {
+        let f = two_track_fixture();
+        let initial_json = serde_json::to_vec(&f.document).unwrap();
+        let (_path, mut runtime) = open_runtime(f.document);
+        runtime.set_test_failpoint(RuntimeTestFailpoint::DeferAfterDurableCommit);
 
         let mut queue = DocumentEditQueue::default();
-        queue.push_prepared(delete_output(), Some(request)).unwrap();
+        queue
+            .push_prepared(delete_output(), Some(f.delete_request))
+            .unwrap();
 
         assert!(matches!(
             runtime.process_next(&mut queue, None, 0),
-            Err(DocumentEditRuntimeError::ReconcileFailed)
+            Err(DocumentEditRuntimeError::DocumentWriteBlocked { .. })
         ));
-        assert!(runtime.is_poisoned());
-        assert_eq!(runtime.revision(), 1);
+        assert!(runtime.is_write_blocked());
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
         assert_eq!(queue.len(), 0);
-        let live_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
 
-        drop(runtime);
-        let limits = ResourceLimits::production();
-        let (_session, opened) = ProjectSession::open(&path, &limits).expect("reopen");
-        assert_eq!(serde_json::to_vec(&opened.document).unwrap(), live_json);
+        let published = runtime
+            .reconcile_pending_commit()
+            .unwrap()
+            .expect("same-session reconciliation publishes the durable candidate");
+        assert_eq!(published.revision, 1);
+        assert!(!runtime.is_write_blocked());
+        assert_eq!(runtime.history_lengths(), (1, 0));
     }
 
     #[test]
-    fn poisoned_runtime_does_not_consume_queue_or_mutate_writer() {
-        let (document, request) = fixture();
-        let initial_json = serde_json::to_vec(&document).unwrap();
-        let (path, mut runtime) = open_runtime(document);
+    fn checkpoint_tip_is_recognized_when_uncertain_commit_is_not_observed() {
+        let f = two_track_fixture();
+        let (path, mut runtime) = open_runtime(f.document);
         let journal = journal_path_for_document(&path);
-        drop(fs::remove_file(&journal));
-        fs::create_dir_all(&journal).unwrap();
+        let checkpoint_journal = fs::read(&journal).unwrap();
+        runtime.set_test_failpoint(RuntimeTestFailpoint::DeferAfterDurableCommit);
+
         let mut queue = DocumentEditQueue::default();
-        queue.push_prepared(delete_output(), Some(request)).unwrap();
+        queue
+            .push_prepared(delete_output(), Some(f.delete_request))
+            .unwrap();
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::DocumentWriteBlocked { .. })
+        ));
+
+        fs::write(&journal, checkpoint_journal).unwrap();
+        assert!(matches!(
+            runtime.reconcile_pending_commit(),
+            Err(DocumentEditRuntimeError::CommitReceiptNotObserved { .. })
+        ));
+        assert!(!runtime.is_write_blocked());
+        assert_eq!(runtime.revision(), 0);
+    }
+
+    #[test]
+    fn reconcile_failure_blocks_only_writes_and_is_retriable() {
+        let f = two_track_fixture();
+        let initial_json = serde_json::to_vec(&f.document).unwrap();
+        let (_path, mut runtime) = open_runtime(f.document);
+        runtime.set_test_failpoint(RuntimeTestFailpoint::DeferAfterDurableCommit);
+
+        let mut queue = DocumentEditQueue::default();
+        queue
+            .push_prepared(delete_output(), Some(f.delete_request))
+            .unwrap();
         let _ = runtime.process_next(&mut queue, None, 0);
-        assert!(runtime.is_poisoned());
+        runtime.fail_reconcile_for_test();
+        assert!(matches!(
+            runtime.reconcile_pending_commit(),
+            Err(DocumentEditRuntimeError::DocumentWriteBlocked { .. })
+        ));
+        assert!(runtime.is_write_blocked());
         assert_eq!(runtime.revision(), 0);
         assert_eq!(
             serde_json::to_vec(&*runtime.snapshot()).unwrap(),
             initial_json
         );
-        let (_document2, request2) = fixture();
+
+        queue.push_replace_primary(f.surviving);
+        let selection = runtime
+            .process_next(&mut queue, None, 0)
+            .unwrap()
+            .expect("selection remains live while writes are blocked");
+        assert_eq!(selection.primary, Some(f.surviving));
+        assert_eq!(selection.revision, 0);
+        assert!(runtime.is_write_blocked());
+
+        queue.push_clear_primary();
+        let cleared = runtime
+            .process_next(&mut queue, Some(f.surviving), 1)
+            .unwrap()
+            .expect("selection clear remains live while writes are blocked");
+        assert_eq!(cleared.primary, None);
+
+        queue.push_replace_primary(f.surviving);
+        let latest_selection = runtime
+            .process_next(&mut queue, None, 2)
+            .unwrap()
+            .expect("latest selection remains live while writes are blocked");
+        assert_eq!(latest_selection.primary, Some(f.surviving));
+        assert_eq!(latest_selection.projection_generation, 3);
+
+        let published = runtime
+            .reconcile_pending_commit()
+            .unwrap()
+            .expect("reconciliation retry");
+        assert_eq!(published.revision, 1);
+        assert_eq!(published.primary, Some(f.surviving));
+        assert_eq!(published.projection_generation, 3);
+        assert!(!runtime.is_write_blocked());
+    }
+
+    #[test]
+    fn write_block_does_not_consume_the_next_action() {
+        let f = two_track_fixture();
+        let (_path, mut runtime) = open_runtime(f.document);
+        runtime.set_test_failpoint(RuntimeTestFailpoint::DeferAfterDurableCommit);
+        let mut queue = DocumentEditQueue::default();
+        queue
+            .push_prepared(delete_output(), Some(f.delete_request))
+            .unwrap();
+        let _ = runtime.process_next(&mut queue, None, 0);
+        assert!(runtime.is_write_blocked());
+        let request2 = two_track_delete_request(runtime.snapshot().as_ref(), f.surviving);
         queue
             .push_prepared(delete_output(), Some(request2))
             .unwrap();
@@ -3041,11 +4570,10 @@ mod tests {
         let initial_json = serde_json::to_vec(&*runtime.snapshot()).unwrap();
         let initial_revision = runtime.revision();
         let initial_history = runtime.history_lengths();
-        let journal_entries_before = fs::read_dir(&journal).unwrap().count();
 
         assert!(matches!(
             runtime.process_next(&mut queue, None, 0),
-            Err(DocumentEditRuntimeError::SessionPoisoned)
+            Err(DocumentEditRuntimeError::DocumentWriteBlocked { .. })
         ));
         assert_eq!(queue.len(), initial_len);
         assert_eq!(
@@ -3054,23 +4582,28 @@ mod tests {
         );
         assert_eq!(runtime.revision(), initial_revision);
         assert_eq!(runtime.history_lengths(), initial_history);
-        assert_eq!(
-            fs::read_dir(&journal).unwrap().count(),
-            journal_entries_before
-        );
+        runtime
+            .reconcile_pending_commit()
+            .unwrap()
+            .expect("first commit recovered");
+        let second = runtime
+            .process_next(&mut queue, None, 1)
+            .unwrap()
+            .expect("queued action remains available");
+        assert_eq!(second.revision, 2);
     }
 
     #[test]
-    fn reopen_restores_healthy_runtime_after_poison() {
+    fn reopen_recovers_a_deferred_commit_without_a_terminal_runtime_state() {
         let f = two_track_fixture();
         let (path, mut runtime) = open_runtime(f.document.clone());
-        runtime.set_test_failpoint(RuntimeTestFailpoint::PostDurableLiveApply);
+        runtime.set_test_failpoint(RuntimeTestFailpoint::DeferAfterDurableCommit);
         let mut queue = DocumentEditQueue::default();
         queue
             .push_prepared(delete_output(), Some(f.delete_request))
             .unwrap();
         let _ = runtime.process_next(&mut queue, None, 0);
-        assert!(runtime.is_poisoned());
+        assert!(runtime.is_write_blocked());
         assert_eq!(runtime.revision(), 0);
         drop(runtime);
 
@@ -3079,7 +4612,7 @@ mod tests {
         let catalog = first_party_catalog();
         let writer = DocumentWriter::new(opened.document, Arc::clone(&catalog)).unwrap();
         let mut runtime = DocumentEditRuntime::new(session, writer, catalog);
-        assert!(!runtime.is_poisoned());
+        assert!(!runtime.is_write_blocked());
 
         let mut queue = DocumentEditQueue::default();
         queue
@@ -3143,7 +4676,7 @@ mod tests {
             post_apply_json
         );
         assert_eq!(fs::metadata(&journal).unwrap().len(), journal_size);
-        assert!(!runtime.is_poisoned());
+        assert!(!runtime.is_write_blocked());
     }
 
     #[test]
@@ -3219,6 +4752,179 @@ mod tests {
             published.snapshot.layers.display_name(placed),
             Some("Rectangle")
         );
+    }
+
+    #[test]
+    fn ellipse_place_uses_one_add_command_and_publishes_the_same_layer_id() {
+        let (document, _) = fixture();
+        let selected = fixture_layer(&document);
+        let initial_next = document.layers.peek_next();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_ellipse(PlaceEllipseRequest {
+            position: [0.25, -0.125],
+            playhead: RationalTime::try_new(1, 1).unwrap(),
+        });
+
+        let published = runtime
+            .process_next(&mut queue, Some(selected), 4)
+            .unwrap()
+            .expect("published Ellipse");
+        let placed = published.primary.expect("placed selection receipt");
+        assert_eq!(placed.get(), initial_next);
+        assert_eq!(published.kind, DocumentEditActionKind::PlaceEllipse);
+        assert_eq!(published.revision, 1);
+        assert_eq!(published.projection_generation, 5);
+        assert_eq!(runtime.history_lengths(), (1, 0));
+        assert_eq!(published.snapshot.tracks[0].items.len(), 2);
+        let TrackItem::Clip(clip) = &published.snapshot.tracks[0].items[1] else {
+            panic!("Ellipse must be a Clip");
+        };
+        assert_eq!(clip.envelope.layer_id, placed);
+        assert_eq!(
+            clip.envelope.transform.position,
+            motolii_doc::DocParam::const_vec2([0.25, -0.125])
+        );
+        assert_eq!(clip.start, RationalTime::try_new(1, 1).unwrap());
+        assert_eq!(
+            clip.duration,
+            published
+                .snapshot
+                .composition
+                .duration
+                .try_sub(clip.start)
+                .unwrap()
+        );
+        let ClipSource::Vector {
+            recipe:
+                VectorRecipe {
+                    content: VectorContent::StandardShape { shape },
+                    modifiers,
+                },
+        } = &clip.source
+        else {
+            panic!("Ellipse must be a Vector clip");
+        };
+        assert!(modifiers.is_empty());
+        assert_eq!(
+            *shape,
+            StandardShape::Ellipse {
+                width: motolii_doc::DocParam::const_f64(0.2),
+                height: motolii_doc::DocParam::const_f64(0.2),
+            }
+        );
+        assert!(!matches!(shape, StandardShape::Rect { .. }));
+        assert_eq!(
+            published.snapshot.layers.display_name(placed),
+            Some("Ellipse")
+        );
+    }
+
+    #[test]
+    fn rejected_ellipse_place_changes_no_document_counter_history_or_revision() {
+        let (document, _) = fixture();
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let initial_next = document.layers.peek_next();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_ellipse(PlaceEllipseRequest {
+            position: [f64::NAN, 0.0],
+            playhead: RationalTime::ZERO,
+        });
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::NonFiniteDropPosition)
+        ));
+        assert_eq!(runtime.snapshot().layers.peek_next(), initial_next);
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+    }
+
+    #[test]
+    fn media_place_admits_asset_and_publishes_the_same_layer_id() {
+        let (document, _) = fixture();
+        let initial_next = document.layers.peek_next();
+        let initial_assets = document.assets.len();
+        let (_path, mut runtime) = open_runtime(document);
+        let media = crate::media_library::default_media_library_root().join("starter-still.png");
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_media(PlaceMediaRequest {
+            path: media,
+            name: "starter-still.png".into(),
+            kind: "image".into(),
+            asset_type: "image/png".into(),
+            position: [0.1, -0.2],
+            playhead: RationalTime::ZERO,
+        });
+
+        let published = runtime
+            .process_next(&mut queue, None, 0)
+            .unwrap()
+            .expect("published media");
+        let placed = published.primary.expect("placed selection receipt");
+        assert_eq!(placed.get(), initial_next);
+        assert_eq!(published.kind, DocumentEditActionKind::PlaceMedia);
+        assert_eq!(published.snapshot.assets.len(), initial_assets + 1);
+        assert_eq!(
+            published.snapshot.layers.display_name(placed),
+            Some("starter-still.png")
+        );
+        let TrackItem::Clip(clip) = published
+            .snapshot
+            .tracks
+            .first()
+            .and_then(|track| track.items.last())
+            .expect("placed clip")
+        else {
+            panic!("media must be a Clip");
+        };
+        assert_eq!(clip.envelope.layer_id, placed);
+        assert!(matches!(
+            clip.source,
+            ClipSource::Asset { video: Some(_), .. }
+        ));
+        assert_eq!(
+            clip.envelope.transform.position,
+            motolii_doc::DocParam::const_vec2([0.1, -0.2])
+        );
+
+        queue.push_undo();
+        let undone = runtime.process_next(&mut queue, None, 1).unwrap().unwrap();
+        assert!(undone
+            .snapshot
+            .tracks
+            .iter()
+            .flat_map(|track| track.items.iter())
+            .all(|item| item_layer_id(item) != placed));
+    }
+
+    #[test]
+    fn missing_media_file_is_consumed_without_document_or_history_change() {
+        let (document, _) = fixture();
+        let before = serde_json::to_vec(&document).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let mut queue = DocumentEditQueue::default();
+        queue.push_place_media(PlaceMediaRequest {
+            path: std::path::PathBuf::from("/no/such/motolii-media.png"),
+            name: "missing.png".into(),
+            kind: "image".into(),
+            asset_type: "image/png".into(),
+            position: [0.0, 0.0],
+            playhead: RationalTime::ZERO,
+        });
+        let pre_history = runtime.history_lengths();
+        assert!(matches!(
+            runtime.process_next(&mut queue, None, 0),
+            Err(DocumentEditRuntimeError::LibraryFileUnreadable)
+        ));
+        assert_eq!(queue.len(), 0);
+        assert_eq!(runtime.history_lengths(), pre_history);
+        assert_eq!(serde_json::to_vec(&*runtime.snapshot()).unwrap(), before);
+        assert!(!runtime.is_write_blocked());
     }
 
     #[test]
@@ -3501,6 +5207,57 @@ mod tests {
             serde_json::to_vec(&*runtime.snapshot()).unwrap(),
             initial_json
         );
+    }
+
+    #[test]
+    fn toggle_visible_and_solo_write_envelope_flags_unknown_layer_writes_nothing() {
+        let (document, _) = fixture();
+        let layer = fixture_layer(&document);
+        let initial_json = serde_json::to_vec(&document).unwrap();
+        let (_path, mut runtime) = open_runtime(document);
+        let missing = LayerId::from_raw(999_999);
+
+        let mut queue = DocumentEditQueue::default();
+        queue.push_toggle_visible(missing);
+        queue.push_toggle_solo(missing);
+        assert!(matches!(
+            runtime.process_next(&mut queue, Some(layer), 0),
+            Err(DocumentEditRuntimeError::SelectionTargetNotFound(id)) if id == missing
+        ));
+        assert!(matches!(
+            runtime.process_next(&mut queue, Some(layer), 0),
+            Err(DocumentEditRuntimeError::SelectionTargetNotFound(id)) if id == missing
+        ));
+        assert_eq!(runtime.revision(), 0);
+        assert_eq!(runtime.history_lengths(), (0, 0));
+        assert_eq!(
+            serde_json::to_vec(&*runtime.snapshot()).unwrap(),
+            initial_json
+        );
+
+        queue.push_toggle_visible(layer);
+        let muted = runtime
+            .process_next(&mut queue, Some(layer), 0)
+            .unwrap()
+            .expect("mute publishes");
+        let TrackItem::Clip(clip) = &muted.snapshot.tracks[0].items[0] else {
+            panic!("fixture clip");
+        };
+        assert!(!clip.envelope.visible);
+        assert!(!clip.envelope.solo);
+        assert_eq!(muted.kind, DocumentEditActionKind::ToggleVisible);
+
+        queue.push_toggle_solo(layer);
+        let soloed = runtime
+            .process_next(&mut queue, Some(layer), muted.projection_generation)
+            .unwrap()
+            .expect("solo publishes");
+        let TrackItem::Clip(clip) = &soloed.snapshot.tracks[0].items[0] else {
+            panic!("fixture clip");
+        };
+        assert!(!clip.envelope.visible);
+        assert!(clip.envelope.solo);
+        assert_eq!(soloed.kind, DocumentEditActionKind::ToggleSolo);
     }
 
     #[test]

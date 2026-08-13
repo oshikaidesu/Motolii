@@ -2,6 +2,7 @@
 
 #import <QuartzCore/CAMetalLayer.h>
 #import <cstring>
+#import <cstdint>
 #import <react/renderer/components/MotoliiNativeSpec/ComponentDescriptors.h>
 #import <react/renderer/components/MotoliiNativeSpec/EventEmitters.h>
 #import <react/renderer/components/MotoliiNativeSpec/Props.h>
@@ -12,8 +13,16 @@ using namespace facebook::react;
 extern "C" void *motolii_macos_renderer_create_ca_layer(void *layer, uint32_t width, uint32_t height);
 extern "C" bool motolii_macos_renderer_resize(void *handle, uint32_t width, uint32_t height);
 extern "C" bool motolii_macos_renderer_render(void *handle);
-extern "C" bool motolii_macos_stage_renderer_pointer(void *handle, uint32_t phase, double x, double y);
+extern "C" bool motolii_macos_stage_renderer_pointer(
+    void *handle, uint32_t phase, uint32_t button, uint32_t modifiers, double x, double y);
+extern "C" bool motolii_macos_stage_renderer_scroll(
+    void *handle, double deltaX, double deltaY, double magnification, uint32_t modifiers, double x,
+    double y);
 extern "C" bool motolii_macos_stage_renderer_set_created_item(void *handle, const char *itemId);
+extern "C" bool MotoliiEnsureProductHost(void);
+extern "C" bool motolii_rnapp_stage_mount(double width, double height, double scale_factor);
+extern "C" bool motolii_rnapp_stage_resize(double width, double height, double scale_factor);
+extern "C" bool motolii_rnapp_stage_unmount(void);
 typedef struct {
   double x;
   double y;
@@ -49,33 +58,281 @@ typedef struct {
 
 extern "C" bool motolii_macos_timeline_renderer_hit_test(
     void *handle, double x, double y, MotoliiTimelineFeedback *feedback);
+extern "C" int32_t motolii_macos_timeline_renderer_hover_cursor(void *handle, double x, double y);
+extern "C" int32_t motolii_macos_stage_renderer_hover_cursor(void *handle, double x, double y);
+extern "C" bool motolii_macos_timeline_renderer_pointer(
+    void *handle, uint32_t phase, double x, double y, uint32_t modifiers,
+    MotoliiTimelineFeedback *feedback);
+extern "C" bool motolii_macos_timeline_renderer_scroll(
+    void *handle, double deltaX, double deltaY, double magnification, uint32_t modifiers, double x,
+    double y);
 extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStats *stats);
+extern "C" int32_t motolii_rnapp_host_key_event(
+    uint16_t keyCode, uint32_t modifierBits, const uint8_t *charsUtf8, size_t charsLen,
+    bool isRepeat, bool timelineFocused);
+extern "C" bool motolii_macos_timeline_renderer_keymap_delete(void *handle);
+
+/// Rust cursor code → NSCursor。0 arrow / 1 resizeLR / 2 openHand / 3 closedHand / 4 pointingHand
+static void MotoliiApplyCursor(int32_t code)
+{
+  NSCursor *cursor = [NSCursor arrowCursor];
+  switch (code) {
+    case 1:
+      cursor = [NSCursor resizeLeftRightCursor];
+      break;
+    case 2:
+      cursor = [NSCursor openHandCursor];
+      break;
+    case 3:
+      cursor = [NSCursor closedHandCursor];
+      break;
+    case 4:
+      cursor = [NSCursor pointingHandCursor];
+      break;
+    default:
+      break;
+  }
+  [cursor set];
+}
+
+/// RN TextInput / フィールドエディタ / IME preedit。これ以外は製品keymapへ通す。
+static BOOL MotoliiResponderIsTextInput(NSResponder *responder)
+{
+  if (responder == nil) {
+    return NO;
+  }
+  if ([responder isKindOfClass:[NSTextView class]] || [responder isKindOfClass:[NSTextField class]]) {
+    return YES;
+  }
+  Class rctField = NSClassFromString(@"RCTUITextField");
+  Class rctView = NSClassFromString(@"RCTUITextView");
+  Class rctInput = NSClassFromString(@"RCTTextInputComponentView");
+  if ((rctField && [responder isKindOfClass:rctField]) || (rctView && [responder isKindOfClass:rctView]) ||
+      (rctInput && [responder isKindOfClass:rctInput])) {
+    return YES;
+  }
+  if ([responder conformsToProtocol:@protocol(NSTextInputClient)] &&
+      [responder respondsToSelector:@selector(hasMarkedText)] &&
+      [(id<NSTextInputClient>)responder hasMarkedText]) {
+    return YES;
+  }
+  return NO;
+}
+
+static uint32_t MotoliiStageModifierBits(NSEventModifierFlags modifierFlags)
+{
+  NSEventModifierFlags flags = modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  uint32_t bits = 0;
+  if (flags & NSEventModifierFlagShift) bits |= 1u;
+  if (flags & NSEventModifierFlagControl) bits |= 2u;
+  if (flags & NSEventModifierFlagOption) bits |= 4u;
+  if (flags & NSEventModifierFlagCommand) bits |= 8u;
+  return bits;
+}
+
+/// 物理キーは表へ渡す。Space/Delete 定数で kind を焼かない。
+static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
+{
+  // IME/TextInput は既存 host_key_event へ送らない。set_ime_gate FFI は未公開。
+  if (MotoliiResponderIsTextInput(event.window.firstResponder)) {
+    return 0;
+  }
+  // dispatchIntent と同じく key 経路でも slot を起こす。AppDelegate の ensure 失敗をキーで再試行する。
+  (void)MotoliiEnsureProductHost();
+  NSEventModifierFlags flags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  uint32_t bits = 0;
+  if (flags & NSEventModifierFlagShift) {
+    bits |= 1u;
+  }
+  if (flags & NSEventModifierFlagControl) {
+    bits |= 2u;
+  }
+  if (flags & NSEventModifierFlagOption) {
+    bits |= 4u;
+  }
+  if (flags & NSEventModifierFlagCommand) {
+    bits |= 8u;
+  }
+  NSString *chars = event.charactersIgnoringModifiers ?: @"";
+  const char *utf8 = chars.UTF8String ?: "";
+  size_t len = strlen(utf8);
+  return motolii_rnapp_host_key_event(
+      event.keyCode, bits, (const uint8_t *)utf8, len, event.isARepeat, timelineFocused);
+}
 
 @interface MotoliiMetalView : NSView
 @end
 
 @interface MotoliiTimelineMetalView : MotoliiMetalView
-@property(nonatomic, copy) void (^timelineClickHandler)(CGFloat x, CGFloat y);
+@property(nonatomic, copy) void (^timelinePointerHandler)(uint32_t phase, CGFloat x, CGFloat y, uint32_t modifiers);
+@property(nonatomic, copy) void (^timelineScrollHandler)(
+    CGFloat deltaX, CGFloat deltaY, CGFloat magnification, uint32_t modifiers, CGFloat x, CGFloat y);
+@property(nonatomic, copy) void (^timelineDeleteHandler)(void);
+@property(nonatomic, copy) void (^timelineHoverHandler)(CGFloat x, CGFloat y);
+@property(nonatomic, strong) NSTrackingArea *trackingArea;
+@property(nonatomic, assign) BOOL timelineGestureActive;
 @end
 
 @interface MotoliiStageMetalView : MotoliiMetalView
-@property(nonatomic, copy) void (^stagePointerHandler)(uint32_t phase, CGFloat x, CGFloat y);
+@property(nonatomic, copy) void (^stagePointerHandler)(
+    uint32_t phase, uint32_t button, uint32_t modifiers, CGFloat x, CGFloat y);
+@property(nonatomic, copy) void (^stageScrollHandler)(
+    CGFloat deltaX, CGFloat deltaY, CGFloat magnification, uint32_t modifiers, CGFloat x,
+    CGFloat y);
+@property(nonatomic, copy) void (^stageHoverHandler)(CGFloat x, CGFloat y);
+@property(nonatomic, strong) NSTrackingArea *trackingArea;
+@property(nonatomic, assign) BOOL stageGestureActive;
+@property(nonatomic, assign) uint32_t stageGestureButton;
 @end
 
 @implementation MotoliiStageMetalView
 - (BOOL)acceptsFirstResponder { return YES; }
-- (void)emitPhase:(uint32_t)phase event:(NSEvent *)event
+- (void)updateTrackingAreas
+{
+  [super updateTrackingAreas];
+  if (self.trackingArea) {
+    [self removeTrackingArea:self.trackingArea];
+    self.trackingArea = nil;
+  }
+  NSTrackingArea *area = [[NSTrackingArea alloc]
+      initWithRect:self.bounds
+           options:(NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved |
+                    NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect)
+             owner:self
+          userInfo:nil];
+  self.trackingArea = area;
+  [self addTrackingArea:area];
+}
+- (void)emitPhase:(uint32_t)phase button:(uint32_t)button event:(NSEvent *)event
 {
   NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
-  if (self.stagePointerHandler) self.stagePointerHandler(phase, point.x, NSHeight(self.bounds) - point.y);
+  if (!self.stagePointerHandler) {
+    return;
+  }
+  if (phase == 0) {
+    if (self.stageGestureActive) {
+      return;
+    }
+    self.stageGestureActive = YES;
+    self.stageGestureButton = button;
+    self.stagePointerHandler(
+        phase, button, MotoliiStageModifierBits(event.modifierFlags), point.x,
+        NSHeight(self.bounds) - point.y);
+    return;
+  }
+  if (!self.stageGestureActive || self.stageGestureButton != button) {
+    return;
+  }
+  self.stagePointerHandler(
+      phase, button, MotoliiStageModifierBits(event.modifierFlags), point.x,
+      NSHeight(self.bounds) - point.y);
+  if (phase == 2 || phase == 3) {
+    self.stageGestureActive = NO;
+  }
 }
 - (void)mouseDown:(NSEvent *)event
 {
   [self.window makeFirstResponder:self];
-  [self emitPhase:0 event:event];
+  [self emitPhase:0 button:0 event:event];
 }
-- (void)mouseDragged:(NSEvent *)event { [self emitPhase:1 event:event]; }
-- (void)mouseUp:(NSEvent *)event { [self emitPhase:2 event:event]; }
+- (void)mouseDragged:(NSEvent *)event
+{
+  [self emitPhase:1 button:0 event:event];
+  if (self.stageHoverHandler) {
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    self.stageHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+  }
+}
+- (void)mouseUp:(NSEvent *)event
+{
+  [self emitPhase:2 button:0 event:event];
+  // gesture終了後、現在位置でcursorを再計算(closedHand残留を防ぐ)。
+  if (self.stageHoverHandler) {
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    self.stageHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+  }
+}
+- (void)rightMouseDown:(NSEvent *)event
+{
+  [self.window makeFirstResponder:self];
+  [self emitPhase:0 button:1 event:event];
+}
+- (void)rightMouseDragged:(NSEvent *)event { [self emitPhase:1 button:1 event:event]; }
+- (void)rightMouseUp:(NSEvent *)event { [self emitPhase:2 button:1 event:event]; }
+- (void)otherMouseDown:(NSEvent *)event
+{
+  if (event.buttonNumber != 2) return;
+  [self.window makeFirstResponder:self];
+  [self emitPhase:0 button:2 event:event];
+}
+- (void)otherMouseDragged:(NSEvent *)event
+{
+  if (event.buttonNumber == 2) [self emitPhase:1 button:2 event:event];
+}
+- (void)otherMouseUp:(NSEvent *)event
+{
+  if (event.buttonNumber == 2) [self emitPhase:2 button:2 event:event];
+}
+- (void)mouseMoved:(NSEvent *)event
+{
+  if (!self.stageHoverHandler) {
+    return;
+  }
+  NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+  self.stageHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+}
+// AppKitはdrag中のmouseDragged/Upをview外でも配送する。mouseExited即cancelしない。
+- (void)mouseExited:(NSEvent *)event
+{
+  (void)event;
+  MotoliiApplyCursor(0);
+}
+
+- (void)emitScrollDeltaX:(CGFloat)deltaX
+                  deltaY:(CGFloat)deltaY
+           magnification:(CGFloat)magnification
+                   event:(NSEvent *)event
+{
+  NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+  if (self.stageScrollHandler) {
+    self.stageScrollHandler(
+        deltaX, deltaY, magnification, MotoliiStageModifierBits(event.modifierFlags), point.x,
+        NSHeight(self.bounds) - point.y);
+  }
+}
+
+- (void)scrollWheel:(NSEvent *)event
+{
+  [self emitScrollDeltaX:event.scrollingDeltaX
+                  deltaY:event.scrollingDeltaY
+           magnification:0.0
+                   event:event];
+}
+
+- (void)magnifyWithEvent:(NSEvent *)event
+{
+  [self emitScrollDeltaX:0.0
+                  deltaY:0.0
+           magnification:event.magnification
+                   event:event];
+}
+
+- (void)keyDown:(NSEvent *)event
+{
+  if (MotoliiDispatchKeymap(event, NO) == 0) {
+    [super keyDown:event];
+  }
+}
+
+- (void)viewDidMoveToWindow
+{
+  [super viewDidMoveToWindow];
+  // window喪失時だけcancelを維持。
+  if (!self.window && self.stageGestureActive && self.stagePointerHandler) {
+    self.stagePointerHandler(3, self.stageGestureButton, 0, 0, 0);
+    self.stageGestureActive = NO;
+  }
+}
 @end
 
 @implementation MotoliiTimelineMetalView
@@ -85,17 +342,128 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   return YES;
 }
 
-- (void)mouseDown:(NSEvent *)event
+- (void)updateTrackingAreas
+{
+  [super updateTrackingAreas];
+  if (self.trackingArea) {
+    [self removeTrackingArea:self.trackingArea];
+    self.trackingArea = nil;
+  }
+  NSTrackingArea *area = [[NSTrackingArea alloc]
+      initWithRect:self.bounds
+           options:(NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved |
+                    NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect)
+             owner:self
+          userInfo:nil];
+  self.trackingArea = area;
+  [self addTrackingArea:area];
+}
+
+- (void)emitPhase:(uint32_t)phase event:(NSEvent *)event
 {
   NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
-  if (self.timelineClickHandler) {
-    self.timelineClickHandler(point.x, NSHeight(self.bounds) - point.y);
+  uint32_t modifiers = (event.modifierFlags & NSEventModifierFlagCommand) ? 1u : 0u;
+  if (self.timelinePointerHandler) {
+    self.timelinePointerHandler(phase, point.x, NSHeight(self.bounds) - point.y, modifiers);
   }
+  if (phase == 0) {
+    self.timelineGestureActive = YES;
+  } else if (phase == 2 || phase == 3) {
+    self.timelineGestureActive = NO;
+  }
+}
+
+- (void)mouseDown:(NSEvent *)event
+{
+  [self.window makeFirstResponder:self];
+  [self emitPhase:0 event:event];
 }
 
 - (void)mouseDragged:(NSEvent *)event
 {
-  [self mouseDown:event];
+  [self emitPhase:1 event:event];
+  if (self.timelineHoverHandler) {
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    self.timelineHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+  }
+}
+
+- (void)mouseUp:(NSEvent *)event
+{
+  [self emitPhase:2 event:event];
+  // gesture終了後、現在位置でcursorを再計算(closedHand残留を防ぐ)。
+  if (self.timelineHoverHandler) {
+    NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+    self.timelineHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+  }
+}
+
+- (void)mouseMoved:(NSEvent *)event
+{
+  if (!self.timelineHoverHandler) {
+    return;
+  }
+  NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+  self.timelineHoverHandler(point.x, NSHeight(self.bounds) - point.y);
+}
+
+- (void)mouseExited:(NSEvent *)event
+{
+  (void)event;
+  MotoliiApplyCursor(0);
+}
+
+- (void)keyDown:(NSEvent *)event
+{
+  int32_t result = MotoliiDispatchKeymap(event, YES);
+  if (result == 2 && self.timelineDeleteHandler) {
+    self.timelineDeleteHandler();
+    return;
+  }
+  if (result == 0) {
+    [super keyDown:event];
+  }
+}
+
+- (void)emitScrollDeltaX:(CGFloat)deltaX
+                  deltaY:(CGFloat)deltaY
+           magnification:(CGFloat)magnification
+               modifiers:(uint32_t)modifiers
+                   event:(NSEvent *)event
+{
+  NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
+  if (self.timelineScrollHandler) {
+    self.timelineScrollHandler(
+        deltaX, deltaY, magnification, modifiers, point.x, NSHeight(self.bounds) - point.y);
+  }
+}
+
+- (void)scrollWheel:(NSEvent *)event
+{
+  uint32_t modifiers = (event.modifierFlags & NSEventModifierFlagCommand) ? 1u : 0u;
+  [self emitScrollDeltaX:event.scrollingDeltaX
+                  deltaY:event.scrollingDeltaY
+           magnification:0.0
+               modifiers:modifiers
+                   event:event];
+}
+
+- (void)magnifyWithEvent:(NSEvent *)event
+{
+  [self emitScrollDeltaX:0.0
+                  deltaY:0.0
+           magnification:event.magnification
+               modifiers:0u
+                   event:event];
+}
+
+- (void)viewDidMoveToWindow
+{
+  [super viewDidMoveToWindow];
+  if (!self.window && self.timelineGestureActive && self.timelinePointerHandler) {
+    self.timelinePointerHandler(3, 0, 0, 0);
+    self.timelineGestureActive = NO;
+  }
 }
 
 @end
@@ -133,13 +501,14 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 {
   if (self = [super init]) {
     _props = MotoliiTimelineViewShadowNode::defaultSharedProps();
-    _selectedObjectIndex = 1;
-    _playhead = 0.54;
+    // 製品は未選択・t=0。fixture clip 1 / 0.54 を native 初期値に焼かない。
+    _selectedObjectIndex = -1;
+    _playhead = 0;
     _timelineView = [MotoliiTimelineMetalView new];
     _timelineView.wantsLayer = YES;
     _timelineView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     __weak MotoliiTimelineComponentView *weakSelf = self;
-    _timelineView.timelineClickHandler = ^(CGFloat x, CGFloat y) {
+    _timelineView.timelinePointerHandler = ^(uint32_t phase, CGFloat x, CGFloat y, uint32_t modifiers) {
       MotoliiTimelineComponentView *strongSelf = weakSelf;
       if (!strongSelf || !strongSelf->_timelineRenderer) {
         return;
@@ -147,8 +516,8 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
       CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_timelineView.layer;
       CGFloat scale = layer.contentsScale ?: 1.0;
       MotoliiTimelineFeedback feedback = {};
-      if (!motolii_macos_timeline_renderer_hit_test(
-              strongSelf->_timelineRenderer, x * scale, y * scale, &feedback)) {
+      if (!motolii_macos_timeline_renderer_pointer(
+              strongSelf->_timelineRenderer, phase, x * scale, y * scale, modifiers, &feedback)) {
         return;
       }
       if (!strongSelf->_eventEmitter) {
@@ -161,6 +530,37 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
           .time = feedback.time,
       };
       emitter->onTimelineFeedback(event);
+    };
+    _timelineView.timelineDeleteHandler = ^{
+      MotoliiTimelineComponentView *strongSelf = weakSelf;
+      if (!strongSelf || !strongSelf->_timelineRenderer) {
+        return;
+      }
+      (void)motolii_macos_timeline_renderer_keymap_delete(strongSelf->_timelineRenderer);
+    };
+    _timelineView.timelineScrollHandler =
+        ^(CGFloat deltaX, CGFloat deltaY, CGFloat magnification, uint32_t modifiers, CGFloat x,
+          CGFloat y) {
+          MotoliiTimelineComponentView *strongSelf = weakSelf;
+          if (!strongSelf || !strongSelf->_timelineRenderer) {
+            return;
+          }
+          CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_timelineView.layer;
+          CGFloat scale = layer.contentsScale ?: 1.0;
+          motolii_macos_timeline_renderer_scroll(
+              strongSelf->_timelineRenderer, deltaX * scale, deltaY * scale, magnification,
+              modifiers, x * scale, y * scale);
+        };
+    _timelineView.timelineHoverHandler = ^(CGFloat x, CGFloat y) {
+      MotoliiTimelineComponentView *strongSelf = weakSelf;
+      if (!strongSelf || !strongSelf->_timelineRenderer) {
+        return;
+      }
+      CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_timelineView.layer;
+      CGFloat scale = layer.contentsScale ?: 1.0;
+      int32_t code = motolii_macos_timeline_renderer_hover_cursor(
+          strongSelf->_timelineRenderer, x * scale, y * scale);
+      MotoliiApplyCursor(code);
     };
     [self addSubview:_timelineView];
   }
@@ -179,10 +579,30 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   [super updateProps:props oldProps:oldProps];
 }
 
+- (BOOL)acceptsFirstResponder
+{
+  return YES;
+}
+
+- (void)keyDown:(NSEvent *)event
+{
+  int32_t result = MotoliiDispatchKeymap(event, YES);
+  if (result == 2) {
+    if (_timelineRenderer) {
+      (void)motolii_macos_timeline_renderer_keymap_delete(_timelineRenderer);
+    }
+    return;
+  }
+  if (result == 0) {
+    [super keyDown:event];
+  }
+}
+
 - (void)viewDidMoveToWindow
 {
   [super viewDidMoveToWindow];
   if (self.window) {
+    MotoliiInstallProductKeymapMonitor();
     [self startTimelineRendererIfNeeded];
   } else {
     [self stopTimelineRenderer];
@@ -209,6 +629,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 
 - (void)startTimelineRendererIfNeeded
 {
+  (void)MotoliiEnsureProductHost();
   if (_timelineRenderer || !_timelineView.layer || NSWidth(self.bounds) <= 0 || NSHeight(self.bounds) <= 0) {
     return;
   }
@@ -226,6 +647,8 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   }
   motolii_macos_timeline_renderer_set_state(
       _timelineRenderer, _selectedObjectIndex, _playhead);
+  // host snapshot apply を live CAMetalLayer で走らせる。timer 初回を待たない。
+  motolii_macos_renderer_render(_timelineRenderer);
   __weak MotoliiTimelineComponentView *weakSelf = self;
   _timelineTimer = [NSTimer scheduledTimerWithTimeInterval:(1.0 / 60.0)
                                                    repeats:YES
@@ -267,6 +690,15 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 
 - (void)stopTimelineRenderer
 {
+  if (_timelineRenderer && _timelineView.timelineGestureActive) {
+    if (_timelineView.timelinePointerHandler) {
+      _timelineView.timelinePointerHandler(3, 0, 0, 0);
+    } else {
+      MotoliiTimelineFeedback feedback = {};
+      motolii_macos_timeline_renderer_pointer(_timelineRenderer, 3, 0.0, 0.0, 0u, &feedback);
+    }
+    _timelineView.timelineGestureActive = NO;
+  }
   [_timelineTimer invalidate];
   _timelineTimer = nil;
   if (_timelineRenderer) {
@@ -311,12 +743,38 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
     [_metalView setAccessibilityLabel:@"Rerun Spatial Stage metrics"];
     [_metalView setAccessibilityIdentifier:@"rerun-spatial-stage-metrics"];
     __weak MotoliiGpuComponentView *weakSelf = self;
-    _metalView.stagePointerHandler = ^(uint32_t phase, CGFloat x, CGFloat y) {
+    _metalView.stagePointerHandler =
+        ^(uint32_t phase, uint32_t button, uint32_t modifiers, CGFloat x, CGFloat y) {
       MotoliiGpuComponentView *strongSelf = weakSelf;
       if (!strongSelf || !strongSelf->_renderer) return;
       CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_metalView.layer;
       CGFloat scale = layer.contentsScale ?: 1.0;
-      motolii_macos_stage_renderer_pointer(strongSelf->_renderer, phase, x * scale, y * scale);
+      motolii_macos_stage_renderer_pointer(
+          strongSelf->_renderer, phase, button, modifiers, x * scale, y * scale);
+    };
+    _metalView.stageScrollHandler =
+        ^(CGFloat deltaX, CGFloat deltaY, CGFloat magnification, uint32_t modifiers, CGFloat x,
+          CGFloat y) {
+          MotoliiGpuComponentView *strongSelf = weakSelf;
+          if (!strongSelf || !strongSelf->_renderer) {
+            return;
+          }
+          CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_metalView.layer;
+          CGFloat scale = layer.contentsScale ?: 1.0;
+          motolii_macos_stage_renderer_scroll(
+              strongSelf->_renderer, deltaX * scale, deltaY * scale, magnification,
+              modifiers, x * scale, y * scale);
+        };
+    _metalView.stageHoverHandler = ^(CGFloat x, CGFloat y) {
+      MotoliiGpuComponentView *strongSelf = weakSelf;
+      if (!strongSelf || !strongSelf->_renderer) {
+        return;
+      }
+      CAMetalLayer *layer = (CAMetalLayer *)strongSelf->_metalView.layer;
+      CGFloat scale = layer.contentsScale ?: 1.0;
+      int32_t code =
+          motolii_macos_stage_renderer_hover_cursor(strongSelf->_renderer, x * scale, y * scale);
+      MotoliiApplyCursor(code);
     };
     [self addSubview:_metalView];
   }
@@ -336,12 +794,24 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   NSPoint point = [_metalView convertPoint:event.locationInWindow fromView:nil];
   double x = -1.0;
   double y = -1.0;
-  if (NSPointInRect(point, _metalView.bounds) && NSWidth(_metalView.bounds) > 0 && NSHeight(_metalView.bounds) > 0) {
-    x = point.x / NSWidth(_metalView.bounds);
-    y = 1.0 - point.y / NSHeight(_metalView.bounds);
+  double canonicalX = 0.0;
+  double canonicalY = 0.0;
+  CGFloat logicalW = NSWidth(_metalView.bounds);
+  CGFloat logicalH = NSHeight(_metalView.bounds);
+  if (NSPointInRect(point, _metalView.bounds) && logicalW > 0 && logicalH > 0) {
+    x = point.x / logicalW;
+    y = 1.0 - point.y / logicalH;
+    // host 正準: cx=(nx-0.5)*(w/h), cy=0.5-ny（logical viewport）
+    canonicalX = (x - 0.5) * (logicalW / logicalH);
+    canonicalY = 0.5 - y;
   }
   auto emitter = std::static_pointer_cast<const MotoliiGpuViewEventEmitter>(_eventEmitter);
-  MotoliiGpuViewEventEmitter::OnStageDrop drop = {.x = x, .y = y};
+  MotoliiGpuViewEventEmitter::OnStageDrop drop = {
+      .x = x,
+      .y = y,
+      .canonicalX = canonicalX,
+      .canonicalY = canonicalY,
+  };
   emitter->onStageDrop(drop);
 }
 
@@ -371,7 +841,8 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   _createdItemId = newProps.createdItemId;
   _draggedItemId = newProps.draggedItemId;
   if (_renderer) {
-    if (_createdItemId != _lastSentCreatedItemId) {
+    // 空 id は fixture rectangle@0.5|pucker-bloat にしない。host Document が正本。
+    if (!_createdItemId.empty() && _createdItemId != _lastSentCreatedItemId) {
       motolii_macos_stage_renderer_set_created_item(_renderer, _createdItemId.c_str());
       _lastSentCreatedItemId = _createdItemId;
     }
@@ -404,10 +875,23 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   [super updateProps:props oldProps:oldProps];
 }
 
+- (BOOL)acceptsFirstResponder
+{
+  return YES;
+}
+
+- (void)keyDown:(NSEvent *)event
+{
+  if (MotoliiDispatchKeymap(event, NO) == 0) {
+    [super keyDown:event];
+  }
+}
+
 - (void)viewDidMoveToWindow
 {
   [super viewDidMoveToWindow];
   if (self.window) {
+    MotoliiInstallProductKeymapMonitor();
     [self startRendererIfNeeded];
   } else {
     [self stopRenderer];
@@ -441,6 +925,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 
 - (void)startRendererIfNeeded
 {
+  (void)MotoliiEnsureProductHost();
   if (_renderer || !_metalView.layer || NSWidth(self.bounds) <= 0 || NSHeight(self.bounds) <= 0) {
     return;
   }
@@ -457,8 +942,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
     NSLog(@"[MotoliiRerunStage] renderer creation failed");
     return;
   }
-  motolii_macos_stage_renderer_set_created_item(_renderer, _createdItemId.c_str());
-  _lastSentCreatedItemId = _createdItemId;
+  // product mount では fixture createdItemId を new() 後に再注入しない。
   const auto &props = static_cast<const MotoliiGpuViewProps &>(*_props);
   MotoliiStageTransform transform = {
       .x = props.transformX,
@@ -471,6 +955,11 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   motolii_macos_stage_renderer_set_transform(_renderer, transform);
   _lastSentTransform = transform;
   _hasLastSentTransform = YES;
+
+  // host stage seat: logical bounds + contentsScale
+  (void)motolii_rnapp_stage_mount(NSWidth(self.bounds), NSHeight(self.bounds), scale);
+  // apply_host + eval frame を live CAMetalLayer で即時実行。offscreen warmup / timer に頼らない。
+  motolii_macos_renderer_render(_renderer);
 
   __weak MotoliiGpuComponentView *weakSelf = self;
   _frameTimer = [NSTimer scheduledTimerWithTimeInterval:(1.0 / 60.0)
@@ -517,6 +1006,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   motolii_macos_renderer_resize(_renderer,
                                 (uint32_t)layer.drawableSize.width,
                                 (uint32_t)layer.drawableSize.height);
+  (void)motolii_rnapp_stage_resize(NSWidth(self.bounds), NSHeight(self.bounds), scale);
   if (!CGSizeEqualToSize(oldSize, newSize)) {
     NSLog(@"[MotoliiRerunStage] renderer resized %.0fx%.0f @ %.1fx",
           newSize.width, newSize.height, scale);
@@ -528,6 +1018,7 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
   [_frameTimer invalidate];
   _frameTimer = nil;
   if (_renderer) {
+    (void)motolii_rnapp_stage_unmount();
     motolii_macos_renderer_destroy(_renderer);
     _renderer = nullptr;
     NSLog(@"[MotoliiRerunStage] renderer unmounted");
@@ -535,3 +1026,26 @@ extern "C" bool motolii_macos_renderer_get_stats(void *handle, MotoliiRenderStat
 }
 
 @end
+
+void MotoliiInstallProductKeymapMonitor(void)
+{
+  static id monitor;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                                                    handler:^NSEvent *(NSEvent *event) {
+      NSResponder *fr = event.window.firstResponder;
+      BOOL timelineFocused = [fr isKindOfClass:[MotoliiTimelineMetalView class]] ||
+          [fr isKindOfClass:[MotoliiTimelineComponentView class]];
+      int32_t result = MotoliiDispatchKeymap(event, timelineFocused);
+      // 2 は timeline 既存 delete。view keyDown に渡す。ここでは消費しない。
+      if (result == 2) {
+        return event;
+      }
+      if (result != 0) {
+        return nil;
+      }
+      return event;
+    }];
+  });
+}

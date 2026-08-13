@@ -269,9 +269,15 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::AddPositionKey => "Add position key",
         CommandKind::SetPositionKeyInterp => "Set position key interpolation",
         CommandKind::SetPositionKeyValue => "Set position key value",
+        CommandKind::SetPositionKeyTime => "Set position key time",
+        CommandKind::RemovePositionKey => "Remove position key",
         CommandKind::SetClipStart => "Set clip start",
         CommandKind::TrimClipIn => "Trim clip in",
         CommandKind::TrimClipOut => "Trim clip out",
+        CommandKind::SplitClip => "Split clip",
+        CommandKind::ReparentClip => "Reparent clip",
+        CommandKind::SetItemVisible => "Set item visible",
+        CommandKind::SetItemSolo => "Set item solo",
     }
 }
 

@@ -7,12 +7,12 @@ use motolii_core::{CanonicalPoint, CanonicalSize, CompCamera, CompCameraError, R
 use motolii_doc::{
     param_eval, resolve_document_spaces, visible_layers_at, Affine2D, Clip, ClipSource,
     CompCameraDoc, Document, EvaluationTime, LayerId, ParamEvalError, ResolvedLayerParams,
-    StandardShape, TrackItem, VectorContent, RECT_LAYER_SOURCE,
+    TrackItem, RECT_LAYER_SOURCE,
 };
 use motolii_eval::DataTracks;
 
 #[cfg(test)]
-use motolii_doc::{resolve_transform, Transform2D};
+use motolii_doc::{resolve_transform, StandardShape, Transform2D, VectorContent};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StageLocalRect {
@@ -111,6 +111,7 @@ pub fn project_stage_geometry(
             }
             TrackItem::Clip(clip) => {
                 if let Some(projection) = project_clip(
+                    document,
                     clip,
                     layer,
                     t,
@@ -132,6 +133,7 @@ pub fn project_stage_geometry(
 }
 
 fn project_clip(
+    document: &Document,
     clip: &Clip,
     layer: LayerId,
     t: RationalTime,
@@ -143,25 +145,37 @@ fn project_clip(
     match &clip.source {
         // AG-1: audio-only は visual に参加しない。正しい不在。
         ClipSource::Asset { video: None, .. } => Ok(None),
-        ClipSource::Asset { video: Some(_), .. } => Ok(Some(StageLayerProjection::Unavailable(
-            StageGeometryUnavailable::VideoSource { layer },
-        ))),
+        ClipSource::Asset { video: Some(_), .. } => {
+            // graph の VideoSource はフルフレーム。画素解像度は使わない。
+            let width =
+                document.composition.aspect_num() as f64 / document.composition.aspect_den() as f64;
+            available_local_rect(
+                layer,
+                CanonicalPoint { x: 0.0, y: 0.0 },
+                CanonicalSize { width, height: 1.0 },
+                world_affine,
+                camera_view,
+            )
+            .map(Some)
+        }
         ClipSource::Vector { recipe } => {
-            let VectorContent::StandardShape {
-                shape: StandardShape::Rect { width, height },
-            } = &recipe.content
+            let path = match motolii_doc::eval_vector_recipe_path(recipe, t, tracks, resolved) {
+                Ok(path) => path,
+                Err(motolii_doc::VectorPathError::Unsupported) => {
+                    return Ok(Some(StageLayerProjection::Unavailable(
+                        StageGeometryUnavailable::VectorSource { layer },
+                    )));
+                }
+                Err(motolii_doc::VectorPathError::Param(err)) => return Err(err.into()),
+            };
+            // gizmo境界はPathのAABB。矩形と楕円の退化だけがAABBを型付きで持つ。
+            let Some((center, width, height)) = motolii_doc::pathgeom::axis_aligned_rect(&path)
+                .or_else(|| motolii_doc::pathgeom::axis_aligned_ellipse(&path))
             else {
                 return Ok(Some(StageLayerProjection::Unavailable(
                     StageGeometryUnavailable::VectorSource { layer },
                 )));
             };
-            if !recipe.modifiers.is_empty() {
-                return Ok(Some(StageLayerProjection::Unavailable(
-                    StageGeometryUnavailable::VectorSource { layer },
-                )));
-            }
-            let width = param_eval::eval_f64(width, t, tracks, resolved)?;
-            let height = param_eval::eval_f64(height, t, tracks, resolved)?;
             let world = world_affine
                 .get(&layer.get())
                 .copied()
@@ -173,7 +187,10 @@ fn project_clip(
             }
             Ok(Some(StageLayerProjection::Available(StageLayerGeometry {
                 local_rect: StageLocalRect {
-                    center: CanonicalPoint { x: 0.0, y: 0.0 },
+                    center: CanonicalPoint {
+                        x: center.x,
+                        y: center.y,
+                    },
                     size: CanonicalSize { width, height },
                 },
                 world,
@@ -225,6 +242,29 @@ fn project_clip(
             StageGeometryUnavailable::PluginSource { layer },
         ))),
     }
+}
+
+fn available_local_rect(
+    layer: LayerId,
+    center: CanonicalPoint,
+    size: CanonicalSize,
+    world_affine: &HashMap<u64, Affine2D>,
+    camera_view: Affine2D,
+) -> Result<StageLayerProjection, StageGeometryError> {
+    let world = world_affine
+        .get(&layer.get())
+        .copied()
+        .ok_or(StageGeometryError::LayerMissing { layer })?;
+    if world.try_invert().is_none() || (camera_view * world).try_invert().is_none() {
+        return Ok(StageLayerProjection::Unavailable(
+            StageGeometryUnavailable::SingularTransform { layer },
+        ));
+    }
+    Ok(StageLayerProjection::Available(StageLayerGeometry {
+        local_rect: StageLocalRect { center, size },
+        world,
+        camera_view,
+    }))
 }
 
 /// `camera_view_affine` と同一構成: S(1/h)·R(-roll)·T(-center)。
@@ -664,7 +704,7 @@ mod tests {
     }
 
     #[test]
-    fn group_video_vector_plugin_are_typed_unavailable() {
+    fn group_and_plugin_are_typed_unavailable_while_video_and_ellipse_project() {
         let mut fx = Fixture::new();
         let asset = fx.doc.assets.allocate("v", "video/mp4", "hash").unwrap();
         let group_id = fx.doc.layers.allocate("g").unwrap();
@@ -722,18 +762,18 @@ mod tests {
                 StageGeometryUnavailable::Group { .. }
             ))
         ));
-        assert!(matches!(
-            proj.get(video_id),
-            Some(StageLayerProjection::Unavailable(
-                StageGeometryUnavailable::VideoSource { .. }
-            ))
-        ));
-        assert!(matches!(
-            proj.get(vector_id),
-            Some(StageLayerProjection::Unavailable(
-                StageGeometryUnavailable::VectorSource { .. }
-            ))
-        ));
+        let StageLayerProjection::Available(video) = proj.get(video_id).expect("video") else {
+            panic!("video source uses composition-frame geometry");
+        };
+        assert!((video.local_rect.size.width - 16.0 / 9.0).abs() < 1e-12);
+        assert_eq!(video.local_rect.size.height, 1.0);
+        let StageLayerProjection::Available(vector) = proj.get(vector_id).expect("vector") else {
+            panic!("ellipse lowers to a path AABB gizmo bound");
+        };
+        assert_eq!(vector.local_rect.center.x, 0.0);
+        assert_eq!(vector.local_rect.center.y, 0.0);
+        assert_eq!(vector.local_rect.size.width, 1.0);
+        assert_eq!(vector.local_rect.size.height, 1.0);
         assert!(matches!(
             proj.get(plugin_id),
             Some(StageLayerProjection::Unavailable(

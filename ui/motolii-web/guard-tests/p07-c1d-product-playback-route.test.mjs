@@ -49,8 +49,6 @@ test("P07-C1D keeps the Stage play handler to ProductApp playback spine", async 
   assert.ok(product.includes("self.document_runtime.project_root()"));
   assert.ok(product.includes("self.editor_playhead.set(plan.timeline_time)"));
   assert.ok(product.includes("self.submit_stage_projection()?"));
-  assert.ok(product.includes("NativeTimelineRenderState"));
-  assert.ok(product.includes("playhead: self.editor_playhead.current"));
 
   for (const forbidden of ["setInterval", "requestAnimationFrame", "f64 * CANONICAL_SAMPLE_RATE"]) {
     assert.equal(main.includes(forbidden), false, forbidden);

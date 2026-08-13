@@ -1721,7 +1721,7 @@ PODS:
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
     - SocketRocket
-  - react-native-safe-area-context (5.8.1):
+  - react-native-safe-area-context (5.9.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -1739,8 +1739,8 @@ PODS:
     - React-graphics
     - React-ImageManager
     - React-jsi
-    - react-native-safe-area-context/common (= 5.8.1)
-    - react-native-safe-area-context/fabric (= 5.8.1)
+    - react-native-safe-area-context/common (= 5.9.0)
+    - react-native-safe-area-context/fabric (= 5.9.0)
     - React-NativeModulesApple
     - React-RCTFabric
     - React-renderercss
@@ -1751,7 +1751,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - react-native-safe-area-context/common (5.8.1):
+  - react-native-safe-area-context/common (5.9.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -1779,7 +1779,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - react-native-safe-area-context/fabric (5.8.1):
+  - react-native-safe-area-context/fabric (5.9.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -2584,7 +2584,7 @@ SPEC CHECKSUMS:
   React-logger: 19586e18cb370047633039b018d365953598739e
   React-Mapbuffer: 45ec5cdca592f4dc6522c59b8f4575abf573e0b1
   React-microtasksnativemodule: a0f271cefc1bae9ff0cb8f4237b9f7481cd97543
-  react-native-safe-area-context: 61f913dfb64ceb843bec60e54872a563b2d30972
+  react-native-safe-area-context: e4ff11face70f82d7f4bb2a0711744e3bbea1b7a
   React-NativeModulesApple: 02b57ec4dced7eb81bedcccdad1ca62fee961c4d
   React-oscompat: 66d4c9c770c0690b00c652a568f30b4713104ebf
   React-perflogger: 0834475c95233811e2095a13fc6fad0bac270dae
@@ -2613,7 +2613,7 @@ SPEC CHECKSUMS:
   React-timing: 990ed60289af22f972123de84fe38f266a604c6a
   React-utils: ae5bf8031b105dbd3cb85fc63ae56512563f8daf
   ReactAppDependencyProvider: db0eebc7a9e85c8976d5ea10706d790753a53889
-  ReactCodegen: 0f28e09abd82c11673255e5dcbd54202833bfc3b
+  ReactCodegen: 057eb81b203cedd724ca2915bca3eade5affc951
   ReactCommon: bc273d1cfc32a36ea662e81293e0961de8c21c77
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: a88f30ac6f89fded00f9840e7d043315e5ab4fe0

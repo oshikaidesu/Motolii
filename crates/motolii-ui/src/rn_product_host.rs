@@ -6,19 +6,28 @@
 use std::collections::{HashMap, HashSet};
 #[cfg(target_os = "macos")]
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::path::Path;
-#[cfg(target_os = "macos")]
-use std::sync::Arc;
-use std::sync::{Mutex, OnceLock};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use motolii_core::{PixelSize, RationalTime};
-use motolii_doc::{DocParam, DocValue, EvaluationTime, KeyframeId, LayerId, TrackItem};
+use motolii_audio::{AudioProgram, PcmCache, CANONICAL_SAMPLE_RATE};
+use motolii_core::{ColorSpace, Fps, FrameDesc, PixelFormat, PixelSize, Quality, RationalTime};
+use motolii_doc::{
+    build_document_frame_graph, layer_names_for_item, prepare_set_transform_param_key_value,
+    Affine2D, Clip, ClipSource, Command, DocParam, DocValue, EffectId, EvaluationTime,
+    ItemEnvelope, KeyframeId, LayerId, ParentLocator, ResolvedLayerParams, ScalarPropertyId,
+    TrackItem,
+};
 use motolii_eval::{DataTracks, Interp};
+use motolii_export::{export_document_video, ExportJob, VideoSourceBinder};
+use motolii_gpu::GpuCtx;
+use motolii_plugins_firstparty::{first_party_catalog, first_party_runtime};
+use motolii_render::{
+    render_graph_cached, validate_render_graph_wiring, RenderGraphInputs, RenderSession,
+};
+use motolii_transport::PlaybackSession;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[cfg(target_os = "macos")]
-use motolii_gpu::GpuCtx;
 #[cfg(target_os = "macos")]
 use wgpu::{
     Color, CompositeAlphaMode, CurrentSurfaceTexture, LoadOp, Operations, PresentMode,
@@ -27,11 +36,16 @@ use wgpu::{
 };
 
 use crate::document_edit_runtime::{
-    AddPositionKeyRequest, DocumentEditQueue, DocumentEditRuntime, DocumentEditRuntimeError,
-    PlaceRectangleRequest, SetPositionKeyInterpRequest, SetPositionKeyValueRequest,
+    prepare_set_effect_param_command, prepare_set_source_param_command, AddPositionKeyRequest,
+    AddTransformParamKeyRequest, AttachEffectRequest, DocumentEditQueue, DocumentEditRuntime,
+    DocumentEditRuntimeError, PlaceEllipseRequest, PlaceMediaRequest, PlaceRectangleRequest,
+    PlaceVismRequest, PublishedDocument, RemovePositionKeyRequest, SetEffectParamRequest,
+    SetOpacityRequest, SetPositionConstRequest, SetPositionKeyInterpRequest,
+    SetPositionKeyTimeRequest, SetPositionKeyValueRequest, SetSourceParamRequest,
 };
+use crate::media_library::{LibraryProjection, MediaLibrary};
 use crate::shell::{open_project_runtime, ShellError};
-use crate::stage_geometry_projection::project_stage_geometry;
+use crate::stage_geometry_projection::{project_stage_geometry, StageLayerProjection};
 use crate::stage_hit_test::{
     hit_test_projected_layers, view_local_in_stage, view_local_to_canonical, StageHit,
     StageHitTestReject,
@@ -40,16 +54,24 @@ use crate::stage_overlay_gpu::{overlay_dimensions_match, overlay_dirty, OverlayU
 use crate::stage_overlay_raster::{raster_selection_outline, StageOverlayRaster};
 #[cfg(target_os = "macos")]
 use crate::static_preview::{bootstrap_frame_desc, prepare_in_setup_worker, StaticPreview};
-use crate::{CommandId, DomainIntent, InputPhase, RouterOutput};
+use crate::timeline_move_gesture::TimelineMoveRequest;
+use crate::timeline_trim_gesture::TimelineTrimRequest;
+use crate::{CommandId, DocumentCommandRequest, DomainIntent, InputPhase, RouterOutput};
 
 const WIRE_VERSION: u8 = 1;
 const HOST_TO_RN: &str = "host-to-rn";
 const RN_TO_HOST: &str = "rn-to-host";
 const PRODUCT_ROLE: &str = "product-runtime-seat";
-const MAX_STAGE_BOUNDS: usize = 16;
+// ResourceLimits.production().max_layers は 100_000。ここは wire/transport truncate であり Document 天井ではない。
+const MAX_STAGE_BOUNDS: usize = 64;
 const MAX_STAGE_SELECTION: usize = 16;
+const MAX_POSITION_KEYS: usize = 64;
+const MAX_EFFECTS_PER_LAYER: usize = 8;
+// Color+scalar を落とさない。f64 専用の意味天井ではない。
+const MAX_SOURCE_PARAMS_PER_LAYER: usize = 16;
 const MAX_DIAGNOSTICS: usize = 8;
 const MAX_JSON_BYTES: usize = 16_384;
+const MAX_SNAPSHOT_JSON_BYTES: usize = 131_072;
 #[cfg(target_os = "macos")]
 const MAX_PROJECT_PATH_BYTES: usize = 4_096;
 
@@ -66,8 +88,6 @@ pub enum RnHostError {
     StageHandleExhausted,
     #[error("timeline handle space exhausted")]
     TimelineHandleExhausted,
-    #[error("host registry lock was poisoned")]
-    RegistryLockPoisoned,
     #[error(transparent)]
     Serialize(#[from] serde_json::Error),
     #[error("json payload exceeds {MAX_JSON_BYTES} bytes")]
@@ -95,6 +115,7 @@ pub enum RnHostError {
 #[doc(hidden)]
 pub enum RnHostReasonCode {
     HostAlreadyExists,
+    ProjectAlreadyOpen,
     InvalidProjectPath,
     UnknownHostHandle,
     UnknownStageHandle,
@@ -103,6 +124,20 @@ pub enum RnHostReasonCode {
     DestroyedStageHandle,
     DestroyedTimelineHandle,
     InvalidIntent,
+    ProjectionGenerationExhausted,
+    NonFiniteDropPosition,
+    PlayheadOutsideComposition,
+    RemainingDurationBelowOneFrame,
+    NoTrackForRectangle,
+    LayerIdReservationChanged,
+    LayerIdError,
+    RationalTimeError,
+    DocumentError,
+    DocumentPluginError,
+    JournalCommit,
+    DocumentWriteBlocked,
+    JournalReconcile,
+    CommandError,
     StaleProjectionGeneration,
     LateLifecycleEvent,
     DoubleDestroy,
@@ -134,7 +169,7 @@ struct WireStageSelection {
     layer_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct WireProductSnapshot {
     version: u8,
     direction: String,
@@ -146,8 +181,124 @@ pub(crate) struct WireProductSnapshot {
     current_time: RationalTime,
     #[serde(skip_serializing_if = "Option::is_none")]
     primary_layer_id: Option<String>,
+    /// Undo/Redo入口の文脈無効化用。NothingToUndo/Redoの事前投影。
+    #[serde(default)]
+    history: WireHistoryProjection,
+    /// 各capで隠れた件数の合計。`(+)→(+N)`表示用。
+    #[serde(default)]
+    truncated_total: u32,
     stage: WireStageProjection,
+    /// Available layer の world 適用済み canonical corners（v1・camera 不使用）。
+    stage_geometry: WireStageGeometryProjection,
+    timeline: WireTimelineProjection,
+    /// session 不変の first-party effect catalog（reference を除く製品 plugin）。
+    catalog: WireCatalogProjection,
+    /// Workspace media library。catalog / Document Asset とは別 owner。
+    #[serde(default)]
+    library: WireLibraryProjection,
+    /// 選択 layer の Document DocParams。未選択時は欠落。transform 数値は stage_geometry。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    selected_doc_params: Option<WireSelectedDocParams>,
     diagnostics: Vec<RnHostDiagnostic>,
+    /// idleは既存snapshot JSONを変えない。playingの時だけ出す。
+    #[serde(default, skip_serializing_if = "playback_state_is_idle")]
+    playback_state: WirePlaybackState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+enum WirePlaybackState {
+    #[default]
+    Idle,
+    Playing,
+}
+
+fn playback_state_is_idle(state: &WirePlaybackState) -> bool {
+    *state == WirePlaybackState::Idle
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+struct WireHistoryProjection {
+    can_undo: bool,
+    can_redo: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireCatalogProjection {
+    effects: Vec<WireCatalogEffect>,
+    #[serde(default)]
+    sources: Vec<WireCatalogSource>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireCatalogEffect {
+    plugin_id: String,
+    name: String,
+    effect_version: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireCatalogSource {
+    plugin_id: String,
+    name: String,
+    effect_version: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+struct WireLibraryProjection {
+    root: Option<WireLibraryRoot>,
+    directories: Vec<WireLibraryDirectory>,
+    tags: Vec<WireLibraryTag>,
+    items: Vec<WireLibraryItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireLibraryRoot {
+    id: String,
+    name: String,
+    path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireLibraryDirectory {
+    id: String,
+    name: String,
+    path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireLibraryTag {
+    id: String,
+    label: String,
+    count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct WireLibraryItem {
+    id: String,
+    name: String,
+    kind: String,
+    directory: String,
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireStageGeometryProjection {
+    layers: Vec<WireStageGeometryLayer>,
+    layers_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireStageGeometryLayer {
+    layer_id: String,
+    /// CCW・local rect 左下起点。world 適用済み canonical。
+    corners: [[f64; 2]; 4],
+    /// Document world affine の並進（local center を写した点）。角平均ではない。
+    position: [f64; 2],
+    /// Document world affine の回転（ラジアン）。
+    rotation: f64,
+    /// Document world affine のスケール。
+    scale: [f64; 2],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -156,7 +307,102 @@ struct WireStageProjection {
     bounds: Vec<WireStageBound>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireTimelineProjection {
+    fps: Fps,
+    layers: Vec<WireTimelineLayer>,
+    duration: RationalTime,
+    layers_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireTimelineLayer {
+    layer_id: String,
+    display_name: String,
+    start: RationalTime,
+    duration: RationalTime,
+    position_keys: Vec<WireTimelinePositionKey>,
+    #[serde(default)]
+    param_keys: Vec<WireTimelineParamKey>,
+    keys_truncated: bool,
+    /// layer の effect 使用列。f64 / Color Const。cap 超過は truncated。
+    effects: Vec<WireTimelineEffect>,
+    effects_truncated: bool,
+    /// ClipSource::Plugin の Const params（f64 と Color）。cap 超過は truncated。
+    #[serde(default)]
+    source_params: Vec<WireTimelineSourceParam>,
+    #[serde(default)]
+    source_params_truncated: bool,
+    #[serde(default = "wire_default_true")]
+    visible: bool,
+    #[serde(default)]
+    solo: bool,
+}
+
+fn wire_default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireTimelineEffect {
+    effect_use_id: String,
+    plugin_id: String,
+    params: Vec<WireTimelineEffectParam>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireTimelineEffectParam {
+    param_id: String,
+    value: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    color: Option<[f64; 4]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireTimelineSourceParam {
+    param_id: String,
+    value: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    color: Option<[f64; 4]>,
+}
+
+/// 選択 layer の envelope / effect / source DocParams。平行 transform は持たない。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireSelectedDocParams {
+    layer_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    opacity: Option<f64>,
+    #[serde(default)]
+    effects: Vec<WireTimelineEffect>,
+    #[serde(default)]
+    source_params: Vec<WireTimelineSourceParam>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireTimelinePositionKey {
+    key_id: String,
+    time: RationalTime,
+    /// DocValue::Vec2 のみ投影。他型は field 欠落(編集不可)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    value: Option<[f64; 2]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    interp: Option<Interp>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct WireTimelineParamKey {
+    property: String,
+    key_id: String,
+    time: RationalTime,
+    /// rotation / opacity の F64。scale では欠落。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    value: Option<f64>,
+    /// scale の Vec2。rotation / opacity では欠落。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    vec: Option<[f64; 2]>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 #[doc(hidden)]
 pub struct RnProductSnapshotForTest {
     pub revision: String,
@@ -164,6 +410,46 @@ pub struct RnProductSnapshotForTest {
     pub current_time: RationalTime,
     pub primary_layer_id: Option<String>,
     pub layer_ids: Vec<String>,
+    pub timeline: RnTimelineProjectionForTest,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[doc(hidden)]
+pub struct RnTimelineProjectionForTest {
+    pub fps: Fps,
+    pub layers: Vec<RnTimelineLayerForTest>,
+    pub layers_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[doc(hidden)]
+pub struct RnTimelineLayerForTest {
+    pub layer_id: String,
+    pub display_name: String,
+    pub start: RationalTime,
+    pub duration: RationalTime,
+    pub position_keys: Vec<RnTimelinePositionKeyForTest>,
+    pub param_keys: Vec<RnTimelineParamKeyForTest>,
+    pub keys_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[doc(hidden)]
+pub struct RnTimelinePositionKeyForTest {
+    pub key_id: String,
+    pub time: RationalTime,
+    pub value: Option<[f64; 2]>,
+    pub interp: Option<Interp>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[doc(hidden)]
+pub struct RnTimelineParamKeyForTest {
+    pub property: String,
+    pub key_id: String,
+    pub time: RationalTime,
+    pub value: Option<f64>,
+    pub vec: Option<[f64; 2]>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -178,12 +464,13 @@ pub struct RnHostTestIntent {
     pub focused: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[doc(hidden)]
 pub struct RnHostTestResponse {
     pub accepted: bool,
     pub reason: Option<RnHostReasonCode>,
     pub snapshot: Option<RnProductSnapshotForTest>,
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -219,7 +506,7 @@ pub(crate) struct WireIntentEnvelope {
     /// set_time: 評価 frame index。欠落・非整数は typed 拒否。暗黙 clamp しない。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     frame: Option<i64>,
-    /// place_rectangle: canonical document position
+    /// place_rectangle / place_ellipse: canonical document position
     #[serde(default, skip_serializing_if = "Option::is_none")]
     position: Option<[f64; 2]>,
     /// place_rectangle: document playhead time
@@ -228,14 +515,45 @@ pub(crate) struct WireIntentEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     target: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    dest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    key_id: Option<String>,
+    /// add_param_key / set_param_key_value: `scale` | `rotation` | `opacity`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    property: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     time: Option<RationalTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     new: Option<[f64; 2]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     interp: Option<Interp>,
+    /// move_layer_by: canonical world delta
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    delta: Option<[f64; 2]>,
+    /// attach_effect: catalog plugin id
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    plugin_id: Option<String>,
+    /// place_media: MediaLibrary item id（Document Asset ではない）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    item_id: Option<String>,
+    /// set_effect_param: EffectUse id（u64 文字列）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    effect_use_id: Option<String>,
+    /// set_effect_param: definition 上の param id
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    param_id: Option<String>,
+    /// set_effect_param / set_opacity / set_source_param: f64 値
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    value: Option<f64>,
+    /// set_source_param: Color。Some かつ finite なら value より優先。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    color: Option<[f64; 4]>,
+    /// export_document: 出力ファイル path。保存先UIはRN側。ここは既存 ExportJob へ渡すだけ。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    output_path: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct WireIntentResponse {
     version: u8,
     accepted: bool,
@@ -243,6 +561,9 @@ pub(crate) struct WireIntentResponse {
     snapshot: Option<WireProductSnapshot>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     diagnostics: Vec<RnHostDiagnostic>,
+    /// export 等の即時理由。永続意味ではない。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
 }
 
 #[cfg(target_os = "macos")]
@@ -429,6 +750,84 @@ pub(crate) struct TimelineFrameBorrow {
     pub(crate) playhead: RationalTime,
 }
 
+/// Stage実フレーム。native合成が同一device上でtextureを読む。
+#[derive(Debug)]
+#[doc(hidden)]
+pub struct AppStageFrame {
+    pub texture: wgpu::Texture,
+    pub width: u32,
+    pub height: u32,
+    pub revision: String,
+    pub generation: String,
+    pub time: RationalTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[doc(hidden)]
+pub enum AppStageTransformEdit {
+    TranslateWorld([f64; 2]),
+    RotateZ(f64),
+    Scale([f64; 2]),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[doc(hidden)]
+pub struct AppStageGeometryLayer {
+    pub layer_id: String,
+    pub corners: [[f64; 2]; 4],
+    pub position: [f64; 2],
+    pub rotation: f64,
+    pub scale: [f64; 2],
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[doc(hidden)]
+pub struct AppStageGeometry {
+    pub layers: Vec<AppStageGeometryLayer>,
+    pub layers_truncated: bool,
+}
+
+#[derive(Debug)]
+#[doc(hidden)]
+pub struct AppStageTransformPreview {
+    pub geometry: AppStageGeometry,
+}
+
+#[derive(Debug, Error)]
+#[doc(hidden)]
+pub enum AppStageTransformError {
+    #[error("Stage host is unavailable")]
+    HostUnavailable,
+    #[error("The Document changed during the gesture; try again")]
+    StaleDocument,
+    #[error("The selected layer is no longer available")]
+    TargetUnavailable,
+    #[error("The selected layer has no editable Stage transform")]
+    TransformUnavailable,
+    #[error("This animated transform can only be edited on an existing keyframe")]
+    OffKeyframe,
+    #[error("This transform value is not editable")]
+    UnsupportedProperty,
+    #[error("The transform result is not finite")]
+    NonFinite,
+    #[error("The transform did not change")]
+    NoChange,
+    #[error("Document preview failed: {0}")]
+    Preview(String),
+    #[error("Stage preview render failed: {0}")]
+    Render(String),
+    #[error("Document commit failed: {0}")]
+    Commit(String),
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[doc(hidden)]
+pub enum HostRenderFrameResult {
+    Unchanged,
+    Rendered,
+    Failed,
+}
+
 struct RnProductHost {
     runtime: DocumentEditRuntime,
     projection_generation: u64,
@@ -438,6 +837,18 @@ struct RnProductHost {
     stages: HashMap<u64, RnStageSurface>,
     timelines: HashMap<u64, RnTimelineSurface>,
     destroyed: bool,
+    /// Arc: GPU submitをregistry lock外で回すためcloneして持ち出す(F10)。
+    stage_frame_runtime: Option<Arc<motolii_plugin::PluginRuntime>>,
+    /// Export と同じ FrameReader 束。GPU 初回 render で作る。
+    stage_video: Option<VideoSourceBinder>,
+    /// dirty gate: 前回返した (revision, generation, time, preview_epoch)。
+    stage_frame_last: Option<(String, String, RationalTime, u64)>,
+    playback_session: Option<PlaybackSession>,
+    playback_caches: HashMap<(String, u32), Arc<PcmCache>>,
+    playback_at_revision: Option<u64>,
+    inspector_preview: Option<Command>,
+    inspector_preview_epoch: u64,
+    media_library: MediaLibrary,
     #[cfg(target_os = "macos")]
     gpu: Option<HostGpuBundle>,
 }
@@ -453,15 +864,30 @@ impl RnProductHost {
         }
         selection.truncate(MAX_STAGE_SELECTION);
 
-        let bounds = document
-            .layers
-            .iter()
+        let bounds = layers_in_track_order(document.as_ref())
+            .into_iter()
             .take(MAX_STAGE_BOUNDS)
             .map(|(layer_id, name)| WireStageBound {
                 layer_id: layer_id.get().to_string(),
-                display_name: name.to_owned(),
+                display_name: name,
             })
             .collect::<Vec<_>>();
+
+        // stage seat と同じ評価文脈: current_time + 空 DataTracks。
+        // Inspector preview は Document を書き換えず、同じ投影へ載せる。
+        let previewed_document = self.inspector_preview.as_ref().and_then(|command| {
+            let mut previewed = (*document).clone();
+            command.apply(&mut previewed).ok()?;
+            previewed.validate().ok()?;
+            Some(previewed)
+        });
+        let params_document = previewed_document.as_ref().unwrap_or(document.as_ref());
+        let stage_geometry = project_stage_geometry_wire(
+            params_document,
+            EvaluationTime::new(self.current_time),
+            &DataTracks::new(),
+        );
+        let (timeline, truncated_total) = project_timeline(document.as_ref());
 
         WireProductSnapshot {
             version: WIRE_VERSION,
@@ -472,9 +898,333 @@ impl RnProductHost {
             projection_generation: self.projection_generation.to_string(),
             current_time: self.current_time,
             primary_layer_id: self.primary.map(|layer| layer.get().to_string()),
+            history: WireHistoryProjection {
+                can_undo: self.runtime.can_undo(),
+                can_redo: self.runtime.can_redo(),
+            },
+            truncated_total,
             stage: WireStageProjection { selection, bounds },
-            diagnostics: Vec::new(),
+            stage_geometry,
+            timeline,
+            catalog: wire_catalog_projection(),
+            library: wire_library_projection(self.media_library.project()),
+            selected_doc_params: project_selected_doc_params(
+                params_document,
+                self.primary,
+                self.current_time,
+            ),
+            diagnostics: self
+                .runtime
+                .is_write_blocked()
+                .then(|| {
+                    diagnostic(
+                        RnHostReasonCode::DocumentWriteBlocked,
+                        Some(host_handle),
+                        None,
+                        None,
+                        None,
+                    )
+                })
+                .into_iter()
+                .collect(),
+            playback_state: if self.playback_session.is_some() {
+                WirePlaybackState::Playing
+            } else {
+                WirePlaybackState::Idle
+            },
         }
+    }
+
+    /// Document 変更を Host transient へ載せ、次の read_snapshot / dispatch が同じ live snapshot を返す。
+    fn adopt_published(&mut self, published: PublishedDocument) {
+        self.primary = published.primary;
+        self.projection_generation = published.projection_generation;
+        self.stage_frame_last = None;
+        #[cfg(target_os = "macos")]
+        self.refresh_stage_overlays().ok();
+    }
+
+    fn accept_live_snapshot(
+        &mut self,
+        host_handle: u64,
+        published: Option<PublishedDocument>,
+    ) -> WireIntentResponse {
+        if let Some(published) = published {
+            self.adopt_published(published);
+        }
+        accept(self.snapshot_wire(host_handle))
+    }
+
+    fn bump_projection_generation(&mut self) -> bool {
+        let Some(next) = self.projection_generation.checked_add(1) else {
+            return false;
+        };
+        self.projection_generation = next;
+        true
+    }
+
+    fn pause_playback(&mut self) {
+        let Some(session) = self.playback_session.take() else {
+            self.playback_at_revision = None;
+            return;
+        };
+        self.playback_at_revision = None;
+        let duration = self.runtime.snapshot().composition.duration;
+        if let Ok(time) = session.transport().perceptual_time() {
+            if time >= RationalTime::ZERO {
+                self.current_time = if duration >= RationalTime::ZERO {
+                    time.min(duration)
+                } else {
+                    time
+                };
+            }
+        }
+    }
+
+    fn begin_playback(&mut self) -> Result<(), RnHostReasonCode> {
+        let document = self.runtime.snapshot();
+        let start_frame = canonical_playback_start_frame(self.current_time)?;
+        let mut caches = std::mem::take(&mut self.playback_caches);
+        let program = AudioProgram::from_document(
+            document.as_ref(),
+            self.runtime.project_root().as_deref(),
+            &mut caches,
+        )
+        .map_err(|_| RnHostReasonCode::InvalidIntent)?;
+        self.playback_caches = caches;
+        let fps = document.composition.fps;
+        #[cfg(target_os = "macos")]
+        let gpu = self.gpu.as_ref().map(|bundle| &*bundle.ctx);
+        #[cfg(not(target_os = "macos"))]
+        let gpu = None;
+        let session =
+            PlaybackSession::open_default(Arc::new(program), start_frame, fps, Quality::DRAFT, gpu)
+                .map_err(|_| RnHostReasonCode::InvalidIntent)?;
+        self.playback_session = Some(session);
+        self.playback_at_revision = Some(self.runtime.document_revision());
+        Ok(())
+    }
+
+    fn invalid_intent(&self, host_handle: u64) -> WireIntentResponse {
+        reject(
+            diagnostic(
+                RnHostReasonCode::InvalidIntent,
+                Some(host_handle),
+                None,
+                None,
+                None,
+            ),
+            None,
+        )
+    }
+
+    fn reject_document_runtime(
+        &self,
+        host_handle: u64,
+        error: &DocumentEditRuntimeError,
+    ) -> WireIntentResponse {
+        with_message(
+            reject(
+                diagnostic(
+                    document_runtime_reason(error),
+                    Some(host_handle),
+                    None,
+                    None,
+                    None,
+                ),
+                Some(self.snapshot_wire(host_handle)),
+            ),
+            error.to_string(),
+        )
+    }
+
+    fn commit_stage_property(&mut self, host_handle: u64, command: Command) -> WireIntentResponse {
+        let mut queue = DocumentEditQueue::default();
+        // Opacity の SetProperty は StageTransform が拒む。scale/rotation だけ通る。
+        if !queue.push_stage_transform(command) {
+            return self.invalid_intent(host_handle);
+        }
+        match self
+            .runtime
+            .process_next(&mut queue, self.primary, self.projection_generation)
+        {
+            Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+            Ok(None) => self.accept_live_snapshot(host_handle, None),
+            Err(error) => self.reject_document_runtime(host_handle, &error),
+        }
+    }
+
+    /// L=再生開始、K=停止。既にその状態なら no-op。新しい player は開かない。
+    fn ensure_playback(&mut self, host_handle: u64, want_playing: bool) -> WireIntentResponse {
+        if self.playback_session.is_some() == want_playing {
+            return accept(self.snapshot_wire(host_handle));
+        }
+        if want_playing {
+            match self.begin_playback() {
+                Ok(()) => {
+                    if !self.bump_projection_generation() {
+                        self.pause_playback();
+                        return reject(
+                            diagnostic(
+                                RnHostReasonCode::InvalidIntent,
+                                Some(host_handle),
+                                None,
+                                None,
+                                None,
+                            ),
+                            Some(self.snapshot_wire(host_handle)),
+                        );
+                    }
+                    accept(self.snapshot_wire(host_handle))
+                }
+                Err(reason) => reject(
+                    diagnostic(reason, Some(host_handle), None, None, None),
+                    Some(self.snapshot_wire(host_handle)),
+                ),
+            }
+        } else {
+            self.pause_playback();
+            if !self.bump_projection_generation() {
+                return reject(
+                    diagnostic(
+                        RnHostReasonCode::InvalidIntent,
+                        Some(host_handle),
+                        None,
+                        None,
+                        None,
+                    ),
+                    Some(self.snapshot_wire(host_handle)),
+                );
+            }
+            accept(self.snapshot_wire(host_handle))
+        }
+    }
+
+    fn seek_to_frame(&mut self, host_handle: u64, frame: i64) -> WireIntentResponse {
+        self.pause_playback();
+        let (fps, duration) = {
+            let snapshot = self.runtime.snapshot();
+            (snapshot.composition.fps, snapshot.composition.duration)
+        };
+        let Ok(time) = RationalTime::try_from_frame(frame, fps) else {
+            return self.invalid_intent(host_handle);
+        };
+        if time < RationalTime::ZERO || time > duration {
+            return self.invalid_intent(host_handle);
+        }
+        if time == self.current_time {
+            return accept(self.snapshot_wire(host_handle));
+        }
+        let Some(next_generation) = self.projection_generation.checked_add(1) else {
+            return self.invalid_intent(host_handle);
+        };
+        self.current_time = time;
+        self.projection_generation = next_generation;
+        #[cfg(target_os = "macos")]
+        self.refresh_stage_overlays().ok();
+        accept(self.snapshot_wire(host_handle))
+    }
+
+    fn shuttle_reverse(&mut self, host_handle: u64) -> WireIntentResponse {
+        let was_playing = self.playback_session.is_some();
+        self.pause_playback();
+        let fps = self.runtime.snapshot().composition.fps;
+        let Ok(frame) = self.current_time.try_to_frame_floor(fps) else {
+            return self.invalid_intent(host_handle);
+        };
+        if frame <= 0 {
+            if was_playing && !self.bump_projection_generation() {
+                return reject(
+                    diagnostic(
+                        RnHostReasonCode::InvalidIntent,
+                        Some(host_handle),
+                        None,
+                        None,
+                        None,
+                    ),
+                    Some(self.snapshot_wire(host_handle)),
+                );
+            }
+            return accept(self.snapshot_wire(host_handle));
+        }
+        self.seek_to_frame(host_handle, frame - 1)
+    }
+
+    fn pump_playback(&mut self) {
+        if self.playback_session.is_none() {
+            return;
+        }
+        if self.playback_at_revision != Some(self.runtime.document_revision()) {
+            self.pause_playback();
+            return;
+        }
+        let duration = self.runtime.snapshot().composition.duration;
+        let plan = match self
+            .playback_session
+            .as_mut()
+            .expect("session checked")
+            .transport_mut()
+            .next_frame_plan()
+        {
+            Ok(plan) => plan,
+            Err(_) => {
+                self.playback_session = None;
+                self.playback_at_revision = None;
+                return;
+            }
+        };
+        if duration >= RationalTime::ZERO && plan.timeline_time >= duration {
+            self.current_time = duration;
+            self.playback_session = None;
+            self.playback_at_revision = None;
+            let _ = self.bump_projection_generation();
+            return;
+        }
+        if plan.timeline_time < RationalTime::ZERO {
+            self.pause_playback();
+            return;
+        }
+        if plan.timeline_time != self.current_time {
+            self.current_time = plan.timeline_time;
+            let _ = self.bump_projection_generation();
+        }
+    }
+
+    fn try_set_inspector_preview(&mut self, command: Command) -> bool {
+        let Some(next_generation) = self.projection_generation.checked_add(1) else {
+            return false;
+        };
+        self.inspector_preview = Some(command);
+        self.inspector_preview_epoch = self.inspector_preview_epoch.saturating_add(1);
+        self.projection_generation = next_generation;
+        true
+    }
+
+    fn clear_inspector_preview(&mut self) {
+        if self.inspector_preview.take().is_some() {
+            self.inspector_preview_epoch = self.inspector_preview_epoch.saturating_add(1);
+        }
+    }
+
+    fn accept_inspector_preview_cancel(&mut self, host_handle: u64) -> WireIntentResponse {
+        if self.inspector_preview.is_none() {
+            return accept(self.snapshot_wire(host_handle));
+        }
+        let Some(next_generation) = self.projection_generation.checked_add(1) else {
+            return reject(
+                diagnostic(
+                    RnHostReasonCode::ProjectionGenerationExhausted,
+                    Some(host_handle),
+                    None,
+                    None,
+                    None,
+                ),
+                None,
+            );
+        };
+        self.clear_inspector_preview();
+        self.projection_generation = next_generation;
+        accept(self.snapshot_wire(host_handle))
     }
 
     fn dispatch_intent(
@@ -530,73 +1280,20 @@ impl RnProductHost {
         }
 
         match intent.kind.as_str() {
-            "read_snapshot" => accept(self.snapshot_wire(host_handle)),
+            "read_snapshot" => self.accept_live_snapshot(host_handle, None),
+            "toggle_playback" => self.ensure_playback(host_handle, self.playback_session.is_none()),
+            "shuttle_forward" => self.ensure_playback(host_handle, true),
+            "shuttle_stop" => self.ensure_playback(host_handle, false),
+            "shuttle_reverse" => self.shuttle_reverse(host_handle),
             "set_time" => {
                 // frame index だけを受け、Composition.fps で RationalTime へ解決する。
                 // 負・duration 超過・try_from_frame 失敗は暗黙 clamp せず typed 拒否。
                 let Some(frame) = intent.frame else {
-                    return reject(
-                        diagnostic(
-                            RnHostReasonCode::InvalidIntent,
-                            Some(host_handle),
-                            None,
-                            None,
-                            None,
-                        ),
-                        None,
-                    );
+                    return self.invalid_intent(host_handle);
                 };
-                let (fps, duration) = {
-                    let snapshot = self.runtime.snapshot();
-                    (snapshot.composition.fps, snapshot.composition.duration)
-                };
-                let Ok(time) = RationalTime::try_from_frame(frame, fps) else {
-                    return reject(
-                        diagnostic(
-                            RnHostReasonCode::InvalidIntent,
-                            Some(host_handle),
-                            None,
-                            None,
-                            None,
-                        ),
-                        None,
-                    );
-                };
-                if time < RationalTime::ZERO || time > duration {
-                    return reject(
-                        diagnostic(
-                            RnHostReasonCode::InvalidIntent,
-                            Some(host_handle),
-                            None,
-                            None,
-                            None,
-                        ),
-                        None,
-                    );
-                }
-                if time == self.current_time {
-                    // 同一時刻の再設定は no-op。generation は進めない。
-                    return accept(self.snapshot_wire(host_handle));
-                }
-                // Host 内に CU-104E 枯渇 preflight は無い。飽和・wrap せず typed 拒否する。
-                let Some(next_generation) = self.projection_generation.checked_add(1) else {
-                    return reject(
-                        diagnostic(
-                            RnHostReasonCode::InvalidIntent,
-                            Some(host_handle),
-                            None,
-                            None,
-                            None,
-                        ),
-                        None,
-                    );
-                };
-                self.current_time = time;
-                self.projection_generation = next_generation;
-                self.refresh_stage_overlays().ok();
-                accept(self.snapshot_wire(host_handle))
+                self.seek_to_frame(host_handle, frame)
             }
-            "place_rectangle" => {
+            "place_rectangle" | "place_ellipse" => {
                 let Some(position) = intent.position else {
                     return reject(
                         diagnostic(
@@ -634,20 +1331,163 @@ impl RnProductHost {
                     );
                 }
                 let mut queue = DocumentEditQueue::default();
-                queue.push_place_rectangle(PlaceRectangleRequest { position, playhead });
+                if intent.kind == "place_ellipse" {
+                    queue.push_place_ellipse(PlaceEllipseRequest { position, playhead });
+                } else {
+                    queue.push_place_rectangle(PlaceRectangleRequest { position, playhead });
+                }
                 match self.runtime.process_next(
                     &mut queue,
                     self.primary,
                     self.projection_generation,
                 ) {
-                    Ok(Some(published)) => {
-                        self.primary = published.primary;
-                        self.projection_generation = published.projection_generation;
-                        self.refresh_stage_overlays().ok();
-                        accept(self.snapshot_wire(host_handle))
-                    }
-                    Ok(None) => accept(self.snapshot_wire(host_handle)),
-                    Err(_) => reject(
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "place_vism" => {
+                let Some(plugin_id) = intent.plugin_id.filter(|id| !id.is_empty()) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(position) = intent.position else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(playhead) = intent.playhead else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if !position.iter().all(|value| value.is_finite()) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_place_vism(PlaceVismRequest {
+                    plugin_id,
+                    position,
+                    playhead,
+                });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "place_media" => {
+                let Some(item_id) = intent.item_id.filter(|id| !id.is_empty()) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(position) = intent.position else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(playhead) = intent.playhead else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if !position.iter().all(|value| value.is_finite()) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let Some(file) = self.media_library.resolve(&item_id) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                queue.push_place_media(PlaceMediaRequest {
+                    path: file.path,
+                    name: file.name,
+                    kind: file.kind.to_owned(),
+                    asset_type: file.asset_type.to_owned(),
+                    position,
+                    playhead,
+                });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => reject(
                         diagnostic(
                             RnHostReasonCode::InvalidIntent,
                             Some(host_handle),
@@ -657,6 +1497,387 @@ impl RnProductHost {
                         ),
                         None,
                     ),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "attach_effect" => {
+                // runtime は current_primary へ attach する(document_edit_runtime AttachEffect)。
+                // wire は target を明示送付し、primary 不一致は typed 拒否。
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(plugin_id) = intent.plugin_id.filter(|id| !id.is_empty()) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if self.primary != Some(target) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_attach_effect(AttachEffectRequest { plugin_id });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "preview_effect_param" => {
+                let document = self.runtime.snapshot();
+                let Some((request, same_as_live)) =
+                    effect_param_request_from_intent(document.as_ref(), &intent)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        Some(self.snapshot_wire(host_handle)),
+                    );
+                };
+                if same_as_live {
+                    return self.accept_inspector_preview_cancel(host_handle);
+                }
+                let Some(command) = prepare_set_effect_param_command(document.as_ref(), &request)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        Some(self.snapshot_wire(host_handle)),
+                    );
+                };
+                if !self.try_set_inspector_preview(command) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::ProjectionGenerationExhausted,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        Some(self.snapshot_wire(host_handle)),
+                    );
+                }
+                accept(self.snapshot_wire(host_handle))
+            }
+            "set_effect_param" => {
+                // definition_id / plugin_id / effect_version は Document から解決し、呼び手に運ばせない。
+                let document = self.runtime.snapshot();
+                let Some((request, same_as_live)) =
+                    effect_param_request_from_intent(document.as_ref(), &intent)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if same_as_live {
+                    return self.accept_inspector_preview_cancel(host_handle);
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_set_effect_param(request);
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.clear_inspector_preview();
+                        self.accept_live_snapshot(host_handle, Some(published))
+                    }
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "preview_source_param" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return self.invalid_intent(host_handle);
+                };
+                let Some(new_value) = source_param_intent_value(&intent) else {
+                    return self.invalid_intent(host_handle);
+                };
+                let Some(param_id) = intent.param_id.filter(|id| !id.is_empty()) else {
+                    return self.invalid_intent(host_handle);
+                };
+                let document = self.runtime.snapshot();
+                if source_param_matches_document(document.as_ref(), target, &param_id, &new_value) {
+                    return self.accept_inspector_preview_cancel(host_handle);
+                }
+                let Some(command) = prepare_set_source_param_command(
+                    document.as_ref(),
+                    &SetSourceParamRequest::new(target, param_id, new_value),
+                ) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        Some(self.snapshot_wire(host_handle)),
+                    );
+                };
+                if !self.try_set_inspector_preview(command) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::ProjectionGenerationExhausted,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                accept(self.snapshot_wire(host_handle))
+            }
+            "set_source_param" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return self.invalid_intent(host_handle);
+                };
+                let Some(new_value) = source_param_intent_value(&intent) else {
+                    return self.invalid_intent(host_handle);
+                };
+                let Some(param_id) = intent.param_id.filter(|id| !id.is_empty()) else {
+                    return self.invalid_intent(host_handle);
+                };
+                if source_param_matches_document(
+                    self.runtime.snapshot().as_ref(),
+                    target,
+                    &param_id,
+                    &new_value,
+                ) {
+                    return self.accept_inspector_preview_cancel(host_handle);
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue
+                    .push_set_source_param(SetSourceParamRequest::new(target, param_id, new_value));
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => {
+                        self.clear_inspector_preview();
+                        self.accept_live_snapshot(host_handle, Some(published))
+                    }
+                    Ok(None) => self.invalid_intent(host_handle),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "set_opacity" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return self.invalid_intent(host_handle);
+                };
+                if self.primary != Some(target) {
+                    return self.invalid_intent(host_handle);
+                }
+                let Some(value) = intent
+                    .value
+                    .filter(|v| v.is_finite() && (0.0..=1.0).contains(v))
+                else {
+                    return self.invalid_intent(host_handle);
+                };
+                let snapshot = self.runtime.snapshot();
+                let Some(envelope) = find_envelope_in_document(snapshot.as_ref(), target) else {
+                    return self.invalid_intent(host_handle);
+                };
+                match &envelope.opacity {
+                    DocParam::Const(DocValue::F64(_)) | DocParam::Keyframes(_) => {}
+                    _ => return self.invalid_intent(host_handle),
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_set_opacity_at(SetOpacityRequest { target, value }, self.current_time);
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "add_param_key" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return self.invalid_intent(host_handle);
+                };
+                let Some(time) = intent.time else {
+                    return self.invalid_intent(host_handle);
+                };
+                let Some(property) = intent.property.as_deref().and_then(wire_transform_property)
+                else {
+                    return self.invalid_intent(host_handle);
+                };
+                if self.primary != Some(target) {
+                    return self.invalid_intent(host_handle);
+                }
+                let mut queue = DocumentEditQueue::default();
+                queue.push_add_transform_param_key(AddTransformParamKeyRequest {
+                    target,
+                    property,
+                    time,
+                });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "set_param_key_value" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return self.invalid_intent(host_handle);
+                };
+                let Some(key) = intent
+                    .key_id
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(KeyframeId::from_raw)
+                else {
+                    return self.invalid_intent(host_handle);
+                };
+                let Some(property) = intent.property.as_deref().and_then(wire_transform_property)
+                else {
+                    return self.invalid_intent(host_handle);
+                };
+                if self.primary != Some(target) {
+                    return self.invalid_intent(host_handle);
+                }
+                if property == ScalarPropertyId::Opacity {
+                    let Some(value) = intent.value.filter(|value| value.is_finite()) else {
+                        return self.invalid_intent(host_handle);
+                    };
+                    let snapshot = self.runtime.snapshot();
+                    let Some(time) =
+                        find_envelope_in_document(snapshot.as_ref(), target).and_then(|envelope| {
+                            let DocParam::Keyframes(track) = &envelope.opacity else {
+                                return None;
+                            };
+                            track.get_by_id(key).map(|existing| existing.t)
+                        })
+                    else {
+                        return self.invalid_intent(host_handle);
+                    };
+                    let mut queue = DocumentEditQueue::default();
+                    queue.push_set_opacity_at(SetOpacityRequest { target, value }, time);
+                    return match self.runtime.process_next(
+                        &mut queue,
+                        self.primary,
+                        self.projection_generation,
+                    ) {
+                        Ok(Some(published)) => {
+                            self.accept_live_snapshot(host_handle, Some(published))
+                        }
+                        Ok(None) => self.accept_live_snapshot(host_handle, None),
+                        Err(error) => self.reject_document_runtime(host_handle, &error),
+                    };
+                }
+                let new = match property {
+                    ScalarPropertyId::Scale => {
+                        let Some(new) = intent
+                            .new
+                            .filter(|value| value.iter().all(|component| component.is_finite()))
+                        else {
+                            return self.invalid_intent(host_handle);
+                        };
+                        DocValue::Vec2(new)
+                    }
+                    ScalarPropertyId::Rotation => {
+                        let Some(value) = intent.value.filter(|value| value.is_finite()) else {
+                            return self.invalid_intent(host_handle);
+                        };
+                        DocValue::F64(value)
+                    }
+                    _ => return self.invalid_intent(host_handle),
+                };
+                match prepare_set_transform_param_key_value(
+                    self.runtime.snapshot().as_ref(),
+                    target,
+                    property,
+                    key,
+                    new,
+                ) {
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Ok(Some(command)) => self.commit_stage_property(host_handle, command),
+                    Err(_) => self.invalid_intent(host_handle),
                 }
             }
             "add_position_key" | "set_position_key_value" | "set_position_key_interp" => {
@@ -738,7 +1959,7 @@ impl RnProductHost {
                 };
 
                 if self.primary != Some(target) {
-                    return accept(self.snapshot_wire(host_handle));
+                    return self.invalid_intent(host_handle);
                 }
 
                 let mut queue = DocumentEditQueue::default();
@@ -796,13 +2017,226 @@ impl RnProductHost {
                     self.primary,
                     self.projection_generation,
                 ) {
-                    Ok(Some(published)) => {
-                        self.primary = published.primary;
-                        self.projection_generation = published.projection_generation;
-                        accept(self.snapshot_wire(host_handle))
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "set_position_key_time" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(key) = intent
+                    .key_id
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(KeyframeId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(new) = intent.time else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(old) = position_key_time_at(self.runtime.snapshot().as_ref(), target, key)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                queue.push_set_position_key_time(SetPositionKeyTimeRequest {
+                    target,
+                    key,
+                    old,
+                    new,
+                });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "remove_position_key" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(key) = intent
+                    .key_id
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(KeyframeId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                queue.push_remove_position_key(RemovePositionKeyRequest { target, key });
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "set_clip_start" | "trim_clip_in" | "trim_clip_out" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(time) = intent.time else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                match intent.kind.as_str() {
+                    "set_clip_start" => {
+                        queue.push_move_clip(TimelineMoveRequest {
+                            layer: target,
+                            new_start: time,
+                        });
                     }
-                    Ok(None) => accept(self.snapshot_wire(host_handle)),
-                    Err(_) => reject(
+                    "trim_clip_in" => {
+                        queue.push_trim_clip(TimelineTrimRequest::In {
+                            layer: target,
+                            new_start: time,
+                        });
+                    }
+                    "trim_clip_out" => {
+                        queue.push_trim_clip(TimelineTrimRequest::Out {
+                            layer: target,
+                            new_end: time,
+                        });
+                    }
+                    _ => unreachable!("matched clip edit intent"),
+                }
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "select_layer" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                queue.push_replace_primary(target);
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Err(DocumentEditRuntimeError::SelectionTargetNotFound(_))
+                    | Err(DocumentEditRuntimeError::ProjectionGenerationExhausted) => reject(
                         diagnostic(
                             RnHostReasonCode::InvalidIntent,
                             Some(host_handle),
@@ -812,8 +2246,186 @@ impl RnProductHost {
                         ),
                         None,
                     ),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
                 }
             }
+            "clear_selection" => {
+                let mut queue = DocumentEditQueue::default();
+                queue.push_clear_primary();
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "delete_layer" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let document = self.runtime.snapshot();
+                let Some((parent, index, item)) =
+                    find_track_item_location(document.as_ref(), target)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Ok(layer_names) = layer_names_for_item(document.as_ref(), &item) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Ok(request) = DocumentCommandRequest::try_new(
+                    DomainIntent::DeleteTargetedItems,
+                    vec![Command::RemoveTrackItem {
+                        parent,
+                        index,
+                        layer_names,
+                        item,
+                    }],
+                ) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let output = RouterOutput::Intent {
+                    phase: InputPhase::Click,
+                    id: CommandId::try_new("motolii.rn.delete_layer").expect("static command id"),
+                    intent: DomainIntent::DeleteTargetedItems,
+                };
+                let mut queue = DocumentEditQueue::default();
+                if queue.push_prepared(output, Some(request)).is_err() {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "split" | "duplicate" | "mute" | "solo" | "reparent_clip" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                match intent.kind.as_str() {
+                    "split" => {
+                        let Some(at) = intent.time else {
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        };
+                        queue.push_split_clip(target, at);
+                    }
+                    "duplicate" => queue.push_duplicate_layer(target),
+                    "mute" => queue.push_toggle_visible(target),
+                    "solo" => queue.push_toggle_solo(target),
+                    "reparent_clip" => {
+                        let Some(dest) = intent
+                            .dest
+                            .as_deref()
+                            .and_then(|value| value.parse::<u64>().ok())
+                            .map(LayerId::from_raw)
+                        else {
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        };
+                        queue.push_reparent_clip(target, dest, intent.time);
+                    }
+                    _ => unreachable!("matched nle intent"),
+                }
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "export_document" => self.export_document(host_handle, intent.output_path),
             "undo" | "redo" => {
                 let (intent, id) = if intent.kind == "undo" {
                     (DomainIntent::Undo, "motolii.rn.undo")
@@ -843,13 +2455,8 @@ impl RnProductHost {
                     self.primary,
                     self.projection_generation,
                 ) {
-                    Ok(Some(published)) => {
-                        self.primary = published.primary;
-                        self.projection_generation = published.projection_generation;
-                        self.refresh_stage_overlays().ok();
-                        accept(self.snapshot_wire(host_handle))
-                    }
-                    Ok(None) => accept(self.snapshot_wire(host_handle)),
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
                     Err(DocumentEditRuntimeError::NothingToUndo)
                     | Err(DocumentEditRuntimeError::NothingToRedo) => reject(
                         diagnostic(
@@ -861,7 +2468,17 @@ impl RnProductHost {
                         ),
                         None,
                     ),
-                    Err(_) => reject(
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
+                }
+            }
+            "move_layer_by" => {
+                let Some(target) = intent
+                    .target
+                    .as_deref()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .map(LayerId::from_raw)
+                else {
+                    return reject(
                         diagnostic(
                             RnHostReasonCode::InvalidIntent,
                             Some(host_handle),
@@ -870,7 +2487,169 @@ impl RnProductHost {
                             None,
                         ),
                         None,
-                    ),
+                    );
+                };
+                let Some(delta) = intent.delta else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                if !delta.iter().all(|value| value.is_finite()) {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                }
+                let snapshot = self.runtime.snapshot();
+                let Some(envelope) = find_envelope_in_document(snapshot.as_ref(), target) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let tracks = DataTracks::new();
+                let projection = match project_stage_geometry(
+                    snapshot.as_ref(),
+                    EvaluationTime::new(self.current_time),
+                    &tracks,
+                ) {
+                    Ok(projection) => projection,
+                    Err(_) => {
+                        return reject(
+                            diagnostic(
+                                RnHostReasonCode::InvalidIntent,
+                                Some(host_handle),
+                                None,
+                                None,
+                                None,
+                            ),
+                            None,
+                        );
+                    }
+                };
+                let Some(StageLayerProjection::Available(geo)) = projection.get(target).cloned()
+                else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let Some(local_delta) = world_delta_to_position_local(geo.world, delta) else {
+                    return reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        None,
+                    );
+                };
+                let mut queue = DocumentEditQueue::default();
+                match &envelope.transform.position {
+                    DocParam::Const(DocValue::Vec2(old)) => {
+                        let new = [old[0] + local_delta[0], old[1] + local_delta[1]];
+                        if !new.iter().all(|value| value.is_finite()) {
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        }
+                        queue.push_set_position_const(SetPositionConstRequest {
+                            target,
+                            old: *old,
+                            new,
+                        });
+                    }
+                    DocParam::Keyframes(_) => {
+                        let Some((key, old)) =
+                            position_key_at(snapshot.as_ref(), target, self.current_time)
+                        else {
+                            // U4b-0V: off-key は Auto Key せず typed 拒否。
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        };
+                        let new = [old[0] + local_delta[0], old[1] + local_delta[1]];
+                        if !new.iter().all(|value| value.is_finite()) {
+                            return reject(
+                                diagnostic(
+                                    RnHostReasonCode::InvalidIntent,
+                                    Some(host_handle),
+                                    None,
+                                    None,
+                                    None,
+                                ),
+                                None,
+                            );
+                        }
+                        queue.push_set_position_key_value(SetPositionKeyValueRequest {
+                            target,
+                            key,
+                            old,
+                            new,
+                        });
+                    }
+                    _ => {
+                        return reject(
+                            diagnostic(
+                                RnHostReasonCode::InvalidIntent,
+                                Some(host_handle),
+                                None,
+                                None,
+                                None,
+                            ),
+                            None,
+                        );
+                    }
+                }
+                match self.runtime.process_next(
+                    &mut queue,
+                    self.primary,
+                    self.projection_generation,
+                ) {
+                    Ok(Some(published)) => self.accept_live_snapshot(host_handle, Some(published)),
+                    Ok(None) => self.accept_live_snapshot(host_handle, None),
+                    Err(error) => self.reject_document_runtime(host_handle, &error),
                 }
             }
             "stage_mount" | "stage_resize" | "stage_focus" | "stage_unmount" | "stage_pointer" => {
@@ -1043,6 +2822,109 @@ impl RnProductHost {
         }
     }
 
+    fn export_document(
+        &mut self,
+        host_handle: u64,
+        output_path: Option<String>,
+    ) -> WireIntentResponse {
+        let snapshot = self.snapshot_wire(host_handle);
+        let Some(output_path) = output_path.filter(|path| !path.trim().is_empty()) else {
+            return with_message(
+                reject(
+                    diagnostic(
+                        RnHostReasonCode::InvalidIntent,
+                        Some(host_handle),
+                        None,
+                        None,
+                        None,
+                    ),
+                    Some(snapshot),
+                ),
+                "output path is required",
+            );
+        };
+        let output_path = PathBuf::from(output_path.trim());
+        if self.stage_frame_runtime.is_none() {
+            match first_party_runtime() {
+                Ok(runtime) => self.stage_frame_runtime = Some(Arc::new(runtime)),
+                Err(error) => {
+                    return with_message(
+                        reject(
+                            diagnostic(
+                                RnHostReasonCode::InvalidIntent,
+                                Some(host_handle),
+                                None,
+                                None,
+                                None,
+                            ),
+                            Some(snapshot),
+                        ),
+                        error.to_string(),
+                    );
+                }
+            }
+        }
+        let plugin_runtime = self
+            .stage_frame_runtime
+            .as_ref()
+            .expect("stage_frame_runtime initialized")
+            .clone();
+        let document = self.runtime.snapshot();
+        let project_root = self.runtime.project_root();
+        let gpu = match GpuCtx::new_headless() {
+            Ok(gpu) => gpu,
+            Err(error) => {
+                return with_message(
+                    reject(
+                        diagnostic(
+                            RnHostReasonCode::InvalidIntent,
+                            Some(host_handle),
+                            None,
+                            None,
+                            None,
+                        ),
+                        Some(snapshot),
+                    ),
+                    error.to_string(),
+                );
+            }
+        };
+        match export_document_video(
+            &gpu,
+            &ExportJob {
+                doc: document.as_ref(),
+                runtime: plugin_runtime.as_ref(),
+                output_path: &output_path,
+                project_root: project_root.as_deref(),
+                frame_count: None,
+                qp0: false,
+                data_tracks: DataTracks::new(),
+            },
+        ) {
+            Ok(report) => with_message(
+                accept(snapshot),
+                format!(
+                    "wrote {} frames to {}",
+                    report.frames_written,
+                    output_path.display()
+                ),
+            ),
+            Err(error) => with_message(
+                reject(
+                    diagnostic(
+                        RnHostReasonCode::InvalidIntent,
+                        Some(host_handle),
+                        None,
+                        None,
+                        None,
+                    ),
+                    Some(snapshot),
+                ),
+                error.to_string(),
+            ),
+        }
+    }
+
     /// `stage_pointer` down の hit-test → 既存 selection writer。
     /// typed 拒否時だけ `Some(reject)`。受理・no-op は `None`（呼び出し側が snapshot を返す）。
     fn apply_stage_pointer_selection(
@@ -1116,32 +2998,10 @@ impl RnProductHost {
             }
             Ok(Some(published)) => {
                 // accepted 変更だけを Host transient へ反映する（直接代入で意図を捏造しない）。
-                self.primary = published.primary;
-                self.projection_generation = published.projection_generation;
-                self.refresh_stage_overlays().ok();
+                self.adopt_published(published);
                 None
             }
-            Err(DocumentEditRuntimeError::SelectionTargetNotFound(_))
-            | Err(DocumentEditRuntimeError::ProjectionGenerationExhausted) => Some(reject(
-                diagnostic(
-                    RnHostReasonCode::InvalidIntent,
-                    Some(host_handle),
-                    Some(stage_handle),
-                    None,
-                    None,
-                ),
-                None,
-            )),
-            Err(_) => Some(reject(
-                diagnostic(
-                    RnHostReasonCode::InvalidIntent,
-                    Some(host_handle),
-                    Some(stage_handle),
-                    None,
-                    None,
-                ),
-                None,
-            )),
+            Err(error) => Some(self.reject_document_runtime(host_handle, &error)),
         }
     }
 
@@ -2391,10 +4251,20 @@ impl RnHostRegistry {
                 stages: HashMap::new(),
                 timelines: HashMap::new(),
                 destroyed: false,
+                stage_frame_runtime: None,
+                stage_video: None,
+                stage_frame_last: None,
+                playback_session: None,
+                playback_caches: HashMap::new(),
+                playback_at_revision: None,
+                inspector_preview: None,
+                inspector_preview_epoch: 0,
+                media_library: MediaLibrary::with_default_root(),
                 #[cfg(target_os = "macos")]
                 gpu: None,
             },
         );
+        // 開いた Document が read_snapshot / dispatch の正本。fixture clip はここで足さない。
         Ok(handle)
     }
 
@@ -2489,8 +4359,8 @@ impl RnHostRegistry {
         Ok(())
     }
 
-    fn read_snapshot(&self, host_handle: u64) -> Result<WireProductSnapshot, RnHostError> {
-        let Some(host) = self.hosts.get(&host_handle) else {
+    fn read_snapshot(&mut self, host_handle: u64) -> Result<WireProductSnapshot, RnHostError> {
+        let Some(host) = self.hosts.get_mut(&host_handle) else {
             return if self.destroyed_hosts.contains(&host_handle) {
                 Err(RnHostError::DestroyedHost(host_handle))
             } else {
@@ -2499,6 +4369,9 @@ impl RnHostRegistry {
         };
         if host.destroyed {
             return Err(RnHostError::DestroyedHost(host_handle));
+        }
+        if let Ok(Some(published)) = host.runtime.reconcile_pending_commit() {
+            host.adopt_published(published);
         }
         Ok(host.snapshot_wire(host_handle))
     }
@@ -2526,7 +4399,7 @@ impl RnHostRegistry {
                     .map(|frame| frame.is_i64())
                     .unwrap_or(false);
                 if value.get("time").is_some() || !frame_is_i64 {
-                    return encode_json(&reject(
+                    return encode_snapshot_json(&reject(
                         diagnostic(
                             RnHostReasonCode::InvalidIntent,
                             Some(host_handle),
@@ -2542,7 +4415,7 @@ impl RnHostRegistry {
         let intent: WireIntentEnvelope = match serde_json::from_str(intent_json) {
             Ok(intent) => intent,
             Err(_) => {
-                return encode_json(&reject(
+                return encode_snapshot_json(&reject(
                     diagnostic(
                         RnHostReasonCode::InvalidIntent,
                         Some(host_handle),
@@ -2568,10 +4441,10 @@ impl RnHostRegistry {
                 ),
                 None,
             );
-            return encode_json(&response);
+            return encode_snapshot_json(&response);
         }
         let response = host.dispatch_intent(host_handle, intent);
-        encode_json(&response)
+        encode_snapshot_json(&response)
     }
 }
 
@@ -2580,18 +4453,30 @@ fn registry() -> &'static Mutex<RnHostRegistry> {
     REGISTRY.get_or_init(|| Mutex::new(RnHostRegistry::default()))
 }
 
+fn lock_registry() -> std::sync::MutexGuard<'static, RnHostRegistry> {
+    registry()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn with_registry<T>(
     f: impl FnOnce(&mut RnHostRegistry) -> Result<T, RnHostError>,
 ) -> Result<T, RnHostError> {
-    let mut guard = registry()
-        .lock()
-        .map_err(|_| RnHostError::RegistryLockPoisoned)?;
+    let mut guard = lock_registry();
     f(&mut guard)
 }
 
 fn encode_json<T: Serialize>(value: &T) -> Result<String, RnHostError> {
     let json = serde_json::to_string(value)?;
     if json.len() > MAX_JSON_BYTES {
+        return Err(RnHostError::PayloadTooLarge);
+    }
+    Ok(json)
+}
+
+fn encode_snapshot_json<T: Serialize>(snapshot: &T) -> Result<String, RnHostError> {
+    let json = serde_json::to_string(snapshot)?;
+    if json.len() > MAX_SNAPSHOT_JSON_BYTES {
         return Err(RnHostError::PayloadTooLarge);
     }
     Ok(json)
@@ -2611,6 +4496,55 @@ fn diagnostic(
         timeline_handle: None,
         expected_projection_generation,
         actual_projection_generation,
+    }
+}
+
+fn document_runtime_reason(error: &DocumentEditRuntimeError) -> RnHostReasonCode {
+    match error {
+        DocumentEditRuntimeError::ProjectionGenerationExhausted => {
+            RnHostReasonCode::ProjectionGenerationExhausted
+        }
+        DocumentEditRuntimeError::NonFiniteDropPosition => RnHostReasonCode::NonFiniteDropPosition,
+        DocumentEditRuntimeError::PlayheadOutsideComposition => {
+            RnHostReasonCode::PlayheadOutsideComposition
+        }
+        DocumentEditRuntimeError::RemainingDurationBelowOneFrame => {
+            RnHostReasonCode::RemainingDurationBelowOneFrame
+        }
+        DocumentEditRuntimeError::NoTrackForRectangle => RnHostReasonCode::NoTrackForRectangle,
+        DocumentEditRuntimeError::LayerIdReservationChanged => {
+            RnHostReasonCode::LayerIdReservationChanged
+        }
+        DocumentEditRuntimeError::LayerId(_) => RnHostReasonCode::LayerIdError,
+        DocumentEditRuntimeError::RationalTime(_) => RnHostReasonCode::RationalTimeError,
+        DocumentEditRuntimeError::Document(_) => RnHostReasonCode::DocumentError,
+        DocumentEditRuntimeError::DocumentPlugin(_) => RnHostReasonCode::DocumentPluginError,
+        DocumentEditRuntimeError::JournalCommit(_) => RnHostReasonCode::JournalCommit,
+        DocumentEditRuntimeError::DocumentWriteBlocked { .. }
+        | DocumentEditRuntimeError::CommitReceiptNotObserved { .. }
+        | DocumentEditRuntimeError::ReconciledDocumentMismatch { .. } => {
+            RnHostReasonCode::DocumentWriteBlocked
+        }
+        DocumentEditRuntimeError::JournalReconcile { .. } => RnHostReasonCode::JournalReconcile,
+        DocumentEditRuntimeError::MissingJournalCommitReceipt => RnHostReasonCode::JournalCommit,
+        DocumentEditRuntimeError::Command(_) => RnHostReasonCode::CommandError,
+        DocumentEditRuntimeError::Undo(_) => RnHostReasonCode::CommandError,
+        DocumentEditRuntimeError::SelectionTargetNotFound(_)
+        | DocumentEditRuntimeError::NoPrimarySelection
+        | DocumentEditRuntimeError::PrepareRejected
+        | DocumentEditRuntimeError::HistoryProjectionMismatch
+        | DocumentEditRuntimeError::MultiCommandActionRejected
+        | DocumentEditRuntimeError::LibraryFileUnreadable
+        | DocumentEditRuntimeError::AttachDefaultNotConst { .. }
+        | DocumentEditRuntimeError::AttachPrepareCommandMismatch
+        | DocumentEditRuntimeError::PositionKeyPrepareMismatch
+        | DocumentEditRuntimeError::EffectPrepare(_)
+        | DocumentEditRuntimeError::PositionKeyPrepare(_)
+        | DocumentEditRuntimeError::TransformParamKeyPrepare(_)
+        | DocumentEditRuntimeError::RemovePositionKeyPrepare(_)
+        | DocumentEditRuntimeError::Duplicate(_)
+        | DocumentEditRuntimeError::NothingToUndo
+        | DocumentEditRuntimeError::NothingToRedo => RnHostReasonCode::InvalidIntent,
     }
 }
 
@@ -2635,6 +4569,7 @@ fn accept(snapshot: WireProductSnapshot) -> WireIntentResponse {
         accepted: true,
         snapshot: Some(snapshot),
         diagnostics: Vec::new(),
+        message: None,
     }
 }
 
@@ -2649,7 +4584,16 @@ fn reject(
         accepted: false,
         snapshot,
         diagnostics,
+        message: None,
     }
+}
+
+fn with_message(
+    mut response: WireIntentResponse,
+    message: impl Into<String>,
+) -> WireIntentResponse {
+    response.message = Some(message.into());
+    response
 }
 
 #[cfg(target_os = "macos")]
@@ -2679,12 +4623,13 @@ fn accept_no_snapshot() -> WireIntentResponse {
         accepted: true,
         snapshot: None,
         diagnostics: Vec::new(),
+        message: None,
     }
 }
 
 #[cfg(target_os = "macos")]
 fn encode_response(response: &WireIntentResponse) -> Result<String, RnHostError> {
-    encode_json(response)
+    encode_snapshot_json(response)
 }
 
 #[cfg(target_os = "macos")]
@@ -2717,6 +4662,9 @@ fn write_reject(
 fn map_create_error(error: &RnHostError) -> Option<RnHostReasonCode> {
     match error {
         RnHostError::HostAlreadyExists => Some(RnHostReasonCode::HostAlreadyExists),
+        RnHostError::OpenProject(ShellError::ProjectSession(
+            motolii_doc::SessionError::ProjectAlreadyOpen,
+        )) => Some(RnHostReasonCode::ProjectAlreadyOpen),
         RnHostError::EmptyProjectPath | RnHostError::InvalidUtf8 | RnHostError::OpenProject(_) => {
             Some(RnHostReasonCode::InvalidProjectPath)
         }
@@ -2790,15 +4738,689 @@ fn snapshot_for_test(snapshot: WireProductSnapshot) -> RnProductSnapshotForTest 
             .into_iter()
             .map(|bound| bound.layer_id)
             .collect(),
+        timeline: RnTimelineProjectionForTest {
+            fps: snapshot.timeline.fps,
+            layers: snapshot
+                .timeline
+                .layers
+                .into_iter()
+                .map(|layer| RnTimelineLayerForTest {
+                    layer_id: layer.layer_id,
+                    display_name: layer.display_name,
+                    start: layer.start,
+                    duration: layer.duration,
+                    position_keys: layer
+                        .position_keys
+                        .into_iter()
+                        .map(|key| RnTimelinePositionKeyForTest {
+                            key_id: key.key_id,
+                            time: key.time,
+                            value: key.value,
+                            interp: key.interp,
+                        })
+                        .collect(),
+                    param_keys: layer
+                        .param_keys
+                        .into_iter()
+                        .map(|key| RnTimelineParamKeyForTest {
+                            property: key.property,
+                            key_id: key.key_id,
+                            time: key.time,
+                            value: key.value,
+                            vec: key.vec,
+                        })
+                        .collect(),
+                    keys_truncated: layer.keys_truncated,
+                })
+                .collect(),
+            layers_truncated: snapshot.timeline.layers_truncated,
+        },
     }
 }
 
-fn position_key_at(
+fn project_timeline(document: &motolii_doc::Document) -> (WireTimelineProjection, u32) {
+    let ordered = layers_in_track_order(document);
+    let mut truncated_total: u32 = 0;
+    if ordered.len() > MAX_STAGE_BOUNDS {
+        truncated_total = truncated_total
+            .saturating_add(u32::try_from(ordered.len() - MAX_STAGE_BOUNDS).unwrap_or(u32::MAX));
+    }
+    let layers_truncated = ordered.len() > MAX_STAGE_BOUNDS;
+    let layers = ordered
+        .into_iter()
+        .take(MAX_STAGE_BOUNDS)
+        .map(|(layer_id, name)| {
+            let (start, duration, visible, solo) = find_first_clip(document, layer_id)
+                .map(|clip| {
+                    (
+                        clip.start,
+                        clip.duration,
+                        clip.envelope.visible,
+                        clip.envelope.solo,
+                    )
+                })
+                .unwrap_or((RationalTime::ZERO, RationalTime::ZERO, true, false));
+            let (position_keys, keys_truncated, keys_hidden) =
+                project_position_keys(document, layer_id);
+            let param_keys = project_param_keys(document, layer_id);
+            let (effects, effects_truncated, effects_hidden) =
+                project_layer_effects(document, layer_id);
+            let (source_params, source_params_truncated, source_hidden) =
+                project_layer_source_params(document, layer_id);
+            truncated_total = truncated_total
+                .saturating_add(keys_hidden)
+                .saturating_add(effects_hidden)
+                .saturating_add(source_hidden);
+            WireTimelineLayer {
+                layer_id: layer_id.get().to_string(),
+                display_name: name,
+                start,
+                duration,
+                position_keys,
+                param_keys,
+                keys_truncated,
+                effects,
+                effects_truncated,
+                source_params,
+                source_params_truncated,
+                visible,
+                solo,
+            }
+        })
+        .collect();
+    (
+        WireTimelineProjection {
+            fps: document.composition.fps,
+            duration: document.composition.duration,
+            layers,
+            layers_truncated,
+        },
+        truncated_total,
+    )
+}
+
+/// LayerIdTable採番順ではなく Document.tracks の track→item 順。
+/// Groupは半対応(自身+childrenを順に列挙)。
+fn layers_in_track_order(document: &motolii_doc::Document) -> Vec<(LayerId, String)> {
+    fn walk(
+        items: &[TrackItem],
+        document: &motolii_doc::Document,
+        out: &mut Vec<(LayerId, String)>,
+    ) {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) => {
+                    let id = clip.envelope.layer_id;
+                    if let Some(name) = document.layers.display_name(id) {
+                        out.push((id, name.to_owned()));
+                    }
+                }
+                TrackItem::Group(group) => {
+                    let id = group.envelope.layer_id;
+                    if let Some(name) = document.layers.display_name(id) {
+                        out.push((id, name.to_owned()));
+                    }
+                    walk(&group.children, document, out);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for track in &document.tracks {
+        walk(&track.items, document, &mut out);
+    }
+    out
+}
+
+fn project_layer_effects(
+    document: &motolii_doc::Document,
+    layer_id: LayerId,
+) -> (Vec<WireTimelineEffect>, bool, u32) {
+    let Some(envelope) = find_envelope_in_document(document, layer_id) else {
+        return (Vec::new(), false, 0);
+    };
+    let hidden = envelope.effects.len().saturating_sub(MAX_EFFECTS_PER_LAYER) as u32;
+    let effects_truncated = hidden > 0;
+    let effects = envelope
+        .effects
+        .iter()
+        .take(MAX_EFFECTS_PER_LAYER)
+        .filter_map(|effect_use| {
+            let definition = document.effect_definition(effect_use.definition_id)?;
+            let params = definition
+                .params
+                .iter()
+                .filter_map(|(param_id, param)| match param {
+                    DocParam::Const(DocValue::F64(value)) if value.is_finite() => {
+                        Some(WireTimelineEffectParam {
+                            param_id: param_id.clone(),
+                            value: *value,
+                            color: None,
+                        })
+                    }
+                    DocParam::Const(DocValue::Color(color))
+                        if color.iter().all(|component| component.is_finite()) =>
+                    {
+                        Some(WireTimelineEffectParam {
+                            param_id: param_id.clone(),
+                            value: 0.0,
+                            color: Some(*color),
+                        })
+                    }
+                    _ => None,
+                })
+                .collect();
+            Some(WireTimelineEffect {
+                effect_use_id: effect_use.id.get().to_string(),
+                plugin_id: definition.plugin_id.clone(),
+                params,
+            })
+        })
+        .collect();
+    (effects, effects_truncated, hidden)
+}
+
+fn project_layer_source_params(
+    document: &motolii_doc::Document,
+    layer_id: LayerId,
+) -> (Vec<WireTimelineSourceParam>, bool, u32) {
+    let Some(clip) = find_first_clip(document, layer_id) else {
+        return (Vec::new(), false, 0);
+    };
+    let ClipSource::Plugin { params, .. } = &clip.source else {
+        return (Vec::new(), false, 0);
+    };
+    let all: Vec<_> = params
+        .iter()
+        .filter_map(|(param_id, param)| match param {
+            DocParam::Const(DocValue::F64(value)) if value.is_finite() => {
+                Some(WireTimelineSourceParam {
+                    param_id: param_id.clone(),
+                    value: *value,
+                    color: None,
+                })
+            }
+            DocParam::Const(DocValue::Color(color)) if color.iter().all(|c| c.is_finite()) => {
+                Some(WireTimelineSourceParam {
+                    param_id: param_id.clone(),
+                    value: 0.0,
+                    color: Some(*color),
+                })
+            }
+            _ => None,
+        })
+        .collect();
+    let hidden = all.len().saturating_sub(MAX_SOURCE_PARAMS_PER_LAYER) as u32;
+    let source_params_truncated = hidden > 0;
+    let source_params = all.into_iter().take(MAX_SOURCE_PARAMS_PER_LAYER).collect();
+    (source_params, source_params_truncated, hidden)
+}
+
+fn const_f64_param(param: &DocParam) -> Option<f64> {
+    match param {
+        DocParam::Const(DocValue::F64(value)) if value.is_finite() => Some(*value),
+        _ => None,
+    }
+}
+
+fn source_param_intent_value(intent: &WireIntentEnvelope) -> Option<DocParam> {
+    if let Some(color) = intent.color {
+        if color.iter().all(|component| component.is_finite()) {
+            return Some(DocParam::const_color(color));
+        }
+        return None;
+    }
+    intent
+        .value
+        .filter(|value| value.is_finite())
+        .map(DocParam::const_f64)
+}
+
+fn source_param_matches_document(
     document: &motolii_doc::Document,
     target: LayerId,
+    param_id: &str,
+    value: &DocParam,
+) -> bool {
+    let Some(clip) = find_first_clip(document, target) else {
+        return false;
+    };
+    let ClipSource::Plugin { params, .. } = &clip.source else {
+        return false;
+    };
+    params.get(param_id) == Some(value)
+}
+
+fn effect_param_request_from_intent(
+    document: &motolii_doc::Document,
+    intent: &WireIntentEnvelope,
+) -> Option<(SetEffectParamRequest, bool)> {
+    let target = intent
+        .target
+        .as_deref()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(LayerId::from_raw)?;
+    let effect_use_id = intent
+        .effect_use_id
+        .as_deref()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(EffectId::from_raw)?;
+    let param_id = intent.param_id.clone().filter(|id| !id.is_empty())?;
+    let new_value = source_param_intent_value(intent)?;
+    let effect_use = document.find_effect_use(target, effect_use_id)?;
+    let definition = document.effect_definition(effect_use.definition_id)?;
+    let same_as_live = definition.params.get(&param_id) == Some(&new_value);
+    Some((
+        SetEffectParamRequest::with_param(
+            target,
+            effect_use_id,
+            effect_use.definition_id,
+            definition.plugin_id.clone(),
+            definition.effect_version,
+            param_id,
+            new_value,
+        ),
+        same_as_live,
+    ))
+}
+
+fn project_selected_doc_params(
+    document: &motolii_doc::Document,
+    primary: Option<LayerId>,
     time: RationalTime,
-) -> Option<(KeyframeId, [f64; 2])> {
-    fn find_envelope(items: &[TrackItem], target: LayerId) -> Option<&motolii_doc::ItemEnvelope> {
+) -> Option<WireSelectedDocParams> {
+    let primary = primary?;
+    let envelope = find_envelope_in_document(document, primary)?;
+    let (effects, _, _) = project_layer_effects(document, primary);
+    let (source_params, _, _) = project_layer_source_params(document, primary);
+    Some(WireSelectedDocParams {
+        layer_id: primary.get().to_string(),
+        opacity: motolii_doc::param_eval::eval_f64(
+            &envelope.opacity,
+            time,
+            &DataTracks::new(),
+            &ResolvedLayerParams::default(),
+        )
+        .ok()
+        .filter(|value| value.is_finite()),
+        effects,
+        source_params,
+    })
+}
+
+/// first_party − reference。session 不変なので OnceLock で cache。
+fn wire_catalog_projection() -> WireCatalogProjection {
+    static CACHE: OnceLock<WireCatalogProjection> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            let catalog = first_party_catalog().expect("first-party catalog");
+            let reference =
+                motolii_plugin::reference::reference_catalog().expect("reference catalog");
+            let mut effects = catalog
+                .iter()
+                .filter(|(plugin_id, contract)| {
+                    contract.kind == motolii_plugin::PluginKind::Filter
+                        && reference.get(plugin_id.0).is_none()
+                })
+                .map(|(plugin_id, contract)| {
+                    let name = if contract.node.display_name.trim().is_empty() {
+                        plugin_id.0.to_owned()
+                    } else {
+                        contract.node.display_name.to_owned()
+                    };
+                    WireCatalogEffect {
+                        plugin_id: plugin_id.0.to_owned(),
+                        name,
+                        effect_version: contract.node.version,
+                    }
+                })
+                .collect::<Vec<_>>();
+            effects.sort_by(|a, b| a.plugin_id.cmp(&b.plugin_id));
+            let mut sources = catalog
+                .iter()
+                .filter(|(plugin_id, contract)| {
+                    contract.kind == motolii_plugin::PluginKind::LayerSource
+                        && reference.get(plugin_id.0).is_none()
+                })
+                .map(|(plugin_id, contract)| {
+                    let name = if contract.node.display_name.trim().is_empty() {
+                        plugin_id.0.to_owned()
+                    } else {
+                        contract.node.display_name.to_owned()
+                    };
+                    WireCatalogSource {
+                        plugin_id: plugin_id.0.to_owned(),
+                        name,
+                        effect_version: contract.node.version,
+                    }
+                })
+                .collect::<Vec<_>>();
+            sources.sort_by(|a, b| a.plugin_id.cmp(&b.plugin_id));
+            WireCatalogProjection { effects, sources }
+        })
+        .clone()
+}
+
+fn wire_library_projection(projection: LibraryProjection) -> WireLibraryProjection {
+    WireLibraryProjection {
+        root: projection.root.map(|root| WireLibraryRoot {
+            id: root.id,
+            name: root.name,
+            path: root.path.to_string_lossy().into_owned(),
+        }),
+        directories: projection
+            .directories
+            .into_iter()
+            .map(|directory| WireLibraryDirectory {
+                id: directory.id,
+                name: directory.name,
+                path: directory.path,
+            })
+            .collect(),
+        tags: projection
+            .tags
+            .into_iter()
+            .map(|tag| WireLibraryTag {
+                id: tag.id,
+                label: tag.label,
+                count: tag.count,
+            })
+            .collect(),
+        items: projection
+            .items
+            .into_iter()
+            .map(|item| WireLibraryItem {
+                id: item.id,
+                name: item.name,
+                kind: item.kind.to_owned(),
+                directory: item.directory,
+                tags: item.tags,
+            })
+            .collect(),
+    }
+}
+
+/// Available だけを corners に畳む。評価失敗は空投影（snapshot 自体は落とさない）。
+fn project_stage_geometry_wire(
+    document: &motolii_doc::Document,
+    eval: EvaluationTime,
+    tracks: &DataTracks,
+) -> WireStageGeometryProjection {
+    let Ok(projection) = project_stage_geometry(document, eval, tracks) else {
+        return WireStageGeometryProjection {
+            layers: Vec::new(),
+            layers_truncated: false,
+        };
+    };
+    let mut layers = Vec::new();
+    let mut available = 0usize;
+    let mut layers_truncated = false;
+    for (layer_id, layer) in projection.layers() {
+        let StageLayerProjection::Available(geo) = layer else {
+            continue;
+        };
+        available += 1;
+        if layers.len() >= MAX_STAGE_BOUNDS {
+            layers_truncated = true;
+            continue;
+        }
+        let hw = geo.local_rect.size.width * 0.5;
+        let hh = geo.local_rect.size.height * 0.5;
+        let cx = geo.local_rect.center.x;
+        let cy = geo.local_rect.center.y;
+        // CCW・local 左下起点。v1 は world のみ（camera_view 不使用）。
+        let local = [
+            [cx - hw, cy - hh],
+            [cx + hw, cy - hh],
+            [cx + hw, cy + hh],
+            [cx - hw, cy + hh],
+        ];
+        let corners = world_rect_corners(geo.world, local);
+        let (position, rotation, scale) = world_layer_trs(geo.world, [cx, cy]);
+        layers.push(WireStageGeometryLayer {
+            layer_id: layer_id.get().to_string(),
+            corners,
+            position,
+            rotation,
+            scale,
+        });
+    }
+    if available > MAX_STAGE_BOUNDS {
+        layers_truncated = true;
+    }
+    WireStageGeometryProjection {
+        layers,
+        layers_truncated,
+    }
+}
+
+fn world_layer_trs(world: Affine2D, center: [f64; 2]) -> ([f64; 2], f64, [f64; 2]) {
+    (
+        world.transform_point(center[0], center[1]),
+        world.m[3].atan2(world.m[0]),
+        world.approx_scale(),
+    )
+}
+
+fn world_rect_corners(world: motolii_doc::Affine2D, local: [[f64; 2]; 4]) -> [[f64; 2]; 4] {
+    let mut corners = local.map(|[x, y]| {
+        let p = world.transform_point(x, y);
+        [p[0], p[1]]
+    });
+    // world determinant が負なら反転して CCW に揃える。
+    if world.m[0] * world.m[4] - world.m[1] * world.m[3] < 0.0 {
+        corners.reverse();
+    }
+    corners
+}
+
+/// world 空間 delta を position param の局所 delta へ写す（線形部のみ）。
+/// `Affine2D::try_invert`（affine.rs）の逆行列で delta を変換する。
+fn world_delta_to_position_local(world: Affine2D, delta: [f64; 2]) -> Option<[f64; 2]> {
+    let inv = world.try_invert()?;
+    let m = inv.m;
+    let local = [
+        m[0] * delta[0] + m[1] * delta[1],
+        m[3] * delta[0] + m[4] * delta[1],
+    ];
+    local.iter().all(|value| value.is_finite()).then_some(local)
+}
+
+fn prepare_app_stage_transform_command(
+    document: &motolii_doc::Document,
+    time: RationalTime,
+    target: LayerId,
+    edit: AppStageTransformEdit,
+) -> Result<Command, AppStageTransformError> {
+    let envelope = find_envelope_in_document(document, target)
+        .ok_or(AppStageTransformError::TargetUnavailable)?;
+    match edit {
+        AppStageTransformEdit::TranslateWorld(delta) => {
+            if !delta.iter().all(|value| value.is_finite()) {
+                return Err(AppStageTransformError::NonFinite);
+            }
+            let tracks = DataTracks::new();
+            let projection = project_stage_geometry(document, EvaluationTime::new(time), &tracks)
+                .map_err(|_| AppStageTransformError::TransformUnavailable)?;
+            let Some(StageLayerProjection::Available(geometry)) = projection.get(target).cloned()
+            else {
+                return Err(AppStageTransformError::TransformUnavailable);
+            };
+            let local_delta = world_delta_to_position_local(geometry.world, delta)
+                .ok_or(AppStageTransformError::TransformUnavailable)?;
+            match &envelope.transform.position {
+                DocParam::Const(DocValue::Vec2(old)) => {
+                    let new = [old[0] + local_delta[0], old[1] + local_delta[1]];
+                    if !new.iter().all(|value| value.is_finite()) {
+                        return Err(AppStageTransformError::NonFinite);
+                    }
+                    if new == *old {
+                        return Err(AppStageTransformError::NoChange);
+                    }
+                    Ok(Command::SetProperty {
+                        target,
+                        property: ScalarPropertyId::Position,
+                        old_value: DocParam::const_vec2(*old),
+                        new_value: DocParam::const_vec2(new),
+                    })
+                }
+                DocParam::Keyframes(_) => {
+                    let (key, old) = position_key_at(document, target, time)
+                        .ok_or(AppStageTransformError::OffKeyframe)?;
+                    let new = [old[0] + local_delta[0], old[1] + local_delta[1]];
+                    if !new.iter().all(|value| value.is_finite()) {
+                        return Err(AppStageTransformError::NonFinite);
+                    }
+                    if new == old {
+                        return Err(AppStageTransformError::NoChange);
+                    }
+                    Ok(Command::SetPositionKeyValue {
+                        target,
+                        key,
+                        old,
+                        new,
+                    })
+                }
+                _ => Err(AppStageTransformError::UnsupportedProperty),
+            }
+        }
+        AppStageTransformEdit::RotateZ(delta) => {
+            if !delta.is_finite() {
+                return Err(AppStageTransformError::NonFinite);
+            }
+            match &envelope.transform.rotation {
+                DocParam::Const(DocValue::F64(old)) => {
+                    let new = *old + delta;
+                    if !new.is_finite() {
+                        return Err(AppStageTransformError::NonFinite);
+                    }
+                    if new == *old {
+                        return Err(AppStageTransformError::NoChange);
+                    }
+                    Ok(Command::SetProperty {
+                        target,
+                        property: ScalarPropertyId::Rotation,
+                        old_value: DocParam::const_f64(*old),
+                        new_value: DocParam::const_f64(new),
+                    })
+                }
+                DocParam::Keyframes(_) => {
+                    let (key, old) = match keyed_value_at(&envelope.transform.rotation, time) {
+                        Some((key, DocValue::F64(old))) => (key, old),
+                        Some(_) => return Err(AppStageTransformError::UnsupportedProperty),
+                        None => return Err(AppStageTransformError::OffKeyframe),
+                    };
+                    let new = old + delta;
+                    if !new.is_finite() {
+                        return Err(AppStageTransformError::NonFinite);
+                    }
+                    if new == old {
+                        return Err(AppStageTransformError::NoChange);
+                    }
+                    keyed_transform_set(
+                        document,
+                        target,
+                        ScalarPropertyId::Rotation,
+                        key,
+                        DocValue::F64(new),
+                    )
+                }
+                _ => Err(AppStageTransformError::UnsupportedProperty),
+            }
+        }
+        AppStageTransformEdit::Scale(factor) => {
+            if !factor.iter().all(|value| value.is_finite()) {
+                return Err(AppStageTransformError::NonFinite);
+            }
+            match &envelope.transform.scale {
+                DocParam::Const(DocValue::Vec2(old)) => {
+                    let new = [old[0] * factor[0], old[1] * factor[1]];
+                    if !new.iter().all(|value| value.is_finite()) {
+                        return Err(AppStageTransformError::NonFinite);
+                    }
+                    if new == *old {
+                        return Err(AppStageTransformError::NoChange);
+                    }
+                    Ok(Command::SetProperty {
+                        target,
+                        property: ScalarPropertyId::Scale,
+                        old_value: DocParam::const_vec2(*old),
+                        new_value: DocParam::const_vec2(new),
+                    })
+                }
+                DocParam::Keyframes(_) => {
+                    let (key, old) = match keyed_value_at(&envelope.transform.scale, time) {
+                        Some((key, DocValue::Vec2(old))) => (key, old),
+                        Some(_) => return Err(AppStageTransformError::UnsupportedProperty),
+                        None => return Err(AppStageTransformError::OffKeyframe),
+                    };
+                    let new = [old[0] * factor[0], old[1] * factor[1]];
+                    if !new.iter().all(|value| value.is_finite()) {
+                        return Err(AppStageTransformError::NonFinite);
+                    }
+                    if new == old {
+                        return Err(AppStageTransformError::NoChange);
+                    }
+                    keyed_transform_set(
+                        document,
+                        target,
+                        ScalarPropertyId::Scale,
+                        key,
+                        DocValue::Vec2(new),
+                    )
+                }
+                _ => Err(AppStageTransformError::UnsupportedProperty),
+            }
+        }
+    }
+}
+
+fn app_stage_geometry(document: &motolii_doc::Document, time: RationalTime) -> AppStageGeometry {
+    let wire = project_stage_geometry_wire(document, EvaluationTime::new(time), &DataTracks::new());
+    AppStageGeometry {
+        layers: wire
+            .layers
+            .into_iter()
+            .map(|layer| AppStageGeometryLayer {
+                layer_id: layer.layer_id,
+                corners: layer.corners,
+                position: layer.position,
+                rotation: layer.rotation,
+                scale: layer.scale,
+            })
+            .collect(),
+        layers_truncated: wire.layers_truncated,
+    }
+}
+
+fn find_first_clip(document: &motolii_doc::Document, target: LayerId) -> Option<&Clip> {
+    fn walk<'a>(items: &'a [TrackItem], target: LayerId) -> Option<&'a Clip> {
+        for item in items {
+            match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return Some(clip);
+                }
+                TrackItem::Group(group) => {
+                    if let Some(clip) = walk(&group.children, target) {
+                        return Some(clip);
+                    }
+                }
+                TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+    document
+        .tracks
+        .iter()
+        .find_map(|track| walk(&track.items, target))
+}
+
+fn find_envelope_in_document(
+    document: &motolii_doc::Document,
+    target: LayerId,
+) -> Option<&ItemEnvelope> {
+    fn walk<'a>(items: &'a [TrackItem], target: LayerId) -> Option<&'a ItemEnvelope> {
         for item in items {
             match item {
                 TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
@@ -2808,7 +5430,7 @@ fn position_key_at(
                     return Some(&group.envelope);
                 }
                 TrackItem::Group(group) => {
-                    if let Some(envelope) = find_envelope(&group.children, target) {
+                    if let Some(envelope) = walk(&group.children, target) {
                         return Some(envelope);
                     }
                 }
@@ -2817,11 +5439,167 @@ fn position_key_at(
         }
         None
     }
-
-    let envelope = document
+    document
         .tracks
         .iter()
-        .find_map(|track| find_envelope(&track.items, target))?;
+        .find_map(|track| walk(&track.items, target))
+}
+
+/// DeleteTargetedItems用: target層の(parent, index, item)を現Documentから拾う。
+fn find_track_item_location(
+    document: &motolii_doc::Document,
+    target: LayerId,
+) -> Option<(ParentLocator, usize, TrackItem)> {
+    fn envelope_layer(item: &TrackItem) -> LayerId {
+        match item {
+            TrackItem::Clip(clip) => clip.envelope.layer_id,
+            TrackItem::Group(group) => group.envelope.layer_id,
+        }
+    }
+    fn walk_groups(
+        items: &[TrackItem],
+        target: LayerId,
+    ) -> Option<(ParentLocator, usize, TrackItem)> {
+        for item in items {
+            if let TrackItem::Group(group) = item {
+                if let Some((idx, child)) = group
+                    .children
+                    .iter()
+                    .enumerate()
+                    .find(|(_, child)| envelope_layer(child) == target)
+                {
+                    return Some((
+                        ParentLocator::Group(group.envelope.layer_id),
+                        idx,
+                        child.clone(),
+                    ));
+                }
+                if let Some(found) = walk_groups(&group.children, target) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    for track in &document.tracks {
+        if let Some((idx, item)) = track
+            .items
+            .iter()
+            .enumerate()
+            .find(|(_, item)| envelope_layer(item) == target)
+        {
+            return Some((ParentLocator::Track(track.id), idx, item.clone()));
+        }
+        if let Some(found) = walk_groups(&track.items, target) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn project_position_keys(
+    document: &motolii_doc::Document,
+    target: LayerId,
+) -> (Vec<WireTimelinePositionKey>, bool, u32) {
+    let Some(envelope) = find_envelope_in_document(document, target) else {
+        return (Vec::new(), false, 0);
+    };
+    let DocParam::Keyframes(track) = &envelope.transform.position else {
+        return (Vec::new(), false, 0);
+    };
+    let keys = track.keys();
+    let hidden = keys.len().saturating_sub(MAX_POSITION_KEYS) as u32;
+    let keys_truncated = hidden > 0;
+    let position_keys = keys
+        .iter()
+        .take(MAX_POSITION_KEYS)
+        .map(|key| WireTimelinePositionKey {
+            key_id: key.id.get().to_string(),
+            time: key.t,
+            value: match key.value {
+                DocValue::Vec2(value) => Some(value),
+                _ => None,
+            },
+            interp: Some(key.interp),
+        })
+        .collect();
+    (position_keys, keys_truncated, hidden)
+}
+
+fn project_param_keys(
+    document: &motolii_doc::Document,
+    target: LayerId,
+) -> Vec<WireTimelineParamKey> {
+    let Some(envelope) = find_envelope_in_document(document, target) else {
+        return Vec::new();
+    };
+    let mut keys = Vec::new();
+    push_param_keys("scale", &envelope.transform.scale, &mut keys);
+    push_param_keys("rotation", &envelope.transform.rotation, &mut keys);
+    push_param_keys("opacity", &envelope.opacity, &mut keys);
+    keys
+}
+
+fn push_param_keys(property: &str, param: &DocParam, out: &mut Vec<WireTimelineParamKey>) {
+    let DocParam::Keyframes(track) = param else {
+        return;
+    };
+    for key in track.keys() {
+        let (value, vec) = match key.value {
+            DocValue::F64(value) if value.is_finite() => (Some(value), None),
+            DocValue::Vec2(value) if value.iter().all(|component| component.is_finite()) => {
+                (None, Some(value))
+            }
+            _ => (None, None),
+        };
+        out.push(WireTimelineParamKey {
+            property: property.to_owned(),
+            key_id: key.id.get().to_string(),
+            time: key.t,
+            value,
+            vec,
+        });
+    }
+}
+
+fn wire_transform_property(name: &str) -> Option<ScalarPropertyId> {
+    match name {
+        "scale" => Some(ScalarPropertyId::Scale),
+        "rotation" => Some(ScalarPropertyId::Rotation),
+        "opacity" => Some(ScalarPropertyId::Opacity),
+        _ => None,
+    }
+}
+
+fn keyed_value_at(param: &DocParam, time: RationalTime) -> Option<(KeyframeId, DocValue)> {
+    let DocParam::Keyframes(track) = param else {
+        return None;
+    };
+    let key = track
+        .keys()
+        .iter()
+        .find(|key| rational_time_eq(key.t, time))?;
+    Some((key.id, key.value.clone()))
+}
+
+fn keyed_transform_set(
+    document: &motolii_doc::Document,
+    target: LayerId,
+    property: ScalarPropertyId,
+    key: KeyframeId,
+    new: DocValue,
+) -> Result<Command, AppStageTransformError> {
+    prepare_set_transform_param_key_value(document, target, property, key, new)
+        .map_err(|_| AppStageTransformError::UnsupportedProperty)?
+        .ok_or(AppStageTransformError::NoChange)
+}
+
+fn position_key_at(
+    document: &motolii_doc::Document,
+    target: LayerId,
+    time: RationalTime,
+) -> Option<(KeyframeId, [f64; 2])> {
+    let envelope = find_envelope_in_document(document, target)?;
     let DocParam::Keyframes(track) = &envelope.transform.position else {
         return None;
     };
@@ -2834,11 +5612,44 @@ fn position_key_at(
     {
         return None;
     }
-    let key = keys.iter().find(|key| key.t == time)?;
+    let key = keys.iter().find(|key| rational_time_eq(key.t, time))?;
     let DocValue::Vec2(value) = key.value else {
         return None;
     };
     Some((key.id, value))
+}
+
+fn position_key_time_at(
+    document: &motolii_doc::Document,
+    target: LayerId,
+    key: KeyframeId,
+) -> Option<RationalTime> {
+    let envelope = find_envelope_in_document(document, target)?;
+    let DocParam::Keyframes(track) = &envelope.transform.position else {
+        return None;
+    };
+    Some(track.get_by_id(key)?.t)
+}
+
+fn rational_time_eq(left: RationalTime, right: RationalTime) -> bool {
+    let lhs = i128::from(left.num()).checked_mul(i128::from(right.den()));
+    let rhs = i128::from(right.num()).checked_mul(i128::from(left.den()));
+    match (lhs, rhs) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
+fn canonical_playback_start_frame(current: RationalTime) -> Result<u64, RnHostReasonCode> {
+    if current < RationalTime::ZERO {
+        return Err(RnHostReasonCode::InvalidIntent);
+    }
+    let canonical_fps = Fps::try_new(CANONICAL_SAMPLE_RATE as i64, 1)
+        .map_err(|_| RnHostReasonCode::InvalidIntent)?;
+    let frame = current
+        .try_to_frame_floor(canonical_fps)
+        .map_err(|_| RnHostReasonCode::InvalidIntent)?;
+    u64::try_from(frame).map_err(|_| RnHostReasonCode::InvalidIntent)
 }
 
 fn response_for_test(response: WireIntentResponse) -> RnHostTestResponse {
@@ -2849,11 +5660,301 @@ fn response_for_test(response: WireIntentResponse) -> RnHostTestResponse {
             .first()
             .map(|diagnostic| diagnostic.reason),
         snapshot: response.snapshot.map(snapshot_for_test),
+        message: response.message,
     }
 }
 
 pub fn host_create_for_test(project_path: &Path) -> Result<u64, RnHostError> {
     with_registry(|registry| registry.create_host(project_path))
+}
+
+fn restore_stage_video(host_handle: u64, binder: Option<VideoSourceBinder>) {
+    let Some(binder) = binder else {
+        return;
+    };
+    let mut guard = lock_registry();
+    let Some(host) = guard.hosts.get_mut(&host_handle) else {
+        return;
+    };
+    if !host.destroyed {
+        host.stage_video = Some(binder);
+    }
+}
+
+/// 評価済み Document の実フレームを Stage 合成へ渡す薄い seam。
+/// dirty gate: 前回と同じ (revision, generation, time) なら再renderせず Unchanged。
+///
+/// F10: registry mutexは取り出し/書き戻しだけに閉じる。graph構築とGPU submitはlock外。
+/// 並行renderは単一render thread前提のため二重render対策は持たない。
+#[doc(hidden)]
+pub fn host_render_frame_for_app(
+    host_handle: u64,
+    gpu: &GpuCtx,
+    session: &mut RenderSession,
+    out: &mut Option<AppStageFrame>,
+) -> HostRenderFrameResult {
+    // Unchanged / Failed では呼び手の既存frameへ触れない(Rendered時のみ上書き)。
+    // 冒頭で無条件にNone化するとUnchanged tickごとに実フレームが消える。
+
+    // 第一lock: destroyed確認・Unchanged判定・snapshot/runtime取り出し。ここまででguardを落とす。
+    let (
+        revision,
+        generation,
+        time,
+        preview_epoch,
+        document,
+        runtime,
+        preview_command,
+        stage_video,
+    ) = {
+        let mut guard = lock_registry();
+        let Some(host) = guard.hosts.get_mut(&host_handle) else {
+            return HostRenderFrameResult::Failed;
+        };
+        if host.destroyed {
+            return HostRenderFrameResult::Failed;
+        }
+        host.pump_playback();
+        let revision = host.runtime.document_revision().to_string();
+        let generation = host.projection_generation.to_string();
+        let time = host.current_time;
+        let preview_epoch = host.inspector_preview_epoch;
+        // 呼び手がframe未保持なら(rev,gen,time,preview)一致でも再render(renderer再生成後の穴を塞ぐ)。
+        if out.is_some() {
+            if let Some((prev_rev, prev_gen, prev_time, prev_preview)) =
+                host.stage_frame_last.as_ref()
+            {
+                if prev_rev == &revision
+                    && prev_gen == &generation
+                    && *prev_time == time
+                    && *prev_preview == preview_epoch
+                {
+                    return HostRenderFrameResult::Unchanged;
+                }
+            }
+        }
+
+        let document = host.runtime.snapshot();
+        if host.stage_frame_runtime.is_none() {
+            let Ok(created) = first_party_runtime() else {
+                return HostRenderFrameResult::Failed;
+            };
+            host.stage_frame_runtime = Some(Arc::new(created));
+        }
+        let runtime = host
+            .stage_frame_runtime
+            .as_ref()
+            .expect("stage_frame_runtime initialized")
+            .clone();
+        let preview_command = host.inspector_preview.clone();
+        let stage_video = host.stage_video.take();
+        (
+            revision,
+            generation,
+            time,
+            preview_epoch,
+            document,
+            runtime,
+            preview_command,
+            stage_video,
+        )
+    };
+
+    let Some(desc) = frame_desc_from_composition(document.as_ref()) else {
+        restore_stage_video(host_handle, stage_video);
+        return HostRenderFrameResult::Failed;
+    };
+
+    // product path / render_worker と同じ: 空 DataTracks、project_root=None、Quality::DRAFT。
+    // video_sources は export と同じ FrameReader 束。lock外: build + GPU submit。
+    let tracks = DataTracks::new();
+    let eval = EvaluationTime::new(time);
+    let request = crate::render_worker::RenderRequest {
+        document: Arc::clone(&document),
+        data_tracks: Arc::new(DataTracks::new()),
+        evaluation_time: eval,
+        desc,
+        quality: Quality::DRAFT,
+    };
+    let previewed = preview_command.as_ref().and_then(|command| {
+        crate::render_worker::prepare_preview_document(&request, Some(command)).ok()
+    });
+    let eval_document = previewed
+        .as_ref()
+        .map(|prepared| prepared.as_ref())
+        .unwrap_or(document.as_ref());
+    let built = match build_document_frame_graph(
+        eval_document,
+        eval,
+        desc,
+        &tracks,
+        runtime.as_ref(),
+        None,
+    ) {
+        Ok(built) => built,
+        Err(_) => {
+            restore_stage_video(host_handle, stage_video);
+            return HostRenderFrameResult::Failed;
+        }
+    };
+    let mut stage_video = stage_video.unwrap_or_else(|| VideoSourceBinder::new(gpu));
+    let bound = match stage_video.bind(gpu, eval_document, None, &built.video_slots, desc) {
+        Ok(bound) => bound,
+        Err(_) => {
+            restore_stage_video(host_handle, Some(stage_video));
+            return HostRenderFrameResult::Failed;
+        }
+    };
+    let video_inputs = bound.as_inputs();
+    let rendered = match render_graph_cached(
+        gpu,
+        session,
+        time,
+        &built.graph,
+        &RenderGraphInputs {
+            camera: built.camera,
+            video_sources: &video_inputs,
+            source_time: Some(built.source_time),
+            plugins: Some(runtime.executors()),
+        },
+        Quality::DRAFT,
+    ) {
+        Ok(frame) => frame,
+        Err(_) => {
+            restore_stage_video(host_handle, Some(stage_video));
+            return HostRenderFrameResult::Failed;
+        }
+    };
+
+    // 第二lock: host生存を再確認してstage_frame_lastを書き戻す。消えていたらFailed、outは触らない。
+    // revisionが進んでいても書き戻してよい(次tickのUnchangedが正しく外れるだけ)。
+    {
+        let mut guard = lock_registry();
+        let Some(host) = guard.hosts.get_mut(&host_handle) else {
+            return HostRenderFrameResult::Failed;
+        };
+        if host.destroyed {
+            return HostRenderFrameResult::Failed;
+        }
+        host.stage_video = Some(stage_video);
+        host.stage_frame_last = Some((revision.clone(), generation.clone(), time, preview_epoch));
+    }
+
+    *out = Some(AppStageFrame {
+        texture: rendered.texture,
+        width: rendered.desc.width,
+        height: rendered.desc.height,
+        revision,
+        generation,
+        time,
+    });
+    HostRenderFrameResult::Rendered
+}
+
+/// Clone the live Document, apply the same D2 command used at commit, and project Stage path
+/// geometry. Does not mutate the single writer and does not render a second frame authority.
+#[doc(hidden)]
+pub fn host_preview_stage_transform_for_app(
+    host_handle: u64,
+    expected_revision: u64,
+    target: u64,
+    edit: AppStageTransformEdit,
+) -> Result<AppStageTransformPreview, AppStageTransformError> {
+    let (time, document, command) = {
+        let mut guard = lock_registry();
+        let host = guard
+            .hosts
+            .get_mut(&host_handle)
+            .ok_or(AppStageTransformError::HostUnavailable)?;
+        if host.destroyed {
+            return Err(AppStageTransformError::HostUnavailable);
+        }
+        if host.runtime.document_revision() != expected_revision {
+            return Err(AppStageTransformError::StaleDocument);
+        }
+        let document = host.runtime.snapshot();
+        let time = host.current_time;
+        let command = prepare_app_stage_transform_command(
+            document.as_ref(),
+            time,
+            LayerId::from_raw(target),
+            edit,
+        )?;
+        (time, document, command)
+    };
+
+    let desc = frame_desc_from_composition(document.as_ref())
+        .ok_or_else(|| AppStageTransformError::Render("invalid composition dimensions".into()))?;
+    let request = crate::render_worker::RenderRequest {
+        document,
+        data_tracks: Arc::new(DataTracks::new()),
+        evaluation_time: EvaluationTime::new(time),
+        desc,
+        quality: Quality::DRAFT,
+    };
+    let prepared = crate::render_worker::prepare_preview_document(&request, Some(&command))
+        .map_err(|error| AppStageTransformError::Preview(error.to_string()))?;
+    Ok(AppStageTransformPreview {
+        geometry: app_stage_geometry(prepared.as_ref(), time),
+    })
+}
+
+/// Commit one Stage transform through the existing DocumentEditRuntime single writer.
+#[doc(hidden)]
+pub fn host_commit_stage_transform_for_app(
+    host_handle: u64,
+    expected_revision: u64,
+    target: u64,
+    edit: AppStageTransformEdit,
+) -> Result<(), AppStageTransformError> {
+    let mut guard = lock_registry();
+    let host = guard
+        .hosts
+        .get_mut(&host_handle)
+        .ok_or(AppStageTransformError::HostUnavailable)?;
+    if host.destroyed {
+        return Err(AppStageTransformError::HostUnavailable);
+    }
+    if host.runtime.document_revision() != expected_revision {
+        return Err(AppStageTransformError::StaleDocument);
+    }
+    let snapshot = host.runtime.snapshot();
+    let command = prepare_app_stage_transform_command(
+        snapshot.as_ref(),
+        host.current_time,
+        LayerId::from_raw(target),
+        edit,
+    )?;
+    let mut queue = DocumentEditQueue::default();
+    if !queue.push_stage_transform(command) {
+        return Err(AppStageTransformError::UnsupportedProperty);
+    }
+    let published = host
+        .runtime
+        .process_next(&mut queue, host.primary, host.projection_generation)
+        .map_err(|error| AppStageTransformError::Commit(error.to_string()))?
+        .ok_or(AppStageTransformError::NoChange)?;
+    host.adopt_published(published);
+    Ok(())
+}
+
+/// composition アスペクトから bootstrap 系の FrameDesc を作る（高さ1080固定）。
+fn frame_desc_from_composition(document: &motolii_doc::Document) -> Option<FrameDesc> {
+    const HEIGHT: u32 = 1080;
+    let width = u64::from(HEIGHT)
+        .checked_mul(document.composition.aspect_num() as u64)?
+        .checked_div(document.composition.aspect_den() as u64)? as u32;
+    if width == 0 {
+        return None;
+    }
+    FrameDesc::try_packed(
+        width,
+        HEIGHT,
+        PixelFormat::Rgba8Unorm,
+        ColorSpace::Srgb,
+        true,
+    )
+    .ok()
 }
 
 pub fn host_read_snapshot_for_test(
@@ -3343,7 +6444,7 @@ pub extern "C" fn motolii_rn_host_read_snapshot_json(
             );
         }
         match with_registry(|registry| registry.read_snapshot(host_handle)) {
-            Ok(snapshot) => match encode_json(&snapshot) {
+            Ok(snapshot) => match encode_snapshot_json(&snapshot) {
                 Ok(json) => write_bytes(out, out_cap, &json),
                 Err(_) => -1,
             },
@@ -3354,6 +6455,38 @@ pub extern "C" fn motolii_rn_host_read_snapshot_json(
         }
     }))
     .unwrap_or(-1)
+}
+
+/// 軽量stamp: snapshot JSONが変わり得る変更で必ず revision か generation が動く。
+/// serialize禁止。registry lock下で2つのu64を書くだけ(F9 / B7)。
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rn_host_projection_stamp(
+    handle: u64,
+    out_revision: *mut u64,
+    out_generation: *mut u64,
+) -> bool {
+    if out_revision.is_null() || out_generation.is_null() || handle == 0 {
+        return false;
+    }
+    catch_unwind(AssertUnwindSafe(|| {
+        let mut guard = lock_registry();
+        let Some(host) = guard.hosts.get_mut(&handle) else {
+            return false;
+        };
+        if host.destroyed {
+            return false;
+        }
+        // Stage の毎frame stamp が再生時計。Transport は聴感時刻なので二重呼び出しでも進まない。
+        host.pump_playback();
+        // SAFETY: 呼び出し側がwritableな非nullポインタを渡す契約。
+        unsafe {
+            *out_revision = host.runtime.document_revision();
+            *out_generation = host.projection_generation;
+        }
+        true
+    }))
+    .unwrap_or(false)
 }
 
 #[cfg(target_os = "macos")]
@@ -3559,6 +6692,7 @@ const _: fn() = || {
     let _ = motolii_rn_timeline_register as extern "C" fn(u64, *mut u64, *mut u8, usize) -> i64;
     let _ = motolii_rn_timeline_destroy as extern "C" fn(u64, *mut u8, usize) -> i64;
     let _ = motolii_rn_host_read_snapshot_json as extern "C" fn(u64, *mut u8, usize) -> i64;
+    let _ = motolii_rn_host_projection_stamp as extern "C" fn(u64, *mut u64, *mut u64) -> bool;
     let _ = motolii_rn_host_dispatch_intent_json
         as extern "C" fn(u64, *const u8, usize, *mut u8, usize) -> i64;
     let _ = motolii_rn_stage_attach
@@ -3583,9 +6717,13 @@ mod tests {
 
     use motolii_core::{RationalTime, TimeMap};
     use motolii_doc::{
-        Clip, ClipSource, CompCameraDoc, DocParam, Document, ItemEnvelope, LayerId, ProjectSession,
-        ResourceLimits, SaveProjectOptions, Track, TrackItem, Transform2D, RECT_LAYER_SOURCE,
+        Clip, ClipSource, CompCameraDoc, DocKeyframe, DocKeyframeTrack, DocParam, DocValue,
+        Document, EffectDefinition, EffectDefinitionId, EffectUse, ItemEnvelope, KeyframeId,
+        LayerId, ProjectSession, ResourceLimits, SaveProjectOptions, Track, TrackItem, Transform2D,
+        RECT_LAYER_SOURCE,
     };
+    use motolii_gpu::download_rgba;
+    use motolii_render::RenderSession;
     use motolii_testkit::tmp_dir;
 
     use super::*;
@@ -3594,7 +6732,9 @@ mod tests {
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     fn test_lock() -> MutexGuard<'static, ()> {
-        TEST_LOCK.lock().expect("test host registry lock")
+        TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn fixture_path(tag: &str) -> std::path::PathBuf {
@@ -3636,6 +6776,32 @@ mod tests {
             )
             .expect("save fixture");
         path
+    }
+
+    fn pixel_at(bytes: &[u8], width: u32, x: u32, y: u32) -> [u8; 4] {
+        let base = ((y * width + x) * 4) as usize;
+        [
+            bytes[base],
+            bytes[base + 1],
+            bytes[base + 2],
+            bytes[base + 3],
+        ]
+    }
+
+    fn has_non_background_pixel(
+        bytes: &[u8],
+        width: u32,
+        height: u32,
+        background: [u8; 4],
+    ) -> bool {
+        for y in 0..height {
+            for x in 0..width {
+                if pixel_at(bytes, width, x, y) != background {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     fn create_host(tag: &str) -> u64 {
@@ -3689,9 +6855,20 @@ mod tests {
             position: None,
             playhead: None,
             target: None,
+            dest: None,
+            key_id: None,
+            property: None,
             time: None,
             new: None,
             interp: None,
+            delta: None,
+            plugin_id: None,
+            item_id: None,
+            effect_use_id: None,
+            param_id: None,
+            value: None,
+            output_path: None,
+            color: None,
         }
     }
 
@@ -3706,10 +6883,18 @@ mod tests {
         )
     }
 
+    fn host_kind_json(host: u64, kind: &str) -> String {
+        format!(
+            r#"{{"version":1,"direction":"rn-to-host","kind":"{kind}","host_handle":"{host}"}}"#,
+            kind = kind,
+            host = host,
+        )
+    }
+
     fn dispatch_raw_json(host: u64, intent_json: &str) -> RnHostTestResponse {
         #[cfg(target_os = "macos")]
         {
-            let mut out = vec![0u8; MAX_JSON_BYTES];
+            let mut out = vec![0u8; MAX_SNAPSHOT_JSON_BYTES];
             let written = motolii_rn_host_dispatch_intent_json(
                 host,
                 intent_json.as_ptr(),
@@ -3942,6 +7127,47 @@ mod tests {
         .flatten()
     }
 
+    fn make_16_layers_64_keys_document() -> Document {
+        let mut document = Document::new_current();
+        let track = document.track_ids.allocate("stress").expect("track");
+        document.tracks.push(Track {
+            id: track,
+            items: vec![],
+        });
+        for layer_idx in 0_u64..16 {
+            let layer = document
+                .layers
+                .allocate(&format!("layer-{layer_idx}"))
+                .expect("layer");
+            let mut keyframes = DocKeyframeTrack::new();
+            for key_idx in 0_u64..64 {
+                let key_id = document.next_stable_id.allocate().expect("key id");
+                keyframes.insert(DocKeyframe {
+                    id: KeyframeId::from_raw(key_id),
+                    t: RationalTime::try_new(key_idx as i64, 1).expect("key time"),
+                    value: DocValue::Vec2([0.0, key_idx as f64]),
+                    interp: Interp::Linear,
+                });
+            }
+            let mut envelope = ItemEnvelope::new(layer);
+            envelope.transform.position = DocParam::Keyframes(keyframes);
+            document.tracks[0].items.push(TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params([0.0, 0.0], [1.0, 1.0]),
+                    extra: Default::default(),
+                },
+            }));
+        }
+        document.validate().expect("valid");
+        document
+    }
+
     #[test]
     fn snapshot_carries_revision_projection_generation_and_primary_layer_id() {
         let _lock = test_lock();
@@ -3952,6 +7178,55 @@ mod tests {
         assert_eq!(snapshot.current_time, RationalTime::ZERO);
         assert!(snapshot.primary_layer_id.is_none());
         assert!(!snapshot.layer_ids.is_empty());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn create_host_opens_the_project_runtime_without_seeding_a_fixture_document() {
+        let source = include_str!("rn_product_host.rs");
+        let production = source.split("#[cfg(test)]").next().unwrap();
+        let start = production
+            .find("fn create_host(&mut self, project_path: &Path)")
+            .expect("create_host");
+        let body = &production[start..];
+        let end = body[1..]
+            .find("\n    fn ")
+            .map(|index| index + 1)
+            .unwrap_or(body.len());
+        let create = &body[..end];
+        assert!(create.contains("open_project_runtime(project_path)"));
+        assert!(!create.contains("RECT_LAYER_SOURCE"));
+        assert!(!create.contains("Document::new_current"));
+    }
+
+    #[test]
+    fn document_change_puts_the_same_live_snapshot_on_dispatch_and_read_mouths() {
+        let _lock = test_lock();
+        let host = create_host("snapshot-mouths");
+        let via_read = read_snapshot(host);
+        let via_dispatch = dispatch(host, base_intent("read_snapshot"))
+            .snapshot
+            .expect("read_snapshot kind");
+        assert_eq!(via_read.revision, via_dispatch.revision);
+        assert_eq!(via_read.layer_ids, via_dispatch.layer_ids);
+
+        let before_layers = via_read.layer_ids.len();
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(response.accepted);
+        let dispatched = response.snapshot.expect("place snapshot");
+        let reread = read_snapshot(host);
+        assert_eq!(dispatched.revision, reread.revision);
+        assert_eq!(dispatched.layer_ids, reread.layer_ids);
+        assert!(reread.layer_ids.len() > before_layers);
         let _ = host_destroy_for_test(host);
     }
 
@@ -5046,6 +8321,35 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
+    fn ffi_create_reports_project_already_open_as_typed_reject() {
+        let _lock = test_lock();
+        let path = fixture_path("ffi-project-already-open");
+        let limits = ResourceLimits::production();
+        let _held = ProjectSession::acquire(&path, &limits).expect("hold project lock");
+        let path_bytes = path.to_string_lossy();
+        let mut host_handle = 1u64;
+        let mut out = [0u8; MAX_JSON_BYTES];
+
+        let written = motolii_rn_host_create(
+            path_bytes.as_bytes().as_ptr(),
+            path_bytes.len(),
+            &mut host_handle,
+            out.as_mut_ptr(),
+            out.len(),
+        );
+
+        assert!(written > 0);
+        assert_eq!(host_handle, 0);
+        let response = parse_wire_response(&out, written);
+        assert!(!response.accepted);
+        assert_eq!(
+            response.diagnostics[0].reason,
+            RnHostReasonCode::ProjectAlreadyOpen
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
     fn ffi_rejects_preserve_typed_reasons_and_skip_registry_mutation_on_bad_out() {
         let _lock = test_lock();
         let path = fixture_path("ffi-reject");
@@ -5171,6 +8475,312 @@ mod tests {
             double_host_response.diagnostics[0].reason,
             RnHostReasonCode::DoubleDestroy
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    fn read_projection_stamp(host: u64) -> (u64, u64) {
+        let mut revision = 0u64;
+        let mut generation = 0u64;
+        assert!(
+            motolii_rn_host_projection_stamp(host, &mut revision, &mut generation),
+            "stamp ffi"
+        );
+        (revision, generation)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn read_snapshot_json_bytes(host: u64) -> Vec<u8> {
+        let mut out = vec![0u8; MAX_SNAPSHOT_JSON_BYTES];
+        let written = motolii_rn_host_read_snapshot_json(host, out.as_mut_ptr(), out.len());
+        assert!(written > 0, "snapshot read failed: {written}");
+        out[..written as usize].to_vec()
+    }
+
+    /// F9: stampはsnapshot JSONが変わり得る全変更で必ず動く。no-opでは不変、stamp不変⇒snapshot不変。
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn projection_stamp_tracks_snapshot_mutating_intents_and_stays_on_noop() {
+        let _lock = test_lock();
+        let host = create_host("projection-stamp");
+        let mut previous_stamp = read_projection_stamp(host);
+        let mut previous_json = read_snapshot_json_bytes(host);
+        assert_eq!(previous_stamp, (0, 0));
+
+        let mut check_mutating = |name: &str, json: String| {
+            let response = dispatch_raw_json(host, &json);
+            assert!(response.accepted, "{name} must be accepted");
+            let next_stamp = read_projection_stamp(host);
+            let next_json = read_snapshot_json_bytes(host);
+            assert_ne!(next_stamp, previous_stamp, "{name} should mutate stamp");
+            assert_ne!(next_json, previous_json, "{name} should mutate snapshot");
+            previous_stamp = next_stamp;
+            previous_json = next_json;
+            response
+        };
+
+        let baseline_wire = read_wire(host);
+        let baseline_layer_id = baseline_wire
+            .timeline
+            .layers
+            .first()
+            .expect("baseline layer")
+            .layer_id
+            .clone();
+
+        let _ = check_mutating(
+            "set_time",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","#,
+                    r#""host_handle":"{host}","frame":12}}"#
+                ),
+                host = host,
+            ),
+        );
+
+        let _ = check_mutating(
+            "place_rectangle",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        );
+
+        // move_layer_by用: rect layer(この時点のprimary)を捕まえておく。
+        let rect_target = read_wire(host)
+            .primary_layer_id
+            .expect("primary after place_rectangle");
+
+        let _ = check_mutating(
+            "place_ellipse",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_ellipse","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        );
+
+        let vism_source = read_wire(host)
+            .catalog
+            .sources
+            .first()
+            .expect("vism source exists")
+            .plugin_id
+            .clone();
+        let _ = check_mutating(
+            "place_vism",
+            place_vism_json(host, &vism_source, [0.0, 0.0], r#"{"num":0,"den":1}"#),
+        );
+
+        // AddPositionKey系はprimary限定(非primaryは拒否)なので、
+        // place後の現primary(=配置layer)を対象にする。
+        let key_target = read_wire(host)
+            .primary_layer_id
+            .unwrap_or_else(|| baseline_layer_id.clone());
+        // moveはAvailableなConst rectへ(明示targetなのでprimary不要)。
+        // key化後のoff-key moveはU4b-0Vでtyped拒否が正仕様。
+        let _ = check_mutating(
+            "move_layer_by",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"{layer}","delta":[0.1,-0.05]}}"#
+                ),
+                host = host,
+                layer = rect_target,
+            ),
+        );
+        let add_key = check_mutating(
+            "add_position_key",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = key_target,
+            ),
+        );
+        let key_id = add_key
+            .snapshot
+            .as_ref()
+            .expect("snapshot after add_position_key")
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == key_target)
+            .expect("layer for key")
+            .position_keys
+            .first()
+            .expect("added key")
+            .key_id
+            .clone();
+        let _ = check_mutating(
+            "set_position_key_value",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_position_key_value","#,
+                    r#""host_handle":"{host}","target":"{layer}","key_id":"{key}","new":[0.25,-0.5],"time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = key_target,
+                key = key_id,
+            ),
+        );
+        let _ = check_mutating(
+            "set_position_key_time",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_position_key_time","#,
+                    r#""host_handle":"{host}","target":"{layer}","key_id":"{key}","time":{{"num":2,"den":1}}}}"#
+                ),
+                host = host,
+                layer = key_target,
+                key = key_id,
+            ),
+        );
+        let _ = check_mutating(
+            "remove_position_key",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"remove_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","key_id":"{key}"}}"#
+                ),
+                host = host,
+                layer = key_target,
+                key = key_id,
+            ),
+        );
+
+        // 配置直後のclipはcomposition一杯なので、先にtrimして縮めてからstartを動かす。
+        let _ = check_mutating(
+            "trim_clip_in",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_in","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = key_target,
+            ),
+        );
+        let _ = check_mutating(
+            "set_clip_start",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_clip_start","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":2}}}}"#
+                ),
+                host = host,
+                layer = key_target,
+            ),
+        );
+
+        let select_target = read_wire(host)
+            .timeline
+            .layers
+            .into_iter()
+            .map(|layer| layer.layer_id)
+            .find(|id| id != &key_target)
+            .unwrap_or_else(|| key_target.clone());
+        let _ = check_mutating(
+            "select_layer",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"select_layer","#,
+                    r#""host_handle":"{host}","target":"{target}"}}"#
+                ),
+                host = host,
+                target = select_target,
+            ),
+        );
+        let _ = check_mutating(
+            "clear_selection",
+            format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"clear_selection","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+        let _ = check_mutating(
+            "delete_layer",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"delete_layer","#,
+                    r#""host_handle":"{host}","target":"{target}"}}"#
+                ),
+                host = host,
+                target = select_target,
+            ),
+        );
+
+        let effect_target = read_wire(host)
+            .primary_layer_id
+            .or_else(|| {
+                read_wire(host)
+                    .timeline
+                    .layers
+                    .first()
+                    .map(|layer| layer.layer_id.clone())
+            })
+            .unwrap_or_else(|| baseline_layer_id.clone());
+        seed_primary(
+            host,
+            LayerId::from_raw(effect_target.parse::<u64>().expect("layer id")),
+        );
+        let _ = check_mutating(
+            "attach_effect",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = effect_target,
+            ),
+        );
+        let effect_use_id = layer_effects(&read_wire(host), &effect_target)[0]
+            .effect_use_id
+            .clone();
+        let _ = check_mutating(
+            "set_effect_param",
+            format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_effect_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","effect_use_id":"{effect}","param_id":"amount","value":0.4}}"#
+                ),
+                host = host,
+                layer = effect_target,
+                effect = effect_use_id,
+            ),
+        );
+
+        let _ = check_mutating(
+            "undo",
+            format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+        let _ = check_mutating(
+            "redo",
+            format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"redo","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+
+        // no-op: dispatchなし2回読んでもstamp/snapshot不変
+        assert_eq!(read_projection_stamp(host), previous_stamp);
+        assert_eq!(read_snapshot_json_bytes(host), previous_json);
+        assert_eq!(read_projection_stamp(host), previous_stamp);
+        assert_eq!(read_snapshot_json_bytes(host), previous_json);
+
+        let _ = host_destroy_for_test(host);
     }
 
     #[cfg(target_os = "macos")]
@@ -5432,5 +9042,4515 @@ mod tests {
             response.diagnostics[0].reason,
             RnHostReasonCode::InvalidIntent
         );
+    }
+
+    #[test]
+    fn seed_snapshot_projects_timeline_layer_interval_without_keys() {
+        let _lock = test_lock();
+        let host = create_host("timeline-seed");
+        let snap = read_snapshot(host);
+        assert_eq!(snap.timeline.layers.len(), 1);
+        let layer = &snap.timeline.layers[0];
+        assert_eq!(layer.layer_id, snap.layer_ids[0]);
+        assert_eq!(layer.start, RationalTime::ZERO);
+        assert_eq!(
+            layer.duration,
+            RationalTime::try_new(10, 1).expect("composition duration")
+        );
+        assert!(layer.position_keys.is_empty());
+        assert!(!layer.keys_truncated);
+        assert!(!snap.timeline.layers_truncated);
+        assert_eq!(snap.timeline.fps.num(), 30);
+        assert_eq!(snap.timeline.fps.den(), 1);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn seed_snapshot_projects_stage_geometry_corners_for_unit_rect() {
+        let _lock = test_lock();
+        let host = create_host("stage-geom-seed");
+        let wire = with_registry(|registry| registry.read_snapshot(host)).expect("wire");
+        assert_eq!(wire.stage_geometry.layers.len(), 1);
+        assert!(!wire.stage_geometry.layers_truncated);
+        // seed: center(0,0) size(1,1) · identity world → CCW 左下起点
+        assert_eq!(
+            wire.stage_geometry.layers[0].corners,
+            [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]]
+        );
+        assert_eq!(wire.stage_geometry.layers[0].position, [0.0, 0.0]);
+        assert_eq!(wire.stage_geometry.layers[0].rotation, 0.0);
+        assert_eq!(wire.stage_geometry.layers[0].scale, [1.0, 1.0]);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_transform_preview_moves_projected_path_corners() {
+        let _lock = test_lock();
+        let host = create_host("stage-gizmo-preview-path");
+        let wire = with_registry(|registry| registry.read_snapshot(host)).expect("wire");
+        let revision = wire.revision.parse::<u64>().expect("revision");
+        let layer_id = wire.stage_geometry.layers[0]
+            .layer_id
+            .parse::<u64>()
+            .expect("layer");
+        let before = wire.stage_geometry.layers[0].corners;
+        let preview = host_preview_stage_transform_for_app(
+            host,
+            revision,
+            layer_id,
+            AppStageTransformEdit::TranslateWorld([0.1, 0.0]),
+        )
+        .expect("preview");
+        assert_eq!(preview.geometry.layers.len(), 1);
+        assert_ne!(
+            preview.geometry.layers[0].corners, before,
+            "Stage path corners must move through Document clone preview"
+        );
+        assert!((preview.geometry.layers[0].position[0] - 0.1).abs() < 1e-12);
+        let after = with_registry(|registry| registry.read_snapshot(host)).expect("unchanged");
+        assert_eq!(
+            after.stage_geometry.layers[0].corners, before,
+            "preview must not mutate the live Document"
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    fn mirror_signed_area(corners: &[[f64; 2]; 4]) -> f64 {
+        let p0 = corners[0];
+        let p1 = corners[1];
+        let p2 = corners[2];
+        let p3 = corners[3];
+        0.5 * ((p0[0] * p1[1] - p1[0] * p0[1])
+            + (p1[0] * p2[1] - p2[0] * p1[1])
+            + (p2[0] * p3[1] - p3[0] * p2[1])
+            + (p3[0] * p0[1] - p0[0] * p3[1]))
+    }
+
+    #[test]
+    fn mirrored_world_geometry_is_forced_to_ccw() {
+        let corners = world_rect_corners(
+            motolii_doc::Affine2D::scale(-1.0, 1.0),
+            [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]],
+        );
+        assert!(mirror_signed_area(&corners) > 0.0);
+        assert_eq!(
+            corners,
+            [[0.5, 0.5], [-0.5, 0.5], [-0.5, -0.5], [0.5, -0.5]]
+        );
+    }
+
+    #[test]
+    fn place_rectangle_adds_stage_geometry_layer_at_drop_position() {
+        let _lock = test_lock();
+        let host = create_host("stage-geom-place");
+        let seed = with_registry(|registry| registry.read_snapshot(host)).expect("seed");
+        let seed_layer = seed.stage_geometry.layers[0].layer_id.clone();
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.25,-0.125],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(response.accepted);
+        let wire = with_registry(|registry| registry.read_snapshot(host)).expect("placed");
+        assert_eq!(wire.stage_geometry.layers.len(), 2);
+        let placed = wire
+            .stage_geometry
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id != seed_layer)
+            .expect("placed layer");
+        let document = live_document(host);
+        let placed_id = LayerId::from_raw(placed.layer_id.parse().expect("placed layer id"));
+        assert_eq!(document.layers.display_name(placed_id), Some("Rectangle"));
+        assert!(document_clip(document.as_ref(), placed_id).is_some());
+        // place Vector rect 0.2×0.2 at transform.position — world 適用済み corners
+        let expected = [
+            [0.15, -0.225],
+            [0.35, -0.225],
+            [0.35, -0.025],
+            [0.15, -0.025],
+        ];
+        for (got, want) in placed.corners.iter().zip(expected.iter()) {
+            assert!(
+                (got[0] - want[0]).abs() < 1e-12 && (got[1] - want[1]).abs() < 1e-12,
+                "corners {got:?} vs {want:?}"
+            );
+        }
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn add_position_key_appears_in_timeline_projection() {
+        let _lock = test_lock();
+        let host = create_host("timeline-add-key");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].parse::<u64>().expect("layer id");
+        let target = LayerId::from_raw(layer_id);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        let time = RationalTime::try_new(1, 1).expect("1s");
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        let layer = &snap.timeline.layers[0];
+        assert_eq!(layer.position_keys.len(), 1);
+        assert!(!layer.position_keys[0].key_id.is_empty());
+        assert_eq!(layer.position_keys[0].time, time);
+        assert_eq!(layer.position_keys[0].interp, Some(Interp::Linear));
+        assert!(!layer.keys_truncated);
+        let _ = host_destroy_for_test(host);
+    }
+
+    fn keyed_scale_document() -> (Document, LayerId, KeyframeId) {
+        let mut document = Document::new_current();
+        let layer = document.layers.allocate("keyed-scale").expect("layer");
+        let track = document.track_ids.allocate("track").expect("track");
+        let key_id = KeyframeId::from_raw(document.next_stable_id.allocate().expect("key"));
+        let mut keyframes = DocKeyframeTrack::new();
+        keyframes.insert(DocKeyframe {
+            id: key_id,
+            t: RationalTime::try_new(1, 1).expect("1s"),
+            value: DocValue::Vec2([1.0, 1.0]),
+            interp: Interp::Linear,
+        });
+        let mut envelope = ItemEnvelope::new(layer);
+        envelope.transform.scale = DocParam::Keyframes(keyframes);
+        document.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params([0.0, 0.0], [1.0, 1.0]),
+                    extra: Default::default(),
+                },
+            })],
+        });
+        document.validate().expect("valid keyed scale");
+        (document, layer, key_id)
+    }
+
+    #[test]
+    fn timeline_scale_keyframes_appear_in_param_keys() {
+        let _lock = test_lock();
+        let (document, _, key_id) = keyed_scale_document();
+        let host = create_host_from_document("timeline-param-keys", &document);
+        let wire = read_wire(host);
+        let layer = &wire.timeline.layers[0];
+        assert!(layer.position_keys.is_empty());
+        assert_eq!(layer.param_keys.len(), 1);
+        assert_eq!(layer.param_keys[0].property, "scale");
+        assert_eq!(layer.param_keys[0].key_id, key_id.get().to_string());
+        assert_eq!(
+            layer.param_keys[0].time,
+            RationalTime::try_new(1, 1).expect("1s")
+        );
+        assert_eq!(layer.param_keys[0].vec, Some([1.0, 1.0]));
+        assert_eq!(layer.param_keys[0].value, None);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn place_ellipse_adds_stage_geometry_layer_at_drop_position() {
+        let _lock = test_lock();
+        let host = create_host("stage-geom-place-ellipse");
+        let seed = with_registry(|registry| registry.read_snapshot(host)).expect("seed");
+        let seed_layer = seed.stage_geometry.layers[0].layer_id.clone();
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_ellipse","#,
+                    r#""host_handle":"{host}","position":[0.25,-0.125],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(response.accepted);
+        let wire = with_registry(|registry| registry.read_snapshot(host)).expect("placed");
+        assert_eq!(wire.stage_geometry.layers.len(), 2);
+        let placed = wire
+            .stage_geometry
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id != seed_layer)
+            .expect("placed layer");
+        let document = live_document(host);
+        let placed_id = LayerId::from_raw(placed.layer_id.parse().expect("placed layer id"));
+        assert_eq!(document.layers.display_name(placed_id), Some("Ellipse"));
+        let clip = document_clip(document.as_ref(), placed_id).expect("ellipse clip");
+        assert!(matches!(
+            clip.source,
+            ClipSource::Vector {
+                recipe: motolii_doc::VectorRecipe {
+                    content: motolii_doc::VectorContent::StandardShape {
+                        shape: motolii_doc::StandardShape::Ellipse { .. }
+                    },
+                    ..
+                }
+            }
+        ));
+        // 0.2×0.2 楕円のgizmoは同じAABB。rect place と同じ corners。
+        let expected = [
+            [0.15, -0.225],
+            [0.35, -0.225],
+            [0.35, -0.025],
+            [0.15, -0.025],
+        ];
+        for (got, want) in placed.corners.iter().zip(expected.iter()) {
+            assert!(
+                (got[0] - want[0]).abs() < 1e-12 && (got[1] - want[1]).abs() < 1e-12,
+                "corners {got:?} vs {want:?}"
+            );
+        }
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn placement_runtime_rejects_keep_typed_reason_and_zero_write_state() {
+        let _lock = test_lock();
+
+        fn assert_rejected_without_state_change(
+            host: u64,
+            kind: &str,
+            playhead: RationalTime,
+            expected: RnHostReasonCode,
+        ) {
+            let before_wire = read_wire(host);
+            let before_document = document_json_bytes(host);
+            let response = dispatch_raw_json(
+                host,
+                &format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"{kind}","#,
+                        r#""host_handle":"{host}","position":[0.0,0.0],"#,
+                        r#""playhead":{{"num":{num},"den":{den}}}}}"#
+                    ),
+                    kind = kind,
+                    host = host,
+                    num = playhead.num(),
+                    den = playhead.den(),
+                ),
+            );
+            assert!(!response.accepted);
+            assert_eq!(response.reason, Some(expected));
+
+            let after_wire = read_wire(host);
+            assert_eq!(after_wire.revision, before_wire.revision);
+            assert_eq!(
+                after_wire.projection_generation,
+                before_wire.projection_generation
+            );
+            assert_eq!(after_wire.history, before_wire.history);
+            assert_eq!(document_json_bytes(host), before_document);
+        }
+
+        let no_track = create_host_from_document("place-no-track", &Document::new_current());
+        assert_rejected_without_state_change(
+            no_track,
+            "place_ellipse",
+            RationalTime::ZERO,
+            RnHostReasonCode::NoTrackForRectangle,
+        );
+        let _ = host_destroy_for_test(no_track);
+
+        let negative = create_host("place-negative-time");
+        assert_rejected_without_state_change(
+            negative,
+            "place_rectangle",
+            RationalTime::try_new(-1, 1).expect("negative time"),
+            RnHostReasonCode::PlayheadOutsideComposition,
+        );
+        let _ = host_destroy_for_test(negative);
+
+        let no_remaining = create_host("place-no-remaining-duration");
+        let duration = live_document(no_remaining).composition.duration;
+        assert_rejected_without_state_change(
+            no_remaining,
+            "place_ellipse",
+            duration,
+            RnHostReasonCode::RemainingDurationBelowOneFrame,
+        );
+        let _ = host_destroy_for_test(no_remaining);
+    }
+
+    #[test]
+    fn deferred_commit_keeps_reads_live_and_reconciles_on_snapshot_poll() {
+        let _lock = test_lock();
+        let host = create_host("reconcile-failure-host");
+        let before = read_wire(host);
+        let before_document = document_json_bytes(host);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            product.runtime.set_test_failpoint(
+                crate::document_edit_runtime::RuntimeTestFailpoint::DeferAfterDurableCommit,
+            );
+            Ok(())
+        })
+        .expect("inject reconcile failure");
+
+        let rejected = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(!rejected.accepted);
+        assert_eq!(
+            rejected.reason,
+            Some(RnHostReasonCode::DocumentWriteBlocked)
+        );
+        assert!(rejected.snapshot.is_some());
+        assert_eq!(document_json_bytes(host), before_document);
+
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            assert!(product.runtime.is_write_blocked());
+            product.runtime.fail_reconcile_for_test();
+            assert_eq!(
+                product.primary.as_ref().map(|id| id.get().to_string()),
+                before.primary_layer_id
+            );
+            assert_eq!(
+                product.projection_generation.to_string(),
+                before.projection_generation
+            );
+            Ok(())
+        })
+        .expect("write-blocked host state");
+
+        let first_poll = host_read_snapshot_for_test(host).expect("read stays live");
+        assert_eq!(first_poll.revision, before.revision);
+        let second_poll = host_read_snapshot_for_test(host).expect("reconcile retry");
+        assert_ne!(second_poll.revision, before.revision);
+        assert_ne!(document_json_bytes(host), before_document);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            assert!(!product.runtime.is_write_blocked());
+            Ok(())
+        })
+        .expect("reconciled host state");
+
+        #[cfg(target_os = "macos")]
+        {
+            let mut revision = 0;
+            let mut generation = 0;
+            assert!(motolii_rn_host_projection_stamp(
+                host,
+                &mut revision,
+                &mut generation
+            ));
+        }
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn place_rectangle_add_param_key_scale_appears_in_param_keys() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("add-param-key-scale");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        )
+        .accepted);
+        let wire = read_wire(host);
+        let layer_id = wire.primary_layer_id.clone().expect("placed primary");
+        let time = RationalTime::try_new(1, 1).expect("1s");
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_param_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","property":"scale","#,
+                    r#""time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(response.accepted, "reason={:?}", response.reason);
+        let snap = response.snapshot.expect("snapshot");
+        let layer = snap
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("placed layer");
+        assert!(layer.position_keys.is_empty());
+        assert_eq!(layer.param_keys.len(), 1);
+        assert_eq!(layer.param_keys[0].property, "scale");
+        assert!(!layer.param_keys[0].key_id.is_empty());
+        assert_eq!(layer.param_keys[0].time, time);
+        assert_eq!(layer.param_keys[0].vec, Some([1.0, 1.0]));
+        assert_eq!(layer.param_keys[0].value, None);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn stage_scale_keyframes_off_key_is_off_keyframe() {
+        let (document, layer, _) = keyed_scale_document();
+        let off = prepare_app_stage_transform_command(
+            &document,
+            RationalTime::ZERO,
+            layer,
+            AppStageTransformEdit::Scale([1.1, 1.1]),
+        );
+        assert!(matches!(off, Err(AppStageTransformError::OffKeyframe)));
+        let on = prepare_app_stage_transform_command(
+            &document,
+            RationalTime::try_new(1, 1).expect("1s"),
+            layer,
+            AppStageTransformEdit::Scale([1.1, 1.1]),
+        );
+        assert!(matches!(
+            on,
+            Ok(Command::SetProperty {
+                property: ScalarPropertyId::Scale,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn add_position_key_snapshot_carries_document_vec2_value() {
+        let _lock = test_lock();
+        let host = create_host("timeline-add-key-value");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].parse::<u64>().expect("layer id");
+        let target = LayerId::from_raw(layer_id);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        let time = RationalTime::try_new(1, 1).expect("1s");
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(response.accepted);
+        let snap = response.snapshot.expect("snapshot");
+        let key = &snap.timeline.layers[0].position_keys[0];
+        assert_eq!(key.time, time);
+        assert_eq!(key.value, Some([0.0, 0.0]));
+        let (doc_key, doc_value) = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_key_at(
+                product.runtime.snapshot().as_ref(),
+                target,
+                time,
+            ))
+        })
+        .expect("doc lookup")
+        .expect("doc key");
+        assert_eq!(key.key_id, doc_key.get().to_string());
+        assert_eq!(key.value, Some(doc_value));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_position_key_value_updates_wire_value_and_preserves_identity_other_keys() {
+        let _lock = test_lock();
+        let host = create_host("timeline-set-key-value");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].parse::<u64>().expect("layer id");
+        let target = LayerId::from_raw(layer_id);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        let add = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":2}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(add.accepted);
+        let before = add.snapshot.expect("before");
+        let before_key = before.timeline.layers[0].position_keys[0].clone();
+        assert_eq!(before_key.value, Some([0.0, 0.0]));
+
+        let second = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":2,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(second.accepted);
+        let before_second_key = second.snapshot.expect("before second").timeline.layers[0]
+            .position_keys
+            .iter()
+            .find(|key| key.key_id != before_key.key_id)
+            .cloned()
+            .expect("other key");
+
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_position_key_value","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":2,"den":4}},"#,
+                    r#""new":[0.25,-0.5]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(response.accepted);
+        let after = response.snapshot.expect("after");
+        assert_eq!(after.timeline.layers[0].position_keys.len(), 2);
+        let after_key = after.timeline.layers[0]
+            .position_keys
+            .iter()
+            .find(|key| key.key_id == before_key.key_id)
+            .expect("target key");
+        let after_other_key = after.timeline.layers[0]
+            .position_keys
+            .iter()
+            .find(|key| key.key_id == before_second_key.key_id)
+            .expect("other key");
+        assert_eq!(after_key.key_id, before_key.key_id);
+        assert_eq!(after_key.time, before_key.time);
+        assert_eq!(after_key.value, Some([0.25, -0.5]));
+        assert_eq!(after_other_key.key_id, before_second_key.key_id);
+        assert_eq!(after_other_key.time, before_second_key.time);
+        assert_eq!(after_other_key.value, Some([0.0, 0.0]));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn timeline_position_keys_cap_at_64_and_mark_truncated() {
+        let _lock = test_lock();
+        let mut document = Document::new_current();
+        let layer = document.layers.allocate("keyed").expect("layer");
+        let track = document.track_ids.allocate("track").expect("track");
+        let mut keyframes = DocKeyframeTrack::new();
+        for i in 0..65 {
+            let id = document.next_stable_id.allocate().expect("key id");
+            keyframes.insert(DocKeyframe {
+                id: KeyframeId::from_raw(id),
+                t: RationalTime::try_new(i, 10).expect("key time"),
+                value: DocValue::Vec2([0.0, 0.0]),
+                interp: Interp::Linear,
+            });
+        }
+        let mut envelope = ItemEnvelope::new(layer);
+        envelope.transform.position = DocParam::Keyframes(keyframes);
+        document.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params([0.0, 0.0], [1.0, 1.0]),
+                    extra: Default::default(),
+                },
+            })],
+        });
+        document.validate().expect("valid keyed document");
+        let host = create_host_from_document("timeline-keys-cap", &document);
+        let snap = read_snapshot(host);
+        let layer = &snap.timeline.layers[0];
+        assert_eq!(layer.position_keys.len(), 64);
+        assert!(layer.keys_truncated);
+        assert_eq!(
+            layer.position_keys[0].time,
+            RationalTime::try_new(0, 10).expect("first")
+        );
+        assert_eq!(
+            layer.position_keys[63].time,
+            RationalTime::try_new(63, 10).expect("64th")
+        );
+        let wire = read_wire(host);
+        assert_eq!(wire.truncated_total, 1);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_history_flags_project_nothing_to_undo_redo() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("history-empty");
+        let empty = read_wire(host);
+        assert!(!empty.history.can_undo);
+        assert!(!empty.history.can_redo);
+        assert_eq!(empty.truncated_total, 0);
+
+        let placed = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+            ),
+        );
+        assert!(placed.accepted);
+        let after = read_wire(host);
+        assert!(after.history.can_undo);
+        assert!(!after.history.can_redo);
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(undone.accepted);
+        let restored = read_wire(host);
+        assert!(!restored.history.can_undo);
+        assert!(restored.history.can_redo);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_stage_bounds_and_timeline_layers_share_layer_ids_in_order() {
+        let _lock = test_lock();
+        let host = create_host("bounds-timeline-alignment");
+        let snap = read_snapshot(host);
+        let timeline_ids: Vec<String> = snap
+            .timeline
+            .layers
+            .iter()
+            .map(|layer| layer.layer_id.clone())
+            .collect();
+        assert_eq!(snap.layer_ids, timeline_ids);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn timeline_and_bounds_follow_track_item_order_not_layer_id_allocation() {
+        let _lock = test_lock();
+        let mut document = Document::new_current();
+        // 採番順: first(=低id) → second。track順は逆(second track0, first track1)。
+        let first = document.layers.allocate("first").expect("first");
+        let second = document.layers.allocate("second").expect("second");
+        let track_a = document.track_ids.allocate("V1").expect("V1");
+        let track_b = document.track_ids.allocate("V2").expect("V2");
+        let duration = document.composition.duration;
+        let mk_clip = |layer: LayerId| {
+            TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: RationalTime::ZERO,
+                duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params([0.0, 0.0], [0.2, 0.2]),
+                    extra: Default::default(),
+                },
+            })
+        };
+        document.tracks.push(Track {
+            id: track_a,
+            items: vec![mk_clip(second)],
+        });
+        document.tracks.push(Track {
+            id: track_b,
+            items: vec![mk_clip(first)],
+        });
+        let alloc_order: Vec<_> = document
+            .layers
+            .iter()
+            .map(|(id, _)| id.get().to_string())
+            .collect();
+        assert_eq!(
+            alloc_order,
+            vec![first.get().to_string(), second.get().to_string()]
+        );
+
+        let host = create_host_from_document("track-order-projection", &document);
+        let snap = read_snapshot(host);
+        let expected = vec![second.get().to_string(), first.get().to_string()];
+        assert_eq!(snap.layer_ids, expected);
+        let timeline_ids: Vec<_> = snap
+            .timeline
+            .layers
+            .iter()
+            .map(|layer| layer.layer_id.clone())
+            .collect();
+        assert_eq!(timeline_ids, expected);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_json_of_16_layers_64_keys_stays_under_the_snapshot_cap_and_untruncated() {
+        let _lock = test_lock();
+        let document = make_16_layers_64_keys_document();
+        let host = create_host_from_document("snapshot-16x64", &document);
+        let mut out = vec![0_u8; MAX_SNAPSHOT_JSON_BYTES];
+        let written = motolii_rn_host_read_snapshot_json(host, out.as_mut_ptr(), out.len());
+        assert!(written > 0);
+        assert!((written as usize) < MAX_SNAPSHOT_JSON_BYTES);
+
+        let snapshot: WireProductSnapshot =
+            serde_json::from_slice(&out[..written as usize]).expect("snapshot json parse");
+        assert_eq!(snapshot.timeline.layers.len(), 16);
+        for layer in snapshot.timeline.layers.iter() {
+            assert_eq!(layer.position_keys.len(), 64);
+            assert!(!layer.keys_truncated);
+        }
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn dispatch_response_with_inflated_layers_keys_effects_fits_snapshot_cap() {
+        let _lock = test_lock();
+        let document = make_16_layers_64_keys_document();
+        let host = create_host_from_document("dispatch-inflated-response", &document);
+        let intent = format!(
+            concat!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","#,
+                r#""host_handle":"{host}","frame":0}}"#
+            ),
+            host = host
+        );
+        let mut out = vec![0_u8; MAX_SNAPSHOT_JSON_BYTES];
+        let written = motolii_rn_host_dispatch_intent_json(
+            host,
+            intent.as_ptr(),
+            intent.len(),
+            out.as_mut_ptr(),
+            out.len(),
+        );
+        assert!(written > 0, "dispatch inflated response failed: {written}");
+        assert!(
+            (written as usize) > MAX_JSON_BYTES,
+            "oracle requires response larger than intent cap: {}",
+            written
+        );
+        assert!((written as usize) <= MAX_SNAPSHOT_JSON_BYTES);
+        let response: WireIntentResponse =
+            serde_json::from_slice(&out[..written as usize]).expect("response json");
+        assert!(response.accepted);
+        assert!(response.snapshot.is_some());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_position_key_time_and_clip_edits_update_timeline_projection_and_undo() {
+        let _lock = test_lock();
+        let host = create_host("timeline-edit-intents");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse::<u64>().expect("layer id"));
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        let before = read_snapshot(host);
+        let before_layer = before
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        let before_start = before_layer.start;
+        let before_duration = before_layer.duration;
+
+        let add = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(add.accepted);
+        let key_id = add
+            .snapshot
+            .expect("keyed")
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer")
+            .position_keys[0]
+            .key_id
+            .clone();
+
+        let moved_key = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_position_key_time","#,
+                    r#""host_handle":"{host}","target":"{layer}","key_id":"{key}","#,
+                    r#""time":{{"num":2,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                key = key_id,
+            ),
+        );
+        assert!(moved_key.accepted);
+        let after_key_layer = moved_key
+            .snapshot
+            .expect("key moved")
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(
+            after_key_layer.position_keys[0].time,
+            RationalTime::from_seconds(2)
+        );
+        assert_eq!(after_key_layer.position_keys[0].key_id, key_id);
+
+        // 先に右edgeを短くしてから start を動かす(compositionはみ出しを避ける)。
+        let trimmed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_out","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":3,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(trimmed.accepted);
+        let after_trim_layer = trimmed
+            .snapshot
+            .expect("trimmed")
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(after_trim_layer.start, before_start);
+        assert_eq!(after_trim_layer.duration, RationalTime::from_seconds(3));
+
+        let moved_clip = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_clip_start","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":2}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(moved_clip.accepted);
+        let after_move_layer = moved_clip
+            .snapshot
+            .expect("clip moved")
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(after_move_layer.start, RationalTime::try_new(1, 2).unwrap());
+        assert_eq!(after_move_layer.duration, RationalTime::from_seconds(3));
+
+        let trimmed_in = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_in","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(trimmed_in.accepted);
+        let after_in_layer = trimmed_in
+            .snapshot
+            .expect("in")
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(after_in_layer.start, RationalTime::from_seconds(1));
+        // start 1..3.5 → duration 2.5 after left trim from 0.5
+        assert_eq!(
+            after_in_layer.duration,
+            RationalTime::try_new(5, 2).unwrap()
+        );
+
+        for _ in 0..5 {
+            assert!(dispatch_raw_json(
+                host,
+                &format!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+                ),
+            )
+            .accepted);
+        }
+        let restored_layer = read_snapshot(host)
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(restored_layer.start, before_start);
+        assert_eq!(restored_layer.duration, before_duration);
+        assert!(restored_layer.position_keys.is_empty());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn trim_then_set_time_drops_same_layer_from_stage_geometry() {
+        let _lock = test_lock();
+        let host = create_host("timeline-trim-stage-geometry");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse::<u64>().expect("layer id"));
+        seed_primary(host, target);
+
+        let seed = read_wire(host);
+        assert_eq!(seed.stage_geometry.layers.len(), 1);
+        assert_eq!(seed.stage_geometry.layers[0].layer_id, layer_id);
+        assert_eq!(seed.current_time, RationalTime::ZERO);
+
+        let trimmed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_out","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(trimmed.accepted);
+        let at_zero = read_wire(host);
+        assert_eq!(at_zero.stage_geometry.layers.len(), 1);
+        assert_eq!(at_zero.stage_geometry.layers[0].layer_id, layer_id);
+
+        // fps 30: frame 60 = 2s。clip は 0..1s なので playhead 外 → Stage から消える。
+        let moved = dispatch_raw_json(host, &set_time_json(host, "60"));
+        assert!(moved.accepted);
+        let outside = read_wire(host);
+        assert_eq!(outside.current_time, RationalTime::from_seconds(2));
+        assert!(
+            outside
+                .stage_geometry
+                .layers
+                .iter()
+                .all(|layer| layer.layer_id != layer_id),
+            "trimmed clip must leave Stage at playhead 2s"
+        );
+
+        let restored = dispatch_raw_json(host, &set_time_json(host, "0"));
+        assert!(restored.accepted);
+        let inside = read_wire(host);
+        assert_eq!(inside.current_time, RationalTime::ZERO);
+        assert_eq!(inside.stage_geometry.layers.len(), 1);
+        assert_eq!(inside.stage_geometry.layers[0].layer_id, layer_id);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn mark_in_at_playhead_trims_clip_and_drops_from_stage() {
+        let _lock = test_lock();
+        let host = create_host("mark-in-playhead");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse::<u64>().expect("layer id"));
+        seed_primary(host, target);
+        let fps = baseline.timeline.fps;
+        assert!(dispatch_raw_json(host, &set_time_json(host, "30")).accepted);
+        let playhead = read_wire(host).current_time;
+        assert_eq!(
+            playhead,
+            RationalTime::try_from_frame(30, fps).expect("frame 30")
+        );
+
+        let marked = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_in","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":{num},"den":{den}}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                num = playhead.num(),
+                den = playhead.den(),
+            ),
+        );
+        assert!(marked.accepted);
+        let after = marked.snapshot.expect("trimmed in");
+        let layer = after
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(layer.start, playhead);
+
+        assert!(dispatch_raw_json(host, &set_time_json(host, "0")).accepted);
+        let outside = read_wire(host);
+        assert!(
+            outside
+                .stage_geometry
+                .layers
+                .iter()
+                .all(|layer| layer.layer_id != layer_id),
+            "clip in after playhead must leave Stage at t=0"
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn mark_out_at_playhead_trims_clip_and_drops_from_stage() {
+        let _lock = test_lock();
+        let host = create_host("mark-out-playhead");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse::<u64>().expect("layer id"));
+        seed_primary(host, target);
+        let fps = baseline.timeline.fps;
+        assert!(dispatch_raw_json(host, &set_time_json(host, "30")).accepted);
+        let playhead = read_wire(host).current_time;
+
+        let marked = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"trim_clip_out","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":{num},"den":{den}}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                num = playhead.num(),
+                den = playhead.den(),
+            ),
+        );
+        assert!(marked.accepted);
+        let after = marked.snapshot.expect("trimmed out");
+        let layer = after
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(layer.start, RationalTime::ZERO);
+        assert_eq!(layer.duration, playhead);
+
+        let outside_frame = RationalTime::try_from_frame(60, fps)
+            .expect("frame 60")
+            .try_to_frame_floor(fps)
+            .expect("floor");
+        assert!(dispatch_raw_json(host, &set_time_json(host, &outside_frame.to_string())).accepted);
+        let outside = read_wire(host);
+        assert!(
+            outside
+                .stage_geometry
+                .layers
+                .iter()
+                .all(|layer| layer.layer_id != layer_id),
+            "clip out before playhead must leave Stage"
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn split_then_set_time_drops_left_identity_and_shows_right() {
+        let _lock = test_lock();
+        let host = create_host("timeline-split-stage-geometry");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse::<u64>().expect("layer id"));
+        seed_primary(host, target);
+
+        let seed = read_wire(host);
+        assert_eq!(seed.stage_geometry.layers.len(), 1);
+        assert_eq!(seed.stage_geometry.layers[0].layer_id, layer_id);
+        assert_eq!(seed.timeline.layers.len(), 1);
+
+        let split = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"split","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(split.accepted);
+        let after_split = read_wire(host);
+        assert_eq!(after_split.timeline.layers.len(), 2);
+        let right_id = after_split
+            .timeline
+            .layers
+            .iter()
+            .map(|layer| layer.layer_id.as_str())
+            .find(|id| *id != layer_id)
+            .expect("split allocates a new layer")
+            .to_owned();
+        assert_eq!(after_split.stage_geometry.layers.len(), 1);
+        assert_eq!(after_split.stage_geometry.layers[0].layer_id, layer_id);
+
+        // fps 30: frame 60 = 2s。左片は 0..1s なので playhead 外。右片の新 identity が見える。
+        let moved = dispatch_raw_json(host, &set_time_json(host, "60"));
+        assert!(moved.accepted);
+        let outside = read_wire(host);
+        assert_eq!(outside.current_time, RationalTime::from_seconds(2));
+        assert!(
+            outside
+                .stage_geometry
+                .layers
+                .iter()
+                .all(|layer| layer.layer_id != layer_id),
+            "left split identity must leave Stage at playhead 2s"
+        );
+        assert!(
+            outside
+                .stage_geometry
+                .layers
+                .iter()
+                .any(|layer| layer.layer_id == right_id),
+            "right split identity must appear on Stage at playhead 2s"
+        );
+
+        let restored = dispatch_raw_json(host, &set_time_json(host, "0"));
+        assert!(restored.accepted);
+        let inside = read_wire(host);
+        assert_eq!(inside.current_time, RationalTime::ZERO);
+        assert_eq!(inside.stage_geometry.layers.len(), 1);
+        assert_eq!(inside.stage_geometry.layers[0].layer_id, layer_id);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn select_layer_and_clear_selection_update_primary_layer_id() {
+        let _lock = test_lock();
+        let host = create_host("select-clear");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        assert!(baseline.primary_layer_id.is_none());
+
+        let selected = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"select_layer","#,
+                    r#""host_handle":"{host}","target":"{layer}"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(selected.accepted);
+        assert_eq!(
+            selected.snapshot.expect("selected").primary_layer_id,
+            Some(layer_id.clone())
+        );
+        assert_eq!(read_snapshot(host).primary_layer_id, Some(layer_id));
+
+        let cleared = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"clear_selection","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(cleared.accepted);
+        assert!(cleared
+            .snapshot
+            .expect("cleared")
+            .primary_layer_id
+            .is_none());
+        assert!(read_snapshot(host).primary_layer_id.is_none());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn remove_position_key_clears_timeline_projection_and_undo_restores() {
+        let _lock = test_lock();
+        let host = create_host("remove-position-key");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse::<u64>().expect("layer id"));
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        let add = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","time":{{"num":1,"den":1}}}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(add.accepted);
+        let key_id = add
+            .snapshot
+            .expect("keyed")
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer")
+            .position_keys[0]
+            .key_id
+            .clone();
+
+        let removed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"remove_position_key","#,
+                    r#""host_handle":"{host}","target":"{layer}","key_id":"{key}"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                key = key_id,
+            ),
+        );
+        assert!(removed.accepted);
+        let after_remove = removed.snapshot.expect("removed");
+        let after_layer = after_remove
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert!(after_layer.position_keys.is_empty());
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(undone.accepted);
+        let restored = undone
+            .snapshot
+            .expect("restored")
+            .timeline
+            .layers
+            .into_iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(restored.position_keys.len(), 1);
+        assert_eq!(restored.position_keys[0].key_id, key_id);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn delete_layer_removes_timeline_row_and_undo_restores_id_and_name() {
+        let _lock = test_lock();
+        let host = create_host("delete-layer");
+        let before = read_snapshot(host);
+        let layer_id = before.layer_ids[0].clone();
+        let display_name = before
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer")
+            .display_name
+            .clone();
+
+        let deleted = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"delete_layer","#,
+                    r#""host_handle":"{host}","target":"{layer}"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(deleted.accepted);
+        let after = deleted.snapshot.expect("deleted");
+        assert!(!after
+            .timeline
+            .layers
+            .iter()
+            .any(|layer| layer.layer_id == layer_id));
+        assert!(!after.layer_ids.iter().any(|id| id == &layer_id));
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(undone.accepted);
+        let restored = undone.snapshot.expect("restored");
+        let layer = restored
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("restored layer");
+        assert_eq!(layer.display_name, display_name);
+        assert!(restored.layer_ids.iter().any(|id| id == &layer_id));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn duplicate_layer_adds_timeline_row_and_undo_restores_count() {
+        let _lock = test_lock();
+        let host = create_host("duplicate-layer");
+        let before = read_snapshot(host);
+        let layer_id = before.layer_ids[0].clone();
+        let before_count = before.layer_ids.len();
+        assert_eq!(before.timeline.layers.len(), before_count);
+
+        let duplicated = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"duplicate","#,
+                    r#""host_handle":"{host}","target":"{layer}"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(duplicated.accepted);
+        let after = duplicated.snapshot.expect("duplicated");
+        assert_eq!(after.layer_ids.len(), before_count + 1);
+        assert_eq!(after.timeline.layers.len(), before_count + 1);
+        assert!(after.layer_ids.iter().any(|id| id == &layer_id));
+        assert_eq!(
+            after.layer_ids.iter().filter(|id| *id != &layer_id).count(),
+            1
+        );
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(undone.accepted);
+        let restored = undone.snapshot.expect("restored");
+        assert_eq!(restored.layer_ids, before.layer_ids);
+        assert_eq!(restored.timeline.layers.len(), before_count);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn duplicate_without_target_rejects_without_document_mutation() {
+        let _lock = test_lock();
+        let host = create_host("duplicate-missing-target");
+        let baseline = read_snapshot(host);
+        let rejected = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"duplicate","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        let after = read_snapshot(host);
+        assert_eq!(after.revision, baseline.revision);
+        assert_eq!(after.layer_ids, baseline.layer_ids);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn mute_and_solo_toggle_item_envelope_flags() {
+        let _lock = test_lock();
+        let host = create_host("mute-solo-envelope");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let seed = read_wire(host);
+        let layer = seed
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert!(layer.visible);
+        assert!(!layer.solo);
+
+        let muted = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"mute","#,
+                    r#""host_handle":"{host}","target":"{layer}"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(muted.accepted);
+        let after_mute = read_wire(host);
+        let muted_layer = after_mute
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert!(!muted_layer.visible);
+        assert!(!muted_layer.solo);
+
+        let soloed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"solo","#,
+                    r#""host_handle":"{host}","target":"{layer}"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(soloed.accepted);
+        let after_solo = read_wire(host);
+        let solo_layer = after_solo
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert!(!solo_layer.visible);
+        assert!(solo_layer.solo);
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(undone.accepted);
+        let after_undo = read_wire(host);
+        let undone_layer = after_undo
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert!(!undone_layer.visible);
+        assert!(!undone_layer.solo);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn mute_and_solo_without_target_reject_without_document_mutation() {
+        let _lock = test_lock();
+        let host = create_host("mute-solo-missing-target");
+        let baseline = read_snapshot(host);
+        for kind in ["mute", "solo"] {
+            let rejected = dispatch_raw_json(
+                host,
+                &format!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"{kind}","host_handle":"{host}"}}"#
+                ),
+            );
+            assert!(!rejected.accepted, "{kind} must reject missing target");
+            assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+            let after = read_snapshot(host);
+            assert_eq!(after.revision, baseline.revision);
+            assert_eq!(after.layer_ids, baseline.layer_ids);
+        }
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn missing_target_selection_and_delete_intents_reject_without_document_mutation() {
+        let _lock = test_lock();
+        let host = create_host("missing-target-reject");
+        let baseline = read_snapshot(host);
+        let missing = "999999";
+
+        for kind in ["select_layer", "delete_layer"] {
+            let rejected = dispatch_raw_json(
+                host,
+                &format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"{kind}","#,
+                        r#""host_handle":"{host}","target":"{missing}"}}"#
+                    ),
+                    kind = kind,
+                    host = host,
+                    missing = missing,
+                ),
+            );
+            assert!(!rejected.accepted, "{kind} must reject missing target");
+            assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+            let after = read_snapshot(host);
+            assert_eq!(after.revision, baseline.revision);
+            assert_eq!(after.projection_generation, baseline.projection_generation);
+            assert_eq!(after.primary_layer_id, baseline.primary_layer_id);
+            assert_eq!(after.layer_ids, baseline.layer_ids);
+        }
+        let _ = host_destroy_for_test(host);
+    }
+
+    fn position_const_at(document: &Document, target: LayerId) -> Option<[f64; 2]> {
+        let envelope = find_envelope_in_document(document, target)?;
+        match &envelope.transform.position {
+            DocParam::Const(DocValue::Vec2(value)) => Some(*value),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn move_layer_by_const_updates_position_and_undo_restores() {
+        let _lock = test_lock();
+        let host = create_host("move-const");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].parse::<u64>().expect("layer id");
+        let target = LayerId::from_raw(layer_id);
+        let before = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_const_at(
+                product.runtime.snapshot().as_ref(),
+                target,
+            ))
+        })
+        .expect("lookup")
+        .expect("const position");
+
+        let delta = [0.1, -0.05];
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"{layer}","delta":[0.1,-0.05]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(response.accepted);
+        let after = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_const_at(
+                product.runtime.snapshot().as_ref(),
+                target,
+            ))
+        })
+        .expect("lookup")
+        .expect("const position");
+        assert!((after[0] - (before[0] + delta[0])).abs() < 1e-12);
+        assert!((after[1] - (before[1] + delta[1])).abs() < 1e-12);
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(undone.accepted);
+        let restored = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_const_at(
+                product.runtime.snapshot().as_ref(),
+                target,
+            ))
+        })
+        .expect("lookup")
+        .expect("const position");
+        assert_eq!(restored, before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn move_layer_by_exact_on_key_updates_only_that_key_value_and_off_key_rejects() {
+        let _lock = test_lock();
+        let host = create_host("move-on-key");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].parse::<u64>().expect("layer id");
+        let target = LayerId::from_raw(layer_id);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+
+        assert!(
+            dispatch_raw_json(
+                host,
+                &format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                        r#""host_handle":"{host}","target":"{layer}","time":{{"num":0,"den":1}}}}"#
+                    ),
+                    host = host,
+                    layer = layer_id,
+                ),
+            )
+            .accepted
+        );
+        assert!(
+            dispatch_raw_json(
+                host,
+                &format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"add_position_key","#,
+                        r#""host_handle":"{host}","target":"{layer}","time":{{"num":2,"den":1}}}}"#
+                    ),
+                    host = host,
+                    layer = layer_id,
+                ),
+            )
+            .accepted
+        );
+        let before = read_snapshot(host);
+        let before_keys = before.timeline.layers[0].position_keys.clone();
+        assert_eq!(before_keys.len(), 2);
+        let on_key_id = before_keys[0].key_id.clone();
+        let before_doc = document_json_bytes(host);
+
+        // current_time は seed で 0。exact-on-key。
+        let moved = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"{layer}","delta":[0.2,0.1]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(moved.accepted);
+        let after = moved.snapshot.expect("after");
+        let after_keys = &after.timeline.layers[0].position_keys;
+        assert_eq!(after_keys.len(), 2);
+        let mut before_keys_sorted = before_keys.to_vec();
+        before_keys_sorted.sort_by_key(|key| key.key_id.clone());
+        let mut after_keys = after_keys.to_vec();
+        after_keys.sort_by_key(|key| key.key_id.clone());
+        for before_key in before_keys_sorted {
+            let after_key = after_keys
+                .iter()
+                .find(|key| key.key_id == before_key.key_id)
+                .expect("all keys preserved");
+            if before_key.key_id == on_key_id {
+                assert_eq!(after_key.key_id, before_key.key_id);
+                assert_eq!(after_key.time, before_key.time);
+                assert_eq!(after_key.value, Some([0.2, 0.1]));
+            } else {
+                assert_eq!(after_key, &before_key);
+            }
+        }
+        let after_on = after_keys
+            .iter()
+            .find(|key| key.key_id == on_key_id)
+            .expect("on key");
+        assert_eq!(after_on.key_id, on_key_id);
+        assert_eq!(after_on.value, Some([0.2, 0.1]));
+
+        // off-key: frame へ進めて拒否。Document 不変。
+        assert!(dispatch_raw_json(host, &set_time_json(host, "15")).accepted);
+        let before_off = document_json_bytes(host);
+        let rejected = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"{layer}","delta":[0.05,0.0]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert_eq!(document_json_bytes(host), before_off);
+        let _ = before_doc;
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_time_accepts_top_level_host_handle_when_nested_host_handle_appears_first() {
+        let _lock = test_lock();
+        let host = create_host("host-handle-nested-then-top-level");
+        let nested = 999_999_u64;
+        let mut intent = serde_json::Map::<String, serde_json::Value>::new();
+        intent.insert(
+            "nested".into(),
+            serde_json::json!({ "host_handle": nested.to_string() }),
+        );
+        intent.insert("version".into(), serde_json::json!(1));
+        intent.insert("direction".into(), serde_json::json!("rn-to-host"));
+        intent.insert("kind".into(), serde_json::json!("set_time"));
+        intent.insert("frame".into(), serde_json::json!(0));
+        intent.insert("host_handle".into(), serde_json::json!(host.to_string()));
+        let response = dispatch_raw_json(
+            host,
+            &serde_json::to_string(&serde_json::Value::Object(intent)).expect("intent json"),
+        );
+        assert!(response.accepted);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn move_layer_by_rotated_scaled_layer_uses_world_inverse_delta() {
+        let _lock = test_lock();
+        let mut fixture = Fixture::new();
+        let layer = fixture.push_rect_layer(
+            "rotScaled",
+            [0.0, 0.0],
+            [0.4, 0.4],
+            Transform2D {
+                position: DocParam::const_vec2([0.1, -0.08]),
+                rotation: DocParam::const_f64(0.55),
+                scale: DocParam::const_vec2([1.25, 0.8]),
+                ..Transform2D::identity()
+            },
+        );
+        fixture.document.validate().expect("valid");
+        let host = create_host_from_document("move-rot-scale", &fixture.document);
+        let layer_id = layer.get().to_string();
+
+        let tracks = DataTracks::new();
+        let projection = project_stage_geometry(
+            &fixture.document,
+            EvaluationTime::new(RationalTime::ZERO),
+            &tracks,
+        )
+        .expect("geometry");
+        let crate::stage_geometry_projection::StageLayerProjection::Available(geo) =
+            projection.get(layer).expect("layer")
+        else {
+            panic!("available");
+        };
+
+        let delta = [0.18, -0.12];
+        let expected_local =
+            world_delta_to_position_local(geo.world, delta).expect("local inverse exists");
+        let before = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_const_at(
+                product.runtime.snapshot().as_ref(),
+                LayerId::from_raw(layer_id.parse::<u64>().expect("id")),
+            ))
+        })
+        .expect("lookup")
+        .expect("const position");
+
+        let moved = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"{layer}","delta":[{dx},{dy}]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                dx = delta[0],
+                dy = delta[1],
+            ),
+        );
+        assert!(moved.accepted);
+        let after = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(position_const_at(
+                product.runtime.snapshot().as_ref(),
+                LayerId::from_raw(layer_id.parse::<u64>().expect("id")),
+            ))
+        })
+        .expect("lookup")
+        .expect("const position");
+        assert!((after[0] - (before[0] + expected_local[0])).abs() < 1e-12);
+        assert!((after[1] - (before[1] + expected_local[1])).abs() < 1e-12);
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn move_layer_by_rejects_non_finite_delta_and_missing_target() {
+        let _lock = test_lock();
+        let host = create_host("move-reject");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let before = document_json_bytes(host);
+
+        let missing = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"move_layer_by","#,
+                    r#""host_handle":"{host}","target":"999999","delta":[0.1,0.0]}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(!missing.accepted);
+        assert_eq!(missing.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert_eq!(document_json_bytes(host), before);
+
+        let mut intent = WireIntentEnvelope {
+            version: WIRE_VERSION,
+            direction: RN_TO_HOST.to_owned(),
+            kind: "move_layer_by".to_owned(),
+            host_handle: String::new(),
+            stage_handle: None,
+            projection_generation: None,
+            width: None,
+            height: None,
+            scale_factor: None,
+            focused: None,
+            phase: None,
+            view_local_x: None,
+            view_local_y: None,
+            sequence: None,
+            frame: None,
+            position: None,
+            playhead: None,
+            target: Some(layer_id),
+            dest: None,
+            key_id: None,
+            property: None,
+            time: None,
+            new: None,
+            interp: None,
+            delta: Some([f64::INFINITY, 0.0]),
+            plugin_id: None,
+            item_id: None,
+            effect_use_id: None,
+            param_id: None,
+            value: None,
+            output_path: None,
+            color: None,
+        };
+        let non_finite = dispatch_wire(host, intent.clone());
+        assert!(!non_finite.accepted);
+        assert_eq!(non_finite.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert_eq!(document_json_bytes(host), before);
+
+        intent.delta = Some([0.0, f64::NAN]);
+        let nan = dispatch_wire(host, intent);
+        assert!(!nan.accepted);
+        assert_eq!(document_json_bytes(host), before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_returns_texture_and_dirty_gates() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            // BLOCKED(GPU): sandboxにadapterが無い場合はsupervisorが実機で回す。
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_host("stage-frame-dirty");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        )
+        .accepted);
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let first = frame.as_ref().expect("frame");
+        let draft = Quality::DRAFT
+            .render_desc(frame_desc_from_composition(&Document::new_current()).expect("desc"));
+        assert_eq!((first.width, first.height), (draft.width, draft.height));
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Unchanged
+        );
+        assert!(frame.is_some());
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_rerenders_when_caller_dropped_frame() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_host("stage-frame-dropped");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        )
+        .accepted);
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        assert!(frame.is_some());
+        // 呼び手がframeを破棄(= renderer再生成後相当)。(rev,gen,time)一致でも再render。
+        frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        assert!(frame.is_some());
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_rerenders_on_revision_and_time() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_host("stage-frame-rerender");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.1,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        )
+        .accepted);
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Unchanged
+        );
+        let rev1 = frame.as_ref().expect("f1").revision.clone();
+
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#
+            ),
+        )
+        .accepted);
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let after_undo = frame.as_ref().expect("undo frame");
+        assert_ne!(after_undo.revision, rev1);
+
+        assert!(dispatch_raw_json(host, &set_time_json(host, "30")).accepted);
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let after_time = frame.as_ref().expect("time frame");
+        assert_eq!(after_time.time, RationalTime::try_new(1, 1).expect("1/1"));
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Unchanged
+        );
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_unknown_handle_is_false() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(9_999, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Failed
+        );
+        assert!(frame.is_none());
+    }
+
+    #[test]
+    fn host_render_frame_after_seed_place_has_non_uniform_pixels() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_host("stage-frame-readback");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        )
+        .accepted);
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let first = frame.take().expect("frame");
+        let draft = Quality::DRAFT
+            .render_desc(frame_desc_from_composition(&Document::new_current()).expect("desc"));
+        assert_eq!((first.width, first.height), (draft.width, draft.height));
+
+        let bytes = download_rgba(&gpu, &first.texture).expect("frame readback");
+        assert_eq!(
+            bytes.len(),
+            (first.width as usize) * (first.height as usize) * 4
+        );
+        let center = pixel_at(&bytes, first.width, first.width / 2, first.height / 2);
+        let background = pixel_at(&bytes, first.width, 0, 0);
+        assert_ne!(center, background);
+        assert!(has_non_background_pixel(
+            &bytes,
+            first.width,
+            first.height,
+            background
+        ));
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_opacity_preview_changes_pixels() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_host("stage-frame-opacity");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        )
+        .accepted);
+        let snapshot = read_snapshot(host);
+        let layer_id = snapshot
+            .primary_layer_id
+            .clone()
+            .or_else(|| snapshot.layer_ids.last().cloned())
+            .expect("placed layer");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        let effect_use_id = layer_effects(&read_wire(host), &layer_id)[0]
+            .effect_use_id
+            .clone();
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let opaque = frame.take().expect("opaque frame");
+        let opaque_bytes = download_rgba(&gpu, &opaque.texture).expect("opaque readback");
+
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"preview_effect_param","host_handle":"{host}","target":"{layer}","effect_use_id":"{effect}","param_id":"amount","value":0.25}}"#,
+                host = host,
+                layer = layer_id,
+                effect = effect_use_id,
+            ),
+        )
+        .accepted);
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let faded = frame.take().expect("faded frame");
+        let faded_bytes = download_rgba(&gpu, &faded.texture).expect("faded readback");
+        assert_eq!(opaque_bytes.len(), faded_bytes.len());
+        assert_ne!(
+            opaque_bytes, faded_bytes,
+            "opacity preview must change the evaluated Stage frame"
+        );
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    fn seed_primary(host: u64, target: LayerId) {
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            let mut queue = DocumentEditQueue::default();
+            queue.push_replace_primary(target);
+            let published = product
+                .runtime
+                .process_next(&mut queue, product.primary, product.projection_generation)
+                .expect("process")
+                .expect("published");
+            product.primary = published.primary;
+            product.projection_generation = published.projection_generation;
+            Ok(())
+        })
+        .expect("seed primary");
+    }
+
+    fn read_wire(host: u64) -> WireProductSnapshot {
+        with_registry(|registry| registry.read_snapshot(host)).expect("wire snapshot")
+    }
+
+    fn layer_effects<'a>(
+        wire: &'a WireProductSnapshot,
+        layer_id: &str,
+    ) -> &'a [WireTimelineEffect] {
+        &wire
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer")
+            .effects
+    }
+
+    /// RN `readSnapshot` と同じ `encode_snapshot_json` 経路。
+    fn read_snapshot_json(host: u64) -> serde_json::Value {
+        let json = encode_snapshot_json(&read_wire(host)).expect("snapshot json");
+        serde_json::from_str(&json).expect("parse snapshot json")
+    }
+
+    /// App.tsx `hostSnapshotStateFromParsed` と同じ: primary の timeline layer effects だけ。
+    fn inspector_selected_effects(snapshot: &serde_json::Value) -> Vec<serde_json::Value> {
+        let Some(primary) = snapshot
+            .get("primary_layer_id")
+            .and_then(|value| value.as_str())
+        else {
+            return Vec::new();
+        };
+        snapshot
+            .get("timeline")
+            .and_then(|timeline| timeline.get("layers"))
+            .and_then(|layers| layers.as_array())
+            .and_then(|layers| {
+                layers
+                    .iter()
+                    .find(|layer| layer.get("layer_id").and_then(|id| id.as_str()) == Some(primary))
+            })
+            .and_then(|layer| layer.get("effects"))
+            .and_then(|effects| effects.as_array())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn snapshot_catalog_effects_lists_attachable_first_party_plugins() {
+        let _lock = test_lock();
+        let host = create_host("catalog-effects");
+        let wire = read_wire(host);
+        let ids: Vec<_> = wire
+            .catalog
+            .effects
+            .iter()
+            .map(|effect| effect.plugin_id.as_str())
+            .collect();
+        assert!(ids.contains(&"core.filter.opacity"));
+        assert!(!ids.contains(&"core.param.sine"));
+        let opacity = wire
+            .catalog
+            .effects
+            .iter()
+            .find(|effect| effect.plugin_id == "core.filter.opacity")
+            .expect("opacity");
+        assert_eq!(opacity.name, "Opacity");
+        assert_eq!(opacity.effect_version, 1);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_library_lists_starter_media_files_not_a_fake_grid() {
+        let _lock = test_lock();
+        let host = create_host("library-starter-media");
+        let wire = read_wire(host);
+        let names: Vec<_> = wire
+            .library
+            .items
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "starter-clip.mp4",
+                "starter-mark.svg",
+                "starter-still.png",
+                "starter-tone.wav"
+            ]
+        );
+        assert_eq!(wire.library.directories.len(), 1);
+        assert_eq!(wire.library.directories[0].name, "media");
+        assert_eq!(
+            wire.library
+                .items
+                .iter()
+                .map(|item| item.tags.as_slice())
+                .collect::<Vec<_>>(),
+            [
+                ["video", "mp4"].as_slice(),
+                ["image", "svg"].as_slice(),
+                ["image", "png"].as_slice(),
+                ["audio", "wav"].as_slice(),
+            ]
+        );
+        let tag_ids: Vec<_> = wire
+            .library
+            .tags
+            .iter()
+            .map(|tag| (tag.id.as_str(), tag.label.as_str(), tag.count))
+            .collect();
+        assert_eq!(
+            tag_ids,
+            [
+                ("audio", "Audio", 1),
+                ("image", "Image", 2),
+                ("mp4", "mp4", 1),
+                ("png", "png", 1),
+                ("svg", "svg", 1),
+                ("video", "Video", 1),
+                ("wav", "wav", 1),
+            ]
+        );
+        let root = wire.library.root.expect("library root");
+        assert!(
+            root.path.ends_with("docs/mocks-ui/starter-media/media")
+                || root.path.ends_with("docs/mocks-ui/starter-media/media/"),
+            "{}",
+            root.path
+        );
+        assert!(wire
+            .library
+            .items
+            .iter()
+            .all(|item| !item.name.starts_with("asset-")));
+        assert!(wire.library.tags.iter().all(|tag| tag.id != "interview"));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn place_media_puts_library_file_on_timeline_and_stage_bounds() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("place-media-starter-clip");
+        let baseline = read_wire(host);
+        assert!(baseline.timeline.layers.is_empty());
+        let clip_id = baseline
+            .library
+            .items
+            .iter()
+            .find(|item| item.name == "starter-clip.mp4")
+            .map(|item| item.id.as_str())
+            .expect("starter clip in library");
+
+        let placed = dispatch_raw_json(
+            host,
+            &place_media_json(host, clip_id, [0.1, -0.2], r#"{"num":0,"den":1}"#),
+        );
+        assert!(placed.accepted, "reason={:?}", placed.reason);
+        let after = read_wire(host);
+        assert_eq!(after.timeline.layers.len(), 1);
+        assert_eq!(after.timeline.layers[0].display_name, "starter-clip.mp4");
+        let layer_id = after.timeline.layers[0].layer_id.clone();
+        assert_eq!(after.primary_layer_id.as_deref(), Some(layer_id.as_str()));
+        assert!(after
+            .stage
+            .bounds
+            .iter()
+            .any(|bound| bound.layer_id == layer_id));
+        let document = live_document(host);
+        let placed_id = LayerId::from_raw(layer_id.parse().expect("placed layer id"));
+        assert_eq!(
+            document.layers.display_name(placed_id),
+            Some("starter-clip.mp4")
+        );
+        assert_eq!(document.assets.len(), 1);
+        assert!(document.assets.iter().any(|asset| {
+            asset.file_name.as_deref() == Some("starter-clip.mp4")
+                && asset
+                    .path_absolute
+                    .as_ref()
+                    .is_some_and(|path| std::path::Path::new(path).ends_with("starter-clip.mp4"))
+        }));
+        let clip = document_clip(document.as_ref(), placed_id).expect("Document clip");
+        assert!(matches!(
+            clip.source,
+            ClipSource::Asset { video: Some(_), .. }
+        ));
+        assert_eq!(
+            clip.envelope.transform.position,
+            motolii_doc::DocParam::const_vec2([0.1, -0.2])
+        );
+        let geometry = after
+            .stage_geometry
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("placed media must appear in stage_geometry");
+        assert_eq!(geometry.position, [0.1, -0.2]);
+        assert!(
+            geometry
+                .corners
+                .iter()
+                .all(|c| c[0].is_finite() && c[1].is_finite()),
+            "stage fill corners {:?}",
+            geometry.corners
+        );
+        let area = geometry
+            .corners
+            .iter()
+            .enumerate()
+            .fold(0.0, |acc, (i, c)| {
+                let n = geometry.corners[(i + 1) % 4];
+                acc + (c[0] * n[1] - n[0] * c[1])
+            });
+        assert!(
+            area.abs() > 1e-9,
+            "stage fill must have area, corners={:?}",
+            geometry.corners
+        );
+        assert_ne!(after.revision, baseline.revision);
+
+        let runtime = first_party_runtime().expect("first_party_runtime");
+        let desc = frame_desc_from_composition(document.as_ref()).expect("desc");
+        let built = build_document_frame_graph(
+            document.as_ref(),
+            EvaluationTime::new(RationalTime::ZERO),
+            desc,
+            &DataTracks::new(),
+            &runtime,
+            None,
+        )
+        .expect("graph after place_media");
+        assert!(
+            !built.video_slots.is_empty(),
+            "place_media must lower to VideoSource slots"
+        );
+        if motolii_testkit::ffmpeg_or_skip() {
+            if let Some(gpu) = motolii_testkit::gpu_or_skip() {
+                let mut binder = VideoSourceBinder::new(&gpu);
+                let bound = binder
+                    .bind(&gpu, document.as_ref(), None, &built.video_slots, desc)
+                    .expect("FrameReader bind after place_media");
+                assert!(
+                    !bound.is_empty(),
+                    "Preview video_sources must be filled from FrameReader"
+                );
+                let mut session = RenderSession::new(&gpu);
+                let mut frame = None;
+                assert_eq!(
+                    host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+                    HostRenderFrameResult::Rendered,
+                    "place_media Stage eval must render FrameReader pixels"
+                );
+                let rendered = frame.take().expect("stage frame");
+                let bytes = download_rgba(&gpu, &rendered.texture).expect("readback");
+                let background = pixel_at(&bytes, rendered.width, 0, 0);
+                assert!(
+                    background[3] != 0
+                        || has_non_background_pixel(
+                            &bytes,
+                            rendered.width,
+                            rendered.height,
+                            background
+                        ),
+                    "place_media Stage frame must show asset pixels"
+                );
+            }
+        }
+
+        let unknown = dispatch_raw_json(
+            host,
+            &place_media_json(
+                host,
+                "root-0:missing.mp4",
+                [0.0, 0.0],
+                r#"{"num":0,"den":1}"#,
+            ),
+        );
+        assert!(!unknown.accepted);
+        assert_eq!(unknown.reason, Some(RnHostReasonCode::InvalidIntent));
+        let rejected = read_wire(host);
+        assert_eq!(rejected.timeline.layers.len(), 1);
+        assert_eq!(rejected.timeline.layers[0].layer_id, layer_id);
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+        assert!(undone.accepted);
+        let after_undo = read_wire(host);
+        assert!(after_undo.timeline.layers.is_empty());
+        assert!(after_undo
+            .stage
+            .bounds
+            .iter()
+            .all(|bound| bound.layer_id != layer_id));
+        assert!(after_undo
+            .stage_geometry
+            .layers
+            .iter()
+            .all(|layer| layer.layer_id != layer_id));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_catalog_effects_are_all_attachable_filter_plugins() {
+        let _lock = test_lock();
+        let host = create_host("catalog-attach-loop");
+        let baseline = read_snapshot(host);
+        let wire = read_wire(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert_eq!(
+            read_snapshot(host).primary_layer_id,
+            Some(layer_id.clone()),
+            "primary should be seeded to target before loop"
+        );
+
+        let mut expected = layer_effects(&wire, &layer_id).len();
+        for effect in &wire.catalog.effects {
+            let intent_json = format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"{plugin}"}}"#,
+                ),
+                host = host,
+                layer = layer_id,
+                plugin = effect.plugin_id,
+            );
+            let response = dispatch_raw_json(host, &intent_json);
+            assert!(
+                response.accepted,
+                "attach failed for {}: accepted={} reason={:?}",
+                effect.plugin_id, response.accepted, response.reason,
+            );
+            assert_eq!(response.reason, None);
+            expected += 1;
+            assert_eq!(layer_effects(&read_wire(host), &layer_id).len(), expected);
+        }
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn snapshot_catalog_effects_mark_projection_truncated_at_eight_plus_nine() {
+        let _lock = test_lock();
+        let host = create_host("catalog-attach-truncation");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert_eq!(
+            read_snapshot(host).primary_layer_id,
+            Some(layer_id.clone()),
+            "primary should be seeded to target before truncation test"
+        );
+        let plugin = read_wire(host)
+            .catalog
+            .effects
+            .first()
+            .expect("catalog should have at least one filter effect")
+            .plugin_id
+            .clone();
+
+        let attach_effect = |host: u64, layer_id: &str| {
+            dispatch_wire(
+                host,
+                WireIntentEnvelope {
+                    version: WIRE_VERSION,
+                    direction: RN_TO_HOST.to_owned(),
+                    kind: "attach_effect".into(),
+                    host_handle: String::new(),
+                    stage_handle: None,
+                    projection_generation: None,
+                    width: None,
+                    height: None,
+                    scale_factor: None,
+                    focused: None,
+                    phase: None,
+                    view_local_x: None,
+                    view_local_y: None,
+                    sequence: None,
+                    frame: None,
+                    position: None,
+                    playhead: None,
+                    target: Some(layer_id.to_string()),
+                    dest: None,
+                    key_id: None,
+                    property: None,
+                    time: None,
+                    new: None,
+                    interp: None,
+                    delta: None,
+                    plugin_id: Some(plugin.clone()),
+                    item_id: None,
+                    effect_use_id: None,
+                    param_id: None,
+                    value: None,
+                    output_path: None,
+                    color: None,
+                },
+            )
+        };
+
+        for index in 1..=8 {
+            let response = attach_effect(host, &layer_id);
+            assert!(
+                response.accepted,
+                "attach failed at {index} plugin={plugin}: accepted={} reason={:?}",
+                response.accepted, response.reason
+            );
+            let wire = read_wire(host);
+            let layer = wire
+                .timeline
+                .layers
+                .iter()
+                .find(|layer| layer.layer_id == layer_id)
+                .expect("layer");
+            assert_eq!(layer.effects.len(), index);
+            assert!(!layer.effects_truncated);
+        }
+
+        assert!(attach_effect(host, &layer_id).accepted);
+        let wire = read_wire(host);
+        let layer = wire
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(layer.effects.len(), 8);
+        assert!(layer.effects_truncated);
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn attach_effect_rejects_when_target_is_not_primary() {
+        let _lock = test_lock();
+        let host = create_host("catalog-target-mismatch");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        let before = read_snapshot(host);
+        let before_wire = read_wire(host);
+        let before_effect_count = layer_effects(&before_wire, &layer_id).len();
+
+        let mismatch_target = if layer_id == "1" { "2" } else { "1" };
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{target}","plugin_id":"core.filter.opacity"}}"#,
+                ),
+                host = host,
+                target = mismatch_target,
+            ),
+        );
+        assert!(!response.accepted);
+        assert_eq!(response.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let after = read_snapshot(host);
+        assert_eq!(after.primary_layer_id, before.primary_layer_id);
+        assert_eq!(after.projection_generation, before.projection_generation);
+        assert_eq!(after.revision, before.revision);
+        assert_eq!(
+            layer_effects(&read_wire(host), &layer_id).len(),
+            before_effect_count
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn attach_effect_grows_layer_effects_and_undo_clears() {
+        let _lock = test_lock();
+        let host = create_host("attach-effect");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert!(layer_effects(&read_wire(host), &layer_id).is_empty());
+
+        let attached = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(attached.accepted);
+        let after = read_wire(host);
+        let effects = layer_effects(&after, &layer_id);
+        assert_eq!(effects.len(), 1);
+        assert_eq!(effects[0].plugin_id, "core.filter.opacity");
+        assert_eq!(effects[0].params.len(), 1);
+        assert_eq!(effects[0].params[0].param_id, "amount");
+        assert_eq!(effects[0].params[0].value, 1.0);
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+        assert!(undone.accepted);
+        assert!(layer_effects(&read_wire(host), &layer_id).is_empty());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_effect_param_updates_value_preserves_others_and_undo_restores() {
+        let _lock = test_lock();
+        let host = create_host("set-effect-param");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        // 第二 effect を足して他 effect 不変を検証する。
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        let before = read_wire(host);
+        let effects_before = layer_effects(&before, &layer_id);
+        assert_eq!(effects_before.len(), 2);
+        let first_id = effects_before[0].effect_use_id.clone();
+        let second_id = effects_before[1].effect_use_id.clone();
+        let second_amount = effects_before[1].params[0].value;
+
+        let changed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_effect_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","effect_use_id":"{use_id}","#,
+                    r#""param_id":"amount","value":0.4}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                use_id = first_id,
+            ),
+        );
+        assert!(changed.accepted);
+        let after = read_wire(host);
+        let effects = layer_effects(&after, &layer_id);
+        assert_eq!(effects.len(), 2);
+        assert_eq!(effects[0].effect_use_id, first_id);
+        assert_eq!(effects[0].params[0].value, 0.4);
+        assert_eq!(effects[1].effect_use_id, second_id);
+        assert_eq!(effects[1].params[0].value, second_amount);
+
+        let undone = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+        assert!(undone.accepted);
+        let restored_wire = read_wire(host);
+        let restored = layer_effects(&restored_wire, &layer_id);
+        assert_eq!(restored[0].params[0].value, 1.0);
+        assert_eq!(restored[1].params[0].value, second_amount);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_effect_param_updates_value_in_read_snapshot_json_selected_not_unselected_bloom() {
+        let _lock = test_lock();
+        let host = create_host("inspector-selected-params-json");
+        let baseline = read_wire(host);
+        assert!(baseline.primary_layer_id.is_none());
+        let unselected = read_snapshot_json(host);
+        let unselected_text = unselected.to_string();
+        assert!(
+            !unselected_text.contains("Echo Bloom"),
+            "unselected snapshot must not invent Echo Bloom"
+        );
+        assert!(unselected.get("primary_layer_id").is_none());
+        assert!(unselected.get("selected_doc_params").is_none());
+        assert!(unselected.get("nodes").is_none());
+        assert!(unselected.get("active_effect_use_id").is_none());
+        assert!(inspector_selected_effects(&unselected).is_empty());
+        for layer in unselected["timeline"]["layers"]
+            .as_array()
+            .expect("timeline layers")
+        {
+            assert!(layer["effects"].as_array().expect("effects").is_empty());
+        }
+        assert!(
+            unselected["catalog"]["effects"]
+                .as_array()
+                .expect("catalog")
+                .iter()
+                .any(|effect| effect["plugin_id"] == "core.filter.opacity"),
+            "catalog may list opacity; Inspector must not treat it as a selected effect"
+        );
+
+        let layer_id = baseline.timeline.layers[0].layer_id.clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        let effect_use_id = layer_effects(&read_wire(host), &layer_id)[0]
+            .effect_use_id
+            .clone();
+        assert!(
+            dispatch_raw_json(
+                host,
+                &format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"set_effect_param","#,
+                        r#""host_handle":"{host}","target":"{layer}","effect_use_id":"{use_id}","#,
+                        r#""param_id":"amount","value":0.4}}"#
+                    ),
+                    host = host,
+                    layer = layer_id,
+                    use_id = effect_use_id,
+                ),
+            )
+            .accepted
+        );
+
+        let selected = read_snapshot_json(host);
+        assert_eq!(selected["primary_layer_id"], layer_id);
+        let selected_effects = inspector_selected_effects(&selected);
+        assert_eq!(selected_effects.len(), 1);
+        assert_eq!(selected_effects[0]["plugin_id"], "core.filter.opacity");
+        assert_eq!(selected_effects[0]["effect_use_id"], effect_use_id);
+        let amount = selected_effects[0]["params"]
+            .as_array()
+            .expect("params")
+            .iter()
+            .find(|param| param["param_id"] == "amount")
+            .expect("amount");
+        assert_eq!(amount["value"], 0.4);
+        let selected_params = selected
+            .get("selected_doc_params")
+            .expect("selected_doc_params");
+        assert_eq!(selected_params["layer_id"], layer_id);
+        assert_eq!(selected_params["opacity"], 1.0);
+        assert!(selected_params.get("position").is_none());
+        assert!(selected_params.get("rotation").is_none());
+        assert!(selected_params.get("scale").is_none());
+        assert_eq!(
+            selected_params["effects"],
+            serde_json::Value::Array(selected_effects.clone())
+        );
+        assert!(!selected.to_string().contains("Echo Bloom"));
+
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"clear_selection","host_handle":"{host}"}}"#
+            ),
+        )
+        .accepted);
+        let cleared = read_snapshot_json(host);
+        assert!(cleared.get("primary_layer_id").is_none());
+        assert!(cleared.get("selected_doc_params").is_none());
+        assert!(inspector_selected_effects(&cleared).is_empty());
+        assert!(!cleared.to_string().contains("Echo Bloom"));
+        let cleared_wire = read_wire(host);
+        let live = layer_effects(&cleared_wire, &layer_id);
+        assert_eq!(live.len(), 1);
+        assert_eq!(live[0].plugin_id, "core.filter.opacity");
+        assert_eq!(live[0].params[0].param_id, "amount");
+        assert_eq!(live[0].params[0].value, 0.4);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_opacity_updates_document_opacity_in_snapshot() {
+        let _lock = test_lock();
+        let host = create_host("set-opacity");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+
+        let before = read_wire(host);
+        assert_eq!(
+            before
+                .selected_doc_params
+                .as_ref()
+                .expect("selected_doc_params")
+                .opacity,
+            Some(1.0)
+        );
+
+        let changed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_opacity","#,
+                    r#""host_handle":"{host}","target":"{layer}","value":0.4}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(changed.accepted);
+
+        let after = read_wire(host);
+        assert_eq!(
+            after
+                .selected_doc_params
+                .as_ref()
+                .expect("selected_doc_params")
+                .opacity,
+            Some(0.4)
+        );
+        let live = with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            Ok(const_f64_param(
+                &find_envelope_in_document(product.runtime.snapshot().as_ref(), target)
+                    .expect("envelope")
+                    .opacity,
+            ))
+        })
+        .expect("lookup");
+        assert_eq!(live, Some(0.4));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_opacity_on_keyframes_at_playhead_writes_without_collapsing() {
+        let _lock = test_lock();
+        let host = create_host("set-opacity-keyframes");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert!(
+            dispatch_raw_json(
+                host,
+                &format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"add_param_key","#,
+                        r#""host_handle":"{host}","target":"{layer}","property":"opacity","#,
+                        r#""time":{{"num":0,"den":1}}}}"#
+                    ),
+                    host = host,
+                    layer = layer_id,
+                ),
+            )
+            .accepted
+        );
+        let keyed = read_wire(host);
+        let layer = keyed
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(layer.param_keys.len(), 1);
+        assert_eq!(layer.param_keys[0].property, "opacity");
+        let changed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_opacity","#,
+                    r#""host_handle":"{host}","target":"{layer}","value":0.25}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(changed.accepted, "reason={:?}", changed.reason);
+        let after = read_wire(host);
+        assert_eq!(
+            after
+                .selected_doc_params
+                .as_ref()
+                .expect("selected_doc_params")
+                .opacity,
+            Some(0.25)
+        );
+        let layer = after
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        assert_eq!(layer.param_keys.len(), 1);
+        assert_eq!(layer.param_keys[0].property, "opacity");
+        assert_eq!(layer.param_keys[0].value, Some(0.25));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_effect_param_color_without_value_writes() {
+        let _lock = test_lock();
+        let host = create_host("set-effect-color");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.tint"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        let attached = read_wire(host);
+        let effect_use_id = layer_effects(&attached, &layer_id)[0].effect_use_id.clone();
+        let changed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_effect_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","effect_use_id":"{effect}","#,
+                    r#""param_id":"color","color":[0.2,1.0,1.0,1.0]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                effect = effect_use_id,
+            ),
+        );
+        assert!(changed.accepted, "reason={:?}", changed.reason);
+        let after = read_wire(host);
+        let color = layer_effects(&after, &layer_id)[0]
+            .params
+            .iter()
+            .find(|param| param.param_id == "color")
+            .expect("color");
+        assert_eq!(color.color, Some([0.2, 1.0, 1.0, 1.0]));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn effect_intents_reject_absent_target_plugin_param_and_non_finite_without_mutation() {
+        let _lock = test_lock();
+        let host = create_host("effect-rejects");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        let before = serde_json::to_vec(&read_wire(host)).expect("before json");
+        let before_wire = read_wire(host);
+        let use_id = layer_effects(&before_wire, &layer_id)[0]
+            .effect_use_id
+            .clone();
+
+        let missing_target = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(!missing_target.accepted);
+
+        let missing_plugin = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.missing"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(!missing_plugin.accepted);
+
+        let missing_param = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_effect_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","effect_use_id":"{use_id}","#,
+                    r#""param_id":"nope","value":0.2}}"#
+                ),
+                host = host,
+                layer = layer_id,
+                use_id = use_id,
+            ),
+        );
+        assert!(!missing_param.accepted);
+
+        let non_finite = dispatch_wire(
+            host,
+            WireIntentEnvelope {
+                version: 1,
+                direction: RN_TO_HOST.to_owned(),
+                kind: "set_effect_param".into(),
+                host_handle: host.to_string(),
+                stage_handle: None,
+                projection_generation: None,
+                width: None,
+                height: None,
+                scale_factor: None,
+                focused: None,
+                phase: None,
+                view_local_x: None,
+                view_local_y: None,
+                sequence: None,
+                frame: None,
+                position: None,
+                playhead: None,
+                target: Some(layer_id.clone()),
+                dest: None,
+                key_id: None,
+                property: None,
+                time: None,
+                new: None,
+                interp: None,
+                delta: None,
+                plugin_id: None,
+                item_id: None,
+                effect_use_id: Some(use_id),
+                param_id: Some("amount".into()),
+                value: Some(f64::NAN),
+                output_path: None,
+                color: None,
+            },
+        );
+        assert!(!non_finite.accepted);
+
+        let after = serde_json::to_vec(&read_wire(host)).expect("after json");
+        assert_eq!(after, before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    fn live_document(host: u64) -> Arc<Document> {
+        with_registry(|registry| Ok(registry.hosts.get(&host).expect("host").runtime.snapshot()))
+            .expect("document")
+    }
+
+    fn document_clip(document: &Document, layer_id: LayerId) -> Option<&Clip> {
+        document.tracks.iter().find_map(|track| {
+            track.items.iter().find_map(|item| match item {
+                TrackItem::Clip(clip) if clip.envelope.layer_id == layer_id => Some(clip),
+                _ => None,
+            })
+        })
+    }
+
+    fn create_empty_track_host(tag: &str) -> u64 {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = tmp_dir(&format!("rn-product-host-{tag}-{id}")).join("project.json");
+        let mut document = Document::new_current();
+        let track = document.track_ids.allocate("seed-track").expect("track");
+        document.tracks.push(Track {
+            id: track,
+            items: vec![],
+        });
+        document.validate().expect("valid empty track document");
+        let limits = ResourceLimits::production();
+        {
+            let mut session = ProjectSession::acquire(&path, &limits).expect("acquire");
+            session
+                .save_with_journal(
+                    &document,
+                    &SaveProjectOptions {
+                        limits,
+                        checkpoint: true,
+                        ..SaveProjectOptions::default()
+                    },
+                )
+                .expect("save");
+        }
+        host_create_for_test(&path).expect("host")
+    }
+
+    fn place_vism_json(host: u64, plugin_id: &str, position: [f64; 2], playhead: &str) -> String {
+        format!(
+            concat!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"place_vism","#,
+                r#""host_handle":"{host}","plugin_id":"{plugin}","position":[{x},{y}],"playhead":{playhead}}}"#
+            ),
+            host = host,
+            plugin = plugin_id,
+            x = position[0],
+            y = position[1],
+            playhead = playhead,
+        )
+    }
+
+    fn place_media_json(host: u64, item_id: &str, position: [f64; 2], playhead: &str) -> String {
+        format!(
+            concat!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"place_media","#,
+                r#""host_handle":"{host}","item_id":"{item}","position":[{x},{y}],"playhead":{playhead}}}"#
+            ),
+            host = host,
+            item = item_id,
+            x = position[0],
+            y = position[1],
+            playhead = playhead,
+        )
+    }
+
+    #[test]
+    fn snapshot_catalog_sources_lists_radial_repeater_and_all_place_vism() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("catalog-sources-place-loop");
+        let wire = read_wire(host);
+        assert!(wire
+            .catalog
+            .sources
+            .iter()
+            .any(|source| source.plugin_id == "core.layer_source.radial_repeater"));
+        assert!(!wire
+            .catalog
+            .sources
+            .iter()
+            .any(|source| source.plugin_id == "core.layer_source.clear"));
+        assert!(wire.timeline.layers.is_empty());
+
+        for source in wire.catalog.sources.clone() {
+            let response = dispatch_raw_json(
+                host,
+                &place_vism_json(host, &source.plugin_id, [0.0, 0.0], r#"{"num":0,"den":1}"#),
+            );
+            assert!(
+                response.accepted,
+                "place_vism failed for {}: accepted={} reason={:?}",
+                source.plugin_id, response.accepted, response.reason,
+            );
+        }
+        let after_place = read_wire(host);
+        assert_eq!(
+            after_place.timeline.layers.len(),
+            wire.catalog.sources.len()
+        );
+        let placed_ids: Vec<String> = after_place
+            .timeline
+            .layers
+            .iter()
+            .map(|layer| layer.layer_id.clone())
+            .collect();
+        assert!(
+            after_place
+                .primary_layer_id
+                .as_ref()
+                .is_some_and(|id| placed_ids.contains(id)),
+            "place_vism should select a live layer"
+        );
+
+        for _ in 0..wire.catalog.sources.len() {
+            let before_undo = read_wire(host);
+            let removed = before_undo.primary_layer_id.clone();
+            let undone = dispatch_raw_json(
+                host,
+                &format!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#,
+                    host = host,
+                ),
+            );
+            assert!(undone.accepted);
+            let after_undo = read_wire(host);
+            if let Some(removed_id) = removed {
+                assert_ne!(
+                    after_undo.primary_layer_id.as_deref(),
+                    Some(removed_id.as_str()),
+                    "undo must not keep deleted LayerId as primary"
+                );
+                assert!(
+                    after_undo
+                        .primary_layer_id
+                        .as_ref()
+                        .map(|id| after_undo
+                            .timeline
+                            .layers
+                            .iter()
+                            .any(|layer| layer.layer_id == *id))
+                        .unwrap_or(true),
+                    "primary_layer_id must be absent or live"
+                );
+            }
+        }
+        assert!(read_wire(host).timeline.layers.is_empty());
+        assert!(read_wire(host).primary_layer_id.is_none());
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn place_vism_projects_source_params_defaults_on_timeline() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("place-vism-source-params");
+        assert!(
+            dispatch_raw_json(
+                host,
+                &place_vism_json(
+                    host,
+                    "core.layer_source.radial_repeater",
+                    [0.0, 0.0],
+                    r#"{"num":0,"den":1}"#
+                ),
+            )
+            .accepted
+        );
+        let wire = read_wire(host);
+        assert_eq!(wire.timeline.layers.len(), 1);
+        let layer = &wire.timeline.layers[0];
+        assert_eq!(layer.display_name, "Radial Repeater");
+        assert!(!layer.source_params_truncated);
+        let by_id: BTreeMap<_, _> = layer
+            .source_params
+            .iter()
+            .map(|param| (param.param_id.as_str(), param))
+            .collect();
+        assert_eq!(by_id.get("count").map(|param| param.value), Some(12.0));
+        assert_eq!(by_id.get("radius").map(|param| param.value), Some(0.30));
+        assert_eq!(by_id.get("dot_radius").map(|param| param.value), Some(0.04));
+        assert_eq!(by_id.get("phase").map(|param| param.value), Some(0.0));
+        assert_eq!(
+            by_id.get("angular_speed").map(|param| param.value),
+            Some(0.0)
+        );
+        let color = by_id.get("color").expect("color is a product source param");
+        assert_eq!(color.value, 0.0);
+        assert_eq!(color.color, Some([1.0, 1.0, 1.0, 1.0]));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_source_param_updates_count_preserves_others_and_undo_restores() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("set-source-param");
+        assert!(
+            dispatch_raw_json(
+                host,
+                &place_vism_json(
+                    host,
+                    "core.layer_source.radial_repeater",
+                    [0.0, 0.0],
+                    r#"{"num":0,"den":1}"#
+                ),
+            )
+            .accepted
+        );
+        let placed = read_wire(host);
+        let layer_id = placed.primary_layer_id.clone().expect("placed primary");
+        let before = placed
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("placed layer");
+        let radius = before
+            .source_params
+            .iter()
+            .find(|param| param.param_id == "radius")
+            .expect("radius")
+            .value;
+
+        let changed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_source_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","param_id":"count","value":8.0}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(changed.accepted, "reason={:?}", changed.reason);
+        let after = read_wire(host);
+        let layer = after
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("updated layer");
+        let by_id: BTreeMap<_, _> = layer
+            .source_params
+            .iter()
+            .map(|param| (param.param_id.as_str(), param.value))
+            .collect();
+        assert_eq!(by_id.get("count"), Some(&8.0));
+        assert_eq!(by_id.get("radius"), Some(&radius));
+
+        assert!(
+            dispatch_raw_json(
+                host,
+                &format!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"undo","host_handle":"{host}"}}"#,
+                    host = host,
+                ),
+            )
+            .accepted
+        );
+        let restored = read_wire(host);
+        let restored_layer = restored
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("restored layer");
+        let restored_count = restored_layer
+            .source_params
+            .iter()
+            .find(|param| param.param_id == "count")
+            .expect("count")
+            .value;
+        assert_eq!(restored_count, 12.0);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_source_param_rejects_unknown_param_without_mutation() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("set-source-param-unknown");
+        assert!(
+            dispatch_raw_json(
+                host,
+                &place_vism_json(
+                    host,
+                    "core.layer_source.radial_repeater",
+                    [0.0, 0.0],
+                    r#"{"num":0,"den":1}"#
+                ),
+            )
+            .accepted
+        );
+        let before = document_json_bytes(host);
+        let layer_id = read_wire(host).primary_layer_id.clone().expect("primary");
+        let rejected = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_source_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","param_id":"missing","value":1.0}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(!rejected.accepted);
+        assert_eq!(document_json_bytes(host), before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn preview_source_param_keeps_revision_and_commit_writes() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("preview-source-param");
+        assert!(
+            dispatch_raw_json(
+                host,
+                &place_vism_json(
+                    host,
+                    "core.layer_source.radial_repeater",
+                    [0.0, 0.0],
+                    r#"{"num":0,"den":1}"#
+                ),
+            )
+            .accepted
+        );
+        let before = read_snapshot(host);
+        let layer_id = read_wire(host).primary_layer_id.clone().expect("primary");
+        let previewed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"preview_source_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","param_id":"count","value":8.0}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(previewed.accepted, "reason={:?}", previewed.reason);
+        let after_preview = read_snapshot(host);
+        assert_eq!(after_preview.revision, before.revision);
+        assert_ne!(
+            after_preview.projection_generation,
+            before.projection_generation
+        );
+        let preview_wire = read_wire(host);
+        let timeline_count = preview_wire
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer")
+            .source_params
+            .iter()
+            .find(|param| param.param_id == "count")
+            .expect("count")
+            .value;
+        assert_eq!(timeline_count, 12.0);
+        let preview_params = preview_wire
+            .selected_doc_params
+            .as_ref()
+            .expect("selected_doc_params");
+        let preview_count = preview_params
+            .source_params
+            .iter()
+            .find(|param| param.param_id == "count")
+            .expect("preview count")
+            .value;
+        assert_eq!(preview_count, 8.0);
+        assert!(
+            dispatch_raw_json(
+                host,
+                &format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"set_source_param","#,
+                        r#""host_handle":"{host}","target":"{layer}","param_id":"count","value":8.0}}"#
+                    ),
+                    host = host,
+                    layer = layer_id,
+                ),
+            )
+            .accepted
+        );
+        let after_commit = read_snapshot(host);
+        assert_ne!(after_commit.revision, before.revision);
+        let committed = read_wire(host)
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer")
+            .source_params
+            .iter()
+            .find(|param| param.param_id == "count")
+            .expect("count")
+            .value;
+        assert_eq!(committed, 8.0);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn rejected_source_commit_and_exhausted_preview_keep_the_same_snapshot() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("preview-source-reject");
+        assert!(
+            dispatch_raw_json(
+                host,
+                &place_vism_json(
+                    host,
+                    "core.layer_source.radial_repeater",
+                    [0.0, 0.0],
+                    r#"{"num":0,"den":1}"#
+                ),
+            )
+            .accepted
+        );
+        let layer_id = read_wire(host).primary_layer_id.clone().expect("primary");
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"preview_source_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","param_id":"count","value":8.0}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+
+        let previewed = read_wire(host);
+        let document = document_json_bytes(host);
+        let rejected_commit = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_source_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","param_id":"missing","value":12.0}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(!rejected_commit.accepted);
+        assert_eq!(
+            rejected_commit.reason,
+            Some(RnHostReasonCode::InvalidIntent)
+        );
+        assert_eq!(read_wire(host), previewed);
+        assert_eq!(document_json_bytes(host), document);
+
+        let cancelled = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"preview_source_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","param_id":"count","value":12.0}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(cancelled.accepted);
+        assert_ne!(
+            read_wire(host).projection_generation,
+            previewed.projection_generation
+        );
+        assert_eq!(document_json_bytes(host), document);
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"preview_source_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","param_id":"count","value":8.0}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            product.projection_generation = u64::MAX;
+            Ok(())
+        })
+        .expect("force exhaustion");
+        let at_max = read_wire(host);
+        let rejected_preview = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"preview_source_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","param_id":"count","value":9.0}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(!rejected_preview.accepted);
+        assert_eq!(
+            rejected_preview.reason,
+            Some(RnHostReasonCode::ProjectionGenerationExhausted)
+        );
+        assert_eq!(read_wire(host), at_max);
+        assert_eq!(document_json_bytes(host), document);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn timeline_source_params_cap_marks_truncated() {
+        let _lock = test_lock();
+        let mut document = Document::new_current();
+        let layer = document.layers.allocate("many-params").expect("layer");
+        let track = document.track_ids.allocate("track").expect("track");
+        let mut params = BTreeMap::new();
+        for i in 0..(MAX_SOURCE_PARAMS_PER_LAYER + 1) {
+            params.insert(format!("p{i:02}"), DocParam::Const(DocValue::F64(i as f64)));
+        }
+        document.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope: ItemEnvelope::new(layer),
+                start: RationalTime::ZERO,
+                duration: document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: "core.layer_source.radial_repeater".into(),
+                    effect_version: 1,
+                    params,
+                    extra: Default::default(),
+                },
+            })],
+        });
+        document.validate().expect("structurally valid");
+        let (timeline, truncated_total) = project_timeline(&document);
+        assert_eq!(timeline.layers.len(), 1);
+        let projected = &timeline.layers[0];
+        assert_eq!(projected.source_params.len(), MAX_SOURCE_PARAMS_PER_LAYER);
+        assert!(projected.source_params_truncated);
+        assert_eq!(truncated_total, 1);
+        assert_eq!(projected.source_params[0].param_id, "p00");
+        let last = MAX_SOURCE_PARAMS_PER_LAYER - 1;
+        assert_eq!(
+            projected.source_params[last].param_id,
+            format!("p{last:02}")
+        );
+        assert_eq!(projected.source_params[last].value, last as f64);
+    }
+
+    #[test]
+    fn place_vism_rejects_missing_filter_kind_and_non_finite_without_mutation() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("place-vism-rejects");
+        let before = serde_json::to_vec(&read_wire(host)).expect("before");
+
+        let missing = dispatch_raw_json(
+            host,
+            &place_vism_json(
+                host,
+                "core.layer_source.missing",
+                [0.0, 0.0],
+                r#"{"num":0,"den":1}"#,
+            ),
+        );
+        assert!(!missing.accepted);
+        assert_eq!(missing.reason, Some(RnHostReasonCode::DocumentPluginError));
+
+        let filter_kind = dispatch_raw_json(
+            host,
+            &place_vism_json(
+                host,
+                "core.filter.opacity",
+                [0.0, 0.0],
+                r#"{"num":0,"den":1}"#,
+            ),
+        );
+        assert!(!filter_kind.accepted);
+        assert_eq!(
+            filter_kind.reason,
+            Some(RnHostReasonCode::DocumentPluginError)
+        );
+
+        let non_finite = dispatch_wire(
+            host,
+            WireIntentEnvelope {
+                version: 1,
+                direction: RN_TO_HOST.to_owned(),
+                kind: "place_vism".into(),
+                host_handle: host.to_string(),
+                stage_handle: None,
+                projection_generation: None,
+                width: None,
+                height: None,
+                scale_factor: None,
+                focused: None,
+                phase: None,
+                view_local_x: None,
+                view_local_y: None,
+                sequence: None,
+                frame: None,
+                position: Some([f64::NAN, 0.0]),
+                playhead: Some(RationalTime::ZERO),
+                target: None,
+                dest: None,
+                key_id: None,
+                property: None,
+                time: None,
+                new: None,
+                interp: None,
+                delta: None,
+                plugin_id: Some("core.layer_source.radial_repeater".into()),
+                item_id: None,
+                effect_use_id: None,
+                param_id: None,
+                value: None,
+                output_path: None,
+                color: None,
+            },
+        );
+        assert!(!non_finite.accepted);
+        assert_eq!(non_finite.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let after = serde_json::to_vec(&read_wire(host)).expect("after");
+        assert_eq!(after, before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn place_vism_frame_graph_passes_unused_texture_write_wiring() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("place-vism-graph-wiring");
+        assert!(
+            dispatch_raw_json(
+                host,
+                &place_vism_json(
+                    host,
+                    "core.layer_source.radial_repeater",
+                    [0.0, 0.0],
+                    r#"{"num":0,"den":1}"#
+                ),
+            )
+            .accepted
+        );
+
+        let document = with_registry(|registry| {
+            Ok(registry.hosts.get(&host).expect("host").runtime.snapshot())
+        })
+        .expect("snapshot");
+        let runtime = first_party_runtime().expect("first_party_runtime");
+        let desc = frame_desc_from_composition(document.as_ref()).expect("desc");
+        let built = build_document_frame_graph(
+            document.as_ref(),
+            EvaluationTime::new(RationalTime::ZERO),
+            desc,
+            &DataTracks::new(),
+            &runtime,
+            None,
+        )
+        .expect("build graph after place_vism");
+        validate_render_graph_wiring(
+            &built.graph,
+            RationalTime::ZERO,
+            &RenderGraphInputs {
+                camera: built.camera,
+                video_sources: &[],
+                source_time: Some(built.source_time),
+                plugins: Some(runtime.executors()),
+            },
+        )
+        .expect("place_vism graph must pass UnusedTextureWrite wiring");
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn host_render_frame_after_place_vism_has_non_uniform_pixels() {
+        let _lock = test_lock();
+        let Some(gpu) = motolii_testkit::gpu_or_skip() else {
+            return;
+        };
+        let mut session = RenderSession::new(&gpu);
+        let host = create_empty_track_host("place-vism-frame-readback");
+        assert!(
+            dispatch_raw_json(
+                host,
+                &place_vism_json(
+                    host,
+                    "core.layer_source.radial_repeater",
+                    [0.0, 0.0],
+                    r#"{"num":0,"den":1}"#
+                ),
+            )
+            .accepted
+        );
+
+        let mut frame = None;
+        assert_eq!(
+            host_render_frame_for_app(host, &gpu, &mut session, &mut frame),
+            HostRenderFrameResult::Rendered
+        );
+        let first = frame.take().expect("frame");
+        let bytes = download_rgba(&gpu, &first.texture).expect("frame readback");
+        assert_eq!(
+            bytes.len(),
+            (first.width as usize) * (first.height as usize) * 4
+        );
+        let background = pixel_at(&bytes, first.width, 0, 0);
+        assert!(has_non_background_pixel(
+            &bytes,
+            first.width,
+            first.height,
+            background
+        ));
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn toggle_playback_without_session_does_not_move_time() {
+        let _lock = test_lock();
+        let host = create_host("toggle-playback");
+        let before = read_snapshot(host);
+        let response = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"toggle_playback","host_handle":"{host}"}}"#,
+                host = host,
+            ),
+        );
+        let after = read_snapshot(host);
+        assert_eq!(after.current_time, before.current_time);
+        if response.accepted {
+            assert_eq!(read_wire(host).playback_state, WirePlaybackState::Playing);
+            assert!(dispatch_raw_json(
+                host,
+                &format!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"toggle_playback","host_handle":"{host}"}}"#,
+                    host = host,
+                ),
+            )
+            .accepted);
+            assert_eq!(read_wire(host).playback_state, WirePlaybackState::Idle);
+        } else {
+            assert_eq!(response.reason, Some(RnHostReasonCode::InvalidIntent));
+            assert_eq!(read_wire(host).playback_state, WirePlaybackState::Idle);
+        }
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn shuttle_forward_starts_and_does_not_toggle_off() {
+        let _lock = test_lock();
+        let host = create_host("shuttle-forward");
+        let before = read_snapshot(host);
+        let start = dispatch_raw_json(host, &host_kind_json(host, "shuttle_forward"));
+        assert_eq!(read_snapshot(host).current_time, before.current_time);
+        if start.accepted {
+            assert_eq!(read_wire(host).playback_state, WirePlaybackState::Playing);
+            assert!(dispatch_raw_json(host, &host_kind_json(host, "shuttle_forward")).accepted);
+            assert_eq!(read_wire(host).playback_state, WirePlaybackState::Playing);
+            assert!(dispatch_raw_json(host, &host_kind_json(host, "shuttle_stop")).accepted);
+            assert_eq!(read_wire(host).playback_state, WirePlaybackState::Idle);
+        } else {
+            assert_eq!(start.reason, Some(RnHostReasonCode::InvalidIntent));
+            assert_eq!(read_wire(host).playback_state, WirePlaybackState::Idle);
+        }
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn shuttle_stop_does_not_start_playback() {
+        let _lock = test_lock();
+        let host = create_host("shuttle-stop");
+        let before = read_snapshot(host);
+        assert_eq!(read_wire(host).playback_state, WirePlaybackState::Idle);
+        assert!(dispatch_raw_json(host, &host_kind_json(host, "shuttle_stop")).accepted);
+        let after = read_snapshot(host);
+        assert_eq!(after.current_time, before.current_time);
+        assert_eq!(read_wire(host).playback_state, WirePlaybackState::Idle);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn shuttle_reverse_steps_playhead_via_set_time_and_stops_at_zero() {
+        let _lock = test_lock();
+        let host = create_host("shuttle-reverse");
+        let fps = read_snapshot(host).timeline.fps;
+        assert!(dispatch_raw_json(host, &set_time_json(host, "45")).accepted);
+        assert!(dispatch_raw_json(host, &host_kind_json(host, "shuttle_reverse")).accepted);
+        assert_eq!(
+            read_snapshot(host).current_time,
+            RationalTime::try_from_frame(44, fps).expect("frame 44")
+        );
+        assert_eq!(read_wire(host).playback_state, WirePlaybackState::Idle);
+
+        assert!(dispatch_raw_json(host, &set_time_json(host, "0")).accepted);
+        let at_zero = read_snapshot(host);
+        assert!(dispatch_raw_json(host, &host_kind_json(host, "shuttle_reverse")).accepted);
+        let still = read_snapshot(host);
+        assert_eq!(still.current_time, RationalTime::ZERO);
+        assert_eq!(still.current_time, at_zero.current_time);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn preview_effect_param_keeps_revision_and_commit_writes() {
+        let _lock = test_lock();
+        let host = create_host("preview-effect-param");
+        let baseline = read_snapshot(host);
+        let layer_id = baseline.layer_ids[0].clone();
+        let target = LayerId::from_raw(layer_id.parse().expect("layer"));
+        seed_primary(host, target);
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        let attached_wire = read_wire(host);
+        let attached = &layer_effects(&attached_wire, &layer_id)[0];
+        let effect_use_id = attached.effect_use_id.clone();
+        let before = read_snapshot(host);
+        let previewed = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"preview_effect_param","host_handle":"{host}","target":"{layer}","effect_use_id":"{effect}","param_id":"amount","value":0.25}}"#,
+                host = host,
+                layer = layer_id,
+                effect = effect_use_id,
+            ),
+        );
+        assert!(previewed.accepted, "preview reason={:?}", previewed.reason);
+        let after_preview = read_snapshot(host);
+        assert_eq!(after_preview.revision, before.revision);
+        assert_ne!(
+            after_preview.projection_generation,
+            before.projection_generation
+        );
+        let preview_wire = read_wire(host);
+        assert_eq!(
+            layer_effects(&preview_wire, &layer_id)[0].params[0].value,
+            1.0
+        );
+        let preview_params = preview_wire
+            .selected_doc_params
+            .as_ref()
+            .expect("selected_doc_params");
+        assert_eq!(preview_params.layer_id, layer_id);
+        assert_eq!(preview_params.effects[0].params[0].value, 0.25);
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"set_effect_param","host_handle":"{host}","target":"{layer}","effect_use_id":"{effect}","param_id":"amount","value":0.25}}"#,
+                host = host,
+                layer = layer_id,
+                effect = effect_use_id,
+            ),
+        )
+        .accepted);
+        let after_commit = read_snapshot(host);
+        assert_ne!(after_commit.revision, before.revision);
+        assert_eq!(
+            layer_effects(&read_wire(host), &layer_id)[0].params[0].value,
+            0.25
+        );
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn rejected_effect_commit_preserves_preview_and_same_live_cancels_it() {
+        let _lock = test_lock();
+        let host = create_host("preview-effect-reject");
+        let layer_id = read_snapshot(host).layer_ids[0].clone();
+        seed_primary(host, LayerId::from_raw(layer_id.parse().expect("layer")));
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        )
+        .accepted);
+        let effect_use_id = layer_effects(&read_wire(host), &layer_id)[0]
+            .effect_use_id
+            .clone();
+        assert!(dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"preview_effect_param","host_handle":"{host}","target":"{layer}","effect_use_id":"{effect}","param_id":"amount","value":0.25}}"#,
+                host = host,
+                layer = layer_id,
+                effect = effect_use_id,
+            ),
+        )
+        .accepted);
+
+        let previewed = read_wire(host);
+        let document = document_json_bytes(host);
+        let rejected = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"set_effect_param","host_handle":"{host}","target":"{layer}","effect_use_id":"{effect}","param_id":"missing","value":1.0}}"#,
+                host = host,
+                layer = layer_id,
+                effect = effect_use_id,
+            ),
+        );
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert_eq!(read_wire(host), previewed);
+        assert_eq!(document_json_bytes(host), document);
+
+        let cancelled = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"preview_effect_param","host_handle":"{host}","target":"{layer}","effect_use_id":"{effect}","param_id":"amount","value":1.0}}"#,
+                host = host,
+                layer = layer_id,
+                effect = effect_use_id,
+            ),
+        );
+        assert!(cancelled.accepted);
+        assert_ne!(
+            read_wire(host).projection_generation,
+            previewed.projection_generation
+        );
+        assert_eq!(document_json_bytes(host), document);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn export_document_rejects_empty_path_without_writing_document() {
+        let _lock = test_lock();
+        let host = create_host("export-empty-path");
+        let before = document_json_bytes(host);
+        let rejected = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"export_document","host_handle":"{host}","output_path":""}}"#
+            ),
+        );
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert_eq!(rejected.message.as_deref(), Some("output path is required"));
+        assert_eq!(document_json_bytes(host), before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn export_document_rejects_missing_path_without_writing_document() {
+        let _lock = test_lock();
+        let host = create_host("export-missing-path");
+        let before = document_json_bytes(host);
+        let rejected = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"export_document","host_handle":"{host}"}}"#
+            ),
+        );
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert_eq!(rejected.message.as_deref(), Some("output path is required"));
+        assert_eq!(document_json_bytes(host), before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn export_document_refuses_plugin_only_document_without_creating_file() {
+        let _lock = test_lock();
+        let host = create_host("export-no-video");
+        let before = document_json_bytes(host);
+        let output = tmp_dir("rn-export-no-video").join("out.mp4");
+        let rejected = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"export_document","host_handle":"{host}","output_path":"{}"}}"#,
+                output.display()
+            ),
+        );
+        assert!(!rejected.accepted);
+        assert_eq!(rejected.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert!(
+            rejected
+                .message
+                .as_deref()
+                .is_some_and(|message| !message.is_empty()),
+            "refusal must carry an immediate reason, got {:?}",
+            rejected.message
+        );
+        assert!(
+            !output.exists(),
+            "refused export must not create {}",
+            output.display()
+        );
+        assert_eq!(document_json_bytes(host), before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_opacity_and_attach_effect_reject_without_primary() {
+        let _lock = test_lock();
+        let host = create_host("edit-without-primary");
+        let baseline = read_snapshot(host);
+        assert!(baseline.primary_layer_id.is_none());
+        let layer_id = baseline.layer_ids[0].clone();
+        let before = document_json_bytes(host);
+
+        let opacity = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_opacity","#,
+                    r#""host_handle":"{host}","target":"{layer}","value":0.4}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(!opacity.accepted);
+        assert_eq!(opacity.reason, Some(RnHostReasonCode::InvalidIntent));
+
+        let attach = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"attach_effect","#,
+                    r#""host_handle":"{host}","target":"{layer}","plugin_id":"core.filter.opacity"}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(!attach.accepted);
+        assert_eq!(attach.reason, Some(RnHostReasonCode::InvalidIntent));
+        assert_eq!(document_json_bytes(host), before);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn seventeen_place_rectangle_layers_are_not_truncated() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("seventeen-layers");
+        for _ in 0..17 {
+            let placed = dispatch_raw_json(
+                host,
+                &format!(
+                    concat!(
+                        r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                        r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                    ),
+                    host = host,
+                ),
+            );
+            assert!(placed.accepted, "reason={:?}", placed.reason);
+        }
+        let wire = read_wire(host);
+        assert_eq!(wire.timeline.layers.len(), 17);
+        assert!(!wire.timeline.layers_truncated);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn set_source_param_color_writes_and_projects() {
+        let _lock = test_lock();
+        let host = create_empty_track_host("set-source-param-color");
+        assert!(
+            dispatch_raw_json(
+                host,
+                &place_vism_json(
+                    host,
+                    "core.layer_source.radial_repeater",
+                    [0.0, 0.0],
+                    r#"{"num":0,"den":1}"#
+                ),
+            )
+            .accepted
+        );
+        let layer_id = read_wire(host).primary_layer_id.clone().expect("primary");
+        let changed = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"set_source_param","#,
+                    r#""host_handle":"{host}","target":"{layer}","param_id":"color","#,
+                    r#""color":[0.2,0.4,0.6,1.0]}}"#
+                ),
+                host = host,
+                layer = layer_id,
+            ),
+        );
+        assert!(changed.accepted, "reason={:?}", changed.reason);
+        let wire = read_wire(host);
+        let layer = wire
+            .timeline
+            .layers
+            .iter()
+            .find(|layer| layer.layer_id == layer_id)
+            .expect("layer");
+        let color = layer
+            .source_params
+            .iter()
+            .find(|param| param.param_id == "color")
+            .expect("color");
+        assert_eq!(color.color, Some([0.2, 0.4, 0.6, 1.0]));
+        assert_eq!(color.value, 0.0);
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn timeline_effect_color_const_is_projected() {
+        let mut document = Document::new_current();
+        let layer = document.layers.allocate("fx").expect("layer");
+        let track = document.track_ids.allocate("track").expect("track");
+        let def_id = EffectDefinitionId::from_raw(document.next_stable_id.allocate().expect("def"));
+        let use_id = EffectId::from_raw(document.next_stable_id.allocate().expect("use"));
+        document.effect_definitions.push(EffectDefinition::new(
+            def_id,
+            "vendor.filter.fixture",
+            1,
+            true,
+            BTreeMap::from([
+                ("amount".into(), DocParam::const_f64(0.5)),
+                ("tint".into(), DocParam::const_color([0.1, 0.2, 0.3, 1.0])),
+            ]),
+            Default::default(),
+        ));
+        let mut envelope = ItemEnvelope::new(layer);
+        envelope.effects.push(EffectUse {
+            id: use_id,
+            definition_id: def_id,
+        });
+        document.tracks.push(Track {
+            id: track,
+            items: vec![TrackItem::Clip(Clip {
+                envelope,
+                start: RationalTime::ZERO,
+                duration: document.composition.duration,
+                time_map: TimeMap::identity(),
+                source: ClipSource::Plugin {
+                    plugin_id: RECT_LAYER_SOURCE.into(),
+                    effect_version: 1,
+                    params: rect_params([0.0, 0.0], [1.0, 1.0]),
+                    extra: Default::default(),
+                },
+            })],
+        });
+        let (effects, truncated, hidden) = project_layer_effects(&document, layer);
+        assert!(!truncated);
+        assert_eq!(hidden, 0);
+        assert_eq!(effects.len(), 1);
+        assert_eq!(effects[0].params.len(), 2);
+        let amount = effects[0]
+            .params
+            .iter()
+            .find(|param| param.param_id == "amount")
+            .expect("amount");
+        assert_eq!(amount.value, 0.5);
+        assert_eq!(amount.color, None);
+        let tint = effects[0]
+            .params
+            .iter()
+            .find(|param| param.param_id == "tint")
+            .expect("tint");
+        assert_eq!(tint.value, 0.0);
+        assert_eq!(tint.color, Some([0.1, 0.2, 0.3, 1.0]));
     }
 }

@@ -41,9 +41,9 @@ pub use replay::{
     document_fingerprint, edit_payload, replay_from_base, JournalEdit, ReplayFailure,
     ReplayOutcome, V1_EDIT_FORMAT_VERSION, V2_EDIT_FORMAT_VERSION, V3_EDIT_FORMAT_VERSION,
 };
+pub use session::{JournalCommitReconcileOutcome, ProjectSession, SessionError};
 pub use session::{LegacySidecarMigrationDisposition, LegacySidecarMigrationReport};
-pub use session::{ProjectSession, SessionError};
-pub use wal::WalError;
+pub use wal::{JournalCommitReceipt, WalError};
 
 #[cfg(test)]
 mod fault_acceptance;

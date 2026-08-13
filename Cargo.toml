@@ -64,8 +64,6 @@ foyer-memory = { version = "=0.22.3" }
 vello_svg = { version = "=0.10.0", default-features = false, features = ["wgpu"] }
 tempfile = "=3.27.0"
 bytemuck = { version = "1", features = ["derive"] }
-fontique = "0.10"
-harfrust = "0.7"
 vello = "0.9.0"
 # N-OVERLAY: 2D overlay renderer(handle/gizmo/outline/grid/safe area/path)。
 # base previewとfinal compositeはwgpuが所有し、overlayはdirty時だけraster/upload。

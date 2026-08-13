@@ -8,6 +8,7 @@ use std::thread::{self, JoinHandle};
 use motolii_core::{CompCamera, FrameDesc, Quality};
 use motolii_doc::{build_document_frame_graph, Command, CommandError, Document, EvaluationTime};
 use motolii_eval::DataTracks;
+use motolii_export::VideoSourceBinder;
 use motolii_gpu::GpuCtx;
 use motolii_plugins_firstparty::first_party_runtime;
 use motolii_render::{render_graph_cached, RenderGraphInputs, RenderSession, RenderedFrame};
@@ -439,13 +440,13 @@ struct RenderWorkPayload {
 }
 
 #[derive(Debug)]
-enum PreparedPreviewDocument<'a> {
+pub(crate) enum PreparedPreviewDocument<'a> {
     Baseline(&'a Document),
     Preview(Box<Document>),
 }
 
 impl PreparedPreviewDocument<'_> {
-    fn as_ref(&self) -> &Document {
+    pub(crate) fn as_ref(&self) -> &Document {
         match self {
             Self::Baseline(document) => document,
             Self::Preview(document) => document,
@@ -453,7 +454,7 @@ impl PreparedPreviewDocument<'_> {
     }
 }
 
-fn prepare_preview_document<'a>(
+pub(crate) fn prepare_preview_document<'a>(
     request: &'a RenderRequest,
     preview_command: Option<&Command>,
 ) -> Result<PreparedPreviewDocument<'a>, RenderWorkerError> {
@@ -485,6 +486,8 @@ pub(crate) enum RenderWorkerError {
     Render(#[from] motolii_render::RenderError),
     #[error(transparent)]
     Gpu(#[from] motolii_gpu::GpuRuntimeError),
+    #[error(transparent)]
+    Export(#[from] motolii_export::ExportError),
     #[error("render worker executor panicked")]
     WorkerPanicked,
 }
@@ -516,6 +519,7 @@ impl RenderWorker {
     pub(crate) fn spawn(gpu: Arc<GpuCtx>) -> Result<Self, RenderWorkerStartError> {
         let runtime = first_party_runtime()?;
         let mut session = RenderSession::new(&gpu);
+        let mut video_binder = VideoSourceBinder::new(&gpu);
         let execute_gpu = Arc::clone(&gpu);
         let execute = move |work: RenderWorkPayload| {
             let prepared = prepare_preview_document(&work.request, work.preview_command.as_ref())?;
@@ -529,6 +533,14 @@ impl RenderWorker {
                 &runtime,
                 None,
             )?;
+            let bound = video_binder.bind(
+                &execute_gpu,
+                document,
+                None,
+                &built.video_slots,
+                work.request.desc,
+            )?;
+            let video_inputs = bound.as_inputs();
             let rendered = render_graph_cached(
                 &execute_gpu,
                 &mut session,
@@ -536,7 +548,7 @@ impl RenderWorker {
                 &built.graph,
                 &RenderGraphInputs {
                     camera: built.camera,
-                    video_sources: &[],
+                    video_sources: &video_inputs,
                     source_time: Some(built.source_time),
                     plugins: Some(runtime.executors()),
                 },
@@ -1174,12 +1186,17 @@ mod tests {
             "create_render_pipeline",
             "create_shader_module",
             "DisplaySlot",
+            "video_sources: &[]",
         ] {
             assert!(
                 !production.contains(forbidden),
                 "production render worker contains forbidden token {forbidden}"
             );
         }
+        assert!(
+            production.contains("VideoSourceBinder"),
+            "preview eval must pass export FrameReader textures into render_graph_cached"
+        );
     }
 
     #[test]
