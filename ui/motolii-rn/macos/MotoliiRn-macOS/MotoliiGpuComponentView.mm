@@ -161,6 +161,7 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
 }
 
 @interface MotoliiMetalView : NSView
+- (BOOL)cancelActiveGesture;
 @end
 
 @interface MotoliiTimelineMetalView : MotoliiMetalView
@@ -223,12 +224,23 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
   if (!self.stageGestureActive || self.stageGestureButton != button) {
     return;
   }
-  self.stagePointerHandler(
-      phase, button, MotoliiStageModifierBits(event.modifierFlags), point.x,
-      NSHeight(self.bounds) - point.y);
   if (phase == 2 || phase == 3) {
     self.stageGestureActive = NO;
   }
+  self.stagePointerHandler(
+      phase, button, MotoliiStageModifierBits(event.modifierFlags), point.x,
+      NSHeight(self.bounds) - point.y);
+}
+- (BOOL)cancelActiveGesture
+{
+  if (!self.stageGestureActive) {
+    return NO;
+  }
+  self.stageGestureActive = NO;
+  if (self.stagePointerHandler) {
+    self.stagePointerHandler(3, self.stageGestureButton, 0, 0, 0);
+  }
+  return YES;
 }
 - (void)mouseDown:(NSEvent *)event
 {
@@ -319,20 +331,14 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
 
 - (void)keyDown:(NSEvent *)event
 {
+  if (event.keyCode == 53 && [self cancelActiveGesture]) {
+    return;
+  }
   if (MotoliiDispatchKeymap(event, NO) == 0) {
     [super keyDown:event];
   }
 }
 
-- (void)viewDidMoveToWindow
-{
-  [super viewDidMoveToWindow];
-  // window喪失時だけcancelを維持。
-  if (!self.window && self.stageGestureActive && self.stagePointerHandler) {
-    self.stagePointerHandler(3, self.stageGestureButton, 0, 0, 0);
-    self.stageGestureActive = NO;
-  }
-}
 @end
 
 @implementation MotoliiTimelineMetalView
@@ -363,14 +369,31 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
 {
   NSPoint point = [self convertPoint:event.locationInWindow fromView:nil];
   uint32_t modifiers = (event.modifierFlags & NSEventModifierFlagCommand) ? 1u : 0u;
-  if (self.timelinePointerHandler) {
-    self.timelinePointerHandler(phase, point.x, NSHeight(self.bounds) - point.y, modifiers);
-  }
   if (phase == 0) {
+    if (self.timelineGestureActive) {
+      return;
+    }
     self.timelineGestureActive = YES;
+  } else if (!self.timelineGestureActive) {
+    return;
   } else if (phase == 2 || phase == 3) {
     self.timelineGestureActive = NO;
   }
+  if (self.timelinePointerHandler) {
+    self.timelinePointerHandler(phase, point.x, NSHeight(self.bounds) - point.y, modifiers);
+  }
+}
+
+- (BOOL)cancelActiveGesture
+{
+  if (!self.timelineGestureActive) {
+    return NO;
+  }
+  self.timelineGestureActive = NO;
+  if (self.timelinePointerHandler) {
+    self.timelinePointerHandler(3, 0, 0, 0);
+  }
+  return YES;
 }
 
 - (void)mouseDown:(NSEvent *)event
@@ -415,6 +438,9 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
 
 - (void)keyDown:(NSEvent *)event
 {
+  if (event.keyCode == 53 && [self cancelActiveGesture]) {
+    return;
+  }
   int32_t result = MotoliiDispatchKeymap(event, YES);
   if (result == 2 && self.timelineDeleteHandler) {
     self.timelineDeleteHandler();
@@ -457,18 +483,49 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
                    event:event];
 }
 
-- (void)viewDidMoveToWindow
-{
-  [super viewDidMoveToWindow];
-  if (!self.window && self.timelineGestureActive && self.timelinePointerHandler) {
-    self.timelinePointerHandler(3, 0, 0, 0);
-    self.timelineGestureActive = NO;
-  }
-}
-
 @end
 
 @implementation MotoliiMetalView
+
+- (BOOL)cancelActiveGesture
+{
+  return NO;
+}
+
+- (BOOL)resignFirstResponder
+{
+  BOOL resigned = [super resignFirstResponder];
+  if (resigned) {
+    [self cancelActiveGesture];
+  }
+  return resigned;
+}
+
+- (void)windowDidResignKey:(NSNotification *)notification
+{
+  (void)notification;
+  [self cancelActiveGesture];
+}
+
+- (void)viewDidMoveToWindow
+{
+  [super viewDidMoveToWindow];
+  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+  [center removeObserver:self name:NSWindowDidResignKeyNotification object:nil];
+  if (self.window) {
+    [center addObserver:self
+               selector:@selector(windowDidResignKey:)
+                   name:NSWindowDidResignKeyNotification
+                 object:self.window];
+  } else {
+    [self cancelActiveGesture];
+  }
+}
+
+- (void)dealloc
+{
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
 
 - (CALayer *)makeBackingLayer
 {
@@ -690,15 +747,7 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
 
 - (void)stopTimelineRenderer
 {
-  if (_timelineRenderer && _timelineView.timelineGestureActive) {
-    if (_timelineView.timelinePointerHandler) {
-      _timelineView.timelinePointerHandler(3, 0, 0, 0);
-    } else {
-      MotoliiTimelineFeedback feedback = {};
-      motolii_macos_timeline_renderer_pointer(_timelineRenderer, 3, 0.0, 0.0, 0u, &feedback);
-    }
-    _timelineView.timelineGestureActive = NO;
-  }
+  [_timelineView cancelActiveGesture];
   [_timelineTimer invalidate];
   _timelineTimer = nil;
   if (_timelineRenderer) {
@@ -1015,6 +1064,7 @@ static int32_t MotoliiDispatchKeymap(NSEvent *event, BOOL timelineFocused)
 
 - (void)stopRenderer
 {
+  [_metalView cancelActiveGesture];
   [_frameTimer invalidate];
   _frameTimer = nil;
   if (_renderer) {
@@ -1035,6 +1085,10 @@ void MotoliiInstallProductKeymapMonitor(void)
     monitor = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown
                                                     handler:^NSEvent *(NSEvent *event) {
       NSResponder *fr = event.window.firstResponder;
+      if (event.keyCode == 53 && [fr isKindOfClass:[MotoliiMetalView class]] &&
+          [(MotoliiMetalView *)fr cancelActiveGesture]) {
+        return nil;
+      }
       BOOL timelineFocused = [fr isKindOfClass:[MotoliiTimelineMetalView class]] ||
           [fr isKindOfClass:[MotoliiTimelineComponentView class]];
       int32_t result = MotoliiDispatchKeymap(event, timelineFocused);
