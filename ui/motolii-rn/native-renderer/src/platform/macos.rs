@@ -53,11 +53,14 @@ impl MacOsSurfaceRenderer {
         self.core.set_created_item(item_id)
     }
 
-    pub(crate) fn stage_transform_projection(&self) -> Option<StageTransformProjection> {
-        self.core.stage_transform_projection()
+    pub(crate) fn take_stage_transform_projection(&mut self) -> Option<StageTransformProjection> {
+        self.core.take_stage_transform_projection()
     }
 
-    pub(crate) fn set_stage_transform_projection(&mut self, projection: StageTransformProjection) -> bool {
+    pub(crate) fn set_stage_transform_projection(
+        &mut self,
+        projection: StageTransformProjection,
+    ) -> bool {
         self.core.set_stage_transform_projection(projection)
     }
 

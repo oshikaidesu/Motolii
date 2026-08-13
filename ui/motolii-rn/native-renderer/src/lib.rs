@@ -156,7 +156,7 @@ pub unsafe extern "C" fn motolii_macos_stage_renderer_get_transform(
     }
     catch_unwind(AssertUnwindSafe(|| unsafe {
         let Some(projection) =
-            (&*handle.cast::<MacOsSurfaceRenderer>()).stage_transform_projection()
+            (&mut *handle.cast::<MacOsSurfaceRenderer>()).take_stage_transform_projection()
         else {
             return false;
         };

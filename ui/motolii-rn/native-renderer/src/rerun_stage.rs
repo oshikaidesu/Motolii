@@ -36,6 +36,7 @@ pub(crate) struct EmbeddedSpatialStage {
     gizmo: Gizmo,
     fixture_transform: Transform,
     fixture_item_id: String,
+    transform_dirty: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -82,6 +83,7 @@ impl EmbeddedSpatialStage {
             gizmo: Gizmo::default(),
             fixture_transform: Transform::default(),
             fixture_item_id: "rectangle@0.500000,0.500000|pucker-bloat".into(),
+            transform_dirty: false,
         };
         if !stage.set_created_item("rectangle@0.500000,0.500000|pucker-bloat") {
             return Err("seed path rectangle for embedded stage".into());
@@ -126,8 +128,19 @@ impl EmbeddedSpatialStage {
         }
     }
 
+    /// ギズモ操作で変化した値だけをInspectorへ返す。
+    pub(crate) fn take_transform_projection(&mut self) -> Option<StageTransformProjection> {
+        self.transform_dirty.then(|| {
+            self.transform_dirty = false;
+            self.transform_projection()
+        })
+    }
+
     /// Inspectorとgizmoが共有する一時値。Documentには書き込まない。
-    pub(crate) fn set_transform_projection(&mut self, projection: StageTransformProjection) -> bool {
+    pub(crate) fn set_transform_projection(
+        &mut self,
+        projection: StageTransformProjection,
+    ) -> bool {
         let transform = Transform::from_scale_rotation_translation(
             DVec3::ONE,
             DQuat::from_euler(
@@ -369,6 +382,7 @@ impl EmbeddedSpatialStage {
             self.fixture_transform = transform;
             let item_id = self.fixture_item_id.clone();
             let _ = self.set_created_item(&item_id);
+            self.transform_dirty = true;
         }
 
         let draw_data = self.gizmo.draw();

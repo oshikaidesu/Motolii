@@ -170,13 +170,16 @@ impl RendererCore {
             .is_some_and(|stage| stage.rerun.set_created_item(item_id))
     }
 
-    pub(crate) fn stage_transform_projection(&self) -> Option<StageTransformProjection> {
+    pub(crate) fn take_stage_transform_projection(&mut self) -> Option<StageTransformProjection> {
         self.stage
-            .as_ref()
-            .map(|stage| stage.rerun.transform_projection())
+            .as_mut()
+            .and_then(|stage| stage.rerun.take_transform_projection())
     }
 
-    pub(crate) fn set_stage_transform_projection(&mut self, projection: StageTransformProjection) -> bool {
+    pub(crate) fn set_stage_transform_projection(
+        &mut self,
+        projection: StageTransformProjection,
+    ) -> bool {
         self.stage
             .as_mut()
             .is_some_and(|stage| stage.rerun.set_transform_projection(projection))
