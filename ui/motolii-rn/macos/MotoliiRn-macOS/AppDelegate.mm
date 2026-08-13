@@ -8,6 +8,7 @@
 #include <cstring>
 
 extern "C" bool motolii_rnapp_host_ensure(const uint8_t *path_utf8, size_t path_len);
+extern "C" bool motolii_rnapp_host_shutdown(void);
 
 @implementation AppDelegate
 
@@ -48,6 +49,12 @@ extern "C" bool motolii_rnapp_host_ensure(const uint8_t *path_utf8, size_t path_
   }
 
   return [super applicationDidFinishLaunching:notification];
+}
+
+- (void)applicationWillTerminate:(NSNotification *)notification
+{
+  (void)motolii_rnapp_host_shutdown();
+  [super applicationWillTerminate:notification];
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge

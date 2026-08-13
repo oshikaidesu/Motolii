@@ -2,7 +2,7 @@
 //!
 //! processに最大1 host。ObjC/RNは薄いcarrierとしてここへ委譲する。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -38,6 +38,11 @@ use motolii_ui::{
     motolii_rn_host_read_snapshot_json, motolii_rn_stage_register,
 };
 
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn motolii_rn_host_destroy(host_handle: u64, out: *mut u8, out_cap: usize) -> i64;
+}
+
 use motolii_ui::{
     AppStageGeometry, AppStageTransformEdit, AsciiKey, EffectiveTrigger, InputPhase, KeyToken,
     Modifier, Modifiers, PlatformCommandModifier, ProductAction, builtin_command_registry,
@@ -48,6 +53,8 @@ use motolii_ui::{
 
 struct HostSlot {
     handle: u64,
+    /// 同じlive Document writerへ再接続できるproject identity。
+    project_path: PathBuf,
     /// processに1つだけのStage seat。register後に埋まる。
     stage_handle: Option<u64>,
     /// stage_pointer がdown状態かどうか（Rust内状態機械）。
@@ -300,13 +307,14 @@ pub unsafe extern "C" fn motolii_rnapp_host_ensure(path_utf8: *const u8, path_le
     else {
         return false;
     };
+    let project_path = Path::new(path);
     let Ok(mut guard) = host_slot().lock() else {
         return false;
     };
-    if guard.is_some() {
-        return true;
+    if let Some(slot) = guard.as_ref() {
+        return slot.project_path == project_path;
     }
-    if !ensure_project_document(Path::new(path)) {
+    if !ensure_project_document(project_path) {
         return false;
     }
     let path_bytes = path.as_bytes();
@@ -337,6 +345,7 @@ pub unsafe extern "C" fn motolii_rnapp_host_ensure(path_utf8: *const u8, path_le
     }
     *guard = Some(HostSlot {
         handle: host_handle,
+        project_path: project_path.to_owned(),
         stage_handle: None,
         stage_pointer_active: false,
         stage_mounted: false,
@@ -345,6 +354,34 @@ pub unsafe extern "C" fn motolii_rnapp_host_ensure(path_utf8: *const u8, path_le
         stage_logical_height: 0.0,
     });
     true
+}
+
+#[cfg(target_os = "macos")]
+fn try_host_shutdown() -> bool {
+    let Ok(mut guard) = host_slot().lock() else {
+        return false;
+    };
+    let Some(slot) = guard.as_ref() else {
+        return true;
+    };
+    let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
+    let written = unsafe { motolii_rn_host_destroy(slot.handle, out.as_mut_ptr(), out.len()) };
+    let Some(response) =
+        slice_from_written(&out, written).and_then(|bytes| std::str::from_utf8(bytes).ok())
+    else {
+        return false;
+    };
+    if !response_is_accepted(response) {
+        return false;
+    }
+    *guard = None;
+    true
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn motolii_rnapp_host_shutdown() -> bool {
+    try_host_shutdown()
 }
 
 /// Host投影のStage seatを1つだけregisterする。既登録はreuse。
@@ -2519,6 +2556,7 @@ mod tests {
         let mut guard = host_slot().lock().expect("slot");
         *guard = Some(HostSlot {
             handle: host,
+            project_path: PathBuf::new(),
             stage_handle: None,
             stage_pointer_active: false,
             stage_mounted: false,
@@ -2821,6 +2859,60 @@ mod tests {
         assert!(written > 0);
         assert_eq!(&out[..written as usize], expected.as_bytes());
         *host_startup_reject().lock().expect("startup reject") = None;
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn host_lifecycle_identity_reuses_same_path_and_tombstones_shutdown_handle() {
+        let _lock = test_lock();
+        clear_slot();
+        *host_startup_reject().lock().expect("startup reject") = None;
+        let first_path = temp_project("lifecycle-first");
+        let first_bytes = first_path.to_string_lossy();
+
+        assert!(unsafe { motolii_rnapp_host_ensure(first_bytes.as_ptr(), first_bytes.len()) });
+        let first_host = try_host_handle().expect("first host");
+        assert!(unsafe { motolii_rnapp_host_ensure(first_bytes.as_ptr(), first_bytes.len()) });
+        assert_eq!(try_host_handle(), Some(first_host));
+
+        assert!(try_stage_mount(1600.0, 900.0, 1.0));
+        let first_stage = host_slot()
+            .lock()
+            .expect("slot")
+            .as_ref()
+            .and_then(|slot| slot.stage_handle)
+            .expect("stage");
+        assert!(try_stage_unmount());
+        assert!(try_stage_mount(1600.0, 900.0, 1.0));
+        {
+            let remounted = host_slot().lock().expect("slot");
+            let remounted = remounted.as_ref().expect("remounted slot");
+            assert_eq!(remounted.handle, first_host);
+            assert_eq!(remounted.stage_handle, Some(first_stage));
+        }
+
+        let second_path = temp_project("lifecycle-second");
+        let second_bytes = second_path.to_string_lossy();
+        assert!(!unsafe { motolii_rnapp_host_ensure(second_bytes.as_ptr(), second_bytes.len()) });
+        assert_eq!(try_host_handle(), Some(first_host));
+
+        assert!(try_host_shutdown());
+        assert_eq!(try_host_handle(), None);
+        assert!(try_host_shutdown(), "shutdown without a slot is idempotent");
+
+        let mut out = [0u8; 1024];
+        let written = motolii_rn_host_read_snapshot_json(first_host, out.as_mut_ptr(), out.len());
+        let rejected = std::str::from_utf8(
+            slice_from_written(&out, written).expect("destroyed host response"),
+        )
+        .expect("destroyed host utf8");
+        assert!(rejected.contains(r#""accepted":false"#));
+        assert!(rejected.contains(r#""reason":"destroyed_host_handle""#));
+
+        assert!(unsafe { motolii_rnapp_host_ensure(second_bytes.as_ptr(), second_bytes.len()) });
+        let second_host = try_host_handle().expect("second host");
+        assert_ne!(second_host, first_host, "host handles stay monotonic");
+        assert!(try_host_shutdown());
     }
 
     #[test]
