@@ -103,6 +103,42 @@ pub(crate) struct HostTimelineProjection {
     pub stage_geometry: Option<HostStageGeometry>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct HostTerminalDiagnostic {
+    pub reason: String,
+    pub host_handle: Option<String>,
+    pub stage_handle: Option<String>,
+    pub timeline_handle: Option<String>,
+    pub expected_projection_generation: Option<String>,
+    pub actual_projection_generation: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct HostTerminalResult {
+    pub accepted: bool,
+    pub diagnostics: Vec<HostTerminalDiagnostic>,
+    pub message: Option<String>,
+    pub projection: Option<HostTimelineProjection>,
+}
+
+impl HostTerminalResult {
+    pub(crate) fn stamp(&self) -> Option<(u64, u64)> {
+        let projection = self.projection.as_ref()?;
+        Some((
+            projection.revision.parse().ok()?,
+            projection.projection_generation.parse().ok()?,
+        ))
+    }
+
+    pub(crate) fn feedback(&self) -> Option<&str> {
+        self.message.as_deref().or_else(|| {
+            self.diagnostics
+                .first()
+                .map(|diagnostic| diagnostic.reason.as_str())
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HostCatalogProjection {
     pub effects: Vec<HostCatalogEffect>,
@@ -569,7 +605,7 @@ pub unsafe extern "C" fn motolii_rnapp_host_keymap(kind_utf8: *const u8, kind_le
     else {
         return false;
     };
-    try_dispatch_keymap(kind)
+    try_dispatch_keymap(kind).is_some_and(|result| result.accepted)
 }
 
 const MOD_SHIFT: u32 = 1;
@@ -675,7 +711,7 @@ pub unsafe extern "C" fn motolii_rnapp_host_key_event(
     if kind == "delete_layer" && timeline_focused {
         return 2;
     }
-    i32::from(try_dispatch_keymap(kind))
+    i32::from(try_dispatch_keymap(kind).is_some_and(|result| result.accepted))
 }
 
 #[cfg(target_os = "macos")]
@@ -874,45 +910,45 @@ pub(crate) fn playhead_from_current_time(num: i64, den: i64, song_bars: f32) -> 
     (scene_secs / f64::from(song_bars)).clamp(0.0, 1.0)
 }
 
-/// process host slot経由でset_timeを送る。host不在はfalse(呼ばない)。
-pub(crate) fn try_dispatch_set_time(frame: i64) -> bool {
+/// process host slot経由でset_timeを送り、同じHost応答を返す。host不在はNone。
+pub(crate) fn try_dispatch_set_time(frame: i64) -> Option<HostTerminalResult> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = frame;
-        false
+        None
     }
     #[cfg(target_os = "macos")]
     {
         let Ok(guard) = host_slot().lock() else {
-            return false;
+            return None;
         };
         let Some(slot) = guard.as_ref() else {
-            return false;
+            return None;
         };
         let intent = format!(
             r#"{{"version":1,"direction":"rn-to-host","kind":"set_time","host_handle":"{}","frame":{}}}"#,
             slot.handle, frame
         );
-        dispatch_intent_json_accepted(slot.handle, &intent)
+        dispatch_intent_json_terminal(slot.handle, &intent)
     }
 }
 
 pub(crate) fn try_dispatch_timeline_edit(
     commit: &crate::timeline_skia::TimelineEditCommit,
-) -> bool {
+) -> Option<HostTerminalResult> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = commit;
-        false
+        None
     }
     #[cfg(target_os = "macos")]
     {
         use crate::timeline_skia::TimelineEditCommit;
         let Ok(guard) = host_slot().lock() else {
-            return false;
+            return None;
         };
         let Some(slot) = guard.as_ref() else {
-            return false;
+            return None;
         };
         let intent = match commit {
             TimelineEditCommit::SetClipStart { layer_id, bar } => {
@@ -952,7 +988,7 @@ pub(crate) fn try_dispatch_timeline_edit(
             } => {
                 // param_keys は diamond だけ。position_keys に無い id は commit しない。
                 if !snapshot_has_position_key(slot.handle, layer_id, *key_id) {
-                    return false;
+                    return None;
                 }
                 #[cfg(test)]
                 TEST_SET_POSITION_KEY_TIME_DISPATCH_COUNT.fetch_add(1, Ordering::SeqCst);
@@ -996,7 +1032,7 @@ pub(crate) fn try_dispatch_timeline_edit(
             TimelineEditCommit::RemovePositionKey { layer_id, key_id } => {
                 // param_keys diamond の Delete を Position 削除へ流さない。
                 if !snapshot_has_position_key(slot.handle, layer_id, *key_id) {
-                    return false;
+                    return None;
                 }
                 format!(
                     concat!(
@@ -1007,11 +1043,14 @@ pub(crate) fn try_dispatch_timeline_edit(
                 )
             }
         };
-        dispatch_intent_json_accepted(slot.handle, &intent)
+        dispatch_intent_json_terminal(slot.handle, &intent)
     }
 }
 
-pub(crate) fn try_dispatch_remove_position_key(layer_id: &str, key_id: u64) -> bool {
+pub(crate) fn try_dispatch_remove_position_key(
+    layer_id: &str,
+    key_id: u64,
+) -> Option<HostTerminalResult> {
     #[cfg(test)]
     TEST_KEYMAP_REMOVE_POSITION_KEY_COUNT.fetch_add(1, Ordering::SeqCst);
     try_dispatch_timeline_edit(
@@ -1024,22 +1063,22 @@ pub(crate) fn try_dispatch_remove_position_key(layer_id: &str, key_id: u64) -> b
 
 pub(crate) fn try_dispatch_timeline_selection(
     commit: &crate::timeline_skia::TimelineSelectionCommit,
-) -> bool {
+) -> Option<HostTerminalResult> {
     #[cfg(test)]
     TEST_SELECTION_DISPATCH_COUNT.fetch_add(1, Ordering::SeqCst);
     #[cfg(not(target_os = "macos"))]
     {
         let _ = commit;
-        false
+        None
     }
     #[cfg(target_os = "macos")]
     {
         use crate::timeline_skia::TimelineSelectionCommit;
         let Ok(guard) = host_slot().lock() else {
-            return false;
+            return None;
         };
         let Some(slot) = guard.as_ref() else {
-            return false;
+            return None;
         };
         let intent = match commit {
             TimelineSelectionCommit::SelectLayer { layer_id } => format!(
@@ -1057,28 +1096,31 @@ pub(crate) fn try_dispatch_timeline_selection(
                 slot.handle
             ),
         };
-        dispatch_intent_json_accepted(slot.handle, &intent)
+        dispatch_intent_json_terminal(slot.handle, &intent)
     }
 }
 
-pub(crate) fn try_dispatch_move_layer_by(target: &str, delta: [f64; 2]) -> bool {
+pub(crate) fn try_dispatch_move_layer_by(
+    target: &str,
+    delta: [f64; 2],
+) -> Option<HostTerminalResult> {
     #[cfg(test)]
     TEST_MOVE_LAYER_BY_DISPATCH_COUNT.fetch_add(1, Ordering::SeqCst);
     if !delta.iter().all(|value| value.is_finite()) {
-        return false;
+        return None;
     }
     #[cfg(not(target_os = "macos"))]
     {
         let _ = target;
-        false
+        None
     }
     #[cfg(target_os = "macos")]
     {
         let Ok(guard) = host_slot().lock() else {
-            return false;
+            return None;
         };
         let Some(slot) = guard.as_ref() else {
-            return false;
+            return None;
         };
         let intent = format!(
             concat!(
@@ -1087,7 +1129,7 @@ pub(crate) fn try_dispatch_move_layer_by(target: &str, delta: [f64; 2]) -> bool 
             ),
             slot.handle, target, delta[0], delta[1]
         );
-        dispatch_intent_json_accepted(slot.handle, &intent)
+        dispatch_intent_json_terminal(slot.handle, &intent)
     }
 }
 
@@ -1128,17 +1170,86 @@ pub(crate) fn try_commit_stage_transform(
     target: &str,
     edit: AppStageTransformEdit,
 ) -> Result<(), String> {
-    let target = target
-        .parse::<u64>()
-        .map_err(|_| "The selected layer identity is invalid".to_owned())?;
-    let handle = host_slot()
+    let result = dispatch_commit_stage_transform(expected_revision, target, edit);
+    if result.accepted {
+        Ok(())
+    } else {
+        Err(result
+            .feedback()
+            .unwrap_or("Stage transform rejected")
+            .to_owned())
+    }
+}
+
+pub(crate) fn dispatch_commit_stage_transform(
+    expected_revision: u64,
+    target: &str,
+    edit: AppStageTransformEdit,
+) -> HostTerminalResult {
+    let Ok(target) = target.parse::<u64>() else {
+        return rejected_terminal_result(
+            "invalid_layer_identity",
+            "The selected layer identity is invalid".to_owned(),
+        );
+    };
+    let Some(handle) = host_slot()
         .lock()
-        .map_err(|_| "Stage host is unavailable".to_owned())?
-        .as_ref()
-        .map(|slot| slot.handle)
-        .ok_or_else(|| "Stage host is unavailable".to_owned())?;
-    host_commit_stage_transform_for_app(handle, expected_revision, target, edit)
-        .map_err(|error| error.to_string())
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|slot| slot.handle))
+    else {
+        return rejected_terminal_result(
+            "host_unavailable",
+            "Stage host is unavailable".to_owned(),
+        );
+    };
+    let result = host_commit_stage_transform_for_app(handle, expected_revision, target, edit);
+    let diagnostic = result.as_ref().err().map(|error| HostTerminalDiagnostic {
+        reason: stage_transform_reason(error).to_owned(),
+        host_handle: Some(handle.to_string()),
+        stage_handle: None,
+        timeline_handle: None,
+        expected_projection_generation: None,
+        actual_projection_generation: None,
+    });
+    HostTerminalResult {
+        accepted: result.is_ok(),
+        diagnostics: diagnostic.into_iter().collect(),
+        message: result.as_ref().err().map(ToString::to_string),
+        projection: try_read_timeline_projection(),
+    }
+}
+
+fn rejected_terminal_result(reason: &str, message: String) -> HostTerminalResult {
+    HostTerminalResult {
+        accepted: false,
+        diagnostics: vec![HostTerminalDiagnostic {
+            reason: reason.to_owned(),
+            host_handle: None,
+            stage_handle: None,
+            timeline_handle: None,
+            expected_projection_generation: None,
+            actual_projection_generation: None,
+        }],
+        message: Some(message),
+        projection: try_read_timeline_projection(),
+    }
+}
+
+fn stage_transform_reason(error: &motolii_ui::AppStageTransformError) -> &'static str {
+    use motolii_ui::AppStageTransformError;
+    match error {
+        AppStageTransformError::HostUnavailable => "host_unavailable",
+        AppStageTransformError::StaleDocument => "stale_document",
+        AppStageTransformError::TargetUnavailable => "target_unavailable",
+        AppStageTransformError::TransformUnavailable => "transform_unavailable",
+        AppStageTransformError::OffKeyframe => "off_keyframe",
+        AppStageTransformError::UnsupportedProperty => "unsupported_property",
+        AppStageTransformError::NonFinite => "non_finite",
+        AppStageTransformError::NoChange => "no_change",
+        AppStageTransformError::Preview(_) => "preview",
+        AppStageTransformError::Render(_) => "render",
+        AppStageTransformError::Commit(_) => "commit",
+    }
 }
 
 pub(crate) fn try_host_handle() -> Option<u64> {
@@ -1203,7 +1314,9 @@ pub(crate) fn test_clear_host_slot() {
 }
 
 /// Timeline Delete: real key選択中なら remove_position_key、否則 delete_layer。
-pub(crate) fn try_timeline_keymap_delete(scene: &crate::timeline_skia::TimelineScene) -> bool {
+pub(crate) fn try_timeline_keymap_delete(
+    scene: &crate::timeline_skia::TimelineScene,
+) -> Option<HostTerminalResult> {
     if let Some(crate::timeline_skia::TimelineEditCommit::RemovePositionKey { layer_id, key_id }) =
         crate::timeline_skia::remove_position_key_commit(scene)
     {
@@ -1215,19 +1328,19 @@ pub(crate) fn try_timeline_keymap_delete(scene: &crate::timeline_skia::TimelineS
 }
 
 /// keymap: undo / redo / delete_layer(現primary=RemoveTrackItem) / duplicate(現primary) / toggle_playback。primaryなしのdelete/duplicateは何もしない。
-pub(crate) fn try_dispatch_keymap(kind: &str) -> bool {
+pub(crate) fn try_dispatch_keymap(kind: &str) -> Option<HostTerminalResult> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = kind;
-        false
+        None
     }
     #[cfg(target_os = "macos")]
     {
         let Ok(guard) = host_slot().lock() else {
-            return false;
+            return None;
         };
         let Some(slot) = guard.as_ref() else {
-            return false;
+            return None;
         };
         let intent = match kind {
             "undo" | "redo" | "toggle_playback" | "shuttle_forward" | "shuttle_reverse"
@@ -1239,16 +1352,21 @@ pub(crate) fn try_dispatch_keymap(kind: &str) -> bool {
             | "trim_clip_out" => {
                 drop(guard);
                 let Some(projection) = try_read_timeline_projection() else {
-                    return false;
+                    return None;
                 };
                 let Some(target) = projection.primary_layer_id else {
-                    return true;
+                    return Some(HostTerminalResult {
+                        accepted: true,
+                        diagnostics: Vec::new(),
+                        message: None,
+                        projection: Some(projection),
+                    });
                 };
                 let Ok(guard) = host_slot().lock() else {
-                    return false;
+                    return None;
                 };
                 let Some(slot) = guard.as_ref() else {
-                    return false;
+                    return None;
                 };
                 let intent = if kind == "split" || kind == "trim_clip_in" || kind == "trim_clip_out"
                 {
@@ -1269,18 +1387,19 @@ pub(crate) fn try_dispatch_keymap(kind: &str) -> bool {
                         kind, slot.handle, target
                     )
                 };
-                return dispatch_intent_json_accepted(slot.handle, &intent);
+                return dispatch_intent_json_terminal(slot.handle, &intent);
             }
-            _ => return false,
+            _ => return None,
         };
-        dispatch_intent_json_accepted(slot.handle, &intent)
+        dispatch_intent_json_terminal(slot.handle, &intent)
     }
 }
 
 #[cfg(target_os = "macos")]
-fn dispatch_intent_json_accepted(handle: u64, intent: &str) -> bool {
+fn dispatch_intent_json_terminal(handle: u64, intent: &str) -> Option<HostTerminalResult> {
+    let intent = intent_with_projection_generation(handle, intent);
     if intent.len() > MAX_JSON_BYTES {
-        return false;
+        return None;
     }
     let mut out = [0u8; MAX_SNAPSHOT_JSON_BYTES];
     let written = unsafe {
@@ -1293,15 +1412,82 @@ fn dispatch_intent_json_accepted(handle: u64, intent: &str) -> bool {
         )
     };
     if written <= 0 {
-        return false;
+        return None;
     }
     let Some(response_bytes) = slice_from_written(&out, written) else {
-        return false;
+        return None;
     };
     let Ok(response) = std::str::from_utf8(response_bytes) else {
-        return false;
+        return None;
     };
-    response_is_accepted(response)
+    parse_terminal_result(response)
+}
+
+#[cfg(target_os = "macos")]
+fn intent_with_projection_generation(handle: u64, intent: &str) -> String {
+    if intent.contains("\"projection_generation\"") {
+        return intent.to_owned();
+    }
+    let mut _revision = 0u64;
+    let mut generation = 0u64;
+    if !unsafe { motolii_rn_host_projection_stamp(handle, &mut _revision, &mut generation) } {
+        return intent.to_owned();
+    }
+    let Some(body) = intent.strip_suffix('}') else {
+        return intent.to_owned();
+    };
+    format!(r#"{body},"projection_generation":"{generation}"}}"#)
+}
+
+fn parse_terminal_result(response: &str) -> Option<HostTerminalResult> {
+    let accepted = json_bool_value(response, "accepted")?;
+    let projection = find_key_object(response, "snapshot").and_then(parse_timeline_projection);
+    let diagnostics = parse_terminal_diagnostics(response)?;
+    Some(HostTerminalResult {
+        accepted,
+        diagnostics,
+        message: json_string_value(response, "message"),
+        projection,
+    })
+}
+
+fn parse_terminal_diagnostics(response: &str) -> Option<Vec<HostTerminalDiagnostic>> {
+    let Some(array) = find_root_key_array(response, "diagnostics") else {
+        return Some(Vec::new());
+    };
+    let mut diagnostics = Vec::new();
+    let mut rest = &array[1..array.len() - 1];
+    loop {
+        rest = rest.trim_start();
+        if rest.is_empty() {
+            break;
+        }
+        if let Some(next) = rest.strip_prefix(',') {
+            rest = next;
+            continue;
+        }
+        if !rest.starts_with('{') {
+            return None;
+        }
+        let end = find_matching_brace(rest)?;
+        let diagnostic = &rest[..=end];
+        diagnostics.push(HostTerminalDiagnostic {
+            reason: json_string_value(diagnostic, "reason")?,
+            host_handle: json_string_value(diagnostic, "host_handle"),
+            stage_handle: json_string_value(diagnostic, "stage_handle"),
+            timeline_handle: json_string_value(diagnostic, "timeline_handle"),
+            expected_projection_generation: json_string_value(
+                diagnostic,
+                "expected_projection_generation",
+            ),
+            actual_projection_generation: json_string_value(
+                diagnostic,
+                "actual_projection_generation",
+            ),
+        });
+        rest = &rest[end + 1..];
+    }
+    Some(diagnostics)
 }
 
 fn response_is_accepted(response: &str) -> bool {
@@ -2155,6 +2341,42 @@ fn find_key_object<'a>(json: &'a str, key: &str) -> Option<&'a str> {
     None
 }
 
+fn find_root_key_array<'a>(json: &'a str, key: &str) -> Option<&'a str> {
+    let needle = format!("\"{key}\"");
+    let bytes = json.as_bytes();
+    let mut depth = 0i32;
+    let mut in_string = false;
+    let mut escape = false;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if in_string {
+            if escape {
+                escape = false;
+            } else if bytes[i] == b'\\' {
+                escape = true;
+            } else if bytes[i] == b'"' {
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => depth -= 1,
+            b'"' if depth == 1 && json[i..].starts_with(&needle) => {
+                let after = json[i + needle.len()..].trim_start().strip_prefix(':')?;
+                let array = after.trim_start();
+                let end = find_matching_bracket(array)?;
+                return Some(&array[..=end]);
+            }
+            b'"' => in_string = true,
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
 fn json_rational(json: &str, key: &str) -> Option<(i64, i64)> {
     let obj = find_key_object(json, key)?;
     let num = json_i64_value(obj, "num")?;
@@ -2431,12 +2653,13 @@ mod tests {
             .stage_geometry
             .expect("preview must not mutate live Document");
         assert_eq!(unchanged.layers[0].corners, geometry.layers[0].corners);
-        try_commit_stage_transform(
+        let accepted_terminal = dispatch_commit_stage_transform(
             revision,
             &primary,
             AppStageTransformEdit::TranslateWorld([0.1, 0.0]),
-        )
-        .expect("host commit");
+        );
+        assert!(accepted_terminal.accepted);
+        assert!(accepted_terminal.projection.is_some());
         let committed = read_host_projection(host)
             .stage_geometry
             .expect("stage_geometry after gizmo commit");
@@ -2448,6 +2671,23 @@ mod tests {
             .revision
             .parse::<u64>()
             .expect("revision after commit");
+        let rejected_terminal = dispatch_commit_stage_transform(
+            revision,
+            &primary,
+            AppStageTransformEdit::RotateZ(0.25),
+        );
+        assert!(!rejected_terminal.accepted);
+        assert_eq!(rejected_terminal.diagnostics[0].reason, "stale_document");
+        assert_eq!(
+            rejected_terminal
+                .projection
+                .expect("authoritative snapshot")
+                .stage_geometry
+                .expect("authoritative geometry")
+                .layers[0]
+                .corners,
+            committed.layers[0].corners
+        );
         try_commit_stage_transform(
             committed_rev,
             &primary,
@@ -2898,13 +3138,16 @@ mod tests {
             .expect("key id");
         let param_key_id = position_key_id.wrapping_add(1_000_003);
         super::TEST_SET_POSITION_KEY_TIME_DISPATCH_COUNT.store(0, Ordering::SeqCst);
-        assert!(!try_dispatch_timeline_edit(
-            &crate::timeline_skia::TimelineEditCommit::SetPositionKeyTime {
-                layer_id: layer_id.clone(),
-                key_id: param_key_id,
-                bar: 2.0,
-            }
-        ));
+        assert!(
+            try_dispatch_timeline_edit(
+                &crate::timeline_skia::TimelineEditCommit::SetPositionKeyTime {
+                    layer_id: layer_id.clone(),
+                    key_id: param_key_id,
+                    bar: 2.0,
+                }
+            )
+            .is_none()
+        );
         assert_eq!(
             super::TEST_SET_POSITION_KEY_TIME_DISPATCH_COUNT.load(Ordering::SeqCst),
             0
@@ -3143,6 +3386,45 @@ mod tests {
     }
 
     #[test]
+    fn terminal_response_keeps_typed_diagnostic_and_authoritative_snapshot() {
+        let response = r#"{
+            "accepted":false,
+            "snapshot":{
+                "revision":"9",
+                "projection_generation":"5",
+                "current_time":{"num":3,"den":1},
+                "stage":{"selection":[],"bounds":[]},
+                "stage_geometry":{"layers":[],"layers_truncated":false},
+                "timeline":{"duration":{"num":10,"den":1},"fps":{"num":30,"den":1},"layers":[],"layers_truncated":false},
+                "diagnostics":[{"reason":"snapshot_only"}]
+            },
+            "diagnostics":[{
+                "reason":"stale_projection_generation",
+                "expected_projection_generation":"4",
+                "actual_projection_generation":"5"
+            }],
+            "message":"stale terminal edit"
+        }"#;
+        let result = parse_terminal_result(response).expect("terminal response");
+        assert!(!result.accepted);
+        assert_eq!(result.feedback(), Some("stale terminal edit"));
+        assert_eq!(result.stamp(), Some((9, 5)));
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(
+            result.diagnostics[0],
+            HostTerminalDiagnostic {
+                reason: "stale_projection_generation".into(),
+                host_handle: None,
+                stage_handle: None,
+                timeline_handle: None,
+                expected_projection_generation: Some("4".into()),
+                actual_projection_generation: Some("5".into()),
+            }
+        );
+        assert_eq!(result.projection.expect("snapshot").current_time, (3, 1));
+    }
+
+    #[test]
     fn playhead_from_current_time_uses_seconds_not_bars() {
         assert_eq!(crate::timeline_skia::SECONDS_PER_BAR, 1.0);
         // 2s / fixture曲長96秒 → 2/96。Ableton 1bar=2s なら 1/96 になる。
@@ -3200,7 +3482,14 @@ mod tests {
         // 1s → frame 30。既定fpsで往復一致。
         let frame = frame_from_scrub_bar(1.0, fps_num, fps_den);
         assert_eq!(frame, 30);
-        assert!(try_dispatch_set_time(frame));
+        let terminal = try_dispatch_set_time(frame).expect("terminal");
+        assert!(terminal.accepted);
+        assert!(terminal.diagnostics.is_empty());
+        assert_eq!(
+            terminal.projection.as_ref().expect("snapshot").current_time,
+            (1, 1)
+        );
+        assert_eq!(terminal.stamp(), Some((0, 1)));
         let after = motolii_ui::host_read_snapshot_for_test(host).expect("after");
         assert_eq!(after.current_time.num(), 1);
         assert_eq!(after.current_time.den(), 1);
@@ -3220,7 +3509,7 @@ mod tests {
         let host = motolii_ui::host_create_for_test(&path).expect("create host");
         install_slot(host);
 
-        assert!(try_dispatch_set_time(45));
+        assert!(try_dispatch_set_time(45).is_some_and(|result| result.accepted));
         let chars = b"j";
         let consumed = unsafe {
             motolii_rnapp_host_key_event(38, 0, chars.as_ptr(), chars.len(), false, false)
@@ -3241,7 +3530,7 @@ mod tests {
     fn set_time_is_not_dispatched_without_host_slot() {
         let _lock = test_lock();
         clear_slot();
-        assert!(!try_dispatch_set_time(60));
+        assert!(try_dispatch_set_time(60).is_none());
     }
 
     #[test]
@@ -3316,12 +3605,21 @@ mod tests {
             .key_id
             .parse::<u64>()
             .expect("key id");
-        assert!(try_dispatch_timeline_edit(
+        let terminal = try_dispatch_timeline_edit(
             &crate::timeline_skia::TimelineEditCommit::RemovePositionKey {
                 layer_id: layer_id.clone(),
                 key_id,
-            }
-        ));
+            },
+        )
+        .expect("terminal");
+        assert!(terminal.accepted);
+        let terminal_layer = terminal
+            .projection
+            .as_ref()
+            .and_then(|projection| projection.timeline_layers.as_ref())
+            .and_then(|layers| layers.iter().find(|layer| layer.layer_id == layer_id))
+            .expect("terminal layer");
+        assert!(terminal_layer.position_keys.is_empty());
         let after = motolii_ui::host_read_snapshot_for_test(host).expect("after");
         let layer = after
             .timeline
@@ -3441,17 +3739,36 @@ mod tests {
         let placed = motolii_ui::host_read_snapshot_for_test(host).expect("placed");
         let layer_id = placed.primary_layer_id.expect("primary after place");
 
-        assert!(try_dispatch_timeline_selection(
-            &crate::timeline_skia::TimelineSelectionCommit::ClearSelection
-        ));
+        let cleared_terminal = try_dispatch_timeline_selection(
+            &crate::timeline_skia::TimelineSelectionCommit::ClearSelection,
+        )
+        .expect("clear terminal");
+        assert!(cleared_terminal.accepted);
+        assert!(
+            cleared_terminal
+                .projection
+                .expect("clear snapshot")
+                .primary_layer_id
+                .is_none()
+        );
         let cleared = try_read_timeline_projection().expect("cleared");
         assert!(cleared.primary_layer_id.is_none());
 
-        assert!(try_dispatch_timeline_selection(
+        let selected_terminal = try_dispatch_timeline_selection(
             &crate::timeline_skia::TimelineSelectionCommit::SelectLayer {
                 layer_id: layer_id.clone(),
-            }
-        ));
+            },
+        )
+        .expect("select terminal");
+        assert!(selected_terminal.accepted);
+        assert_eq!(
+            selected_terminal
+                .projection
+                .expect("select snapshot")
+                .primary_layer_id
+                .as_deref(),
+            Some(layer_id.as_str())
+        );
         let selected = try_read_timeline_projection().expect("selected");
         assert_eq!(
             selected.primary_layer_id.as_deref(),

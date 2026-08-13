@@ -494,15 +494,19 @@ impl RendererCore {
             self.restore_stage_preview("The live Document revision is unavailable");
             return false;
         };
-        match crate::host_bridge::try_commit_stage_transform(expected_revision, &layer_id, edit) {
-            Ok(()) => {
-                self.force_next_host_snapshot = true;
-                true
-            }
-            Err(error) => {
-                self.restore_stage_preview(&error);
-                false
-            }
+        let result =
+            crate::host_bridge::dispatch_commit_stage_transform(expected_revision, &layer_id, edit);
+        let accepted = result.accepted;
+        let message = result
+            .feedback()
+            .unwrap_or("Stage transform rejected")
+            .to_owned();
+        self.apply_terminal_stage_result(result);
+        if accepted {
+            true
+        } else {
+            self.restore_stage_preview(&message);
+            false
         }
     }
 
@@ -544,8 +548,15 @@ impl RendererCore {
         layer_id: &str,
         edit: AppStageTransformEdit,
     ) -> Result<(), String> {
-        let result =
-            crate::host_bridge::try_commit_stage_transform(expected_revision, layer_id, edit);
+        let terminal =
+            crate::host_bridge::dispatch_commit_stage_transform(expected_revision, layer_id, edit);
+        let accepted = terminal.accepted;
+        let message = terminal
+            .feedback()
+            .unwrap_or("Stage transform rejected")
+            .to_owned();
+        self.apply_terminal_stage_result(terminal);
+        let result = if accepted { Ok(()) } else { Err(message) };
         match &result {
             Ok(()) => {
                 if let Some(stage) = self.stage.as_mut() {
@@ -554,7 +565,6 @@ impl RendererCore {
                         .rerun
                         .set_feedback("Transform applied · Undo available", false);
                 }
-                self.force_next_host_snapshot = true;
             }
             Err(error) => self.restore_stage_preview(error),
         }
@@ -686,8 +696,14 @@ impl RendererCore {
                 self.force_next_host_snapshot = true;
             }
             if let Some(commit) = outcome.edit_commit {
-                let accepted = crate::host_bridge::try_dispatch_timeline_edit(&commit);
-                if !accepted {
+                if let Some(result) = crate::host_bridge::try_dispatch_timeline_edit(&commit) {
+                    let has_projection = result.projection.is_some();
+                    self.apply_terminal_timeline_result(result);
+                    if !has_projection {
+                        // snapshot欠落時だけ次frameのfull読みに委ねる。
+                        self.force_next_host_snapshot = true;
+                    }
+                } else {
                     // 拒否時は次snapshotで幾何を戻す。dirty再描画だけ先に立てる。
                     if let Some(timeline) = &mut self.timeline {
                         timeline.dirty = true;
@@ -696,7 +712,7 @@ impl RendererCore {
                 }
             }
             if let Some(commit) = outcome.selection_commit {
-                let _ = Self::dispatch_timeline_selection(&commit);
+                let _ = self.dispatch_timeline_selection(&commit);
             }
             self.scrubbing = self.scrub_time_pump.is_active();
         }
@@ -735,7 +751,13 @@ impl RendererCore {
         else {
             return;
         };
-        let _ = crate::host_bridge::try_dispatch_set_time(frame);
+        if let Some(result) = crate::host_bridge::try_dispatch_set_time(frame) {
+            let has_projection = result.projection.is_some();
+            self.apply_terminal_timeline_result(result);
+            if !has_projection {
+                self.force_next_host_snapshot = true;
+            }
+        }
     }
 
     /// Timeline scroll/pinch。戻り値trueは視覚変化(dirty)。feedbackなし。
@@ -772,9 +794,11 @@ impl RendererCore {
     /// Timeline Delete/Backspace: 選択keyがあれば remove、なければ layer削除。
     pub(crate) fn timeline_keymap_delete(&self) -> bool {
         let Some(session) = &self.timeline_session else {
-            return crate::host_bridge::try_dispatch_keymap("delete_layer");
+            return crate::host_bridge::try_dispatch_keymap("delete_layer")
+                .is_some_and(|result| result.accepted);
         };
         crate::host_bridge::try_timeline_keymap_delete(&session.scene)
+            .is_some_and(|result| result.accepted)
     }
 
     pub(crate) fn stats(&self) -> RenderStats {
@@ -919,8 +943,124 @@ impl RendererCore {
         Ok(())
     }
 
-    fn dispatch_timeline_selection(commit: &crate::timeline_skia::TimelineSelectionCommit) -> bool {
-        crate::host_bridge::try_dispatch_timeline_selection(commit)
+    fn dispatch_timeline_selection(
+        &mut self,
+        commit: &crate::timeline_skia::TimelineSelectionCommit,
+    ) -> bool {
+        let Some(result) = crate::host_bridge::try_dispatch_timeline_selection(commit) else {
+            return false;
+        };
+        let accepted = result.accepted;
+        let has_projection = result.projection.is_some();
+        match self.scene {
+            SceneKind::Stage => self.apply_terminal_stage_result(result),
+            SceneKind::Timeline => self.apply_terminal_timeline_result(result),
+        }
+        if !has_projection {
+            self.force_next_host_snapshot = true;
+        }
+        accepted
+    }
+
+    fn apply_terminal_timeline_result(&mut self, result: crate::host_bridge::HostTerminalResult) {
+        let stamp = result.stamp();
+        let Some(projection) = result.projection else {
+            if !result.accepted {
+                self.force_next_host_snapshot = true;
+            }
+            return;
+        };
+        self.host_projection_stamp = stamp;
+        self.host_fps = projection.fps;
+        let revision_changed = self.host_revision.as_deref() != Some(projection.revision.as_str());
+        let generation_changed = self.host_projection_generation.as_deref()
+            != Some(projection.projection_generation.as_str());
+        let primary_changed =
+            self.selected_object_index != timeline_projection_selected_flat(&projection);
+        let should_reproject = revision_changed || primary_changed || !result.accepted;
+        if should_reproject {
+            let Some(session) = &mut self.timeline_session else {
+                return;
+            };
+            let gesture_dirty = session.discard_active_gesture();
+            if gesture_dirty {
+                self.scrub_time_pump = ScrubTimePump::new();
+                self.scrubbing = false;
+                crate::host_bridge::set_timeline_interacting(false);
+            }
+            let scene = timeline_scene_from_projection(&session.scene, &projection);
+            self.selected_object_index = scene.selected_flat;
+            session.scene = scene;
+        }
+        self.host_revision = Some(projection.revision.clone());
+        self.host_projection_generation = Some(projection.projection_generation.clone());
+        if !self.scrubbing && (generation_changed || revision_changed || !result.accepted) {
+            let song_bars = self
+                .timeline_session
+                .as_ref()
+                .map(|session| session.scene.song_bars)
+                .unwrap_or(crate::timeline_skia::SONG_BARS);
+            self.playhead = crate::host_bridge::playhead_from_current_time(
+                projection.current_time.0,
+                projection.current_time.1,
+                song_bars,
+            );
+        }
+        if (should_reproject || generation_changed)
+            && let Some(timeline) = &mut self.timeline
+        {
+            timeline.dirty = true;
+        }
+        self.force_next_host_snapshot = false;
+    }
+
+    fn apply_terminal_stage_result(&mut self, result: crate::host_bridge::HostTerminalResult) {
+        let stamp = result.stamp();
+        let feedback = result.feedback().map(str::to_owned);
+        let accepted = result.accepted;
+        let Some(projection) = result.projection else {
+            if !accepted {
+                self.restore_stage_preview(feedback.as_deref().unwrap_or("Host rejected the edit"));
+                self.force_next_host_snapshot = true;
+            }
+            return;
+        };
+        self.host_projection_stamp = stamp;
+        self.host_revision = Some(projection.revision.clone());
+        self.host_projection_generation = Some(projection.projection_generation.clone());
+        let Some(stage) = self.stage.as_mut() else {
+            return;
+        };
+        stage.preview_active = false;
+        stage
+            .rerun
+            .set_host_primary_layer_id(projection.primary_layer_id.clone());
+        match host_stage_geometry_command(self.host_stage_geometry.as_ref(), Some(&projection)) {
+            HostStageGeometryCommand::Apply(geometry) => {
+                if stage.rerun.apply_host_stage_geometry(
+                    &geometry,
+                    self.config.width,
+                    self.config.height,
+                ) {
+                    self.host_stage_geometry = Some(geometry);
+                    self.host_stage_viewport = Some((self.config.width, self.config.height));
+                }
+            }
+            HostStageGeometryCommand::Clear => {
+                if stage.rerun.clear_host_projection() {
+                    self.host_stage_geometry = None;
+                    self.host_stage_viewport = None;
+                }
+            }
+            HostStageGeometryCommand::Noop => {}
+        }
+        if !accepted {
+            stage.rerun.set_feedback(
+                feedback.as_deref().unwrap_or("Host rejected the edit"),
+                true,
+            );
+        }
+        self.force_next_host_snapshot = false;
     }
 
     /// F9: stamp不変かつforceでなく初回でもないtickはfull JSON読みを飛ばす。
@@ -1107,7 +1247,7 @@ impl RendererCore {
         )?;
         if let Some(selected_entity_path) = selected_entity_path {
             let commit = stage_selection_commit(selected_entity_path.as_deref());
-            let _ = Self::dispatch_timeline_selection(&commit);
+            let _ = self.dispatch_timeline_selection(&commit);
         }
         Ok(())
     }
@@ -1839,7 +1979,7 @@ mod tests {
         );
         assert!(down.selection_commit.is_some());
         if let Some(commit) = down.selection_commit {
-            assert!(!RendererCore::dispatch_timeline_selection(&commit));
+            assert!(crate::host_bridge::try_dispatch_timeline_selection(&commit).is_none());
         }
         assert_eq!(
             crate::host_bridge::test_timeline_selection_dispatch_count(),
@@ -1881,10 +2021,10 @@ mod tests {
         assert!(trim_down.selection_commit.is_none());
 
         if let Some(commit) = clip_down.selection_commit {
-            assert!(!RendererCore::dispatch_timeline_selection(&commit));
+            assert!(crate::host_bridge::try_dispatch_timeline_selection(&commit).is_none());
         }
         if let Some(commit) = trim_down.selection_commit {
-            assert!(!RendererCore::dispatch_timeline_selection(&commit));
+            assert!(crate::host_bridge::try_dispatch_timeline_selection(&commit).is_none());
         }
         assert_eq!(
             crate::host_bridge::test_timeline_selection_dispatch_count(),
