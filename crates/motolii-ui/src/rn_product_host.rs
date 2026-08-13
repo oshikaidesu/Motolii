@@ -855,6 +855,14 @@ struct RnProductHost {
 
 impl RnProductHost {
     fn snapshot_wire(&self, host_handle: u64) -> WireProductSnapshot {
+        self.snapshot_wire_with_runtime_diagnostic(host_handle, None)
+    }
+
+    fn snapshot_wire_with_runtime_diagnostic(
+        &self,
+        host_handle: u64,
+        runtime_diagnostic: Option<RnHostReasonCode>,
+    ) -> WireProductSnapshot {
         let document = self.runtime.snapshot();
         let mut selection = Vec::new();
         if let Some(primary) = self.primary {
@@ -913,18 +921,13 @@ impl RnProductHost {
                 self.primary,
                 self.current_time,
             ),
-            diagnostics: self
-                .runtime
-                .is_write_blocked()
-                .then(|| {
-                    diagnostic(
-                        RnHostReasonCode::DocumentWriteBlocked,
-                        Some(host_handle),
-                        None,
-                        None,
-                        None,
-                    )
+            diagnostics: runtime_diagnostic
+                .or_else(|| {
+                    self.runtime
+                        .is_write_blocked()
+                        .then_some(RnHostReasonCode::DocumentWriteBlocked)
                 })
+                .map(|reason| diagnostic(reason, Some(host_handle), None, None, None))
                 .into_iter()
                 .collect(),
             playback_state: if self.playback_session.is_some() {
@@ -4370,10 +4373,15 @@ impl RnHostRegistry {
         if host.destroyed {
             return Err(RnHostError::DestroyedHost(host_handle));
         }
-        if let Ok(Some(published)) = host.runtime.reconcile_pending_commit() {
-            host.adopt_published(published);
-        }
-        Ok(host.snapshot_wire(host_handle))
+        let runtime_diagnostic = match host.runtime.reconcile_pending_commit() {
+            Ok(Some(published)) => {
+                host.adopt_published(published);
+                None
+            }
+            Ok(None) => None,
+            Err(error) => Some(document_runtime_reason(&error)),
+        };
+        Ok(host.snapshot_wire_with_runtime_diagnostic(host_handle, runtime_diagnostic))
     }
 
     fn dispatch_intent_json(
@@ -6712,6 +6720,7 @@ const _: fn() = || {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Mutex, MutexGuard};
 
@@ -9489,6 +9498,126 @@ mod tests {
                 &mut generation
             ));
         }
+
+        let _ = host_destroy_for_test(host);
+    }
+
+    #[test]
+    fn read_snapshot_preserves_exact_reconcile_reason_until_unblocked() {
+        let _lock = test_lock();
+        let path = fixture_path("reconcile-reason-snapshot");
+        let host = host_create_for_test(&path).expect("host");
+        let before = read_wire(host);
+        let before_document = document_json_bytes(host);
+        let target = before.stage.bounds[0].layer_id.clone();
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get_mut(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            product.runtime.set_test_failpoint(
+                crate::document_edit_runtime::RuntimeTestFailpoint::DeferAfterDurableCommit,
+            );
+            Ok(())
+        })
+        .expect("defer durable commit publication");
+
+        let rejected = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.0,0.0],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(!rejected.accepted);
+        assert_eq!(
+            rejected.reason,
+            Some(RnHostReasonCode::DocumentWriteBlocked)
+        );
+        assert_eq!(document_json_bytes(host), before_document);
+
+        let journal = motolii_doc::journal_path_for_document(&path);
+        let committed_journal = fs::read(&journal).expect("committed journal");
+        fs::write(&journal, b"not a journal").expect("inject reconcile read failure");
+        let failed_read = read_wire(host);
+        assert_eq!(failed_read.revision, before.revision);
+        assert_eq!(
+            failed_read
+                .diagnostics
+                .first()
+                .map(|diagnostic| diagnostic.reason),
+            Some(RnHostReasonCode::JournalReconcile)
+        );
+        let failed_json: serde_json::Value = serde_json::from_str(
+            &encode_snapshot_json(&failed_read).expect("encode failed snapshot"),
+        )
+        .expect("failed snapshot json");
+        assert_eq!(
+            failed_json
+                .pointer("/diagnostics/0/reason")
+                .and_then(serde_json::Value::as_str),
+            Some("journal_reconcile")
+        );
+        assert_eq!(
+            read_wire(host)
+                .diagnostics
+                .first()
+                .map(|diagnostic| diagnostic.reason),
+            Some(RnHostReasonCode::JournalReconcile),
+            "each blocked read must preserve the current reconcile reason"
+        );
+        fs::write(&journal, committed_journal).expect("restore committed journal");
+        assert_eq!(document_json_bytes(host), before_document);
+
+        let selection = dispatch_raw_json(
+            host,
+            &format!(
+                r#"{{"version":1,"direction":"rn-to-host","kind":"select_layer","host_handle":"{host}","target":"{target}"}}"#,
+            ),
+        );
+        assert!(
+            selection.accepted,
+            "selection must remain live while blocked"
+        );
+        assert_eq!(document_json_bytes(host), before_document);
+
+        let blocked_write = dispatch_raw_json(
+            host,
+            &format!(
+                concat!(
+                    r#"{{"version":1,"direction":"rn-to-host","kind":"place_rectangle","#,
+                    r#""host_handle":"{host}","position":[0.25,0.25],"playhead":{{"num":0,"den":1}}}}"#
+                ),
+                host = host,
+            ),
+        );
+        assert!(!blocked_write.accepted);
+        assert_eq!(
+            blocked_write.reason,
+            Some(RnHostReasonCode::DocumentWriteBlocked)
+        );
+        assert_eq!(document_json_bytes(host), before_document);
+
+        let reconciled = read_wire(host);
+        assert_eq!(
+            reconciled.revision.parse::<u64>().expect("revision"),
+            before.revision.parse::<u64>().expect("before revision") + 1
+        );
+        assert_eq!(reconciled.primary_layer_id, Some(target));
+        assert!(reconciled.diagnostics.is_empty());
+        assert_eq!(read_wire(host).revision, reconciled.revision);
+        with_registry(|registry| {
+            let product = registry
+                .hosts
+                .get(&host)
+                .ok_or(RnHostError::UnknownHost(host))?;
+            assert!(!product.runtime.is_write_blocked());
+            Ok(())
+        })
+        .expect("reconciled host state");
 
         let _ = host_destroy_for_test(host);
     }

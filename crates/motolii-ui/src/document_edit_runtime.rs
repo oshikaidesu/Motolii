@@ -1448,9 +1448,9 @@ impl DocumentEditRuntime {
         match self.session.reconcile_journal_commit(pending.receipt) {
             Ok(JournalCommitReconcileOutcome::NotCommitted) => {
                 let Some(error) = pending.initial_error.take() else {
-                    return Err(DocumentEditRuntimeError::CommitReceiptNotObserved {
-                        receipt: pending.receipt,
-                    });
+                    let receipt = pending.receipt;
+                    self.health = RuntimeHealth::WriteBlocked(Box::new(pending));
+                    return Err(DocumentEditRuntimeError::CommitReceiptNotObserved { receipt });
                 };
                 Err(DocumentEditRuntimeError::JournalCommit(error))
             }
@@ -4468,7 +4468,7 @@ mod tests {
     }
 
     #[test]
-    fn checkpoint_tip_is_recognized_when_uncertain_commit_is_not_observed() {
+    fn reconcile_successful_receipt_not_observed_stays_write_blocked() {
         let f = two_track_fixture();
         let (path, mut runtime) = open_runtime(f.document);
         let journal = journal_path_for_document(&path);
@@ -4489,7 +4489,7 @@ mod tests {
             runtime.reconcile_pending_commit(),
             Err(DocumentEditRuntimeError::CommitReceiptNotObserved { .. })
         ));
-        assert!(!runtime.is_write_blocked());
+        assert!(runtime.is_write_blocked());
         assert_eq!(runtime.revision(), 0);
     }
 
