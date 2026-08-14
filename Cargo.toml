@@ -19,6 +19,8 @@ members = [
     "crates/motolii-audio",
     "crates/motolii-transport",
     "crates/motolii-ui",
+    "crates/motolii-input",
+    "crates/motolii-web-input",
     "crates/motolii-ui-token-gen",
 ]
 
@@ -46,6 +48,7 @@ motolii-doc = { path = "crates/motolii-doc" }
 motolii-audio = { path = "crates/motolii-audio" }
 motolii-transport = { path = "crates/motolii-transport" }
 motolii-ui = { path = "crates/motolii-ui" }
+motolii-input = { path = "crates/motolii-input" }
 cargo_metadata = "0.23"
 serde = { version = "1", features = ["derive"] }
 egui = "0.35"

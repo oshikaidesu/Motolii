@@ -1,0 +1,16 @@
+[package]
+name = "motolii-web-input"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Wasm boundary for the shared Motolii input resolver and router"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+motolii-input.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+wasm-bindgen = "0.2"

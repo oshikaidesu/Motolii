@@ -1,0 +1,11 @@
+[package]
+name = "motolii-input"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Toolkit-independent Motolii input contracts"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

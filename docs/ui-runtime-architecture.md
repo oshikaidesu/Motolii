@@ -2,7 +2,11 @@
 
 状態: **React Native製品shell + Rerun Spatial Viewer Stage + rust-skia Timeline／overlay**（2026-08-11）
 
-正本決定: [M3 React Native + Rust/Skia UI runtime再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)
+> 2026-08-14追補: Timelineに限り、rust-skia／CanvasKit／Motolii eguiを製品engineとする読みは[Rerun相乗り先・意味源・日常ループ座席](reviews/2026-08-14-rerun-body-skin-meaning-decision.md)により撤回。行き先はRerun Time Panel。layer／clip／key意味はDocument／D2。この切り方をStage／Inspector／Browserへ広げない。
+>
+> 2026-08-15追補: Timeline **engine** の行き先は Motolii egui。Rerun Time Panel 相乗りは撤回。正本は[Motolii egui Timeline engine](reviews/2026-08-15-egui-timeline-engine-authority.md)。Stage spatial の Rerun は維持。
+
+正本決定: [M3 React Native + Rust/Skia UI runtime再基線決定](reviews/2026-08-07-m3-react-native-rust-skia-runtime-rebaseline.md)、[Rerun相乗り先・意味源・日常ループ座席](reviews/2026-08-14-rerun-body-skin-meaning-decision.md)
 
 現行画面ごとのRerun対応、Motolii残余、接続状態は[現行Motolii UIとRerunの対応表](m3-rerun-ui-correspondence.md)に集約する。
 
@@ -64,7 +68,7 @@ curve、key、tangent、grid、marquee、pan、zoom、preset previewをrust-skia
 
 ### Stage
 
-base previewはRerun Spatial Viewerが所有する。MotoliiはDocumentのidentity／time／assetをRerun入力へ翻訳するだけで、scene／view／camera／picking／rendererを複製しない。一方、既存のnative Stage component、CAMetalLayer／Composition surface、mount／resize／frame lifecycle、normalized inputはRerunの不足を補う代替rendererではなく、Rerunを制作画面へ収めるMotolii固有のHost seamである。これを別appや別Stageへcopyせず、componentの内側にある固定fixtureをDocument projectionへ順次置き換える。
+base previewはRerun Spatial Viewerが所有する。MotoliiはDocumentのidentity／time／assetをRerun入力へ翻訳するだけで、scene／view／camera／picking／rendererを複製しない。一方、既存のnative Stage component、CAMetalLayer／Composition surface、mount／resize／frame lifecycle、normalized inputはRerunの不足を補う代替rendererではなく、Rerunを制作画面へ収めるMotolii固有のHost seamである。これを別appや別Stageへcopyせず、製品マウントではHost snapshotのidentity／time／geometryと評価フレームをRerun入力へ投影する。残る固定fixtureは[現行UI対応表](m3-rerun-ui-correspondence.md)の未接続行に限る。
 
 Rerunのcamera／pickingは空間操作の機構を返す。何を選択したか、どのtool操作か、どのD2 commandへ確定するかはMotoliiが決める。rust-skia overlayはgrid、safe area、selection bounds、path、gizmo、snap補助だけを描き、dirty時だけRerun outputへcomposeする。
 

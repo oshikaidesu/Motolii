@@ -9,27 +9,30 @@ use motolii_gpu::GpuCtx;
 
 use crate::browser_host::BrowserPlaceIntent;
 use crate::browser_host_runtime::{BrowserHostRuntime, BrowserHostRuntimeError};
-use crate::command_registry::builtin_command_registry;
+use crate::builtin_command_registry;
 use crate::display_slot::DisplaySlotError;
 use crate::document_edit_runtime::{
     DocumentEditActionKind, DocumentEditDispatchError, DocumentEditQueue, DocumentEditRuntime,
     DocumentEditRuntimeError, PlaceRectangleRequest, PublishedDocument,
 };
 use crate::host_pointer_capture::HostPointerCandidate;
-use crate::input_router::{ImeGateState, InputPhase, InputRouter, NormalizedInput};
 use crate::layout::{LayoutAction, LayoutConstraints, PanelRole, SeparatorAction};
 use crate::layout_authority::{LayoutAuthority, RuntimeFrameEdit};
 use crate::layout_runtime::{RuntimeLayout, RuntimeSeparator};
 use crate::layout_runtime_adapter::{
-    read_layout_cancel, read_safety_interrupt, read_separator_action, read_stage_drop_terminal,
-    StageDropTerminal,
+    StageDropTerminal, read_layout_cancel, read_safety_interrupt, read_separator_action,
+    read_stage_drop_terminal,
 };
 use crate::render_worker::{
     RenderGeneration, RenderRequest, RenderSubmitError, RenderWorkerClient, RenderWorkerError,
     RepaintSignalEpoch, RepaintSignalRegistrationError,
 };
 use crate::static_preview::{StaticPreview, StaticPreviewEvidence};
+use crate::timeline_move_gesture::TimelineMoveGesture;
+use crate::timeline_projection::TimelineProjection;
+use crate::timeline_trim_gesture::{TimelineTrimEdge, TimelineTrimGesture};
 use crate::{CommandId, DocumentCommandRequest};
+use crate::{ImeGateState, InputPhase, InputRouter, NormalizedInput};
 
 const DEFAULT_STAGE_MIN_POINTS: f32 = 320.0;
 
@@ -177,6 +180,18 @@ pub(crate) struct MotoliiApp {
     browser_place_generation: u64,
     active_browser_place: Option<BrowserPlaceIntent>,
     latest_camera: Option<CompCamera>,
+    timeline_move: Option<TimelineMoveGesture>,
+    timeline_trim: Option<TimelineTrimGesture>,
+    timeline_key_drag: Option<EguiKeyDrag>,
+    // ドラッグ中は未確定previewを描き、Documentはreleaseまで触らない。
+    timeline_preview: Option<TimelineProjection>,
+}
+
+struct EguiKeyDrag {
+    layer: motolii_doc::LayerId,
+    key: motolii_doc::KeyframeId,
+    old: motolii_core::RationalTime,
+    initial_pointer: motolii_core::RationalTime,
 }
 
 const INITIAL_PRIMARY: Option<motolii_doc::LayerId> = None;
@@ -290,6 +305,10 @@ impl MotoliiApp {
             browser_place_generation: 0,
             active_browser_place: None,
             latest_camera: None,
+            timeline_move: None,
+            timeline_trim: None,
+            timeline_key_drag: None,
+            timeline_preview: None,
         })
     }
 
@@ -421,17 +440,74 @@ impl eframe::App for MotoliiApp {
             let cancel_runtime_frame = safety.is_some()
                 || read_layout_cancel(ui, self.layout_authority.gesture_in_flight(), self.ime_gate);
 
-            let mut behavior = PanelBehavior {
-                preview: &self.preview,
-                texture_id: self.texture_id,
-                edits: Vec::new(),
-                visibility_edited: false,
-                stage_rect: None,
+            let timeline_projection =
+                crate::timeline_egui::project_for_egui(&self.current_document);
+            let timeline_projection_error = timeline_projection
+                .as_ref()
+                .err()
+                .map(ToString::to_string);
+            let (timeline_intents, edits, visibility_edited, stage_rect) = {
+                let paint_projection = self
+                    .timeline_preview
+                    .as_ref()
+                    .or(timeline_projection.as_ref().ok());
+                let mut behavior = PanelBehavior {
+                    preview: &self.preview,
+                    texture_id: self.texture_id,
+                    edits: Vec::new(),
+                    visibility_edited: false,
+                    stage_rect: None,
+                    timeline_document: &self.current_document,
+                    timeline_projection: paint_projection,
+                    timeline_projection_error,
+                    timeline_primary: &mut self.primary,
+                    timeline_playhead: &mut self.render_request_template.evaluation_time.timeline_time,
+                    timeline_intents: Vec::new(),
+                };
+                self.layout_authority
+                    .runtime_mut()
+                    .tree_mut()
+                    .ui(&mut behavior, ui);
+                (
+                    std::mem::take(&mut behavior.timeline_intents),
+                    std::mem::take(&mut behavior.edits),
+                    behavior.visibility_edited,
+                    behavior.stage_rect,
+                )
             };
-            self.layout_authority
-                .runtime_mut()
-                .tree_mut()
-                .ui(&mut behavior, ui);
+            for intent in timeline_intents {
+                match intent {
+                    crate::timeline_egui::TimelineIntent::Pointer {
+                        phase,
+                        time,
+                        hit,
+                        ..
+                    } => self.handle_timeline_pointer(phase, time, hit, timeline_projection.as_ref().ok()),
+                    crate::timeline_egui::TimelineIntent::Command { command, .. } => {
+                        let mapped = match command {
+                            crate::timeline_egui::TimelineCommand::Undo => {
+                                Some(crate::timeline_intent_adapter::TimelineIntent::Undo)
+                            }
+                            crate::timeline_egui::TimelineCommand::Redo => {
+                                Some(crate::timeline_intent_adapter::TimelineIntent::Redo)
+                            }
+                            crate::timeline_egui::TimelineCommand::Duplicate => {
+                                self.primary.map(
+                                    crate::timeline_intent_adapter::TimelineIntent::DuplicateLayer,
+                                )
+                            }
+                            _ => None,
+                        };
+                        if let Some(mapped) = mapped {
+                            let _ = crate::timeline_intent_adapter::enqueue_timeline_intent(
+                                &mut self.document_queue,
+                                mapped,
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+            }
             if !self.layout_evidence_logged {
                 eprintln!(
                     "U1A2_LAYOUT signature={}",
@@ -440,20 +516,18 @@ impl eframe::App for MotoliiApp {
                 self.layout_evidence_logged = true;
             }
 
-            let edits = behavior.edits;
             let runtime_edit = if edits
                 .iter()
                 .any(|edit| matches!(edit, EditAction::TileResized | EditAction::TileDragged))
             {
                 RuntimeFrameEdit::Continuous
-            } else if !edits.is_empty() || behavior.visibility_edited {
+            } else if !edits.is_empty() || visibility_edited {
                 RuntimeFrameEdit::Commit
             } else {
                 RuntimeFrameEdit::None
             };
             let gesture_finished =
                 edits.contains(&EditAction::TileDropped) || ui.ctx().drag_stopped_id().is_some();
-            let stage_rect = behavior.stage_rect;
 
             if cancel_runtime_frame {
                 if let Err(error) = self.layout_authority.reconcile_runtime_frame(
@@ -530,6 +604,155 @@ fn runtime_edit_after_separator_action(
 }
 
 impl MotoliiApp {
+    fn handle_timeline_pointer(
+        &mut self,
+        phase: crate::timeline_egui::TimelinePointerPhase,
+        time: Option<motolii_core::RationalTime>,
+        hit: crate::timeline_egui::EguiTimelineHit,
+        live_projection: Option<&TimelineProjection>,
+    ) {
+        use crate::timeline_egui::{EguiTimelineHit, TimelinePointerPhase};
+        use crate::timeline_intent_adapter::{enqueue_timeline_intent, TimelineIntent};
+
+        match phase {
+            TimelinePointerPhase::Down => {
+                self.clear_timeline_gestures();
+                let mapped = match hit {
+                    EguiTimelineHit::Key { layer, .. }
+                    | EguiTimelineHit::Body { layer }
+                    | EguiTimelineHit::Left { layer }
+                    | EguiTimelineHit::Right { layer } => TimelineIntent::Select(Some(layer)),
+                    EguiTimelineHit::None => TimelineIntent::Select(None),
+                };
+                let _ = enqueue_timeline_intent(&mut self.document_queue, mapped);
+                let Some(pointer_time) = time else {
+                    return;
+                };
+                match hit {
+                    EguiTimelineHit::Body { layer } => {
+                        if let Some(initial_start) =
+                            find_clip_start(&self.current_document, layer)
+                        {
+                            self.timeline_move = Some(TimelineMoveGesture::begin(
+                                layer,
+                                pointer_time,
+                                initial_start,
+                                self.projection_generation,
+                            ));
+                        }
+                    }
+                    EguiTimelineHit::Left { layer } | EguiTimelineHit::Right { layer } => {
+                        if let Some((initial_start, initial_end)) =
+                            find_clip_interval(&self.current_document, layer)
+                        {
+                            let edge = match hit {
+                                EguiTimelineHit::Left { .. } => TimelineTrimEdge::Left,
+                                _ => TimelineTrimEdge::Right,
+                            };
+                            self.timeline_trim = Some(TimelineTrimGesture::begin(
+                                layer,
+                                edge,
+                                pointer_time,
+                                initial_start,
+                                initial_end,
+                                self.projection_generation,
+                            ));
+                        }
+                    }
+                    EguiTimelineHit::Key { layer, key } => {
+                        let old = find_position_key_time(&self.current_document, layer, key)
+                            .or_else(|| {
+                                live_projection.and_then(|projection| {
+                                    projection
+                                        .keys()
+                                        .iter()
+                                        .find(|item| item.layer == layer && item.key == key)
+                                        .map(|item| item.t)
+                                })
+                            });
+                        if let Some(old) = old {
+                            self.timeline_key_drag = Some(EguiKeyDrag {
+                                layer,
+                                key,
+                                old,
+                                initial_pointer: pointer_time,
+                            });
+                        }
+                    }
+                    EguiTimelineHit::None => {}
+                }
+            }
+            TimelinePointerPhase::Drag => {
+                let Some(pointer_time) = time else {
+                    return;
+                };
+                if let Some(gesture) = self.timeline_move {
+                    if let Ok(new_start) = gesture.preview(pointer_time) {
+                        self.timeline_preview = live_projection.and_then(|projection| {
+                            projection.preview_move(
+                                gesture.layer(),
+                                new_start,
+                                self.current_document.composition.duration,
+                            )
+                        });
+                    }
+                }
+            }
+            TimelinePointerPhase::Up => {
+                if let Some(gesture) = self.timeline_move.take() {
+                    if let Some(pointer_time) = time {
+                        if let Ok(Some(request)) = gesture.release(pointer_time) {
+                            let _ = enqueue_timeline_intent(
+                                &mut self.document_queue,
+                                TimelineIntent::MoveClip {
+                                    layer: request.layer,
+                                    new_start: request.new_start,
+                                },
+                            );
+                        }
+                    }
+                }
+                if let Some(gesture) = self.timeline_trim.take() {
+                    if let Some(pointer_time) = time {
+                        if let Ok(Some(request)) = gesture.release(pointer_time) {
+                            let _ = enqueue_timeline_intent(
+                                &mut self.document_queue,
+                                TimelineIntent::TrimClip(request),
+                            );
+                        }
+                    }
+                }
+                if let Some(drag) = self.timeline_key_drag.take() {
+                    if let Some(pointer_time) = time {
+                        let new = pointer_time
+                            .try_sub(drag.initial_pointer)
+                            .ok()
+                            .and_then(|delta| drag.old.try_add(delta).ok());
+                        if let Some(new) = new.filter(|new| *new != drag.old) {
+                            let _ = enqueue_timeline_intent(
+                                &mut self.document_queue,
+                                TimelineIntent::MovePositionKey {
+                                    target: drag.layer,
+                                    key: drag.key,
+                                    old: drag.old,
+                                    new,
+                                },
+                            );
+                        }
+                    }
+                }
+                self.timeline_preview = None;
+            }
+        }
+    }
+
+    fn clear_timeline_gestures(&mut self) {
+        self.timeline_move = None;
+        self.timeline_trim = None;
+        self.timeline_key_drag = None;
+        self.timeline_preview = None;
+    }
+
     fn process_document_edit(&mut self, ctx: &egui::Context) {
         let Some(document_runtime) = &mut self.document_runtime else {
             return;
@@ -918,12 +1141,117 @@ impl LatestPreviewSmoke {
     }
 }
 
+fn find_clip_start(
+    document: &motolii_doc::Document,
+    target: motolii_doc::LayerId,
+) -> Option<motolii_core::RationalTime> {
+    fn find(
+        items: &[motolii_doc::TrackItem],
+        target: motolii_doc::LayerId,
+    ) -> Option<motolii_core::RationalTime> {
+        for item in items {
+            match item {
+                motolii_doc::TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return Some(clip.start);
+                }
+                motolii_doc::TrackItem::Group(group) => {
+                    if let Some(start) = find(&group.children, target) {
+                        return Some(start);
+                    }
+                }
+                motolii_doc::TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+
+    document
+        .tracks
+        .iter()
+        .find_map(|track| find(&track.items, target))
+}
+
+fn find_clip_interval(
+    document: &motolii_doc::Document,
+    target: motolii_doc::LayerId,
+) -> Option<(motolii_core::RationalTime, motolii_core::RationalTime)> {
+    fn find(
+        items: &[motolii_doc::TrackItem],
+        target: motolii_doc::LayerId,
+    ) -> Option<(motolii_core::RationalTime, motolii_core::RationalTime)> {
+        for item in items {
+            match item {
+                motolii_doc::TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return Some((clip.start, clip.start.try_add(clip.duration).ok()?));
+                }
+                motolii_doc::TrackItem::Group(group) => {
+                    if let Some(interval) = find(&group.children, target) {
+                        return Some(interval);
+                    }
+                }
+                motolii_doc::TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+
+    document
+        .tracks
+        .iter()
+        .find_map(|track| find(&track.items, target))
+}
+
+fn find_position_key_time(
+    document: &motolii_doc::Document,
+    target: motolii_doc::LayerId,
+    key: motolii_doc::KeyframeId,
+) -> Option<motolii_core::RationalTime> {
+    fn find(
+        items: &[motolii_doc::TrackItem],
+        target: motolii_doc::LayerId,
+        key: motolii_doc::KeyframeId,
+    ) -> Option<motolii_core::RationalTime> {
+        for item in items {
+            match item {
+                motolii_doc::TrackItem::Clip(clip) if clip.envelope.layer_id == target => {
+                    return match &clip.envelope.transform.position {
+                        motolii_doc::DocParam::Keyframes(track) => track
+                            .keys()
+                            .iter()
+                            .find(|item| item.id == key)
+                            .map(|item| item.t),
+                        _ => None,
+                    };
+                }
+                motolii_doc::TrackItem::Group(group) => {
+                    if let Some(time) = find(&group.children, target, key) {
+                        return Some(time);
+                    }
+                }
+                motolii_doc::TrackItem::Clip(_) => {}
+            }
+        }
+        None
+    }
+
+    document
+        .tracks
+        .iter()
+        .find_map(|track| find(&track.items, target, key))
+}
+
 struct PanelBehavior<'a> {
     preview: &'a StaticPreview,
     texture_id: egui::TextureId,
     edits: Vec<EditAction>,
     visibility_edited: bool,
     stage_rect: Option<egui::Rect>,
+    timeline_document: &'a motolii_doc::Document,
+    timeline_projection: Option<&'a crate::timeline_projection::TimelineProjection>,
+    timeline_projection_error: Option<String>,
+    timeline_primary: &'a mut Option<motolii_doc::LayerId>,
+    timeline_playhead: &'a mut motolii_core::RationalTime,
+    timeline_intents: Vec<crate::timeline_egui::TimelineIntent>,
 }
 
 impl Behavior<PanelRole> for PanelBehavior<'_> {
@@ -931,6 +1259,17 @@ impl Behavior<PanelRole> for PanelBehavior<'_> {
         match pane {
             PanelRole::Stage => {
                 self.stage_rect = Some(paint_stage(ui, self.preview, self.texture_id));
+            }
+            PanelRole::Timeline => {
+                let output = crate::timeline_egui::paint_timeline(
+                    ui,
+                    self.timeline_document,
+                    self.timeline_projection,
+                    self.timeline_projection_error.as_deref(),
+                    self.timeline_primary,
+                    self.timeline_playhead,
+                );
+                self.timeline_intents.extend(output.intents);
             }
             role => {
                 let response = ui.add(egui::Label::new(role.title()).sense(egui::Sense::drag()));

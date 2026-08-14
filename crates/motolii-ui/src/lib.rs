@@ -5,19 +5,14 @@
 mod app;
 mod browser_host;
 mod browser_host_runtime;
-mod command_registry;
 mod diagnostic;
 mod diagnostic_projection;
 mod display_slot;
 mod document_command_request;
 mod document_edit_runtime;
-mod domain_intent;
 mod host_pointer_capture;
-mod input_router;
 mod inspector_host_runtime;
 mod interaction_state;
-mod keymap;
-mod keymap_codec;
 mod layout;
 mod layout_authority;
 mod layout_geometry;
@@ -25,6 +20,7 @@ mod layout_runtime;
 mod layout_runtime_adapter;
 mod media_library;
 mod native_host_layout;
+mod palette_settings;
 mod parameter_control;
 mod product_easing_popup;
 mod product_runtime;
@@ -35,8 +31,9 @@ mod rn_product_host;
 pub use rn_product_host::{
     host_commit_stage_transform_for_app, host_create_for_test, host_destroy_for_test,
     host_destroy_stage_for_test, host_dispatch_intent_for_test,
-    host_preview_stage_transform_for_app, host_read_snapshot_for_test,
-    host_register_stage_for_test, host_render_frame_for_app, AppStageFrame, AppStageGeometry,
+    host_position_key_times_for_app, host_preview_stage_transform_for_app,
+    host_read_snapshot_for_test, host_register_stage_for_test, host_render_frame_for_app,
+    host_stage_geometry_at_for_app, AppStageFrame, AppStageGeometry,
     AppStageGeometryLayer, AppStageTransformEdit, AppStageTransformError, AppStageTransformPreview,
     HostRenderFrameResult, RnHostError, RnHostReasonCode, RnHostTestIntent, RnHostTestResponse,
     RnProductSnapshotForTest,
@@ -56,10 +53,15 @@ mod stage_geometry_projection;
 mod stage_hit_test;
 mod stage_overlay_gpu;
 pub mod stage_overlay_raster;
-mod state_ownership;
 mod static_preview;
+mod timeline_egui;
+#[cfg(test)]
+mod timeline_egui_interaction_tests;
+mod timeline_clipboard_intents;
+mod timeline_intent_adapter;
 mod timeline_move_gesture;
 mod timeline_projection;
+mod timeline_viewport_state;
 #[cfg(target_os = "macos")]
 mod timeline_skia_raster;
 mod timeline_tools_host_runtime;
@@ -67,39 +69,39 @@ mod timeline_trim_gesture;
 mod ui_numeric_trace;
 mod user_keymap_prefs;
 
-pub use command_registry::{
-    builtin_command_registry, CommandId, CommandIdError, CommandMetadata, CommandRegistry,
-    CommandRegistryError,
-};
 pub use diagnostic::{
     adapt_command_error, adapt_document_command_request_error, adapt_input_router_error,
     DiagnosticActionKind, DiagnosticEnvelope, DiagnosticFact, DiagnosticReasonCode,
     DiagnosticRecoverability, DiagnosticSubject, UnsupportedDiagnosticSource,
 };
 pub use document_command_request::{DocumentCommandRequest, DocumentCommandRequestError};
-pub use domain_intent::{DomainIntent, DomainIntentError};
-pub use input_router::{
-    ImeGateState, InputPhase, InputRouter, InputRouterError, NormalizedInput, RouterOutput,
-    SafetyInterrupt,
-};
 pub use interaction_state::{
     InteractionState, InteractionStateMachine, InteractionTransitionError,
 };
-pub use keymap::{
-    product_action_host_kind, product_builtin_keymap, resolve_keymap, resolve_product_action,
-    AsciiKey, AsciiKeyError, Binding, BuiltinKeymap, DeltaOperation, EffectiveTrigger, Gesture,
-    KeyToken, KeymapDelta, KeymapDiagnostic, KeymapResolution, Modifier, ModifierError, Modifiers,
-    PlatformBindingConstraints, PlatformCommandModifier, PointerButton, ProductAction,
-    PRODUCT_BUILTIN_KEYMAP_VERSION, PRODUCT_HOST_KIND_DUPLICATE, PRODUCT_HOST_KIND_MUTE,
-    PRODUCT_HOST_KIND_SHUTTLE_FORWARD, PRODUCT_HOST_KIND_SHUTTLE_REVERSE,
-    PRODUCT_HOST_KIND_SHUTTLE_STOP, PRODUCT_HOST_KIND_SOLO, PRODUCT_HOST_KIND_TOGGLE_PLAYBACK,
-    PRODUCT_HOST_KIND_TRIM_CLIP_IN, PRODUCT_HOST_KIND_TRIM_CLIP_OUT, PRODUCT_KEYMAP_PROFILE_ID,
-    PRODUCT_UNWIRED_DUPLICATE, PRODUCT_UNWIRED_MUTE, PRODUCT_UNWIRED_SOLO, PRODUCT_UNWIRED_SPLIT,
+pub use motolii_input::{
+    builtin_command_registry, decode_keymap_json, encode_keymap_json, product_action_host_kind,
+    product_action_repeat_disposition, product_builtin_keymap, resolve_keymap,
+    resolve_product_action, AsciiKey, AsciiKeyError, Binding, BuiltinKeymap, CommandId,
+    CommandIdError, CommandMetadata, CommandRegistry, CommandRegistryError, DeltaOperation,
+    DomainIntent, DomainIntentError, EffectiveTrigger, Gesture, ImeGateState, InputPhase,
+    InputRouter, InputRouterError, KeyToken, KeymapApplyError, KeymapCodecDiagnostic,
+    KeymapCodecError, KeymapCodecLimits, KeymapDelta, KeymapDiagnostic, KeymapResolution,
+    LimitKind, LoadedKeymap, Modifier, ModifierError, Modifiers, NormalizedInput,
+    OpaqueOperationReason, PlatformBindingConstraints, PlatformCommandModifier, PointerButton,
+    ProductAction, RepeatDisposition, RouterOutput, SafetyInterrupt, UiStateLifetime, UiStateOwner,
+    KEYMAP_CODEC_VERSION, PRODUCT_BUILTIN_KEYMAP_VERSION, PRODUCT_HOST_KIND_COPY,
+    PRODUCT_HOST_KIND_CUT, PRODUCT_HOST_KIND_DUPLICATE, PRODUCT_HOST_KIND_GOTO_NEXT_KEY,
+    PRODUCT_HOST_KIND_GOTO_NEXT_STEP, PRODUCT_HOST_KIND_GOTO_PREV_KEY,
+    PRODUCT_HOST_KIND_GOTO_PREV_STEP, PRODUCT_HOST_KIND_MUTE, PRODUCT_HOST_KIND_PASTE,
+    PRODUCT_HOST_KIND_SELECT_ALL, PRODUCT_HOST_KIND_SHUTTLE_FORWARD,
+    PRODUCT_HOST_KIND_SHUTTLE_REVERSE, PRODUCT_HOST_KIND_SHUTTLE_STOP, PRODUCT_HOST_KIND_SOLO,
+    PRODUCT_HOST_KIND_TOGGLE_PLAYBACK, PRODUCT_HOST_KIND_TRIM_CLIP_IN,
+    PRODUCT_HOST_KIND_TRIM_CLIP_OUT, PRODUCT_KEYMAP_PROFILE_ID, PRODUCT_UNWIRED_DUPLICATE,
+    PRODUCT_UNWIRED_MUTE, PRODUCT_UNWIRED_SOLO, PRODUCT_UNWIRED_SPLIT,
 };
-pub use keymap_codec::{
-    decode_keymap_json, encode_keymap_json, KeymapApplyError, KeymapCodecDiagnostic,
-    KeymapCodecError, KeymapCodecLimits, LimitKind, LoadedKeymap, OpaqueOperationReason,
-    KEYMAP_CODEC_VERSION,
+pub use palette_settings::{
+    default_user_palette_settings_path, Palette, PaletteColor, PaletteColorId, PaletteId,
+    PaletteSettings, PaletteSettingsError, Rgba, PALETTE_SETTINGS_VERSION, USER_PALETTE_FILE_NAME,
 };
 pub use parameter_control::{
     map_parameter_control, HostParameterControl, ParameterControlError, ParameterControlSpec,
@@ -109,7 +111,6 @@ pub use stage_geometry_projection::{
     project_stage_geometry, StageGeometryError, StageGeometryProjection, StageGeometryUnavailable,
     StageLayerGeometry, StageLayerProjection, StageLocalRect,
 };
-pub use state_ownership::{UiStateLifetime, UiStateOwner};
 pub use static_preview::StaticPreviewError;
 pub use timeline_projection::{
     project_timeline, TimelineBar, TimelineHit, TimelineKey, TimelineMetrics, TimelineProjection,

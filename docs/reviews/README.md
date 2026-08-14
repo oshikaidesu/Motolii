@@ -32,6 +32,12 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-15-egui-timeline-engine-authority.md](2026-08-15-egui-timeline-engine-authority.md) | 製品Timeline engineはMotolii egui。Godot PORT操作、egui-keyframeはPATTERNのみ。Rerun Time Panel相乗りは撤回 |
+| [2026-08-14-rerun-body-skin-meaning-decision.md](2026-08-14-rerun-body-skin-meaning-decision.md) | Timelineに限る。Rerun Time Panelのスキン＋Skiaのlayer／clip／key意味（2026-08-15: engine相乗りは撤回注記） |
+| [2026-08-14-web-window-product-reflection-authority.md](2026-08-14-web-window-product-reflection-authority.md) | Web窓／macOS窓／Windows窓を同じ製品coreとsnapshotのprojectionとし、platform adapterを薄く保つ決定 |
+| [2026-08-13-godot-editing-port-handoff.md](2026-08-13-godot-editing-port-handoff.md) | Godot編集系PORTのdirty実装状態、Release確認入口、未接続の`[` `]`、Debug誤起動を次sessionへ渡す観察 |
+| [2026-08-13-godot-editing-system-adoption.md](2026-08-13-godot-editing-system-adoption.md) | Timeline／key／Inspector操作をGodot MIT editorからPORTし、トンマナは現行Motoliiのまま維持する決定 |
+| [2026-08-13-inspector-key-add-ux-decision.md](2026-08-13-inspector-key-add-ux-decision.md) | Riveのproperty key buttonを既存Document/D2 intentへ縮小採択し、Vec2一button、snapshot-owned tri-state、同一値行、reject非遷移を固定する決定 |
 | [2026-08-10-creator-translation-working-draft-pr-integration-decision.md](2026-08-10-creator-translation-working-draft-pr-integration-decision.md) | Motoliiをクリエイター意図の翻訳Hostとし、理論を通す叩き台、良い塊のPR、機械的conflict許容とsemantic conflict停止を定める決定 |
 | [2026-08-10-m5-glow-multipass-hdr-transient-proof.md](2026-08-10-m5-glow-multipass-hdr-transient-proof.md) | M5-R0でFP16 bright-pass、separable blur、additive composite、Host所有transient再利用とalpha／extent負例を確認する縮小採用 |
 | [2026-08-10-m5-feedback-trail-host-ping-pong-proof.md](2026-08-10-m5-feedback-trail-host-ping-pong-proof.md) | 再帰FeedbackをStatefulFilterにせずHost所有2 textureの明示clear／ping-pong／fresh replayで成立確認し、SCR-4のWAITを維持する決定 |
@@ -578,3 +584,4 @@
 | [2026-08-12-remove-position-key-contract.md](2026-08-12-remove-position-key-contract.md) | RemovePositionKey(position key削除)の閉じた契約 — Add/UndoAdd対の鏡映、最後の1個はConst収束、undoは同一KeyframeId復元。Timeline Deleteが通常入口 |
 | [2026-08-12-pre-handson-ux-decision-demotion.md](2026-08-12-pre-handson-ux-decision-demotion.md) | 実機以前のUX決定を仮説へ一括降格(利用者裁定)。object bar read-onlyを明示撤回、UX authorityは実機裁定>品質バー>文法地図>旧仮説。工学契約(絶対規律/D2)は対象外 |
 | [2026-08-13-pr476-structural-skepticism-audit.md](2026-08-13-pr476-structural-skepticism-audit.md) | PR #476全成果物の構造懐疑監査S1〜S12(利用者裁定「見た目だけ通ればいい話ではない」)。最重症=Stage gizmo迂回(採択済みtransform_gizmo資産をhost接続で迂回し実UXが退化)。検収体系の欠陥(見た目保存の報酬化)を根本原因と認定、PRIOR ART欄義務化を即日施行 |
+| [2026-08-14-user-palette-library-contract.md](2026-08-14-user-palette-library-contract.md) | Paletteをproject横断User Settings、適用RGBAを既存Document Color、Stage表示を既存Rerun Spatial Viewer投影へ分離する実データ契約 |

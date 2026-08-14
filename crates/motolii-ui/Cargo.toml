@@ -20,6 +20,7 @@ motolii-doc.workspace = true
 motolii-eval.workspace = true
 motolii-export.workspace = true
 motolii-gpu.workspace = true
+motolii-input.workspace = true
 motolii-plugin.workspace = true
 motolii-plugins-firstparty.workspace = true
 motolii-render.workspace = true
