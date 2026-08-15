@@ -125,6 +125,30 @@ impl BrowserBlitzPanel {
         })
     }
 
+    /// 面の大きさを変える。**`Runtime` も `BlitzSurface` も縮小実体も作り直さない。**
+    ///
+    /// パネルごと作り直すと `tokio::runtime::Runtime` が立ち上がり直し、`<img>` を
+    /// 全部取り直すことになる。ドッキングのドラッグ中は寸法が毎フレーム変わるので、
+    /// それが「パネルを動かすとサムネイルが消える」の正体だった。
+    ///
+    /// ここで作り直すのは文書だけで、それも `dirty` を立てて次の `render` に任せる
+    /// (寸法が続けて変わる間に何度も組み直さないため)。`width`/`height` は **CSS px**。
+    pub fn resize(&mut self, width: u32, height: u32, scale: f64) {
+        if self.width == width && self.height == height {
+            // 倍率だけが変わることもある(別のディスプレイへ移した等)。
+            self.surface.set_scale(scale);
+            return;
+        }
+        self.width = width;
+        self.height = height;
+        self.surface.resize(
+            ((width as f64) * scale).round() as u32,
+            ((height as f64) * scale).round() as u32,
+        );
+        self.surface.set_scale(scale);
+        self.dirty = true;
+    }
+
     /// フォルダを参照してパネルを作る。走査と種別判定は `media_library` が持つ。
     /// native file dialog は使わない(C6 NON-GOALS)。
     #[allow(clippy::too_many_arguments)]

@@ -83,6 +83,24 @@ impl BlitzSurface {
         self.scale = scale;
     }
 
+    /// 面の大きさを変える。**`Renderer` も `Resources` も作り直さない。**
+    ///
+    /// `vello_hybrid::Renderer::render` は毎回 `RenderSize` を受け取り、内部の
+    /// `maybe_update_config_buffer` が「前回と寸法が違うとき」だけ config buffer を
+    /// 書き換えて depth texture を作り直す
+    /// (`vello_hybrid-0.0.9/src/render/wgpu.rs:2302-2334`)。構築時に pipeline へ
+    /// 焼き込まれるのは `format` だけ(`:1317`, `:1404`, `:1572`)なので、
+    /// **寸法が変わっただけで `BlitzSurface` を作り直す必要は無い**。
+    ///
+    /// 作り直す方が高くつく: `image_cache` と `Resources`(グリフatlasを持つ)を
+    /// 捨てることになり、次のフレームで全部載せ直しになる。
+    /// 上流 Blitz の `examples/wgpu_texture` も、リサイズ時に作り直すのは
+    /// テクスチャだけで pipeline と device はそのままにしている。
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
+    }
+
     /// 1フレーム描いて `target` へ書く。GPU resourceはloop内で作らない
     /// (renderer/resources/cacheはすべて再利用)。
     pub fn render(

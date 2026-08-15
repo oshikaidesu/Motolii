@@ -481,17 +481,28 @@ impl HtmlPane {
             self.document_scale = scale;
             self.painted = false;
         }
-        if self.surface.is_none() || self.surface_size != (texture_width, texture_height) {
-            self.surface = Some(BlitzSurface::new(
-                device,
-                adapter,
-                queue,
-                FORMAT,
-                texture_width,
-                texture_height,
-            ));
-            self.surface_size = (texture_width, texture_height);
-            self.painted = false;
+        // **寸法が変わっただけなら作り直さない。** `BlitzSurface::resize` の doc の
+        // とおり、`Renderer` は `RenderSize` を毎回受け取って自分で追随する。
+        // 作り直すと画像キャッシュとグリフatlasを毎回捨てることになる。
+        match self.surface.as_mut() {
+            Some(surface) if self.surface_size != (texture_width, texture_height) => {
+                surface.resize(texture_width, texture_height);
+                self.surface_size = (texture_width, texture_height);
+                self.painted = false;
+            }
+            Some(_) => {}
+            None => {
+                self.surface = Some(BlitzSurface::new(
+                    device,
+                    adapter,
+                    queue,
+                    FORMAT,
+                    texture_width,
+                    texture_height,
+                ));
+                self.surface_size = (texture_width, texture_height);
+                self.painted = false;
+            }
         }
         // 文書の `hidpi_scale` と同じ倍率を描画側にも渡す。片方だけだと縮尺がずれる。
         if let Some(surface) = self.surface.as_mut() {
@@ -604,7 +615,20 @@ impl BrowserPane {
             ((width as f64) / scale).round().max(1.0) as u32,
             ((height as f64) / scale).round().max(1.0) as u32,
         );
-        if self.panel.is_none() || self.size != css || self.scale != scale {
+        // **寸法が変わっただけならパネルを作り直さない**(`BrowserBlitzPanel::resize`)。
+        // 作り直すと tokio runtime ごと立て直して画像を全部取り直すため、
+        // ドラッグ中にサムネイルが消える。
+        if self.panel.is_some() && (self.size != css || self.scale != scale) {
+            if let Some(panel) = self.panel.as_mut() {
+                panel.resize(css.0, css.1, scale);
+            }
+            self.size = css;
+            self.scale = scale;
+            // 文書を組み直すので、落ち着き待ちからやり直す。
+            self.settled = 0;
+            self.last_images = usize::MAX;
+        }
+        if self.panel.is_none() {
             let items = self
                 .items
                 .get_or_insert_with(|| image_items(&PathBuf::from(BROWSER_DIR), DEFAULT_MAX_ITEMS))
