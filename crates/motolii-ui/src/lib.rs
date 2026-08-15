@@ -9,7 +9,6 @@ mod blitz_ui;
 /// C6: フォルダ参照でメディア入口を開くBrowserパネル(Blitz)。
 pub mod browser_blitz;
 mod browser_host;
-mod browser_host_runtime;
 // C8: chrome と extension panel の見た目のBlitz(HTML/CSS)写し。bin から使うので pub。
 pub mod chrome_blitz;
 mod diagnostic;
@@ -21,7 +20,6 @@ mod document_edit_runtime;
 mod host_pointer_capture;
 // C7: Inspector の見た目のBlitz(HTML/CSS)写し。bin から使うので pub。
 pub mod inspector_blitz;
-mod inspector_host_runtime;
 mod interaction_state;
 mod layout;
 mod layout_authority;
@@ -33,8 +31,7 @@ mod native_host_layout;
 mod palette_settings;
 mod parameter_control;
 mod product_easing_popup;
-mod product_runtime;
-mod product_runtime_adapter;
+mod preview_pipeline;
 mod rn_product_host;
 /// Rerun Spatial Viewer の Stage。Motolii はこのViewerの wrapper であり、
 /// `re_renderer` で直接シーンを組まない(2026-08-11裁定)。bin から使うので pub。
@@ -60,7 +57,6 @@ pub use rn_product_host::{
 };
 mod render_worker;
 mod shell;
-mod stage_chrome_host_runtime;
 mod stage_geometry_projection;
 mod stage_hit_test;
 mod stage_overlay_gpu;
@@ -73,7 +69,6 @@ mod timeline_move_gesture;
 mod timeline_projection;
 #[cfg(target_os = "macos")]
 mod timeline_skia_raster;
-mod timeline_tools_host_runtime;
 mod timeline_trim_gesture;
 mod timeline_viewport_state;
 mod ui_numeric_trace;

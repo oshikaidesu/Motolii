@@ -21,13 +21,11 @@ mod tests {
         assert!(enabled());
     }
 
+    /// Web窓(wry)の host runtime 3本は 2026-08-16 に凍結・撤去したので、
+    /// この検査に残っているのは pointer 境界だけ。
     #[test]
-    fn place_trace_schema_keeps_every_numeric_boundary() {
+    fn pointer_trace_schema_keeps_every_numeric_boundary() {
         let pointer_source = include_str!("host_pointer_capture.rs");
-        let product_source = include_str!("product_runtime.rs");
-        let browser_source = include_str!("browser_host_runtime.rs");
-        let inspector_source = include_str!("inspector_host_runtime.rs");
-
         for field in [
             "generation=",
             "raw_x=",
@@ -40,51 +38,6 @@ mod tests {
             assert!(
                 pointer_source.contains(field),
                 "pointer numeric trace is missing {field}"
-            );
-        }
-        for field in [
-            "layout_epoch=",
-            "stage_x=",
-            "stage_y=",
-            "stage_width=",
-            "stage_height=",
-            "ndc_x=",
-            "ndc_y=",
-            "canonical_x=",
-            "canonical_y=",
-            "kind=startup",
-            "kind=layout",
-            "kind=browser-intent",
-            "kind=document-publish",
-            "kind=stage-submit",
-            "kind=stage-result",
-            "kind=timeline-projection",
-            "kind=timeline-hit",
-            "kind=window",
-            "kind=surface",
-            "kind=failure",
-        ] {
-            assert!(
-                product_source.contains(field),
-                "product numeric trace is missing {field}"
-            );
-        }
-        for field in [
-            "event=load-started",
-            "event=load-finished",
-            "event=ipc-accepted",
-            "event=bounds",
-            "event=focus",
-        ] {
-            assert!(
-                browser_source.contains(field),
-                "Browser trace is missing {field}"
-            );
-        }
-        for field in ["surface=inspector", "event=bounds", "event=publish"] {
-            assert!(
-                inspector_source.contains(field),
-                "Inspector trace is missing {field}"
             );
         }
     }

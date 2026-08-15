@@ -122,7 +122,7 @@ impl RnProductHost {
             )
             .map_err(|_| RnHostReasonCode::InvalidIntent)?;
             let (preview_pipeline, preview_bind_group) =
-                crate::product_runtime::create_preview_pipeline(
+                crate::preview_pipeline::create_preview_pipeline(
                     &ctx.device,
                     TextureFormat::Bgra8Unorm,
                     preview.slot().view(),

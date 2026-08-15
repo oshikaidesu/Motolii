@@ -110,7 +110,6 @@ glam = "0.32"
 # Stage の authoring gizmo(rerun_stage/gizmo.rs)。版は native-renderer と揃える。
 transform-gizmo = "0.9.0"
 winit = "0.30.9"
-wry = "0.55.1"
 # blitz-* / anyrender / vello_hybrid の版は上の [workspace.dependencies] に一本化済み。
 # 版・feature は実証済みの spikes/blitz-probe/Cargo.toml から写したもので、ここで選び直さない。
 # 0.8系/wgpu 29 でないと本体のwgpu 29と型が繋がらない(probe冒頭の注記)。

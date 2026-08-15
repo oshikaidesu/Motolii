@@ -80,7 +80,6 @@ transform-gizmo.workspace = true
 skia-safe.workspace = true
 wgpu.workspace = true
 winit.workspace = true
-wry.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
