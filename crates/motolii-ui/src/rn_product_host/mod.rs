@@ -17,7 +17,9 @@ mod key_projection;
 mod playback;
 mod projection;
 mod registry;
-mod stage_projection;
+// `app_stage_geometry` を blitz_shell の Stage ペインから読むため crate 内へ開ける。
+// C5(RN退役)でこの module ごと行き先が変わる。
+pub(crate) mod stage_projection;
 mod surfaces;
 mod timeline_gpu;
 mod wire;

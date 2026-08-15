@@ -91,23 +91,24 @@ impl eframe::App for BlitzShellApp {
 ///
 /// ```text
 /// 横 ─┬─ Browser
-///     ├─ 中央列（縦）─── Timeline
+///     ├─ 中央列（縦）─┬─ Stage
+///     │               └─ Timeline
 ///     └─ 右列（縦）─┬─ Inspector
 ///                   └─ chrome タブ（Export / Settings / Panels）
 /// ```
 ///
-/// 中央列の上は Stage の席だが、Stage の Blitz パネルはまだ無い。
-/// 代わりの絵を描かないため、Stage のタイルは**置かない**（席が空くだけ）。
+/// Stage だけ Blitz ではなく **Rerun Spatial Viewer** が描く。
+/// Motolii はその wrapper であって `re_renderer` で直接シーンを組まない（2026-08-11裁定）。
 fn build_initial_tree() -> Tree<BlitzPane> {
     let mut tiles = Tiles::default();
 
     // 左: Browser。
     let browser = tiles.insert_pane(BlitzPane::new(PaneKind::Browser));
 
-    // 中央: 上が Stage の席（タイル無し）、下が Timeline。
-    // 今は Timeline しか無いので中央列は Timeline 1 枚の縦コンテナ。
+    // 中央: 上が Stage、下が Timeline。
+    let stage = tiles.insert_pane(BlitzPane::new(PaneKind::Stage));
     let timeline = tiles.insert_pane(BlitzPane::new(PaneKind::Timeline));
-    let center = tiles.insert_vertical_tile(vec![timeline]);
+    let center = tiles.insert_vertical_tile(vec![stage, timeline]);
 
     // 右: Inspector。
     let inspector = tiles.insert_pane(BlitzPane::new(PaneKind::Inspector));

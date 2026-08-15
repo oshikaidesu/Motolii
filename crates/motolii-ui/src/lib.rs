@@ -36,6 +36,9 @@ mod product_easing_popup;
 mod product_runtime;
 mod product_runtime_adapter;
 mod rn_product_host;
+/// Rerun Spatial Viewer の Stage。Motolii はこのViewerの wrapper であり、
+/// `re_renderer` で直接シーンを組まない(2026-08-11裁定)。bin から使うので pub。
+pub mod rerun_stage;
 
 #[doc(hidden)]
 pub use rn_product_host::{

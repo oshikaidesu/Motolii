@@ -9,6 +9,10 @@
 //! HTML/CSS はどれも既存の移植実装(`timeline_blitz` / `inspector_blitz` /
 //! `chrome_blitz` / `browser_blitz`)が出したものを使う。色も寸法もこのfileでは決めない。
 //!
+//! **Stage だけは別経路。** `re_view_spatial::SpatialStage` は元から egui の
+//! ウィジェットなので、ホストの `egui::Ui` へ直接挿す(`EmbeddedSpatialStage::show_in`)。
+//! 自前textureも2つ目の egui context も持たない。
+//!
 //! ## このfileが持たないもの
 //! - 入力ルーティング(マウスを受けない。`Sense::hover()` で場所を取るだけ)
 //! - Document編集・DomainIntent(表示する値は既存実装の投影とsampleのまま)
@@ -61,6 +65,16 @@ const TEXTURE_QUANTUM: u32 = 32;
 /// 少し小さい面を左上に等倍で置き、余った帯は余白として残す。
 const BROWSER_QUANTUM: u32 = 64;
 
+/// Browserの画像が届き終わったと見なすまでの、枚数が増えないフレーム数。
+const BROWSER_SETTLE_FRAMES: u32 = 10;
+
+/// 計測の出力間隔(フレーム)。
+const TRACE_EVERY: u32 = 60;
+
+fn trace_enabled() -> bool {
+    std::env::var_os("MOTOLII_SHELL_TRACE").is_some()
+}
+
 /// Timelineの絵にするDocument。`blitz_dump/main.rs:126-131` と同じ。
 /// `Document::new_current()` は空で、投影が bar も key も出さない。
 const TIMELINE_DOC: &str = "docs/mocks-ui/fixtures/reference-document.json";
@@ -71,6 +85,7 @@ const BROWSER_DIR: &str = "docs/mocks";
 /// 1ペインに出す面の種類。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PaneKind {
+    Stage,
     Timeline,
     Inspector,
     Browser,
@@ -82,6 +97,9 @@ pub enum PaneKind {
 /// Blitzパネル1面。
 pub struct BlitzPane {
     kind: PaneKind,
+    /// 計測用。`MOTOLII_SHELL_TRACE=1` の時だけ動く。
+    trace_total: std::time::Duration,
+    trace_frames: u32,
     /// egui へ渡す合成先。大きさが変わった時だけ作り直す。
     target: Option<Target>,
     content: Content,
@@ -90,11 +108,14 @@ pub struct BlitzPane {
 impl BlitzPane {
     pub fn new(kind: PaneKind) -> Self {
         let content = match kind {
+            PaneKind::Stage => Content::Stage(StagePane::default()),
             PaneKind::Browser => Content::Browser(BrowserPane::default()),
             _ => Content::Html(HtmlPane::default()),
         };
         Self {
             kind,
+            trace_total: std::time::Duration::ZERO,
+            trace_frames: 0,
             target: None,
             content,
         }
@@ -107,6 +128,7 @@ impl BlitzPane {
     /// tab に出す名前。**画面の題ではなく面の名前**なので短くする。
     pub fn title(&self) -> &'static str {
         match self.kind {
+            PaneKind::Stage => "Stage",
             PaneKind::Timeline => "Timeline",
             PaneKind::Inspector => "Inspector",
             PaneKind::Browser => "Browser",
@@ -135,11 +157,26 @@ impl BlitzPane {
             return;
         }
 
+        // Stage だけは **ホストの egui へ直接描く**。以下の texture 経路には来ない。
+        // `SpatialStage` は元から egui のウィジェットなので、間に自前の
+        // texture と2つ目の egui を挟む理由が(ホストが egui になった今は)無い。
+        if matches!(self.content, Content::Stage(_)) {
+            let trace_started = trace_enabled().then(std::time::Instant::now);
+            if let Content::Stage(pane) = &mut self.content {
+                pane.show(ui, render_state);
+            }
+            if let Some(started) = trace_started {
+                self.trace_frame(started.elapsed(), width, height);
+            }
+            return;
+        }
+
         let (device, queue) = (&render_state.device, &render_state.queue);
 
         // 描く面の大きさ(物理px)。Html系は要求どおり、Browserは切り下げ。
         let (paint_width, paint_height) = match &self.content {
-            Content::Html(_) => (width, height),
+            // Stage は上で返しているのでここへは来ない。
+            Content::Html(_) | Content::Stage(_) => (width, height),
             Content::Browser(_) => (
                 floor_to(width, BROWSER_QUANTUM),
                 floor_to(height, BROWSER_QUANTUM),
@@ -156,20 +193,21 @@ impl BlitzPane {
                 ceil_to(paint_width, TEXTURE_QUANTUM),
                 ceil_to(paint_height, TEXTURE_QUANTUM),
             ),
-            Content::Browser(_) => (paint_width, paint_height),
+            Content::Stage(_) | Content::Browser(_) => (paint_width, paint_height),
         };
 
-        ensure_target(
-            &mut self.target,
-            render_state,
-            texture_width,
-            texture_height,
-        );
+        ensure_target(&mut self.target, render_state, texture_width, texture_height);
         // 直前に作った(か、そのまま生きている)ので必ず在る。
         // 万一無ければ今フレームは描かない — 毎フレームの経路でpanicさせない。
         let Some(target) = self.target.as_ref() else {
             return;
         };
+        // `self.target` の借りは描き終わりで切る。合成で要るのは id だけなので先に写す。
+        let texture_id = target.id;
+
+        // 遅さの出所を測る窓。`MOTOLII_SHELL_TRACE=1` の時だけ働く。
+        // 「重いのはどのペインか」を推測せずに言うために置いている。
+        let trace_started = trace_enabled().then(std::time::Instant::now);
 
         match &mut self.content {
             Content::Html(pane) => {
@@ -197,6 +235,12 @@ impl BlitzPane {
                     points_per_pixel as f64,
                 );
             }
+            // Stage は上で返している。
+            Content::Stage(_) => {}
+        }
+
+        if let Some(started) = trace_started {
+            self.trace_frame(started.elapsed(), paint_width, paint_height);
         }
 
         // ---- egui が Blitz の texture を合成する ----
@@ -216,11 +260,32 @@ impl BlitzPane {
             ),
         );
         ui.painter()
-            .image(target.id, draw, uv, egui::Color32::WHITE);
+            .image(texture_id, draw, uv, egui::Color32::WHITE);
+    }
+
+    /// 1フレームぶんの実測を積み、`TRACE_EVERY` ごとに吐く。
+    fn trace_frame(&mut self, elapsed: std::time::Duration, width: u32, height: u32) {
+        self.trace_total += elapsed;
+        self.trace_frames += 1;
+        if self.trace_frames < TRACE_EVERY {
+            return;
+        }
+        eprintln!(
+            "shell-trace {:>16}: {:.2} ms/frame ({}x{})",
+            self.title(),
+            self.trace_total.as_secs_f64() * 1000.0 / TRACE_EVERY as f64,
+            width,
+            height
+        );
+        self.trace_total = std::time::Duration::ZERO;
+        self.trace_frames = 0;
     }
 }
 
 /// 合成先texture1枚と、そのegui側の登録。
+///
+/// format は `FORMAT` 固定。Stage はホストの egui へ直接描くので、
+/// この器を使うのは Blitz 面(Html / Browser)だけになった。
 struct Target {
     #[allow(dead_code)]
     texture: wgpu::Texture,
@@ -298,6 +363,78 @@ fn ensure_target(
 enum Content {
     Html(HtmlPane),
     Browser(BrowserPane),
+    /// Rerun Spatial Viewer の Stage。**Blitzではない。**
+    /// Motolii は Viewer の wrapper であって、`re_renderer` で直接シーンを組まない
+    /// (2026-08-11裁定)。ここは `rerun_stage::EmbeddedSpatialStage` を呼ぶだけ。
+    /// これだけは合成先textureを持たず、ホストの egui へ直接描く。
+    Stage(StagePane),
+}
+
+/// Rerun Stage 1面。**ホストの egui へ直接描く。**
+///
+/// `re_view_spatial::SpatialStage::show` は元から `&mut egui::Ui` を取るウィジェットで、
+/// Rerun 自身も eframe のホスト egui へそのまま挿している。ホストが egui になった今、
+/// 間に自前 texture と2つ目の egui context を挟む理由は無い
+/// (元の `EmbeddedSpatialStage::render` は RN の native surface へ埋めるための足場)。
+/// なので **`Target` を確保しない / `register_native_texture` もしない**。
+#[derive(Default)]
+struct StagePane {
+    stage: Option<crate::rerun_stage::EmbeddedSpatialStage>,
+    /// 幾何を積んだ面の大きさ(物理px)。変わったら `fit_view` をやり直す。
+    fitted: (u32, u32),
+}
+
+impl StagePane {
+    fn show(&mut self, ui: &mut egui::Ui, render_state: &eframe::egui_wgpu::RenderState) {
+        if self.stage.is_none() {
+            match crate::rerun_stage::EmbeddedSpatialStage::new_in_host(render_state) {
+                Ok(stage) => self.stage = Some(stage),
+                Err(error) => {
+                    eprintln!("blitz-pane: Rerun Stage を作れない: {error}");
+                    return;
+                }
+            }
+        }
+        let Some(stage) = self.stage.as_mut() else {
+            return;
+        };
+
+        // ペインの大きさは `ui` から取る(自前textureが無いので他に出所が無い)。
+        // 投影は物理px で行う — 変更前に texture の大きさを渡していたのと同じ量。
+        let available = ui.available_size_before_wrap();
+        let points_per_pixel = ui.ctx().pixels_per_point();
+        let width = (available.x * points_per_pixel).floor().max(0.0) as u32;
+        let height = (available.y * points_per_pixel).floor().max(0.0) as u32;
+        if width == 0 || height == 0 {
+            return;
+        }
+
+        // 幾何は既存の投影から来る。**ここで作らない。**
+        // `app_stage_geometry` は `rn_product_host` 側にあり、C5(RN退役)で行き先が変わる。
+        if self.fitted != (width, height) {
+            let document = stage_document();
+            let geometry = crate::rn_product_host::stage_projection::app_stage_geometry(
+                &document,
+                motolii_core::RationalTime::ZERO,
+            );
+            stage.apply_host_stage_geometry(&geometry, width, height);
+            stage.fit_view(width, height);
+            self.fitted = (width, height);
+        }
+
+        if let Err(error) = stage.show_in(ui, render_state) {
+            eprintln!("blitz-pane: Rerun Stage の描画に失敗: {error}");
+        }
+    }
+}
+
+/// Stage が映すDocument。Timelineと同じものを読む。
+fn stage_document() -> motolii_doc::Document {
+    let path = PathBuf::from(TIMELINE_DOC);
+    motolii_doc::load_document(&path).unwrap_or_else(|error| {
+        eprintln!("blitz-pane: {} を読めないので空Documentで描く: {error}", path.display());
+        motolii_doc::Document::new_current()
+    })
 }
 
 /// HTML文書1枚で足りる面(Timeline / Inspector / chrome 3枚)。
@@ -313,6 +450,8 @@ struct HtmlPane {
     surface_size: (u32, u32),
     /// Timelineの投影元。読み直さないように1度だけ持つ。
     source_document: Option<motolii_doc::Document>,
+    /// 現在の文書とsurfaceの組で既に1回描いたか。**変わるまで描き直さない。**
+    painted: bool,
 }
 
 impl HtmlPane {
@@ -340,6 +479,7 @@ impl HtmlPane {
             self.document = Some(build_document(&html, width, height, scale));
             self.document_size = css;
             self.document_scale = scale;
+            self.painted = false;
         }
         if self.surface.is_none() || self.surface_size != (texture_width, texture_height) {
             self.surface = Some(BlitzSurface::new(
@@ -351,17 +491,33 @@ impl HtmlPane {
                 texture_height,
             ));
             self.surface_size = (texture_width, texture_height);
+            self.painted = false;
         }
         // 文書の `hidpi_scale` と同じ倍率を描画側にも渡す。片方だけだと縮尺がずれる。
         if let Some(surface) = self.surface.as_mut() {
             surface.set_scale(scale);
         }
 
-        // 文書もsurfaceも作り直していないフレームでも描き直す。
-        // 絵は同じだが、textureの中身が生きている保証をこのfileが持てないため
-        // (blitz-paint は未取得リソースがあるフレームで何も描かずに戻る)。
+        // **変わっていないフレームは描き直さない。**
+        //
+        // 以前はここが毎フレーム `paint_scene` を呼んでいた。`BlitzSurface::render` は
+        // 毎回 `Scene::new` からDOM全体を起こし直す(差分もダーティ判定も無い)ので、
+        // 同じ絵を作り直すために面の数だけ費用を払っていた
+        // (合体シェルの実測: Timeline 42 / Inspector 49 / Export 28 ms/frame、debug)。
+        //
+        // texture はこのペインが所有していて他に書く者がいない。文書もsurfaceも
+        // 作り直していないなら、前フレームの中身がそのまま生きている。
+        //
+        // 描き足りない事故が起きうるのは、blitz-paint が未取得リソースのあるフレームで
+        // 何も描かずに戻る場合だけ。ここに来る4枚(Timeline / Inspector / chrome)は
+        // **HTML内に外部リソースを持たない**(file冒頭の契約)ので、その事故は起きない。
+        // 外部画像を持つ Browser は `BrowserPane` 側が別に面倒を見る。
+        if self.painted {
+            return;
+        }
         if let (Some(document), Some(surface)) = (self.document.as_mut(), self.surface.as_mut()) {
             surface.render(document, device, queue, target);
+            self.painted = true;
         }
     }
 
@@ -385,8 +541,8 @@ impl HtmlPane {
             PaneKind::ChromeExport => chrome_blitz::export_html(&chrome_blitz::EXPORT_SAMPLE, w, h),
             PaneKind::ChromeSettings => chrome_blitz::settings_html(w, h),
             PaneKind::ChromePanels => chrome_blitz::panels_html(w, h),
-            // Browser は `BrowserPane` が持つ。ここへは来ない。
-            PaneKind::Browser => String::new(),
+            // Browser は `BrowserPane`、Stage は `StagePane` が持つ。ここへは来ない。
+            PaneKind::Browser | PaneKind::Stage => String::new(),
         };
         html
     }
@@ -424,6 +580,11 @@ struct BrowserPane {
     size: (u32, u32),
     /// パネルを作ったときの倍率。変わったら作り直す(CSS px の意味が変わるため)。
     scale: f64,
+    /// 画像が届き終わるまでの落ち着き待ち。**Browserだけは1回描いて終われない** —
+    /// `blitz-net` の fetch が非同期で、1フレーム目ではサムネイルがまだ来ていない
+    /// (`blitz_dump/main.rs:202-204` と同じ理由)。枚数が増えなくなったら描くのを止める。
+    settled: u32,
+    last_images: usize,
 }
 
 impl BrowserPane {
@@ -458,6 +619,8 @@ impl BrowserPane {
                     self.panel = Some(panel);
                     self.size = css;
                     self.scale = scale;
+                    self.settled = 0;
+                    self.last_images = usize::MAX;
                 }
                 Err(error) => {
                     eprintln!("blitz-pane: Browserパネルを作れない: {error}");
@@ -467,7 +630,19 @@ impl BrowserPane {
             }
         }
         if let Some(panel) = self.panel.as_mut() {
+            // 落ち着いたら描き直さない。同じ絵を作り直すために毎フレーム
+            // DOM全体をシーンへ起こし直す必要は無い(実測107 ms/frame、debug)。
+            if self.settled >= BROWSER_SETTLE_FRAMES {
+                return;
+            }
             panel.render(device, queue, target);
+            let images = panel.cached_image_count();
+            self.settled = if images == self.last_images {
+                self.settled + 1
+            } else {
+                0
+            };
+            self.last_images = images;
         }
     }
 }

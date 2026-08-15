@@ -318,7 +318,7 @@ pub(super) fn prepare_app_stage_transform_command(
     }
 }
 
-pub(super) fn app_stage_geometry(
+pub(crate) fn app_stage_geometry(
     document: &motolii_doc::Document,
     time: RationalTime,
 ) -> AppStageGeometry {
