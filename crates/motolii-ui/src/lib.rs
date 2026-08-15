@@ -2,7 +2,6 @@
 //!
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
-mod app;
 mod canonical_drop;
 /// 移植済みBlitzパネルを1つの窓へ合体させる殻(eframe host + egui_tiles)。bin から使うので pub。
 pub mod blitz_shell;
@@ -68,10 +67,7 @@ mod stage_overlay_gpu;
 pub mod stage_overlay_raster;
 mod static_preview;
 pub mod timeline_blitz;
-mod timeline_clipboard_intents;
-mod timeline_egui;
 #[cfg(test)]
-mod timeline_egui_interaction_tests;
 mod timeline_intent_adapter;
 mod timeline_move_gesture;
 mod timeline_projection;
@@ -120,7 +116,7 @@ pub use palette_settings::{
 pub use parameter_control::{
     map_parameter_control, HostParameterControl, ParameterControlError, ParameterControlSpec,
 };
-pub use shell::{run_shell, run_shell_with_project, ShellError};
+pub use shell::ShellError;
 pub use stage_geometry_projection::{
     project_stage_geometry, StageGeometryError, StageGeometryProjection, StageGeometryUnavailable,
     StageLayerGeometry, StageLayerProjection, StageLocalRect,

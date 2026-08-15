@@ -284,7 +284,7 @@ mod tests {
     use motolii_testkit::unavailable_dep;
 
     use super::*;
-    use crate::app::{ShellLifecycleInput, StaticViewportProjection};
+
     use crate::layout::{LayoutAction, LayoutConstraints, PanelRole, SeparatorAction, SplitAxis};
     use crate::layout_authority::{LayoutAuthority, RuntimeFrameEdit};
 
