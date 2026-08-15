@@ -9,7 +9,7 @@ use transform_gizmo::{
     math::{DQuat, DVec3},
 };
 
-use crate::{AppStageGeometry, AppStageTransformEdit};
+use crate::stage_app_geometry::{AppStageGeometry, AppStageTransformEdit};
 
 use super::host_mesh::{
     hidden_layer_mesh, host_layer_fill_is_visible, host_layer_mesh_paths, ingest_host_layer_meshes,

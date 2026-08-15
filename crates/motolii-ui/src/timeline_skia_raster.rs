@@ -5,7 +5,23 @@ use skia_safe::{
     PathBuilder, Rect,
 };
 
-use crate::rn_product_host::TimelineFrameBorrow;
+/// 1フレーム分の投影済みTimeline。**`rn_product_host` から移してきた。**
+///
+/// 元は RN 製品ホストが GPU へ渡すために持っていた借用型で、RN 面を畳んだ
+/// (2026-08-16)ときにここへ降ろした。中身は Document と投影だけで、
+/// renderer にも wire にも依存しない。
+///
+/// **注意: 現在この raster を呼ぶ者は居ない。** 唯一の消費者だった
+/// `rn_product_host/timeline_gpu.rs` を畳んだため。Skia Timeline は
+/// 意味・hit・oracle の源として残してあるが、製品経路からは外れている。
+pub(crate) struct TimelineFrameBorrow {
+    pub(crate) revision: u64,
+    pub(crate) projection_generation: u64,
+    pub(crate) document: std::sync::Arc<motolii_doc::Document>,
+    pub(crate) projection: crate::timeline_projection::TimelineProjection,
+    pub(crate) primary: Option<motolii_doc::LayerId>,
+    pub(crate) playhead: motolii_core::RationalTime,
+}
 
 const HEADER_HEIGHT: f32 = 22.0;
 const RULER_HEIGHT: f32 = 18.0;

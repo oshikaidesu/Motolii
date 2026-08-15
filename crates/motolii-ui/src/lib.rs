@@ -32,31 +32,13 @@ mod palette_settings;
 mod parameter_control;
 mod product_easing_popup;
 mod preview_pipeline;
-mod rn_product_host;
 /// Rerun Spatial Viewer の Stage。Motolii はこのViewerの wrapper であり、
 /// `re_renderer` で直接シーンを組まない(2026-08-11裁定)。bin から使うので pub。
 pub mod rerun_stage;
 
-#[doc(hidden)]
-pub use rn_product_host::{
-    host_commit_stage_transform_for_app, host_create_for_test, host_destroy_for_test,
-    host_destroy_stage_for_test, host_dispatch_intent_for_test,
-    host_preview_stage_transform_for_app, host_read_snapshot_for_test,
-    host_register_stage_for_test, host_render_frame_for_app, AppStageFrame, AppStageGeometry,
-    AppStageGeometryLayer, AppStageTransformEdit, AppStageTransformError, AppStageTransformPreview,
-    HostRenderFrameResult, RnHostError, RnHostReasonCode, RnHostTestIntent, RnHostTestResponse,
-    RnProductSnapshotForTest,
-};
-// RN app staticlibが同一crate graph内からRust経由で呼ぶための再export。
-// extern importで参照するとarchiveから当該objectが引かれずリンクに失敗する。
-#[cfg(target_os = "macos")]
-#[doc(hidden)]
-pub use rn_product_host::{
-    motolii_rn_host_create, motolii_rn_host_dispatch_intent_json, motolii_rn_host_projection_stamp,
-    motolii_rn_host_read_snapshot_json, motolii_rn_stage_register,
-};
 mod render_worker;
 mod shell;
+mod stage_app_geometry;
 mod stage_geometry_projection;
 mod stage_hit_test;
 mod stage_overlay_gpu;

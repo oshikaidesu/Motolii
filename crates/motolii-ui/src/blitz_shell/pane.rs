@@ -413,7 +413,7 @@ impl StagePane {
         // `app_stage_geometry` は `rn_product_host` 側にあり、C5(RN退役)で行き先が変わる。
         if self.fitted != (width, height) {
             let document = stage_document();
-            let geometry = crate::rn_product_host::stage_projection::app_stage_geometry(
+            let geometry = crate::stage_app_geometry::app_stage_geometry(
                 &document,
                 motolii_core::RationalTime::ZERO,
             );

@@ -11,7 +11,7 @@ use re_log_types::TimePoint;
 use re_sdk_types::archetypes::Mesh3D;
 use transform_gizmo::math::{DQuat, DVec3, Transform};
 
-use crate::AppStageGeometry;
+use crate::stage_app_geometry::AppStageGeometry;
 
 use super::{DOCUMENT_RECT_FILL_COLOR, FIXTURE_RECT_STROKE_COLOR, STAGE_HOST_ERASE_COLOR};
 
