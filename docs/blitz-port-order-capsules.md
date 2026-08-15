@@ -106,7 +106,28 @@ RETURN:
 | **NON-GOALS** | 共通NON-GOALS全部 + hit半径を変えない（`F7` で5.6px視覚一致が既決） |
 | **RETURN** | 間引き（`(+N)`）の見た目を決める必要が出たら`RETURN`。**これはUI文法の決定であり実装判断ではない** |
 
-## C4 — ドッキング移植
+## C4 — ドッキング移植 — **退役（2026-08-15 利用者裁定）**
+
+**ドッキングは egui 側の責任とする。Blitzへは移植しない。**
+
+理由（利用者の言葉）: 「簡単そうに見えて大変」。`egui_tiles` の split/tab/resize/hide/reset は
+**見た目ではなく状態機械**であり、CSS flex/grid で描けるのは配置結果だけで、
+移植コストの本体は写せない側にある。ホストは既に `eframe(egui)` で
+（[P7](reviews/2026-08-15-blitz-ui-runtime-probe.md#p7--提案構成そのものを窓で動かし上限を測る)）、
+Blitzパネルはテクスチャとして pane へ合成される
+（[P12 透過合成 PASS](reviews/2026-08-15-blitz-ui-runtime-probe.md#p12--透過合成2026-08-15追測採択時の未了4)）。
+`egui_tiles` を移植せず**そのまま使う**構成が、この2つの実測と一致する。
+
+したがって本capsuleは**発注しない**。以下は退役時点の原文で、履歴として残す。
+
+- 既に存在する `crates/motolii-ui/src/blitz_ui/`（dock skin）と `blitz_dump` の dock パネルは、
+  **製品の役割を持たない**。C1/C6/C7 と同じ器で描けることを示した証拠として残す
+- 合成先 format は `Rgba8Unorm` で揃える（[P12(a)](reviews/2026-08-15-blitz-ui-runtime-probe.md#p12で出た効いているつもりで効いていない2件)）。
+  egui 側の pane texture format がここに効く
+- **未確認**: `egui_tiles` の pane 内へ他所のテクスチャを出す口の形
+
+<details>
+<summary>退役した原文</summary>
 
 | 項目 | 内容 |
 |---|---|
@@ -117,6 +138,8 @@ RETURN:
 | **NEGATIVE ORACLE** | `egui` への依存が `dock/` に**0件**であること |
 | **NON-GOALS** | 共通NON-GOALS全部 + **ドッキングの操作感を「改善」しない**（`egui_tiles` の挙動を写す） + ライセンス表記を落とさない |
 | **RETURN** | `egui::Id`/`Context` のメモリストア置換で意味が変わりそうな箇所 → `RETURN` |
+
+</details>
 
 ## C6 — Browserパネル（フォルダ参照でメディア入口を開く）
 
@@ -153,7 +176,7 @@ C7(Inspector)より偏りが大きい。**フォルダ走査・メディア一�
 
 ## C5 — RN退役（**最後**）
 
-C1〜C4がmainで動いた後にのみ着手する。
+C1〜C3・C6〜C8がmainで動いた後にのみ着手する（C4は退役）。
 
 | 項目 | 内容 |
 |---|---|
@@ -188,6 +211,18 @@ Rust側にロジックを新規で書き足していたら、それは**やり�
 | **NON-GOALS** | 共通NON-GOALS全部 + `PanResponder`(ドラッグ)を移植しない(C2) + `ui/motolii-rn/`を削除・改変しない(**まだ製品正本**) |
 | **RETURN** | `productStyles.ts` に無い値が要る時点で即`RETURN`。Rust側にロジックを足したくなったら`RETURN` |
 
+### 実装は EXACT TARGET より狭く返ってきた（2026-08-15、利用者裁定で容認）
+
+上表は「表示は `inspector_host_runtime.rs` の既存投影を読む」と書いているが、
+実装（`crates/motolii-ui/src/inspector_blitz/`）は `mod.rs:8` で
+**`inspector_host_runtime` を参照しないと明記し、表示値は `sample.rs` の固定値**にしている。
+
+利用者裁定（2026-08-15）: **仮の値で良い。** よって差分は欠陥ではなく**繰り延べ**として扱う。
+ただし C7 を「済」と数えると投影配線が誰の担当でもなくなるため、ここに残余として置く。
+
+- **残余**: `inspector_host_runtime.rs` の既存投影 → `sample.rs` の置換。入力配線はC2のまま別
+- 移植面（マークアップ・スタイル・寸法）は完了しており、この残余は写す仕事ではなく繋ぐ仕事
+
 ## C8 — chrome と panels を RN から Blitz へ
 
 C5の前提。C7と同型で、対象が小さい（計252行）。
@@ -219,18 +254,17 @@ C5の前提。C7と同型で、対象が小さい（計252行）。
 ## 発注順
 
 ```
-C1 ──┬── C2 ──┬── C3
-     │        │
-     └── C4 ──┘
-C6 ──────────────┤
-C7 ──┬───────────┴── C5(最後)
+C1 ──── C2 ──── C3 ──┐
+C6 ──────────────────┤
+C7 ──┬───────────────┴── C5(最後)
 C8 ──┘
+
+C4(ドッキング) は退役。egui側の責任。
 ```
 
-**C6 は C1〜C4 と独立**（file-disjoint）で、かつ**完成条件を直接動かす**ため優先度が高い。
+**C6 は C1〜C3 と独立**（file-disjoint）で、かつ**完成条件を直接動かす**ため優先度が高い。
 
-C1とC4は独立（file-disjoint）なので並列可。
-**C7・C8 は C1/C4/C6 と file-disjoint なので並列可**で、かつ**C5の前提**である
+**C7・C8 は C1/C6 と file-disjoint なので並列可**で、かつ**C5の前提**である
 （Inspectorとchromeの移植先が無いまま`rn_product_host`を消すと製品が消える）。
 C5は全部の後。
 同じshared seatを触る複数PRを同時発注しない（[AGENTS.md](../AGENTS.md)）。
