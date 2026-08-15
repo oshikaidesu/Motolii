@@ -58,10 +58,18 @@ div { position: absolute; }
 .tg     { width: 13px; height: 12px; background: #2f2f2f; color: {ruler};
           font-size: 8px; text-align: center; border: 1px solid {surface_hi}; }
 
-/* ---- clip と key ---- */
+/* ---- 時間面 ----
+ * 中身は custom widget が描く(`surface.rs`)。この箱は場所を取るだけで、
+ * **背景色を置かないこと** — 置くと行の縞と grid が隠れる。 */
+.tlsurface { }
+
+/* ---- clip と key(custom widget 側の色の出所。CSSからは使われない) ---- */
 .bar    { height: {bar_h}px; color: {bar_ink}; font-size: 9px; padding-left: 6px;
           overflow: hidden; white-space: nowrap; }
 .selbar { border: 1px solid #ffffff; }
+/* clip の名前。バーそのものは widget が描き、文字だけ DOM に残る。 */
+.barlabel { height: {bar_h}px; color: {bar_ink}; font-size: 9px;
+            overflow: hidden; white-space: nowrap; }
 .key    { width: 8px; height: 8px; background: {ink}; transform: rotate(45deg); }
 .selkey { background: {accent}; }
 

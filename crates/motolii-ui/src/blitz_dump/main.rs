@@ -154,7 +154,27 @@ fn dump_timeline(gpu: &Gpu, runtime: &tokio::runtime::Runtime, out: &Path) -> Re
         TIMELINE_W as f64,
         TIMELINE_H as f64,
     );
-    dump_html(gpu, runtime, &html, TIMELINE_W, TIMELINE_H, out)
+    dump_html_with(
+        gpu,
+        runtime,
+        &html,
+        TIMELINE_W,
+        TIMELINE_H,
+        out,
+        |blitz_document| {
+            // clip と key は DOM に無い。ここで挿さないと絵から消える。
+            if !motolii_ui::timeline_blitz::attach_surface(
+                blitz_document,
+                &document,
+                Some(&projection),
+                None,
+                TIMELINE_W as f64,
+                TIMELINE_H as f64,
+            ) {
+                eprintln!("blitz-dump: #tl-surface が見つからず custom widget を挿せない");
+            }
+        },
+    )
 }
 
 /// dock: `dock/css.rs` の `layout_html` が出すHTMLを、ダンプ側のスタイルシートで描く。
@@ -308,6 +328,19 @@ fn dump_html(
     height: u32,
     out: &Path,
 ) -> Result<(), String> {
+    dump_html_with(gpu, runtime, html, width, height, out, |_| {})
+}
+
+/// `attach` は文書を組んだ直後・`resolve` の前に呼ぶ。custom widget を挿す口。
+fn dump_html_with(
+    gpu: &Gpu,
+    runtime: &tokio::runtime::Runtime,
+    html: &str,
+    width: u32,
+    height: u32,
+    out: &Path,
+    attach: impl FnOnce(&mut HtmlDocument),
+) -> Result<(), String> {
     // 絵が期待どおりでない時に「HTMLが出していないのか、描けていないのか」を
     // 切り分けるための窓。既定では書かない。
     if std::env::var_os("MOTOLII_BLITZ_DUMP_HTML").is_some() {
@@ -331,6 +364,8 @@ fn dump_html(
         zoom: 1.0,
         color_scheme: ColorScheme::Dark,
     });
+    // custom widget は resolve より前に挿す(挿した後で座標を解く)。
+    attach(&mut document);
     // 2回呼ぶ理由は inspector_blitz/dump_main.rs と同じ(hoisted paint child の座標が
     // 1レイアウト遅れる)。現在の3パネルは z-index を使っていないので絵は変わらないが、
     // 使い始めた時に道具の側が嘘をつかないようにしておく。

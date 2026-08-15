@@ -166,6 +166,7 @@ fn body(
 
     // ---- 行 ----
     // 選択行の決め方は timeline_egui/clip_band.rs:19-29 の写し。
+    let mut labels = String::new();
     let selected_index = primary.as_ref().and_then(|layer| {
         rows.iter()
             .position(|row| row.property.is_none() && row.layer == *layer)
@@ -205,33 +206,33 @@ fn body(
                 cy - 6.0
             ));
         }
-        // clip バー
+        // clip の名前だけは DOM に残す。**文字は widget が描けない**(グリフ配線が要る)。
+        // 数も clip の数どまりで、key のように素材で増えない。
+        // **surface より後ろへ出す。** DOMの後勝ちで、先に出すと widget に覆われる。
         if r.property.is_none() {
             if let (Some(start), Some(end)) = (r.start, r.end) {
                 if end > start {
-                    let x0 = geometry.x_at(start);
-                    let x1 = geometry.x_at(end);
-                    b.push_str(&format!(
-                        r#"<div class="bar{}" style="left:{x0}px;top:{}px;width:{}px;background:{}">{}</div>"#,
-                        if selected { " selbar" } else { "" },
+                    labels.push_str(&format!(
+                        r#"<div class="barlabel" style="left:{}px;top:{}px">{}</div>"#,
+                        geometry.x_at(start) + 6.0,
                         y + 1.0,
-                        (x1 - x0).max(1.0),
-                        PALETTE[r.palette_slot],
                         escape(&r.label)
                     ));
                 }
             }
         }
-        // key ダイヤ
-        for (k, kx) in r.keys.iter().enumerate() {
-            b.push_str(&format!(
-                r#"<div class="key{}" style="left:{}px;top:{}px"></div>"#,
-                if selected && k == 0 { " selkey" } else { "" },
-                geometry.x_at(*kx) - 4.0,
-                cy - 4.0
-            ));
-        }
     }
+
+    // ---- 時間面(密な部分)。中身は custom widget が描く(`surface.rs`) ----
+    // clip と key を DOM ノードにしない。素材の数だけ `resolve` を払うため
+    // (P8実測: DOM 4.0µs/ノード・天井3,600 vs 描画 0.73µs/個・天井20,000)。
+    b.push_str(&format!(
+        r#"<div id="tl-surface" class="tlsurface" style="left:{sidebar}px;top:{}px;width:{}px;height:{}px"></div>"#,
+        geometry.rows_top,
+        geometry.surface_width,
+        (geometry.height - geometry.rows_top).max(0.0)
+    ));
+    b.push_str(&labels);
 
     // ---- surface 境界線と playhead ----
     let playhead_x = geometry.x_at(geometry.playhead_fraction(playhead));
