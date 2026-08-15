@@ -16,7 +16,7 @@
 mod geometry;
 mod html;
 mod rows;
-mod theme;
+pub mod theme;
 
 use motolii_core::RationalTime;
 use motolii_doc::Document;
@@ -26,10 +26,10 @@ use crate::timeline_projection::{
     TimelineViewport,
 };
 
-pub(crate) use html::timeline_html;
+pub use html::timeline_html;
 
 /// timeline_egui/mod.rs:39-56 の写し。投影の作り方を変えないため。
-pub(crate) fn project_for_blitz(
+pub fn project_for_blitz(
     document: &Document,
 ) -> Result<TimelineProjection, TimelineProjectionError> {
     let duration = document.composition.duration;

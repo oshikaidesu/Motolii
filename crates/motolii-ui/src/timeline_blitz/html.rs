@@ -41,7 +41,7 @@ use crate::timeline_projection::TimelineProjection;
 
 /// `timeline_egui::paint_timeline` と同じ入力から、同じ絵のHTML文書を作る。
 /// 入力処理も編集意味もここには無い。Documentは読むだけ。
-pub(crate) fn timeline_html(
+pub fn timeline_html(
     document: &Document,
     projection: Option<&TimelineProjection>,
     primary: Option<LayerId>,

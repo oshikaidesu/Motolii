@@ -14,7 +14,7 @@ use rustc_hash::FxHashMap;
 use vello_hybrid::{RenderSize, RenderTargetConfig, Renderer, Resources, Scene, TextureBindings};
 use wgpu_context::DeviceHandle;
 
-pub(super) struct BlitzSurface {
+pub struct BlitzSurface {
     renderer: Renderer,
     resources: Resources,
     device_handle: DeviceHandle,
@@ -27,7 +27,7 @@ pub(super) struct BlitzSurface {
 }
 
 impl BlitzSurface {
-    pub(super) fn new(
+    pub fn new(
         device: &wgpu::Device,
         adapter: &wgpu::Adapter,
         queue: &wgpu::Queue,
@@ -62,7 +62,7 @@ impl BlitzSurface {
 
     /// 1フレーム描いて `target` へ書く。GPU resourceはloop内で作らない
     /// (renderer/resources/cacheはすべて再利用)。
-    pub(super) fn render(
+    pub fn render(
         &mut self,
         document: &mut BaseDocument,
         device: &wgpu::Device,
@@ -104,7 +104,7 @@ impl BlitzSurface {
     }
 
     /// atlasへ載っている画像の枚数。罠1の再発をテスト/観測から見るための窓。
-    pub(super) fn cached_image_count(&self) -> usize {
+    pub fn cached_image_count(&self) -> usize {
         self.image_cache.len()
     }
 }

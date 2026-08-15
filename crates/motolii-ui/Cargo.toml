@@ -12,6 +12,12 @@ crate-type = ["rlib", "staticlib"]
 name = "motolii-browser-blitz-oracle"
 path = "src/browser_blitz/oracle_main.rs"
 
+# 移植した Blitz パネル(Timeline / Browser / dock)をPNGに落とす道具。
+# 見た目は決めず、既存実装が出すHTML/CSSをそのまま描くだけ。
+[[bin]]
+name = "motolii-blitz-dump"
+path = "src/blitz_dump/main.rs"
+
 [dependencies]
 anyrender.workspace = true
 anyrender_vello_hybrid.workspace = true

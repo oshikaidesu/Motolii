@@ -57,7 +57,7 @@ mod stage_hit_test;
 mod stage_overlay_gpu;
 pub mod stage_overlay_raster;
 mod static_preview;
-mod timeline_blitz;
+pub mod timeline_blitz;
 mod timeline_egui;
 #[cfg(test)]
 mod timeline_egui_interaction_tests;

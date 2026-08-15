@@ -28,7 +28,7 @@
 mod interaction;
 mod library_view;
 mod markup;
-mod render;
+pub mod render;
 mod theme;
 
 use atomic_refcell::AtomicRefCell;

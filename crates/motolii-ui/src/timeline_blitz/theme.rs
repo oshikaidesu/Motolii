@@ -5,33 +5,33 @@
 //! `timeline_egui/theme.rs` の原文に対して機械照合する。
 
 // timeline_egui/theme.rs:5
-pub(super) const OVERVIEW_H: f64 = 22.0;
+pub const OVERVIEW_H: f64 = 22.0;
 // timeline_egui/theme.rs:6
-pub(super) const RULER_H: f64 = 20.0;
+pub const RULER_H: f64 = 20.0;
 // timeline_egui/theme.rs:7
-pub(super) const LOCATOR_H: f64 = 16.0;
+pub const LOCATOR_H: f64 = 16.0;
 // timeline_egui/theme.rs:8
-pub(super) const DESKTOP: &str = "#2a2a2a";
+pub const DESKTOP: &str = "#2a2a2a";
 // timeline_egui/theme.rs:9
-pub(super) const SURFACE: &str = "#363636";
+pub const SURFACE: &str = "#363636";
 // timeline_egui/theme.rs:10
-pub(super) const SURFACE_HI: &str = "#464646";
+pub const SURFACE_HI: &str = "#464646";
 // timeline_egui/theme.rs:11
-pub(super) const SURFACE_LO: &str = "#242424";
+pub const SURFACE_LO: &str = "#242424";
 // timeline_egui/theme.rs:12
-pub(super) const CONTRAST: &str = "#111111";
+pub const CONTRAST: &str = "#111111";
 // timeline_egui/theme.rs:13
-pub(super) const DIM: &str = "#757575";
+pub const DIM: &str = "#757575";
 // timeline_egui/theme.rs:14
-pub(super) const RULER: &str = "#919191";
+pub const RULER: &str = "#919191";
 // timeline_egui/theme.rs:15
-pub(super) const ACCENT: &str = "#ffad56";
+pub const ACCENT: &str = "#ffad56";
 // timeline_egui/theme.rs:16
-pub(super) const INK: &str = "#d6d6d6";
+pub const INK: &str = "#d6d6d6";
 // timeline_egui/theme.rs:17
-pub(super) const BAR_INK: &str = "#141414";
+pub const BAR_INK: &str = "#141414";
 // timeline_egui/theme.rs:18-25
-pub(super) const PALETTE: [&str; 6] = [
+pub const PALETTE: [&str; 6] = [
     "#96aadb", "#6fb9c1", "#bfa973", "#89b992", "#d69a8b", "#c39bc5",
 ];
 
