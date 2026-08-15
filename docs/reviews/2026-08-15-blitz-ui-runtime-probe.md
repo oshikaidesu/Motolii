@@ -390,6 +390,66 @@ cd spikes/blitz-probe && cargo run --release --bin alpha_composite
 実物の Rerun Stage との合成（本プローブの下地はCPU生成テクスチャ）、窓表示・surface format
 （すべてオフスクリーン読み戻し）、HDR/wide-gamut、`mix-blend-mode` 等のCSS合成モード、`hidpi_scale≠1`。
 
+## P13 — z-index を持つ要素は「間違った場所に描かれる」のではなく「座標が1レイアウト遅れる」（2026-08-15追測）
+
+C7(Inspector)のPNGを見ると、dialの値(`1.000`)と単位(`°`)が行の中ではなくパネル最上部に固まって出る。
+[commit 71547dd8](../../) はこれを **「z-index paints in the wrong place」** と記録したが、
+**現象の記述としては正しく、原因の記述としては誤り**だった。実際は**1フレーム遅れ**である。
+
+### 切り分け
+
+`.dial` は `position:relative; overflow:hidden` を持ち、`dialValue` はその中にある。
+マークアップ側に不備は無い。同じ `.dial` の中で切り分けると:
+
+| 要素 | position | z-index | 結果 |
+|---|---|---|---|
+| `dialTicks` / `dialPointer` | absolute | **なし** | **正しい位置に描かれる** |
+| `dialValue` | absolute | 1 | パネル原点へ落ちる |
+| `dialUnit` | absolute | 2 | パネル原点へ落ちる |
+
+`dialValue` から `z-index` だけを外すと行の中に収まり、**`z-index:2` を残した `dialUnit` だけが上に残る**。
+z-index の有無が単独の判別条件である。
+
+### 機構
+
+`z-index != 0` かつ非static の要素は **hoisted paint child** として stacking context ルートへ持ち上げられ、
+`HoistedPaintChild.position` に祖先のオフセットを積んだ座標を持つ（`blitz-dom-0.3.0-beta.1` `src/layout/damage.rs:636-643`）。
+積むときに読むのは `final_layout.location` だが、この積み上げを行う `flush_styles_to_layout` は
+**`resolve_layout` より前に走る**。
+
+```
+resolve.rs:86  self.flush_styles_to_layout(root_node_id);   ← ここで hoisted の座標を積む
+resolve.rs:90  self.resolve_layout();                        ← レイアウトはこの後
+```
+
+したがって hoisted の座標は常に**1レイアウト前**の値になり、**初回 resolve ではゼロ**。
+描画側（`blitz-paint-0.3.0-beta.1` `src/render.rs:866-905`）はその座標を素直に使うため、原点に落ちる。
+
+### 実証
+
+`doc.resolve(0.0)` を**2回**呼ぶだけで、値も単位も各行に収まる。CSSは1文字も変えていない。
+
+### 設計上の含意
+
+- **静止画を1枚だけ描く道具は嘘をつく。** dump は2回 resolve するよう修正済み
+  （`blitz_dump/main.rs` / `inspector_blitz/dump_main.rs`）
+- **実走では初回フレームだけ崩れて自己回復する**が、**レイアウトが変わるたびに1フレーム遅れる**。
+  ドラッグ・ズーム・パネルリサイズ中は毎フレーム遅れる。z-index付き要素を追従させる用途には使えない
+- 現行の Timeline / Browser / dock の CSS は **`z-index` を1つも使っていない**ため影響を受けない。
+  影響は RN の `productStyles.ts` から `zIndex` を連れてきた Inspector の2箇所のみ
+- **未確認**: 上流に報告済みか、0.3.0-beta.1 以降で直っているか
+
+### 教訓（規律6の記録）
+
+`z-index` という語が現象と原因の両方に見えたため、**絵と語が一致した瞬間に原因まで決まったことにした**。
+判別条件（z-indexの有無）と機構（順序）を分けて確かめれば、修正箇所はCSSではなく呼び出し回数だった。
+
+## P11 追記 — どの30枚がアトラスに載るかは走るたびに変わる（2026-08-15）
+
+同一バイナリで `motolii-blitz-dump all` を2回走らせると、**timeline と dock はバイト同一だが browser だけ変わる**。
+`atlas images = 30 / items = 45` は毎回同じで、**溢れる15枚の内訳が非決定的**。
+Browser のPNGは回帰比較に使えない（timeline / dock は使える）。原因は未特定。
+
 ## 提案（裁定待ち）
 
 1. ホストとcanvas層は Document と同一プロセスに置く

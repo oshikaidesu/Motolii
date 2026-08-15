@@ -237,6 +237,10 @@ fn dump_html(
         zoom: 1.0,
         color_scheme: ColorScheme::Dark,
     });
+    // 2回呼ぶ理由は inspector_blitz/dump_main.rs と同じ(hoisted paint child の座標が
+    // 1レイアウト遅れる)。現在の3パネルは z-index を使っていないので絵は変わらないが、
+    // 使い始めた時に道具の側が嘘をつかないようにしておく。
+    document.resolve(0.0);
     document.resolve(0.0);
 
     let mut surface = BlitzSurface::new(

@@ -72,6 +72,12 @@ fn main() {
         zoom: 1.0,
         color_scheme: ColorScheme::Dark,
     });
+    // 2回呼ぶ。blitz-dom は hoisted paint child(= position付き かつ z-index≠0 の要素)の
+    // 座標を flush_styles_to_layout で積むが、これは resolve_layout より前に走るため
+    // (blitz-dom-0.3.0-beta.1 resolve.rs:86 → :90)、読む final_layout.location は
+    // 1レイアウト前の値になる。初回は全部ゼロで、z-index付き要素が stacking context
+    // ルートの原点へ落ちる。1枚しか描かない道具が定常状態を写すには2回要る。
+    doc.resolve(0.0);
     doc.resolve(0.0);
 
     let texture = device.create_texture(&wgpu::TextureDescriptor {
