@@ -8,6 +8,7 @@ mod browser_host_runtime;
 mod diagnostic;
 mod diagnostic_projection;
 mod display_slot;
+pub mod dock;
 mod document_command_request;
 mod document_edit_runtime;
 mod host_pointer_capture;
