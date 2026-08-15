@@ -3,6 +3,10 @@
 日付: 2026-08-16
 状態: **決定**
 
+> **同日再追記(2026-08-16)**: 利用者裁定により、**Timeline の正本は `timeline_blitz` になった**。
+> Skia は意味・hit・oracle の源として残るが製品経路ではない。
+> → [BlitzがTimelineの正本](2026-08-16-blitz-timeline-authority.md)
+>
 > **同日追記(2026-08-16)**: 本文書の後に **RN 製品面を畳んだ**ため、`timeline_skia_raster` を
 > 呼ぶ者が居なくなった(唯一の消費者が `rn_product_host/timeline_gpu.rs` だった)。
 > 「製品 Timeline は Skia」は**RN 製品についての事実**であり、その RN が無い。

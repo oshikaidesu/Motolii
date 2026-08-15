@@ -34,6 +34,7 @@
 |---|---|
 | [2026-08-15-blitz-ui-runtime-adoption-proposal.md](2026-08-15-blitz-ui-runtime-adoption-proposal.md) | UI基盤をBlitz(HTML/CSS)+テクスチャ合成へ移す起案。処分すべき既決3件(RN再基線・Skia ADOPT・Web窓)と未了6件を固定。比較中・裁定未記入 |
 | [2026-08-15-blitz-ui-runtime-probe.md](2026-08-15-blitz-ui-runtime-probe.md) | Blitz(HTML/CSS)をUI基盤候補として実測。自前wgpu29テクスチャへの描画はPASS、キーはフォーム要素にしか届かない等の制約と版の罠を記録。比較中・裁定未了 |
+| [2026-08-16-blitz-timeline-authority.md](2026-08-16-blitz-timeline-authority.md) | **Timelineの正本は`timeline_blitz`**(利用者裁定)。Skiaは意味/hit/oracle源として残置(呼び手なし)。ホストがeguiなのはRerun Viewerがeguiウィジェットである構造上の帰結で、ドッキングをCSSへ移す案は成立しない。clip/keyはcustom widget 1ノード(C3完了)、行高20px固定 |
 | [2026-08-16-web-window-and-rn-product-fold.md](2026-08-16-web-window-and-rn-product-fold.md) | Web窓(wry)とRN製品面を畳む決定。約40,657行撤去。2026-08-14 Web窓projectionを撤回。`ui/motolii-rn/src`のTSは移植元として残す。**Timeline座席は空席・製品は不在**になった |
 | [2026-08-16-skia-timeline-authority-correction.md](2026-08-16-skia-timeline-authority-correction.md) | 製品Timelineの正本はSkia(`timeline_skia_raster`)。eguiは製品から1箇所も呼ばれていない残骸で、旧eguiアプリごと3,338行撤去。参照グラフで判定 |
 | [2026-08-15-egui-timeline-engine-authority.md](2026-08-15-egui-timeline-engine-authority.md) | 製品Timeline engineはMotolii egui。Godot PORT操作、egui-keyframeはPATTERNのみ。Rerun Time Panel相乗りは撤回（2026-08-16: engine正本はSkiaへ訂正。Rerun非相乗りは維持） |
