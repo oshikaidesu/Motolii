@@ -3,9 +3,15 @@
 日付: 2026-08-15  
 状態: **決定**
 
+> **訂正(2026-08-16)**: 下の「Timeline engine／皮の正本は `timeline_egui.rs`」は**撤回された**。
+> 現物では `timeline_egui` は製品のどこからも呼ばれておらず、製品 Timeline は以前から
+> Skia(`timeline_skia_raster.rs`)である。egui Timeline は移行が途中で止まった残骸で、
+> 3,338行ごと撤去した。→ [製品Timelineの正本はSkia](2026-08-16-skia-timeline-authority-correction.md)
+> 本文は歴史として残す。**「Rerun Time Panel へ engine 相乗りしない」は維持**。
+
 ## 決定
 
-利用者裁定(2026-08-15): 製品 Timeline の **engine** は Motolii egui（[`crates/motolii-ui/src/timeline_egui.rs`](../../crates/motolii-ui/src/timeline_egui/mod.rs)）である。Rerun Time Panel への engine 相乗りはしない。改造コストより、普通の Timeline を現行 egui へ翻訳し切る。
+利用者裁定(2026-08-15): 製品 Timeline の **engine** は Motolii egui（`crates/motolii-ui/src/timeline_egui/mod.rs` — 2026-08-16 に撤去済み。原文は `git show f209da9d^:crates/motolii-ui/src/timeline_egui/mod.rs`）である。Rerun Time Panel への engine 相乗りはしない。改造コストより、普通の Timeline を現行 egui へ翻訳し切る。
 
 Stage spatial の Rerun `ADOPT / WRAP` は[採択再締結](2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md)のまま。この切り方を Stage／Inspector／Browser／Host へ広げない。
 
