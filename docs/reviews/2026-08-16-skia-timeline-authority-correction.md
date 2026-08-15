@@ -3,6 +3,12 @@
 日付: 2026-08-16
 状態: **決定**
 
+> **同日追記(2026-08-16)**: 本文書の後に **RN 製品面を畳んだ**ため、`timeline_skia_raster` を
+> 呼ぶ者が居なくなった(唯一の消費者が `rn_product_host/timeline_gpu.rs` だった)。
+> 「製品 Timeline は Skia」は**RN 製品についての事実**であり、その RN が無い。
+> Skia は意味・hit・oracle の源として残すが、**Timeline の座席は空席**。
+> → [Web窓とRN製品面の畳み込み](2026-08-16-web-window-and-rn-product-fold.md)
+
 ## 決定
 
 利用者裁定(2026-08-16): 製品 Timeline を描いているのは **Skia**([`crates/motolii-ui/src/timeline_skia_raster.rs`](../../crates/motolii-ui/src/timeline_skia_raster.rs))であり、これは以前から変わっていない。egui Timeline は**移行が途中で止まった残骸**であり、コードごと畳んだ。

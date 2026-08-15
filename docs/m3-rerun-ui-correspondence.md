@@ -50,8 +50,8 @@ Browser、Inspector、TimelineはRerun UIへ置き換えない。これらは同
 ## コード根拠
 
 - 現行画面とfixture: [`ui/motolii-rn/App.tsx`](../ui/motolii-rn/App.tsx)
-- Stage／Timeline native ABI: [`ui/motolii-rn/native-renderer/src/lib.rs`](../ui/motolii-rn/native-renderer/src/lib.rs)
-- Stage surface／lifecycleの所有: [`renderer_core.rs`](../ui/motolii-rn/native-renderer/src/renderer_core/mod.rs)
-- Rerun Spatial ViewerのEgui adapter: [`rerun_stage.rs`](../ui/motolii-rn/native-renderer/src/rerun_stage/mod.rs)
-- 現行依存はforkした`re_view_spatial`／`re_renderer`: [`native-renderer/Cargo.toml`](../ui/motolii-rn/native-renderer/Cargo.toml)
+- Stage／Timeline native ABI: `ui/motolii-rn/native-renderer/src/lib.rs`(2026-08-16撤去。原文は `git show e6e64265^:` + パス)
+- Stage surface／lifecycleの所有: `renderer_core.rs`(2026-08-16撤去。原文は `git show e6e64265^:` + パス)
+- Rerun Spatial ViewerのEgui adapter: `rerun_stage.rs`(2026-08-16撤去。原文は `git show e6e64265^:` + パス)
+- 現行依存はforkした`re_view_spatial`／`re_renderer`: `native-renderer/Cargo.toml`(2026-08-16撤去。原文は `git show e6e64265^:` + パス)
 - Rerun source別の転移境界: [Rerun学習・転移計画](reviews/2026-07-20-rerun-learning-transfer-plan.md)

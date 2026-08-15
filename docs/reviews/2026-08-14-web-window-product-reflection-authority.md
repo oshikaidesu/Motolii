@@ -1,7 +1,13 @@
 # Web窓を含む製品projection正本化
 
 日付: 2026-08-14  
-状態: **決定**
+状態: **撤回**
+
+> **撤回(2026-08-16)**: Web窓(wry WebView)の経路はコードごと畳んだ。到達不能になっていた
+> (呼び手が旧 egui アプリだった)上に、**webview を置き換えるために採択した Blitz の下で
+> webview 本体をリンクしていた**。RN 製品面も同日に畳んだ。
+> → [Web窓とRN製品面の畳み込み](2026-08-16-web-window-and-rn-product-fold.md)
+> `ui/motolii-rn/src` の TypeScript は移植元として残す。本文は歴史として残す。
 
 ## 決定
 
