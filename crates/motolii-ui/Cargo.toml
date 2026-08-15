@@ -50,6 +50,17 @@ egui.workspace = true
 egui-wgpu.workspace = true
 egui-winit.workspace = true
 egui_tiles.workspace = true
+glam.workspace = true
+# Browserパネルのサムネイル生成(`browser_blitz/thumbnail.rs`)。
+# workspace 側は default-features = false / features = ["png"]。ここでは足さない。
+image.workspace = true
+lyon_path.workspace = true
+lyon_tessellation.workspace = true
+re_chunk.workspace = true
+re_log_types.workspace = true
+re_renderer.workspace = true
+re_sdk_types.workspace = true
+re_view_spatial.workspace = true
 motolii-core.workspace = true
 motolii-audio.workspace = true
 motolii-doc.workspace = true
@@ -65,6 +76,7 @@ serde.workspace = true
 serde_json.workspace = true
 taffy.workspace = true
 thiserror.workspace = true
+transform-gizmo.workspace = true
 skia-safe.workspace = true
 wgpu.workspace = true
 winit.workspace = true

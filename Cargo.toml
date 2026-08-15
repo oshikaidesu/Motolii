@@ -94,6 +94,21 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # egui-wgpuとコアで同じwgpuメジャーを共有する。
 # 更新時はnative textureと既存device共有を同じPRで再検証する。
 wgpu = "29"
+
+# Rerun fork(Spatial Viewer)。2026-08-11裁定でMotoliiはこのViewerのwrapperであり、
+# direct `re_renderer` sceneや第二runtimeを作らない。revは
+# `ui/motolii-rn/native-renderer/Cargo.toml:22-26` と**同じものを使う**(揃えないと二重になる)。
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "8c6865acb9770d7f0ea50319fc985d9c7ceac055" }
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "8c6865acb9770d7f0ea50319fc985d9c7ceac055" }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "8c6865acb9770d7f0ea50319fc985d9c7ceac055", default-features = false }
+re_sdk_types = { git = "https://github.com/oshikaidesu/rerun", rev = "8c6865acb9770d7f0ea50319fc985d9c7ceac055" }
+re_view_spatial = { git = "https://github.com/oshikaidesu/rerun", rev = "8c6865acb9770d7f0ea50319fc985d9c7ceac055", default-features = false }
+# Stageの幾何→Mesh3D で使う(host_mesh.rs)。版は native-renderer と揃える。
+lyon_path = "1.0.19"
+lyon_tessellation = "1.0.19"
+glam = "0.32"
+# Stage の authoring gizmo(rerun_stage/gizmo.rs)。版は native-renderer と揃える。
+transform-gizmo = "0.9.0"
 winit = "0.30.9"
 wry = "0.55.1"
 # blitz-* / anyrender / vello_hybrid の版は上の [workspace.dependencies] に一本化済み。
