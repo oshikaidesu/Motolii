@@ -30,9 +30,8 @@ Rerunに乗っている部分は `rerun_stage/` **1,600行のみ**で、`crates/
 | P8 | custom widget で密な面を1ノードにできるか | **PASS。resolve が消える** |
 | P9 | 差分更新は HTML 再パースを置き換えられるか | **PASS。32.25ms → 8.31ms** |
 | P10 | 現行Timeline UI の再現 | **合格**（利用者審判） |
-| P11 | Browserパネル（外部フォルダ参照+サムネイル+D&D） | **PASS**（元寸1480×1400×45枚） |
-| P10 | 現行Timeline UI の再現 | **合格**（利用者審判） |
-| P11 | Browserパネル（外部フォルダ参照+サムネイル+D&D） | **条件付きPASS。画像アトラス上限あり** |
+| P11 | Browserパネル（外部フォルダ参照+サムネイル+D&D） | **条件付きPASS**（元寸1480×1400×45枚。画像アトラス上限あり） |
+| P12 | **透過合成（Stageの上へ重ねる）** | **PASS（全320×200pxで最大誤差0）** |
 
 ### P4 — 要石
 
@@ -318,6 +317,50 @@ Blitz本体 **Apache-2.0 OR MIT、CLAなし**。`stylo_taffy` のみ MPL-2.0 が
 - ドッキング（[`ui-interaction-language.md`](../ui-interaction-language.md) の製品要件）はBlitzに無い。
   `egui_tiles`(rerun-io, MIT OR Apache-2.0) のツリーとD&D状態機械はツールキット非依存に見えるが**移植可能性は未検証**
 - `dioxus-native 0.8` は alpha。0.7→0.8 でカスタム描画APIが移動しており、APIは動いている最中
+
+## P12 — 透過合成（2026-08-15追測。採択時の未了4）
+
+`spikes/blitz-probe/src/bin/alpha_composite.rs`。macOS / Metal / wgpu 29.0.4 / `vello_hybrid 0.0.9`。
+
+```bash
+cd spikes/blitz-probe && cargo run --release --bin alpha_composite
+```
+
+| 問い | 結果 |
+|---|---|
+| アルファを保持するか | **PASS。出力はプリマルチプライド済み** |
+| 別の絵の上へ重ねて期待どおりか | **PASS。全320×200pxで最大誤差 0** |
+| 一部だけ透過（パネル不透明・間は完全透過） | **PASS** |
+
+`rgba(255,0,0,0.5)` が `[128,0,0,128]` で出る（straightなら R=255）。
+コード側も一致 — `vello_hybrid/src/render/wgpu.rs:1370` が `BlendState::PREMULTIPLIED_ALPHA_BLENDING` 固定、
+クリアは `LoadOp::Clear(Color::TRANSPARENT)`。
+角丸AAの中間α画素168個を検査し、**下地より暗くなる画素は0**（縁が暗くなる現象は出ていない）。
+
+**判別力の確認**: 誤設定 `(SrcAlpha, OneMinusSrcAlpha)` を対照として同時に測り、
+最大誤差64 / 16,296px が外れることを確認済み。「何を書いても通る試験」にはなっていない。
+
+### P12で出た「効いているつもりで効いていない」2件
+
+**(a) 合成先のtexture formatをsRGBにすると壊れる。**
+`Rgba8UnormSrgb` にすると最大誤差73、不透明パネルが `45→117` に浮く。
+**UI・下地・合成先を `Rgba8Unorm` で揃えること。**Stage側のformatが違うとここで事故る。
+
+**(b) `body` に背景色を置くと面全体が不透明になる。**
+
+| 書き方 | 外周の実測値 |
+|---|---|
+| `html, body { background: transparent }` | `[0,0,0,0]` |
+| 背景指定を一切書かない | `[0,0,0,0]`（既定が透明） |
+| `body { background: rgb(24,24,24) }` だけ | `[24,24,24,255]` — **viewport全面を塗り潰す** |
+
+`html` が透明のとき `blitz-paint` は body の背景色を拾って viewport 全面を塗る
+（`blitz-paint-0.3.0-beta.1/src/render.rs:127-160`）。**パネル色は body ではなく個々の要素に置く。**
+
+### P12の未測定（推測と実測の切り分け）
+
+実物の Rerun Stage との合成（本プローブの下地はCPU生成テクスチャ）、窓表示・surface format
+（すべてオフスクリーン読み戻し）、HDR/wide-gamut、`mix-blend-mode` 等のCSS合成モード、`hidpi_scale≠1`。
 
 ## 提案（裁定待ち）
 
