@@ -15,6 +15,8 @@ pub mod dock;
 mod document_command_request;
 mod document_edit_runtime;
 mod host_pointer_capture;
+// C7: Inspector の見た目のBlitz(HTML/CSS)写し。bin から使うので pub。
+pub mod inspector_blitz;
 mod inspector_host_runtime;
 mod interaction_state;
 mod layout;

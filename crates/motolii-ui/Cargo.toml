@@ -18,6 +18,11 @@ path = "src/browser_blitz/oracle_main.rs"
 name = "motolii-blitz-dump"
 path = "src/blitz_dump/main.rs"
 
+# C7 の判定材料(Inspector の Blitz 写しをPNGにする)の実行体。sourceは inspector_blitz/ 内に置く。
+[[bin]]
+name = "motolii-inspector-blitz-dump"
+path = "src/inspector_blitz/dump_main.rs"
+
 [dependencies]
 anyrender.workspace = true
 anyrender_vello_hybrid.workspace = true
