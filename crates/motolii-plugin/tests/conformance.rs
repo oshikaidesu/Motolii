@@ -257,6 +257,29 @@ fn panic_violations(src: &str) -> Vec<&'static str> {
         .collect()
 }
 
+fn silent_f64_fallback_violations(src: &str) -> Vec<String> {
+    let code = strip_line_comments(src);
+    // 定義 `fn f64_or` ではなく呼び出しだけを見る。リテラル連結でこのfile自身を誤爆させない。
+    let forbidden = format!(".{}(", "f64_or");
+    if code.contains(&forbidden) {
+        vec![forbidden]
+    } else {
+        Vec::new()
+    }
+}
+
+fn migrate_plugin_params_violations(src: &str) -> Vec<String> {
+    let code = strip_line_comments(src);
+    let mut violations = Vec::new();
+    if code.contains("fn migrate_plugin_params") {
+        violations.push("fn migrate_plugin_params".to_string());
+    }
+    if code.contains("\"core.param.sine\" =>") {
+        violations.push("\"core.param.sine\" =>".to_string());
+    }
+    violations
+}
+
 fn collect_rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
@@ -579,6 +602,25 @@ fn panic_scanner_allows_debug_assert_and_test_code() {
 }
 
 #[test]
+fn silent_f64_fallback_scanner_flags_call() {
+    let src =
+        "fn render(params: &ResolvedParams) {\n    let _ = params.f64_or(\"amount\", 0.0);\n}\n";
+    assert_eq!(
+        silent_f64_fallback_violations(src),
+        vec![format!(".{}(", "f64_or")]
+    );
+}
+
+#[test]
+fn migrate_plugin_params_scanner_flags_central_fn() {
+    let src = "fn migrate_plugin_params(id: &str) {}\n";
+    assert_eq!(
+        migrate_plugin_params_violations(src),
+        vec!["fn migrate_plugin_params".to_string()]
+    );
+}
+
+#[test]
 fn workspace_has_external_plugin_crates() {
     let plugin_dirs = plugin_crate_dirs();
     assert!(
@@ -745,17 +787,38 @@ fn cli_sine_import_scanner_flags_source_violation() {
 
 #[test]
 fn plugin_facade_has_no_central_migrate_plugin_params() {
-    let lib_src =
-        fs::read_to_string(workspace_root().join("crates/motolii-plugin/src/lib.rs")).unwrap();
-    let code = strip_line_comments(&lib_src);
-    assert!(
-        !code.contains("fn migrate_plugin_params"),
-        "central migrate_plugin_params must be removed (VSM-A2)"
-    );
-    assert!(
-        !code.contains("\"core.param.sine\" =>"),
-        "central Sine ID match must not remain in motolii-plugin facade"
-    );
+    let root = workspace_root();
+    let mut files = Vec::new();
+    collect_rust_files(&root.join("crates/motolii-plugin/src"), &mut files);
+    assert!(!files.is_empty());
+    for file in files {
+        let text = fs::read_to_string(&file).unwrap();
+        let violations = migrate_plugin_params_violations(&text);
+        assert!(
+            violations.is_empty(),
+            "{}: central migrate_plugin_params must be removed (VSM-A2): {:?}",
+            file.display(),
+            violations
+        );
+    }
+}
+
+#[test]
+fn reference_impl_does_not_call_silent_f64_fallback() {
+    // 完了条件: 参照実装からサイレントf64フォールバック呼び出しが消えている(M2E-8)。
+    let root = workspace_root();
+    let mut files = Vec::new();
+    collect_rust_files(&root.join("crates/motolii-plugin/src"), &mut files);
+    assert!(!files.is_empty());
+    for file in files {
+        let text = fs::read_to_string(&file).unwrap();
+        let violations = silent_f64_fallback_violations(&text);
+        assert!(
+            violations.is_empty(),
+            "{}: reference plugins must use require_* instead of silent f64 fallback",
+            file.display()
+        );
+    }
 }
 
 #[test]
