@@ -121,3 +121,20 @@ objc2 = "0.6.4"
 objc2-app-kit = { version = "0.3.2", default-features = false }
 # M2E-6: プロパティテストの正本。エージェントはこれ以外を独断導入しない(監査EN-5)。
 proptest = "1"
+
+# 開発の往復用プロファイル。**製品の出力には使わない**(`release` はそのまま残す)。
+# 実測(motolii-ui を1行触ってから建て直す):
+#   release / bin 4本 27.2s (user 90.6 = 非incremental な codegen が律速)
+#   release / bin 1本 23.4s (同上)
+#   dev     / bin 4本 49.7s (user 27.8 = リンクと debuginfo が律速)
+# release は既定で `incremental = false` なので、1行の変更でも motolii-ui を
+# 丸ごと焼き直す。ここでは incremental を入れ、自分のcrateの最適化を落とし、
+# 依存だけ opt-level 3 に保つ。
+[profile.fast]
+inherits = "release"
+incremental = true
+opt-level = 1
+debug = 0
+
+[profile.fast.package."*"]
+opt-level = 3
