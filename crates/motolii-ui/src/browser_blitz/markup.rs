@@ -9,6 +9,8 @@
 //!   overflow / white-space / font-size / object-fit
 //! セレクタも同ファイルで実証済みの要素・class・`:hover` だけ。
 
+use std::path::PathBuf;
+
 use super::library_view::BrowserItem;
 use super::theme;
 
@@ -47,11 +49,14 @@ pub(super) fn cell_origin(index: usize) -> (f64, f64) {
     )
 }
 
+/// `thumbs` は `items` と**同じ長さ・同じ並び**の縮小実体path(`thumbnail.rs`)。
+/// `None` の項目は画像なしで描く(元画像へは戻さない — 戻すと重さの原因が残る)。
 pub(super) fn build_html(
     width: u32,
     height: u32,
     title: &str,
     items: &[BrowserItem],
+    thumbs: &[Option<PathBuf>],
     highlight: GridHighlight,
 ) -> String {
     let mut body = String::new();
@@ -76,19 +81,28 @@ pub(super) fn build_html(
         } else {
             "card"
         };
+        // **元画像ではなく縮小実体を指す。** 元寸を出すとatlasを元解像度で食う
+        // (`thumbnail.rs` / `library_view.rs` の実測)。
         // blitz-net は file スキームを std::fs::read で処理する(probe P11)。
-        let src = escape(&item.path.to_string_lossy());
+        let img = match thumbs.get(index).and_then(|thumb| thumb.as_ref()) {
+            Some(thumb) => format!(
+                r#"<img class="th" src="file://{}" />"#,
+                escape(&thumb.to_string_lossy())
+            ),
+            // 作れなかった項目。画像なしのcardとして描く。
+            None => String::new(),
+        };
         body.push_str(&format!(
             r#"<div class="{class}" style="left:{x}px;top:{y}px">
-                 <img class="th" src="file://{src}" />
+                 {img}
                  <div class="nm">{}</div>
                </div>"#,
             escape(&item.name)
         ));
     }
 
-    let thumb_w = theme::CELL_W - 8.0;
-    let thumb_h = theme::CELL_H - 24.0;
+    let thumb_w = theme::THUMB_W;
+    let thumb_h = theme::THUMB_H;
     let name_top = theme::CELL_H - 18.0;
     let header_h = theme::HEADER_H;
     let (desktop, surface, surface_hi, surface_lo) = (

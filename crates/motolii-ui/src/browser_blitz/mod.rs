@@ -19,7 +19,8 @@
 //! ## 実装が踏んでいる罠(実測記録: docs/reviews/2026-08-15-blitz-ui-runtime-probe.md)
 //! 1. `ImageManager` の `cache` / `texture_bindings` はフレームを跨いで保持する → `render.rs`
 //! 2. `blitz_net::Provider` は Tokio reactor を要求する → 本fileが runtime を張る
-//! 3. 画像はCSS表示サイズではなく**元解像度**でatlasを消費する → `library_view.rs` の枚数上限
+//! 3. 画像はCSS表示サイズではなく**元解像度**でatlasを消費する → `thumbnail.rs` で縮小実体を
+//!    先に作り、`<img>` はそれを指す(枚数上限のロジックは `library_view.rs` に残してある)
 //!
 //! ## 合成側の実測(P12: spikes/blitz-probe/src/bin/alpha_composite.rs)
 //! - `body` に背景色を置くと viewport 全面が不透明で塗り潰される → 地色は要素側へ(`markup.rs`)
@@ -30,6 +31,7 @@ mod library_view;
 mod markup;
 pub mod render;
 mod theme;
+mod thumbnail;
 
 use atomic_refcell::AtomicRefCell;
 use blitz_dom::{DocumentConfig, EventDriver, NoopEventHandler, StyleThreading};
@@ -63,6 +65,9 @@ pub struct BrowserBlitzPanel {
     runtime: tokio::runtime::Runtime,
     title: String,
     items: Vec<BrowserItem>,
+    /// `items` と同じ長さ・同じ並びの縮小実体path(`thumbnail.rs`)。
+    /// `<img>` はこちらを指す。作れなかった項目は `None` で、画像なしで描かれる。
+    thumbnails: Vec<Option<std::path::PathBuf>>,
     highlight: markup::GridHighlight,
     drag: Option<BrowserDrag>,
     width: u32,
@@ -86,9 +91,11 @@ impl BrowserBlitzPanel {
         let runtime = tokio::runtime::Runtime::new().map_err(BrowserBlitzError::Runtime)?;
         let title = title.into();
         let highlight = markup::GridHighlight::default();
+        // 縮小実体はDocumentを組む前に用意する(2回目以降はディスクのキャッシュを掴むだけ)。
+        let thumbnails = thumbnail::prepare(&items);
         let document = {
             let _guard = runtime.enter();
-            build_document(width, height, &title, &items, highlight)
+            build_document(width, height, &title, &items, &thumbnails, highlight)
         };
         Ok(Self {
             document,
@@ -109,6 +116,7 @@ impl BrowserBlitzPanel {
             runtime,
             title,
             items,
+            thumbnails,
             highlight,
             drag: None,
             width,
@@ -231,6 +239,7 @@ impl BrowserBlitzPanel {
                 self.height,
                 &self.title,
                 &self.items,
+                &self.thumbnails,
                 self.highlight,
             );
             self.dirty = false;
@@ -246,10 +255,11 @@ fn build_document(
     height: u32,
     title: &str,
     items: &[BrowserItem],
+    thumbnails: &[Option<std::path::PathBuf>],
     highlight: markup::GridHighlight,
 ) -> HtmlDocument {
     let mut document = HtmlDocument::from_html(
-        &markup::build_html(width, height, title, items, highlight),
+        &markup::build_html(width, height, title, items, thumbnails, highlight),
         DocumentConfig {
             style_threading: StyleThreading::Sequential,
             // file スキームを std::fs::read で処理する経路。reactor必須(罠2)。
@@ -318,6 +328,42 @@ mod tests {
         assert_eq!(interaction::index_at(theme::PAD + 1.0, y, 3), None);
     }
 
+    /// `<img>` は縮小実体だけを指す。作れなかった項目は**元画像へ戻さず**画像なしで描く。
+    #[test]
+    fn markup_points_at_thumbnails_and_never_at_the_source() {
+        let items = vec![
+            BrowserItem {
+                id: "root-0:a.png".into(),
+                name: "a.png".into(),
+                kind: "image",
+                path: "/tmp/source-a.png".into(),
+                asset_type: "image/png",
+            },
+            BrowserItem {
+                id: "root-0:b.png".into(),
+                name: "b.png".into(),
+                kind: "image",
+                path: "/tmp/source-b.png".into(),
+                asset_type: "image/png",
+            },
+        ];
+        let html = markup::build_html(
+            900,
+            520,
+            "t",
+            &items,
+            // 2枚目は生成に失敗した項目。
+            &[Some("/tmp/thumbs/aaaa-248x168.png".into()), None],
+            markup::GridHighlight::default(),
+        );
+        assert!(html.contains("file:///tmp/thumbs/aaaa-248x168.png"));
+        assert!(!html.contains("source-a.png"));
+        assert!(!html.contains("source-b.png"));
+        // 画像なしのcardが1枚。`<img>` は1個だけ。
+        assert_eq!(html.matches("<img").count(), 1);
+        assert!(html.contains(r#"<div class="nm">b.png</div>"#));
+    }
+
     #[test]
     fn markup_uses_only_probe_verified_css_properties() {
         // spikes/blitz-probe で実際に効いたプロパティ以外を混ぜない。
@@ -351,6 +397,7 @@ mod tests {
                 path: "/tmp/a.png".into(),
                 asset_type: "image/png",
             }],
+            &[Some("/tmp/a-thumb.png".into())],
             markup::GridHighlight::default(),
         );
         let style = html

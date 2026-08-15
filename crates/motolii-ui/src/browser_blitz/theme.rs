@@ -36,3 +36,9 @@ pub(super) const PAD: f64 = 10.0;
 pub(super) const TOP: f64 = 34.0;
 /// browser_panel.rs:105 ヘッダ帯の高さ
 pub(super) const HEADER_H: f64 = 24.0;
+
+/// card内の画像枠(`.th`)の**表示寸法**。`markup.rs` が使っていた式をそのまま置いただけで、
+/// 値は決めていない(cardの左右余白 4px x2 / 名前帯 24px を `CELL_W`/`CELL_H` から引く)。
+/// `thumbnail.rs` が作る縮小実体の寸法はここから導出する。
+pub(super) const THUMB_W: f64 = CELL_W - 8.0;
+pub(super) const THUMB_H: f64 = CELL_H - 24.0;
