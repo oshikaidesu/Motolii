@@ -16,8 +16,9 @@
 //! 窓の最小寸法は `ui/motolii-rn/src/productStyles.ts:4` の `shell`
 //! (`minWidth: 980, minHeight: 650`) をそのまま使う。新しい値ではない。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use image::ImageEncoder as _;
 use motolii_ui::blitz_shell::BlitzShellApp;
 
 /// productStyles.ts:4 `shell: {minWidth: 980, minHeight: 650}`
@@ -99,12 +100,7 @@ impl eframe::App for Harness {
         });
         if let Some(image) = captured {
             let [width, height] = image.size;
-            motolii_ui::blitz_png::write_png(
-                &shot.path,
-                image.as_raw(),
-                width as u32,
-                height as u32,
-            );
+            write_png(&shot.path, image.as_raw(), width as u32, height as u32);
             println!("blitz-shell: {} ({width}x{height})", shot.path.display());
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
@@ -117,4 +113,13 @@ impl eframe::App for Harness {
         // 撮るまでは自分で回す(入力が無いと再描画が来ないため)。
         ctx.request_repaint();
     }
+}
+
+/// 撮った1枚を8bit RGBAのPNGにする。`rgba` は行頭パディング無しの `w * h * 4` バイト
+/// (`egui::ColorImage::as_raw()` がそのまま渡せる)。
+fn write_png(path: &Path, rgba: &[u8], w: u32, h: u32) {
+    let file = std::fs::File::create(path).expect("png create");
+    image::codecs::png::PngEncoder::new(std::io::BufWriter::new(file))
+        .write_image(rgba, w, h, image::ExtendedColorType::Rgba8)
+        .expect("png write");
 }

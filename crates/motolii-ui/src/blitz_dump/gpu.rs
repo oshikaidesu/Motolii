@@ -4,7 +4,9 @@
 //!   - `init_gpu` (:440-479) → [`Gpu::new`]
 //!   - `read_texture` (:789-833) → [`read_texture`]
 //!   - `unpremultiply` (:399-410) → [`unpremultiply`]
-//!   - `write_png` / `chunk` / `crc32` / `adler32` (:838-905) → 以下同名
+//!
+//! PNG書き出し(probe側の `write_png` / `chunk` / `crc32` / `adler32`)だけは写していない。
+//! `image` が依存に入ったので [`write_png`] はそれに任せる。
 //!
 //! ## 実測済みの罠(同probe)
 //! - テクスチャformatは `Rgba8Unorm`。`Rgba8UnormSrgb` にすると色が浮く(最大誤差73)
@@ -12,6 +14,10 @@
 //! - `body` に背景色を置くと viewport 全面が塗り潰される。よってパネル側のCSSは
 //!   背景を持たず、面の外は透過で出る。**確認用の下地はここで別レイヤとして敷く**
 //!   ([`over_checkerboard`])。パネル自身のCSSには触らない。
+
+use std::path::Path;
+
+use image::ImageEncoder as _;
 
 /// 面のテクスチャformat。`Rgba8UnormSrgb` にしないこと(罠2)。
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -177,5 +183,13 @@ pub fn over_checkerboard(premultiplied: &[u8], width: u32, height: u32) -> Vec<u
     out
 }
 
-/// PNG書き出しはlib側の `motolii_ui::blitz_png` にある(`blitz_shell` と共用)。
-pub use motolii_ui::blitz_png::write_png;
+/// 8bit RGBAでPNGへ書く。`rgba` は行頭パディング無しの `w * h * 4` バイト。
+///
+/// かつては「encoder依存を足さない」ために無圧縮PNGを手で書いていたが、
+/// `image`(workspace側で `features = ["png"]`)が依存に入ったので理由が消えた。
+pub fn write_png(path: &Path, rgba: &[u8], w: u32, h: u32) {
+    let file = std::fs::File::create(path).expect("png create");
+    image::codecs::png::PngEncoder::new(std::io::BufWriter::new(file))
+        .write_image(rgba, w, h, image::ExtendedColorType::Rgba8)
+        .expect("png write");
+}
