@@ -10,6 +10,11 @@ pub const OVERVIEW_H: f64 = 22.0;
 pub const RULER_H: f64 = 20.0;
 // timeline_egui/theme.rs:7
 pub const LOCATOR_H: f64 = 16.0;
+
+/// 行高。**固定・最小 20px**(2026-08-08 Timeline設計決定(3))。
+/// 「コンポジットのタイムラインは縦が情報を持たない」ため可変にしない。
+/// Ableton由来の可変トラック高／Optimize Height は同決定で不要とされている。
+pub const ROW_H: f64 = 20.0;
 // timeline_egui/theme.rs:8
 pub const DESKTOP: &str = "#2a2a2a";
 // timeline_egui/theme.rs:9

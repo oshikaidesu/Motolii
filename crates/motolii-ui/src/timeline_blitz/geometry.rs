@@ -6,7 +6,7 @@
 
 use motolii_core::RationalTime;
 
-use super::theme::{LOCATOR_H, OVERVIEW_H, RULER_H};
+use super::theme::{LOCATOR_H, OVERVIEW_H, ROW_H, RULER_H};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct TimelineGeometry {
@@ -30,7 +30,13 @@ impl TimelineGeometry {
             sidebar_width,
             surface_width: (width - sidebar_width).max(1.0),
             rows_top: OVERVIEW_H + RULER_H + LOCATOR_H + 1.0,
-            row_height: ((height - 72.0) / row_count.max(1) as f64).clamp(20.0, 24.0),
+            // **行高は固定・最小 20px**(2026-08-08決定, 利用者裁定 2026-08-16 で適用)。
+            // 理由は「コンポジットのタイムラインは縦が情報を持たない」ため。
+            // 移植元(`timeline_egui/geometry.rs:27`, 撤去済み)は面の高さで
+            // `clamp(20.0, 24.0)` と伸縮させており、**決定に反していた**。
+            // `row_count` はもう使わないが、呼び手の引数は変えない
+            // (行数は他の寸法計算で使う可能性があるため、ここでの不使用に留める)。
+            row_height: ROW_H,
             duration,
         }
     }
@@ -68,11 +74,15 @@ mod tests {
         assert_eq!(geometry.surface_width, 796.0);
         // ui_mock.rs:36 ROWS_TOP=59 と一致。
         assert_eq!(geometry.rows_top, 59.0);
-        // 行高はmockの固定値22.0ではなく geometry.rs:27 の式が出所。
-        // (460-72)/11 = 35.3 なので上端24へclampされる。
-        assert_eq!(geometry.row_height, 24.0);
+        // 行高は面の高さにも行数にも依らず 20px 固定(2026-08-08決定(3))。
+        // 移植元は clamp(20,24) で伸縮させていたが、決定に反していた。
+        assert_eq!(geometry.row_height, 20.0);
         assert_eq!(
             TimelineGeometry::new(1000.0, 460.0, 40, 10.0).row_height,
+            20.0
+        );
+        assert_eq!(
+            TimelineGeometry::new(1000.0, 2000.0, 2, 10.0).row_height,
             20.0
         );
     }

@@ -63,53 +63,37 @@ pub fn timeline_html(
     )
 }
 
-/// ui_mock.rs:188-229 の写し。
+/// CSSの実体は `timeline.css`。**Rustを再ビルドせずに触れる**(`blitz_css`)。
+/// 差し込む値の出所は `theme.rs`(色)と `geometry.rs`(寸法)で、ここでは決めない。
 fn css(geometry: &TimelineGeometry) -> String {
+    const EMBEDDED: &str = include_str!("timeline.css");
     let w = geometry.width;
     let h = geometry.height;
-    let ov_border_h = OVERVIEW_H - 3.0;
-    let row_h = geometry.row_height - 1.0;
-    let grid_step = geometry.surface_width / 10.0;
-    let bar_h = geometry.row_height - 4.0;
-    let ph_h = h - OVERVIEW_H;
-    let phhead_top = OVERVIEW_H - 6.0;
-    format!(
-        "
-  html,body {{ margin:0; padding:0; width:{w}px; height:{h}px;
-              font-family:sans-serif; color:{INK}; }}
-  div {{ position:absolute; }}
-  .desktop {{ left:0; top:0; width:{w}px; height:{h}px; background:{DESKTOP}; }}
-  .ov {{ top:0; height:{OVERVIEW_H}px; background:{SURFACE_LO}; }}
-  .ovlabel {{ left:8px; top:4px; font-size:9px; color:{DIM}; }}
-  .ovborder {{ top:1px; height:{ov_border_h}px; border:1px solid #d8d8d8; }}
-  .ovbar {{ height:3px; }}
-  .ruler {{ left:0; width:{w}px; height:{RULER_H}px; background:{SURFACE_HI}; }}
-  .rulerlabel {{ left:8px; font-size:9px; color:#c0c0c0; }}
-  .tick {{ width:1px; height:5px; background:#6a6a6a; }}
-  .ticklabel {{ font-size:8px; color:{RULER}; }}
-  .locator {{ left:0; width:{w}px; height:{LOCATOR_H}px; background:{SURFACE};
-              border-bottom:1px solid {CONTRAST}; }}
-  .row {{ left:0; width:{w}px; height:{row_h}px; background:{SURFACE};
-          border-bottom:1px solid {CONTRAST};
-          background-image:repeating-linear-gradient(to right,
-            #262626 0px, #262626 1px, transparent 1px, transparent {grid_step}px); }}
-  .sel {{ background:#414141; }}
-  .tri {{ left:10px; width:0; height:0; border-left:5px solid #929292;
-          border-top:4px solid transparent; border-bottom:4px solid transparent; }}
-  .dot {{ left:11px; width:2px; height:2px; background:#929292; }}
-  .llabel {{ left:20px; font-size:9px; color:{INK}; }}
-  .plabel {{ left:31px; font-size:9px; color:{DIM}; }}
-  .tg {{ width:13px; height:12px; background:#2f2f2f; color:{RULER};
-         font-size:8px; text-align:center; border:1px solid {SURFACE_HI}; }}
-  .bar {{ height:{bar_h}px; color:{BAR_INK}; font-size:9px; padding-left:6px;
-          overflow:hidden; white-space:nowrap; }}
-  .selbar {{ border:1px solid #ffffff; }}
-  .key {{ width:8px; height:8px; background:{INK}; transform:rotate(45deg); }}
-  .selkey {{ background:{ACCENT}; }}
-  .vsep {{ top:0; width:1px; height:{h}px; background:{CONTRAST}; }}
-  .ph {{ top:{OVERVIEW_H}px; width:1px; height:{ph_h}px; background:#e7e7e7; }}
-  .phhead {{ top:{phhead_top}px; width:9px; height:6px; background:#e7e7e7; }}
-"
+    crate::blitz_css::fill(
+        &crate::blitz_css::template("timeline_blitz/timeline.css", EMBEDDED),
+        &[
+            ("overview_h", &OVERVIEW_H.to_string()),
+            ("ov_border_h", &(OVERVIEW_H - 3.0).to_string()),
+            ("locator_h", &LOCATOR_H.to_string()),
+            ("ruler_h", &RULER_H.to_string()),
+            ("grid_step", &(geometry.surface_width / 10.0).to_string()),
+            ("phhead_top", &(OVERVIEW_H - 6.0).to_string()),
+            ("row_h", &(geometry.row_height - 1.0).to_string()),
+            ("bar_h", &(geometry.row_height - 4.0).to_string()),
+            ("ph_h", &(h - OVERVIEW_H).to_string()),
+            ("bar_ink", BAR_INK),
+            ("surface_hi", SURFACE_HI),
+            ("surface_lo", SURFACE_LO),
+            ("surface", SURFACE),
+            ("contrast", CONTRAST),
+            ("desktop", DESKTOP),
+            ("accent", ACCENT),
+            ("ruler", RULER),
+            ("dim", DIM),
+            ("ink", INK),
+            ("w", &w.to_string()),
+            ("h", &h.to_string()),
+        ],
     )
 }
 

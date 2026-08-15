@@ -126,8 +126,8 @@ pub(super) fn build_html(
     );
     let (cell_w, cell_h) = (theme::CELL_W, theme::CELL_H);
 
-    let style = fill(
-        &css_template(),
+    let style = crate::blitz_css::fill(
+        &crate::blitz_css::template("browser_blitz/browser.css", include_str!("browser.css")),
         &[
             ("width", &width.to_string()),
             ("height", &height.to_string()),
@@ -150,38 +150,4 @@ pub(super) fn build_html(
     );
 
     format!("<html><head><style>{style}</style></head><body>{body}</body></html>")
-}
-
-/// CSSの実体。**既定は埋め込み、`MOTOLII_BLITZ_CSS_DIR` があれば実行時に読み直す。**
-///
-/// CSSがRustの文字列リテラルに埋まっていると、色を1つ変えるのに `motolii-ui` の
-/// 再ビルドが要る(実測 23〜30秒)。外に出すと、その往復から**ビルドが消える** —
-/// ファイルを保存して dump を実行し直すだけになる(実測 0.70秒)。
-///
-/// 製品のバイナリは `include_str!` の方を使うので、実行時にファイルを要求しない。
-fn css_template() -> std::borrow::Cow<'static, str> {
-    const EMBEDDED: &str = include_str!("browser.css");
-    if let Some(dir) = std::env::var_os("MOTOLII_BLITZ_CSS_DIR") {
-        let path = std::path::Path::new(&dir).join("browser.css");
-        match std::fs::read_to_string(&path) {
-            Ok(text) => return std::borrow::Cow::Owned(text),
-            Err(error) => {
-                eprintln!(
-                    "browser_blitz: {} を読めないので埋め込みのCSSで描く: {error}",
-                    path.display()
-                );
-            }
-        }
-    }
-    std::borrow::Cow::Borrowed(EMBEDDED)
-}
-
-/// `{name}` を差し替える。**長い名前から先に**渡すこと
-/// (`surface_hi` を `surface` より先に置換しないと `{surface_hi}` が壊れる)。
-fn fill(template: &str, values: &[(&str, &str)]) -> String {
-    let mut out = template.to_string();
-    for (name, value) in values {
-        out = out.replace(&format!("{{{name}}}"), value);
-    }
-    out
 }

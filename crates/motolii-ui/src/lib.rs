@@ -5,6 +5,7 @@
 mod canonical_drop;
 /// 移植済みBlitzパネルを1つの窓へ合体させる殻(eframe host + egui_tiles)。bin から使うので pub。
 pub mod blitz_shell;
+mod blitz_css;
 mod blitz_ui;
 /// C6: フォルダ参照でメディア入口を開くBrowserパネル(Blitz)。
 pub mod browser_blitz;
