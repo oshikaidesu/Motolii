@@ -476,7 +476,24 @@ impl HtmlPane {
         );
         if self.document.is_none() || self.document_size != css || self.document_scale != scale {
             let html = self.html(kind, css.0, css.1);
-            self.document = Some(build_document(&html, width, height, scale));
+            let mut document = build_document(&html, width, height, scale);
+            // Timeline の clip と key は DOM に無い(`timeline_blitz/surface.rs`)。
+            // ここで挿さないと、行と目盛だけの Timeline になる。
+            if kind == PaneKind::Timeline {
+                let source = self.timeline_document().clone();
+                let projection = project_for_blitz(&source).ok();
+                if !crate::timeline_blitz::attach_surface(
+                    &mut document,
+                    &source,
+                    projection.as_ref(),
+                    None,
+                    css.0 as f64,
+                    css.1 as f64,
+                ) {
+                    eprintln!("blitz-pane: #tl-surface が見つからず Timeline の面を挿せない");
+                }
+            }
+            self.document = Some(document);
             self.document_size = css;
             self.document_scale = scale;
             self.painted = false;

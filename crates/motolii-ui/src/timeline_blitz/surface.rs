@@ -70,23 +70,27 @@ impl Widget for TimelineSurface {
         _styles: &ComputedStyles,
         width: u32,
         height: u32,
-        _scale: f64,
+        scale: f64,
     ) -> Scene {
         let mut scene = Scene::new();
         let width = width as f64;
         let height = height as f64;
+        // **`width`/`height` は物理px、`row_height` は CSS px。** 掛け合わせないと
+        // hidpi の面で行がずれる(scale=1 の dump では一致するので気付けない)。
+        // 文書側の `Viewport::hidpi_scale` と同じ値がここへ来る。
+        let row_height = self.row_height * scale;
         // bar の高さは `html.rs` の `.bar` と同じ式(row_height - 4)。
-        let bar_h = (self.row_height - 4.0).max(1.0);
+        let bar_h = (row_height - 4.0 * scale).max(1.0);
         let ink = rgb(theme::INK);
         let accent = rgb(theme::ACCENT);
         let white = Color::from_rgb8(255, 255, 255);
 
         for (index, row) in self.rows.iter().enumerate() {
-            let y = index as f64 * self.row_height;
+            let y = index as f64 * row_height;
             if y >= height {
                 break;
             }
-            let cy = y + self.row_height * 0.5;
+            let cy = y + row_height * 0.5;
             let selected = row.property.is_none() && self.selected_index == Some(index);
 
             // ---- clip バー ----
@@ -95,7 +99,8 @@ impl Widget for TimelineSurface {
                     if end > start {
                         let x0 = start.clamp(0.0, 1.0) * width;
                         let x1 = end.clamp(0.0, 1.0) * width;
-                        let rect = Rect::new(x0, y + 1.0, x1.max(x0 + 1.0), y + 1.0 + bar_h);
+                        let top = y + scale;
+                        let rect = Rect::new(x0, top, x1.max(x0 + 1.0), top + bar_h);
                         scene.fill(
                             Fill::NonZero,
                             Affine::IDENTITY,
@@ -106,10 +111,10 @@ impl Widget for TimelineSurface {
                         // 選択枠。`.selbar` の 1px 白枠と同じ意味。
                         if selected {
                             for edge in [
-                                Rect::new(rect.x0, rect.y0, rect.x1, rect.y0 + 1.0),
-                                Rect::new(rect.x0, rect.y1 - 1.0, rect.x1, rect.y1),
-                                Rect::new(rect.x0, rect.y0, rect.x0 + 1.0, rect.y1),
-                                Rect::new(rect.x1 - 1.0, rect.y0, rect.x1, rect.y1),
+                                Rect::new(rect.x0, rect.y0, rect.x1, rect.y0 + scale),
+                                Rect::new(rect.x0, rect.y1 - scale, rect.x1, rect.y1),
+                                Rect::new(rect.x0, rect.y0, rect.x0 + scale, rect.y1),
+                                Rect::new(rect.x1 - scale, rect.y0, rect.x1, rect.y1),
                             ] {
                                 scene.fill(Fill::NonZero, Affine::IDENTITY, white, None, &edge);
                             }
@@ -123,7 +128,8 @@ impl Widget for TimelineSurface {
             for (k, fraction) in row.keys.iter().enumerate() {
                 let cx = fraction.clamp(0.0, 1.0) * width;
                 let color = if selected && k == 0 { accent } else { ink };
-                let square = Rect::new(cx - 4.0, cy - 4.0, cx + 4.0, cy + 4.0);
+                let half = 4.0 * scale;
+                let square = Rect::new(cx - half, cy - half, cx + half, cy + half);
                 scene.fill(
                     Fill::NonZero,
                     Affine::rotate_about(std::f64::consts::FRAC_PI_4, Point::new(cx, cy)),
