@@ -1,0 +1,107 @@
+/* Browserパネルの見た目。**Rustを再ビルドせずに触れる。**
+ *
+ * 既定ではこのファイルはバイナリへ埋め込まれる(`include_str!`)。
+ * `MOTOLII_BLITZ_CSS_DIR` を設定すると、そのディレクトリの `browser.css` を
+ * 実行時に読み直す。色や寸法を変えて絵を見るだけならビルドは要らない:
+ *
+ *   export MOTOLII_BLITZ_CSS_DIR=crates/motolii-ui/src/browser_blitz
+ *   ./target/release/motolii-blitz-dump browser /tmp/b.png   # 実測 0.70s
+ *
+ * `{...}` は `markup.rs` が差し込む。**値はここで決めない** —
+ * 出所は `theme.rs`(色は timeline_egui/theme.rs、寸法は browser_panel.rs の写し)。
+ *
+ * **Blitzはブラウザではない。** ブラウザで効くCSSが silent に効かない事例が実測で
+ * 出ている。ここで使ってよいのは `spikes/blitz-probe/src/bin/browser_panel.rs:102-118`
+ * で実際に効いたものだけ:
+ *   margin / padding / width / height / background / font-family / color /
+ *   position / left / top / border / border-bottom / border-color /
+ *   overflow / white-space / font-size / object-fit
+ * セレクタも同ファイルで実証済みの要素・class・`:hover` だけ。
+ * 新しいプロパティを足すなら、効くことを dump で確かめてから足すこと。
+ */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: {width}px;
+  height: {height}px;
+  font-family: sans-serif;
+  color: {ink};
+}
+
+/* 罠(b): `body` に背景色を置くと viewport 全面が不透明で塗り潰される
+ * (`blitz-paint-0.3.0-beta.1/src/render.rs:127-160`)。地色は通常の要素として敷く。 */
+.bg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: {width}px;
+  height: {height}px;
+  background: {desktop};
+}
+
+.hdr {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: {width}px;
+  height: {header_h}px;
+  background: {surface};
+  color: {ruler};
+  font-size: 11px;
+  padding: 7px 8px;
+  border-bottom: 1px solid {contrast};
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.empty {
+  position: absolute;
+  left: 12px;
+  top: 48px;
+  font-size: 11px;
+  color: {warn};
+}
+
+.card {
+  position: absolute;
+  width: {cell_w}px;
+  height: {cell_h}px;
+  background: {surface};
+  border: 1px solid {surface_lo};
+}
+
+.card:hover {
+  background: {surface_hi};
+  border-color: {ruler};
+}
+
+.sel {
+  border: 1px solid {accent};
+}
+
+.drag {
+  background: {surface_hi};
+  border: 1px solid {ink};
+}
+
+.th {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: {thumb_w}px;
+  height: {thumb_h}px;
+  background: {surface_lo};
+  object-fit: contain;
+}
+
+.nm {
+  position: absolute;
+  left: 4px;
+  top: {name_top}px;
+  width: {thumb_w}px;
+  font-size: 9px;
+  color: {ink};
+  overflow: hidden;
+  white-space: nowrap;
+}

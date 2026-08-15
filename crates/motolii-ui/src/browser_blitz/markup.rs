@@ -120,25 +120,62 @@ pub(super) fn build_html(
     );
     let (cell_w, cell_h) = (theme::CELL_W, theme::CELL_H);
 
-    format!(
-        r#"<html><head><style>
-  html,body {{ margin:0; padding:0; width:{width}px; height:{height}px;
-              font-family:sans-serif; color:{ink}; }}
-  .bg {{ position:absolute; left:0; top:0; width:{width}px; height:{height}px;
-         background:{desktop}; }}
-  .hdr {{ position:absolute; left:0; top:0; width:{width}px; height:{header_h}px;
-          background:{surface}; color:{ruler}; font-size:11px; padding:7px 8px;
-          border-bottom:1px solid {contrast}; overflow:hidden; white-space:nowrap; }}
-  .empty {{ position:absolute; left:12px; top:48px; font-size:11px; color:{warn}; }}
-  .card {{ position:absolute; width:{cell_w}px; height:{cell_h}px; background:{surface};
-           border:1px solid {surface_lo}; }}
-  .card:hover {{ background:{surface_hi}; border-color:{ruler}; }}
-  .sel {{ border:1px solid {accent}; }}
-  .drag {{ background:{surface_hi}; border:1px solid {ink}; }}
-  .th {{ position:absolute; left:4px; top:4px; width:{thumb_w}px; height:{thumb_h}px;
-         background:{surface_lo}; object-fit:contain; }}
-  .nm {{ position:absolute; left:4px; top:{name_top}px; width:{thumb_w}px; font-size:9px;
-         color:{ink}; overflow:hidden; white-space:nowrap; }}
-</style></head><body>{body}</body></html>"#
-    )
+    let style = fill(
+        &css_template(),
+        &[
+            ("width", &width.to_string()),
+            ("height", &height.to_string()),
+            ("header_h", &header_h.to_string()),
+            ("cell_w", &cell_w.to_string()),
+            ("cell_h", &cell_h.to_string()),
+            ("thumb_w", &thumb_w.to_string()),
+            ("thumb_h", &thumb_h.to_string()),
+            ("name_top", &name_top.to_string()),
+            ("desktop", desktop),
+            ("surface_hi", surface_hi),
+            ("surface_lo", surface_lo),
+            ("surface", surface),
+            ("contrast", contrast),
+            ("ruler", ruler),
+            ("accent", accent),
+            ("ink", ink),
+            ("warn", warn),
+        ],
+    );
+
+    format!("<html><head><style>{style}</style></head><body>{body}</body></html>")
+}
+
+/// CSSの実体。**既定は埋め込み、`MOTOLII_BLITZ_CSS_DIR` があれば実行時に読み直す。**
+///
+/// CSSがRustの文字列リテラルに埋まっていると、色を1つ変えるのに `motolii-ui` の
+/// 再ビルドが要る(実測 23〜30秒)。外に出すと、その往復から**ビルドが消える** —
+/// ファイルを保存して dump を実行し直すだけになる(実測 0.70秒)。
+///
+/// 製品のバイナリは `include_str!` の方を使うので、実行時にファイルを要求しない。
+fn css_template() -> std::borrow::Cow<'static, str> {
+    const EMBEDDED: &str = include_str!("browser.css");
+    if let Some(dir) = std::env::var_os("MOTOLII_BLITZ_CSS_DIR") {
+        let path = std::path::Path::new(&dir).join("browser.css");
+        match std::fs::read_to_string(&path) {
+            Ok(text) => return std::borrow::Cow::Owned(text),
+            Err(error) => {
+                eprintln!(
+                    "browser_blitz: {} を読めないので埋め込みのCSSで描く: {error}",
+                    path.display()
+                );
+            }
+        }
+    }
+    std::borrow::Cow::Borrowed(EMBEDDED)
+}
+
+/// `{name}` を差し替える。**長い名前から先に**渡すこと
+/// (`surface_hi` を `surface` より先に置換しないと `{surface_hi}` が壊れる)。
+fn fill(template: &str, values: &[(&str, &str)]) -> String {
+    let mut out = template.to_string();
+    for (name, value) in values {
+        out = out.replace(&format!("{{{name}}}"), value);
+    }
+    out
 }
