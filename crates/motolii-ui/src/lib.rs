@@ -4,6 +4,8 @@
 
 mod app;
 mod blitz_ui;
+/// C6: フォルダ参照でメディア入口を開くBrowserパネル(Blitz)。
+pub mod browser_blitz;
 mod browser_host;
 mod browser_host_runtime;
 mod diagnostic;

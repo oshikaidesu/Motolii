@@ -7,26 +7,32 @@ license.workspace = true
 [lib]
 crate-type = ["rlib", "staticlib"]
 
+# C6 POSITIVE ORACLE(元寸PNG45枚 / 60秒)の実行体。sourceは browser_blitz/ 内に置く。
+[[bin]]
+name = "motolii-browser-blitz-oracle"
+path = "src/browser_blitz/oracle_main.rs"
+
 [dependencies]
+anyrender.workspace = true
+anyrender_vello_hybrid.workspace = true
+atomic_refcell.workspace = true
+blitz-dom.workspace = true
+blitz-html.workspace = true
+blitz-net.workspace = true
+blitz-paint.workspace = true
+blitz-traits.workspace = true
 bytemuck.workspace = true
 eframe.workspace = true
+keyboard-types.workspace = true
+rustc-hash.workspace = true
+tokio.workspace = true
+vello_common.workspace = true
+vello_hybrid.workspace = true
+wgpu_context.workspace = true
 egui.workspace = true
 egui-wgpu.workspace = true
 egui-winit.workspace = true
 egui_tiles.workspace = true
-blitz-dom.workspace = true
-blitz-html.workspace = true
-blitz-paint.workspace = true
-blitz-traits.workspace = true
-blitz-net.workspace = true
-anyrender.workspace = true
-anyrender_vello_hybrid.workspace = true
-vello_hybrid.workspace = true
-vello_common.workspace = true
-wgpu_context.workspace = true
-keyboard-types.workspace = true
-atomic_refcell.workspace = true
-rustc-hash.workspace = true
 motolii-core.workspace = true
 motolii-audio.workspace = true
 motolii-doc.workspace = true

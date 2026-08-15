@@ -3345,6 +3345,7 @@ dependencies = [
  "syn 2.0.119",
  "taffy",
  "thiserror 2.0.19",
+ "tokio",
  "vello_common",
  "vello_hybrid",
  "wgpu",

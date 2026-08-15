@@ -59,7 +59,7 @@ egui_tiles = "0.16"
 # Blitz(HTML/CSS)によるUI面。wgpu 29 に一致するのは vello_hybrid 系のみで、
 # classic vello / anyrender_vello は wgpu 26 のため使わない
 # (docs/decision-index.md「wgpu 版 罠」の行を参照)。
-blitz-dom = { version = "0.3.0-beta.1", features = ["custom-widget"] }
+blitz-dom = { version = "0.3.0-beta.1", features = ["custom-widget", "parallel-construct"] }
 blitz-html = "0.3.0-beta.1"
 blitz-paint = { version = "0.3.0-beta.1", features = ["custom-widget"] }
 blitz-traits = "0.3.0-beta.1"
@@ -96,6 +96,11 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 wgpu = "29"
 winit = "0.30.9"
 wry = "0.55.1"
+# blitz-* / anyrender / vello_hybrid の版は上の [workspace.dependencies] に一本化済み。
+# 版・feature は実証済みの spikes/blitz-probe/Cargo.toml から写したもので、ここで選び直さない。
+# 0.8系/wgpu 29 でないと本体のwgpu 29と型が繋がらない(probe冒頭の注記)。
+# blitz_net::Provider は Tokio reactor を要求する(probe 罠2)。
+tokio = { version = "1", features = ["time", "rt-multi-thread"] }
 block2 = "0.6.2"
 objc2 = "0.6.4"
 objc2-app-kit = { version = "0.3.2", default-features = false }
