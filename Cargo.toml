@@ -56,7 +56,23 @@ eframe = { version = "0.35", default-features = false, features = ["wgpu", "x11"
 egui-wgpu = "0.35"
 egui-winit = "0.35"
 egui_tiles = "0.16"
-taffy = { version = "=0.12.2", default-features = false, features = ["std", "flexbox", "taffy_tree"] }
+# Blitz(HTML/CSS)によるUI面。wgpu 29 に一致するのは vello_hybrid 系のみで、
+# classic vello / anyrender_vello は wgpu 26 のため使わない
+# (docs/decision-index.md「wgpu 版 罠」の行を参照)。
+blitz-dom = { version = "0.3.0-beta.1", features = ["custom-widget"] }
+blitz-html = "0.3.0-beta.1"
+blitz-paint = { version = "0.3.0-beta.1", features = ["custom-widget"] }
+blitz-traits = "0.3.0-beta.1"
+blitz-net = "0.3.0-beta.1"
+anyrender = "0.11"
+anyrender_vello_hybrid = "0.8"
+vello_hybrid = "0.0.9"
+vello_common = "0.0.9"
+wgpu_context = "0.7"
+keyboard-types = "0.7"
+atomic_refcell = "0.1"
+rustc-hash = "2"
+taffy ={ version = "=0.12.2", default-features = false, features = ["std", "flexbox", "taffy_tree"] }
 serde_json = "1"
 sha2 = "0.10"
 windows-sys = "0.61"

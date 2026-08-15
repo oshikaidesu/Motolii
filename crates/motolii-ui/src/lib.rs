@@ -3,6 +3,7 @@
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
 mod app;
+mod blitz_ui;
 mod browser_host;
 mod browser_host_runtime;
 mod diagnostic;
