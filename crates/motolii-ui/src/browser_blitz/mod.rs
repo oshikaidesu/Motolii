@@ -207,9 +207,15 @@ impl BrowserBlitzPanel {
         }
     }
 
+    /// 座標(panel左上原点、CSS px)にある項目。当たり判定はCSSが解決した
+    /// レイアウトから引く。絵を見ながら確かめるための口でもある。
+    pub fn index_at(&self, x: f64, y: f64) -> Option<usize> {
+        interaction::index_at(&self.document, x, y)
+    }
+
     /// 押した。項目の上なら選択してドラッグを開始する。
     pub fn pointer_down(&mut self, x: f64, y: f64) {
-        let hit = interaction::index_at(x, y, self.items.len());
+        let hit = interaction::index_at(&self.document, x, y).filter(|i| *i < self.items.len());
         if self.highlight.selected != hit {
             self.highlight.selected = hit;
             self.dirty = true;

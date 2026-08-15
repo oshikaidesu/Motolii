@@ -39,7 +39,11 @@ fn escape(raw: &str) -> String {
     out
 }
 
-/// 格子1セルの左上座標。hit判定(`interaction.rs`)と同じ式を使う。
+/// card の `id` 接頭辞。`interaction.rs` が DOM から index を引くのに使う。
+pub(super) const CARD_ID_PREFIX: &str = "c";
+
+/// 格子1セルの左上座標。**描画専用**。
+/// 当たり判定はこの式を使わず DOM から引く(`interaction::index_at`)。
 pub(super) fn cell_origin(index: usize) -> (f64, f64) {
     let col = index % theme::COLS;
     let row = index / theme::COLS;
@@ -92,8 +96,10 @@ pub(super) fn build_html(
             // 作れなかった項目。画像なしのcardとして描く。
             None => String::new(),
         };
+        // `id` は当たり判定の口。`interaction.rs` はこの id を DOM から引くので、
+        // **格子の式を二重に持たなくて済む**(列数を変えても hit が勝手に追随する)。
         body.push_str(&format!(
-            r#"<div class="{class}" style="left:{x}px;top:{y}px">
+            r#"<div id="{CARD_ID_PREFIX}{index}" class="{class}" style="left:{x}px;top:{y}px">
                  {img}
                  <div class="nm">{}</div>
                </div>"#,

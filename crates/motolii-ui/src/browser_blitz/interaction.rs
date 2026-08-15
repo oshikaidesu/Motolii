@@ -5,22 +5,46 @@
 //! よって release は「どの項目をどこで離したか」だけを返し、
 //! `DomainIntent` / `Document` へは一切触れない。
 
-use super::library_view::BrowserItem;
-use super::theme;
+use blitz_dom::BaseDocument;
 
-/// 格子座標(panel左上原点、px)から項目indexを引く。
-/// `spikes/blitz-probe/src/bin/browser_panel.rs:205-216` の式の写し。
-pub(super) fn index_at(x: f64, y: f64, item_count: usize) -> Option<usize> {
-    if y < theme::TOP {
-        return None;
+use super::library_view::BrowserItem;
+use super::markup::CARD_ID_PREFIX;
+
+/// 座標(panel左上原点、**CSS px**)から項目indexを引く。
+///
+/// **格子の式は持たない。** レイアウトはCSSが決めるので、当たり判定もCSSが解決した
+/// 結果から引く。以前はここに `spikes/blitz-probe/src/bin/browser_panel.rs:205-216`
+/// の式を写していたが、それは `markup.rs` の `cell_origin` と同じ式の複製で、
+/// **列数や間隔を変えた瞬間にずれる**。CSSを触るだけで当たり判定が追随するのが
+/// HTML/CSSで組んでいることの利点なので、そちらへ寄せた。
+///
+/// 文書の `Viewport::hidpi_scale` は 1.0(`browser_blitz/mod.rs` の `build_document`)
+/// なので、`hit` へ渡す座標も CSS px のままでよい。
+///
+/// **既知の穴**: blitz-dom の `hit` は z-index を見ない(`node/node.rs` に `TODO: z-index`)。
+/// このパネルは card が重ならないので今は問題にならないが、重なる面へ同じ手を
+/// 使うときは別の手当てが要る。
+pub(super) fn index_at(document: &BaseDocument, x: f64, y: f64) -> Option<usize> {
+    let hit = document.hit(x as f32, y as f32)?;
+    // 当たったのが `<img>` や名前帯でも、card まで遡って id を拾う。
+    let mut node_id = hit.node_id;
+    loop {
+        let node = document.get_node(node_id)?;
+        if let Some(index) = node
+            .attrs()
+            .and_then(|attrs| {
+                attrs
+                    .iter()
+                    .find(|attr| attr.name.local.as_ref() == "id")
+                    .map(|attr| attr.value.as_str())
+            })
+            .and_then(|id| id.strip_prefix(CARD_ID_PREFIX))
+            .and_then(|rest| rest.parse::<usize>().ok())
+        {
+            return Some(index);
+        }
+        node_id = node.parent?;
     }
-    let col = ((x - theme::PAD) / (theme::CELL_W + theme::PAD)).floor();
-    let row = ((y - theme::TOP) / (theme::CELL_H + theme::PAD)).floor();
-    if col < 0.0 || row < 0.0 || col as usize >= theme::COLS {
-        return None;
-    }
-    let index = row as usize * theme::COLS + col as usize;
-    (index < item_count).then_some(index)
 }
 
 /// 掴んでいる最中の状態。掴んだ項目と現在のpointer位置だけを持つ。

@@ -216,6 +216,34 @@ fn dump_browser(gpu: &Gpu, _runtime: &tokio::runtime::Runtime, out: &Path) -> Re
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    // 当たり判定を絵と突き合わせるための口。ビルドせずに確かめられる:
+    //   MOTOLII_BLITZ_HIT="70,60 200,60 70,500" motolii-blitz-dump browser out.png
+    // 座標は panel 左上原点の CSS px。判定はCSSが解決したレイアウトから引くので、
+    // CSSを変えれば結果も変わる(格子の式はもう持っていない)。
+    if let Some(spec) = std::env::var_os("MOTOLII_BLITZ_HIT") {
+        for point in spec.to_string_lossy().split_whitespace() {
+            let mut parts = point.split(',');
+            let parsed = parts
+                .next()
+                .and_then(|x| x.trim().parse::<f64>().ok())
+                .zip(parts.next().and_then(|y| y.trim().parse::<f64>().ok()));
+            match parsed {
+                Some((x, y)) => match panel.index_at(x, y) {
+                    Some(index) => {
+                        let name = panel
+                            .items()
+                            .get(index)
+                            .map(|item| item.name.as_str())
+                            .unwrap_or("(範囲外)");
+                        eprintln!("blitz-dump: hit ({x},{y}) → #{index} {name}");
+                    }
+                    None => eprintln!("blitz-dump: hit ({x},{y}) → なし"),
+                },
+                None => eprintln!("blitz-dump: hit の座標を読めない: {point:?}"),
+            }
+        }
+    }
+
     eprintln!(
         "blitz-dump: browser atlas images = {} / items = {}",
         panel.cached_image_count(),
