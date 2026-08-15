@@ -31,9 +31,8 @@ mod rn_product_host;
 pub use rn_product_host::{
     host_commit_stage_transform_for_app, host_create_for_test, host_destroy_for_test,
     host_destroy_stage_for_test, host_dispatch_intent_for_test,
-    host_position_key_times_for_app, host_preview_stage_transform_for_app,
-    host_read_snapshot_for_test, host_register_stage_for_test, host_render_frame_for_app,
-    host_stage_geometry_at_for_app, AppStageFrame, AppStageGeometry,
+    host_preview_stage_transform_for_app, host_read_snapshot_for_test,
+    host_register_stage_for_test, host_render_frame_for_app, AppStageFrame, AppStageGeometry,
     AppStageGeometryLayer, AppStageTransformEdit, AppStageTransformError, AppStageTransformPreview,
     HostRenderFrameResult, RnHostError, RnHostReasonCode, RnHostTestIntent, RnHostTestResponse,
     RnProductSnapshotForTest,

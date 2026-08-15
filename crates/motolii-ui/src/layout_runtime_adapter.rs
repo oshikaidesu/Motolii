@@ -1,6 +1,6 @@
 //! U1a-2で仕様許可されたegui layout/input adapter。
 
-use crate::input_router::{ImeGateState, SafetyInterrupt};
+use motolii_input::{ImeGateState, SafetyInterrupt};
 use crate::layout::{SeparatorAction, SplitAxis};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
