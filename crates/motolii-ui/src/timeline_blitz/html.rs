@@ -10,6 +10,9 @@
 //!
 //! | CSS | 値 | 出所 |
 //! |---|---|---|
+//! **出所の `timeline_egui/*` は 2026-08-16 に撤去済み**。file:line は撤去前の原文に対するもので、
+//! `git show f209da9d^:<path>` で読める。Timelineの正本は現在 `timeline_blitz`(2026-08-16裁定)。
+//!
 //! | `.ovborder` border | `#d8d8d8` | timeline_egui/ruler.rs:55 |
 //! | `.rulerlabel` color | `#c0c0c0` | timeline_egui/ruler.rs:75 |
 //! | `.tick` background | `#6a6a6a` | timeline_egui/ruler.rs:84 |

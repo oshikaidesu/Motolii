@@ -1,4 +1,8 @@
-//! `timeline_egui/theme.rs` の**写し**。値をここで決めないため、名前と並びを1対1で保つ。
+//! 移植元 `timeline_egui/theme.rs` の**写し**。値をここで決めないため、名前と並びを1対1で保つ。
+//!
+//! **移植元は 2026-08-16 に撤去済み**(RN製品面と旧eguiアプリの畳み込み)。
+//! 原文は同じディレクトリの `timeline_egui_theme.snapshot` に保存してあり、
+//! 下の照合テストはそれを読む。file:line の引用は撤去前の原文に対するもの。
 //!
 //! 色はCSSへ出すので `Color32` ではなく16進文字列で持つ。
 //! 値が一致していることは `tests::mirrors_timeline_egui_theme` が
@@ -46,7 +50,12 @@ mod tests {
 
     /// 意味の出所である `timeline_egui/theme.rs` の原文と突き合わせる。
     /// 写し間違いと、向こうが変わってこちらが取り残された事故の両方をここで落とす。
-    const EGUI_THEME: &str = include_str!("../timeline_egui/theme.rs");
+    /// 移植元 `timeline_egui/theme.rs` の**原文**。
+    /// 2026-08-16 に `timeline_egui/` を撤去したので、照合相手をここへ取り出した
+    /// (`git show f209da9d^:crates/motolii-ui/src/timeline_egui/theme.rs` と同一)。
+    /// **この検査は「写しが原文と一致しているか」を見るものなので、
+    /// 原文が消えたら検査ごと消すのではなく、原文を証拠として保存する。**
+    const EGUI_THEME: &str = include_str!("timeline_egui_theme.snapshot");
 
     fn from_rgb_literal(hex: &str) -> String {
         let bytes = hex.trim_start_matches('#');

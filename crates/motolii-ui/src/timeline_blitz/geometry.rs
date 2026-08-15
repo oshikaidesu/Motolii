@@ -1,8 +1,12 @@
-//! `timeline_egui/geometry.rs` の**写し**。座標をここで決めないため、
+//! 移植元 `timeline_egui/geometry.rs` の**写し**。座標をここで決めないため、
 //! 式・定数・関数名を1対1で保つ。
 //!
 //! 違いは `egui::Rect` を取らず原点(0,0)の幅高で受ける点だけ。
 //! Blitz文書は自分の左上が原点であり、`rect.left()`/`rect.top()` は常に 0 になる。
+//!
+//! **移植元は 2026-08-16 に撤去済み**(旧eguiアプリの畳み込み)。file:line の引用は
+//! 撤去前の原文に対するもので、原文は `git show f209da9d^:<path>` で読める。
+//! 新しい値をここで決めないという契約は生きている。
 
 use motolii_core::RationalTime;
 

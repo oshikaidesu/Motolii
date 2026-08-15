@@ -1,6 +1,9 @@
 //! Blitz(HTML/CSS)版Timelineのskin。
 //!
 //! 現行Timelineの**見た目だけ**をHTML/CSSへ移す。意味・寸法・色の出所は
+//! **出所の `timeline_egui/*` は 2026-08-16 に撤去済み**。file:line は撤去前の原文に対するもので、
+//! `git show f209da9d^:<path>` で読める。Timelineの正本は現在 `timeline_blitz`(2026-08-16裁定)。
+//!
 //! `timeline_egui/theme.rs` と `timeline_egui/geometry.rs` のままであり、
 //! ここはその写しを持つだけで新しい値を決めない。
 //!

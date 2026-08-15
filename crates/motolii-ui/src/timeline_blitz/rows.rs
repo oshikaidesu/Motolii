@@ -1,7 +1,11 @@
-//! `timeline_egui/rows.rs` の**写し**。行の起こし方を変えないため、
+//! 移植元 `timeline_egui/rows.rs` の**写し**。行の起こし方を変えないため、
 //! 構造体のfield名・行の並び・palette_slotの決め方を1対1で保つ。
 //!
 //! Documentは読むだけで、ここでも描画側でも書き換えない。
+//!
+//! **移植元は 2026-08-16 に撤去済み**(旧eguiアプリの畳み込み)。file:line の引用は
+//! 撤去前の原文に対するもので、原文は `git show f209da9d^:<path>` で読める。
+//! 新しい値をここで決めないという契約は生きている。
 
 use motolii_doc::{Document, LayerId};
 
