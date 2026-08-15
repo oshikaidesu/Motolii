@@ -4,8 +4,9 @@
 外部実装へ渡すためのclosed order capsule集。形式は[AGENTS.md](../AGENTS.md)の
 `BASE / AUTHORITY / CURRENT STATE / OWNER / EXACT TARGET / ALLOWLIST / READ SET / ORACLES / NON-GOALS / RETURN`。
 
-> **起案の裁定欄が空である間、本書のcapsuleを発注しない。**
-> 本書は発注準備であって発注許可ではない。
+> **2026-08-15の[利用者裁定](reviews/2026-08-15-blitz-ui-runtime-adoption-proposal.md#裁定)により発注凍結は解除された。**
+> C1〜C6は発注してよい。ただし本書のNON-GOALSとORACLEは裁定後も全て有効であり、
+> **裁定が担保しているのは採否だけで、移植が意味を変えないことは担保していない。**
 
 ## この文書が存在する理由
 
@@ -31,6 +32,23 @@
 | 8 | 複数capsuleを1PRにまとめる | 1 capsule = 1 branch = 1 PR |
 
 **判断が要ると感じたら、それは`RETURN`の合図である。** 判断してはならない。
+
+## 全capsule共通の NEGATIVE ORACLE（Blitzはブラウザではない）
+
+HTML/CSSはLLMとの相性が良く、それが本移植を成立させている。
+**同時にそれが最大の罠でもある。** LLMのCSSはブラウザで訓練されており、
+Blitzで効かないCSSを書いても**エラーにならず、silentに違う絵になる**。
+[実測プローブ](reviews/2026-08-15-blitz-ui-runtime-probe.md)で既に2件踏んでいる。
+
+| # | 禁止 | 理由 / 代わりにすること |
+|---|---|---|
+| 9 | **ブラウザで動くはずのCSSを、Blitzで確認せずに使う** | 画像は`width`指定でも**元解像度でアトラスへ載る**（probe実測）。使うCSSは`spikes/blitz-probe/`で実際に効いたものに限る |
+| 10 | **JSに依存する構造を書く**（`<script>`、インラインhandler、JS前提のライブラリ） | **BlitzはJSエンジンを持たない。**挙動はRust側に書く |
+| 11 | **性能問題をCSSで解こうとする** | メモ化はCSSではなく**Dioxus側**（probe実測）。CSSで直らないものはCSSの問題ではない |
+| 12 | 効くか不明なCSSプロパティを「たぶん効く」で入れる | `spikes/blitz-probe/` に最小再現を足して**確かめてから**使う。確かめられないなら`RETURN` |
+
+**判定法**: `timeline_blitz/` 等に書いたCSSプロパティのうち、
+`spikes/blitz-probe/` で一度も使われていないものが**残っていないこと**。
 
 ## RETURN の形式
 
