@@ -32,6 +32,8 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-15-blitz-ui-runtime-adoption-proposal.md](2026-08-15-blitz-ui-runtime-adoption-proposal.md) | UI基盤をBlitz(HTML/CSS)+テクスチャ合成へ移す起案。処分すべき既決3件(RN再基線・Skia ADOPT・Web窓)と未了6件を固定。比較中・裁定未記入 |
+| [2026-08-15-blitz-ui-runtime-probe.md](2026-08-15-blitz-ui-runtime-probe.md) | Blitz(HTML/CSS)をUI基盤候補として実測。自前wgpu29テクスチャへの描画はPASS、キーはフォーム要素にしか届かない等の制約と版の罠を記録。比較中・裁定未了 |
 | [2026-08-15-egui-timeline-engine-authority.md](2026-08-15-egui-timeline-engine-authority.md) | 製品Timeline engineはMotolii egui。Godot PORT操作、egui-keyframeはPATTERNのみ。Rerun Time Panel相乗りは撤回 |
 | [2026-08-14-rerun-body-skin-meaning-decision.md](2026-08-14-rerun-body-skin-meaning-decision.md) | Timelineに限る。Rerun Time Panelのスキン＋Skiaのlayer／clip／key意味（2026-08-15: engine相乗りは撤回注記） |
 | [2026-08-14-web-window-product-reflection-authority.md](2026-08-14-web-window-product-reflection-authority.md) | Web窓／macOS窓／Windows窓を同じ製品coreとsnapshotのprojectionとし、platform adapterを薄く保つ決定 |

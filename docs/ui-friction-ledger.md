@@ -25,6 +25,21 @@ F12(source paramが表示のみ) — `SetProperty` + `ScalarPropertyId::SourcePa
 | F14 | DOC status labelの開発者臭(`DOC r42`) | Q0 inventory掃除(Sol) |
 | F15 | keydragが隣接clip境界のkeyでtrimに先勝ちされる | 判定順の再考(小粒) |
 | F16 | 複数timeline間のCAS上書き / BigInt精度(i64>2^53) | known limit(multi-window/将来) |
+| F17 | Timeline drag中にEscapeを押しても、window focus/pointer captureを失っても、掴んだ状態が解けない(gesture stateが`Some`のまま残る) | `TimelinePointerPhase`にCancel位相を通す |
+| F18 | `enqueue_timeline_intent` の失敗が全call siteで `let _ =` により捨てられている(Document到達失敗が無音) | enqueue失敗の可視化 |
+
+### F17/F18の観測(2026-08-15、`timeline_egui.rs` 851行時点)
+
+Document到達経路そのものは存在し、型付きの門を通っている。`app.rs:607 handle_timeline_pointer` → `TimelineMoveGesture` / `TimelineTrimGesture` / `EguiKeyDrag` → `timeline_intent_adapter::TimelineIntent::{MoveClip, TrimClip, MovePositionKey}` → `enqueue_timeline_intent` → `DocumentEditQueue`。**「clip trim / key moveが門を通っていない」という初出の記述は誤りだったので上表を訂正した。**
+
+実際の穴は2つ。
+
+- **F17(Cancel位相の不在)**: `timeline_egui::TimelinePointerPhase` は `Down` / `Drag` / `Up` の3値で、Cancelが無い。`motolii-input` 側には `InputPhase::Cancel`、`SafetyInterrupt::{PointerCaptureLost, WindowFocusLost}`、`DomainIntent::CancelInFlightGesture` が揃っているが、egui Timelineはこれを一切発火しない。`TimelineCommand::Escape` は `timeline_egui` で収集されるものの、`app.rs:486` のCommand matchが拾うのは Undo / Redo / Duplicate だけで `_ => None` に落ちる。結果、drag中のEscapeもfocus喪失も `self.timeline_move` / `timeline_trim` / `timeline_key_drag` を解除しない。
+- **F18(enqueue失敗の無音)**: `enqueue_timeline_intent` は `Result<(), TimelineIntentAdapterError>` を返すが、`app.rs` の全call site(502、627、705、718、732)が `let _ =` で捨てている。Documentに届かなかった事実がどこにも出ない。これが「気づきづらい」の実体。
+
+**入力層の重複**: `timeline_egui.rs` を `InputPhase` / `InputRouter` でgrepすると0件で、dragは生eguiで処理されている(`interact_pointer_pos()` 432、`!pressed && response.dragged()` 489、`egui::Event::PointerMoved` 511)。489行は `InputPhase` が既に持つpress/drag弁別の手書き再実装。`TimelinePointerPhase` は `InputPhase` の部分再定義で、落ちたのがCancel — F17はこの重複の帰結。
+
+**構造的原因**: 境界が強制されていない(生eguiの`response.dragged()`が常に手の届く所にある)ため、局所で完結する実装が最も安い経路になる。issue単位のdispatchはこれを増幅する — 受注側にとって、別crateの位相enumに合流させるより当該ファイル内で3値を定義する方が合理的なため。落ちるのは「その操作に無くても動くもの」= Cancelとエラー伝播で、どちらも正常系では観測されない。
 
 ## 規則
 

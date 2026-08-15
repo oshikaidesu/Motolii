@@ -1,0 +1,37 @@
+[package]
+name = "blitz-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# ルートworkspaceから隔離。spikes/ 完結で製品 Document/schema には触れない。
+[workspace]
+
+[dependencies]
+# 0.8系を使う理由: 0.7.10 は wgpu 26 で、Motolii本体/egui/Rerun fork の
+# wgpu 29 と型が繋がらない。0.8.0-alpha.1 は wgpu 29.0.4 で一致する。
+dioxus = "0.8.0-alpha.1"
+dioxus-native = "0.8.0-alpha.1"
+wgpu = "29"
+tokio = { version = "1", features = ["time", "rt-multi-thread"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blitz-dom = { version = "0.3.0-beta.1", features = ["parallel-construct", "custom-widget"] }
+blitz-html = "0.3.0-beta.1"
+blitz-paint = { version = "0.3.0-beta.1", features = ["custom-widget"] }
+blitz-traits = "0.3.0-beta.1"
+anyrender = "0.11"
+# wgpu 29 系の実体は vello_hybrid。anyrender_vello(classic) は wgpu 26 なので使わない。
+anyrender_vello_hybrid = "0.8"
+vello_hybrid = "0.0.9"
+wgpu_context = "0.7"
+rustc-hash = "2"
+pollster = "0.4"
+keyboard-types = "0.7"   # blitz-traits 0.3.0-beta.1 と同じ版に揃える
+atomic_refcell = "0.1"
+eframe = { version = "0.35", default-features = false, features = ["wgpu", "default_fonts"] }
+egui = "0.35"
+egui-wgpu = "0.35"
+peniko = "0.6"
+blitz-net = "0.3.0-beta.1"
+vello_common = "0.0.9"

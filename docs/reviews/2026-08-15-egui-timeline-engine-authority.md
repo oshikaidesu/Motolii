@@ -5,7 +5,7 @@
 
 ## 決定
 
-利用者裁定(2026-08-15): 製品 Timeline の **engine** は Motolii egui（[`crates/motolii-ui/src/timeline_egui.rs`](../../crates/motolii-ui/src/timeline_egui.rs)）である。Rerun Time Panel への engine 相乗りはしない。改造コストより、普通の Timeline を現行 egui へ翻訳し切る。
+利用者裁定(2026-08-15): 製品 Timeline の **engine** は Motolii egui（[`crates/motolii-ui/src/timeline_egui.rs`](../../crates/motolii-ui/src/timeline_egui/mod.rs)）である。Rerun Time Panel への engine 相乗りはしない。改造コストより、普通の Timeline を現行 egui へ翻訳し切る。
 
 Stage spatial の Rerun `ADOPT / WRAP` は[採択再締結](2026-08-10-m5-rerun-spatial-viewer-adoption-reclosure-decision.md)のまま。この切り方を Stage／Inspector／Browser／Host へ広げない。
 

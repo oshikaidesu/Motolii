@@ -12,6 +12,7 @@ spikes/g0-9-graph-view/target
 spikes/g0-10-multi-surface-window/target
 # 2026-08-10にリポ外から移管したprobe(移管時はtarget除外だったがignore規則が未追加だった)
 spikes/skia-timeline-probe/target
+spikes/blitz-probe/target
 ui/motolii-rn/native-renderer/target
 /.tools
 # Claude Codeの個人設定と隔離worktreeを誤コミットしない
