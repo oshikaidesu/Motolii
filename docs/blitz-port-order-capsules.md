@@ -123,13 +123,24 @@ RETURN:
 `N-MEDIA-PICK` / `N-PROJECT-ENTRY`（ファイルを選ぶ入口が無い）への代替。
 **完成条件を直接動かす唯一のcapsule**。
 
+### 計測（2026-08-15。C7と同じ構図であることが後から判明した）
+
+| | 行数 | |
+|---|---|---|
+| `Browser.tsx` | 544 | うち **JSXマークアップ45行 / style 41行** |
+| `browser_host.rs` + `browser_host_runtime.rs` + `media_library.rs` | **1,899** | **意味とメディア管理は既にRust側にある** |
+
+C7(Inspector)より偏りが大きい。**フォルダ走査・メディア一覧・サムネイル管理を新規に実装する仕事ではない。**
+既にあるRust runtimeの投影をHTML/CSSで描く仕事である。
+同等の機能を `browser_blitz/` に書いていたら、それは**やりすぎのサイン**。
+
 | 項目 | 内容 |
 |---|---|
 | **EXACT TARGET** | フォルダを参照してサムネイル格子を出し、項目を掴んでドラッグできる |
 | **ALLOWLIST** | `crates/motolii-ui/src/browser_blitz/**`（新規） |
-| **READ SET** | `spikes/blitz-probe/src/bin/browser_panel.rs`（実証済み）、`docs/ui-interaction-language.md`（Browserの役割） |
+| **READ SET** | `spikes/blitz-probe/src/bin/browser_panel.rs`（実証済み）、`docs/ui-interaction-language.md`（Browserの役割）、**`browser_host.rs`(661) / `browser_host_runtime.rs`(685) / `media_library.rs`(553) — 意味とメディア管理は既にRust側にある。繋ぐ先** |
 | **POSITIVE ORACLE** | 元寸PNG 45枚を表示して60秒 panic しないこと |
-| **NEGATIVE ORACLE** | `ImageManager` の `cache` と `texture_bindings` を**フレーム内で新規生成していない**こと（下記の罠） |
+| **NEGATIVE ORACLE** | `ImageManager` の `cache` と `texture_bindings` を**フレーム内で新規生成していない**こと（下記の罠）／`browser_host*.rs` と `media_library.rs` を**編集していない**こと／`browser_blitz/` にそれら3ファイルが既に持つ機能の**再実装が無い**こと |
 | **NON-GOALS** | 共通NON-GOALS全部 + **配置intentの意味を決めない**（drop先で何が起きるかは未決。RETURN） + native file dialog を作らない |
 | **RETURN** | drop したとき Document に何が起きるべきかを決める必要が出たら`RETURN`。**これは製品意味の決定** |
 
