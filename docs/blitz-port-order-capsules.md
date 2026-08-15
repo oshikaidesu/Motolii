@@ -237,6 +237,25 @@ C5の前提。C7と同型で、対象が小さい（計252行）。
 | **NON-GOALS** | 共通NON-GOALS全部 + chromeに何を置くかを決めない + `ui/motolii-rn/`を削除・改変しない |
 | **RETURN** | `productStyles.ts` に無い値が要る時点で即`RETURN` |
 
+### 実装済み（2026-08-15）— `crates/motolii-ui/src/chrome_blitz/`
+
+`export` / `settings` / `panels` / `parts` の4枚を `motolii-blitz-dump` から出せる。専用 bin は作らず、
+Timeline / Browser / dock と同じ道具に足した（4枚を並べて見るため）。
+
+値の出所が**3つ**ある点が C7 と違う。`registry.tsx:20-24` と `AssetTaggingPanel.tsx:39-56` は
+`productStyles.ts` ではなく**自前のローカル `StyleSheet`** を持つ。`theme.rs` は3つの表に分け、
+それぞれの原文と逐語で突き合わせる。両方が `root` という名前を持って衝突するため、
+CSSは `registry.tsx:16-17` の id で名前空間を切って出す（`.asset-tags .root` / `.export-notes .root`）。
+
+**残余**
+
+- `input` の `font-size` が写せない（上の共通罠の表を見ること）。決定が要る
+- `parts` の並びは**製品レイアウトではない**。`chrome.tsx` が1枚の画面ではなく部品の集まりなので、
+  見るために並べただけ。ここに意味を読まないこと
+- `.parts-row` だけが移植元に無い構造クラス（幅しか持たない `vSplitter` に交差軸の高さを与えるため）
+- 面は 980x650 固定。`.shell` が `productStyles.ts:4` で `minWidth: 980, minHeight: 650` を持つので、
+  これより小さい面を渡すと最小値が勝って `chromeModalScrim` の矩形とPNGの矩形がずれる
+
 ### C7 / C8 共通 — React Native は HTML ではない
 
 `View`/`Text`/`Pressable`/`ScrollView`/`TextInput` は div/span/button ではない。機械的に置換しないこと。
@@ -245,6 +264,7 @@ C5の前提。C7と同型で、対象が小さい（計252行）。
 |---|---|
 | **`flexDirection` の既定が逆** | **RNは`column`、CSSは`row`。**写し間違えるとsilentに崩れる |
 | カスケードと継承 | RNの`StyleSheet`には**無い**。CSSには**ある**。意図しない継承が起きていないか確認する |
+| **`fontSize` を書いていない葉は写せない** | C8実測。`AssetTaggingPanel.tsx:43-52` の `input` は `fontSize` を持たないため、CSS側はUA既定の16pxを継承し、`heading`(14px)より大きく出る。RNは継承が無く、`TextInput` の既定はプラットフォーム側にある。**その値はリポジトリのどこにも書かれていないので写せない。** 埋めるには決定が要る |
 | 単位 | RNの数値は密度非依存ピクセル |
 | `FlatList` | 仮想化リスト。BlitzのDOM天井は1,500〜3,000ノードなので作り直しが要る（C6の担当） |
 | **`zIndex` を写すと座標が1フレーム遅れる** | Blitz側の順序の問題であってCSSの書き方の問題ではない。静止画1枚だと原点に落ちて見える（[P13](reviews/2026-08-15-blitz-ui-runtime-probe.md#p13--z-index-を持つ要素は間違った場所に描かれるのではなく座標が1レイアウト遅れる2026-08-15追測)）。**絵が崩れてもCSSを書き換えて直そうとしないこと** |

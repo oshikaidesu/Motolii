@@ -8,6 +8,8 @@ mod blitz_ui;
 pub mod browser_blitz;
 mod browser_host;
 mod browser_host_runtime;
+// C8: chrome と extension panel の見た目のBlitz(HTML/CSS)写し。bin から使うので pub。
+pub mod chrome_blitz;
 mod diagnostic;
 mod diagnostic_projection;
 mod display_slot;
@@ -60,18 +62,18 @@ mod stage_overlay_gpu;
 pub mod stage_overlay_raster;
 mod static_preview;
 pub mod timeline_blitz;
+mod timeline_clipboard_intents;
 mod timeline_egui;
 #[cfg(test)]
 mod timeline_egui_interaction_tests;
-mod timeline_clipboard_intents;
 mod timeline_intent_adapter;
 mod timeline_move_gesture;
 mod timeline_projection;
-mod timeline_viewport_state;
 #[cfg(target_os = "macos")]
 mod timeline_skia_raster;
 mod timeline_tools_host_runtime;
 mod timeline_trim_gesture;
+mod timeline_viewport_state;
 mod ui_numeric_trace;
 mod user_keymap_prefs;
 

@@ -1,13 +1,17 @@
-//! 移植した Blitz パネル(Timeline / Browser / dock)を PNG に落とすだけの道具。
+//! 移植した Blitz パネル(Timeline / Browser / dock / chrome)を PNG に落とすだけの道具。
 //!
 //! ```text
 //! cargo run -p motolii-ui --bin motolii-blitz-dump -- timeline out/timeline.png
 //! cargo run -p motolii-ui --bin motolii-blitz-dump -- browser  out/browser.png
 //! cargo run -p motolii-ui --bin motolii-blitz-dump -- dock     out/dock.png
+//! cargo run -p motolii-ui --bin motolii-blitz-dump -- chrome-export   out/chrome-export.png
+//! cargo run -p motolii-ui --bin motolii-blitz-dump -- chrome-settings out/chrome-settings.png
+//! cargo run -p motolii-ui --bin motolii-blitz-dump -- chrome-panels   out/chrome-panels.png
+//! cargo run -p motolii-ui --bin motolii-blitz-dump -- chrome-parts    out/chrome-parts.png
 //! cargo run -p motolii-ui --bin motolii-blitz-dump -- all      out/
 //! ```
 //!
-//! **見た目をここで決めない。** HTML/CSS は3つとも既存実装がそのまま出したものを使い、
+//! **見た目をここで決めない。** HTML/CSS はどれも既存実装がそのまま出したものを使い、
 //! この bin は「文書を作る → 描く → 読み戻す → PNG にする」だけを持つ。
 //! 描画経路は `browser_blitz/render.rs` の `BlitzSurface`(実証済み)を**使い回す**。
 //! 新しい描画方式は作らない。
@@ -26,6 +30,7 @@ use blitz_traits::shell::{ColorScheme, Viewport};
 
 use motolii_ui::browser_blitz::render::BlitzSurface;
 use motolii_ui::browser_blitz::{BrowserBlitzPanel, DEFAULT_MAX_ITEMS};
+use motolii_ui::chrome_blitz;
 use motolii_ui::timeline_blitz::{project_for_blitz, timeline_html};
 
 use gpu::Gpu;
@@ -36,13 +41,22 @@ const TIMELINE_H: u32 = 460;
 /// browser_blitz/oracle_main.rs:15-16 の写し。
 const BROWSER_W: u32 = 900;
 const BROWSER_H: u32 = 520;
+/// chrome の4枚はどれも `.shell` を下地に持つ。`.shell` は `productStyles.ts:4` で
+/// `minWidth: 980, minHeight: 650` を持つので、**これより小さい面を渡しても意味がない**
+/// — 最小値が勝って面だけがはみ出し、`chromeModalScrim` が覆う矩形と
+/// PNGの矩形がずれる(実際に640x360で描いてcardが右下へ流れた)。
+/// 製品の最小shellをそのまま面にする。
+const CHROME_W: u32 = 980;
+const CHROME_H: u32 = 650;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (panel, out) = match args.as_slice() {
         [panel, out] => (panel.as_str(), PathBuf::from(out)),
         _ => {
-            eprintln!("usage: motolii-blitz-dump <timeline|browser|dock|all> <out.png|out/>");
+            eprintln!(
+                "usage: motolii-blitz-dump <timeline|browser|dock|chrome-export|chrome-settings|chrome-panels|chrome-parts|all> <out.png|out/>"
+            );
             std::process::exit(2);
         }
     };
@@ -61,7 +75,7 @@ fn main() {
                 report(name, run(&gpu, &runtime, &path), &mut failures);
             }
         }
-        "timeline" | "browser" | "dock" => {
+        name if panels().iter().any(|(known, _)| *known == name) => {
             if let Some(parent) = out.parent() {
                 if !parent.as_os_str().is_empty() {
                     std::fs::create_dir_all(parent).expect("out dir");
@@ -95,6 +109,10 @@ fn panels() -> Vec<(&'static str, Dump)> {
         ("timeline", dump_timeline as Dump),
         ("browser", dump_browser as Dump),
         ("dock", dump_dock as Dump),
+        ("chrome-export", dump_chrome_export as Dump),
+        ("chrome-settings", dump_chrome_settings as Dump),
+        ("chrome-panels", dump_chrome_panels as Dump),
+        ("chrome-parts", dump_chrome_parts as Dump),
     ]
 }
 
@@ -202,6 +220,52 @@ fn dump_browser(gpu: &Gpu, _runtime: &tokio::runtime::Runtime, out: &Path) -> Re
         panel.items().len()
     );
     save(gpu, &texture, BROWSER_W, BROWSER_H, out)
+}
+
+/// chrome: `chrome_blitz` が出すHTMLをそのまま描く。4枚に分かれているのは
+/// `chrome.tsx` が1枚の画面ではなく部品の集まりだから。**並びは製品レイアウトではない。**
+///
+/// `ChromeModal` の scrim は `productStyles.ts:5` で `zIndex: 20` を持つ。
+/// hoisted paint child の座標が1レイアウト遅れる件(`dump_html` の2回resolve)が
+/// 実際に効くのはこの2枚。
+fn dump_chrome_export(
+    gpu: &Gpu,
+    runtime: &tokio::runtime::Runtime,
+    out: &Path,
+) -> Result<(), String> {
+    let html = chrome_blitz::export_html(
+        &chrome_blitz::EXPORT_SAMPLE,
+        CHROME_W as f64,
+        CHROME_H as f64,
+    );
+    dump_html(gpu, runtime, &html, CHROME_W, CHROME_H, out)
+}
+
+fn dump_chrome_settings(
+    gpu: &Gpu,
+    runtime: &tokio::runtime::Runtime,
+    out: &Path,
+) -> Result<(), String> {
+    let html = chrome_blitz::settings_html(CHROME_W as f64, CHROME_H as f64);
+    dump_html(gpu, runtime, &html, CHROME_W, CHROME_H, out)
+}
+
+fn dump_chrome_panels(
+    gpu: &Gpu,
+    runtime: &tokio::runtime::Runtime,
+    out: &Path,
+) -> Result<(), String> {
+    let html = chrome_blitz::panels_html(CHROME_W as f64, CHROME_H as f64);
+    dump_html(gpu, runtime, &html, CHROME_W, CHROME_H, out)
+}
+
+fn dump_chrome_parts(
+    gpu: &Gpu,
+    runtime: &tokio::runtime::Runtime,
+    out: &Path,
+) -> Result<(), String> {
+    let html = chrome_blitz::parts_html(CHROME_W as f64, CHROME_H as f64);
+    dump_html(gpu, runtime, &html, CHROME_W, CHROME_H, out)
 }
 
 /// 文書1つを描いてPNGにする。`browser_blitz/mod.rs:221-245` の `build_document` と
