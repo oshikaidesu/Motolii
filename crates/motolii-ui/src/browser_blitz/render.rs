@@ -14,6 +14,15 @@ use rustc_hash::FxHashMap;
 use vello_hybrid::{RenderSize, RenderTargetConfig, Renderer, Resources, Scene, TextureBindings};
 use wgpu_context::DeviceHandle;
 
+/// プロセスで1つだけ作る `wgpu::Instance`。
+/// `anyrender` の `DeviceHandle` が要求するので持つが、**中身は使い回す**。
+fn shared_instance() -> &'static wgpu::Instance {
+    static INSTANCE: std::sync::OnceLock<wgpu::Instance> = std::sync::OnceLock::new();
+    INSTANCE.get_or_init(|| {
+        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle())
+    })
+}
+
 pub struct BlitzSurface {
     renderer: Renderer,
     resources: Resources,
@@ -52,9 +61,11 @@ impl BlitzSurface {
             ),
             resources: Resources::new(),
             device_handle: DeviceHandle {
-                instance: wgpu::Instance::new(
-                    wgpu::InstanceDescriptor::new_without_display_handle(),
-                ),
+                // **使い回す。** `wgpu::Instance::new` はバックエンドとアダプタを
+                // 列挙するので安くない。面の大きさが変わるたびに `BlitzSurface` を
+                // 作り直す呼び手(ドッキングのドラッグ中は毎フレーム)がいるため、
+                // ここで毎回作ると драг が目に見えて重くなる。
+                instance: shared_instance().clone(),
                 adapter: adapter.clone(),
                 device: device.clone(),
                 queue: queue.clone(),
