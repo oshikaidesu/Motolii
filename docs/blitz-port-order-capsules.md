@@ -152,16 +152,73 @@ C1〜C4がmainで動いた後にのみ着手する。
 
 ---
 
+## C7 — Inspector を RN から Blitz へ
+
+C5(RN退役)の**前提**。Inspectorの移植先が無いままRNを消すと製品が消える。
+
+### 計測（2026-08-15、この capsule の形を決めた根拠）
+
+| | 行数 | |
+|---|---|---|
+| `Inspector.tsx` | 1,596 | うち **JSXマークアップ149行 / style定義85行 / host呼び出し14行** |
+| `inspector_host_runtime.rs` | **1,965** | **意味と状態機械は既にRust側にある**（TSXより大きい） |
+
+したがってこれは「ロジックをRustへ書き直す」仕事では**ない**。
+**マークアップとスタイルを写し、既にあるRust runtimeへ繋ぐ**仕事である。
+Rust側にロジックを新規で書き足していたら、それは**やりすぎのサイン**。
+
+| 項目 | 内容 |
+|---|---|
+| **EXACT TARGET** | `Inspector.tsx` の見た目をBlitzで描き自前wgpuテクスチャへ出す。表示は `inspector_host_runtime.rs` の既存投影を読む。**入力配線は含まない**（C2の担当） |
+| **ALLOWLIST** | 新規 `crates/motolii-ui/src/inspector_blitz/**` のみ |
+| **READ SET** | `Inspector.tsx`(構造)、**`productStyles.ts`(147行 — 色・寸法の唯一の出所。C1における`theme.rs`に相当)**、`inspector_host_runtime.rs`(繋ぐ先)、`spikes/blitz-probe/src/bin/ui_mock.rs` |
+| **POSITIVE ORACLE** | 各セクションが同じ構造で存在し、`productStyles.ts` の値が**リテラルで一致**すること |
+| **NEGATIVE ORACLE** | 新しい色・寸法定数が0件 / probe未使用のCSSプロパティが0件 / **`inspector_host_runtime.rs` を編集していない** |
+| **NON-GOALS** | 共通NON-GOALS全部 + `PanResponder`(ドラッグ)を移植しない(C2) + `ui/motolii-rn/`を削除・改変しない(**まだ製品正本**) |
+| **RETURN** | `productStyles.ts` に無い値が要る時点で即`RETURN`。Rust側にロジックを足したくなったら`RETURN` |
+
+## C8 — chrome と panels を RN から Blitz へ
+
+C5の前提。C7と同型で、対象が小さい（計252行）。
+
+| 項目 | 内容 |
+|---|---|
+| **EXACT TARGET** | `chrome.tsx`(172)、`panels/registry.tsx`(24)、`panels/AssetTaggingPanel.tsx`(56) の見た目をBlitzで描く。**入力配線は含まない** |
+| **ALLOWLIST** | 新規 `crates/motolii-ui/src/chrome_blitz/**` のみ |
+| **READ SET** | 上記3ファイル、`productStyles.ts`、`spikes/blitz-probe/src/bin/ui_mock.rs`、`docs/ui-interaction-language.md`(**読むだけ。新要件を発明しない**) |
+| **POSITIVE ORACLE** | 各要素が同じ構造で存在し `productStyles.ts` の値がリテラル一致 |
+| **NEGATIVE ORACLE** | 新しい色・寸法定数が0件 / probe未使用のCSSが0件 / **パネル登録の仕組みを新設しない**(`registry.tsx`の構造を写す) |
+| **NON-GOALS** | 共通NON-GOALS全部 + chromeに何を置くかを決めない + `ui/motolii-rn/`を削除・改変しない |
+| **RETURN** | `productStyles.ts` に無い値が要る時点で即`RETURN` |
+
+### C7 / C8 共通 — React Native は HTML ではない
+
+`View`/`Text`/`Pressable`/`ScrollView`/`TextInput` は div/span/button ではない。機械的に置換しないこと。
+
+| 罠 | 内容 |
+|---|---|
+| **`flexDirection` の既定が逆** | **RNは`column`、CSSは`row`。**写し間違えるとsilentに崩れる |
+| カスケードと継承 | RNの`StyleSheet`には**無い**。CSSには**ある**。意図しない継承が起きていないか確認する |
+| 単位 | RNの数値は密度非依存ピクセル |
+| `FlatList` | 仮想化リスト。BlitzのDOM天井は1,500〜3,000ノードなので作り直しが要る（C6の担当） |
+
+---
+
 ## 発注順
 
 ```
 C1 ──┬── C2 ──┬── C3
      │        │
      └── C4 ──┘
-C6 ──────────────┴── C5(最後)
+C6 ──────────────┤
+C7 ──┬───────────┴── C5(最後)
+C8 ──┘
 ```
 
 **C6 は C1〜C4 と独立**（file-disjoint）で、かつ**完成条件を直接動かす**ため優先度が高い。
 
-C1とC4は独立（file-disjoint）なので並列可。C5は全部の後。
+C1とC4は独立（file-disjoint）なので並列可。
+**C7・C8 は C1/C4/C6 と file-disjoint なので並列可**で、かつ**C5の前提**である
+（Inspectorとchromeの移植先が無いまま`rn_product_host`を消すと製品が消える）。
+C5は全部の後。
 同じshared seatを触る複数PRを同時発注しない（[AGENTS.md](../AGENTS.md)）。
