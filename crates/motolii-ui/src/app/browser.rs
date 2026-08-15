@@ -2,6 +2,8 @@
 
 use motolii_core::{CanonicalPoint, CompCamera};
 
+use crate::canonical_drop::canonical_drop_from_ndc;
+
 use crate::document_edit_runtime::PlaceRectangleRequest;
 use crate::host_pointer_capture::HostPointerCandidate;
 use crate::layout_runtime_adapter::StageDropTerminal;
@@ -78,30 +80,9 @@ impl MotoliiApp {
     }
 }
 
-pub(crate) fn canonical_drop_from_ndc(camera: CompCamera, ndc: [f64; 2]) -> Option<[f64; 2]> {
-    if !ndc[0].is_finite() || !ndc[1].is_finite() {
-        return None;
-    }
-    let qx =
-        ndc[0] * camera.aspect_num() as f64 / camera.aspect_den() as f64 * camera.height() / 2.0;
-    let qy = ndc[1] * camera.height() / 2.0;
-    let cos_r = camera.roll_radians().cos();
-    let sin_r = camera.roll_radians().sin();
-    let center = camera.center();
-    let point = CanonicalPoint {
-        x: center.x + cos_r * qx - sin_r * qy,
-        y: center.y + sin_r * qx + cos_r * qy,
-    };
-    let projected = camera.world_to_ndc(point).ok()?;
-    if !point.x.is_finite()
-        || !point.y.is_finite()
-        || (projected.0 - ndc[0]).abs() > 1e-9
-        || (projected.1 - ndc[1]).abs() > 1e-9
-    {
-        return None;
-    }
-    Some([point.x, point.y])
-}
+// `canonical_drop_from_ndc` は `crate::canonical_drop` へ移した。
+// カメラの逆射影だけでアプリの状態を見ない関数がここに置かれていたせいで、
+// `product_runtime/` の14ファイルが旧アプリ側へ依存していた。
 
 #[cfg(test)]
 mod tests {

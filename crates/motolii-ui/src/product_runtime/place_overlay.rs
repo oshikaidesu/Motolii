@@ -2,7 +2,7 @@
 
 use motolii_core::CanonicalPoint;
 
-use crate::app::canonical_drop_from_ndc;
+use crate::canonical_drop::canonical_drop_from_ndc;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct RectanglePlaceOverlay {

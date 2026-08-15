@@ -34,7 +34,7 @@ use lifecycle::{
 use preview::register_repaint_signal;
 use timeline::EguiKeyDrag;
 
-pub(crate) use browser::canonical_drop_from_ndc;
+pub(crate) use crate::canonical_drop::canonical_drop_from_ndc;
 pub(crate) use lifecycle::{
     LifecycleInvariantError, LifecycleSmokeOutcome, ShellLifecycleInput, StaticViewportProjection,
 };

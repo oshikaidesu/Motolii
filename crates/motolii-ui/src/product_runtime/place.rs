@@ -17,7 +17,7 @@ use winit::dpi::LogicalSize;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::Window;
 
-use crate::app::canonical_drop_from_ndc;
+use crate::canonical_drop::canonical_drop_from_ndc;
 use crate::browser_host::BrowserPlaceIntent;
 use crate::browser_host_runtime::{
     BrowserFocusTarget, BrowserHostRuntime, BrowserHostRuntimeError, BrowserLifecycleEvent,
