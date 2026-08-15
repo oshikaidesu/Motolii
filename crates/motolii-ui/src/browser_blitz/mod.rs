@@ -79,6 +79,7 @@ impl BrowserBlitzPanel {
         format: wgpu::TextureFormat,
         width: u32,
         height: u32,
+        scale: f64,
         title: impl Into<String>,
         items: Vec<BrowserItem>,
     ) -> Result<Self, BrowserBlitzError> {
@@ -91,7 +92,20 @@ impl BrowserBlitzPanel {
         };
         Ok(Self {
             document,
-            surface: render::BlitzSurface::new(device, adapter, queue, format, width, height),
+            surface: {
+                // `width`/`height` は **CSS px**(ポインタ判定もこの空間)。
+                // texture は物理px で要る。hidpiの面へ等倍で描くための倍率がここ。
+                let mut surface = render::BlitzSurface::new(
+                    device,
+                    adapter,
+                    queue,
+                    format,
+                    ((width as f64) * scale).round() as u32,
+                    ((height as f64) * scale).round() as u32,
+                );
+                surface.set_scale(scale);
+                surface
+            },
             runtime,
             title,
             items,
@@ -113,13 +127,14 @@ impl BrowserBlitzPanel {
         format: wgpu::TextureFormat,
         width: u32,
         height: u32,
+        scale: f64,
         dir: &Path,
         max_items: usize,
     ) -> Result<Self, BrowserBlitzError> {
         let items = image_items(dir, max_items);
         let title = format!("Browser — {}", dir.display());
         Self::new(
-            device, adapter, queue, format, width, height, title, items,
+            device, adapter, queue, format, width, height, scale, title, items,
         )
     }
 
@@ -134,6 +149,14 @@ impl BrowserBlitzPanel {
 
     pub fn selected(&self) -> Option<usize> {
         self.highlight.selected
+    }
+
+    /// paint scale。hidpiの面へ等倍で描くときに `pixels_per_point` を渡す。
+    /// 文書側の `Viewport::hidpi_scale` と同じ値にすること。
+    /// **この面は文書の大きさを後から変えられない**ので、倍率を変えるだけでは
+    /// レイアウトのCSS px幅は変わらない。呼び出し側はパネルごと作り直すこと。
+    pub fn set_scale(&mut self, scale: f64) {
+        self.surface.set_scale(scale);
     }
 
     /// 罠1の再発観測窓。フレームを跨いで保持できていれば同じフォルダで増え続けない。

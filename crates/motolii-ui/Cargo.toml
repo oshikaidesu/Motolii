@@ -23,6 +23,12 @@ path = "src/blitz_dump/main.rs"
 name = "motolii-inspector-blitz-dump"
 path = "src/inspector_blitz/dump_main.rs"
 
+# 移植済みパネルを1つの窓へ合体させて見るための殻(eframe host + Blitzテクスチャ + egui_tiles)。
+# 入力もDocument接続も持たない。sourceは blitz_shell/ 内に置く。
+[[bin]]
+name = "motolii-blitz-shell"
+path = "src/blitz_shell/main.rs"
+
 [dependencies]
 anyrender.workspace = true
 anyrender_vello_hybrid.workspace = true

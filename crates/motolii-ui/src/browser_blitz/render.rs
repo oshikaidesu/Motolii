@@ -24,6 +24,12 @@ pub struct BlitzSurface {
     image_cache: FxHashMap<u64, vello_common::paint::ImageId>,
     /// 同上。`texture_bindings` もフレームを跨いで保持する。
     texture_bindings: FxHashMap<anyrender::ResourceId, wgpu::TextureView>,
+    /// paint scale。**1 CSS px を何物理px で描くか。**
+    /// 既定は1.0で、これは「CSS px = 物理px」を意味する。hidpi の面へ等倍で描くなら
+    /// `set_scale` で `pixels_per_point` を渡す。渡さないと Retina で全部が半分に見える。
+    /// 文書側の `Viewport::hidpi_scale` と**同じ値**にすること(片方だけだとレイアウトと
+    /// 描画の縮尺がずれる)。
+    scale: f64,
 }
 
 impl BlitzSurface {
@@ -57,7 +63,13 @@ impl BlitzSurface {
             height,
             image_cache: FxHashMap::default(),
             texture_bindings: FxHashMap::default(),
+            scale: 1.0,
         }
+    }
+
+    /// paint scale を差し替える。`Viewport::hidpi_scale` と同じ値を渡すこと。
+    pub fn set_scale(&mut self, scale: f64) {
+        self.scale = scale;
     }
 
     /// 1フレーム描いて `target` へ書く。GPU resourceはloop内で作らない
@@ -88,7 +100,7 @@ impl BlitzSurface {
                 &mut self.texture_bindings,
                 &self.device_handle,
             );
-            paint_scene(&mut painter, document, 1.0, width, height, 0, 0);
+            paint_scene(&mut painter, document, self.scale, width, height, 0, 0);
         }
         let _ = self.renderer.render(
             &scene,

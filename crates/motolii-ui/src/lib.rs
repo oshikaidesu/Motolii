@@ -3,6 +3,10 @@
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
 mod app;
+/// 絵を見るための8bit RGBA PNG書き出し(encoder依存を足さないための手書き)。
+pub mod blitz_png;
+/// 移植済みBlitzパネルを1つの窓へ合体させる殻(eframe host + egui_tiles)。bin から使うので pub。
+pub mod blitz_shell;
 mod blitz_ui;
 /// C6: フォルダ参照でメディア入口を開くBrowserパネル(Blitz)。
 pub mod browser_blitz;

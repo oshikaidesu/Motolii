@@ -188,6 +188,8 @@ fn dump_browser(gpu: &Gpu, _runtime: &tokio::runtime::Runtime, out: &Path) -> Re
         gpu::FORMAT,
         BROWSER_W,
         BROWSER_H,
+        // 窓を持たない道具なので CSS px = 物理px でよい。
+        1.0,
         &dir,
         max_items,
     )

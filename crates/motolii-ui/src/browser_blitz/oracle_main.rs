@@ -52,12 +52,7 @@ struct Oracle {
 }
 
 impl Oracle {
-    fn new(
-        cc: &eframe::CreationContext<'_>,
-        dir: PathBuf,
-        max_items: usize,
-        seconds: u64,
-    ) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, dir: PathBuf, max_items: usize, seconds: u64) -> Self {
         let state = cc.wgpu_render_state.as_ref().expect("wgpu render state");
         let texture = state.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("browser-blitz-oracle"),
@@ -74,11 +69,11 @@ impl Oracle {
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let texture_id =
-            state
-                .renderer
-                .write()
-                .register_native_texture(&state.device, &view, wgpu::FilterMode::Linear);
+        let texture_id = state.renderer.write().register_native_texture(
+            &state.device,
+            &view,
+            wgpu::FilterMode::Linear,
+        );
         let panel = BrowserBlitzPanel::from_folder(
             &state.device,
             &state.adapter,
@@ -86,6 +81,8 @@ impl Oracle {
             FORMAT,
             W,
             H,
+            // C6 ORACLE は固定寸法の面で測る。CSS px = 物理px。
+            1.0,
             &dir,
             max_items,
         )
@@ -136,7 +133,9 @@ impl eframe::App for Oracle {
                         // 配置intentの意味は未決。ここでDocumentへ触らない。
                         self.note = format!(
                             "release: {} @({:.0},{:.0}) inside={}",
-                            release.item.name, release.pointer.0, release.pointer.1,
+                            release.item.name,
+                            release.pointer.0,
+                            release.pointer.1,
                             release.inside_panel
                         );
                     }

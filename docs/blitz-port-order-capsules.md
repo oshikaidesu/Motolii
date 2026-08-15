@@ -256,6 +256,44 @@ CSSは `registry.tsx:16-17` の id で名前空間を切って出す（`.asset-t
 - 面は 980x650 固定。`.shell` が `productStyles.ts:4` で `minWidth: 980, minHeight: 650` を持つので、
   これより小さい面を渡すと最小値が勝って `chromeModalScrim` の矩形とPNGの矩形がずれる
 
+## 合体（2026-08-15）— `crates/motolii-ui/src/blitz_shell/`
+
+移植済みパネルを1つの窓へ入れて**実際に見た**もの。C4退役の裁定どおり、
+ドッキングは `egui_tiles` をそのまま使い、Blitzパネルはテクスチャとして pane へ合成する。
+構成は [P7](reviews/2026-08-15-blitz-ui-runtime-probe.md#p7--提案構成そのものを窓で動かし上限を測る) の実走そのまま。
+
+```bash
+cargo run -p motolii-ui --bin motolii-blitz-shell
+cargo run -p motolii-ui --bin motolii-blitz-shell -- --screenshot out/shell.png
+```
+
+`--screenshot` は窓を1枚だけ描いてPNGにして終了する。**合体した絵を人が窓を開かずに見るための口**。
+
+### 合体して初めて分かったこと — hidpi で全部が半分に見えていた
+
+`BlitzSurface` が `paint_scene(.., 1.0, ..)` を固定しており、**1 CSS px = 1 物理px** で描いていた。
+Retina(`pixels_per_point = 2`)では移植したパネルだけが半分の大きさで出る。
+パネル単位のPNGでは面の大きさを自分で決めていたので**一度も現れなかった**症状で、
+egui の文字と並べて初めて見えた。
+
+直し方は倍率を2箇所へ**同じ値で**渡すこと。片方だけだとレイアウトと描画の縮尺がずれる。
+
+| 渡し先 | 何が決まるか |
+|---|---|
+| `Viewport` の `window_size` と `hidpi_scale` | レイアウトのCSS px幅 |
+| `BlitzSurface::set_scale` (= `paint_scene` の scale) | 1 CSS px を何物理pxで描くか |
+
+`BrowserBlitzPanel` は面の大きさを後から変えられないので、倍率が変わったら**パネルごと作り直す**。
+
+### 残っていること（絵を見て確認した状態）
+
+- **Stage が無い。** Blitzパネルが無いので席も置いていない。**代わりの絵を描いていない**
+- **入力が通らない。** ペインは `Sense::hover()` で場所を取るだけ。C2の担当
+- **Document に繋がっていない。** Timelineは参照Documentを読むだけ、他は固定サンプル
+- chrome 3枚のタブ帯は **egui の既定の見た目**で、Blitzパネルと地続きに見えない。
+  テーマを作り込んでいないため
+- Browser の atlas 上限(45枚中30枚)はそのまま
+
 ### C7 / C8 共通 — React Native は HTML ではない
 
 `View`/`Text`/`Pressable`/`ScrollView`/`TextInput` は div/span/button ではない。機械的に置換しないこと。
