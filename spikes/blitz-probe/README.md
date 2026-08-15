@@ -125,3 +125,39 @@ BLITZ_PROBE_WIDGET=1 BLITZ_PROBE_TRACKS=14 cargo run --release --bin texture_hos
 `doc.mutate().set_attribute(id, qual_name!("style"), ..)`。
 `diff_update` には `P9 SANITY` としてピクセル健全性検査を入れてあるので、
 **性能を測るときは必ず併せて見ること**。
+
+
+## P12 — 透過合成（2026-08-15追記）
+
+採択時の未了4「透過合成（Stageの上へ重ねる）が未検証」に対応。
+
+```bash
+cargo run --release --bin alpha_composite   # 出力は spikes/blitz-probe/out/
+```
+
+| 問い | 結果 |
+|---|---|
+| Q1 Blitzテクスチャはアルファを保持するか | **PASS** |
+| Q2 別の絵の上へ重ねて期待どおりの合成になるか | **PASS（全ピクセル最大誤差 0）** |
+| Q3 一部だけ透過（パネル不透明・間は完全透過） | **PASS** |
+
+- **出力はプリマルチプライド済み。** `rgba(255,0,0,0.5)` が `[128,0,0,128]` で出る。
+  `vello_hybrid` 側も `BlendState::PREMULTIPLIED_ALPHA_BLENDING` 固定
+  (`render/wgpu.rs:1370`)、クリアは `LoadOp::Clear(Color::TRANSPARENT)`。
+- **合成側は `PREMULTIPLIED_ALPHA_BLENDING` 一択。** ストレートα用の
+  `(SrcAlpha, OneMinusSrcAlpha)` にすると 16,296px が外れ最大誤差 64。
+  半透明パネルが濁って暗くなる（`out/p12_composite_straight.png` が対照）。
+- **合成先の texture format を sRGB にすると壊れる。** `Rgba8UnormSrgb` を出力先に
+  すると最大誤差 73（不透明パネル 45→117）。UI/下地/出力を `Rgba8Unorm` で揃えること。
+
+### 罠(必読) — 背景指定（いずれも実測値）
+
+| 書き方 | 外周(何も無い所) |
+|---|---|
+| `html, body { background: transparent }` | `[0,0,0,0]` 透過 |
+| 背景の指定を一切書かない | `[0,0,0,0]` 透過（既定は透明） |
+| `body { background: rgb(24,24,24) }` だけ | `[24,24,24,255]` **面全体が不透明になる** |
+
+`html` が透明のとき `blitz-paint` は body の背景色を拾い、**viewport 全面**を塗る
+(`render.rs:127-160`)。body に背景色を置くと Stage が完全に隠れる。
+パネルの背景色は body ではなく個々の要素に置くこと。
