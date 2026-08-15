@@ -3,6 +3,8 @@
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
 mod app;
+/// C6: フォルダ参照でメディア入口を開くBrowserパネル(Blitz)。
+pub mod browser_blitz;
 mod browser_host;
 mod browser_host_runtime;
 mod diagnostic;
