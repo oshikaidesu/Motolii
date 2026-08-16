@@ -15,6 +15,7 @@ pub mod chrome_blitz;
 mod diagnostic;
 mod diagnostic_projection;
 mod display_slot;
+mod egui_fonts;
 pub mod dock;
 mod document_command_request;
 mod host_pointer_capture;

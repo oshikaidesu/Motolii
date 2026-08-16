@@ -54,6 +54,10 @@ impl BlitzShellApp {
             .clone()
             .expect("BlitzShellApp は wgpu バックエンドを要求する（eframe features = [\"wgpu\"]）");
 
+        // 記号(◆ ◇ ▶ ← ↔ →)が豆腐にならないよう、既定fontの後ろにHackを連ねる。
+        // 新しいフォントは足していない。詳細は `egui_fonts`。
+        crate::egui_fonts::install_symbol_fallback(&cc.egui_ctx);
+
         let runtime = tokio::runtime::Runtime::new()
             .expect("blitz_net::Provider 用の Tokio runtime を作れなかった");
 

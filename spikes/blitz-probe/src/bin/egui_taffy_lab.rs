@@ -86,6 +86,16 @@ fn main() -> eframe::Result<()> {
             ..Default::default()
         },
         Box::new(move |_cc| {
+            // 記号の豆腐を消す。製品側 `motolii-ui/src/egui_fonts.rs` と同じことを、
+            // 隔離workspaceなので写している(このcrateはmotolii-uiへ依存しない)。
+            let mut fonts = egui::FontDefinitions::default();
+            if let Some(f) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+                if !f.iter().any(|n| n == "Hack") {
+                    f.push("Hack".to_owned());
+                }
+            }
+            _cc.egui_ctx.set_fonts(fonts);
+
             Ok(Box::new(App {
                 shot,
                 frame: 0,
