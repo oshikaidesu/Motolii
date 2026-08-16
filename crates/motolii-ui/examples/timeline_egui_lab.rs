@@ -10,7 +10,7 @@
 //!   - clip bar をドラッグ … 時間方向へ移動。**キーが一緒に動く**
 //!
 //!   - bar の左右端6px      … トリム（in / out）
-//!   - Position 行の菱形    … 掴んでキーの時刻を変える
+//!   - 菱形                 … 掴んでキーの時刻を変える(パラメータを問わない)
 //!   - 左列を上下へドラッグ … **並べ替え。Group の中へも出し入れできる**
 //!   - `M` / `S`           … mute（`visible`）/ solo の反転
 //!   - 左列クリック         … 選択。`Cmd` で足し引き、`Shift` で範囲
@@ -739,9 +739,11 @@ enum Grab {
         /// 時刻を変える `prepare_*` が無い
         not_movable: usize,
     },
-    /// Position キー1つを掴んで時刻を変える
+    /// キー1つを掴んで時刻を変える。**どのパラメータのキーかを持つ** —
+    /// Position だけが専用の入口を持ち、他は `SetTransformParamKeyTime` へ行くので
     KeyTime {
         layer: LayerId,
+        param: ParamRef,
         key: KeyframeId,
         grab_at: f32,
         original: f32,
@@ -1035,6 +1037,7 @@ impl Lab {
             }
             Grab::KeyTime {
                 layer,
+                param,
                 key,
                 grab_at,
                 original,
@@ -1046,11 +1049,8 @@ impl Lab {
                 let Some(t) = seconds_to_time(moved, fps) else {
                     return;
                 };
-                prepared.push((
-                    *layer,
-                    true,
-                    self.writer.prepare_set_position_key_time(*layer, *key, t).map_err(|e| e.to_string()),
-                ));
+                // **Position 専用の入口へ直に行かない。** param で選ぶ1本を通す
+                prepared.push((*layer, true, self.key_time_command(*layer, *param, *key, t)));
             }
             Grab::TrimIn { layer } => {
                 prepared.push((*layer, false, self.writer.prepare_trim_clip_in(*layer, time).map_err(|e| e.to_string())))
@@ -3191,9 +3191,10 @@ impl eframe::App for Lab {
                                 egui::pos2(c.x, c.y + d),
                                 egui::pos2(c.x - d, c.y),
                             ],
-                            if self.selected_keys.contains(&(row.layer, param, key)) {
-                                ACCENT
-                            } else if movable && (r.dragged() || r.hovered()) {
+                            if self.selected_keys.contains(&(row.layer, param, key))
+                                || r.dragged()
+                                || r.hovered()
+                            {
                                 ACCENT
                             } else {
                                 KEY_IDLE
@@ -3226,22 +3227,20 @@ impl eframe::App for Lab {
                         if r.drag_started() && self.is_locked(row.layer) {
                             self.status = format!("{} is locked", self.name(row.layer));
                         } else if r.drag_started() {
-                            if !movable {
-                                self.status = format!(
-                                    "{} {} key: not movable",
-                                    self.name(row.layer),
-                                    param_label(param)
-                                );
-                            } else if let Some(pos) = r.interact_pointer_pos() {
+                            // **どのパラメータのキーも掴める。** D2 に
+                            // `SetTransformParamKeyTime` が入った時点で Position 縛りの
+                            // 理由は消えていたのに、掴む側だけ残っていた
+                            if let Some(pos) = r.interact_pointer_pos() {
                                 self.hold_item(Grab::KeyTime {
                                     layer: row.layer,
+                                    param,
                                     key,
                                     grab_at: surface.time_at(self.view, pos.x),
                                     original: t,
                                 });
                             }
                         }
-                        if r.dragged() && movable {
+                        if r.dragged() {
                             if let Some(pos) = r.interact_pointer_pos() {
                                 let at = surface.time_at(self.view, pos.x).max(0.0);
                                 self.commit_drag_snapped(at, surface.px_per_second(self.view));
@@ -4211,6 +4210,7 @@ mod tests {
 
         lab.hold_item(Grab::KeyTime {
             layer,
+            param: ParamRef::Position,
             key,
             grab_at: t0,
             original: t0,
@@ -5834,5 +5834,50 @@ mod tests {
 
         lab.hold = None;
         assert!(lab.item_hold().is_none());
+    }
+
+    /// **Position 以外のキーも掴める。** D2 の入口ができた日から可能だったのに、
+    /// 掴む側が Position 縛りのままだった(2026-08-17 に外した)。
+    #[test]
+    fn a_scale_key_can_be_dragged_like_a_position_one() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Shared left");
+        let before = param_keys(&lab.document, layer, ParamRef::Scale);
+        assert_eq!(before.len(), 2, "fixture の Shared left は Scale キー2つ");
+        let (key, t0) = before[0];
+        let others: Vec<_> = param_keys(&lab.document, layer, ParamRef::Position);
+        let clip_before = clip_span(&lab.document, layer).expect("span");
+
+        lab.hold_item(Grab::KeyTime {
+            layer,
+            param: ParamRef::Scale,
+            key,
+            grab_at: t0,
+            original: t0,
+        });
+        lab.commit_drag(t0 + 0.5);
+
+        let after = param_keys(&lab.document, layer, ParamRef::Scale);
+        let moved = after.iter().find(|(id, _)| *id == key).expect("id は不変").1;
+        assert!((moved - (t0 + 0.5)).abs() < 1e-3, "掴んだキーが動く: {moved}");
+        assert_eq!(
+            after.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            before.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            "KeyframeId は変わらない"
+        );
+        assert_eq!(
+            param_keys(&lab.document, layer, ParamRef::Position),
+            others,
+            "他のパラメータのキーは動かない"
+        );
+        assert_eq!(
+            clip_span(&lab.document, layer).expect("span"),
+            clip_before,
+            "clip も動かない"
+        );
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(param_keys(&lab.document, layer, ParamRef::Scale), before, "1回で戻る");
     }
 }
