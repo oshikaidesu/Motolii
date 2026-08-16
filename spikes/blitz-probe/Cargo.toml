@@ -31,7 +31,8 @@ keyboard-types = "0.7"   # blitz-traits 0.3.0-beta.1 と同じ版に揃える
 atomic_refcell = "0.1"
 eframe = { version = "0.35", default-features = false, features = ["wgpu", "default_fonts"] }
 egui = "0.35"
-egui-wgpu = "0.35"
+egui-wgpu = { version = "0.35", features = ["capture"] }  # P13: eframeのscreenshotはこのfeatureが要る(既定OFF)
 peniko = "0.6"
 blitz-net = "0.3.0-beta.1"
 vello_common = "0.0.9"
+egui_taffy = "0.13"

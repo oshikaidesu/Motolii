@@ -388,7 +388,7 @@ dependencies = [
  "stylo_static_prefs",
  "stylo_taffy",
  "stylo_traits",
- "taffy",
+ "taffy 0.12.2",
  "thread_local",
  "url",
  "usvg",
@@ -438,7 +438,7 @@ dependencies = [
  "peniko",
  "smallvec",
  "stylo",
- "taffy",
+ "taffy 0.12.2",
  "usvg",
 ]
 
@@ -459,6 +459,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui-wgpu",
+ "egui_taffy",
  "keyboard-types 0.7.0",
  "peniko",
  "pollster",
@@ -1619,6 +1620,19 @@ dependencies = [
  "web-time",
  "webbrowser",
  "winit 0.30.13",
+]
+
+[[package]]
+name = "egui_taffy"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b99f11e3e407a1fa2f7d19c69d6260b5a5b9629bce35b05f3a921c7c42462261"
+dependencies = [
+ "egui",
+ "log",
+ "parking_lot",
+ "stackbox",
+ "taffy 0.9.2",
 ]
 
 [[package]]
@@ -3597,6 +3611,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
 name = "peniko"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4621,6 +4641,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
+name = "stackbox"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "719cc368f443f1b8b4e9abfe8c1444d1f14341ce5fa9c9e6c59e456837523d0d"
+dependencies = [
+ "paste",
+]
+
+[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4803,7 +4832,7 @@ checksum = "ba6f8e06f0038eb2e01c558b3004cb07c1ee1ab27f23aecbfbf629f55b0307e1"
 dependencies = [
  "stylo",
  "stylo_atoms",
- "taffy",
+ "taffy 0.12.2",
 ]
 
 [[package]]
@@ -4906,6 +4935,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "taffy"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41ba83ebaf2954d31d05d67340fd46cebe99da2b7133b0dd68d70c65473a437b"
+dependencies = [
+ "arrayvec",
+ "grid",
+ "serde",
+ "slotmap",
 ]
 
 [[package]]
