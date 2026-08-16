@@ -152,6 +152,66 @@ pub struct DropTarget {
     pub y: f32,
 }
 
+/// `dt` 秒ぶん進んだ playhead と、**まだ再生中か**。
+///
+/// 終端で止まる(巻き戻さない)。頭へ戻すかどうかは押した側の判断である。
+fn advance_playhead(playhead: f32, dt: f32, comp: f32) -> (f32, bool) {
+    let at = playhead + dt.max(0.0);
+    if at >= comp {
+        (comp, false)
+    } else {
+        (at, true)
+    }
+}
+
+/// 目盛の間隔(秒)。**窓に8本前後入る、切りのいい値**を選ぶ。
+///
+/// 寄るとフレームの倍数へ、引くと秒・分の倍数へ移る。候補にしか無い値は出さない
+/// — 「0.37秒ごと」のような目盛は読めないので。
+fn tick_step(span: f32, fps: Fps) -> f32 {
+    let frame = 1.0 / fps.as_f64() as f32;
+    let target = span / 8.0;
+    let mut candidates = vec![frame, frame * 2.0, frame * 5.0, frame * 10.0];
+    candidates.extend_from_slice(&[
+        0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0,
+    ]);
+    candidates.sort_by(f32::total_cmp);
+    candidates
+        .into_iter()
+        .find(|c| *c >= target)
+        .unwrap_or(600.0)
+}
+
+/// いま見えている窓に入る目盛の時刻。
+///
+/// **目盛は時刻に貼り付く。** 画面をN等分すると、パンしても線が動かず
+/// 数字だけが変わる — 方眼が紙ではなく窓に貼られているように見えてしまう。
+fn ticks(view: TimelineView, fps: Fps) -> Vec<f32> {
+    let step = tick_step(view.span, fps);
+    let first = (view.start / step).floor() * step;
+    let mut out = Vec::new();
+    let mut t = first;
+    // 端数で無限に回らないよう、本数で止める
+    while t <= view.start + view.span + step * 0.5 && out.len() < 256 {
+        if t >= -1e-4 {
+            out.push(t);
+        }
+        t += step;
+    }
+    out
+}
+
+/// 目盛の文字。**間隔より細かい桁は出さない**
+fn tick_label(t: f32, step: f32) -> String {
+    let minutes = (t / 60.0).floor().max(0.0);
+    let seconds = t - minutes * 60.0;
+    if step >= 1.0 {
+        format!("{minutes}:{seconds:04.1}")
+    } else {
+        format!("{minutes}:{seconds:05.2}")
+    }
+}
+
 /// ナビゲータ帯のどこを掴んだか
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum NavGrab {
@@ -373,6 +433,8 @@ struct Lab {
     nav: Option<NavGrab>,
     /// playhead(秒)。同上
     playhead: f32,
+    /// 再生中か。**Space で入り切りする**。Document には入れない
+    playing: bool,
     status: String,
     shot: Option<String>,
     frame: u32,
@@ -418,7 +480,8 @@ impl Lab {
             drop: None,
             nav: None,
             playhead: 0.0,
-            status: "drag bar=move  drag name=reorder  Cmd/Shift+click=select  Del=delete".to_owned(),
+            playing: false,
+            status: "space=play  drag bar=move  drag name=reorder  Cmd/Shift+click=select".to_owned(),
             shot,
             frame: 0,
         }
@@ -959,18 +1022,24 @@ impl eframe::App for Lab {
         let track_left = full.left() + RAIL_W;
         let track_w = (full.right() - track_left).max(1.0);
         p.rect_filled(ruler, CornerRadius::ZERO, Color32::from_rgb(0x2a, 0x2a, 0x2a));
-        for i in 0..=8 {
-            // **目盛は窓を8等分した時刻である。** 寄れば 0:06.0 の隣が 0:06.5 になる
-            let t = self.view.start + self.view.span * i as f32 / 8.0;
-            let x = self.view.time_to_x(t, track_left, track_w);
-            p.line_segment(
+        // **目盛は時刻に貼り付く。** ルーラも方眼もこの1本の列から引く
+        let fps = self.document.composition.fps;
+        let step = tick_step(self.view.span, fps);
+        let ticks = ticks(self.view, fps);
+        let ruler_clip = p.with_clip_rect(Rect::from_min_max(
+            egui::pos2(track_left, ruler.top()),
+            ruler.max,
+        ));
+        for t in &ticks {
+            let x = self.view.time_to_x(*t, track_left, track_w);
+            ruler_clip.line_segment(
                 [egui::pos2(x, ruler.top()), egui::pos2(x, ruler.bottom())],
                 Stroke::new(1.0, Color32::from_rgb(0x44, 0x44, 0x44)),
             );
-            p.text(
+            ruler_clip.text(
                 egui::pos2(x + 4.0, ruler.bottom() - 5.0),
                 Align2::LEFT_BOTTOM,
-                format!("{}:{:04.1}", (t / 60.0).floor() as i64, t % 60.0),
+                tick_label(*t, step),
                 FontId::monospace(9.0),
                 DIM,
             );
@@ -979,6 +1048,37 @@ impl eframe::App for Lab {
             [ruler.left_bottom(), ruler.right_bottom()],
             Stroke::new(1.0, RULE),
         );
+
+        // ---- 再生 ----
+        // **Space で入り切り。** 音も絵もまだ無いので、動くのは playhead だけである。
+        // 掴んでいる最中は入り切りしない — ドラッグ中に時間が流れると何が起きたか読めない
+        let comp_seconds = self.document.composition.duration.as_seconds_f64() as f32;
+        let (space, dt) = ctx.input(|i| (i.key_pressed(egui::Key::Space), i.stable_dt));
+        if space && self.drag.is_none() {
+            self.playing = !self.playing;
+            // 終端で押したら頭から。止まったまま何も起きないのが一番困る
+            if self.playing && self.playhead >= comp_seconds - 1e-3 {
+                self.playhead = 0.0;
+            }
+            self.status = if self.playing { "play" } else { "pause" }.to_owned();
+        }
+        if self.playing {
+            let (at, keep) = advance_playhead(self.playhead, dt, comp_seconds);
+            self.playhead = at;
+            if !keep {
+                self.playing = false;
+                self.status = "end".to_owned();
+            }
+            // **窓の外へ出たら窓が付いていく。** 寄っているときの再生は、これが無いと
+            // playhead を見失う(AE と同じページ送り)
+            if self.playhead < self.view.start || self.playhead > self.view.start + self.view.span {
+                self.view = TimelineView {
+                    start: self.playhead,
+                    span: self.view.span,
+                }
+                .clamped(comp_seconds);
+            }
+        }
 
         // ルーラのスクラブ。**Document は触らない** — playhead は session の状態
         let ruler_track = Rect::from_min_max(egui::pos2(track_left, ruler.top()), ruler.max);
@@ -989,11 +1089,17 @@ impl eframe::App for Lab {
         );
         if scrub.is_pointer_button_down_on() {
             if let Some(pos) = scrub.interact_pointer_pos() {
-                let comp = self.document.composition.duration.as_seconds_f64() as f32;
-                self.playhead = self
+                // 掴んだら再生は止まる。**手で動かしているものが勝手に進まない**
+                self.playing = false;
+                let at = self
                     .view
                     .x_to_time(pos.x, track_left, track_w)
-                    .clamp(0.0, comp);
+                    .clamp(0.0, comp_seconds);
+                // **playhead もフレームに乗る。** 編集の時刻と同じ粒でないと、
+                // キーの上に置いたつもりで半端な位置に居ることになる
+                self.playhead = seconds_to_time(at, fps)
+                    .map(|t| t.as_seconds_f64() as f32)
+                    .unwrap_or(at);
                 self.status = format!("{:.2}s", self.playhead);
             }
         }
@@ -1230,10 +1336,13 @@ impl eframe::App for Lab {
                 }
             }
 
-            // 時間面
+            // 時間面。**方眼はルーラと同じ目盛の上に立つ**
             p.rect_filled(track, CornerRadius::ZERO, TRACK_A);
-            for i in 0..=8 {
-                let x = track_left + track_w * i as f32 / 8.0;
+            for t in &ticks {
+                let x = self.view.time_to_x(*t, track_left, track_w);
+                if x < track.left() {
+                    continue;
+                }
                 p.line_segment(
                     [egui::pos2(x, track.top()), egui::pos2(x, track.bottom())],
                     Stroke::new(1.0, TRACK_B),
@@ -2753,5 +2862,70 @@ mod tests {
             items_before,
             "2枚まとめて1回の Undo で戻る"
         );
+    }
+
+    /// **目盛は時刻に貼り付く。** 窓を N 等分すると、パンしても線が動かない。
+    #[test]
+    fn ticks_are_multiples_of_the_step_not_divisions_of_the_window() {
+        let fps = Fps::try_new(30, 1).expect("fps");
+        let view = TimelineView { start: 3.3, span: 16.0 };
+        let step = tick_step(view.span, fps);
+        let list = ticks(view, fps);
+
+        assert!(list.len() >= 6, "窓に何本か入る: {list:?}");
+        for t in &list {
+            let n = t / step;
+            assert!(
+                (n - n.round()).abs() < 1e-3,
+                "目盛は {step} の倍数である: {t}"
+            );
+        }
+        // パンすると、目盛は同じ倍数の列のまま**時刻ごと動く**
+        let panned = ticks(TimelineView { start: 5.3, span: 16.0 }, fps);
+        assert_ne!(list, panned, "窓が動けば見える目盛も変わる");
+        for t in &panned {
+            let n = t / step;
+            assert!((n - n.round()).abs() < 1e-3);
+        }
+        // 0 より前は出さない
+        assert!(ticks(TimelineView { start: 0.0, span: 16.0 }, fps)
+            .iter()
+            .all(|t| *t >= 0.0));
+    }
+
+    /// 寄るほど細かい目盛になり、**最後はフレームの倍数**になる。
+    #[test]
+    fn tick_step_gets_finer_as_you_zoom_in() {
+        let fps = Fps::try_new(30, 1).expect("fps");
+        let frame = 1.0 / 30.0;
+
+        let wide = tick_step(600.0, fps);
+        let mid = tick_step(16.0, fps);
+        let close = tick_step(MIN_SPAN, fps);
+        assert!(wide > mid && mid > close, "{wide} > {mid} > {close}");
+        assert!(close >= frame - 1e-6, "1フレームより細かくはしない: {close}");
+        let n = close / frame;
+        assert!((n - n.round()).abs() < 1e-3, "寄ったらフレームの倍数: {close}");
+
+        // 文字は間隔より細かい桁を出さない
+        assert_eq!(tick_label(64.5, 1.0), "1:04.5");
+        assert_eq!(tick_label(64.5, frame), "1:04.50");
+    }
+
+    /// **Space の再生は終端で止まる。** 巻き戻さない
+    #[test]
+    fn playback_advances_and_stops_at_the_end() {
+        let (at, playing) = advance_playhead(0.0, 0.5, 16.0);
+        assert!((at - 0.5).abs() < 1e-6);
+        assert!(playing);
+
+        let (at, playing) = advance_playhead(15.9, 0.5, 16.0);
+        assert_eq!(at, 16.0, "終端を越えない");
+        assert!(!playing, "終端で止まる");
+
+        // 止まったフレームで dt が来ても進まない
+        let (at, playing) = advance_playhead(16.0, 0.016, 16.0);
+        assert_eq!(at, 16.0);
+        assert!(!playing);
     }
 }
