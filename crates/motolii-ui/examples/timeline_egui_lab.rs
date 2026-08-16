@@ -78,6 +78,9 @@ const MUTE_ON: Color32 = Color32::from_rgb(0x65, 0x3b, 0x34);
 const SOLO_ON: Color32 = Color32::from_rgb(0x66, 0x5b, 0x32);
 /// L(編集禁止)が入っているときの下地
 const LOCK_ON: Color32 = Color32::from_rgb(0x3f, 0x4e, 0x5c);
+/// 選択の点灯。**白にする** — 将来レイヤーごとに色を散らすので、
+/// 選択がその色の1つに見えてはいけない(選択は状態であって、持ち物ではない)
+const SELECTED: Color32 = Color32::from_rgb(0xf2, 0xf2, 0xf2);
 
 const RAIL_W: f32 = 196.0;
 /// 行の高さ(小)。**2026-08-08 決定の「行高は固定・最小20px」の最小側**
@@ -2699,7 +2702,7 @@ impl eframe::App for Lab {
                 p.rect_filled(
                     Rect::from_min_size(rail.left_top(), Vec2::new(3.0, rail.height())),
                     CornerRadius::ZERO,
-                    ACCENT,
+                    SELECTED,
                 );
             }
             p.line_segment(
