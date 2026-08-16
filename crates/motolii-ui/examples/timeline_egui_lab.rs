@@ -771,8 +771,9 @@ enum BarPart {
     TrimOut,
 }
 
-/// トリムの端の幅。モックの `.trimHandle{width:7px}` に合わせた値
-const TRIM_EDGE: f32 = 6.0;
+/// トリムの端の幅。モックの `.trimHandle{width:7px}` は**見た目の幅**で、
+/// 掴む幅としては細い。8px にして、同じ幅の帯を絵にも出す(掴める所を見せる)
+const TRIM_EDGE: f32 = 8.0;
 
 /// bar のどこを掴んだかを決める。**端を差し出してよい場合だけ差し出す。**
 ///
@@ -2912,6 +2913,16 @@ impl eframe::App for Lab {
                 _ if row.depth > 0 => CELL_CHILD,
                 _ => CELL,
             };
+            // 選んだ行は左列も少し明るくする。**帯だけだと1クリックの手応えが薄い**
+            let cell = if matches!(row.kind, RowKind::Object) && self.is_selected(row.layer) {
+                Color32::from_rgb(
+                    cell.r().saturating_add(0x0e),
+                    cell.g().saturating_add(0x0e),
+                    cell.b().saturating_add(0x0e),
+                )
+            } else {
+                cell
+            };
             p.rect_filled(rail, CornerRadius::ZERO, cell);
             // 左列のどこを押しても、その行の layer を選ぶ(ボタン類は上に載るので先に取られる)。
             // **同じ場所を掴んで上下へ引くと並べ替え**になる — AE と同じで、
@@ -3214,6 +3225,63 @@ impl eframe::App for Lab {
                             CornerRadius::ZERO,
                             if r.dragged() { ACCENT } else { color },
                         );
+                        // **選んだ bar は光る。** 左列の帯だけだと、時間面の上で
+                        // 何を選んだのかが分からない
+                        let selected = self.is_selected(row.layer);
+                        if selected {
+                            p.rect_stroke(
+                                bar,
+                                CornerRadius::ZERO,
+                                Stroke::new(2.0, SELECTED),
+                                StrokeKind::Inside,
+                            );
+                        }
+                        // **掴める端を絵で出す。** 触れそうな所は見えていなければ
+                        // 探すことになる(hover か選択のときだけ、常時だと煩い)
+                        let has_edges =
+                            classify_bar_edge(bar, bar.left(), row.has_children) == BarPart::TrimIn;
+                        if has_edges && (r.hovered() || selected) {
+                            let hovered_part = r
+                                .hover_pos()
+                                .map(|pos| classify_bar_edge(bar, pos.x, row.has_children));
+                            for (part, band) in [
+                                (
+                                    BarPart::TrimIn,
+                                    Rect::from_min_max(
+                                        bar.left_top(),
+                                        egui::pos2(bar.left() + TRIM_EDGE, bar.bottom()),
+                                    ),
+                                ),
+                                (
+                                    BarPart::TrimOut,
+                                    Rect::from_min_max(
+                                        egui::pos2(bar.right() - TRIM_EDGE, bar.top()),
+                                        bar.right_bottom(),
+                                    ),
+                                ),
+                            ] {
+                                p.rect_filled(
+                                    band.intersect(track),
+                                    CornerRadius::ZERO,
+                                    if hovered_part == Some(part) {
+                                        SELECTED
+                                    } else {
+                                        Color32::from_rgba_unmultiplied(0xff, 0xff, 0xff, 40)
+                                    },
+                                );
+                            }
+                        }
+                        // 手の形で、掴んだら何になるかを先に言う
+                        if r.hovered() {
+                            let part = r
+                                .hover_pos()
+                                .map(|pos| classify_bar_edge(bar, pos.x, row.has_children))
+                                .unwrap_or(BarPart::Body);
+                            ctx.set_cursor_icon(match part {
+                                BarPart::Body => egui::CursorIcon::Grab,
+                                _ => egui::CursorIcon::ResizeHorizontal,
+                            });
+                        }
                         // **畳んである Group は、中身をその bar の中に出す。**
                         // 開けば行として見えるものが、閉じると消えてしまうと、
                         // 何が入っているのか掴めない(説明の文字を足さずに済ませる)
