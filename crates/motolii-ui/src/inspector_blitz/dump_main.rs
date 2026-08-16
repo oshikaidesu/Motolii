@@ -40,7 +40,7 @@ fn main() {
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
     let _guard = runtime.enter();
 
-    let html = inspector_html(&SAMPLE, w as f64, h as f64);
+    let html = inspector_html(&SAMPLE);
     if let Ok(path) = std::env::var("MOTOLII_INSPECTOR_HTML_OUT") {
         std::fs::write(&path, &html).expect("write html");
         println!("C7 HTML: {path}");

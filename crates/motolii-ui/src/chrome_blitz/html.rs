@@ -51,40 +51,32 @@ use super::theme::{ASSET_TAGS_STYLES, EXPORT_NOTES_STYLES, STYLES};
 
 /// `chrome.tsx:79-107` の `ChromeModal` の中へ `chrome.tsx:109-157` の `ExportScreen` を入れた1枚。
 /// `sample` は固定値で、入力も編集意味もここには無い。
-pub fn export_html(sample: &ExportSample, width: f64, height: f64) -> String {
+pub fn export_html(sample: &ExportSample) -> String {
     document(
-        css(width, height, false),
-        shell(
-            width,
-            height,
-            // chrome.tsx:76 ChromeModalKind = 'export'。ChromeModal の title に渡る名前。
-            &chrome_modal("Export", &export_screen(sample)),
-        ),
+        css(false),
+        // chrome.tsx:76 ChromeModalKind = 'export'。ChromeModal の title に渡る名前。
+        shell(&chrome_modal("Export", &export_screen(sample))),
     )
 }
 
 /// `chrome.tsx:79-107` の `ChromeModal` の中へ `chrome.tsx:159-172` の `SettingsScreen` を入れた1枚。
-pub fn settings_html(width: f64, height: f64) -> String {
+pub fn settings_html() -> String {
     document(
-        css(width, height, false),
-        shell(
-            width,
-            height,
-            // chrome.tsx:76 ChromeModalKind = 'settings'。
-            &chrome_modal("Settings", &settings_screen()),
-        ),
+        css(false),
+        // chrome.tsx:76 ChromeModalKind = 'settings'。
+        shell(&chrome_modal("Settings", &settings_screen())),
     )
 }
 
 /// `registry.tsx:15-18` の `panelRegistry` の2パネルを縦に並べた1枚。
 /// 選択(どちらを出すか)は意味なので写さない。**両方を同時に並べて見る**。
-pub fn panels_html(width: f64, height: f64) -> String {
+pub fn panels_html() -> String {
     let mut inner = String::new();
     // registry.tsx:16  {id: 'asset-tags', title: 'Tags', Component: AssetTaggingPanel}
     inner.push_str(&asset_tagging_panel());
     // registry.tsx:17  {id: 'export-notes', title: 'Notes', Component: ExportNotesPanel}
     inner.push_str(&export_notes_panel());
-    document(css(width, height, true), shell(width, height, &inner))
+    document(css(true), shell(&inner))
 }
 
 /// `chrome.tsx:26-65` の `Splitter`(`vertical` と `horizontal` の両方)と
@@ -93,7 +85,7 @@ pub fn panels_html(width: f64, height: f64) -> String {
 /// **これは製品のレイアウトではなく確認用の並びである。** 製品では `Splitter` は
 /// 隣り合う席の境目に、`PanelHeader` は各パネルの先頭に置かれる。ここでは
 /// 「その3つが Blitz で正しい寸法・色で出るか」だけを見たいので、席の中へ順に置いてある。
-pub fn parts_html(width: f64, height: f64) -> String {
+pub fn parts_html() -> String {
     let mut inner = String::new();
     // chrome.tsx:67-74 PanelHeader。title/detail は呼び出し側の値なので
     // 実在の呼び出し(Inspector.tsx:135-138)の文字列をそのまま借りる。
@@ -103,7 +95,7 @@ pub fn parts_html(width: f64, height: f64) -> String {
     // chrome.tsx:62  orientation === 'vertical' → styles.vSplitter
     // 幅しか持たない(productStyles.ts:65)ので、伸びる行の中へ置いて高さを与える。
     inner.push_str(r#"<div class="parts-row"><div class="vSplitter"></div></div>"#);
-    document(css(width, height, false), shell(width, height, &inner))
+    document(css(false), shell(&inner))
 }
 
 fn document(css: String, body: String) -> String {
@@ -111,16 +103,16 @@ fn document(css: String, body: String) -> String {
 }
 
 /// `locals` が真のときだけ、パネルのローカル `StyleSheet` を名前空間つきで足す。
-fn css(width: f64, height: f64, locals: bool) -> String {
-    let mut out = format!(
+fn css(locals: bool) -> String {
+    let mut out = String::from(
         "
-  html,body {{ margin:0; padding:0; width:{width}px; height:{height}px;
-               font-family:sans-serif; }}
-  div {{ display:flex; flex-direction:column; align-items:stretch;
-         flex-shrink:0; position:relative; box-sizing:border-box; }}
-  span {{ display:block; flex-shrink:0; position:relative; box-sizing:border-box; }}
-  .parts-row {{ flex-direction:row; flex-grow:1; flex-shrink:1; flex-basis:0px; }}
-"
+  html,body { margin:0; padding:0; width:100%; height:100%;
+               font-family:sans-serif; }
+  div { display:flex; flex-direction:column; align-items:stretch;
+        flex-shrink:0; position:relative; box-sizing:border-box; }
+  span { display:block; flex-shrink:0; position:relative; box-sizing:border-box; }
+  .parts-row { flex-direction:row; flex-grow:1; flex-shrink:1; flex-basis:0px; }
+",
     );
     // productStyles.ts の並びのまま出す。後勝ちの上書き関係を原文と同じに保つ。
     for style in STYLES {
@@ -144,9 +136,9 @@ fn css(width: f64, height: f64, locals: bool) -> String {
     out
 }
 
-/// 下地。`productStyles.ts:4` の `shell`。席の寸法だけを引数から受ける。
-fn shell(width: f64, height: f64, inner: &str) -> String {
-    format!(r#"<div class="shell" style="width:{width}px;height:{height}px">{inner}</div>"#)
+/// 下地。`productStyles.ts:4` の `shell`。席の寸法はDocument viewportから受ける。
+fn shell(inner: &str) -> String {
+    format!(r#"<div class="shell" style="width:100%;height:100%">{inner}</div>"#)
 }
 
 /// `chrome.tsx:67-74` の `PanelHeader` の写し。
@@ -317,10 +309,10 @@ mod tests {
 
     fn all_html() -> Vec<(&'static str, String)> {
         vec![
-            ("export", export_html(&EXPORT_SAMPLE, 980.0, 650.0)),
-            ("settings", settings_html(980.0, 650.0)),
-            ("panels", panels_html(980.0, 650.0)),
-            ("parts", parts_html(980.0, 650.0)),
+            ("export", export_html(&EXPORT_SAMPLE)),
+            ("settings", settings_html()),
+            ("panels", panels_html()),
+            ("parts", parts_html()),
         ]
     }
 
@@ -393,7 +385,7 @@ mod tests {
     /// POSITIVE ORACLE: `chrome.tsx` の literal がそのまま出ている。
     #[test]
     fn emits_the_chrome_literals() {
-        let export = export_html(&EXPORT_SAMPLE, 980.0, 650.0);
+        let export = export_html(&EXPORT_SAMPLE);
         for text in [
             "Export",
             "Close",
@@ -410,9 +402,9 @@ mod tests {
             phase: ExportPhase::Idle,
             status_text: "Ready",
         };
-        assert!(export_html(&empty, 980.0, 650.0).contains("/path/to/output.mp4"));
+        assert!(export_html(&empty).contains("/path/to/output.mp4"));
 
-        let settings = settings_html(980.0, 650.0);
+        let settings = settings_html();
         for text in [
             "Settings",
             "Color theme",
@@ -430,9 +422,9 @@ mod tests {
         // `titleActionDisabled` はCSSの表にも出るので、class属性の側で見る。
         let enabled = r#"<div class="titleAction"><span class="titleActionText">Export</span>"#;
         let disabled = r#"<div class="titleAction titleActionDisabled"><span class="titleActionText">Export</span>"#;
-        let idle = export_html(&EXPORT_SAMPLE, 980.0, 650.0);
+        let idle = export_html(&EXPORT_SAMPLE);
         assert!(idle.contains(enabled) && !idle.contains(disabled));
-        let busy = export_html(&EXPORT_SAMPLE_BUSY, 980.0, 650.0);
+        let busy = export_html(&EXPORT_SAMPLE_BUSY);
         assert!(busy.contains(disabled));
     }
 
@@ -440,7 +432,7 @@ mod tests {
     /// 名前空間で囲んでいないとCSSが衝突して片方が消える。
     #[test]
     fn namespaces_the_two_panel_style_sheets() {
-        let html = panels_html(980.0, 650.0);
+        let html = panels_html();
         assert!(html.contains(".asset-tags .root {"));
         assert!(html.contains(".export-notes .root {"));
         assert!(html.contains(r#"<div class="asset-tags"><div class="root">"#));
@@ -461,7 +453,7 @@ mod tests {
     /// `parts_html` は `Splitter` の両向きと `PanelHeader` を出す。
     #[test]
     fn emits_both_splitters_and_the_panel_header() {
-        let html = parts_html(980.0, 650.0);
+        let html = parts_html();
         for fragment in [
             r#"class="panelHeader""#,
             r#"class="panelTitle""#,
@@ -477,7 +469,7 @@ mod tests {
     /// 明示していないと silent に崩れる。写し規則がCSSに出ていること。
     #[test]
     fn pins_the_react_native_flex_direction_default() {
-        let html = panels_html(980.0, 650.0);
+        let html = panels_html();
         assert!(html.contains("div { display:flex; flex-direction:column;"));
         // row を持つのは原文が flexDirection:'row' と書いたぶんだけ。
         let row_rules = theme::STYLES

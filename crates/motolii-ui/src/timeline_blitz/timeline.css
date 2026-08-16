@@ -13,15 +13,17 @@
 html, body {
   margin: 0;
   padding: 0;
-  width: {w}px;
-  height: {h}px;
+  width: 100%;
+  height: 100%;
   font-family: sans-serif;
   color: {ink};
 }
 
 div { position: absolute; }
 
-.desktop { left: 0; top: 0; width: {w}px; height: {h}px; background: {desktop}; }
+.desktop { left: 0; top: 0; width: 100%; height: 100%; background: {desktop}; }
+.sidebar { left:0; top:0; width:25.5%; height:100%; }
+.track { left:25.5%; top:0; right:0; height:100%; }
 
 /* ---- overview 帯 ---- */
 .ov      { top: 0; height: {overview_h}px; background: {surface_lo}; }
@@ -30,24 +32,23 @@ div { position: absolute; }
 .ovbar   { height: 3px; }
 
 /* ---- ruler / locator ---- */
-.ruler      { left: 0; width: {w}px; height: {ruler_h}px; background: {surface_hi}; }
-.rulerlabel { left: 8px; font-size: 9px; color: #c0c0c0; }
+.ruler      { left: 0; width: 100%; height: {ruler_h}px; background: {surface_hi}; }
+.rulerlabel { left: 8px; top: {overview_h}px; font-size: 9px; color: #c0c0c0; }
 .tick       { width: 1px; height: 5px; background: #6a6a6a; }
 .ticklabel  { font-size: 8px; color: {ruler}; }
-.locator    { left: 0; width: {w}px; height: {locator_h}px; background: {surface};
+.locator    { left: 0; width: 100%; height: {locator_h}px; background: {surface};
               border-bottom: 1px solid {contrast}; }
 
 /* ---- 行 ---- */
 .row {
   left: 0;
-  width: {w}px;
+  width: 100%;
   height: {row_h}px;
   background: {surface};
   border-bottom: 1px solid {contrast};
-  background-image: repeating-linear-gradient(to right,
-    #262626 0px, #262626 1px, transparent 1px, transparent {grid_step}px);
 }
 .sel { background: #414141; }
+.gridline { top: {rows_top}px; height: 100%; width: 1px; background: #262626; }
 
 /* ---- sidebar の中身 ---- */
 .tri    { left: 10px; width: 0; height: 0; border-left: 5px solid #929292;
@@ -57,11 +58,13 @@ div { position: absolute; }
 .plabel { left: 31px; font-size: 9px; color: {dim}; }
 .tg     { width: 13px; height: 12px; background: #2f2f2f; color: {ruler};
           font-size: 8px; text-align: center; border: 1px solid {surface_hi}; }
+.tg-m   { right: 31px; }
+.tg-s   { right: 14px; }
 
 /* ---- 時間面 ----
  * 中身は custom widget が描く(`surface.rs`)。この箱は場所を取るだけで、
  * **背景色を置かないこと** — 置くと行の縞と grid が隠れる。 */
-.tlsurface { }
+.tlsurface { left: 0; top: {rows_top}px; right: 0; height: 100%; }
 
 /* ---- clip と key(custom widget 側の色の出所。CSSからは使われない) ---- */
 .bar    { height: {bar_h}px; color: {bar_ink}; font-size: 9px; padding-left: 6px;
@@ -74,6 +77,6 @@ div { position: absolute; }
 .selkey { background: {accent}; }
 
 /* ---- 境界と playhead ---- */
-.vsep   { top: 0; width: 1px; height: {h}px; background: {contrast}; }
-.ph     { top: {overview_h}px; width: 1px; height: {ph_h}px; background: #e7e7e7; }
+.vsep   { top: 0; width: 1px; height: 100%; background: {contrast}; }
+.ph     { top: {overview_h}px; width: 1px; height: 100%; background: #e7e7e7; }
 .phhead { top: {phhead_top}px; width: 9px; height: 6px; background: #e7e7e7; }

@@ -27,7 +27,7 @@ mod tests {
 
     #[test]
     fn renders_the_sample_inspector_as_a_blitz_document() {
-        let html = inspector_html(&SAMPLE, 340.0, 760.0);
+        let html = inspector_html(&SAMPLE);
         assert!(html.starts_with("<html><head><style>"));
         assert!(html.ends_with("</body></html>"));
         assert!(html.contains(r#"class="inspector""#));

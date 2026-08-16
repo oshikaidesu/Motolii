@@ -5,10 +5,8 @@
 // なぜ絶対配置か、なぜ flex/grid の入れ子ではないか:
 // 1. ツリーは既に**正確な矩形**を出している。flex/grid に組み直すとCSS側がもう一度
 //    レイアウトを解くことになり、share の分配と食い違う余地が生まれる。写すなら矩形を写す。
-// 2. 共通 NEGATIVE ORACLE: `spikes/blitz-probe/` で使われていないCSSプロパティを使わない。
-//    実測済みなのは position / left / top / width / height / display:flex / flex / gap /
-//    align-items / overflow / z-index / pointer-events など。`flex-direction` や
-//    `grid-template-*` は probe に無いため使わない(縦分割が書けない)。
+// 2. CSSの採用は既存probeのproperty一覧では制限しない。browser previewで設計を確認し、
+//    固定Blitz crate版のdumpで描画を確認する。DockをCSSへ移植しない判断自体は不変。
 //
 // 色・寸法定数はここでは一切決めない(共通 NON-GOALS 1)。class 名だけを出し、
 // 見た目はホスト側のスタイルシートが `timeline_egui/theme.rs` から与える。

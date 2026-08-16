@@ -42,10 +42,10 @@ mod tests {
     #[test]
     fn renders_every_chrome_screen_as_a_blitz_document() {
         for html in [
-            export_html(&EXPORT_SAMPLE, 640.0, 360.0),
-            settings_html(640.0, 360.0),
-            panels_html(320.0, 260.0),
-            parts_html(420.0, 140.0),
+            export_html(&EXPORT_SAMPLE),
+            settings_html(),
+            panels_html(),
+            parts_html(),
         ] {
             assert!(html.starts_with("<html><head><style>"));
             assert!(html.ends_with("</body></html>"));
@@ -57,10 +57,10 @@ mod tests {
     #[test]
     fn never_paints_the_body() {
         for html in [
-            export_html(&EXPORT_SAMPLE, 640.0, 360.0),
-            settings_html(640.0, 360.0),
-            panels_html(320.0, 260.0),
-            parts_html(420.0, 140.0),
+            export_html(&EXPORT_SAMPLE),
+            settings_html(),
+            panels_html(),
+            parts_html(),
         ] {
             let head = html.split("</style>").next().expect("style block");
             for line in head.lines() {

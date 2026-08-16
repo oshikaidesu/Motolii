@@ -22,7 +22,7 @@
 //! | `html,body` の `margin:0;padding:0` | — | ブラウザ既定の打ち消し |
 //! | `html,body` の `font-family:sans-serif` | — | `timeline_blitz/html.rs:79` と同じ扱い |
 //! | `.scroll` の `flex-grow:1;flex-shrink:1;flex-basis:0px;overflow:hidden` | — | RN `ScrollView`(`Inspector.tsx:147`)の既定 |
-//! | `html,body` / `.inspector` の `width`/`height` | 引数 | 席の寸法。`Inspector.tsx:134` の `{width}` に相当 |
+//! | `html,body` / `.inspector` の `width`/`height` | viewport | 席の寸法。`Inspector.tsx:134` の `{width}` に相当 |
 //!
 //! `body` には背景色を置かない。置くとviewport全面が不透明になり Stage の上へ重ねられない
 //! (`blitz-paint-0.3.0-beta.1/src/render.rs:127-160`)。下地は `.inspector` 自身が持つ
@@ -31,9 +31,13 @@
 //! ## RN と CSS の差で気をつけたところ
 //!
 //! - **`flexDirection` の既定が違う。** RN は `column`、CSS は `row`。
-//!   `div` の既定を `column` に倒し、`productStyles.ts` が `flexDirection: 'row'` と
+//!   この写しでは `div` を flex container にして既定を `column` に倒し、
+//!   `productStyles.ts` が `flexDirection: 'row'` と
 //!   書いているところ(`panelHeader` `tabRow` `parameterRow` `pathOperationGrid`
 //!   `dialTickStrip`)だけが `flex-direction:row` を持つ。
+//!   これは RN View の写し規則であり、Blitz panel 全体を Flex に限定する規則ではない。
+//!   Grid/Flex の採否と固定crate版dumpによる確認は
+//!   `docs/reviews/2026-08-16-blitz-html-css-authoring-and-validation-decision.md` を正とする。
 //! - **RN の `StyleSheet` にカスケード/継承は無いが CSS にはある。** `color` と `font-size` は
 //!   親から子へ漏れる。`Inspector.tsx` の `Text` はすべて自前の style を持つので実害は無いが、
 //!   親の `div` 側には `color`/`font-size` を一切置かない(= `productStyles.ts` に書いてある
@@ -44,24 +48,24 @@ use super::theme::STYLES;
 
 /// `Inspector.tsx` の INSPECTOR パネル(既定タブ)を1枚のHTML文書にする。
 /// 入力も編集意味もここには無い。`sample` は固定値。
-pub fn inspector_html(sample: &InspectorSample, width: f64, height: f64) -> String {
+pub fn inspector_html(sample: &InspectorSample) -> String {
     format!(
         "<html><head><style>{}</style></head><body>{}</body></html>",
-        css(width, height),
-        body(sample, width, height)
+        css(),
+        body(sample)
     )
 }
 
-fn css(width: f64, height: f64) -> String {
-    let mut out = format!(
+fn css() -> String {
+    let mut out = String::from(
         "
-  html,body {{ margin:0; padding:0; width:{width}px; height:{height}px;
-               font-family:sans-serif; }}
-  div {{ display:flex; flex-direction:column; align-items:stretch;
-         flex-shrink:0; position:relative; box-sizing:border-box; }}
-  span {{ display:block; flex-shrink:0; position:relative; box-sizing:border-box; }}
-  .scroll {{ flex-grow:1; flex-shrink:1; flex-basis:0px; overflow:hidden; }}
-"
+  html,body { margin:0; padding:0; width:100%; height:100%;
+               font-family:sans-serif; }
+  div { display:flex; flex-direction:column; align-items:stretch;
+        flex-shrink:0; position:relative; box-sizing:border-box; }
+  span { display:block; flex-shrink:0; position:relative; box-sizing:border-box; }
+  .scroll { flex-grow:1; flex-shrink:1; flex-basis:0px; overflow:hidden; }
+",
     );
     // productStyles.ts の並びのまま出す。後勝ちの上書き関係を原文と同じに保つ。
     for style in STYLES {
@@ -70,12 +74,10 @@ fn css(width: f64, height: f64) -> String {
     out
 }
 
-fn body(sample: &InspectorSample, width: f64, height: f64) -> String {
+fn body(sample: &InspectorSample) -> String {
     let mut b = String::new();
-    // Inspector.tsx:134  <View style={[styles.inspector, {width}]} testID="inspector-surface">
-    b.push_str(&format!(
-        r#"<div class="inspector" style="width:{width}px;height:{height}px">"#
-    ));
+    // Inspector.tsx:134。席の幅高はDocument viewportから受ける。
+    b.push_str(r#"<div class="inspector" style="width:100%;height:100%">"#);
 
     // Inspector.tsx:135-138 → chrome.tsx:67-74 PanelHeader
     b.push_str(&format!(
@@ -124,7 +126,9 @@ fn body(sample: &InspectorSample, width: f64, height: f64) -> String {
 
     // ---- Inspector.tsx:279-300  source section ----
     if !sample.source_params.is_empty() {
-        b.push_str(r#"<div class="pathOperationSection"><span class="pathOperationTitle">Source</span>"#);
+        b.push_str(
+            r#"<div class="pathOperationSection"><span class="pathOperationTitle">Source</span>"#,
+        );
         for param in sample.source_params {
             b.push_str(&source_param_row(param));
         }
@@ -133,7 +137,9 @@ fn body(sample: &InspectorSample, width: f64, height: f64) -> String {
 
     // ---- Inspector.tsx:301-329  effects section ----
     if !sample.effects.is_empty() {
-        b.push_str(r#"<div class="pathOperationSection"><span class="pathOperationTitle">Effects</span>"#);
+        b.push_str(
+            r#"<div class="pathOperationSection"><span class="pathOperationTitle">Effects</span>"#,
+        );
         for effect in sample.effects {
             b.push_str(&effect_block(effect));
         }
@@ -141,7 +147,9 @@ fn body(sample: &InspectorSample, width: f64, height: f64) -> String {
     }
 
     // ---- Inspector.tsx:330-592  transform section ----
-    b.push_str(r#"<div class="transformSection"><span class="pathOperationTitle">Transform</span>"#);
+    b.push_str(
+        r#"<div class="transformSection"><span class="pathOperationTitle">Transform</span>"#,
+    );
     for dial in sample.dials {
         b.push_str(&dial_parameter(dial));
     }
@@ -286,7 +294,7 @@ mod tests {
     use super::*;
 
     fn sample_html() -> String {
-        inspector_html(&SAMPLE, 340.0, 760.0)
+        inspector_html(&SAMPLE)
     }
 
     /// POSITIVE ORACLE: `Inspector.tsx` の各セクションが同じ構造で出ている。
@@ -314,9 +322,24 @@ mod tests {
             assert!(html.contains(fragment), "{fragment} が出ていない");
         }
         for text in [
-            "Inspector", "Effect", "Custom", "position keys: 3", "Opacity", "Delete", "Duplicate",
-            "Split", "Mute", "Solo", "Source", "Effects", "Transform", "Position X", "Position Y",
-            "Rotation Z", "Scale X", "Scale Y",
+            "Inspector",
+            "Effect",
+            "Custom",
+            "position keys: 3",
+            "Opacity",
+            "Delete",
+            "Duplicate",
+            "Split",
+            "Mute",
+            "Solo",
+            "Source",
+            "Effects",
+            "Transform",
+            "Position X",
+            "Position Y",
+            "Rotation Z",
+            "Scale X",
+            "Scale Y",
         ] {
             assert!(html.contains(text), "{text} が出ていない");
         }
@@ -362,7 +385,10 @@ mod tests {
         let html = sample_html();
         let table: String = theme::STYLES.iter().map(|style| style.css).collect();
         for chunk in html.split('#').skip(1) {
-            let hex: String = chunk.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+            let hex: String = chunk
+                .chars()
+                .take_while(|c| c.is_ascii_hexdigit())
+                .collect();
             if hex.len() != 6 && hex.len() != 3 {
                 continue;
             }

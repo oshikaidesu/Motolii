@@ -1,44 +1,44 @@
-//! Browserパネルが使う色と寸法。**ここで値を決めない。**
+//! Browser パネルの見た目の値。ここで新しい値は決めない。
 //!
-//! 色は `crates/motolii-ui/src/timeline_egui/theme.rs` からの写し。
-//! theme.rs の定数は `pub(super)` で timeline_egui の外から参照できないため、
-//! 型変換ではなく同じリテラルを出所付きで写す。
-//! 寸法は `spikes/blitz-probe/src/bin/browser_panel.rs`(実証済み)からの写し。
+//! すべて `ui/motolii-rn/src/productStyles.ts:27-61` の Browser 用 style
+//! (`browser` から `effectTags`) から写した。Browser の旧 probe 格子は製品の
+//! 見た目ではなかったので、ここには残さない。
 
-/// timeline_egui/theme.rs:8 `DESKTOP` = rgb(0x2a,0x2a,0x2a)
-pub(super) const DESKTOP: &str = "#2a2a2a";
-/// timeline_egui/theme.rs:9 `SURFACE` = rgb(0x36,0x36,0x36)
-pub(super) const SURFACE: &str = "#363636";
-/// timeline_egui/theme.rs:10 `SURFACE_HI` = rgb(0x46,0x46,0x46)
-pub(super) const SURFACE_HI: &str = "#464646";
-/// timeline_egui/theme.rs:11 `SURFACE_LO` = rgb(0x24,0x24,0x24)
-pub(super) const SURFACE_LO: &str = "#242424";
-/// timeline_egui/theme.rs:12 `CONTRAST` = rgb(0x11,0x11,0x11)
-pub(super) const CONTRAST: &str = "#111111";
-/// timeline_egui/theme.rs:14 `RULER` = rgb(0x91,0x91,0x91)
-pub(super) const RULER: &str = "#919191";
-/// timeline_egui/theme.rs:15 `ACCENT` = rgb(0xff,0xad,0x56)
-pub(super) const ACCENT: &str = "#ffad56";
-/// timeline_egui/theme.rs:16 `INK` = rgb(0xd6,0xd6,0xd6)
-pub(super) const INK: &str = "#d6d6d6";
-/// timeline_egui/theme.rs:23 `PALETTE[4]` = rgb(0xd6,0x9a,0x8b)
-pub(super) const PALETTE_4: &str = "#d69a8b";
+/// productStyles.ts:27 `browser`
+pub(super) const BACKGROUND: &str = "#202326";
+/// productStyles.ts:29, 32, 34 `borderBottomColor`
+pub(super) const BORDER: &str = "#3a3d41";
+/// productStyles.ts:33 `tabActive.borderBottomColor`
+pub(super) const ACTIVE: &str = "#b4a66a";
+/// productStyles.ts:33 `tabActive.backgroundColor`
+pub(super) const ACTIVE_BACKGROUND: &str = "#191b1e";
+/// productStyles.ts:35 `search.backgroundColor`
+pub(super) const INPUT_BACKGROUND: &str = "#17191b";
+/// productStyles.ts:35, 36 `borderColor`
+pub(super) const CONTROL_BORDER: &str = "#44484d";
+/// productStyles.ts:37 `iconButtonActive.borderColor`
+pub(super) const MODE_BORDER: &str = "#c6b975";
+/// productStyles.ts:37 `iconButtonActive.backgroundColor`
+pub(super) const MODE_BACKGROUND: &str = "#38372f";
+/// productStyles.ts:39 `sourceRail.backgroundColor`
+pub(super) const RAIL_BACKGROUND: &str = "#181a1d";
+/// productStyles.ts:40 `railItem.color`
+pub(super) const RAIL_TEXT: &str = "#b9bcbd";
+/// productStyles.ts:41 `railHeading.color`
+pub(super) const MUTED: &str = "#74797c";
+/// productStyles.ts:43 `resultTitle.color`
+pub(super) const TITLE: &str = "#d5d6d3";
+/// productStyles.ts:49 `browserThumb.borderColor`
+pub(super) const THUMB_BORDER: &str = "#3c4044";
+/// Browser.tsx:43 `MEDIA_COLORS`。Browser.tsx:301 が item index で循環させる。
+pub(super) const MEDIA_COLORS: [&str; 5] = ["#5d7899", "#746398", "#88704e", "#557f6d", "#8b5962"];
+/// productStyles.ts:52 `effectName.color`
+pub(super) const ITEM_TEXT: &str = "#ededeb";
+/// productStyles.ts:53 `effectTags.color`
+pub(super) const ITEM_DETAIL: &str = "#9ca0a2";
 
-/// browser_panel.rs:34 `CELL_W`
-pub(super) const CELL_W: f64 = 132.0;
-/// browser_panel.rs:35 `CELL_H`
-pub(super) const CELL_H: f64 = 108.0;
-/// browser_panel.rs:36 `COLS`
-pub(super) const COLS: usize = 6;
-/// browser_panel.rs:37 `PAD`
-pub(super) const PAD: f64 = 10.0;
-/// browser_panel.rs:38 `TOP`(ヘッダ下端 = 格子の原点)
-pub(super) const TOP: f64 = 34.0;
-/// browser_panel.rs:105 ヘッダ帯の高さ
-pub(super) const HEADER_H: f64 = 24.0;
-
-/// card内の画像枠(`.th`)の**表示寸法**。`markup.rs` が使っていた式をそのまま置いただけで、
-/// 値は決めていない(cardの左右余白 4px x2 / 名前帯 24px を `CELL_W`/`CELL_H` から引く)。
-/// `thumbnail.rs` が作る縮小実体の寸法はここから導出する。
-pub(super) const THUMB_W: f64 = CELL_W - 8.0;
-pub(super) const THUMB_H: f64 = CELL_H - 24.0;
+/// productStyles.ts:49 `browserThumb.height`。
+pub(super) const THUMB_H: f64 = 52.0;
+/// Browser の GRID card は `width: '50%'` で、画像の表示幅は親から来る。
+/// これは旧 Browser が使っていた縮小実体の resource 上限を維持する値で、視覚値ではない。
+pub(super) const THUMB_W: f64 = 124.0;

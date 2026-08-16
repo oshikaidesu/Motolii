@@ -17,7 +17,6 @@ mod diagnostic_projection;
 mod display_slot;
 pub mod dock;
 mod document_command_request;
-mod document_edit_runtime;
 mod host_pointer_capture;
 // C7: Inspector の見た目のBlitz(HTML/CSS)写し。bin から使うので pub。
 pub mod inspector_blitz;
@@ -46,8 +45,6 @@ mod stage_overlay_gpu;
 pub mod stage_overlay_raster;
 mod static_preview;
 pub mod timeline_blitz;
-#[cfg(test)]
-mod timeline_intent_adapter;
 mod timeline_move_gesture;
 mod timeline_projection;
 #[cfg(target_os = "macos")]

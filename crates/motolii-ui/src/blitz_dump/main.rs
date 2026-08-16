@@ -17,7 +17,7 @@
 //! 新しい描画方式は作らない。
 //!
 //! Browser のサンプル枚数は `MOTOLII_BROWSER_MAX` / フォルダは `MOTOLII_BROWSER_DIR` で
-//! 変えられる(既定は `oracle_main.rs` と同じ `docs/mocks` / `DEFAULT_MAX_ITEMS`)。
+//! 変えられる(既定は `docs/mocks` / `DEFAULT_MAX_ITEMS`)。
 
 mod dock_sample;
 mod gpu;
@@ -38,7 +38,7 @@ use gpu::Gpu;
 /// timeline_blitz/mod.rs:59-66 のテストが使う面の大きさ。
 const TIMELINE_W: u32 = 1000;
 const TIMELINE_H: u32 = 460;
-/// browser_blitz/oracle_main.rs:15-16 の写し。
+/// Browser dumpの固定表示面。
 const BROWSER_W: u32 = 900;
 const BROWSER_H: u32 = 520;
 /// chrome の4枚はどれも `.shell` を下地に持つ。`.shell` は `productStyles.ts:4` で
@@ -151,8 +151,6 @@ fn dump_timeline(gpu: &Gpu, runtime: &tokio::runtime::Runtime, out: &Path) -> Re
         Some(&projection),
         None,
         motolii_core::RationalTime::ZERO,
-        TIMELINE_W as f64,
-        TIMELINE_H as f64,
     );
     dump_html_with(
         gpu,
@@ -168,8 +166,6 @@ fn dump_timeline(gpu: &Gpu, runtime: &tokio::runtime::Runtime, out: &Path) -> Re
                 &document,
                 Some(&projection),
                 None,
-                TIMELINE_W as f64,
-                TIMELINE_H as f64,
             ) {
                 eprintln!("blitz-dump: #tl-surface が見つからず custom widget を挿せない");
             }
@@ -222,7 +218,7 @@ fn dump_browser(gpu: &Gpu, _runtime: &tokio::runtime::Runtime, out: &Path) -> Re
 
     let (texture, view) = gpu.target(BROWSER_W, BROWSER_H);
     // `blitz-net` の fetch は非同期。1フレームだけ描くと画像がまだ届いておらず
-    // cardが空のまま出る(`oracle_main.rs` は60秒描き続けるので気付けない)。
+    // cardが空のまま出る。
     // 枚数が増えなくなるまで描き直してから読み戻す。
     let mut settled = 0;
     let mut last = usize::MAX;
@@ -236,34 +232,6 @@ fn dump_browser(gpu: &Gpu, _runtime: &tokio::runtime::Runtime, out: &Path) -> Re
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    // 当たり判定を絵と突き合わせるための口。ビルドせずに確かめられる:
-    //   MOTOLII_BLITZ_HIT="70,60 200,60 70,500" motolii-blitz-dump browser out.png
-    // 座標は panel 左上原点の CSS px。判定はCSSが解決したレイアウトから引くので、
-    // CSSを変えれば結果も変わる(格子の式はもう持っていない)。
-    if let Some(spec) = std::env::var_os("MOTOLII_BLITZ_HIT") {
-        for point in spec.to_string_lossy().split_whitespace() {
-            let mut parts = point.split(',');
-            let parsed = parts
-                .next()
-                .and_then(|x| x.trim().parse::<f64>().ok())
-                .zip(parts.next().and_then(|y| y.trim().parse::<f64>().ok()));
-            match parsed {
-                Some((x, y)) => match panel.index_at(x, y) {
-                    Some(index) => {
-                        let name = panel
-                            .items()
-                            .get(index)
-                            .map(|item| item.name.as_str())
-                            .unwrap_or("(範囲外)");
-                        eprintln!("blitz-dump: hit ({x},{y}) → #{index} {name}");
-                    }
-                    None => eprintln!("blitz-dump: hit ({x},{y}) → なし"),
-                },
-                None => eprintln!("blitz-dump: hit の座標を読めない: {point:?}"),
-            }
-        }
-    }
-
     eprintln!(
         "blitz-dump: browser atlas images = {} / items = {}",
         panel.cached_image_count(),
@@ -283,11 +251,7 @@ fn dump_chrome_export(
     runtime: &tokio::runtime::Runtime,
     out: &Path,
 ) -> Result<(), String> {
-    let html = chrome_blitz::export_html(
-        &chrome_blitz::EXPORT_SAMPLE,
-        CHROME_W as f64,
-        CHROME_H as f64,
-    );
+    let html = chrome_blitz::export_html(&chrome_blitz::EXPORT_SAMPLE);
     dump_html(gpu, runtime, &html, CHROME_W, CHROME_H, out)
 }
 
@@ -296,7 +260,7 @@ fn dump_chrome_settings(
     runtime: &tokio::runtime::Runtime,
     out: &Path,
 ) -> Result<(), String> {
-    let html = chrome_blitz::settings_html(CHROME_W as f64, CHROME_H as f64);
+    let html = chrome_blitz::settings_html();
     dump_html(gpu, runtime, &html, CHROME_W, CHROME_H, out)
 }
 
@@ -305,7 +269,7 @@ fn dump_chrome_panels(
     runtime: &tokio::runtime::Runtime,
     out: &Path,
 ) -> Result<(), String> {
-    let html = chrome_blitz::panels_html(CHROME_W as f64, CHROME_H as f64);
+    let html = chrome_blitz::panels_html();
     dump_html(gpu, runtime, &html, CHROME_W, CHROME_H, out)
 }
 
@@ -314,7 +278,7 @@ fn dump_chrome_parts(
     runtime: &tokio::runtime::Runtime,
     out: &Path,
 ) -> Result<(), String> {
-    let html = chrome_blitz::parts_html(CHROME_W as f64, CHROME_H as f64);
+    let html = chrome_blitz::parts_html();
     dump_html(gpu, runtime, &html, CHROME_W, CHROME_H, out)
 }
 

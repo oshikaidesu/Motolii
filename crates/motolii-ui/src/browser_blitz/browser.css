@@ -1,107 +1,227 @@
-/* Browserパネルの見た目。**Rustを再ビルドせずに触れる。**
+/* `ui/motolii-rn/src/Browser.tsx:378-427` と
+ * `ui/motolii-rn/src/productStyles.ts:27-53` の MEDIA / GRID 表示。
  *
- * 既定ではこのファイルはバイナリへ埋め込まれる(`include_str!`)。
- * `MOTOLII_BLITZ_CSS_DIR` を設定すると、そのディレクトリの `browser.css` を
- * 実行時に読み直す。色や寸法を変えて絵を見るだけならビルドは要らない:
+ * 既存 Inspector / chrome の Blitz 移植と同じく、RN の flex 構造をそのまま CSS
+ * へ言い直す。値は theme.rs の file:line 付き RN source からだけ来る。
  *
- *   export MOTOLII_BLITZ_CSS_DIR=crates/motolii-ui/src/browser_blitz
- *   ./target/release/motolii-blitz-dump browser /tmp/b.png   # 実測 0.70s
- *
- * `{...}` は `markup.rs` が差し込む。**値はここで決めない** —
- * 出所は `theme.rs`(色は timeline_egui/theme.rs、寸法は browser_panel.rs の写し)。
- *
- * **Blitzはブラウザではない。** ブラウザで効くCSSが silent に効かない事例が実測で
- * 出ている。ここで使ってよいのは `spikes/blitz-probe/src/bin/browser_panel.rs:102-118`
- * で実際に効いたものだけ:
- *   margin / padding / width / height / background / font-family / color /
- *   position / left / top / border / border-bottom / border-color /
- *   overflow / white-space / font-size / object-fit
- * セレクタも同ファイルで実証済みの要素・class・`:hover` だけ。
- * 新しいプロパティを足すなら、効くことを dump で確かめてから足すこと。
+ * Grid/Flex の選択は構造に従う。browser previewで設計を確認し、固定Blitz版のdumpで
+ * 採用を確認する共通方針は `docs/reviews/2026-08-16-blitz-html-css-authoring-and-validation-decision.md`。
+ * `MOTOLII_BLITZ_CSS_DIR=crates/motolii-ui/src` を指定すると、色・寸法・余白は
+ * Rust の再ビルドなしで dump へ反映される。Browser の input / click / drag は未配線。
  */
 
 html, body {
   margin: 0;
   padding: 0;
-  width: {width}px;
-  height: {height}px;
+  width: 100%;
+  height: 100%;
   font-family: sans-serif;
-  color: {ink};
 }
 
-/* 罠(b): `body` に背景色を置くと viewport 全面が不透明で塗り潰される
- * (`blitz-paint-0.3.0-beta.1/src/render.rs:127-160`)。地色は通常の要素として敷く。 */
-.bg {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: {width}px;
-  height: {height}px;
-  background: {desktop};
+/* RN は column が既定、CSS は row が既定なので揃える。 */
+div {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex-shrink: 0;
+  position: relative;
+  box-sizing: border-box;
 }
 
-.hdr {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: {width}px;
-  height: {header_h}px;
-  background: {surface};
-  color: {ruler};
+span {
+  display: block;
+  flex-shrink: 0;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.browser {
+  width: 100%;
+  height: 100%;
+  background: {background};
+  overflow: hidden;
+}
+
+.panelHeader {
+  height: 31px;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 9px;
+  border-bottom: 1px solid {border};
+}
+
+.panelTitle {
   font-size: 11px;
-  padding: 7px 8px;
-  border-bottom: 1px solid {contrast};
+  color: {title};
+}
+
+.panelDetail {
+  margin-left: auto;
+  font-size: 8px;
+  color: {muted};
   overflow: hidden;
   white-space: nowrap;
 }
 
-.empty {
-  position: absolute;
-  left: 12px;
-  top: 48px;
-  font-size: 11px;
-  color: {warn};
+.tabRow {
+  height: 31px;
+  flex-direction: row;
+  border-bottom: 1px solid {border};
 }
 
-.card {
-  position: absolute;
-  width: {cell_w}px;
-  height: {cell_h}px;
-  background: {surface};
-  border: 1px solid {surface_lo};
+.tab {
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0px;
+  align-items: center;
+  justify-content: center;
 }
 
-.card:hover {
-  background: {surface_hi};
-  border-color: {ruler};
+.tabActive {
+  border-bottom: 2px solid {active};
+  background: {active_background};
 }
 
-.sel {
-  border: 1px solid {accent};
+.tabText {
+  font-size: 9px;
+  color: {title};
 }
 
-.drag {
-  background: {surface_hi};
-  border: 1px solid {ink};
+.searchRow {
+  height: 36px;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 5px;
+  border-bottom: 1px solid {border};
 }
 
-.th {
-  position: absolute;
-  left: 4px;
-  top: 4px;
-  width: {thumb_w}px;
-  height: {thumb_h}px;
-  background: {surface_lo};
+.search {
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0px;
+  height: 27px;
+  padding: 7px;
+  background: {input_background};
+  border: 1px solid {control_border};
+  color: {muted};
+  font-size: 10px;
+}
+
+.iconButton {
+  width: 27px;
+  height: 27px;
+  margin-left: 4px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid {control_border};
+}
+
+.iconButtonActive {
+  border-color: {mode_border};
+  background: {mode_background};
+}
+
+.iconText {
+  font-size: 10px;
+  color: {title};
+}
+
+.discoveryBody {
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0px;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+.sourceRail {
+  width: 104px;
+  padding: 4px 0;
+  background: {rail_background};
+  border-right: 1px solid {border};
+  overflow: hidden;
+}
+
+.railItem {
+  height: 23px;
+  padding: 5px 8px;
+  color: {rail_text};
+  font-size: 9px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.railHeading {
+  height: 20px;
+  padding: 7px 8px;
+  color: {muted};
+  font-size: 7px;
+}
+
+.effectSelected { background: {mode_background}; }
+
+.results {
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0px;
+  overflow: hidden;
+}
+
+.resultsHeader {
+  height: 28px;
+  flex-direction: row;
+  align-items: center;
+  padding: 0 7px;
+}
+
+.resultTitle {
+  font-size: 10px;
+  color: {title};
+}
+
+.resultGrid {
+  flex-direction: row;
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+
+.browserCard {
+  width: 50%;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.browserThumb {
+  height: 52px;
+  padding: 4px;
+  border: 1px solid {thumb_border};
+  overflow: hidden;
+}
+
+.thumb {
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 
-.nm {
-  position: absolute;
-  left: 4px;
-  top: {name_top}px;
-  width: {thumb_w}px;
+.effectName {
+  margin-top: 3px;
   font-size: 9px;
-  color: {ink};
+  color: {item_text};
   overflow: hidden;
   white-space: nowrap;
+}
+
+.effectTags {
+  font-size: 7px;
+  color: {item_detail};
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.emptyPanel { padding: 14px; }
+
+.muted {
+  font-size: 9px;
+  color: {muted};
 }

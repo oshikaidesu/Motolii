@@ -18,9 +18,8 @@ use wgpu_context::DeviceHandle;
 /// `anyrender` の `DeviceHandle` が要求するので持つが、**中身は使い回す**。
 fn shared_instance() -> &'static wgpu::Instance {
     static INSTANCE: std::sync::OnceLock<wgpu::Instance> = std::sync::OnceLock::new();
-    INSTANCE.get_or_init(|| {
-        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle())
-    })
+    INSTANCE
+        .get_or_init(|| wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle()))
 }
 
 pub struct BlitzSurface {

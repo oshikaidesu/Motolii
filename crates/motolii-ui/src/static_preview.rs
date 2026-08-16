@@ -375,43 +375,6 @@ mod tests {
     }
 
     #[test]
-    fn lifecycle_projection_cannot_change_document_or_gpu_evidence() {
-        let Ok(gpu) = GpuCtx::new_headless() else {
-            unavailable_dep("GPU adapter", "new_headless failed");
-            return;
-        };
-        let preview = prepare_static_viewport(
-            Arc::new(gpu),
-            Arc::new(bootstrap_document().expect("fixture")),
-            EvaluationTime::new(RationalTime::ZERO),
-            bootstrap_frame_desc().expect("desc"),
-        )
-        .expect("preview");
-        let mut renderer = Renderer::new(
-            &preview.gpu().device,
-            wgpu::TextureFormat::Bgra8Unorm,
-            RendererOptions::default(),
-        );
-        preview
-            .slot()
-            .register_once(&preview.gpu().device, &mut renderer);
-        let before = preview.invariant_evidence();
-        let mut projection = StaticViewportProjection::new(&preview);
-        for input in [
-            ShellLifecycleInput::Resized([960.0, 640.0]),
-            ShellLifecycleInput::ScaleFactorChanged(2.0),
-            ShellLifecycleInput::Minimized,
-            ShellLifecycleInput::Restored,
-            ShellLifecycleInput::Resized([800.0, 600.0]),
-        ] {
-            projection
-                .observe(input, &preview)
-                .expect("shell lifecycle must preserve preview evidence");
-        }
-        assert_eq!(preview.invariant_evidence(), before);
-    }
-
-    #[test]
     fn layout_operation_sequence_cannot_change_document_or_display_evidence() {
         let Ok(gpu) = GpuCtx::new_headless() else {
             unavailable_dep("GPU adapter", "new_headless failed");

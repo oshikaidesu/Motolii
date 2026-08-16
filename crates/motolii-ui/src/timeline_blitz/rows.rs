@@ -7,7 +7,7 @@
 //! 撤去前の原文に対するもので、原文は `git show f209da9d^:<path>` で読める。
 //! 新しい値をここで決めないという契約は生きている。
 
-use motolii_doc::{Document, LayerId};
+use motolii_doc::{Document, KeyframeId, LayerId};
 
 use super::theme::PALETTE;
 use crate::timeline_projection::TimelineProjection;
@@ -19,8 +19,14 @@ pub(super) struct TimelineRow {
     pub(super) property: Option<&'static str>,
     pub(super) start: Option<f64>,
     pub(super) end: Option<f64>,
-    pub(super) keys: Vec<f64>,
+    pub(super) keys: Vec<TimelineRowKey>,
     pub(super) palette_slot: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct TimelineRowKey {
+    pub(super) id: KeyframeId,
+    pub(super) fraction: f64,
 }
 
 /// timeline_egui/rows.rs:19-97 の写し。f32ではなくf64で持つのはCSSへ出すため。
@@ -58,7 +64,10 @@ pub(super) fn rows_from_projection(
                 .keys()
                 .iter()
                 .filter(|key| key.layer == layer)
-                .map(|key| key.center_x)
+                .map(|key| TimelineRowKey {
+                    id: key.key,
+                    fraction: key.center_x,
+                })
                 .collect::<Vec<_>>();
             let label = document
                 .layers

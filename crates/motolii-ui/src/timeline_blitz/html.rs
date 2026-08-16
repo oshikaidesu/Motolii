@@ -24,21 +24,19 @@
 //! | `.selbar` border | `#ffffff` | timeline_egui/clip_band.rs:123 |
 //! | `.ph` / `.phhead` | `#e7e7e7` | timeline_egui/ruler.rs:144,152 |
 //!
-//! ## 使ったCSSプロパティ
+//! ## CSS検証
 //!
-//! すべて `spikes/blitz-probe/` で実際に効いたものだけ。新規プロパティは無い。
-//! `margin` `padding` `padding-left` `width` `height` `background` `background-image`
-//! `font-family` `font-size` `color` `position` `top` `left` `border` `border-left`
-//! `border-top` `border-bottom` `text-align` `overflow` `white-space` `transform`
+//! CSSの採用は既存probeのproperty一覧では制限しない。browser previewで設計を確認し、
+//! 固定Blitz crate版のdumpで描画を確認する。共通方針は
+//! `docs/reviews/2026-08-16-blitz-html-css-authoring-and-validation-decision.md`。
 
 use motolii_core::RationalTime;
 use motolii_doc::{Document, LayerId};
 
-use super::geometry::TimelineGeometry;
 use super::rows::{rows_from_projection, TimelineRow};
 use super::theme::{
-    ACCENT, BAR_INK, CONTRAST, DESKTOP, DIM, INK, LOCATOR_H, OVERVIEW_H, PALETTE, RULER, RULER_H,
-    SURFACE, SURFACE_HI, SURFACE_LO,
+    ACCENT, BAR_INK, CONTRAST, DESKTOP, DIM, INK, LOCATOR_H, OVERVIEW_H, PALETTE, ROW_H, RULER,
+    RULER_H, SURFACE, SURFACE_HI, SURFACE_LO,
 };
 use crate::timeline_projection::TimelineProjection;
 
@@ -49,29 +47,48 @@ pub fn timeline_html(
     projection: Option<&TimelineProjection>,
     primary: Option<LayerId>,
     playhead: RationalTime,
-    width: f64,
-    height: f64,
+) -> String {
+    timeline_html_with_dense_mode(document, projection, primary, playhead, false)
+}
+
+/// custom widgetへ昇格する前の、clip/keyを通常DOMで出す参照実装。
+///
+/// 外側のHTML/CSS・Document投影・座標式は製品版と同じ。違うのは密な面を
+/// DOM nodeで描く一点だけで、ブラウザとPNGでUXを詰めるために使う。
+pub fn timeline_html_dom_prototype(
+    document: &Document,
+    projection: Option<&TimelineProjection>,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+) -> String {
+    timeline_html_with_dense_mode(document, projection, primary, playhead, true)
+}
+
+fn timeline_html_with_dense_mode(
+    document: &Document,
+    projection: Option<&TimelineProjection>,
+    primary: Option<LayerId>,
+    playhead: RationalTime,
+    dom_dense_surface: bool,
 ) -> String {
     let rows = rows_from_projection(document, projection);
-    let geometry = TimelineGeometry::new(
-        width,
-        height,
-        rows.len(),
-        document.composition.duration.as_seconds_f64(),
-    );
     format!(
         "<html><head><style>{}</style></head><body>{}</body></html>",
-        css(&geometry),
-        body(&geometry, &rows, primary, playhead)
+        css(),
+        body(
+            &rows,
+            primary,
+            playhead,
+            document.composition.duration.as_seconds_f64(),
+            dom_dense_surface,
+        )
     )
 }
 
 /// CSSの実体は `timeline.css`。**Rustを再ビルドせずに触れる**(`blitz_css`)。
 /// 差し込む値の出所は `theme.rs`(色)と `geometry.rs`(寸法)で、ここでは決めない。
-fn css(geometry: &TimelineGeometry) -> String {
+fn css() -> String {
     const EMBEDDED: &str = include_str!("timeline.css");
-    let w = geometry.width;
-    let h = geometry.height;
     crate::blitz_css::fill(
         &crate::blitz_css::template("timeline_blitz/timeline.css", EMBEDDED),
         &[
@@ -79,11 +96,13 @@ fn css(geometry: &TimelineGeometry) -> String {
             ("ov_border_h", &(OVERVIEW_H - 3.0).to_string()),
             ("locator_h", &LOCATOR_H.to_string()),
             ("ruler_h", &RULER_H.to_string()),
-            ("grid_step", &(geometry.surface_width / 10.0).to_string()),
             ("phhead_top", &(OVERVIEW_H - 6.0).to_string()),
-            ("row_h", &(geometry.row_height - 1.0).to_string()),
-            ("bar_h", &(geometry.row_height - 4.0).to_string()),
-            ("ph_h", &(h - OVERVIEW_H).to_string()),
+            (
+                "rows_top",
+                &(OVERVIEW_H + RULER_H + LOCATOR_H + 1.0).to_string(),
+            ),
+            ("row_h", &(ROW_H - 1.0).to_string()),
+            ("bar_h", &(ROW_H - 4.0).to_string()),
             ("bar_ink", BAR_INK),
             ("surface_hi", SURFACE_HI),
             ("surface_lo", SURFACE_LO),
@@ -94,21 +113,19 @@ fn css(geometry: &TimelineGeometry) -> String {
             ("ruler", RULER),
             ("dim", DIM),
             ("ink", INK),
-            ("w", &w.to_string()),
-            ("h", &h.to_string()),
         ],
     )
 }
 
 /// ui_mock.rs:75-186 の写し。
 fn body(
-    geometry: &TimelineGeometry,
     rows: &[TimelineRow],
     primary: Option<LayerId>,
     playhead: RationalTime,
+    duration: f64,
+    dom_dense_surface: bool,
 ) -> String {
-    let sidebar = geometry.sidebar_width;
-    let surface_w = geometry.surface_width;
+    let rows_top = OVERVIEW_H + RULER_H + LOCATOR_H + 1.0;
     let mut b = String::new();
 
     // ---- 席全体の下地 ----
@@ -116,16 +133,54 @@ fn body(
     // mockは body の背景色で代用していたが、Blitzでは body の背景が
     // viewport全面を不透明で塗り、Stageの上へ重ねられなくなる
     // (blitz-paint-0.3.0-beta.1/src/render.rs:127-160)。要素側へ移す。
-    b.push_str(r#"<div class="desktop"></div>"#);
-
-    // ---- overview 帯 ----
+    b.push_str(r#"<div class="desktop">"#);
     b.push_str(&format!(
-        r#"<div class="ov" style="left:{sidebar}px;width:{surface_w}px"></div>
-           <div class="ovlabel">overview</div>
-           <div class="ovborder" style="left:{}px;width:{}px"></div>"#,
-        sidebar + 1.0,
-        surface_w - 3.0
+        r#"<div class="ruler" style="top:{}px"></div><div class="locator" style="top:{}px"></div>"#,
+        OVERVIEW_H + 1.0,
+        OVERVIEW_H + RULER_H + 1.0
     ));
+
+    // 面高でDOMを増減させず、viewport のclipへ任せる。resizeでDocumentを作り直さないため。
+    let selected_index = primary.as_ref().and_then(|layer| {
+        rows.iter()
+            .position(|row| row.property.is_none() && row.layer == *layer)
+    });
+    for (index, row) in rows.iter().enumerate() {
+        let y = rows_top + index as f64 * ROW_H;
+        let selected = row.property.is_none() && selected_index == Some(index);
+        b.push_str(&format!(
+            r#"<div class="row{}" style="top:{y}px"></div>"#,
+            if selected { " sel" } else { "" }
+        ));
+    }
+
+    // `.sidebar` の min/max/割合は TimelineGeometry::new と同じ clamp をCSSへ写したもの。
+    b.push_str(r#"<div class="sidebar"><div class="ovlabel">overview</div><div class="rulerlabel">Inbox</div>"#);
+    for (index, row) in rows.iter().enumerate() {
+        let y = rows_top + index as f64 * ROW_H;
+        let cy = y + ROW_H * 0.5;
+        if row.property.is_some() {
+            b.push_str(&format!(
+                r#"<div class="dot" style="top:{}px"></div><div class="plabel" style="top:{}px">{}</div>"#,
+                cy - 1.0,
+                cy - 5.0,
+                escape(&row.label)
+            ));
+        } else {
+            b.push_str(&format!(
+                r#"<div class="tri" style="top:{}px"></div><div class="llabel" style="top:{}px">{}</div><div class="tg tg-m" style="top:{}px">M</div><div class="tg tg-s" style="top:{}px">S</div>"#,
+                cy - 4.0,
+                cy - 5.0,
+                escape(&row.label),
+                cy - 6.0,
+                cy - 6.0,
+            ));
+        }
+    }
+    b.push_str("</div>");
+
+    // ---- 時間面 ----
+    b.push_str(r#"<div class="track"><div class="ov"></div><div class="ovborder"></div>"#);
     for (i, r) in rows.iter().enumerate() {
         if r.property.is_some() {
             continue;
@@ -137,87 +192,36 @@ fn body(
             continue;
         }
         b.push_str(&format!(
-            r#"<div class="ovbar" style="left:{}px;top:{}px;width:{}px;background:{}"></div>"#,
-            geometry.x_at(start),
+            r#"<div class="ovbar" style="left:{}%;top:{}px;width:{}%;background:{}"></div>"#,
+            start.clamp(0.0, 1.0) * 100.0,
             4.0 + i as f64 * 4.0,
-            (geometry.x_at(end) - geometry.x_at(start)).max(1.0),
+            ((end - start).clamp(0.0, 1.0) * 100.0).max(0.1),
             PALETTE[r.palette_slot]
         ));
     }
 
-    // ---- ruler 帯 ----
-    b.push_str(&format!(
-        r#"<div class="ruler" style="top:{}px"></div><div class="rulerlabel" style="top:{}px">Inbox</div>"#,
-        OVERVIEW_H + 1.0,
-        OVERVIEW_H + 3.0
-    ));
+    // ruler と行のgridは時間面を親にして、横幅に追随させる。
     for i in 0..=10 {
-        let x = geometry.x_at(i as f64 / 10.0);
+        let percent = i as f64 * 10.0;
         b.push_str(&format!(
-            r#"<div class="tick" style="left:{x}px;top:{}px"></div>
-               <div class="ticklabel" style="left:{}px;top:{}px">{i}s</div>"#,
+            r#"<div class="tick" style="left:{percent}%;top:{}px"></div>
+               <div class="ticklabel" style="left:{percent}%;top:{}px">{i}s</div>
+               <div class="gridline" style="left:{percent}%"></div>"#,
             OVERVIEW_H + RULER_H - 5.0,
-            x + 3.0,
             OVERVIEW_H + 3.0
         ));
     }
-    // ---- locator 帯 ----
-    b.push_str(&format!(
-        r#"<div class="locator" style="top:{}px"></div>"#,
-        OVERVIEW_H + RULER_H + 1.0
-    ));
 
-    // ---- 行 ----
-    // 選択行の決め方は timeline_egui/clip_band.rs:19-29 の写し。
+    // clip名だけはDOMに残す。箱の相対幅で位置を決めるのでviewport更新で追随する。
     let mut labels = String::new();
-    let selected_index = primary.as_ref().and_then(|layer| {
-        rows.iter()
-            .position(|row| row.property.is_none() && row.layer == *layer)
-    });
     for (i, r) in rows.iter().enumerate() {
-        let y = geometry.rows_top + i as f64 * geometry.row_height;
-        if y >= geometry.height {
-            break;
-        }
-        let cy = y + geometry.row_height * 0.5;
-        let selected = r.property.is_none() && selected_index == Some(i);
-        b.push_str(&format!(
-            r#"<div class="row{}" style="top:{y}px"></div>"#,
-            if selected { " sel" } else { "" }
-        ));
-        // sidebar 側
-        if r.property.is_some() {
-            b.push_str(&format!(
-                r#"<div class="dot" style="top:{}px"></div>
-                   <div class="plabel" style="top:{}px">{}</div>"#,
-                cy - 1.0,
-                cy - 5.0,
-                escape(&r.label)
-            ));
-        } else {
-            b.push_str(&format!(
-                r#"<div class="tri" style="top:{}px"></div>
-                   <div class="llabel" style="top:{}px">{}</div>
-                   <div class="tg" style="left:{}px;top:{}px">M</div>
-                   <div class="tg" style="left:{}px;top:{}px">S</div>"#,
-                cy - 4.0,
-                cy - 5.0,
-                escape(&r.label),
-                sidebar - 48.0,
-                cy - 6.0,
-                sidebar - 31.0,
-                cy - 6.0
-            ));
-        }
-        // clip の名前だけは DOM に残す。**文字は widget が描けない**(グリフ配線が要る)。
-        // 数も clip の数どまりで、key のように素材で増えない。
-        // **surface より後ろへ出す。** DOMの後勝ちで、先に出すと widget に覆われる。
+        let y = rows_top + i as f64 * ROW_H;
         if r.property.is_none() {
             if let (Some(start), Some(end)) = (r.start, r.end) {
                 if end > start {
                     labels.push_str(&format!(
-                        r#"<div class="barlabel" style="left:{}px;top:{}px">{}</div>"#,
-                        geometry.x_at(start) + 6.0,
+                        r#"<div class="barlabel" style="left:{}%;top:{}px">{}</div>"#,
+                        start.clamp(0.0, 1.0) * 100.0,
                         y + 1.0,
                         escape(&r.label)
                     ));
@@ -226,25 +230,50 @@ fn body(
         }
     }
 
-    // ---- 時間面(密な部分)。中身は custom widget が描く(`surface.rs`) ----
-    // clip と key を DOM ノードにしない。素材の数だけ `resolve` を払うため
-    // (P8実測: DOM 4.0µs/ノード・天井3,600 vs 描画 0.73µs/個・天井20,000)。
-    b.push_str(&format!(
-        r#"<div id="tl-surface" class="tlsurface" style="left:{sidebar}px;top:{}px;width:{}px;height:{}px"></div>"#,
-        geometry.rows_top,
-        geometry.surface_width,
-        (geometry.height - geometry.rows_top).max(0.0)
-    ));
+    if dom_dense_surface {
+        // 参照実装: custom widget昇格前のHTML。座標・class・色をwidget版と揃える。
+        for (index, row) in rows.iter().enumerate() {
+            let y = rows_top + index as f64 * ROW_H + 1.0;
+            if row.property.is_none() {
+                if let (Some(start), Some(end)) = (row.start, row.end) {
+                    if end > start {
+                        let selected = primary == Some(row.layer);
+                        b.push_str(&format!(
+                            r#"<div class="bar{}" style="left:{}%;top:{y}px;width:{}%;background:{}">{}</div>"#,
+                            if selected { " selbar" } else { "" },
+                            start.clamp(0.0, 1.0) * 100.0,
+                            (end - start).clamp(0.0, 1.0) * 100.0,
+                            PALETTE[row.palette_slot],
+                            escape(&row.label),
+                        ));
+                    }
+                }
+            } else if row.property == Some("Position") {
+                for key in &row.keys {
+                    b.push_str(&format!(
+                        r#"<div class="key" style="left:{}%;top:{}px"></div>"#,
+                        key.fraction.clamp(0.0, 1.0) * 100.0,
+                        y + 4.0,
+                    ));
+                }
+            }
+        }
+    } else {
+        // 製品経路: 素材数に比例するDOMを避け、密な面を1 custom widgetで描く。
+        b.push_str(r#"<div id="tl-surface" class="tlsurface"></div>"#);
+    }
     b.push_str(&labels);
 
     // ---- surface 境界線と playhead ----
-    let playhead_x = geometry.x_at(geometry.playhead_fraction(playhead));
+    let playhead_percent = if duration.is_finite() && duration > 0.0 {
+        (playhead.as_seconds_f64() / duration).clamp(0.0, 1.0) * 100.0
+    } else {
+        0.0
+    };
     b.push_str(&format!(
-        r#"<div class="vsep" style="left:{sidebar}px"></div>
-           <div class="ph" style="left:{playhead_x}px"></div>
-           <div class="phhead" style="left:{}px"></div>"#,
-        playhead_x - 4.0
+        r#"<div class="vsep"></div><div class="ph" style="left:{playhead_percent}%"></div><div class="phhead" style="left:{playhead_percent}%"></div>"#,
     ));
+    b.push_str("</div></div>");
     b
 }
 
@@ -271,14 +300,7 @@ mod tests {
     fn sample_html() -> String {
         let document = Document::new_current();
         let projection = project_for_blitz(&document).expect("current document timeline");
-        timeline_html(
-            &document,
-            Some(&projection),
-            None,
-            RationalTime::ZERO,
-            1000.0,
-            460.0,
-        )
+        timeline_html(&document, Some(&projection), None, RationalTime::ZERO)
     }
 
     #[test]
@@ -295,58 +317,43 @@ mod tests {
     fn emits_the_same_class_vocabulary_as_the_probe_mock() {
         let html = sample_html();
         for class in [
-            ".desktop", ".ov", ".ovlabel", ".ovborder", ".ovbar", ".ruler", ".rulerlabel", ".tick",
-            ".ticklabel", ".locator", ".row", ".sel", ".tri", ".dot", ".llabel", ".plabel", ".tg",
-            ".bar", ".selbar", ".key", ".selkey", ".vsep", ".ph", ".phhead",
+            ".desktop",
+            ".ov",
+            ".ovlabel",
+            ".ovborder",
+            ".ovbar",
+            ".ruler",
+            ".rulerlabel",
+            ".tick",
+            ".ticklabel",
+            ".locator",
+            ".row",
+            ".sel",
+            ".tri",
+            ".dot",
+            ".llabel",
+            ".plabel",
+            ".tg",
+            ".bar",
+            ".selbar",
+            ".key",
+            ".selkey",
+            ".vsep",
+            ".ph",
+            ".phhead",
         ] {
             assert!(html.contains(class), "mockのclass {class} が無い");
         }
     }
 
-    /// 出力に現れる `名前:` を全部拾う。CSS宣言もstyle属性も同じ形なので同じ走査で足りる。
-    fn declared_properties(source: &str) -> Vec<String> {
-        let bytes: Vec<char> = source.chars().collect();
-        let mut found = Vec::new();
-        for (index, ch) in bytes.iter().enumerate() {
-            if *ch != ':' {
-                continue;
-            }
-            let mut start = index;
-            while start > 0 && (bytes[start - 1].is_ascii_lowercase() || bytes[start - 1] == '-') {
-                start -= 1;
-            }
-            if start == index {
-                continue;
-            }
-            let name: String = bytes[start..index].iter().collect();
-            if !found.contains(&name) {
-                found.push(name);
-            }
-        }
-        found
-    }
-
-    /// NEGATIVE ORACLE: probeで一度も使っていないCSSプロパティを持ち込まない。
     #[test]
-    fn uses_only_css_properties_proven_in_the_probe() {
-        const PROBE: &str = concat!(
-            include_str!("../../../../spikes/blitz-probe/src/bin/ui_mock.rs"),
-            include_str!("../../../../spikes/blitz-probe/src/bin/timeline_ux.rs"),
-            include_str!("../../../../spikes/blitz-probe/src/bin/browser_panel.rs"),
-            include_str!("../../../../spikes/blitz-probe/src/bin/diff_update.rs"),
-            include_str!("../../../../spikes/blitz-probe/src/bin/offscreen.rs"),
-            include_str!("../../../../spikes/blitz-probe/src/bin/texture_host.rs"),
-            include_str!("../../../../spikes/blitz-probe/src/bin/texture_mode.rs"),
-            include_str!("../../../../spikes/blitz-probe/src/bin/custom_widget.rs"),
-        );
+    fn uses_the_document_viewport_instead_of_baked_panel_dimensions() {
         let html = sample_html();
-        let probe_properties = declared_properties(PROBE);
-        for property in declared_properties(&html) {
-            assert!(
-                probe_properties.contains(&property),
-                "{property} が spikes/blitz-probe で一度も使われていない"
-            );
-        }
+        assert!(html.contains(".desktop { left: 0; top: 0; width: 100%; height: 100%"));
+        assert!(html.contains(".sidebar { left:0; top:0; width:25.5%; height:100%"));
+        assert!(html.contains(".track { left:25.5%; top:0; right:0; height:100%"));
+        assert!(!html.contains("width:1000px"));
+        assert!(!html.contains("height:520px"));
     }
 
     /// `body` に背景色を置くとviewport全面が不透明になり、Stageの上へ重ねられない

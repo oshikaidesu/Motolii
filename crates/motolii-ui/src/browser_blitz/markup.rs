@@ -1,30 +1,14 @@
-//! サムネイル格子のHTML/CSSを組む。
+//! `ui/motolii-rn/src/Browser.tsx` の MEDIA / GRID をそのまま HTML の木へ写す。
 //!
-//! **Blitzはブラウザではない。** JSエンジンは無く、ブラウザで効くCSSが silent に
-//! 効かない事例が実測で出ている(`docs/reviews/2026-08-15-blitz-ui-runtime-probe.md`)。
-//! よってここで使うCSSプロパティは `spikes/blitz-probe/src/bin/browser_panel.rs:102-118`
-//! で実際に効いたものだけに限る:
-//!   margin / padding / width / height / background / font-family / color /
-//!   position / left / top / border / border-bottom / border-color /
-//!   overflow / white-space / font-size / object-fit
-//! セレクタも同ファイルで実証済みの要素・class・`:hover` だけ。
+//! `View` → `div`、`Text` → `span`、`TextInput` / `Pressable` → 見た目だけの `div`。
+//! input、tab切替、選択、drag、Document intent はこの文書に持たない。メディアの
+//! 走査・path解決は既存 `media_library`、縮小画像は `thumbnail.rs` が owner のまま。
 
 use std::path::PathBuf;
 
 use super::library_view::BrowserItem;
 use super::theme;
 
-/// 表示中の選択・ドラッグ状態。意味は「どのcardを強調するか」だけで、
-/// Documentへの影響は持たない。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(super) struct GridHighlight {
-    pub(super) selected: Option<usize>,
-    pub(super) dragging: Option<usize>,
-}
-
-/// テキストノード/属性値へ入れる前の最小escape。
-/// probe は escape していないが、走査対象は利用者のフォルダなので
-/// `&<>"` を含むfile名でmarkupが壊れないようにする。
 fn escape(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     for ch in raw.chars() {
@@ -39,115 +23,98 @@ fn escape(raw: &str) -> String {
     out
 }
 
-/// card の `id` 接頭辞。`interaction.rs` が DOM から index を引くのに使う。
+/// DOM id は表示の identity だけ。Browser hit-test の入口にはしない。
 pub(super) const CARD_ID_PREFIX: &str = "c";
 
-/// 格子1セルの左上座標。**描画専用**。
-/// 当たり判定はこの式を使わず DOM から引く(`interaction::index_at`)。
-pub(super) fn cell_origin(index: usize) -> (f64, f64) {
-    let col = index % theme::COLS;
-    let row = index / theme::COLS;
-    (
-        theme::PAD + col as f64 * (theme::CELL_W + theme::PAD),
-        theme::TOP + row as f64 * (theme::CELL_H + theme::PAD),
-    )
+fn directory_label(items: &[BrowserItem]) -> String {
+    items
+        .first()
+        .and_then(|item| item.path.parent())
+        .and_then(|path| path.file_name())
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "Media".to_owned())
 }
 
-/// `thumbs` は `items` と**同じ長さ・同じ並び**の縮小実体path(`thumbnail.rs`)。
-/// `None` の項目は画像なしで描く(元画像へは戻さない — 戻すと重さの原因が残る)。
+/// Browser.tsx:378-427 の immutable MEDIA / GRID snapshot。
 pub(super) fn build_html(
-    width: u32,
-    height: u32,
-    title: &str,
+    _title: &str,
     items: &[BrowserItem],
     thumbs: &[Option<PathBuf>],
-    highlight: GridHighlight,
 ) -> String {
-    let mut body = String::new();
-    // 罠(b): `body` に背景色を置くと viewport 全面が不透明で塗り潰される
-    // (`blitz-paint-0.3.0-beta.1/src/render.rs:127-160`)。
-    // パネルの地色は body ではなく通常の要素として敷く。
-    body.push_str(r#"<div class="bg"></div>"#);
+    let mut body = String::from(r#"<div class="browser">"#);
+
+    // Browser.tsx:378-379 → chrome.tsx:67-74 PanelHeader。
+    body.push_str(
+        r#"<div class="panelHeader"><span class="panelTitle">Browser</span><span class="panelDetail">MEDIA / CREATE / EFFECTS</span></div>"#,
+    );
+    // Browser.tsx:380-392。表示中の immutable snapshot は MEDIA。
+    body.push_str(
+        r#"<div class="tabRow"><div class="tab tabActive"><span class="tabText">Media</span></div><div class="tab"><span class="tabText">Effects</span></div><div class="tab"><span class="tabText">Create</span></div></div>"#,
+    );
+    // Browser.tsx:393-424。Blitz の既定フォントに無い icon は T/G/L fallback で表す。
+    body.push_str(
+        r#"<div class="searchRow"><div class="search"><span>Search media</span></div><div class="iconButton"><span class="iconText">T</span></div><div class="iconButton iconButtonActive"><span class="iconText">G</span></div><div class="iconButton"><span class="iconText">L</span></div></div>"#,
+    );
+
+    // BrowserResults.tsx:186-266。
+    body.push_str(r#"<div class="discoveryBody"><div class="sourceRail"><span class="railItem effectSelected">All media</span><span class="railHeading">DIRECTORIES</span>"#);
     body.push_str(&format!(
-        r#"<div class="hdr">{} ({}件)</div>"#,
-        escape(title),
+        r#"<span class="railItem">{}</span>"#,
+        escape(&directory_label(items))
+    ));
+    body.push_str(&format!(
+        r#"<span class="railHeading">TYPE</span><span class="railItem">Image</span></div><div class="results"><div class="resultsHeader"><span class="resultTitle">Results</span><span class="panelDetail">{}</span></div>"#,
         items.len()
     ));
-    if items.is_empty() {
-        body.push_str(r#"<div class="empty">画像が見つかりません。</div>"#);
-    }
-    for (index, item) in items.iter().enumerate() {
-        let (x, y) = cell_origin(index);
-        let class = if Some(index) == highlight.dragging {
-            "card drag"
-        } else if Some(index) == highlight.selected {
-            "card sel"
-        } else {
-            "card"
-        };
-        // **元画像ではなく縮小実体を指す。** 元寸を出すとatlasを元解像度で食う
-        // (`thumbnail.rs` / `library_view.rs` の実測)。
-        // blitz-net は file スキームを std::fs::read で処理する(probe P11)。
-        let img = match thumbs.get(index).and_then(|thumb| thumb.as_ref()) {
-            Some(thumb) => format!(
-                r#"<img class="th" src="file://{}" />"#,
-                escape(&thumb.to_string_lossy())
-            ),
-            // 作れなかった項目。画像なしのcardとして描く。
-            None => String::new(),
-        };
-        // `id` は当たり判定の口。`interaction.rs` はこの id を DOM から引くので、
-        // **格子の式を二重に持たなくて済む**(列数を変えても hit が勝手に追随する)。
-        body.push_str(&format!(
-            r#"<div id="{CARD_ID_PREFIX}{index}" class="{class}" style="left:{x}px;top:{y}px">
-                 {img}
-                 <div class="nm">{}</div>
-               </div>"#,
-            escape(&item.name)
-        ));
-    }
 
-    let thumb_w = theme::THUMB_W;
-    let thumb_h = theme::THUMB_H;
-    let name_top = theme::CELL_H - 18.0;
-    let header_h = theme::HEADER_H;
-    let (desktop, surface, surface_hi, surface_lo) = (
-        theme::DESKTOP,
-        theme::SURFACE,
-        theme::SURFACE_HI,
-        theme::SURFACE_LO,
-    );
-    let (contrast, ruler, accent, ink, warn) = (
-        theme::CONTRAST,
-        theme::RULER,
-        theme::ACCENT,
-        theme::INK,
-        theme::PALETTE_4,
-    );
-    let (cell_w, cell_h) = (theme::CELL_W, theme::CELL_H);
+    if items.is_empty() {
+        body.push_str(
+            r#"<div class="emptyPanel"><span class="muted">画像が見つかりません。</span></div>"#,
+        );
+    } else {
+        body.push_str(r#"<div class="resultGrid">"#);
+        for (index, item) in items.iter().enumerate() {
+            let image = match thumbs.get(index).and_then(|thumb| thumb.as_ref()) {
+                Some(thumb) => format!(
+                    r#"<img class="thumb" style="background:{}" src="file://{}" />"#,
+                    theme::MEDIA_COLORS[index % theme::MEDIA_COLORS.len()],
+                    escape(&thumb.to_string_lossy()),
+                ),
+                None => format!(
+                    r#"<div class="thumb" style="background:{}"></div>"#,
+                    theme::MEDIA_COLORS[index % theme::MEDIA_COLORS.len()],
+                ),
+            };
+            // BrowserResults.tsx:215-251。image は既存縮小実体、色面/name/detail は RN source。
+            body.push_str(&format!(
+                r#"<div id="{CARD_ID_PREFIX}{index}" class="browserCard"><div class="browserThumb">{image}</div><span class="effectName">{}</span><span class="effectTags">{}</span></div>"#,
+                escape(&item.name),
+                escape(&item.kind),
+            ));
+        }
+        body.push_str("</div>");
+    }
+    body.push_str("</div></div></div>");
 
     let style = crate::blitz_css::fill(
         &crate::blitz_css::template("browser_blitz/browser.css", include_str!("browser.css")),
         &[
-            ("width", &width.to_string()),
-            ("height", &height.to_string()),
-            ("header_h", &header_h.to_string()),
-            ("cell_w", &cell_w.to_string()),
-            ("cell_h", &cell_h.to_string()),
-            ("thumb_w", &thumb_w.to_string()),
-            ("thumb_h", &thumb_h.to_string()),
-            ("name_top", &name_top.to_string()),
-            ("desktop", desktop),
-            ("surface_hi", surface_hi),
-            ("surface_lo", surface_lo),
-            ("surface", surface),
-            ("contrast", contrast),
-            ("ruler", ruler),
-            ("accent", accent),
-            ("ink", ink),
-            ("warn", warn),
+            ("background", theme::BACKGROUND),
+            ("border", theme::BORDER),
+            ("active", theme::ACTIVE),
+            ("active_background", theme::ACTIVE_BACKGROUND),
+            ("input_background", theme::INPUT_BACKGROUND),
+            ("control_border", theme::CONTROL_BORDER),
+            ("mode_border", theme::MODE_BORDER),
+            ("mode_background", theme::MODE_BACKGROUND),
+            ("rail_background", theme::RAIL_BACKGROUND),
+            ("rail_text", theme::RAIL_TEXT),
+            ("muted", theme::MUTED),
+            ("title", theme::TITLE),
+            ("thumb_border", theme::THUMB_BORDER),
+            ("item_text", theme::ITEM_TEXT),
+            ("item_detail", theme::ITEM_DETAIL),
         ],
     );
-
     format!("<html><head><style>{style}</style></head><body>{body}</body></html>")
 }

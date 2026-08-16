@@ -17,12 +17,58 @@
 
 use anyrender::{PaintScene, Scene};
 use blitz_dom::node::{ComputedStyles, Widget};
-use blitz_traits::events::UiEvent;
+use blitz_traits::events::{UiEvent, BlitzPointerEvent};
+use motolii_doc::{KeyframeId, LayerId};
+use std::sync::{Arc, Mutex};
 use vello_common::kurbo::{Affine, Point, Rect};
 use vello_common::peniko::{Color, Fill};
 
 use super::rows::TimelineRow;
 use super::theme;
+
+/// custom widgetが拾ったTimeline面の入力。意味への翻訳とDocument書込みはhostが担う。
+#[derive(Clone, Default)]
+pub struct TimelineInput {
+    events: Arc<Mutex<Vec<TimelinePointerEvent>>>,
+}
+
+impl TimelineInput {
+    pub fn drain(&self) -> Vec<TimelinePointerEvent> {
+        self.events
+            .lock()
+            .map_or_else(|_| Vec::new(), |mut events| std::mem::take(&mut *events))
+    }
+
+    fn push(&self, event: TimelinePointerEvent) {
+        if let Ok(mut events) = self.events.lock() {
+            events.push(event);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelinePointerPhase {
+    Down,
+    Move,
+    Up,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimelineSurfaceHit {
+    ClipBody { layer: LayerId },
+    ClipLeft { layer: LayerId },
+    ClipRight { layer: LayerId },
+    PositionKey { layer: LayerId, key: KeyframeId },
+    None,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TimelinePointerEvent {
+    pub phase: TimelinePointerPhase,
+    pub hit: TimelineSurfaceHit,
+    /// 現在のviewport内でのtime座標。hostがDocumentのRationalTimeへ変換する。
+    pub time_fraction: f64,
+}
 
 /// `#rrggbb` を色へ。**値の出所は `theme.rs`(CSSと同じ文字列)** で、ここでは決めない。
 /// 読めない文字列は白へ落とす(描画を止めない。色が違えば絵で分かる)。
@@ -42,6 +88,9 @@ pub(super) struct TimelineSurface {
     row_height: f64,
     /// 選択中の clip 行。`html.rs` が出した index をそのまま受ける。
     selected_index: Option<usize>,
+    input: Option<TimelineInput>,
+    width: f64,
+    scale: f64,
 }
 
 impl TimelineSurface {
@@ -49,11 +98,15 @@ impl TimelineSurface {
         rows: Vec<TimelineRow>,
         row_height: f64,
         selected_index: Option<usize>,
+        input: Option<TimelineInput>,
     ) -> Self {
         Self {
             rows,
             row_height,
             selected_index,
+            input,
+            width: 0.0,
+            scale: 1.0,
         }
     }
 }
@@ -62,7 +115,24 @@ impl Widget for TimelineSurface {
     /// 面の中の hit と掴みはここで受ける(C2で配線する)。
     /// **面の中は DOM から見て1ノード**なので、内側の当たり判定は
     /// 描画と同じ式(この file の座標)を共有する。二重持ちにはならない。
-    fn handle_event(&mut self, _event: &UiEvent) {}
+    fn handle_event(&mut self, event: &UiEvent) {
+        let (phase, pointer) = match event {
+            UiEvent::PointerDown(pointer) => (TimelinePointerPhase::Down, pointer),
+            UiEvent::PointerMove(pointer) => (TimelinePointerPhase::Move, pointer),
+            UiEvent::PointerUp(pointer) => (TimelinePointerPhase::Up, pointer),
+            _ => return,
+        };
+        let Some(input) = &self.input else { return };
+        input.push(TimelinePointerEvent {
+            phase,
+            hit: self.hit(pointer),
+            time_fraction: if self.width > 0.0 {
+                (f64::from(pointer.element.x) / self.width).clamp(0.0, 1.0)
+            } else {
+                0.0
+            },
+        });
+    }
 
     fn paint(
         &mut self,
@@ -79,6 +149,9 @@ impl Widget for TimelineSurface {
         // hidpi の面で行がずれる(scale=1 の dump では一致するので気付けない)。
         // 文書側の `Viewport::hidpi_scale` と同じ値がここへ来る。
         let row_height = self.row_height * scale;
+        // EventDriver の座標は CSS px、paint の width は物理px。
+        self.width = width / scale;
+        self.scale = scale;
         // bar の高さは `html.rs` の `.bar` と同じ式(row_height - 4)。
         let bar_h = (row_height - 4.0 * scale).max(1.0);
         let ink = rgb(theme::INK);
@@ -125,8 +198,8 @@ impl Widget for TimelineSurface {
 
             // ---- key ダイヤ ----
             // `.key` は 8x8 を 45° 回した形。同じものを回転行列で描く。
-            for (k, fraction) in row.keys.iter().enumerate() {
-                let cx = fraction.clamp(0.0, 1.0) * width;
+            for (k, key) in row.keys.iter().enumerate() {
+                let cx = key.fraction.clamp(0.0, 1.0) * width;
                 let color = if selected && k == 0 { accent } else { ink };
                 let half = 4.0 * scale;
                 let square = Rect::new(cx - half, cy - half, cx + half, cy + half);
@@ -140,5 +213,47 @@ impl Widget for TimelineSurface {
             }
         }
         scene
+    }
+}
+
+impl TimelineSurface {
+    fn hit(&self, pointer: &BlitzPointerEvent) -> TimelineSurfaceHit {
+        if self.width <= 0.0 {
+            return TimelineSurfaceHit::None;
+        }
+        let x = f64::from(pointer.element.x);
+        let y = f64::from(pointer.element.y);
+        let row_height = self.row_height;
+        if row_height <= 0.0 || y < 0.0 {
+            return TimelineSurfaceHit::None;
+        }
+        let Some(row) = self.rows.get((y / row_height).floor() as usize) else {
+            return TimelineSurfaceHit::None;
+        };
+        if row.property == Some("Position") {
+            let cy = ((y / row_height).floor() + 0.5) * row_height;
+            let half = 4.0;
+            if let Some(key) = row.keys.iter().find(|key| {
+                (x - key.fraction * self.width).abs() + (y - cy).abs() <= half
+            }) {
+                return TimelineSurfaceHit::PositionKey { layer: row.layer, key: key.id };
+            }
+        }
+        let (Some(start), Some(end)) = (row.start, row.end) else {
+            return TimelineSurfaceHit::None;
+        };
+        let x0 = start * self.width;
+        let x1 = end * self.width;
+        if x < x0 || x > x1 {
+            return TimelineSurfaceHit::None;
+        }
+        let edge = 15.0_f64.min((x1 - x0) * 0.25);
+        if x1 - x0 >= 25.0 && x - x0 <= edge {
+            TimelineSurfaceHit::ClipLeft { layer: row.layer }
+        } else if x1 - x0 >= 25.0 && x1 - x <= edge {
+            TimelineSurfaceHit::ClipRight { layer: row.layer }
+        } else {
+            TimelineSurfaceHit::ClipBody { layer: row.layer }
+        }
     }
 }

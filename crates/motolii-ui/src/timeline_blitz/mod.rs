@@ -30,13 +30,14 @@ use crate::timeline_projection::{
     TimelineViewport,
 };
 
-pub use html::timeline_html;
+pub use html::{timeline_html, timeline_html_dom_prototype};
+pub use surface::{TimelineInput, TimelinePointerEvent, TimelinePointerPhase, TimelineSurfaceHit};
 
 /// 時間面の密な部分(clip と key)を描く custom widget を文書へ挿す。
 ///
 /// `timeline_html` が置いた `#tl-surface` の箱へ結ぶ。**この呼び出しをしないと
 /// clip と key は描かれない**(DOM 側には置いていないため)。
-/// 引数は `timeline_html` と同じものを渡すこと — 同じ行と同じ選択から組む。
+/// 引数は `timeline_html` と同じDocument / projection / 選択を渡すこと。
 ///
 /// 挿せなかった場合は `false`。呼び手はそれを絵の欠落として扱う
 /// (勝手に DOM へ戻さない — 二重に描く経路を作らないため)。
@@ -45,16 +46,31 @@ pub fn attach_surface(
     document: &Document,
     projection: Option<&TimelineProjection>,
     primary: Option<motolii_doc::LayerId>,
-    width: f64,
-    height: f64,
+) -> bool {
+    attach_surface_with_input(blitz_document, document, projection, primary, None)
+}
+
+/// `attach_surface` と同じ描画面へ入力の受け口だけを追加する。
+/// hitはcustom widgetが決め、Document更新はhostの既存writerへ渡す。
+pub fn attach_surface_interactive(
+    blitz_document: &mut blitz_html::HtmlDocument,
+    document: &Document,
+    projection: Option<&TimelineProjection>,
+    primary: Option<motolii_doc::LayerId>,
+) -> Option<TimelineInput> {
+    let input = TimelineInput::default();
+    attach_surface_with_input(blitz_document, document, projection, primary, Some(input.clone()))
+        .then_some(input)
+}
+
+fn attach_surface_with_input(
+    blitz_document: &mut blitz_html::HtmlDocument,
+    document: &Document,
+    projection: Option<&TimelineProjection>,
+    primary: Option<motolii_doc::LayerId>,
+    input: Option<TimelineInput>,
 ) -> bool {
     let rows = rows::rows_from_projection(document, projection);
-    let geometry = geometry::TimelineGeometry::new(
-        width,
-        height,
-        rows.len(),
-        document.composition.duration.as_seconds_f64(),
-    );
     let selected_index = primary.as_ref().and_then(|layer| {
         rows.iter()
             .position(|row| row.property.is_none() && row.layer == *layer)
@@ -66,8 +82,9 @@ pub fn attach_surface(
         node_id,
         Box::new(surface::TimelineSurface::new(
             rows,
-            geometry.row_height,
+            theme::ROW_H,
             selected_index,
+            input,
         )),
     );
     true
@@ -101,25 +118,18 @@ mod tests {
     fn renders_the_current_document_timeline_as_a_blitz_document() {
         let document = Document::new_current();
         let projection = project_for_blitz(&document).expect("current document timeline");
-        let html = timeline_html(
-            &document,
-            Some(&projection),
-            None,
-            RationalTime::ZERO,
-            1000.0,
-            460.0,
-        );
+        let html = timeline_html(&document, Some(&projection), None, RationalTime::ZERO);
         assert!(html.starts_with("<html><head><style>"));
         assert!(html.ends_with("</body></html>"));
-        assert!(html.contains("class=\"row\""));
-        assert!(html.contains("class=\"bar\""));
+        assert!(html.contains("class=\"track\""));
+        assert!(html.contains("id=\"tl-surface\""));
     }
 
     /// 投影が無い時に落ちないこと。egui側 rows_from_projection と同じ空扱い。
     #[test]
     fn renders_an_empty_surface_without_a_projection() {
         let document = Document::new_current();
-        let html = timeline_html(&document, None, None, RationalTime::ZERO, 1000.0, 460.0);
+        let html = timeline_html(&document, None, None, RationalTime::ZERO);
         assert!(html.contains("class=\"vsep\""));
         assert!(!html.contains("class=\"row\""));
     }

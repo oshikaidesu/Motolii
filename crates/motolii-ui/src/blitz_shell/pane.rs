@@ -35,8 +35,8 @@
 //! 実際の判定は `tokio::runtime::Handle::try_current()` で行い、
 //! **reactorが無い場合は `net_provider` を渡さずに文書を組む**(panicさせない)。
 //! Timeline / Inspector / chrome の4枚はHTML内に外部リソースを持たないので、
-//! net provider が無くても絵は変わらない。外部リソースを持つのは Browser だけで、
-//! そちらは `BrowserBlitzPanel` が自前で reactor を張る。
+//! net provider が無くても絵は変わらない。外部画像を持つ Browser だけは
+//! `BrowserBlitzPanel` が自前で reactor を張る。
 
 use std::path::PathBuf;
 
@@ -59,14 +59,13 @@ const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 /// 合成は常に等倍(1 texel = 1 物理px)にする。
 const TEXTURE_QUANTUM: u32 = 32;
 
-/// Browserペインだけの量子化粒度。こちらは文書自身の大きさも量子化される
-/// (`BrowserBlitzPanel` は面の大きさを変えられず、作り直すしかないため)。
-/// **切り下げる** — 面より大きい文書を組んで端を切り落とすと格子が欠けるので、
-/// 少し小さい面を左上に等倍で置き、余った帯は余白として残す。
+/// Browser は画像の非同期ロードを持つため、合成先は面より大きくしない。
+/// **切り下げる** — 面より大きい文書を組んで端を切り落とさない。
 const BROWSER_QUANTUM: u32 = 64;
 
-/// Browserの画像が届き終わったと見なすまでの、枚数が増えないフレーム数。
+/// Browser の画像が届き終わったと見なすまでの、枚数が増えないフレーム数。
 const BROWSER_SETTLE_FRAMES: u32 = 10;
+
 
 /// 計測の出力間隔(フレーム)。
 const TRACE_EVERY: u32 = 60;
@@ -173,9 +172,8 @@ impl BlitzPane {
 
         let (device, queue) = (&render_state.device, &render_state.queue);
 
-        // 描く面の大きさ(物理px)。Html系は要求どおり、Browserは切り下げ。
+        // Html pane は要求どおり、Browser は画像面を切り下げて安定させる。
         let (paint_width, paint_height) = match &self.content {
-            // Stage は上で返しているのでここへは来ない。
             Content::Html(_) | Content::Stage(_) => (width, height),
             Content::Browser(_) => (
                 floor_to(width, BROWSER_QUANTUM),
@@ -196,7 +194,12 @@ impl BlitzPane {
             Content::Stage(_) | Content::Browser(_) => (paint_width, paint_height),
         };
 
-        ensure_target(&mut self.target, render_state, texture_width, texture_height);
+        ensure_target(
+            &mut self.target,
+            render_state,
+            texture_width,
+            texture_height,
+        );
         // 直前に作った(か、そのまま生きている)ので必ず在る。
         // 万一無ければ今フレームは描かない — 毎フレームの経路でpanicさせない。
         let Some(target) = self.target.as_ref() else {
@@ -432,7 +435,10 @@ impl StagePane {
 fn stage_document() -> motolii_doc::Document {
     let path = PathBuf::from(TIMELINE_DOC);
     motolii_doc::load_document(&path).unwrap_or_else(|error| {
-        eprintln!("blitz-pane: {} を読めないので空Documentで描く: {error}", path.display());
+        eprintln!(
+            "blitz-pane: {} を読めないので空Documentで描く: {error}",
+            path.display()
+        );
         motolii_doc::Document::new_current()
     })
 }
@@ -442,10 +448,8 @@ fn stage_document() -> motolii_doc::Document {
 struct HtmlPane {
     document: Option<HtmlDocument>,
     surface: Option<BlitzSurface>,
-    /// 文書を組んだ面の大きさ(CSS px)。
-    document_size: (u32, u32),
-    /// 文書を組んだときの倍率。変わったら組み直す(CSS px の意味が変わるため)。
-    document_scale: f64,
+    /// 最後に文書へ渡した viewport。寸法変更は文書の再 parse ではなくここを更新する。
+    viewport: Option<(u32, u32, f64)>,
     /// `BlitzSurface` を作った texture の大きさ。
     surface_size: (u32, u32),
     /// Timelineの投影元。読み直さないように1度だけ持つ。
@@ -469,35 +473,7 @@ impl HtmlPane {
         height: u32,
         scale: f64,
     ) {
-        // 文書は CSS px で組む。texture は物理px のまま。
-        let css = (
-            ((width as f64) / scale).round().max(1.0) as u32,
-            ((height as f64) / scale).round().max(1.0) as u32,
-        );
-        if self.document.is_none() || self.document_size != css || self.document_scale != scale {
-            let html = self.html(kind, css.0, css.1);
-            let mut document = build_document(&html, width, height, scale);
-            // Timeline の clip と key は DOM に無い(`timeline_blitz/surface.rs`)。
-            // ここで挿さないと、行と目盛だけの Timeline になる。
-            if kind == PaneKind::Timeline {
-                let source = self.timeline_document().clone();
-                let projection = project_for_blitz(&source).ok();
-                if !crate::timeline_blitz::attach_surface(
-                    &mut document,
-                    &source,
-                    projection.as_ref(),
-                    None,
-                    css.0 as f64,
-                    css.1 as f64,
-                ) {
-                    eprintln!("blitz-pane: #tl-surface が見つからず Timeline の面を挿せない");
-                }
-            }
-            self.document = Some(document);
-            self.document_size = css;
-            self.document_scale = scale;
-            self.painted = false;
-        }
+        self.ensure_document(kind, width, height, scale);
         // **寸法が変わっただけなら作り直さない。** `BlitzSurface::resize` の doc の
         // とおり、`Renderer` は `RenderSize` を毎回受け取って自分で追随する。
         // 作り直すと画像キャッシュとグリフatlasを毎回捨てることになる。
@@ -549,9 +525,41 @@ impl HtmlPane {
         }
     }
 
-    /// 面の大きさ(**CSS px**)に合わせてHTMLを組む。出所はすべて既存の移植実装。
-    fn html(&mut self, kind: PaneKind, width: u32, height: u32) -> String {
-        let (w, h) = (width as f64, height as f64);
+    fn ensure_document(&mut self, kind: PaneKind, width: u32, height: u32, scale: f64) {
+        let viewport = (width, height, scale);
+        if self.document.is_none() {
+            let html = self.html(kind);
+            let mut document = build_document(&html, width, height, scale);
+            // Timeline の clip と key は DOM に無い(`timeline_blitz/surface.rs`)。
+            // ここで挿さないと、行と目盛だけの Timeline になる。
+            if kind == PaneKind::Timeline {
+                let source = self.timeline_document().clone();
+                let projection = project_for_blitz(&source).ok();
+                if !crate::timeline_blitz::attach_surface(
+                    &mut document,
+                    &source,
+                    projection.as_ref(),
+                    None,
+                ) {
+                    eprintln!("blitz-pane: #tl-surface が見つからず Timeline の面を挿せない");
+                }
+            }
+            self.document = Some(document);
+            self.viewport = Some(viewport);
+            self.painted = false;
+        } else if self.viewport != Some(viewport) {
+            let document = self.document.as_mut().expect("checked above");
+            document.set_viewport(blitz_viewport(width, height, scale));
+            // z-index 付き要素の座標が1レイアウト遅れるため、初回構築時と同じく2回解く。
+            document.resolve(0.0);
+            document.resolve(0.0);
+            self.viewport = Some(viewport);
+            self.painted = false;
+        }
+    }
+
+    /// 面の構造を一度だけ組む。寸法は Document の viewport が持つ。
+    fn html(&mut self, kind: PaneKind) -> String {
         let html = match kind {
             PaneKind::Timeline => {
                 let document = self.timeline_document();
@@ -561,14 +569,12 @@ impl HtmlPane {
                     projection.as_ref(),
                     None,
                     motolii_core::RationalTime::ZERO,
-                    w,
-                    h,
                 )
             }
-            PaneKind::Inspector => inspector_blitz::inspector_html(&inspector_blitz::SAMPLE, w, h),
-            PaneKind::ChromeExport => chrome_blitz::export_html(&chrome_blitz::EXPORT_SAMPLE, w, h),
-            PaneKind::ChromeSettings => chrome_blitz::settings_html(w, h),
-            PaneKind::ChromePanels => chrome_blitz::panels_html(w, h),
+            PaneKind::Inspector => inspector_blitz::inspector_html(&inspector_blitz::SAMPLE),
+            PaneKind::ChromeExport => chrome_blitz::export_html(&chrome_blitz::EXPORT_SAMPLE),
+            PaneKind::ChromeSettings => chrome_blitz::settings_html(),
+            PaneKind::ChromePanels => chrome_blitz::panels_html(),
             // Browser は `BrowserPane`、Stage は `StagePane` が持つ。ここへは来ない。
             PaneKind::Browser | PaneKind::Stage => String::new(),
         };
@@ -641,7 +647,7 @@ impl BrowserPane {
             }
             self.size = css;
             self.scale = scale;
-            // 文書を組み直すので、落ち着き待ちからやり直す。
+            // 新しい viewport の描画が完了するまでだけ、再び落ち着き待ちに入る。
             self.settled = 0;
             self.last_images = usize::MAX;
         }
@@ -706,16 +712,20 @@ fn build_document(html: &str, width: u32, height: u32, scale: f64) -> HtmlDocume
             ..Default::default()
         },
     );
-    document.set_viewport(Viewport {
-        window_size: (width, height),
-        hidpi_scale: scale as f32,
-        zoom: 1.0,
-        color_scheme: ColorScheme::Dark,
-    });
+    document.set_viewport(blitz_viewport(width, height, scale));
     // 2回呼ぶ(罠2)。z-index 付き要素の座標が1レイアウト遅れる。
     document.resolve(0.0);
     document.resolve(0.0);
     document
+}
+
+fn blitz_viewport(width: u32, height: u32, scale: f64) -> Viewport {
+    Viewport {
+        window_size: (width, height),
+        hidpi_scale: scale as f32,
+        zoom: 1.0,
+        color_scheme: ColorScheme::Dark,
+    }
 }
 
 fn ceil_to(value: u32, quantum: u32) -> u32 {
@@ -724,4 +734,33 @@ fn ceil_to(value: u32, quantum: u32) -> u32 {
 
 fn floor_to(value: u32, quantum: u32) -> u32 {
     (value / quantum) * quantum
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resizing_html_panes_reuses_the_document() {
+        for kind in [
+            PaneKind::Timeline,
+            PaneKind::Inspector,
+            PaneKind::ChromeExport,
+            PaneKind::ChromeSettings,
+            PaneKind::ChromePanels,
+        ] {
+            let mut pane = HtmlPane::default();
+            pane.ensure_document(kind, 640, 480, 1.0);
+            let before = pane.document.as_ref().expect("initial document") as *const HtmlDocument;
+
+            pane.ensure_document(kind, 960, 640, 1.0);
+
+            assert_eq!(
+                before,
+                pane.document.as_ref().expect("resized document") as *const HtmlDocument,
+                "{kind:?} recreated its HTML document during resize"
+            );
+            assert_eq!(pane.viewport, Some((960, 640, 1.0)));
+        }
+    }
 }
