@@ -48,7 +48,7 @@ use eframe::egui;
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, Vec2};
 use motolii_core::{Fps, RationalTime};
 use motolii_doc::{
-    collect_layer_ids, find_item_location, Clip, ClipSource, Command, DocKeyframe,
+    collect_layer_ids, CommandError, find_item_location, Clip, ClipSource, Command, DocKeyframe,
     DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, GestureId, Group, ItemEnvelope,
     KeyframeId, LayerId, ParentLocator, Track, TrackItem, Transform2D,
 };
@@ -78,6 +78,8 @@ const MUTE_ON: Color32 = Color32::from_rgb(0x65, 0x3b, 0x34);
 const SOLO_ON: Color32 = Color32::from_rgb(0x66, 0x5b, 0x32);
 /// L(編集禁止)が入っているときの下地
 const LOCK_ON: Color32 = Color32::from_rgb(0x3f, 0x4e, 0x5c);
+/// 親から受けているロック。**自分では外せない**ので弱く出す
+const LOCK_INHERITED: Color32 = Color32::from_rgb(0x2f, 0x37, 0x3d);
 /// **仮のパレット。** 値は `mock_tokens`(HTML/CSS を解いて取り出す)の担当で、
 /// ここで発明した色を正本にしない — 並べて見るための当て馬である。
 const LAYER_COLORS: [Color32; 8] = [
@@ -194,6 +196,39 @@ pub struct LoopRegion {
     pub end: f32,
     /// 帯は引いたまま、効きだけ切れる。**引き直さずに戻せる**
     pub on: bool,
+}
+
+/// 掴んでいるあいだ、毎フレーム同じ3つを聞かれる — ポインタの時刻、端で流すか、
+/// 窓の広さ。**その3つをまとめて1度だけ用意する。**
+///
+/// これを持ち回らないと、掴む物ごとに同じ式(`x_to_time` / `edge_pan_seconds` /
+/// `track_w / span`)が写経で増えていく。実際4箇所で同じ4行が並んでいた。
+#[derive(Debug, Clone, Copy)]
+struct Surface {
+    track_left: f32,
+    track_w: f32,
+    comp: f32,
+    dt: f32,
+}
+
+impl Surface {
+    fn time_at(&self, view: TimelineView, pos_x: f32) -> f32 {
+        view.x_to_time(pos_x, self.track_left, self.track_w)
+    }
+
+    fn px_per_second(&self, view: TimelineView) -> f32 {
+        self.track_w / view.span
+    }
+
+    /// 端まで運んでいるぶんの流れ。**中に居るなら 0** なので呼び手は分岐しない
+    fn edge_pan(&self, view: TimelineView, pos_x: f32) -> TimelineView {
+        let seconds = edge_pan_seconds(pos_x, self.track_left, self.track_w, view.span, self.dt);
+        if seconds == 0.0 {
+            view
+        } else {
+            view.pan(seconds, self.comp)
+        }
+    }
 }
 
 /// ループ帯のどこを掴んだか。
@@ -1085,48 +1120,69 @@ impl Lab {
         }
     }
 
+    /// **準備済みの command を1つ、1 gesture で書く。**
+    ///
+    /// 書けたら `true`。`Ok(None)`(変化なし)は失敗ではないので黙って `false` を返す。
+    /// 落ちたら status に理由を出すので、**呼び手は成功時の言葉だけ持てばよい**。
+    ///
+    /// 「gesture を開く → 3通りに場合分け → 通ったら snapshot を取り直す →
+    /// 落ちたら名前つきで status」は、ここへ来るまで7箇所に写経されていた。
+    fn apply_one<E: std::fmt::Display>(
+        &mut self,
+        what: &str,
+        prepared: Result<Option<Command>, E>,
+    ) -> bool {
+        let gesture = self.writer.begin_gesture();
+        match prepared {
+            Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
+                Ok(()) => {
+                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                    true
+                }
+                Err(error) => {
+                    self.status = format!("{what} rejected: {error}");
+                    false
+                }
+            },
+            Ok(None) => false,
+            Err(error) => {
+                self.status = format!("{what} rejected: {error}");
+                false
+            }
+        }
+    }
+
     /// M / S / L を反転して Document へ書く。**1クリック = 1 `GestureId` = 1 Undo 単位**
     fn toggle_flag(&mut self, layer: LayerId, flag: Flag) {
         let Some((visible, solo, lock)) = item_flags(&self.document, layer) else {
             return;
         };
-        let gesture = self.writer.begin_gesture();
         let prepared = match flag {
             Flag::Mute => self.writer.prepare_set_item_visible(layer, !visible),
             Flag::Solo => self.writer.prepare_set_item_solo(layer, !solo),
             Flag::Lock => self.writer.prepare_set_item_lock(layer, !lock),
         };
-        match prepared {
-            Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
-                Ok(()) => {
-                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
-                    let what = match (flag, visible, solo, lock) {
-                        (Flag::Mute, true, _, _) => "mute",
-                        (Flag::Mute, false, _, _) => "unmute",
-                        (Flag::Solo, _, false, _) => "solo",
-                        (Flag::Solo, _, true, _) => "unsolo",
-                        (Flag::Lock, _, _, false) => "lock",
-                        (Flag::Lock, _, _, true) => "unlock",
-                    };
-                    self.status = format!(
-                        "{} {what}  undo {}",
-                        self.name(layer),
-                        self.writer.undo_len()
-                    );
-                }
-                Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
-            },
-            Ok(None) => {}
-            Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
+        let name = self.name(layer).to_owned();
+        if self.apply_one(&name, prepared) {
+            let what = match (flag, visible, solo, lock) {
+                (Flag::Mute, true, _, _) => "mute",
+                (Flag::Mute, false, _, _) => "unmute",
+                (Flag::Solo, _, false, _) => "solo",
+                (Flag::Solo, _, true, _) => "unsolo",
+                (Flag::Lock, _, _, false) => "lock",
+                (Flag::Lock, _, _, true) => "unlock",
+            };
+            self.status = format!("{name} {what}  undo {}", self.writer.undo_len());
         }
     }
 
-    /// **編集禁止か。** D2 は lock を見ない(評価・描画に影響しないフラグなので)。
-    /// 触らせないのは UI 側の仕事である — ここを通さない経路を作らないこと。
+    /// **効いているロックか。** D2 は lock を見ない(評価・描画に影響しないフラグ
+    /// なので)。触らせないのは UI 側の仕事である — ここを通さない経路を作らないこと。
+    ///
+    /// 親から受けている分も含める(`effective_lock`)。Group を掛けたのに中が
+    /// 触れてしまうのは、ここで各行の `lock` を単体で読んでいたからだった。
     fn is_locked(&self, layer: LayerId) -> bool {
-        item_flags(&self.document, layer)
-            .map(|(_, _, lock)| lock)
-            .unwrap_or(false)
+        effective_lock(&self.document, layer)
     }
 
     fn is_selected(&self, layer: LayerId) -> bool {
@@ -1337,18 +1393,14 @@ impl Lab {
         let Some(t) = seconds_to_time(at.clamp(0.0, comp), fps) else {
             return;
         };
-        let gesture = self.writer.begin_gesture();
         // 既定名は数える。**空の印を置かない** — 名前が無いと構成を指せない
         let name = format!("Locator {}", self.document.locators.len() + 1);
-        let command = self.writer.prepare_add_locator(t, &name);
-        match self.writer.apply_command(gesture, command) {
-            Ok(()) => {
-                refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
-                let index = self.document.locators.len().saturating_sub(1);
-                self.editing_locator = Some((index, name.clone()));
-                self.status = format!("{name} at {at:.2}s  undo {}", self.writer.undo_len());
-            }
-            Err(error) => self.status = format!("rejected: {error}"),
+        let prepared: Result<Option<Command>, CommandError> =
+            Ok(Some(self.writer.prepare_add_locator(t, &name)));
+        if self.apply_one("locator", prepared) {
+            let index = self.document.locators.len().saturating_sub(1);
+            self.editing_locator = Some((index, name.clone()));
+            self.status = format!("{name} at {at:.2}s  undo {}", self.writer.undo_len());
         }
     }
 
@@ -1358,44 +1410,27 @@ impl Lab {
             return;
         };
         let text = text.trim().to_owned();
-        let gesture = self.writer.begin_gesture();
+        // 空にしたら消す。**空の印は印にならない**
         let prepared = if text.is_empty() {
             self.writer.prepare_remove_locator(index).map(Some)
         } else {
-            self.writer
-                .prepare_set_locator_text(index, &text)
-                .map(|c| c)
+            self.writer.prepare_set_locator_text(index, &text)
         };
-        match prepared {
-            Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
-                Ok(()) => {
-                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
-                    self.status = if text.is_empty() {
-                        format!("locator removed  undo {}", self.writer.undo_len())
-                    } else {
-                        format!("locator: {text}  undo {}", self.writer.undo_len())
-                    };
-                }
-                Err(error) => self.status = format!("rejected: {error}"),
-            },
-            Ok(None) => {}
-            Err(error) => self.status = format!("rejected: {error}"),
+        if self.apply_one("locator", prepared) {
+            self.status = if text.is_empty() {
+                format!("locator removed  undo {}", self.writer.undo_len())
+            } else {
+                format!("locator: {text}  undo {}", self.writer.undo_len())
+            };
         }
     }
 
     /// メモを外す
     fn remove_locator(&mut self, index: usize) {
-        let gesture = self.writer.begin_gesture();
-        match self.writer.prepare_remove_locator(index) {
-            Ok(command) => match self.writer.apply_command(gesture, command) {
-                Ok(()) => {
-                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
-                    self.editing_locator = None;
-                    self.status = format!("locator removed  undo {}", self.writer.undo_len());
-                }
-                Err(error) => self.status = format!("rejected: {error}"),
-            },
-            Err(error) => self.status = format!("rejected: {error}"),
+        let prepared = self.writer.prepare_remove_locator(index).map(Some);
+        if self.apply_one("locator", prepared) {
+            self.editing_locator = None;
+            self.status = format!("locator removed  undo {}", self.writer.undo_len());
         }
     }
 
@@ -1440,22 +1475,12 @@ impl Lab {
             self.status = "name cannot be empty".to_owned();
             return;
         }
-        match self.writer.prepare_set_layer_name(layer, &name) {
-            Ok(Some(command)) => {
-                let gesture = self.writer.begin_gesture();
-                match self.writer.apply_command(gesture, command) {
-                    Ok(()) => {
-                        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
-                        // Lab の控えも合わせる。**台帳が正**なので、控えは捨ててもよい
-                        self.names.remove(&layer);
-                        self.status = format!("renamed to {name}  undo {}", self.writer.undo_len());
-                    }
-                    Err(error) => self.status = format!("rejected: {error}"),
-                }
-            }
-            // 同じ名前を打ち直した。**失敗ではない**
-            Ok(None) => {}
-            Err(error) => self.status = format!("rejected: {error}"),
+        let prepared = self.writer.prepare_set_layer_name(layer, &name);
+        // 同じ名前を打ち直したときは何も書かない。**失敗ではない**
+        if self.apply_one("rename", prepared) {
+            // Lab の控えも合わせる。**台帳が正**なので、控えは捨ててもよい
+            self.names.remove(&layer);
+            self.status = format!("renamed to {name}  undo {}", self.writer.undo_len());
         }
     }
 
@@ -1675,20 +1700,9 @@ impl Lab {
         let prepared = self
             .writer
             .prepare_reparent_clip(layer, to.parent, to.index, None);
-        match prepared {
-            Ok(Some(command)) => {
-                let gesture = self.writer.begin_gesture();
-                match self.writer.apply_command(gesture, command) {
-                    Ok(()) => {
-                        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
-                        self.status = format!("moved {name}  undo {}", self.writer.undo_len());
-                    }
-                    Err(error) => self.status = format!("{name} rejected: {error}"),
-                }
-            }
-            // 同じ場所へ落とした。**失敗ではない**
-            Ok(None) => self.status = format!("{name} stayed"),
-            Err(error) => self.status = format!("{name} rejected: {error}"),
+        // 同じ場所へ落としたときは何も書かない。**失敗ではない**
+        if self.apply_one(&name, prepared) {
+            self.status = format!("moved {name}  undo {}", self.writer.undo_len());
         }
     }
 
@@ -2337,6 +2351,14 @@ impl eframe::App for Lab {
                 i.stable_dt,
             )
         });
+        // 掴み物が毎フレーム使う3つ(時刻・端流し・px/秒)を1つにまとめる
+        let surface = Surface {
+            track_left,
+            track_w,
+            comp: comp_seconds,
+            dt,
+        };
+
         if space && self.drag.is_none() {
             self.playing = !self.playing;
             // 終端で押したら頭から。止まったまま何も起きないのが一番困る
@@ -2432,10 +2454,7 @@ impl eframe::App for Lab {
                 self.loop_region.end = end;
                 self.status = format!("loop {start:.2}–{end:.2}s");
                 // 端まで引いたら窓が流れる。**窓の外までループを引ける**
-                let seconds = edge_pan_seconds(pos.x, track_left, track_w, self.view.span, dt);
-                if seconds != 0.0 {
-                    self.view = self.view.pan(seconds, comp_seconds);
-                }
+                self.view = surface.edge_pan(self.view, pos.x);
             }
         }
         if loop_hit.drag_stopped() {
@@ -2547,16 +2566,9 @@ impl eframe::App for Lab {
                         .clamp(0.0, comp_seconds);
                     let at = self.snapped(at, &[], track_w / self.view.span);
                     if let Some(time) = seconds_to_time(at, fps) {
-                        let gesture = self.writer.begin_gesture();
-                        if let Ok(Some(command)) = self.writer.prepare_set_locator_time(index, time) {
-                            if self.writer.apply_command(gesture, command).is_ok() {
-                                refresh_if_stale(
-                                    &self.writer,
-                                    &mut self.document,
-                                    &mut self.revision,
-                                );
-                                self.status = format!("locator {at:.2}s");
-                            }
+                        let prepared = self.writer.prepare_set_locator_time(index, time);
+                        if self.apply_one("locator", prepared) {
+                            self.status = format!("locator {at:.2}s");
                         }
                     }
                 }
@@ -2643,10 +2655,7 @@ impl eframe::App for Lab {
                     .unwrap_or(at);
                 // **掴んだまま端まで運んだら窓が付いてくる。** 窓の中にある時間しか
                 // 指せないと、寄っているときに playhead を遠くへ運べない
-                let seconds = edge_pan_seconds(pos.x, track_left, track_w, self.view.span, dt);
-                if seconds != 0.0 {
-                    self.view = self.view.pan(seconds, comp_seconds);
-                }
+                self.view = surface.edge_pan(self.view, pos.x);
                 self.status = format!("{:.2}s", self.playhead);
             }
         }
@@ -2913,6 +2922,7 @@ impl eframe::App for Lab {
                     // **押下状態は Document から読む。** ボタン側に状態を持たない
                     let (item_visible, item_solo, item_lock) =
                         item_flags(&self.document, row.layer).unwrap_or((true, false, false));
+                    let inherited_lock = effective_lock(&self.document, row.layer) && !item_lock;
                     for (i, (label, flag)) in [("M", Flag::Mute), ("S", Flag::Solo), ("L", Flag::Lock)]
                         .iter()
                         .enumerate()
@@ -2924,8 +2934,13 @@ impl eframe::App for Lab {
                         let on = match flag {
                             Flag::Mute => !item_visible,
                             Flag::Solo => item_solo,
+                            // **自分が掛けた分だけを点ける。** 親から受けている分は
+                            // 下で薄く出す — 押しても外れないものを点灯させない
                             Flag::Lock => item_lock,
                         };
+                        if *flag == Flag::Lock && !item_lock && inherited_lock {
+                            p.rect_filled(b, CornerRadius::ZERO, LOCK_INHERITED);
+                        }
                         let on_color = match flag {
                             Flag::Mute => MUTE_ON,
                             Flag::Solo => SOLO_ON,
@@ -3076,19 +3091,10 @@ impl eframe::App for Lab {
                         }
                         if r.dragged() {
                             if let Some(pos) = r.interact_pointer_pos() {
-                                let at = self.view.x_to_time(pos.x, track_left, track_w).max(0.0);
-                                self.commit_drag_snapped(at, track_w / self.view.span);
+                                let at = surface.time_at(self.view, pos.x).max(0.0);
+                                self.commit_drag_snapped(at, surface.px_per_second(self.view));
                                 // 掴んだまま端まで運んだら窓が流れる(playhead と同じ)
-                                let seconds = edge_pan_seconds(
-                                    pos.x,
-                                    track_left,
-                                    track_w,
-                                    self.view.span,
-                                    dt,
-                                );
-                                if seconds != 0.0 {
-                                    self.view = self.view.pan(seconds, comp_seconds);
-                                }
+                                self.view = surface.edge_pan(self.view, pos.x);
                             }
                         }
                         if r.drag_stopped() {
@@ -3174,18 +3180,9 @@ impl eframe::App for Lab {
                         }
                         if r.dragged() && movable {
                             if let Some(pos) = r.interact_pointer_pos() {
-                                let at = self.view.x_to_time(pos.x, track_left, track_w);
-                                self.commit_drag_snapped(at.max(0.0), track_w / self.view.span);
-                                let seconds = edge_pan_seconds(
-                                    pos.x,
-                                    track_left,
-                                    track_w,
-                                    self.view.span,
-                                    dt,
-                                );
-                                if seconds != 0.0 {
-                                    self.view = self.view.pan(seconds, comp_seconds);
-                                }
+                                let at = surface.time_at(self.view, pos.x).max(0.0);
+                                self.commit_drag_snapped(at, surface.px_per_second(self.view));
+                                self.view = surface.edge_pan(self.view, pos.x);
                             }
                         }
                         if r.drag_stopped() {
@@ -3442,6 +3439,14 @@ impl eframe::App for Lab {
         }
 
         for (layer, flag) in flags {
+            // 親から受けているロックは、自分の L を触っても外れない。**黙らせない**
+            if flag == Flag::Lock
+                && effective_lock(&self.document, layer)
+                && !item_flags(&self.document, layer).map(|(_, _, l)| l).unwrap_or(false)
+            {
+                self.status = format!("{} is locked by a parent", self.name(layer));
+                continue;
+            }
             self.toggle_flag(layer, flag);
         }
 
@@ -3772,6 +3777,37 @@ enum Flag {
     Mute,
     Solo,
     Lock,
+}
+
+/// **効いているロック。** 自分が掛かっているか、**親のどれかが掛かっていれば掛かる**。
+///
+/// Group を掛けたのに中が触れてしまうのは、`ItemEnvelope.lock` を各行で
+/// 単体で読んでいたからである。ロックは「この枝には触るな」という意味なので、
+/// 木を下りながら受け継ぐ。
+fn effective_lock(document: &Document, layer: LayerId) -> bool {
+    fn walk(items: &[TrackItem], layer: LayerId, inherited: bool) -> Option<bool> {
+        for item in items {
+            let env = match item {
+                TrackItem::Clip(c) => &c.envelope,
+                TrackItem::Group(g) => &g.envelope,
+            };
+            let locked = inherited || env.lock;
+            if env.layer_id == layer {
+                return Some(locked);
+            }
+            if let TrackItem::Group(group) = item {
+                if let Some(found) = walk(&group.children, layer, locked) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    document
+        .tracks
+        .iter()
+        .find_map(|track| walk(&track.items, layer, false))
+        .unwrap_or(false)
 }
 
 /// その layer の `visible` / `solo` / `lock`
@@ -5645,5 +5681,39 @@ mod tests {
             before.as_ref(),
             "**他人の付けた色は消えない**。表示の好みが Document を書き換えない"
         );
+    }
+
+    /// **Group を掛けると中も掛かる。** ロックは「この枝に触るな」である。
+    #[test]
+    fn locking_a_group_locks_everything_inside_it() {
+        let mut lab = Lab::new(None);
+        let group = layer_named(&lab.names, "Title scene");
+        let child = layer_named(&lab.names, "Shared left");
+        let outside = layer_named(&lab.names, "Background");
+
+        assert!(!lab.is_locked(child));
+        lab.toggle_flag(group, Flag::Lock);
+
+        assert!(lab.is_locked(group), "{}", lab.status);
+        assert!(lab.is_locked(child), "**子も掛かる**");
+        assert!(!lab.is_locked(outside), "外は掛からない");
+
+        // 子は自分では掛けていない(押しても外せない状態)
+        assert_eq!(
+            item_flags(&lab.document, child).map(|(_, _, l)| l),
+            Some(false),
+            "自分の lock は false のまま — 受けているだけ"
+        );
+
+        // 子を消せない・動かせない
+        let items_before = movable_clips(&lab.document, group).len();
+        lab.selected = vec![child];
+        lab.delete_selected();
+        assert!(find_item(&lab.document, child).is_some(), "子は消えない");
+        assert_eq!(movable_clips(&lab.document, group).len(), items_before);
+
+        // 親を外せば子も触れる
+        lab.toggle_flag(group, Flag::Lock);
+        assert!(!lab.is_locked(child), "親を外せば子も自由");
     }
 }
