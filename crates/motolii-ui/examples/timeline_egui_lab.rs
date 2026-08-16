@@ -777,14 +777,19 @@ fn hold_cursor(hold: &Option<Hold>) -> Option<egui::CursorIcon> {
             Grab::Reorder { .. } => egui::CursorIcon::Grabbing,
         }),
         Some(Hold::Locator { .. }) => Some(egui::CursorIcon::Grabbing),
-        Some(Hold::Loop(grab)) => Some(match grab {
-            LoopGrab::In { .. } | LoopGrab::Out { .. } => egui::CursorIcon::ResizeHorizontal,
-            LoopGrab::Move { .. } => egui::CursorIcon::Grabbing,
-            LoopGrab::New { .. } => egui::CursorIcon::Crosshair,
-        }),
+        Some(Hold::Loop(grab)) => Some(loop_grab_cursor(grab)),
         Some(Hold::Nav(_)) => Some(egui::CursorIcon::Grabbing),
         Some(Hold::Marquee { .. }) => Some(egui::CursorIcon::Crosshair),
         None => None,
+    }
+}
+
+/// ループ帯の掴み方に対応する手の形。**触れているときも掴んでいるときも同じ表**
+fn loop_grab_cursor(grab: &LoopGrab) -> egui::CursorIcon {
+    match grab {
+        LoopGrab::In { .. } | LoopGrab::Out { .. } => egui::CursorIcon::ResizeHorizontal,
+        LoopGrab::Move { .. } => egui::CursorIcon::Grabbing,
+        LoopGrab::New { .. } => egui::CursorIcon::Crosshair,
     }
 }
 
@@ -2587,15 +2592,10 @@ impl eframe::App for Lab {
         let loop_x1 = self.view.time_to_x(self.loop_region.end, track_left, track_w);
         let loop_hit = ui.interact(loop_lane, ui.id().with("loop"), Sense::click_and_drag());
         if let Some(pos) = loop_hit.hover_pos() {
-            let icon = if (pos.x - loop_x0).abs() <= LOOP_GRAB || (pos.x - loop_x1).abs() <= LOOP_GRAB
-            {
-                egui::CursorIcon::ResizeHorizontal
-            } else if pos.x > loop_x0 && pos.x < loop_x1 {
-                egui::CursorIcon::Grab
-            } else {
-                egui::CursorIcon::Crosshair
-            };
-            self.hover_cursor(&ctx, loop_hit.hovered(), icon);
+            // **掴み判定そのものから形を出す。** 別に書くと、片方だけ直したときに
+            // 手の形と起きることがずれる
+            let would = loop_grab_for(pos.x, loop_x0, loop_x1, 0.0, self.loop_region);
+            self.hover_cursor(&ctx, loop_hit.hovered(), loop_grab_cursor(&would));
         }
         if loop_hit.drag_started() {
             if let Some(pos) = loop_hit.interact_pointer_pos() {
@@ -3327,12 +3327,18 @@ impl eframe::App for Lab {
                             }
                         }
                         // 手の形で、掴んだら何になるかを先に言う。**同じ `part` から**
+                        // **押しても何も起きない所では、掴める形を出さない。**
+                        // ロック中は断るのだから、手の形も断る
                         self.hover_cursor(
                             &ctx,
-                            r.hovered(),
-                            match part.unwrap_or(BarPart::Body) {
-                                BarPart::Body => egui::CursorIcon::Grab,
-                                _ => egui::CursorIcon::ResizeHorizontal,
+                            r.hovered() && bar_hit.width() > 0.5,
+                            if self.is_locked(row.layer) {
+                                egui::CursorIcon::NotAllowed
+                            } else {
+                                match part.unwrap_or(BarPart::Body) {
+                                    BarPart::Body => egui::CursorIcon::Grab,
+                                    _ => egui::CursorIcon::ResizeHorizontal,
+                                }
                             },
                         );
                         // **畳んである Group は、中身をその bar の中に出す。**
@@ -3445,7 +3451,15 @@ impl eframe::App for Lab {
                             },
                             Stroke::new(1.0, Color32::from_rgb(0xee, 0xee, 0xee)),
                         ));
-                        self.hover_cursor(&ctx, r.hovered(), egui::CursorIcon::Grab);
+                        self.hover_cursor(
+                            &ctx,
+                            r.hovered() && hit.width() > 0.5,
+                            if self.is_locked(row.layer) {
+                                egui::CursorIcon::NotAllowed
+                            } else {
+                                egui::CursorIcon::Grab
+                            },
+                        );
                         // キーもクリックで選ぶ。**Delete の対象がここで決まる**
                         if r.clicked() {
                             let additive = ctx.input(|i| i.modifiers.command);
@@ -6275,6 +6289,45 @@ mod tests {
             }))),
             Some(CursorIcon::Grabbing),
             "ループごと動かすなら掴み手"
+        );
+    }
+
+    /// **横矢印はトリムのときだけ。** 掴み判定と同じ表から出す。
+    #[test]
+    fn the_resize_arrow_only_appears_where_something_resizes() {
+        use egui::CursorIcon;
+        let region = LoopRegion { start: 2.0, end: 6.0, on: true };
+        let (x0, x1) = (300.0_f32, 700.0_f32);
+
+        // ループ帯: 端だけが横矢印。中は掴み手、外は十字(新しく引く)
+        let icon_at = |x: f32| loop_grab_cursor(&loop_grab_for(x, x0, x1, 0.0, region));
+        assert_eq!(icon_at(x0), CursorIcon::ResizeHorizontal);
+        assert_eq!(icon_at(x1), CursorIcon::ResizeHorizontal);
+        assert_eq!(icon_at((x0 + x1) * 0.5), CursorIcon::Grabbing, "中は動かす");
+        assert_eq!(icon_at(x1 + 60.0), CursorIcon::Crosshair, "外は引く");
+
+        // clip: 端だけが横矢印。Group と細い clip には端が無いので出ない
+        let bar = Rect::from_min_max(egui::pos2(100.0, 0.0), egui::pos2(400.0, 20.0));
+        let bar_icon = |x: f32, is_group: bool| match classify_bar_edge(bar, x, is_group) {
+            BarPart::Body => CursorIcon::Grab,
+            _ => CursorIcon::ResizeHorizontal,
+        };
+        assert_eq!(bar_icon(101.0, false), CursorIcon::ResizeHorizontal);
+        assert_eq!(bar_icon(250.0, false), CursorIcon::Grab);
+        assert_eq!(
+            bar_icon(101.0, true),
+            CursorIcon::Grab,
+            "**Group の端では横矢印を出さない**(伸ばせないので)"
+        );
+
+        let thin = Rect::from_min_max(egui::pos2(100.0, 0.0), egui::pos2(112.0, 20.0));
+        assert_eq!(
+            match classify_bar_edge(thin, 101.0, false) {
+                BarPart::Body => CursorIcon::Grab,
+                _ => CursorIcon::ResizeHorizontal,
+            },
+            CursorIcon::Grab,
+            "**細い clip の端でも出さない**(伸ばす代わりに動かせる)"
         );
     }
 }
