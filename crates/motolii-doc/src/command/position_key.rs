@@ -3,10 +3,13 @@ use motolii_core::RationalTime;
 use crate::doc_keyframe::{validate_interp, DocKeyframe};
 use crate::doc_value::DocValue;
 use crate::param::DocParam;
-use crate::position_key_prepare::{deterministic_new_position, deterministic_remove_position};
+use crate::position_key_prepare::{
+    deterministic_new_position, deterministic_remove_position, transform_param, transform_param_mut,
+};
 use crate::stable_id::{KeyframeId, StableIdReservation};
 use crate::{Document, LayerId};
 
+use super::ids::ScalarPropertyId;
 use super::locate::{find_envelope, find_envelope_mut};
 use super::reservation::{
     apply_reservation_commit, swap_if_valid, validate_reservation_for_apply,
@@ -260,6 +263,94 @@ pub(super) fn apply_set_position_key_time(
     swap_if_valid(doc, next)
 }
 
+pub(super) fn apply_set_transform_param_key_time(
+    doc: &mut Document,
+    target: LayerId,
+    property: &ScalarPropertyId,
+    key: KeyframeId,
+    old: RationalTime,
+    new: RationalTime,
+) -> Result<(), CommandError> {
+    transform_param_key_time_for_command(doc, target, property, key, Some(old), new)?;
+    if old == new {
+        return Ok(());
+    }
+
+    let mut next = doc.clone();
+    let layer = target.get();
+    let env = find_envelope_mut(&mut next, target)?;
+    let param = transform_param_mut(env, property)
+        .ok_or(CommandError::TransformParamKeyTimeSourceUnsupported { layer })?;
+    let DocParam::Keyframes(track) = param else {
+        return Err(CommandError::TransformParamKeyTimeSourceUnsupported { layer });
+    };
+    let removed = track
+        .remove_by_id(key)
+        .ok_or(CommandError::TransformParamKeyTimeNotFound {
+            layer,
+            key_id: key.get(),
+        })?;
+    track.insert(DocKeyframe {
+        id: removed.id,
+        t: new,
+        value: removed.value,
+        interp: removed.interp,
+    });
+    swap_if_valid(doc, next)
+}
+
+/// `SetTransformParamKeyTime` の CAS/時刻検証。`position_key_time_for_command` の鏡映で、
+/// 対象paramだけが `transform_param` 経由に替わる。
+pub(crate) fn transform_param_key_time_for_command(
+    doc: &Document,
+    target: LayerId,
+    property: &ScalarPropertyId,
+    key: KeyframeId,
+    expected_old: Option<RationalTime>,
+    new: RationalTime,
+) -> Result<RationalTime, CommandError> {
+    let layer = target.get();
+    if new < RationalTime::ZERO {
+        return Err(CommandError::TransformParamKeyTimeNegative {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    let param = transform_param(env, property)
+        .ok_or(CommandError::TransformParamKeyTimeSourceUnsupported { layer })?;
+    let DocParam::Keyframes(track) = param else {
+        return Err(CommandError::TransformParamKeyTimeSourceUnsupported { layer });
+    };
+    if track.keys().is_empty() {
+        return Err(CommandError::TransformParamKeyTimeSourceUnsupported { layer });
+    }
+    let current = track
+        .get_by_id(key)
+        .ok_or(CommandError::TransformParamKeyTimeNotFound {
+            layer,
+            key_id: key.get(),
+        })?;
+    if expected_old.is_some_and(|old| old != current.t) {
+        return Err(CommandError::TransformParamKeyTimePayloadMismatch {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    if new != current.t
+        && track
+            .keys()
+            .iter()
+            .any(|candidate| candidate.id != key && candidate.t == new)
+    {
+        return Err(CommandError::TransformParamKeyTimeOccupied {
+            layer,
+            key_id: key.get(),
+        });
+    }
+    Ok(current.t)
+}
+
 fn position_key_time_for_command(
     doc: &Document,
     target: LayerId,
@@ -493,3 +584,7 @@ fn validate_remove_position_key_payload(
 #[cfg(test)]
 #[path = "position_key_time_tests.rs"]
 mod set_position_key_time_tests;
+
+#[cfg(test)]
+#[path = "transform_param_key_time_tests.rs"]
+mod set_transform_param_key_time_tests;

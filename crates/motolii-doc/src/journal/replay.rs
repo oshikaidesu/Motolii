@@ -820,6 +820,79 @@ mod replay_tests {
     }
 
     #[test]
+    fn transform_param_key_time_replay_round_trips_and_inverse_restores() {
+        let (base, layer) = empty_clip_base();
+        let crate::AddTransformParamKeyPreparation::Prepared { key_id, command } =
+            crate::position_key_prepare::prepare_add_transform_param_key(
+                &base,
+                layer,
+                ScalarPropertyId::Scale,
+                RationalTime::from_seconds(2),
+            )
+            .unwrap()
+        else {
+            panic!("const scale must prepare a key");
+        };
+        let mut keyed = base;
+        command.apply(&mut keyed).unwrap();
+        let command = crate::position_key_prepare::prepare_set_transform_param_key_time(
+            &keyed,
+            layer,
+            ScalarPropertyId::Scale,
+            key_id,
+            RationalTime::from_seconds(3),
+        )
+        .unwrap()
+        .unwrap();
+        let command_value = serde_json::to_value(&command).unwrap();
+        let serde_json::Value::Object(command_object) = &command_value else {
+            panic!("command must use the externally tagged serde shape");
+        };
+        let serde_json::Value::Object(fields) = command_object
+            .get("SetTransformParamKeyTime")
+            .expect("dedicated command tag")
+        else {
+            panic!("SetTransformParamKeyTime payload must be an object");
+        };
+        for field in ["target", "property", "key", "old", "new"] {
+            assert!(fields.contains_key(field), "missing {field}");
+        }
+        assert_eq!(
+            JournalEdit::new(command.clone()).format_version,
+            V3_EDIT_FORMAT_VERSION
+        );
+
+        let mut live = keyed.clone();
+        let counter = live.next_stable_id.peek_next();
+        command.apply(&mut live).unwrap();
+        let scale = &crate::command::find_envelope(&live, layer)
+            .unwrap()
+            .transform
+            .scale;
+        let DocParam::Keyframes(track) = scale else {
+            panic!("replayed scale must remain keyframed");
+        };
+        let edited = track.get_by_id(key_id).unwrap();
+        assert_eq!(edited.t, RationalTime::from_seconds(3));
+        assert_eq!(edited.interp, motolii_eval::Interp::Linear);
+        assert_eq!(live.next_stable_id.peek_next(), counter);
+
+        let payload = edit_payload(&JournalEdit::new(command.clone())).unwrap();
+        let decoded = decode_edit(&payload).unwrap();
+        let mut replayed = keyed.clone();
+        apply_decoded_edit(&mut replayed, &decoded).unwrap();
+        assert_eq!(replayed, live);
+
+        let mut undone = live.clone();
+        command.inverse().apply(&mut undone).unwrap();
+        assert_eq!(undone, keyed);
+
+        let before_stale = serde_json::to_vec(&live).unwrap();
+        assert!(command.apply(&mut live).is_err());
+        assert_eq!(serde_json::to_vec(&live).unwrap(), before_stale);
+    }
+
+    #[test]
     fn v2_position_key_interp_committed_wal_replays_like_live_apply() {
         let dir = unique_dir("position-key-interp-wal");
         let path = dir.join("proj.json");

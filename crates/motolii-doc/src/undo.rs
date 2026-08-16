@@ -152,6 +152,22 @@ fn merge_pair(first: &Command, second: Command) -> Command {
             new,
         },
         (
+            Command::SetTransformParamKeyTime {
+                target,
+                property,
+                key,
+                old,
+                ..
+            },
+            Command::SetTransformParamKeyTime { new, .. },
+        ) => Command::SetTransformParamKeyTime {
+            target,
+            property,
+            key,
+            old,
+            new,
+        },
+        (
             Command::TrimClipIn {
                 target,
                 old_start,

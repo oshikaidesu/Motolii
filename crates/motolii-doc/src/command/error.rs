@@ -96,6 +96,16 @@ pub enum CommandError {
     PositionKeyTimeOccupied { layer: u64, key_id: u64 },
     #[error("position key time for key {key_id} on layer {layer} must be >= 0")]
     PositionKeyTimeNegative { layer: u64, key_id: u64 },
+    #[error("transform param key time source unsupported for layer {layer}")]
+    TransformParamKeyTimeSourceUnsupported { layer: u64 },
+    #[error("transform param key time not found for key {key_id} on layer {layer}")]
+    TransformParamKeyTimeNotFound { layer: u64, key_id: u64 },
+    #[error("transform param key time payload mismatch for key {key_id} on layer {layer}")]
+    TransformParamKeyTimePayloadMismatch { layer: u64, key_id: u64 },
+    #[error("transform param key time {key_id} on layer {layer} would collide at destination")]
+    TransformParamKeyTimeOccupied { layer: u64, key_id: u64 },
+    #[error("transform param key time for key {key_id} on layer {layer} must be >= 0")]
+    TransformParamKeyTimeNegative { layer: u64, key_id: u64 },
     #[error("effect use {use_id} not found in document")]
     EffectUseNotFound { use_id: u64 },
     #[error(

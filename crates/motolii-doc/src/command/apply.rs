@@ -20,8 +20,8 @@ use super::locate::{
 };
 use super::position_key::{
     apply_add_position_key, apply_remove_position_key, apply_set_position_key_interp,
-    apply_set_position_key_time, apply_set_position_key_value, undo_add_position_key,
-    undo_remove_position_key,
+    apply_set_position_key_time, apply_set_position_key_value,
+    apply_set_transform_param_key_time, undo_add_position_key, undo_remove_position_key,
 };
 use super::split::{apply_split_clip, apply_unsplit_clip};
 use super::track_item::{apply_add_track_item, apply_remove_track_item};
@@ -250,6 +250,13 @@ impl Command {
                 old,
                 new,
             } => apply_set_position_key_time(doc, *target, *key, *old, *new),
+            Command::SetTransformParamKeyTime {
+                target,
+                property,
+                key,
+                old,
+                new,
+            } => apply_set_transform_param_key_time(doc, *target, property, *key, *old, *new),
             Command::RemovePositionKey {
                 target,
                 old_value,

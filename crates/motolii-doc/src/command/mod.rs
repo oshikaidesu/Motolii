@@ -48,5 +48,6 @@ pub(crate) use locate::{
 };
 pub(crate) use position_key::{
     prepare_set_position_key_interp, prepare_set_position_key_time, prepare_set_position_key_value,
+    transform_param_key_time_for_command,
 };
 pub(crate) use reservation::validate_reservation_closure;

@@ -44,6 +44,9 @@ pub enum PropertyId {
     PositionKeyInterp(KeyframeId),
     PositionKeyValue(KeyframeId),
     PositionKeyTime(KeyframeId),
+    /// Scale / Rotation / Opacity key の時刻。KeyframeIdはdocument内で一意なので
+    /// `PositionKeyTime`と同じくkeyだけでmerge対象を決められる。
+    TransformParamKeyTime(KeyframeId),
     ClipStart,
     ClipIn,
     ClipOut,

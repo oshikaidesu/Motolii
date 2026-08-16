@@ -189,6 +189,16 @@ pub enum Command {
         old: RationalTime,
         new: RationalTime,
     },
+    /// Scale / Rotation / Opacity の既存keyの時刻だけを移す。`SetPositionKeyTime`の鏡映で、
+    /// `property`セレクタの範囲は`prepare_add_transform_param_key`族と同じ。
+    /// Positionは`SetPositionKeyTime`が担当し続ける(こちらでは受け付けない)。
+    SetTransformParamKeyTime {
+        target: LayerId,
+        property: ScalarPropertyId,
+        key: KeyframeId,
+        old: RationalTime,
+        new: RationalTime,
+    },
     RemovePositionKey {
         target: LayerId,
         old_value: DocParam,

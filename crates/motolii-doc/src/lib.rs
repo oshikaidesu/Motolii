@@ -107,9 +107,10 @@ pub use plugin_resolution::{
 };
 pub use position_key_prepare::{
     prepare_add_transform_param_key, prepare_remove_transform_param_key,
-    prepare_set_transform_param_key_value, AddPositionKeyPreparation, AddPositionKeyPrepareError,
-    AddTransformParamKeyPreparation, AddTransformParamKeyPrepareError,
-    RemovePositionKeyPrepareError, RemoveTransformParamKeyPrepareError,
+    prepare_set_transform_param_key_time, prepare_set_transform_param_key_value,
+    AddPositionKeyPreparation, AddPositionKeyPrepareError, AddTransformParamKeyPreparation,
+    AddTransformParamKeyPrepareError, RemovePositionKeyPrepareError,
+    RemoveTransformParamKeyPrepareError, SetTransformParamKeyTimePrepareError,
     SetTransformParamKeyValuePrepareError,
 };
 pub use schema::{
@@ -703,6 +704,20 @@ impl DocumentWriter {
         new: DocValue,
     ) -> Result<Option<Command>, SetTransformParamKeyValuePrepareError> {
         position_key_prepare::prepare_set_transform_param_key_value(
+            &self.doc, target, property, key, new,
+        )
+    }
+
+    /// Scale / Rotation / Opacity の既存keyの時刻だけを移す command を準備する。same-time は `None`。
+    /// Positionは `prepare_set_position_key_time` を使う。
+    pub fn prepare_set_transform_param_key_time(
+        &self,
+        target: LayerId,
+        property: ScalarPropertyId,
+        key: KeyframeId,
+        new: RationalTime,
+    ) -> Result<Option<Command>, SetTransformParamKeyTimePrepareError> {
+        position_key_prepare::prepare_set_transform_param_key_time(
             &self.doc, target, property, key, new,
         )
     }

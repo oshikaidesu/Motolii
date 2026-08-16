@@ -161,6 +161,32 @@ fn transform_key_target(
     }
 }
 
+/// `transform_key_target`が受ける property の live DocParam を借りる。範囲外は `None`。
+pub(crate) fn transform_param<'a>(
+    env: &'a ItemEnvelope,
+    property: &ScalarPropertyId,
+) -> Option<&'a DocParam> {
+    match property {
+        ScalarPropertyId::Scale => Some(&env.transform.scale),
+        ScalarPropertyId::Rotation => Some(&env.transform.rotation),
+        ScalarPropertyId::Opacity => Some(&env.opacity),
+        _ => None,
+    }
+}
+
+/// `transform_param` の可変版。受ける property 集合は同じ。
+pub(crate) fn transform_param_mut<'a>(
+    env: &'a mut ItemEnvelope,
+    property: &ScalarPropertyId,
+) -> Option<&'a mut DocParam> {
+    match property {
+        ScalarPropertyId::Scale => Some(&mut env.transform.scale),
+        ScalarPropertyId::Rotation => Some(&mut env.transform.rotation),
+        ScalarPropertyId::Opacity => Some(&mut env.opacity),
+        _ => None,
+    }
+}
+
 fn clone_transform_param(env: &ItemEnvelope, property: &ScalarPropertyId) -> DocParam {
     match property {
         ScalarPropertyId::Scale => env.transform.scale.clone(),
@@ -326,6 +352,42 @@ pub fn prepare_set_transform_param_key_value(
         property,
         old_value,
         new_value: DocParam::Keyframes(new_track),
+    }))
+}
+
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum SetTransformParamKeyTimePrepareError {
+    #[error(transparent)]
+    Command(#[from] CommandError),
+    #[error("transform param {property:?} is not a Scale/Rotation/Opacity key target")]
+    PropertyUnsupported { property: ScalarPropertyId },
+}
+
+/// Scale / Rotation / Opacity の既存keyの時刻だけを移す command を構築する。
+/// same-time は `None`(変化なしは失敗ではない)。key不在・CAS不一致・移動先占有・負時刻は
+/// `SetPositionKeyTime` と同じ検証で typed 拒否する。
+pub fn prepare_set_transform_param_key_time(
+    doc: &Document,
+    target: LayerId,
+    property: ScalarPropertyId,
+    key: KeyframeId,
+    new: RationalTime,
+) -> Result<Option<Command>, SetTransformParamKeyTimePrepareError> {
+    transform_key_target(&property).map_err(|property| {
+        SetTransformParamKeyTimePrepareError::PropertyUnsupported { property }
+    })?;
+    let old = crate::command::transform_param_key_time_for_command(
+        doc, target, &property, key, None, new,
+    )?;
+    if new == old {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetTransformParamKeyTime {
+        target,
+        property,
+        key,
+        old,
+        new,
     }))
 }
 

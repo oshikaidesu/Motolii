@@ -267,6 +267,19 @@ impl Command {
                 old: new,
                 new: old,
             },
+            Command::SetTransformParamKeyTime {
+                target,
+                property,
+                key,
+                old,
+                new,
+            } => Command::SetTransformParamKeyTime {
+                target,
+                property,
+                key,
+                old: new,
+                new: old,
+            },
             Command::RemovePositionKey {
                 target,
                 old_value,

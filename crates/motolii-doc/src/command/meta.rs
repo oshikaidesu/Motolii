@@ -39,6 +39,9 @@ impl Command {
             Command::SetPositionKeyInterp { .. } => CommandKind::SetPositionKeyInterp,
             Command::SetPositionKeyValue { .. } => CommandKind::SetPositionKeyValue,
             Command::SetPositionKeyTime { .. } => CommandKind::SetPositionKeyTime,
+            // transform param key族(add/remove/value)は`SetProperty` kindで揃っている。
+            // 時刻移動だけ別kindにするとmerge key族が割れるので同じkindへ載せる。
+            Command::SetTransformParamKeyTime { .. } => CommandKind::SetProperty,
             Command::RemovePositionKey { .. } | Command::UndoRemovePositionKey { .. } => {
                 CommandKind::RemovePositionKey
             }
@@ -67,6 +70,7 @@ impl Command {
             | Command::SetPositionKeyInterp { target, .. }
             | Command::SetPositionKeyValue { target, .. }
             | Command::SetPositionKeyTime { target, .. }
+            | Command::SetTransformParamKeyTime { target, .. }
             | Command::SetClipStart { target, .. }
             | Command::TrimClipIn { target, .. }
             | Command::TrimClipOut { target, .. }
@@ -132,6 +136,9 @@ impl Command {
             Command::SetPositionKeyInterp { key, .. } => PropertyId::PositionKeyInterp(*key),
             Command::SetPositionKeyValue { key, .. } => PropertyId::PositionKeyValue(*key),
             Command::SetPositionKeyTime { key, .. } => PropertyId::PositionKeyTime(*key),
+            Command::SetTransformParamKeyTime { key, .. } => {
+                PropertyId::TransformParamKeyTime(*key)
+            }
             Command::SetAudioComponentEnabled { index, .. } => PropertyId::AudioEnabled(*index),
             Command::SetAudioComponentGain { index, .. } => PropertyId::AudioGain(*index),
             Command::AddTrackItem { .. } | Command::RemoveTrackItem { .. } => PropertyId::ChildList,
@@ -217,6 +224,7 @@ impl Command {
             | Command::SetPositionKeyInterp { .. }
             | Command::SetPositionKeyValue { .. }
             | Command::SetPositionKeyTime { .. }
+            | Command::SetTransformParamKeyTime { .. }
             | Command::SetClipStart { .. }
             | Command::TrimClipIn { .. }
             | Command::TrimClipOut { .. }
