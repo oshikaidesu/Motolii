@@ -75,8 +75,12 @@ const MUTE_ON: Color32 = Color32::from_rgb(0x65, 0x3b, 0x34);
 const SOLO_ON: Color32 = Color32::from_rgb(0x66, 0x5b, 0x32);
 
 const RAIL_W: f32 = 196.0;
+/// 行の高さ(小)。**2026-08-08 決定の「行高は固定・最小20px」の最小側**
 const ROW_H: f32 = 24.0;
 const PROP_H: f32 = 20.0;
+/// 行の高さ(大)。名前と bar を見やすくするだけで、意味は変わらない
+const ROW_H_LARGE: f32 = 34.0;
+const PROP_H_LARGE: f32 = 26.0;
 const HEAD_H: f32 = 34.0;
 const RULER_H: f32 = 27.0;
 /// ルーラが覆う秒数の**初期値**。以後は `TimelineView` が持つ。
@@ -362,6 +366,16 @@ fn band_is_dark(t: f32, step: f32) -> bool {
     (t / step).round() as i64 % 2 != 0
 }
 
+/// タイムコード `M:SS:FF`。**フレーム番号まで出す** — 秒だけだと、
+/// フレームに乗っているかどうかが読めない
+fn timecode(seconds: f32, fps: Fps) -> String {
+    let rate = fps.as_f64() as f32;
+    let total_frames = (seconds * rate).round().max(0.0);
+    let frame = (total_frames % rate).round() as i64;
+    let whole = (total_frames / rate).floor() as i64;
+    format!("{}:{:02}:{:02}", whole / 60, whole % 60, frame)
+}
+
 /// 目盛の文字。**間隔より細かい桁は出さない**
 fn tick_label(t: f32, step: f32) -> String {
     let minutes = (t / 60.0).floor().max(0.0);
@@ -390,6 +404,8 @@ enum MenuAction {
     FitView,
     LoopToSelection,
     ClearLoop,
+    RowHeight(bool),
+    SelectAll,
     Split,
     AddKey(LayerId, ParamRef),
     SetInterp(LayerId, ParamRef, KeyframeId, Interp),
@@ -461,11 +477,11 @@ fn boundary_y(objects: &[(LayerId, f32, f32)], boundary: usize) -> f32 {
 }
 
 /// 行の合計高。縦スクロールの上限はここから出る
-fn content_height(rows: &[TimelineRow]) -> f32 {
+fn content_height(rows: &[TimelineRow], row_h: f32, prop_h: f32) -> f32 {
     rows.iter()
         .map(|r| match r.kind {
-            RowKind::Object => ROW_H,
-            RowKind::Property(_) => PROP_H,
+            RowKind::Object => row_h,
+            RowKind::Property(_) => prop_h,
         })
         .sum()
 }
@@ -678,6 +694,10 @@ struct Lab {
     loop_drag: Option<LoopGrab>,
     /// 吸着するか。**Alt を押しているあいだは切れる**(押しっぱなしで自由に置ける)
     snap: bool,
+    /// 行を高くするか。**意味は変わらない** — 見やすさだけ
+    large_rows: bool,
+    /// 矩形選択を掴んだ場所(面の座標)。掴んでいないときは `None`
+    marquee: Option<(egui::Pos2, egui::Pos2)>,
     /// 再生中か。**Space で入り切りする**。Document には入れない
     playing: bool,
     status: String,
@@ -734,6 +754,8 @@ impl Lab {
             },
             loop_drag: None,
             snap: true,
+            large_rows: false,
+            marquee: None,
             playing: false,
             status: "space=play  L=loop  Cmd+G=group  Del=delete  drag name=reorder".to_owned(),
             shot,
@@ -1533,10 +1555,19 @@ impl Lab {
             *out = Some(MenuAction::ClearLoop);
             ui.close();
         }
+        ui.menu_button("Row height   ▸", |ui| {
+            if ui.button("Small").clicked() {
+                *out = Some(MenuAction::RowHeight(false));
+                ui.close();
+            }
+            if ui.button("Large").clicked() {
+                *out = Some(MenuAction::RowHeight(true));
+                ui.close();
+            }
+        });
         ui.separator();
         seat(ui, "Paste   ⌘V");
         seat(ui, "New layer…");
-        seat(ui, "Select all   ⌘A");
         seat(ui, "Zoom to loop");
     }
 
@@ -1602,6 +1633,11 @@ impl Lab {
                 self.status = "loop off".to_owned();
             }
             MenuAction::Split => self.split_selected(),
+            MenuAction::RowHeight(large) => {
+                self.large_rows = large;
+                self.status = if large { "large rows" } else { "small rows" }.to_owned();
+            }
+            MenuAction::SelectAll => {}
             MenuAction::AddKey(layer, param) => self.add_key_at_playhead(layer, param),
             MenuAction::SetInterp(layer, param, key, interp) => {
                 self.set_key_interp(layer, param, key, interp)
@@ -1773,19 +1809,77 @@ impl eframe::App for Lab {
         // ---- ヘッダ ----
         let head = Rect::from_min_size(full.min, Vec2::new(full.width(), HEAD_H));
         p.rect_filled(head, CornerRadius::ZERO, HEAD_BG);
-        p.text(
-            egui::pos2(head.left() + 10.0, head.center().y),
-            Align2::LEFT_CENTER,
-            "Timeline",
-            FontId::proportional(15.0),
-            INK,
+        // ---- transport ----
+        // **記号は自前で描く。** ▶ や ⏮ はフォントに無くて豆腐になるので、
+        // 三角と縦棒を painter で置く(M/S と同じ、chrome を painter で作る側)
+        let comp_for_head = self.document.composition.duration.as_seconds_f64() as f32;
+        let to_start = Rect::from_center_size(
+            egui::pos2(head.left() + 18.0, head.center().y),
+            Vec2::splat(18.0),
         );
+        let play_hit = Rect::from_center_size(
+            egui::pos2(head.left() + 42.0, head.center().y),
+            Vec2::splat(18.0),
+        );
+        let to_start_r = ui.interact(to_start, ui.id().with("to_start"), Sense::click());
+        let play_r = ui.interact(play_hit, ui.id().with("play"), Sense::click());
+        {
+            let c = to_start.center();
+            let tint = if to_start_r.hovered() { ACCENT } else { INK };
+            p.rect_filled(
+                Rect::from_min_size(egui::pos2(c.x - 5.0, c.y - 5.0), Vec2::new(2.0, 10.0)),
+                CornerRadius::ZERO,
+                tint,
+            );
+            p.add(egui::Shape::convex_polygon(
+                vec![
+                    egui::pos2(c.x + 5.0, c.y - 5.0),
+                    egui::pos2(c.x + 5.0, c.y + 5.0),
+                    egui::pos2(c.x - 2.0, c.y),
+                ],
+                tint,
+                Stroke::NONE,
+            ));
+            let c = play_hit.center();
+            let tint = if play_r.hovered() { ACCENT } else { INK };
+            if self.playing {
+                for dx in [-4.0, 1.0] {
+                    p.rect_filled(
+                        Rect::from_min_size(egui::pos2(c.x + dx, c.y - 5.0), Vec2::new(3.0, 10.0)),
+                        CornerRadius::ZERO,
+                        tint,
+                    );
+                }
+            } else {
+                p.add(egui::Shape::convex_polygon(
+                    vec![
+                        egui::pos2(c.x - 4.0, c.y - 5.0),
+                        egui::pos2(c.x + 6.0, c.y),
+                        egui::pos2(c.x - 4.0, c.y + 5.0),
+                    ],
+                    tint,
+                    Stroke::NONE,
+                ));
+            }
+        }
+        if to_start_r.clicked() {
+            self.playhead = 0.0;
+            self.status = "0:00:00".to_owned();
+        }
+        if play_r.clicked() {
+            self.playing = !self.playing;
+            if self.playing && self.playhead >= comp_for_head - 1e-3 {
+                self.playhead = 0.0;
+            }
+            self.status = if self.playing { "play" } else { "pause" }.to_owned();
+        }
+        // **タイムコードは大きく出す。** いま何フレームに居るかは一番よく見る値
         p.text(
-            egui::pos2(head.left() + 92.0, head.center().y),
+            egui::pos2(head.left() + 62.0, head.center().y),
             Align2::LEFT_CENTER,
-            format!("{} rows", visible.len()),
-            FontId::proportional(9.0),
-            DIM,
+            timecode(self.playhead, self.document.composition.fps),
+            FontId::monospace(13.0),
+            INK,
         );
         p.text(
             egui::pos2(head.right() - 10.0, head.center().y),
@@ -1843,11 +1937,11 @@ impl eframe::App for Lab {
         }
         // いま何秒を見ているか。**窓の広さと粒**もここに出す
         p.text(
-            egui::pos2(head.left() + 150.0, head.center().y),
+            egui::pos2(head.left() + 140.0, head.center().y),
             Align2::LEFT_CENTER,
             format!(
-                "{:.2}s  view {:.2}–{:.2}s  grid {}  loop {}",
-                self.playhead,
+                "{} rows  view {:.2}–{:.2}s  grid {}  loop {}",
+                visible.len(),
                 self.view.start,
                 self.view.start + self.view.span,
                 if step >= 1.0 {
@@ -2064,7 +2158,12 @@ impl eframe::App for Lab {
             egui::pos2(full.left(), ruler.bottom()),
             egui::pos2(full.right(), nav_top),
         );
-        let content_h = content_height(&visible);
+        let (row_h, prop_h) = if self.large_rows {
+            (ROW_H_LARGE, PROP_H_LARGE)
+        } else {
+            (ROW_H, PROP_H)
+        };
+        let content_h = content_height(&visible, row_h, prop_h);
         self.scroll_y = clamp_scroll(self.scroll_y, content_h, rows_view.height());
 
         // **位置を先に確定させる。** 描く順と、並べ替えの落とし先と、線の位置が
@@ -2073,8 +2172,8 @@ impl eframe::App for Lab {
         let mut y = rows_view.top() - self.scroll_y;
         for row in &visible {
             let h = match row.kind {
-                RowKind::Object => ROW_H,
-                RowKind::Property(_) => PROP_H,
+                RowKind::Object => row_h,
+                RowKind::Property(_) => prop_h,
             };
             layout.push((*row, y, h));
             y += h;
@@ -2096,7 +2195,30 @@ impl eframe::App for Lab {
         let mut menu_action: Option<MenuAction> = None;
 
         // 何も無いところの右クリック。**行より先に登録する**ので、行の上では行が勝つ
-        let surface_bg = ui.interact(rows_view, ui.id().with("surface"), Sense::click());
+        let surface_bg = ui.interact(
+            rows_view,
+            ui.id().with("surface"),
+            Sense::click_and_drag(),
+        );
+        // **何も無いところを押したら選択は空になる。** 押した物が選択、が通るなら
+        // 「何も押していない」も通らなければ筋が合わない
+        if surface_bg.clicked() {
+            self.selected.clear();
+            self.selected_keys.clear();
+            self.status = "nothing selected".to_owned();
+        }
+        // 矩形選択。**掴んだ範囲に bar が掛かっている行を選ぶ**
+        if surface_bg.drag_started() {
+            if let Some(pos) = surface_bg.interact_pointer_pos() {
+                self.marquee = Some((pos, pos));
+            }
+        }
+        if surface_bg.dragged() {
+            if let (Some((from, _)), Some(pos)) = (self.marquee, surface_bg.interact_pointer_pos())
+            {
+                self.marquee = Some((from, pos));
+            }
+        }
         {
             let loop_on = self.loop_region.on;
             surface_bg.context_menu(|ui| Lab::surface_menu(ui, loop_on, &mut menu_action));
@@ -2571,6 +2693,34 @@ impl eframe::App for Lab {
             }
         }
 
+        // 掴み終わったら、矩形に掛かった行を選ぶ
+        if surface_bg.drag_stopped() {
+            if let Some((from, to)) = self.marquee.take() {
+                let rect = Rect::from_two_pos(from, to);
+                let mut hit = Vec::new();
+                for (layer, top, h) in &objects {
+                    let row_band = (*top, top + h);
+                    if rect.bottom() < row_band.0 || rect.top() > row_band.1 {
+                        continue;
+                    }
+                    // 時間方向は bar と重なっているか。**行に掛かるだけでは選ばない** —
+                    // 空の時間を囲っただけで選ばれると、掃くたびに全部拾ってしまう
+                    if let Some((start, end)) = clip_span(&self.document, *layer) {
+                        let x0 = self.view.time_to_x(start, track_left, track_w);
+                        let x1 = self.view.time_to_x(end, track_left, track_w);
+                        if rect.right() >= x0 && rect.left() <= x1 {
+                            hit.push(*layer);
+                        }
+                    }
+                }
+                if !hit.is_empty() {
+                    self.selected = hit;
+                    self.selected_keys.clear();
+                    self.status = format!("{} selected", self.selected.len());
+                }
+            }
+        }
+
         // ---- 並べ替え ----
         // **落とし先は境界で決まる。** どの行の上に居るかではなく、
         // どの行と行のあいだに居るか
@@ -2709,6 +2859,13 @@ impl eframe::App for Lab {
                 );
             }
         }
+        // 矩形選択の枠
+        if let Some((from, to)) = self.marquee {
+            let rect = Rect::from_two_pos(from, to);
+            time_p.rect_filled(rect, CornerRadius::ZERO, Color32::from_rgba_unmultiplied(0xe9, 0xcf, 0x72, 24));
+            time_p.rect_stroke(rect, CornerRadius::ZERO, Stroke::new(1.0, ACCENT), StrokeKind::Inside);
+        }
+
         let playhead_x = self.view.time_to_x(self.playhead, track_left, track_w);
         time_p.line_segment(
             [
@@ -2751,13 +2908,38 @@ impl eframe::App for Lab {
             self.toggle_flag(layer, mute);
         }
 
+        // **掴んでいるあいだ、時刻を指の近くに出す。** status 行まで目を運ばせない
+        if self.drag.is_some() || scrub.is_pointer_button_down_on() {
+            if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
+                let at = self.view.x_to_time(pos.x, track_left, track_w);
+                let label = format!("{}", timecode(at.max(0.0), fps));
+                let anchor = egui::pos2(pos.x + 12.0, pos.y - 18.0);
+                let size = Vec2::new(74.0, 16.0);
+                let box_rect = Rect::from_min_size(anchor, size);
+                p.rect_filled(box_rect, CornerRadius::same(2), Color32::from_rgb(0x1c, 0x1c, 0x1c));
+                p.rect_stroke(
+                    box_rect,
+                    CornerRadius::same(2),
+                    Stroke::new(1.0, Color32::from_rgb(0x55, 0x55, 0x55)),
+                    StrokeKind::Inside,
+                );
+                p.text(
+                    box_rect.center(),
+                    Align2::CENTER_CENTER,
+                    label,
+                    FontId::monospace(9.0),
+                    ACCENT,
+                );
+            }
+        }
+
         // メニューから出た指示は、行を回し終えてから1つだけ実行する
         if let Some(action) = menu_action {
             self.run_menu(action, comp_seconds, fps);
         }
 
         // Undo / Redo。1ドラッグ = 1 GestureId なので、掴んで動かした分がまとめて戻る
-        let (undo, redo, escape, duplicate, delete, group, split) = ctx.input(|i| {
+        let (undo, redo, escape, duplicate, delete, group, split, select_all) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && !i.modifiers.shift,
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && i.modifiers.shift,
@@ -2766,6 +2948,7 @@ impl eframe::App for Lab {
                 i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
                 i.key_pressed(egui::Key::G) && i.modifiers.command,
                 i.key_pressed(egui::Key::K) && i.modifiers.command,
+                i.key_pressed(egui::Key::A) && i.modifiers.command,
             )
         });
         // **掴んでいる最中の Esc は、その gesture ごと取り消す。**
@@ -2810,6 +2993,13 @@ impl eframe::App for Lab {
         // Cmd/Ctrl + K。**playhead で切る**
         if split && self.drag.is_none() {
             self.split_selected();
+        }
+
+        // Cmd/Ctrl + A。**見えている行を全部選ぶ**(閉じた Group の中は見えていない)
+        if select_all {
+            self.selected = object_layers.clone();
+            self.selected_keys.clear();
+            self.status = format!("{} selected", self.selected.len());
         }
 
         self.frame += 1;
@@ -3723,7 +3913,14 @@ mod tests {
             .filter(|r| matches!(r.kind, RowKind::Object))
             .count() as f32;
         let props = visible.len() as f32 - objects;
-        assert_eq!(content_height(&visible), objects * ROW_H + props * PROP_H);
+        assert_eq!(
+            content_height(&visible, ROW_H, PROP_H),
+            objects * ROW_H + props * PROP_H
+        );
+        assert!(
+            content_height(&visible, ROW_H_LARGE, PROP_H_LARGE) > content_height(&visible, ROW_H, PROP_H),
+            "大きい行のほうが高い"
+        );
     }
 
     /// **選ばれているものは、掴んだ1つだけでなく全部が同じ差分で動く。**
@@ -4584,5 +4781,17 @@ mod tests {
         // Alt 相当(切ってあるとき)は素通し
         lab.snap = false;
         assert!((lab.snapped(near, &[moving], px_per_second) - near).abs() < 1e-4);
+    }
+
+    /// **タイムコードはフレーム番号まで出す。** 秒だけだと乗っているか読めない。
+    #[test]
+    fn timecode_counts_frames_not_decimals() {
+        let fps = Fps::try_new(30, 1).expect("fps");
+        assert_eq!(timecode(0.0, fps), "0:00:00");
+        assert_eq!(timecode(1.0, fps), "0:01:00");
+        assert_eq!(timecode(1.0 + 6.0 / 30.0, fps), "0:01:06");
+        assert_eq!(timecode(61.0, fps), "1:01:00");
+        // 半端な秒は最寄りのフレームとして出る(表示が実体より細かくならない)
+        assert_eq!(timecode(2.0334, fps), "0:02:01");
     }
 }
