@@ -784,6 +784,51 @@ fn hold_cursor(hold: &Option<Hold>) -> Option<egui::CursorIcon> {
     }
 }
 
+/// クリックの選択規則。**行にもキーにも同じものを使う。**
+///
+/// - 素のクリック … その1つだけにする
+/// - `Cmd`      … 足し引き
+/// - `Shift`    … **直前に触ったもの**からここまで(`order` の並びで数える)
+///
+/// 起点(anchor)は末尾に残す。続けて `Shift` を押しても基準が動かないため。
+/// `order` に無いもの(畳まれて見えていない等)は範囲に入らない — **見えている
+/// とおりに採れる**のが範囲選択の約束である。
+fn select_click<T: Copy + PartialEq>(
+    selected: &mut Vec<T>,
+    item: T,
+    additive: bool,
+    range: bool,
+    order: &[T],
+) {
+    if range {
+        if let Some(anchor) = selected.last().copied() {
+            if let (Some(a), Some(b)) = (
+                order.iter().position(|x| *x == anchor),
+                order.iter().position(|x| *x == item),
+            ) {
+                let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+                let mut next: Vec<T> = order[lo..=hi]
+                    .iter()
+                    .copied()
+                    .filter(|x| *x != anchor)
+                    .collect();
+                next.push(anchor);
+                *selected = next;
+                return;
+            }
+        }
+    }
+    if additive {
+        if let Some(at) = selected.iter().position(|x| *x == item) {
+            selected.remove(at);
+        } else {
+            selected.push(item);
+        }
+    } else {
+        *selected = vec![item];
+    }
+}
+
 /// ループ帯の掴み方に対応する手の形。**触れているときも掴んでいるときも同じ表**
 fn loop_grab_cursor(grab: &LoopGrab) -> egui::CursorIcon {
     match grab {
@@ -1356,38 +1401,27 @@ impl Lab {
     /// - `Shift`  … 直前に触った行からここまで(**見えている object 行の上で**数える。
     ///   閉じた Group の中は見えないので入らない)
     fn select(&mut self, layer: LayerId, additive: bool, range: bool, objects: &[LayerId]) {
-        if range {
-            if let Some(anchor) = self.selected.last().copied() {
-                let (Some(a), Some(b)) = (
-                    objects.iter().position(|l| *l == anchor),
-                    objects.iter().position(|l| *l == layer),
-                ) else {
-                    return;
-                };
-                let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
-                // anchor を末尾に残す — 続けて Shift を押したときの起点が動かない
-                let mut next: Vec<LayerId> =
-                    objects[lo..=hi].iter().copied().filter(|l| *l != anchor).collect();
-                next.push(anchor);
-                self.selected = next;
-                self.status = format!("{} selected", self.selected.len());
-                return;
-            }
-        }
-        if additive {
-            if let Some(at) = self.selected.iter().position(|l| *l == layer) {
-                self.selected.remove(at);
-            } else {
-                self.selected.push(layer);
-            }
-        } else {
-            self.selected = vec![layer];
-        }
+        select_click(&mut self.selected, layer, additive, range, objects);
         self.status = match self.selected.len() {
             0 => "nothing selected".to_owned(),
             1 => format!("selected {}", self.name(self.selected[0])),
             n => format!("{n} selected"),
         };
+    }
+
+    /// キーのクリック。**行と同じ規則**(素で置き換え / `Cmd` で足し引き / `Shift` で範囲)。
+    ///
+    /// 並び順は画面に出ている順(行の順 → その行の中は時刻順)で、
+    /// **見えているとおりに範囲が採れる**。
+    fn select_key(
+        &mut self,
+        entry: (LayerId, ParamRef, KeyframeId),
+        additive: bool,
+        range: bool,
+        order: &[(LayerId, ParamRef, KeyframeId)],
+    ) {
+        select_click(&mut self.selected_keys, entry, additive, range, order);
+        self.status = format!("{} keys selected", self.selected_keys.len());
     }
 
     /// 選択のうち、**他の選択の子孫でないもの**だけ。
@@ -2892,6 +2926,20 @@ impl eframe::App for Lab {
             .map(|(row, top, h)| (row.layer, *top, *h))
             .collect();
         let object_layers: Vec<LayerId> = objects.iter().map(|(l, _, _)| *l).collect();
+        // **キーも画面に出ている順に並べる**(行の順 → その行の中は時刻順)。
+        // 行と同じ規則で範囲選択できるのは、この並びがあるからである
+        let key_order: Vec<(LayerId, ParamRef, KeyframeId)> = layout
+            .iter()
+            .filter_map(|(row, _, _)| match row.kind {
+                RowKind::Property(param) => Some((row.layer, param)),
+                RowKind::Object => None,
+            })
+            .flat_map(|(layer, param)| {
+                let mut keys = param_keys(&self.document, layer, param);
+                keys.sort_by(|a, b| a.1.total_cmp(&b.1));
+                keys.into_iter().map(move |(key, _)| (layer, param, key))
+            })
+            .collect();
 
         let mut toggles: Vec<(LayerId, bool)> = Vec::new();
         // M / S のクリック。行を回している間は Document を触らず、回し終えてから書く
@@ -3477,25 +3525,13 @@ impl eframe::App for Lab {
                         );
                         // キーもクリックで選ぶ。**Delete の対象がここで決まる**
                         if r.clicked() {
-                            let additive = ctx.input(|i| i.modifiers.command);
-                            let entry = (row.layer, param, key);
-                            if additive {
-                                if let Some(at) =
-                                    self.selected_keys.iter().position(|e| *e == entry)
-                                {
-                                    self.selected_keys.remove(at);
-                                } else {
-                                    self.selected_keys.push(entry);
-                                }
-                            } else {
-                                self.selected_keys = vec![entry];
-                            }
-                            self.status = format!(
-                                "{} {} key {:.2}s  ({} selected)",
-                                self.name(row.layer),
-                                param_label(param),
-                                t,
-                                self.selected_keys.len()
+                            let (additive, range) =
+                                ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
+                            self.select_key(
+                                (row.layer, param, key),
+                                additive,
+                                range,
+                                &key_order,
                             );
                         }
                         if r.drag_started() && self.is_locked(row.layer) {
@@ -3583,9 +3619,37 @@ impl eframe::App for Lab {
                         }
                     }
                 }
+                // **掃いた中のキーも拾う。** bar と同じ掃き方で、同じように選べる
+                let keys: Vec<(LayerId, ParamRef, KeyframeId)> = layout
+                    .iter()
+                    .filter_map(|(row, top, h)| match row.kind {
+                        RowKind::Property(param) => Some((row.layer, param, *top, *h)),
+                        RowKind::Object => None,
+                    })
+                    .filter(|(_, _, top, h)| rect.bottom() >= *top && rect.top() <= top + h)
+                    .flat_map(|(layer, param, _, _)| {
+                        param_keys(&self.document, layer, param)
+                            .into_iter()
+                            .map(move |(key, t)| (layer, param, key, t))
+                    })
+                    .filter(|(_, _, _, t)| {
+                        let x = self.view.time_to_x(*t, track_left, track_w);
+                        rect.left() <= x && x <= rect.right()
+                    })
+                    .map(|(layer, param, key, _)| (layer, param, key))
+                    .collect();
+
+                let swept_keys = !keys.is_empty();
+                if swept_keys {
+                    self.selected_keys = keys;
+                    self.status = format!("{} keys selected", self.selected_keys.len());
+                }
                 if !hit.is_empty() {
                     self.selected = hit;
-                    self.selected_keys.clear();
+                    // キーを掃いていないときだけ、キーの選択を落とす
+                    if !swept_keys {
+                        self.selected_keys.clear();
+                    }
                     self.status = format!("{} selected", self.selected.len());
                 }
             }
@@ -6349,5 +6413,100 @@ mod tests {
             CursorIcon::Grab,
             "**細い clip の端でも出さない**(伸ばす代わりに動かせる)"
         );
+    }
+
+    /// **行とキーは同じ選択規則を通る。** 素で置き換え / `Cmd` で足し引き / `Shift` で範囲。
+    #[test]
+    fn rows_and_keys_share_one_selection_rule() {
+        let order = ['a', 'b', 'c', 'd', 'e'];
+        let mut sel: Vec<char> = Vec::new();
+
+        select_click(&mut sel, 'b', false, false, &order);
+        assert_eq!(sel, vec!['b'], "素のクリックは1つだけにする");
+
+        select_click(&mut sel, 'd', false, true, &order);
+        assert_eq!(sel.len(), 3, "b..d の3つ: {sel:?}");
+        for c in ['b', 'c', 'd'] {
+            assert!(sel.contains(&c));
+        }
+        assert_eq!(sel.last(), Some(&'b'), "起点は末尾に残る");
+
+        // 続けて Shift を押しても起点は動かない(b から数え直す)
+        select_click(&mut sel, 'a', false, true, &order);
+        assert_eq!(sel.len(), 2, "a..b: {sel:?}");
+        assert!(sel.contains(&'a') && sel.contains(&'b'));
+
+        // Cmd は足し引き
+        select_click(&mut sel, 'e', true, false, &order);
+        assert!(sel.contains(&'e'));
+        select_click(&mut sel, 'e', true, false, &order);
+        assert!(!sel.contains(&'e'), "同じものをもう一度で外れる");
+
+        // 並びに無いものは範囲に入らない(畳まれて見えていない行など)
+        let mut sel = vec!['b'];
+        select_click(&mut sel, 'z', false, true, &['a', 'b', 'c']);
+        assert_eq!(sel, vec!['z'], "見えていないなら範囲にならず、素の選択へ落ちる");
+    }
+
+    /// キーの範囲選択は**画面に出ている順**(行の順 → 時刻順)で採る。
+    #[test]
+    fn a_range_of_keys_follows_what_is_on_screen() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Shared left");
+        lab.fold.open_params(layer);
+        let _ = layer;
+
+        // 行の順 → 時刻順に並べた列を、画面と同じ手順で作る
+        let visible = rows(&lab.document, &lab.fold);
+        let key_order: Vec<(LayerId, ParamRef, KeyframeId)> = visible
+            .iter()
+            .filter_map(|row| match row.kind {
+                RowKind::Property(param) => Some((row.layer, param)),
+                RowKind::Object => None,
+            })
+            .flat_map(|(l, param)| {
+                let mut keys = param_keys(&lab.document, l, param);
+                keys.sort_by(|a, b| a.1.total_cmp(&b.1));
+                keys.into_iter().map(move |(key, _)| (l, param, key))
+            })
+            .collect();
+        assert!(key_order.len() >= 4, "Position 2つ + Scale 2つ: {}", key_order.len());
+
+        lab.select_key(key_order[0], false, false, &key_order);
+        assert_eq!(lab.selected_keys.len(), 1);
+
+        // **Shift で、間のキーがパラメータをまたいで入る**
+        lab.select_key(key_order[3], false, true, &key_order);
+        assert_eq!(lab.selected_keys.len(), 4, "{:?}", lab.selected_keys);
+        for entry in &key_order[0..=3] {
+            assert!(lab.selected_keys.contains(entry));
+        }
+
+        // 選んだキーはまとめて消える(既に通っている道を、複数でも通る)
+        let doomed = lab.selected_keys.clone();
+        assert!(lab.delete_selected_keys());
+        assert!(lab.selected_keys.is_empty());
+        for (l, param, key) in &doomed {
+            assert!(
+                !param_keys(&lab.document, *l, *param)
+                    .iter()
+                    .any(|(id, _)| id == key),
+                "選んだキーが消えた: {} {}  status={}",
+                lab.name(*l),
+                param_label(*param),
+                lab.status
+            );
+        }
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        for (l, param, key) in &doomed {
+            assert!(
+                param_keys(&lab.document, *l, *param)
+                    .iter()
+                    .any(|(id, _)| id == key),
+                "**まとめて消しても Undo は1回**で全部戻る"
+            );
+        }
     }
 }
