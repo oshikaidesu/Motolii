@@ -228,22 +228,39 @@ egui は視覚設計の反復が弱い(CSS が無い)。そこを Blitz で補�
 
 **フォント同梱 → 行モデル＋純関数テスト(339行の意図を写す) → その時点で `egui_kittest` を入れてジェスチャとスナップショットを閉じる。** 純関数テストが先なのは、一番安く、行モデルの作り直しを安全にするため。スナップショットは**撮る対象ができてから**入れる。
 
-## 残余
+## 残余（2026-08-16 夜 更新）
 
-- **入力(C2)は未配線のまま。** 基盤が変わっても、この穴は塞がっていない。前回 `timeline_egui` が止まったのもここ。**加えて §7 の通り、繋ぐ先の翻訳層も作り直しになる**(`21cb8204^` から読める)
-- **同一性の対応づけが未設計。** `LayerId`/`KeyframeId` ↔ 面の要素。renderer 非依存の作業
-- **フォント同梱**が未着手(豆腐)
-- **行モデルの作り直し**が要る(group 階層)。着手順は「テスト339行 → 行モデル → トークン取り込み → `input.rs` の型」
-- `mock_tokens` の限界: グラデーション・擬似要素・box-shadow は取れない。修飾class(`objectBar toneGreen`)を先頭classで集計するため14件が宿題として残る
-- **Blitz を実行時から外しても、ビルド時の依存としては残る**(`spikes/blitz-probe`)。beta のバグは踏むが、踏んでも壊れるのはビルドであって実機ではない
+### できている（テストが押さえている）
 
-## プローブ(すべて `spikes/blitz-probe/src/bin/`)
-
-| | 何を測ったか |
+| | oracle |
 |---|---|
-| `virtual_dom_grid` | DOM仮想化の天井と recycling コスト(§1) |
-| `dom_inspect` | 計算済みスタイルと確定矩形の抽出。§3-1 の切り分けに使った |
-| `mock_input` | DOM の hit / hover / イベント配送 / ドラッグ結果(§2) |
-| `mock_host` | モックを窓で触る器(DOM の hit だけで掴む。器は幾何を持たない) |
-| `egui_taffy_lab` | egui 側の構造検証(§4) |
-| `mock_tokens` | 値の変換機構(§5) |
+| 行モデル(`timeline_rows.rs`) — 1 Layer = 1行、2軸独立の開閉、キー無しパラメータは行を出さない | `cargo test -p motolii-ui --lib timeline_rows` → 7 passed |
+| Lab で clip / group を動かす、トリム、Position キーの追従、キー単体のドラッグ、M/S の書き込み、Undo/Redo | `cargo test -p motolii-ui --example timeline_egui_lab` → 5 passed |
+| 記号の豆腐(`egui_fonts.rs`) | Hack を fallback へ。追加フォント0 |
+
+**触れる:** `cargo run --profile fast -p motolii-ui --example timeline_egui_lab`
+
+### 決めていない（実装させずに止めてある）
+
+1. **Group 自身のキーが追従しない。** Group は `clip.start` を持たないので「Group が動いた」という事実が Document に無く、動くのは子の clip だけ。Group envelope の Position/Opacity キーを子と同じ delta で動かすか否かは**意味の決定**。AE のプリコンポは中身ごと動くので追従が自然に見えるが、未決
+2. **ドラッグ中に1本弾かれたときの後始末。** gesture ごと巻き戻すか、部分適用を許すか
+
+### 進行中
+
+- **D2 に `SetTransformParamKeyTime` を足す**(発注中)。これが入るまで Scale/Rotation のキーは clip 移動に追従しない。`prepare_set_position_key_time` しか時刻を動かせないため
+
+### 未着手
+
+- 選択(クリックで選ぶ)・playhead のスクラブ・スクロール/ズーム(`timeline_viewport_state` 341行は生存)
+- `egui_kittest` の導入(§8)。**撮る対象はできた**
+- CJK フォントの取得と `docs/references.md` への登録(コードではなく取得の仕事)
+- chrome を egui ウィジェットへ(AccessKit から叩けるように。§8)
+- `timeline_projection` の扱い。行の構造は `timeline_rows` が持ったので、投影に残すのは時間→座標の変換だけ
+- `mock_tokens` の修飾class対応(発注文は用意済み)
+
+### 引き継ぐときに読む順
+
+1. この文書の §7(編集経路)・§8(開発動線)
+2. `git log --oneline` の 2026-08-16 分。**判断の理由は commit message に書いてある**
+3. `crates/motolii-ui/src/timeline_rows.rs` の冒頭コメント(行モデルの規則)
+4. Lab を起動して触る
