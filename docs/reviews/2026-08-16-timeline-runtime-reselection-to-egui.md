@@ -258,6 +258,50 @@ egui は視覚設計の反復が弱い(CSS が無い)。そこを Blitz で補�
 - `timeline_projection` の扱い。行の構造は `timeline_rows` が持ったので、投影に残すのは時間→座標の変換だけ
 - `mock_tokens` の修飾class対応(発注文は用意済み)
 
+### 決定待ち — キー編集APIを `ScalarPropertyId` 1本へ畳む(2026-08-16 提起)
+
+**利用者の指摘**: 「`transform_key_target` にかぎらず、それぞれ汎用的に単純なAPIにすべき。
+拡張できるように、今後の VISM のためにも、動的な拡張ができるように」。
+
+現物を見ると**セレクタの語彙は既にある**。
+
+```rust
+pub enum ScalarPropertyId {           // command/ids.rs:10
+    Position, Anchor, Scale, Rotation, Opacity,
+    EffectParam(EffectId, String),    // ← 実行時に増える。VISM が要るのはこれ
+    SourceParam(String),
+}
+```
+
+使われていないのは command 側で、キー編集の入口が**9本に割れている**。
+
+| | |
+|---|---|
+| `prepare_{add,remove}_position_key` / `prepare_set_position_key_{value,interp,time}` | **Position 直書き 5本** |
+| `prepare_{add,remove}_transform_param_key` / `prepare_set_transform_param_key_{value,time}` | `ScalarPropertyId` を取る 4本。ただし `transform_key_target` が **Scale/Rotation/Opacity しか受けない** |
+
+**Anchor のキーが動かせないのも、EffectParam にキーが打てないのも、この1関数の受け付け集合が原因**である
+(2026-08-16 の `SetTransformParamKeyTime` 発注で `NOT_DONE` として返ってきた)。
+発注先はさらに、受け付け集合が `transform_param`/`transform_param_mut` と
+`transform_key_target`/`clone_transform_param` に**二重に置かれている**ことも報告している。
+
+**畳む方向は正しいが、置き換えてはならない。** 既存プロジェクトの journal には
+`SetPositionKeyTime` 等が記録済みで、variant を消すと replay できなくなる。移行は:
+
+1. `ScalarPropertyId` を**全 variant 受け付ける**汎用版を足す(add / remove / set_value / set_time / set_interp の5本)
+2. 旧 variant は **replay 用に残す**(emit はやめる)
+3. 新規の書き込みは汎用版だけを使う
+
+**未決**: 汎用版の command 名と payload、`CommandKind` を新設するか
+(`diagnostic_projection.rs:250` の網羅 match が UI 側にあるため UI と同時に決める必要がある)、
+`prepare_add_transform_param_key` の `next_stable_id` 非対称(下記)を移行に含めるか。
+
+**併せて直すべき既存の穴**(2026-08-16 発見、未修正): `prepare_add_transform_param_key` は
+`doc.next_stable_id` の**コピー**から `KeyframeId` を採り reservation を載せないため、
+同じ doc に2回呼ぶと**同じ id が返る**。`prepare_add_position_key` は reservation で
+counter を commit するので、非対称は transform param 側だけ。
+現在キー追加を UI から呼んでいないので害が出ていない。
+
 ### 引き継ぐときに読む順
 
 1. この文書の §7(編集経路)・§8(開発動線)
