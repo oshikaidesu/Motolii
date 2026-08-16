@@ -7,10 +7,18 @@
 //! 触れるもの:
 //!   - グループ左端の `▸`/`▾` … 子レイヤーの開閉
 //!   - `◇`/`◆`            … そのレイヤーのキーパラメータ行の開閉（子とは独立）
-//!   - clip bar をドラッグ … 時間方向へ移動
+//!   - clip bar をドラッグ … 時間方向へ移動。**Position キーが一緒に動く**
 //!
 //!   - bar の左右端6px      … トリム（in / out）
+//!   - Position 行の菱形    … 掴んでキーの時刻を変える
+//!   - `M` / `S`           … mute（`visible`）/ solo の反転
 //!   - `Cmd/Ctrl + Z` / `Shift+Z` … Undo / Redo
+//!
+//! **キーの時刻を動かせるのは Position だけである。** `DocumentWriter` に
+//! Scale/Rotation/Anchor/Opacity のキー時刻を変える `prepare_*` は無い。
+//! remove + add で代用すると `KeyframeId` が変わり、意味論が変わってしまうので
+//! やらない。clip を動かしたとき Position 以外のキーが取り残されることは
+//! status 行に `N not movable` として出す。
 //!
 //! **ドラッグは Document を実際に書き換える。** 経路は
 //! `DocumentWriter::prepare_* -> apply_command(gesture, command)` で、
@@ -45,6 +53,9 @@ const INK: Color32 = Color32::from_rgb(0xd4, 0xd4, 0xd4);
 const DIM: Color32 = Color32::from_rgb(0x8d, 0x8d, 0x8d);
 const ACCENT: Color32 = Color32::from_rgb(0xe9, 0xcf, 0x72);
 const KEY_IDLE: Color32 = Color32::from_rgb(0x35, 0x35, 0x35);
+// M / S が入っているときの下地。モックの採用値
+const MUTE_ON: Color32 = Color32::from_rgb(0x65, 0x3b, 0x34);
+const SOLO_ON: Color32 = Color32::from_rgb(0x66, 0x5b, 0x32);
 
 const RAIL_W: f32 = 196.0;
 const ROW_H: f32 = 24.0;
@@ -76,9 +87,53 @@ enum Grab {
         layer: LayerId,
         grab_at: f32,
         targets: Vec<(LayerId, f32, f32)>,
+        /// 追従させる Position キーと、掴んだ瞬間の時刻(秒)。
+        /// **絶対値で出し直すので、掴んだ瞬間の値を持ったままにする**
+        keys: Vec<(LayerId, KeyframeId, f32)>,
+        /// 追従できないキーの数。Scale/Rotation/Anchor/Opacity には
+        /// 時刻を変える `prepare_*` が無い
+        not_movable: usize,
+    },
+    /// Position キー1つを掴んで時刻を変える
+    KeyTime {
+        layer: LayerId,
+        key: KeyframeId,
+        grab_at: f32,
+        original: f32,
     },
     TrimIn { layer: LayerId },
     TrimOut { layer: LayerId },
+}
+
+/// clip / group を掴んだ瞬間の状態を採る。
+///
+/// **動くもの(clip の開始時刻)と、追従するもの(その clip の Position キー)を
+/// ここで一度に確定させる。** ドラッグ中は毎フレーム絶対値で出し直すので、
+/// 掴んだ瞬間の値が要る。
+fn begin_move(document: &Document, layer: LayerId, grab_at: f32) -> Grab {
+    let targets = movable_clips(document, layer);
+    let mut keys = Vec::new();
+    let mut not_movable = 0usize;
+    for (clip, _, _) in &targets {
+        for (key, t) in param_keys(document, *clip, ParamRef::Position) {
+            keys.push((*clip, key, t));
+        }
+        for param in [
+            ParamRef::Anchor,
+            ParamRef::Scale,
+            ParamRef::Rotation,
+            ParamRef::Opacity,
+        ] {
+            not_movable += param_keys(document, *clip, param).len();
+        }
+    }
+    Grab::Move {
+        layer,
+        grab_at,
+        targets,
+        keys,
+        not_movable,
+    }
 }
 
 struct Lab {
@@ -139,11 +194,15 @@ impl Lab {
         };
 
         // 掴んだものごとに、出す command の並びを作る。
+        // 各要素は (layer, これはキーの command か, 準備結果)。
         // **Move だけが複数になりうる**(Group は子をまとめて動かす)
         let mut prepared = Vec::new();
         match &grab {
             Grab::Move {
-                grab_at, targets, ..
+                grab_at,
+                targets,
+                keys,
+                ..
             } => {
                 if targets.is_empty() {
                     self.status = "nothing to move (empty group)".to_owned();
@@ -165,22 +224,71 @@ impl Lab {
                     let Some(t) = seconds_to_time((start + delta).max(0.0)) else {
                         return;
                     };
-                    prepared.push((*layer, self.writer.prepare_set_clip_start(*layer, t)));
+                    prepared.push((*layer, false, self.writer.prepare_set_clip_start(*layer, t)));
+                }
+                // **キーは出す順が要る。** 同じ時刻に2つは置けないので、後ろへ動かす
+                // ときは遅いキーから、前へ動かすときは早いキーから出す。全員が同じ
+                // delta で動くので、この順なら途中でぶつからない
+                let mut ordered = keys.clone();
+                ordered.sort_by(|a, b| {
+                    if delta >= 0.0 {
+                        b.2.total_cmp(&a.2)
+                    } else {
+                        a.2.total_cmp(&b.2)
+                    }
+                });
+                for (layer, key, original) in ordered {
+                    let Some(t) = seconds_to_time((original + delta).max(0.0)) else {
+                        return;
+                    };
+                    prepared.push((
+                        layer,
+                        true,
+                        self.writer.prepare_set_position_key_time(layer, key, t),
+                    ));
                 }
             }
+            Grab::KeyTime {
+                layer,
+                key,
+                grab_at,
+                original,
+            } => {
+                // Move と同じ考え方でクランプする。0秒より前・composition の
+                // 終端より後ろへは出さない
+                let comp = self.document.composition.duration.as_seconds_f64() as f32;
+                let moved = (original + (at_seconds - grab_at)).clamp(0.0, comp.max(0.0));
+                let Some(t) = seconds_to_time(moved) else {
+                    return;
+                };
+                prepared.push((
+                    *layer,
+                    true,
+                    self.writer.prepare_set_position_key_time(*layer, *key, t),
+                ));
+            }
             Grab::TrimIn { layer } => {
-                prepared.push((*layer, self.writer.prepare_trim_clip_in(*layer, time)))
+                prepared.push((*layer, false, self.writer.prepare_trim_clip_in(*layer, time)))
             }
-            Grab::TrimOut { layer } => {
-                prepared.push((*layer, self.writer.prepare_trim_clip_out(*layer, time)))
-            }
+            Grab::TrimOut { layer } => prepared.push((
+                *layer,
+                false,
+                self.writer.prepare_trim_clip_out(*layer, time),
+            )),
         }
 
         let mut applied = 0usize;
-        for (layer, result) in prepared {
+        let mut keys_applied = 0usize;
+        for (layer, is_key, result) in prepared {
             match result {
                 Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
-                    Ok(()) => applied += 1,
+                    Ok(()) => {
+                        if is_key {
+                            keys_applied += 1;
+                        } else {
+                            applied += 1;
+                        }
+                    }
                     Err(error) => {
                         self.status = format!("{} rejected: {error}", self.name(layer));
                         return;
@@ -193,13 +301,55 @@ impl Lab {
                 }
             }
         }
-        if applied > 0 {
+        if applied + keys_applied > 0 {
             self.document = self.writer.snapshot();
+            // **追従できなかったキーを黙らせない。** Position 以外は動いていない
+            let detail = match &grab {
+                Grab::Move { not_movable, .. } => format!(
+                    "{applied} clip, {keys_applied} keys followed, {not_movable} not movable"
+                ),
+                Grab::KeyTime { .. } => format!("{keys_applied} key"),
+                Grab::TrimIn { .. } | Grab::TrimOut { .. } => format!("{applied} clip"),
+            };
             self.status = format!(
-                "{} @ {at_seconds:.2}s  ({applied} clip)  undo {}",
+                "{} @ {at_seconds:.2}s  ({detail})  undo {}",
                 self.name(grab_layer(&grab)),
                 self.writer.undo_len()
             );
+        }
+    }
+
+    /// M / S を反転して Document へ書く。**1クリック = 1 `GestureId` = 1 Undo 単位**
+    fn toggle_flag(&mut self, layer: LayerId, mute: bool) {
+        let Some((visible, solo)) = item_flags(&self.document, layer) else {
+            return;
+        };
+        let gesture = self.writer.begin_gesture();
+        let prepared = if mute {
+            self.writer.prepare_set_item_visible(layer, !visible)
+        } else {
+            self.writer.prepare_set_item_solo(layer, !solo)
+        };
+        match prepared {
+            Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
+                Ok(()) => {
+                    self.document = self.writer.snapshot();
+                    let what = match (mute, visible, solo) {
+                        (true, true, _) => "mute",
+                        (true, false, _) => "unmute",
+                        (false, _, false) => "solo",
+                        (false, _, true) => "unsolo",
+                    };
+                    self.status = format!(
+                        "{} {what}  undo {}",
+                        self.name(layer),
+                        self.writer.undo_len()
+                    );
+                }
+                Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
+            },
+            Ok(None) => {}
+            Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
         }
     }
 
@@ -276,6 +426,8 @@ impl eframe::App for Lab {
         // ---- 行 ----
         let mut y = ruler.bottom();
         let mut toggles: Vec<(LayerId, bool)> = Vec::new();
+        // M / S のクリック。行を回している間は Document を触らず、回し終えてから書く
+        let mut flags: Vec<(LayerId, bool)> = Vec::new();
 
         for row in &visible {
             let h = match row.kind {
@@ -372,15 +524,39 @@ impl eframe::App for Lab {
                         }
                     }
 
+                    // **押下状態は Document から読む。** ボタン側に状態を持たない
+                    let (item_visible, item_solo) =
+                        item_flags(&self.document, row.layer).unwrap_or((true, false));
                     for (i, label) in ["M", "S"].iter().enumerate() {
                         let b = Rect::from_center_size(
                             egui::pos2(rail.right() - 30.0 + i as f32 * 18.0, cy),
                             Vec2::splat(16.0),
                         );
+                        let is_mute = i == 0;
+                        let on = if is_mute { !item_visible } else { item_solo };
+                        let r = ui.interact(
+                            b,
+                            ui.id().with(("flag", row.layer, is_mute)),
+                            Sense::click(),
+                        );
+                        if on {
+                            p.rect_filled(
+                                b,
+                                CornerRadius::ZERO,
+                                if is_mute { MUTE_ON } else { SOLO_ON },
+                            );
+                        }
                         p.rect_stroke(
                             b,
                             CornerRadius::ZERO,
-                            Stroke::new(1.0, Color32::from_rgb(0x51, 0x51, 0x51)),
+                            Stroke::new(
+                                1.0,
+                                if r.hovered() {
+                                    ACCENT
+                                } else {
+                                    Color32::from_rgb(0x51, 0x51, 0x51)
+                                },
+                            ),
                             StrokeKind::Inside,
                         );
                         p.text(
@@ -388,8 +564,15 @@ impl eframe::App for Lab {
                             Align2::CENTER_CENTER,
                             *label,
                             FontId::proportional(9.0),
-                            Color32::from_rgb(0xaa, 0xaa, 0xaa),
+                            if on {
+                                INK
+                            } else {
+                                Color32::from_rgb(0xaa, 0xaa, 0xaa)
+                            },
                         );
+                        if r.clicked() {
+                            flags.push((row.layer, is_mute));
+                        }
                     }
                 }
                 RowKind::Property(param) => {
@@ -463,11 +646,11 @@ impl eframe::App for Lab {
                                 } else if bar.right() - pos.x <= 6.0 {
                                     Grab::TrimOut { layer: row.layer }
                                 } else {
-                                    Grab::Move {
-                                        layer: row.layer,
-                                        grab_at: (pos.x - track_left) / track_w * 16.0,
-                                        targets: movable_clips(&self.document, row.layer),
-                                    }
+                                    begin_move(
+                                        &self.document,
+                                        row.layer,
+                                        (pos.x - track_left) / track_w * 16.0,
+                                    )
                                 };
                                 let gesture = self.writer.begin_gesture();
                                 self.drag = Some((grab, gesture));
@@ -486,10 +669,19 @@ impl eframe::App for Lab {
                     }
                 }
                 RowKind::Property(param) => {
-                    for t in key_times(&self.document, row.layer, param) {
+                    // **時刻を動かせるのは Position だけ。** 他は掴んでも動かない
+                    let movable = param == ParamRef::Position;
+                    for (key, t) in param_keys(&self.document, row.layer, param) {
                         let x = track_left + track_w * t / 16.0;
                         let c = egui::pos2(x, track.center().y);
                         let d = 4.0;
+                        // 掴む的は菱形の中心から6px。bar の端と同じ寸法
+                        let hit = Rect::from_center_size(c, Vec2::splat(12.0));
+                        let r = ui.interact(
+                            hit,
+                            ui.id().with(("key", row.layer, param_label(param), key.get())),
+                            Sense::click_and_drag(),
+                        );
                         p.add(egui::Shape::convex_polygon(
                             vec![
                                 egui::pos2(c.x, c.y - d),
@@ -497,9 +689,44 @@ impl eframe::App for Lab {
                                 egui::pos2(c.x, c.y + d),
                                 egui::pos2(c.x - d, c.y),
                             ],
-                            KEY_IDLE,
+                            if movable && (r.dragged() || r.hovered()) {
+                                ACCENT
+                            } else {
+                                KEY_IDLE
+                            },
                             Stroke::new(1.0, Color32::from_rgb(0xee, 0xee, 0xee)),
                         ));
+                        if r.drag_started() {
+                            if !movable {
+                                self.status = format!(
+                                    "{} {} key: not movable",
+                                    self.name(row.layer),
+                                    param_label(param)
+                                );
+                            } else if let Some(pos) = r.interact_pointer_pos() {
+                                let gesture = self.writer.begin_gesture();
+                                self.drag = Some((
+                                    Grab::KeyTime {
+                                        layer: row.layer,
+                                        key,
+                                        grab_at: (pos.x - track_left)
+                                            / track_w_for_time.max(1.0)
+                                            * 16.0,
+                                        original: t,
+                                    },
+                                    gesture,
+                                ));
+                            }
+                        }
+                        if r.dragged() && movable {
+                            if let Some(pos) = r.interact_pointer_pos() {
+                                let at = (pos.x - track_left) / track_w_for_time.max(1.0) * 16.0;
+                                self.commit_drag(at.max(0.0));
+                            }
+                        }
+                        if r.drag_stopped() {
+                            self.drag = None;
+                        }
                     }
                 }
             }
@@ -519,6 +746,10 @@ impl eframe::App for Lab {
             } else {
                 self.fold.open_params(layer);
             }
+        }
+
+        for (layer, mute) in flags {
+            self.toggle_flag(layer, mute);
         }
 
         // Undo / Redo。1ドラッグ = 1 GestureId なので、掴んで動かした分がまとめて戻る
@@ -567,7 +798,10 @@ impl eframe::App for Lab {
 
 fn grab_layer(grab: &Grab) -> LayerId {
     match grab {
-        Grab::Move { layer, .. } | Grab::TrimIn { layer } | Grab::TrimOut { layer } => *layer,
+        Grab::Move { layer, .. }
+        | Grab::KeyTime { layer, .. }
+        | Grab::TrimIn { layer }
+        | Grab::TrimOut { layer } => *layer,
     }
 }
 
@@ -676,7 +910,18 @@ fn clip_span(document: &Document, layer: LayerId) -> Option<(f32, f32)> {
     }
 }
 
-fn key_times(document: &Document, layer: LayerId, param: ParamRef) -> Vec<f32> {
+/// その layer の `visible` / `solo`。M / S の押下状態はここから読む
+fn item_flags(document: &Document, layer: LayerId) -> Option<(bool, bool)> {
+    let env = match find_item(document, layer)? {
+        TrackItem::Clip(c) => &c.envelope,
+        TrackItem::Group(g) => &g.envelope,
+    };
+    Some((env.visible, env.solo))
+}
+
+/// キーを `(KeyframeId, 時刻(秒))` で返す。**掴んだ物を追い続けるには id が要る** —
+/// 時刻は編集で変わるが `KeyframeId` は変わらない
+fn param_keys(document: &Document, layer: LayerId, param: ParamRef) -> Vec<(KeyframeId, f32)> {
     let Some(item) = find_item(document, layer) else {
         return Vec::new();
     };
@@ -695,7 +940,7 @@ fn key_times(document: &Document, layer: LayerId, param: ParamRef) -> Vec<f32> {
         DocParam::Keyframes(track) => track
             .keys()
             .iter()
-            .map(|k| k.t.as_seconds_f64() as f32)
+            .map(|k| (k.id, k.t.as_seconds_f64() as f32))
             .collect(),
         _ => Vec::new(),
     }
@@ -917,5 +1162,135 @@ mod tests {
         for (layer, start, _) in &targets {
             assert!((clip_span(&restored, *layer).expect("span").0 - start).abs() < 1e-3);
         }
+    }
+
+    /// **clip が動いたら、その Position キーも一緒に動く。**
+    /// Scale は時刻を変える `prepare_*` が無いので置いていかれる — それも押さえる。
+    #[test]
+    fn moving_a_clip_carries_its_position_keys() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Shared left");
+
+        let start_before = clip_span(&lab.document, layer).expect("span").0;
+        let position_before = param_keys(&lab.document, layer, ParamRef::Position);
+        let scale_before = param_keys(&lab.document, layer, ParamRef::Scale);
+        assert_eq!(position_before.len(), 2, "fixture の Shared left は Position キー2つ");
+        assert_eq!(scale_before.len(), 2, "Scale も2つ。こちらは時刻を動かせない");
+
+        let gesture = lab.writer.begin_gesture();
+        lab.drag = Some((begin_move(&lab.document, layer, 3.0), gesture));
+        lab.commit_drag(4.0); // +1.0s
+
+        let after = lab.writer.snapshot();
+        assert!(
+            (clip_span(&after, layer).expect("span").0 - (start_before + 1.0)).abs() < 1e-3,
+            "clip が +1.0s 動いた"
+        );
+        let position_after = param_keys(&after, layer, ParamRef::Position);
+        for (key, before) in &position_before {
+            let now = position_after
+                .iter()
+                .find(|(id, _)| id == key)
+                .expect("KeyframeId は時刻編集で不変")
+                .1;
+            assert!(
+                (now - (before + 1.0)).abs() < 1e-3,
+                "Position キーが clip に追従する: {now} vs {}",
+                before + 1.0
+            );
+        }
+        assert_eq!(
+            param_keys(&after, layer, ParamRef::Scale),
+            scale_before,
+            "Scale キーは動かない。remove+add で代用しない"
+        );
+
+        lab.writer.undo().expect("undo");
+        let restored = lab.writer.snapshot();
+        assert!(
+            (clip_span(&restored, layer).expect("span").0 - start_before).abs() < 1e-3,
+            "1ドラッグ = 1 Undo"
+        );
+        assert_eq!(
+            param_keys(&restored, layer, ParamRef::Position),
+            position_before,
+            "キーも同じ Undo でまとめて戻る"
+        );
+    }
+
+    /// **キーを掴んで動かすと、そのキーだけが動く。** clip も他のキーも巻き込まない。
+    #[test]
+    fn dragging_a_position_key_changes_only_that_key() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Shared right");
+
+        let before = param_keys(&lab.document, layer, ParamRef::Position);
+        assert_eq!(before.len(), 3, "fixture の Shared right は Position キー3つ");
+        let start_before = clip_span(&lab.document, layer).expect("span").0;
+        let (key, t0) = before[0];
+
+        let gesture = lab.writer.begin_gesture();
+        lab.drag = Some((
+            Grab::KeyTime {
+                layer,
+                key,
+                grab_at: t0,
+                original: t0,
+            },
+            gesture,
+        ));
+        lab.commit_drag(t0 + 1.0);
+
+        let after = param_keys(&lab.writer.snapshot(), layer, ParamRef::Position);
+        let moved = after.iter().find(|(id, _)| *id == key).expect("key").1;
+        assert!(
+            (moved - (t0 + 1.0)).abs() < 1e-3,
+            "掴んだキーだけ +1.0s: {moved}"
+        );
+        for (id, t) in &before[1..] {
+            let now = after.iter().find(|(i, _)| i == id).expect("key").1;
+            assert_eq!(now, *t, "他のキーは動かない");
+        }
+        assert!(
+            (clip_span(&lab.writer.snapshot(), layer).expect("span").0 - start_before).abs() < 1e-3,
+            "clip.start は変わらない"
+        );
+    }
+
+    /// **M / S は Document を書き換える。** 枠と文字だけではない。
+    #[test]
+    fn muting_a_layer_writes_through_to_the_document() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Background");
+        assert_eq!(
+            item_flags(&lab.document, layer),
+            Some((true, false)),
+            "既定は表示・非solo"
+        );
+
+        lab.toggle_flag(layer, true);
+        assert_eq!(
+            item_flags(&lab.document, layer),
+            Some((false, false)),
+            "M で visible=false"
+        );
+
+        lab.toggle_flag(layer, false);
+        assert_eq!(
+            item_flags(&lab.document, layer),
+            Some((false, true)),
+            "S で solo=true"
+        );
+
+        lab.writer.undo().expect("undo");
+        lab.document = lab.writer.snapshot();
+        assert_eq!(
+            item_flags(&lab.document, layer),
+            Some((false, false)),
+            "1クリック = 1 Undo"
+        );
+        lab.writer.undo().expect("undo");
+        lab.document = lab.writer.snapshot();
+        assert_eq!(item_flags(&lab.document, layer), Some((true, false)));
     }
 }
