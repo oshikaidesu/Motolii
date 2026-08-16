@@ -143,6 +143,80 @@ impl TimelineView {
     }
 }
 
+/// ルーラの上端に置くループ帯の高さ
+const LOOP_H: f32 = 9.0;
+/// 面の端これだけ以内へポインタが入ったら、掴んだまま窓が動く
+const EDGE_PAN: f32 = 28.0;
+/// 端で掴み続けたときに流れる速さ(窓の幅に対する毎秒の割合)
+const EDGE_PAN_RATE: f32 = 0.8;
+
+/// ループ区間。**Project session の状態**で、Document には入れない
+/// (再生の都合であって、書き出される内容ではない)。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LoopRegion {
+    pub start: f32,
+    pub end: f32,
+    /// 帯は引いたまま、効きだけ切れる。**引き直さずに戻せる**
+    pub on: bool,
+}
+
+/// ループ帯のどこを掴んだか
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum LoopGrab {
+    /// 何も無いところから引いた。`anchor` は掴んだ時刻で、反対側がポインタを追う
+    New { anchor: f32 },
+    /// 区間ごと動かす
+    Move { grab_at: f32, from: (f32, f32) },
+    In,
+    Out,
+}
+
+/// 引いた2点からループ区間を作る。
+///
+/// **右から左へ引いても同じ区間になる**(掴んだ点と離した点の順序を持たない)。
+/// 時刻はフレームに乗せ、composition の外へは出さない。**最短は1フレーム** —
+/// 長さ0の区間は再生が止まる場所にしかならない。
+fn loop_from_drag(a: f32, b: f32, comp: f32, fps: Fps) -> (f32, f32) {
+    let snap = |t: f32| {
+        seconds_to_time(t.clamp(0.0, comp), fps)
+            .map(|t| t.as_seconds_f64() as f32)
+            .unwrap_or(t)
+    };
+    let frame = 1.0 / fps.as_f64() as f32;
+    let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+    let (lo, mut hi) = (snap(lo), snap(hi));
+    if hi - lo < frame * 0.5 {
+        hi = (lo + frame).min(comp);
+    }
+    (lo, hi)
+}
+
+/// ループの折り返し。**行き過ぎた分は捨てずに頭へ足す** —
+/// 捨てると1フレームの取りこぼしが毎周たまり、周期が伸びる。
+fn wrap_playhead(at: f32, region: LoopRegion) -> f32 {
+    let length = region.end - region.start;
+    if !region.on || length <= 0.0 || at < region.end {
+        return at;
+    }
+    region.start + (at - region.start) % length
+}
+
+/// 端を掴み続けているあいだ、窓が流れる秒数(このフレームぶん)。
+///
+/// **掴んだものを窓の外へ運べないと、長い composition では手が届かない。**
+/// 端に近いほど速い。中に居るあいだは 0 で、窓は動かない。
+fn edge_pan_seconds(pointer_x: f32, track_left: f32, track_w: f32, span: f32, dt: f32) -> f32 {
+    let right = track_left + track_w;
+    let strength = if pointer_x > right - EDGE_PAN {
+        ((pointer_x - (right - EDGE_PAN)) / EDGE_PAN).min(1.5)
+    } else if pointer_x < track_left + EDGE_PAN {
+        -(((track_left + EDGE_PAN) - pointer_x) / EDGE_PAN).min(1.5)
+    } else {
+        0.0
+    };
+    strength * span * EDGE_PAN_RATE * dt
+}
+
 /// 並べ替えの落とし先。**行と行のあいだ**を指す。
 ///
 /// `index` は D2 の `prepare_reparent_clip` と同じ意味、つまり
@@ -480,6 +554,10 @@ struct Lab {
     nav: Option<NavGrab>,
     /// playhead(秒)。同上
     playhead: f32,
+    /// ループ区間。同上
+    loop_region: LoopRegion,
+    /// ループ帯を掴んでいる最中の掴み方
+    loop_drag: Option<LoopGrab>,
     /// 再生中か。**Space で入り切りする**。Document には入れない
     playing: bool,
     status: String,
@@ -527,8 +605,15 @@ impl Lab {
             drop: None,
             nav: None,
             playhead: 0.0,
+            // 最初から引いてある帯は邪魔なので、区間だけ用意して切っておく
+            loop_region: LoopRegion {
+                start: 2.0,
+                end: 6.0,
+                on: false,
+            },
+            loop_drag: None,
             playing: false,
-            status: "space=play  drag bar=move  drag name=reorder  Cmd/Shift+click=select".to_owned(),
+            status: "space=play  L=loop  drag ruler top=loop  drag name=reorder".to_owned(),
             shot,
             frame: 0,
         }
@@ -1112,7 +1197,7 @@ impl eframe::App for Lab {
             egui::pos2(head.left() + 150.0, head.center().y),
             Align2::LEFT_CENTER,
             format!(
-                "{:.2}s  view {:.2}–{:.2}s  grid {}",
+                "{:.2}s  view {:.2}–{:.2}s  grid {}  loop {}",
                 self.playhead,
                 self.view.start,
                 self.view.start + self.view.span,
@@ -1120,6 +1205,14 @@ impl eframe::App for Lab {
                     format!("{step:.0}s")
                 } else {
                     format!("{:.0}f", step * fps.as_f64() as f32)
+                },
+                if self.loop_region.on {
+                    format!(
+                        "{:.2}–{:.2}s",
+                        self.loop_region.start, self.loop_region.end
+                    )
+                } else {
+                    "off".to_owned()
                 }
             ),
             FontId::monospace(9.0),
@@ -1134,14 +1227,38 @@ impl eframe::App for Lab {
         // **Space で入り切り。** 音も絵もまだ無いので、動くのは playhead だけである。
         // 掴んでいる最中は入り切りしない — ドラッグ中に時間が流れると何が起きたか読めない
         let comp_seconds = self.document.composition.duration.as_seconds_f64() as f32;
-        let (space, dt) = ctx.input(|i| (i.key_pressed(egui::Key::Space), i.stable_dt));
+        let (space, loop_key, dt) = ctx.input(|i| {
+            (
+                i.key_pressed(egui::Key::Space),
+                i.key_pressed(egui::Key::L) && !i.modifiers.command,
+                i.stable_dt,
+            )
+        });
         if space && self.drag.is_none() {
             self.playing = !self.playing;
             // 終端で押したら頭から。止まったまま何も起きないのが一番困る
             if self.playing && self.playhead >= comp_seconds - 1e-3 {
                 self.playhead = 0.0;
             }
+            // ループが効いていて、その外から押したら**区間の頭から**。
+            // 押した所から始めて一度も折り返さない、が一番分かりにくい
+            if self.playing
+                && self.loop_region.on
+                && (self.playhead < self.loop_region.start || self.playhead >= self.loop_region.end)
+            {
+                self.playhead = self.loop_region.start;
+            }
             self.status = if self.playing { "play" } else { "pause" }.to_owned();
+        }
+        // `L` は帯を消さずに効きだけ切る。**引き直さずに戻せる**
+        if loop_key {
+            self.loop_region.on = !self.loop_region.on;
+            self.status = format!(
+                "loop {} ({:.2}–{:.2}s)",
+                if self.loop_region.on { "on" } else { "off" },
+                self.loop_region.start,
+                self.loop_region.end
+            );
         }
         if self.playing {
             // **溜まった時間をまとめて進めない。** 窓が隠れていた分は捨てる
@@ -1149,8 +1266,10 @@ impl eframe::App for Lab {
             //  後ろにあると eframe が描画を間引き、戻った1フレームの `dt` が
             //  数百msになる — 足すと playhead が数秒ぶん飛ぶ)
             let (at, keep) = advance_playhead(self.playhead, dt.min(MAX_STEP), comp_seconds);
-            self.playhead = at;
-            if !keep {
+            // **折り返しは終端判定より先。** ループの中に居るなら composition の
+            // 終わりには辿り着かないので、`keep` を見るのは折り返した後で足りる
+            self.playhead = wrap_playhead(at, self.loop_region);
+            if !keep && !self.loop_region.on {
                 self.playing = false;
                 self.status = "end".to_owned();
             }
@@ -1170,8 +1289,104 @@ impl eframe::App for Lab {
             .clamped(comp_seconds);
         }
 
-        // ルーラのスクラブ。**Document は触らない** — playhead は session の状態
-        let ruler_track = Rect::from_min_max(egui::pos2(track_left, ruler.top()), ruler.max);
+        // ---- ループ帯 ----
+        // **ルーラの上端だけがループの面である。** 下は今までどおりスクラブなので、
+        // 「掴む場所が違えば別のもの」で撃ち分けられる(bar の端6px と同じ考え方)
+        let loop_lane = Rect::from_min_max(
+            egui::pos2(track_left, ruler.top()),
+            egui::pos2(full.right(), ruler.top() + LOOP_H),
+        );
+        let loop_x0 = self
+            .view
+            .time_to_x(self.loop_region.start, track_left, track_w);
+        let loop_x1 = self.view.time_to_x(self.loop_region.end, track_left, track_w);
+        let loop_hit = ui.interact(loop_lane, ui.id().with("loop"), Sense::click_and_drag());
+        if loop_hit.drag_started() {
+            if let Some(pos) = loop_hit.interact_pointer_pos() {
+                let at = self.view.x_to_time(pos.x, track_left, track_w);
+                self.loop_drag = Some(if (pos.x - loop_x0).abs() <= 6.0 {
+                    LoopGrab::In
+                } else if (pos.x - loop_x1).abs() <= 6.0 {
+                    LoopGrab::Out
+                } else if pos.x > loop_x0 && pos.x < loop_x1 {
+                    LoopGrab::Move {
+                        grab_at: at,
+                        from: (self.loop_region.start, self.loop_region.end),
+                    }
+                } else {
+                    LoopGrab::New { anchor: at }
+                });
+                // **引いたら効く。** 引いてから別のキーで入れる手順にしない
+                self.loop_region.on = true;
+            }
+        }
+        if loop_hit.dragged() {
+            if let (Some(grab), Some(pos)) = (self.loop_drag, loop_hit.interact_pointer_pos()) {
+                let at = self.view.x_to_time(pos.x, track_left, track_w);
+                let (start, end) = match grab {
+                    LoopGrab::New { anchor } => loop_from_drag(anchor, at, comp_seconds, fps),
+                    LoopGrab::In => loop_from_drag(at, self.loop_region.end, comp_seconds, fps),
+                    LoopGrab::Out => loop_from_drag(self.loop_region.start, at, comp_seconds, fps),
+                    LoopGrab::Move { grab_at, from } => {
+                        // 区間ごと動かすときは長さを変えない。端に当たったら止まる
+                        let length = from.1 - from.0;
+                        let moved = (from.0 + (at - grab_at)).clamp(0.0, comp_seconds - length);
+                        loop_from_drag(moved, moved + length, comp_seconds, fps)
+                    }
+                };
+                self.loop_region.start = start;
+                self.loop_region.end = end;
+                self.status = format!("loop {start:.2}–{end:.2}s");
+                // 端まで引いたら窓が流れる。**窓の外までループを引ける**
+                let seconds = edge_pan_seconds(pos.x, track_left, track_w, self.view.span, dt);
+                if seconds != 0.0 {
+                    self.view = self.view.pan(seconds, comp_seconds);
+                }
+            }
+        }
+        if loop_hit.drag_stopped() {
+            self.loop_drag = None;
+        }
+        // 帯を描く。**切れているときも残す** — 引いた区間は消えていない
+        {
+            let lane = p.with_clip_rect(loop_lane);
+            let x0 = self
+                .view
+                .time_to_x(self.loop_region.start, track_left, track_w);
+            let x1 = self.view.time_to_x(self.loop_region.end, track_left, track_w);
+            lane.rect_filled(
+                Rect::from_min_max(
+                    egui::pos2(x0, loop_lane.top() + 1.0),
+                    egui::pos2(x1, loop_lane.bottom() - 1.0),
+                ),
+                CornerRadius::same(2),
+                if self.loop_region.on {
+                    ACCENT
+                } else {
+                    Color32::from_rgb(0x4a, 0x4a, 0x4a)
+                },
+            );
+            // 掴める端を示す。bar のトリム端と同じ 6px
+            if loop_hit.hovered() || self.loop_drag.is_some() {
+                for x in [x0, x1] {
+                    lane.rect_filled(
+                        Rect::from_min_max(
+                            egui::pos2(x - 1.0, loop_lane.top()),
+                            egui::pos2(x + 1.0, loop_lane.bottom()),
+                        ),
+                        CornerRadius::ZERO,
+                        INK,
+                    );
+                }
+            }
+        }
+
+        // ルーラのスクラブ。**Document は触らない** — playhead は session の状態。
+        // **ループ帯のぶんだけ下から**(上端はループが取る)
+        let ruler_track = Rect::from_min_max(
+            egui::pos2(track_left, ruler.top() + LOOP_H),
+            ruler.max,
+        );
         let scrub = ui.interact(
             ruler_track,
             ui.id().with("ruler"),
@@ -1190,6 +1405,12 @@ impl eframe::App for Lab {
                 self.playhead = seconds_to_time(at, fps)
                     .map(|t| t.as_seconds_f64() as f32)
                     .unwrap_or(at);
+                // **掴んだまま端まで運んだら窓が付いてくる。** 窓の中にある時間しか
+                // 指せないと、寄っているときに playhead を遠くへ運べない
+                let seconds = edge_pan_seconds(pos.x, track_left, track_w, self.view.span, dt);
+                if seconds != 0.0 {
+                    self.view = self.view.pan(seconds, comp_seconds);
+                }
                 self.status = format!("{:.2}s", self.playhead);
             }
         }
@@ -1533,6 +1754,17 @@ impl eframe::App for Lab {
                             if let Some(pos) = r.interact_pointer_pos() {
                                 let at = self.view.x_to_time(pos.x, track_left, track_w).max(0.0);
                                 self.commit_drag(at);
+                                // 掴んだまま端まで運んだら窓が流れる(playhead と同じ)
+                                let seconds = edge_pan_seconds(
+                                    pos.x,
+                                    track_left,
+                                    track_w,
+                                    self.view.span,
+                                    dt,
+                                );
+                                if seconds != 0.0 {
+                                    self.view = self.view.pan(seconds, comp_seconds);
+                                }
                             }
                         }
                         if r.drag_stopped() {
@@ -1593,6 +1825,16 @@ impl eframe::App for Lab {
                             if let Some(pos) = r.interact_pointer_pos() {
                                 let at = self.view.x_to_time(pos.x, track_left, track_w);
                                 self.commit_drag(at.max(0.0));
+                                let seconds = edge_pan_seconds(
+                                    pos.x,
+                                    track_left,
+                                    track_w,
+                                    self.view.span,
+                                    dt,
+                                );
+                                if seconds != 0.0 {
+                                    self.view = self.view.pan(seconds, comp_seconds);
+                                }
                             }
                         }
                         if r.drag_stopped() {
@@ -1728,6 +1970,19 @@ impl eframe::App for Lab {
             egui::pos2(track_left, ruler.top()),
             egui::pos2(full.right(), rows_view.bottom()),
         ));
+        // ループの境目を面の上まで伸ばす。**どこで折り返すかが行の上で分かる**
+        if self.loop_region.on {
+            for t in [self.loop_region.start, self.loop_region.end] {
+                let x = self.view.time_to_x(t, track_left, track_w);
+                time_p.line_segment(
+                    [
+                        egui::pos2(x, ruler.top() + LOOP_H),
+                        egui::pos2(x, rows_view.bottom()),
+                    ],
+                    Stroke::new(1.0, Color32::from_rgb(0x6b, 0x60, 0x3a)),
+                );
+            }
+        }
         let playhead_x = self.view.time_to_x(self.playhead, track_left, track_w);
         time_p.line_segment(
             [
@@ -3148,5 +3403,77 @@ mod tests {
                 assert_eq!(band_is_dark(t, step), shade, "start={start} で反転した");
             }
         }
+    }
+
+    /// **右から左へ引いても同じ区間になる。** フレームに乗り、最短は1フレーム。
+    #[test]
+    fn a_loop_drag_reads_the_same_in_either_direction() {
+        let fps = Fps::try_new(30, 1).expect("fps");
+        let comp = 16.0_f32;
+
+        let forward = loop_from_drag(2.0, 6.0, comp, fps);
+        let backward = loop_from_drag(6.0, 2.0, comp, fps);
+        assert_eq!(forward, backward, "掴んだ順序を持たない");
+        assert!((forward.0 - 2.0).abs() < 1e-3 && (forward.1 - 6.0).abs() < 1e-3);
+
+        // 端は必ずフレーム境界
+        let (start, end) = loop_from_drag(2.0334, 5.9876, comp, fps);
+        for t in [start, end] {
+            let snapped = seconds_to_time(t, fps).expect("time").as_seconds_f64() as f32;
+            assert!((t - snapped).abs() < 1e-4, "フレームに乗る: {t}");
+        }
+
+        // 点を突いただけでも長さ0にはしない(**止まる場所しか作らない区間を作らない**)
+        let (start, end) = loop_from_drag(4.0, 4.0, comp, fps);
+        assert!(end > start, "最短でも1フレーム: {start}–{end}");
+        assert!((end - start - 1.0 / 30.0).abs() < 1e-3);
+
+        // composition の外へは出ない
+        let (start, end) = loop_from_drag(-3.0, 99.0, comp, fps);
+        assert!(start >= 0.0 && end <= comp, "{start}–{end}");
+    }
+
+    /// **行き過ぎた分は頭へ足す。** 捨てると毎周ぶんだけ周期が伸びる。
+    #[test]
+    fn playback_wraps_at_the_loop_end_without_losing_the_overshoot() {
+        let region = LoopRegion {
+            start: 2.0,
+            end: 6.0,
+            on: true,
+        };
+        assert_eq!(wrap_playhead(3.0, region), 3.0, "中では何もしない");
+        assert!((wrap_playhead(6.02, region) - 2.02).abs() < 1e-4, "行き過ぎた分が残る");
+        assert!((wrap_playhead(6.0, region) - 2.0).abs() < 1e-4, "終端ちょうどで頭へ");
+        // 何周ぶんも飛んでいても剰余で収まる
+        assert!((wrap_playhead(15.0, region) - 3.0).abs() < 1e-4);
+
+        // 切れているなら折り返さない
+        let off = LoopRegion { on: false, ..region };
+        assert_eq!(wrap_playhead(9.0, off), 9.0);
+    }
+
+    /// **端まで運んだときだけ窓が流れる。** 面の中では動かない。
+    #[test]
+    fn dragging_to_the_edge_scrolls_and_the_middle_does_not() {
+        let (track_left, track_w, span, dt) = (196.0_f32, 800.0_f32, 8.0_f32, 1.0 / 60.0);
+
+        assert_eq!(
+            edge_pan_seconds(track_left + track_w * 0.5, track_left, track_w, span, dt),
+            0.0,
+            "真ん中では動かない"
+        );
+
+        let right = edge_pan_seconds(track_left + track_w - 2.0, track_left, track_w, span, dt);
+        assert!(right > 0.0, "右端では先へ流れる: {right}");
+        let left = edge_pan_seconds(track_left + 2.0, track_left, track_w, span, dt);
+        assert!(left < 0.0, "左端では戻る: {left}");
+
+        // 端に近いほど速い
+        let near = edge_pan_seconds(track_left + track_w - 20.0, track_left, track_w, span, dt);
+        assert!(right > near && near > 0.0, "{right} > {near}");
+
+        // 窓の外まで出しても、1フレームで窓の幅を超えて飛ばない
+        let far = edge_pan_seconds(track_left + track_w + 200.0, track_left, track_w, span, dt);
+        assert!(far < span * 0.5, "1フレームで飛びすぎない: {far}");
     }
 }
