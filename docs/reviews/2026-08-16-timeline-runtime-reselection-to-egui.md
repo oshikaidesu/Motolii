@@ -165,6 +165,69 @@ git show 21cb8204^:crates/motolii-ui/src/document_edit_runtime/tests/place_and_t
 
 **着手順は C2 に入る時点で: テストの意図を新しい行モデル向けに書き直す → それが通る最小の翻訳層を書く → `prepare_place.rs` / `process_keys.rs` を参照実装として開く。** D2 の API は変わっていないので、設計判断はほぼ済んでいる。
 
+## 8. 開発動線 — UX(ジェスチャ・ショートカット)をどう通すか
+
+**ビルド時間は問題ではない**。1ファイル触ってからの実測(`[profile.fast]`、温まった状態):
+
+| | |
+|---|---|
+| `cargo check -p motolii-ui` | 4.67s |
+| lib ビルド(コード生成) | 5.80s |
+| `--bin motolii-blitz-dump` | **3.53s** |
+| `--bin motolii-blitz-shell` | **4.67s** |
+| `spikes/blitz-probe` の1本 | 2.47s |
+
+冷えた初回だけ17秒かかる。**crate分割で速度を稼ぐ理由はない**([`motolii-timeline` crate は U3a-1 で `REJECT` 済み](2026-07-26-u3a-1-headless-timeline-owner-visibility-split-decision.md))。
+
+### 既存の3本はBlitz向きで、そのままでは使えない
+
+| | 現状 |
+|---|---|
+| `scripts/watch-timeline-widget-dump.sh` | **`timeline_blitz/` を監視** → `motolii-blitz-dump timeline` → PNG。監視先を差し替えれば骨格(41行)は再利用できる |
+| `examples/timeline_widget_lab.rs`(416行) | eframe → Blitz texture → egui image の窓。経路ごと不要になる |
+| `src/blitz_dump/`(bin) | Blitzパネル専用。egui は描けない |
+
+### 検証は3層に分ける
+
+**1. 純関数** — hit の分類 / トリム端 / ショートカット解決。窓もフレームも要らない。**UX の不変条件の大半はここ**。道具は無傷で残っている(`motolii-input` 2,413行: `keymap` / `keymap_codec` / `command_registry` / `input_router`)。削除された 339 行のテストが見ていたのもこの層(`egui_shortcut_mapping_rejects_wrong_modifiers` / `classify_bar_edge_narrow_bar_is_always_body` 等)。
+
+**2. [`egui_kittest`](https://docs.rs/egui_kittest/0.35.0/egui_kittest/struct.Harness.html) 0.35.0** — egui 公式(emilk/egui)。依存は `egui ^0.35.0` / `egui-wgpu ^0.35.0` / `wgpu ^29.0` で**このワークスペースと全一致**。
+
+```rust
+harness.drag_at(from); harness.hover_at(to); harness.drop_at(to);  // 座標でジェスチャ
+harness.key_combination(&[Key::Cmd, Key::Z]);                      // 修飾キーつき
+harness.get_by_label("Mute").click();                              // AccessKit で引く
+harness.snapshot("clip_moved_200px");                              // tests/snapshots/ と差分
+```
+
+今日 `mock_input`(300行)を手書きして確かめた「down → move → up → 実際に動いた」が、**手書きのハーネスなしで書ける**。`blitz_dump` との差は、**食い違ったらテストが落ちる**こと(dump は人が見るだけだった)。
+
+**3. 窓の Lab** — 手触り。ここだけは人間が要る。
+
+### 設計への跳ね返り
+
+`get_by_label` が効くのは **egui ウィジェットとして作った部品だけ**(AccessKit ノードが出るため)。**painter で描いた矩形はラベルで引けない。**
+
+```
+chrome(ボタン・M/S・transport・fold三角)  → egui ウィジェット。ラベルで叩ける
+密な面(clip・key・グリッド・playhead)      → painter。座標で叩く
+```
+
+座標で叩く以上、**テストが幾何を知る**必要がある。§6 で `geometry.rs` から「一本の変換を共有する契約」だけを写すと決めたのは、ここに効く。
+
+### Blitz との役割分担 — 補強は設計時であって実行時ではない
+
+```
+設計時: HTML/CSS で見た目を詰める → Blitz(Stylo+Taffy)が解く → mock_tokens が値を吐く
+実行時: egui だけ。**Blitz は出てこない**
+```
+
+egui は視覚設計の反復が弱い(CSS が無い)。そこを Blitz で補うが、**それはビルド時の話**である。実行時に Blitz を混ぜる案は §3 の理由(接ぎ目・単位境界・beta の露出)で棄却済みであり、この分担を「実行時の補強」と読み替えないこと。
+
+### 着手順
+
+**フォント同梱 → 行モデル＋純関数テスト(339行の意図を写す) → その時点で `egui_kittest` を入れてジェスチャとスナップショットを閉じる。** 純関数テストが先なのは、一番安く、行モデルの作り直しを安全にするため。スナップショットは**撮る対象ができてから**入れる。
+
 ## 残余
 
 - **入力(C2)は未配線のまま。** 基盤が変わっても、この穴は塞がっていない。前回 `timeline_egui` が止まったのもここ。**加えて §7 の通り、繋ぐ先の翻訳層も作り直しになる**(`21cb8204^` から読める)
