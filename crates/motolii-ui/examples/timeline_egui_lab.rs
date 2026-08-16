@@ -61,6 +61,8 @@ const CELL_CHILD: Color32 = Color32::from_rgb(0x30, 0x30, 0x30);
 const CELL_PROP: Color32 = Color32::from_rgb(0x29, 0x29, 0x29);
 const TRACK_A: Color32 = Color32::from_rgb(0x37, 0x37, 0x37);
 const TRACK_B: Color32 = Color32::from_rgb(0x25, 0x25, 0x25);
+/// 数字を持たない細目盛。**主目盛より弱く、下地より濃い**
+const TRACK_MINOR: Color32 = Color32::from_rgb(0x30, 0x30, 0x30);
 const RULE: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
 const INK: Color32 = Color32::from_rgb(0xd4, 0xd4, 0xd4);
 const DIM: Color32 = Color32::from_rgb(0x8d, 0x8d, 0x8d);
@@ -164,16 +166,16 @@ fn advance_playhead(playhead: f32, dt: f32, comp: f32) -> (f32, bool) {
     }
 }
 
-/// 目盛の間隔(秒)。**窓に8本前後入る、切りのいい値**を選ぶ。
+/// 数字を出す目盛の間隔(秒)。**窓に16本前後入る、切りのいい値**を選ぶ。
 ///
 /// 寄るとフレームの倍数へ、引くと秒・分の倍数へ移る。候補にしか無い値は出さない
 /// — 「0.37秒ごと」のような目盛は読めないので。
 fn tick_step(span: f32, fps: Fps) -> f32 {
     let frame = 1.0 / fps.as_f64() as f32;
-    let target = span / 8.0;
+    let target = span / 16.0;
     let mut candidates = vec![frame, frame * 2.0, frame * 5.0, frame * 10.0];
     candidates.extend_from_slice(&[
-        0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0,
+        0.2, 0.5, 1.0, 2.0, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0, 600.0,
     ]);
     candidates.sort_by(f32::total_cmp);
     candidates
@@ -182,23 +184,49 @@ fn tick_step(span: f32, fps: Fps) -> f32 {
         .unwrap_or(600.0)
 }
 
-/// いま見えている窓に入る目盛の時刻。
+/// 数字を出さない細かい目盛の間隔。**`major` を割り切り、1フレームより細かくしない。**
+///
+/// これが「あいだがどれくらいか」を数えられる目盛で、数字の密度を上げずに
+/// 読み取れる分解能だけを上げる。フレームまで寄ったら細目盛は消える。
+fn minor_step(major: f32, fps: Fps) -> Option<f32> {
+    let frame = 1.0 / fps.as_f64() as f32;
+    // 5等分が基本。60秒台だけは 4等分(15秒)のほうが読める
+    let divisor = if (major - 60.0).abs() < 1e-3 || (major - 120.0).abs() < 1e-3 {
+        4.0
+    } else {
+        5.0
+    };
+    let candidate = major / divisor;
+    if candidate >= frame * 0.999 {
+        Some(candidate)
+    } else if frame < major * 0.5 {
+        Some(frame)
+    } else {
+        None
+    }
+}
+
+/// いま見えている窓に入る、その間隔の目盛の時刻。
 ///
 /// **目盛は時刻に貼り付く。** 画面をN等分すると、パンしても線が動かず
 /// 数字だけが変わる — 方眼が紙ではなく窓に貼られているように見えてしまう。
-fn ticks(view: TimelineView, fps: Fps) -> Vec<f32> {
-    let step = tick_step(view.span, fps);
+fn ticks_every(view: TimelineView, step: f32) -> Vec<f32> {
     let first = (view.start / step).floor() * step;
     let mut out = Vec::new();
     let mut t = first;
     // 端数で無限に回らないよう、本数で止める
-    while t <= view.start + view.span + step * 0.5 && out.len() < 256 {
+    while t <= view.start + view.span + step * 0.5 && out.len() < 1024 {
         if t >= -1e-4 {
             out.push(t);
         }
         t += step;
     }
     out
+}
+
+/// 数字を出す目盛
+fn ticks(view: TimelineView, fps: Fps) -> Vec<f32> {
+    ticks_every(view, tick_step(view.span, fps))
 }
 
 /// 目盛の文字。**間隔より細かい桁は出さない**
@@ -1022,28 +1050,62 @@ impl eframe::App for Lab {
         let track_left = full.left() + RAIL_W;
         let track_w = (full.right() - track_left).max(1.0);
         p.rect_filled(ruler, CornerRadius::ZERO, Color32::from_rgb(0x2a, 0x2a, 0x2a));
-        // **目盛は時刻に貼り付く。** ルーラも方眼もこの1本の列から引く
+        // **目盛は時刻に貼り付く。** ルーラも方眼もこの2本の列から引く
         let fps = self.document.composition.fps;
         let step = tick_step(self.view.span, fps);
         let ticks = ticks(self.view, fps);
+        let minor = minor_step(step, fps);
+        let minor_ticks: Vec<f32> = minor
+            .map(|s| ticks_every(self.view, s))
+            .unwrap_or_default();
         let ruler_clip = p.with_clip_rect(Rect::from_min_max(
             egui::pos2(track_left, ruler.top()),
             ruler.max,
         ));
+        // 細目盛は数字を持たない。**下から短く出す** — 数字の密度を上げずに
+        // 「あいだがどれだけか」を数えられるようにする
+        for t in &minor_ticks {
+            let x = self.view.time_to_x(*t, track_left, track_w);
+            ruler_clip.line_segment(
+                [
+                    egui::pos2(x, ruler.bottom() - 5.0),
+                    egui::pos2(x, ruler.bottom()),
+                ],
+                Stroke::new(1.0, Color32::from_rgb(0x3a, 0x3a, 0x3a)),
+            );
+        }
         for t in &ticks {
             let x = self.view.time_to_x(*t, track_left, track_w);
             ruler_clip.line_segment(
                 [egui::pos2(x, ruler.top()), egui::pos2(x, ruler.bottom())],
-                Stroke::new(1.0, Color32::from_rgb(0x44, 0x44, 0x44)),
+                Stroke::new(1.0, Color32::from_rgb(0x55, 0x55, 0x55)),
             );
             ruler_clip.text(
-                egui::pos2(x + 4.0, ruler.bottom() - 5.0),
+                egui::pos2(x + 4.0, ruler.bottom() - 6.0),
                 Align2::LEFT_BOTTOM,
                 tick_label(*t, step),
                 FontId::monospace(9.0),
                 DIM,
             );
         }
+        // いま何秒を見ているか。**窓の広さと粒**もここに出す
+        p.text(
+            egui::pos2(head.left() + 150.0, head.center().y),
+            Align2::LEFT_CENTER,
+            format!(
+                "{:.2}s  view {:.2}–{:.2}s  grid {}",
+                self.playhead,
+                self.view.start,
+                self.view.start + self.view.span,
+                if step >= 1.0 {
+                    format!("{step:.0}s")
+                } else {
+                    format!("{:.0}f", step * fps.as_f64() as f32)
+                }
+            ),
+            FontId::monospace(9.0),
+            DIM,
+        );
         p.line_segment(
             [ruler.left_bottom(), ruler.right_bottom()],
             Stroke::new(1.0, RULE),
@@ -1069,15 +1131,17 @@ impl eframe::App for Lab {
                 self.playing = false;
                 self.status = "end".to_owned();
             }
-            // **窓の外へ出たら窓が付いていく。** 寄っているときの再生は、これが無いと
-            // playhead を見失う(AE と同じページ送り)
-            if self.playhead < self.view.start || self.playhead > self.view.start + self.view.span {
-                self.view = TimelineView {
-                    start: self.playhead,
-                    span: self.view.span,
-                }
-                .clamped(comp_seconds);
+            // **DAW と同じで、面のほうが流れる。** playhead を窓の中央に置き続け、
+            // 下の絵が左へ流れていく。ページ送り(端まで行ったら1画面ぶん飛ぶ)は
+            // 飛んだ瞬間に目が置いていかれるので採らない。
+            //
+            // 頭と終端では `clamped` が窓を止めるので、そこだけは playhead のほうが
+            // 動く — 流れる物が無いところで無理に流さない
+            self.view = TimelineView {
+                start: self.playhead - self.view.span * 0.5,
+                span: self.view.span,
             }
+            .clamped(comp_seconds);
         }
 
         // ルーラのスクラブ。**Document は触らない** — playhead は session の状態
@@ -1336,8 +1400,18 @@ impl eframe::App for Lab {
                 }
             }
 
-            // 時間面。**方眼はルーラと同じ目盛の上に立つ**
+            // 時間面。**方眼はルーラと同じ目盛の上に立つ**(細目盛は薄く)
             p.rect_filled(track, CornerRadius::ZERO, TRACK_A);
+            for t in &minor_ticks {
+                let x = self.view.time_to_x(*t, track_left, track_w);
+                if x < track.left() {
+                    continue;
+                }
+                p.line_segment(
+                    [egui::pos2(x, track.top()), egui::pos2(x, track.bottom())],
+                    Stroke::new(1.0, TRACK_MINOR),
+                );
+            }
             for t in &ticks {
                 let x = self.view.time_to_x(*t, track_left, track_w);
                 if x < track.left() {
@@ -2927,5 +3001,60 @@ mod tests {
         let (at, playing) = advance_playhead(16.0, 0.016, 16.0);
         assert_eq!(at, 16.0);
         assert!(!playing);
+    }
+
+    /// **細目盛は主目盛を割り切り、1フレームより細かくならない。**
+    #[test]
+    fn minor_ticks_divide_the_labelled_ones_and_stop_at_a_frame() {
+        let fps = Fps::try_new(30, 1).expect("fps");
+        let frame = 1.0 / 30.0;
+
+        for span in [600.0_f32, 120.0, 16.0, 4.0, 1.0, MIN_SPAN] {
+            let major = tick_step(span, fps);
+            let Some(minor) = minor_step(major, fps) else {
+                assert!(
+                    major <= frame * 2.0,
+                    "細目盛を消していいのはフレームまで寄ったときだけ: major={major}"
+                );
+                continue;
+            };
+            assert!(minor >= frame * 0.999, "1フレームより細かくしない: {minor}");
+            assert!(minor < major, "主目盛より細かい: {minor} < {major}");
+            let n = major / minor;
+            assert!(
+                (n - n.round()).abs() < 1e-3,
+                "主目盛を割り切る: {major} / {minor}"
+            );
+        }
+    }
+
+    /// 再生中は**面が流れ、playhead は窓の真ん中に居続ける**(DAW と同じ)。
+    /// 頭と終端だけは窓が止まり、playhead のほうが動く。
+    #[test]
+    fn playback_keeps_the_playhead_centred_and_stops_scrolling_at_both_ends() {
+        let comp = 16.0_f32;
+        let span = 4.0_f32;
+        let centred = |playhead: f32| {
+            TimelineView {
+                start: playhead - span * 0.5,
+                span,
+            }
+            .clamped(comp)
+        };
+
+        // 真ん中あたり: playhead は窓の中央
+        let view = centred(8.0);
+        assert!((view.start - 6.0).abs() < 1e-4);
+        assert!(((8.0 - view.start) / view.span - 0.5).abs() < 1e-4);
+
+        // 頭: 窓は0より前へ行かない = playhead は窓の左寄りに居る
+        let view = centred(0.5);
+        assert_eq!(view.start, 0.0);
+        assert!((0.5 - view.start) / view.span < 0.5);
+
+        // 終端: 窓はcompより後ろへ行かない = playhead は窓の右寄りに居る
+        let view = centred(15.5);
+        assert!((view.start - (comp - span)).abs() < 1e-4);
+        assert!((15.5 - view.start) / view.span > 0.5);
     }
 }
