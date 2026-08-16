@@ -1,0 +1,169 @@
+<!doctype html>
+<!-- Visual-review-only Timeline concept. Document/D2 remains the product owner. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Motolii Timeline · Group Layer</title>
+  <link rel="stylesheet" href="../src/tokens/mock-candidates.css">
+  <link rel="stylesheet" href="./timeline-library.css">
+</head>
+<body>
+<main class="timeline" aria-label="Timeline Group Layer concept">
+  <header class="timelineHead">
+    <strong>Timeline</strong><span class="headMeta">LAYERS</span>
+    <nav class="transport" aria-label="Timeline transport">
+      <button type="button" data-action="previous-key" title="Previous key">‹◆</button>
+      <button type="button" data-action="play">▶</button>
+      <button type="button" data-action="next-key" title="Next key">◆›</button>
+    </nav>
+    <div class="headActions">
+      <button type="button" class="pressed" data-toggle="snap" aria-pressed="true">Snap</button>
+      <button type="button" data-action="fit">Fit</button>
+      <time>00:00:04</time>
+    </div>
+  </header>
+
+  <section class="overview" aria-label="Composition overview">
+    <span>ARRANGEMENT</span>
+    <div class="overviewTrack"><i class="bar barA"></i><i class="bar barB"></i><i class="bar barC"></i><b></b><em></em></div>
+  </section>
+
+  <section class="workspace">
+    <section class="arrangement" aria-label="Layer timeline">
+      <div class="columnHead"><span>OBJECT</span><span title="Key parameters · Mute · Solo">◆&nbsp; M&nbsp; S</span></div>
+      <div class="ruler"><span style="left:0%">0:00</span><span style="left:12.5%">0:02</span><span style="left:25%">0:04</span><span style="left:37.5%">0:06</span><span style="left:50%">0:08</span><span style="left:62.5%">0:10</span><span style="left:75%">0:12</span><span style="left:87.5%">0:14</span><span style="left:100%">0:16</span></div>
+
+      <div class="rows" id="timelineRows">
+        <div class="timelineRow layerRow groupRow selected folded" data-id="title-group" data-parent="" title="Double-click to show the layers inside this group">
+          <header class="layerCell">
+            <button class="fold" type="button" aria-expanded="false" aria-label="Show layers inside Title scene">›</button>
+            <i class="layerIcon groupIcon"></i><button class="layerName" type="button">Title scene</button>
+            <span class="childCount">3</span><button class="propertyFold paramFold" type="button" aria-expanded="false" aria-label="Show key parameters for Title scene" title="Show or hide this layer's key parameters">◇</button><button class="ms mute" type="button" aria-pressed="false">M</button><button class="ms solo" type="button" aria-pressed="false">S</button>
+          </header>
+          <div class="rowTrack"><article class="objectBar groupBar selectedBar" data-owner="title-group" style="--left:4%;--width:91%" aria-label="Title scene"><i class="trimHandle trimStart"></i><i class="summaryTicks"></i><i class="trimHandle trimEnd"></i></article></div>
+        </div>
+
+        <div class="timelineRow propertyRow groupProperty" data-owner="title-group" hidden>
+          <div class="layerCell"><span class="treeLine"></span><i class="propertyColor position"></i><span>Transform</span><small>◆ 2</small></div>
+          <div class="rowTrack keyTrack" data-property="Transform"><i class="key" style="left:20%"></i><i class="key" style="left:71%"></i></div>
+        </div>
+        <div class="timelineRow propertyRow groupProperty" data-owner="title-group" hidden>
+          <div class="layerCell"><span class="treeLine"></span><i class="propertyColor opacity"></i><span>Opacity</span><small>◆ 3</small></div>
+          <div class="rowTrack keyTrack" data-property="Opacity"><i class="key" style="left:15%"></i><i class="key" style="left:49%"></i><i class="key" style="left:84%"></i></div>
+        </div>
+
+        <div class="timelineRow layerRow childRow" data-id="shared-left" data-parent="title-group" hidden>
+          <header class="layerCell"><span class="foldSpacer childFoldSpacer"></span><i class="layerIcon shapeIcon"></i><button class="layerName" type="button">Shared left</button><span></span><button class="propertyFold paramFold" type="button" aria-expanded="false" aria-label="Show key parameters for Shared left" title="Show or hide this layer's key parameters">◇</button><button class="ms mute" type="button" aria-pressed="false">M</button><button class="ms solo" type="button" aria-pressed="false">S</button></header>
+          <div class="rowTrack"><article class="objectBar toneBlue" data-owner="shared-left" style="--left:4%;--width:38%" aria-label="Shared left"><i class="trimHandle trimStart"></i><span class="keySummary">◆◆</span><i class="trimHandle trimEnd"></i></article></div>
+        </div>
+        <div class="timelineRow propertyRow" data-owner="shared-left" hidden>
+          <div class="layerCell"><span class="treeLine childTree"></span><i class="propertyColor position"></i><span>Position</span><small>◆ 2</small></div>
+          <div class="rowTrack keyTrack" data-property="Position"><i class="key" style="left:11%"></i><i class="key" style="left:35%"></i></div>
+        </div>
+        <div class="timelineRow propertyRow" data-owner="shared-left" hidden>
+          <div class="layerCell"><span class="treeLine childTree"></span><i class="propertyColor scale"></i><span>Scale</span><small>◆ 2</small></div>
+          <div class="rowTrack keyTrack" data-property="Scale"><i class="key" style="left:18%"></i><i class="key" style="left:39%"></i></div>
+        </div>
+
+        <div class="timelineRow layerRow childRow" data-id="reference-text" data-parent="title-group" hidden>
+          <header class="layerCell"><span class="foldSpacer childFoldSpacer"></span><i class="layerIcon textIcon"></i><button class="layerName" type="button">Reference text</button><span></span><button class="propertyFold paramFold" type="button" aria-expanded="false" aria-label="Show key parameters for Reference text" title="Show or hide this layer's key parameters">◇</button><button class="ms mute" type="button" aria-pressed="false">M</button><button class="ms solo" type="button" aria-pressed="false">S</button></header>
+          <div class="rowTrack"><article class="objectBar tonePurple" data-owner="reference-text" style="--left:34%;--width:43%" aria-label="Reference text"><i class="trimHandle trimStart"></i><span class="keySummary">◆</span><i class="trimHandle trimEnd"></i></article></div>
+        </div>
+        <div class="timelineRow propertyRow" data-owner="reference-text" hidden>
+          <div class="layerCell"><span class="treeLine childTree"></span><i class="propertyColor opacity"></i><span>Opacity</span><small>◆ 2</small></div>
+          <div class="rowTrack keyTrack" data-property="Opacity"><i class="key" style="left:40%"></i><i class="key" style="left:72%"></i></div>
+        </div>
+
+        <div class="timelineRow layerRow childRow" data-id="shared-right" data-parent="title-group" hidden>
+          <header class="layerCell"><span class="foldSpacer childFoldSpacer"></span><i class="layerIcon shapeIcon"></i><button class="layerName" type="button">Shared right</button><span></span><button class="propertyFold paramFold" type="button" aria-expanded="false" aria-label="Show key parameters for Shared right" title="Show or hide this layer's key parameters">◇</button><button class="ms mute" type="button" aria-pressed="false">M</button><button class="ms solo" type="button" aria-pressed="false">S</button></header>
+          <div class="rowTrack"><article class="objectBar toneRose" data-owner="shared-right" style="--left:69%;--width:26%" aria-label="Shared right"><i class="trimHandle trimStart"></i><span class="keySummary">◆◆◆</span><i class="trimHandle trimEnd"></i></article></div>
+        </div>
+        <div class="timelineRow propertyRow" data-owner="shared-right" hidden>
+          <div class="layerCell"><span class="treeLine childTree"></span><i class="propertyColor rotation"></i><span>Rotation</span><small>◆ 3</small></div>
+          <div class="rowTrack keyTrack" data-property="Rotation"><i class="key" style="left:72%"></i><i class="key" style="left:83%"></i><i class="key" style="left:93%"></i></div>
+        </div>
+
+        <div class="timelineRow layerRow rootRow" data-id="background" data-parent="">
+          <header class="layerCell"><span class="foldSpacer"></span><i class="layerIcon mediaIcon"></i><button class="layerName" type="button">Background</button><span></span><span class="paramSpacer"></span><button class="ms mute" type="button" aria-pressed="false">M</button><button class="ms solo" type="button" aria-pressed="false">S</button></header>
+          <div class="rowTrack"><article class="objectBar toneGreen" data-owner="background" style="--left:0%;--width:84%" aria-label="Background"><i class="trimHandle trimStart"></i><i class="trimHandle trimEnd"></i></article></div>
+        </div>
+        <div class="timelineRow layerRow rootRow audioRow" data-id="starter-audio" data-parent="">
+          <header class="layerCell"><span class="foldSpacer"></span><i class="layerIcon audioIcon"></i><button class="layerName" type="button">starter-tone.wav</button><span></span><span class="paramSpacer"></span><button class="ms mute" type="button" aria-pressed="false">M</button><button class="ms solo" type="button" aria-pressed="false">S</button></header>
+          <div class="rowTrack"><article class="objectBar toneGold waveform" data-owner="starter-audio" style="--left:7%;--width:78%" aria-label="starter-tone.wav"><i class="trimHandle trimStart"></i><i class="trimHandle trimEnd"></i></article></div>
+        </div>
+      </div>
+
+      <div class="surfaceOverlay"><div class="playhead" style="left:25%"><i></i></div><i class="timeGuide" hidden></i><i class="insertGuide" hidden></i></div>
+    </section>
+
+    <aside class="keyTools" aria-label="Key tools">
+      <header><span>KEY TOOLS</span><small>0 selected</small></header>
+      <section><h2>ALIGN</h2><div class="toolGrid"><button type="button">←</button><button type="button">↔</button><button type="button">→</button></div></section>
+      <section><h2>INTERPOLATION</h2><div class="toolGrid"><button type="button">Hold</button><button type="button" class="pressed">Smooth</button></div></section>
+      <p>Only parameters with keys appear. Values remain in the Inspector.</p>
+    </aside>
+  </section>
+
+  <menu class="contextMenu" hidden>
+    <button type="button">Duplicate</button><hr><button type="button">Group selected</button><button type="button">Ungroup</button><hr><button type="button">Delete</button>
+  </menu>
+
+  <footer><span id="gestureStatus" aria-live="polite">Selected Group: Title scene · 3 children</span><span>Wheel: pan time · Shift/⌘ click: multi-key · Drag: time / order · Esc: revert</span></footer>
+</main>
+<script>
+const rows=document.querySelector('#timelineRows'),ruler=document.querySelector('.ruler'),status=document.querySelector('#gestureStatus'),playhead=document.querySelector('.playhead'),timeGuide=document.querySelector('.timeGuide'),insertGuide=document.querySelector('.insertGuide'),snapButton=document.querySelector('[data-toggle="snap"]'),menu=document.querySelector('.contextMenu'),arrangement=document.querySelector('.arrangement');let gesture,viewportStart=0;const timelineRange=16;
+const clamp=(v,min,max)=>Math.max(min,Math.min(max,v)),pct=(e,el)=>clamp((e.clientX-el.getBoundingClientRect().left)/el.getBoundingClientRect().width*100,0,100),snap=v=>snapButton.getAttribute('aria-pressed')==='true'?Math.round(v/2)*2:v,timeLabel=seconds=>{const sign=seconds<0?'-':'';return `${sign}0:${String(Math.abs(Math.round(seconds))).padStart(2,'0')}`},timecode=v=>timeLabel(viewportStart+v/100*timelineRange),num=(el,p)=>parseFloat(el.style.getPropertyValue(p));
+const rowFor=id=>document.querySelector(`.layerRow[data-id="${id}"]`),propertiesFor=id=>[...document.querySelectorAll(`.propertyRow[data-owner="${id}"]`)],childrenFor=id=>[...document.querySelectorAll(`.layerRow[data-parent="${id}"]`)];
+const descendantRows=id=>{const out=[];for(const child of childrenFor(id)){out.push(child,...propertiesFor(child.dataset.id),...descendantRows(child.dataset.id))}return out};
+const setBar=(bar,left,width)=>{bar.style.setProperty('--left',`${left}%`);bar.style.setProperty('--width',`${width}%`)};
+const storeBarTime=bar=>{bar.dataset.start=String(viewportStart+num(bar,'--left')/100*timelineRange);bar.dataset.duration=String(num(bar,'--width')/100*timelineRange)};
+const storeKeyTime=key=>key.dataset.time=String(viewportStart+parseFloat(key.style.left)/100*timelineRange);
+const renderViewport=()=>{document.querySelectorAll('.objectBar').forEach(bar=>{if(!bar.dataset.start)storeBarTime(bar);setBar(bar,(Number(bar.dataset.start)-viewportStart)/timelineRange*100,Number(bar.dataset.duration)/timelineRange*100)});document.querySelectorAll('.key').forEach(key=>{if(!key.dataset.time)storeKeyTime(key);key.style.left=`${(Number(key.dataset.time)-viewportStart)/timelineRange*100}%`});ruler.querySelectorAll('span').forEach((label,index)=>label.textContent=timeLabel(viewportStart+index*timelineRange/8))};
+renderViewport();
+const setGuide=(at,label=timecode(at))=>{timeGuide.hidden=false;timeGuide.style.left=`${at}%`;timeGuide.dataset.label=label};
+const selectLayer=id=>{
+  document.querySelectorAll('.layerRow').forEach(row=>row.classList.toggle('selected',row.dataset.id===id));
+  const row=rowFor(id),bar=row.querySelector('.objectBar'),isGroup=row.classList.contains('groupRow');
+  status.textContent=`Selected ${isGroup?'Group':'Layer'}: ${row.querySelector('.layerName').textContent}${isGroup?' · 3 children':''}`;
+  bar?.classList.add('selectedBar');document.querySelectorAll('.objectBar').forEach(item=>{if(item!==bar)item.classList.remove('selectedBar')});
+};
+const foldGroup=button=>{
+  const id=button.closest('.groupRow').dataset.id,open=button.getAttribute('aria-expanded')==='true';
+  button.setAttribute('aria-expanded',String(!open));button.textContent=open?'›':'⌄';
+  if(open){descendantRows(id).forEach(row=>{row.dataset.beforeFoldHidden=String(row.hidden);row.hidden=true})}else{descendantRows(id).forEach(row=>{row.hidden=row.dataset.beforeFoldHidden?row.dataset.beforeFoldHidden==='true':row.classList.contains('propertyRow');delete row.dataset.beforeFoldHidden})}
+  button.closest('.groupRow').classList.toggle('folded',open);
+  status.textContent=`${button.closest('.groupRow').querySelector('.layerName').textContent} ${open?'folded':'unfolded'}`;
+};
+const clearGesture=message=>{gesture?.target?.classList.remove('dragging');gesture?.targets?.forEach(item=>item.key.classList.remove('dragging'));timeGuide.hidden=true;insertGuide.hidden=true;if(message)status.textContent=message;gesture=undefined};
+const restoreGesture=message=>{if(!gesture)return;if(gesture.kind==='key')gesture.targets.forEach(item=>item.key.style.left=`${item.left}%`);if(gesture.kind==='scrub')playhead.style.left=`${gesture.left}%`;if(gesture.bars)gesture.bars.forEach(({bar,left,width})=>setBar(bar,left,width));if(gesture.order)gesture.order.forEach(row=>rows.append(row));clearGesture(message)};
+document.querySelectorAll('.fold').forEach(button=>button.addEventListener('click',e=>{e.stopPropagation();foldGroup(button)}));
+document.querySelectorAll('.groupRow').forEach(row=>row.addEventListener('dblclick',e=>{if(e.target.closest('.ms,.propertyFold'))return;e.preventDefault();foldGroup(row.querySelector('.fold'))}));
+document.querySelectorAll('.propertyFold').forEach(button=>button.addEventListener('click',e=>{e.stopPropagation();const id=button.closest('.layerRow').dataset.id,open=button.getAttribute('aria-expanded')==='true',name=button.closest('.layerRow').querySelector('.layerName').textContent;button.setAttribute('aria-expanded',String(!open));button.textContent=open?'◇':'◆';button.setAttribute('aria-label',`${open?'Show':'Hide'} key parameters for ${name}`);propertiesFor(id).forEach(row=>row.hidden=open);status.textContent=`${name} key parameters ${open?'hidden':'shown'}`}));
+document.querySelectorAll('.layerName').forEach(button=>button.addEventListener('click',()=>selectLayer(button.closest('.layerRow').dataset.id)));
+const syncOutputState=()=>{const soloed=[...document.querySelectorAll('.ms.solo[aria-pressed="true"]')];document.querySelectorAll('.layerRow').forEach(row=>{const muted=row.querySelector('.ms.mute')?.getAttribute('aria-pressed')==='true',solo=row.querySelector('.ms.solo')?.getAttribute('aria-pressed')==='true';row.classList.toggle('outputMuted',muted);row.classList.toggle('notSoloed',soloed.length>0&&!solo)})};
+document.querySelectorAll('.ms').forEach(button=>{const layer=button.closest('.layerRow').querySelector('.layerName').textContent,action=button.classList.contains('mute')?'Mute':'Solo',meaning=action==='Mute'?'removes this layer from preview':'isolates this layer in preview';button.title=`${action} ${layer}`;button.setAttribute('aria-label',`${action} ${layer}`);button.addEventListener('pointerenter',()=>status.textContent=`${action}: ${meaning}`)});
+document.querySelectorAll('.ms,[data-toggle]').forEach(button=>button.addEventListener('click',()=>{const pressed=button.getAttribute('aria-pressed')!=='true';button.setAttribute('aria-pressed',String(pressed));button.classList.toggle('pressed',pressed);if(button.matches('.ms')){syncOutputState();const action=button.classList.contains('mute')?'Mute':'Solo';status.textContent=`${action} ${pressed?'on':'off'} · ${button.closest('.layerRow').querySelector('.layerName').textContent}`}else status.textContent=`Snap ${pressed?'enabled':'disabled'}`}));
+document.querySelectorAll('[data-action],.toolGrid button,.contextMenu button').forEach(button=>button.addEventListener('click',()=>{status.textContent=`${button.textContent.trim()} (prototype state)`;menu.hidden=true}));
+document.querySelectorAll('.objectBar').forEach(bar=>bar.addEventListener('pointerdown',e=>{
+  if(e.button!==0)return;e.preventDefault();const owner=bar.dataset.owner,row=rowFor(owner),rect=bar.getBoundingClientRect(),kind=e.target.classList.contains('trimStart')||e.clientX-rect.left<7?'trim-start':e.target.classList.contains('trimEnd')||rect.right-e.clientX<7?'trim-end':'move';
+  selectLayer(owner);const members=row.classList.contains('groupRow')?[bar,...descendantRows(owner).map(r=>r.querySelector('.objectBar')).filter(Boolean)]:[bar];
+  gesture={kind,target:bar,owner,origin:pct(e,bar.closest('.rowTrack')),originY:e.clientY,left:num(bar,'--left'),width:num(bar,'--width'),bars:members.map(item=>({bar:item,left:num(item,'--left'),width:num(item,'--width')})),order:[...rows.children],reordered:false};bar.classList.add('dragging');bar.setPointerCapture(e.pointerId);
+}));
+document.querySelectorAll('.key').forEach(key=>key.addEventListener('pointerdown',e=>{if(e.button!==0)return;e.preventDefault();e.stopPropagation();const additive=e.shiftKey||e.metaKey||e.ctrlKey,alreadySelected=key.classList.contains('selectedKey');if(additive)key.classList.toggle('selectedKey');else{if(!alreadySelected)document.querySelectorAll('.key').forEach(k=>k.classList.remove('selectedKey'));key.classList.add('selectedKey')}if(!key.classList.contains('selectedKey')){document.querySelector('.keyTools header small').textContent=`${document.querySelectorAll('.key.selectedKey').length} selected`;return}const targets=[...document.querySelectorAll('.key.selectedKey')];targets.forEach(item=>item.classList.add('dragging'));document.querySelector('.keyTools header small').textContent=`${targets.length} selected`;gesture={kind:'key',target:key,targets:targets.map(item=>({key:item,left:parseFloat(item.style.left)})),origin:pct(e,key.closest('.rowTrack')),left:parseFloat(key.style.left)};key.setPointerCapture(e.pointerId)}));
+ruler.addEventListener('pointerdown',e=>{const at=snap(pct(e,ruler));gesture={kind:'scrub',left:parseFloat(playhead.style.left)||25};playhead.style.left=`${at}%`;setGuide(at);ruler.setPointerCapture(e.pointerId)});
+window.addEventListener('pointermove',e=>{
+  if(!gesture)return;if(gesture.kind==='scrub'){const at=snap(pct(e,ruler));playhead.style.left=`${at}%`;setGuide(at);status.textContent=`Scrubbing ${timecode(at)}`;return}
+  if(gesture.kind==='key'){const delta=snap(pct(e,gesture.target.closest('.rowTrack'))-gesture.origin);gesture.targets.forEach(item=>item.key.style.left=`${clamp(item.left+delta,0,100)}%`);const at=clamp(gesture.left+delta,0,100);setGuide(at,gesture.target.closest('.keyTrack').dataset.property+' · '+timecode(at));status.textContent=`Moving ${gesture.targets.length} key${gesture.targets.length===1?'':'s'} to ${timecode(at)}`;return}
+  const track=gesture.target.closest('.rowTrack'),delta=snap(pct(e,track)-gesture.origin);
+  if(gesture.kind==='move'){gesture.bars.forEach(item=>setBar(item.bar,clamp(item.left+delta,0,100-item.width),item.width));setGuide(clamp(gesture.left+delta,0,100-gesture.width));if(Math.abs(e.clientY-gesture.originY)>9){const candidates=[...document.querySelectorAll(`.layerRow[data-parent="${rowFor(gesture.owner).dataset.parent}"]`)].filter(row=>row.dataset.id!==gesture.owner&&!row.hidden),target=candidates.find(row=>e.clientY<row.getBoundingClientRect().top+row.getBoundingClientRect().height/2);if(target){const block=[rowFor(gesture.owner),...propertiesFor(gesture.owner),...descendantRows(gesture.owner)];block.forEach(row=>rows.insertBefore(row,target));gesture.reordered=true;insertGuide.hidden=false;insertGuide.style.top=`${target.offsetTop}px`}}}
+  if(gesture.kind==='trim-start'){const left=clamp(gesture.left+delta,0,gesture.left+gesture.width-4);setBar(gesture.target,left,gesture.left+gesture.width-left);setGuide(left)}
+  if(gesture.kind==='trim-end'){const width=clamp(gesture.width+delta,4,100-gesture.left);setBar(gesture.target,gesture.left,width);setGuide(gesture.left+width)}
+});
+arrangement.addEventListener('wheel',e=>{const delta=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;if(!delta)return;e.preventDefault();viewportStart=clamp(viewportStart+delta/60,-16,96);renderViewport();status.textContent=`Timeline view ${timeLabel(viewportStart)}–${timeLabel(viewportStart+timelineRange)}`},{passive:false});
+window.addEventListener('pointerup',()=>{if(!gesture)return;if(gesture.kind==='key')gesture.targets.forEach(item=>storeKeyTime(item.key));else gesture.bars?.forEach(item=>storeBarTime(item.bar));const {kind,owner,reordered}=gesture;clearGesture(kind==='key'?'Key moved':kind==='scrub'?'Playhead moved':kind==='move'&&reordered?'Layer order changed':kind==='move'&&rowFor(owner)?.classList.contains('groupRow')?'Group and children moved together':kind==='move'?'Layer moved':'Layer trimmed')});
+window.addEventListener('pointercancel',()=>restoreGesture('Gesture cancelled — reverted'));window.addEventListener('keydown',e=>{if(e.key==='Escape'&&gesture)restoreGesture('Gesture cancelled — reverted')});
+document.addEventListener('contextmenu',e=>{const target=e.target.closest('.layerRow,.objectBar');if(!target)return;e.preventDefault();menu.hidden=false;menu.style.left=`${e.clientX}px`;menu.style.top=`${e.clientY}px`});document.addEventListener('pointerdown',e=>{if(!e.target.closest('.contextMenu')&&e.button===0)menu.hidden=true});
+</script>
+</body>
+</html>

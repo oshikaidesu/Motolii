@@ -42,13 +42,14 @@ Blitzで効かないCSSを書いても**エラーにならず、silentに違う�
 
 | # | 禁止 | 理由 / 代わりにすること |
 |---|---|---|
-| 9 | **ブラウザで動くはずのCSSを、Blitzで確認せずに使う** | 画像は`width`指定でも**元解像度でアトラスへ載る**（probe実測）。使うCSSは`spikes/blitz-probe/`で実際に効いたものに限る |
+| 9 | **browser previewだけでCSSを採用する** | 画像は`width`指定でも**元解像度でアトラスへ載る**（probe実測）。HTML/CSSは通常のGrid/Flexを含めて設計してよいが、採用前に固定crate版のdirect dumpで確認する |
 | 10 | **JSに依存する構造を書く**（`<script>`、インラインhandler、JS前提のライブラリ） | **BlitzはJSエンジンを持たない。**挙動はRust側に書く |
 | 11 | **性能問題をCSSで解こうとする** | メモ化はCSSではなく**Dioxus側**（probe実測）。CSSで直らないものはCSSの問題ではない |
-| 12 | 効くか不明なCSSプロパティを「たぶん効く」で入れる | `spikes/blitz-probe/` に最小再現を足して**確かめてから**使う。確かめられないなら`RETURN` |
+| 12 | 効くか不明なCSSプロパティを「たぶん効く」で入れる | 公式statusを設計可能性の根拠にし、固定crate版の最小direct dumpまたは対象panel dumpで**確かめてから**使う。既存probeにpropertyが無いこと自体は拒否理由にしない |
 
-**判定法**: `timeline_blitz/` 等に書いたCSSプロパティのうち、
-`spikes/blitz-probe/` で一度も使われていないものが**残っていないこと**。
+**判定法**: browser previewを視覚設計の確認とし、`timeline_blitz/` 等の採用CSSは
+固定crate版のdirect dumpで描画を確認する。propertyが既存probeに無いことでは拒否しない。
+詳細は[Blitz HTML/CSSの設計・検証方針](reviews/2026-08-16-blitz-html-css-authoring-and-validation-decision.md)を正とする。
 
 ## RETURN の形式
 
@@ -207,7 +208,7 @@ Rust側にロジックを新規で書き足していたら、それは**やり�
 | **ALLOWLIST** | 新規 `crates/motolii-ui/src/inspector_blitz/**` のみ |
 | **READ SET** | `Inspector.tsx`(構造)、**`productStyles.ts`(147行 — 色・寸法の唯一の出所。C1における`theme.rs`に相当)**、`inspector_host_runtime.rs`(繋ぐ先)、`spikes/blitz-probe/src/bin/ui_mock.rs` |
 | **POSITIVE ORACLE** | 各セクションが同じ構造で存在し、`productStyles.ts` の値が**リテラルで一致**すること |
-| **NEGATIVE ORACLE** | 新しい色・寸法定数が0件 / probe未使用のCSSプロパティが0件 / **`inspector_host_runtime.rs` を編集していない** |
+| **NEGATIVE ORACLE** | 新しい色・寸法定数が0件 / browser previewだけで採用したCSSが0件（固定crate版dumpを要する） / **`inspector_host_runtime.rs` を編集していない** |
 | **NON-GOALS** | 共通NON-GOALS全部 + `PanResponder`(ドラッグ)を移植しない(C2) + `ui/motolii-rn/`を削除・改変しない(**まだ製品正本**) |
 | **RETURN** | `productStyles.ts` に無い値が要る時点で即`RETURN`。Rust側にロジックを足したくなったら`RETURN` |
 
@@ -233,7 +234,7 @@ C5の前提。C7と同型で、対象が小さい（計252行）。
 | **ALLOWLIST** | 新規 `crates/motolii-ui/src/chrome_blitz/**` のみ |
 | **READ SET** | 上記3ファイル、`productStyles.ts`、`spikes/blitz-probe/src/bin/ui_mock.rs`、`docs/ui-interaction-language.md`(**読むだけ。新要件を発明しない**) |
 | **POSITIVE ORACLE** | 各要素が同じ構造で存在し `productStyles.ts` の値がリテラル一致 |
-| **NEGATIVE ORACLE** | 新しい色・寸法定数が0件 / probe未使用のCSSが0件 / **パネル登録の仕組みを新設しない**(`registry.tsx`の構造を写す) |
+| **NEGATIVE ORACLE** | 新しい色・寸法定数が0件 / browser previewだけで採用したCSSが0件（固定crate版dumpを要する） / **パネル登録の仕組みを新設しない**(`registry.tsx`の構造を写す) |
 | **NON-GOALS** | 共通NON-GOALS全部 + chromeに何を置くかを決めない + `ui/motolii-rn/`を削除・改変しない |
 | **RETURN** | `productStyles.ts` に無い値が要る時点で即`RETURN` |
 

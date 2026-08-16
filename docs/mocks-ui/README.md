@@ -23,6 +23,19 @@
   group候補にすること、group境界をまたぐ並べ替えを拒否すること、右クリックとheader focusの
   shortcut入口を保つ。semantic write routeは別のclosed contractでDocument/D2へ接続する。
 
+## Timeline library static review leaf (2026-08-16)
+
+[`public/timeline-library.html`](public/timeline-library.html) と
+[`public/timeline-library.css`](public/timeline-library.css) は、現在の `timeline_blitz` dumpを
+基準に、Timelineの密度・rail・時間面・Key Toolsの情報階層をブラウザで比較する独立leafである。
+Viteでは `/timeline-library.html` で開く。HTML内の選択、開閉、M/S、clip の move/trim、ruler scrub は
+比較用の局所状態であり、Document/D2、playback、clip/keyの編集、Undo、保存、Preview/Exportに接続しない。
+
+- 製品Timelineの描画正本は `timeline_blitz` である。clip/keyの密な時間面は custom widget 1 node、
+  chrome/railはHTML/CSSという現行境界を変えない。
+- Layer/Property hierarchy、M/S、Key Toolsの表示は視覚比較に限る。これらの所有者・永続意味・操作write routeを
+  このleafから定義しない。実操作へ進める時はDocument/D2の別closed contractを先に定める。
+
 ## 現在の所有境界
 
 React/Viteへの移行は実行基盤として完了しているが、全surfaceのReact-native化は完了していない。`src/legacy/LegacyHostBoundaryScreen.jsx`は、legacy `m3-vism-host-boundary.html`をVite raw importし、`html-react-parser`でReact treeへ変換する移行bridgeである。元CSS、class、ID、子DOMと、リポジトリ同梱の固定scriptを維持しながら、Browser、Color Book、Stage、Inspector、Timeline、Recovery、Settingsをnamed wrapperへ昇格する。

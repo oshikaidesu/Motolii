@@ -1,0 +1,200 @@
+<!doctype html>
+<!--
+  Visual review projection only.
+  Source: 161c7ccdeb5a44a572de5cd9333a72467a78fae8:ui/motolii-rn/src/Browser.tsx
+  Styles: 161c7ccdeb5a44a572de5cd9333a72467a78fae8:ui/motolii-rn/src/productStyles.ts
+  Initial MEDIA data: 161c7ccd App.test.tsx. Palette fixture: BrowserPaletteMock.test.tsx.
+  No Host, Document, intent, drag, or persistence is attached here.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Motolii Browser RN source projection</title>
+    <link rel="stylesheet" href="/rn-browser-161c7ccd.css" />
+  </head>
+  <body>
+    <input class="state" type="radio" name="tab" id="tab-media" checked />
+    <input class="state" type="radio" name="tab" id="tab-effects" />
+    <input class="state" type="radio" name="tab" id="tab-create" />
+    <input class="state" type="radio" name="tab" id="tab-palettes" />
+    <input class="state" type="radio" name="view" id="view-thumbnails" />
+    <input class="state" type="radio" name="view" id="view-grid" checked />
+    <input class="state" type="radio" name="view" id="view-list" />
+
+    <main class="browser" aria-label="Browser">
+      <header class="panelHeader">
+        <strong class="panelTitle">Browser</strong>
+        <span class="panelDetail">MEDIA / EFFECTS / CREATE / PALETTES</span>
+      </header>
+
+      <nav class="tabRow" aria-label="Browser tabs" role="tablist">
+        <button class="tab browserTab" type="button" role="tab" aria-selected="true" aria-controls="browser-media" data-tab-control="media">Media</button>
+        <button class="tab browserTab" type="button" role="tab" aria-selected="false" aria-controls="browser-effects" data-tab-control="effects">Effects</button>
+        <button class="tab browserTab" type="button" role="tab" aria-selected="false" aria-controls="browser-create" data-tab-control="create">Create</button>
+        <button class="tab browserTab" type="button" role="tab" aria-selected="false" aria-controls="browser-palettes" data-tab-control="palettes">Palettes</button>
+      </nav>
+
+      <div class="searchRow">
+        <input class="search search-media" type="search" placeholder="Search media" aria-label="Search media" data-search-input />
+        <input class="search search-effects" type="search" placeholder="Search effects" aria-label="Search effects" data-search-input />
+        <input class="search search-create" type="search" placeholder="Search create" aria-label="Search create" data-search-input />
+        <input class="search search-palettes" type="search" placeholder="Search palettes" aria-label="Search palettes" data-search-input />
+        <button class="iconButton" type="button" title="Thumbnail only view" aria-label="Thumbnail only view" aria-pressed="false" data-view-control="thumbnails">▦</button>
+        <button class="iconButton" type="button" title="Card view" aria-label="Card view" aria-pressed="true" data-view-control="grid">▤</button>
+        <button class="iconButton" type="button" title="List view" aria-label="List view" aria-pressed="false" data-view-control="list">☷</button>
+      </div>
+
+      <section class="browserState browserState-media" id="browser-media" role="tabpanel" aria-label="Media">
+        <aside class="sourceRail">
+          <button class="railItem railButton effectSelected" data-filter-tab="media" data-filter="all">▦&nbsp; All media</button>
+          <span class="railHeading">DIRECTORIES</span>
+          <span class="railItem">▣&nbsp; media</span>
+          <span class="railHeading">TYPE</span>
+          <button class="railItem railButton" data-filter-tab="media" data-filter="video">▣&nbsp; Video</button>
+          <button class="railItem railButton" data-filter-tab="media" data-filter="audio">♪&nbsp; Audio</button>
+          <button class="railItem railButton" data-filter-tab="media" data-filter="image">▧&nbsp; Image</button>
+          <span class="railHeading">TAGS</span>
+          <button class="railItem railButton" data-filter-tab="media" data-filter="audio">◎&nbsp; Audio&nbsp; 1</button>
+          <button class="railItem railButton" data-filter-tab="media" data-filter="image">◎&nbsp; Image&nbsp; 2</button>
+          <button class="railItem railButton" data-filter-tab="media" data-filter="mp4">◎&nbsp; mp4&nbsp; 1</button>
+          <button class="railItem railButton" data-filter-tab="media" data-filter="png">◎&nbsp; png&nbsp; 1</button>
+          <button class="railItem railButton" data-filter-tab="media" data-filter="svg">◎&nbsp; svg&nbsp; 1</button>
+          <button class="railItem railButton" data-filter-tab="media" data-filter="video">◎&nbsp; Video&nbsp; 1</button>
+          <button class="railItem railButton" data-filter-tab="media" data-filter="wav">◎&nbsp; wav&nbsp; 1</button>
+        </aside>
+        <div class="results">
+          <header class="resultsHeader"><strong class="resultTitle">Results</strong><span class="panelDetail resultCount" aria-live="polite" data-result-count>4</span></header>
+          <div class="resultGrid">
+            <button class="browserCard" data-tags="video mp4" data-search="starter-clip.mp4 video mp4"><span class="browserThumb thumb-blue"></span><span class="cardCopy"><strong class="effectName">starter-clip.mp4</strong><span class="effectTags">video · video · mp4</span></span></button>
+            <button class="browserCard" data-tags="image svg" data-search="starter-mark.svg image svg"><span class="browserThumb thumb-purple"></span><span class="cardCopy"><strong class="effectName">starter-mark.svg</strong><span class="effectTags">image · image · svg</span></span></button>
+            <button class="browserCard" data-tags="image png" data-search="starter-still.png image png"><span class="browserThumb thumb-ochre"></span><span class="cardCopy"><strong class="effectName">starter-still.png</strong><span class="effectTags">image · image · png</span></span></button>
+            <button class="browserCard" data-tags="audio wav" data-search="starter-tone.wav audio wav"><span class="browserThumb thumb-green"></span><span class="cardCopy"><strong class="effectName">starter-tone.wav</strong><span class="effectTags">audio · audio · wav</span></span></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="browserState browserState-effects" id="browser-effects" role="tabpanel" aria-label="Effects">
+        <aside class="sourceRail">
+          <button class="railItem railButton effectSelected" data-filter-tab="effects" data-filter="all">▦&nbsp; All</button>
+          <button class="railItem railButton" data-filter-tab="effects" data-filter="used">◇&nbsp; Used</button>
+        </aside>
+        <div class="results">
+          <header class="resultsHeader"><strong class="resultTitle">Results</strong><span class="panelDetail resultCount" aria-live="polite" data-result-count>2</span></header>
+          <div class="resultGrid">
+            <button class="browserCard effectSelected" data-tags="used" data-search="opacity core.filter.opacity"><span class="browserThumb thumb-blue"><span class="effectBadge">FX</span><span class="playBadge">▶</span></span><span class="cardCopy"><strong class="effectName">Opacity</strong><span class="effectTags">core.filter.opacity</span></span></button>
+            <button class="browserCard" data-search="sine core.param.sine"><span class="browserThumb thumb-purple"><span class="effectBadge">FX</span><span class="playBadge">▶</span></span><span class="cardCopy"><strong class="effectName">Sine</strong><span class="effectTags">core.param.sine</span></span></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="browserState browserState-create" id="browser-create" role="tabpanel" aria-label="Create">
+        <aside class="sourceRail">
+          <button class="railItem railButton effectSelected" data-filter-tab="create" data-filter="all">▦&nbsp; All</button>
+          <span class="railHeading">TYPE</span>
+          <button class="railItem railButton" data-filter-tab="create" data-filter="shape">□&nbsp; Shapes</button>
+          <span class="railHeading">PROVIDER</span>
+          <button class="railItem railButton" data-filter-tab="create" data-filter="builtin">M&nbsp; Built-in</button>
+        </aside>
+        <div class="results">
+          <header class="resultsHeader"><strong class="resultTitle">Create items</strong><span class="panelDetail resultCount" aria-live="polite" data-result-count>2</span></header>
+          <div class="resultGrid">
+            <button class="browserCard" data-tags="shape builtin" data-search="rectangle shape built-in"><span class="browserThumb thumb-create"><span class="createGlyph">□</span></span><span class="cardCopy"><strong class="effectName">Rectangle</strong><span class="effectTags">Shape · Built-in</span></span></button>
+            <button class="browserCard" data-tags="shape builtin" data-search="ellipse shape built-in"><span class="browserThumb thumb-create"><span class="createGlyph">○</span></span><span class="cardCopy"><strong class="effectName">Ellipse</strong><span class="effectTags">Shape · Built-in</span></span></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="browserState browserState-palettes" id="browser-palettes" role="tabpanel" aria-label="Palettes">
+        <div class="paletteRegistration"><input class="search" type="text" placeholder="New palette name" aria-label="New palette name" /><button class="paletteAction" type="button" disabled>＋ Current color</button></div>
+        <div class="paletteBody">
+          <aside class="sourceRail"><button class="railItem railButton effectSelected" data-filter-tab="palettes" data-filter="brand">▦&nbsp; Brand</button></aside>
+          <div class="results">
+            <header class="resultsHeader"><strong class="resultTitle">Target · Select a color parameter</strong><span class="panelDetail resultCount" aria-live="polite" data-result-count>1</span></header>
+            <div class="resultGrid"><button class="browserCard" data-search="red"><span class="browserThumb palette-red"></span><span class="cardCopy"><strong class="effectName">red</strong><span class="effectTags">Select a color parameter first</span></span></button></div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script>
+      const preview = {query: '', filters: {media: 'all', effects: 'all', create: 'all', palettes: 'brand'}};
+      const activeTab = () => document.querySelector('input[name="tab"]:checked').id.replace('tab-', '');
+      const activeView = () => document.querySelector('input[name="view"]:checked').id.replace('view-', '');
+      const matches = (card, filter) => {
+        const query = preview.query.trim().toLowerCase();
+        const haystack = card.dataset.search || '';
+        return (!query || haystack.includes(query)) && (filter === 'all' || filter === 'brand' || (card.dataset.tags || '').split(' ').includes(filter));
+      };
+      const render = () => {
+        const tab = activeTab();
+        const view = activeView();
+        document.querySelectorAll('[data-search-input]').forEach(input => { input.value = preview.query; });
+        document.querySelectorAll('[data-tab-control]').forEach(button => {
+          const isCurrent = button.dataset.tabControl === tab;
+          button.setAttribute('aria-selected', String(isCurrent));
+          button.tabIndex = isCurrent ? 0 : -1;
+        });
+        document.querySelectorAll('[data-view-control]').forEach(button => {
+          button.setAttribute('aria-pressed', String(button.dataset.viewControl === view));
+        });
+        document.querySelectorAll('.browserState').forEach(state => {
+          const isCurrent = state.classList.contains(`browserState-${tab}`);
+          if (!isCurrent) return;
+          const filter = preview.filters[tab];
+          const cards = [...state.querySelectorAll('.browserCard')];
+          cards.forEach(card => { card.hidden = !matches(card, filter); });
+          state.querySelector('[data-result-count]').textContent = cards.filter(card => !card.hidden).length;
+          state.querySelectorAll('[data-filter-tab]').forEach(button => button.classList.toggle('effectSelected', button.dataset.filter === filter));
+        });
+        document.querySelectorAll('.browserCard').forEach(card => {
+          card.setAttribute('aria-pressed', String(card.classList.contains('effectSelected')));
+        });
+      };
+      const chooseTab = (tab, focus = false) => {
+        document.querySelector(`#tab-${tab}`).checked = true;
+        render();
+        if (focus) document.querySelector(`[data-tab-control="${tab}"]`).focus();
+      };
+      const chooseView = view => {
+        document.querySelector(`#view-${view}`).checked = true;
+        render();
+      };
+      document.querySelectorAll('[data-search-input]').forEach(input => input.addEventListener('input', event => {
+        preview.query = event.currentTarget.value;
+        render();
+      }));
+      document.querySelectorAll('[data-search-input]').forEach(input => input.addEventListener('keydown', event => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        preview.query = '';
+        render();
+      }));
+      document.querySelectorAll('input[name="tab"]').forEach(input => input.addEventListener('change', render));
+      document.querySelectorAll('[data-tab-control]').forEach((button, index, tabs) => {
+        button.addEventListener('click', () => chooseTab(button.dataset.tabControl));
+        button.addEventListener('keydown', event => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+          chooseTab(tabs[next].dataset.tabControl, true);
+        });
+      });
+      document.querySelectorAll('[data-view-control]').forEach(button => button.addEventListener('click', () => {
+        chooseView(button.dataset.viewControl);
+      }));
+      document.querySelectorAll('[data-filter-tab]').forEach(button => button.addEventListener('click', () => {
+        preview.filters[button.dataset.filterTab] = button.dataset.filter;
+        render();
+      }));
+      document.querySelectorAll('.browserCard').forEach(card => card.addEventListener('click', () => {
+        const state = card.closest('.browserState');
+        state.querySelectorAll('.browserCard').forEach(item => item.classList.remove('effectSelected'));
+        card.classList.add('effectSelected');
+        state.querySelectorAll('.browserCard').forEach(item => {
+          item.setAttribute('aria-pressed', String(item.classList.contains('effectSelected')));
+        });
+      }));
+      render();
+    </script>
+  </body>
+</html>
