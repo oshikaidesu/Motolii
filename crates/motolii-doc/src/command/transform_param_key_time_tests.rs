@@ -226,12 +226,32 @@ fn set_transform_param_key_time_rejects_cas_occupied_missing_without_mutation() 
         ))
     ));
 
-    // Position は既存の SetPositionKeyTime の担当 — この variant は受け付けない。
+    // Position も property としては受け付ける(2026-08-16 に受け付け集合を統合)。
+    // **時刻を動かすのに値の型は要らない**ので、envelope が持つ property は全部通る。
+    // ここで落ちる理由は property ではなく、この fixture の Position が key 列を
+    // 持たないこと。**「property が範囲外」と「その property が key 列を持たない」は別。**
+    let position_result = prepare_set_transform_param_key_time(
+        &doc,
+        layer,
+        ScalarPropertyId::Position,
+        k0,
+        RationalTime::from_seconds(3),
+    );
+    assert!(
+        !matches!(
+            position_result,
+            Err(SetTransformParamKeyTimePrepareError::PropertyUnsupported { .. })
+        ),
+        "Position は property として受け付けられるべき。実際: {position_result:?}"
+    );
+
+    // plugin 由来の property は envelope の外にあるので、まだ到達できない。
+    // 広げるには catalog を引いて型を決める必要がある(台帳の「決定待ち」)。
     assert!(matches!(
         prepare_set_transform_param_key_time(
             &doc,
             layer,
-            ScalarPropertyId::Position,
+            ScalarPropertyId::SourceParam("whatever".to_owned()),
             k0,
             RationalTime::from_seconds(3),
         ),

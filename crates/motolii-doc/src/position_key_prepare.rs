@@ -151,49 +151,65 @@ pub enum AddTransformParamKeyPrepareError {
     },
 }
 
+/// **値の型**の判定。値を書く command だけが要る。
+///
+/// 時刻を動かす command はここを通さない — キーの時刻を変えても値は変わらないので、
+/// 型を知る必要が無い。**その1点が、時刻編集を全 property へ広げられる理由である。**
+///
+/// `EffectParam` / `SourceParam` は plugin の定義側に型があり、ここでは決められない。
+/// 受け付け集合を広げるには catalog を引く必要がある(未着手。台帳の「決定待ち」参照)。
 fn transform_key_target(
     property: &ScalarPropertyId,
 ) -> Result<fn(&DocValue) -> bool, ScalarPropertyId> {
     match property {
-        ScalarPropertyId::Scale => Ok(is_vec2),
+        ScalarPropertyId::Position | ScalarPropertyId::Anchor | ScalarPropertyId::Scale => {
+            Ok(is_vec2)
+        }
         ScalarPropertyId::Rotation | ScalarPropertyId::Opacity => Ok(is_f64),
         other => Err(other.clone()),
     }
 }
 
-/// `transform_key_target`が受ける property の live DocParam を借りる。範囲外は `None`。
+/// envelope が直接持つ property の live `DocParam` を借りる。範囲外は `None`。
+///
+/// **受け付け集合の正本はこの1関数である。** 以前はここと可変版と clone 版と
+/// `transform_key_target` の4箇所が同じ集合を別々に持っていて、
+/// Position と Anchor がどこにも入っていなかった(2026-08-16 に統合)。
 pub(crate) fn transform_param<'a>(
     env: &'a ItemEnvelope,
     property: &ScalarPropertyId,
 ) -> Option<&'a DocParam> {
     match property {
+        ScalarPropertyId::Position => Some(&env.transform.position),
+        ScalarPropertyId::Anchor => Some(&env.transform.anchor),
         ScalarPropertyId::Scale => Some(&env.transform.scale),
         ScalarPropertyId::Rotation => Some(&env.transform.rotation),
         ScalarPropertyId::Opacity => Some(&env.opacity),
-        _ => None,
+        // plugin 由来。envelope の外にあるので、ここでは到達できない
+        ScalarPropertyId::EffectParam(..) | ScalarPropertyId::SourceParam(_) => None,
     }
 }
 
-/// `transform_param` の可変版。受ける property 集合は同じ。
+/// `transform_param` の可変版。**集合を足すときは上と必ず一対で足すこと。**
 pub(crate) fn transform_param_mut<'a>(
     env: &'a mut ItemEnvelope,
     property: &ScalarPropertyId,
 ) -> Option<&'a mut DocParam> {
     match property {
+        ScalarPropertyId::Position => Some(&mut env.transform.position),
+        ScalarPropertyId::Anchor => Some(&mut env.transform.anchor),
         ScalarPropertyId::Scale => Some(&mut env.transform.scale),
         ScalarPropertyId::Rotation => Some(&mut env.transform.rotation),
         ScalarPropertyId::Opacity => Some(&mut env.opacity),
-        _ => None,
+        ScalarPropertyId::EffectParam(..) | ScalarPropertyId::SourceParam(_) => None,
     }
 }
 
+/// 借りるのと同じ集合から複製する。**独自の match を持たない**(4重化の再発を防ぐ)。
 fn clone_transform_param(env: &ItemEnvelope, property: &ScalarPropertyId) -> DocParam {
-    match property {
-        ScalarPropertyId::Scale => env.transform.scale.clone(),
-        ScalarPropertyId::Rotation => env.transform.rotation.clone(),
-        ScalarPropertyId::Opacity => env.opacity.clone(),
-        _ => unreachable!("rejected by transform_key_target"),
-    }
+    transform_param(env, property)
+        .cloned()
+        .expect("rejected by transform_key_target")
 }
 
 pub fn prepare_add_transform_param_key(
