@@ -30,7 +30,7 @@ VSM-A0I-1〜3でContract Catalog、Documentのprepared resolution、graph／expo
 |---|---|---|
 | `motolii-plugin`内の参照実装 | 実装済み | `new-plugin.sh`はこのin-tree形を生成する |
 | bundled first-party workspace crate | 実装済み | Opacity / Sine / Radial Repeater、公開façade、依存allowlist、Host composition root |
-| 同形crateを作る作者scaffold | **未実装・再入場可** | A1で「A2の二例後」へ延期され、A2/A3は完了した。VSM-A4でin-tree scaffoldと分けて閉じる |
+| 同形crateを作る作者scaffold | **実装済み（static source forkのみ）** | `scripts/new-plugin-crate.sh` がRadial Repeaterをout-of-tree crateへ生成し、同じ入口でHost conformance／purity／goldenを実行する。in-tree `new-plugin.sh`とは別tool |
 | third-party install / load / update | 未実装 | `.vism` package、resolver、trust、権限、rollbackが未決 |
 | WASM / native payload runtime | 予約・比較前 | `PluginKind::ScriptWasm`はenum予約だけ。native Rust first-party crateの静的組み立てと、OS別binaryの動的loadを同義にしない |
 
@@ -43,6 +43,24 @@ first-party無特権は「第三者配布が完成した」または「現行sta
 - PreviewとExportで同じ実装を使い、OS・GPU vendor・解像度に意味を依存させない
 - Hostのcache、resource lifecycle、error、欠落診断、UI discoveryへ参加し、独自の裏口を作らない
 - 人間とLLMのどちらも、参照実装と機械判定可能なtestから適合性を確認できる
+
+### 0.2 外部作者crate scaffold（VSM-A4I）
+
+Radial Repeaterを別identityの作者sourceへforkする最小入口は次である。`--out-dir`は必ずMotolii repository外の新規directoryを指定し、`core`と`doc`は作者vendorとして拒否される。
+
+```sh
+scripts/new-plugin-crate.sh \
+  --from core.layer_source.radial_repeater \
+  --vendor acme \
+  --name radial_fork \
+  --out-dir /absolute/path/to/acme-radial-fork
+
+scripts/new-plugin-crate.sh --check /absolute/path/to/acme-radial-fork
+```
+
+生成crateは通常依存を公開`motolii-plugin`一つだけにし、dev/build dependency、`build.rs`、workspace継承を持たない。`--check`はcandidateを変更せず、一時Host harnessでcompile、`NodeDesc`／registry／contract parity、GPU必須のpurityと独立goldenを順に審判してからharnessを破棄する。private crate、testkit、UI／OS／vendor API、ambient authority、予約namespace、未設定の閉路を成功扱いしない。
+
+この入口はsource forkの検査だけである。install、manifest、loader、署名、package、dynamic load、hot reload、Hostへの自動登録は生成も実行もしない。採用するcrateは後続のcomposition root変更で明示登録し、rebuild／restartする。
 
 詳しい設計審判とv1の非目標は[concept.md「長期の北極星」](concept.md#長期の北極星-映像表現を実行再利用配布できる単位にする)を正本とする。以下の規約は、その北極星を現在の実装で守るための具体化である。
 
