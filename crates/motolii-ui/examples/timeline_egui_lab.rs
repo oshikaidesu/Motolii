@@ -154,6 +154,31 @@ pub struct DropTarget {
     pub y: f32,
 }
 
+/// 1フレームで進める上限(秒)。
+///
+/// **窓が隠れていた分をまとめて進めない。** eframe は見えていないと描画を間引くので、
+/// 戻ってきたフレームの `dt` は数百msになりうる。そのまま足すと playhead が飛ぶ。
+const MAX_STEP: f32 = 0.05;
+
+/// 窓が playhead へ追いつく速さ(1秒でこの割合ぶん詰める)。
+const FOLLOW_RATE: f32 = 8.0;
+
+/// 再生中の窓。**playhead を中央へ置きにいくが、飛ばずに詰める。**
+///
+/// いきなり中央へ合わせると、再生を押した瞬間に面ごと横へ跳ぶ
+/// (playhead が瞬間移動したように見える)。指数で詰めると、押した所から
+/// 中央まで 0.2秒ほどで滑って入る。等速で流れているあいだの遅れは
+/// `速度 / FOLLOW_RATE` ぶんで一定なので、**中央付近に落ち着いたまま流れる**。
+fn follow_view(view: TimelineView, playhead: f32, dt: f32, comp: f32) -> TimelineView {
+    let target = playhead - view.span * 0.5;
+    let k = (dt * FOLLOW_RATE).clamp(0.0, 1.0);
+    TimelineView {
+        start: view.start + (target - view.start) * k,
+        span: view.span,
+    }
+    .clamped(comp)
+}
+
 /// `dt` 秒ぶん進んだ playhead と、**まだ再生中か**。
 ///
 /// 終端で止まる(巻き戻さない)。頭へ戻すかどうかは押した側の判断である。
@@ -1125,23 +1150,20 @@ impl eframe::App for Lab {
             self.status = if self.playing { "play" } else { "pause" }.to_owned();
         }
         if self.playing {
-            let (at, keep) = advance_playhead(self.playhead, dt, comp_seconds);
+            // **溜まった時間をまとめて進めない。** 窓が隠れていた分は捨てる
+            let (at, keep) = advance_playhead(self.playhead, dt.min(MAX_STEP), comp_seconds);
             self.playhead = at;
             if !keep {
                 self.playing = false;
                 self.status = "end".to_owned();
             }
-            // **DAW と同じで、面のほうが流れる。** playhead を窓の中央に置き続け、
+            // **DAW と同じで、面のほうが流れる。** playhead を窓の中央へ置きにいき、
             // 下の絵が左へ流れていく。ページ送り(端まで行ったら1画面ぶん飛ぶ)は
             // 飛んだ瞬間に目が置いていかれるので採らない。
             //
             // 頭と終端では `clamped` が窓を止めるので、そこだけは playhead のほうが
             // 動く — 流れる物が無いところで無理に流さない
-            self.view = TimelineView {
-                start: self.playhead - self.view.span * 0.5,
-                span: self.view.span,
-            }
-            .clamped(comp_seconds);
+            self.view = follow_view(self.view, self.playhead, dt.min(MAX_STEP), comp_seconds);
         }
 
         // ルーラのスクラブ。**Document は触らない** — playhead は session の状態
@@ -3056,5 +3078,50 @@ mod tests {
         let view = centred(15.5);
         assert!((view.start - (comp - span)).abs() < 1e-4);
         assert!((15.5 - view.start) / view.span > 0.5);
+    }
+
+    /// **再生を押した瞬間に面が跳ばない。** 中央へは滑って入る。
+    #[test]
+    fn the_window_glides_to_the_playhead_instead_of_jumping() {
+        let comp = 60.0_f32;
+        // 0..8s を見ているところで、6s から再生を始める
+        let mut view = TimelineView { start: 0.0, span: 8.0 };
+        let playhead = 6.0_f32;
+        let dt = 1.0 / 60.0;
+
+        let after_one = follow_view(view, playhead, dt, comp);
+        let target = playhead - view.span * 0.5; // 2.0
+        assert!(
+            after_one.start > view.start && after_one.start < target * 0.5,
+            "1フレームで詰めるのは距離のごく一部: {}",
+            after_one.start
+        );
+        assert_eq!(after_one.span, view.span, "追従で寄り引きはしない");
+
+        // 0.5秒ぶん回せば、ほぼ中央に入っている
+        for _ in 0..30 {
+            view = follow_view(view, playhead, dt, comp);
+        }
+        let centred = (playhead - view.start) / view.span;
+        assert!(
+            (centred - 0.5).abs() < 0.05,
+            "中央付近に落ち着く: {centred}"
+        );
+
+        // 頭では窓が止まり、playhead のほうが窓の中を動く
+        let head = follow_view(TimelineView { start: 0.0, span: 8.0 }, 1.0, 1.0, comp);
+        assert_eq!(head.start, 0.0, "0 より前へは流れない");
+    }
+
+    /// 窓が隠れていた分を**まとめて進めない**。
+    #[test]
+    fn a_long_frame_does_not_teleport_the_playhead() {
+        // 800ms 止まっていた次のフレーム
+        let (at, playing) = advance_playhead(2.0, (0.8_f32).min(MAX_STEP), 16.0);
+        assert!(playing);
+        assert!(
+            (at - 2.05).abs() < 1e-6,
+            "1フレームで進むのは MAX_STEP まで: {at}"
+        );
     }
 }
