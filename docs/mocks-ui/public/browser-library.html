@@ -1,0 +1,481 @@
+<!doctype html>
+<!--
+  Visual-review browser concept. It keeps the established thumbnail result modes.
+  Ableton reference is limited to search, Places, Collections, and tag filtering.
+  The catalog, folders, and tags below are preview-local data: no filesystem,
+  Document, Host, intent, persistence, or placement route is attached.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Motolii Browser library concept</title>
+    <link rel="stylesheet" href="/browser-library.css" />
+  </head>
+  <body>
+    <main class="libraryBrowser" aria-label="Browser library concept">
+      <header class="browserHeader">
+        <strong>Browser</strong>
+        <span>LOCAL LIBRARY</span>
+      </header>
+
+      <div class="browserToolbar">
+        <button class="historyButton" type="button" disabled aria-label="Back">‹</button>
+        <button class="historyButton" type="button" disabled aria-label="Forward">›</button>
+        <input id="library-search" type="search" placeholder="Search files and tags" aria-label="Search files and tags" />
+        <button class="toolbarButton" id="filter-toggle" type="button" aria-expanded="true">Filters</button>
+        <button class="toolbarButton" id="editor-toggle" type="button" aria-expanded="false">Tags</button>
+      </div>
+
+      <nav class="libraryTabs" role="tablist" aria-label="Browser categories">
+        <button type="button" role="tab" aria-selected="true" data-tab="media">Media</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="effects">Effects</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="create">Create</button>
+        <button type="button" role="tab" aria-selected="false" data-tab="panels">Panels</button>
+      </nav>
+
+      <div class="browserWorkspace">
+        <aside class="librarySidebar" aria-label="Library locations">
+          <div class="tabScoped tabScoped-media">
+            <h2>COLLECTIONS</h2>
+            <button class="locationRow collection amber" type="button" data-tag-filter="favorite"><i></i> Favorite</button>
+            <button class="locationRow collection cyan" type="button" data-tag-filter="b-roll"><i></i> B-roll</button>
+            <button class="locationRow collection violet" type="button" data-tag-filter="brand"><i></i> Brand</button>
+
+            <h2>LIBRARY</h2>
+            <button class="locationRow selected" type="button" data-source="all">▦&nbsp; All media</button>
+            <button class="locationRow" type="button" data-tag-filter="video">▣&nbsp; Video</button>
+            <button class="locationRow" type="button" data-tag-filter="image">▧&nbsp; Images</button>
+            <button class="locationRow" type="button" data-tag-filter="audio">♪&nbsp; Audio</button>
+
+            <h2>PLACES</h2>
+            <button class="locationRow" type="button" data-source="starter">▾&nbsp; Starter Media</button>
+            <button class="locationRow indent" type="button" data-source="project">├&nbsp; Project assets</button>
+            <button class="locationRow" type="button" data-source="motion">▸&nbsp; Motion assets</button>
+            <button class="locationRow addFolder" type="button" disabled title="Directory access is not wired in this visual review">＋&nbsp; Add folder</button>
+          </div>
+
+          <div class="tabScoped tabScoped-effects">
+            <h2>COLLECTIONS</h2>
+            <button class="locationRow collection amber" type="button" data-tag-filter="favorite"><i></i> Favorite</button>
+            <h2>EFFECTS</h2>
+            <button class="locationRow selected" type="button" data-source="all">▦&nbsp; All effects</button>
+            <button class="locationRow" type="button" data-tag-filter="color">✦&nbsp; Color</button>
+            <button class="locationRow" type="button" data-tag-filter="utility">◇&nbsp; Utility</button>
+            <button class="locationRow" type="button" data-tag-filter="animation">∿&nbsp; Animation</button>
+          </div>
+
+          <div class="tabScoped tabScoped-create">
+            <h2>COLLECTIONS</h2>
+            <button class="locationRow collection amber" type="button" data-tag-filter="favorite"><i></i> Favorite</button>
+            <h2>CREATE</h2>
+            <button class="locationRow selected" type="button" data-source="all">▦&nbsp; All create</button>
+            <button class="locationRow" type="button" data-tag-filter="shape">□&nbsp; Shapes</button>
+            <button class="locationRow" type="button" data-tag-filter="builtin">M&nbsp; Built-in</button>
+          </div>
+
+          <div class="tabScoped tabScoped-panels">
+            <h2>COLLECTIONS</h2>
+            <button class="locationRow collection amber" type="button" data-tag-filter="favorite"><i></i> Favorite</button>
+            <h2>PANELS</h2>
+            <button class="locationRow selected" type="button" data-source="all">▦&nbsp; All panels</button>
+            <button class="locationRow" type="button" data-tag-filter="tags">#&nbsp; Tags</button>
+            <button class="locationRow" type="button" data-tag-filter="notes">✎&nbsp; Notes</button>
+            <button class="locationRow" type="button" data-tag-filter="export">↗&nbsp; Export</button>
+          </div>
+        </aside>
+
+        <section class="catalog" role="tabpanel" aria-label="Browser items">
+          <header class="catalogHeader">
+            <div>
+              <strong id="catalog-title">All media</strong>
+              <span id="catalog-path">Library · local preview</span>
+            </div>
+            <div class="viewModes" aria-label="Result view">
+              <button type="button" aria-label="Thumbnail view" aria-pressed="false" data-view="thumbnails">▦</button>
+              <button type="button" aria-label="Grid view" aria-pressed="true" data-view="grid">▤</button>
+              <button type="button" aria-label="List view" aria-pressed="false" data-view="list">☷</button>
+            </div>
+          </header>
+
+          <div class="filterShelf" id="filter-shelf">
+            <div class="filterGroup" data-filter-group="media">
+              <span>FILTERS</span><button type="button" data-tag-filter="video">Video</button><button type="button" data-tag-filter="image">Image</button><button type="button" data-tag-filter="audio">Audio</button><button type="button" data-tag-filter="b-roll">B-roll</button><button type="button" data-tag-filter="brand">Brand</button><button class="clearFilter" type="button" data-clear-filter>Clear</button>
+            </div>
+            <div class="filterGroup" data-filter-group="effects">
+              <span>FILTERS</span><button type="button" data-tag-filter="color">Color</button><button type="button" data-tag-filter="utility">Utility</button><button type="button" data-tag-filter="animation">Animation</button><button class="clearFilter" type="button" data-clear-filter>Clear</button>
+            </div>
+            <div class="filterGroup" data-filter-group="create">
+              <span>FILTERS</span><button type="button" data-tag-filter="shape">Shapes</button><button type="button" data-tag-filter="builtin">Built-in</button><button class="clearFilter" type="button" data-clear-filter>Clear</button>
+            </div>
+            <div class="filterGroup" data-filter-group="panels">
+              <span>FILTERS</span><button type="button" data-tag-filter="tags">Tags</button><button type="button" data-tag-filter="notes">Notes</button><button type="button" data-tag-filter="export">Export</button><button class="clearFilter" type="button" data-clear-filter>Clear</button>
+            </div>
+          </div>
+
+          <div class="resultSummary">
+            <strong>Results</strong>
+            <span id="result-count" aria-live="polite">5</span>
+          </div>
+
+          <div class="thumbnailGrid" id="thumbnail-grid">
+            <button class="libraryCard" type="button" data-item="starter-clip" data-tab="media" data-source="starter" data-tags="video b-roll favorite" data-search="starter clip mp4 video b-roll interview">
+              <span class="libraryThumb thumb-blue"><b>▶</b></span><span class="cardCopy"><strong>starter-clip.mp4</strong><small>video · B-roll</small></span>
+            </button>
+            <button class="libraryCard" type="button" data-item="starter-mark" data-tab="media" data-source="starter" data-tags="image brand favorite" data-search="starter mark svg image brand logo">
+              <span class="libraryThumb thumb-purple"><b>SVG</b></span><span class="cardCopy"><strong>starter-mark.svg</strong><small>image · Brand</small></span>
+            </button>
+            <button class="libraryCard" type="button" data-item="starter-still" data-tab="media" data-source="starter" data-tags="image b-roll" data-search="starter still png image b-roll still">
+              <span class="libraryThumb thumb-ochre"></span><span class="cardCopy"><strong>starter-still.png</strong><small>image · B-roll</small></span>
+            </button>
+            <button class="libraryCard" type="button" data-item="starter-tone" data-tab="media" data-source="starter" data-tags="audio" data-search="starter tone wav audio room tone">
+              <span class="libraryThumb thumb-green"><b>♪</b></span><span class="cardCopy"><strong>starter-tone.wav</strong><small>audio · WAV</small></span>
+            </button>
+            <button class="libraryCard" type="button" data-item="project-intro" data-tab="media" data-source="project" data-tags="video brand" data-search="project intro mp4 video brand">
+              <span class="libraryThumb thumb-red"><b>▶</b></span><span class="cardCopy"><strong>project-intro.mp4</strong><small>video · Project assets</small></span>
+            </button>
+            <button class="libraryCard" type="button" data-item="motion-grain" data-tab="media" data-source="motion" data-tags="video b-roll" data-search="motion grain mp4 video b-roll">
+              <span class="libraryThumb thumb-slate"><b>▶</b></span><span class="cardCopy"><strong>motion-grain.mp4</strong><small>video · Motion assets</small></span>
+            </button>
+
+            <button class="libraryCard" type="button" data-item="echo-bloom" data-tab="effects" data-source="all" data-tags="effect color favorite" data-search="echo bloom effect color">
+              <span class="libraryThumb thumb-magenta"><b>FX</b></span><span class="cardCopy"><strong>Echo Bloom</strong><small>effect · Color</small></span>
+            </button>
+            <button class="libraryCard" type="button" data-item="opacity" data-tab="effects" data-source="all" data-tags="effect utility" data-search="opacity effect utility">
+              <span class="libraryThumb thumb-blue"><b>FX</b></span><span class="cardCopy"><strong>Opacity</strong><small>effect · Utility</small></span>
+            </button>
+            <button class="libraryCard" type="button" data-item="sine" data-tab="effects" data-source="all" data-tags="effect animation" data-search="sine effect animation">
+              <span class="libraryThumb thumb-purple"><b>FX</b></span><span class="cardCopy"><strong>Sine</strong><small>effect · Animation</small></span>
+            </button>
+
+            <button class="libraryCard" type="button" data-item="rectangle" data-tab="create" data-source="all" data-tags="shape builtin favorite" data-search="rectangle shape built-in create">
+              <span class="libraryThumb thumb-create"><b>□</b></span><span class="cardCopy"><strong>Rectangle</strong><small>shape · Built-in</small></span>
+            </button>
+            <button class="libraryCard" type="button" data-item="ellipse" data-tab="create" data-source="all" data-tags="shape builtin" data-search="ellipse shape built-in create">
+              <span class="libraryThumb thumb-create"><b>○</b></span><span class="cardCopy"><strong>Ellipse</strong><small>shape · Built-in</small></span>
+            </button>
+
+            <button class="libraryCard" type="button" data-item="asset-tags" data-tab="panels" data-source="all" data-tags="panel tags favorite" data-search="asset tagging panel tags extension">
+              <span class="libraryThumb thumb-cyan"><b>#</b></span><span class="cardCopy"><strong>Asset tagging</strong><small>panel · Tags</small></span>
+            </button>
+            <button class="libraryCard" type="button" data-item="notes" data-tab="panels" data-source="all" data-tags="panel notes" data-search="notes panel extension">
+              <span class="libraryThumb thumb-slate"><b>✎</b></span><span class="cardCopy"><strong>Notes</strong><small>panel · Notes</small></span>
+            </button>
+            <button class="libraryCard" type="button" data-item="export-notes" data-tab="panels" data-source="all" data-tags="panel export" data-search="export notes panel extension">
+              <span class="libraryThumb thumb-ochre"><b>↗</b></span><span class="cardCopy"><strong>Export notes</strong><small>panel · Export</small></span>
+            </button>
+          </div>
+
+          <footer class="selectionTray" id="selection-tray">
+            <span class="selectionDot"></span><strong id="selection-name">starter-clip.mp4</strong><span id="selection-meta">Starter Media · 2 tags</span>
+            <span id="gesture-status" aria-live="polite"></span>
+            <button type="button" id="selection-tags">Edit tags</button>
+          </footer>
+
+          <aside class="tagEditor" id="tag-editor" hidden aria-label="Tag editor">
+            <header><strong>Tags</strong><button type="button" id="editor-close" aria-label="Close tag editor">×</button></header>
+            <p id="editor-item">starter-clip.mp4</p>
+            <small id="editor-path">~/Movies/Starter Media</small>
+            <form id="tag-form"><input id="tag-input" type="text" placeholder="Add tag" aria-label="Add tag" /><button type="submit">Add</button></form>
+            <div id="editor-tags" class="editorTags"></div>
+          </aside>
+
+          <div class="contextMenu" id="context-menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-action="preview-item" disabled>Preview</button>
+            <span role="separator"></span>
+            <button type="button" role="menuitem" id="menu-favorite">Add to Collections · Favorite</button>
+            <button type="button" role="menuitem" id="menu-tags">Edit tags…</button>
+            <span role="separator"></span>
+            <button type="button" role="menuitem" data-action="copy-source-path" disabled>Copy source path</button>
+            <button type="button" role="menuitem" data-action="reveal-folder" disabled title="Folder access needs the product Host">Reveal in folder</button>
+            <button type="button" role="menuitem" data-action="place-in-composition" disabled title="Document placement needs the product route">Place in composition</button>
+          </div>
+
+          <div class="contextMenu sourceContextMenu" id="source-context-menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-action="rescan-folder" disabled>Rescan folder</button>
+            <button type="button" role="menuitem" data-action="locate-folder" disabled>Locate folder…</button>
+            <span role="separator"></span>
+            <button type="button" role="menuitem" data-action="remove-location" disabled>Remove from Browser</button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const state = {tab: 'media', source: 'all', tag: '', query: '', view: 'grid', selected: 'starter-clip', selectedIds: new Set(['starter-clip']), selectionAnchor: 'starter-clip', gesture: ''};
+      const metadata = {
+        'starter-clip': {path: '~/Movies/Starter Media', tags: ['video', 'b-roll', 'favorite']},
+        'starter-mark': {path: '~/Movies/Starter Media', tags: ['image', 'brand', 'favorite']},
+        'starter-still': {path: '~/Movies/Starter Media', tags: ['image', 'b-roll']},
+        'starter-tone': {path: '~/Movies/Starter Media', tags: ['audio']},
+        'project-intro': {path: '~/Projects/Motolii/assets', tags: ['video', 'brand']},
+        'motion-grain': {path: '/Volumes/Motion Assets', tags: ['video', 'b-roll']},
+        'echo-bloom': {path: 'Built-in effects', tags: ['effect', 'color', 'favorite']},
+        'opacity': {path: 'Built-in effects', tags: ['effect', 'utility']},
+        'sine': {path: 'Built-in effects', tags: ['effect', 'animation']},
+        rectangle: {path: 'Built-in create', tags: ['shape', 'builtin', 'favorite']},
+        ellipse: {path: 'Built-in create', tags: ['shape', 'builtin']},
+        'asset-tags': {path: 'Extensions', tags: ['panel', 'tags', 'favorite']},
+        notes: {path: 'Extensions', tags: ['panel', 'notes']},
+        'export-notes': {path: 'Extensions', tags: ['panel', 'export']},
+      };
+      const titles = {all: ['All media', 'Library · local preview'], starter: ['Starter Media', '~/Movies/Starter Media'], project: ['Project assets', '~/Projects/Motolii/assets'], motion: ['Motion assets', '/Volumes/Motion Assets']};
+      const tabTitles = {media: 'All media', effects: 'Effects', create: 'Create', panels: 'Panels'};
+      const cards = [...document.querySelectorAll('.libraryCard')];
+      const search = document.querySelector('#library-search');
+      const editor = document.querySelector('#tag-editor');
+      const contextMenu = document.querySelector('#context-menu');
+      const sourceContextMenu = document.querySelector('#source-context-menu');
+      const activeCard = () => document.querySelector(`[data-item="${state.selected}"]`);
+      const visibleCards = () => cards.filter(card => !card.hidden);
+      const selectedCards = () => cards.filter(card => state.selectedIds.has(card.dataset.item));
+      const selectCard = (card, event = {}) => {
+        const id = card.dataset.item;
+        const visible = visibleCards();
+        if (event.shiftKey && state.selectionAnchor) {
+          const first = visible.findIndex(item => item.dataset.item === state.selectionAnchor);
+          const last = visible.findIndex(item => item.dataset.item === id);
+          if (first >= 0 && last >= 0) state.selectedIds = new Set(visible.slice(Math.min(first, last), Math.max(first, last) + 1).map(item => item.dataset.item));
+        } else if (event.metaKey || event.ctrlKey) {
+          const next = new Set(state.selectedIds);
+          if (next.has(id) && next.size > 1) next.delete(id); else next.add(id);
+          state.selectedIds = next;
+          state.selectionAnchor = id;
+        } else {
+          state.selectedIds = new Set([id]);
+          state.selectionAnchor = id;
+        }
+        state.selected = id;
+      };
+      const selectByOffset = (card, offset, extend = false) => {
+        const visible = visibleCards();
+        const current = visible.findIndex(item => item.dataset.item === card.dataset.item);
+        const next = visible[Math.max(0, Math.min(visible.length - 1, current + offset))];
+        if (!next) return;
+        selectCard(next, {shiftKey: extend});
+        render();
+        next.focus();
+      };
+      const requestGesture = message => { state.gesture = message; render(); };
+      const renderTags = () => {
+        const item = metadata[state.selected];
+        document.querySelector('#editor-item').textContent = activeCard().querySelector('strong').textContent;
+        document.querySelector('#editor-path').textContent = item.path;
+        document.querySelector('#editor-tags').replaceChildren(...item.tags.map(tag => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.dataset.removeTag = tag;
+          button.textContent = `${tag} ×`;
+          return button;
+        }));
+      };
+      const render = () => {
+        const title = state.source === 'all' ? [tabTitles[state.tab], 'Library · local preview'] : titles[state.source];
+        document.querySelector('#catalog-title').textContent = title[0];
+        document.querySelector('#catalog-path').textContent = title[1];
+        document.querySelector('.libraryBrowser').dataset.view = state.view;
+        document.querySelector('.libraryBrowser').dataset.tab = state.tab;
+        document.querySelectorAll('[data-tab]').forEach(button => {
+          if (button.getAttribute('role') === 'tab') {
+            const current = button.dataset.tab === state.tab;
+            button.setAttribute('aria-selected', String(current));
+            button.tabIndex = current ? 0 : -1;
+          }
+        });
+        document.querySelectorAll('[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === state.view)));
+        document.querySelectorAll('.locationRow[data-source]').forEach(button => button.classList.toggle('selected', button.dataset.source === state.source && !state.tag));
+        document.querySelectorAll('[data-tag-filter]').forEach(button => button.classList.toggle('selected', button.dataset.tagFilter === state.tag));
+        cards.forEach(card => {
+          const tags = metadata[card.dataset.item].tags;
+          const haystack = `${card.dataset.search} ${tags.join(' ')}`.toLowerCase();
+          const tabMatches = card.dataset.tab === state.tab;
+          const sourceMatches = state.source === 'all' || card.dataset.source === state.source;
+          const tagMatches = !state.tag || tags.includes(state.tag);
+          card.hidden = !(tabMatches && sourceMatches && tagMatches && haystack.includes(state.query));
+          card.classList.toggle('selected', state.selectedIds.has(card.dataset.item));
+          card.setAttribute('aria-pressed', String(state.selectedIds.has(card.dataset.item)));
+        });
+        document.querySelector('#result-count').textContent = visibleCards().length;
+        const selection = selectedCards();
+        const allFavorite = selection.every(card => metadata[card.dataset.item].tags.includes('favorite'));
+        document.querySelector('#menu-favorite').textContent = allFavorite ? 'Remove from Collections · Favorite' : 'Add to Collections · Favorite';
+        const selected = activeCard();
+        if (selected) {
+          const data = metadata[state.selected];
+          document.querySelector('#selection-name').textContent = selection.length > 1 ? `${selection.length} items selected` : selected.querySelector('strong').textContent;
+          document.querySelector('#selection-meta').textContent = selection.length > 1 ? 'Batch selection' : `${data.path.replace(/^.*\//, '')} · ${data.tags.length} tags`;
+          document.querySelector('#gesture-status').textContent = state.gesture;
+          renderTags();
+        }
+      };
+      const chooseTab = (tab, focus = false) => {
+        state.tab = tab;
+        if (tab !== 'media') {
+          state.source = 'all';
+          state.tag = '';
+        }
+        const first = cards.find(card => card.dataset.tab === tab);
+        state.selected = first.dataset.item;
+        state.selectedIds = new Set([first.dataset.item]);
+        state.selectionAnchor = first.dataset.item;
+        state.gesture = '';
+        render();
+        if (focus) document.querySelector(`[role=tab][data-tab="${tab}"]`).focus();
+      };
+      document.querySelectorAll('[role=tab]').forEach((button, index, tabs) => {
+        button.addEventListener('click', () => chooseTab(button.dataset.tab));
+        button.addEventListener('keydown', event => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+          chooseTab(tabs[next].dataset.tab, true);
+        });
+      });
+      document.querySelectorAll('.locationRow[data-source]').forEach(button => button.addEventListener('click', () => {
+        state.source = button.dataset.source;
+        state.tag = '';
+        render();
+      }));
+      document.querySelectorAll('[data-tag-filter]').forEach(button => button.addEventListener('click', () => {
+        state.tag = state.tag === button.dataset.tagFilter ? '' : button.dataset.tagFilter;
+        state.source = 'all';
+        render();
+      }));
+      document.querySelectorAll('[data-clear-filter]').forEach(button => button.addEventListener('click', () => {
+        state.tag = '';
+        state.source = 'all';
+        search.value = '';
+        state.query = '';
+        render();
+      }));
+      search.addEventListener('input', event => { state.query = event.currentTarget.value.trim().toLowerCase(); render(); });
+      search.addEventListener('keydown', event => {
+        if (event.key === 'Escape') { state.query = ''; search.value = ''; render(); }
+      });
+      document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => { state.view = button.dataset.view; render(); }));
+      cards.forEach(card => card.addEventListener('click', event => { selectCard(card, event); state.gesture = ''; render(); }));
+      cards.forEach(card => card.addEventListener('dblclick', event => {
+        selectCard(card, event);
+        requestGesture('Placement waits for Host / Document');
+      }));
+      cards.forEach(card => card.addEventListener('keydown', event => {
+        const columns = state.view === 'thumbnails' ? 4 : state.view === 'grid' ? 2 : 1;
+        if (event.key === 'ArrowLeft') { event.preventDefault(); selectByOffset(card, -1, event.shiftKey); }
+        if (event.key === 'ArrowRight') { event.preventDefault(); selectByOffset(card, 1, event.shiftKey); }
+        if (event.key === 'ArrowUp') { event.preventDefault(); selectByOffset(card, -columns, event.shiftKey); }
+        if (event.key === 'ArrowDown') { event.preventDefault(); selectByOffset(card, columns, event.shiftKey); }
+        if (event.key === 'Enter') { event.preventDefault(); requestGesture('Placement waits for Host / Document'); }
+        if (event.key === ' ') { event.preventDefault(); requestGesture('Preview waits for the audio Host'); }
+      }));
+      cards.forEach(card => {
+        card.draggable = true;
+        card.addEventListener('dragstart', event => {
+          selectCard(card);
+          event.dataTransfer.setData('application/x-motolii-browser-item', card.dataset.item);
+          event.dataTransfer.effectAllowed = 'copy';
+          document.querySelector('.libraryBrowser').classList.add('isDragging');
+          requestGesture('Dragging item · waiting for a composition drop target');
+        });
+        card.addEventListener('dragend', () => document.querySelector('.libraryBrowser').classList.remove('isDragging'));
+      });
+      const closeContextMenus = () => { contextMenu.hidden = true; sourceContextMenu.hidden = true; };
+      const placeContextMenu = (menu, event) => {
+        menu.hidden = false;
+        const margin = 4;
+        const x = Math.min(event.clientX, window.innerWidth - menu.offsetWidth - margin);
+        const y = Math.min(event.clientY, window.innerHeight - menu.offsetHeight - margin);
+        menu.style.left = `${Math.max(margin, x)}px`;
+        menu.style.top = `${Math.max(margin, y)}px`;
+      };
+      cards.forEach(card => card.addEventListener('contextmenu', event => {
+        event.preventDefault();
+        if (!state.selectedIds.has(card.dataset.item)) selectCard(card);
+        state.selected = card.dataset.item;
+        render();
+        sourceContextMenu.hidden = true;
+        placeContextMenu(contextMenu, event);
+      }));
+      document.querySelectorAll('.locationRow[data-source]:not([data-source="all"])').forEach(row => row.addEventListener('contextmenu', event => {
+        event.preventDefault();
+        state.source = row.dataset.source;
+        state.tag = '';
+        render();
+        contextMenu.hidden = true;
+        placeContextMenu(sourceContextMenu, event);
+      }));
+      document.querySelector('#menu-favorite').addEventListener('click', () => {
+        const selection = selectedCards();
+        const remove = selection.every(card => metadata[card.dataset.item].tags.includes('favorite'));
+        selection.forEach(card => {
+          const tags = metadata[card.dataset.item].tags;
+          metadata[card.dataset.item].tags = remove ? tags.filter(tag => tag !== 'favorite') : [...new Set([...tags, 'favorite'])];
+        });
+        closeContextMenus();
+        render();
+      });
+      document.querySelector('#menu-tags').addEventListener('click', () => { closeContextMenus(); toggleEditor(true); });
+      document.addEventListener('pointerdown', event => {
+        if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeContextMenus();
+        if (!sourceContextMenu.hidden && !sourceContextMenu.contains(event.target)) closeContextMenus();
+      });
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && (!contextMenu.hidden || !sourceContextMenu.hidden)) {
+          event.preventDefault();
+          closeContextMenus();
+        }
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+          event.preventDefault();
+          search.focus();
+        }
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a' && document.activeElement !== search && document.activeElement !== document.querySelector('#tag-input')) {
+          event.preventDefault();
+          state.selectedIds = new Set(visibleCards().map(card => card.dataset.item));
+          state.gesture = '';
+          render();
+        }
+      });
+      document.querySelector('#filter-toggle').addEventListener('click', event => {
+        const shelf = document.querySelector('#filter-shelf');
+        shelf.hidden = !shelf.hidden;
+        event.currentTarget.setAttribute('aria-expanded', String(!shelf.hidden));
+      });
+      const toggleEditor = open => {
+        editor.hidden = !open;
+        document.querySelector('#editor-toggle').setAttribute('aria-expanded', String(open));
+        if (open) document.querySelector('#tag-input').focus();
+      };
+      document.querySelector('#editor-toggle').addEventListener('click', () => toggleEditor(editor.hidden));
+      document.querySelector('#selection-tags').addEventListener('click', () => toggleEditor(true));
+      document.querySelector('#editor-close').addEventListener('click', () => toggleEditor(false));
+      document.querySelector('#tag-form').addEventListener('submit', event => {
+        event.preventDefault();
+        const input = document.querySelector('#tag-input');
+        const tag = input.value.trim().toLowerCase();
+        if (tag && !metadata[state.selected].tags.includes(tag)) metadata[state.selected].tags.push(tag);
+        input.value = '';
+        render();
+      });
+      document.querySelector('#editor-tags').addEventListener('click', event => {
+        const tag = event.target.dataset.removeTag;
+        if (!tag) return;
+        metadata[state.selected].tags = metadata[state.selected].tags.filter(value => value !== tag);
+        if (state.tag === tag) state.tag = '';
+        render();
+      });
+      let longPressTimer;
+      cards.forEach(card => {
+        card.addEventListener('pointerdown', event => {
+          if (event.pointerType === 'mouse') return;
+          longPressTimer = window.setTimeout(() => {
+            selectCard(card);
+            render();
+            sourceContextMenu.hidden = true;
+            placeContextMenu(contextMenu, event);
+          }, 550);
+        });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(type => card.addEventListener(type, () => window.clearTimeout(longPressTimer)));
+      });
+      render();
+    </script>
+  </body>
+</html>
