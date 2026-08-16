@@ -14,6 +14,9 @@
 //!   - 左列を上下へドラッグ … **並べ替え。Group の中へも出し入れできる**
 //!   - `M` / `S`           … mute（`visible`）/ solo の反転
 //!   - 左列クリック         … 選択。`Cmd` で足し引き、`Shift` で範囲
+//!   - 右クリック           … その場のメニュー。**名前の変更はここから**
+//!     (ダブルクリックは使わない — 選択・並べ替え・跳ぶ が同じ場所に
+//!      重なっている面では、2回目の押下が別の操作の途中と区別できない)
 //!   - `Cmd/Ctrl + Z` / `Shift+Z` … Undo / Redo
 //!   - `Cmd/Ctrl + D`      … 選択中の layer を複製
 //!   - `Delete` / `Backspace` … 選択中の layer を削除（Group は中身ごと）
@@ -2359,10 +2362,6 @@ impl eframe::App for Lab {
             if r.clicked() {
                 locator_jump = Some(t);
             }
-            // 名前を直すのはダブルクリック(跳ぶほうを一手で使えるようにする)
-            if r.double_clicked() {
-                locator_clicked = Some(index);
-            }
             if r.dragged() {
                 if let Some(pos) = r.interact_pointer_pos() {
                     let at = self
@@ -2592,9 +2591,6 @@ impl eframe::App for Lab {
                     let (additive, range) =
                         ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
                     pick = Some((row.layer, additive, range));
-                }
-                if r.double_clicked() {
-                    rename_started = Some(row.layer);
                 }
                 if r.drag_started() {
                     reorder_started = Some(row.layer);
