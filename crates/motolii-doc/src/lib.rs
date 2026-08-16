@@ -706,12 +706,12 @@ impl DocumentWriter {
     /// Scale / Rotation / Opacity へplayhead時刻のkeyを追加する SetProperty を準備する。
     /// Positionは `prepare_add_position_key` を使う。
     pub fn prepare_add_transform_param_key(
-        &self,
+        &mut self,
         target: LayerId,
         property: ScalarPropertyId,
         t: RationalTime,
     ) -> Result<AddTransformParamKeyPreparation, AddTransformParamKeyPrepareError> {
-        position_key_prepare::prepare_add_transform_param_key(&self.doc, target, property, t)
+        position_key_prepare::prepare_add_transform_param_key(&mut self.doc, target, property, t)
     }
 
     /// Scale / Rotation / Opacity の既存key値だけを差し替える SetProperty を準備する。same-value は `None`。

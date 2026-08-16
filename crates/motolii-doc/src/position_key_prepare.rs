@@ -212,8 +212,15 @@ fn clone_transform_param(env: &ItemEnvelope, property: &ScalarPropertyId) -> Doc
         .expect("rejected by transform_key_target")
 }
 
+/// **カウンタは実際に進める。** 以前はコピーから採っていたため、同じ Document へ
+/// 2回呼ぶと**同じ `KeyframeId` が返っていた**(2026-08-16 記録、UI から呼んでいない
+/// あいだは害が出ていなかった)。`SetProperty` は `StableIdReservation` を持たない
+/// ので apply では進まず、進めるならここしかない。
+///
+/// 採った id は command を捨てても戻らない — 非再利用カウンタの規律どおりで、
+/// `prepare_duplicate_track_item` の `reserve` と同じ扱いである。
 pub fn prepare_add_transform_param_key(
-    doc: &Document,
+    doc: &mut Document,
     target: LayerId,
     property: ScalarPropertyId,
     t: RationalTime,
@@ -261,8 +268,7 @@ pub fn prepare_add_transform_param_key(
         }
     }
 
-    let mut next = doc.next_stable_id;
-    let key_id = KeyframeId::from_raw(next.allocate()?);
+    let key_id = KeyframeId::from_raw(doc.next_stable_id.allocate()?);
     let new_value =
         deterministic_new_param_key(&old_value, t, key_id, type_ok).map_err(|err| match err {
             InsertKeyError::SourceUnsupported => {

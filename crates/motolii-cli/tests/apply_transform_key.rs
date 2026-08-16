@@ -39,17 +39,19 @@ fn apply_scale_key_dump_contains_keyframes_eval_equals_const() {
     assert_eq!(got, [1.0, 1.0], "{dumped}");
 }
 
+/// plugin 由来の property は型が catalog 側にあるので、ここでは決められない。
+/// **Position / Anchor は 2026-08-16 の受け付け集合統合(`5db01f7d`)で通るようになった。**
 #[test]
-fn prepare_position_via_transform_param_key_is_unsupported() {
+fn prepare_plugin_property_via_transform_param_key_is_unsupported() {
     let (path, layer) = saved_one_clip("cli-apply-scale-key-position");
-    let doc = load_document(&path).unwrap();
+    let mut doc = load_document(&path).unwrap();
     let err = prepare_add_transform_param_key(
-        &doc,
+        &mut doc,
         layer,
-        ScalarPropertyId::Position,
+        ScalarPropertyId::SourceParam("count".into()),
         RationalTime::from_seconds(1),
     )
-    .expect_err("Position must be PropertyUnsupported");
+    .expect_err("plugin property must be PropertyUnsupported");
     assert!(matches!(
         err,
         AddTransformParamKeyPrepareError::PropertyUnsupported { .. }
@@ -64,8 +66,8 @@ fn prepare_position_via_transform_param_key_is_unsupported() {
 }
 
 fn prepared_scale_key(path: &Path, layer: LayerId, t: RationalTime) -> DocCommand {
-    let doc = load_document(path).unwrap();
-    match prepare_add_transform_param_key(&doc, layer, ScalarPropertyId::Scale, t).unwrap() {
+    let mut doc = load_document(path).unwrap();
+    match prepare_add_transform_param_key(&mut doc, layer, ScalarPropertyId::Scale, t).unwrap() {
         AddTransformParamKeyPreparation::Prepared { command, .. } => command,
         AddTransformParamKeyPreparation::AlreadyPresent { .. } => {
             panic!("const scale must prepare a key")
