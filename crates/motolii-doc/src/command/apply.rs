@@ -419,6 +419,10 @@ impl Command {
                 find_envelope_mut(doc, *target)?.solo = *new;
                 Ok(())
             }
+            Command::SetItemLock { target, new, .. } => {
+                find_envelope_mut(doc, *target)?.lock = *new;
+                Ok(())
+            }
         }
     }
 }

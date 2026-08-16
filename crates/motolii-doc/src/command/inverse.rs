@@ -398,6 +398,11 @@ impl Command {
                 old: new,
                 new: old,
             },
+            Command::SetItemLock { target, old, new } => Command::SetItemLock {
+                target,
+                old: new,
+                new: old,
+            },
         }
     }
 }

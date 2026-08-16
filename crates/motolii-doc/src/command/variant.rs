@@ -273,6 +273,12 @@ pub enum Command {
         old: bool,
         new: bool,
     },
+    /// 編集禁止(B④)。**評価・描画には影響しない** — 触れなくなるだけ
+    SetItemLock {
+        target: LayerId,
+        old: bool,
+        new: bool,
+    },
 }
 
 /// fresh admitだけが使う非永続prepared値。Undo/Redo/replayの復元とは分離する。

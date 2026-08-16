@@ -54,6 +54,7 @@ pub enum PropertyId {
     Reparent,
     ItemVisible,
     ItemSolo,
+    ItemLock,
 }
 
 impl From<ScalarPropertyId> for PropertyId {
@@ -130,6 +131,7 @@ pub enum CommandKind {
     ReparentClip,
     SetItemVisible,
     SetItemSolo,
+    SetItemLock,
 }
 
 /// S18: `gesture_id + command_kind + target_stable_id + property_id`。

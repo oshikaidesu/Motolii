@@ -28,7 +28,8 @@ mod track_item;
 mod variant;
 
 pub use clip::{
-    prepare_reparent_clip, prepare_set_clip_start, prepare_set_item_solo, prepare_set_item_visible,
+    prepare_reparent_clip, prepare_set_clip_start, prepare_set_item_lock, prepare_set_item_solo,
+    prepare_set_item_visible,
     prepare_trim_clip_in, prepare_trim_clip_out,
 };
 pub use split::prepare_split_clip;

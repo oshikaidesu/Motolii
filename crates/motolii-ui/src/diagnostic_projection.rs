@@ -277,6 +277,7 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::SplitClip => "Split clip",
         CommandKind::ReparentClip => "Reparent clip",
         CommandKind::SetItemVisible => "Set item visible",
+        CommandKind::SetItemLock => "Set item lock",
         CommandKind::SetItemSolo => "Set item solo",
     }
 }

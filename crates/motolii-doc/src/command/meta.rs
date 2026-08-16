@@ -52,6 +52,7 @@ impl Command {
             Command::ReparentClip { .. } => CommandKind::ReparentClip,
             Command::SetItemVisible { .. } => CommandKind::SetItemVisible,
             Command::SetItemSolo { .. } => CommandKind::SetItemSolo,
+            Command::SetItemLock { .. } => CommandKind::SetItemLock,
         }
     }
 
@@ -78,6 +79,7 @@ impl Command {
             | Command::UnsplitClip { target, .. }
             | Command::ReparentClip { target, .. }
             | Command::SetItemVisible { target, .. }
+            | Command::SetItemLock { target, .. }
             | Command::SetItemSolo { target, .. } => target.get(),
             Command::AddPositionKey { added_key_id, .. }
             | Command::UndoAddPositionKey { added_key_id, .. } => added_key_id.get(),
@@ -149,6 +151,7 @@ impl Command {
             Command::ReparentClip { .. } => PropertyId::Reparent,
             Command::SetItemVisible { .. } => PropertyId::ItemVisible,
             Command::SetItemSolo { .. } => PropertyId::ItemSolo,
+            Command::SetItemLock { .. } => PropertyId::ItemLock,
         }
     }
 
@@ -232,6 +235,7 @@ impl Command {
             | Command::UnsplitClip { .. }
             | Command::ReparentClip { .. }
             | Command::SetItemVisible { .. }
+            | Command::SetItemLock { .. }
             | Command::SetItemSolo { .. } => None,
         }
     }

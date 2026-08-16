@@ -73,6 +73,8 @@ const KEY_IDLE: Color32 = Color32::from_rgb(0x35, 0x35, 0x35);
 // M / S が入っているときの下地。モックの採用値
 const MUTE_ON: Color32 = Color32::from_rgb(0x65, 0x3b, 0x34);
 const SOLO_ON: Color32 = Color32::from_rgb(0x66, 0x5b, 0x32);
+/// L(編集禁止)が入っているときの下地
+const LOCK_ON: Color32 = Color32::from_rgb(0x3f, 0x4e, 0x5c);
 
 const RAIL_W: f32 = 196.0;
 /// 行の高さ(小)。**2026-08-08 決定の「行高は固定・最小20px」の最小側**
@@ -399,6 +401,7 @@ enum MenuAction {
     DeleteKeys,
     ToggleMute(LayerId),
     ToggleSolo(LayerId),
+    ToggleLock(LayerId),
     ToggleChildren(LayerId),
     ToggleKeys(LayerId),
     FitView,
@@ -964,26 +967,28 @@ impl Lab {
         }
     }
 
-    /// M / S を反転して Document へ書く。**1クリック = 1 `GestureId` = 1 Undo 単位**
-    fn toggle_flag(&mut self, layer: LayerId, mute: bool) {
-        let Some((visible, solo)) = item_flags(&self.document, layer) else {
+    /// M / S / L を反転して Document へ書く。**1クリック = 1 `GestureId` = 1 Undo 単位**
+    fn toggle_flag(&mut self, layer: LayerId, flag: Flag) {
+        let Some((visible, solo, lock)) = item_flags(&self.document, layer) else {
             return;
         };
         let gesture = self.writer.begin_gesture();
-        let prepared = if mute {
-            self.writer.prepare_set_item_visible(layer, !visible)
-        } else {
-            self.writer.prepare_set_item_solo(layer, !solo)
+        let prepared = match flag {
+            Flag::Mute => self.writer.prepare_set_item_visible(layer, !visible),
+            Flag::Solo => self.writer.prepare_set_item_solo(layer, !solo),
+            Flag::Lock => self.writer.prepare_set_item_lock(layer, !lock),
         };
         match prepared {
             Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
                 Ok(()) => {
                     refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
-                    let what = match (mute, visible, solo) {
-                        (true, true, _) => "mute",
-                        (true, false, _) => "unmute",
-                        (false, _, false) => "solo",
-                        (false, _, true) => "unsolo",
+                    let what = match (flag, visible, solo, lock) {
+                        (Flag::Mute, true, _, _) => "mute",
+                        (Flag::Mute, false, _, _) => "unmute",
+                        (Flag::Solo, _, false, _) => "solo",
+                        (Flag::Solo, _, true, _) => "unsolo",
+                        (Flag::Lock, _, _, false) => "lock",
+                        (Flag::Lock, _, _, true) => "unlock",
                     };
                     self.status = format!(
                         "{} {what}  undo {}",
@@ -996,6 +1001,14 @@ impl Lab {
             Ok(None) => {}
             Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
         }
+    }
+
+    /// **編集禁止か。** D2 は lock を見ない(評価・描画に影響しないフラグなので)。
+    /// 触らせないのは UI 側の仕事である — ここを通さない経路を作らないこと。
+    fn is_locked(&self, layer: LayerId) -> bool {
+        item_flags(&self.document, layer)
+            .map(|(_, _, lock)| lock)
+            .unwrap_or(false)
     }
 
     fn is_selected(&self, layer: LayerId) -> bool {
@@ -1061,6 +1074,23 @@ impl Lab {
             .collect()
     }
 
+    /// 構造を触ってよい選択。**ロックされているものは外す。**
+    ///
+    /// 選択そのものは許す(見て確かめたいだけのことがある)。外すのは書く直前で、
+    /// **1つでも外したら status で言う** — 黙って対象が減るのが一番分からない。
+    fn editable_roots(&mut self) -> Vec<LayerId> {
+        let roots = self.selection_roots();
+        let editable: Vec<LayerId> = roots
+            .iter()
+            .copied()
+            .filter(|layer| !self.is_locked(*layer))
+            .collect();
+        if editable.len() < roots.len() {
+            self.status = format!("{} locked, skipped", roots.len() - editable.len());
+        }
+        editable
+    }
+
     /// 選択中の layer を丸ごと複製する。**1複製 = 1 `GestureId` = 1 Undo 単位**
     ///
     /// **深いところは D2 がやる。** `prepare_duplicate_track_item` は Group の
@@ -1070,7 +1100,7 @@ impl Lab {
     ///
     /// 複製後は**増えたほうを選ぶ**。続けて動かすのが普通なので
     fn duplicate_selected(&mut self) {
-        let roots = self.selection_roots();
+        let roots = self.editable_roots();
         if roots.is_empty() {
             self.status = "nothing selected".to_owned();
             return;
@@ -1153,7 +1183,7 @@ impl Lab {
     /// 消す順は関係ない — `selection_roots` が親子の重なりを外しているので、
     /// どれを先に消しても残りの `prepare` は当たる。
     fn delete_selected(&mut self) {
-        let roots = self.selection_roots();
+        let roots = self.editable_roots();
         if roots.is_empty() {
             self.status = "nothing selected".to_owned();
             return;
@@ -1188,7 +1218,7 @@ impl Lab {
     /// **親が揃っていないときは断る。** 別々の階層に居るものを1つに入れると、
     /// どの位置へ置いたのかが誰にも言えなくなる。
     fn group_selected(&mut self) {
-        let roots = self.selection_roots();
+        let roots = self.editable_roots();
         if roots.is_empty() {
             self.status = "nothing selected".to_owned();
             return;
@@ -1263,7 +1293,7 @@ impl Lab {
     /// 端に当たっているもの(playhead が clip の外・端ちょうど)は `Ok(None)` で
     /// 返るので、**切れなかったものは黙って飛ばす** — 失敗ではない。
     fn split_selected(&mut self) {
-        let roots = self.selection_roots();
+        let roots = self.editable_roots();
         if roots.is_empty() {
             self.status = "nothing selected".to_owned();
             return;
@@ -1415,6 +1445,7 @@ impl Lab {
         has_children: bool,
         muted: bool,
         soloed: bool,
+        locked: bool,
         selected: usize,
         out: &mut Option<MenuAction>,
     ) {
@@ -1473,6 +1504,13 @@ impl Lab {
             *out = Some(MenuAction::ToggleSolo(layer));
             ui.close();
         }
+        if ui
+            .button(if locked { "Unlock   L" } else { "Lock   L" })
+            .clicked()
+        {
+            *out = Some(MenuAction::ToggleLock(layer));
+            ui.close();
+        }
         if ui.button("Show keys   ◇").clicked() {
             *out = Some(MenuAction::ToggleKeys(layer));
             ui.close();
@@ -1487,7 +1525,7 @@ impl Lab {
         seat(ui, "Copy   ⌘C");
         seat(ui, "Paste   ⌘V");
         seat(ui, "Rename…   ⏎");
-        seat(ui, "Lock   ⌘L");
+
         seat(ui, "Reveal source");
     }
 
@@ -1580,8 +1618,9 @@ impl Lab {
             MenuAction::DeleteKeys => {
                 self.delete_selected_keys();
             }
-            MenuAction::ToggleMute(layer) => self.toggle_flag(layer, true),
-            MenuAction::ToggleSolo(layer) => self.toggle_flag(layer, false),
+            MenuAction::ToggleMute(layer) => self.toggle_flag(layer, Flag::Mute),
+            MenuAction::ToggleSolo(layer) => self.toggle_flag(layer, Flag::Solo),
+            MenuAction::ToggleLock(layer) => self.toggle_flag(layer, Flag::Lock),
             MenuAction::ToggleChildren(layer) => {
                 if self.fold.children_are_open(layer) {
                     self.fold.close_children(layer);
@@ -2188,7 +2227,7 @@ impl eframe::App for Lab {
 
         let mut toggles: Vec<(LayerId, bool)> = Vec::new();
         // M / S のクリック。行を回している間は Document を触らず、回し終えてから書く
-        let mut flags: Vec<(LayerId, bool)> = Vec::new();
+        let mut flags: Vec<(LayerId, Flag)> = Vec::new();
         let mut pick: Option<(LayerId, bool, bool)> = None;
         let mut reorder_started: Option<LayerId> = None;
         let mut reorder_released = false;
@@ -2271,8 +2310,8 @@ impl eframe::App for Lab {
                 }
                 {
                     let name = self.name(row.layer).to_owned();
-                    let (visible, solo) =
-                        item_flags(&self.document, row.layer).unwrap_or((true, false));
+                    let (visible, solo, lock) =
+                        item_flags(&self.document, row.layer).unwrap_or((true, false, false));
                     let selected = self.selected.len().max(1);
                     r.context_menu(|ui| {
                         Lab::row_menu(
@@ -2282,6 +2321,7 @@ impl eframe::App for Lab {
                             row.has_children,
                             !visible,
                             solo,
+                            lock,
                             selected,
                             &mut menu_action,
                         )
@@ -2354,7 +2394,7 @@ impl eframe::App for Lab {
                     let has_keys = !visible_params(&self.document, row.layer).is_empty();
                     if has_keys {
                         let hit = Rect::from_center_size(
-                            egui::pos2(rail.right() - 52.0, cy),
+                            egui::pos2(rail.right() - 66.0, cy),
                             Vec2::splat(16.0),
                         );
                         let r =
@@ -2376,25 +2416,35 @@ impl eframe::App for Lab {
                     }
 
                     // **押下状態は Document から読む。** ボタン側に状態を持たない
-                    let (item_visible, item_solo) =
-                        item_flags(&self.document, row.layer).unwrap_or((true, false));
-                    for (i, label) in ["M", "S"].iter().enumerate() {
+                    let (item_visible, item_solo, item_lock) =
+                        item_flags(&self.document, row.layer).unwrap_or((true, false, false));
+                    for (i, (label, flag)) in [("M", Flag::Mute), ("S", Flag::Solo), ("L", Flag::Lock)]
+                        .iter()
+                        .enumerate()
+                    {
                         let b = Rect::from_center_size(
-                            egui::pos2(rail.right() - 30.0 + i as f32 * 18.0, cy),
+                            egui::pos2(rail.right() - 48.0 + i as f32 * 18.0, cy),
                             Vec2::splat(16.0),
                         );
-                        let is_mute = i == 0;
-                        let on = if is_mute { !item_visible } else { item_solo };
+                        let on = match flag {
+                            Flag::Mute => !item_visible,
+                            Flag::Solo => item_solo,
+                            Flag::Lock => item_lock,
+                        };
                         let r = ui.interact(
                             b,
-                            ui.id().with(("flag", row.layer, is_mute)),
+                            ui.id().with(("flag", row.layer, i)),
                             Sense::click(),
                         );
                         if on {
                             p.rect_filled(
                                 b,
                                 CornerRadius::ZERO,
-                                if is_mute { MUTE_ON } else { SOLO_ON },
+                                match flag {
+                                    Flag::Mute => MUTE_ON,
+                                    Flag::Solo => SOLO_ON,
+                                    Flag::Lock => LOCK_ON,
+                                },
                             );
                         }
                         p.rect_stroke(
@@ -2422,7 +2472,7 @@ impl eframe::App for Lab {
                             },
                         );
                         if r.clicked() {
-                            flags.push((row.layer, is_mute));
+                            flags.push((row.layer, *flag));
                         }
                     }
                 }
@@ -2525,7 +2575,9 @@ impl eframe::App for Lab {
                                 ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
                             pick = Some((row.layer, additive, range));
                         }
-                        if r.drag_started() {
+                        if r.drag_started() && self.is_locked(row.layer) {
+                            self.status = format!("{} is locked", self.name(row.layer));
+                        } else if r.drag_started() {
                             if let Some(pos) = r.interact_pointer_pos() {
                                 // **何を掴んだかは端からの距離で決める。** 6px はモックの
                                 // `.trimHandle{width:7px}` に合わせた値
@@ -2627,7 +2679,9 @@ impl eframe::App for Lab {
                                 self.selected_keys.len()
                             );
                         }
-                        if r.drag_started() {
+                        if r.drag_started() && self.is_locked(row.layer) {
+                            self.status = format!("{} is locked", self.name(row.layer));
+                        } else if r.drag_started() {
                             if !movable {
                                 self.status = format!(
                                     "{} {} key: not movable",
@@ -2672,8 +2726,8 @@ impl eframe::App for Lab {
                         }
                         {
                             let name = self.name(row.layer).to_owned();
-                            let (visible, solo) =
-                                item_flags(&self.document, row.layer).unwrap_or((true, false));
+                            let (visible, solo, lock) =
+                                item_flags(&self.document, row.layer).unwrap_or((true, false, false));
                             let selected = self.selected.len().max(1);
                             r.context_menu(|ui| {
                                 Lab::row_menu(
@@ -2683,6 +2737,7 @@ impl eframe::App for Lab {
                                     row.has_children,
                                     !visible,
                                     solo,
+                                    lock,
                                     selected,
                                     &mut menu_action,
                                 )
@@ -2904,8 +2959,8 @@ impl eframe::App for Lab {
             }
         }
 
-        for (layer, mute) in flags {
-            self.toggle_flag(layer, mute);
+        for (layer, flag) in flags {
+            self.toggle_flag(layer, flag);
         }
 
         // **掴んでいるあいだ、時刻を指の近くに出す。** status 行まで目を運ばせない
@@ -3179,13 +3234,21 @@ fn clip_span(document: &Document, layer: LayerId) -> Option<(f32, f32)> {
     }
 }
 
-/// その layer の `visible` / `solo`。M / S の押下状態はここから読む
-fn item_flags(document: &Document, layer: LayerId) -> Option<(bool, bool)> {
+/// 掴める3つのフラグ。**押下状態は Document から読む**(ボタン側に状態を持たない)
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Flag {
+    Mute,
+    Solo,
+    Lock,
+}
+
+/// その layer の `visible` / `solo` / `lock`
+fn item_flags(document: &Document, layer: LayerId) -> Option<(bool, bool, bool)> {
     let env = match find_item(document, layer)? {
         TrackItem::Clip(c) => &c.envelope,
         TrackItem::Group(g) => &g.envelope,
     };
-    Some((env.visible, env.solo))
+    Some((env.visible, env.solo, env.lock))
 }
 
 /// キーを `(KeyframeId, 時刻(秒))` で返す。**掴んだ物を追い続けるには id が要る** —
@@ -3221,7 +3284,7 @@ fn time(ms: i64) -> RationalTime {
     RationalTime::try_new(ms, 1000).expect("fixture time")
 }
 
-fn keys_at(document: &mut Document, seconds: &[f64], v: DocValue) -> DocParam {
+fn keys_at(document: &mut Document, seconds: &[f64], v: DocValue) -> DocParam { // single-writer-exempt: fixture が Document を所有している(writer より前)
     let mut track = DocKeyframeTrack::new();
     for s in seconds {
         let id = KeyframeId::from_raw(document.next_stable_id.allocate().expect("key id"));
@@ -3236,7 +3299,7 @@ fn keys_at(document: &mut Document, seconds: &[f64], v: DocValue) -> DocParam {
 }
 
 fn make_clip(
-    document: &mut Document,
+    document: &mut Document, // single-writer-exempt: fixture が Document を所有している(writer より前)
     name: &str,
     start_s: f64,
     dur_s: f64,
@@ -3539,28 +3602,28 @@ mod tests {
         );
     }
 
-    /// **M / S は Document を書き換える。** 枠と文字だけではない。
+    /// **M / S / L は Document を書き換える。** 枠と文字だけではない。
     #[test]
     fn muting_a_layer_writes_through_to_the_document() {
         let mut lab = Lab::new(None);
         let layer = layer_named(&lab.names, "Background");
         assert_eq!(
             item_flags(&lab.document, layer),
-            Some((true, false)),
-            "既定は表示・非solo"
+            Some((true, false, false)),
+            "既定は表示・非solo・非ロック"
         );
 
-        lab.toggle_flag(layer, true);
+        lab.toggle_flag(layer, Flag::Mute);
         assert_eq!(
             item_flags(&lab.document, layer),
-            Some((false, false)),
+            Some((false, false, false)),
             "M で visible=false"
         );
 
-        lab.toggle_flag(layer, false);
+        lab.toggle_flag(layer, Flag::Solo);
         assert_eq!(
             item_flags(&lab.document, layer),
-            Some((false, true)),
+            Some((false, true, false)),
             "S で solo=true"
         );
 
@@ -3568,12 +3631,12 @@ mod tests {
         lab.document = lab.writer.snapshot();
         assert_eq!(
             item_flags(&lab.document, layer),
-            Some((false, false)),
+            Some((false, false, false)),
             "1クリック = 1 Undo"
         );
         lab.writer.undo().expect("undo");
         lab.document = lab.writer.snapshot();
-        assert_eq!(item_flags(&lab.document, layer), Some((true, false)));
+        assert_eq!(item_flags(&lab.document, layer), Some((true, false, false)));
     }
 
     /// **Scale のキーも clip について来る。** 2026-08-16 に D2 側の入口ができるまで
@@ -4793,5 +4856,78 @@ mod tests {
         assert_eq!(timecode(61.0, fps), "1:01:00");
         // 半端な秒は最寄りのフレームとして出る(表示が実体より細かくならない)
         assert_eq!(timecode(2.0334, fps), "0:02:01");
+    }
+
+    /// **ロックは触らせないだけ。** 評価にも描画にも影響しない(D2 の B④)。
+    #[test]
+    fn a_locked_layer_keeps_its_place_and_its_keys() {
+        let mut lab = Lab::new(None);
+        let locked = layer_named(&lab.names, "Background");
+        let free = layer_named(&lab.names, "starter-tone.wav");
+
+        lab.toggle_flag(locked, Flag::Lock);
+        assert!(lab.is_locked(locked), "status: {}", lab.status);
+        assert!(!lab.is_locked(free));
+
+        // 消えない。**選んでいても構造操作から外れる**
+        let items_before = lab.document.tracks[0].items.len();
+        lab.selected = vec![locked, free];
+        lab.delete_selected();
+        assert!(find_item(&lab.document, locked).is_some(), "ロックは消えない");
+        assert!(find_item(&lab.document, free).is_none(), "ロックでないほうは消える");
+        assert_eq!(lab.document.tracks[0].items.len(), items_before - 1);
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+
+        // 複製もされない
+        let items_before = lab.document.tracks[0].items.len();
+        lab.selected = vec![locked];
+        lab.duplicate_selected();
+        assert_eq!(
+            lab.document.tracks[0].items.len(),
+            items_before,
+            "ロックは複製されない: {}",
+            lab.status
+        );
+
+        // 切れない
+        lab.playhead = 4.0;
+        lab.split_selected();
+        assert_eq!(lab.document.tracks[0].items.len(), items_before, "ロックは切れない");
+
+        // **外せば元どおり触れる**
+        lab.toggle_flag(locked, Flag::Lock);
+        assert!(!lab.is_locked(locked));
+        lab.selected = vec![locked];
+        lab.duplicate_selected();
+        assert_eq!(lab.document.tracks[0].items.len(), items_before + 1, "外したら複製できる");
+    }
+
+    /// M / S / L は**押下状態を Document から読む**。ボタン側に状態を持たない。
+    #[test]
+    fn the_three_flags_write_through_and_read_back() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Reference text");
+        assert_eq!(item_flags(&lab.document, layer), Some((true, false, false)));
+
+        for (flag, expect) in [
+            (Flag::Mute, (false, false, false)),
+            (Flag::Solo, (false, true, false)),
+            (Flag::Lock, (false, true, true)),
+        ] {
+            lab.toggle_flag(layer, flag);
+            assert_eq!(
+                item_flags(&lab.document, layer),
+                Some(expect),
+                "{flag:?} を入れた後: {}",
+                lab.status
+            );
+        }
+
+        // 1クリック = 1 Undo
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(item_flags(&lab.document, layer), Some((false, true, false)));
     }
 }

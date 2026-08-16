@@ -694,6 +694,15 @@ impl DocumentWriter {
         command::prepare_set_item_solo(&self.doc, target, new)
     }
 
+    /// 編集禁止フラグ。**評価・描画には影響しない**(B④)。
+    pub fn prepare_set_item_lock(
+        &self,
+        target: LayerId,
+        new: bool,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_item_lock(&self.doc, target, new)
+    }
+
     /// Positionへplayhead時刻のkeyを追加するcommandを準備する。
     pub fn prepare_add_position_key(
         &self,
