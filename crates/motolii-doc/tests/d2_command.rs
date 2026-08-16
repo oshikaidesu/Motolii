@@ -2920,3 +2920,38 @@ fn an_empty_locator_list_is_not_serialised() {
     let back: Document = serde_json::from_str(&json).unwrap();
     assert_eq!(back.locators, doc.locators, "往復する");
 }
+
+/// **掴んで動かしているあいだ、Undo は掴む直前へ戻る。**
+///
+/// 1 gesture の中で同じロケータの時刻が何度も出るので、畳むときに
+/// 先頭の `old` を残さないと、Undo が1フレーム前までしか戻らない。
+#[test]
+fn dragging_a_locator_merges_into_one_step_that_undoes_to_the_start() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc);
+    let start = RationalTime::try_new(3, 1).unwrap();
+
+    let gesture = writer.begin_gesture();
+    let command = writer.prepare_add_locator(start, "verse");
+    writer.apply_command(gesture, command).expect("add");
+    let undo_before = writer.undo_len();
+
+    let gesture = writer.begin_gesture();
+    for seconds in [4, 5, 6] {
+        let t = RationalTime::try_new(seconds, 1).unwrap();
+        let command = writer
+            .prepare_set_locator_time(0, t)
+            .expect("prepare")
+            .expect("変化がある");
+        writer.apply_command(gesture, command).expect("apply");
+    }
+    assert_eq!(writer.snapshot().locators[0].t, RationalTime::try_new(6, 1).unwrap());
+    assert_eq!(writer.undo_len(), undo_before + 1, "1 gesture = 1 Undo");
+
+    writer.undo().expect("undo");
+    assert_eq!(
+        writer.snapshot().locators[0].t,
+        start,
+        "**掴む直前へ戻る**(1フレーム前ではなく)"
+    );
+}

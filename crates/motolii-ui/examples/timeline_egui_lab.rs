@@ -198,6 +198,33 @@ pub struct LoopRegion {
     pub on: bool,
 }
 
+/// **面の上で押しているあいだ在るもの。** 掴み物はこれ1つに畳んである。
+///
+/// 以前は `drag` / `loop_drag` / `nav` / `marquee` と別々の Option が並んでいて、
+/// 「いま何か掴んでいるか」を聞くたびに4つ確かめる必要があった(実際、聞き忘れて
+/// 再生が始まる・ロケータが1フレームごとに別の Undo になる、が起きていた)。
+///
+/// **Document を書くものは `GestureId` を握る** — 1ドラッグが1 Undo になるのは
+/// 掴んだ瞬間に採った id を離すまで使い回すからで、毎フレーム開き直すと
+/// フレーム数だけ Undo が積まれる。
+#[derive(Debug, Clone)]
+enum Hold {
+    /// clip / キー / トリム / 並べ替え。`undo_base` は Esc で戻す判断に使う
+    Item {
+        grab: Grab,
+        gesture: GestureId,
+        undo_base: usize,
+    },
+    /// ロケータを時間方向へ
+    Locator { index: usize, gesture: GestureId },
+    /// ループ帯(Document を書かない — 区間は session の状態)
+    Loop(LoopGrab),
+    /// ナビゲータ帯(同上)
+    Nav(NavGrab),
+    /// 矩形選択(同上)
+    Marquee { from: egui::Pos2, to: egui::Pos2 },
+}
+
 /// 掴んでいるあいだ、毎フレーム同じ3つを聞かれる — ポインタの時刻、端で流すか、
 /// 窓の広さ。**その3つをまとめて1度だけ用意する。**
 ///
@@ -696,7 +723,7 @@ fn main() -> eframe::Result<()> {
 }
 
 /// 掴んでいるもの。**何を掴んだかで、出す command が変わる**
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Grab {
     /// **Group を掴んだら子も同じ差分で動く。**`targets` は動かす clip と、
     /// 掴んだ瞬間の開始時刻(秒)。Group 自身は clip ではないので入らない
@@ -808,11 +835,8 @@ struct Lab {
     /// `document` を取ったときの `writer.revision`。**これが取り直しの唯一の合図**
     revision: u64,
     fold: TimelineFoldState,
-    drag: Option<(Grab, GestureId)>,
-    /// 掴んだ瞬間の `undo_len`。Esc で戻すときに、この gesture が実際に何か
-    /// 積んだのかを見る。**積んでいないなら undo しない** — 掴む前の、
-    /// 関係ない編集を取り消してしまう
-    drag_undo_base: usize,
+    /// **いま掴んでいるもの。** 掴み物はここ1つに集める
+    hold: Option<Hold>,
     names: HashMap<LayerId, String>,
     /// 選択中の layer。**Project session が持つ種類の状態**で、Document には入れない。
     /// **順序は選んだ順**で、末尾が Shift 範囲選択の起点になる
@@ -826,14 +850,10 @@ struct Lab {
     selected_keys: Vec<(LayerId, ParamRef, KeyframeId)>,
     /// 並べ替えのドラッグ中に、いま落とすと決まる場所。**線を描く位置でもある**
     drop: Option<DropTarget>,
-    /// ナビゲータ帯を掴んでいる間の掴み方。掴んだ瞬間に決めて、離すまで変えない
-    nav: Option<NavGrab>,
     /// playhead(秒)。同上
     playhead: f32,
     /// ループ区間。同上
     loop_region: LoopRegion,
-    /// ループ帯を掴んでいる最中の掴み方
-    loop_drag: Option<LoopGrab>,
     /// 吸着するか。**Alt を押しているあいだは切れる**(押しっぱなしで自由に置ける)
     snap: bool,
     /// 行を高くするか。**意味は変わらない** — 見やすさだけ
@@ -842,8 +862,6 @@ struct Lab {
     /// (白で統一して見たい人の好みが、他人の付けた色を消してはいけない)。
     /// Lab には profile が無いので、ここでは窓の状態として持つ
     colors_on: bool,
-    /// 矩形選択を掴んだ場所(面の座標)。掴んでいないときは `None`
-    marquee: Option<(egui::Pos2, egui::Pos2)>,
     /// 名前を編集中の layer と、編集中の文字列。**確定するまで Document は触らない**
     renaming: Option<(LayerId, String)>,
     /// メモを編集中の index と文字列。同上
@@ -885,8 +903,7 @@ impl Lab {
             document,
             revision,
             fold,
-            drag: None,
-            drag_undo_base: 0,
+            hold: None,
             names,
             selected: Vec::new(),
             selected_keys: Vec::new(),
@@ -896,7 +913,6 @@ impl Lab {
             },
             scroll_y: 0.0,
             drop: None,
-            nav: None,
             playhead: 0.0,
             // 最初から引いてある帯は邪魔なので、区間だけ用意して切っておく
             loop_region: LoopRegion {
@@ -904,11 +920,9 @@ impl Lab {
                 end: 6.0,
                 on: false,
             },
-            loop_drag: None,
             snap: true,
             large_rows: false,
             colors_on: true,
-            marquee: None,
             renaming: None,
             editing_locator: None,
             context_time: 0.0,
@@ -950,16 +964,16 @@ impl Lab {
     /// ドラッグの着地時刻。**掴んでいるものが何であれ、まず候補へ吸着する。**
     /// `px_per_second` は窓の広さから来るので、寄れば吸着の間合いも細かくなる
     fn commit_drag_snapped(&mut self, at_seconds: f32, px_per_second: f32) {
-        let exclude: Vec<LayerId> = match &self.drag {
-            Some((grab, _)) => vec![grab_layer(grab)],
-            None => Vec::new(),
-        };
+        let exclude: Vec<LayerId> = self
+            .item_hold()
+            .map(|(grab, _, _)| vec![grab_layer(&grab)])
+            .unwrap_or_default();
         let at = self.snapped(at_seconds, &exclude, px_per_second);
         self.commit_drag(at);
     }
 
     fn commit_drag(&mut self, at_seconds: f32) {
-        let Some((grab, gesture)) = self.drag.clone() else {
+        let Some((grab, gesture, _)) = self.item_hold() else {
             return;
         };
         // **編集が作る時刻は全部フレーム境界へ乗る。** fps はここで1回だけ読む
@@ -1099,11 +1113,12 @@ impl Lab {
     /// まとめて戻る。まだ何も積んでいない(掴んだだけで動かしていない)ときは
     /// **undo しない** — 掴む前の、関係ない編集を取り消してしまう。
     fn cancel_drag(&mut self) {
-        let Some((grab, _)) = self.drag.take() else {
+        let Some((grab, _, undo_base)) = self.item_hold() else {
             return;
         };
+        self.hold = None;
         let layer = grab_layer(&grab);
-        if self.writer.undo_len() <= self.drag_undo_base {
+        if self.writer.undo_len() <= undo_base {
             self.status = format!("{} cancelled (nothing to undo)", self.name(layer));
             return;
         }
@@ -1120,19 +1135,35 @@ impl Lab {
         }
     }
 
-    /// **準備済みの command を1つ、1 gesture で書く。**
-    ///
-    /// 書けたら `true`。`Ok(None)`(変化なし)は失敗ではないので黙って `false` を返す。
-    /// 落ちたら status に理由を出すので、**呼び手は成功時の言葉だけ持てばよい**。
-    ///
-    /// 「gesture を開く → 3通りに場合分け → 通ったら snapshot を取り直す →
-    /// 落ちたら名前つきで status」は、ここへ来るまで7箇所に写経されていた。
-    fn apply_one<E: std::fmt::Display>(
+    /// いま掴んでいるのが編集(clip / キー / トリム / 並べ替え)なら、その中身
+    fn item_hold(&self) -> Option<(Grab, GestureId, usize)> {
+        match &self.hold {
+            Some(Hold::Item {
+                grab,
+                gesture,
+                undo_base,
+            }) => Some((grab.clone(), *gesture, *undo_base)),
+            _ => None,
+        }
+    }
+
+    /// 掴み始める。**押した瞬間に1回だけ**
+    fn hold_item(&mut self, grab: Grab) {
+        let gesture = self.writer.begin_gesture();
+        self.hold = Some(Hold::Item {
+            grab,
+            gesture,
+            undo_base: self.writer.undo_len(),
+        });
+    }
+
+    /// 開いてある gesture へ書く。**1ドラッグ = 1 Undo** はこれで保たれる
+    fn apply_in<E: std::fmt::Display>(
         &mut self,
+        gesture: GestureId,
         what: &str,
         prepared: Result<Option<Command>, E>,
     ) -> bool {
-        let gesture = self.writer.begin_gesture();
         match prepared {
             Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
                 Ok(()) => {
@@ -1150,6 +1181,22 @@ impl Lab {
                 false
             }
         }
+    }
+
+    /// **準備済みの command を1つ、1 gesture で書く。**
+    ///
+    /// 書けたら `true`。`Ok(None)`(変化なし)は失敗ではないので黙って `false` を返す。
+    /// 落ちたら status に理由を出すので、**呼び手は成功時の言葉だけ持てばよい**。
+    ///
+    /// 「gesture を開く → 3通りに場合分け → 通ったら snapshot を取り直す →
+    /// 落ちたら名前つきで status」は、ここへ来るまで7箇所に写経されていた。
+    fn apply_one<E: std::fmt::Display>(
+        &mut self,
+        what: &str,
+        prepared: Result<Option<Command>, E>,
+    ) -> bool {
+        let gesture = self.writer.begin_gesture();
+        self.apply_in(gesture, what, prepared)
     }
 
     /// M / S / L を反転して Document へ書く。**1クリック = 1 `GestureId` = 1 Undo 単位**
@@ -2047,18 +2094,23 @@ impl Lab {
         );
         let r = ui.interact(bar, ui.id().with("nav"), Sense::click_and_drag());
         if r.drag_started() {
-            self.nav = r.interact_pointer_pos().map(|pos| {
+            self.hold = r.interact_pointer_pos().map(|pos| {
+                Hold::Nav(
                 if (pos.x - knob.left()).abs() <= 6.0 {
                     NavGrab::Left
                 } else if (pos.x - knob.right()).abs() <= 6.0 {
                     NavGrab::Right
                 } else {
                     NavGrab::Pan
-                }
+                })
             });
         }
         if r.dragged() {
-            if let (Some(mode), Some(pos)) = (self.nav, r.interact_pointer_pos()) {
+            let nav_grab = match &self.hold {
+                Some(Hold::Nav(mode)) => Some(*mode),
+                _ => None,
+            };
+            if let (Some(mode), Some(pos)) = (nav_grab, r.interact_pointer_pos()) {
                 let at = ((pos.x - bar.left()) / bar.width() * comp).clamp(0.0, comp);
                 self.view = match mode {
                     // 掴んだ所が窓の中心へ来る
@@ -2080,7 +2132,7 @@ impl Lab {
             }
         }
         if r.drag_stopped() {
-            self.nav = None;
+            self.hold = None;
         }
         p.rect_filled(knob, CornerRadius::same(2), Color32::from_rgb(0x4a, 0x4a, 0x4a));
         p.rect_stroke(
@@ -2088,7 +2140,7 @@ impl Lab {
             CornerRadius::same(2),
             Stroke::new(
                 1.0,
-                if r.hovered() || self.nav.is_some() {
+                if r.hovered() || matches!(self.hold, Some(Hold::Nav(_))) {
                     ACCENT
                 } else {
                     Color32::from_rgb(0x66, 0x66, 0x66)
@@ -2359,7 +2411,7 @@ impl eframe::App for Lab {
             dt,
         };
 
-        if space && self.drag.is_none() {
+        if space && self.hold.is_none() {
             self.playing = !self.playing;
             // 終端で押したら頭から。止まったまま何も起きないのが一番困る
             if self.playing && self.playhead >= comp_seconds - 1e-3 {
@@ -2424,19 +2476,23 @@ impl eframe::App for Lab {
         if loop_hit.drag_started() {
             if let Some(pos) = loop_hit.interact_pointer_pos() {
                 let at = self.view.x_to_time(pos.x, track_left, track_w);
-                self.loop_drag = Some(loop_grab_for(
+                self.hold = Some(Hold::Loop(loop_grab_for(
                     pos.x,
                     loop_x0,
                     loop_x1,
                     at,
                     self.loop_region,
-                ));
+                )));
                 // **引いたら効く。** 引いてから別のキーで入れる手順にしない
                 self.loop_region.on = true;
             }
         }
         if loop_hit.dragged() {
-            if let (Some(grab), Some(pos)) = (self.loop_drag, loop_hit.interact_pointer_pos()) {
+            let loop_grab = match &self.hold {
+                Some(Hold::Loop(grab)) => Some(*grab),
+                _ => None,
+            };
+            if let (Some(grab), Some(pos)) = (loop_grab, loop_hit.interact_pointer_pos()) {
                 let at = self.view.x_to_time(pos.x, track_left, track_w);
                 let (start, end) = match grab {
                     LoopGrab::New { anchor } => loop_from_drag(anchor, at, comp_seconds, fps),
@@ -2458,7 +2514,7 @@ impl eframe::App for Lab {
             }
         }
         if loop_hit.drag_stopped() {
-            self.loop_drag = None;
+            self.hold = None;
         }
         // 帯を描く。**切れているときも残す** — 引いた区間は消えていない
         {
@@ -2480,7 +2536,7 @@ impl eframe::App for Lab {
                 },
             );
             // 掴める端を示す
-            if loop_hit.hovered() || self.loop_drag.is_some() {
+            if loop_hit.hovered() || matches!(self.hold, Some(Hold::Loop(_))) {
                 for x in [x0, x1] {
                     lane.rect_filled(
                         Rect::from_min_max(
@@ -2558,20 +2614,33 @@ impl eframe::App for Lab {
             if r.clicked() {
                 locator_jump = Some(t);
             }
+            // **掴んだ瞬間に gesture を1つ採る。** 毎フレーム開き直していたので、
+            // 1回動かすとフレーム数だけ Undo が積まれていた
+            if r.drag_started() {
+                let gesture = self.writer.begin_gesture();
+                self.hold = Some(Hold::Locator { index, gesture });
+            }
             if r.dragged() {
-                if let Some(pos) = r.interact_pointer_pos() {
-                    let at = self
-                        .view
-                        .x_to_time(pos.x, track_left, track_w)
-                        .clamp(0.0, comp_seconds);
-                    let at = self.snapped(at, &[], track_w / self.view.span);
+                let held = match &self.hold {
+                    Some(Hold::Locator { index, gesture }) => Some((*index, *gesture)),
+                    _ => None,
+                };
+                if let (Some((index, gesture)), Some(pos)) = (held, r.interact_pointer_pos()) {
+                    let at = surface
+                        .time_at(self.view, pos.x)
+                        .clamp(0.0, surface.comp);
+                    let at = self.snapped(at, &[], surface.px_per_second(self.view));
                     if let Some(time) = seconds_to_time(at, fps) {
                         let prepared = self.writer.prepare_set_locator_time(index, time);
-                        if self.apply_one("locator", prepared) {
+                        if self.apply_in(gesture, "locator", prepared) {
                             self.status = format!("locator {at:.2}s");
                         }
                     }
+                    self.view = surface.edge_pan(self.view, pos.x);
                 }
+            }
+            if r.drag_stopped() {
+                self.hold = None;
             }
             r.context_menu(|ui| {
                 ui.set_min_width(150.0);
@@ -2722,13 +2791,14 @@ impl eframe::App for Lab {
         // 矩形選択。**掴んだ範囲に bar が掛かっている行を選ぶ**
         if surface_bg.drag_started() {
             if let Some(pos) = surface_bg.interact_pointer_pos() {
-                self.marquee = Some((pos, pos));
+                self.hold = Some(Hold::Marquee { from: pos, to: pos });
             }
         }
         if surface_bg.dragged() {
-            if let (Some((from, _)), Some(pos)) = (self.marquee, surface_bg.interact_pointer_pos())
+            if let (Some(Hold::Marquee { from, .. }), Some(pos)) =
+                (self.hold.clone(), surface_bg.interact_pointer_pos())
             {
-                self.marquee = Some((from, pos));
+                self.hold = Some(Hold::Marquee { from, to: pos });
             }
         }
         {
@@ -3084,9 +3154,7 @@ impl eframe::App for Lab {
                                         self.view.x_to_time(pos.x, track_left, track_w),
                                     )
                                 };
-                                let gesture = self.writer.begin_gesture();
-                                self.drag_undo_base = self.writer.undo_len();
-                                self.drag = Some((grab, gesture));
+                                self.hold_item(grab);
                             }
                         }
                         if r.dragged() {
@@ -3098,7 +3166,7 @@ impl eframe::App for Lab {
                             }
                         }
                         if r.drag_stopped() {
-                            self.drag = None;
+                            self.hold = None;
                         }
                     }
                 }
@@ -3165,17 +3233,12 @@ impl eframe::App for Lab {
                                     param_label(param)
                                 );
                             } else if let Some(pos) = r.interact_pointer_pos() {
-                                let gesture = self.writer.begin_gesture();
-                                self.drag_undo_base = self.writer.undo_len();
-                                self.drag = Some((
-                                    Grab::KeyTime {
-                                        layer: row.layer,
-                                        key,
-                                        grab_at: self.view.x_to_time(pos.x, track_left, track_w),
-                                        original: t,
-                                    },
-                                    gesture,
-                                ));
+                                self.hold_item(Grab::KeyTime {
+                                    layer: row.layer,
+                                    key,
+                                    grab_at: surface.time_at(self.view, pos.x),
+                                    original: t,
+                                });
                             }
                         }
                         if r.dragged() && movable {
@@ -3186,7 +3249,7 @@ impl eframe::App for Lab {
                             }
                         }
                         if r.drag_stopped() {
-                            self.drag = None;
+                            self.hold = None;
                         }
                         if r.secondary_clicked() && !self.is_selected(row.layer) {
                             pick = Some((row.layer, false, false));
@@ -3217,7 +3280,14 @@ impl eframe::App for Lab {
 
         // 掴み終わったら、矩形に掛かった行を選ぶ
         if surface_bg.drag_stopped() {
-            if let Some((from, to)) = self.marquee.take() {
+            let swept = match self.hold.take() {
+                Some(Hold::Marquee { from, to }) => Some((from, to)),
+                other => {
+                    self.hold = other;
+                    None
+                }
+            };
+            if let Some((from, to)) = swept {
                 let rect = Rect::from_two_pos(from, to);
                 let mut hit = Vec::new();
                 for (layer, top, h) in &objects {
@@ -3250,11 +3320,9 @@ impl eframe::App for Lab {
             if !self.is_selected(layer) {
                 self.selected = vec![layer];
             }
-            let gesture = self.writer.begin_gesture();
-            self.drag_undo_base = self.writer.undo_len();
-            self.drag = Some((Grab::Reorder { layer }, gesture));
+            self.hold_item(Grab::Reorder { layer });
         }
-        if let Some((Grab::Reorder { layer }, _)) = self.drag.clone() {
+        if let Some((Grab::Reorder { layer }, _, _)) = self.item_hold() {
             self.drop = ctx
                 .input(|i| i.pointer.latest_pos())
                 .and_then(|pos| {
@@ -3277,7 +3345,7 @@ impl eframe::App for Lab {
                 if let Some(to) = self.drop.take() {
                     self.commit_reorder(layer, to);
                 }
-                self.drag = None;
+                self.hold = None;
             }
         }
 
@@ -3394,7 +3462,7 @@ impl eframe::App for Lab {
             }
         }
         // 矩形選択の枠
-        if let Some((from, to)) = self.marquee {
+        if let Some(Hold::Marquee { from, to }) = self.hold {
             let rect = Rect::from_two_pos(from, to);
             time_p.rect_filled(rect, CornerRadius::ZERO, Color32::from_rgba_unmultiplied(0xe9, 0xcf, 0x72, 24));
             time_p.rect_stroke(rect, CornerRadius::ZERO, Stroke::new(1.0, ACCENT), StrokeKind::Inside);
@@ -3451,7 +3519,7 @@ impl eframe::App for Lab {
         }
 
         // **掴んでいるあいだ、時刻を指の近くに出す。** status 行まで目を運ばせない
-        if self.drag.is_some() || scrub.is_pointer_button_down_on() {
+        if self.hold.is_some() || scrub.is_pointer_button_down_on() {
             if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
                 let at = self.view.x_to_time(pos.x, track_left, track_w);
                 let label = format!("{}", timecode(at.max(0.0), fps));
@@ -3507,7 +3575,7 @@ impl eframe::App for Lab {
         });
         // **掴んでいる最中の Esc は、その gesture ごと取り消す。**
         // 掴んでいないときの Esc は何もしない — Undo の代わりではない
-        if escape && self.drag.is_some() {
+        if escape && self.hold.is_some() {
             self.cancel_drag();
         } else if undo {
             match self.writer.undo() {
@@ -3535,17 +3603,17 @@ impl eframe::App for Lab {
         // Delete / Backspace。**キーが選ばれていればキーが先**、無ければ層を消す
         // (Group は中身ごと。D2 の RemoveTrackItem)。
         // ドラッグ中は効かせない — 掴んだものが消えると gesture の行き先が無くなる
-        if delete && self.drag.is_none() && !self.delete_selected_keys() {
+        if delete && self.hold.is_none() && !self.delete_selected_keys() {
             self.delete_selected();
         }
 
         // Cmd/Ctrl + G。**選択をひとつの Group にまとめる**
-        if group && self.drag.is_none() {
+        if group && self.hold.is_none() {
             self.group_selected();
         }
 
         // Cmd/Ctrl + K。**playhead で切る**
-        if split && self.drag.is_none() {
+        if split && self.hold.is_none() {
             self.split_selected();
         }
 
@@ -4079,8 +4147,7 @@ mod tests {
         assert_eq!(position_before.len(), 2, "fixture の Shared left は Position キー2つ");
         assert_eq!(scale_before.len(), 2, "Scale も2つ。こちらも追従する");
 
-        let gesture = lab.writer.begin_gesture();
-        lab.drag = Some((begin_move(&lab.document, layer, 3.0), gesture));
+        lab.hold_item(begin_move(&lab.document, layer, 3.0));
         lab.commit_drag(4.0); // +1.0s
 
         let after = lab.writer.snapshot();
@@ -4142,16 +4209,12 @@ mod tests {
         let start_before = clip_span(&lab.document, layer).expect("span").0;
         let (key, t0) = before[0];
 
-        let gesture = lab.writer.begin_gesture();
-        lab.drag = Some((
-            Grab::KeyTime {
-                layer,
-                key,
-                grab_at: t0,
-                original: t0,
-            },
-            gesture,
-        ));
+        lab.hold_item(Grab::KeyTime {
+            layer,
+            key,
+            grab_at: t0,
+            original: t0,
+        });
         lab.commit_drag(t0 + 1.0);
 
         let after = param_keys(&lab.writer.snapshot(), layer, ParamRef::Position);
@@ -4372,9 +4435,8 @@ mod tests {
         let layer = layer_named(&lab.names, "Background");
         let before = clip_span(&lab.document, layer).expect("span").0;
 
-        let gesture = lab.writer.begin_gesture();
-        lab.drag_undo_base = lab.writer.undo_len();
-        lab.drag = Some((begin_move(&lab.document, layer, 1.0), gesture));
+        let undo_base = lab.writer.undo_len();
+        lab.hold_item(begin_move(&lab.document, layer, 1.0));
         // 実際のドラッグと同じく、動かしている間に何度も出す
         lab.commit_drag(2.0);
         lab.commit_drag(3.0);
@@ -4386,7 +4448,7 @@ mod tests {
 
         lab.cancel_drag();
 
-        assert!(lab.drag.is_none(), "取り消したら、もう掴んでいない");
+        assert!(lab.hold.is_none(), "取り消したら、もう掴んでいない");
         assert!(
             (clip_span(&lab.document, layer).expect("span").0 - before).abs() < 1e-3,
             "Esc で掴む前の開始時刻へ戻る: {:?}",
@@ -4394,7 +4456,7 @@ mod tests {
         );
         assert_eq!(
             lab.writer.undo_len(),
-            lab.drag_undo_base,
+            undo_base,
             "取り消した gesture は履歴に残らない"
         );
         assert!(
@@ -4570,12 +4632,8 @@ mod tests {
         );
 
         lab.selected = vec![background, tone];
-        let gesture = lab.writer.begin_gesture();
         let roots = lab.selection_roots();
-        lab.drag = Some((
-            begin_move_many(&lab.document, &roots, background, 3.0),
-            gesture,
-        ));
+        lab.hold_item(begin_move_many(&lab.document, &roots, background, 3.0));
         lab.commit_drag(3.5); // +0.5s
 
         assert!((before(&lab, background) - (bg0 + 0.5)).abs() < 1e-3, "掴んだほうが動く");
@@ -4609,11 +4667,7 @@ mod tests {
         };
         assert_eq!(targets.len(), 3, "同じ clip を2度数えない");
 
-        let gesture = lab.writer.begin_gesture();
-        lab.drag = Some((
-            begin_move_many(&lab.document, &roots, group, 1.0),
-            gesture,
-        ));
+        lab.hold_item(begin_move_many(&lab.document, &roots, group, 1.0));
         lab.commit_drag(1.3); // +0.3s
         assert!(
             (clip_span(&lab.document, child).expect("span").0 - (start0 + 0.3)).abs() < 1e-3,
@@ -5163,8 +5217,7 @@ mod tests {
 
         lab.selected = vec![group];
         let roots = lab.selection_roots();
-        let gesture = lab.writer.begin_gesture();
-        lab.drag = Some((begin_move_many(&lab.document, &roots, group, 1.0), gesture));
+        lab.hold_item(begin_move_many(&lab.document, &roots, group, 1.0));
         lab.commit_drag(1.4); // +0.4s
 
         let after = lab.writer.snapshot();
@@ -5715,5 +5768,71 @@ mod tests {
         // 親を外せば子も触れる
         lab.toggle_flag(group, Flag::Lock);
         assert!(!lab.is_locked(child), "親を外せば子も自由");
+    }
+
+    /// **ロケータのドラッグは1回の Undo。**
+    ///
+    /// 掴んだ瞬間の gesture を離すまで使い回すからで、毎フレーム開き直すと
+    /// フレーム数だけ Undo が積まれる(掴み物を1つに畳むまで、実際そうなっていた)。
+    #[test]
+    fn dragging_a_locator_is_one_undo_step() {
+        let mut lab = Lab::new(None);
+        lab.add_locator(3.0);
+        lab.editing_locator = None;
+        let undo_before = lab.writer.undo_len();
+
+        // 掴んで、動かして、離す — 途中の適用は同じ gesture へ入る
+        let gesture = lab.writer.begin_gesture();
+        lab.hold = Some(Hold::Locator { index: 0, gesture });
+        for at in [4.0_f32, 5.0, 6.0] {
+            let time = seconds_to_time(at, lab.document.composition.fps).expect("time");
+            let prepared = lab.writer.prepare_set_locator_time(0, time);
+            assert!(lab.apply_in(gesture, "locator", prepared));
+        }
+        lab.hold = None;
+
+        assert!(
+            (lab.document.locators[0].t.as_seconds_f64() as f32 - 6.0).abs() < 1e-3,
+            "最後の位置に居る"
+        );
+        assert_eq!(
+            lab.writer.undo_len(),
+            undo_before + 1,
+            "**3回動かしても Undo は1つ**"
+        );
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert!(
+            (lab.document.locators[0].t.as_seconds_f64() as f32 - 3.0).abs() < 1e-3,
+            "1回で掴む前へ戻る: {}",
+            lab.document.locators[0].t.as_seconds_f64()
+        );
+    }
+
+    /// **掴み物は1つの入れ物に入っている。** 「何か掴んでいるか」を1箇所で聞ける。
+    #[test]
+    fn everything_held_lives_in_one_place() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Background");
+        assert!(lab.hold.is_none());
+
+        lab.hold_item(begin_move(&lab.document, layer, 1.0));
+        assert!(lab.hold.is_some(), "掴んでいる");
+        assert!(lab.item_hold().is_some(), "編集の掴みとして取り出せる");
+
+        // 編集以外の掴みは、編集としては取り出せない
+        lab.hold = Some(Hold::Nav(NavGrab::Pan));
+        assert!(lab.hold.is_some());
+        assert!(lab.item_hold().is_none(), "ナビゲータは編集ではない");
+
+        lab.hold = Some(Hold::Marquee {
+            from: egui::pos2(0.0, 0.0),
+            to: egui::pos2(10.0, 10.0),
+        });
+        assert!(lab.item_hold().is_none());
+
+        lab.hold = None;
+        assert!(lab.item_hold().is_none());
     }
 }
