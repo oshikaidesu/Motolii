@@ -390,6 +390,9 @@ enum MenuAction {
     FitView,
     LoopToSelection,
     ClearLoop,
+    Split,
+    AddKey(LayerId, ParamRef),
+    SetInterp(LayerId, ParamRef, KeyframeId, Interp),
 }
 
 /// メニューの下地を Lab のトンマナへ寄せる。
@@ -673,6 +676,8 @@ struct Lab {
     loop_region: LoopRegion,
     /// ループ帯を掴んでいる最中の掴み方
     loop_drag: Option<LoopGrab>,
+    /// 吸着するか。**Alt を押しているあいだは切れる**(押しっぱなしで自由に置ける)
+    snap: bool,
     /// 再生中か。**Space で入り切りする**。Document には入れない
     playing: bool,
     status: String,
@@ -728,6 +733,7 @@ impl Lab {
                 on: false,
             },
             loop_drag: None,
+            snap: true,
             playing: false,
             status: "space=play  L=loop  Cmd+G=group  Del=delete  drag name=reorder".to_owned(),
             shot,
@@ -761,6 +767,17 @@ impl Lab {
                 .prepare_set_transform_param_key_time(layer, scalar_property(other), key, t)
                 .map_err(|e| e.to_string()),
         }
+    }
+
+    /// ドラッグの着地時刻。**掴んでいるものが何であれ、まず候補へ吸着する。**
+    /// `px_per_second` は窓の広さから来るので、寄れば吸着の間合いも細かくなる
+    fn commit_drag_snapped(&mut self, at_seconds: f32, px_per_second: f32) {
+        let exclude: Vec<LayerId> = match &self.drag {
+            Some((grab, _)) => vec![grab_layer(grab)],
+            None => Vec::new(),
+        };
+        let at = self.snapped(at_seconds, &exclude, px_per_second);
+        self.commit_drag(at);
     }
 
     fn commit_drag(&mut self, at_seconds: f32) {
@@ -1219,6 +1236,126 @@ impl Lab {
         self.status = format!("grouped {} into {name}  undo {}", roots.len(), self.writer.undo_len());
     }
 
+    /// 選択を playhead で切る。**1回 = 1 `GestureId` = 1 Undo 単位**
+    ///
+    /// 端に当たっているもの(playhead が clip の外・端ちょうど)は `Ok(None)` で
+    /// 返るので、**切れなかったものは黙って飛ばす** — 失敗ではない。
+    fn split_selected(&mut self) {
+        let roots = self.selection_roots();
+        if roots.is_empty() {
+            self.status = "nothing selected".to_owned();
+            return;
+        }
+        let fps = self.document.composition.fps;
+        let Some(at) = seconds_to_time(self.playhead, fps) else {
+            return;
+        };
+        let gesture = self.writer.begin_gesture();
+        let mut split = 0usize;
+        for layer in roots {
+            match self.writer.prepare_split_clip(layer, at) {
+                Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
+                    Ok(()) => split += 1,
+                    Err(error) => {
+                        self.status = format!("{} rejected: {error}", self.name(layer));
+                        return;
+                    }
+                },
+                Ok(None) => {}
+                // Group は clip ではないので切れない。**それは断りであって失敗ではない**
+                Err(_) => {}
+            }
+        }
+        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+        self.status = if split > 0 {
+            format!("split {split} at {:.2}s  undo {}", self.playhead, self.writer.undo_len())
+        } else {
+            "nothing to split at the playhead".to_owned()
+        };
+    }
+
+    /// playhead の時刻へキーを打つ。**既にキーがあるならそれを選ぶだけ。**
+    fn add_key_at_playhead(&mut self, layer: LayerId, param: ParamRef) {
+        let fps = self.document.composition.fps;
+        let Some(at) = seconds_to_time(self.playhead, fps) else {
+            return;
+        };
+        let gesture = self.writer.begin_gesture();
+        let prepared = match param {
+            ParamRef::Position => match self.writer.prepare_add_position_key(layer, at) {
+                Ok(motolii_doc::AddPositionKeyPreparation::Prepared { key_id, command }) => {
+                    Some((key_id, command))
+                }
+                Ok(motolii_doc::AddPositionKeyPreparation::AlreadyPresent { key_id }) => {
+                    self.selected_keys = vec![(layer, param, key_id)];
+                    self.status = "key already there".to_owned();
+                    return;
+                }
+                Err(error) => {
+                    self.status = format!("{} rejected: {error}", self.name(layer));
+                    return;
+                }
+            },
+            other => match self
+                .writer
+                .prepare_add_transform_param_key(layer, scalar_property(other), at)
+            {
+                Ok(motolii_doc::AddTransformParamKeyPreparation::Prepared { key_id, command }) => {
+                    Some((key_id, command))
+                }
+                Ok(motolii_doc::AddTransformParamKeyPreparation::AlreadyPresent { key_id }) => {
+                    self.selected_keys = vec![(layer, param, key_id)];
+                    self.status = "key already there".to_owned();
+                    return;
+                }
+                Err(error) => {
+                    self.status = format!("{} rejected: {error}", self.name(layer));
+                    return;
+                }
+            },
+        };
+        let Some((key_id, command)) = prepared else {
+            return;
+        };
+        match self.writer.apply_command(gesture, command) {
+            Ok(()) => {
+                refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                // 打ったキーを選んでおく。**次の操作(値・イージング・削除)の相手になる**
+                self.selected_keys = vec![(layer, param, key_id)];
+                self.fold.open_params(layer);
+                self.status = format!(
+                    "{} {} key at {:.2}s  undo {}",
+                    self.name(layer),
+                    param_label(param),
+                    self.playhead,
+                    self.writer.undo_len()
+                );
+            }
+            Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
+        }
+    }
+
+    /// キーの補間を変える。**入口があるのは Position だけ**である
+    /// (`prepare_set_position_key_interp`)。他は D2 に無いので断る。
+    fn set_key_interp(&mut self, layer: LayerId, param: ParamRef, key: KeyframeId, interp: Interp) {
+        if param != ParamRef::Position {
+            self.status = format!("{}: interp is Position-only in D2", param_label(param));
+            return;
+        }
+        let gesture = self.writer.begin_gesture();
+        match self.writer.prepare_set_position_key_interp(layer, key, interp) {
+            Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
+                Ok(()) => {
+                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                    self.status = format!("{} interp  undo {}", self.name(layer), self.writer.undo_len());
+                }
+                Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
+            },
+            Ok(None) => {}
+            Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
+        }
+    }
+
     /// 並べ替えを1回だけ書く。**離した瞬間に呼ぶ。**
     ///
     /// 時刻は変えない(`new_start = None`) — 上下に動かしただけで clip が
@@ -1281,7 +1418,25 @@ impl Lab {
             *out = Some(MenuAction::Delete);
             ui.close();
         }
+        if ui.button("Split at playhead   ⌘K").clicked() {
+            *out = Some(MenuAction::Split);
+            ui.close();
+        }
         ui.separator();
+        ui.menu_button("Add key at playhead   ▸", |ui| {
+            for param in [
+                ParamRef::Position,
+                ParamRef::Anchor,
+                ParamRef::Scale,
+                ParamRef::Rotation,
+                ParamRef::Opacity,
+            ] {
+                if ui.button(param_label(param)).clicked() {
+                    *out = Some(MenuAction::AddKey(layer, param));
+                    ui.close();
+                }
+            }
+        });
         if ui
             .button(if muted { "Unmute   M" } else { "Mute   M" })
             .clicked()
@@ -1310,12 +1465,19 @@ impl Lab {
         seat(ui, "Copy   ⌘C");
         seat(ui, "Paste   ⌘V");
         seat(ui, "Rename…   ⏎");
-        seat(ui, "Add key at playhead");
+        seat(ui, "Lock   ⌘L");
         seat(ui, "Reveal source");
     }
 
     /// キーの右クリックメニュー
-    fn key_menu(ui: &mut egui::Ui, label: &str, out: &mut Option<MenuAction>) {
+    fn key_menu(
+        ui: &mut egui::Ui,
+        label: &str,
+        layer: LayerId,
+        param: ParamRef,
+        key: KeyframeId,
+        out: &mut Option<MenuAction>,
+    ) {
         ui.set_min_width(180.0);
         ui.label(egui::RichText::new(label).color(DIM).size(9.0));
         ui.separator();
@@ -1323,9 +1485,33 @@ impl Lab {
             *out = Some(MenuAction::DeleteKeys);
             ui.close();
         }
+        // **入口があるのは Position だけ。** 他は D2 に無いので席として置く
+        if param == ParamRef::Position {
+            ui.menu_button("Easing   ▸", |ui| {
+                for (name, interp) in [
+                    ("Hold", Interp::Hold),
+                    ("Linear", Interp::Linear),
+                    (
+                        "Ease in-out",
+                        Interp::Bezier {
+                            x1: 0.42,
+                            y1: 0.0,
+                            x2: 0.58,
+                            y2: 1.0,
+                        },
+                    ),
+                ] {
+                    if ui.button(name).clicked() {
+                        *out = Some(MenuAction::SetInterp(layer, param, key, interp));
+                        ui.close();
+                    }
+                }
+            });
+        } else {
+            seat(ui, "Easing   (Position only in D2)");
+        }
         ui.separator();
         seat(ui, "Copy key   ⌘C");
-        seat(ui, "Easing…");
         seat(ui, "Set value…");
         seat(ui, "Snap to playhead");
     }
@@ -1415,6 +1601,11 @@ impl Lab {
                 self.loop_region.on = false;
                 self.status = "loop off".to_owned();
             }
+            MenuAction::Split => self.split_selected(),
+            MenuAction::AddKey(layer, param) => self.add_key_at_playhead(layer, param),
+            MenuAction::SetInterp(layer, param, key, interp) => {
+                self.set_key_interp(layer, param, key, interp)
+            }
         }
     }
 
@@ -1500,6 +1691,56 @@ impl Lab {
             ),
             StrokeKind::Inside,
         );
+    }
+
+    /// 吸着の候補を集める。**clip の端・キー・playhead・ループの端・0・終端。**
+    ///
+    /// `exclude` は動かしている当人で、自分自身へは吸着しない。
+    fn snap_candidates(&self, exclude: &[LayerId]) -> Vec<f32> {
+        let mut out = vec![0.0, self.document.composition.duration.as_seconds_f64() as f32];
+        out.push(self.playhead);
+        if self.loop_region.on {
+            out.push(self.loop_region.start);
+            out.push(self.loop_region.end);
+        }
+        for row in rows(&self.document, &self.fold) {
+            if exclude.contains(&row.layer) {
+                continue;
+            }
+            match row.kind {
+                RowKind::Object => {
+                    if let Some((start, end)) = clip_span(&self.document, row.layer) {
+                        out.push(start);
+                        out.push(end);
+                    }
+                }
+                RowKind::Property(param) => {
+                    for (_, t) in param_keys(&self.document, row.layer, param) {
+                        out.push(t);
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// 候補へ吸着した時刻。**間合いは画面の距離**なので、`px_per_second` が要る。
+    ///
+    /// 吸着しなければ元の値をそのまま返す(フレームへの丸めは後段の
+    /// `seconds_to_time` がやる — **吸着はフレームより優先**である)。
+    fn snapped(&self, t: f32, exclude: &[LayerId], px_per_second: f32) -> f32 {
+        if !self.snap || px_per_second <= 0.0 {
+            return t;
+        }
+        let window = SNAP_PX / px_per_second;
+        let mut best: Option<(f32, f32)> = None;
+        for candidate in self.snap_candidates(exclude) {
+            let d = (candidate - t).abs();
+            if d <= window && best.map(|(bd, _)| d < bd).unwrap_or(true) {
+                best = Some((d, candidate));
+            }
+        }
+        best.map(|(_, c)| c).unwrap_or(t)
     }
 
     /// 行の名前。**Lab の控えに無ければ Document の台帳を見る。**
@@ -1635,6 +1876,8 @@ impl eframe::App for Lab {
         // **Space で入り切り。** 音も絵もまだ無いので、動くのは playhead だけである。
         // 掴んでいる最中は入り切りしない — ドラッグ中に時間が流れると何が起きたか読めない
         let comp_seconds = self.document.composition.duration.as_seconds_f64() as f32;
+        // **Alt を押しているあいだは吸着が切れる。** 押しっぱなしで自由に置ける
+        self.snap = !ctx.input(|i| i.modifiers.alt);
         let (space, loop_key, dt) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::Space),
@@ -2190,7 +2433,7 @@ impl eframe::App for Lab {
                         if r.dragged() {
                             if let Some(pos) = r.interact_pointer_pos() {
                                 let at = self.view.x_to_time(pos.x, track_left, track_w).max(0.0);
-                                self.commit_drag(at);
+                                self.commit_drag_snapped(at, track_w / self.view.span);
                                 // 掴んだまま端まで運んだら窓が流れる(playhead と同じ)
                                 let seconds = edge_pan_seconds(
                                     pos.x,
@@ -2286,7 +2529,7 @@ impl eframe::App for Lab {
                         if r.dragged() && movable {
                             if let Some(pos) = r.interact_pointer_pos() {
                                 let at = self.view.x_to_time(pos.x, track_left, track_w);
-                                self.commit_drag(at.max(0.0));
+                                self.commit_drag_snapped(at.max(0.0), track_w / self.view.span);
                                 let seconds = edge_pan_seconds(
                                     pos.x,
                                     track_left,
@@ -2514,7 +2757,7 @@ impl eframe::App for Lab {
         }
 
         // Undo / Redo。1ドラッグ = 1 GestureId なので、掴んで動かした分がまとめて戻る
-        let (undo, redo, escape, duplicate, delete, group) = ctx.input(|i| {
+        let (undo, redo, escape, duplicate, delete, group, split) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && !i.modifiers.shift,
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && i.modifiers.shift,
@@ -2522,6 +2765,7 @@ impl eframe::App for Lab {
                 i.key_pressed(egui::Key::D) && i.modifiers.command,
                 i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
                 i.key_pressed(egui::Key::G) && i.modifiers.command,
+                i.key_pressed(egui::Key::K) && i.modifiers.command,
             )
         });
         // **掴んでいる最中の Esc は、その gesture ごと取り消す。**
@@ -2561,6 +2805,11 @@ impl eframe::App for Lab {
         // Cmd/Ctrl + G。**選択をひとつの Group にまとめる**
         if group && self.drag.is_none() {
             self.group_selected();
+        }
+
+        // Cmd/Ctrl + K。**playhead で切る**
+        if split && self.drag.is_none() {
+            self.split_selected();
         }
 
         self.frame += 1;
@@ -2652,6 +2901,9 @@ fn movable_clips(document: &Document, layer: LayerId) -> Vec<(LayerId, f32, f32)
     }
     out
 }
+
+/// 吸着の間合い(px)。**画面の距離で決める** — 寄れば時間としては細かくなる
+const SNAP_PX: f32 = 7.0;
 
 /// 秒 → **最寄りのフレーム境界**の時刻。
 ///
@@ -4214,5 +4466,123 @@ mod tests {
         // キーを選んでいなければ、Delete は層のほうへ回る
         lab.selected_keys.clear();
         assert!(!lab.delete_selected_keys(), "キーが無いなら何もしない");
+    }
+
+    /// **playhead で切ると、clip が2枚になる。** 端では切れない(断りであって失敗ではない)。
+    #[test]
+    fn splitting_at_the_playhead_makes_two_clips() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Background");
+        let (start, end) = clip_span(&lab.document, layer).expect("span");
+        let items_before = lab.document.tracks[0].items.len();
+
+        lab.selected = vec![layer];
+        lab.playhead = (start + end) * 0.5;
+        lab.split_selected();
+
+        assert_eq!(
+            lab.document.tracks[0].items.len(),
+            items_before + 1,
+            "1枚増える: {}",
+            lab.status
+        );
+        let left = clip_span(&lab.document, layer).expect("span");
+        assert!((left.0 - start).abs() < 1e-3 && (left.1 - lab.playhead).abs() < 1e-3);
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(lab.document.tracks[0].items.len(), items_before, "1回の Undo で戻る");
+
+        // 端では切れない。**何も起きないが status で言う**
+        lab.playhead = start;
+        lab.split_selected();
+        assert_eq!(lab.document.tracks[0].items.len(), items_before);
+        assert!(lab.status.contains("nothing to split"), "{}", lab.status);
+    }
+
+    /// **playhead へキーを打てる。** 既にあるなら打たずにそれを選ぶ。
+    #[test]
+    fn adding_a_key_at_the_playhead_puts_one_key_and_selects_it() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Shared left");
+        let before = param_keys(&lab.document, layer, ParamRef::Scale);
+        assert_eq!(before.len(), 2);
+
+        lab.playhead = 3.0;
+        lab.add_key_at_playhead(layer, ParamRef::Scale);
+
+        let now = param_keys(&lab.document, layer, ParamRef::Scale);
+        assert_eq!(now.len(), 3, "1つ増えた: {}", lab.status);
+        assert!(
+            now.iter().any(|(_, t)| (t - 3.0).abs() < 1e-3),
+            "playhead の時刻にある"
+        );
+        assert_eq!(lab.selected_keys.len(), 1, "打ったキーが選ばれている");
+        assert!(lab.fold.params_are_open(layer), "キー行が開く(打った物が見える)");
+
+        // 2回目は増えない。**同じ時刻には1つしか置かない**
+        lab.add_key_at_playhead(layer, ParamRef::Scale);
+        assert_eq!(
+            param_keys(&lab.document, layer, ParamRef::Scale).len(),
+            3,
+            "{}",
+            lab.status
+        );
+
+        // **id は使い回されない**(2026-08-16 に D2 側を直した点)
+        let mut lab2 = Lab::new(None);
+        let layer2 = layer_named(&lab2.names, "Shared left");
+        lab2.playhead = 3.0;
+        lab2.add_key_at_playhead(layer2, ParamRef::Scale);
+        lab2.playhead = 4.0;
+        lab2.add_key_at_playhead(layer2, ParamRef::Scale);
+        let ids: Vec<_> = param_keys(&lab2.document, layer2, ParamRef::Scale)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        let mut unique = ids.clone();
+        unique.sort_by_key(|id| id.get());
+        unique.dedup();
+        assert_eq!(ids.len(), unique.len(), "KeyframeId が重複しない: {ids:?}");
+    }
+
+    /// **吸着は「近くの候補へ寄る」。** 間合いは画面の距離で決まる。
+    #[test]
+    fn dragging_snaps_to_nearby_edges_and_keys_but_not_to_itself() {
+        let mut lab = Lab::new(None);
+        let moving = layer_named(&lab.names, "Background");
+        let neighbour = layer_named(&lab.names, "Shared left");
+        let (target_start, _) = clip_span(&lab.document, neighbour).expect("span");
+        let px_per_second = 100.0_f32; // 1秒=100px。SNAP_PX=7 なので 0.07s の間合い
+
+        // 近ければ隣の clip の頭へ吸着する
+        let near = target_start + 0.05;
+        assert!(
+            (lab.snapped(near, &[moving], px_per_second) - target_start).abs() < 1e-4,
+            "隣の端へ寄る"
+        );
+        // 遠ければ動かない
+        let far = target_start + 0.5;
+        assert!((lab.snapped(far, &[moving], px_per_second) - far).abs() < 1e-4);
+
+        // **自分自身へは吸着しない**(掴んでいる当人は候補から外す)。
+        // 0秒始まりの clip では composition の頭(0.0)と区別が付かないので、
+        // 途中から始まる clip で見る
+        let own = layer_named(&lab.names, "starter-tone.wav");
+        let (own_start, _) = clip_span(&lab.document, own).expect("span");
+        let near_own = own_start + 0.02;
+        assert!(
+            (lab.snapped(near_own, &[own], px_per_second) - near_own).abs() < 1e-4,
+            "自分の端には吸わない: {}",
+            lab.snapped(near_own, &[own], px_per_second)
+        );
+
+        // playhead も候補
+        lab.playhead = 9.0;
+        assert!((lab.snapped(9.03, &[moving], px_per_second) - 9.0).abs() < 1e-4);
+
+        // Alt 相当(切ってあるとき)は素通し
+        lab.snap = false;
+        assert!((lab.snapped(near, &[moving], px_per_second) - near).abs() < 1e-4);
     }
 }
