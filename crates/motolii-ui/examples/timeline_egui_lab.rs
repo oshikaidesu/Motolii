@@ -763,6 +763,31 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+/// **掴んでいる間のカーソルは、掴んでいるものが決める。**
+///
+/// hover から毎フレーム決め直すと、ポインタが的から少し外れた瞬間に形が戻り、
+/// 「トリム中なのに掴み手のまま」のような嘘になる。掴んでいるあいだは
+/// 手の形も掴んだものに固定する。
+fn hold_cursor(hold: &Option<Hold>) -> Option<egui::CursorIcon> {
+    match hold {
+        Some(Hold::Item { grab, .. }) => Some(match grab {
+            Grab::TrimIn { .. } | Grab::TrimOut { .. } => egui::CursorIcon::ResizeHorizontal,
+            Grab::Move { .. } => egui::CursorIcon::Grabbing,
+            Grab::KeyTime { .. } => egui::CursorIcon::Grabbing,
+            Grab::Reorder { .. } => egui::CursorIcon::Grabbing,
+        }),
+        Some(Hold::Locator { .. }) => Some(egui::CursorIcon::Grabbing),
+        Some(Hold::Loop(grab)) => Some(match grab {
+            LoopGrab::In { .. } | LoopGrab::Out { .. } => egui::CursorIcon::ResizeHorizontal,
+            LoopGrab::Move { .. } => egui::CursorIcon::Grabbing,
+            LoopGrab::New { .. } => egui::CursorIcon::Crosshair,
+        }),
+        Some(Hold::Nav(_)) => Some(egui::CursorIcon::Grabbing),
+        Some(Hold::Marquee { .. }) => Some(egui::CursorIcon::Crosshair),
+        None => None,
+    }
+}
+
 /// bar のどこを掴んだか
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum BarPart {
@@ -1207,6 +1232,14 @@ impl Lab {
                 );
             }
             Err(error) => self.status = format!("cancel rejected: {error}"),
+        }
+    }
+
+    /// 触れているあいだの手の形。**掴んでいるときは何も言わない** —
+    /// 掴んだものが決めた形を上書きしないため(`hold_cursor` が後で勝つ)。
+    fn hover_cursor(&self, ctx: &egui::Context, hovered: bool, icon: egui::CursorIcon) {
+        if hovered && self.hold.is_none() {
+            ctx.set_cursor_icon(icon);
         }
     }
 
@@ -2553,6 +2586,17 @@ impl eframe::App for Lab {
             .time_to_x(self.loop_region.start, track_left, track_w);
         let loop_x1 = self.view.time_to_x(self.loop_region.end, track_left, track_w);
         let loop_hit = ui.interact(loop_lane, ui.id().with("loop"), Sense::click_and_drag());
+        if let Some(pos) = loop_hit.hover_pos() {
+            let icon = if (pos.x - loop_x0).abs() <= LOOP_GRAB || (pos.x - loop_x1).abs() <= LOOP_GRAB
+            {
+                egui::CursorIcon::ResizeHorizontal
+            } else if pos.x > loop_x0 && pos.x < loop_x1 {
+                egui::CursorIcon::Grab
+            } else {
+                egui::CursorIcon::Crosshair
+            };
+            self.hover_cursor(&ctx, loop_hit.hovered(), icon);
+        }
         if loop_hit.drag_started() {
             if let Some(pos) = loop_hit.interact_pointer_pos() {
                 let at = self.view.x_to_time(pos.x, track_left, track_w);
@@ -2661,6 +2705,7 @@ impl eframe::App for Lab {
             );
             let r = ui.interact(pin, ui.id().with(("locator", index)), Sense::click_and_drag());
             let playhead_is_here = (self.playhead - t).abs() < 1e-3;
+            self.hover_cursor(&ctx, r.hovered(), egui::CursorIcon::Grab);
             let lane_p = p.with_clip_rect(locator_lane);
             lane_p.add(egui::Shape::convex_polygon(
                 vec![
@@ -2863,6 +2908,7 @@ impl eframe::App for Lab {
         );
         // **何も無いところを押したら選択は空になる。** 押した物が選択、が通るなら
         // 「何も押していない」も通らなければ筋が合わない
+        self.hover_cursor(&ctx, surface_bg.hovered(), egui::CursorIcon::Crosshair);
         if surface_bg.clicked() {
             self.selected.clear();
             self.selected_keys.clear();
@@ -2933,6 +2979,7 @@ impl eframe::App for Lab {
                     ui.id().with(("pick", row.layer)),
                     Sense::click_and_drag(),
                 );
+                self.hover_cursor(&ctx, r.hovered(), egui::CursorIcon::Grab);
                 if r.clicked() {
                     let (additive, range) =
                         ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
@@ -3225,6 +3272,16 @@ impl eframe::App for Lab {
                             CornerRadius::ZERO,
                             if r.dragged() { ACCENT } else { color },
                         );
+                        // **ポインタの居場所は1回だけ決める。** 絵・カーソル・
+                        // 掴みが別々に聞くと、答えが食い違って手の形が嘘をつく。
+                        // 押している間は `interact_pointer_pos`、触れているだけの
+                        // ときは `hover_pos` — どちらか一方しか来ない
+                        let pointer_x = r
+                            .interact_pointer_pos()
+                            .or(r.hover_pos())
+                            .map(|pos| pos.x);
+                        let part =
+                            pointer_x.map(|x| classify_bar_edge(bar, x, row.has_children));
                         // **選んだ bar は光る。** 左列の帯だけだと、時間面の上で
                         // 何を選んだのかが分からない
                         let selected = self.is_selected(row.layer);
@@ -3241,9 +3298,7 @@ impl eframe::App for Lab {
                         let has_edges =
                             classify_bar_edge(bar, bar.left(), row.has_children) == BarPart::TrimIn;
                         if has_edges && (r.hovered() || selected) {
-                            let hovered_part = r
-                                .hover_pos()
-                                .map(|pos| classify_bar_edge(bar, pos.x, row.has_children));
+                            let hovered_part = part;
                             for (part, band) in [
                                 (
                                     BarPart::TrimIn,
@@ -3271,17 +3326,15 @@ impl eframe::App for Lab {
                                 );
                             }
                         }
-                        // 手の形で、掴んだら何になるかを先に言う
-                        if r.hovered() {
-                            let part = r
-                                .hover_pos()
-                                .map(|pos| classify_bar_edge(bar, pos.x, row.has_children))
-                                .unwrap_or(BarPart::Body);
-                            ctx.set_cursor_icon(match part {
+                        // 手の形で、掴んだら何になるかを先に言う。**同じ `part` から**
+                        self.hover_cursor(
+                            &ctx,
+                            r.hovered(),
+                            match part.unwrap_or(BarPart::Body) {
                                 BarPart::Body => egui::CursorIcon::Grab,
                                 _ => egui::CursorIcon::ResizeHorizontal,
-                            });
-                        }
+                            },
+                        );
                         // **畳んである Group は、中身をその bar の中に出す。**
                         // 開けば行として見えるものが、閉じると消えてしまうと、
                         // 何が入っているのか掴めない(説明の文字を足さずに済ませる)
@@ -3322,8 +3375,8 @@ impl eframe::App for Lab {
                         if r.drag_started() && self.is_locked(row.layer) {
                             self.status = format!("{} is locked", self.name(row.layer));
                         } else if r.drag_started() {
-                            if let Some(pos) = r.interact_pointer_pos() {
-                                let grab = match classify_bar_edge(bar, pos.x, row.has_children) {
+                            if let (Some(pos), Some(part)) = (r.interact_pointer_pos(), part) {
+                                let grab = match part {
                                     BarPart::TrimIn => Grab::TrimIn { layer: row.layer },
                                     BarPart::TrimOut => Grab::TrimOut { layer: row.layer },
                                     BarPart::Body => {
@@ -3392,6 +3445,7 @@ impl eframe::App for Lab {
                             },
                             Stroke::new(1.0, Color32::from_rgb(0xee, 0xee, 0xee)),
                         ));
+                        self.hover_cursor(&ctx, r.hovered(), egui::CursorIcon::Grab);
                         // キーもクリックで選ぶ。**Delete の対象がここで決まる**
                         if r.clicked() {
                             let additive = ctx.input(|i| i.modifiers.command);
@@ -3752,6 +3806,12 @@ impl eframe::App for Lab {
         if rename_cancelled {
             self.renaming = None;
             self.status = "rename cancelled".to_owned();
+        }
+
+        // **掴んでいるあいだの手の形は、掴んだものが決める。** hover の答えより後に
+        // 置いて上書きする — 途中でポインタが的から外れても形が変わらない
+        if let Some(icon) = hold_cursor(&self.hold) {
+            ctx.set_cursor_icon(icon);
         }
 
         // メニューから出た指示は、行を回し終えてから1つだけ実行する
@@ -6164,5 +6224,57 @@ mod tests {
         assert_eq!(classify_bar_edge(bar, 200.0, false), BarPart::Body);
         // clip 本来の右端では端が出る
         assert_eq!(classify_bar_edge(bar, 497.0, false), BarPart::TrimOut);
+    }
+
+    /// **掴んでいるあいだの手の形は、掴んだものが決める。**
+    ///
+    /// hover から毎フレーム決め直すと、ポインタが的から少し外れた瞬間に形が戻る
+    /// (トリム中なのに掴み手、など)。掴みの種類と形の対応をここで固定する。
+    #[test]
+    fn the_cursor_follows_what_is_held_not_what_is_under_the_pointer() {
+        use egui::CursorIcon;
+
+        assert_eq!(hold_cursor(&None), None, "掴んでいなければ何も言わない");
+
+        let held = |grab: Grab| {
+            hold_cursor(&Some(Hold::Item {
+                grab,
+                gesture: GestureId::from_raw(1),
+                undo_base: 0,
+            }))
+        };
+        let layer = LayerId::from_raw(1);
+        assert_eq!(
+            held(Grab::TrimIn { layer }),
+            Some(CursorIcon::ResizeHorizontal),
+            "端を引いているあいだは横矢印"
+        );
+        assert_eq!(held(Grab::TrimOut { layer }), Some(CursorIcon::ResizeHorizontal));
+        assert_eq!(
+            held(Grab::Reorder { layer }),
+            Some(CursorIcon::Grabbing),
+            "並べ替えは掴み手"
+        );
+        assert_eq!(
+            hold_cursor(&Some(Hold::Marquee {
+                from: egui::pos2(0.0, 0.0),
+                to: egui::pos2(1.0, 1.0),
+            })),
+            Some(CursorIcon::Crosshair),
+            "掃いているあいだは十字"
+        );
+        assert_eq!(
+            hold_cursor(&Some(Hold::Loop(LoopGrab::In { fixed: 1.0 }))),
+            Some(CursorIcon::ResizeHorizontal),
+            "ループの端も横矢印"
+        );
+        assert_eq!(
+            hold_cursor(&Some(Hold::Loop(LoopGrab::Move {
+                grab_at: 0.0,
+                from: (0.0, 1.0)
+            }))),
+            Some(CursorIcon::Grabbing),
+            "ループごと動かすなら掴み手"
+        );
     }
 }
