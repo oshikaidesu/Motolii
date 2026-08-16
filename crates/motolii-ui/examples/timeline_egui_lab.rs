@@ -3155,10 +3155,19 @@ impl eframe::App for Lab {
                             egui::pos2(x0, track.top() + 3.0),
                             egui::pos2(x1, track.bottom() - 4.0),
                         );
+                        // **当たり判定も時間面の中だけ。** 寄ると clip の左端は
+                        // 面の外(左レールの下)まで伸びる。描画はクリップしていたが
+                        // 判定はしていなかったので、bar が左列のボタンを飲んでいた
+                        // (「拡大すると開閉できない」の正体)
+                        let bar_hit = bar.intersect(track);
                         let r = ui.interact(
-                            bar,
+                            bar_hit,
                             ui.id().with(("bar", row.layer)),
-                            Sense::click_and_drag(),
+                            if bar_hit.width() > 0.5 {
+                                Sense::click_and_drag()
+                            } else {
+                                Sense::hover()
+                            },
                         );
                         let color = if self.colors_on {
                             layer_color(&self.document, row.layer)
@@ -3257,11 +3266,15 @@ impl eframe::App for Lab {
                         let c = egui::pos2(x, track.center().y);
                         let d = 4.0;
                         // 掴む的は菱形の中心から6px。bar の端と同じ寸法
-                        let hit = Rect::from_center_size(c, Vec2::splat(12.0));
+                        let hit = Rect::from_center_size(c, Vec2::splat(12.0)).intersect(track);
                         let r = ui.interact(
                             hit,
                             ui.id().with(("key", row.layer, param_label(param), key.get())),
-                            Sense::click_and_drag(),
+                            if hit.width() > 0.5 {
+                                Sense::click_and_drag()
+                            } else {
+                                Sense::hover()
+                            },
                         );
                         p.add(egui::Shape::convex_polygon(
                             vec![
@@ -5967,5 +5980,37 @@ mod tests {
         lab.writer.undo().expect("undo");
         refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
         assert_eq!(param_keys(&lab.document, layer, ParamRef::Scale), before, "1回で戻る");
+    }
+
+    /// **時間面の外へはみ出した clip は、左列のボタンを飲まない。**
+    ///
+    /// 寄ると clip の左端は面の左(レールの下)まで伸びる。描画はクリップして
+    /// いたのに判定はしていなかったので、bar が三角や M/S/L の上に乗っていた。
+    #[test]
+    fn a_bar_that_starts_before_the_window_does_not_reach_into_the_rail() {
+        let track_left = 196.0_f32;
+        let track_w = 800.0_f32;
+        let track = Rect::from_min_max(
+            egui::pos2(track_left, 100.0),
+            egui::pos2(track_left + track_w, 124.0),
+        );
+        let view = TimelineView { start: 4.0, span: 8.0 };
+
+        // 0秒から始まる clip を 4秒地点から見ている: x0 は面の左の外
+        let x0 = view.time_to_x(0.0, track_left, track_w);
+        let x1 = view.time_to_x(6.0, track_left, track_w);
+        assert!(x0 < track_left, "左端は面の外: {x0}");
+
+        let bar = Rect::from_min_max(egui::pos2(x0, track.top()), egui::pos2(x1, track.bottom()));
+        let hit = bar.intersect(track);
+        assert!(hit.left() >= track_left - 1e-3, "判定は面の中から: {}", hit.left());
+        assert!(hit.width() > 0.5, "見えている分は掴める");
+
+        // 完全に左へ出た clip は掴む的が残らない
+        let gone = Rect::from_min_max(
+            egui::pos2(view.time_to_x(0.0, track_left, track_w), track.top()),
+            egui::pos2(view.time_to_x(1.0, track_left, track_w), track.bottom()),
+        );
+        assert!(gone.intersect(track).width() <= 0.5, "面の外にしか無いなら的も無い");
     }
 }
