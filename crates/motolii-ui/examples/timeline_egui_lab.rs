@@ -9,10 +9,13 @@
 //!   - `◇`/`◆`            … そのレイヤーのキーパラメータ行の開閉（子とは独立）
 //!   - clip bar をドラッグ … 時間方向へ移動
 //!
-//! **まだ Document へ書き戻していない。** ドラッグは session 側の仮の値(`nudge`)で、
-//! 離しても Document は変わらない。編集経路(`document_edit_runtime`)は
-//! 2026-08-16 に撤去されており、C2 の配線はこの後の作業である。
-//! ここで確かめるのは行モデルと手触りであって、編集の永続化ではない。
+//!   - bar の左右端6px      … トリム（in / out）
+//!   - `Cmd/Ctrl + Z` / `Shift+Z` … Undo / Redo
+//!
+//! **ドラッグは Document を実際に書き換える。** 経路は
+//! `DocumentWriter::prepare_* -> apply_command(gesture, command)` で、
+//! 1ドラッグ = 1 `GestureId` = 1 Undo 単位である。撤去された
+//! `document_edit_runtime` を経由しない — D2 が既に薄い入口を持っていた。
 //!
 //! 実行: `cargo run --profile fast -p motolii-ui --example timeline_egui_lab`
 
@@ -22,9 +25,10 @@ use eframe::egui;
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, Vec2};
 use motolii_core::RationalTime;
 use motolii_doc::{
-    Clip, ClipSource, DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, Group,
-    ItemEnvelope, KeyframeId, LayerId, Track, TrackItem, Transform2D,
+    Clip, ClipSource, DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter,
+    GestureId, Group, ItemEnvelope, KeyframeId, LayerId, Track, TrackItem, Transform2D,
 };
+use std::sync::Arc;
 use motolii_eval::Interp;
 use motolii_ui::timeline_rows::{rows, ParamRef, RowKind, TimelineFoldState, TimelineRow};
 
@@ -63,12 +67,19 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+/// 掴んでいるもの。**何を掴んだかで、出す command が変わる**
+#[derive(Clone, Copy)]
+enum Grab {
+    Move { layer: LayerId, grab_offset: f32 },
+    TrimIn { layer: LayerId },
+    TrimOut { layer: LayerId },
+}
+
 struct Lab {
-    document: Document,
+    writer: DocumentWriter,
+    document: Arc<Document>,
     fold: TimelineFoldState,
-    /// ドラッグ中/後の仮の時間ずらし(秒)。**Document には書いていない**
-    nudge: HashMap<LayerId, f32>,
-    drag: Option<(LayerId, f32, f32)>,
+    drag: Option<(Grab, GestureId)>,
     names: HashMap<LayerId, String>,
     status: String,
     shot: Option<String>,
@@ -77,7 +88,12 @@ struct Lab {
 
 impl Lab {
     fn new(shot: Option<String>) -> Self {
-        let (document, names) = fixture();
+        let (doc, names) = fixture();
+        let catalog = Arc::new(
+            motolii_plugin::reference::reference_catalog().expect("reference catalog"),
+        );
+        let writer = DocumentWriter::new(doc, catalog).expect("writer");
+        let document = writer.snapshot();
         let mut fold = TimelineFoldState::default();
         // 最初から階層が見えているほうが、行モデルの確認になる
         for (&layer, name) in &names {
@@ -93,14 +109,52 @@ impl Lab {
             fold.open_params(layer);
         }
         Self {
+            writer,
             document,
             fold,
-            nudge: HashMap::new(),
             drag: None,
             names,
-            status: "arrow = children   diamond = key rows   drag a bar".to_owned(),
+            status: "arrow=children  diamond=key rows  drag=move  edges=trim  Cmd+Z=undo".to_owned(),
             shot,
             frame: 0,
+        }
+    }
+
+    /// ポインタの時刻(秒)を、掴んでいるものに応じた D2 command にして適用する。
+    ///
+    /// **prepare_* が `Ok(None)` を返したら、それは「変化なし」であって失敗ではない。**
+    /// 落ちた編集は status に出す。通ったことにしない。
+    fn commit_drag(&mut self, at_seconds: f32) {
+        let Some((grab, gesture)) = self.drag else {
+            return;
+        };
+        let Some(time) = seconds_to_time(at_seconds) else {
+            return;
+        };
+        let prepared = match grab {
+            Grab::Move { layer, grab_offset } => {
+                let Some(start) = seconds_to_time((at_seconds - grab_offset).max(0.0)) else {
+                    return;
+                };
+                self.writer.prepare_set_clip_start(layer, start)
+            }
+            Grab::TrimIn { layer } => self.writer.prepare_trim_clip_in(layer, time),
+            Grab::TrimOut { layer } => self.writer.prepare_trim_clip_out(layer, time),
+        };
+        match prepared {
+            Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
+                Ok(()) => {
+                    self.document = self.writer.snapshot();
+                    self.status = format!(
+                        "{} @ {at_seconds:.2}s   undo {}",
+                        self.name(grab_layer(grab)),
+                        self.writer.undo_len()
+                    );
+                }
+                Err(error) => self.status = format!("edit rejected: {error}"),
+            },
+            Ok(None) => {}
+            Err(error) => self.status = format!("edit rejected: {error}"),
         }
     }
 
@@ -116,6 +170,7 @@ impl eframe::App for Lab {
 
         // **毎フレーム、実Documentから行を作り直す。** 行のキャッシュを持たない
         let visible = rows(&self.document, &self.fold);
+        let track_w_for_time = ui.available_rect_before_wrap().width() - RAIL_W;
 
         let full = ui.available_rect_before_wrap();
         let p = ui.painter().clone();
@@ -322,12 +377,11 @@ impl eframe::App for Lab {
                 Stroke::new(1.0, RULE),
             );
 
-            let nudge = self.nudge.get(&row.layer).copied().unwrap_or(0.0);
             match row.kind {
                 RowKind::Object => {
                     if let Some((start, end)) = clip_span(&self.document, row.layer) {
-                        let x0 = track_left + track_w * (start + nudge) / 16.0;
-                        let x1 = track_left + track_w * (end + nudge) / 16.0;
+                        let x0 = track_left + track_w * start / 16.0;
+                        let x1 = track_left + track_w * end / 16.0;
                         let bar = Rect::from_min_max(
                             egui::pos2(x0, track.top() + 3.0),
                             egui::pos2(x1, track.bottom() - 4.0),
@@ -355,29 +409,37 @@ impl eframe::App for Lab {
                         );
                         if r.drag_started() {
                             if let Some(pos) = r.interact_pointer_pos() {
-                                self.drag = Some((row.layer, pos.x, nudge));
+                                // **何を掴んだかは端からの距離で決める。** 6px はモックの
+                                // `.trimHandle{width:7px}` に合わせた値
+                                let grab = if pos.x - bar.left() <= 6.0 {
+                                    Grab::TrimIn { layer: row.layer }
+                                } else if bar.right() - pos.x <= 6.0 {
+                                    Grab::TrimOut { layer: row.layer }
+                                } else {
+                                    Grab::Move {
+                                        layer: row.layer,
+                                        grab_offset: (pos.x - bar.left()) / track_w * 16.0,
+                                    }
+                                };
+                                let gesture = self.writer.begin_gesture();
+                                self.drag = Some((grab, gesture));
                             }
                         }
                         if r.dragged() {
-                            if let (Some((layer, from, base)), Some(pos)) =
-                                (self.drag, r.interact_pointer_pos())
-                            {
-                                let delta = (pos.x - from) / track_w * 16.0;
-                                self.nudge.insert(layer, base + delta);
-                                self.status =
-                                    format!("{} {:+.2}s", self.name(layer), base + delta);
+                            if let Some(pos) = r.interact_pointer_pos() {
+                                let at = ((pos.x - track_left) / track_w_for_time.max(1.0) * 16.0)
+                                    .max(0.0);
+                                self.commit_drag(at);
                             }
                         }
                         if r.drag_stopped() {
-                            self.status =
-                                "released (not written to the Document -- C2 is unwired)".to_owned();
                             self.drag = None;
                         }
                     }
                 }
                 RowKind::Property(param) => {
                     for t in key_times(&self.document, row.layer, param) {
-                        let x = track_left + track_w * (t + nudge) / 16.0;
+                        let x = track_left + track_w * t / 16.0;
                         let c = egui::pos2(x, track.center().y);
                         let d = 4.0;
                         p.add(egui::Shape::convex_polygon(
@@ -411,6 +473,31 @@ impl eframe::App for Lab {
             }
         }
 
+        // Undo / Redo。1ドラッグ = 1 GestureId なので、掴んで動かした分がまとめて戻る
+        let (undo, redo) = ctx.input(|i| {
+            (
+                i.key_pressed(egui::Key::Z) && i.modifiers.command && !i.modifiers.shift,
+                i.key_pressed(egui::Key::Z) && i.modifiers.command && i.modifiers.shift,
+            )
+        });
+        if undo {
+            match self.writer.undo() {
+                Ok(()) => {
+                    self.document = self.writer.snapshot();
+                    self.status = format!("undo  ({} left)", self.writer.undo_len());
+                }
+                Err(error) => self.status = format!("undo rejected: {error}"),
+            }
+        } else if redo {
+            match self.writer.redo() {
+                Ok(()) => {
+                    self.document = self.writer.snapshot();
+                    self.status = format!("redo  ({} left)", self.writer.redo_len());
+                }
+                Err(error) => self.status = format!("redo rejected: {error}"),
+            }
+        }
+
         self.frame += 1;
         if let Some(path) = self.shot.clone() {
             if self.frame >= 20 {
@@ -428,6 +515,16 @@ impl eframe::App for Lab {
             }
         }
     }
+}
+
+fn grab_layer(grab: Grab) -> LayerId {
+    match grab {
+        Grab::Move { layer, .. } | Grab::TrimIn { layer } | Grab::TrimOut { layer } => layer,
+    }
+}
+
+fn seconds_to_time(seconds: f32) -> Option<RationalTime> {
+    RationalTime::try_new((seconds * 1000.0).round() as i64, 1000).ok()
 }
 
 fn param_label(p: ParamRef) -> &'static str {
@@ -653,4 +750,50 @@ fn write_bmp(path: &str, image: &egui::ColorImage) {
         }
     }
     std::fs::write(path, out).expect("write bmp");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn layer_named(names: &HashMap<LayerId, String>, want: &str) -> LayerId {
+        *names
+            .iter()
+            .find(|(_, n)| n.as_str() == want)
+            .map(|(l, _)| l)
+            .expect("fixture layer")
+    }
+
+    /// マウス無しで、ドラッグが出すのと同じ command を通す。
+    /// **手で触る前に、編集が Document へ届くことをここで確かめる。**
+    #[test]
+    fn dragging_a_clip_moves_it_in_the_document_and_undo_puts_it_back() {
+        let (doc, names) = fixture();
+        let catalog =
+            Arc::new(motolii_plugin::reference::reference_catalog().expect("reference catalog"));
+        let mut writer = DocumentWriter::new(doc, catalog).expect("writer");
+        let layer = layer_named(&names, "Background");
+
+        let before = clip_span(&writer.snapshot(), layer).expect("span");
+        assert_eq!(before.0, 0.0, "fixture の Background は 0s 始まり");
+
+        let gesture = writer.begin_gesture();
+        let command = writer
+            .prepare_set_clip_start(layer, seconds_to_time(2.0).expect("time"))
+            .expect("prepare")
+            .expect("変化があるので command が出る");
+        writer.apply_command(gesture, command).expect("apply");
+
+        let after = clip_span(&writer.snapshot(), layer).expect("span");
+        assert!((after.0 - 2.0).abs() < 1e-3, "clip が動いた: {after:?}");
+        assert_eq!(
+            after.1 - after.0,
+            before.1 - before.0,
+            "move は尺を変えない"
+        );
+
+        writer.undo().expect("undo");
+        let restored = clip_span(&writer.snapshot(), layer).expect("span");
+        assert!((restored.0 - before.0).abs() < 1e-3, "1ドラッグ = 1 Undo");
+    }
 }
