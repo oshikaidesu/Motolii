@@ -160,23 +160,55 @@ pub struct DropTarget {
 /// 戻ってきたフレームの `dt` は数百msになりうる。そのまま足すと playhead が飛ぶ。
 const MAX_STEP: f32 = 0.05;
 
-/// 窓が playhead へ追いつく速さ(1秒でこの割合ぶん詰める)。
+/// 見失った playhead を連れ戻す速さ(1秒でこの割合ぶん詰める)。
 const FOLLOW_RATE: f32 = 8.0;
 
-/// 再生中の窓。**playhead を中央へ置きにいくが、飛ばずに詰める。**
+/// 再生中の窓。**playhead が窓のどこに居るかを、そのまま保つ。**
 ///
-/// いきなり中央へ合わせると、再生を押した瞬間に面ごと横へ跳ぶ
-/// (playhead が瞬間移動したように見える)。指数で詰めると、押した所から
-/// 中央まで 0.2秒ほどで滑って入る。等速で流れているあいだの遅れは
-/// `速度 / FOLLOW_RATE` ぶんで一定なので、**中央付近に落ち着いたまま流れる**。
-fn follow_view(view: TimelineView, playhead: f32, dt: f32, comp: f32) -> TimelineView {
-    let target = playhead - view.span * 0.5;
-    let k = (dt * FOLLOW_RATE).clamp(0.0, 1.0);
-    TimelineView {
-        start: view.start + (target - view.start) * k,
+/// 中央は特別な場所ではない。左寄りに置いたなら左寄りのまま流れるべきで、
+/// 「中央へ合わせにいく」と押した瞬間に面が横へ滑り、**playhead が瞬間移動した
+/// ように見える**(左に置いたときは面が右へ戻るので特に強い)。
+///
+/// だから窓は playhead と**同じ量だけ**進む。相対距離は保たれ、寄せ直しは起きない。
+/// 頭と終端では `clamped` が窓を止めるので、そこだけ playhead のほうが窓の中を動く。
+///
+/// 窓の外に居るとき(掴んで別の場所へ飛ばした、パンで置いていった)だけは、
+/// 連れ戻さないと見失うので中央へ指数で詰める。
+/// 連れ戻しは**中央付近まで来たら終わる**。この幅に入ったら相対位置の保持へ戻す
+const RECENTRED: f32 = 0.05;
+
+fn follow_view(
+    view: TimelineView,
+    playhead: f32,
+    dt: f32,
+    comp: f32,
+    recentering: bool,
+) -> (TimelineView, bool) {
+    let visible = playhead >= view.start && playhead <= view.start + view.span;
+    // **一度見失ったら、中央付近へ戻すまで連れ戻し続ける。** 窓に入った瞬間に
+    // やめると、入ってきた端に貼り付いたまま流れることになる
+    let mut recentering = recentering || !visible;
+    let start = if recentering {
+        let target = playhead - view.span * 0.5;
+        let k = (dt * FOLLOW_RATE).clamp(0.0, 1.0);
+        view.start + (target - view.start) * k
+    } else {
+        view.start + dt
+    };
+    let next = TimelineView {
+        start,
         span: view.span,
     }
-    .clamped(comp)
+    .clamped(comp);
+    if recentering {
+        let ratio = (playhead - next.start) / next.span;
+        // 中央へ入った、または端で窓がこれ以上動けない(中央へは行けない)
+        let stuck = next.start <= 0.0 || next.start >= (comp - next.span).max(0.0);
+        if (ratio - 0.5).abs() < RECENTRED || (stuck && (0.0..=1.0).contains(&ratio)) {
+            recentering = false;
+        }
+    }
+    (next, recentering)
 }
 
 /// `dt` 秒ぶん進んだ playhead と、**まだ再生中か**。
@@ -488,6 +520,8 @@ struct Lab {
     playhead: f32,
     /// 再生中か。**Space で入り切りする**。Document には入れない
     playing: bool,
+    /// playhead を見失っていて、窓へ連れ戻している最中か
+    recentering: bool,
     status: String,
     shot: Option<String>,
     frame: u32,
@@ -534,6 +568,7 @@ impl Lab {
             nav: None,
             playhead: 0.0,
             playing: false,
+            recentering: false,
             status: "space=play  drag bar=move  drag name=reorder  Cmd/Shift+click=select".to_owned(),
             shot,
             frame: 0,
@@ -1163,7 +1198,15 @@ impl eframe::App for Lab {
             //
             // 頭と終端では `clamped` が窓を止めるので、そこだけは playhead のほうが
             // 動く — 流れる物が無いところで無理に流さない
-            self.view = follow_view(self.view, self.playhead, dt.min(MAX_STEP), comp_seconds);
+            let (view, recentering) = follow_view(
+                self.view,
+                self.playhead,
+                dt.min(MAX_STEP),
+                comp_seconds,
+                self.recentering,
+            );
+            self.view = view;
+            self.recentering = recentering;
         }
 
         // ルーラのスクラブ。**Document は触らない** — playhead は session の状態
@@ -3080,37 +3123,93 @@ mod tests {
         assert!((15.5 - view.start) / view.span > 0.5);
     }
 
-    /// **再生を押した瞬間に面が跳ばない。** 中央へは滑って入る。
+    /// **窓の中の相対位置が保たれる。** 中央へ寄せ直さない。
     #[test]
-    fn the_window_glides_to_the_playhead_instead_of_jumping() {
+    fn playback_keeps_the_playhead_where_the_user_put_it() {
         let comp = 60.0_f32;
-        // 0..8s を見ているところで、6s から再生を始める
-        let mut view = TimelineView { start: 0.0, span: 8.0 };
-        let playhead = 6.0_f32;
         let dt = 1.0 / 60.0;
 
-        let after_one = follow_view(view, playhead, dt, comp);
-        let target = playhead - view.span * 0.5; // 2.0
-        assert!(
-            after_one.start > view.start && after_one.start < target * 0.5,
-            "1フレームで詰めるのは距離のごく一部: {}",
-            after_one.start
-        );
-        assert_eq!(after_one.span, view.span, "追従で寄り引きはしない");
+        // 窓の左寄り(ratio 0.25)に置いて再生する
+        let mut view = TimelineView { start: 4.0, span: 8.0 };
+        let mut playhead = 6.0_f32;
+        let ratio = |view: TimelineView, playhead: f32| (playhead - view.start) / view.span;
+        let before = ratio(view, playhead);
+        assert!((before - 0.25).abs() < 1e-4);
 
-        // 0.5秒ぶん回せば、ほぼ中央に入っている
-        for _ in 0..30 {
-            view = follow_view(view, playhead, dt, comp);
+        // 1フレーム目から相対位置は変わらない(**押した瞬間に滑らない**)
+        let (next, _) = advance_playhead(playhead, dt, comp);
+        let (after_one, _) = follow_view(view, next, dt, comp, false);
+        assert!(
+            (ratio(after_one, next) - before).abs() < 1e-4,
+            "1フレーム目で寄せ直さない: {}",
+            ratio(after_one, next)
+        );
+
+        // 1秒ぶん流しても左寄りのまま
+        for _ in 0..60 {
+            let (at, _) = advance_playhead(playhead, dt, comp);
+            playhead = at;
+            let (next, _) = follow_view(view, playhead, dt, comp, false);
+            view = next;
         }
+        assert!(
+            (ratio(view, playhead) - before).abs() < 1e-3,
+            "**左寄りのまま流れる**。中央へは行かない: {}",
+            ratio(view, playhead)
+        );
+        assert!(view.start > 4.0, "面のほうは流れている: {}", view.start);
+    }
+
+    /// 終端では窓が止まり、**playhead のほうが窓の中を動く**。
+    #[test]
+    fn the_window_holds_still_at_the_end() {
+        let comp = 16.0_f32;
+        let dt = 1.0 / 60.0;
+
+        // 終端: comp より後ろは無いので、窓は止まり playhead が右端へ寄る
+        let tail = TimelineView { start: 8.0, span: 8.0 };
+        let (moved, _) = follow_view(tail, 15.5, dt, comp, false);
+        assert_eq!(moved.start, 8.0, "終端より後ろへは流れない");
+
+        // 頭は「止まる」ではない。**先があるので流れる** — 相対位置が保たれる以上、
+        // 0秒付近から再生しても面は動く(playhead が左端に貼り付いたりしない)
+        let head = TimelineView { start: 0.0, span: 8.0 };
+        let (moved, _) = follow_view(head, 0.5, dt, comp, false);
+        assert!((moved.start - dt).abs() < 1e-6, "頭でも流れる: {}", moved.start);
+    }
+
+    /// 窓の外へ出たときだけ連れ戻す。**そのときも飛ばない。**
+    #[test]
+    fn a_playhead_outside_the_window_is_pulled_back_without_jumping() {
+        let comp = 60.0_f32;
+        let dt = 1.0 / 60.0;
+        let mut view = TimelineView { start: 30.0, span: 8.0 };
+        let playhead = 6.0_f32; // 窓のずっと左
+
+        let (one, recentering) = follow_view(view, playhead, dt, comp, false);
+        assert!(recentering, "見失ったので連れ戻しに入る");
+        assert!(
+            one.start < view.start && one.start > 25.0,
+            "1フレームで飛ばない: {}",
+            one.start
+        );
+
+        // 実際の再生と同じく playhead も進めながら回す
+        let mut recentering = false;
+        let mut playhead = playhead;
+        for _ in 0..60 {
+            let (at, _) = advance_playhead(playhead, dt, comp);
+            playhead = at;
+            let (next, flag) = follow_view(view, playhead, dt, comp, recentering);
+            view = next;
+            recentering = flag;
+        }
+        assert!(!recentering, "中央まで来たら連れ戻しは終わる");
         let centred = (playhead - view.start) / view.span;
         assert!(
             (centred - 0.5).abs() < 0.05,
-            "中央付近に落ち着く: {centred}"
+            "見えるところまで連れ戻す: {centred}"
         );
-
-        // 頭では窓が止まり、playhead のほうが窓の中を動く
-        let head = follow_view(TimelineView { start: 0.0, span: 8.0 }, 1.0, 1.0, comp);
-        assert_eq!(head.start, 0.0, "0 より前へは流れない");
     }
 
     /// 窓が隠れていた分を**まとめて進めない**。
