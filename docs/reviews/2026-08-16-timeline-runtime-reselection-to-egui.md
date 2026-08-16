@@ -228,14 +228,21 @@ egui は視覚設計の反復が弱い(CSS が無い)。そこを Blitz で補�
 
 **フォント同梱 → 行モデル＋純関数テスト(339行の意図を写す) → その時点で `egui_kittest` を入れてジェスチャとスナップショットを閉じる。** 純関数テストが先なのは、一番安く、行モデルの作り直しを安全にするため。スナップショットは**撮る対象ができてから**入れる。
 
-## 残余（2026-08-16 夜 更新）
+## 残余（2026-08-16 深夜 更新）
+
+> 更新履歴: 夜の版は `0d79a139` 時点で書かれており、その後 `81ab958e` `071fb5bc` `4b71de05` `1d26879d` `6e9de3d4` の5本が着地したため、次の席が読む前にここを実状へ戻した。**「進行中」は空になり、「未着手」からは選択・playhead・横ズーム/パンが抜けた。**
 
 ### できている（テストが押さえている）
 
 | | oracle |
 |---|---|
-| 行モデル(`timeline_rows.rs`) — 1 Layer = 1行、2軸独立の開閉、キー無しパラメータは行を出さない | `cargo test -p motolii-ui --lib timeline_rows` → 7 passed |
-| Lab で clip / group を動かす、トリム、Position キーの追従、キー単体のドラッグ、M/S の書き込み、Undo/Redo | `cargo test -p motolii-ui --example timeline_egui_lab` → 5 passed |
+| 行モデル(`timeline_rows.rs`) — 1 Layer = 1行、2軸独立の開閉、キー無しパラメータは行を出さない | `cargo test -p motolii-ui --lib timeline_rows` → **7 passed** |
+| Lab で clip / group を動かす、トリム、キー単体のドラッグ、M/S の書き込み、選択、playhead のスクラブ、Undo/Redo/Esc | `cargo test -p motolii-ui --example timeline_egui_lab` → **14 passed** |
+| clip 移動に**5パラメータ全部のキーが追従する**(Position / Anchor / Scale / Rotation / Opacity)。Position だけが自前の command で、残りは `SetTransformParamKeyTime`(`81ab958e` で D2 に追加)。**KeyframeId は編集をまたいで生き残る**(remove+add にしない) | 同上 |
+| 横ズーム・パン。カーソル下の時刻が動かない、0.25秒より寄れない、composition より広く引けない、`x→time` と `time→x` が往復で一致 | 同上 |
+| **編集の時刻がフレーム境界に乗る。** `try_from_frame` / `try_to_frame_round` を通す(fps は有理数なので `(秒*fps).round()` を自前で書かない) | 同上 |
+| **Cmd+D 複製。** 再帰(Group の子・入れ子 Vector)と id の採り直しは `duplicate.rs` が持ち、Lab は子を辿らない | 同上 |
+| 外部の編集が次フレームで映る(revision 監視。ブラウザからのシェイプ配置が別プログラムに見えないため) | 同上 |
 | 記号の豆腐(`egui_fonts.rs`) | Hack を fallback へ。追加フォント0 |
 
 **触れる:** `cargo run --profile fast -p motolii-ui --example timeline_egui_lab`
@@ -244,14 +251,18 @@ egui は視覚設計の反復が弱い(CSS が無い)。そこを Blitz で補�
 
 1. **Group 自身のキーが追従しない。** Group は `clip.start` を持たないので「Group が動いた」という事実が Document に無く、動くのは子の clip だけ。Group envelope の Position/Opacity キーを子と同じ delta で動かすか否かは**意味の決定**。AE のプリコンポは中身ごと動くので追従が自然に見えるが、未決
 2. **ドラッグ中に1本弾かれたときの後始末。** gesture ごと巻き戻すか、部分適用を許すか
+3. **コピー／ペーストの持ち出し形式。** Cmd+D(複製)とは別物で、**貼り付け先が変わる**ぶんだけ決めることが多い — キーを別パラメータへ貼れるか(型が違う)、別レイヤーへ貼ったとき時刻は絶対か playhead 基準か、シェイプを別 Group へ貼ったとき親の Transform をどう扱うか。**下請けに渡す前に決める話**
 
 ### 進行中
 
-- **D2 に `SetTransformParamKeyTime` を足す**(発注中)。これが入るまで Scale/Rotation のキーは clip 移動に追従しない。`prepare_set_position_key_time` しか時刻を動かせないため
+なし（2026-08-16 深夜時点。夜の版にあった `SetTransformParamKeyTime` は `81ab958e` で着地）。
 
 ### 未着手
 
-- 選択(クリックで選ぶ)・playhead のスクラブ・スクロール/ズーム(`timeline_viewport_state` 341行は生存)
+- **縦スクロール。** 行を上から並べるだけなので 30行で溢れる。行ベースなので実装は素直(可視範囲だけ描く)だが、`rows()` が毎フレーム全走査であることと併せて見る
+- **複数選択。** いまは `selected: Option<LayerId>`(`timeline_egui_lab.rs:218`)。1 gesture に N command は Group ドラッグで通っているので**形は証明済み**。単数前提のコードが増える前に変えるほうが安い
+- **並べ替え。** 入口は既にある — `prepare_reparent_clip(target, new_parent, new_index, new_start)`(`motolii-doc/src/lib.rs:652`)。`new_parent` を取るので Group への出し入れも同じ1本で表現できる
+- **`TimelineView`(Lab, f32) と `timeline_viewport_state`(341行, f64 + `RationalTime`) の二重化。** ズーム／パン／snap を両方が持っている。`snap_time` は「近くの端やキーへ吸着」であってフレーム量子化とは別物なので、畳むときに混ぜない
 - `egui_kittest` の導入(§8)。**撮る対象はできた**
 - CJK フォントの取得と `docs/references.md` への登録(コードではなく取得の仕事)
 - chrome を egui ウィジェットへ(AccessKit から叩けるように。§8)
