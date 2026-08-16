@@ -62,6 +62,9 @@ const ROW_H: f32 = 24.0;
 const PROP_H: f32 = 20.0;
 const HEAD_H: f32 = 34.0;
 const RULER_H: f32 = 27.0;
+/// ルーラが覆う秒数。**時間→x の換算はここ1箇所を通す**
+/// (ズームを入れるときに触る場所を1つにしておく)
+const TIMELINE_SECONDS: f32 = 16.0;
 
 fn main() -> eframe::Result<()> {
     let shot = std::env::args().nth(1);
@@ -142,6 +145,10 @@ struct Lab {
     fold: TimelineFoldState,
     drag: Option<(Grab, GestureId)>,
     names: HashMap<LayerId, String>,
+    /// 選択中の layer。**Project session が持つ種類の状態**で、Document には入れない
+    selected: Option<LayerId>,
+    /// playhead(秒)。同上
+    playhead: f32,
     status: String,
     shot: Option<String>,
     frame: u32,
@@ -175,6 +182,8 @@ impl Lab {
             fold,
             drag: None,
             names,
+            selected: None,
+            playhead: 0.0,
             status: "arrow=children  diamond=key rows  drag=move  edges=trim  Cmd+Z=undo".to_owned(),
             shot,
             frame: 0,
@@ -423,11 +432,27 @@ impl eframe::App for Lab {
             Stroke::new(1.0, RULE),
         );
 
+        // ルーラのスクラブ。**Document は触らない** — playhead は session の状態
+        let ruler_track = Rect::from_min_max(egui::pos2(track_left, ruler.top()), ruler.max);
+        let scrub = ui.interact(
+            ruler_track,
+            ui.id().with("ruler"),
+            Sense::click_and_drag(),
+        );
+        if scrub.is_pointer_button_down_on() {
+            if let Some(pos) = scrub.interact_pointer_pos() {
+                self.playhead =
+                    ((pos.x - track_left) / track_w * TIMELINE_SECONDS).clamp(0.0, TIMELINE_SECONDS);
+                self.status = format!("{:.2}s", self.playhead);
+            }
+        }
+
         // ---- 行 ----
         let mut y = ruler.bottom();
         let mut toggles: Vec<(LayerId, bool)> = Vec::new();
         // M / S のクリック。行を回している間は Document を触らず、回し終えてから書く
         let mut flags: Vec<(LayerId, bool)> = Vec::new();
+        let mut pick: Option<LayerId> = None;
 
         for row in &visible {
             let h = match row.kind {
@@ -445,6 +470,21 @@ impl eframe::App for Lab {
                 _ => CELL,
             };
             p.rect_filled(rail, CornerRadius::ZERO, cell);
+            // 左列のどこを押しても、その行の layer を選ぶ(ボタン類は上に載るので先に取られる)
+            if matches!(row.kind, RowKind::Object) {
+                let r = ui.interact(rail, ui.id().with(("pick", row.layer)), Sense::click());
+                if r.clicked() {
+                    pick = Some(row.layer);
+                }
+            }
+            if self.selected == Some(row.layer) {
+                // 選択の帯。**行全体ではなく左端の細い帯**(モックの inset 3px と同じ)
+                p.rect_filled(
+                    Rect::from_min_size(rail.left_top(), Vec2::new(3.0, rail.height())),
+                    CornerRadius::ZERO,
+                    ACCENT,
+                );
+            }
             p.line_segment(
                 [rail.left_bottom(), rail.right_bottom()],
                 Stroke::new(1.0, RULE),
@@ -610,8 +650,8 @@ impl eframe::App for Lab {
             match row.kind {
                 RowKind::Object => {
                     if let Some((start, end)) = clip_span(&self.document, row.layer) {
-                        let x0 = track_left + track_w * start / 16.0;
-                        let x1 = track_left + track_w * end / 16.0;
+                        let x0 = track_left + track_w * start / TIMELINE_SECONDS;
+                        let x1 = track_left + track_w * end / TIMELINE_SECONDS;
                         let bar = Rect::from_min_max(
                             egui::pos2(x0, track.top() + 3.0),
                             egui::pos2(x1, track.bottom() - 4.0),
@@ -649,7 +689,7 @@ impl eframe::App for Lab {
                                     begin_move(
                                         &self.document,
                                         row.layer,
-                                        (pos.x - track_left) / track_w * 16.0,
+                                        (pos.x - track_left) / track_w * TIMELINE_SECONDS,
                                     )
                                 };
                                 let gesture = self.writer.begin_gesture();
@@ -658,7 +698,7 @@ impl eframe::App for Lab {
                         }
                         if r.dragged() {
                             if let Some(pos) = r.interact_pointer_pos() {
-                                let at = ((pos.x - track_left) / track_w_for_time.max(1.0) * 16.0)
+                                let at = ((pos.x - track_left) / track_w_for_time.max(1.0) * TIMELINE_SECONDS)
                                     .max(0.0);
                                 self.commit_drag(at);
                             }
@@ -672,7 +712,7 @@ impl eframe::App for Lab {
                     // **時刻を動かせるのは Position だけ。** 他は掴んでも動かない
                     let movable = param == ParamRef::Position;
                     for (key, t) in param_keys(&self.document, row.layer, param) {
-                        let x = track_left + track_w * t / 16.0;
+                        let x = track_left + track_w * t / TIMELINE_SECONDS;
                         let c = egui::pos2(x, track.center().y);
                         let d = 4.0;
                         // 掴む的は菱形の中心から6px。bar の端と同じ寸法
@@ -711,7 +751,7 @@ impl eframe::App for Lab {
                                         key,
                                         grab_at: (pos.x - track_left)
                                             / track_w_for_time.max(1.0)
-                                            * 16.0,
+                                            * TIMELINE_SECONDS,
                                         original: t,
                                     },
                                     gesture,
@@ -720,7 +760,7 @@ impl eframe::App for Lab {
                         }
                         if r.dragged() && movable {
                             if let Some(pos) = r.interact_pointer_pos() {
-                                let at = (pos.x - track_left) / track_w_for_time.max(1.0) * 16.0;
+                                let at = (pos.x - track_left) / track_w_for_time.max(1.0) * TIMELINE_SECONDS;
                                 self.commit_drag(at.max(0.0));
                             }
                         }
@@ -732,6 +772,31 @@ impl eframe::App for Lab {
             }
 
             y += h;
+        }
+
+        // playhead は行を描き終えてから、面の上に1本
+        let playhead_x = track_left + track_w * self.playhead / TIMELINE_SECONDS;
+        let rows_bottom = y;
+        p.line_segment(
+            [
+                egui::pos2(playhead_x, ruler.top()),
+                egui::pos2(playhead_x, rows_bottom.max(ruler.bottom())),
+            ],
+            Stroke::new(1.0, Color32::from_rgb(0xe8, 0xe8, 0xe8)),
+        );
+        p.add(egui::Shape::convex_polygon(
+            vec![
+                egui::pos2(playhead_x - 5.0, ruler.top()),
+                egui::pos2(playhead_x + 5.0, ruler.top()),
+                egui::pos2(playhead_x, ruler.top() + 7.0),
+            ],
+            Color32::from_rgb(0xe8, 0xe8, 0xe8),
+            Stroke::NONE,
+        ));
+
+        if let Some(layer) = pick {
+            self.selected = Some(layer);
+            self.status = format!("selected {}", self.name(layer));
         }
 
         for (layer, is_children) in toggles {
