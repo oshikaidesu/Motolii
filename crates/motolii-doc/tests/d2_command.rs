@@ -2784,3 +2784,49 @@ fn an_empty_group_can_be_added_and_filled_by_reparenting() {
         "Group の LayerId は台帳から外れる(孤児を残さない)"
     );
 }
+
+/// **名前は識別子ではない。** 変えても参照は動かず、Undo で元の名前へ戻る。
+#[test]
+fn renaming_a_layer_changes_only_the_ledger_entry() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc);
+    let before = writer.snapshot();
+    let old_name = before.layers.display_name(f.layer).unwrap().to_owned();
+    let tracks_before = before.tracks.clone();
+
+    let command = writer
+        .prepare_set_layer_name(f.layer, "renamed")
+        .expect("prepare")
+        .expect("変化があるので command が出る");
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, command).expect("apply");
+
+    let after = writer.snapshot();
+    writer.validate().expect("post-rename document must validate");
+    assert_eq!(after.layers.display_name(f.layer), Some("renamed"));
+    assert_eq!(after.tracks, tracks_before, "**ツリーは1バイトも動かない**");
+    assert_eq!(
+        after.layers.len(),
+        before.layers.len(),
+        "エントリは増えも減りもしない"
+    );
+
+    // same-value は command を出さない
+    assert!(writer
+        .prepare_set_layer_name(f.layer, "renamed")
+        .expect("prepare")
+        .is_none());
+
+    writer.undo().expect("undo");
+    assert_eq!(
+        writer.snapshot().layers.display_name(f.layer),
+        Some(old_name.as_str()),
+        "1回の Undo で元の名前へ"
+    );
+
+    // 居ない layer は断る
+    assert!(matches!(
+        writer.prepare_set_layer_name(LayerId::from_raw(9_999), "x"),
+        Err(CommandError::LayerNotFound(_))
+    ));
+}

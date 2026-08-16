@@ -403,6 +403,11 @@ impl Command {
                 old: new,
                 new: old,
             },
+            Command::SetLayerName { target, old, new } => Command::SetLayerName {
+                target,
+                old: new,
+                new: old,
+            },
         }
     }
 }

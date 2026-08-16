@@ -694,6 +694,15 @@ impl DocumentWriter {
         command::prepare_set_item_solo(&self.doc, target, new)
     }
 
+    /// 表示名を差し替える command を準備する。same-value は `None`。
+    pub fn prepare_set_layer_name(
+        &self,
+        target: LayerId,
+        new: &str,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_layer_name(&self.doc, target, new)
+    }
+
     /// 編集禁止フラグ。**評価・描画には影響しない**(B④)。
     pub fn prepare_set_item_lock(
         &self,

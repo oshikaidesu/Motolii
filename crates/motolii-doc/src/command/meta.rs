@@ -53,6 +53,7 @@ impl Command {
             Command::SetItemVisible { .. } => CommandKind::SetItemVisible,
             Command::SetItemSolo { .. } => CommandKind::SetItemSolo,
             Command::SetItemLock { .. } => CommandKind::SetItemLock,
+            Command::SetLayerName { .. } => CommandKind::SetLayerName,
         }
     }
 
@@ -80,6 +81,7 @@ impl Command {
             | Command::ReparentClip { target, .. }
             | Command::SetItemVisible { target, .. }
             | Command::SetItemLock { target, .. }
+            | Command::SetLayerName { target, .. }
             | Command::SetItemSolo { target, .. } => target.get(),
             Command::AddPositionKey { added_key_id, .. }
             | Command::UndoAddPositionKey { added_key_id, .. } => added_key_id.get(),
@@ -152,6 +154,7 @@ impl Command {
             Command::SetItemVisible { .. } => PropertyId::ItemVisible,
             Command::SetItemSolo { .. } => PropertyId::ItemSolo,
             Command::SetItemLock { .. } => PropertyId::ItemLock,
+            Command::SetLayerName { .. } => PropertyId::LayerName,
         }
     }
 
@@ -236,6 +239,7 @@ impl Command {
             | Command::ReparentClip { .. }
             | Command::SetItemVisible { .. }
             | Command::SetItemLock { .. }
+            | Command::SetLayerName { .. }
             | Command::SetItemSolo { .. } => None,
         }
     }

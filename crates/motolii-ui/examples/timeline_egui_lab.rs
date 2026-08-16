@@ -407,6 +407,7 @@ enum MenuAction {
     FitView,
     LoopToSelection,
     ClearLoop,
+    Rename(LayerId),
     RowHeight(bool),
     SelectAll,
     Split,
@@ -701,6 +702,8 @@ struct Lab {
     large_rows: bool,
     /// 矩形選択を掴んだ場所(面の座標)。掴んでいないときは `None`
     marquee: Option<(egui::Pos2, egui::Pos2)>,
+    /// 名前を編集中の layer と、編集中の文字列。**確定するまで Document は触らない**
+    renaming: Option<(LayerId, String)>,
     /// 再生中か。**Space で入り切りする**。Document には入れない
     playing: bool,
     status: String,
@@ -759,6 +762,7 @@ impl Lab {
             snap: true,
             large_rows: false,
             marquee: None,
+            renaming: None,
             playing: false,
             status: "space=play  L=loop  Cmd+G=group  Del=delete  drag name=reorder".to_owned(),
             shot,
@@ -1210,6 +1214,44 @@ impl Lab {
         self.status = format!("deleted {removed}  undo {}", self.writer.undo_len());
     }
 
+    /// 名前の編集を確定する。**空の名前は断る**(行が読めなくなる)。
+    fn commit_rename(&mut self) {
+        let Some((layer, name)) = self.renaming.take() else {
+            return;
+        };
+        let name = name.trim().to_owned();
+        if name.is_empty() {
+            self.status = "name cannot be empty".to_owned();
+            return;
+        }
+        match self.writer.prepare_set_layer_name(layer, &name) {
+            Ok(Some(command)) => {
+                let gesture = self.writer.begin_gesture();
+                match self.writer.apply_command(gesture, command) {
+                    Ok(()) => {
+                        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                        // Lab の控えも合わせる。**台帳が正**なので、控えは捨ててもよい
+                        self.names.remove(&layer);
+                        self.status = format!("renamed to {name}  undo {}", self.writer.undo_len());
+                    }
+                    Err(error) => self.status = format!("rejected: {error}"),
+                }
+            }
+            // 同じ名前を打ち直した。**失敗ではない**
+            Ok(None) => {}
+            Err(error) => self.status = format!("rejected: {error}"),
+        }
+    }
+
+    /// 名前の編集を始める。**いま見えている名前を初期値にする**
+    fn begin_rename(&mut self, layer: LayerId) {
+        if self.is_locked(layer) {
+            self.status = format!("{} is locked", self.name(layer));
+            return;
+        }
+        self.renaming = Some((layer, self.name(layer).to_owned()));
+    }
+
     /// 選択をひとつの Group にまとめる。**1回 = 1 `GestureId` = 1 Undo 単位**
     ///
     /// 「空の Group を置く」+「選んだものを順に入れる」で表す。新しい意味の
@@ -1524,7 +1566,10 @@ impl Lab {
         seat(ui, "Cut   ⌘X");
         seat(ui, "Copy   ⌘C");
         seat(ui, "Paste   ⌘V");
-        seat(ui, "Rename…   ⏎");
+        if ui.button("Rename…   ⏎").clicked() {
+            *out = Some(MenuAction::Rename(layer));
+            ui.close();
+        }
 
         seat(ui, "Reveal source");
     }
@@ -1672,6 +1717,7 @@ impl Lab {
                 self.status = "loop off".to_owned();
             }
             MenuAction::Split => self.split_selected(),
+            MenuAction::Rename(layer) => self.begin_rename(layer),
             MenuAction::RowHeight(large) => {
                 self.large_rows = large;
                 self.status = if large { "large rows" } else { "small rows" }.to_owned();
@@ -2232,6 +2278,9 @@ impl eframe::App for Lab {
         let mut reorder_started: Option<LayerId> = None;
         let mut reorder_released = false;
         let mut menu_action: Option<MenuAction> = None;
+        let mut rename_started: Option<LayerId> = None;
+        let mut rename_committed = false;
+        let mut rename_cancelled = false;
 
         // 何も無いところの右クリック。**行より先に登録する**ので、行の上では行が勝つ
         let surface_bg = ui.interact(
@@ -2296,6 +2345,9 @@ impl eframe::App for Lab {
                     let (additive, range) =
                         ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
                     pick = Some((row.layer, additive, range));
+                }
+                if r.double_clicked() {
+                    rename_started = Some(row.layer);
                 }
                 if r.drag_started() {
                     reorder_started = Some(row.layer);
@@ -2382,13 +2434,41 @@ impl eframe::App for Lab {
                             Color32::from_rgb(0x72, 0x92, 0x98)
                         },
                     );
-                    p.text(
-                        egui::pos2(rail.left() + indent + 32.0, cy),
-                        Align2::LEFT_CENTER,
-                        self.name(row.layer),
-                        FontId::proportional(11.0),
-                        INK,
+                    // 名前。**編集中はその場が入力欄になる**(別の窓を出さない)
+                    let name_rect = Rect::from_min_max(
+                        egui::pos2(rail.left() + indent + 30.0, rail.top() + 2.0),
+                        egui::pos2(rail.right() - 70.0, rail.bottom() - 2.0),
                     );
+                    if self.renaming.as_ref().map(|(l, _)| *l) == Some(row.layer) {
+                        let mut buf = self
+                            .renaming
+                            .as_ref()
+                            .map(|(_, n)| n.clone())
+                            .unwrap_or_default();
+                        let edit = ui.put(
+                            name_rect,
+                            egui::TextEdit::singleline(&mut buf)
+                                .font(FontId::proportional(11.0))
+                                .margin(Vec2::new(2.0, 0.0)),
+                        );
+                        edit.request_focus();
+                        if let Some((_, name)) = self.renaming.as_mut() {
+                            *name = buf;
+                        }
+                        rename_committed = edit.lost_focus()
+                            && ctx.input(|i| i.key_pressed(egui::Key::Enter));
+                        if edit.lost_focus() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                            rename_cancelled = true;
+                        }
+                    } else {
+                        p.text(
+                            egui::pos2(rail.left() + indent + 32.0, cy),
+                            Align2::LEFT_CENTER,
+                            self.name(row.layer),
+                            FontId::proportional(11.0),
+                            INK,
+                        );
+                    }
 
                     // キー行の開閉（◇/◆）— キーを持つ行だけ
                     let has_keys = !visible_params(&self.document, row.layer).is_empty();
@@ -2988,6 +3068,18 @@ impl eframe::App for Lab {
             }
         }
 
+        // 名前の編集。**始める・確定する・やめる**を行の外で1回ずつ
+        if let Some(layer) = rename_started {
+            self.begin_rename(layer);
+        }
+        if rename_committed {
+            self.commit_rename();
+        }
+        if rename_cancelled {
+            self.renaming = None;
+            self.status = "rename cancelled".to_owned();
+        }
+
         // メニューから出た指示は、行を回し終えてから1つだけ実行する
         if let Some(action) = menu_action {
             self.run_menu(action, comp_seconds, fps);
@@ -3048,6 +3140,15 @@ impl eframe::App for Lab {
         // Cmd/Ctrl + K。**playhead で切る**
         if split && self.drag.is_none() {
             self.split_selected();
+        }
+
+        // Enter。**1つだけ選んでいるときに名前を編集する**(AE と同じ)
+        if ctx.input(|i| i.key_pressed(egui::Key::Enter))
+            && self.renaming.is_none()
+            && self.selected.len() == 1
+        {
+            let layer = self.selected[0];
+            self.begin_rename(layer);
         }
 
         // Cmd/Ctrl + A。**見えている行を全部選ぶ**(閉じた Group の中は見えていない)
@@ -4929,5 +5030,58 @@ mod tests {
         lab.writer.undo().expect("undo");
         refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
         assert_eq!(item_flags(&lab.document, layer), Some((false, true, false)));
+    }
+
+    /// **名前を変えても、動くのは台帳だけ。** 行も、キーも、選択も動かない。
+    #[test]
+    fn renaming_a_layer_only_moves_the_ledger_entry() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Reference text");
+        let rows_before = rows(&lab.document, &lab.fold).len();
+        let span_before = clip_span(&lab.document, layer).expect("span");
+
+        lab.begin_rename(layer);
+        assert_eq!(
+            lab.renaming.as_ref().map(|(l, n)| (*l, n.as_str())),
+            Some((layer, "Reference text")),
+            "**いま見えている名前が初期値**"
+        );
+        lab.renaming = Some((layer, "  Caption  ".to_owned()));
+        lab.commit_rename();
+
+        assert_eq!(lab.name(layer), "Caption", "前後の空白は落とす: {}", lab.status);
+        assert_eq!(rows(&lab.document, &lab.fold).len(), rows_before, "行は増減しない");
+        assert_eq!(clip_span(&lab.document, layer).expect("span"), span_before);
+        assert!(lab.renaming.is_none(), "編集は終わっている");
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(lab.name(layer), "Reference text", "1回の Undo で戻る");
+    }
+
+    /// **空の名前は断る。** 行が読めなくなるので、編集も終わらせない。
+    #[test]
+    fn an_empty_name_is_refused_and_keeps_the_editor_open() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Background");
+
+        lab.begin_rename(layer);
+        lab.renaming = Some((layer, "   ".to_owned()));
+        lab.commit_rename();
+
+        assert_eq!(lab.name(layer), "Background", "名前は変わらない");
+        assert!(lab.status.contains("empty"), "理由を出す: {}", lab.status);
+    }
+
+    /// ロックされた行は名前も変えられない。**編集禁止は名前も含む。**
+    #[test]
+    fn a_locked_layer_cannot_be_renamed() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Background");
+        lab.toggle_flag(layer, Flag::Lock);
+
+        lab.begin_rename(layer);
+        assert!(lab.renaming.is_none(), "編集が始まらない");
+        assert!(lab.status.contains("locked"), "{}", lab.status);
     }
 }

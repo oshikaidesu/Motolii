@@ -55,6 +55,7 @@ pub enum PropertyId {
     ItemVisible,
     ItemSolo,
     ItemLock,
+    LayerName,
 }
 
 impl From<ScalarPropertyId> for PropertyId {
@@ -132,6 +133,7 @@ pub enum CommandKind {
     SetItemVisible,
     SetItemSolo,
     SetItemLock,
+    SetLayerName,
 }
 
 /// S18: `gesture_id + command_kind + target_stable_id + property_id`。

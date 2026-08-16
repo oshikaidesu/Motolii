@@ -423,6 +423,10 @@ impl Command {
                 find_envelope_mut(doc, *target)?.lock = *new;
                 Ok(())
             }
+            Command::SetLayerName { target, new, .. } => {
+                doc.layers.rename(*target, new.clone())?;
+                Ok(())
+            }
         }
     }
 }

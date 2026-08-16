@@ -273,6 +273,12 @@ pub enum Command {
         old: bool,
         new: bool,
     },
+    /// 表示名。**台帳(`Document.layers`)だけが変わる**。ツリーもIDも動かない
+    SetLayerName {
+        target: LayerId,
+        old: String,
+        new: String,
+    },
     /// 編集禁止(B④)。**評価・描画には影響しない** — 触れなくなるだけ
     SetItemLock {
         target: LayerId,

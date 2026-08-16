@@ -278,6 +278,7 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::ReparentClip => "Reparent clip",
         CommandKind::SetItemVisible => "Set item visible",
         CommandKind::SetItemLock => "Set item lock",
+        CommandKind::SetLayerName => "Rename layer",
         CommandKind::SetItemSolo => "Set item solo",
     }
 }

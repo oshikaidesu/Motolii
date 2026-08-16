@@ -42,6 +42,29 @@ pub fn prepare_add_group(
     })
 }
 
+/// 表示名を差し替える準備をする。same-value は `None`。
+///
+/// **名前は識別子ではない。** 参照は全部 `LayerId` なので、変えても
+/// `transform.parent` / `LookAt` / journal の指し先は動かない。
+pub fn prepare_set_layer_name(
+    doc: &Document,
+    target: LayerId,
+    new: &str,
+) -> Result<Option<Command>, CommandError> {
+    let old = doc
+        .layers
+        .display_name(target)
+        .ok_or(CommandError::LayerNotFound(target.get()))?;
+    if old == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetLayerName {
+        target,
+        old: old.to_owned(),
+        new: new.to_owned(),
+    }))
+}
+
 /// `target`が指すTrackItem(Clip/Group、子ごと)を外す準備をする。
 ///
 /// **`prepare_duplicate_track_item`の裏返しである。** 複製が`AddTrackItem`で
