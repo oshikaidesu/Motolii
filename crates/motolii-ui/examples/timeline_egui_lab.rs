@@ -373,6 +373,62 @@ fn tick_label(t: f32, step: f32) -> String {
     }
 }
 
+/// 右クリックのメニューから出た指示。
+///
+/// **メニューの中では Document を触らない。** 行を回している最中に木が変わると、
+/// その場で持っている位置が全部ずれる(M/S のクリックと同じ扱い)。
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum MenuAction {
+    Group,
+    Duplicate,
+    Delete,
+    DeleteKeys,
+    ToggleMute(LayerId),
+    ToggleSolo(LayerId),
+    ToggleChildren(LayerId),
+    ToggleKeys(LayerId),
+    FitView,
+    LoopToSelection,
+    ClearLoop,
+}
+
+/// メニューの下地を Lab のトンマナへ寄せる。
+///
+/// **egui のメニューは `visuals.window_*` と `widgets.*` で描かれる**ので、
+/// 面のほうの定数(`CELL` / `INK` / `ACCENT`)をそのまま渡す。ここを既定のままに
+/// すると、メニューだけ別のアプリのように見える。
+fn install_lab_style(ctx: &egui::Context) {
+    let mut style = (*ctx.style_of(egui::Theme::Dark)).clone();
+    let v = &mut style.visuals;
+    v.dark_mode = true;
+    v.window_fill = CELL;
+    v.panel_fill = BG;
+    v.window_stroke = Stroke::new(1.0, Color32::from_rgb(0x11, 0x11, 0x11));
+    v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, DIM);
+    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_rgb(0x44, 0x44, 0x44));
+    v.widgets.inactive.fg_stroke = Stroke::new(1.0, INK);
+    v.widgets.inactive.bg_fill = Color32::TRANSPARENT;
+    v.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
+    // hover は帯で示す。**触れる物と触れない物の差を色で出す**
+    v.widgets.hovered.bg_fill = ACCENT;
+    v.widgets.hovered.weak_bg_fill = ACCENT;
+    v.widgets.hovered.fg_stroke = Stroke::new(1.0, Color32::from_rgb(0x1c, 0x1c, 0x1c));
+    v.widgets.active.bg_fill = ACCENT;
+    v.widgets.active.weak_bg_fill = ACCENT;
+    v.widgets.active.fg_stroke = Stroke::new(1.0, Color32::from_rgb(0x1c, 0x1c, 0x1c));
+    style.spacing.button_padding = Vec2::new(8.0, 3.0);
+    ctx.set_style_of(egui::Theme::Dark, style.clone());
+    ctx.set_style_of(egui::Theme::Light, style);
+}
+
+/// まだ無い操作を**席として並べる**。押せないが、どこに来るかは分かる。
+///
+/// 空欄にすると「この面には無い操作」に見えてしまう。灰色で置いておけば
+/// 「ここに来る」と読める。実装したらここから外す。
+fn seat(ui: &mut egui::Ui, label: &str) {
+    ui.add_enabled(false, egui::Button::new(label));
+}
+
 /// ナビゲータ帯のどこを掴んだか
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum NavGrab {
@@ -472,6 +528,7 @@ fn main() -> eframe::Result<()> {
         },
         Box::new(move |cc| {
             motolii_ui::install_egui_symbol_fallback(&cc.egui_ctx);
+            install_lab_style(&cc.egui_ctx);
             Ok(Box::new(Lab::new(shot)))
         }),
     )
@@ -1188,6 +1245,179 @@ impl Lab {
         }
     }
 
+    /// 行(clip / group)の右クリックメニュー。
+    ///
+    /// **並びは「いま効くもの → 面の状態 → まだ無いもの」**の順にした。
+    /// 押せない席を上に置くと、使える操作を探すのに毎回読み飛ばすことになる。
+    fn row_menu(
+        ui: &mut egui::Ui,
+        name: &str,
+        layer: LayerId,
+        has_children: bool,
+        muted: bool,
+        soloed: bool,
+        selected: usize,
+        out: &mut Option<MenuAction>,
+    ) {
+        ui.set_min_width(190.0);
+        ui.label(egui::RichText::new(name).color(DIM).size(9.0));
+        ui.separator();
+        if ui
+            .button(if selected > 1 {
+                format!("Group {selected} layers   ⌘G")
+            } else {
+                "Group   ⌘G".to_owned()
+            })
+            .clicked()
+        {
+            *out = Some(MenuAction::Group);
+            ui.close();
+        }
+        if ui.button("Duplicate   ⌘D").clicked() {
+            *out = Some(MenuAction::Duplicate);
+            ui.close();
+        }
+        if ui.button("Delete   ⌫").clicked() {
+            *out = Some(MenuAction::Delete);
+            ui.close();
+        }
+        ui.separator();
+        if ui
+            .button(if muted { "Unmute   M" } else { "Mute   M" })
+            .clicked()
+        {
+            *out = Some(MenuAction::ToggleMute(layer));
+            ui.close();
+        }
+        if ui
+            .button(if soloed { "Unsolo   S" } else { "Solo   S" })
+            .clicked()
+        {
+            *out = Some(MenuAction::ToggleSolo(layer));
+            ui.close();
+        }
+        if ui.button("Show keys   ◇").clicked() {
+            *out = Some(MenuAction::ToggleKeys(layer));
+            ui.close();
+        }
+        if has_children && ui.button("Expand children   ▾").clicked() {
+            *out = Some(MenuAction::ToggleChildren(layer));
+            ui.close();
+        }
+        ui.separator();
+        // ここから下は**席**。実装したらこの行を消して上へ移す
+        seat(ui, "Cut   ⌘X");
+        seat(ui, "Copy   ⌘C");
+        seat(ui, "Paste   ⌘V");
+        seat(ui, "Rename…   ⏎");
+        seat(ui, "Add key at playhead");
+        seat(ui, "Reveal source");
+    }
+
+    /// キーの右クリックメニュー
+    fn key_menu(ui: &mut egui::Ui, label: &str, out: &mut Option<MenuAction>) {
+        ui.set_min_width(180.0);
+        ui.label(egui::RichText::new(label).color(DIM).size(9.0));
+        ui.separator();
+        if ui.button("Delete key   ⌫").clicked() {
+            *out = Some(MenuAction::DeleteKeys);
+            ui.close();
+        }
+        ui.separator();
+        seat(ui, "Copy key   ⌘C");
+        seat(ui, "Easing…");
+        seat(ui, "Set value…");
+        seat(ui, "Snap to playhead");
+    }
+
+    /// 何も無いところの右クリックメニュー。**面そのものへの操作**
+    fn surface_menu(ui: &mut egui::Ui, loop_on: bool, out: &mut Option<MenuAction>) {
+        ui.set_min_width(190.0);
+        ui.label(egui::RichText::new("timeline").color(DIM).size(9.0));
+        ui.separator();
+        if ui.button("Fit to composition").clicked() {
+            *out = Some(MenuAction::FitView);
+            ui.close();
+        }
+        if ui.button("Loop to selection   L").clicked() {
+            *out = Some(MenuAction::LoopToSelection);
+            ui.close();
+        }
+        if loop_on && ui.button("Clear loop").clicked() {
+            *out = Some(MenuAction::ClearLoop);
+            ui.close();
+        }
+        ui.separator();
+        seat(ui, "Paste   ⌘V");
+        seat(ui, "New layer…");
+        seat(ui, "Select all   ⌘A");
+        seat(ui, "Zoom to loop");
+    }
+
+    /// メニューから出た指示を1つ実行する。**行を回し終えてから呼ぶ**
+    fn run_menu(&mut self, action: MenuAction, comp: f32, fps: Fps) {
+        match action {
+            MenuAction::Group => self.group_selected(),
+            MenuAction::Duplicate => self.duplicate_selected(),
+            MenuAction::Delete => self.delete_selected(),
+            MenuAction::DeleteKeys => {
+                self.delete_selected_keys();
+            }
+            MenuAction::ToggleMute(layer) => self.toggle_flag(layer, true),
+            MenuAction::ToggleSolo(layer) => self.toggle_flag(layer, false),
+            MenuAction::ToggleChildren(layer) => {
+                if self.fold.children_are_open(layer) {
+                    self.fold.close_children(layer);
+                } else {
+                    self.fold.open_children(layer);
+                }
+            }
+            MenuAction::ToggleKeys(layer) => {
+                if self.fold.params_are_open(layer) {
+                    self.fold.close_params(layer);
+                } else {
+                    self.fold.open_params(layer);
+                }
+            }
+            MenuAction::FitView => {
+                self.view = TimelineView {
+                    start: 0.0,
+                    span: comp,
+                }
+                .clamped(comp);
+                self.status = "fit".to_owned();
+            }
+            MenuAction::LoopToSelection => {
+                // 選んだものが占める範囲。**選択が空なら触らない**
+                let mut span: Option<(f32, f32)> = None;
+                for layer in &self.selected {
+                    if let Some((s, e)) = clip_span(&self.document, *layer) {
+                        span = Some(match span {
+                            Some((a, b)) => (a.min(s), b.max(e)),
+                            None => (s, e),
+                        });
+                    }
+                }
+                match span {
+                    Some((s, e)) => {
+                        let (start, end) = loop_from_drag(s, e, comp, fps);
+                        self.loop_region = LoopRegion {
+                            start,
+                            end,
+                            on: true,
+                        };
+                        self.status = format!("loop {start:.2}–{end:.2}s");
+                    }
+                    None => self.status = "nothing selected".to_owned(),
+                }
+            }
+            MenuAction::ClearLoop => {
+                self.loop_region.on = false;
+                self.status = "loop off".to_owned();
+            }
+        }
+    }
+
     /// 下端の時間ナビゲータ帯。**寄っているときに、いま全体のどこを見ているか。**
     ///
     /// 溝が composition 全体、明るい所が見えている窓である。
@@ -1620,6 +1850,14 @@ impl eframe::App for Lab {
         let mut pick: Option<(LayerId, bool, bool)> = None;
         let mut reorder_started: Option<LayerId> = None;
         let mut reorder_released = false;
+        let mut menu_action: Option<MenuAction> = None;
+
+        // 何も無いところの右クリック。**行より先に登録する**ので、行の上では行が勝つ
+        let surface_bg = ui.interact(rows_view, ui.id().with("surface"), Sense::click());
+        {
+            let loop_on = self.loop_region.on;
+            surface_bg.context_menu(|ui| Lab::surface_menu(ui, loop_on, &mut menu_action));
+        }
 
         // **面からはみ出した行は描かない。** 1000行でも触るのは見えている分だけ
         let row_p = p.with_clip_rect(rows_view);
@@ -1660,6 +1898,29 @@ impl eframe::App for Lab {
                 }
                 if r.drag_stopped() {
                     reorder_released = true;
+                }
+                // **右クリックは、選んでいない行なら選び直してから開く。**
+                // 選択と、メニューが効く相手が食い違うのが一番危ない
+                if r.secondary_clicked() && !self.is_selected(row.layer) {
+                    pick = Some((row.layer, false, false));
+                }
+                {
+                    let name = self.name(row.layer).to_owned();
+                    let (visible, solo) =
+                        item_flags(&self.document, row.layer).unwrap_or((true, false));
+                    let selected = self.selected.len().max(1);
+                    r.context_menu(|ui| {
+                        Lab::row_menu(
+                            ui,
+                            &name,
+                            row.layer,
+                            row.has_children,
+                            !visible,
+                            solo,
+                            selected,
+                            &mut menu_action,
+                        )
+                    });
                 }
             }
             if self.is_selected(row.layer) {
@@ -2041,6 +2302,27 @@ impl eframe::App for Lab {
                         if r.drag_stopped() {
                             self.drag = None;
                         }
+                        if r.secondary_clicked() && !self.is_selected(row.layer) {
+                            pick = Some((row.layer, false, false));
+                        }
+                        {
+                            let name = self.name(row.layer).to_owned();
+                            let (visible, solo) =
+                                item_flags(&self.document, row.layer).unwrap_or((true, false));
+                            let selected = self.selected.len().max(1);
+                            r.context_menu(|ui| {
+                                Lab::row_menu(
+                                    ui,
+                                    &name,
+                                    row.layer,
+                                    row.has_children,
+                                    !visible,
+                                    solo,
+                                    selected,
+                                    &mut menu_action,
+                                )
+                            });
+                        }
                     }
                 }
             }
@@ -2224,6 +2506,11 @@ impl eframe::App for Lab {
 
         for (layer, mute) in flags {
             self.toggle_flag(layer, mute);
+        }
+
+        // メニューから出た指示は、行を回し終えてから1つだけ実行する
+        if let Some(action) = menu_action {
+            self.run_menu(action, comp_seconds, fps);
         }
 
         // Undo / Redo。1ドラッグ = 1 GestureId なので、掴んで動かした分がまとめて戻る
