@@ -48,7 +48,11 @@ mod static_preview;
 pub mod timeline_blitz;
 mod timeline_move_gesture;
 mod timeline_projection;
-mod timeline_rows;
+// Lab(examples/timeline_egui_lab.rs)から使うので pub。`timeline_blitz` と同じ扱い。
+pub mod timeline_rows;
+
+/// Lab/シェル共通のフォント fallback。記号が豆腐にならないようにする。
+pub use egui_fonts::install_symbol_fallback as install_egui_symbol_fallback;
 #[cfg(target_os = "macos")]
 mod timeline_skia_raster;
 mod timeline_trim_gesture;

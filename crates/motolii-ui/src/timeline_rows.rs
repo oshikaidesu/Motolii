@@ -27,12 +27,12 @@
 
 use std::collections::HashSet;
 
-use motolii_doc::{Document, LayerId, TrackItem};
+use motolii_doc::{DocParam, Document, LayerId, TrackItem};
 
 /// キーを持ちうるパラメータ。**effect のパラメータはこの版では扱わない**
 /// (必要になったら `RETURN`。enum に足すのは設計判断である)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum ParamRef {
+pub enum ParamRef {
     Position,
     Anchor,
     Scale,
@@ -41,7 +41,7 @@ pub(crate) enum ParamRef {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RowKind {
+pub enum RowKind {
     /// object の行。clip bar を持ち、キーがあれば要約を出す
     Object,
     /// あるパラメータの key 行。親 object の直下に並ぶ
@@ -50,46 +50,46 @@ pub(crate) enum RowKind {
 
 /// 画面に出る1行。**縦の index がそのままレーンである**(band を持たない)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct TimelineRow {
-    pub(crate) layer: LayerId,
-    pub(crate) kind: RowKind,
+pub struct TimelineRow {
+    pub layer: LayerId,
+    pub kind: RowKind,
     /// 0 = 最上位。Group の子は +1
-    pub(crate) depth: u16,
+    pub depth: u16,
     /// Group かどうかではなく「子を持つか」。空の Group は矢印を出さない
-    pub(crate) has_children: bool,
-    pub(crate) children_open: bool,
-    pub(crate) params_open: bool,
+    pub has_children: bool,
+    pub children_open: bool,
+    pub params_open: bool,
 }
 
 /// 開閉状態。Project session が持つ。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct TimelineFoldState {
+pub struct TimelineFoldState {
     children_open: HashSet<LayerId>,
     params_open: HashSet<LayerId>,
 }
 
 impl TimelineFoldState {
-    pub(crate) fn open_children(&mut self, layer: LayerId) {
+    pub fn open_children(&mut self, layer: LayerId) {
         self.children_open.insert(layer);
     }
 
-    pub(crate) fn close_children(&mut self, layer: LayerId) {
+    pub fn close_children(&mut self, layer: LayerId) {
         self.children_open.remove(&layer);
     }
 
-    pub(crate) fn open_params(&mut self, layer: LayerId) {
+    pub fn open_params(&mut self, layer: LayerId) {
         self.params_open.insert(layer);
     }
 
-    pub(crate) fn close_params(&mut self, layer: LayerId) {
+    pub fn close_params(&mut self, layer: LayerId) {
         self.params_open.remove(&layer);
     }
 
-    pub(crate) fn children_are_open(&self, layer: LayerId) -> bool {
+    pub fn children_are_open(&self, layer: LayerId) -> bool {
         self.children_open.contains(&layer)
     }
 
-    pub(crate) fn params_are_open(&self, layer: LayerId) -> bool {
+    pub fn params_are_open(&self, layer: LayerId) -> bool {
         self.params_open.contains(&layer)
     }
 }
@@ -105,9 +105,67 @@ impl TimelineFoldState {
 /// - 2つの軸は独立。畳んだ子の開閉状態は捨てず、開き直したら復元される
 ///   (`TimelineFoldState` が LayerId で持つので自然にそうなる)
 /// - Document に存在しない LayerId が開閉状態に残っていても無視する
-pub(crate) fn rows(document: &Document, fold: &TimelineFoldState) -> Vec<TimelineRow> {
-    let _ = (document, fold);
-    todo!("行モデルの実装。テストを通すこと。他の module を触らないこと")
+pub fn rows(document: &Document, fold: &TimelineFoldState) -> Vec<TimelineRow> {
+    let mut out = Vec::new();
+    for track in &document.tracks {
+        for item in &track.items {
+            push_item(item, 0, fold, &mut out);
+        }
+    }
+    out
+}
+
+/// 1件を、開閉状態にしたがって行へ広げる。
+///
+/// 順序は **object → 自分のキー行 → 子** である。パラメータは自分に属し、
+/// 子は階層なので、子より先に自分のパラメータが来る(モックと同じ)。
+fn push_item(item: &TrackItem, depth: u16, fold: &TimelineFoldState, out: &mut Vec<TimelineRow>) {
+    let layer = envelope(item).layer_id;
+    let children = children_of(item);
+    let children_open = fold.children_are_open(layer);
+    let params_open = fold.params_are_open(layer);
+
+    out.push(TimelineRow {
+        layer,
+        kind: RowKind::Object,
+        depth,
+        has_children: !children.is_empty(),
+        children_open,
+        params_open,
+    });
+
+    if params_open {
+        for param in keyed_params(item) {
+            out.push(TimelineRow {
+                layer,
+                kind: RowKind::Property(param),
+                depth: depth + 1,
+                has_children: false,
+                children_open: false,
+                params_open: true,
+            });
+        }
+    }
+
+    if children_open {
+        for child in children {
+            push_item(child, depth + 1, fold, out);
+        }
+    }
+}
+
+fn envelope(item: &TrackItem) -> &motolii_doc::ItemEnvelope {
+    match item {
+        TrackItem::Clip(clip) => &clip.envelope,
+        TrackItem::Group(group) => &group.envelope,
+    }
+}
+
+fn children_of(item: &TrackItem) -> &[TrackItem] {
+    match item {
+        TrackItem::Clip(_) => &[],
+        TrackItem::Group(group) => &group.children,
+    }
 }
 
 /// その object が、キーを持つパラメータを並び順で返す。
@@ -115,9 +173,26 @@ pub(crate) fn rows(document: &Document, fold: &TimelineFoldState) -> Vec<Timelin
 /// 並び順は `ParamRef` の宣言順(Position → Anchor → Scale → Rotation → Opacity)で固定する。
 /// **Document の内部順序に依存させない** — 行の並びが保存順で揺れると、
 /// 同じ画面が2回違う形で出る。
-pub(crate) fn keyed_params(item: &TrackItem) -> Vec<ParamRef> {
-    let _ = item;
-    todo!("キーを持つパラメータの列挙。テストを通すこと")
+pub fn keyed_params(item: &TrackItem) -> Vec<ParamRef> {
+    let env = envelope(item);
+    let transform = &env.transform;
+    [
+        (ParamRef::Position, &transform.position),
+        (ParamRef::Anchor, &transform.anchor),
+        (ParamRef::Scale, &transform.scale),
+        (ParamRef::Rotation, &transform.rotation),
+        (ParamRef::Opacity, &env.opacity),
+    ]
+    .into_iter()
+    .filter(|(_, param)| has_keys(param))
+    .map(|(name, _)| name)
+    .collect()
+}
+
+/// キーを1つでも持つか。**`Const` も、空の `Keyframes` も「持たない」**。
+/// 空のキー行を出さないため、件数まで見る。
+fn has_keys(param: &DocParam) -> bool {
+    matches!(param, DocParam::Keyframes(track) if !track.keys().is_empty())
 }
 
 #[cfg(test)]
