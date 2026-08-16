@@ -1,0 +1,524 @@
+/* Visual-review-only inspector: persistent property matrix, never a product control path. */
+
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; }
+
+body {
+  overflow: hidden;
+  background: var(--mock-role-surface-app, #141414);
+  color: var(--mock-role-text-primary, #f0f0f0);
+  color-scheme: dark;
+  font-family: var(--mock-role-font-interface, Inter, system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, textarea { font: inherit; }
+button { color: inherit; cursor: pointer; }
+
+.inspectorShell {
+  --fill-color: #d8c97f;
+  width: min(100%, 496px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--mock-role-border-default, #3b3b3b);
+  background: var(--mock-role-surface-panel, #1a1a1a);
+}
+
+.panelHeader {
+  height: var(--mock-role-panel-header-height, 29px);
+  flex: 0 0 var(--mock-role-panel-header-height, 29px);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 var(--mock-role-inset-control, 9px);
+  border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b);
+}
+
+.panelHeader::before {
+  width: 3px;
+  height: 13px;
+  background: var(--mock-role-way-inspector, #8eb086);
+  content: "";
+}
+
+.panelHeader strong { font-size: 11px; font-weight: 700; }
+.panelHeader span { margin-left: auto; color: var(--mock-role-text-muted, #929292); font-size: 9px; }
+
+.modeTabs {
+  height: var(--mock-role-tab-height, 28px);
+  flex: 0 0 var(--mock-role-tab-height, 28px);
+  display: flex;
+  border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b);
+}
+
+.modeTabs button {
+  flex: 1;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--mock-role-text-muted, #929292);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.modeTabs [aria-selected="true"] {
+  border-bottom-color: var(--mock-role-way-inspector, #8eb086);
+  background: var(--mock-role-surface-app, #141414);
+  color: var(--mock-role-text-primary, #f0f0f0);
+}
+
+.modePanel { min-height: 0; flex: 1; overflow: hidden; }
+.modePanel[hidden], .extensionPanel[hidden] { display: none; }
+
+.selectionSummary {
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b);
+  background: var(--mock-role-surface-raised, #222222);
+}
+
+.shapeGlyph {
+  width: 27px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 2px solid var(--mock-role-shape, #aaa0d0);
+  background: color-mix(in srgb, var(--fill-color) 62%, #111 38%);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--fill-color) 32%, #111 68%);
+}
+
+.selectionSummary div:not(.shapeGlyph):not(.layerStateControls) { display: grid; gap: 2px; min-width: 0; }
+.selectionSummary strong { font-size: 11px; }
+.selectionSummary span { overflow: hidden; color: var(--mock-role-text-muted, #929292); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.layerStateControls { display: flex; flex: 0 0 auto; gap: 3px; margin-left: auto; }
+.layerStateButton { width: 22px; height: 21px; padding: 0; border: 1px solid var(--mock-role-border-default, #3b3b3b); background: var(--mock-role-surface-app, #141414); color: var(--mock-role-text-muted, #929292); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 9px; font-weight: 800; }
+.layerStateButton:hover,
+.layerStateButton:focus-visible { border-color: var(--mock-role-border-strong, #686868); background: var(--mock-role-surface-panel, #1a1a1a); color: var(--mock-role-text-primary, #f0f0f0); outline: 0; }
+.layerStateButton[data-layer-state="mute"][aria-pressed="true"] { border-color: var(--mock-role-text-muted, #929292); background: color-mix(in srgb, var(--mock-role-text-muted, #929292) 18%, var(--mock-role-surface-app, #141414)); color: var(--mock-role-text-primary, #f0f0f0); }
+.layerStateButton[data-layer-state="solo"][aria-pressed="true"] { border-color: var(--mock-role-action-active, #d8b574); background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 18%, var(--mock-role-surface-app, #141414)); color: var(--mock-role-action-active, #d8b574); }
+.selectionSummary.layerMuted .shapeGlyph { opacity: .42; }
+.selectionSummary.layerMuted strong,
+.selectionSummary.layerMuted span { color: var(--mock-role-text-muted, #929292); }
+
+.tableScroller { height: calc(100% - 46px); overflow: auto; }
+
+.propertyTable {
+  min-width: 390px;
+  padding-bottom: 4px;
+}
+
+.columnHeader,
+.propertyRow {
+  display: grid;
+  grid-template-columns: minmax(132px, 1fr) repeat(3, 64px) 26px;
+  align-items: stretch;
+}
+
+.columnHeader {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  height: 21px;
+  border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b);
+  background: var(--mock-role-surface-app, #141414);
+  color: var(--mock-role-text-muted, #929292);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-align: center;
+}
+
+.columnHeader span { display: grid; place-items: center; }
+.columnHeader span:first-child { padding-left: 11px; text-align: left; place-items: center start; }
+.columnHeader span:last-child { color: var(--mock-role-action-active, #d8b574); }
+
+.tableSection { border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b); }
+.tableSection h2 {
+  height: 23px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mock-role-border-default, #3b3b3b) 68%, transparent);
+  background: var(--mock-role-surface-app, #141414);
+  color: var(--mock-role-text-secondary, #c6c6c6);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+
+.tableSection h2 span {
+  margin-right: 10px;
+  color: var(--mock-role-text-muted, #929292);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.sectionToggle {
+  height: 100%;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+}
+
+.sectionToggle i { width: 7px; color: var(--property-color, var(--mock-role-text-muted, #929292)); font-size: 11px; font-style: normal; line-height: 1; }
+.sectionToggle:hover { background: color-mix(in srgb, var(--mock-role-way-inspector, #8eb086) 10%, transparent); color: var(--mock-role-text-primary, #f0f0f0); }
+.tableSection.collapsed { border-bottom-color: var(--mock-role-border-strong, #686868); }
+.tableSection.collapsed .propertyRow,
+.tableSection.collapsed .advancedToggle { display: none; }
+
+.dragHandle { width: 13px; display: grid; place-items: center; color: var(--mock-role-text-muted, #929292); cursor: grab; font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 11px; letter-spacing: -2px; touch-action: none; }
+.dragHandle:active { cursor: grabbing; }
+.effectStackToolbar { min-height: 22px; display: flex; align-items: center; gap: 7px; padding: 0 8px; border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b); background: color-mix(in srgb, var(--mock-role-surface-app, #141414) 88%, #000); color: var(--mock-role-text-muted, #929292); font-size: 8px; }
+.effectStackToolbar strong { color: var(--mock-role-text-secondary, #c6c6c6); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; letter-spacing: .1em; }
+.effectStackToolbar > span { overflow: hidden; min-width: 0; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.effectStackToolbar input { width: 58px; height: 17px; padding: 0 5px; border: 1px solid var(--mock-role-border-default, #3b3b3b); outline: 0; background: var(--mock-role-surface-panel, #1a1a1a); color: var(--mock-role-text-primary, #f0f0f0); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; }
+.effectStackToolbar input:focus { width: 100px; border-color: var(--mock-role-way-inspector, #8eb086); }
+.effectStackToolbar input::placeholder { color: var(--mock-role-text-muted, #929292); }
+.effectStackToolbar button { height: 17px; padding: 0 5px; border: 1px solid var(--mock-role-border-default, #3b3b3b); background: transparent; color: var(--mock-role-text-secondary, #c6c6c6); font-size: 8px; font-weight: 700; }
+.effectStackToolbar button:not(:disabled):hover { border-color: var(--mock-role-action-active, #d8b574); color: var(--mock-role-text-primary, #f0f0f0); }
+.effectStackToolbar button:disabled { color: var(--mock-role-text-muted, #929292); opacity: .45; }
+kbd { margin-left: 4px; color: var(--mock-role-text-muted, #929292); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 7px; font-weight: 600; }
+.effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 10%, var(--mock-role-surface-app, #141414)); }
+.effectSection .dragHandle,
+.effectSection .sectionToggle i { color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); }
+.effectSelect { width: 13px; height: 17px; display: grid; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; color: var(--mock-role-text-muted, #929292); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 12px; }
+.effectSelect:hover,
+.effectSelect:focus-visible { color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); outline: 0; }
+.effectSelect[aria-pressed="true"] { color: var(--mock-role-action-active, #d8b574); }
+.effectSection.selectedEffect .effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)), inset 0 -1px 0 var(--mock-role-action-active, #d8b574), inset 0 1px 0 color-mix(in srgb, var(--mock-role-action-active, #d8b574) 54%, transparent); }
+.effectBadge { width: 17px; height: 13px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 18%, transparent); color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 7px; font-weight: 800; letter-spacing: 0; }
+.effectRename { width: 16px; height: 16px; display: grid; flex: 0 0 auto; place-items: center; margin-right: 3px; padding: 0; border: 0; background: transparent; color: var(--mock-role-text-muted, #929292); font-size: 10px; opacity: 0; }
+.effectHeader:hover .effectRename,
+.effectHeader:focus-within .effectRename { opacity: 1; }
+.effectRename:hover,
+.effectRename:focus-visible { color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); outline: 0; }
+.inlineRename { width: 100%; min-width: 0; height: 17px; padding: 0 3px; border: 1px solid var(--mock-role-action-active, #d8b574); outline: 0; background: var(--mock-role-surface-raised, #222222); color: var(--mock-role-text-primary, #f0f0f0); font: inherit; letter-spacing: inherit; text-transform: none; }
+.effectTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.effectSource { overflow: hidden; min-width: 0; margin-right: 3px; color: var(--mock-role-text-muted, #929292); font-size: 8px; font-weight: 500; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
+.effectSource b { color: var(--mock-role-text-secondary, #c6c6c6); font-weight: 650; }
+.effectEnable { min-width: 25px; height: 15px; margin-right: 7px; padding: 0 4px; border: 1px solid color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 72%, transparent); background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 16%, transparent); color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 7px; font-weight: 800; letter-spacing: .04em; }
+.effectEnable:hover,
+.effectEnable:focus-visible { background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 26%, transparent); outline: 0; }
+.effectEnable[aria-pressed="false"] { border-color: var(--mock-role-border-default, #3b3b3b); background: transparent; color: var(--mock-role-text-muted, #929292); }
+.effectSection.effectDisabled > .propertyRow,
+.effectSection.effectDisabled > .advancedToggle { opacity: .48; }
+.effectSection.effectDisabled .effectBadge { border-color: var(--mock-role-border-default, #3b3b3b); background: transparent; color: var(--mock-role-text-muted, #929292); }
+.effectSection.contextTarget .effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)), inset 0 0 0 1px color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 68%, transparent); }
+.effectSection.dropBefore .effectHeader,
+.effectSection.dropAfter .effectHeader { position: relative; }
+.effectSection.dropBefore .effectHeader::before,
+.effectSection.dropAfter .effectHeader::after { position: absolute; z-index: 4; right: 0; left: 0; height: 3px; background: var(--mock-role-action-active, #d8b574); box-shadow: 0 0 7px color-mix(in srgb, var(--mock-role-action-active, #d8b574) 62%, transparent); content: ""; }
+.effectSection.dropBefore .effectHeader::before { top: -2px; }
+.effectSection.dropAfter .effectHeader::after { bottom: -2px; }
+.effectGroup { margin: 3px 5px; border: 1px solid color-mix(in srgb, var(--mock-role-border-strong, #686868) 80%, transparent); background: color-mix(in srgb, var(--mock-role-surface-app, #141414) 78%, #000); }
+.effectGroupHeader { min-height: 22px; display: flex; align-items: center; margin: 0; border-bottom: 1px solid color-mix(in srgb, var(--mock-role-border-default, #3b3b3b) 65%, transparent); background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 8%, var(--mock-role-surface-app, #141414)); }
+.effectGroupHeader::before { width: 3px; align-self: stretch; background: var(--mock-role-action-active, #d8b574); content: ""; }
+.effectGroupToggle { height: 22px; min-width: 0; flex: 1; display: flex; align-items: center; gap: 5px; padding: 0 7px; border: 0; background: transparent; color: var(--mock-role-text-secondary, #c6c6c6); font-size: 8px; font-weight: 800; letter-spacing: .08em; text-align: left; }
+.effectGroupToggle i { color: var(--mock-role-action-active, #d8b574); font-size: 11px; font-style: normal; }
+.effectGroupToggle small { margin-left: auto; color: var(--mock-role-text-muted, #929292); font-size: 8px; font-weight: 500; letter-spacing: 0; }
+.effectGroupToggle:hover { background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 12%, transparent); }
+.effectGroupRename,
+.effectGroupUngroup,
+.effectGroupEnable { height: 16px; margin-right: 4px; padding: 0 5px; border: 1px solid var(--mock-role-border-default, #3b3b3b); background: transparent; color: var(--mock-role-text-muted, #929292); font-size: 8px; }
+.effectGroupRename:hover,
+.effectGroupUngroup:hover,
+.effectGroupEnable:hover { border-color: var(--mock-role-action-active, #d8b574); color: var(--mock-role-text-primary, #f0f0f0); }
+.effectGroupEnable[aria-pressed="true"] { border-color: var(--mock-role-action-active, #d8b574); color: var(--mock-role-action-active, #d8b574); }
+.effectGroupBody { padding: 0 3px 3px; }
+.effectGroupBody > .effectSection { margin: 0; }
+.effectGroup.collapsed .effectGroupBody { display: none; }
+.effectGroup.effectGroupDisabled .effectGroupBody { opacity: .48; }
+.effectSection.filterHidden,
+.effectGroup.filterHidden { display: none; }
+.effectSection.filterMatch .effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)), inset 0 0 0 1px color-mix(in srgb, var(--mock-role-way-inspector, #8eb086) 52%, transparent); }
+
+.advancedToggle {
+  position: relative;
+  width: 100%;
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px 0 19px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mock-role-border-default, #3b3b3b) 64%, transparent);
+  background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 5%, var(--mock-role-surface-app, #141414));
+  color: var(--mock-role-text-muted, #929292);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-align: left;
+}
+
+.advancedToggle::before { position: absolute; top: 0; bottom: 0; left: 8px; width: 1px; background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 48%, transparent); content: ""; }
+.advancedToggle::after { position: absolute; top: 50%; left: 8px; width: 8px; height: 1px; background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 48%, transparent); content: ""; }
+.advancedToggle i { width: 7px; color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); font-size: 11px; font-style: normal; line-height: 1; }
+.advancedToggle span { margin-left: auto; color: var(--mock-role-text-muted, #929292); font-size: 8px; font-weight: 500; letter-spacing: 0; }
+.advancedToggle:hover { background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 12%, var(--mock-role-surface-app, #141414)); color: var(--mock-role-text-primary, #f0f0f0); }
+.effectSection.advancedCollapsed .propertyRow[data-advanced-row] { display: none; }
+.effectSection > .propertyRow:not([data-advanced-row])::before { left: 8px; }
+.effectSection > .propertyRow:not([data-advanced-row]) .propertyName { padding-left: 19px; }
+.effectSection > .propertyRow[data-advanced-row]::before { left: 16px; }
+.effectSection > .propertyRow[data-advanced-row] .propertyName { padding-left: 27px; }
+
+.propertyRow {
+  --property-color: var(--mock-role-text-secondary, #c6c6c6);
+  position: relative;
+  min-height: 25px;
+  border-bottom: 1px solid color-mix(in srgb, var(--mock-role-border-default, #3b3b3b) 64%, transparent);
+  background: var(--mock-role-surface-panel, #1a1a1a);
+}
+
+.propertyRow:last-child { border-bottom: 0; }
+.propertyRow::before { position: absolute; z-index: 1; top: 0; bottom: 0; left: 0; width: 3px; background: var(--property-color); content: ""; }
+.propertyRow.recent { background: color-mix(in srgb, var(--property-color) 9%, var(--mock-role-surface-panel, #1a1a1a)); }
+.propertyRow.recent::before { width: 4px; }
+.propertyRow.contextTarget { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--property-color) 68%, transparent); }
+
+/* FX行では値型を帯・記号・操作時の輪郭へ渡し、名称依存の色分けを避ける。 */
+.effectSection .propertyRow[data-param-kind="scalar"] { --property-color: var(--mock-role-data, #78b5b0); }
+.effectSection .propertyRow[data-param-kind="vector"] { --property-color: var(--mock-role-way-inspector, #8eb086); }
+.effectSection .propertyRow[data-param-kind="angle"] { --property-color: var(--mock-role-action-active, #d8b574); }
+.effectSection .propertyRow[data-param-kind="integer"] { --property-color: var(--mock-role-shape, #aaa0d0); }
+.effectSection .propertyRow[data-param-kind="boolean"] { --property-color: var(--mock-role-way-inspector, #8eb086); }
+.effectSection .propertyRow[data-param-kind="choice"] { --property-color: var(--mock-role-action-active, #d8b574); }
+
+.propertyName {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px 0 11px;
+  border-right: 1px solid color-mix(in srgb, var(--mock-role-border-default, #3b3b3b) 60%, transparent);
+}
+
+.propertyName i {
+  width: 15px;
+  height: 15px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--property-color) 66%, #242424 34%);
+  color: var(--property-color);
+  font-family: var(--mock-role-font-technical, ui-monospace, monospace);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.parameterKind.vector {
+  background:
+    linear-gradient(var(--property-color) 0 0) 3px 3px / 3px 3px no-repeat,
+    linear-gradient(var(--property-color) 0 0) center 3px / 3px 3px no-repeat,
+    linear-gradient(var(--property-color) 0 0) right 3px top 3px / 3px 3px no-repeat,
+    linear-gradient(var(--property-color) 0 0) 3px bottom 3px / 3px 3px no-repeat,
+    linear-gradient(var(--property-color) 0 0) center bottom 3px / 3px 3px no-repeat,
+    linear-gradient(var(--property-color) 0 0) right 3px bottom 3px / 3px 3px no-repeat;
+}
+
+.parameterKind.scalar::before { width: 5px; height: 5px; border-radius: 50%; background: var(--property-color); content: ""; }
+.parameterKind.color { background: color-mix(in srgb, var(--fill-color) 68%, #222 32%); }
+.parameterKind.integer::before { color: var(--property-color); content: "#"; font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 10px; }
+.parameterKind.angle::before { width: 7px; height: 7px; border: 1px solid var(--property-color); border-top-color: transparent; border-radius: 50%; content: ""; }
+.parameterKind.boolean::before { width: 8px; height: 4px; border: 1px solid var(--property-color); border-radius: 5px; background: linear-gradient(90deg, var(--property-color) 0 40%, transparent 40%); content: ""; }
+.parameterKind.choice::before { color: var(--property-color); content: "≡"; font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 11px; }
+
+/* Hostが意味を持つ値だけは、型ではなく役割を固定形で示す。 */
+.parameterKind.hostIcon { position: relative; background: none; }
+.parameterKind.hostIcon.hostPosition { background: linear-gradient(var(--property-color) 0 0) center / 1px 9px no-repeat, linear-gradient(var(--property-color) 0 0) center / 9px 1px no-repeat; }
+.parameterKind.hostIcon.hostPosition::before { width: 3px; height: 3px; border: 1px solid var(--property-color); border-radius: 50%; background: var(--mock-role-surface-panel, #1a1a1a); content: ""; }
+.parameterKind.hostIcon.hostRotation::before { width: 8px; height: 8px; border: 1px solid var(--property-color); border-right-color: transparent; border-radius: 50%; content: ""; }
+.parameterKind.hostIcon.hostRotation::after { position: absolute; top: 1px; right: 1px; width: 0; height: 0; border: 3px solid transparent; border-bottom: 0; border-left-color: var(--property-color); content: ""; transform: rotate(-18deg); }
+.parameterKind.hostIcon.hostScale::before { position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-top: 1px solid var(--property-color); border-right: 1px solid var(--property-color); content: ""; }
+.parameterKind.hostIcon.hostScale::after { position: absolute; bottom: 2px; left: 2px; width: 5px; height: 5px; border-bottom: 1px solid var(--property-color); border-left: 1px solid var(--property-color); content: ""; }
+.parameterKind.hostIcon.hostFill { background: color-mix(in srgb, var(--fill-color) 68%, #222 32%); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--fill-color) 32%, #111 68%); }
+.parameterKind.hostIcon.hostOpacity { border-radius: 50%; background: linear-gradient(90deg, var(--property-color) 0 50%, transparent 50%); }
+.parameterKind.hostIcon.hostOpacity::before { width: 100%; height: 100%; border: 0; border-radius: inherit; background: transparent; content: ""; }
+
+.propertyName span {
+  overflow: hidden;
+  color: var(--mock-role-text-primary, #f0f0f0);
+  font-size: 10px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.propertyName small { margin-left: auto; color: var(--mock-role-text-muted, #929292); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; font-weight: 500; }
+.propertyName.effectName span { font-size: 9px; }
+
+.valueCell {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid color-mix(in srgb, var(--mock-role-border-default, #3b3b3b) 58%, transparent);
+  background: color-mix(in srgb, var(--mock-role-surface-app, #141414) 74%, transparent);
+  cursor: ew-resize;
+}
+
+.valueCell::before {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 50%;
+  width: 1px;
+  background: transparent;
+  content: "";
+}
+
+.valueCell:hover { background: color-mix(in srgb, var(--property-color) 9%, var(--mock-role-surface-app, #141414)); }
+.valueCell:focus-within,
+.valueCell.dragging { box-shadow: inset 0 0 0 1px var(--property-color); }
+.valueCell.dragging::before { background: var(--property-color); }
+
+.valueCell input {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0 6px 0 17px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--mock-role-text-primary, #f0f0f0);
+  font-family: var(--mock-role-font-technical, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 650;
+  text-align: right;
+  pointer-events: none;
+}
+
+.valueCell > b { position: absolute; z-index: 1; left: 5px; color: var(--property-color); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 7px; line-height: 1; }
+.valueCell.editing { cursor: text; }
+.valueCell.editing input { pointer-events: auto; }
+.valueCell.unit input { padding-right: 15px; }
+.valueCell.unit i { position: absolute; right: 5px; color: var(--mock-role-text-muted, #929292); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; font-style: normal; }
+.valueCell.scalar { grid-column: span 3; }
+.valueCell.scalar input { max-width: 88px; }
+.seedValue input { max-width: none; padding-left: 6px; }
+.seedValue button { height: 19px; margin-right: 4px; padding: 0 6px; border: 1px solid var(--mock-role-border-strong, #686868); background: var(--mock-role-surface-raised, #222222); color: var(--mock-role-text-secondary, #c6c6c6); font-size: 8px; font-weight: 700; }
+.seedValue button:hover { border-color: var(--property-color); color: var(--mock-role-text-primary, #f0f0f0); }
+
+.emptyComponent,
+.choiceControl,
+.toggleControl {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid color-mix(in srgb, var(--mock-role-border-default, #3b3b3b) 58%, transparent);
+  background: color-mix(in srgb, var(--mock-role-surface-app, #141414) 74%, transparent);
+  color: var(--mock-role-text-secondary, #c6c6c6);
+  font-size: 9px;
+}
+
+.emptyComponent { justify-content: center; color: var(--mock-role-text-muted, #929292); }
+.choiceControl,
+.toggleControl { grid-column: span 3; justify-content: flex-end; padding: 0 7px; border-top: 0; border-bottom: 0; border-left: 0; text-align: right; }
+.choiceControl i { margin-left: 5px; color: var(--property-color); font-size: 10px; font-style: normal; }
+.choiceControl:hover,
+.toggleControl:hover { background: color-mix(in srgb, var(--property-color) 9%, var(--mock-role-surface-app, #141414)); }
+.toggleControl { color: var(--mock-role-text-muted, #929292); }
+.toggleControl[aria-pressed="true"] { color: var(--mock-role-text-primary, #f0f0f0); }
+
+.keyButton,
+.keyPlaceholder {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--mock-role-border-default, #3b3b3b) 60%, transparent);
+  background: transparent;
+  color: var(--mock-role-text-muted, #929292);
+  font-family: var(--mock-role-font-technical, ui-monospace, monospace);
+  font-size: 10px;
+}
+
+.keyButton:hover { background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 12%, transparent); }
+.keyButton.animated { background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 12%, transparent); color: var(--mock-role-action-active, #d8b574); }
+.keyButton.current { background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 20%, transparent); color: var(--mock-role-action-active, #d8b574); }
+.keyPlaceholder { color: var(--mock-role-text-muted, #929292); font-size: 9px; }
+
+/* FXでは行全体を染めず、キー列だけを値型の視覚的な索引にする。 */
+.effectSection .keyButton,
+.effectSection .keyPlaceholder { background: color-mix(in srgb, var(--property-color) 12%, transparent); }
+.effectSection .keyButton:hover { background: color-mix(in srgb, var(--property-color) 20%, transparent); }
+.effectSection .keyButton.animated { background: color-mix(in srgb, var(--property-color) 18%, transparent); }
+.effectSection .keyButton.current { background: color-mix(in srgb, var(--property-color) 24%, transparent); }
+
+.parameterContextMenu {
+  position: fixed;
+  z-index: 8;
+  width: 148px;
+  padding: 3px;
+  border: 1px solid var(--mock-role-border-strong, #686868);
+  background: var(--mock-role-surface-raised, #222222);
+  box-shadow: 0 8px 20px #000c;
+}
+
+.parameterContextMenu[hidden] { display: none; }
+.parameterContextMenu strong { display: block; overflow: hidden; padding: 2px 6px 4px; color: var(--mock-role-text-muted, #929292); font-size: 8px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.parameterContextMenu button { width: 100%; height: 22px; padding: 0 6px; border: 0; background: transparent; color: var(--mock-role-text-primary, #f0f0f0); font-size: 9px; text-align: left; }
+.parameterContextMenu button:hover,
+.parameterContextMenu button:focus-visible { background: color-mix(in srgb, var(--mock-role-way-inspector, #8eb086) 18%, transparent); outline: 0; }
+.effectContextMenu { width: 194px; }
+.effectContextMenu button { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.effectContextMenu button kbd { margin-left: auto; white-space: nowrap; }
+
+.fillValue {
+  grid-column: span 3;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-right: 1px solid color-mix(in srgb, var(--mock-role-border-default, #3b3b3b) 58%, transparent);
+  background: color-mix(in srgb, var(--mock-role-surface-app, #141414) 74%, transparent);
+}
+
+.fillValue input[type="color"] { width: 26px; height: 19px; flex: 0 0 auto; padding: 2px; border: 1px solid var(--mock-role-border-strong, #686868); background: var(--mock-role-surface-app, #141414); }
+.fillValue code { width: 60px; color: var(--mock-role-text-secondary, #c6c6c6); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; }
+.fillValue > span { margin-left: auto; color: var(--mock-role-text-muted, #929292); font-size: 8px; }
+.recentColors { display: flex; gap: 3px; }
+.recentColors button { width: 16px; height: 16px; padding: 0; border: 1px solid var(--mock-role-border-strong, #686868); background: var(--swatch-color); }
+.recentColors button:first-child { outline: 1px solid var(--mock-role-text-primary, #f0f0f0); outline-offset: 1px; }
+
+.extensionTabs { display: flex; gap: 5px; padding: 7px; border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b); }
+.extensionTabs button { padding: 5px 9px; border: 1px solid var(--mock-role-border-default, #3b3b3b); background: transparent; color: var(--mock-role-text-secondary, #c6c6c6); font-size: 9px; }
+.extensionTabs [aria-selected="true"] { border-color: var(--mock-role-way-inspector, #8eb086); background: color-mix(in srgb, var(--mock-role-way-inspector, #8eb086) 16%, transparent); color: var(--mock-role-text-primary, #f0f0f0); }
+.extensionPanel { padding: 12px; }
+.extensionPanel h1 { margin: 0; font-size: 14px; font-weight: 600; }
+.extensionPanel p { margin: 3px 0 0; color: var(--mock-role-text-muted, #929292); font-size: 10px; }
+
+#tag-form { margin-top: 14px; }
+#tag-input, .notesPanel textarea { width: 100%; border: 1px solid var(--mock-role-border-strong, #686868); border-radius: var(--mock-role-corner-control, 2px); background: var(--mock-role-surface-app, #141414); color: var(--mock-role-text-primary, #f0f0f0); outline-color: var(--mock-role-way-inspector, #8eb086); }
+#tag-input { height: var(--mock-role-control-height, 25px); padding: 0 8px; font-size: 11px; }
+#tag-input::placeholder, .notesPanel textarea::placeholder { color: var(--mock-role-text-muted, #929292); }
+.tagList { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.tagList button { border: 1px solid var(--mock-role-border-default, #3b3b3b); border-radius: 9px; background: var(--mock-role-surface-raised, #222222); color: var(--mock-role-text-secondary, #c6c6c6); padding: 4px 8px; font-size: 9px; }
+.notesPanel textarea { min-height: 112px; margin-top: 14px; padding: 8px; resize: vertical; font-size: 10px; }
+
+footer { min-height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 9px; border-top: 1px solid var(--mock-role-border-default, #3b3b3b); background: var(--mock-role-surface-app, #141414); color: var(--mock-role-text-muted, #929292); font-size: 9px; }
+.statusDot { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: var(--mock-role-way-inspector, #8eb086); }
+
+@media (max-width: 390px) {
+  .tableScroller { overflow-x: auto; }
+}

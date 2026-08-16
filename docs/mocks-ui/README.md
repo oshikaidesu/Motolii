@@ -4,6 +4,25 @@
 
 台帳はRust公開API、永続形式、製品component名、JSX props、製品token値を定めない。HTMLのDOM境界をegui境界へそのまま写す指示でもない。具体的な色、px、radiusは`U0e-2`の比較材料に留め、`G0-6H`の人間審判より前に`U0e-3`の製品値へ昇格させない。
 
+## Inspector library static review leaf (2026-08-16)
+
+[`public/inspector-library.html`](public/inspector-library.html) と
+[`public/inspector-library.css`](public/inspector-library.css) は、Blitz移植前にInspectorの
+情報階層と日常操作をブラウザでレビューするための独立HTML/CSS leafである。Viteでは
+`/inspector-library.html` で開く。React source asset、製品Preview、Document writerではない。
+
+- Effectの**表示名**は作者が変更できるinstance label、右側に残る**種別名**は適用した
+  Effect/Pluginの識別である。表示名の編集は種別、parameter、評価順を変えない。
+- Effect groupはInspector内の連続したEffect表示を畳むためのpresentation groupである。
+  Layer/CompositionのGroup、子合成後に一回適用するDocumentのGroup effect、Precompose、
+  評価順の新しい意味を定義しない。groupのON/OFFもこのレビューleafでは局所的なbypass表示だけである。
+- Rename、Copy/Paste、Duplicate、Delete、選択、filter、shortcutは、各操作の発見性と
+  feedbackを比較する局所状態である。Document、D2、Undo、保存、Preview/Export、plugin lifecycleへ
+  書き込まない。数値欄の通常のCmd/Ctrl+C/Vは奪わない。
+- Blitzへの移管時は、全情報の一覧性、effect instance labelとtypeの併記、連続選択だけを
+  group候補にすること、group境界をまたぐ並べ替えを拒否すること、右クリックとheader focusの
+  shortcut入口を保つ。semantic write routeは別のclosed contractでDocument/D2へ接続する。
+
 ## 現在の所有境界
 
 React/Viteへの移行は実行基盤として完了しているが、全surfaceのReact-native化は完了していない。`src/legacy/LegacyHostBoundaryScreen.jsx`は、legacy `m3-vism-host-boundary.html`をVite raw importし、`html-react-parser`でReact treeへ変換する移行bridgeである。元CSS、class、ID、子DOMと、リポジトリ同梱の固定scriptを維持しながら、Browser、Color Book、Stage、Inspector、Timeline、Recovery、Settingsをnamed wrapperへ昇格する。
