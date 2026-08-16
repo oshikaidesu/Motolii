@@ -68,9 +68,15 @@ fn main() -> eframe::Result<()> {
 }
 
 /// 掴んでいるもの。**何を掴んだかで、出す command が変わる**
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum Grab {
-    Move { layer: LayerId, grab_offset: f32 },
+    /// **Group を掴んだら子も同じ差分で動く。**`targets` は動かす clip と、
+    /// 掴んだ瞬間の開始時刻(秒)。Group 自身は clip ではないので入らない
+    Move {
+        layer: LayerId,
+        grab_at: f32,
+        targets: Vec<(LayerId, f32, f32)>,
+    },
     TrimIn { layer: LayerId },
     TrimOut { layer: LayerId },
 }
@@ -125,36 +131,75 @@ impl Lab {
     /// **prepare_* が `Ok(None)` を返したら、それは「変化なし」であって失敗ではない。**
     /// 落ちた編集は status に出す。通ったことにしない。
     fn commit_drag(&mut self, at_seconds: f32) {
-        let Some((grab, gesture)) = self.drag else {
+        let Some((grab, gesture)) = self.drag.clone() else {
             return;
         };
         let Some(time) = seconds_to_time(at_seconds) else {
             return;
         };
-        let prepared = match grab {
-            Grab::Move { layer, grab_offset } => {
-                let Some(start) = seconds_to_time((at_seconds - grab_offset).max(0.0)) else {
+
+        // 掴んだものごとに、出す command の並びを作る。
+        // **Move だけが複数になりうる**(Group は子をまとめて動かす)
+        let mut prepared = Vec::new();
+        match &grab {
+            Grab::Move {
+                grab_at, targets, ..
+            } => {
+                if targets.is_empty() {
+                    self.status = "nothing to move (empty group)".to_owned();
                     return;
-                };
-                self.writer.prepare_set_clip_start(layer, start)
-            }
-            Grab::TrimIn { layer } => self.writer.prepare_trim_clip_in(layer, time),
-            Grab::TrimOut { layer } => self.writer.prepare_trim_clip_out(layer, time),
-        };
-        match prepared {
-            Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
-                Ok(()) => {
-                    self.document = self.writer.snapshot();
-                    self.status = format!(
-                        "{} @ {at_seconds:.2}s   undo {}",
-                        self.name(grab_layer(grab)),
-                        self.writer.undo_len()
-                    );
                 }
-                Err(error) => self.status = format!("edit rejected: {error}"),
-            },
-            Ok(None) => {}
-            Err(error) => self.status = format!("edit rejected: {error}"),
+                // **塊のまま動く。** 誰か1人でも端を越えるなら、全員そこで止まる。
+                // 越えた者だけ置いていくと、Group の中の相対位置が壊れる
+                let comp = self.document.composition.duration.as_seconds_f64() as f32;
+                let floor = targets
+                    .iter()
+                    .map(|(_, start, _)| *start)
+                    .fold(f32::INFINITY, f32::min);
+                let headroom = targets
+                    .iter()
+                    .map(|(_, _, end)| comp - *end)
+                    .fold(f32::INFINITY, f32::min);
+                let delta = (at_seconds - grab_at).clamp(-floor, headroom.max(0.0));
+                for (layer, start, _) in targets {
+                    let Some(t) = seconds_to_time((start + delta).max(0.0)) else {
+                        return;
+                    };
+                    prepared.push((*layer, self.writer.prepare_set_clip_start(*layer, t)));
+                }
+            }
+            Grab::TrimIn { layer } => {
+                prepared.push((*layer, self.writer.prepare_trim_clip_in(*layer, time)))
+            }
+            Grab::TrimOut { layer } => {
+                prepared.push((*layer, self.writer.prepare_trim_clip_out(*layer, time)))
+            }
+        }
+
+        let mut applied = 0usize;
+        for (layer, result) in prepared {
+            match result {
+                Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
+                    Ok(()) => applied += 1,
+                    Err(error) => {
+                        self.status = format!("{} rejected: {error}", self.name(layer));
+                        return;
+                    }
+                },
+                Ok(None) => {}
+                Err(error) => {
+                    self.status = format!("{} rejected: {error}", self.name(layer));
+                    return;
+                }
+            }
+        }
+        if applied > 0 {
+            self.document = self.writer.snapshot();
+            self.status = format!(
+                "{} @ {at_seconds:.2}s  ({applied} clip)  undo {}",
+                self.name(grab_layer(&grab)),
+                self.writer.undo_len()
+            );
         }
     }
 
@@ -377,6 +422,8 @@ impl eframe::App for Lab {
                 Stroke::new(1.0, RULE),
             );
 
+            // **時間面の描画は track の中だけ。** 左列へはみ出すと M/S を覆う
+            let p = p.with_clip_rect(track);
             match row.kind {
                 RowKind::Object => {
                     if let Some((start, end)) = clip_span(&self.document, row.layer) {
@@ -418,7 +465,8 @@ impl eframe::App for Lab {
                                 } else {
                                     Grab::Move {
                                         layer: row.layer,
-                                        grab_offset: (pos.x - bar.left()) / track_w * 16.0,
+                                        grab_at: (pos.x - track_left) / track_w * 16.0,
+                                        targets: movable_clips(&self.document, row.layer),
                                     }
                                 };
                                 let gesture = self.writer.begin_gesture();
@@ -517,10 +565,39 @@ impl eframe::App for Lab {
     }
 }
 
-fn grab_layer(grab: Grab) -> LayerId {
+fn grab_layer(grab: &Grab) -> LayerId {
     match grab {
-        Grab::Move { layer, .. } | Grab::TrimIn { layer } | Grab::TrimOut { layer } => layer,
+        Grab::Move { layer, .. } | Grab::TrimIn { layer } | Grab::TrimOut { layer } => *layer,
     }
+}
+
+/// その layer を動かしたとき、実際に開始時刻が変わる clip を集める。
+///
+/// **Group 自身は clip ではないので、動くのは子孫の clip である。**
+/// モックの「Group barを動かすと子barも同じ差分で追従する」をここで満たす。
+fn movable_clips(document: &Document, layer: LayerId) -> Vec<(LayerId, f32, f32)> {
+    fn collect(item: &TrackItem, out: &mut Vec<(LayerId, f32, f32)>) {
+        match item {
+            TrackItem::Clip(clip) => {
+                let start = clip.start.as_seconds_f64() as f32;
+                out.push((
+                    clip.envelope.layer_id,
+                    start,
+                    start + clip.duration.as_seconds_f64() as f32,
+                ));
+            }
+            TrackItem::Group(group) => {
+                for child in &group.children {
+                    collect(child, out);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    if let Some(item) = find_item(document, layer) {
+        collect(item, &mut out);
+    }
+    out
 }
 
 fn seconds_to_time(seconds: f32) -> Option<RationalTime> {
@@ -795,5 +872,50 @@ mod tests {
         writer.undo().expect("undo");
         let restored = clip_span(&writer.snapshot(), layer).expect("span");
         assert!((restored.0 - before.0).abs() < 1e-3, "1ドラッグ = 1 Undo");
+    }
+
+    /// **Group を掴むと、子が同じ差分で動く。** モックで決めた挙動。
+    #[test]
+    fn dragging_a_group_moves_every_child_by_the_same_delta() {
+        let (doc, names) = fixture();
+        let catalog =
+            Arc::new(motolii_plugin::reference::reference_catalog().expect("reference catalog"));
+        let mut writer = DocumentWriter::new(doc, catalog).expect("writer");
+        let group = layer_named(&names, "Title scene");
+
+        let targets = movable_clips(&writer.snapshot(), group);
+        assert_eq!(targets.len(), 3, "Group の子 clip は3枚");
+
+        // Shared right が 15.2s で終わり、composition は 16s。
+        // **塊で動ける余地は 0.8s しかない** — それを超える delta は頭打ちになる
+        let delta = 0.5_f32;
+        let gesture = writer.begin_gesture();
+        for (layer, start, _) in &targets {
+            let command = writer
+                .prepare_set_clip_start(*layer, seconds_to_time(start + delta).expect("time"))
+                .expect("prepare")
+                .expect("command");
+            writer.apply_command(gesture, command).expect("apply");
+        }
+
+        let after = writer.snapshot();
+        for (layer, start, _) in &targets {
+            let moved = clip_span(&after, *layer).expect("span").0;
+            assert!(
+                (moved - (start + delta)).abs() < 1e-3,
+                "子は同じ差分で動く: {moved} vs {}",
+                start + delta
+            );
+        }
+
+        // Group 行の bar は子を包むので、まとめて動いたように見える
+        let group_span = clip_span(&after, group).expect("group span");
+        assert!((group_span.0 - (0.6 + delta)).abs() < 1e-3);
+
+        writer.undo().expect("undo");
+        let restored = writer.snapshot();
+        for (layer, start, _) in &targets {
+            assert!((clip_span(&restored, *layer).expect("span").0 - start).abs() < 1e-3);
+        }
     }
 }
