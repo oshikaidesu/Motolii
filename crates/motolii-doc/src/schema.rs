@@ -64,6 +64,18 @@ pub struct Composition {
     pub camera: CompCameraDoc,
 }
 
+/// タイムライン上のメモ。**時刻と文字だけ**を持つ。
+///
+/// 評価にも描画にも入らない — 読む人のための印である。だから
+/// `LayerId` のような識別子を持たず、参照される側にもならない。
+/// **並びは保持順**で、時刻順に見せるのは UI の仕事(並べ替えると index が動き、
+/// command の宛先が変わってしまう)。
+#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+pub struct Marker {
+    pub t: RationalTime,
+    pub text: String,
+}
+
 #[derive(DeserializeDerive)]
 struct RawComposition {
     aspect_num: i64,

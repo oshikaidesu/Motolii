@@ -33,7 +33,10 @@ pub use clip::{
     prepare_trim_clip_in, prepare_trim_clip_out,
 };
 pub use split::prepare_split_clip;
-pub use track_item::{prepare_add_group, prepare_remove_track_item, prepare_set_layer_name};
+pub use track_item::{
+    prepare_add_group, prepare_add_marker, prepare_remove_marker, prepare_remove_track_item,
+    prepare_set_layer_name, prepare_set_marker_text, prepare_set_marker_time,
+};
 pub use error::CommandError;
 pub use ids::{CommandKind, GestureId, MergeKey, ParentLocator, PropertyId, ScalarPropertyId};
 pub use locate::{collect_layer_ids, find_envelope, find_item_location, layer_names_for_item};

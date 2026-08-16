@@ -279,6 +279,10 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::SetItemVisible => "Set item visible",
         CommandKind::SetItemLock => "Set item lock",
         CommandKind::SetLayerName => "Rename layer",
+        CommandKind::AddMarker => "Add marker",
+        CommandKind::RemoveMarker => "Remove marker",
+        CommandKind::SetMarkerTime => "Move marker",
+        CommandKind::SetMarkerText => "Edit marker",
         CommandKind::SetItemSolo => "Set item solo",
     }
 }

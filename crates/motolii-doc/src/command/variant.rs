@@ -7,7 +7,7 @@ use motolii_core::{RationalTime, TimeMap};
 use crate::asset::Asset;
 use crate::param::DocParam;
 use crate::schema::{
-    BlendMode, ClippingMaskSettings, EffectDefinition, EffectInstance, EffectUse, TrackItem,
+    BlendMode, ClippingMaskSettings, EffectDefinition, EffectInstance, EffectUse, Marker, TrackItem,
 };
 use crate::stable_id::{EffectDefinitionId, EffectId, KeyframeId, StableIdReservation};
 use crate::{Document, LayerId};
@@ -272,6 +272,20 @@ pub enum Command {
         target: LayerId,
         old: bool,
         new: bool,
+    },
+    /// メモを置く。**宛先は index** — マーカーは識別子を持たない(保持順で addressing)
+    AddMarker { index: usize, marker: Marker },
+    /// `AddMarker` の inverse でもあり、単独の削除でもある
+    RemoveMarker { index: usize, marker: Marker },
+    SetMarkerTime {
+        index: usize,
+        old: RationalTime,
+        new: RationalTime,
+    },
+    SetMarkerText {
+        index: usize,
+        old: String,
+        new: String,
     },
     /// 表示名。**台帳(`Document.layers`)だけが変わる**。ツリーもIDも動かない
     SetLayerName {

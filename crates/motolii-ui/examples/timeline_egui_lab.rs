@@ -408,6 +408,8 @@ enum MenuAction {
     LoopToSelection,
     ClearLoop,
     Rename(LayerId),
+    AddMarker,
+    RemoveMarker(usize),
     RowHeight(bool),
     SelectAll,
     Split,
@@ -704,6 +706,8 @@ struct Lab {
     marquee: Option<(egui::Pos2, egui::Pos2)>,
     /// 名前を編集中の layer と、編集中の文字列。**確定するまで Document は触らない**
     renaming: Option<(LayerId, String)>,
+    /// メモを編集中の index と文字列。同上
+    editing_marker: Option<(usize, String)>,
     /// 再生中か。**Space で入り切りする**。Document には入れない
     playing: bool,
     status: String,
@@ -763,6 +767,7 @@ impl Lab {
             large_rows: false,
             marquee: None,
             renaming: None,
+            editing_marker: None,
             playing: false,
             status: "space=play  L=loop  Cmd+G=group  Del=delete  drag name=reorder".to_owned(),
             shot,
@@ -1214,6 +1219,72 @@ impl Lab {
         self.status = format!("deleted {removed}  undo {}", self.writer.undo_len());
     }
 
+    /// playhead の位置にメモを置く。**置いた直後から書ける状態にする**
+    fn add_marker(&mut self) {
+        let fps = self.document.composition.fps;
+        let Some(t) = seconds_to_time(self.playhead, fps) else {
+            return;
+        };
+        let gesture = self.writer.begin_gesture();
+        let command = self.writer.prepare_add_marker(t, "memo");
+        match self.writer.apply_command(gesture, command) {
+            Ok(()) => {
+                refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                let index = self.document.markers.len().saturating_sub(1);
+                self.editing_marker = Some((index, "memo".to_owned()));
+                self.status = format!("marker at {:.2}s  undo {}", self.playhead, self.writer.undo_len());
+            }
+            Err(error) => self.status = format!("rejected: {error}"),
+        }
+    }
+
+    /// メモの文を確定する。**空なら消す** — 空のメモは印にならない
+    fn commit_marker_text(&mut self) {
+        let Some((index, text)) = self.editing_marker.take() else {
+            return;
+        };
+        let text = text.trim().to_owned();
+        let gesture = self.writer.begin_gesture();
+        let prepared = if text.is_empty() {
+            self.writer.prepare_remove_marker(index).map(Some)
+        } else {
+            self.writer
+                .prepare_set_marker_text(index, &text)
+                .map(|c| c)
+        };
+        match prepared {
+            Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
+                Ok(()) => {
+                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                    self.status = if text.is_empty() {
+                        format!("marker removed  undo {}", self.writer.undo_len())
+                    } else {
+                        format!("marker: {text}  undo {}", self.writer.undo_len())
+                    };
+                }
+                Err(error) => self.status = format!("rejected: {error}"),
+            },
+            Ok(None) => {}
+            Err(error) => self.status = format!("rejected: {error}"),
+        }
+    }
+
+    /// メモを外す
+    fn remove_marker(&mut self, index: usize) {
+        let gesture = self.writer.begin_gesture();
+        match self.writer.prepare_remove_marker(index) {
+            Ok(command) => match self.writer.apply_command(gesture, command) {
+                Ok(()) => {
+                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                    self.editing_marker = None;
+                    self.status = format!("marker removed  undo {}", self.writer.undo_len());
+                }
+                Err(error) => self.status = format!("rejected: {error}"),
+            },
+            Err(error) => self.status = format!("rejected: {error}"),
+        }
+    }
+
     /// 名前の編集を確定する。**空の名前は断る**(行が読めなくなる)。
     fn commit_rename(&mut self) {
         let Some((layer, name)) = self.renaming.take() else {
@@ -1638,6 +1709,10 @@ impl Lab {
             *out = Some(MenuAction::ClearLoop);
             ui.close();
         }
+        if ui.button("Add marker at playhead   M").clicked() {
+            *out = Some(MenuAction::AddMarker);
+            ui.close();
+        }
         ui.menu_button("Row height   ▸", |ui| {
             if ui.button("Small").clicked() {
                 *out = Some(MenuAction::RowHeight(false));
@@ -1718,6 +1793,8 @@ impl Lab {
             }
             MenuAction::Split => self.split_selected(),
             MenuAction::Rename(layer) => self.begin_rename(layer),
+            MenuAction::AddMarker => self.add_marker(),
+            MenuAction::RemoveMarker(index) => self.remove_marker(index),
             MenuAction::RowHeight(large) => {
                 self.large_rows = large;
                 self.status = if large { "large rows" } else { "small rows" }.to_owned();
@@ -2199,6 +2276,132 @@ impl eframe::App for Lab {
                         INK,
                     );
                 }
+            }
+        }
+
+        // ---- メモ(marker) ----
+        // **ルーラの下端に印を置く。** 評価に入らないものなので、面の上には出さず
+        // 縦線だけ薄く伸ばす(どの時刻の話かは分かるが、編集の邪魔をしない)
+        let marker_lane = Rect::from_min_max(
+            egui::pos2(track_left, ruler.top() + LOOP_H),
+            egui::pos2(full.right(), ruler.bottom()),
+        );
+        let mut time_line_hints: Vec<f32> = Vec::new();
+        let mut marker_action: Option<MenuAction> = None;
+        let mut marker_clicked: Option<usize> = None;
+        // **借りたまま書かない。** 行を回す間に Document が変わる形にしない
+        let markers: Vec<(f32, String)> = self
+            .document
+            .markers
+            .iter()
+            .map(|m| (m.t.as_seconds_f64() as f32, m.text.clone()))
+            .collect();
+        for (index, (t, text)) in markers.into_iter().enumerate() {
+            let t = t;
+            let x = self.view.time_to_x(t, track_left, track_w);
+            if x < marker_lane.left() - 8.0 || x > marker_lane.right() {
+                continue;
+            }
+            let pin = Rect::from_center_size(
+                egui::pos2(x, marker_lane.bottom() - 5.0),
+                Vec2::new(10.0, 10.0),
+            );
+            let r = ui.interact(pin, ui.id().with(("marker", index)), Sense::click_and_drag());
+            let lane_p = p.with_clip_rect(marker_lane);
+            lane_p.add(egui::Shape::convex_polygon(
+                vec![
+                    egui::pos2(x - 4.0, pin.top()),
+                    egui::pos2(x + 4.0, pin.top()),
+                    egui::pos2(x, pin.bottom()),
+                ],
+                if r.hovered() || self.editing_marker.as_ref().map(|(i, _)| *i) == Some(index) {
+                    ACCENT
+                } else {
+                    Color32::from_rgb(0x9a, 0x8a, 0x55)
+                },
+                Stroke::NONE,
+            ));
+            if !text.is_empty() {
+                lane_p.text(
+                    egui::pos2(x + 6.0, marker_lane.bottom() - 4.0),
+                    Align2::LEFT_BOTTOM,
+                    &text,
+                    FontId::proportional(9.0),
+                    Color32::from_rgb(0xb9, 0xa9, 0x74),
+                );
+            }
+            // 面の上へは薄い縦線だけ
+            time_line_hints.push(t);
+            if r.clicked() {
+                marker_clicked = Some(index);
+            }
+            if r.dragged() {
+                if let Some(pos) = r.interact_pointer_pos() {
+                    let at = self
+                        .view
+                        .x_to_time(pos.x, track_left, track_w)
+                        .clamp(0.0, comp_seconds);
+                    let at = self.snapped(at, &[], track_w / self.view.span);
+                    if let Some(time) = seconds_to_time(at, fps) {
+                        let gesture = self.writer.begin_gesture();
+                        if let Ok(Some(command)) = self.writer.prepare_set_marker_time(index, time) {
+                            if self.writer.apply_command(gesture, command).is_ok() {
+                                refresh_if_stale(
+                                    &self.writer,
+                                    &mut self.document,
+                                    &mut self.revision,
+                                );
+                                self.status = format!("marker {at:.2}s");
+                            }
+                        }
+                    }
+                }
+            }
+            r.context_menu(|ui| {
+                ui.set_min_width(150.0);
+                ui.label(egui::RichText::new("marker").color(DIM).size(9.0));
+                ui.separator();
+                if ui.button("Remove marker   ⌫").clicked() {
+                    marker_action = Some(MenuAction::RemoveMarker(index));
+                    ui.close();
+                }
+            });
+        }
+        if let Some(index) = marker_clicked {
+            let text = self.document.markers[index].text.clone();
+            self.editing_marker = Some((index, text));
+        }
+        if let Some(action) = marker_action {
+            self.run_menu(action, comp_seconds, fps);
+        }
+        // 編集中は、その印の上が入力欄になる
+        if let Some((index, text)) = self.editing_marker.clone() {
+            if let Some(marker) = self.document.markers.get(index) {
+                let x = self
+                    .view
+                    .time_to_x(marker.t.as_seconds_f64() as f32, track_left, track_w);
+                let rect = Rect::from_min_size(
+                    egui::pos2(x + 6.0, marker_lane.top()),
+                    Vec2::new(120.0, marker_lane.height()),
+                );
+                let mut buf = text;
+                let edit = ui.put(
+                    rect,
+                    egui::TextEdit::singleline(&mut buf)
+                        .font(FontId::proportional(9.0))
+                        .margin(Vec2::new(2.0, 0.0)),
+                );
+                edit.request_focus();
+                self.editing_marker = Some((index, buf));
+                if edit.lost_focus() {
+                    if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        self.editing_marker = None;
+                    } else {
+                        self.commit_marker_text();
+                    }
+                }
+            } else {
+                self.editing_marker = None;
             }
         }
 
@@ -2981,6 +3184,18 @@ impl eframe::App for Lab {
             egui::pos2(track_left, ruler.top()),
             egui::pos2(full.right(), rows_view.bottom()),
         ));
+        // メモの縦線。**薄く、面の上だけ**(印そのものはルーラに置く)
+        for t in &time_line_hints {
+            let x = self.view.time_to_x(*t, track_left, track_w);
+            time_p.line_segment(
+                [
+                    egui::pos2(x, rows_view.top()),
+                    egui::pos2(x, rows_view.bottom()),
+                ],
+                Stroke::new(1.0, Color32::from_rgb(0x4a, 0x44, 0x33)),
+            );
+        }
+
         // ループの境目を面の上まで伸ばす。**どこで折り返すかが行の上で分かる**
         if self.loop_region.on {
             for t in [self.loop_region.start, self.loop_region.end] {
@@ -3140,6 +3355,14 @@ impl eframe::App for Lab {
         // Cmd/Ctrl + K。**playhead で切る**
         if split && self.drag.is_none() {
             self.split_selected();
+        }
+
+        // `M`。**playhead にメモを置く**(置いた直後から書ける)
+        if ctx.input(|i| i.key_pressed(egui::Key::M) && !i.modifiers.command)
+            && self.renaming.is_none()
+            && self.editing_marker.is_none()
+        {
+            self.add_marker();
         }
 
         // Enter。**1つだけ選んでいるときに名前を編集する**(AE と同じ)
@@ -5083,5 +5306,67 @@ mod tests {
         lab.begin_rename(layer);
         assert!(lab.renaming.is_none(), "編集が始まらない");
         assert!(lab.status.contains("locked"), "{}", lab.status);
+    }
+
+    /// **メモは置いてすぐ書ける。** 空にすると消える(空の印は印にならない)。
+    #[test]
+    fn a_marker_is_placed_at_the_playhead_and_empty_text_removes_it() {
+        let mut lab = Lab::new(None);
+        assert!(lab.document.markers.is_empty());
+
+        lab.playhead = 4.0;
+        lab.add_marker();
+        assert_eq!(lab.document.markers.len(), 1, "{}", lab.status);
+        assert!((lab.document.markers[0].t.as_seconds_f64() as f32 - 4.0).abs() < 1e-3);
+        assert_eq!(
+            lab.editing_marker.as_ref().map(|(i, _)| *i),
+            Some(0),
+            "**置いた直後から書ける**"
+        );
+
+        // 書く
+        lab.editing_marker = Some((0, "  fade is late  ".to_owned()));
+        lab.commit_marker_text();
+        assert_eq!(lab.document.markers[0].text, "fade is late", "前後の空白は落とす");
+        assert!(lab.editing_marker.is_none());
+
+        // 空にすると消える
+        lab.editing_marker = Some((0, "   ".to_owned()));
+        lab.commit_marker_text();
+        assert!(lab.document.markers.is_empty(), "{}", lab.status);
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(lab.document.markers.len(), 1, "1回の Undo で戻る");
+        assert_eq!(lab.document.markers[0].text, "fade is late");
+    }
+
+    /// メモは**時刻と文だけ**。ツリーにも選択にも触らない。
+    #[test]
+    fn markers_do_not_touch_the_tree() {
+        let mut lab = Lab::new(None);
+        let rows_before = rows(&lab.document, &lab.fold).len();
+        let items_before = lab.document.tracks[0].items.len();
+        let layer = layer_named(&lab.names, "Background");
+        let span_before = clip_span(&lab.document, layer).expect("span");
+
+        lab.playhead = 2.0;
+        lab.add_marker();
+        lab.editing_marker = Some((0, "memo".to_owned()));
+        lab.commit_marker_text();
+        lab.playhead = 7.0;
+        lab.add_marker();
+        lab.editing_marker = Some((1, "another".to_owned()));
+        lab.commit_marker_text();
+
+        assert_eq!(lab.document.markers.len(), 2);
+        assert_eq!(rows(&lab.document, &lab.fold).len(), rows_before, "行は増えない");
+        assert_eq!(lab.document.tracks[0].items.len(), items_before);
+        assert_eq!(clip_span(&lab.document, layer).expect("span"), span_before);
+
+        // 外すのは index で。**保持順が宛先**なので、後ろを外しても前は動かない
+        lab.remove_marker(1);
+        assert_eq!(lab.document.markers.len(), 1);
+        assert_eq!(lab.document.markers[0].text, "memo");
     }
 }

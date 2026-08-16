@@ -403,6 +403,18 @@ impl Command {
                 old: new,
                 new: old,
             },
+            Command::AddMarker { index, marker } => Command::RemoveMarker { index, marker },
+            Command::RemoveMarker { index, marker } => Command::AddMarker { index, marker },
+            Command::SetMarkerTime { index, old, new } => Command::SetMarkerTime {
+                index,
+                old: new,
+                new: old,
+            },
+            Command::SetMarkerText { index, old, new } => Command::SetMarkerText {
+                index,
+                old: new,
+                new: old,
+            },
             Command::SetLayerName { target, old, new } => Command::SetLayerName {
                 target,
                 old: new,

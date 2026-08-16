@@ -427,6 +427,52 @@ impl Command {
                 doc.layers.rename(*target, new.clone())?;
                 Ok(())
             }
+            Command::AddMarker { index, marker } => {
+                if *index > doc.markers.len() {
+                    return Err(CommandError::IndexOutOfRange {
+                        index: *index,
+                        len: doc.markers.len(),
+                    });
+                }
+                doc.markers.insert(*index, marker.clone());
+                Ok(())
+            }
+            Command::RemoveMarker { index, marker } => {
+                let Some(found) = doc.markers.get(*index) else {
+                    return Err(CommandError::IndexOutOfRange {
+                        index: *index,
+                        len: doc.markers.len(),
+                    });
+                };
+                // **payload と食い違ったら書かない。** Add/Remove の対称性を守る
+                if found != marker {
+                    return Err(CommandError::MarkerMismatch { index: *index });
+                }
+                doc.markers.remove(*index);
+                Ok(())
+            }
+            Command::SetMarkerTime { index, new, .. } => {
+                let marker = doc
+                    .markers
+                    .get_mut(*index)
+                    .ok_or(CommandError::IndexOutOfRange {
+                        index: *index,
+                        len: 0,
+                    })?;
+                marker.t = *new;
+                Ok(())
+            }
+            Command::SetMarkerText { index, new, .. } => {
+                let marker = doc
+                    .markers
+                    .get_mut(*index)
+                    .ok_or(CommandError::IndexOutOfRange {
+                        index: *index,
+                        len: 0,
+                    })?;
+                marker.text = new.clone();
+                Ok(())
+            }
         }
     }
 }

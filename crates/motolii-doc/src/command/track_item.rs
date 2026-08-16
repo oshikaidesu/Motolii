@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use motolii_core::RationalTime;
+
 use crate::schema::{Group, ItemEnvelope, TrackItem};
 use crate::{Document, LayerId};
 
@@ -40,6 +42,79 @@ pub fn prepare_add_group(
         }),
         layer_names,
     })
+}
+
+/// メモを置く準備をする。**末尾に足す** — 保持順が index の意味なので、
+/// 時刻で並べ替えない(並べ替えると既存 command の宛先が動く)。
+pub fn prepare_add_marker(doc: &Document, t: RationalTime, text: &str) -> Command {
+    Command::AddMarker {
+        index: doc.markers.len(),
+        marker: crate::schema::Marker {
+            t,
+            text: text.to_owned(),
+        },
+    }
+}
+
+/// メモを外す準備をする。payload も載せる(inverse がそのまま戻せる)。
+pub fn prepare_remove_marker(doc: &Document, index: usize) -> Result<Command, CommandError> {
+    let marker = doc
+        .markers
+        .get(index)
+        .ok_or(CommandError::IndexOutOfRange {
+            index,
+            len: doc.markers.len(),
+        })?;
+    Ok(Command::RemoveMarker {
+        index,
+        marker: marker.clone(),
+    })
+}
+
+/// メモの時刻。same-value は `None`。
+pub fn prepare_set_marker_time(
+    doc: &Document,
+    index: usize,
+    new: RationalTime,
+) -> Result<Option<Command>, CommandError> {
+    let marker = doc
+        .markers
+        .get(index)
+        .ok_or(CommandError::IndexOutOfRange {
+            index,
+            len: doc.markers.len(),
+        })?;
+    if marker.t == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetMarkerTime {
+        index,
+        old: marker.t,
+        new,
+    }))
+}
+
+/// メモの文。same-value は `None`。
+pub fn prepare_set_marker_text(
+    doc: &Document,
+    index: usize,
+    new: &str,
+) -> Result<Option<Command>, CommandError> {
+    let marker = doc
+        .markers
+        .get(index)
+        .ok_or(CommandError::IndexOutOfRange {
+            index,
+            len: doc.markers.len(),
+        })?;
+    if marker.text == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetMarkerText {
+        index,
+        old: marker.text.clone(),
+        new: new.to_owned(),
+    }))
 }
 
 /// 表示名を差し替える準備をする。same-value は `None`。

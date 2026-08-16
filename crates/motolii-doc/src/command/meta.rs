@@ -54,6 +54,10 @@ impl Command {
             Command::SetItemSolo { .. } => CommandKind::SetItemSolo,
             Command::SetItemLock { .. } => CommandKind::SetItemLock,
             Command::SetLayerName { .. } => CommandKind::SetLayerName,
+            Command::AddMarker { .. } => CommandKind::AddMarker,
+            Command::RemoveMarker { .. } => CommandKind::RemoveMarker,
+            Command::SetMarkerTime { .. } => CommandKind::SetMarkerTime,
+            Command::SetMarkerText { .. } => CommandKind::SetMarkerText,
         }
     }
 
@@ -101,6 +105,11 @@ impl Command {
             Command::AddTrackItem { item, .. } | Command::RemoveTrackItem { item, .. } => {
                 envelope_of(item).layer_id.get()
             }
+            // **メモは layer に属さない。** index をそのまま宛先にする
+            Command::AddMarker { index, .. }
+            | Command::RemoveMarker { index, .. }
+            | Command::SetMarkerTime { index, .. }
+            | Command::SetMarkerText { index, .. } => *index as u64,
         }
     }
 
@@ -155,6 +164,10 @@ impl Command {
             Command::SetItemSolo { .. } => PropertyId::ItemSolo,
             Command::SetItemLock { .. } => PropertyId::ItemLock,
             Command::SetLayerName { .. } => PropertyId::LayerName,
+            Command::AddMarker { .. }
+            | Command::RemoveMarker { .. }
+            | Command::SetMarkerTime { .. }
+            | Command::SetMarkerText { .. } => PropertyId::Marker,
         }
     }
 
@@ -240,6 +253,10 @@ impl Command {
             | Command::SetItemVisible { .. }
             | Command::SetItemLock { .. }
             | Command::SetLayerName { .. }
+            | Command::AddMarker { .. }
+            | Command::RemoveMarker { .. }
+            | Command::SetMarkerTime { .. }
+            | Command::SetMarkerText { .. }
             | Command::SetItemSolo { .. } => None,
         }
     }

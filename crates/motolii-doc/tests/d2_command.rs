@@ -2830,3 +2830,93 @@ fn renaming_a_layer_changes_only_the_ledger_entry() {
         Err(CommandError::LayerNotFound(_))
     ));
 }
+
+/// **メモは評価にも描画にも入らない。** 置く・動かす・書き換える・外すが
+/// それぞれ1回の Undo で戻り、ツリーには一切触れない。
+#[test]
+fn markers_are_memos_that_undo_one_step_at_a_time() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc);
+    let tracks_before = writer.snapshot().tracks.clone();
+    assert!(writer.snapshot().markers.is_empty(), "最初は空");
+
+    let t = RationalTime::try_new(3, 1).unwrap();
+    let gesture = writer.begin_gesture();
+    let command = writer.prepare_add_marker(t, "check the fade");
+    writer.apply_command(gesture, command).expect("add");
+
+    let after = writer.snapshot();
+    writer.validate().expect("メモを持つ文書も検証を通る");
+    assert_eq!(after.markers.len(), 1);
+    assert_eq!(after.markers[0].text, "check the fade");
+    assert_eq!(after.markers[0].t, t);
+    assert_eq!(after.tracks, tracks_before, "**ツリーは動かない**");
+
+    // 文を書き換える
+    let gesture = writer.begin_gesture();
+    let command = writer
+        .prepare_set_marker_text(0, "fade is too fast")
+        .expect("prepare")
+        .expect("変化がある");
+    writer.apply_command(gesture, command).expect("set text");
+    assert_eq!(writer.snapshot().markers[0].text, "fade is too fast");
+
+    // 時刻を動かす
+    let moved = RationalTime::try_new(9, 2).unwrap();
+    let gesture = writer.begin_gesture();
+    let command = writer
+        .prepare_set_marker_time(0, moved)
+        .expect("prepare")
+        .expect("変化がある");
+    writer.apply_command(gesture, command).expect("set time");
+    assert_eq!(writer.snapshot().markers[0].t, moved);
+
+    // same-value は command を出さない
+    assert!(writer.prepare_set_marker_time(0, moved).unwrap().is_none());
+    assert!(writer
+        .prepare_set_marker_text(0, "fade is too fast")
+        .unwrap()
+        .is_none());
+
+    // 1つずつ戻る
+    writer.undo().expect("undo time");
+    assert_eq!(writer.snapshot().markers[0].t, t);
+    writer.undo().expect("undo text");
+    assert_eq!(writer.snapshot().markers[0].text, "check the fade");
+
+    // 外す
+    let gesture = writer.begin_gesture();
+    let command = writer.prepare_remove_marker(0).expect("prepare remove");
+    writer.apply_command(gesture, command).expect("remove");
+    assert!(writer.snapshot().markers.is_empty());
+    writer.undo().expect("undo remove");
+    assert_eq!(
+        writer.snapshot().markers[0].text,
+        "check the fade",
+        "**外したメモは文ごと戻る**"
+    );
+
+    // 居ない index は断る
+    assert!(matches!(
+        writer.prepare_remove_marker(9),
+        Err(CommandError::IndexOutOfRange { .. })
+    ));
+}
+
+/// **空のときは書き出さない。** 既存文書のバイト列が変わらない。
+#[test]
+fn an_empty_marker_list_is_not_serialised() {
+    let f = fixture();
+    let json = serde_json::to_string(&f.doc).unwrap();
+    assert!(!json.contains("markers"), "空なら鍵ごと出ない");
+
+    let mut doc = f.doc;
+    doc.markers.push(motolii_doc::Marker {
+        t: RationalTime::ZERO,
+        text: "memo".into(),
+    });
+    let json = serde_json::to_string(&doc).unwrap();
+    assert!(json.contains("\"markers\""), "置いたら出る");
+    let back: Document = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.markers, doc.markers, "往復する");
+}
