@@ -92,7 +92,8 @@ enum Grab {
         targets: Vec<(LayerId, f32, f32)>,
         /// 追従させる Position キーと、掴んだ瞬間の時刻(秒)。
         /// **絶対値で出し直すので、掴んだ瞬間の値を持ったままにする**
-        keys: Vec<(LayerId, KeyframeId, f32)>,
+        /// 追従させるキー。**param ごとに出す command が違う**ので param も持つ
+        keys: Vec<(LayerId, ParamRef, KeyframeId, f32)>,
         /// 追従できないキーの数。Scale/Rotation/Anchor/Opacity には
         /// 時刻を変える `prepare_*` が無い
         not_movable: usize,
@@ -118,18 +119,23 @@ fn begin_move(document: &Document, layer: LayerId, grab_at: f32) -> Grab {
     let mut keys = Vec::new();
     let mut not_movable = 0usize;
     for (clip, _, _) in &targets {
-        for (key, t) in param_keys(document, *clip, ParamRef::Position) {
-            keys.push((*clip, key, t));
-        }
+        // **envelope が持つ param は全部追従できる**(2026-08-16 に D2 の
+        // `SetTransformParamKeyTime` と受け付け集合の統合が入った)。
+        // 追従できないのは plugin 由来(EffectParam / SourceParam)だけで、
+        // Lab はまだそれを描いていないので 0 のまま
         for param in [
+            ParamRef::Position,
             ParamRef::Anchor,
             ParamRef::Scale,
             ParamRef::Rotation,
             ParamRef::Opacity,
         ] {
-            not_movable += param_keys(document, *clip, param).len();
+            for (key, t) in param_keys(document, *clip, param) {
+                keys.push((*clip, param, key, t));
+            }
         }
     }
+    let _ = &mut not_movable;
     Grab::Move {
         layer,
         grab_at,
@@ -194,6 +200,30 @@ impl Lab {
     ///
     /// **prepare_* が `Ok(None)` を返したら、それは「変化なし」であって失敗ではない。**
     /// 落ちた編集は status に出す。通ったことにしない。
+    /// param ごとに、時刻を動かす command を選ぶ。
+    ///
+    /// Position だけ専用の入口があり(`SetPositionKeyTime`)、他は
+    /// `SetTransformParamKeyTime` が受ける。**将来ここは1本に畳む**
+    /// (台帳「キー編集APIを `ScalarPropertyId` 1本へ畳む」参照)。
+    fn key_time_command(
+        &self,
+        layer: LayerId,
+        param: ParamRef,
+        key: KeyframeId,
+        t: RationalTime,
+    ) -> Result<Option<motolii_doc::Command>, String> {
+        match param {
+            ParamRef::Position => self
+                .writer
+                .prepare_set_position_key_time(layer, key, t)
+                .map_err(|e| e.to_string()),
+            other => self
+                .writer
+                .prepare_set_transform_param_key_time(layer, scalar_property(other), key, t)
+                .map_err(|e| e.to_string()),
+        }
+    }
+
     fn commit_drag(&mut self, at_seconds: f32) {
         let Some((grab, gesture)) = self.drag.clone() else {
             return;
@@ -233,7 +263,7 @@ impl Lab {
                     let Some(t) = seconds_to_time((start + delta).max(0.0)) else {
                         return;
                     };
-                    prepared.push((*layer, false, self.writer.prepare_set_clip_start(*layer, t)));
+                    prepared.push((*layer, false, self.writer.prepare_set_clip_start(*layer, t).map_err(|e| e.to_string())));
                 }
                 // **キーは出す順が要る。** 同じ時刻に2つは置けないので、後ろへ動かす
                 // ときは遅いキーから、前へ動かすときは早いキーから出す。全員が同じ
@@ -241,20 +271,16 @@ impl Lab {
                 let mut ordered = keys.clone();
                 ordered.sort_by(|a, b| {
                     if delta >= 0.0 {
-                        b.2.total_cmp(&a.2)
+                        b.3.total_cmp(&a.3)
                     } else {
-                        a.2.total_cmp(&b.2)
+                        a.3.total_cmp(&b.3)
                     }
                 });
-                for (layer, key, original) in ordered {
+                for (layer, param, key, original) in ordered {
                     let Some(t) = seconds_to_time((original + delta).max(0.0)) else {
                         return;
                     };
-                    prepared.push((
-                        layer,
-                        true,
-                        self.writer.prepare_set_position_key_time(layer, key, t),
-                    ));
+                    prepared.push((layer, true, self.key_time_command(layer, param, key, t)));
                 }
             }
             Grab::KeyTime {
@@ -273,16 +299,16 @@ impl Lab {
                 prepared.push((
                     *layer,
                     true,
-                    self.writer.prepare_set_position_key_time(*layer, *key, t),
+                    self.writer.prepare_set_position_key_time(*layer, *key, t).map_err(|e| e.to_string()),
                 ));
             }
             Grab::TrimIn { layer } => {
-                prepared.push((*layer, false, self.writer.prepare_trim_clip_in(*layer, time)))
+                prepared.push((*layer, false, self.writer.prepare_trim_clip_in(*layer, time).map_err(|e| e.to_string())))
             }
             Grab::TrimOut { layer } => prepared.push((
                 *layer,
                 false,
-                self.writer.prepare_trim_clip_out(*layer, time),
+                self.writer.prepare_trim_clip_out(*layer, time).map_err(|e| e.to_string()),
             )),
         }
 
@@ -861,6 +887,18 @@ impl eframe::App for Lab {
     }
 }
 
+/// Lab の `ParamRef` を D2 の property セレクタへ。
+fn scalar_property(param: ParamRef) -> motolii_doc::ScalarPropertyId {
+    use motolii_doc::ScalarPropertyId as S;
+    match param {
+        ParamRef::Position => S::Position,
+        ParamRef::Anchor => S::Anchor,
+        ParamRef::Scale => S::Scale,
+        ParamRef::Rotation => S::Rotation,
+        ParamRef::Opacity => S::Opacity,
+    }
+}
+
 fn grab_layer(grab: &Grab) -> LayerId {
     match grab {
         Grab::Move { layer, .. }
@@ -1240,7 +1278,7 @@ mod tests {
         let position_before = param_keys(&lab.document, layer, ParamRef::Position);
         let scale_before = param_keys(&lab.document, layer, ParamRef::Scale);
         assert_eq!(position_before.len(), 2, "fixture の Shared left は Position キー2つ");
-        assert_eq!(scale_before.len(), 2, "Scale も2つ。こちらは時刻を動かせない");
+        assert_eq!(scale_before.len(), 2, "Scale も2つ。こちらも追従する");
 
         let gesture = lab.writer.begin_gesture();
         lab.drag = Some((begin_move(&lab.document, layer, 3.0), gesture));
@@ -1264,11 +1302,22 @@ mod tests {
                 before + 1.0
             );
         }
+        // Scale キーも同じ delta で追従する(2026-08-16 に D2 の入口ができた)。
+        // **守るべきは「時刻が動く」ことではなく「KeyframeId が変わらない」こと** —
+        // remove+add で代用すると id が変わり、Undo と同一性が壊れる
+        let scale_after = param_keys(&after, layer, ParamRef::Scale);
         assert_eq!(
-            param_keys(&after, layer, ParamRef::Scale),
-            scale_before,
-            "Scale キーは動かない。remove+add で代用しない"
+            scale_after.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            scale_before.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            "KeyframeId は時刻編集で不変。remove+add で代用しない"
         );
+        for ((_, before), (_, now)) in scale_before.iter().zip(scale_after.iter()) {
+            assert!(
+                (now - (before + 1.0)).abs() < 1e-3,
+                "Scale キーも clip に追従する: {now} vs {}",
+                before + 1.0
+            );
+        }
 
         lab.writer.undo().expect("undo");
         let restored = lab.writer.snapshot();
@@ -1357,5 +1406,57 @@ mod tests {
         lab.writer.undo().expect("undo");
         lab.document = lab.writer.snapshot();
         assert_eq!(item_flags(&lab.document, layer), Some((true, false)));
+    }
+
+    /// **Scale のキーも clip について来る。** 2026-08-16 に D2 側の入口ができるまで
+    /// できなかったこと。Position だけが動いて Scale が取り残される状態を潰す。
+    #[test]
+    fn moving_a_clip_carries_scale_keys_too_not_just_position() {
+        let (doc, names) = fixture();
+        let catalog =
+            Arc::new(motolii_plugin::reference::reference_catalog().expect("reference catalog"));
+        let mut writer = DocumentWriter::new(doc, catalog).expect("writer");
+        let layer = layer_named(&names, "Shared left");
+
+        let scale_before = param_keys(&writer.snapshot(), layer, ParamRef::Scale);
+        assert_eq!(scale_before.len(), 2, "fixture の Shared left は Scale キー2つ");
+
+        let delta = 0.5_f32;
+        let gesture = writer.begin_gesture();
+        // clip 本体
+        let start = clip_span(&writer.snapshot(), layer).expect("span").0;
+        let command = writer
+            .prepare_set_clip_start(layer, seconds_to_time(start + delta).expect("time"))
+            .expect("prepare")
+            .expect("command");
+        writer.apply_command(gesture, command).expect("apply");
+        // Scale キー(後ろから出す。同時刻の占有を避ける)
+        for (key, t) in scale_before.iter().rev() {
+            let command = writer
+                .prepare_set_transform_param_key_time(
+                    layer,
+                    motolii_doc::ScalarPropertyId::Scale,
+                    *key,
+                    seconds_to_time(t + delta).expect("time"),
+                )
+                .expect("prepare")
+                .expect("command");
+            writer.apply_command(gesture, command).expect("apply");
+        }
+
+        let after = param_keys(&writer.snapshot(), layer, ParamRef::Scale);
+        for ((_, before_t), (_, after_t)) in scale_before.iter().zip(after.iter()) {
+            assert!(
+                (after_t - (before_t + delta)).abs() < 1e-3,
+                "Scale キーが追従する: {after_t} vs {}",
+                before_t + delta
+            );
+        }
+
+        writer.undo().expect("undo");
+        let restored = param_keys(&writer.snapshot(), layer, ParamRef::Scale);
+        for ((_, before_t), (_, back_t)) in scale_before.iter().zip(restored.iter()) {
+            assert!((back_t - before_t).abs() < 1e-3, "1ドラッグ = 1 Undo");
+        }
     }
 }
