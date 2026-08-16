@@ -453,6 +453,77 @@ fn install_lab_style(ctx: &egui::Context) {
     ctx.set_style_of(egui::Theme::Light, style);
 }
 
+/// 左列の小さな部品を1つ置く。**M / S / L も ▾ も ◇ もこれを通る。**
+///
+/// `Sense::click_and_drag()` なのは、**押した瞬間に自分が掴みの相手になる**ため。
+/// クリック専用にすると、下に敷いてある行(選択＋並べ替え)のほうが掴みの相手に
+/// なり、指が数px動いただけでボタンの `clicked()` が消える —
+/// 「M/S/L がたまに効かない」の正体はこれで、ボタン側の不具合ではなかった。
+fn rail_hit(ui: &mut egui::Ui, id: egui::Id, rect: Rect) -> egui::Response {
+    ui.interact(rect, id, Sense::click_and_drag())
+}
+
+/// 枠つきの四角ボタン(M / S / L)。**入っている色は呼び側が持つ**
+fn rail_button(
+    ui: &mut egui::Ui,
+    p: &egui::Painter,
+    id: egui::Id,
+    rect: Rect,
+    label: &str,
+    on: bool,
+    on_color: Color32,
+) -> bool {
+    let r = rail_hit(ui, id, rect);
+    if on {
+        p.rect_filled(rect, CornerRadius::ZERO, on_color);
+    }
+    p.rect_stroke(
+        rect,
+        CornerRadius::ZERO,
+        Stroke::new(
+            1.0,
+            if r.hovered() {
+                ACCENT
+            } else {
+                Color32::from_rgb(0x51, 0x51, 0x51)
+            },
+        ),
+        StrokeKind::Inside,
+    );
+    p.text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        label,
+        FontId::proportional(9.0),
+        if on {
+            INK
+        } else {
+            Color32::from_rgb(0xaa, 0xaa, 0xaa)
+        },
+    );
+    r.clicked()
+}
+
+/// 枠の無い記号ボタン(▾ / ◇)。開いているときは点いたままにする
+fn rail_glyph(
+    ui: &mut egui::Ui,
+    p: &egui::Painter,
+    id: egui::Id,
+    rect: Rect,
+    glyph: &str,
+    on: bool,
+) -> bool {
+    let r = rail_hit(ui, id, rect);
+    p.text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        glyph,
+        FontId::proportional(11.0),
+        if on || r.hovered() { ACCENT } else { DIM },
+    );
+    r.clicked()
+}
+
 /// まだ無い操作を**席として並べる**。押せないが、どこに来るかは分かる。
 ///
 /// 空欄にすると「この面には無い操作」に見えてしまう。灰色で置いておけば
@@ -2649,15 +2720,14 @@ impl eframe::App for Lab {
                     egui::pos2(rail.left() + indent + 2.0, cy),
                     Vec2::splat(16.0),
                 );
-                let r = ui.interact(hit, ui.id().with(("fold", row.layer)), Sense::click());
-                p.text(
-                    hit.center(),
-                    Align2::CENTER_CENTER,
+                if rail_glyph(
+                    ui,
+                    p,
+                    ui.id().with(("fold", row.layer)),
+                    hit,
                     if row.children_open { "▾" } else { "▸" },
-                    FontId::proportional(11.0),
-                    if r.hovered() { ACCENT } else { DIM },
-                );
-                if r.clicked() {
+                    false,
+                ) {
                     toggles.push((row.layer, true));
                 }
             }
@@ -2721,20 +2791,14 @@ impl eframe::App for Lab {
                             egui::pos2(rail.right() - 66.0, cy),
                             Vec2::splat(16.0),
                         );
-                        let r =
-                            ui.interact(hit, ui.id().with(("params", row.layer)), Sense::click());
-                        p.text(
-                            hit.center(),
-                            Align2::CENTER_CENTER,
+                        if rail_glyph(
+                            ui,
+                            p,
+                            ui.id().with(("params", row.layer)),
+                            hit,
                             if row.params_open { "◆" } else { "◇" },
-                            FontId::proportional(11.0),
-                            if row.params_open || r.hovered() {
-                                ACCENT
-                            } else {
-                                DIM
-                            },
-                        );
-                        if r.clicked() {
+                            row.params_open,
+                        ) {
                             toggles.push((row.layer, false));
                         }
                     }
@@ -2755,47 +2819,20 @@ impl eframe::App for Lab {
                             Flag::Solo => item_solo,
                             Flag::Lock => item_lock,
                         };
-                        let r = ui.interact(
-                            b,
+                        let on_color = match flag {
+                            Flag::Mute => MUTE_ON,
+                            Flag::Solo => SOLO_ON,
+                            Flag::Lock => LOCK_ON,
+                        };
+                        if rail_button(
+                            ui,
+                            p,
                             ui.id().with(("flag", row.layer, i)),
-                            Sense::click(),
-                        );
-                        if on {
-                            p.rect_filled(
-                                b,
-                                CornerRadius::ZERO,
-                                match flag {
-                                    Flag::Mute => MUTE_ON,
-                                    Flag::Solo => SOLO_ON,
-                                    Flag::Lock => LOCK_ON,
-                                },
-                            );
-                        }
-                        p.rect_stroke(
                             b,
-                            CornerRadius::ZERO,
-                            Stroke::new(
-                                1.0,
-                                if r.hovered() {
-                                    ACCENT
-                                } else {
-                                    Color32::from_rgb(0x51, 0x51, 0x51)
-                                },
-                            ),
-                            StrokeKind::Inside,
-                        );
-                        p.text(
-                            b.center(),
-                            Align2::CENTER_CENTER,
-                            *label,
-                            FontId::proportional(9.0),
-                            if on {
-                                INK
-                            } else {
-                                Color32::from_rgb(0xaa, 0xaa, 0xaa)
-                            },
-                        );
-                        if r.clicked() {
+                            label,
+                            on,
+                            on_color,
+                        ) {
                             flags.push((row.layer, *flag));
                         }
                     }
