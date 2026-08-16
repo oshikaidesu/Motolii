@@ -2598,7 +2598,11 @@ impl eframe::App for Lab {
             self.hover_cursor(&ctx, loop_hit.hovered(), loop_grab_cursor(&would));
         }
         if loop_hit.drag_started() {
-            if let Some(pos) = loop_hit.interact_pointer_pos() {
+            // 同じ理由で、押した場所から掴み方を決める
+            if let Some(pos) = ctx
+                .input(|i| i.pointer.press_origin())
+                .or_else(|| loop_hit.interact_pointer_pos())
+            {
                 let at = self.view.x_to_time(pos.x, track_left, track_w);
                 self.hold = Some(Hold::Loop(loop_grab_for(
                     pos.x,
@@ -3381,8 +3385,19 @@ impl eframe::App for Lab {
                         if r.drag_started() && self.is_locked(row.layer) {
                             self.status = format!("{} is locked", self.name(row.layer));
                         } else if r.drag_started() {
-                            if let (Some(pos), Some(part)) = (r.interact_pointer_pos(), part) {
-                                let grab = match part {
+                            // **判定は押した場所で行う。** egui は数px動いてから
+                            // ドラッグ開始を報せるので、そのときのポインタは既に
+                            // 動いている — 右端を掴んで左へ引くと、報せが来た時点で
+                            // 端の外に出ており、トリムのつもりが移動になっていた
+                            let press = ctx
+                                .input(|i| i.pointer.press_origin())
+                                .or_else(|| r.interact_pointer_pos());
+                            if let Some(pos) = press {
+                                let grab = match classify_bar_edge(
+                                    bar,
+                                    pos.x,
+                                    row.has_children,
+                                ) {
                                     BarPart::TrimIn => Grab::TrimIn { layer: row.layer },
                                     BarPart::TrimOut => Grab::TrimOut { layer: row.layer },
                                     BarPart::Body => {
@@ -3488,8 +3503,13 @@ impl eframe::App for Lab {
                         } else if r.drag_started() {
                             // **どのパラメータのキーも掴める。** D2 に
                             // `SetTransformParamKeyTime` が入った時点で Position 縛りの
-                            // 理由は消えていたのに、掴む側だけ残っていた
-                            if let Some(pos) = r.interact_pointer_pos() {
+                            // 理由は消えていたのに、掴む側だけ残っていた。
+                            // 掴んだ時刻も**押した場所**から採る — ドラッグ開始の報せは
+                            // 数px動いた後に来るので、そこを起点にすると最初の1手で跳ぶ
+                            if let Some(pos) = ctx
+                                .input(|i| i.pointer.press_origin())
+                                .or_else(|| r.interact_pointer_pos())
+                            {
                                 self.hold_item(Grab::KeyTime {
                                     layer: row.layer,
                                     param,
