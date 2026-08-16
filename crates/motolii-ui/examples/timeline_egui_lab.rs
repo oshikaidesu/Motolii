@@ -62,9 +62,65 @@ const ROW_H: f32 = 24.0;
 const PROP_H: f32 = 20.0;
 const HEAD_H: f32 = 34.0;
 const RULER_H: f32 = 27.0;
-/// ルーラが覆う秒数。**時間→x の換算はここ1箇所を通す**
-/// (ズームを入れるときに触る場所を1つにしておく)
+/// ルーラが覆う秒数の**初期値**。以後は `TimelineView` が持つ。
 const TIMELINE_SECONDS: f32 = 16.0;
+/// これ以上は寄れない。1秒を4分割まで
+const MIN_SPAN: f32 = 0.25;
+
+/// 時間軸の見えている窓。**Project session が持つ状態**で、Document には入れない。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TimelineView {
+    /// 左端の時刻(秒)
+    pub start: f32,
+    /// 見えている秒数
+    pub span: f32,
+}
+
+impl TimelineView {
+    /// 時刻 → 面の中の x。**時間↔x の換算はこの2本しか無い。**
+    pub fn time_to_x(&self, t: f32, track_left: f32, track_w: f32) -> f32 {
+        track_left + (t - self.start) / self.span * track_w
+    }
+
+    /// x → 時刻。`time_to_x` の逆。
+    pub fn x_to_time(&self, x: f32, track_left: f32, track_w: f32) -> f32 {
+        self.start + (x - track_left) / track_w * self.span
+    }
+
+    /// `anchor` の時刻を動かさずに寄る/引く。`factor` < 1 で寄る。
+    ///
+    /// **カーソルの下の時刻が動かないことが、ズームの手触りそのもの**である。
+    pub fn zoom_at(self, anchor: f32, factor: f32, comp: f32) -> TimelineView {
+        let span = (self.span * factor).clamp(MIN_SPAN, comp.max(MIN_SPAN));
+        // anchor が窓の中で占める割合を保つ
+        let ratio = if self.span > 0.0 {
+            (anchor - self.start) / self.span
+        } else {
+            0.0
+        };
+        TimelineView {
+            start: anchor - ratio * span,
+            span,
+        }
+        .clamped(comp)
+    }
+
+    /// 横へずらす。
+    pub fn pan(self, delta_seconds: f32, comp: f32) -> TimelineView {
+        TimelineView {
+            start: self.start + delta_seconds,
+            span: self.span,
+        }
+        .clamped(comp)
+    }
+
+    /// **窓は composition の外へ出ない。** 0より前も、終端より後ろも見せない。
+    pub fn clamped(self, comp: f32) -> TimelineView {
+        let span = self.span.clamp(MIN_SPAN, comp.max(MIN_SPAN));
+        let start = self.start.clamp(0.0, (comp - span).max(0.0));
+        TimelineView { start, span }
+    }
+}
 
 fn main() -> eframe::Result<()> {
     let shot = std::env::args().nth(1);
@@ -148,11 +204,19 @@ fn begin_move(document: &Document, layer: LayerId, grab_at: f32) -> Grab {
 struct Lab {
     writer: DocumentWriter,
     document: Arc<Document>,
+    /// `document` を取ったときの `writer.revision`。**これが取り直しの唯一の合図**
+    revision: u64,
     fold: TimelineFoldState,
     drag: Option<(Grab, GestureId)>,
+    /// 掴んだ瞬間の `undo_len`。Esc で戻すときに、この gesture が実際に何か
+    /// 積んだのかを見る。**積んでいないなら undo しない** — 掴む前の、
+    /// 関係ない編集を取り消してしまう
+    drag_undo_base: usize,
     names: HashMap<LayerId, String>,
     /// 選択中の layer。**Project session が持つ種類の状態**で、Document には入れない
     selected: Option<LayerId>,
+    /// 見えている時間の窓。同上
+    view: TimelineView,
     /// playhead(秒)。同上
     playhead: f32,
     status: String,
@@ -168,6 +232,7 @@ impl Lab {
         );
         let writer = DocumentWriter::new(doc, catalog).expect("writer");
         let document = writer.snapshot();
+        let revision = writer.revision;
         let mut fold = TimelineFoldState::default();
         // 最初から階層が見えているほうが、行モデルの確認になる
         for (&layer, name) in &names {
@@ -185,10 +250,16 @@ impl Lab {
         Self {
             writer,
             document,
+            revision,
             fold,
             drag: None,
+            drag_undo_base: 0,
             names,
             selected: None,
+            view: TimelineView {
+                start: 0.0,
+                span: TIMELINE_SECONDS,
+            },
             playhead: 0.0,
             status: "arrow=children  diamond=key rows  drag=move  edges=trim  Cmd+Z=undo".to_owned(),
             shot,
@@ -337,7 +408,7 @@ impl Lab {
             }
         }
         if applied + keys_applied > 0 {
-            self.document = self.writer.snapshot();
+            refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
             // **追従できなかったキーを黙らせない。** Position 以外は動いていない
             let detail = match &grab {
                 Grab::Move { not_movable, .. } => format!(
@@ -351,6 +422,33 @@ impl Lab {
                 self.name(grab_layer(&grab)),
                 self.writer.undo_len()
             );
+        }
+    }
+
+    /// ドラッグ中の Esc。**掴む前へ戻す。**
+    ///
+    /// 1ドラッグ = 1 `GestureId` なので、その gesture が積んだものは undo 1回で
+    /// まとめて戻る。まだ何も積んでいない(掴んだだけで動かしていない)ときは
+    /// **undo しない** — 掴む前の、関係ない編集を取り消してしまう。
+    fn cancel_drag(&mut self) {
+        let Some((grab, _)) = self.drag.take() else {
+            return;
+        };
+        let layer = grab_layer(&grab);
+        if self.writer.undo_len() <= self.drag_undo_base {
+            self.status = format!("{} cancelled (nothing to undo)", self.name(layer));
+            return;
+        }
+        match self.writer.undo() {
+            Ok(()) => {
+                refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                self.status = format!(
+                    "{} cancelled  (undo {})",
+                    self.name(layer),
+                    self.writer.undo_len()
+                );
+            }
+            Err(error) => self.status = format!("cancel rejected: {error}"),
         }
     }
 
@@ -368,7 +466,7 @@ impl Lab {
         match prepared {
             Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
                 Ok(()) => {
-                    self.document = self.writer.snapshot();
+                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
                     let what = match (mute, visible, solo) {
                         (true, true, _) => "mute",
                         (true, false, _) => "unmute",
@@ -398,9 +496,12 @@ impl eframe::App for Lab {
         let ctx = ui.ctx().clone();
         ctx.request_repaint();
 
+        // **編集の出どころを問わない。** 自分が書いたときも、Browser が別の場所で
+        // シェイプを置いたときも、`revision` が進んでいれば次のフレームで拾う
+        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+
         // **毎フレーム、実Documentから行を作り直す。** 行のキャッシュを持たない
         let visible = rows(&self.document, &self.fold);
-        let track_w_for_time = ui.available_rect_before_wrap().width() - RAIL_W;
 
         let full = ui.available_rect_before_wrap();
         let p = ui.painter().clone();
@@ -437,10 +538,12 @@ impl eframe::App for Lab {
             Vec2::new(full.width(), RULER_H),
         );
         let track_left = full.left() + RAIL_W;
-        let track_w = full.right() - track_left;
+        let track_w = (full.right() - track_left).max(1.0);
         p.rect_filled(ruler, CornerRadius::ZERO, Color32::from_rgb(0x2a, 0x2a, 0x2a));
         for i in 0..=8 {
-            let x = track_left + track_w * i as f32 / 8.0;
+            // **目盛は窓を8等分した時刻である。** 寄れば 0:06.0 の隣が 0:06.5 になる
+            let t = self.view.start + self.view.span * i as f32 / 8.0;
+            let x = self.view.time_to_x(t, track_left, track_w);
             p.line_segment(
                 [egui::pos2(x, ruler.top()), egui::pos2(x, ruler.bottom())],
                 Stroke::new(1.0, Color32::from_rgb(0x44, 0x44, 0x44)),
@@ -448,7 +551,7 @@ impl eframe::App for Lab {
             p.text(
                 egui::pos2(x + 4.0, ruler.bottom() - 5.0),
                 Align2::LEFT_BOTTOM,
-                format!("0:{:02}", i * 2),
+                format!("{}:{:04.1}", (t / 60.0).floor() as i64, t % 60.0),
                 FontId::monospace(9.0),
                 DIM,
             );
@@ -467,8 +570,11 @@ impl eframe::App for Lab {
         );
         if scrub.is_pointer_button_down_on() {
             if let Some(pos) = scrub.interact_pointer_pos() {
-                self.playhead =
-                    ((pos.x - track_left) / track_w * TIMELINE_SECONDS).clamp(0.0, TIMELINE_SECONDS);
+                let comp = self.document.composition.duration.as_seconds_f64() as f32;
+                self.playhead = self
+                    .view
+                    .x_to_time(pos.x, track_left, track_w)
+                    .clamp(0.0, comp);
                 self.status = format!("{:.2}s", self.playhead);
             }
         }
@@ -676,8 +782,8 @@ impl eframe::App for Lab {
             match row.kind {
                 RowKind::Object => {
                     if let Some((start, end)) = clip_span(&self.document, row.layer) {
-                        let x0 = track_left + track_w * start / TIMELINE_SECONDS;
-                        let x1 = track_left + track_w * end / TIMELINE_SECONDS;
+                        let x0 = self.view.time_to_x(start, track_left, track_w);
+                        let x1 = self.view.time_to_x(end, track_left, track_w);
                         let bar = Rect::from_min_max(
                             egui::pos2(x0, track.top() + 3.0),
                             egui::pos2(x1, track.bottom() - 4.0),
@@ -715,17 +821,17 @@ impl eframe::App for Lab {
                                     begin_move(
                                         &self.document,
                                         row.layer,
-                                        (pos.x - track_left) / track_w * TIMELINE_SECONDS,
+                                        self.view.x_to_time(pos.x, track_left, track_w),
                                     )
                                 };
                                 let gesture = self.writer.begin_gesture();
+                                self.drag_undo_base = self.writer.undo_len();
                                 self.drag = Some((grab, gesture));
                             }
                         }
                         if r.dragged() {
                             if let Some(pos) = r.interact_pointer_pos() {
-                                let at = ((pos.x - track_left) / track_w_for_time.max(1.0) * TIMELINE_SECONDS)
-                                    .max(0.0);
+                                let at = self.view.x_to_time(pos.x, track_left, track_w).max(0.0);
                                 self.commit_drag(at);
                             }
                         }
@@ -738,7 +844,7 @@ impl eframe::App for Lab {
                     // **時刻を動かせるのは Position だけ。** 他は掴んでも動かない
                     let movable = param == ParamRef::Position;
                     for (key, t) in param_keys(&self.document, row.layer, param) {
-                        let x = track_left + track_w * t / TIMELINE_SECONDS;
+                        let x = self.view.time_to_x(t, track_left, track_w);
                         let c = egui::pos2(x, track.center().y);
                         let d = 4.0;
                         // 掴む的は菱形の中心から6px。bar の端と同じ寸法
@@ -771,13 +877,12 @@ impl eframe::App for Lab {
                                 );
                             } else if let Some(pos) = r.interact_pointer_pos() {
                                 let gesture = self.writer.begin_gesture();
+                                self.drag_undo_base = self.writer.undo_len();
                                 self.drag = Some((
                                     Grab::KeyTime {
                                         layer: row.layer,
                                         key,
-                                        grab_at: (pos.x - track_left)
-                                            / track_w_for_time.max(1.0)
-                                            * TIMELINE_SECONDS,
+                                        grab_at: self.view.x_to_time(pos.x, track_left, track_w),
                                         original: t,
                                     },
                                     gesture,
@@ -786,7 +891,7 @@ impl eframe::App for Lab {
                         }
                         if r.dragged() && movable {
                             if let Some(pos) = r.interact_pointer_pos() {
-                                let at = (pos.x - track_left) / track_w_for_time.max(1.0) * TIMELINE_SECONDS;
+                                let at = self.view.x_to_time(pos.x, track_left, track_w);
                                 self.commit_drag(at.max(0.0));
                             }
                         }
@@ -800,9 +905,40 @@ impl eframe::App for Lab {
             y += h;
         }
 
-        // playhead は行を描き終えてから、面の上に1本
-        let playhead_x = track_left + track_w * self.playhead / TIMELINE_SECONDS;
+        // ---- 横ズーム / パン ----
+        // **時間面の上でだけ効く。** 左列の上でホイールしても窓は動かない
         let rows_bottom = y;
+        let surface = Rect::from_min_max(
+            egui::pos2(track_left, ruler.top()),
+            egui::pos2(full.right(), rows_bottom.max(ruler.bottom())),
+        );
+        let comp = self.document.composition.duration.as_seconds_f64() as f32;
+        let (scroll, shift, pointer) = ctx.input(|i| {
+            (
+                i.smooth_scroll_delta,
+                i.modifiers.shift,
+                i.pointer.latest_pos(),
+            )
+        });
+        if let Some(pos) = pointer.filter(|p| surface.contains(*p)) {
+            if scroll.x != 0.0 || (shift && scroll.y != 0.0) {
+                // 横スクロール、または Shift + ホイール。**ピクセルの移動量を秒へ
+                // 直すのも `x_to_time` の仕事**にして、換算をここに書かない
+                let dx = if scroll.x != 0.0 { scroll.x } else { scroll.y };
+                let seconds = self.view.x_to_time(track_left + dx, track_left, track_w)
+                    - self.view.x_to_time(track_left, track_left, track_w);
+                self.view = self.view.pan(-seconds, comp);
+            } else if scroll.y != 0.0 {
+                // **カーソルの下の時刻は動かない。** それがズームの手触りそのもの
+                let anchor = self.view.x_to_time(pos.x, track_left, track_w);
+                self.view = self
+                    .view
+                    .zoom_at(anchor, 0.9_f32.powf(scroll.y / 50.0), comp);
+            }
+        }
+
+        // playhead は行を描き終えてから、面の上に1本
+        let playhead_x = self.view.time_to_x(self.playhead, track_left, track_w);
         p.line_segment(
             [
                 egui::pos2(playhead_x, ruler.top()),
@@ -844,16 +980,21 @@ impl eframe::App for Lab {
         }
 
         // Undo / Redo。1ドラッグ = 1 GestureId なので、掴んで動かした分がまとめて戻る
-        let (undo, redo) = ctx.input(|i| {
+        let (undo, redo, escape) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && !i.modifiers.shift,
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && i.modifiers.shift,
+                i.key_pressed(egui::Key::Escape),
             )
         });
-        if undo {
+        // **掴んでいる最中の Esc は、その gesture ごと取り消す。**
+        // 掴んでいないときの Esc は何もしない — Undo の代わりではない
+        if escape && self.drag.is_some() {
+            self.cancel_drag();
+        } else if undo {
             match self.writer.undo() {
                 Ok(()) => {
-                    self.document = self.writer.snapshot();
+                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
                     self.status = format!("undo  ({} left)", self.writer.undo_len());
                 }
                 Err(error) => self.status = format!("undo rejected: {error}"),
@@ -861,7 +1002,7 @@ impl eframe::App for Lab {
         } else if redo {
             match self.writer.redo() {
                 Ok(()) => {
-                    self.document = self.writer.snapshot();
+                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
                     self.status = format!("redo  ({} left)", self.writer.redo_len());
                 }
                 Err(error) => self.status = format!("redo rejected: {error}"),
@@ -885,6 +1026,26 @@ impl eframe::App for Lab {
             }
         }
     }
+}
+
+/// **外で入った編集を、次のフレームで拾う。**
+///
+/// Browser が別の場所でシェイプを置いたとき、Timeline はその編集を自分では
+/// 知らない。編集の出どころを問わず `writer.revision` だけを見る。
+///
+/// `snapshot()` は Document を丸ごと clone するので、**毎フレーム呼ばない** —
+/// revision が進んだフレームだけ取り直す。取り直したら `true`。
+fn refresh_if_stale(
+    writer: &DocumentWriter,
+    cached: &mut Arc<Document>,
+    cached_revision: &mut u64,
+) -> bool {
+    if writer.revision == *cached_revision {
+        return false;
+    }
+    *cached = writer.snapshot();
+    *cached_revision = writer.revision;
+    true
 }
 
 /// Lab の `ParamRef` を D2 の property セレクタへ。
@@ -1458,5 +1619,149 @@ mod tests {
         for ((_, before_t), (_, back_t)) in scale_before.iter().zip(restored.iter()) {
             assert!((back_t - before_t).abs() < 1e-3, "1ドラッグ = 1 Undo");
         }
+    }
+
+    // ---- 以下は未実装。実装者はこれを通すこと ----
+
+    const COMP: f32 = 16.0;
+
+    fn view() -> TimelineView {
+        TimelineView { start: 0.0, span: 16.0 }
+    }
+
+    #[test]
+    fn zoom_keeps_the_anchor_time_under_the_cursor() {
+        let v = view();
+        let (left, w) = (100.0_f32, 900.0_f32);
+        let anchor = 6.0_f32;
+        let x_before = v.time_to_x(anchor, left, w);
+
+        let zoomed = v.zoom_at(anchor, 0.5, COMP);
+        let x_after = zoomed.time_to_x(anchor, left, w);
+
+        assert!(
+            (x_before - x_after).abs() < 0.5,
+            "カーソルの下の時刻は動かない: {x_before} vs {x_after}"
+        );
+        assert!((zoomed.span - 8.0).abs() < 1e-3, "span は半分になる");
+    }
+
+    #[test]
+    fn zoom_clamps_at_the_whole_composition_and_at_a_quarter_second() {
+        let out = view().zoom_at(8.0, 100.0, COMP);
+        assert!((out.span - COMP).abs() < 1e-3, "composition より広く引けない");
+        assert!(out.start.abs() < 1e-3);
+
+        let mut deep = view();
+        for _ in 0..20 {
+            deep = deep.zoom_at(8.0, 0.5, COMP);
+        }
+        assert!((deep.span - MIN_SPAN).abs() < 1e-3, "0.25秒より寄れない");
+    }
+
+    #[test]
+    fn pan_cannot_scroll_before_zero_or_past_the_end() {
+        let v = view().zoom_at(8.0, 0.25, COMP); // span 4s
+        assert!((v.span - 4.0).abs() < 1e-3);
+
+        let left = v.pan(-999.0, COMP);
+        assert!(left.start.abs() < 1e-3, "0より前へは行かない");
+
+        let right = v.pan(999.0, COMP);
+        assert!(
+            (right.start - (COMP - 4.0)).abs() < 1e-3,
+            "終端より後ろは見せない: {}",
+            right.start
+        );
+    }
+
+    #[test]
+    fn x_to_time_is_the_inverse_of_time_to_x() {
+        let v = TimelineView { start: 3.5, span: 4.0 };
+        let (left, w) = (196.0_f32, 800.0_f32);
+        for t in [3.5_f32, 4.0, 5.25, 7.5] {
+            let back = v.x_to_time(v.time_to_x(t, left, w), left, w);
+            assert!((back - t).abs() < 1e-3, "{t} -> {back}");
+        }
+    }
+
+    #[test]
+    fn a_document_edit_made_elsewhere_shows_up_on_the_next_frame() {
+        // Browser がシェイプを置いたときに Timeline がすぐ出す、の最小形。
+        // **Lab が自分で編集していないのに、行が増えること**を見る
+        let (doc, names) = fixture();
+        let catalog =
+            Arc::new(motolii_plugin::reference::reference_catalog().expect("reference catalog"));
+        let mut writer = DocumentWriter::new(doc, catalog).expect("writer");
+
+        let mut cached = writer.snapshot();
+        let mut cached_revision = writer.revision;
+        let rows_before = rows(&cached, &TimelineFoldState::default()).len();
+
+        // Lab の外で編集する(ここでは M を落とすだけ。行数は変えない編集でも revision は進む)
+        let layer = layer_named(&names, "Background");
+        let gesture = writer.begin_gesture();
+        let command = writer
+            .prepare_set_item_visible(layer, false)
+            .expect("prepare")
+            .expect("command");
+        writer.apply_command(gesture, command).expect("apply");
+
+        assert_ne!(writer.revision, cached_revision, "編集で revision が進む");
+
+        // 次のフレームで拾う
+        let refreshed = refresh_if_stale(&writer, &mut cached, &mut cached_revision);
+        assert!(refreshed, "revision が変わったら取り直す");
+        assert_eq!(
+            rows(&cached, &TimelineFoldState::default()).len(),
+            rows_before
+        );
+        assert!(
+            !item_flags(&cached, layer).expect("flags").0,
+            "外からの編集が cached snapshot へ反映されている"
+        );
+
+        // 変化が無ければ取り直さない(毎フレーム clone しない)
+        assert!(!refresh_if_stale(&writer, &mut cached, &mut cached_revision));
+    }
+
+    /// **Esc は掴む前へ戻す。** ドラッグは毎フレーム出し直すが、1ドラッグ =
+    /// 1 `GestureId` なので、undo 1回でその gesture の編集がまとめて消える。
+    #[test]
+    fn escape_during_a_drag_restores_the_original_start() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Background");
+        let before = clip_span(&lab.document, layer).expect("span").0;
+
+        let gesture = lab.writer.begin_gesture();
+        lab.drag_undo_base = lab.writer.undo_len();
+        lab.drag = Some((begin_move(&lab.document, layer, 1.0), gesture));
+        // 実際のドラッグと同じく、動かしている間に何度も出す
+        lab.commit_drag(2.0);
+        lab.commit_drag(3.0);
+        assert!(
+            (clip_span(&lab.document, layer).expect("span").0 - (before + 2.0)).abs() < 1e-3,
+            "掴んでいる間は動いている: {:?}",
+            clip_span(&lab.document, layer)
+        );
+
+        lab.cancel_drag();
+
+        assert!(lab.drag.is_none(), "取り消したら、もう掴んでいない");
+        assert!(
+            (clip_span(&lab.document, layer).expect("span").0 - before).abs() < 1e-3,
+            "Esc で掴む前の開始時刻へ戻る: {:?}",
+            clip_span(&lab.document, layer)
+        );
+        assert_eq!(
+            lab.writer.undo_len(),
+            lab.drag_undo_base,
+            "取り消した gesture は履歴に残らない"
+        );
+        assert!(
+            lab.status.contains("cancelled"),
+            "status に出す: {}",
+            lab.status
+        );
     }
 }
