@@ -364,6 +364,28 @@ pub struct DropTarget {
     pub y: f32,
 }
 
+/// このフレームに来たホイールの生の量。
+///
+/// `smooth_scroll_delta` は egui が時間で均した値で、**指を止めても数フレーム
+/// 流れ続ける**。面を掴んで動かす操作(パン・縦スクロール)では、その上乗せが
+/// そのまま遅延として出る。OS 側の慣性はイベントに含まれて来るので、
+/// ここで捨てているのは egui の均しだけである。
+fn raw_wheel(input: &egui::InputState) -> Vec2 {
+    input
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            egui::Event::MouseWheel { unit, delta, .. } => Some(match unit {
+                egui::MouseWheelUnit::Point => *delta,
+                // 行・ページ単位で来る環境では px へ直す(macOS は Point で来る)
+                egui::MouseWheelUnit::Line => *delta * 50.0,
+                egui::MouseWheelUnit::Page => *delta * 400.0,
+            }),
+            _ => None,
+        })
+        .fold(Vec2::ZERO, |sum, delta| sum + delta)
+}
+
 /// 1フレームで進める上限(秒)。
 ///
 /// **窓が隠れていた分をまとめて進めない。** eframe は見えていないと描画を間引くので、
@@ -2150,6 +2172,11 @@ impl Lab {
         );
     }
 
+    /// 画面上の移動量(px)を、いまの窓での秒へ。**換算はここ1本**
+    fn seconds_for(&self, dx: f32, track_w: f32) -> f32 {
+        dx / track_w * self.view.span
+    }
+
     /// 吸着の候補を集める。**clip の端・キー・playhead・ループの端・0・終端。**
     ///
     /// `exclude` は動かしている当人で、自分自身へは吸着しない。
@@ -2899,6 +2926,15 @@ impl eframe::App for Lab {
             let indent = 8.0 + row.depth as f32 * 14.0;
             let cy = rail.center().y;
 
+            // **入れ子の背骨。** 深さのぶんだけ縦線を引き、どこまでが誰の中かを見せる
+            for level in 0..row.depth {
+                let x = rail.left() + 8.0 + level as f32 * 14.0 + 2.0;
+                p.line_segment(
+                    [egui::pos2(x, rail.top()), egui::pos2(x, rail.bottom())],
+                    Stroke::new(1.0, Color32::from_rgb(0x4a, 0x4a, 0x4a)),
+                );
+            }
+
             // 子の開閉（三角）— 子を持つ行だけ
             if row.has_children {
                 let hit = Rect::from_center_size(
@@ -3117,6 +3153,30 @@ impl eframe::App for Lab {
                             CornerRadius::ZERO,
                             if r.dragged() { ACCENT } else { color },
                         );
+                        // **畳んである Group は、中身をその bar の中に出す。**
+                        // 開けば行として見えるものが、閉じると消えてしまうと、
+                        // 何が入っているのか掴めない(説明の文字を足さずに済ませる)
+                        if row.has_children && !row.children_open {
+                            for (child, start, end) in movable_clips(&self.document, row.layer) {
+                                let cx0 = self.view.time_to_x(start, track_left, track_w);
+                                let cx1 = self.view.time_to_x(end, track_left, track_w);
+                                let inner = Rect::from_min_max(
+                                    egui::pos2(cx0, bar.top() + bar.height() * 0.55),
+                                    egui::pos2(cx1, bar.bottom() - 1.0),
+                                );
+                                if inner.width() > 0.5 {
+                                    p.rect_filled(
+                                        inner,
+                                        CornerRadius::ZERO,
+                                        if self.colors_on {
+                                            layer_color(&self.document, child)
+                                        } else {
+                                            Color32::from_rgb(0x65, 0x75, 0x8c)
+                                        },
+                                    );
+                                }
+                            }
+                        }
                         p.rect_stroke(
                             bar,
                             CornerRadius::ZERO,
@@ -3351,8 +3411,14 @@ impl eframe::App for Lab {
         // ---- 縦スクロール / 横ズーム / 横パン ----
         // **割り当ては AE / Premiere と同じ。** 素のホイールは縦、Cmd で横ズーム
         let comp = self.document.composition.duration.as_seconds_f64() as f32;
-        let (scroll, shift, command, pinch, pointer) = ctx.input(|i| {
+        // **運ぶ量は生のまま取る。** `smooth_scroll_delta` は egui が均した値で、
+        // 指を止めても数フレーム流れ続ける — 面を掴んで動かしている感触にならない
+        // (OS 側の慣性はそのまま来るので、失うのは egui の上乗せ分だけ)。
+        // ズームだけは均した値を使う: 倍率は1フレームの差が指数で効くので、
+        // 生値だと段が見える
+        let (scroll, smooth, shift, command, pinch, pointer) = ctx.input(|i| {
             (
+                raw_wheel(i),
                 i.smooth_scroll_delta,
                 i.modifiers.shift,
                 i.modifiers.command,
@@ -3368,22 +3434,25 @@ impl eframe::App for Lab {
             if (pinch - 1.0).abs() > 1e-3 {
                 // ピンチ。**trackpad はこれが本命**
                 self.view = self.view.zoom_at(anchor, 1.0 / pinch, comp);
-            } else if command && scroll.y != 0.0 {
+            } else if command && smooth.y != 0.0 {
                 // **カーソルの下の時刻は動かない。** それがズームの手触りそのもの
                 self.view = self
                     .view
-                    .zoom_at(anchor, 0.9_f32.powf(scroll.y / 50.0), comp);
-            } else if scroll.x != 0.0 || (shift && scroll.y != 0.0) {
-                // 横スクロール、または Shift + ホイール。**ピクセルの移動量を秒へ
-                // 直すのも `x_to_time` の仕事**にして、換算をここに書かない
-                let dx = if scroll.x != 0.0 { scroll.x } else { scroll.y };
-                let seconds = self.view.x_to_time(track_left + dx, track_left, track_w)
-                    - self.view.x_to_time(track_left, track_left, track_w);
-                self.view = self.view.pan(-seconds, comp);
-            } else if scroll.y != 0.0 {
-                // 素のホイールは縦。**行が画面より多いときだけ動く**
-                self.scroll_y =
-                    clamp_scroll(self.scroll_y - scroll.y, content_h, rows_view.height());
+                    .zoom_at(anchor, 0.9_f32.powf(smooth.y / 50.0), comp);
+            } else if shift && scroll.y != 0.0 {
+                // マウスの Shift + ホイール。横しか無いので、そのまま横へ
+                self.view = self.view.pan(-self.seconds_for(scroll.y, track_w), comp);
+            } else {
+                // **二本指はどちらの軸も同時に効く。** 以前は「x が少しでも動いたら
+                // 横パンだけ」にしていたので、縦へ振ったつもりの僅かな横ブレで
+                // 面が滑っていた(素直でない、の正体)。指の動きをそのまま2軸へ渡す
+                if scroll.x != 0.0 {
+                    self.view = self.view.pan(-self.seconds_for(scroll.x, track_w), comp);
+                }
+                if scroll.y != 0.0 {
+                    self.scroll_y =
+                        clamp_scroll(self.scroll_y - scroll.y, content_h, rows_view.height());
+                }
             }
         }
 
