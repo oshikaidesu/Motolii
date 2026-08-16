@@ -137,9 +137,37 @@ Blitz をビルド時のコンパイラとして使い、Stylo にカスケー�
 
 **リポジトリへ戻す必要はない。** `git show f209da9d^:<path>` で読める。
 
+## 7. UI側の編集経路が同日に消えた — 繋ぐ先の現状
+
+本決定と同じ日に、`document_edit_runtime/`(25ファイル)と `timeline_intent_adapter.rs` が削除された(`21cb8204`)。**C2 で繋ぐはずだった翻訳層である。**
+
+朝の[Web窓とRN製品面の畳み込み](2026-08-16-web-window-and-rn-product-fold.md)は「`timeline_intent_adapter`(166行)は参照ゼロだが**残してある**。消すと同じ作業を書き直すことになる」と書いていた。**その指示に反して消した**ので、経緯として明記する。
+
+ただし**繋ぐ両端は無傷**であり、「配線が全部消えた」は誤りである。
+
+| | 状態 |
+|---|---|
+| ジェスチャ層(`timeline_move_gesture` 130 / `timeline_trim_gesture` 189) | **生存**。`TimelineMoveRequest` / `TimelineTrimRequest` を作るところまで動く |
+| 投影・視野(`timeline_projection` 411 / `timeline_viewport_state` 341) | **生存** |
+| 単一書き手の境界(`document_command_request.rs` 62) | **生存**。決定済みD2 command列を1回の編集要求へ畳む |
+| D2 の意味論(`motolii-doc/src/command/`) | **無傷**。`AddPositionKey` と逆操作の持ち主は最初からここ |
+| 翻訳層(`document_edit_runtime` + `timeline_intent_adapter`) | **削除**。コード2,556行 / テスト3,212行 |
+
+消えた5,934行の**半分以上はテスト**(`apply_failures` 494 / `place_and_trim` 418 / `position_keys` 390 / `journal` 303 …)で、それらは「**どの編集が合法で、どれが拒否されるべきか**」の記録だった。痛いのはコードよりこちらである。
+
+### 戻し方 — `git checkout` ではなく `git show`
+
+```bash
+git show 21cb8204^:crates/motolii-ui/src/document_edit_runtime/tests/place_and_trim.rs
+```
+
+**いま木へ戻さない。** 理由は `timeline_egui` を戻さないのと同じで、(1) 消費者ゼロのコードを押し戻すことになる(ビルド 23.4→3.10s の効きは自分のコード量だった)、(2) `timeline_intent_adapter` は平坦な行モデル前提で、**今日決めた Group 階層では作り直しになる**、(3) テストは runtime の型に依存するので単体では動かず、その runtime こそ作り直す対象。
+
+**着手順は C2 に入る時点で: テストの意図を新しい行モデル向けに書き直す → それが通る最小の翻訳層を書く → `prepare_place.rs` / `process_keys.rs` を参照実装として開く。** D2 の API は変わっていないので、設計判断はほぼ済んでいる。
+
 ## 残余
 
-- **入力(C2)は未配線のまま。** 基盤が変わっても、この穴は塞がっていない。前回 `timeline_egui` が止まったのもここ
+- **入力(C2)は未配線のまま。** 基盤が変わっても、この穴は塞がっていない。前回 `timeline_egui` が止まったのもここ。**加えて §7 の通り、繋ぐ先の翻訳層も作り直しになる**(`21cb8204^` から読める)
 - **同一性の対応づけが未設計。** `LayerId`/`KeyframeId` ↔ 面の要素。renderer 非依存の作業
 - **フォント同梱**が未着手(豆腐)
 - **行モデルの作り直し**が要る(group 階層)。着手順は「テスト339行 → 行モデル → トークン取り込み → `input.rs` の型」
