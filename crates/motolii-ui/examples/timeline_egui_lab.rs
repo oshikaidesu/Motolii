@@ -143,8 +143,12 @@ impl TimelineView {
     }
 }
 
-/// ルーラの上端に置くループ帯の高さ
-const LOOP_H: f32 = 9.0;
+/// ルーラの上端に置くループ帯の高さ。**掴める帯として成立する厚み**
+const LOOP_H: f32 = 12.0;
+/// ループの端を掴める幅。bar のトリム端(6px)より広い —
+/// **外すと「新しい区間を引く」に落ちて、古い区間が消えてしまう**ので、
+/// 端の判定は甘いほうが事故が小さい
+const LOOP_GRAB: f32 = 8.0;
 /// 面の端これだけ以内へポインタが入ったら、掴んだまま窓が動く
 const EDGE_PAN: f32 = 28.0;
 /// 端で掴み続けたときに流れる速さ(窓の幅に対する毎秒の割合)
@@ -160,15 +164,44 @@ pub struct LoopRegion {
     pub on: bool,
 }
 
-/// ループ帯のどこを掴んだか
+/// ループ帯のどこを掴んだか。
+///
+/// **端を掴んだときは反対側の端を掴んだ瞬間に控える。** 毎フレーム
+/// `self.loop_region` から読み直すと、ポインタが反対の端を追い越した瞬間に
+/// 区間が畳まれて1フレームの薄片になり、戻しても復元しない。
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum LoopGrab {
     /// 何も無いところから引いた。`anchor` は掴んだ時刻で、反対側がポインタを追う
     New { anchor: f32 },
     /// 区間ごと動かす
     Move { grab_at: f32, from: (f32, f32) },
-    In,
-    Out,
+    /// 頭を動かす。`fixed` は動かないほうの端(お尻)
+    In { fixed: f32 },
+    /// お尻を動かす。`fixed` は動かないほうの端(頭)
+    Out { fixed: f32 },
+}
+
+/// ループ帯のどこを掴んだかを決める。**端が先、中が次、外は新規**。
+///
+/// 端の判定を外すと `New` に落ちる = **古い区間が消える**ので、
+/// 端は `LOOP_GRAB` ぶん甘く見る。短い区間で頭と尻の判定が重なったら、
+/// 近いほうを採る(どちらも同じだけ近いなら尻 — 伸ばす操作のほうが多い)。
+fn loop_grab_for(pos_x: f32, x0: f32, x1: f32, at: f32, region: LoopRegion) -> LoopGrab {
+    let (d0, d1) = ((pos_x - x0).abs(), (pos_x - x1).abs());
+    if d0 <= LOOP_GRAB || d1 <= LOOP_GRAB {
+        return if d0 < d1 {
+            LoopGrab::In { fixed: region.end }
+        } else {
+            LoopGrab::Out { fixed: region.start }
+        };
+    }
+    if pos_x > x0 && pos_x < x1 {
+        return LoopGrab::Move {
+            grab_at: at,
+            from: (region.start, region.end),
+        };
+    }
+    LoopGrab::New { anchor: at }
 }
 
 /// 引いた2点からループ区間を作る。
@@ -191,14 +224,21 @@ fn loop_from_drag(a: f32, b: f32, comp: f32, fps: Fps) -> (f32, f32) {
     (lo, hi)
 }
 
-/// ループの折り返し。**行き過ぎた分は捨てずに頭へ足す** —
-/// 捨てると1フレームの取りこぼしが毎周たまり、周期が伸びる。
-fn wrap_playhead(at: f32, region: LoopRegion) -> f32 {
+/// ループの折り返し。**判定は「お尻に来たか」だけ。**
+///
+/// 区間の外から再生を始めても頭へ引き戻さない — 押した所から流れ、
+/// **お尻を越えた瞬間に**頭へ戻る。だから区間より前から入れば
+/// そこまで通しで聴こえ、区間より後ろから始めたなら一度も折り返さない
+/// (`from` が既にお尻より後ろなら、越える瞬間が来ない)。
+///
+/// 行き過ぎた分は捨てずに頭へ足す — 捨てると1フレームの取りこぼしが
+/// 毎周たまり、周期が伸びる。
+fn wrap_playhead(from: f32, to: f32, region: LoopRegion) -> f32 {
     let length = region.end - region.start;
-    if !region.on || length <= 0.0 || at < region.end {
-        return at;
+    if !region.on || length <= 0.0 || from >= region.end || to < region.end {
+        return to;
     }
-    region.start + (at - region.start) % length
+    region.start + (to - region.start) % length
 }
 
 /// 端を掴み続けているあいだ、窓が流れる秒数(このフレームぶん)。
@@ -1240,14 +1280,6 @@ impl eframe::App for Lab {
             if self.playing && self.playhead >= comp_seconds - 1e-3 {
                 self.playhead = 0.0;
             }
-            // ループが効いていて、その外から押したら**区間の頭から**。
-            // 押した所から始めて一度も折り返さない、が一番分かりにくい
-            if self.playing
-                && self.loop_region.on
-                && (self.playhead < self.loop_region.start || self.playhead >= self.loop_region.end)
-            {
-                self.playhead = self.loop_region.start;
-            }
             self.status = if self.playing { "play" } else { "pause" }.to_owned();
         }
         // `L` は帯を消さずに効きだけ切る。**引き直さずに戻せる**
@@ -1266,10 +1298,13 @@ impl eframe::App for Lab {
             //  後ろにあると eframe が描画を間引き、戻った1フレームの `dt` が
             //  数百msになる — 足すと playhead が数秒ぶん飛ぶ)
             let (at, keep) = advance_playhead(self.playhead, dt.min(MAX_STEP), comp_seconds);
-            // **折り返しは終端判定より先。** ループの中に居るなら composition の
-            // 終わりには辿り着かないので、`keep` を見るのは折り返した後で足りる
-            self.playhead = wrap_playhead(at, self.loop_region);
-            if !keep && !self.loop_region.on {
+            // **折り返したかどうかで終端判定が変わる。** 折り返したのなら
+            // composition の終わりに着いたのではない(ループのお尻が終端と
+            // 同じ時刻でも、再生は続く)
+            let wrapped = wrap_playhead(self.playhead, at, self.loop_region);
+            let did_wrap = wrapped != at;
+            self.playhead = wrapped;
+            if !keep && !did_wrap {
                 self.playing = false;
                 self.status = "end".to_owned();
             }
@@ -1304,18 +1339,13 @@ impl eframe::App for Lab {
         if loop_hit.drag_started() {
             if let Some(pos) = loop_hit.interact_pointer_pos() {
                 let at = self.view.x_to_time(pos.x, track_left, track_w);
-                self.loop_drag = Some(if (pos.x - loop_x0).abs() <= 6.0 {
-                    LoopGrab::In
-                } else if (pos.x - loop_x1).abs() <= 6.0 {
-                    LoopGrab::Out
-                } else if pos.x > loop_x0 && pos.x < loop_x1 {
-                    LoopGrab::Move {
-                        grab_at: at,
-                        from: (self.loop_region.start, self.loop_region.end),
-                    }
-                } else {
-                    LoopGrab::New { anchor: at }
-                });
+                self.loop_drag = Some(loop_grab_for(
+                    pos.x,
+                    loop_x0,
+                    loop_x1,
+                    at,
+                    self.loop_region,
+                ));
                 // **引いたら効く。** 引いてから別のキーで入れる手順にしない
                 self.loop_region.on = true;
             }
@@ -1325,8 +1355,9 @@ impl eframe::App for Lab {
                 let at = self.view.x_to_time(pos.x, track_left, track_w);
                 let (start, end) = match grab {
                     LoopGrab::New { anchor } => loop_from_drag(anchor, at, comp_seconds, fps),
-                    LoopGrab::In => loop_from_drag(at, self.loop_region.end, comp_seconds, fps),
-                    LoopGrab::Out => loop_from_drag(self.loop_region.start, at, comp_seconds, fps),
+                    // **反対側は掴んだ瞬間の値で固定する。** 追い越しても畳まれない
+                    LoopGrab::In { fixed } => loop_from_drag(at, fixed, comp_seconds, fps),
+                    LoopGrab::Out { fixed } => loop_from_drag(fixed, at, comp_seconds, fps),
                     LoopGrab::Move { grab_at, from } => {
                         // 区間ごと動かすときは長さを変えない。端に当たったら止まる
                         let length = from.1 - from.0;
@@ -1366,7 +1397,7 @@ impl eframe::App for Lab {
                     Color32::from_rgb(0x4a, 0x4a, 0x4a)
                 },
             );
-            // 掴める端を示す。bar のトリム端と同じ 6px
+            // 掴める端を示す
             if loop_hit.hovered() || self.loop_drag.is_some() {
                 for x in [x0, x1] {
                     lane.rect_filled(
@@ -3433,23 +3464,44 @@ mod tests {
         assert!(start >= 0.0 && end <= comp, "{start}–{end}");
     }
 
-    /// **行き過ぎた分は頭へ足す。** 捨てると毎周ぶんだけ周期が伸びる。
+    /// **判定は「お尻を越えたか」だけ。** 入り口へ引き戻さない。
     #[test]
-    fn playback_wraps_at_the_loop_end_without_losing_the_overshoot() {
+    fn playback_wraps_when_it_reaches_the_loop_end_not_when_it_starts_outside() {
         let region = LoopRegion {
             start: 2.0,
             end: 6.0,
             on: true,
         };
-        assert_eq!(wrap_playhead(3.0, region), 3.0, "中では何もしない");
-        assert!((wrap_playhead(6.02, region) - 2.02).abs() < 1e-4, "行き過ぎた分が残る");
-        assert!((wrap_playhead(6.0, region) - 2.0).abs() < 1e-4, "終端ちょうどで頭へ");
-        // 何周ぶんも飛んでいても剰余で収まる
-        assert!((wrap_playhead(15.0, region) - 3.0).abs() < 1e-4);
+
+        // 区間の中: お尻に来るまで何もしない
+        assert_eq!(wrap_playhead(2.9, 3.0, region), 3.0);
+        assert!(
+            (wrap_playhead(5.99, 6.02, region) - 2.02).abs() < 1e-4,
+            "行き過ぎた分が残る"
+        );
+        assert!(
+            (wrap_playhead(5.99, 6.0, region) - 2.0).abs() < 1e-4,
+            "お尻ちょうどで頭へ"
+        );
+
+        // **区間より前から始めても引き戻さない。** そこまで通しで流れる
+        assert_eq!(wrap_playhead(0.0, 0.5, region), 0.5, "入り口へ強制しない");
+        assert_eq!(wrap_playhead(1.9, 1.95, region), 1.95);
+        assert!(
+            (wrap_playhead(5.9, 6.01, region) - 2.01).abs() < 1e-4,
+            "前から入っても、お尻では折り返す"
+        );
+
+        // **区間より後ろから始めたら一度も折り返さない。** 越える瞬間が来ない
+        assert_eq!(wrap_playhead(9.0, 9.1, region), 9.1);
+        assert_eq!(wrap_playhead(6.0, 6.1, region), 6.1);
+
+        // 1フレームで何周ぶんも飛んでいても剰余で収まる
+        assert!((wrap_playhead(5.9, 15.0, region) - 3.0).abs() < 1e-4);
 
         // 切れているなら折り返さない
         let off = LoopRegion { on: false, ..region };
-        assert_eq!(wrap_playhead(9.0, off), 9.0);
+        assert_eq!(wrap_playhead(5.9, 9.0, off), 9.0);
     }
 
     /// **端まで運んだときだけ窓が流れる。** 面の中では動かない。
@@ -3475,5 +3527,74 @@ mod tests {
         // 窓の外まで出しても、1フレームで窓の幅を超えて飛ばない
         let far = edge_pan_seconds(track_left + track_w + 200.0, track_left, track_w, span, dt);
         assert!(far < span * 0.5, "1フレームで飛びすぎない: {far}");
+    }
+
+    /// **お尻を掴んだつもりが新規作成になる、が一番効く事故。**
+    ///
+    /// 端の判定を外すと `New` に落ち、そこまで作った区間が消える。
+    /// だから端は甘く見る。
+    #[test]
+    fn the_ends_of_a_loop_are_grabbable_and_a_near_miss_is_not_a_new_region() {
+        let region = LoopRegion {
+            start: 2.0,
+            end: 6.0,
+            on: true,
+        };
+        let (x0, x1) = (300.0_f32, 700.0_f32);
+
+        // 端そのもの
+        assert_eq!(
+            loop_grab_for(x0, x0, x1, 2.0, region),
+            LoopGrab::In { fixed: 6.0 },
+            "頭を掴む"
+        );
+        assert_eq!(
+            loop_grab_for(x1, x0, x1, 6.0, region),
+            LoopGrab::Out { fixed: 2.0 },
+            "お尻を掴む"
+        );
+        // 少し外しても端のまま(**新規作成に落ちない**)
+        for dx in [-LOOP_GRAB, -3.0, 3.0, LOOP_GRAB] {
+            assert_eq!(
+                loop_grab_for(x1 + dx, x0, x1, 6.0, region),
+                LoopGrab::Out { fixed: 2.0 },
+                "お尻から {dx}px は掴めたまま"
+            );
+        }
+        // 内側は移動、完全に外は新規
+        assert!(matches!(
+            loop_grab_for((x0 + x1) * 0.5, x0, x1, 4.0, region),
+            LoopGrab::Move { .. }
+        ));
+        assert!(matches!(
+            loop_grab_for(x1 + 40.0, x0, x1, 9.0, region),
+            LoopGrab::New { .. }
+        ));
+    }
+
+    /// **端を掴んで反対側を追い越しても、区間が畳まれない。**
+    ///
+    /// 反対側を毎フレーム `loop_region` から読み直すと、追い越した瞬間に
+    /// 長さ0 → 最短1フレームへ潰れ、戻しても復元しない。
+    #[test]
+    fn dragging_an_end_past_the_other_keeps_the_region_anchored() {
+        let fps = Fps::try_new(30, 1).expect("fps");
+        let comp = 16.0_f32;
+        let region = LoopRegion {
+            start: 2.0,
+            end: 6.0,
+            on: true,
+        };
+
+        // お尻を頭より前まで引く: 固定した頭(2.0)との区間になる
+        let LoopGrab::Out { fixed } = loop_grab_for(700.0, 300.0, 700.0, 6.0, region) else {
+            panic!("お尻を掴んだはず");
+        };
+        let (start, end) = loop_from_drag(fixed, 1.0, comp, fps);
+        assert!((start - 1.0).abs() < 1e-3 && (end - 2.0).abs() < 1e-3, "{start}–{end}");
+
+        // そのまま戻せば元の長さに戻る(潰れていない)
+        let (start, end) = loop_from_drag(fixed, 6.0, comp, fps);
+        assert!((start - 2.0).abs() < 1e-3 && (end - 6.0).abs() < 1e-3, "{start}–{end}");
     }
 }
