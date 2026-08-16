@@ -570,6 +570,24 @@ fn rail_hit(ui: &mut egui::Ui, id: egui::Id, rect: Rect) -> egui::Response {
     ui.interact(rect, id, Sense::click_and_drag())
 }
 
+/// その部品が**押されたか**。
+///
+/// `click_and_drag` は掴みを捕まえるが、その代わり**数px動くと `clicked()` が
+/// 立たない** — egui から見ると「掴んで離した」になるからである。三角や M/S/L の
+/// ような小さい的では、少し動いてしまった押下も押下として扱うのが正しい
+/// (押した所で離しているなら、指が揺れただけである)。
+///
+/// 離した場所が的の外なら押下にしない — ボタンから指をずらして逃がす、
+/// あの取り消し方をそのまま残す。
+fn pressed(r: &egui::Response, rect: Rect) -> bool {
+    r.clicked()
+        || (r.drag_stopped()
+            && r
+                .interact_pointer_pos()
+                .map(|pos| rect.contains(pos))
+                .unwrap_or(false))
+}
+
 /// 枠つきの四角ボタン(M / S / L)。**入っている色は呼び側が持つ**
 fn rail_button(
     ui: &mut egui::Ui,
@@ -581,6 +599,7 @@ fn rail_button(
     on_color: Color32,
 ) -> bool {
     let r = rail_hit(ui, id, rect);
+    let hit = pressed(&r, rect);
     if on {
         p.rect_filled(rect, CornerRadius::ZERO, on_color);
     }
@@ -608,7 +627,7 @@ fn rail_button(
             Color32::from_rgb(0xaa, 0xaa, 0xaa)
         },
     );
-    r.clicked()
+    hit
 }
 
 /// 枠の無い記号ボタン(▾ / ◇)。開いているときは点いたままにする
@@ -628,7 +647,7 @@ fn rail_glyph(
         FontId::proportional(11.0),
         if on || r.hovered() { ACCENT } else { DIM },
     );
-    r.clicked()
+    pressed(&r, rect)
 }
 
 /// まだ無い操作を**席として並べる**。押せないが、どこに来るかは分かる。
