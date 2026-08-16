@@ -763,6 +763,39 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+/// bar のどこを掴んだか
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum BarPart {
+    Body,
+    TrimIn,
+    TrimOut,
+}
+
+/// トリムの端の幅。モックの `.trimHandle{width:7px}` に合わせた値
+const TRIM_EDGE: f32 = 6.0;
+
+/// bar のどこを掴んだかを決める。**端を差し出してよい場合だけ差し出す。**
+///
+/// - **Group の bar は端を持たない。** あれは子の範囲を写した絵で、Group 自身は
+///   `clip.start` も `duration` も持たない — 端を掴ませても D2 は
+///   `TrackItemNotClip` で断る。**書けない操作を差し出さない**
+/// - **細い bar でも端を取らない。** 左右6pxずつ取ると幅12px以下の clip は
+///   全部が端になり、**動かせない clip** ができる(掴める体を必ず残す)
+/// - 端の判定は**面に映っている矩形ではなく clip 本来の矩形**で見る。
+///   窓の外へ出ている端は、画面の縁であって clip の端ではない
+fn classify_bar_edge(bar: Rect, pos_x: f32, is_group: bool) -> BarPart {
+    if is_group || bar.width() < TRIM_EDGE * 3.0 {
+        return BarPart::Body;
+    }
+    if pos_x - bar.left() <= TRIM_EDGE {
+        BarPart::TrimIn
+    } else if bar.right() - pos_x <= TRIM_EDGE {
+        BarPart::TrimOut
+    } else {
+        BarPart::Body
+    }
+}
+
 /// 掴んでいるもの。**何を掴んだかで、出す command が変わる**
 #[derive(Debug, Clone)]
 enum Grab {
@@ -3222,25 +3255,23 @@ impl eframe::App for Lab {
                             self.status = format!("{} is locked", self.name(row.layer));
                         } else if r.drag_started() {
                             if let Some(pos) = r.interact_pointer_pos() {
-                                // **何を掴んだかは端からの距離で決める。** 6px はモックの
-                                // `.trimHandle{width:7px}` に合わせた値
-                                let grab = if pos.x - bar.left() <= 6.0 {
-                                    Grab::TrimIn { layer: row.layer }
-                                } else if bar.right() - pos.x <= 6.0 {
-                                    Grab::TrimOut { layer: row.layer }
-                                } else {
-                                    // **選ばれているものは一緒に動く。** 選ばれていない
-                                    // bar を掴んだときは、その1つを選び直してから動かす
-                                    if !self.is_selected(row.layer) {
-                                        self.selected = vec![row.layer];
+                                let grab = match classify_bar_edge(bar, pos.x, row.has_children) {
+                                    BarPart::TrimIn => Grab::TrimIn { layer: row.layer },
+                                    BarPart::TrimOut => Grab::TrimOut { layer: row.layer },
+                                    BarPart::Body => {
+                                        // **選ばれているものは一緒に動く。** 選ばれて
+                                        // いない bar を掴んだら、その1つを選び直す
+                                        if !self.is_selected(row.layer) {
+                                            self.selected = vec![row.layer];
+                                        }
+                                        let roots = self.selection_roots();
+                                        begin_move_many(
+                                            &self.document,
+                                            &roots,
+                                            row.layer,
+                                            surface.time_at(self.view, pos.x),
+                                        )
                                     }
-                                    let roots = self.selection_roots();
-                                    begin_move_many(
-                                        &self.document,
-                                        &roots,
-                                        row.layer,
-                                        self.view.x_to_time(pos.x, track_left, track_w),
-                                    )
                                 };
                                 self.hold_item(grab);
                             }
@@ -6012,5 +6043,58 @@ mod tests {
             egui::pos2(view.time_to_x(1.0, track_left, track_w), track.bottom()),
         );
         assert!(gone.intersect(track).width() <= 0.5, "面の外にしか無いなら的も無い");
+    }
+
+    /// **書けない操作を差し出さない。** Group の bar には端が無い。
+    ///
+    /// Group の bar は子の範囲を写した絵で、Group 自身は `clip.start` も
+    /// `duration` も持たない。掴ませても D2 は `TrackItemNotClip` で断るので、
+    /// 端として振る舞わせない(掴めるのに何も起きない、を作らない)。
+    #[test]
+    fn a_group_bar_has_no_trim_edges() {
+        let bar = Rect::from_min_max(egui::pos2(100.0, 0.0), egui::pos2(400.0, 20.0));
+
+        for x in [100.0_f32, 103.0, 250.0, 397.0, 400.0] {
+            assert_eq!(
+                classify_bar_edge(bar, x, true),
+                BarPart::Body,
+                "Group はどこを掴んでも body: x={x}"
+            );
+        }
+        // clip なら端がある
+        assert_eq!(classify_bar_edge(bar, 102.0, false), BarPart::TrimIn);
+        assert_eq!(classify_bar_edge(bar, 398.0, false), BarPart::TrimOut);
+        assert_eq!(classify_bar_edge(bar, 250.0, false), BarPart::Body);
+    }
+
+    /// **細い bar は全部が体。** 端を取ると動かせない clip ができる。
+    #[test]
+    fn a_thin_bar_keeps_a_body_to_grab() {
+        // 幅18px未満: 左右6pxずつ取ると掴める体が残らない
+        let thin = Rect::from_min_max(egui::pos2(100.0, 0.0), egui::pos2(112.0, 20.0));
+        for x in [100.0_f32, 104.0, 108.0, 112.0] {
+            assert_eq!(
+                classify_bar_edge(thin, x, false),
+                BarPart::Body,
+                "細い bar は動かせるほうを残す: x={x}"
+            );
+        }
+
+        // ちょうど体が残る幅なら端が出る
+        let wide = Rect::from_min_max(egui::pos2(100.0, 0.0), egui::pos2(140.0, 20.0));
+        assert_eq!(classify_bar_edge(wide, 101.0, false), BarPart::TrimIn);
+        assert_eq!(classify_bar_edge(wide, 139.0, false), BarPart::TrimOut);
+        assert_eq!(classify_bar_edge(wide, 120.0, false), BarPart::Body);
+    }
+
+    /// 端の判定は**clip 本来の矩形**で見る。窓の外へ出ている端は clip の端ではない。
+    #[test]
+    fn the_window_edge_is_not_the_clips_edge() {
+        // 面が 196..996 で、clip は面の左外(0px)から中(500px)まで伸びている
+        let bar = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(500.0, 20.0));
+        // 面の左端すぐの位置は、clip の中(体)である
+        assert_eq!(classify_bar_edge(bar, 200.0, false), BarPart::Body);
+        // clip 本来の右端では端が出る
+        assert_eq!(classify_bar_edge(bar, 497.0, false), BarPart::TrimOut);
     }
 }
