@@ -246,6 +246,10 @@ pub struct ItemEnvelope {
     /// 描画フィルタ。文書内に1つでも true があればソロ集合のみ描画(B④)。
     #[serde(default = "default_false")]
     pub solo: bool,
+    /// 行の色。**選んだときだけ載る** — 未選択なら UI が id から既定を導く。
+    /// 評価にも描画にも入らない(見分けるための印)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<u32>,
     /// 編集禁止のみ。評価・描画に影響しない(B④)。
     #[serde(default = "default_false")]
     pub lock: bool,
@@ -262,6 +266,7 @@ impl ItemEnvelope {
             opacity: default_opacity(),
             visible: true,
             solo: false,
+            color: None,
             lock: false,
         }
     }

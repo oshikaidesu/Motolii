@@ -293,6 +293,12 @@ pub enum Command {
         old: String,
         new: String,
     },
+    /// 行の色。**選んだ色だけが載る**(`None` は「選んでいない」)
+    SetItemColor {
+        target: LayerId,
+        old: Option<u32>,
+        new: Option<u32>,
+    },
     /// 編集禁止(B④)。**評価・描画には影響しない** — 触れなくなるだけ
     SetItemLock {
         target: LayerId,

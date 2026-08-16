@@ -53,6 +53,7 @@ impl Command {
             Command::SetItemVisible { .. } => CommandKind::SetItemVisible,
             Command::SetItemSolo { .. } => CommandKind::SetItemSolo,
             Command::SetItemLock { .. } => CommandKind::SetItemLock,
+            Command::SetItemColor { .. } => CommandKind::SetItemColor,
             Command::SetLayerName { .. } => CommandKind::SetLayerName,
             Command::AddLocator { .. } => CommandKind::AddLocator,
             Command::RemoveLocator { .. } => CommandKind::RemoveLocator,
@@ -85,6 +86,7 @@ impl Command {
             | Command::ReparentClip { target, .. }
             | Command::SetItemVisible { target, .. }
             | Command::SetItemLock { target, .. }
+            | Command::SetItemColor { target, .. }
             | Command::SetLayerName { target, .. }
             | Command::SetItemSolo { target, .. } => target.get(),
             Command::AddPositionKey { added_key_id, .. }
@@ -163,6 +165,7 @@ impl Command {
             Command::SetItemVisible { .. } => PropertyId::ItemVisible,
             Command::SetItemSolo { .. } => PropertyId::ItemSolo,
             Command::SetItemLock { .. } => PropertyId::ItemLock,
+            Command::SetItemColor { .. } => PropertyId::ItemColor,
             Command::SetLayerName { .. } => PropertyId::LayerName,
             Command::AddLocator { .. }
             | Command::RemoveLocator { .. }
@@ -252,6 +255,7 @@ impl Command {
             | Command::ReparentClip { .. }
             | Command::SetItemVisible { .. }
             | Command::SetItemLock { .. }
+            | Command::SetItemColor { .. }
             | Command::SetLayerName { .. }
             | Command::AddLocator { .. }
             | Command::RemoveLocator { .. }

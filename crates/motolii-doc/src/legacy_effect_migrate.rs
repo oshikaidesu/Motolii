@@ -283,6 +283,8 @@ fn plan_envelope_to_item_envelope(envelope: &LegacyPlanEnvelope) -> ItemEnvelope
         visible: envelope.visible,
         solo: envelope.solo,
         lock: envelope.lock,
+        // 旧形式は色を持たない
+        color: None,
     }
 }
 

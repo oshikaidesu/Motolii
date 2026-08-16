@@ -278,6 +278,7 @@ const fn command_kind_copy(kind: CommandKind) -> &'static str {
         CommandKind::ReparentClip => "Reparent clip",
         CommandKind::SetItemVisible => "Set item visible",
         CommandKind::SetItemLock => "Set item lock",
+        CommandKind::SetItemColor => "Set item colour",
         CommandKind::SetLayerName => "Rename layer",
         CommandKind::AddLocator => "Add locator",
         CommandKind::RemoveLocator => "Remove locator",

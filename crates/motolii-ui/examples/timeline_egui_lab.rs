@@ -78,6 +78,24 @@ const MUTE_ON: Color32 = Color32::from_rgb(0x65, 0x3b, 0x34);
 const SOLO_ON: Color32 = Color32::from_rgb(0x66, 0x5b, 0x32);
 /// L(編集禁止)が入っているときの下地
 const LOCK_ON: Color32 = Color32::from_rgb(0x3f, 0x4e, 0x5c);
+/// **仮のパレット。** 値は `mock_tokens`(HTML/CSS を解いて取り出す)の担当で、
+/// ここで発明した色を正本にしない — 並べて見るための当て馬である。
+const LAYER_COLORS: [Color32; 8] = [
+    Color32::from_rgb(0x8c, 0x6b, 0x6b),
+    Color32::from_rgb(0x8c, 0x7d, 0x5c),
+    Color32::from_rgb(0x7d, 0x8c, 0x5c),
+    Color32::from_rgb(0x5c, 0x8c, 0x6f),
+    Color32::from_rgb(0x5c, 0x7f, 0x8c),
+    Color32::from_rgb(0x64, 0x66, 0x8c),
+    Color32::from_rgb(0x7d, 0x5c, 0x8c),
+    Color32::from_rgb(0x8c, 0x5c, 0x74),
+];
+
+/// パレットの生値(command へ入れるのは `u32`)。上の `LAYER_COLORS` と同じ並び
+const LAYER_COLORS_RGB: [u32; 8] = [
+    0x8c6b6b, 0x8c7d5c, 0x7d8c5c, 0x5c8c6f, 0x5c7f8c, 0x64668c, 0x7d5c8c, 0x8c5c74,
+];
+
 /// 選択の点灯。**白にする** — 将来レイヤーごとに色を散らすので、
 /// 選択がその色の1つに見えてはいけない(選択は状態であって、持ち物ではない)
 const SELECTED: Color32 = Color32::from_rgb(0xf2, 0xf2, 0xf2);
@@ -416,6 +434,8 @@ enum MenuAction {
     LoopToSelection,
     ClearLoop,
     Rename(LayerId),
+    SetColor(LayerId, Option<u32>),
+    ToggleColors,
     /// **右クリックした時刻に置く。** 「いま指した所」以外に置き場所は要らない
     AddLocatorAt(f32),
     RemoveLocator(usize),
@@ -783,6 +803,10 @@ struct Lab {
     snap: bool,
     /// 行を高くするか。**意味は変わらない** — 見やすさだけ
     large_rows: bool,
+    /// 色を出すか。**これは Document ではなく Workspace profile の持ち物**
+    /// (白で統一して見たい人の好みが、他人の付けた色を消してはいけない)。
+    /// Lab には profile が無いので、ここでは窓の状態として持つ
+    colors_on: bool,
     /// 矩形選択を掴んだ場所(面の座標)。掴んでいないときは `None`
     marquee: Option<(egui::Pos2, egui::Pos2)>,
     /// 名前を編集中の layer と、編集中の文字列。**確定するまで Document は触らない**
@@ -848,6 +872,7 @@ impl Lab {
             loop_drag: None,
             snap: true,
             large_rows: false,
+            colors_on: true,
             marquee: None,
             renaming: None,
             editing_locator: None,
@@ -1374,6 +1399,37 @@ impl Lab {
         }
     }
 
+    /// 行の色を選ぶ。`None` は「選んでいない」へ戻す(既定色に返る)。
+    /// **選択が複数なら全部に付く** — 色は構成を見分けるためのものなので
+    fn set_color(&mut self, layer: LayerId, rgb: Option<u32>) {
+        let targets: Vec<LayerId> = if self.is_selected(layer) {
+            self.editable_roots()
+        } else {
+            vec![layer]
+        };
+        let gesture = self.writer.begin_gesture();
+        let mut painted = 0usize;
+        for target in targets {
+            match self.writer.prepare_set_item_color(target, rgb) {
+                Ok(Some(command)) => {
+                    if self.writer.apply_command(gesture, command).is_ok() {
+                        painted += 1;
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    self.status = format!("{} rejected: {error}", self.name(target));
+                    return;
+                }
+            }
+        }
+        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+        self.status = match rgb {
+            Some(_) => format!("coloured {painted}  undo {}", self.writer.undo_len()),
+            None => format!("colour cleared  undo {}", self.writer.undo_len()),
+        };
+    }
+
     /// 名前の編集を確定する。**空の名前は断る**(行が読めなくなる)。
     fn commit_rename(&mut self) {
         let Some((layer, name)) = self.renaming.take() else {
@@ -1726,6 +1782,39 @@ impl Lab {
         seat(ui, "Cut   ⌘X");
         seat(ui, "Copy   ⌘C");
         seat(ui, "Paste   ⌘V");
+        ui.menu_button("Colour   ▸", |ui| {
+            ui.horizontal(|ui| {
+                for rgb in LAYER_COLORS_RGB {
+                    let (rect, response) =
+                        ui.allocate_exact_size(Vec2::splat(16.0), Sense::click());
+                    ui.painter().rect_filled(
+                        rect,
+                        CornerRadius::same(2),
+                        Color32::from_rgb(
+                            ((rgb >> 16) & 0xff) as u8,
+                            ((rgb >> 8) & 0xff) as u8,
+                            (rgb & 0xff) as u8,
+                        ),
+                    );
+                    if response.hovered() {
+                        ui.painter().rect_stroke(
+                            rect,
+                            CornerRadius::same(2),
+                            Stroke::new(1.0, SELECTED),
+                            StrokeKind::Outside,
+                        );
+                    }
+                    if response.clicked() {
+                        *out = Some(MenuAction::SetColor(layer, Some(rgb)));
+                        ui.close();
+                    }
+                }
+            });
+            if ui.button("Default (from id)").clicked() {
+                *out = Some(MenuAction::SetColor(layer, None));
+                ui.close();
+            }
+        });
         if ui.button("Rename…   ⏎").clicked() {
             *out = Some(MenuAction::Rename(layer));
             ui.close();
@@ -1800,6 +1889,10 @@ impl Lab {
         }
         if ui.button("Add locator here").clicked() {
             *out = Some(MenuAction::AddLocatorAt(at));
+            ui.close();
+        }
+        if ui.button("Layer colours   on/off").clicked() {
+            *out = Some(MenuAction::ToggleColors);
             ui.close();
         }
         ui.menu_button("Row height   ▸", |ui| {
@@ -1882,6 +1975,16 @@ impl Lab {
             }
             MenuAction::Split => self.split_selected(),
             MenuAction::Rename(layer) => self.begin_rename(layer),
+            MenuAction::SetColor(layer, rgb) => self.set_color(layer, rgb),
+            MenuAction::ToggleColors => {
+                self.colors_on = !self.colors_on;
+                self.status = if self.colors_on {
+                    "colours on"
+                } else {
+                    "colours off (white)"
+                }
+                .to_owned();
+            }
             MenuAction::AddLocatorAt(at) => self.add_locator(at),
             MenuAction::RemoveLocator(index) => self.remove_locator(index),
 
@@ -2741,11 +2844,12 @@ impl eframe::App for Lab {
                         egui::pos2(rail.left() + indent + 20.0, cy),
                         Vec2::splat(9.0),
                     );
+                    // 色の札。**Group もそうでないものも同じ扱い**にする
                     p.rect_filled(
                         icon,
                         CornerRadius::same(2),
-                        if row.has_children {
-                            ACCENT
+                        if self.colors_on {
+                            layer_color(&self.document, row.layer)
                         } else {
                             Color32::from_rgb(0x72, 0x92, 0x98)
                         },
@@ -2916,7 +3020,9 @@ impl eframe::App for Lab {
                             ui.id().with(("bar", row.layer)),
                             Sense::click_and_drag(),
                         );
-                        let color = if row.has_children {
+                        let color = if self.colors_on {
+                            layer_color(&self.document, row.layer)
+                        } else if row.has_children {
                             Color32::from_rgb(0x4c, 0x49, 0x3c)
                         } else {
                             Color32::from_rgb(0x65, 0x75, 0x8c)
@@ -3636,6 +3742,27 @@ fn clip_span(document: &Document, layer: LayerId) -> Option<(f32, f32)> {
             }
             span
         }
+    }
+}
+
+/// その layer の色。**選ばれていれば Document の値、無ければ id から導く。**
+///
+/// 導出を `LayerId` にするのは、**採番後に変わらず再利用もされない**唯一の値だから。
+/// 行番号から導くと並べ替えた瞬間に総入れ替えになり、色記憶にならない。
+/// ただし導出は複製で色が変わる(新しい id が付く)ので、**選んだ色は Document へ**
+/// 置く — envelope ごと写るので複製にも付いていく。
+fn layer_color(document: &Document, layer: LayerId) -> Color32 {
+    let chosen = find_item(document, layer).and_then(|item| match item {
+        TrackItem::Clip(c) => c.envelope.color,
+        TrackItem::Group(g) => g.envelope.color,
+    });
+    match chosen {
+        Some(rgb) => Color32::from_rgb(
+            ((rgb >> 16) & 0xff) as u8,
+            ((rgb >> 8) & 0xff) as u8,
+            (rgb & 0xff) as u8,
+        ),
+        None => LAYER_COLORS[(layer.get() as usize) % LAYER_COLORS.len()],
     }
 }
 
@@ -5446,5 +5573,77 @@ mod tests {
         lab.remove_locator(1);
         assert_eq!(lab.document.locators.len(), 1);
         assert_eq!(lab.document.locators[0].text, "verse");
+    }
+
+    /// **色は選ぶまで Document に載らない。** 既定は id から導き、並べ替えでは動かない。
+    #[test]
+    fn a_layer_colour_is_derived_until_it_is_chosen() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Background");
+        let other = layer_named(&lab.names, "starter-tone.wav");
+
+        // 既定: Document には何も載っていない
+        let stored = |lab: &Lab, l: LayerId| match find_item(&lab.document, l) {
+            Some(TrackItem::Clip(c)) => c.envelope.color,
+            Some(TrackItem::Group(g)) => g.envelope.color,
+            None => None,
+        };
+        assert_eq!(stored(&lab, layer), None, "選ぶまでは載らない");
+        let derived = layer_color(&lab.document, layer);
+        assert_eq!(
+            derived,
+            LAYER_COLORS[(layer.get() as usize) % LAYER_COLORS.len()],
+            "id から導く"
+        );
+        assert_ne!(
+            layer_color(&lab.document, other),
+            derived,
+            "隣とは違う色になる(id が違うので)"
+        );
+
+        // **並べ替えても色は動かない** — 行番号ではなく id から来ているので
+        let objects = objects_of(&lab);
+        let (parent, index) = drop_target(&lab.document, &objects, 0, layer).expect("落とせる");
+        lab.commit_reorder(layer, DropTarget { parent, index, y: 0.0 });
+        assert_eq!(layer_color(&lab.document, layer), derived, "並べ替えで変わらない");
+
+        // 選ぶと載る。**複製にも付いていく**(envelope ごと写るので)
+        lab.selected = vec![layer];
+        lab.set_color(layer, Some(0x5c8c6f));
+        assert_eq!(stored(&lab, layer), Some(0x5c8c6f), "{}", lab.status);
+        assert_eq!(layer_color(&lab.document, layer), Color32::from_rgb(0x5c, 0x8c, 0x6f));
+
+        lab.duplicate_selected();
+        let copy = lab.selected[0];
+        assert_eq!(stored(&lab, copy), Some(0x5c8c6f), "**複製は色を持って生まれる**");
+
+        // 既定へ戻す
+        lab.selected = vec![layer];
+        lab.set_color(layer, None);
+        assert_eq!(stored(&lab, layer), None);
+        assert_eq!(layer_color(&lab.document, layer), derived, "既定色へ返る");
+
+        // 1回の Undo で戻る
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(stored(&lab, layer), Some(0x5c8c6f));
+    }
+
+    /// **「色を出すか」は Document に入れない。** 窓の側の好みである。
+    #[test]
+    fn turning_colours_off_does_not_touch_the_document() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Background");
+        lab.selected = vec![layer];
+        lab.set_color(layer, Some(0x8c6b6b));
+        let before = lab.document.clone();
+
+        lab.run_menu(MenuAction::ToggleColors, 16.0, lab.document.composition.fps);
+        assert!(!lab.colors_on, "{}", lab.status);
+        assert_eq!(
+            lab.document.as_ref(),
+            before.as_ref(),
+            "**他人の付けた色は消えない**。表示の好みが Document を書き換えない"
+        );
     }
 }

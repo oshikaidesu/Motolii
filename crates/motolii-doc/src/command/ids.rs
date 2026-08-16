@@ -55,6 +55,7 @@ pub enum PropertyId {
     ItemVisible,
     ItemSolo,
     ItemLock,
+    ItemColor,
     LayerName,
     Locator,
 }
@@ -134,6 +135,7 @@ pub enum CommandKind {
     SetItemVisible,
     SetItemSolo,
     SetItemLock,
+    SetItemColor,
     SetLayerName,
     AddLocator,
     RemoveLocator,

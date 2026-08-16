@@ -739,6 +739,15 @@ impl DocumentWriter {
         command::prepare_set_layer_name(&self.doc, target, new)
     }
 
+    /// 行の色。**`None` は「選んでいない」**(既定色は UI が id から導く)。
+    pub fn prepare_set_item_color(
+        &self,
+        target: LayerId,
+        new: Option<u32>,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_item_color(&self.doc, target, new)
+    }
+
     /// 編集禁止フラグ。**評価・描画には影響しない**(B④)。
     pub fn prepare_set_item_lock(
         &self,
