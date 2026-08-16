@@ -13,6 +13,7 @@
 //!   - Position 行の菱形    … 掴んでキーの時刻を変える
 //!   - `M` / `S`           … mute（`visible`）/ solo の反転
 //!   - `Cmd/Ctrl + Z` / `Shift+Z` … Undo / Redo
+//!   - `Cmd/Ctrl + D`      … 選択中の layer を複製
 //!
 //! **キーの時刻を動かせるのは Position だけである。** `DocumentWriter` に
 //! Scale/Rotation/Anchor/Opacity のキー時刻を変える `prepare_*` は無い。
@@ -31,7 +32,7 @@ use std::collections::HashMap;
 
 use eframe::egui;
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, Vec2};
-use motolii_core::RationalTime;
+use motolii_core::{Fps, RationalTime};
 use motolii_doc::{
     Clip, ClipSource, DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter,
     GestureId, Group, ItemEnvelope, KeyframeId, LayerId, Track, TrackItem, Transform2D,
@@ -299,7 +300,9 @@ impl Lab {
         let Some((grab, gesture)) = self.drag.clone() else {
             return;
         };
-        let Some(time) = seconds_to_time(at_seconds) else {
+        // **編集が作る時刻は全部フレーム境界へ乗る。** fps はここで1回だけ読む
+        let fps = self.document.composition.fps;
+        let Some(time) = seconds_to_time(at_seconds, fps) else {
             return;
         };
 
@@ -331,7 +334,7 @@ impl Lab {
                     .fold(f32::INFINITY, f32::min);
                 let delta = (at_seconds - grab_at).clamp(-floor, headroom.max(0.0));
                 for (layer, start, _) in targets {
-                    let Some(t) = seconds_to_time((start + delta).max(0.0)) else {
+                    let Some(t) = seconds_to_time((start + delta).max(0.0), fps) else {
                         return;
                     };
                     prepared.push((*layer, false, self.writer.prepare_set_clip_start(*layer, t).map_err(|e| e.to_string())));
@@ -348,7 +351,7 @@ impl Lab {
                     }
                 });
                 for (layer, param, key, original) in ordered {
-                    let Some(t) = seconds_to_time((original + delta).max(0.0)) else {
+                    let Some(t) = seconds_to_time((original + delta).max(0.0), fps) else {
                         return;
                     };
                     prepared.push((layer, true, self.key_time_command(layer, param, key, t)));
@@ -364,7 +367,7 @@ impl Lab {
                 // 終端より後ろへは出さない
                 let comp = self.document.composition.duration.as_seconds_f64() as f32;
                 let moved = (original + (at_seconds - grab_at)).clamp(0.0, comp.max(0.0));
-                let Some(t) = seconds_to_time(moved) else {
+                let Some(t) = seconds_to_time(moved, fps) else {
                     return;
                 };
                 prepared.push((
@@ -486,8 +489,43 @@ impl Lab {
         }
     }
 
+    /// 選択中の layer を丸ごと複製する。**1複製 = 1 `GestureId` = 1 Undo 単位**
+    ///
+    /// **深いところは D2 がやる。** `prepare_duplicate_track_item` は Group の
+    /// 子も、シェイプの中の入れ子(`VectorContent::Group`)も再帰して写し、
+    /// LayerId / KeyframeId / EffectId を全部新しく振り直す。Lab が子を辿って
+    /// 複製し直すと、その再写像を二重にしてしまう — **ここでは source を1つ渡すだけ**。
+    fn duplicate_selected(&mut self) {
+        let Some(layer) = self.selected else {
+            self.status = "nothing selected".to_owned();
+            return;
+        };
+        let name = self.name(layer).to_owned();
+        let command = match self.writer.prepare_duplicate_track_item(layer) {
+            Ok(command) => command,
+            Err(error) => {
+                self.status = format!("{name} rejected: {error}");
+                return;
+            }
+        };
+        let gesture = self.writer.begin_gesture();
+        match self.writer.apply_command(gesture, command) {
+            Ok(()) => {
+                refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                self.status = format!("duplicated {name}  undo {}", self.writer.undo_len());
+            }
+            Err(error) => self.status = format!("{name} rejected: {error}"),
+        }
+    }
+
+    /// 行の名前。**Lab の控えに無ければ Document の台帳を見る。**
+    /// 複製で増えた layer は控えに載らないので、これが無いと "?" になる。
     fn name(&self, layer: LayerId) -> &str {
-        self.names.get(&layer).map(String::as_str).unwrap_or("?")
+        self.names
+            .get(&layer)
+            .map(String::as_str)
+            .or_else(|| self.document.layers.display_name(layer))
+            .unwrap_or("?")
     }
 }
 
@@ -980,11 +1018,12 @@ impl eframe::App for Lab {
         }
 
         // Undo / Redo。1ドラッグ = 1 GestureId なので、掴んで動かした分がまとめて戻る
-        let (undo, redo, escape) = ctx.input(|i| {
+        let (undo, redo, escape, duplicate) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && !i.modifiers.shift,
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && i.modifiers.shift,
                 i.key_pressed(egui::Key::Escape),
+                i.key_pressed(egui::Key::D) && i.modifiers.command,
             )
         });
         // **掴んでいる最中の Esc は、その gesture ごと取り消す。**
@@ -1007,6 +1046,11 @@ impl eframe::App for Lab {
                 }
                 Err(error) => self.status = format!("redo rejected: {error}"),
             }
+        }
+
+        // Cmd/Ctrl + D。**選択が無いときは何もしない** — 複製する対象が無い
+        if duplicate {
+            self.duplicate_selected();
         }
 
         self.frame += 1;
@@ -1098,8 +1142,16 @@ fn movable_clips(document: &Document, layer: LayerId) -> Vec<(LayerId, f32, f32)
     out
 }
 
-fn seconds_to_time(seconds: f32) -> Option<RationalTime> {
-    RationalTime::try_new((seconds * 1000.0).round() as i64, 1000).ok()
+/// 秒 → **最寄りのフレーム境界**の時刻。
+///
+/// 普通のタイムラインはフレーム単位で動く。clip の頭が 2.0334 秒に来ると、
+/// 揃うべきキーが揃わなくなる。丸めは `motolii-core` の変換に任せ、
+/// **ここで `(x * fps).round()` を自前で書かない**(fps は有理数で、
+/// 30000/1001 のような値がある)。
+fn seconds_to_time(seconds: f32, fps: Fps) -> Option<RationalTime> {
+    let raw = RationalTime::try_new((f64::from(seconds) * 1000.0).round() as i64, 1000).ok()?;
+    let frame = raw.try_to_frame_round(fps).ok()?;
+    RationalTime::try_from_frame(frame, fps).ok()
 }
 
 fn param_label(p: ParamRef) -> &'static str {
@@ -1358,6 +1410,7 @@ mod tests {
         let catalog =
             Arc::new(motolii_plugin::reference::reference_catalog().expect("reference catalog"));
         let mut writer = DocumentWriter::new(doc, catalog).expect("writer");
+        let fps = writer.snapshot().composition.fps;
         let layer = layer_named(&names, "Background");
 
         let before = clip_span(&writer.snapshot(), layer).expect("span");
@@ -1365,7 +1418,7 @@ mod tests {
 
         let gesture = writer.begin_gesture();
         let command = writer
-            .prepare_set_clip_start(layer, seconds_to_time(2.0).expect("time"))
+            .prepare_set_clip_start(layer, seconds_to_time(2.0, fps).expect("time"))
             .expect("prepare")
             .expect("変化があるので command が出る");
         writer.apply_command(gesture, command).expect("apply");
@@ -1390,6 +1443,7 @@ mod tests {
         let catalog =
             Arc::new(motolii_plugin::reference::reference_catalog().expect("reference catalog"));
         let mut writer = DocumentWriter::new(doc, catalog).expect("writer");
+        let fps = writer.snapshot().composition.fps;
         let group = layer_named(&names, "Title scene");
 
         let targets = movable_clips(&writer.snapshot(), group);
@@ -1401,7 +1455,7 @@ mod tests {
         let gesture = writer.begin_gesture();
         for (layer, start, _) in &targets {
             let command = writer
-                .prepare_set_clip_start(*layer, seconds_to_time(start + delta).expect("time"))
+                .prepare_set_clip_start(*layer, seconds_to_time(start + delta, fps).expect("time"))
                 .expect("prepare")
                 .expect("command");
             writer.apply_command(gesture, command).expect("apply");
@@ -1577,6 +1631,7 @@ mod tests {
         let catalog =
             Arc::new(motolii_plugin::reference::reference_catalog().expect("reference catalog"));
         let mut writer = DocumentWriter::new(doc, catalog).expect("writer");
+        let fps = writer.snapshot().composition.fps;
         let layer = layer_named(&names, "Shared left");
 
         let scale_before = param_keys(&writer.snapshot(), layer, ParamRef::Scale);
@@ -1587,7 +1642,7 @@ mod tests {
         // clip 本体
         let start = clip_span(&writer.snapshot(), layer).expect("span").0;
         let command = writer
-            .prepare_set_clip_start(layer, seconds_to_time(start + delta).expect("time"))
+            .prepare_set_clip_start(layer, seconds_to_time(start + delta, fps).expect("time"))
             .expect("prepare")
             .expect("command");
         writer.apply_command(gesture, command).expect("apply");
@@ -1598,7 +1653,7 @@ mod tests {
                     layer,
                     motolii_doc::ScalarPropertyId::Scale,
                     *key,
-                    seconds_to_time(t + delta).expect("time"),
+                    seconds_to_time(t + delta, fps).expect("time"),
                 )
                 .expect("prepare")
                 .expect("command");
@@ -1763,5 +1818,112 @@ mod tests {
             "status に出す: {}",
             lab.status
         );
+    }
+
+    /// **複製の深さは D2 が持っている。** Group を1つ渡すだけで、子3枚が
+    /// 新しい `LayerId` を持って一緒に来る。Lab 側で子を辿って複製し直さない。
+    #[test]
+    fn duplicating_a_group_copies_its_children_with_fresh_ids() {
+        let mut lab = Lab::new(None);
+        let group = layer_named(&lab.names, "Title scene");
+
+        let items_before = lab.document.tracks[0].items.len();
+        let children_before: Vec<LayerId> = movable_clips(&lab.document, group)
+            .into_iter()
+            .map(|(layer, _, _)| layer)
+            .collect();
+        assert_eq!(children_before.len(), 3, "fixture の Title scene は子3枚");
+
+        lab.selected = Some(group);
+        lab.duplicate_selected();
+
+        // (a) TrackItem が1つ増えている
+        assert_eq!(
+            lab.document.tracks[0].items.len(),
+            items_before + 1,
+            "複製が1つ増える: {}",
+            lab.status
+        );
+        assert!(
+            lab.status.contains("Title scene"),
+            "status に複製した名前を出す: {}",
+            lab.status
+        );
+
+        let copy = lab.document.tracks[0]
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                TrackItem::Group(g) => Some(g.envelope.layer_id),
+                _ => None,
+            })
+            .find(|layer| *layer != group)
+            .expect("複製された Group");
+        let children_after: Vec<LayerId> = movable_clips(&lab.document, copy)
+            .into_iter()
+            .map(|(layer, _, _)| layer)
+            .collect();
+
+        // (c) 子の枚数は3枚のまま。D2 が再帰して写している
+        assert_eq!(children_after.len(), 3, "子も一緒に複製される");
+        // (b) 複製された子の LayerId は元と全部違う
+        for layer in &children_after {
+            assert!(
+                !children_before.contains(layer),
+                "複製された子は新しい LayerId: {layer:?} が元と重なる"
+            );
+        }
+
+        // (d) Undo で元へ戻る。1複製 = 1 GestureId
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(
+            lab.document.tracks[0].items.len(),
+            items_before,
+            "1複製 = 1 Undo"
+        );
+        assert_eq!(
+            movable_clips(&lab.document, group)
+                .into_iter()
+                .map(|(layer, _, _)| layer)
+                .collect::<Vec<_>>(),
+            children_before,
+            "元の Group は触られていない"
+        );
+    }
+
+    /// **ドラッグの結果はフレーム境界に乗る。** 半端な位置に置けると、
+    /// 揃うべきキーが揃わなくなる。
+    #[test]
+    fn dragging_lands_on_a_frame_boundary() {
+        let (doc, names) = fixture();
+        let catalog =
+            Arc::new(motolii_plugin::reference::reference_catalog().expect("reference catalog"));
+        let mut writer = DocumentWriter::new(doc, catalog).expect("writer");
+        let fps = writer.snapshot().composition.fps;
+        let layer = layer_named(&names, "Background");
+
+        // フレームの途中に相当する秒数(30fps なら 1/30 = 0.0333.. の非整数倍)
+        let ragged = 2.0334_f32;
+        let snapped = seconds_to_time(ragged, fps).expect("time");
+
+        let frame = snapped.try_to_frame_round(fps).expect("frame");
+        assert_eq!(
+            snapped,
+            RationalTime::try_from_frame(frame, fps).expect("time"),
+            "丸めた時刻はフレーム境界と往復で一致する"
+        );
+
+        // 実際に適用しても境界のまま
+        let gesture = writer.begin_gesture();
+        let command = writer
+            .prepare_set_clip_start(layer, snapped)
+            .expect("prepare")
+            .expect("command");
+        writer.apply_command(gesture, command).expect("apply");
+
+        let after = clip_span(&writer.snapshot(), layer).expect("span").0;
+        let back = seconds_to_time(after, fps).expect("time");
+        assert_eq!(back, snapped, "適用後も境界に乗ったまま: {after}");
     }
 }
