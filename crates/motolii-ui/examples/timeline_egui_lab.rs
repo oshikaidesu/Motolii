@@ -540,9 +540,24 @@ fn begin_move_many(
             }
         }
     }
+    // **キーを持つのは clip だけではない。** Group 自身の envelope にもキーがあり、
+    // 掴んだ subtree の中の Group はまとめて動いたことになる。ここを clip だけに
+    // していたので「Group 自体のキーが追従しない」が起きていた
+    let mut keyed: Vec<LayerId> = Vec::new();
+    for root in roots {
+        if let Some(item) = find_item(document, *root) {
+            let mut ids = Vec::new();
+            collect_layer_ids(item, &mut ids);
+            for id in ids {
+                if !keyed.contains(&id) {
+                    keyed.push(id);
+                }
+            }
+        }
+    }
     let mut keys = Vec::new();
     let mut not_movable = 0usize;
-    for (clip, _, _) in &targets {
+    for clip in &keyed {
         // **envelope が持つ param は全部追従できる**(2026-08-16 に D2 の
         // `SetTransformParamKeyTime` と受け付け集合の統合が入った)。
         // 追従できないのは plugin 由来(EffectParam / SourceParam)だけで、
@@ -588,6 +603,9 @@ struct Lab {
     view: TimelineView,
     /// 縦スクロール(px)。行の合計高が面より高いときだけ動く。同上
     scroll_y: f32,
+    /// 選択中のキー。**行の選択とは別の入れ物**で、Delete はキーが選ばれていれば
+    /// キーを消す(層の選択より内側のものが勝つ)
+    selected_keys: Vec<(LayerId, ParamRef, KeyframeId)>,
     /// 並べ替えのドラッグ中に、いま落とすと決まる場所。**線を描く位置でもある**
     drop: Option<DropTarget>,
     /// ナビゲータ帯を掴んでいる間の掴み方。掴んだ瞬間に決めて、離すまで変えない
@@ -637,6 +655,7 @@ impl Lab {
             drag_undo_base: 0,
             names,
             selected: Vec::new(),
+            selected_keys: Vec::new(),
             view: TimelineView {
                 start: 0.0,
                 span: TIMELINE_SECONDS,
@@ -653,7 +672,7 @@ impl Lab {
             },
             loop_drag: None,
             playing: false,
-            status: "space=play  L=loop  drag ruler top=loop  drag name=reorder".to_owned(),
+            status: "space=play  L=loop  Cmd+G=group  Del=delete  drag name=reorder".to_owned(),
             shot,
             frame: 0,
         }
@@ -992,6 +1011,47 @@ impl Lab {
         self.selected = made;
     }
 
+    /// 選択中のキーを消す。**1回の Delete = 1 `GestureId` = 1 Undo 単位**
+    ///
+    /// キーが選ばれているときは、そちらが層の削除より先に効く —
+    /// **内側のものを選んでいるなら、消したいのは内側**である。
+    fn delete_selected_keys(&mut self) -> bool {
+        if self.selected_keys.is_empty() {
+            return false;
+        }
+        let gesture = self.writer.begin_gesture();
+        let mut removed = 0usize;
+        for (layer, param, key) in self.selected_keys.clone() {
+            let prepared = match param {
+                ParamRef::Position => self
+                    .writer
+                    .prepare_remove_position_key(layer, key)
+                    .map_err(|e| e.to_string()),
+                other => self
+                    .writer
+                    .prepare_remove_transform_param_key(layer, scalar_property(other), key)
+                    .map_err(|e| e.to_string()),
+            };
+            match prepared {
+                Ok(command) => match self.writer.apply_command(gesture, command) {
+                    Ok(()) => removed += 1,
+                    Err(error) => {
+                        self.status = format!("{} rejected: {error}", self.name(layer));
+                        return true;
+                    }
+                },
+                Err(error) => {
+                    self.status = format!("{} rejected: {error}", self.name(layer));
+                    return true;
+                }
+            }
+        }
+        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+        self.selected_keys.clear();
+        self.status = format!("deleted {removed} keys  undo {}", self.writer.undo_len());
+        true
+    }
+
     /// 選択中の layer を消す。**Group は中身ごと。1回の Delete = 1 Undo 単位**
     ///
     /// 消す順は関係ない — `selection_roots` が親子の重なりを外しているので、
@@ -1022,6 +1082,84 @@ impl Lab {
         refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
         self.selected.clear();
         self.status = format!("deleted {removed}  undo {}", self.writer.undo_len());
+    }
+
+    /// 選択をひとつの Group にまとめる。**1回 = 1 `GestureId` = 1 Undo 単位**
+    ///
+    /// 「空の Group を置く」+「選んだものを順に入れる」で表す。新しい意味の
+    /// command は足していない(D2 `prepare_add_group` は `AddTrackItem` を返すだけ)。
+    ///
+    /// **親が揃っていないときは断る。** 別々の階層に居るものを1つに入れると、
+    /// どの位置へ置いたのかが誰にも言えなくなる。
+    fn group_selected(&mut self) {
+        let roots = self.selection_roots();
+        if roots.is_empty() {
+            self.status = "nothing selected".to_owned();
+            return;
+        }
+        let Some((parent, index, _)) = find_item_location(&self.document, roots[0]) else {
+            self.status = "not found".to_owned();
+            return;
+        };
+        // 位置は**いちばん上のものの場所**。まとめた結果がどこに出るかを固定する
+        let mut at = index;
+        for layer in &roots[1..] {
+            match find_item_location(&self.document, *layer) {
+                Some((p, i, _)) if p == parent => at = at.min(i),
+                _ => {
+                    self.status = "group: pick items in the same parent".to_owned();
+                    return;
+                }
+            }
+        }
+        let name = format!("Group {}", self.document.layers.len());
+        let command = match self.writer.prepare_add_group(parent, at, &name) {
+            Ok(command) => command,
+            Err(error) => {
+                self.status = format!("group rejected: {error}");
+                return;
+            }
+        };
+        let group = match &command {
+            Command::AddTrackItem { item, .. } => {
+                let mut ids = Vec::new();
+                collect_layer_ids(item, &mut ids);
+                ids.first().copied()
+            }
+            _ => None,
+        };
+        let Some(group) = group else {
+            self.status = "group: no layer".to_owned();
+            return;
+        };
+        let gesture = self.writer.begin_gesture();
+        if let Err(error) = self.writer.apply_command(gesture, command) {
+            self.status = format!("group rejected: {error}");
+            return;
+        }
+        for (i, layer) in roots.iter().enumerate() {
+            let prepared = self
+                .writer
+                .prepare_reparent_clip(*layer, ParentLocator::Group(group), i, None);
+            match prepared {
+                Ok(Some(command)) => {
+                    if let Err(error) = self.writer.apply_command(gesture, command) {
+                        self.status = format!("{} rejected: {error}", self.name(*layer));
+                        return;
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    self.status = format!("{} rejected: {error}", self.name(*layer));
+                    return;
+                }
+            }
+        }
+        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+        // まとめたら中が見えている状態にする。**畳まれて消えたように見せない**
+        self.fold.open_children(group);
+        self.selected = vec![group];
+        self.status = format!("grouped {} into {name}  undo {}", roots.len(), self.writer.undo_len());
     }
 
     /// 並べ替えを1回だけ書く。**離した瞬間に呼ぶ。**
@@ -1754,6 +1892,13 @@ impl eframe::App for Lab {
                             Stroke::new(1.0, Color32::from_rgb(0x17, 0x17, 0x17)),
                             StrokeKind::Inside,
                         );
+                        // **クリックしただけで選ぶ。** 掴んで動かすまで選択が
+                        // 変わらないのは、押した手応えが無いのと同じである
+                        if r.clicked() {
+                            let (additive, range) =
+                                ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
+                            pick = Some((row.layer, additive, range));
+                        }
                         if r.drag_started() {
                             if let Some(pos) = r.interact_pointer_pos() {
                                 // **何を掴んだかは端からの距離で決める。** 6px はモックの
@@ -1824,13 +1969,38 @@ impl eframe::App for Lab {
                                 egui::pos2(c.x, c.y + d),
                                 egui::pos2(c.x - d, c.y),
                             ],
-                            if movable && (r.dragged() || r.hovered()) {
+                            if self.selected_keys.contains(&(row.layer, param, key)) {
+                                ACCENT
+                            } else if movable && (r.dragged() || r.hovered()) {
                                 ACCENT
                             } else {
                                 KEY_IDLE
                             },
                             Stroke::new(1.0, Color32::from_rgb(0xee, 0xee, 0xee)),
                         ));
+                        // キーもクリックで選ぶ。**Delete の対象がここで決まる**
+                        if r.clicked() {
+                            let additive = ctx.input(|i| i.modifiers.command);
+                            let entry = (row.layer, param, key);
+                            if additive {
+                                if let Some(at) =
+                                    self.selected_keys.iter().position(|e| *e == entry)
+                                {
+                                    self.selected_keys.remove(at);
+                                } else {
+                                    self.selected_keys.push(entry);
+                                }
+                            } else {
+                                self.selected_keys = vec![entry];
+                            }
+                            self.status = format!(
+                                "{} {} key {:.2}s  ({} selected)",
+                                self.name(row.layer),
+                                param_label(param),
+                                t,
+                                self.selected_keys.len()
+                            );
+                        }
                         if r.drag_started() {
                             if !movable {
                                 self.status = format!(
@@ -2034,6 +2204,8 @@ impl eframe::App for Lab {
 
         if let Some((layer, additive, range)) = pick {
             self.select(layer, additive, range, &object_layers);
+            // **行を選んだらキーの選択は落とす。** Delete の対象が2つあると読めない
+            self.selected_keys.clear();
         }
 
         for (layer, is_children) in toggles {
@@ -2055,13 +2227,14 @@ impl eframe::App for Lab {
         }
 
         // Undo / Redo。1ドラッグ = 1 GestureId なので、掴んで動かした分がまとめて戻る
-        let (undo, redo, escape, duplicate, delete) = ctx.input(|i| {
+        let (undo, redo, escape, duplicate, delete, group) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && !i.modifiers.shift,
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && i.modifiers.shift,
                 i.key_pressed(egui::Key::Escape),
                 i.key_pressed(egui::Key::D) && i.modifiers.command,
                 i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
+                i.key_pressed(egui::Key::G) && i.modifiers.command,
             )
         });
         // **掴んでいる最中の Esc は、その gesture ごと取り消す。**
@@ -2091,10 +2264,16 @@ impl eframe::App for Lab {
             self.duplicate_selected();
         }
 
-        // Delete / Backspace。**Group は中身ごと消える**(D2 の RemoveTrackItem)。
+        // Delete / Backspace。**キーが選ばれていればキーが先**、無ければ層を消す
+        // (Group は中身ごと。D2 の RemoveTrackItem)。
         // ドラッグ中は効かせない — 掴んだものが消えると gesture の行き先が無くなる
-        if delete && self.drag.is_none() {
+        if delete && self.drag.is_none() && !self.delete_selected_keys() {
             self.delete_selected();
+        }
+
+        // Cmd/Ctrl + G。**選択をひとつの Group にまとめる**
+        if group && self.drag.is_none() {
+            self.group_selected();
         }
 
         self.frame += 1;
@@ -3596,5 +3775,157 @@ mod tests {
         // そのまま戻せば元の長さに戻る(潰れていない)
         let (start, end) = loop_from_drag(fixed, 6.0, comp, fps);
         assert!((start - 2.0).abs() < 1e-3 && (end - 6.0).abs() < 1e-3, "{start}–{end}");
+    }
+
+    /// **Group を動かすと、Group 自身のキーも一緒に動く。**
+    ///
+    /// 2026-08-16: 「Group は `clip.start` を持たないので動いた事実が Document に
+    /// 無い」として保留していた点。利用者裁定で追従させる — プリコンポを掴んだら
+    /// 中身ごと動く、が期待される挙動である。
+    #[test]
+    fn moving_a_group_carries_the_groups_own_keys_too() {
+        let mut lab = Lab::new(None);
+        let group = layer_named(&lab.names, "Title scene");
+        let child = layer_named(&lab.names, "Shared left");
+
+        let group_position = param_keys(&lab.document, group, ParamRef::Position);
+        let group_opacity = param_keys(&lab.document, group, ParamRef::Opacity);
+        let child_start = clip_span(&lab.document, child).expect("span").0;
+        assert_eq!(group_position.len(), 2, "fixture の Group は Position キー2つ");
+        assert_eq!(group_opacity.len(), 3, "Opacity キー3つ");
+
+        lab.selected = vec![group];
+        let roots = lab.selection_roots();
+        let gesture = lab.writer.begin_gesture();
+        lab.drag = Some((begin_move_many(&lab.document, &roots, group, 1.0), gesture));
+        lab.commit_drag(1.4); // +0.4s
+
+        let after = lab.writer.snapshot();
+        assert!(
+            (clip_span(&after, child).expect("span").0 - (child_start + 0.4)).abs() < 1e-3,
+            "子は動く(今までどおり)"
+        );
+        for (param, before) in [
+            (ParamRef::Position, &group_position),
+            (ParamRef::Opacity, &group_opacity),
+        ] {
+            let now = param_keys(&after, group, param);
+            assert_eq!(
+                now.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+                before.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+                "KeyframeId は変わらない"
+            );
+            for ((_, was), (_, is)) in before.iter().zip(now.iter()) {
+                assert!(
+                    (is - (was + 0.4)).abs() < 1e-3,
+                    "**Group 自身の {} キーも追従する**: {is} vs {}",
+                    param_label(param),
+                    was + 0.4
+                );
+            }
+        }
+
+        lab.writer.undo().expect("undo");
+        let restored = lab.writer.snapshot();
+        assert_eq!(
+            param_keys(&restored, group, ParamRef::Opacity),
+            group_opacity,
+            "1ドラッグ = 1 Undo"
+        );
+    }
+
+    /// **選択をひとつの Group にまとめる。** 1回の Undo で元の並びへ戻る。
+    #[test]
+    fn grouping_two_layers_puts_them_under_one_new_group() {
+        let mut lab = Lab::new(None);
+        let background = layer_named(&lab.names, "Background");
+        let tone = layer_named(&lab.names, "starter-tone.wav");
+        let items_before = lab.document.tracks[0].items.len();
+
+        lab.selected = vec![background, tone];
+        lab.group_selected();
+
+        // Group 1つに置き換わる(2枚が中へ入るので、トップレベルは1つ減る)
+        assert_eq!(
+            lab.document.tracks[0].items.len(),
+            items_before - 1,
+            "status: {}",
+            lab.status
+        );
+        let group = lab.selected[0];
+        assert_eq!(lab.selected.len(), 1, "まとめた Group が選ばれている");
+        let (parent, _, _) = find_item_location(&lab.document, background).expect("location");
+        assert_eq!(parent, ParentLocator::Group(group), "中へ入った");
+        assert_eq!(
+            movable_clips(&lab.document, group).len(),
+            2,
+            "Group を動かせば2枚とも動く"
+        );
+        assert!(lab.fold.children_are_open(group), "中が見えている");
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(
+            lab.document.tracks[0].items.len(),
+            items_before,
+            "**1回の Undo で元の並びへ**(Group を置く + 入れる が1 gesture)"
+        );
+        assert!(
+            find_item(&lab.document, group).is_none(),
+            "Group ごと消える"
+        );
+    }
+
+    /// 親が揃っていない選択は**まとめない**。位置が言えなくなる。
+    #[test]
+    fn grouping_refuses_a_selection_that_spans_parents() {
+        let mut lab = Lab::new(None);
+        let inside = layer_named(&lab.names, "Shared left"); // Group の中
+        let outside = layer_named(&lab.names, "Background"); // トップレベル
+        let items_before = lab.document.tracks[0].items.len();
+
+        lab.selected = vec![outside, inside];
+        lab.group_selected();
+
+        assert_eq!(
+            lab.document.tracks[0].items.len(),
+            items_before,
+            "何も起きない"
+        );
+        assert!(lab.status.contains("same parent"), "理由を出す: {}", lab.status);
+    }
+
+    /// **キーが選ばれていれば、Delete はキーを消す。** 層は消えない。
+    #[test]
+    fn delete_removes_the_selected_keys_and_leaves_the_layer() {
+        let mut lab = Lab::new(None);
+        let layer = layer_named(&lab.names, "Shared right");
+        let before = param_keys(&lab.document, layer, ParamRef::Position);
+        assert_eq!(before.len(), 3);
+
+        lab.selected = vec![layer];
+        lab.selected_keys = vec![(layer, ParamRef::Position, before[1].0)];
+        assert!(lab.delete_selected_keys(), "キーの削除が効いた");
+
+        let now = param_keys(&lab.document, layer, ParamRef::Position);
+        assert_eq!(now.len(), 2, "1つ消えた");
+        assert!(
+            !now.iter().any(|(id, _)| *id == before[1].0),
+            "消えたのは選んだキー"
+        );
+        assert!(find_item(&lab.document, layer).is_some(), "**層は消えない**");
+        assert!(lab.selected_keys.is_empty(), "消したものを選んだままにしない");
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(
+            param_keys(&lab.document, layer, ParamRef::Position).len(),
+            3,
+            "1回の Undo で戻る"
+        );
+
+        // キーを選んでいなければ、Delete は層のほうへ回る
+        lab.selected_keys.clear();
+        assert!(!lab.delete_selected_keys(), "キーが無いなら何もしない");
     }
 }

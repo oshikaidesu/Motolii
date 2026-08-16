@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::schema::TrackItem;
+use crate::schema::{Group, ItemEnvelope, TrackItem};
 use crate::{Document, LayerId};
 
 use super::locate::{
@@ -8,6 +8,39 @@ use super::locate::{
     find_items_vec_mut, layer_names_for_item,
 };
 use super::{Command, CommandError, ParentLocator};
+
+/// 空の Group を1つ作る準備をする。**中身を入れるのは呼び側**である。
+///
+/// グループ化は「空の Group を置く」+「選んだものを `ReparentClip` で入れる」の
+/// 組み合わせで表す。**新しい意味の command を増やさない** — 逆操作は既にある
+/// `RemoveTrackItem` / `ReparentClip` の逆で閉じており、Undo は 1 gesture で戻る。
+///
+/// LayerId は `reserve` のみ(台帳エントリは作らない)。エントリは戻り値の
+/// `AddTrackItem.layer_names` の apply で載り、Undo の Remove で外れる —
+/// 複製と同じ経路なので、`max_layers` に孤児が溜まらない。
+pub fn prepare_add_group(
+    doc: &mut Document,
+    parent: ParentLocator,
+    index: usize,
+    name: &str,
+) -> Result<Command, CommandError> {
+    let len = find_items_vec(doc, parent)?.len();
+    if index > len {
+        return Err(CommandError::IndexOutOfRange { index, len });
+    }
+    let layer = doc.layers.reserve()?;
+    let mut layer_names = BTreeMap::new();
+    layer_names.insert(layer, name.to_owned());
+    Ok(Command::AddTrackItem {
+        parent,
+        index,
+        item: TrackItem::Group(Group {
+            envelope: ItemEnvelope::new(layer),
+            children: Vec::new(),
+        }),
+        layer_names,
+    })
+}
 
 /// `target`が指すTrackItem(Clip/Group、子ごと)を外す準備をする。
 ///

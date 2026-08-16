@@ -2714,3 +2714,73 @@ fn removing_the_first_of_two_clips_leaves_the_second_addressable() {
         "既に消えたものは消せない"
     );
 }
+
+/// **グループ化は「空のGroupを置く」+「ReparentClipで入れる」で表せる。**
+/// 新しい意味のcommandを足さずに、逆操作は既存の逆で閉じる。
+#[test]
+fn an_empty_group_can_be_added_and_filled_by_reparenting() {
+    let mut doc = Document::new_current();
+    let first = doc.layers.allocate("first").unwrap();
+    let second = doc.layers.allocate("second").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    let clip = |layer: LayerId| {
+        TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        })
+    };
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![clip(first), clip(second)],
+    });
+    doc.validate().expect("fixture");
+
+    let before = layer_entries(&doc);
+    let mut writer = reference_writer(doc);
+    let gesture = writer.begin_gesture();
+
+    let command = writer
+        .prepare_add_group(ParentLocator::Track(track), 0, "Group 1")
+        .expect("prepare group");
+    let Command::AddTrackItem { item, .. } = &command else {
+        panic!("AddTrackItem を返す");
+    };
+    let group_layer = match item {
+        TrackItem::Group(g) => g.envelope.layer_id,
+        _ => panic!("Group を返す"),
+    };
+    writer.apply_command(gesture, command).expect("apply group");
+
+    for (index, layer) in [first, second].into_iter().enumerate() {
+        let command = writer
+            .prepare_reparent_clip(layer, ParentLocator::Group(group_layer), index, None)
+            .expect("prepare reparent")
+            .expect("command");
+        writer.apply_command(gesture, command).expect("apply reparent");
+    }
+
+    writer.validate().expect("空でなくなったGroupは検証を通る");
+    let after = writer.snapshot();
+    assert_eq!(after.tracks[0].items.len(), 1, "トップレベルはGroup1つ");
+    match &after.tracks[0].items[0] {
+        TrackItem::Group(g) => {
+            assert_eq!(g.children.len(), 2, "2枚とも中に入った");
+            assert_eq!(g.envelope.layer_id, group_layer);
+        }
+        _ => panic!("Group であること"),
+    }
+
+    // **1 gesture なので、1回の Undo で全部戻る**
+    writer.undo().expect("undo");
+    let restored = writer.snapshot();
+    assert_eq!(restored.tracks[0].items.len(), 2, "元の並びへ戻る");
+    assert_eq!(
+        layer_entries(&restored),
+        before,
+        "Group の LayerId は台帳から外れる(孤児を残さない)"
+    );
+}

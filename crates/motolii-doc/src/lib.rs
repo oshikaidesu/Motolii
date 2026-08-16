@@ -659,6 +659,18 @@ impl DocumentWriter {
         command::prepare_reparent_clip(&self.doc, target, new_parent, new_index, new_start)
     }
 
+    /// 空の Group を1つ置く command を準備する。**中身は `prepare_reparent_clip` で入れる。**
+    ///
+    /// LayerIdを予約するので `&mut self`。適用は呼び出し側(`apply_command`)。
+    pub fn prepare_add_group(
+        &mut self,
+        parent: ParentLocator,
+        index: usize,
+        name: &str,
+    ) -> Result<Command, CommandError> {
+        command::prepare_add_group(&mut self.doc, parent, index, name)
+    }
+
     /// 対象TrackItem(Clip/Group、子ごと)を外すcommandを準備する。
     ///
     /// **複製の裏返し。** Undoでは同じLayerId/表示名がrestoreで戻る。
