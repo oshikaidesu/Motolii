@@ -62,7 +62,9 @@ const CELL_PROP: Color32 = Color32::from_rgb(0x29, 0x29, 0x29);
 const TRACK_A: Color32 = Color32::from_rgb(0x37, 0x37, 0x37);
 const TRACK_B: Color32 = Color32::from_rgb(0x25, 0x25, 0x25);
 /// 数字を持たない細目盛。**主目盛より弱く、下地より濃い**
-const TRACK_MINOR: Color32 = Color32::from_rgb(0x30, 0x30, 0x30);
+const TRACK_MINOR: Color32 = Color32::from_rgb(0x2b, 0x2b, 0x2b);
+/// 1区間おきの下地。**目盛と目盛のあいだを図にする**(Ableton の明暗)
+const TRACK_BAND: Color32 = Color32::from_rgb(0x2f, 0x2f, 0x2f);
 const RULE: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
 const INK: Color32 = Color32::from_rgb(0xd4, 0xd4, 0xd4);
 const DIM: Color32 = Color32::from_rgb(0x8d, 0x8d, 0x8d);
@@ -160,113 +162,55 @@ pub struct DropTarget {
 /// 戻ってきたフレームの `dt` は数百msになりうる。そのまま足すと playhead が飛ぶ。
 const MAX_STEP: f32 = 0.05;
 
-/// ページを送るときにかける時間(秒)。**跳ばずに送るのが目的**。
+/// 見失った playhead を連れ戻す速さ(1秒でこの割合ぶん詰める)。
+const FOLLOW_RATE: f32 = 8.0;
+
+/// 再生中の窓。**playhead が窓のどこに居るかを、そのまま保つ。**
 ///
-/// LMMS は `smoothscroll` 設定のとき `QTimeLine` で 600ms かける
-/// (`src/gui/editors/SongEditor.cpp:727 animateScroll`)。600ms は歩幅が大きいので
-/// ここでは 0.4s にした。値の根拠は先例だが、数値そのものは触って決める種類のもの。
-const FLIP_SECONDS: f32 = 0.4;
-
-/// 追従の仕方。**先例は「ページ送り」と「中央固定」の2つしか持たない。**
+/// 中央は特別な場所ではない。左寄りに置いたなら左寄りのまま流れるべきで、
+/// 「中央へ合わせにいく」と押した瞬間に面が横へ滑り、**playhead が瞬間移動した
+/// ように見える**(左に置いたときは面が右へ戻るので特に強い)。
 ///
-/// - Ardour: Follow Playhead(ページ送り) / Stationary Playhead(中央固定)
-///   (`gtk2_ardour/editing_context.cc:3738`、`gtk2_ardour/editor.cc:5463`)
-/// - LMMS: `AutoScrollState::{Stepped, Continuous, Disabled}`
-///   (`include/TimeLineWidget.h:76`、`src/gui/editors/SongEditor.cpp:758`)
-/// - Ableton Live 11: Follow Behavior = Page / Scroll
+/// だから窓は playhead と**同じ量だけ**進む。相対距離は保たれ、寄せ直しは起きない。
+/// 頭と終端では `clamped` が窓を止めるので、そこだけ playhead のほうが窓の中を動く。
 ///
-/// **「掴んだ相対位置を保つ」は先例に無い。** 一度そう作って捨てた —
-/// 窓が動かない時間が無いので、どこに置いても常に面が流れ続けることになる。
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum Follow {
-    /// 追わない
-    Off,
-    /// **ページの中に居るあいだは一切動かさない。** 出たら次のページへ送る(既定)
-    Page,
-    /// 常に窓の中央に置く
-    Centre,
-}
+/// 窓の外に居るとき(掴んで別の場所へ飛ばした、パンで置いていった)だけは、
+/// 連れ戻さないと見失うので中央へ指数で詰める。
+/// 連れ戻しは**中央付近まで来たら終わる**。この幅に入ったら相対位置の保持へ戻す
+const RECENTRED: f32 = 0.05;
 
-impl Follow {
-    fn next(self) -> Follow {
-        match self {
-            Follow::Page => Follow::Centre,
-            Follow::Centre => Follow::Off,
-            Follow::Off => Follow::Page,
-        }
-    }
-
-    fn label(self) -> &'static str {
-        match self {
-            Follow::Page => "page",
-            Follow::Centre => "centre",
-            Follow::Off => "off",
-        }
-    }
-}
-
-/// 窓を送る途中。**送り先へ向かって動いている状態を持つ** — 1フレームで飛ばないため
-#[derive(Debug, Clone, Copy)]
-struct ScrollFlip {
-    from: f32,
-    to: f32,
-    /// 経過(秒)
-    at: f32,
-}
-
-impl ScrollFlip {
-    /// いまの左端。終わっていたら `None`
-    fn advance(&mut self, dt: f32) -> Option<f32> {
-        self.at += dt;
-        let t = (self.at / FLIP_SECONDS).clamp(0.0, 1.0);
-        // ease-in-out。等速で滑らせると、止まる瞬間が硬い
-        let eased = t * t * (3.0 - 2.0 * t);
-        let at = self.from + (self.to - self.from) * eased;
-        if t >= 1.0 {
-            None
-        } else {
-            Some(at)
-        }
-    }
-}
-
-/// ページ送りの送り先。**ページの中に居るなら `None`**(動かさない)。
-///
-/// 着地点は Ardour の `reset_x_origin_to_follow_playhead`
-/// (`gtk2_ardour/editing_context.cc:3760-3780`)と同じ考え方にした。
-/// 再生しながら前へ出たときは **playhead が新しい左端**になる —
-/// これから来る1ページぶんが丸ごと先に見えるので、次の送りまでが最も長い。
-/// 後ろへ出たときは逆に右端へ置く。
-///
-/// LMMS の Stepped も同じ着地(`SongEditor.cpp:773-779`、
-/// スクロール値に playhead の tick をそのまま入れている)。
-fn page_target(view: TimelineView, playhead: f32, comp: f32) -> Option<f32> {
-    if playhead >= view.start && playhead <= view.start + view.span {
-        return None;
-    }
-    let start = if playhead < view.start {
-        playhead - view.span
+fn follow_view(
+    view: TimelineView,
+    playhead: f32,
+    dt: f32,
+    comp: f32,
+    recentering: bool,
+) -> (TimelineView, bool) {
+    let visible = playhead >= view.start && playhead <= view.start + view.span;
+    // **一度見失ったら、中央付近へ戻すまで連れ戻し続ける。** 窓に入った瞬間に
+    // やめると、入ってきた端に貼り付いたまま流れることになる
+    let mut recentering = recentering || !visible;
+    let start = if recentering {
+        let target = playhead - view.span * 0.5;
+        let k = (dt * FOLLOW_RATE).clamp(0.0, 1.0);
+        view.start + (target - view.start) * k
     } else {
-        playhead
+        view.start + dt
     };
-    let landed = TimelineView {
+    let next = TimelineView {
         start,
         span: view.span,
     }
-    .clamped(comp)
-    .start;
-    (landed != view.start).then_some(landed)
-}
-
-/// 中央固定の送り先。窓が端で止まっているなら `None`
-fn centre_target(view: TimelineView, playhead: f32, comp: f32) -> Option<f32> {
-    let landed = TimelineView {
-        start: playhead - view.span * 0.5,
-        span: view.span,
+    .clamped(comp);
+    if recentering {
+        let ratio = (playhead - next.start) / next.span;
+        // 中央へ入った、または端で窓がこれ以上動けない(中央へは行けない)
+        let stuck = next.start <= 0.0 || next.start >= (comp - next.span).max(0.0);
+        if (ratio - 0.5).abs() < RECENTRED || (stuck && (0.0..=1.0).contains(&ratio)) {
+            recentering = false;
+        }
     }
-    .clamped(comp)
-    .start;
-    (landed != view.start).then_some(landed)
+    (next, recentering)
 }
 
 /// `dt` 秒ぶん進んだ playhead と、**まだ再生中か**。
@@ -342,6 +286,17 @@ fn ticks_every(view: TimelineView, step: f32) -> Vec<f32> {
 /// 数字を出す目盛
 fn ticks(view: TimelineView, fps: Fps) -> Vec<f32> {
     ticks_every(view, tick_step(view.span, fps))
+}
+
+/// その区間を暗いほうで塗るか。**絶対時刻で決める。**
+///
+/// 窓の中で何本目かで決めると、パンした瞬間に縞が入れ替わって画面が沸く。
+/// 0秒から数えた区間の偶奇なら、窓をどう動かしても縞は動かない。
+fn band_is_dark(t: f32, step: f32) -> bool {
+    if step <= 0.0 {
+        return false;
+    }
+    (t / step).round() as i64 % 2 != 0
 }
 
 /// 目盛の文字。**間隔より細かい桁は出さない**
@@ -578,13 +533,8 @@ struct Lab {
     playhead: f32,
     /// 再生中か。**Space で入り切りする**。Document には入れない
     playing: bool,
-    /// 追従の仕方。**既定はページ送り**(Ardour / Ableton と同じ既定)
-    follow: Follow,
-    /// 追従を一時停止している。**再生中に自分で横へ動かしたら止まる**
-    /// (Ableton の Follow と同じ。Space での再生し直しかスクラブで戻る)
-    follow_paused: bool,
-    /// ページを送っている途中
-    flip: Option<ScrollFlip>,
+    /// playhead を見失っていて、窓へ連れ戻している最中か
+    recentering: bool,
     status: String,
     shot: Option<String>,
     frame: u32,
@@ -631,9 +581,7 @@ impl Lab {
             nav: None,
             playhead: 0.0,
             playing: false,
-            follow: Follow::Page,
-            follow_paused: false,
-            flip: None,
+            recentering: false,
             status: "space=play  drag bar=move  drag name=reorder  Cmd/Shift+click=select".to_owned(),
             shot,
             frame: 0,
@@ -1213,17 +1161,12 @@ impl eframe::App for Lab {
                 DIM,
             );
         }
-        // いま何秒を見ているか。**窓の広さと粒、追従の仕方**もここに出す
-        let follow = if self.follow_paused {
-            "paused"
-        } else {
-            self.follow.label()
-        };
+        // いま何秒を見ているか。**窓の広さと粒**もここに出す
         p.text(
             egui::pos2(head.left() + 150.0, head.center().y),
             Align2::LEFT_CENTER,
             format!(
-                "{:.2}s  view {:.2}–{:.2}s  grid {}  follow {follow}",
+                "{:.2}s  view {:.2}–{:.2}s  grid {}",
                 self.playhead,
                 self.view.start,
                 self.view.start + self.view.span,
@@ -1245,27 +1188,14 @@ impl eframe::App for Lab {
         // **Space で入り切り。** 音も絵もまだ無いので、動くのは playhead だけである。
         // 掴んでいる最中は入り切りしない — ドラッグ中に時間が流れると何が起きたか読めない
         let comp_seconds = self.document.composition.duration.as_seconds_f64() as f32;
-        let (space, follow_key, dt) = ctx.input(|i| {
-            (
-                i.key_pressed(egui::Key::Space),
-                i.key_pressed(egui::Key::F) && !i.modifiers.command,
-                i.stable_dt,
-            )
-        });
+        let (space, dt) = ctx.input(|i| (i.key_pressed(egui::Key::Space), i.stable_dt));
         if space && self.drag.is_none() {
             self.playing = !self.playing;
             // 終端で押したら頭から。止まったまま何も起きないのが一番困る
             if self.playing && self.playhead >= comp_seconds - 1e-3 {
                 self.playhead = 0.0;
             }
-            // **再生し直したら追従は戻る。** Ableton の Follow と同じ復帰条件
-            self.follow_paused = false;
             self.status = if self.playing { "play" } else { "pause" }.to_owned();
-        }
-        if follow_key {
-            self.follow = self.follow.next();
-            self.follow_paused = false;
-            self.status = format!("follow {}", self.follow.label());
         }
         if self.playing {
             // **溜まった時間をまとめて進めない。** 窓が隠れていた分は捨てる
@@ -1275,55 +1205,21 @@ impl eframe::App for Lab {
                 self.playing = false;
                 self.status = "end".to_owned();
             }
-            // **追従はページ送りが既定。** ページの中に居るあいだは窓を動かさない
-            // (Ardour `editing_context.cc:3746` の早期 return と同じ)。
-            // ドラッグ中は追わない — Ardour も同じ理由で切っている(`:1570`)
-            if !self.follow_paused && self.drag.is_none() && self.flip.is_none() {
-                let target = match self.follow {
-                    Follow::Page => page_target(self.view, self.playhead, comp_seconds),
-                    Follow::Centre => centre_target(self.view, self.playhead, comp_seconds),
-                    Follow::Off => None,
-                };
-                if let Some(to) = target {
-                    // 中央固定は、中央に乗ってからは毎フレーム僅かしか動かない。
-                    // 送りにするのは**目に見えて飛ぶとき**だけで、あとは直に置く
-                    if (to - self.view.start).abs() > self.view.span * 0.02 {
-                        self.flip = Some(ScrollFlip {
-                            from: self.view.start,
-                            to,
-                            at: 0.0,
-                        });
-                    } else {
-                        self.view = TimelineView {
-                            start: to,
-                            span: self.view.span,
-                        }
-                        .clamped(comp_seconds);
-                    }
-                }
-            }
-        }
-
-        // 送りを1フレーム進める。**再生を止めても、始まった送りは着地させる**
-        if let Some(mut flip) = self.flip {
-            match flip.advance(dt.min(MAX_STEP)) {
-                Some(start) => {
-                    self.view = TimelineView {
-                        start,
-                        span: self.view.span,
-                    }
-                    .clamped(comp_seconds);
-                    self.flip = Some(flip);
-                }
-                None => {
-                    self.view = TimelineView {
-                        start: flip.to,
-                        span: self.view.span,
-                    }
-                    .clamped(comp_seconds);
-                    self.flip = None;
-                }
-            }
+            // **DAW と同じで、面のほうが流れる。** playhead を窓の中央へ置きにいき、
+            // 下の絵が左へ流れていく。ページ送り(端まで行ったら1画面ぶん飛ぶ)は
+            // 飛んだ瞬間に目が置いていかれるので採らない。
+            //
+            // 頭と終端では `clamped` が窓を止めるので、そこだけは playhead のほうが
+            // 動く — 流れる物が無いところで無理に流さない
+            let (view, recentering) = follow_view(
+                self.view,
+                self.playhead,
+                dt.min(MAX_STEP),
+                comp_seconds,
+                self.recentering,
+            );
+            self.view = view;
+            self.recentering = recentering;
         }
 
         // ルーラのスクラブ。**Document は触らない** — playhead は session の状態
@@ -1337,9 +1233,6 @@ impl eframe::App for Lab {
             if let Some(pos) = scrub.interact_pointer_pos() {
                 // 掴んだら再生は止まる。**手で動かしているものが勝手に進まない**
                 self.playing = false;
-                // 手で置き直したら追従は戻る(Ableton と同じ復帰条件)
-                self.follow_paused = false;
-                self.flip = None;
                 let at = self
                     .view
                     .x_to_time(pos.x, track_left, track_w)
@@ -1587,6 +1480,23 @@ impl eframe::App for Lab {
 
             // 時間面。**方眼はルーラと同じ目盛の上に立つ**(細目盛は薄く)
             p.rect_filled(track, CornerRadius::ZERO, TRACK_A);
+            // **1区間おきに下地を変える。** 線だけだと区間が全部同じ面に見えて、
+            // どこからどこまでが1目盛なのかを目で掴めない。明暗があると
+            // 「区間」そのものが図になる(Ableton の Arrangement と同じ作り)。
+            // 濃淡は**絶対時刻で決める** — パンしても縞が入れ替わらない
+            for t in &ticks {
+                if band_is_dark(*t, step) {
+                    let x0 = self.view.time_to_x(*t, track_left, track_w);
+                    let x1 = self.view.time_to_x(*t + step, track_left, track_w);
+                    let band = Rect::from_min_max(
+                        egui::pos2(x0.max(track.left()), track.top()),
+                        egui::pos2(x1.min(track.right()), track.bottom()),
+                    );
+                    if band.width() > 0.0 {
+                        p.rect_filled(band, CornerRadius::ZERO, TRACK_BAND);
+                    }
+                }
+            }
             for t in &minor_ticks {
                 let x = self.view.time_to_x(*t, track_left, track_w);
                 if x < track.left() {
@@ -1815,12 +1725,6 @@ impl eframe::App for Lab {
                 let seconds = self.view.x_to_time(track_left + dx, track_left, track_w)
                     - self.view.x_to_time(track_left, track_left, track_w);
                 self.view = self.view.pan(-seconds, comp);
-                // **自分で横へ動かしたら追従は止まる。** 追いかけっこにしない
-                // (Ableton: 横スクロールで Follow が一時停止する)
-                if self.playing {
-                    self.follow_paused = true;
-                    self.flip = None;
-                }
             } else if scroll.y != 0.0 {
                 // 素のホイールは縦。**行が画面より多いときだけ動く**
                 self.scroll_y =
@@ -1867,16 +1771,24 @@ impl eframe::App for Lab {
         // ---- 時間のナビゲータ帯 ----
         self.navigator(ui, &p, full, track_left, comp);
 
-        // playhead は行を描き終えてから、面の上に1本
+        // playhead は行を描き終えてから、面の上に1本。
+        //
+        // **時間面の中だけに描く。** 窓の左端より前の時刻に居ると x が
+        // レールの中へ入るので、クリップしないと**レイヤー名の列を縦に貫く**。
+        // 時刻を持たない列に時刻の線が出るのは、面の意味が壊れて見える
+        let time_p = p.with_clip_rect(Rect::from_min_max(
+            egui::pos2(track_left, ruler.top()),
+            egui::pos2(full.right(), rows_view.bottom()),
+        ));
         let playhead_x = self.view.time_to_x(self.playhead, track_left, track_w);
-        p.line_segment(
+        time_p.line_segment(
             [
                 egui::pos2(playhead_x, ruler.top()),
                 egui::pos2(playhead_x, rows_view.bottom()),
             ],
             Stroke::new(1.0, Color32::from_rgb(0xe8, 0xe8, 0xe8)),
         );
-        p.add(egui::Shape::convex_polygon(
+        time_p.add(egui::Shape::convex_polygon(
             vec![
                 egui::pos2(playhead_x - 5.0, ruler.top()),
                 egui::pos2(playhead_x + 5.0, ruler.top()),
@@ -3249,95 +3161,92 @@ mod tests {
         assert!((15.5 - view.start) / view.span > 0.5);
     }
 
-    /// **ページの中に居るあいだ、窓は1ピクセルも動かない。**
-    ///
-    /// Ardour `EditingContext::reset_x_origin_to_follow_playhead`
-    /// (`gtk2_ardour/editing_context.cc:3746`)の早期 return と同じ規則。
-    /// 再生を押した瞬間に面が滑らないのは、寄せ方が上手いからではなく
-    /// **そもそも寄せないから**である。
+    /// **窓の中の相対位置が保たれる。** 中央へ寄せ直さない。
     #[test]
-    fn the_window_does_not_move_while_the_playhead_is_on_the_page() {
+    fn playback_keeps_the_playhead_where_the_user_put_it() {
         let comp = 60.0_f32;
-        let view = TimelineView { start: 4.0, span: 8.0 };
-
-        for playhead in [4.0_f32, 5.0, 6.0, 11.9, 12.0] {
-            assert_eq!(
-                page_target(view, playhead, comp),
-                None,
-                "ページの中では動かさない: {playhead}"
-            );
-        }
-    }
-
-    /// 前へ出たら**playhead が新しい左端**。次の1ページぶんが先に見える。
-    ///
-    /// Ardour(`editing_context.cc:3772` 前進かつ再生中 → `l = sample`)と
-    /// LMMS(`src/gui/editors/SongEditor.cpp:778` スクロール値に playhead を入れる)が
-    /// 同じ着地を採っている。**送りの回数が最も少なくなる置き方**である。
-    #[test]
-    fn crossing_the_right_edge_lands_the_playhead_on_the_left() {
-        let comp = 60.0_f32;
-        let view = TimelineView { start: 4.0, span: 8.0 };
-
-        let to = page_target(view, 12.5, comp).expect("ページの外なので送る");
-        assert!((to - 12.5).abs() < 1e-4, "playhead が左端に来る: {to}");
-
-        // 後ろへ出たら逆(右端)。Ardour の transport_rolling かつ左方向と同じ
-        let to = page_target(view, 3.0, comp).expect("ページの外なので送る");
-        assert!((to - 0.0_f32).abs() < 1e-4, "右端に来る(頭で止まる): {to}");
-
-        // 端では窓が composition の外へ出ない
-        let to = page_target(TimelineView { start: 50.0, span: 8.0 }, 59.0, comp);
-        assert_eq!(to, Some(52.0), "終端で止まる: {to:?}");
-    }
-
-    /// 中央固定は Ardour の Stationary Playhead(`gtk2_ardour/editor.cc:5466`)と同じ式。
-    #[test]
-    fn centre_mode_puts_the_playhead_in_the_middle() {
-        let comp = 60.0_f32;
-        let view = TimelineView { start: 0.0, span: 8.0 };
-        assert_eq!(centre_target(view, 20.0, comp), Some(16.0));
-        // 端では中央へ行けない。**行けないことを None で言う**
-        assert_eq!(centre_target(view, 2.0, comp), None, "頭では窓が動かない");
-        assert_eq!(
-            centre_target(TimelineView { start: 52.0, span: 8.0 }, 58.0, comp),
-            None,
-            "終端でも窓が動かない"
-        );
-    }
-
-    /// **送りは1フレームで終わらない。** 跳ばずに着地する。
-    ///
-    /// LMMS は `smoothscroll` のとき `QTimeLine` で 600ms かけて送る
-    /// (`src/gui/editors/SongEditor.cpp:727`)。跳ぶのを避けるのではなく、
-    /// **跳ぶところを見せる**のが先例の答えだった。
-    #[test]
-    fn a_page_flip_is_animated_rather_than_instant() {
-        let mut flip = ScrollFlip {
-            from: 4.0,
-            to: 12.0,
-            at: 0.0,
-        };
         let dt = 1.0 / 60.0;
 
-        let first = flip.advance(dt).expect("まだ途中");
+        // 窓の左寄り(ratio 0.25)に置いて再生する
+        let mut view = TimelineView { start: 4.0, span: 8.0 };
+        let mut playhead = 6.0_f32;
+        let ratio = |view: TimelineView, playhead: f32| (playhead - view.start) / view.span;
+        let before = ratio(view, playhead);
+        assert!((before - 0.25).abs() < 1e-4);
+
+        // 1フレーム目から相対位置は変わらない(**押した瞬間に滑らない**)
+        let (next, _) = advance_playhead(playhead, dt, comp);
+        let (after_one, _) = follow_view(view, next, dt, comp, false);
         assert!(
-            first > 4.0 && first < 4.5,
-            "1フレームで飛ばない: {first}"
+            (ratio(after_one, next) - before).abs() < 1e-4,
+            "1フレーム目で寄せ直さない: {}",
+            ratio(after_one, next)
         );
 
-        let mut last = first;
-        let mut frames = 1;
-        while let Some(at) = flip.advance(dt) {
-            assert!(at >= last - 1e-4, "戻らない: {at} < {last}");
-            last = at;
-            frames += 1;
-            assert!(frames < 600, "いつか終わる");
+        // 1秒ぶん流しても左寄りのまま
+        for _ in 0..60 {
+            let (at, _) = advance_playhead(playhead, dt, comp);
+            playhead = at;
+            let (next, _) = follow_view(view, playhead, dt, comp, false);
+            view = next;
         }
         assert!(
-            (frames as f32 * dt - FLIP_SECONDS).abs() < 0.05,
-            "{FLIP_SECONDS}秒で着く: {}s",
-            frames as f32 * dt
+            (ratio(view, playhead) - before).abs() < 1e-3,
+            "**左寄りのまま流れる**。中央へは行かない: {}",
+            ratio(view, playhead)
+        );
+        assert!(view.start > 4.0, "面のほうは流れている: {}", view.start);
+    }
+
+    /// 終端では窓が止まり、**playhead のほうが窓の中を動く**。
+    #[test]
+    fn the_window_holds_still_at_the_end() {
+        let comp = 16.0_f32;
+        let dt = 1.0 / 60.0;
+
+        // 終端: comp より後ろは無いので、窓は止まり playhead が右端へ寄る
+        let tail = TimelineView { start: 8.0, span: 8.0 };
+        let (moved, _) = follow_view(tail, 15.5, dt, comp, false);
+        assert_eq!(moved.start, 8.0, "終端より後ろへは流れない");
+
+        // 頭は「止まる」ではない。**先があるので流れる** — 相対位置が保たれる以上、
+        // 0秒付近から再生しても面は動く(playhead が左端に貼り付いたりしない)
+        let head = TimelineView { start: 0.0, span: 8.0 };
+        let (moved, _) = follow_view(head, 0.5, dt, comp, false);
+        assert!((moved.start - dt).abs() < 1e-6, "頭でも流れる: {}", moved.start);
+    }
+
+    /// 窓の外へ出たときだけ連れ戻す。**そのときも飛ばない。**
+    #[test]
+    fn a_playhead_outside_the_window_is_pulled_back_without_jumping() {
+        let comp = 60.0_f32;
+        let dt = 1.0 / 60.0;
+        let mut view = TimelineView { start: 30.0, span: 8.0 };
+        let playhead = 6.0_f32; // 窓のずっと左
+
+        let (one, recentering) = follow_view(view, playhead, dt, comp, false);
+        assert!(recentering, "見失ったので連れ戻しに入る");
+        assert!(
+            one.start < view.start && one.start > 25.0,
+            "1フレームで飛ばない: {}",
+            one.start
+        );
+
+        // 実際の再生と同じく playhead も進めながら回す
+        let mut recentering = false;
+        let mut playhead = playhead;
+        for _ in 0..60 {
+            let (at, _) = advance_playhead(playhead, dt, comp);
+            playhead = at;
+            let (next, flag) = follow_view(view, playhead, dt, comp, recentering);
+            view = next;
+            recentering = flag;
+        }
+        assert!(!recentering, "中央まで来たら連れ戻しは終わる");
+        let centred = (playhead - view.start) / view.span;
+        assert!(
+            (centred - 0.5).abs() < 0.05,
+            "見えるところまで連れ戻す: {centred}"
         );
     }
 
@@ -3351,5 +3260,32 @@ mod tests {
             (at - 2.05).abs() < 1e-6,
             "1フレームで進むのは MAX_STEP まで: {at}"
         );
+    }
+
+    /// **縞は時刻に貼り付く。** 窓を動かしても入れ替わらない。
+    ///
+    /// 窓の中で何本目かで濃淡を決めると、パンした瞬間に全部の縞が反転して
+    /// 画面が沸く。0秒から数えた区間の偶奇なら、窓の位置は式に入らない。
+    #[test]
+    fn the_bands_are_nailed_to_time_not_to_the_window() {
+        assert!(!band_is_dark(0.0, 1.0), "0–1s は明");
+        assert!(band_is_dark(1.0, 1.0), "1–2s は暗");
+        assert!(!band_is_dark(2.0, 1.0));
+
+        // 目盛が2秒粒になっても、偶奇は0秒から数える
+        assert!(!band_is_dark(0.0, 2.0));
+        assert!(band_is_dark(2.0, 2.0));
+        assert!(!band_is_dark(4.0, 2.0));
+
+        // **窓の位置は式に入らない** — どの窓から見ても同じ時刻は同じ濃さ
+        let fps = Fps::try_new(30, 1).expect("fps");
+        let step = tick_step(16.0, fps);
+        let shade = band_is_dark(4.0, step);
+        for start in [0.0_f32, 0.7, 3.3, 9.9] {
+            let view = TimelineView { start, span: 16.0 };
+            if let Some(t) = ticks(view, fps).into_iter().find(|t| (*t - 4.0).abs() < 1e-3) {
+                assert_eq!(band_is_dark(t, step), shade, "start={start} で反転した");
+            }
+        }
     }
 }
