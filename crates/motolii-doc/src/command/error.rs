@@ -155,6 +155,8 @@ pub enum CommandError {
     },
     #[error(transparent)]
     LayerIdAlloc(#[from] crate::LayerIdError),
+    #[error("locator payload mismatch at index {index}")]
+    LocatorMismatch { index: usize },
     #[error(transparent)]
     StableIdAlloc(#[from] crate::stable_id::StableIdError),
     #[error(transparent)]

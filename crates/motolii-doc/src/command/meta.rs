@@ -52,6 +52,13 @@ impl Command {
             Command::ReparentClip { .. } => CommandKind::ReparentClip,
             Command::SetItemVisible { .. } => CommandKind::SetItemVisible,
             Command::SetItemSolo { .. } => CommandKind::SetItemSolo,
+            Command::SetItemLock { .. } => CommandKind::SetItemLock,
+            Command::SetItemColor { .. } => CommandKind::SetItemColor,
+            Command::SetLayerName { .. } => CommandKind::SetLayerName,
+            Command::AddLocator { .. } => CommandKind::AddLocator,
+            Command::RemoveLocator { .. } => CommandKind::RemoveLocator,
+            Command::SetLocatorTime { .. } => CommandKind::SetLocatorTime,
+            Command::SetLocatorText { .. } => CommandKind::SetLocatorText,
         }
     }
 
@@ -78,6 +85,9 @@ impl Command {
             | Command::UnsplitClip { target, .. }
             | Command::ReparentClip { target, .. }
             | Command::SetItemVisible { target, .. }
+            | Command::SetItemLock { target, .. }
+            | Command::SetItemColor { target, .. }
+            | Command::SetLayerName { target, .. }
             | Command::SetItemSolo { target, .. } => target.get(),
             Command::AddPositionKey { added_key_id, .. }
             | Command::UndoAddPositionKey { added_key_id, .. } => added_key_id.get(),
@@ -97,6 +107,11 @@ impl Command {
             Command::AddTrackItem { item, .. } | Command::RemoveTrackItem { item, .. } => {
                 envelope_of(item).layer_id.get()
             }
+            // **メモは layer に属さない。** index をそのまま宛先にする
+            Command::AddLocator { index, .. }
+            | Command::RemoveLocator { index, .. }
+            | Command::SetLocatorTime { index, .. }
+            | Command::SetLocatorText { index, .. } => *index as u64,
         }
     }
 
@@ -149,6 +164,13 @@ impl Command {
             Command::ReparentClip { .. } => PropertyId::Reparent,
             Command::SetItemVisible { .. } => PropertyId::ItemVisible,
             Command::SetItemSolo { .. } => PropertyId::ItemSolo,
+            Command::SetItemLock { .. } => PropertyId::ItemLock,
+            Command::SetItemColor { .. } => PropertyId::ItemColor,
+            Command::SetLayerName { .. } => PropertyId::LayerName,
+            Command::AddLocator { .. }
+            | Command::RemoveLocator { .. }
+            | Command::SetLocatorTime { .. }
+            | Command::SetLocatorText { .. } => PropertyId::Locator,
         }
     }
 
@@ -232,6 +254,13 @@ impl Command {
             | Command::UnsplitClip { .. }
             | Command::ReparentClip { .. }
             | Command::SetItemVisible { .. }
+            | Command::SetItemLock { .. }
+            | Command::SetItemColor { .. }
+            | Command::SetLayerName { .. }
+            | Command::AddLocator { .. }
+            | Command::RemoveLocator { .. }
+            | Command::SetLocatorTime { .. }
+            | Command::SetLocatorText { .. }
             | Command::SetItemSolo { .. } => None,
         }
     }

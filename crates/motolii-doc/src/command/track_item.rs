@@ -1,12 +1,167 @@
 use std::collections::BTreeMap;
 
-use crate::schema::TrackItem;
+use motolii_core::RationalTime;
+
+use crate::schema::{Group, ItemEnvelope, TrackItem};
 use crate::{Document, LayerId};
 
 use super::locate::{
-    envelope_of, ensure_layer_names_match_item, find_items_vec, find_items_vec_mut,
+    envelope_of, ensure_layer_names_match_item, find_item_location, find_items_vec,
+    find_items_vec_mut, layer_names_for_item,
 };
-use super::{CommandError, ParentLocator};
+use super::{Command, CommandError, ParentLocator};
+
+/// 空の Group を1つ作る準備をする。**中身を入れるのは呼び側**である。
+///
+/// グループ化は「空の Group を置く」+「選んだものを `ReparentClip` で入れる」の
+/// 組み合わせで表す。**新しい意味の command を増やさない** — 逆操作は既にある
+/// `RemoveTrackItem` / `ReparentClip` の逆で閉じており、Undo は 1 gesture で戻る。
+///
+/// LayerId は `reserve` のみ(台帳エントリは作らない)。エントリは戻り値の
+/// `AddTrackItem.layer_names` の apply で載り、Undo の Remove で外れる —
+/// 複製と同じ経路なので、`max_layers` に孤児が溜まらない。
+pub fn prepare_add_group(
+    doc: &mut Document,
+    parent: ParentLocator,
+    index: usize,
+    name: &str,
+) -> Result<Command, CommandError> {
+    let len = find_items_vec(doc, parent)?.len();
+    if index > len {
+        return Err(CommandError::IndexOutOfRange { index, len });
+    }
+    let layer = doc.layers.reserve()?;
+    let mut layer_names = BTreeMap::new();
+    layer_names.insert(layer, name.to_owned());
+    Ok(Command::AddTrackItem {
+        parent,
+        index,
+        item: TrackItem::Group(Group {
+            envelope: ItemEnvelope::new(layer),
+            children: Vec::new(),
+        }),
+        layer_names,
+    })
+}
+
+/// メモを置く準備をする。**末尾に足す** — 保持順が index の意味なので、
+/// 時刻で並べ替えない(並べ替えると既存 command の宛先が動く)。
+pub fn prepare_add_locator(doc: &Document, t: RationalTime, text: &str) -> Command {
+    Command::AddLocator {
+        index: doc.locators.len(),
+        locator: crate::schema::Locator {
+            t,
+            text: text.to_owned(),
+        },
+    }
+}
+
+/// メモを外す準備をする。payload も載せる(inverse がそのまま戻せる)。
+pub fn prepare_remove_locator(doc: &Document, index: usize) -> Result<Command, CommandError> {
+    let locator = doc
+        .locators
+        .get(index)
+        .ok_or(CommandError::IndexOutOfRange {
+            index,
+            len: doc.locators.len(),
+        })?;
+    Ok(Command::RemoveLocator {
+        index,
+        locator: locator.clone(),
+    })
+}
+
+/// メモの時刻。same-value は `None`。
+pub fn prepare_set_locator_time(
+    doc: &Document,
+    index: usize,
+    new: RationalTime,
+) -> Result<Option<Command>, CommandError> {
+    let locator = doc
+        .locators
+        .get(index)
+        .ok_or(CommandError::IndexOutOfRange {
+            index,
+            len: doc.locators.len(),
+        })?;
+    if locator.t == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetLocatorTime {
+        index,
+        old: locator.t,
+        new,
+    }))
+}
+
+/// メモの文。same-value は `None`。
+pub fn prepare_set_locator_text(
+    doc: &Document,
+    index: usize,
+    new: &str,
+) -> Result<Option<Command>, CommandError> {
+    let locator = doc
+        .locators
+        .get(index)
+        .ok_or(CommandError::IndexOutOfRange {
+            index,
+            len: doc.locators.len(),
+        })?;
+    if locator.text == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetLocatorText {
+        index,
+        old: locator.text.clone(),
+        new: new.to_owned(),
+    }))
+}
+
+/// 表示名を差し替える準備をする。same-value は `None`。
+///
+/// **名前は識別子ではない。** 参照は全部 `LayerId` なので、変えても
+/// `transform.parent` / `LookAt` / journal の指し先は動かない。
+pub fn prepare_set_layer_name(
+    doc: &Document,
+    target: LayerId,
+    new: &str,
+) -> Result<Option<Command>, CommandError> {
+    let old = doc
+        .layers
+        .display_name(target)
+        .ok_or(CommandError::LayerNotFound(target.get()))?;
+    if old == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetLayerName {
+        target,
+        old: old.to_owned(),
+        new: new.to_owned(),
+    }))
+}
+
+/// `target`が指すTrackItem(Clip/Group、子ごと)を外す準備をする。
+///
+/// **`prepare_duplicate_track_item`の裏返しである。** 複製が`AddTrackItem`で
+/// 台帳へ載せるのと同じ経路を逆へ通すので、Undo(inverseの`AddTrackItem`)では
+/// **同じLayerIdと表示名が`restore`で戻る** — idを振り直さない。
+///
+/// この関数はツリーも台帳も変更しない(適用は`apply_command`側)。
+/// 同名の`Ok(None)`は無い — 「消す対象がある」なら必ず変化する。
+pub fn prepare_remove_track_item(
+    doc: &Document,
+    target: LayerId,
+) -> Result<Command, CommandError> {
+    let (parent, index, item) =
+        find_item_location(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    let layer_names = layer_names_for_item(doc, item)?;
+    Ok(Command::RemoveTrackItem {
+        parent,
+        index,
+        item: item.clone(),
+        layer_names,
+    })
+}
 
 pub(super) fn apply_add_track_item(
     doc: &mut Document,

@@ -398,6 +398,33 @@ impl Command {
                 old: new,
                 new: old,
             },
+            Command::SetItemLock { target, old, new } => Command::SetItemLock {
+                target,
+                old: new,
+                new: old,
+            },
+            Command::SetItemColor { target, old, new } => Command::SetItemColor {
+                target,
+                old: new,
+                new: old,
+            },
+            Command::AddLocator { index, locator } => Command::RemoveLocator { index, locator },
+            Command::RemoveLocator { index, locator } => Command::AddLocator { index, locator },
+            Command::SetLocatorTime { index, old, new } => Command::SetLocatorTime {
+                index,
+                old: new,
+                new: old,
+            },
+            Command::SetLocatorText { index, old, new } => Command::SetLocatorText {
+                index,
+                old: new,
+                new: old,
+            },
+            Command::SetLayerName { target, old, new } => Command::SetLayerName {
+                target,
+                old: new,
+                new: old,
+            },
         }
     }
 }

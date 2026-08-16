@@ -64,6 +64,19 @@ pub struct Composition {
     pub camera: CompCameraDoc,
 }
 
+/// タイムライン上のロケータ。**時刻と名前だけ**を持つ(Ableton の Locator 相当)。
+///
+/// 曲の構成を指す印である — "Verse" / "Chorus" のように名前を付け、
+/// **そこへ跳ぶ**ために使う。評価にも描画にも入らないので、`LayerId` のような
+/// 識別子を持たず、参照される側にもならない。
+/// **並びは保持順**で、時刻順に見せるのは UI の仕事(並べ替えると index が動き、
+/// command の宛先が変わってしまう)。
+#[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
+pub struct Locator {
+    pub t: RationalTime,
+    pub text: String,
+}
+
 #[derive(DeserializeDerive)]
 struct RawComposition {
     aspect_num: i64,
@@ -233,6 +246,10 @@ pub struct ItemEnvelope {
     /// 描画フィルタ。文書内に1つでも true があればソロ集合のみ描画(B④)。
     #[serde(default = "default_false")]
     pub solo: bool,
+    /// 行の色。**選んだときだけ載る** — 未選択なら UI が id から既定を導く。
+    /// 評価にも描画にも入らない(見分けるための印)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<u32>,
     /// 編集禁止のみ。評価・描画に影響しない(B④)。
     #[serde(default = "default_false")]
     pub lock: bool,
@@ -249,6 +266,7 @@ impl ItemEnvelope {
             opacity: default_opacity(),
             visible: true,
             solo: false,
+            color: None,
             lock: false,
         }
     }

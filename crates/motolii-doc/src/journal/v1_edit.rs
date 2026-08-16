@@ -405,6 +405,8 @@ fn migrate_legacy_track_item_for_remove(
                     visible: envelope.visible,
                     solo: envelope.solo,
                     lock: envelope.lock,
+                    // 旧 journal は色を持たない。**選んでいない**として復元する
+                    color: None,
                 },
                 start: *start,
                 duration: *duration,
@@ -429,6 +431,8 @@ fn migrate_legacy_track_item_for_remove(
                     visible: envelope.visible,
                     solo: envelope.solo,
                     lock: envelope.lock,
+                    // 旧 journal は色を持たない。**選んでいない**として復元する
+                    color: None,
                 },
                 children: migrated_children,
             }))

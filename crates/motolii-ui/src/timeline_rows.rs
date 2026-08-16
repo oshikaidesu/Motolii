@@ -209,7 +209,7 @@ mod tests {
         RationalTime::try_new(seconds, 1).expect("fixture time")
     }
 
-    fn position_keys(document: &mut Document) -> DocParam {
+    fn position_keys(document: &mut Document) -> DocParam { // single-writer-exempt: テスト fixture が Document を所有している
         let key_id = KeyframeId::from_raw(document.next_stable_id.allocate().expect("key id"));
         let mut keys = DocKeyframeTrack::new();
         keys.insert(DocKeyframe {
@@ -221,7 +221,7 @@ mod tests {
         DocParam::Keyframes(keys)
     }
 
-    fn clip(document: &mut Document, name: &str, keyed: bool) -> (TrackItem, LayerId) {
+    fn clip(document: &mut Document, name: &str, keyed: bool) -> (TrackItem, LayerId) { // single-writer-exempt: テスト fixture が Document を所有している
         let asset = document
             .assets
             .allocate(name, "video/mp4", &format!("{name}-hash"))

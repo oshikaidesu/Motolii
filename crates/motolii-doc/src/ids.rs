@@ -224,6 +224,21 @@ impl LayerIdTable {
         Ok(())
     }
 
+    /// 表示名を差し替える。**IDは変えない** — 名前は識別子ではないので、
+    /// 変えても参照(`transform.parent` / `LookAt` / journal)は一切動かない。
+    /// 戻り値は差し替える前の名前(inverse を組む側が要る)。
+    pub fn rename(
+        &mut self,
+        id: LayerId,
+        display_name: impl Into<String>,
+    ) -> Result<String, LayerIdError> {
+        let slot = self
+            .entries
+            .get_mut(&id)
+            .ok_or(LayerIdError::NotFound { id: id.0 })?;
+        Ok(std::mem::replace(slot, display_name.into()))
+    }
+
     /// 削除。採番カウンタは戻さない(再利用禁止)。
     pub fn remove(&mut self, id: LayerId) -> Result<String, LayerIdError> {
         self.entries

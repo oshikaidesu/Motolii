@@ -7,7 +7,7 @@ use motolii_core::{RationalTime, TimeMap};
 use crate::asset::Asset;
 use crate::param::DocParam;
 use crate::schema::{
-    BlendMode, ClippingMaskSettings, EffectDefinition, EffectInstance, EffectUse, TrackItem,
+    BlendMode, ClippingMaskSettings, EffectDefinition, EffectInstance, EffectUse, Locator, TrackItem,
 };
 use crate::stable_id::{EffectDefinitionId, EffectId, KeyframeId, StableIdReservation};
 use crate::{Document, LayerId};
@@ -269,6 +269,38 @@ pub enum Command {
         new: bool,
     },
     SetItemSolo {
+        target: LayerId,
+        old: bool,
+        new: bool,
+    },
+    /// メモを置く。**宛先は index** — マーカーは識別子を持たない(保持順で addressing)
+    AddLocator { index: usize, locator: Locator },
+    /// `AddLocator` の inverse でもあり、単独の削除でもある
+    RemoveLocator { index: usize, locator: Locator },
+    SetLocatorTime {
+        index: usize,
+        old: RationalTime,
+        new: RationalTime,
+    },
+    SetLocatorText {
+        index: usize,
+        old: String,
+        new: String,
+    },
+    /// 表示名。**台帳(`Document.layers`)だけが変わる**。ツリーもIDも動かない
+    SetLayerName {
+        target: LayerId,
+        old: String,
+        new: String,
+    },
+    /// 行の色。**選んだ色だけが載る**(`None` は「選んでいない」)
+    SetItemColor {
+        target: LayerId,
+        old: Option<u32>,
+        new: Option<u32>,
+    },
+    /// 編集禁止(B④)。**評価・描画には影響しない** — 触れなくなるだけ
+    SetItemLock {
         target: LayerId,
         old: bool,
         new: bool,

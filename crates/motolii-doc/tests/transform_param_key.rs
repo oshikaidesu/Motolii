@@ -71,10 +71,10 @@ fn scale_keyframes(keys: Vec<(u64, RationalTime, [f64; 2])>) -> DocParam {
 
 #[test]
 fn const_scale_prepares_set_property_keyframes_at_t() {
-    let (doc, layer) = clip_doc(|env| env.transform.scale = DocParam::const_vec2([2.0, 3.0]));
+    let (mut doc, layer) = clip_doc(|env| env.transform.scale = DocParam::const_vec2([2.0, 3.0]));
     let t = RationalTime::from_seconds(1);
     let prepared =
-        prepare_add_transform_param_key(&doc, layer, ScalarPropertyId::Scale, t).unwrap();
+        prepare_add_transform_param_key(&mut doc, layer, ScalarPropertyId::Scale, t).unwrap();
     let (key_id, command) = match prepared {
         AddTransformParamKeyPreparation::Prepared { key_id, command } => (key_id, command),
         AddTransformParamKeyPreparation::AlreadyPresent { .. } => {
@@ -106,11 +106,11 @@ fn const_scale_prepares_set_property_keyframes_at_t() {
 #[test]
 fn second_prepare_at_same_t_is_already_present() {
     let t = RationalTime::from_seconds(1);
-    let (doc, layer) = clip_doc(|env| {
+    let (mut doc, layer) = clip_doc(|env| {
         env.transform.scale = scale_keyframes(vec![(0, t, [2.0, 3.0])]);
     });
     let prepared =
-        prepare_add_transform_param_key(&doc, layer, ScalarPropertyId::Scale, t).unwrap();
+        prepare_add_transform_param_key(&mut doc, layer, ScalarPropertyId::Scale, t).unwrap();
     match prepared {
         AddTransformParamKeyPreparation::AlreadyPresent { key_id } => {
             assert_eq!(key_id, KeyframeId::from_raw(0));
@@ -124,7 +124,7 @@ fn command_apply_dump_eval_at_t_returns_const_scale() {
     let (mut doc, layer) = clip_doc(|env| env.transform.scale = DocParam::const_vec2([2.0, 3.0]));
     let t = RationalTime::from_seconds(1);
     let prepared =
-        prepare_add_transform_param_key(&doc, layer, ScalarPropertyId::Scale, t).unwrap();
+        prepare_add_transform_param_key(&mut doc, layer, ScalarPropertyId::Scale, t).unwrap();
     let command = match prepared {
         AddTransformParamKeyPreparation::Prepared { command, .. } => command,
         AddTransformParamKeyPreparation::AlreadyPresent { .. } => {
@@ -155,10 +155,10 @@ fn command_apply_dump_eval_at_t_returns_const_scale() {
 
 #[test]
 fn document_writer_apply_macro_commits_scale_keyframe_id() {
-    let (doc, layer) = clip_doc(|env| env.transform.scale = DocParam::const_vec2([2.0, 3.0]));
+    let (mut doc, layer) = clip_doc(|env| env.transform.scale = DocParam::const_vec2([2.0, 3.0]));
     let t = RationalTime::from_seconds(1);
     let prepared =
-        prepare_add_transform_param_key(&doc, layer, ScalarPropertyId::Scale, t).unwrap();
+        prepare_add_transform_param_key(&mut doc, layer, ScalarPropertyId::Scale, t).unwrap();
     let command = match prepared {
         AddTransformParamKeyPreparation::Prepared { command, .. } => command,
         AddTransformParamKeyPreparation::AlreadyPresent { .. } => {
@@ -212,7 +212,7 @@ fn scale_const_f64_is_type_mismatch() {
         })],
     });
     let err =
-        prepare_add_transform_param_key(&doc, layer, ScalarPropertyId::Scale, RationalTime::ZERO)
+        prepare_add_transform_param_key(&mut doc, layer, ScalarPropertyId::Scale, RationalTime::ZERO)
             .expect_err("F64 scale must fail");
     assert!(matches!(
         err,
@@ -220,16 +220,22 @@ fn scale_const_f64_is_type_mismatch() {
     ));
 }
 
+/// **Position と Anchor は受け付ける。** 2026-08-16 に受け付け集合を1つへ統合した
+/// (`5db01f7d`)ときに広がった。plugin 由来(`EffectParam` / `SourceParam`)だけは、
+/// 型が catalog 側にあるのでここでは決められず、拒否のまま。
 #[test]
-fn position_source_param_and_effect_param_are_rejected() {
-    let (doc, layer) = clip_doc(|env| env.transform.scale = DocParam::const_vec2([1.0, 1.0]));
+fn plugin_properties_are_rejected_but_envelope_ones_are_not() {
+    let (mut doc, layer) = clip_doc(|env| env.transform.scale = DocParam::const_vec2([1.0, 1.0]));
     let t = RationalTime::ZERO;
+    for property in [ScalarPropertyId::Position, ScalarPropertyId::Anchor] {
+        prepare_add_transform_param_key(&mut doc, layer, property.clone(), t)
+            .unwrap_or_else(|err| panic!("envelope の property は通る: {property:?} {err:?}"));
+    }
     for property in [
-        ScalarPropertyId::Position,
         ScalarPropertyId::SourceParam("count".into()),
         ScalarPropertyId::EffectParam(EffectId::from_raw(0), "amount".into()),
     ] {
-        let err = prepare_add_transform_param_key(&doc, layer, property.clone(), t)
+        let err = prepare_add_transform_param_key(&mut doc, layer, property.clone(), t)
             .expect_err("unsupported property");
         assert!(
             matches!(
@@ -243,7 +249,7 @@ fn position_source_param_and_effect_param_are_rejected() {
 
 #[test]
 fn rotation_and_opacity_const_emit_set_property_f64_keyframes() {
-    let (doc, layer) = clip_doc(|env| {
+    let (mut doc, layer) = clip_doc(|env| {
         env.transform.rotation = DocParam::const_f64(0.25);
         env.opacity = DocParam::const_f64(0.5);
     });
@@ -253,7 +259,7 @@ fn rotation_and_opacity_const_emit_set_property_f64_keyframes() {
         (ScalarPropertyId::Rotation, 0.25),
         (ScalarPropertyId::Opacity, 0.5),
     ] {
-        let prepared = prepare_add_transform_param_key(&doc, layer, property.clone(), t).unwrap();
+        let prepared = prepare_add_transform_param_key(&mut doc, layer, property.clone(), t).unwrap();
         let command = match prepared {
             AddTransformParamKeyPreparation::Prepared { command, .. } => command,
             AddTransformParamKeyPreparation::AlreadyPresent { .. } => panic!("const must prepare"),
@@ -283,7 +289,7 @@ fn rotation_and_opacity_const_emit_set_property_f64_keyframes() {
 fn set_scale_key_value_replaces_only_that_key() {
     let t0 = RationalTime::ZERO;
     let t1 = RationalTime::from_seconds(1);
-    let (doc, layer) = clip_doc(|env| {
+    let (mut doc, layer) = clip_doc(|env| {
         env.transform.scale = scale_keyframes(vec![(0, t0, [1.0, 1.0]), (1, t1, [2.0, 3.0])]);
     });
     let command = prepare_set_transform_param_key_value(
@@ -347,7 +353,7 @@ fn set_scale_key_value_replaces_only_that_key() {
 #[test]
 fn set_scale_key_same_value_is_none() {
     let t = RationalTime::from_seconds(1);
-    let (doc, layer) = clip_doc(|env| {
+    let (mut doc, layer) = clip_doc(|env| {
         env.transform.scale = scale_keyframes(vec![(0, t, [2.0, 3.0])]);
     });
     let prepared = prepare_set_transform_param_key_value(
@@ -364,7 +370,7 @@ fn set_scale_key_same_value_is_none() {
 #[test]
 fn remove_last_scale_key_collapses_to_const() {
     let t = RationalTime::from_seconds(1);
-    let (doc, layer) = clip_doc(|env| {
+    let (mut doc, layer) = clip_doc(|env| {
         env.transform.scale = scale_keyframes(vec![(0, t, [2.0, 3.0])]);
     });
     let command = prepare_remove_transform_param_key(
@@ -383,7 +389,7 @@ fn remove_last_scale_key_collapses_to_const() {
 #[test]
 fn writer_apply_macro_remove_does_not_rewind_counter() {
     let t = RationalTime::from_seconds(1);
-    let (doc, layer) = clip_doc(|env| {
+    let (mut doc, layer) = clip_doc(|env| {
         env.transform.scale = scale_keyframes(vec![(0, t, [2.0, 3.0])]);
     });
     assert_eq!(doc.next_stable_id.peek_next(), 1);
@@ -405,7 +411,7 @@ fn writer_apply_macro_remove_does_not_rewind_counter() {
 #[test]
 fn set_and_remove_reject_missing_wrong_type_and_unsupported_property() {
     let t = RationalTime::from_seconds(1);
-    let (doc, layer) = clip_doc(|env| {
+    let (mut doc, layer) = clip_doc(|env| {
         env.transform.scale = scale_keyframes(vec![(0, t, [2.0, 3.0])]);
     });
 
@@ -436,7 +442,6 @@ fn set_and_remove_reject_missing_wrong_type_and_unsupported_property() {
     ));
 
     for property in [
-        ScalarPropertyId::Position,
         ScalarPropertyId::SourceParam("count".into()),
         ScalarPropertyId::EffectParam(EffectId::from_raw(0), "amount".into()),
     ] {
@@ -470,4 +475,40 @@ fn set_and_remove_reject_missing_wrong_type_and_unsupported_property() {
             "unexpected {remove_err:?} for {property:?}"
         );
     }
+}
+
+/// **同じ Document へ2回キーを足したら、別の `KeyframeId` が返る。**
+///
+/// 以前はカウンタの**コピー**から採っていたため、`SetProperty` に
+/// `StableIdReservation` が無い(= apply でカウンタが進まない)ぶんと合わさって、
+/// 2回目が1回目と同じ id を返していた。UI から呼んでいないあいだは害が
+/// 出ていなかったが、キー追加を配線する前に塞ぐ。
+#[test]
+fn adding_two_keys_to_the_same_document_gives_different_ids() {
+    let (mut doc, layer) = clip_doc(|env| env.transform.scale = DocParam::const_vec2([1.0, 1.0]));
+
+    let first = match prepare_add_transform_param_key(
+        &mut doc,
+        layer,
+        ScalarPropertyId::Scale,
+        RationalTime::ZERO,
+    )
+    .expect("first")
+    {
+        AddTransformParamKeyPreparation::Prepared { key_id, .. } => key_id,
+        other => panic!("Prepared を返す: {other:?}"),
+    };
+    let second = match prepare_add_transform_param_key(
+        &mut doc,
+        layer,
+        ScalarPropertyId::Scale,
+        RationalTime::try_new(1, 1).unwrap(),
+    )
+    .expect("second")
+    {
+        AddTransformParamKeyPreparation::Prepared { key_id, .. } => key_id,
+        other => panic!("Prepared を返す: {other:?}"),
+    };
+
+    assert_ne!(first, second, "**2回目が同じ id を返さない**");
 }

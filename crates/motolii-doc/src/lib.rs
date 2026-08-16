@@ -116,7 +116,8 @@ pub use position_key_prepare::{
 pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
     ClipSource, ClippingMaskSettings, CompCameraDoc, CompositeOrder, Composition, CompositionError,
-    EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, MaskMode, PathOp,
+    EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, Locator, MaskMode,
+    PathOp,
     PointType, Soundtrack, SoundtrackError, StandardShape, StreamKind, StreamSelector, Track,
     TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
 };
@@ -160,6 +161,12 @@ pub struct Document {
     /// D1l: 共有Effect recipe台帳。Useから参照。orphan(参照0)を許可する。
     #[serde(default)]
     pub effect_definitions: Vec<EffectDefinition>,
+    /// タイムライン上のメモ(2026-08-16)。**空なら書き出さない**ので、
+    /// 既存文書のバイト列は変わらない。旧readerは未知キーとして`extra`へ拾い、
+    /// そのまま書き戻す(`unknown_keys_roundtrip`)ため**版は上げない** —
+    /// 評価に入らない印であり、読めない旧readerでも落とさずに済む。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locators: Vec<Locator>,
     /// 未知キー保持(unknown-keys roundtrip)。
     #[serde(default, flatten)]
     pub extra: Map<String, Value>,
@@ -201,6 +208,7 @@ impl Document {
             tracks: Vec::new(),
             next_stable_id: StableIdSeq::new(),
             effect_definitions: Vec::new(),
+            locators: Vec::new(),
             extra: Map::new(),
         }
     }
@@ -659,6 +667,25 @@ impl DocumentWriter {
         command::prepare_reparent_clip(&self.doc, target, new_parent, new_index, new_start)
     }
 
+    /// 空の Group を1つ置く command を準備する。**中身は `prepare_reparent_clip` で入れる。**
+    ///
+    /// LayerIdを予約するので `&mut self`。適用は呼び出し側(`apply_command`)。
+    pub fn prepare_add_group(
+        &mut self,
+        parent: ParentLocator,
+        index: usize,
+        name: &str,
+    ) -> Result<Command, CommandError> {
+        command::prepare_add_group(&mut self.doc, parent, index, name)
+    }
+
+    /// 対象TrackItem(Clip/Group、子ごと)を外すcommandを準備する。
+    ///
+    /// **複製の裏返し。** Undoでは同じLayerId/表示名がrestoreで戻る。
+    pub fn prepare_remove_track_item(&self, target: LayerId) -> Result<Command, CommandError> {
+        command::prepare_remove_track_item(&self.doc, target)
+    }
+
     pub fn prepare_set_item_visible(
         &self,
         target: LayerId,
@@ -675,6 +702,61 @@ impl DocumentWriter {
         command::prepare_set_item_solo(&self.doc, target, new)
     }
 
+    /// メモを置く command を準備する(末尾へ足す)。
+    pub fn prepare_add_locator(&self, t: RationalTime, text: &str) -> Command {
+        command::prepare_add_locator(&self.doc, t, text)
+    }
+
+    /// メモを外す command を準備する。
+    pub fn prepare_remove_locator(&self, index: usize) -> Result<Command, CommandError> {
+        command::prepare_remove_locator(&self.doc, index)
+    }
+
+    /// メモの時刻を変える command を準備する。same-value は `None`。
+    pub fn prepare_set_locator_time(
+        &self,
+        index: usize,
+        new: RationalTime,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_locator_time(&self.doc, index, new)
+    }
+
+    /// メモの文を変える command を準備する。same-value は `None`。
+    pub fn prepare_set_locator_text(
+        &self,
+        index: usize,
+        new: &str,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_locator_text(&self.doc, index, new)
+    }
+
+    /// 表示名を差し替える command を準備する。same-value は `None`。
+    pub fn prepare_set_layer_name(
+        &self,
+        target: LayerId,
+        new: &str,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_layer_name(&self.doc, target, new)
+    }
+
+    /// 行の色。**`None` は「選んでいない」**(既定色は UI が id から導く)。
+    pub fn prepare_set_item_color(
+        &self,
+        target: LayerId,
+        new: Option<u32>,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_item_color(&self.doc, target, new)
+    }
+
+    /// 編集禁止フラグ。**評価・描画には影響しない**(B④)。
+    pub fn prepare_set_item_lock(
+        &self,
+        target: LayerId,
+        new: bool,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_item_lock(&self.doc, target, new)
+    }
+
     /// Positionへplayhead時刻のkeyを追加するcommandを準備する。
     pub fn prepare_add_position_key(
         &self,
@@ -687,12 +769,12 @@ impl DocumentWriter {
     /// Scale / Rotation / Opacity へplayhead時刻のkeyを追加する SetProperty を準備する。
     /// Positionは `prepare_add_position_key` を使う。
     pub fn prepare_add_transform_param_key(
-        &self,
+        &mut self,
         target: LayerId,
         property: ScalarPropertyId,
         t: RationalTime,
     ) -> Result<AddTransformParamKeyPreparation, AddTransformParamKeyPrepareError> {
-        position_key_prepare::prepare_add_transform_param_key(&self.doc, target, property, t)
+        position_key_prepare::prepare_add_transform_param_key(&mut self.doc, target, property, t)
     }
 
     /// Scale / Rotation / Opacity の既存key値だけを差し替える SetProperty を準備する。same-value は `None`。

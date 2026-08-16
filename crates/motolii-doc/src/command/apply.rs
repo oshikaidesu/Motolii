@@ -419,6 +419,64 @@ impl Command {
                 find_envelope_mut(doc, *target)?.solo = *new;
                 Ok(())
             }
+            Command::SetItemLock { target, new, .. } => {
+                find_envelope_mut(doc, *target)?.lock = *new;
+                Ok(())
+            }
+            Command::SetItemColor { target, new, .. } => {
+                find_envelope_mut(doc, *target)?.color = *new;
+                Ok(())
+            }
+            Command::SetLayerName { target, new, .. } => {
+                doc.layers.rename(*target, new.clone())?;
+                Ok(())
+            }
+            Command::AddLocator { index, locator } => {
+                if *index > doc.locators.len() {
+                    return Err(CommandError::IndexOutOfRange {
+                        index: *index,
+                        len: doc.locators.len(),
+                    });
+                }
+                doc.locators.insert(*index, locator.clone());
+                Ok(())
+            }
+            Command::RemoveLocator { index, locator } => {
+                let Some(found) = doc.locators.get(*index) else {
+                    return Err(CommandError::IndexOutOfRange {
+                        index: *index,
+                        len: doc.locators.len(),
+                    });
+                };
+                // **payload と食い違ったら書かない。** Add/Remove の対称性を守る
+                if found != locator {
+                    return Err(CommandError::LocatorMismatch { index: *index });
+                }
+                doc.locators.remove(*index);
+                Ok(())
+            }
+            Command::SetLocatorTime { index, new, .. } => {
+                let locator = doc
+                    .locators
+                    .get_mut(*index)
+                    .ok_or(CommandError::IndexOutOfRange {
+                        index: *index,
+                        len: 0,
+                    })?;
+                locator.t = *new;
+                Ok(())
+            }
+            Command::SetLocatorText { index, new, .. } => {
+                let locator = doc
+                    .locators
+                    .get_mut(*index)
+                    .ok_or(CommandError::IndexOutOfRange {
+                        index: *index,
+                        len: 0,
+                    })?;
+                locator.text = new.clone();
+                Ok(())
+            }
         }
     }
 }

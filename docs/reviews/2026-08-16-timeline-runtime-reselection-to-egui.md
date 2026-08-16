@@ -228,30 +228,91 @@ egui は視覚設計の反復が弱い(CSS が無い)。そこを Blitz で補�
 
 **フォント同梱 → 行モデル＋純関数テスト(339行の意図を写す) → その時点で `egui_kittest` を入れてジェスチャとスナップショットを閉じる。** 純関数テストが先なのは、一番安く、行モデルの作り直しを安全にするため。スナップショットは**撮る対象ができてから**入れる。
 
-## 残余（2026-08-16 夜 更新）
+## 残余（2026-08-16 深夜 更新）
+
+> 更新履歴: 夜の版は `0d79a139` 時点で書かれており、その後 `81ab958e` `071fb5bc` `4b71de05` `1d26879d` `6e9de3d4` の5本が着地したため、次の席が読む前にここを実状へ戻した。**「進行中」は空になり、「未着手」からは選択・playhead・横ズーム/パンが抜けた。**
 
 ### できている（テストが押さえている）
 
 | | oracle |
 |---|---|
-| 行モデル(`timeline_rows.rs`) — 1 Layer = 1行、2軸独立の開閉、キー無しパラメータは行を出さない | `cargo test -p motolii-ui --lib timeline_rows` → 7 passed |
-| Lab で clip / group を動かす、トリム、Position キーの追従、キー単体のドラッグ、M/S の書き込み、Undo/Redo | `cargo test -p motolii-ui --example timeline_egui_lab` → 5 passed |
+| 行モデル(`timeline_rows.rs`) — 1 Layer = 1行、2軸独立の開閉、キー無しパラメータは行を出さない | `cargo test -p motolii-ui --lib timeline_rows` → **7 passed** |
+| Lab で clip / group を動かす、トリム、キー単体のドラッグ、M/S の書き込み、選択、playhead のスクラブ、Undo/Redo/Esc | `cargo test -p motolii-ui --example timeline_egui_lab` → **14 passed** |
+| clip 移動に**5パラメータ全部のキーが追従する**(Position / Anchor / Scale / Rotation / Opacity)。Position だけが自前の command で、残りは `SetTransformParamKeyTime`(`81ab958e` で D2 に追加)。**KeyframeId は編集をまたいで生き残る**(remove+add にしない) | 同上 |
+| 横ズーム・パン。カーソル下の時刻が動かない、0.25秒より寄れない、composition より広く引けない、`x→time` と `time→x` が往復で一致 | 同上 |
+| **編集の時刻がフレーム境界に乗る。** `try_from_frame` / `try_to_frame_round` を通す(fps は有理数なので `(秒*fps).round()` を自前で書かない) | 同上 |
+| **Cmd+D 複製。** 再帰(Group の子・入れ子 Vector)と id の採り直しは `duplicate.rs` が持ち、Lab は子を辿らない | 同上 |
+| 外部の編集が次フレームで映る(revision 監視。ブラウザからのシェイプ配置が別プログラムに見えないため) | 同上 |
+| **複数選択**(素のクリック / `Cmd` で足し引き / `Shift` で範囲)。移動・複製・削除がまとめて効く。親 Group と子を同時に選んでも**子は二重に動かない**(`selection_roots`) | 同上 |
+| **並べ替え**(左列を上下へドラッグ)。落とし先は**行と行のあいだ**で決まり、開いた Group の中へも出し入れできる。**自分の中へは落とせない**。時刻は変えない | 同上 |
+| **削除**(`Delete`/`Backspace`)。Group は中身ごと。1回 = 1 Undo で、**同じ LayerId と表示名が戻る** | `cargo test -p motolii-doc --test d2_command removing_` → 2 passed |
+| **縦スクロール**(ホイール / 右端のつまみ)。面からはみ出した行は描かず、触りもしない | `--example timeline_egui_lab` |
+| **ピンチで横ズーム**、下端の**時間ナビゲータ帯**(掴んで横パン、両端6pxでズーム) | 同上 |
+| **再生**(`Space`)。終端で止まり、終端で押すと頭から。**再生中は面が流れ、playhead は窓の中央に居続ける**(頭と終端では窓が止まり、playhead のほうが窓の中を動く)。スクラブは再生を止め、playhead もフレームに乗る。**窓が隠れていた分の時間はまとめて進めない**(1フレーム50msまで)。追従は同日に「相対位置を保つ」「DAW のページ送り」と2度作り替えたが、**利用者の指定でこの中央固定へ戻した** — 詳細と経緯は[DAWのplayhead追従 先例調査](2026-08-16-daw-playhead-follow-prior-art.md)の「撤廃」 | 同上 |
+| **Group 自身のキーが追従する**(2026-08-16 利用者裁定で未決から決定へ)。掴んだ subtree の中の Group envelope のキーも子と同じ delta で動く。追従の集合は「clip だけ」から**subtree の全 layer**へ広げた | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **グループ化**(`Cmd+G`)。「空の Group を置く」+「選んだものを `ReparentClip` で入れる」の組み合わせで、**新しい意味の command を足していない**(D2 に `prepare_add_group` を追加、返すのは `AddTrackItem`)。1回 = 1 Undo。**親が揃っていない選択は断る** — 位置が言えなくなるため | 同上 + `-p motolii-doc --test d2_command an_empty_group` |
+| **キーフレーム削除**。キーをクリックで選び(`Cmd`で足し引き)、`Delete` は**キーが選ばれていればキーを消す**(無ければ層)。行を選び直すとキーの選択は落ちる — Delete の対象を2つ持たない | 同上 |
+| **クリックしただけで選択が変わる**(clip bar / キー)。掴んで動かすまで選択が変わらないのは、押した手応えが無いのと同じ | 同上 |
+| **分割**(`Cmd+K` / メニュー)。playhead で切る。端では切れないが**それは断りであって失敗ではない**(status で言う) | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **キーの追加**(メニュー → パラメータを選ぶ)。playhead の時刻へ打ち、打ったキーを選んでキー行を開く。同じ時刻には二重に打たない。**`prepare_add_transform_param_key` が同じ `KeyframeId` を返す穴を先に塞いだ**(カウンタのコピーではなく本体から採る。`d3cfdb9a`) | 同上 + `-p motolii-doc --test transform_param_key` |
+| **イージング**(キーのメニュー → Hold / Linear / Ease in-out)。**Position だけ**。他パラメータは `prepare_set_*_key_interp` が D2 に無いので席のまま(キー編集APIを1本へ畳む話と同じ穴) | 同上 |
+| **吸着**(clip の端・キー・playhead・ループの端・0・終端)。間合いは**画面の距離**(7px)なので寄れば細かくなる。掴んでいる当人へは吸わない。**Alt で切れる**。フレーム丸めより吸着が優先 | 同上 |
+| **transport**(頭出し / 再生停止ボタンと**タイムコード `M:SS:FF`**)。記号は painter で描く — `▶` `⏮` はフォントに無く豆腐になる | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **矩形選択**(何も無いところをドラッグ)。**bar と時間方向に重なった行だけ**選ぶ(行に掛かるだけでは拾わない)。何も無いところのクリックで選択解除、`Cmd+A` で見えている行を全選択 | 同上 |
+| **掴んでいるあいだ、時刻がポインタの脇に出る**(status 行まで目を運ばせない) | 同上 |
+| **行の高さ切替**(小24px / 大34px、メニュー)。**意味は変わらない**、見やすさだけ | 同上 |
+| **ロック**(`L` 列 / メニュー)。D2 に `SetItemLock` を新設(`SetItemVisible` と同型、`ItemEnvelope.lock` は元からあった)。**D2 は lock を見ない**(評価・描画に影響しないフラグ)ので、触らせないのは UI の仕事 — 移動・トリム・キー・削除・複製・分割・グループ化の入口で外す。**選択は許す**(見て確かめたいことがある)、外したときは status で言う | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **表示名の変更**(右クリック → `Rename…` / `⏎`。**ダブルクリックは使わない** — 同じ場所に選択・並べ替えが重なっており、2回目の押下を別操作の途中と区別できない)。D2 に `SetLayerName` を新設し、`LayerIdTable::rename` を足した。**動くのは台帳だけ** — ツリーも ID も参照(`transform.parent` / `LookAt` / journal)も動かない。空の名前は断る、ロック中は始まらない、その場が入力欄になる(別窓を出さない) | `cargo test -p motolii-ui --example timeline_egui_lab` + `-p motolii-doc --test d2_command renaming` |
+| **ロケータ**(Ableton の Locator 相当)。**タイムラインを右クリック → その位置に置く**(仮の playhead のような印)。押すと playhead がそこへ跳び、右クリックで名前を直し、掴んで動かせる(吸着つき)、**名前を空にすると消える**。ルーラにロケータの段を1本足し、面には薄い縦線だけ。D2 は `Document.locators: Vec<Locator>{t, text}` と4 command(Add/Remove/SetTime/SetText)。**識別子を持たず保持順が宛先**、空なら書き出さないので既存文書のバイト列は不変、旧readerは未知キーとして往復するので**版は上げない**。※最初「メモ(marker)」として作ったが、利用者の求めは**構成管理と再生位置のナビゲーション**で、定義を確かめる前に作ったのが誤り | `cargo test -p motolii-ui --example timeline_egui_lab` + `-p motolii-doc --test d2_command locator` |
+| **左列の部品は1本の入口に揃えた**(`rail_button` / `rail_glyph`)。**`Sense::click_and_drag()` にするのが要点** — クリック専用だと、下に敷いた行(選択＋並べ替え)のほうが掴みの相手になり、**指が数px動いた瞬間にボタンの `clicked()` が消える**(「M/S/L がたまに効かない」の正体)。**ただしそれだけでは今度は自分が「掴んで離した」になり `clicked()` が立たない**(2026-08-17「Group が閉じられない」の正体) — 的の中で離したなら押下として拾う(`pressed`)。**外へずらして離す取り消し**はそのまま残る | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **行の色**。D2 に `SetItemColor` と `ItemEnvelope.color: Option<u32>`(**選ぶまで載らない / 空なら書き出さない / 版を上げない**)。**既定は `LayerId` から導く** — 採番後に変わらず再利用もされない唯一の値なので、並べ替えでも Group への出し入れでも動かない(行番号から導くと並べ替えで総入れ替えになる)。**選んだ色は Document なので複製にも付いていく**(envelope ごと写る)。選択が複数なら全部に付く。**「色を出すか / 白で統一するか」は Document に入れない** — 製品では Workspace profile の持ち物(白で統一したい人の好みが、他人の付けた色を消してはいけない)。パレットの値は**仮**で、正本は `mock_tokens` 側 | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **選択の点灯は白**。行が色を持つ以上、アクセント色だと「行の色のひとつ」に見える — 選択は状態であって持ち物ではない | 同上 |
+| **ロックは枝ごと効く**(`effective_lock`)。Group を掛けると中も掛かる — 各行の `lock` を単体で読んでいたのがバグだった。子の `L` は**自分が掛けた分だけ点け**、親から受けている分は薄く出す(押しても外れないものを点灯させない。押したら理由を status へ) | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **掴み物は `Hold` 1つに畳んだ**(clip/キー/トリム/並べ替え / ロケータ / ループ帯 / ナビゲータ / 矩形選択)。以前は Option が4つ並び、「何か掴んでいるか」を聞くたびに4つ確かめる必要があった。毎フレーム同じ3つ(ポインタの時刻・端で流す量・px/秒)は `Surface` 1つへ、単発の書き込みは `apply_one` / `apply_in` へ集約 — **写経が4+7箇所消えた** | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **キーは全パラメータ掴める**(2026-08-17)。D2 に `SetTransformParamKeyTime` が入った時点で Position 縛りの理由は消えていたのに、**掴む側だけ Position のままだった** — clip 移動の追従は全パラメータ効くのに単体で掴むと動かない、という食い違いになっていた | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **ロケータのドラッグが1 Undo になった**(畳む前は毎フレーム `begin_gesture` していたので、フレーム数だけ Undo が積まれていた)。併せて D2 の `merge_pair` に `SetLocatorTime` / `SetLocatorText` の腕を足した — 腕が無いと catch-all の「後着をそのまま」に落ち、**Undo が掴む直前ではなく1フレーム前へ戻る** | 同上 + `-p motolii-doc --test d2_command locator` |
+| **パンと縦スクロールは生のホイール量で動かす**(2026-08-17)。`smooth_scroll_delta` は egui が時間で均した値で、**指を止めても数フレーム流れ続ける** — 面を掴んで動かす操作では上乗せがそのまま遅延になる。OS の慣性はイベントに含まれて来るので、捨てているのは egui の均しだけ。**ズームだけは均した値のまま**(倍率は1フレームの差が指数で効くので、生値だと段が見える) | 目視 |
+| **畳んだ Group は中身をその bar の中に見せる**(子の占める範囲を色付きの帯で)。開けば行として見えるものが閉じると消えるので、何が入っているか掴めなかった。**左列には入れ子の背骨**(深さぶんの縦線)。どちらも**文字を足さずに**構造を見せる | 同上 |
+| **当たり判定も時間面でクリップする**(2026-08-17)。寄ると clip の左端は面の外(左レールの下)まで伸びる。**描画はクリップしていたのに判定はしていなかった**ので、bar が三角や M/S/L の上に乗り「拡大すると開閉できない」になっていた。見えている分が無い clip は掴む的も持たない | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **端(トリム)を差し出す条件を1本の純関数へ**(`classify_bar_edge`)。**Group の bar には端が無い** — あれは子の範囲を写した絵で、Group 自身は `clip.start`/`duration` を持たず、掴ませても D2 は `TrackItemNotClip` で断る(**書けない操作を差し出さない**)。**細い bar でも端を取らない** — 左右6pxずつ取ると幅18px未満の clip は全部が端になり、**動かせない clip** ができる。端の判定は面に映った矩形ではなく **clip 本来の矩形**で見る(窓の外へ出ている端は画面の縁であって clip の端ではない) | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **選択が時間面でも光る**。選んだ bar は白の縁、行の左列も一段明るくする — 左端3pxの帯だけでは、1クリックの手応えが薄く、時間面の上で何を選んだか分からなかった | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **掴めるトリム端を絵で出す**(hover か選択のときだけ)。幅は 6→8px、hover 中の端は白く強調 — **触れそうな所は見えていなければ探すことになる** | 同上 |
+| **カーソルは1つの語彙に揃えた**。動かす=`Grab`/`Grabbing`、端を伸ばす=`ResizeHorizontal`、掃く=`Crosshair`、**できない=`NotAllowed`**(ロック中)。**形は必ず掴み判定そのものから出す** — ループ帯は `loop_grab_for`、bar は `classify_bar_edge`。写しを別に書くと、片方だけ直したときに手の形と起きることがずれる。**掴んでいるあいだの形は掴んだものが決める**(`hold_cursor` が hover を後から上書き)。掴む的が無い所(面の外へ出た clip、ロック中)では**掴める形を出さない** | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **掴み方は「押した場所」で決める**(2026-08-17)。egui は**数px動いてからドラッグ開始を報せる**ので、その時点のポインタは既に動いている — 右端を掴んで左へ引くと、報せが来た頃には端の外に出ており、**トリムのつもりが移動**になっていた(利用者の診断)。`press_origin` から判定し、掴んだ時刻の起点も同じ場所から採る(そうしないと最初の1手で跳ぶ) | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **キーの範囲・複数選択**(2026-08-17)。行とキーが**同じ選択規則**(`select_click`)を通る — 素で置き換え / `Cmd` で足し引き / `Shift` で範囲、起点は末尾に残す。キーの並びは**画面に出ている順**(行の順 → その行は時刻順)なので、**パラメータをまたいだ範囲**も見えているとおりに採れる。**矩形選択もキーを拾う**(bar と同じ掃き方)。並びに無いもの(畳まれて見えていない)は範囲に入らない | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **右クリックメニュー**(行 / キー / 何も無いところ の3種)。**egui のウィジェットで作る** — AccessKit のラベルが出るので `egui_kittest` の `get_by_label` で叩ける(§8「chrome はウィジェット」)。トンマナは面の定数(`CELL`/`INK`/`ACCENT`)を `visuals` へ渡して合わせた。**まだ無い操作は灰色の席として並べる**(空欄だと「この面には無い操作」に見える)。右クリックは選んでいない行なら選び直してから開く | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **ループ再生**。ルーラの**上端12px**を引いて区間を作る(右→左でも同じ区間、端はフレームに乗る、最短1フレーム)。端8pxで伸縮(**掴んだ瞬間に反対側の端を固定**するので追い越しても畳まれない。判定を外すと新規作成に落ちて区間が消えるため、端は甘く見る)、中を掴んで移動、`L`で効きの入り切り(帯は残る)。**折り返しの判定は「お尻を越えたか」だけ** — 区間の外から再生を始めても頭へ引き戻さず、前から入ればそこまで通し、後ろから始めたら一度も折り返さない。行き過ぎた分は頭へ足す(捨てると毎周ぶん周期が伸びる) | `cargo test -p motolii-ui --example timeline_egui_lab` |
+| **掴んだまま面の端まで運ぶと窓が流れる**(playhead / clip / キー / ループ帯)。端に近いほど速い。窓の中にある時間しか指せないと、寄っているとき遠くへ運べない | 同上 |
+| **目盛は時刻に貼り付く**(窓のN等分ではない)。数字つきの主目盛＋数字なしの細目盛の2段で、寄るとフレームの倍数、引くと秒・分の倍数へ移る。方眼はルーラと同じ列から引く | 同上 |
+| **1区間おきに下地の明暗を変える**(Ableton の Arrangement と同じ)。線だけだと区間が全部同じ面に見え、どこからどこまでが1目盛か目で掴めない。濃淡は**絶対時刻の偶奇**で決めるのでパンしても縞が入れ替わらない | 同上 |
+| playhead は**時間面の中だけに描く**。窓の左端より前の時刻に居ると x がレールへ入り、レイヤー名の列を縦に貫いていた | 目視 |
 | 記号の豆腐(`egui_fonts.rs`) | Hack を fallback へ。追加フォント0 |
+
+**面の動かし方は AE / Premiere と同じ割り当てにした**(2026-08-16 深夜)。素のホイール＝縦スクロール、`Shift`＝横パン、`Cmd`＝横ズーム、ピンチ＝横ズーム。
+夜の版では素のホイールが横ズームだったが、**縦スクロールを入れる時点で素のホイールは縦へ渡すのが普通**であり、
+横方向の手掛かりが消える分をナビゲータ帯が埋める。
+
+**レイヤーの全体地図(minimap)は作らない**(2026-08-16 利用者指摘、採用)。1 Layer = 1行なので**行の一覧そのものが全体図**であり、
+縮小版を別に持っても情報が増えない(利用者の言い方では「行ベースだと死に機能になる」)。
+一方、**時間方向のナビゲータ帯は死なない** — 寄ると全体のどこに居るか分からなくなるのは時間軸だけだからである。
 
 **触れる:** `cargo run --profile fast -p motolii-ui --example timeline_egui_lab`
 
 ### 決めていない（実装させずに止めてある）
 
-1. **Group 自身のキーが追従しない。** Group は `clip.start` を持たないので「Group が動いた」という事実が Document に無く、動くのは子の clip だけ。Group envelope の Position/Opacity キーを子と同じ delta で動かすか否かは**意味の決定**。AE のプリコンポは中身ごと動くので追従が自然に見えるが、未決
-2. **ドラッグ中に1本弾かれたときの後始末。** gesture ごと巻き戻すか、部分適用を許すか
+1. **ドラッグ中に1本弾かれたときの後始末。** gesture ごと巻き戻すか、部分適用を許すか
+3. **コピー／ペーストの持ち出し形式。** Cmd+D(複製)とは別物で、**貼り付け先が変わる**ぶんだけ決めることが多い — キーを別パラメータへ貼れるか(型が違う)、別レイヤーへ貼ったとき時刻は絶対か playhead 基準か、シェイプを別 Group へ貼ったとき親の Transform をどう扱うか。**下請けに渡す前に決める話**
 
 ### 進行中
 
-- **D2 に `SetTransformParamKeyTime` を足す**(発注中)。これが入るまで Scale/Rotation のキーは clip 移動に追従しない。`prepare_set_position_key_time` しか時刻を動かせないため
+なし（2026-08-16 深夜時点。夜の版にあった `SetTransformParamKeyTime` は `81ab958e` で着地）。
 
 ### 未着手
 
-- 選択(クリックで選ぶ)・playhead のスクラブ・スクロール/ズーム(`timeline_viewport_state` 341行は生存)
+- **`rows()` の毎フレーム全走査。** 描画と hit は可視範囲だけになったが、行の列は毎フレーム全部作る。1,000行なら問題なく、100k で効く
+- **`TimelineView`(Lab, f32) と `timeline_viewport_state`(341行, f64 + `RationalTime`) の二重化。** ズーム／パン／snap を両方が持っている。`snap_time` は「近くの端やキーへ吸着」であってフレーム量子化とは別物なので、畳むときに混ぜない
+- **並べ替えの落とし先が横位置を見ない。** 開いた Group の**末尾**と、その Group の**次**は同じ境界になる(いまは常に「中」を選ぶ)。Finder のようにインデントで撃ち分けるかは未決
+- **B(ロック / 表示名 / マーカー)は全部着地した**(2026-08-16)
 - `egui_kittest` の導入(§8)。**撮る対象はできた**
 - CJK フォントの取得と `docs/references.md` への登録(コードではなく取得の仕事)
 - chrome を egui ウィジェットへ(AccessKit から叩けるように。§8)

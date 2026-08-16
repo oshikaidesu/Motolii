@@ -821,10 +821,10 @@ mod replay_tests {
 
     #[test]
     fn transform_param_key_time_replay_round_trips_and_inverse_restores() {
-        let (base, layer) = empty_clip_base();
+        let (mut base, layer) = empty_clip_base();
         let crate::AddTransformParamKeyPreparation::Prepared { key_id, command } =
             crate::position_key_prepare::prepare_add_transform_param_key(
-                &base,
+                &mut base,
                 layer,
                 ScalarPropertyId::Scale,
                 RationalTime::from_seconds(2),

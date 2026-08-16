@@ -45,7 +45,10 @@ fn journal_mod_keeps_wal_and_recover_crate_private() {
     assert!(!journal.contains("pub(crate) use recover::recover_project"));
     assert!(!journal.contains("pub(crate) use wal::"));
     assert!(!journal.contains("pub use wal::WalSession"));
-    assert!(journal.contains("pub use session::{ProjectSession"));
+    // **名前の並びに依存しない。** rustfmt が波括弧の中を辞書順へ並べ替えるので、
+    // 「先頭に来ていること」を条件にすると整形だけで落ちる(2026-08-16 実際に落ちていた)
+    assert!(journal.contains("pub use session::"));
+    assert!(journal.contains("ProjectSession"));
     assert!(journal.contains("pub use project::{OpenProjectOutcome"));
     for banned in [
         "checkpoint_with_fault_plan",

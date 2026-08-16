@@ -55,6 +55,8 @@ pub(super) fn collect_asset_uses_item(item: &TrackItem, out: &mut Vec<AssetUse>)
     let ItemEnvelope {
         layer_id: _,
         effects: _,
+        // 色は asset を参照しない
+        color: _,
         transform,
         clipping_mask: _,
         blend: _,

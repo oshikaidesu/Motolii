@@ -310,6 +310,42 @@ pub fn prepare_set_item_solo(
     }))
 }
 
+/// 編集禁止フラグ。**評価・描画に影響しない**(B④)ので、UI 側の可否だけが変わる。
+pub fn prepare_set_item_lock(
+    doc: &Document,
+    target: LayerId,
+    new: bool,
+) -> Result<Option<Command>, CommandError> {
+    let layer = target.get();
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    if env.lock == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetItemLock {
+        target,
+        old: env.lock,
+        new,
+    }))
+}
+
+/// 行の色。**`None` は「選んでいない」**で、既定色を導くのは UI 側。
+pub fn prepare_set_item_color(
+    doc: &Document,
+    target: LayerId,
+    new: Option<u32>,
+) -> Result<Option<Command>, CommandError> {
+    let layer = target.get();
+    let env = find_envelope(doc, target).ok_or(CommandError::LayerNotFound(layer))?;
+    if env.color == new {
+        return Ok(None);
+    }
+    Ok(Some(Command::SetItemColor {
+        target,
+        old: env.color,
+        new,
+    }))
+}
+
 
 pub(super) fn apply_reparent_track_item(
     doc: &mut Document,

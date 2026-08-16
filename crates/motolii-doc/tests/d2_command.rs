@@ -2604,3 +2604,354 @@ impl ClipItem for TrackItem {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// 削除: subtree を外し、Undo で同じ LayerId と表示名を戻す
+// ---------------------------------------------------------------------------
+
+/// **Group を消すと子も一緒に消え、Undo で全員が同じ id で戻る。**
+///
+/// 複製の裏返しである。`AddTrackItem` が台帳へ載せるのと同じ経路を逆へ通し、
+/// `remove` した LayerId は `restore` で戻る(非再利用カウンタは巻き戻さない)。
+#[test]
+fn removing_a_group_takes_its_children_and_undo_puts_them_back() {
+    let mut doc = Document::new_current();
+    let group_layer = doc.layers.allocate("group").unwrap();
+    let child_a = doc.layers.allocate("child_a").unwrap();
+    let child_b = doc.layers.allocate("child_b").unwrap();
+    let keeper = doc.layers.allocate("keeper").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    let clip = |layer: LayerId| {
+        TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        })
+    };
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![
+            TrackItem::Group(Group {
+                envelope: ItemEnvelope::new(group_layer),
+                children: vec![clip(child_a), clip(child_b)],
+            }),
+            clip(keeper),
+        ],
+    });
+    doc.validate().expect("fixture");
+
+    let before = layer_entries(&doc);
+    let mut writer = reference_writer(doc);
+    let command = writer
+        .prepare_remove_track_item(group_layer)
+        .expect("prepare remove");
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, command).expect("apply remove");
+
+    let after = writer.snapshot();
+    writer.validate().expect("post-remove document must validate");
+    assert_eq!(after.tracks[0].items.len(), 1, "Group が1つ外れた");
+    assert!(
+        !after.layers.contains(group_layer)
+            && !after.layers.contains(child_a)
+            && !after.layers.contains(child_b),
+        "子も台帳から外れる"
+    );
+    assert!(after.layers.contains(keeper), "兄弟は消えない");
+
+    writer.undo().expect("undo remove");
+    let restored = writer.snapshot();
+    writer.validate().expect("post-undo document must validate");
+    assert_eq!(
+        layer_entries(&restored),
+        before,
+        "**同じ LayerId と表示名が戻る**。id を振り直さない"
+    );
+    assert_eq!(restored.tracks[0].items.len(), 2);
+}
+
+/// 消すのは1つ。**兄弟の index がずれても、次の削除は正しい位置を消す。**
+#[test]
+fn removing_the_first_of_two_clips_leaves_the_second_addressable() {
+    let mut doc = Document::new_current();
+    let first = doc.layers.allocate("first").unwrap();
+    let second = doc.layers.allocate("second").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    let clip = |layer: LayerId| {
+        TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        })
+    };
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![clip(first), clip(second)],
+    });
+    doc.validate().expect("fixture");
+
+    let mut writer = reference_writer(doc);
+    let gesture = writer.begin_gesture();
+    let command = writer.prepare_remove_track_item(first).expect("prepare");
+    writer.apply_command(gesture, command).expect("apply");
+
+    let command = writer.prepare_remove_track_item(second).expect("prepare");
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, command).expect("apply second");
+    assert!(writer.snapshot().tracks[0].items.is_empty());
+
+    assert!(
+        matches!(
+            writer.prepare_remove_track_item(first),
+            Err(CommandError::LayerNotFound(_))
+        ),
+        "既に消えたものは消せない"
+    );
+}
+
+/// **グループ化は「空のGroupを置く」+「ReparentClipで入れる」で表せる。**
+/// 新しい意味のcommandを足さずに、逆操作は既存の逆で閉じる。
+#[test]
+fn an_empty_group_can_be_added_and_filled_by_reparenting() {
+    let mut doc = Document::new_current();
+    let first = doc.layers.allocate("first").unwrap();
+    let second = doc.layers.allocate("second").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    let clip = |layer: LayerId| {
+        TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        })
+    };
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![clip(first), clip(second)],
+    });
+    doc.validate().expect("fixture");
+
+    let before = layer_entries(&doc);
+    let mut writer = reference_writer(doc);
+    let gesture = writer.begin_gesture();
+
+    let command = writer
+        .prepare_add_group(ParentLocator::Track(track), 0, "Group 1")
+        .expect("prepare group");
+    let Command::AddTrackItem { item, .. } = &command else {
+        panic!("AddTrackItem を返す");
+    };
+    let group_layer = match item {
+        TrackItem::Group(g) => g.envelope.layer_id,
+        _ => panic!("Group を返す"),
+    };
+    writer.apply_command(gesture, command).expect("apply group");
+
+    for (index, layer) in [first, second].into_iter().enumerate() {
+        let command = writer
+            .prepare_reparent_clip(layer, ParentLocator::Group(group_layer), index, None)
+            .expect("prepare reparent")
+            .expect("command");
+        writer.apply_command(gesture, command).expect("apply reparent");
+    }
+
+    writer.validate().expect("空でなくなったGroupは検証を通る");
+    let after = writer.snapshot();
+    assert_eq!(after.tracks[0].items.len(), 1, "トップレベルはGroup1つ");
+    match &after.tracks[0].items[0] {
+        TrackItem::Group(g) => {
+            assert_eq!(g.children.len(), 2, "2枚とも中に入った");
+            assert_eq!(g.envelope.layer_id, group_layer);
+        }
+        _ => panic!("Group であること"),
+    }
+
+    // **1 gesture なので、1回の Undo で全部戻る**
+    writer.undo().expect("undo");
+    let restored = writer.snapshot();
+    assert_eq!(restored.tracks[0].items.len(), 2, "元の並びへ戻る");
+    assert_eq!(
+        layer_entries(&restored),
+        before,
+        "Group の LayerId は台帳から外れる(孤児を残さない)"
+    );
+}
+
+/// **名前は識別子ではない。** 変えても参照は動かず、Undo で元の名前へ戻る。
+#[test]
+fn renaming_a_layer_changes_only_the_ledger_entry() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc);
+    let before = writer.snapshot();
+    let old_name = before.layers.display_name(f.layer).unwrap().to_owned();
+    let tracks_before = before.tracks.clone();
+
+    let command = writer
+        .prepare_set_layer_name(f.layer, "renamed")
+        .expect("prepare")
+        .expect("変化があるので command が出る");
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, command).expect("apply");
+
+    let after = writer.snapshot();
+    writer.validate().expect("post-rename document must validate");
+    assert_eq!(after.layers.display_name(f.layer), Some("renamed"));
+    assert_eq!(after.tracks, tracks_before, "**ツリーは1バイトも動かない**");
+    assert_eq!(
+        after.layers.len(),
+        before.layers.len(),
+        "エントリは増えも減りもしない"
+    );
+
+    // same-value は command を出さない
+    assert!(writer
+        .prepare_set_layer_name(f.layer, "renamed")
+        .expect("prepare")
+        .is_none());
+
+    writer.undo().expect("undo");
+    assert_eq!(
+        writer.snapshot().layers.display_name(f.layer),
+        Some(old_name.as_str()),
+        "1回の Undo で元の名前へ"
+    );
+
+    // 居ない layer は断る
+    assert!(matches!(
+        writer.prepare_set_layer_name(LayerId::from_raw(9_999), "x"),
+        Err(CommandError::LayerNotFound(_))
+    ));
+}
+
+/// **メモは評価にも描画にも入らない。** 置く・動かす・書き換える・外すが
+/// それぞれ1回の Undo で戻り、ツリーには一切触れない。
+#[test]
+fn locators_are_memos_that_undo_one_step_at_a_time() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc);
+    let tracks_before = writer.snapshot().tracks.clone();
+    assert!(writer.snapshot().locators.is_empty(), "最初は空");
+
+    let t = RationalTime::try_new(3, 1).unwrap();
+    let gesture = writer.begin_gesture();
+    let command = writer.prepare_add_locator(t, "check the fade");
+    writer.apply_command(gesture, command).expect("add");
+
+    let after = writer.snapshot();
+    writer.validate().expect("メモを持つ文書も検証を通る");
+    assert_eq!(after.locators.len(), 1);
+    assert_eq!(after.locators[0].text, "check the fade");
+    assert_eq!(after.locators[0].t, t);
+    assert_eq!(after.tracks, tracks_before, "**ツリーは動かない**");
+
+    // 文を書き換える
+    let gesture = writer.begin_gesture();
+    let command = writer
+        .prepare_set_locator_text(0, "fade is too fast")
+        .expect("prepare")
+        .expect("変化がある");
+    writer.apply_command(gesture, command).expect("set text");
+    assert_eq!(writer.snapshot().locators[0].text, "fade is too fast");
+
+    // 時刻を動かす
+    let moved = RationalTime::try_new(9, 2).unwrap();
+    let gesture = writer.begin_gesture();
+    let command = writer
+        .prepare_set_locator_time(0, moved)
+        .expect("prepare")
+        .expect("変化がある");
+    writer.apply_command(gesture, command).expect("set time");
+    assert_eq!(writer.snapshot().locators[0].t, moved);
+
+    // same-value は command を出さない
+    assert!(writer.prepare_set_locator_time(0, moved).unwrap().is_none());
+    assert!(writer
+        .prepare_set_locator_text(0, "fade is too fast")
+        .unwrap()
+        .is_none());
+
+    // 1つずつ戻る
+    writer.undo().expect("undo time");
+    assert_eq!(writer.snapshot().locators[0].t, t);
+    writer.undo().expect("undo text");
+    assert_eq!(writer.snapshot().locators[0].text, "check the fade");
+
+    // 外す
+    let gesture = writer.begin_gesture();
+    let command = writer.prepare_remove_locator(0).expect("prepare remove");
+    writer.apply_command(gesture, command).expect("remove");
+    assert!(writer.snapshot().locators.is_empty());
+    writer.undo().expect("undo remove");
+    assert_eq!(
+        writer.snapshot().locators[0].text,
+        "check the fade",
+        "**外したメモは文ごと戻る**"
+    );
+
+    // 居ない index は断る
+    assert!(matches!(
+        writer.prepare_remove_locator(9),
+        Err(CommandError::IndexOutOfRange { .. })
+    ));
+}
+
+/// **空のときは書き出さない。** 既存文書のバイト列が変わらない。
+#[test]
+fn an_empty_locator_list_is_not_serialised() {
+    let f = fixture();
+    let json = serde_json::to_string(&f.doc).unwrap();
+    assert!(!json.contains("locators"), "空なら鍵ごと出ない");
+
+    let mut doc = f.doc;
+    doc.locators.push(motolii_doc::Locator {
+        t: RationalTime::ZERO,
+        text: "memo".into(),
+    });
+    let json = serde_json::to_string(&doc).unwrap();
+    assert!(json.contains("\"locators\""), "置いたら出る");
+    let back: Document = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.locators, doc.locators, "往復する");
+}
+
+/// **掴んで動かしているあいだ、Undo は掴む直前へ戻る。**
+///
+/// 1 gesture の中で同じロケータの時刻が何度も出るので、畳むときに
+/// 先頭の `old` を残さないと、Undo が1フレーム前までしか戻らない。
+#[test]
+fn dragging_a_locator_merges_into_one_step_that_undoes_to_the_start() {
+    let f = fixture();
+    let mut writer = reference_writer(f.doc);
+    let start = RationalTime::try_new(3, 1).unwrap();
+
+    let gesture = writer.begin_gesture();
+    let command = writer.prepare_add_locator(start, "verse");
+    writer.apply_command(gesture, command).expect("add");
+    let undo_before = writer.undo_len();
+
+    let gesture = writer.begin_gesture();
+    for seconds in [4, 5, 6] {
+        let t = RationalTime::try_new(seconds, 1).unwrap();
+        let command = writer
+            .prepare_set_locator_time(0, t)
+            .expect("prepare")
+            .expect("変化がある");
+        writer.apply_command(gesture, command).expect("apply");
+    }
+    assert_eq!(writer.snapshot().locators[0].t, RationalTime::try_new(6, 1).unwrap());
+    assert_eq!(writer.undo_len(), undo_before + 1, "1 gesture = 1 Undo");
+
+    writer.undo().expect("undo");
+    assert_eq!(
+        writer.snapshot().locators[0].t,
+        start,
+        "**掴む直前へ戻る**(1フレーム前ではなく)"
+    );
+}
