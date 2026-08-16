@@ -64,14 +64,15 @@ pub struct Composition {
     pub camera: CompCameraDoc,
 }
 
-/// タイムライン上のメモ。**時刻と文字だけ**を持つ。
+/// タイムライン上のロケータ。**時刻と名前だけ**を持つ(Ableton の Locator 相当)。
 ///
-/// 評価にも描画にも入らない — 読む人のための印である。だから
-/// `LayerId` のような識別子を持たず、参照される側にもならない。
+/// 曲の構成を指す印である — "Verse" / "Chorus" のように名前を付け、
+/// **そこへ跳ぶ**ために使う。評価にも描画にも入らないので、`LayerId` のような
+/// 識別子を持たず、参照される側にもならない。
 /// **並びは保持順**で、時刻順に見せるのは UI の仕事(並べ替えると index が動き、
 /// command の宛先が変わってしまう)。
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
-pub struct Marker {
+pub struct Locator {
     pub t: RationalTime,
     pub text: String,
 }

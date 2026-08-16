@@ -7,7 +7,7 @@ use motolii_core::{RationalTime, TimeMap};
 use crate::asset::Asset;
 use crate::param::DocParam;
 use crate::schema::{
-    BlendMode, ClippingMaskSettings, EffectDefinition, EffectInstance, EffectUse, Marker, TrackItem,
+    BlendMode, ClippingMaskSettings, EffectDefinition, EffectInstance, EffectUse, Locator, TrackItem,
 };
 use crate::stable_id::{EffectDefinitionId, EffectId, KeyframeId, StableIdReservation};
 use crate::{Document, LayerId};
@@ -274,15 +274,15 @@ pub enum Command {
         new: bool,
     },
     /// メモを置く。**宛先は index** — マーカーは識別子を持たない(保持順で addressing)
-    AddMarker { index: usize, marker: Marker },
-    /// `AddMarker` の inverse でもあり、単独の削除でもある
-    RemoveMarker { index: usize, marker: Marker },
-    SetMarkerTime {
+    AddLocator { index: usize, locator: Locator },
+    /// `AddLocator` の inverse でもあり、単独の削除でもある
+    RemoveLocator { index: usize, locator: Locator },
+    SetLocatorTime {
         index: usize,
         old: RationalTime,
         new: RationalTime,
     },
-    SetMarkerText {
+    SetLocatorText {
         index: usize,
         old: String,
         new: String,

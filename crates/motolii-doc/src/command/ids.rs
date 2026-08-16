@@ -56,7 +56,7 @@ pub enum PropertyId {
     ItemSolo,
     ItemLock,
     LayerName,
-    Marker,
+    Locator,
 }
 
 impl From<ScalarPropertyId> for PropertyId {
@@ -135,10 +135,10 @@ pub enum CommandKind {
     SetItemSolo,
     SetItemLock,
     SetLayerName,
-    AddMarker,
-    RemoveMarker,
-    SetMarkerTime,
-    SetMarkerText,
+    AddLocator,
+    RemoveLocator,
+    SetLocatorTime,
+    SetLocatorText,
 }
 
 /// S18: `gesture_id + command_kind + target_stable_id + property_id`。

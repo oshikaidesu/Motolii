@@ -252,7 +252,7 @@ impl Document {
             next_stable_id: _,
             effect_definitions,
             // メモは asset を参照しない(**参照される側にも、する側にもならない**)
-            markers: _,
+            locators: _,
             extra: _,
         } = self;
         let mut uses = Vec::new();

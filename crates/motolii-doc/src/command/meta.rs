@@ -54,10 +54,10 @@ impl Command {
             Command::SetItemSolo { .. } => CommandKind::SetItemSolo,
             Command::SetItemLock { .. } => CommandKind::SetItemLock,
             Command::SetLayerName { .. } => CommandKind::SetLayerName,
-            Command::AddMarker { .. } => CommandKind::AddMarker,
-            Command::RemoveMarker { .. } => CommandKind::RemoveMarker,
-            Command::SetMarkerTime { .. } => CommandKind::SetMarkerTime,
-            Command::SetMarkerText { .. } => CommandKind::SetMarkerText,
+            Command::AddLocator { .. } => CommandKind::AddLocator,
+            Command::RemoveLocator { .. } => CommandKind::RemoveLocator,
+            Command::SetLocatorTime { .. } => CommandKind::SetLocatorTime,
+            Command::SetLocatorText { .. } => CommandKind::SetLocatorText,
         }
     }
 
@@ -106,10 +106,10 @@ impl Command {
                 envelope_of(item).layer_id.get()
             }
             // **メモは layer に属さない。** index をそのまま宛先にする
-            Command::AddMarker { index, .. }
-            | Command::RemoveMarker { index, .. }
-            | Command::SetMarkerTime { index, .. }
-            | Command::SetMarkerText { index, .. } => *index as u64,
+            Command::AddLocator { index, .. }
+            | Command::RemoveLocator { index, .. }
+            | Command::SetLocatorTime { index, .. }
+            | Command::SetLocatorText { index, .. } => *index as u64,
         }
     }
 
@@ -164,10 +164,10 @@ impl Command {
             Command::SetItemSolo { .. } => PropertyId::ItemSolo,
             Command::SetItemLock { .. } => PropertyId::ItemLock,
             Command::SetLayerName { .. } => PropertyId::LayerName,
-            Command::AddMarker { .. }
-            | Command::RemoveMarker { .. }
-            | Command::SetMarkerTime { .. }
-            | Command::SetMarkerText { .. } => PropertyId::Marker,
+            Command::AddLocator { .. }
+            | Command::RemoveLocator { .. }
+            | Command::SetLocatorTime { .. }
+            | Command::SetLocatorText { .. } => PropertyId::Locator,
         }
     }
 
@@ -253,10 +253,10 @@ impl Command {
             | Command::SetItemVisible { .. }
             | Command::SetItemLock { .. }
             | Command::SetLayerName { .. }
-            | Command::AddMarker { .. }
-            | Command::RemoveMarker { .. }
-            | Command::SetMarkerTime { .. }
-            | Command::SetMarkerText { .. }
+            | Command::AddLocator { .. }
+            | Command::RemoveLocator { .. }
+            | Command::SetLocatorTime { .. }
+            | Command::SetLocatorText { .. }
             | Command::SetItemSolo { .. } => None,
         }
     }

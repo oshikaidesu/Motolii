@@ -116,7 +116,7 @@ pub use position_key_prepare::{
 pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
     ClipSource, ClippingMaskSettings, CompCameraDoc, CompositeOrder, Composition, CompositionError,
-    EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, Marker, MaskMode,
+    EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, Locator, MaskMode,
     PathOp,
     PointType, Soundtrack, SoundtrackError, StandardShape, StreamKind, StreamSelector, Track,
     TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
@@ -166,7 +166,7 @@ pub struct Document {
     /// そのまま書き戻す(`unknown_keys_roundtrip`)ため**版は上げない** —
     /// 評価に入らない印であり、読めない旧readerでも落とさずに済む。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub markers: Vec<Marker>,
+    pub locators: Vec<Locator>,
     /// 未知キー保持(unknown-keys roundtrip)。
     #[serde(default, flatten)]
     pub extra: Map<String, Value>,
@@ -208,7 +208,7 @@ impl Document {
             tracks: Vec::new(),
             next_stable_id: StableIdSeq::new(),
             effect_definitions: Vec::new(),
-            markers: Vec::new(),
+            locators: Vec::new(),
             extra: Map::new(),
         }
     }
@@ -703,31 +703,31 @@ impl DocumentWriter {
     }
 
     /// メモを置く command を準備する(末尾へ足す)。
-    pub fn prepare_add_marker(&self, t: RationalTime, text: &str) -> Command {
-        command::prepare_add_marker(&self.doc, t, text)
+    pub fn prepare_add_locator(&self, t: RationalTime, text: &str) -> Command {
+        command::prepare_add_locator(&self.doc, t, text)
     }
 
     /// メモを外す command を準備する。
-    pub fn prepare_remove_marker(&self, index: usize) -> Result<Command, CommandError> {
-        command::prepare_remove_marker(&self.doc, index)
+    pub fn prepare_remove_locator(&self, index: usize) -> Result<Command, CommandError> {
+        command::prepare_remove_locator(&self.doc, index)
     }
 
     /// メモの時刻を変える command を準備する。same-value は `None`。
-    pub fn prepare_set_marker_time(
+    pub fn prepare_set_locator_time(
         &self,
         index: usize,
         new: RationalTime,
     ) -> Result<Option<Command>, CommandError> {
-        command::prepare_set_marker_time(&self.doc, index, new)
+        command::prepare_set_locator_time(&self.doc, index, new)
     }
 
     /// メモの文を変える command を準備する。same-value は `None`。
-    pub fn prepare_set_marker_text(
+    pub fn prepare_set_locator_text(
         &self,
         index: usize,
         new: &str,
     ) -> Result<Option<Command>, CommandError> {
-        command::prepare_set_marker_text(&self.doc, index, new)
+        command::prepare_set_locator_text(&self.doc, index, new)
     }
 
     /// 表示名を差し替える command を準備する。same-value は `None`。

@@ -46,10 +46,10 @@ pub fn prepare_add_group(
 
 /// メモを置く準備をする。**末尾に足す** — 保持順が index の意味なので、
 /// 時刻で並べ替えない(並べ替えると既存 command の宛先が動く)。
-pub fn prepare_add_marker(doc: &Document, t: RationalTime, text: &str) -> Command {
-    Command::AddMarker {
-        index: doc.markers.len(),
-        marker: crate::schema::Marker {
+pub fn prepare_add_locator(doc: &Document, t: RationalTime, text: &str) -> Command {
+    Command::AddLocator {
+        index: doc.locators.len(),
+        locator: crate::schema::Locator {
             t,
             text: text.to_owned(),
         },
@@ -57,62 +57,62 @@ pub fn prepare_add_marker(doc: &Document, t: RationalTime, text: &str) -> Comman
 }
 
 /// メモを外す準備をする。payload も載せる(inverse がそのまま戻せる)。
-pub fn prepare_remove_marker(doc: &Document, index: usize) -> Result<Command, CommandError> {
-    let marker = doc
-        .markers
+pub fn prepare_remove_locator(doc: &Document, index: usize) -> Result<Command, CommandError> {
+    let locator = doc
+        .locators
         .get(index)
         .ok_or(CommandError::IndexOutOfRange {
             index,
-            len: doc.markers.len(),
+            len: doc.locators.len(),
         })?;
-    Ok(Command::RemoveMarker {
+    Ok(Command::RemoveLocator {
         index,
-        marker: marker.clone(),
+        locator: locator.clone(),
     })
 }
 
 /// メモの時刻。same-value は `None`。
-pub fn prepare_set_marker_time(
+pub fn prepare_set_locator_time(
     doc: &Document,
     index: usize,
     new: RationalTime,
 ) -> Result<Option<Command>, CommandError> {
-    let marker = doc
-        .markers
+    let locator = doc
+        .locators
         .get(index)
         .ok_or(CommandError::IndexOutOfRange {
             index,
-            len: doc.markers.len(),
+            len: doc.locators.len(),
         })?;
-    if marker.t == new {
+    if locator.t == new {
         return Ok(None);
     }
-    Ok(Some(Command::SetMarkerTime {
+    Ok(Some(Command::SetLocatorTime {
         index,
-        old: marker.t,
+        old: locator.t,
         new,
     }))
 }
 
 /// メモの文。same-value は `None`。
-pub fn prepare_set_marker_text(
+pub fn prepare_set_locator_text(
     doc: &Document,
     index: usize,
     new: &str,
 ) -> Result<Option<Command>, CommandError> {
-    let marker = doc
-        .markers
+    let locator = doc
+        .locators
         .get(index)
         .ok_or(CommandError::IndexOutOfRange {
             index,
-            len: doc.markers.len(),
+            len: doc.locators.len(),
         })?;
-    if marker.text == new {
+    if locator.text == new {
         return Ok(None);
     }
-    Ok(Some(Command::SetMarkerText {
+    Ok(Some(Command::SetLocatorText {
         index,
-        old: marker.text.clone(),
+        old: locator.text.clone(),
         new: new.to_owned(),
     }))
 }

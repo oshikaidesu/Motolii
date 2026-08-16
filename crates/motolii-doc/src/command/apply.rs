@@ -427,50 +427,50 @@ impl Command {
                 doc.layers.rename(*target, new.clone())?;
                 Ok(())
             }
-            Command::AddMarker { index, marker } => {
-                if *index > doc.markers.len() {
+            Command::AddLocator { index, locator } => {
+                if *index > doc.locators.len() {
                     return Err(CommandError::IndexOutOfRange {
                         index: *index,
-                        len: doc.markers.len(),
+                        len: doc.locators.len(),
                     });
                 }
-                doc.markers.insert(*index, marker.clone());
+                doc.locators.insert(*index, locator.clone());
                 Ok(())
             }
-            Command::RemoveMarker { index, marker } => {
-                let Some(found) = doc.markers.get(*index) else {
+            Command::RemoveLocator { index, locator } => {
+                let Some(found) = doc.locators.get(*index) else {
                     return Err(CommandError::IndexOutOfRange {
                         index: *index,
-                        len: doc.markers.len(),
+                        len: doc.locators.len(),
                     });
                 };
                 // **payload と食い違ったら書かない。** Add/Remove の対称性を守る
-                if found != marker {
-                    return Err(CommandError::MarkerMismatch { index: *index });
+                if found != locator {
+                    return Err(CommandError::LocatorMismatch { index: *index });
                 }
-                doc.markers.remove(*index);
+                doc.locators.remove(*index);
                 Ok(())
             }
-            Command::SetMarkerTime { index, new, .. } => {
-                let marker = doc
-                    .markers
+            Command::SetLocatorTime { index, new, .. } => {
+                let locator = doc
+                    .locators
                     .get_mut(*index)
                     .ok_or(CommandError::IndexOutOfRange {
                         index: *index,
                         len: 0,
                     })?;
-                marker.t = *new;
+                locator.t = *new;
                 Ok(())
             }
-            Command::SetMarkerText { index, new, .. } => {
-                let marker = doc
-                    .markers
+            Command::SetLocatorText { index, new, .. } => {
+                let locator = doc
+                    .locators
                     .get_mut(*index)
                     .ok_or(CommandError::IndexOutOfRange {
                         index: *index,
                         len: 0,
                     })?;
-                marker.text = new.clone();
+                locator.text = new.clone();
                 Ok(())
             }
         }

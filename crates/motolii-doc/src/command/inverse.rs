@@ -403,14 +403,14 @@ impl Command {
                 old: new,
                 new: old,
             },
-            Command::AddMarker { index, marker } => Command::RemoveMarker { index, marker },
-            Command::RemoveMarker { index, marker } => Command::AddMarker { index, marker },
-            Command::SetMarkerTime { index, old, new } => Command::SetMarkerTime {
+            Command::AddLocator { index, locator } => Command::RemoveLocator { index, locator },
+            Command::RemoveLocator { index, locator } => Command::AddLocator { index, locator },
+            Command::SetLocatorTime { index, old, new } => Command::SetLocatorTime {
                 index,
                 old: new,
                 new: old,
             },
-            Command::SetMarkerText { index, old, new } => Command::SetMarkerText {
+            Command::SetLocatorText { index, old, new } => Command::SetLocatorText {
                 index,
                 old: new,
                 new: old,
