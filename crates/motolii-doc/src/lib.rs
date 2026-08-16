@@ -659,6 +659,13 @@ impl DocumentWriter {
         command::prepare_reparent_clip(&self.doc, target, new_parent, new_index, new_start)
     }
 
+    /// 対象TrackItem(Clip/Group、子ごと)を外すcommandを準備する。
+    ///
+    /// **複製の裏返し。** Undoでは同じLayerId/表示名がrestoreで戻る。
+    pub fn prepare_remove_track_item(&self, target: LayerId) -> Result<Command, CommandError> {
+        command::prepare_remove_track_item(&self.doc, target)
+    }
+
     pub fn prepare_set_item_visible(
         &self,
         target: LayerId,

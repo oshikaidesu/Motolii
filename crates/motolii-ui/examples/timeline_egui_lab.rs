@@ -7,19 +7,30 @@
 //! 触れるもの:
 //!   - グループ左端の `▸`/`▾` … 子レイヤーの開閉
 //!   - `◇`/`◆`            … そのレイヤーのキーパラメータ行の開閉（子とは独立）
-//!   - clip bar をドラッグ … 時間方向へ移動。**Position キーが一緒に動く**
+//!   - clip bar をドラッグ … 時間方向へ移動。**キーが一緒に動く**
 //!
 //!   - bar の左右端6px      … トリム（in / out）
 //!   - Position 行の菱形    … 掴んでキーの時刻を変える
+//!   - 左列を上下へドラッグ … **並べ替え。Group の中へも出し入れできる**
 //!   - `M` / `S`           … mute（`visible`）/ solo の反転
+//!   - 左列クリック         … 選択。`Cmd` で足し引き、`Shift` で範囲
 //!   - `Cmd/Ctrl + Z` / `Shift+Z` … Undo / Redo
 //!   - `Cmd/Ctrl + D`      … 選択中の layer を複製
+//!   - `Delete` / `Backspace` … 選択中の layer を削除（Group は中身ごと）
 //!
-//! **キーの時刻を動かせるのは Position だけである。** `DocumentWriter` に
-//! Scale/Rotation/Anchor/Opacity のキー時刻を変える `prepare_*` は無い。
-//! remove + add で代用すると `KeyframeId` が変わり、意味論が変わってしまうので
-//! やらない。clip を動かしたとき Position 以外のキーが取り残されることは
-//! status 行に `N not movable` として出す。
+//! ## 面の動かし方（AE / Premiere と同じ割り当て）
+//!
+//! ```text
+//! ホイール / 二本指        縦スクロール
+//! Shift + ホイール         横パン
+//! Cmd(⌘) + ホイール        横ズーム（カーソル下の時刻が動かない）
+//! ピンチ                   横ズーム
+//! 下端のナビゲータ帯       掴んで横パン、両端6pxでズーム
+//! ```
+//!
+//! **レイヤーの全体地図(minimap)は置かない。** 1 Layer = 1行なので行の一覧が
+//! 既に全体図であり、その縮小版を別に持っても情報が増えない。時間方向だけは
+//! 寄ると全体が見えなくなるので、そこにナビゲータ帯を置く。
 //!
 //! **ドラッグは Document を実際に書き換える。** 経路は
 //! `DocumentWriter::prepare_* -> apply_command(gesture, command)` で、
@@ -34,8 +45,9 @@ use eframe::egui;
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, Vec2};
 use motolii_core::{Fps, RationalTime};
 use motolii_doc::{
-    Clip, ClipSource, DocKeyframe, DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter,
-    GestureId, Group, ItemEnvelope, KeyframeId, LayerId, Track, TrackItem, Transform2D,
+    collect_layer_ids, find_item_location, Clip, ClipSource, Command, DocKeyframe,
+    DocKeyframeTrack, DocParam, DocValue, Document, DocumentWriter, GestureId, Group, ItemEnvelope,
+    KeyframeId, LayerId, ParentLocator, Track, TrackItem, Transform2D,
 };
 use std::sync::Arc;
 use motolii_eval::Interp;
@@ -67,6 +79,10 @@ const RULER_H: f32 = 27.0;
 const TIMELINE_SECONDS: f32 = 16.0;
 /// これ以上は寄れない。1秒を4分割まで
 const MIN_SPAN: f32 = 0.25;
+/// 下端の時間ナビゲータ帯の高さ
+const NAV_H: f32 = 14.0;
+/// 縦のつまみの幅
+const SCROLLBAR_W: f32 = 6.0;
 
 /// 時間軸の見えている窓。**Project session が持つ状態**で、Document には入れない。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -123,6 +139,108 @@ impl TimelineView {
     }
 }
 
+/// 並べ替えの落とし先。**行と行のあいだ**を指す。
+///
+/// `index` は D2 の `prepare_reparent_clip` と同じ意味、つまり
+/// **外したあとの挿入位置**である。同じ親の中で下へ動かすときに1つずれるのは
+/// このためで、`drop_target` がその調整を持つ。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DropTarget {
+    pub parent: ParentLocator,
+    pub index: usize,
+    /// 線を引く y。**絵のためだけに持つ**
+    pub y: f32,
+}
+
+/// ナビゲータ帯のどこを掴んだか
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum NavGrab {
+    Pan,
+    Left,
+    Right,
+}
+
+/// ポインタの y が、object 行の**何番目の上の境界**に居るか。
+///
+/// 行の中心で切り替える。`objects.len()` は「いちばん下」を指す
+fn boundary_at(objects: &[(LayerId, f32, f32)], y: f32) -> usize {
+    for (i, (_, top, h)) in objects.iter().enumerate() {
+        if y < top + h * 0.5 {
+            return i;
+        }
+    }
+    objects.len()
+}
+
+/// その境界に線を引く y
+fn boundary_y(objects: &[(LayerId, f32, f32)], boundary: usize) -> f32 {
+    match objects.get(boundary) {
+        Some((_, top, _)) => *top,
+        None => objects.last().map(|(_, top, h)| top + h).unwrap_or(0.0),
+    }
+}
+
+/// 行の合計高。縦スクロールの上限はここから出る
+fn content_height(rows: &[TimelineRow]) -> f32 {
+    rows.iter()
+        .map(|r| match r.kind {
+            RowKind::Object => ROW_H,
+            RowKind::Property(_) => PROP_H,
+        })
+        .sum()
+}
+
+/// **面より短い中身はスクロールしない。** 下は最後の行で止まる
+fn clamp_scroll(scroll: f32, content: f32, viewport: f32) -> f32 {
+    scroll.clamp(0.0, (content - viewport).max(0.0))
+}
+
+/// `layer` の subtree に `maybe` が含まれるか。**自分自身は含めない**
+fn is_descendant(document: &Document, layer: LayerId, maybe: LayerId) -> bool {
+    if layer == maybe {
+        return false;
+    }
+    let Some(item) = find_item(document, layer) else {
+        return false;
+    };
+    let mut ids = Vec::new();
+    collect_layer_ids(item, &mut ids);
+    ids.contains(&maybe)
+}
+
+/// 境界 `boundary`(object 行の何番目の**上**か)へ `dragged` を落とすとき、
+/// D2 へ渡す `(parent, index)` を出す。
+///
+/// - 境界の**下にある行**の位置がそのまま挿入位置になる。開いた Group の
+///   最初の子の上へ落とせば、それは「Group の中の先頭」である
+/// - 末尾の境界だけは、**最後の行の次**を指す
+/// - **自分自身の中へは落とせない。** Group を自分の子の中へ入れると木が壊れる
+/// - 同じ親の中で下へ動かすときは1つ引く。`index` は外したあとの位置なので
+fn drop_target(
+    document: &Document,
+    objects: &[LayerId],
+    boundary: usize,
+    dragged: LayerId,
+) -> Option<(ParentLocator, usize)> {
+    let (parent, mut index) = if boundary < objects.len() {
+        let (parent, index, _) = find_item_location(document, objects[boundary])?;
+        (parent, index)
+    } else {
+        let (parent, index, _) = find_item_location(document, *objects.last()?)?;
+        (parent, index + 1)
+    };
+    if let ParentLocator::Group(group) = parent {
+        if group == dragged || is_descendant(document, dragged, group) {
+            return None;
+        }
+    }
+    let (old_parent, old_index, _) = find_item_location(document, dragged)?;
+    if old_parent == parent && old_index < index {
+        index -= 1;
+    }
+    Some((parent, index))
+}
+
 fn main() -> eframe::Result<()> {
     let shot = std::env::args().nth(1);
     eframe::run_native(
@@ -164,6 +282,10 @@ enum Grab {
     },
     TrimIn { layer: LayerId },
     TrimOut { layer: LayerId },
+    /// 左列を掴んで上下へ。**離した瞬間に1回だけ書く。**
+    /// 途中の位置は線で見せるだけで、Document は動かさない — 通り道の親へ
+    /// 一度ずつ入れ直すと、1ドラッグが N 個の編集になってしまう
+    Reorder { layer: LayerId },
 }
 
 /// clip / group を掴んだ瞬間の状態を採る。
@@ -171,8 +293,32 @@ enum Grab {
 /// **動くもの(clip の開始時刻)と、追従するもの(その clip の Position キー)を
 /// ここで一度に確定させる。** ドラッグ中は毎フレーム絶対値で出し直すので、
 /// 掴んだ瞬間の値が要る。
+/// 1つだけ掴む。**窓は必ず複数選択の道(`begin_move_many`)を通る**ので、
+/// これを呼ぶのはテストである。
+#[cfg(test)]
 fn begin_move(document: &Document, layer: LayerId, grab_at: f32) -> Grab {
-    let targets = movable_clips(document, layer);
+    begin_move_many(document, &[layer], layer, grab_at)
+}
+
+/// 複数選択のドラッグ。**選ばれている全部が同じ差分で動く。**
+///
+/// `layer` は掴んだ行(status に出す代表)で、`roots` が実際に動かす集合である。
+/// 親と子が両方選ばれていても、**動く clip は重複しない** — `movable_clips` が
+/// 子孫まで返すので、集めたあとに LayerId で畳む。
+fn begin_move_many(
+    document: &Document,
+    roots: &[LayerId],
+    layer: LayerId,
+    grab_at: f32,
+) -> Grab {
+    let mut targets: Vec<(LayerId, f32, f32)> = Vec::new();
+    for root in roots {
+        for target in movable_clips(document, *root) {
+            if !targets.iter().any(|(l, _, _)| *l == target.0) {
+                targets.push(target);
+            }
+        }
+    }
     let mut keys = Vec::new();
     let mut not_movable = 0usize;
     for (clip, _, _) in &targets {
@@ -214,10 +360,17 @@ struct Lab {
     /// 関係ない編集を取り消してしまう
     drag_undo_base: usize,
     names: HashMap<LayerId, String>,
-    /// 選択中の layer。**Project session が持つ種類の状態**で、Document には入れない
-    selected: Option<LayerId>,
+    /// 選択中の layer。**Project session が持つ種類の状態**で、Document には入れない。
+    /// **順序は選んだ順**で、末尾が Shift 範囲選択の起点になる
+    selected: Vec<LayerId>,
     /// 見えている時間の窓。同上
     view: TimelineView,
+    /// 縦スクロール(px)。行の合計高が面より高いときだけ動く。同上
+    scroll_y: f32,
+    /// 並べ替えのドラッグ中に、いま落とすと決まる場所。**線を描く位置でもある**
+    drop: Option<DropTarget>,
+    /// ナビゲータ帯を掴んでいる間の掴み方。掴んだ瞬間に決めて、離すまで変えない
+    nav: Option<NavGrab>,
     /// playhead(秒)。同上
     playhead: f32,
     status: String,
@@ -256,13 +409,16 @@ impl Lab {
             drag: None,
             drag_undo_base: 0,
             names,
-            selected: None,
+            selected: Vec::new(),
             view: TimelineView {
                 start: 0.0,
                 span: TIMELINE_SECONDS,
             },
+            scroll_y: 0.0,
+            drop: None,
+            nav: None,
             playhead: 0.0,
-            status: "arrow=children  diamond=key rows  drag=move  edges=trim  Cmd+Z=undo".to_owned(),
+            status: "drag bar=move  drag name=reorder  Cmd/Shift+click=select  Del=delete".to_owned(),
             shot,
             frame: 0,
         }
@@ -384,6 +540,8 @@ impl Lab {
                 false,
                 self.writer.prepare_trim_clip_out(*layer, time).map_err(|e| e.to_string()),
             )),
+            // 並べ替えは離した瞬間にしか書かない。ドラッグ中はここへ来ない
+            Grab::Reorder { .. } => return,
         }
 
         let mut applied = 0usize;
@@ -419,6 +577,7 @@ impl Lab {
                 ),
                 Grab::KeyTime { .. } => format!("{keys_applied} key"),
                 Grab::TrimIn { .. } | Grab::TrimOut { .. } => format!("{applied} clip"),
+                Grab::Reorder { .. } => String::new(),
             };
             self.status = format!(
                 "{} @ {at_seconds:.2}s  ({detail})  undo {}",
@@ -489,33 +648,255 @@ impl Lab {
         }
     }
 
+    fn is_selected(&self, layer: LayerId) -> bool {
+        self.selected.contains(&layer)
+    }
+
+    /// 行をクリックしたときの選択。**普通のリストと同じ3通り。**
+    ///
+    /// - そのまま  … その1つだけにする
+    /// - `Cmd`    … 足す / 外す
+    /// - `Shift`  … 直前に触った行からここまで(**見えている object 行の上で**数える。
+    ///   閉じた Group の中は見えないので入らない)
+    fn select(&mut self, layer: LayerId, additive: bool, range: bool, objects: &[LayerId]) {
+        if range {
+            if let Some(anchor) = self.selected.last().copied() {
+                let (Some(a), Some(b)) = (
+                    objects.iter().position(|l| *l == anchor),
+                    objects.iter().position(|l| *l == layer),
+                ) else {
+                    return;
+                };
+                let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+                // anchor を末尾に残す — 続けて Shift を押したときの起点が動かない
+                let mut next: Vec<LayerId> =
+                    objects[lo..=hi].iter().copied().filter(|l| *l != anchor).collect();
+                next.push(anchor);
+                self.selected = next;
+                self.status = format!("{} selected", self.selected.len());
+                return;
+            }
+        }
+        if additive {
+            if let Some(at) = self.selected.iter().position(|l| *l == layer) {
+                self.selected.remove(at);
+            } else {
+                self.selected.push(layer);
+            }
+        } else {
+            self.selected = vec![layer];
+        }
+        self.status = match self.selected.len() {
+            0 => "nothing selected".to_owned(),
+            1 => format!("selected {}", self.name(self.selected[0])),
+            n => format!("{n} selected"),
+        };
+    }
+
+    /// 選択のうち、**他の選択の子孫でないもの**だけ。
+    ///
+    /// 親 Group と子が同時に選ばれているとき、複製すると子が2重に増え、
+    /// 削除すると親を消した時点で子が消えて `LayerNotFound` になる。
+    /// **構造を触る操作は必ずここを通す。**
+    fn selection_roots(&self) -> Vec<LayerId> {
+        self.selected
+            .iter()
+            .copied()
+            .filter(|layer| {
+                !self
+                    .selected
+                    .iter()
+                    .any(|other| is_descendant(&self.document, *other, *layer))
+            })
+            .collect()
+    }
+
     /// 選択中の layer を丸ごと複製する。**1複製 = 1 `GestureId` = 1 Undo 単位**
     ///
     /// **深いところは D2 がやる。** `prepare_duplicate_track_item` は Group の
     /// 子も、シェイプの中の入れ子(`VectorContent::Group`)も再帰して写し、
     /// LayerId / KeyframeId / EffectId を全部新しく振り直す。Lab が子を辿って
     /// 複製し直すと、その再写像を二重にしてしまう — **ここでは source を1つ渡すだけ**。
+    ///
+    /// 複製後は**増えたほうを選ぶ**。続けて動かすのが普通なので
     fn duplicate_selected(&mut self) {
-        let Some(layer) = self.selected else {
+        let roots = self.selection_roots();
+        if roots.is_empty() {
             self.status = "nothing selected".to_owned();
             return;
-        };
-        let name = self.name(layer).to_owned();
-        let command = match self.writer.prepare_duplicate_track_item(layer) {
-            Ok(command) => command,
-            Err(error) => {
+        }
+        let gesture = self.writer.begin_gesture();
+        let mut made = Vec::new();
+        for layer in roots {
+            let name = self.name(layer).to_owned();
+            let command = match self.writer.prepare_duplicate_track_item(layer) {
+                Ok(command) => command,
+                Err(error) => {
+                    self.status = format!("{name} rejected: {error}");
+                    return;
+                }
+            };
+            // 増えたほうの LayerId は command の中にしか無い(まだ Document に無い)
+            if let Command::AddTrackItem { item, .. } = &command {
+                let mut ids = Vec::new();
+                collect_layer_ids(item, &mut ids);
+                made.extend(ids.first().copied());
+            }
+            if let Err(error) = self.writer.apply_command(gesture, command) {
                 self.status = format!("{name} rejected: {error}");
                 return;
             }
+        }
+        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+        // **1つなら名前を出す。** 何が増えたか分からない状態にしない
+        let what = match made.as_slice() {
+            [one] => self.name(*one).to_owned(),
+            many => format!("{}", many.len()),
         };
+        self.status = format!("duplicated {what}  undo {}", self.writer.undo_len());
+        self.selected = made;
+    }
+
+    /// 選択中の layer を消す。**Group は中身ごと。1回の Delete = 1 Undo 単位**
+    ///
+    /// 消す順は関係ない — `selection_roots` が親子の重なりを外しているので、
+    /// どれを先に消しても残りの `prepare` は当たる。
+    fn delete_selected(&mut self) {
+        let roots = self.selection_roots();
+        if roots.is_empty() {
+            self.status = "nothing selected".to_owned();
+            return;
+        }
         let gesture = self.writer.begin_gesture();
-        match self.writer.apply_command(gesture, command) {
-            Ok(()) => {
-                refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
-                self.status = format!("duplicated {name}  undo {}", self.writer.undo_len());
+        let mut removed = 0usize;
+        for layer in &roots {
+            let name = self.name(*layer).to_owned();
+            let command = match self.writer.prepare_remove_track_item(*layer) {
+                Ok(command) => command,
+                Err(error) => {
+                    self.status = format!("{name} rejected: {error}");
+                    return;
+                }
+            };
+            if let Err(error) = self.writer.apply_command(gesture, command) {
+                self.status = format!("{name} rejected: {error}");
+                return;
             }
+            removed += 1;
+        }
+        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+        self.selected.clear();
+        self.status = format!("deleted {removed}  undo {}", self.writer.undo_len());
+    }
+
+    /// 並べ替えを1回だけ書く。**離した瞬間に呼ぶ。**
+    ///
+    /// 時刻は変えない(`new_start = None`) — 上下に動かしただけで clip が
+    /// 時間方向へ跳ぶと、並べ替えのつもりが編集になってしまう。
+    fn commit_reorder(&mut self, layer: LayerId, to: DropTarget) {
+        let name = self.name(layer).to_owned();
+        let prepared = self
+            .writer
+            .prepare_reparent_clip(layer, to.parent, to.index, None);
+        match prepared {
+            Ok(Some(command)) => {
+                let gesture = self.writer.begin_gesture();
+                match self.writer.apply_command(gesture, command) {
+                    Ok(()) => {
+                        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                        self.status = format!("moved {name}  undo {}", self.writer.undo_len());
+                    }
+                    Err(error) => self.status = format!("{name} rejected: {error}"),
+                }
+            }
+            // 同じ場所へ落とした。**失敗ではない**
+            Ok(None) => self.status = format!("{name} stayed"),
             Err(error) => self.status = format!("{name} rejected: {error}"),
         }
+    }
+
+    /// 下端の時間ナビゲータ帯。**寄っているときに、いま全体のどこを見ているか。**
+    ///
+    /// 溝が composition 全体、明るい所が見えている窓である。
+    /// **掴めば横パン、両端6pxを掴めばズーム** — ホイールを縦へ渡した分の
+    /// 代わりがここにある。レイヤーの地図は置かない(行そのものが一覧なので)。
+    fn navigator(
+        &mut self,
+        ui: &mut egui::Ui,
+        p: &egui::Painter,
+        full: Rect,
+        track_left: f32,
+        comp: f32,
+    ) {
+        if comp <= 0.0 {
+            return;
+        }
+        let bar = Rect::from_min_max(
+            egui::pos2(track_left, full.bottom() - NAV_H),
+            egui::pos2(full.right(), full.bottom()),
+        );
+        p.rect_filled(
+            Rect::from_min_max(egui::pos2(full.left(), bar.top()), full.max),
+            CornerRadius::ZERO,
+            Color32::from_rgb(0x1e, 0x1e, 0x1e),
+        );
+        let to_x = |t: f32| bar.left() + (t / comp) * bar.width();
+        let (x0, x1) = (to_x(self.view.start), to_x(self.view.start + self.view.span));
+        let knob = Rect::from_min_max(
+            egui::pos2(x0, bar.top() + 3.0),
+            egui::pos2(x1.max(x0 + 8.0), bar.bottom() - 3.0),
+        );
+        let r = ui.interact(bar, ui.id().with("nav"), Sense::click_and_drag());
+        if r.drag_started() {
+            self.nav = r.interact_pointer_pos().map(|pos| {
+                if (pos.x - knob.left()).abs() <= 6.0 {
+                    NavGrab::Left
+                } else if (pos.x - knob.right()).abs() <= 6.0 {
+                    NavGrab::Right
+                } else {
+                    NavGrab::Pan
+                }
+            });
+        }
+        if r.dragged() {
+            if let (Some(mode), Some(pos)) = (self.nav, r.interact_pointer_pos()) {
+                let at = ((pos.x - bar.left()) / bar.width() * comp).clamp(0.0, comp);
+                self.view = match mode {
+                    // 掴んだ所が窓の中心へ来る
+                    NavGrab::Pan => TimelineView {
+                        start: at - self.view.span * 0.5,
+                        span: self.view.span,
+                    },
+                    // 端を掴んだら、反対の端は動かさない
+                    NavGrab::Left => TimelineView {
+                        start: at,
+                        span: (self.view.start + self.view.span - at).max(MIN_SPAN),
+                    },
+                    NavGrab::Right => TimelineView {
+                        start: self.view.start,
+                        span: (at - self.view.start).max(MIN_SPAN),
+                    },
+                }
+                .clamped(comp);
+            }
+        }
+        if r.drag_stopped() {
+            self.nav = None;
+        }
+        p.rect_filled(knob, CornerRadius::same(2), Color32::from_rgb(0x4a, 0x4a, 0x4a));
+        p.rect_stroke(
+            knob,
+            CornerRadius::same(2),
+            Stroke::new(
+                1.0,
+                if r.hovered() || self.nav.is_some() {
+                    ACCENT
+                } else {
+                    Color32::from_rgb(0x66, 0x66, 0x66)
+                },
+            ),
+            StrokeKind::Inside,
+        );
     }
 
     /// 行の名前。**Lab の控えに無ければ Document の台帳を見る。**
@@ -618,17 +999,51 @@ impl eframe::App for Lab {
         }
 
         // ---- 行 ----
-        let mut y = ruler.bottom();
-        let mut toggles: Vec<(LayerId, bool)> = Vec::new();
-        // M / S のクリック。行を回している間は Document を触らず、回し終えてから書く
-        let mut flags: Vec<(LayerId, bool)> = Vec::new();
-        let mut pick: Option<LayerId> = None;
+        // **行の面は、ルーラの下からナビゲータ帯の上まで。** 縦スクロールはこの中だけ
+        let nav_top = (full.bottom() - NAV_H).max(ruler.bottom());
+        let rows_view = Rect::from_min_max(
+            egui::pos2(full.left(), ruler.bottom()),
+            egui::pos2(full.right(), nav_top),
+        );
+        let content_h = content_height(&visible);
+        self.scroll_y = clamp_scroll(self.scroll_y, content_h, rows_view.height());
 
+        // **位置を先に確定させる。** 描く順と、並べ替えの落とし先と、線の位置が
+        // 同じ1つの表から出る(3箇所で y を数え直さない)
+        let mut layout: Vec<(TimelineRow, f32, f32)> = Vec::with_capacity(visible.len());
+        let mut y = rows_view.top() - self.scroll_y;
         for row in &visible {
             let h = match row.kind {
                 RowKind::Object => ROW_H,
                 RowKind::Property(_) => PROP_H,
             };
+            layout.push((*row, y, h));
+            y += h;
+        }
+        // 並べ替えが数える単位は object 行だけ。パラメータ行のあいだへは落とせない
+        let objects: Vec<(LayerId, f32, f32)> = layout
+            .iter()
+            .filter(|(row, _, _)| matches!(row.kind, RowKind::Object))
+            .map(|(row, top, h)| (row.layer, *top, *h))
+            .collect();
+        let object_layers: Vec<LayerId> = objects.iter().map(|(l, _, _)| *l).collect();
+
+        let mut toggles: Vec<(LayerId, bool)> = Vec::new();
+        // M / S のクリック。行を回している間は Document を触らず、回し終えてから書く
+        let mut flags: Vec<(LayerId, bool)> = Vec::new();
+        let mut pick: Option<(LayerId, bool, bool)> = None;
+        let mut reorder_started: Option<LayerId> = None;
+        let mut reorder_released = false;
+
+        // **面からはみ出した行は描かない。** 1000行でも触るのは見えている分だけ
+        let row_p = p.with_clip_rect(rows_view);
+        for (row, top, h) in &layout {
+            let p = &row_p;
+            let (row, h) = (*row, *h);
+            let y = *top;
+            if y + h < rows_view.top() || y > rows_view.bottom() {
+                continue;
+            }
             let rect = Rect::from_min_size(egui::pos2(full.left(), y), Vec2::new(full.width(), h));
             let rail = Rect::from_min_size(rect.min, Vec2::new(RAIL_W, h));
             let track = Rect::from_min_max(egui::pos2(track_left, rect.top()), rect.max);
@@ -640,14 +1055,28 @@ impl eframe::App for Lab {
                 _ => CELL,
             };
             p.rect_filled(rail, CornerRadius::ZERO, cell);
-            // 左列のどこを押しても、その行の layer を選ぶ(ボタン類は上に載るので先に取られる)
+            // 左列のどこを押しても、その行の layer を選ぶ(ボタン類は上に載るので先に取られる)。
+            // **同じ場所を掴んで上下へ引くと並べ替え**になる — AE と同じで、
+            // 名前の列は「選ぶ」と「並べ替える」の両方の入口である
             if matches!(row.kind, RowKind::Object) {
-                let r = ui.interact(rail, ui.id().with(("pick", row.layer)), Sense::click());
+                let r = ui.interact(
+                    rail,
+                    ui.id().with(("pick", row.layer)),
+                    Sense::click_and_drag(),
+                );
                 if r.clicked() {
-                    pick = Some(row.layer);
+                    let (additive, range) =
+                        ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
+                    pick = Some((row.layer, additive, range));
+                }
+                if r.drag_started() {
+                    reorder_started = Some(row.layer);
+                }
+                if r.drag_stopped() {
+                    reorder_released = true;
                 }
             }
-            if self.selected == Some(row.layer) {
+            if self.is_selected(row.layer) {
                 // 選択の帯。**行全体ではなく左端の細い帯**(モックの inset 3px と同じ)
                 p.rect_filled(
                     Rect::from_min_size(rail.left_top(), Vec2::new(3.0, rail.height())),
@@ -856,8 +1285,15 @@ impl eframe::App for Lab {
                                 } else if bar.right() - pos.x <= 6.0 {
                                     Grab::TrimOut { layer: row.layer }
                                 } else {
-                                    begin_move(
+                                    // **選ばれているものは一緒に動く。** 選ばれていない
+                                    // bar を掴んだときは、その1つを選び直してから動かす
+                                    if !self.is_selected(row.layer) {
+                                        self.selected = vec![row.layer];
+                                    }
+                                    let roots = self.selection_roots();
+                                    begin_move_many(
                                         &self.document,
+                                        &roots,
                                         row.layer,
                                         self.view.x_to_time(pos.x, track_left, track_w),
                                     )
@@ -939,27 +1375,72 @@ impl eframe::App for Lab {
                     }
                 }
             }
-
-            y += h;
         }
 
-        // ---- 横ズーム / パン ----
-        // **時間面の上でだけ効く。** 左列の上でホイールしても窓は動かない
-        let rows_bottom = y;
-        let surface = Rect::from_min_max(
-            egui::pos2(track_left, ruler.top()),
-            egui::pos2(full.right(), rows_bottom.max(ruler.bottom())),
-        );
+        // ---- 並べ替え ----
+        // **落とし先は境界で決まる。** どの行の上に居るかではなく、
+        // どの行と行のあいだに居るか
+        if let Some(layer) = reorder_started {
+            if !self.is_selected(layer) {
+                self.selected = vec![layer];
+            }
+            let gesture = self.writer.begin_gesture();
+            self.drag_undo_base = self.writer.undo_len();
+            self.drag = Some((Grab::Reorder { layer }, gesture));
+        }
+        if let Some((Grab::Reorder { layer }, _)) = self.drag.clone() {
+            self.drop = ctx
+                .input(|i| i.pointer.latest_pos())
+                .and_then(|pos| {
+                    let boundary = boundary_at(&objects, pos.y);
+                    let y = boundary_y(&objects, boundary);
+                    drop_target(&self.document, &object_layers, boundary, layer)
+                        .map(|(parent, index)| DropTarget { parent, index, y })
+                });
+            if let Some(to) = self.drop {
+                // 落とす前に線で見せる。**書くのは離した瞬間だけ**
+                row_p.line_segment(
+                    [
+                        egui::pos2(full.left() + 4.0, to.y),
+                        egui::pos2(full.right() - 4.0, to.y),
+                    ],
+                    Stroke::new(2.0, ACCENT),
+                );
+            }
+            if reorder_released {
+                if let Some(to) = self.drop.take() {
+                    self.commit_reorder(layer, to);
+                }
+                self.drag = None;
+            }
+        }
+
+        // ---- 縦スクロール / 横ズーム / 横パン ----
+        // **割り当ては AE / Premiere と同じ。** 素のホイールは縦、Cmd で横ズーム
         let comp = self.document.composition.duration.as_seconds_f64() as f32;
-        let (scroll, shift, pointer) = ctx.input(|i| {
+        let (scroll, shift, command, pinch, pointer) = ctx.input(|i| {
             (
                 i.smooth_scroll_delta,
                 i.modifiers.shift,
+                i.modifiers.command,
+                i.zoom_delta(),
                 i.pointer.latest_pos(),
             )
         });
-        if let Some(pos) = pointer.filter(|p| surface.contains(*p)) {
-            if scroll.x != 0.0 || (shift && scroll.y != 0.0) {
+        if let Some(pos) = pointer.filter(|p| full.contains(*p)) {
+            // ズームの起点は時間面の中に留める。左列の上でピンチしても暴れない
+            let anchor = self
+                .view
+                .x_to_time(pos.x.max(track_left), track_left, track_w);
+            if (pinch - 1.0).abs() > 1e-3 {
+                // ピンチ。**trackpad はこれが本命**
+                self.view = self.view.zoom_at(anchor, 1.0 / pinch, comp);
+            } else if command && scroll.y != 0.0 {
+                // **カーソルの下の時刻は動かない。** それがズームの手触りそのもの
+                self.view = self
+                    .view
+                    .zoom_at(anchor, 0.9_f32.powf(scroll.y / 50.0), comp);
+            } else if scroll.x != 0.0 || (shift && scroll.y != 0.0) {
                 // 横スクロール、または Shift + ホイール。**ピクセルの移動量を秒へ
                 // 直すのも `x_to_time` の仕事**にして、換算をここに書かない
                 let dx = if scroll.x != 0.0 { scroll.x } else { scroll.y };
@@ -967,20 +1448,57 @@ impl eframe::App for Lab {
                     - self.view.x_to_time(track_left, track_left, track_w);
                 self.view = self.view.pan(-seconds, comp);
             } else if scroll.y != 0.0 {
-                // **カーソルの下の時刻は動かない。** それがズームの手触りそのもの
-                let anchor = self.view.x_to_time(pos.x, track_left, track_w);
-                self.view = self
-                    .view
-                    .zoom_at(anchor, 0.9_f32.powf(scroll.y / 50.0), comp);
+                // 素のホイールは縦。**行が画面より多いときだけ動く**
+                self.scroll_y =
+                    clamp_scroll(self.scroll_y - scroll.y, content_h, rows_view.height());
             }
         }
+
+        // ---- 縦のつまみ ----
+        // 中身が面より高いときだけ出る。**掴んで動かせる**
+        if content_h > rows_view.height() {
+            let track_rect = Rect::from_min_max(
+                egui::pos2(full.right() - SCROLLBAR_W, rows_view.top()),
+                rows_view.max,
+            );
+            let ratio = rows_view.height() / content_h;
+            let knob_h = (track_rect.height() * ratio).max(24.0);
+            let travel = track_rect.height() - knob_h;
+            let at = self.scroll_y / (content_h - rows_view.height());
+            let knob = Rect::from_min_size(
+                egui::pos2(track_rect.left(), track_rect.top() + travel * at),
+                Vec2::new(SCROLLBAR_W, knob_h),
+            );
+            let r = ui.interact(track_rect, ui.id().with("vscroll"), Sense::click_and_drag());
+            if r.dragged() && travel > 0.0 {
+                let per_px = (content_h - rows_view.height()) / travel;
+                self.scroll_y = clamp_scroll(
+                    self.scroll_y + r.drag_delta().y * per_px,
+                    content_h,
+                    rows_view.height(),
+                );
+            }
+            p.rect_filled(track_rect, CornerRadius::ZERO, Color32::from_rgb(0x22, 0x22, 0x22));
+            p.rect_filled(
+                knob,
+                CornerRadius::same(2),
+                if r.hovered() || r.dragged() {
+                    ACCENT
+                } else {
+                    Color32::from_rgb(0x55, 0x55, 0x55)
+                },
+            );
+        }
+
+        // ---- 時間のナビゲータ帯 ----
+        self.navigator(ui, &p, full, track_left, comp);
 
         // playhead は行を描き終えてから、面の上に1本
         let playhead_x = self.view.time_to_x(self.playhead, track_left, track_w);
         p.line_segment(
             [
                 egui::pos2(playhead_x, ruler.top()),
-                egui::pos2(playhead_x, rows_bottom.max(ruler.bottom())),
+                egui::pos2(playhead_x, rows_view.bottom()),
             ],
             Stroke::new(1.0, Color32::from_rgb(0xe8, 0xe8, 0xe8)),
         );
@@ -994,9 +1512,8 @@ impl eframe::App for Lab {
             Stroke::NONE,
         ));
 
-        if let Some(layer) = pick {
-            self.selected = Some(layer);
-            self.status = format!("selected {}", self.name(layer));
+        if let Some((layer, additive, range)) = pick {
+            self.select(layer, additive, range, &object_layers);
         }
 
         for (layer, is_children) in toggles {
@@ -1018,12 +1535,13 @@ impl eframe::App for Lab {
         }
 
         // Undo / Redo。1ドラッグ = 1 GestureId なので、掴んで動かした分がまとめて戻る
-        let (undo, redo, escape, duplicate) = ctx.input(|i| {
+        let (undo, redo, escape, duplicate, delete) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && !i.modifiers.shift,
                 i.key_pressed(egui::Key::Z) && i.modifiers.command && i.modifiers.shift,
                 i.key_pressed(egui::Key::Escape),
                 i.key_pressed(egui::Key::D) && i.modifiers.command,
+                i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
             )
         });
         // **掴んでいる最中の Esc は、その gesture ごと取り消す。**
@@ -1051,6 +1569,12 @@ impl eframe::App for Lab {
         // Cmd/Ctrl + D。**選択が無いときは何もしない** — 複製する対象が無い
         if duplicate {
             self.duplicate_selected();
+        }
+
+        // Delete / Backspace。**Group は中身ごと消える**(D2 の RemoveTrackItem)。
+        // ドラッグ中は効かせない — 掴んだものが消えると gesture の行き先が無くなる
+        if delete && self.drag.is_none() {
+            self.delete_selected();
         }
 
         self.frame += 1;
@@ -1109,7 +1633,8 @@ fn grab_layer(grab: &Grab) -> LayerId {
         Grab::Move { layer, .. }
         | Grab::KeyTime { layer, .. }
         | Grab::TrimIn { layer }
-        | Grab::TrimOut { layer } => *layer,
+        | Grab::TrimOut { layer }
+        | Grab::Reorder { layer } => *layer,
     }
 }
 
@@ -1834,7 +2359,7 @@ mod tests {
             .collect();
         assert_eq!(children_before.len(), 3, "fixture の Title scene は子3枚");
 
-        lab.selected = Some(group);
+        lab.selected = vec![group];
         lab.duplicate_selected();
 
         // (a) TrackItem が1つ増えている
@@ -1925,5 +2450,308 @@ mod tests {
         let after = clip_span(&writer.snapshot(), layer).expect("span").0;
         let back = seconds_to_time(after, fps).expect("time");
         assert_eq!(back, snapped, "適用後も境界に乗ったまま: {after}");
+    }
+
+    // ---- 見えている行の並び。並べ替えと範囲選択が数える単位 ----
+    fn objects_of(lab: &Lab) -> Vec<LayerId> {
+        rows(&lab.document, &lab.fold)
+            .into_iter()
+            .filter(|r| matches!(r.kind, RowKind::Object))
+            .map(|r| r.layer)
+            .collect()
+    }
+
+    fn location(lab: &Lab, layer: LayerId) -> (ParentLocator, usize) {
+        let (parent, index, _) = find_item_location(&lab.document, layer).expect("location");
+        (parent, index)
+    }
+
+    /// **面より短い中身はスクロールしない。下は最後の行で止まる。**
+    #[test]
+    fn scrolling_stops_at_the_top_and_at_the_last_row() {
+        // 中身(200) が面(300) より低い: どちらへ回しても 0
+        assert_eq!(clamp_scroll(-40.0, 200.0, 300.0), 0.0);
+        assert_eq!(clamp_scroll(80.0, 200.0, 300.0), 0.0);
+        // 中身(500) が面(300) より高い: 下限は 0、上限は差の 200
+        assert_eq!(clamp_scroll(-1.0, 500.0, 300.0), 0.0);
+        assert_eq!(clamp_scroll(120.0, 500.0, 300.0), 120.0);
+        assert_eq!(clamp_scroll(999.0, 500.0, 300.0), 200.0);
+
+        // 行の合計高は object 24 / property 20 の実寸から出る
+        let lab = Lab::new(None);
+        let visible = rows(&lab.document, &lab.fold);
+        let objects = visible
+            .iter()
+            .filter(|r| matches!(r.kind, RowKind::Object))
+            .count() as f32;
+        let props = visible.len() as f32 - objects;
+        assert_eq!(content_height(&visible), objects * ROW_H + props * PROP_H);
+    }
+
+    /// **選ばれているものは、掴んだ1つだけでなく全部が同じ差分で動く。**
+    #[test]
+    fn moving_one_of_several_selected_clips_moves_them_all() {
+        let mut lab = Lab::new(None);
+        let background = layer_named(&lab.names, "Background");
+        let tone = layer_named(&lab.names, "starter-tone.wav");
+        let untouched = layer_named(&lab.names, "Shared left");
+
+        let before = |lab: &Lab, l| clip_span(&lab.document, l).expect("span").0;
+        let (bg0, tone0, other0) = (
+            before(&lab, background),
+            before(&lab, tone),
+            before(&lab, untouched),
+        );
+
+        lab.selected = vec![background, tone];
+        let gesture = lab.writer.begin_gesture();
+        let roots = lab.selection_roots();
+        lab.drag = Some((
+            begin_move_many(&lab.document, &roots, background, 3.0),
+            gesture,
+        ));
+        lab.commit_drag(3.5); // +0.5s
+
+        assert!((before(&lab, background) - (bg0 + 0.5)).abs() < 1e-3, "掴んだほうが動く");
+        assert!((before(&lab, tone) - (tone0 + 0.5)).abs() < 1e-3, "**もう一方も同じ差分で動く**");
+        assert!((before(&lab, untouched) - other0).abs() < 1e-3, "選んでいないものは動かない");
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert!((before(&lab, background) - bg0).abs() < 1e-3, "1ドラッグ = 1 Undo");
+        assert!((before(&lab, tone) - tone0).abs() < 1e-3);
+    }
+
+    /// 親 Group と子を同時に選んでも、**動くのは1回分の差分**である。
+    #[test]
+    fn selecting_a_group_and_its_child_moves_the_child_once() {
+        let mut lab = Lab::new(None);
+        let group = layer_named(&lab.names, "Title scene");
+        let child = layer_named(&lab.names, "Shared left");
+        let start0 = clip_span(&lab.document, child).expect("span").0;
+
+        lab.selected = vec![group, child];
+        assert_eq!(
+            lab.selection_roots(),
+            vec![group],
+            "子は親の子孫なので構造操作からは外れる"
+        );
+
+        let roots = lab.selection_roots();
+        let Grab::Move { targets, .. } = begin_move_many(&lab.document, &roots, group, 0.0) else {
+            panic!("Move を掴んだはず");
+        };
+        assert_eq!(targets.len(), 3, "同じ clip を2度数えない");
+
+        let gesture = lab.writer.begin_gesture();
+        lab.drag = Some((
+            begin_move_many(&lab.document, &roots, group, 1.0),
+            gesture,
+        ));
+        lab.commit_drag(1.3); // +0.3s
+        assert!(
+            (clip_span(&lab.document, child).expect("span").0 - (start0 + 0.3)).abs() < 1e-3,
+            "子は 0.3s だけ動く(0.6s ではない)"
+        );
+    }
+
+    /// **Shift クリックは、見えている行の上で範囲を採る。**
+    #[test]
+    fn shift_click_selects_the_range_between_two_rows() {
+        let mut lab = Lab::new(None);
+        let objects = objects_of(&lab);
+        assert!(objects.len() >= 4, "fixture の行数");
+
+        lab.select(objects[0], false, false, &objects);
+        assert_eq!(lab.selected, vec![objects[0]]);
+
+        lab.select(objects[2], false, true, &objects);
+        assert_eq!(lab.selected.len(), 3, "0..2 の3行");
+        for layer in &objects[0..=2] {
+            assert!(lab.is_selected(*layer));
+        }
+        assert_eq!(
+            lab.selected.last(),
+            Some(&objects[0]),
+            "起点は末尾に残る。続けて Shift を押しても基準が動かない"
+        );
+
+        // Cmd は足し引き
+        lab.select(objects[3], true, false, &objects);
+        assert!(lab.is_selected(objects[3]));
+        lab.select(objects[3], true, false, &objects);
+        assert!(!lab.is_selected(objects[3]), "同じ行をもう一度 Cmd クリックで外れる");
+
+        // 素のクリックは1つに戻す
+        lab.select(objects[1], false, false, &objects);
+        assert_eq!(lab.selected, vec![objects[1]]);
+    }
+
+    /// **行を上へ落とすと、Document の並びが変わる。** 時刻は変わらない。
+    #[test]
+    fn dropping_a_row_above_another_reorders_the_document() {
+        let mut lab = Lab::new(None);
+        let objects = objects_of(&lab);
+        let background = layer_named(&lab.names, "Background");
+        let start_before = clip_span(&lab.document, background).expect("span").0;
+        assert_eq!(location(&lab, background).1, 1, "はじめは Group の次");
+
+        // 境界0 = いちばん上の行の上
+        let (parent, index) =
+            drop_target(&lab.document, &objects, 0, background).expect("落とせる");
+        lab.commit_reorder(background, DropTarget { parent, index, y: 0.0 });
+
+        assert_eq!(location(&lab, background), (parent, 0), "先頭へ来た");
+        assert!(
+            (clip_span(&lab.document, background).expect("span").0 - start_before).abs() < 1e-3,
+            "**並べ替えは時刻を動かさない**"
+        );
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(location(&lab, background).1, 1, "1回の Undo で戻る");
+    }
+
+    /// 下へ動かすときは**外したあとの位置**になる。1つずれるのを埋める。
+    #[test]
+    fn dropping_a_row_at_the_end_lands_after_the_last_one() {
+        let mut lab = Lab::new(None);
+        let objects = objects_of(&lab);
+        let background = layer_named(&lab.names, "Background");
+        let tone = layer_named(&lab.names, "starter-tone.wav");
+        assert_eq!(location(&lab, tone).1, 2, "はじめは最後");
+
+        let (parent, index) =
+            drop_target(&lab.document, &objects, objects.len(), background).expect("落とせる");
+        assert_eq!(index, 2, "3つのうち自分を外したので、末尾は 2 である");
+        lab.commit_reorder(background, DropTarget { parent, index, y: 0.0 });
+
+        assert_eq!(location(&lab, background).1, 2, "最後へ来た");
+        assert_eq!(location(&lab, tone).1, 1, "追い越された側は1つ上がる");
+    }
+
+    /// **開いた Group の中へも落とせる。** 出し入れは同じ1本の command で表す。
+    #[test]
+    fn dropping_a_row_into_an_open_group_reparents_it() {
+        let mut lab = Lab::new(None);
+        let objects = objects_of(&lab);
+        let group = layer_named(&lab.names, "Title scene");
+        let background = layer_named(&lab.names, "Background");
+        assert_eq!(objects[0], group, "先頭は Group で、子が開いている");
+
+        // 境界1 = Group の最初の子の上 = 「Group の中の先頭」
+        let (parent, index) =
+            drop_target(&lab.document, &objects, 1, background).expect("落とせる");
+        assert_eq!(parent, ParentLocator::Group(group));
+        lab.commit_reorder(background, DropTarget { parent, index, y: 0.0 });
+
+        assert_eq!(location(&lab, background), (ParentLocator::Group(group), 0));
+        assert_eq!(
+            movable_clips(&lab.document, group).len(),
+            4,
+            "Group を動かすと、入れたものも一緒に動く"
+        );
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(
+            location(&lab, background),
+            (ParentLocator::Track(lab.document.tracks[0].id), 1),
+            "1回の Undo で元の親へ戻る"
+        );
+    }
+
+    /// **自分の中へは落とせない。** Group を自分の子の中へ入れると木が壊れる。
+    #[test]
+    fn a_group_cannot_be_dropped_inside_itself() {
+        let lab = Lab::new(None);
+        let objects = objects_of(&lab);
+        let group = layer_named(&lab.names, "Title scene");
+
+        for boundary in 1..=3 {
+            assert!(
+                drop_target(&lab.document, &objects, boundary, group).is_none(),
+                "境界 {boundary} は Group の中なので落とせない"
+            );
+        }
+        // 子の外(いちばん上・いちばん下)へは動かせる
+        assert!(drop_target(&lab.document, &objects, 0, group).is_some());
+        assert!(drop_target(&lab.document, &objects, objects.len(), group).is_some());
+    }
+
+    /// **Delete は Group を中身ごと消し、1回の Undo で全員が戻る。**
+    #[test]
+    fn deleting_a_group_takes_its_children_and_one_undo_puts_them_back() {
+        let mut lab = Lab::new(None);
+        let group = layer_named(&lab.names, "Title scene");
+        let child = layer_named(&lab.names, "Shared left");
+        let items_before = lab.document.tracks[0].items.len();
+
+        lab.selected = vec![group, child]; // 親と子を同時に選んでも壊れない
+        lab.delete_selected();
+
+        assert_eq!(
+            lab.document.tracks[0].items.len(),
+            items_before - 1,
+            "status: {}",
+            lab.status
+        );
+        assert!(find_item(&lab.document, child).is_none(), "子も消える");
+        assert!(lab.selected.is_empty(), "消したものを選んだままにしない");
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(lab.document.tracks[0].items.len(), items_before);
+        assert!(
+            find_item(&lab.document, child).is_some(),
+            "**同じ LayerId で戻る**。id を振り直さない"
+        );
+        assert_eq!(lab.name(child), "Shared left", "表示名も戻る");
+    }
+
+    /// 複数選んで消すのも**1回の Undo 単位**である。
+    #[test]
+    fn deleting_two_selected_layers_is_one_undo() {
+        let mut lab = Lab::new(None);
+        let background = layer_named(&lab.names, "Background");
+        let tone = layer_named(&lab.names, "starter-tone.wav");
+        let undo_before = lab.writer.undo_len();
+
+        lab.selected = vec![background, tone];
+        lab.delete_selected();
+        assert_eq!(lab.document.tracks[0].items.len(), 1);
+        assert_eq!(lab.writer.undo_len(), undo_before + 1, "1 gesture にまとまる");
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(lab.document.tracks[0].items.len(), 3, "2枚とも戻る");
+    }
+
+    /// 複数選んだ Cmd+D は**選んだ数だけ増え、増えたほうが選ばれる**。
+    #[test]
+    fn duplicating_two_selected_layers_makes_two_and_selects_them() {
+        let mut lab = Lab::new(None);
+        let background = layer_named(&lab.names, "Background");
+        let tone = layer_named(&lab.names, "starter-tone.wav");
+        let items_before = lab.document.tracks[0].items.len();
+
+        lab.selected = vec![background, tone];
+        lab.duplicate_selected();
+
+        assert_eq!(lab.document.tracks[0].items.len(), items_before + 2);
+        assert_eq!(lab.selected.len(), 2, "増えたほうが選ばれている");
+        assert!(
+            !lab.selected.contains(&background) && !lab.selected.contains(&tone),
+            "選ばれているのは元ではなく複製: {:?}",
+            lab.selected
+        );
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(
+            lab.document.tracks[0].items.len(),
+            items_before,
+            "2枚まとめて1回の Undo で戻る"
+        );
     }
 }

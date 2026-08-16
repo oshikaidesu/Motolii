@@ -32,6 +32,7 @@ pub use clip::{
     prepare_trim_clip_in, prepare_trim_clip_out,
 };
 pub use split::prepare_split_clip;
+pub use track_item::prepare_remove_track_item;
 pub use error::CommandError;
 pub use ids::{CommandKind, GestureId, MergeKey, ParentLocator, PropertyId, ScalarPropertyId};
 pub use locate::{collect_layer_ids, find_envelope, find_item_location, layer_names_for_item};

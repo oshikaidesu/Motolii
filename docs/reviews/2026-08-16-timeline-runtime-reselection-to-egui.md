@@ -243,7 +243,20 @@ egui は視覚設計の反復が弱い(CSS が無い)。そこを Blitz で補�
 | **編集の時刻がフレーム境界に乗る。** `try_from_frame` / `try_to_frame_round` を通す(fps は有理数なので `(秒*fps).round()` を自前で書かない) | 同上 |
 | **Cmd+D 複製。** 再帰(Group の子・入れ子 Vector)と id の採り直しは `duplicate.rs` が持ち、Lab は子を辿らない | 同上 |
 | 外部の編集が次フレームで映る(revision 監視。ブラウザからのシェイプ配置が別プログラムに見えないため) | 同上 |
+| **複数選択**(素のクリック / `Cmd` で足し引き / `Shift` で範囲)。移動・複製・削除がまとめて効く。親 Group と子を同時に選んでも**子は二重に動かない**(`selection_roots`) | 同上 |
+| **並べ替え**(左列を上下へドラッグ)。落とし先は**行と行のあいだ**で決まり、開いた Group の中へも出し入れできる。**自分の中へは落とせない**。時刻は変えない | 同上 |
+| **削除**(`Delete`/`Backspace`)。Group は中身ごと。1回 = 1 Undo で、**同じ LayerId と表示名が戻る** | `cargo test -p motolii-doc --test d2_command removing_` → 2 passed |
+| **縦スクロール**(ホイール / 右端のつまみ)。面からはみ出した行は描かず、触りもしない | `--example timeline_egui_lab` |
+| **ピンチで横ズーム**、下端の**時間ナビゲータ帯**(掴んで横パン、両端6pxでズーム) | 同上 |
 | 記号の豆腐(`egui_fonts.rs`) | Hack を fallback へ。追加フォント0 |
+
+**面の動かし方は AE / Premiere と同じ割り当てにした**(2026-08-16 深夜)。素のホイール＝縦スクロール、`Shift`＝横パン、`Cmd`＝横ズーム、ピンチ＝横ズーム。
+夜の版では素のホイールが横ズームだったが、**縦スクロールを入れる時点で素のホイールは縦へ渡すのが普通**であり、
+横方向の手掛かりが消える分をナビゲータ帯が埋める。
+
+**レイヤーの全体地図(minimap)は作らない**(2026-08-16 利用者指摘、採用)。1 Layer = 1行なので**行の一覧そのものが全体図**であり、
+縮小版を別に持っても情報が増えない(利用者の言い方では「行ベースだと死に機能になる」)。
+一方、**時間方向のナビゲータ帯は死なない** — 寄ると全体のどこに居るか分からなくなるのは時間軸だけだからである。
 
 **触れる:** `cargo run --profile fast -p motolii-ui --example timeline_egui_lab`
 
@@ -259,10 +272,10 @@ egui は視覚設計の反復が弱い(CSS が無い)。そこを Blitz で補�
 
 ### 未着手
 
-- **縦スクロール。** 行を上から並べるだけなので 30行で溢れる。行ベースなので実装は素直(可視範囲だけ描く)だが、`rows()` が毎フレーム全走査であることと併せて見る
-- **複数選択。** いまは `selected: Option<LayerId>`(`timeline_egui_lab.rs:218`)。1 gesture に N command は Group ドラッグで通っているので**形は証明済み**。単数前提のコードが増える前に変えるほうが安い
-- **並べ替え。** 入口は既にある — `prepare_reparent_clip(target, new_parent, new_index, new_start)`(`motolii-doc/src/lib.rs:652`)。`new_parent` を取るので Group への出し入れも同じ1本で表現できる
+- **`rows()` の毎フレーム全走査。** 描画と hit は可視範囲だけになったが、行の列は毎フレーム全部作る。1,000行なら問題なく、100k で効く
 - **`TimelineView`(Lab, f32) と `timeline_viewport_state`(341行, f64 + `RationalTime`) の二重化。** ズーム／パン／snap を両方が持っている。`snap_time` は「近くの端やキーへ吸着」であってフレーム量子化とは別物なので、畳むときに混ぜない
+- **並べ替えの落とし先が横位置を見ない。** 開いた Group の**末尾**と、その Group の**次**は同じ境界になる(いまは常に「中」を選ぶ)。Finder のようにインデントで撃ち分けるかは未決
+- **`Delete` が clip の一部を消す道は無い。** 消せるのは TrackItem 単位で、キーフレーム単体の削除は UI から呼んでいない(`prepare_remove_position_key` / `prepare_remove_transform_param_key` は D2 にある)
 - `egui_kittest` の導入(§8)。**撮る対象はできた**
 - CJK フォントの取得と `docs/references.md` への登録(コードではなく取得の仕事)
 - chrome を egui ウィジェットへ(AccessKit から叩けるように。§8)

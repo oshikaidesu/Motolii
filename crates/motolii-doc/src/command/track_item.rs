@@ -4,9 +4,33 @@ use crate::schema::TrackItem;
 use crate::{Document, LayerId};
 
 use super::locate::{
-    envelope_of, ensure_layer_names_match_item, find_items_vec, find_items_vec_mut,
+    envelope_of, ensure_layer_names_match_item, find_item_location, find_items_vec,
+    find_items_vec_mut, layer_names_for_item,
 };
-use super::{CommandError, ParentLocator};
+use super::{Command, CommandError, ParentLocator};
+
+/// `target`が指すTrackItem(Clip/Group、子ごと)を外す準備をする。
+///
+/// **`prepare_duplicate_track_item`の裏返しである。** 複製が`AddTrackItem`で
+/// 台帳へ載せるのと同じ経路を逆へ通すので、Undo(inverseの`AddTrackItem`)では
+/// **同じLayerIdと表示名が`restore`で戻る** — idを振り直さない。
+///
+/// この関数はツリーも台帳も変更しない(適用は`apply_command`側)。
+/// 同名の`Ok(None)`は無い — 「消す対象がある」なら必ず変化する。
+pub fn prepare_remove_track_item(
+    doc: &Document,
+    target: LayerId,
+) -> Result<Command, CommandError> {
+    let (parent, index, item) =
+        find_item_location(doc, target).ok_or(CommandError::LayerNotFound(target.get()))?;
+    let layer_names = layer_names_for_item(doc, item)?;
+    Ok(Command::RemoveTrackItem {
+        parent,
+        index,
+        item: item.clone(),
+        layer_names,
+    })
+}
 
 pub(super) fn apply_add_track_item(
     doc: &mut Document,

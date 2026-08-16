@@ -2604,3 +2604,113 @@ impl ClipItem for TrackItem {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// 削除: subtree を外し、Undo で同じ LayerId と表示名を戻す
+// ---------------------------------------------------------------------------
+
+/// **Group を消すと子も一緒に消え、Undo で全員が同じ id で戻る。**
+///
+/// 複製の裏返しである。`AddTrackItem` が台帳へ載せるのと同じ経路を逆へ通し、
+/// `remove` した LayerId は `restore` で戻る(非再利用カウンタは巻き戻さない)。
+#[test]
+fn removing_a_group_takes_its_children_and_undo_puts_them_back() {
+    let mut doc = Document::new_current();
+    let group_layer = doc.layers.allocate("group").unwrap();
+    let child_a = doc.layers.allocate("child_a").unwrap();
+    let child_b = doc.layers.allocate("child_b").unwrap();
+    let keeper = doc.layers.allocate("keeper").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    let clip = |layer: LayerId| {
+        TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        })
+    };
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![
+            TrackItem::Group(Group {
+                envelope: ItemEnvelope::new(group_layer),
+                children: vec![clip(child_a), clip(child_b)],
+            }),
+            clip(keeper),
+        ],
+    });
+    doc.validate().expect("fixture");
+
+    let before = layer_entries(&doc);
+    let mut writer = reference_writer(doc);
+    let command = writer
+        .prepare_remove_track_item(group_layer)
+        .expect("prepare remove");
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, command).expect("apply remove");
+
+    let after = writer.snapshot();
+    writer.validate().expect("post-remove document must validate");
+    assert_eq!(after.tracks[0].items.len(), 1, "Group が1つ外れた");
+    assert!(
+        !after.layers.contains(group_layer)
+            && !after.layers.contains(child_a)
+            && !after.layers.contains(child_b),
+        "子も台帳から外れる"
+    );
+    assert!(after.layers.contains(keeper), "兄弟は消えない");
+
+    writer.undo().expect("undo remove");
+    let restored = writer.snapshot();
+    writer.validate().expect("post-undo document must validate");
+    assert_eq!(
+        layer_entries(&restored),
+        before,
+        "**同じ LayerId と表示名が戻る**。id を振り直さない"
+    );
+    assert_eq!(restored.tracks[0].items.len(), 2);
+}
+
+/// 消すのは1つ。**兄弟の index がずれても、次の削除は正しい位置を消す。**
+#[test]
+fn removing_the_first_of_two_clips_leaves_the_second_addressable() {
+    let mut doc = Document::new_current();
+    let first = doc.layers.allocate("first").unwrap();
+    let second = doc.layers.allocate("second").unwrap();
+    let track = doc.track_ids.allocate("V1").unwrap();
+    let asset = doc.assets.allocate("media", "video/mp4", "hash").unwrap();
+    let clip = |layer: LayerId| {
+        TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start: RationalTime::ZERO,
+            duration: RationalTime::try_new(1, 1).unwrap(),
+            time_map: Default::default(),
+            source: ClipSource::asset_video_only(asset),
+        })
+    };
+    doc.tracks.push(Track {
+        id: track,
+        items: vec![clip(first), clip(second)],
+    });
+    doc.validate().expect("fixture");
+
+    let mut writer = reference_writer(doc);
+    let gesture = writer.begin_gesture();
+    let command = writer.prepare_remove_track_item(first).expect("prepare");
+    writer.apply_command(gesture, command).expect("apply");
+
+    let command = writer.prepare_remove_track_item(second).expect("prepare");
+    let gesture = writer.begin_gesture();
+    writer.apply_command(gesture, command).expect("apply second");
+    assert!(writer.snapshot().tracks[0].items.is_empty());
+
+    assert!(
+        matches!(
+            writer.prepare_remove_track_item(first),
+            Err(CommandError::LayerNotFound(_))
+        ),
+        "既に消えたものは消せない"
+    );
+}
