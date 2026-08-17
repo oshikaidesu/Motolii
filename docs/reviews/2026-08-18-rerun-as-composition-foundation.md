@@ -53,6 +53,14 @@
   レイヤー同士では成立(距離ソートの対照実験つき)。(b) は `SpatialStage` が
   `AppendToStore` を捨てる S2 seam(spatial_stage.rs:154-175)で塞がっており、
   S2 を通すレーンを同日発注。
+  **→ (b) も成立(同日・2巡目)**: blueprint 迂回は利用者裁定(wrapper-over-hack)で
+  棄却し、fork に `SpatialStage::set_camera`(plain 型・純追加 +187/−0)を新設。
+  2304/2304 サンプル一致・`reset_view` byte 一致・恒久 oracle 常設。fork は
+  `motolii/stage-camera-seat`(`483b8559`)へ push 済み・rev pin 切替済み。
+  乖離台帳=[fork seam ledger](2026-08-18-rerun-fork-seam-ledger.md)。
+  **E0 は3点とも成立し、E1(export 経路の同一シーン化)へ進める。**
+  残: 製品側 adapter がまだ `set_camera` を呼んでいない(斜め Stage の実修正)、
+  orbit との共存(S2 別レーン)、orthographic(S3)。
 - **E1**: E0 成立後、export 経路を「per-layer 評価 → シーン合成 → mux」へ差し替え。
   Preview=Export の pixel 同一性 oracle を常設。
 - E0 が不成立の項目は、fork の追加 seam か re_renderer 上流改修かを実測で切り分けて
