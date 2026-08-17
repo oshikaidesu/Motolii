@@ -48,6 +48,11 @@
 - **E0 probe(先行・単独レーン)**: fork 越しに (a) offscreen render で pixel が取れる
   (b) document camera を注入して view と同一 pixel が出る (c) 2レイヤーの前後関係が
   遮蔽として成立する、の3点を最小シーンで実測。落ちる oracle 先行。
+  **→ 実測済み(同日)**: [(a)(c) 成立・(b) のみ fork seam 待ち](2026-08-18-rerun-e0-composition-probe.md)。
+  offscreen は fork 改変不要で決定的(PNG sha256 一致)、遮蔽は 08-17 の予想に反して
+  レイヤー同士では成立(距離ソートの対照実験つき)。(b) は `SpatialStage` が
+  `AppendToStore` を捨てる S2 seam(spatial_stage.rs:154-175)で塞がっており、
+  S2 を通すレーンを同日発注。
 - **E1**: E0 成立後、export 経路を「per-layer 評価 → シーン合成 → mux」へ差し替え。
   Preview=Export の pixel 同一性 oracle を常設。
 - E0 が不成立の項目は、fork の追加 seam か re_renderer 上流改修かを実測で切り分けて
