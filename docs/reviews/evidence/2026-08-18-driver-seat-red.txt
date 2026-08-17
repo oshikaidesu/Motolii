@@ -6,3 +6,12 @@ assertion failed: blitz_shell/pane.rs に eprintln! が 8 箇所残っている 
 ## src/blitz_shell/drive_tests.rs (compile-red)
 error[E0432]: unresolved import `super::drive`
 error: could not compile `motolii-ui` (lib test) due to 1 previous error
+
+# 2026-08-18 place/export red 先行の証跡
+
+## m2_place_respects_source_duration.rs (compile-red)
+error[E0609]: no field `duration` on type `AssetDraft`
+error[E0609]: no field `duration` on type `&motolii_doc::Asset`
+
+## export_report_matches_artifact.rs (実行red)
+assertion failed: soundtrack(2s)が短くても video は comp の長さ(4s=48枚)ぶん出る left: 21, right: 48
