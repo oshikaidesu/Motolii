@@ -1,9 +1,12 @@
 //! D1m: non-blocking exclusive session lock (subprocess / drop / kill).
 
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use motolii_doc::{Document, ProjectSession, ResourceLimits, SaveProjectOptions, SessionError};
 
@@ -25,14 +28,63 @@ fn lock_holder_exe() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_d1m-lock-holder"))
 }
 
-fn spawn_lock_holder(project_path: &Path, hold_ms: u64) -> std::process::Child {
-    Command::new(lock_holder_exe())
+/// `src/bin/d1m_lock_holder.rs` が lock 獲得後に出す一行。両者で同じ文字列を保つこと。
+const READY_LINE: &str = "d1m-lock-holder: ready";
+
+/// 子の合図待ちと lock 解放待ちの上限。cold 実行(helper の初回起動が数秒かかる)を
+/// 吸収できる幅を取る。ここは「正常なら即座に抜ける」上限であって待ち時間ではない。
+const SYNC_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// 子を起動し、**lock を獲得した合図(stdout の一行)を受け取ってから**返す。
+///
+/// 固定 sleep で「もう握ったはず」と仮定すると、cold 実行では子の起動がそれより遅く、
+/// 親が先に lock を取ってしまって flake する。合図待ちなら子の起動時間に依存しない。
+fn spawn_ready_lock_holder(project_path: &Path, hold_ms: u64) -> std::process::Child {
+    let mut child = Command::new(lock_holder_exe())
         .arg(project_path)
         .arg(hold_ms.to_string())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .expect("spawn lock holder")
+        .expect("spawn lock holder");
+
+    // read_line 自体には timeout がないので、別スレッドで読んで channel 側で締め切る。
+    let stdout = child.stdout.take().expect("piped stdout");
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let mut line = String::new();
+        let outcome = BufReader::new(stdout).read_line(&mut line).map(|_| line);
+        let _ = tx.send(outcome);
+    });
+
+    match rx.recv_timeout(SYNC_TIMEOUT) {
+        Ok(Ok(ref line)) if line.trim() == READY_LINE => child,
+        other => {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("lock holder did not signal readiness within {SYNC_TIMEOUT:?}: {other:?}");
+        }
+    }
+}
+
+/// 子の kill 後、lock が実際に解放されるまでを上限つきで待つ。
+///
+/// 解放は OS が fd を閉じた時点で起きるので、固定 sleep ではなく
+/// 「取れるまで試す」で同期する。取れた lock はすぐ手放し、本来の検証へ渡す。
+fn wait_until_lock_released(path: &Path) {
+    let deadline = Instant::now() + SYNC_TIMEOUT;
+    loop {
+        match ProjectSession::acquire(path, &ResourceLimits::production()) {
+            Ok(session) => {
+                drop(session);
+                return;
+            }
+            Err(SessionError::ProjectAlreadyOpen) if Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(err) => panic!("lock was not released within {SYNC_TIMEOUT:?}: {err:?}"),
+        }
+    }
 }
 
 #[test]
@@ -45,8 +97,7 @@ fn subprocess_holding_lock_rejects_second_open() {
         &SaveProjectOptions::default(),
     );
 
-    let mut child = spawn_lock_holder(&path, 5_000);
-    std::thread::sleep(Duration::from_millis(500));
+    let mut child = spawn_ready_lock_holder(&path, 5_000);
 
     let err = ProjectSession::open(&path, &ResourceLimits::production()).unwrap_err();
     assert!(
@@ -85,15 +136,14 @@ fn forced_subprocess_termination_releases_lock() {
         &SaveProjectOptions::default(),
     );
 
-    let mut child = spawn_lock_holder(&path, 60_000);
-    std::thread::sleep(Duration::from_millis(500));
+    let mut child = spawn_ready_lock_holder(&path, 60_000);
     assert!(matches!(
         ProjectSession::open(&path, &ResourceLimits::production()).unwrap_err(),
         SessionError::ProjectAlreadyOpen
     ));
     let _ = child.kill();
     let _ = child.wait();
-    std::thread::sleep(Duration::from_millis(300));
+    wait_until_lock_released(&path);
     let (_session, opened) = open_recovered(&path);
     assert!(opened.document.validate().is_ok());
     let _ = fs::remove_dir_all(dir);
@@ -114,8 +164,7 @@ fn symlink_alias_shares_lock_identity() {
     );
     symlink(&path, &alias).unwrap();
 
-    let mut child = spawn_lock_holder(&path, 5_000);
-    std::thread::sleep(Duration::from_millis(500));
+    let mut child = spawn_ready_lock_holder(&path, 5_000);
     let err = ProjectSession::open(&alias, &ResourceLimits::production()).unwrap_err();
     assert!(matches!(err, SessionError::ProjectAlreadyOpen));
     let _ = child.kill();
