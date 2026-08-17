@@ -145,7 +145,9 @@ impl DisplaySlot {
         }
     }
 
-    #[cfg(test)]
+    /// 受けた1枚そのもの。Stage は毎フレームこの handle を Rerun の
+    /// texture pool へ渡す(ゼロコピー import なので **借り物が生きている必要がある**
+    /// — slot が持ち主で、寸法が変わるまで作り直さない)。
     pub(crate) fn texture(&self) -> &wgpu::Texture {
         &self.texture
     }

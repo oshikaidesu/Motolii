@@ -415,10 +415,16 @@ impl EmbeddedSpatialStage {
     /// callback が context を引けず、Stage が何も描かないまま戻る。
     ///
     /// 戻り値は `render()` と同じく `SpatialStage` が拾った選択 entity path。
+    ///
+    /// `evaluated_frame` は playhead 時刻の合成フレーム(`stage_frame_seat`)。
+    /// `render()` 経路と**同じ** `present_evaluated_frame` を通し、Rerun 側の
+    /// `GridMap` entity として comp 平面へ載せる。`None` なら幾何だけの従来表示
+    /// (fixture 展示)。
     pub fn show_in(
         &mut self,
         ui: &mut egui::Ui,
         render_state: &eframe::egui_wgpu::RenderState,
+        evaluated_frame: Option<&wgpu::Texture>,
     ) -> Result<Option<Option<String>>, String> {
         let Some(mut render_ctx) = render_state
             .renderer
@@ -432,6 +438,12 @@ impl EmbeddedSpatialStage {
                     .to_string(),
             );
         };
+
+        // 絵は `show` より先に載せる。同じフレームの中で幾何(fill の隠し)まで
+        // 追随させるため。
+        if let Some(texture) = evaluated_frame {
+            self.present_evaluated_frame(&render_ctx, texture);
+        }
 
         let result = self.spatial_stage.show(ui, &mut render_ctx);
 
