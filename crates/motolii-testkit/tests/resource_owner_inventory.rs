@@ -87,6 +87,67 @@ const INVENTORY: &[InventoryEntry] = &[
             peak_multiplicity: "dynamic-by-display-generation",
         }],
     },
+    // 以下5件は2026-08-15〜16のBlitz/pane系着地で増えた確保箇所。2026-08-17の
+    // workspace全体再走(protected_assetsで止まっていた区間の先)で表面化し、分類して受け入れた。
+    InventoryEntry {
+        relative_path: "crates/motolii-ui/examples/timeline_widget_lab.rs",
+        raw_allocation_calls: 1,
+        owner_seats: &[OwnerSeat {
+            name: "lab-offscreen-target",
+            lifetime: "scale-generation",
+            peak_multiplicity: "one",
+        }],
+    },
+    InventoryEntry {
+        relative_path: "crates/motolii-ui/src/blitz_dump/gpu.rs",
+        raw_allocation_calls: 2,
+        owner_seats: &[
+            OwnerSeat {
+                name: "dump-render-target",
+                lifetime: "single-shot-invocation",
+                peak_multiplicity: "one",
+            },
+            OwnerSeat {
+                name: "dump-readback",
+                lifetime: "single-shot-invocation",
+                peak_multiplicity: "one",
+            },
+        ],
+    },
+    InventoryEntry {
+        relative_path: "crates/motolii-ui/src/blitz_shell/pane.rs",
+        raw_allocation_calls: 1,
+        owner_seats: &[OwnerSeat {
+            name: "pane-composite",
+            lifetime: "pane-resize-generation",
+            peak_multiplicity: "per-visible-pane",
+        }],
+    },
+    InventoryEntry {
+        relative_path: "crates/motolii-ui/src/blitz_ui/surface.rs",
+        raw_allocation_calls: 1,
+        owner_seats: &[OwnerSeat {
+            name: "blitz-panel-surface",
+            lifetime: "surface-resize-generation",
+            peak_multiplicity: "per-live-panel",
+        }],
+    },
+    InventoryEntry {
+        relative_path: "crates/motolii-ui/src/inspector_blitz/dump_main.rs",
+        raw_allocation_calls: 2,
+        owner_seats: &[
+            OwnerSeat {
+                name: "dump-render-target",
+                lifetime: "single-shot-invocation",
+                peak_multiplicity: "one",
+            },
+            OwnerSeat {
+                name: "dump-readback",
+                lifetime: "single-shot-invocation",
+                peak_multiplicity: "one",
+            },
+        ],
+    },
 ];
 
 fn workspace_root() -> PathBuf {
