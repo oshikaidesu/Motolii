@@ -598,3 +598,4 @@
 | [2026-08-17-vism-param-list-type-decision.md](2026-08-17-vism-param-list-type-decision.md) | parameterに同種の並びを足す決定。keyframeはlist全体で1キー、補間は要素ごと。未実装 | **決定**(2026-08-17) |
 | [2026-08-17-vsm-b0-identity-fixture.md](2026-08-17-vsm-b0-identity-fixture.md) | VSM-B0 identity期待値マトリクス。6ケース×6操作×5identityの180セルを台帳根拠付きで固定し、根拠が台帳に無い30セルをUNDETERMINEDとして必要な決定先ごと名指しした意味fixture。ケース5・6の採否は決めない |
 | [2026-08-17-vism-identity-known-implementation-survey.md](2026-08-17-vism-identity-known-implementation-survey.md) | VSM-B0の未決6問に対しOFX／CLAP／cargoの既知解を対照。5問は先行実装が答えており、U2のみ対応物なし | **比較中**(2026-08-17) |
+| [2026-08-18-rerun-e0-composition-probe.md](2026-08-18-rerun-e0-composition-probe.md) | Rerunを空間合成の基盤にできるかのE0 3点実測。窓なし描画と遮蔽は成立、カメラ注入は不成立でfork seam 3箇所を名指し | **観察**(2026-08-18) |

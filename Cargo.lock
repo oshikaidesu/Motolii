@@ -7733,6 +7733,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rerun-e0-composition-probe"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui-wgpu",
+ "glam 0.30.10",
+ "image",
+ "pollster",
+ "re_chunk",
+ "re_log_types",
+ "re_renderer",
+ "re_sdk_types",
+ "re_view_spatial",
+ "wgpu",
+]
+
+[[package]]
 name = "rerun-tonic-web-wasm-client"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

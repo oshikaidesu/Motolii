@@ -26,6 +26,8 @@ members = [
     "spikes/rerun-vism-layer-alpha-probe",
     # GPU経路(`copy_gpu_image`)が画素alphaを通すかだけを確認する隔離probe。同上。
     "spikes/rerun-vism-gpu-alpha-probe",
+    # E0: Rerunを空間合成の基盤に据えられるか(窓なし描画・カメラ注入・遮蔽)の隔離probe。同上。
+    "spikes/rerun-e0-composition-probe",
 ]
 
 [workspace.package]
