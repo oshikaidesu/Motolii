@@ -40,15 +40,15 @@
 
 ## 1. UNDETERMINED の総数と内訳
 
-**総数: 30 / 180**。
+**総数: 36 / 180**（初版30。反対側レビュー後の訂正で6件増えた。§8参照）。
 
 180セルの分類は次のとおりである。
 
-- 期待値＋根拠: **132**
+- 期待値＋根拠: **126**
 - `該当なし`＋理由: **18**（Kit接続を含まないケース1・2・5の `Kit` identity。3ケース × 6操作）
-- `UNDETERMINED:`: **30**
+- `UNDETERMINED:`: **36**
 
-`UNDETERMINED`の内訳は5種であり、いずれも6ケース全部に同じ形で現れる（5種 × 6ケース = 30）。
+`UNDETERMINED`の内訳は6種であり、いずれも6ケース全部に同じ形で現れる（6種 × 6ケース = 36）。
 
 | # | 未決の主題 | どの文書にどういう決定が要るか | 該当セル | 件数 |
 |---|---|---|---|---|
@@ -58,7 +58,9 @@
 | U4 | Projectがartifact identityを固定するか | `docs/vism-kit-model.md` §1.1のProject Lock行に、作品再現のためにProjectがartifact identityを固定するかの決定が要る。固定しないなら欠落時にProject側へartifact identityは存在しない | 全6ケース × `missing` × `artifact` | 6 |
 | U5 | 同一version再導入とartifactの同一性 | `docs/vism-package-concept.md` §4.2／§10「source / native binary / WGSLの同梱方式」に、同一versionの再導入が同一artifact identityを再現するか（Host build成果を同一artifactと見なすか）の決定が要る | 全6ケース × `reinstall` × `artifact` | 6 |
 
-この5種はすべて`docs/reviews/2026-07-17-vism-implementation-plan.md` §3、`docs/vism-kit-model.md`、`docs/vism-package-concept.md`、`docs/decision-index.md` のVism関連行のいずれにも決定が無い。埋めるには上表の右列に名指しした文書へ決定を加える必要がある。ケース5・6を追加したこと自体は`UNDETERMINED`を増やさなかった。ケース固有の未決（一package複数entryの採否、kindを跨いだ参照key）は、既存のU1へ同じ形で収束するためである。
+| U6 | capability entry identity の scope | `docs/vism-kit-model.md` の identity 表に「entry identity が package に閉じるか」の決定が要る。閉じるなら別packageのentryは別identity、閉じないなら二つのpackageが同じentry IDを持ちうる。`docs/vism-kit-model.md:300` [権威] は package identity を entry ID へ流用することを禁じ、entry IDがpackageから導出されないことは示すが、scopeは決めていない | 全6ケース × `fork差替え` × `capability entry` | 6 |
+
+この6種はすべて`docs/reviews/2026-07-17-vism-implementation-plan.md` §3、`docs/vism-kit-model.md`、`docs/vism-package-concept.md`、`docs/decision-index.md` のVism関連行のいずれにも決定が無い。埋めるには上表の右列に名指しした文書へ決定を加える必要がある。ケース5・6を追加したこと自体は`UNDETERMINED`を増やさなかった。ケース固有の未決（一package複数entryの採否、kindを跨いだ参照key）は、既存のU1へ同じ形で収束するためである。
 
 ## 2. ケース1 — 一つのVismがFilter entryを一つ持つ
 
@@ -75,7 +77,7 @@
 | `update` | `capability entry` | UNDETERMINED: `docs/vism-package-concept.md` §4.1／§10「1 package内のcapability数」に、version更新をまたぐentry identityの保持範囲と、entry追加・削除・改名の可否、`selected capability / entry`の再解決規則の決定が要る | `docs/vism-package-concept.md:282` [権威]、`docs/vism-package-concept.md:202` [権威] |
 | `update` | `Kit` | 該当なし。ケース1にKit接続が現れない | `docs/reviews/2026-07-17-vism-implementation-plan.md:74` [権威] |
 | `update` | `Project instance` | 保持。instance identityをpackage versionから導出しない | `docs/reviews/2026-07-17-vism-implementation-plan.md:70` [権威]、`docs/vism-kit-model.md:297` [権威] |
-| `update` | `artifact` | 変化。新しいversionは同じsource／版から得た別の実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威]、`docs/vism-package-concept.md:123` [権威] |
+| `update` | `artifact` | 変化。新しいversionは同じsource／版から得た別の実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威] |
 | `duplicate` | `package` | 保持。作品内の複製はProject Documentの操作であり、配布面へ触れない | `docs/reviews/2026-07-17-vism-implementation-plan.md:64` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:67` [権威] |
 | `duplicate` | `capability entry` | 保持。複製されるのはFilter entryを使うProject instanceであって、entryそのものではない | `docs/reviews/2026-07-17-vism-implementation-plan.md:65` [権威]、`docs/vism-kit-model.md:297` [権威] |
 | `duplicate` | `Kit` | 該当なし。ケース1にKit接続が現れない | `docs/reviews/2026-07-17-vism-implementation-plan.md:74` [権威] |
@@ -87,12 +89,12 @@
 | `missing` | `Project instance` | 保持。原本を保持し、無関係なDocument領域の編集を許可する | `docs/vism-package-concept.md:210-211` [権威]、`docs/vism-kit-model.md:64` [権威] |
 | `missing` | `artifact` | UNDETERMINED: `docs/vism-kit-model.md` §1.1のProject Lock行に「作品再現のためにProjectがartifact identityを固定するか」の決定が要る | `docs/vism-kit-model.md:48` [権威]、`docs/vism-package-concept.md:200-204` [権威]（Project参照集合にartifact identityが無い） |
 | `reinstall` | `package` | 保持。再導入でユーザー整理を動かさないことがstable package identityの要件である | `docs/vism-package-concept.md:55` [権威]、`docs/vism-package-concept.md:213` [権威] |
-| `reinstall` | `capability entry` | 保持し再解決される。互換Vismの再導入後、保持したpayloadから復元する | `docs/vism-package-concept.md:213` [権威]、`docs/vism-kit-model.md:295` [権威] |
+| `reinstall` | `capability entry` | 保持し再解決される。互換Vismの再導入後、保持したpayloadから復元する | `docs/vism-package-concept.md:213` [権威] |
 | `reinstall` | `Kit` | 該当なし。ケース1にKit接続が現れない | `docs/reviews/2026-07-17-vism-implementation-plan.md:74` [権威] |
 | `reinstall` | `Project instance` | 保持。同一instanceへ復元する。役割に欠落復元が含まれる | `docs/vism-kit-model.md:297` [権威]、`docs/vism-package-concept.md:213` [権威] |
 | `reinstall` | `artifact` | UNDETERMINED: `docs/vism-package-concept.md` §4.2／§10「source / native binary / WGSLの同梱方式」に「同一version再導入が同一artifact identityを再現するか」の決定が要る | `docs/vism-package-concept.md:284` [権威]、`docs/vism-package-concept.md:100` [権威] |
 | `fork差替え` | `package` | 変化。参照先が別作者の別package identityへ移る。元のpackage identityは改名も消滅もしない | `docs/reviews/2026-07-17-vism-implementation-plan.md:64` [権威]、`docs/vism-package-concept.md:314` [権威] |
-| `fork差替え` | `capability entry` | 変化。fork packageの表現契約が持つ別のentry identityになる | `docs/vism-kit-model.md:295` [権威]、`docs/vism-kit-model.md:300` [権威] |
+| `fork差替え` | `capability entry` | UNDETERMINED: `docs/vism-kit-model.md` の identity 表に「capability entry identity が package に閉じるか」の決定が要る。閉じるなら別 package の entry は別 identity、閉じないなら二つの package が同じ entry ID を持ちうる。`docs/vism-kit-model.md:300` [権威] は package identity を entry ID へ流用することを禁じており、entry ID が package から導出されないことは示すが、scope は決めていない | `docs/vism-kit-model.md:295` [権威]、`docs/vism-kit-model.md:300` [権威] |
 | `fork差替え` | `Kit` | 該当なし。ケース1にKit接続が現れない | `docs/reviews/2026-07-17-vism-implementation-plan.md:74` [権威] |
 | `fork差替え` | `Project instance` | UNDETERMINED: `docs/vism-kit-model.md` §5に「参照先packageをforkへ差し替えた時、既存Project instance identityを保持するか新規採番するか」の決定が要る | `docs/vism-kit-model.md:182` [権威]、`docs/vism-kit-model.md:179` [権威] |
 | `fork差替え` | `artifact` | 変化。別packageの別実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:68` [権威] |
@@ -114,7 +116,7 @@
 | `update` | `capability entry` | UNDETERMINED: `docs/vism-package-concept.md` §4.1／§10「1 package内のcapability数」に、version更新をまたぐentry identityの保持範囲と、要求する型の宣言が変わった時の再解決規則の決定が要る | `docs/vism-package-concept.md:282` [権威]、`docs/vism-package-concept.md:202` [権威] |
 | `update` | `Kit` | 該当なし。ケース2にprovider選択＝Kitが現れない | `docs/reviews/2026-07-17-vism-implementation-plan.md:75` [権威] |
 | `update` | `Project instance` | 保持。instance identityをpackage versionから導出しない | `docs/reviews/2026-07-17-vism-implementation-plan.md:70` [権威]、`docs/vism-kit-model.md:297` [権威] |
-| `update` | `artifact` | 変化。新しいversionは別の実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威]、`docs/vism-package-concept.md:123` [権威] |
+| `update` | `artifact` | 変化。新しいversionは別の実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威] |
 | `duplicate` | `package` | 保持。作品内の複製はProject Documentの操作である | `docs/reviews/2026-07-17-vism-implementation-plan.md:64` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:67` [権威] |
 | `duplicate` | `capability entry` | 保持。複製されるのはconsumer entryを使うProject instanceである | `docs/reviews/2026-07-17-vism-implementation-plan.md:65` [権威]、`docs/vism-kit-model.md:297` [権威] |
 | `duplicate` | `Kit` | 該当なし。ケース2にprovider選択＝Kitが現れない | `docs/reviews/2026-07-17-vism-implementation-plan.md:75` [権威] |
@@ -126,12 +128,12 @@
 | `missing` | `Project instance` | 保持。原本を保持し、無関係なDocument領域の編集を許可する | `docs/vism-package-concept.md:210-211` [権威]、`docs/vism-kit-model.md:64` [権威] |
 | `missing` | `artifact` | UNDETERMINED: `docs/vism-kit-model.md` §1.1のProject Lock行に「Projectがartifact identityを固定するか」の決定が要る | `docs/vism-kit-model.md:48` [権威]、`docs/vism-package-concept.md:200-204` [権威] |
 | `reinstall` | `package` | 保持。再導入でユーザー整理を動かさない | `docs/vism-package-concept.md:55` [権威]、`docs/vism-package-concept.md:213` [権威] |
-| `reinstall` | `capability entry` | 保持し再解決される。保持したpayloadから復元する | `docs/vism-package-concept.md:213` [権威]、`docs/vism-kit-model.md:295` [権威] |
+| `reinstall` | `capability entry` | 保持し再解決される。保持したpayloadから復元する | `docs/vism-package-concept.md:213` [権威] |
 | `reinstall` | `Kit` | 該当なし。ケース2にprovider選択＝Kitが現れない | `docs/reviews/2026-07-17-vism-implementation-plan.md:75` [権威] |
 | `reinstall` | `Project instance` | 保持。同一instanceへ復元する | `docs/vism-kit-model.md:297` [権威]、`docs/vism-package-concept.md:213` [権威] |
 | `reinstall` | `artifact` | UNDETERMINED: `docs/vism-package-concept.md` §4.2／§10「source / native binary / WGSLの同梱方式」に「同一version再導入が同一artifact identityを再現するか」の決定が要る | `docs/vism-package-concept.md:284` [権威]、`docs/vism-package-concept.md:100` [権威] |
 | `fork差替え` | `package` | 変化。consumerを別作者のfork consumer packageへ差し替えると、参照先が別のpackage identityになる | `docs/reviews/2026-07-17-vism-implementation-plan.md:64` [権威]、`docs/vism-package-concept.md:314` [権威] |
-| `fork差替え` | `capability entry` | 変化。fork側の表現契約が持つ別のentry identityになる。要求する型が同じでもentry identityは共有しない | `docs/vism-kit-model.md:295` [権威]、`docs/vism-kit-model.md:300` [権威] |
+| `fork差替え` | `capability entry` | UNDETERMINED: `docs/vism-kit-model.md` の identity 表に「capability entry identity が package に閉じるか」の決定が要る。閉じるなら別 package の entry は別 identity、閉じないなら二つの package が同じ entry ID を持ちうる。`docs/vism-kit-model.md:300` [権威] は package identity を entry ID へ流用することを禁じており、entry ID が package から導出されないことは示すが、scope は決めていない | `docs/vism-kit-model.md:295` [権威]、`docs/vism-kit-model.md:300` [権威] |
 | `fork差替え` | `Kit` | 該当なし。ケース2にprovider選択＝Kitが現れない | `docs/reviews/2026-07-17-vism-implementation-plan.md:75` [権威] |
 | `fork差替え` | `Project instance` | UNDETERMINED: `docs/vism-kit-model.md` §5に「参照先packageをforkへ差し替えた時、既存Project instance identityを保持するか新規採番するか」の決定が要る | `docs/vism-kit-model.md:182` [権威]、`docs/vism-kit-model.md:179` [権威] |
 | `fork差替え` | `artifact` | 変化。別packageの別実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:68` [権威] |
@@ -151,7 +153,7 @@
 | `update` | `capability entry` | UNDETERMINED: `docs/vism-package-concept.md` §4.1／§10「1 package内のcapability数」に、version更新をまたぐentry identityの保持範囲と、Kitが宣言した各entryの型付きinput／output対応をどう再解決するかの決定が要る | `docs/vism-package-concept.md:282` [権威]、`docs/vism-kit-model.md:101` [権威] |
 | `update` | `Kit` | 保持。Kitは必要なVism identityと互換versionを宣言するだけで、Kit identityはpackage versionから導出しない | `docs/vism-kit-model.md:101` [権威]、`docs/vism-kit-model.md:296` [権威] |
 | `update` | `Project instance` | 保持。instance identityをpackage versionから導出せず、展開されたVismのidentity・version・payloadはProjectが通常規則で保持する | `docs/reviews/2026-07-17-vism-implementation-plan.md:70` [権威]、`docs/vism-kit-model.md:180` [権威] |
-| `update` | `artifact` | 変化。新しいversionは別の実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威]、`docs/vism-package-concept.md:123` [権威] |
+| `update` | `artifact` | 変化。新しいversionは別の実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威] |
 | `duplicate` | `package` | 保持。作品内の複製はProject Documentの操作であり、配布面へ触れない | `docs/reviews/2026-07-17-vism-implementation-plan.md:64` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:67` [権威] |
 | `duplicate` | `capability entry` | 保持。複製されるのは展開済みinstanceであってentryではない | `docs/reviews/2026-07-17-vism-implementation-plan.md:65` [権威]、`docs/vism-kit-model.md:297` [権威] |
 | `duplicate` | `Kit` | 保持。展開後はKit runtimeがなくても通常のProject意味が残るため、複製はKitに触れない | `docs/vism-kit-model.md:178` [権威]、`docs/vism-kit-model.md:296` [権威] |
@@ -163,12 +165,12 @@
 | `missing` | `Project instance` | 保持。原本を保持し、無関係なDocument領域の編集を許可する | `docs/vism-package-concept.md:210-211` [権威]、`docs/vism-kit-model.md:64` [権威] |
 | `missing` | `artifact` | UNDETERMINED: `docs/vism-kit-model.md` §1.1のProject Lock行に「Projectがartifact identityを固定するか」の決定が要る | `docs/vism-kit-model.md:48` [権威]、`docs/vism-package-concept.md:200-204` [権威] |
 | `reinstall` | `package` | 保持。再導入でユーザー整理を動かさない | `docs/vism-package-concept.md:55` [権威]、`docs/vism-package-concept.md:213` [権威] |
-| `reinstall` | `capability entry` | 保持し再解決される。互換Vismの再導入後、保持したpayloadから復元する | `docs/vism-package-concept.md:213` [権威]、`docs/vism-kit-model.md:295` [権威] |
+| `reinstall` | `capability entry` | 保持し再解決される。互換Vismの再導入後、保持したpayloadから復元する | `docs/vism-package-concept.md:213` [権威] |
 | `reinstall` | `Kit` | 保持。再導入はinstall storeの操作であり、Kitの版に触れない | `docs/vism-kit-model.md:296` [権威]、`docs/vism-package-concept.md:215` [権威] |
 | `reinstall` | `Project instance` | 保持。同一instanceへ復元する | `docs/vism-kit-model.md:297` [権威]、`docs/vism-package-concept.md:213` [権威] |
 | `reinstall` | `artifact` | UNDETERMINED: `docs/vism-package-concept.md` §4.2／§10「source / native binary / WGSLの同梱方式」に「同一version再導入が同一artifact identityを再現するか」の決定が要る | `docs/vism-package-concept.md:284` [権威]、`docs/vism-package-concept.md:100` [権威] |
 | `fork差替え` | `package` | 変化。provider参照が別作者の別package identityへ移る。consumer packageは保持される | `docs/vism-kit-model.md:238` [権威]、`docs/vism-package-concept.md:314` [権威] |
-| `fork差替え` | `capability entry` | 変化。provider側は別のentry identityになる。consumerは型を宣言し具体providerのentry IDを参照しないため、consumer側entryは保持 | `docs/vism-kit-model.md:23` [権威]、`docs/vism-kit-model.md:238` [権威] |
+| `fork差替え` | `capability entry` | UNDETERMINED: `docs/vism-kit-model.md` の identity 表に「capability entry identity が package に閉じるか」の決定が要る。閉じるなら別 package の entry は別 identity、閉じないなら二つの package が同じ entry ID を持ちうる。`docs/vism-kit-model.md:300` [権威] は package identity を entry ID へ流用することを禁じており、entry ID が package から導出されないことは示すが、scope は決めていない | `docs/vism-kit-model.md:295` [権威]、`docs/vism-kit-model.md:300` [権威] |
 | `fork差替え` | `Kit` | 保持。展開後の差替えは通常のProject編集であり、既に使ったKitの版を変えない | `docs/vism-kit-model.md:178` [権威]、`docs/vism-kit-model.md:179` [権威] |
 | `fork差替え` | `Project instance` | UNDETERMINED: `docs/vism-kit-model.md` §5に「materialize済みProjectのprovider packageをforkへ差し替えた時、置換される側のProject instance identityを保持するか新規採番するか」の決定が要る。consumer側instanceが不変であることは `docs/vism-kit-model.md:238` [権威] が示すが、置換側は未決 | `docs/vism-kit-model.md:182` [権威]、`docs/vism-kit-model.md:238` [権威] |
 | `fork差替え` | `artifact` | 変化。別packageの別実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:68` [権威] |
@@ -188,7 +190,7 @@
 | `update` | `capability entry` | UNDETERMINED: `docs/vism-package-concept.md` §4.1／§10「1 package内のcapability数」に、version更新をまたぐentry identityの保持範囲と、両Kitが宣言した互換versionの範囲外へ出た時の再解決規則の決定が要る | `docs/vism-package-concept.md:282` [権威]、`docs/vism-kit-model.md:101` [権威] |
 | `update` | `Kit` | 保持。fork固有能力は名前空間、version、非互換理由を宣言するが、それはKit identityではない | `docs/vism-kit-model.md:238` [権威]、`docs/vism-kit-model.md:296` [権威] |
 | `update` | `Project instance` | 保持。instance identityをpackage versionから導出しない | `docs/reviews/2026-07-17-vism-implementation-plan.md:70` [権威]、`docs/vism-kit-model.md:180` [権威] |
-| `update` | `artifact` | 変化。新しいversionは別の実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威]、`docs/vism-package-concept.md:123` [権威] |
+| `update` | `artifact` | 変化。新しいversionは別の実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威] |
 | `duplicate` | `package` | 保持。作品内の複製はProject Documentの操作である | `docs/reviews/2026-07-17-vism-implementation-plan.md:64` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:67` [権威] |
 | `duplicate` | `capability entry` | 保持。複製されるのは展開済みinstanceであってentryではない | `docs/vism-kit-model.md:297` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:65` [権威] |
 | `duplicate` | `Kit` | 保持。どちらのKitも展開済みで、複製はKit runtimeを必要としない | `docs/vism-kit-model.md:178` [権威]、`docs/vism-kit-model.md:296` [権威] |
@@ -200,12 +202,12 @@
 | `missing` | `Project instance` | 保持。原本を保持し、無関係なDocument領域の編集を許可する | `docs/vism-package-concept.md:210-211` [権威]、`docs/vism-kit-model.md:64` [権威] |
 | `missing` | `artifact` | UNDETERMINED: `docs/vism-kit-model.md` §1.1のProject Lock行に「Projectがartifact identityを固定するか」の決定が要る | `docs/vism-kit-model.md:48` [権威]、`docs/vism-package-concept.md:200-204` [権威] |
 | `reinstall` | `package` | 保持。再導入でユーザー整理を動かさない | `docs/vism-package-concept.md:55` [権威]、`docs/vism-package-concept.md:213` [権威] |
-| `reinstall` | `capability entry` | 保持し再解決される。保持したpayloadから復元する | `docs/vism-package-concept.md:213` [権威]、`docs/vism-kit-model.md:295` [権威] |
+| `reinstall` | `capability entry` | 保持し再解決される。保持したpayloadから復元する | `docs/vism-package-concept.md:213` [権威] |
 | `reinstall` | `Kit` | 保持。再導入はinstall storeの操作であり、どちらのKitの版にも触れない | `docs/vism-kit-model.md:296` [権威]、`docs/vism-package-concept.md:215` [権威] |
 | `reinstall` | `Project instance` | 保持。同一instanceへ復元する | `docs/vism-kit-model.md:297` [権威]、`docs/vism-package-concept.md:213` [権威] |
 | `reinstall` | `artifact` | UNDETERMINED: `docs/vism-package-concept.md` §4.2／§10「source / native binary / WGSLの同梱方式」に「同一version再導入が同一artifact identityを再現するか」の決定が要る | `docs/vism-package-concept.md:284` [権威]、`docs/vism-package-concept.md:100` [権威] |
 | `fork差替え` | `package` | 変化。参照するproviderが別作者の別package identityへ移る。consumer packageは保持される | `docs/vism-kit-model.md:234-235` [権威]、`docs/vism-kit-model.md:238` [権威] |
-| `fork差替え` | `capability entry` | 変化。provider側は別のentry identityになる。consumerは型で接続するためconsumer側entryは保持 | `docs/vism-kit-model.md:23` [権威]、`docs/vism-kit-model.md:238` [権威] |
+| `fork差替え` | `capability entry` | UNDETERMINED: `docs/vism-kit-model.md` の identity 表に「capability entry identity が package に閉じるか」の決定が要る。閉じるなら別 package の entry は別 identity、閉じないなら二つの package が同じ entry ID を持ちうる。`docs/vism-kit-model.md:300` [権威] は package identity を entry ID へ流用することを禁じており、entry ID が package から導出されないことは示すが、scope は決めていない | `docs/vism-kit-model.md:295` [権威]、`docs/vism-kit-model.md:300` [権威] |
 | `fork差替え` | `Kit` | 保持。展開後の差替えは通常のProject編集であり、既に使ったKitの版を変えない。標準Kitとfork Kitが別identityを持つのはケース4の構成であって、この操作の効果ではない | `docs/vism-kit-model.md:178` [権威]、`docs/vism-kit-model.md:179` [権威] |
 | `fork差替え` | `Project instance` | UNDETERMINED: `docs/vism-kit-model.md` §5に「materialize済みProjectのprovider packageをforkへ差し替えた時、置換される側のProject instance identityを保持するか新規採番するか」の決定が要る。consumer側instanceが不変であることは `docs/vism-kit-model.md:238` [権威] が示すが、置換側は未決 | `docs/vism-kit-model.md:182` [権威]、`docs/vism-kit-model.md:238` [権威] |
 | `fork差替え` | `artifact` | 変化。別packageの別実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:68` [権威] |
@@ -246,7 +248,7 @@
 | `reinstall` | `Project instance` | 保持。全kindのentryを使う各instanceが同一instanceへ復元する | `docs/vism-kit-model.md:297` [権威]、`docs/vism-package-concept.md:213` [権威] |
 | `reinstall` | `artifact` | UNDETERMINED: `docs/vism-package-concept.md` §4.2／§10「source / native binary / WGSLの同梱方式」に「同一version再導入が同一artifact identityを再現するか」の決定が要る | `docs/vism-package-concept.md:284` [権威]、`docs/vism-package-concept.md:100` [権威] |
 | `fork差替え` | `package` | 変化。参照先が別作者の別package identityへ移る。fork側が同じkind組のentryを備える保証は無い | `docs/reviews/2026-07-17-vism-implementation-plan.md:64` [権威]、`docs/vism-package-concept.md:282` [権威] |
-| `fork差替え` | `capability entry` | 変化。fork packageの表現契約が持つ別のentry identity群になる | `docs/vism-kit-model.md:295` [権威]、`docs/vism-kit-model.md:300` [権威] |
+| `fork差替え` | `capability entry` | UNDETERMINED: `docs/vism-kit-model.md` の identity 表に「capability entry identity が package に閉じるか」の決定が要る。閉じるなら別 package の entry は別 identity、閉じないなら二つの package が同じ entry ID を持ちうる。`docs/vism-kit-model.md:300` [権威] は package identity を entry ID へ流用することを禁じており、entry ID が package から導出されないことは示すが、scope は決めていない | `docs/vism-kit-model.md:295` [権威]、`docs/vism-kit-model.md:300` [権威] |
 | `fork差替え` | `Kit` | 該当なし。ケース5は単一package内部のentry構成であり、Kit接続を含まない | `docs/reviews/2026-07-17-vism-implementation-plan.md:79` [権威] |
 | `fork差替え` | `Project instance` | UNDETERMINED: `docs/vism-kit-model.md` §5に「参照先packageをforkへ差し替えた時、既存Project instance identityを保持するか新規採番するか」の決定が要る。複数kindのinstanceが同時に差し替わる場合の扱いも同じ決定に属する | `docs/vism-kit-model.md:182` [権威]、`docs/vism-kit-model.md:179` [権威] |
 | `fork差替え` | `artifact` | 変化。別packageの別実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:68` [権威] |
@@ -289,7 +291,7 @@
 | `reinstall` | `Project instance` | 保持。provider側・参照側とも同一instanceへ復元する | `docs/vism-kit-model.md:297` [権威]、`docs/vism-package-concept.md:213` [権威] |
 | `reinstall` | `artifact` | UNDETERMINED: `docs/vism-package-concept.md` §4.2／§10「source / native binary / WGSLの同梱方式」に「同一version再導入が同一artifact identityを再現するか」の決定が要る | `docs/vism-package-concept.md:284` [権威]、`docs/vism-package-concept.md:100` [権威] |
 | `fork差替え` | `package` | 変化。provider参照が別作者の別package identityへ移る。参照側packageは保持される | `docs/vism-kit-model.md:238` [権威]、`docs/vism-package-concept.md:314` [権威] |
-| `fork差替え` | `capability entry` | 変化（provider側）。参照側entryは保持される。kindが異なっても接続は型で成立し、consumerはprovider entry IDを参照しない | `docs/vism-kit-model.md:23` [権威]、`docs/vism-kit-model.md:238` [権威] |
+| `fork差替え` | `capability entry` | UNDETERMINED: `docs/vism-kit-model.md` の identity 表に「capability entry identity が package に閉じるか」の決定が要る。閉じるなら別 package の entry は別 identity、閉じないなら二つの package が同じ entry ID を持ちうる。`docs/vism-kit-model.md:300` [権威] は package identity を entry ID へ流用することを禁じており、entry ID が package から導出されないことは示すが、scope は決めていない | `docs/vism-kit-model.md:295` [権威]、`docs/vism-kit-model.md:300` [権威] |
 | `fork差替え` | `Kit` | 保持。展開後の差替えは通常のProject編集であり、既に使ったKitの版を変えない | `docs/vism-kit-model.md:178` [権威]、`docs/vism-kit-model.md:179` [権威] |
 | `fork差替え` | `Project instance` | UNDETERMINED: `docs/vism-kit-model.md` §5に「materialize済みProjectのprovider packageをforkへ差し替えた時、置換される側のProject instance identityを保持するか新規採番するか」の決定が要る。参照側instanceが不変であることは `docs/vism-kit-model.md:238` [権威] が示すが、置換側は未決 | `docs/vism-kit-model.md:182` [権威]、`docs/vism-kit-model.md:238` [権威] |
 | `fork差替え` | `artifact` | 変化。別packageの別実体であり、別のartifact identityになる | `docs/vism-kit-model.md:298` [権威]、`docs/reviews/2026-07-17-vism-implementation-plan.md:68` [権威] |
@@ -302,8 +304,10 @@
 
 **誤りは埋まっている側にあった。** ケース4の `fork差替え × Kit` が、根拠として当該ケースの定義文（`2026-07-17-vism-implementation-plan.md:77`）とその例示（`vism-kit-model.md:234-235`）を引いており、循環していた。同じ操作がケース3・6では `vism-kit-model.md:178-179` を根拠に `保持` になっていたため、同一台帳から結論が割れていた。本書では `保持` へ揃え、ケース構成と操作の効果を書き分けた。
 
-**未処理の指摘（3件）。** いずれも値ではなく根拠の弱さである。次の改訂で根拠を差し替えるか `UNDETERMINED` へ倒すかを判断する。
+**指摘3件は処理した。**
 
-1. ケース1・2・5 の `fork差替え × capability entry = 変化` — `vism-kit-model.md:295`（所有者）と `:300`（package identityをentry IDへ流用しない）は、fork packageが別のentry identityを持つことを述べていない
-2. 全ケースの `update × artifact = 変化` の第二引用 `vism-package-concept.md:123` — source と immutable artifact の配布topology分離であって、新versionが別artifact identityになることは述べていない
-3. 全ケースの `reinstall × capability entry = 保持` の第二引用 `vism-kit-model.md:295` — 所有者行であり再導入時の再解決を支えない
+1. `fork差替え × capability entry = 変化` — 全6ケースを `UNDETERMINED`（U6）へ倒した。`docs/vism-kit-model.md:295`（所有者）と `:300`（package identityをentry IDへ流用しない）は、fork packageが別のentry identityを持つことを述べていない。`:300` はむしろentry IDがpackageから導出されないことを示しており、二つのpackageが同じentry IDを持つ余地を閉じていない。entry identityがpackageに閉じるかが未決である以上、`変化` と断定できない。
+2. `update × artifact = 変化` — 第二引用 `docs/vism-package-concept.md:123`（sourceとimmutable artifactの配布topology分離）を落とした。第一引用 `docs/vism-kit-model.md:298`（「同じsource／版から得た実体の由来」）だけで、版が変われば別実体になることは支えられる。値は変えていない。
+3. `reinstall × capability entry = 保持` — 第二引用 `docs/vism-kit-model.md:295`（所有者行）を落とした。第一引用 `docs/vism-package-concept.md:213`（再導入後に保持したpayloadから復元する）が根拠として残る。値は変えていない。
+
+この訂正で `UNDETERMINED` は30から36へ増えた。**未決が増えたのは後退ではなく、循環根拠と無支持の断定を取り除いた結果である。**
