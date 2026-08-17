@@ -161,11 +161,11 @@ gate結果は`docs/reviews/README.md`に索引されていたが、そこから�
 | node | 状態 | 現在地 | 次の一手 |
 |---|---|---|---|
 | （gate #1 CLI音声mux到達） | `DONE` | commit `97830975`(2026-08-10)で`export-document` subcommandが`export_document_video`へ到達。gate指摘は解決済み | 追加作業なし。**未解決として再発注しない** |
-| `N-IMPORT-AUDIO` | `DECIDE / ABSENT`（訂正） | `asset_video_only`の8箇所は全て`document_edit_runtime.rs:1135`以降の`#[cfg(test)]`内。**音声を落としているのではなく製品import経路が無い** | 独立発注しない。`N-MEDIA-PLACE`施工時の選択事項へ畳む |
+| `N-IMPORT-AUDIO` | `DONE`（2026-08-17） | `import` subcommandが音声(`audio/*`)を動画と同経路で取り込み、`SetSoundtrack`が消費する。E2E `headless_mv_e2e`で音声streamの出力到達まで審判済み | 追加作業なし |
 | `N-MEDIA-PICK` | `DECIDE / ABSENT` | 素材を選ぶ入口が`crates/` `ui/`に0件。リポ外probeのrfd実装は製品転記禁止で意図的に非コミット | **`N-PROJECT-ENTRY`と同じ「file dialogの席」へ収束**。個別発注しない |
-| `N-MEDIA-PLACE` | `DECIDE / BUILT_UNWIRED`（訂正） | `Command::AdmitAsset`は型として実在・Undo可能だが、`prepare_admit_asset`の呼び出しはtestのみで**`motolii-ui`に`AdmitAsset`が0件**。Browserの品目も`rectangle`固定1件 | admission接続と配置intentを1粒に束ねない。先にどちらが先かを決める |
+| `N-MEDIA-PLACE` | `DONE / GUI残`（2026-08-17） | admission接続は完了: `probe_admission_source`→`AssetDraft::from_probed_source`→既存`prepare_admit_asset`(commit `ffee0d34`)、配置は`prepare_place_asset_clip`(CU-101意味、doc所有)+CLI `place`。E2E緑 | 残るはBrowser UIからの配置intent(GUI半分)のみ |
 | `N-PROJECT-ENTRY` | `DECIDE / ABSENT`（2026-08-17再訂正） | 2026-08-16のWeb窓/RN畳み込み後、`crates/motolii-ui/src/shell.rs`は全27行(`toolkit_linked`と`ShellError`のみ)で**Open実装は現存しない**(`open_project_runtime`もrepo 0件)。`--motolii-project`/`MOTOLII_PROJECT`もrepo全体0件、`blitz_shell/main.rs`の引数は`--screenshot`のみ。`ProjectSession::open`の製品呼び出しはCLI(export/debug)の3箇所 | file dialogの席として`N-MEDIA-PICK`と一緒に閉じる。旧記述の`shell.rs:58`/`AppDelegate.mm:23`は畳み込み前の座標であり参照しない |
-| `N-SOUNDTRACK-WRITE` | `DECIDE / ABSENT` | `Document.soundtrack`（`motolii-doc/src/lib.rs:137`）・validate・`AudioProgram`・muxは揃うが、`command.rs`にsoundtrackを設定するvariantが0件 | 完成条件の「音楽同期」の入口。M2 Document ownerへ返す粒であり、M3接続粒として修理しない |
+| `N-SOUNDTRACK-WRITE` | `DONE`（2026-08-17） | `Command::SetSoundtrack { old, new }`(commit `ea5fc2ef`、decision=[soundtrack command](reviews/2026-08-17-soundtrack-command-decision.md))が唯一の書き込み経路。CLI `set-soundtrack`とE2Eで出力到達まで審判済み | 追加作業なし |
 
 gate #6／#7は[統合地図§5.9](outcome-driven-integration-map.md)の`T1`（RN Inspector編集route）と
 `T3`（`SetEffectEnabled`呼び出し0件）に既登録である。**重複nodeを立てない。**
