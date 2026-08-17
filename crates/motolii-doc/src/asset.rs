@@ -196,6 +196,47 @@ pub struct AssetDraft {
 }
 
 impl AssetDraft {
+    /// probe済みsourceのplain値から新規file-backed draftを組む(IOなし・純関数)。
+    ///
+    /// - `content_hash`/`size_bytes`は正準`SourceFingerprintV1`
+    ///   (`motolii-source-v1:sha256:<64 lowercase hex>` + exact size)から写す
+    /// - `head_hash`/`tail_hash`はlegacy hint(2026-08-08 serial-core決定で
+    ///   identity authorityから退役済み)であり、新規admissionでは発行しない
+    /// - `name`はfile stem、`file_name`はfile name
+    /// - `path_project_relative`は`path_absolute`が`project_root`配下の時だけ
+    ///   純粋なprefix計算で入れる(ファイルコピー・実在確認はしない)
+    ///
+    /// probe自体(ffprobe/hash IO)は`motolii-media`側が持つ。ここはplain値のみ。
+    pub fn from_probed_source(
+        asset_type: impl Into<String>,
+        fingerprint: &SourceFingerprintV1,
+        path_absolute: &std::path::Path,
+        project_root: Option<&std::path::Path>,
+    ) -> Self {
+        let file_name = path_absolute
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned());
+        let name = path_absolute
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().into_owned())
+            .or_else(|| file_name.clone())
+            .unwrap_or_else(|| path_absolute.to_string_lossy().into_owned());
+        let path_project_relative = project_root
+            .and_then(|root| path_absolute.strip_prefix(root).ok())
+            .map(|relative| Asset::normalize_path(&relative.to_string_lossy()));
+        Self {
+            name,
+            asset_type: asset_type.into(),
+            content_hash: fingerprint.content_hash(),
+            path_absolute: Some(Asset::normalize_path(&path_absolute.to_string_lossy())),
+            path_project_relative,
+            file_name,
+            size_bytes: Some(fingerprint.size_bytes()),
+            head_hash: None,
+            tail_hash: None,
+        }
+    }
+
     pub(crate) fn into_asset(self, id: AssetId) -> Asset {
         let mut asset = Asset {
             id,
