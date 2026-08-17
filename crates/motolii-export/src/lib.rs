@@ -101,6 +101,10 @@ pub enum ExportError {
     DegradedPlugins(Vec<PluginDiagnostic>),
     #[error(transparent)]
     Audio(#[from] motolii_audio::AudioError),
+    /// cancel 口(`export_document_video_cancellable`)からの早期終了。
+    /// 部分出力は残さない(呼び手が成果物と取り違えないこと)。
+    #[error("export cancelled")]
+    Cancelled,
 }
 
 /// 書き出し設定。Document≠ExportJob(M2E-11⑤)。
@@ -222,6 +226,21 @@ pub fn export_document_video(
     gpu: &GpuCtx,
     job: &ExportJob<'_>,
 ) -> Result<ExportReport, ExportError> {
+    // cancel 無し呼び出しの意味・出力は従来と同一(flag は誰も立てない)。
+    export_document_video_cancellable(gpu, job, &std::sync::atomic::AtomicBool::new(false))
+}
+
+/// `export_document_video` + 最小の cancel 口(2026-08-18、GUI 書き出し面)。
+///
+/// `cancel` は frame loop が毎周見るだけの `AtomicBool`。立っていたら
+/// [`ExportError::Cancelled`] で早期 return し、**書きかけの出力 file は消す**。
+/// `ExportJob` に field を足さないのは、既存の呼び手(CLI / テスト)の struct
+/// literal を壊さないため — cancel 無しの経路は上の wrapper がそのまま持つ。
+pub fn export_document_video_cancellable(
+    gpu: &GpuCtx,
+    job: &ExportJob<'_>,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<ExportReport, ExportError> {
     // 実装ガード9: 開く=診断、書き出す=拒否(D1fの接続点。未知pluginは発明しない)。
     let prepared = job.doc.prepare_plugins(job.runtime.catalog())?;
     let mut degraded = prepared.diagnostics().to_vec();
@@ -251,6 +270,10 @@ pub fn export_document_video(
     let mut frames_written = 0usize;
     let mut loop_error = None;
     while job.frame_count.map(|n| frames_written < n).unwrap_or(true) {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            loop_error = Some(ExportError::Cancelled);
+            break;
+        }
         let timeline_time = match RationalTime::try_from_frame(frames_written as i64, timeline_fps)
         {
             Ok(t) => t,
@@ -314,7 +337,9 @@ pub fn export_document_video(
     }
     let finish_error = encoder.finish().err().map(ExportError::from);
     if let Some(e) = loop_error {
-        if !matches!(soundtrack, AudioExportPlan::None) {
+        // cancel は「無かったこと」にする: 書きかけの出力も消す(他のエラーの
+        // 掃除は従来どおり mux 用一時 file だけで、挙動を変えない)。
+        if !matches!(soundtrack, AudioExportPlan::None) || matches!(e, ExportError::Cancelled) {
             let _ = std::fs::remove_file(encode_path);
         }
         return Err(e);

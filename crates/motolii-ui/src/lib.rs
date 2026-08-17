@@ -20,6 +20,9 @@ mod display_slot;
 pub mod dock;
 mod document_command_request;
 mod egui_fonts;
+/// 書き出し面の座席(Export ボタンの後ろ)。開始判断・別thread起動・
+/// キャンセル・完了pollを持ち、dialog は持たない。shell と統合テストが同じ列を呼ぶ。
+pub mod export_seat;
 mod host_pointer_capture;
 // C7: Inspector の見た目のBlitz(HTML/CSS)写し。dump 器・oracle 源として残す。
 pub mod inspector_blitz;
