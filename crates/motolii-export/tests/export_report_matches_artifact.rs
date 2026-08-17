@@ -94,6 +94,7 @@ fn document_with_short_soundtrack(video: &Path, audio: &Path) -> Document {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
     let audio_id = AssetId::from_raw(1);
@@ -109,6 +110,7 @@ fn document_with_short_soundtrack(video: &Path, audio: &Path) -> Document {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
 

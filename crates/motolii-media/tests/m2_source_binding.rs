@@ -27,6 +27,7 @@ fn asset(path: &std::path::Path, fingerprint: &SourceFingerprintV1) -> Asset {
         size_bytes: Some(fingerprint.size_bytes()),
         head_hash: None,
         tail_hash: None,
+        duration: None,
     }
 }
 

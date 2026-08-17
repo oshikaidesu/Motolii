@@ -953,6 +953,7 @@ mod resolve_tests {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         }
     }
 

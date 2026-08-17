@@ -81,6 +81,7 @@ fn camera_document(project_root: &Path, video_name: &str, camera: CompCameraDoc)
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
 

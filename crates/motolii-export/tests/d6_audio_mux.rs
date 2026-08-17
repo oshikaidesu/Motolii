@@ -114,6 +114,7 @@ fn build_doc(video_name: &str, audio_name: Option<(&str, RationalTime)>) -> Docu
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
 
@@ -131,6 +132,7 @@ fn build_doc(video_name: &str, audio_name: Option<(&str, RationalTime)>) -> Docu
                 size_bytes: None,
                 head_hash: None,
                 tail_hash: None,
+                duration: None,
             })
             .unwrap();
         doc.soundtrack = Some(Soundtrack::try_new(audio_id, offset, 1.0).unwrap());

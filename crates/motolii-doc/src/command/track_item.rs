@@ -48,9 +48,12 @@ pub fn prepare_add_group(
     })
 }
 
-/// 素材clipを最初のTrackの末尾へ置く準備をする(CU-101のPlace意味のCLI/GUI共通口)。
+/// 素材clipを最初のTrackの末尾へ置く準備をする(Place意味のCLI/GUI共通口)。
 ///
-/// - 尺は`start`からcomposition endまで(playhead相当は呼び側が渡す)
+/// - 尺は`min(素材の長さ, composition end - start)`。**素材より長いclipは作らない** —
+///   CU-101は「startからcomposition endまで」だったが、実走(2026-08-18観察(1))で
+///   4sの素材が10sのclipになり終端がフリーズフレームの尾になると分かったので置き換えた。
+///   `Asset.duration`を持たない素材(生成系・stream・旧文書)は従来どおりcomposition endまで
 /// - componentはasset_typeの大分類から: `video/*`→video ordinal 0、`audio/*`→audio ordinal 0。
 ///   stream実在の細部はexport/mix時の検証に任せる
 /// - `LayerId`はreserveのみ。表示名はasset名で`layer_names`に載せる(`prepare_add_group`と同型)
@@ -75,19 +78,27 @@ pub fn prepare_place_asset_clip(
         });
     };
     let name = asset.name.clone();
+    // 素材の長さ。非正値は「測れていない」と同じ扱いにする(壊れたヒントで
+    // 置けなくなるより、従来のcomposition end挙動へ落ちる方が人にとって普通)。
+    let source_duration = asset.duration.filter(|d| *d > RationalTime::ZERO);
 
-    // duration = composition end - start(正確な有理数演算、i128で桁溢れ検査)。
+    // composition end - start(正確な有理数演算、i128で桁溢れ検査)。
     let end = doc.composition.duration;
     let num = (end.num() as i128) * (start.den() as i128) - (start.num() as i128) * (end.den() as i128);
     let den = (end.den() as i128) * (start.den() as i128);
     if num <= 0 {
         return Err(CommandError::PlacementOutsideComposition);
     }
-    let duration = i64::try_from(num)
+    let remaining = i64::try_from(num)
         .ok()
         .zip(i64::try_from(den).ok())
         .and_then(|(num, den)| RationalTime::try_new(num, den).ok())
         .ok_or(CommandError::PlacementTimeOverflow)?;
+    // 素材の長さを知っているなら、そこで切る。知らないなら残り全部。
+    let duration = match source_duration {
+        Some(source) => source.min(remaining),
+        None => remaining,
+    };
 
     let track = doc.tracks.first().ok_or(CommandError::NoTrackForPlacement)?;
     let parent = ParentLocator::Track(track.id);

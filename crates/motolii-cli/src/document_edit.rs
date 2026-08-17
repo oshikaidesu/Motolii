@@ -66,12 +66,14 @@ pub fn import_asset(project: &Path, media: &Path) -> Result<AssetId, CliError> {
         .filter(|parent| !parent.as_os_str().is_empty())
         .and_then(|parent| parent.canonicalize().ok());
     with_writer(project, move |writer| {
-        let draft = AssetDraft::from_probed_source(
+        let mut draft = AssetDraft::from_probed_source(
             source.asset_type.clone(),
             &source.fingerprint,
             &absolute,
             root.as_deref(),
         );
+        // probeが測った総尺を落とさない。placeの尺決めがこれを見る。
+        draft.duration = source.duration;
         let prepared = writer
             .prepare_admit_asset(draft)
             .map_err(|e| CliError::Usage(e.to_string()))?;

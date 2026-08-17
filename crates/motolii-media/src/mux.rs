@@ -39,6 +39,13 @@ pub struct SoundtrackMuxRequest<'a> {
     pub start_offset: RationalTime,
     /// [0, 1]。1.0以外はストリームコピー不可。
     pub master_gain: f64,
+    /// 出力の上限尺 = **映像の尺**。`None`なら上限を置かない。
+    ///
+    /// `-shortest`は使わない(2026-08-18観察(2)): 音が先に終わるのは普通の編集の
+    /// 通常事態であって、そこで絵まで切ると報告した枚数と現物が食い違う。
+    /// 上限を映像側に固定すれば、長い音は従来どおり映像尺で切られ、短い音は
+    /// 足りないぶん鳴らないだけ — どちらでも**映像は1枚も落ちない**。
+    pub video_duration: Option<RationalTime>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,7 +137,7 @@ pub fn mux_soundtrack(req: &SoundtrackMuxRequest<'_>) -> Result<SoundtrackMuxRep
 
     let audio = probe_audio(req.audio_path)?;
     let encode_mode = choose_audio_encode_mode(&audio.codec_name, req.master_gain);
-    let offset = format_offset_secs(req.start_offset);
+    let offset = format_secs(req.start_offset);
 
     let mut cmd = Command::new("ffmpeg");
     cmd.args(["-v", "error", "-y"]);
@@ -153,8 +160,12 @@ pub fn mux_soundtrack(req: &SoundtrackMuxRequest<'_>) -> Result<SoundtrackMuxRep
             }
         }
     }
-    // 映像尺に合わせて音声を切る(MV最終書き出し: コンポ尺=映像)。
-    cmd.args(["-shortest", "-movflags", "+faststart"]);
+    // 映像尺に合わせて音声を切る(MV最終書き出し: コンポ尺=映像)。上限は映像の
+    // 尺そのものなので、映像フレームは1枚も落ちない(`video_duration`のdocを見よ)。
+    if let Some(limit) = duration_limit_arg(req.video_duration) {
+        cmd.args(["-t", &limit]);
+    }
+    cmd.args(["-movflags", "+faststart"]);
     cmd.arg(req.output_path);
     cmd.stderr(std::process::Stdio::piped());
 
@@ -185,6 +196,8 @@ pub struct MixedPcmMuxRequest<'a> {
     /// IEEE float WAV(48kHz / stereo / f32le)。
     pub pcm_wav_path: &'a Path,
     pub output_path: &'a Path,
+    /// 出力の上限尺 = 映像の尺。意味は[`SoundtrackMuxRequest::video_duration`]と同じ。
+    pub video_duration: Option<RationalTime>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,20 +211,12 @@ pub fn mux_mixed_pcm(req: &MixedPcmMuxRequest<'_>) -> Result<MixedPcmMuxReport> 
     cmd.arg("-i").arg(req.video_path);
     cmd.arg("-i").arg(req.pcm_wav_path);
     cmd.args([
-        "-map",
-        "0:v:0",
-        "-map",
-        "1:a:0",
-        "-c:v",
-        "copy",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "192k",
-        "-shortest",
-        "-movflags",
-        "+faststart",
+        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
     ]);
+    if let Some(limit) = duration_limit_arg(req.video_duration) {
+        cmd.args(["-t", &limit]);
+    }
+    cmd.args(["-movflags", "+faststart"]);
     cmd.arg(req.output_path);
     cmd.stderr(std::process::Stdio::piped());
 
@@ -269,10 +274,17 @@ pub fn write_f32le_wav_stereo_48k(path: &Path, interleaved: &[f32]) -> Result<()
     Ok(())
 }
 
-fn format_offset_secs(t: RationalTime) -> String {
+fn format_secs(t: RationalTime) -> String {
     // 有理数を十分精度の秒文字列へ。比較・演算には使わずffmpeg引数専用。
     let s = format!("{:.9}", t.as_seconds_f64());
     s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// 上限尺の`-t`引数。正値のときだけ置く(0や負は「上限なし」と同じ扱い)。
+fn duration_limit_arg(duration: Option<RationalTime>) -> Option<String> {
+    duration
+        .filter(|d| *d > RationalTime::ZERO)
+        .map(format_secs)
 }
 
 #[cfg(test)]
@@ -353,6 +365,7 @@ mod tests {
             output_path: Path::new("o.mp4"),
             start_offset: RationalTime::try_new(-1, 10).unwrap(),
             master_gain: 1.0,
+            video_duration: None,
         })
         .unwrap_err();
         assert!(matches!(err, MediaError::InvalidStartOffset(_)));
@@ -376,6 +389,7 @@ mod tests {
             output_path: &out,
             start_offset: RationalTime::ZERO,
             master_gain: 1.0,
+            video_duration: RationalTime::try_new(2, 1).ok(),
         })
         .unwrap();
         assert_eq!(report.encode_mode, AudioEncodeMode::StreamCopy);
@@ -383,12 +397,12 @@ mod tests {
 
         let got = dir.join("got.pcm");
         let want = dir.join("want.pcm");
-        // 映像尺(=shortest)に揃えた区間でPCM比較。
+        // 映像尺に揃えた区間でPCM比較。
         extract_pcm(&out, &got, None, Some("2"));
         extract_pcm(&audio, &want, None, Some("2"));
         let got_bytes = std::fs::read(&got).unwrap();
         let want_bytes = std::fs::read(&want).unwrap();
-        // -shortest は映像パケット境界で切るため、AACフレーム単位で数ms短くなり得る。
+        // 上限は AAC フレーム境界で丸まるため数ms短くなり得る。
         // 重なる先頭はサンプル一致であることを完了条件の審判にする。
         let n = got_bytes.len().min(want_bytes.len());
         assert!(n > 48_000, "expected ~1s+ of pcm, got {n} bytes");
@@ -422,6 +436,7 @@ mod tests {
             output_path: &out,
             start_offset: offset,
             master_gain: 1.0,
+            video_duration: RationalTime::try_new(1, 1).ok(),
         })
         .unwrap();
         assert_eq!(report.encode_mode, AudioEncodeMode::StreamCopy);

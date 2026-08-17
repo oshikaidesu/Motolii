@@ -58,6 +58,7 @@ fn video_document(video_name: &str, aspect_num: i64, aspect_den: i64) -> Documen
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
 

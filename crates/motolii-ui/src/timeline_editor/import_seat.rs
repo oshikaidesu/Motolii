@@ -6,7 +6,7 @@
 //!
 //! ```text
 //! probe_admission_source        … 拡張子→asset_type、container、content hash
-//! AssetDraft::from_probed_source … 名前・path(project 相対も)・size
+//! AssetDraft::from_probed_source … 名前・path(project 相対も)・size(尺は呼び手が足す)
 //! prepare_admit_asset / apply_*  … 素材台帳へ入れる(table-local ID の照合つき)
 //! prepare_place_asset_clip       … 最初のトラックの末尾へ clip を置く
 //! ```
@@ -74,12 +74,15 @@ pub(crate) fn import_and_place(
         }
     }
 
-    let draft = AssetDraft::from_probed_source(
+    let mut draft = AssetDraft::from_probed_source(
         source.asset_type.clone(),
         &source.fingerprint,
         &absolute,
         root.as_deref(),
     );
+    // CLI の import と同じく、probe が測った総尺を Asset まで運ぶ
+    // (place の尺がこれを見て素材の終わりで切る)
+    draft.duration = source.duration;
     let prepared = writer
         .prepare_admit_asset(draft)
         .map_err(|error| error.to_string())?;

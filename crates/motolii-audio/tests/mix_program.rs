@@ -79,6 +79,7 @@ fn soundtrack_and_clip_audio_mix_together() {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
     doc.assets
@@ -93,6 +94,7 @@ fn soundtrack_and_clip_audio_mix_together() {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
     doc.soundtrack = Some(Soundtrack::try_new(bed_id, RationalTime::ZERO, 1.0).unwrap());
@@ -350,6 +352,7 @@ fn soundtrack_start_offset_shortens_timeline_duration() {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
     let offset = RationalTime::try_new(240, 48_000).unwrap(); // 半分
