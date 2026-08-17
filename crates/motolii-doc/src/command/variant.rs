@@ -7,7 +7,8 @@ use motolii_core::{RationalTime, TimeMap};
 use crate::asset::Asset;
 use crate::param::DocParam;
 use crate::schema::{
-    BlendMode, ClippingMaskSettings, EffectDefinition, EffectInstance, EffectUse, Locator, TrackItem,
+    BlendMode, ClippingMaskSettings, EffectDefinition, EffectInstance, EffectUse, Locator,
+    Soundtrack, TrackItem,
 };
 use crate::stable_id::{EffectDefinitionId, EffectId, KeyframeId, StableIdReservation};
 use crate::{Document, LayerId};
@@ -304,6 +305,13 @@ pub enum Command {
         target: LayerId,
         old: bool,
         new: bool,
+    },
+    /// `Document.soundtrack`(プロジェクト直下の楽曲1本)を差し替える唯一の書き込み経路
+    /// (N-SOUNDTRACK-WRITE)。`None`は「楽曲なし」。applyは`new.asset`の台帳存在だけを検証する
+    /// (gain等のpayload不変条件は`Soundtrack::try_new`/Deserializeが構築時に閉じている)。
+    SetSoundtrack {
+        old: Option<Soundtrack>,
+        new: Option<Soundtrack>,
     },
 }
 

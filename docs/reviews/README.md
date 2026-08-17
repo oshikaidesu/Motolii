@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-17-soundtrack-command-decision.md](2026-08-17-soundtrack-command-decision.md) | `Command::SetSoundtrack { old, new }`を`Document.soundtrack`の唯一の書き込み経路として決定。apply時UnknownAssetId拒否、singleton merge key、v3-only journal decode。N-SOUNDTRACK-WRITEを閉じる |
 | [2026-08-15-blitz-ui-runtime-adoption-proposal.md](2026-08-15-blitz-ui-runtime-adoption-proposal.md) | UI基盤をBlitz(HTML/CSS)+テクスチャ合成へ移す起案。処分すべき既決3件(RN再基線・Skia ADOPT・Web窓)と未了6件を固定。比較中・裁定未記入 |
 | [2026-08-15-blitz-ui-runtime-probe.md](2026-08-15-blitz-ui-runtime-probe.md) | Blitz(HTML/CSS)をUI基盤候補として実測。自前wgpu29テクスチャへの描画はPASS、キーはフォーム要素にしか届かない等の制約と版の罠を記録。比較中・裁定未了 |
 | [2026-08-16-daw-playhead-follow-prior-art.md](2026-08-16-daw-playhead-follow-prior-art.md) | **再生中に窓をどう動かすかを、Ardour(GPL)・LMMS(GPL)・Ableton Live 11の実装で確認した観察**。追従の型は「ページ送り」と「中央固定」の2つだけで、**自作した「相対位置を保つ」は先例に無い**(窓が止まる時間がゼロになる)。ページ送りは**ページの内側では1pxも動かない**(Ardour `editing_context.cc:3746`)、前進時の着地は**playheadが新しい左端**(次の送りまでが最長)、瞬間移動は避けるのではなく**600msかけて見せる**(LMMS `SongEditor.cpp:727`)、ドラッグ中は追従しない(同`:1570`)。GPLのためコードは持ち込まずPATTERNのみ。**実装は同日に撤廃** — 利用者の違和感の対象は追従ではなく目盛の明暗で、Abletonの窓の挙動は調査前の実装と同じだった。症状から原因を推測して調査に走った失敗の記録でもある |

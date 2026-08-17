@@ -425,6 +425,7 @@ impl Command {
                 old: new,
                 new: old,
             },
+            Command::SetSoundtrack { old, new } => Command::SetSoundtrack { old: new, new: old },
         }
     }
 }
