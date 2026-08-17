@@ -191,6 +191,12 @@ pub fn create_project_file(path: &Path) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     let mut document = motolii_doc::Document::new_current();
+    // 2026-08-17決定: 新規projectの出力解像度既定は1920x1080(CLI `new_document`と同値。
+    // 以後の変更は`Command::SetCompositionResolution`だけが書く)。
+    document
+        .composition
+        .set_resolution(Some((1920, 1080)))
+        .map_err(|error| error.to_string())?;
     // 受け皿のトラックが無いと clip を1本も置けない（`prepare_place_asset_clip`）。
     let track = document
         .track_ids
