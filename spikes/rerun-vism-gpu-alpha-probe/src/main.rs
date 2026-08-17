@@ -30,9 +30,15 @@ const CONTROL_GRID_PARENT_PATH: &str = "layer-stack/control-grid";
 const SCREENSHOT_DELAY_FRAMES: u32 = 16;
 /// ここでhostが別のtextureへ描き始める。撮影はこれより後。
 const SWAP_AT_FRAME: u32 = 8;
+/// stress: レイヤーを外す。poolはここから借り物を回収し始める。
+const STRESS_CLEAR_AT_FRAME: u32 = 30;
+/// stress: 同じtextureを再投入する。回収時にdestroyされていればここで露見する。
+const STRESS_REIMPORT_AT_FRAME: u32 = 90;
+/// stress: 撮影フレーム。再投入後も十分に回す。
+const STRESS_SCREENSHOT_FRAME: u32 = 200;
 
 fn main() -> eframe::Result {
-    let screenshot = parse_args();
+    let (screenshot, stress) = parse_args();
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1280.0, 800.0])
@@ -46,17 +52,20 @@ fn main() -> eframe::Result {
         native_options,
         Box::new(move |creation_context| {
             setup_render_context(creation_context)?;
-            Ok(Box::new(StageHost::new(screenshot)?))
+            Ok(Box::new(StageHost::new(screenshot, stress)?))
         }),
     )
 }
 
-fn parse_args() -> PathBuf {
+fn parse_args() -> (PathBuf, bool) {
     let args: Vec<_> = std::env::args().skip(1).collect();
     match args.as_slice() {
-        [flag, path] if flag == "--screenshot" => PathBuf::from(path),
+        [flag, path] if flag == "--screenshot" => (PathBuf::from(path), false),
+        [flag, path, stress] if flag == "--screenshot" && stress == "--stress" => {
+            (PathBuf::from(path), true)
+        }
         _ => {
-            eprintln!("usage: rerun-vism-gpu-alpha-probe --screenshot <output.png>");
+            eprintln!("usage: rerun-vism-gpu-alpha-probe --screenshot <output.png> [--stress]");
             std::process::exit(2);
         }
     }
@@ -68,6 +77,14 @@ fn setup_render_context(cc: &eframe::CreationContext<'_>) -> Result<(), String> 
         .wgpu_render_state
         .as_ref()
         .ok_or_else(|| "eframeのWGPU render stateが無い".to_owned())?;
+    // 検証層のメッセージは既定でどこにも出ない。借り物textureをdestroyしてしまった場合の
+    // "Texture ... is destroyed" はここでしか見えないので、拾って即座に落とす。
+    render_state
+        .device
+        .on_uncaptured_error(std::sync::Arc::new(|error| {
+            eprintln!("WGPU VALIDATION: {error}");
+            std::process::exit(3);
+        }));
     let render_ctx = RenderContext::new(
         &render_state.adapter,
         render_state.device.clone(),
@@ -86,6 +103,8 @@ fn setup_render_context(cc: &eframe::CreationContext<'_>) -> Result<(), String> 
 
 struct StageHost {
     stage: SpatialStage,
+    /// 解放経路とlong runを踏む筋書きへ切り替える。
+    stress: bool,
     screenshot: PathBuf,
     frame_count: u32,
     focus_frames: u8,
@@ -93,17 +112,22 @@ struct StageHost {
     /// ダブルバッファを模して2枚持ち、途中で差し替える。
     filter_output: Vec<wgpu::Texture>,
     draw_order_sent: bool,
+    /// stress: texture poolの常駐数の推移。積み上がればリーク。
+    pool_samples: Vec<usize>,
     screenshot_requested: bool,
     captured: bool,
     error: Option<String>,
 }
 
 impl StageHost {
-    fn new(screenshot: PathBuf) -> Result<Self, String> {
+    fn new(screenshot: PathBuf, stress: bool) -> Result<Self, String> {
         let mut stage = SpatialStage::new(ApplicationId::from("rerun-vism-gpu-alpha-probe"))
             .map_err(|error| format!("create Rerun spatial stage: {error}"))?;
         ingest_background(&mut stage)?;
-        ingest_control_image(&mut stage)?;
+        // stressでは対照群を置かない。既知の黒い矩形があるとPNG oracleの「黒が無い」判定が使えない。
+        if !stress {
+            ingest_control_image(&mut stage)?;
+        }
         ingest_transform(
             &mut stage,
             FOREGROUND_PARENT_PATH,
@@ -113,11 +137,13 @@ impl StageHost {
         )?;
         Ok(Self {
             stage,
+            stress,
             screenshot,
             frame_count: 0,
             focus_frames: 3,
             filter_output: Vec::new(),
             draw_order_sent: false,
+            pool_samples: Vec::new(),
             screenshot_requested: false,
             captured: false,
             error: None,
@@ -154,17 +180,41 @@ impl StageHost {
             // 途中で別のtextureへ差し替える。entity pathもtexture keyも同じなので、
             // importが毎回取り直していなければAが出続ける = ダブルバッファが効かない。
             let index = usize::from(self.frame_count >= SWAP_AT_FRAME);
-            self.stage
-                .copy_gpu_image(&render_ctx, FOREGROUND_IMAGE_PATH, &self.filter_output[index])
-                .map_err(|error| format!("hand Vism GPU output to stage: {error}"))?;
-            if !self.draw_order_sent {
-                // entityは`copy_gpu_image`が作るので、その後でdraw orderだけ足す。
-                ingest_draw_order(&mut self.stage, FOREGROUND_IMAGE_PATH, 10.0)?;
-                self.draw_order_sent = true;
+
+            // stressでは一度レイヤーを外し、poolが借り物を回収する猶予を与えたうえで、
+            // **同じtexture**を再投入する。回収時にdestroy()されていればここで検証層が鳴る。
+            let dropped = self.stress
+                && (STRESS_CLEAR_AT_FRAME..STRESS_REIMPORT_AT_FRAME).contains(&self.frame_count);
+            if self.stress && self.frame_count == STRESS_CLEAR_AT_FRAME {
+                self.stage
+                    .clear_gpu_image(FOREGROUND_IMAGE_PATH)
+                    .map_err(|error| format!("clear Vism layer: {error}"))?;
+                self.draw_order_sent = false;
+                println!("stress: dropped the layer at frame {}", self.frame_count);
+            }
+            if !dropped {
+                if self.stress && self.frame_count == STRESS_REIMPORT_AT_FRAME {
+                    println!("stress: re-importing the same texture at frame {STRESS_REIMPORT_AT_FRAME}");
+                }
+                self.stage
+                    .copy_gpu_image(&render_ctx, FOREGROUND_IMAGE_PATH, &self.filter_output[index])
+                    .map_err(|error| format!("hand Vism GPU output to stage: {error}"))?;
+                if !self.draw_order_sent {
+                    // entityは`copy_gpu_image`が作るので、その後でdraw orderだけ足す。
+                    ingest_draw_order(&mut self.stage, FOREGROUND_IMAGE_PATH, 10.0)?;
+                    self.draw_order_sent = true;
+                }
             }
             // 既定カメラのscene fitに任せる。前景が描かれない場合にbboxが無く、
             // focusが効いたかどうかで判定がぶれるのを避ける。
             let _ = self.focus_frames;
+            // 毎フレームre-importするので、pool entryが積み上がらないことを数で見る。
+            // 回収されていれば定常、されていなければフレーム数に比例して増える。
+            if self.stress && matches!(self.frame_count, 40 | 120 | 200) {
+                let live = render_ctx.gpu_resources.textures.num_resources();
+                println!("stress: frame {} textures in pool = {live}", self.frame_count);
+                self.pool_samples.push(live);
+            }
             self.stage
                 .show(ui, &mut render_ctx)
                 .map_err(|error| error.to_string())
@@ -200,15 +250,26 @@ impl StageHost {
                         height
                     );
                     self.captured = true;
+                    if self.stress {
+                        match check_layer_oracle(image.as_raw()) {
+                            Ok(report) => println!("stress oracle: pass — {report}"),
+                            Err(failure) => {
+                                eprintln!("stress oracle: FAIL — {failure}");
+                                std::process::exit(1);
+                            }
+                        }
+                    }
                 }
                 Err(error) => self.error = Some(error),
             }
             return;
         }
-        if !self.captured
-            && !self.screenshot_requested
-            && self.frame_count >= SCREENSHOT_DELAY_FRAMES
-        {
+        let capture_at = if self.stress {
+            STRESS_SCREENSHOT_FRAME
+        } else {
+            SCREENSHOT_DELAY_FRAMES
+        };
+        if !self.captured && !self.screenshot_requested && self.frame_count >= capture_at {
             self.screenshot_requested = true;
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
         }
@@ -465,6 +526,45 @@ fn premultiplied_blur_output() -> Vec<u8> {
         }
     }
     rgba
+}
+
+/// 撮影したフレームを目視ではなく画素で審判する。
+///
+/// - 不透明化して潰れていないか: 真っ黒な画素が出ない(黒い矩形の再来)。stress配置には
+///   黒を出す素材が無いので、出たら合成が opaque pass へ落ちている。
+/// - 背景が透けているか: checkerboardの2色が十分な数ある。
+/// - 差し替えが効いているか: 2枚目にしか無い緑マーカーがある。
+fn check_layer_oracle(rgba: &[u8]) -> Result<String, String> {
+    let near = |a: u8, b: u8| a.abs_diff(b) <= 24;
+    let (mut black, mut checker, mut green) = (0u32, 0u32, 0u32);
+    for pixel in rgba.chunks_exact(4) {
+        let (r, g, b) = (pixel[0], pixel[1], pixel[2]);
+        if r < 12 && g < 12 && b < 12 {
+            black += 1;
+        }
+        if (near(r, 36) && near(g, 143) && near(b, 237))
+            || (near(r, 252) && near(g, 189) && near(b, 55))
+        {
+            checker += 1;
+        }
+        if near(r, 40) && near(g, 220) && near(b, 80) {
+            green += 1;
+        }
+    }
+    if black > 0 {
+        return Err(format!(
+            "{black} opaque black pixels — the transparent gutter was flattened"
+        ));
+    }
+    if checker < 10_000 {
+        return Err(format!("only {checker} checkerboard pixels — background is hidden"));
+    }
+    if green < 200 {
+        return Err(format!(
+            "only {green} marker pixels — the swapped-in texture is not the one being sampled"
+        ));
+    }
+    Ok(format!("{checker} checkerboard, {green} marker, 0 black"))
 }
 
 fn write_png(path: &Path, rgba: &[u8], width: u32, height: u32) -> Result<(), String> {
