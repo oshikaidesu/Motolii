@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use image::ImageEncoder as _;
 
+use super::drive::ShellTranscript;
 use super::{BlitzShellApp, ProjectSeat};
 use crate::ShellError;
 
@@ -36,6 +37,12 @@ pub struct BlitzShellLaunch {
     /// fixture 展示（開発動線・screenshot テスト用）。既定 false = 座席なしは
     /// スタート画面。
     pub fixture: bool,
+    /// 窓が言ったことを機械可読で外へ流す先（`--status-log`）。
+    ///
+    /// 毎フレーム、`ShellTranscript` に増えた分だけ JSONL
+    /// (`{"seq":n,"text":"…"}`) を追記して flush する。CLI から窓を駆動する実行は
+    /// **必ず失敗の記録を持つ**ための口で、製品機能ではない。
+    pub status_log: Option<PathBuf>,
 }
 
 /// 窓を開いて shell を回す。公開 API はこの1本で、署名は toolkit-free。
@@ -54,6 +61,15 @@ pub fn run_blitz_shell(launch: BlitzShellLaunch) -> Result<(), ShellError> {
         after: request.frames,
         requested: false,
     });
+    // 記録先は**窓より先に**開く。開けないなら起動失敗にする — 「記録している
+    // つもりで何も残っていない」実行を作らない。
+    let status_log = match launch.status_log {
+        Some(path) => Some(
+            StatusLog::create(&path)
+                .map_err(|message| ShellError::AppConstruction(message.into()))?,
+        ),
+        None => None,
+    };
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -66,8 +82,13 @@ pub fn run_blitz_shell(launch: BlitzShellLaunch) -> Result<(), ShellError> {
         "motolii-blitz-shell",
         options,
         Box::new(move |cc| {
+            let inner = BlitzShellApp::with_seat(cc, seat, launch_fixture);
+            let transcript = inner.transcript().clone();
             Ok(Box::new(Harness {
-                inner: BlitzShellApp::with_seat(cc, seat, launch_fixture),
+                inner,
+                transcript,
+                status_log,
+                written: 0,
                 shot,
                 frame_count: 0,
             }))
@@ -82,17 +103,62 @@ struct Screenshot {
     requested: bool,
 }
 
+/// 窓が言ったことの追記先（`--status-log`）。
+struct StatusLog {
+    file: std::io::BufWriter<std::fs::File>,
+}
+
+impl StatusLog {
+    fn create(path: &Path) -> Result<Self, String> {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| format!("status log {} を作れない: {error}", path.display()))?;
+        }
+        let file = std::fs::File::create(path)
+            .map_err(|error| format!("status log {} を作れない: {error}", path.display()))?;
+        Ok(Self {
+            file: std::io::BufWriter::new(file),
+        })
+    }
+
+    /// 1行 = 1 report。書けなかった時は**黙らない**が、窓は落とさない
+    /// （記録先が消えても編集中の project を失わせない）。
+    fn append(&mut self, seq: u64, text: &str) {
+        use std::io::Write as _;
+        let line = serde_json::json!({ "seq": seq, "text": text });
+        if let Err(error) = writeln!(self.file, "{line}").and_then(|()| self.file.flush()) {
+            println!("blitz-shell: status log へ書けない: {error}");
+        }
+    }
+}
+
 /// `BlitzShellApp` をそのまま包んで、`--screenshot` のときだけ
-/// 1枚撮って閉じる。**殻の側には撮影の都合を1つも足さない。**
+/// 1枚撮って閉じ、`--status-log` のときだけ言われたことを流す。
+/// **殻の側には撮影も記録の都合も1つも足さない。**
 struct Harness {
     inner: BlitzShellApp,
+    /// 殻の台帳（`inner` と同じもの）。毎フレーム増えた分だけ log へ流す。
+    transcript: ShellTranscript,
+    status_log: Option<StatusLog>,
+    /// log へ既に流した行数。
+    written: usize,
     shot: Option<Screenshot>,
     frame_count: u32,
 }
 
 impl eframe::App for Harness {
-    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
-        self.inner.ui(ui, frame);
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.inner.ui(ui);
+
+        // 言われたことは描いた直後に流す。1行ずつ flush するので、窓が固まっても
+        // 落ちても、そこまでの記録は外に残る。
+        if let Some(log) = self.status_log.as_mut() {
+            for event in self.transcript.since(self.written) {
+                log.append(event.seq, &event.text);
+            }
+            self.written = self.transcript.len();
+        }
+
         let ctx = ui.ctx().clone();
         let ctx = &ctx;
 

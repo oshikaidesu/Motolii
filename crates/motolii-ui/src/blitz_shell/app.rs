@@ -19,10 +19,9 @@ use std::sync::Arc;
 use eframe::egui_wgpu::RenderState;
 use egui_tiles::{Container, Linear, LinearDir, Tile, TileId, Tiles, Tree, UiResponse};
 
+use super::drive::{NativePrompts, ShellPrompts, ShellTranscript};
 use super::pane::{BlitzPane, PaneKind};
-use crate::export_seat::{
-    can_start_export, default_export_file_name, ExportFinish, ExportRequest, ExportRun,
-};
+use crate::export_seat::{can_start_export, ExportFinish, ExportRequest, ExportRun};
 use crate::timeline_editor::TimelineEditor;
 
 /// `egui_tiles` のペイン描画をパネルへ委譲するだけの behavior。
@@ -336,33 +335,6 @@ pub fn decide_unsaved(dirty: bool, choose: impl FnOnce() -> UnsavedChoice) -> Un
     }
 }
 
-/// 未保存の3択を人に訊く。**dialog はここだけ**で、判断は `decide_unsaved` にある
-/// （`prompt_new_project_path` / `prompt_open_project_path` と同じ集約）。
-/// 閉じられた・知らない答えは Cancel 扱い（勝手に捨てない側へ倒す）。
-fn prompt_unsaved_choice(project: &Path) -> UnsavedChoice {
-    let name = project
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| project.display().to_string());
-    let result = rfd::MessageDialog::new()
-        .set_level(rfd::MessageLevel::Warning)
-        .set_title("Unsaved changes")
-        .set_description(format!("{name} has unsaved changes."))
-        .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
-            "Save".to_owned(),
-            "Discard".to_owned(),
-            "Cancel".to_owned(),
-        ))
-        .show();
-    match result {
-        rfd::MessageDialogResult::Custom(label) if label == "Save" => UnsavedChoice::Save,
-        rfd::MessageDialogResult::Custom(label) if label == "Discard" => UnsavedChoice::Discard,
-        rfd::MessageDialogResult::Yes => UnsavedChoice::Save,
-        rfd::MessageDialogResult::No => UnsavedChoice::Discard,
-        _ => UnsavedChoice::Cancel,
-    }
-}
-
 /// Blitz パネルを合体表示するアプリ本体。
 pub struct BlitzShellApp {
     /// `blitz_net::Provider` は Tokio reactor を要求し、無いと panic する。
@@ -376,9 +348,14 @@ pub struct BlitzShellApp {
     /// Stage へ最後に配った snapshot の revision。エディタの編集で進んでいたら
     /// 次のフレームで新しい snapshot を配り直す（Stage の描画コードは触らない）。
     seated_revision: u64,
-    /// 窓ぜんたいに関わる一言（ドロップ・New・Open の結果）。空なら帯を出さない。
+    /// 窓ぜんたいに関わる一言（ドロップ・New・Open の結果）の**唯一の言い場所**。
+    /// 帯は `latest()` を映し、言われた全文はそのまま残る（`--status-log` へも出る）。
+    /// pane の失敗も同じ台帳へ来る（clone を配ってある）ので、stderr へ消えない。
     /// Timeline の中の出来事は従来どおりエディタ自身の status が言う。
-    status: String,
+    transcript: ShellTranscript,
+    /// 人に訊く4本（New / Open / Export / 未保存）。窓は `NativePrompts`（rfd）で、
+    /// テスト・CLI 駆動は台本が答える。**app は rfd を直接呼ばない。**
+    prompts: Box<dyn ShellPrompts>,
     /// 実行中の書き出し（高々1件。実行中は Export ボタンが disabled = 二重起動防止）。
     /// UI thread は毎フレーム `try_finish` を poll するだけで、書き出しは別 thread。
     export: Option<ExportRun>,
@@ -401,6 +378,9 @@ impl BlitzShellApp {
     /// 座席ごと作る。`Some(seat)` なら Timeline / Stage は fixture ではなく
     /// その project の Document（writer の snapshot）を映す。
     ///
+    /// `CreationContext` から取り出せるものを取り出して [`Self::with_deps`] へ渡す
+    /// **薄皮**で、判断はここに無い。訊き手は窓の `NativePrompts`（= 現行の rfd）。
+    ///
     /// # Panics
     /// `new` と同じ。
     pub(crate) fn with_seat(
@@ -412,10 +392,33 @@ impl BlitzShellApp {
             .wgpu_render_state
             .clone()
             .expect("BlitzShellApp は wgpu バックエンドを要求する（eframe features = [\"wgpu\"]）");
+        Self::with_deps(
+            &cc.egui_ctx,
+            render_state,
+            Box::new(NativePrompts),
+            project,
+            fixture,
+        )
+    }
 
+    /// 依存を全部**外から**渡して作る構築 seam。窓（`CreationContext`）でも
+    /// headless の運転席（`drive::DrivenShell`）でも同じ shell が立つ。
+    ///
+    /// ここで足しているのは器だけ（reactor・帯の台帳・面の並び）で、
+    /// 製品の挙動は `with_seat` 経由と1つも変わらない。
+    ///
+    /// # Panics
+    /// Tokio runtime を作れない場合。
+    pub(crate) fn with_deps(
+        egui_ctx: &egui::Context,
+        render_state: RenderState,
+        prompts: Box<dyn ShellPrompts>,
+        project: Option<ProjectSeat>,
+        fixture: bool,
+    ) -> Self {
         // 記号(◆ ◇ ▶ ← ↔ →)が豆腐にならないよう、既定fontの後ろにHackを連ねる。
         // 新しいフォントは足していない。詳細は `egui_fonts`。
-        crate::egui_fonts::install_symbol_fallback(&cc.egui_ctx);
+        crate::egui_fonts::install_symbol_fallback(egui_ctx);
 
         let runtime = tokio::runtime::Runtime::new()
             .expect("blitz_net::Provider 用の Tokio runtime を作れなかった");
@@ -426,13 +429,16 @@ impl BlitzShellApp {
             .as_ref()
             .map(|seat| seat.editor().revision())
             .unwrap_or(0);
+        // 帯の台帳は面より先に作る。pane は clone を持って同じ場所へ言う。
+        let transcript = ShellTranscript::default();
         Self {
             runtime,
             render_state,
-            tree: build_initial_tree(snapshot.as_ref()),
+            tree: build_initial_tree(snapshot.as_ref(), &transcript),
             project,
             seated_revision,
-            status: String::new(),
+            transcript,
+            prompts,
             export: None,
             fixture,
         }
@@ -448,10 +454,10 @@ impl BlitzShellApp {
         if !self.clear_unsaved_or_stay() {
             return;
         }
-        if let Some(path) = prompt_new_project_path() {
+        if let Some(path) = self.prompts.new_project_path() {
             match create_project_file(&path) {
                 Ok(()) => self.reseat(&path),
-                Err(error) => self.status = error,
+                Err(error) => self.transcript.report(error),
             }
         }
     }
@@ -461,7 +467,7 @@ impl BlitzShellApp {
         if !self.clear_unsaved_or_stay() {
             return;
         }
-        if let Some(path) = prompt_open_project_path() {
+        if let Some(path) = self.prompts.open_project_path() {
             self.reseat(&path);
         }
     }
@@ -471,9 +477,9 @@ impl BlitzShellApp {
         self.project.as_ref()
     }
 
-    /// 窓の一言（読み）。
-    pub fn status(&self) -> &str {
-        &self.status
+    /// 窓の一言の台帳（読み）。帯が映すのは `latest()`、`--status-log` は全文を流す。
+    pub(crate) fn transcript(&self) -> &ShellTranscript {
+        &self.transcript
     }
 
     /// 座席を差し替えて、Stage を新しい Document へ座らせ直す。
@@ -488,36 +494,37 @@ impl BlitzShellApp {
                 let snapshot = seat.snapshot();
                 self.seated_revision = seat.editor().revision();
                 seat_stage_documents(&mut self.tree, &snapshot);
-                self.status = format!("opened {}", path.display());
+                self.transcript.report(format!("opened {}", path.display()));
             }
             Err(error) => {
                 // 同じ project を開き直そうとして落ちた時だけ席が空く。
                 // 黙って fixture に見えないよう、並びも status も合わせる。
                 if self.project.is_none() {
-                    self.tree = build_initial_tree(None);
+                    self.tree = build_initial_tree(None, &self.transcript);
                     self.seated_revision = 0;
                 }
-                self.status = error;
+                self.transcript.report(error);
             }
         }
     }
 
     /// 未保存のまま座席を捨てる操作（Cmd+O / Cmd+N / 窓を閉じる）の前に挟む。
-    /// 続行してよければ `true`。判断は `decide_unsaved`、dialog は
-    /// `prompt_unsaved_choice` に居る。「保存して続行」で保存に失敗したら
-    /// **続行しない**（status に理由が出る）。
+    /// 続行してよければ `true`。判断は `decide_unsaved`、訊き手は
+    /// `prompts.unsaved_choice` に居る。「保存して続行」で保存に失敗したら
+    /// **続行しない**（帯に理由が出る）。
     fn clear_unsaved_or_stay(&mut self) -> bool {
         let Some(seat) = self.project.as_mut() else {
             return true;
         };
         let path = seat.path().to_path_buf();
-        match decide_unsaved(seat.is_dirty(), || prompt_unsaved_choice(&path)) {
+        let prompts = &mut self.prompts;
+        match decide_unsaved(seat.is_dirty(), || prompts.unsaved_choice(&path)) {
             UnsavedDecision::Proceed => true,
             UnsavedDecision::Stay => false,
             UnsavedDecision::SaveThenProceed => match seat.save() {
                 Ok(()) => true,
                 Err(error) => {
-                    self.status = error;
+                    self.transcript.report(error);
                     false
                 }
             },
@@ -546,12 +553,14 @@ impl BlitzShellApp {
         if save_project {
             match self.project.as_mut() {
                 Some(seat) => match seat.save() {
-                    Ok(()) => self.status = format!("saved {}", seat.path().display()),
-                    Err(error) => self.status = error,
+                    Ok(()) => self
+                        .transcript
+                        .report(format!("saved {}", seat.path().display())),
+                    Err(error) => self.transcript.report(error),
                 },
                 None => {
-                    self.status =
-                        "open a project first — Cmd+N to create one, Cmd+O to open one".to_owned();
+                    self.transcript
+                        .report("open a project first — Cmd+N to create one, Cmd+O to open one");
                 }
             }
         }
@@ -574,14 +583,15 @@ impl BlitzShellApp {
                 .collect()
         });
         if !dropped.is_empty() {
-            self.status = admit_dropped_paths(self.project.as_mut(), &dropped);
+            let report = admit_dropped_paths(self.project.as_mut(), &dropped);
+            self.transcript.report(report);
         }
     }
 
-    /// Export ボタンの後ろ。保存先を訊いて（dialog はここで開く）、**現 writer
+    /// Export ボタンの後ろ。保存先を訊いて（訊き手は `prompts`）、**現 writer
     /// snapshot** を別 thread の書き出しへ渡す（dirty でも書き出せる）。
     /// 判断（座席あり・実行中なし）は `can_start_export` — ボタンの enabled と
-    /// 同じ関数なので、ここに来た時点で普通は真。dialog を閉じたら何もしない。
+    /// 同じ関数なので、ここに来た時点で普通は真。訊いて断られたら何もしない。
     fn begin_export(&mut self) {
         if !can_start_export(self.project.is_some(), self.export.is_some()) {
             return;
@@ -590,10 +600,11 @@ impl BlitzShellApp {
             .project
             .as_ref()
             .expect("can_start_export checked the seat");
-        let Some(output_path) = prompt_export_path(seat.path()) else {
+        let Some(output_path) = self.prompts.export_path(seat.path()) else {
             return;
         };
-        self.status = format!("exporting {}", output_path.display());
+        self.transcript
+            .report(format!("exporting {}", output_path.display()));
         self.export = Some(ExportRun::start(ExportRequest {
             document: seat.snapshot(),
             // project root = document path の親（CLI export と同じ規約）。
@@ -614,7 +625,7 @@ impl BlitzShellApp {
         let Some(finish) = run.try_finish() else {
             return;
         };
-        self.status = match finish {
+        let report = match finish {
             ExportFinish::Done(report) => format!(
                 "Exported {} ({}f)",
                 run.output_path().display(),
@@ -628,42 +639,18 @@ impl BlitzShellApp {
             }
             ExportFinish::Failed(reason) => format!("export failed: {reason}"),
         };
+        self.transcript.report(report);
         self.export = None;
     }
-}
 
-/// 書き出し先を訊く。**dialog はここだけ**で、判定できる列は `export_seat` にある
-/// （`prompt_new_project_path` / `prompt_open_project_path` と同じ集約）。
-fn prompt_export_path(project: &Path) -> Option<PathBuf> {
-    rfd::FileDialog::new()
-        .set_title("Export video")
-        .add_filter("MP4 video", &["mp4"])
-        .set_file_name(default_export_file_name(project))
-        .save_file()
-}
-
-/// New の場所を訊く。**dialog はここだけ**で、判定できる列は外にある。
-fn prompt_new_project_path() -> Option<PathBuf> {
-    rfd::FileDialog::new()
-        .set_title("New Motolii project")
-        .add_filter("Motolii project", &["json"])
-        .set_file_name("untitled.json")
-        .save_file()
-}
-
-/// Open するファイルを訊く。同上。
-fn prompt_open_project_path() -> Option<PathBuf> {
-    rfd::FileDialog::new()
-        .set_title("Open Motolii project")
-        .add_filter("Motolii project", &["json"])
-        .pick_file()
-}
-
-impl eframe::App for BlitzShellApp {
-    /// eframe 0.35 の `App` は `update(ctx, frame)` ではなく `ui(&mut Ui, ..)` を要求する。
-    /// 渡される `Ui` は余白も背景も持たないので、`CentralPanel` は自分で被せる
-    /// (`eframe-0.35 src/epi.rs:165-176`)。
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    /// 1フレーム描く。
+    ///
+    /// eframe 0.35 の `App` は `update(ctx, frame)` ではなく `ui(&mut Ui, ..)` を要求し、
+    /// 渡される `Ui` は余白も背景も持たないので `CentralPanel` は自分で被せる
+    /// (`eframe-0.35 src/epi.rs:165-176`)。**`eframe::Frame` は使わない**ので取らない —
+    /// 窓を持たない運転席（`drive::DrivenShell`）からも同じ1フレームを回せる。
+    /// 窓を開く側の `eframe::App` は `runner.rs` の `Harness` が持つ。
+    pub(crate) fn ui(&mut self, ui: &mut egui::Ui) {
         // パネルが内部で blitz_net::Provider を起こしても panic しないよう、
         // フレーム全体を reactor の中で回す。
         let _guard = self.runtime.enter();
@@ -692,7 +679,9 @@ impl eframe::App for BlitzShellApp {
         // Open・Save の結果）は従来どおり同じ帯の右に出る。座席が無いときは
         // 従来どおり、何か言うことがある時だけ帯が出る。
         let mut want_export = false;
-        if self.project.is_some() || !self.status.is_empty() {
+        // 帯が映すのは台帳の**最新の1行**。言われた全文は transcript に残る。
+        let latest = self.transcript.latest();
+        if self.project.is_some() || latest.is_some() {
             egui::Panel::bottom("blitz_shell_status").show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.add_space(STATUS_PAD_X);
@@ -758,12 +747,12 @@ impl eframe::App for BlitzShellApp {
                             want_export = true;
                         }
                     }
-                    if !self.status.is_empty() {
+                    if let Some(latest) = latest.as_deref() {
                         if self.project.is_some() {
                             ui.separator();
                         }
                         ui.label(
-                            egui::RichText::new(&self.status)
+                            egui::RichText::new(latest)
                                 .size(STATUS_FONT_SIZE)
                                 .color(crate::timeline_editor::ACCENT),
                         );
@@ -927,33 +916,40 @@ fn seat_stage_documents(tree: &mut Tree<BlitzPane>, document: &Arc<motolii_doc::
 /// **Stage だけ**で、live の Timeline は pane ではなくエディタが描く
 /// （`BlitzShellBehavior::pane_ui`）。Browser / Inspector / chrome は fixture のまま
 /// （本レーンの範囲）。`None` なら全面が従来どおり fixture。
-fn build_initial_tree(document: Option<&Arc<motolii_doc::Document>>) -> Tree<BlitzPane> {
+///
+/// `transcript` は帯の台帳。**面の失敗もここへ言う**ので、全ペインに同じ clone を配る
+/// （`pane.rs` の stderr 専用失敗を全廃した先がこれ。`tests/shell_error_fence.rs`）。
+fn build_initial_tree(
+    document: Option<&Arc<motolii_doc::Document>>,
+    transcript: &ShellTranscript,
+) -> Tree<BlitzPane> {
     let mut tiles = Tiles::default();
 
+    let plain = |kind: PaneKind| BlitzPane::new(kind).reporting_to(transcript);
     let seated = |kind: PaneKind| match document {
-        Some(doc) => BlitzPane::with_document(kind, Arc::clone(doc)),
-        None => BlitzPane::new(kind),
+        Some(doc) => BlitzPane::with_document(kind, Arc::clone(doc)).reporting_to(transcript),
+        None => plain(kind),
     };
 
     // 左: Browser。
-    let browser = tiles.insert_pane(BlitzPane::new(PaneKind::Browser));
+    let browser = tiles.insert_pane(plain(PaneKind::Browser));
 
     // 中央: 上が Stage（live Document が座る）、下が Timeline
     // （live ならエディタが behavior 側で描くので、pane は席だけ）。
     let stage = tiles.insert_pane(seated(PaneKind::Stage));
-    let timeline = tiles.insert_pane(BlitzPane::new(PaneKind::Timeline));
+    let timeline = tiles.insert_pane(plain(PaneKind::Timeline));
     let center = tiles.insert_vertical_tile(vec![stage, timeline]);
 
     // 右: Inspector。
-    let inspector = tiles.insert_pane(BlitzPane::new(PaneKind::Inspector));
+    let inspector = tiles.insert_pane(plain(PaneKind::Inspector));
 
     // chrome の 3 枚はタブとして 1 ペインにまとめる。
     // 注意: これらは本来モーダル／拡張パネルであって常設面ではない。
     // ここに席があるのは「main の画面を見る」ための便宜であり、
     // 常設パネルという UI 決定ではない。
-    let chrome_export = tiles.insert_pane(BlitzPane::new(PaneKind::ChromeExport));
-    let chrome_settings = tiles.insert_pane(BlitzPane::new(PaneKind::ChromeSettings));
-    let chrome_panels = tiles.insert_pane(BlitzPane::new(PaneKind::ChromePanels));
+    let chrome_export = tiles.insert_pane(plain(PaneKind::ChromeExport));
+    let chrome_settings = tiles.insert_pane(plain(PaneKind::ChromeSettings));
+    let chrome_panels = tiles.insert_pane(plain(PaneKind::ChromePanels));
     let chrome = tiles.insert_tab_tile(vec![chrome_export, chrome_settings, chrome_panels]);
 
     // 右列は Inspector（上）と chrome タブ（下）。
@@ -1022,7 +1018,7 @@ mod tests {
             "the editor serves the writer snapshot itself, not a re-load"
         );
 
-        let tree = build_initial_tree(Some(&snapshot));
+        let tree = build_initial_tree(Some(&snapshot), &ShellTranscript::default());
         let mut timeline = 0;
         let mut stage = 0;
         for (_, tile) in tree.tiles.iter() {
@@ -1077,7 +1073,7 @@ mod tests {
 
         let mut seat = ProjectSeat::open(&path).expect("open temp project");
         let first = seat.snapshot();
-        let mut tree = build_initial_tree(Some(&first));
+        let mut tree = build_initial_tree(Some(&first), &ShellTranscript::default());
 
         // エディタの操作 API で move を1回通す(writer 経由の実編集)。
         let layer = *names
@@ -1119,7 +1115,7 @@ mod tests {
 
     #[test]
     fn fixture_tree_has_no_live_document() {
-        let tree = build_initial_tree(None);
+        let tree = build_initial_tree(None, &ShellTranscript::default());
         for (_, tile) in tree.tiles.iter() {
             if let Tile::Pane(pane) = tile {
                 assert!(

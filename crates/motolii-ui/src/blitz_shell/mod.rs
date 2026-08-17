@@ -38,8 +38,17 @@
 //!   キャンセルは部分出力を残さない。実行中は Export が消える = 二重起動なし。
 //!   判断と thread は `crate::export_seat`、dialog は `rfd` に集約
 //! - **レイアウトの永続化**は無い。起動するたび既定の並び
+//! - **失敗の言い場所は1つ**。窓の一言も面(pane)の失敗も `drive::ShellTranscript` を
+//!   通り、帯には最新の1行が出て、`--status-log <path>` を付ければ全文が JSONL
+//!   (`{"seq":n,"text":"…"}`)で追記される。`eprintln!` で消える失敗は無い
+//!   (フェンス: `tests/shell_error_fence.rs`)。New / Open / Export / 未保存確認の
+//!   dialog も `drive::ShellPrompts` の後ろに集約してあり、窓は `NativePrompts`(rfd)、
+//!   テスト・CLI 駆動は台本(`ScriptedPrompts`)が答える
 
 mod app;
+/// 運転席(transcript / prompts / headless 駆動)。**公開しない** — U0a の境界規律で、
+/// egui / kittest の型を公開APIへ出さないため。外へ出るのは `--status-log` の JSONL だけ。
+mod drive;
 #[cfg(test)]
 mod drive_tests;
 mod pane;
