@@ -426,6 +426,9 @@ impl Command {
                 new: old,
             },
             Command::SetSoundtrack { old, new } => Command::SetSoundtrack { old: new, new: old },
+            Command::SetCompositionResolution { old, new } => {
+                Command::SetCompositionResolution { old: new, new: old }
+            }
         }
     }
 }

@@ -492,6 +492,15 @@ impl Command {
                 doc.soundtrack = *new;
                 Ok(())
             }
+            Command::SetCompositionResolution { new, .. } => {
+                // validateと同じ正値・上限基準で拒否する(不正なら書かない)。
+                doc.composition.set_resolution(*new).map_err(|source| {
+                    CommandError::Validate(
+                        crate::validate::DocumentError::InvalidCompositionResolution { source },
+                    )
+                })?;
+                Ok(())
+            }
         }
     }
 }

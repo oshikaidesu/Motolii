@@ -173,6 +173,11 @@ fn decode_edit(payload: &[u8]) -> Result<DecodedJournalEdit, String> {
             if matches!(&edit.command, Command::SetSoundtrack { .. }) {
                 return Err("soundtrack commands require journal edit format_version 3".into());
             }
+            if matches!(&edit.command, Command::SetCompositionResolution { .. }) {
+                return Err(
+                    "composition resolution commands require journal edit format_version 3".into(),
+                );
+            }
             Ok(DecodedJournalEdit::V2OrV3(Box::new(edit.command)))
         }
         v if v == u64::from(V3_EDIT_FORMAT_VERSION) => {
@@ -461,6 +466,20 @@ mod replay_tests {
             command: Command::SetSoundtrack {
                 old: None,
                 new: Some(soundtrack),
+            },
+        })
+        .unwrap();
+        let error = decode_edit(&payload).unwrap_err();
+        assert!(error.contains("require journal edit format_version 3"));
+    }
+
+    #[test]
+    fn v2_edit_rejects_v3_only_composition_resolution_command() {
+        let payload = edit_payload(&JournalEdit {
+            format_version: V2_EDIT_FORMAT_VERSION,
+            command: Command::SetCompositionResolution {
+                old: None,
+                new: Some((1920, 1080)),
             },
         })
         .unwrap();

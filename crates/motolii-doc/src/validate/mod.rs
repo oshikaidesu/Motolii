@@ -43,6 +43,12 @@ pub enum DocumentError {
     },
     #[error("composition.duration must be positive, got {duration:?}")]
     NonPositiveCompositionDuration { duration: RationalTime },
+    /// 2026-08-17決定: 出力解像度は正値かつ上限内(基準は`Composition::validate_resolution`)。
+    #[error("invalid composition.resolution: {source}")]
+    InvalidCompositionResolution {
+        #[source]
+        source: crate::schema::CompositionError,
+    },
     #[error("track id {id} is not registered in track_ids")]
     UnknownTrackId { id: u64 },
     #[error("duplicate track id {id} in tracks")]
@@ -214,6 +220,10 @@ impl Document {
             return Err(DocumentError::NonPositiveCompositionDuration {
                 duration: self.composition.duration,
             });
+        }
+        if let Some(resolution) = self.composition.resolution() {
+            crate::schema::Composition::validate_resolution(resolution)
+                .map_err(|source| DocumentError::InvalidCompositionResolution { source })?;
         }
         self.validate_comp_camera()?;
 

@@ -271,12 +271,17 @@ pub fn export_document_video(
                 job.runtime,
                 job.project_root,
             )?;
-            video_binder.require_export_dimensions(
-                job.doc,
-                job.project_root,
-                &built.video_slots,
-                desc,
-            )?;
+            // 2026-08-17決定: composition解像度が明示された文書は素材の寸法を拘束しない
+            // (aspect/寸法不一致はレンダ側contain fitの正常系)。`None`(旧文書)は
+            // 旧挙動どおり native==desc を要求したままにする。
+            if job.doc.composition.resolution().is_none() {
+                video_binder.require_export_dimensions(
+                    job.doc,
+                    job.project_root,
+                    &built.video_slots,
+                    desc,
+                )?;
+            }
             let bound =
                 video_binder.bind(gpu, job.doc, job.project_root, &built.video_slots, desc)?;
             let video_inputs = bound.as_inputs();
@@ -668,6 +673,18 @@ fn resolve_export_frame_desc(
     let Some(asset_id) = found else {
         return Err(ExportError::NoVideoSource);
     };
+    // 2026-08-17決定: Compositionが出力解像度を所有する。`Some`なら素材のnativeを
+    // 見ずにそれを使う(aspect不一致の素材はレンダ側のcontain fitが受ける)。
+    // `None`は旧挙動(最初のvideo sourceから導出)のまま=旧Document互換。
+    if let Some((width, height)) = doc.composition.resolution() {
+        return Ok(FrameDesc::packed(
+            width,
+            height,
+            PixelFormat::Rgba8Unorm,
+            ColorSpace::Srgb,
+            true,
+        ));
+    }
     let asset = doc
         .assets
         .get(asset_id)

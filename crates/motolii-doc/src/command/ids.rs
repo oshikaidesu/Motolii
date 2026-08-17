@@ -60,6 +60,8 @@ pub enum PropertyId {
     Locator,
     /// `SetSoundtrack`(Document直下のsingleton — 対象IDを持たない)。
     Soundtrack,
+    /// `SetCompositionResolution`(Composition直下のsingleton — 対象IDを持たない)。
+    CompositionResolution,
 }
 
 impl From<ScalarPropertyId> for PropertyId {
@@ -144,6 +146,7 @@ pub enum CommandKind {
     SetLocatorTime,
     SetLocatorText,
     SetSoundtrack,
+    SetCompositionResolution,
 }
 
 /// S18: `gesture_id + command_kind + target_stable_id + property_id`。

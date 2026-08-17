@@ -23,6 +23,12 @@ pub fn new_document(path: &Path) -> Result<(), CliError> {
         std::fs::create_dir_all(parent).map_err(|e| CliError::Usage(e.to_string()))?;
     }
     let mut document = Document::new_current();
+    // 2026-08-17決定: 新規projectの出力解像度既定は1920x1080(既定camera aspect 16/9
+    // と整合)。以後の変更は`Command::SetCompositionResolution`だけが書く。
+    document
+        .composition
+        .set_resolution(Some((1920, 1080)))
+        .map_err(|e| CliError::Usage(e.to_string()))?;
     let track = document
         .track_ids
         .allocate("V1")

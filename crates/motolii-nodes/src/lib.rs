@@ -1050,6 +1050,34 @@ impl MaskNode {
     }
 }
 
+/// contain fit(2026-08-17決定): 素材のaspectを保ったまま出力フレームに収まる最大
+/// サイズで中央配置する逆UV行列(出力uv→入力uv)。嵌め込み矩形の外は
+/// `affine_place.wgsl`の枠外透明がそのまま余白(letterbox/pillarbox=合成背景)になる。
+/// 同一aspectなら恒等写像。0次元はNone。
+pub fn contain_fit_inverse_uv(source: (u32, u32), dest: (u32, u32)) -> Option<[f32; 6]> {
+    let (src_w, src_h) = source;
+    let (dst_w, dst_h) = dest;
+    if src_w == 0 || src_h == 0 || dst_w == 0 || dst_h == 0 {
+        return None;
+    }
+    let src_aspect = f64::from(src_w) / f64::from(src_h);
+    let dst_aspect = f64::from(dst_w) / f64::from(dst_h);
+    // 正規化出力座標での嵌め込み矩形の幅・高さ(どちらかが1)。
+    let (fit_w, fit_h) = if src_aspect >= dst_aspect {
+        (1.0, dst_aspect / src_aspect)
+    } else {
+        (src_aspect / dst_aspect, 1.0)
+    };
+    Some([
+        (1.0 / fit_w) as f32,
+        0.0,
+        (-(1.0 - fit_w) / (2.0 * fit_w)) as f32,
+        0.0,
+        (1.0 / fit_h) as f32,
+        (-(1.0 - fit_h) / (2.0 * fit_h)) as f32,
+    ])
+}
+
 /// F-3 の変形段: 入力テクスチャを正準アフィンで再配置する。
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -1165,8 +1193,18 @@ impl AffinePlaceNode {
         input: TextureRef<'_>,
         output: TextureRef<'_>,
     ) -> Result<(), NodeError> {
-        // Draft 縮小の VideoSource は整数倍。UV サンプリングなので画素一致は不要。
-        require_compatible_background("affine_place", input.desc, output.desc)?;
+        // UVサンプリングなので入出力の画素一致は不要。aspect一致も要求しない:
+        // 2026-08-17決定のcontain fitは入力(素材native)と出力(composition)の
+        // aspectが異なるのが正常系で、写像は逆UV行列側が持つ。
+        if input.desc.width == 0
+            || input.desc.height == 0
+            || output.desc.width == 0
+            || output.desc.height == 0
+        {
+            return Err(NodeError::DimensionMismatch {
+                node: "affine_place",
+            });
+        }
         if input.desc.premultiplied || output.desc.premultiplied {
             require_premultiplied("affine_place", "input", input.desc)?;
             require_premultiplied("affine_place", "output", output.desc)?;
@@ -1322,6 +1360,55 @@ fn sampler_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    /// 出力uvへ逆UV行列を適用する(shaderのfs_mainと同じ式)。
+    fn map_uv(m: [f32; 6], u: f32, v: f32) -> (f32, f32) {
+        (m[0] * u + m[1] * v + m[2], m[3] * u + m[4] * v + m[5])
+    }
+
+    #[test]
+    fn contain_fit_same_aspect_is_identity() {
+        let m = contain_fit_inverse_uv((1920, 1080), (960, 540)).unwrap();
+        assert_eq!(m, [1.0, 0.0, 0.0, 0.0, 1.0, 0.0]);
+    }
+
+    #[test]
+    fn contain_fit_portrait_into_landscape_pillarboxes_centered() {
+        // 9:16 → 16:9: 嵌め込み幅 = (9/16)/(16/9) = 81/256。
+        let m = contain_fit_inverse_uv((1080, 1920), (1920, 1080)).unwrap();
+        let fit_w = 81.0 / 256.0;
+        let left = (1.0 - fit_w) / 2.0;
+        // 嵌め込み左端→src u=0、右端→u=1、中央→中央。上下はフルなのでv恒等。
+        let (u, v) = map_uv(m, left as f32, 0.5);
+        assert!(u.abs() < 1e-5 && (v - 0.5).abs() < 1e-6, "left edge: {u} {v}");
+        let (u, _) = map_uv(m, (left + fit_w) as f32, 0.5);
+        assert!((u - 1.0).abs() < 1e-5, "right edge: {u}");
+        let (u, v) = map_uv(m, 0.5, 0.5);
+        assert!((u - 0.5).abs() < 1e-6 && (v - 0.5).abs() < 1e-6);
+        // 余白(嵌め込み外)はsrc範囲外 → shaderが透明を返す領域。
+        let (u, _) = map_uv(m, 0.05, 0.5);
+        assert!(u < 0.0, "margin must map outside the source: {u}");
+    }
+
+    #[test]
+    fn contain_fit_landscape_into_portrait_letterboxes_centered() {
+        // 16:9 → 9:16: 上下letterbox。左右はフルなのでu恒等。
+        let m = contain_fit_inverse_uv((1920, 1080), (1080, 1920)).unwrap();
+        let fit_h = 81.0 / 256.0;
+        let top = (1.0 - fit_h) / 2.0;
+        let (u, v) = map_uv(m, 0.5, top as f32);
+        assert!(v.abs() < 1e-5 && (u - 0.5).abs() < 1e-6, "top edge: {u} {v}");
+        let (_, v) = map_uv(m, 0.5, (top + fit_h) as f32);
+        assert!((v - 1.0).abs() < 1e-5, "bottom edge: {v}");
+        let (_, v) = map_uv(m, 0.5, 0.05);
+        assert!(v < 0.0, "margin must map outside the source: {v}");
+    }
+
+    #[test]
+    fn contain_fit_rejects_zero_dimensions() {
+        assert!(contain_fit_inverse_uv((0, 1080), (1920, 1080)).is_none());
+        assert!(contain_fit_inverse_uv((1920, 1080), (1920, 0)).is_none());
+    }
 
     #[test]
     fn select_composite_color_path_follows_precise_color_flag() {
