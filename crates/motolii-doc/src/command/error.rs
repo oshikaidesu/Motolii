@@ -161,4 +161,12 @@ pub enum CommandError {
     StableIdAlloc(#[from] crate::stable_id::StableIdError),
     #[error(transparent)]
     Asset(#[from] AssetError),
+    #[error("asset type {asset_type} cannot be placed as a clip")]
+    UnsupportedPlacementAssetType { asset_type: String },
+    #[error("placement start is at or beyond the composition end")]
+    PlacementOutsideComposition,
+    #[error("placement time arithmetic overflowed")]
+    PlacementTimeOverflow,
+    #[error("document has no track to place into")]
+    NoTrackForPlacement,
 }

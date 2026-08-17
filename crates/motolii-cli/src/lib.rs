@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use motolii_nodes::{CanonicalPoint, CanonicalSize, ParamRectOverlay, RectOverlay};
 
 mod document_debug;
+pub mod document_edit;
 mod document_export;
 mod project;
 mod verify_b4;
@@ -15,6 +16,9 @@ pub enum Command {
     Dump(DumpDocumentArgs),
     Apply(ApplyDocumentArgs),
     New(NewDocumentArgs),
+    ImportAsset(ImportAssetArgs),
+    PlaceClip(PlaceClipArgs),
+    SetSoundtrack(SetSoundtrackArgs),
     VerifyB4(VerifyB4Args),
     Help,
 }
@@ -53,6 +57,27 @@ pub struct NewDocumentArgs {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct ImportAssetArgs {
+    pub project: PathBuf,
+    pub media: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlaceClipArgs {
+    pub project: PathBuf,
+    pub asset: u64,
+    pub at_seconds: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SetSoundtrackArgs {
+    pub project: PathBuf,
+    pub asset: u64,
+    pub offset_seconds: f64,
+    pub gain: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ApplyDocumentArgs {
     pub document: PathBuf,
     pub command_json: String,
@@ -85,6 +110,9 @@ Commands:
   dump --document <json>
   apply --document <json> --command <json-or-file> [--out <json>]
   new --document <json>
+  import --project <json> --media <file>
+  place --project <json> --asset <id> [--at <seconds>]
+  set-soundtrack --project <json> --asset <id> [--offset <seconds>] [--gain <0..1>]
   verify-b4 --project <json> [options]
 
 Options:
@@ -117,6 +145,9 @@ where
         Some("dump") => parse_dump(&args[1..]).map(Command::Dump),
         Some("apply") => parse_apply(&args[1..]).map(Command::Apply),
         Some("new") => parse_new(&args[1..]).map(Command::New),
+        Some("import") => parse_import(&args[1..]).map(Command::ImportAsset),
+        Some("place") => parse_place(&args[1..]).map(Command::PlaceClip),
+        Some("set-soundtrack") => parse_set_soundtrack(&args[1..]).map(Command::SetSoundtrack),
         Some("verify-b4") => parse_verify_b4(&args[1..]).map(Command::VerifyB4),
         Some(other) => Err(CliError::Usage(format!(
             "unknown command: {other}\n\n{HELP}"
@@ -229,6 +260,93 @@ fn parse_new(args: &[String]) -> Result<NewDocumentArgs, CliError> {
 
     Ok(NewDocumentArgs {
         document: document.ok_or_else(|| CliError::Usage("--document is required".into()))?,
+    })
+}
+
+fn parse_import(args: &[String]) -> Result<ImportAssetArgs, CliError> {
+    let mut project: Option<PathBuf> = None;
+    let mut media: Option<PathBuf> = None;
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => return Err(CliError::Usage(HELP.to_string())),
+            "--project" => project = Some(PathBuf::from(take_one(args, &mut i, "--project")?)),
+            "--media" => media = Some(PathBuf::from(take_one(args, &mut i, "--media")?)),
+            other => {
+                return Err(CliError::Usage(format!(
+                    "unknown import option: {other}\n\n{HELP}"
+                )))
+            }
+        }
+    }
+    Ok(ImportAssetArgs {
+        project: project.ok_or_else(|| CliError::Usage("--project is required".into()))?,
+        media: media.ok_or_else(|| CliError::Usage("--media is required".into()))?,
+    })
+}
+
+fn parse_f64(raw: &str, flag: &str) -> Result<f64, CliError> {
+    raw.parse()
+        .map_err(|_| CliError::Usage(format!("{flag} expects a number, got: {raw}")))
+}
+
+fn parse_u64(raw: &str, flag: &str) -> Result<u64, CliError> {
+    raw.parse()
+        .map_err(|_| CliError::Usage(format!("{flag} expects an id, got: {raw}")))
+}
+
+fn parse_place(args: &[String]) -> Result<PlaceClipArgs, CliError> {
+    let mut project: Option<PathBuf> = None;
+    let mut asset: Option<u64> = None;
+    let mut at_seconds = 0.0f64;
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => return Err(CliError::Usage(HELP.to_string())),
+            "--project" => project = Some(PathBuf::from(take_one(args, &mut i, "--project")?)),
+            "--asset" => asset = Some(parse_u64(&take_one(args, &mut i, "--asset")?, "--asset")?),
+            "--at" => at_seconds = parse_f64(&take_one(args, &mut i, "--at")?, "--at")?,
+            other => {
+                return Err(CliError::Usage(format!(
+                    "unknown place option: {other}\n\n{HELP}"
+                )))
+            }
+        }
+    }
+    Ok(PlaceClipArgs {
+        project: project.ok_or_else(|| CliError::Usage("--project is required".into()))?,
+        asset: asset.ok_or_else(|| CliError::Usage("--asset is required".into()))?,
+        at_seconds,
+    })
+}
+
+fn parse_set_soundtrack(args: &[String]) -> Result<SetSoundtrackArgs, CliError> {
+    let mut project: Option<PathBuf> = None;
+    let mut asset: Option<u64> = None;
+    let mut offset_seconds = 0.0f64;
+    let mut gain = 1.0f64;
+    let mut i = 0usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => return Err(CliError::Usage(HELP.to_string())),
+            "--project" => project = Some(PathBuf::from(take_one(args, &mut i, "--project")?)),
+            "--asset" => asset = Some(parse_u64(&take_one(args, &mut i, "--asset")?, "--asset")?),
+            "--offset" => {
+                offset_seconds = parse_f64(&take_one(args, &mut i, "--offset")?, "--offset")?
+            }
+            "--gain" => gain = parse_f64(&take_one(args, &mut i, "--gain")?, "--gain")?,
+            other => {
+                return Err(CliError::Usage(format!(
+                    "unknown set-soundtrack option: {other}\n\n{HELP}"
+                )))
+            }
+        }
+    }
+    Ok(SetSoundtrackArgs {
+        project: project.ok_or_else(|| CliError::Usage("--project is required".into()))?,
+        asset: asset.ok_or_else(|| CliError::Usage("--asset is required".into()))?,
+        offset_seconds,
+        gain,
     })
 }
 

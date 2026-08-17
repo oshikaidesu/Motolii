@@ -2,8 +2,12 @@ use std::collections::BTreeMap;
 
 use motolii_core::RationalTime;
 
-use crate::schema::{Group, ItemEnvelope, TrackItem};
-use crate::{Document, LayerId};
+use motolii_core::TimeMap;
+
+use crate::schema::{
+    AudioComponent, Clip, ClipSource, Group, ItemEnvelope, TrackItem, VideoComponent,
+};
+use crate::{AssetId, Document, LayerId};
 
 use super::locate::{
     envelope_of, ensure_layer_names_match_item, find_item_location, find_items_vec,
@@ -39,6 +43,72 @@ pub fn prepare_add_group(
         item: TrackItem::Group(Group {
             envelope: ItemEnvelope::new(layer),
             children: Vec::new(),
+        }),
+        layer_names,
+    })
+}
+
+/// 素材clipを最初のTrackの末尾へ置く準備をする(CU-101のPlace意味のCLI/GUI共通口)。
+///
+/// - 尺は`start`からcomposition endまで(playhead相当は呼び側が渡す)
+/// - componentはasset_typeの大分類から: `video/*`→video ordinal 0、`audio/*`→audio ordinal 0。
+///   stream実在の細部はexport/mix時の検証に任せる
+/// - `LayerId`はreserveのみ。表示名はasset名で`layer_names`に載せる(`prepare_add_group`と同型)
+pub fn prepare_place_asset_clip(
+    doc: &mut Document,
+    asset_id: AssetId,
+    start: RationalTime,
+) -> Result<Command, CommandError> {
+    let asset = doc
+        .assets
+        .get(asset_id)
+        .ok_or(CommandError::Validate(
+            crate::validate::DocumentError::UnknownAssetId { id: asset_id.get() },
+        ))?;
+    let (video, audio) = if asset.asset_type.starts_with("video/") {
+        (Some(VideoComponent::ordinal(0)), Vec::new())
+    } else if asset.asset_type.starts_with("audio/") {
+        (None, vec![AudioComponent::ordinal(0)])
+    } else {
+        return Err(CommandError::UnsupportedPlacementAssetType {
+            asset_type: asset.asset_type.clone(),
+        });
+    };
+    let name = asset.name.clone();
+
+    // duration = composition end - start(正確な有理数演算、i128で桁溢れ検査)。
+    let end = doc.composition.duration;
+    let num = (end.num() as i128) * (start.den() as i128) - (start.num() as i128) * (end.den() as i128);
+    let den = (end.den() as i128) * (start.den() as i128);
+    if num <= 0 {
+        return Err(CommandError::PlacementOutsideComposition);
+    }
+    let duration = i64::try_from(num)
+        .ok()
+        .zip(i64::try_from(den).ok())
+        .and_then(|(num, den)| RationalTime::try_new(num, den).ok())
+        .ok_or(CommandError::PlacementTimeOverflow)?;
+
+    let track = doc.tracks.first().ok_or(CommandError::NoTrackForPlacement)?;
+    let parent = ParentLocator::Track(track.id);
+    let index = track.items.len();
+
+    let layer = doc.layers.reserve()?;
+    let mut layer_names = BTreeMap::new();
+    layer_names.insert(layer, name);
+    Ok(Command::AddTrackItem {
+        parent,
+        index,
+        item: TrackItem::Clip(Clip {
+            envelope: ItemEnvelope::new(layer),
+            start,
+            duration,
+            time_map: TimeMap::identity(),
+            source: ClipSource::Asset {
+                asset: asset_id,
+                video,
+                audio,
+            },
         }),
         layer_names,
     })

@@ -64,6 +64,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         Command::New(args) => {
             motolii_cli::new_document(&args.document)?;
         }
+        Command::ImportAsset(args) => {
+            motolii_media_tools_hint();
+            let id = motolii_cli::document_edit::import_asset(&args.project, &args.media)?;
+            println!("imported asset {}", id.get());
+        }
+        Command::PlaceClip(args) => {
+            let layer = motolii_cli::document_edit::place_clip(
+                &args.project,
+                motolii_doc::AssetId::from_raw(args.asset),
+                args.at_seconds,
+            )?;
+            println!("placed layer {}", layer.get());
+        }
+        Command::SetSoundtrack(args) => {
+            motolii_cli::document_edit::set_soundtrack(
+                &args.project,
+                motolii_doc::AssetId::from_raw(args.asset),
+                args.offset_seconds,
+                args.gain,
+            )?;
+            println!("soundtrack set");
+        }
         Command::ExportDocument(args) => {
             motolii_media_tools_hint();
             let gpu = GpuCtx::new_headless()?;

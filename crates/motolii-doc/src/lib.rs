@@ -683,6 +683,15 @@ impl DocumentWriter {
         command::prepare_add_group(&mut self.doc, parent, index, name)
     }
 
+    /// 素材clipを最初のTrackへ置くcommandを準備する(CU-101のPlace意味)。
+    pub fn prepare_place_asset_clip(
+        &mut self,
+        asset: AssetId,
+        start: RationalTime,
+    ) -> Result<Command, CommandError> {
+        command::prepare_place_asset_clip(&mut self.doc, asset, start)
+    }
+
     /// 対象TrackItem(Clip/Group、子ごと)を外すcommandを準備する。
     ///
     /// **複製の裏返し。** Undoでは同じLayerId/表示名がrestoreで戻る。

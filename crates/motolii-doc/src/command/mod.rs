@@ -35,7 +35,8 @@ pub use clip::{
 };
 pub use split::prepare_split_clip;
 pub use track_item::{
-    prepare_add_group, prepare_add_locator, prepare_remove_locator, prepare_remove_track_item,
+    prepare_add_group, prepare_add_locator, prepare_place_asset_clip, prepare_remove_locator,
+    prepare_remove_track_item,
     prepare_set_layer_name, prepare_set_locator_text, prepare_set_locator_time,
 };
 pub use error::CommandError;
