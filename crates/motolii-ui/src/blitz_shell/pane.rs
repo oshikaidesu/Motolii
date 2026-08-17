@@ -6,12 +6,20 @@
 //! 描画は `browser_blitz::render::BlitzSurface`(実証済み)を使い回す。
 //! **新しい描画方式はここで作らない。**
 //!
-//! HTML/CSS はどれも既存の移植実装(`timeline_blitz` / `inspector_blitz` /
-//! `chrome_blitz` / `browser_blitz`)が出したものを使う。色も寸法もこのfileでは決めない。
+//! HTML/CSS はどれも既存の移植実装(`timeline_blitz` / `chrome_blitz`)が
+//! 出したものを使う。色も寸法もこのfileでは決めない。
 //!
-//! **Stage だけは別経路。** `re_view_spatial::SpatialStage` は元から egui の
+//! **Stage は別経路。** `re_view_spatial::SpatialStage` は元から egui の
 //! ウィジェットなので、ホストの `egui::Ui` へ直接挿す(`EmbeddedSpatialStage::show_in`)。
 //! 自前textureも2つ目の egui context も持たない。
+//!
+//! **Browser / Inspector も egui native(2026-08-18 差し替え)。**
+//! 見た目の正本は `docs/mocks-ui/public/browser-library.html` / `inspector-library.html`
+//! で、描き手は `crate::browser_panel` / `crate::inspector_panel`。
+//! Stage と同じくホストの `egui::Ui` へ直接描き、自前 texture を持たない。
+//! 旧 `browser_blitz` / `inspector_blitz` は dump 器・oracle 源として残る
+//! (この pane からは呼ばない)。Browser の縮小実体 cache
+//! (`browser_blitz::thumbnail`)は native 側も同じものを食う。
 //!
 //! ## このfileが持たないもの
 //! - 入力ルーティング(マウスを受けない。`Sense::hover()` で場所を取るだけ)
@@ -34,11 +42,11 @@
 //! しかも作り直しのたびに runtime を drop することになる。
 //! 実際の判定は `tokio::runtime::Handle::try_current()` で行い、
 //! **reactorが無い場合は `net_provider` を渡さずに文書を組む**(panicさせない)。
-//! Timeline / Inspector / chrome の4枚はHTML内に外部リソースを持たないので、
-//! net provider が無くても絵は変わらない。外部画像を持つ Browser だけは
-//! `BrowserBlitzPanel` が自前で reactor を張る。
+//! Timeline / chrome の4枚はHTML内に外部リソースを持たないので、
+//! net provider が無くても絵は変わらない(Browser / Inspector は native pane で
+//! そもそも Blitz を通らない)。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use blitz_dom::{DocumentConfig, StyleThreading};
@@ -46,9 +54,9 @@ use blitz_html::HtmlDocument;
 use blitz_traits::shell::{ColorScheme, Viewport};
 
 use crate::browser_blitz::render::BlitzSurface;
-use crate::browser_blitz::{image_items, BrowserBlitzPanel, BrowserItem, DEFAULT_MAX_ITEMS};
+use crate::browser_panel::BrowserPanel;
 use crate::chrome_blitz;
-use crate::inspector_blitz;
+use crate::inspector_panel::{InspectorPanel, FIXTURE_TARGET_LAYER};
 use crate::timeline_blitz::{project_for_blitz, timeline_html};
 
 /// 合成先textureのformat。`Rgba8UnormSrgb` にしないこと(罠1)。
@@ -60,13 +68,6 @@ const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 /// 合成は常に等倍(1 texel = 1 物理px)にする。
 const TEXTURE_QUANTUM: u32 = 32;
 
-/// Browser は画像の非同期ロードを持つため、合成先は面より大きくしない。
-/// **切り下げる** — 面より大きい文書を組んで端を切り落とさない。
-const BROWSER_QUANTUM: u32 = 64;
-
-/// Browser の画像が届き終わったと見なすまでの、枚数が増えないフレーム数。
-const BROWSER_SETTLE_FRAMES: u32 = 10;
-
 /// 計測の出力間隔(フレーム)。
 const TRACE_EVERY: u32 = 60;
 
@@ -76,10 +77,8 @@ fn trace_enabled() -> bool {
 
 /// Timelineの絵にするDocument。`blitz_dump/main.rs:126-131` と同じ。
 /// `Document::new_current()` は空で、投影が bar も key も出さない。
+/// Inspector の fixture read-model も同じ文書から組む(decoder P1 と同じ)。
 const TIMELINE_DOC: &str = "docs/mocks-ui/fixtures/reference-document.json";
-
-/// Browserが走査するフォルダ。`blitz_dump/main.rs:175` と同じ。
-const BROWSER_DIR: &str = "docs/mocks";
 
 /// 1ペインに出す面の種類。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -108,7 +107,8 @@ impl BlitzPane {
     pub fn new(kind: PaneKind) -> Self {
         let content = match kind {
             PaneKind::Stage => Content::Stage(StagePane::default()),
-            PaneKind::Browser => Content::Browser(BrowserPane::default()),
+            PaneKind::Browser => Content::NativeBrowser(None),
+            PaneKind::Inspector => Content::NativeInspector(None),
             _ => Content::Html(HtmlPane::default()),
         };
         Self {
@@ -159,7 +159,7 @@ impl BlitzPane {
         match &self.content {
             Content::Html(html) => html.source_document.as_ref(),
             Content::Stage(stage) => stage.document.as_ref(),
-            Content::Browser(_) => None,
+            Content::NativeBrowser(_) | Content::NativeInspector(_) => None,
         }
     }
 
@@ -195,43 +195,52 @@ impl BlitzPane {
             return;
         }
 
-        // Stage だけは **ホストの egui へ直接描く**。以下の texture 経路には来ない。
-        // `SpatialStage` は元から egui のウィジェットなので、間に自前の
-        // texture と2つ目の egui を挟む理由が(ホストが egui になった今は)無い。
-        if matches!(self.content, Content::Stage(_)) {
-            let trace_started = trace_enabled().then(std::time::Instant::now);
-            if let Content::Stage(pane) = &mut self.content {
-                pane.show(ui, render_state);
+        // Stage / Browser / Inspector は **ホストの egui へ直接描く**。
+        // 以下の texture 経路には来ない。Stage は元から egui のウィジェット、
+        // Browser / Inspector は 2026-08-18 に egui native へ差し替えた
+        // (`crate::browser_panel` / `crate::inspector_panel`)。
+        match &mut self.content {
+            Content::Stage(_) | Content::NativeBrowser(_) | Content::NativeInspector(_) => {
+                let trace_started = trace_enabled().then(std::time::Instant::now);
+                match &mut self.content {
+                    Content::Stage(pane) => pane.show(ui, render_state),
+                    Content::NativeBrowser(panel) => {
+                        // 初回表示時に作る(フォルダ走査と縮小実体の準備を、
+                        // 窓を開く前に払わない)。
+                        panel
+                            .get_or_insert_with(BrowserPanel::default_shell)
+                            .show(ui);
+                    }
+                    Content::NativeInspector(panel) => {
+                        panel
+                            .get_or_insert_with(|| {
+                                InspectorPanel::from_document_path(
+                                    Path::new(TIMELINE_DOC),
+                                    FIXTURE_TARGET_LAYER,
+                                )
+                            })
+                            .show(ui);
+                    }
+                    Content::Html(_) => unreachable!("checked above"),
+                }
+                if let Some(started) = trace_started {
+                    self.trace_frame(started.elapsed(), width, height);
+                }
+                return;
             }
-            if let Some(started) = trace_started {
-                self.trace_frame(started.elapsed(), width, height);
-            }
-            return;
+            Content::Html(_) => {}
         }
 
         let (device, queue) = (&render_state.device, &render_state.queue);
 
-        // Html pane は要求どおり、Browser は画像面を切り下げて安定させる。
-        let (paint_width, paint_height) = match &self.content {
-            Content::Html(_) | Content::Stage(_) => (width, height),
-            Content::Browser(_) => (
-                floor_to(width, BROWSER_QUANTUM),
-                floor_to(height, BROWSER_QUANTUM),
-            ),
-        };
-        if paint_width == 0 || paint_height == 0 {
-            return;
-        }
+        let (paint_width, paint_height) = (width, height);
 
         // 確保する texture の大きさ。Html系は切り上げて作り直しの頻度を下げ、
         // 使うのは左上の `paint_*` 分だけ(UVで切り出す)。
-        let (texture_width, texture_height) = match &self.content {
-            Content::Html(_) => (
-                ceil_to(paint_width, TEXTURE_QUANTUM),
-                ceil_to(paint_height, TEXTURE_QUANTUM),
-            ),
-            Content::Stage(_) | Content::Browser(_) => (paint_width, paint_height),
-        };
+        let (texture_width, texture_height) = (
+            ceil_to(paint_width, TEXTURE_QUANTUM),
+            ceil_to(paint_height, TEXTURE_QUANTUM),
+        );
 
         ensure_target(
             &mut self.target,
@@ -266,19 +275,8 @@ impl BlitzPane {
                     points_per_pixel as f64,
                 );
             }
-            Content::Browser(pane) => {
-                pane.render(
-                    device,
-                    queue,
-                    &render_state.adapter,
-                    &target.view,
-                    paint_width,
-                    paint_height,
-                    points_per_pixel as f64,
-                );
-            }
-            // Stage は上で返している。
-            Content::Stage(_) => {}
+            // native 系は上で返している。
+            Content::Stage(_) | Content::NativeBrowser(_) | Content::NativeInspector(_) => {}
         }
 
         if let Some(started) = trace_started {
@@ -326,8 +324,8 @@ impl BlitzPane {
 
 /// 合成先texture1枚と、そのegui側の登録。
 ///
-/// format は `FORMAT` 固定。Stage はホストの egui へ直接描くので、
-/// この器を使うのは Blitz 面(Html / Browser)だけになった。
+/// format は `FORMAT` 固定。Stage / Browser / Inspector はホストの egui へ
+/// 直接描くので、この器を使うのは Blitz 面(Html)だけになった。
 struct Target {
     #[allow(dead_code)]
     texture: wgpu::Texture,
@@ -404,7 +402,11 @@ fn ensure_target(
 
 enum Content {
     Html(HtmlPane),
-    Browser(BrowserPane),
+    /// Browser native pane(`crate::browser_panel`)。初回表示時に作る
+    /// (フォルダ走査と縮小実体の準備を、窓を開く前に払わない)。
+    NativeBrowser(Option<BrowserPanel>),
+    /// Inspector native pane(`crate::inspector_panel`)。同上。
+    NativeInspector(Option<InspectorPanel>),
     /// Rerun Spatial Viewer の Stage。**Blitzではない。**
     /// Motolii は Viewer の wrapper であって、`re_renderer` で直接シーンを組まない
     /// (2026-08-11裁定)。ここは `rerun_stage::EmbeddedSpatialStage` を呼ぶだけ。
@@ -493,7 +495,7 @@ fn stage_document() -> motolii_doc::Document {
     })
 }
 
-/// HTML文書1枚で足りる面(Timeline / Inspector / chrome 3枚)。
+/// HTML文書1枚で足りる面(Timeline / chrome 3枚)。
 #[derive(Default)]
 struct HtmlPane {
     document: Option<HtmlDocument>,
@@ -564,9 +566,9 @@ impl HtmlPane {
         // 作り直していないなら、前フレームの中身がそのまま生きている。
         //
         // 描き足りない事故が起きうるのは、blitz-paint が未取得リソースのあるフレームで
-        // 何も描かずに戻る場合だけ。ここに来る4枚(Timeline / Inspector / chrome)は
+        // 何も描かずに戻る場合だけ。ここに来る4枚(Timeline / chrome 3枚)は
         // **HTML内に外部リソースを持たない**(file冒頭の契約)ので、その事故は起きない。
-        // 外部画像を持つ Browser は `BrowserPane` 側が別に面倒を見る。
+        // (外部画像を持つ Browser は native pane で、この経路を通らない。)
         if self.painted {
             return;
         }
@@ -622,12 +624,11 @@ impl HtmlPane {
                     motolii_core::RationalTime::ZERO,
                 )
             }
-            PaneKind::Inspector => inspector_blitz::inspector_html(&inspector_blitz::SAMPLE),
             PaneKind::ChromeExport => chrome_blitz::export_html(&chrome_blitz::EXPORT_SAMPLE),
             PaneKind::ChromeSettings => chrome_blitz::settings_html(),
             PaneKind::ChromePanels => chrome_blitz::panels_html(),
-            // Browser は `BrowserPane`、Stage は `StagePane` が持つ。ここへは来ない。
-            PaneKind::Browser | PaneKind::Stage => String::new(),
+            // Browser / Inspector は native pane、Stage は `StagePane`。ここへは来ない。
+            PaneKind::Browser | PaneKind::Inspector | PaneKind::Stage => String::new(),
         };
         html
     }
@@ -650,101 +651,6 @@ impl HtmlPane {
                 }
             })
         })
-    }
-}
-
-/// Browser面。**これだけは自前のsurfaceを持つ**(`BrowserBlitzPanel` が
-/// 文書・reactor・描画をひとまとめに抱える)ので、他の面と扱いが違う:
-/// - `BlitzSurface` をこちらで作らない
-/// - `resolve` も `BrowserBlitzPanel::render` の中で行われる(2回resolveは効かない。
-///   Browserのmarkupは z-index を使わないので絵は変わらない)
-/// - 面の大きさを後から変えられないので、変わったらパネルごと作り直す。
-///   走査結果(`items`)は保持して再走査を避ける。
-#[derive(Default)]
-struct BrowserPane {
-    panel: Option<BrowserBlitzPanel>,
-    items: Option<Vec<BrowserItem>>,
-    /// パネルを作った面の大きさ(CSS px)。
-    size: (u32, u32),
-    /// パネルを作ったときの倍率。変わったら作り直す(CSS px の意味が変わるため)。
-    scale: f64,
-    /// 画像が届き終わるまでの落ち着き待ち。**Browserだけは1回描いて終われない** —
-    /// `blitz-net` の fetch が非同期で、1フレーム目ではサムネイルがまだ来ていない
-    /// (`blitz_dump/main.rs:202-204` と同じ理由)。枚数が増えなくなったら描くのを止める。
-    settled: u32,
-    last_images: usize,
-}
-
-impl BrowserPane {
-    fn render(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        adapter: &wgpu::Adapter,
-        target: &wgpu::TextureView,
-        width: u32,
-        height: u32,
-        scale: f64,
-    ) {
-        // `BrowserBlitzPanel` は `width`/`height` を **CSS px** で取る
-        // (ポインタ判定も同じ空間)。texture は倍率を掛けた物理px で作られる。
-        let css = (
-            ((width as f64) / scale).round().max(1.0) as u32,
-            ((height as f64) / scale).round().max(1.0) as u32,
-        );
-        // **寸法が変わっただけならパネルを作り直さない**(`BrowserBlitzPanel::resize`)。
-        // 作り直すと tokio runtime ごと立て直して画像を全部取り直すため、
-        // ドラッグ中にサムネイルが消える。
-        if self.panel.is_some() && (self.size != css || self.scale != scale) {
-            if let Some(panel) = self.panel.as_mut() {
-                panel.resize(css.0, css.1, scale);
-            }
-            self.size = css;
-            self.scale = scale;
-            // 新しい viewport の描画が完了するまでだけ、再び落ち着き待ちに入る。
-            self.settled = 0;
-            self.last_images = usize::MAX;
-        }
-        if self.panel.is_none() {
-            let items = self
-                .items
-                .get_or_insert_with(|| image_items(&PathBuf::from(BROWSER_DIR), DEFAULT_MAX_ITEMS))
-                .clone();
-            let title = format!("Browser — {BROWSER_DIR}");
-            // 作り直しは `BROWSER_QUANTUM` の段でしか起きない(splitterのドラッグ中に
-            // 毎フレーム走らせない)。失敗したら今フレームは何も描かない。
-            match BrowserBlitzPanel::new(
-                device, adapter, queue, FORMAT, css.0, css.1, scale, title, items,
-            ) {
-                Ok(panel) => {
-                    self.panel = Some(panel);
-                    self.size = css;
-                    self.scale = scale;
-                    self.settled = 0;
-                    self.last_images = usize::MAX;
-                }
-                Err(error) => {
-                    eprintln!("blitz-pane: Browserパネルを作れない: {error}");
-                    self.panel = None;
-                    return;
-                }
-            }
-        }
-        if let Some(panel) = self.panel.as_mut() {
-            // 落ち着いたら描き直さない。同じ絵を作り直すために毎フレーム
-            // DOM全体をシーンへ起こし直す必要は無い(実測107 ms/frame、debug)。
-            if self.settled >= BROWSER_SETTLE_FRAMES {
-                return;
-            }
-            panel.render(device, queue, target);
-            let images = panel.cached_image_count();
-            self.settled = if images == self.last_images {
-                self.settled + 1
-            } else {
-                0
-            };
-            self.last_images = images;
-        }
     }
 }
 
@@ -786,19 +692,37 @@ fn ceil_to(value: u32, quantum: u32) -> u32 {
     value.div_ceil(quantum) * quantum
 }
 
-fn floor_to(value: u32, quantum: u32) -> u32 {
-    (value / quantum) * quantum
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Browser / Inspector は Blitz texture 面ではなく native pane に座る
+    /// (2026-08-18 差し替えの見張り)。
+    #[test]
+    fn browser_and_inspector_panes_are_native() {
+        assert!(matches!(
+            BlitzPane::new(PaneKind::Browser).content,
+            Content::NativeBrowser(_)
+        ));
+        assert!(matches!(
+            BlitzPane::new(PaneKind::Inspector).content,
+            Content::NativeInspector(_)
+        ));
+        // Timeline / chrome は従来どおり Blitz(Html)面。
+        for kind in [
+            PaneKind::Timeline,
+            PaneKind::ChromeExport,
+            PaneKind::ChromeSettings,
+            PaneKind::ChromePanels,
+        ] {
+            assert!(matches!(BlitzPane::new(kind).content, Content::Html(_)));
+        }
+    }
 
     #[test]
     fn resizing_html_panes_reuses_the_document() {
         for kind in [
             PaneKind::Timeline,
-            PaneKind::Inspector,
             PaneKind::ChromeExport,
             PaneKind::ChromeSettings,
             PaneKind::ChromePanels,

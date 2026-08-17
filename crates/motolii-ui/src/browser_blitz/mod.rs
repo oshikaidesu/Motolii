@@ -9,7 +9,8 @@ mod library_view;
 mod markup;
 pub mod render;
 mod theme;
-mod thumbnail;
+/// 縮小実体 cache。native Browser pane(`crate::browser_panel`)も同じものを食う。
+pub(crate) mod thumbnail;
 
 use blitz_dom::{DocumentConfig, StyleThreading};
 use blitz_html::HtmlDocument;

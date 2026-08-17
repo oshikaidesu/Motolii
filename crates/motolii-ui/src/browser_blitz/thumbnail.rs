@@ -56,7 +56,7 @@ fn max_size() -> (u32, u32) {
 /// 項目ごとの縮小実体のpath。`items` と**同じ長さ・同じ並び**で返す。
 /// `None` は作れなかった項目で、その card は画像なしで描かれる(`markup.rs`)。
 /// **元画像へフォールバックしない** — 戻すと重さの原因がそのまま残る。
-pub(super) fn prepare(items: &[BrowserItem]) -> Vec<Option<PathBuf>> {
+pub(crate) fn prepare(items: &[BrowserItem]) -> Vec<Option<PathBuf>> {
     items
         .iter()
         .map(|item| match thumbnail_for(&item.path) {

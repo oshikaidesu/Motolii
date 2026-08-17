@@ -6,9 +6,11 @@ mod blitz_css;
 /// 移植済みBlitzパネルを1つの窓へ合体させる殻(eframe host + egui_tiles)。bin から使うので pub。
 pub mod blitz_shell;
 mod blitz_ui;
-/// C6: フォルダ参照でメディア入口を開くBrowserパネル(Blitz)。
+/// C6: フォルダ参照でメディア入口を開くBrowserパネル(Blitz)。dump 器・oracle 源として残す。
 pub mod browser_blitz;
 mod browser_host;
+/// Browser native pane(egui)。UX 正本は `docs/mocks-ui/public/browser-library.html`。
+pub mod browser_panel;
 mod canonical_drop;
 // C8: chrome と extension panel の見た目のBlitz(HTML/CSS)写し。bin から使うので pub。
 pub mod chrome_blitz;
@@ -19,8 +21,12 @@ pub mod dock;
 mod document_command_request;
 mod egui_fonts;
 mod host_pointer_capture;
-// C7: Inspector の見た目のBlitz(HTML/CSS)写し。bin から使うので pub。
+// C7: Inspector の見た目のBlitz(HTML/CSS)写し。dump 器・oracle 源として残す。
 pub mod inspector_blitz;
+/// Inspector native pane(egui)+ read-model。
+/// UX 正本は `docs/mocks-ui/public/inspector-library.html`、
+/// read-model の意味の正本は guard-tests(inspector-read-model-decoder.test.mjs)。
+pub mod inspector_panel;
 mod interaction_state;
 mod layout;
 mod layout_authority;
