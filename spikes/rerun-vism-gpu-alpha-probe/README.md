@@ -54,6 +54,10 @@ cargo run -p rerun-vism-gpu-alpha-probe -- \
   黒い矩形のまま残る。これが残っていることが「上流を書き換えていない」証拠になる。
 - 8フレーム目でhostが別のtextureへ差し替える。マーカー(緑=画像左上/白=右下)が
   出ていれば、importが毎回取り直している。出なければ古いtextureに貼り付いている。
+- 背景と前景は厳密に同一平面(z=0)で、前後は`draw_order`だけで決めている。
+  `copy_gpu_image`が自分のpathへ置くz=-0.01は親の+0.01で打ち消す。ちらつきや斑が
+  出れば、coplanar clusterの検出か透明フェーズへの強制が効いていない。
+- マーカーの位置は上下方向も兼ねる。緑(画像の行0)が奥側に出れば反転なし。
 
 これは標準 3D consumer の透明合成だけを確認する fixture であり、Vism runtime、Filter、
 Vism API、Preview/Export、`motolii-blitz-shell` へ接続しない。

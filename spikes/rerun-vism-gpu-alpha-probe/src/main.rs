@@ -92,6 +92,7 @@ struct StageHost {
     /// Vism の出力に相当するGPU texture。host側が所有を持ち続ける。
     /// ダブルバッファを模して2枚持ち、途中で差し替える。
     filter_output: Vec<wgpu::Texture>,
+    draw_order_sent: bool,
     screenshot_requested: bool,
     captured: bool,
     error: Option<String>,
@@ -106,7 +107,9 @@ impl StageHost {
         ingest_transform(
             &mut stage,
             FOREGROUND_PARENT_PATH,
-            &Transform3D::from_translation([0.0, 0.0, 0.05]),
+            // `copy_gpu_image`が自分のpathへ置くz=-0.01を打ち消し、背景と厳密に同一平面へ載せる。
+            // 前後はz差ではなくdraw orderだけで決める。
+            &Transform3D::from_translation([0.0, 0.0, 0.01]),
         )?;
         Ok(Self {
             stage,
@@ -114,6 +117,7 @@ impl StageHost {
             frame_count: 0,
             focus_frames: 3,
             filter_output: Vec::new(),
+            draw_order_sent: false,
             screenshot_requested: false,
             captured: false,
             error: None,
@@ -153,6 +157,11 @@ impl StageHost {
             self.stage
                 .copy_gpu_image(&render_ctx, FOREGROUND_IMAGE_PATH, &self.filter_output[index])
                 .map_err(|error| format!("hand Vism GPU output to stage: {error}"))?;
+            if !self.draw_order_sent {
+                // entityは`copy_gpu_image`が作るので、その後でdraw orderだけ足す。
+                ingest_draw_order(&mut self.stage, FOREGROUND_IMAGE_PATH, 10.0)?;
+                self.draw_order_sent = true;
+            }
             // 既定カメラのscene fitに任せる。前景が描かれない場合にbboxが無く、
             // focusが効いたかどうかで判定がぶれるのを避ける。
             let _ = self.focus_frames;
@@ -239,6 +248,7 @@ fn ingest_background(stage: &mut SpatialStage) -> Result<(), String> {
 
     // `copy_gpu_image` が前景へ置くのと同じ「原点中心・縦1.0」の矩形へ揃える。
     let aspect = WIDTH as f32 / HEIGHT as f32;
+    ingest_draw_order(stage, BACKGROUND_IMAGE_PATH, 0.0)?;
     ingest_transform(
         stage,
         BACKGROUND_PARENT_PATH,
@@ -302,6 +312,21 @@ fn ingest_control_image(stage: &mut SpatialStage) -> Result<(), String> {
             [1.0 / HEIGHT as f32, 1.0 / HEIGHT as f32, 1.0],
         ),
     )
+}
+
+/// 同一平面のlayerの前後を、z差ではなくdraw orderで決める。
+fn ingest_draw_order(stage: &mut SpatialStage, path: &str, order: f32) -> Result<(), String> {
+    let chunk = Chunk::builder(path)
+        .with_archetype(
+            RowId::new(),
+            TimePoint::STATIC,
+            &GridMap::update_fields().with_draw_order(order),
+        )
+        .build()
+        .map_err(|error| format!("build Rerun draw order: {error}"))?;
+    stage
+        .ingest_chunk(std::sync::Arc::new(chunk))
+        .map_err(|error| format!("ingest Rerun draw order: {error}"))
 }
 
 fn ingest_transform(
