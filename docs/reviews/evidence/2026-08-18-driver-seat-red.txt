@@ -1,0 +1,8 @@
+# 2026-08-18 運転席 red 先行の証跡
+
+## tests/shell_error_fence.rs (即red)
+assertion failed: blitz_shell/pane.rs に eprintln! が 8 箇所残っている (left: 8, right: 0)
+
+## src/blitz_shell/drive_tests.rs (compile-red)
+error[E0432]: unresolved import `super::drive`
+error: could not compile `motolii-ui` (lib test) due to 1 previous error

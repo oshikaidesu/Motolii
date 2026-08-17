@@ -85,5 +85,6 @@ objc2.workspace = true
 objc2-app-kit = { workspace = true, features = ["block2", "std", "NSEvent", "NSView", "NSWindow"] }
 
 [dev-dependencies]
+egui_kittest.workspace = true
 motolii-testkit.workspace = true
 syn = { version = "2", features = ["full", "visit"] }

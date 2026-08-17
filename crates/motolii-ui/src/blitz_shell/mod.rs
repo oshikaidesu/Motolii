@@ -40,6 +40,8 @@
 //! - **レイアウトの永続化**は無い。起動するたび既定の並び
 
 mod app;
+#[cfg(test)]
+mod drive_tests;
 mod pane;
 mod runner;
 

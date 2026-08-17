@@ -59,6 +59,9 @@ egui = "0.35"
 eframe = { version = "0.35", default-features = false, features = ["wgpu", "x11", "wayland"] }
 egui-wgpu = "0.35"
 egui-winit = "0.35"
+# 運転席(drive_tests)用。egui/egui-wgpu/wgpu と全一致する公式テストハーネス
+# (2026-08-16 Timeline再選定の開発動線 第2層)。dev-dependencies 専用。
+egui_kittest = { version = "0.35", features = ["wgpu", "snapshot"] }
 egui_tiles = "0.16"
 # Blitz(HTML/CSS)によるUI面。wgpu 29 に一致するのは vello_hybrid 系のみで、
 # classic vello / anyrender_vello は wgpu 26 のため使わない
