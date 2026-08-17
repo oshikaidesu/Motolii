@@ -53,6 +53,7 @@ use blitz_dom::{DocumentConfig, StyleThreading};
 use blitz_html::HtmlDocument;
 use blitz_traits::shell::{ColorScheme, Viewport};
 
+use super::drive::ShellTranscript;
 use crate::browser_blitz::render::BlitzSurface;
 use crate::browser_panel::BrowserPanel;
 use crate::chrome_blitz;
@@ -132,6 +133,10 @@ pub struct BlitzPane {
     /// egui へ渡す合成先。大きさが変わった時だけ作り直す。
     target: Option<Target>,
     content: Content,
+    /// この面の失敗を言う場所。**stderr には書かない**（`tests/shell_error_fence.rs`）。
+    /// 既定は誰も読まない台帳で、shell が組む時に殻の台帳へ差し替える
+    /// (`reporting_to`)。そうすると帯にも `--status-log` にも同じ文が出る。
+    transcript: ShellTranscript,
 }
 
 impl BlitzPane {
@@ -148,7 +153,15 @@ impl BlitzPane {
             trace_frames: 0,
             target: None,
             content,
+            transcript: ShellTranscript::default(),
         }
+    }
+
+    /// この面の一言を殻の台帳へ流す。**失敗を黙って消さない**ための線で、
+    /// 面の見た目も意味も変えない。
+    pub(crate) fn reporting_to(mut self, transcript: &ShellTranscript) -> Self {
+        self.transcript = transcript.clone();
+        self
     }
 
     /// live Document(編集threadの `DocumentWriter` が出した snapshot)を映す面として作る。
@@ -277,7 +290,7 @@ impl BlitzPane {
             Content::Stage(_) | Content::NativeBrowser(_) | Content::NativeInspector(_) => {
                 let trace_started = trace_enabled().then(std::time::Instant::now);
                 match &mut self.content {
-                    Content::Stage(pane) => pane.show(ui, render_state),
+                    Content::Stage(pane) => pane.show(ui, render_state, &self.transcript),
                     Content::NativeBrowser(panel) => {
                         // 初回表示時に作る(フォルダ走査と縮小実体の準備を、
                         // 窓を開く前に払わない)。
@@ -350,6 +363,7 @@ impl BlitzPane {
                     paint_width,
                     paint_height,
                     points_per_pixel as f64,
+                    &self.transcript,
                 );
             }
             // native 系は上で返している。
@@ -381,19 +395,21 @@ impl BlitzPane {
     }
 
     /// 1フレームぶんの実測を積み、`TRACE_EVERY` ごとに吐く。
+    /// 出す先も台帳（`MOTOLII_SHELL_TRACE=1` の時だけ動くのは変わらない）。
+    /// stderr へ分けないので、`--status-log` に測りも失敗も同じ順で残る。
     fn trace_frame(&mut self, elapsed: std::time::Duration, width: u32, height: u32) {
         self.trace_total += elapsed;
         self.trace_frames += 1;
         if self.trace_frames < TRACE_EVERY {
             return;
         }
-        eprintln!(
+        self.transcript.report(format!(
             "shell-trace {:>16}: {:.2} ms/frame ({}x{})",
             self.title(),
             self.trace_total.as_secs_f64() * 1000.0 / TRACE_EVERY as f64,
             width,
             height
-        );
+        ));
         self.trace_total = std::time::Duration::ZERO;
         self.trace_frames = 0;
     }
@@ -518,6 +534,15 @@ struct StagePane {
     frame_seat: Option<StageFrameSeat>,
     /// 席を立てられなかった(GPU/worker)。理由は1度だけ言い、以後は幾何だけで出す。
     frame_seat_failed: bool,
+    /// Rerun Stage を作れないと言ったか。作り直しは毎フレーム試すが、
+    /// **同じ理由を毎フレーム言わない**(帯が理由1つで埋まってしまう)。
+    stage_failure_reported: bool,
+    /// 最後に言った合成の失敗。**変わった時だけ**言い直す。
+    reported_frame_error: Option<String>,
+    /// 最後に言った Stage 描画の失敗。同上。
+    reported_draw_error: Option<String>,
+    /// fixture が読めないと言ったか(座席の無い展示動線だけが通る)。
+    fixture_failure_reported: bool,
 }
 
 impl StagePane {
@@ -551,6 +576,7 @@ impl StagePane {
         &mut self,
         render_state: &eframe::egui_wgpu::RenderState,
         ctx: &egui::Context,
+        transcript: &ShellTranscript,
     ) {
         if !self.wants_evaluated_frame() {
             return;
@@ -571,7 +597,9 @@ impl StagePane {
                 }
                 Err(error) => {
                     self.frame_seat_failed = true;
-                    eprintln!("blitz-pane: Stage の合成フレーム席を立てられない: {error}");
+                    transcript.report(format!(
+                        "blitz-pane: Stage の合成フレーム席を立てられない: {error}"
+                    ));
                 }
             }
         }
@@ -583,17 +611,34 @@ impl StagePane {
         };
         seat.request(&document, self.playhead);
         seat.poll();
-        if let Some(error) = seat.take_error() {
-            eprintln!("blitz-pane: Stage の合成に失敗: {error}");
+        match seat.take_error() {
+            Some(error) => {
+                let text = format!("blitz-pane: Stage の合成に失敗: {error}");
+                if self.reported_frame_error.as_deref() != Some(text.as_str()) {
+                    transcript.report(text.clone());
+                    self.reported_frame_error = Some(text);
+                }
+            }
+            // 直った失敗は忘れる — 次に同じ理由で落ちたら改めて言う。
+            None => self.reported_frame_error = None,
         }
     }
 
-    fn show(&mut self, ui: &mut egui::Ui, render_state: &eframe::egui_wgpu::RenderState) {
+    fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        render_state: &eframe::egui_wgpu::RenderState,
+        transcript: &ShellTranscript,
+    ) {
         if self.stage.is_none() {
             match crate::rerun_stage::EmbeddedSpatialStage::new_in_host(render_state) {
                 Ok(stage) => self.stage = Some(stage),
                 Err(error) => {
-                    eprintln!("blitz-pane: Rerun Stage を作れない: {error}");
+                    // 作り直しは次のフレームでも試すが、理由は1度だけ言う。
+                    if !self.stage_failure_reported {
+                        self.stage_failure_reported = true;
+                        transcript.report(format!("blitz-pane: Rerun Stage を作れない: {error}"));
+                    }
                     return;
                 }
             }
@@ -601,7 +646,7 @@ impl StagePane {
 
         // 合成フレームの席は Stage を借りる前に回す(借りが割れないように)。
         let ctx = ui.ctx().clone();
-        self.drive_frame_seat(render_state, &ctx);
+        self.drive_frame_seat(render_state, &ctx, transcript);
 
         let evaluated_frame = self.frame_seat.as_ref().and_then(StageFrameSeat::frame);
         // 幾何を積む時刻も Stage を借りる前に決める(同じ理由)。
@@ -630,14 +675,19 @@ impl StagePane {
         if resized || self.framed_at != Some(framed_at) {
             // live(`--project`)なら writer の snapshot をそのまま読む(single writer の
             // reader 側)。座っていなければ従来どおり fixture。
-            let fixture;
-            let document: &motolii_doc::Document = match &self.document {
-                Some(live) => live,
-                None => {
-                    fixture = stage_document();
-                    &fixture
-                }
+            let fixture = if self.document.is_none() {
+                Some(stage_document(
+                    transcript,
+                    &mut self.fixture_failure_reported,
+                ))
+            } else {
+                None
             };
+            let document: &motolii_doc::Document = self
+                .document
+                .as_deref()
+                .or(fixture.as_ref())
+                .expect("live か fixture のどちらかが在る");
             let geometry = crate::stage_app_geometry::app_stage_geometry(document, framed_at);
             if resized || self.applied_geometry.as_ref() != Some(&geometry) {
                 stage.apply_host_stage_geometry(&geometry, width, height);
@@ -652,20 +702,34 @@ impl StagePane {
             self.framed_at = Some(framed_at);
         }
 
-        if let Err(error) = stage.show_in(ui, render_state, evaluated_frame) {
-            eprintln!("blitz-pane: Rerun Stage の描画に失敗: {error}");
+        match stage.show_in(ui, render_state, evaluated_frame) {
+            Err(error) => {
+                let text = format!("blitz-pane: Rerun Stage の描画に失敗: {error}");
+                if self.reported_draw_error.as_deref() != Some(text.as_str()) {
+                    transcript.report(text.clone());
+                    self.reported_draw_error = Some(text);
+                }
+            }
+            // 描けた時の戻りは従来どおり読み捨てる（この面の関心ではない）。
+            Ok(_) => self.reported_draw_error = None,
         }
     }
 }
 
 /// Stage が映すDocument。Timelineと同じものを読む。
-fn stage_document() -> motolii_doc::Document {
+///
+/// 読めなければ空Documentで描くのは従来どおりだが、**理由は台帳へ言う**。
+/// 毎フレーム通る経路なので、同じ理由は `reported` で1度に抑える。
+fn stage_document(transcript: &ShellTranscript, reported: &mut bool) -> motolii_doc::Document {
     let path = PathBuf::from(TIMELINE_DOC);
     motolii_doc::load_document(&path).unwrap_or_else(|error| {
-        eprintln!(
-            "blitz-pane: {} を読めないので空Documentで描く: {error}",
-            path.display()
-        );
+        if !*reported {
+            *reported = true;
+            transcript.report(format!(
+                "blitz-pane: {} を読めないので空Documentで描く: {error}",
+                path.display()
+            ));
+        }
         motolii_doc::Document::new_current()
     })
 }
@@ -684,6 +748,8 @@ struct HtmlPane {
     source_document: Option<Arc<motolii_doc::Document>>,
     /// 現在の文書とsurfaceの組で既に1回描いたか。**変わるまで描き直さない。**
     painted: bool,
+    /// `#tl-surface` が無いと言ったか。文書を組み直すたびに通るので1度に抑える。
+    surface_failure_reported: bool,
 }
 
 impl HtmlPane {
@@ -700,8 +766,9 @@ impl HtmlPane {
         width: u32,
         height: u32,
         scale: f64,
+        transcript: &ShellTranscript,
     ) {
-        self.ensure_document(kind, width, height, scale);
+        self.ensure_document(kind, width, height, scale, transcript);
         // **寸法が変わっただけなら作り直さない。** `BlitzSurface::resize` の doc の
         // とおり、`Renderer` は `RenderSize` を毎回受け取って自分で追随する。
         // 作り直すと画像キャッシュとグリフatlasを毎回捨てることになる。
@@ -753,23 +820,33 @@ impl HtmlPane {
         }
     }
 
-    fn ensure_document(&mut self, kind: PaneKind, width: u32, height: u32, scale: f64) {
+    fn ensure_document(
+        &mut self,
+        kind: PaneKind,
+        width: u32,
+        height: u32,
+        scale: f64,
+        transcript: &ShellTranscript,
+    ) {
         let viewport = (width, height, scale);
         if self.document.is_none() {
-            let html = self.html(kind);
+            let html = self.html(kind, transcript);
             let mut document = build_document(&html, width, height, scale);
             // Timeline の clip と key は DOM に無い(`timeline_blitz/surface.rs`)。
             // ここで挿さないと、行と目盛だけの Timeline になる。
             if kind == PaneKind::Timeline {
-                let source = self.timeline_document().clone();
+                let source = self.timeline_document(transcript).clone();
                 let projection = project_for_blitz(&source).ok();
                 if !crate::timeline_blitz::attach_surface(
                     &mut document,
                     &source,
                     projection.as_ref(),
                     None,
-                ) {
-                    eprintln!("blitz-pane: #tl-surface が見つからず Timeline の面を挿せない");
+                ) && !self.surface_failure_reported
+                {
+                    self.surface_failure_reported = true;
+                    transcript
+                        .report("blitz-pane: #tl-surface が見つからず Timeline の面を挿せない");
                 }
             }
             self.document = Some(document);
@@ -787,10 +864,10 @@ impl HtmlPane {
     }
 
     /// 面の構造を一度だけ組む。寸法は Document の viewport が持つ。
-    fn html(&mut self, kind: PaneKind) -> String {
+    fn html(&mut self, kind: PaneKind, transcript: &ShellTranscript) -> String {
         let html = match kind {
             PaneKind::Timeline => {
-                let document = self.timeline_document();
+                let document = self.timeline_document(transcript);
                 let projection = project_for_blitz(document).ok();
                 timeline_html(
                     document,
@@ -812,16 +889,16 @@ impl HtmlPane {
     /// 読めなければ空Documentへ落とす(`blitz_dump/main.rs:134-147` と同じ)。
     /// fixture の fallback はここ(表示専用の動線)だけで、`--project` の失敗は
     /// ここへ来る前に起動失敗になっている(`app.rs` の `ProjectSeat::open`)。
-    fn timeline_document(&mut self) -> &Arc<motolii_doc::Document> {
+    fn timeline_document(&mut self, transcript: &ShellTranscript) -> &Arc<motolii_doc::Document> {
         self.source_document.get_or_insert_with(|| {
             let path = PathBuf::from(TIMELINE_DOC);
             Arc::new(match motolii_doc::load_document(&path) {
                 Ok(document) => document,
                 Err(error) => {
-                    eprintln!(
+                    transcript.report(format!(
                         "blitz-pane: {} を読めないので空Documentで描く: {error}",
                         path.display()
-                    );
+                    ));
                     motolii_doc::Document::new_current()
                 }
             })
@@ -996,10 +1073,11 @@ mod tests {
             PaneKind::ChromePanels,
         ] {
             let mut pane = HtmlPane::default();
-            pane.ensure_document(kind, 640, 480, 1.0);
+            let transcript = ShellTranscript::default();
+            pane.ensure_document(kind, 640, 480, 1.0, &transcript);
             let before = pane.document.as_ref().expect("initial document") as *const HtmlDocument;
 
-            pane.ensure_document(kind, 960, 640, 1.0);
+            pane.ensure_document(kind, 960, 640, 1.0, &transcript);
 
             assert_eq!(
                 before,
