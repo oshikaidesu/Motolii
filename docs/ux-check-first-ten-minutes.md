@@ -19,9 +19,8 @@ projectなしで起動すると展示(fixture)が出る。**Cmd+N**で新規proj
 ## P1: 曲が先にあるDTMer
 
 1. Cmd+N で新規project
-2. 曲(m4a/mp3等)をFinderから窓へドロップ
-   - **現状の注意**: 音声ドロップはclip配置になる。soundtrackとして貼るには一時的にCLI:
-     `motolii-cli set-soundtrack --project <p> --asset <id>`(GUI化はタスク済み)
+2. 曲(m4a/mp3等)をFinderから窓へドロップ — **soundtrack未設定ならそのまま曲として貼られる**
+   (2本目以降の音声はclip配置。差し替えUIは未実装=入れ間違いはCLIで)
 3. soundtrackが付くとruler直下に**波形帯**が出る
 4. Space で再生 — 音が鳴り、playheadが音に同期して進む
 5. 聴きながら **M** でセクション頭にマーカーを打つ(再生は止まらない)
@@ -76,7 +75,7 @@ projectなしで起動すると展示(fixture)が出る。**Cmd+N**で新規proj
 
 ## 既知の「まだ無い」(違和感ではなく未実装)
 
-- soundtrackのGUI設定(上記P1注意。タスク済み)
+- soundtrackの差し替え/削除UI、offset/gainのUI
 - clip音声のmix再生(soundtrackのみ鳴る)/ 波形はsoundtrackのみ
 - Effectの追加/削除UI、Anchor/Scale/RotationのInspector行(経路は実在、行が未表示)
 - Browserパネルにproject assetが出ない(folder閲覧のみ)
