@@ -1302,6 +1302,30 @@ impl TimelineEditor {
         Ok(())
     }
 
+    /// Undo を **UI の1操作**として通す。Cmd+Z と shell の Undo ボタンが同じ
+    /// この入口を使う(同経路・同意味。1クリック = 1 gesture 単位)。
+    /// 成否はエディタ自身の status が言う — 空の台帳で押されても落ちない。
+    pub fn undo_gesture(&mut self) {
+        match self.writer.undo() {
+            Ok(()) => {
+                refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                self.status = format!("undo  ({} left)", self.writer.undo_len());
+            }
+            Err(error) => self.status = format!("undo rejected: {error}"),
+        }
+    }
+
+    /// Redo の UI 入口。同上(Shift+Cmd+Z とボタンが共用)。
+    pub fn redo_gesture(&mut self) {
+        match self.writer.redo() {
+            Ok(()) => {
+                refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+                self.status = format!("redo  ({} left)", self.writer.redo_len());
+            }
+            Err(error) => self.status = format!("redo rejected: {error}"),
+        }
+    }
+
     /// 入力シミュレーションの入口: clip / Group を `grab_at_seconds` で掴む。
     /// マウスのドラッグ開始と同じ経路(`begin_move_many` → `hold_item`)で、
     /// テストと統合テストがマウスの代わりに呼ぶ。
@@ -4320,21 +4344,10 @@ impl TimelineEditor {
         if escape && self.hold.is_some() {
             self.cancel_drag();
         } else if undo {
-            match self.writer.undo() {
-                Ok(()) => {
-                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
-                    self.status = format!("undo  ({} left)", self.writer.undo_len());
-                }
-                Err(error) => self.status = format!("undo rejected: {error}"),
-            }
+            // ボタン(shell status 帯)と同じ入口。経路も status の言葉も1つ。
+            self.undo_gesture();
         } else if redo {
-            match self.writer.redo() {
-                Ok(()) => {
-                    refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
-                    self.status = format!("redo  ({} left)", self.writer.redo_len());
-                }
-                Err(error) => self.status = format!("redo rejected: {error}"),
-            }
+            self.redo_gesture();
         }
 
         // Cmd/Ctrl + D。**選択が無いときは何もしない** — 複製する対象が無い
