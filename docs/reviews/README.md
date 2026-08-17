@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-17-composition-resolution-and-aspect-fit-decision.md](2026-08-17-composition-resolution-and-aspect-fit-decision.md) | **出力解像度はCompositionが所有し、素材はfit(contain)で受ける**。現行exportの「最初のvideo asset解像度」導出はM1名残で、縦動画が拒否される。`Composition.resolution: Option`(None=互換)+新Command+既定1920x1080+letterbox。blur-fillはv1.x粒2 |
 | [2026-08-17-edit-during-playback-decision.md](2026-08-17-edit-during-playback-decision.md) | **再生中の編集は再生を止めない(Ableton型)**。音はsoundtrackのみ由来で編集は影響せず、絵は毎フレームsnapshot読み直しのため停止が不要。playhead手動移動とSetSoundtrackだけsessionを開き直す。oracleは再生継続テストを操作family毎に1本 |
 | [2026-08-17-soundtrack-command-decision.md](2026-08-17-soundtrack-command-decision.md) | `Command::SetSoundtrack { old, new }`を`Document.soundtrack`の唯一の書き込み経路として決定。apply時UnknownAssetId拒否、singleton merge key、v3-only journal decode。N-SOUNDTRACK-WRITEを閉じる |
 | [2026-08-15-blitz-ui-runtime-adoption-proposal.md](2026-08-15-blitz-ui-runtime-adoption-proposal.md) | UI基盤をBlitz(HTML/CSS)+テクスチャ合成へ移す起案。処分すべき既決3件(RN再基線・Skia ADOPT・Web窓)と未了6件を固定。比較中・裁定未記入 |
