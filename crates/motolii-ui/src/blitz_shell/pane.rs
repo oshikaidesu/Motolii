@@ -39,6 +39,7 @@
 //! `BrowserBlitzPanel` が自前で reactor を張る。
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use blitz_dom::{DocumentConfig, StyleThreading};
 use blitz_html::HtmlDocument;
@@ -65,7 +66,6 @@ const BROWSER_QUANTUM: u32 = 64;
 
 /// Browser の画像が届き終わったと見なすまでの、枚数が増えないフレーム数。
 const BROWSER_SETTLE_FRAMES: u32 = 10;
-
 
 /// 計測の出力間隔(フレーム)。
 const TRACE_EVERY: u32 = 60;
@@ -120,8 +120,36 @@ impl BlitzPane {
         }
     }
 
+    /// live Document(編集threadの `DocumentWriter` が出した snapshot)を映す面として作る。
+    ///
+    /// この座席が意味を持つのは **Timeline と Stage だけ**(他の面は本レーンでは
+    /// fixture のまま)。渡された `Arc` はそのまま持つ — ここで読み直しも clone もしない
+    /// (single writer: 読み手は immutable snapshot)。
+    pub fn with_document(kind: PaneKind, document: Arc<motolii_doc::Document>) -> Self {
+        let mut pane = Self::new(kind);
+        match &mut pane.content {
+            Content::Html(html) if kind == PaneKind::Timeline => {
+                html.source_document = Some(document);
+            }
+            Content::Stage(stage) => stage.document = Some(document),
+            // Browser / Inspector / chrome は Document を映さない(後続レーン)。
+            _ => {}
+        }
+        pane
+    }
+
     pub fn kind(&self) -> PaneKind {
         self.kind
+    }
+
+    /// テストの検分用: この面に座らせた live Document。fixture 動線では `None`。
+    #[cfg(test)]
+    pub(crate) fn live_document(&self) -> Option<&Arc<motolii_doc::Document>> {
+        match &self.content {
+            Content::Html(html) => html.source_document.as_ref(),
+            Content::Stage(stage) => stage.document.as_ref(),
+            Content::Browser(_) => None,
+        }
     }
 
     /// tab に出す名前。**画面の題ではなく面の名前**なので短くする。
@@ -385,6 +413,8 @@ struct StagePane {
     stage: Option<crate::rerun_stage::EmbeddedSpatialStage>,
     /// 幾何を積んだ面の大きさ(物理px)。変わったら `fit_view` をやり直す。
     fitted: (u32, u32),
+    /// live Document(writer の snapshot)。`None` なら fixture を読む(従来動線)。
+    document: Option<Arc<motolii_doc::Document>>,
 }
 
 impl StagePane {
@@ -415,9 +445,18 @@ impl StagePane {
         // 幾何は既存の投影から来る。**ここで作らない。**
         // `app_stage_geometry` は `rn_product_host` 側にあり、C5(RN退役)で行き先が変わる。
         if self.fitted != (width, height) {
-            let document = stage_document();
+            // live(`--project`)なら writer の snapshot をそのまま読む(single writer の
+            // reader 側)。座っていなければ従来どおり fixture。
+            let fixture;
+            let document: &motolii_doc::Document = match &self.document {
+                Some(live) => live,
+                None => {
+                    fixture = stage_document();
+                    &fixture
+                }
+            };
             let geometry = crate::stage_app_geometry::app_stage_geometry(
-                &document,
+                document,
                 motolii_core::RationalTime::ZERO,
             );
             stage.apply_host_stage_geometry(&geometry, width, height);
@@ -452,8 +491,9 @@ struct HtmlPane {
     viewport: Option<(u32, u32, f64)>,
     /// `BlitzSurface` を作った texture の大きさ。
     surface_size: (u32, u32),
-    /// Timelineの投影元。読み直さないように1度だけ持つ。
-    source_document: Option<motolii_doc::Document>,
+    /// Timelineの投影元。live(`--project`)なら構築時に writer の snapshot が座り、
+    /// fixture 動線なら初回描画で1度だけ読んでここに持つ。
+    source_document: Option<Arc<motolii_doc::Document>>,
     /// 現在の文書とsurfaceの組で既に1回描いたか。**変わるまで描き直さない。**
     painted: bool,
 }
@@ -581,11 +621,14 @@ impl HtmlPane {
         html
     }
 
-    /// Timelineの投影元。読めなければ空Documentへ落とす(`blitz_dump/main.rs:134-147` と同じ)。
-    fn timeline_document(&mut self) -> &motolii_doc::Document {
+    /// Timelineの投影元。live が座っていればそれ。無ければ fixture を読み、
+    /// 読めなければ空Documentへ落とす(`blitz_dump/main.rs:134-147` と同じ)。
+    /// fixture の fallback はここ(表示専用の動線)だけで、`--project` の失敗は
+    /// ここへ来る前に起動失敗になっている(`app.rs` の `ProjectSeat::open`)。
+    fn timeline_document(&mut self) -> &Arc<motolii_doc::Document> {
         self.source_document.get_or_insert_with(|| {
             let path = PathBuf::from(TIMELINE_DOC);
-            match motolii_doc::load_document(&path) {
+            Arc::new(match motolii_doc::load_document(&path) {
                 Ok(document) => document,
                 Err(error) => {
                     eprintln!(
@@ -594,7 +637,7 @@ impl HtmlPane {
                     );
                     motolii_doc::Document::new_current()
                 }
-            }
+            })
         })
     }
 }

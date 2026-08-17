@@ -2,11 +2,17 @@
 //!
 //! ```text
 //! cargo run -p motolii-ui --bin motolii-blitz-shell
+//! cargo run -p motolii-ui --bin motolii-blitz-shell -- --project my-project.json
 //! cargo run -p motolii-ui --bin motolii-blitz-shell -- --screenshot out/shell.png [frames]
 //! ```
 //!
 //! 中身は `crates/motolii-ui/src/blitz_shell/` にある。この bin は窓を開くだけで、
 //! **見た目も配置もここで決めない。**
+//!
+//! `--project` は実プロジェクトを開き、Timeline / Stage がその Document
+//! （writer の snapshot）を映す。**開けなければ起動失敗**で、fixture へ黙って落ちない。
+//! 開く場所を窓より前に置いてあるのは、失敗を絵ではなく exit code とメッセージで
+//! 返すため。`--project` 無しは従来どおり fixture 展示（開発動線・screenshot テスト）。
 //!
 //! `--screenshot` は窓を1枚だけ描いてPNGにし、そのまま終了する。
 //! 合体した絵を**人が窓を開かずに確認する**ための口で、製品機能ではない。
@@ -19,7 +25,7 @@
 use std::path::{Path, PathBuf};
 
 use image::ImageEncoder as _;
-use motolii_ui::blitz_shell::BlitzShellApp;
+use motolii_ui::blitz_shell::{BlitzShellApp, ProjectSeat};
 
 /// productStyles.ts:4 `shell: {minWidth: 980, minHeight: 650}`
 const MIN_WIDTH: f32 = 980.0;
@@ -28,22 +34,58 @@ const MIN_HEIGHT: f32 = 650.0;
 /// 既定の待ちフレーム数。Browserの画像が届くのを待つ。
 const DEFAULT_FRAMES: u32 = 10;
 
+fn usage() -> ! {
+    eprintln!(
+        "usage: motolii-blitz-shell [--project <project.json>] [--screenshot <out.png> [frames]]"
+    );
+    std::process::exit(2);
+}
+
 fn main() -> eframe::Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let shot = match args.as_slice() {
-        [flag, path, rest @ ..] if flag == "--screenshot" => Some(Screenshot {
-            path: PathBuf::from(path),
-            after: rest
-                .first()
-                .and_then(|value| value.parse().ok())
-                .unwrap_or(DEFAULT_FRAMES),
-            requested: false,
-        }),
-        [] => None,
-        _ => {
-            eprintln!("usage: motolii-blitz-shell [--screenshot <out.png> [frames]]");
-            std::process::exit(2);
+    let mut project: Option<PathBuf> = None;
+    let mut shot: Option<Screenshot> = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--project" => {
+                let Some(path) = args.get(index + 1) else {
+                    usage()
+                };
+                project = Some(PathBuf::from(path));
+                index += 2;
+            }
+            "--screenshot" => {
+                let Some(path) = args.get(index + 1) else {
+                    usage()
+                };
+                let mut after = DEFAULT_FRAMES;
+                index += 2;
+                // frames は省略可能（次が数値のときだけ食う）。
+                if let Some(frames) = args.get(index).and_then(|value| value.parse().ok()) {
+                    after = frames;
+                    index += 1;
+                }
+                shot = Some(Screenshot {
+                    path: PathBuf::from(path),
+                    after,
+                    requested: false,
+                });
+            }
+            _ => usage(),
         }
+    }
+
+    // project は**窓より先に**開く。開けなければ起動失敗（fixture へ黙って落ちない）。
+    let seat = match project {
+        Some(path) => match ProjectSeat::open(&path) {
+            Ok(seat) => Some(seat),
+            Err(error) => {
+                eprintln!("motolii-blitz-shell: {error}");
+                std::process::exit(1);
+            }
+        },
+        None => None,
     };
 
     let options = eframe::NativeOptions {
@@ -56,9 +98,9 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "motolii-blitz-shell",
         options,
-        Box::new(|cc| {
+        Box::new(move |cc| {
             Ok(Box::new(Harness {
-                inner: BlitzShellApp::new(cc),
+                inner: BlitzShellApp::with_seat(cc, seat),
                 shot,
                 frame_count: 0,
             }))

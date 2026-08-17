@@ -13,9 +13,9 @@
 //! ## ここに無いもの
 //!
 //! - **入力**。ペインはマウスを受けない。ポインタの振り分けは後続capsule(C2)
-//! - **Document接続**。Timeline以外は固定サンプルを描く。Timelineも参照Documentを読むだけで、
-//!   編集は1つも通らない
-//! - **Stage**。Blitzパネルが無いので席も置かない。**代わりの絵を描かない**
+//! - **編集**。`--project` で実プロジェクトを開くと Timeline / Stage はその Document
+//!   (`ProjectSeat` の writer snapshot)を映すが、編集は1つも通らない(次レーン)。
+//!   Browser / Inspector / chrome は固定サンプルのまま
 //! - **レイアウトの永続化**。起動するたび既定の並び
 //!
 //! つまりこれは「合わさった絵を見る」ための実物であって、製品の殻ではない。
@@ -23,5 +23,5 @@
 mod app;
 mod pane;
 
-pub use app::BlitzShellApp;
+pub use app::{BlitzShellApp, ProjectSeat};
 pub use pane::{BlitzPane, PaneKind};
