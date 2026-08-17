@@ -61,11 +61,20 @@ pub struct ProjectSeat {
     /// 開いている project のパス。**同じ project を開き直す時に lock を先に返す**
     /// 判断がこれを見る（`reseat_project`）。
     path: PathBuf,
-    /// project identity の排他 lock。読みはしないが、app が生きているあいだ握り続ける
-    /// （落とすと他プロセスが同じ project を開けてしまう）。
-    _session: motolii_doc::ProjectSession,
+    /// project identity の排他 lock。app が生きているあいだ握り続け
+    /// （落とすと他プロセスが同じ project を開けてしまう）、保存（`save`）も
+    /// この lock の中の `save_document` を通る（CLI `document_edit.rs` と同じ経路）。
+    session: motolii_doc::ProjectSession,
     /// Timeline エディタ。編集は全部（キー入力も操作 API も）この中の writer を通る。
     editor: TimelineEditor,
+    /// 最後に project ファイルへ書いた（開いた直後はファイルにある）内容の snapshot。
+    /// dirty 判定はこれとの**内容比較**（`is_dirty`）。undo 台帳の深さや revision の
+    /// 一致では判定しない — undo で保存内容へ戻れば clean、深さが偶然揃っても
+    /// 内容が違えば dirty、が正しく出る。
+    saved: Arc<motolii_doc::Document>,
+    /// `is_dirty` の cache（判定した時の revision とその答え）。revision が
+    /// 進んでいなければ Document 比較をやり直さない（status 帯が毎フレーム見るため）。
+    dirty_cache: std::cell::Cell<Option<(u64, bool)>>,
 }
 
 impl ProjectSeat {
@@ -94,14 +103,52 @@ impl ProjectSeat {
                 )
             },
         )?;
+        let editor =
+            TimelineEditor::new(writer).with_project_root(path.parent().map(Path::to_path_buf));
+        // 開いた直後の snapshot がそのまま「ファイルにある内容」= clean の基準。
+        let saved = Arc::clone(editor.document());
         Ok(Self {
             path: path.to_path_buf(),
-            _session: opened.session,
+            session: opened.session,
             // project root = document path の親(CLI export と同じ規約)。
             // soundtrack 再生の asset path 解決に使う。
-            editor: TimelineEditor::new(writer)
-                .with_project_root(path.parent().map(Path::to_path_buf)),
+            editor,
+            saved,
+            dirty_cache: std::cell::Cell::new(None),
         })
+    }
+
+    /// writer snapshot を project ファイルへ書き戻す（Cmd+S の後ろ）。
+    ///
+    /// 経路は既存の `ProjectSession::save_document`（CLI `document_edit.rs` の
+    /// `with_writer` が編集後に通すのと同じ）で、**新しい保存経路を作らない**。
+    /// journal への常時追記はここではしない（明示保存のみ）。
+    pub fn save(&mut self) -> Result<(), String> {
+        let snapshot = Arc::clone(self.editor.document());
+        self.session
+            .save_document(&snapshot, &motolii_doc::SaveOptions::default())
+            .map_err(|error| format!("save {} failed: {error}", self.path.display()))?;
+        self.saved = snapshot;
+        self.dirty_cache.set(Some((self.editor.revision(), false)));
+        Ok(())
+    }
+
+    /// 未保存の編集があるか。**保存済み内容との比較**で答える。
+    ///
+    /// revision や undo 台帳の深さの一致は根拠にしない — undo で保存時の内容へ
+    /// 戻れば clean に戻り、保存点より下へ undo してから別の編集で深さだけ揃っても
+    /// dirty のまま、が正しく出る。比較は revision が進んだ時だけやり直す。
+    pub fn is_dirty(&self) -> bool {
+        let revision = self.editor.revision();
+        if let Some((seen, dirty)) = self.dirty_cache.get() {
+            if seen == revision {
+                return dirty;
+            }
+        }
+        let current = self.editor.document();
+        let dirty = !Arc::ptr_eq(current, &self.saved) && **current != *self.saved;
+        self.dirty_cache.set(Some((revision, dirty)));
+        dirty
     }
 
     /// 開いている project のパス。
@@ -205,6 +252,72 @@ pub fn admit_dropped_paths(seat: Option<&mut ProjectSeat>, paths: &[PathBuf]) ->
     seat.editor_mut().import_dropped_media(paths).summary()
 }
 
+/// 未保存 guard の3択。dialog（`prompt_unsaved_choice`）が返すのはこれだけで、
+/// 何が起きるかは `decide_unsaved` が決める。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnsavedChoice {
+    /// 保存してから続行。
+    Save,
+    /// 編集を捨てて続行。
+    Discard,
+    /// やめる（いまの座席に留まる）。
+    Cancel,
+}
+
+/// 未保存 guard の判断結果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnsavedDecision {
+    /// そのまま続行してよい（clean だった、または破棄を選んだ）。
+    Proceed,
+    /// 先に保存してから続行する。保存に失敗したら続行しない（呼び手の責任）。
+    SaveThenProceed,
+    /// 続行しない。
+    Stay,
+}
+
+/// 未保存のまま座席を捨てる操作（Cmd+O / Cmd+N / 窓を閉じる）の判断。
+///
+/// **dialog はここに無い**（`blitz_shell_file_entry.rs` と同じ形 — テストも製品も
+/// この関数を通り、製品は `choose` に `prompt_unsaved_choice` を差す）。
+/// clean なら `choose` を呼びもせず続行する。
+pub fn decide_unsaved(dirty: bool, choose: impl FnOnce() -> UnsavedChoice) -> UnsavedDecision {
+    if !dirty {
+        return UnsavedDecision::Proceed;
+    }
+    match choose() {
+        UnsavedChoice::Save => UnsavedDecision::SaveThenProceed,
+        UnsavedChoice::Discard => UnsavedDecision::Proceed,
+        UnsavedChoice::Cancel => UnsavedDecision::Stay,
+    }
+}
+
+/// 未保存の3択を人に訊く。**dialog はここだけ**で、判断は `decide_unsaved` にある
+/// （`prompt_new_project_path` / `prompt_open_project_path` と同じ集約）。
+/// 閉じられた・知らない答えは Cancel 扱い（勝手に捨てない側へ倒す）。
+fn prompt_unsaved_choice(project: &Path) -> UnsavedChoice {
+    let name = project
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| project.display().to_string());
+    let result = rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Warning)
+        .set_title("Unsaved changes")
+        .set_description(format!("{name} has unsaved changes."))
+        .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
+            "Save".to_owned(),
+            "Discard".to_owned(),
+            "Cancel".to_owned(),
+        ))
+        .show();
+    match result {
+        rfd::MessageDialogResult::Custom(label) if label == "Save" => UnsavedChoice::Save,
+        rfd::MessageDialogResult::Custom(label) if label == "Discard" => UnsavedChoice::Discard,
+        rfd::MessageDialogResult::Yes => UnsavedChoice::Save,
+        rfd::MessageDialogResult::No => UnsavedChoice::Discard,
+        _ => UnsavedChoice::Cancel,
+    }
+}
+
 /// Blitz パネルを合体表示するアプリ本体。
 pub struct BlitzShellApp {
     /// `blitz_net::Provider` は Tokio reactor を要求し、無いと panic する。
@@ -306,10 +419,32 @@ impl BlitzShellApp {
         }
     }
 
-    /// ドロップ・New・Open を受ける。**描く前に1回だけ**通す。
+    /// 未保存のまま座席を捨てる操作（Cmd+O / Cmd+N / 窓を閉じる）の前に挟む。
+    /// 続行してよければ `true`。判断は `decide_unsaved`、dialog は
+    /// `prompt_unsaved_choice` に居る。「保存して続行」で保存に失敗したら
+    /// **続行しない**（status に理由が出る）。
+    fn clear_unsaved_or_stay(&mut self) -> bool {
+        let Some(seat) = self.project.as_mut() else {
+            return true;
+        };
+        let path = seat.path().to_path_buf();
+        match decide_unsaved(seat.is_dirty(), || prompt_unsaved_choice(&path)) {
+            UnsavedDecision::Proceed => true,
+            UnsavedDecision::Stay => false,
+            UnsavedDecision::SaveThenProceed => match seat.save() {
+                Ok(()) => true,
+                Err(error) => {
+                    self.status = error;
+                    false
+                }
+            },
+        }
+    }
+
+    /// ドロップ・New・Open・Save を受ける。**描く前に1回だけ**通す。
     fn handle_file_entry(&mut self, ctx: &egui::Context) {
-        // ---- New / Open。dialog は main thread を止めて開く（eframe 慣行） ----
-        let (new_project, open_project) = ctx.input_mut(|input| {
+        // ---- New / Open / Save。dialog は main thread を止めて開く（eframe 慣行） ----
+        let (new_project, open_project, save_project) = ctx.input_mut(|input| {
             (
                 input.consume_shortcut(&egui::KeyboardShortcut::new(
                     egui::Modifiers::COMMAND,
@@ -319,9 +454,26 @@ impl BlitzShellApp {
                     egui::Modifiers::COMMAND,
                     egui::Key::O,
                 )),
+                input.consume_shortcut(&egui::KeyboardShortcut::new(
+                    egui::Modifiers::COMMAND,
+                    egui::Key::S,
+                )),
             )
         });
-        if new_project {
+        if save_project {
+            match self.project.as_mut() {
+                Some(seat) => match seat.save() {
+                    Ok(()) => self.status = format!("saved {}", seat.path().display()),
+                    Err(error) => self.status = error,
+                },
+                None => {
+                    self.status =
+                        "open a project first — Cmd+N to create one, Cmd+O to open one".to_owned();
+                }
+            }
+        }
+        // New / Open は座席を差し替える = いまの編集を捨てる。未保存なら先に訊く。
+        if new_project && self.clear_unsaved_or_stay() {
             if let Some(path) = prompt_new_project_path() {
                 match create_project_file(&path) {
                     Ok(()) => self.reseat(&path),
@@ -329,7 +481,7 @@ impl BlitzShellApp {
                 }
             }
         }
-        if open_project {
+        if open_project && self.clear_unsaved_or_stay() {
             if let Some(path) = prompt_open_project_path() {
                 self.reseat(&path);
             }
@@ -376,20 +528,68 @@ impl eframe::App for BlitzShellApp {
         // フレーム全体を reactor の中で回す。
         let _guard = self.runtime.enter();
 
-        // ファイルの入口（ドロップ / New / Open）は描く前に通す。
+        // ファイルの入口（ドロップ / New / Open / Save）は描く前に通す。
         let ctx = ui.ctx().clone();
         self.handle_file_entry(&ctx);
 
-        // 窓の一言。何か言うことがある時だけ帯が出る（常設の面を増やさない）。
-        if !self.status.is_empty() {
+        // 窓を閉じるのも「未保存のまま座席を捨てる」操作。egui の慣行どおり
+        // close_requested を見て、留まるなら CancelClose を返す。判断と保存は
+        // Cmd+O / Cmd+N と同じ `clear_unsaved_or_stay`。
+        if ctx.input(|input| input.viewport().close_requested()) && !self.clear_unsaved_or_stay() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
+
+        // 窓の帯。project が居るあいだは常設で、**信用の可視化**を持つ:
+        // Undo/Redo ボタン（Cmd+Z / Shift+Cmd+Z と同じ入口）と、保存状態
+        // （保存済みなら project 名、未保存なら ● 付き）。一言（ドロップ・New・
+        // Open・Save の結果）は従来どおり同じ帯の右に出る。座席が無いときは
+        // 従来どおり、何か言うことがある時だけ帯が出る。
+        if self.project.is_some() || !self.status.is_empty() {
             egui::Panel::bottom("blitz_shell_status").show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.add_space(STATUS_PAD_X);
-                    ui.label(
-                        egui::RichText::new(&self.status)
-                            .size(STATUS_FONT_SIZE)
-                            .color(crate::timeline_editor::ACCENT),
-                    );
+                    if let Some(seat) = self.project.as_mut() {
+                        // 効かない時は disabled（押せない見た目 = 台帳が空）。
+                        let undo = ui.add_enabled(
+                            seat.editor().undo_len() > 0,
+                            egui::Button::new(egui::RichText::new("Undo").size(STATUS_FONT_SIZE)),
+                        );
+                        let redo = ui.add_enabled(
+                            seat.editor().redo_len() > 0,
+                            egui::Button::new(egui::RichText::new("Redo").size(STATUS_FONT_SIZE)),
+                        );
+                        if undo.clicked() {
+                            seat.editor_mut().undo_gesture();
+                        }
+                        if redo.clicked() {
+                            seat.editor_mut().redo_gesture();
+                        }
+                        ui.separator();
+                        let name = seat
+                            .path()
+                            .file_name()
+                            .map(|name| name.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| seat.path().display().to_string());
+                        if seat.is_dirty() {
+                            ui.label(
+                                egui::RichText::new(format!("● {name} — unsaved"))
+                                    .size(STATUS_FONT_SIZE)
+                                    .color(crate::timeline_editor::ACCENT),
+                            );
+                        } else {
+                            ui.label(egui::RichText::new(name).size(STATUS_FONT_SIZE));
+                        }
+                    }
+                    if !self.status.is_empty() {
+                        if self.project.is_some() {
+                            ui.separator();
+                        }
+                        ui.label(
+                            egui::RichText::new(&self.status)
+                                .size(STATUS_FONT_SIZE)
+                                .color(crate::timeline_editor::ACCENT),
+                        );
+                    }
                 });
             });
         }

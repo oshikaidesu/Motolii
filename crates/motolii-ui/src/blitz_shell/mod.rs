@@ -23,8 +23,13 @@
 //!   probe できないファイルは理由つきで飛ばし、黙って捨てない
 //! - **入力(Timeline 以外)**。Blitz のペインはマウスを受けない。ポインタの
 //!   振り分けは後続capsule(C2)。Browser / Inspector / chrome は固定サンプルのまま
-//! - **保存は無い**。ドロップも編集も writer の中だけで、project ファイルへは
-//!   書き戻らない(`Cmd+S` はまだ無い)。座席を差し替えるとその編集は消える
+//! - **保存と信用の可視化**。`Cmd+S` が writer snapshot を project ファイルへ
+//!   書き戻す(`ProjectSeat::save`。経路は既存の `ProjectSession::save_document`)。
+//!   下の status 帯は project が居るあいだ常設で、保存状態(未保存なら ● 付き)と
+//!   Undo/Redo ボタン(Cmd+Z / Shift+Cmd+Z と同じ入口)を持つ。未保存のまま
+//!   座席を捨てる操作(Cmd+O / Cmd+N / 窓を閉じる)は 保存 / 破棄 / キャンセル の
+//!   確認を挟む(判断は `decide_unsaved`、dialog は `rfd` に集約)。
+//!   自動保存と journal 常時追記は**しない**(明示保存のみ)
 //! - **レイアウトの永続化**は無い。起動するたび既定の並び
 
 mod app;
@@ -32,6 +37,9 @@ mod pane;
 mod runner;
 
 pub(crate) use app::BlitzShellApp;
-pub use app::{admit_dropped_paths, create_project_file, reseat_project, ProjectSeat};
+pub use app::{
+    admit_dropped_paths, create_project_file, decide_unsaved, reseat_project, ProjectSeat,
+    UnsavedChoice, UnsavedDecision,
+};
 pub use pane::{BlitzPane, PaneKind};
 pub use runner::{run_blitz_shell, BlitzShellLaunch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES};
