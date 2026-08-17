@@ -30,6 +30,13 @@
 //!   座席を捨てる操作(Cmd+O / Cmd+N / 窓を閉じる)は 保存 / 破棄 / キャンセル の
 //!   確認を挟む(判断は `decide_unsaved`、dialog は `rfd` に集約)。
 //!   自動保存と journal 常時追記は**しない**(明示保存のみ)
+//! - **書き出し面**。status 帯の Export ボタン → 保存先 dialog(既定
+//!   `{project名}.mp4`)→ **現 writer snapshot** から既存の
+//!   `export_document_video` が**別 thread**で走る(headless GpuCtx。CLI と
+//!   同じ形。dirty でも書き出せる)。実行中は「Exporting… {経過}s」+ Cancel が
+//!   帯に出て UI は固まらず、完了/キャンセル/失敗は同じ帯の一言になる。
+//!   キャンセルは部分出力を残さない。実行中は Export が消える = 二重起動なし。
+//!   判断と thread は `crate::export_seat`、dialog は `rfd` に集約
 //! - **レイアウトの永続化**は無い。起動するたび既定の並び
 
 mod app;

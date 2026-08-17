@@ -20,6 +20,9 @@ use eframe::egui_wgpu::RenderState;
 use egui_tiles::{Container, Linear, LinearDir, Tile, TileId, Tiles, Tree, UiResponse};
 
 use super::pane::{BlitzPane, PaneKind};
+use crate::export_seat::{
+    can_start_export, default_export_file_name, ExportFinish, ExportRequest, ExportRun,
+};
 use crate::timeline_editor::TimelineEditor;
 
 /// `egui_tiles` のペイン描画をパネルへ委譲するだけの behavior。
@@ -334,6 +337,9 @@ pub struct BlitzShellApp {
     /// 窓ぜんたいに関わる一言（ドロップ・New・Open の結果）。空なら帯を出さない。
     /// Timeline の中の出来事は従来どおりエディタ自身の status が言う。
     status: String,
+    /// 実行中の書き出し（高々1件。実行中は Export ボタンが disabled = 二重起動防止）。
+    /// UI thread は毎フレーム `try_finish` を poll するだけで、書き出しは別 thread。
+    export: Option<ExportRun>,
 }
 
 impl BlitzShellApp {
@@ -380,6 +386,7 @@ impl BlitzShellApp {
             project,
             seated_revision,
             status: String::new(),
+            export: None,
         }
     }
 
@@ -500,6 +507,69 @@ impl BlitzShellApp {
             self.status = admit_dropped_paths(self.project.as_mut(), &dropped);
         }
     }
+
+    /// Export ボタンの後ろ。保存先を訊いて（dialog はここで開く）、**現 writer
+    /// snapshot** を別 thread の書き出しへ渡す（dirty でも書き出せる）。
+    /// 判断（座席あり・実行中なし）は `can_start_export` — ボタンの enabled と
+    /// 同じ関数なので、ここに来た時点で普通は真。dialog を閉じたら何もしない。
+    fn begin_export(&mut self) {
+        if !can_start_export(self.project.is_some(), self.export.is_some()) {
+            return;
+        }
+        let seat = self
+            .project
+            .as_ref()
+            .expect("can_start_export checked the seat");
+        let Some(output_path) = prompt_export_path(seat.path()) else {
+            return;
+        };
+        self.status = format!("exporting {}", output_path.display());
+        self.export = Some(ExportRun::start(ExportRequest {
+            document: seat.snapshot(),
+            // project root = document path の親（CLI export と同じ規約）。
+            project_root: seat.path().parent().map(Path::to_path_buf),
+            output_path,
+            // v0 は既定値のみ: composition 全長・通常品質。
+            frame_count: None,
+            qp0: false,
+        }));
+    }
+
+    /// 実行中の書き出しの返事を受ける。**描く前に1回だけ**通す。
+    /// 完了/キャンセル/失敗は status 帯の一言になり、run は捨てる。
+    fn handle_export_finish(&mut self) {
+        let Some(run) = self.export.as_mut() else {
+            return;
+        };
+        let Some(finish) = run.try_finish() else {
+            return;
+        };
+        self.status = match finish {
+            ExportFinish::Done(report) => format!(
+                "Exported {} ({}f)",
+                run.output_path().display(),
+                report.frames_written
+            ),
+            ExportFinish::Cancelled => {
+                format!(
+                    "export cancelled — {} was removed",
+                    run.output_path().display()
+                )
+            }
+            ExportFinish::Failed(reason) => format!("export failed: {reason}"),
+        };
+        self.export = None;
+    }
+}
+
+/// 書き出し先を訊く。**dialog はここだけ**で、判定できる列は `export_seat` にある
+/// （`prompt_new_project_path` / `prompt_open_project_path` と同じ集約）。
+fn prompt_export_path(project: &Path) -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .set_title("Export video")
+        .add_filter("MP4 video", &["mp4"])
+        .set_file_name(default_export_file_name(project))
+        .save_file()
 }
 
 /// New の場所を訊く。**dialog はここだけ**で、判定できる列は外にある。
@@ -532,6 +602,13 @@ impl eframe::App for BlitzShellApp {
         let ctx = ui.ctx().clone();
         self.handle_file_entry(&ctx);
 
+        // 書き出し thread の返事も描く前に受ける。走っているあいだは入力が
+        // 無くても回し続ける（経過秒の更新と完了の受け取りのため）。
+        self.handle_export_finish();
+        if self.export.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(200));
+        }
+
         // 窓を閉じるのも「未保存のまま座席を捨てる」操作。egui の慣行どおり
         // close_requested を見て、留まるなら CancelClose を返す。判断と保存は
         // Cmd+O / Cmd+N と同じ `clear_unsaved_or_stay`。
@@ -544,6 +621,7 @@ impl eframe::App for BlitzShellApp {
         // （保存済みなら project 名、未保存なら ● 付き）。一言（ドロップ・New・
         // Open・Save の結果）は従来どおり同じ帯の右に出る。座席が無いときは
         // 従来どおり、何か言うことがある時だけ帯が出る。
+        let mut want_export = false;
         if self.project.is_some() || !self.status.is_empty() {
             egui::Panel::bottom("blitz_shell_status").show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -580,6 +658,36 @@ impl eframe::App for BlitzShellApp {
                             ui.label(egui::RichText::new(name).size(STATUS_FONT_SIZE));
                         }
                     }
+                    // 書き出し面。全ペルソナが最後に当たる面なので、信用の可視化と
+                    // 同じ帯に常設する（Blitz chrome の Export fixture はマウスを
+                    // 受けないため、押せる面はここに置く）。実行中は indeterminate
+                    // スピナー＋経過秒＋Cancel（export 側に進捗 callback の口が
+                    // 無い v0 の形）。二重起動はボタン自体が消えることで防ぐ。
+                    if let Some(run) = self.export.as_ref() {
+                        ui.separator();
+                        ui.add(egui::Spinner::new().size(STATUS_FONT_SIZE + 2.0));
+                        ui.label(
+                            egui::RichText::new(format!("Exporting… {}s", run.elapsed_seconds()))
+                                .size(STATUS_FONT_SIZE),
+                        );
+                        let cancel = ui.add_enabled(
+                            !run.cancel_requested(),
+                            egui::Button::new(egui::RichText::new("Cancel").size(STATUS_FONT_SIZE)),
+                        );
+                        if cancel.clicked() {
+                            run.cancel();
+                        }
+                    } else if self.project.is_some() {
+                        ui.separator();
+                        let export = ui.add_enabled(
+                            can_start_export(self.project.is_some(), self.export.is_some()),
+                            egui::Button::new(egui::RichText::new("Export").size(STATUS_FONT_SIZE)),
+                        );
+                        if export.clicked() {
+                            // dialog（保存先）は描画の外で開く（New / Open と同じ形）。
+                            want_export = true;
+                        }
+                    }
                     if !self.status.is_empty() {
                         if self.project.is_some() {
                             ui.separator();
@@ -592,6 +700,9 @@ impl eframe::App for BlitzShellApp {
                     }
                 });
             });
+        }
+        if want_export {
+            self.begin_export();
         }
 
         let mut behavior = BlitzShellBehavior {
