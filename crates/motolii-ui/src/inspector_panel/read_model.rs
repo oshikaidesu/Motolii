@@ -19,6 +19,7 @@
 //!
 //! ここは投影だけで、Document を書かない(single writer 規律)。
 
+use motolii_core::RationalTime;
 use motolii_doc::{DocParam, DocValue, Document, ItemEnvelope, TrackItem};
 use motolii_plugin::{F64Domain, PluginCatalog, Value, ValueType};
 
@@ -26,12 +27,18 @@ use motolii_plugin::{F64Domain, PluginCatalog, Value, ValueType};
 pub const INSPECTOR_READ_MODEL_REVISION: u32 = 1;
 
 /// decoder 出力 D1: `{fixture_revision, target, effect_definitions, position}`。
+///
+/// `editable` は decoder には無い **live 専用**の追加面で、fixture 投影
+/// (`project_inspector_read_model`)では常に空である。decoder 由来の
+/// 4 field の意味はここでは一切変えていない。
 #[derive(Debug, Clone, PartialEq)]
 pub struct InspectorReadModel {
     pub fixture_revision: u32,
     pub target: InspectorTarget,
     pub effect_definitions: Vec<InspectorEffectDefinition>,
     pub position: InspectorPosition,
+    /// 直打ち・◇ が効く行。live 投影(`project_inspector_live_model`)だけが埋める。
+    pub editable: Vec<InspectorEditableRow>,
 }
 
 /// decoder 出力 D2: `{layer_id, layer_name, item_kind, child_count?}`。
@@ -86,6 +93,63 @@ pub enum InspectorPosition {
     Animated,
 }
 
+/// live 編集の対象になる Transform param。**本レーンで閉じたのはこの2つだけ**で、
+/// Anchor / Scale / Rotation / Effect param / Vector / Color は residual。
+/// 増やすときは `TimelineEditor` 側の適用口(`ParamRef`)と一対で増やすこと。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectorEditParam {
+    Position,
+    Opacity,
+}
+
+impl InspectorEditParam {
+    /// 行に出す名前(inspector-library.html:29 の `Position` と同じ字)。
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Position => "Position",
+            Self::Opacity => "Opacity",
+        }
+    }
+
+    /// 成分の軸ラベル。Position は X/Y の2本、Opacity は軸を持たない1本。
+    pub fn axes(self) -> &'static [Option<&'static str>] {
+        match self {
+            Self::Position => &[Some("X"), Some("Y")],
+            Self::Opacity => &[None],
+        }
+    }
+}
+
+/// ◇ / ◆ の状態。**キー有無の見せ方はここ1本から決まる**(html:33 の keyCell)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectorKeyState {
+    /// Const。キーを1つも持たない → ◇
+    Unkeyed,
+    /// keyframes を持つが playhead には無い → ◇(accent)
+    Animated,
+    /// playhead にキーがある → ◆
+    KeyedAtPlayhead,
+}
+
+/// 1行ぶんの live 値。値は **playhead 時刻で評価したもの**で、
+/// keyframes の中身(キー列)はここでは開かない。
+#[derive(Debug, Clone, PartialEq)]
+pub struct InspectorEditableRow {
+    pub param: InspectorEditParam,
+    /// 成分値。Position は [x, y]、Opacity は [a]。
+    pub components: Vec<f64>,
+    pub key_state: InspectorKeyState,
+    /// 直打ち・◇ を受け付けるか。閉じていない `DocParam` 種
+    /// (`Data` / `Vec2Axes` / `LookAt` / `Follow`)は `false` で、値は出すが触らせない。
+    pub editable: bool,
+}
+
+impl InspectorEditableRow {
+    pub fn label(&self) -> &'static str {
+        self.param.label()
+    }
+}
+
 /// 投影の失敗。decoder の R系 rule に対応する(該当 rule をコメントで持つ)。
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum InspectorReadModelError {
@@ -117,6 +181,28 @@ pub fn project_inspector_read_model(
     document: &Document,
     catalog: &PluginCatalog,
     target_layer: u64,
+) -> Result<InspectorReadModel, InspectorReadModelError> {
+    project(document, catalog, target_layer, None)
+}
+
+/// live 投影。decoder と同じ形の上に、playhead 時刻で評価した `editable` を足す。
+///
+/// **Document は読むだけ**(single writer)。直打ちと ◇ の適用は `TimelineEditor`
+/// が抱える writer だけが行い、ここは値と ◇/◆ の状態を出すところまでを持つ。
+pub fn project_inspector_live_model(
+    document: &Document,
+    catalog: &PluginCatalog,
+    target_layer: u64,
+    playhead: RationalTime,
+) -> Result<InspectorReadModel, InspectorReadModelError> {
+    project(document, catalog, target_layer, Some(playhead))
+}
+
+fn project(
+    document: &Document,
+    catalog: &PluginCatalog,
+    target_layer: u64,
+    playhead: Option<RationalTime>,
 ) -> Result<InspectorReadModel, InspectorReadModelError> {
     // R7: 文書内の全 EffectUse が definition へ届くことを先に見る
     //     (decoder は target 以外の item の dangling も落とす)。
@@ -200,7 +286,85 @@ pub fn project_inspector_read_model(
         },
         effect_definitions,
         position: project_position(envelope)?,
+        editable: match playhead {
+            Some(at) => project_editable_rows(envelope, at),
+            None => Vec::new(),
+        },
     })
+}
+
+/// live の直打ち行を組む。**read-model に無い値を発明しない** — 値は Document の
+/// `DocParam` を playhead 時刻で評価したものだけで、キー列は開かない。
+fn project_editable_rows(envelope: &ItemEnvelope, at: RationalTime) -> Vec<InspectorEditableRow> {
+    [
+        (InspectorEditParam::Position, &envelope.transform.position),
+        (InspectorEditParam::Opacity, &envelope.opacity),
+    ]
+    .into_iter()
+    .map(|(param, doc_param)| project_editable_row(param, doc_param, at))
+    .collect()
+}
+
+fn project_editable_row(
+    param: InspectorEditParam,
+    doc_param: &DocParam,
+    at: RationalTime,
+) -> InspectorEditableRow {
+    let arity = param.axes().len();
+    match doc_param {
+        DocParam::Const(value) => InspectorEditableRow {
+            param,
+            components: components_of(value, arity),
+            key_state: InspectorKeyState::Unkeyed,
+            editable: true,
+        },
+        DocParam::Keyframes(track) => {
+            let keyed_here = track.keys().iter().any(|key| key.t == at);
+            // 値は playhead の評価値。キーの上ならそのキーの値そのものになる。
+            InspectorEditableRow {
+                param,
+                components: eval_components(&track.eval(at), arity),
+                key_state: if keyed_here {
+                    InspectorKeyState::KeyedAtPlayhead
+                } else {
+                    InspectorKeyState::Animated
+                },
+                // 空の keyframes track は prepare_* が断るので触らせない。
+                editable: !track.keys().is_empty(),
+            }
+        }
+        // 閉じていない種(Data / Vec2Axes / LookAt / Follow)。値も要約も発明しない。
+        _ => InspectorEditableRow {
+            param,
+            components: vec![0.0; arity],
+            key_state: InspectorKeyState::Unkeyed,
+            editable: false,
+        },
+    }
+}
+
+/// `DocValue` を成分の並びへ。arity に足りない分は出さない(0 で埋めない)。
+fn components_of(value: &DocValue, arity: usize) -> Vec<f64> {
+    let all: Vec<f64> = match value {
+        DocValue::F64(v) => vec![*v],
+        DocValue::Vec2(v) => v.to_vec(),
+        DocValue::Vec3(v) => v.to_vec(),
+        DocValue::Color(v) => v.to_vec(),
+        DocValue::AssetRef(_) => Vec::new(),
+    };
+    all.into_iter().take(arity).collect()
+}
+
+/// 評価層の値(D3)を成分の並びへ。`DocValue` 側と同じ規則で切り出す。
+fn eval_components(value: &motolii_eval::Value, arity: usize) -> Vec<f64> {
+    let all: Vec<f64> = match value {
+        motolii_eval::Value::F64(v) => vec![*v],
+        motolii_eval::Value::Vec2(v) => v.to_vec(),
+        motolii_eval::Value::Vec3(v) => v.to_vec(),
+        motolii_eval::Value::Color(v) => v.to_vec(),
+        motolii_eval::Value::AssetRef(_) => Vec::new(),
+    };
+    all.into_iter().take(arity).collect()
 }
 
 fn collect_items_for_layer<'doc>(

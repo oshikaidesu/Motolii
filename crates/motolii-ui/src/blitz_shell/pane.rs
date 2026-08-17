@@ -56,9 +56,12 @@ use blitz_traits::shell::{ColorScheme, Viewport};
 use crate::browser_blitz::render::BlitzSurface;
 use crate::browser_panel::BrowserPanel;
 use crate::chrome_blitz;
-use crate::inspector_panel::{InspectorPanel, FIXTURE_TARGET_LAYER};
+use crate::inspector_panel::{
+    InspectorAction, InspectorEditParam, InspectorPanel, FIXTURE_TARGET_LAYER,
+};
 use crate::stage_frame_seat::StageFrameSeat;
 use crate::timeline_blitz::{project_for_blitz, timeline_html};
+use crate::timeline_rows::ParamRef;
 
 /// 合成先textureのformat。`Rgba8UnormSrgb` にしないこと(罠1)。
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -80,6 +83,33 @@ fn trace_enabled() -> bool {
 /// `Document::new_current()` は空で、投影が bar も key も出さない。
 /// Inspector の fixture read-model も同じ文書から組む(decoder P1 と同じ)。
 const TIMELINE_DOC: &str = "docs/mocks-ui/fixtures/reference-document.json";
+
+/// Inspector が出した1つの要求を、エディタの適用口へ写す。
+///
+/// ここには判断が無い — `InspectorEditParam` を `ParamRef` へ写し替えるだけで、
+/// 「何が書けるか」「1 gesture の切れ目はどこか」はエディタ側が持つ。
+fn apply_inspector_action(
+    editor: &mut crate::timeline_editor::TimelineEditor,
+    layer: motolii_doc::LayerId,
+    action: InspectorAction,
+) {
+    let param = |param: InspectorEditParam| match param {
+        InspectorEditParam::Position => ParamRef::Position,
+        InspectorEditParam::Opacity => ParamRef::Opacity,
+    };
+    match action {
+        InspectorAction::BeginEdit { param: p } => editor.begin_param_edit(layer, param(p)),
+        InspectorAction::SetComponent {
+            param: p,
+            component,
+            value,
+        } => editor.set_param_component(layer, param(p), component, value),
+        InspectorAction::EndEdit => editor.end_param_edit(),
+        InspectorAction::KeyAtPlayhead { param: p, .. } => {
+            editor.key_param_at_playhead(layer, param(p), action.key_components())
+        }
+    }
+}
 
 /// 1ペインに出す面の種類。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -154,6 +184,40 @@ impl BlitzPane {
         }
     }
 
+    /// live の Inspector を描いて、出た編集要求をそのままエディタの適用口へ渡す。
+    ///
+    /// **Inspector は Document を書かない**(single writer)。ここは
+    /// 「投影を座らせる → 描く → 出た要求を writer へ渡す」の3手だけで、
+    /// 判断も第二の Document 保持も持たない。live の Timeline がエディタ自身に
+    /// 描かせているのと同じ形である。
+    pub(crate) fn show_live_inspector(
+        &mut self,
+        ui: &mut egui::Ui,
+        editor: &mut crate::timeline_editor::TimelineEditor,
+    ) {
+        let Content::NativeInspector(slot) = &mut self.content else {
+            return;
+        };
+        let panel = slot.get_or_insert_with(|| InspectorPanel::placeholder("No selection"));
+
+        // 投影は snapshot から。`Arc` を1本借りるだけで読み直さない。
+        let document = Arc::clone(editor.document());
+        let selection: Vec<motolii_doc::LayerId> = editor.selected_layers().to_vec();
+        match editor.playhead_time() {
+            Some(at) => panel.seat_live(&document, &selection, at),
+            // fps の格子へ載らない playhead。理由を出して触らせない。
+            None => panel.seat_live(&document, &[], motolii_core::RationalTime::ZERO),
+        }
+
+        let actions = panel.show(ui);
+        let Some(&layer) = selection.first().filter(|_| selection.len() == 1) else {
+            return;
+        };
+        for action in actions {
+            apply_inspector_action(editor, layer, action);
+        }
+    }
+
     /// playhead(秒)を Stage へ置く。**Stage が出すのはこの時刻の合成フレーム**で、
     /// 編集と同じく writer 側の値をそのまま読むだけ(ここで進めない)。
     /// Stage 以外の面には意味が無い。
@@ -222,7 +286,10 @@ impl BlitzPane {
                             .show(ui);
                     }
                     Content::NativeInspector(panel) => {
-                        panel
+                        // 座席が無いとき(fixture 展示)の Inspector。live の Inspector は
+                        // `show_live_inspector` が描く — 編集要求を writer へ渡すために
+                        // エディタと同じ場所で回す必要がある。
+                        let _ = panel
                             .get_or_insert_with(|| {
                                 InspectorPanel::from_document_path(
                                     Path::new(TIMELINE_DOC),
