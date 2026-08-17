@@ -10,23 +10,21 @@
 //! cargo run -p motolii-ui --bin motolii-blitz-shell
 //! ```
 //!
-//! ## ここに無いもの
+//! ## ここに在るもの / 無いもの
 //!
-//! - **入力**。ペインはマウスを受けない。ポインタの振り分けは後続capsule(C2)
-//! - **編集**。`--project` で実プロジェクトを開くと Timeline / Stage はその Document
-//!   (`ProjectSeat` の writer snapshot)を映すが、編集は1つも通らない(次レーン)。
-//!   Browser / Inspector / chrome は固定サンプルのまま
-//! - **レイアウトの永続化**。起動するたび既定の並び
-//!
-//! つまりこれは「合わさった絵を見る」ための実物であって、製品の殻ではない。
+//! - **Timeline の編集**。`--project` で実プロジェクトを開くと Timeline pane は
+//!   Blitz テクスチャではなく native エディタ(`timeline_editor::TimelineEditor`)になり、
+//!   移動・トリム・選択・Undo/Redo(Cmd+Z / Shift+Cmd+Z)が `ProjectSeat` の唯一の
+//!   writer を通る。編集後の snapshot は同じフレームで Stage へも配り直される
+//! - **入力(Timeline 以外)**。Blitz のペインはマウスを受けない。ポインタの
+//!   振り分けは後続capsule(C2)。Browser / Inspector / chrome は固定サンプルのまま
+//! - **レイアウトの永続化**は無い。起動するたび既定の並び
 
 mod app;
 mod pane;
 mod runner;
 
-pub use app::ProjectSeat;
 pub(crate) use app::BlitzShellApp;
+pub use app::ProjectSeat;
 pub use pane::{BlitzPane, PaneKind};
-pub use runner::{
-    run_blitz_shell, BlitzShellLaunch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES,
-};
+pub use runner::{run_blitz_shell, BlitzShellLaunch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES};

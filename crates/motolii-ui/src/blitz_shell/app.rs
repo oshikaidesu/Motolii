@@ -8,9 +8,10 @@
 //! レイアウトの永続化もしない（毎回既定の並びで起動する）。
 //!
 //! Document の座席もここにある（`ProjectSeat`）。`--project` で開いた実プロジェクトの
-//! `ProjectSession`（OS lock）と `DocumentWriter`（唯一の書き手）を app が抱え、
-//! Timeline / Stage へは `writer.snapshot()` の immutable snapshot だけを流す。
-//! **編集の配線はまだ無い**（次レーン）。座席無しの起動は従来どおり fixture 展示。
+//! `ProjectSession`（OS lock）と Timeline エディタ（唯一の writer を抱える）を app が
+//! 抱え、Stage へは immutable snapshot だけを流す。**Timeline は live のとき
+//! native エディタ**（`timeline_editor::TimelineEditor`）で、移動・トリム・選択・
+//! Undo/Redo が writer を通る。座席無しの起動は従来どおり fixture 展示。
 
 use std::path::Path;
 use std::sync::Arc;
@@ -19,17 +20,27 @@ use eframe::egui_wgpu::RenderState;
 use egui_tiles::{Container, Linear, LinearDir, Tile, TileId, Tiles, Tree, UiResponse};
 
 use super::pane::{BlitzPane, PaneKind};
+use crate::timeline_editor::TimelineEditor;
 
 /// `egui_tiles` のペイン描画をパネルへ委譲するだけの behavior。
 ///
 /// `BlitzPane::show` が wgpu の `RenderState` を要求するので、
-/// behavior が参照を持ち回る。
+/// behavior が参照を持ち回る。live project があるときは Timeline pane だけ
+/// Blitz ではなく native エディタが描く（Stage が egui 直描きなのと同じ形）。
 struct BlitzShellBehavior<'a> {
     render_state: &'a RenderState,
+    /// live の Timeline エディタ。`None` なら Timeline も fixture の Blitz 表示。
+    editor: Option<&'a mut TimelineEditor>,
 }
 
 impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
     fn pane_ui(&mut self, ui: &mut egui::Ui, _tile_id: TileId, pane: &mut BlitzPane) -> UiResponse {
+        if pane.kind() == PaneKind::Timeline {
+            if let Some(editor) = self.editor.as_deref_mut() {
+                editor.show(ui);
+                return UiResponse::None;
+            }
+        }
         pane.show(ui, self.render_state);
         // ペイン本体をドラッグ元にはしない（タブのドラッグだけで足りる）。
         UiResponse::None
@@ -41,17 +52,17 @@ impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
 }
 
 /// live project の座席。開いた project の `ProjectSession`（OS 排他 lock）と、
-/// Document を書く唯一の口（`DocumentWriter`）をひとまとめに持つ。
+/// Timeline エディタをひとまとめに持つ。**Document の唯一の writer はエディタの
+/// 中に1つだけ座る**（single writer）。
 ///
-/// single writer 規律の写し: Document を書けるのはこの writer だけで、
 /// pane 側へ出て行くのは `snapshot()` の immutable snapshot だけ。
 /// 第二の Document 保持経路（cache / 読み直し）はここから先に作らない。
 pub struct ProjectSeat {
     /// project identity の排他 lock。読みはしないが、app が生きているあいだ握り続ける
     /// （落とすと他プロセスが同じ project を開けてしまう）。
     _session: motolii_doc::ProjectSession,
-    /// 唯一の書き手。本レーンでは編集を配線しない — 座席だけ先に据える。
-    writer: motolii_doc::DocumentWriter,
+    /// Timeline エディタ。編集は全部（キー入力も操作 API も）この中の writer を通る。
+    editor: TimelineEditor,
 }
 
 impl ProjectSeat {
@@ -82,13 +93,24 @@ impl ProjectSeat {
         )?;
         Ok(Self {
             _session: opened.session,
-            writer,
+            editor: TimelineEditor::new(writer),
         })
     }
 
-    /// pane へ流す immutable snapshot。
+    /// pane へ流す immutable snapshot（エディタが writer から取った cached をそのまま配る）。
     pub fn snapshot(&self) -> Arc<motolii_doc::Document> {
-        self.writer.snapshot()
+        Arc::clone(self.editor.document())
+    }
+
+    /// Timeline エディタ（読み）。revision / snapshot の照合に使う。
+    pub fn editor(&self) -> &TimelineEditor {
+        &self.editor
+    }
+
+    /// Timeline エディタ（書き）。pane の描画と統合テストの操作 API がここを通る。
+    /// writer 自体は外へ出さない — 編集は必ずエディタの操作として通る。
+    pub fn editor_mut(&mut self) -> &mut TimelineEditor {
+        &mut self.editor
     }
 }
 
@@ -102,6 +124,9 @@ pub struct BlitzShellApp {
     tree: Tree<BlitzPane>,
     /// live project の座席。`None` は fixture 展示（従来の開発動線）。
     project: Option<ProjectSeat>,
+    /// Stage へ最後に配った snapshot の revision。エディタの編集で進んでいたら
+    /// 次のフレームで新しい snapshot を配り直す（Stage の描画コードは触らない）。
+    seated_revision: u64,
 }
 
 impl BlitzShellApp {
@@ -119,7 +144,10 @@ impl BlitzShellApp {
     ///
     /// # Panics
     /// `new` と同じ。
-    pub(crate) fn with_seat(cc: &eframe::CreationContext<'_>, project: Option<ProjectSeat>) -> Self {
+    pub(crate) fn with_seat(
+        cc: &eframe::CreationContext<'_>,
+        project: Option<ProjectSeat>,
+    ) -> Self {
         let render_state = cc
             .wgpu_render_state
             .clone()
@@ -132,17 +160,22 @@ impl BlitzShellApp {
         let runtime = tokio::runtime::Runtime::new()
             .expect("blitz_net::Provider 用の Tokio runtime を作れなかった");
 
-        // snapshot はここで1度だけ取り、Timeline / Stage が同じ `Arc` を持つ。
+        // snapshot はここで1度だけ取り、Stage が writer の出した `Arc` そのものを持つ。
         let snapshot = project.as_ref().map(ProjectSeat::snapshot);
+        let seated_revision = project
+            .as_ref()
+            .map(|seat| seat.editor().revision())
+            .unwrap_or(0);
         Self {
             runtime,
             render_state,
             tree: build_initial_tree(snapshot.as_ref()),
             project,
+            seated_revision,
         }
     }
 
-    /// 座席の参照。編集配線（次レーン）がここから writer へ入る。
+    /// 座席の参照。
     pub fn project(&self) -> Option<&ProjectSeat> {
         self.project.as_ref()
     }
@@ -159,11 +192,38 @@ impl eframe::App for BlitzShellApp {
 
         let mut behavior = BlitzShellBehavior {
             render_state: &self.render_state,
+            editor: self.project.as_mut().map(ProjectSeat::editor_mut),
         };
 
         egui::CentralPanel::default().show(ui, |ui| {
             self.tree.ui(&mut behavior, ui);
         });
+        drop(behavior);
+
+        // エディタ（か Undo/Redo）が Document を進めていたら、同じ新 snapshot を
+        // Stage へ配り直す。Stage の描画コードは変えない — 渡す `Arc` の更新だけ。
+        if let Some(seat) = self.project.as_ref() {
+            let revision = seat.editor().revision();
+            if revision != self.seated_revision {
+                let snapshot = seat.snapshot();
+                seat_stage_documents(&mut self.tree, &snapshot);
+                self.seated_revision = revision;
+            }
+        }
+    }
+}
+
+/// tree の中の Stage pane 全部へ、新しい snapshot を配り直す。
+///
+/// single writer の reader 側: ここで配るのは writer が出した `Arc` そのもので、
+/// 読み直しも clone 編集もしない。
+fn seat_stage_documents(tree: &mut Tree<BlitzPane>, document: &Arc<motolii_doc::Document>) {
+    for (_, tile) in tree.tiles.iter_mut() {
+        if let Tile::Pane(pane) = tile {
+            if pane.kind() == PaneKind::Stage {
+                pane.set_live_document(Arc::clone(document));
+            }
+        }
     }
 }
 
@@ -184,8 +244,9 @@ impl eframe::App for BlitzShellApp {
 /// Motolii はその wrapper であって `re_renderer` で直接シーンを組まない（2026-08-11裁定）。
 ///
 /// `document` は live project の snapshot（`ProjectSeat::snapshot`）。座るのは
-/// **Timeline と Stage だけ**で、Browser / Inspector / chrome は fixture のまま（本レーンの範囲）。
-/// `None` なら全面が従来どおり fixture。
+/// **Stage だけ**で、live の Timeline は pane ではなくエディタが描く
+/// （`BlitzShellBehavior::pane_ui`）。Browser / Inspector / chrome は fixture のまま
+/// （本レーンの範囲）。`None` なら全面が従来どおり fixture。
 fn build_initial_tree(document: Option<&Arc<motolii_doc::Document>>) -> Tree<BlitzPane> {
     let mut tiles = Tiles::default();
 
@@ -197,9 +258,10 @@ fn build_initial_tree(document: Option<&Arc<motolii_doc::Document>>) -> Tree<Bli
     // 左: Browser。
     let browser = tiles.insert_pane(BlitzPane::new(PaneKind::Browser));
 
-    // 中央: 上が Stage、下が Timeline。live Document が座る2面。
+    // 中央: 上が Stage（live Document が座る）、下が Timeline
+    // （live ならエディタが behavior 側で描くので、pane は席だけ）。
     let stage = tiles.insert_pane(seated(PaneKind::Stage));
-    let timeline = tiles.insert_pane(seated(PaneKind::Timeline));
+    let timeline = tiles.insert_pane(BlitzPane::new(PaneKind::Timeline));
     let center = tiles.insert_vertical_tile(vec![stage, timeline]);
 
     // 右: Inspector。
@@ -263,8 +325,10 @@ mod tests {
         motolii_core::RationalTime::try_new(7, 1).expect("marker duration")
     }
 
+    /// live では Stage に snapshot が座り、Timeline は pane でなくエディタが持つ
+    /// （編集レーンで Timeline の表示主体が HtmlPane からエディタへ移った）。
     #[test]
-    fn opening_a_project_seats_its_document_into_timeline_and_stage() {
+    fn opening_a_project_seats_its_document_into_stage_and_the_editor() {
         let path = create_project("seat");
         let seat = ProjectSeat::open(&path).expect("open temp project");
         let snapshot = seat.snapshot();
@@ -272,6 +336,10 @@ mod tests {
             snapshot.composition.duration,
             marker_duration(),
             "seat must serve the opened project, not the fixture"
+        );
+        assert!(
+            Arc::ptr_eq(seat.editor().document(), &snapshot),
+            "the editor serves the writer snapshot itself, not a re-load"
         );
 
         let tree = build_initial_tree(Some(&snapshot));
@@ -282,12 +350,9 @@ mod tests {
             match pane.kind() {
                 PaneKind::Timeline => {
                     timeline += 1;
-                    let doc = pane
-                        .live_document()
-                        .expect("Timeline must receive the live Document");
                     assert!(
-                        Arc::ptr_eq(doc, &snapshot),
-                        "Timeline must hold the writer snapshot itself, not a re-load"
+                        pane.live_document().is_none(),
+                        "live の Timeline はエディタが描く。pane に第二の Document を持たせない"
                     );
                 }
                 PaneKind::Stage => {
@@ -307,6 +372,69 @@ mod tests {
             }
         }
         assert_eq!((timeline, stage), (1, 1), "default layout has one of each");
+    }
+
+    /// エディタの編集が進んだら、Stage pane へ**同じ新 snapshot**が配り直される
+    /// （`BlitzShellApp::ui` の revision 照合が呼ぶのはこの関数）。
+    #[test]
+    fn an_edit_reseats_the_stage_snapshot() {
+        // clip を持つ lab fixture を実プロジェクトとして保存して開く。
+        let (document, names) = crate::timeline_editor::lab_fixture();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("motolii-blitz-shell-reseat-{nanos}"));
+        std::fs::create_dir_all(&dir).expect("temp project dir");
+        let path = dir.join("project.json");
+        let mut session =
+            motolii_doc::ProjectSession::acquire(&path, &motolii_doc::ResourceLimits::production())
+                .expect("acquire temp project");
+        session
+            .save_document(&document, &motolii_doc::SaveOptions::default())
+            .expect("save temp project");
+        drop(session);
+
+        let mut seat = ProjectSeat::open(&path).expect("open temp project");
+        let first = seat.snapshot();
+        let mut tree = build_initial_tree(Some(&first));
+
+        // エディタの操作 API で move を1回通す(writer 経由の実編集)。
+        let layer = *names
+            .iter()
+            .find(|(_, name)| name.as_str() == "Background")
+            .map(|(layer, _)| layer)
+            .expect("fixture layer");
+        let revision_before = seat.editor().revision();
+        let editor = seat.editor_mut();
+        editor.begin_clip_move(layer, 1.0);
+        editor.drag_to(2.0);
+        editor.release();
+        assert!(
+            seat.editor().revision() > revision_before,
+            "the move must advance the writer revision"
+        );
+
+        let second = seat.snapshot();
+        assert!(
+            !Arc::ptr_eq(&first, &second),
+            "the edit produces a new snapshot Arc"
+        );
+
+        seat_stage_documents(&mut tree, &second);
+        let mut stage = 0;
+        for (_, tile) in tree.tiles.iter() {
+            let Tile::Pane(pane) = tile else { continue };
+            if pane.kind() == PaneKind::Stage {
+                stage += 1;
+                let doc = pane.live_document().expect("Stage stays seated");
+                assert!(
+                    Arc::ptr_eq(doc, &second),
+                    "Stage must be handed the new snapshot Arc itself"
+                );
+            }
+        }
+        assert_eq!(stage, 1, "default layout has one Stage");
     }
 
     #[test]
