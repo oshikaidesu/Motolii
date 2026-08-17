@@ -289,3 +289,11 @@ AEの3世代の3D(Ray-traced CS6 / Cineware / Advanced 3D)の死因、glTF実装
 - ~~縦書き対応の時期とスコープ(v1は横書きのみか)~~ → **判定(2026-07-12): v1は横書きのみ(縦書き延期)+ガード9据え置き**(回転ベースの反面事例2件=resvg・Flutter公式回答を調査で追加確認)。P6契約へは費用≈0の文言3点のみ先行反映(C-1/C-2/C-3、上記追記)。**C-4**(縦行送りメトリクス口)/**C-5**(縦メトリクス欠落診断)は延期=縦書き着手時の完了条件へ、**C-6**(sideways描画材料)は棄却=`glyph_transform`貫通で現契約に既にある、**C-7**(fallback縦適性)は論点記録のみ=実質の緩和策はガード8(a)同梱フォント下限保証。併読: [調査メモ](../reviews/2026-07-12-vertical-text-prior-art.md)・[反対側レビュー](../reviews/2026-07-12-vertical-text-prior-art-counter-review.md)
 - ~~モーションブラーはスコープ外のままでよいか~~ → 決定(2026-07-07): プラグイン領域。Quality型にサンプル数の口だけ確保
 - ~~テキストP6の一発API vs ラン単位~~ → **決定(2026-07-10)**: ラン単位3点セット(上記)
+
+## Rerun表示座席の実測追補(2026-08-17)
+
+2026-08-12に引いた「標準`Mesh3D`のalbedo／textureをGlass BSDF完成とみなさない」の線は、実測により**慎重な線引きではなく測定された制約**になった。pin `8c6865ac`の`instanced_mesh.wgsl:87`がtexture alphaを捨てて`alpha=1`固定にし、透明判定(`mesh.rs:387`)も一様係数だけを見るためである(上流TODO `#12223`)。したがって`VSM-M5-S0` GlassSurfaceのcustom renderer seamは選択ではなく必然である。
+
+一方`VSM-M5-G0` MeshDeformと`VSM-M5-G1` GeometryFractureは不透明ジオメトリを扱うため、この制約に触れない。「`Mesh3D`が使えない」を3D表現全体へ広げないこと。
+
+Vism Filter出力のような透明レイヤーの表示座席は`GridMap`→`RectangleRenderer`である。`Image`は`SpaceKind::TwoD`として登録されるため3D viewで平面として描かれない。詳細と証拠は[Rerun表示座席の実測](../reviews/2026-08-17-rerun-layer-display-seat-measurement.md)。

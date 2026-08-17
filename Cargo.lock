@@ -7758,6 +7758,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "rerun-vism-gpu-alpha-probe"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "image",
+ "re_chunk",
+ "re_log_types",
+ "re_renderer",
+ "re_sdk_types",
+ "re_view_spatial",
+ "wgpu",
+]
+
+[[package]]
+name = "rerun-vism-layer-alpha-probe"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "image",
+ "re_chunk",
+ "re_log_types",
+ "re_renderer",
+ "re_sdk_types",
+ "re_view_spatial",
+ "wgpu",
+]
+
+[[package]]
 name = "resvg"
 version = "0.45.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
