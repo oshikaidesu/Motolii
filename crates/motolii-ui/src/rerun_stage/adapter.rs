@@ -1,9 +1,12 @@
+use std::sync::Arc;
 use std::time::Instant;
 
 use egui::{
     Event, Modifiers, MouseWheelUnit, PointerButton, Pos2, RawInput, Rect, TouchPhase, Vec2,
 };
 use glam::EulerRot;
+use re_chunk::Chunk;
+use re_log_types::{EntityPath, TimePoint};
 use transform_gizmo::{
     Gizmo,
     math::{DQuat, DVec3},
@@ -174,7 +177,7 @@ impl EmbeddedSpatialStage {
     }
 
     fn with_own_egui(own_egui: Option<OwnEgui>) -> Result<Self, String> {
-        let stage = Self {
+        let mut stage = Self {
             own_egui,
             spatial_stage: re_view_spatial::SpatialStage::new(re_log_types::ApplicationId::from(
                 "motolii-rn-stage",
@@ -200,6 +203,11 @@ impl EmbeddedSpatialStage {
             evaluated_frame_active: false,
             host_viewport: None,
         };
+        // 既定カメラを comp 平面の正面側へ置く。**Rerun の camera 機構の中で**決める
+        // (独自 camera を持たない)ので、scene の向きを先に伝える。
+        if !ingest_scene_view_coordinates(&mut stage.spatial_stage) {
+            return Err("ingest Rerun scene view coordinates".to_string());
+        }
         // 製品マウントでは fixture rect を出さない。host snapshot / 評価フレームが正本。
         Ok(stage)
     }
@@ -631,6 +639,40 @@ impl EmbeddedSpatialStage {
     }
 }
 
+/// Motolii の正準座標(原点中央 / Y-up / 高さ1.0、comp 平面は XY・法線 +Z)を
+/// Rerun の scene 座標系として root へ積む。**これが既定カメラの向きを決める。**
+///
+/// なぜ必要か: Rerun の既定 eye は blueprint の `EyeControls3D` が空のときに
+/// fallback で決まり、その fallback は scene の view coordinates から軸を引く
+/// (`re_view_spatial/src/view_3d.rs:206-233`)。何も積まないと
+/// `unwrap_or_default()` が効いて right=+X / up=+Z / forward=+Y、つまり **Z-up の
+/// 世界**とみなされる。comp 平面は XY にあるので、既定カメラはそれを地面すれすれの
+/// 角度から見る絵になる(= 合成フレームが斜めに潰れる)。
+///
+/// `RIGHT_HAND_Y_UP`(X=Right, Y=Up, Z=Back)を積むと同じ fallback が
+/// up=+Y / forward=-Z を引き、既定 eye は comp 平面の **正面側(+Z)** に立ち、
+/// 上下も Document と揃う。orbit / zoom は Rerun 側のまま触らない。
+pub(super) const STAGE_SCENE_VIEW_COORDINATES: re_sdk_types::components::ViewCoordinates =
+    re_sdk_types::components::ViewCoordinates::RIGHT_HAND_Y_UP;
+
+fn scene_view_coordinates_chunk() -> Option<Arc<Chunk>> {
+    Chunk::builder(EntityPath::root())
+        .with_archetype_auto_row(
+            TimePoint::STATIC,
+            &re_sdk_types::archetypes::ViewCoordinates::new(STAGE_SCENE_VIEW_COORDINATES),
+        )
+        .build()
+        .ok()
+        .map(Arc::new)
+}
+
+fn ingest_scene_view_coordinates(stage: &mut re_view_spatial::SpatialStage) -> bool {
+    let Some(chunk) = scene_view_coordinates_chunk() else {
+        return false;
+    };
+    stage.ingest_chunk(chunk).is_ok()
+}
+
 pub(super) fn stage_navigation_events(
     delta_x: f64,
     delta_y: f64,
@@ -680,5 +722,108 @@ pub(super) fn egui_pointer_button(button: StagePointerButton) -> PointerButton {
         StagePointerButton::Primary => PointerButton::Primary,
         StagePointerButton::Secondary => PointerButton::Secondary,
         StagePointerButton::Middle => PointerButton::Middle,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use re_sdk_types::view_coordinates::{Axis3, Sign, SignedAxis3};
+
+    use super::*;
+
+    /// `SignedAxis3` → 単位ベクトル。`glam` は Motolii(0.32)と Rerun(0.30)で
+    /// 別crateなので `From` が繋がらない。ここは素の配列で持つ。
+    fn unit(axis: SignedAxis3) -> [f32; 3] {
+        let sign = match axis.sign {
+            Sign::Positive => 1.0,
+            Sign::Negative => -1.0,
+        };
+        match axis.axis {
+            Axis3::X => [sign, 0.0, 0.0],
+            Axis3::Y => [0.0, sign, 0.0],
+            Axis3::Z => [0.0, 0.0, sign],
+        }
+    }
+
+    fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    }
+
+    fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+        a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+    }
+
+    /// Rerun の既定 eye 方向の算出をそのまま写した審判。
+    /// 出所は `re_view_spatial/src/view_3d.rs:206-233`
+    /// (`EyeControls3D::position` の fallback provider)。
+    /// **ここで式を変えない** — 変わったら Rerun 追随として別に扱う。
+    fn rerun_default_eye_dir(coordinates: re_sdk_types::components::ViewCoordinates) -> [f32; 3] {
+        let right = unit(coordinates.right().unwrap_or(SignedAxis3::POSITIVE_X));
+        let eye_up = unit(coordinates.up().unwrap_or(SignedAxis3::POSITIVE_Z));
+        let fwd = cross(eye_up, right);
+
+        let dir = [
+            0.75 * fwd[0] + 0.25 * right[0] - 0.25 * eye_up[0],
+            0.75 * fwd[1] + 0.25 * right[1] - 0.25 * eye_up[1],
+            0.75 * fwd[2] + 0.25 * right[2] - 0.25 * eye_up[2],
+        ];
+        let length = dot(dir, dir).sqrt();
+        [dir[0] / length, dir[1] / length, dir[2] / length]
+    }
+
+    /// comp 平面の正面方向。canonical 座標では平面は XY にあり法線は ±Z。
+    const COMP_PLANE_FRONT: [f32; 3] = [0.0, 0.0, -1.0];
+
+    /// 何も積まないときの既定(`ViewCoordinates::default()` = RFU)は、
+    /// comp 平面をほとんど真横から見る。これが「斜めに見える」の実体。
+    #[test]
+    fn rerun_default_scene_coordinates_look_at_the_comp_plane_edge_on() {
+        let dir = rerun_default_eye_dir(re_sdk_types::components::ViewCoordinates::default());
+        assert!(
+            dot(dir, COMP_PLANE_FRONT) < 0.35,
+            "既定 scene 座標系では comp 平面を正面から見ていない: {dir:?}"
+        );
+    }
+
+    /// Stage が積む scene 座標系では、既定 eye は comp 平面の正面側に立つ。
+    #[test]
+    fn stage_scene_coordinates_put_the_default_eye_in_front_of_the_comp_plane() {
+        let coordinates = STAGE_SCENE_VIEW_COORDINATES;
+        assert_eq!(coordinates.describe_short(), "RUB");
+
+        // Document と同じ上下。
+        assert_eq!(
+            coordinates.up().map(unit),
+            Some([0.0, 1.0, 0.0]),
+            "Stage の上は Document の上(+Y)"
+        );
+
+        // eye は comp 平面の正面(-Z 方向)を向く。
+        let dir = rerun_default_eye_dir(coordinates);
+        assert!(
+            dot(dir, COMP_PLANE_FRONT) > 0.9,
+            "既定 eye が comp 平面の正面を向いていない: {dir:?}"
+        );
+        // `eye_pos = center - radius * dir` なので、+Z 側に立つ。
+        assert!(-dir[2] > 0.0, "既定 eye が comp 平面の裏側に立っている");
+    }
+
+    /// 積むものが root の ViewCoordinates 1本であること。
+    /// `query_view_coordinates_at_closest_ancestor` は view origin(`/`)から
+    /// 親を辿るので、root に無いと fallback へ落ちる。
+    #[test]
+    fn scene_view_coordinates_chunk_sits_at_the_recording_root() {
+        let chunk = scene_view_coordinates_chunk().expect("scene view coordinates chunk");
+        assert_eq!(chunk.entity_path(), &EntityPath::root());
+        assert!(
+            chunk.components().keys().any(|component| {
+                *component == re_sdk_types::archetypes::ViewCoordinates::descriptor_xyz().component
+            }),
+            "root chunk が ViewCoordinates を運んでいない"
+        );
     }
 }
