@@ -29,7 +29,17 @@ pub enum CompositionError {
     NonPositiveAspectNum(i64),
     #[error("aspect denominator must be positive, got {0}")]
     NonPositiveAspectDen(i64),
+    #[error("resolution must have positive dimensions, got {width}x{height}")]
+    NonPositiveResolution { width: u32, height: u32 },
+    #[error("resolution {width}x{height} exceeds max dimension {max}")]
+    ResolutionTooLarge { width: u32, height: u32, max: u32 },
 }
+
+/// 出力解像度の1辺の上限(2026-08-17決定の「上限」)。8K UHD(7680x4320)に余白を
+/// 持たせた恒久上限であり、実際に描けるかはadapter limit(最低保証4096)が別途
+/// 型付きで拒否する — ResourceLimitsの他のproduction値と同じく「壊れた入力だけを
+/// 弾く寛大な恒久上限」の系に合わせる。
+pub const MAX_COMPOSITION_RESOLUTION_DIMENSION: u32 = 16_384;
 
 /// コンポジションカメラ(D1j)。永続variantは`PlanarOrthographic`のみ。
 #[derive(Debug, Clone, PartialEq, Serialize, DeserializeDerive)]
@@ -62,6 +72,12 @@ pub struct Composition {
     pub duration: RationalTime,
     pub fps: Fps,
     pub camera: CompCameraDoc,
+    /// 出力解像度(2026-08-17決定: Compositionが出力を所有し、素材はfitで受ける)。
+    /// `None`は旧挙動(最初のvideo sourceから導出)のまま。**空なら書き出さない**ので
+    /// ロケータと同じく旧文書のバイト列は変わらず、版も上げない。
+    /// 書き込みは`Command::SetCompositionResolution`だけ(直書きしない)。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    resolution: Option<(u32, u32)>,
 }
 
 /// タイムライン上のロケータ。**時刻と名前だけ**を持つ(Ableton の Locator 相当)。
@@ -84,6 +100,8 @@ struct RawComposition {
     duration: RationalTime,
     fps: Fps,
     camera: CompCameraDoc,
+    #[serde(default)]
+    resolution: Option<(u32, u32)>,
 }
 
 impl<'de> Deserialize<'de> for Composition {
@@ -96,6 +114,9 @@ impl<'de> Deserialize<'de> for Composition {
             Composition::try_new(raw.aspect_num, raw.aspect_den, raw.duration, raw.fps)
                 .map_err(de::Error::custom)?;
         composition.camera = raw.camera;
+        composition
+            .set_resolution(raw.resolution)
+            .map_err(de::Error::custom)?;
         Ok(composition)
     }
 }
@@ -120,6 +141,7 @@ impl Composition {
             duration,
             fps,
             camera: CompCameraDoc::default_planar_orthographic(),
+            resolution: None,
         })
     }
 
@@ -139,6 +161,42 @@ impl Composition {
 
     pub fn aspect_den(&self) -> i64 {
         self.aspect_den
+    }
+
+    /// 出力解像度。`None`は「最初のvideo sourceから導出」(旧挙動)。
+    pub fn resolution(&self) -> Option<(u32, u32)> {
+        self.resolution
+    }
+
+    /// 正値・上限の検証(構築/Command apply/Document validateで同じ基準)。
+    pub fn validate_resolution(resolution: (u32, u32)) -> Result<(), CompositionError> {
+        let (width, height) = resolution;
+        if width == 0 || height == 0 {
+            return Err(CompositionError::NonPositiveResolution { width, height });
+        }
+        if width > MAX_COMPOSITION_RESOLUTION_DIMENSION
+            || height > MAX_COMPOSITION_RESOLUTION_DIMENSION
+        {
+            return Err(CompositionError::ResolutionTooLarge {
+                width,
+                height,
+                max: MAX_COMPOSITION_RESOLUTION_DIMENSION,
+            });
+        }
+        Ok(())
+    }
+
+    /// 検証付きの書き込み口。製品経路は`Command::SetCompositionResolution`のapplyと
+    /// 新規Document構築だけが呼ぶ。
+    pub fn set_resolution(
+        &mut self,
+        resolution: Option<(u32, u32)>,
+    ) -> Result<(), CompositionError> {
+        if let Some(value) = resolution {
+            Self::validate_resolution(value)?;
+        }
+        self.resolution = resolution;
+        Ok(())
     }
 }
 

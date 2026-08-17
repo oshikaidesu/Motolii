@@ -313,6 +313,14 @@ pub enum Command {
         old: Option<Soundtrack>,
         new: Option<Soundtrack>,
     },
+    /// `Composition.resolution`(出力解像度)を差し替える唯一の書き込み経路
+    /// (2026-08-17決定: Compositionが出力を所有し、素材はfitで受ける)。
+    /// `None`は「最初のvideo sourceから導出」(旧挙動)。applyは`new`の正値・上限
+    /// だけを検証する(`Composition::validate_resolution`と同一基準)。
+    SetCompositionResolution {
+        old: Option<(u32, u32)>,
+        new: Option<(u32, u32)>,
+    },
 }
 
 /// fresh admitだけが使う非永続prepared値。Undo/Redo/replayの復元とは分離する。

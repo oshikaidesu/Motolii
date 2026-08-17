@@ -121,7 +121,7 @@ pub use schema::{
     asset_components_require_newer_reader, AudioComponent, AudioOutOfRange, BlendMode, Clip,
     ClipSource, ClippingMaskSettings, CompCameraDoc, CompositeOrder, Composition, CompositionError,
     EffectDefinition, EffectInstance, EffectUse, Group, ItemEnvelope, LineJoin, Locator, MaskMode,
-    PathOp,
+    PathOp, MAX_COMPOSITION_RESOLUTION_DIMENSION,
     PointType, Soundtrack, SoundtrackError, StandardShape, StreamKind, StreamSelector, Track,
     TrackItem, Transform2D, TrimMode, VectorContent, VectorRecipe, VideoComponent,
 };

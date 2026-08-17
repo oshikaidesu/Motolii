@@ -60,6 +60,7 @@ impl Command {
             Command::SetLocatorTime { .. } => CommandKind::SetLocatorTime,
             Command::SetLocatorText { .. } => CommandKind::SetLocatorText,
             Command::SetSoundtrack { .. } => CommandKind::SetSoundtrack,
+            Command::SetCompositionResolution { .. } => CommandKind::SetCompositionResolution,
         }
     }
 
@@ -115,7 +116,7 @@ impl Command {
             | Command::SetLocatorText { index, .. } => *index as u64,
             // **Documentに1本のsingleton。** 対象stable idを持たないので0固定
             // (kind+propertyだけで merge 対象が決まる)。
-            Command::SetSoundtrack { .. } => 0,
+            Command::SetSoundtrack { .. } | Command::SetCompositionResolution { .. } => 0,
         }
     }
 
@@ -176,6 +177,7 @@ impl Command {
             | Command::SetLocatorTime { .. }
             | Command::SetLocatorText { .. } => PropertyId::Locator,
             Command::SetSoundtrack { .. } => PropertyId::Soundtrack,
+            Command::SetCompositionResolution { .. } => PropertyId::CompositionResolution,
         }
     }
 
@@ -267,6 +269,7 @@ impl Command {
             | Command::SetLocatorTime { .. }
             | Command::SetLocatorText { .. }
             | Command::SetSoundtrack { .. }
+            | Command::SetCompositionResolution { .. }
             | Command::SetItemSolo { .. } => None,
         }
     }

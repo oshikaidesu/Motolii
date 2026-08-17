@@ -468,9 +468,39 @@ fn render_graph_cached_inner(
                     .iter()
                     .find(|(id, _)| *id == *output)
                     .ok_or(RenderError::MissingVideoSource(output.0))?;
-                validate_external_texture_desc(graph.desc, *tex)?;
-                // ハンドル(Arc)の複製でスロットに載せ、以降は通常テクスチャと同じ経路にする。
-                textures[output.0] = Some(tex.texture.clone());
+                validate_external_texture_desc(*tex)?;
+                let source_w = tex.texture.width();
+                let source_h = tex.texture.height();
+                if source_w == desc.width && source_h == desc.height {
+                    // 寸法完全一致: fitは恒等なのでハンドル(Arc)の複製でスロットに載せ、
+                    // 以降は通常テクスチャと同じ経路にする。
+                    textures[output.0] = Some(tex.texture.clone());
+                } else {
+                    // 2026-08-17決定: 素材の解像度は出力を拘束しない。aspect不一致は
+                    // contain fit(中央配置、余白はshaderの枠外透明=合成背景)、
+                    // 同一aspectの倍率違いは恒等fit=デスク寸法への明示リサンプルになる
+                    // (スロットを常にdesc寸法へ正規化し、出力コピーの寸法前提を守る)。
+                    // Preview/Exportどちらもこの1点を通るので別経路は生まれない。
+                    let fit = motolii_nodes::contain_fit_inverse_uv(
+                        (source_w, source_h),
+                        (desc.width, desc.height),
+                    )
+                    .ok_or(RenderError::UnsupportedFrameDesc)?;
+                    let output_texture = session.acquire_render_target(gpu, desc, &avoid);
+                    session.affine_place.set_inverse_uv_matrix(fit);
+                    session.affine_place.render(
+                        gpu,
+                        TextureRef {
+                            texture: tex.texture,
+                            desc: frame_desc_with_texture_size(tex.texture, desc),
+                        },
+                        TextureRef {
+                            texture: &output_texture,
+                            desc,
+                        },
+                    )?;
+                    textures[output.0] = Some(output_texture);
+                }
             }
             RenderStep::SolidSource { output, source } => {
                 let texture = if source.color == [0.0, 0.0, 0.0, 0.0] {
@@ -1146,18 +1176,10 @@ fn frame_desc_with_texture_size(texture: &wgpu::Texture, template: FrameDesc) ->
     )
 }
 
-fn validate_external_texture_desc(
-    expected: FrameDesc,
-    source: TextureRef<'_>,
-) -> Result<(), RenderError> {
-    let actual = FrameDesc::packed(
-        source.texture.width(),
-        source.texture.height(),
-        source.desc.format,
-        source.desc.color_space,
-        source.desc.premultiplied,
-    );
-    if !actual.same_aspect_integer_scale(expected) {
+fn validate_external_texture_desc(source: TextureRef<'_>) -> Result<(), RenderError> {
+    // 2026-08-17決定: 素材の解像度は出力を拘束しない(aspect不一致はcontain fitで受ける)
+    // ので、寸法は非0だけを要求する。format/色空間/premulは従来どおり固定。
+    if source.texture.width() == 0 || source.texture.height() == 0 {
         return Err(RenderError::UnsupportedFrameDesc);
     }
     if source.desc.format != PixelFormat::Rgba8Unorm
@@ -2475,20 +2497,23 @@ mod tests {
         assert!(actual.iter().any(|&v| v != 0));
     }
 
+    /// 2026-08-17決定: aspect不一致のVideoSourceは拒否せず、contain fit(中央配置・
+    /// 余白透明)でcanonicalフレームへ写す。旧`rejects_mismatched_video_source_dimensions`
+    /// の置き換え(拒否という制約自体が決定で撤去された)。
     #[test]
-    fn render_graph_rejects_mismatched_video_source_dimensions() {
+    fn render_graph_fits_mismatched_video_source_with_contain() {
         let Some(gpu) = gpu_or_skip() else { return };
         let request = centered_request();
-        let desc = request.desc;
-        let wrong_desc = FrameDesc::packed(8, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
+        let desc = request.desc; // 8x4 (2:1)
+        let square_desc = FrameDesc::packed(8, 8, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true);
         let background = upload_rgba(
             &gpu,
-            &wrong_desc,
-            &solid_rgba(wrong_desc, request.source.color),
+            &square_desc,
+            &solid_rgba(square_desc, request.source.color),
         );
         let graph = linear_graph_with_video_source(desc, request.overlay);
 
-        let err = render_graph_cached(
+        let rendered = render_graph_cached(
             &gpu,
             &mut RenderSession::new(&gpu),
             request.timeline_time,
@@ -2499,7 +2524,7 @@ mod tests {
                     TextureId(0),
                     TextureRef {
                         texture: &background,
-                        desc: wrong_desc,
+                        desc: square_desc,
                     },
                 )],
                 source_time: Some(RationalTime::ZERO),
@@ -2507,8 +2532,21 @@ mod tests {
             },
             Quality::FINAL,
         )
-        .unwrap_err();
-        assert!(matches!(err, RenderError::UnsupportedFrameDesc));
+        .unwrap();
+        let actual = download_rgba(&gpu, &rendered.texture).unwrap();
+        let px = |x: usize, y: usize| -> [u8; 4] {
+            let idx = (y * desc.width as usize + x) * 4;
+            actual[idx..idx + 4].try_into().unwrap()
+        };
+        // 8x8 → 8x4 のcontain fitは幅0.5(x∈[2,6))の中央pillarbox。overlay外の行(y=0)で
+        // 嵌め込み列に映像、左右余白は透明(=合成背景)であること。
+        assert_eq!(px(0, 0), [0, 0, 0, 0], "left margin must stay transparent");
+        assert_eq!(px(7, 3), [0, 0, 0, 0], "right margin must stay transparent");
+        let fitted = px(3, 0);
+        assert!(
+            fitted[3] > 0 && fitted[1] > 0,
+            "fitted column must carry the video source, got {fitted:?}"
+        );
     }
 
     #[test]
