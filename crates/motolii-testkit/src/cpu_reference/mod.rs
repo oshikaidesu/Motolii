@@ -4,12 +4,14 @@
 //! 製品の`ViewportTransform`等に依存しない(監査E-6の循環参照回避)。
 
 mod composite;
+mod fingerprint;
 mod graph;
 mod luma;
 mod overlay;
 mod yuv;
 
 pub use composite::{premul_add_u8, premul_multiply_u8, premul_over_u8, to_u8};
+pub use fingerprint::{expected_source_content_hash, expected_source_content_hash_of_file};
 pub use graph::expected_fixed_graph;
 pub use luma::expected_luma;
 pub use overlay::{

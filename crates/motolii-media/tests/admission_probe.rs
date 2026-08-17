@@ -14,7 +14,7 @@ use motolii_doc::{
 };
 use motolii_media::{probe_admission_source, MediaError};
 use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
-use sha2::{Digest, Sha256};
+use motolii_testkit::cpu_reference::expected_source_content_hash_of_file;
 
 fn run_ffmpeg(args: &[&str]) {
     let status = Command::new("ffmpeg")
@@ -60,16 +60,6 @@ fn make_audio_m4a(path: &Path) {
     ]);
 }
 
-/// 独立oracle: 実装と別経路(sha2直叩き)で正準content_hash文字列を組む。
-fn expected_content_hash(path: &Path) -> String {
-    let bytes = std::fs::read(path).unwrap();
-    let digest = Sha256::digest(&bytes);
-    let mut hash = String::from("motolii-source-v1:sha256:");
-    for byte in digest {
-        hash.push_str(&format!("{byte:02x}"));
-    }
-    hash
-}
 
 #[test]
 fn probes_video_container_fingerprint_and_duration() {
@@ -91,7 +81,7 @@ fn probes_video_container_fingerprint_and_duration() {
     assert!((0.3..2.0).contains(&secs), "unexpected duration {secs}");
     assert_eq!(
         source.fingerprint.content_hash(),
-        expected_content_hash(&path)
+        expected_source_content_hash_of_file(&path)
     );
     assert_eq!(
         source.fingerprint.size_bytes(),
@@ -120,7 +110,7 @@ fn probes_audio_only_m4a() {
     assert!((0.3..2.0).contains(&secs), "unexpected duration {secs}");
     assert_eq!(
         source.fingerprint.content_hash(),
-        expected_content_hash(&path)
+        expected_source_content_hash_of_file(&path)
     );
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -185,7 +175,7 @@ fn real_file_probe_to_document_admission_via_existing_route() {
         asset.path_project_relative.as_deref(),
         Some("media/clip.mp4")
     );
-    assert_eq!(asset.content_hash, expected_content_hash(&path));
+    assert_eq!(asset.content_hash, expected_source_content_hash_of_file(&path));
     assert_eq!(
         asset.size_bytes,
         Some(std::fs::metadata(&path).unwrap().len())
