@@ -440,6 +440,7 @@ mod replay_tests {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         };
         for command in [
             Command::AdmitAsset {

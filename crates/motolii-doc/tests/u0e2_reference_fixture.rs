@@ -69,6 +69,7 @@ fn fixture_document() -> Document {
             size_bytes: Some(1024),
             head_hash: Some("reference-head".into()),
             tail_hash: Some("reference-tail".into()),
+            duration: None,
         })
         .unwrap();
     let font_id = AssetId::from_raw(1);
@@ -84,6 +85,7 @@ fn fixture_document() -> Document {
             size_bytes: Some(512),
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
     doc.soundtrack = Some(Soundtrack::try_new(media_id, RationalTime::ZERO, 0.8).unwrap());

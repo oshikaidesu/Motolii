@@ -59,6 +59,7 @@ fn register_asset(doc: &mut Document) -> motolii_doc::AssetId {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
     id

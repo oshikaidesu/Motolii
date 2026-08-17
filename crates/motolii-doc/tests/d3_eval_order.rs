@@ -472,6 +472,7 @@ fn source_time_comes_from_video_clip_not_overlay() {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
     let video_layer = doc.layers.allocate("video").unwrap();
@@ -643,6 +644,7 @@ fn two_video_assets_get_independent_slots() {
                 size_bytes: None,
                 head_hash: None,
                 tail_hash: None,
+                duration: None,
             })
             .unwrap();
     }

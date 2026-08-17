@@ -49,6 +49,9 @@ pub struct ExportOverlayRequest<'a> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExportReport {
+    /// **現物のフレーム数**。encode ループが書いた枚数であり、mux はこれを
+    /// 上限尺として使うので出力 file を数え直しても同じ数になる(報告=現物)。
+    /// 音声が短くてもここは減らない — 絵を切らないのが mux 側の契約である。
     pub frames_written: usize,
     pub desc: FrameDesc,
     pub fps: motolii_core::Fps,
@@ -351,6 +354,11 @@ pub fn export_document_video_cancellable(
         return Err(e);
     }
 
+    // mux の上限尺は**実際に書けた枚数**そのもの。ここを音声側に決めさせると
+    // (旧 `-shortest`)短い曲が絵を黙って切り、`frames_written` が現物と食い違う
+    // (2026-08-18観察(2))。曲が先に終わるのは編集の通常事態で、絵を消す理由ではない。
+    let video_duration = RationalTime::try_from_frame(frames_written as i64, timeline_fps).ok();
+
     match soundtrack {
         AudioExportPlan::None => {}
         AudioExportPlan::SoundtrackFast(audio) => {
@@ -360,6 +368,7 @@ pub fn export_document_video_cancellable(
                 output_path: job.output_path,
                 start_offset: audio.start_offset,
                 master_gain: audio.master_gain,
+                video_duration,
             });
             let _ = std::fs::remove_file(encode_path);
             mux_result?;
@@ -385,6 +394,7 @@ pub fn export_document_video_cancellable(
                     video_path: encode_path,
                     pcm_wav_path: &pcm_path,
                     output_path: job.output_path,
+                    video_duration,
                 })?;
                 Ok(())
             })();

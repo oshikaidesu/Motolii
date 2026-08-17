@@ -76,6 +76,7 @@ fn build_exit_demo_document(input_name: &str) -> Document {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
 

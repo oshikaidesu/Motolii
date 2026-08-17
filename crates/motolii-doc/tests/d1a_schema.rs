@@ -31,6 +31,7 @@ fn sample_document() -> Document {
             size_bytes: Some(2048),
             head_hash: Some("head".into()),
             tail_hash: Some("tail".into()),
+            duration: None,
         })
         .unwrap();
 

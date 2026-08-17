@@ -71,6 +71,7 @@ fn shared_effect_document(project_root: &Path, video_name: &str) -> Document {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
 

@@ -117,6 +117,7 @@ fn build_video_doc(video_name: &str) -> Document {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
 
@@ -198,6 +199,7 @@ fn clip_audio_forces_mixed_export_and_matches_preview_pcm() {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
     let layer = doc.layers.allocate("AUD").unwrap();
@@ -291,6 +293,7 @@ fn soundtrack_plus_clip_audio_takes_mixed_path() {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
     doc.assets
@@ -305,6 +308,7 @@ fn soundtrack_plus_clip_audio_takes_mixed_path() {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         })
         .unwrap();
     doc.soundtrack = Some(Soundtrack::try_new(bed_id, RationalTime::ZERO, 1.0).unwrap());

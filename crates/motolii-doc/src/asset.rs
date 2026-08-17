@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 use std::io::{self, Read};
 
+use motolii_core::RationalTime;
 use serde::de::{self, Deserialize, Deserializer};
 use serde::{Deserialize as DeserializeDerive, Serialize};
 use sha2::{Digest, Sha256};
@@ -179,6 +180,14 @@ pub struct Asset {
     pub head_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tail_hash: Option<String>,
+    /// 素材そのものの長さ(probeが測ったcontainer総尺)。**分かる時だけ**入る —
+    /// 生成系・streamなど尺を持たない素材は`None`のまま。
+    ///
+    /// **空なら書き出さない**ので、旧文書のバイト列は変わらず、旧readerは未知キーとして
+    /// 往復する(ロケータ/`resolution`と同じ互換方針)。版も上げない。
+    /// 使い手は`prepare_place_asset_clip`の尺決め — 意味の権威ではなく素材のヒントである。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration: Option<RationalTime>,
 }
 
 /// 新規Assetを準備するための非永続payload。`AssetId`はedit threadが付与する。
@@ -193,6 +202,9 @@ pub struct AssetDraft {
     pub size_bytes: Option<u64>,
     pub head_hash: Option<String>,
     pub tail_hash: Option<String>,
+    /// probeが測った素材の総尺。既定`None` — 呼び手(CLI import / GUI drop)が
+    /// `probe_admission_source`の値を入れる。
+    pub duration: Option<RationalTime>,
 }
 
 impl AssetDraft {
@@ -234,6 +246,9 @@ impl AssetDraft {
             size_bytes: Some(fingerprint.size_bytes()),
             head_hash: None,
             tail_hash: None,
+            // 尺はplain値のprobe結果であり、この純関数の入力には無い。
+            // 知っている呼び手(admission経路)が後から入れる。
+            duration: None,
         }
     }
 
@@ -249,6 +264,7 @@ impl AssetDraft {
             size_bytes: self.size_bytes,
             head_hash: self.head_hash,
             tail_hash: self.tail_hash,
+            duration: self.duration,
         };
         asset.normalize_self();
         asset
@@ -388,6 +404,7 @@ impl AssetTable {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         };
         self.entries.insert(id, asset);
         self.next = next;
@@ -521,6 +538,7 @@ mod tests {
                 size_bytes: None,
                 head_hash: None,
                 tail_hash: None,
+                duration: None,
             }),
             Err(AssetError::Retired {
                 id: id.get(),
@@ -559,6 +577,7 @@ mod tests {
             size_bytes: None,
             head_hash: None,
             tail_hash: None,
+            duration: None,
         };
         table.restore(future).unwrap();
         assert_eq!(table.peek_next(), 4);
@@ -587,6 +606,7 @@ mod tests {
                 size_bytes: Some(1024),
                 head_hash: Some("h".into()),
                 tail_hash: Some("t".into()),
+                duration: None,
             })
             .unwrap();
 

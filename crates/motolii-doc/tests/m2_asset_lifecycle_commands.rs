@@ -27,6 +27,7 @@ fn draft(name: &str) -> AssetDraft {
         size_bytes: Some(3),
         head_hash: None,
         tail_hash: None,
+        duration: None,
     }
 }
 
