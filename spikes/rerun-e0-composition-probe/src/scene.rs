@@ -150,30 +150,6 @@ pub fn set_draw_order(stage: &mut SpatialStage, path: &str, order: f32) -> Resul
     )
 }
 
-/// document camera 相当として `Pinhole` を1本立てる。
-/// これを Rerun のカメラ機構へ「外注」できるかが (b) の本題である。
-pub fn place_pinhole_camera(
-    stage: &mut SpatialStage,
-    path: &str,
-    translation: [f32; 3],
-) -> Result<(), String> {
-    let pinhole = re_sdk_types::archetypes::Pinhole::from_focal_length_and_resolution(
-        [LAYER_H as f32, LAYER_H as f32],
-        [LAYER_W as f32, LAYER_H as f32],
-    );
-    ingest(
-        stage,
-        Chunk::builder(path)
-            .with_archetype(RowId::new(), TimePoint::STATIC, &pinhole)
-            .with_archetype(
-                RowId::new(),
-                TimePoint::STATIC,
-                &Transform3D::from_translation(translation),
-            )
-            .build(),
-    )
-}
-
 fn ingest(
     stage: &mut SpatialStage,
     chunk: Result<Chunk, re_chunk::ChunkError>,

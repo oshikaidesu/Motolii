@@ -1,33 +1,40 @@
 
 === (a) offscreen: PASS ===
-PNG: <out-dir>/e0-a-offscreen.png
+PNG: /tmp/e0-run3/e0-a-offscreen.png
 fnv1a: fedf6ba2930ab713
 hue histogram: red=10970 green=7158 blue=38084 yellow=20311 dark=230236 other=441
 all four quadrants are present: the scene really rendered without a window
 
 
-=== (b) camera: FAIL ===
-PNG(default camera): <out-dir>/e0-b-default-camera.png
-fnv1a: 1db085eb3cba4c98
-eye.pos = (-0.6813, -2.0440, 1.9263)  fwd = (0.3015, 0.9045, -0.3015)  fov_y = Some(0.9599311)
-  image top-left (red): 576 samples inside the viewport, 0 outside, 0 wrong
-  image top-right (green): 576 samples inside the viewport, 0 outside, 0 wrong
-  image bottom-left (blue): 91 samples inside the viewport, 485 outside, 0 wrong
-  image bottom-right (yellow): 410 samples inside the viewport, 166 outside, 0 wrong
-  focus_entity(layer): fnv1a 1db085eb3cba4c98 (identical), eye.pos = (-0.6813, -2.0440, 1.9263)
-  focus_entity(pinhole camera): fnv1a 1db085eb3cba4c98 (identical), eye.pos = (-0.6813, -2.0440, 1.9263)
-  reset_view(): fnv1a 1db085eb3cba4c98 (identical), eye.pos = (-0.6813, -2.0440, 1.9263)
-camera model matches the rendered pixels: the projected corners land on their own quadrant
-no public API moved the camera. `focus_entity`/`reset_view` both end in `ViewProperty::save_blueprint_component`, which sends `SystemCommand::AppendToStore`; `SpatialStage::process_system_commands` drops it (spatial_stage.rs:154-175, `_ => {}` arm). There is also no blueprint ingest: `ingest_chunk` only targets `recording_store_id` (spatial_stage.rs:182-185).
+=== (b) camera: PASS ===
+PNG(default camera): /tmp/e0-run3/e0-b-default-camera.png
+fnv1a: fedf6ba2930ab713
+eye.pos = (-0.3769, -1.1307, 0.3669)  fwd = (0.3015, 0.9045, -0.3015)  fov_y = Some(0.9599311)
+
+injected document camera: pos = (0, 0, 0.8560), look_target = (0, 0, -0.01), fov_y = 1.0472 rad
+PNG(document camera): /tmp/e0-run3/e0-b-document-camera.png
+fnv1a: 4c4186b2e5256325 (changed)
+  last_eye() readback: pos = (-0.0000, -0.0000, 0.8560), fwd = (0.0000, 0.0000, -1.0000), fov_y = Some(1.0471976)
+  frame corner top-left (6, 6): red (expected red)
+  frame corner top-right (633, 6): green (expected green)
+  frame corner bottom-left (6, 473): blue (expected blue)
+  frame corner bottom-right (633, 473): yellow (expected yellow)
+  image top-left (red): 576 samples landed on their expected pixel, 0 wrong
+  image top-right (green): 576 samples landed on their expected pixel, 0 wrong
+  image bottom-left (blue): 576 samples landed on their expected pixel, 0 wrong
+  image bottom-right (yellow): 576 samples landed on their expected pixel, 0 wrong
+
+reset_view(): fnv1a fedf6ba2930ab713 (differs from the injected camera, back to the default camera)
+the injected document camera lands the layer exactly on the frame, and reset_view() gives Rerun's framing back
 
 
 === (c) occlusion: PASS ===
-disc-in-front: PNG <out-dir>/e0-c-disc-in-front.png
+disc-in-front: PNG /tmp/e0-run3/e0-c-disc-in-front.png
   fnv1a 7d9d3fb4495d5f77
   eye.pos = (-0.3771, -1.1312, 0.3921); disc z=0.05 d=1.2433, solid z=0 d=1.2583 -> disc is NEARER
   hue histogram: red=68037 green=11869 dark=226814 other=406
   nearer disc composites over the backdrop: OK
-disc-behind: PNG <out-dir>/e0-c-disc-behind.png
+disc-behind: PNG /tmp/e0-run3/e0-c-disc-behind.png
   fnv1a a2afff02fb504e70
   eye.pos = (-0.3771, -1.1312, 0.3921); disc z=0 d=1.2583, solid z=0.05 d=1.2433 -> disc is FARTHER
   hue histogram: red=72872 green=0 dark=233989 other=339
@@ -35,4 +42,4 @@ disc-behind: PNG <out-dir>/e0-c-disc-behind.png
 both orderings behave: the nearer layer wins and the transparent gutter lets the farther one through
 
 
-failed: (b) camera
+all three E0 checks passed

@@ -4,6 +4,12 @@
 
 状態: **観察**(3点の実測。うち2点成立、1点不成立)
 
+> **追記(同日、後続レーン): (b) は成立した。** 本稿 §4.3 が挙げた blueprint 系 seam
+> (S1/S2/S3)ではなく、`SpatialStage` に素直な公開カメラ API を1本生やす形で通した。
+> 経緯・差分・再適用手順は [Rerun fork seam 台帳](2026-08-18-rerun-fork-seam-ledger.md)。
+> **以下の本文は追記前の実測記録としてそのまま残してある**(§4.2 の「絵が変わらない」は
+> seam を入れる前の観察である)。現在の (b) の姿は §8 を見よ。
+
 対象: embedded Spatial Viewer(`re_view_spatial::SpatialStage`)を、表示専用ではなく
 **空間合成の座席**として使えるか。
 
@@ -275,3 +281,41 @@ shasum -a 256 /tmp/e0-run1/*.png /tmp/e0-run2/*.png
 `cargo test -p rerun-e0-composition-probe` は素材と分類器の 6 件。
 
 証拠一式: `evidence/rerun-e0-composition-probe/`(相異なる PNG 5枚 + `probe-output.txt`)。
+
+## 8. 追記 — (b) をどう通したか(同日、後続レーン)
+
+§4.3 は「Seam 1 か Seam 2 のどちらか片方で足りる」と見込んでいた。**その見込みは
+技術的には正しいが、採らなかった。** `AppendToStore` を通しても、そこから言えるのは
+`focus_entity(entity)` までで、実際のカメラ姿勢は bounding box の発見的処理が決める。
+document camera を「ここに置く」用途には間接的すぎる。
+
+代わりに **`SpatialStage` へ公開カメラ API を1本生やした**。blueprint 系 seam
+(S1/S2/S3)は手つかずのまま残してある。
+
+```rust
+let camera = StageCamera::new([0.0, 0.0, camera_z], [0.0, 0.0, -0.01], [0.0, 1.0, 0.0])
+    .with_fov_y_radians(std::f32::consts::FRAC_PI_3);
+stage.set_camera(camera);
+```
+
+実測(fork `483b85596`、macOS / Metal、640x480):
+
+| oracle | 結果 |
+|---|---|
+| 注入で絵が変わる | 成立(fnv1a が既定カメラと相違) |
+| `last_eye()` が注入した姿勢を返す | 成立(pos/fwd/fov すべて 1e-4 以内) |
+| レイヤーが画枠ちょうどに写る | 成立(四隅が赤/緑/青/黄) |
+| 格子点が期待座標の色と一致 | 成立(**2304点中 wrong = 0**) |
+| `reset_view()` で既定へ戻る | 成立(既定 PNG と sha256 一致) |
+
+**期待 pixel は Rerun の `Eye` / `ui_from_world` を通さず、画角と距離から probe 側だけで
+決めている。** よってこれは描画に対する独立な照合であり、§5 が「測れていない」と
+していた「注入したカメラで期待通り写るか」がここで埋まった。
+
+probe binary は **exit 0**。`cargo test -p rerun-e0-composition-probe` は7件
+(`injected_document_camera_maps_the_layer_onto_the_frame` を含む)。
+このテストは **fork の rev を上げたら落ちて教えてくれる恒久ゲート**として置いてある。
+
+§5 の「測っていないこと」のうち、なお残るもの: 3 OS 未検証、不透明ジオメトリとの混在、
+blend mode、Preview=Export の pixel 同一性、性能。加えて orbit との相互作用と
+orthographic は台帳 §4 に挙げてある。
