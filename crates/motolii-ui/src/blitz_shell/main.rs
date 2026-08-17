@@ -10,8 +10,9 @@
 //! `crates/motolii-ui/src/blitz_shell/runner.rs` にある(公開APIを toolkit-free に保つ
 //! U0a の境界規律のため)。見た目も配置もここで決めない。
 //!
-//! `--project` は実プロジェクトを開き、Timeline / Stage がその Document
-//! (writer の snapshot)を映す。**開けなければ起動失敗**で、fixture へ黙って落ちない。
+//! `--project` は実プロジェクトを開く。Timeline は native エディタになって
+//! その Document を編集でき(移動/トリム/選択/Undo/Redo)、Stage は編集後の
+//! snapshot を映す。**開けなければ起動失敗**で、fixture へ黙って落ちない。
 //! `--project` 無しは従来どおり fixture 展示(開発動線・screenshot テスト)。
 
 use std::path::PathBuf;

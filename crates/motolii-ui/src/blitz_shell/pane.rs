@@ -142,6 +142,17 @@ impl BlitzPane {
         self.kind
     }
 
+    /// 編集で進んだ新しい snapshot を流し込む(single writer の reader 側)。
+    /// 意味を持つのは Stage だけで、幾何は次のフレームで組み直す。
+    /// live の Timeline はエディタが描くので、ここでは何も持たせない。
+    pub(crate) fn set_live_document(&mut self, document: Arc<motolii_doc::Document>) {
+        if let Content::Stage(stage) = &mut self.content {
+            stage.document = Some(document);
+            // 大きさが同じでも geometry を再適用させる。
+            stage.fitted = (0, 0);
+        }
+    }
+
     /// テストの検分用: この面に座らせた live Document。fixture 動線では `None`。
     #[cfg(test)]
     pub(crate) fn live_document(&self) -> Option<&Arc<motolii_doc::Document>> {

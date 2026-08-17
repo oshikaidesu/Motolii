@@ -2,22 +2,22 @@
 //!
 //! toolkit APIはprivate module内に閉じ、domain/coreの公開契約へは出さない。
 
-mod canonical_drop;
+mod blitz_css;
 /// 移植済みBlitzパネルを1つの窓へ合体させる殻(eframe host + egui_tiles)。bin から使うので pub。
 pub mod blitz_shell;
-mod blitz_css;
 mod blitz_ui;
 /// C6: フォルダ参照でメディア入口を開くBrowserパネル(Blitz)。
 pub mod browser_blitz;
 mod browser_host;
+mod canonical_drop;
 // C8: chrome と extension panel の見た目のBlitz(HTML/CSS)写し。bin から使うので pub。
 pub mod chrome_blitz;
 mod diagnostic;
 mod diagnostic_projection;
 mod display_slot;
-mod egui_fonts;
 pub mod dock;
 mod document_command_request;
+mod egui_fonts;
 mod host_pointer_capture;
 // C7: Inspector の見た目のBlitz(HTML/CSS)写し。bin から使うので pub。
 pub mod inspector_blitz;
@@ -31,8 +31,8 @@ mod media_library;
 mod native_host_layout;
 mod palette_settings;
 mod parameter_control;
-mod product_easing_popup;
 mod preview_pipeline;
+mod product_easing_popup;
 /// Rerun Spatial Viewer の Stage。Motolii はこのViewerの wrapper であり、
 /// `re_renderer` で直接シーンを組まない(2026-08-11裁定)。bin から使うので pub。
 pub mod rerun_stage;
@@ -46,6 +46,9 @@ mod stage_overlay_gpu;
 pub mod stage_overlay_raster;
 mod static_preview;
 pub mod timeline_blitz;
+/// egui Timeline エディタ(旧 lab の本体)。shell の Timeline pane と
+/// example の薄殻(`timeline_egui_lab`)が同じ実装を呼ぶ。
+pub mod timeline_editor;
 mod timeline_move_gesture;
 mod timeline_projection;
 // Lab(examples/timeline_egui_lab.rs)から使うので pub。`timeline_blitz` と同じ扱い。
