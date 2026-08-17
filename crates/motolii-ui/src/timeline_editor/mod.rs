@@ -1076,34 +1076,45 @@ fn begin_move_many(document: &Document, roots: &[LayerId], layer: LayerId, grab_
 pub struct MediaDropOutcome {
     /// 置けたもの: 落ちたファイルと、そこに立った clip の layer。
     pub placed: Vec<(PathBuf, LayerId)>,
+    /// 曲として貼ったもの。**曲は project に1本**なので、ここに入るのも高々1本。
+    /// 落ちた時点でまだ曲が無かった音声だけがここへ来る(2本目からは `placed`)。
+    pub soundtrack: Vec<PathBuf>,
     /// 飛ばしたもの: 落ちたファイルと理由。
     pub skipped: Vec<(PathBuf, String)>,
 }
 
 impl MediaDropOutcome {
     /// 一言でどうなったかを言う。**飛ばしたものは必ず名指しで出す。**
+    ///
+    /// 同じ音声ドロップでも曲になったか clip になったかで人の次の一手が変わるので、
+    /// **どちらになったかも名指しで出す**(曲は `soundtrack <名前>`)。
     pub fn summary(&self) -> String {
         fn label(path: &std::path::Path) -> String {
             path.file_name()
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_else(|| path.display().to_string())
         }
-        let placed: Vec<String> = self.placed.iter().map(|(path, _)| label(path)).collect();
-        let skipped: Vec<String> = self
-            .skipped
-            .iter()
-            .map(|(path, reason)| format!("{}: {reason}", label(path)))
-            .collect();
-        match (placed.is_empty(), skipped.is_empty()) {
-            (true, true) => "nothing dropped".to_owned(),
-            (false, true) => format!("placed {}", placed.join(", ")),
-            (true, false) => format!("skipped {}", skipped.join("; ")),
-            (false, false) => format!(
-                "placed {}  ·  skipped {}",
-                placed.join(", "),
-                skipped.join("; ")
-            ),
+        let mut parts: Vec<String> = Vec::new();
+        if !self.soundtrack.is_empty() {
+            let names: Vec<String> = self.soundtrack.iter().map(|path| label(path)).collect();
+            parts.push(format!("soundtrack {}", names.join(", ")));
         }
+        if !self.placed.is_empty() {
+            let names: Vec<String> = self.placed.iter().map(|(path, _)| label(path)).collect();
+            parts.push(format!("placed {}", names.join(", ")));
+        }
+        if !self.skipped.is_empty() {
+            let names: Vec<String> = self
+                .skipped
+                .iter()
+                .map(|(path, reason)| format!("{}: {reason}", label(path)))
+                .collect();
+            parts.push(format!("skipped {}", names.join("; ")));
+        }
+        if parts.is_empty() {
+            return "nothing dropped".to_owned();
+        }
+        parts.join("  ·  ")
     }
 }
 
@@ -1290,11 +1301,17 @@ impl TimelineEditor {
     /// probe できないもの(拡張子が対象外、stream が無い、読めない)は
     /// **理由を持って飛ばす**。1本落ちても残りは通る。列そのものは
     /// `import_seat`(= CLI の import / place と同じ関数列)が持つ。
+    ///
+    /// **まだ曲が無い project へ落ちた音声は曲になる**(clip ではない)。
+    /// どちらになったかは `import_seat` が決め、ここは数えて status に出すだけ。
     pub fn import_dropped_media(&mut self, paths: &[PathBuf]) -> MediaDropOutcome {
         let mut outcome = MediaDropOutcome::default();
         for path in paths {
             match self.import_media_at_playhead(path) {
-                Ok(layer) => outcome.placed.push((path.clone(), layer)),
+                Ok(import_seat::Admitted::Clip(layer)) => {
+                    outcome.placed.push((path.clone(), layer))
+                }
+                Ok(import_seat::Admitted::Soundtrack) => outcome.soundtrack.push(path.clone()),
                 Err(reason) => outcome.skipped.push((path.clone(), reason)),
             }
         }
@@ -1303,7 +1320,10 @@ impl TimelineEditor {
     }
 
     /// media 1本を playhead へ取り込む。成否は呼び手(`import_dropped_media`)が数える。
-    fn import_media_at_playhead(&mut self, media: &std::path::Path) -> Result<LayerId, String> {
+    fn import_media_at_playhead(
+        &mut self,
+        media: &std::path::Path,
+    ) -> Result<import_seat::Admitted, String> {
         let fps = self.document.composition.fps;
         let comp = self.document.composition.duration.as_seconds_f64() as f32;
         let at = seconds_to_time(self.playhead.clamp(0.0, comp), fps)

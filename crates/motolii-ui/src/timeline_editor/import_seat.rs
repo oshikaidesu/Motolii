@@ -13,32 +13,54 @@
 //!
 //! CLI と違うのは**取り込みと配置を1つの `GestureId` に入れる**ことだけ。
 //! 1回のドロップは人にとって1操作なので、Undo も1回で戻る。
+//!
+//! もう1つ、CLI に無い分岐がここにある。**まだ曲が無い project へ音声を落としたら、
+//! clip ではなく soundtrack にする**(CapCut / Ableton と同じ既定 — MV を作る人が
+//! 最初に置くのは曲で、置いた瞬間に波形帯が出るのが期待される絵である)。
+//! 曲が既にあれば従来どおり clip。曲の差し替え・削除の口はまだ無い。
 
 use std::path::Path;
 
 use motolii_core::RationalTime;
-use motolii_doc::{AssetDraft, Command, DocumentWriter, LayerId, TrackItem};
+use motolii_doc::{AssetDraft, Command, DocumentWriter, LayerId, Soundtrack, TrackItem};
 use motolii_media::probe_admission_source;
 
-/// media を1本取り込んで `at` へ置き、立った clip の layer を返す。
+/// 落ちた media 1本がどこへ着地したか。
+pub(crate) enum Admitted {
+    /// トラックへ clip として置いた。
+    Clip(LayerId),
+    /// project 直下の曲として貼った。
+    Soundtrack,
+}
+
+/// 曲に貼るときの既定。offset / gain の UI はまだ無いので、頭からそのままの音量。
+const SOUNDTRACK_GAIN: f64 = 1.0;
+
+/// media を1本取り込んで `at` へ置き、どこへ着地したかを返す。
 /// **落ちたら Document は動かない。**
 ///
 /// 素材だけ入って clip が置けない中途半端を作らないため、置けるかどうかは
 /// 台帳を触る前に確かめる(`prepare_place_asset_clip` が拒む条件と同じ)。
+/// 曲として貼る側はトラックも playhead も要らないので、この確認を通らない。
 pub(crate) fn import_and_place(
     writer: &mut DocumentWriter,
     media: &Path,
     project_root: Option<&Path>,
     at: RationalTime,
-) -> Result<LayerId, String> {
+) -> Result<Admitted, String> {
     let source = probe_admission_source(media).map_err(|error| error.to_string())?;
     let absolute = media
         .canonicalize()
         .map_err(|error| format!("cannot resolve {}: {error}", media.display()))?;
     let root = project_root.and_then(|root| root.canonicalize().ok());
 
+    // **音声で、まだ曲が無いなら曲にする。** 判定は probe の `asset_type` だけで、
+    // 拡張子表は `motolii-media` が持つ(ここで二重に持たない)
+    let as_soundtrack =
+        source.asset_type.starts_with("audio/") && writer.snapshot().soundtrack.is_none();
+
     // ---- 置ける所か先に見る。素材だけ入って clip が無い状態を作らない ----
-    {
+    if !as_soundtrack {
         let document = writer.snapshot();
         if document.tracks.is_empty() {
             return Err("this project has no track to place a clip on".to_owned());
@@ -64,10 +86,29 @@ pub(crate) fn import_and_place(
     let asset = prepared.asset().id;
 
     // **1ドロップ = 1 `GestureId` = 1 Undo 単位。** 取り込みと配置を分けない
+    // (曲として貼る側も同じ1 gesture — Undo 1回で素材ごと戻る)
     let gesture = writer.begin_gesture();
     writer
         .apply_prepared_asset_admission(gesture, prepared)
         .map_err(|error| error.to_string())?;
+
+    if as_soundtrack {
+        // 曲を書き換える唯一の経路(2026-08-17 決定)。CLI の `set_soundtrack` と同じ形で、
+        // `old` は上の分岐が `None` を保証している
+        let soundtrack = Soundtrack::try_new(asset, RationalTime::ZERO, SOUNDTRACK_GAIN)
+            .map_err(|error| error.to_string())?;
+        writer
+            .apply_command(
+                gesture,
+                Command::SetSoundtrack {
+                    old: None,
+                    new: Some(soundtrack),
+                },
+            )
+            .map_err(|error| error.to_string())?;
+        return Ok(Admitted::Soundtrack);
+    }
+
     let command = writer
         .prepare_place_asset_clip(asset, at)
         .map_err(|error| error.to_string())?;
@@ -81,5 +122,5 @@ pub(crate) fn import_and_place(
     writer
         .apply_command(gesture, command)
         .map_err(|error| error.to_string())?;
-    Ok(layer)
+    Ok(Admitted::Clip(layer))
 }

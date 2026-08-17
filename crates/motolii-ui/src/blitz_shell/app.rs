@@ -284,6 +284,9 @@ fn same_project(a: &Path, b: &Path) -> bool {
 /// project が開いていないときは Document が無いので取り込めない。黙って
 /// 捨てず、**先に project を作る／開く**と案内する（v0。ドロップから
 /// 新規 project を作る意味はまだ決めていない）。
+///
+/// 落ちたものが clip になったか曲になったかは status がそのまま名指しで言う
+/// （まだ曲が無い project へ落ちた音声は曲になる — 分岐は `import_seat`）。
 pub fn admit_dropped_paths(seat: Option<&mut ProjectSeat>, paths: &[PathBuf]) -> String {
     let Some(seat) = seat else {
         return "open a project first — Cmd+N to create one, Cmd+O to open one".to_owned();

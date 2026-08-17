@@ -35,6 +35,14 @@ fn starter_clip() -> PathBuf {
         .expect("starter clip lives in the repo")
 }
 
+/// repo に入っている実 audio(starter kit)。曲を貼る側の入口で使う。
+fn starter_tone() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/mocks-ui/starter-media/media/starter-tone.wav")
+        .canonicalize()
+        .expect("starter tone lives in the repo")
+}
+
 fn clips(document: &Document) -> Vec<&motolii_doc::Clip> {
     document
         .tracks
@@ -104,6 +112,125 @@ fn dropping_media_imports_it_and_places_a_clip_at_the_playhead() {
         status.contains("starter-clip"),
         "何が入ったかを言う: {status}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// 曲を貼る(音声ドロップ)
+// ---------------------------------------------------------------------------
+
+/// **まだ曲が無い project へ音声を落としたら、それが曲になる。**
+/// clip は増えない(帯が即出るのが人の期待 — CapCut / Ableton と同じ既定)。
+#[test]
+fn dropping_audio_into_a_project_without_a_soundtrack_makes_it_the_soundtrack() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = work_dir("soundtrack");
+    let path = dir.join("project.json");
+    create_project_file(&path).expect("create a new project");
+    let mut seat = ProjectSeat::open(&path).expect("open");
+
+    let status = admit_dropped_paths(Some(&mut seat), &[starter_tone()]);
+
+    let document = seat.snapshot();
+    let soundtrack = document.soundtrack.expect("音声は曲として貼られる");
+    assert_eq!(document.assets.len(), 1, "素材が1つ入った");
+    let asset = document
+        .assets
+        .get(soundtrack.asset)
+        .expect("曲は取り込んだ素材そのものを指す");
+    assert!(
+        asset.asset_type.starts_with("audio/"),
+        "曲になったのは音声素材: {}",
+        asset.asset_type
+    );
+    assert_eq!(
+        soundtrack.start_offset.as_seconds_f64(),
+        0.0,
+        "頭から鳴る(offset の UI はまだ無い)"
+    );
+    assert_eq!(soundtrack.master_gain(), 1.0, "音量はそのまま");
+    assert!(clips(&document).is_empty(), "clip は増えない");
+    // **貼った瞬間に帯が出る。** 帯も再生も同じ cached snapshot を読むので、
+    // 高さが 0 でない = 新しい曲が拾えている(取り直しの合図は revision)
+    assert!(
+        seat.editor().waveform_band_height() > 0.0,
+        "波形帯がその場で出る: {}",
+        seat.editor().waveform_band_height()
+    );
+    assert_eq!(seat.editor().undo_len(), 1, "1本のドロップ = 1 Undo 単位");
+    assert!(
+        status.contains("soundtrack") && status.contains("starter-tone"),
+        "どちらになったかを一言で言う: {status}"
+    );
+}
+
+/// **既に曲がある所へ落ちた2本目の音声は clip になる。** 曲は黙って差し替わらない。
+#[test]
+fn dropping_a_second_audio_file_places_a_clip_and_keeps_the_soundtrack() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = work_dir("soundtrack-second");
+    let path = dir.join("project.json");
+    create_project_file(&path).expect("create a new project");
+    let mut seat = ProjectSeat::open(&path).expect("open");
+
+    admit_dropped_paths(Some(&mut seat), &[starter_tone()]);
+    let first = seat.snapshot().soundtrack.expect("1本目が曲になっている");
+
+    let status = admit_dropped_paths(Some(&mut seat), &[starter_tone()]);
+
+    let document = seat.snapshot();
+    assert_eq!(
+        document.soundtrack.expect("曲は残る").asset,
+        first.asset,
+        "2本目は曲を差し替えない"
+    );
+    assert_eq!(clips(&document).len(), 1, "2本目は clip として置かれる");
+    assert_eq!(seat.editor().undo_len(), 2, "ドロップ2回 = Undo 2段");
+    assert!(status.contains("placed"), "clip 側の文言に戻る: {status}");
+}
+
+/// **動画は曲が無くても従来どおり clip。** 音声だけの分岐である。
+#[test]
+fn dropping_video_still_places_a_clip_even_without_a_soundtrack() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = work_dir("soundtrack-video");
+    let path = dir.join("project.json");
+    create_project_file(&path).expect("create a new project");
+    let mut seat = ProjectSeat::open(&path).expect("open");
+
+    admit_dropped_paths(Some(&mut seat), &[starter_clip()]);
+
+    let document = seat.snapshot();
+    assert!(document.soundtrack.is_none(), "動画は曲にならない");
+    assert_eq!(clips(&document).len(), 1, "clip として置かれる");
+}
+
+/// **Undo 1回で曲ごと戻る。** 取り込みと曲付けは同じ1 gesture なので、
+/// 素材だけ台帳に残る中途半端を作らない。
+#[test]
+fn undoing_a_soundtrack_drop_takes_the_asset_back_out_too() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = work_dir("soundtrack-undo");
+    let path = dir.join("project.json");
+    create_project_file(&path).expect("create a new project");
+    let mut seat = ProjectSeat::open(&path).expect("open");
+
+    admit_dropped_paths(Some(&mut seat), &[starter_tone()]);
+    assert!(seat.snapshot().soundtrack.is_some(), "貼れている前提");
+
+    seat.editor_mut().undo().expect("Undo は1回で戻る");
+
+    let document = seat.snapshot();
+    assert!(document.soundtrack.is_none(), "曲が外れる");
+    assert_eq!(document.assets.len(), 0, "素材も一緒に戻る");
+    assert_eq!(seat.editor().undo_len(), 0, "台帳も空に戻る");
 }
 
 /// probe できないファイルは**理由つきで飛ばす**。Document は触らない。
