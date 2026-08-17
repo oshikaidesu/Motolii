@@ -591,3 +591,4 @@
 | [2026-08-13-pr476-structural-skepticism-audit.md](2026-08-13-pr476-structural-skepticism-audit.md) | PR #476全成果物の構造懐疑監査S1〜S12(利用者裁定「見た目だけ通ればいい話ではない」)。最重症=Stage gizmo迂回(採択済みtransform_gizmo資産をhost接続で迂回し実UXが退化)。検収体系の欠陥(見た目保存の報酬化)を根本原因と認定、PRIOR ART欄義務化を即日施行 |
 | [2026-08-14-user-palette-library-contract.md](2026-08-14-user-palette-library-contract.md) | Paletteをproject横断User Settings、適用RGBAを既存Document Color、Stage表示を既存Rerun Spatial Viewer投影へ分離する実データ契約 |
 | [2026-08-17-vsm-b0-identity-fixture.md](2026-08-17-vsm-b0-identity-fixture.md) | VSM-B0 identity期待値マトリクス。6ケース×6操作×5identityの180セルを台帳根拠付きで固定し、根拠が台帳に無い30セルをUNDETERMINEDとして必要な決定先ごと名指しした意味fixture。ケース5・6の採否は決めない |
+| [2026-08-17-vism-identity-known-implementation-survey.md](2026-08-17-vism-identity-known-implementation-survey.md) | VSM-B0の未決6問に対しOFX／CLAP／cargoの既知解を対照。5問は先行実装が答えており、U2のみ対応物なし | **比較中**(2026-08-17) |
