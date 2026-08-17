@@ -93,7 +93,10 @@ impl ProjectSeat {
         )?;
         Ok(Self {
             _session: opened.session,
-            editor: TimelineEditor::new(writer),
+            // project root = document path の親(CLI export と同じ規約)。
+            // soundtrack 再生の asset path 解決に使う。
+            editor: TimelineEditor::new(writer)
+                .with_project_root(path.parent().map(Path::to_path_buf)),
         })
     }
 

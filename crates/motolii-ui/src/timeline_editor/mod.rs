@@ -46,9 +46,13 @@
 //!
 //! 実行: `cargo run --profile fast -p motolii-ui --example timeline_egui_lab`
 
+mod audio_seat;
+
 use std::collections::HashMap;
 
 use crate::timeline_rows::{rows, ParamRef, RowKind, TimelineFoldState, TimelineRow};
+use audio_seat::{AudioPlayback, WallClockReason};
+use motolii_audio::PcmCache;
 use eframe::egui;
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, Vec2};
 use motolii_core::{Fps, RationalTime};
@@ -1071,6 +1075,16 @@ pub struct TimelineEditor {
     context_time: f32,
     /// 再生中か。**Space で入り切りする**。Document には入れない
     playing: bool,
+    /// 再生中の clock の座席。`playing` のあいだだけ `Some` で、停止・pause・
+    /// スクラブで drop して device を手放す。soundtrack が無い/鳴らせない時は
+    /// `WallClock` に落ち、playhead は従来どおり `advance_playhead` で進む
+    audio: Option<AudioPlayback>,
+    /// project root(document path の親)。soundtrack の asset path 解決に使う。
+    /// fixture / lab の席には無い(→ soundtrack も無いので壁時計のまま)
+    project_root: Option<std::path::PathBuf>,
+    /// decode 済み正準PCMの控え(`(content_hash, ordinal)`)。再生をまたいで
+    /// 使い回し、再生のたびに decode し直さない
+    pcm_caches: HashMap<(String, u32), Arc<PcmCache>>,
     status: String,
 }
 
@@ -1143,8 +1157,24 @@ impl TimelineEditor {
             editing_locator: None,
             context_time: 0.0,
             playing: false,
+            audio: None,
+            project_root: None,
+            pcm_caches: HashMap::new(),
             status: "space=play  L=loop  Cmd+G=group  Del=delete  drag name=reorder".to_owned(),
         }
+    }
+
+    /// project root(document の親 dir)を座らせる。soundtrack 再生の
+    /// asset path 解決(`resolve_asset_path`)がこれを使う。CLI の export と
+    /// 同じ規約(`document_export.rs` の `doc_path.parent()`)。
+    pub fn with_project_root(mut self, root: Option<std::path::PathBuf>) -> Self {
+        self.project_root = root;
+        self
+    }
+
+    /// 座っている project root(読み)。座席の配線テストが見る。
+    pub fn project_root(&self) -> Option<&std::path::Path> {
+        self.project_root.as_deref()
     }
 
     /// pane / Stage へ流す immutable snapshot(cached。取り直しは revision が合図)。
@@ -2517,6 +2547,24 @@ impl TimelineEditor {
 }
 
 impl TimelineEditor {
+    /// audio の座席を別の時刻から開き直す(シーク・ループの折り返し)。
+    /// 開き直せなければ壁時計へ**明示的に**落ち、理由を status に出す。
+    /// 壁時計の座席には何もしない(壁時計にシークの追従は要らない)。
+    fn reseek_audio(&mut self, at: f32, fps: Fps) {
+        match self.audio.take() {
+            Some(AudioPlayback::Synced(seat)) => match seat.reseek(at, fps) {
+                Ok(seat) => self.audio = Some(AudioPlayback::Synced(seat)),
+                Err(error) => {
+                    self.status = format!("play (no audio: {error})");
+                    self.audio = Some(AudioPlayback::WallClock(
+                        WallClockReason::AudioUnavailable(error.to_string()),
+                    ));
+                }
+            },
+            other => self.audio = other,
+        }
+    }
+
     /// エディタ1面を `ui` の available rect いっぱいに描き、入力を受けて Document を
     /// 編集する。lab では eframe の App がそのまま、shell では Timeline pane の
     /// behavior がここを呼ぶ(旧 `impl eframe::App for Lab` の `ui` 本体)。
@@ -2698,7 +2746,9 @@ impl TimelineEditor {
         );
 
         // ---- 再生 ----
-        // **Space で入り切り。** 音も絵もまだ無いので、動くのは playhead だけである。
+        // **Space で入り切り。** soundtrack がある project は音が実際に鳴り、
+        // playhead は audio clock(`motolii-transport`)に同期して進む。無ければ
+        // 従来どおり壁時計で playhead だけが動く。
         // 掴んでいる最中は入り切りしない — ドラッグ中に時間が流れると何が起きたか読めない
         let comp_seconds = self.document.composition.duration.as_seconds_f64() as f32;
         // **Alt を押しているあいだは吸着が切れる。** 押しっぱなしで自由に置ける
@@ -2737,20 +2787,74 @@ impl TimelineEditor {
             );
         }
         if self.playing {
+            // 再生の頭で audio の座席を開く(soundtrack 無しなら壁時計のまま)。
+            // 開けない時は**黙らない** — 理由を status に出して壁時計へ落ちる
+            if self.audio.is_none() {
+                let playback = audio_seat::open_playback(
+                    &self.document,
+                    self.project_root.as_deref(),
+                    &mut self.pcm_caches,
+                    self.playhead,
+                    fps,
+                );
+                match &playback {
+                    AudioPlayback::Synced(_) => self.status = "play (soundtrack)".to_owned(),
+                    AudioPlayback::WallClock(WallClockReason::NoSoundtrack) => {}
+                    AudioPlayback::WallClock(WallClockReason::AudioUnavailable(reason)) => {
+                        self.status = format!("play (no audio: {reason})");
+                    }
+                }
+                self.audio = Some(playback);
+            }
+            // **手で動かした playhead に音が付いてくる。** to_start / locator で
+            // 跳んだら、そこから鳴らし直す(audio が書いた値と違えば動かした印)
+            let moved = matches!(
+                &self.audio,
+                Some(AudioPlayback::Synced(seat))
+                    if audio_seat::playhead_moved(self.playhead, seat.last_synced())
+            );
+            if moved {
+                self.reseek_audio(self.playhead, fps);
+            }
             // **溜まった時間をまとめて進めない。** 窓が隠れていた分は捨てる
             // (ここだけは指摘の時点より後の修正を残した。窓が他のウィンドウの
             //  後ろにあると eframe が描画を間引き、戻った1フレームの `dt` が
             //  数百msになる — 足すと playhead が数秒ぶん飛ぶ)
-            let (at, keep) = advance_playhead(self.playhead, dt.min(MAX_STEP), comp_seconds);
+            //
+            // audio の座席があるときは dt を使わない — **clock の正本は
+            // デバイスへ供給済みのサンプル数**(`motolii-transport`)で、
+            // 隠れていた窓の分も音は正しく流れ続けている。
+            let step = match self.audio.as_mut() {
+                Some(AudioPlayback::Synced(seat)) => Some(seat.follow(comp_seconds)),
+                _ => None,
+            };
+            let (at, keep) = match step {
+                Some(Ok(step)) => step,
+                Some(Err(error)) => {
+                    // clock が壊れたら止まらずに壁時計へ明示的に落ちる
+                    self.status = format!("play (no audio: {error})");
+                    self.audio = Some(AudioPlayback::WallClock(
+                        WallClockReason::AudioUnavailable(error.to_string()),
+                    ));
+                    advance_playhead(self.playhead, dt.min(MAX_STEP), comp_seconds)
+                }
+                None => advance_playhead(self.playhead, dt.min(MAX_STEP), comp_seconds),
+            };
             // **折り返したかどうかで終端判定が変わる。** 折り返したのなら
             // composition の終わりに着いたのではない(ループのお尻が終端と
             // 同じ時刻でも、再生は続く)
             let wrapped = wrap_playhead(self.playhead, at, self.loop_region);
             let did_wrap = wrapped != at;
             self.playhead = wrapped;
+            if did_wrap {
+                // ループの頭から鳴らし直す(音はまっすぐにしか流れない)
+                self.reseek_audio(wrapped, fps);
+            }
             if !keep && !did_wrap {
                 self.playing = false;
                 self.status = "end".to_owned();
+                // 終端で device を手放す
+                self.audio = None;
             }
             // **面のほうが流れ、playhead は窓の中央に居続ける。**
             //
@@ -2766,6 +2870,9 @@ impl TimelineEditor {
                 span: self.view.span,
             }
             .clamped(comp_seconds);
+        } else if self.audio.is_some() {
+            // pause / スクラブで止まったら device を手放す(握り続けない)
+            self.audio = None;
         }
 
         // ---- ループ帯 ----
@@ -5531,9 +5638,13 @@ mod tests {
         assert_eq!(tick_label(64.5, frame), "1:04.50");
     }
 
-    /// **Space の再生は終端で止まる。** 巻き戻さない
+    /// **Space の再生は終端で止まる。** 巻き戻さない。
+    ///
+    /// `advance_playhead` は **soundtrack が無い project の壁時計 fallback** である
+    /// (soundtrack がある project の playhead は audio clock に同期して進む —
+    /// `audio_seat::follow_audio_clock` のテストがそちらの正本)。
     #[test]
-    fn playback_advances_and_stops_at_the_end() {
+    fn wall_clock_fallback_advances_and_stops_at_the_end() {
         let (at, playing) = advance_playhead(0.0, 0.5, 16.0);
         assert!((at - 0.5).abs() < 1e-6);
         assert!(playing);
@@ -5605,7 +5716,8 @@ mod tests {
         assert!((15.5 - view.start) / view.span > 0.5);
     }
 
-    /// 窓が隠れていた分を**まとめて進めない**。
+    /// 窓が隠れていた分を**まとめて進めない**(壁時計 fallback の規律。
+    /// audio clock 側は供給済みサンプル数が正本なので、この上限は要らない)。
     #[test]
     fn a_long_frame_does_not_teleport_the_playhead() {
         // 800ms 止まっていた次のフレーム
