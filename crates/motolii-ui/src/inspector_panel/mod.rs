@@ -8,7 +8,11 @@
 //! read-model の意味の正本は guard-tests
 //! (`docs/mocks-ui/guard-tests/inspector-read-model-decoder.test.mjs`)で、
 //! fixture(reference-document)からでも live Document の snapshot からでも同じに描ける。
-//! **selection → ここ の live 配線は後続レーン**(このレーンは型と描画まで)。
+//!
+//! **live のときは Timeline の選択がそのままここへ来る**(`seat_live`)。
+//! Transform の Position / Opacity は直打ちでき、◇ で playhead へキーが打てる。
+//! ただし **この面は Document を書かない**(single writer) — 出すのは
+//! [`InspectorAction`] だけで、writer を持つ `TimelineEditor` が適用する。
 //!
 //! 旧 `inspector_blitz`(HTML/CSS + Blitz テクスチャ)は dump 器・oracle 源として残る。
 //! 意味を持つ行だけを描く: read-model に無い行(Rotation / Scale / Fill 等の
@@ -21,8 +25,9 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 pub use read_model::{
-    project_inspector_read_model, InspectorEffectDefinition, InspectorItemKind, InspectorParam,
-    InspectorPosition, InspectorReadModel, InspectorReadModelError, InspectorTarget,
+    project_inspector_live_model, project_inspector_read_model, InspectorEditParam,
+    InspectorEditableRow, InspectorEffectDefinition, InspectorItemKind, InspectorKeyState,
+    InspectorParam, InspectorPosition, InspectorReadModel, InspectorReadModelError, InspectorTarget,
     INSPECTOR_READ_MODEL_REVISION,
 };
 
@@ -31,6 +36,45 @@ use theme::mix;
 
 /// decoder P1 と同じ fixture 選択(reference-document の "Reference group")。
 pub const FIXTURE_TARGET_LAYER: u64 = 5;
+
+/// 値セルの中に軸の字(X/Y/Z)を出す最小幅。これより狭いと字が数の桁を食う。
+const AXIS_GLYPH_MIN_CELL_W: f32 = 46.0;
+
+/// Inspector が出す編集要求。**Inspector は Document を書かない**(single writer) —
+/// これを受けた呼び手が `TimelineEditor` の適用口へ渡す。
+///
+/// 相手の layer は「いま映している target」なので、ここには載せない。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InspectorAction {
+    /// 数値を掴んだ。ここから `EndEdit` までが1 gesture = 1 Undo。
+    BeginEdit { param: InspectorEditParam },
+    /// 成分1本の値が変わった(開いている gesture へ入る)。
+    SetComponent {
+        param: InspectorEditParam,
+        component: usize,
+        value: f64,
+    },
+    /// 掴みを離した。
+    EndEdit,
+    /// ◇ を押した。playhead へキーを打つ(既にあれば `components` の値へ更新)。
+    KeyAtPlayhead {
+        param: InspectorEditParam,
+        /// 画面に出ている成分値。Position は `[x, y, _]`、Opacity は `[a, _, _]`。
+        /// 長さは `len` が持つ(`Copy` のため固定長で運ぶ)。
+        components: [f64; 3],
+        len: usize,
+    },
+}
+
+impl InspectorAction {
+    /// `KeyAtPlayhead` が運ぶ成分値。
+    pub fn key_components(&self) -> &[f64] {
+        match self {
+            Self::KeyAtPlayhead { components, len, .. } => &components[..*len],
+            _ => &[],
+        }
+    }
+}
 
 /// Inspector の mode tab(inspector-library.html:19 `Effect` / `Custom`)。
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -44,6 +88,9 @@ pub struct InspectorPanel {
     model: Option<InspectorReadModel>,
     /// footer に出す状態文(inspector-library.html:177 の `#preview-status` の席)。
     status: String,
+    /// model が無いときに面の真ん中へ出す一言。**黙って空にしない**ための席で、
+    /// 「No selection」「2 items selected」「読めない理由」がここに来る。
+    empty_note: String,
     mode: Mode,
     /// 折り畳まれた section(0 = TRANSFORM、1.. = effect)。局所 UI 状態。
     collapsed: BTreeSet<usize>,
@@ -52,32 +99,94 @@ pub struct InspectorPanel {
     solo: bool,
     /// FX の ON/OFF 局所視覚状態(definition_id の集合が OFF)。
     disabled_effects: BTreeSet<u64>,
+    /// いま掴んでいる数値(param と成分)。**1掴み = 1 gesture** の判定に使う。
+    edit_hold: Option<(InspectorEditParam, usize)>,
+    /// live 投影に使う plugin catalog。座席の writer と同じ `reference_catalog` を
+    /// 1度だけ組んで持ち回る(毎フレーム組み直さない)。
+    catalog: Option<std::sync::Arc<motolii_plugin::PluginCatalog>>,
 }
 
 impl InspectorPanel {
     pub fn from_read_model(model: InspectorReadModel) -> Self {
-        Self {
-            model: Some(model),
-            status: "read-model preview · selection wiring pending".to_owned(),
-            mode: Mode::Effect,
-            collapsed: BTreeSet::new(),
-            muted: false,
-            solo: false,
-            disabled_effects: BTreeSet::new(),
-        }
+        let mut panel = Self::placeholder("read-model preview");
+        panel.model = Some(model);
+        panel.empty_note.clear();
+        panel
     }
 
     /// read-model を作れない時の空面。理由は footer に出す(黙って空にしない)。
     pub fn placeholder(status: impl Into<String>) -> Self {
+        let status = status.into();
         Self {
             model: None,
-            status: status.into(),
+            empty_note: status.clone(),
+            status,
             mode: Mode::Effect,
             collapsed: BTreeSet::new(),
             muted: false,
             solo: false,
             disabled_effects: BTreeSet::new(),
+            edit_hold: None,
+            catalog: None,
         }
+    }
+
+    /// model が無いときに面へ出る一言(読み)。
+    pub fn empty_note(&self) -> &str {
+        &self.empty_note
+    }
+
+    /// live の選択と playhead でこの面を座らせ直す。**毎フレーム呼んでよい** —
+    /// 折り畳み・mode などの局所 UI 状態は残る。
+    ///
+    /// - 選択なし … 「No selection」の空状態(fixture へ落ちない)
+    /// - 2つ以上 … 「N items selected」の要約(property は出さない)
+    /// - 1つ … live 投影。失敗したら理由つきの空状態
+    pub fn seat_live(
+        &mut self,
+        document: &motolii_doc::Document,
+        selection: &[motolii_doc::LayerId],
+        playhead: motolii_core::RationalTime,
+    ) {
+        match selection {
+            [] => self.seat_empty("No selection — pick a layer in the Timeline"),
+            [one] => {
+                let catalog = match self.catalog.clone() {
+                    Some(catalog) => catalog,
+                    None => match motolii_plugin::reference::reference_catalog() {
+                        Ok(catalog) => {
+                            let catalog = std::sync::Arc::new(catalog);
+                            self.catalog = Some(std::sync::Arc::clone(&catalog));
+                            catalog
+                        }
+                        Err(error) => {
+                            self.seat_empty(format!("plugin catalog を作れない: {error}"));
+                            return;
+                        }
+                    },
+                };
+                match project_inspector_live_model(document, &catalog, one.get(), playhead) {
+                    Ok(model) => {
+                        self.model = Some(model);
+                        self.empty_note.clear();
+                        self.status = format!("layer {} · live", one.get());
+                    }
+                    Err(error) => self.seat_empty(format!("read-model を作れない: {error}")),
+                }
+            }
+            many => self.seat_empty(format!(
+                "{} items selected — pick one to edit",
+                many.len()
+            )),
+        }
+    }
+
+    fn seat_empty(&mut self, note: impl Into<String>) {
+        let note = note.into();
+        self.model = None;
+        self.edit_hold = None;
+        self.status = note.clone();
+        self.empty_note = note;
     }
 
     /// fixture(または任意の Document file)から read-model を組む。
@@ -104,7 +213,10 @@ impl InspectorPanel {
     }
 
     /// pane いっぱいに描く。値も構造も read-model と theme 以外から持ち込まない。
-    pub(crate) fn show(&mut self, ui: &mut egui::Ui) {
+    ///
+    /// 返すのは**編集要求**だけで、この面は Document を書かない(single writer)。
+    pub(crate) fn show(&mut self, ui: &mut egui::Ui) -> Vec<InspectorAction> {
+        let mut actions = Vec::new();
         let rect = ui.available_rect_before_wrap();
         let painter = ui.painter().with_clip_rect(rect);
         // inspector-library.css:27 `.inspectorShell { background: var(--mock-role-surface-panel) }`
@@ -123,7 +235,7 @@ impl InspectorPanel {
                     Pos2::new(rect.left(), cursor),
                     Pos2::new(rect.right(), footer_top),
                 );
-                self.draw_table(ui, body);
+                self.draw_table(ui, body, &mut actions);
             }
             Mode::Custom => {
                 // Custom(extensions)は後続レーン。空面に理由だけ出す(無反応にしない)。
@@ -139,6 +251,7 @@ impl InspectorPanel {
         self.draw_footer(&painter, rect, footer_top);
         // 借用の都合で使わない変数を残さない。
         let _ = cursor;
+        actions
     }
 
     /// inspector-library.css:29-47 `.panelHeader`。
@@ -270,10 +383,16 @@ impl InspectorPanel {
             Stroke::new(1.0, theme::BORDER_DEFAULT),
         );
         let Some(model) = &self.model else {
+            // 空状態。**理由をそのまま出す**(「No selection」/「N items selected」/
+            // 読めない理由)。黙って空の面にしない。
             painter.text(
                 Pos2::new(summary.left() + theme::SUMMARY_PAD_X, summary.center().y),
                 Align2::LEFT_CENTER,
-                "No selection read-model",
+                if self.empty_note.is_empty() {
+                    "No selection"
+                } else {
+                    self.empty_note.as_str()
+                },
                 FontId::proportional(theme::FS_SUMMARY_SPAN),
                 theme::TEXT_MUTED,
             );
@@ -383,7 +502,7 @@ impl InspectorPanel {
     }
 
     /// 本体表(TRANSFORM + FX stack)。縦に溢れたら scroll(css:108 `.tableScroller`)。
-    fn draw_table(&mut self, ui: &mut egui::Ui, body: Rect) {
+    fn draw_table(&mut self, ui: &mut egui::Ui, body: Rect, actions: &mut Vec<InspectorAction>) {
         let Some(model) = self.model.clone() else {
             return;
         };
@@ -392,7 +511,7 @@ impl InspectorPanel {
             .id_salt("inspector-table")
             .auto_shrink([false, false])
             .show(&mut child, |ui| {
-                self.draw_transform_section(ui, &model);
+                self.draw_transform_section(ui, &model, actions);
                 draw_fx_toolbar(ui, &model);
                 for (index, definition) in model.effect_definitions.iter().enumerate() {
                     self.draw_effect_section(ui, index, definition);
@@ -400,14 +519,45 @@ impl InspectorPanel {
             });
     }
 
-    /// TRANSFORM section(html:27-50 の構造、read-model が持つ Position 行だけ)。
-    fn draw_transform_section(&mut self, ui: &mut egui::Ui, model: &InspectorReadModel) {
-        let keyed = matches!(model.position, InspectorPosition::Animated);
-        let subtitle = if keyed { "1 · 1 keyed" } else { "1 · 0 keyed" };
-        let collapsed = self.draw_section_header(ui, 0, "TRANSFORM", subtitle, theme::WAY_INSPECTOR);
+    /// TRANSFORM section(html:27-50 の構造)。
+    ///
+    /// live 投影(`editable` が埋まっている)なら**直打ちできる行**を出し、
+    /// fixture 投影ならこれまでどおり decoder の Position 要約だけを出す。
+    fn draw_transform_section(
+        &mut self,
+        ui: &mut egui::Ui,
+        model: &InspectorReadModel,
+        actions: &mut Vec<InspectorAction>,
+    ) {
+        if model.editable.is_empty() {
+            let keyed = matches!(model.position, InspectorPosition::Animated);
+            let subtitle = if keyed { "1 · 1 keyed" } else { "1 · 0 keyed" };
+            let collapsed =
+                self.draw_section_header(ui, 0, "TRANSFORM", subtitle, theme::WAY_INSPECTOR);
+            if collapsed {
+                return;
+            }
+            self.draw_fixture_position_row(ui, model);
+            return;
+        }
+
+        let keyed = model
+            .editable
+            .iter()
+            .filter(|row| row.key_state != InspectorKeyState::Unkeyed)
+            .count();
+        let subtitle = format!("{} · {keyed} keyed", model.editable.len());
+        let collapsed = self.draw_section_header(ui, 0, "TRANSFORM", &subtitle, theme::WAY_INSPECTOR);
         if collapsed {
             return;
         }
+        for row in &model.editable {
+            self.draw_editable_row(ui, row, actions);
+        }
+    }
+
+    /// fixture 投影の Position 行(decoder D1 の要約そのまま。触れない)。
+    fn draw_fixture_position_row(&mut self, ui: &mut egui::Ui, model: &InspectorReadModel) {
         let (rect, _) = ui.allocate_exact_size(
             Vec2::new(ui.available_width(), theme::ROW_H),
             Sense::hover(),
@@ -432,6 +582,192 @@ impl InspectorPanel {
                 draw_value_span(&painter, span, "animated");
                 draw_key_cell(&painter, cols[3], KeyVisual::Animated);
             }
+        }
+    }
+
+    /// live の1行。**数は直打ちでき、◇ でキーが打てる。**
+    ///
+    /// gesture の畳み: 変化があったフレームで掴んでいなければ `BeginEdit`、
+    /// 掴んだまま動いているあいだ `SetComponent`、掴みが外れたら `EndEdit`。
+    /// ドラッグの途中フレームは `BeginEdit` を出さないので、1ドラッグが1 Undo になる。
+    fn draw_editable_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        row: &InspectorEditableRow,
+        actions: &mut Vec<InspectorAction>,
+    ) {
+        let (rect, _) = ui.allocate_exact_size(
+            Vec2::new(ui.available_width(), theme::ROW_H),
+            Sense::hover(),
+        );
+        let band = match row.param {
+            // css:298 vector / css:297 scalar
+            InspectorEditParam::Position => theme::ROLE_VECTOR,
+            InspectorEditParam::Opacity => theme::ROLE_DATA,
+        };
+        let icon = match row.param {
+            InspectorEditParam::Position => IconKind::Vector,
+            InspectorEditParam::Opacity => IconKind::Scalar,
+        };
+        {
+            let painter = ui.painter().with_clip_rect(rect);
+            draw_row_chrome(&painter, rect, band, !row.editable);
+            draw_kind_icon(&painter, rect, band, icon);
+            draw_row_name(&painter, rect, row.label(), theme::FS_ROW_NAME, 0.0);
+        }
+
+        let cols = value_columns(rect);
+        let axes = row.param.axes();
+        for (index, cell) in cols.iter().take(3).enumerate() {
+            let Some(axis) = axes.get(index) else {
+                // 持たない成分は `—`(html:89 emptyComponent)。値を発明しない。
+                draw_empty_component(&ui.painter().with_clip_rect(*cell), *cell);
+                continue;
+            };
+            let value = row.components.get(index).copied().unwrap_or_default();
+            self.draw_value_field(ui, *cell, *axis, row, index, value, actions);
+        }
+
+        // ◇ / ◆。押すと playhead へキーが立つ(既にあれば値を更新)。
+        let key_visual = match row.key_state {
+            InspectorKeyState::Unkeyed => KeyVisual::Unkeyed,
+            InspectorKeyState::Animated => KeyVisual::Unkeyed,
+            InspectorKeyState::KeyedAtPlayhead => KeyVisual::Animated,
+        };
+        let key_cell = cols[3];
+        let response = ui.interact(
+            key_cell,
+            ui.id().with(("inspector-key", row.label())),
+            if row.editable {
+                Sense::click()
+            } else {
+                Sense::hover()
+            },
+        );
+        {
+            let painter = ui.painter().with_clip_rect(key_cell);
+            if response.hovered() && row.editable {
+                painter.rect_filled(
+                    key_cell,
+                    0.0,
+                    mix(theme::ACTION_ACTIVE, 18.0, theme::SURFACE_PANEL),
+                );
+            }
+            draw_key_cell(&painter, key_cell, key_visual);
+        }
+        if response.clicked() && row.editable {
+            let mut components = [0.0; 3];
+            let len = row.components.len().min(3);
+            components[..len].copy_from_slice(&row.components[..len]);
+            actions.push(InspectorAction::KeyAtPlayhead {
+                param: row.param,
+                components,
+                len,
+            });
+        }
+    }
+
+    /// 1成分の数値フィールド(css:369-414 `.valueCell` の席に `DragValue` を置く)。
+    fn draw_value_field(
+        &mut self,
+        ui: &mut egui::Ui,
+        cell: Rect,
+        axis: Option<&'static str>,
+        row: &InspectorEditableRow,
+        index: usize,
+        value: f64,
+        actions: &mut Vec<InspectorAction>,
+    ) {
+        {
+            let painter = ui.painter().with_clip_rect(cell);
+            // css:375 bg = mix(surface-app 74%, panel)
+            painter.rect_filled(cell, 0.0, mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL));
+            painter.vline(
+                cell.right(),
+                cell.y_range(),
+                Stroke::new(1.0, mix(theme::BORDER_DEFAULT, 58.0, theme::SURFACE_PANEL)),
+            );
+            // css:410 の軸の字。**狭い pane では出さない** — 列見出しが既に X/Y/Z を
+            // 言っているので、字を残して数の桁を削るほうが失う情報が大きい。
+            if let Some(axis) = axis.filter(|_| cell.width() >= AXIS_GLYPH_MIN_CELL_W) {
+                painter.text(
+                    Pos2::new(cell.left() + 5.0, cell.center().y),
+                    Align2::LEFT_CENTER,
+                    axis,
+                    FontId::monospace(7.0),
+                    theme::TEXT_MUTED,
+                );
+            }
+        }
+        if !row.editable {
+            // 触れない行は値だけ出す(触れそうで触れないものを置かない)。
+            let painter = ui.painter().with_clip_rect(cell);
+            painter.text(
+                Pos2::new(cell.right() - 6.0, cell.center().y),
+                Align2::RIGHT_CENTER,
+                format_value(value, 3),
+                FontId::monospace(theme::FS_VALUE),
+                theme::TEXT_MUTED,
+            );
+            return;
+        }
+
+        // 軸ラベルの右から右端までが入力欄。**cell からはみ出さない** —
+        // 桁が切れると数が読めなくなるので、字も枠も cell に合わせて縮める。
+        let axis_inset = if axis.is_some() && cell.width() >= AXIS_GLYPH_MIN_CELL_W {
+            11.0
+        } else {
+            2.0
+        };
+        let field = Rect::from_min_max(
+            Pos2::new(cell.left() + axis_inset, cell.top() + 2.0),
+            Pos2::new(cell.right() - 2.0, cell.bottom() - 2.0),
+        );
+        let mut edited = value;
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(field));
+        // 値の字は css:394-407 の mono。DragValue の既定枠は cell の地に溶かして、
+        // 「セルの中の数」に見せる(触れる面は hover / focus で分かる)。
+        child.style_mut().override_font_id = Some(FontId::monospace(theme::FS_VALUE));
+        child.style_mut().spacing.button_padding = Vec2::new(2.0, 0.0);
+        child.style_mut().spacing.interact_size = Vec2::new(0.0, field.height());
+        let cell_fill = mix(theme::SURFACE_APP, 74.0, theme::SURFACE_PANEL);
+        let visuals = &mut child.style_mut().visuals.widgets;
+        visuals.inactive.weak_bg_fill = cell_fill;
+        visuals.inactive.bg_stroke = Stroke::NONE;
+        visuals.inactive.fg_stroke = Stroke::new(1.0, theme::TEXT_PRIMARY);
+        visuals.hovered.weak_bg_fill = mix(theme::ACTION_ACTIVE, 14.0, cell_fill);
+        visuals.hovered.bg_stroke = Stroke::new(1.0, theme::BORDER_STRONG);
+        visuals.active.weak_bg_fill = mix(theme::ACTION_ACTIVE, 22.0, cell_fill);
+        let response = child.put(
+            field,
+            egui::DragValue::new(&mut edited)
+                // 正準座標(原点中央・高さ1.0)も不透明度も 0..1 桁の世界なので刻みは細かく。
+                .speed(0.005)
+                .max_decimals(3),
+        );
+
+        let key = (row.param, index);
+        let changed = response.changed();
+        // 掴んでいる間 = ドラッグ中か、テキスト入力に focus がある間。
+        let holding = response.dragged() || response.has_focus();
+        if changed {
+            if self.edit_hold != Some(key) {
+                // 別の欄を掴み直したら前の gesture を先に閉じる。
+                if self.edit_hold.is_some() {
+                    actions.push(InspectorAction::EndEdit);
+                }
+                actions.push(InspectorAction::BeginEdit { param: row.param });
+                self.edit_hold = Some(key);
+            }
+            actions.push(InspectorAction::SetComponent {
+                param: row.param,
+                component: index,
+                value: edited,
+            });
+        }
+        if self.edit_hold == Some(key) && !holding {
+            actions.push(InspectorAction::EndEdit);
+            self.edit_hold = None;
         }
     }
 
@@ -1094,4 +1430,5 @@ mod tests {
         assert_eq!(format_value(-0.0, 3), "0.000");
         assert_eq!(format_value(-0.075, 3), "-0.075");
     }
+
 }

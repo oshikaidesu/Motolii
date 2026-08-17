@@ -44,6 +44,15 @@ impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
                 return UiResponse::None;
             }
         }
+        // Inspector も live のときは fixture ではなく**選択を映す**。編集要求は
+        // その場でエディタの適用口へ渡す — Document を書くのは相変わらず
+        // エディタが抱える1つの writer だけである(single writer)。
+        if pane.kind() == PaneKind::Inspector {
+            if let Some(editor) = self.editor.as_deref_mut() {
+                pane.show_live_inspector(ui, editor);
+                return UiResponse::None;
+            }
+        }
         // Stage が出すのは playhead 時刻の合成フレーム。時刻の正本はエディタ
         // （writer と同じ席）で、ここは読んで渡すだけ。
         if pane.kind() == PaneKind::Stage {
@@ -113,8 +122,9 @@ impl ProjectSeat {
                 )
             },
         )?;
-        let editor =
+        let mut editor =
             TimelineEditor::new(writer).with_project_root(path.parent().map(Path::to_path_buf));
+        seat_inspection_selection(&mut editor);
         // 開いた直後の snapshot がそのまま「ファイルにある内容」= clean の基準。
         let saved = Arc::clone(editor.document());
         Ok(Self {
@@ -181,6 +191,22 @@ impl ProjectSeat {
     pub fn editor_mut(&mut self) -> &mut TimelineEditor {
         &mut self.editor
     }
+}
+
+/// 検分用: `MOTOLII_SELECT_LAYER=<id>` があれば、開いた直後にその layer を選んでおく。
+///
+/// **製品の挙動ではない** — `--screenshot` と同じ「窓を触らずに絵を確かめる」ための口で、
+/// `pane.rs` の `MOTOLII_SHELL_TRACE` と同じ扱いである。通る経路は素のクリックと同じ
+/// `select_layer` なので、選択の意味も Undo 台帳も変えない。環境変数が無い・数として
+/// 読めないときは**何もしない**（既定は従来どおり「選択なし」）。
+fn seat_inspection_selection(editor: &mut TimelineEditor) {
+    let Some(raw) = std::env::var_os("MOTOLII_SELECT_LAYER") else {
+        return;
+    };
+    let Some(id) = raw.to_str().and_then(|text| text.trim().parse::<u64>().ok()) else {
+        return;
+    };
+    editor.select_layer(motolii_doc::LayerId::from_raw(id));
 }
 
 /// 新規 project を1つ作る（空コンポ + V1 トラック1本）。

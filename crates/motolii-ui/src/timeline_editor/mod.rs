@@ -244,6 +244,17 @@ enum Hold {
     Marquee { from: egui::Pos2, to: egui::Pos2 },
 }
 
+/// Inspector の数値を掴んでいるあいだの座席。**1掴み = 1 `GestureId` = 1 Undo**。
+///
+/// `Hold` と分けてあるのは、Timeline の掴み物(clip / キー / トリム / 並べ替え)の
+/// 意味を広げないため。Inspector は面が別で、同時に掴めるものでもない。
+#[derive(Debug, Clone, Copy)]
+struct ParamEditHold {
+    layer: LayerId,
+    param: ParamRef,
+    gesture: GestureId,
+}
+
 /// 掴んでいるあいだ、毎フレーム同じ3つを聞かれる — ポインタの時刻、端で流すか、
 /// 窓の広さ。**その3つをまとめて1度だけ用意する。**
 ///
@@ -1115,6 +1126,10 @@ pub struct TimelineEditor {
     /// (白で統一して見たい人の好みが、他人の付けた色を消してはいけない)。
     /// TimelineEditor には profile が無いので、ここでは窓の状態として持つ
     colors_on: bool,
+    /// Inspector の数値を掴んでいるあいだ開いている gesture。
+    /// **ドラッグ中の連続変更を1 Undo に畳む**ためだけの座席で、Timeline の `hold`
+    /// とは別物である(Timeline の掴み物の意味を変えないため混ぜない)。
+    param_edit: Option<ParamEditHold>,
     /// 名前を編集中の layer と、編集中の文字列。**確定するまで Document は触らない**
     renaming: Option<(LayerId, String)>,
     /// メモを編集中の index と文字列。同上
@@ -1204,6 +1219,7 @@ impl TimelineEditor {
             snap: true,
             large_rows: false,
             colors_on: true,
+            param_edit: None,
             renaming: None,
             editing_locator: None,
             context_time: 0.0,
@@ -1357,6 +1373,247 @@ impl TimelineEditor {
     /// 離す。gesture は着地のたびに書き終えているので、掴みを手放すだけ。
     pub fn release(&mut self) {
         self.hold = None;
+    }
+
+    // ---- Inspector の読み口と適用口 ----
+    //
+    // Inspector は Document を書かない。ここが**唯一の適用口**で、書くのは
+    // エディタが抱える1つの writer だけである(single writer)。
+    // 描画・gesture の意味は Timeline 側と共有しない — 触るのは新しい
+    // `param_edit` 座席だけで、`hold` には手を入れていない。
+
+    /// いま選ばれている layer(**選んだ順**)。Inspector が映す相手。
+    /// Document には入らない Project session の状態である。
+    pub fn selected_layers(&self) -> &[LayerId] {
+        &self.selected
+    }
+
+    /// 選択を1つに置き換える(素のクリックと同じ意味)。
+    /// マウスの代わりに呼ぶ入力シミュレーションの入口で、経路は `select` と同じ。
+    pub fn select_layer(&mut self, layer: LayerId) {
+        self.select(layer, false, false, &[]);
+    }
+
+    /// 選択へ1つ足す / 外す(Cmd クリックと同じ意味)。同上。
+    pub fn add_to_selection(&mut self, layer: LayerId) {
+        self.select(layer, true, false, &[]);
+    }
+
+    /// 選択を空にする。Inspector はこれで空状態になる。
+    pub fn clear_selection(&mut self) {
+        self.selected.clear();
+        self.selected_keys.clear();
+        self.status = "nothing selected".to_owned();
+    }
+
+    /// playhead の時刻。fps の格子に載らない位置は `None`(キーを打てない時刻)。
+    pub fn playhead_time(&self) -> Option<RationalTime> {
+        seconds_to_time(self.playhead, self.document.composition.fps)
+    }
+
+    /// 再生中か(読み)。編集は再生を止めない(2026-08-17裁定)ので、
+    /// Inspector からの適用の前後でこれは変わらない。
+    pub fn is_playing(&self) -> bool {
+        self.playing
+    }
+
+    /// Inspector の数値を掴む。**ここから `end_param_edit` までが1 gesture = 1 Undo。**
+    ///
+    /// 掴んだ瞬間に gesture を1つ採り、離すまで使い回す — Timeline のドラッグ
+    /// (`hold_item`)と同じ畳み方である。毎フレーム開き直すとフレーム数だけ
+    /// Undo が積まれる。
+    pub fn begin_param_edit(&mut self, layer: LayerId, param: ParamRef) {
+        // 掴み直しは前の gesture を閉じてから(取りこぼした `end` で漏れないように)。
+        let gesture = self.writer.begin_gesture();
+        self.param_edit = Some(ParamEditHold {
+            layer,
+            param,
+            gesture,
+        });
+    }
+
+    /// 成分1本を書く。開いている gesture があればそこへ入り、無ければ
+    /// 1回ぶんの gesture を開いて書く(Enter 1発の確定も1 Undo になる)。
+    ///
+    /// - Const … その成分だけ差し替えた Const を書く
+    /// - keyframes … **playhead のキーの値**を書く。キーが無い時刻なら
+    ///   playhead へキーを1つ立ててから書く(アニメーション済みの param を
+    ///   Const へ潰さないため。同じ gesture に入るので Undo は1段)
+    /// - 閉じていない種(Data / Vec2Axes / LookAt / Follow) … 断って理由を status に出す
+    pub fn set_param_component(
+        &mut self,
+        layer: LayerId,
+        param: ParamRef,
+        component: usize,
+        value: f64,
+    ) {
+        let gesture = match self.param_edit {
+            Some(ParamEditHold {
+                layer: held_layer,
+                param: held_param,
+                gesture,
+            }) if held_layer == layer && held_param == param => gesture,
+            _ => self.writer.begin_gesture(),
+        };
+        self.write_param_component(gesture, layer, param, component, value);
+    }
+
+    /// 掴みを離す。gesture は書くたびに閉じているので、座席を空けるだけ。
+    pub fn end_param_edit(&mut self) {
+        self.param_edit = None;
+    }
+
+    /// ◇: playhead へキーを打つ。**既にその時刻にキーがあれば値を更新する**
+    /// (キーは増えない)。1回の打鍵 = 1 `GestureId` = 1 Undo 単位。
+    ///
+    /// `components` は Inspector が出している成分値(Position は `[x, y]`、
+    /// Opacity は `[a]`)。**画面に出ている数がそのままキーになる**。
+    pub fn key_param_at_playhead(&mut self, layer: LayerId, param: ParamRef, components: &[f64]) {
+        let Some(at) = self.playhead_time() else {
+            self.status = "the playhead is not a keyable time".to_owned();
+            return;
+        };
+        let Some(new_value) = doc_value_for(param, components) else {
+            self.status = format!("{}: no value to key", param_label(param));
+            return;
+        };
+        let property = scalar_property(param);
+        let gesture = self.writer.begin_gesture();
+        let key_id = match self
+            .writer
+            .prepare_add_transform_param_key(layer, property.clone(), at)
+        {
+            Ok(motolii_doc::AddTransformParamKeyPreparation::Prepared { key_id, command }) => {
+                if !self.apply_in(gesture, param_label(param), Ok::<_, String>(Some(command))) {
+                    return;
+                }
+                key_id
+            }
+            Ok(motolii_doc::AddTransformParamKeyPreparation::AlreadyPresent { key_id }) => key_id,
+            Err(error) => {
+                self.status = format!("{} rejected: {error}", self.name(layer));
+                return;
+            }
+        };
+        // 打った(か既にあった)キーへ、画面の値をそのまま入れる。
+        // 同値なら `Ok(None)` で何も積まれない — それは失敗ではない。
+        let prepared =
+            self.writer
+                .prepare_set_transform_param_key_value(layer, property, key_id, new_value);
+        self.apply_in(gesture, param_label(param), prepared);
+        self.selected_keys = vec![(layer, param, key_id)];
+        self.fold.open_params(layer);
+        self.status = format!(
+            "{} {} key at {:.2}s  undo {}",
+            self.name(layer),
+            param_label(param),
+            self.playhead,
+            self.writer.undo_len()
+        );
+    }
+
+    /// `set_param_component` の本体。gesture は呼び手が決める。
+    fn write_param_component(
+        &mut self,
+        gesture: GestureId,
+        layer: LayerId,
+        param: ParamRef,
+        component: usize,
+        value: f64,
+    ) {
+        let Some(current) = envelope_param(&self.document, layer, param).cloned() else {
+            self.status = format!("{} rejected: no such layer", param_label(param));
+            return;
+        };
+        let property = scalar_property(param);
+        match current {
+            DocParam::Const(old) => {
+                let Some(new) = replace_component(&old, component, value) else {
+                    self.status = format!("{}: value type mismatch", param_label(param));
+                    return;
+                };
+                if new == old {
+                    return;
+                }
+                let command = Command::SetProperty {
+                    target: layer,
+                    property,
+                    old_value: DocParam::Const(old),
+                    new_value: DocParam::Const(new),
+                };
+                self.apply_in(gesture, param_label(param), Ok::<_, String>(Some(command)));
+            }
+            DocParam::Keyframes(track) => {
+                let Some(at) = self.playhead_time() else {
+                    self.status = "the playhead is not a keyable time".to_owned();
+                    return;
+                };
+                if track.keys().is_empty() {
+                    self.status = format!("{}: empty keyframe track", param_label(param));
+                    return;
+                }
+                // playhead にキーが無ければ1本立ててから書く。同じ gesture なので Undo は1段。
+                let key_id = match track.keys().iter().find(|key| key.t == at) {
+                    Some(key) => key.id,
+                    None => match self.writer.prepare_add_transform_param_key(
+                        layer,
+                        property.clone(),
+                        at,
+                    ) {
+                        Ok(motolii_doc::AddTransformParamKeyPreparation::Prepared {
+                            key_id,
+                            command,
+                        }) => {
+                            if !self.apply_in(
+                                gesture,
+                                param_label(param),
+                                Ok::<_, String>(Some(command)),
+                            ) {
+                                return;
+                            }
+                            key_id
+                        }
+                        Ok(motolii_doc::AddTransformParamKeyPreparation::AlreadyPresent {
+                            key_id,
+                        }) => key_id,
+                        Err(error) => {
+                            self.status = format!("{} rejected: {error}", self.name(layer));
+                            return;
+                        }
+                    },
+                };
+                // いまのキーの値の、その成分だけを差し替える。
+                let Some(old) = envelope_param(&self.document, layer, param).and_then(|doc_param| {
+                    match doc_param {
+                        DocParam::Keyframes(track) => track
+                            .keys()
+                            .iter()
+                            .find(|key| key.id == key_id)
+                            .map(|key| key.value.clone()),
+                        _ => None,
+                    }
+                }) else {
+                    self.status = format!("{}: key vanished", param_label(param));
+                    return;
+                };
+                let Some(new) = replace_component(&old, component, value) else {
+                    self.status = format!("{}: value type mismatch", param_label(param));
+                    return;
+                };
+                let prepared =
+                    self.writer
+                        .prepare_set_transform_param_key_value(layer, property, key_id, new);
+                self.apply_in(gesture, param_label(param), prepared);
+            }
+            other => {
+                // 閉じていない種は要約も編集も発明しない(read-model の `editable: false` と同じ判断)。
+                self.status = format!(
+                    "{}: `{}` is not editable here",
+                    param_label(param),
+                    doc_param_kind(&other)
+                );
+            }
+        }
     }
 
     /// ポインタの時刻(秒)を、掴んでいるものに応じた D2 command にして適用する。
@@ -4664,6 +4921,64 @@ fn find_item(document: &Document, layer: LayerId) -> Option<&TrackItem> {
     document.tracks.iter().find_map(|t| walk(&t.items, layer))
 }
 
+/// その layer の envelope が直接持つ param。**受け付け集合の正本はこの1関数**で、
+/// `param_keys` / `scalar_property` と同じ並びを持つ(別々の match を増やさない)。
+fn envelope_param(document: &Document, layer: LayerId, param: ParamRef) -> Option<&DocParam> {
+    let env = match find_item(document, layer)? {
+        TrackItem::Clip(c) => &c.envelope,
+        TrackItem::Group(g) => &g.envelope,
+    };
+    Some(match param {
+        ParamRef::Position => &env.transform.position,
+        ParamRef::Anchor => &env.transform.anchor,
+        ParamRef::Scale => &env.transform.scale,
+        ParamRef::Rotation => &env.transform.rotation,
+        ParamRef::Opacity => &env.opacity,
+    })
+}
+
+/// 成分1本だけを差し替えた値。範囲外の成分・型違いは `None`(値を発明しない)。
+fn replace_component(old: &DocValue, component: usize, value: f64) -> Option<DocValue> {
+    match old {
+        DocValue::F64(_) if component == 0 => Some(DocValue::F64(value)),
+        DocValue::Vec2(v) if component < 2 => {
+            let mut next = *v;
+            next[component] = value;
+            Some(DocValue::Vec2(next))
+        }
+        DocValue::Vec3(v) if component < 3 => {
+            let mut next = *v;
+            next[component] = value;
+            Some(DocValue::Vec3(next))
+        }
+        _ => None,
+    }
+}
+
+/// 成分の並びから、その param の `DocValue` を組む。足りなければ `None`。
+fn doc_value_for(param: ParamRef, components: &[f64]) -> Option<DocValue> {
+    match param {
+        ParamRef::Position | ParamRef::Anchor | ParamRef::Scale => {
+            (components.len() >= 2).then(|| DocValue::Vec2([components[0], components[1]]))
+        }
+        ParamRef::Rotation | ParamRef::Opacity => {
+            components.first().copied().map(DocValue::F64)
+        }
+    }
+}
+
+/// 断る理由に出す `DocParam` の種。
+fn doc_param_kind(param: &DocParam) -> &'static str {
+    match param {
+        DocParam::Const(_) => "const",
+        DocParam::Keyframes(_) => "keyframes",
+        DocParam::Data { .. } => "data",
+        DocParam::Vec2Axes { .. } => "vec2_axes",
+        DocParam::LookAt { .. } => "look_at",
+        DocParam::Follow { .. } => "follow",
+    }
+}
+
 fn visible_params(document: &Document, layer: LayerId) -> Vec<ParamRef> {
     find_item(document, layer)
         .map(crate::timeline_rows::keyed_params)
@@ -6747,6 +7062,32 @@ mod tests {
         assert!((lab.document.locators[0].t.as_seconds_f64() as f32 - 7.5).abs() < 1e-3);
         assert!(lab.playing, "**タップは再生を止めない**");
         assert!(lab.editing_locator.is_none(), "再生中にリネームへ入らない");
+    }
+
+    /// **Inspector からの適用も再生を止めない**(2026-08-17裁定: 編集は再生を止めない)。
+    /// 直打ちも ◇ も、通しで見ながら当てられる。
+    #[test]
+    fn applying_from_the_inspector_while_playing_keeps_playing() {
+        let mut lab = TimelineEditor::with_fixture();
+        let layer = layer_named(&lab.names, "Background");
+        lab.playing = true;
+        lab.playhead = 3.0;
+
+        lab.begin_param_edit(layer, ParamRef::Position);
+        lab.set_param_component(layer, ParamRef::Position, 0, 0.3);
+        lab.end_param_edit();
+        assert!(lab.is_playing(), "直打ちは再生を止めない: {}", lab.status);
+
+        lab.key_param_at_playhead(layer, ParamRef::Position, &[0.3, 0.0]);
+        assert!(lab.is_playing(), "◇ も再生を止めない: {}", lab.status);
+        assert_eq!(
+            param_keys(&lab.document, layer, ParamRef::Position).len(),
+            1,
+            "再生中でもキーは立つ: {}",
+            lab.status
+        );
+        // playhead も止まらない(再生の座席には触っていない)。
+        assert!((lab.playhead - 3.0).abs() < 1e-6);
     }
 
     /// **同一フレームへの連打は1つに畳む。** 同位置に山を作らない。
