@@ -86,6 +86,10 @@ fs4 = { version = "=1.1.0", default-features = false, features = ["sync"] }
 foyer-memory = { version = "=0.22.3" }
 vello_svg = { version = "=0.10.0", default-features = false, features = ["wgpu"] }
 tempfile = "=3.27.0"
+# OS の file dialog(New / Open)。2026-08-03 の P06-C1-MAC probe で
+# `rfd` 0.17.2 を固定Macの native seam として縮小採用済み。既に
+# `re_viewer_context` 経由で解決済みの同じ版をそのまま使う。
+rfd = "0.17"
 bytemuck = { version = "1", features = ["derive"] }
 vello = "0.9.0"
 # N-OVERLAY: 2D overlay renderer(handle/gizmo/outline/grid/safe area/path)。

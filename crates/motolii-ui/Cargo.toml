@@ -55,6 +55,8 @@ re_log_types.workspace = true
 re_renderer.workspace = true
 re_sdk_types.workspace = true
 re_view_spatial.workspace = true
+# New / Open の OS dialog。呼ぶのは `blitz_shell` の中だけ。
+rfd.workspace = true
 motolii-audio.workspace = true
 motolii-core.workspace = true
 motolii-doc.workspace = true
@@ -62,6 +64,8 @@ motolii-eval.workspace = true
 motolii-export.workspace = true
 motolii-gpu.workspace = true
 motolii-input.workspace = true
+# OS ドロップの取り込み(`probe_admission_source`)。CLI の import と同じ関数。
+motolii-media.workspace = true
 motolii-plugin.workspace = true
 motolii-plugins-firstparty.workspace = true
 motolii-render.workspace = true

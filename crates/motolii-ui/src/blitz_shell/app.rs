@@ -13,7 +13,7 @@
 //! native エディタ**（`timeline_editor::TimelineEditor`）で、移動・トリム・選択・
 //! Undo/Redo が writer を通る。座席無しの起動は従来どおり fixture 展示。
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use eframe::egui_wgpu::RenderState;
@@ -58,6 +58,9 @@ impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
 /// pane 側へ出て行くのは `snapshot()` の immutable snapshot だけ。
 /// 第二の Document 保持経路（cache / 読み直し）はここから先に作らない。
 pub struct ProjectSeat {
+    /// 開いている project のパス。**同じ project を開き直す時に lock を先に返す**
+    /// 判断がこれを見る（`reseat_project`）。
+    path: PathBuf,
     /// project identity の排他 lock。読みはしないが、app が生きているあいだ握り続ける
     /// （落とすと他プロセスが同じ project を開けてしまう）。
     _session: motolii_doc::ProjectSession,
@@ -92,12 +95,18 @@ impl ProjectSeat {
             },
         )?;
         Ok(Self {
+            path: path.to_path_buf(),
             _session: opened.session,
             // project root = document path の親(CLI export と同じ規約)。
             // soundtrack 再生の asset path 解決に使う。
             editor: TimelineEditor::new(writer)
                 .with_project_root(path.parent().map(Path::to_path_buf)),
         })
+    }
+
+    /// 開いている project のパス。
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 
     /// pane へ流す immutable snapshot（エディタが writer から取った cached をそのまま配る）。
@@ -117,6 +126,85 @@ impl ProjectSeat {
     }
 }
 
+/// 新規 project を1つ作る（空コンポ + V1 トラック1本）。
+///
+/// 意味は CLI の `new_document`（`crates/motolii-cli/src/document_debug.rs:12`）
+/// そのもので、**作ったものはそのまま `ProjectSeat::open` で開ける**
+/// （= `--project` 起動と同じ状態になる）。既にあるファイルは踏まない。
+///
+/// dialog はここに無い。呼び手（`BlitzShellApp`）が場所を決めてから呼ぶ。
+pub fn create_project_file(path: &Path) -> Result<(), String> {
+    if path.exists() {
+        return Err(format!("project already exists: {}", path.display()));
+    }
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let mut document = motolii_doc::Document::new_current();
+    // 受け皿のトラックが無いと clip を1本も置けない（`prepare_place_asset_clip`）。
+    let track = document
+        .track_ids
+        .allocate("V1")
+        .map_err(|error| error.to_string())?;
+    document.tracks.push(motolii_doc::Track {
+        id: track,
+        items: vec![],
+    });
+    let mut session =
+        motolii_doc::ProjectSession::acquire(path, &motolii_doc::ResourceLimits::production())
+            .map_err(|error| error.to_string())?;
+    session
+        .save_document(&document, &motolii_doc::SaveOptions::default())
+        .map_err(|error| error.to_string())
+    // session はここで落ちて lock を返す。開くのは呼び手（`reseat_project`）。
+}
+
+/// 座席を差し替える。**旧 session の lock をいつ返すかがここの全部である。**
+///
+/// - 別の project … 新しい席を**先に開いてから**旧席を落とす。開けなくても
+///   いま編集している席を失わない
+/// - 同じ project … 先に旧席を落として lock を返してから開き直す
+///   （そうしないと自分の lock に自分がぶつかる）
+///
+/// 開けなければ `Err(理由)` で、app は落とさない。dialog はここに無い。
+pub fn reseat_project(current: &mut Option<ProjectSeat>, path: &Path) -> Result<(), String> {
+    if current
+        .as_ref()
+        .is_some_and(|seat| same_project(seat.path(), path))
+    {
+        // 旧 session を先に落として lock を返す。
+        *current = None;
+    }
+    let seat = ProjectSeat::open(path)?;
+    // ここで初めて旧席（別 project の場合）が落ちる。
+    *current = Some(seat);
+    Ok(())
+}
+
+/// 同じ project を指しているか。symlink や `./` の違いで別物に見えないよう、
+/// 取れるなら canonical path で比べる。
+fn same_project(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
+
+/// OS から窓へ落ちてきた path 群を受ける。**返すのは一言の status。**
+///
+/// project が開いていないときは Document が無いので取り込めない。黙って
+/// 捨てず、**先に project を作る／開く**と案内する（v0。ドロップから
+/// 新規 project を作る意味はまだ決めていない）。
+pub fn admit_dropped_paths(seat: Option<&mut ProjectSeat>, paths: &[PathBuf]) -> String {
+    let Some(seat) = seat else {
+        return "open a project first — Cmd+N to create one, Cmd+O to open one".to_owned();
+    };
+    if paths.is_empty() {
+        return "nothing dropped".to_owned();
+    }
+    seat.editor_mut().import_dropped_media(paths).summary()
+}
+
 /// Blitz パネルを合体表示するアプリ本体。
 pub struct BlitzShellApp {
     /// `blitz_net::Provider` は Tokio reactor を要求し、無いと panic する。
@@ -130,6 +218,9 @@ pub struct BlitzShellApp {
     /// Stage へ最後に配った snapshot の revision。エディタの編集で進んでいたら
     /// 次のフレームで新しい snapshot を配り直す（Stage の描画コードは触らない）。
     seated_revision: u64,
+    /// 窓ぜんたいに関わる一言（ドロップ・New・Open の結果）。空なら帯を出さない。
+    /// Timeline の中の出来事は従来どおりエディタ自身の status が言う。
+    status: String,
 }
 
 impl BlitzShellApp {
@@ -175,6 +266,7 @@ impl BlitzShellApp {
             tree: build_initial_tree(snapshot.as_ref()),
             project,
             seated_revision,
+            status: String::new(),
         }
     }
 
@@ -182,6 +274,97 @@ impl BlitzShellApp {
     pub fn project(&self) -> Option<&ProjectSeat> {
         self.project.as_ref()
     }
+
+    /// 窓の一言（読み）。
+    pub fn status(&self) -> &str {
+        &self.status
+    }
+
+    /// 座席を差し替えて、Stage を新しい Document へ座らせ直す。
+    ///
+    /// 座り直しは既存の経路をそのまま使う: 開けたら `seat_stage_documents`
+    /// （編集のたびに Stage へ配り直しているのと同じ関数）、席を失ったときだけ
+    /// `build_initial_tree(None)` で fixture の並びへ戻す。
+    fn reseat(&mut self, path: &Path) {
+        match reseat_project(&mut self.project, path) {
+            Ok(()) => {
+                let seat = self.project.as_ref().expect("reseat_project seated one");
+                let snapshot = seat.snapshot();
+                self.seated_revision = seat.editor().revision();
+                seat_stage_documents(&mut self.tree, &snapshot);
+                self.status = format!("opened {}", path.display());
+            }
+            Err(error) => {
+                // 同じ project を開き直そうとして落ちた時だけ席が空く。
+                // 黙って fixture に見えないよう、並びも status も合わせる。
+                if self.project.is_none() {
+                    self.tree = build_initial_tree(None);
+                    self.seated_revision = 0;
+                }
+                self.status = error;
+            }
+        }
+    }
+
+    /// ドロップ・New・Open を受ける。**描く前に1回だけ**通す。
+    fn handle_file_entry(&mut self, ctx: &egui::Context) {
+        // ---- New / Open。dialog は main thread を止めて開く（eframe 慣行） ----
+        let (new_project, open_project) = ctx.input_mut(|input| {
+            (
+                input.consume_shortcut(&egui::KeyboardShortcut::new(
+                    egui::Modifiers::COMMAND,
+                    egui::Key::N,
+                )),
+                input.consume_shortcut(&egui::KeyboardShortcut::new(
+                    egui::Modifiers::COMMAND,
+                    egui::Key::O,
+                )),
+            )
+        });
+        if new_project {
+            if let Some(path) = prompt_new_project_path() {
+                match create_project_file(&path) {
+                    Ok(()) => self.reseat(&path),
+                    Err(error) => self.status = error,
+                }
+            }
+        }
+        if open_project {
+            if let Some(path) = prompt_open_project_path() {
+                self.reseat(&path);
+            }
+        }
+
+        // ---- ドロップ。native では path が入っている ----
+        let dropped: Vec<PathBuf> = ctx.input(|input| {
+            input
+                .raw
+                .dropped_files
+                .iter()
+                .filter_map(|file| file.path.clone())
+                .collect()
+        });
+        if !dropped.is_empty() {
+            self.status = admit_dropped_paths(self.project.as_mut(), &dropped);
+        }
+    }
+}
+
+/// New の場所を訊く。**dialog はここだけ**で、判定できる列は外にある。
+fn prompt_new_project_path() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .set_title("New Motolii project")
+        .add_filter("Motolii project", &["json"])
+        .set_file_name("untitled.json")
+        .save_file()
+}
+
+/// Open するファイルを訊く。同上。
+fn prompt_open_project_path() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .set_title("Open Motolii project")
+        .add_filter("Motolii project", &["json"])
+        .pick_file()
 }
 
 impl eframe::App for BlitzShellApp {
@@ -193,6 +376,24 @@ impl eframe::App for BlitzShellApp {
         // フレーム全体を reactor の中で回す。
         let _guard = self.runtime.enter();
 
+        // ファイルの入口（ドロップ / New / Open）は描く前に通す。
+        let ctx = ui.ctx().clone();
+        self.handle_file_entry(&ctx);
+
+        // 窓の一言。何か言うことがある時だけ帯が出る（常設の面を増やさない）。
+        if !self.status.is_empty() {
+            egui::Panel::bottom("blitz_shell_status").show_inside(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.add_space(STATUS_PAD_X);
+                    ui.label(
+                        egui::RichText::new(&self.status)
+                            .size(STATUS_FONT_SIZE)
+                            .color(crate::timeline_editor::ACCENT),
+                    );
+                });
+            });
+        }
+
         let mut behavior = BlitzShellBehavior {
             render_state: &self.render_state,
             editor: self.project.as_mut().map(ProjectSeat::editor_mut),
@@ -202,6 +403,9 @@ impl eframe::App for BlitzShellApp {
             self.tree.ui(&mut behavior, ui);
         });
         drop(behavior);
+
+        // 掴んだファイルが窓の上に来ているあいだ、受け取れることを見せる。
+        paint_drop_hint(&ctx, self.project.is_some());
 
         // エディタ（か Undo/Redo）が Document を進めていたら、同じ新 snapshot を
         // Stage へ配り直す。Stage の描画コードは変えない — 渡す `Arc` の更新だけ。
@@ -214,6 +418,55 @@ impl eframe::App for BlitzShellApp {
             }
         }
     }
+}
+
+/// browser-library.css:47 の toolbar と同じ余白・字送りを status 帯にも使う
+/// （新しい寸法をここで決めない）。
+const STATUS_PAD_X: f32 = 5.0;
+const STATUS_FONT_SIZE: f32 = 9.0;
+
+/// ファイルを掴んだまま窓の上に来ているあいだの見せ方。
+///
+/// egui 慣行どおり `hovered_files` を見て前面レイヤに1枚だけ被せる。色は
+/// Browser パネルの token をそのまま使い、新しい色を決めない。
+/// 座席が無いときは「取り込めない」ことが分かる言葉にする。
+fn paint_drop_hint(ctx: &egui::Context, seated: bool) {
+    let hovering = ctx.input(|input| input.raw.hovered_files.len());
+    if hovering == 0 {
+        return;
+    }
+    let screen = ctx.content_rect();
+    let painter = ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::new("blitz_shell_drop_hint"),
+    ));
+    // 面は暗く落として、縁だけ accent で囲む（Browser の focus 枠と同じ考え）。
+    painter.rect_filled(
+        screen,
+        egui::CornerRadius::ZERO,
+        egui::Color32::from_black_alpha(96),
+    );
+    painter.rect_stroke(
+        screen.shrink(4.0),
+        egui::CornerRadius::ZERO,
+        egui::Stroke::new(2.0, crate::timeline_editor::ACCENT),
+        egui::StrokeKind::Inside,
+    );
+    let message = if seated {
+        format!(
+            "drop {hovering} file{} to place at the playhead",
+            if hovering == 1 { "" } else { "s" }
+        )
+    } else {
+        "open a project first — Cmd+N to create one, Cmd+O to open one".to_owned()
+    };
+    painter.text(
+        screen.center(),
+        egui::Align2::CENTER_CENTER,
+        message,
+        egui::FontId::proportional(14.0),
+        crate::timeline_editor::ACCENT,
+    );
 }
 
 /// tree の中の Stage pane 全部へ、新しい snapshot を配り直す。

@@ -49,8 +49,10 @@
 //! 実行: `cargo run --profile fast -p motolii-ui --example timeline_egui_lab`
 
 mod audio_seat;
+mod import_seat;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use crate::timeline_rows::{rows, ParamRef, RowKind, TimelineFoldState, TimelineRow};
 use audio_seat::{AudioPlayback, WallClockReason};
@@ -81,7 +83,9 @@ const TRACK_BAND: Color32 = Color32::from_rgb(0x2f, 0x2f, 0x2f);
 const RULE: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
 const INK: Color32 = Color32::from_rgb(0xd4, 0xd4, 0xd4);
 const DIM: Color32 = Color32::from_rgb(0x8d, 0x8d, 0x8d);
-const ACCENT: Color32 = Color32::from_rgb(0xe9, 0xcf, 0x72);
+/// 「いま効いている」を言う一色。status の字と、殻のドロップ枠が共有する
+/// (殻で別の色を決めないため `pub(crate)`)。
+pub(crate) const ACCENT: Color32 = Color32::from_rgb(0xe9, 0xcf, 0x72);
 const KEY_IDLE: Color32 = Color32::from_rgb(0x35, 0x35, 0x35);
 // M / S が入っているときの下地。モックの採用値
 const MUTE_ON: Color32 = Color32::from_rgb(0x65, 0x3b, 0x34);
@@ -1033,6 +1037,43 @@ fn begin_move_many(document: &Document, roots: &[LayerId], layer: LayerId, grab_
     }
 }
 
+/// OS から落ちた file 群を取り込んだ結果。**飛ばしたものも数に入れる** —
+/// 黙って減るのが一番分からないので、理由ごと持って帰って status に出す。
+#[derive(Debug, Default)]
+pub struct MediaDropOutcome {
+    /// 置けたもの: 落ちたファイルと、そこに立った clip の layer。
+    pub placed: Vec<(PathBuf, LayerId)>,
+    /// 飛ばしたもの: 落ちたファイルと理由。
+    pub skipped: Vec<(PathBuf, String)>,
+}
+
+impl MediaDropOutcome {
+    /// 一言でどうなったかを言う。**飛ばしたものは必ず名指しで出す。**
+    pub fn summary(&self) -> String {
+        fn label(path: &std::path::Path) -> String {
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string())
+        }
+        let placed: Vec<String> = self.placed.iter().map(|(path, _)| label(path)).collect();
+        let skipped: Vec<String> = self
+            .skipped
+            .iter()
+            .map(|(path, reason)| format!("{}: {reason}", label(path)))
+            .collect();
+        match (placed.is_empty(), skipped.is_empty()) {
+            (true, true) => "nothing dropped".to_owned(),
+            (false, true) => format!("placed {}", placed.join(", ")),
+            (true, false) => format!("skipped {}", skipped.join("; ")),
+            (false, false) => format!(
+                "placed {}  ·  skipped {}",
+                placed.join(", "),
+                skipped.join("; ")
+            ),
+        }
+    }
+}
+
 /// Timeline エディタ本体。**Document の唯一の writer をここに1つだけ抱える**
 /// (single writer)。外へ出て行くのは `document()` の immutable snapshot だけで、
 /// 第二の writer も Document clone 編集もここから先に作らない。
@@ -1177,6 +1218,54 @@ impl TimelineEditor {
     /// 座っている project root(読み)。座席の配線テストが見る。
     pub fn project_root(&self) -> Option<&std::path::Path> {
         self.project_root.as_deref()
+    }
+
+    /// 一番下に出ている一言(読み)。**落ちた編集の理由もここに出る。**
+    pub fn status(&self) -> &str {
+        &self.status
+    }
+
+    /// playhead(秒)。ドロップした素材が立つのはここ。
+    pub fn playhead_seconds(&self) -> f32 {
+        self.playhead
+    }
+
+    /// playhead を置く。**スクラブと同じ値の置き換え**で、再生や音の座席は触らない
+    /// (再生中に動かした時の追従は `show` の中の既存経路が見る)。
+    pub fn set_playhead_seconds(&mut self, seconds: f32) {
+        let comp = self.document.composition.duration.as_seconds_f64() as f32;
+        self.playhead = seconds.clamp(0.0, comp);
+    }
+
+    /// OS から落ちてきた media を**1本ずつ** playhead へ取り込む。
+    ///
+    /// probe できないもの(拡張子が対象外、stream が無い、読めない)は
+    /// **理由を持って飛ばす**。1本落ちても残りは通る。列そのものは
+    /// `import_seat`(= CLI の import / place と同じ関数列)が持つ。
+    pub fn import_dropped_media(&mut self, paths: &[PathBuf]) -> MediaDropOutcome {
+        let mut outcome = MediaDropOutcome::default();
+        for path in paths {
+            match self.import_media_at_playhead(path) {
+                Ok(layer) => outcome.placed.push((path.clone(), layer)),
+                Err(reason) => outcome.skipped.push((path.clone(), reason)),
+            }
+        }
+        self.status = outcome.summary();
+        outcome
+    }
+
+    /// media 1本を playhead へ取り込む。成否は呼び手(`import_dropped_media`)が数える。
+    fn import_media_at_playhead(&mut self, media: &std::path::Path) -> Result<LayerId, String> {
+        let fps = self.document.composition.fps;
+        let comp = self.document.composition.duration.as_seconds_f64() as f32;
+        let at = seconds_to_time(self.playhead.clamp(0.0, comp), fps)
+            .ok_or_else(|| "the playhead is not a placeable time".to_owned())?;
+        let root = self.project_root.clone();
+        let placed = import_seat::import_and_place(&mut self.writer, media, root.as_deref(), at);
+        // 通っても落ちても、writer が進んでいれば cached snapshot は取り直す。
+        // 行の名前は Document の台帳(`layer_names`)から来るので、ここでは控えない。
+        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+        placed
     }
 
     /// pane / Stage へ流す immutable snapshot(cached。取り直しは revision が合図)。
