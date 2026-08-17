@@ -4419,8 +4419,12 @@ fn time(ms: i64) -> RationalTime {
     RationalTime::try_new(ms, 1000).expect("fixture time")
 }
 
-fn keys_at(document: &mut Document, seconds: &[f64], v: DocValue) -> DocParam {
-    // single-writer-exempt: fixture が Document を所有している(writer より前)
+// single-writer-exempt の理由は引数行に同居(guard は同一行コメントだけを honor する)。
+fn keys_at(
+    document: &mut Document, // single-writer-exempt: fixture が Document を所有している(writer より前)
+    seconds: &[f64],
+    v: DocValue,
+) -> DocParam {
     let mut track = DocKeyframeTrack::new();
     for s in seconds {
         let id = KeyframeId::from_raw(document.next_stable_id.allocate().expect("key id"));
