@@ -58,6 +58,8 @@ pub enum PropertyId {
     ItemColor,
     LayerName,
     Locator,
+    /// `SetSoundtrack`(Document直下のsingleton — 対象IDを持たない)。
+    Soundtrack,
 }
 
 impl From<ScalarPropertyId> for PropertyId {
@@ -141,6 +143,7 @@ pub enum CommandKind {
     RemoveLocator,
     SetLocatorTime,
     SetLocatorText,
+    SetSoundtrack,
 }
 
 /// S18: `gesture_id + command_kind + target_stable_id + property_id`。

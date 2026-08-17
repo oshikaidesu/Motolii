@@ -3,7 +3,8 @@ use crate::Document;
 
 use super::asset::{apply_admit_asset, apply_remove_asset};
 use super::clip::{
-    apply_reparent_track_item, validate_clip_duration, validate_clip_in_payload, validate_clip_start,
+    apply_reparent_track_item, validate_clip_duration, validate_clip_in_payload,
+    validate_clip_start,
 };
 use super::effect::{
     apply_copy_local_effect, apply_create_effect, apply_link_effect_use, apply_restore_effect_use,
@@ -20,8 +21,8 @@ use super::locate::{
 };
 use super::position_key::{
     apply_add_position_key, apply_remove_position_key, apply_set_position_key_interp,
-    apply_set_position_key_time, apply_set_position_key_value,
-    apply_set_transform_param_key_time, undo_add_position_key, undo_remove_position_key,
+    apply_set_position_key_time, apply_set_position_key_value, apply_set_transform_param_key_time,
+    undo_add_position_key, undo_remove_position_key,
 };
 use super::split::{apply_split_clip, apply_unsplit_clip};
 use super::track_item::{apply_add_track_item, apply_remove_track_item};
@@ -456,25 +457,39 @@ impl Command {
                 Ok(())
             }
             Command::SetLocatorTime { index, new, .. } => {
-                let locator = doc
-                    .locators
-                    .get_mut(*index)
-                    .ok_or(CommandError::IndexOutOfRange {
-                        index: *index,
-                        len: 0,
-                    })?;
+                let locator =
+                    doc.locators
+                        .get_mut(*index)
+                        .ok_or(CommandError::IndexOutOfRange {
+                            index: *index,
+                            len: 0,
+                        })?;
                 locator.t = *new;
                 Ok(())
             }
             Command::SetLocatorText { index, new, .. } => {
-                let locator = doc
-                    .locators
-                    .get_mut(*index)
-                    .ok_or(CommandError::IndexOutOfRange {
-                        index: *index,
-                        len: 0,
-                    })?;
+                let locator =
+                    doc.locators
+                        .get_mut(*index)
+                        .ok_or(CommandError::IndexOutOfRange {
+                            index: *index,
+                            len: 0,
+                        })?;
                 locator.text = new.clone();
+                Ok(())
+            }
+            Command::SetSoundtrack { new, .. } => {
+                // asset参照はvalidateと同じ台帳基準で拒否する(不在なら書かない)。
+                if let Some(soundtrack) = new {
+                    if doc.assets.get(soundtrack.asset).is_none() {
+                        return Err(CommandError::Validate(
+                            crate::validate::DocumentError::UnknownAssetId {
+                                id: soundtrack.asset.get(),
+                            },
+                        ));
+                    }
+                }
+                doc.soundtrack = *new;
                 Ok(())
             }
         }

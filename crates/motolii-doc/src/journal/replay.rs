@@ -169,6 +169,10 @@ fn decode_edit(payload: &[u8]) -> Result<DecodedJournalEdit, String> {
                     "asset lifecycle commands require journal edit format_version 3".into(),
                 );
             }
+            // v3 writer cutover後に導入されたvariant — v2 writerが書けた事実はない。
+            if matches!(&edit.command, Command::SetSoundtrack { .. }) {
+                return Err("soundtrack commands require journal edit format_version 3".into());
+            }
             Ok(DecodedJournalEdit::V2OrV3(Box::new(edit.command)))
         }
         v if v == u64::from(V3_EDIT_FORMAT_VERSION) => {
@@ -446,6 +450,22 @@ mod replay_tests {
             let error = decode_edit(&payload).unwrap_err();
             assert!(error.contains("require journal edit format_version 3"));
         }
+    }
+
+    #[test]
+    fn v2_edit_rejects_v3_only_soundtrack_command() {
+        let soundtrack =
+            crate::Soundtrack::try_new(AssetId::from_raw(0), RationalTime::ZERO, 1.0).unwrap();
+        let payload = edit_payload(&JournalEdit {
+            format_version: V2_EDIT_FORMAT_VERSION,
+            command: Command::SetSoundtrack {
+                old: None,
+                new: Some(soundtrack),
+            },
+        })
+        .unwrap();
+        let error = decode_edit(&payload).unwrap_err();
+        assert!(error.contains("require journal edit format_version 3"));
     }
 
     #[test]
