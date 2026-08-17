@@ -24,6 +24,8 @@
 //!   - `Cmd/Ctrl + Z` / `Shift+Z` … Undo / Redo
 //!   - `Cmd/Ctrl + D`      … 選択中の layer を複製
 //!   - `Delete` / `Backspace` … 選択中の layer を削除（Group は中身ごと）
+//!   - `M` キー            … playhead にロケータを打つ。**再生中でも止めずに打てる**
+//!     （曲を通しで聴きながらセクションを割る。同一フレームへの連打は1つに畳む）
 //!
 //! ## 面の動かし方（AE / Premiere と同じ割り当て）
 //!
@@ -1751,6 +1753,34 @@ impl TimelineEditor {
             let index = self.document.locators.len().saturating_sub(1);
             self.editing_locator = Some((index, name.clone()));
             self.status = format!("{name} at {at:.2}s  undo {}", self.writer.undo_len());
+        }
+    }
+
+    /// **キー1本のタップで playhead にロケータを置く。** 曲を通しで聴きながら
+    /// セクションを割る操作(Ableton の再生中 locator 追加と同じ)なので、
+    /// 再生中でも停止中でも同じキーで効き、再生は止めず、リネーム編集にも
+    /// 入らない(名前は右クリック追加と同じ自動連番)。
+    /// **同一フレームへの連打は1つに畳む** — 連打で同位置に山を作らない。
+    fn tap_locator(&mut self) {
+        let fps = self.document.composition.fps;
+        let comp = self.document.composition.duration.as_seconds_f64() as f32;
+        let Some(t) = seconds_to_time(self.playhead.clamp(0.0, comp), fps) else {
+            return;
+        };
+        // 既に同じフレームに立っているなら何もしない。undo 台帳にも積まない
+        if self.document.locators.iter().any(|l| l.t == t) {
+            self.status = format!("locator already at {:.2}s", t.as_seconds_f64());
+            return;
+        }
+        let name = format!("Locator {}", self.document.locators.len() + 1);
+        let prepared: Result<Option<Command>, CommandError> =
+            Ok(Some(self.writer.prepare_add_locator(t, &name)));
+        if self.apply_one("locator", prepared) {
+            self.status = format!(
+                "{name} at {:.2}s  undo {}",
+                t.as_seconds_f64(),
+                self.writer.undo_len()
+            );
         }
     }
 
@@ -4240,12 +4270,12 @@ impl TimelineEditor {
             self.split_selected();
         }
 
-        // `M`。**playhead にメモを置く**(置いた直後から書ける)
+        // `M`。**playhead にメモを置く**(タップ用 — リネームに入らず、再生も止めない)
         if ctx.input(|i| i.key_pressed(egui::Key::M) && !i.modifiers.command)
             && self.renaming.is_none()
             && self.editing_locator.is_none()
         {
-            self.add_locator(self.playhead);
+            self.tap_locator();
         }
 
         // Enter。**1つだけ選んでいるときに名前を編集する**(AE と同じ)
@@ -6442,6 +6472,61 @@ mod tests {
         lab.remove_locator(1);
         assert_eq!(lab.document.locators.len(), 1);
         assert_eq!(lab.document.locators[0].text, "verse");
+    }
+
+    /// **`M` 1本のタップは playhead に置き、リネームに入らない。** 停止中の打ち方。
+    /// 名前は右クリック追加と同じ自動連番が付く。
+    #[test]
+    fn tapping_m_while_stopped_drops_a_named_locator_without_entering_rename() {
+        let mut lab = TimelineEditor::with_fixture();
+        assert!(lab.document.locators.is_empty());
+
+        lab.playhead = 3.0;
+        lab.tap_locator();
+        assert_eq!(lab.document.locators.len(), 1, "{}", lab.status);
+        assert!((lab.document.locators[0].t.as_seconds_f64() as f32 - 3.0).abs() < 1e-3);
+        assert_eq!(
+            lab.document.locators[0].text, "Locator 1",
+            "既定名は自動連番"
+        );
+        assert!(
+            lab.editing_locator.is_none(),
+            "**タップはリネームに入らない** — 再生を妨げない"
+        );
+    }
+
+    /// **再生中のタップは再生を止めない。** DTMer が通しで聴きながら打つ操作。
+    #[test]
+    fn tapping_m_while_playing_adds_a_locator_and_keeps_playing() {
+        let mut lab = TimelineEditor::with_fixture();
+        lab.playing = true;
+        lab.playhead = 7.5;
+
+        lab.tap_locator();
+        assert_eq!(lab.document.locators.len(), 1, "{}", lab.status);
+        assert!((lab.document.locators[0].t.as_seconds_f64() as f32 - 7.5).abs() < 1e-3);
+        assert!(lab.playing, "**タップは再生を止めない**");
+        assert!(lab.editing_locator.is_none(), "再生中にリネームへ入らない");
+    }
+
+    /// **同一フレームへの連打は1つに畳む。** 同位置に山を作らない。
+    #[test]
+    fn double_tapping_the_same_frame_folds_into_one_locator() {
+        let mut lab = TimelineEditor::with_fixture();
+        lab.playhead = 5.0;
+
+        lab.tap_locator();
+        lab.tap_locator();
+        assert_eq!(
+            lab.document.locators.len(),
+            1,
+            "同一フレームは畳む: {}",
+            lab.status
+        );
+
+        // 畳んだ連打は undo 台帳にも積まれない — 1回の Undo で消える
+        lab.undo().expect("undo");
+        assert!(lab.document.locators.is_empty(), "1回の Undo で消える");
     }
 
     /// **色は選ぶまで Document に載らない。** 既定は id から導き、並べ替えでは動かない。
