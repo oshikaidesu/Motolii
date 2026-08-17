@@ -1,8 +1,8 @@
-# VSM-A4I 外部作者経路の実測 — LayerSource 専用である
+# VSM-A4I 外部作者経路の実測と汎用化
 
 作成日: 2026-08-17
 
-状態: **観察**
+状態: **観察**（§1〜§3）＋ **実装**（§4）
 
 対象: `scripts/new_plugin_crate.py`（`VSM-A4I` の外部作者 crate scaffold と Host 検査）。
 
@@ -10,7 +10,9 @@
 
 ## 0. なぜ測ったか
 
-「既知解に沿って各種 Vism を作れるか」を確かめる検証ターンとして、scaffold で 1 本、手書きで 1 本作った。結論は**LayerSource なら作れる、Filter は書けるが認定できない**である。
+「既知解に沿って各種 Vism を作れるか」を確かめる検証ターンとして、scaffold で 1 本、手書きで 1 本作った。
+
+出発点の結論は**LayerSource なら作れる、Filter は書けるが認定できない**だった（§1〜§3）。汎用入口が正しいかを検証する過程で、詰まりとした前提が誤りだと分かり、そのまま汎用化まで通した（§4）。
 
 ## 1. scaffold は主張どおり動く（LayerSource）
 
@@ -52,19 +54,45 @@ use candidate::{radial_repeater_contract, RADIAL_REPEATER_LAYER_SOURCE};
 
 scaffold は `PLUGIN_ID` と `display_name` を差し替えるが**シンボル名は fixture のまま残す**。つまり `--check` が通るのは `--from` で生成した crate だけであり、**手書きの外部 crate は識別子を直しても import 行で落ちる**。
 
-## 4. 汎用化に必要なもの（未実施）
+## 4. 汎用化した（実測で通した）
 
-土台は揃っている。
+土台は揃っていた。
 
-- `PluginRegistry` の `register_filter` / `register_layer_source` / `register_param_driver` / `register_composite` — **4種すべてある**
-- `motolii-testkit` の `assert_filter_pure` / `assert_layer_source_pure` / `assert_param_driver_pure` / `assert_composite_pure` — **4種すべてある**
-- fixture となる first-party plugin — Filter は `core.filter.opacity`、ParamDriver は `core.param.sine` が repo にある
+- `PluginRegistry` の `register_*` — 4種すべてある
+- `motolii-testkit` の `assert_*_pure` — 4種すべてある
+- **`PluginRegistry::iter(kind) -> Iterator<(&PluginId, DynPlugin)>`（`crates/motolii-plugin/src/registry.rs:138`）と `DynPlugin`（同 `:256`、4 kindのenumで `desc()` / `kind()` を持つ）** — これで汎用ハーネスが実体を取り出せる
 
-足りないものは 2 つである。
+初版の本節は「registryにkind別の取り出し口が無いため汎用purityが書けない」と書いていたが**誤りである**。`pub fn register_` だけを検索して結論した推論だった。列挙口は最初から存在する。
 
-**(1) `PluginRegistry` の kind 別列挙口。** 汎用ハーネスは `register_plugins(&mut registry)` 方式で実体を受け取る形になるが、purity は `&dyn FilterPlugin` 等の**実体**を要求する。registry から kind 別に取り出す公開 API が無いため、汎用 purity が書けない。`conformance` は contract だけで済むので generic にできる。**詰まるのは purity だけである。**
+汎用化は次の形で成立した。
 
-**(2) golden を作者の opt-in にすること。** 現在のハーネスには radial_repeater 専用の CPU オラクル（`radial_oracle`、約60行）が焼き込まれている。Filter に相当物は無く、**作れない**。期待画像は「その効果が何をするか」という作者の主張であり、Host が生成できるものではない。Host が用意できるのは purity（同じ入力で同じ出力か）までである。crate がオラクルを持たないなら `golden: なし` と明示し、`check passed` と言わないこと。
+**入口**: 外部crateが2本の関数を出す。`reference.rs:14,22` の first-party 向けの形をそのまま使う。
+
+```rust
+pub fn register_contracts(catalog: &mut PluginCatalogBuilder) -> Result<(), PluginContractError>;
+pub fn register_plugins(registry: &mut PluginRegistry) -> Result<(), PluginError>;
+```
+
+複数entryを最初から許し、kind は `PluginContract` が運ぶ。**entry数にもkindにも上限を作らない。**
+
+**ハーネス**: `register_*` を呼び、`registry.iter(kind)` で列挙し、`DynPlugin` で dispatch する。paramsは `NodeDesc` が宣言した既定値だけで組み、fixture固有の値を持ち込まない。未対応kind（ParamDriver / Composite）は**黙って通さず失敗させる**。
+
+**golden**: 作者のopt-inにした。現行ハーネスにあった radial_repeater 専用CPUオラクル（約60行）は汎用化できない。期待画像は「その効果が何をするか」という作者の主張であり、Hostが生成できるものではない。`--check` は golden を回さず、回していないことを明示して出力する。
+
+### 検証結果
+
+同じハーネス・同じ入口2本で、kindの違う2 crateが通った。
+
+```
+LayerSource（scaffold生成 example.layer_source.rgbsplit）
+  conformance ... ok / purity ... ok / check passed
+Filter（手書き example.filter.rgbsplit）
+  conformance ... ok / purity ... ok / check passed
+新規生成（example.layer_source.freshprobe）
+  conformance ... ok / purity ... ok / check passed
+```
+
+**手書きcrateが通ったことが要点である。** 以前は `--from` 生成物しか通らなかった。
 
 ## 5. 入口規約についての非目標
 
@@ -78,16 +106,16 @@ scaffold は `PLUGIN_ID` と `display_name` を差し替えるが**シンボル�
 
 ## 6. カタログへの含み
 
-[Vismプラグインカタログ](../vism-plugin-catalog.md) の SINGLE lane（新しい共通能力を要求しない表現）は12件ある。今日の実測により、外部作者として着手できるかが分かれる。
+[Vismプラグインカタログ](../vism-plugin-catalog.md) の SINGLE lane は12件ある。§3 の時点では LayerSource 3件だけが着手可で、Filter 9件は認定不可だった。§4 の汎用化により、**12件すべてが同じ経路で認定できる**。
 
-- **今日から可能（LayerSource 3件）**: Fractal Field、Gradient Ramp、Deterministic Particle Field
-- **公開 API では書けるが認定できない（Filter 9件）**: RGB Split、Grain、Dither、Halftone、Pixelate、Scanline、Tile、Kaleidoscope、Warp
+ただし golden は作者のopt-inになったため、各表現は自分のオラクルを持ち込む必要がある。Hostが用意するのは conformance と purity までである。
 
-「A4I でサンドボックスの面は決定済み」は、正確には**1 kind 分だけ決まっている**状態である。
+ParamDriver と Composite は purity ハーネスが未対応で、`--check` は黙って通さず失敗する。fixture（`core.param.sine`）は repo にあるので、対応は同じ形の追加で済む。
 
 ## 7. 成果物
 
-- scaffold 生成物: `/private/tmp/vism-scaffold-probe`（`--check` 通過）
-- 手書き Filter: `/private/tmp/vism-rgbsplit-filter`（ビルド通過、`--check` 不可）
+- scaffold 生成物: `/private/tmp/vism-scaffold-probe`
+- 手書き Filter: `/private/tmp/vism-rgbsplit-filter`
+- 新規生成: `/private/tmp/vism-fresh-probe`
 
-どちらも `/private/tmp` にあり、再起動で消える。再現手順は §1〜§3 に書いたコマンドで足りる。
+3本とも `--check` 通過。`/private/tmp` にあるため再起動で消えるが、再現手順は §1 と §4 のコマンドで足りる。手書き Filter の全文は本文書に無く、`core.filter.opacity` を写して `register_contracts` / `register_plugins` を足したものである。

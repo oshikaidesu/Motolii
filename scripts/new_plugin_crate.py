@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ID = "core.layer_source.radial_repeater"
 IDENT_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 PLUGIN_ID_RE = re.compile(r'const\s+PLUGIN_ID:\s*&str\s*=\s*"([^"]+)"')
+# const を強制しない。`PluginId("...")` からも同定する。
+PLUGIN_ID_FALLBACK_RE = re.compile(r'PluginId\(\s*"([^"]+)"\s*\)')
 FORBIDDEN_SOURCE = (
     "motolii_core",
     "motolii_eval",
@@ -120,6 +122,24 @@ are not implemented here.
 '''
 
 
+ENTRY_POINTS_LAYER_SOURCE = """
+
+// Host検査が呼ぶ固定の入口。kind は PluginContract が運ぶため、この2本は kind に依存しない。
+// これはHost内検査の規約であって公開ABIではない(動的ロードは未実装)。
+pub fn register_contracts(
+    catalog: &mut motolii_plugin::PluginCatalogBuilder,
+) -> Result<(), motolii_plugin::PluginContractError> {
+    catalog.register(radial_repeater_contract())
+}
+
+pub fn register_plugins(
+    registry: &mut motolii_plugin::PluginRegistry,
+) -> Result<(), motolii_plugin::PluginError> {
+    registry.register_layer_source(&RADIAL_REPEATER_LAYER_SOURCE)
+}
+"""
+
+
 def generated_source(vendor: str, name: str) -> str:
     template_path = ROOT / "plugins/motolii-plugin-radial-repeater/src/lib.rs"
     source = template_path.read_text(encoding="utf-8")
@@ -145,6 +165,8 @@ def generated_source(vendor: str, name: str) -> str:
     )
     if plugin_id not in source:
         die("source fixture did not accept the generated plugin identity")
+
+    source += ENTRY_POINTS_LAYER_SOURCE
     return source
 
 
@@ -254,9 +276,14 @@ def check_hygiene(crate_dir: Path) -> tuple[str, str]:
             if marker in source:
                 reject(f"forbidden direct reference: {marker}", source_path)
     if plugin_id == "<unresolved>" or not re.fullmatch(
-        r"[a-z][a-z0-9_]*\.layer_source\.[a-z][a-z0-9_]*", plugin_id
+        r"[a-z][a-z0-9_]*\.(layer_source|filter|param_driver|composite)\.[a-z][a-z0-9_]*",
+        plugin_id,
     ):
-        reject("plugin identity must be vendor.layer_source.name", crate_dir / "src/lib.rs")
+        reject(
+            "plugin identity must be vendor.<kind>.name where kind is one of "
+            "layer_source, filter, param_driver, composite",
+            crate_dir / "src/lib.rs",
+        )
     if plugin_id.split(".", 1)[0] in {"core", "doc"}:
         reject("plugin identity uses a reserved namespace", crate_dir / "src/lib.rs")
     package_name = toml_literal(package, "name")
@@ -283,29 +310,32 @@ motolii-testkit = {{ path = "{ROOT / 'crates/motolii-testkit'}" }}
 
 HOST_TEST = r'''use std::sync::Arc;
 
-use candidate::{radial_repeater_contract, RADIAL_REPEATER_LAYER_SOURCE};
+use candidate::{register_contracts, register_plugins};
 use motolii_core::{CanonicalPoint, ColorSpace, CompCamera, FrameDesc, PixelFormat};
 use motolii_plugin::{
-    validate_node_desc, LayerSourceContext, LayerSourcePlugin, PluginCatalogBuilder, PluginKind,
-    PluginRegistry, PluginRuntime, RationalTime, ResolvedParams, Value,
+    validate_node_desc, DynPlugin, LayerSourceContext, NodeDesc, PluginCatalogBuilder, PluginKind,
+    PluginRegistry, PluginRuntime, RationalTime, ResolvedParams,
 };
-use motolii_testkit::purity::{
-    assert_layer_source_pure, render_layer_source_rgba, LayerSourceRenderRequest,
-};
-use motolii_testkit::{assert_rgba_close, gpu_or_skip, tol, RgbaImageDesc};
+use motolii_testkit::purity::{assert_filter_pure, assert_layer_source_pure};
+use motolii_testkit::gpu_or_skip;
+
+const KINDS: [PluginKind; 4] = [
+    PluginKind::LayerSource,
+    PluginKind::Filter,
+    PluginKind::ParamDriver,
+    PluginKind::Composite,
+];
 
 fn frame() -> FrameDesc {
     FrameDesc::packed(48, 36, PixelFormat::Rgba8Unorm, ColorSpace::Srgb, true)
 }
 
-fn params() -> ResolvedParams {
+/// NodeDescが宣言した既定値だけでparamsを組む。fixture固有の値を持ち込まない。
+fn params_for(desc: &NodeDesc) -> ResolvedParams {
     let mut params = ResolvedParams::new();
-    params.insert("count", Value::F64(7.0));
-    params.insert("radius", Value::F64(0.27));
-    params.insert("dot_radius", Value::F64(0.055));
-    params.insert("phase", Value::F64(0.35));
-    params.insert("angular_speed", Value::F64(0.85));
-    params.insert("color", Value::Color([0.82, 0.41, 0.19, 0.72]));
+    for def in &desc.params {
+        params.insert(def.id, def.default.clone());
+    }
     params
 }
 
@@ -322,17 +352,42 @@ fn layer_context(frame: FrameDesc) -> LayerSourceContext {
     }
 }
 
+/// Filter purityへ渡す決定的な入力。透明・半透明・不透明を1枚に含める。
+fn input_rgba(frame: FrameDesc) -> Vec<u8> {
+    let mut data = vec![0u8; frame.data_size()];
+    for y in 0..frame.height {
+        for x in 0..frame.width {
+            let offset = ((y * frame.width + x) * 4) as usize;
+            let a = ((x * 255) / frame.width.max(1)) as u8;
+            // premultiplied: RGB <= A を保つ。
+            data[offset] = a;
+            data[offset + 1] = a / 2;
+            data[offset + 2] = a / 3;
+            data[offset + 3] = a;
+        }
+    }
+    data
+}
+
+fn build() -> (PluginCatalogBuilder, PluginRegistry) {
+    let mut catalog = PluginCatalogBuilder::new();
+    register_contracts(&mut catalog).expect("candidate contracts");
+    let mut registry = PluginRegistry::new();
+    register_plugins(&mut registry).expect("candidate registration");
+    (catalog, registry)
+}
+
 #[test]
 fn conformance() {
-    validate_node_desc(PluginKind::LayerSource, RADIAL_REPEATER_LAYER_SOURCE.desc())
-        .expect("candidate NodeDesc");
-    let contract = radial_repeater_contract();
-    let mut catalog = PluginCatalogBuilder::new();
-    catalog.register(contract).expect("candidate contract");
-    let mut registry = PluginRegistry::new();
-    registry
-        .register_layer_source(&RADIAL_REPEATER_LAYER_SOURCE)
-        .expect("candidate registration");
+    let (catalog, registry) = build();
+    let mut seen = 0usize;
+    for kind in KINDS {
+        for (_id, plugin) in registry.iter(kind) {
+            validate_node_desc(plugin.kind(), plugin.desc()).expect("candidate NodeDesc");
+            seen += 1;
+        }
+    }
+    assert!(seen > 0, "candidate registered no plugin");
     PluginRuntime::try_new(Arc::new(catalog.build().expect("catalog")), registry)
         .expect("contract and executor parity");
 }
@@ -341,86 +396,48 @@ fn conformance() {
 fn purity() {
     let gpu = gpu_or_skip().expect("required GPU adapter for external plugin check");
     let frame = frame();
-    let params = params();
-    assert_layer_source_pure(
-        "external-radial-purity",
-        &gpu,
-        &RADIAL_REPEATER_LAYER_SOURCE,
-        RationalTime::try_new(5, 4).expect("time"),
-        &params,
-        layer_context(frame),
-        frame,
-    )
-    .expect("candidate purity");
-}
-
-#[test]
-fn golden() {
-    let gpu = gpu_or_skip().expect("required GPU adapter for external plugin check");
-    let frame = frame();
-    let params = params();
     let t = RationalTime::try_new(5, 4).expect("time");
-    let mut pipelines = motolii_plugin::PipelineCache::new();
-    let actual = render_layer_source_rgba(
-        "external-radial-golden",
-        &gpu,
-        &mut pipelines,
-        &LayerSourceRenderRequest {
-            plugin: &RADIAL_REPEATER_LAYER_SOURCE,
-            t,
-            params: &params,
-            ctx: layer_context(frame),
-            frame,
-        },
-    )
-    .expect("candidate render");
-    let expected = radial_oracle(frame, t);
-    assert!(expected.iter().any(|value| *value != 0), "golden must not default transparent");
-    assert_rgba_close(
-        "external-radial-golden",
-        RgbaImageDesc { width: frame.width, height: frame.height },
-        &actual,
-        &expected,
-        tol::GPU_RASTER,
-    );
-}
+    let (_catalog, registry) = build();
+    let mut checked = 0usize;
+    let mut unsupported: Vec<String> = Vec::new();
 
-fn radial_oracle(frame: FrameDesc, t: RationalTime) -> Vec<u8> {
-    let count = 7u32;
-    let radius = 0.27;
-    let dot_radius = 0.055;
-    let phase = 0.35;
-    let angular_speed = 0.85;
-    let color = [0.82, 0.41, 0.19, 0.72];
-    let width = f64::from(frame.width);
-    let height = f64::from(frame.height);
-    let mut output = vec![0; frame.data_size()];
-    for y in 0..frame.height {
-        for x in 0..frame.width {
-            let px = (f64::from(x) + 0.5 - width / 2.0) / height;
-            let py = (height / 2.0 - (f64::from(y) + 0.5)) / height;
-            let mut distance = f64::INFINITY;
-            for index in 0..count {
-                let theta = phase
-                    + angular_speed * t.as_seconds_f64()
-                    + 2.0 * std::f64::consts::PI * f64::from(index) / f64::from(count);
-                let center = (radius * theta.cos(), radius * theta.sin());
-                distance = distance.min(((px - center.0).powi(2) + (py - center.1).powi(2)).sqrt() - dot_radius);
-            }
-            let coverage = (0.5 - distance / (1.0 / height)).clamp(0.0, 1.0);
-            let pixel = [
-                color[0] * color[3] * coverage,
-                color[1] * color[3] * coverage,
-                color[2] * color[3] * coverage,
-                color[3] * coverage,
-            ];
-            let offset = ((y * frame.width + x) * 4) as usize;
-            for (channel, value) in pixel.into_iter().enumerate() {
-                output[offset + channel] = (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    for kind in KINDS {
+        for (id, plugin) in registry.iter(kind) {
+            let params = params_for(plugin.desc());
+            let label = format!("external-{}", id.0);
+            match plugin {
+                DynPlugin::LayerSource(p) => {
+                    assert_layer_source_pure(
+                        &label,
+                        &gpu,
+                        p,
+                        t,
+                        &params,
+                        layer_context(frame),
+                        frame,
+                    )
+                    .expect("candidate purity");
+                    checked += 1;
+                }
+                DynPlugin::Filter(p) => {
+                    assert_filter_pure(&label, &gpu, p, t, &params, frame, &input_rgba(frame))
+                        .expect("candidate purity");
+                    checked += 1;
+                }
+                // 未対応のkindを黙って通さない。回していないものは回していないと言う。
+                DynPlugin::ParamDriver(_) | DynPlugin::Composite(_) => {
+                    unsupported.push(format!("{} ({:?})", id.0, plugin.kind()));
+                }
             }
         }
     }
-    output
+
+    assert!(
+        unsupported.is_empty(),
+        "purity harness does not cover these kinds yet: {}",
+        unsupported.join(", ")
+    );
+    assert!(checked > 0, "no plugin was purity-checked");
 }
 '''
 
@@ -482,9 +499,13 @@ def check(args: argparse.Namespace) -> None:
             host_harness_manifest(candidate, package_name), encoding="utf-8"
         )
         (harness / "src/lib.rs").write_text(HOST_TEST, encoding="utf-8")
-        for stage in ("conformance", "purity", "golden"):
+        for stage in ("conformance", "purity"):
             run_host_stage(harness, stage, crate_dir, plugin_id)
     print(f"check passed: crate={crate_dir} plugin={plugin_id}")
+    print(
+        "golden: not run. The expected image is the author's claim about their own "
+        "effect, so a Host-side oracle cannot stand in for it."
+    )
 
 
 def parse_args() -> argparse.Namespace:
