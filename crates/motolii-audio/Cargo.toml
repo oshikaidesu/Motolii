@@ -16,6 +16,9 @@ symphonia = { version = "0.6", default-features = false, features = [
     "aiff",
     "alac",
     "flac",
+    # m4a/mp4 container demux。codec(aac)だけでは器が開けず
+    # 「unsupported feature: core (probe)」で落ちる(2026-08-18実測)。
+    "isomp4",
     "mp1",
     "mp2",
     "mp3",

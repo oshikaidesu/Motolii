@@ -160,3 +160,24 @@ fn decode_respects_max_samples_limit() {
         } if observed > 100
     ));
 }
+
+/// m4a(MP4 container)のdecode。codec featureだけでは器が開けず
+/// 「unsupported feature: core (probe)」になる退行を防ぐ(2026-08-18、isomp4追加)。
+#[test]
+fn decode_m4a_container_with_aac() {
+    if !motolii_testkit::ffmpeg_or_skip() {
+        return;
+    }
+    let dir = motolii_testkit::tmp_dir("decode_m4a");
+    let path = dir.join("tone.m4a");
+    let status = std::process::Command::new("ffmpeg")
+        .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+        .arg("sine=frequency=440:sample_rate=48000:duration=0.3")
+        .args(["-c:a", "aac", "-b:a", "96k"])
+        .arg(&path)
+        .status()
+        .expect("spawn ffmpeg");
+    assert!(status.success());
+    let cache = decode_file(&path).expect("decode m4a container");
+    assert!(cache.frame_count() > 0, "decoded frames must be non-empty");
+}
