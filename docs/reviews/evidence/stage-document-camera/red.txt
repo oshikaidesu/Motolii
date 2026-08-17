@@ -1,0 +1,32 @@
+warning: `motolii-ui` (lib test) generated 57 warnings (run `cargo fix --lib -p motolii-ui --tests` to apply 6 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.17s
+     Running unittests src/lib.rs (target/debug/deps/motolii_ui-0c7d03e82a92ceea)
+
+running 5 tests
+test rerun_stage::adapter::tests::rerun_default_scene_coordinates_look_at_the_comp_plane_edge_on ... ok
+test rerun_stage::adapter::tests::stage_scene_coordinates_put_the_default_eye_in_front_of_the_comp_plane ... ok
+test rerun_stage::adapter::tests::scene_view_coordinates_chunk_sits_at_the_recording_root ... ok
+test rerun_stage::adapter::tests::a_freshly_built_stage_already_faces_the_composition_head_on ... FAILED
+test rerun_stage::adapter::tests::fitting_the_view_keeps_the_document_camera_head_on ... FAILED
+
+failures:
+
+---- rerun_stage::adapter::tests::a_freshly_built_stage_already_faces_the_composition_head_on stdout ----
+
+thread 'rerun_stage::adapter::tests::a_freshly_built_stage_already_faces_the_composition_head_on' (18457302) panicked at crates/motolii-ui/src/rerun_stage/adapter.rs:871:14:
+構築直後の Stage に document camera が置かれていない
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- rerun_stage::adapter::tests::fitting_the_view_keeps_the_document_camera_head_on stdout ----
+
+thread 'rerun_stage::adapter::tests::fitting_the_view_keeps_the_document_camera_head_on' (18457303) panicked at crates/motolii-ui/src/rerun_stage/adapter.rs:902:14:
+fit_view の後に document camera が無い(Rerun 既定へ戻っている)
+
+
+failures:
+    rerun_stage::adapter::tests::a_freshly_built_stage_already_faces_the_composition_head_on
+    rerun_stage::adapter::tests::fitting_the_view_keeps_the_document_camera_head_on
+
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 297 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p motolii-ui --lib`

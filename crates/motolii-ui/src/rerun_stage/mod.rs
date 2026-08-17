@@ -1,4 +1,5 @@
 mod adapter;
+mod document_camera;
 mod gizmo;
 mod host_mesh;
 

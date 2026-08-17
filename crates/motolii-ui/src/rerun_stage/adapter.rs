@@ -14,6 +14,7 @@ use transform_gizmo::{
 
 use crate::stage_app_geometry::{AppStageGeometry, AppStageTransformEdit};
 
+use super::document_camera::document_camera;
 use super::host_mesh::{
     hidden_layer_mesh, host_layer_fill_is_visible, host_layer_mesh_paths, ingest_host_layer_meshes,
     ingest_mesh,
@@ -89,6 +90,11 @@ pub struct EmbeddedSpatialStage {
     /// 評価済み Document frame を Image visualizer へ載せているか。
     pub(super) evaluated_frame_active: bool,
     pub(super) host_viewport: Option<(u32, u32)>,
+    /// composition の縦横比。document camera の横合わせに使う。
+    /// `None` は「まだ聞いていない」— 画枠と同じ形と見なす。
+    pub(super) composition_aspect: Option<f32>,
+    /// Stage 面の縦横比(物理px)。同上。
+    pub(super) stage_viewport_aspect: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -202,14 +208,55 @@ impl EmbeddedSpatialStage {
             feedback: None,
             evaluated_frame_active: false,
             host_viewport: None,
+            composition_aspect: None,
+            stage_viewport_aspect: None,
         };
         // 既定カメラを comp 平面の正面側へ置く。**Rerun の camera 機構の中で**決める
         // (独自 camera を持たない)ので、scene の向きを先に伝える。
         if !ingest_scene_view_coordinates(&mut stage.spatial_stage) {
             return Err("ingest Rerun scene view coordinates".to_string());
         }
+        // 既定表示は document camera(正対)。**最初の1フレーム目から**置く
+        // — Rerun の既定 eye が一度でも出ると、開いた瞬間だけ斜めの絵が見える。
+        // 面の大きさも comp の縦横比もまだ聞いていないので、ここでは
+        // 「画枠と comp が同じ形」の縦合わせになる(`document_camera` の注記)。
+        stage.place_document_camera();
         // 製品マウントでは fixture rect を出さない。host snapshot / 評価フレームが正本。
         Ok(stage)
+    }
+
+    /// 今分かっている comp / 画枠の縦横比で document camera を組み直して置く。
+    ///
+    /// 片方しか分かっていないときは**もう片方も同じ形**と見なす。その仮定では
+    /// 縦合わせと横合わせが一致するので、既知の側だけで距離が決まる
+    /// (推測した縦横比で切ってしまうことがない)。
+    fn place_document_camera(&mut self) {
+        let (comp_aspect, viewport_aspect) =
+            match (self.composition_aspect, self.stage_viewport_aspect) {
+                (Some(comp), Some(viewport)) => (comp, viewport),
+                (Some(comp), None) => (comp, comp),
+                (None, Some(viewport)) => (viewport, viewport),
+                (None, None) => (1.0, 1.0),
+            };
+        self.spatial_stage
+            .set_camera(document_camera(comp_aspect, viewport_aspect));
+    }
+
+    /// composition の縦横比(幅/高さ)を伝える。**変わった時だけカメラを組み直す。**
+    ///
+    /// 出所は Document の `Composition`(正準では高さ1.0固定なので縦横比が寸法の全部)。
+    /// 解像度が変われば縦横比も変わるので、ここが「composition 解像度変更時」の口である。
+    /// 毎フレーム同じ値で呼ばれても、カメラは動かない(再生中に視点が跳ねない)。
+    pub fn set_composition_aspect(&mut self, aspect: f32) -> bool {
+        if !aspect.is_finite() || aspect <= 0.0 {
+            return false;
+        }
+        if self.composition_aspect == Some(aspect) {
+            return true;
+        }
+        self.composition_aspect = Some(aspect);
+        self.place_document_camera();
+        true
     }
 
     pub fn pointer(
@@ -404,11 +451,18 @@ impl EmbeddedSpatialStage {
         true
     }
 
+    /// 面の大きさに合わせて document camera を掛け直す。
+    ///
+    /// **`SpatialStage::reset_view()` は呼ばない。** あれは Rerun 自身の framing
+    /// (斜め見下ろしの既定 eye)へ戻す口で、置いた camera も落としてしまう
+    /// — 面を広げるたびに正対が壊れることになる。
     pub fn fit_view(&mut self, viewport_width: u32, viewport_height: u32) -> bool {
         if viewport_width == 0 || viewport_height == 0 {
             return false;
         }
-        self.spatial_stage.reset_view();
+        let aspect = f64::from(viewport_width) / f64::from(viewport_height);
+        self.stage_viewport_aspect = Some(aspect as f32);
+        self.place_document_camera();
         true
     }
 
@@ -810,6 +864,179 @@ mod tests {
         );
         // `eye_pos = center - radius * dir` なので、+Z 側に立つ。
         assert!(-dir[2] > 0.0, "既定 eye が comp 平面の裏側に立っている");
+    }
+
+    // ───────── document camera(既定=正対) ─────────
+    //
+    // 「編集時の既定表示も document camera(未定義なら正対)とし、現在の斜め固定視点は
+    // view camera の初期値バグとして扱う」(2026-08-18 利用者裁定,
+    // `docs/reviews/2026-08-18-rerun-as-composition-foundation.md`)。
+    //
+    // 下の審判は**画素を見ない**。`SpatialStage::camera()` が返す姿勢を、透視投影の
+    // 定義だけで検算する。
+
+    /// 合成フレーム面の半分の高さ。
+    ///
+    /// `SpatialStage::copy_gpu_image` は `cell_size = 1/height` で置くので、
+    /// comp 平面は世界の中で必ず高さ1.0・幅 aspect になる(fork の
+    /// `spatial_stage.rs` `copy_gpu_image`)。
+    const COMPOSITION_HALF_HEIGHT: f32 = 0.5;
+
+    /// カメラが正対しているか。位置と注視点が x/y で一致し、注視点より手前(+Z)に立つ。
+    fn assert_head_on(camera: &re_view_spatial::StageCamera, what: &str) {
+        assert_eq!(
+            camera.up,
+            [0.0, 1.0, 0.0],
+            "{what}: Stage の上が Document の上(+Y)でない"
+        );
+        assert_eq!(
+            (camera.position[0], camera.position[1]),
+            (camera.look_target[0], camera.look_target[1]),
+            "{what}: 視線が comp 平面の法線からずれている(斜めに見ている)"
+        );
+        assert!(
+            camera.position[2] > camera.look_target[2],
+            "{what}: カメラが comp 平面の裏側に立っている: {camera:?}"
+        );
+    }
+
+    /// comp 平面の位置で画枠に収まる**半分の高さ**。
+    ///
+    /// `d * tan(fov_y/2)` は透視投影の定義そのもので、adapter の距離の決め方は
+    /// 通らない。よって「定数を直書きして絵を合わせた」camera はここで落ちる。
+    fn half_visible_height(camera: &re_view_spatial::StageCamera) -> f32 {
+        let distance = camera.position[2] - camera.look_target[2];
+        let fov_y = camera
+            .fov_y_radians
+            .expect("document camera が垂直画角を決めていない");
+        distance * (fov_y * 0.5).tan()
+    }
+
+    /// **構築直後**の Stage には document camera が置かれている。
+    ///
+    /// ここが落ちている間、製品の Stage は Rerun の既定 eye(斜め見下ろし)で開く。
+    #[test]
+    fn a_freshly_built_stage_already_faces_the_composition_head_on() {
+        let stage =
+            EmbeddedSpatialStage::with_own_egui(None).expect("自前 egui 無しの Stage を作る");
+        let camera = stage
+            .spatial_stage
+            .camera()
+            .expect("構築直後の Stage に document camera が置かれていない");
+
+        assert_head_on(&camera, "構築直後");
+
+        let fov_y = camera
+            .fov_y_radians
+            .expect("document camera が垂直画角を決めていない");
+        assert!(
+            fov_y > 0.0 && fov_y < std::f32::consts::PI,
+            "画角が画角になっていない: {fov_y}"
+        );
+
+        // 画枠の縦を comp の高さ1.0がちょうど満たす。
+        // 距離は画角から逆算されているはずなので、ここは 0.5 に一致する。
+        let half = half_visible_height(&camera);
+        assert!(
+            (half - COMPOSITION_HALF_HEIGHT).abs() < 1.0e-4,
+            "comp の高さが画枠に収まっていない: 可視半高 {half} (期待 {COMPOSITION_HALF_HEIGHT})"
+        );
+    }
+
+    /// 面の大きさが変わっても正対のまま。**Rerun の既定 eye へ戻さない。**
+    #[test]
+    fn fitting_the_view_keeps_the_document_camera_head_on() {
+        let mut stage =
+            EmbeddedSpatialStage::with_own_egui(None).expect("自前 egui 無しの Stage を作る");
+        assert!(stage.fit_view(1920, 1080), "fit_view が失敗した");
+
+        let camera = stage
+            .spatial_stage
+            .camera()
+            .expect("fit_view の後に document camera が無い(Rerun 既定へ戻っている)");
+        assert_head_on(&camera, "fit_view の後");
+    }
+
+    /// 面の形と comp の形を両方伝えたら、comp 全体が画枠へ収まる。
+    ///
+    /// 画枠より横長の comp を正方の面へ出す場合で見る。縦だけ合わせる実装は
+    /// 左右がはみ出してここで落ちる。
+    #[test]
+    fn a_wide_composition_still_fits_a_square_stage() {
+        let mut stage =
+            EmbeddedSpatialStage::with_own_egui(None).expect("自前 egui 無しの Stage を作る");
+        let comp_aspect = 16.0 / 9.0;
+        assert!(stage.set_composition_aspect(comp_aspect));
+        assert!(stage.fit_view(1000, 1000));
+
+        let camera = stage.spatial_stage.camera().expect("document camera が無い");
+        assert_head_on(&camera, "正方の面");
+
+        let half_visible_h = half_visible_height(&camera);
+        // 面が正方なので可視半幅 = 可視半高。
+        let half_visible_w = half_visible_h;
+        let half_comp_w = COMPOSITION_HALF_HEIGHT * comp_aspect;
+        assert!(
+            half_visible_w >= half_comp_w - 1.0e-5,
+            "comp の左右が画枠からはみ出している: 可視半幅 {half_visible_w} < comp 半幅 {half_comp_w}"
+        );
+        assert!(
+            (half_visible_w - half_comp_w).abs() < 1.0e-4,
+            "横合わせなのに画枠に接していない: 可視半幅 {half_visible_w} / comp 半幅 {half_comp_w}"
+        );
+    }
+
+    /// 同じ comp でも面の形が変われば距離が変わる。**定数を置いた実装はここで落ちる。**
+    #[test]
+    fn the_camera_moves_when_the_stage_changes_shape() {
+        let comp_aspect = 16.0 / 9.0;
+        let distance_for = |viewport: (u32, u32)| {
+            let mut stage =
+                EmbeddedSpatialStage::with_own_egui(None).expect("自前 egui 無しの Stage を作る");
+            assert!(stage.set_composition_aspect(comp_aspect));
+            assert!(stage.fit_view(viewport.0, viewport.1));
+            let camera = stage.spatial_stage.camera().expect("document camera が無い");
+            camera.position[2] - camera.look_target[2]
+        };
+
+        let matching = distance_for((1600, 900));
+        let square = distance_for((1000, 1000));
+        assert!(
+            square > matching * 1.5,
+            "正方の面でも同じ距離のまま(画枠の形を見ていない): 同形 {matching} / 正方 {square}"
+        );
+    }
+
+    /// 同じ縦横比を毎フレーム伝えてもカメラは動かない(再生中に視点が跳ねない)。
+    #[test]
+    fn repeating_the_composition_shape_leaves_the_camera_alone() {
+        let mut stage =
+            EmbeddedSpatialStage::with_own_egui(None).expect("自前 egui 無しの Stage を作る");
+        assert!(stage.set_composition_aspect(16.0 / 9.0));
+        assert!(stage.fit_view(1600, 900));
+        let before = stage.spatial_stage.camera().expect("document camera が無い");
+
+        for _ in 0..8 {
+            assert!(stage.set_composition_aspect(16.0 / 9.0));
+        }
+        let after = stage.spatial_stage.camera().expect("document camera が無い");
+        assert_eq!(before, after, "同じ形を伝え直しただけでカメラが動いた");
+    }
+
+    /// 意味を成さない縦横比は受け取らない(壊れた値でカメラを潰さない)。
+    #[test]
+    fn a_broken_composition_shape_is_refused() {
+        let mut stage =
+            EmbeddedSpatialStage::with_own_egui(None).expect("自前 egui 無しの Stage を作る");
+        let before = stage.spatial_stage.camera().expect("document camera が無い");
+        for broken in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert!(
+                !stage.set_composition_aspect(broken),
+                "縦横比 {broken} を受け取ってしまった"
+            );
+        }
+        let after = stage.spatial_stage.camera().expect("document camera が無い");
+        assert_eq!(before, after, "壊れた縦横比でカメラが動いた");
     }
 
     /// 積むものが root の ViewCoordinates 1本であること。

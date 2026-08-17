@@ -688,6 +688,14 @@ impl StagePane {
                 .as_deref()
                 .or(fixture.as_ref())
                 .expect("live か fixture のどちらかが在る");
+            // document camera の横合わせに要る寸法。正準座標では高さが 1.0 固定なので、
+            // composition の寸法は縦横比が全部である。**Stage は Document を読まない**
+            // (第二 writer を作らない)ので、読む側であるここが伝える。
+            // 同じ値なら Stage 側で弾かれる — 再生中に視点は跳ねない。
+            let composition = &document.composition;
+            stage.set_composition_aspect(
+                composition.aspect_num() as f32 / composition.aspect_den() as f32,
+            );
             let geometry = crate::stage_app_geometry::app_stage_geometry(document, framed_at);
             if resized || self.applied_geometry.as_ref() != Some(&geometry) {
                 stage.apply_host_stage_geometry(&geometry, width, height);

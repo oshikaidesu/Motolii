@@ -24,6 +24,10 @@
 3. **Stage の絵が斜めの3D視点のまま**(グリッド床+暗赤背景の上に遠近付きの板)。
    引き継ぎ既知の Rerun fork seam(`SpatialStage` が `AppendToStore` を落とす)の
    再確認。正対2Dプレビューが normal editor の期待。
+   → **解消**(2026-08-18)。`SpatialStage::set_camera` seam の上に document camera を
+   置き、Stage は構築時から正対で開くようにした。前後の絵は
+   `evidence/stage-document-camera/`、導出は
+   `crates/motolii-ui/src/rerun_stage/document_camera.rs`。
 4. **browser thumbnail の失敗が stderr 専用**(SVG 不読で「画像なしで描く」が帯に出ない)。
    [運転席決定](2026-08-18-cli-gui-driver-seat.md)の残余(フェンス拡張対象)と一致。
 5. (小) `import` の標準出力が「imported asset 0」で、`--asset` は素の id を要求する。
@@ -38,4 +42,4 @@
 
 運転席レーン(進行中)の検収後、(1)+(2) を1レーンで修正発注する
 (place の既定 duration=min(source, comp残り)、export の報告=現物、無音切り詰めの明示化)。
-(3) は Rerun fork seam レーンとして別口(単独で重い)。
+(3) は Rerun fork seam レーンとして別口(単独で重い) — **実施済み**、上の追記を参照。
