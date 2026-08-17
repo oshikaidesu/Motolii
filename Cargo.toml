@@ -22,6 +22,10 @@ members = [
     "crates/motolii-input",
     "crates/motolii-web-input",
     "crates/motolii-ui-token-gen",
+    # CPU経路の`GridMap`がlayer alphaを担えるかだけを確認する隔離probe。製品binaryには入れない。
+    "spikes/rerun-vism-layer-alpha-probe",
+    # GPU経路(`copy_gpu_image`)が画素alphaを通すかだけを確認する隔離probe。同上。
+    "spikes/rerun-vism-gpu-alpha-probe",
 ]
 
 [workspace.package]

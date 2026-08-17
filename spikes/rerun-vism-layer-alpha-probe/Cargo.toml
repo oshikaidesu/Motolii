@@ -1,0 +1,17 @@
+[package]
+name = "rerun-vism-layer-alpha-probe"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+eframe.workspace = true
+egui.workspace = true
+image.workspace = true
+re_chunk.workspace = true
+re_log_types.workspace = true
+re_renderer.workspace = true
+re_sdk_types.workspace = true
+re_view_spatial.workspace = true
+wgpu.workspace = true
