@@ -110,7 +110,7 @@ impl BlitzShellApp {
     /// # Panics
     /// - wgpu の `RenderState` が取れない場合（glow バックエンドで起動された等）
     /// - Tokio runtime を作れない場合
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub(crate) fn new(cc: &eframe::CreationContext<'_>) -> Self {
         Self::with_seat(cc, None)
     }
 
@@ -119,7 +119,7 @@ impl BlitzShellApp {
     ///
     /// # Panics
     /// `new` と同じ。
-    pub fn with_seat(cc: &eframe::CreationContext<'_>, project: Option<ProjectSeat>) -> Self {
+    pub(crate) fn with_seat(cc: &eframe::CreationContext<'_>, project: Option<ProjectSeat>) -> Self {
         let render_state = cc
             .wgpu_render_state
             .clone()

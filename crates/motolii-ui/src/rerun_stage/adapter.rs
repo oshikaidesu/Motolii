@@ -151,7 +151,7 @@ impl EmbeddedSpatialStage {
     /// callback が黙って何も描かずに戻る(絵が出ない)。
     /// Rerun 自身の eframe 版も同じ場所へ入れている
     /// (`re_viewer/src/lib.rs` `customize_eframe_and_setup_renderer`)。
-    pub fn new_in_host(render_state: &eframe::egui_wgpu::RenderState) -> Result<Self, String> {
+    pub(crate) fn new_in_host(render_state: &eframe::egui_wgpu::RenderState) -> Result<Self, String> {
         {
             let mut renderer = render_state.renderer.write();
             if renderer

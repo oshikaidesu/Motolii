@@ -22,6 +22,11 @@
 
 mod app;
 mod pane;
+mod runner;
 
-pub use app::{BlitzShellApp, ProjectSeat};
+pub use app::ProjectSeat;
+pub(crate) use app::BlitzShellApp;
 pub use pane::{BlitzPane, PaneKind};
+pub use runner::{
+    run_blitz_shell, BlitzShellLaunch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES,
+};
