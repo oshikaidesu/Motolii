@@ -594,3 +594,4 @@
 | [2026-08-13-pr476-structural-skepticism-audit.md](2026-08-13-pr476-structural-skepticism-audit.md) | PR #476全成果物の構造懐疑監査S1〜S12(利用者裁定「見た目だけ通ればいい話ではない」)。最重症=Stage gizmo迂回(採択済みtransform_gizmo資産をhost接続で迂回し実UXが退化)。検収体系の欠陥(見た目保存の報酬化)を根本原因と認定、PRIOR ART欄義務化を即日施行 |
 | [2026-08-14-user-palette-library-contract.md](2026-08-14-user-palette-library-contract.md) | Paletteをproject横断User Settings、適用RGBAを既存Document Color、Stage表示を既存Rerun Spatial Viewer投影へ分離する実データ契約 |
 | [2026-08-17-rerun-layer-display-seat-measurement.md](2026-08-17-rerun-layer-display-seat-measurement.md) | Vism出力の透明レイヤー表示座席をGridMap→RectangleRendererへ確定し、Mesh3Dのtexture alpha不可・Imageの3D不在・ゼロコピーimport・coplanar draw orderを実測した | **決定/観察**(2026-08-17) |
+| [2026-08-17-vsm-a4i-external-author-path-measurement.md](2026-08-17-vsm-a4i-external-author-path-measurement.md) | 外部作者経路がLayerSource専用であることの実測。汎用化にはregistry列挙口とgoldenの作者opt-inが要る | **観察**(2026-08-17) |
