@@ -1,13 +1,23 @@
 # Motolii
 
-**[日本語: なぜ、もう一つ映像制作ソフトを作るのか](MANIFESTO.ja.md)** — After Effectsの重さ、AviUtlからの移行、ソフトごとのエフェクト再発明、そして「映像制作におけるVST」について。問題設定と長期方針の要約は[VISION.ja.md](VISION.ja.md)。
+**[日本語: なぜ、もう一つ映像制作ソフトを作るのか](MANIFESTO.ja.md)** — After EffectsとAviUtlが残した別の可能性、ソフトごとのエフェクト再発明、そして「映像制作におけるVST」について。問題設定と長期方針の要約は[VISION.ja.md](VISION.ja.md)。
 
 <p align="center">
   <img src="docs/assets/exit_demo.gif" alt="Motolii M1 exit demo: a video background with a shape animated by cubic-bezier easing and exported to mp4" width="960">
 </p>
 <p align="center"><em>M1 exit demo — a typed project recipe rendered headlessly to mp4</em></p>
 
-> **After Effects is too heavy. Let's build a lighter motion-graphics compositor in native Rust.**
+> **The Other After Effects**
+>
+> Imagine the After Effects of another timeline. Its name: AviUtl.
+>
+> A lightweight compositor. A world of user-made plugins, scripts, presets, and techniques growing around it.
+>
+> What if the world had found it? What would that future look like now?
+>
+> Motolii is a recovery project for futures like that. We recover, rework, and reconnect technologies, workflows, and creative cultures that might otherwise have been lost.
+>
+> **A living workshop for possibilities that could have been.**
 
 **GPU-resident rendering. Direct tools instead of setup rituals. Typed plugins. Local projects. One deterministic path from preview to export.**
 
