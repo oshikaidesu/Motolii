@@ -33,6 +33,9 @@ pub struct BlitzShellLaunch {
     /// `None` は従来どおり fixture 展示(開発動線・screenshot テスト)。
     pub project: Option<PathBuf>,
     pub screenshot: Option<ScreenshotRequest>,
+    /// fixture 展示（開発動線・screenshot テスト用）。既定 false = 座席なしは
+    /// スタート画面。
+    pub fixture: bool,
 }
 
 /// 窓を開いて shell を回す。公開 API はこの1本で、署名は toolkit-free。
@@ -45,6 +48,7 @@ pub fn run_blitz_shell(launch: BlitzShellLaunch) -> Result<(), ShellError> {
         ),
         None => None,
     };
+    let launch_fixture = launch.fixture;
     let shot = launch.screenshot.map(|request| Screenshot {
         path: request.path,
         after: request.frames,
@@ -63,7 +67,7 @@ pub fn run_blitz_shell(launch: BlitzShellLaunch) -> Result<(), ShellError> {
         options,
         Box::new(move |cc| {
             Ok(Box::new(Harness {
-                inner: BlitzShellApp::with_seat(cc, seat),
+                inner: BlitzShellApp::with_seat(cc, seat, launch_fixture),
                 shot,
                 frame_count: 0,
             }))

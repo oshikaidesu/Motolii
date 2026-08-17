@@ -13,8 +13,9 @@
 cargo run -p motolii-ui --bin motolii-blitz-shell
 ```
 
-projectなしで起動すると展示(fixture)が出る。**Cmd+N**で新規project(既定1920x1080)、
-**Cmd+O**で既存を開く。以降の全編集はCmd+Sで保存(未保存は帯に「● unsaved」)。
+projectなしで起動すると**スタート画面**(New Project / Open)が出る。**Cmd+N**で新規
+project(既定1920x1080)、**Cmd+O**で既存を開く。以降の全編集はCmd+Sで保存(未保存は
+帯に「● unsaved」)。開発用のfixture展示は`--fixture`でのみ出る。
 
 ## P1: 曲が先にあるDTMer
 

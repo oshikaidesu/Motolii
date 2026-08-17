@@ -382,6 +382,10 @@ pub struct BlitzShellApp {
     /// 実行中の書き出し（高々1件。実行中は Export ボタンが disabled = 二重起動防止）。
     /// UI thread は毎フレーム `try_finish` を poll するだけで、書き出しは別 thread。
     export: Option<ExportRun>,
+    /// fixture 展示モード（開発動線・screenshot テスト用、`--fixture`）。
+    /// **既定は false** — 座席なしの起動は展示ではなくスタート画面
+    /// (New / Open) を出す。展示が製品状態に見える混乱をUXチェック第1号で確認した。
+    fixture: bool,
 }
 
 impl BlitzShellApp {
@@ -391,7 +395,7 @@ impl BlitzShellApp {
     /// - wgpu の `RenderState` が取れない場合（glow バックエンドで起動された等）
     /// - Tokio runtime を作れない場合
     pub(crate) fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        Self::with_seat(cc, None)
+        Self::with_seat(cc, None, true)
     }
 
     /// 座席ごと作る。`Some(seat)` なら Timeline / Stage は fixture ではなく
@@ -402,6 +406,7 @@ impl BlitzShellApp {
     pub(crate) fn with_seat(
         cc: &eframe::CreationContext<'_>,
         project: Option<ProjectSeat>,
+        fixture: bool,
     ) -> Self {
         let render_state = cc
             .wgpu_render_state
@@ -429,6 +434,35 @@ impl BlitzShellApp {
             seated_revision,
             status: String::new(),
             export: None,
+            fixture,
+        }
+    }
+
+    /// スタート画面を出すべきか。座席が無く、fixture 展示も明示されていない時。
+    fn shows_welcome(&self) -> bool {
+        self.project.is_none() && !self.fixture
+    }
+
+    /// New の実体（Cmd+N とスタート画面のボタンが共用）。
+    fn request_new_project(&mut self) {
+        if !self.clear_unsaved_or_stay() {
+            return;
+        }
+        if let Some(path) = prompt_new_project_path() {
+            match create_project_file(&path) {
+                Ok(()) => self.reseat(&path),
+                Err(error) => self.status = error,
+            }
+        }
+    }
+
+    /// Open の実体（Cmd+O とスタート画面のボタンが共用）。
+    fn request_open_project(&mut self) {
+        if !self.clear_unsaved_or_stay() {
+            return;
+        }
+        if let Some(path) = prompt_open_project_path() {
+            self.reseat(&path);
         }
     }
 
@@ -521,19 +555,13 @@ impl BlitzShellApp {
                 }
             }
         }
-        // New / Open は座席を差し替える = いまの編集を捨てる。未保存なら先に訊く。
-        if new_project && self.clear_unsaved_or_stay() {
-            if let Some(path) = prompt_new_project_path() {
-                match create_project_file(&path) {
-                    Ok(()) => self.reseat(&path),
-                    Err(error) => self.status = error,
-                }
-            }
+        // New / Open は座席を差し替える = いまの編集を捨てる。未保存なら先に訊く
+        // （その判断ごと `request_*` が持つ。スタート画面のボタンと同じ入口）。
+        if new_project {
+            self.request_new_project();
         }
-        if open_project && self.clear_unsaved_or_stay() {
-            if let Some(path) = prompt_open_project_path() {
-                self.reseat(&path);
-            }
+        if open_project {
+            self.request_open_project();
         }
 
         // ---- ドロップ。native では path が入っている ----
@@ -745,6 +773,49 @@ impl eframe::App for BlitzShellApp {
         }
         if want_export {
             self.begin_export();
+        }
+
+        // 座席が無い既定起動は panel 群でなく**スタート画面**。fixture 展示は
+        // `--fixture` の明示だけ(展示が製品状態に見える混乱を UX チェック第1号で確認)。
+        if self.shows_welcome() {
+            let mut new_clicked = false;
+            let mut open_clicked = false;
+            egui::CentralPanel::default().show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(ui.available_height() * 0.32);
+                    ui.label(
+                        egui::RichText::new("Motolii")
+                            .size(34.0)
+                            .strong(),
+                    );
+                    ui.add_space(6.0);
+                    ui.label("Make one 3\u{2013}5 minute music video.");
+                    ui.add_space(24.0);
+                    new_clicked = ui
+                        .add(egui::Button::new(
+                            egui::RichText::new("New Project\u{2026}   Cmd+N").size(16.0),
+                        ))
+                        .clicked();
+                    ui.add_space(8.0);
+                    open_clicked = ui
+                        .add(egui::Button::new(
+                            egui::RichText::new("Open\u{2026}   Cmd+O").size(16.0),
+                        ))
+                        .clicked();
+                    ui.add_space(18.0);
+                    ui.label(
+                        egui::RichText::new("Then just drop video and audio into this window.")
+                            .weak(),
+                    );
+                });
+            });
+            if new_clicked {
+                self.request_new_project();
+            }
+            if open_clicked {
+                self.request_open_project();
+            }
+            return;
         }
 
         let mut behavior = BlitzShellBehavior {

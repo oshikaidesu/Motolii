@@ -23,7 +23,7 @@ use motolii_ui::blitz_shell::{
 
 fn usage() -> ! {
     eprintln!(
-        "usage: motolii-blitz-shell [--project <project.json>] [--screenshot <out.png> [frames]]"
+        "usage: motolii-blitz-shell [--project <project.json>] [--fixture] [--screenshot <out.png> [frames]]"
     );
     std::process::exit(2);
 }
@@ -32,6 +32,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut project: Option<PathBuf> = None;
     let mut screenshot: Option<ScreenshotRequest> = None;
+    let mut fixture = false;
     let mut index = 0;
     while index < args.len() {
         match args[index].as_str() {
@@ -41,6 +42,10 @@ fn main() {
                 };
                 project = Some(PathBuf::from(path));
                 index += 2;
+            }
+            "--fixture" => {
+                fixture = true;
+                index += 1;
             }
             "--screenshot" => {
                 let Some(path) = args.get(index + 1) else {
@@ -65,6 +70,7 @@ fn main() {
     if let Err(error) = run_blitz_shell(BlitzShellLaunch {
         project,
         screenshot,
+        fixture,
     }) {
         eprintln!("motolii-blitz-shell: {error}");
         std::process::exit(1);
