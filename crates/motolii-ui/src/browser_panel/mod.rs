@@ -250,16 +250,20 @@ impl BrowserPanel {
 
         // browser-library.css:99 `.browserWorkspace { display: flex }`(sidebar + catalog)
         let workspace = Rect::from_min_max(Pos2::new(rect.left(), cursor), rect.max);
+        // css:348-349 `@media (max-width: 420px)`: 狭い pane では sidebar を 92px へ
+        // 譲らせて catalog 側に席を返す。ここを守らないと catalog header の見出しが
+        // 先に潰れる。
         let sidebar = Rect::from_min_size(
             workspace.min,
-            Vec2::new(theme::SIDEBAR_W, workspace.height()),
+            Vec2::new(sidebar_width(rect.width()), workspace.height()),
         );
         let catalog = Rect::from_min_max(
             Pos2::new(sidebar.right(), workspace.top()),
             workspace.max,
         );
         self.draw_sidebar(ui, sidebar);
-        self.draw_catalog(ui, catalog);
+        // css:348 の `@media (max-width: 420px)` は文書幅 = pane 幅で効く。
+        self.draw_catalog(ui, catalog, rect.width());
     }
 
     /// browser-library.css:28-38 `.browserHeader`。
@@ -645,10 +649,10 @@ impl BrowserPanel {
     }
 
     /// catalog 列(header / shelf / summary / grid / tray)。
-    fn draw_catalog(&mut self, ui: &mut egui::Ui, rect: Rect) {
+    fn draw_catalog(&mut self, ui: &mut egui::Ui, rect: Rect, panel_w: f32) {
         let painter = ui.painter().with_clip_rect(rect);
         let mut cursor = rect.top();
-        cursor = self.draw_catalog_header(ui, &painter, rect, cursor);
+        cursor = self.draw_catalog_header(ui, &painter, rect, cursor, panel_w);
         if self.shelf_open {
             cursor = self.draw_filter_shelf(ui, &painter, rect, cursor);
         }
@@ -663,17 +667,24 @@ impl BrowserPanel {
     }
 
     /// browser-library.css:155-168 `.catalogHeader` + view modes。
+    ///
+    /// css:158 が `display: flex`、css:166 が `.viewModes { margin-left: auto }` なので、
+    /// **見出しと view-mode ボタンは重ならない** — ボタンは右へ寄り、残りが見出しの席になる。
+    /// egui の painter は勝手に席を割らないので、ここで先にボタンぶんの幅を引いてから
+    /// 見出しと path を置き、はみ出しは `…` で畳む。
     fn draw_catalog_header(
         &mut self,
         ui: &mut egui::Ui,
         painter: &egui::Painter,
         rect: Rect,
         top: f32,
+        panel_w: f32,
     ) -> f32 {
         let header = Rect::from_min_size(
             Pos2::new(rect.left(), top),
             Vec2::new(rect.width(), theme::CATALOG_HEADER_H),
         );
+        let layout = catalog_header_layout(header.width(), panel_w);
         painter.hline(
             header.x_range(),
             header.bottom(),
@@ -702,22 +713,41 @@ impl BrowserPanel {
                 "Library · local files".to_owned(),
             ),
         };
-        painter.text(
-            Pos2::new(header.left() + 6.0, header.center().y - 6.0),
-            Align2::LEFT_CENTER,
+        // css:164 strong / css:165 span。span は css:165 の `text-overflow: ellipsis` を
+        // そのまま持つ。strong に css の規定は無いが、この header は高さ 31px の1行席で
+        // 折返せないので egui 慣行の `…` で畳む(切り落としにしない)。
+        let title_galley = elided(
+            painter,
             title,
             FontId::proportional(theme::FS_CATALOG_TITLE),
             theme::CATALOG_TITLE_FG,
+            layout.text_w,
         );
-        painter.text(
-            Pos2::new(header.left() + 6.0, header.center().y + 6.0),
-            Align2::LEFT_CENTER,
+        painter.galley(
+            Pos2::new(
+                header.left() + theme::CATALOG_HEADER_PAD_X,
+                header.center().y - 6.0 - title_galley.size().y / 2.0,
+            ),
+            title_galley,
+            theme::CATALOG_TITLE_FG,
+        );
+        let path_galley = elided(
+            painter,
             path,
             FontId::proportional(theme::FS_CATALOG_PATH),
             theme::CATALOG_PATH_FG,
+            layout.path_max_w,
+        );
+        painter.galley(
+            Pos2::new(
+                header.left() + theme::CATALOG_HEADER_PAD_X,
+                header.center().y + 6.0 - path_galley.size().y / 2.0,
+            ),
+            path_galley,
+            theme::CATALOG_PATH_FG,
         );
         // view modes(css:166-168)。glyph は html:95-97 の ▦ ▤ ☷。
-        let mut x = header.right() - 6.0;
+        let mut x = header.left() + layout.modes_left + theme::VIEW_MODES_W;
         for (index, (glyph, view)) in [
             ("☷", BrowserView::List),
             ("▤", BrowserView::Grid),
@@ -733,7 +763,7 @@ impl BrowserPanel {
                 ),
                 Vec2::new(theme::VIEW_BUTTON_W, theme::BUTTON_H),
             );
-            x = button.left() - 2.0; // css:166 gap 2px
+            x = button.left() - theme::VIEW_BUTTON_GAP; // css:166 gap 2px
             let response = ui.interact(button, ui.id().with(("view", index)), Sense::click());
             if response.clicked() {
                 self.view = view;
@@ -1138,6 +1168,66 @@ impl BrowserPanel {
     }
 }
 
+/// `.catalogHeader`(browser-library.css:155-168)の横並びを先に割った結果。
+///
+/// css:158 `display: flex` + css:166 `.viewModes { margin-left: auto }` は、
+/// **ボタン塊を右端へ寄せ、見出しには残りだけを渡す**という規則である。egui の
+/// painter はこれを自動でやらないので、同じ割り方をここで数値にして持つ。
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct CatalogHeaderLayout {
+    /// view-mode ボタン塊の左端(header 左端からの相対 px)。
+    modes_left: f32,
+    /// 見出し行に残る幅。
+    text_w: f32,
+    /// path 行の上限(css:165 の `max-width: 205px`、css:353 の narrow は 110px)。
+    path_max_w: f32,
+}
+
+/// browser-library.css:102-103 / css:349 `.librarySidebar`。
+fn sidebar_width(panel_w: f32) -> f32 {
+    if panel_w <= theme::NARROW_BREAKPOINT_W {
+        theme::SIDEBAR_W_NARROW
+    } else {
+        theme::SIDEBAR_W
+    }
+}
+
+fn catalog_header_layout(header_w: f32, panel_w: f32) -> CatalogHeaderLayout {
+    let pad = theme::CATALOG_HEADER_PAD_X;
+    // ボタン塊は右 padding の内側(css:160 `padding: 0 6px`)。
+    let modes_left = (header_w - pad - theme::VIEW_MODES_W).max(pad);
+    // css:155-162 の `.catalogHeader` は gap を持たない — flex では
+    // `margin-left: auto` が寄せるだけで、見出しはボタンに接するところまで伸びてよい。
+    // ただし完全に接すると読みにくいので、この rule 内で唯一定義されている間隔
+    // (css:166 `.viewModes { gap: 2px }`)を見出しとボタンの間にも使う。
+    // 6px 空けると狭い pane で `All media` が畳まれてしまう。
+    let text_w = (modes_left - pad - theme::VIEW_BUTTON_GAP).max(0.0);
+    let path_cap = if panel_w <= theme::NARROW_BREAKPOINT_W {
+        theme::CATALOG_PATH_MAX_W_NARROW
+    } else {
+        theme::CATALOG_PATH_MAX_W
+    };
+    CatalogHeaderLayout {
+        modes_left,
+        text_w,
+        path_max_w: text_w.min(path_cap),
+    }
+}
+
+/// 1行に収まらない文字列を `…` で畳んだ galley。
+/// `Painter::text` は幅を見ないので、隣の席へ食い込ませないためにこちらを使う。
+fn elided(
+    painter: &egui::Painter,
+    text: String,
+    font: FontId,
+    color: Color32,
+    max_width: f32,
+) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple_singleline(text, font, color);
+    job.wrap = egui::text::TextWrapping::truncate_at_width(max_width);
+    painter.layout_job(job)
+}
+
 /// card 2行目(browser-library.html:123 `video · B-roll` の形)。
 /// 出所は model の tag(kind の次の派生 tag = 拡張子か folder 名)。
 fn card_meta(item: &LibraryItem) -> String {
@@ -1158,4 +1248,67 @@ fn load_color_image(path: &Path) -> Option<egui::ColorImage> {
         size,
         image.as_raw(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// css:158 flex + css:166 `margin-left: auto`。
+    /// **見出しの席と view-mode ボタンの席は決して重ならない。**
+    #[test]
+    fn the_catalog_title_never_reaches_under_the_view_modes() {
+        for header_w in [20.0_f32, 90.0, 120.0, 200.0, 320.0, 640.0, 1200.0] {
+            let layout = catalog_header_layout(header_w, header_w);
+            let text_right = theme::CATALOG_HEADER_PAD_X + layout.text_w;
+            assert!(
+                text_right <= layout.modes_left,
+                "header {header_w}: 見出し右端 {text_right} が modes 左端 {} を越えた",
+                layout.modes_left
+            );
+            assert!(layout.text_w >= 0.0);
+            assert!(layout.path_max_w <= layout.text_w);
+        }
+    }
+
+    /// ボタン塊は右 padding の内側に丸ごと収まる(css:160 `padding: 0 6px`)。
+    #[test]
+    fn the_view_modes_sit_inside_the_right_padding() {
+        let header_w = 320.0;
+        let layout = catalog_header_layout(header_w, header_w);
+        assert!(
+            (layout.modes_left + theme::VIEW_MODES_W - (header_w - theme::CATALOG_HEADER_PAD_X))
+                .abs()
+                < 0.001,
+            "modes 塊が右 padding に揃っていない"
+        );
+    }
+
+    /// css:165 は 205px、css:353 の `@media (max-width: 420px)` は 110px。
+    #[test]
+    fn the_path_line_takes_the_narrow_cap_on_a_narrow_pane() {
+        let wide = catalog_header_layout(900.0, 900.0);
+        assert_eq!(wide.path_max_w, theme::CATALOG_PATH_MAX_W);
+        let narrow = catalog_header_layout(400.0, 400.0);
+        assert_eq!(narrow.path_max_w, theme::CATALOG_PATH_MAX_W_NARROW);
+    }
+
+    /// css:349 の narrow sidebar。狭い pane では catalog に席が返る。
+    #[test]
+    fn a_narrow_pane_hands_the_sidebar_width_back_to_the_catalog() {
+        assert_eq!(sidebar_width(900.0), theme::SIDEBAR_W);
+        assert_eq!(sidebar_width(300.0), theme::SIDEBAR_W_NARROW);
+        let wide_catalog = 300.0 - sidebar_width(300.0);
+        let narrow_catalog = 300.0 - theme::SIDEBAR_W;
+        assert!(wide_catalog > narrow_catalog);
+    }
+
+    /// ボタンすら入らない幅でも席を負にしない(header が畳まれた時の下限)。
+    #[test]
+    fn a_pane_too_narrow_for_the_buttons_still_yields_a_sane_layout() {
+        let layout = catalog_header_layout(20.0, 20.0);
+        assert_eq!(layout.modes_left, theme::CATALOG_HEADER_PAD_X);
+        assert_eq!(layout.text_w, 0.0);
+        assert_eq!(layout.path_max_w, 0.0);
+    }
 }
