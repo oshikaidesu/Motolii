@@ -150,3 +150,16 @@ debug = 0
 
 [profile.fast.package."*"]
 opt-level = 3
+
+# 【検証用・暫定】Rerun fork の S2 seam を実測するため local path へ向けている。
+# S2 = `SpatialStage::process_system_commands` が `SystemCommand::AppendToStore` を
+# 捨てていた件(`docs/reviews/2026-08-18-rerun-e0-composition-probe.md` §4.3 Seam 2)。
+# fork 側 branch は `motolii/s2-append-to-store`
+# (base rev = 501a0403b6942d488798a60c66ade889855346ff)。
+# **検収時にこの patch 節を消し、上の rev pin を fork の新しい commit へ差し替えること。**
+[patch."https://github.com/oshikaidesu/rerun"]
+re_log_types = { path = "/Users/member_ottoto/rust_ae/rerun-s2-seam-20260818/crates/store/re_log_types" }
+re_chunk = { path = "/Users/member_ottoto/rust_ae/rerun-s2-seam-20260818/crates/store/re_chunk" }
+re_renderer = { path = "/Users/member_ottoto/rust_ae/rerun-s2-seam-20260818/crates/viewer/re_renderer" }
+re_sdk_types = { path = "/Users/member_ottoto/rust_ae/rerun-s2-seam-20260818/crates/store/re_sdk_types" }
+re_view_spatial = { path = "/Users/member_ottoto/rust_ae/rerun-s2-seam-20260818/crates/viewer/re_view_spatial" }

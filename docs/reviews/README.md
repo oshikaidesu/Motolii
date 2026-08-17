@@ -606,3 +606,4 @@
 | [2026-08-17-vsm-b0-identity-fixture.md](2026-08-17-vsm-b0-identity-fixture.md) | VSM-B0 identity期待値マトリクス。6ケース×6操作×5identityの180セルを台帳根拠付きで固定し、根拠が台帳に無い30セルをUNDETERMINEDとして必要な決定先ごと名指しした意味fixture。ケース5・6の採否は決めない |
 | [2026-08-17-vism-identity-known-implementation-survey.md](2026-08-17-vism-identity-known-implementation-survey.md) | VSM-B0の未決6問に対しOFX／CLAP／cargoの既知解を対照。5問は先行実装が答えており、U2のみ対応物なし | **比較中**(2026-08-17) |
 | [2026-08-18-rerun-e0-composition-probe.md](2026-08-18-rerun-e0-composition-probe.md) | Rerunを空間合成の基盤にできるかのE0 3点実測。窓なし描画と遮蔽は成立、カメラ注入は不成立でfork seam 3箇所を名指し | **観察**(2026-08-18) |
+| [2026-08-18-rerun-fork-seam-ledger.md](2026-08-18-rerun-fork-seam-ledger.md) | Rerun fork(`oshikaidesu/rerun`)が上流とどこで乖離しているかの台帳と、カメラ注入seamの実装記録。blueprint系seam(S1/S2/S3)は採らず`SpatialStage::set_camera`という公開APIで通した理由、上流rebase時の再適用手順、rev bumpの恒久oracle(`cargo test -p rerun-e0-composition-probe`)。実測=注入したdocument cameraが既知レイヤーを期待座標へ写す(2304点wrong 0)。 | 観察 |

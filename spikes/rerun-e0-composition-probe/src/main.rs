@@ -20,13 +20,26 @@ use std::path::{Path, PathBuf};
 use harness::Offscreen;
 use oracle::{Frame, Hue};
 use re_log_types::ApplicationId;
-use re_view_spatial::SpatialStage;
+use re_view_spatial::{SpatialStage, StageCamera};
 
 const TARGET_W: u32 = 640;
 const TARGET_H: u32 = 480;
 /// bounding box の平滑化とカメラ補間が落ち着くまで回す。
 /// 決定性のため実時間ではなく固定 dt で数える(`harness::Offscreen::frame`)。
 const WARMUP_FRAMES: u32 = 90;
+
+/// 注入したカメラは補間を挟まずに効くので、落ち着かせる必要が無い。
+/// それでも1フレームでは「たまたま」を排除できないので2フレーム回す。
+const SETTLE_FRAMES: u32 = 2;
+
+/// document camera の垂直画角(60°)。
+///
+/// レイヤーの縦 1.0 がちょうど画枠の縦を満たす距離を、この画角から逆算する。
+/// ビューポート(640x480)もレイヤー(320x240)も 4:3 なので、横もちょうど収まる。
+const DOC_FOV_Y: f32 = std::f32::consts::FRAC_PI_3;
+
+/// レイヤー面の z。`copy_gpu_image` が自分の path へ書く値である。
+const LAYER_PLANE_Z: f32 = -0.01;
 
 /// (c) の前後差。
 ///
@@ -125,11 +138,17 @@ fn probe_offscreen(out_dir: &Path) -> Result<String, String> {
 
 /// (b) カメラをプログラムから決められるか、そして既知配置が期待座標へ写るか。
 ///
-/// oracle は2段になっている。
-/// 1. 投影の一致: `SpatialStage::last_eye()` が返すカメラで4象限の中心を投影し、
-///    その pixel が本当にその象限の色であること。カメラモデルと実際の描画が一致する証拠。
-/// 2. 注入: `focus_entity` / `reset_view` / `Pinhole` tracking のいずれかで
-///    カメラが動くこと。
+/// `SpatialStage::set_camera` へ document camera 相当を渡し、**こちらが独立に
+/// 計算した期待座標**とレンダリング結果を突き合わせる。期待 pixel は画角と距離から
+/// 直接出しており、Rerun の `Eye` や `ui_from_world` を経由しない。よって上流の
+/// カメラ実装が変われば、この照合が落ちて教えてくれる。
+///
+/// oracle は5段。
+/// 1. 注入で絵が変わること
+/// 2. `last_eye()` が注入した姿勢をそのまま返すこと
+/// 3. レイヤーが画枠ちょうどに写ること(四隅の色)
+/// 4. レイヤー内の格子点が期待座標の色と一致すること
+/// 5. `reset_view()` で Rerun 既定の画へ戻ること
 fn probe_camera(out_dir: &Path) -> Result<String, String> {
     let mut offscreen = Offscreen::new(TARGET_W, TARGET_H)?;
     let mut stage = new_stage("e0-camera")?;
@@ -145,8 +164,6 @@ fn probe_camera(out_dir: &Path) -> Result<String, String> {
         .map_err(|error| format!("copy_gpu_image: {error}"))?;
     scene::place_parent(&mut stage, "stack/main", 0.0)?;
     scene::set_draw_order(&mut stage, "stack/main/image", 0.0)?;
-    // document camera 相当。Rerun のカメラ機構へ外注できるかを見るために立てておく。
-    scene::place_pinhole_camera(&mut stage, "stack/camera", [0.0, 0.0, 2.5])?;
 
     for _ in 0..WARMUP_FRAMES {
         offscreen.frame(&mut stage)?;
@@ -173,131 +190,188 @@ fn probe_camera(out_dir: &Path) -> Result<String, String> {
         eye.fov_y,
     );
 
-    // --- oracle 1: カメラモデルと描画の一致 ---
+    let mut failures = Vec::new();
+
+    // --- oracle 1: 注入したカメラで絵が変わること ---
     //
-    // 4隅を1点ずつ見るのでは、既定カメラの画角次第で点が画面外へ出る(実際に出た)。
-    // 代わりに各象限を格子状に舐め、「画面内へ落ちた点はすべてその象限の色である」
-    // を要求する。カメラが1つでも狂っていれば、境界をまたいだ点が別の色を返す。
-    let ui_from_world = eye.ui_from_world(offscreen.ui_rect());
-    let half_w = 0.5 * scene::LAYER_ASPECT;
-    // 象限境界と矩形の縁から離す幅。ここを跨ぐ点は「どちらの色でも正しい」ので測らない。
-    const MARGIN: f32 = 0.06;
-    // 既定カメラの画角はレイヤー全体を収めない(手前側の角が画面下へ出る)。
-    // 収まらない点は数えないので、どの象限も判定に足る数が残るよう密に舐める。
-    const STEPS: u32 = 24;
+    // レイヤーの半分の高さ 0.5 が画枠の半分をちょうど満たす距離を、画角から逆算する。
+    // これで「document が画枠に一致する」状態が作れ、期待座標が解析的に決まる。
+    let distance = 0.5 / (DOC_FOV_Y * 0.5).tan();
+    let camera_z = LAYER_PLANE_Z + distance;
+    let camera = StageCamera::new(
+        [0.0, 0.0, camera_z],
+        [0.0, 0.0, LAYER_PLANE_Z],
+        [0.0, 1.0, 0.0],
+    )
+    .with_fov_y_radians(DOC_FOV_Y);
+    stage.set_camera(camera);
+
+    for _ in 0..SETTLE_FRAMES {
+        offscreen.frame(&mut stage)?;
+    }
+    let shot = Frame::new(offscreen.read_rgba()?, TARGET_W, TARGET_H);
+    let shot_png = out_dir.join("e0-b-document-camera.png");
+    shot.write_png(&shot_png)?;
+
+    report.push_str(&format!(
+        "\ninjected document camera: pos = (0, 0, {camera_z:.4}), look_target = (0, 0, {LAYER_PLANE_Z}), \
+         fov_y = {DOC_FOV_Y:.4} rad\nPNG(document camera): {}\nfnv1a: {:016x} ({})\n",
+        shot_png.display(),
+        shot.digest(),
+        if shot.digest() == before.digest() {
+            "IDENTICAL to the default camera — nothing moved"
+        } else {
+            "changed"
+        },
+    ));
+    if shot.digest() == before.digest() {
+        failures.push("set_camera did not change the picture".to_owned());
+    }
+
+    // --- oracle 2: last_eye() が注入した姿勢をそのまま返すこと ---
+    match stage.last_eye() {
+        Some(eye) => {
+            let pos = eye.pos_in_world();
+            let fwd = eye.forward_in_world();
+            report.push_str(&format!(
+                "  last_eye() readback: pos = ({:.4}, {:.4}, {:.4}), fwd = ({:.4}, {:.4}, {:.4}), fov_y = {:?}\n",
+                pos.x, pos.y, pos.z, fwd.x, fwd.y, fwd.z, eye.fov_y,
+            ));
+            if (pos - glam::vec3(0.0, 0.0, camera_z)).length() > 1.0e-4 {
+                failures.push(format!("last_eye() position ({pos:?}) is not the injected one"));
+            }
+            if (fwd - glam::vec3(0.0, 0.0, -1.0)).length() > 1.0e-4 {
+                failures.push(format!("last_eye() forward ({fwd:?}) is not -Z"));
+            }
+        }
+        None => failures.push("last_eye() is None after set_camera".to_owned()),
+    }
+
+    // --- oracle 3: レイヤーが画枠ちょうどに写ること ---
+    //
+    // 四隅の内側が各象限の色なら、画枠と document がぴったり重なっている。
+    // どこかに Rerun の world grid や背景が見えていれば、ここで落ちる。
+    const INSET: i32 = 6;
+    let corners: [(&str, i32, i32, Hue); 4] = [
+        ("top-left", INSET, INSET, Hue::Red),
+        ("top-right", TARGET_W as i32 - 1 - INSET, INSET, Hue::Green),
+        ("bottom-left", INSET, TARGET_H as i32 - 1 - INSET, Hue::Blue),
+        (
+            "bottom-right",
+            TARGET_W as i32 - 1 - INSET,
+            TARGET_H as i32 - 1 - INSET,
+            Hue::Yellow,
+        ),
+    ];
+    for (name, x, y, expected) in corners {
+        let observed = shot.hue_at(x, y);
+        report.push_str(&format!(
+            "  frame corner {name} ({x}, {y}): {observed} (expected {expected})\n"
+        ));
+        if observed != expected {
+            failures.push(format!(
+                "frame corner {name} is {observed}, expected {expected} — the document does not fill the frame"
+            ));
+        }
+    }
+
+    // --- oracle 4: 格子点が期待座標の色と一致すること ---
+    //
+    // 期待 pixel は「レイヤーが画枠を満たす」ことだけから出す。Rerun の
+    // `ui_from_world` は通さないので、これは描画に対する独立な照合である。
+    //
     // 画像の行0は world の +y 側(`grid_map.rs:290-293` の extent_v = -Y)。
     // 左上/右上/左下/右下 = 赤/緑/青/黄。
+    const STEPS: u32 = 24;
+    // 象限境界と矩形の縁から離す幅。ここを跨ぐ点は「どちらの色でも正しい」ので測らない。
+    const MARGIN: f32 = 0.06;
+    let half_w = 0.5 * scene::LAYER_ASPECT;
     let quadrants: [(&str, f32, f32, Hue); 4] = [
         ("image top-left", -1.0, 1.0, Hue::Red),
         ("image top-right", 1.0, 1.0, Hue::Green),
         ("image bottom-left", -1.0, -1.0, Hue::Blue),
         ("image bottom-right", 1.0, -1.0, Hue::Yellow),
     ];
-    let mut projection_failures = Vec::new();
     for (name, sign_x, sign_y, expected) in quadrants {
-        let (mut on_screen, mut off_screen, mut wrong) = (0u32, 0u32, 0u32);
+        let (mut checked, mut wrong) = (0u32, 0u32);
         let mut first_wrong = None;
         for i in 0..STEPS {
             for j in 0..STEPS {
-                let tx = MARGIN
-                    + (half_w - 2.0 * MARGIN) * (f32::from(i as u16) / f32::from(STEPS as u16 - 1));
-                let ty = MARGIN
-                    + (0.5 - 2.0 * MARGIN) * (f32::from(j as u16) / f32::from(STEPS as u16 - 1));
-                // `copy_gpu_image` は自分の path へ z=-0.01 を書く。面はそこにある。
-                let world = glam::vec3(sign_x * tx, sign_y * ty, -0.01);
-                let ui = ui_from_world.project_point3(world);
-                let (x, y) = (ui.x.round() as i32, ui.y.round() as i32);
-                if x < 1 || y < 1 || x >= TARGET_W as i32 - 1 || y >= TARGET_H as i32 - 1 {
-                    off_screen += 1;
+                let tx = MARGIN + (half_w - 2.0 * MARGIN) * (i as f32 / (STEPS - 1) as f32);
+                let ty = MARGIN + (0.5 - 2.0 * MARGIN) * (j as f32 / (STEPS - 1) as f32);
+                let (world_x, world_y) = (sign_x * tx, sign_y * ty);
+                // document が画枠に一致しているので、写像はこの1行で決まる。
+                let px = (world_x + half_w) / (2.0 * half_w) * TARGET_W as f32;
+                let py = (0.5 - world_y) * TARGET_H as f32;
+                let (x, y) = (px.round() as i32, py.round() as i32);
+                if x < 0 || y < 0 || x >= TARGET_W as i32 || y >= TARGET_H as i32 {
+                    wrong += 1;
+                    first_wrong.get_or_insert(format!(
+                        "world ({world_x:.4}, {world_y:.4}) -> expected pixel ({x}, {y}) is outside the frame"
+                    ));
                     continue;
                 }
-                on_screen += 1;
-                let observed = before.hue_at(x, y);
+                checked += 1;
+                let observed = shot.hue_at(x, y);
                 if observed != expected {
                     wrong += 1;
                     first_wrong.get_or_insert(format!(
-                        "world ({:.4}, {:.4}) -> pixel ({x}, {y}) = {observed} {:?}",
-                        world.x,
-                        world.y,
-                        before.rgb(x, y)
+                        "world ({world_x:.4}, {world_y:.4}) -> pixel ({x}, {y}) = {observed} {:?}",
+                        shot.rgb(x, y)
                     ));
                 }
             }
         }
         report.push_str(&format!(
-            "  {name} ({expected}): {on_screen} samples inside the viewport, {off_screen} outside, {wrong} wrong{}\n",
+            "  {name} ({expected}): {checked} samples landed on their expected pixel, {wrong} wrong{}\n",
             first_wrong
                 .as_ref()
                 .map_or_else(String::new, |detail| format!(" (first: {detail})")),
         ));
-        if on_screen < 30 {
-            projection_failures.push(format!(
-                "{name}: only {on_screen} samples landed inside the viewport — cannot judge"
+        if wrong > 0 {
+            failures.push(format!(
+                "{name}: {wrong} samples missed the expected mapping"
             ));
         }
-        if wrong > 0 {
-            projection_failures.push(format!("{name}: {wrong} samples hit the wrong colour"));
-        }
     }
 
-    // --- oracle 2: カメラ注入 ---
-    // `SpatialStage` の公開APIでカメラへ触れるのは focus_entity / reset_view の2つだけ。
-    // Pinhole を立ててあるので、tracking へ切り替わるかもここで見る。
-    let mut injection = Vec::new();
-    for (label, action) in [
-        ("focus_entity(layer)", 0u8),
-        ("focus_entity(pinhole camera)", 1),
-        ("reset_view()", 2),
-    ] {
-        match action {
-            0 => stage.focus_entity("stack/main/image"),
-            1 => stage.focus_entity("stack/camera"),
-            _ => stage.reset_view(),
-        }
-        for _ in 0..WARMUP_FRAMES {
-            offscreen.frame(&mut stage)?;
-        }
-        let after = Frame::new(offscreen.read_rgba()?, TARGET_W, TARGET_H);
-        let after_eye = stage.last_eye();
-        let moved = after.digest() != before.digest();
-        let pos = after_eye.map(|eye| eye.pos_in_world());
-        report.push_str(&format!(
-            "  {label}: fnv1a {:016x} ({}), eye.pos = {}\n",
-            after.digest(),
-            if moved { "CHANGED" } else { "identical" },
-            pos.map_or_else(
-                || "None".to_owned(),
-                |p| format!("({:.4}, {:.4}, {:.4})", p.x, p.y, p.z)
-            ),
-        ));
-        after.write_png(&out_dir.join(format!("e0-b-after-{action}.png")))?;
-        if moved {
-            injection.push(label);
-        }
+    // --- oracle 5: reset_view() で Rerun 既定の画へ戻ること ---
+    stage.reset_view();
+    for _ in 0..WARMUP_FRAMES {
+        offscreen.frame(&mut stage)?;
+    }
+    let after_reset = Frame::new(offscreen.read_rgba()?, TARGET_W, TARGET_H);
+    after_reset.write_png(&out_dir.join("e0-b-after-reset-view.png"))?;
+    report.push_str(&format!(
+        "\nreset_view(): fnv1a {:016x} ({} the injected camera, {} the default camera)\n",
+        after_reset.digest(),
+        if after_reset.digest() == shot.digest() {
+            "SAME as"
+        } else {
+            "differs from"
+        },
+        if after_reset.digest() == before.digest() {
+            "back to"
+        } else {
+            "differs from"
+        },
+    ));
+    if after_reset.digest() == shot.digest() {
+        failures.push("reset_view() left the injected camera in place".to_owned());
+    }
+    if after_reset.digest() != before.digest() {
+        failures.push("reset_view() did not restore Rerun's own framing".to_owned());
     }
 
-    if !projection_failures.is_empty() {
-        return Err(format!(
-            "{report}projection mismatch: {}\n",
-            projection_failures.join("; ")
-        ));
+    if failures.is_empty() {
+        report.push_str(
+            "the injected document camera lands the layer exactly on the frame, \
+             and reset_view() gives Rerun's framing back\n",
+        );
+        Ok(report)
+    } else {
+        Err(format!("{report}\n{}\n", failures.join("\n")))
     }
-    report.push_str(
-        "camera model matches the rendered pixels: the projected corners land on their own quadrant\n",
-    );
-
-    if injection.is_empty() {
-        return Err(format!(
-            "{report}no public API moved the camera. \
-             `focus_entity`/`reset_view` both end in `ViewProperty::save_blueprint_component`, \
-             which sends `SystemCommand::AppendToStore`; `SpatialStage::process_system_commands` \
-             drops it (spatial_stage.rs:154-175, `_ => {{}}` arm). \
-             There is also no blueprint ingest: `ingest_chunk` only targets `recording_store_id` \
-             (spatial_stage.rs:182-185).\n"
-        ));
-    }
-    report.push_str(&format!("camera moved via: {}\n", injection.join(", ")));
-    Ok(report)
 }
 
 /// (c) 前後関係が遮蔽として成立するか。
@@ -417,4 +491,30 @@ fn probe_occlusion(out_dir: &Path) -> Result<String, String> {
 fn new_stage(name: &str) -> Result<SpatialStage, String> {
     SpatialStage::new(ApplicationId::from(name))
         .map_err(|error| format!("create SpatialStage: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    /// **fork の rev を上げたらここが落ちて教えてくれる**、というのがこのテストの役目。
+    ///
+    /// `SpatialStage::set_camera` で注入した document camera が、既知配置のレイヤーを
+    /// 期待座標へ写すことを見る。期待値は画角と距離から我々の側で決めており、
+    /// Rerun の `Eye` を通さない。窓は開かないし、実時間にも依存しない。
+    ///
+    /// GPU を使うので、adapter が取れない環境では skip する(CI 無しの前提)。
+    #[test]
+    fn injected_document_camera_maps_the_layer_onto_the_frame() {
+        let out_dir = std::env::temp_dir().join("e0-camera-oracle");
+        if let Err(error) = std::fs::create_dir_all(&out_dir) {
+            panic!("could not create {}: {error}", out_dir.display());
+        }
+
+        match super::probe_camera(&out_dir) {
+            Ok(report) => println!("{report}"),
+            Err(report) if report.contains("select an adapter") => {
+                eprintln!("skipped: no usable GPU adapter\n{report}");
+            }
+            Err(report) => panic!("injected camera oracle failed:\n{report}"),
+        }
+    }
 }
