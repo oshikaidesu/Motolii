@@ -31,6 +31,9 @@ pub struct MediaInfo {
 pub struct ContainerInfo {
     pub video_streams: Vec<ProbedVideoStream>,
     pub audio_streams: Vec<ProbedAudioStream>,
+    /// format(container)levelの総尺。fpsを持たないのでframe gridへはsnapしない
+    /// (video streamの尺はstream側がsnap済みで持つ)。audio-only素材でも入る。
+    pub duration: Option<RationalTime>,
 }
 
 /// kind内ordinal付きのvideo stream。
@@ -197,9 +200,12 @@ pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
         }
     }
 
+    let duration = format_duration.and_then(|s| RationalTime::try_from_decimal_str(s).ok());
+
     Ok(ContainerInfo {
         video_streams,
         audio_streams,
+        duration,
     })
 }
 

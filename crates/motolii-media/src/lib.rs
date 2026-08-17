@@ -9,6 +9,7 @@
 //! YUV→RGB変換・色空間の解釈はffmpeg側に寄せ、motolii-gpu側の変換シェーダ実装(M1-T3)
 //! までの間もパイプライン全体をRGBAで一貫させる。
 
+mod admission;
 mod decode;
 mod encode;
 mod mux;
@@ -18,6 +19,7 @@ mod source_binding;
 use std::io::Read;
 use std::process::Command;
 
+pub use admission::{admission_asset_type_for_path, probe_admission_source, AdmissionSource};
 pub use decode::{read_frame_at, FrameReader, FrameReaderCancel, FrameReaderKillHandle};
 pub use encode::Encoder;
 pub use mux::{
@@ -39,6 +41,8 @@ pub enum MediaError {
     Io(#[from] std::io::Error),
     #[error("probe failed: {0}")]
     Probe(String),
+    #[error(transparent)]
+    Fingerprint(#[from] motolii_doc::SourceFingerprintError),
     #[error("media stream not found: kind={kind}, ordinal={ordinal}")]
     StreamNotFound { kind: MediaStreamKind, ordinal: u32 },
     #[error("unsupported audio codec `{codec}` (audio ordinal {ordinal})")]

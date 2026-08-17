@@ -47,6 +47,10 @@ use motolii_core::RationalTime;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+/// `DocumentWriter::new`が公開APIで`motolii_plugin::PluginCatalog`を要求するため、
+/// 下流(統合テスト・CLI/GUI皮)が直接依存を足さずにcatalogを組めるよう再exportする。
+pub use motolii_plugin;
+
 pub use affine::{compose_local, compose_transform, resolve_transform, Affine2D};
 pub use asset::{
     Asset, AssetDraft, AssetError, AssetId, AssetTable, SourceFingerprintDecode,
