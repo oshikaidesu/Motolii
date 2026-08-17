@@ -44,6 +44,13 @@ impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
                 return UiResponse::None;
             }
         }
+        // Stage が出すのは playhead 時刻の合成フレーム。時刻の正本はエディタ
+        // （writer と同じ席）で、ここは読んで渡すだけ。
+        if pane.kind() == PaneKind::Stage {
+            if let Some(editor) = self.editor.as_deref() {
+                pane.set_live_playhead(editor.playhead_seconds());
+            }
+        }
         pane.show(ui, self.render_state);
         // ペイン本体をドラッグ元にはしない（タブのドラッグだけで足りる）。
         UiResponse::None

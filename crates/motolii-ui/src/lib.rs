@@ -49,6 +49,7 @@ pub mod rerun_stage;
 mod render_worker;
 mod shell;
 mod stage_app_geometry;
+mod stage_frame_seat;
 mod stage_geometry_projection;
 mod stage_hit_test;
 mod stage_overlay_gpu;

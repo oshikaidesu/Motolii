@@ -57,6 +57,7 @@ use crate::browser_blitz::render::BlitzSurface;
 use crate::browser_panel::BrowserPanel;
 use crate::chrome_blitz;
 use crate::inspector_panel::{InspectorPanel, FIXTURE_TARGET_LAYER};
+use crate::stage_frame_seat::StageFrameSeat;
 use crate::timeline_blitz::{project_for_blitz, timeline_html};
 
 /// 合成先textureのformat。`Rgba8UnormSrgb` にしないこと(罠1)。
@@ -150,6 +151,15 @@ impl BlitzPane {
             stage.document = Some(document);
             // 大きさが同じでも geometry を再適用させる。
             stage.fitted = (0, 0);
+        }
+    }
+
+    /// playhead(秒)を Stage へ置く。**Stage が出すのはこの時刻の合成フレーム**で、
+    /// 編集と同じく writer 側の値をそのまま読むだけ(ここで進めない)。
+    /// Stage 以外の面には意味が無い。
+    pub(crate) fn set_live_playhead(&mut self, seconds: f32) {
+        if let Content::Stage(stage) = &mut self.content {
+            stage.playhead = seconds;
         }
     }
 
@@ -428,9 +438,64 @@ struct StagePane {
     fitted: (u32, u32),
     /// live Document(writer の snapshot)。`None` なら fixture を読む(従来動線)。
     document: Option<Arc<motolii_doc::Document>>,
+    /// playhead(秒)。live のとき app が毎フレーム置く。
+    playhead: f32,
+    /// playhead 時刻の合成フレームの席。**live のときだけ立つ。**
+    frame_seat: Option<StageFrameSeat>,
+    /// 席を立てられなかった(GPU/worker)。理由は1度だけ言い、以後は幾何だけで出す。
+    frame_seat_failed: bool,
 }
 
 impl StagePane {
+    /// 合成フレームを出す面か。**live Document が座っている時だけ。**
+    /// fixture 展示(`--project` 無し)は幾何だけの従来表示のままにする。
+    fn wants_evaluated_frame(&self) -> bool {
+        self.document.is_some()
+    }
+
+    /// 席を立て、playhead 時刻を要求し、届いていれば受ける。
+    /// 戻すものは無い — 出す1枚は `frame_seat.frame()` から取る。
+    fn drive_frame_seat(
+        &mut self,
+        render_state: &eframe::egui_wgpu::RenderState,
+        ctx: &egui::Context,
+    ) {
+        if !self.wants_evaluated_frame() {
+            return;
+        }
+        if self.frame_seat.is_none() && !self.frame_seat_failed {
+            // **ホストと同じ device** で評価する。完成 texture は Rerun の
+            // texture pool へ実 handle のまま渡るので、別 device では import できない。
+            let gpu = Arc::new(motolii_gpu::GpuCtx::from_device_queue(
+                render_state.device.clone(),
+                render_state.queue.clone(),
+            ));
+            match StageFrameSeat::spawn(gpu) {
+                Ok(mut seat) => {
+                    // 完成は別 thread で来る。入力が無くても塗り直させる。
+                    let repaint = ctx.clone();
+                    seat.on_frame_ready(move || repaint.request_repaint());
+                    self.frame_seat = Some(seat);
+                }
+                Err(error) => {
+                    self.frame_seat_failed = true;
+                    eprintln!("blitz-pane: Stage の合成フレーム席を立てられない: {error}");
+                }
+            }
+        }
+        let Some(document) = self.document.clone() else {
+            return;
+        };
+        let Some(seat) = self.frame_seat.as_mut() else {
+            return;
+        };
+        seat.request(&document, self.playhead);
+        seat.poll();
+        if let Some(error) = seat.take_error() {
+            eprintln!("blitz-pane: Stage の合成に失敗: {error}");
+        }
+    }
+
     fn show(&mut self, ui: &mut egui::Ui, render_state: &eframe::egui_wgpu::RenderState) {
         if self.stage.is_none() {
             match crate::rerun_stage::EmbeddedSpatialStage::new_in_host(render_state) {
@@ -441,6 +506,12 @@ impl StagePane {
                 }
             }
         }
+
+        // 合成フレームの席は Stage を借りる前に回す(借りが割れないように)。
+        let ctx = ui.ctx().clone();
+        self.drive_frame_seat(render_state, &ctx);
+
+        let evaluated_frame = self.frame_seat.as_ref().and_then(StageFrameSeat::frame);
         let Some(stage) = self.stage.as_mut() else {
             return;
         };
@@ -477,7 +548,7 @@ impl StagePane {
             self.fitted = (width, height);
         }
 
-        if let Err(error) = stage.show_in(ui, render_state) {
+        if let Err(error) = stage.show_in(ui, render_state, evaluated_frame) {
             eprintln!("blitz-pane: Rerun Stage の描画に失敗: {error}");
         }
     }
@@ -716,6 +787,49 @@ mod tests {
             PaneKind::ChromePanels,
         ] {
             assert!(matches!(BlitzPane::new(kind).content, Content::Html(_)));
+        }
+    }
+
+    /// **合成フレームの経路は live project の時だけ**動く。
+    /// `--project` 無しの fixture 展示は幾何だけの従来表示のまま
+    /// （席を立てず、render worker も GpuCtx も作らない）。
+    #[test]
+    fn the_evaluated_frame_path_only_runs_for_a_live_project() {
+        let fixture = BlitzPane::new(PaneKind::Stage);
+        let Content::Stage(stage) = &fixture.content else {
+            panic!("Stage pane");
+        };
+        assert!(!stage.wants_evaluated_frame());
+        assert!(stage.frame_seat.is_none());
+
+        let live = BlitzPane::with_document(
+            PaneKind::Stage,
+            Arc::new(motolii_doc::Document::new_current()),
+        );
+        let Content::Stage(stage) = &live.content else {
+            panic!("Stage pane");
+        };
+        assert!(stage.wants_evaluated_frame());
+        assert!(
+            stage.frame_seat.is_none(),
+            "席は最初の描画で立てる（窓を開く前に GPU を掴まない）"
+        );
+    }
+
+    /// playhead は Stage にだけ座る（他の面はこの値を知らない）。
+    #[test]
+    fn the_playhead_seats_only_on_the_stage() {
+        let mut stage = BlitzPane::new(PaneKind::Stage);
+        stage.set_live_playhead(2.5);
+        let Content::Stage(pane) = &stage.content else {
+            panic!("Stage pane");
+        };
+        assert_eq!(pane.playhead, 2.5);
+
+        // 他の面は同じ入口を素通りする（panic も状態も持たない）。
+        for kind in [PaneKind::Timeline, PaneKind::Browser, PaneKind::Inspector] {
+            let mut pane = BlitzPane::new(kind);
+            pane.set_live_playhead(2.5);
         }
     }
 
