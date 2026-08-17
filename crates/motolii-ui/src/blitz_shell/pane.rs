@@ -503,6 +503,13 @@ struct StagePane {
     stage: Option<crate::rerun_stage::EmbeddedSpatialStage>,
     /// 幾何を積んだ面の大きさ(物理px)。変わったら `fit_view` をやり直す。
     fitted: (u32, u32),
+    /// 幾何を積んだ時刻。**絵(合成フレーム)と同じ時刻**でなければ、枠だけが
+    /// t=0 に残って絵とズレる。`None` はまだ一度も積んでいない。
+    framed_at: Option<motolii_core::RationalTime>,
+    /// 最後に Stage へ積んだ幾何。**同じものを積み直さない** — 積むたびに
+    /// Rerun の recording へ chunk が増えるので、動かない layer を再生中に
+    /// 毎フレーム積むと store が伸び続ける。
+    applied_geometry: Option<crate::stage_app_geometry::AppStageGeometry>,
     /// live Document(writer の snapshot)。`None` なら fixture を読む(従来動線)。
     document: Option<Arc<motolii_doc::Document>>,
     /// playhead(秒)。live のとき app が毎フレーム置く。
@@ -518,6 +525,24 @@ impl StagePane {
     /// fixture 展示(`--project` 無し)は幾何だけの従来表示のままにする。
     fn wants_evaluated_frame(&self) -> bool {
         self.document.is_some()
+    }
+
+    /// 幾何を積む時刻。**合成フレームと同じ格子**へ載せた playhead。
+    ///
+    /// live Document が座っていない fixture 展示は playhead を持たないので t=0。
+    /// composition の fps / duration から格子が出せない時も t=0 へ落とす
+    /// (枠を消すより、絵の無い時刻の枠を出すほうが害が小さい)。
+    fn geometry_time(&self) -> motolii_core::RationalTime {
+        self.document
+            .as_deref()
+            .and_then(|document| {
+                crate::stage_frame_seat::snap_to_frame(
+                    self.playhead,
+                    document.composition.fps,
+                    document.composition.duration,
+                )
+            })
+            .unwrap_or(motolii_core::RationalTime::ZERO)
     }
 
     /// 席を立て、playhead 時刻を要求し、届いていれば受ける。
@@ -579,6 +604,8 @@ impl StagePane {
         self.drive_frame_seat(render_state, &ctx);
 
         let evaluated_frame = self.frame_seat.as_ref().and_then(StageFrameSeat::frame);
+        // 幾何を積む時刻も Stage を借りる前に決める(同じ理由)。
+        let framed_at = self.geometry_time();
         let Some(stage) = self.stage.as_mut() else {
             return;
         };
@@ -595,7 +622,12 @@ impl StagePane {
 
         // 幾何は既存の投影から来る。**ここで作らない。**
         // `app_stage_geometry` は `rn_product_host` 側にあり、C5(RN退役)で行き先が変わる。
-        if self.fitted != (width, height) {
+        //
+        // 時刻は絵と同じ格子へ載せる。`stage_frame_seat` が合成フレームを
+        // `snap_to_frame` の時刻で作るので、枠も同じ関数を通す
+        // (別の丸めをすると1フレームぶん枠だけ先走る)。
+        let resized = self.fitted != (width, height);
+        if resized || self.framed_at != Some(framed_at) {
             // live(`--project`)なら writer の snapshot をそのまま読む(single writer の
             // reader 側)。座っていなければ従来どおり fixture。
             let fixture;
@@ -606,13 +638,18 @@ impl StagePane {
                     &fixture
                 }
             };
-            let geometry = crate::stage_app_geometry::app_stage_geometry(
-                document,
-                motolii_core::RationalTime::ZERO,
-            );
-            stage.apply_host_stage_geometry(&geometry, width, height);
-            stage.fit_view(width, height);
+            let geometry = crate::stage_app_geometry::app_stage_geometry(document, framed_at);
+            if resized || self.applied_geometry.as_ref() != Some(&geometry) {
+                stage.apply_host_stage_geometry(&geometry, width, height);
+                self.applied_geometry = Some(geometry);
+            }
+            // カメラの掛け直しは面の大きさが変わった時だけ。playhead が動くたびに
+            // 視点を戻すと、再生中にカメラが跳ねる。
+            if resized {
+                stage.fit_view(width, height);
+            }
             self.fitted = (width, height);
+            self.framed_at = Some(framed_at);
         }
 
         if let Err(error) = stage.show_in(ui, render_state, evaluated_frame) {
@@ -898,6 +935,56 @@ mod tests {
             let mut pane = BlitzPane::new(kind);
             pane.set_live_playhead(2.5);
         }
+    }
+
+    /// **枠は絵と同じ時刻に立つ。** playhead が動けば layer 枠を積み直す時刻も動く。
+    /// ここが t=0 固定だと、絵だけ playhead に追従して枠が置き去りになる。
+    #[test]
+    fn the_stage_geometry_time_follows_the_playhead() {
+        let mut document = motolii_doc::Document::new_current();
+        document.composition.duration = motolii_core::RationalTime::from_seconds(2);
+        let fps = document.composition.fps;
+        let mut stage = BlitzPane::with_document(PaneKind::Stage, Arc::new(document));
+
+        stage.set_live_playhead(1.0);
+        let Content::Stage(pane) = &stage.content else {
+            panic!("Stage pane");
+        };
+        let at_one = pane.geometry_time();
+        assert_eq!(
+            at_one,
+            motolii_core::RationalTime::from_seconds(1),
+            "playhead 1秒の枠が t=1 に立っていない"
+        );
+
+        stage.set_live_playhead(0.0);
+        let Content::Stage(pane) = &stage.content else {
+            panic!("Stage pane");
+        };
+        assert_eq!(pane.geometry_time(), motolii_core::RationalTime::ZERO);
+
+        // 合成フレームと同じ格子(`stage_frame_seat::snap_to_frame`)へ載る。
+        let one_frame = 1.0 / (fps.num() as f32 / fps.den() as f32);
+        stage.set_live_playhead(one_frame * 0.4);
+        let Content::Stage(pane) = &stage.content else {
+            panic!("Stage pane");
+        };
+        assert_eq!(
+            pane.geometry_time(),
+            motolii_core::RationalTime::ZERO,
+            "フレーム格子へ丸めていない"
+        );
+    }
+
+    /// fixture 展示(live Document 無し)は playhead を持たないので t=0 のまま。
+    #[test]
+    fn the_fixture_stage_stays_at_time_zero() {
+        let mut stage = BlitzPane::new(PaneKind::Stage);
+        stage.set_live_playhead(1.5);
+        let Content::Stage(pane) = &stage.content else {
+            panic!("Stage pane");
+        };
+        assert_eq!(pane.geometry_time(), motolii_core::RationalTime::ZERO);
     }
 
     #[test]

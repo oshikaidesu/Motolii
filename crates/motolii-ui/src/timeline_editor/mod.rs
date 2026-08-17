@@ -440,6 +440,23 @@ fn advance_playhead(playhead: f32, dt: f32, comp: f32) -> (f32, bool) {
 ///
 /// 寄るとフレームの倍数へ、引くと秒・分の倍数へ移る。候補にしか無い値は出さない
 /// — 「0.37秒ごと」のような目盛は読めないので。
+/// header の右側(view 表示 + status)を分ける。返すのは **status に渡す幅**。
+///
+/// 両方入るなら素直に。入らないなら短いほうを先に通し、残りを長いほうへ回す。
+/// どちらも半分より長ければ半分ずつ。**どちらの経路でも合計は `shared` を超えない**
+/// ので、2本が重なることは無い。
+fn head_status_width(shared: f32, want_status: f32, want_info: f32) -> f32 {
+    if want_status + want_info <= shared {
+        want_status
+    } else if want_status <= shared * 0.5 {
+        want_status
+    } else if want_info <= shared * 0.5 {
+        (shared - want_info).max(0.0)
+    } else {
+        shared * 0.5
+    }
+}
+
 fn tick_step(span: f32, fps: Fps) -> f32 {
     let frame = 1.0 / fps.as_f64() as f32;
     let target = span / 16.0;
@@ -3190,13 +3207,7 @@ impl TimelineEditor {
             FontId::monospace(13.0),
             INK,
         );
-        p.text(
-            egui::pos2(head.right() - 10.0, head.center().y),
-            Align2::RIGHT_CENTER,
-            &self.status,
-            FontId::proportional(10.0),
-            ACCENT,
-        );
+        // status は view 表示と場所を分け合うので、両方まとめて下で置く。
 
         // ---- ルーラ ----
         let ruler = Rect::from_min_size(
@@ -3232,6 +3243,9 @@ impl TimelineEditor {
                 Stroke::new(1.0, Color32::from_rgb(0x3a, 0x3a, 0x3a)),
             );
         }
+        // 目盛の数は `tick_step`(時間の粒)で決まるので、**幅が狭いと数字だけが
+        // 重なる**。線は間引かず、数字は隣とぶつかる分を落として読めるほうを残す。
+        let mut label_free_from = f32::NEG_INFINITY;
         for t in &ticks {
             let x = self.view.time_to_x(*t, track_left, track_w);
             ruler_clip.line_segment(
@@ -3241,34 +3255,80 @@ impl TimelineEditor {
                 ],
                 Stroke::new(1.0, Color32::from_rgb(0x55, 0x55, 0x55)),
             );
-            ruler_clip.text(
-                egui::pos2(x + 4.0, ruler.bottom() - 6.0),
-                Align2::LEFT_BOTTOM,
-                tick_label(*t, step),
-                FontId::monospace(9.0),
+            let label = p.layout_no_wrap(tick_label(*t, step), FontId::monospace(9.0), DIM);
+            let left = x + 4.0;
+            if left < label_free_from {
+                continue;
+            }
+            ruler_clip.galley(
+                egui::pos2(left, ruler.bottom() - 6.0 - label.size().y),
+                label.clone(),
                 DIM,
             );
+            // 次の数字は、この数字の右端から最低 6px 空けたところから出せる。
+            label_free_from = left + label.size().x + 6.0;
         }
-        // いま何秒を見ているか。**窓の広さと粒**もここに出す
-        p.text(
-            egui::pos2(head.left() + 140.0, head.center().y),
+        // いま何秒を見ているか。**窓の広さと粒**もここに出す。
+        //
+        // status(右寄せ)と場所を取り合うので、**先に幅を測って分ける**。
+        // 素で置くと狭いペインで2本の文字列が重なって、どちらも読めなくなる。
+        let view_info = format!(
+            "{} rows  view {:.2}–{:.2}s  grid {}  loop {}",
+            visible.len(),
+            self.view.start,
+            self.view.start + self.view.span,
+            if step >= 1.0 {
+                format!("{step:.0}s")
+            } else {
+                format!("{:.0}f", step * fps.as_f64() as f32)
+            },
+            if self.loop_region.on {
+                format!("{:.2}–{:.2}s", self.loop_region.start, self.loop_region.end)
+            } else {
+                "off".to_owned()
+            }
+        );
+        let info_left = head.left() + 140.0;
+        let head_right = head.right() - 10.0;
+        // 2本のあいだに必ず空ける幅。
+        const HEAD_TEXT_GAP: f32 = 12.0;
+
+        let status_font = FontId::proportional(10.0);
+        let status_galley = p.layout_no_wrap(self.status.clone(), status_font.clone(), ACCENT);
+        let info_galley = p.layout_no_wrap(view_info.clone(), FontId::monospace(9.0), DIM);
+        let shared = (head_right - info_left - HEAD_TEXT_GAP).max(0.0);
+        let status_w = head_status_width(shared, status_galley.size().x, info_galley.size().x);
+        let status_left = head_right - status_w;
+        let status_p = p.with_clip_rect(Rect::from_min_max(
+            egui::pos2(status_left, head.top()),
+            egui::pos2(head_right, head.bottom()),
+        ));
+        // 収まる時は右寄せ。溢れる時は頭を残して尻を切る(先頭が読めなくならない)。
+        if status_galley.size().x <= status_w {
+            status_p.text(
+                egui::pos2(head_right, head.center().y),
+                Align2::RIGHT_CENTER,
+                &self.status,
+                status_font,
+                ACCENT,
+            );
+        } else {
+            status_p.text(
+                egui::pos2(status_left, head.center().y),
+                Align2::LEFT_CENTER,
+                &self.status,
+                status_font,
+                ACCENT,
+            );
+        }
+        p.with_clip_rect(Rect::from_min_max(
+            egui::pos2(info_left, head.top()),
+            egui::pos2((status_left - HEAD_TEXT_GAP).max(info_left), head.bottom()),
+        ))
+        .text(
+            egui::pos2(info_left, head.center().y),
             Align2::LEFT_CENTER,
-            format!(
-                "{} rows  view {:.2}–{:.2}s  grid {}  loop {}",
-                visible.len(),
-                self.view.start,
-                self.view.start + self.view.span,
-                if step >= 1.0 {
-                    format!("{step:.0}s")
-                } else {
-                    format!("{:.0}f", step * fps.as_f64() as f32)
-                },
-                if self.loop_region.on {
-                    format!("{:.2}–{:.2}s", self.loop_region.start, self.loop_region.end)
-                } else {
-                    "off".to_owned()
-                }
-            ),
+            view_info,
             FontId::monospace(9.0),
             DIM,
         );
@@ -6196,6 +6256,38 @@ mod tests {
         )
         .iter()
         .all(|t| *t >= 0.0));
+    }
+
+    /// **header の2本は重ならない。** view 表示と status が同じ場所を取り合っても、
+    /// 合計は分け合える幅を超えない(狭いペインで文字が重なっていた見た目バグの見張り)。
+    #[test]
+    fn the_header_never_overlaps_the_status_with_the_view_readout() {
+        let shared = 300.0;
+
+        // 両方入るなら削らない。
+        assert_eq!(head_status_width(shared, 100.0, 120.0), 100.0);
+
+        // status が短いときは status を通し切り、残りが view 表示へ。
+        let status = head_status_width(shared, 80.0, 400.0);
+        assert_eq!(status, 80.0);
+        assert!(status + 400.0_f32.min(shared - status) <= shared);
+
+        // view 表示が短いときは view 表示を通し切る。
+        assert_eq!(head_status_width(shared, 400.0, 90.0), 210.0);
+
+        // どちらも長ければ半分ずつ。
+        assert_eq!(head_status_width(shared, 400.0, 400.0), 150.0);
+
+        // 幅が無い時も負にならない。
+        assert_eq!(head_status_width(0.0, 400.0, 400.0), 0.0);
+        for (want_status, want_info) in [(400.0, 400.0), (80.0, 400.0), (400.0, 90.0), (10.0, 10.0)]
+        {
+            let status = head_status_width(shared, want_status, want_info);
+            assert!(
+                (0.0..=shared).contains(&status),
+                "status 幅が分け合える範囲の外: {status}"
+            );
+        }
     }
 
     /// 寄るほど細かい目盛になり、**最後はフレームの倍数**になる。
