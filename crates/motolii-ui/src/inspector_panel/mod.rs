@@ -87,9 +87,13 @@ enum Mode {
 pub struct InspectorPanel {
     model: Option<InspectorReadModel>,
     /// footer に出す状態文(inspector-library.html:177 の `#preview-status` の席)。
+    /// 正本の footer は js の `remember()`(html:204-209)が**選択中の面で起きた事**を
+    /// 書き込む席で、選択の有無そのものを言う席ではない。よって**空状態の理由は
+    /// ここに来ない** — 座席が空なら空文字で、footer は帯だけになる。
     status: String,
     /// model が無いときに面の真ん中へ出す一言。**黙って空にしない**ための席で、
     /// 「No selection」「2 items selected」「読めない理由」がここに来る。
+    /// 理由を出すのは**この1箇所だけ**(footer と二重に出さない)。
     empty_note: String,
     mode: Mode,
     /// 折り畳まれた section(0 = TRANSFORM、1.. = effect)。局所 UI 状態。
@@ -111,16 +115,18 @@ impl InspectorPanel {
         let mut panel = Self::placeholder("read-model preview");
         panel.model = Some(model);
         panel.empty_note.clear();
+        // 座席が埋まったので footer に報告する事ができた。
+        panel.status = "read-model preview".to_owned();
         panel
     }
 
-    /// read-model を作れない時の空面。理由は footer に出す(黙って空にしない)。
-    pub fn placeholder(status: impl Into<String>) -> Self {
-        let status = status.into();
+    /// read-model を作れない時の空面。理由は**面の本文**に出す(黙って空にしない)。
+    /// footer は選択中の面の状態を言う席なので、ここでは空のままにする。
+    pub fn placeholder(note: impl Into<String>) -> Self {
         Self {
             model: None,
-            empty_note: status.clone(),
-            status,
+            empty_note: note.into(),
+            status: String::new(),
             mode: Mode::Effect,
             collapsed: BTreeSet::new(),
             muted: false,
@@ -181,12 +187,13 @@ impl InspectorPanel {
         }
     }
 
+    /// 空状態へ座らせ直す。理由は `empty_note`(本文)にだけ置き、footer は黙らせる。
+    /// 両方へ書くと同じ一言が面に2度出る。
     fn seat_empty(&mut self, note: impl Into<String>) {
-        let note = note.into();
         self.model = None;
         self.edit_hold = None;
-        self.status = note.clone();
-        self.empty_note = note;
+        self.status.clear();
+        self.empty_note = note.into();
     }
 
     /// fixture(または任意の Document file)から read-model を組む。
@@ -1025,6 +1032,12 @@ impl InspectorPanel {
             footer.top(),
             Stroke::new(1.0, theme::BORDER_DEFAULT),
         );
+        // 正本の footer は `.statusDot` + `#preview-status` が必ず対で出る(html:177)。
+        // 報告する状態が無いとき(= 座席が空)は点だけ残さず、帯だけにする。
+        // 空の理由は summary 行が既に言っている — ここへ写すと同じ一言が2度出る。
+        if self.status.is_empty() {
+            return;
+        }
         let dot = Pos2::new(footer.left() + 9.0 + theme::STATUS_DOT / 2.0, footer.center().y);
         painter.circle_filled(dot, theme::STATUS_DOT / 2.0, theme::WAY_INSPECTOR);
         painter.text(
@@ -1422,7 +1435,33 @@ mod tests {
             FIXTURE_TARGET_LAYER,
         );
         assert!(panel.read_model().is_none());
-        assert!(panel.status.contains("/no/such/motolii-doc.json"));
+        // 理由は面の本文(`empty_note`)にだけ立つ。footer は同じ一言を繰り返さない。
+        assert!(panel.empty_note().contains("/no/such/motolii-doc.json"));
+        assert!(
+            panel.status.is_empty(),
+            "空状態の理由が footer にも出ている: {:?}",
+            panel.status
+        );
+    }
+
+    #[test]
+    fn an_empty_seat_says_its_reason_once() {
+        let panel = InspectorPanel::placeholder("No selection — pick a layer in the Timeline");
+        assert_eq!(
+            panel.empty_note(),
+            "No selection — pick a layer in the Timeline"
+        );
+        assert!(panel.status.is_empty());
+    }
+
+    #[test]
+    fn a_seated_model_reports_in_the_footer() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/mocks-ui/fixtures/reference-document.json");
+        let panel = InspectorPanel::from_document_path(&path, FIXTURE_TARGET_LAYER);
+        assert!(panel.read_model().is_some());
+        assert!(panel.empty_note().is_empty());
+        assert!(!panel.status.is_empty());
     }
 
     #[test]

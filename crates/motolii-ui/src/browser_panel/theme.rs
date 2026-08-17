@@ -67,6 +67,8 @@ pub(crate) const TAB_SELECTED_FG: Color32 = rgb(0xf0f0ec);
 // ---- sidebar ----
 /// browser-library.css:102-103 `.librarySidebar { width: 112px }`
 pub(crate) const SIDEBAR_W: f32 = 112.0;
+/// browser-library.css:349 `@media (max-width: 420px) { .librarySidebar { width: 92px } }`
+pub(crate) const SIDEBAR_W_NARROW: f32 = 92.0;
 /// browser-library.css:107 `background: #181a1d`
 pub(crate) const SIDEBAR_BG: Color32 = rgb(0x181a1d);
 /// browser-library.css:111-118 h2: h16 / #727679 / 6px
@@ -99,8 +101,20 @@ pub(crate) const FS_CATALOG_TITLE: f32 = 9.0;
 /// browser-library.css:165 span: #808487 / 6px
 pub(crate) const CATALOG_PATH_FG: Color32 = rgb(0x808487);
 pub(crate) const FS_CATALOG_PATH: f32 = 6.0;
+/// browser-library.css:160 `.catalogHeader { padding: 0 6px }`
+pub(crate) const CATALOG_HEADER_PAD_X: f32 = 6.0;
+/// browser-library.css:165 `.catalogHeader span { max-width: 205px }`
+pub(crate) const CATALOG_PATH_MAX_W: f32 = 205.0;
+/// browser-library.css:353 `@media (max-width: 420px) { .catalogHeader span { max-width: 110px } }`
+pub(crate) const CATALOG_PATH_MAX_W_NARROW: f32 = 110.0;
+/// browser-library.css:348 `@media (max-width: 420px)` の境目。
+pub(crate) const NARROW_BREAKPOINT_W: f32 = 420.0;
 /// browser-library.css:167 `.viewModes button { width: 21px }`
 pub(crate) const VIEW_BUTTON_W: f32 = 21.0;
+/// browser-library.css:166 `.viewModes { gap: 2px }`
+pub(crate) const VIEW_BUTTON_GAP: f32 = 2.0;
+/// browser-library.html:95-97 の3ボタン + css:166 の gap 2つ。
+pub(crate) const VIEW_MODES_W: f32 = 3.0 * VIEW_BUTTON_W + 2.0 * VIEW_BUTTON_GAP;
 /// browser-library.css:168 pressed: border #b9a660 / bg #38362c / #f0ebce
 pub(crate) const VIEW_PRESSED_BG: Color32 = rgb(0x38362c);
 pub(crate) const VIEW_PRESSED_FG: Color32 = rgb(0xf0ebce);
