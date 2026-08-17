@@ -50,6 +50,7 @@
 
 mod audio_seat;
 mod import_seat;
+pub mod waveform_band;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -57,6 +58,7 @@ use std::path::PathBuf;
 use crate::timeline_rows::{rows, ParamRef, RowKind, TimelineFoldState, TimelineRow};
 use audio_seat::{AudioPlayback, WallClockReason};
 use motolii_audio::PcmCache;
+use waveform_band::{band_height, WaveformBand, WaveformSeat, WaveformWindow};
 use eframe::egui;
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, Vec2};
 use motolii_core::{Fps, RationalTime};
@@ -81,6 +83,9 @@ const TRACK_MINOR: Color32 = Color32::from_rgb(0x2b, 0x2b, 0x2b);
 /// 1区間おきの下地。**目盛と目盛のあいだを図にする**(Ableton の明暗)
 const TRACK_BAND: Color32 = Color32::from_rgb(0x2f, 0x2f, 0x2f);
 const RULE: Color32 = Color32::from_rgb(0x11, 0x11, 0x11);
+/// soundtrack の波形。**下地より明るく、ACCENT より鈍い** — 地図であって、
+/// 「いま効いている」物ではない
+const WAVE: Color32 = Color32::from_rgb(0x7f, 0x92, 0x8c);
 const INK: Color32 = Color32::from_rgb(0xd4, 0xd4, 0xd4);
 const DIM: Color32 = Color32::from_rgb(0x8d, 0x8d, 0x8d);
 /// 「いま効いている」を言う一色。status の字と、殻のドロップ枠が共有する
@@ -1128,6 +1133,9 @@ pub struct TimelineEditor {
     /// decode 済み正準PCMの控え(`(content_hash, ordinal)`)。再生をまたいで
     /// 使い回し、再生のたびに decode し直さない
     pcm_caches: HashMap<(String, u32), Arc<PcmCache>>,
+    /// soundtrack の波形帯の生成座席。**decode と縮約は別 thread**で、
+    /// 届くまでは薄い placeholder のまま描く。控えは `pcm_caches` と共有する
+    waveform: WaveformSeat,
     status: String,
 }
 
@@ -1203,6 +1211,7 @@ impl TimelineEditor {
             audio: None,
             project_root: None,
             pcm_caches: HashMap::new(),
+            waveform: WaveformSeat::default(),
             status: "space=play  L=loop  Cmd+G=group  Del=delete  drag name=reorder".to_owned(),
         }
     }
@@ -1218,6 +1227,12 @@ impl TimelineEditor {
     /// 座っている project root(読み)。座席の配線テストが見る。
     pub fn project_root(&self) -> Option<&std::path::Path> {
         self.project_root.as_deref()
+    }
+
+    /// soundtrack の波形帯が取る高さ(px)。**soundtrack が無ければ 0** で、
+    /// 帯ごと出ない(空の帯で行の面を削らない)。描画もこの1本から引く。
+    pub fn waveform_band_height(&self) -> f32 {
+        band_height(self.document.soundtrack.is_some())
     }
 
     /// 一番下に出ている一言(読み)。**落ちた編集の理由もここに出る。**
@@ -2690,6 +2705,123 @@ impl TimelineEditor {
 }
 
 impl TimelineEditor {
+    /// soundtrack の波形帯を**ルーラの直下**へ描き、帯の下端を返す
+    /// (行の面はここから始まる)。soundtrack が無ければ何も描かず `top` を返す。
+    ///
+    /// 時間 ↔ x は `self.view` の1本しか使わない — ルーラの目盛も、ロケータの印も、
+    /// playhead も同じ換算なので、**M で打った印は見ていた波形の真上に落ちる**。
+    fn waveform_band(
+        &mut self,
+        p: &egui::Painter,
+        full: Rect,
+        track_left: f32,
+        track_w: f32,
+        top: f32,
+    ) -> f32 {
+        let height = self.waveform_band_height();
+        if height <= 0.0 {
+            return top;
+        }
+        let band = Rect::from_min_max(
+            egui::pos2(full.left(), top),
+            egui::pos2(full.right(), top + height),
+        );
+        p.rect_filled(
+            band,
+            CornerRadius::ZERO,
+            Color32::from_rgb(0x22, 0x22, 0x22),
+        );
+        p.line_segment(
+            [band.left_bottom(), band.right_bottom()],
+            Stroke::new(1.0, RULE),
+        );
+        // 左のレールには時刻が無いので、時間の物は置かない(名前だけ出す)
+        p.text(
+            egui::pos2(full.left() + 10.0, band.center().y),
+            Align2::LEFT_CENTER,
+            "soundtrack",
+            FontId::proportional(9.0),
+            DIM,
+        );
+
+        let lane = Rect::from_min_max(egui::pos2(track_left, band.top()), band.max);
+        let band_p = p.with_clip_rect(lane);
+        // 無音の高さ。**線が1本通っている**ほうが、まだ読めていないのか
+        // 本当に無音なのかを取り違えない
+        let mid = lane.center().y;
+        band_p.line_segment(
+            [egui::pos2(lane.left(), mid), egui::pos2(lane.right(), mid)],
+            Stroke::new(1.0, Color32::from_rgb(0x3a, 0x3a, 0x3a)),
+        );
+
+        let start_offset = self
+            .document
+            .soundtrack
+            .as_ref()
+            .map(|st| st.start_offset.as_seconds_f64() as f32)
+            .unwrap_or(0.0);
+        let band_state = {
+            let document = Arc::clone(&self.document);
+            let root = self.project_root.clone();
+            self.waveform
+                .poll(&document, root.as_deref(), &mut self.pcm_caches)
+        };
+        match band_state {
+            // 帯を出すと決めた以上ここへは来ない(高さは soundtrack の有無で決まる)
+            WaveformBand::Absent => {}
+            // **decode を待つあいだもフレームは進む。** 薄い帯だけ出しておく
+            WaveformBand::Building => {
+                band_p.text(
+                    egui::pos2(lane.left() + 6.0, mid),
+                    Align2::LEFT_CENTER,
+                    "reading waveform…",
+                    FontId::proportional(9.0),
+                    Color32::from_rgb(0x5a, 0x5a, 0x5a),
+                );
+            }
+            // 黙って空の帯にしない。読めなかった理由を帯の中に書く
+            WaveformBand::Unavailable(reason) => {
+                band_p.text(
+                    egui::pos2(lane.left() + 6.0, mid),
+                    Align2::LEFT_CENTER,
+                    reason,
+                    FontId::proportional(9.0),
+                    Color32::from_rgb(0x7a, 0x5a, 0x4a),
+                );
+            }
+            WaveformBand::Ready(peaks) => {
+                let mut columns = Vec::new();
+                peaks.columns(
+                    WaveformWindow {
+                        view_start: self.view.start,
+                        view_span: self.view.span,
+                        width_px: track_w,
+                        start_offset,
+                    },
+                    &mut columns,
+                );
+                // **1列 = 1px の縦棒を1つの mesh へ畳む。** 見えている px のぶんしか
+                // 積まないので、ズームを引いても1フレームの値段は変わらない
+                let half = (lane.height() * 0.5 - 2.0).max(1.0);
+                let mut mesh = egui::Mesh::default();
+                for (column, peak) in columns.iter().enumerate() {
+                    let x = lane.left() + column as f32;
+                    // 無音でも 0.5px は置く(線が切れると「読めていない」に見える)
+                    let h = (peak * half).max(0.5);
+                    mesh.add_colored_rect(
+                        Rect::from_min_max(
+                            egui::pos2(x, mid - h),
+                            egui::pos2(x + 1.0, mid + h),
+                        ),
+                        WAVE,
+                    );
+                }
+                band_p.add(egui::Shape::mesh(mesh));
+            }
+        }
+        band.bottom()
+    }
+
     /// audio の座席を別の時刻から開き直す(シーク・ループの折り返し)。
     /// 開き直せなければ壁時計へ**明示的に**落ち、理由を status に出す。
     /// 壁時計の座席には何もしない(壁時計にシークの追従は要らない)。
@@ -3299,11 +3431,16 @@ impl TimelineEditor {
             }
         }
 
+        // ---- soundtrack の波形帯 ----
+        // **ルーラの直下。** 目盛・ロケータ・playhead と同じ `view` から x を引くので、
+        // 波形を見ながら M を押した所に印が落ちる。soundtrack が無ければ帯ごと出ない
+        let wave_bottom = self.waveform_band(&p, full, track_left, track_w, ruler.bottom());
+
         // ---- 行 ----
-        // **行の面は、ルーラの下からナビゲータ帯の上まで。** 縦スクロールはこの中だけ
-        let nav_top = (full.bottom() - NAV_H).max(ruler.bottom());
+        // **行の面は、波形帯の下からナビゲータ帯の上まで。** 縦スクロールはこの中だけ
+        let nav_top = (full.bottom() - NAV_H).max(wave_bottom);
         let rows_view = Rect::from_min_max(
-            egui::pos2(full.left(), ruler.bottom()),
+            egui::pos2(full.left(), wave_bottom),
             egui::pos2(full.right(), nav_top),
         );
         let (row_h, prop_h) = if self.large_rows {
@@ -4181,12 +4318,13 @@ impl TimelineEditor {
             egui::pos2(track_left, ruler.top()),
             egui::pos2(full.right(), rows_view.bottom()),
         ));
-        // メモの縦線。**薄く、面の上だけ**(印そのものはルーラに置く)
+        // メモの縦線。**薄く、面の上だけ**(印そのものはルーラに置く)。
+        // **波形帯も貫く** — 印がどの音の上に落ちたかは、そこでしか読めない
         for t in &time_line_hints {
             let x = self.view.time_to_x(*t, track_left, track_w);
             time_p.line_segment(
                 [
-                    egui::pos2(x, rows_view.top()),
+                    egui::pos2(x, ruler.bottom()),
                     egui::pos2(x, rows_view.bottom()),
                 ],
                 Stroke::new(1.0, Color32::from_rgb(0x4a, 0x44, 0x33)),
