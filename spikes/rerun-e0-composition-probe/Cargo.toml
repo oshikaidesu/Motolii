@@ -1,0 +1,21 @@
+[package]
+name = "rerun-e0-composition-probe"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+egui.workspace = true
+egui-wgpu.workspace = true
+image.workspace = true
+re_chunk.workspace = true
+re_log_types.workspace = true
+re_renderer.workspace = true
+re_sdk_types.workspace = true
+re_view_spatial.workspace = true
+wgpu.workspace = true
+# `Eye::ui_from_world` が返すのは **Rerun 側の glam(0.30)** の `Mat4` である。
+# workspace の glam は 0.32 で型が別物になるため、ここだけ 0.30 を直接引く。
+glam = "0.30"
+pollster = "0.4"
