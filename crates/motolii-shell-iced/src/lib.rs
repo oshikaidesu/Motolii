@@ -26,10 +26,18 @@
 //!   (`tests/` 配下)。近道キーと OS ドロップが購読ではなく widget 木
 //!   ([`window_input`])を通るのは、運転席から注入できる道を1本に保つためである
 //!
+//! ## M-2 で加わったもの
+//!
+//! - **Stage 島**([`stage_island`])。座席が在る間の中央 pane に Rerun
+//!   `SpatialStage` の合成絵が立つ。入力は翻訳([`stage_bridge`])と
+//!   調停3状態([`stage_arbiter`]: 素通し / orbit 中 / 掴み中)を通り、
+//!   失敗は [`Message::StageReported`] として帯へ出る。bind group 床
+//!   (iced fork seam 2)の実効 oracle も常設(`tests/stage_bind_groups_oracle.rs`)
+//!
 //! ## ここに無いもの(意図的に)
 //!
-//! - Rerun の Stage 島(M-2)、Timeline(M-3)、Browser / Inspector(M-4)。
-//!   Undo / Redo ボタンは編集面と一緒に来る
+//! - Timeline(M-3)、Browser / Inspector(M-4)。ギズモの絵と意味論・
+//!   書き出しカメラ枠 overlay は M-2 後。Undo / Redo ボタンは編集面と一緒に来る
 //! - 引数なし起動の「続きが開く」(egui 側 wave D の `last_project`)。M-2 以降
 //! - egui。**この crate に egui 系の直接依存は1つも無い**
 //!   (柵: `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs` の
