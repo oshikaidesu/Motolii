@@ -1,0 +1,14 @@
+[package]
+name = "iced-timeline-probe"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+# `../probe` と同じ vendored iced(rev 3de451447bd28217bb535632867550908e29d5d0)。
+# こちらは Rerun も wgpu も引かない。measure したいのは「密な編集面を Elm で書く」ことだけで、
+# 埋め込みの話は `../probe` が既に測っている。
+#
+# `advanced` は canvas の `Program` / `Action` を出すために要る。`wgpu` は既定の描画 backend。
+iced = { path = "../vendor/iced", features = ["wgpu", "advanced", "canvas"] }
