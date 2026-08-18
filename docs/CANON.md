@@ -17,6 +17,13 @@
 
 RN由来のBrowserモックが別にもう1つある: `docs/mocks-ui/public/rn-browser-161c7ccd.html`(2026-08-16、`ui/motolii-rn/src/Browser.tsx`固定commit`161c7ccd`からの投影専用・Host/Document/intent/drag/persistence非接続)。上表の`browser-library.html`と役割が異なる(こちらは視覚回帰の投影専用、上表は製品egui実装が直接写す対象)。
 
+**2026-08-19 利用者裁定 — 面ごとに「手本」が違う(取り違え注意)**:
+
+- **Browser / Inspector**: 正本は上表の HTML/CSS **そのもの**。**egui 実装(`browser_panel` / `inspector_panel`)は手本にしない** — 利用者の判断で「egui 変換が上手くできなかった部分」。定数が css と一致していることと、構造・階層が設計の意図どおりであることは別問題。iced 側は **HTML から意図(section 階層・class の意味・行の内部構造・状態の表現)を解析して**作る。egui から拾ってよいのは**振る舞いの結線と意味関数**だけ
+- **Timeline**: 逆。**egui 実装が正本**(2026-08-19 裁定「egui 版が最も機能を詰めれていて優れている、UI も」)。`timeline-library.html` は副参照
+
+器具: `motolii-css-metrics`(`motolii_ui::css_metrics::extract()`)が HTML/CSS の計算済み値を吐く。写経せず器具の値を根拠にする。**罠**: `<link>` は解決されない(inline 要)/ 帯・アクセントバーは `::before`/`::after` = `AnonymousBlock` なので Element だけ歩くと消える / JS 依存の初期状態は再現されない。
+
 ## Timeline engineの実装
 
 | 実体 | 最終更新 | 状態 |
