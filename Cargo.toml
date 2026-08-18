@@ -72,6 +72,11 @@ motolii-input = { path = "crates/motolii-input" }
 iced = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c", features = ["wgpu", "advanced"] }
 # 運転席(headless Simulator)。dev-dependencies 専用。
 iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+# fork seam 2(bind group 床)の口。`iced` 本体は `iced_wgpu` を再公開しないので、
+# `device_limits::request_min_max_bind_groups` を呼ぶには直接引くしかない。
+# 同じ repo・同じ rev なので cargo のグラフ上では iced 内部の iced_wgpu と**同一 package**
+# になり、床の static も1つだけである(M-2 Stage 島)。
+iced_wgpu = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
 cargo_metadata = "0.23"
 serde = { version = "1", features = ["derive"] }
 egui = "0.35"

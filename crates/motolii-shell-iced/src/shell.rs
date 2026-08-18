@@ -116,6 +116,10 @@ impl Shell {
                 // **intent ではない** — 走っている thread からの返事を受けるだけ。
                 self.gateway.poll_export();
             }
+            Message::StageReported(lines) => {
+                // red: 未実装 — まだ transcript へ写していない。
+                let _ = lines;
+            }
         }
         Outcome::Stay
     }
@@ -145,6 +149,18 @@ impl Shell {
     /// live project が座っているか。スタート画面を出すかどうかがこれで決まる。
     pub fn is_seated(&self) -> bool {
         self.gateway.is_seated()
+    }
+
+    /// composition の縦横比(幅/高さ)。Stage 島の document camera の横合わせに要る。
+    ///
+    /// 出所は座席の Document(正準では高さ1.0固定なので縦横比が寸法の全部 —
+    /// egui shell の pane と同じ読み方)。座っていなければ `None`。
+    pub fn composition_aspect(&self) -> Option<f32> {
+        self.gateway.project().map(|seat| {
+            let snapshot = seat.snapshot();
+            let composition = &snapshot.composition;
+            composition.aspect_num() as f32 / composition.aspect_den() as f32
+        })
     }
 
     /// 座っている project のパス。

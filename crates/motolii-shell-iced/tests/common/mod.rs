@@ -101,3 +101,18 @@ pub fn redraw() -> iced::event::Event {
 pub fn close_requested() -> iced::event::Event {
     iced::event::Event::Window(iced::window::Event::CloseRequested)
 }
+
+/// GPU(wgpu adapter)が無い環境では Stage 島の審判ができないので skip する。
+/// egui 版運転席の「GPU 無ければ skip」と同じ扱い。`Some(())` なら回してよい。
+pub fn gpu_or_skip() -> Option<()> {
+    let instance = wgpu::Instance::new(re_renderer::device_caps::instance_descriptor(None));
+    let adapters =
+        iced::futures::executor::block_on(instance.enumerate_adapters(wgpu::Backends::all()));
+    match re_renderer::device_caps::select_adapter(&adapters, wgpu::Backends::all(), None) {
+        Ok(_) => Some(()),
+        Err(error) => {
+            println!("skip: no usable GPU adapter ({error})");
+            None
+        }
+    }
+}
