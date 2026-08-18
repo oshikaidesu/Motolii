@@ -297,19 +297,23 @@ fn an_effect_toggle_writes_the_shared_definition() {
     }
     let dir = motolii_testkit::tmp_dir("iced_inspector_fx");
     let path = dir.join("fx.json");
-    // tint recipe を1つ持つ project を仕立てる(作り方は `create_project_file` と
-    // 同じ骨組み + 共有 recipe 1本。plugin は reference catalog の `core.filter.tint`)。
-    let mut document = motolii_doc::Document::new_current();
-    document
-        .composition
-        .set_resolution(Some((1920, 1080)))
-        .expect("resolution");
-    let track = document.track_ids.allocate("V1").expect("track");
-    document.tracks.push(motolii_doc::Track {
-        id: track,
-        items: vec![],
+    // まず殻で「project を作って still を1本置いて保存」まで進め、座席を返す。
+    let mut first = Shell::new(ScriptedPrompts {
+        new_project_path: Some(path.clone()),
+        ..ScriptedPrompts::default()
     });
+    seat_with_selected_layer(&mut first);
+    let saved = common::command_key('s');
+    let typed = feed(iced_test::simulator(view(&first)), saved);
+    drain(&mut first, typed);
+    drop(first); // OS lock を返す(次の殻が同じ project を開けるように)
+
+    // 次に**永続層で** tint recipe と、置いた clip からの EffectUse を仕立てる。
+    // FX の追加 UI は非目標(2026-08-13)なので、テスト fixture はファイルを
+    // 直接組む — 開いた後の書き道は相変わらず intent だけである。
+    let mut document = motolii_doc::load_document(&path).expect("load");
     let definition_id = document.next_stable_id.allocate().expect("stable id");
+    let use_id = document.next_stable_id.allocate().expect("stable id");
     document
         .effect_definitions
         .push(motolii_doc::EffectDefinition::new(
@@ -320,6 +324,22 @@ fn an_effect_toggle_writes_the_shared_definition() {
             std::collections::BTreeMap::new(),
             serde_json::Map::new(),
         ));
+    {
+        let item = document
+            .tracks
+            .iter_mut()
+            .flat_map(|track| &mut track.items)
+            .next()
+            .expect("置いた clip");
+        let envelope = match item {
+            motolii_doc::TrackItem::Clip(clip) => &mut clip.envelope,
+            motolii_doc::TrackItem::Group(group) => &mut group.envelope,
+        };
+        envelope.effects.push(motolii_doc::EffectUse {
+            id: motolii_doc::EffectId::from_raw(use_id),
+            definition_id: motolii_doc::EffectDefinitionId::from_raw(definition_id),
+        });
+    }
     let mut session = motolii_doc::ProjectSession::acquire(
         &path,
         &motolii_doc::ResourceLimits::production(),
@@ -339,12 +359,6 @@ fn an_effect_toggle_writes_the_shared_definition() {
         motolii_shell_iced::view::OPEN_PROJECT,
     );
     drain(&mut shell, pressed);
-    let still = starter_media_dir().join("starter-still.png");
-    let dropped = feed(
-        iced_test::simulator(view(&shell)),
-        [file_dropped(&still), redraw()],
-    );
-    drain(&mut shell, dropped);
     let layer = shell
         .document()
         .expect("seated")

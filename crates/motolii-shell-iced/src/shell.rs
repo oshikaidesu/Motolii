@@ -144,11 +144,6 @@ impl Shell {
     /// ([`Self::inspector`])から取る。面にも殻にも先行する局所値は無い
     /// (optimistic 禁止 — 2026-08-13 裁定)。
     fn apply_inspector(&mut self, event: InspectorEvent) {
-        // RED: not wired yet — the failing tests come first.
-        let _ = event;
-        if true {
-            return;
-        }
         match event {
             InspectorEvent::SetEffectEnabled {
                 definition_id,
