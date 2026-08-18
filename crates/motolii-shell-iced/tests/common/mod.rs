@@ -83,6 +83,36 @@ pub fn command_key(character: char) -> Vec<iced::event::Event> {
     ]
 }
 
+/// cursor 移動。widget は event の position を読むが、`Simulator` の当たり判定は
+/// `point_at` の cursor を見るので、**動かす時は必ず両方を揃える**
+/// (`point_and_move` を使う)。
+pub fn cursor_moved(x: f32, y: f32) -> iced::event::Event {
+    iced::event::Event::Mouse(iced::mouse::Event::CursorMoved {
+        position: iced::Point::new(x, y),
+    })
+}
+
+/// cursor を `point_at` で置いてから `CursorMoved` を1発流す。
+pub fn point_and_move<Message>(ui: &mut iced_test::Simulator<'_, Message>, x: f32, y: f32) {
+    ui.point_at(iced::Point::new(x, y));
+    let _ = ui.simulate([cursor_moved(x, y)]);
+}
+
+/// 左ボタン押下。
+pub fn left_pressed() -> iced::event::Event {
+    iced::event::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left))
+}
+
+/// 左ボタン離し。
+pub fn left_released() -> iced::event::Event {
+    iced::event::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left))
+}
+
+/// cursor が窓から出た。
+pub fn cursor_left() -> iced::event::Event {
+    iced::event::Event::Mouse(iced::mouse::Event::CursorLeft)
+}
+
 /// OS ドロップ1件。winit は**ファイル1つにつき1事象**を出す。
 pub fn file_dropped(path: &Path) -> iced::event::Event {
     iced::event::Event::Window(iced::window::Event::FileDropped(path.to_path_buf()))
