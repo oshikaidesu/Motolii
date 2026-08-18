@@ -20,7 +20,7 @@ use std::sync::Arc;
 use motolii_audio::PcmCache;
 use motolii_doc::{Document, LayerId};
 use motolii_ui::blitz_shell::{
-    decide_unsaved, IntentEvent, ShellGateway, ShellPrompts, ShellTranscript, StatusEvent,
+    decide_unsaved, IntentEvent, Resume, ShellGateway, ShellPrompts, ShellTranscript, StatusEvent,
     UiIntent, UiItemFlag, UnsavedDecision,
 };
 
@@ -73,17 +73,47 @@ impl Shell {
     /// 座席なしで始める(スタート画面)。Browser の登録 folder は既定
     /// (repo の starter media)。
     pub fn new(prompts: impl ShellPrompts + 'static) -> Self {
-        Self::with_browser(prompts, BrowserPane::default_shell())
+        Self::with_browser(
+            prompts,
+            BrowserPane::default_shell(),
+            ShellGateway::new(ShellTranscript::default()),
+        )
     }
 
     /// 登録 folder を差し替えて始める(運転席テスト用。窓の経路は同じ)。
     pub fn with_browser_root(prompts: impl ShellPrompts + 'static, root: PathBuf) -> Self {
-        Self::with_browser(prompts, BrowserPane::with_root(root))
+        Self::with_browser(
+            prompts,
+            BrowserPane::with_root(root),
+            ShellGateway::new(ShellTranscript::default()),
+        )
     }
 
-    fn with_browser(prompts: impl ShellPrompts + 'static, browser: BrowserPane) -> Self {
+    /// 座席ごと始める — `--project` で窓より先に開いた座席か、引数なし起動の
+    /// [`resume::decide_resume`](crate::resume::decide_resume) が返す3択(`Resume`)を
+    /// 受ける。判断はここに無く、`motolii_ui::blitz_shell::ShellGateway::resumed` が
+    /// 済ませている(egui 版 `BlitzShellApp::with_seat` と同じ分担)。
+    ///
+    /// `last_project` を渡した経路(窓を開く `main.rs`)だけが、次に座り直した
+    /// project を覚える — 渡さなければ(`None`)何も書かない。テストと replay が
+    /// 利用者の「続きが開く」設定を踏まないための境目は egui 版と同じ。
+    pub fn resumed(
+        prompts: impl ShellPrompts + 'static,
+        resume: Resume,
+        last_project: Option<PathBuf>,
+    ) -> Self {
+        let gateway =
+            ShellGateway::resumed(ShellTranscript::default(), resume).remembering(last_project);
+        Self::with_browser(prompts, BrowserPane::default_shell(), gateway)
+    }
+
+    fn with_browser(
+        prompts: impl ShellPrompts + 'static,
+        browser: BrowserPane,
+        gateway: ShellGateway,
+    ) -> Self {
         let mut shell = Self {
-            gateway: ShellGateway::new(ShellTranscript::default()),
+            gateway,
             prompts: Box::new(prompts),
             catalog: motolii_plugin::reference::reference_catalog()
                 .map(Arc::new)

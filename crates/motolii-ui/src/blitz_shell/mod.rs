@@ -88,8 +88,9 @@ pub use app::{decide_unsaved, UnsavedChoice, UnsavedDecision};
 /// 同じ型・同じ文言を通す(2026-08-18 iced ホスト移行 M-0 / M-1)。
 pub use drive::{NativePrompts, ScriptedPrompts, ShellPrompts, ShellTranscript, StatusEvent};
 pub use intent::{
-    admit_dropped_paths, create_project_file, reseat_project, seconds_to_us, IntentEvent,
-    IntentJournal, ProjectSeat, ShellGateway, UiEditParam, UiIntent, UiItemFlag,
+    admit_dropped_paths, create_project_file, reseat_project, resume_last_project,
+    seconds_to_us, IntentEvent, IntentJournal, ProjectSeat, Resume, ShellGateway, UiEditParam,
+    UiIntent, UiItemFlag,
 };
 pub use pane::{BlitzPane, PaneKind};
 pub use runner::{run_blitz_shell, BlitzShellLaunch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES};

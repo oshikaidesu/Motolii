@@ -4,8 +4,12 @@
 //! 中に埋めると「引数をどう読むか」を窓を開かずに確かめられない
 //! (egui 側の `BlitzShellLaunch` と同じ分担)。
 //!
-//! M-1 の範囲は記録の2本だけ。`--project` / `--screenshot` / `--fixture` は
+//! M-1 の範囲は記録の2本だけだった。`--screenshot` / `--fixture` は
 //! 中身(Stage / Timeline)が来てから。
+//!
+//! M-2 で `--project` が加わった。読むだけがここの仕事で、開く・座らせる判断は
+//! [`crate::resume::decide_resume`] が持つ(窓を開く前に呼べるようにするため、
+//! 意図的にここへは書かない)。
 
 use std::path::PathBuf;
 
@@ -17,6 +21,9 @@ pub struct Launch {
     pub intent_log: Option<PathBuf>,
     /// 窓が**言ったこと**の流し先(`--status-log`)。
     pub status_log: Option<PathBuf>,
+    /// 起動時に開く project(`--project`)。指定が無ければ引数なし起動の
+    /// 「続きが開く」(`crate::resume::decide_resume`)へ回る。
+    pub project: Option<PathBuf>,
 }
 
 impl Launch {
@@ -39,6 +46,12 @@ impl Launch {
                 i += 2;
             } else if arg == "--status-log" {
                 launch.status_log = Some(PathBuf::from(value_after(&args, i, arg)?));
+                i += 2;
+            } else if let Some(rest) = arg.strip_prefix("--project=") {
+                launch.project = Some(PathBuf::from(rest));
+                i += 1;
+            } else if arg == "--project" {
+                launch.project = Some(PathBuf::from(value_after(&args, i, arg)?));
                 i += 2;
             } else {
                 return Err(format!("知らない引数: {arg}"));
