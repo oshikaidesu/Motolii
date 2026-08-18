@@ -1,0 +1,12 @@
+# Motolii の workspace には**入れない**。iced master は独自の winit git fork を引くので、
+# 本体 workspace の winit 0.30.9 と衝突しうる。`spikes/g0-9-surface-host` と同じ
+# 「workspace 外の隔離 spike」形式で、この spike が自分の workspace を持つ。
+#
+# 2階建てにしてあるのは cargo の都合である。`vendor/iced` は iced 自身の workspace root で、
+# 「別の workspace root がパッケージのディレクトリの中にある」状態を cargo が拒む。
+# ここを仮想 manifest にして `probe/` をメンバにすると、`vendor/` は誰のパッケージにも
+# 属さなくなり、`exclude` が効く。
+[workspace]
+resolver = "2"
+members = ["probe"]
+exclude = ["vendor"]

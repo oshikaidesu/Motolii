@@ -1,0 +1,57 @@
+# iced x Rerun SpatialStage embed probe — GUI run
+
+## embed log (what the shader widget did with iced's device)
+
+iced handed us its runtime device: max_bind_groups=2, max_non_sampler_bindings=2048, max_texture_dimension_2d=16384, features=Features { features_wgpu: FeaturesWGPU(0x0), features_webgpu: FeaturesWebGPU(SHADER_F16) }, surface format=Bgra8Unorm
+borrowed iced's own device (no second device was created)
+  iced device max_bind_groups = 2
+  iced device max_non_sampler_bindings = 2048
+  iced device max_texture_dimension_2d = 16384
+  iced device features = Features { features_wgpu: FeaturesWGPU(0x0), features_webgpu: FeaturesWebGPU(SHADER_F16) }
+  adapter re-enumerated for RenderContext::new = AdapterInfo { name: "Apple M4", vendor: 0, device: 0, device_type: IntegratedGpu, device_pci_bus_id: "", driver: "", driver_info: "", backend: Metal, subgroup_min_size: 4, subgroup_max_size: 64, transient_saves_memory: true }
+built a Rerun RenderContext on iced's device; offscreen target 1280x960 Rgba8Unorm
+warmed up 90 frames of SpatialStage on iced's device, but wgpu reported:
+  SpatialStage frame: Validation Error
+
+Caused by:
+  In Device::create_pipeline_layout, label = 'LineRenderer::pipeline_layout'
+    Bind group layout count 3 exceeds device bind group limit 2
+
+applied camera generation 1 (pull_back = 1.000)
+applied camera generation 2 (pull_back = 1.600)
+
+## app log (what the probe checked)
+
+requesting the (b) screenshot
+wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-a75ad764af63acf47/docs/reviews/evidence/iced-rerun-embed-probe/iced-b-document-camera.png (1280x960, scale factor 2)
+  fnv1a: b63a5915482f2325
+  hue histogram: red=307200 green=307200 blue=307200 yellow=307200 dark=0 other=0 (minimum per quadrant = 7987 of 1228800)
+  all four quadrants are present
+  frame corner top-left (6, 6): red Some([230, 30, 30]) (expected red)
+  frame corner top-right (1273, 6): green Some([30, 230, 30]) (expected green)
+  frame corner bottom-left (6, 953): blue Some([30, 30, 230]) (expected blue)
+  frame corner bottom-right (1273, 953): yellow Some([230, 230, 30]) (expected yellow)
+embed status: initialized=true frames=122 offscreen=1280x960 error=None
+wgpu validation error on iced's device: SpatialStage frame: Validation Error
+
+Caused by:
+  In Device::create_pipeline_layout, label = 'LineRenderer::pipeline_layout'
+    Bind group layout count 3 exceeds device bind group limit 2
+
+(b) PASS: the Rerun-composited frame reached the iced window and passes the E0 corner oracle
+wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-a75ad764af63acf47/docs/reviews/evidence/iced-rerun-embed-probe/iced-b-offscreen-source.png (the offscreen texture the widget samples, fnv1a b63a5915482f2325)
+(c) the shader widget's Program::update turned a left-button press into StageClicked { x: 160.0, y: 120.0 }
+App::update received Message::StageClicked { x: 160.0, y: 120.0 }
+the click moved the stage camera: set_camera(pull_back = 1.6), camera generation is now 2
+requesting the (c) screenshot
+wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-a75ad764af63acf47/docs/reviews/evidence/iced-rerun-embed-probe/iced-c-after-click.png (1280x960, scale factor 2)
+  fnv1a: e10626ece994e3a8
+(c) the picture after the click differs from the picture before it
+  frame corner top-left (6, 6): dark Some([24, 48, 19]) (expected red)
+  frame corner top-right (1273, 6): dark Some([52, 49, 20]) (expected green)
+  frame corner bottom-left (6, 953): dark Some([24, 27, 19]) (expected blue)
+  frame corner bottom-right (1273, 953): dark Some([52, 28, 20]) (expected yellow)
+(c) PASS: the typed Message reached update(), set_camera() ran, and the frame corners are no longer the document (the camera pulled back)
+
+click positions that reached App::update: [(160.0, 120.0)]
+(mode: gui — synthesized press, runtime-delivered Message. In `gui` the press is handed to the widget's Program::update and the Message it returns is delivered by the runtime; winit's own dispatch is only exercised in `gui-interactive`.)
