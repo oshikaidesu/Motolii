@@ -14,13 +14,17 @@
 //! (=「意味は不変のまま iced へ移る」)。
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use motolii_ui::blitz_shell::{
     decide_unsaved, IntentEvent, ShellGateway, ShellPrompts, ShellTranscript, StatusEvent,
-    UiIntent, UnsavedDecision,
+    UiIntent, UiItemFlag, UnsavedDecision,
 };
 
+use crate::inspector_model::{project_inspector, InspectorSeat};
+use crate::inspector_pane::InspectorEvent;
 use crate::message::Message;
+use crate::widgets_stub::ScrubEvent;
 
 /// `update` 1件のあとで窓に残る唯一の要求。
 ///
@@ -43,6 +47,11 @@ pub struct Shell {
     /// 人に訊く口。窓は `NativePrompts`、テスト・CLI 駆動は `ScriptedPrompts`。
     /// **egui shell と同じ trait の同じ実装**である(`crate::prompts` の注記)。
     prompts: Box<dyn ShellPrompts>,
+    /// Inspector の live 投影に使う plugin catalog。座席の writer が使うのと同じ
+    /// `reference_catalog` を1度だけ組んで持ち回る(毎フレーム組み直さない —
+    /// egui 版 `InspectorPanel` と同じ判断)。組めなかったら理由を持ち、
+    /// Inspector が空面としてその理由を出す(黙らない)。
+    catalog: Result<Arc<motolii_plugin::PluginCatalog>, String>,
 }
 
 impl Shell {
@@ -51,6 +60,9 @@ impl Shell {
         Self {
             gateway: ShellGateway::new(ShellTranscript::default()),
             prompts: Box::new(prompts),
+            catalog: motolii_plugin::reference::reference_catalog()
+                .map(Arc::new)
+                .map_err(|error| format!("plugin catalog を作れない: {error}")),
         }
     }
 
@@ -116,8 +128,114 @@ impl Shell {
                 // **intent ではない** — 走っている thread からの返事を受けるだけ。
                 self.gateway.poll_export();
             }
+            Message::LayerSelected(layer) => {
+                let _ = self.gateway.dispatch(UiIntent::SelectLayer { layer });
+            }
+            Message::Inspector(event) => self.apply_inspector(event),
         }
         Outcome::Stay
+    }
+
+    /// Inspector の1押しを intent へ写す。**判断はここに無い** — どの layer の
+    /// 話か(いま映している選択)と、スクラブ事象の gesture 区切りを写すだけで、
+    /// 「書けるか」「Undo の粒度」はゲートウェイの先のエディタが持つ。
+    ///
+    /// `KeyParamAtPlayhead` が運ぶ成分値は **accepted snapshot の投影そのもの**
+    /// ([`Self::inspector`])から取る。面にも殻にも先行する局所値は無い
+    /// (optimistic 禁止 — 2026-08-13 裁定)。
+    fn apply_inspector(&mut self, event: InspectorEvent) {
+        // RED: not wired yet — the failing tests come first.
+        let _ = event;
+        if true {
+            return;
+        }
+        match event {
+            InspectorEvent::SetEffectEnabled {
+                definition_id,
+                enabled,
+            } => {
+                let _ = self
+                    .gateway
+                    .dispatch(UiIntent::SetEffectEnabled {
+                        definition_id,
+                        enabled,
+                    });
+            }
+            InspectorEvent::ToggleMute | InspectorEvent::ToggleSolo => {
+                let Some(layer) = self.inspected_layer() else {
+                    return;
+                };
+                let flag = if matches!(event, InspectorEvent::ToggleMute) {
+                    UiItemFlag::Mute
+                } else {
+                    UiItemFlag::Solo
+                };
+                let _ = self.gateway.dispatch(UiIntent::ToggleItemFlag { layer, flag });
+            }
+            InspectorEvent::KeyPressed(param) => {
+                let Some(layer) = self.inspected_layer() else {
+                    return;
+                };
+                // 画面に出ている成分値がそのままキーになる(2026-08-13裁定)。
+                let InspectorSeat::Ready(model) = self.inspector() else {
+                    return;
+                };
+                let Some(row) = model.transform_row(param) else {
+                    return;
+                };
+                if !row.editable {
+                    return;
+                }
+                let _ = self.gateway.dispatch(UiIntent::KeyParamAtPlayhead {
+                    layer,
+                    param,
+                    components: row.components.clone(),
+                });
+            }
+            InspectorEvent::Scrub {
+                param,
+                component,
+                event,
+            } => {
+                let Some(layer) = self.inspected_layer() else {
+                    return;
+                };
+                match event {
+                    ScrubEvent::Started => {
+                        let _ = self.gateway.dispatch(UiIntent::BeginParamEdit { layer, param });
+                    }
+                    ScrubEvent::Changed(value) => {
+                        let _ = self.gateway.dispatch(UiIntent::SetParamComponent {
+                            layer,
+                            param,
+                            component,
+                            value,
+                        });
+                    }
+                    ScrubEvent::Committed(value) => {
+                        let _ = self.gateway.dispatch(UiIntent::SetParamComponent {
+                            layer,
+                            param,
+                            component,
+                            value,
+                        });
+                        let _ = self.gateway.dispatch(UiIntent::EndParamEdit);
+                    }
+                    ScrubEvent::Cancelled => {
+                        let _ = self.gateway.dispatch(UiIntent::EndParamEdit);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Inspector が映している layer(選択がちょうど1つのとき)。
+    fn inspected_layer(&self) -> Option<u64> {
+        let seat = self.gateway.project()?;
+        match seat.editor().selected_layers() {
+            [one] => Some(one.get()),
+            _ => None,
+        }
     }
 
     /// 未保存のまま座席を捨てる操作(New / Open / 窓を閉じる)の前に挟む。
@@ -145,6 +263,45 @@ impl Shell {
     /// live project が座っているか。スタート画面を出すかどうかがこれで決まる。
     pub fn is_seated(&self) -> bool {
         self.gateway.is_seated()
+    }
+
+    /// Inspector の座席 — **accepted snapshot から毎回導出**する(状態は持たない)。
+    ///
+    /// 選択・playhead の正本はエディタ(座席)に、値の正本は Document snapshot に
+    /// 在り、ここはそれを1つの投影に写すだけ(Q5: 単一の真実)。
+    pub fn inspector(&self) -> InspectorSeat {
+        let Some(seat) = self.gateway.project() else {
+            return InspectorSeat::NoSelection;
+        };
+        let catalog = match &self.catalog {
+            Ok(catalog) => catalog,
+            Err(reason) => return InspectorSeat::Unreadable(reason.clone()),
+        };
+        let editor = seat.editor();
+        let Some(playhead) = editor.playhead_time() else {
+            // fps の格子に載らない playhead はキーを打てない時刻。理由ごと出す。
+            return InspectorSeat::Unreadable("the playhead is not a keyable time".to_owned());
+        };
+        project_inspector(
+            &seat.snapshot(),
+            catalog,
+            editor.selected_layers(),
+            playhead,
+        )
+    }
+
+    /// エディタの status 1行(確定・断りの一言)。空なら席ごと出さない。
+    pub fn editor_status(&self) -> Option<String> {
+        self.gateway
+            .project()
+            .map(|seat| seat.editor().status().to_owned())
+            .filter(|status| !status.is_empty())
+    }
+
+    /// 座席の Document snapshot(読み)。テストと投影の照合用で、
+    /// **書く道はここから生えない**(snapshot は immutable)。
+    pub fn document(&self) -> Option<std::sync::Arc<motolii_doc::Document>> {
+        self.gateway.project().map(|seat| seat.snapshot())
     }
 
     /// 座っている project のパス。

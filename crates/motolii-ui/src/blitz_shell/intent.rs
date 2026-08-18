@@ -33,7 +33,8 @@ use serde::{Deserialize, Serialize};
 
 use super::drive::ShellTranscript;
 use crate::export_seat::{can_start_export, ExportFinish, ExportRequest, ExportRun};
-use crate::timeline_editor::TimelineEditor;
+use crate::timeline_editor::{ItemFlag, TimelineEditor};
+use crate::timeline_rows::ParamRef;
 
 // ---------------------------------------------------------------------------
 // ログ: 型付き intent と、その台帳
@@ -44,7 +45,7 @@ use crate::timeline_editor::TimelineEditor;
 ///
 /// dialog の答えは値として中に入っている(`NewProject { path }`)ので、
 /// この列だけで replay が成立する — 訊き直す口はどこにも要らない。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum UiIntent {
     /// 新しい project を作って、そこへ座り直す(Cmd+N / スタート画面の New)。
@@ -60,15 +61,93 @@ pub enum UiIntent {
     /// 素材を取り込んで playhead へ置く。**OS ドロップと Browser のカードの
     /// ダブルクリックが合流する1点**で、入口が増えても intent は1種類のまま。
     AdmitPaths { paths: Vec<PathBuf> },
-    // 将来枠(本レーンのスコープ外。足す時はフェンスの禁止リストも一緒に伸ばす):
-    // - view: camera 操作・選択・panel の開閉/並び
-    // - wave E: timeline_editor / inspector の編集、Undo/Redo
+    // ---- ここから wave E の第1弾(2026-08-18 M-4b Inspector) ----
+    //
+    // Inspector が起こす編集は全部この列になる。**実体は既存の `TimelineEditor`
+    // 操作 API へ1対1で落ちるだけ**で、新しい編集経路・新しい Document command は
+    // ここに無い(D2 journal / Undo の粒度はエディタ側の決定のまま)。
+    // wire は layer identity を u64 で運ぶ(2026-08-10「wire carries layer
+    // identity only」)。
+    /// 選択を1つに置き換える(clip / Stage 板のクリックと同じ意味)。
+    /// Document には入らない session 状態だが、Inspector が誰を映すかの原因なので
+    /// journal に載る。
+    SelectLayer { layer: u64 },
+    /// M / S を1手反転する。押下状態の正本は Document(`ItemEnvelope`)で、
+    /// intent は反転要求だけを運ぶ(F-03 枝A)。
+    ToggleItemFlag { layer: u64, flag: UiItemFlag },
+    /// Inspector の数値を掴んだ。ここから `EndParamEdit` までが1 gesture = 1 Undo
+    /// (エディタの `begin_param_edit` と同じ意味)。
+    BeginParamEdit { layer: u64, param: UiEditParam },
+    /// 成分1本を書く(`set_param_component`)。開いている gesture があれば
+    /// そこへ入り、無ければ1回ぶんの gesture で書く。
+    SetParamComponent {
+        layer: u64,
+        param: UiEditParam,
+        component: usize,
+        value: f64,
+    },
+    /// 掴みを離した(`end_param_edit`)。
+    EndParamEdit,
+    /// ◇: playhead へキーを打つ(`key_param_at_playhead`)。`components` は
+    /// 画面に出ている成分値で、**画面の数がそのままキーになる**。
+    KeyParamAtPlayhead {
+        layer: u64,
+        param: UiEditParam,
+        components: Vec<f64>,
+    },
+    /// 共有 FX の ON/OFF(`set_effect_enabled`)。相手は `EffectDefinition`。
+    SetEffectEnabled { definition_id: u64, enabled: bool },
+    // 将来枠(足す時はフェンスの禁止リストも一緒に伸ばす):
+    // - view: camera 操作・panel の開閉/並び
+    // - wave E 残り: Timeline 内の編集(move / trim / key drag)、Undo/Redo、
+    //   audio gain(エディタに操作 API が立ってから)
+}
+
+/// intent が運ぶ M / S。Timeline 側の `ItemFlag` と一対一(Lock は Timeline の
+/// 行だけの操作なので wire に載せない — 載せるときは Inspector 側の UI と一緒に)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiItemFlag {
+    Mute,
+    Solo,
+}
+
+impl UiItemFlag {
+    fn to_item_flag(self) -> ItemFlag {
+        match self {
+            Self::Mute => ItemFlag::Mute,
+            Self::Solo => ItemFlag::Solo,
+        }
+    }
+}
+
+/// intent が運ぶ編集対象 param。エディタの `ParamRef` と同じ語彙のうち、
+/// Inspector が行を出す4つだけ(Anchor は Inspector に行が無いので wire にも
+/// 載せない — 行を出すときに一緒に増やす)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiEditParam {
+    Position,
+    Scale,
+    Rotation,
+    Opacity,
+}
+
+impl UiEditParam {
+    fn to_param_ref(self) -> ParamRef {
+        match self {
+            Self::Position => ParamRef::Position,
+            Self::Scale => ParamRef::Scale,
+            Self::Rotation => ParamRef::Rotation,
+            Self::Opacity => ParamRef::Opacity,
+        }
+    }
 }
 
 /// journal の1行。`seq` は 1 始まりの通し番号で、`--intent-log` の JSONL
 /// (`{"seq":n,"intent":{"kind":"…",…}}`)がそのまま名乗る番号でもある。
 /// `--status-log`(`{"seq":n,"text":"…"}`)と同型で、並べて読める。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntentEvent {
     pub seq: u64,
     pub intent: UiIntent,
@@ -344,7 +423,72 @@ impl ShellGateway {
                     .as_ref()
                     .is_some_and(|seat| seat.editor().revision() > placed)
             }
+            // ---- wave E 第1弾: Inspector の編集。実体は既存エディタ操作1本ずつ ----
+            UiIntent::SelectLayer { layer } => self.edit(|editor| {
+                editor.select_layer(motolii_doc::LayerId::from_raw(*layer));
+            }),
+            UiIntent::ToggleItemFlag { layer, flag } => self.edit(|editor| {
+                editor.toggle_item_flag(motolii_doc::LayerId::from_raw(*layer), flag.to_item_flag());
+            }),
+            UiIntent::BeginParamEdit { layer, param } => self.edit(|editor| {
+                editor.begin_param_edit(motolii_doc::LayerId::from_raw(*layer), param.to_param_ref());
+            }),
+            UiIntent::SetParamComponent {
+                layer,
+                param,
+                component,
+                value,
+            } => self.edit(|editor| {
+                editor.set_param_component(
+                    motolii_doc::LayerId::from_raw(*layer),
+                    param.to_param_ref(),
+                    *component,
+                    *value,
+                );
+            }),
+            UiIntent::EndParamEdit => self.edit(|editor| editor.end_param_edit()),
+            UiIntent::KeyParamAtPlayhead {
+                layer,
+                param,
+                components,
+            } => self.edit(|editor| {
+                editor.key_param_at_playhead(
+                    motolii_doc::LayerId::from_raw(*layer),
+                    param.to_param_ref(),
+                    components,
+                );
+            }),
+            UiIntent::SetEffectEnabled {
+                definition_id,
+                enabled,
+            } => self.edit(|editor| {
+                editor.set_effect_enabled(
+                    motolii_doc::EffectDefinitionId::from_raw(*definition_id),
+                    *enabled,
+                );
+            }),
         }
+    }
+
+    /// 編集系 intent の共通の門。座席が無ければ**黙らずに**案内し、実行後は
+    /// エディタが断った理由(`take_rejections`)を全部帯へ写す。
+    ///
+    /// 返り値は「断られなかったか」。**accepted-no-op(同値への編集)は true** —
+    /// 意図は通っていて、変化ゼロが正しい結果だからである(Q3 の扱いは表示側)。
+    /// 状態は一切ここで持たない: 面は次の snapshot からだけ導出する(optimistic 禁止)。
+    fn edit(&mut self, act: impl FnOnce(&mut TimelineEditor)) -> bool {
+        let Some(seat) = self.project.as_mut() else {
+            self.transcript
+                .report("open a project first — Cmd+N to create one, Cmd+O to open one");
+            return false;
+        };
+        act(seat.editor_mut());
+        let rejections = seat.editor_mut().take_rejections();
+        let ok = rejections.is_empty();
+        for reason in rejections {
+            self.transcript.report(reason);
+        }
+        ok
     }
 
     /// 座席を差し替えて、成否を帯に言う。判断そのものは [`reseat_project`]。
@@ -726,6 +870,37 @@ mod tests {
 
         let cancel = serde_json::to_string(&UiIntent::CancelExport).expect("unit variant");
         assert_eq!(cancel, r#"{"kind":"cancel_export"}"#);
+
+        // wave E 第1弾(Inspector)の wire の形。layer は u64 で運ぶ
+        // (2026-08-10「wire carries layer identity only」)。
+        let toggled = serde_json::to_string(&UiIntent::ToggleItemFlag {
+            layer: 7,
+            flag: UiItemFlag::Mute,
+        })
+        .expect("編集 intent も機械可読である");
+        assert_eq!(
+            toggled,
+            r#"{"kind":"toggle_item_flag","layer":7,"flag":"mute"}"#
+        );
+        let keyed = serde_json::to_string(&UiIntent::KeyParamAtPlayhead {
+            layer: 7,
+            param: UiEditParam::Position,
+            components: vec![4.0, 2.0],
+        })
+        .expect("成分値ごと往復する");
+        assert_eq!(
+            keyed,
+            r#"{"kind":"key_param_at_playhead","layer":7,"param":"position","components":[4.0,2.0]}"#
+        );
+        let back: UiIntent = serde_json::from_str(&keyed).expect("読み戻せる");
+        assert_eq!(
+            back,
+            UiIntent::KeyParamAtPlayhead {
+                layer: 7,
+                param: UiEditParam::Position,
+                components: vec![4.0, 2.0],
+            }
+        );
     }
 
     /// **落ちた行動も記録される。** intent は行動の前に journal へ入るので、

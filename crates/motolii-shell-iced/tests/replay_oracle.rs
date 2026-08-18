@@ -13,8 +13,10 @@
 mod common;
 
 use common::{command_key, drain, feed, file_dropped, press, redraw, starter_media_dir};
-use motolii_shell_iced::{view, ScriptedPrompts, Shell};
-use motolii_ui::blitz_shell::{ShellGateway, UiIntent};
+use motolii_shell_iced::inspector_pane::InspectorEvent;
+use motolii_shell_iced::widgets_stub::ScrubEvent;
+use motolii_shell_iced::{view, Message, ScriptedPrompts, Shell};
+use motolii_ui::blitz_shell::{ShellGateway, UiEditParam, UiIntent, UiItemFlag};
 
 #[test]
 fn a_recorded_session_replays_into_the_same_shell_state() {
@@ -46,6 +48,42 @@ fn a_recorded_session_replays_into_the_same_shell_state() {
     let typed = feed(iced_test::simulator(view(&shell)), command_key('s'));
     drain(&mut shell, typed);
 
+    // M-4b: Inspector の編集も同じ台本に載る。選ぶ → M → ◇(Position)→
+    // Opacity の確定、を1列で。
+    let layer = shell
+        .document()
+        .expect("seated")
+        .tracks
+        .iter()
+        .flat_map(|track| &track.items)
+        .map(|item| match item {
+            motolii_doc::TrackItem::Clip(clip) => clip.envelope.layer_id.get(),
+            motolii_doc::TrackItem::Group(group) => group.envelope.layer_id.get(),
+        })
+        .next()
+        .expect("落とした素材の clip");
+    drain(&mut shell, vec![Message::LayerSelected(layer)]);
+    let pressed = press(iced_test::simulator(view(&shell)), "M");
+    drain(&mut shell, pressed);
+    let pressed = press(iced_test::simulator(view(&shell)), "\u{25c7}");
+    drain(&mut shell, pressed);
+    drain(
+        &mut shell,
+        vec![Message::Inspector(InspectorEvent::Scrub {
+            param: UiEditParam::Opacity,
+            component: 0,
+            event: ScrubEvent::Committed(0.25),
+        })],
+    );
+    let keyed_components = match shell.inspector() {
+        motolii_shell_iced::InspectorSeat::Ready(model) => model
+            .transform_row(UiEditParam::Position)
+            .expect("Position 行")
+            .components
+            .clone(),
+        other => panic!("Inspector が座っていない: {other:?}"),
+    };
+
     let intents: Vec<UiIntent> = shell
         .intents()
         .into_iter()
@@ -68,6 +106,23 @@ fn a_recorded_session_replays_into_the_same_shell_state() {
                 paths: vec![still.clone()]
             },
             UiIntent::SaveProject,
+            UiIntent::SelectLayer { layer },
+            UiIntent::ToggleItemFlag {
+                layer,
+                flag: UiItemFlag::Mute,
+            },
+            UiIntent::KeyParamAtPlayhead {
+                layer,
+                param: UiEditParam::Position,
+                components: keyed_components,
+            },
+            UiIntent::SetParamComponent {
+                layer,
+                param: UiEditParam::Opacity,
+                component: 0,
+                value: 0.25,
+            },
+            UiIntent::EndParamEdit,
         ],
         "運転席の1セッションが intent 列として素直に読めない"
     );
@@ -95,6 +150,28 @@ fn a_recorded_session_replays_into_the_same_shell_state() {
         replayed.track_item_count(),
         driven_items,
         "帯だけ揃って Document が違うのは不合格"
+    );
+
+    // 編集の中身も一致する: M / Position キー / Opacity が replay 側の Document に立つ。
+    let replayed_doc = replayed
+        .project()
+        .expect("replay は同じ座席に着く")
+        .snapshot();
+    let envelope = replayed_doc
+        .tracks
+        .iter()
+        .flat_map(|track| &track.items)
+        .find_map(|item| match item {
+            motolii_doc::TrackItem::Clip(clip) if clip.envelope.layer_id.get() == layer => {
+                Some(&clip.envelope)
+            }
+            _ => None,
+        })
+        .expect("同じ clip が居る");
+    assert!(!envelope.visible, "M(mute)が replay で再現されない");
+    assert!(
+        matches!(envelope.transform.position, motolii_doc::DocParam::Keyframes(_)),
+        "Position のキーが replay で再現されない"
     );
 
     // 結果のログの要点: replay が言ったことは、駆動が言ったことの中に

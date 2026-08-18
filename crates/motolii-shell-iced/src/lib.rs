@@ -26,10 +26,20 @@
 //!   (`tests/` 配下)。近道キーと OS ドロップが購読ではなく widget 木
 //!   ([`window_input`])を通るのは、運転席から注入できる道を1本に保つためである
 //!
+//! ## ここに在るもの(M-4b で足した)
+//!
+//! - **Inspector pane**(本物)。選択 layer の identity / M・S / Transform 4行
+//!   (Position / Scale / Rotation / Opacity)/ 共有 FX の ON/OFF が、全部
+//!   `UiIntent` の編集列(wave E 第1弾)として同じゲートウェイを通る。
+//!   状態は accepted snapshot からだけ導出する([`inspector_model`])。
+//!   スクラブ値・key ボタンは widgets レーンの契約の stub
+//!   ([`widgets_stub`] — INTEGRATION: swap to widgets module)
+//!
 //! ## ここに無いもの(意図的に)
 //!
-//! - Rerun の Stage 島(M-2)、Timeline(M-3)、Browser / Inspector(M-4)。
-//!   Undo / Redo ボタンは編集面と一緒に来る
+//! - Rerun の Stage 島(M-2)、Timeline(M-3)、Browser(M-4a)。
+//!   Undo / Redo ボタンは編集面と一緒に来る。Inspector の Audio(gain)section は
+//!   エディタに gain の操作 API が立つまで**出さない**(Q0: 死に chrome 禁止)
 //! - 引数なし起動の「続きが開く」(egui 側 wave D の `last_project`)。M-2 以降
 //! - egui。**この crate に egui 系の直接依存は1つも無い**
 //!   (柵: `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs` の
@@ -37,6 +47,8 @@
 //! - `rfd` の直接呼び出し。native dialog は egui shell と**同じ実装**
 //!   (`motolii_ui::blitz_shell::NativePrompts`)の後ろに1箇所だけ在る
 
+pub mod inspector_model;
+pub mod inspector_pane;
 mod intent_log;
 mod jsonl;
 mod launch;
@@ -45,8 +57,11 @@ mod prompts;
 mod shell;
 mod status_log;
 pub mod view;
+pub mod widgets_stub;
 mod window_input;
 
+pub use inspector_model::{InspectorModel, InspectorSeat};
+pub use inspector_pane::InspectorEvent;
 pub use intent_log::IntentLog;
 pub use launch::Launch;
 pub use message::Message;
@@ -54,4 +69,5 @@ pub use prompts::{NativePrompts, ScriptedPrompts, ShellPrompts};
 pub use shell::{Outcome, Shell};
 pub use status_log::StatusLog;
 pub use view::view;
+pub use widgets_stub::{KeyState, ScrubEvent};
 pub use window_input::window_input;

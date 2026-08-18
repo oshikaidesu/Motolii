@@ -4997,6 +4997,10 @@ version = "0.1.0"
 dependencies = [
  "iced",
  "iced_test",
+ "motolii-core",
+ "motolii-doc",
+ "motolii-eval",
+ "motolii-plugin",
  "motolii-testkit",
  "motolii-ui",
  "serde",

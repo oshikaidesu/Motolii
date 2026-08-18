@@ -38,12 +38,15 @@ pub const OPEN_PROJECT: &str = "Open\u{2026}";
 pub const OPEN_PROJECT_SHORTCUT: &str = "Cmd+O";
 /// スタート画面の末尾の一行。
 pub const DROP_HINT: &str = "Then just drop video and audio into this window.";
-/// 座った後に出る、いまの正直な中身。
+/// 座った後の主面(Stage / Timeline / Browser の席)に出る、いまの正直な中身。
 ///
 /// **編集面のふりをした空箱を置かない**(2026-08-12 の Q0「触れそうで触れない物は
-/// 不合格」)。M-2 以降が Stage / Timeline / Browser / Inspector を持ってくるまで、
-/// ここは「何がまだ無いか」を言うだけの一行である。
+/// 不合格」)。M-2 / M-3 が Stage / Timeline を持ってくるまで、主面は
+/// 「何がまだ無いか」を言うだけの一行である。Inspector は M-4b で本物になった
+/// (右側の [`crate::inspector_pane`])。
 pub const SEATED_PLACEHOLDER: &str = "Project is open. The editing surface arrives in M-2.";
+/// Inspector pane の幅。iced 既定 theme のまま、寸法だけこの1定数。
+pub const INSPECTOR_PANE_W: f32 = 300.0;
 /// 書き出しを始めるボタン。
 pub const EXPORT: &str = "Export";
 /// 走っている書き出しを止めるボタン。
@@ -64,13 +67,15 @@ pub fn exporting_label(seconds: u64) -> String {
 /// 一番外は [`window_input`] — 近道キー・OS ドロップ・閉じる要求はここで
 /// [`Message`] になる。中身は「座席の有無で変わる本体」と「status 帯」の2段。
 pub fn view(shell: &Shell) -> Element<'_, Message> {
-    let body = if shell.is_seated() {
-        seated()
+    let body: Element<'_, Message> = if shell.is_seated() {
+        seated(shell)
     } else {
-        start_screen()
+        container(start_screen()).center(Fill).into()
     };
 
-    let mut page = column![container(body).center(Fill)].width(Fill).height(Fill);
+    let mut page = column![container(body).width(Fill).height(Fill)]
+        .width(Fill)
+        .height(Fill);
 
     // 帯は「座席が居るあいだ」と「言われたことがある時」に出る。空の帯を常設しない
     // (egui 版と同じ判断)。
@@ -111,9 +116,18 @@ fn action_button<'a>(name: &'a str, shortcut: &'a str, message: Message) -> Elem
         .into()
 }
 
-/// 座席が在るときの画面(M-1 は一行だけ)。
-fn seated<'a>() -> Element<'a, Message> {
-    text(SEATED_PLACEHOLDER).into()
+/// 座席が在るときの画面。主面(まだ placeholder)+ 右に Inspector pane。
+fn seated(shell: &Shell) -> Element<'_, Message> {
+    row![
+        container(text(SEATED_PLACEHOLDER)).center(Fill),
+        container(crate::inspector_pane::inspector(
+            shell.inspector(),
+            shell.editor_status(),
+        ))
+        .width(INSPECTOR_PANE_W)
+        .height(Fill),
+    ]
+    .into()
 }
 
 /// status 帯 — **信用の可視化と、窓が言ったことの最新1行**。
