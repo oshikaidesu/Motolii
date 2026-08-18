@@ -23,7 +23,10 @@ use super::app::UnsavedChoice;
 
 /// transcript の1行。`seq` は 1 始まりの通し番号で、`--status-log` の JSONL
 /// (`{"seq":n,"text":"…"}`)がそのまま名乗る番号でもある。
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// **JSONL の1行はこの型がそのまま名乗る**(`serde` の field 順 = 宣言順)。
+/// 原因の側(`intent::IntentEvent`)も同じ形で、並べて読める。
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct StatusEvent {
     pub seq: u64,
     pub text: String,
