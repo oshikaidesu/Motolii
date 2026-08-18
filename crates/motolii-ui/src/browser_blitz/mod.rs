@@ -37,6 +37,9 @@ pub struct BrowserBlitzPanel {
     width: u32,
     height: u32,
     scale: f64,
+    /// 縮小実体を作れなかった理由。`thumbnail::prepare` が返したものをそのまま持つ
+    /// (この面は Blitz probe 側なので、読むのは dump の呼び手)。
+    notices: Vec<String>,
 }
 
 impl BrowserBlitzPanel {
@@ -55,7 +58,22 @@ impl BrowserBlitzPanel {
         let runtime = tokio::runtime::Runtime::new().map_err(BrowserBlitzError::Runtime)?;
         let title = title.into();
         // 縮小実体は Document を組む前に用意する。2回目以降は cache path を使うだけ。
-        let thumbnails = thumbnail::prepare(&items);
+        // 作れなかった理由は捨てずに持つ(画像なしで描くのは従来どおり)。
+        let mut notices = Vec::new();
+        let thumbnails: Vec<Option<std::path::PathBuf>> = thumbnail::prepare(&items)
+            .into_iter()
+            .zip(&items)
+            .map(|(prepared, item)| match prepared {
+                Ok(path) => Some(path),
+                Err(reason) => {
+                    notices.push(format!(
+                        "browser thumbnail: {} を作れないので画像なしで描く: {reason}",
+                        item.path.display()
+                    ));
+                    None
+                }
+            })
+            .collect();
         let document = {
             let _guard = runtime.enter();
             build_document(width, height, scale, &title, &items, &thumbnails)
@@ -77,6 +95,7 @@ impl BrowserBlitzPanel {
             width,
             height,
             scale,
+            notices,
         })
     }
 
@@ -147,6 +166,13 @@ impl BrowserBlitzPanel {
         self.document.resolve(0.0);
         self.surface
             .render(&mut self.document, device, queue, target);
+    }
+}
+
+impl BrowserBlitzPanel {
+    /// 縮小実体を作れなかった理由を引き取る(引き取ったら空になる)。
+    pub fn take_notices(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.notices)
     }
 }
 

@@ -215,6 +215,11 @@ fn dump_browser(gpu: &Gpu, _runtime: &tokio::runtime::Runtime, out: &Path) -> Re
         dir.display(),
         panel.items().len()
     );
+    // 縮小実体を作れなかった分の理由。ここは窓を持たない道具なので stderr が
+    // 唯一の言い場所である(窓の側は `ShellTranscript` — `tests/shell_error_fence.rs`)。
+    for notice in panel.take_notices() {
+        eprintln!("blitz-dump: {notice}");
+    }
 
     let (texture, view) = gpu.target(BROWSER_W, BROWSER_H);
     // `blitz-net` の fetch は非同期。1フレームだけ描くと画像がまだ届いておらず

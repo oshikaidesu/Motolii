@@ -115,6 +115,13 @@ pub struct BrowserPanel {
     selected: Option<String>,
     /// filter shelf の開閉(browser-library.html:437-441 `#filter-toggle`)。
     shelf_open: bool,
+    /// 画像を出せなかった理由の控え。**再試行の方針は変えない**(`None` を
+    /// 覚えたまま作り直さない)が、なぜ glyph card なのかは1度は外へ出す
+    /// (2026-08-18 外部診断 F-09)。
+    ///
+    /// **shell の型はここに来ない。** panel は理由を返すだけで、言うのは
+    /// `blitz_shell::pane`(そこで `ShellTranscript` へ写る)。
+    notices: Vec<String>,
 }
 
 impl BrowserPanel {
@@ -133,10 +140,21 @@ impl BrowserPanel {
             .filter(|item| item.kind == "image")
             .filter_map(|item| library.resolve(&item.id))
             .collect();
+        // 作れなかった分は理由つきで控えへ。card は従来どおり glyph で出る。
+        let mut notices = Vec::new();
         let thumbnails = crate::browser_blitz::thumbnail::prepare(&image_items)
             .into_iter()
             .zip(&image_items)
-            .filter_map(|(path, item)| Some((item.id.clone(), path?)))
+            .filter_map(|(prepared, item)| match prepared {
+                Ok(path) => Some((item.id.clone(), path)),
+                Err(reason) => {
+                    notices.push(format!(
+                        "browser-panel: {} の縮小実体を作れないので glyph card で描く: {reason}",
+                        item.path.display()
+                    ));
+                    None
+                }
+            })
             .collect();
         Self {
             library,
@@ -151,7 +169,16 @@ impl BrowserPanel {
             query: String::new(),
             selected: None,
             shelf_open: true,
+            notices,
         }
+    }
+
+    /// 出せなかった画像の理由を引き取る(引き取ったら空になる)。
+    ///
+    /// 呼び手は shell 側で、`--status-log` に残る一言へ写す。同じ理由が
+    /// 毎フレーム流れないのは、`None` cache のおかげで**1回しか積まれない**から。
+    pub fn take_notices(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.notices)
     }
 
     // ---- model 面(toolkit 非依存) ----
@@ -1157,19 +1184,22 @@ impl BrowserPanel {
             return entry.clone();
         }
         let path = self.thumbnails.get(id)?.clone();
-        let loaded = load_color_image(&path).map(|image| {
-            ctx.load_texture(
+        let loaded = match load_color_image(&path) {
+            Ok(image) => Some(ctx.load_texture(
                 format!("browser-thumb:{id}"),
                 image,
                 egui::TextureOptions::LINEAR,
-            )
-        });
-        if loaded.is_none() {
-            eprintln!(
-                "browser-panel: {} を texture にできないので glyph card で描く",
-                path.display()
-            );
-        }
+            )),
+            Err(reason) => {
+                // 再試行しない方針は変えない(`None` を覚える)。変えたのは
+                // **理由が1度だけ外へ出る**ことだけ。
+                self.notices.push(format!(
+                    "browser-panel: {} を texture にできないので glyph card で描く: {reason}",
+                    path.display()
+                ));
+                None
+            }
+        };
         self.textures.insert(id.to_owned(), loaded.clone());
         loaded
     }
@@ -1299,11 +1329,15 @@ fn card_meta(item: &LibraryItem) -> String {
     format!("{} · {}", item.kind, secondary)
 }
 
-fn load_color_image(path: &Path) -> Option<egui::ColorImage> {
-    let bytes = std::fs::read(path).ok()?;
-    let image = image::load_from_memory(&bytes).ok()?.to_rgba8();
+/// 縮小実体1枚を egui の絵に写す。**落ちた段(読めない/画像でない)を落とさない** —
+/// `.ok()?` で畳むと「画像が出ない」だけが残り、原因が散逸する(外部診断 F-09)。
+fn load_color_image(path: &Path) -> Result<egui::ColorImage, String> {
+    let bytes = std::fs::read(path).map_err(|error| format!("read: {error}"))?;
+    let image = image::load_from_memory(&bytes)
+        .map_err(|error| format!("decode: {error}"))?
+        .to_rgba8();
     let size = [image.width() as usize, image.height() as usize];
-    Some(egui::ColorImage::from_rgba_unmultiplied(
+    Ok(egui::ColorImage::from_rgba_unmultiplied(
         size,
         image.as_raw(),
     ))

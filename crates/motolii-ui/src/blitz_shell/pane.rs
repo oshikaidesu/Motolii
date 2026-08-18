@@ -112,6 +112,43 @@ fn apply_inspector_action(
     }
 }
 
+/// エディタが断った編集の理由を、そのまま台帳へ写す。
+///
+/// **timeline は shell を知らない**(`ShellTranscript` を timeline へ持ち込まない)。
+/// 理由を「返す」のはエディタ、「言う」のはここ、という分担で、
+/// Timeline の一番下の一行は従来どおりそのまま出る(2026-08-18 外部診断 F-07)。
+///
+/// 同じ理由を毎フレーム言わないのは latch ではなく、エディタ側が
+/// **引き取られたら空になる**からである(1クリック1件しか積まれない)。
+pub(crate) fn relay_editor_rejections(
+    editor: &mut crate::timeline_editor::TimelineEditor,
+    transcript: &ShellTranscript,
+) {
+    for reason in editor.take_rejections() {
+        transcript.report(format!("timeline: {reason}"));
+    }
+}
+
+/// 面から返ってきた失敗のうち、**まだ言っていないものだけ**を台帳へ出す。
+///
+/// `reported` は前回言った理由の控え。毎フレーム通る経路(Stage の描画)で
+/// 同じ理由を言い直すと帯が1つの理由で埋まるので、変わった時だけ言う。
+/// 直った失敗は忘れる — 次に同じ理由で落ちたら改めて言う。
+fn report_new_failures(
+    transcript: &ShellTranscript,
+    reported: &mut Vec<String>,
+    failures: Vec<String>,
+) {
+    for failure in &failures {
+        if reported.iter().any(|known| known == failure) {
+            continue;
+        }
+        // 出所の名乗りは既存の Stage 系の一言と同じ形("blitz-pane: …")。
+        transcript.report(format!("blitz-pane: {failure}"));
+    }
+    *reported = failures;
+}
+
 /// 1ペインに出す面の種類。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PaneKind {
@@ -316,12 +353,17 @@ impl BlitzPane {
                         // 初回表示時に作る(フォルダ走査と縮小実体の準備を、
                         // 窓を開く前に払わない)。
                         let root = self.browser_root.clone();
-                        request = panel
-                            .get_or_insert_with(|| match root {
-                                Some(root) => BrowserPanel::with_root(root),
-                                None => BrowserPanel::default_shell(),
-                            })
-                            .show(ui);
+                        let panel = panel.get_or_insert_with(|| match root {
+                            Some(root) => BrowserPanel::with_root(root),
+                            None => BrowserPanel::default_shell(),
+                        });
+                        request = panel.show(ui);
+                        // 画像を出せなかった理由を引き取る。card は glyph のまま
+                        // 出てよいが、**なぜ画像が無いか**は1度は帯に出す。
+                        // (`None` cache のおかげで同じ理由は1回しか積まれない)
+                        for notice in panel.take_notices() {
+                            self.transcript.report(notice);
+                        }
                     }
                     Content::NativeInspector(panel) => {
                         // 座席が無いとき(fixture 展示)の Inspector。live の Inspector は
@@ -570,6 +612,9 @@ struct StagePane {
     reported_draw_error: Option<String>,
     /// fixture が読めないと言ったか(座席の無い展示動線だけが通る)。
     fixture_failure_reported: bool,
+    /// 最後に言った Stage の載せ替え失敗(`EmbeddedSpatialStage::take_failures`)。
+    /// 毎フレーム通る経路なので、**変わった時だけ**言い直す。
+    reported_stage_failures: Vec<String>,
 }
 
 impl StagePane {
@@ -725,8 +770,14 @@ impl StagePane {
             );
             let geometry = crate::stage_app_geometry::app_stage_geometry(document, framed_at);
             if resized || self.applied_geometry.as_ref() != Some(&geometry) {
-                stage.apply_host_stage_geometry(&geometry, width, height);
-                self.applied_geometry = Some(geometry);
+                // 積めなかったら**積んだことにしない**。控えを更新してしまうと
+                // 「同じ幾何だから積み直さない」に落ちて、枠が永久にずれたままになる。
+                // 理由は Stage 側が `failures` に積むので、下でまとめて言う。
+                if stage.apply_host_stage_geometry(&geometry, width, height) {
+                    self.applied_geometry = Some(geometry);
+                } else {
+                    self.applied_geometry = None;
+                }
             }
             // カメラの掛け直しは面の大きさが変わった時だけ。playhead が動くたびに
             // 視点を戻すと、再生中にカメラが跳ねる。
@@ -748,6 +799,11 @@ impl StagePane {
             // 描けた時の戻りは従来どおり読み捨てる（この面の関心ではない）。
             Ok(_) => self.reported_draw_error = None,
         }
+
+        // 絵と幾何の載せ替えで落ちた分。Stage は `Err` を返さずに**溜めて返す**
+        // (合成フレームが載らなくても幾何だけの絵は出るので、描画は止めない)。
+        let failures = stage.take_failures();
+        report_new_failures(transcript, &mut self.reported_stage_failures, failures);
     }
 }
 
@@ -1121,5 +1177,82 @@ mod tests {
             );
             assert_eq!(pane.viewport, Some((960, 640, 1.0)));
         }
+    }
+
+    /// F-07: Timeline が落とした編集の理由は帯まで来る。
+    ///
+    /// editor は `ShellTranscript` を知らない(型を timeline へ持ち込まない)。
+    /// 返すのは editor、言うのはここ、という分担をこのテストが留める。
+    #[test]
+    fn refused_edits_travel_from_the_editor_to_the_transcript() {
+        let mut editor = crate::timeline_editor::TimelineEditor::with_fixture();
+        let transcript = ShellTranscript::default();
+
+        // 何も落ちていなければ何も言わない(黙っているのが正しい時もある)。
+        relay_editor_rejections(&mut editor, &transcript);
+        assert!(transcript.entries().is_empty());
+
+        editor.push_rejection_for_test("Title scene is locked by a parent");
+        relay_editor_rejections(&mut editor, &transcript);
+
+        let said = transcript.latest().unwrap_or_default();
+        assert!(
+            said.contains("Title scene is locked by a parent"),
+            "拒否の理由が帯に出ていない: {said:?}"
+        );
+        assert!(said.starts_with("timeline:"), "どの面が断ったかを言う: {said:?}");
+
+        // 同じ理由を毎フレーム言わない — editor 側が引き取り済みなので次は増えない。
+        let before = transcript.len();
+        relay_editor_rejections(&mut editor, &transcript);
+        assert_eq!(transcript.len(), before);
+    }
+
+    /// F-08: Stage が返した失敗は帯に出るが、**同じ理由は1度だけ**。
+    #[test]
+    fn stage_failures_are_said_once_not_every_frame() {
+        let transcript = ShellTranscript::default();
+        let mut reported: Vec<String> = Vec::new();
+
+        report_new_failures(
+            &transcript,
+            &mut reported,
+            vec!["合成フレームを Stage へ載せられない: no such texture".to_owned()],
+        );
+        assert_eq!(transcript.len(), 1);
+        let said = transcript.latest().unwrap_or_default();
+        assert!(said.starts_with("blitz-pane: "), "出所を言う: {said:?}");
+        assert!(
+            said.contains("合成フレームを Stage へ載せられない"),
+            "何が起きたかを言う: {said:?}"
+        );
+        assert!(said.contains("no such texture"), "理由を落とさない: {said:?}");
+
+        // 毎フレーム同じ理由で落ちても帯は埋まらない。
+        for _ in 0..30 {
+            report_new_failures(
+                &transcript,
+                &mut reported,
+                vec!["合成フレームを Stage へ載せられない: no such texture".to_owned()],
+            );
+        }
+        assert_eq!(transcript.len(), 1, "同じ理由が毎フレーム帯を埋めている");
+
+        // 別の理由に変わったら言い直す。
+        report_new_failures(
+            &transcript,
+            &mut reported,
+            vec!["幾何を積み直せない".to_owned()],
+        );
+        assert_eq!(transcript.len(), 2);
+
+        // 直ったら忘れる — 次に同じ理由で落ちたら改めて言う。
+        report_new_failures(&transcript, &mut reported, Vec::new());
+        report_new_failures(
+            &transcript,
+            &mut reported,
+            vec!["幾何を積み直せない".to_owned()],
+        );
+        assert_eq!(transcript.len(), 3);
     }
 }

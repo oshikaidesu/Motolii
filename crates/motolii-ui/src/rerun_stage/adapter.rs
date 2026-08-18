@@ -95,6 +95,14 @@ pub struct EmbeddedSpatialStage {
     pub(super) composition_aspect: Option<f32>,
     /// Stage 面の縦横比(物理px)。同上。
     pub(super) stage_viewport_aspect: Option<f32>,
+    /// 絵と幾何を載せる時に落ちた理由。
+    ///
+    /// `show_in` は `Err` を返さない — 合成フレームが載らなくても幾何だけの絵は
+    /// 出るし、出すべきだからである。だが**黙って出さない**のは別の話で、
+    /// 理由はここへ溜めて `take_failures` で呼び手(pane)へ渡す
+    /// (2026-08-18 外部診断 F-08)。帯へ出すのは pane 側で、同じ理由を
+    /// 毎フレーム言わない latch もそちらに在る。
+    pub(super) failures: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -210,6 +218,7 @@ impl EmbeddedSpatialStage {
             host_viewport: None,
             composition_aspect: None,
             stage_viewport_aspect: None,
+            failures: Vec::new(),
         };
         // 既定カメラを comp 平面の正面側へ置く。**Rerun の camera 機構の中で**決める
         // (独自 camera を持たない)ので、scene の向きを先に伝える。
@@ -420,16 +429,25 @@ impl EmbeddedSpatialStage {
             .iter()
             .flat_map(|layer| host_layer_mesh_paths(&layer.layer_id))
             .collect();
-        for old_id in &self.host_layer_ids {
-            if next_ids.iter().any(|id| id == old_id) {
-                continue;
-            }
-            let _ = ingest_mesh(
+        // 消えた layer の板は先に潰す。id を先に写すのは、消しながら
+        // `note_failure` を呼べるようにするため(自分の field を跨いで借りない)。
+        let stale: Vec<String> = self
+            .host_layer_ids
+            .iter()
+            .filter(|old_id| !next_ids.iter().any(|id| id == *old_id))
+            .cloned()
+            .collect();
+        for old_id in &stale {
+            if !ingest_mesh(
                 &mut self.spatial_stage,
                 old_id,
                 hidden_layer_mesh(),
                 STAGE_HOST_ERASE_COLOR,
-            );
+            ) {
+                // 消し損ねると**消えた layer の板が残り続ける**。絵だけ見ても
+                // 「消したのに残っている」としか分からないので言う。
+                self.note_failure(format!("消した layer の板を Stage から取り除けない: {old_id}"));
+            }
         }
 
         let previewing = self.gizmo_gesture.is_some();
@@ -440,6 +458,8 @@ impl EmbeddedSpatialStage {
                 layer.corners,
                 !host_layer_fill_is_visible(layer.corners, self.evaluated_frame_active, previewing),
             ) {
+                let layer_id = layer.layer_id.clone();
+                self.note_failure(format!("layer の枠を Stage へ積めない: {layer_id}"));
                 return false;
             }
         }
@@ -669,16 +689,30 @@ impl EmbeddedSpatialStage {
         Ok(self.spatial_stage.take_selected_entity_path())
     }
 
+    /// 溜まっている失敗を引き取る(引き取ったら空になる)。
+    ///
+    /// 呼び手は shell の pane で、`ShellTranscript` へ写して帯と
+    /// `--status-log` に出す。呼ばれない席(RN 経路・単体)では従来どおり
+    /// 絵が出ないだけだが、**理由は捨てていない**。
+    pub fn take_failures(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.failures)
+    }
+
+    /// 合成フレームを comp 平面へ載せる。
+    ///
+    /// 落ちても `show_in` は続ける — 幾何だけの絵は出るし、出すべきである。
+    /// **ただし黙って出さない**: 理由は `failures` へ積んで呼び手が引き取る
+    /// (2026-08-18 外部診断 F-08。以前はここが無言 `return` だった)。
     fn present_evaluated_frame(
         &mut self,
         render_ctx: &re_renderer::RenderContext,
         texture: &wgpu::Texture,
     ) {
-        if self
-            .spatial_stage
-            .copy_gpu_image(render_ctx, DOCUMENT_FRAME_ENTITY, texture)
-            .is_err()
+        if let Err(error) =
+            self.spatial_stage
+                .copy_gpu_image(render_ctx, DOCUMENT_FRAME_ENTITY, texture)
         {
+            self.note_failure(format!("合成フレームを Stage へ載せられない: {error}"));
             return;
         }
         if self.evaluated_frame_active {
@@ -688,8 +722,24 @@ impl EmbeddedSpatialStage {
         if let (Some(geometry), Some((width, height))) =
             (self.host_geometry.clone(), self.host_viewport)
         {
-            let _ = self.apply_host_stage_geometry(&geometry, width, height);
+            // 絵が載った初回は fill を隠すために幾何を積み直す。ここが落ちると
+            // **絵の上に不透明な板が残る** — 見た目だけでは原因が読めないので言う。
+            if !self.apply_host_stage_geometry(&geometry, width, height) {
+                self.note_failure(
+                    "合成フレームに合わせて幾何を積み直せない(layer の板が絵を覆ったままになる)"
+                        .to_owned(),
+                );
+            }
         }
+    }
+
+    /// 失敗を1つ控える。**同じ理由を溜め込まない**(帯は1行しか出さないので、
+    /// 毎フレーム落ちる経路で `Vec` が伸び続けるほうが害になる)。
+    pub(super) fn note_failure(&mut self, text: String) {
+        if self.failures.iter().any(|known| *known == text) {
+            return;
+        }
+        self.failures.push(text);
     }
 }
 
