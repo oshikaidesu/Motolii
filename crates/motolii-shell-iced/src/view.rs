@@ -12,20 +12,20 @@
 //! 運転席の selector(`&str` は**完全一致**)も「押したいボタンの名前」だけを
 //! 名指しできる。
 //!
-//! ## M-1 の帯に無い物
+//! ## M-3 で帯に来た物
 //!
-//! Undo / Redo ボタンは編集面(Timeline)と一緒に来る(M-3)。**触れそうで触れない
-//! 物を先に置かない**(2026-08-12 の Q0)。
+//! Undo / Redo ボタン(編集面 = Timeline と一緒に来た)。`Cmd+Z` / `Shift+Cmd+Z`
+//! と同じ `UiIntent::Undo` / `Redo` へ流れる — 経路も意味も1つ。
 
-use iced::widget::{
-    button, column, container, mouse_area, row, rule, scrollable, space, text,
-};
+use iced::widget::canvas::Canvas;
+use iced::widget::{button, column, container, mouse_area, row, rule, scrollable, space, text};
 use iced::{Center, Element, Fill};
 
 use crate::browser::{BrowserCard, BrowserRail};
 use crate::message::Message;
 use crate::shell::Shell;
 use crate::theme::style;
+use crate::timeline::{TimelineMsg, TimelineProgram};
 use crate::widgets::DropEvent;
 use crate::window_input::window_input;
 
@@ -48,10 +48,20 @@ pub const DROP_HINT: &str = "Then just drop video and audio into this window.";
 pub const BROWSER_PANE_W: f32 = 316.0;
 /// Inspector pane の幅(既定配置の右)。
 pub const INSPECTOR_PANE_W: f32 = 300.0;
+// 上段(Browser|Stage|Inspector)対 下段 Timeline の高さ比は egui shell
+// (`crates/motolii-ui/src/blitz_shell/app.rs::build_initial_tree`)の中央列を
+// 正典にする: そこは Stage/Timeline を `insert_vertical_tile` へ明示 share を
+// 与えず渡していて、`egui_tiles::Shares::get_share` は未設定を 1.0 として扱う
+// ので実測は 1:1(50:50)。「だいたい6:4」という見積りではなく、egui 側に実在
+// するこの数字を `seated()` の `Length::FillPortion(1)` 2本で採る。
 /// 書き出しを始めるボタン。
 pub const EXPORT: &str = "Export";
 /// 走っている書き出しを止めるボタン。
 pub const CANCEL_EXPORT: &str = "Cancel";
+/// 帯の Undo ボタン(`Cmd+Z` と同じ入口 — 経路も意味も1つ)。
+pub const UNDO: &str = "Undo";
+/// 帯の Redo ボタン(`Shift+Cmd+Z` と同じ入口)。
+pub const REDO: &str = "Redo";
 
 // ---------------------------------------------------------------------------
 // Browser pane(M-4a)の名乗り。運転席は全部この文字列で掴む(完全一致)。
@@ -112,6 +122,7 @@ pub fn view(shell: &Shell) -> Element<'_, Message> {
         .width(Fill)
         .height(Fill);
 
+
     // 帯は「座席が居るあいだ」と「言われたことがある時」に出る。空の帯を常設しない
     // (egui 版と同じ判断)。
     if let Some(band) = status_band(shell) {
@@ -160,13 +171,15 @@ fn action_button<'a>(name: &'a str, shortcut: &'a str, message: Message) -> Elem
 }
 
 /// 座席が在るときの画面 — 既定配置(ui-interaction-language §3):
-/// 左 Browser(M-4a)/ 中央 Stage 島(M-2)/ 右 Inspector(M-4b)。下段 Timeline
-/// (M-3)はまだ無い。分割線は 1px([`style::separator`])。
+/// 上段は 左 Browser(M-4a)/ 中央 Stage 島(M-2)/ 右 Inspector(M-4b)、
+/// 下段は Timeline(M-3, canvas)。分割線は 1px([`style::separator`])。
 ///
-/// 中央は [`crate::stage_island::stage_island`]: Rerun `SpatialStage` の
+/// 中央上は [`crate::stage_island::stage_island`]: Rerun `SpatialStage` の
 /// 合成絵が shader widget として立ち、入力はブリッジ(調停つき)を通る。
+/// 上段:下段の高さ比は 1:1(egui shell の中央列の実測 — [`TOP_ROW_HEIGHT`] の
+/// docコメント参照)。
 fn seated(shell: &Shell) -> Element<'_, Message> {
-    row![
+    let top = row![
         browser_panel(shell),
         rule::vertical(1).style(style::separator),
         container(crate::stage_island::stage_island(shell))
@@ -180,7 +193,36 @@ fn seated(shell: &Shell) -> Element<'_, Message> {
         .width(INSPECTOR_PANE_W)
         .height(Fill),
     ]
+    .height(iced::Length::FillPortion(1));
+
+    column![
+        top,
+        rule::horizontal(1).style(style::separator),
+        container(timeline_pane(shell))
+            .id(TIMELINE_PANE_ID)
+            .height(iced::Length::FillPortion(1)),
+    ]
+    .width(Fill)
+    .height(Fill)
     .into()
+}
+
+/// Timeline pane を包む `container` の id。**運転席がここへ実座標を訊く**——
+/// 4面合成(統合第2弾)で Timeline canvas が窓の左上 (0,0) には立たなくなった
+/// ので、運転席は `Simulator::find(TIMELINE_PANE_ID)` で実 bounds を引いてから
+/// canvas ローカル座標(`timeline::semantics::PaneGeometry`)へ足す
+/// (`drive_timeline.rs::geometry_offset`)。
+pub const TIMELINE_PANE_ID: iced::advanced::widget::Id =
+    iced::advanced::widget::Id::new("motolii-timeline-pane");
+
+/// 下段 Timeline pane(M-3)。canvas は自分の受け持つ矩形の左上を原点に取る
+/// ので、運転席のポインタ座標(`timeline::semantics::PaneGeometry`)はその
+/// 矩形のローカル座標のまま成立する(窓座標への変換は [`TIMELINE_PANE_ID`])。
+fn timeline_pane(shell: &Shell) -> Element<'_, Message> {
+    Canvas::new(TimelineProgram { shell })
+        .width(Fill)
+        .height(Fill)
+        .into()
 }
 
 /// grid の列数。
@@ -545,6 +587,21 @@ fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
             name
         };
         band = band.push(text(label).size(13));
+    }
+
+    // Undo / Redo(M-3)。`Cmd+Z` / `Shift+Cmd+Z` と同じ入口へ流れる。
+    // 台帳が空の側は押せない(触れそうで触れない物にしない — 灰色は「無効」の意味)。
+    if shell.is_seated() {
+        band = band.push(
+            button(text(UNDO).size(13)).on_press_maybe(
+                (shell.undo_len() > 0).then_some(Message::Timeline(TimelineMsg::UndoPressed)),
+            ),
+        );
+        band = band.push(
+            button(text(REDO).size(13)).on_press_maybe(
+                (shell.redo_len() > 0).then_some(Message::Timeline(TimelineMsg::RedoPressed)),
+            ),
+        );
     }
 
     // 書き出し面。実行中は経過秒と Cancel、そうでなければ Export。

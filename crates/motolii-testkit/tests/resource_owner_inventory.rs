@@ -132,6 +132,25 @@ const INVENTORY: &[InventoryEntry] = &[
             peak_multiplicity: "per-live-panel",
         }],
     },
+    // iced Stage 島(M-2, 2026-08-18)。egui 版 stage_island 相当の offscreen 合成が
+    // iced の shader widget 側にも立ち、bind group 床/GPU 割当台帳へ登録する必要が
+    // 統合第2弾の fence 修理(item 4)で表面化した。
+    InventoryEntry {
+        relative_path: "crates/motolii-shell-iced/src/stage_island.rs",
+        raw_allocation_calls: 2,
+        owner_seats: &[
+            OwnerSeat {
+                name: "iced-offscreen-target",
+                lifetime: "widget-resize-generation",
+                peak_multiplicity: "one-per-stage-island",
+            },
+            OwnerSeat {
+                name: "iced-evaluated-frame",
+                lifetime: "probe-frame-generation",
+                peak_multiplicity: "one",
+            },
+        ],
+    },
     InventoryEntry {
         relative_path: "crates/motolii-ui/src/inspector_blitz/dump_main.rs",
         raw_allocation_calls: 2,

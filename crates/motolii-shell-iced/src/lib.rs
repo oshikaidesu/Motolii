@@ -84,6 +84,9 @@ pub mod stage_bridge;
 pub mod stage_island;
 mod status_log;
 pub mod theme;
+/// Timeline pane(M-3)。spike を種に、実 Document の投影と Q1 文法の操作を持つ。
+/// 編集は全部 `UiIntent` になって `ShellGateway` を通る(gateway 迂回なし)。
+pub mod timeline;
 pub mod view;
 pub mod widgets;
 mod window_input;
