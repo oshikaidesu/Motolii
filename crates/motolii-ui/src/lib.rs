@@ -38,7 +38,10 @@ mod layout_runtime;
 mod layout_runtime_adapter;
 /// 「最後に開いていた project」の置き場。引数なし起動で続きを開く(F-01)。
 mod last_project;
-mod media_library;
+/// Media library の read-model(走査・種別判定・path 解決)。toolkit 非依存。
+/// iced shell の Browser pane(M-4a)も**同じ owner** を差すので `pub`
+/// (走査を2つ持たない。M-1 が `ShellPrompts` 群を共用したのと同じ理由)。
+pub mod media_library;
 mod native_host_layout;
 mod palette_settings;
 mod parameter_control;

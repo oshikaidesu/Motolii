@@ -18,7 +18,9 @@ path = "src/main.rs"
 # ホストの toolkit。**egui は入れない**(dep policy の柵:
 # `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs`。この crate は iced 系の
 # allowlist にだけ載っていて、egui 系の allowlist には載っていない)。
-iced.workspace = true
+# `image` feature は Browser pane(M-4a)のサムネイル表示のため。縮小実体そのもの
+# は既存座席(`motolii_ui::browser_blitz::thumbnail`)が作り、ここは表示だけ。
+iced = { workspace = true, features = ["image"] }
 # fork seam 2(bind group 床)の口。iced 本体は `iced_wgpu` を再公開しないので
 # 直接引く(同 repo 同 rev = iced 内部と同一 package。床の static は1つ)。
 # 柵上も合法: `ICED_CRATE_ALLOWLIST` はこの crate に iced 系依存を許している。

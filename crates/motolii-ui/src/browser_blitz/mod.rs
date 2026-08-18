@@ -10,7 +10,10 @@ mod markup;
 pub mod render;
 mod theme;
 /// 縮小実体 cache。native Browser pane(`crate::browser_panel`)も同じものを食う。
-pub(crate) mod thumbnail;
+/// iced shell の Browser pane(M-4a)も**同じ座席**を差すので `pub`
+/// (M-1 が `ShellPrompts` 群を `pub` にして dialog を共用したのと同じ理由 —
+/// 2つ目のサムネイル cache を作らない)。
+pub mod thumbnail;
 
 use blitz_dom::{DocumentConfig, StyleThreading};
 use blitz_html::HtmlDocument;
