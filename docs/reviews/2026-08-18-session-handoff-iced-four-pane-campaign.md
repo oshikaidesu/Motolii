@@ -130,3 +130,23 @@ motolii-ui 5エラーで**失敗**→ `1465b0e4` で修復し `-p motolii-ui` gr
 **教訓(メモリ `capsule-gaps-are-the-defect-source` に記録)**: 型・oracle・fence は
 「書いた物が正しいか」しか守らない。green 100% は発注書の完全性を何も保証しない。
 UI 発注には視覚の受入条件と**検証器具**(撮って自分の目で見る)を必ず入れること。
+
+### 視覚の正本と撮影器具(2026-08-18 深夜に確定)
+
+利用者の指摘「それらは旧版、最新は散らかっている」を受けて mtime / git log で走査した結果:
+
+- **視覚の正本 = `docs/mocks-ui/public/{inspector,browser,timeline}-library.html` + 同名 `.css`**
+  (最終コミット 2026-08-16。リポ内の設計資産で最新)。egui の
+  `inspector_panel/theme.rs` は冒頭で「**全部 `inspector-library.css` の写し**」と
+  宣言しており、**egui 画面は写しにすぎない**。再現は写しでなく元を見る
+- `docs/mocks/m3-main-ui-v1*`(`ui-visual-language.md` が基準と呼ぶもの)は旧版。
+  密度の基準としては有効だが、面の詳細はライブラリ側が新しい
+- 素の html はスタイルが当たらない(`<link>` が2本: token css
+  `src/tokens/mock-candidates.css` と library css)。**両方を `<style>` へ流し込んだ
+  `-inlined.html` を作ってから撮る**
+
+**撮影器具**(Playwright。`docs/mocks-ui/` の node_modules を使うためその場所で実行):
+scratchpad の `capture-design-reference.mjs`。出力した基準画像:
+`/tmp/motolii-design-reference/{inspector,browser,timeline}-reference.png`。
+**この3枚を Read で開いて目視するのが視覚検収の唯一の合否判定**であり、
+visual-fidelity レーンへは正本の訂正とともに送付済み。
