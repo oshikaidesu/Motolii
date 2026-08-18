@@ -32,6 +32,7 @@
 
 | ファイル | 表題 |
 |---|---|
+| [2026-08-19-normal-timeline-prior-art.md](2026-08-19-normal-timeline-prior-art.md) | **普通のタイムラインが持つ操作の先例調査**(AE/Premiere/Resolve/CapCut/AviUtl/Ableton/Reaper 7製品、観察)。必須判定12件は既にMotolii既決またはコード実装済み。決定的な欠落は個別操作ではなく「track/laneがgapless packingか自由配置か」という土台の未選択で、trim family(ripple/roll/slip/slide)はtrack-based系だけが持つ操作族と判明。プリコンポ回避(AE痛点)はグループ化+foldで裏付け済み、A/V link-unlinkはMotoliiの単一soundtrackモデルと前提が異なる可能性 |
 | [2026-08-17-composition-resolution-and-aspect-fit-decision.md](2026-08-17-composition-resolution-and-aspect-fit-decision.md) | **出力解像度はCompositionが所有し、素材はfit(contain)で受ける**。現行exportの「最初のvideo asset解像度」導出はM1名残で、縦動画が拒否される。`Composition.resolution: Option`(None=互換)+新Command+既定1920x1080+letterbox。blur-fillはv1.x粒2 |
 | [2026-08-17-edit-during-playback-decision.md](2026-08-17-edit-during-playback-decision.md) | **再生中の編集は再生を止めない(Ableton型)**。音はsoundtrackのみ由来で編集は影響せず、絵は毎フレームsnapshot読み直しのため停止が不要。playhead手動移動とSetSoundtrackだけsessionを開き直す。oracleは再生継続テストを操作family毎に1本 |
 | [2026-08-18-session-handoff-normal-editor-campaign.md](2026-08-18-session-handoff-normal-editor-campaign.md) | **「普通の動画編集ソフト」campaign第1区切りの引き継ぎ**(セッションID記載)。merge済み17レーン、機械検証と人間未検証の線引き、既知欠陥・残タスクの正本、運転規約。remote未push |
