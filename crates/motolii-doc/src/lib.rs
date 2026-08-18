@@ -96,7 +96,7 @@ pub use migrate::{
 };
 pub use param::{DocParam, LookAtAxis};
 pub use param_eval::{eval_look_at_rotation, look_at_angle, ParamEvalError, ResolvedLayerParams};
-pub use param_expect::{ExpectedValueType, ParamConstraints};
+pub use param_expect::{ExpectedElementType, ExpectedValueType, ParamConstraints};
 pub use pathgeom::PathOpError;
 pub use persist::{
     check_migration_allowed, classify_open_mode, detect_cloud_sync, load_document,

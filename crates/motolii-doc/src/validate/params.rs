@@ -254,6 +254,11 @@ fn validate_value_structure(value: &DocValue, path: &str) -> Result<(), Document
             }
         }
         DocValue::AssetRef(_) => {}
+        DocValue::List(items) => {
+            for item in items {
+                validate_value_structure(item, path)?;
+            }
+        }
     }
     Ok(())
 }

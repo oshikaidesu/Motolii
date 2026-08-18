@@ -70,9 +70,13 @@ pub fn map_parameter_control(
             param_id: param.id,
             control: HostParameterControl::Color,
         }),
-        ValueType::AssetRef => Err(ParameterControlError::UnsupportedValueType {
-            param_id: param.id,
-            value_type: param.value_type,
-        }),
+        // `List`のウィジェットは未決(決定2.5は要素のdomainを持たないと定めただけ)。
+        // AssetRefと同じく、Host側の受け口が決まるまでは不支持として返す。
+        ValueType::AssetRef | ValueType::List(_) => {
+            Err(ParameterControlError::UnsupportedValueType {
+                param_id: param.id,
+                value_type: param.value_type,
+            })
+        }
     }
 }

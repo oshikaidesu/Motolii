@@ -4,7 +4,6 @@
 
 use crate::doc_value::DocValue;
 use crate::param::{DocParam, LookAtAxis};
-use crate::param_expect::ExpectedValueType;
 use crate::LayerId;
 use motolii_core::RationalTime;
 use motolii_eval::{DataTrackId, DataTracks, Value};
@@ -56,25 +55,23 @@ impl ResolvedLayerParams {
     }
 }
 
-fn doc_value_type(v: &DocValue) -> ExpectedValueType {
-    match v {
-        DocValue::F64(_) => ExpectedValueType::F64,
-        DocValue::Vec2(_) => ExpectedValueType::Vec2,
-        DocValue::Vec3(_) => ExpectedValueType::Vec3,
-        DocValue::Color(_) => ExpectedValueType::Color,
-        DocValue::AssetRef(_) => ExpectedValueType::AssetRef,
+/// DataTrackの出力型を fallback の形と照合する。
+///
+/// `List`の要素型は fallback の先頭要素で決まる。空listは要素型を決めないので、
+/// listでありさえすれば通す(長さはこの層の関心ではない)。
+fn value_matches_fallback(fallback: &DocValue, v: &Value) -> bool {
+    match (fallback, v) {
+        (DocValue::F64(_), Value::F64(_))
+        | (DocValue::Vec2(_), Value::Vec2(_))
+        | (DocValue::Vec3(_), Value::Vec3(_))
+        | (DocValue::Color(_), Value::Color(_))
+        | (DocValue::AssetRef(_), Value::AssetRef(_)) => true,
+        (DocValue::List(items), Value::List(got)) => match items.first() {
+            None => true,
+            Some(first) => got.iter().all(|g| value_matches_fallback(first, g)),
+        },
+        _ => false,
     }
-}
-
-fn value_matches_expected(expected: ExpectedValueType, v: &Value) -> bool {
-    matches!(
-        (expected, v),
-        (ExpectedValueType::F64, Value::F64(_))
-            | (ExpectedValueType::Vec2, Value::Vec2(_))
-            | (ExpectedValueType::Vec3, Value::Vec3(_))
-            | (ExpectedValueType::Color, Value::Color(_))
-            | (ExpectedValueType::AssetRef, Value::AssetRef(_))
-    )
 }
 
 pub fn eval_doc_param(
@@ -139,15 +136,14 @@ fn eval_data_track(
     t: RationalTime,
     tracks: &DataTracks,
 ) -> Result<Value, ParamEvalError> {
-    let expected = doc_value_type(fallback);
     match tracks.get(track) {
         None => Ok(fallback.to_eval()),
         Some(dt) => {
             let got = dt.eval(t);
-            if !value_matches_expected(expected, &got) {
+            if !value_matches_fallback(fallback, &got) {
                 return Err(ParamEvalError::DataTrackTypeMismatch {
                     track: track.0.clone(),
-                    expected: expected.name(),
+                    expected: fallback.kind_name(),
                     got,
                     fallback: fallback.kind_name(),
                 });

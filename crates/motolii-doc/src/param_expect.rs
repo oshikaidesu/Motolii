@@ -5,6 +5,29 @@
 
 use crate::doc_value::DocValue;
 
+/// `List`受け口の期待要素型。`ExpectedValueType`と別の型にしてあるのは
+/// 入れ子を型で禁じるためで、plugin側の`ElementType`と同じ理由である。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExpectedElementType {
+    F64,
+    Vec2,
+    Vec3,
+    Color,
+    AssetRef,
+}
+
+impl ExpectedElementType {
+    pub fn as_value_type(self) -> ExpectedValueType {
+        match self {
+            Self::F64 => ExpectedValueType::F64,
+            Self::Vec2 => ExpectedValueType::Vec2,
+            Self::Vec3 => ExpectedValueType::Vec3,
+            Self::Color => ExpectedValueType::Color,
+            Self::AssetRef => ExpectedValueType::AssetRef,
+        }
+    }
+}
+
 /// パラメータ値の期待バリアント。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExpectedValueType {
@@ -13,6 +36,7 @@ pub enum ExpectedValueType {
     Vec3,
     Color,
     AssetRef,
+    List(ExpectedElementType),
 }
 
 impl ExpectedValueType {
@@ -23,18 +47,29 @@ impl ExpectedValueType {
             Self::Vec3 => "Vec3",
             Self::Color => "Color",
             Self::AssetRef => "AssetRef",
+            Self::List(ExpectedElementType::F64) => "List<F64>",
+            Self::List(ExpectedElementType::Vec2) => "List<Vec2>",
+            Self::List(ExpectedElementType::Vec3) => "List<Vec3>",
+            Self::List(ExpectedElementType::Color) => "List<Color>",
+            Self::List(ExpectedElementType::AssetRef) => "List<AssetRef>",
         }
     }
 
     pub fn matches(self, value: &DocValue) -> bool {
-        matches!(
-            (self, value),
-            (Self::F64, DocValue::F64(_))
-                | (Self::Vec2, DocValue::Vec2(_))
-                | (Self::Vec3, DocValue::Vec3(_))
-                | (Self::Color, DocValue::Color(_))
-                | (Self::AssetRef, DocValue::AssetRef(_))
-        )
+        match (self, value) {
+            // 空listは長さの問題であって型の問題ではないので、どの要素型にも一致する。
+            (Self::List(element), DocValue::List(items)) => items
+                .iter()
+                .all(|item| element.as_value_type().matches(item)),
+            _ => matches!(
+                (self, value),
+                (Self::F64, DocValue::F64(_))
+                    | (Self::Vec2, DocValue::Vec2(_))
+                    | (Self::Vec3, DocValue::Vec3(_))
+                    | (Self::Color, DocValue::Color(_))
+                    | (Self::AssetRef, DocValue::AssetRef(_))
+            ),
+        }
     }
 }
 

@@ -2,7 +2,7 @@
 
 作成日: 2026-08-17
 
-状態: **決定**（型と規則）＋ **未実装**
+状態: **決定**（型と規則）＋ **型・規則は実装済み（2026-08-17）／GPU受け渡し(2.4)とUIウィジェットは未実装**
 
 関連: [Vismプラグインカタログ](../vism-plugin-catalog.md)、[VSM-A4I外部作者経路の実測と汎用化](2026-08-17-vsm-a4i-external-author-path-measurement.md)、[プラグイン作成](../plugin-authoring.md)
 
@@ -109,3 +109,56 @@ Value::AssetRef を含む網羅 match  11ファイル以上
 ## 5. 未実装
 
 型・規則・粒度は決まっており、設計判断は残っていない。実装は網羅 match の追随と直列化・journal の追加であり、機械的である。ただし11ファイル以上を同時に動かすため、半端に始めるとビルドが割れた状態が残る。一括で入れること。
+
+## 6. 実装で分かったこと（2026-08-17）
+
+### 6.1 `List(Box<ValueType>)` は入らなかった — 要素型を別の型にした
+
+**実装した形は §2.1 と違う。**
+
+```rust
+pub enum ElementType { F64, Vec2, Vec3, Color, AssetRef }
+pub enum ValueType   { F64, Vec2, Vec3, Color, AssetRef, List(ElementType) }
+```
+
+根拠は推論ではなく、`List(Box<ValueType>)` を実際に入れて `cargo check -p motolii-plugin` を回した結果である。
+
+```
+error[E0204]: the trait `Copy` cannot be implemented for this type
+error[E0004]: non-exhaustive patterns: `ValueType::List(_)` not covered
+```
+
+`ValueType` は `Copy` で、`as_str(self) -> &'static str` を持ち、`ParamDef`・`ParamConstraints` は `Copy` かつ `const fn` で組まれている。`Box` を入れると `Copy` が落ち、`as_str` も `&'static str` を返せなくなる（入れ子の型名は静的文字列にならない）。これは網羅 match の追随ではなく、公開境界の作り直しになる。
+
+`ElementType` を別に置くと、`Copy`・`const fn`・`&'static str` がすべて残り、加えて **§2.1 の「`List` の入れ子は許さない」が検証規則ではなく型で保証される**。決めた中身（要素は既存型に限る／入れ子なし／不透明データなし）は一つも変えていない。
+
+副作用として **§2.5 の「`List` の入れ子を弾く」は弾く対象が構文上作れない**ため、検証項目としては消えた。`Value::List(vec![Value::List(..)])` は値としては書けるが、`value_matches_type` がどの `ValueType` にも一致させないので受け口に入らない。
+
+### 6.2 決定に書かれていなかったが必要だった型が2つある
+
+§2.1 は `ValueType` と `Value` だけを挙げているが、keyframe を保存し検証するには次の2本も並びを持つ必要があった。どちらも決定文書に記載がない。
+
+- `DocValue`（`crates/motolii-doc/src/doc_value.rs`）— 永続層の値。**keyframe は list 全体で1キー（§2.3）なので、保存されるのはこの型である**
+- `ExpectedValueType`（`crates/motolii-doc/src/param_expect.rs`）— doc 受け口の期待型。`Copy` + `const fn` なので `ExpectedElementType` を同じ理由で対にした
+
+評価層の `Value` と永続層の `DocValue` を分ける設計は既存のもの（`doc_value.rs` の冒頭に理由が書かれている）であり、本実装はその分離をまたいでいない。
+
+### 6.3 空 list の扱い（決定に無い規則を1つ足した）
+
+`List` の要素型は値からは先頭要素でしか分からず、空 list は要素型を名乗れない。次のようにした。
+
+- `value_matches_type(List(T), Value::List([]))` → **一致する**。長さは plugin 側の関心であって型の関心ではない（§2.1「長さの一致は plugin 側が検査する」に合わせた）
+- 型名表示は空なら `List`、要素があれば `List<F64>` 等
+
+### 6.4 要素ごとの domain は入れていない
+
+`validate_param` の `unit_interval` / `min` / `max` / `integer` は**スカラのみに掛かったまま**にした。§2.5 の「要素の domain は本決定では持たない」に従う。`List(F64)` に `f64_domain` を付けると既存の `NonF64Parameter` が弾く（`value_type != ValueType::F64` のため）ので、§2.5 の「`List(F64)` でも `None`」は追加のコードなしに成立している。
+
+ただし **`default` の有限性と Color の 0..=1 は要素へ降りて検査する**。これは domain ではなく値の健全性なので分けた。
+
+### 6.5 まだ無いもの
+
+- **§2.4 の storage buffer 形**（`PipelineCache`）— 未実装。使う plugin がまだ無い
+- **UI ウィジェット** — `map_parameter_control` は `List` を `AssetRef` と同じく不支持で返す。Host 側の受け口が未決
+- **Gradient Ramp 本体** — 型が入っただけで、plugin は書いていない
+- **journal の往復試験** — `DocValue` は `Serialize`/`Deserialize` を継いでいるが、`List` を含む文書の replay は試していない

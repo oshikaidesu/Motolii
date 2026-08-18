@@ -691,7 +691,8 @@ fn eval_typed_key(
         Value::Vec2(v) => DocValue::Vec2(v),
         Value::Vec3(v) => DocValue::Vec3(v),
         Value::Color(v) => DocValue::Color(v),
-        Value::AssetRef(_) => return Err(InsertKeyError::ValueTypeMismatch),
+        // transform受け口はVec2/F64のみ。AssetRef同様、Listもここには来ない。
+        Value::AssetRef(_) | Value::List(_) => return Err(InsertKeyError::ValueTypeMismatch),
     };
     if type_ok(&value) {
         Ok(value)
