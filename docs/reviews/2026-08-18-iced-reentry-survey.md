@@ -22,6 +22,15 @@ Message/intent 列で、renderer 無しに同じ列をCLI/テストから流せ�
    でも 28)、Motolii と Rerun fork は **wgpu 29**。shader widget での外部 texture
    埋め込みは「同一 device 共有」が前提で、版が揃わない限り成立しない。
    egui を iced 内に埋める先例は**ゼロ**(失敗報告すら無い=全リスク自前)。
+   **→ 再仕分け(2026-08-18・利用者指摘)**: この計上はカテゴリを誤っていた。島の実体は
+   (1) wgpu offscreen絵のiced合成=icedの公式機能、(2) 入力adapter(re_view_spatialの
+   入力語彙がegui型であるための翻訳)、(3) SpatialStageのライブラリ駆動、の3部品であり、
+   新規性は(3)=Rerun fork問題に集中する。eguiは島内の実装詳細(repaint経済とIME経路なし
+   のみが実害)で、島内eguiのバージョンはRerun fork pinに従属するためiced追随と独立。
+   見張るべきはre_view_spatial/re_renderer上流。外部調査の結果は
+   [Rerun埋め込み前例調査](2026-08-18-rerun-embedding-precedent-survey.md) —
+   eframe埋め込みは公式に文書化・example維持、ネイティブ埋め込み実在例は数件、
+   offscreen非eguiホストは前例なし。
    **→ 訂正(同日・利用者指摘)**: released 版しか見ていなかった。**iced master
    (0.15.0-dev)は wgpu = "29"**(workspace.dependencies を直接確認)で、版の壁は
    master 基準では消えている。同一 device 埋め込み(shader widget に Rerun offscreen
