@@ -120,31 +120,62 @@ pub struct ExportRun {
     handle: Option<std::thread::JoinHandle<()>>,
     /// 1回答えたら以後は `None`(UI が二重に status を書かない)。
     answered: bool,
+    /// thread を起こせなかった理由。**panic の代わり**である
+    /// (2026-08-18 外部診断 F-10)。窓しか無い運転席で panic すると、帯にも
+    /// `--status-log` にも何も残らないまま全部が落ちる。返事にしておけば
+    /// `poll_export` が「export failed: …」を1行言い、窓は生き残る。
+    spawn_failure: Option<String>,
 }
 
 impl ExportRun {
     /// 書き出し thread を起こす。呼んだ時点から `try_finish` が答えるまで
     /// UI は自由に動いてよい(書き出し中も固まらない)。
+    ///
+    /// **thread が起きなくても panic しない。** 起きなかったことは書き出しの
+    /// 失敗であって、窓を落とす理由ではない — 次の `try_finish` が
+    /// `ExportFinish::Failed` で理由ごと返す。
     pub fn start(request: ExportRequest) -> Self {
         let cancel = Arc::new(AtomicBool::new(false));
         let (sender, receiver) = sync_channel(1);
         let worker_cancel = Arc::clone(&cancel);
         let output_path = request.output_path.clone();
-        let handle = std::thread::Builder::new()
+        match std::thread::Builder::new()
             .name("motolii-export".to_owned())
             .spawn(move || {
                 let finish = run_export_worker(&request, &worker_cancel);
                 // UI 側が run を捨てていたら受け手が居ないだけ — worker は静かに終わる。
+                // (**失敗を運ぶ Result ではない** — `tests/shell_error_fence.rs` の注記)
                 let _ = sender.send(finish);
-            })
-            .expect("spawn export thread");
+            }) {
+            Ok(handle) => Self {
+                output_path,
+                cancel,
+                started: Instant::now(),
+                receiver,
+                handle: Some(handle),
+                answered: false,
+                spawn_failure: None,
+            },
+            Err(error) => Self::spawn_failed(
+                output_path,
+                format!("could not start the export thread: {error}"),
+            ),
+        }
+    }
+
+    /// thread を起こせなかった run。作られた瞬間から「失敗した書き出し」で、
+    /// 最初の `try_finish` が理由つきの `Failed` を返して終わる。
+    fn spawn_failed(output_path: PathBuf, reason: String) -> Self {
+        // 受け手だけ持つ空の口。返事は `spawn_failure` から出るので誰も送らない。
+        let (_sender, receiver) = sync_channel(1);
         Self {
             output_path,
-            cancel,
+            cancel: Arc::new(AtomicBool::new(false)),
             started: Instant::now(),
             receiver,
-            handle: Some(handle),
+            handle: None,
             answered: false,
+            spawn_failure: Some(reason),
         }
     }
 
@@ -174,6 +205,12 @@ impl ExportRun {
         if self.answered {
             return None;
         }
+        // thread が起きなかった run。receiver には誰も居ないので、
+        // 「thread が死んだ」ではなく起こせなかった理由をそのまま返す。
+        if let Some(reason) = self.spawn_failure.take() {
+            self.answered = true;
+            return Some(ExportFinish::Failed(reason));
+        }
         let finish = match self.receiver.try_recv() {
             Ok(finish) => finish,
             Err(TryRecvError::Empty) => return None,
@@ -184,8 +221,46 @@ impl ExportRun {
         };
         self.answered = true;
         if let Some(handle) = self.handle.take() {
+            // join の戻りは worker の panic 有無。返事は既に受けているので読み捨てる
+            // (**失敗を運ぶ Result ではない** — `tests/shell_error_fence.rs` の注記)。
             let _ = handle.join();
         }
         Some(finish)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// F-10: thread を起こせない時に panic しない。
+    ///
+    /// 窓しか無い運転席で panic すると、帯にも `--status-log` にも何も出ないまま
+    /// 全部が落ちる。返事にしておけば `poll_export` が
+    /// 「export failed: …」を1行言い、窓は生き残る。
+    #[test]
+    fn a_run_that_could_not_start_answers_instead_of_panicking() {
+        let mut run = ExportRun::spawn_failed(
+            PathBuf::from("/tmp/never-written.mp4"),
+            "Too many open files (os error 24)".to_owned(),
+        );
+
+        assert!(!run.cancel_requested());
+        assert_eq!(run.output_path(), Path::new("/tmp/never-written.mp4"));
+
+        match run.try_finish() {
+            Some(ExportFinish::Failed(reason)) => {
+                assert!(
+                    reason.contains("Too many open files"),
+                    "起こせなかった理由がそのまま帯へ行かない: {reason}"
+                );
+            }
+            other => panic!("spawn 失敗は Failed で返る: {other:?}"),
+        }
+
+        assert!(
+            run.try_finish().is_none(),
+            "答えるのは1回だけ(帯が同じ失敗を二度言わない)"
+        );
     }
 }

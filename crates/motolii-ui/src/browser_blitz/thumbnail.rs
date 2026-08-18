@@ -54,21 +54,15 @@ fn max_size() -> (u32, u32) {
 }
 
 /// 項目ごとの縮小実体のpath。`items` と**同じ長さ・同じ並び**で返す。
-/// `None` は作れなかった項目で、その card は画像なしで描かれる(`markup.rs`)。
+/// `Err` は作れなかった項目で、その card は画像なしで描かれる(`markup.rs`)。
 /// **元画像へフォールバックしない** — 戻すと重さの原因がそのまま残る。
-pub(crate) fn prepare(items: &[BrowserItem]) -> Vec<Option<PathBuf>> {
+///
+/// 落ちた理由は**呼び手へ返す**。`eprintln!` で書くと、窓しか無い運転席では
+/// 誰も読まないまま「画像が出ない」だけが残る(2026-08-18 外部診断 F-09)。
+pub(crate) fn prepare(items: &[BrowserItem]) -> Vec<Result<PathBuf, String>> {
     items
         .iter()
-        .map(|item| match thumbnail_for(&item.path) {
-            Ok(path) => Some(path),
-            Err(error) => {
-                eprintln!(
-                    "browser thumbnail: {} を作れないので画像なしで描く: {error}",
-                    item.path.display()
-                );
-                None
-            }
-        })
+        .map(|item| thumbnail_for(&item.path))
         .collect()
 }
 

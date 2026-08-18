@@ -43,6 +43,9 @@ struct BlitzShellBehavior<'a> {
     render_state: &'a RenderState,
     /// live の Timeline エディタ。`None` なら Timeline も fixture の Blitz 表示。
     editor: Option<&'a mut TimelineEditor>,
+    /// エディタが断った編集を言う場所。台帳は `Arc` 共有なので、殻の
+    /// `gateway` を可変で借りている間も clone を持って言える。
+    transcript: ShellTranscript,
     /// 面が出した要求(いまは Browser のカードのダブルクリックだけ)。
     /// **ここでは実行しない** — 座席を触るのは描き終わってからの `app` である。
     /// 1フレームに1件で足りる(人の指は1本)。
@@ -54,6 +57,9 @@ impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
         if pane.kind() == PaneKind::Timeline {
             if let Some(editor) = self.editor.as_deref_mut() {
                 editor.show(ui);
+                // 断った編集の理由を帯へ写す。**Timeline の一行はそのまま**で、
+                // 増えるのは `--status-log` に残る側だけである(外部診断 F-07)。
+                super::pane::relay_editor_rejections(editor, &self.transcript);
                 return UiResponse::None;
             }
         }
@@ -63,6 +69,8 @@ impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
         if pane.kind() == PaneKind::Inspector {
             if let Some(editor) = self.editor.as_deref_mut() {
                 pane.show_live_inspector(ui, editor);
+                // Inspector の編集もエディタの適用口を通るので、断られ方も同じ。
+                super::pane::relay_editor_rejections(editor, &self.transcript);
                 return UiResponse::None;
             }
         }
@@ -599,9 +607,12 @@ impl BlitzShellApp {
 
         // Timeline / Inspector の中の編集は**まだ intent を通らない**（wave E）。
         // 通っているのは `motolii-doc` 側の D2 Command journal だけである。
+        // 台帳は `Arc` の共有なので、座席を可変で借りたあとでも同じ帳面へ言える。
+        let transcript = self.gateway.transcript().clone();
         let mut behavior = BlitzShellBehavior {
             render_state: &self.render_state,
             editor: self.gateway.project_mut().map(ProjectSeat::editor_mut),
+            transcript,
             browser_request: None,
         };
 

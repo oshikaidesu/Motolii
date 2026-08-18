@@ -1180,7 +1180,20 @@ pub struct TimelineEditor {
     /// 届くまでは薄い placeholder のまま描く。控えは `pcm_caches` と共有する
     waveform: WaveformSeat,
     status: String,
+    /// **落ちた編集の理由の控え。** status は一番下の一行に出るだけで、窓を
+    /// 閉じれば消え `--status-log` にも残らない。呼び手(shell)が引き取れるよう
+    /// 同じ文をここへ積む(2026-08-18 外部診断 F-07)。
+    ///
+    /// **shell の型はここに来ない。** editor は理由を返すだけで、どこへ言うかは
+    /// 知らない(`blitz_shell::pane::relay_editor_rejections` が写す)。
+    /// 引き取り手が居ない席(lab / fixture)でも伸び続けないよう
+    /// `REJECTION_MEMORY` 件で古いほうから捨てる。
+    rejections: Vec<String>,
 }
+
+/// 引き取られないまま溜める上限。帯は1行しか出さないので、これ以上覚えても
+/// 誰も読まない(古いほうから捨てる)。
+const REJECTION_MEMORY: usize = 32;
 
 impl TimelineEditor {
     /// 実プロジェクトの writer を座らせる(shell の `--project` 経路)。
@@ -1257,6 +1270,7 @@ impl TimelineEditor {
             pcm_caches: HashMap::new(),
             waveform: WaveformSeat::default(),
             status: "space=play  L=loop  Cmd+G=group  Del=delete  drag name=reorder".to_owned(),
+            rejections: Vec::new(),
         }
     }
 
@@ -1282,6 +1296,42 @@ impl TimelineEditor {
     /// 一番下に出ている一言(読み)。**落ちた編集の理由もここに出る。**
     pub fn status(&self) -> &str {
         &self.status
+    }
+
+    /// **断った理由の置き場。** status に出すのと**同じ文**を控えにも積む。
+    ///
+    /// 「起きたこと」(選択が変わった・undo が1つ戻った)はここを通さない。
+    /// 通すのは「頼まれたのに書かなかった」ときだけで、それが呼び手に
+    /// 「押しても無反応」と見えないための唯一の材料である。
+    ///
+    /// **同じ理由を続けて言わない。** ドラッグのように毎フレーム断られる経路
+    /// (キーを打てない playhead で Inspector の数を掴む等)があるので、
+    /// 一言も画面も変わっていないなら控えも増やさない。間に別の一言が入れば、
+    /// 次の拒否は改めて言う — `blitz_shell::pane` の latch と同じ考え方である。
+    fn reject(&mut self, text: String) {
+        if self.status == text {
+            return;
+        }
+        if self.rejections.len() >= REJECTION_MEMORY {
+            self.rejections.remove(0);
+        }
+        self.rejections.push(text.clone());
+        self.status = text;
+    }
+
+    /// 溜まっている拒否を引き取る(引き取ったら空になる)。
+    ///
+    /// 呼び手は shell 側で、`--status-log` に残る一言へ写す。呼ばれない席
+    /// (lab / 単体テスト)では status だけが従来どおり出る。
+    pub fn take_rejections(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.rejections)
+    }
+
+    /// 拒否の運び方だけを見るテスト用の口(拒否そのものを作るには
+    /// 座席と writer が要るので、運搬路のテストは中身を注いで見る)。
+    #[cfg(test)]
+    pub(crate) fn push_rejection_for_test(&mut self, text: impl Into<String>) {
+        self.reject(text.into());
     }
 
     /// playhead(秒)。ドロップした素材が立つのはここ。
@@ -1379,7 +1429,7 @@ impl TimelineEditor {
                 refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
                 self.status = format!("undo  ({} left)", self.writer.undo_len());
             }
-            Err(error) => self.status = format!("undo rejected: {error}"),
+            Err(error) => self.reject(format!("undo rejected: {error}")),
         }
     }
 
@@ -1390,7 +1440,7 @@ impl TimelineEditor {
                 refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
                 self.status = format!("redo  ({} left)", self.writer.redo_len());
             }
-            Err(error) => self.status = format!("redo rejected: {error}"),
+            Err(error) => self.reject(format!("redo rejected: {error}")),
         }
     }
 
@@ -1507,7 +1557,7 @@ impl TimelineEditor {
     /// Opacity は `[a]`)。**画面に出ている数がそのままキーになる**。
     pub fn key_param_at_playhead(&mut self, layer: LayerId, param: ParamRef, components: &[f64]) {
         let Some(at) = self.playhead_time() else {
-            self.status = "the playhead is not a keyable time".to_owned();
+            self.reject("the playhead is not a keyable time".to_owned());
             return;
         };
         let Some(new_value) = doc_value_for(param, components) else {
@@ -1528,7 +1578,7 @@ impl TimelineEditor {
             }
             Ok(motolii_doc::AddTransformParamKeyPreparation::AlreadyPresent { key_id }) => key_id,
             Err(error) => {
-                self.status = format!("{} rejected: {error}", self.name(layer));
+                self.reject(format!("{} rejected: {error}", self.name(layer)));
                 return;
             }
         };
@@ -1559,7 +1609,7 @@ impl TimelineEditor {
         value: f64,
     ) {
         let Some(current) = envelope_param(&self.document, layer, param).cloned() else {
-            self.status = format!("{} rejected: no such layer", param_label(param));
+            self.reject(format!("{} rejected: no such layer", param_label(param)));
             return;
         };
         let property = scalar_property(param);
@@ -1582,7 +1632,7 @@ impl TimelineEditor {
             }
             DocParam::Keyframes(track) => {
                 let Some(at) = self.playhead_time() else {
-                    self.status = "the playhead is not a keyable time".to_owned();
+                    self.reject("the playhead is not a keyable time".to_owned());
                     return;
                 };
                 if track.keys().is_empty() {
@@ -1614,7 +1664,7 @@ impl TimelineEditor {
                             key_id,
                         }) => key_id,
                         Err(error) => {
-                            self.status = format!("{} rejected: {error}", self.name(layer));
+                            self.reject(format!("{} rejected: {error}", self.name(layer)));
                             return;
                         }
                     },
@@ -1807,13 +1857,13 @@ impl TimelineEditor {
                         }
                     }
                     Err(error) => {
-                        self.status = format!("{} rejected: {error}", self.name(layer));
+                        self.reject(format!("{} rejected: {error}", self.name(layer)));
                         return;
                     }
                 },
                 Ok(None) => {}
                 Err(error) => {
-                    self.status = format!("{} rejected: {error}", self.name(layer));
+                    self.reject(format!("{} rejected: {error}", self.name(layer)));
                     return;
                 }
             }
@@ -1861,7 +1911,7 @@ impl TimelineEditor {
                     self.writer.undo_len()
                 );
             }
-            Err(error) => self.status = format!("cancel rejected: {error}"),
+            Err(error) => self.reject(format!("cancel rejected: {error}")),
         }
     }
 
@@ -1909,13 +1959,13 @@ impl TimelineEditor {
                     true
                 }
                 Err(error) => {
-                    self.status = format!("{what} rejected: {error}");
+                    self.reject(format!("{what} rejected: {error}"));
                     false
                 }
             },
             Ok(None) => false,
             Err(error) => {
-                self.status = format!("{what} rejected: {error}");
+                self.reject(format!("{what} rejected: {error}"));
                 false
             }
         }
@@ -1935,6 +1985,24 @@ impl TimelineEditor {
     ) -> bool {
         let gesture = self.writer.begin_gesture();
         self.apply_in(gesture, what, prepared)
+    }
+
+    /// M / S / L の1クリック分。**断りも含めてここが1手**である。
+    ///
+    /// 親から受けているロックは、自分の L を触っても外れない。押しても何も
+    /// 起きないのは正しいが、理由が出ないと「無反応」に見える(外部診断 F-07)。
+    /// 判断を `show` の描画列から出しておくと、窓を開かずにこの1手を審判できる。
+    fn toggle_flag_gesture(&mut self, layer: LayerId, flag: Flag) {
+        if flag == Flag::Lock
+            && effective_lock(&self.document, layer)
+            && !item_flags(&self.document, layer)
+                .map(|(_, _, l)| l)
+                .unwrap_or(false)
+        {
+            self.reject(format!("{} is locked by a parent", self.name(layer)));
+            return;
+        }
+        self.toggle_flag(layer, flag);
     }
 
     /// M / S / L を反転して Document へ書く。**1クリック = 1 `GestureId` = 1 Undo 単位**
@@ -2034,7 +2102,7 @@ impl TimelineEditor {
             .filter(|layer| !self.is_locked(*layer))
             .collect();
         if editable.len() < roots.len() {
-            self.status = format!("{} locked, skipped", roots.len() - editable.len());
+            self.reject(format!("{} locked, skipped", roots.len() - editable.len()));
         }
         editable
     }
@@ -2060,7 +2128,7 @@ impl TimelineEditor {
             let command = match self.writer.prepare_duplicate_track_item(layer) {
                 Ok(command) => command,
                 Err(error) => {
-                    self.status = format!("{name} rejected: {error}");
+                    self.reject(format!("{name} rejected: {error}"));
                     return;
                 }
             };
@@ -2071,7 +2139,7 @@ impl TimelineEditor {
                 made.extend(ids.first().copied());
             }
             if let Err(error) = self.writer.apply_command(gesture, command) {
-                self.status = format!("{name} rejected: {error}");
+                self.reject(format!("{name} rejected: {error}"));
                 return;
             }
         }
@@ -2110,12 +2178,12 @@ impl TimelineEditor {
                 Ok(command) => match self.writer.apply_command(gesture, command) {
                     Ok(()) => removed += 1,
                     Err(error) => {
-                        self.status = format!("{} rejected: {error}", self.name(layer));
+                        self.reject(format!("{} rejected: {error}", self.name(layer)));
                         return true;
                     }
                 },
                 Err(error) => {
-                    self.status = format!("{} rejected: {error}", self.name(layer));
+                    self.reject(format!("{} rejected: {error}", self.name(layer)));
                     return true;
                 }
             }
@@ -2143,12 +2211,12 @@ impl TimelineEditor {
             let command = match self.writer.prepare_remove_track_item(*layer) {
                 Ok(command) => command,
                 Err(error) => {
-                    self.status = format!("{name} rejected: {error}");
+                    self.reject(format!("{name} rejected: {error}"));
                     return;
                 }
             };
             if let Err(error) = self.writer.apply_command(gesture, command) {
-                self.status = format!("{name} rejected: {error}");
+                self.reject(format!("{name} rejected: {error}"));
                 return;
             }
             removed += 1;
@@ -2255,7 +2323,7 @@ impl TimelineEditor {
                 }
                 Ok(None) => {}
                 Err(error) => {
-                    self.status = format!("{} rejected: {error}", self.name(target));
+                    self.reject(format!("{} rejected: {error}", self.name(target)));
                     return;
                 }
             }
@@ -2274,7 +2342,7 @@ impl TimelineEditor {
         };
         let name = name.trim().to_owned();
         if name.is_empty() {
-            self.status = "name cannot be empty".to_owned();
+            self.reject("name cannot be empty".to_owned());
             return;
         }
         let prepared = self.writer.prepare_set_layer_name(layer, &name);
@@ -2289,7 +2357,7 @@ impl TimelineEditor {
     /// 名前の編集を始める。**いま見えている名前を初期値にする**
     fn begin_rename(&mut self, layer: LayerId) {
         if self.is_locked(layer) {
-            self.status = format!("{} is locked", self.name(layer));
+            self.reject(format!("{} is locked", self.name(layer)));
             return;
         }
         self.renaming = Some((layer, self.name(layer).to_owned()));
@@ -2318,7 +2386,7 @@ impl TimelineEditor {
             match find_item_location(&self.document, *layer) {
                 Some((p, i, _)) if p == parent => at = at.min(i),
                 _ => {
-                    self.status = "group: pick items in the same parent".to_owned();
+                    self.reject("group: pick items in the same parent".to_owned());
                     return;
                 }
             }
@@ -2327,7 +2395,7 @@ impl TimelineEditor {
         let command = match self.writer.prepare_add_group(parent, at, &name) {
             Ok(command) => command,
             Err(error) => {
-                self.status = format!("group rejected: {error}");
+                self.reject(format!("group rejected: {error}"));
                 return;
             }
         };
@@ -2340,12 +2408,12 @@ impl TimelineEditor {
             _ => None,
         };
         let Some(group) = group else {
-            self.status = "group: no layer".to_owned();
+            self.reject("group: no layer".to_owned());
             return;
         };
         let gesture = self.writer.begin_gesture();
         if let Err(error) = self.writer.apply_command(gesture, command) {
-            self.status = format!("group rejected: {error}");
+            self.reject(format!("group rejected: {error}"));
             return;
         }
         for (i, layer) in roots.iter().enumerate() {
@@ -2355,13 +2423,13 @@ impl TimelineEditor {
             match prepared {
                 Ok(Some(command)) => {
                     if let Err(error) = self.writer.apply_command(gesture, command) {
-                        self.status = format!("{} rejected: {error}", self.name(*layer));
+                        self.reject(format!("{} rejected: {error}", self.name(*layer)));
                         return;
                     }
                 }
                 Ok(None) => {}
                 Err(error) => {
-                    self.status = format!("{} rejected: {error}", self.name(*layer));
+                    self.reject(format!("{} rejected: {error}", self.name(*layer)));
                     return;
                 }
             }
@@ -2398,7 +2466,7 @@ impl TimelineEditor {
                 Ok(Some(command)) => match self.writer.apply_command(gesture, command) {
                     Ok(()) => split += 1,
                     Err(error) => {
-                        self.status = format!("{} rejected: {error}", self.name(layer));
+                        self.reject(format!("{} rejected: {error}", self.name(layer)));
                         return;
                     }
                 },
@@ -2437,7 +2505,7 @@ impl TimelineEditor {
                     return;
                 }
                 Err(error) => {
-                    self.status = format!("{} rejected: {error}", self.name(layer));
+                    self.reject(format!("{} rejected: {error}", self.name(layer)));
                     return;
                 }
             },
@@ -2456,7 +2524,7 @@ impl TimelineEditor {
                         return;
                     }
                     Err(error) => {
-                        self.status = format!("{} rejected: {error}", self.name(layer));
+                        self.reject(format!("{} rejected: {error}", self.name(layer)));
                         return;
                     }
                 }
@@ -2479,7 +2547,7 @@ impl TimelineEditor {
                     self.writer.undo_len()
                 );
             }
-            Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
+            Err(error) => self.reject(format!("{} rejected: {error}", self.name(layer))),
         }
     }
 
@@ -2504,10 +2572,10 @@ impl TimelineEditor {
                         self.writer.undo_len()
                     );
                 }
-                Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
+                Err(error) => self.reject(format!("{} rejected: {error}", self.name(layer))),
             },
             Ok(None) => {}
-            Err(error) => self.status = format!("{} rejected: {error}", self.name(layer)),
+            Err(error) => self.reject(format!("{} rejected: {error}", self.name(layer))),
         }
     }
 
@@ -4305,7 +4373,7 @@ impl TimelineEditor {
                             pick = Some((row.layer, additive, range));
                         }
                         if r.drag_started() && self.is_locked(row.layer) {
-                            self.status = format!("{} is locked", self.name(row.layer));
+                            self.reject(format!("{} is locked", self.name(row.layer)));
                         } else if r.drag_started() {
                             // **判定は押した場所で行う。** egui は数px動いてから
                             // ドラッグ開始を報せるので、そのときのポインタは既に
@@ -4401,7 +4469,7 @@ impl TimelineEditor {
                             self.select_key((row.layer, param, key), additive, range, &key_order);
                         }
                         if r.drag_started() && self.is_locked(row.layer) {
-                            self.status = format!("{} is locked", self.name(row.layer));
+                            self.reject(format!("{} is locked", self.name(row.layer)));
                         } else if r.drag_started() {
                             // **どのパラメータのキーも掴める。** D2 に
                             // `SetTransformParamKeyTime` が入った時点で Position 縛りの
@@ -4736,17 +4804,7 @@ impl TimelineEditor {
         }
 
         for (layer, flag) in flags {
-            // 親から受けているロックは、自分の L を触っても外れない。**黙らせない**
-            if flag == Flag::Lock
-                && effective_lock(&self.document, layer)
-                && !item_flags(&self.document, layer)
-                    .map(|(_, _, l)| l)
-                    .unwrap_or(false)
-            {
-                self.status = format!("{} is locked by a parent", self.name(layer));
-                continue;
-            }
-            self.toggle_flag(layer, flag);
+            self.toggle_flag_gesture(layer, flag);
         }
 
         // **掴んでいるあいだ、時刻を指の近くに出す。** status 行まで目を運ばせない
@@ -7762,5 +7820,91 @@ mod tests {
                 "**まとめて消しても Undo は1回**で全部戻る"
             );
         }
+    }
+
+    /// **落ちた編集は帯まで届く。** 親から受けたロックの上で L を押しても
+    /// 何も起きないのは正しいが、理由が Timeline の一行にしか出ないと
+    /// `--status-log` にも残らず「押しても無反応」に見える(外部診断 F-07)。
+    ///
+    /// editor は shell を知らないので、**返す**のがここの仕事である
+    /// (言うのは `blitz_shell::pane` 側)。
+    #[test]
+    fn a_refused_edit_is_handed_back_not_only_painted() {
+        let mut lab = TimelineEditor::with_fixture();
+        let parent = layer_named(&lab.names, "Title scene");
+        let child = movable_clips(&lab.document, parent)
+            .first()
+            .map(|(layer, _, _)| *layer)
+            .expect("fixture の Title scene には子が居る");
+
+        // 座った直後は言うことが無い。
+        assert!(lab.take_rejections().is_empty());
+
+        lab.toggle_flag_gesture(parent, Flag::Lock);
+        assert!(lab.is_locked(child), "親のロックは子まで効く");
+        // 親を締めた時の一言は拒否ではない。ここまでの分は捨てて、次の1手だけ見る。
+        let _ = lab.take_rejections();
+
+        // 親から受けているロックは、自分の L を触っても外れない。**黙らせない**
+        lab.toggle_flag_gesture(child, Flag::Lock);
+
+        let refusals = lab.take_rejections();
+        assert!(
+            refusals
+                .iter()
+                .any(|text| text.contains("locked by a parent")),
+            "親ロックの拒否が返ってこない: {refusals:?}(status は「{}」)",
+            lab.status
+        );
+        assert_eq!(
+            lab.status,
+            refusals.last().cloned().unwrap_or_default(),
+            "帯へ返す文と Timeline の一行は同じ文でなければならない"
+        );
+        assert!(
+            lab.take_rejections().is_empty(),
+            "引き取ったら空になる(同じ理由を毎フレーム帯へ流さない)"
+        );
+    }
+
+    /// writer が撥ねた編集(`… rejected: …`)も同じ口から返る。
+    /// 拒否の funnel は `apply_in` の1本なので、そこを通る全部が返ることになる。
+    #[test]
+    fn a_writer_rejection_is_handed_back_too() {
+        let mut lab = TimelineEditor::with_fixture();
+        let layer = layer_named(&lab.names, "Background");
+        let _ = lab.take_rejections();
+
+        // 空の名前は writer 以前に断られる。**断り方は変えない**(status も従来どおり)。
+        lab.renaming = Some((layer, "   ".to_owned()));
+        lab.commit_rename();
+
+        assert!(
+            lab.take_rejections()
+                .iter()
+                .any(|text| text.contains("name cannot be empty")),
+            "空の名前を断った理由が返ってこない: status は「{}」",
+            lab.status
+        );
+    }
+
+    /// **同じ理由を続けて言わない。** キーを打てない playhead の上で Inspector の
+    /// 数を掴むと、断りは毎フレーム来る。一言も画面も変わっていないのに
+    /// 帯だけ1つの理由で埋まるのは、言わないのと同じくらい読めない。
+    #[test]
+    fn the_same_refusal_in_a_row_is_said_once() {
+        let mut lab = TimelineEditor::with_fixture();
+        let layer = layer_named(&lab.names, "Background");
+        let _ = lab.take_rejections();
+
+        for _ in 0..60 {
+            lab.reject(format!("{} is locked", lab.name(layer)));
+        }
+        assert_eq!(lab.take_rejections().len(), 1, "毎フレーム分が溜まっている");
+
+        // 間に別の一言が入れば、次の拒否は改めて言う。
+        lab.status = "selected Background".to_owned();
+        lab.reject(format!("{} is locked", lab.name(layer)));
+        assert_eq!(lab.take_rejections().len(), 1);
     }
 }
