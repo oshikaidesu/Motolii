@@ -380,7 +380,11 @@ impl ShellGateway {
 
     /// 実行中の書き出しの返事を受ける(**intent ではない** — 世界の側からの返事)。
     /// 完了/キャンセル/失敗は帯の一言になり、run は捨てる。
-    pub(crate) fn poll_export(&mut self) {
+    ///
+    /// **公開している**理由: iced shell も同じ書き出しを共用する(M-1)。刻み方だけが
+    /// host で違い(egui は `request_repaint_after`、iced は `window::frames()` の購読)、
+    /// 受け取る口はこの1つである。
+    pub fn poll_export(&mut self) {
         let Some(run) = self.export.as_mut() else {
             return;
         };
@@ -405,8 +409,9 @@ impl ShellGateway {
         self.export = None;
     }
 
-    /// 座席(読み)。
-    pub(crate) fn project(&self) -> Option<&ProjectSeat> {
+    /// 座席(読み)。**書きは出さない** — 状態を進める道は [`dispatch`](Self::dispatch)
+    /// だけ、という構造は公開しても変わらない(`ProjectSeat` は元から `pub`)。
+    pub fn project(&self) -> Option<&ProjectSeat> {
         self.project.as_ref()
     }
 
@@ -419,7 +424,7 @@ impl ShellGateway {
     }
 
     /// 実行中の書き出し(読み)。帯がスピナーと経過秒に使う。
-    pub(crate) fn export(&self) -> Option<&ExportRun> {
+    pub fn export(&self) -> Option<&ExportRun> {
         self.export.as_ref()
     }
 
@@ -429,7 +434,7 @@ impl ShellGateway {
     }
 
     /// Export ボタンの enabled と `BeginExport` の門。同じ関数を両方が見る。
-    pub(crate) fn can_start_export(&self) -> bool {
+    pub fn can_start_export(&self) -> bool {
         can_start_export(self.project.is_some(), self.export.is_some())
     }
 
@@ -444,7 +449,7 @@ impl ShellGateway {
     }
 
     /// 座席の Document に立っている track item の総数(replay の審判用)。
-    pub(crate) fn track_item_count(&self) -> usize {
+    pub fn track_item_count(&self) -> usize {
         self.project
             .as_ref()
             .map(|seat| {
@@ -458,7 +463,7 @@ impl ShellGateway {
     }
 
     /// 座席の writer 世代(replay の審判用)。座席が無ければ 0。
-    pub(crate) fn revision(&self) -> u64 {
+    pub fn revision(&self) -> u64 {
         self.project
             .as_ref()
             .map(|seat| seat.editor().revision())

@@ -1,61 +1,23 @@
-//! 人に訊く口。**native dialog はこの trait の後ろだけ**に居る。
+//! 人に訊く口 — **egui shell の trait をそのまま共用する**。
 //!
-//! egui shell の `blitz_shell::drive::ShellPrompts` と同じ考え方だが、あちらは
-//! `pub(crate)` で外へ出ていない(公開すると kittest 由来の型が付いてくる module
-//! ごと出てしまう)。ここでは M-0 が要る2本だけを、この crate の口として持つ。
-//! Export と未保存確認は M-1 で足す。
+//! M-0 ではこの crate に New / Open の2本だけを持つ小さな trait を建てた。M-1 で
+//! Export と未保存の3択が要るようになったところで、それは egui shell
+//! (`motolii_ui::blitz_shell::ShellPrompts`)が既に持っている4本と**同じ物**だと
+//! 分かった。同じ物を2つ持てば、いつか文言か既定値がずれる — dialog は
+//! 「利用者から見て窓が替わったと分からない」ことが値打ちなので、ここでは
+//! 2つ目を作らずに向こうを差す。
 //!
-//! **なぜ intent の外に居るのか。** 決まった答え(path)だけが `UiIntent` の中へ
-//! 入るので、journal を replay しても dialog は二度と開かない。この規律は
-//! `motolii_ui::blitz_shell` から持ち越したもので、host を替えても変わらない。
+//! そのために `motolii-ui` 側で `ShellPrompts` / `NativePrompts` / `ScriptedPrompts` を
+//! `pub` にした(意味は不変。どれも toolkit の型を1つも持たないので U0a の境界は
+//! 破れない)。結果として:
+//!
+//! - **この crate は `rfd` を直接呼ばない。** native dialog の呼び出しは repo に
+//!   1箇所(`blitz_shell/drive.rs` の `NativePrompts`)だけになった
+//! - 台本(`ScriptedPrompts`)も共通なので、egui 版の運転席テストと iced 版の
+//!   運転席テストが**同じ台本の書き方**をする
+//!
+//! **なぜ intent の外に居るのか。** 決まった答え(path・3択)だけが `UiIntent` の
+//! 中へ入るので、journal を replay しても dialog は二度と開かない。この規律は
+//! host を替えても変わらない。
 
-use std::path::PathBuf;
-
-/// New / Open の訊き手。
-pub trait ShellPrompts {
-    /// New の保存先。`None` は「やめた」= 何も起きない。
-    fn new_project_path(&mut self) -> Option<PathBuf>;
-    /// Open するファイル。`None` は「やめた」= 何も起きない。
-    fn open_project_path(&mut self) -> Option<PathBuf>;
-}
-
-/// 窓の訊き手。egui shell の `NativePrompts` と**同じ文言・同じ既定値**で、
-/// 窓が替わっても利用者から見た dialog は変わらない。
-#[derive(Debug, Default, Clone, Copy)]
-pub struct NativePrompts;
-
-impl ShellPrompts for NativePrompts {
-    fn new_project_path(&mut self) -> Option<PathBuf> {
-        rfd::FileDialog::new()
-            .set_title("New Motolii project")
-            .add_filter("Motolii project", &["json"])
-            .set_file_name("untitled.json")
-            .save_file()
-    }
-
-    fn open_project_path(&mut self) -> Option<PathBuf> {
-        rfd::FileDialog::new()
-            .set_title("Open Motolii project")
-            .add_filter("Motolii project", &["json"])
-            .pick_file()
-    }
-}
-
-/// 台本の訊き手。**native dialog を一切開かない。**
-///
-/// `Default` は全部「答えない」なので、テストは触った口だけを置けばよい。
-#[derive(Debug, Clone, Default)]
-pub struct ScriptedPrompts {
-    pub new_project_path: Option<PathBuf>,
-    pub open_project_path: Option<PathBuf>,
-}
-
-impl ShellPrompts for ScriptedPrompts {
-    fn new_project_path(&mut self) -> Option<PathBuf> {
-        self.new_project_path.clone()
-    }
-
-    fn open_project_path(&mut self) -> Option<PathBuf> {
-        self.open_project_path.clone()
-    }
-}
+pub use motolii_ui::blitz_shell::{NativePrompts, ScriptedPrompts, ShellPrompts};

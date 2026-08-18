@@ -84,8 +84,9 @@ mod runner;
 
 pub(crate) use app::BlitzShellApp;
 pub use app::{decide_unsaved, UnsavedChoice, UnsavedDecision};
-/// **結果のログ**。host 非依存の契約なので、egui shell と iced shell が同じ型を映す。
-pub use drive::{ShellTranscript, StatusEvent};
+/// **結果のログ**と**訊き方**。host 非依存の契約なので、egui shell と iced shell が
+/// 同じ型・同じ文言を通す(2026-08-18 iced ホスト移行 M-0 / M-1)。
+pub use drive::{NativePrompts, ScriptedPrompts, ShellPrompts, ShellTranscript, StatusEvent};
 pub use intent::{
     admit_dropped_paths, create_project_file, reseat_project, IntentEvent, IntentJournal,
     ProjectSeat, ShellGateway, UiIntent,

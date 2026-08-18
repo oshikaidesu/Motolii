@@ -15,29 +15,11 @@
 //! 2026-08-18 の裁定が「段差ゼロが公式不変量」と言ったのはこの差である。
 //! kittest は自前で繋いだ第2層だが、`iced_test` は iced 本体が持っている。
 
-use motolii_shell_iced::{view, Message, ScriptedPrompts, Shell};
+mod common;
+
+use common::{drain, press};
+use motolii_shell_iced::{view, ScriptedPrompts, Shell};
 use motolii_ui::blitz_shell::ShellTranscript;
-
-/// 押した結果を殻へ流し込む。iced の `Simulator` は message を**溜める**ので、
-/// 「押す」と「起こる」の間が明示的に切れている(egui の `run_frames` と違い、
-/// どのフレームで何が起きたかを取り違えようがない)。
-///
-/// **型が順番を強制する。** `Simulator` は `view(&shell)` が返した Element を
-/// 借りているので、殻を可変で触る前に必ず消費し切らなければならない
-/// (`&mut shell` と生きている simulator は同時に持てない)。
-/// 「描いている途中でモデルを書く」が書けない、という iced の性質がテストにも出る。
-fn press(mut ui: iced_test::Simulator<'_, Message>, selector: &str) -> Vec<Message> {
-    ui.click(selector)
-        .unwrap_or_else(|error| panic!("{selector:?} が押せる物として立っていない: {error}"));
-    ui.into_messages().collect()
-}
-
-/// 溜めた message を順に流す。
-fn drain(shell: &mut Shell, messages: Vec<Message>) {
-    for message in messages {
-        shell.update(message);
-    }
-}
 
 /// 言う場所は1つ: report された全文が残り、帯は最新を映す。
 ///

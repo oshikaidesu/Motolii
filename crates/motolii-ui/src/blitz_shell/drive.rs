@@ -98,7 +98,13 @@ impl ShellTranscript {
 ///
 /// 何を訊くかはここ、何が起きるかは `app.rs`(`decide_unsaved` 等)という分担は
 /// 変えていない — 変えたのは「訊き手を差し替えられる」ことだけである。
-pub(crate) trait ShellPrompts {
+///
+/// **公開している**理由: 2026-08-18 の iced ホスト移行(M-1)。`motolii-shell-iced`
+/// が**同じ台本・同じ文言**で訊くため、trait ごと共用する — 2つ目の dialog 層を
+/// 作らせない。この trait も `NativePrompts` / `ScriptedPrompts` も toolkit の型を
+/// 1つも持たないので、U0a の境界は破れない(`DrivenShell` は `#[cfg(test)]` の
+/// ままで、公開APIには出ない)。
+pub trait ShellPrompts {
     /// New の場所。`None` は「やめた」。
     fn new_project_path(&mut self) -> Option<PathBuf>;
     /// Open するファイル。`None` は「やめた」。
@@ -110,7 +116,11 @@ pub(crate) trait ShellPrompts {
 }
 
 /// 窓の訊き手。**現行の `rfd` 呼び出しをそのまま移したもの**で、文言も既定値も変えない。
-pub(crate) struct NativePrompts;
+///
+/// egui shell も iced shell もこれを差す。`rfd` を呼ぶ場所は repo にこの1箇所だけで、
+/// 窓が替わっても利用者から見た dialog は変わらない。
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NativePrompts;
 
 impl ShellPrompts for NativePrompts {
     fn new_project_path(&mut self) -> Option<PathBuf> {
@@ -166,7 +176,7 @@ impl ShellPrompts for NativePrompts {
 /// `Default` は全部「答えない」= dialog を閉じたのと同じ(未保存は `Cancel`)。
 /// 答えを置いた口だけが動くので、テストは「触った口」だけを言えばよい。
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ScriptedPrompts {
+pub struct ScriptedPrompts {
     pub new_project_path: Option<PathBuf>,
     pub open_project_path: Option<PathBuf>,
     pub export_path: Option<PathBuf>,
