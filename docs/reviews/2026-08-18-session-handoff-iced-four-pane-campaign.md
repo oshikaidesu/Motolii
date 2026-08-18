@@ -43,8 +43,8 @@
 | M-4b Inspector | `claude/m4b-inspector-20260818` | **検収合格・未merge**(統合レーンが取り込み中)。4 section(Audioは口が無いため不出=Q0)・逸脱受理: intent背骨へwave E変種追加(select/flags/param edit/key/fx。`project_mut`がpub(crate)で公開経路が無かったため=迂回よりwrapper) |
 | M-4a Browser | `claude/m4a-browser-20260818` | **検収合格・未merge**(同上)。rail 3種のみ・double-click=`AdmitPaths`(OSドロップと同一レール)・motolii-ui可視性のみ変更(M-1前例)・**選択intentの空白を報告**(下記「要裁定」) |
 | M-3 Timeline | `claude/m3-timeline-20260818` | **検収合格・未merge**(統合第2弾で取り込む)。drive 14+unit 7・intent列replayでclip実位置まで一致・intent背骨へtimeline 9変種+`editor_mut(`禁止フェンス・release-only commit(egui のlive-commit不採用を記録)・zoom/panはintent外(Message列replayで対) |
-| **統合第1弾** | `claude/m4-integration-20260818`(**sonnet・走行中**) | base `172dc76f`。M-4b+M-4a merge・3面pane合成(左Browser/中Stage/右Inspector)・stub→本物widgets・theme統一。**返却未着 — 継続セッションはまずこれを検収** |
-| 統合第2弾 | 未発注 | M-3 merge(intent.rsは両レーン独立増殖=union解消)+下段Timeline+選択結線(Stage/Timeline→Inspector)+**full workspace gate** |
+| 統合第1弾 | `claude/m4-integration-20260818` | **merge済み(`5c7a05c3`)**。3面合成・stub→本物・theme統一、82/0。drop_zoneの意味差(mouse hover vs OSファイルhover)は局所`os_file_drop_zone`として保全。発見: base既存のfence赤(stage_island GPU割当が所有台帳未登録)→第2弾へ |
+| **統合第2弾** | `claude/m4-integration2-20260818`(**sonnet・走行中**) | base `5c7a05c3`。M-3 merge(intent.rs union)+下段Timeline=4面完成+選択結線(Timeline→`SelectLayer`→Inspector。Browserはpane-localのまま=裁定1の暫定解)+fence修理+**full gate(受入条件)**+docs整合。**返却未着 — 継続セッションはまずこれを検収** |
 
 ## 検証の実態(バイアス抜きの核)
 
