@@ -174,3 +174,34 @@ visual-fidelity レーンへは正本の訂正とともに送付済み。
 - Inspector: 行左端の種別色帯と kind アイコンが無い / section 見出しの字間・面色 / 値が枠付きに見える(基準は枠なし等幅右寄せ)/ APPEARANCE(Opacity)section
 - Timeline: 行の M/S ボタン(既存 `ToggleItemFlag` へ結線可)/ 行頭の種別色四角 / OBJECT ヘッダ / 選択枠の色 / ARRANGEMENT 俯瞰帯(機能させられる場合のみ)
 - Browser: 検索・タブ・COLLECTIONS/PLACES・フィルタ chip は**機能が無い**ため Q0 により未設置(意図的)
+
+## 追記3 — 視覚第2ラウンド着地と、次の本題(2026-08-19 朝)
+
+**利用者裁定(2026-08-19)**: 「タイムラインに関しては egui 版が最も機能を詰めれていて優れている、UI も」。
+→ Timeline の再現目標を **css モックから egui 版へ変更**(モックは副参照へ降格)。走行中レーンへ訂正送付済み。
+
+**着地(main)**:
+- `ec5b3b1e` Inspector 視覚 R2 — **実バグ発見**: 行左端の種別色帯は R1 で実装済みだったが
+  高さ `0.0` で描かれ不可視だった(panel header のアクセント帯からのコピペ)。「呼び出し側が
+  罫線を積む」と書かれた箇所も誰も積んでいなかった。修復に加え kind アイコン・枠なし等幅値
+  (hover=種別色の淡背景、ドラッグ中のみ内枠)・APPEARANCE section。新規 hex ゼロ・127 green
+- (Timeline R2) — M/S を既存 `ToggleItemFlag` へ結線・色丸・**機能する ARRANGEMENT 俯瞰帯**
+  (press/drag で表示範囲が動く)・transport 表示(等幅時計 / 行数 / view 範囲 / grid)・
+  等幅 ruler(0:00.0 刻み+小目盛)・選択枠を金へ・下部スクロールバー。
+  **Lock と近道キー表示は intent が無いため置かず**(Q0)
+
+**supervisor 実測**: `/tmp/check-dedupe.png`(現行 main)で Browser の重複排除が正しく効いて
+いることを確認(レーンの証拠画像に重複が写っていたが、あれはレーン worktree 側の project 状態)。
+
+### 次の本題 — egui Timeline の機能移植(M-5 の前提)
+
+**engine 正本のパスは `crates/motolii-ui/src/timeline_editor/`**(mod.rs 8,186行+audio_seat/
+import_seat/waveform_band、計 **9,059行**)。**`timeline_egui.rs` は存在しない** — 古い名前で
+発注したレーンが「移植元が無い」と誤報告した(メモリ `timeline-skia-route-confirmed` も訂正済み)。
+
+egui にあって iced に無い操作: Group/Ungroup・Duplicate・Reorder・Rename・AddKey/DeleteKeys/
+SetInterp・Locator・Loop 範囲・行の畳み開閉・Property/キー行・キー菱形・Inbox 列・帯高 resize・Lock。
+
+分割案(supervisor 推奨順): ①キー編集(AddKey/DeleteKeys/SetInterp+キー行と菱形)②構造操作
+(Group/Ungroup/Duplicate/Reorder/Rename+畳み開閉と Group 子帯)③時間の道具(Locator/Loop/
+俯瞰帯の精度)④ロックと帯高と Inbox。**利用者の UX 優先度で順序を決める**。
