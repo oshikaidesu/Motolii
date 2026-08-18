@@ -22,6 +22,12 @@ Message/intent 列で、renderer 無しに同じ列をCLI/テストから流せ�
    でも 28)、Motolii と Rerun fork は **wgpu 29**。shader widget での外部 texture
    埋め込みは「同一 device 共有」が前提で、版が揃わない限り成立しない。
    egui を iced 内に埋める先例は**ゼロ**(失敗報告すら無い=全リスク自前)。
+   **→ 訂正(同日・利用者指摘)**: released 版しか見ていなかった。**iced master
+   (0.15.0-dev)は wgpu = "29"**(workspace.dependencies を直接確認)で、版の壁は
+   master 基準では消えている。同一 device 埋め込み(shader widget に Rerun offscreen
+   合成を bind + 入力→Message→set_camera)の実測 probe を同日発注
+   (`spikes/iced-rerun-embed-probe/`、隔離 workspace)。残る壁は「master は未 release
+   の移動標的」という安定度の問題に変わる。
 2. **検証基盤の空白**: AccessKit は upstream 未統合(issue #552 が2020年から
    open)。iced_test は出た直後で、COSMIC 実アプリ群が使っている証拠も未観測。
    日本語 IME は 0.14 が初実装(fcitx 追従等の未解決あり)。
