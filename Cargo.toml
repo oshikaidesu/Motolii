@@ -19,6 +19,8 @@ members = [
     "crates/motolii-audio",
     "crates/motolii-transport",
     "crates/motolii-ui",
+    # M-0: iced ホストへの絞め殺し移行の受け皿(2026-08-18裁定)。egui shell と**並走**する。
+    "crates/motolii-shell-iced",
     "crates/motolii-input",
     "crates/motolii-web-input",
     "crates/motolii-ui-token-gen",
@@ -54,7 +56,29 @@ motolii-doc = { path = "crates/motolii-doc" }
 motolii-audio = { path = "crates/motolii-audio" }
 motolii-transport = { path = "crates/motolii-transport" }
 motolii-ui = { path = "crates/motolii-ui" }
+motolii-shell-iced = { path = "crates/motolii-shell-iced" }
 motolii-input = { path = "crates/motolii-input" }
+
+# ---------------------------------------------------------------------------
+# iced fork(2026-08-18 ホスト移行 M-0)
+# ---------------------------------------------------------------------------
+# **この2行の絶対パスは検収で消える。** fork はまだ push されておらず、検収側が
+# push して rev を固定した時点で rerun と同じ形へ差し替える:
+#
+#   iced      = { git = "https://github.com/oshikaidesu/iced", rev = "<push 後の rev>", features = [...] }
+#   iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "<同じ rev>" }
+#
+# 相対パスにしないのは、この repo が `.claude/worktrees/*` の worktree からも
+# 建つためである(worktree と本チェックアウトでは `../` の深さが違うので、
+# 相対パスだとどちらか片方で必ず壊れる)。絶対パスは「機械ローカルである」ことを
+# 隠さない分だけ正直で、差し替え忘れは**他所の機械で必ず落ちる**ので見逃せない。
+#
+# fork の中身(上流との乖離2件・再適用手順・上流 PR 候補である旨)は
+# docs/reviews/2026-08-18-iced-fork-seam-ledger.md。
+# branch = `motolii/host-seams`、上流 pin = `3de451447bd28217bb535632867550908e29d5d0`。
+iced = { path = "/Users/member_ottoto/rust_ae/iced-motolii-20260818", features = ["wgpu", "advanced"] }
+# 運転席(headless Simulator)。dev-dependencies 専用。
+iced_test = { path = "/Users/member_ottoto/rust_ae/iced-motolii-20260818/test" }
 cargo_metadata = "0.23"
 serde = { version = "1", features = ["derive"] }
 egui = "0.35"

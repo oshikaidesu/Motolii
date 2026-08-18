@@ -1,0 +1,33 @@
+[package]
+name = "motolii-shell-iced"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "motolii_shell_iced"
+path = "src/lib.rs"
+
+[[bin]]
+name = "motolii-shell-iced"
+path = "src/main.rs"
+
+[dependencies]
+# ホストの toolkit。**egui は入れない**(dep policy の柵:
+# `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs`。この crate は iced 系の
+# allowlist にだけ載っていて、egui 系の allowlist には載っていない)。
+iced.workspace = true
+# 背骨(`UiIntent` / `ShellGateway` / `ShellTranscript`)。host 非依存の契約なので
+# egui shell と同じ物を通す — 2つ目の journal も 2つ目の transcript も作らない。
+motolii-ui.workspace = true
+# `--intent-log` 相当。行の形は `motolii_ui::blitz_shell::IntentEvent` が名乗る。
+serde_json.workspace = true
+# New / Open の native dialog。egui shell と同じ版・同じ役目。
+rfd.workspace = true
+
+[dev-dependencies]
+# 運転席。egui shell の `egui_kittest` に対応する物で、iced が公式に持っている。
+iced_test.workspace = true
+motolii-testkit.workspace = true

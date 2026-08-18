@@ -4,9 +4,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use motolii_testkit::ui_toolkit_dep_policy::{
-    find_slint_violations, find_slint_violations_in_crates, find_ui_toolkit_violations,
-    find_ui_toolkit_violations_in_crates, is_slint_dependency, is_ui_toolkit_dependency,
-    load_workspace_metadata, UI_TOOLKIT_CRATE_ALLOWLIST,
+    find_iced_violations, find_iced_violations_in_crates, find_slint_violations,
+    find_slint_violations_in_crates, find_ui_toolkit_violations,
+    find_ui_toolkit_violations_in_crates, is_iced_dependency, is_slint_dependency,
+    is_ui_toolkit_dependency, load_workspace_metadata, ICED_CRATE_ALLOWLIST,
+    UI_TOOLKIT_CRATE_ALLOWLIST,
 };
 
 fn workspace_root() -> PathBuf {
@@ -195,6 +197,103 @@ fn metadata_flags_slint_dependency() {
     assert_eq!(violations[0].crate_name, "motolii-core");
     assert_eq!(violations[0].dependency, "slint");
     assert_eq!(violations[0].section, "dependencies");
+}
+
+// ---------------------------------------------------------------------------
+// iced 系(2026-08-18 ホスト移行 M-0)
+// ---------------------------------------------------------------------------
+//
+// 柵は**2本**である。iced を持てるのは `motolii-shell-iced` だけ、という向きと、
+// その `motolii-shell-iced` が egui を持てない、という逆向き。後者は
+// `UI_TOOLKIT_CRATE_ALLOWLIST` に新 crate を**入れないこと**で成立する
+// (絞め殺し移行で、新しい殻へ古い toolkit が滲み戻るのを止める)。
+
+#[test]
+fn iced_dependency_names_cover_ecosystem() {
+    assert!(is_iced_dependency("iced"));
+    assert!(is_iced_dependency("iced_test"));
+    assert!(is_iced_dependency("iced_core"));
+    assert!(is_iced_dependency("iced_wgpu"));
+    assert!(is_iced_dependency("iced_winit"));
+    assert!(is_iced_dependency("iced_widget"));
+    assert!(is_iced_dependency("iced-graphics"));
+    assert!(!is_iced_dependency("wgpu"));
+    assert!(!is_iced_dependency("motolii-shell-iced"));
+    // 「iced で始まる無関係な名前」まで巻き込まない。
+    assert!(!is_iced_dependency("icedream"));
+}
+
+#[test]
+fn workspace_has_no_iced_outside_shell_allowlist() {
+    let root = workspace_root();
+    let violations = find_iced_violations_in_crates(&root, ICED_CRATE_ALLOWLIST);
+    assert!(
+        violations.is_empty(),
+        "iced must be limited to {ICED_CRATE_ALLOWLIST:?}; violations: {violations:#?}"
+    );
+}
+
+/// **新しい殻に egui を持ち込ませない柵。** allowlist は名簿であって、
+/// うっかり足せる物である — 足されていないことを名指しで言う。
+#[test]
+fn the_iced_shell_is_not_on_the_egui_allowlist() {
+    assert!(
+        !UI_TOOLKIT_CRATE_ALLOWLIST.contains(&"motolii-shell-iced"),
+        "motolii-shell-iced を egui 系の allowlist へ入れてはならない — \
+         絞め殺し移行の意味が消える(2026-08-18裁定 M-0)"
+    );
+    assert!(
+        ICED_CRATE_ALLOWLIST.contains(&"motolii-shell-iced"),
+        "iced を持てるのは新しい殻だけである"
+    );
+}
+
+#[test]
+fn metadata_flags_non_shell_crate_with_iced() {
+    let ws = synthetic_workspace(&[("motolii-core", "violation_iced")]);
+    let metadata = load_workspace_metadata(&ws.root).unwrap_or_else(|err| {
+        panic!("cargo metadata failed for {}: {err}", ws.root.display());
+    });
+    let violations = find_iced_violations(&metadata, &ws.root, ICED_CRATE_ALLOWLIST);
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].crate_name, "motolii-core");
+    assert_eq!(violations[0].dependency, "iced");
+    assert_eq!(violations[0].section, "dependencies");
+}
+
+#[test]
+fn allowlist_skips_shell_iced_in_metadata_scan() {
+    let ws = synthetic_workspace(&[
+        ("motolii-shell-iced", "allowed_shell_iced"),
+        ("motolii-core", "violation_iced"),
+    ]);
+    let metadata = load_workspace_metadata(&ws.root).unwrap_or_else(|err| {
+        panic!("cargo metadata failed for {}: {err}", ws.root.display());
+    });
+    let violations = find_iced_violations(&metadata, &ws.root, ICED_CRATE_ALLOWLIST);
+    assert_eq!(
+        violations.len(),
+        1,
+        "許可された殻の iced / iced_test は違反ではない: {violations:#?}"
+    );
+    assert_eq!(violations[0].crate_name, "motolii-core");
+}
+
+/// 逆向きの柵の負例: 新しい殻が egui を引いたら、egui 側の走査が捕まえる。
+#[test]
+fn metadata_flags_egui_inside_the_iced_shell() {
+    let ws = synthetic_workspace(&[("motolii-shell-iced", "violation_shell_iced_egui")]);
+    let metadata = load_workspace_metadata(&ws.root).unwrap_or_else(|err| {
+        panic!("cargo metadata failed for {}: {err}", ws.root.display());
+    });
+    let violations = find_ui_toolkit_violations(&metadata, &ws.root, UI_TOOLKIT_CRATE_ALLOWLIST);
+    assert_eq!(violations.len(), 1);
+    assert_eq!(violations[0].crate_name, "motolii-shell-iced");
+    assert_eq!(violations[0].dependency, "egui");
+
+    // 同じ crate の iced は**通る**。柵は toolkit ごとに別々である。
+    let iced = find_iced_violations(&metadata, &ws.root, ICED_CRATE_ALLOWLIST);
+    assert!(iced.is_empty(), "iced は許可されている: {iced:#?}");
 }
 
 #[test]
