@@ -39,12 +39,6 @@ pub const OPEN_PROJECT: &str = "Open\u{2026}";
 pub const OPEN_PROJECT_SHORTCUT: &str = "Cmd+O";
 /// スタート画面の末尾の一行。
 pub const DROP_HINT: &str = "Then just drop video and audio into this window.";
-/// 座った後に出る、いまの正直な中身。
-///
-/// **編集面のふりをした空箱を置かない**(2026-08-12 の Q0「触れそうで触れない物は
-/// 不合格」)。M-2 以降が Stage / Timeline / Browser / Inspector を持ってくるまで、
-/// ここは「何がまだ無いか」を言うだけの一行である。
-pub const SEATED_PLACEHOLDER: &str = "Project is open. The editing surface arrives in M-2.";
 /// 書き出しを始めるボタン。
 pub const EXPORT: &str = "Export";
 /// 走っている書き出しを止めるボタン。
@@ -66,7 +60,7 @@ pub fn exporting_label(seconds: u64) -> String {
 /// [`Message`] になる。中身は「座席の有無で変わる本体」と「status 帯」の2段。
 pub fn view(shell: &Shell) -> Element<'_, Message> {
     let body = if shell.is_seated() {
-        seated()
+        seated(shell)
     } else {
         start_screen()
     };
@@ -120,9 +114,13 @@ fn action_button<'a>(name: &'a str, shortcut: &'a str, message: Message) -> Elem
     .into()
 }
 
-/// 座席が在るときの画面(M-1 は一行だけ)。
-fn seated<'a>() -> Element<'a, Message> {
-    text(SEATED_PLACEHOLDER).style(style::text_secondary).into()
+/// 座席が在るときの画面 — Stage 島(M-2)。
+///
+/// M-1 の「編集面はまだ無い」の一行はここで退役した。中身は
+/// [`crate::stage_island::stage_island`]: Rerun `SpatialStage` の合成絵が
+/// shader widget として立ち、入力はブリッジ(調停つき)を通る。
+fn seated(shell: &Shell) -> Element<'_, Message> {
+    crate::stage_island::stage_island(shell)
 }
 
 /// status 帯 — **信用の可視化と、窓が言ったことの最新1行**。

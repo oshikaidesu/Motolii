@@ -40,4 +40,9 @@ pub enum Message {
     CloseRequested,
     /// 走っている書き出しの返事を受ける合図。**intent ではない。**
     ExportPolled,
+    /// Stage 島からの報告(初期化・texture import・描画の失敗)。**intent ではない**
+    /// — 利用者の操作でも文書の変化でもなく、窓が言うべき一言である。
+    /// `Shell::update` が transcript(帯 / `--status-log`)へ写す。
+    /// journal には載らない(replay は Stage の故障まで再現しない)。
+    StageReported(Vec<String>),
 }

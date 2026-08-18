@@ -115,3 +115,85 @@ fn a_recorded_session_replays_into_the_same_shell_state() {
         );
     }
 }
+
+/// Stage 島つきの台本(M-2)。Stage が帯へ喋っても **intent 列は汚れず**、
+/// replay は同じ Document へ着く。
+///
+/// M-2 の Stage 島は新しい `UiIntent` を持たない(ギズモの意味論は M-2 後)。
+/// つまり「Stage 系 intent の台本」とは、Stage pane が立っている座席で
+/// 従来 intent(NewProject / AdmitPaths)が回り、Stage の報告
+/// (`Message::StageReported` — intent では**ない**)が混ざっても replay が
+/// 崩れないことの審判である。ここが緑である限り、`--intent-log` は Stage の
+/// 故障や報告に影響されない。
+#[test]
+fn a_session_with_stage_reports_replays_from_intents_alone() {
+    if !motolii_testkit::ffmpeg_or_skip() {
+        return;
+    }
+    let dir = motolii_testkit::tmp_dir("iced_stage_replay");
+    let project = dir.join("fresh.json");
+    let clip = starter_media_dir().join("starter-clip.mp4");
+    let mut shell = Shell::new(ScriptedPrompts {
+        new_project_path: Some(project.clone()),
+        ..ScriptedPrompts::default()
+    });
+
+    // 作る → Stage が一言喋る → 落とす → また喋る。
+    let pressed = press(iced_test::simulator(view(&shell)), view::NEW_PROJECT);
+    drain(&mut shell, pressed);
+    drain(
+        &mut shell,
+        vec![motolii_shell_iced::Message::StageReported(vec![
+            "stage: 初期化しました(テスト台本)".to_owned(),
+        ])],
+    );
+    let dropped = feed(
+        iced_test::simulator(view(&shell)),
+        [file_dropped(&clip), redraw()],
+    );
+    drain(&mut shell, dropped);
+    drain(
+        &mut shell,
+        vec![motolii_shell_iced::Message::StageReported(vec![
+            "stage: 合成フレームを載せられない(テスト台本)".to_owned(),
+        ])],
+    );
+
+    let intents: Vec<UiIntent> = shell
+        .intents()
+        .into_iter()
+        .map(|event| event.intent)
+        .collect();
+    assert_eq!(
+        intents,
+        vec![
+            UiIntent::NewProject {
+                path: project.clone()
+            },
+            UiIntent::AdmitPaths {
+                paths: vec![clip.clone()]
+            },
+        ],
+        "Stage の報告が intent 列へ混ざってはならない"
+    );
+    assert!(
+        shell
+            .reports()
+            .iter()
+            .any(|line| line.contains("合成フレーム")),
+        "Stage の報告は transcript には残る"
+    );
+
+    let driven_revision = shell.revision();
+    let driven_items = shell.track_item_count();
+    drop(shell);
+    std::fs::remove_file(&project).expect("駆動が作った project を消して初期状態へ戻す");
+
+    let replayed = ShellGateway::replay(&intents);
+    assert_eq!(replayed.revision(), driven_revision, "writer 世代が一致する");
+    assert_eq!(
+        replayed.track_item_count(),
+        driven_items,
+        "Stage の報告抜きの intent 列だけで同じ Document へ着く"
+    );
+}

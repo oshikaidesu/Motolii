@@ -4997,10 +4997,14 @@ version = "0.1.0"
 dependencies = [
  "iced",
  "iced_test",
+ "iced_wgpu",
+ "image",
  "motolii-testkit",
  "motolii-ui",
+ "re_renderer",
  "serde",
  "serde_json",
+ "wgpu",
 ]
 
 [[package]]

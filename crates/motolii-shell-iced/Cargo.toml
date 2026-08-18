@@ -19,6 +19,16 @@ path = "src/main.rs"
 # `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs`。この crate は iced 系の
 # allowlist にだけ載っていて、egui 系の allowlist には載っていない)。
 iced.workspace = true
+# fork seam 2(bind group 床)の口。iced 本体は `iced_wgpu` を再公開しないので
+# 直接引く(同 repo 同 rev = iced 内部と同一 package。床の static は1つ)。
+# 柵上も合法: `ICED_CRATE_ALLOWLIST` はこの crate に iced 系依存を許している。
+iced_wgpu.workspace = true
+# Stage 島の GPU 側。iced の shader widget が渡してくる device の上で
+# Rerun の絵(offscreen texture)を組み、blit で iced の render pass へ写す。
+wgpu.workspace = true
+# adapter の再列挙(iced は adapter を渡してこない — spike の詰まった箇所その3)。
+# `RenderContext` を作るのは motolii-ui 側だが、adapter を選ぶのはこちらの仕事。
+re_renderer.workspace = true
 # 背骨(`UiIntent` / `ShellGateway` / `ShellTranscript` / `ShellPrompts`)。host 非依存の
 # 契約なので egui shell と同じ物を通す — 2つ目の journal も transcript も dialog 層も
 # 作らない。**`rfd` はここに要らない**: native dialog は向こうの `NativePrompts` に
@@ -33,3 +43,5 @@ serde.workspace = true
 # 運転席。egui shell の `egui_kittest` に対応する物で、iced が公式に持っている。
 iced_test.workspace = true
 motolii-testkit.workspace = true
+# pixel 証拠(運転席 snapshot の PNG)を読み戻して画素 oracle に掛ける。
+image.workspace = true

@@ -1,0 +1,2116 @@
+warning: function `estimate_copy_buffer_bytes` is never used
+  --> crates/motolii-gpu/src/allocation.rs:72:15
+   |
+72 | pub(crate) fn estimate_copy_buffer_bytes(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `motolii-gpu` (lib) generated 1 warning
+warning: unused imports: `find_audio_component_mut`, `find_envelope_mut`, and `find_items_vec_mut`
+  --> crates/motolii-doc/src/command/mod.rs:54:35
+   |
+54 |     envelope_of, envelope_of_mut, find_audio_component_mut, find_envelope_mut, find_items_vec,
+   |                                   ^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^
+55 |     find_items_vec_mut,
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `validate_interp_at`
+  --> crates/motolii-doc/src/validate/mod.rs:22:5
+   |
+22 |     validate_interp_at, validate_keyframe_draft_values, validate_param, validate_param_structure,
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `collect_document_stable_ids`
+  --> crates/motolii-doc/src/validate/mod.rs:24:29
+   |
+24 | pub(crate) use stable_ids::{collect_document_stable_ids, stable_id_in_use};
+   |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `motolii-doc` (lib) generated 3 warnings (run `cargo fix --lib -p motolii-doc` to apply 3 suggestions)
+warning: unused imports: `BlitzSurface` and `SurfacePointer`
+  --> crates/motolii-ui/src/blitz_ui/mod.rs:15:26
+   |
+15 | pub(crate) use surface::{BlitzSurface, SurfacePointer};
+   |                          ^^^^^^^^^^^^  ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: use of deprecated method `egui::Panel::show_inside`: Renamed to `show`
+   --> crates/motolii-ui/src/blitz_shell/app.rs:504:55
+    |
+504 |             egui::Panel::bottom("blitz_shell_status").show_inside(ui, |ui| {
+    |                                                       ^^^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: unused variable: `row_count`
+  --> crates/motolii-ui/src/timeline_blitz/geometry.rs:28:48
+   |
+28 |     pub(super) fn new(width: f64, height: f64, row_count: usize, duration: f64) -> Self {
+   |                                                ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_row_count`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> crates/motolii-ui/src/timeline_editor/mod.rs:3733:13
+     |
+3733 |         let mut locator_clicked: Option<usize> = None;
+     |             ----^^^^^^^^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> crates/motolii-ui/src/timeline_editor/mod.rs:3735:13
+     |
+3735 |         let mut locator_rename: Option<usize> = None;
+     |             ----^^^^^^^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> crates/motolii-ui/src/timeline_editor/mod.rs:3963:13
+     |
+3963 |         let mut rename_started: Option<LayerId> = None;
+     |             ----^^^^^^^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: unused variable: `movable`
+    --> crates/motolii-ui/src/timeline_editor/mod.rs:4485:25
+     |
+4485 |                     let movable = param == ParamRef::Position;
+     |                         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_movable`
+
+warning: associated items `new` and `project` are never used
+   --> crates/motolii-ui/src/blitz_shell/app.rs:186:19
+    |
+180 | impl BlitzShellApp {
+    | ------------------ associated items in this implementation
+...
+186 |     pub(crate) fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    |                   ^^^
+...
+356 |     pub fn project(&self) -> Option<&ProjectSeat> {
+    |            ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: enum `SurfacePointer` is never used
+  --> crates/motolii-ui/src/blitz_ui/surface.rs:35:17
+   |
+35 | pub(crate) enum SurfacePointer {
+   |                 ^^^^^^^^^^^^^^
+
+warning: struct `BlitzSurface` is never constructed
+  --> crates/motolii-ui/src/blitz_ui/surface.rs:42:19
+   |
+42 | pub(crate) struct BlitzSurface {
+   |                   ^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> crates/motolii-ui/src/blitz_ui/surface.rs:59:19
+    |
+ 57 | impl BlitzSurface {
+    | ----------------- associated items in this implementation
+ 58 |     /// `html` は完全な文書。`device`/`queue` はホスト(eframe)のものをそのまま使う。
+ 59 |     pub(crate) fn new(
+    |                   ^^^
+...
+ 99 |     pub(crate) fn size(&self) -> (u32, u32) {
+    |                   ^^^^
+...
+103 |     pub(crate) fn texture(&self) -> &wgpu::Texture {
+    |                   ^^^^^^^
+...
+107 |     pub(crate) fn view(&self) -> &wgpu::TextureView {
+    |                   ^^^^
+...
+112 |     pub(crate) fn resize(&mut self, device: &wgpu::Device, width: u32, height: u32) -> bool {
+    |                   ^^^^^^
+...
+138 |     pub(crate) fn replace_document(&mut self, html: &str) {
+    |                   ^^^^^^^^^^^^^^^^
+...
+147 |     pub(crate) fn set_style(&mut self, node_id: usize, style: &str) {
+    |                   ^^^^^^^^^
+...
+153 |     pub(crate) fn node_by_id(&self, id: &str) -> Option<usize> {
+    |                   ^^^^^^^^^^
+...
+171 |     pub(crate) fn hit(&self, x: f32, y: f32) -> Option<usize> {
+    |                   ^^^
+...
+176 |     pub(crate) fn send_pointer(&mut self, phase: SurfacePointer, x: f32, y: f32) {
+    |                   ^^^^^^^^^^^^
+...
+188 |     pub(crate) fn resolve(&mut self) {
+    |                   ^^^^^^^
+...
+193 |     pub(crate) fn paint(
+    |                   ^^^^^
+
+warning: constant `TEXTURE_FORMAT` is never used
+   --> crates/motolii-ui/src/blitz_ui/surface.rs:233:7
+    |
+233 | const TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+    |       ^^^^^^^^^^^^^^
+
+warning: function `create_texture` is never used
+   --> crates/motolii-ui/src/blitz_ui/surface.rs:235:4
+    |
+235 | fn create_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `viewport` is never used
+   --> crates/motolii-ui/src/blitz_ui/surface.rs:252:4
+    |
+252 | fn viewport(width: u32, height: u32) -> Viewport {
+    |    ^^^^^^^^
+
+warning: function `build_document` is never used
+   --> crates/motolii-ui/src/blitz_ui/surface.rs:261:4
+    |
+261 | fn build_document(html: &str, width: u32, height: u32) -> HtmlDocument {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `pointer_event` is never used
+   --> crates/motolii-ui/src/blitz_ui/surface.rs:276:4
+    |
+276 | fn pointer_event(x: f32, y: f32, phase: SurfacePointer) -> BlitzPointerEvent {
+    |    ^^^^^^^^^^^^^
+
+warning: constant `CODEC_VERSION` is never used
+ --> crates/motolii-ui/src/browser_host.rs:6:7
+  |
+6 | const CODEC_VERSION: u8 = 1;
+  |       ^^^^^^^^^^^^^
+
+warning: constant `BROWSER_ROLE` is never used
+ --> crates/motolii-ui/src/browser_host.rs:7:7
+  |
+7 | const BROWSER_ROLE: &str = "browser";
+  |       ^^^^^^^^^^^^
+
+warning: constant `HOST_TO_WEB` is never used
+ --> crates/motolii-ui/src/browser_host.rs:8:7
+  |
+8 | const HOST_TO_WEB: &str = "host-to-web";
+  |       ^^^^^^^^^^^
+
+warning: constant `WEB_TO_HOST` is never used
+ --> crates/motolii-ui/src/browser_host.rs:9:7
+  |
+9 | const WEB_TO_HOST: &str = "web-to-host";
+  |       ^^^^^^^^^^^
+
+warning: constant `PLACE_KIND` is never used
+  --> crates/motolii-ui/src/browser_host.rs:10:7
+   |
+10 | const PLACE_KIND: &str = "browser.place";
+   |       ^^^^^^^^^^
+
+warning: constant `ATTACH_EFFECT_KIND` is never used
+  --> crates/motolii-ui/src/browser_host.rs:11:7
+   |
+11 | const ATTACH_EFFECT_KIND: &str = "browser.attach-effect";
+   |       ^^^^^^^^^^^^^^^^^^
+
+warning: constant `MAX_ID_BYTES` is never used
+  --> crates/motolii-ui/src/browser_host.rs:12:7
+   |
+12 | const MAX_ID_BYTES: usize = 128;
+   |       ^^^^^^^^^^^^
+
+warning: constant `MAX_MESSAGE_BYTES` is never used
+  --> crates/motolii-ui/src/browser_host.rs:13:7
+   |
+13 | const MAX_MESSAGE_BYTES: usize = 1024;
+   |       ^^^^^^^^^^^^^^^^^
+
+warning: constant `INBOX_CAPACITY` is never used
+  --> crates/motolii-ui/src/browser_host.rs:14:7
+   |
+14 | const INBOX_CAPACITY: usize = 16;
+   |       ^^^^^^^^^^^^^^
+
+warning: constant `CATALOG_REVISION` is never used
+  --> crates/motolii-ui/src/browser_host.rs:15:7
+   |
+15 | const CATALOG_REVISION: u8 = 1;
+   |       ^^^^^^^^^^^^^^^^
+
+warning: constant `OPACITY_ID` is never used
+  --> crates/motolii-ui/src/browser_host.rs:16:7
+   |
+16 | const OPACITY_ID: &str = "core.filter.opacity";
+   |       ^^^^^^^^^^
+
+warning: constant `OPACITY_NAME` is never used
+  --> crates/motolii-ui/src/browser_host.rs:17:7
+   |
+17 | const OPACITY_NAME: &str = "Opacity";
+   |       ^^^^^^^^^^^^
+
+warning: constant `OPACITY_CATEGORY` is never used
+  --> crates/motolii-ui/src/browser_host.rs:18:7
+   |
+18 | const OPACITY_CATEGORY: &str = "Color";
+   |       ^^^^^^^^^^^^^^^^
+
+warning: constant `OPACITY_PARAM` is never used
+  --> crates/motolii-ui/src/browser_host.rs:19:7
+   |
+19 | const OPACITY_PARAM: &str = "amount";
+   |       ^^^^^^^^^^^^^
+
+warning: constant `EFFECTS_SCOPE` is never used
+  --> crates/motolii-ui/src/browser_host.rs:20:7
+   |
+20 | const EFFECTS_SCOPE: &str = "first-party-effects";
+   |       ^^^^^^^^^^^^^
+
+warning: struct `BrowserPlaceIntent` is never constructed
+  --> crates/motolii-ui/src/browser_host.rs:23:19
+   |
+23 | pub(crate) struct BrowserPlaceIntent {
+   |                   ^^^^^^^^^^^^^^^^^^
+
+warning: struct `BrowserAttachEffectIntent` is never constructed
+  --> crates/motolii-ui/src/browser_host.rs:29:19
+   |
+29 | pub(crate) struct BrowserAttachEffectIntent {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `BrowserHostSession` is never constructed
+  --> crates/motolii-ui/src/browser_host.rs:35:19
+   |
+35 | pub(crate) struct BrowserHostSession {
+   |                   ^^^^^^^^^^^^^^^^^^
+
+warning: associated items `new`, `snapshot_json`, `accept`, `pop`, and `pop_attach_effect` are never used
+   --> crates/motolii-ui/src/browser_host.rs:45:19
+    |
+ 44 | impl BrowserHostSession {
+    | ----------------------- associated items in this implementation
+ 45 |     pub(crate) fn new(
+    |                   ^^^
+...
+ 63 |     pub(crate) fn snapshot_json(&self) -> Result<String, BrowserHostError> {
+    |                   ^^^^^^^^^^^^^
+...
+ 85 |     pub(crate) fn accept(&mut self, raw: &str) -> Result<(), BrowserHostError> {
+    |                   ^^^^^^
+...
+155 |     pub(crate) fn pop(&mut self) -> Option<BrowserPlaceIntent> {
+    |                   ^^^
+...
+159 |     pub(crate) fn pop_attach_effect(&mut self) -> Option<BrowserAttachEffectIntent> {
+    |                   ^^^^^^^^^^^^^^^^^
+
+warning: struct `HostSnapshot` is never constructed
+   --> crates/motolii-ui/src/browser_host.rs:165:8
+    |
+165 | struct HostSnapshot<'a> {
+    |        ^^^^^^^^^^^^
+
+warning: struct `HostBrowser` is never constructed
+   --> crates/motolii-ui/src/browser_host.rs:175:8
+    |
+175 | struct HostBrowser<'a> {
+    |        ^^^^^^^^^^^
+
+warning: struct `WireSource` is never constructed
+   --> crates/motolii-ui/src/browser_host.rs:181:8
+    |
+181 | struct WireSource<'a> {
+    |        ^^^^^^^^^^
+
+warning: struct `HostCatalogSnapshot` is never constructed
+   --> crates/motolii-ui/src/browser_host.rs:187:8
+    |
+187 | struct HostCatalogSnapshot<'a> {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `HostVocabularies` is never constructed
+   --> crates/motolii-ui/src/browser_host.rs:194:8
+    |
+194 | struct HostVocabularies {
+    |        ^^^^^^^^^^^^^^^^
+
+warning: struct `HostVocabularyEntry` is never constructed
+   --> crates/motolii-ui/src/browser_host.rs:205:8
+    |
+205 | struct HostVocabularyEntry {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `HostScopedCatalog` is never constructed
+   --> crates/motolii-ui/src/browser_host.rs:212:8
+    |
+212 | struct HostScopedCatalog<'a> {
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: struct `HostCatalogItem` is never constructed
+   --> crates/motolii-ui/src/browser_host.rs:218:8
+    |
+218 | struct HostCatalogItem<'a> {
+    |        ^^^^^^^^^^^^^^^
+
+warning: function `opacity_catalog_snapshot` is never used
+   --> crates/motolii-ui/src/browser_host.rs:230:4
+    |
+230 | fn opacity_catalog_snapshot(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_opacity_contract` is never used
+   --> crates/motolii-ui/src/browser_host.rs:312:4
+    |
+312 | fn validate_opacity_contract(condition: bool, field: &'static str) -> Result<(), BrowserHostError> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `WebMessage` is never constructed
+   --> crates/motolii-ui/src/browser_host.rs:322:8
+    |
+322 | struct WebMessage {
+    |        ^^^^^^^^^^
+
+warning: struct `OwnedWireSource` is never constructed
+   --> crates/motolii-ui/src/browser_host.rs:334:8
+    |
+334 | struct OwnedWireSource {
+    |        ^^^^^^^^^^^^^^^
+
+warning: function `parse_canonical_u64` is never used
+   --> crates/motolii-ui/src/browser_host.rs:339:4
+    |
+339 | fn parse_canonical_u64(value: &str, field: &'static str) -> Result<u64, BrowserHostError> {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_id` is never used
+   --> crates/motolii-ui/src/browser_host.rs:351:4
+    |
+351 | fn validate_id(value: &str, field: &'static str) -> Result<(), BrowserHostError> {
+    |    ^^^^^^^^^^^
+
+warning: enum `BrowserHostError` is never used
+   --> crates/motolii-ui/src/browser_host.rs:359:17
+    |
+359 | pub(crate) enum BrowserHostError {
+    |                 ^^^^^^^^^^^^^^^^
+
+warning: function `canonical_drop_from_ndc` is never used
+  --> crates/motolii-ui/src/canonical_drop.rs:14:15
+   |
+14 | pub(crate) fn canonical_drop_from_ndc(camera: CompCamera, ndc: [f64; 2]) -> Option<[f64; 2]> {
+   |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `DisplaySlotEvidence` is never constructed
+  --> crates/motolii-ui/src/display_slot.rs:15:19
+   |
+15 | pub(crate) struct DisplaySlotEvidence {
+   |                   ^^^^^^^^^^^^^^^^^^^
+
+warning: fields `view`, `slot_id`, `registration_count`, and `texture_id` are never read
+  --> crates/motolii-ui/src/display_slot.rs:34:5
+   |
+32 | pub(crate) struct DisplaySlot {
+   |                   ----------- fields in this struct
+33 |     texture: wgpu::Texture,
+34 |     view: wgpu::TextureView,
+   |     ^^^^
+35 |     desc: FrameDesc,
+36 |     slot_id: u64,
+   |     ^^^^^^^
+37 |     copy_count: AtomicU32,
+38 |     registration_count: AtomicU32,
+   |     ^^^^^^^^^^^^^^^^^^
+39 |     texture_id: OnceLock<TextureId>,
+   |     ^^^^^^^^^^
+
+warning: methods `register_once`, `view`, and `evidence` are never used
+   --> crates/motolii-ui/src/display_slot.rs:121:19
+    |
+ 42 | impl DisplaySlot {
+    | ---------------- methods in this implementation
+...
+121 |     pub(crate) fn register_once(
+    |                   ^^^^^^^^^^^^^
+...
+136 |     pub(crate) fn view(&self) -> &wgpu::TextureView {
+    |                   ^^^^
+...
+140 |     pub(crate) fn evidence(&self) -> DisplaySlotEvidence {
+    |                   ^^^^^^^^
+
+warning: struct `HostPointerSample` is never constructed
+ --> crates/motolii-ui/src/host_pointer_capture.rs:8:19
+  |
+8 | pub(crate) struct HostPointerSample {
+  |                   ^^^^^^^^^^^^^^^^^
+
+warning: enum `HostPointerCancel` is never used
+  --> crates/motolii-ui/src/host_pointer_capture.rs:16:17
+   |
+16 | pub(crate) enum HostPointerCancel {
+   |                 ^^^^^^^^^^^^^^^^^
+
+warning: enum `HostPointerCandidate` is never used
+  --> crates/motolii-ui/src/host_pointer_capture.rs:22:17
+   |
+22 | pub(crate) enum HostPointerCandidate {
+   |                 ^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `HostPointerClick` is never constructed
+  --> crates/motolii-ui/src/host_pointer_capture.rs:38:19
+   |
+38 | pub(crate) struct HostPointerClick {
+   |                   ^^^^^^^^^^^^^^^^
+
+warning: struct `PointerUpEntry` is never constructed
+  --> crates/motolii-ui/src/host_pointer_capture.rs:43:8
+   |
+43 | struct PointerUpEntry {
+   |        ^^^^^^^^^^^^^^
+
+warning: struct `PointerUpQueue` is never constructed
+  --> crates/motolii-ui/src/host_pointer_capture.rs:49:8
+   |
+49 | struct PointerUpQueue {
+   |        ^^^^^^^^^^^^^^
+
+warning: methods `enqueue`, `high_water`, `claim_first_after`, and `pop_unclaimed` are never used
+  --> crates/motolii-ui/src/host_pointer_capture.rs:55:8
+   |
+54 | impl PointerUpQueue {
+   | ------------------- methods in this implementation
+55 |     fn enqueue(&mut self, position: [f64; 2]) -> Option<u64> {
+   |        ^^^^^^^
+...
+63 |     fn high_water(&self) -> u64 {
+   |        ^^^^^^^^^^
+...
+67 |     fn claim_first_after(&mut self, arm_sequence: u64) -> Option<PointerUpEntry> {
+   |        ^^^^^^^^^^^^^^^^^
+...
+75 |     fn pop_unclaimed(&mut self) -> Option<PointerUpEntry> {
+   |        ^^^^^^^^^^^^^
+
+warning: struct `HostPointerCaptureState` is never constructed
+  --> crates/motolii-ui/src/host_pointer_capture.rs:81:19
+   |
+81 | pub(crate) struct HostPointerCaptureState {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `ActiveCapture` is never constructed
+  --> crates/motolii-ui/src/host_pointer_capture.rs:86:8
+   |
+86 | struct ActiveCapture {
+   |        ^^^^^^^^^^^^^
+
+warning: methods `is_active`, `active_generation`, `arm`, and `update` are never used
+   --> crates/motolii-ui/src/host_pointer_capture.rs:92:19
+    |
+ 91 | impl HostPointerCaptureState {
+    | ---------------------------- methods in this implementation
+ 92 |     pub(crate) fn is_active(&self) -> bool {
+    |                   ^^^^^^^^^
+...
+ 96 |     fn active_generation(&self) -> Option<u64> {
+    |        ^^^^^^^^^^^^^^^^^
+...
+100 |     pub(crate) fn arm(&mut self, generation: u64, arm_sequence: u64) -> bool {
+    |                   ^^^
+...
+111 |     fn update(
+    |        ^^^^^^
+
+warning: struct `PlatformPointerCapture` is never constructed
+   --> crates/motolii-ui/src/host_pointer_capture.rs:150:19
+    |
+150 | pub(crate) struct PlatformPointerCapture {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> crates/motolii-ui/src/host_pointer_capture.rs:163:19
+    |
+162 | impl PlatformPointerCapture {
+    | --------------------------- associated items in this implementation
+163 |     pub(crate) fn new(
+    |                   ^^^
+...
+246 |     pub(crate) fn arm(&mut self, generation: u64) -> bool {
+    |                   ^^^
+...
+268 |     pub(crate) fn is_active(&self) -> bool {
+    |                   ^^^^^^^^^
+...
+272 |     pub(crate) fn poll(
+    |                   ^^^^
+...
+328 |     pub(crate) fn poll_click(
+    |                   ^^^^^^^^^^
+...
+340 |     pub(crate) fn set_host_commands_enabled(&self, enabled: bool) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+345 |     pub(crate) fn poll_command(
+    |                   ^^^^^^^^^^^^
+
+warning: function `top_down_logical` is never used
+   --> crates/motolii-ui/src/host_pointer_capture.rs:356:4
+    |
+356 | fn top_down_logical(x: f64, y: f64, is_flipped: bool, height: f64) -> [f64; 2] {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `mac_history_trigger` is never used
+   --> crates/motolii-ui/src/host_pointer_capture.rs:365:4
+    |
+365 | fn mac_history_trigger(event: &objc2_app_kit::NSEvent) -> Option<EffectiveTrigger> {
+    |    ^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_history_character` is never used
+   --> crates/motolii-ui/src/host_pointer_capture.rs:398:4
+    |
+398 | fn is_history_character(characters: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `PlatformPointerCaptureError` is never used
+   --> crates/motolii-ui/src/host_pointer_capture.rs:455:17
+    |
+455 | pub(crate) enum PlatformPointerCaptureError {
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `position_changed` is never used
+   --> crates/motolii-ui/src/host_pointer_capture.rs:472:4
+    |
+472 | fn position_changed(previous: Option<[f64; 2]>, current: [f64; 2]) -> bool {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: constant `SHARE_UNITS` is never used
+ --> crates/motolii-ui/src/layout.rs:5:7
+  |
+5 | const SHARE_UNITS: u32 = 1_000_000;
+  |       ^^^^^^^^^^^
+
+warning: constant `KEYBOARD_SHARE_STEP` is never used
+ --> crates/motolii-ui/src/layout.rs:6:7
+  |
+6 | const KEYBOARD_SHARE_STEP: u32 = 50_000;
+  |       ^^^^^^^^^^^^^^^^^^^
+
+warning: enum `PanelRole` is never used
+ --> crates/motolii-ui/src/layout.rs:9:17
+  |
+9 | pub(crate) enum PanelRole {
+  |                 ^^^^^^^^^
+
+warning: associated items `ALL`, `AUXILIARY`, `title`, and `is_auxiliary` are never used
+  --> crates/motolii-ui/src/layout.rs:17:22
+   |
+16 | impl PanelRole {
+   | -------------- associated items in this implementation
+17 |     pub(crate) const ALL: [Self; 4] = [Self::Browser, Self::Stage, Self::Inspector, Self::Timeline];
+   |                      ^^^
+18 |     pub(crate) const AUXILIARY: [Self; 3] = [Self::Browser, Self::Inspector, Self::Timeline];
+   |                      ^^^^^^^^^
+19 |
+20 |     pub(crate) const fn title(self) -> &'static str {
+   |                         ^^^^^
+...
+29 |     pub(crate) const fn is_auxiliary(self) -> bool {
+   |                         ^^^^^^^^^^^^
+
+warning: enum `SplitAxis` is never used
+  --> crates/motolii-ui/src/layout.rs:35:17
+   |
+35 | pub(crate) enum SplitAxis {
+   |                 ^^^^^^^^^
+
+warning: enum `LayoutNode` is never used
+  --> crates/motolii-ui/src/layout.rs:41:17
+   |
+41 | pub(crate) enum LayoutNode {
+   |                 ^^^^^^^^^^
+
+warning: struct `PanelLayout` is never constructed
+  --> crates/motolii-ui/src/layout.rs:56:19
+   |
+56 | pub(crate) struct PanelLayout {
+   |                   ^^^^^^^^^^^
+
+warning: struct `LayoutConstraints` is never constructed
+  --> crates/motolii-ui/src/layout.rs:62:19
+   |
+62 | pub(crate) struct LayoutConstraints {
+   |                   ^^^^^^^^^^^^^^^^^
+
+warning: enum `SeparatorAction` is never used
+  --> crates/motolii-ui/src/layout.rs:68:17
+   |
+68 | pub(crate) enum SeparatorAction {
+   |                 ^^^^^^^^^^^^^^^
+
+warning: enum `LayoutAction` is never used
+  --> crates/motolii-ui/src/layout.rs:76:17
+   |
+76 | pub(crate) enum LayoutAction {
+   |                 ^^^^^^^^^^^^
+
+warning: enum `LayoutError` is never used
+  --> crates/motolii-ui/src/layout.rs:88:17
+   |
+88 | pub(crate) enum LayoutError {
+   |                 ^^^^^^^^^^^
+
+warning: constant `BUILT_IN_TOP_SHARES` is never used
+   --> crates/motolii-ui/src/layout.rs:130:7
+    |
+130 | const BUILT_IN_TOP_SHARES: [u32; 3] = [1, 3, 1];
+    |       ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BUILT_IN_VERTICAL_SHARES` is never used
+   --> crates/motolii-ui/src/layout.rs:131:7
+    |
+131 | const BUILT_IN_VERTICAL_SHARES: [u32; 2] = [3, 1];
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> crates/motolii-ui/src/layout.rs:134:19
+    |
+133 | impl PanelLayout {
+    | ---------------- associated items in this implementation
+134 |     pub(crate) fn built_in() -> Self {
+    |                   ^^^^^^^^
+...
+158 |     pub(crate) fn from_parts(
+    |                   ^^^^^^^^^^
+...
+167 |     pub(crate) fn root(&self) -> &LayoutNode {
+    |                   ^^^^
+...
+171 |     pub(crate) fn is_visible(&self, role: PanelRole) -> bool {
+    |                   ^^^^^^^^^^
+...
+175 |     pub(crate) fn canonical_signature(&self) -> String {
+    |                   ^^^^^^^^^^^^^^^^^^^
+...
+228 |     pub(crate) fn validate(&self) -> Result<(), LayoutError> {
+    |                   ^^^^^^^^
+...
+291 |     pub(crate) fn apply(
+    |                   ^^^^^
+...
+324 |     pub(crate) fn accept_runtime_proposal(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+...
+337 |     fn clamp_stage_minimum(&mut self, constraints: LayoutConstraints) -> Result<(), LayoutError> {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: function `normalize_runtime_shares` is never used
+   --> crates/motolii-ui/src/layout.rs:412:15
+    |
+412 | pub(crate) fn normalize_runtime_shares(shares: &[f32]) -> Result<Vec<u32>, LayoutError> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `require_auxiliary` is never used
+   --> crates/motolii-ui/src/layout.rs:462:4
+    |
+462 | fn require_auxiliary(role: PanelRole) -> Result<(), LayoutError> {
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `reduce_shares` is never used
+   --> crates/motolii-ui/src/layout.rs:470:4
+    |
+470 | fn reduce_shares(shares: &mut [u32]) {
+    |    ^^^^^^^^^^^^^
+
+warning: function `adjust_separator` is never used
+   --> crates/motolii-ui/src/layout.rs:645:4
+    |
+645 | fn adjust_separator(
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `inherit_default_shares` is never used
+   --> crates/motolii-ui/src/layout.rs:697:4
+    |
+697 | fn inherit_default_shares(candidate: &mut LayoutNode, previous: &LayoutNode) {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `same_role_shape` is never used
+   --> crates/motolii-ui/src/layout.rs:727:4
+    |
+727 | fn same_role_shape(left: &[LayoutNode], right: &[LayoutNode]) -> bool {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `first_role` is never used
+   --> crates/motolii-ui/src/layout.rs:731:4
+    |
+731 | fn first_role(node: &LayoutNode) -> PanelRole {
+    |    ^^^^^^^^^^
+
+warning: function `contains_stage` is never used
+   --> crates/motolii-ui/src/layout.rs:740:4
+    |
+740 | fn contains_stage(node: &LayoutNode) -> bool {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `horizontal_stage_depth` is never used
+   --> crates/motolii-ui/src/layout.rs:749:4
+    |
+749 | fn horizontal_stage_depth(node: &LayoutNode) -> usize {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `stage_width_fraction` is never used
+   --> crates/motolii-ui/src/layout.rs:764:4
+    |
+764 | fn stage_width_fraction(node: &LayoutNode) -> f64 {
+    |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `clamp_stage_path` is never used
+   --> crates/motolii-ui/src/layout.rs:788:4
+    |
+788 | fn clamp_stage_path(node: &mut LayoutNode, minimum_ratio: f64) -> Result<(), LayoutError> {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: enum `RuntimeFrameEdit` is never used
+ --> crates/motolii-ui/src/layout_authority.rs:7:17
+  |
+7 | pub(crate) enum RuntimeFrameEdit {
+  |                 ^^^^^^^^^^^^^^^^
+
+warning: struct `LayoutAuthority` is never constructed
+  --> crates/motolii-ui/src/layout_authority.rs:13:19
+   |
+13 | pub(crate) struct LayoutAuthority {
+   |                   ^^^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> crates/motolii-ui/src/layout_authority.rs:20:19
+    |
+ 19 | impl LayoutAuthority {
+    | -------------------- associated items in this implementation
+ 20 |     pub(crate) fn built_in() -> Result<Self, LayoutError> {
+    |                   ^^^^^^^^
+...
+ 30 |     pub(crate) fn intent(&self) -> &PanelLayout {
+    |                   ^^^^^^
+...
+ 34 |     pub(crate) fn runtime(&self) -> &RuntimeLayout {
+    |                   ^^^^^^^
+...
+ 38 |     pub(crate) fn runtime_mut(&mut self) -> &mut RuntimeLayout {
+    |                   ^^^^^^^^^^^
+...
+ 51 |     pub(crate) fn gesture_in_flight(&self) -> bool {
+    |                   ^^^^^^^^^^^^^^^^^
+...
+ 55 |     pub(crate) fn apply(
+    |                   ^^^^^
+...
+ 68 |     pub(crate) fn reconcile_runtime_frame(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^
+...
+107 |     fn cancel_gesture(&mut self) -> Result<(), LayoutError> {
+    |        ^^^^^^^^^^^^^^
+...
+114 |     fn reproject_authority(&mut self) -> Result<(), LayoutError> {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: function `project_panel_rects` is never used
+  --> crates/motolii-ui/src/layout_geometry.rs:13:15
+   |
+13 | pub(crate) fn project_panel_rects(
+   |               ^^^^^^^^^^^^^^^^^^^
+
+warning: function `add_node` is never used
+  --> crates/motolii-ui/src/layout_geometry.rs:38:4
+   |
+38 | fn add_node(
+   |    ^^^^^^^^
+
+warning: function `node_is_visible` is never used
+   --> crates/motolii-ui/src/layout_geometry.rs:146:4
+    |
+146 | fn node_is_visible(layout: &PanelLayout, node: &LayoutNode) -> bool {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `collect` is never used
+   --> crates/motolii-ui/src/layout_geometry.rs:156:4
+    |
+156 | fn collect(
+    |    ^^^^^^^
+
+warning: struct `RuntimeLayout` is never constructed
+  --> crates/motolii-ui/src/layout_runtime.rs:11:19
+   |
+11 | pub(crate) struct RuntimeLayout {
+   |                   ^^^^^^^^^^^^^
+
+warning: struct `RuntimeSeparator` is never constructed
+  --> crates/motolii-ui/src/layout_runtime.rs:18:19
+   |
+18 | pub(crate) struct RuntimeSeparator {
+   |                   ^^^^^^^^^^^^^^^^
+
+warning: associated items `project`, `tree_mut`, `separators`, `extract_proposal`, `canonical_signature`, and `separator_response` are never used
+  --> crates/motolii-ui/src/layout_runtime.rs:27:19
+   |
+26 | impl RuntimeLayout {
+   | ------------------ associated items in this implementation
+27 |     pub(crate) fn project(layout: &PanelLayout) -> Result<Self, LayoutError> {
+   |                   ^^^^^^^
+...
+56 |     pub(crate) fn tree_mut(&mut self) -> &mut Tree<PanelRole> {
+   |                   ^^^^^^^^
+...
+65 |     pub(crate) fn separators(&self) -> &[RuntimeSeparator] {
+   |                   ^^^^^^^^^^
+...
+69 |     pub(crate) fn extract_proposal(&self) -> Result<PanelLayout, LayoutError> {
+   |                   ^^^^^^^^^^^^^^^^
+...
+84 |     pub(crate) fn canonical_signature(&self) -> Result<String, LayoutError> {
+   |                   ^^^^^^^^^^^^^^^^^^^
+...
+88 |     pub(crate) fn separator_response(
+   |                   ^^^^^^^^^^^^^^^^^^
+
+warning: function `project_node` is never used
+   --> crates/motolii-ui/src/layout_runtime.rs:132:4
+    |
+132 | fn project_node(
+    |    ^^^^^^^^^^^^
+
+warning: function `extract_node` is never used
+   --> crates/motolii-ui/src/layout_runtime.rs:202:4
+    |
+202 | fn extract_node(
+    |    ^^^^^^^^^^^^
+
+warning: enum `StageDropTerminal` is never used
+ --> crates/motolii-ui/src/layout_runtime_adapter.rs:7:17
+  |
+7 | pub(crate) enum StageDropTerminal {
+  |                 ^^^^^^^^^^^^^^^^^
+
+warning: function `read_stage_drop_terminal` is never used
+  --> crates/motolii-ui/src/layout_runtime_adapter.rs:12:15
+   |
+12 | pub(crate) fn read_stage_drop_terminal(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_safety_interrupt` is never used
+  --> crates/motolii-ui/src/layout_runtime_adapter.rs:37:15
+   |
+37 | pub(crate) fn read_safety_interrupt(ui: &egui::Ui) -> Option<SafetyInterrupt> {
+   |               ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_layout_cancel` is never used
+  --> crates/motolii-ui/src/layout_runtime_adapter.rs:47:15
+   |
+47 | pub(crate) fn read_layout_cancel(
+   |               ^^^^^^^^^^^^^^^^^^
+
+warning: function `read_separator_action` is never used
+  --> crates/motolii-ui/src/layout_runtime_adapter.rs:56:15
+   |
+56 | pub(crate) fn read_separator_action(
+   |               ^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `SeparatorKey` is never used
+  --> crates/motolii-ui/src/layout_runtime_adapter.rs:84:6
+   |
+84 | enum SeparatorKey {
+   |      ^^^^^^^^^^^^
+
+warning: function `resolve_separator_input` is never used
+  --> crates/motolii-ui/src/layout_runtime_adapter.rs:93:4
+   |
+93 | fn resolve_separator_input(
+   |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `resolve_layout_cancel` is never used
+   --> crates/motolii-ui/src/layout_runtime_adapter.rs:117:4
+    |
+117 | fn resolve_layout_cancel(
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `resolve_stage_drop_terminal` is never used
+   --> crates/motolii-ui/src/layout_runtime_adapter.rs:125:4
+    |
+125 | fn resolve_stage_drop_terminal(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `default_media_library_root` is never used
+  --> crates/motolii-ui/src/media_library.rs:13:8
+   |
+13 | pub fn default_media_library_root() -> PathBuf {
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `All`, `Tag`, and `Directory` are never constructed
+  --> crates/motolii-ui/src/media_library.rs:63:5
+   |
+62 | pub enum LibraryFilter {
+   |          ------------- variants in this enum
+63 |     All,
+   |     ^^^
+64 |     Tag(String),
+   |     ^^^
+65 |     Directory(String),
+   |     ^^^^^^^^^
+   |
+   = note: `LibraryFilter` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: associated function `with_default_root` is never used
+  --> crates/motolii-ui/src/media_library.rs:79:12
+   |
+78 | impl MediaLibrary {
+   | ----------------- associated function in this implementation
+79 |     pub fn with_default_root() -> Self {
+   |            ^^^^^^^^^^^^^^^^^
+
+warning: struct `LogicalRect` is never constructed
+ --> crates/motolii-ui/src/native_host_layout.rs:9:19
+  |
+9 | pub(crate) struct LogicalRect {
+  |                   ^^^^^^^^^^^
+
+warning: method `contains` is never used
+  --> crates/motolii-ui/src/native_host_layout.rs:17:19
+   |
+16 | impl LogicalRect {
+   | ---------------- method in this implementation
+17 |     pub(crate) fn contains(self, point: [f64; 2]) -> bool {
+   |                   ^^^^^^^^
+
+warning: struct `PhysicalRect` is never constructed
+  --> crates/motolii-ui/src/native_host_layout.rs:26:19
+   |
+26 | pub(crate) struct PhysicalRect {
+   |                   ^^^^^^^^^^^^
+
+warning: struct `NativeHostLayout` is never constructed
+  --> crates/motolii-ui/src/native_host_layout.rs:34:19
+   |
+34 | pub(crate) struct NativeHostLayout {
+   |                   ^^^^^^^^^^^^^^^^
+
+warning: associated items `try_new` and `stage_ndc` are never used
+   --> crates/motolii-ui/src/native_host_layout.rs:48:19
+    |
+ 47 | impl NativeHostLayout {
+    | --------------------- associated items in this implementation
+ 48 |     pub(crate) fn try_new(
+    |                   ^^^^^^^
+...
+134 |     pub(crate) fn stage_ndc(self, point: [f64; 2]) -> Option<[f64; 2]> {
+    |                   ^^^^^^^^^
+
+warning: enum `NativeHostLayoutError` is never used
+   --> crates/motolii-ui/src/native_host_layout.rs:146:17
+    |
+146 | pub(crate) enum NativeHostLayoutError {
+    |                 ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `physical_rect` is never used
+   --> crates/motolii-ui/src/native_host_layout.rs:153:4
+    |
+153 | fn physical_rect(
+    |    ^^^^^^^^^^^^^
+
+warning: constant `KEY_TOOLS_WIDTH` is never used
+   --> crates/motolii-ui/src/native_host_layout.rs:185:7
+    |
+185 | const KEY_TOOLS_WIDTH: f64 = 202.0;
+    |       ^^^^^^^^^^^^^^^
+
+warning: constant `BAND_RAIL_WIDTH` is never used
+   --> crates/motolii-ui/src/native_host_layout.rs:186:7
+    |
+186 | const BAND_RAIL_WIDTH: f64 = 54.0;
+    |       ^^^^^^^^^^^^^^^
+
+warning: constant `HEADER_HEIGHT` is never used
+   --> crates/motolii-ui/src/native_host_layout.rs:187:7
+    |
+187 | const HEADER_HEIGHT: f64 = 30.0;
+    |       ^^^^^^^^^^^^^
+
+warning: constant `RULER_HEIGHT` is never used
+   --> crates/motolii-ui/src/native_host_layout.rs:188:7
+    |
+188 | const RULER_HEIGHT: f64 = 25.0;
+    |       ^^^^^^^^^^^^
+
+warning: function `key_tools_logical_rect` is never used
+   --> crates/motolii-ui/src/native_host_layout.rs:190:15
+    |
+190 | pub(crate) fn key_tools_logical_rect(layout: NativeHostLayout) -> Option<LogicalRect> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `timeline_time_surface_logical_rect` is never used
+   --> crates/motolii-ui/src/native_host_layout.rs:199:15
+    |
+199 | pub(crate) fn timeline_time_surface_logical_rect(layout: NativeHostLayout) -> Option<LogicalRect> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `timeline_ruler_logical_rect` is never used
+   --> crates/motolii-ui/src/native_host_layout.rs:213:15
+    |
+213 | pub(crate) fn timeline_ruler_logical_rect(layout: NativeHostLayout) -> Option<LogicalRect> {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `PREVIEW_SHADER` is never used
+  --> crates/motolii-ui/src/preview_pipeline.rs:12:7
+   |
+12 | const PREVIEW_SHADER: &str = r#"
+   |       ^^^^^^^^^^^^^^
+
+warning: function `create_preview_pipeline` is never used
+  --> crates/motolii-ui/src/preview_pipeline.rs:28:15
+   |
+28 | pub(crate) fn create_preview_pipeline(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `create_pipeline` is never used
+  --> crates/motolii-ui/src/preview_pipeline.rs:80:4
+   |
+80 | fn create_pipeline(
+   |    ^^^^^^^^^^^^^^^
+
+warning: struct `ProductEasingPopup` is never constructed
+  --> crates/motolii-ui/src/product_easing_popup.rs:15:19
+   |
+15 | pub(crate) struct ProductEasingPopup {
+   |                   ^^^^^^^^^^^^^^^^^^
+
+warning: enum `PopupTerminal` is never used
+  --> crates/motolii-ui/src/product_easing_popup.rs:28:17
+   |
+28 | pub(crate) enum PopupTerminal {
+   |                 ^^^^^^^^^^^^^
+
+warning: struct `ProductEasingPopupOpen` is never constructed
+  --> crates/motolii-ui/src/product_easing_popup.rs:33:19
+   |
+33 | pub(crate) struct ProductEasingPopupOpen<'a> {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `open`, `window_id`, `handle_event`, and `paint` are never used
+   --> crates/motolii-ui/src/product_easing_popup.rs:44:19
+    |
+ 43 | impl ProductEasingPopup {
+    | ----------------------- associated items in this implementation
+ 44 |     pub(crate) fn open(
+    |                   ^^^^
+...
+124 |     pub(crate) fn window_id(&self) -> WindowId {
+    |                   ^^^^^^^^^
+...
+128 |     pub(crate) fn handle_event(
+    |                   ^^^^^^^^^^^^
+...
+150 |     fn paint(&mut self) -> Result<Option<PopupTerminal>, ProductEasingPopupError> {
+    |        ^^^^^
+
+warning: enum `PopupPreset` is never used
+   --> crates/motolii-ui/src/product_easing_popup.rs:259:6
+    |
+259 | enum PopupPreset {
+    |      ^^^^^^^^^^^
+
+warning: function `popup_preset_terminal` is never used
+   --> crates/motolii-ui/src/product_easing_popup.rs:270:4
+    |
+270 | fn popup_preset_terminal(preset: PopupPreset) -> Option<PopupTerminal> {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `popup_custom_terminal` is never used
+   --> crates/motolii-ui/src/product_easing_popup.rs:296:4
+    |
+296 | fn popup_custom_terminal(curve: [f32; 4]) -> PopupTerminal {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `popup_terminal_for_window_event` is never used
+   --> crates/motolii-ui/src/product_easing_popup.rs:305:4
+    |
+305 | fn popup_terminal_for_window_event(event: &winit::event::WindowEvent) -> Option<PopupTerminal> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `popup_screen_position` is never used
+   --> crates/motolii-ui/src/product_easing_popup.rs:313:4
+    |
+313 | fn popup_screen_position(
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `ProductEasingPopupError` is never used
+   --> crates/motolii-ui/src/product_easing_popup.rs:330:17
+    |
+330 | pub(crate) enum ProductEasingPopupError {
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `path_stroke_from_canonical_corners` is never used
+  --> crates/motolii-ui/src/rerun_stage/host_mesh.rs:36:15
+   |
+36 | pub(super) fn path_stroke_from_canonical_corners(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `RenderJoinError` is never used
+  --> crates/motolii-ui/src/render_worker.rs:85:17
+   |
+85 | pub(crate) enum RenderJoinError {
+   |                 ^^^^^^^^^^^^^^^
+
+warning: field `join` is never read
+   --> crates/motolii-ui/src/render_worker.rs:134:5
+    |
+132 | struct LatestWorker<P, R, E> {
+    |        ------------ field in this struct
+133 |     shared: Arc<WorkerShared<P, R, E>>,
+134 |     join: Option<JoinHandle<()>>,
+    |     ^^^^
+
+warning: methods `latest_accepted_generation`, `status`, `close`, and `join` are never used
+   --> crates/motolii-ui/src/render_worker.rs:202:8
+    |
+149 | / impl<P, R, E> LatestWorker<P, R, E>
+150 | | where
+151 | |     P: Send + 'static,
+152 | |     R: Send + 'static,
+153 | |     E: Send + 'static,
+    | |______________________- methods in this implementation
+...
+202 |       fn latest_accepted_generation(&self) -> Option<RenderGeneration> {
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+206 |       fn status(&self) -> RenderWorkerStatus {
+    |          ^^^^^^
+...
+214 |       fn close(&self) {
+    |          ^^^^^
+...
+228 |       fn join(&mut self) -> Result<(), RenderJoinError> {
+    |          ^^^^
+
+warning: methods `latest_accepted_generation`, `status`, and `failed_repaint_signal_epoch` are never used
+   --> crates/motolii-ui/src/render_worker.rs:285:8
+    |
+257 | impl<P, R, E> LatestWorkerClient<P, R, E> {
+    | ----------------------------------------- methods in this implementation
+...
+285 |     fn latest_accepted_generation(&self) -> Option<RenderGeneration> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+289 |     fn status(&self) -> RenderWorkerStatus {
+    |        ^^^^^^
+...
+324 |     fn failed_repaint_signal_epoch(&self) -> Option<RepaintSignalEpoch> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `camera` is never read
+   --> crates/motolii-ui/src/render_worker.rs:515:16
+    |
+513 | pub(crate) struct RenderedPreview {
+    |                   --------------- field in this struct
+514 |     pub(crate) frame: RenderedFrame,
+515 |     pub(crate) camera: CompCamera,
+    |                ^^^^^^
+    |
+    = note: `RenderedPreview` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: methods `latest_accepted_generation`, `status`, `close`, and `join` are never used
+   --> crates/motolii-ui/src/render_worker.rs:586:19
+    |
+518 | impl RenderWorker {
+    | ----------------- methods in this implementation
+...
+586 |     pub(crate) fn latest_accepted_generation(&self) -> Option<RenderGeneration> {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+590 |     pub(crate) fn status(&self) -> RenderWorkerStatus {
+    |                   ^^^^^^
+...
+600 |     pub(crate) fn close(&self) {
+    |                   ^^^^^
+...
+604 |     pub(crate) fn join(&mut self) -> Result<(), RenderJoinError> {
+    |                   ^^^^
+
+warning: methods `submit`, `submit_preview`, `latest_accepted_generation`, `try_take_latest`, and `failed_repaint_signal_epoch` are never used
+   --> crates/motolii-ui/src/render_worker.rs:610:19
+    |
+609 | impl RenderWorkerClient {
+    | ----------------------- methods in this implementation
+610 |     pub(crate) fn submit(
+    |                   ^^^^^^
+...
+620 |     pub(crate) fn submit_preview(
+    |                   ^^^^^^^^^^^^^^
+...
+631 |     pub(crate) fn latest_accepted_generation(&self) -> Option<RenderGeneration> {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+635 |     pub(crate) fn try_take_latest(
+    |                   ^^^^^^^^^^^^^^^
+...
+648 |     pub(crate) fn failed_repaint_signal_epoch(&self) -> Option<RepaintSignalEpoch> {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `dropped` is never used
+  --> crates/motolii-ui/src/stage_frame_seat.rs:54:19
+   |
+51 | impl StageFrameEvidence {
+   | ----------------------- method in this implementation
+...
+54 |     pub(crate) fn dropped(self) -> u32 {
+   |                   ^^^^^^^
+
+warning: method `evidence` is never used
+   --> crates/motolii-ui/src/stage_frame_seat.rs:230:19
+    |
+115 | impl StageFrameSeat {
+    | ------------------- method in this implementation
+...
+230 |     pub(crate) fn evidence(&self) -> StageFrameEvidence {
+    |                   ^^^^^^^^
+
+warning: enum `StageHitTestReject` is never used
+  --> crates/motolii-ui/src/stage_hit_test.rs:12:17
+   |
+12 | pub(crate) enum StageHitTestReject {
+   |                 ^^^^^^^^^^^^^^^^^^
+
+warning: enum `StageHit` is never used
+  --> crates/motolii-ui/src/stage_hit_test.rs:18:17
+   |
+18 | pub(crate) enum StageHit {
+   |                 ^^^^^^^^
+
+warning: function `view_local_to_canonical` is never used
+  --> crates/motolii-ui/src/stage_hit_test.rs:25:15
+   |
+25 | pub(crate) fn view_local_to_canonical(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `view_local_in_stage` is never used
+  --> crates/motolii-ui/src/stage_hit_test.rs:43:15
+   |
+43 | pub(crate) fn view_local_in_stage(
+   |               ^^^^^^^^^^^^^^^^^^^
+
+warning: function `point_in_closed_local_rect` is never used
+  --> crates/motolii-ui/src/stage_hit_test.rs:54:4
+   |
+54 | fn point_in_closed_local_rect(local: CanonicalPoint, rect: StageLocalRect) -> bool {
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `hit_test_projected_layers` is never used
+  --> crates/motolii-ui/src/stage_hit_test.rs:74:15
+   |
+74 | pub(crate) fn hit_test_projected_layers(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `OverlayUploadKey` is never constructed
+ --> crates/motolii-ui/src/stage_overlay_gpu.rs:4:19
+  |
+4 | pub(crate) struct OverlayUploadKey {
+  |                   ^^^^^^^^^^^^^^^^
+
+warning: function `overlay_dirty` is never used
+ --> crates/motolii-ui/src/stage_overlay_gpu.rs:9:15
+  |
+9 | pub(crate) fn overlay_dirty(previous: Option<OverlayUploadKey>, next: OverlayUploadKey) -> bool {
+  |               ^^^^^^^^^^^^^
+
+warning: function `overlay_dimensions_match` is never used
+  --> crates/motolii-ui/src/stage_overlay_gpu.rs:13:15
+   |
+13 | pub(crate) fn overlay_dimensions_match(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BOOTSTRAP_WIDTH` is never used
+  --> crates/motolii-ui/src/static_preview.rs:26:7
+   |
+26 | const BOOTSTRAP_WIDTH: u32 = 1920;
+   |       ^^^^^^^^^^^^^^^
+
+warning: constant `BOOTSTRAP_HEIGHT` is never used
+  --> crates/motolii-ui/src/static_preview.rs:27:7
+   |
+27 | const BOOTSTRAP_HEIGHT: u32 = 1080;
+   |       ^^^^^^^^^^^^^^^^
+
+warning: constant `BOOTSTRAP_COLOR` is never used
+  --> crates/motolii-ui/src/static_preview.rs:28:7
+   |
+28 | const BOOTSTRAP_COLOR: [f64; 4] = [0.0, 1.0, 0.0, 1.0];
+   |       ^^^^^^^^^^^^^^^
+
+warning: struct `StaticPreview` is never constructed
+  --> crates/motolii-ui/src/static_preview.rs:76:19
+   |
+76 | pub(crate) struct StaticPreview {
+   |                   ^^^^^^^^^^^^^
+
+warning: methods `slot`, `camera`, and `invariant_evidence` are never used
+  --> crates/motolii-ui/src/static_preview.rs:90:19
+   |
+84 | impl StaticPreview {
+   | ------------------ methods in this implementation
+...
+90 |     pub(crate) fn slot(&self) -> &DisplaySlot {
+   |                   ^^^^
+...
+94 |     pub(crate) fn camera(&self) -> motolii_core::CompCamera {
+   |                   ^^^^^^
+...
+98 |     pub(crate) fn invariant_evidence(&self) -> StaticPreviewEvidence {
+   |                   ^^^^^^^^^^^^^^^^^^
+
+warning: struct `StaticPreviewEvidence` is never constructed
+   --> crates/motolii-ui/src/static_preview.rs:108:19
+    |
+108 | pub(crate) struct StaticPreviewEvidence {
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `bootstrap_frame_desc` is never used
+   --> crates/motolii-ui/src/static_preview.rs:114:15
+    |
+114 | pub(crate) fn bootstrap_frame_desc() -> Result<FrameDesc, StaticPreviewError> {
+    |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `bootstrap_document` is never used
+   --> crates/motolii-ui/src/static_preview.rs:124:15
+    |
+124 | pub(crate) fn bootstrap_document() -> Result<Document, StaticPreviewError> {
+    |               ^^^^^^^^^^^^^^^^^^
+
+warning: function `fixture_document` is never used
+   --> crates/motolii-ui/src/static_preview.rs:128:4
+    |
+128 | fn fixture_document(color: [f64; 4]) -> Result<Document, StaticPreviewError> {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `prepare_in_setup_worker` is never used
+   --> crates/motolii-ui/src/static_preview.rs:155:15
+    |
+155 | pub(crate) fn prepare_in_setup_worker(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `map_worker_start_error` is never used
+   --> crates/motolii-ui/src/static_preview.rs:199:4
+    |
+199 | fn map_worker_start_error(error: RenderWorkerStartError) -> StaticPreviewError {
+    |    ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `map_submit_error` is never used
+   --> crates/motolii-ui/src/static_preview.rs:206:4
+    |
+206 | fn map_submit_error(error: RenderSubmitError) -> StaticPreviewError {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `map_join_error` is never used
+   --> crates/motolii-ui/src/static_preview.rs:214:4
+    |
+214 | fn map_join_error(_error: RenderJoinError) -> StaticPreviewError {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `map_worker_error` is never used
+   --> crates/motolii-ui/src/static_preview.rs:218:4
+    |
+218 | fn map_worker_error(error: RenderWorkerError) -> StaticPreviewError {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: variants `DeleteKeys`, `SelectAll`, and `SetInterp` are never constructed
+   --> crates/motolii-ui/src/timeline_editor/mod.rs:560:5
+    |
+556 | enum MenuAction {
+    |      ---------- variants in this enum
+...
+560 |     DeleteKeys,
+    |     ^^^^^^^^^^
+...
+577 |     SelectAll,
+    |     ^^^^^^^^^
+...
+580 |     SetInterp(LayerId, ParamRef, KeyframeId, Interp),
+    |     ^^^^^^^^^
+    |
+    = note: `MenuAction` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: associated function `key_menu` is never used
+    --> crates/motolii-ui/src/timeline_editor/mod.rs:2792:8
+     |
+1198 | impl TimelineEditor {
+     | ------------------- associated function in this implementation
+...
+2792 |     fn key_menu(
+     |        ^^^^^^^^
+
+warning: struct `TimelineMoveRequest` is never constructed
+ --> crates/motolii-ui/src/timeline_move_gesture.rs:7:19
+  |
+7 | pub(crate) struct TimelineMoveRequest {
+  |                   ^^^^^^^^^^^^^^^^^^^
+
+warning: enum `TimelineMoveGestureError` is never used
+  --> crates/motolii-ui/src/timeline_move_gesture.rs:13:17
+   |
+13 | pub(crate) enum TimelineMoveGestureError {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `TimelineMoveGesture` is never constructed
+  --> crates/motolii-ui/src/timeline_move_gesture.rs:25:19
+   |
+25 | pub(crate) struct TimelineMoveGesture {
+   |                   ^^^^^^^^^^^^^^^^^^^
+
+warning: associated items `begin`, `layer`, `generation`, `initial_start`, `preview`, and `release` are never used
+  --> crates/motolii-ui/src/timeline_move_gesture.rs:33:19
+   |
+32 | impl TimelineMoveGesture {
+   | ------------------------ associated items in this implementation
+33 |     pub(crate) fn begin(
+   |                   ^^^^^
+...
+47 |     pub(crate) fn layer(self) -> LayerId {
+   |                   ^^^^^
+...
+51 |     pub(crate) fn generation(self) -> u64 {
+   |                   ^^^^^^^^^^
+...
+55 |     pub(crate) fn initial_start(self) -> RationalTime {
+   |                   ^^^^^^^^^^^^^
+...
+59 |     pub(crate) fn preview(
+   |                   ^^^^^^^
+...
+67 |     pub(crate) fn release(
+   |                   ^^^^^^^
+
+warning: method `preview_move` is never used
+   --> crates/motolii-ui/src/timeline_projection.rs:175:19
+    |
+161 | impl TimelineProjection {
+    | ----------------------- method in this implementation
+...
+175 |     pub(crate) fn preview_move(
+    |                   ^^^^^^^^^^^^
+
+warning: struct `TimelineFrameBorrow` is never constructed
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:17:19
+   |
+17 | pub(crate) struct TimelineFrameBorrow {
+   |                   ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `HEADER_HEIGHT` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:26:7
+   |
+26 | const HEADER_HEIGHT: f32 = 22.0;
+   |       ^^^^^^^^^^^^^
+
+warning: constant `RULER_HEIGHT` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:27:7
+   |
+27 | const RULER_HEIGHT: f32 = 18.0;
+   |       ^^^^^^^^^^^^
+
+warning: constant `RAIL_WIDTH` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:28:7
+   |
+28 | const RAIL_WIDTH: f32 = 58.0;
+   |       ^^^^^^^^^^
+
+warning: constant `MIN_ROW_HEIGHT` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:29:7
+   |
+29 | const MIN_ROW_HEIGHT: f32 = 20.0;
+   |       ^^^^^^^^^^^^^^
+
+warning: constant `BACKGROUND` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:31:7
+   |
+31 | const BACKGROUND: Color = Color::from_rgb(42, 42, 42);
+   |       ^^^^^^^^^^
+
+warning: constant `SURFACE` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:32:7
+   |
+32 | const SURFACE: Color = Color::from_rgb(54, 54, 54);
+   |       ^^^^^^^
+
+warning: constant `RAISED` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:33:7
+   |
+33 | const RAISED: Color = Color::from_rgb(70, 70, 70);
+   |       ^^^^^^
+
+warning: constant `RULE` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:34:7
+   |
+34 | const RULE: Color = Color::from_rgb(98, 98, 98);
+   |       ^^^^
+
+warning: constant `GRID` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:35:7
+   |
+35 | const GRID: Color = Color::from_rgb(72, 72, 72);
+   |       ^^^^
+
+warning: constant `TEXT` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:36:7
+   |
+36 | const TEXT: Color = Color::from_rgb(218, 218, 218);
+   |       ^^^^
+
+warning: constant `SUBTEXT` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:37:7
+   |
+37 | const SUBTEXT: Color = Color::from_rgb(154, 154, 154);
+   |       ^^^^^^^
+
+warning: constant `BAR` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:38:7
+   |
+38 | const BAR: Color = Color::from_rgb(150, 170, 219);
+   |       ^^^
+
+warning: constant `BAR_SELECTED` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:39:7
+   |
+39 | const BAR_SELECTED: Color = Color::from_rgb(255, 173, 86);
+   |       ^^^^^^^^^^^^
+
+warning: constant `KEY` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:40:7
+   |
+40 | const KEY: Color = Color::from_rgb(232, 232, 232);
+   |       ^^^
+
+warning: constant `PLAYHEAD` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:41:7
+   |
+41 | const PLAYHEAD: Color = Color::from_rgb(242, 77, 87);
+   |       ^^^^^^^^
+
+warning: struct `TimelineSkiaRaster` is never constructed
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:43:19
+   |
+43 | pub(crate) struct TimelineSkiaRaster {
+   |                   ^^^^^^^^^^^^^^^^^^
+
+warning: struct `TimelineSkiaStats` is never constructed
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:51:19
+   |
+51 | pub(crate) struct TimelineSkiaStats {
+   |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `raster_timeline` is never used
+  --> crates/motolii-ui/src/timeline_skia_raster.rs:57:15
+   |
+57 | pub(crate) fn raster_timeline(
+   |               ^^^^^^^^^^^^^^^
+
+warning: function `fill` is never used
+   --> crates/motolii-ui/src/timeline_skia_raster.rs:227:4
+    |
+227 | fn fill(canvas: &skia_safe::Canvas, rect: Rect, color: Color) {
+    |    ^^^^
+
+warning: function `line` is never used
+   --> crates/motolii-ui/src/timeline_skia_raster.rs:234:4
+    |
+234 | fn line(canvas: &skia_safe::Canvas, x0: f32, y0: f32, x1: f32, y1: f32, color: Color, width: f32) {
+    |    ^^^^
+
+warning: function `outline` is never used
+   --> crates/motolii-ui/src/timeline_skia_raster.rs:243:4
+    |
+243 | fn outline(canvas: &skia_safe::Canvas, rect: Rect, color: Color, width: f32) {
+    |    ^^^^^^^
+
+warning: function `draw_text` is never used
+   --> crates/motolii-ui/src/timeline_skia_raster.rs:252:4
+    |
+252 | fn draw_text(canvas: &skia_safe::Canvas, text: &str, x: f32, y: f32, size: f32, color: Color) {
+    |    ^^^^^^^^^
+
+warning: function `diamond` is never used
+   --> crates/motolii-ui/src/timeline_skia_raster.rs:263:4
+    |
+263 | fn diamond(canvas: &skia_safe::Canvas, x: f32, y: f32, selected: bool) {
+    |    ^^^^^^^
+
+warning: enum `TimelineTrimRequest` is never used
+ --> crates/motolii-ui/src/timeline_trim_gesture.rs:7:17
+  |
+7 | pub(crate) enum TimelineTrimRequest {
+  |                 ^^^^^^^^^^^^^^^^^^^
+
+warning: enum `TimelineTrimEdge` is never used
+  --> crates/motolii-ui/src/timeline_trim_gesture.rs:19:17
+   |
+19 | pub(crate) enum TimelineTrimEdge {
+   |                 ^^^^^^^^^^^^^^^^
+
+warning: enum `TimelineTrimGestureError` is never used
+  --> crates/motolii-ui/src/timeline_trim_gesture.rs:25:17
+   |
+25 | pub(crate) enum TimelineTrimGestureError {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `TimelineTrimGesture` is never constructed
+  --> crates/motolii-ui/src/timeline_trim_gesture.rs:37:19
+   |
+37 | pub(crate) struct TimelineTrimGesture {
+   |                   ^^^^^^^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> crates/motolii-ui/src/timeline_trim_gesture.rs:47:25
+    |
+ 46 | impl TimelineTrimGesture {
+    | ------------------------ associated items in this implementation
+ 47 |     pub(crate) const fn begin(
+    |                         ^^^^^
+...
+ 65 |     pub(crate) const fn layer(&self) -> LayerId {
+    |                         ^^^^^
+...
+ 69 |     pub(crate) const fn edge(&self) -> TimelineTrimEdge {
+    |                         ^^^^
+...
+ 73 |     pub(crate) const fn generation(&self) -> u64 {
+    |                         ^^^^^^^^^^
+...
+ 77 |     pub(crate) const fn initial_start(&self) -> RationalTime {
+    |                         ^^^^^^^^^^^^^
+...
+ 81 |     pub(crate) const fn initial_end(&self) -> RationalTime {
+    |                         ^^^^^^^^^^^
+...
+ 85 |     pub(crate) fn preview(
+    |                   ^^^^^^^
+...
+102 |     pub(crate) fn release(
+    |                   ^^^^^^^
+
+warning: constant `TIME_QUANTUM_DENOMINATOR` is never used
+  --> crates/motolii-ui/src/timeline_viewport_state.rs:10:7
+   |
+10 | const TIME_QUANTUM_DENOMINATOR: i64 = 1_000_000;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `DEFAULT_MIN_SPAN_SECONDS` is never used
+  --> crates/motolii-ui/src/timeline_viewport_state.rs:11:7
+   |
+11 | const DEFAULT_MIN_SPAN_SECONDS: f64 = 0.001;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `TimelineViewportStateError` is never used
+  --> crates/motolii-ui/src/timeline_viewport_state.rs:14:17
+   |
+14 | pub(crate) enum TimelineViewportStateError {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `TimelineViewportState` is never constructed
+  --> crates/motolii-ui/src/timeline_viewport_state.rs:27:19
+   |
+27 | pub(crate) struct TimelineViewportState {
+   |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> crates/motolii-ui/src/timeline_viewport_state.rs:35:19
+    |
+ 34 | impl TimelineViewportState {
+    | -------------------------- associated items in this implementation
+ 35 |     pub(crate) fn new(
+    |                   ^^^
+...
+ 57 |     pub(crate) fn viewport(&self) -> TimelineViewport {
+    |                   ^^^^^^^^
+...
+ 61 |     pub(crate) fn vertical_offset(&self) -> f32 {
+    |                   ^^^^^^^^^^^^^^^
+...
+ 66 |     pub(crate) fn select_overview(
+    |                   ^^^^^^^^^^^^^^^
+...
+ 87 |     pub(crate) fn pan_horizontal_pixels(
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+104 |     pub(crate) fn scroll_vertical_pixels(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+...
+125 |     pub(crate) fn zoom_at(
+    |                   ^^^^^^^
+...
+151 |     pub(crate) fn apply_wheel(
+    |                   ^^^^^^^^^^^
+...
+181 |     pub(crate) fn snap_time(
+    |                   ^^^^^^^^^
+...
+212 |     fn viewport_span_seconds(&self) -> f64 {
+    |        ^^^^^^^^^^^^^^^^^^^^^
+...
+216 |     fn set_viewport_seconds(
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `seconds_to_time` is never used
+   --> crates/motolii-ui/src/timeline_viewport_state.rs:253:4
+    |
+253 | fn seconds_to_time(seconds: f64) -> Result<RationalTime, TimelineViewportStateError> {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `emit` is never used
+ --> crates/motolii-ui/src/ui_numeric_trace.rs:3:15
+  |
+3 | pub(crate) fn emit(arguments: std::fmt::Arguments<'_>) {
+  |               ^^^^
+
+warning: function `enabled` is never used
+ --> crates/motolii-ui/src/ui_numeric_trace.rs:9:4
+  |
+9 | fn enabled() -> bool {
+  |    ^^^^^^^
+
+warning: `motolii-ui` (lib) generated 224 warnings (run `cargo fix --lib -p motolii-ui` to apply 6 suggestions)
+warning: unused import: `PointerPhase`
+  --> crates/motolii-shell-iced/src/stage_arbiter.rs:24:31
+   |
+24 | use motolii_ui::rerun_stage::{PointerPhase, StagePointerButton};
+   |                               ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `button_of` is never used
+  --> crates/motolii-shell-iced/src/stage_bridge.rs:68:4
+   |
+68 | fn button_of(button: mouse::Button) -> Option<StagePointerButton> {
+   |    ^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `composition_aspect` is never read
+  --> crates/motolii-shell-iced/src/stage_island.rs:82:5
+   |
+81 | pub struct StagePrimitive {
+   |            -------------- field in this struct
+82 |     composition_aspect: Option<f32>,
+   |     ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `StagePrimitive` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `width`, `height`, and `rgba` are never read
+   --> crates/motolii-shell-iced/src/stage_island.rs:196:5
+    |
+195 | struct ProbeFrame {
+    |        ---------- fields in this struct
+196 |     width: u32,
+    |     ^^^^^
+197 |     height: u32,
+    |     ^^^^^^
+198 |     rgba: Vec<u8>,
+    |     ^^^^
+
+warning: `motolii-shell-iced` (lib) generated 4 warnings (run `cargo fix --lib -p motolii-shell-iced` to apply 1 suggestion)
+warning: `motolii-shell-iced` (lib test) generated 3 warnings (3 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.10s
+     Running unittests src/lib.rs (target/debug/deps/motolii_shell_iced-a3eed581269725a3)
+
+running 13 tests
+test stage_arbiter::tests::modifiers_always_flow ... ok
+test stage_arbiter::tests::pass_through_forwards_hover_and_wheel ... ok
+test stage_arbiter::tests::a_press_inside_the_grab_region_starves_rerun_of_the_whole_gesture ... FAILED
+test stage_arbiter::tests::a_second_button_follows_the_current_owner ... FAILED
+test stage_arbiter::tests::leaving_the_window_resets_the_owner ... FAILED
+test stage_arbiter::tests::a_press_outside_the_grab_region_starts_an_orbit_that_rerun_sees ... FAILED
+test stage_bridge::tests::a_press_carries_the_cursor_position_in_widget_space ... FAILED
+test stage_bridge::tests::a_press_without_a_known_cursor_produces_nothing ... ok
+test stage_arbiter::tests::without_a_grab_region_grabbing_never_happens ... FAILED
+test stage_bridge::tests::cursor_moved_is_relative_to_the_widget_origin ... FAILED
+test stage_bridge::tests::leaving_the_window_cancels_the_pointer ... FAILED
+test stage_bridge::tests::modifiers_bits_match_the_stage_reading ... FAILED
+test stage_bridge::tests::wheel_lines_become_points_and_pixels_pass_through ... FAILED
+
+failures:
+
+---- stage_arbiter::tests::a_press_inside_the_grab_region_starves_rerun_of_the_whole_gesture stdout ----
+
+thread 'stage_arbiter::tests::a_press_inside_the_grab_region_starves_rerun_of_the_whole_gesture' (20787577) panicked at crates/motolii-shell-iced/src/stage_arbiter.rs:170:9:
+assertion `left == right` failed
+  left: Forward
+ right: Swallow
+
+---- stage_arbiter::tests::a_second_button_follows_the_current_owner stdout ----
+
+thread 'stage_arbiter::tests::a_second_button_follows_the_current_owner' (20787579) panicked at crates/motolii-shell-iced/src/stage_arbiter.rs:211:9:
+assertion `left == right` failed: 所有者は最初のボタンのまま
+  left: PassThrough
+ right: Orbiting { button: Primary }
+
+---- stage_arbiter::tests::leaving_the_window_resets_the_owner stdout ----
+
+thread 'stage_arbiter::tests::leaving_the_window_resets_the_owner' (20787580) panicked at crates/motolii-shell-iced/src/stage_arbiter.rs:248:9:
+assertion `left == right` failed
+  left: Orbiting { button: Primary }
+ right: PassThrough
+
+---- stage_arbiter::tests::a_press_outside_the_grab_region_starts_an_orbit_that_rerun_sees stdout ----
+
+thread 'stage_arbiter::tests::a_press_outside_the_grab_region_starts_an_orbit_that_rerun_sees' (20787578) panicked at crates/motolii-shell-iced/src/stage_arbiter.rs:152:9:
+assertion `left == right` failed: 掴み領域の外の押下で orbit 中になる
+  left: PassThrough
+ right: Orbiting { button: Primary }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- stage_bridge::tests::a_press_carries_the_cursor_position_in_widget_space stdout ----
+
+thread 'stage_bridge::tests::a_press_carries_the_cursor_position_in_widget_space' (20787584) panicked at crates/motolii-shell-iced/src/stage_bridge.rs:125:9:
+assertion `left == right` failed
+  left: []
+ right: [Pointer { phase: Down, button: Primary, x: 100.0, y: 50.0 }]
+
+---- stage_arbiter::tests::without_a_grab_region_grabbing_never_happens stdout ----
+
+thread 'stage_arbiter::tests::without_a_grab_region_grabbing_never_happens' (20787583) panicked at crates/motolii-shell-iced/src/stage_arbiter.rs:190:9:
+assertion `left == right` failed
+  left: PassThrough
+ right: Orbiting { button: Primary }
+
+---- stage_bridge::tests::cursor_moved_is_relative_to_the_widget_origin stdout ----
+
+thread 'stage_bridge::tests::cursor_moved_is_relative_to_the_widget_origin' (20787586) panicked at crates/motolii-shell-iced/src/stage_bridge.rs:110:9:
+assertion `left == right` failed
+  left: []
+ right: [Pointer { phase: Move, button: Primary, x: 50.0, y: 50.0 }]
+
+---- stage_bridge::tests::leaving_the_window_cancels_the_pointer stdout ----
+
+thread 'stage_bridge::tests::leaving_the_window_cancels_the_pointer' (20787587) panicked at crates/motolii-shell-iced/src/stage_bridge.rs:178:9:
+assertion failed: matches!(translated.as_slice(),
+    [StageInput::Pointer { phase: PointerPhase::Cancel, .. }])
+
+---- stage_bridge::tests::modifiers_bits_match_the_stage_reading stdout ----
+
+thread 'stage_bridge::tests::modifiers_bits_match_the_stage_reading' (20787588) panicked at crates/motolii-shell-iced/src/stage_bridge.rs:191:9:
+assertion `left == right` failed
+  left: 0
+ right: 1
+
+---- stage_bridge::tests::wheel_lines_become_points_and_pixels_pass_through stdout ----
+
+thread 'stage_bridge::tests::wheel_lines_become_points_and_pixels_pass_through' (20787589) panicked at crates/motolii-shell-iced/src/stage_bridge.rs:150:9:
+assertion `left == right` failed
+  left: []
+ right: [Scroll { delta_x: 0.0, delta_y: 120.0, x: 100.0, y: 50.0 }]
+
+
+failures:
+    stage_arbiter::tests::a_press_inside_the_grab_region_starves_rerun_of_the_whole_gesture
+    stage_arbiter::tests::a_press_outside_the_grab_region_starts_an_orbit_that_rerun_sees
+    stage_arbiter::tests::a_second_button_follows_the_current_owner
+    stage_arbiter::tests::leaving_the_window_resets_the_owner
+    stage_arbiter::tests::without_a_grab_region_grabbing_never_happens
+    stage_bridge::tests::a_press_carries_the_cursor_position_in_widget_space
+    stage_bridge::tests::cursor_moved_is_relative_to_the_widget_origin
+    stage_bridge::tests::leaving_the_window_cancels_the_pointer
+    stage_bridge::tests::modifiers_bits_match_the_stage_reading
+    stage_bridge::tests::wheel_lines_become_points_and_pixels_pass_through
+
+test result: FAILED. 3 passed; 10 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p motolii-shell-iced --lib`
+     Running unittests src/main.rs (target/debug/deps/motolii_shell_iced-ab011b15f58f61b5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/drive_drop.rs (target/debug/deps/drive_drop-8fde1c8702a06e84)
+
+running 4 tests
+test a_drop_without_a_project_says_to_make_one_first ... ok
+test a_drop_we_cannot_admit_says_why_and_leaves_the_document_alone ... ok
+test a_dropped_clip_lands_at_the_playhead_and_the_band_names_it ... ok
+test two_files_dropped_together_are_one_admission ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.90s
+
+     Running tests/drive_export.rs (target/debug/deps/drive_export-300beef98c013b4d)
+
+running 4 tests
+test the_start_screen_offers_no_export ... ok
+test an_export_dialog_that_is_cancelled_leaves_no_trace ... ok
+test pressing_export_starts_a_run_and_the_band_offers_cancel ... ok
+test cancel_is_dispatched_and_the_band_closes_the_run ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.23s
+
+     Running tests/drive_save_guard.rs (target/debug/deps/drive_save_guard-c53841d94a337b85)
+
+running 7 tests
+test saving_without_a_seat_says_what_to_do_first ... ok
+test closing_with_unsaved_changes_can_be_cancelled ... ok
+test an_unsaved_open_that_discards_does_not_save ... ok
+test an_unsaved_open_that_is_cancelled_keeps_the_seat ... ok
+test an_unsaved_open_saves_first_and_the_journal_shows_the_order ... ok
+test closing_after_discarding_or_when_clean_lets_the_window_go ... ok
+test cmd_s_saves_and_the_band_drops_the_unsaved_mark ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.04s
+
+     Running tests/drive_seat.rs (target/debug/deps/drive_seat-494dc622df57eff1)
+
+running 4 tests
+test every_report_lands_in_the_transcript_and_the_band_shows_the_latest ... ok
+test a_cancelled_dialog_leaves_no_trace ... ok
+test the_press_lands_in_the_journal_as_a_replayable_line ... ok
+test the_start_screen_seats_a_project_without_a_native_dialog ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+
+     Running tests/intent_gateway_fence.rs (target/debug/deps/intent_gateway_fence-ee89dfef222e4a72)
+
+running 4 tests
+test every_product_source_is_scanned ... ok
+test the_forbidden_names_are_real_public_api_of_motolii_ui ... ok
+test no_shell_code_touches_product_state_outside_the_gateway ... ok
+test the_only_door_is_shell_update ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/jsonl_logs.rs (target/debug/deps/jsonl_logs-834f7ef197804af8)
+
+running 3 tests
+test the_launch_arguments_name_both_logs ... ok
+test both_logs_append_only_what_is_new ... ok
+test the_status_log_writes_the_same_jsonl_shape_as_the_egui_runner ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.26s
+
+     Running tests/replay_oracle.rs (target/debug/deps/replay_oracle-6768e190fc8b8401)
+
+running 2 tests
+test a_session_with_stage_reports_replays_from_intents_alone ... FAILED
+test a_recorded_session_replays_into_the_same_shell_state ... ok
+
+failures:
+
+---- a_session_with_stage_reports_replays_from_intents_alone stdout ----
+
+thread 'a_session_with_stage_reports_replays_from_intents_alone' (20790482) panicked at crates/motolii-shell-iced/tests/replay_oracle.rs:179:5:
+Stage の報告は transcript には残る
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_session_with_stage_reports_replays_from_intents_alone
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.97s
+
+error: test failed, to rerun pass `-p motolii-shell-iced --test replay_oracle`
+     Running tests/stage_bind_groups_oracle.rs (target/debug/deps/stage_bind_groups_oracle-1dc00b7e2c91f659)
+
+running 2 tests
+test the_floor_constant_covers_what_re_renderer_actually_asks_for ... ok
+test the_bind_group_floor_reaches_iceds_real_device ... FAILED
+
+failures:
+
+---- the_bind_group_floor_reaches_iceds_real_device stdout ----
+
+thread 'the_bind_group_floor_reaches_iceds_real_device' (20791028) panicked at crates/motolii-shell-iced/tests/stage_bind_groups_oracle.rs:53:5:
+assertion `left == right` failed: 床を上げる前の iced device が上流既定の 2 ではない: []
+  left: None
+ right: Some(2)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    the_bind_group_floor_reaches_iceds_real_device
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s
+
+error: test failed, to rerun pass `-p motolii-shell-iced --test stage_bind_groups_oracle`
+     Running tests/stage_island_pixels.rs (target/debug/deps/stage_island_pixels-56c1f3bb0fb7298b)
+
+running 3 tests
+test a_drag_through_the_widget_reaches_the_stage_without_validation_errors ... FAILED
+test a_gesture_inside_the_dummy_grab_region_is_swallowed ... FAILED
+test the_known_frame_maps_head_on_through_the_iced_widget ... FAILED
+
+failures:
+
+---- a_drag_through_the_widget_reaches_the_stage_without_validation_errors stdout ----
+
+thread 'a_drag_through_the_widget_reaches_the_stage_without_validation_errors' (20791122) panicked at crates/motolii-shell-iced/tests/stage_island_pixels.rs:224:5:
+ドラッグ一式(move+press+12 move+release)が橋を渡っていない: 0 手
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- a_gesture_inside_the_dummy_grab_region_is_swallowed stdout ----
+
+thread 'a_gesture_inside_the_dummy_grab_region_is_swallowed' (20791123) panicked at crates/motolii-shell-iced/tests/stage_island_pixels.rs:292:5:
+掴み領域で始めたジェスチャが Rerun へ漏れている: swallow 0 手
+
+---- the_known_frame_maps_head_on_through_the_iced_widget stdout ----
+
+thread 'the_known_frame_maps_head_on_through_the_iced_widget' (20791124) panicked at crates/motolii-shell-iced/tests/stage_island_pixels.rs:160:9:
+assertion `left == right` failed: 左上の象限が Red でなく Other(占有 1.00)。正対 camera で写っていない(または絵が出ていない)。証拠: /private/tmp/motolii-m2-stage-island-20260818/crates/motolii-shell-iced/../../docs/reviews/evidence/iced-m2-stage-island/head-on-quadrants-wgpu.png
+  left: Other
+ right: Red
+
+
+failures:
+    a_drag_through_the_widget_reaches_the_stage_without_validation_errors
+    a_gesture_inside_the_dummy_grab_region_is_swallowed
+    the_known_frame_maps_head_on_through_the_iced_widget
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.56s
+
+error: test failed, to rerun pass `-p motolii-shell-iced --test stage_island_pixels`
+     Running tests/stage_reports.rs (target/debug/deps/stage_reports-98c87845d7c5fac6)
+
+running 2 tests
+test a_stage_report_lands_in_the_transcript_but_never_the_journal ... FAILED
+test a_broken_probe_frame_is_reported_not_swallowed ... FAILED
+
+failures:
+
+---- a_stage_report_lands_in_the_transcript_but_never_the_journal stdout ----
+
+thread 'a_stage_report_lands_in_the_transcript_but_never_the_journal' (20791225) panicked at crates/motolii-shell-iced/tests/stage_reports.rs:30:5:
+assertion `left == right` failed: Stage の報告は transcript に**全部**残る
+  left: []
+ right: ["stage: だめでした", "stage: これもだめでした"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- a_broken_probe_frame_is_reported_not_swallowed stdout ----
+
+thread 'a_broken_probe_frame_is_reported_not_swallowed' (20791224) panicked at crates/motolii-shell-iced/tests/stage_reports.rs:91:5:
+壊れた評価済みフレームが報告になっていない。実際の報告: []
+
+
+failures:
+    a_broken_probe_frame_is_reported_not_swallowed
+    a_stage_report_lands_in_the_transcript_but_never_the_journal
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.97s
+
+error: test failed, to rerun pass `-p motolii-shell-iced --test stage_reports`
+   Doc-tests motolii_shell_iced
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 5 targets failed:
+    `-p motolii-shell-iced --lib`
+    `-p motolii-shell-iced --test replay_oracle`
+    `-p motolii-shell-iced --test stage_bind_groups_oracle`
+    `-p motolii-shell-iced --test stage_island_pixels`
+    `-p motolii-shell-iced --test stage_reports`

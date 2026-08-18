@@ -12,6 +12,10 @@
 use motolii_shell_iced::{view, IntentLog, Launch, Message, NativePrompts, Outcome, Shell, StatusLog};
 
 fn main() -> iced::Result {
+    // Stage 島(Rerun renderer 同居)のための bind group 床。**窓を建てる前**で
+    // なければ効かない(iced fork seam 2。台帳 §3)。
+    motolii_shell_iced::stage_island::install_rerun_device_floor();
+
     let launch = match Launch::parse(std::env::args().skip(1)) {
         Ok(launch) => launch,
         Err(reason) => {

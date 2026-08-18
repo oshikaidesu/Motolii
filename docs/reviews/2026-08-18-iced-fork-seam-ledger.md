@@ -149,6 +149,20 @@ iced_wgpu::device_limits::request_min_max_bind_groups(4);
 常設 oracle になる。それまでは「rev を上げたら spike を手で回す」しかない。
 この穴は M-2 の受け入れ条件に含める。
 
+> **追記(同日、M-2 レーン): この穴は塞がった。**
+> `crates/motolii-shell-iced/tests/stage_bind_groups_oracle.rs` が常設の実効 oracle である。
+> iced の headless renderer(fork の `renderer::Headless` 実装 = §3 の呼び出し箇所)で
+> 実際に device を建て、`Pipeline::new` が読み戻した `device.limits().max_bind_groups` を
+> 審判する。実測(2026-08-18, macOS / Metal):
+> **床を上げる前 = 2(上流既定)/ `request_min_max_bind_groups(4)` 後 = 4**。
+> 併設テストが、定数 4 が `re_renderer` の実要求
+> (`DeviceCaps::from_adapter(..).device_descriptor()`)を下回っていないことも
+> adapter 実物で照合する。rev bump の検収はこの test binary を回すだけでよい。
+> §6 の「`request_min_max_bind_groups` の実効」も同レーンで実証済み —
+> 床を上げた device の上で `re_renderer`(`EmbeddedSpatialStage`)が
+> 4象限フレームを合成し、ドラッグ15手でも検証層エラー 0
+> (`docs/reviews/evidence/iced-m2-stage-island/`)。
+
 ## 5. 上流 PR 候補としての位置
 
 両 seam とも**上流に投げれば消える**種類のもので、fork を永続させる理由ではない。
