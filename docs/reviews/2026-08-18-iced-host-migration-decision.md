@@ -58,7 +58,19 @@ plugin(D2・journal・評価器)。**UiIntent 背骨は設計どおり持ち越�
 - **M-2 Stage 島**: 入力ブリッジ probe を製品 adapter 化(camera seat・正対既定・
   transcript 相当の失敗報告)
 - **M-3 Timeline**: spike を種に Document へ結線(prepare_*/D2 は既存。egui 版の
-  意味関数・oracle は移植元)。波形帯・audio seat の載せ替え
+  意味関数・oracle は移植元)。波形帯・audio seat の載せ替え — **完了**(2026-08-18)。
+  `motolii-shell-iced/src/timeline/` に semantics(移植した意味関数)/ pane
+  (ジェスチャ状態機械)/ canvas(絵と翻訳)/ waveform(座席の写し。縮約は
+  `WaveformPeaks` を共用)。**編集は全部 `UiIntent` 経由**: Timeline の編集 intent
+  (`SelectLayer` 〜 `StepPlayhead`)を共有ゲートウェイ(`blitz_shell::intent`)へ
+  実装し、egui pane の `project_mut()` の穴は新殻に持ち込まなかった
+  (柵: `tests/intent_gateway_fence.rs` が `editor_mut(` を禁止)。
+  ドラッグは **release の1件だけが intent**(preview は pane、Document は release
+  まで無傷 — Esc=復元が「何も起きていない」の同義になる。Skia 側 transient
+  lifecycle と同じ判断で、egui の live-commit とは違う)。運転席は
+  `tests/drive_timeline.rs` の 14本(Q1 文法・複数選択の塊クランプ・scrub・
+  コマ送り・zoom/pan・intent 列 replay・Message 列 replay(表示状態)・波形帯)。
+  zoom / pan / scroll は view 状態なので intent にせず、再現は Message 列 replay が持つ
 - **M-4 Browser / Inspector**: iced widget 化(標準 widget 領域 = iced の得意面)
 - **M-5 切替**: UX 台本 P1〜P5 が iced shell で通り、replay oracle・フェンス同等物が
   green になったら既定 bin を切替。egui shell は当面 `--legacy` で残し、
