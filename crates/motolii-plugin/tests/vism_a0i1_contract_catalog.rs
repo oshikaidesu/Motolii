@@ -5,7 +5,8 @@ use std::sync::Arc;
 use motolii_eval::Value;
 use motolii_plugin::reference::{reference_catalog, register_reference_plugins, CLEAR_FILTER};
 use motolii_plugin::{
-    DomainError, F64Domain, FilterPlugin, MigrationOp, MigrationPlanError, MigrationStep, NodeDesc,
+    DomainError, ElementType, F64Domain, FilterPlugin, MigrationOp, MigrationPlanError,
+    MigrationStep, NodeDesc,
     ParamDef, PluginCatalogBuilder, PluginContract, PluginContractError, PluginId, PluginKind,
     PluginRegistry, PluginRuntime, PluginRuntimeError, ValueType,
 };
@@ -133,6 +134,152 @@ fn catalog_rejects_non_f64_domain_and_non_finite_default() {
         err,
         PluginContractError::InvalidDomain {
             reason: DomainError::NonFiniteDefault,
+            ..
+        }
+    ));
+}
+
+fn list_param(id: &'static str, element: ElementType, default: Value) -> ParamDef {
+    ParamDef {
+        id,
+        value_type: ValueType::List(element),
+        default,
+        f64_domain: None,
+    }
+}
+
+fn register_one(id: &'static str, param: ParamDef) -> Result<(), PluginContractError> {
+    PluginCatalogBuilder::new().register(filter_contract(id, 1, vec![param]))
+}
+
+/// 決定 2.1: 要素は既存型に限る。長さは plugin 側の関心なので空listも通る。
+#[test]
+fn catalog_accepts_list_of_existing_types() {
+    register_one(
+        "test.filter.list_f64",
+        list_param(
+            "positions",
+            ElementType::F64,
+            Value::List(vec![Value::F64(0.0), Value::F64(1.0)]),
+        ),
+    )
+    .unwrap();
+
+    register_one(
+        "test.filter.list_color",
+        list_param(
+            "colors",
+            ElementType::Color,
+            Value::List(vec![Value::Color([0.0, 0.0, 0.0, 1.0])]),
+        ),
+    )
+    .unwrap();
+
+    register_one(
+        "test.filter.list_empty",
+        list_param("stops", ElementType::F64, Value::List(Vec::new())),
+    )
+    .unwrap();
+}
+
+/// 決定 2.1: 入れ子は許さない。`ElementType` が `List` を持たないので、
+/// 入れ子の値はどの `ValueType` にも一致せず default 検証で落ちる。
+#[test]
+fn catalog_rejects_nested_list_default() {
+    let err = register_one(
+        "test.filter.nested",
+        list_param(
+            "nested",
+            ElementType::F64,
+            Value::List(vec![Value::List(vec![Value::F64(0.0)])]),
+        ),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        PluginContractError::InvalidDomain {
+            reason: DomainError::DefaultTypeMismatch,
+            ..
+        }
+    ));
+}
+
+/// 要素の型が宣言と違う list は default 検証で落ちる。
+#[test]
+fn catalog_rejects_list_with_wrong_element_type() {
+    let err = register_one(
+        "test.filter.wrong_element",
+        list_param(
+            "positions",
+            ElementType::F64,
+            Value::List(vec![Value::F64(0.0), Value::Vec2([0.0, 1.0])]),
+        ),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        PluginContractError::InvalidDomain {
+            reason: DomainError::DefaultTypeMismatch,
+            ..
+        }
+    ));
+}
+
+/// 値の健全性は要素へ降りる(domain ではないので 2.5 の対象外)。
+#[test]
+fn catalog_rejects_unhealthy_list_elements() {
+    let err = register_one(
+        "test.filter.list_non_finite",
+        list_param(
+            "positions",
+            ElementType::F64,
+            Value::List(vec![Value::F64(f64::NAN)]),
+        ),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        PluginContractError::InvalidDomain {
+            reason: DomainError::NonFiniteDefault,
+            ..
+        }
+    ));
+
+    let err = register_one(
+        "test.filter.list_color_range",
+        list_param(
+            "colors",
+            ElementType::Color,
+            Value::List(vec![Value::Color([0.0, 0.0, 0.0, 2.0])]),
+        ),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        PluginContractError::InvalidDomain {
+            reason: DomainError::ColorDefaultOutsideUnitInterval,
+            ..
+        }
+    ));
+}
+
+/// 決定 2.5: `f64_domain` は `ValueType::F64` 以外で `None`。`List(F64)` も含む。
+#[test]
+fn catalog_rejects_f64_domain_on_list() {
+    let err = register_one(
+        "test.filter.list_domain",
+        ParamDef {
+            id: "positions",
+            value_type: ValueType::List(ElementType::F64),
+            default: Value::List(vec![Value::F64(0.5)]),
+            f64_domain: Some(F64Domain::unit()),
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        PluginContractError::InvalidDomain {
+            reason: DomainError::NonF64Parameter,
             ..
         }
     ));

@@ -27,6 +27,43 @@ pub enum PluginKind {
     ScriptWasm,
 }
 
+/// `List` の要素型。要素は既存のスカラ・ベクトル型に限る。
+///
+/// `ValueType`と別の型にしてあるのは、`List`の入れ子を**型で**禁じるためである
+/// (決定 2.1「`List`の入れ子は許さない」)。`List(Box<ValueType>)`にすると
+/// `Copy`が実装できず(`E0204`)、`as_str`が`&'static str`を返せなくなる。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ElementType {
+    F64,
+    Vec2,
+    Vec3,
+    Color,
+    AssetRef,
+}
+
+impl ElementType {
+    pub fn as_str(self) -> &'static str {
+        self.as_value_type().as_str()
+    }
+
+    /// 要素型を単体の`ValueType`として見る。
+    pub fn as_value_type(self) -> ValueType {
+        match self {
+            ElementType::F64 => ValueType::F64,
+            ElementType::Vec2 => ValueType::Vec2,
+            ElementType::Vec3 => ValueType::Vec3,
+            ElementType::Color => ValueType::Color,
+            ElementType::AssetRef => ValueType::AssetRef,
+        }
+    }
+}
+
+impl std::fmt::Display for ElementType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ValueType {
     F64,
@@ -35,6 +72,8 @@ pub enum ValueType {
     Color,
     /// アセットID参照(F-10予約。実装結線はM2 D1)。
     AssetRef,
+    /// 同種のものが可変個並ぶ型。長さの検査は plugin 側の責任。
+    List(ElementType),
 }
 
 impl ValueType {
@@ -45,6 +84,11 @@ impl ValueType {
             ValueType::Vec3 => "Vec3",
             ValueType::Color => "Color",
             ValueType::AssetRef => "AssetRef",
+            ValueType::List(ElementType::F64) => "List<F64>",
+            ValueType::List(ElementType::Vec2) => "List<Vec2>",
+            ValueType::List(ElementType::Vec3) => "List<Vec3>",
+            ValueType::List(ElementType::Color) => "List<Color>",
+            ValueType::List(ElementType::AssetRef) => "List<AssetRef>",
         }
     }
 }
@@ -63,18 +107,34 @@ pub fn value_type_name(value: &Value) -> &'static str {
         Value::Vec3(_) => "Vec3",
         Value::Color(_) => "Color",
         Value::AssetRef(_) => "AssetRef",
+        // 要素型は先頭要素から名乗る。空listは要素型を名乗れない。
+        Value::List(items) => match items.first() {
+            Some(Value::F64(_)) => "List<F64>",
+            Some(Value::Vec2(_)) => "List<Vec2>",
+            Some(Value::Vec3(_)) => "List<Vec3>",
+            Some(Value::Color(_)) => "List<Color>",
+            Some(Value::AssetRef(_)) => "List<AssetRef>",
+            Some(Value::List(_)) => "List<List>",
+            None => "List",
+        },
     }
 }
 
 pub fn value_matches_type(value_type: ValueType, value: &Value) -> bool {
-    matches!(
-        (value_type, value),
-        (ValueType::F64, Value::F64(_))
-            | (ValueType::Vec2, Value::Vec2(_))
-            | (ValueType::Vec3, Value::Vec3(_))
-            | (ValueType::Color, Value::Color(_))
-            | (ValueType::AssetRef, Value::AssetRef(_))
-    )
+    match (value_type, value) {
+        // 空listは長さの問題であって型の問題ではないので、どの要素型にも一致する。
+        (ValueType::List(element), Value::List(items)) => items
+            .iter()
+            .all(|item| value_matches_type(element.as_value_type(), item)),
+        _ => matches!(
+            (value_type, value),
+            (ValueType::F64, Value::F64(_))
+                | (ValueType::Vec2, Value::Vec2(_))
+                | (ValueType::Vec3, Value::Vec3(_))
+                | (ValueType::Color, Value::Color(_))
+                | (ValueType::AssetRef, Value::AssetRef(_))
+        ),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -314,20 +374,11 @@ fn validate_param_contract(
     if !value_matches_type(param.value_type, &param.default) {
         return Err(reject(DomainError::DefaultTypeMismatch));
     }
-    let finite = match &param.default {
-        Value::F64(value) => value.is_finite(),
-        Value::Vec2(value) => value.iter().all(|v| v.is_finite()),
-        Value::Vec3(value) => value.iter().all(|v| v.is_finite()),
-        Value::Color(value) => value.iter().all(|v| v.is_finite()),
-        Value::AssetRef(_) => true,
-    };
-    if !finite {
+    if !value_is_finite(&param.default) {
         return Err(reject(DomainError::NonFiniteDefault));
     }
-    if let Value::Color(value) = &param.default {
-        if value.iter().any(|v| !(0.0..=1.0).contains(v)) {
-            return Err(reject(DomainError::ColorDefaultOutsideUnitInterval));
-        }
+    if !colors_in_unit_interval(&param.default) {
+        return Err(reject(DomainError::ColorDefaultOutsideUnitInterval));
     }
     let Some(domain) = param.f64_domain else {
         return Ok(());
@@ -359,6 +410,26 @@ fn validate_param_contract(
         return Err(reject(DomainError::DefaultOutsideDomain));
     }
     Ok(())
+}
+
+/// `List`は要素へ降りて検査する(入れ子は`value_matches_type`が既に弾いている)。
+fn value_is_finite(value: &Value) -> bool {
+    match value {
+        Value::F64(value) => value.is_finite(),
+        Value::Vec2(value) => value.iter().all(|v| v.is_finite()),
+        Value::Vec3(value) => value.iter().all(|v| v.is_finite()),
+        Value::Color(value) => value.iter().all(|v| v.is_finite()),
+        Value::AssetRef(_) => true,
+        Value::List(items) => items.iter().all(value_is_finite),
+    }
+}
+
+fn colors_in_unit_interval(value: &Value) -> bool {
+    match value {
+        Value::Color(value) => value.iter().all(|v| (0.0..=1.0).contains(v)),
+        Value::List(items) => items.iter().all(colors_in_unit_interval),
+        _ => true,
+    }
 }
 
 fn validate_migration_plan(contract: &PluginContract) -> Result<(), PluginContractError> {

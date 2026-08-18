@@ -10,6 +10,9 @@ pub enum Value {
     Color([f64; 4]),
     /// アセットID参照(F-10 / D1h)。永続層の`AssetId`生値と同一。補間なし。
     AssetRef(u64),
+    /// 同種のものの並び。keyframeはlist全体で1キーとし、補間は要素ごとに走る。
+    /// 要素が既存型に限られること(入れ子の禁止)は`ValueType`側の検証が担う。
+    List(Vec<Value>),
 }
 
 impl Value {
@@ -26,7 +29,21 @@ impl Value {
             (Value::Color(x), Value::Color(y)) => {
                 Value::Color(std::array::from_fn(|i| x[i] + (y[i] - x[i]) * u))
             }
+            // 長さが同じなら要素ごと、違えば補間せずaを返す(バリアント不一致と同じ扱い)。
+            (Value::List(x), Value::List(y)) if x.len() == y.len() => Value::List(
+                x.iter()
+                    .zip(y.iter())
+                    .map(|(x, y)| Value::lerp(x, y, u))
+                    .collect(),
+            ),
             _ => a.clone(),
+        }
+    }
+
+    pub fn as_list(&self) -> Option<&[Value]> {
+        match self {
+            Value::List(items) => Some(items),
+            _ => None,
         }
     }
 
@@ -81,5 +98,28 @@ mod tests {
         let a = Value::F64(1.0);
         let b = Value::Vec2([0.0, 0.0]);
         assert_eq!(Value::lerp(&a, &b, 0.5), a);
+    }
+
+    #[test]
+    fn lerp_list_of_equal_length_interpolates_each_element() {
+        let a = Value::List(vec![Value::F64(0.0), Value::Color([0.0, 0.0, 0.0, 0.0])]);
+        let b = Value::List(vec![Value::F64(10.0), Value::Color([1.0, 1.0, 1.0, 1.0])]);
+        assert_eq!(
+            Value::lerp(&a, &b, 0.5),
+            Value::List(vec![Value::F64(5.0), Value::Color([0.5, 0.5, 0.5, 0.5])])
+        );
+    }
+
+    #[test]
+    fn lerp_list_of_differing_length_returns_first() {
+        let a = Value::List(vec![Value::F64(0.0)]);
+        let b = Value::List(vec![Value::F64(10.0), Value::F64(20.0)]);
+        assert_eq!(Value::lerp(&a, &b, 0.5), a);
+    }
+
+    #[test]
+    fn lerp_empty_lists_stay_empty() {
+        let a = Value::List(Vec::new());
+        assert_eq!(Value::lerp(&a, &a, 0.5), a);
     }
 }

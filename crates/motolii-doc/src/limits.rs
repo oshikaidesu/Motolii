@@ -542,6 +542,7 @@ mod tests {
             tracks: Vec::new(),
             next_stable_id: Default::default(),
             effect_definitions: Vec::new(),
+            locators: Vec::new(),
             extra: Map::new(),
         }
     }

@@ -23,7 +23,8 @@ pub use context::{
     TemporalFootprint, TextureRef,
 };
 pub use contract::{
-    validate_node_desc, value_matches_type, value_type_name, DomainError, F64Domain, MigrationOp,
+    validate_node_desc, value_matches_type, value_type_name, DomainError, ElementType, F64Domain,
+    MigrationOp,
     MigrationPlanError, MigrationStep, NodeDesc, ParamDef, PluginCatalog, PluginCatalogBuilder,
     PluginContract, PluginContractError, PluginError, PluginId, PluginKind, ValueType,
 };

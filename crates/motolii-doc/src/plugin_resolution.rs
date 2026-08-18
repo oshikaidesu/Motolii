@@ -4,12 +4,13 @@ use std::collections::BTreeMap;
 
 use motolii_eval::Value;
 use motolii_plugin::{
-    F64Domain, MigrationOp, ParamDef, PluginCatalog, PluginKind, PluginRuntime, ValueType,
+    ElementType, F64Domain, MigrationOp, ParamDef, PluginCatalog, PluginKind, PluginRuntime,
+    ValueType,
 };
 
 use crate::doc_value::DocValue;
 use crate::param::DocParam;
-use crate::param_expect::{ExpectedValueType, ParamConstraints};
+use crate::param_expect::{ExpectedElementType, ExpectedValueType, ParamConstraints};
 use crate::schema::{ClipSource, TrackItem};
 use crate::stable_id::EffectDefinitionId;
 use crate::validate::{validate_param, DocumentError};
@@ -455,6 +456,13 @@ fn constraints_for(param: &ParamDef) -> ParamConstraints {
         ValueType::Vec3 => ExpectedValueType::Vec3,
         ValueType::Color => ExpectedValueType::Color,
         ValueType::AssetRef => ExpectedValueType::AssetRef,
+        ValueType::List(element) => ExpectedValueType::List(match element {
+            ElementType::F64 => ExpectedElementType::F64,
+            ElementType::Vec2 => ExpectedElementType::Vec2,
+            ElementType::Vec3 => ExpectedElementType::Vec3,
+            ElementType::Color => ExpectedElementType::Color,
+            ElementType::AssetRef => ExpectedElementType::AssetRef,
+        }),
     };
     let mut constraints = if expected == ExpectedValueType::Color {
         ParamConstraints::color()
@@ -475,16 +483,23 @@ fn constraints_for(param: &ParamDef) -> ParamConstraints {
 }
 
 fn default_doc_value(plugin_id: &str, param: &ParamDef) -> Result<DocValue, DocumentPluginError> {
-    match &param.default {
-        Value::F64(value) => Ok(DocValue::F64(*value)),
-        Value::Vec2(value) => Ok(DocValue::Vec2(*value)),
-        Value::Vec3(value) => Ok(DocValue::Vec3(*value)),
-        Value::Color(value) => Ok(DocValue::Color(*value)),
-        Value::AssetRef(value) => Ok(DocValue::AssetRef(AssetId::from_raw(*value))),
-        #[allow(unreachable_patterns)]
-        _ => Err(DocumentPluginError::InvalidDefault {
-            plugin_id: plugin_id.to_string(),
-            param: param.id.to_string(),
-        }),
+    doc_value_from_eval(&param.default).ok_or_else(|| DocumentPluginError::InvalidDefault {
+        plugin_id: plugin_id.to_string(),
+        param: param.id.to_string(),
+    })
+}
+
+fn doc_value_from_eval(value: &Value) -> Option<DocValue> {
+    match value {
+        Value::F64(value) => Some(DocValue::F64(*value)),
+        Value::Vec2(value) => Some(DocValue::Vec2(*value)),
+        Value::Vec3(value) => Some(DocValue::Vec3(*value)),
+        Value::Color(value) => Some(DocValue::Color(*value)),
+        Value::AssetRef(value) => Some(DocValue::AssetRef(AssetId::from_raw(*value))),
+        Value::List(items) => items
+            .iter()
+            .map(doc_value_from_eval)
+            .collect::<Option<Vec<_>>>()
+            .map(DocValue::List),
     }
 }
