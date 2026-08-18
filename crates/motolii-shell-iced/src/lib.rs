@@ -37,6 +37,16 @@
 //!   調停3状態([`stage_arbiter`]: 素通し / orbit 中 / 掴み中)を通り、
 //!   失敗は [`Message::StageReported`] として帯へ出る。bind group 床
 //!   (iced fork seam 2)の実効 oracle も常設(`tests/stage_bind_groups_oracle.rs`)
+//! - **`--project <path>`**([`launch::Launch::project`])。起動時にその project を
+//!   開いて座らせる。開けなければ**窓は開いたまま**理由を帯へ出す — egui 版
+//!   `run_blitz_shell` の起動失敗(プロセスごと落ちる)とは意図的に違う
+//! - **引数なし起動の「続きが開く」**([`resume::decide_resume`])。egui 側 wave D
+//!   の `motolii_ui::last_project` / `resume_last_project` を**共用**する(2つ目の
+//!   判断を作らない)。覚えていない(初回)は何も言わずスタート画面、覚えていたのに
+//!   開けない(消された・他プロセスが握っている)は理由を帯へ出してからスタート画面。
+//!   `--project` 指定時はこの分岐に入らない。座り直しが成立するたび、次の引数なし
+//!   起動が開ける先を覚える経路も egui 版と**同じ座席**(`ShellGateway::remembering`)
+//!   を通る
 //!
 //! ## M-4 統合 wave で加わったもの
 //!
@@ -63,7 +73,6 @@
 //! - Browser の preview 再生・検索/フィルタ・Collections・Timeline への DnD 受け
 //!   (M-4a の非目標)
 //! - Stage / Timeline からの layer 選択 → Inspector 反映。M-3 後の統合 wave 第2弾
-//! - 引数なし起動の「続きが開く」(egui 側 wave D の `last_project`)。M-2 以降
 //! - egui。**この crate に egui 系の直接依存は1つも無い**
 //!   (柵: `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs` の
 //!   `UI_TOOLKIT_CRATE_ALLOWLIST` にこの crate を**入れていない**)
@@ -78,6 +87,7 @@ mod jsonl;
 mod launch;
 mod message;
 mod prompts;
+pub mod resume;
 mod shell;
 pub mod stage_arbiter;
 pub mod stage_bridge;
@@ -98,6 +108,7 @@ pub use intent_log::IntentLog;
 pub use launch::Launch;
 pub use message::Message;
 pub use prompts::{NativePrompts, ScriptedPrompts, ShellPrompts};
+pub use resume::decide_resume;
 pub use shell::{Outcome, Shell};
 pub use status_log::StatusLog;
 pub use view::view;

@@ -295,8 +295,12 @@ pub struct ShellGateway {
 ///
 /// 変種の大きさは揃わない(座席は OS lock と writer を抱える)が、この値は
 /// 起動時に1個だけ作って1回 move するだけなので box に包む意味が無い。
+///
+/// **公開している**理由: iced shell も同じ3択を通る(2026-08-19 M-2: `--project` /
+/// 引数なし起動の「続きが開く」)。egui 版と同じ言い方(黙って fixture にも
+/// 空の窓にも落ちない)を2つ目の型で複製させない。
 #[allow(clippy::large_enum_variant)]
-pub(crate) enum Resume {
+pub enum Resume {
     /// 覚えていた project が開けた。`--project` 起動と同じ座り方をする。
     Seated(ProjectSeat),
     /// 覚えていない(初回起動)。何も言わずスタート画面。
@@ -311,7 +315,10 @@ pub(crate) enum Resume {
 /// (消された・別プロセスが握っている・壊れている)は、理由と次の一手を持った
 /// `Explained` にする — `--project` が開けなかった時に起動失敗として理由を出す
 /// のと同じ原則を、自動 open の側でも守る。
-pub(crate) fn resume_last_project(store: Option<&Path>) -> Resume {
+///
+/// **公開している**理由: iced shell の引数なし起動もこの判断を**そのまま**呼ぶ
+/// (2026-08-19 M-2)。判断を2つ目に実装しない。
+pub fn resume_last_project(store: Option<&Path>) -> Resume {
     let Some(store) = store else {
         return Resume::Nothing;
     };
@@ -346,7 +353,11 @@ impl ShellGateway {
 
     /// 座り直しを覚える先(user 設定層の path)を渡す。**渡さない限り何も書かない** —
     /// replay も単体テストも、利用者の「最後に開いていた project」を踏まない。
-    pub(crate) fn remembering(mut self, store: Option<PathBuf>) -> Self {
+    ///
+    /// **公開している**理由: iced shell も窓を開く経路(`main.rs`)だけがここへ
+    /// `default_last_project_path()` を渡す(2026-08-19 M-2)。egui 版
+    /// `BlitzShellApp::with_seat` と同じ境目を共用する。
+    pub fn remembering(mut self, store: Option<PathBuf>) -> Self {
         self.last_project = store;
         self
     }
@@ -354,7 +365,10 @@ impl ShellGateway {
     /// 引数なし起動の座席。[`resume_last_project`] の3択を受けて、座るか・
     /// 理由を言うかを決める。**座る道は `--project` と同じ**([`Self::seated`])なので、
     /// 自動 open も journal の第1行に `OpenProject` を持つ。
-    pub(crate) fn resumed(transcript: ShellTranscript, resume: Resume) -> Self {
+    ///
+    /// **公開している**理由: iced shell の `--project` 起動・引数なし起動が
+    /// どちらもここを通る(2026-08-19 M-2。`motolii_shell_iced::resume::decide_resume`)。
+    pub fn resumed(transcript: ShellTranscript, resume: Resume) -> Self {
         match resume {
             Resume::Seated(seat) => Self::seated(transcript, seat),
             Resume::Nothing => Self::new(transcript),

@@ -15,6 +15,14 @@
 //! M-3 から Timeline の編集がある。編集の唯一の書き口
 //! (`ProjectSeat::editor_mut`)を禁止リストへ足したので、canvas / pane が
 //! intent を通らずにエディタを動かす道は名前ごと塞がっている。
+//!
+//! M-2(2026-08-19)で `resume.rs` が加わった。`--project` の解決は**窓より前**、
+//! journal がまだ無い時点の話で、egui 版 `blitz_shell/runner.rs` が同じ理由で
+//! `ProjectSeat::open` を直接呼んでいるのと同じ扱いである(あちらの fence は
+//! この禁止をそもそも持たない)。開いた座席は `ShellGateway::seated` /
+//! `resumed` に渡され、journal の第1行に `OpenProject` を合成で持つので、
+//! journal を迂回してはいない。[`BOOT_TIME_PROJECT_OPEN`] がこの1箇所だけを
+//! 名指しで免除する。
 
 /// この crate の製品ソース全部。**足したらここへ足す**(走査漏れは静かな穴になる)。
 const SCANNED: &[(&str, &str)] = &[
@@ -28,6 +36,7 @@ const SCANNED: &[(&str, &str)] = &[
     ("launch.rs", include_str!("../src/launch.rs")),
     ("message.rs", include_str!("../src/message.rs")),
     ("prompts.rs", include_str!("../src/prompts.rs")),
+    ("resume.rs", include_str!("../src/resume.rs")),
     ("shell.rs", include_str!("../src/shell.rs")),
     ("stage_arbiter.rs", include_str!("../src/stage_arbiter.rs")),
     ("stage_bridge.rs", include_str!("../src/stage_bridge.rs")),
@@ -89,6 +98,11 @@ const FORBIDDEN: &[(&str, &str)] = &[
 /// という主張を機械で保つ。ここが増えたら殻の設計が変わったということ。
 const GATEWAY_CALL: &str = "self.gateway.dispatch(";
 
+/// `ProjectSeat::open(` 1つだけを免除する file。**窓より前**(journal が無い時点)
+/// の `--project` 解決がここに在り、egui 版 `runner.rs` と同じ理由で正当
+/// (module doc 参照)。他の禁止パターンはここにも普通に効く。
+const BOOT_TIME_PROJECT_OPEN: &[&str] = &["resume.rs"];
+
 fn product_source(source: &str) -> String {
     let body = match source.find("#[cfg(test)]") {
         Some(at) => &source[..at],
@@ -106,6 +120,9 @@ fn no_shell_code_touches_product_state_outside_the_gateway() {
     for (name, source) in SCANNED {
         let product = product_source(source);
         for (pattern, replacement) in FORBIDDEN {
+            if *pattern == "ProjectSeat::open(" && BOOT_TIME_PROJECT_OPEN.contains(name) {
+                continue;
+            }
             let hits = product.matches(pattern).count();
             if hits > 0 {
                 breaches.push(format!(

@@ -2,14 +2,23 @@
 //!
 //! ```text
 //! cargo run -p motolii-shell-iced
+//! cargo run -p motolii-shell-iced -- --project /path/to/project.json
 //! cargo run -p motolii-shell-iced -- --intent-log /tmp/intents.jsonl
 //! cargo run -p motolii-shell-iced -- --status-log /tmp/statuses.jsonl
 //! ```
 //!
+//! `--project` が無い通常起動は**最後に開いていた project へ座り直す**
+//! (egui 側 wave D の `last_project` を共用。`resume` モジュール参照)。
+//!
 //! egui shell(`cargo run -p motolii-ui --bin motolii-blitz-shell`)は**そのまま在る**。
 //! 既定 bin の切り替えは M-5 で、UX 台本が iced 側で通ってからである。
 
-use motolii_shell_iced::{view, IntentLog, Launch, Message, NativePrompts, Outcome, Shell, StatusLog};
+use std::path::PathBuf;
+
+use motolii_shell_iced::{
+    decide_resume, view, IntentLog, Launch, Message, NativePrompts, Outcome, Shell, StatusLog,
+};
+use motolii_ui::blitz_shell::Resume;
 
 fn main() -> iced::Result {
     // Stage 島(Rerun renderer 同居)のための bind group 床。**窓を建てる前**で
@@ -34,13 +43,32 @@ fn main() -> iced::Result {
         }
     };
 
+    // 「最後に開いていた project」の置き場(palette settings と同じ家)。
+    // `--project` が来ていればそちらを優先し、無ければここへ座り直す(F-01)。
+    // 開けない `--project` も、消えていた覚え project も、**窓は開いたまま**
+    // 理由が帯へ出る(`decide_resume` / `ShellGateway::resumed` の3択)。
+    let last_project = motolii_ui::default_last_project_path();
+    let resume = decide_resume(&launch, last_project.as_deref());
+
     // `BootFn` は `Fn() -> _`(**`FnOnce` ではない**)なので、move で握った
-    // 記録先をそのまま渡せない。1回しか呼ばれない物を1回だけ渡す口として
-    // `RefCell::take` を使う。2度目が来たら記録先は `None` になる — 起きないはずの
-    // ことを黙って握り潰すのではなく、記録しないことがそのまま見えるようにしてある。
-    let logs = std::cell::RefCell::new(Some(logs));
+    // 記録先/座席をそのまま渡せない。1回しか呼ばれない物を1回だけ渡す口として
+    // `RefCell::take` を使う。2度目が来たら空の Boot になる — 起きないはずの
+    // ことを黙って握り潰すのではなく、記録しない・座らないことがそのまま見えるように
+    // してある。
+    let boot = std::cell::RefCell::new(Some(Boot {
+        logs,
+        resume,
+        last_project,
+    }));
     iced::application(
-        move || Host::new(logs.borrow_mut().take().unwrap_or_default()),
+        move || {
+            let Boot {
+                logs,
+                resume,
+                last_project,
+            } = boot.borrow_mut().take().unwrap_or_default();
+            Host::new(logs, resume, last_project)
+        },
         Host::update,
         Host::view,
     )
@@ -53,6 +81,25 @@ fn main() -> iced::Result {
     // 閉じるかどうかは殻が決める(未保存なら3択)。窓に勝手に閉じさせない。
     .exit_on_close_request(false)
     .run()
+}
+
+/// `BootFn` へ1回だけ渡す一式(記録先 + 起動時の座席の決め方)。
+struct Boot {
+    logs: Logs,
+    resume: Resume,
+    last_project: Option<PathBuf>,
+}
+
+impl Default for Boot {
+    /// `BootFn` が(起きないはずだが)2度呼ばれた時の逃げ場。記録しない・
+    /// 座らないという「何もしない」側へ倒す — 黙って前回の座席を複製したりしない。
+    fn default() -> Self {
+        Self {
+            logs: Logs::default(),
+            resume: Resume::Nothing,
+            last_project: None,
+        }
+    }
 }
 
 /// 記録の口ぜんたい。**殻の側には記録の都合を1つも足さない**(egui 版 `Harness` と同じ分担)。
@@ -96,9 +143,11 @@ struct Host {
 }
 
 impl Host {
-    fn new(logs: Logs) -> Self {
+    /// 座席は窓より先に決まっている(`resume`)。`last_project` を渡しているので、
+    /// ここから先の座り直し(New / Open)も同じ置き場を覚え続ける。
+    fn new(logs: Logs, resume: Resume, last_project: Option<PathBuf>) -> Self {
         Self {
-            shell: Shell::new(NativePrompts),
+            shell: Shell::resumed(NativePrompts, resume, last_project),
             logs,
         }
     }
