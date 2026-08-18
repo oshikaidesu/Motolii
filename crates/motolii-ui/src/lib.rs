@@ -14,6 +14,10 @@ pub mod browser_panel;
 mod canonical_drop;
 // C8: chrome と extension panel の見た目のBlitz(HTML/CSS)写し。bin から使うので pub。
 pub mod chrome_blitz;
+/// HTML/CSS を Blitz(taffy layout + stylo style)へ食わせて計算済みの値を
+/// 取り出す抽出器具。bin(`motolii-css-metrics`)と `motolii-shell-iced` の
+/// oracle テストの両方から使うので pub。
+pub mod css_metrics;
 mod diagnostic;
 mod diagnostic_projection;
 mod display_slot;
