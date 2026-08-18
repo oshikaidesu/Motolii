@@ -1,0 +1,22 @@
+$ cargo test -p motolii-shell-iced --test drive_timeline command_a_selects -j 5
+(with `window_input.rs`'s new `.or_else(|| crate::shortcuts::additional_window_shortcut(character))`
+temporarily commented out, i.e. the state of this lane before Cmd+A was wired)
+
+running 1 test
+test command_a_selects_every_visible_object_row ... FAILED
+
+failures:
+
+---- command_a_selects_every_visible_object_row stdout ----
+
+thread 'command_a_selects_every_visible_object_row' (22154195) panicked at crates/motolii-shell-iced/tests/drive_timeline.rs:568:5:
+assertion `left == right` failed: Cmd+A で見えている3行(Group 1 + clip 2)が選ばれない
+  left: []
+ right: [LayerId(3), LayerId(4), LayerId(5)]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    command_a_selects_every_visible_object_row
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 1.72s

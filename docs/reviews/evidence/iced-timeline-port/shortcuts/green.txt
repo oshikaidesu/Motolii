@@ -1,0 +1,49 @@
+$ cargo test -p motolii-shell-iced -j 5
+(full crate — lib unit tests + every integration test binary, after the fix)
+
+running 26 tests   (src/lib.rs unit tests, includes crate::shortcuts::tests::*)
+test shortcuts::tests::select_all_maps_the_a_character ... ok
+test shortcuts::tests::unrelated_characters_stay_none ... ok
+test shortcuts::tests::legend_lists_only_implemented_keys ... ok
+... (23 more, all ok)
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+     Running tests/drive_timeline.rs
+
+running 15 tests
+test arrow_keys_step_the_playhead_by_frames ... ok
+test command_a_selects_every_visible_object_row ... ok
+test command_wheel_zooms_around_the_cursor ... ok
+test clicking_a_bar_selects_the_layer_through_the_gateway ... ok
+test dragging_the_left_edge_trims_the_in_point ... ok
+test a_dropped_soundtrack_grows_a_waveform_band ... ok
+test delete_removes_the_selection_and_undo_brings_it_back ... ok
+test dragging_a_body_moves_the_clip_and_lands_one_undo_unit ... ok
+test dragging_the_right_edge_trims_the_out_point ... ok
+test escape_during_a_drag_restores_without_a_trace ... ok
+test shift_wheel_pans_horizontally_inside_the_composition ... ok
+test scrubbing_the_ruler_seeks_the_playhead ... ok
+test the_same_message_sequence_reproduces_the_view_state ... ok
+test a_timeline_session_replays_from_its_intent_log ... ok
+test a_multi_selection_moves_as_a_block_and_stops_at_zero ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+     Running tests/intent_gateway_fence.rs
+
+running 4 tests
+test the_forbidden_names_are_real_public_api_of_motolii_ui ... ok
+test every_product_source_is_scanned ... ok    (shortcuts.rs added to SCANNED)
+test the_only_door_is_shell_update ... ok      (shortcuts.rs calls no .dispatch(); pane.rs
+                                                  still routes only through Shell::update)
+test no_shell_code_touches_product_state_outside_the_gateway ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+... every other test binary in the crate (drive_browser, drive_drop, drive_export,
+drive_save_guard, drive_seat, inspector_drive, jsonl_logs, launch_project_flag,
+launch_resume, replay_oracle, snapshot_start_screen, stage_bind_groups_oracle,
+stage_island_live_frame, stage_island_pixels, stage_reports,
+theme_matches_generated_tokens, widgets_context_menu, widgets_drop_zone,
+widgets_key_button, widgets_scrub_value) also finished `ok`, 0 failed. Full run
+exit code 0 (verified twice: once mid-work, once as the final check before commit).

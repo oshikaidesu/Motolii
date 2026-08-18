@@ -721,16 +721,27 @@ fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
         band = band.push(text(latest).size(13).style(style::text_secondary));
     }
 
+    // 近道キーの提示(2026-08-19 iced 近道キー移植レーン)。**実際に効く
+    // キーだけ**(Q0)— 表は `crate::shortcuts` が正本で、ここは読むだけ。
+    // Timeline が立っている(= 座席がある)ときだけ出す。
+    let mut column = column![].push(rule::horizontal(1).style(style::separator));
+    if shell.is_seated() {
+        column = column.push(
+            container(text(crate::shortcuts::legend_line()).size(11).style(style::text_muted))
+                .padding([2, 8]),
+        );
+    }
+
     // 帯は panel 面 + 上辺の区切り線。土台との段差は明度差と 1px の線で作る
     // (UI視覚言語「面」: 階層は小さな明度差と境界線で作る)。
     Some(
-        column![
-            rule::horizontal(1).style(style::separator),
-            container(band)
-                .padding(8)
-                .width(Fill)
-                .style(style::status_band),
-        ]
-        .into(),
+        column
+            .push(
+                container(band)
+                    .padding(8)
+                    .width(Fill)
+                    .style(style::status_band),
+            )
+            .into(),
     )
 }
