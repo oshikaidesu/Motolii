@@ -11,7 +11,7 @@ use iced::advanced::widget::{tree, Operation, Tree};
 use iced::advanced::{layout, mouse, overlay, renderer, Layout, Shell, Widget};
 use iced::{Element, Event, Length, Rectangle, Size, Vector};
 
-use crate::widgets::palette::PALETTE;
+use crate::theme::Tokens;
 
 /// hover 縁の太さ。
 const EDGE_W: f32 = 2.0;
@@ -180,16 +180,17 @@ impl<M> Widget<M, iced::Theme, iced::Renderer> for DropZone<'_, M> {
         if !state.hovered {
             return;
         }
+        let t = Tokens::resolve(theme);
         let (edge, wash) = if self.accepting {
             (
-                PALETTE.accent,
+                t.action_active,
                 iced::Color {
                     a: 0.08,
-                    ..PALETTE.accent
+                    ..t.action_active
                 },
             )
         } else {
-            (PALETTE.outline, iced::Color::TRANSPARENT)
+            (t.border_default, iced::Color::TRANSPARENT)
         };
         renderer.fill_quad(
             renderer::Quad {

@@ -19,8 +19,12 @@
 
 use std::path::PathBuf;
 
-/// この窓で起きうることの全部(M-1 の範囲)。
-#[derive(Debug, Clone, PartialEq, Eq)]
+use crate::inspector_pane::InspectorEvent;
+
+/// この窓で起きうることの全部(M-1 + M-2 Stage + M-4a Browser + M-4b Inspector)。
+///
+/// `Eq` を降ろしたのは [`InspectorEvent`] がスクラブ値(`f64`)を運ぶため。
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     /// New Project ボタン / `Cmd+N`。dialog が答えたら `UiIntent::NewProject` になる。
     NewProjectPressed,
@@ -45,4 +49,12 @@ pub enum Message {
     /// `Shell::update` が transcript(帯 / `--status-log`)へ写す。
     /// journal には載らない(replay は Stage の故障まで再現しない)。
     StageReported(Vec<String>),
+    /// layer を1つ選んだ。`UiIntent::SelectLayer` になる。
+    ///
+    /// M-4b 時点でこれを出す widget はまだ無い(選択の面は Stage = M-2、
+    /// Timeline = M-3 が持ってくる)。運転席(テスト)と後続 M がこの1点へ
+    /// 合流する — 入口が増えても intent は1種類のまま(AdmitPaths と同じ型)。
+    LayerSelected(u64),
+    /// Inspector pane で押された事実。intent 化は `Shell::update` の写像1箇所。
+    Inspector(InspectorEvent),
 }

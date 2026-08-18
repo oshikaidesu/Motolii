@@ -4,8 +4,8 @@
 //! (`docs/reviews/2026-08-13-inspector-key-add-ux-decision.md`):
 //! unkeyed = 灰 outline / animated = accent outline / current = accent fill。
 
+use motolii_shell_iced::theme::Tokens;
 use motolii_shell_iced::widgets::key_button::{key_button, look, KeyState};
-use motolii_shell_iced::widgets::palette::PALETTE;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Msg {
@@ -21,13 +21,13 @@ fn the_three_states_follow_the_2026_08_13_vocabulary() {
 
     // unkeyed = 灰 outline: 中抜きの菱形で、accent ではない灰。
     assert_eq!(unkeyed.glyph, "\u{25c7}");
-    assert_ne!(unkeyed.color, PALETTE.accent);
+    assert_ne!(unkeyed.color, Tokens::DARK.action_active);
     // animated = accent outline: 中抜きのまま accent。
     assert_eq!(animated.glyph, "\u{25c7}");
-    assert_eq!(animated.color, PALETTE.accent);
+    assert_eq!(animated.color, Tokens::DARK.action_active);
     // current = accent fill: 塗りの菱形で accent。
     assert_eq!(current.glyph, "\u{25c6}");
-    assert_eq!(current.color, PALETTE.accent);
+    assert_eq!(current.color, Tokens::DARK.action_active);
     // unkeyed と animated は glyph が同じでも色で区別できる。
     assert_ne!(unkeyed.color, animated.color);
 }

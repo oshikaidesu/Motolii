@@ -8,7 +8,7 @@
 use iced::widget::{button, text};
 use iced::{Background, Border, Element};
 
-use crate::widgets::palette::{self, PALETTE};
+use crate::theme::{self, Tokens};
 
 /// ボタンの一辺(正方形)。
 pub const KEY_BUTTON_SIZE: f32 = 18.0;
@@ -34,19 +34,22 @@ pub struct KeyLook {
 }
 
 /// 3状態 → 絵。2026-08-13 裁定の写しであり、ここ以外で状態を色に写さない。
+/// token は [`Tokens::DARK`](crate::theme::Tokens::DARK) — Light がまだ無いので
+/// 組み込み既定と同じ(`Tokens::resolve` と揃った時に差し替わる)。
 pub fn look(state: KeyState) -> KeyLook {
+    let t = &Tokens::DARK;
     match state {
         KeyState::Unkeyed => KeyLook {
             glyph: "\u{25c7}",
-            color: PALETTE.text_secondary,
+            color: t.text_secondary,
         },
         KeyState::Animated => KeyLook {
             glyph: "\u{25c7}",
-            color: PALETTE.accent,
+            color: t.action_active,
         },
         KeyState::Current => KeyLook {
             glyph: "\u{25c6}",
-            color: PALETTE.accent,
+            color: t.action_active,
         },
     }
 }
@@ -70,18 +73,19 @@ where
         .height(KEY_BUTTON_SIZE)
         .padding(0)
         .on_press(on_press)
-        .style(move |_theme, status| {
+        .style(move |theme, status| {
+            let t = Tokens::resolve(theme);
             // Q3 接触の報酬: hover / press で地が段階的に応える。
             let fill = match status {
-                button::Status::Hovered => palette::mix(PALETTE.accent, 16.0, PALETTE.bg_control),
-                button::Status::Pressed => palette::mix(PALETTE.accent, 26.0, PALETTE.bg_control),
-                button::Status::Active | button::Status::Disabled => PALETTE.bg_control,
+                button::Status::Hovered => theme::mix(t.action_active, 16.0, t.surface_raised),
+                button::Status::Pressed => theme::mix(t.action_active, 26.0, t.surface_raised),
+                button::Status::Active | button::Status::Disabled => t.surface_raised,
             };
             button::Style {
                 background: Some(Background::Color(fill)),
                 text_color: look.color,
                 border: Border {
-                    color: PALETTE.outline,
+                    color: t.border_default,
                     width: 1.0,
                     radius: 3.0.into(),
                 },

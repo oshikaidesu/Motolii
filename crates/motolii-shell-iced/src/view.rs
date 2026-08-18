@@ -39,6 +39,8 @@ pub const OPEN_PROJECT: &str = "Open\u{2026}";
 pub const OPEN_PROJECT_SHORTCUT: &str = "Cmd+O";
 /// スタート画面の末尾の一行。
 pub const DROP_HINT: &str = "Then just drop video and audio into this window.";
+/// Inspector pane の幅。
+pub const INSPECTOR_PANE_W: f32 = 300.0;
 /// 書き出しを始めるボタン。
 pub const EXPORT: &str = "Export";
 /// 走っている書き出しを止めるボタン。
@@ -59,13 +61,15 @@ pub fn exporting_label(seconds: u64) -> String {
 /// 一番外は [`window_input`] — 近道キー・OS ドロップ・閉じる要求はここで
 /// [`Message`] になる。中身は「座席の有無で変わる本体」と「status 帯」の2段。
 pub fn view(shell: &Shell) -> Element<'_, Message> {
-    let body = if shell.is_seated() {
+    let body: Element<'_, Message> = if shell.is_seated() {
         seated(shell)
     } else {
-        start_screen()
+        container(start_screen()).center(Fill).into()
     };
 
-    let mut page = column![container(body).center(Fill)].width(Fill).height(Fill);
+    let mut page = column![container(body).width(Fill).height(Fill)]
+        .width(Fill)
+        .height(Fill);
 
     // 帯は「座席が居るあいだ」と「言われたことがある時」に出る。空の帯を常設しない
     // (egui 版と同じ判断)。
@@ -114,13 +118,26 @@ fn action_button<'a>(name: &'a str, shortcut: &'a str, message: Message) -> Elem
     .into()
 }
 
-/// 座席が在るときの画面 — Stage 島(M-2)。
+/// 座席が在るときの画面 — 中央 Stage 島(M-2)+ 右 Inspector pane(M-4b)。
 ///
-/// M-1 の「編集面はまだ無い」の一行はここで退役した。中身は
+/// M-1 の「編集面はまだ無い」の一行はここで退役した。中央は
 /// [`crate::stage_island::stage_island`]: Rerun `SpatialStage` の合成絵が
-/// shader widget として立ち、入力はブリッジ(調停つき)を通る。
+/// shader widget として立ち、入力はブリッジ(調停つき)を通る。左 Browser
+/// (M-4a)は統合 wave で合流する。下段 Timeline(M-3)はまだ無い。
 fn seated(shell: &Shell) -> Element<'_, Message> {
-    crate::stage_island::stage_island(shell)
+    row![
+        container(crate::stage_island::stage_island(shell))
+            .width(Fill)
+            .height(Fill),
+        rule::vertical(1).style(style::separator),
+        container(crate::inspector_pane::inspector(
+            shell.inspector(),
+            shell.editor_status(),
+        ))
+        .width(INSPECTOR_PANE_W)
+        .height(Fill),
+    ]
+    .into()
 }
 
 /// status 帯 — **信用の可視化と、窓が言ったことの最新1行**。

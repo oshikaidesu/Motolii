@@ -38,10 +38,25 @@
 //!   失敗は [`Message::StageReported`] として帯へ出る。bind group 床
 //!   (iced fork seam 2)の実効 oracle も常設(`tests/stage_bind_groups_oracle.rs`)
 //!
+//! ## M-4 統合 wave で加わったもの
+//!
+//! - **Browser pane**(本物、[`browser`])。左 pane に `Media` source rail
+//!   (All media / Project / Recent)と結果一覧が立つ。read-model は
+//!   `motolii_ui::media_library` / `browser_blitz::thumbnail` を共有する
+//! - **Inspector pane**(本物、[`inspector_pane`])。右 pane に選択 layer の
+//!   identity / M・S / Transform 4行(Position / Scale / Rotation / Opacity)/
+//!   共有 FX の ON/OFF が、全部 `UiIntent` の編集列(wave E 第1弾)として
+//!   同じゲートウェイを通る。状態は accepted snapshot からだけ導出する
+//!   ([`inspector_model`])
+//! - スクラブ値・key ボタン・context menu・drop zone は
+//!   [`widgets`](crate::widgets)の本物を Browser / Inspector 双方が使う
+//!   (統合 wave で `widgets_stub` を退役させた)
+//!
 //! ## ここに無いもの(意図的に)
 //!
-//! - Timeline(M-3)、Browser / Inspector(M-4)。ギズモの絵と意味論・
-//!   書き出しカメラ枠 overlay は M-2 後。Undo / Redo ボタンは編集面と一緒に来る
+//! - Timeline(M-3)。ギズモの絵と意味論・書き出しカメラ枠 overlay は M-3 後。
+//!   Undo / Redo ボタンは編集面と一緒に来る。Inspector の Audio(gain)section は
+//!   エディタに gain の操作 API が立つまで**出さない**(Q0: 死に chrome 禁止)
 //! - 引数なし起動の「続きが開く」(egui 側 wave D の `last_project`)。M-2 以降
 //! - egui。**この crate に egui 系の直接依存は1つも無い**
 //!   (柵: `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs` の
@@ -49,6 +64,9 @@
 //! - `rfd` の直接呼び出し。native dialog は egui shell と**同じ実装**
 //!   (`motolii_ui::blitz_shell::NativePrompts`)の後ろに1箇所だけ在る
 
+mod browser;
+pub mod inspector_model;
+pub mod inspector_pane;
 mod intent_log;
 mod jsonl;
 mod launch;
@@ -64,6 +82,9 @@ pub mod view;
 pub mod widgets;
 mod window_input;
 
+pub use browser::BrowserEvent;
+pub use inspector_model::{InspectorModel, InspectorSeat};
+pub use inspector_pane::InspectorEvent;
 pub use intent_log::IntentLog;
 pub use launch::Launch;
 pub use message::Message;
@@ -71,4 +92,5 @@ pub use prompts::{NativePrompts, ScriptedPrompts, ShellPrompts};
 pub use shell::{Outcome, Shell};
 pub use status_log::StatusLog;
 pub use view::view;
+pub use widgets::{KeyState, ScrubEvent};
 pub use window_input::window_input;

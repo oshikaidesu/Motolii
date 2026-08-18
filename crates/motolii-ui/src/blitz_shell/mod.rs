@@ -89,7 +89,7 @@ pub use app::{decide_unsaved, UnsavedChoice, UnsavedDecision};
 pub use drive::{NativePrompts, ScriptedPrompts, ShellPrompts, ShellTranscript, StatusEvent};
 pub use intent::{
     admit_dropped_paths, create_project_file, reseat_project, IntentEvent, IntentJournal,
-    ProjectSeat, ShellGateway, UiIntent,
+    ProjectSeat, ShellGateway, UiEditParam, UiIntent, UiItemFlag,
 };
 pub use pane::{BlitzPane, PaneKind};
 pub use runner::{run_blitz_shell, BlitzShellLaunch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES};

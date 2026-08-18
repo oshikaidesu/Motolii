@@ -22,7 +22,7 @@ use iced::advanced::widget::{tree, Tree};
 use iced::advanced::{layout, mouse, renderer, text, Layout, Shell, Widget};
 use iced::{keyboard, Element, Event, Length, Pixels, Point, Rectangle, Size};
 
-use crate::widgets::palette::{self, PALETTE};
+use crate::theme::{self, Tokens};
 
 /// 欄の高さ。
 pub const SCRUB_H: f32 = 20.0;
@@ -389,7 +389,7 @@ impl<M> Widget<M, iced::Theme, iced::Renderer> for ScrubValue<'_, M> {
         &self,
         tree: &Tree,
         renderer: &mut iced::Renderer,
-        _theme: &iced::Theme,
+        theme_in: &iced::Theme,
         _style: &renderer::Style,
         layout: Layout<'_>,
         _cursor: mouse::Cursor,
@@ -398,24 +398,25 @@ impl<M> Widget<M, iced::Theme, iced::Renderer> for ScrubValue<'_, M> {
         use iced::advanced::text::Renderer as _;
         use iced::advanced::Renderer as _;
 
+        let t = Tokens::resolve(theme_in);
         let state: &State = tree.state.downcast_ref();
         let bounds = layout.bounds();
 
-        // 地と枠。段階は全部パレットの2色から混ぜる(palette 以外の色を作らない)。
+        // 地と枠。段階は全部 token の2色から混ぜる(token 以外の色を作らない)。
         let (fill, border_color) = match &state.phase {
             Phase::Editing { .. } => (
-                palette::mix(PALETTE.accent, 8.0, PALETTE.bg_control),
-                PALETTE.accent,
+                theme::mix(t.action_active, 8.0, t.surface_raised),
+                t.action_active,
             ),
             Phase::Pressed { .. } | Phase::Dragging { .. } => (
-                palette::mix(PALETTE.accent, 14.0, PALETTE.bg_control),
-                PALETTE.accent,
+                theme::mix(t.action_active, 14.0, t.surface_raised),
+                t.action_active,
             ),
             Phase::Idle if state.hovered => (
-                palette::mix(PALETTE.accent, 6.0, PALETTE.bg_control),
-                PALETTE.text_secondary,
+                theme::mix(t.action_active, 6.0, t.surface_raised),
+                t.text_secondary,
             ),
-            Phase::Idle => (PALETTE.bg_control, PALETTE.outline),
+            Phase::Idle => (t.surface_raised, t.border_default),
         };
         renderer.fill_quad(
             renderer::Quad {
@@ -451,7 +452,7 @@ impl<M> Widget<M, iced::Theme, iced::Renderer> for ScrubValue<'_, M> {
                 hint_factor: None,
             },
             Point::new(bounds.x + bounds.width - PAD_X, bounds.center_y()),
-            PALETTE.text_primary,
+            t.text_primary,
             bounds,
         );
 
@@ -467,7 +468,7 @@ impl<M> Widget<M, iced::Theme, iced::Renderer> for ScrubValue<'_, M> {
                     },
                     ..renderer::Quad::default()
                 },
-                PALETTE.accent,
+                t.action_active,
             );
         }
     }
