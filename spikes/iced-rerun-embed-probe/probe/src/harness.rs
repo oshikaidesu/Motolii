@@ -152,6 +152,22 @@ impl Gpu {
     }
 }
 
+/// 検証エラーを1か所で記録する。ログにも積み、通算カウンタも上げる。
+///
+/// カウンタが要るのは、入力ブリッジのレーンでは「このフレームは wgpu に
+/// 蹴られたのか、それとも本当に絵が変わらなかったのか」を区別しないと
+/// (d) の合否が言えないからである。
+fn record_validation(text: String, errors: &ErrorLog) {
+    eprintln!("WGPU VALIDATION: {text}");
+    crate::embed::VALIDATION_TOTAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if let Ok(mut slot) = crate::embed::LAST_VALIDATION.lock() {
+        *slot = Some(text.clone());
+    }
+    if let Ok(mut log) = errors.lock() {
+        log.push(text);
+    }
+}
+
 /// error scope を閉じ、拾えた検証エラーを記録する。
 fn drain_scope(
     device: &wgpu::Device,
@@ -165,11 +181,7 @@ fn drain_scope(
         timeout: None,
     });
     if let Some(error) = pollster::block_on(pending) {
-        let text = format!("{what}: {error}");
-        eprintln!("WGPU VALIDATION: {text}");
-        if let Ok(mut log) = errors.lock() {
-            log.push(text);
-        }
+        record_validation(format!("{what}: {error}"), errors);
     }
 }
 
@@ -212,6 +224,10 @@ pub struct Offscreen {
     padded_bytes_per_row: u32,
     frame: u32,
     errors: ErrorLog,
+    /// 直近フレームの `platform_output.cursor_icon`。(e)。
+    last_cursor_icon: egui::CursorIcon,
+    /// 直近フレームの root viewport の `repaint_delay`。(f)。
+    last_repaint_delay: Option<std::time::Duration>,
 }
 
 impl Offscreen {
@@ -227,11 +243,7 @@ impl Offscreen {
         {
             let sink = errors.clone();
             gpu.device.on_uncaptured_error(Arc::new(move |error| {
-                let text = format!("{error}");
-                eprintln!("WGPU VALIDATION: {text}");
-                if let Ok(mut log) = sink.lock() {
-                    log.push(text);
-                }
+                record_validation(format!("{error}"), &sink);
             }));
         }
 
@@ -301,6 +313,8 @@ impl Offscreen {
             padded_bytes_per_row,
             frame: 0,
             errors,
+            last_cursor_icon: egui::CursorIcon::Default,
+            last_repaint_delay: None,
         })
     }
 
@@ -344,14 +358,29 @@ impl Offscreen {
 
     /// 1フレーム進める。egui の run → tessellate → egui_wgpu の render を
     /// offscreen texture に対して行う。窓もイベントループも使わない。
+    ///
+    /// 入力ゼロの frame。(a)(b)(c) の経路はこちらのまま。
     pub fn frame(&mut self, stage: &mut SpatialStage) -> Result<(), String> {
+        self.frame_with_input(stage, Vec::new(), egui::Modifiers::NONE)
+    }
+
+    /// **入力つきの1フレーム**。`bridge` が翻訳した `egui::Event` 列をそのまま渡す。
+    ///
+    /// egui の1フレームは `RawInput` を丸ごと受け取ってから始まるので、
+    /// 「iced が1フレームで配ったイベント」と「egui の1フレーム」はここで1:1に対応する。
+    pub fn frame_with_input(
+        &mut self,
+        stage: &mut SpatialStage,
+        events: Vec<egui::Event>,
+        modifiers: egui::Modifiers,
+    ) -> Result<(), String> {
         // `on_uncaptured_error` は `RenderContext::new` が自分の物(Rerun の `ErrorTracker`)で
         // 上書きしてしまう。確実に拾うために error scope を使う。
         let scope = self
             .gpu
             .device
             .push_error_scope(wgpu::ErrorFilter::Validation);
-        let result = self.frame_inner(stage);
+        let result = self.frame_inner(stage, events, modifiers);
         drain_scope(
             &self.gpu.device,
             scope,
@@ -361,7 +390,27 @@ impl Offscreen {
         result
     }
 
-    fn frame_inner(&mut self, stage: &mut SpatialStage) -> Result<(), String> {
+    /// 直近のフレームで egui が要求した cursor icon。(e) の観測点。
+    pub fn last_cursor_icon(&self) -> egui::CursorIcon {
+        self.last_cursor_icon
+    }
+
+    /// 直近のフレームで egui が要求した再描画までの待ち時間。(f) の観測点。
+    pub fn last_repaint_delay(&self) -> Option<std::time::Duration> {
+        self.last_repaint_delay
+    }
+
+    /// egui がこのフレームでポインタ入力を「使いたい」と言ったか。
+    pub fn wants_pointer_input(&self) -> bool {
+        self.egui_ctx.egui_wants_pointer_input()
+    }
+
+    fn frame_inner(
+        &mut self,
+        stage: &mut SpatialStage,
+        events: Vec<egui::Event>,
+        modifiers: egui::Modifiers,
+    ) -> Result<(), String> {
         let mut render_ctx = self
             .render_ctx
             .take()
@@ -375,6 +424,8 @@ impl Offscreen {
             predicted_dt: 1.0 / 60.0,
             max_texture_side: Some(8192),
             focused: true,
+            modifiers,
+            events,
             ..Default::default()
         };
 
@@ -388,6 +439,15 @@ impl Offscreen {
             self.render_ctx = Some(render_ctx);
             return Err(format!("SpatialStage::show: {error}"));
         }
+
+        // 戻りの半分。egui が「このカーソルにしてほしい」「いつ再描画してほしい」と
+        // 言った物を回収する。iced 側へ写せるかどうかは `bridge` が判定する。
+        self.last_cursor_icon = full_output.platform_output.cursor_icon;
+        self.last_repaint_delay = full_output
+            .viewport_output
+            .get(&egui::ViewportId::ROOT)
+            .map(|viewport| viewport.repaint_delay);
+        crate::bridge::observe_platform_output(self.last_cursor_icon, self.last_repaint_delay);
 
         let paint_jobs = egui_ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
         let screen_descriptor = egui_wgpu::ScreenDescriptor {

@@ -25,6 +25,8 @@
 //! `iced_test`/Simulator の統合、AccessKit、IME、タイムライン widget。
 
 mod app;
+mod bridge;
+mod bridge_app;
 mod embed;
 mod harness;
 mod oracle;
@@ -56,6 +58,18 @@ fn main() -> ExitCode {
             Some(out_dir) => run_gui(PathBuf::from(out_dir), true),
             None => usage(),
         },
+        Some("bridge") => match args.get(2) {
+            Some(out_dir) => run_bridge(PathBuf::from(out_dir), false),
+            None => usage(),
+        },
+        Some("bridge-interactive") => match args.get(2) {
+            Some(out_dir) => run_bridge(PathBuf::from(out_dir), true),
+            None => usage(),
+        },
+        Some("bridge-offscreen") => match (args.get(2), args.get(3)) {
+            (Some(kind), Some(out_dir)) => run_bridge_offscreen(kind, Path::new(out_dir)),
+            _ => usage(),
+        },
         _ => usage(),
     }
 }
@@ -66,7 +80,10 @@ fn usage() -> ExitCode {
          iced-rerun-embed-probe preflight <output-dir>\n  \
          iced-rerun-embed-probe preflight-case <iced-windowed|re_renderer> <output-dir>\n  \
          iced-rerun-embed-probe gui <output-dir>\n  \
-         iced-rerun-embed-probe gui-interactive <output-dir>   # (c) waits for a real click"
+         iced-rerun-embed-probe gui-interactive <output-dir>   # (c) waits for a real click\n  \
+         iced-rerun-embed-probe bridge <output-dir>            # (d)(e)(f) scripted drag/wheel\n  \
+         iced-rerun-embed-probe bridge-interactive <output-dir> # (d)(e)(f) driven by a human\n  \
+         iced-rerun-embed-probe bridge-offscreen <iced-windowed|re_renderer> <output-dir>"
     );
     ExitCode::from(2)
 }
@@ -294,6 +311,47 @@ fn run_gui(out_dir: PathBuf, interactive: bool) -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("iced failed: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// bridge — (d)(e)(f)
+// ---------------------------------------------------------------------------
+
+fn run_bridge(out_dir: PathBuf, interactive: bool) -> ExitCode {
+    if let Err(error) = std::fs::create_dir_all(&out_dir) {
+        eprintln!("could not create {}: {error}", out_dir.display());
+        return ExitCode::FAILURE;
+    }
+    match bridge_app::run(out_dir, interactive) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("iced failed: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// 対照群。窓を開かずに同じ台本を回す。子プロセスに分けなくても片方ずつ走らせられる。
+fn run_bridge_offscreen(kind: &str, out_dir: &Path) -> ExitCode {
+    if let Err(error) = std::fs::create_dir_all(out_dir) {
+        eprintln!("could not create {}: {error}", out_dir.display());
+        return ExitCode::FAILURE;
+    }
+    let kind = match kind {
+        "iced-windowed" => DeviceKind::IcedWindowed,
+        "re_renderer" => DeviceKind::ReRenderer,
+        other => {
+            eprintln!("unknown device kind: {other}");
+            return ExitCode::from(2);
+        }
+    };
+    match bridge_app::run_offscreen(kind, out_dir) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("bridge-offscreen failed: {error}");
             ExitCode::FAILURE
         }
     }
