@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use image::ImageEncoder as _;
 
 use super::drive::ShellTranscript;
-use super::intent::IntentJournal;
+use super::intent::{resume_last_project, IntentJournal, Resume};
 use super::{BlitzShellApp, ProjectSeat};
 use crate::ShellError;
 
@@ -56,12 +56,19 @@ pub struct BlitzShellLaunch {
 /// 窓を開いて shell を回す。公開 API はこの1本で、署名は toolkit-free。
 pub fn run_blitz_shell(launch: BlitzShellLaunch) -> Result<(), ShellError> {
     // project は**窓より先に**開く。失敗は絵ではなく Err で返す。
-    let seat = match launch.project {
-        Some(path) => Some(
+    //
+    // `--project` が無い通常起動は、**最後に開いていた project へ座り直す**
+    // (F-01。台本 P5「保存→再起動→続きがそのまま開く」)。ここも窓より先で、
+    // ただし失敗は起動エラーにしない — 覚えていた project が消えていても
+    // 窓は開くべきで、理由を帯に言ってスタート画面にする(`Resume::Explained`)。
+    // `--fixture` は展示なので座り直さない。
+    let resume = match launch.project {
+        Some(path) => Resume::Seated(
             ProjectSeat::open(&path)
                 .map_err(|message| ShellError::AppConstruction(message.into()))?,
         ),
-        None => None,
+        None if launch.fixture => Resume::Nothing,
+        None => resume_last_project(crate::last_project::default_last_project_path().as_deref()),
     };
     let launch_fixture = launch.fixture;
     let shot = launch.screenshot.map(|request| Screenshot {
@@ -97,7 +104,7 @@ pub fn run_blitz_shell(launch: BlitzShellLaunch) -> Result<(), ShellError> {
         "motolii-blitz-shell",
         options,
         Box::new(move |cc| {
-            let inner = BlitzShellApp::with_seat(cc, seat, launch_fixture);
+            let inner = BlitzShellApp::with_seat(cc, resume, launch_fixture);
             let transcript = inner.transcript().clone();
             let journal = inner.intent_journal().clone();
             Ok(Box::new(Harness {

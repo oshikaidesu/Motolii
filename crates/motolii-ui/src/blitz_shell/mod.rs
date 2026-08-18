@@ -25,6 +25,14 @@
 //! - **project の入口**。`Cmd+N` で新規 project を作って開き、`Cmd+O` で開き直す
 //!   (`create_project_file` / `reseat_project`)。つまり `--project` 無しで
 //!   起動しても後から project を持てる
+//! - **続きが開く**。座り直しが成立するたび、その path を user 設定層
+//!   (`crate::last_project`。palette settings と同じ家・同じ保存方式)へ1本だけ
+//!   覚える。次に `--project` 無しで起動すると**そこへ座り直してから窓が出る** —
+//!   `--project` 起動と同じ座り方なので、journal の第1行も同じ `OpenProject` に
+//!   なる。覚えていない(初回)はスタート画面、覚えていたのに開けない(消された・
+//!   他プロセスが握っている)は**理由を帯に言ってから**スタート画面で、黙って
+//!   fixture へは落ちない。覚えるのは最後の1本だけで、recent files の一覧も
+//!   autosave も無い
 //! - **入力**。Blitz のペイン(chrome の3枚)はマウスを受けない — ポインタの
 //!   振り分けは後続capsule(C2)。Timeline / Stage / Browser / Inspector は
 //!   ホストの egui へ直接描く native 面なので、素直にマウスが通る

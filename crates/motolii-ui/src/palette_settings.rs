@@ -228,23 +228,8 @@ impl PaletteSettings {
         if bytes.len() as u64 > MAX_FILE_BYTES {
             return Err(PaletteSettingsError::ResourceLimit("file bytes"));
         }
-        let parent = path
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-            .unwrap_or_else(|| Path::new("."));
-        let (temp_path, mut temp) = create_temp(parent, path.file_name().and_then(|v| v.to_str()))?;
-        let result = (|| {
-            temp.write_all(&bytes)?;
-            temp.sync_all()?;
-            drop(temp);
-            fs::rename(&temp_path, path)?;
-            sync_directory(parent)?;
-            Ok(())
-        })();
-        if result.is_err() {
-            let _ = fs::remove_file(&temp_path);
-        }
-        result
+        write_atomically(path, &bytes)?;
+        Ok(())
     }
 
     fn validate(&self) -> Result<(), PaletteSettingsError> {
@@ -340,6 +325,34 @@ fn remove_by<T>(items: &mut Vec<T>, predicate: impl Fn(&T) -> bool) -> bool {
     };
     items.remove(index);
     true
+}
+
+/// user 設定層の**唯一の書き方**: 同じディレクトリの temp へ書いて fsync し、
+/// rename で差し替えてディレクトリも fsync する。途中で落ちても、既にある
+/// ファイルが半端な内容へ化けない。
+///
+/// ここに居るのは palette が最初にこれを要ったからで、置き場も同じ
+/// (`~/Library/Application Support/Motolii/`)である。あとから増えた設定
+/// (`last_project`)は**新しい保存方式を作らず**この1本を通る。
+pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> Result<(), std::io::Error> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+    let (temp_path, mut temp) = create_temp(parent, path.file_name().and_then(|v| v.to_str()))?;
+    let result = (|| {
+        temp.write_all(bytes)?;
+        temp.sync_all()?;
+        drop(temp);
+        fs::rename(&temp_path, path)?;
+        sync_directory(parent)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+    result
 }
 
 fn create_temp(parent: &Path, name: Option<&str>) -> Result<(PathBuf, fs::File), std::io::Error> {

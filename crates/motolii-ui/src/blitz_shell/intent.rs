@@ -143,6 +143,54 @@ pub(crate) struct ShellGateway {
     transcript: ShellTranscript,
     /// 原因のログ。
     journal: IntentJournal,
+    /// 「最後に開いていた project」の置き場(user 設定層)。座り直しが成立する
+    /// たびにここへ1本だけ書き、**次の引数なし起動がそれを開く**(F-01)。
+    ///
+    /// `None` は**覚えない**。replay と単体テストは利用者の設定を踏んではならず、
+    /// 覚え先を渡すのは窓を開く経路(`BlitzShellApp::with_seat`)だけである。
+    last_project: Option<PathBuf>,
+}
+
+/// 引数なし起動の座席をどうするか。**判断は `resume_last_project` が済ませ**、
+/// ゲートウェイはこの3択を受け取るだけである。
+///
+/// 変種の大きさは揃わない(座席は OS lock と writer を抱える)が、この値は
+/// 起動時に1個だけ作って1回 move するだけなので box に包む意味が無い。
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum Resume {
+    /// 覚えていた project が開けた。`--project` 起動と同じ座り方をする。
+    Seated(ProjectSeat),
+    /// 覚えていない(初回起動)。何も言わずスタート画面。
+    Nothing,
+    /// 覚えていたのに開けない。**理由を帯に言ってから**スタート画面。
+    Explained(String),
+}
+
+/// 引数なし起動で座り直す先を決める。**黙って fixture にも空の窓にも落ちない。**
+///
+/// 覚えていない = 初回起動なので `Nothing`。覚えていたのに読めない・開けない
+/// (消された・別プロセスが握っている・壊れている)は、理由と次の一手を持った
+/// `Explained` にする — `--project` が開けなかった時に起動失敗として理由を出す
+/// のと同じ原則を、自動 open の側でも守る。
+pub(crate) fn resume_last_project(store: Option<&Path>) -> Resume {
+    let Some(store) = store else {
+        return Resume::Nothing;
+    };
+    let remembered = match crate::last_project::load_last_project(store) {
+        Ok(Some(path)) => path,
+        Ok(None) => return Resume::Nothing,
+        Err(error) => {
+            return Resume::Explained(format!(
+                "最後に開いていた project を思い出せない: {error} — \
+                 Cmd+N で作るか Cmd+O で開く"
+            ))
+        }
+    };
+    match ProjectSeat::open(&remembered) {
+        Ok(seat) => Resume::Seated(seat),
+        // `ProjectSeat::open` の Err は既に path を名指ししている。
+        Err(error) => Resume::Explained(format!("{error} — Cmd+N で作るか Cmd+O で開く")),
+    }
 }
 
 impl ShellGateway {
@@ -153,6 +201,30 @@ impl ShellGateway {
             export: None,
             transcript,
             journal: IntentJournal::default(),
+            last_project: None,
+        }
+    }
+
+    /// 座り直しを覚える先(user 設定層の path)を渡す。**渡さない限り何も書かない** —
+    /// replay も単体テストも、利用者の「最後に開いていた project」を踏まない。
+    pub(crate) fn remembering(mut self, store: Option<PathBuf>) -> Self {
+        self.last_project = store;
+        self
+    }
+
+    /// 引数なし起動の座席。[`resume_last_project`] の3択を受けて、座るか・
+    /// 理由を言うかを決める。**座る道は `--project` と同じ**([`Self::seated`])なので、
+    /// 自動 open も journal の第1行に `OpenProject` を持つ。
+    pub(crate) fn resumed(transcript: ShellTranscript, resume: Resume) -> Self {
+        match resume {
+            Resume::Seated(seat) => Self::seated(transcript, seat),
+            Resume::Nothing => Self::new(transcript),
+            Resume::Explained(reason) => {
+                // 開けなかったことは**帯が言う**。起きなかった行動は journal に
+                // 載せない(intent は起こした行動の記録であって、失敗の記録ではない)。
+                transcript.report(reason);
+                Self::new(transcript)
+            }
         }
     }
 
@@ -173,6 +245,7 @@ impl ShellGateway {
             export: None,
             transcript,
             journal,
+            last_project: None,
         }
     }
 
@@ -279,12 +352,29 @@ impl ShellGateway {
         match reseat_project(&mut self.project, path) {
             Ok(()) => {
                 self.transcript.report(format!("opened {}", path.display()));
+                self.remember_last_project(path);
                 true
             }
             Err(error) => {
                 self.transcript.report(error);
                 false
             }
+        }
+    }
+
+    /// 次の引数なし起動が続きを開けるよう、いま座った project を覚える。
+    ///
+    /// New も Open も同じ `reseat` を通るので、覚える口はこの1つで足りる。
+    /// **覚えられなくても編集は続く** — ただし黙らない(帯へ理由が出る)。
+    fn remember_last_project(&self, path: &Path) {
+        let Some(store) = self.last_project.as_deref() else {
+            return;
+        };
+        if let Err(error) = crate::last_project::remember_last_project(store, path) {
+            self.transcript.report(format!(
+                "最後に開いた project を覚えられない({}): {error}",
+                store.display()
+            ));
         }
     }
 
@@ -678,6 +768,126 @@ mod tests {
             "作る/開く口を名指しで案内する: {:?}",
             gateway.transcript().latest()
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // 引数なし起動で続きが開く(外部診断 F-01)
+    // -----------------------------------------------------------------------
+
+    /// **座り直した project は次の起動のために覚える。**
+    ///
+    /// New も Open も同じ `reseat` を通るので、覚える口も1つで足りる。
+    /// 覚え先は外から渡された user 設定層の path だけで、`remembering` を
+    /// 渡していないゲートウェイ(replay・大半のテスト)は何も書かない。
+    #[test]
+    fn a_seated_project_is_remembered_for_the_next_launch() {
+        let dir = motolii_testkit::tmp_dir("intent_remember_last");
+        let store = dir.join("last-project.json");
+        let first = dir.join("first.json");
+        let second = dir.join("second.json");
+        create_project_file(&second).expect("create");
+
+        let mut gateway = ShellGateway::new(ShellTranscript::default())
+            .remembering(Some(store.clone()));
+        assert!(gateway.dispatch(UiIntent::NewProject {
+            path: first.clone()
+        }));
+        assert_eq!(
+            crate::last_project::load_last_project(&store).expect("読める"),
+            Some(first),
+            "New で作った project が覚えられていない"
+        );
+
+        assert!(gateway.dispatch(UiIntent::OpenProject {
+            path: second.clone()
+        }));
+        assert_eq!(
+            crate::last_project::load_last_project(&store).expect("読める"),
+            Some(second),
+            "Open した project が覚えられていない"
+        );
+    }
+
+    /// 覚え先を渡していないゲートウェイは**何も書かない**。replay と
+    /// 単体テストが利用者の設定を踏まないための境目。
+    #[test]
+    fn a_gateway_without_a_store_remembers_nothing() {
+        let dir = motolii_testkit::tmp_dir("intent_remember_none");
+        let store = dir.join("last-project.json");
+        let project = dir.join("fresh.json");
+
+        let mut gateway = ShellGateway::new(ShellTranscript::default());
+        assert!(gateway.dispatch(UiIntent::NewProject { path: project }));
+        assert!(!store.exists(), "覚え先を渡していないのに書いている");
+    }
+
+    /// **引数なしの起動は、最後に開いていた project へそのまま座る。**
+    /// 台本 P5「保存→再起動→続きがそのまま開く」の機械版。
+    ///
+    /// 座り方は `--project` 起動と同じ(`ShellGateway::seated`)なので、journal の
+    /// 第1行も同じ `OpenProject` になる — `--intent-log` はそれ単体で replay できる。
+    #[test]
+    fn an_argument_less_launch_sits_back_down_in_the_last_project() {
+        let dir = motolii_testkit::tmp_dir("intent_resume_seat");
+        let store = dir.join("last-project.json");
+        let project = dir.join("continue.json");
+        create_project_file(&project).expect("create");
+        crate::last_project::remember_last_project(&store, &project).expect("覚える");
+
+        let transcript = ShellTranscript::default();
+        let gateway = ShellGateway::resumed(transcript.clone(), resume_last_project(Some(&store)));
+
+        assert_eq!(
+            gateway.project().map(|seat| seat.path().to_path_buf()),
+            Some(project.clone()),
+            "続きが開いていない"
+        );
+        assert_eq!(
+            gateway.journal().intents(),
+            vec![UiIntent::OpenProject { path: project }],
+            "自動 open も seq 1 の OpenProject として残る(--project 起動と同じ扱い)"
+        );
+    }
+
+    /// **覚えている project が消えていたら、理由を言ってからスタート画面。**
+    /// 黙って fixture にも空の窓にも落ちない(既存の起動失敗の原則と同じ)。
+    #[test]
+    fn a_last_project_that_vanished_says_why_and_leaves_the_start_screen() {
+        let dir = motolii_testkit::tmp_dir("intent_resume_gone");
+        let store = dir.join("last-project.json");
+        let project = dir.join("deleted.json");
+        create_project_file(&project).expect("create");
+        crate::last_project::remember_last_project(&store, &project).expect("覚える");
+        std::fs::remove_file(&project).expect("消す");
+
+        let transcript = ShellTranscript::default();
+        let gateway = ShellGateway::resumed(transcript.clone(), resume_last_project(Some(&store)));
+
+        assert!(!gateway.is_seated(), "開けなかったのに座っている");
+        let said = transcript.latest().unwrap_or_default();
+        assert!(
+            said.contains("deleted.json"),
+            "開けなかった project を名指しで言う。実際: {said:?}"
+        );
+        assert!(
+            said.contains("Cmd+N") || said.contains("New"),
+            "次にどうすればよいかまで言う。実際: {said:?}"
+        );
+    }
+
+    /// 初回起動(まだ何も覚えていない)は、**何も言わずに**スタート画面。
+    /// 言うことが無いのに帯を出さない。
+    #[test]
+    fn a_first_ever_launch_is_the_start_screen_without_a_word() {
+        let dir = motolii_testkit::tmp_dir("intent_resume_first");
+        let store = dir.join("last-project.json");
+
+        let transcript = ShellTranscript::default();
+        let gateway = ShellGateway::resumed(transcript.clone(), resume_last_project(Some(&store)));
+
+        assert!(!gateway.is_seated());
+        assert!(gateway.journal().intents().is_empty(), "起きていない行動は記録しない");
+        assert_eq!(transcript.latest(), None, "初回起動に帯は要らない");
     }
 
     /// `--project` 起動の座席も journal の第1行を持つ(replay 可能な列になる)。

@@ -25,7 +25,12 @@
 //! `--project` は実プロジェクトを開く。Timeline は native エディタになって
 //! その Document を編集でき(移動/トリム/選択/Undo/Redo)、Stage は編集後の
 //! snapshot を映す。**開けなければ起動失敗**で、fixture へ黙って落ちない。
-//! `--project` 無しは従来どおり fixture 展示(開発動線・screenshot テスト)。
+//!
+//! `--project` 無しの通常起動は**最後に開いていた project へ座り直す**
+//! (`docs/ux-check-first-ten-minutes.md` P5「保存→再起動→続きがそのまま開く」)。
+//! 覚えていない・開けない時だけスタート画面で、開けなかった理由は帯に出る。
+//! `--fixture` はその手前で分岐して従来どおり fixture 展示(開発動線・
+//! screenshot テスト)になる。
 
 use std::path::PathBuf;
 
