@@ -187,7 +187,7 @@ pub(crate) use driven::DrivenShell;
 
 #[cfg(test)]
 mod driven {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     use eframe::egui_wgpu::RenderState;
     use egui_kittest::kittest::Queryable as _;
@@ -237,10 +237,21 @@ mod driven {
         /// GPU が無い環境では `None` を返す — `motolii_testkit::gpu_or_skip` と
         /// 同じポリシー(理由を言って skip。`MOTOLII_REQUIRE_GPU=1` なら panic)。
         pub(crate) fn seatless(prompts: ScriptedPrompts) -> Option<Self> {
-            Self::new(Box::new(prompts))
+            Self::new(Box::new(prompts), None)
         }
 
-        fn new(prompts: Box<dyn ShellPrompts>) -> Option<Self> {
+        /// スタート画面から始めつつ、**Browser を実 media の入った folder へ座らせる**。
+        ///
+        /// 製品の既定(`docs/mocks`)には動画も音声も無く、カードを触る道が試せない。
+        /// 変えるのは Browser が見る根だけで、他は `seatless` と1つも違わない。
+        pub(crate) fn seatless_browsing(
+            prompts: ScriptedPrompts,
+            browser_root: &Path,
+        ) -> Option<Self> {
+            Self::new(Box::new(prompts), Some(browser_root.to_path_buf()))
+        }
+
+        fn new(prompts: Box<dyn ShellPrompts>, browser_root: Option<PathBuf>) -> Option<Self> {
             let (render_state, renderer) = headless_render_state()?;
             let mut prompts = Some(prompts);
             let seat = Seat {
@@ -251,6 +262,7 @@ mod driven {
                         prompts.take().expect("prompts は1度だけ使う"),
                         None,
                         false,
+                        browser_root,
                     )
                 })),
                 app: None,
@@ -296,6 +308,76 @@ mod driven {
                     panic!("ラベルに {label:?} を含む面が無い:\n{:#?}", self.harness)
                 });
             node.click();
+        }
+
+        /// そのラベルを含む最初の面を**ダブルクリック**する。
+        ///
+        /// kittest の `click()` は1押しぶんの事象を queue へ積み、`step()` が
+        /// **1事象 = 1フレーム**で流す。既定の `step_dt` は 0.25s なので、素直に
+        /// 2回 `click()` すると押下の間隔が egui の double-click 判定窓
+        /// (`max_double_click_delay` = 0.3s)から外れて、ただの単クリック2回になる。
+        /// そこで 2 連打ぶんの押下/離しを**同じフレーム**の `RawInput` へ直接積む
+        /// (同一フレーム = 時刻差 0 なので、窓の広さに依らず必ず 2 連打になる)。
+        ///
+        /// hover はひとつ前のフレームの席で決まるので、先に pointer を置くフレームを
+        /// 1つ挟む。
+        pub(crate) fn double_click_label_containing(&mut self, label: &str) {
+            let center = {
+                let node = self
+                    .harness
+                    .query_all_by_label_contains(label)
+                    .next()
+                    .unwrap_or_else(|| {
+                        panic!("ラベルに {label:?} を含む面が無い:\n{:#?}", self.harness)
+                    });
+                node.rect().center()
+            };
+            self.harness
+                .input_mut()
+                .events
+                .push(egui::Event::PointerMoved(center));
+            self.harness.step();
+            for _ in 0..2 {
+                for pressed in [true, false] {
+                    self.harness
+                        .input_mut()
+                        .events
+                        .push(egui::Event::PointerButton {
+                            pos: center,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::default(),
+                        });
+                }
+            }
+            self.harness.step();
+        }
+
+        /// 座席の Document に立っている track item の総数。
+        /// **配置が起きたか**の審判(帯の一言だけを信じない)。座席が無ければ 0。
+        pub(crate) fn track_item_count(&self) -> usize {
+            self.harness
+                .state()
+                .app()
+                .project()
+                .map(|seat| {
+                    seat.snapshot()
+                        .tracks
+                        .iter()
+                        .map(|track| track.items.len())
+                        .sum()
+                })
+                .unwrap_or(0)
+        }
+
+        /// 座席の writer 世代。編集が実際に通ったかの合図。座席が無ければ 0。
+        pub(crate) fn revision(&self) -> u64 {
+            self.harness
+                .state()
+                .app()
+                .project()
+                .map(|seat| seat.editor().revision())
+                .unwrap_or(0)
         }
 
         /// OS ドロップの注入。native と同じ「path の入った `DroppedFile`」を積む。

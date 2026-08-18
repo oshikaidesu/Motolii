@@ -21,6 +21,7 @@ use egui_tiles::{Container, Linear, LinearDir, Tile, TileId, Tiles, Tree, UiResp
 
 use super::drive::{NativePrompts, ShellPrompts, ShellTranscript};
 use super::pane::{BlitzPane, PaneKind};
+use crate::browser_panel::BrowserRequest;
 use crate::export_seat::{can_start_export, ExportFinish, ExportRequest, ExportRun};
 use crate::timeline_editor::TimelineEditor;
 
@@ -33,6 +34,10 @@ struct BlitzShellBehavior<'a> {
     render_state: &'a RenderState,
     /// live の Timeline エディタ。`None` なら Timeline も fixture の Blitz 表示。
     editor: Option<&'a mut TimelineEditor>,
+    /// 面が出した要求(いまは Browser のカードのダブルクリックだけ)。
+    /// **ここでは実行しない** — 座席を触るのは描き終わってからの `app` である。
+    /// 1フレームに1件で足りる(人の指は1本)。
+    browser_request: Option<BrowserRequest>,
 }
 
 impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
@@ -59,7 +64,9 @@ impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
                 pane.set_live_playhead(editor.playhead_seconds());
             }
         }
-        pane.show(ui, self.render_state);
+        if let Some(request) = pane.show(ui, self.render_state) {
+            self.browser_request = Some(request);
+        }
         // ペイン本体をドラッグ元にはしない（タブのドラッグだけで足りる）。
         UiResponse::None
     }
@@ -363,6 +370,9 @@ pub struct BlitzShellApp {
     /// **既定は false** — 座席なしの起動は展示ではなくスタート画面
     /// (New / Open) を出す。展示が製品状態に見える混乱をUXチェック第1号で確認した。
     fixture: bool,
+    /// Browser が見るフォルダ。`None` は既定(`docs/mocks`)。座席を失って並びを
+    /// 組み直すとき(`reseat` の失敗経路)も同じ根を渡し直すために持っている。
+    browser_root: Option<PathBuf>,
 }
 
 impl BlitzShellApp {
@@ -398,6 +408,8 @@ impl BlitzShellApp {
             Box::new(NativePrompts),
             project,
             fixture,
+            // 窓は従来どおり `docs/mocks` を見る(Browser の根はこのレーンの主題ではない)。
+            None,
         )
     }
 
@@ -409,12 +421,16 @@ impl BlitzShellApp {
     ///
     /// # Panics
     /// Tokio runtime を作れない場合。
+    ///
+    /// `browser_root` は Browser が見るフォルダ。`None` は製品の既定(`docs/mocks`)で、
+    /// 運転席だけが実 media の入った folder を座らせる(窓を開かずにカードを触るため)。
     pub(crate) fn with_deps(
         egui_ctx: &egui::Context,
         render_state: RenderState,
         prompts: Box<dyn ShellPrompts>,
         project: Option<ProjectSeat>,
         fixture: bool,
+        browser_root: Option<PathBuf>,
     ) -> Self {
         // 記号(◆ ◇ ▶ ← ↔ →)が豆腐にならないよう、既定fontの後ろにHackを連ねる。
         // 新しいフォントは足していない。詳細は `egui_fonts`。
@@ -434,13 +450,14 @@ impl BlitzShellApp {
         Self {
             runtime,
             render_state,
-            tree: build_initial_tree(snapshot.as_ref(), &transcript),
+            tree: build_initial_tree(snapshot.as_ref(), &transcript, browser_root.clone()),
             project,
             seated_revision,
             transcript,
             prompts,
             export: None,
             fixture,
+            browser_root,
         }
     }
 
@@ -500,7 +517,8 @@ impl BlitzShellApp {
                 // 同じ project を開き直そうとして落ちた時だけ席が空く。
                 // 黙って fixture に見えないよう、並びも status も合わせる。
                 if self.project.is_none() {
-                    self.tree = build_initial_tree(None, &self.transcript);
+                    self.tree =
+                        build_initial_tree(None, &self.transcript, self.browser_root.clone());
                     self.seated_revision = 0;
                 }
                 self.transcript.report(error);
@@ -810,12 +828,23 @@ impl BlitzShellApp {
         let mut behavior = BlitzShellBehavior {
             render_state: &self.render_state,
             editor: self.project.as_mut().map(ProjectSeat::editor_mut),
+            browser_request: None,
         };
 
         egui::CentralPanel::default().show(ui, |ui| {
             self.tree.ui(&mut behavior, ui);
         });
+        let browser_request = behavior.browser_request.take();
         drop(behavior);
+
+        // Browser のカードのダブルクリック。**ドロップと同じ1本の経路へ合流させる** —
+        // 新しい import 経路は作らない(2026-08-18 の実機一撃で「押しても何も起きない」
+        // と分かった所。原因は判断が無いことではなく、要求がどこにも流れていなかったこと)。
+        // 成立も失敗も帯(= transcript)が一言で言う。
+        if let Some(BrowserRequest::PlaceFile(path)) = browser_request {
+            let report = admit_dropped_paths(self.project.as_mut(), &[path]);
+            self.transcript.report(report);
+        }
 
         // 掴んだファイルが窓の上に来ているあいだ、受け取れることを見せる。
         paint_drop_hint(&ctx, self.project.is_some());
@@ -922,10 +951,15 @@ fn seat_stage_documents(tree: &mut Tree<BlitzPane>, document: &Arc<motolii_doc::
 fn build_initial_tree(
     document: Option<&Arc<motolii_doc::Document>>,
     transcript: &ShellTranscript,
+    browser_root: Option<PathBuf>,
 ) -> Tree<BlitzPane> {
     let mut tiles = Tiles::default();
 
-    let plain = |kind: PaneKind| BlitzPane::new(kind).reporting_to(transcript);
+    let plain = |kind: PaneKind| {
+        BlitzPane::new(kind)
+            .with_browser_root(browser_root.clone())
+            .reporting_to(transcript)
+    };
     let seated = |kind: PaneKind| match document {
         Some(doc) => BlitzPane::with_document(kind, Arc::clone(doc)).reporting_to(transcript),
         None => plain(kind),
@@ -1018,7 +1052,7 @@ mod tests {
             "the editor serves the writer snapshot itself, not a re-load"
         );
 
-        let tree = build_initial_tree(Some(&snapshot), &ShellTranscript::default());
+        let tree = build_initial_tree(Some(&snapshot), &ShellTranscript::default(), None);
         let mut timeline = 0;
         let mut stage = 0;
         for (_, tile) in tree.tiles.iter() {
@@ -1073,7 +1107,7 @@ mod tests {
 
         let mut seat = ProjectSeat::open(&path).expect("open temp project");
         let first = seat.snapshot();
-        let mut tree = build_initial_tree(Some(&first), &ShellTranscript::default());
+        let mut tree = build_initial_tree(Some(&first), &ShellTranscript::default(), None);
 
         // エディタの操作 API で move を1回通す(writer 経由の実編集)。
         let layer = *names
@@ -1115,7 +1149,7 @@ mod tests {
 
     #[test]
     fn fixture_tree_has_no_live_document() {
-        let tree = build_initial_tree(None, &ShellTranscript::default());
+        let tree = build_initial_tree(None, &ShellTranscript::default(), None);
         for (_, tile) in tree.tiles.iter() {
             if let Tile::Pane(pane) = tile {
                 assert!(

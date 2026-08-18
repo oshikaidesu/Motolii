@@ -16,13 +16,18 @@
 //!   Blitz テクスチャではなく native エディタ(`timeline_editor::TimelineEditor`)になり、
 //!   移動・トリム・選択・Undo/Redo(Cmd+Z / Shift+Cmd+Z)が `ProjectSeat` の唯一の
 //!   writer を通る。編集後の snapshot は同じフレームで Stage へも配り直される
-//! - **ファイルの入口が2つ**。Finder から窓へ動画/音声を落とすと probe → import →
-//!   **playhead の位置**へ clip が立つ(`admit_dropped_paths`)。`Cmd+N` で新規
-//!   project を作って開き、`Cmd+O` で開き直す(`create_project_file` /
-//!   `reseat_project`)。つまり `--project` 無しで起動しても後から project を持てる。
+//! - **素材の入口が2つ、経路は1本**。Finder から窓へ動画/音声を落とすか、
+//!   **Browser のカードをダブルクリック**すると、どちらも同じ `admit_dropped_paths`
+//!   を通って probe → import → **playhead の位置**へ clip が立つ。Browser 側は
+//!   パネルが `browser_panel::BrowserRequest` を返すだけで Document を書かず、
+//!   流す先を決めるのは `app.rs` である(2つ目の import 経路を作らない)。
 //!   probe できないファイルは理由つきで飛ばし、黙って捨てない
-//! - **入力(Timeline 以外)**。Blitz のペインはマウスを受けない。ポインタの
-//!   振り分けは後続capsule(C2)。Browser / Inspector / chrome は固定サンプルのまま
+//! - **project の入口**。`Cmd+N` で新規 project を作って開き、`Cmd+O` で開き直す
+//!   (`create_project_file` / `reseat_project`)。つまり `--project` 無しで
+//!   起動しても後から project を持てる
+//! - **入力**。Blitz のペイン(chrome の3枚)はマウスを受けない — ポインタの
+//!   振り分けは後続capsule(C2)。Timeline / Stage / Browser / Inspector は
+//!   ホストの egui へ直接描く native 面なので、素直にマウスが通る
 //! - **保存と信用の可視化**。`Cmd+S` が writer snapshot を project ファイルへ
 //!   書き戻す(`ProjectSeat::save`。経路は既存の `ProjectSession::save_document`)。
 //!   下の status 帯は project が居るあいだ常設で、保存状態(未保存なら ● 付き)と

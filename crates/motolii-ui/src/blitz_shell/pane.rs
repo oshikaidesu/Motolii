@@ -55,7 +55,7 @@ use blitz_traits::shell::{ColorScheme, Viewport};
 
 use super::drive::ShellTranscript;
 use crate::browser_blitz::render::BlitzSurface;
-use crate::browser_panel::BrowserPanel;
+use crate::browser_panel::{BrowserPanel, BrowserRequest};
 use crate::chrome_blitz;
 use crate::inspector_panel::{
     InspectorAction, InspectorEditParam, InspectorPanel, FIXTURE_TARGET_LAYER,
@@ -137,6 +137,10 @@ pub struct BlitzPane {
     /// 既定は誰も読まない台帳で、shell が組む時に殻の台帳へ差し替える
     /// (`reporting_to`)。そうすると帯にも `--status-log` にも同じ文が出る。
     transcript: ShellTranscript,
+    /// Browser が見るフォルダ。`None` は従来どおり `BrowserPanel::default_shell()`
+    /// (= `docs/mocks`)。運転席は実 media の入った folder を座らせて、
+    /// **窓を開かずにカードを触れる**ようにする。
+    browser_root: Option<PathBuf>,
 }
 
 impl BlitzPane {
@@ -154,7 +158,15 @@ impl BlitzPane {
             target: None,
             content,
             transcript: ShellTranscript::default(),
+            browser_root: None,
         }
+    }
+
+    /// Browser が見るフォルダを決める。`None` なら従来どおり `docs/mocks`。
+    /// Browser 以外の面には意味が無い。
+    pub(crate) fn with_browser_root(mut self, root: Option<PathBuf>) -> Self {
+        self.browser_root = root;
+        self
     }
 
     /// この面の一言を殻の台帳へ流す。**失敗を黙って消さない**ための線で、
@@ -266,8 +278,16 @@ impl BlitzPane {
     /// `ui` の available rect いっぱいにこのペインの絵を描く。
     ///
     /// textureの作り直し・egui側への再登録・Blitz側のviewport更新はすべてここが持つ。
-    /// マウスは受けない(`Sense::hover()`)。入力ルーティングは後続capsule。
-    pub fn show(&mut self, ui: &mut egui::Ui, render_state: &eframe::egui_wgpu::RenderState) {
+    /// Blitz 面はマウスを受けない(`Sense::hover()`)。入力ルーティングは後続capsule。
+    ///
+    /// 返るのは **native Browser が出した要求**だけ(`BrowserRequest`)。面は自分で
+    /// Document を書かないので、要求はそのまま呼び手(`app.rs`)へ上がる。
+    /// 他の面は常に `None`。
+    pub fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        render_state: &eframe::egui_wgpu::RenderState,
+    ) -> Option<BrowserRequest> {
         let available = ui.available_size_before_wrap();
         let points_per_pixel = ui.ctx().pixels_per_point();
         // 面は物理pxで確保する。egui の point ではなく物理pxに合わせておけば、
@@ -279,7 +299,7 @@ impl BlitzPane {
         let height = (available.y * points_per_pixel).floor().max(0.0) as u32;
         // 0サイズのtexture生成はpanicするので、その前に返す。
         if width == 0 || height == 0 {
-            return;
+            return None;
         }
 
         // Stage / Browser / Inspector は **ホストの egui へ直接描く**。
@@ -289,13 +309,18 @@ impl BlitzPane {
         match &mut self.content {
             Content::Stage(_) | Content::NativeBrowser(_) | Content::NativeInspector(_) => {
                 let trace_started = trace_enabled().then(std::time::Instant::now);
+                let mut request = None;
                 match &mut self.content {
                     Content::Stage(pane) => pane.show(ui, render_state, &self.transcript),
                     Content::NativeBrowser(panel) => {
                         // 初回表示時に作る(フォルダ走査と縮小実体の準備を、
                         // 窓を開く前に払わない)。
-                        panel
-                            .get_or_insert_with(BrowserPanel::default_shell)
+                        let root = self.browser_root.clone();
+                        request = panel
+                            .get_or_insert_with(|| match root {
+                                Some(root) => BrowserPanel::with_root(root),
+                                None => BrowserPanel::default_shell(),
+                            })
                             .show(ui);
                     }
                     Content::NativeInspector(panel) => {
@@ -316,7 +341,7 @@ impl BlitzPane {
                 if let Some(started) = trace_started {
                     self.trace_frame(started.elapsed(), width, height);
                 }
-                return;
+                return request;
             }
             Content::Html(_) => {}
         }
@@ -341,7 +366,7 @@ impl BlitzPane {
         // 直前に作った(か、そのまま生きている)ので必ず在る。
         // 万一無ければ今フレームは描かない — 毎フレームの経路でpanicさせない。
         let Some(target) = self.target.as_ref() else {
-            return;
+            return None;
         };
         // `self.target` の借りは描き終わりで切る。合成で要るのは id だけなので先に写す。
         let texture_id = target.id;
@@ -392,6 +417,8 @@ impl BlitzPane {
         );
         ui.painter()
             .image(texture_id, draw, uv, egui::Color32::WHITE);
+        // Blitz 面は要求を出さない(マウスを受けないので出しようがない)。
+        None
     }
 
     /// 1フレームぶんの実測を積み、`TRACE_EVERY` ごとに吐く。
