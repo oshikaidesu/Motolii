@@ -18,14 +18,18 @@
 //! と同じ `UiIntent::Undo` / `Redo` へ流れる — 経路も意味も1つ。
 
 use iced::widget::canvas::Canvas;
-use iced::widget::{button, column, container, mouse_area, row, rule, scrollable, space, text};
+use iced::widget::{
+    button, column, container, mouse_area, row, rule, scrollable, space, stack, text,
+};
 use iced::{Center, Element, Fill};
 
 use crate::browser::{BrowserCard, BrowserRail};
 use crate::message::Message;
 use crate::shell::Shell;
 use crate::theme::style;
+use crate::timeline::keys::interp_menu_items;
 use crate::timeline::{TimelineMsg, TimelineProgram};
+use crate::widgets::context_menu::{context_menu, MenuEvent};
 use crate::widgets::DropEvent;
 use crate::window_input::window_input;
 
@@ -221,11 +225,37 @@ pub const TIMELINE_PANE_ID: iced::advanced::widget::Id =
 /// 下段 Timeline pane(M-3)。canvas は自分の受け持つ矩形の左上を原点に取る
 /// ので、運転席のポインタ座標(`timeline::semantics::PaneGeometry`)はその
 /// 矩形のローカル座標のまま成立する(窓座標への変換は [`TIMELINE_PANE_ID`])。
+///
+/// **2026-08-19 M-6**: 右クリックで開いたキーの補間メニュー
+/// (`TimelinePane::key_menu`)が在れば、canvas の上に重ねる
+/// (`widgets::context_menu` — M-4w で用意した既存の overlay 部品を初めて使う)。
 fn timeline_pane(shell: &Shell) -> Element<'_, Message> {
-    Canvas::new(TimelineProgram { shell })
+    let canvas: Element<'_, Message> = Canvas::new(TimelineProgram { shell })
         .width(Fill)
         .height(Fill)
-        .into()
+        .into();
+    let Some(menu) = shell.timeline_pane().key_menu else {
+        return canvas;
+    };
+    let items = interp_menu_items(menu.param);
+    let (layer, param, at_us) = (
+        menu.layer,
+        menu.param,
+        motolii_ui::blitz_shell::seconds_to_us(menu.at_seconds),
+    );
+    let overlay = context_menu(items, menu.anchor, move |event| match event {
+        MenuEvent::Chosen(id) => match crate::timeline::keys::interp_for_menu_id(id) {
+            Some(interp) => Message::Timeline(TimelineMsg::KeyInterpChosen {
+                layer,
+                param,
+                at_us,
+                interp,
+            }),
+            None => Message::Timeline(TimelineMsg::KeyMenuDismissed),
+        },
+        MenuEvent::Dismissed => Message::Timeline(TimelineMsg::KeyMenuDismissed),
+    });
+    stack(vec![canvas, overlay]).width(Fill).height(Fill).into()
 }
 
 /// grid の列数。

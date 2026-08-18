@@ -24,13 +24,13 @@
 
 use std::sync::Arc;
 
-use motolii_core::Fps;
+use motolii_core::{Fps, RationalTime};
 use motolii_doc::{Document, LayerId};
-use motolii_ui::blitz_shell::{seconds_to_us, UiIntent, UiItemFlag};
+use motolii_ui::blitz_shell::{seconds_to_us, UiEditParam, UiIntent, UiItemFlag, UiKeyInterp};
 use motolii_ui::timeline_editor::{TimelineView, TrimEdge};
 
 use super::semantics::{
-    clamped_move_delta, clamped_trim, frame_snapped, initial_view, move_targets,
+    clamped_move_delta, clamped_trim, frame_snapped, initial_view, key_times_match, move_targets,
 };
 
 /// canvas が出す **意図(intent)まで解決済み**の Message。生イベント中継は無い —
@@ -83,6 +83,40 @@ pub enum TimelineMsg {
     /// 修飾キーの状態。`WheelScrolled` が modifiers を運ばないので追いかける
     /// (spike の詰まった箇所その1と同じ回避)。
     ModifiersChanged(iced::keyboard::Modifiers),
+
+    // ---- property 行(`RowKind::Property`)のキー菱形(2026-08-19 M-6
+    // キー編集レーン)。凍結名は発注の通り、名前は変えていない。 ----
+    /// 菱形を掴んだ = 選択(Cmd で足し引き)+ ドラッグの開始。**intent は無い**
+    /// — 選択は pane 側の局所状態(`selected_keys`。egui 版の `selected_keys`
+    /// と同じ扱いで、Document/journal には入らない)。
+    KeyGrabbed {
+        layer: LayerId,
+        param: UiEditParam,
+        at_seconds: f32,
+        additive: bool,
+    },
+    /// property 行の、菱形の外側のトラック面を押した = playhead へキーを打つ
+    /// (`UiIntent::KeyParamAtPlayhead` — Timeline からもこの1本を呼ぶ)。
+    KeyTrackClicked { layer: LayerId, param: UiEditParam },
+    /// 菱形を右クリック = 補間メニューを開く。`anchor` は窓座標(メニューの
+    /// 出る位置)。
+    KeyMenuRequested {
+        layer: LayerId,
+        param: UiEditParam,
+        at_seconds: f32,
+        anchor: iced::Point,
+    },
+    /// 補間メニューの外を押した / Esc = 閉じるだけ(何も書かない)。
+    KeyMenuDismissed,
+    /// 補間メニューで1項目を選んだ → `UiIntent::SetParamKeyInterp` そのもの
+    /// (凍結名)。`view.rs` の menu closure が `key_menu` の控え(layer/param/
+    /// at_us)と選んだ id からこの形へ組み立てる。
+    KeyInterpChosen {
+        layer: LayerId,
+        param: UiEditParam,
+        at_us: i64,
+        interp: UiKeyInterp,
+    },
 }
 
 /// bar のどこを掴んだか(Message が運ぶ側)。
@@ -112,6 +146,25 @@ pub enum TimelineDrag {
     },
     /// playhead のスクラブ。`preview` はフレーム吸着済み。
     Scrub { preview: f32 },
+    /// property 行のキー菱形の移動。`from_seconds` は掴んだ時の実時刻
+    /// (egui 版 `Grab::KeyTime.original` と同じ役)、`preview` はフレーム吸着済み
+    /// の着地(egui のように clip 端へは吸着しない — v1 の残差、README 参照)。
+    Key {
+        layer: LayerId,
+        param: UiEditParam,
+        from_seconds: f32,
+        preview: f32,
+    },
+}
+
+/// 右クリックで開いている補間メニューの控え。`view.rs` がこれを読んで
+/// `widgets::context_menu` を canvas の上に重ねる。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KeyMenuState {
+    pub layer: LayerId,
+    pub param: UiEditParam,
+    pub at_seconds: f32,
+    pub anchor: iced::Point,
 }
 
 /// plan / note が座席から借りる読み取り一式。dispatch の前(`plan`)と後(`note`)で
@@ -140,6 +193,13 @@ pub struct TimelinePane {
     pub scroll_y: f32,
     pub modifiers: iced::keyboard::Modifiers,
     pub drag: Option<TimelineDrag>,
+    /// 選ばれているキー(`(layer, param, at_seconds)`)。egui 版 `selected_keys`
+    /// と同じ扱いで、Document/journal には入らない pane 局所の session 状態
+    /// (2026-08-19 M-6 — `SelectLayer` と違い、Inspector など他面から見る
+    /// 相手が今のところ無いので intent 化していない)。
+    pub selected_keys: Vec<(LayerId, UiEditParam, f32)>,
+    /// 右クリックで開いている補間メニュー(無ければ閉じている)。
+    pub key_menu: Option<KeyMenuState>,
     /// 最初の ctx で view を composition に合わせて据えたか。
     initialized: bool,
 }
@@ -151,6 +211,8 @@ impl Default for TimelinePane {
             scroll_y: 0.0,
             modifiers: iced::keyboard::Modifiers::empty(),
             drag: None,
+            selected_keys: Vec::new(),
+            key_menu: None,
             initialized: false,
         }
     }
@@ -224,10 +286,33 @@ impl TimelinePane {
                 Some(TimelineDrag::Scrub { preview }) => vec![UiIntent::SetPlayhead {
                     at_us: seconds_to_us(*preview),
                 }],
+                Some(TimelineDrag::Key {
+                    layer,
+                    param,
+                    from_seconds,
+                    preview,
+                }) if !key_times_match(*preview, *from_seconds) => vec![UiIntent::MoveParamKey {
+                    layer: layer.get(),
+                    param: *param,
+                    from_us: seconds_to_us(*from_seconds),
+                    to_us: seconds_to_us(*preview),
+                }],
                 _ => Vec::new(),
             },
+            // **キーが選ばれていればキーが先**(egui 版 `delete_selection_gesture`
+            // と同じ横取り — clip 選択の削除は構造レーンの担当なので、キー選択が
+            // 空の時だけそちらへ通す)。
             TimelineMsg::DeletePressed => {
-                if ctx.selected.is_empty() {
+                if !self.selected_keys.is_empty() {
+                    self.selected_keys
+                        .iter()
+                        .map(|(layer, param, at_seconds)| UiIntent::RemoveParamKey {
+                            layer: layer.get(),
+                            param: *param,
+                            at_us: seconds_to_us(*at_seconds),
+                        })
+                        .collect()
+                } else if ctx.selected.is_empty() {
                     Vec::new()
                 } else {
                     vec![UiIntent::DeleteSelection]
@@ -238,6 +323,45 @@ impl TimelinePane {
             TimelineMsg::PlayheadStepped { frames } => {
                 vec![UiIntent::StepPlayhead { frames: *frames }]
             }
+            // 菱形を掴んだのは選択 + ドラッグ開始(pane 局所、`note` が持つ)。
+            // release までは intent が無い(Move/Trim と同じ設計)。
+            TimelineMsg::KeyGrabbed { .. } => Vec::new(),
+            // 空のトラック面を押した = playhead へキーを打つ。**Inspector 用に
+            // M-4b で入った intent をそのまま呼ぶ**(新しい intent は作らない)。
+            // 成分値が引けない(catalog / playhead 不整合)なら黙って何もしない
+            // — 理由は gateway 側の reject 経路と同じ帯へ出るのは実際に
+            // dispatch した時だけなので、ここで出せない分は素通しする。
+            TimelineMsg::KeyTrackClicked { layer, param } => {
+                let Some(at) = frame_snapped_time(ctx) else {
+                    return Vec::new();
+                };
+                let Some(components) = crate::inspector_model::transform_component_values(
+                    &ctx.document,
+                    *layer,
+                    *param,
+                    at,
+                ) else {
+                    return Vec::new();
+                };
+                vec![UiIntent::KeyParamAtPlayhead {
+                    layer: layer.get(),
+                    param: *param,
+                    components,
+                }]
+            }
+            // メニューを開く/閉じるのは pane 局所(`note` が持つ)。
+            TimelineMsg::KeyMenuRequested { .. } | TimelineMsg::KeyMenuDismissed => Vec::new(),
+            TimelineMsg::KeyInterpChosen {
+                layer,
+                param,
+                at_us,
+                interp,
+            } => vec![UiIntent::SetParamKeyInterp {
+                layer: layer.get(),
+                param: *param,
+                at_us: *at_us,
+                interp: *interp,
+            }],
             // view の操作・preview の途中経過は intent にならない
             // (再現は Message 列 replay が持つ — `drive_timeline.rs` の oracle)。
             TimelineMsg::ScrubStarted { .. }
@@ -333,6 +457,11 @@ impl TimelinePane {
                 Some(TimelineDrag::Scrub { preview }) => {
                     *preview = frame_snapped(at_seconds.clamp(0.0, comp), ctx.fps());
                 }
+                Some(TimelineDrag::Key { preview, .. }) => {
+                    // v1: フレーム境界へ吸着するだけ(clip 端 / 他キーへの吸着は
+                    // egui 版にはあるが、この版の残差 — README に記載)。
+                    *preview = frame_snapped(at_seconds.clamp(0.0, comp), ctx.fps());
+                }
                 None => {}
             },
             TimelineMsg::PointerReleased | TimelineMsg::GestureCancelled => {
@@ -361,11 +490,69 @@ impl TimelinePane {
             TimelineMsg::ModifiersChanged(modifiers) => {
                 self.modifiers = *modifiers;
             }
-            // 選択・M/S・削除・Undo/Redo・コマ送りは座席側の状態で、pane は何も控えない。
+            // 菱形を掴んだ = 選択(egui 版 `select_key` と同じ規則: 素で置き換え /
+            // Cmd で足し引き)+ ドラッグの開始。preview は掴んだ時刻から始まる
+            // ので、掴んだだけ(ドラッグ無し)の release は `key_times_match` が
+            // 効いて intent を出さない。
+            TimelineMsg::KeyGrabbed {
+                layer,
+                param,
+                at_seconds,
+                additive,
+            } => {
+                let entry = (*layer, *param, *at_seconds);
+                if *additive {
+                    if let Some(pos) = self
+                        .selected_keys
+                        .iter()
+                        .position(|e| key_entry_matches(e, &entry))
+                    {
+                        self.selected_keys.remove(pos);
+                    } else {
+                        self.selected_keys.push(entry);
+                    }
+                } else if !self
+                    .selected_keys
+                    .iter()
+                    .any(|e| key_entry_matches(e, &entry))
+                {
+                    self.selected_keys = vec![entry];
+                }
+                self.drag = Some(TimelineDrag::Key {
+                    layer: *layer,
+                    param: *param,
+                    from_seconds: *at_seconds,
+                    preview: *at_seconds,
+                });
+            }
+            TimelineMsg::KeyMenuRequested {
+                layer,
+                param,
+                at_seconds,
+                anchor,
+            } => {
+                self.key_menu = Some(KeyMenuState {
+                    layer: *layer,
+                    param: *param,
+                    at_seconds: *at_seconds,
+                    anchor: *anchor,
+                });
+            }
+            TimelineMsg::KeyMenuDismissed | TimelineMsg::KeyInterpChosen { .. } => {
+                self.key_menu = None;
+            }
+            // Delete で消えた分は選択にも残さない(egui 版と同じ — 消した後は
+            // 選択も空)。行選択の削除は別レーンの `DeleteSelection` が持つので
+            // ここでは触らない。
+            TimelineMsg::DeletePressed => {
+                self.selected_keys.clear();
+            }
+            // 選択・M/S・Undo/Redo・コマ送り・空トラック押しは座席側の状態で、
+            // pane は何も控えない。
             TimelineMsg::RowPicked { .. }
             | TimelineMsg::FlagPressed { .. }
             | TimelineMsg::EmptyPressed { .. }
-            | TimelineMsg::DeletePressed
+            | TimelineMsg::KeyTrackClicked { .. }
             | TimelineMsg::UndoPressed
             | TimelineMsg::RedoPressed
             | TimelineMsg::PlayheadStepped { .. } => {}
@@ -390,6 +577,26 @@ impl TimelinePane {
             _ => Vec::new(),
         }
     }
+}
+
+/// `selected_keys` の1件が、いま押した/掃いたキーと同じか。**秒は
+/// epsilon 比較**(`key_times_match`)— 浮動小数の往復で揺れても選択が
+/// ちらつかない。
+fn key_entry_matches(
+    entry: &(LayerId, UiEditParam, f32),
+    other: &(LayerId, UiEditParam, f32),
+) -> bool {
+    entry.0 == other.0 && entry.1 == other.1 && key_times_match(entry.2, other.2)
+}
+
+/// playhead(pane が読める f32 秒)を、キーを打てるフレーム境界の `RationalTime`
+/// へ。`TimelineEditor::playhead_time` の pane 側の鏡映(同じ「フレームの
+/// 格子に載らない playhead はキーを打てない」判断)。
+fn frame_snapped_time(ctx: &TimelineCtx) -> Option<RationalTime> {
+    let fps = ctx.fps();
+    let raw = RationalTime::try_new((f64::from(ctx.playhead) * 1000.0).round() as i64, 1000).ok()?;
+    let frame = raw.try_to_frame_round(fps).ok()?;
+    RationalTime::try_from_frame(frame, fps).ok()
 }
 
 /// bar 本体を押した瞬間の選択の意味(spike の `apply_selection` と同じ):

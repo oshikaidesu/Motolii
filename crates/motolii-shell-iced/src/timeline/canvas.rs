@@ -20,8 +20,9 @@ use motolii_doc::{Document, LayerId};
 use motolii_ui::blitz_shell::UiItemFlag;
 use motolii_ui::timeline_editor::waveform_band::WaveformWindow;
 use motolii_ui::timeline_editor::TrimEdge;
-use motolii_ui::timeline_rows::{rows, TimelineFoldState, TimelineRow};
+use motolii_ui::timeline_rows::{rows, RowKind, TimelineFoldState, TimelineRow};
 
+use super::keys;
 use super::pane::{GrabZone, TimelineDrag, TimelineMsg};
 use super::semantics::{
     bar_span, flag_button_rect_y, frame_step, hit_test, item_mute_solo, movable_clips,
@@ -189,9 +190,35 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                         at_seconds,
                         additive,
                     },
+                    // property 行の菱形 / トラック面(2026-08-19 M-6)。hit 判定を
+                    // Message へ翻訳するのは `keys::grab_message`(新しい絵・hit の
+                    // コードは `keys.rs` に置く柵)。
+                    TimelineHit::Key { .. } | TimelineHit::PropertyTrack { .. } => {
+                        keys::grab_message(hit, additive)
+                            .unwrap_or(TimelineMsg::EmptyPressed { additive })
+                    }
                     TimelineHit::Empty => TimelineMsg::EmptyPressed { additive },
                 };
                 publish(msg)
+            }
+
+            // ── 右クリック: キーの補間メニュー(2026-08-19 M-6)────────
+            // 菱形の上だけが対象(`keys::menu_request` が Anchor などを黙らせる)。
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) => {
+                let p = cursor.position_in(bounds)?;
+                let hit = hit_test(
+                    &scene.document,
+                    &scene.rows,
+                    view,
+                    &geometry,
+                    pane.scroll_y,
+                    p.x,
+                    p.y,
+                );
+                // `context_menu` は Timeline pane と同じ Stack の中に立つので、
+                // 場所は canvas ローカル座標のまま渡す(窓座標へは変換しない —
+                // `ContextMenu::overlay` が Stack の translation を自分で足す)。
+                keys::menu_request(hit, p).and_then(publish)
             }
 
             // ── ARRANGEMENT 帯を引きずった ────────────────────────────
@@ -370,6 +397,24 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 Size::new(geometry.track_left(), ROW_H),
                 CELL,
             );
+            // property 行(`RowKind::Property`)は object 行と絵が別。M/S/名前・
+            // bar は object 行だけの物なので、ここで分けて `continue`(新しい
+            // 描画コードは `keys.rs` に置く柵 — 2026-08-19 M-6)。
+            if matches!(row.kind, RowKind::Property(_)) {
+                keys::draw_property_row(
+                    &mut frame,
+                    &scene.document,
+                    view,
+                    &geometry,
+                    row,
+                    y,
+                    size.width,
+                    &pane.selected_keys,
+                    pane.drag.as_ref(),
+                    hover,
+                );
+                continue;
+            }
             let selected = scene.selected.contains(&row.layer);
             let span = bar_span(&scene.document, row.layer);
             let is_group_icon = span.map(|(_, _, g)| g).unwrap_or(false);
@@ -834,7 +879,9 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             return mouse::Interaction::ResizingHorizontally;
         }
         match &pane.drag {
-            Some(TimelineDrag::Move { .. }) => return mouse::Interaction::Grabbing,
+            Some(TimelineDrag::Move { .. }) | Some(TimelineDrag::Key { .. }) => {
+                return mouse::Interaction::Grabbing
+            }
             Some(TimelineDrag::Trim { .. }) | Some(TimelineDrag::Scrub { .. }) => {
                 return mouse::Interaction::ResizingHorizontally
             }
@@ -868,6 +915,22 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 ..
             } => mouse::Interaction::Grab,
             TimelineHit::Rail { .. } => mouse::Interaction::Pointer,
+            // 掴めない param(Anchor — `key_ui_param` が `None`)は触れそうに
+            // 見せない(Q0): 手の形は既定のまま。
+            TimelineHit::Key { param, .. } => {
+                if super::semantics::key_ui_param(param).is_some() {
+                    mouse::Interaction::Grab
+                } else {
+                    mouse::Interaction::default()
+                }
+            }
+            TimelineHit::PropertyTrack { param, .. } => {
+                if super::semantics::key_ui_param(param).is_some() {
+                    mouse::Interaction::Pointer
+                } else {
+                    mouse::Interaction::default()
+                }
+            }
             TimelineHit::Empty => mouse::Interaction::default(),
         }
     }

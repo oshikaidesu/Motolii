@@ -90,7 +90,7 @@ pub use drive::{NativePrompts, ScriptedPrompts, ShellPrompts, ShellTranscript, S
 pub use intent::{
     admit_dropped_paths, create_project_file, reseat_project, resume_last_project,
     seconds_to_us, IntentEvent, IntentJournal, ProjectSeat, Resume, ShellGateway, UiEditParam,
-    UiIntent, UiItemFlag,
+    UiIntent, UiItemFlag, UiKeyInterp,
 };
 pub use pane::{BlitzPane, PaneKind};
 pub use runner::{run_blitz_shell, BlitzShellLaunch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES};

@@ -157,10 +157,36 @@ pub enum UiIntent {
     SetPlayhead { at_us: i64 },
     /// playhead を矢印キーでコマ送りする(±1 / Shift ±10)。
     StepPlayhead { frames: i32 },
+
+    // ---- Timeline のキー編集(2026-08-19 M-6 キー編集レーン)。名前は
+    // 構造操作レーン(Group/Rename/Lock/畳み開閉)と同時に走る発注の凍結名
+    // そのまま。KeyframeId は運ばない — `at_us` / `from_us` で名指し、
+    // 実行の直前にゲートウェイが引き直す(wire は layer identity だけを運ぶ
+    // 2026-08-10 の決定と同じ理由)。 ----
+    /// Timeline: キー1本を消す(菱形選択中の Delete / Backspace)。
+    RemoveParamKey {
+        layer: u64,
+        param: UiEditParam,
+        at_us: i64,
+    },
+    /// Timeline: キー1本の時刻をドラッグで動かす(release で1件)。
+    MoveParamKey {
+        layer: u64,
+        param: UiEditParam,
+        from_us: i64,
+        to_us: i64,
+    },
+    /// Timeline: キー1本の補間を右クリックで指定する。**D2 の口は Position だけ**
+    /// (`prepare_set_position_key_interp`)— 他は断られる(帯が理由を言う)。
+    SetParamKeyInterp {
+        layer: u64,
+        param: UiEditParam,
+        at_us: i64,
+        interp: UiKeyInterp,
+    },
     // 将来枠(足す時はフェンスの禁止リストも一緒に伸ばす):
     // - view: camera 操作・panel の開閉/並び
-    // - wave E 残り: Timeline 内の編集(key drag)、
-    //   audio gain(エディタに操作 API が立ってから)
+    // - wave E 残り: audio gain(エディタに操作 API が立ってから)
 }
 
 /// intent が運ぶ M / S。Timeline 側の `ItemFlag` と一対一(Lock は Timeline の
@@ -200,6 +226,34 @@ impl UiEditParam {
             Self::Scale => ParamRef::Scale,
             Self::Rotation => ParamRef::Rotation,
             Self::Opacity => ParamRef::Opacity,
+        }
+    }
+}
+
+/// intent が運ぶキーの補間。egui 版の右クリックメニュー
+/// (`Hold` / `Linear` / `Ease in-out`)と同じ3択(2026-08-19 M-6)。
+/// `motolii_eval::Interp` の `Bezier { .. }` は数値を4つ持つので wire に
+/// そのまま出さない — `Smooth` は egui 版と同じ既定パラメータへ写す。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UiKeyInterp {
+    Hold,
+    Linear,
+    Smooth,
+}
+
+impl UiKeyInterp {
+    fn to_interp(self) -> motolii_eval::Interp {
+        match self {
+            Self::Hold => motolii_eval::Interp::Hold,
+            Self::Linear => motolii_eval::Interp::Linear,
+            // egui 版 `key_menu` の "Ease in-out" と同じ既定値。
+            Self::Smooth => motolii_eval::Interp::Bezier {
+                x1: 0.42,
+                y1: 0.0,
+                x2: 0.58,
+                y2: 1.0,
+            },
         }
     }
 }
@@ -598,6 +652,48 @@ impl ShellGateway {
             UiIntent::StepPlayhead { frames } => self.with_editor(|editor| {
                 editor.step_playhead_frames(*frames);
                 true
+            }),
+
+            // ---- Timeline のキー編集(M-6)。実体は timeline_editor に足した
+            //      1本ずつの操作 API — MoveClips/TrimClip と同じ with_editor 経路。
+            UiIntent::RemoveParamKey { layer, param, at_us } => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.remove_param_key_at(
+                    motolii_doc::LayerId::from_raw(*layer),
+                    param.to_param_ref(),
+                    us_to_seconds(*at_us),
+                );
+                editor.revision() > before
+            }),
+            UiIntent::MoveParamKey {
+                layer,
+                param,
+                from_us,
+                to_us,
+            } => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.move_param_key(
+                    motolii_doc::LayerId::from_raw(*layer),
+                    param.to_param_ref(),
+                    us_to_seconds(*from_us),
+                    us_to_seconds(*to_us),
+                );
+                editor.revision() > before
+            }),
+            UiIntent::SetParamKeyInterp {
+                layer,
+                param,
+                at_us,
+                interp,
+            } => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.set_param_key_interp(
+                    motolii_doc::LayerId::from_raw(*layer),
+                    param.to_param_ref(),
+                    us_to_seconds(*at_us),
+                    interp.to_interp(),
+                );
+                editor.revision() > before
             }),
         }
     }

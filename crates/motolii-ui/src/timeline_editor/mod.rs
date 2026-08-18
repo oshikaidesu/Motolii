@@ -1734,6 +1734,136 @@ impl TimelineEditor {
         );
     }
 
+    // ---- キー1本の操作 API(2026-08-19 M-6 キー編集レーン)。iced Timeline の
+    // `UiIntent::RemoveParamKey` / `MoveParamKey` / `SetParamKeyInterp` の入口
+    // ----
+    //
+    // egui 版の Grab::KeyTime / delete_selected_keys / set_key_interp と**同じ
+    // D2 呼び出し**(`key_time_command` / `prepare_remove_*` /
+    // `prepare_set_position_key_interp`)を再利用するが、egui のように
+    // `selected_keys` 経由ではなく、intent が運ぶ `at_seconds` で1本を名指しする
+    // (wire は layer identity だけを運ぶ2026-08-10の決定と同じ理由 — `KeyframeId`
+    // を外へ出さない)。
+
+    /// キーを時刻で探す。秒の丸め誤差(µs 往復・f32)より充分粗い間合いで
+    /// 一致を見る — フレーム境界どうしの間隔よりずっと狭いので、隣のキーと
+    /// 取り違えない。
+    fn find_param_key(
+        &self,
+        layer: LayerId,
+        param: ParamRef,
+        at_seconds: f32,
+    ) -> Option<KeyframeId> {
+        const EPS: f32 = 1e-4;
+        param_keys(&self.document, layer, param)
+            .into_iter()
+            .find(|(_, t)| (*t - at_seconds).abs() <= EPS)
+            .map(|(id, _)| id)
+    }
+
+    /// キー1本の削除。**選択とは独立**に、`at_seconds` で指した1本だけを消す
+    /// (egui 版 `delete_selected_keys` は選択経由の複数削除 — intent は
+    /// 選択の外から1本を名指しする)。
+    pub fn remove_param_key_at(&mut self, layer: LayerId, param: ParamRef, at_seconds: f32) {
+        if self.is_locked(layer) {
+            let name = self.name(layer).to_owned();
+            self.reject(format!("{name} is locked"));
+            return;
+        }
+        let Some(key) = self.find_param_key(layer, param, at_seconds) else {
+            self.reject(format!("{}: no key at {:.3}s", self.name(layer), at_seconds));
+            return;
+        };
+        let gesture = self.writer.begin_gesture();
+        let prepared = match param {
+            ParamRef::Position => self
+                .writer
+                .prepare_remove_position_key(layer, key)
+                .map(Some)
+                .map_err(|e| e.to_string()),
+            other => self
+                .writer
+                .prepare_remove_transform_param_key(layer, scalar_property(other), key)
+                .map(Some)
+                .map_err(|e| e.to_string()),
+        };
+        let what = self.name(layer).to_owned();
+        if self.apply_in(gesture, &what, prepared) {
+            self.selected_keys.retain(|entry| *entry != (layer, param, key));
+            self.status = format!(
+                "{} key removed  undo {}",
+                param_label(param),
+                self.writer.undo_len()
+            );
+        }
+    }
+
+    /// キー1本の時刻を動かす。egui 版のドラッグ(`Grab::KeyTime` →
+    /// `commit_drag` → `key_time_command`)と**同じ検証**を通すが、iced は
+    /// release まで Document を触らない設計(preview は pane 側)なので、
+    /// 1回の dispatch で最初から着地まで進む。
+    pub fn move_param_key(
+        &mut self,
+        layer: LayerId,
+        param: ParamRef,
+        from_seconds: f32,
+        to_seconds: f32,
+    ) {
+        if self.is_locked(layer) {
+            let name = self.name(layer).to_owned();
+            self.reject(format!("{name} is locked"));
+            return;
+        }
+        let Some(key) = self.find_param_key(layer, param, from_seconds) else {
+            self.reject(format!("{}: no key at {:.3}s", self.name(layer), from_seconds));
+            return;
+        };
+        let comp = self.document.composition.duration.as_seconds_f64() as f32;
+        let fps = self.document.composition.fps;
+        let Some(t) = seconds_to_time(to_seconds.clamp(0.0, comp.max(0.0)), fps) else {
+            return;
+        };
+        let gesture = self.writer.begin_gesture();
+        let prepared = self.key_time_command(layer, param, key, t);
+        let what = self.name(layer).to_owned();
+        if self.apply_in(gesture, &what, prepared) {
+            self.status = format!(
+                "{} key moved  undo {}",
+                param_label(param),
+                self.writer.undo_len()
+            );
+        }
+    }
+
+    /// キー1本の補間を変える。**入口があるのは Position だけ**(egui 版
+    /// `set_key_interp` と同じ D2 の穴 — `prepare_set_position_key_interp` に
+    /// 対応する transform-param 版が D2 に無い)。
+    pub fn set_param_key_interp(
+        &mut self,
+        layer: LayerId,
+        param: ParamRef,
+        at_seconds: f32,
+        interp: Interp,
+    ) {
+        if param != ParamRef::Position {
+            self.reject(format!("{}: interp is Position-only in D2", param_label(param)));
+            return;
+        }
+        let Some(key) = self.find_param_key(layer, param, at_seconds) else {
+            self.reject(format!("{}: no key at {:.3}s", self.name(layer), at_seconds));
+            return;
+        };
+        let gesture = self.writer.begin_gesture();
+        let prepared = self
+            .writer
+            .prepare_set_position_key_interp(layer, key, interp)
+            .map_err(|e| e.to_string());
+        let what = self.name(layer).to_owned();
+        if self.apply_in(gesture, &what, prepared) {
+            self.status = format!("interp set  undo {}", self.writer.undo_len());
+        }
+    }
+
     /// `set_param_component` の本体。gesture は呼び手が決める。
     fn write_param_component(
         &mut self,
@@ -5392,8 +5522,11 @@ fn item_flags(document: &Document, layer: LayerId) -> Option<(bool, bool, bool)>
 }
 
 /// キーを `(KeyframeId, 時刻(秒))` で返す。**掴んだ物を追い続けるには id が要る** —
-/// 時刻は編集で変わるが `KeyframeId` は変わらない
-fn param_keys(document: &Document, layer: LayerId, param: ParamRef) -> Vec<(KeyframeId, f32)> {
+/// 時刻は編集で変わるが `KeyframeId` は変わらない。
+///
+/// **`pub`**: iced 側(`motolii-shell-iced::timeline::keys`)の描画・hit test が
+/// 同じこれを読む(2026-08-19 M-6 キー編集レーン)— 純関数なので複製しない。
+pub fn param_keys(document: &Document, layer: LayerId, param: ParamRef) -> Vec<(KeyframeId, f32)> {
     let Some(item) = find_item(document, layer) else {
         return Vec::new();
     };
@@ -7023,6 +7156,129 @@ mod tests {
         // キーを選んでいなければ、Delete は層のほうへ回る
         lab.selected_keys.clear();
         assert!(!lab.delete_selected_keys(), "キーが無いなら何もしない");
+    }
+
+    // ---- キー1本の操作 API(2026-08-19 M-6 キー編集レーン)。egui のように
+    // `selected_keys` 経由ではなく、iced Timeline の intent
+    // (`RemoveParamKey` / `MoveParamKey` / `SetParamKeyInterp`)がそのまま
+    // 呼ぶ `remove_param_key_at` / `move_param_key` / `set_param_key_interp`
+    // の審判。上の `delete_removes_the_selected_keys_and_leaves_the_layer`
+    // と同じ fixture・同じ主張の形を、選択を経由しない版で確かめる。
+
+    /// **時刻で名指しした1本だけが消える。** 選択は触らない。
+    #[test]
+    fn remove_param_key_at_removes_only_the_named_key() {
+        let mut lab = TimelineEditor::with_fixture();
+        let layer = layer_named(&lab.names, "Shared right");
+        let before = param_keys(&lab.document, layer, ParamRef::Position);
+        assert_eq!(before.len(), 3);
+        let (_, doomed_t) = before[1];
+
+        lab.remove_param_key_at(layer, ParamRef::Position, doomed_t);
+
+        let now = param_keys(&lab.document, layer, ParamRef::Position);
+        assert_eq!(now.len(), 2, "1つ消えた: {}", lab.status);
+        assert!(
+            !now.iter().any(|(_, t)| (*t - doomed_t).abs() < 1e-6),
+            "消えたのは名指しした時刻のキー"
+        );
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        assert_eq!(
+            param_keys(&lab.document, layer, ParamRef::Position).len(),
+            3,
+            "1回の Undo で戻る"
+        );
+    }
+
+    /// **無い時刻を指したら、何も消えず理由が控えに残る。**
+    #[test]
+    fn remove_param_key_at_a_missing_time_rejects_without_writing() {
+        let mut lab = TimelineEditor::with_fixture();
+        let layer = layer_named(&lab.names, "Shared right");
+        let before_rev = lab.revision;
+
+        lab.remove_param_key_at(layer, ParamRef::Position, 999.0);
+
+        assert_eq!(lab.revision, before_rev, "書いていない");
+        assert!(
+            lab.take_rejections().iter().any(|r| r.contains("no key at")),
+            "理由が控えに残る"
+        );
+    }
+
+    /// **ロックされた層のキーは消えない。**
+    #[test]
+    fn remove_param_key_at_a_locked_layer_rejects() {
+        let mut lab = TimelineEditor::with_fixture();
+        let layer = layer_named(&lab.names, "Shared right");
+        let (_, t) = param_keys(&lab.document, layer, ParamRef::Position)[0];
+        lab.toggle_item_flag(layer, ItemFlag::Lock);
+        let before_rev = lab.revision;
+
+        lab.remove_param_key_at(layer, ParamRef::Position, t);
+
+        assert_eq!(lab.revision, before_rev, "ロック中は書かない");
+        assert!(lab.take_rejections().iter().any(|r| r.contains("locked")));
+    }
+
+    /// **時刻を動かすと、そのキーだけが動く。** 他のキーはそのまま。
+    #[test]
+    fn move_param_key_changes_only_that_keys_time() {
+        let mut lab = TimelineEditor::with_fixture();
+        let layer = layer_named(&lab.names, "Shared left");
+        let before = param_keys(&lab.document, layer, ParamRef::Scale);
+        assert_eq!(before.len(), 2);
+        let (_, grabbed_t) = before[0];
+        let other_t = before[1].1;
+
+        lab.move_param_key(layer, ParamRef::Scale, grabbed_t, 4.0);
+
+        let now = param_keys(&lab.document, layer, ParamRef::Scale);
+        assert_eq!(now.len(), 2, "本数は変わらない: {}", lab.status);
+        assert!(
+            now.iter().any(|(_, t)| (*t - 4.0).abs() < 1e-3),
+            "掴んだキーが 4.0s へ動いた: {now:?}"
+        );
+        assert!(
+            now.iter().any(|(_, t)| (*t - other_t).abs() < 1e-6),
+            "もう1本はそのまま: {now:?}"
+        );
+
+        lab.writer.undo().expect("undo");
+        refresh_if_stale(&lab.writer, &mut lab.document, &mut lab.revision);
+        let restored = param_keys(&lab.document, layer, ParamRef::Scale);
+        assert!(
+            restored.iter().any(|(_, t)| (*t - grabbed_t).abs() < 1e-3),
+            "1回の Undo で元の時刻へ戻る"
+        );
+    }
+
+    /// **補間の入口は Position だけ。** D2 に無い param は理由つきで断る。
+    #[test]
+    fn set_param_key_interp_is_position_only() {
+        let mut lab = TimelineEditor::with_fixture();
+        let position_layer = layer_named(&lab.names, "Title scene"); // Group: Position keys [2.8, 10.1]
+        let (_, t) = param_keys(&lab.document, position_layer, ParamRef::Position)[0];
+
+        lab.set_param_key_interp(position_layer, ParamRef::Position, t, Interp::Linear);
+        assert!(
+            lab.take_rejections().is_empty(),
+            "Position は D2 の口がある — 断られない"
+        );
+
+        let scale_layer = layer_named(&lab.names, "Shared left");
+        let (_, scale_t) = param_keys(&lab.document, scale_layer, ParamRef::Scale)[0];
+        let before_rev = lab.revision;
+        lab.set_param_key_interp(scale_layer, ParamRef::Scale, scale_t, Interp::Linear);
+        assert_eq!(lab.revision, before_rev, "Scale は書かない");
+        assert!(
+            lab.take_rejections()
+                .iter()
+                .any(|r| r.contains("Position-only")),
+            "理由が Position-only だと言う"
+        );
     }
 
     /// **playhead で切ると、clip が2枚になる。** 端では切れない(断りであって失敗ではない)。
