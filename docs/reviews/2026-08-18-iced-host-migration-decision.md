@@ -36,6 +36,10 @@ plugin(D2・journal・評価器)。**UiIntent 背骨は設計どおり持ち越�
 
 - **M-0 土台**: iced fork 作成(pin rev+seam 2件+seam 台帳)、`motolii-shell-iced`
   crate 新設(dep policy へ iced 系 allowlist を追加)。egui shell は**並走のまま**
+  — **着手済み**(2026-08-18)。fork の乖離と再適用手順は
+  [iced fork seam 台帳](2026-08-18-iced-fork-seam-ledger.md)。柵は2本(iced を持てるのは
+  新殻だけ / 新殻は egui を持てない)で、後者は egui 側 allowlist へ新殻を**入れないこと**で
+  成立している
 - **M-1 殻**: スタート画面・New/Open/Save・status 帯・prompts 台本・
   `--intent-log`/replay・iced_test の新運転席(kittest 相当の駆動+replay oracle)
 - **M-2 Stage 島**: 入力ブリッジ probe を製品 adapter 化(camera seat・正対既定・

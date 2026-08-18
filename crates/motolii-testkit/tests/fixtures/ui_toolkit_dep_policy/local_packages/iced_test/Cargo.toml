@@ -1,0 +1,4 @@
+[package]
+name = "iced_test"
+version = "0.0.0"
+edition = "2021"

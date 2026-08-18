@@ -68,8 +68,10 @@
 //!   テスト・CLI 駆動は台本(`ScriptedPrompts`)が答える
 
 mod app;
-/// 運転席(transcript / prompts / headless 駆動)。**公開しない** — U0a の境界規律で、
-/// egui / kittest の型を公開APIへ出さないため。外へ出るのは `--status-log` の JSONL だけ。
+/// 運転席(transcript / prompts / headless 駆動)。**module は公開しない** — U0a の
+/// 境界規律で、egui / kittest の型(`DrivenShell`)を公開APIへ出さないため。
+/// 出るのは下の `pub use` が名指しする `ShellTranscript` / `StatusEvent` の2つだけで、
+/// どちらも toolkit の型を1つも持たない(2026-08-18 iced ホスト移行 M-0)。
 mod drive;
 #[cfg(test)]
 mod drive_tests;
@@ -82,8 +84,11 @@ mod runner;
 
 pub(crate) use app::BlitzShellApp;
 pub use app::{decide_unsaved, UnsavedChoice, UnsavedDecision};
+/// **結果のログ**。host 非依存の契約なので、egui shell と iced shell が同じ型を映す。
+pub use drive::{ShellTranscript, StatusEvent};
 pub use intent::{
-    admit_dropped_paths, create_project_file, reseat_project, IntentEvent, ProjectSeat, UiIntent,
+    admit_dropped_paths, create_project_file, reseat_project, IntentEvent, IntentJournal,
+    ProjectSeat, ShellGateway, UiIntent,
 };
 pub use pane::{BlitzPane, PaneKind};
 pub use runner::{run_blitz_shell, BlitzShellLaunch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES};

@@ -77,7 +77,7 @@ pub struct IntentEvent {
 /// 原因のログを溜める唯一の場所。`ShellTranscript` と同じ形(`Arc<Mutex<_>>` の
 /// 共有)で、runner が `--intent-log` へ流す側もここを読む。
 #[derive(Clone, Default)]
-pub(crate) struct IntentJournal {
+pub struct IntentJournal {
     entries: Arc<Mutex<Vec<IntentEvent>>>,
 }
 
@@ -94,17 +94,17 @@ impl IntentJournal {
     }
 
     /// 記録の全部(順のまま)。
-    pub(crate) fn entries(&self) -> Vec<IntentEvent> {
+    pub fn entries(&self) -> Vec<IntentEvent> {
         self.lock().clone()
     }
 
     /// intent だけを順に。replay へそのまま渡せる形。
-    pub(crate) fn intents(&self) -> Vec<UiIntent> {
+    pub fn intents(&self) -> Vec<UiIntent> {
         self.lock().iter().map(|event| event.intent.clone()).collect()
     }
 
     /// 既に `count` 行を見た側が、その後に増えた分だけ受け取る(`--intent-log` 用)。
-    pub(crate) fn since(&self, count: usize) -> Vec<IntentEvent> {
+    pub fn since(&self, count: usize) -> Vec<IntentEvent> {
         let mut entries = self.entries();
         if count >= entries.len() {
             return Vec::new();
@@ -114,7 +114,7 @@ impl IntentJournal {
     }
 
     /// 溜まっている行数。
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.lock().len()
     }
 
@@ -136,7 +136,7 @@ impl IntentJournal {
 /// 書き出し)は**この型の private フィールド**で、外へ出るのは読み取りと
 /// 「wave E で残した穴」(`project_mut`)だけである。状態を進めたい側は
 /// [`dispatch`](Self::dispatch) に intent を渡すしかない。
-pub(crate) struct ShellGateway {
+pub struct ShellGateway {
     project: Option<ProjectSeat>,
     export: Option<ExportRun>,
     /// 結果のログ(status 帯 + `--status-log`)。窓と面が共有している台帳そのもの。
@@ -195,7 +195,7 @@ pub(crate) fn resume_last_project(store: Option<&Path>) -> Resume {
 
 impl ShellGateway {
     /// 座席なしで作る(スタート画面 / fixture 展示の起動)。
-    pub(crate) fn new(transcript: ShellTranscript) -> Self {
+    pub fn new(transcript: ShellTranscript) -> Self {
         Self {
             project: None,
             export: None,
@@ -254,7 +254,7 @@ impl ShellGateway {
     /// 返すのは「意図どおりに進んだか」で、進まなかった理由は必ず transcript に
     /// 言われている(黙って false を返さない)。呼び手はこの真偽で続きを決める
     /// (未保存 guard の「保存して続行」など)。
-    pub(crate) fn dispatch(&mut self, intent: UiIntent) -> bool {
+    pub fn dispatch(&mut self, intent: UiIntent) -> bool {
         // 行動の**前**に記録する。実行が panic しても・失敗しても、
         // 「何をしようとしたか」は残る。
         self.journal.record(&intent);
@@ -266,7 +266,7 @@ impl ShellGateway {
     /// 窓も egui も dialog も要らない — intent が答えを値として持っているため。
     /// 前提は「初期状態が同じであること」で、file system もその初期状態に含まれる
     /// (`NewProject` は既にあるファイルを踏まない)。
-    pub(crate) fn replay(intents: &[UiIntent]) -> Self {
+    pub fn replay(intents: &[UiIntent]) -> Self {
         let mut gateway = Self::new(ShellTranscript::default());
         for intent in intents {
             gateway.dispatch(intent.clone());
@@ -424,7 +424,7 @@ impl ShellGateway {
     }
 
     /// live project が座っているか。
-    pub(crate) fn is_seated(&self) -> bool {
+    pub fn is_seated(&self) -> bool {
         self.project.is_some()
     }
 
@@ -434,12 +434,12 @@ impl ShellGateway {
     }
 
     /// 原因のログ。
-    pub(crate) fn journal(&self) -> &IntentJournal {
+    pub fn journal(&self) -> &IntentJournal {
         &self.journal
     }
 
     /// 結果のログ。replay の審判が読む。
-    pub(crate) fn transcript(&self) -> &ShellTranscript {
+    pub fn transcript(&self) -> &ShellTranscript {
         &self.transcript
     }
 

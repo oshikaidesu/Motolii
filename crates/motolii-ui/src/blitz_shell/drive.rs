@@ -26,8 +26,11 @@ use super::app::UnsavedChoice;
 ///
 /// **JSONL の1行はこの型がそのまま名乗る**(`serde` の field 順 = 宣言順)。
 /// 原因の側(`intent::IntentEvent`)も同じ形で、並べて読める。
+///
+/// **公開している**理由: 2026-08-18 の iced ホスト移行(M-0)で、`motolii-shell-iced`
+/// が同じ帯を映すため。toolkit の型は1つも入っていないので U0a の境界は破れない。
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub(crate) struct StatusEvent {
+pub struct StatusEvent {
     pub seq: u64,
     pub text: String,
 }
@@ -36,14 +39,18 @@ pub(crate) struct StatusEvent {
 ///
 /// `Clone` は同じ台帳の共有(`Arc`)で、pane へ配った clone が言ったことも
 /// 帯と `--status-log` に出る。**何も黙って消えない**のがこの型の全部である。
+///
+/// **公開している**理由: 2026-08-18 の iced ホスト移行(M-0)。transcript は
+/// host 非依存の契約(裁定文書の「意味は不変のまま iced へ移る」)なので、
+/// `motolii-shell-iced` は同じ型の同じ帯を映す — 2つ目の台帳を作らせない。
 #[derive(Clone, Default)]
-pub(crate) struct ShellTranscript {
+pub struct ShellTranscript {
     entries: Arc<Mutex<Vec<StatusEvent>>>,
 }
 
 impl ShellTranscript {
     /// 一言を残す。帯はこの直後から `latest()` を映す。
-    pub(crate) fn report(&self, text: impl Into<String>) {
+    pub fn report(&self, text: impl Into<String>) {
         let mut entries = self.lock();
         let seq = entries.len() as u64 + 1;
         entries.push(StatusEvent {
@@ -53,18 +60,18 @@ impl ShellTranscript {
     }
 
     /// 残っている全文(順のまま)。
-    pub(crate) fn entries(&self) -> Vec<StatusEvent> {
+    pub fn entries(&self) -> Vec<StatusEvent> {
         self.lock().clone()
     }
 
     /// 帯が映す最新の一言。何も言われていなければ `None`(= 帯を出さない)。
-    pub(crate) fn latest(&self) -> Option<String> {
+    pub fn latest(&self) -> Option<String> {
         self.lock().last().map(|event| event.text.clone())
     }
 
     /// 既に `count` 行を見た側が、その後に増えた分だけ受け取る(`--status-log` 用)。
     /// **`entries()` の続きから**であって、別の台帳を持たない。
-    pub(crate) fn since(&self, count: usize) -> Vec<StatusEvent> {
+    pub fn since(&self, count: usize) -> Vec<StatusEvent> {
         let mut entries = self.entries();
         if count >= entries.len() {
             return Vec::new();
@@ -74,7 +81,7 @@ impl ShellTranscript {
     }
 
     /// 溜まっている行数。
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.lock().len()
     }
 

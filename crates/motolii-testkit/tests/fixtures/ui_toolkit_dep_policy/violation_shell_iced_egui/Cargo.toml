@@ -1,0 +1,7 @@
+[package]
+name = "motolii-shell-iced"
+version = "0.0.0"
+
+[dependencies]
+iced = { path = "../local_packages/iced" }
+egui = { path = "../local_packages/egui" }
