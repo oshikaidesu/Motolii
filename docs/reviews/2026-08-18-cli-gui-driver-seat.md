@@ -49,6 +49,21 @@
   非決定的・dialog で止まる。transcript+kittest が揃えば、同じ台本を「窓あり
   (--status-log で観測)」でも「headless(テストとして)」でも走らせられる。
 
+## toolkit 再入場トリガー(2026-08-18 利用者裁定・同日追記)
+
+egui→iced の乗り換え検討は次の実測トリガーで開く(資産量は論拠にしない):
+
+- **「UX が繋がっていない」箇所の散見**: 利用者に見える状態変化のうち、headless の
+  intent 列(または運転席の駆動)から再現できないものが**複数の面で**見つかった時。
+  以後、UX 欠陥を記録する際は必ず「繋がっている(intent replay 可)/橋渡しのみ
+  (kittest 経由でだけ駆動可)/繋がっていない(駆動不能・dialog/画素のみ)」の
+  3分類を付け、「繋がっていない」の件数を台帳で数えられるようにする。
+- 中間の道として、[Elm 性の不変量](2026-08-18-cli-gui-driver-seat.md)
+  (UI 層は入力→intent の翻訳だけ、状態変化は全て replay 可能)を egui のまま
+  広げる。これが達成できない面が出たら、それが上記の1件になる。
+- iced 側の実態(iced_test/Simulator・AccessKit/IME・外部 wgpu texture 埋め込み
+  =Rerun 再配管コスト)は調査中。返り次第、観察文書として索引へ載せる。
+
 ## 残余(順不同)
 
 - browser_panel ほか pane.rs 以外の stderr 専用失敗のフェンス拡張
