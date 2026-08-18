@@ -14,7 +14,7 @@
 
 - 統合branch: `claude/ux-cli-gui-integration-002b03`
   (worktree `.claude/worktrees/gallant-blackwell-f4d72c`)
-- tip: `6545c039`。campaign tip `026630f6` を ff で取り込み、その上に **54 commit**
+- tip: `984233cf`(M-1 merge)。campaign tip `026630f6` を ff で取り込み、その上に **57 commit**
 - **Motolii repo は remote へ一切 push していない。全成果 local のみ**
 - **fork は 2 本とも GitHub へ push 済み**(cargo の rev pin に必要なため):
   - `oshikaidesu/rerun` branch `motolii/stage-camera-seat` = `483b8559`
@@ -22,10 +22,11 @@
   - `oshikaidesu/iced` **新設 fork** branch `motolii/host-seams` = `73e686ee`
     (web-sys 釘打ち解除+bind groups floor。台帳=[iced fork seam ledger](2026-08-18-iced-fork-seam-ledger.md))
 - 最終 gate: `cargo test --workspace --no-fail-fast -j 5` **失敗ゼロ**(6545c039 時点)
-- **M-1 レーンが引き継ぎ時点で走行中**(iced 殻の完成: Save/未保存guard/ドロップ/
-  Export/replay oracle)。agent worktree `agent-a8218378d0fd9c212`。継続セッションは
-  まずこの返却/残骸を `git -C .claude/worktrees/agent-a8218378d0fd9c212 log` で確認し、
-  通常の検収(diff読み→自分で再実行→merge --no-ff→gate)を行うこと
+- **M-1 は着地済み**(`984233cf`、引き継ぎ作成後に返却→検収→merge→gate失敗ゼロ):
+  iced 殻が Save/未保存3択/OSドロップ/Export開始・中止/replay oracle/--status-log
+  まで持ち、iced_test 27テスト。注入可否の実測表と手動確認事項(実窓での
+  経過秒・dialog 4種・実Finderドロップ)はレーン報告どおり migration 決定文書に追記済み。
+  **次は M-2(Stage島)から**
 
 ## この区切りで入ったもの(merge順・全て gate 通過)
 
