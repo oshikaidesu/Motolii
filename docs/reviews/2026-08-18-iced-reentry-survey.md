@@ -111,3 +111,10 @@ Stage 1面=egui の島)は、iced fork の定数修正1つと既知の S2 残件
 - iced 側の再観測ポイント: 1.0 到達(wgpu 29 での release)/ AccessKit 統合 /
   `web-sys` 釘打ちと `max_bind_groups` の上流修正 / iced_test の実運用事例。
   どれかが動いたらこの表を更新する。
+- **DX(if 沼)は慢性コスト枠として記帳**(2026-08-18 利用者所感: 「if まみれで
+  開発体験が悪い」)。immediate mode では局所状態をその場で触るのが最も楽で、
+  F-03 型のバグはその症状。緩和は「widget は型付き action を返すだけ」+
+  gateway+フェンス(ログと構造の強制)。**フェンス下でも F-03 型の再発が続く**
+  なら「柵の維持費が高すぎる」証拠として乗り換え判断の材料に数える。なお
+  timeline 等の密な面は iced でも custom widget(painter 的コード)になるため、
+  DX 差が最大なのは chrome 側・最小なのは密な面である。
