@@ -67,6 +67,13 @@ pub struct Shell {
     waveform: WaveformSeat,
     waveform_state: WaveformBandState,
     pcm_caches: HashMap<(String, u32), Arc<PcmCache>>,
+    /// 直前の [`Message::PlaybackTick`] の時刻。**製品状態ではない** —
+    /// `dt` を計るためだけの host 側の刻み(egui の `ctx.input(|i| i.stable_dt)`
+    /// に相当する、iced にはフレームワークが持ってこない値を自分で測る)。
+    /// `TogglePlayPressed` のたびに `None` へ戻す — pause で刻みの購読が外れる
+    /// あいだの実時間を、次の再生開始時にまとめて足さないため
+    /// (2026-08-19 iced 再生機構移植レーン)。
+    last_playback_tick: Option<std::time::Instant>,
 }
 
 impl Shell {
@@ -123,6 +130,7 @@ impl Shell {
             waveform: WaveformSeat::default(),
             waveform_state: WaveformBandState::Absent,
             pcm_caches: HashMap::new(),
+            last_playback_tick: None,
         };
         // 走査時に作れなかったサムネイルの理由は、最初から帯経路に居る(F-09)。
         shell.drain_browser_notices();
@@ -244,6 +252,35 @@ impl Shell {
                 let _ = self
                     .gateway
                     .dispatch(UiIntent::SelectLayer { layer, additive: false });
+            }
+            Message::TogglePlayPressed => {
+                // **intent ではない**(module doc 参照)。`ShellGateway` の
+                // dispatch を通らない専用口(`poll_export` と同じ型)。
+                self.gateway.toggle_playing();
+                // 次の tick の dt を 0 から始める — pause のあいだの実時間を
+                // 次の再生開始時にまとめて足さない(`last_playback_tick` の doc)。
+                self.last_playback_tick = None;
+            }
+            Message::ToggleLoopPressed => {
+                self.gateway.toggle_loop();
+            }
+            Message::ToStartPressed => {
+                // playhead を特定の値(0)へ置く操作なので、scrub 確定と同じ
+                // intent を通す(`SetPlayhead` — こちらは replay で再現できる)。
+                let _ = self.gateway.dispatch(UiIntent::SetPlayhead { at_us: 0 });
+            }
+            Message::PlaybackTick => {
+                // **intent ではない** — 時間経過そのものは操作ではない
+                // (zoom/pan と同じ scope、module doc 参照)。dt は host が測る
+                // (egui の `stable_dt` に相当する値をここで作る)。
+                let now = std::time::Instant::now();
+                let dt = self
+                    .last_playback_tick
+                    .take()
+                    .map(|last| (now - last).as_secs_f32())
+                    .unwrap_or(0.0);
+                self.last_playback_tick = Some(now);
+                self.gateway.tick_playback(dt);
             }
             Message::Inspector(event) => self.apply_inspector(event),
             Message::BrowserRailChosen(rail) => {
@@ -626,6 +663,16 @@ impl Shell {
             .project()
             .map(|seat| seat.editor().playhead_seconds())
             .unwrap_or(0.0)
+    }
+
+    /// 再生中か(transport ボタンの絵)。座席が無ければ `false`。
+    pub fn timeline_playing(&self) -> bool {
+        self.gateway.is_playing()
+    }
+
+    /// loop が有効か。座席が無ければ `false`。
+    pub fn timeline_loop_on(&self) -> bool {
+        self.gateway.loop_on()
     }
 
     /// undo 台帳の深さ(帯の Undo ボタンの enabled)。

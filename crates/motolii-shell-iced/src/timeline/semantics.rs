@@ -50,6 +50,13 @@ const FLAG_BTN_H: f32 = 18.0;
 const FLAG_BTN_GAP: f32 = 4.0;
 /// レール右端からの余白。
 const FLAG_BTN_MARGIN: f32 = 8.0;
+/// transport の2ボタン(to_start / play-pause)1枚の一辺。egui 版(18px, `HEAD_H`
+/// 34px の帯)より少し詰める(`TRANSPORT_H` 30px の帯に合わせた比率)。
+const TRANSPORT_BTN: f32 = 16.0;
+/// transport 帯の左端から to_start ボタンの左端までの余白。
+const TRANSPORT_BTN_MARGIN: f32 = 8.0;
+/// to_start と play/pause のあいだの隙間。
+const TRANSPORT_BTN_GAP: f32 = 6.0;
 /// ARRANGEMENT 帯の右余白。
 const OVERVIEW_MARGIN: f32 = 10.0;
 /// trim の端の幅。egui 版 `TRIM_EDGE` と同値(spike も同じ 8.0 を採った)。
@@ -167,6 +174,23 @@ pub fn flag_button_rect_y(row_top: f32) -> (f32, f32) {
     (row_top + (ROW_H - FLAG_BTN_H) * 0.5, FLAG_BTN_H)
 }
 
+/// transport 帯の「先頭へ戻る」ボタンの矩形(x0, x1, y0, y1)。egui 版
+/// `to_start`(`timeline_editor/mod.rs`)と同じ並び — 左端いちばん。
+/// `hit_test` と描画(`canvas.rs`)が同じこれを呼ぶ(2026-08-19 再生機構移植レーン)。
+pub fn to_start_button_rect(geometry: &PaneGeometry) -> (f32, f32, f32, f32) {
+    let cy = geometry.transport_bottom() * 0.5;
+    let half = TRANSPORT_BTN * 0.5;
+    let x0 = TRANSPORT_BTN_MARGIN;
+    (x0, x0 + TRANSPORT_BTN, cy - half, cy + half)
+}
+
+/// transport 帯の play/pause ボタンの矩形。to_start の右隣(egui 版と同じ並び)。
+pub fn play_pause_button_rect(geometry: &PaneGeometry) -> (f32, f32, f32, f32) {
+    let (_, to_start_x1, y0, y1) = to_start_button_rect(geometry);
+    let x0 = to_start_x1 + TRANSPORT_BTN_GAP;
+    (x0, x0 + TRANSPORT_BTN, y0, y1)
+}
+
 /// bar のどこに居るか。egui 版 `BarPart` の対応物(名前は zone にして、
 /// intent の `TrimEdge` と別物であることを保つ)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -193,6 +217,10 @@ pub enum TimelineHit {
         zone: BarZone,
         at_seconds: f32,
     },
+    /// transport 帯の「先頭へ戻る」ボタン(2026-08-19 再生機構移植レーン)。
+    ToStart,
+    /// transport 帯の play/pause ボタン。同上。
+    PlayPause,
     /// 何も無い所。
     Empty,
 }
@@ -251,9 +279,19 @@ pub fn hit_test(
     x: f32,
     y: f32,
 ) -> TimelineHit {
-    // transport 帯(playhead 読み・`N rows`・`view a-bs`・`grid n`)は表示専用 —
-    // 対応する intent が無い(2026-08-19 裁定、Q0)。
+    // transport 帯: `N rows`・`view a-bs`・`grid n`・playhead の時計は表示専用のまま
+    // (対応する intent が無い、2026-08-19 裁定、Q0)。to_start / play-pause の
+    // 2ボタンだけは口が着いた(`ShellGateway::toggle_playing` /
+    // `UiIntent::SetPlayhead` — 2026-08-19 再生機構移植レーン)。
     if y < geometry.transport_bottom() {
+        let (x0, x1, y0, y1) = to_start_button_rect(geometry);
+        if x >= x0 && x <= x1 && y >= y0 && y <= y1 {
+            return TimelineHit::ToStart;
+        }
+        let (x0, x1, y0, y1) = play_pause_button_rect(geometry);
+        if x >= x0 && x <= x1 && y >= y0 && y <= y1 {
+            return TimelineHit::PlayPause;
+        }
         return TimelineHit::Empty;
     }
     // ARRANGEMENT 俯瞰帯はレールの右のトラック部分だけ(composition 全体が相手 —
@@ -704,6 +742,48 @@ mod tests {
                 assert_eq!(flag, UiItemFlag::Mute);
             }
             other => panic!("M ボタンを外した: {other:?}"),
+        }
+    }
+
+    /// transport 帯の to_start / play-pause ボタン(2026-08-19 再生機構移植
+    /// レーン)。egui 版と同じ「並び順」を、hit の種類で確かめる —
+    /// to_start が左、play/pause がその右。
+    #[test]
+    fn hit_test_resolves_the_transport_buttons() {
+        let (document, _background) = fixture_layer("Background");
+        let rows = motolii_ui::timeline_rows::rows(
+            &document,
+            &motolii_ui::timeline_rows::TimelineFoldState::default(),
+        );
+        let geometry = geometry();
+        let view = initial_view(16.0);
+
+        let (x0, x1, y0, y1) = to_start_button_rect(&geometry);
+        let center = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
+        match hit_test(&document, &rows, view, &geometry, 0.0, center.0, center.1) {
+            TimelineHit::ToStart => {}
+            other => panic!("to_start ボタンを外した: {other:?}"),
+        }
+
+        let (x0, x1, y0, y1) = play_pause_button_rect(&geometry);
+        let center = ((x0 + x1) * 0.5, (y0 + y1) * 0.5);
+        match hit_test(&document, &rows, view, &geometry, 0.0, center.0, center.1) {
+            TimelineHit::PlayPause => {}
+            other => panic!("play/pause ボタンを外した: {other:?}"),
+        }
+
+        // to_start は play/pause より左(egui 版と同じ並び)。
+        let (to_start_x0, _, _, _) = to_start_button_rect(&geometry);
+        let (play_x0, _, _, _) = play_pause_button_rect(&geometry);
+        assert!(
+            to_start_x0 < play_x0,
+            "to_start が play/pause より右に来てはいけない(egui 版と並びが逆)"
+        );
+
+        // transport 帯の他の場所(ボタンの外)は引き続き表示専用のまま。
+        match hit_test(&document, &rows, view, &geometry, 0.0, 400.0, 5.0) {
+            TimelineHit::Empty => {}
+            other => panic!("transport 帯のボタン以外がクリック可になっている: {other:?}"),
         }
     }
 

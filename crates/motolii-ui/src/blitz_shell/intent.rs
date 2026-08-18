@@ -28,6 +28,14 @@
 //! - **egui pane の中の編集の intent 化**。Timeline の編集 intent
 //!   (`SelectLayer` 〜 `StepPlayhead`)は 2026-08-18 M-3 で入り、iced shell は
 //!   これだけを通る。egui pane は当面 `project_mut` の穴(下記)で D2 へ直行する
+//! - **再生の start/stop・tick・loop の ON/OFF**(2026-08-19)。`playhead` を
+//!   **特定の値に置く**(scrub 確定・ロケータ跳び)操作は `SetPlayhead` のまま
+//!   intent だが、そこから実時間でどれだけ進むかは壁時計 / audio device の
+//!   実時間で replay ごとに揺れるので、intent 化すると再現できない出力を
+//!   「意図」として記録することになる。loop 区間(`LoopRegion`)も元から
+//!   「Project session の状態で、Document には入れない」(egui 版 `mod.rs`)。
+//!   3つとも `ShellGateway::toggle_playing` / `toggle_loop` / `tick_playback`
+//!   という `dispatch` を通らない専用口を持つ(`poll_export` と同じ型)
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -705,6 +713,54 @@ impl ShellGateway {
         };
         self.transcript.report(report);
         self.export = None;
+    }
+
+    // ---- 再生(2026-08-19 iced 再生機構移植レーン) ----
+    //
+    // `TogglePlaying` / `ToggleLoop` / `TickPlayback` は **`UiIntent` に無い**。
+    // 時間経過そのものは操作ではない(zoom/pan と同じ scope、`intent.rs` module
+    // doc の「ここに無いもの」参照)。start/stop の bool も、そのあと実時間が
+    // どれだけ経つかは壁時計 / audio device の実時間で replay ごとに揺れるので、
+    // journal に載せると再現できない出力を「意図」として記録することになる —
+    // だから journal を通さず、この3つを `dispatch` の外側の**唯一の口**として
+    // 公開する(`poll_export` と同じ「非 intent だが gateway 経由」の型)。
+    // playhead の移動先を**特定の値に置く**操作(scrub 確定・ロケータ跳び)は
+    // 既存の `UiIntent::SetPlayhead` のまま(こちらは replay で再現できる)。
+
+    /// `Space`: 再生 / 一時停止。座席が無ければ何もしない。
+    pub fn toggle_playing(&mut self) {
+        if let Some(seat) = self.project.as_mut() {
+            seat.editor_mut().toggle_playing();
+        }
+    }
+
+    /// `L`: loop の ON/OFF。座席が無ければ何もしない。
+    pub fn toggle_loop(&mut self) {
+        if let Some(seat) = self.project.as_mut() {
+            seat.editor_mut().toggle_loop();
+        }
+    }
+
+    /// 再生を `dt` 秒ぶん進める(host の tick から毎回呼ぶ)。再生中でなければ、
+    /// または座席が無ければ何もしない。
+    pub fn tick_playback(&mut self, dt: f32) {
+        if let Some(seat) = self.project.as_mut() {
+            seat.editor_mut().advance_playback(dt);
+        }
+    }
+
+    /// 再生中か(読み)。transport ボタンの絵に使う。座席が無ければ `false`。
+    pub fn is_playing(&self) -> bool {
+        self.project
+            .as_ref()
+            .is_some_and(|seat| seat.editor().is_playing())
+    }
+
+    /// loop が有効か(読み)。座席が無ければ `false`。
+    pub fn loop_on(&self) -> bool {
+        self.project
+            .as_ref()
+            .is_some_and(|seat| seat.editor().loop_on())
     }
 
     /// 座席(読み)。**書きは出さない** — 状態を進める道は [`dispatch`](Self::dispatch)

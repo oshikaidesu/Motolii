@@ -94,4 +94,19 @@ pub enum Message {
     /// と同じ型の解決)。実際の `request`/`poll` は `stage_island::Embed` の
     /// `prepare` が持つ(ここは redraw の刻みを起こすだけ)。
     StagePolled,
+    /// `Space` / transport の play/pause ボタン。**intent ではない**
+    /// (`ShellGateway::toggle_playing` — 理由は
+    /// `motolii_ui::blitz_shell::intent` module doc の「ここに無いもの」)。
+    TogglePlayPressed,
+    /// `L` / (将来の) loop トグルボタン。同上、`ShellGateway::toggle_loop`。
+    ToggleLoopPressed,
+    /// transport の「先頭へ戻る」ボタン(`|◀`)。**これは intent** —
+    /// playhead を特定の値(0)へ置く操作なので、scrub 確定と同じ
+    /// `UiIntent::SetPlayhead { at_us: 0 }` を通る。
+    ToStartPressed,
+    /// 再生中、host の redraw 刻みが運ぶ1 tick。**intent ではない**
+    /// (`ShellGateway::tick_playback` — 時間経過そのものは操作ではない、
+    /// zoom/pan と同じ scope)。`Host::subscription` が `shell.timeline_playing()`
+    /// のあいだだけ購読する(`ExportPolled` 等と同じ「必要な間だけ」の型)。
+    PlaybackTick,
 }

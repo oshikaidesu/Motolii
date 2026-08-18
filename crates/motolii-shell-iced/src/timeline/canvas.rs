@@ -25,8 +25,9 @@ use motolii_ui::timeline_rows::{rows, TimelineFoldState, TimelineRow};
 use super::pane::{GrabZone, TimelineDrag, TimelineMsg};
 use super::semantics::{
     bar_span, flag_button_rect_y, frame_step, hit_test, item_mute_solo, movable_clips,
-    mute_button_x, ruler_step_seconds, snap_candidates, snapped, solo_button_x, BarZone,
-    PaneGeometry, TimelineHit, OVERVIEW_H, ROW_H, RULER_H,
+    mute_button_x, play_pause_button_rect, ruler_step_seconds, snap_candidates, snapped,
+    solo_button_x, to_start_button_rect, BarZone, PaneGeometry, TimelineHit, OVERVIEW_H, ROW_H,
+    RULER_H,
 };
 use super::waveform::WaveformBandState;
 use crate::message::Message;
@@ -107,6 +108,9 @@ struct Scene {
     rows: Vec<TimelineRow>,
     selected: Vec<LayerId>,
     playhead: f32,
+    /// 再生中か。transport の play/pause ボタンの絵(▶/⏸)がこれを見る
+    /// (2026-08-19 再生機構移植レーン)。
+    playing: bool,
 }
 
 impl TimelineProgram<'_> {
@@ -116,6 +120,7 @@ impl TimelineProgram<'_> {
         Some(Scene {
             selected: self.shell.timeline_selection(),
             playhead: self.shell.timeline_playhead(),
+            playing: self.shell.timeline_playing(),
             document,
             rows,
         })
@@ -166,6 +171,21 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     p.y,
                 );
                 state.overview_dragging = matches!(hit, TimelineHit::Overview { .. });
+                // to_start / play-pause は `TimelineMsg`(intent 化のパイプライン)
+                // を経由しない — 2つとも `Shell::update` の top-level Message
+                // として直接処理する(2026-08-19 再生機構移植レーン)。
+                // - `ToStartPressed` は既存の `UiIntent::SetPlayhead` へ乗る
+                //   (`LayerSelected` 等、他の top-level dispatch と同じ形)
+                // - `TogglePlayPressed` は intent を持たない
+                //   (`motolii_ui::blitz_shell::intent` module doc の「ここに無いもの」)
+                if matches!(hit, TimelineHit::ToStart) {
+                    return Some(canvas::Action::publish(Message::ToStartPressed).and_capture());
+                }
+                if matches!(hit, TimelineHit::PlayPause) {
+                    return Some(
+                        canvas::Action::publish(Message::TogglePlayPressed).and_capture(),
+                    );
+                }
                 let msg = match hit {
                     TimelineHit::Overview { at_seconds } => {
                         TimelineMsg::OverviewSeek { at_seconds }
@@ -190,6 +210,10 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                         additive,
                     },
                     TimelineHit::Empty => TimelineMsg::EmptyPressed { additive },
+                    // 上の2つの早期 return が already handled — ここへは来ない。
+                    TimelineHit::ToStart | TimelineHit::PlayPause => unreachable!(
+                        "ToStart/PlayPause return early above, before this match"
+                    ),
                 };
                 publish(msg)
             }
@@ -554,10 +578,13 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             BG,
         );
 
-        // ── transport 帯(表示専用)──────────────────────────────────
-        // `/tmp/egui-same-doc.png` の最上段。再生ボタン・`space=play` 等の
-        // **対応する intent が無い項目は描かない**(2026-08-19 裁定、Q0) —
-        // 残すのは既に読める状態(playhead・行数・view 範囲・ルーラ刻み)だけ。
+        // ── transport 帯 ──────────────────────────────────────────────
+        // `/tmp/egui-same-doc.png` の最上段。to_start / play-pause の2ボタンは
+        // egui 版と同じ並び(左から to_start → play)で、口も着いた
+        // (`ShellGateway::toggle_playing` / `UiIntent::SetPlayhead` —
+        // 2026-08-19 再生機構移植レーン)。他(`N rows`・`view a-bs`・`grid n`・
+        // ルーラ刻み)は引き続き表示専用のまま(対応する intent が無い、
+        // 2026-08-19 裁定、Q0)。
         let comp = scene.document.composition.duration.as_seconds_f64() as f32;
         let step = ruler_step_seconds(geometry.px_per_second(view));
         frame.fill_rectangle(
@@ -565,9 +592,62 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             Size::new(size.width, geometry.transport_bottom()),
             HEAD_BG,
         );
+        // **記号は自前で描く。** ▶ や ⏮ はフォントに無くて豆腐になるので、
+        // egui 版と同じく三角と縦棒を frame へ直接置く。
+        let hovered = cursor.position_in(bounds);
+        let hit_tint = |x0: f32, x1: f32, y0: f32, y1: f32| {
+            let inside = hovered.is_some_and(|p| p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
+            if inside {
+                SELECTED
+            } else {
+                INK
+            }
+        };
+        {
+            let (x0, x1, y0, y1) = to_start_button_rect(&geometry);
+            let tint = hit_tint(x0, x1, y0, y1);
+            let cx = (x0 + x1) * 0.5;
+            let cy = (y0 + y1) * 0.5;
+            frame.fill_rectangle(Point::new(cx - 5.0, cy - 5.0), Size::new(2.0, 10.0), tint);
+            let head = Path::new(|p| {
+                p.move_to(Point::new(cx + 5.0, cy - 5.0));
+                p.line_to(Point::new(cx + 5.0, cy + 5.0));
+                p.line_to(Point::new(cx - 2.0, cy));
+                p.close();
+            });
+            frame.fill(&head, tint);
+        }
+        {
+            let (x0, x1, y0, y1) = play_pause_button_rect(&geometry);
+            let tint = hit_tint(x0, x1, y0, y1);
+            let cx = (x0 + x1) * 0.5;
+            let cy = (y0 + y1) * 0.5;
+            if scene.playing {
+                for dx in [-4.0, 1.0] {
+                    frame.fill_rectangle(
+                        Point::new(cx + dx, cy - 5.0),
+                        Size::new(3.0, 10.0),
+                        tint,
+                    );
+                }
+            } else {
+                let head = Path::new(|p| {
+                    p.move_to(Point::new(cx - 4.0, cy - 5.0));
+                    p.line_to(Point::new(cx + 6.0, cy));
+                    p.line_to(Point::new(cx - 4.0, cy + 5.0));
+                    p.close();
+                });
+                frame.fill(&head, tint);
+            }
+        }
+        // **タイムコードは大きく出す。** transport ボタン2枚の右へ寄せる
+        // (egui 版 `head.left() + 62.0` と同じ考え方 — ボタンと重ならない
+        // 最初の空きから)。
+        let (_, play_x1, _, _) = play_pause_button_rect(&geometry);
+        let clock_x = play_x1 + 10.0;
         frame.fill_text(Text {
             content: playhead_clock(scene.playhead),
-            position: Point::new(8.0, geometry.transport_bottom() * 0.5),
+            position: Point::new(clock_x, geometry.transport_bottom() * 0.5),
             color: INK,
             size: Pixels(15.0),
             font: iced::Font::MONOSPACE,
@@ -582,7 +662,7 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 view.start + view.span,
                 grid_label(step),
             ),
-            position: Point::new(96.0, geometry.transport_bottom() * 0.5),
+            position: Point::new(clock_x + 88.0, geometry.transport_bottom() * 0.5),
             color: DIM,
             size: Pixels(10.0),
             font: iced::Font::MONOSPACE,
@@ -868,6 +948,7 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 ..
             } => mouse::Interaction::Grab,
             TimelineHit::Rail { .. } => mouse::Interaction::Pointer,
+            TimelineHit::ToStart | TimelineHit::PlayPause => mouse::Interaction::Pointer,
             TimelineHit::Empty => mouse::Interaction::default(),
         }
     }

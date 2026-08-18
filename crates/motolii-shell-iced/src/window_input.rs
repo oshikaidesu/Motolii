@@ -150,6 +150,17 @@ impl Widget<Message, iced::Theme, iced::Renderer> for WindowInput<'_> {
                 shell.publish(message);
                 shell.capture_event();
             }
+            // Space(play/pause)・L(loop)。Cmd 系は上のアームが先に取るので、
+            // ここに来る時点で command 修飾は付いていない
+            // (2026-08-19 iced 再生機構移植レーン — `crate::shortcuts` module doc
+            // の地図に載っている2本)。
+            Event::Keyboard(iced::keyboard::Event::KeyPressed { key, .. }) => {
+                let Some(message) = crate::shortcuts::playback_shortcut(key) else {
+                    return;
+                };
+                shell.publish(message);
+                shell.capture_event();
+            }
             Event::Window(iced::window::Event::FileDropped(path)) => {
                 // まだ言わない。フレームの区切りで**まとめて**1回言う。
                 pending.dropped.push(path.clone());
