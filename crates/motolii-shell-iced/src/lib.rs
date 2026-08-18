@@ -45,6 +45,7 @@ mod prompts;
 mod shell;
 mod status_log;
 pub mod view;
+pub mod widgets;
 mod window_input;
 
 pub use intent_log::IntentLog;
