@@ -99,6 +99,15 @@ Elm 性の不変量(UI層=入力→intent の翻訳だけ、状態変化は repl
 Stage 1面=egui の島)は、iced fork の定数修正1つと既知の S2 残件を払えば成立する。
 島に text 入力を置かない限り IME の穴も踏まない。
 
+**ホスト選択の再構成(同日・利用者指摘「Rerunも埋め込み想定では」)**:
+2026-08-16 の「ホストが egui なのは構造上の帰結」論は、本日の3 probe で**実測的に
+弱まった**。Rerun は offscreen texture+入力ブリッジの後ろに置けば任意の wgpu
+ホストへ埋め込める島であり、egui runtime は島の内側の実装詳細に縮む。
+ホスト選択(egui/iced)は Rerun に拘束されず、DX・検証基盤・エコシステムの判断に
+戻った。また UiIntent 背骨(ログと構造の強制)は iced の Message と同型のため、
+将来ホストを移す場合も shell の意味層(intent/gateway/replay oracle)は持ち越せる —
+egui 固有なのは view 層と kittest だけ。
+
 ## 判断
 
 - 現時点では乗り換えの実測根拠なし(「繋がっていない」= 0 件)。
