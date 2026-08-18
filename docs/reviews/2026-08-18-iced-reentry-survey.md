@@ -50,10 +50,38 @@ Elm 性の不変量(UI層=入力→intent の翻訳だけ、状態変化は repl
 | Timeline 密描画面(clip/key 操作) | 橋渡しのみ(座標契約経由) |
 | **繋がっていない** | **現時点で確認ゼロ** |
 
+## 同一 device 埋め込み probe の実測(同日・2巡目)
+
+`spikes/iced-rerun-embed-probe/`(隔離 workspace、iced master
+`3de45144` pin + Rerun fork `483b8559`)。証拠は
+`evidence/iced-rerun-embed-probe/`(results.md と PNG 群)。
+
+- **(a) 同一 device: 条件つき成立** — wgpu 29.0.4 / egui 0.35 が iced・re_renderer・
+  probe で各1本に解決し、device 1つで動いた。ただし **iced が `max_bind_groups: 2`
+  をべた書き**しており上書きの口が無く、re_renderer の `LineRenderer`(3 groups)が
+  作れない — 矩形・grid は出るが**線分・outline・gizmo が犠牲**。
+- **(b) 絵の到達: 成立** — E0 の4象限 oracle 通過。窓の fnv1a が Rerun の
+  offscreen texture の fnv1a と一致(窓に出ているのは frame そのもの)。
+- **(c) 入力→Message: 成立** — click が型付き `Message::StageClicked` として
+  `update` に届き、`set_camera` で絵が変わった(winit→widget tree の最終区間のみ
+  自動走行外。interactive 実行の口は残してある)。
+- **新しい壁2つ**: ① iced が `web-sys = "=0.3.85"` を完全一致で釘打ちしており
+  re_renderer と **cargo グラフ上で同居できない**(vendor+1行 patch で回避 =
+  実採用なら iced fork を持つことになる)。② 上記 bind groups 上限。どちらも
+  上流に直せる浅い壁だが、**採用時は fork 2本体制**(rerun + iced)になる。
+- 付帯: `Pipeline` の Send+Sync 要求で SpatialStage 束は thread_local 置き。
+  依存 836 package・clean build 5分34秒(M4)・増分2〜4秒。0.14→0.15-dev の
+  API 差では詰まらなかった(詰まりは wgpu 29 側)。
+
 ## 判断
 
 - 現時点では乗り換えの実測根拠なし(「繋がっていない」= 0 件)。
 - トリガー(繋がっていない箇所の散見)は運転席決定に記録済み。以後の UX 欠陥は
   3分類つきで記録し、件数で判断する。
-- iced 側の再観測ポイント: 1.0 到達 / AccessKit 統合 / wgpu 版が Rerun と揃う /
-  iced_test の実運用事例。どれかが動いたらこの表を更新する。
+- probe により**構造的不成立は消えた**: iced 採択は「できない」ではなく
+  「fork 2本体制+master 追随+検証基盤(AccessKit/iced_test 実績)の空白を払うか」
+  という**コストの選択**になった。トリガーが積み上がった時の乗り換え先として
+  実測済みの道が1本ある、が現在地。
+- iced 側の再観測ポイント: 1.0 到達(wgpu 29 での release)/ AccessKit 統合 /
+  `web-sys` 釘打ちと `max_bind_groups` の上流修正 / iced_test の実運用事例。
+  どれかが動いたらこの表を更新する。
