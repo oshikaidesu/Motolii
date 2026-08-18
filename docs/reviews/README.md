@@ -39,6 +39,7 @@
 | [2026-08-18-first-real-run-observations.md](2026-08-18-first-real-run-observations.md) | 実素材での初通し実走(CLI鎖+GUI screenshot)。placeがclip長をcomp長にする・exportの報告(300frames)と現物(178)の不一致・Stage斜め視点の再確認・thumbnail失敗のstderr黙殺を発見 | **観察**(2026-08-18) |
 | [2026-08-18-rerun-as-composition-foundation.md](2026-08-18-rerun-as-composition-foundation.md) | **利用者裁定: Rerunは合成のメイン基盤**。AEカメラレイヤー相当をdocument cameraとしてRerunへ外注し、ビューとエクスポートを同一シーンで撮る。成立条件はE0 probe(offscreen/カメラ注入/遮蔽)の実測待ち | **決定**(2026-08-18) |
 | [2026-08-18-iced-reentry-survey.md](2026-08-18-iced-reentry-survey.md) | iced 0.14の実態調査(段差ゼロ軸)。replayは公式不変量(iced_test/time-travel)で軸上は本物、だがwgpu版不一致でRerun基盤と衝突・AccessKit未統合・NLE先人ゼロ。繋がり3分類の現状マップ=「繋がっていない」0件 | **観察**(2026-08-18) |
+| [2026-08-18-user-first-touch-observations.md](2026-08-18-user-first-touch-observations.md) | 利用者の初回タッチ観察。Browserダブルクリック=処理不在の無反応(Q0違反)、画像はadmission拡張子リストで入口拒否(台本と乖離)、透明パネル=空コンポの正対プレート。「繋がっていない」は引き続き0件。修正レーン2本発注 | **観察**(2026-08-18) |
 | [2026-08-17-soundtrack-command-decision.md](2026-08-17-soundtrack-command-decision.md) | `Command::SetSoundtrack { old, new }`を`Document.soundtrack`の唯一の書き込み経路として決定。apply時UnknownAssetId拒否、singleton merge key、v3-only journal decode。N-SOUNDTRACK-WRITEを閉じる |
 | [2026-08-15-blitz-ui-runtime-adoption-proposal.md](2026-08-15-blitz-ui-runtime-adoption-proposal.md) | UI基盤をBlitz(HTML/CSS)+テクスチャ合成へ移す起案。処分すべき既決3件(RN再基線・Skia ADOPT・Web窓)と未了6件を固定。比較中・裁定未記入 |
 | [2026-08-15-blitz-ui-runtime-probe.md](2026-08-15-blitz-ui-runtime-probe.md) | Blitz(HTML/CSS)をUI基盤候補として実測。自前wgpu29テクスチャへの描画はPASS、キーはフォーム要素にしか届かない等の制約と版の罠を記録。比較中・裁定未了 |
