@@ -56,7 +56,7 @@
       "notes": "Small-core and plugin-responsibility learning fixture; it does not define plugin traits, custom UI APIs, or Document schema."
     },
     {
-      "file": "docs/mocks/m3-main-ui-v1.html",
+      "file": "docs/archive/m3-main-ui-early-mocks/m3-main-ui-v1.html",
       "role": "historical-baseline",
       "status": "comparison-only",
       "entryFixtures": [
@@ -66,28 +66,28 @@
       "notes": "Retained for visual-composition comparison. New decomposition work must not treat it as the current integrated reference."
     },
     {
-      "file": "docs/mocks/m3-main-ui-v2.html",
+      "file": "docs/archive/m3-main-ui-early-mocks/m3-main-ui-v2.html",
       "role": "historical-comparison",
       "status": "comparison-only",
       "entryFixtures": [],
       "notes": "Grid-oriented comparison proposal."
     },
     {
-      "file": "docs/mocks/m3-timeline-v0.svg",
+      "file": "docs/archive/m3-main-ui-early-mocks/m3-timeline-v0.svg",
       "role": "historical-comparison",
       "status": "comparison-only",
       "entryFixtures": [],
       "notes": "Static timeline comparison; not a product UI or golden."
     },
     {
-      "file": "docs/mocks/m3-interaction-v0.html",
+      "file": "docs/archive/m3-main-ui-early-mocks/m3-interaction-v0.html",
       "role": "historical-comparison",
       "status": "comparison-only",
       "entryFixtures": [],
       "notes": "State-step comparison; not a token or product UI decision."
     },
     {
-      "file": "docs/mocks/m3-ui-dynamics-v1.html",
+      "file": "docs/archive/m3-main-ui-early-mocks/m3-ui-dynamics-v1.html",
       "role": "historical-comparison",
       "status": "comparison-only",
       "entryFixtures": [],

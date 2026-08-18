@@ -29,6 +29,11 @@
 | 5 | oracle・test・golden・閾値を通すために変更する | 落ちたら止める。testが誤りに見えるなら`RETURN`（[AGENTS.md](../AGENTS.md)) |
 | 6 | 「より良い」構造・命名・抽象を提案して適用する | 現行の構造と命名を保つ。提案は`RETURN`のnoteへ書き、実装しない |
 | 7 | `timeline_skia/` を削除する | **意味/hit/oracleの源として残す**（2026-08-15 egui裁定と同じ扱い） |
+
+> 上表の行1・2が例示する`timeline_egui/theme.rs`・`timeline_egui/clip_band.rs`は
+> Timeline用の写経元の例だったが、**C1〜C3が失効した今は無効**(パス自体が存在しない。
+> 下記C1直前の注記を見よ)。C6〜C8はそれぞれの写経元(`browser-library.html`、
+> `inspector-library.html`、`productStyles.ts`系)を各capsuleのREAD SETに個別に持つ。
 | 8 | 複数capsuleを1PRにまとめる | 1 capsule = 1 branch = 1 PR |
 
 **判断が要ると感じたら、それは`RETURN`の合図である。** 判断してはならない。
@@ -67,23 +72,32 @@ RETURN:
 
 ---
 
-## C1 — Timeline描画をBlitzへ（意味は移さない）
+> **C1〜C3は失効(2026-08-16裁定により発注してはならない)**: 同日
+> [Timeline実行時基盤の再選定](reviews/2026-08-16-timeline-runtime-reselection-to-egui.md)が
+> 「TimelineをBlitzへ移す」計画そのものを撤回し、Timelineの実行時基盤はeguiのまま確定した
+> (2026-08-19、利用者裁定によりTimelineの再現目標はCSSモックからさらにegui実装そのものへ確定。
+> [CANON](CANON.md)を見よ)。下のCURRENT STATE/READ SETが指す
+> `crates/motolii-ui/src/timeline_egui/` は**2026-08-16に削除済みで存在しない**
+> (現在の実装は`crates/motolii-ui/src/timeline_editor/`。名前も構造も別物なので写経元にしない)。
+> C6〜C8(Browser/Inspector/chrome)は対象外・引き続き有効。
+
+## C1 — Timeline描画をBlitzへ(意味は移さない)【失効】
 
 | 項目 | 内容 |
 |---|---|
 | **BASE** | 裁定後の最新 main |
 | **AUTHORITY** | [Blitz移行起案](reviews/2026-08-15-blitz-ui-runtime-adoption-proposal.md)の裁定 |
-| **CURRENT STATE** | Timeline描画は `crates/motolii-ui/src/timeline_egui/`（egui）。`ui/motolii-rn/native-renderer/src/timeline_skia/`（rust-skia）が並存 |
+| **CURRENT STATE** | ~~Timeline描画は `crates/motolii-ui/src/timeline_egui/`（egui）。`ui/motolii-rn/native-renderer/src/timeline_skia/`（rust-skia）が並存~~ **(失効。当時の記述。`timeline_egui/`は2026-08-16に削除済み)** |
 | **OWNER** | UI描画層のみ |
 | **EXACT TARGET** | 現行Timelineの見た目をBlitz(HTML/CSS)で描き、自前wgpuテクスチャへ出す。**入力・意味・Documentは触らない** |
 | **ALLOWLIST** | 新規 `crates/motolii-ui/src/timeline_blitz/**` のみ |
-| **READ SET** | `timeline_egui/theme.rs`（色・帯高）、`geometry.rs`（座標変換）、`ruler.rs`、`clip_band.rs`、`rows.rs`、`spikes/blitz-probe/src/bin/ui_mock.rs`（再現済みモック） |
+| **READ SET** | ~~`timeline_egui/theme.rs`（色・帯高）、`geometry.rs`（座標変換）、`ruler.rs`、`clip_band.rs`、`rows.rs`~~ **(失効。パスが存在しない)**、`spikes/blitz-probe/src/bin/ui_mock.rs`(再現済みモック) |
 | **POSITIVE ORACLE** | `ui_mock.rs` と同一のHTML/CSS構造で、`theme.rs` の全定数が**リテラルで一致**すること（色・帯高・sidebar幅・行高） |
 | **NEGATIVE ORACLE** | `timeline_blitz/` に**新しい色定数・寸法定数が1つも無い**こと。全て `theme.rs` / `geometry.rs` からの写し |
 | **NON-GOALS** | 共通NON-GOALS全部 + 入力処理を書かない + `timeline_egui/` を削除しない |
 | **RETURN** | `theme.rs` に無い色が必要になった時点で即`RETURN`。**自分で選ばない** |
 
-## C2 — 入力ルーティング（Motolii側が持つ）
+## C2 — 入力ルーティング（Motolii側が持つ）【失効。C1直前の注記を見よ】
 
 | 項目 | 内容 |
 |---|---|
@@ -95,7 +109,7 @@ RETURN:
 | **NON-GOALS** | 共通NON-GOALS全部 + **`DomainIntent` に variant を足さない**（足りなければRETURN） |
 | **RETURN** | Timeline操作を表す `DomainIntent` が無いことに気づいた時 → **足さずにRETURN**。これは[F18](ui-friction-ledger.md)が指す未決事項 |
 
-## C3 — key帯を custom widget へ（密な面の1ノード化）
+## C3 — key帯を custom widget へ（密な面の1ノード化）【失効。C1直前の注記を見よ】
 
 | 項目 | 内容 |
 |---|---|

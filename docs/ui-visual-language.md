@@ -4,7 +4,9 @@
 
 この文書は操作モデルではなく、Motoliiの見た目と視覚認知の基準を定める。UI toolkit、Document意味論、入力契約は変更しない。操作トポロジーと共通component契約は[UI操作言語](ui-interaction-language.md)、実装境界は[M3 UI境界汚染の予防](reviews/2026-07-14-m3-ui-boundary-prevention.md)、タスクと審判は[M3仕様](specs/M3-ui-integration.md)を正本とする。
 
-視覚構成の基準は[高密度メインUIモック](mocks/m3-main-ui-v1.html)とする。HTMLは設定画面からライト/ダークを実際に切り替えられ、[ライト静止画](mocks/m3-main-ui-v1-light.png)と[ダーク静止画](mocks/m3-main-ui-v1-dark.png)は回収時点の構成比較証拠として固定する。モックにある未決機能は実装決定ではなく、画面密度のfixtureである。
+> **訂正(2026-08-19)**: 下の「視覚構成の基準は高密度メインUIモック(m3-main-ui-v1)」は2026-07-14時点の記述で、現在は誤り。**現行の視覚正本は面ごとに分かれた`docs/mocks-ui/public/{inspector,browser,timeline}-library.html`(+同名`.css`、最終更新2026-08-16)**であり、`crates/motolii-ui/src/inspector_panel/theme.rs`はその冒頭で「全部`inspector-library.css`の写し」と自己宣言している。m3-main-ui-v1は`docs/archive/m3-main-ui-early-mocks/`へ移動済みで、画面密度の履歴比較資料としてのみ有効(面の詳細・色・寸法の根拠には使わない)。正本一覧は[docs/CANON.md](CANON.md)を見よ。
+
+~~視覚構成の基準は[高密度メインUIモック](archive/m3-main-ui-early-mocks/m3-main-ui-v1.html)とする。HTMLは設定画面からライト/ダークを実際に切り替えられ、[ライト静止画](archive/m3-main-ui-early-mocks/m3-main-ui-v1-light.png)と[ダーク静止画](archive/m3-main-ui-early-mocks/m3-main-ui-v1-dark.png)は回収時点の構成比較証拠として固定する。モックにある未決機能は実装決定ではなく、画面密度のfixtureである。~~
 
 ## 参照範囲を混ぜない
 
