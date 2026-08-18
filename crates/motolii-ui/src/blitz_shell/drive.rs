@@ -23,7 +23,10 @@ use super::app::UnsavedChoice;
 
 /// transcript の1行。`seq` は 1 始まりの通し番号で、`--status-log` の JSONL
 /// (`{"seq":n,"text":"…"}`)がそのまま名乗る番号でもある。
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// **JSONL の1行はこの型がそのまま名乗る**(`serde` の field 順 = 宣言順)。
+/// 原因の側(`intent::IntentEvent`)も同じ形で、並べて読める。
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) struct StatusEvent {
     pub seq: u64,
     pub text: String,
@@ -194,6 +197,7 @@ mod driven {
 
     use super::{ScriptedPrompts, ShellPrompts, ShellTranscript};
     use crate::blitz_shell::app::BlitzShellApp;
+    use crate::blitz_shell::intent::UiIntent;
 
     /// 運転席の窓の大きさ(論理px)。`runner.rs` の最小寸法(980x650)に合わせる —
     /// 実行時より狭い窓でだけ通るテストにしないため。
@@ -396,9 +400,33 @@ mod driven {
             self.harness.state().app().project().is_some()
         }
 
+        /// 座っている project のパス。replay 後の座席と突き合わせる。
+        pub(crate) fn project_path(&self) -> Option<PathBuf> {
+            self.harness
+                .state()
+                .app()
+                .project()
+                .map(|seat| seat.path().to_path_buf())
+        }
+
         /// 帯が映している一言(何も言われていなければ空文字)。
         pub(crate) fn latest_report(&self) -> String {
             self.transcript.latest().unwrap_or_default()
+        }
+
+        /// 言われた全文(**結果**のログ)。replay の照合に使う。
+        pub(crate) fn reports(&self) -> Vec<String> {
+            self.transcript
+                .entries()
+                .into_iter()
+                .map(|event| event.text)
+                .collect()
+        }
+
+        /// この駆動で記録された intent 列(**原因**のログ)。そのまま
+        /// `ShellGateway::replay` へ渡せる。
+        pub(crate) fn intents(&self) -> Vec<UiIntent> {
+            self.harness.state().app().intent_journal().intents()
         }
     }
 

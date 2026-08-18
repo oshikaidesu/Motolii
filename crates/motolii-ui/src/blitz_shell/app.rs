@@ -7,22 +7,31 @@
 //! ペインの中身・色・寸法は `super::pane::BlitzPane` が描く。
 //! レイアウトの永続化もしない（毎回既定の並びで起動する）。
 //!
-//! Document の座席もここにある（`ProjectSeat`）。`--project` で開いた実プロジェクトの
-//! `ProjectSession`（OS lock）と Timeline エディタ（唯一の writer を抱える）を app が
-//! 抱え、Stage へは immutable snapshot だけを流す。**Timeline は live のとき
-//! native エディタ**（`timeline_editor::TimelineEditor`）で、移動・トリム・選択・
-//! Undo/Redo が writer を通る。座席無しの起動は従来どおり fixture 展示。
+//! **Document の座席はここに無い**（2026-08-18「ログと構造の強制」）。`ProjectSeat`
+//! （`ProjectSession` の OS lock ＋ 唯一の writer を抱える Timeline エディタ）は
+//! `super::intent::ShellGateway` の中に居て、app が触れるのは
+//! [`BlitzShellApp::dispatch`] に `UiIntent` を渡す道だけである。つまりこのファイルの
+//! 仕事は 3 つに減った:
+//!
+//! 1. **入力を intent に翻訳する**（Cmd+N → 訊く → `NewProject { path }`）
+//! 2. **面を状態へ合わせる**（`resync_view` が Stage へ snapshot を配り直す）
+//! 3. 器（どこに何の面が座るか）を決める
+//!
+//! Stage へ流れるのは相変わらず immutable snapshot だけで、**Timeline は live のとき
+//! native エディタ**（`timeline_editor::TimelineEditor`）である。その中の編集と
+//! Undo/Redo はまだ intent を通らない（`motolii-doc` の D2 journal が受けている。
+//! shell 層の intent 化は wave E）。座席無しの起動は従来どおりスタート画面。
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use eframe::egui_wgpu::RenderState;
 use egui_tiles::{Container, Linear, LinearDir, Tile, TileId, Tiles, Tree, UiResponse};
 
 use super::drive::{NativePrompts, ShellPrompts, ShellTranscript};
+use super::intent::{IntentJournal, ProjectSeat, ShellGateway, UiIntent};
 use super::pane::{BlitzPane, PaneKind};
 use crate::browser_panel::BrowserRequest;
-use crate::export_seat::{can_start_export, ExportFinish, ExportRequest, ExportRun};
 use crate::timeline_editor::TimelineEditor;
 
 /// `egui_tiles` のペイン描画をパネルへ委譲するだけの behavior。
@@ -76,233 +85,6 @@ impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
     }
 }
 
-/// live project の座席。開いた project の `ProjectSession`（OS 排他 lock）と、
-/// Timeline エディタをひとまとめに持つ。**Document の唯一の writer はエディタの
-/// 中に1つだけ座る**（single writer）。
-///
-/// pane 側へ出て行くのは `snapshot()` の immutable snapshot だけ。
-/// 第二の Document 保持経路（cache / 読み直し）はここから先に作らない。
-pub struct ProjectSeat {
-    /// 開いている project のパス。**同じ project を開き直す時に lock を先に返す**
-    /// 判断がこれを見る（`reseat_project`）。
-    path: PathBuf,
-    /// project identity の排他 lock。app が生きているあいだ握り続け
-    /// （落とすと他プロセスが同じ project を開けてしまう）、保存（`save`）も
-    /// この lock の中の `save_document` を通る（CLI `document_edit.rs` と同じ経路）。
-    session: motolii_doc::ProjectSession,
-    /// Timeline エディタ。編集は全部（キー入力も操作 API も）この中の writer を通る。
-    editor: TimelineEditor,
-    /// 最後に project ファイルへ書いた（開いた直後はファイルにある）内容の snapshot。
-    /// dirty 判定はこれとの**内容比較**（`is_dirty`）。undo 台帳の深さや revision の
-    /// 一致では判定しない — undo で保存内容へ戻れば clean、深さが偶然揃っても
-    /// 内容が違えば dirty、が正しく出る。
-    saved: Arc<motolii_doc::Document>,
-    /// `is_dirty` の cache（判定した時の revision とその答え）。revision が
-    /// 進んでいなければ Document 比較をやり直さない（status 帯が毎フレーム見るため）。
-    dirty_cache: std::cell::Cell<Option<(u64, bool)>>,
-}
-
-impl ProjectSeat {
-    /// 実プロジェクトを開いて座席を作る。経路は既存の `open_project_resolved`
-    /// （= `ProjectSession::open` ＋ plugin 解決。`document_export.rs:18` /
-    /// `timeline_widget_lab.rs:120` と同じ慣行）。
-    ///
-    /// 開けなければ `Err` — **fixture へ黙って fallback しない**。呼び手（`main.rs`）が
-    /// 起動失敗として扱う。
-    pub fn open(path: &Path) -> Result<Self, String> {
-        let catalog = Arc::new(
-            motolii_plugin::reference::reference_catalog()
-                .map_err(|error| format!("plugin catalog を作れない: {error}"))?,
-        );
-        let opened = motolii_doc::open_project_resolved(
-            path,
-            &motolii_doc::ResourceLimits::production(),
-            &catalog,
-        )
-        .map_err(|error| format!("project {} を開けない: {error}", path.display()))?;
-        let writer = motolii_doc::DocumentWriter::new(opened.recovered.document, catalog).map_err(
-            |error| {
-                format!(
-                    "project {} の DocumentWriter を作れない: {error}",
-                    path.display()
-                )
-            },
-        )?;
-        let mut editor =
-            TimelineEditor::new(writer).with_project_root(path.parent().map(Path::to_path_buf));
-        seat_inspection_selection(&mut editor);
-        // 開いた直後の snapshot がそのまま「ファイルにある内容」= clean の基準。
-        let saved = Arc::clone(editor.document());
-        Ok(Self {
-            path: path.to_path_buf(),
-            session: opened.session,
-            // project root = document path の親(CLI export と同じ規約)。
-            // soundtrack 再生の asset path 解決に使う。
-            editor,
-            saved,
-            dirty_cache: std::cell::Cell::new(None),
-        })
-    }
-
-    /// writer snapshot を project ファイルへ書き戻す（Cmd+S の後ろ）。
-    ///
-    /// 経路は既存の `ProjectSession::save_document`（CLI `document_edit.rs` の
-    /// `with_writer` が編集後に通すのと同じ）で、**新しい保存経路を作らない**。
-    /// journal への常時追記はここではしない（明示保存のみ）。
-    pub fn save(&mut self) -> Result<(), String> {
-        let snapshot = Arc::clone(self.editor.document());
-        self.session
-            .save_document(&snapshot, &motolii_doc::SaveOptions::default())
-            .map_err(|error| format!("save {} failed: {error}", self.path.display()))?;
-        self.saved = snapshot;
-        self.dirty_cache.set(Some((self.editor.revision(), false)));
-        Ok(())
-    }
-
-    /// 未保存の編集があるか。**保存済み内容との比較**で答える。
-    ///
-    /// revision や undo 台帳の深さの一致は根拠にしない — undo で保存時の内容へ
-    /// 戻れば clean に戻り、保存点より下へ undo してから別の編集で深さだけ揃っても
-    /// dirty のまま、が正しく出る。比較は revision が進んだ時だけやり直す。
-    pub fn is_dirty(&self) -> bool {
-        let revision = self.editor.revision();
-        if let Some((seen, dirty)) = self.dirty_cache.get() {
-            if seen == revision {
-                return dirty;
-            }
-        }
-        let current = self.editor.document();
-        let dirty = !Arc::ptr_eq(current, &self.saved) && **current != *self.saved;
-        self.dirty_cache.set(Some((revision, dirty)));
-        dirty
-    }
-
-    /// 開いている project のパス。
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// pane へ流す immutable snapshot（エディタが writer から取った cached をそのまま配る）。
-    pub fn snapshot(&self) -> Arc<motolii_doc::Document> {
-        Arc::clone(self.editor.document())
-    }
-
-    /// Timeline エディタ（読み）。revision / snapshot の照合に使う。
-    pub fn editor(&self) -> &TimelineEditor {
-        &self.editor
-    }
-
-    /// Timeline エディタ（書き）。pane の描画と統合テストの操作 API がここを通る。
-    /// writer 自体は外へ出さない — 編集は必ずエディタの操作として通る。
-    pub fn editor_mut(&mut self) -> &mut TimelineEditor {
-        &mut self.editor
-    }
-}
-
-/// 検分用: `MOTOLII_SELECT_LAYER=<id>` があれば、開いた直後にその layer を選んでおく。
-///
-/// **製品の挙動ではない** — `--screenshot` と同じ「窓を触らずに絵を確かめる」ための口で、
-/// `pane.rs` の `MOTOLII_SHELL_TRACE` と同じ扱いである。通る経路は素のクリックと同じ
-/// `select_layer` なので、選択の意味も Undo 台帳も変えない。環境変数が無い・数として
-/// 読めないときは**何もしない**（既定は従来どおり「選択なし」）。
-fn seat_inspection_selection(editor: &mut TimelineEditor) {
-    let Some(raw) = std::env::var_os("MOTOLII_SELECT_LAYER") else {
-        return;
-    };
-    let Some(id) = raw.to_str().and_then(|text| text.trim().parse::<u64>().ok()) else {
-        return;
-    };
-    editor.select_layer(motolii_doc::LayerId::from_raw(id));
-}
-
-/// 新規 project を1つ作る（空コンポ + V1 トラック1本）。
-///
-/// 意味は CLI の `new_document`（`crates/motolii-cli/src/document_debug.rs:12`）
-/// そのもので、**作ったものはそのまま `ProjectSeat::open` で開ける**
-/// （= `--project` 起動と同じ状態になる）。既にあるファイルは踏まない。
-///
-/// dialog はここに無い。呼び手（`BlitzShellApp`）が場所を決めてから呼ぶ。
-pub fn create_project_file(path: &Path) -> Result<(), String> {
-    if path.exists() {
-        return Err(format!("project already exists: {}", path.display()));
-    }
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-    let mut document = motolii_doc::Document::new_current();
-    // 2026-08-17決定: 新規projectの出力解像度既定は1920x1080(CLI `new_document`と同値。
-    // 以後の変更は`Command::SetCompositionResolution`だけが書く)。
-    document
-        .composition
-        .set_resolution(Some((1920, 1080)))
-        .map_err(|error| error.to_string())?;
-    // 受け皿のトラックが無いと clip を1本も置けない（`prepare_place_asset_clip`）。
-    let track = document
-        .track_ids
-        .allocate("V1")
-        .map_err(|error| error.to_string())?;
-    document.tracks.push(motolii_doc::Track {
-        id: track,
-        items: vec![],
-    });
-    let mut session =
-        motolii_doc::ProjectSession::acquire(path, &motolii_doc::ResourceLimits::production())
-            .map_err(|error| error.to_string())?;
-    session
-        .save_document(&document, &motolii_doc::SaveOptions::default())
-        .map_err(|error| error.to_string())
-    // session はここで落ちて lock を返す。開くのは呼び手（`reseat_project`）。
-}
-
-/// 座席を差し替える。**旧 session の lock をいつ返すかがここの全部である。**
-///
-/// - 別の project … 新しい席を**先に開いてから**旧席を落とす。開けなくても
-///   いま編集している席を失わない
-/// - 同じ project … 先に旧席を落として lock を返してから開き直す
-///   （そうしないと自分の lock に自分がぶつかる）
-///
-/// 開けなければ `Err(理由)` で、app は落とさない。dialog はここに無い。
-pub fn reseat_project(current: &mut Option<ProjectSeat>, path: &Path) -> Result<(), String> {
-    if current
-        .as_ref()
-        .is_some_and(|seat| same_project(seat.path(), path))
-    {
-        // 旧 session を先に落として lock を返す。
-        *current = None;
-    }
-    let seat = ProjectSeat::open(path)?;
-    // ここで初めて旧席（別 project の場合）が落ちる。
-    *current = Some(seat);
-    Ok(())
-}
-
-/// 同じ project を指しているか。symlink や `./` の違いで別物に見えないよう、
-/// 取れるなら canonical path で比べる。
-fn same_project(a: &Path, b: &Path) -> bool {
-    match (a.canonicalize(), b.canonicalize()) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => a == b,
-    }
-}
-
-/// OS から窓へ落ちてきた path 群を受ける。**返すのは一言の status。**
-///
-/// project が開いていないときは Document が無いので取り込めない。黙って
-/// 捨てず、**先に project を作る／開く**と案内する（v0。ドロップから
-/// 新規 project を作る意味はまだ決めていない）。
-///
-/// 落ちたものが clip になったか曲になったかは status がそのまま名指しで言う
-/// （まだ曲が無い project へ落ちた音声は曲になる — 分岐は `import_seat`）。
-pub fn admit_dropped_paths(seat: Option<&mut ProjectSeat>, paths: &[PathBuf]) -> String {
-    let Some(seat) = seat else {
-        return "open a project first — Cmd+N to create one, Cmd+O to open one".to_owned();
-    };
-    if paths.is_empty() {
-        return "nothing dropped".to_owned();
-    }
-    seat.editor_mut().import_dropped_media(paths).summary()
-}
-
 /// 未保存 guard の3択。dialog（`prompt_unsaved_choice`）が返すのはこれだけで、
 /// 何が起きるかは `decide_unsaved` が決める。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -350,28 +132,32 @@ pub struct BlitzShellApp {
     /// wgpu バックエンド前提（eframe は `features = ["wgpu"]`、glow ではない）。
     render_state: RenderState,
     tree: Tree<BlitzPane>,
-    /// live project の座席。`None` は fixture 展示（従来の開発動線）。
-    project: Option<ProjectSeat>,
-    /// Stage へ最後に配った snapshot の revision。エディタの編集で進んでいたら
-    /// 次のフレームで新しい snapshot を配り直す（Stage の描画コードは触らない）。
+    /// **製品状態への唯一の口**（`super::intent`）。live project の座席と実行中の
+    /// 書き出しはこの中に居て、app は `UiIntent` を渡す以外に動かせない。
+    /// 記録（原因のログ）と実行が1点に集まっているのがこの型の全部である。
+    gateway: ShellGateway,
+    /// Stage へ最後に配った座席（パスと revision）。ここと gateway の現状がずれた
+    /// フレームで、新しい snapshot を Stage へ配り直す（`resync_view`）。
+    seated: Option<PathBuf>,
     seated_revision: u64,
     /// 窓ぜんたいに関わる一言（ドロップ・New・Open の結果）の**唯一の言い場所**。
     /// 帯は `latest()` を映し、言われた全文はそのまま残る（`--status-log` へも出る）。
     /// pane の失敗も同じ台帳へ来る（clone を配ってある）ので、stderr へ消えない。
     /// Timeline の中の出来事は従来どおりエディタ自身の status が言う。
+    /// gateway が持っているのと**同じ台帳**（`Arc` 共有）。
     transcript: ShellTranscript,
     /// 人に訊く4本（New / Open / Export / 未保存）。窓は `NativePrompts`（rfd）で、
     /// テスト・CLI 駆動は台本が答える。**app は rfd を直接呼ばない。**
+    ///
+    /// 訊くのは intent の**外**で、決まった答え（path・3択）だけが intent の中へ
+    /// 入る。だから replay は dialog を二度と開かない。
     prompts: Box<dyn ShellPrompts>,
-    /// 実行中の書き出し（高々1件。実行中は Export ボタンが disabled = 二重起動防止）。
-    /// UI thread は毎フレーム `try_finish` を poll するだけで、書き出しは別 thread。
-    export: Option<ExportRun>,
     /// fixture 展示モード（開発動線・screenshot テスト用、`--fixture`）。
     /// **既定は false** — 座席なしの起動は展示ではなくスタート画面
     /// (New / Open) を出す。展示が製品状態に見える混乱をUXチェック第1号で確認した。
     fixture: bool,
     /// Browser が見るフォルダ。`None` は既定(`docs/mocks`)。座席を失って並びを
-    /// 組み直すとき(`reseat` の失敗経路)も同じ根を渡し直すために持っている。
+    /// 組み直すとき(`resync_view` の失席経路)も同じ根を渡し直すために持っている。
     browser_root: Option<PathBuf>,
 }
 
@@ -441,21 +227,28 @@ impl BlitzShellApp {
 
         // snapshot はここで1度だけ取り、Stage が writer の出した `Arc` そのものを持つ。
         let snapshot = project.as_ref().map(ProjectSeat::snapshot);
+        let seated = project.as_ref().map(|seat| seat.path().to_path_buf());
         let seated_revision = project
             .as_ref()
             .map(|seat| seat.editor().revision())
             .unwrap_or(0);
         // 帯の台帳は面より先に作る。pane は clone を持って同じ場所へ言う。
         let transcript = ShellTranscript::default();
+        // 製品状態は最初からゲートウェイの中。`--project` で開いた座席も
+        // 「どうやって着いたか」を journal の第1行に持つ（`ShellGateway::seated`）。
+        let gateway = match project {
+            Some(seat) => ShellGateway::seated(transcript.clone(), seat),
+            None => ShellGateway::new(transcript.clone()),
+        };
         Self {
             runtime,
             render_state,
             tree: build_initial_tree(snapshot.as_ref(), &transcript, browser_root.clone()),
-            project,
+            gateway,
+            seated,
             seated_revision,
             transcript,
             prompts,
-            export: None,
             fixture,
             browser_root,
         }
@@ -463,19 +256,57 @@ impl BlitzShellApp {
 
     /// スタート画面を出すべきか。座席が無く、fixture 展示も明示されていない時。
     fn shows_welcome(&self) -> bool {
-        self.project.is_none() && !self.fixture
+        !self.gateway.is_seated() && !self.fixture
+    }
+
+    /// **利用者の操作をゲートウェイへ流す唯一の口。**
+    ///
+    /// intent は記録されてから実行され、実行のあとで面（Stage の snapshot・
+    /// fixture への戻り）を現状へ合わせる。返すのは「意図どおり進んだか」で、
+    /// 進まなかった理由は帯が言っている。
+    fn dispatch(&mut self, intent: UiIntent) -> bool {
+        let proceeded = self.gateway.dispatch(intent);
+        self.resync_view();
+        proceeded
+    }
+
+    /// 面をゲートウェイの現状へ合わせる。**判断はここに無い** — 座席が変わったか
+    /// （path）、Document が進んだか（revision）を見て、Stage へ配り直すだけ。
+    ///
+    /// 座席を失ったときだけ `build_initial_tree(None)` で並びを組み直す
+    /// （黙って fixture に見えないため。旧 `reseat` の失敗経路と同じ）。
+    fn resync_view(&mut self) {
+        match self.gateway.project() {
+            Some(seat) => {
+                let path = seat.path().to_path_buf();
+                let revision = seat.editor().revision();
+                if self.seated.as_deref() != Some(path.as_path()) || revision != self.seated_revision
+                {
+                    let snapshot = seat.snapshot();
+                    seat_stage_documents(&mut self.tree, &snapshot);
+                    self.seated = Some(path);
+                    self.seated_revision = revision;
+                }
+            }
+            None => {
+                if self.seated.is_some() {
+                    self.tree =
+                        build_initial_tree(None, &self.transcript, self.browser_root.clone());
+                    self.seated = None;
+                    self.seated_revision = 0;
+                }
+            }
+        }
     }
 
     /// New の実体（Cmd+N とスタート画面のボタンが共用）。
+    /// **訊くのはここ、記録と実行はゲートウェイ**。
     fn request_new_project(&mut self) {
         if !self.clear_unsaved_or_stay() {
             return;
         }
         if let Some(path) = self.prompts.new_project_path() {
-            match create_project_file(&path) {
-                Ok(()) => self.reseat(&path),
-                Err(error) => self.transcript.report(error),
-            }
+            self.dispatch(UiIntent::NewProject { path });
         }
     }
 
@@ -485,13 +316,13 @@ impl BlitzShellApp {
             return;
         }
         if let Some(path) = self.prompts.open_project_path() {
-            self.reseat(&path);
+            self.dispatch(UiIntent::OpenProject { path });
         }
     }
 
     /// 座席の参照。
     pub fn project(&self) -> Option<&ProjectSeat> {
-        self.project.as_ref()
+        self.gateway.project()
     }
 
     /// 窓の一言の台帳（読み）。帯が映すのは `latest()`、`--status-log` は全文を流す。
@@ -499,53 +330,30 @@ impl BlitzShellApp {
         &self.transcript
     }
 
-    /// 座席を差し替えて、Stage を新しい Document へ座らせ直す。
-    ///
-    /// 座り直しは既存の経路をそのまま使う: 開けたら `seat_stage_documents`
-    /// （編集のたびに Stage へ配り直しているのと同じ関数）、席を失ったときだけ
-    /// `build_initial_tree(None)` で fixture の並びへ戻す。
-    fn reseat(&mut self, path: &Path) {
-        match reseat_project(&mut self.project, path) {
-            Ok(()) => {
-                let seat = self.project.as_ref().expect("reseat_project seated one");
-                let snapshot = seat.snapshot();
-                self.seated_revision = seat.editor().revision();
-                seat_stage_documents(&mut self.tree, &snapshot);
-                self.transcript.report(format!("opened {}", path.display()));
-            }
-            Err(error) => {
-                // 同じ project を開き直そうとして落ちた時だけ席が空く。
-                // 黙って fixture に見えないよう、並びも status も合わせる。
-                if self.project.is_none() {
-                    self.tree =
-                        build_initial_tree(None, &self.transcript, self.browser_root.clone());
-                    self.seated_revision = 0;
-                }
-                self.transcript.report(error);
-            }
-        }
+    /// 原因のログ（読み）。`--intent-log` は全文を流し、replay oracle はここを読む。
+    pub(crate) fn intent_journal(&self) -> &IntentJournal {
+        self.gateway.journal()
     }
 
     /// 未保存のまま座席を捨てる操作（Cmd+O / Cmd+N / 窓を閉じる）の前に挟む。
     /// 続行してよければ `true`。判断は `decide_unsaved`、訊き手は
     /// `prompts.unsaved_choice` に居る。「保存して続行」で保存に失敗したら
     /// **続行しない**（帯に理由が出る）。
+    ///
+    /// 「保存して続行」の保存も利用者が決めた行動なので、`UiIntent::SaveProject`
+    /// として記録される — 記録を見た側は New / Open の直前に保存が入ったことを
+    /// 読み取れるし、replay も同じ順で保存する。
     fn clear_unsaved_or_stay(&mut self) -> bool {
-        let Some(seat) = self.project.as_mut() else {
+        let Some(seat) = self.gateway.project() else {
             return true;
         };
         let path = seat.path().to_path_buf();
+        let dirty = seat.is_dirty();
         let prompts = &mut self.prompts;
-        match decide_unsaved(seat.is_dirty(), || prompts.unsaved_choice(&path)) {
+        match decide_unsaved(dirty, || prompts.unsaved_choice(&path)) {
             UnsavedDecision::Proceed => true,
             UnsavedDecision::Stay => false,
-            UnsavedDecision::SaveThenProceed => match seat.save() {
-                Ok(()) => true,
-                Err(error) => {
-                    self.transcript.report(error);
-                    false
-                }
-            },
+            UnsavedDecision::SaveThenProceed => self.dispatch(UiIntent::SaveProject),
         }
     }
 
@@ -569,18 +377,7 @@ impl BlitzShellApp {
             )
         });
         if save_project {
-            match self.project.as_mut() {
-                Some(seat) => match seat.save() {
-                    Ok(()) => self
-                        .transcript
-                        .report(format!("saved {}", seat.path().display())),
-                    Err(error) => self.transcript.report(error),
-                },
-                None => {
-                    self.transcript
-                        .report("open a project first — Cmd+N to create one, Cmd+O to open one");
-                }
-            }
+            self.dispatch(UiIntent::SaveProject);
         }
         // New / Open は座席を差し替える = いまの編集を捨てる。未保存なら先に訊く
         // （その判断ごと `request_*` が持つ。スタート画面のボタンと同じ入口）。
@@ -601,64 +398,29 @@ impl BlitzShellApp {
                 .collect()
         });
         if !dropped.is_empty() {
-            let report = admit_dropped_paths(self.project.as_mut(), &dropped);
-            self.transcript.report(report);
+            // OS ドロップと Browser のダブルクリックは**同じ intent**へ合流する。
+            self.dispatch(UiIntent::AdmitPaths { paths: dropped });
         }
     }
 
-    /// Export ボタンの後ろ。保存先を訊いて（訊き手は `prompts`）、**現 writer
-    /// snapshot** を別 thread の書き出しへ渡す（dirty でも書き出せる）。
-    /// 判断（座席あり・実行中なし）は `can_start_export` — ボタンの enabled と
-    /// 同じ関数なので、ここに来た時点で普通は真。訊いて断られたら何もしない。
+    /// Export ボタンの後ろ。保存先を訊いて（訊き手は `prompts`）、決まった保存先を
+    /// intent に入れて渡す。判断（座席あり・実行中なし）は `can_start_export` —
+    /// ボタンの enabled と同じ関数で、実体はゲートウェイの中にもう一度ある。
+    /// 訊いて断られたら何も記録しない（**訊いただけの操作は intent ではない**）。
     fn begin_export(&mut self) {
-        if !can_start_export(self.project.is_some(), self.export.is_some()) {
+        if !self.gateway.can_start_export() {
             return;
         }
-        let seat = self
-            .project
-            .as_ref()
-            .expect("can_start_export checked the seat");
-        let Some(output_path) = self.prompts.export_path(seat.path()) else {
+        let project = self
+            .gateway
+            .project()
+            .expect("can_start_export checked the seat")
+            .path()
+            .to_path_buf();
+        let Some(output) = self.prompts.export_path(&project) else {
             return;
         };
-        self.transcript
-            .report(format!("exporting {}", output_path.display()));
-        self.export = Some(ExportRun::start(ExportRequest {
-            document: seat.snapshot(),
-            // project root = document path の親（CLI export と同じ規約）。
-            project_root: seat.path().parent().map(Path::to_path_buf),
-            output_path,
-            // v0 は既定値のみ: composition 全長・通常品質。
-            frame_count: None,
-            qp0: false,
-        }));
-    }
-
-    /// 実行中の書き出しの返事を受ける。**描く前に1回だけ**通す。
-    /// 完了/キャンセル/失敗は status 帯の一言になり、run は捨てる。
-    fn handle_export_finish(&mut self) {
-        let Some(run) = self.export.as_mut() else {
-            return;
-        };
-        let Some(finish) = run.try_finish() else {
-            return;
-        };
-        let report = match finish {
-            ExportFinish::Done(report) => format!(
-                "Exported {} ({}f)",
-                run.output_path().display(),
-                report.frames_written
-            ),
-            ExportFinish::Cancelled => {
-                format!(
-                    "export cancelled — {} was removed",
-                    run.output_path().display()
-                )
-            }
-            ExportFinish::Failed(reason) => format!("export failed: {reason}"),
-        };
-        self.transcript.report(report);
-        self.export = None;
+        self.dispatch(UiIntent::BeginExport { output });
     }
 
     /// 1フレーム描く。
@@ -677,10 +439,11 @@ impl BlitzShellApp {
         let ctx = ui.ctx().clone();
         self.handle_file_entry(&ctx);
 
-        // 書き出し thread の返事も描く前に受ける。走っているあいだは入力が
+        // 書き出し thread の返事も描く前に受ける。**これは intent ではない** —
+        // 利用者の操作ではなく、世界の側からの返事だから。走っているあいだは入力が
         // 無くても回し続ける（経過秒の更新と完了の受け取りのため）。
-        self.handle_export_finish();
-        if self.export.is_some() {
+        self.gateway.poll_export();
+        if self.gateway.export().is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(200));
         }
 
@@ -696,14 +459,20 @@ impl BlitzShellApp {
         // （保存済みなら project 名、未保存なら ● 付き）。一言（ドロップ・New・
         // Open・Save の結果）は従来どおり同じ帯の右に出る。座席が無いときは
         // 従来どおり、何か言うことがある時だけ帯が出る。
+        //
+        // 押された結果は**その場で実行しない**。描画の中は「押された」を拾うだけで、
+        // dialog と intent の dispatch は描き終わってから通す（New / Open と同じ形）。
         let mut want_export = false;
+        let mut want_cancel = false;
         // 帯が映すのは台帳の**最新の1行**。言われた全文は transcript に残る。
         let latest = self.transcript.latest();
-        if self.project.is_some() || latest.is_some() {
+        let seated = self.gateway.is_seated();
+        let can_export = self.gateway.can_start_export();
+        if seated || latest.is_some() {
             egui::Panel::bottom("blitz_shell_status").show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.add_space(STATUS_PAD_X);
-                    if let Some(seat) = self.project.as_mut() {
+                    if let Some(seat) = self.gateway.project_mut() {
                         // 効かない時は disabled（押せない見た目 = 台帳が空）。
                         let undo = ui.add_enabled(
                             seat.editor().undo_len() > 0,
@@ -740,7 +509,7 @@ impl BlitzShellApp {
                     // 受けないため、押せる面はここに置く）。実行中は indeterminate
                     // スピナー＋経過秒＋Cancel（export 側に進捗 callback の口が
                     // 無い v0 の形）。二重起動はボタン自体が消えることで防ぐ。
-                    if let Some(run) = self.export.as_ref() {
+                    if let Some(run) = self.gateway.export() {
                         ui.separator();
                         ui.add(egui::Spinner::new().size(STATUS_FONT_SIZE + 2.0));
                         ui.label(
@@ -752,12 +521,12 @@ impl BlitzShellApp {
                             egui::Button::new(egui::RichText::new("Cancel").size(STATUS_FONT_SIZE)),
                         );
                         if cancel.clicked() {
-                            run.cancel();
+                            want_cancel = true;
                         }
-                    } else if self.project.is_some() {
+                    } else if seated {
                         ui.separator();
                         let export = ui.add_enabled(
-                            can_start_export(self.project.is_some(), self.export.is_some()),
+                            can_export,
                             egui::Button::new(egui::RichText::new("Export").size(STATUS_FONT_SIZE)),
                         );
                         if export.clicked() {
@@ -766,7 +535,7 @@ impl BlitzShellApp {
                         }
                     }
                     if let Some(latest) = latest.as_deref() {
-                        if self.project.is_some() {
+                        if seated {
                             ui.separator();
                         }
                         ui.label(
@@ -777,6 +546,9 @@ impl BlitzShellApp {
                     }
                 });
             });
+        }
+        if want_cancel {
+            self.dispatch(UiIntent::CancelExport);
         }
         if want_export {
             self.begin_export();
@@ -825,9 +597,11 @@ impl BlitzShellApp {
             return;
         }
 
+        // Timeline / Inspector の中の編集は**まだ intent を通らない**（wave E）。
+        // 通っているのは `motolii-doc` 側の D2 Command journal だけである。
         let mut behavior = BlitzShellBehavior {
             render_state: &self.render_state,
-            editor: self.project.as_mut().map(ProjectSeat::editor_mut),
+            editor: self.gateway.project_mut().map(ProjectSeat::editor_mut),
             browser_request: None,
         };
 
@@ -840,25 +614,19 @@ impl BlitzShellApp {
         // Browser のカードのダブルクリック。**ドロップと同じ1本の経路へ合流させる** —
         // 新しい import 経路は作らない(2026-08-18 の実機一撃で「押しても何も起きない」
         // と分かった所。原因は判断が無いことではなく、要求がどこにも流れていなかったこと)。
-        // 成立も失敗も帯(= transcript)が一言で言う。
+        // 合流点は今や `UiIntent::AdmitPaths` そのもので、入口が増えても intent は
+        // 1種類のまま。成立も失敗も帯(= transcript)が一言で言う。
         if let Some(BrowserRequest::PlaceFile(path)) = browser_request {
-            let report = admit_dropped_paths(self.project.as_mut(), &[path]);
-            self.transcript.report(report);
+            self.dispatch(UiIntent::AdmitPaths { paths: vec![path] });
         }
 
         // 掴んだファイルが窓の上に来ているあいだ、受け取れることを見せる。
-        paint_drop_hint(&ctx, self.project.is_some());
+        paint_drop_hint(&ctx, self.gateway.is_seated());
 
         // エディタ（か Undo/Redo）が Document を進めていたら、同じ新 snapshot を
-        // Stage へ配り直す。Stage の描画コードは変えない — 渡す `Arc` の更新だけ。
-        if let Some(seat) = self.project.as_ref() {
-            let revision = seat.editor().revision();
-            if revision != self.seated_revision {
-                let snapshot = seat.snapshot();
-                seat_stage_documents(&mut self.tree, &snapshot);
-                self.seated_revision = revision;
-            }
-        }
+        // Stage へ配り直す。**intent を通らない編集はここでしか拾えない**（wave E で
+        // 通るようになったら、この呼び出しは dispatch 側の resync に吸収される）。
+        self.resync_view();
     }
 }
 

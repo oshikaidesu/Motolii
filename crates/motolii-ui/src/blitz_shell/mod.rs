@@ -43,6 +43,15 @@
 //!   キャンセルは部分出力を残さない。実行中は Export が消える = 二重起動なし。
 //!   判断と thread は `crate::export_seat`、dialog は `rfd` に集約
 //! - **レイアウトの永続化**は無い。起動するたび既定の並び
+//! - **原因の言い場所も1つ**。利用者の操作(New / Open / Save / Export 開始・
+//!   キャンセル / 素材の取り込み)は型付きの `intent::UiIntent` になって
+//!   `intent::IntentJournal` へ**行動の前に**載り、`intent::ShellGateway` だけが
+//!   実行する。`--intent-log <path>` を付ければ全文が JSONL
+//!   (`{"seq":n,"intent":{"kind":"…",…}}`)で追記され、その列は
+//!   `ShellGateway::replay` に食わせればそのまま再現する。ゲートウェイを迂回して
+//!   製品状態へ着く道はフェンス(`tests/shell_intent_gateway_fence.rs`)が塞ぐ。
+//!   Timeline エディタの中の編集と Undo/Redo はまだ通っていない(wave E。あちらは
+//!   `motolii-doc` の D2 Command journal が受けている)
 //! - **失敗の言い場所は1つ**。窓の一言も面(pane)の失敗も `drive::ShellTranscript` を
 //!   通り、帯には最新の1行が出て、`--status-log <path>` を付ければ全文が JSONL
 //!   (`{"seq":n,"text":"…"}`)で追記される。`eprintln!` で消える失敗は無い
@@ -56,13 +65,17 @@ mod app;
 mod drive;
 #[cfg(test)]
 mod drive_tests;
+/// **原因のログとその唯一の実行口**(2026-08-18裁定「ログと構造の強制」の第1弾)。
+/// 利用者の操作は `UiIntent` になって journal に載り、`ShellGateway` だけが実行する。
+/// journal を通らずに製品状態へ着く道は `tests/shell_intent_gateway_fence.rs` が塞ぐ。
+mod intent;
 mod pane;
 mod runner;
 
 pub(crate) use app::BlitzShellApp;
-pub use app::{
-    admit_dropped_paths, create_project_file, decide_unsaved, reseat_project, ProjectSeat,
-    UnsavedChoice, UnsavedDecision,
+pub use app::{decide_unsaved, UnsavedChoice, UnsavedDecision};
+pub use intent::{
+    admit_dropped_paths, create_project_file, reseat_project, IntentEvent, ProjectSeat, UiIntent,
 };
 pub use pane::{BlitzPane, PaneKind};
 pub use runner::{run_blitz_shell, BlitzShellLaunch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES};

@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use image::ImageEncoder as _;
 
 use super::drive::ShellTranscript;
+use super::intent::IntentJournal;
 use super::{BlitzShellApp, ProjectSeat};
 use crate::ShellError;
 
@@ -43,6 +44,13 @@ pub struct BlitzShellLaunch {
     /// (`{"seq":n,"text":"…"}`) を追記して flush する。CLI から窓を駆動する実行は
     /// **必ず失敗の記録を持つ**ための口で、製品機能ではない。
     pub status_log: Option<PathBuf>,
+    /// 窓で**起きた原因**を機械可読で外へ流す先（`--intent-log`）。
+    ///
+    /// `--status-log` と同型の JSONL (`{"seq":n,"intent":{"kind":"…",…}}`) で、
+    /// `IntentJournal` に増えた分だけ追記して flush する。並べて読むと
+    /// 「何をしようとして（intent）、何が起きたか（status）」が揃う。
+    /// 出た列はそのまま `ShellGateway::replay` へ食わせられる。
+    pub intent_log: Option<PathBuf>,
 }
 
 /// 窓を開いて shell を回す。公開 API はこの1本で、署名は toolkit-free。
@@ -65,7 +73,14 @@ pub fn run_blitz_shell(launch: BlitzShellLaunch) -> Result<(), ShellError> {
     // つもりで何も残っていない」実行を作らない。
     let status_log = match launch.status_log {
         Some(path) => Some(
-            StatusLog::create(&path)
+            JsonlLog::create(&path, "status log")
+                .map_err(|message| ShellError::AppConstruction(message.into()))?,
+        ),
+        None => None,
+    };
+    let intent_log = match launch.intent_log {
+        Some(path) => Some(
+            JsonlLog::create(&path, "intent log")
                 .map_err(|message| ShellError::AppConstruction(message.into()))?,
         ),
         None => None,
@@ -84,11 +99,15 @@ pub fn run_blitz_shell(launch: BlitzShellLaunch) -> Result<(), ShellError> {
         Box::new(move |cc| {
             let inner = BlitzShellApp::with_seat(cc, seat, launch_fixture);
             let transcript = inner.transcript().clone();
+            let journal = inner.intent_journal().clone();
             Ok(Box::new(Harness {
                 inner,
                 transcript,
+                journal,
                 status_log,
+                intent_log,
                 written: 0,
+                dispatched: 0,
                 shot,
                 frame_count: 0,
             }))
@@ -103,45 +122,62 @@ struct Screenshot {
     requested: bool,
 }
 
-/// 窓が言ったことの追記先（`--status-log`）。
-struct StatusLog {
+/// 窓の記録の追記先（`--status-log` / `--intent-log`）。**同じ形の JSONL** で、
+/// 中身（1行に何を書くか）は呼び手が決める。
+struct JsonlLog {
     file: std::io::BufWriter<std::fs::File>,
+    /// 失敗を言うときの名乗り（"status log" / "intent log"）。
+    what: &'static str,
 }
 
-impl StatusLog {
-    fn create(path: &Path) -> Result<Self, String> {
+impl JsonlLog {
+    fn create(path: &Path, what: &'static str) -> Result<Self, String> {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)
-                .map_err(|error| format!("status log {} を作れない: {error}", path.display()))?;
+                .map_err(|error| format!("{what} {} を作れない: {error}", path.display()))?;
         }
         let file = std::fs::File::create(path)
-            .map_err(|error| format!("status log {} を作れない: {error}", path.display()))?;
+            .map_err(|error| format!("{what} {} を作れない: {error}", path.display()))?;
         Ok(Self {
             file: std::io::BufWriter::new(file),
+            what,
         })
     }
 
-    /// 1行 = 1 report。書けなかった時は**黙らない**が、窓は落とさない
+    /// 1行 = 1 件。台帳の event 型をそのまま流すので、行の形（field の順）は
+    /// 型の宣言そのものである。書けなかった時は**黙らない**が、窓は落とさない
     /// （記録先が消えても編集中の project を失わせない）。
-    fn append(&mut self, seq: u64, text: &str) {
+    fn append(&mut self, event: &impl serde::Serialize) {
         use std::io::Write as _;
-        let line = serde_json::json!({ "seq": seq, "text": text });
+        let what = self.what;
+        let line = match serde_json::to_string(event) {
+            Ok(line) => line,
+            Err(error) => {
+                println!("blitz-shell: {what} の1行を組めない: {error}");
+                return;
+            }
+        };
         if let Err(error) = writeln!(self.file, "{line}").and_then(|()| self.file.flush()) {
-            println!("blitz-shell: status log へ書けない: {error}");
+            println!("blitz-shell: {what} へ書けない: {error}");
         }
     }
 }
 
-/// `BlitzShellApp` をそのまま包んで、`--screenshot` のときだけ
-/// 1枚撮って閉じ、`--status-log` のときだけ言われたことを流す。
+/// `BlitzShellApp` をそのまま包んで、`--screenshot` のときだけ 1枚撮って閉じ、
+/// `--status-log` / `--intent-log` のときだけ**結果**と**原因**を流す。
 /// **殻の側には撮影も記録の都合も1つも足さない。**
 struct Harness {
     inner: BlitzShellApp,
     /// 殻の台帳（`inner` と同じもの）。毎フレーム増えた分だけ log へ流す。
     transcript: ShellTranscript,
-    status_log: Option<StatusLog>,
-    /// log へ既に流した行数。
+    /// 原因のログ（`inner` と同じもの）。
+    journal: IntentJournal,
+    status_log: Option<JsonlLog>,
+    intent_log: Option<JsonlLog>,
+    /// status log へ既に流した行数。
     written: usize,
+    /// intent log へ既に流した行数。
+    dispatched: usize,
     shot: Option<Screenshot>,
     frame_count: u32,
 }
@@ -150,11 +186,18 @@ impl eframe::App for Harness {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.inner.ui(ui);
 
-        // 言われたことは描いた直後に流す。1行ずつ flush するので、窓が固まっても
-        // 落ちても、そこまでの記録は外に残る。
+        // 記録は描いた直後に流す。1行ずつ flush するので、窓が固まっても
+        // 落ちても、そこまでの記録は外に残る。**原因を先に**流すのは、
+        // 記録の順が「intent → その結果の status」だから。
+        if let Some(log) = self.intent_log.as_mut() {
+            for event in self.journal.since(self.dispatched) {
+                log.append(&event);
+            }
+            self.dispatched = self.journal.len();
+        }
         if let Some(log) = self.status_log.as_mut() {
             for event in self.transcript.since(self.written) {
-                log.append(event.seq, &event.text);
+                log.append(&event);
             }
             self.written = self.transcript.len();
         }
@@ -198,4 +241,47 @@ fn write_png(path: &Path, rgba: &[u8], w: u32, h: u32) {
     image::codecs::png::PngEncoder::new(std::io::BufWriter::new(file))
         .write_image(rgba, w, h, image::ExtendedColorType::Rgba8)
         .expect("png write");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::blitz_shell::{IntentEvent, UiIntent};
+
+    /// `--intent-log` / `--status-log` の2本が**同型の JSONL**で並ぶ。
+    /// intent 側は dialog の答え(path)まで運ぶので、出た列はそのまま replay
+    /// に食わせられる。窓を開かずに、外へ出る1行の形そのものを固定する。
+    #[test]
+    fn the_two_logs_write_the_same_jsonl_shape() {
+        let dir = motolii_testkit::tmp_dir("runner_jsonl");
+        let intents = dir.join("nested/intents.jsonl");
+        let statuses = dir.join("statuses.jsonl");
+
+        // 親ディレクトリが無くても作る(記録先の不在で起動を落とさない)。
+        let mut intent_log = JsonlLog::create(&intents, "intent log").expect("intent log を開く");
+        let mut status_log = JsonlLog::create(&statuses, "status log").expect("status log を開く");
+        intent_log.append(&IntentEvent {
+            seq: 1,
+            intent: UiIntent::NewProject {
+                path: PathBuf::from("/tmp/fresh.json"),
+            },
+        });
+        status_log.append(&super::super::drive::StatusEvent {
+            seq: 1,
+            text: "opened /tmp/fresh.json".to_owned(),
+        });
+        drop(intent_log);
+        drop(status_log);
+
+        assert_eq!(
+            std::fs::read_to_string(&intents).expect("intent log を読む"),
+            "{\"seq\":1,\"intent\":{\"kind\":\"new_project\",\"path\":\"/tmp/fresh.json\"}}\n",
+            "原因の1行: 答え(path)ごと機械可読で出る"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&statuses).expect("status log を読む"),
+            "{\"seq\":1,\"text\":\"opened /tmp/fresh.json\"}\n",
+            "結果の1行は従来のまま(並べて読める)"
+        );
+    }
 }
