@@ -103,3 +103,30 @@ motolii-ui 5エラーで**失敗**→ `1465b0e4` で修復し `-p motolii-ui` gr
   M-5切替判定(台本P1-P5+replay green→既定bin切替・egui shellは`--legacy`)。
   その先の残キューは[前引き継ぎ](2026-08-18-session-handoff-ux-driver-seat-and-iced-migration.md)
   「既知の欠陥・残タスク」節が引き続き正本
+
+## 追記 — 利用者の実機裁定(2026-08-18 深夜)と修復レーン
+
+4面着地・full gate 2131/0 の直後、利用者が `cargo run -p motolii-shell-iced` を実走。
+**2件の不合格**(実機裁定は最上位の証拠)。どちらもレーンの失敗ではなく**発注書の穴**である。
+
+1. **Stage に何も映らない** — `stage_island.rs::frame()` が
+   `present_probe_frame()`(試験用の絵)を流しており、評価済み Document フレームを
+   流していない。M-2 が「M-3 が置き換える」とコメントして席を空けたが、
+   M-3 の capsule は Timeline しか書いておらず、**2つの capsule の隙間に落ちた**。
+   島自体は生きている(空シーンの背景が描画されている)
+2. **見た目が egui / html / Skia を全く再現していない** — M-4 系のどの capsule にも
+   「視覚言語の再現」が受入条件として無かった(theme レーンは色 token を M-1 画面へ
+   当てただけ)。実物は素のシステムフォント見出し+平文で、section 構造・帯色・
+   行密度・chrome が無い
+
+**修復レーン(sonnet・走行中、base `8b7cd640`)**:
+- `claude/stage-frame-seat-20260818` — `stage_frame_seat`/`render_worker` を iced 側へ移植し
+  probe を置き換え。playhead 追従・revision 監視・失敗報告・既知色 fixture の pixel oracle
+- `claude/visual-fidelity-20260818` — 4面を css 正本(`docs/mocks-ui/`)から導出し直す。
+  タイポ階層・Inspector の section/property 行・Browser の card・Timeline の ruler と bar・
+  窓の既定サイズ。**`--screenshot` を iced shell へ追加**(以後の視覚検収の常設器具)し、
+  egui の絵と並べて `docs/reviews/evidence/iced-visual-fidelity/` へ
+
+**教訓(メモリ `capsule-gaps-are-the-defect-source` に記録)**: 型・oracle・fence は
+「書いた物が正しいか」しか守らない。green 100% は発注書の完全性を何も保証しない。
+UI 発注には視覚の受入条件と**検証器具**(撮って自分の目で見る)を必ず入れること。
