@@ -849,6 +849,11 @@ impl InspectorPanel {
                     let span = Rect::from_min_max(cols[0].min, cols[2].max);
                     draw_value_span(&painter, span, &format!("asset {id}"));
                 }
+                // `List`のウィジェットは未決(parameter_control と同じ扱い)。要素数だけ出す。
+                motolii_plugin::Value::List(items) => {
+                    let span = Rect::from_min_max(cols[0].min, cols[2].max);
+                    draw_value_span(&painter, span, &format!("list [{}]", items.len()));
+                }
             }
             // params は plugin 契約の既定値で、key を持たない(css:458 keyPlaceholder)。
             draw_key_cell(&painter, cols[3], KeyVisual::Placeholder);
@@ -1410,8 +1415,10 @@ fn param_band_color(param: &InspectorParam) -> Color32 {
             motolii_plugin::Value::Color(rgba) => color32_from_rgba(*rgba),
             _ => theme::ROLE_DATA,
         },
-        // AssetRef は css:283 の propertyRow 既定色(text-secondary)。
-        motolii_plugin::ValueType::AssetRef => theme::TEXT_SECONDARY,
+        // AssetRef は css:283 の propertyRow 既定色(text-secondary)。List も widget 未決のため同じ。
+        motolii_plugin::ValueType::AssetRef | motolii_plugin::ValueType::List(_) => {
+            theme::TEXT_SECONDARY
+        }
     }
 }
 
@@ -1428,7 +1435,9 @@ fn icon_kind_for(param: &InspectorParam) -> IconKind {
             motolii_plugin::Value::Color(rgba) => IconKind::Color(*rgba),
             _ => IconKind::Scalar,
         },
-        motolii_plugin::ValueType::AssetRef => IconKind::Integer,
+        motolii_plugin::ValueType::AssetRef | motolii_plugin::ValueType::List(_) => {
+            IconKind::Integer
+        }
     }
 }
 
