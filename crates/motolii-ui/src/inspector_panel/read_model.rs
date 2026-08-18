@@ -39,6 +39,20 @@ pub struct InspectorReadModel {
     pub position: InspectorPosition,
     /// 直打ち・◇ が効く行。live 投影(`project_inspector_live_model`)だけが埋める。
     pub editable: Vec<InspectorEditableRow>,
+    /// M / S の**押下状態**。`editable` と同じく decoder D1 には無い追加面で、
+    /// 出所は target item の `ItemEnvelope`(`visible` / `solo`)である。
+    ///
+    /// 面がこれを読むから、Inspector は M / S の局所 bool を持たない
+    /// (2026-08-18 外部診断 F-03)。Timeline 行の M / S も同じ envelope を読む。
+    pub flags: InspectorFlags,
+}
+
+/// M / S の押下状態。**正本は Document**。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct InspectorFlags {
+    /// `envelope.visible == false`。Timeline 行の M と同じ意味。
+    pub muted: bool,
+    pub solo: bool,
 }
 
 /// decoder 出力 D2: `{layer_id, layer_name, item_kind, child_count?}`。
@@ -74,6 +88,10 @@ pub struct InspectorEffectDefinition {
     pub definition_id: u64,
     pub plugin_id: String,
     pub params: Vec<InspectorParam>,
+    /// ON/OFF の**押下状態**。decoder D1 には無い追加面で、出所は文書の
+    /// `EffectDefinition.enabled`(評価がこの旗で effect を飛ばす)。
+    /// 面がこれを読むから、Inspector は OFF の集合を局所に持たない(F-03)。
+    pub enabled: bool,
 }
 
 /// decoder 出力 D5: `{id, value_type, default, f64_domain?}`。
@@ -259,6 +277,7 @@ fn project(
         effect_definitions.push(InspectorEffectDefinition {
             definition_id: definition.id.get(),
             plugin_id: definition.plugin_id.clone(),
+            enabled: definition.enabled,
             params: contract
                 .node
                 .params
@@ -289,6 +308,11 @@ fn project(
         editable: match playhead {
             Some(at) => project_editable_rows(envelope, at),
             None => Vec::new(),
+        },
+        // M は Timeline 行と同じ約束(`ItemFlag::Mute => !visible`)。
+        flags: InspectorFlags {
+            muted: !envelope.visible,
+            solo: envelope.solo,
         },
     })
 }

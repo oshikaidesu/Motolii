@@ -128,6 +128,45 @@ pub(super) fn apply_remove_effect(
     Ok(())
 }
 
+/// 共有 recipe(`EffectDefinition`)の ON/OFF を準備する。
+///
+/// **相手が定義なのは文書模型がそうだから**(D1l)。`enabled` は
+/// `EffectDefinition` に在り、評価(`graph::…`)はこの旗で effect を飛ばす。
+/// `Command::SetEffectEnabled` は「どの layer のどの Use を通して触ったか」まで
+/// 記録するので、ここで使い手を1つ名指す — **誰も使っていない定義は書けない**。
+///
+/// 同じ値なら `Ok(None)`(変化なし。失敗ではない)。
+pub fn prepare_set_effect_enabled(
+    doc: &Document,
+    definition: crate::stable_id::EffectDefinitionId,
+    new: bool,
+) -> Result<Option<crate::Command>, CommandError> {
+    let old = doc
+        .effect_definition(definition)
+        .ok_or(CommandError::EffectDefinitionNotFound {
+            id: definition.get(),
+        })?
+        .enabled;
+    if old == new {
+        return Ok(None);
+    }
+    let effect = doc.effect_use_ids(definition).into_iter().next().ok_or(
+        CommandError::EffectDefinitionUnused {
+            id: definition.get(),
+        },
+    )?;
+    let (target, _index) =
+        super::effect::find_use_location(doc, effect).ok_or(CommandError::EffectUseNotFound {
+            use_id: effect.get(),
+        })?;
+    Ok(Some(crate::Command::SetEffectEnabled {
+        target,
+        effect,
+        old,
+        new,
+    }))
+}
+
 pub(super) fn apply_set_effect_enabled(
     doc: &mut Document,
     target: LayerId,

@@ -26,9 +26,9 @@ use std::path::Path;
 
 pub use read_model::{
     project_inspector_live_model, project_inspector_read_model, InspectorEditParam,
-    InspectorEditableRow, InspectorEffectDefinition, InspectorItemKind, InspectorKeyState,
-    InspectorParam, InspectorPosition, InspectorReadModel, InspectorReadModelError, InspectorTarget,
-    INSPECTOR_READ_MODEL_REVISION,
+    InspectorEditableRow, InspectorEffectDefinition, InspectorFlags, InspectorItemKind,
+    InspectorKeyState, InspectorParam, InspectorPosition, InspectorReadModel,
+    InspectorReadModelError, InspectorTarget, INSPECTOR_READ_MODEL_REVISION,
 };
 
 use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Vec2};
@@ -56,6 +56,12 @@ pub enum InspectorAction {
     },
     /// 掴みを離した。
     EndEdit,
+    /// M / S を押した。**押下状態は Document が持つ**ので、ここは反転要求だけ。
+    /// 呼び手は Timeline 行の M / S と同じ `toggle_item_flag` へ渡す(F-03 枝A)。
+    ToggleFlag { flag: InspectorFlag },
+    /// 共有 FX の ON/OFF を押した。相手は `EffectDefinition`
+    /// (`enabled` は定義側に在り、評価がこの旗で effect を飛ばす)。
+    SetEffectEnabled { definition_id: u64, enabled: bool },
     /// ◇ を押した。playhead へキーを打つ(既にあれば `components` の値へ更新)。
     KeyAtPlayhead {
         param: InspectorEditParam,
@@ -64,6 +70,14 @@ pub enum InspectorAction {
         components: [f64; 3],
         len: usize,
     },
+}
+
+/// Inspector の M / S。Timeline 側の `ItemFlag` と一対一だが、**Inspector は
+/// timeline の型を知らない**(投影と要求しか持たない層のまま)。写すのは呼び手。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectorFlag {
+    Mute,
+    Solo,
 }
 
 impl InspectorAction {
@@ -98,11 +112,9 @@ pub struct InspectorPanel {
     mode: Mode,
     /// 折り畳まれた section(0 = TRANSFORM、1.. = effect)。局所 UI 状態。
     collapsed: BTreeSet<usize>,
-    /// M / S の局所視覚状態(書き込み routeは後続。html:22 の aria-pressed に対応)。
-    muted: bool,
-    solo: bool,
-    /// FX の ON/OFF 局所視覚状態(definition_id の集合が OFF)。
-    disabled_effects: BTreeSet<u64>,
+    // M / S と FX ON/OFF の**押下状態はここに無い**。正本は Document で、
+    // 面は read-model(`flags` / `InspectorEffectDefinition::enabled`)を読む。
+    // 局所 bool を戻すと「見た目だけ変わる」に逆戻りする(2026-08-18 外部診断 F-03)。
     /// いま掴んでいる数値(param と成分)。**1掴み = 1 gesture** の判定に使う。
     edit_hold: Option<(InspectorEditParam, usize)>,
     /// live 投影に使う plugin catalog。座席の writer と同じ `reference_catalog` を
@@ -129,9 +141,6 @@ impl InspectorPanel {
             status: String::new(),
             mode: Mode::Effect,
             collapsed: BTreeSet::new(),
-            muted: false,
-            solo: false,
-            disabled_effects: BTreeSet::new(),
             edit_hold: None,
             catalog: None,
         }
@@ -236,7 +245,7 @@ impl InspectorPanel {
         let footer_top = rect.bottom() - theme::FOOTER_H;
         match self.mode {
             Mode::Effect => {
-                cursor = self.draw_summary(ui, &painter, rect, cursor);
+                cursor = self.draw_summary(ui, &painter, rect, cursor, &mut actions);
                 cursor = draw_column_header(&painter, rect, cursor);
                 let body = Rect::from_min_max(
                     Pos2::new(rect.left(), cursor),
@@ -377,6 +386,7 @@ impl InspectorPanel {
         painter: &egui::Painter,
         rect: Rect,
         top: f32,
+        actions: &mut Vec<InspectorAction>,
     ) -> f32 {
         let summary = Rect::from_min_size(
             Pos2::new(rect.left(), top),
@@ -405,6 +415,8 @@ impl InspectorPanel {
             );
             return summary.bottom();
         };
+        // 押下状態は **Document から**(局所 bool を持たない。F-03)。
+        let InspectorFlags { muted, solo } = model.flags;
         // css:86-93 shapeGlyph(border 2px role-shape)。muted なら css:104 opacity .42。
         let glyph = Rect::from_min_size(
             Pos2::new(
@@ -413,7 +425,7 @@ impl InspectorPanel {
             ),
             Vec2::new(theme::GLYPH_W, theme::GLYPH_H),
         );
-        let glyph_color = if self.muted {
+        let glyph_color = if muted {
             theme::ROLE_SHAPE.gamma_multiply(0.42)
         } else {
             theme::ROLE_SHAPE
@@ -424,7 +436,7 @@ impl InspectorPanel {
             Stroke::new(2.0, glyph_color),
             egui::StrokeKind::Inside,
         );
-        let text_color = if self.muted {
+        let text_color = if muted {
             theme::TEXT_MUTED
         } else {
             theme::TEXT_PRIMARY
@@ -457,9 +469,15 @@ impl InspectorPanel {
             FontId::proportional(theme::FS_SUMMARY_SPAN),
             theme::TEXT_MUTED,
         );
-        // css:98-103 M / S(局所視覚状態のみ。Document へは書かない)。
+        // css:98-103 M / S。**押下状態は Document(`model.flags`)**で、押すと
+        // Timeline 行と同じ1手へ落ちる要求が出る(F-03 枝A)。
         let mut right = summary.right() - theme::SUMMARY_PAD_X;
-        for (index, (label, pressed)) in [("S", self.solo), ("M", self.muted)].into_iter().enumerate()
+        for (index, (label, pressed, flag)) in [
+            ("S", solo, InspectorFlag::Solo),
+            ("M", muted, InspectorFlag::Mute),
+        ]
+        .into_iter()
+        .enumerate()
         {
             let button = Rect::from_min_size(
                 Pos2::new(
@@ -474,6 +492,11 @@ impl InspectorPanel {
                 ui.id().with(("layer-state", index)),
                 Sense::click(),
             );
+            // painter で描く面なので、名乗らせないと AccessKit の木に出ない
+            // = 運転席(kittest)からも支援技術からも掴めない(Browser card と同じ理由)。
+            response.widget_info(|| {
+                egui::WidgetInfo::selected(egui::WidgetType::Button, true, pressed, label)
+            });
             // css:99 既定 / css:102-103 pressed(mute=text-muted 18%、solo=action-active 18%)
             let accent = if label == "S" {
                 theme::ACTION_ACTIVE
@@ -498,11 +521,7 @@ impl InspectorPanel {
                 fg,
             );
             if response.clicked() {
-                if label == "S" {
-                    self.solo = !self.solo;
-                } else {
-                    self.muted = !self.muted;
-                }
+                actions.push(InspectorAction::ToggleFlag { flag });
             }
         }
         summary.bottom()
@@ -521,7 +540,7 @@ impl InspectorPanel {
                 self.draw_transform_section(ui, &model, actions);
                 draw_fx_toolbar(ui, &model);
                 for (index, definition) in model.effect_definitions.iter().enumerate() {
-                    self.draw_effect_section(ui, index, definition);
+                    self.draw_effect_section(ui, index, definition, actions);
                 }
             });
     }
@@ -784,10 +803,13 @@ impl InspectorPanel {
         ui: &mut egui::Ui,
         index: usize,
         definition: &InspectorEffectDefinition,
+        actions: &mut Vec<InspectorAction>,
     ) {
         let effect_color = theme::WAY_PLUGINS;
-        let disabled = self.disabled_effects.contains(&definition.definition_id);
-        let collapsed = self.draw_effect_header(ui, index, definition, effect_color, disabled);
+        // OFF の出所は Document(`EffectDefinition.enabled`)。局所集合は持たない。
+        let disabled = !definition.enabled;
+        let collapsed =
+            self.draw_effect_header(ui, index, definition, effect_color, disabled, actions);
         if collapsed {
             return;
         }
@@ -901,6 +923,7 @@ impl InspectorPanel {
         definition: &InspectorEffectDefinition,
         effect_color: Color32,
         disabled: bool,
+        actions: &mut Vec<InspectorAction>,
     ) -> bool {
         let section = index + 1;
         let (rect, response) = ui.allocate_exact_size(
@@ -962,7 +985,9 @@ impl InspectorPanel {
             FontId::proportional(theme::FS_SECTION),
             theme::TEXT_SECONDARY,
         );
-        // css:217 ON/OFF(局所視覚状態)。
+        // css:217 ON/OFF。**押下状態は Document(`definition.enabled`)**で、
+        // 押すと共有 recipe の `enabled` を書く要求が出る(F-03 枝A)。
+        let enabled = definition.enabled;
         let on_size = Vec2::new(25.0, 15.0);
         let on_rect = Rect::from_min_size(
             Pos2::new(rect.right() - 7.0 - on_size.x, rect.center().y - on_size.y / 2.0),
@@ -973,12 +998,21 @@ impl InspectorPanel {
             ui.id().with(("effect-enable", definition.definition_id)),
             Sense::click(),
         );
+        // painter で描く面なので名乗らせる(M / S と同じ理由)。
+        on_response.widget_info(|| {
+            egui::WidgetInfo::selected(
+                egui::WidgetType::Button,
+                true,
+                enabled,
+                if enabled { "ON" } else { "OFF" },
+            )
+        });
         if on_response.clicked() {
-            if !self.disabled_effects.remove(&definition.definition_id) {
-                self.disabled_effects.insert(definition.definition_id);
-            }
+            actions.push(InspectorAction::SetEffectEnabled {
+                definition_id: definition.definition_id,
+                enabled: !enabled,
+            });
         }
-        let enabled = !self.disabled_effects.contains(&definition.definition_id);
         if enabled {
             painter.rect_filled(on_rect, 0.0, mix(effect_color, 16.0, theme::SURFACE_APP));
             painter.rect_stroke(
@@ -1417,6 +1451,7 @@ fn format_value(value: f64, decimals: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     #[test]
     fn fixture_panel_carries_the_p1_read_model() {
@@ -1470,4 +1505,167 @@ mod tests {
         assert_eq!(format_value(-0.075, 3), "-0.075");
     }
 
+    // ---- F-03: 見えているトグルは押すと意味へ届く ----
+
+    fn reference_document() -> motolii_doc::Document {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/mocks-ui/fixtures/reference-document.json");
+        motolii_doc::load_document(&path).expect("reference document")
+    }
+
+    /// 書き換え用の writer。**catalog が投影側と違うのは fixture の都合**で、
+    /// `reference-document.json` の `core.filter.opacity` は instance param を
+    /// `opacity` で持つのに first-party 契約の param 名は `amount` である。
+    /// first-party を渡すと writer が契約違反で立たないので、その id を持たない
+    /// reference catalog(未知 plugin として通す既存経路)で立てる。
+    /// **この食い違いは本レーンの主題ではない**(投影も評価も従来どおり)。
+    fn writer_over_the_fixture() -> motolii_doc::DocumentWriter {
+        let catalog =
+            Arc::new(motolii_plugin::reference::reference_catalog().expect("reference catalog"));
+        motolii_doc::DocumentWriter::new(reference_document(), catalog)
+            .expect("writer over the reference document")
+    }
+
+    /// 面を1つ座らせる(`from_document_path` と同じ catalog = first-party)。
+    /// `flags` / `enabled` は live 投影と共通の `project` が埋めるので、
+    /// ここで見れば live 側の出所も同じである。
+    fn seated(document: &motolii_doc::Document) -> InspectorPanel {
+        let catalog =
+            motolii_plugins_firstparty::first_party_catalog().expect("first party catalog");
+        let model = project_inspector_read_model(document, &catalog, FIXTURE_TARGET_LAYER)
+            .expect("reference read-model");
+        InspectorPanel::from_read_model(model)
+    }
+
+    /// 対象 layer を mute / solo にした Document を **writer 経由で**作る。
+    /// `&mut Document` は motolii-doc の中だけ(single writer。`mut_document_deny`)。
+    fn document_with_flags(visible: bool, solo: bool) -> Arc<motolii_doc::Document> {
+        let mut writer = writer_over_the_fixture();
+        let target = motolii_doc::LayerId::from_raw(FIXTURE_TARGET_LAYER);
+        for prepared in [
+            writer.prepare_set_item_visible(target, visible),
+            writer.prepare_set_item_solo(target, solo),
+        ] {
+            if let Some(command) = prepared.expect("prepared flag command") {
+                let gesture = writer.begin_gesture();
+                writer.apply_command(gesture, command).expect("apply");
+            }
+        }
+        writer.snapshot()
+    }
+
+    /// **M / S の正本は Document。** 面はそれを映すだけで、局所 bool を持たない
+    /// (2026-08-18 外部診断 F-03)。同じ面へ違う Document を座らせれば表示が変わる。
+    #[test]
+    fn mute_and_solo_come_from_the_document_not_from_the_panel() {
+        let plain = document_with_flags(true, false);
+        let flags = seated(&plain).read_model().expect("seated").flags;
+        assert!(!flags.muted, "visible な layer が mute に見えている");
+        assert!(!flags.solo);
+
+        let muted = document_with_flags(false, true);
+        let flags = seated(&muted).read_model().expect("seated").flags;
+        assert!(flags.muted, "visible=false は mute として映る");
+        assert!(flags.solo);
+    }
+
+    /// FX の ON/OFF も Document の `EffectDefinition.enabled` が正本。
+    /// OFF の Document も **writer 経由**で作る(single writer)。
+    #[test]
+    fn effect_on_off_comes_from_the_document() {
+        let mut writer = writer_over_the_fixture();
+        let definitions: Vec<_> = writer
+            .snapshot()
+            .effect_definitions
+            .iter()
+            .map(|definition| definition.id)
+            .collect();
+        assert!(!definitions.is_empty(), "fixture に effect が無い");
+        for definition in definitions {
+            let command = writer
+                .prepare_set_effect_enabled(definition, false)
+                .expect("prepared")
+                .expect("ON → OFF は値が変わる");
+            let gesture = writer.begin_gesture();
+            writer.apply_command(gesture, command).expect("apply");
+        }
+
+        let document = writer.snapshot();
+        let panel = seated(&document);
+        let model = panel.read_model().expect("seated");
+        for definition in &model.effect_definitions {
+            assert!(
+                !definition.enabled,
+                "Document が OFF の effect が ON に見えている: {}",
+                definition.plugin_id
+            );
+        }
+    }
+
+    /// 名前で1つ押して、そのフレームに出た要求を集める。
+    ///
+    /// **名前で掴めること自体が合否の一部**。painter で描く面は `widget_info` を
+    /// 出さないと AccessKit の木に載らず、運転席からも支援技術からも触れない。
+    fn actions_after_clicking(
+        document: &motolii_doc::Document,
+        label: &str,
+    ) -> Vec<InspectorAction> {
+        use egui_kittest::kittest::Queryable;
+        let mut harness = egui_kittest::Harness::builder()
+            .with_size([320.0, 620.0])
+            .build_ui_state(
+                |ui, state: &mut (InspectorPanel, Vec<InspectorAction>)| {
+                    state.1 = state.0.show(ui);
+                },
+                (seated(document), Vec::new()),
+            );
+        harness.run();
+        // FX は複数あるので**最初の1つ**を押す(名前で掴めない時は `get_all_*` が落ちる)。
+        harness
+            .get_all_by_label(label)
+            .next()
+            .expect("at least one match")
+            .click();
+        harness.step();
+        harness.state().1.clone()
+    }
+
+    /// M を押したら**要求が出る**。局所 bool を反転して終わらない。
+    #[test]
+    fn clicking_mute_asks_for_a_document_write() {
+        let document = reference_document();
+        assert_eq!(
+            actions_after_clicking(&document, "M"),
+            vec![InspectorAction::ToggleFlag {
+                flag: InspectorFlag::Mute
+            }]
+        );
+        assert_eq!(
+            actions_after_clicking(&document, "S"),
+            vec![InspectorAction::ToggleFlag {
+                flag: InspectorFlag::Solo
+            }]
+        );
+    }
+
+    /// FX の ON も同じ。押した先は Document の `enabled`。
+    #[test]
+    fn clicking_an_effect_toggle_asks_for_a_document_write() {
+        let document = reference_document();
+        let definition_id = document
+            .effect_definitions
+            .first()
+            .expect("fixture effect")
+            .id
+            .get();
+        let actions = actions_after_clicking(&document, "ON");
+        assert_eq!(
+            actions,
+            vec![InspectorAction::SetEffectEnabled {
+                definition_id,
+                enabled: false,
+            }],
+            "FX の ON/OFF が局所集合のままになっている"
+        );
+    }
 }

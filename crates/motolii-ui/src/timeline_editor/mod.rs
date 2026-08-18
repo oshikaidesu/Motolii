@@ -1511,6 +1511,44 @@ impl TimelineEditor {
         self.select(layer, true, false, &[]);
     }
 
+    /// **M / S / L の1手。** Timeline 行のボタンと Inspector の M / S が
+    /// 通るのはここ1本で、親ロックの断りも Undo の粒度も同じである
+    /// (2026-08-18 外部診断 F-03 枝A: 見えているトグルは意味へ届く)。
+    pub fn toggle_item_flag(&mut self, layer: LayerId, flag: ItemFlag) {
+        self.toggle_flag_gesture(layer, flag);
+    }
+
+    /// その layer の `(visible, solo, lock)`。**押下状態の正本は Document** で、
+    /// Timeline 行も Inspector も同じここを読む(表示が割れない)。
+    pub fn item_flags_for(&self, layer: LayerId) -> Option<(bool, bool, bool)> {
+        item_flags(&self.document, layer)
+    }
+
+    /// **共有 FX の ON/OFF。** 相手は `EffectDefinition` — 文書模型では
+    /// `enabled` が定義側に在り、評価(`motolii_doc::graph`)がこの旗で
+    /// effect を飛ばす。Inspector の要約が「N shared FX」と言っているのと同じ単位。
+    ///
+    /// 書けない時は**黙らない** — 理由を `rejections` へ積む(帯まで出る)。
+    pub fn set_effect_enabled(
+        &mut self,
+        definition: motolii_doc::EffectDefinitionId,
+        enabled: bool,
+    ) {
+        let name = self
+            .document
+            .effect_definition(definition)
+            .map(|definition| definition.plugin_id.clone())
+            .unwrap_or_else(|| format!("effect definition {}", definition.get()));
+        let prepared = self.writer.prepare_set_effect_enabled(definition, enabled);
+        if self.apply_one(&name, prepared) {
+            self.status = format!(
+                "{name} {}  undo {}",
+                if enabled { "on" } else { "off" },
+                self.writer.undo_len()
+            );
+        }
+    }
+
     /// 選択を空にする。Inspector はこれで空状態になる。
     pub fn clear_selection(&mut self) {
         self.selected.clear();
@@ -2017,8 +2055,8 @@ impl TimelineEditor {
     /// 親から受けているロックは、自分の L を触っても外れない。押しても何も
     /// 起きないのは正しいが、理由が出ないと「無反応」に見える(外部診断 F-07)。
     /// 判断を `show` の描画列から出しておくと、窓を開かずにこの1手を審判できる。
-    fn toggle_flag_gesture(&mut self, layer: LayerId, flag: Flag) {
-        if flag == Flag::Lock
+    fn toggle_flag_gesture(&mut self, layer: LayerId, flag: ItemFlag) {
+        if flag == ItemFlag::Lock
             && effective_lock(&self.document, layer)
             && !item_flags(&self.document, layer)
                 .map(|(_, _, l)| l)
@@ -2031,24 +2069,24 @@ impl TimelineEditor {
     }
 
     /// M / S / L を反転して Document へ書く。**1クリック = 1 `GestureId` = 1 Undo 単位**
-    fn toggle_flag(&mut self, layer: LayerId, flag: Flag) {
+    fn toggle_flag(&mut self, layer: LayerId, flag: ItemFlag) {
         let Some((visible, solo, lock)) = item_flags(&self.document, layer) else {
             return;
         };
         let prepared = match flag {
-            Flag::Mute => self.writer.prepare_set_item_visible(layer, !visible),
-            Flag::Solo => self.writer.prepare_set_item_solo(layer, !solo),
-            Flag::Lock => self.writer.prepare_set_item_lock(layer, !lock),
+            ItemFlag::Mute => self.writer.prepare_set_item_visible(layer, !visible),
+            ItemFlag::Solo => self.writer.prepare_set_item_solo(layer, !solo),
+            ItemFlag::Lock => self.writer.prepare_set_item_lock(layer, !lock),
         };
         let name = self.name(layer).to_owned();
         if self.apply_one(&name, prepared) {
             let what = match (flag, visible, solo, lock) {
-                (Flag::Mute, true, _, _) => "mute",
-                (Flag::Mute, false, _, _) => "unmute",
-                (Flag::Solo, _, false, _) => "solo",
-                (Flag::Solo, _, true, _) => "unsolo",
-                (Flag::Lock, _, _, false) => "lock",
-                (Flag::Lock, _, _, true) => "unlock",
+                (ItemFlag::Mute, true, _, _) => "mute",
+                (ItemFlag::Mute, false, _, _) => "unmute",
+                (ItemFlag::Solo, _, false, _) => "solo",
+                (ItemFlag::Solo, _, true, _) => "unsolo",
+                (ItemFlag::Lock, _, _, false) => "lock",
+                (ItemFlag::Lock, _, _, true) => "unlock",
             };
             self.status = format!("{name} {what}  undo {}", self.writer.undo_len());
         }
@@ -2847,9 +2885,9 @@ impl TimelineEditor {
             MenuAction::DeleteKeys => {
                 self.delete_selected_keys();
             }
-            MenuAction::ToggleMute(layer) => self.toggle_flag(layer, Flag::Mute),
-            MenuAction::ToggleSolo(layer) => self.toggle_flag(layer, Flag::Solo),
-            MenuAction::ToggleLock(layer) => self.toggle_flag(layer, Flag::Lock),
+            MenuAction::ToggleMute(layer) => self.toggle_flag(layer, ItemFlag::Mute),
+            MenuAction::ToggleSolo(layer) => self.toggle_flag(layer, ItemFlag::Solo),
+            MenuAction::ToggleLock(layer) => self.toggle_flag(layer, ItemFlag::Lock),
             MenuAction::ToggleChildren(layer) => {
                 if self.fold.children_are_open(layer) {
                     self.fold.close_children(layer);
@@ -3917,7 +3955,7 @@ impl TimelineEditor {
 
         let mut toggles: Vec<(LayerId, bool)> = Vec::new();
         // M / S のクリック。行を回している間は Document を触らず、回し終えてから書く
-        let mut flags: Vec<(LayerId, Flag)> = Vec::new();
+        let mut flags: Vec<(LayerId, ItemFlag)> = Vec::new();
         let mut pick: Option<(LayerId, bool, bool)> = None;
         let mut reorder_started: Option<LayerId> = None;
         let mut reorder_released = false;
@@ -4162,7 +4200,7 @@ impl TimelineEditor {
                         item_flags(&self.document, row.layer).unwrap_or((true, false, false));
                     let inherited_lock = effective_lock(&self.document, row.layer) && !item_lock;
                     for (i, (label, flag)) in
-                        [("M", Flag::Mute), ("S", Flag::Solo), ("L", Flag::Lock)]
+                        [("M", ItemFlag::Mute), ("S", ItemFlag::Solo), ("L", ItemFlag::Lock)]
                             .iter()
                             .enumerate()
                     {
@@ -4171,19 +4209,19 @@ impl TimelineEditor {
                             Vec2::splat(16.0),
                         );
                         let on = match flag {
-                            Flag::Mute => !item_visible,
-                            Flag::Solo => item_solo,
+                            ItemFlag::Mute => !item_visible,
+                            ItemFlag::Solo => item_solo,
                             // **自分が掛けた分だけを点ける。** 親から受けている分は
                             // 下で薄く出す — 押しても外れないものを点灯させない
-                            Flag::Lock => item_lock,
+                            ItemFlag::Lock => item_lock,
                         };
-                        if *flag == Flag::Lock && !item_lock && inherited_lock {
+                        if *flag == ItemFlag::Lock && !item_lock && inherited_lock {
                             p.rect_filled(b, CornerRadius::ZERO, LOCK_INHERITED);
                         }
                         let on_color = match flag {
-                            Flag::Mute => MUTE_ON,
-                            Flag::Solo => SOLO_ON,
-                            Flag::Lock => LOCK_ON,
+                            ItemFlag::Mute => MUTE_ON,
+                            ItemFlag::Solo => SOLO_ON,
+                            ItemFlag::Lock => LOCK_ON,
                         };
                         if rail_button(
                             ui,
@@ -5235,7 +5273,7 @@ fn layer_color(document: &Document, layer: LayerId) -> Color32 {
 
 /// 掴める3つのフラグ。**押下状態は Document から読む**(ボタン側に状態を持たない)
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum Flag {
+pub enum ItemFlag {
     Mute,
     Solo,
     Lock,
@@ -5668,14 +5706,14 @@ mod tests {
             "既定は表示・非solo・非ロック"
         );
 
-        lab.toggle_flag(layer, Flag::Mute);
+        lab.toggle_flag(layer, ItemFlag::Mute);
         assert_eq!(
             item_flags(&lab.document, layer),
             Some((false, false, false)),
             "M で visible=false"
         );
 
-        lab.toggle_flag(layer, Flag::Solo);
+        lab.toggle_flag(layer, ItemFlag::Solo);
         assert_eq!(
             item_flags(&lab.document, layer),
             Some((false, true, false)),
@@ -7059,7 +7097,7 @@ mod tests {
         let locked = layer_named(&lab.names, "Background");
         let free = layer_named(&lab.names, "starter-tone.wav");
 
-        lab.toggle_flag(locked, Flag::Lock);
+        lab.toggle_flag(locked, ItemFlag::Lock);
         assert!(lab.is_locked(locked), "status: {}", lab.status);
         assert!(!lab.is_locked(free));
 
@@ -7101,7 +7139,7 @@ mod tests {
         );
 
         // **外せば元どおり触れる**
-        lab.toggle_flag(locked, Flag::Lock);
+        lab.toggle_flag(locked, ItemFlag::Lock);
         assert!(!lab.is_locked(locked));
         lab.selected = vec![locked];
         lab.duplicate_selected();
@@ -7120,9 +7158,9 @@ mod tests {
         assert_eq!(item_flags(&lab.document, layer), Some((true, false, false)));
 
         for (flag, expect) in [
-            (Flag::Mute, (false, false, false)),
-            (Flag::Solo, (false, true, false)),
-            (Flag::Lock, (false, true, true)),
+            (ItemFlag::Mute, (false, false, false)),
+            (ItemFlag::Solo, (false, true, false)),
+            (ItemFlag::Lock, (false, true, true)),
         ] {
             lab.toggle_flag(layer, flag);
             assert_eq!(
@@ -7194,7 +7232,7 @@ mod tests {
     fn a_locked_layer_cannot_be_renamed() {
         let mut lab = TimelineEditor::with_fixture();
         let layer = layer_named(&lab.names, "Background");
-        lab.toggle_flag(layer, Flag::Lock);
+        lab.toggle_flag(layer, ItemFlag::Lock);
 
         lab.begin_rename(layer);
         assert!(lab.renaming.is_none(), "編集が始まらない");
@@ -7444,7 +7482,7 @@ mod tests {
         let outside = layer_named(&lab.names, "Background");
 
         assert!(!lab.is_locked(child));
-        lab.toggle_flag(group, Flag::Lock);
+        lab.toggle_flag(group, ItemFlag::Lock);
 
         assert!(lab.is_locked(group), "{}", lab.status);
         assert!(lab.is_locked(child), "**子も掛かる**");
@@ -7465,7 +7503,7 @@ mod tests {
         assert_eq!(movable_clips(&lab.document, group).len(), items_before);
 
         // 親を外せば子も触れる
-        lab.toggle_flag(group, Flag::Lock);
+        lab.toggle_flag(group, ItemFlag::Lock);
         assert!(!lab.is_locked(child), "親を外せば子も自由");
     }
 
@@ -7905,13 +7943,13 @@ mod tests {
         // 座った直後は言うことが無い。
         assert!(lab.take_rejections().is_empty());
 
-        lab.toggle_flag_gesture(parent, Flag::Lock);
+        lab.toggle_flag_gesture(parent, ItemFlag::Lock);
         assert!(lab.is_locked(child), "親のロックは子まで効く");
         // 親を締めた時の一言は拒否ではない。ここまでの分は捨てて、次の1手だけ見る。
         let _ = lab.take_rejections();
 
         // 親から受けているロックは、自分の L を触っても外れない。**黙らせない**
-        lab.toggle_flag_gesture(child, Flag::Lock);
+        lab.toggle_flag_gesture(child, ItemFlag::Lock);
 
         let refusals = lab.take_rejections();
         assert!(

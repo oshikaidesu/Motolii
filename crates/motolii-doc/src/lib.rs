@@ -715,6 +715,16 @@ impl DocumentWriter {
         command::prepare_set_item_solo(&self.doc, target, new)
     }
 
+    /// 共有 FX の ON/OFF。相手は **`EffectDefinition`**(評価が飛ばすのはこの旗)。
+    /// same-value は `None`、使い手のいない定義は `EffectDefinitionUnused`。
+    pub fn prepare_set_effect_enabled(
+        &self,
+        definition: EffectDefinitionId,
+        new: bool,
+    ) -> Result<Option<Command>, CommandError> {
+        command::prepare_set_effect_enabled(&self.doc, definition, new)
+    }
+
     /// メモを置く command を準備する(末尾へ足す)。
     pub fn prepare_add_locator(&self, t: RationalTime, text: &str) -> Command {
         command::prepare_add_locator(&self.doc, t, text)

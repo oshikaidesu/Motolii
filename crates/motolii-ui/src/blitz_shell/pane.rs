@@ -58,10 +58,11 @@ use crate::browser_blitz::render::BlitzSurface;
 use crate::browser_panel::{BrowserPanel, BrowserRequest};
 use crate::chrome_blitz;
 use crate::inspector_panel::{
-    InspectorAction, InspectorEditParam, InspectorPanel, FIXTURE_TARGET_LAYER,
+    InspectorAction, InspectorEditParam, InspectorFlag, InspectorPanel, FIXTURE_TARGET_LAYER,
 };
 use crate::stage_frame_seat::StageFrameSeat;
 use crate::timeline_blitz::{project_for_blitz, timeline_html};
+use crate::timeline_editor::ItemFlag;
 use crate::timeline_rows::ParamRef;
 
 /// 合成先textureのformat。`Rgba8UnormSrgb` にしないこと(罠1)。
@@ -109,7 +110,68 @@ fn apply_inspector_action(
         InspectorAction::KeyAtPlayhead { param: p, .. } => {
             editor.key_param_at_playhead(layer, param(p), action.key_components())
         }
+        // M / S は **Timeline 行の M / S と同じ1手**。局所 bool はどちらにも無い。
+        InspectorAction::ToggleFlag { flag } => editor.toggle_item_flag(
+            layer,
+            match flag {
+                InspectorFlag::Mute => ItemFlag::Mute,
+                InspectorFlag::Solo => ItemFlag::Solo,
+            },
+        ),
+        // FX の ON/OFF は共有 recipe(定義)を書く。相手が layer でないのは
+        // `enabled` が `EffectDefinition` に在るからで、ここで発明していない。
+        InspectorAction::SetEffectEnabled {
+            definition_id,
+            enabled,
+        } => editor.set_effect_enabled(
+            motolii_doc::EffectDefinitionId::from_raw(definition_id),
+            enabled,
+        ),
     }
+}
+
+/// Stage の entity path が指しているもの。**これが対応表そのもの**で、
+/// 引けない entity は「捨てた」のではなく `NotALayer` として表に載っている
+/// (2026-08-18 外部診断 F-06)。Stage へ積む entity を増やしたら、ここと
+/// `every_entity_motolii_puts_on_the_stage_is_in_the_table` を一対で増やすこと。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StageEntity {
+    /// layer の板(`motolii/document/layers/<id>/{fill,path}`)。
+    /// Timeline の選択へ写る。
+    Layer(motolii_doc::LayerId),
+    /// layer を持たない面。合成フレームの comp 平面
+    /// (`motolii/document/frame`)や、Rerun 自身が置く grid・view の根。
+    /// **選択は写らないが、それは分類の結果であって読み捨てではない。**
+    NotALayer,
+}
+
+/// entity path → 対応表。
+fn stage_entity(entity_path: &str) -> StageEntity {
+    crate::rerun_stage::host_layer_id_from_entity_path(entity_path)
+        .and_then(|layer_id| layer_id.parse::<u64>().ok())
+        .map(|layer_id| StageEntity::Layer(motolii_doc::LayerId::from_raw(layer_id)))
+        .unwrap_or(StageEntity::NotALayer)
+}
+
+/// `SpatialStage::show_in` の戻りを Timeline の選択へ写す。
+///
+/// 外側の `None` は「このフレームで選択は動いていない」、内側の `None` は
+/// 「選択を外した」。どちらも Timeline の選択は動かさない — 選択の外し方は
+/// Timeline 側の作法(空きをクリック)に任せ、Stage から二重に決めない。
+fn selection_from_stage(selected: Option<Option<String>>) -> Option<motolii_doc::LayerId> {
+    match stage_entity(selected??.as_str()) {
+        StageEntity::Layer(layer) => Some(layer),
+        StageEntity::NotALayer => None,
+    }
+}
+
+/// 面が呼び手へ返す要求。**面は Document も選択も自分で書かない。**
+#[derive(Debug, Clone, PartialEq)]
+pub enum PaneRequest {
+    /// Browser のカードのダブルクリック(取り込み)。
+    Browser(BrowserRequest),
+    /// Stage で layer の板を選んだ。clip をクリックしたのと同じ選択状態にする。
+    SelectLayer(motolii_doc::LayerId),
 }
 
 /// エディタが断った編集の理由を、そのまま台帳へ写す。
@@ -159,6 +221,25 @@ pub enum PaneKind {
     ChromeExport,
     ChromeSettings,
     ChromePanels,
+}
+
+impl PaneKind {
+    /// **この面はマウスを受けるか。**
+    ///
+    /// chrome の3枚(Export / Settings / Panels)は HTML texture 面で、
+    /// `BlitzPane::show` の texture 経路が `Sense::hover()` しか置かない
+    /// — 押しても handler も status も無い(2026-08-18 外部診断 F-02)。
+    /// Stage / Browser / Inspector はホストの egui へ直接描いて入力を受け、
+    /// Timeline は既定の並びでは native エディタが描く。
+    ///
+    /// **これは事実の言い直しであって願望ではない。** 入力を受けるようにした
+    /// 面はここを `true` へ移してから既定の並びへ戻すこと。
+    pub fn takes_pointer_input(self) -> bool {
+        match self {
+            Self::Stage | Self::Timeline | Self::Inspector | Self::Browser => true,
+            Self::ChromeExport | Self::ChromeSettings | Self::ChromePanels => false,
+        }
+    }
 }
 
 /// Blitzパネル1面。
@@ -317,14 +398,14 @@ impl BlitzPane {
     /// textureの作り直し・egui側への再登録・Blitz側のviewport更新はすべてここが持つ。
     /// Blitz 面はマウスを受けない(`Sense::hover()`)。入力ルーティングは後続capsule。
     ///
-    /// 返るのは **native Browser が出した要求**だけ(`BrowserRequest`)。面は自分で
-    /// Document を書かないので、要求はそのまま呼び手(`app.rs`)へ上がる。
-    /// 他の面は常に `None`。
+    /// 返るのは **面が出した要求**(`PaneRequest`)。面は自分で Document も選択も
+    /// 書かないので、要求はそのまま呼び手(`app.rs` の behavior)へ上がる。
+    /// いま出るのは Browser のダブルクリックと Stage の板の選択で、他の面は `None`。
     pub fn show(
         &mut self,
         ui: &mut egui::Ui,
         render_state: &eframe::egui_wgpu::RenderState,
-    ) -> Option<BrowserRequest> {
+    ) -> Option<PaneRequest> {
         let available = ui.available_size_before_wrap();
         let points_per_pixel = ui.ctx().pixels_per_point();
         // 面は物理pxで確保する。egui の point ではなく物理pxに合わせておけば、
@@ -348,7 +429,13 @@ impl BlitzPane {
                 let trace_started = trace_enabled().then(std::time::Instant::now);
                 let mut request = None;
                 match &mut self.content {
-                    Content::Stage(pane) => pane.show(ui, render_state, &self.transcript),
+                    Content::Stage(pane) => {
+                        // Stage で板を選んだら Timeline の選択へ写す(F-06)。
+                        // **ここでは選択しない** — 選択を持つのはエディタである。
+                        request = pane
+                            .show(ui, render_state, &self.transcript)
+                            .map(PaneRequest::SelectLayer);
+                    }
                     Content::NativeBrowser(panel) => {
                         // 初回表示時に作る(フォルダ走査と縮小実体の準備を、
                         // 窓を開く前に払わない)。
@@ -357,7 +444,7 @@ impl BlitzPane {
                             Some(root) => BrowserPanel::with_root(root),
                             None => BrowserPanel::default_shell(),
                         });
-                        request = panel.show(ui);
+                        request = panel.show(ui).map(PaneRequest::Browser);
                         // 画像を出せなかった理由を引き取る。card は glyph のまま
                         // 出てよいが、**なぜ画像が無いか**は1度は帯に出す。
                         // (`None` cache のおかげで同じ理由は1回しか積まれない)
@@ -696,12 +783,15 @@ impl StagePane {
         }
     }
 
+    /// 返るのは **Stage で選ばれた layer**(F-06)。呼び手が Timeline の選択へ写す。
+    /// 選択が動いていない・layer を持たない entity だった場合は `None`
+    /// (`stage_entity` の対応表を通る。読み捨てではない)。
     fn show(
         &mut self,
         ui: &mut egui::Ui,
         render_state: &eframe::egui_wgpu::RenderState,
         transcript: &ShellTranscript,
-    ) {
+    ) -> Option<motolii_doc::LayerId> {
         if self.stage.is_none() {
             match crate::rerun_stage::EmbeddedSpatialStage::new_in_host(render_state) {
                 Ok(stage) => self.stage = Some(stage),
@@ -711,7 +801,7 @@ impl StagePane {
                         self.stage_failure_reported = true;
                         transcript.report(format!("blitz-pane: Rerun Stage を作れない: {error}"));
                     }
-                    return;
+                    return None;
                 }
             }
         }
@@ -724,7 +814,7 @@ impl StagePane {
         // 幾何を積む時刻も Stage を借りる前に決める(同じ理由)。
         let framed_at = self.geometry_time();
         let Some(stage) = self.stage.as_mut() else {
-            return;
+            return None;
         };
 
         // ペインの大きさは `ui` から取る(自前textureが無いので他に出所が無い)。
@@ -734,7 +824,7 @@ impl StagePane {
         let width = (available.x * points_per_pixel).floor().max(0.0) as u32;
         let height = (available.y * points_per_pixel).floor().max(0.0) as u32;
         if width == 0 || height == 0 {
-            return;
+            return None;
         }
 
         // 幾何は既存の投影から来る。**ここで作らない。**
@@ -788,22 +878,29 @@ impl StagePane {
             self.framed_at = Some(framed_at);
         }
 
-        match stage.show_in(ui, render_state, evaluated_frame) {
+        let selected = match stage.show_in(ui, render_state, evaluated_frame) {
             Err(error) => {
                 let text = format!("blitz-pane: Rerun Stage の描画に失敗: {error}");
                 if self.reported_draw_error.as_deref() != Some(text.as_str()) {
                     transcript.report(text.clone());
                     self.reported_draw_error = Some(text);
                 }
+                None
             }
-            // 描けた時の戻りは従来どおり読み捨てる（この面の関心ではない）。
-            Ok(_) => self.reported_draw_error = None,
-        }
+            // 拾った entity は**対応表を通す**。layer の板なら呼び手が Timeline の
+            // 選択へ写し、grid や comp 平面は `NotALayer` として写らない(F-06)。
+            // 帯には出さない — 選択は高頻度操作で、毎回言うと帯が選択で埋まる。
+            Ok(selected) => {
+                self.reported_draw_error = None;
+                selection_from_stage(selected)
+            }
+        };
 
         // 絵と幾何の載せ替えで落ちた分。Stage は `Err` を返さずに**溜めて返す**
         // (合成フレームが載らなくても幾何だけの絵は出るので、描画は止めない)。
         let failures = stage.take_failures();
         report_new_failures(transcript, &mut self.reported_stage_failures, failures);
+        selected
     }
 }
 
@@ -1254,5 +1351,153 @@ mod tests {
             vec!["幾何を積み直せない".to_owned()],
         );
         assert_eq!(transcript.len(), 3);
+    }
+
+    // ---- F-06: Stage で選んだ板が Timeline の選択になる ----
+
+    /// Stage が拾った entity path は layer へ引ける。
+    /// **fill も path も同じ板**(visualizer が2つあるだけ)。
+    #[test]
+    fn a_layer_board_on_the_stage_resolves_to_its_timeline_layer() {
+        for leaf in ["fill", "path"] {
+            let path = format!("motolii/document/layers/7/{leaf}");
+            assert_eq!(
+                stage_entity(&path),
+                StageEntity::Layer(motolii_doc::LayerId::from_raw(7)),
+                "{path} が layer へ引けない"
+            );
+            // Rerun は先頭に `/` を付けて返すこともある。
+            assert_eq!(
+                stage_entity(&format!("/{path}")),
+                StageEntity::Layer(motolii_doc::LayerId::from_raw(7)),
+            );
+        }
+    }
+
+    /// **対応表の網羅。** Motolii が Stage へ積む entity は3種類しか無く、
+    /// layer を持たない物は「捨てた」のではなく **`NotALayer` として表に在る**。
+    /// 積む entity を増やしたらこの表も増やすこと(でないとここが落ちる)。
+    #[test]
+    fn every_entity_motolii_puts_on_the_stage_is_in_the_table() {
+        let ingested = [
+            // `host_mesh::host_layer_mesh_paths`
+            ("motolii/document/layers/5/fill", true),
+            ("motolii/document/layers/5/path", true),
+            // `rerun_stage::DOCUMENT_FRAME_ENTITY`(合成フレームの comp 平面)
+            ("motolii/document/frame", false),
+        ];
+        for (path, is_layer) in ingested {
+            let entity = stage_entity(path);
+            assert_eq!(
+                matches!(entity, StageEntity::Layer(_)),
+                is_layer,
+                "{path} の分類が対応表と違う: {entity:?}"
+            );
+        }
+        // Rerun 自身が置く物(grid・view の根)は layer を持たない。
+        for path in ["/", "grid", "motolii", "motolii/document"] {
+            assert_eq!(
+                stage_entity(path),
+                StageEntity::NotALayer,
+                "{path} を layer と取り違えている"
+            );
+        }
+        // layer id が数でない entity は**黙って 0 番へ落とさない**。
+        assert_eq!(
+            stage_entity("motolii/document/layers/not-a-number/fill"),
+            StageEntity::NotALayer
+        );
+    }
+
+    /// 選択が変わらなかったフレーム(`None`)と、選択を外したフレーム
+    /// (`Some(None)`)は Timeline の選択を動かさない。
+    #[test]
+    fn only_a_layer_board_moves_the_timeline_selection() {
+        assert_eq!(selection_from_stage(None), None);
+        assert_eq!(selection_from_stage(Some(None)), None);
+        assert_eq!(
+            selection_from_stage(Some(Some("motolii/document/frame".to_owned()))),
+            None,
+            "合成フレームの面は layer ではない"
+        );
+        assert_eq!(
+            selection_from_stage(Some(Some("motolii/document/layers/3/fill".to_owned()))),
+            Some(motolii_doc::LayerId::from_raw(3))
+        );
+    }
+
+    // ---- F-03: Inspector の M / S が Document へ届く ----
+
+    /// fixture の一番上の clip と、その `(visible, solo)`。
+    fn first_clip(document: &motolii_doc::Document) -> motolii_doc::LayerId {
+        fn walk(items: &[motolii_doc::TrackItem]) -> Option<motolii_doc::LayerId> {
+            for item in items {
+                match item {
+                    motolii_doc::TrackItem::Clip(clip) => return Some(clip.envelope.layer_id),
+                    motolii_doc::TrackItem::Group(group) => {
+                        if let Some(found) = walk(&group.children) {
+                            return Some(found);
+                        }
+                    }
+                }
+            }
+            None
+        }
+        document
+            .tracks
+            .iter()
+            .find_map(|track| walk(&track.items))
+            .expect("fixture has a clip")
+    }
+
+    fn flags(
+        editor: &crate::timeline_editor::TimelineEditor,
+        layer: motolii_doc::LayerId,
+    ) -> (bool, bool) {
+        let (visible, solo, _lock) = editor.item_flags_for(layer).expect("layer envelope");
+        (visible, solo)
+    }
+
+    /// Inspector の M は **Timeline 行の M と同じ1手**へ落ちる。
+    /// 局所 bool ではなく Document の `visible` が変わる。
+    #[test]
+    fn the_inspector_mute_button_writes_the_document() {
+        let mut editor = crate::timeline_editor::TimelineEditor::with_fixture();
+        let layer = first_clip(editor.document());
+        let (visible_before, _) = flags(&editor, layer);
+        let undo_before = editor.undo_len();
+
+        apply_inspector_action(
+            &mut editor,
+            layer,
+            InspectorAction::ToggleFlag {
+                flag: InspectorFlag::Mute,
+            },
+        );
+
+        assert_eq!(
+            flags(&editor, layer).0,
+            !visible_before,
+            "Inspector の M が Document の visible を反転していない"
+        );
+        assert_eq!(editor.undo_len(), undo_before + 1, "1クリック = 1 Undo");
+    }
+
+    /// S も同じ。
+    #[test]
+    fn the_inspector_solo_button_writes_the_document() {
+        let mut editor = crate::timeline_editor::TimelineEditor::with_fixture();
+        let layer = first_clip(editor.document());
+        let (_, solo_before) = flags(&editor, layer);
+
+        apply_inspector_action(
+            &mut editor,
+            layer,
+            InspectorAction::ToggleFlag {
+                flag: InspectorFlag::Solo,
+            },
+        );
+
+        assert_eq!(flags(&editor, layer).1, !solo_before);
     }
 }
