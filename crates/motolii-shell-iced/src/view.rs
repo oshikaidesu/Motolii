@@ -26,7 +26,7 @@ use crate::browser::{BrowserCard, BrowserRail};
 use crate::message::Message;
 use crate::shell::Shell;
 use crate::theme::style;
-use crate::widgets::{drop_zone, DropEvent};
+use crate::widgets::DropEvent;
 use crate::window_input::window_input;
 
 /// スタート画面の見出し。
@@ -270,7 +270,7 @@ fn browser_panel(shell: &Shell) -> Element<'_, Message> {
     panel = panel.push(row![rail, body].spacing(8).height(Fill));
     panel = panel.push(text(tray_line).size(12));
 
-    drop_zone(
+    os_file_drop_zone(
         container(panel)
             .style(browser_panel_style)
             .height(Fill)
@@ -278,6 +278,162 @@ fn browser_panel(shell: &Shell) -> Element<'_, Message> {
         shell.is_seated(),
         |event| Message::BrowserDropHover(matches!(event, DropEvent::HoverEnter)),
     )
+}
+
+/// OS drag のファイル受け皿表示。**`crate::widgets::drop_zone` とは意味が違う** —
+/// widgets 版はマウス cursor の面内滞在(`CursorMoved`/`CursorLeft`)を hover と
+/// 呼ぶ汎用 widget で、Browser が要るのは OS がファイルを窓上へ運んでいる間だけ
+/// 点く受け皿表示(`FileHovered` / `FilesHoveredLeft` window event)である。
+/// 型は同じ [`DropEvent`] 契約を借りるが、統合 wave で widgets 版へ差し替えると
+/// この意味が壊れるため、ここは Browser の局所 widget として残す
+/// (`FileDropped` は捕まない — 取り込みは [`window_input`] → `AdmitPaths` のまま)。
+fn os_file_drop_zone<'a, M>(
+    inner: iced::Element<'a, M>,
+    accepting: bool,
+    on_event: impl Fn(DropEvent) -> M + 'a,
+) -> iced::Element<'a, M>
+where
+    M: 'a,
+{
+    use iced::advanced::widget::{Operation, Tree};
+    use iced::advanced::{layout, mouse, overlay, renderer, Layout, Shell as IcedShell, Widget};
+    use iced::{Event, Length, Rectangle, Size, Vector};
+
+    struct OsFileDropZone<'a, M> {
+        inner: Element<'a, M>,
+        accepting: bool,
+        on_event: Box<dyn Fn(DropEvent) -> M + 'a>,
+    }
+
+    impl<M> Widget<M, iced::Theme, iced::Renderer> for OsFileDropZone<'_, M> {
+        fn size(&self) -> Size<Length> {
+            self.inner.as_widget().size()
+        }
+
+        fn layout(
+            &mut self,
+            tree: &mut Tree,
+            renderer: &iced::Renderer,
+            limits: &layout::Limits,
+        ) -> layout::Node {
+            self.inner
+                .as_widget_mut()
+                .layout(&mut tree.children[0], renderer, limits)
+        }
+
+        fn diff(&mut self, tree: &mut Tree) {
+            tree.diff_children(std::slice::from_mut(&mut self.inner));
+        }
+
+        fn operate(
+            &mut self,
+            tree: &mut Tree,
+            layout: Layout<'_>,
+            renderer: &iced::Renderer,
+            operation: &mut dyn Operation,
+        ) {
+            self.inner
+                .as_widget_mut()
+                .operate(&mut tree.children[0], layout, renderer, operation);
+        }
+
+        fn update(
+            &mut self,
+            tree: &mut Tree,
+            event: &Event,
+            layout: Layout<'_>,
+            cursor: mouse::Cursor,
+            renderer: &iced::Renderer,
+            shell: &mut IcedShell<'_, M>,
+            viewport: &Rectangle,
+        ) {
+            self.inner.as_widget_mut().update(
+                &mut tree.children[0],
+                event,
+                layout,
+                cursor,
+                renderer,
+                shell,
+                viewport,
+            );
+
+            // 点灯/消灯は事象をそのまま写す(widget 側で状態を持たない — 複数
+            // zone が同じ事象を見てよい)。`FileDropped` はここで**捕まない**。
+            match event {
+                Event::Window(iced::window::Event::FileHovered(_)) if self.accepting => {
+                    shell.publish((self.on_event)(DropEvent::HoverEnter));
+                }
+                Event::Window(
+                    iced::window::Event::FilesHoveredLeft
+                    | iced::window::Event::FileDropped(_),
+                ) => {
+                    shell.publish((self.on_event)(DropEvent::HoverLeave));
+                }
+                _ => {}
+            }
+        }
+
+        fn mouse_interaction(
+            &self,
+            tree: &Tree,
+            layout: Layout<'_>,
+            cursor: mouse::Cursor,
+            viewport: &Rectangle,
+            renderer: &iced::Renderer,
+        ) -> mouse::Interaction {
+            self.inner.as_widget().mouse_interaction(
+                &tree.children[0],
+                layout,
+                cursor,
+                viewport,
+                renderer,
+            )
+        }
+
+        fn draw(
+            &self,
+            tree: &Tree,
+            renderer: &mut iced::Renderer,
+            theme: &iced::Theme,
+            style: &renderer::Style,
+            layout: Layout<'_>,
+            cursor: mouse::Cursor,
+            viewport: &Rectangle,
+        ) {
+            self.inner.as_widget().draw(
+                &tree.children[0],
+                renderer,
+                theme,
+                style,
+                layout,
+                cursor,
+                viewport,
+            );
+        }
+
+        fn overlay<'b>(
+            &'b mut self,
+            tree: &'b mut Tree,
+            layout: Layout<'b>,
+            renderer: &iced::Renderer,
+            viewport: &Rectangle,
+            translation: Vector,
+        ) -> Option<overlay::Element<'b, M, iced::Theme, iced::Renderer>> {
+            self.inner.as_widget_mut().overlay(
+                &mut tree.children[0],
+                layout,
+                renderer,
+                viewport,
+                translation,
+            )
+        }
+    }
+
+    Element::new(OsFileDropZone {
+        inner,
+        accepting,
+        on_event: Box::new(on_event),
+    })
 }
 
 /// source rail の1行。選択中は `action_active` の字 + `surface_raised` の地、
