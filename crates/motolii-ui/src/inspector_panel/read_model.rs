@@ -374,7 +374,7 @@ fn components_of(value: &DocValue, arity: usize) -> Vec<f64> {
         DocValue::Vec2(v) => v.to_vec(),
         DocValue::Vec3(v) => v.to_vec(),
         DocValue::Color(v) => v.to_vec(),
-        DocValue::AssetRef(_) => Vec::new(),
+        DocValue::AssetRef(_) | DocValue::List(_) => Vec::new(),
     };
     all.into_iter().take(arity).collect()
 }
@@ -386,7 +386,7 @@ fn eval_components(value: &motolii_eval::Value, arity: usize) -> Vec<f64> {
         motolii_eval::Value::Vec2(v) => v.to_vec(),
         motolii_eval::Value::Vec3(v) => v.to_vec(),
         motolii_eval::Value::Color(v) => v.to_vec(),
-        motolii_eval::Value::AssetRef(_) => Vec::new(),
+        motolii_eval::Value::AssetRef(_) | motolii_eval::Value::List(_) => Vec::new(),
     };
     all.into_iter().take(arity).collect()
 }
