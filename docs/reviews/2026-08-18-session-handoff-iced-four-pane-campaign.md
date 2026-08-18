@@ -150,3 +150,27 @@ scratchpad の `capture-design-reference.mjs`。出力した基準画像:
 `/tmp/motolii-design-reference/{inspector,browser,timeline}-reference.png`。
 **この3枚を Read で開いて目視するのが視覚検収の唯一の合否判定**であり、
 visual-fidelity レーンへは正本の訂正とともに送付済み。
+
+## 追記2 — 修復の検証結果(2026-08-19 未明、supervisor が実窓で確認)
+
+利用者裁定の2件は**両方とも解消を実物で確認**した(merge 済み。main tip `abf59aa0`)。
+
+| 着地 | commit | 確認 |
+|---|---|---|
+| Stage frame seat 結線 | `38be1e6a` | probe を退役し egui と同一の `StageFrameSeat`(export と同じ評価経路)へ。playhead 追従は t0=赤 / t1=青 の2枚組 pixel oracle |
+| 起動器具(`--project` / 続きが開く) | (launch レーン) | 引数なし起動は egui の `resume_last_project` を**共用**。boot 時 open はフェンスを弱めず名前つき例外に |
+| 視覚第1ラウンド+`--screenshot` | `abf59aa0` | Inspector に identity 行・列見出し・TRANSFORM section・等幅値・M/S、Browser に rail とカード、窓既定は productStyles の 980x650 |
+
+**実窓での実測(`--screenshot`)**:
+- `/tmp/iced-verify-seated.png` — 4面が座り、Inspector が本物の chrome で表示される
+- `/tmp/iced-stage-120.png` — **Stage に合成結果が出る**(starter-still.png の縞模様が Browser サムネイルと一致)
+- **待ちフレームの実測**: 25 では非同期の評価が間に合わず Stage が空に見える。**120 で確実**。
+  検証時は `--screenshot <out> 120` を使うこと(この事実を知らないと「まだ空だ」と誤診する)
+- 既知の別件を1つ再発見: `~/Documents/Motolii/Timeline Lab Project.json` は
+  `core.filter.opacity` の param 名乖離(`opacity` vs 第一者契約 `amount`)で評価に失敗し、
+  **その理由が status 帯に出る**(前引き継ぎの残作業項目。座席は正しく報告している)
+
+**残差(supervisor 目視。第2ラウンドを sonnet 2レーンで発注済み)**:
+- Inspector: 行左端の種別色帯と kind アイコンが無い / section 見出しの字間・面色 / 値が枠付きに見える(基準は枠なし等幅右寄せ)/ APPEARANCE(Opacity)section
+- Timeline: 行の M/S ボタン(既存 `ToggleItemFlag` へ結線可)/ 行頭の種別色四角 / OBJECT ヘッダ / 選択枠の色 / ARRANGEMENT 俯瞰帯(機能させられる場合のみ)
+- Browser: 検索・タブ・COLLECTIONS/PLACES・フィルタ chip は**機能が無い**ため Q0 により未設置(意図的)
