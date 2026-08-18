@@ -17,18 +17,21 @@ use iced::widget::canvas::{self, Event, Frame, Geometry, Path, Stroke, Text};
 use iced::{Color, Pixels, Point, Rectangle, Renderer, Size, Theme};
 
 use motolii_doc::{Document, LayerId};
+use motolii_ui::blitz_shell::UiItemFlag;
 use motolii_ui::timeline_editor::waveform_band::WaveformWindow;
 use motolii_ui::timeline_editor::TrimEdge;
 use motolii_ui::timeline_rows::{rows, TimelineFoldState, TimelineRow};
 
 use super::pane::{GrabZone, TimelineDrag, TimelineMsg};
 use super::semantics::{
-    bar_span, frame_step, hit_test, movable_clips, ruler_step_seconds, snap_candidates, snapped,
-    BarZone, PaneGeometry, TimelineHit, ROW_H, RULER_H,
+    bar_span, flag_button_rect_y, frame_step, hit_test, item_mute_solo, movable_clips,
+    mute_button_x, ruler_step_seconds, snap_candidates, snapped, solo_button_x, BarZone,
+    PaneGeometry, TimelineHit, OVERVIEW_H, ROW_H, RULER_H,
 };
 use super::waveform::WaveformBandState;
 use crate::message::Message;
 use crate::shell::Shell;
+use crate::theme::Tokens;
 
 // ── 配色 ───────────────────────────────────────────────────────────────────
 // egui 版 `timeline_editor/mod.rs` の mock_tokens 採用値をそのまま写す
@@ -56,6 +59,12 @@ const WAVE: Color = Color::from_rgb(0x7f as f32 / 255.0, 0x92 as f32 / 255.0, 0x
 const WAVE_BG: Color =
     Color::from_rgb(0x22 as f32 / 255.0, 0x22 as f32 / 255.0, 0x22 as f32 / 255.0);
 const TRIM_BAND: Color = Color::from_rgba(1.0, 1.0, 1.0, 0.28);
+// ARRANGEMENT 俯瞰帯の下地。`timeline-library.css:3` `.overview{background:#242424}`
+// (TRACK_B の #252525 とほぼ同値だが、帯とトラック縞は別要素なので取り違えないよう
+// 別定数にする。egui 版参照は overview 行に専用の下地色を持たないので、この帯だけ
+// 周りの行から浮かせる目的でこの値を採る)。
+const OVERVIEW_BG: Color =
+    Color::from_rgb(0x24 as f32 / 255.0, 0x24 as f32 / 255.0, 0x24 as f32 / 255.0);
 /// 仮のパレット(egui 版 `LAYER_COLORS` と同じ並び。id から導く側だけを写す)。
 const LAYER_COLORS: [Color; 8] = [
     Color::from_rgb(0x8c as f32 / 255.0, 0x6b as f32 / 255.0, 0x6b as f32 / 255.0),
@@ -72,9 +81,23 @@ fn layer_color(layer: LayerId) -> Color {
     LAYER_COLORS[(layer.get() % LAYER_COLORS.len() as u64) as usize]
 }
 
+/// 角丸の矩形。行頭スウォッチ・bar・ARRANGEMENT の窓・下端スクロールバーが
+/// 共用する(`/tmp/egui-same-doc.png` はどれも角丸 — 直角の矩形は無い)。
+fn rounded_rect(top_left: Point, size: Size, radius: f32) -> Path {
+    Path::rounded_rectangle(top_left, size, radius.into())
+}
+
 /// `view()` が毎フレーム作り直す、殻への参照だけを持つ薄い殻。
 pub struct TimelineProgram<'a> {
     pub shell: &'a Shell,
+}
+
+/// canvas ローカルの transient 状態。ARRANGEMENT 帯を掴んでいる間だけ真になる —
+/// Document を持たない chrome の話なので `TimelinePane::drag`(Move/Trim/Scrub の
+/// preview)には混ぜない。
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct TimelineCanvasState {
+    overview_dragging: bool,
 }
 
 /// この canvas が読む一式。座席が無い時は `None`(canvas 自体が立たないはずだが、
@@ -110,11 +133,11 @@ impl TimelineProgram<'_> {
 }
 
 impl canvas::Program<Message> for TimelineProgram<'_> {
-    type State = ();
+    type State = TimelineCanvasState;
 
     fn update(
         &self,
-        _state: &mut Self::State,
+        state: &mut Self::State,
         event: &Event,
         bounds: Rectangle,
         cursor: mouse::Cursor,
@@ -133,7 +156,7 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let p = cursor.position_in(bounds)?;
                 let additive = pane.modifiers.command();
-                let msg = match hit_test(
+                let hit = hit_test(
                     &scene.document,
                     &scene.rows,
                     view,
@@ -141,8 +164,16 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     pane.scroll_y,
                     p.x,
                     p.y,
-                ) {
+                );
+                state.overview_dragging = matches!(hit, TimelineHit::Overview { .. });
+                let msg = match hit {
+                    TimelineHit::Overview { at_seconds } => {
+                        TimelineMsg::OverviewSeek { at_seconds }
+                    }
                     TimelineHit::Ruler { at_seconds } => TimelineMsg::ScrubStarted { at_seconds },
+                    TimelineHit::FlagButton { layer, flag } => {
+                        TimelineMsg::FlagPressed { layer, flag }
+                    }
                     TimelineHit::Rail { layer } => TimelineMsg::RowPicked { layer, additive },
                     TimelineHit::Bar {
                         layer,
@@ -161,6 +192,23 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     TimelineHit::Empty => TimelineMsg::EmptyPressed { additive },
                 };
                 publish(msg)
+            }
+
+            // ── ARRANGEMENT 帯を引きずった ────────────────────────────
+            // Document とは無縁の view chrome なので `pane.drag` ではなく
+            // canvas ローカルの `state.overview_dragging` で追う。
+            Event::Mouse(mouse::Event::CursorMoved { .. }) if state.overview_dragging => {
+                let p = cursor.position()?;
+                let x = p.x - bounds.x;
+                let (x0, x1) = geometry.overview_track_x();
+                let comp = scene.document.composition.duration.as_seconds_f64() as f32;
+                if comp <= 0.0 || x1 <= x0 {
+                    return None;
+                }
+                let ratio = ((x - x0) / (x1 - x0)).clamp(0.0, 1.0);
+                publish(TimelineMsg::OverviewSeek {
+                    at_seconds: ratio * comp,
+                })
             }
 
             // ── 引きずった ────────────────────────────────────────────
@@ -185,6 +233,12 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             }
 
             // ── 離した ────────────────────────────────────────────────
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+                if state.overview_dragging =>
+            {
+                state.overview_dragging = false;
+                None
+            }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
                 if pane.drag.is_some() =>
             {
@@ -271,10 +325,11 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
         &self,
         _state: &Self::State,
         renderer: &Renderer,
-        _theme: &Theme,
+        theme: &Theme,
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
+        let tokens = Tokens::resolve(theme);
         let mut frame = Frame::new(renderer, bounds.size());
         frame.fill_rectangle(Point::ORIGIN, bounds.size(), BG);
         let Some(scene) = self.scene() else {
@@ -316,6 +371,23 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 CELL,
             );
             let selected = scene.selected.contains(&row.layer);
+            let span = bar_span(&scene.document, row.layer);
+            let is_group_icon = span.map(|(_, _, g)| g).unwrap_or(false);
+            let indent = 8.0 + f32::from(row.depth) * 12.0;
+            // 種別色の四角(角丸)。`/tmp/egui-same-doc.png` の行頭スウォッチ —
+            // bar に既に使っている色をそのまま流用する(新しい色は発明しない)。
+            frame.fill(
+                &rounded_rect(
+                    Point::new(indent, y + ROW_H * 0.5 - 7.0),
+                    Size::new(14.0, 14.0),
+                    3.0,
+                ),
+                if is_group_icon {
+                    HEAD_BG
+                } else {
+                    layer_color(row.layer)
+                },
+            );
             let name = scene
                 .document
                 .layers
@@ -324,12 +396,46 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 .to_owned();
             frame.fill_text(Text {
                 content: name,
-                position: Point::new(8.0 + f32::from(row.depth) * 12.0, y + ROW_H * 0.5),
+                position: Point::new(indent + 20.0, y + ROW_H * 0.5),
                 color: if selected { SELECTED } else { INK },
                 size: Pixels(11.0),
                 align_y: alignment::Vertical::Center.into(),
                 ..Text::default()
             });
+            // M / S。押下状態は Document(`ItemEnvelope`)から読む — ボタン側に
+            // 状態を持たない(egui 版 `item_flags_for` と同じ判断)。
+            let (muted, solo) = item_mute_solo(&scene.document, row.layer);
+            let (btn_y0, btn_h) = flag_button_rect_y(y);
+            let mute_hovered = matches!(
+                hover,
+                Some(TimelineHit::FlagButton { layer, flag: UiItemFlag::Mute }) if layer == row.layer
+            );
+            let solo_hovered = matches!(
+                hover,
+                Some(TimelineHit::FlagButton { layer, flag: UiItemFlag::Solo }) if layer == row.layer
+            );
+            draw_flag_button(
+                &mut frame,
+                mute_button_x(),
+                btn_y0,
+                btn_h,
+                "M",
+                muted,
+                mute_hovered,
+                tokens.text_muted,
+                tokens,
+            );
+            draw_flag_button(
+                &mut frame,
+                solo_button_x(),
+                btn_y0,
+                btn_h,
+                "S",
+                solo,
+                solo_hovered,
+                tokens.action_active,
+                tokens,
+            );
             frame.fill_rectangle(
                 Point::new(0.0, y + ROW_H - 1.0),
                 Size::new(size.width, 1.0),
@@ -337,7 +443,7 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             );
 
             // ── bar ─────────────────────────────────────────────────
-            let Some((mut start, mut end, is_group)) = bar_span(&scene.document, row.layer) else {
+            let Some((mut start, mut end, is_group)) = span else {
                 continue;
             };
             // 進行中ジェスチャの preview を映す(Document は release まで触らない)。
@@ -382,14 +488,14 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             let wc = (x1.min(size.width) - x0c).max(1.0);
             let bar_top = y + 3.0;
             let bar_h = ROW_H - 6.0;
-            frame.fill_rectangle(
-                Point::new(x0c, bar_top),
-                Size::new(wc, bar_h),
-                if is_group {
-                    HEAD_BG
-                } else {
-                    layer_color(row.layer)
-                },
+            let bar_color = if is_group {
+                HEAD_BG
+            } else {
+                layer_color(row.layer)
+            };
+            frame.fill(
+                &rounded_rect(Point::new(x0c, bar_top), Size::new(wc, bar_h), 3.0),
+                bar_color,
             );
             // 畳んである Group は中身をその bar の中に出す(egui と同じ)。
             if is_group {
@@ -413,11 +519,10 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     }
                 }
             }
-            frame.stroke_rectangle(
-                Point::new(x0c, bar_top),
-                Size::new(wc, bar_h),
+            frame.stroke(
+                &rounded_rect(Point::new(x0c, bar_top), Size::new(wc, bar_h), 3.0),
                 Stroke::default()
-                    .with_color(if selected { SELECTED } else { RULE })
+                    .with_color(if selected { tokens.action_active } else { RULE })
                     .with_width(if selected { 1.5 } else { 1.0 }),
             );
 
@@ -449,21 +554,121 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             BG,
         );
 
-        // ── ルーラ ──────────────────────────────────────────────────
-        frame.fill_rectangle(Point::ORIGIN, Size::new(size.width, RULER_H), HEAD_BG);
+        // ── transport 帯(表示専用)──────────────────────────────────
+        // `/tmp/egui-same-doc.png` の最上段。再生ボタン・`space=play` 等の
+        // **対応する intent が無い項目は描かない**(2026-08-19 裁定、Q0) —
+        // 残すのは既に読める状態(playhead・行数・view 範囲・ルーラ刻み)だけ。
+        let comp = scene.document.composition.duration.as_seconds_f64() as f32;
         let step = ruler_step_seconds(geometry.px_per_second(view));
+        frame.fill_rectangle(
+            Point::ORIGIN,
+            Size::new(size.width, geometry.transport_bottom()),
+            HEAD_BG,
+        );
+        frame.fill_text(Text {
+            content: playhead_clock(scene.playhead),
+            position: Point::new(8.0, geometry.transport_bottom() * 0.5),
+            color: INK,
+            size: Pixels(15.0),
+            font: iced::Font::MONOSPACE,
+            align_y: alignment::Vertical::Center.into(),
+            ..Text::default()
+        });
+        frame.fill_text(Text {
+            content: format!(
+                "{} rows   view {:.2}-{:.2}s   grid {}",
+                scene.rows.len(),
+                view.start,
+                view.start + view.span,
+                grid_label(step),
+            ),
+            position: Point::new(96.0, geometry.transport_bottom() * 0.5),
+            color: DIM,
+            size: Pixels(10.0),
+            font: iced::Font::MONOSPACE,
+            align_y: alignment::Vertical::Center.into(),
+            ..Text::default()
+        });
+        frame.fill_rectangle(
+            Point::new(0.0, geometry.transport_bottom() - 1.0),
+            Size::new(size.width, 1.0),
+            RULE,
+        );
+
+        // ── ARRANGEMENT 俯瞰帯 ───────────────────────────────────────
+        // `/tmp/egui-same-doc.png` — 灰色の丸みを帯びた1本の帯(セグメント
+        // 表示ではない)。押す/引きずると `OverviewSeek` が飛び、view がその
+        // 時刻へ寄る(機能する chrome だけを置く — 押しても動かない飾りは
+        // 作らない)。
+        frame.fill_rectangle(
+            Point::new(0.0, geometry.transport_bottom()),
+            Size::new(size.width, OVERVIEW_H),
+            OVERVIEW_BG,
+        );
+        let (ov_x0, ov_x1) = geometry.overview_track_x();
+        if comp > 0.0 {
+            let to_ov_x = |t: f32| ov_x0 + (t.clamp(0.0, comp) / comp) * (ov_x1 - ov_x0);
+            let win_x0 = to_ov_x(view.start);
+            let win_x1 = to_ov_x(view.start + view.span);
+            let pill_top = geometry.transport_bottom() + 4.0;
+            let pill_h = OVERVIEW_H - 8.0;
+            frame.fill(
+                &rounded_rect(
+                    Point::new(win_x0, pill_top),
+                    Size::new((win_x1 - win_x0).max(pill_h), pill_h),
+                    pill_h * 0.5,
+                ),
+                // `/tmp/egui-same-doc.png` の窓は中間グレー — token の
+                // `border_strong`(既存 role)がほぼ同値なので、これも新しい
+                // hex は発明しない。
+                tokens.border_strong,
+            );
+        }
+
+        // ── ルーラ ──────────────────────────────────────────────────
+        let ruler_top = geometry.ruler_top();
+        frame.fill_rectangle(
+            Point::new(0.0, ruler_top),
+            Size::new(size.width, RULER_H),
+            HEAD_BG,
+        );
+        // 副目盛(主目盛の 1/5)。`/tmp/egui-same-doc.png` はルーラの中が
+        // 細かい縦線で密に埋まる — 主目盛だけだと間延びして見える。
+        let minor_step = step / 5.0;
+        if minor_step > 0.5 {
+            let mut minor = (view.start / minor_step).floor() * minor_step;
+            let last = view.start + view.span;
+            while minor <= last {
+                if minor >= 0.0 {
+                    let x = geometry.time_to_x(view, minor);
+                    if x >= geometry.track_left() {
+                        frame.fill_rectangle(
+                            Point::new(x, ruler_top + RULER_H - 4.0),
+                            Size::new(1.0, 4.0),
+                            Color { a: 0.35, ..DIM },
+                        );
+                    }
+                }
+                minor += minor_step;
+            }
+        }
         let mut tick = (view.start / step).floor() * step;
         let last = view.start + view.span;
         while tick <= last {
             if tick >= 0.0 {
                 let x = geometry.time_to_x(view, tick);
                 if x >= geometry.track_left() {
-                    frame.fill_rectangle(Point::new(x, RULER_H - 8.0), Size::new(1.0, 8.0), DIM);
+                    frame.fill_rectangle(
+                        Point::new(x, ruler_top + RULER_H - 8.0),
+                        Size::new(1.0, 8.0),
+                        DIM,
+                    );
                     frame.fill_text(Text {
-                        content: ruler_label(tick, step),
-                        position: Point::new(x + 3.0, RULER_H - 14.0),
+                        content: ruler_label(tick),
+                        position: Point::new(x + 3.0, ruler_top + RULER_H - 14.0),
                         color: DIM,
                         size: Pixels(10.0),
+                        font: iced::Font::MONOSPACE,
                         ..Text::default()
                     });
                     // 行の面へ落ちる細いグリッド。
@@ -477,14 +682,14 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             tick += step;
         }
         frame.fill_rectangle(
-            Point::new(0.0, RULER_H - 1.0),
+            Point::new(0.0, ruler_top + RULER_H - 1.0),
             Size::new(size.width, 1.0),
             RULE,
         );
 
         // ── 波形帯(ルーラの直下・同じ時間換算)──────────────────────
         if geometry.wave_h > 0.0 {
-            let top = RULER_H;
+            let top = geometry.ruler_bottom();
             frame.fill_rectangle(
                 Point::new(0.0, top),
                 Size::new(size.width, geometry.wave_h),
@@ -561,25 +766,55 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             );
         }
 
-        // ── レールとトラックの縦の境界 ──────────────────────────────
+        // ── レールとトラックの縦の境界(ARRANGEMENT 帯の下だけ — あの帯は
+        // レール/トラックの2列に分かれていない)───────────────────────
         frame.fill_rectangle(
-            Point::new(geometry.track_left() - 1.0, 0.0),
-            Size::new(1.0, size.height),
+            Point::new(geometry.track_left() - 1.0, ruler_top),
+            Size::new(1.0, size.height - ruler_top),
             RULE,
         );
 
-        // ── playhead ────────────────────────────────────────────────
+        // ── playhead(ルーラから下だけ。ARRANGEMENT 帯には俯瞰トラック側の
+        // 目印(上で描いた `em` 相当)が別にある)─────────────────────
         let playhead = pane.scrub_preview().unwrap_or(scene.playhead);
         let px = geometry.time_to_x(view, playhead);
         if px >= geometry.track_left() - 1.0 && px <= size.width + 1.0 {
-            frame.fill_rectangle(Point::new(px, 0.0), Size::new(1.0, size.height), SELECTED);
+            frame.fill_rectangle(
+                Point::new(px, ruler_top),
+                Size::new(1.0, size.height - ruler_top),
+                SELECTED,
+            );
             let head = Path::new(|p| {
-                p.move_to(Point::new(px - 5.0, 0.0));
-                p.line_to(Point::new(px + 5.0, 0.0));
-                p.line_to(Point::new(px, 9.0));
+                p.move_to(Point::new(px - 5.0, ruler_top));
+                p.line_to(Point::new(px + 5.0, ruler_top));
+                p.line_to(Point::new(px, ruler_top + 9.0));
                 p.close();
             });
             frame.fill(&head, SELECTED);
+        }
+
+        // ── 下端の横スクロールバー(表示専用)──────────────────────────
+        // `/tmp/egui-same-doc.png` 最下段の丸い灰色バー。今回はドラッグの
+        // 意味を増やさない(ARRANGEMENT の窓が既にその役目を持つ)ので、
+        // view/comp の比率を映すだけの飾りとして置く(2026-08-19 裁定 —
+        // 「表示するだけで正しい物」に該当し、状態は既にある)。
+        if comp > 0.0 {
+            let (sb_y0, sb_h) = geometry.scrollbar_y();
+            let (tx0, tx1) = geometry.overview_track_x();
+            let to_x = |t: f32| tx0 + (t.clamp(0.0, comp) / comp) * (tx1 - tx0);
+            let sb_x0 = to_x(view.start);
+            let sb_x1 = to_x(view.start + view.span);
+            frame.fill(
+                &rounded_rect(
+                    Point::new(sb_x0, sb_y0),
+                    Size::new((sb_x1 - sb_x0).max(sb_h), sb_h),
+                    sb_h * 0.5,
+                ),
+                Color {
+                    a: 0.6,
+                    ..tokens.border_strong
+                },
+            );
         }
 
         vec![frame.into_geometry()]
@@ -588,13 +823,16 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
     /// カーソル形状。`update` と**同じ `hit_test`** を通す。
     fn mouse_interaction(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> mouse::Interaction {
         let pane = self.shell.timeline_pane();
         // ジェスチャ中はカーソルを固定する(引きずって別の物の上に乗るたび
         // 形が変わるのは目障り — spike と同じ)。
+        if state.overview_dragging {
+            return mouse::Interaction::ResizingHorizontally;
+        }
         match &pane.drag {
             Some(TimelineDrag::Move { .. }) => return mouse::Interaction::Grabbing,
             Some(TimelineDrag::Trim { .. }) | Some(TimelineDrag::Scrub { .. }) => {
@@ -618,7 +856,9 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             p.x,
             p.y,
         ) {
+            TimelineHit::Overview { .. } => mouse::Interaction::Pointer,
             TimelineHit::Ruler { .. } => mouse::Interaction::ResizingHorizontally,
+            TimelineHit::FlagButton { .. } => mouse::Interaction::Pointer,
             TimelineHit::Bar {
                 zone: BarZone::In | BarZone::Out,
                 ..
@@ -633,13 +873,75 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
     }
 }
 
-/// ルーラの目盛の文字。分:秒で、1秒未満の刻みのときだけ小数を出す。
-fn ruler_label(t: f32, step: f32) -> String {
+/// M / S の1枚。inspector_pane.rs の `flag_button_style` と同じ3状態
+/// (pressed / hover / 既定)を token だけで写す — Timeline と Inspector の
+/// M/S が同じ手触りになる(新しい色を発明しない)。
+#[allow(clippy::too_many_arguments)]
+fn draw_flag_button(
+    frame: &mut Frame,
+    x_range: (f32, f32),
+    y0: f32,
+    h: f32,
+    label: &str,
+    pressed: bool,
+    hovered: bool,
+    accent: Color,
+    tokens: &Tokens,
+) {
+    let (x0, x1) = x_range;
+    let w = (x1 - x0).max(1.0);
+    let (border, background, text_color) = if pressed {
+        (
+            accent,
+            Color { a: 0.18, ..accent },
+            if label == "S" { accent } else { tokens.text_primary },
+        )
+    } else if hovered {
+        (
+            tokens.border_strong,
+            tokens.surface_panel,
+            tokens.text_primary,
+        )
+    } else {
+        (tokens.border_default, tokens.surface_app, tokens.text_muted)
+    };
+    let rect = rounded_rect(Point::new(x0, y0), Size::new(w, h), 2.0);
+    frame.fill(&rect, background);
+    frame.stroke(&rect, Stroke::default().with_color(border).with_width(1.0));
+    frame.fill_text(Text {
+        content: label.to_owned(),
+        position: Point::new(x0 + w * 0.5, y0 + h * 0.5),
+        color: text_color,
+        size: Pixels(9.0),
+        font: iced::Font::MONOSPACE,
+        align_x: alignment::Horizontal::Center.into(),
+        align_y: alignment::Vertical::Center.into(),
+        ..Text::default()
+    });
+}
+
+/// ルーラの目盛の文字。分:秒.小数第1位まで固定
+/// (`/tmp/egui-same-doc.png` の `0:00.0 | 0:02.0 | …` と同じ書式)。
+fn ruler_label(t: f32) -> String {
     let minutes = (t / 60.0).floor() as i64;
     let seconds = t - minutes as f32 * 60.0;
-    if step < 1.0 {
-        format!("{minutes}:{seconds:05.2}")
+    format!("{minutes}:{seconds:04.1}")
+}
+
+/// transport 帯の playhead 読み。時:分:秒(`/tmp/egui-same-doc.png` の
+/// `0:00:00`)。
+fn playhead_clock(seconds: f32) -> String {
+    let total = seconds.max(0.0).round() as i64;
+    let (h, m, s) = (total / 3600, (total % 3600) / 60, total % 60);
+    format!("{h}:{m:02}:{s:02}")
+}
+
+/// transport 帯の `grid n` — 整数なら小数を出さない
+/// (`/tmp/egui-same-doc.png` の `grid 1`)。
+fn grid_label(step: f32) -> String {
+    if step.fract().abs() < f32::EPSILON {
+        format!("{}", step as i64)
     } else {
-        format!("{minutes}:{:02}", seconds.round() as i64)
+        format!("{step}")
     }
 }

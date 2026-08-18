@@ -26,7 +26,7 @@ use std::sync::Arc;
 
 use motolii_core::Fps;
 use motolii_doc::{Document, LayerId};
-use motolii_ui::blitz_shell::{seconds_to_us, UiIntent};
+use motolii_ui::blitz_shell::{seconds_to_us, UiIntent, UiItemFlag};
 use motolii_ui::timeline_editor::{TimelineView, TrimEdge};
 
 use super::semantics::{
@@ -48,6 +48,12 @@ pub enum TimelineMsg {
     },
     /// 左レールの行を押した = 選択(クリックの意味そのもの)。
     RowPicked { layer: LayerId, additive: bool },
+    /// 行の M / S ボタンを押した = `UiIntent::ToggleItemFlag` への結線そのもの
+    /// (新しい intent は作らない。M-4b が既に持っている1本を Timeline からも呼ぶ)。
+    FlagPressed { layer: LayerId, flag: UiItemFlag },
+    /// ARRANGEMENT 俯瞰帯を押した/引きずった = その時刻を中心に view を寄せる。
+    /// **意味を持たない view chrome**(zoom/pan と同じ scope — intent にはならない)。
+    OverviewSeek { at_seconds: f32 },
     /// 何も無い所を押した = 選択解除(Cmd 併用なら何もしない)。
     EmptyPressed { additive: bool },
     /// ルーラを押した = スクラブ開始。
@@ -173,6 +179,10 @@ impl TimelinePane {
                 layer: layer.get(),
                 additive: *additive,
             }],
+            TimelineMsg::FlagPressed { layer, flag } => vec![UiIntent::ToggleItemFlag {
+                layer: layer.get(),
+                flag: *flag,
+            }],
             TimelineMsg::EmptyPressed { additive } => {
                 if !additive && !ctx.selected.is_empty() {
                     vec![UiIntent::ClearSelection]
@@ -236,6 +246,7 @@ impl TimelinePane {
             | TimelineMsg::ZoomedAt { .. }
             | TimelineMsg::PannedX { .. }
             | TimelineMsg::ScrolledY { .. }
+            | TimelineMsg::OverviewSeek { .. }
             | TimelineMsg::ModifiersChanged(_) => Vec::new(),
         }
     }
@@ -336,14 +347,23 @@ impl TimelinePane {
             TimelineMsg::PannedX { delta_seconds } => {
                 self.view = self.view.pan(*delta_seconds, comp);
             }
+            TimelineMsg::OverviewSeek { at_seconds } => {
+                let span = self.view.span;
+                self.view = TimelineView {
+                    start: at_seconds - span * 0.5,
+                    span,
+                }
+                .clamped(comp);
+            }
             TimelineMsg::ScrolledY { delta_px, max } => {
                 self.scroll_y = (self.scroll_y + delta_px).clamp(0.0, max.max(0.0));
             }
             TimelineMsg::ModifiersChanged(modifiers) => {
                 self.modifiers = *modifiers;
             }
-            // 選択・削除・Undo/Redo・コマ送りは座席側の状態で、pane は何も控えない。
+            // 選択・M/S・削除・Undo/Redo・コマ送りは座席側の状態で、pane は何も控えない。
             TimelineMsg::RowPicked { .. }
+            | TimelineMsg::FlagPressed { .. }
             | TimelineMsg::EmptyPressed { .. }
             | TimelineMsg::DeletePressed
             | TimelineMsg::UndoPressed

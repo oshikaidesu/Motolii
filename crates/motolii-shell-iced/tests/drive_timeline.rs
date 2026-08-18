@@ -481,7 +481,7 @@ fn scrubbing_the_ruler_seeks_the_playhead() {
     let view0 = fresh_view();
 
     // click: 5.0s。
-    let at5 = Point::new(geometry.time_to_x(view0, 5.0), 10.0);
+    let at5 = Point::new(geometry.time_to_x(view0, 5.0), geometry.ruler_top() + 10.0);
     pointer_step(&mut shell, at5, [pressed()]);
     pointer_step(&mut shell, at5, [released()]);
     assert!(
@@ -491,7 +491,7 @@ fn scrubbing_the_ruler_seeks_the_playhead() {
     );
 
     // drag: 5.0 → 8.0s。
-    let at8 = Point::new(geometry.time_to_x(view0, 8.0), 10.0);
+    let at8 = Point::new(geometry.time_to_x(view0, 8.0), geometry.ruler_top() + 10.0);
     pointer_step(&mut shell, at5, [pressed()]);
     pointer_step(&mut shell, at8, std::iter::empty());
     pointer_step(&mut shell, at8, [released()]);
@@ -656,7 +656,7 @@ fn a_timeline_session_replays_from_its_intent_log() {
         Point::new(geometry.time_to_x(view0, 13.6) - 4.0, audio_y),
         Point::new(geometry.time_to_x(view0, 10.0), audio_y),
     );
-    let ruler5 = Point::new(geometry.time_to_x(view0, 5.0), 10.0);
+    let ruler5 = Point::new(geometry.time_to_x(view0, 5.0), geometry.ruler_top() + 10.0);
     pointer_step(&mut shell, ruler5, [pressed()]);
     pointer_step(&mut shell, ruler5, [released()]);
     key_step(&mut shell, tap(Named::ArrowRight));
