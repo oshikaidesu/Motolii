@@ -1,0 +1,698 @@
+//! **原因のログ**と、その唯一の実行口(単一ゲートウェイ)。
+//!
+//! [2026-08-18裁定](../../../../docs/reviews/2026-08-18-log-and-structure-enforcement.md)
+//! (「ログと構造の強制が組めれば egui は iced になれる」)の第1弾。iced が
+//! フレームワークとして強制する2つの規律を、toolkit を替えずに**この module の
+//! 形**で強制する:
+//!
+//! 1. **ログ** … 利用者が起こした shell 層の状態変化は全て [`UiIntent`] 1件になり、
+//!    **行動の前に** [`IntentJournal`] へ記録される。落ちた行動も「何をしようと
+//!    したか」が残る。`ShellTranscript`(結果のログ)と対になる
+//! 2. **構造** … その intent を実行できるのは [`ShellGateway::dispatch`] だけで、
+//!    製品状態(`ProjectSeat` = Document の唯一の writer / 実行中の書き出し)は
+//!    この module の外から掴めない。journal を通らずに同じ副作用へ着く道が
+//!    shell から消える(フェンス: `tests/shell_intent_gateway_fence.rs`)
+//!
+//! そして [`ShellGateway::replay`] が、記録した intent 列を**窓も egui も無しで**
+//! 再実行する。iced の time-travel に相当する検証をこれで自前に持つ
+//! (審判は `drive_tests.rs`)。
+//!
+//! ## ここに無いもの
+//!
+//! - **訊くこと**。dialog(`ShellPrompts`)は intent の外に居て、**決まった答え**
+//!   (`NewProject { path }` の path)だけが intent の中へ入る。だから replay は
+//!   dialog を二度と開かない
+//! - **view の操作**。camera・選択・panel の並びは本レーンのスコープ外(将来枠)
+//! - **timeline_editor の中の編集**と Undo/Redo。あれは既に D2 Command として
+//!   `motolii-doc` の journal を通る。shell 層の intent 化は wave E
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+
+use serde::{Deserialize, Serialize};
+
+use super::drive::ShellTranscript;
+use crate::export_seat::{can_start_export, ExportFinish, ExportRequest, ExportRun};
+use crate::timeline_editor::TimelineEditor;
+
+// ---------------------------------------------------------------------------
+// ログ: 型付き intent と、その台帳
+// ---------------------------------------------------------------------------
+
+/// 利用者が起こした shell 層の状態変化1件。**製品(`motolii-doc`)の型は
+/// 漏らしてよいが、egui / kittest の型は入れない**(U0a の境界規律)。
+///
+/// dialog の答えは値として中に入っている(`NewProject { path }`)ので、
+/// この列だけで replay が成立する — 訊き直す口はどこにも要らない。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum UiIntent {
+    /// 新しい project を作って、そこへ座り直す(Cmd+N / スタート画面の New)。
+    NewProject { path: PathBuf },
+    /// 既にある project へ座り直す(Cmd+O / スタート画面の Open / `--project` 起動)。
+    OpenProject { path: PathBuf },
+    /// いまの writer snapshot を project ファイルへ書き戻す(Cmd+S)。
+    SaveProject,
+    /// 書き出しを始める(status 帯の Export)。`output` は dialog が決めた保存先。
+    BeginExport { output: PathBuf },
+    /// 実行中の書き出しを止める(status 帯の Cancel)。
+    CancelExport,
+    /// 素材を取り込んで playhead へ置く。**OS ドロップと Browser のカードの
+    /// ダブルクリックが合流する1点**で、入口が増えても intent は1種類のまま。
+    AdmitPaths { paths: Vec<PathBuf> },
+    // 将来枠(本レーンのスコープ外。足す時はフェンスの禁止リストも一緒に伸ばす):
+    // - view: camera 操作・選択・panel の開閉/並び
+    // - wave E: timeline_editor / inspector の編集、Undo/Redo
+}
+
+/// journal の1行。`seq` は 1 始まりの通し番号で、`--intent-log` の JSONL
+/// (`{"seq":n,"intent":{"kind":"…",…}}`)がそのまま名乗る番号でもある。
+/// `--status-log`(`{"seq":n,"text":"…"}`)と同型で、並べて読める。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IntentEvent {
+    pub seq: u64,
+    pub intent: UiIntent,
+}
+
+/// 原因のログを溜める唯一の場所。`ShellTranscript` と同じ形(`Arc<Mutex<_>>` の
+/// 共有)で、runner が `--intent-log` へ流す側もここを読む。
+#[derive(Clone, Default)]
+pub(crate) struct IntentJournal {
+    entries: Arc<Mutex<Vec<IntentEvent>>>,
+}
+
+impl IntentJournal {
+    /// 1件記録して、付けた `seq` を返す。**呼ぶのは行動の前**。
+    fn record(&self, intent: &UiIntent) -> u64 {
+        let mut entries = self.lock();
+        let seq = entries.len() as u64 + 1;
+        entries.push(IntentEvent {
+            seq,
+            intent: intent.clone(),
+        });
+        seq
+    }
+
+    /// 記録の全部(順のまま)。
+    pub(crate) fn entries(&self) -> Vec<IntentEvent> {
+        self.lock().clone()
+    }
+
+    /// intent だけを順に。replay へそのまま渡せる形。
+    pub(crate) fn intents(&self) -> Vec<UiIntent> {
+        self.lock().iter().map(|event| event.intent.clone()).collect()
+    }
+
+    /// 既に `count` 行を見た側が、その後に増えた分だけ受け取る(`--intent-log` 用)。
+    pub(crate) fn since(&self, count: usize) -> Vec<IntentEvent> {
+        let mut entries = self.entries();
+        if count >= entries.len() {
+            return Vec::new();
+        }
+        entries.drain(..count);
+        entries
+    }
+
+    /// 溜まっている行数。
+    pub(crate) fn len(&self) -> usize {
+        self.lock().len()
+    }
+
+    /// `ShellTranscript::lock` と同じ方針(毒されても台帳を失わない)。
+    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<IntentEvent>> {
+        self.entries
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 構造: 製品状態へ触れる唯一の口
+// ---------------------------------------------------------------------------
+
+/// shell 層の製品状態と、そこへ触る唯一の口。
+///
+/// `project`(Document の唯一の writer を抱える座席)と `export`(実行中の
+/// 書き出し)は**この型の private フィールド**で、外へ出るのは読み取りと
+/// 「wave E で残した穴」(`project_mut`)だけである。状態を進めたい側は
+/// [`dispatch`](Self::dispatch) に intent を渡すしかない。
+pub(crate) struct ShellGateway {
+    project: Option<ProjectSeat>,
+    export: Option<ExportRun>,
+    /// 結果のログ(status 帯 + `--status-log`)。窓と面が共有している台帳そのもの。
+    transcript: ShellTranscript,
+    /// 原因のログ。
+    journal: IntentJournal,
+}
+
+impl ShellGateway {
+    /// 座席なしで作る(スタート画面 / fixture 展示の起動)。
+    pub(crate) fn new(transcript: ShellTranscript) -> Self {
+        Self {
+            project: None,
+            export: None,
+            transcript,
+            journal: IntentJournal::default(),
+        }
+    }
+
+    /// `--project` で**窓より先に**開いた座席を受け取って作る。
+    ///
+    /// 起動時の失敗を絵ではなく起動エラーにする決定(`runner.rs`)は変えないので、
+    /// 開く操作そのものは runner が済ませている。ただし journal は
+    /// 「どうやってこの座席に着いたか」を欠かしてはならないので、**同じ意味の
+    /// `OpenProject` を第1行として記録する** — こうしておくと `--intent-log` は
+    /// それ単体で replay 可能な列になる。
+    pub(crate) fn seated(transcript: ShellTranscript, seat: ProjectSeat) -> Self {
+        let journal = IntentJournal::default();
+        journal.record(&UiIntent::OpenProject {
+            path: seat.path().to_path_buf(),
+        });
+        Self {
+            project: Some(seat),
+            export: None,
+            transcript,
+            journal,
+        }
+    }
+
+    /// **intent を記録してから実行する、唯一の口。**
+    ///
+    /// 返すのは「意図どおりに進んだか」で、進まなかった理由は必ず transcript に
+    /// 言われている(黙って false を返さない)。呼び手はこの真偽で続きを決める
+    /// (未保存 guard の「保存して続行」など)。
+    pub(crate) fn dispatch(&mut self, intent: UiIntent) -> bool {
+        // 行動の**前**に記録する。実行が panic しても・失敗しても、
+        // 「何をしようとしたか」は残る。
+        self.journal.record(&intent);
+        self.perform(&intent)
+    }
+
+    /// 記録済みの intent 列を、新しい shell 状態へ再実行する(replay oracle)。
+    ///
+    /// 窓も egui も dialog も要らない — intent が答えを値として持っているため。
+    /// 前提は「初期状態が同じであること」で、file system もその初期状態に含まれる
+    /// (`NewProject` は既にあるファイルを踏まない)。
+    pub(crate) fn replay(intents: &[UiIntent]) -> Self {
+        let mut gateway = Self::new(ShellTranscript::default());
+        for intent in intents {
+            gateway.dispatch(intent.clone());
+        }
+        gateway
+    }
+
+    /// intent 1件の実体。**ここが shell 層の副作用の全部**である。
+    fn perform(&mut self, intent: &UiIntent) -> bool {
+        match intent {
+            UiIntent::NewProject { path } => match create_project_file(path) {
+                Ok(()) => self.reseat(path),
+                Err(error) => {
+                    self.transcript.report(error);
+                    false
+                }
+            },
+            UiIntent::OpenProject { path } => self.reseat(path),
+            UiIntent::SaveProject => match self.project.as_mut() {
+                Some(seat) => match seat.save() {
+                    Ok(()) => {
+                        self.transcript
+                            .report(format!("saved {}", seat.path().display()));
+                        true
+                    }
+                    Err(error) => {
+                        self.transcript.report(error);
+                        false
+                    }
+                },
+                None => {
+                    self.transcript
+                        .report("open a project first — Cmd+N to create one, Cmd+O to open one");
+                    false
+                }
+            },
+            UiIntent::BeginExport { output } => {
+                if !self.can_start_export() {
+                    return false;
+                }
+                let seat = self
+                    .project
+                    .as_ref()
+                    .expect("can_start_export checked the seat");
+                self.transcript
+                    .report(format!("exporting {}", output.display()));
+                self.export = Some(ExportRun::start(ExportRequest {
+                    document: seat.snapshot(),
+                    // project root = document path の親（CLI export と同じ規約）。
+                    project_root: seat.path().parent().map(Path::to_path_buf),
+                    output_path: output.clone(),
+                    // v0 は既定値のみ: composition 全長・通常品質。
+                    frame_count: None,
+                    qp0: false,
+                }));
+                true
+            }
+            UiIntent::CancelExport => match self.export.as_ref() {
+                Some(run) => {
+                    run.cancel();
+                    true
+                }
+                None => false,
+            },
+            UiIntent::AdmitPaths { paths } => {
+                let placed = self
+                    .project
+                    .as_ref()
+                    .map(|seat| seat.editor().revision())
+                    .unwrap_or(0);
+                let report = admit_dropped_paths(self.project.as_mut(), paths);
+                self.transcript.report(report);
+                // 何も入らなかった(理由つき skip)も「意図は通った」ではない。
+                self.project
+                    .as_ref()
+                    .is_some_and(|seat| seat.editor().revision() > placed)
+            }
+        }
+    }
+
+    /// 座席を差し替えて、成否を帯に言う。判断そのものは [`reseat_project`]。
+    fn reseat(&mut self, path: &Path) -> bool {
+        match reseat_project(&mut self.project, path) {
+            Ok(()) => {
+                self.transcript.report(format!("opened {}", path.display()));
+                true
+            }
+            Err(error) => {
+                self.transcript.report(error);
+                false
+            }
+        }
+    }
+
+    /// 実行中の書き出しの返事を受ける(**intent ではない** — 世界の側からの返事)。
+    /// 完了/キャンセル/失敗は帯の一言になり、run は捨てる。
+    pub(crate) fn poll_export(&mut self) {
+        let Some(run) = self.export.as_mut() else {
+            return;
+        };
+        let Some(finish) = run.try_finish() else {
+            return;
+        };
+        let report = match finish {
+            ExportFinish::Done(report) => format!(
+                "Exported {} ({}f)",
+                run.output_path().display(),
+                report.frames_written
+            ),
+            ExportFinish::Cancelled => {
+                format!(
+                    "export cancelled — {} was removed",
+                    run.output_path().display()
+                )
+            }
+            ExportFinish::Failed(reason) => format!("export failed: {reason}"),
+        };
+        self.transcript.report(report);
+        self.export = None;
+    }
+
+    /// 座席(読み)。
+    pub(crate) fn project(&self) -> Option<&ProjectSeat> {
+        self.project.as_ref()
+    }
+
+    /// 座席(書き)。**wave E まで残る穴**: Timeline エディタの中の編集は
+    /// まだ intent を通らず、`motolii-doc` 側の D2 journal だけが受けている。
+    /// 新しい shell 層の副作用をここから足さないこと(フェンスは呼び出しの
+    /// 有無ではなく「禁止 API 名」で見ているので、増やせば黙って通ってしまう)。
+    pub(crate) fn project_mut(&mut self) -> Option<&mut ProjectSeat> {
+        self.project.as_mut()
+    }
+
+    /// 実行中の書き出し(読み)。帯がスピナーと経過秒に使う。
+    pub(crate) fn export(&self) -> Option<&ExportRun> {
+        self.export.as_ref()
+    }
+
+    /// live project が座っているか。
+    pub(crate) fn is_seated(&self) -> bool {
+        self.project.is_some()
+    }
+
+    /// Export ボタンの enabled と `BeginExport` の門。同じ関数を両方が見る。
+    pub(crate) fn can_start_export(&self) -> bool {
+        can_start_export(self.project.is_some(), self.export.is_some())
+    }
+
+    /// 原因のログ。
+    pub(crate) fn journal(&self) -> &IntentJournal {
+        &self.journal
+    }
+
+    /// 結果のログ。replay の審判が読む。
+    pub(crate) fn transcript(&self) -> &ShellTranscript {
+        &self.transcript
+    }
+
+    /// 座席の Document に立っている track item の総数(replay の審判用)。
+    pub(crate) fn track_item_count(&self) -> usize {
+        self.project
+            .as_ref()
+            .map(|seat| {
+                seat.snapshot()
+                    .tracks
+                    .iter()
+                    .map(|track| track.items.len())
+                    .sum()
+            })
+            .unwrap_or(0)
+    }
+
+    /// 座席の writer 世代(replay の審判用)。座席が無ければ 0。
+    pub(crate) fn revision(&self) -> u64 {
+        self.project
+            .as_ref()
+            .map(|seat| seat.editor().revision())
+            .unwrap_or(0)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 製品状態そのもの(座席と、それを動かす関数)
+// ---------------------------------------------------------------------------
+
+/// live project の座席。開いた project の `ProjectSession`（OS 排他 lock）と、
+/// Timeline エディタをひとまとめに持つ。**Document の唯一の writer はエディタの
+/// 中に1つだけ座る**（single writer）。
+///
+/// pane 側へ出て行くのは `snapshot()` の immutable snapshot だけ。
+/// 第二の Document 保持経路（cache / 読み直し）はここから先に作らない。
+pub struct ProjectSeat {
+    /// 開いている project のパス。**同じ project を開き直す時に lock を先に返す**
+    /// 判断がこれを見る（`reseat_project`）。
+    path: PathBuf,
+    /// project identity の排他 lock。app が生きているあいだ握り続け
+    /// （落とすと他プロセスが同じ project を開けてしまう）、保存（`save`）も
+    /// この lock の中の `save_document` を通る（CLI `document_edit.rs` と同じ経路）。
+    session: motolii_doc::ProjectSession,
+    /// Timeline エディタ。編集は全部（キー入力も操作 API も）この中の writer を通る。
+    editor: TimelineEditor,
+    /// 最後に project ファイルへ書いた（開いた直後はファイルにある）内容の snapshot。
+    /// dirty 判定はこれとの**内容比較**（`is_dirty`）。undo 台帳の深さや revision の
+    /// 一致では判定しない — undo で保存内容へ戻れば clean、深さが偶然揃っても
+    /// 内容が違えば dirty、が正しく出る。
+    saved: Arc<motolii_doc::Document>,
+    /// `is_dirty` の cache（判定した時の revision とその答え）。revision が
+    /// 進んでいなければ Document 比較をやり直さない（status 帯が毎フレーム見るため）。
+    dirty_cache: std::cell::Cell<Option<(u64, bool)>>,
+}
+
+impl ProjectSeat {
+    /// 実プロジェクトを開いて座席を作る。経路は既存の `open_project_resolved`
+    /// （= `ProjectSession::open` ＋ plugin 解決。`document_export.rs:18` /
+    /// `timeline_widget_lab.rs:120` と同じ慣行）。
+    ///
+    /// 開けなければ `Err` — **fixture へ黙って fallback しない**。呼び手（`main.rs`）が
+    /// 起動失敗として扱う。
+    pub fn open(path: &Path) -> Result<Self, String> {
+        let catalog = Arc::new(
+            motolii_plugin::reference::reference_catalog()
+                .map_err(|error| format!("plugin catalog を作れない: {error}"))?,
+        );
+        let opened = motolii_doc::open_project_resolved(
+            path,
+            &motolii_doc::ResourceLimits::production(),
+            &catalog,
+        )
+        .map_err(|error| format!("project {} を開けない: {error}", path.display()))?;
+        let writer = motolii_doc::DocumentWriter::new(opened.recovered.document, catalog).map_err(
+            |error| {
+                format!(
+                    "project {} の DocumentWriter を作れない: {error}",
+                    path.display()
+                )
+            },
+        )?;
+        let mut editor =
+            TimelineEditor::new(writer).with_project_root(path.parent().map(Path::to_path_buf));
+        seat_inspection_selection(&mut editor);
+        // 開いた直後の snapshot がそのまま「ファイルにある内容」= clean の基準。
+        let saved = Arc::clone(editor.document());
+        Ok(Self {
+            path: path.to_path_buf(),
+            session: opened.session,
+            // project root = document path の親(CLI export と同じ規約)。
+            // soundtrack 再生の asset path 解決に使う。
+            editor,
+            saved,
+            dirty_cache: std::cell::Cell::new(None),
+        })
+    }
+
+    /// writer snapshot を project ファイルへ書き戻す（`UiIntent::SaveProject` の後ろ）。
+    ///
+    /// 経路は既存の `ProjectSession::save_document`（CLI `document_edit.rs` の
+    /// `with_writer` が編集後に通すのと同じ）で、**新しい保存経路を作らない**。
+    /// journal への常時追記はここではしない（明示保存のみ）。
+    pub fn save(&mut self) -> Result<(), String> {
+        let snapshot = Arc::clone(self.editor.document());
+        self.session
+            .save_document(&snapshot, &motolii_doc::SaveOptions::default())
+            .map_err(|error| format!("save {} failed: {error}", self.path.display()))?;
+        self.saved = snapshot;
+        self.dirty_cache.set(Some((self.editor.revision(), false)));
+        Ok(())
+    }
+
+    /// 未保存の編集があるか。**保存済み内容との比較**で答える。
+    ///
+    /// revision や undo 台帳の深さの一致は根拠にしない — undo で保存時の内容へ
+    /// 戻れば clean に戻り、保存点より下へ undo してから別の編集で深さだけ揃っても
+    /// dirty のまま、が正しく出る。比較は revision が進んだ時だけやり直す。
+    pub fn is_dirty(&self) -> bool {
+        let revision = self.editor.revision();
+        if let Some((seen, dirty)) = self.dirty_cache.get() {
+            if seen == revision {
+                return dirty;
+            }
+        }
+        let current = self.editor.document();
+        let dirty = !Arc::ptr_eq(current, &self.saved) && **current != *self.saved;
+        self.dirty_cache.set(Some((revision, dirty)));
+        dirty
+    }
+
+    /// 開いている project のパス。
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// pane へ流す immutable snapshot（エディタが writer から取った cached をそのまま配る）。
+    pub fn snapshot(&self) -> Arc<motolii_doc::Document> {
+        Arc::clone(self.editor.document())
+    }
+
+    /// Timeline エディタ（読み）。revision / snapshot の照合に使う。
+    pub fn editor(&self) -> &TimelineEditor {
+        &self.editor
+    }
+
+    /// Timeline エディタ（書き）。pane の描画と統合テストの操作 API がここを通る。
+    /// writer 自体は外へ出さない — 編集は必ずエディタの操作として通る。
+    pub fn editor_mut(&mut self) -> &mut TimelineEditor {
+        &mut self.editor
+    }
+}
+
+/// 検分用: `MOTOLII_SELECT_LAYER=<id>` があれば、開いた直後にその layer を選んでおく。
+///
+/// **製品の挙動ではない** — `--screenshot` と同じ「窓を触らずに絵を確かめる」ための口で、
+/// `pane.rs` の `MOTOLII_SHELL_TRACE` と同じ扱いである。通る経路は素のクリックと同じ
+/// `select_layer` なので、選択の意味も Undo 台帳も変えない。環境変数が無い・数として
+/// 読めないときは**何もしない**（既定は従来どおり「選択なし」）。
+fn seat_inspection_selection(editor: &mut TimelineEditor) {
+    let Some(raw) = std::env::var_os("MOTOLII_SELECT_LAYER") else {
+        return;
+    };
+    let Some(id) = raw.to_str().and_then(|text| text.trim().parse::<u64>().ok()) else {
+        return;
+    };
+    editor.select_layer(motolii_doc::LayerId::from_raw(id));
+}
+
+/// 新規 project を1つ作る（空コンポ + V1 トラック1本）。
+///
+/// 意味は CLI の `new_document`（`crates/motolii-cli/src/document_debug.rs:12`）
+/// そのもので、**作ったものはそのまま `ProjectSeat::open` で開ける**
+/// （= `--project` 起動と同じ状態になる）。既にあるファイルは踏まない。
+///
+/// dialog はここに無い。呼び手（`UiIntent::NewProject`）が場所を決めてから通る。
+pub fn create_project_file(path: &Path) -> Result<(), String> {
+    if path.exists() {
+        return Err(format!("project already exists: {}", path.display()));
+    }
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let mut document = motolii_doc::Document::new_current();
+    // 2026-08-17決定: 新規projectの出力解像度既定は1920x1080(CLI `new_document`と同値。
+    // 以後の変更は`Command::SetCompositionResolution`だけが書く)。
+    document
+        .composition
+        .set_resolution(Some((1920, 1080)))
+        .map_err(|error| error.to_string())?;
+    // 受け皿のトラックが無いと clip を1本も置けない（`prepare_place_asset_clip`）。
+    let track = document
+        .track_ids
+        .allocate("V1")
+        .map_err(|error| error.to_string())?;
+    document.tracks.push(motolii_doc::Track {
+        id: track,
+        items: vec![],
+    });
+    let mut session =
+        motolii_doc::ProjectSession::acquire(path, &motolii_doc::ResourceLimits::production())
+            .map_err(|error| error.to_string())?;
+    session
+        .save_document(&document, &motolii_doc::SaveOptions::default())
+        .map_err(|error| error.to_string())
+    // session はここで落ちて lock を返す。開くのは呼び手（`reseat_project`）。
+}
+
+/// 座席を差し替える。**旧 session の lock をいつ返すかがここの全部である。**
+///
+/// - 別の project … 新しい席を**先に開いてから**旧席を落とす。開けなくても
+///   いま編集している席を失わない
+/// - 同じ project … 先に旧席を落として lock を返してから開き直す
+///   （そうしないと自分の lock に自分がぶつかる）
+///
+/// 開けなければ `Err(理由)` で、app は落とさない。dialog はここに無い。
+pub fn reseat_project(current: &mut Option<ProjectSeat>, path: &Path) -> Result<(), String> {
+    if current
+        .as_ref()
+        .is_some_and(|seat| same_project(seat.path(), path))
+    {
+        // 旧 session を先に落として lock を返す。
+        *current = None;
+    }
+    let seat = ProjectSeat::open(path)?;
+    // ここで初めて旧席（別 project の場合）が落ちる。
+    *current = Some(seat);
+    Ok(())
+}
+
+/// 同じ project を指しているか。symlink や `./` の違いで別物に見えないよう、
+/// 取れるなら canonical path で比べる。
+fn same_project(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
+
+/// OS から窓へ落ちてきた path 群を受ける。**返すのは一言の status。**
+///
+/// project が開いていないときは Document が無いので取り込めない。黙って
+/// 捨てず、**先に project を作る／開く**と案内する（v0。ドロップから
+/// 新規 project を作る意味はまだ決めていない）。
+///
+/// 落ちたものが clip になったか曲になったかは status がそのまま名指しで言う
+/// （まだ曲が無い project へ落ちた音声は曲になる — 分岐は `import_seat`）。
+pub fn admit_dropped_paths(seat: Option<&mut ProjectSeat>, paths: &[PathBuf]) -> String {
+    let Some(seat) = seat else {
+        return "open a project first — Cmd+N to create one, Cmd+O to open one".to_owned();
+    };
+    if paths.is_empty() {
+        return "nothing dropped".to_owned();
+    }
+    seat.editor_mut().import_dropped_media(paths).summary()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// journal の JSONL は `--status-log` と同型で、答え(path)まで機械可読に運ぶ。
+    /// これが崩れると `--intent-log` を読んだ側が replay を組めない。
+    #[test]
+    fn an_intent_event_round_trips_through_the_jsonl_shape() {
+        let event = IntentEvent {
+            seq: 3,
+            intent: UiIntent::NewProject {
+                path: PathBuf::from("/tmp/fresh.json"),
+            },
+        };
+        let line = serde_json::to_string(&event).expect("intent は機械可読である");
+        assert_eq!(
+            line, r#"{"seq":3,"intent":{"kind":"new_project","path":"/tmp/fresh.json"}}"#,
+            "--intent-log の1行の形"
+        );
+        let back: IntentEvent = serde_json::from_str(&line).expect("読み戻せる");
+        assert_eq!(back, event, "答えごと往復する(dialog を訊き直さない)");
+
+        let cancel = serde_json::to_string(&UiIntent::CancelExport).expect("unit variant");
+        assert_eq!(cancel, r#"{"kind":"cancel_export"}"#);
+    }
+
+    /// **落ちた行動も記録される。** intent は行動の前に journal へ入るので、
+    /// 「やろうとして失敗した」が消えない。
+    #[test]
+    fn a_failing_intent_is_recorded_before_it_is_attempted() {
+        let dir = motolii_testkit::tmp_dir("intent_failed_new");
+        let path = dir.join("fresh.json");
+        let mut gateway = ShellGateway::new(ShellTranscript::default());
+
+        assert!(
+            gateway.dispatch(UiIntent::NewProject { path: path.clone() }),
+            "1回目の New は通る"
+        );
+        assert!(
+            !gateway.dispatch(UiIntent::NewProject { path: path.clone() }),
+            "既にある project は踏まない(失敗する)"
+        );
+
+        let entries = gateway.journal().entries();
+        assert_eq!(entries.len(), 2, "失敗した行動も台帳から消えない");
+        assert_eq!(entries[0].seq, 1);
+        assert_eq!(entries[1].seq, 2);
+        assert_eq!(entries[1].intent, UiIntent::NewProject { path });
+        assert!(
+            gateway
+                .transcript()
+                .latest()
+                .is_some_and(|text| text.contains("already exists")),
+            "失敗の理由は帯に言われる: {:?}",
+            gateway.transcript().latest()
+        );
+    }
+
+    /// 座席なしの Save は Document を作らず、案内だけ言う(黙らない)。
+    #[test]
+    fn saving_without_a_seat_says_what_to_do_first() {
+        let mut gateway = ShellGateway::new(ShellTranscript::default());
+        assert!(!gateway.dispatch(UiIntent::SaveProject));
+        assert!(
+            gateway
+                .transcript()
+                .latest()
+                .is_some_and(|text| text.contains("Cmd+N") && text.contains("Cmd+O")),
+            "作る/開く口を名指しで案内する: {:?}",
+            gateway.transcript().latest()
+        );
+    }
+
+    /// `--project` 起動の座席も journal の第1行を持つ(replay 可能な列になる)。
+    #[test]
+    fn a_launch_seat_still_names_how_it_got_there() {
+        let dir = motolii_testkit::tmp_dir("intent_launch_seat");
+        let path = dir.join("launch.json");
+        create_project_file(&path).expect("create");
+        let seat = ProjectSeat::open(&path).expect("open");
+
+        let gateway = ShellGateway::seated(ShellTranscript::default(), seat);
+        assert_eq!(
+            gateway.journal().intents(),
+            vec![UiIntent::OpenProject { path }],
+            "--project の座席も『どうやって着いたか』を名乗る"
+        );
+    }
+}

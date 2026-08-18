@@ -20,6 +20,7 @@ use eframe::egui_wgpu::RenderState;
 use egui_tiles::{Container, Linear, LinearDir, Tile, TileId, Tiles, Tree, UiResponse};
 
 use super::drive::{NativePrompts, ShellPrompts, ShellTranscript};
+use super::intent::{admit_dropped_paths, create_project_file, reseat_project, ProjectSeat};
 use super::pane::{BlitzPane, PaneKind};
 use crate::browser_panel::BrowserRequest;
 use crate::export_seat::{can_start_export, ExportFinish, ExportRequest, ExportRun};
@@ -74,233 +75,6 @@ impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
     fn tab_title_for_pane(&mut self, pane: &BlitzPane) -> egui::WidgetText {
         pane.title().into()
     }
-}
-
-/// live project の座席。開いた project の `ProjectSession`（OS 排他 lock）と、
-/// Timeline エディタをひとまとめに持つ。**Document の唯一の writer はエディタの
-/// 中に1つだけ座る**（single writer）。
-///
-/// pane 側へ出て行くのは `snapshot()` の immutable snapshot だけ。
-/// 第二の Document 保持経路（cache / 読み直し）はここから先に作らない。
-pub struct ProjectSeat {
-    /// 開いている project のパス。**同じ project を開き直す時に lock を先に返す**
-    /// 判断がこれを見る（`reseat_project`）。
-    path: PathBuf,
-    /// project identity の排他 lock。app が生きているあいだ握り続け
-    /// （落とすと他プロセスが同じ project を開けてしまう）、保存（`save`）も
-    /// この lock の中の `save_document` を通る（CLI `document_edit.rs` と同じ経路）。
-    session: motolii_doc::ProjectSession,
-    /// Timeline エディタ。編集は全部（キー入力も操作 API も）この中の writer を通る。
-    editor: TimelineEditor,
-    /// 最後に project ファイルへ書いた（開いた直後はファイルにある）内容の snapshot。
-    /// dirty 判定はこれとの**内容比較**（`is_dirty`）。undo 台帳の深さや revision の
-    /// 一致では判定しない — undo で保存内容へ戻れば clean、深さが偶然揃っても
-    /// 内容が違えば dirty、が正しく出る。
-    saved: Arc<motolii_doc::Document>,
-    /// `is_dirty` の cache（判定した時の revision とその答え）。revision が
-    /// 進んでいなければ Document 比較をやり直さない（status 帯が毎フレーム見るため）。
-    dirty_cache: std::cell::Cell<Option<(u64, bool)>>,
-}
-
-impl ProjectSeat {
-    /// 実プロジェクトを開いて座席を作る。経路は既存の `open_project_resolved`
-    /// （= `ProjectSession::open` ＋ plugin 解決。`document_export.rs:18` /
-    /// `timeline_widget_lab.rs:120` と同じ慣行）。
-    ///
-    /// 開けなければ `Err` — **fixture へ黙って fallback しない**。呼び手（`main.rs`）が
-    /// 起動失敗として扱う。
-    pub fn open(path: &Path) -> Result<Self, String> {
-        let catalog = Arc::new(
-            motolii_plugin::reference::reference_catalog()
-                .map_err(|error| format!("plugin catalog を作れない: {error}"))?,
-        );
-        let opened = motolii_doc::open_project_resolved(
-            path,
-            &motolii_doc::ResourceLimits::production(),
-            &catalog,
-        )
-        .map_err(|error| format!("project {} を開けない: {error}", path.display()))?;
-        let writer = motolii_doc::DocumentWriter::new(opened.recovered.document, catalog).map_err(
-            |error| {
-                format!(
-                    "project {} の DocumentWriter を作れない: {error}",
-                    path.display()
-                )
-            },
-        )?;
-        let mut editor =
-            TimelineEditor::new(writer).with_project_root(path.parent().map(Path::to_path_buf));
-        seat_inspection_selection(&mut editor);
-        // 開いた直後の snapshot がそのまま「ファイルにある内容」= clean の基準。
-        let saved = Arc::clone(editor.document());
-        Ok(Self {
-            path: path.to_path_buf(),
-            session: opened.session,
-            // project root = document path の親(CLI export と同じ規約)。
-            // soundtrack 再生の asset path 解決に使う。
-            editor,
-            saved,
-            dirty_cache: std::cell::Cell::new(None),
-        })
-    }
-
-    /// writer snapshot を project ファイルへ書き戻す（Cmd+S の後ろ）。
-    ///
-    /// 経路は既存の `ProjectSession::save_document`（CLI `document_edit.rs` の
-    /// `with_writer` が編集後に通すのと同じ）で、**新しい保存経路を作らない**。
-    /// journal への常時追記はここではしない（明示保存のみ）。
-    pub fn save(&mut self) -> Result<(), String> {
-        let snapshot = Arc::clone(self.editor.document());
-        self.session
-            .save_document(&snapshot, &motolii_doc::SaveOptions::default())
-            .map_err(|error| format!("save {} failed: {error}", self.path.display()))?;
-        self.saved = snapshot;
-        self.dirty_cache.set(Some((self.editor.revision(), false)));
-        Ok(())
-    }
-
-    /// 未保存の編集があるか。**保存済み内容との比較**で答える。
-    ///
-    /// revision や undo 台帳の深さの一致は根拠にしない — undo で保存時の内容へ
-    /// 戻れば clean に戻り、保存点より下へ undo してから別の編集で深さだけ揃っても
-    /// dirty のまま、が正しく出る。比較は revision が進んだ時だけやり直す。
-    pub fn is_dirty(&self) -> bool {
-        let revision = self.editor.revision();
-        if let Some((seen, dirty)) = self.dirty_cache.get() {
-            if seen == revision {
-                return dirty;
-            }
-        }
-        let current = self.editor.document();
-        let dirty = !Arc::ptr_eq(current, &self.saved) && **current != *self.saved;
-        self.dirty_cache.set(Some((revision, dirty)));
-        dirty
-    }
-
-    /// 開いている project のパス。
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// pane へ流す immutable snapshot（エディタが writer から取った cached をそのまま配る）。
-    pub fn snapshot(&self) -> Arc<motolii_doc::Document> {
-        Arc::clone(self.editor.document())
-    }
-
-    /// Timeline エディタ（読み）。revision / snapshot の照合に使う。
-    pub fn editor(&self) -> &TimelineEditor {
-        &self.editor
-    }
-
-    /// Timeline エディタ（書き）。pane の描画と統合テストの操作 API がここを通る。
-    /// writer 自体は外へ出さない — 編集は必ずエディタの操作として通る。
-    pub fn editor_mut(&mut self) -> &mut TimelineEditor {
-        &mut self.editor
-    }
-}
-
-/// 検分用: `MOTOLII_SELECT_LAYER=<id>` があれば、開いた直後にその layer を選んでおく。
-///
-/// **製品の挙動ではない** — `--screenshot` と同じ「窓を触らずに絵を確かめる」ための口で、
-/// `pane.rs` の `MOTOLII_SHELL_TRACE` と同じ扱いである。通る経路は素のクリックと同じ
-/// `select_layer` なので、選択の意味も Undo 台帳も変えない。環境変数が無い・数として
-/// 読めないときは**何もしない**（既定は従来どおり「選択なし」）。
-fn seat_inspection_selection(editor: &mut TimelineEditor) {
-    let Some(raw) = std::env::var_os("MOTOLII_SELECT_LAYER") else {
-        return;
-    };
-    let Some(id) = raw.to_str().and_then(|text| text.trim().parse::<u64>().ok()) else {
-        return;
-    };
-    editor.select_layer(motolii_doc::LayerId::from_raw(id));
-}
-
-/// 新規 project を1つ作る（空コンポ + V1 トラック1本）。
-///
-/// 意味は CLI の `new_document`（`crates/motolii-cli/src/document_debug.rs:12`）
-/// そのもので、**作ったものはそのまま `ProjectSeat::open` で開ける**
-/// （= `--project` 起動と同じ状態になる）。既にあるファイルは踏まない。
-///
-/// dialog はここに無い。呼び手（`BlitzShellApp`）が場所を決めてから呼ぶ。
-pub fn create_project_file(path: &Path) -> Result<(), String> {
-    if path.exists() {
-        return Err(format!("project already exists: {}", path.display()));
-    }
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-    let mut document = motolii_doc::Document::new_current();
-    // 2026-08-17決定: 新規projectの出力解像度既定は1920x1080(CLI `new_document`と同値。
-    // 以後の変更は`Command::SetCompositionResolution`だけが書く)。
-    document
-        .composition
-        .set_resolution(Some((1920, 1080)))
-        .map_err(|error| error.to_string())?;
-    // 受け皿のトラックが無いと clip を1本も置けない（`prepare_place_asset_clip`）。
-    let track = document
-        .track_ids
-        .allocate("V1")
-        .map_err(|error| error.to_string())?;
-    document.tracks.push(motolii_doc::Track {
-        id: track,
-        items: vec![],
-    });
-    let mut session =
-        motolii_doc::ProjectSession::acquire(path, &motolii_doc::ResourceLimits::production())
-            .map_err(|error| error.to_string())?;
-    session
-        .save_document(&document, &motolii_doc::SaveOptions::default())
-        .map_err(|error| error.to_string())
-    // session はここで落ちて lock を返す。開くのは呼び手（`reseat_project`）。
-}
-
-/// 座席を差し替える。**旧 session の lock をいつ返すかがここの全部である。**
-///
-/// - 別の project … 新しい席を**先に開いてから**旧席を落とす。開けなくても
-///   いま編集している席を失わない
-/// - 同じ project … 先に旧席を落として lock を返してから開き直す
-///   （そうしないと自分の lock に自分がぶつかる）
-///
-/// 開けなければ `Err(理由)` で、app は落とさない。dialog はここに無い。
-pub fn reseat_project(current: &mut Option<ProjectSeat>, path: &Path) -> Result<(), String> {
-    if current
-        .as_ref()
-        .is_some_and(|seat| same_project(seat.path(), path))
-    {
-        // 旧 session を先に落として lock を返す。
-        *current = None;
-    }
-    let seat = ProjectSeat::open(path)?;
-    // ここで初めて旧席（別 project の場合）が落ちる。
-    *current = Some(seat);
-    Ok(())
-}
-
-/// 同じ project を指しているか。symlink や `./` の違いで別物に見えないよう、
-/// 取れるなら canonical path で比べる。
-fn same_project(a: &Path, b: &Path) -> bool {
-    match (a.canonicalize(), b.canonicalize()) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => a == b,
-    }
-}
-
-/// OS から窓へ落ちてきた path 群を受ける。**返すのは一言の status。**
-///
-/// project が開いていないときは Document が無いので取り込めない。黙って
-/// 捨てず、**先に project を作る／開く**と案内する（v0。ドロップから
-/// 新規 project を作る意味はまだ決めていない）。
-///
-/// 落ちたものが clip になったか曲になったかは status がそのまま名指しで言う
-/// （まだ曲が無い project へ落ちた音声は曲になる — 分岐は `import_seat`）。
-pub fn admit_dropped_paths(seat: Option<&mut ProjectSeat>, paths: &[PathBuf]) -> String {
-    let Some(seat) = seat else {
-        return "open a project first — Cmd+N to create one, Cmd+O to open one".to_owned();
-    };
-    if paths.is_empty() {
-        return "nothing dropped".to_owned();
-    }
-    seat.editor_mut().import_dropped_media(paths).summary()
 }
 
 /// 未保存 guard の3択。dialog（`prompt_unsaved_choice`）が返すのはこれだけで、
@@ -373,6 +147,8 @@ pub struct BlitzShellApp {
     /// Browser が見るフォルダ。`None` は既定(`docs/mocks`)。座席を失って並びを
     /// 組み直すとき(`reseat` の失敗経路)も同じ根を渡し直すために持っている。
     browser_root: Option<PathBuf>,
+    /// 原因のログ。**まだ何も書いていない**(この commit は red の側)。
+    journal: super::intent::IntentJournal,
 }
 
 impl BlitzShellApp {
@@ -458,6 +234,7 @@ impl BlitzShellApp {
             export: None,
             fixture,
             browser_root,
+            journal: super::intent::IntentJournal::default(),
         }
     }
 
@@ -497,6 +274,11 @@ impl BlitzShellApp {
     /// 窓の一言の台帳（読み）。帯が映すのは `latest()`、`--status-log` は全文を流す。
     pub(crate) fn transcript(&self) -> &ShellTranscript {
         &self.transcript
+    }
+
+    /// 原因のログ（読み）。`--intent-log` は全文を流し、replay oracle はここを読む。
+    pub(crate) fn intent_journal(&self) -> &super::intent::IntentJournal {
+        &self.journal
     }
 
     /// 座席を差し替えて、Stage を新しい Document へ座らせ直す。

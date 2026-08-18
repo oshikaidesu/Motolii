@@ -19,6 +19,7 @@
 use std::path::{Path, PathBuf};
 
 use super::drive::{DrivenShell, ScriptedPrompts, ShellTranscript};
+use super::intent::{ShellGateway, UiIntent};
 
 /// repo に入っている実 media(starter kit)。動画・画像・音声が1本ずつ在る。
 /// Browser をここへ座らせると、窓を開かずにカードを触る道が試せる。
@@ -239,4 +240,144 @@ fn double_clicking_a_card_we_cannot_admit_says_why_and_leaves_the_document_alone
         0,
         "入らなかったなら Document は動かない"
     );
+}
+
+// ---------------------------------------------------------------------------
+// ログと構造の強制(2026-08-18裁定)
+// ---------------------------------------------------------------------------
+
+/// **原因のログ**: 利用者が触った操作は、入口が違っても全部 `UiIntent` として
+/// journal に載る。
+///
+/// ここが空なら「何が起きたか(transcript)」はあっても「なぜ起きたか」が無い =
+/// replay を組めない。ドロップと Browser のダブルクリックは別の入口だが、
+/// 合流点である `AdmitPaths` として**同じ形**で残る。
+#[test]
+fn every_shell_action_lands_in_the_intent_journal() {
+    if !motolii_testkit::ffmpeg_or_skip() {
+        return;
+    }
+    let dir = motolii_testkit::tmp_dir("drive_intent_journal");
+    let project = dir.join("fresh.json");
+    let still = starter_media_dir().join("starter-still.png");
+    let prompts = ScriptedPrompts {
+        new_project_path: Some(project.clone()),
+        ..ScriptedPrompts::default()
+    };
+    let Some(mut shell) = DrivenShell::seatless_browsing(prompts, &starter_media_dir()) else {
+        return; // GPU 無し: gpu_or_skip と同じスキップポリシー
+    };
+
+    shell.click_label_containing("New Project");
+    shell.run_frames(2);
+    shell.double_click_label_containing("starter-clip.mp4");
+    shell.run_frames(2);
+    shell.drop_file(&still);
+    shell.run_frames(2);
+
+    let intents = shell.intents();
+    assert_eq!(
+        intents.len(),
+        3,
+        "New / ダブルクリック / ドロップ で 3 件。実際: {intents:#?}"
+    );
+    assert_eq!(
+        intents[0],
+        UiIntent::NewProject {
+            path: project.clone()
+        },
+        "dialog の**答え**が intent の中に入る(replay が訊き直さないため)"
+    );
+    assert!(
+        matches!(&intents[1], UiIntent::AdmitPaths { paths }
+            if paths.len() == 1 && paths[0].ends_with("starter-clip.mp4")),
+        "Browser のダブルクリックは AdmitPaths として残る。実際: {:?}",
+        intents[1]
+    );
+    assert_eq!(
+        intents[2],
+        UiIntent::AdmitPaths { paths: vec![still] },
+        "OS ドロップも同じ合流点の intent になる"
+    );
+}
+
+/// **replay oracle(常設)**: 駆動セッションで記録した intent 列を、窓を持たない
+/// 新しい shell へ再実行すると、座席・revision・track item 数・言われたことが一致する。
+///
+/// iced の time-travel に相当する検証をこれで自前に持つ。前提は「初期状態が同じ」
+/// ことなので、駆動が作った project ファイルは消してから replay する
+/// (`NewProject` は既にあるファイルを踏まないのが決定済みの意味であり、
+/// その意味ごと再現するために world を初期状態へ戻す)。
+#[test]
+fn a_recorded_session_replays_into_the_same_shell_state() {
+    if !motolii_testkit::ffmpeg_or_skip() {
+        return;
+    }
+    let dir = motolii_testkit::tmp_dir("drive_intent_replay");
+    let project = dir.join("fresh.json");
+    let still = starter_media_dir().join("starter-still.png");
+    let prompts = ScriptedPrompts {
+        new_project_path: Some(project.clone()),
+        ..ScriptedPrompts::default()
+    };
+    let Some(mut shell) = DrivenShell::seatless_browsing(prompts, &starter_media_dir()) else {
+        return;
+    };
+
+    shell.click_label_containing("New Project");
+    shell.run_frames(2);
+    shell.double_click_label_containing("starter-clip.mp4");
+    shell.run_frames(2);
+    shell.drop_file(&still);
+    shell.run_frames(2);
+
+    let intents = shell.intents();
+    let driven_path = shell.project_path();
+    let driven_revision = shell.revision();
+    let driven_items = shell.track_item_count();
+    let driven_reports = shell.reports();
+    assert!(driven_items > 0, "replay で比べる中身がまず要る");
+    assert!(!intents.is_empty(), "記録が空なら replay は何も言えない");
+
+    // 座席は project ファイルの OS lock を握っている。replay が同じ project を
+    // 開けるよう、先に窓ごと落とす(lock を返す)。
+    drop(shell);
+    // world を初期状態へ戻す: NewProject が作ったファイルだけを消す。
+    std::fs::remove_file(&project).expect("駆動が作った project を消して初期状態へ戻す");
+
+    let replayed = ShellGateway::replay(&intents);
+
+    assert_eq!(
+        replayed.project().map(|seat| seat.path().to_path_buf()),
+        driven_path,
+        "replay は同じ project へ座り直す"
+    );
+    assert_eq!(
+        replayed.revision(),
+        driven_revision,
+        "writer 世代が一致する(同じ command 列が通った)"
+    );
+    assert_eq!(
+        replayed.track_item_count(),
+        driven_items,
+        "帯だけ揃って Document が違うのは不合格"
+    );
+
+    // 結果のログの要点: replay が言ったことは、駆動が言ったことの中に
+    // **同じ順で**現れる(駆動側には面が言った一言も混ざるので部分列で見る)。
+    let replayed_reports: Vec<String> = replayed
+        .transcript()
+        .entries()
+        .into_iter()
+        .map(|event| event.text)
+        .collect();
+    assert!(!replayed_reports.is_empty(), "replay も言うべきことを言う");
+    let mut driven = driven_reports.iter();
+    for line in &replayed_reports {
+        assert!(
+            driven.any(|seen| seen == line),
+            "replay の一言 {line:?} が駆動セッションの台帳に同じ順で無い。\n\
+             駆動: {driven_reports:#?}\nreplay: {replayed_reports:#?}"
+        );
+    }
 }

@@ -56,13 +56,17 @@ mod app;
 mod drive;
 #[cfg(test)]
 mod drive_tests;
+/// **原因のログとその唯一の実行口**(2026-08-18裁定「ログと構造の強制」の第1弾)。
+/// 利用者の操作は `UiIntent` になって journal に載り、`ShellGateway` だけが実行する。
+/// journal を通らずに製品状態へ着く道は `tests/shell_intent_gateway_fence.rs` が塞ぐ。
+mod intent;
 mod pane;
 mod runner;
 
 pub(crate) use app::BlitzShellApp;
-pub use app::{
-    admit_dropped_paths, create_project_file, decide_unsaved, reseat_project, ProjectSeat,
-    UnsavedChoice, UnsavedDecision,
+pub use app::{decide_unsaved, UnsavedChoice, UnsavedDecision};
+pub use intent::{
+    admit_dropped_paths, create_project_file, reseat_project, IntentEvent, ProjectSeat, UiIntent,
 };
 pub use pane::{BlitzPane, PaneKind};
 pub use runner::{run_blitz_shell, BlitzShellLaunch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES};
