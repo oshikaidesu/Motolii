@@ -8,5 +8,5 @@
 # 属さなくなり、`exclude` が効く。
 [workspace]
 resolver = "2"
-members = ["probe"]
+members = ["probe", "timeline"]
 exclude = ["vendor"]

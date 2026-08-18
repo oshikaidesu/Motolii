@@ -1,0 +1,36 @@
+iced 仮タイムライン(spikes/iced-rerun-embed-probe/timeline)の frame 時間実測
+2026-08-18 / macOS 24.5.0 / release ビルド / 窓 1280x520 / 60Hz ディスプレイ
+
+読み方
+------
+「draw」= canvas::Program::draw が幾何を組み立てるのに掛かった時間(µs 計測)。
+「frame」= window::frames() が返す描画時刻の差の指数移動平均。
+canvas の Cache は使っていない(egui の即時モードと同じ毎フレーム作り直しに揃えるため)。
+連続再描画は RedrawRequested → Action::request_redraw() で強制している。
+
+窓のタイトルバーと画面下端の HUD の両方に同じ値が出る。下は撮影時の読み値。
+
+--clips 24(既定)   timeline-24-clips.png
+  タイトル: iced timeline probe — 24 clips / draw 0.04 ms / frame 16.55 ms
+  HUD     : 24 clips (24 drawn) | draw 0.04 ms | frame 16.51 ms | 4.00 px/frame | playhead 90 | sel 0
+
+--clips 500          timeline-500-clips.png
+  タイトル: iced timeline probe — 500 clips / draw 0.27 ms / frame 16.53 ms
+  HUD     : 500 clips (500 drawn) | draw 0.37 ms | frame 16.64 ms | 0.48 px/frame | playhead 90 | sel 0
+  ※ 500本すべてが画面内。culling で減っていない(起動時に全部入る zoom を当てている)。
+
+--clips 5000(頭打ちの位置を見るための対照。PNG は残していない)
+  タイトル: iced timeline probe — 5000 clips / draw 1.8 ms(撮影時の瞬間値)
+  HUD     : 5000 clips (5000 drawn) | draw 1.57 ms | frame 16.57 ms | 0.05 px/frame | playhead 90 | sel 0
+
+まとめ
+------
+frame 間隔はどの条件でも 16.5〜16.6 ms、つまり 60Hz の vsync に張り付いたまま。
+5000 clips(draw 1.57 ms)でも 16.6 ms の予算の 1/10 しか使っておらず、
+この範囲では描画が律速になっていない。
+
+同時に走らせた検証
+------------------
+cargo test -p iced-timeline-probe → 20 passed; 0 failed
+(4ジェスチャの判断部分を窓なしで確かめるテスト。egui 版は同じ判断が
+ show(&mut self, ui) の中にあるので ui 無しでは呼べない。)

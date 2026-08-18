@@ -8,6 +8,11 @@
 
 判断はしない。測ったことだけを置く。
 
+> この workspace には**もう1つ**パッケージがある。`timeline/` は同じ vendored iced の上で
+> 「密な編集面(仮タイムライン)を Elm 構造で書くと何行になり、egui 版とどう違うか」を測る、
+> 埋め込みとは独立した DX 実測である。起動コマンドと実測値は `timeline/README.md`。
+> `cargo run -j 5 --release -p iced-timeline-probe -- --clips 500`
+
 ## 何を測ったか
 
 | | 主張 | 結果 |
