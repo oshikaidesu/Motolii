@@ -73,6 +73,32 @@ Elm 性の不変量(UI層=入力→intent の翻訳だけ、状態変化は repl
   依存 836 package・clean build 5分34秒(M4)・増分2〜4秒。0.14→0.15-dev の
   API 差では詰まらなかった(詰まりは wgpu 29 側)。
 
+## egui との共存(入力ブリッジ)の実測(同日・3巡目)
+
+「Rerun の egui ビューと iced は共存できないのか」への実測回答。ブリッジ
+(`probe/src/bridge.rs`、iced event→`egui::RawInput` 翻訳、442行の半分は説明とテスト)
+を書き、iced 窓の中の SpatialStage を **Rerun 自身の `EyeController` で** orbit させた
+(`set_camera` 直呼びなし)。証拠は `evidence/iced-rerun-embed-probe/interactive-bridge-*`。
+
+- **入力到達: 成立** — 合成 drag 12手で `last_eye()` が動き、wheel 6ノッチで軌道半径
+  0.457 移動。翻訳の薄さは「原点補正と pixels_per_point の2点だけ」
+- **ドラッグ中の絵: iced device では凍る** — orbit 目印が `LineRenderer`(3 bind
+  groups)で描かれ、`max_bind_groups=2` により**コマンドバッファごと**蹴られる。
+  同じ台本を re_renderer 記述の device で回した対照群は18フレーム全追随・検証エラー0
+  (eye 数列は両者で完全一致=切れているのは絵だけ)。**壁は iced の定数1つ**
+- **姿勢の保持: iced 無関係の既知 seam** — `EyeController::save_to_blueprint` の
+  `AppendToStore` を SpatialStage が捨てるため補間で戻る。これは egui ホストの製品でも
+  同じ(orbit 持続は S2 レーンの残件。[fork seam ledger](2026-08-18-rerun-fork-seam-ledger.md))
+- **cursor: 写る**(egui 26種中 `VerticalText` 以外対応、構造的に1フレーム遅れ)
+- **構造的な穴2つ**: iced の `shader::Program` は (1) egui の repaint_delay に答える
+  口が無い(毎フレーム描画で回避=省電力性を失う)、(2) `request_input_method` を
+  呼べず **島の中へ IME を届ける経路が無い**。島を Stage(view操作専用・text入力
+  なし)に限る設計なら踏まない
+
+**共存の結論**: 「できない」ではない。island 方式(アプリ=iced Message列、
+Stage 1面=egui の島)は、iced fork の定数修正1つと既知の S2 残件を払えば成立する。
+島に text 入力を置かない限り IME の穴も踏まない。
+
 ## 判断
 
 - 現時点では乗り換えの実測根拠なし(「繋がっていない」= 0 件)。
