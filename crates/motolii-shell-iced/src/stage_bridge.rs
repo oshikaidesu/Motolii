@@ -37,9 +37,20 @@ pub const POINTS_PER_SCROLL_LINE: f32 = 40.0;
 /// modifiers のビット表現。`EmbeddedSpatialStage::pointer` / `scroll` の
 /// `modifiers: u32` と**同じ読み方**(あちらの `stage_modifiers` が正)。
 pub fn modifiers_bits(modifiers: iced::keyboard::Modifiers) -> u32 {
-    // red: 未実装。
-    let _ = modifiers;
-    0
+    let mut bits = 0;
+    if modifiers.shift() {
+        bits |= 1;
+    }
+    if modifiers.control() {
+        bits |= 2;
+    }
+    if modifiers.alt() {
+        bits |= 4;
+    }
+    if modifiers.logo() {
+        bits |= 8;
+    }
+    bits
 }
 
 /// この橋を渡る1件。座標は widget 左上原点の**論理**座標。
@@ -84,9 +95,73 @@ pub fn translate(
     bounds: Rectangle,
     cursor: mouse::Cursor,
 ) -> Vec<StageInput> {
-    // red: 未実装。
-    let _ = (event, bounds, cursor);
-    Vec::new()
+    let local = |point: iced::Point| (point.x - bounds.x, point.y - bounds.y);
+    let cursor_local = || cursor.position().map(local);
+
+    match event {
+        iced::Event::Mouse(mouse::Event::CursorMoved { position }) => {
+            let (x, y) = local(*position);
+            vec![StageInput::Pointer {
+                phase: PointerPhase::Move,
+                button: StagePointerButton::Primary,
+                x,
+                y,
+            }]
+        }
+        iced::Event::Mouse(mouse::Event::CursorLeft) => vec![StageInput::Pointer {
+            phase: PointerPhase::Cancel,
+            button: StagePointerButton::Primary,
+            // 位置は意味を持たない(Cancel は「もう何も指していない」)。取り出す側が
+            // 直近の位置に差し替える。
+            x: f32::NAN,
+            y: f32::NAN,
+        }],
+        iced::Event::Mouse(mouse::Event::ButtonPressed(button)) => {
+            let (Some(button), Some((x, y))) = (button_of(*button), cursor_local()) else {
+                return Vec::new();
+            };
+            vec![StageInput::Pointer {
+                phase: PointerPhase::Down,
+                button,
+                x,
+                y,
+            }]
+        }
+        iced::Event::Mouse(mouse::Event::ButtonReleased(button)) => {
+            let (Some(button), Some((x, y))) = (button_of(*button), cursor_local()) else {
+                return Vec::new();
+            };
+            vec![StageInput::Pointer {
+                phase: PointerPhase::Up,
+                button,
+                x,
+                y,
+            }]
+        }
+        iced::Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
+            let Some((x, y)) = cursor_local() else {
+                return Vec::new();
+            };
+            let (delta_x, delta_y) = match delta {
+                mouse::ScrollDelta::Lines { x, y } => {
+                    (x * POINTS_PER_SCROLL_LINE, y * POINTS_PER_SCROLL_LINE)
+                }
+                mouse::ScrollDelta::Pixels { x, y } => (*x, *y),
+            };
+            vec![StageInput::Scroll {
+                delta_x,
+                delta_y,
+                x,
+                y,
+            }]
+        }
+        iced::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(modifiers)) => {
+            vec![StageInput::Modifiers(modifiers_bits(*modifiers))]
+        }
+        // キーボード本体・IME・タッチは M-2 の範囲外(spike README 11 番の実測どおり
+        // shader widget には IME を要求する口も無い)。
+        _ => Vec::new(),
+    }
 }
 
 #[cfg(test)]

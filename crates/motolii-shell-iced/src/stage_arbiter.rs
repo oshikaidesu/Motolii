@@ -81,11 +81,65 @@ pub fn route(
     input: &StageInput,
     grab: Option<&GrabRegion>,
 ) -> Route {
-    // red: 未実装。全部素通しで流す。
-    let _ = grab;
-    let _ = input;
-    let _ = owner;
-    Route::Forward
+    // いまの所有者に従う行き先。状態遷移の後で使うものではない点に注意
+    // (`Up` は「所有者に従って流してから」素通しへ戻る)。
+    let follow_owner = |owner: &StagePointerOwner| match owner {
+        StagePointerOwner::Grabbing { .. } => Route::Swallow,
+        StagePointerOwner::PassThrough | StagePointerOwner::Orbiting { .. } => Route::Forward,
+    };
+
+    match input {
+        StageInput::Modifiers(_) => Route::Forward,
+        StageInput::Scroll { .. } => follow_owner(owner),
+        StageInput::Pointer {
+            phase: PointerPhase::Move,
+            ..
+        } => follow_owner(owner),
+        StageInput::Pointer {
+            phase: PointerPhase::Down,
+            button,
+            x,
+            y,
+        } => match *owner {
+            StagePointerOwner::PassThrough => {
+                if grab.is_some_and(|region| region.contains(*x, *y)) {
+                    *owner = StagePointerOwner::Grabbing { button: *button };
+                    Route::Swallow
+                } else {
+                    *owner = StagePointerOwner::Orbiting { button: *button };
+                    Route::Forward
+                }
+            }
+            // 後から来たボタンはいまの所有者に従う(状態は変えない)。
+            StagePointerOwner::Orbiting { .. } => Route::Forward,
+            StagePointerOwner::Grabbing { .. } => Route::Swallow,
+        },
+        StageInput::Pointer {
+            phase: PointerPhase::Up,
+            button,
+            ..
+        } => {
+            let route = follow_owner(owner);
+            match *owner {
+                StagePointerOwner::Orbiting { button: held } if held == *button => {
+                    *owner = StagePointerOwner::PassThrough;
+                }
+                StagePointerOwner::Grabbing { button: held } if held == *button => {
+                    *owner = StagePointerOwner::PassThrough;
+                }
+                _ => {}
+            }
+            route
+        }
+        StageInput::Pointer {
+            phase: PointerPhase::Cancel,
+            ..
+        } => {
+            let route = follow_owner(owner);
+            *owner = StagePointerOwner::PassThrough;
+            route
+        }
+    }
 }
 
 #[cfg(test)]

@@ -69,6 +69,11 @@ fn the_bind_group_floor_reaches_iceds_real_device() {
         "床を上げたのに iced の device が {raised} 個しか取得していない\
          (要求 {RERUN_MIN_MAX_BIND_GROUPS})。fork seam 2 が効いていない: {observed:?}"
     );
+    // 実測値を残す(`--nocapture` / 証拠採取用)。
+    println!(
+        "observed max_bind_groups on iced's headless device: before floor = {:?}, after floor = {raised}",
+        observed.first()
+    );
 }
 
 /// [`RERUN_MIN_MAX_BIND_GROUPS`] が `re_renderer` の実要求を下回っていないこと。

@@ -117,8 +117,13 @@ impl Shell {
                 self.gateway.poll_export();
             }
             Message::StageReported(lines) => {
-                // red: 未実装 — まだ transcript へ写していない。
-                let _ = lines;
+                // **intent ではない** — Stage 島の報告(初期化・texture import・描画の
+                // 失敗)を帯 / `--status-log` へ写すだけ。journal には載せない
+                // (replay は Stage の故障まで再現しない)。egui shell の pane が
+                // `transcript.report(...)` している行と同じ層である。
+                for line in lines {
+                    self.gateway.transcript().report(line);
+                }
             }
         }
         Outcome::Stay

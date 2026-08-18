@@ -200,6 +200,9 @@ fn a_drag_through_the_widget_reaches_the_stage_without_validation_errors() {
     );
 
     let (forwarded_before, _) = stage_island::input_tally();
+    // Simulator の cursor は event からは動かない(`point_at` だけが動かす)。
+    // 押下・離しの位置は cursor から採るので、先に指しておく。
+    ui.point_at(iced::Point::new(100.0, 100.0));
     let mut events = vec![iced::Event::Mouse(iced::mouse::Event::CursorMoved {
         position: iced::Point::new(100.0, 100.0),
     })];
@@ -217,7 +220,15 @@ fn a_drag_through_the_widget_reaches_the_stage_without_validation_errors() {
     let _ = ui.simulate(events);
 
     // prepare(= stage へ流す)を回してから、報告の吐き出しをもう1周。
-    let _ = ui.snapshot(&iced::Theme::Dark);
+    // ついでにドラッグ後の絵を証拠に残す。評価済みフレームの席は process 全体で
+    // 1つなので、隣のテストが差した4象限が写っていることがある — それ自体が
+    // 「ドラッグを流しても document camera(sticky)の間は視点が変わらない」
+    // (Rerun fork 台帳 §4 の既知の相互作用)の絵になっている。
+    let snapshot = ui.snapshot(&iced::Theme::Dark).expect("snapshot が撮れる");
+    let dir = evidence_dir();
+    std::fs::create_dir_all(&dir).expect("evidence dir");
+    let _ = std::fs::remove_file(dir.join("stage-after-drag-wgpu.png"));
+    let _ = snapshot.matches_image(dir.join("stage-after-drag.png"));
     let _ = ui.simulate([common::redraw()]);
 
     let (forwarded_after, _) = stage_island::input_tally();
@@ -272,6 +283,8 @@ fn a_gesture_inside_the_dummy_grab_region_is_swallowed() {
     );
 
     let (_, swallowed_before) = stage_island::input_tally();
+    // 押下位置(= 掴み領域の中)を cursor に指しておく(`point_at` の注記と同じ)。
+    ui.point_at(iced::Point::new(60.0, 60.0));
     let events = vec![
         iced::Event::Mouse(iced::mouse::Event::CursorMoved {
             position: iced::Point::new(60.0, 60.0),
