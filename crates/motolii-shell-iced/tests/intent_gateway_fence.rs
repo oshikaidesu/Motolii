@@ -16,6 +16,7 @@
 const SCANNED: &[(&str, &str)] = &[
     ("lib.rs", include_str!("../src/lib.rs")),
     ("main.rs", include_str!("../src/main.rs")),
+    ("browser.rs", include_str!("../src/browser.rs")),
     ("intent_log.rs", include_str!("../src/intent_log.rs")),
     ("jsonl.rs", include_str!("../src/jsonl.rs")),
     ("launch.rs", include_str!("../src/launch.rs")),
@@ -24,6 +25,7 @@ const SCANNED: &[(&str, &str)] = &[
     ("shell.rs", include_str!("../src/shell.rs")),
     ("status_log.rs", include_str!("../src/status_log.rs")),
     ("view.rs", include_str!("../src/view.rs")),
+    ("widgets_stub.rs", include_str!("../src/widgets_stub.rs")),
     ("window_input.rs", include_str!("../src/window_input.rs")),
 ];
 

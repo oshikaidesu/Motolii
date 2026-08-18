@@ -26,10 +26,20 @@
 //!   (`tests/` 配下)。近道キーと OS ドロップが購読ではなく widget 木
 //!   ([`window_input`])を通るのは、運転席から注入できる道を1本に保つためである
 //!
+//! ## M-4a で増えたもの
+//!
+//! - **Browser pane**([`browser`] + `view::browser_panel`)。source rail は
+//!   機能する3席だけ(All media / Project / Recent)、カードの単クリック=選択、
+//!   ダブルクリック=`UiIntent::AdmitPaths`(OS ドロップと同じ合流点)。
+//!   OS ドラッグが窓の上に居るあいだの受け皿表示は [`widgets_stub::drop_zone`]
+//!   (部品契約の薄い stub。本物の widgets module が来たら差し替える)
+//!
 //! ## ここに無いもの(意図的に)
 //!
-//! - Rerun の Stage 島(M-2)、Timeline(M-3)、Browser / Inspector(M-4)。
+//! - Rerun の Stage 島(M-2)、Timeline(M-3)、Inspector(M-4b)。
 //!   Undo / Redo ボタンは編集面と一緒に来る
+//! - Browser の preview 再生・検索/フィルタ・Collections・Timeline への DnD 受け
+//!   (M-4a の非目標)
 //! - 引数なし起動の「続きが開く」(egui 側 wave D の `last_project`)。M-2 以降
 //! - egui。**この crate に egui 系の直接依存は1つも無い**
 //!   (柵: `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs` の
@@ -46,6 +56,7 @@ mod prompts;
 mod shell;
 mod status_log;
 pub mod view;
+pub mod widgets_stub;
 mod window_input;
 
 pub use browser::{BrowserCard, BrowserPane, BrowserRail};

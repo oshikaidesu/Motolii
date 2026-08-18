@@ -59,7 +59,7 @@ fn max_size() -> (u32, u32) {
 ///
 /// 落ちた理由は**呼び手へ返す**。`eprintln!` で書くと、窓しか無い運転席では
 /// 誰も読まないまま「画像が出ない」だけが残る(2026-08-18 外部診断 F-09)。
-pub(crate) fn prepare(items: &[BrowserItem]) -> Vec<Result<PathBuf, String>> {
+pub fn prepare(items: &[BrowserItem]) -> Vec<Result<PathBuf, String>> {
     items
         .iter()
         .map(|item| thumbnail_for(&item.path))

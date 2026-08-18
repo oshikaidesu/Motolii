@@ -17,11 +17,14 @@
 //! Undo / Redo ボタンは編集面(Timeline)と一緒に来る(M-3)。**触れそうで触れない
 //! 物を先に置かない**(2026-08-12 の Q0)。
 
-use iced::widget::{button, column, container, row, text};
+use iced::widget::{button, column, container, mouse_area, row, scrollable, space, text};
 use iced::{Center, Element, Fill};
 
+use crate::browser::{BrowserCard, BrowserRail};
 use crate::message::Message;
 use crate::shell::Shell;
+// INTEGRATION: swap to widgets module(部品契約の本物が来たら差し替える)。
+use crate::widgets_stub::{drop_zone, DropEvent};
 use crate::window_input::window_input;
 
 /// スタート画面の見出し。
@@ -99,7 +102,7 @@ pub fn exporting_label(seconds: u64) -> String {
 /// [`Message`] になる。中身は「座席の有無で変わる本体」と「status 帯」の2段。
 pub fn view(shell: &Shell) -> Element<'_, Message> {
     let body = if shell.is_seated() {
-        seated()
+        seated(shell)
     } else {
         start_screen()
     };
@@ -145,9 +148,162 @@ fn action_button<'a>(name: &'a str, shortcut: &'a str, message: Message) -> Elem
         .into()
 }
 
-/// 座席が在るときの画面(M-1 は一行だけ)。
-fn seated<'a>() -> Element<'a, Message> {
-    text(SEATED_PLACEHOLDER).into()
+/// 座席が在るときの画面。左に Browser pane(M-4a)、残りは M-2 / M-3 が
+/// Stage / Timeline を持ってくるまで正直な一行のまま(空箱の編集面を置かない)。
+fn seated(shell: &Shell) -> Element<'_, Message> {
+    row![
+        browser_panel(shell),
+        container(text(SEATED_PLACEHOLDER)).center(Fill),
+    ]
+    .into()
+}
+
+/// Browser pane の幅(窓 980px の左に1枚。panel の resize / dock 文法は
+/// M-5 以降の統合 wave で来る)。
+const BROWSER_PANEL_W: f32 = 316.0;
+/// grid の列数。
+const BROWSER_GRID_COLUMNS: usize = 3;
+
+/// Browser pane 1面。上から見出し(+受け皿表示)、source rail と grid、
+/// selection tray。**Document を書く道はここに無い** — カードのダブルクリックは
+/// Message になり、殻が `UiIntent::AdmitPaths` へ写す。
+fn browser_panel(shell: &Shell) -> Element<'_, Message> {
+    let pane = shell.browser();
+    let cards = shell.browser_cards();
+
+    // selection tray の名乗り(grid が card を消費する前に写す)。
+    let tray_line = pane
+        .selected_id()
+        .and_then(|selected| {
+            cards
+                .iter()
+                .find(|card| card.id == selected)
+                .map(|card| browser_tray_label(&card.name))
+        })
+        .unwrap_or_else(|| BROWSER_NO_SELECTION.to_owned());
+
+    // source rail(機能する3席だけ = Q0)。選択中は primary、他は text —
+    // 色は iced 既定 theme のまま(独自 hex を発明しない)。
+    let mut rail = column![].spacing(2).width(96);
+    for (label, value) in [
+        (BROWSER_RAIL_ALL, BrowserRail::AllMedia),
+        (BROWSER_RAIL_PROJECT, BrowserRail::Project),
+        (BROWSER_RAIL_RECENT, BrowserRail::Recent),
+    ] {
+        let style = if pane.rail() == value {
+            button::primary
+        } else {
+            button::text
+        };
+        rail = rail.push(
+            button(text(label).size(13))
+                .style(style)
+                .width(Fill)
+                .on_press(Message::BrowserRailChosen(value)),
+        );
+    }
+
+    // grid(空なら Q7 の正直な空状態 — 幽霊 card を出さない)。
+    let body: Element<'_, Message> = if cards.is_empty() {
+        let line = match pane.rail() {
+            BrowserRail::AllMedia => browser_empty_all(&pane.library_root_name()),
+            BrowserRail::Project => BROWSER_EMPTY_PROJECT.to_owned(),
+            BrowserRail::Recent => BROWSER_EMPTY_RECENT.to_owned(),
+        };
+        container(text(line).size(12)).padding(8).width(Fill).into()
+    } else {
+        let mut grid = column![].spacing(4).width(Fill);
+        let mut cells = row![].spacing(4);
+        let mut in_row = 0;
+        for card in cards {
+            cells = cells.push(browser_card(card));
+            in_row += 1;
+            if in_row == BROWSER_GRID_COLUMNS {
+                grid = grid.push(cells);
+                cells = row![].spacing(4);
+                in_row = 0;
+            }
+        }
+        if in_row > 0 {
+            // 端数行でも cell 幅を揃える(空席で埋める)。
+            while in_row < BROWSER_GRID_COLUMNS {
+                cells = cells.push(space::horizontal());
+                in_row += 1;
+            }
+            grid = grid.push(cells);
+        }
+        scrollable(grid).height(Fill).into()
+    };
+
+    let mut panel = column![text(BROWSER_HEADER).size(13)]
+        .spacing(6)
+        .padding(8)
+        .width(BROWSER_PANEL_W)
+        .height(Fill);
+    if pane.drop_hover() {
+        // 受け皿の点灯(**表示だけ**。取り込みは窓ぜんたいの AdmitPaths)。
+        panel = panel.push(
+            container(text(BROWSER_DROP_TARGET).size(12))
+                .padding(6)
+                .width(Fill)
+                .style(container::primary),
+        );
+    }
+    panel = panel.push(row![rail, body].spacing(8).height(Fill));
+    panel = panel.push(text(tray_line).size(12));
+
+    drop_zone(
+        container(panel)
+            .style(container::bordered_box)
+            .height(Fill)
+            .into(),
+        shell.is_seated(),
+        |event| Message::BrowserDropHover(matches!(event, DropEvent::HoverEnter)),
+    )
+}
+
+/// card 1枚。click=選択 / double-click=配置(Q1 の共通文法)。
+fn browser_card(card: BrowserCard) -> Element<'static, Message> {
+    let glyph = match card.kind {
+        "video" => "\u{25b6}", // ▶(egui 版 draw_thumb と同じ割当)
+        "audio" => "\u{266a}", // ♪
+        _ => "\u{25e7}",       // ▧
+    };
+    let thumb: Element<'static, Message> = match card.thumbnail {
+        // 縮小実体(既存座席の cache)を載せる。元画像へは戻さない。
+        Some(path) => iced::widget::image(iced::widget::image::Handle::from_path(path))
+            .width(Fill)
+            .height(48)
+            .into(),
+        None => container(text(glyph).size(16))
+            .center_x(Fill)
+            .height(48)
+            .into(),
+    };
+    let selected = card.selected;
+    let body = column![thumb, text(card.name).size(11), text(card.meta).size(9)].spacing(2);
+    mouse_area(
+        container(body)
+            .padding(4)
+            .width(Fill)
+            .style(move |theme| browser_card_style(theme, selected)),
+    )
+    .interaction(iced::mouse::Interaction::Pointer)
+    .on_press(Message::BrowserCardClicked(card.id.clone()))
+    .on_double_click(Message::BrowserCardActivated(card.id))
+    .into()
+}
+
+/// card の面。選択の強調も iced 既定 theme の palette から取る
+/// (独自 hex を発明しない — theme レーンが別走中)。
+fn browser_card_style(theme: &iced::Theme, selected: bool) -> container::Style {
+    let palette = theme.palette();
+    let mut style = container::rounded_box(theme);
+    if selected {
+        style.background = Some(palette.primary.weak.color.into());
+        style.border = style.border.color(palette.primary.strong.color).width(1);
+    }
+    style
 }
 
 /// status 帯 — **信用の可視化と、窓が言ったことの最新1行**。
