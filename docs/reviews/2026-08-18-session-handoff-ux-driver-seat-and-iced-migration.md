@@ -21,7 +21,7 @@
     (camera seat。乖離台帳=[rerun fork seam ledger](2026-08-18-rerun-fork-seam-ledger.md))
   - `oshikaidesu/iced` **新設 fork** branch `motolii/host-seams` = `73e686ee`
     (web-sys 釘打ち解除+bind groups floor。台帳=[iced fork seam ledger](2026-08-18-iced-fork-seam-ledger.md))
-- 最終 gate: `cargo test --workspace --no-fail-fast -j 5` **失敗ゼロ**(6545c039 時点)
+- 最終 gate: `cargo test --workspace --no-fail-fast -j 5` **失敗ゼロ**(tip `984233cf` 時点)
 - **M-1 は着地済み**(`984233cf`、引き継ぎ作成後に返却→検収→merge→gate失敗ゼロ):
   iced 殻が Save/未保存3択/OSドロップ/Export開始・中止/replay oracle/--status-log
   まで持ち、iced_test 27テスト。注入可否の実測表と手動確認事項(実窓での
@@ -44,7 +44,7 @@
 **機械検証済み:**
 - 全レーン red 先行→green→workspace gate(no-fail-fast)。gate は各 merge 後に実行し全て失敗ゼロ
 - E2E: CLI鎖(new→import→place→set-soundtrack→export)を実素材で実走し ffprobe+画素目視。画像も赤PNG→出力画素(250,0,0)まで
-- replay oracle: 駆動セッション記録→世界を消して headless replay→座席/revision/帯一致(egui 版)。iced 版は M-1 で施工中
+- replay oracle: 駆動セッション記録→世界を消して headless replay→座席/revision/帯一致(egui 版・iced 版の両方が常設)
 - E0/camera/遮蔽/iced埋め込み/入力ブリッジ: 全て pixel 証拠つき probe(evidence/ 配下)
 - フェンス群: eprintln(6ファイル)・gateway迂回・toolkit dep policy(egui/iced 両建て)・meta-fence
 
@@ -61,7 +61,7 @@
 ## 既知の欠陥・残タスク(修正順は未決。ここが残作業の正本)
 
 **iced 移行(地図= [移行裁定](2026-08-18-iced-host-migration-decision.md)):**
-- M-1 走行中(上記)。M-2 Stage島(bind groups seam の実効確認が受入条件・fork台帳§4§6)、M-3 Timeline(spike `spikes/iced-rerun-embed-probe/timeline/` 342行が種・D2結線)、M-4 Browser/Inspector、M-5 切替(台本P1-P5+replay green→既定bin切替・egui shellは`--legacy`)
+- M-1 着地済み(上記)。次= M-2 Stage島(bind groups seam の実効確認が受入条件・fork台帳§4§6)、M-3 Timeline(spike `spikes/iced-rerun-embed-probe/timeline/` 342行が種・D2結線)、M-4 Browser/Inspector、M-5 切替(台本P1-P5+replay green→既定bin切替・egui shellは`--legacy`)
 - iced 側の既知穴: WheelScrolled が modifiers を運ばない/canvas にフォーカス概念なし/AccessKit 未統合(後退として裁定に明記)/shader widget に repaint 経済・IME 経路なし(島がview専用なら踏まない)
 
 **egui shell(切替まで現役):**
