@@ -17,11 +17,12 @@
 //! Undo / Redo ボタンは編集面(Timeline)と一緒に来る(M-3)。**触れそうで触れない
 //! 物を先に置かない**(2026-08-12 の Q0)。
 
-use iced::widget::{button, column, container, row, text};
+use iced::widget::{button, column, container, row, rule, text};
 use iced::{Center, Element, Fill};
 
 use crate::message::Message;
 use crate::shell::Shell;
+use crate::theme::style;
 use crate::window_input::window_input;
 
 /// スタート画面の見出し。
@@ -85,7 +86,7 @@ pub fn view(shell: &Shell) -> Element<'_, Message> {
 fn start_screen<'a>() -> Element<'a, Message> {
     column![
         text(TITLE).size(34),
-        text(TAGLINE),
+        text(TAGLINE).style(style::text_secondary),
         column![
             action_button(NEW_PROJECT, NEW_PROJECT_SHORTCUT, Message::NewProjectPressed),
             action_button(
@@ -96,7 +97,7 @@ fn start_screen<'a>() -> Element<'a, Message> {
         ]
         .spacing(8)
         .align_x(Center),
-        text(DROP_HINT),
+        text(DROP_HINT).style(style::text_muted),
     ]
     .spacing(18)
     .align_x(Center)
@@ -105,15 +106,23 @@ fn start_screen<'a>() -> Element<'a, Message> {
 
 /// 名前と近道を1つのボタンに並べる。名前は独立した text なので、
 /// 運転席は `"New Project…"` の完全一致で掴める。
+/// 近道は添え物なので muted — 名前と同格の顔をさせない。
 fn action_button<'a>(name: &'a str, shortcut: &'a str, message: Message) -> Element<'a, Message> {
-    button(row![text(name).size(16), text(shortcut).size(16)].spacing(12))
-        .on_press(message)
-        .into()
+    button(
+        row![
+            text(name).size(16),
+            text(shortcut).size(16).style(style::text_muted)
+        ]
+        .spacing(12),
+    )
+    .style(style::action)
+    .on_press(message)
+    .into()
 }
 
 /// 座席が在るときの画面(M-1 は一行だけ)。
 fn seated<'a>() -> Element<'a, Message> {
-    text(SEATED_PLACEHOLDER).into()
+    text(SEATED_PLACEHOLDER).style(style::text_secondary).into()
 }
 
 /// status 帯 — **信用の可視化と、窓が言ったことの最新1行**。
@@ -142,13 +151,13 @@ fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
     // **実行中に Export は出さない** = 二重起動の口が無い。
     if let Some(seconds) = shell.export_elapsed_seconds() {
         band = band.push(text(exporting_label(seconds)).size(13));
-        let mut cancel = button(text(CANCEL_EXPORT).size(13));
+        let mut cancel = button(text(CANCEL_EXPORT).size(13)).style(style::action);
         if !shell.export_cancel_requested() {
             cancel = cancel.on_press(Message::CancelExportPressed);
         }
         band = band.push(cancel);
     } else if shell.is_seated() {
-        let mut export = button(text(EXPORT).size(13));
+        let mut export = button(text(EXPORT).size(13)).style(style::action);
         if shell.can_start_export() {
             export = export.on_press(Message::ExportPressed);
         }
@@ -156,8 +165,19 @@ fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
     }
 
     if let Some(latest) = latest {
-        band = band.push(text(latest).size(13));
+        band = band.push(text(latest).size(13).style(style::text_secondary));
     }
 
-    Some(container(band).padding(8).width(Fill).into())
+    // 帯は panel 面 + 上辺の区切り線。土台との段差は明度差と 1px の線で作る
+    // (UI視覚言語「面」: 階層は小さな明度差と境界線で作る)。
+    Some(
+        column![
+            rule::horizontal(1).style(style::separator),
+            container(band)
+                .padding(8)
+                .width(Fill)
+                .style(style::status_band),
+        ]
+        .into(),
+    )
 }

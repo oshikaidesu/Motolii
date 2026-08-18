@@ -41,6 +41,9 @@ fn main() -> iced::Result {
         Host::view,
     )
     .subscription(Host::subscription)
+    // 見た目は token 正本から(`theme::product`)。iced 既定 palette の藍色を
+    // 1画面も残さない — 見た目も嘘をつかない(Q0 の精神)。
+    .theme(|_host: &Host| motolii_shell_iced::theme::product())
     .title("Motolii")
     .window_size((980.0, 650.0))
     // 閉じるかどうかは殻が決める(未保存なら3択)。窓に勝手に閉じさせない。
