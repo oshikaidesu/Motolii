@@ -24,6 +24,13 @@ path = "src/inspector_blitz/dump_main.rs"
 name = "motolii-blitz-shell"
 path = "src/blitz_shell/main.rs"
 
+# HTML/CSS を Blitz に食わせて計算済みの値(box・padding・border・margin・
+# background/color/font/border-radius/gap)を JSON へ落とす抽出器具。
+# GPU 不要 — layout だけ解いて読み戻す(描画しない)。sourceは css_metrics/ 内に置く。
+[[bin]]
+name = "motolii-css-metrics"
+path = "src/css_metrics/main.rs"
+
 [dependencies]
 anyrender.workspace = true
 anyrender_vello_hybrid.workspace = true
@@ -72,6 +79,10 @@ motolii-render.workspace = true
 motolii-transport.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# css_metrics だけが使う。blitz-dom (0.3.0-beta.1) が固定する版と揃えてあり、
+# cargo は既に取得済みの1個へ重複なく解決する — workspace 側には無いので直接指定。
+style = { version = "0.19.0", package = "stylo" }
+style_traits = { version = "0.19.0", package = "stylo_traits" }
 taffy.workspace = true
 thiserror.workspace = true
 transform-gizmo.workspace = true
