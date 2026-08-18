@@ -56,7 +56,12 @@ plugin(D2・journal・評価器)。**UiIntent 背骨は設計どおり持ち越�
   (`window_input`)を1枚置いたのはこのため。購読に残るのは書き出しの刻み
   (`window::frames()` → `ExportPolled`)だけで、そこは同じ Message を直に流して審判する
 - **M-2 Stage 島**: 入力ブリッジ probe を製品 adapter 化(camera seat・正対既定・
-  transcript 相当の失敗報告)
+  transcript 相当の失敗報告) — **完了**(2026-08-18)。bind group 床の実効実測を
+  2→4(fork seam 台帳§4の受入条件を閉塞)、ギズモの掴みは3状態の調停
+  (`grab_probe`)、pixel 証拠は
+  `docs/reviews/evidence/iced-m2-stage-island/`。Rerun の合成絵・入力は
+  `EmbeddedSpatialStage` 経由のままで egui へ依存しない(新しい入力 seam を
+  作らない)
 - **M-3 Timeline**: spike を種に Document へ結線(prepare_*/D2 は既存。egui 版の
   意味関数・oracle は移植元)。波形帯・audio seat の載せ替え — **完了**(2026-08-18)。
   `motolii-shell-iced/src/timeline/` に semantics(移植した意味関数)/ pane
@@ -72,6 +77,41 @@ plugin(D2・journal・評価器)。**UiIntent 背骨は設計どおり持ち越�
   コマ送り・zoom/pan・intent 列 replay・Message 列 replay(表示状態)・波形帯)。
   zoom / pan / scroll は view 状態なので intent にせず、再現は Message 列 replay が持つ
 - **M-4 Browser / Inspector**: iced widget 化(標準 widget 領域 = iced の得意面)
+  — **完了**(2026-08-18)。M-4a Browser は rail 3種(All media / Project /
+  Recent)・double-click=`AdmitPaths`(OS ドロップと同一レール)・Browser の
+  カード選択は pane-local のまま(外部候補の選択は Document 外 — 正典どおり
+  Timeline/Stage の選択へは繋がない)。M-4b Inspector は 4 section 常設
+  (Audio は口が無いため不出=Q0)・wave E の編集 intent
+  (`ToggleItemFlag`/`BeginParamEdit`/`SetParamComponent`/`EndParamEdit`/
+  `KeyParamAtPlayhead`/`SetEffectEnabled`)を実装
+- **M-4 統合(1・2弾)**: M-4a+M-4b+M-4t(theme)+M-4w(widgets)+M-2+M-3 を1本の
+  `motolii-shell-iced` へ合流 — **完了**(2026-08-18)。4面合成は
+  `docs/ui-interaction-language.md` §3 の既定配置どおり、上段
+  (Browser|Stage|Inspector、既存のまま)+下段 Timeline(canvas)。上段:下段の
+  高さ比は egui shell(`blitz_shell/app.rs::build_initial_tree`)の中央列
+  (Stage/Timeline を `insert_vertical_tile` へ明示 share なしで渡している =
+  `egui_tiles` の既定等分割)を正典にして 1:1 を採った。**選択の合流**:
+  M-4b が先に足していた `UiIntent::SelectLayer { layer: u64 }` と、M-3 が
+  独立に足していた `SelectLayer { layer: LayerId, additive: bool }` は
+  同名で共存できないため union で1本化した
+  (`SelectLayer { layer: u64, additive: bool }`)。JSON 形は変わらない
+  (`LayerId` が `#[serde(transparent)]` なので数値表現は同じ) — Stage/
+  Inspector クリックは `additive: false` を渡し、Timeline のクリック
+  (Cmd 併用可)は実値を渡す。Timeline の行選択 → Inspector 反映は
+  `crates/motolii-shell-iced/tests/replay_oracle.rs`
+  (`timeline_row_pick_selects_the_same_layer_the_inspector_reads`)が台本
+  として持つ。fence 修理: `motolii-testkit` の
+  `resource_owner_inventory::every_product_raw_gpu_allocation_callsite_has_an_owner_seat`
+  が base 時点で赤だった(M-2 の `stage_island.rs` の
+  `device.create_texture` 2箇所が GPU 割当台帳に未登録) — 台帳の既存流儀
+  (owner seat = name/lifetime/peak_multiplicity)で登録して green にした。
+  同時に `intent_gateway_fence.rs::every_product_source_is_scanned` も base
+  時点で赤だった(M-4t/M-4w が足した `theme/` `widgets/` が走査表に無かった)
+  ので、走査表へ足した。targeted 検証は `-p motolii-shell-iced` で 100 passed
+  / 0 failed。**full workspace gate**(`cargo test --workspace --no-fail-fast
+  -j 5`、統合第2弾の受入条件)は 237 test binary 全部 green、**2131 passed /
+  0 failed**(motolii-shell-iced 100 本を含む。既知の profile 依存
+  `ui_numeric_trace` fast-profile 問題はこの通常 profile 実行では出ない)
 - **M-5 切替**: UX 台本 P1〜P5 が iced shell で通り、replay oracle・フェンス同等物が
   green になったら既定 bin を切替。egui shell は当面 `--legacy` で残し、
   勝負が付いたら撤去

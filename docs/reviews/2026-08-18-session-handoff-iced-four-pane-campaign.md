@@ -40,11 +40,11 @@
 | M-4t theme | `claude/m4t-theme-20260818` | **merge済み**。token正本(DTCG `motolii-dark.json`→生成CSS)の写し21 role・手書きhexゼロ・snapshot golden(iced_testに`Simulator::snapshot`実在)。Lightは正本欠如により不発明 |
 | M-2 Stage島 | `claude/m2-stage-island-20260818` | **merge済み**。bind groups床の実効実測 2→4(fork台帳§4受入条件を閉塞)・調停3状態(`grab_probe`=ギズモの席)・pixel証拠 `docs/reviews/evidence/iced-m2-stage-island/`・egui非依存(`EmbeddedSpatialStage`経由)・新seam不要 |
 | M-4w widgets | `claude/m4w-widgets-20260818` | **merge済み**。scrub_value/key_button/context_menu/drop_zone、18/18、契約逸脱なし、`widgets/palette.rs`は仮(→`theme::Tokens`対応表がtheme/mod.rs docsに) |
-| M-4b Inspector | `claude/m4b-inspector-20260818` | **検収合格・未merge**(統合レーンが取り込み中)。4 section(Audioは口が無いため不出=Q0)・逸脱受理: intent背骨へwave E変種追加(select/flags/param edit/key/fx。`project_mut`がpub(crate)で公開経路が無かったため=迂回よりwrapper) |
-| M-4a Browser | `claude/m4a-browser-20260818` | **検収合格・未merge**(同上)。rail 3種のみ・double-click=`AdmitPaths`(OSドロップと同一レール)・motolii-ui可視性のみ変更(M-1前例)・**選択intentの空白を報告**(下記「要裁定」) |
-| M-3 Timeline | `claude/m3-timeline-20260818` | **検収合格・未merge**(統合第2弾で取り込む)。drive 14+unit 7・intent列replayでclip実位置まで一致・intent背骨へtimeline 9変種+`editor_mut(`禁止フェンス・release-only commit(egui のlive-commit不採用を記録)・zoom/panはintent外(Message列replayで対) |
-| **統合第1弾** | `claude/m4-integration-20260818`(**sonnet・走行中**) | base `172dc76f`。M-4b+M-4a merge・3面pane合成(左Browser/中Stage/右Inspector)・stub→本物widgets・theme統一。**返却未着 — 継続セッションはまずこれを検収** |
-| 統合第2弾 | 未発注 | M-3 merge(intent.rsは両レーン独立増殖=union解消)+下段Timeline+選択結線(Stage/Timeline→Inspector)+**full workspace gate** |
+| M-4b Inspector | `claude/m4b-inspector-20260818` | **merge済み**(統合第1弾)。4 section(Audioは口が無いため不出=Q0)・逸脱受理: intent背骨へwave E変種追加(select/flags/param edit/key/fx。`project_mut`がpub(crate)で公開経路が無かったため=迂回よりwrapper) |
+| M-4a Browser | `claude/m4a-browser-20260818` | **merge済み**(統合第1弾)。rail 3種のみ・double-click=`AdmitPaths`(OSドロップと同一レール)・motolii-ui可視性のみ変更(M-1前例)・選択intentの空白は統合第2弾で `SelectLayer` union へ解消(下記) |
+| M-3 Timeline | `claude/m3-timeline-20260818` | **merge済み**(統合第2弾)。drive 14+unit 7・intent列replayでclip実位置まで一致・intent背骨へtimeline 9変種+`editor_mut(`禁止フェンス・release-only commit(egui のlive-commit不採用を記録)・zoom/panはintent外(Message列replayで対) |
+| 統合第1弾 | `claude/m4-integration-20260818` → main `5c7a05c3` | **merge済み**。M-4b+M-4a merge・3面pane合成(左Browser/中Stage/右Inspector)・stub→本物widgets・theme統一 |
+| **統合第2弾** | `claude/m4-integration2-20260818`(base `5c7a05c3`) | **merge済み**。M-3 merge(intent.rsのunion解消: `SelectLayer{layer:u64,additive:bool}`1本化)+4面合成(上段Browser/Stage/Inspector・下段Timeline、比率1:1=egui shell中央列の実測)+選択結線(Timeline→`UiIntent::SelectLayer`→Inspector、replay台本つき)+fence修理(GPU owner台帳・SCANNED走査表)+**full workspace gate**(下記) |
 
 ## 検証の実態(バイアス抜きの核)
 
@@ -56,7 +56,10 @@ fence群(gateway/dep-policy/editor_mut)全green。
 **full workspace gate は `1c76140e` 以降未通過**: post-vism gate(`0d794c7c`)は
 motolii-ui 5エラーで**失敗**→ `1465b0e4` で修復し `-p motolii-ui` green を確認したが、
 **workspace全体のgateはそれ以降回していない**(6レーン並走でcargo枠を譲った)。
-統合第2弾の受入条件に full gate を含めてある。
+統合第2弾の受入条件に full gate を含めてある。**統合第2弾で通過**:
+`cargo test --workspace --no-fail-fast -j 5` が237 test binary全部green、
+**2131 passed / 0 failed**([移行地図](2026-08-18-iced-host-migration-decision.md)
+のM-4統合節に詳細)。
 
 **人間検証済み(本セッション・2回)**: ①利用者がiced殻(M-1)の実窓スタート画面を目視
 (驚いて閉じた=閉じるボタン実動)。②egui shell の fixture screenshot と実窓比較で
@@ -69,9 +72,10 @@ motolii-ui 5エラーで**失敗**→ `1465b0e4` で修復し `-p motolii-ui` gr
 
 ## 要裁定(継続セッションが拾う)
 
-1. **選択のreplay可否**: Browserのcard選択はpane-local(Document外=正典準拠)とした。
-   Stage/Timeline→Inspectorのlayer選択をintent化(replay可能)するかは未裁定。
-   M-4bは`SelectLayer` intentを既に足しており、M-4aは意図的に使っていない — 統一が要る
+1. **選択のreplay可否**: **統合第2弾で決着**。Stage/Timeline→Inspectorのlayer選択は
+   `UiIntent::SelectLayer{layer:u64,additive:bool}`1本(journal・replay可能)に統一した
+   (M-4bのIntentとM-3のIntentが同名別形で共存できなかったのをunionで解消)。
+   Browserのcard選択は引き続きpane-local(Document外=正典準拠)のまま繋がない
 2. audio gain の editor 操作API(commandはdoc層に有り、口が無い)→ Audio section 復活の前提
 3. egui側フェンス禁止リストへM-3の editor 入口4本を足すか(M-3返却§5)
 4. Recent railの意味(=admit順。閲覧順ではない)が台帳の読みと合うか
