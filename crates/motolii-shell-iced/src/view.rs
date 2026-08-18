@@ -49,6 +49,40 @@ pub const EXPORT: &str = "Export";
 /// 走っている書き出しを止めるボタン。
 pub const CANCEL_EXPORT: &str = "Cancel";
 
+// ---------------------------------------------------------------------------
+// Browser pane(M-4a)の名乗り。運転席は全部この文字列で掴む(完全一致)。
+// ---------------------------------------------------------------------------
+
+/// pane の見出し。
+pub const BROWSER_HEADER: &str = "Browser";
+/// source rail: 登録 folder + Document asset の統合面。
+pub const BROWSER_RAIL_ALL: &str = "All media";
+/// source rail: Document の asset 台帳。
+pub const BROWSER_RAIL_PROJECT: &str = "Project";
+/// source rail: 同じ台帳を取り込みの新しい順で。
+pub const BROWSER_RAIL_RECENT: &str = "Recent";
+/// 掴んだファイルが窓の上に居るあいだ、panel が受け皿であることを言う一行。
+/// **取り込み自体は窓ぜんたい**(`AdmitPaths`)で、panel は表示だけ。
+pub const BROWSER_DROP_TARGET: &str = "Drop anywhere in this window to add media";
+/// Project rail の空状態(Q7: 空は空として、次の一手つきで言う)。
+pub const BROWSER_EMPTY_PROJECT: &str =
+    "No media in this project yet — drop files into this window, or double-click a card in All media.";
+/// Recent rail の空状態。
+pub const BROWSER_EMPTY_RECENT: &str = "Nothing has been added to this project yet.";
+/// selection tray の空状態。
+pub const BROWSER_NO_SELECTION: &str = "No selection";
+
+/// All media の空状態は登録 folder を名指しする(幽霊 card を出さない)。
+pub fn browser_empty_all(folder: &str) -> String {
+    format!("No media found in {folder}.")
+}
+
+/// selection tray の名乗り。card の text と選択の text を運転席が
+/// 別々に掴めるよう、tray は `●` を前置する。
+pub fn browser_tray_label(name: &str) -> String {
+    format!("\u{25cf} {name}")
+}
+
 /// 未保存の座席の名乗り方。egui shell の status 帯と**一字も違わない**。
 pub fn unsaved_label(name: &str) -> String {
     format!("\u{25cf} {name} \u{2014} unsaved")

@@ -12,7 +12,7 @@
 
 mod common;
 
-use common::{command_key, drain, feed, file_dropped, press, redraw, starter_media_dir};
+use common::{command_key, double_click, drain, feed, file_dropped, press, redraw, starter_media_dir};
 use motolii_shell_iced::{view, ScriptedPrompts, Shell};
 use motolii_ui::blitz_shell::{ShellGateway, UiIntent};
 
@@ -30,7 +30,8 @@ fn a_recorded_session_replays_into_the_same_shell_state() {
         ..ScriptedPrompts::default()
     });
 
-    // 運転席で1セッション回す: 作る → 落とす → もう1本落とす → 保存する。
+    // 運転席で1セッション回す: 作る → 落とす → もう1本落とす →
+    // Browser のカードをダブルクリックで置く(M-4a) → 保存する。
     let pressed = press(iced_test::simulator(view(&shell)), view::NEW_PROJECT);
     drain(&mut shell, pressed);
     let dropped = feed(
@@ -43,6 +44,9 @@ fn a_recorded_session_replays_into_the_same_shell_state() {
         [file_dropped(&still), redraw()],
     );
     drain(&mut shell, dropped);
+    // Browser 経由の配置も**同じ AdmitPaths** として台本に載る(合流点が1本の証拠)。
+    let placed = double_click(iced_test::simulator(view(&shell)), "starter-clip.mp4");
+    drain(&mut shell, placed);
     let typed = feed(iced_test::simulator(view(&shell)), command_key('s'));
     drain(&mut shell, typed);
 
@@ -66,6 +70,11 @@ fn a_recorded_session_replays_into_the_same_shell_state() {
             },
             UiIntent::AdmitPaths {
                 paths: vec![still.clone()]
+            },
+            // Browser のダブルクリック。**intent は OS ドロップと同じ1種類**なので、
+            // 台本を読む側に「Browser 用の別レール」は要らない。
+            UiIntent::AdmitPaths {
+                paths: vec![clip.clone()]
             },
             UiIntent::SaveProject,
         ],

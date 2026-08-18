@@ -20,6 +20,7 @@ use motolii_ui::blitz_shell::{
     UiIntent, UnsavedDecision,
 };
 
+use crate::browser::{BrowserCard, BrowserPane};
 use crate::message::Message;
 
 /// `update` 1件のあとで窓に残る唯一の要求。
@@ -43,15 +44,32 @@ pub struct Shell {
     /// 人に訊く口。窓は `NativePrompts`、テスト・CLI 駆動は `ScriptedPrompts`。
     /// **egui shell と同じ trait の同じ実装**である(`crate::prompts` の注記)。
     prompts: Box<dyn ShellPrompts>,
+    /// Browser pane の view 状態(rail・選択・受け皿表示)と登録 folder の走査。
+    /// Document の写しは**持たない**(読みは都度 `gateway` の snapshot を渡す)。
+    browser: BrowserPane,
 }
 
 impl Shell {
-    /// 座席なしで始める(スタート画面)。
+    /// 座席なしで始める(スタート画面)。Browser の登録 folder は既定
+    /// (repo の starter media)。
     pub fn new(prompts: impl ShellPrompts + 'static) -> Self {
-        Self {
+        Self::with_browser(prompts, BrowserPane::default_shell())
+    }
+
+    /// 登録 folder を差し替えて始める(運転席テスト用。窓の経路は同じ)。
+    pub fn with_browser_root(prompts: impl ShellPrompts + 'static, root: PathBuf) -> Self {
+        Self::with_browser(prompts, BrowserPane::with_root(root))
+    }
+
+    fn with_browser(prompts: impl ShellPrompts + 'static, browser: BrowserPane) -> Self {
+        let mut shell = Self {
             gateway: ShellGateway::new(ShellTranscript::default()),
             prompts: Box::new(prompts),
-        }
+            browser,
+        };
+        // 走査時に作れなかったサムネイルの理由は、最初から帯経路に居る(F-09)。
+        shell.drain_browser_notices();
+        shell
     }
 
     /// Message 1件を受ける。**ここが Message → `UiIntent` の唯一の写像**である。
@@ -116,8 +134,91 @@ impl Shell {
                 // **intent ではない** — 走っている thread からの返事を受けるだけ。
                 self.gateway.poll_export();
             }
+            Message::BrowserRailChosen(rail) => {
+                // pane 内の表示切替。Document に触れないので intent にならない
+                // (view 系 intent は `blitz_shell/intent.rs` の将来枠)。
+                self.browser.set_rail(rail);
+            }
+            Message::BrowserCardClicked(id) => {
+                // 単クリック = 選択だけ(Q1)。報酬は selection tray と枠の強調。
+                self.browser.select(&id);
+            }
+            Message::BrowserCardActivated(id) => {
+                // 置いたカードは選ばれてもいる(egui 版と同じ)。
+                self.browser.select(&id);
+                match self.browser_place_path(&id) {
+                    Some(path) => {
+                        // **OS ドロップと同じ1本の合流点。** 成立も失敗も帯が言う
+                        // (`admit_dropped_paths` の一言がそのまま出る)。
+                        let _ = self.gateway.dispatch(UiIntent::AdmitPaths { paths: vec![path] });
+                    }
+                    None => {
+                        // 拒否の報酬(Q3): 黙って無視しない。存在しない path を
+                        // intent にもしない(egui 版 `place_request` と同じ判断)。
+                        self.gateway.transcript().report(format!(
+                            "browser: cannot place {id} — the file is missing or was moved"
+                        ));
+                    }
+                }
+            }
+            Message::BrowserDropHover(hovering) => {
+                // panel 内の受け皿表示だけ。取り込みは `FilesDropped` のまま。
+                self.browser.set_drop_hover(hovering);
+            }
         }
+        // Document が進んでいれば、新しく載った image asset の縮小実体を用意する
+        // (既に在る分は fs metadata を見るだけ)。作れなかった理由は帯経路へ。
+        self.sync_browser();
         Outcome::Stay
+    }
+
+    /// Browser の読み(rail・選択・受け皿表示・サムネイル)。
+    pub fn browser(&self) -> &BrowserPane {
+        &self.browser
+    }
+
+    /// いまの rail の card 一覧(Document snapshot を写した投影)。
+    pub fn browser_cards(&self) -> Vec<BrowserCard> {
+        let seat = self.gateway.project();
+        let snapshot = seat.map(|seat| seat.snapshot());
+        let root = self.browser_project_root();
+        self.browser
+            .cards(snapshot.as_deref(), root.as_deref())
+    }
+
+    /// card 1枚が指す実ファイル(配置要求の解決)。
+    fn browser_place_path(&self, id: &str) -> Option<PathBuf> {
+        let snapshot = self.gateway.project().map(|seat| seat.snapshot());
+        let root = self.browser_project_root();
+        self.browser
+            .place_path(id, snapshot.as_deref(), root.as_deref())
+    }
+
+    /// project root = document path の親(CLI export と同じ規約)。
+    fn browser_project_root(&self) -> Option<PathBuf> {
+        self.gateway
+            .project()
+            .and_then(|seat| seat.path().parent().map(Path::to_path_buf))
+    }
+
+    /// Document の進みに Browser のサムネイルを追いつかせ、理由を帯へ写す。
+    fn sync_browser(&mut self) {
+        if let Some(seat) = self.gateway.project() {
+            let snapshot = seat.snapshot();
+            let revision = seat.editor().revision();
+            let root = seat.path().parent().map(Path::to_path_buf);
+            self.browser
+                .ensure_asset_thumbnails(&snapshot, root.as_deref(), revision);
+        }
+        self.drain_browser_notices();
+    }
+
+    /// pane が返した理由を status 帯(= `--status-log`)へ写す。
+    /// stderr に書かない(2026-08-18 外部診断 F-09 の流儀)。
+    fn drain_browser_notices(&mut self) {
+        for notice in self.browser.take_notices() {
+            self.gateway.transcript().report(notice);
+        }
     }
 
     /// 未保存のまま座席を捨てる操作(New / Open / 窓を閉じる)の前に挟む。

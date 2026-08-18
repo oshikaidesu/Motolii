@@ -19,7 +19,9 @@
 
 use std::path::PathBuf;
 
-/// この窓で起きうることの全部(M-1 の範囲)。
+use crate::browser::BrowserRail;
+
+/// この窓で起きうることの全部(M-1 + Browser pane = M-4a の範囲)。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Message {
     /// New Project ボタン / `Cmd+N`。dialog が答えたら `UiIntent::NewProject` になる。
@@ -40,4 +42,21 @@ pub enum Message {
     CloseRequested,
     /// 走っている書き出しの返事を受ける合図。**intent ではない。**
     ExportPolled,
+    /// Browser の source rail(All media / Project / Recent)を選んだ。
+    /// pane 内の表示切替で、Document には触れない。
+    BrowserRailChosen(BrowserRail),
+    /// Browser のカードの単クリック = **選択だけ**(Q1: click=選択)。
+    /// 選ぶたびに clip が増えたら人は選べない — 要求は出ない。
+    ///
+    /// `UiIntent` に view 系の変種はまだ無い(`blitz_shell/intent.rs` の将来枠)
+    /// ので、選択は pane の中の状態に留まり journal には載らない。
+    BrowserCardClicked(String),
+    /// Browser のカードのダブルクリック = 「この実ファイルを playhead へ置いてくれ」。
+    /// `UiIntent::AdmitPaths` になる — **OS ドロップと同じ1本の合流点**で、
+    /// 入口が増えても intent は1種類のまま(egui 版 `BrowserRequest::PlaceFile` と同じ)。
+    BrowserCardActivated(String),
+    /// 掴んだファイルが窓の上に来た(`true`)/離れた(`false`)。
+    /// **panel 内の受け皿表示だけ**を切り替える。取り込みそのものは従来どおり
+    /// [`Message::FilesDropped`] = 殻の `AdmitPaths` で、ここでは奪わない。
+    BrowserDropHover(bool),
 }

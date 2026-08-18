@@ -18,7 +18,13 @@ path = "src/main.rs"
 # ホストの toolkit。**egui は入れない**(dep policy の柵:
 # `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs`。この crate は iced 系の
 # allowlist にだけ載っていて、egui 系の allowlist には載っていない)。
-iced.workspace = true
+# `image` feature は Browser pane(M-4a)のサムネイル表示のため。縮小実体そのもの
+# は既存座席(`motolii_ui::browser_blitz::thumbnail`)が作り、ここは表示だけ。
+iced = { workspace = true, features = ["image"] }
+# Browser pane が Document の asset 台帳を読む(Project / Recent rail と、
+# `resolve_asset_path` による配置先解決)。書きは持たない — Document を進める道は
+# 変わらず `ShellGateway::dispatch` の1本である。
+motolii-doc.workspace = true
 # 背骨(`UiIntent` / `ShellGateway` / `ShellTranscript` / `ShellPrompts`)。host 非依存の
 # 契約なので egui shell と同じ物を通す — 2つ目の journal も transcript も dialog 層も
 # 作らない。**`rfd` はここに要らない**: native dialog は向こうの `NativePrompts` に

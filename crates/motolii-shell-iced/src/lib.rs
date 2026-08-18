@@ -37,6 +37,7 @@
 //! - `rfd` の直接呼び出し。native dialog は egui shell と**同じ実装**
 //!   (`motolii_ui::blitz_shell::NativePrompts`)の後ろに1箇所だけ在る
 
+pub mod browser;
 mod intent_log;
 mod jsonl;
 mod launch;
@@ -47,6 +48,7 @@ mod status_log;
 pub mod view;
 mod window_input;
 
+pub use browser::{BrowserCard, BrowserPane, BrowserRail};
 pub use intent_log::IntentLog;
 pub use launch::Launch;
 pub use message::Message;
