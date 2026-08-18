@@ -13,7 +13,7 @@ use iced::advanced::widget::Tree;
 use iced::advanced::{layout, mouse, overlay, renderer, text, Layout, Shell, Widget};
 use iced::{keyboard, Element, Event, Length, Pixels, Point, Rectangle, Size, Vector};
 
-use crate::widgets::palette::{self, PALETTE};
+use crate::theme::{self, Tokens};
 
 /// メニューの1項目。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -250,25 +250,26 @@ impl<M> overlay::Overlay<M, iced::Theme, iced::Renderer> for MenuOverlay<'_, M> 
     fn draw(
         &self,
         renderer: &mut iced::Renderer,
-        _theme: &iced::Theme,
+        theme_in: &iced::Theme,
         _style: &renderer::Style,
         layout: Layout<'_>,
         cursor: mouse::Cursor,
     ) {
         use iced::advanced::Renderer as _;
 
+        let t = Tokens::resolve(theme_in);
         let bounds = layout.bounds();
         renderer.fill_quad(
             renderer::Quad {
                 bounds,
                 border: iced::Border {
-                    color: PALETTE.outline,
+                    color: t.border_default,
                     width: 1.0,
                     radius: 4.0.into(),
                 },
                 ..renderer::Quad::default()
             },
-            PALETTE.bg_panel,
+            t.surface_panel,
         );
 
         for (index, item) in self.items.iter().enumerate() {
@@ -280,7 +281,7 @@ impl<M> overlay::Overlay<M, iced::Theme, iced::Renderer> for MenuOverlay<'_, M> 
                         bounds: row,
                         ..renderer::Quad::default()
                     },
-                    palette::mix(PALETTE.accent, 20.0, PALETTE.bg_panel),
+                    theme::mix(t.action_active, 20.0, t.surface_panel),
                 );
             }
             renderer.fill_text(
@@ -299,10 +300,10 @@ impl<M> overlay::Overlay<M, iced::Theme, iced::Renderer> for MenuOverlay<'_, M> 
                 },
                 Point::new(row.x + ITEM_PAD_X, row.center_y()),
                 if item.enabled {
-                    PALETTE.text_primary
+                    t.text_primary
                 } else {
                     // 「今この文脈で無効」は灰で言う(Q0 — 死に見た目ではなく文脈 disabled)。
-                    PALETTE.text_secondary
+                    t.text_secondary
                 },
                 row,
             );

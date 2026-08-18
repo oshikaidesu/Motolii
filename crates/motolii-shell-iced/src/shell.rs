@@ -14,13 +14,18 @@
 //! (=「意味は不変のまま iced へ移る」)。
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use motolii_ui::blitz_shell::{
     decide_unsaved, IntentEvent, ShellGateway, ShellPrompts, ShellTranscript, StatusEvent,
-    UiIntent, UnsavedDecision,
+    UiIntent, UiItemFlag, UnsavedDecision,
 };
 
+use crate::browser::{BrowserCard, BrowserPane};
+use crate::inspector_model::{project_inspector, InspectorSeat};
+use crate::inspector_pane::InspectorEvent;
 use crate::message::Message;
+use crate::widgets::ScrubEvent;
 
 /// `update` 1件のあとで窓に残る唯一の要求。
 ///
@@ -43,15 +48,40 @@ pub struct Shell {
     /// 人に訊く口。窓は `NativePrompts`、テスト・CLI 駆動は `ScriptedPrompts`。
     /// **egui shell と同じ trait の同じ実装**である(`crate::prompts` の注記)。
     prompts: Box<dyn ShellPrompts>,
+    /// Inspector の live 投影に使う plugin catalog。座席の writer が使うのと同じ
+    /// `reference_catalog` を1度だけ組んで持ち回る(毎フレーム組み直さない —
+    /// egui 版 `InspectorPanel` と同じ判断)。組めなかったら理由を持ち、
+    /// Inspector が空面としてその理由を出す(黙らない)。
+    catalog: Result<Arc<motolii_plugin::PluginCatalog>, String>,
+    /// Browser pane の view 状態(rail・選択・受け皿表示)と登録 folder の走査。
+    /// Document の写しは**持たない**(読みは都度 `gateway` の snapshot を渡す)。
+    browser: BrowserPane,
 }
 
 impl Shell {
-    /// 座席なしで始める(スタート画面)。
+    /// 座席なしで始める(スタート画面)。Browser の登録 folder は既定
+    /// (repo の starter media)。
     pub fn new(prompts: impl ShellPrompts + 'static) -> Self {
-        Self {
+        Self::with_browser(prompts, BrowserPane::default_shell())
+    }
+
+    /// 登録 folder を差し替えて始める(運転席テスト用。窓の経路は同じ)。
+    pub fn with_browser_root(prompts: impl ShellPrompts + 'static, root: PathBuf) -> Self {
+        Self::with_browser(prompts, BrowserPane::with_root(root))
+    }
+
+    fn with_browser(prompts: impl ShellPrompts + 'static, browser: BrowserPane) -> Self {
+        let mut shell = Self {
             gateway: ShellGateway::new(ShellTranscript::default()),
             prompts: Box::new(prompts),
-        }
+            catalog: motolii_plugin::reference::reference_catalog()
+                .map(Arc::new)
+                .map_err(|error| format!("plugin catalog を作れない: {error}")),
+            browser,
+        };
+        // 走査時に作れなかったサムネイルの理由は、最初から帯経路に居る(F-09)。
+        shell.drain_browser_notices();
+        shell
     }
 
     /// Message 1件を受ける。**ここが Message → `UiIntent` の唯一の写像**である。
@@ -125,8 +155,192 @@ impl Shell {
                     self.gateway.transcript().report(line);
                 }
             }
+            Message::LayerSelected(layer) => {
+                let _ = self.gateway.dispatch(UiIntent::SelectLayer { layer });
+            }
+            Message::Inspector(event) => self.apply_inspector(event),
+            Message::BrowserRailChosen(rail) => {
+                // pane 内の表示切替。Document に触れないので intent にならない
+                // (view 系 intent は `blitz_shell/intent.rs` の将来枠)。
+                self.browser.set_rail(rail);
+            }
+            Message::BrowserCardClicked(id) => {
+                // 単クリック = 選択だけ(Q1)。報酬は selection tray と枠の強調。
+                self.browser.select(&id);
+            }
+            Message::BrowserCardActivated(id) => {
+                // 置いたカードは選ばれてもいる(egui 版と同じ)。
+                self.browser.select(&id);
+                match self.browser_place_path(&id) {
+                    Some(path) => {
+                        // **OS ドロップと同じ1本の合流点。** 成立も失敗も帯が言う
+                        // (`admit_dropped_paths` の一言がそのまま出る)。
+                        let _ = self.gateway.dispatch(UiIntent::AdmitPaths { paths: vec![path] });
+                    }
+                    None => {
+                        // 拒否の報酬(Q3): 黙って無視しない。存在しない path を
+                        // intent にもしない(egui 版 `place_request` と同じ判断)。
+                        self.gateway.transcript().report(format!(
+                            "browser: cannot place {id} — the file is missing or was moved"
+                        ));
+                    }
+                }
+            }
+            Message::BrowserDropHover(hovering) => {
+                // panel 内の受け皿表示だけ。取り込みは `FilesDropped` のまま。
+                self.browser.set_drop_hover(hovering);
+            }
         }
+        // Document が進んでいれば、新しく載った image asset の縮小実体を用意する
+        // (既に在る分は fs metadata を見るだけ)。作れなかった理由は帯経路へ。
+        self.sync_browser();
         Outcome::Stay
+    }
+
+    /// Inspector の1押しを intent へ写す。**判断はここに無い** — どの layer の
+    /// 話か(いま映している選択)と、スクラブ事象の gesture 区切りを写すだけで、
+    /// 「書けるか」「Undo の粒度」はゲートウェイの先のエディタが持つ。
+    ///
+    /// `KeyParamAtPlayhead` が運ぶ成分値は **accepted snapshot の投影そのもの**
+    /// ([`Self::inspector`])から取る。面にも殻にも先行する局所値は無い
+    /// (optimistic 禁止 — 2026-08-13 裁定)。
+    fn apply_inspector(&mut self, event: InspectorEvent) {
+        match event {
+            InspectorEvent::SetEffectEnabled {
+                definition_id,
+                enabled,
+            } => {
+                let _ = self
+                    .gateway
+                    .dispatch(UiIntent::SetEffectEnabled {
+                        definition_id,
+                        enabled,
+                    });
+            }
+            InspectorEvent::ToggleMute | InspectorEvent::ToggleSolo => {
+                let Some(layer) = self.inspected_layer() else {
+                    return;
+                };
+                let flag = if matches!(event, InspectorEvent::ToggleMute) {
+                    UiItemFlag::Mute
+                } else {
+                    UiItemFlag::Solo
+                };
+                let _ = self.gateway.dispatch(UiIntent::ToggleItemFlag { layer, flag });
+            }
+            InspectorEvent::KeyPressed(param) => {
+                let Some(layer) = self.inspected_layer() else {
+                    return;
+                };
+                // 画面に出ている成分値がそのままキーになる(2026-08-13裁定)。
+                let InspectorSeat::Ready(model) = self.inspector() else {
+                    return;
+                };
+                let Some(row) = model.transform_row(param) else {
+                    return;
+                };
+                if !row.editable {
+                    return;
+                }
+                let _ = self.gateway.dispatch(UiIntent::KeyParamAtPlayhead {
+                    layer,
+                    param,
+                    components: row.components.clone(),
+                });
+            }
+            InspectorEvent::Scrub {
+                param,
+                component,
+                event,
+            } => {
+                let Some(layer) = self.inspected_layer() else {
+                    return;
+                };
+                match event {
+                    ScrubEvent::Started => {
+                        let _ = self.gateway.dispatch(UiIntent::BeginParamEdit { layer, param });
+                    }
+                    ScrubEvent::Changed(value) => {
+                        let _ = self.gateway.dispatch(UiIntent::SetParamComponent {
+                            layer,
+                            param,
+                            component,
+                            value,
+                        });
+                    }
+                    ScrubEvent::Committed(value) => {
+                        let _ = self.gateway.dispatch(UiIntent::SetParamComponent {
+                            layer,
+                            param,
+                            component,
+                            value,
+                        });
+                        let _ = self.gateway.dispatch(UiIntent::EndParamEdit);
+                    }
+                    ScrubEvent::Cancelled => {
+                        let _ = self.gateway.dispatch(UiIntent::EndParamEdit);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Inspector が映している layer(選択がちょうど1つのとき)。
+    fn inspected_layer(&self) -> Option<u64> {
+        let seat = self.gateway.project()?;
+        match seat.editor().selected_layers() {
+            [one] => Some(one.get()),
+            _ => None,
+        }
+    }
+
+    /// Browser の読み(rail・選択・受け皿表示・サムネイル)。
+    pub fn browser(&self) -> &BrowserPane {
+        &self.browser
+    }
+
+    /// いまの rail の card 一覧(Document snapshot を写した投影)。
+    pub fn browser_cards(&self) -> Vec<BrowserCard> {
+        let seat = self.gateway.project();
+        let snapshot = seat.map(|seat| seat.snapshot());
+        let root = self.browser_project_root();
+        self.browser
+            .cards(snapshot.as_deref(), root.as_deref())
+    }
+
+    /// card 1枚が指す実ファイル(配置要求の解決)。
+    fn browser_place_path(&self, id: &str) -> Option<PathBuf> {
+        let snapshot = self.gateway.project().map(|seat| seat.snapshot());
+        let root = self.browser_project_root();
+        self.browser
+            .place_path(id, snapshot.as_deref(), root.as_deref())
+    }
+
+    /// project root = document path の親(CLI export と同じ規約)。
+    fn browser_project_root(&self) -> Option<PathBuf> {
+        self.gateway
+            .project()
+            .and_then(|seat| seat.path().parent().map(Path::to_path_buf))
+    }
+
+    /// Document の進みに Browser のサムネイルを追いつかせ、理由を帯へ写す。
+    fn sync_browser(&mut self) {
+        if let Some(seat) = self.gateway.project() {
+            let snapshot = seat.snapshot();
+            let revision = seat.editor().revision();
+            let root = seat.path().parent().map(Path::to_path_buf);
+            self.browser
+                .ensure_asset_thumbnails(&snapshot, root.as_deref(), revision);
+        }
+        self.drain_browser_notices();
+    }
+
+    /// pane が返した理由を status 帯(= `--status-log`)へ写す。
+    /// stderr に書かない(2026-08-18 外部診断 F-09 の流儀)。
+    fn drain_browser_notices(&mut self) {
+        for notice in self.browser.take_notices() {
+            self.gateway.transcript().report(notice);
+        }
     }
 
     /// 未保存のまま座席を捨てる操作(New / Open / 窓を閉じる)の前に挟む。
@@ -166,6 +380,45 @@ impl Shell {
             let composition = &snapshot.composition;
             composition.aspect_num() as f32 / composition.aspect_den() as f32
         })
+    }
+
+    /// Inspector の座席 — **accepted snapshot から毎回導出**する(状態は持たない)。
+    ///
+    /// 選択・playhead の正本はエディタ(座席)に、値の正本は Document snapshot に
+    /// 在り、ここはそれを1つの投影に写すだけ(Q5: 単一の真実)。
+    pub fn inspector(&self) -> InspectorSeat {
+        let Some(seat) = self.gateway.project() else {
+            return InspectorSeat::NoSelection;
+        };
+        let catalog = match &self.catalog {
+            Ok(catalog) => catalog,
+            Err(reason) => return InspectorSeat::Unreadable(reason.clone()),
+        };
+        let editor = seat.editor();
+        let Some(playhead) = editor.playhead_time() else {
+            // fps の格子に載らない playhead はキーを打てない時刻。理由ごと出す。
+            return InspectorSeat::Unreadable("the playhead is not a keyable time".to_owned());
+        };
+        project_inspector(
+            &seat.snapshot(),
+            catalog,
+            editor.selected_layers(),
+            playhead,
+        )
+    }
+
+    /// エディタの status 1行(確定・断りの一言)。空なら席ごと出さない。
+    pub fn editor_status(&self) -> Option<String> {
+        self.gateway
+            .project()
+            .map(|seat| seat.editor().status().to_owned())
+            .filter(|status| !status.is_empty())
+    }
+
+    /// 座席の Document snapshot(読み)。テストと投影の照合用で、
+    /// **書く道はここから生えない**(snapshot は immutable)。
+    pub fn document(&self) -> Option<std::sync::Arc<motolii_doc::Document>> {
+        self.gateway.project().map(|seat| seat.snapshot())
     }
 
     /// 座っている project のパス。

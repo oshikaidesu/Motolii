@@ -113,9 +113,33 @@ pub fn cursor_left() -> iced::event::Event {
     iced::event::Event::Mouse(iced::mouse::Event::CursorLeft)
 }
 
+/// カード1枚のダブルクリック。**同じ Simulator の上で**2連打する —
+/// `mouse_area` の double-click 判定は前回クリックとの間隔で決まり、
+/// Simulator は widget 木(とその中のクリック履歴)を持ち続けるからである。
+/// 出る Message 列は `on_press → on_press → on_double_click` の順
+/// (単クリックの選択と同居する。egui 版と同じ)。
+pub fn double_click(mut ui: iced_test::Simulator<'_, Message>, selector: &str) -> Vec<Message> {
+    for _ in 0..2 {
+        ui.click(selector).unwrap_or_else(|error| {
+            panic!("{selector:?} が押せる物として立っていない: {error}")
+        });
+    }
+    ui.into_messages().collect()
+}
+
 /// OS ドロップ1件。winit は**ファイル1つにつき1事象**を出す。
 pub fn file_dropped(path: &Path) -> iced::event::Event {
     iced::event::Event::Window(iced::window::Event::FileDropped(path.to_path_buf()))
+}
+
+/// 掴んだファイルが窓の上に来た(winit の `HoveredFile`)。
+pub fn file_hovered(path: &Path) -> iced::event::Event {
+    iced::event::Event::Window(iced::window::Event::FileHovered(path.to_path_buf()))
+}
+
+/// 掴んだまま窓の外へ出た(winit の `HoveredFileCancelled`)。
+pub fn files_hovered_left() -> iced::event::Event {
+    iced::event::Event::Window(iced::window::Event::FilesHoveredLeft)
 }
 
 /// フレームの終わり。窓は毎フレームこれを widget 木へ流す

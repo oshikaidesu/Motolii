@@ -19,8 +19,13 @@
 
 use std::path::PathBuf;
 
-/// この窓で起きうることの全部(M-1 の範囲)。
-#[derive(Debug, Clone, PartialEq, Eq)]
+use crate::browser::BrowserRail;
+use crate::inspector_pane::InspectorEvent;
+
+/// この窓で起きうることの全部(M-1 + M-2 Stage + M-4a Browser + M-4b Inspector)。
+///
+/// `Eq` を降ろしたのは [`InspectorEvent`] がスクラブ値(`f64`)を運ぶため。
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     /// New Project ボタン / `Cmd+N`。dialog が答えたら `UiIntent::NewProject` になる。
     NewProjectPressed,
@@ -45,4 +50,32 @@ pub enum Message {
     /// `Shell::update` が transcript(帯 / `--status-log`)へ写す。
     /// journal には載らない(replay は Stage の故障まで再現しない)。
     StageReported(Vec<String>),
+    /// layer を1つ選んだ。`UiIntent::SelectLayer` になる。
+    ///
+    /// M-4b 時点でこれを出す widget はまだ無い(選択の面は Stage = M-2、
+    /// Timeline = M-3 が持ってくる)。運転席(テスト)と後続 M がこの1点へ
+    /// 合流する — 入口が増えても intent は1種類のまま(AdmitPaths と同じ型)。
+    /// **Browser のカード選択はここへ繋がない**(外部候補の選択は Document 外)。
+    LayerSelected(u64),
+    /// Inspector pane で押された事実。intent 化は `Shell::update` の写像1箇所。
+    Inspector(InspectorEvent),
+    /// Browser の source rail(All media / Project / Recent)を選んだ。
+    /// pane 内の表示切替で、Document には触れない。
+    BrowserRailChosen(BrowserRail),
+    /// Browser のカードの単クリック = **選択だけ**(Q1: click=選択)。
+    /// 選ぶたびに clip が増えたら人は選べない — 要求は出ない。
+    ///
+    /// `UiIntent` に view 系の変種はまだ無い(`blitz_shell/intent.rs` の将来枠)
+    /// ので、選択は pane の中の状態に留まり journal には載らない。**Inspector の
+    /// 選択(`LayerSelected`)へも繋がない** — Browser の選択は pane-local のまま
+    /// (interaction-language: 外部候補の選択は Document 外)。
+    BrowserCardClicked(String),
+    /// Browser のカードのダブルクリック = 「この実ファイルを playhead へ置いてくれ」。
+    /// `UiIntent::AdmitPaths` になる — **OS ドロップと同じ1本の合流点**で、
+    /// 入口が増えても intent は1種類のまま(egui 版 `BrowserRequest::PlaceFile` と同じ)。
+    BrowserCardActivated(String),
+    /// 掴んだファイルが窓の上に来た(`true`)/離れた(`false`)。
+    /// **panel 内の受け皿表示だけ**を切り替える。取り込みそのものは従来どおり
+    /// [`Message::FilesDropped`] = 殻の `AdmitPaths` で、ここでは奪わない。
+    BrowserDropHover(bool),
 }

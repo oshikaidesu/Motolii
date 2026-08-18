@@ -197,3 +197,18 @@ pub fn product() -> iced::Theme {
         },
     )
 }
+
+/// CSS `color-mix(in srgb, A p%, B (100-p)%)` の写し(egui 版 `theme::mix` と同じ)。
+/// 葉 widget(`crate::widgets`)の hover / press 段階はここで**token の2色から**
+/// 導く — 新しい色定数を作らない。統合 wave で `widgets::palette::mix` の代わりに
+/// ここへ差し替えた。
+pub fn mix(a: Color, pct_a: f32, b: Color) -> Color {
+    let t = (pct_a.clamp(0.0, 100.0)) / 100.0;
+    let ch = |x: f32, y: f32| x * t + y * (1.0 - t);
+    Color {
+        r: ch(a.r, b.r),
+        g: ch(a.g, b.g),
+        b: ch(a.b, b.b),
+        a: 1.0,
+    }
+}
