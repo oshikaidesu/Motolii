@@ -2,9 +2,16 @@
 //! の3状態語彙: **unkeyed = 灰 outline / animated = accent outline / current = accent fill**。
 //!
 //! 状態の正本は呼び出し側の accepted snapshot(裁定「local optimistic key state を
-//! 持たない」)。この widget は見た目と press だけを持つ。
+//! 持たない」)。この widget は見た目と press だけを持つ。押した結果どうなるかは
+//! 消費側が既存 add-key intent へ写す。
 
-use crate::widgets::palette;
+use iced::widget::{button, text};
+use iced::{Background, Border, Element};
+
+use crate::widgets::palette::{self, PALETTE};
+
+/// ボタンの一辺(正方形)。
+pub const KEY_BUTTON_SIZE: f32 = 18.0;
 
 /// key ボタンの3状態。**この enum が公開契約**(消費側 capsule と同文)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,8 +35,20 @@ pub struct KeyLook {
 
 /// 3状態 → 絵。2026-08-13 裁定の写しであり、ここ以外で状態を色に写さない。
 pub fn look(state: KeyState) -> KeyLook {
-    let _ = (state, palette::PALETTE);
-    todo!("red 先行 — 実装は次コミット")
+    match state {
+        KeyState::Unkeyed => KeyLook {
+            glyph: "\u{25c7}",
+            color: PALETTE.text_secondary,
+        },
+        KeyState::Animated => KeyLook {
+            glyph: "\u{25c7}",
+            color: PALETTE.accent,
+        },
+        KeyState::Current => KeyLook {
+            glyph: "\u{25c6}",
+            color: PALETTE.accent,
+        },
+    }
 }
 
 /// key ボタンを1つ組む。押せば `on_press` がそのまま出る。
@@ -37,6 +56,41 @@ pub fn key_button<'a, M>(state: KeyState, on_press: M) -> iced::Element<'a, M>
 where
     M: Clone + 'a,
 {
-    let _ = (state, on_press);
-    todo!("red 先行 — 実装は次コミット")
+    let look = look(state);
+    let diamond: Element<'a, M> = text(look.glyph)
+        .size(FONT_SIZE)
+        .shaping(text::Shaping::Advanced)
+        .center()
+        .width(iced::Fill)
+        .height(iced::Fill)
+        .into();
+
+    button(diamond)
+        .width(KEY_BUTTON_SIZE)
+        .height(KEY_BUTTON_SIZE)
+        .padding(0)
+        .on_press(on_press)
+        .style(move |_theme, status| {
+            // Q3 接触の報酬: hover / press で地が段階的に応える。
+            let fill = match status {
+                button::Status::Hovered => palette::mix(PALETTE.accent, 16.0, PALETTE.bg_control),
+                button::Status::Pressed => palette::mix(PALETTE.accent, 26.0, PALETTE.bg_control),
+                button::Status::Active | button::Status::Disabled => PALETTE.bg_control,
+            };
+            button::Style {
+                background: Some(Background::Color(fill)),
+                text_color: look.color,
+                border: Border {
+                    color: PALETTE.outline,
+                    width: 1.0,
+                    radius: 3.0.into(),
+                },
+                shadow: iced::Shadow::default(),
+                snap: true,
+            }
+        })
+        .into()
 }
+
+/// 菱形の字の大きさ。
+const FONT_SIZE: f32 = 11.0;
