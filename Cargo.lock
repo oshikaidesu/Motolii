@@ -5222,6 +5222,7 @@ dependencies = [
  "motolii-core",
  "motolii-doc",
  "motolii-eval",
+ "motolii-gpu",
  "motolii-plugin",
  "motolii-testkit",
  "motolii-ui",

@@ -1,0 +1,62 @@
+$ cargo test -p motolii-shell-iced -j 5
+...
+     Running tests/stage_bind_groups_oracle.rs (target/debug/deps/stage_bind_groups_oracle-e584329a9774140a)
+
+running 2 tests
+test the_floor_constant_covers_what_re_renderer_actually_asks_for ... ok
+test the_bind_group_floor_reaches_iceds_real_device ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.44s
+
+     Running tests/stage_island_live_frame.rs (target/debug/deps/stage_island_live_frame-798f97c2e710dad2)
+
+running 2 tests
+test an_evaluated_document_frame_lands_on_the_stage_island ... ok
+test moving_the_playhead_changes_the_frame_on_the_stage_island ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+
+     Running tests/stage_island_pixels.rs (target/debug/deps/stage_island_pixels-3749f8511bdc0118)
+
+running 3 tests
+test a_gesture_inside_the_dummy_grab_region_is_swallowed ... ok
+test a_drag_through_the_widget_reaches_the_stage_without_validation_errors ... ok
+test the_known_frame_maps_head_on_through_the_iced_widget ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests/stage_reports.rs (target/debug/deps/stage_reports-8c56763b0c3fb03e)
+
+running 2 tests
+test a_stage_report_lands_in_the_transcript_but_never_the_journal ... ok
+test a_broken_probe_frame_is_reported_not_swallowed ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+...
+(full suite: unittests 21 + drive_browser 9 + drive_drop 4 + drive_export 4 +
+ drive_save_guard 7 + drive_seat 4 + drive_timeline 14 + inspector_drive 6 +
+ intent_gateway_fence 4 + jsonl_logs 3 + replay_oracle 3 + snapshot_start_screen 1 +
+ stage_bind_groups_oracle 2 + stage_island_live_frame 2 + stage_island_pixels 3 +
+ stage_reports 2 + theme_matches_generated_tokens 2 + widgets_context_menu 4 +
+ widgets_drop_zone 3 + widgets_key_button 3 + widgets_scrub_value 8 = 109 tests,
+ 0 failed)
+
+$ cargo test -p motolii-ui --lib stage_frame_seat -j 5
+running 8 tests
+test stage_frame_seat::tests::the_key_uses_the_composition_resolution_and_falls_back_to_full_hd ... ok
+test stage_frame_seat::tests::the_key_snaps_the_playhead_to_the_frame_grid ... ok
+test stage_frame_seat::tests::a_seat_without_a_completed_frame_hands_nothing_to_the_stage ... ok
+test stage_frame_seat::tests::only_playhead_or_revision_changes_submit_a_render ... ok
+test stage_frame_seat::tests::a_pending_request_keeps_showing_the_last_completed_frame ... ok
+test stage_frame_seat::tests::the_frame_follows_the_playhead ... ok
+test stage_frame_seat::tests::a_completed_frame_lands_in_the_display_slot ... ok
+test stage_frame_seat::tests::playback_never_blanks_the_stage_even_when_renders_are_dropped ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 345 filtered out; finished in 0.41s
+
+$ cargo test -p motolii-testkit ui_toolkit -j 5
+running 2 tests
+test ui_toolkit_dependency_names_cover_ecosystem ... ok
+test workspace_has_no_ui_toolkit_outside_ui_allowlist ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 4.51s

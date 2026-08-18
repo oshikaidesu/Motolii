@@ -54,7 +54,11 @@ pub mod rerun_stage;
 mod render_worker;
 mod shell;
 mod stage_app_geometry;
-mod stage_frame_seat;
+/// playhead 時刻の評価済みフレームの席。egui shell(`blitz_shell::pane`)と
+/// iced shell(`motolii-shell-iced::stage_island`)が同じ1つを使う
+/// (第二 render 経路を作らない — 絶対規律6)。M-1 前例に従い `pub` にした
+/// 共有部品(2026-08-18 stage frame seat 結線)。
+pub mod stage_frame_seat;
 mod stage_geometry_projection;
 mod stage_hit_test;
 mod stage_overlay_gpu;

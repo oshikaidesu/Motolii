@@ -492,8 +492,11 @@ pub(crate) enum RenderWorkerError {
     WorkerPanicked,
 }
 
+/// `pub`: `stage_frame_seat::StageFrameSeat::spawn` の戻り値として
+/// 外部 crate(iced shell)まで名指しできる必要がある(`stage_frame_seat` 側の
+/// `pub use` がここへ path を通している)。
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum RenderWorkerStartError {
+pub enum RenderWorkerStartError {
     #[error(transparent)]
     Runtime(#[from] motolii_plugins_firstparty::FirstPartyError),
     #[error("failed to spawn render worker: {0}")]

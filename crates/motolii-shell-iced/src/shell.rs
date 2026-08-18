@@ -179,6 +179,16 @@ impl Shell {
                 // **intent ではない** — decode thread からの返事を受けるだけ。
                 self.poll_waveform();
             }
+            Message::StagePolled => {
+                // **intent ではない** — この Message 自体は状態を変えない。
+                // Stage 島の `frame_seat` は shader widget の thread_local
+                // (`stage_island::Embed`)が持ち、`prepare` が毎回 request/poll
+                // する。ここが在る理由は redraw の刻みだけ:
+                // `main.rs::Host::subscription` の `window::frames()` 購読が
+                // この Message を刻み続けて `update → view` を回すことで、
+                // 非同期に完成した評価済みフレームを次の `prepare` が拾える
+                // (`ExportPolled` / `WaveformPolled` と同じ型の解決)。
+            }
             Message::CloseRequested => {
                 // 窓を閉じるのも「未保存のまま座席を捨てる」操作。
                 return if self.clear_unsaved_or_stay() {

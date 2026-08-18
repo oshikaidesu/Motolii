@@ -128,6 +128,14 @@ impl Host {
         if self.shell.waveform_building() {
             ticks.push(iced::window::frames().map(|_| Message::WaveformPolled));
         }
+        // Stage 島の評価済みフレームの席は live Document が座っている間だけ走る
+        // (`StagePane::wants_evaluated_frame` と同じ条件)。playhead 評価は
+        // render worker thread の非同期な返事なので、egui のように自分で
+        // repaint を起こす手段が無いここでは、この刻みが無いと完成したフレームが
+        // 画面に届かない。
+        if self.shell.document().is_some() {
+            ticks.push(iced::window::frames().map(|_| Message::StagePolled));
+        }
         iced::Subscription::batch(ticks)
     }
 
