@@ -33,6 +33,7 @@ pub use clip::{
     prepare_set_item_visible,
     prepare_trim_clip_in, prepare_trim_clip_out,
 };
+pub use effect_instance::prepare_set_effect_enabled;
 pub use split::prepare_split_clip;
 pub use track_item::{
     prepare_add_group, prepare_add_locator, prepare_place_asset_clip, prepare_remove_locator,

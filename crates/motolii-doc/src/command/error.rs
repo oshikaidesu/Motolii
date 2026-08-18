@@ -44,6 +44,10 @@ pub enum CommandError {
     /// GAP-14§2.1: 参照中Definitionの削除はReject(Cascadeしない)。
     #[error("effect definition {id} is in use by effect use(s) {use_ids:?}")]
     DefinitionInUse { id: u64, use_ids: Vec<u64> },
+    /// ON/OFF は「どの Use を通して触ったか」まで記録するので、
+    /// 使い手のいない定義は切り替えられない(`prepare_set_effect_enabled`)。
+    #[error("effect definition {id} has no effect use to toggle it through")]
+    EffectDefinitionUnused { id: u64 },
     #[error("effect definition {id} already exists")]
     EffectDefinitionAlreadyExists { id: u64 },
     #[error("effect definition {id} payload does not match existing ledger entry")]

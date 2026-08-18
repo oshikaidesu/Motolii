@@ -30,7 +30,7 @@ use egui_tiles::{Container, Linear, LinearDir, Tile, TileId, Tiles, Tree, UiResp
 
 use super::drive::{NativePrompts, ShellPrompts, ShellTranscript};
 use super::intent::{IntentJournal, ProjectSeat, Resume, ShellGateway, UiIntent};
-use super::pane::{BlitzPane, PaneKind};
+use super::pane::{BlitzPane, PaneKind, PaneRequest};
 use crate::browser_panel::BrowserRequest;
 use crate::timeline_editor::TimelineEditor;
 
@@ -46,7 +46,7 @@ struct BlitzShellBehavior<'a> {
     /// エディタが断った編集を言う場所。台帳は `Arc` 共有なので、殻の
     /// `gateway` を可変で借りている間も clone を持って言える。
     transcript: ShellTranscript,
-    /// 面が出した要求(いまは Browser のカードのダブルクリックだけ)。
+    /// 面が出した取り込み要求(Browser のカードのダブルクリック)。
     /// **ここでは実行しない** — 座席を触るのは描き終わってからの `app` である。
     /// 1フレームに1件で足りる(人の指は1本)。
     browser_request: Option<BrowserRequest>,
@@ -81,8 +81,16 @@ impl egui_tiles::Behavior<BlitzPane> for BlitzShellBehavior<'_> {
                 pane.set_live_playhead(editor.playhead_seconds());
             }
         }
-        if let Some(request) = pane.show(ui, self.render_state) {
-            self.browser_request = Some(request);
+        match pane.show(ui, self.render_state) {
+            Some(PaneRequest::Browser(request)) => self.browser_request = Some(request),
+            // Stage で板を選んだら、clip をクリックしたのと**同じ選択状態**にする
+            // （選択を持つのはエディタ1つだけ。Inspector は既存の配線で追従する）。
+            Some(PaneRequest::SelectLayer(layer)) => {
+                if let Some(editor) = self.editor.as_deref_mut() {
+                    editor.select_layer(layer);
+                }
+            }
+            None => {}
         }
         // ペイン本体をドラッグ元にはしない（タブのドラッグだけで足りる）。
         UiResponse::None
@@ -258,7 +266,12 @@ impl BlitzShellApp {
         Self {
             runtime,
             render_state,
-            tree: build_initial_tree(snapshot.as_ref(), &transcript, browser_root.clone()),
+            tree: build_initial_tree(
+                snapshot.as_ref(),
+                &transcript,
+                browser_root.clone(),
+                fixture,
+            ),
             gateway,
             seated,
             seated_revision,
@@ -305,8 +318,12 @@ impl BlitzShellApp {
             }
             None => {
                 if self.seated.is_some() {
-                    self.tree =
-                        build_initial_tree(None, &self.transcript, self.browser_root.clone());
+                    self.tree = build_initial_tree(
+                        None,
+                        &self.transcript,
+                        self.browser_root.clone(),
+                        self.fixture,
+                    );
                     self.seated = None;
                     self.seated_revision = 0;
                 }
@@ -720,9 +737,15 @@ fn seat_stage_documents(tree: &mut Tree<BlitzPane>, document: &Arc<motolii_doc::
 /// 横 ─┬─ Browser
 ///     ├─ 中央列（縦）─┬─ Stage
 ///     │               └─ Timeline
-///     └─ 右列（縦）─┬─ Inspector
-///                   └─ chrome タブ（Export / Settings / Panels）
+///     └─ Inspector
 /// ```
+///
+/// **既定に無入力の面は置かない**（2026-08-18 外部診断 F-02）。chrome の3枚
+/// （Export / Settings / Panels）は HTML texture 面で `Sense::hover()` しか
+/// 置いておらず、押しても handler も status も無い — 触れそうで触れない物を
+/// 出さない（Q0）。面そのものは消しておらず、`fixture` が真のとき
+/// （`--fixture` 展示 = 開発動線・screenshot）だけ右列の下にタブで出る。
+/// 押せる Export は従来どおり status 帯に在る。
 ///
 /// Stage だけ Blitz ではなく **Rerun Spatial Viewer** が描く。
 /// Motolii はその wrapper であって `re_renderer` で直接シーンを組まない（2026-08-11裁定）。
@@ -738,6 +761,7 @@ fn build_initial_tree(
     document: Option<&Arc<motolii_doc::Document>>,
     transcript: &ShellTranscript,
     browser_root: Option<PathBuf>,
+    fixture: bool,
 ) -> Tree<BlitzPane> {
     let mut tiles = Tiles::default();
 
@@ -763,17 +787,17 @@ fn build_initial_tree(
     // 右: Inspector。
     let inspector = tiles.insert_pane(plain(PaneKind::Inspector));
 
-    // chrome の 3 枚はタブとして 1 ペインにまとめる。
-    // 注意: これらは本来モーダル／拡張パネルであって常設面ではない。
-    // ここに席があるのは「main の画面を見る」ための便宜であり、
-    // 常設パネルという UI 決定ではない。
-    let chrome_export = tiles.insert_pane(plain(PaneKind::ChromeExport));
-    let chrome_settings = tiles.insert_pane(plain(PaneKind::ChromeSettings));
-    let chrome_panels = tiles.insert_pane(plain(PaneKind::ChromePanels));
-    let chrome = tiles.insert_tab_tile(vec![chrome_export, chrome_settings, chrome_panels]);
-
-    // 右列は Inspector（上）と chrome タブ（下）。
-    let right = tiles.insert_vertical_tile(vec![inspector, chrome]);
+    // 右列。既定は Inspector だけで、chrome の 3 枚は `--fixture` 展示のときだけ
+    // 下にタブで足す。**マウスを受けない面を製品の既定へ座らせない**（F-02）。
+    let right = if fixture {
+        let chrome_export = tiles.insert_pane(plain(PaneKind::ChromeExport));
+        let chrome_settings = tiles.insert_pane(plain(PaneKind::ChromeSettings));
+        let chrome_panels = tiles.insert_pane(plain(PaneKind::ChromePanels));
+        let chrome = tiles.insert_tab_tile(vec![chrome_export, chrome_settings, chrome_panels]);
+        tiles.insert_vertical_tile(vec![inspector, chrome])
+    } else {
+        inspector
+    };
 
     // 3 列を横に並べる。`centerColumn` が flex:1 で左右が固定幅相当なので、
     // 中央の share を大きく取る。
@@ -838,7 +862,7 @@ mod tests {
             "the editor serves the writer snapshot itself, not a re-load"
         );
 
-        let tree = build_initial_tree(Some(&snapshot), &ShellTranscript::default(), None);
+        let tree = build_initial_tree(Some(&snapshot), &ShellTranscript::default(), None, false);
         let mut timeline = 0;
         let mut stage = 0;
         for (_, tile) in tree.tiles.iter() {
@@ -893,7 +917,7 @@ mod tests {
 
         let mut seat = ProjectSeat::open(&path).expect("open temp project");
         let first = seat.snapshot();
-        let mut tree = build_initial_tree(Some(&first), &ShellTranscript::default(), None);
+        let mut tree = build_initial_tree(Some(&first), &ShellTranscript::default(), None, false);
 
         // エディタの操作 API で move を1回通す(writer 経由の実編集)。
         let layer = *names
@@ -935,7 +959,7 @@ mod tests {
 
     #[test]
     fn fixture_tree_has_no_live_document() {
-        let tree = build_initial_tree(None, &ShellTranscript::default(), None);
+        let tree = build_initial_tree(None, &ShellTranscript::default(), None, false);
         for (_, tile) in tree.tiles.iter() {
             if let Tile::Pane(pane) = tile {
                 assert!(
@@ -944,6 +968,74 @@ mod tests {
                     pane.kind()
                 );
             }
+        }
+    }
+
+    /// tree に座っている面の種類を並びのまま数える(検分用)。
+    fn seated_kinds(tree: &Tree<BlitzPane>) -> Vec<PaneKind> {
+        let mut kinds: Vec<PaneKind> = tree
+            .tiles
+            .iter()
+            .filter_map(|(_, tile)| match tile {
+                Tile::Pane(pane) => Some(pane.kind()),
+                Tile::Container(_) => None,
+            })
+            .collect();
+        kinds.sort_by_key(|kind| format!("{kind:?}"));
+        kinds
+    }
+
+    /// **既定の並びに無入力の面は座らない**(2026-08-18 外部診断 F-02)。
+    ///
+    /// 触れそうで触れない物を出さない(Q0)。chrome の3枚(Export / Settings /
+    /// Panels)は HTML texture 面で `Sense::hover()` しか置いていないので、
+    /// 既定の並びからは外れて `--fixture` 展示だけに残る。
+    #[test]
+    fn the_default_layout_seats_only_panes_that_take_input() {
+        let tree = build_initial_tree(None, &ShellTranscript::default(), None, false);
+        for kind in seated_kinds(&tree) {
+            assert!(
+                kind.takes_pointer_input(),
+                "{kind:?} は入力を受けないので既定の並びに置けない(Q0)"
+            );
+        }
+    }
+
+    /// 既定の並びは動く4面ちょうど。**減らしすぎてもいない。**
+    #[test]
+    fn the_default_layout_is_the_four_working_panes() {
+        let tree = build_initial_tree(None, &ShellTranscript::default(), None, false);
+        assert_eq!(
+            seated_kinds(&tree),
+            {
+                let mut want = vec![
+                    PaneKind::Browser,
+                    PaneKind::Stage,
+                    PaneKind::Timeline,
+                    PaneKind::Inspector,
+                ];
+                want.sort_by_key(|kind| format!("{kind:?}"));
+                want
+            },
+            "既定は Browser / Stage / Timeline / Inspector の4面"
+        );
+    }
+
+    /// HTML 面そのものは消していない — `--fixture` 展示(開発動線・screenshot)には
+    /// 従来どおり3枚が出る。
+    #[test]
+    fn the_fixture_display_still_shows_the_chrome_panes() {
+        let tree = build_initial_tree(None, &ShellTranscript::default(), None, true);
+        let kinds = seated_kinds(&tree);
+        for kind in [
+            PaneKind::ChromeExport,
+            PaneKind::ChromeSettings,
+            PaneKind::ChromePanels,
+        ] {
+            assert!(
+                kinds.contains(&kind),
+                "--fixture 展示は {kind:?} を残す(開発動線): {kinds:?}"
+            );
         }
     }
 

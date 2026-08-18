@@ -19,7 +19,7 @@ use motolii_doc::{DocParam, DocValue, Document, DocumentWriter, LayerId};
 use motolii_ui::inspector_panel::{
     project_inspector_live_model, InspectorEditParam, InspectorKeyState, InspectorPanel,
 };
-use motolii_ui::timeline_editor::{lab_fixture, TimelineEditor};
+use motolii_ui::timeline_editor::{lab_fixture, ItemFlag, TimelineEditor};
 use motolii_ui::timeline_rows::ParamRef;
 
 fn seated_editor() -> (TimelineEditor, std::collections::HashMap<LayerId, String>) {
@@ -346,4 +346,123 @@ fn position_keys(
             .collect(),
         _ => Vec::new(),
     }
+}
+
+// ---- 5. M / S / FX が意味へ届く(2026-08-18 外部診断 F-03、枝A) ----
+
+/// 「見えているトグルは押すと意味へ届く」。M / S は Timeline 行と**同じ1手**
+/// (`toggle_item_flag`)で Document を書き、Inspector の投影もその Document から
+/// 読む。だから局所 bool を反転するだけの実装ではここが通らない。
+#[test]
+fn the_inspector_mute_agrees_with_the_timeline_row() {
+    let (mut editor, names) = seated_editor();
+    let background = layer_named(&names, "Background");
+    editor.select_layer(background);
+
+    let mut panel = InspectorPanel::placeholder("seed");
+    fn seat(panel: &mut InspectorPanel, editor: &TimelineEditor) {
+        panel.seat_live(
+            editor.document(),
+            editor.selected_layers(),
+            editor.playhead_time().expect("playhead time"),
+        );
+    }
+    seat(&mut panel, &editor);
+    assert!(
+        !panel.read_model().expect("seated").flags.muted,
+        "fixture の Background は visible"
+    );
+
+    editor.toggle_item_flag(background, ItemFlag::Mute);
+
+    assert!(
+        !find_envelope(editor.document(), background).visible,
+        "Document の visible が変わっていない"
+    );
+    seat(&mut panel, &editor);
+    assert!(
+        panel.read_model().expect("seated").flags.muted,
+        "Document は mute なのに Inspector が ON のまま"
+    );
+    // Timeline 行の M も同じ Document を読む(2つの面の表示が割れない)。
+    assert_eq!(
+        editor.item_flags_for(background),
+        Some((false, false, false)),
+        "Timeline 側の (visible, solo, lock)"
+    );
+
+    editor.undo_gesture();
+    seat(&mut panel, &editor);
+    assert!(
+        !panel.read_model().expect("seated").flags.muted,
+        "1クリック = 1 Undo"
+    );
+}
+
+/// S も同じ経路。
+#[test]
+fn the_inspector_solo_reaches_the_document() {
+    let (mut editor, names) = seated_editor();
+    let background = layer_named(&names, "Background");
+
+    editor.toggle_item_flag(background, ItemFlag::Solo);
+
+    assert!(find_envelope(editor.document(), background).solo);
+    assert_eq!(editor.item_flags_for(background), Some((true, true, false)));
+}
+
+/// reference-document(effect を持つ唯一の fixture)へ座ったエディタ。
+fn editor_with_effects() -> TimelineEditor {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/mocks-ui/fixtures/reference-document.json");
+    let document = motolii_doc::load_document(&path).expect("reference document");
+    let catalog = Arc::new(reference_catalog());
+    TimelineEditor::new(DocumentWriter::new(document, catalog).expect("writer"))
+}
+
+/// FX の ON/OFF は `EffectDefinition.enabled` を書く。相手が**定義**なのは
+/// この文書模型が共有 FX だから(Inspector の要約も「N shared FX」と言っている)。
+#[test]
+fn the_inspector_effect_toggle_writes_the_definition() {
+    let mut editor = editor_with_effects();
+    let definition_id = editor
+        .document()
+        .effect_definitions
+        .first()
+        .expect("fixture effect definition")
+        .id;
+    let enabled = |editor: &TimelineEditor| {
+        editor
+            .document()
+            .effect_definition(definition_id)
+            .expect("definition")
+            .enabled
+    };
+    let before = enabled(&editor);
+
+    editor.set_effect_enabled(definition_id, !before);
+
+    assert_eq!(
+        enabled(&editor),
+        !before,
+        "FX の ON/OFF が Document へ届いていない"
+    );
+
+    editor.undo_gesture();
+    assert_eq!(enabled(&editor), before, "1クリック = 1 Undo");
+}
+
+/// 使い手のいない定義を切ろうとしたら**理由が出る**(無反応にしない)。
+#[test]
+fn toggling_an_unused_effect_definition_says_why_it_cannot() {
+    let mut editor = editor_with_effects();
+    let unused = motolii_doc::EffectDefinitionId::from_raw(9_999);
+
+    editor.set_effect_enabled(unused, false);
+
+    let said = editor.take_rejections();
+    assert!(
+        said.iter().any(|line| line.contains("9999")),
+        "断った理由が出ていない: {said:?}"
+    );
 }
