@@ -2,6 +2,8 @@
 
 状態: **現行dispatch地図 / R0-ACCEPT DONE / R1 READY-RECHECK**（2026-08-09）
 
+> **現在地(2026-08-19追記)**: 本書がR0/R1の施工nodeとして挙げる個別ファイル(`rn_product_host.rs`、`product_runtime.rs`、`document_edit_runtime.rs`等)の多くは、その後のRN製品面撤去(2026-08-16)・`document_edit_runtime`削除(2026-08-17)を経て**現物が存在しない**。本書は2026-08-09時点のdispatch記録として保持するが、現在の実装配置は[docs/CANON.md](CANON.md)、現在地の要約は[docs/README.mdのM3現在地](README.md)を見よ。
+
 本書は[現行M3仕様](specs/M3-ui-integration.md)のR0〜R4を、実在target、単一owner、非LLM oracle、依存関係へ落とす。成果waveは利用者出口、nodeは施工境界であり、node数を発注回数や担当LLM数として扱わない。同じowner、同じallowlist、同じoracleで閉じる隣接nodeは一つの短い実装waveにまとめてよい。
 
 旧[既知技術採択地図](m3-parallel-implementation-map.md)と[実行可能task地図](m3-executable-dispatch-map.md)は、既存owner、semantic oracle、失敗例を探す履歴資料である。旧IDや旧rendererを本書へ自動継承しない。

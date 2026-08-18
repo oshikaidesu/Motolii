@@ -1,6 +1,6 @@
 # M3 UIモック
 
-> **ARCHIVED — 新規変更禁止**: 現行の実行入口は`codex/m3-mock-components` worktreeの`docs/mocks-ui/`にあるReact/Viteモック、資料全体の参照順位は[M3 UI参照地図](../ui-reference-map.md)である。このディレクトリのHTMLとgoldenは明示的なparity検査・履歴確認専用であり、新しいUI判断、操作追加、golden更新の実装先または製品仕様ではない。通常動線からはReact側の`#archive/*`を経由してのみ参照する。
+> **ARCHIVED — 新規変更禁止**: 現行の実行入口は(別worktreeではなく)このリポジトリ直下の`docs/mocks-ui/`にあるReact/Viteモック、資料全体の参照順位は[M3 UI参照地図](../ui-reference-map.md)である。このディレクトリのHTMLとgoldenは明示的なparity検査・履歴確認専用であり、新しいUI判断、操作追加、golden更新の実装先または製品仕様ではない。通常動線からはReact側の`#archive/*`を経由してのみ参照する。**「今どれが正本か」の1枚索引は[docs/CANON.md](../CANON.md)。視覚(見た目)の現行正本は`docs/mocks-ui/public/{inspector,browser,timeline}-library.html`であり、下記v1〜v5は履歴比較資料である**(v1・v2は`docs/archive/m3-main-ui-early-mocks/`へ2026-08-19に移動済み)。
 
 ## モック共通規約
 
@@ -111,14 +111,16 @@
 
 ## 基準: 高密度メインUI v1
 
-[インタラクティブHTML](m3-main-ui-v1.html)をM3の視覚構成基盤とする。設定画面からのライト/ダーク切替、preview canvas、波形、driver scopeをブラウザ内で実際に描画する。
+> **訂正(2026-08-19)**: 見出しの「基準」は制定当時(2026-07-16)のものであり、現在は誤り。視覚の現行正本は`docs/mocks-ui/public/{inspector,browser,timeline}-library.html`(2026-08-16最終更新)。本セクションは密度比較の履歴資料として`docs/archive/m3-main-ui-early-mocks/`へ移動済み(元パス`docs/mocks/m3-main-ui-v1.html`)。詳細は[docs/CANON.md](../CANON.md)。
+
+~~[インタラクティブHTML](../archive/m3-main-ui-early-mocks/m3-main-ui-v1.html)をM3の視覚構成基盤とする。~~設定画面からのライト/ダーク切替、preview canvas、波形、driver scopeをブラウザ内で実際に描画する。
 
 このHTMLは2026-07-11にClaude Desktopが一時scratchpadへ生成したモックを、2026-07-14に回収し、テーマ設定要件・role名token・Dark既定・contrast修正を反映したもの。静止画はHTML改訂のたびにheadless Chrome(`#dark` / `#light` hashで固定入場)から再生成し、HTMLと乖離させない。
 
-![M3 main UI dark](m3-main-ui-v1-dark.png)
+![M3 main UI dark](../archive/m3-main-ui-early-mocks/m3-main-ui-v1-dark.png)
 
-- [ライト静止画](m3-main-ui-v1-light.png)
-- [ダーク静止画](m3-main-ui-v1-dark.png)
+- [ライト静止画](../archive/m3-main-ui-early-mocks/m3-main-ui-v1-light.png)
+- [ダーク静止画](../archive/m3-main-ui-early-mocks/m3-main-ui-v1-dark.png)
 - ステータス: **視覚構成の基準モック**。Document意味論や未決機能を確定するものではない
 - 色: Ableton Liveを先例にしたflat surface、細罫線、色=機能。装飾gradientなし
 - 密度: asset browser、preview、property、effect stack、driver、波形、階層timeline、easing popupを同一画面へ常設
@@ -126,11 +128,11 @@
 
 ## 比較案: グリッド基調 v2
 
-[m3-main-ui-v2.html](m3-main-ui-v2.html)は、v1と同一fixture・同一token roleのまま「余白は分離の手段にしない」規約(2026-07-14追記)で組み直した比較案。G0-6の構成審判はv1とv2を同じviewport・同じ情報量で比較して行う。
+[m3-main-ui-v2.html](../archive/m3-main-ui-early-mocks/m3-main-ui-v2.html)は、v1と同一fixture・同一token roleのまま「余白は分離の手段にしない」規約(2026-07-14追記)で組み直した比較案。G0-6の構成審判はv1とv2を同じviewport・同じ情報量で比較して行う。
 
-![M3 main UI v2 dark](m3-main-ui-v2-dark.png)
+![M3 main UI v2 dark](../archive/m3-main-ui-early-mocks/m3-main-ui-v2-dark.png)
 
-- [v2ダーク静止画](m3-main-ui-v2-dark.png) / [v2ライト静止画](m3-main-ui-v2-light.png)
+- [v2ダーク静止画](../archive/m3-main-ui-early-mocks/m3-main-ui-v2-dark.png) / [v2ライト静止画](../archive/m3-main-ui-early-mocks/m3-main-ui-v2-light.png)
 - 全spacing/行高/radiusを`--sp-*`/`--row-*`/`--radius` tokenから取得し、raw値の場当たり指定を排除(色と同じ機械検査に載る)
 - 領域分離は罫線+明度のみ。カード・影・空白分離を廃止(asset browserはカード型→22px行型)
 - timeline 10行常視。text / image / meshの項目種別色を追加し、item roleの全種を1画面へ収載
@@ -169,9 +171,9 @@
 
 ## timeline v0
 
-![M3 timeline visual mock](m3-timeline-v0.png)
+![M3 timeline visual mock](../archive/m3-main-ui-early-mocks/m3-timeline-v0.png)
 
-- [SVG source](m3-timeline-v0.svg)
+- [SVG source](../archive/m3-main-ui-early-mocks/m3-timeline-v0.svg)
 - ステータス: **比較用の静的モック**。G0-6のtoken決定、製品UI、goldenではない
 - 対象: asset browser、preview、inspector、一般的なtrack型timelineを同一画面へ置いた時の密度と視覚認知
 - 表現済み: video/audio/shape/text/group、選択、keyframe、mute、warning、playhead
@@ -189,7 +191,7 @@
 
 ## interaction v0(状態step送り)
 
-- [HTML mock](m3-interaction-v0.html)(ローカルでブラウザ表示。例: `python3 -m http.server --directory docs/mocks`)
+- [HTML mock](../archive/m3-main-ui-early-mocks/m3-interaction-v0.html)(ローカルでブラウザ表示。例: `python3 -m http.server --directory docs/mocks`)
 - ステータス: **比較用の状態モック**。token決定、製品UI、goldenではない
 - 対象: timeline v0が未表現とした操作状態を、autoplayアニメーションではなく**scene切替(motion 0)**で表現する。各sceneはそのまま静止fixtureとしてG0-6のgrayscale/CVD/5秒審判に転用できる
 - scene構成: 平常時 / hover・Info / keyboard focus / drag・trim中HUD / Relative drag(HUD+motion path ghost) / easing popup(区間選択→popup) / 接続valid(カーソル追従説明+仮線+輪郭◇) / 接続invalid(型付き拒否理由) / disabled+段階診断(Brief→Context)
@@ -207,7 +209,7 @@
 
 ## UI dynamics v1（力学検証）
 
-- [HTML mock](m3-ui-dynamics-v1.html)（ローカルでブラウザ表示。例: `python3 -m http.server --directory docs/mocks`）
+- [HTML mock](../archive/m3-main-ui-early-mocks/m3-ui-dynamics-v1.html)（ローカルでブラウザ表示。例: `python3 -m http.server --directory docs/mocks`）
 - ステータス: **UI力学の比較用モック**。既存のinteraction v0を改版したものではなく、2026-07-16時点のUI操作言語から別に構成した。token決定、製品UI、goldenではない
 - 対象: 選択のStage/Timeline/Inspector同期、説明付き接続、Relative Move、Camera/Handの所有差、共有Effectの常時接続線、Brief/Context/Inspectの段階診断
 - 共通状態: `Discover → Target → Preview → Commit / Cancel → Inspect → Undo`
