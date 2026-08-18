@@ -1,0 +1,267 @@
+# iced x Rerun SpatialStage — input bridge run (offscreen control)
+
+device kind: re_renderer
+mode: bridge-offscreen — the same script, the same translation, no window
+
+## verdicts
+
+bridge delivered 23 egui events (15 moves, 1 presses, 1 releases, 6 wheels, 0 focus)
+(d) reach — during the left-drag the picture CHANGED and Rerun's own eye MOVED (by 0.07682)
+(d) reach PASS: iced -> bridge -> egui RawInput -> SpatialStage's own EyeController. Rerun turned its own camera; no set_camera was involved.
+(d) picture — across the 18 frames of the drag the offscreen texture took 18 distinct values, and 0 of those frames were refused by the wgpu validation layer
+(d) persistence — the drag took the eye 0.07682 away from the pre-drag pose; 64 frames after the release it is 0.00451 away
+(d) persistence FAIL: the orbit does not accumulate — the eye eases back toward Rerun's default framing. SpatialStage swallows the blueprint write that would have kept it (see README).
+(d) persistence — one frame later, still holding the button but not moving, the eye had already slid back by 0.03068
+(d) recovery — 30 frames after the release (long enough for Rerun's orbit-centre indicator to fade out) the picture differs from what it was right after the release, and 0 more validation errors arrived in between
+(d) zoom — six wheel notches moved the eye 0.45770 from the settled pose; 30 frames later it is 0.00776 away
+(e) egui asked for these cursor icons across the run: [Default, Crosshair]; 0 of them have no iced::mouse::Interaction ([])
+(f) repaint — egui asked for these repaint delays in ms: [0, never]. `Primitive::prepare` returns `()`, so there is no seam to answer them from; this run redrew every frame with `iced::window::frames()` instead.
+
+## what crossed the bridge
+
+Counters {
+    moved: 15,
+    pressed: 1,
+    released: 1,
+    wheel: 6,
+    gone: 0,
+    modifiers: 0,
+    focus: 0,
+    delivered: 23,
+}
+
+## captures (name, fnv1a, eye, validation errors so far)
+
+00-document-camera: 4c4186b2e5256325  eye pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  validation 0
+01-free-camera-settled: 5f69835573025d69  eye pos(-0.3759, -1.1278, 0.3681) fwd(0.3007, 0.9038, -0.3045)  validation 0
+02-during-drag: af4d2540ee852112  eye pos(-0.4294, -1.1056, 0.3835) fwd(0.3436, 0.8847, -0.3149)  validation 0
+03-drag-held-but-still: a9d0437cfe955dcc  eye pos(-0.4086, -1.1155, 0.3769) fwd(0.3271, 0.8928, -0.3096)  validation 0
+04-just-after-release: 25a78f2a08b51246  eye pos(-0.3904, -1.1242, 0.3712) fwd(0.3124, 0.8997, -0.3050)  validation 0
+05-after-the-indicator-faded: c6d754007371e71f  eye pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  validation 0
+06-long-after-the-drag: 5d889acf41ff55e1  eye pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  validation 0
+07-during-wheel: 6bc3c0a1511c00b8  eye pos(-0.5141, -1.5424, 0.5041) fwd(0.3015, 0.9045, -0.3015)  validation 0
+08-after-the-wheel-faded: 6c2fc33f58df4666  eye pos(-0.3782, -1.1346, 0.3682) fwd(0.3015, 0.9045, -0.3015)  validation 0
+
+## per-tick readback (tick, fnv1a, eye, validation errors so far)
+
+Each row is the frame produced by the step of the *previous* tick.
+
+tick    1  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick    2  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick    3  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick    4  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick    5  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick    6  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick    7  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick    8  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick    9  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   10  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   11  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   12  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   13  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   14  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   15  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   16  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   17  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   18  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   19  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   20  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   21  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   22  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   23  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   24  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   25  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   26  4c4186b2e5256325  pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000)  v=0
+tick   27  d6aa37eeaea2f0d4  pos(-0.0302, -0.0907, 0.8168) fwd(0.0174, 0.1002, -0.9948)  v=0
+tick   28  d3940ceeafecbafc  pos(-0.0592, -0.1777, 0.7792) fwd(0.0360, 0.1948, -0.9802)  v=0
+tick   29  c34ebe5edfaf7466  pos(-0.0869, -0.2607, 0.7433) fwd(0.0554, 0.2831, -0.9575)  v=0
+tick   30  86efedb4f6c7fc07  pos(-0.1132, -0.3395, 0.7091) fwd(0.0750, 0.3643, -0.9283)  v=0
+tick   31  07cd69982887b3c6  pos(-0.1381, -0.4142, 0.6768) fwd(0.0946, 0.4382, -0.8939)  v=0
+tick   32  3c051744acb3cb93  pos(-0.1615, -0.4845, 0.6464) fwd(0.1138, 0.5046, -0.8558)  v=0
+tick   33  d31923e810be2adb  pos(-0.1835, -0.5504, 0.6179) fwd(0.1324, 0.5636, -0.8153)  v=0
+tick   34  95430c7f7d685494  pos(-0.2040, -0.6119, 0.5913) fwd(0.1501, 0.6156, -0.7736)  v=0
+tick   35  9f93b4e756d9fa63  pos(-0.2230, -0.6689, 0.5667) fwd(0.1667, 0.6610, -0.7317)  v=0
+tick   36  87671fc8e4123344  pos(-0.2405, -0.7214, 0.5439) fwd(0.1822, 0.7001, -0.6904)  v=0
+tick   37  226dd5fabb2c2a45  pos(-0.2565, -0.7695, 0.5231) fwd(0.1965, 0.7337, -0.6505)  v=0
+tick   38  f697b060a343573d  pos(-0.2711, -0.8134, 0.5042) fwd(0.2095, 0.7622, -0.6126)  v=0
+tick   39  eab668c7ef1c5b14  pos(-0.2843, -0.8530, 0.4870) fwd(0.2213, 0.7862, -0.5770)  v=0
+tick   40  30e28937fa1d3a67  pos(-0.2962, -0.8887, 0.4716) fwd(0.2319, 0.8064, -0.5441)  v=0
+tick   41  7e81aea9e1744005  pos(-0.3069, -0.9206, 0.4578) fwd(0.2413, 0.8232, -0.5139)  v=0
+tick   42  14374038e5786983  pos(-0.3163, -0.9489, 0.4455) fwd(0.2496, 0.8372, -0.4866)  v=0
+tick   43  654a5055c1a5f9a4  pos(-0.3247, -0.9740, 0.4347) fwd(0.2569, 0.8488, -0.4620)  v=0
+tick   44  edb7dee7e3bc0497  pos(-0.3320, -0.9960, 0.4251) fwd(0.2633, 0.8584, -0.4402)  v=0
+tick   45  54000defcbfc2574  pos(-0.3384, -1.0152, 0.4168) fwd(0.2689, 0.8664, -0.4209)  v=0
+tick   46  1aae40ac9aea7bfe  pos(-0.3440, -1.0320, 0.4096) fwd(0.2737, 0.8729, -0.4039)  v=0
+tick   47  fb50d5f7dc4e1a17  pos(-0.3488, -1.0465, 0.4033) fwd(0.2778, 0.8783, -0.3891)  v=0
+tick   48  d9cdbd6c2c03b8b2  pos(-0.3530, -1.0590, 0.3979) fwd(0.2814, 0.8827, -0.3763)  v=0
+tick   49  e3fbfee7cfd28c02  pos(-0.3566, -1.0698, 0.3932) fwd(0.2845, 0.8864, -0.3652)  v=0
+tick   50  37be350f3d61be7a  pos(-0.3597, -1.0790, 0.3892) fwd(0.2871, 0.8895, -0.3556)  v=0
+tick   51  69ca09cb2462e16f  pos(-0.3623, -1.0869, 0.3858) fwd(0.2893, 0.8920, -0.3474)  v=0
+tick   52  da7198cb0f0932e1  pos(-0.3645, -1.0936, 0.3829) fwd(0.2912, 0.8941, -0.3404)  v=0
+tick   53  290c6a6099927652  pos(-0.3665, -1.0994, 0.3804) fwd(0.2928, 0.8958, -0.3344)  v=0
+tick   54  eee68072b812c3c3  pos(-0.3681, -1.1042, 0.3783) fwd(0.2942, 0.8972, -0.3293)  v=0
+tick   55  5f9d1e1d5d8c38a2  pos(-0.3695, -1.1084, 0.3765) fwd(0.2953, 0.8984, -0.3250)  v=0
+tick   56  b366e3cc2e3f453d  pos(-0.3706, -1.1119, 0.3750) fwd(0.2963, 0.8994, -0.3213)  v=0
+tick   57  01d2dc8296a55faa  pos(-0.3716, -1.1148, 0.3737) fwd(0.2971, 0.9003, -0.3182)  v=0
+tick   58  f9999ba199d26ca0  pos(-0.3724, -1.1173, 0.3727) fwd(0.2978, 0.9009, -0.3156)  v=0
+tick   59  dd377515b68d8ff5  pos(-0.3731, -1.1194, 0.3718) fwd(0.2984, 0.9015, -0.3134)  v=0
+tick   60  ffd4895d2e5c8799  pos(-0.3737, -1.1212, 0.3710) fwd(0.2989, 0.9020, -0.3115)  v=0
+tick   61  3d7267910a58a780  pos(-0.3742, -1.1227, 0.3703) fwd(0.2993, 0.9024, -0.3099)  v=0
+tick   62  8c77b6486f328317  pos(-0.3747, -1.1240, 0.3698) fwd(0.2997, 0.9028, -0.3086)  v=0
+tick   63  9c7f62f152a61500  pos(-0.3750, -1.1250, 0.3693) fwd(0.3000, 0.9030, -0.3075)  v=0
+tick   64  d42b5ebb67183d38  pos(-0.3753, -1.1259, 0.3689) fwd(0.3002, 0.9033, -0.3065)  v=0
+tick   65  f9be5e65eb192b6f  pos(-0.3756, -1.1267, 0.3686) fwd(0.3004, 0.9035, -0.3057)  v=0
+tick   66  dd0ec9fc92f00463  pos(-0.3758, -1.1273, 0.3683) fwd(0.3006, 0.9037, -0.3051)  v=0
+tick   67  5f69835573025d69  pos(-0.3759, -1.1278, 0.3681) fwd(0.3007, 0.9038, -0.3045)  v=0
+tick   68  30d35789a03f0f13  pos(-0.3761, -1.1283, 0.3679) fwd(0.3009, 0.9039, -0.3040)  v=0
+tick   69  7a1bf68c3d790145  pos(-0.3762, -1.1287, 0.3678) fwd(0.3010, 0.9040, -0.3036)  v=0
+tick   70  b6d829b5d1ef8341  pos(-0.3763, -1.1290, 0.3676) fwd(0.3010, 0.9041, -0.3033)  v=0
+tick   71  0d29306ad0e171c1  pos(-0.3764, -1.1293, 0.3675) fwd(0.3011, 0.9042, -0.3030)  v=0
+tick   72  7abc680faff40fef  pos(-0.3765, -1.1295, 0.3674) fwd(0.3012, 0.9042, -0.3028)  v=0
+tick   73  5e34bca8d0545d5a  pos(-0.3858, -1.1253, 0.3702) fwd(0.3087, 0.9010, -0.3049)  v=0
+tick   74  249c061b1db8c5f3  pos(-0.3937, -1.1217, 0.3726) fwd(0.3151, 0.8981, -0.3067)  v=0
+tick   75  28872271132e1d58  pos(-0.4005, -1.1187, 0.3747) fwd(0.3205, 0.8957, -0.3083)  v=0
+tick   76  f5cff0fccc21ec35  pos(-0.4062, -1.1161, 0.3764) fwd(0.3251, 0.8936, -0.3096)  v=0
+tick   77  824265ff754ec016  pos(-0.4111, -1.1139, 0.3779) fwd(0.3290, 0.8917, -0.3107)  v=0
+tick   78  ec8dcb2b76cebd90  pos(-0.4152, -1.1120, 0.3792) fwd(0.3323, 0.8902, -0.3117)  v=0
+tick   79  6976da14c3b55282  pos(-0.4186, -1.1105, 0.3802) fwd(0.3351, 0.8889, -0.3124)  v=0
+tick   80  d55e351db5d1df22  pos(-0.4216, -1.1091, 0.3811) fwd(0.3374, 0.8878, -0.3131)  v=0
+tick   81  be92cc833b0d5e6c  pos(-0.4241, -1.1080, 0.3819) fwd(0.3394, 0.8868, -0.3137)  v=0
+tick   82  868f11b1ebdb79dc  pos(-0.4262, -1.1071, 0.3825) fwd(0.3410, 0.8860, -0.3142)  v=0
+tick   83  c4e686b26ef29c67  pos(-0.4279, -1.1063, 0.3831) fwd(0.3424, 0.8853, -0.3146)  v=0
+tick   84  af4d2540ee852112  pos(-0.4294, -1.1056, 0.3835) fwd(0.3436, 0.8847, -0.3149)  v=0
+tick   85  dd984d6dc08ebc38  pos(-0.4213, -1.1095, 0.3810) fwd(0.3372, 0.8879, -0.3129)  v=0
+tick   86  4389e3ab094114ac  pos(-0.4145, -1.1127, 0.3788) fwd(0.3317, 0.8906, -0.3111)  v=0
+tick   87  a9d0437cfe955dcc  pos(-0.4086, -1.1155, 0.3769) fwd(0.3271, 0.8928, -0.3096)  v=0
+tick   88  ad89e4578ad90d38  pos(-0.4037, -1.1179, 0.3754) fwd(0.3231, 0.8947, -0.3084)  v=0
+tick   89  23a529ee8f42dfd9  pos(-0.3995, -1.1199, 0.3740) fwd(0.3197, 0.8963, -0.3073)  v=0
+tick   90  b04fed80dbbaf749  pos(-0.3959, -1.1216, 0.3729) fwd(0.3169, 0.8976, -0.3064)  v=0
+tick   91  754d5bf6b369aa64  pos(-0.3929, -1.1230, 0.3720) fwd(0.3145, 0.8987, -0.3056)  v=0
+tick   92  25a78f2a08b51246  pos(-0.3904, -1.1242, 0.3712) fwd(0.3124, 0.8997, -0.3050)  v=0
+tick   93  b4f46424daaf8095  pos(-0.3883, -1.1252, 0.3705) fwd(0.3107, 0.9004, -0.3044)  v=0
+tick   94  9098f740f567cead  pos(-0.3865, -1.1261, 0.3699) fwd(0.3093, 0.9011, -0.3040)  v=0
+tick   95  b4209dbcdc67003d  pos(-0.3849, -1.1268, 0.3694) fwd(0.3080, 0.9016, -0.3036)  v=0
+tick   96  5b7cfb1a5a1dfd43  pos(-0.3837, -1.1274, 0.3690) fwd(0.3070, 0.9021, -0.3032)  v=0
+tick   97  efec622ff47a3f25  pos(-0.3826, -1.1280, 0.3687) fwd(0.3061, 0.9025, -0.3030)  v=0
+tick   98  86cdf95fe4b62218  pos(-0.3817, -1.1284, 0.3684) fwd(0.3054, 0.9028, -0.3027)  v=0
+tick   99  077778600038ac41  pos(-0.3809, -1.1287, 0.3682) fwd(0.3048, 0.9031, -0.3025)  v=0
+tick  100  976ffa4bed558b50  pos(-0.3803, -1.1291, 0.3680) fwd(0.3043, 0.9033, -0.3024)  v=0
+tick  101  fa88c0707bbf2329  pos(-0.3797, -1.1293, 0.3678) fwd(0.3038, 0.9035, -0.3022)  v=0
+tick  102  3f1b3abaa971d5bd  pos(-0.3793, -1.1295, 0.3676) fwd(0.3035, 0.9037, -0.3021)  v=0
+tick  103  a1b057406f284333  pos(-0.3789, -1.1297, 0.3675) fwd(0.3031, 0.9038, -0.3020)  v=0
+tick  104  785acdfb13c7bcc8  pos(-0.3786, -1.1299, 0.3674) fwd(0.3029, 0.9039, -0.3019)  v=0
+tick  105  5f7d95b7132fb173  pos(-0.3783, -1.1300, 0.3673) fwd(0.3027, 0.9040, -0.3019)  v=0
+tick  106  08449957f7c0343d  pos(-0.3781, -1.1301, 0.3673) fwd(0.3025, 0.9041, -0.3018)  v=0
+tick  107  78891bd9e97387fe  pos(-0.3779, -1.1302, 0.3672) fwd(0.3023, 0.9042, -0.3018)  v=0
+tick  108  6f07d7f801526eea  pos(-0.3777, -1.1303, 0.3672) fwd(0.3022, 0.9042, -0.3017)  v=0
+tick  109  0d518d9c95f82b72  pos(-0.3776, -1.1303, 0.3671) fwd(0.3021, 0.9043, -0.3017)  v=0
+tick  110  bfc003ffe6966a65  pos(-0.3775, -1.1304, 0.3671) fwd(0.3020, 0.9043, -0.3017)  v=0
+tick  111  a7824b36030410a4  pos(-0.3774, -1.1304, 0.3670) fwd(0.3019, 0.9044, -0.3016)  v=0
+tick  112  9a8ea7bd6314c264  pos(-0.3773, -1.1305, 0.3670) fwd(0.3019, 0.9044, -0.3016)  v=0
+tick  113  956b7103a3a1ebb3  pos(-0.3772, -1.1305, 0.3670) fwd(0.3018, 0.9044, -0.3016)  v=0
+tick  114  c927d9cf38c6f4fd  pos(-0.3772, -1.1305, 0.3670) fwd(0.3018, 0.9044, -0.3016)  v=0
+tick  115  66208b861a0d6e1a  pos(-0.3771, -1.1305, 0.3670) fwd(0.3017, 0.9044, -0.3016)  v=0
+tick  116  d6940d3362f00094  pos(-0.3771, -1.1306, 0.3670) fwd(0.3017, 0.9045, -0.3016)  v=0
+tick  117  cba6ce335c95278b  pos(-0.3771, -1.1306, 0.3669) fwd(0.3017, 0.9045, -0.3016)  v=0
+tick  118  4731521f1478998d  pos(-0.3770, -1.1306, 0.3669) fwd(0.3016, 0.9045, -0.3015)  v=0
+tick  119  4dd7b5f9e384334a  pos(-0.3770, -1.1306, 0.3669) fwd(0.3016, 0.9045, -0.3015)  v=0
+tick  120  b6ca4c774630f5ec  pos(-0.3770, -1.1306, 0.3669) fwd(0.3016, 0.9045, -0.3015)  v=0
+tick  121  3cd29ac1c8b87ed3  pos(-0.3770, -1.1306, 0.3669) fwd(0.3016, 0.9045, -0.3015)  v=0
+tick  122  be8ae3bace19476e  pos(-0.3770, -1.1306, 0.3669) fwd(0.3016, 0.9045, -0.3015)  v=0
+tick  123  c6d754007371e71f  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  124  17f1f4e1f4369cee  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  125  418f1846b27f97fb  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  126  385976c3a1837515  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  127  1f85dce13d1275ca  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  128  6f3ce5d3e9fda26e  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  129  c6ed734844d42743  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  130  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  131  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  132  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  133  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  134  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  135  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  136  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  137  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  138  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  139  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  140  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  141  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  142  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  143  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  144  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  145  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  146  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  147  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  148  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  149  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  150  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  151  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  152  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  153  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  154  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  155  5d889acf41ff55e1  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  156  c0aaa30761a11342  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  157  c0aaa30761a11342  pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  158  4830def457632483  pos(-0.3896, -1.1687, 0.3796) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  159  97d72e38d42e2df2  pos(-0.4104, -1.2311, 0.4004) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  160  8deec5aae8c7ad69  pos(-0.4355, -1.3066, 0.4255) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  161  8073ca061f4c3b56  pos(-0.4624, -1.3871, 0.4524) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  162  44c9a946a2e29162  pos(-0.4890, -1.4669, 0.4790) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  163  6bc3c0a1511c00b8  pos(-0.5141, -1.5424, 0.5041) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  164  d6dde0f89ca054ad  pos(-0.5190, -1.5570, 0.5090) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  165  76a98924bba403cd  pos(-0.5134, -1.5403, 0.5034) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  166  c1eafc5420fd1e78  pos(-0.5028, -1.5085, 0.4928) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  167  f2d43d015c7b2460  pos(-0.4901, -1.4704, 0.4801) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  168  1ff4f20dd05a800e  pos(-0.4770, -1.4311, 0.4670) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  169  d1ad0cda62357cea  pos(-0.4644, -1.3931, 0.4544) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  170  fc6b4e2b748f1742  pos(-0.4527, -1.3580, 0.4427) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  171  a855871f94977767  pos(-0.4421, -1.3263, 0.4321) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  172  9aa0934a917e66d3  pos(-0.4327, -1.2981, 0.4227) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  173  65d0a9cac7349864  pos(-0.4245, -1.2735, 0.4145) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  174  326e975db428b605  pos(-0.4174, -1.2521, 0.4074) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  175  e8d87cacc4958ee9  pos(-0.4112, -1.2337, 0.4012) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  176  341bce2006418bf2  pos(-0.4060, -1.2179, 0.3960) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  177  fffe831cbb182109  pos(-0.4015, -1.2044, 0.3915) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  178  c64d15df72c2c831  pos(-0.3977, -1.1930, 0.3877) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  179  dea27cc53faeb13b  pos(-0.3946, -1.1837, 0.3846) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  180  89433950f25f7964  pos(-0.3917, -1.1752, 0.3817) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  181  04e0880b25a74d05  pos(-0.3894, -1.1681, 0.3794) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  182  cd4cbf6af90764de  pos(-0.3874, -1.1621, 0.3774) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  183  90d066a590a224a8  pos(-0.3857, -1.1571, 0.3757) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  184  aecbb6327c1770d4  pos(-0.3843, -1.1529, 0.3743) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  185  36c233a64411a608  pos(-0.3831, -1.1493, 0.3731) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  186  0fd10bf8c389f31f  pos(-0.3821, -1.1463, 0.3721) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  187  90724a3ead4878bc  pos(-0.3813, -1.1438, 0.3713) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  188  87328d676465af08  pos(-0.3806, -1.1417, 0.3706) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  189  422bb369134bc2e6  pos(-0.3800, -1.1400, 0.3700) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  190  28a7435357903aea  pos(-0.3795, -1.1385, 0.3695) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  191  59ed3127334db8b9  pos(-0.3791, -1.1372, 0.3691) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  192  1c8bcc2b1723a480  pos(-0.3787, -1.1362, 0.3687) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  193  7dac7262c7b1d897  pos(-0.3784, -1.1353, 0.3684) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  194  6c2fc33f58df4666  pos(-0.3782, -1.1346, 0.3682) fwd(0.3015, 0.9045, -0.3015)  v=0
+tick  195  3d6667886c17311d  pos(-0.3780, -1.1339, 0.3680) fwd(0.3015, 0.9045, -0.3015)  v=0
+
+## embed log
+
+
+## step log
+
+device kind: re_renderer
+  requested max_bind_groups = 4
+  requested features = Features { features_wgpu: FeaturesWGPU(0x0), features_webgpu: FeaturesWebGPU(0x0) }
+  adapter = AdapterInfo { name: "Apple M4", vendor: 0, device: 0, device_type: IntegratedGpu, device_pci_bus_id: "", driver: "", driver_info: "", backend: Metal, subgroup_min_size: 4, subgroup_max_size: 64, transient_saves_memory: true }
+capture 00-document-camera: wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-aac82412cce64bc3d/docs/reviews/evidence/iced-rerun-embed-probe/interactive-bridge-offscreen-re_renderer-00-document-camera.png (fnv1a 4c4186b2e5256325, eye pos(-0.0000, -0.0000, 0.8560) fwd(0.0000, 0.0000, -1.0000))
+step: camera -> Free (generation 2)
+capture 01-free-camera-settled: wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-aac82412cce64bc3d/docs/reviews/evidence/iced-rerun-embed-probe/interactive-bridge-offscreen-re_renderer-01-free-camera-settled.png (fnv1a 5f69835573025d69, eye pos(-0.3759, -1.1278, 0.3681) fwd(0.3007, 0.9038, -0.3045))
+(e) hovering, no button: egui asked for Crosshair -> iced Some(Crosshair)
+@press 71 Left
+capture 02-during-drag: wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-aac82412cce64bc3d/docs/reviews/evidence/iced-rerun-embed-probe/interactive-bridge-offscreen-re_renderer-02-during-drag.png (fnv1a af4d2540ee852112, eye pos(-0.4294, -1.1056, 0.3835) fwd(0.3436, 0.8847, -0.3149))
+(e) mid-drag, left button down: egui asked for Default -> iced Some(Idle)
+capture 03-drag-held-but-still: wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-aac82412cce64bc3d/docs/reviews/evidence/iced-rerun-embed-probe/interactive-bridge-offscreen-re_renderer-03-drag-held-but-still.png (fnv1a a9d0437cfe955dcc, eye pos(-0.4086, -1.1155, 0.3769) fwd(0.3271, 0.8928, -0.3096))
+@release 88 Left
+capture 04-just-after-release: wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-aac82412cce64bc3d/docs/reviews/evidence/iced-rerun-embed-probe/interactive-bridge-offscreen-re_renderer-04-just-after-release.png (fnv1a 25a78f2a08b51246, eye pos(-0.3904, -1.1242, 0.3712) fwd(0.3124, 0.8997, -0.3050))
+capture 05-after-the-indicator-faded: wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-aac82412cce64bc3d/docs/reviews/evidence/iced-rerun-embed-probe/interactive-bridge-offscreen-re_renderer-05-after-the-indicator-faded.png (fnv1a c6d754007371e71f, eye pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015))
+capture 06-long-after-the-drag: wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-aac82412cce64bc3d/docs/reviews/evidence/iced-rerun-embed-probe/interactive-bridge-offscreen-re_renderer-06-long-after-the-drag.png (fnv1a 5d889acf41ff55e1, eye pos(-0.3769, -1.1307, 0.3669) fwd(0.3015, 0.9045, -0.3015))
+capture 07-during-wheel: wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-aac82412cce64bc3d/docs/reviews/evidence/iced-rerun-embed-probe/interactive-bridge-offscreen-re_renderer-07-during-wheel.png (fnv1a 6bc3c0a1511c00b8, eye pos(-0.5141, -1.5424, 0.5041) fwd(0.3015, 0.9045, -0.3015))
+capture 08-after-the-wheel-faded: wrote /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-aac82412cce64bc3d/docs/reviews/evidence/iced-rerun-embed-probe/interactive-bridge-offscreen-re_renderer-08-after-the-wheel-faded.png (fnv1a 6c2fc33f58df4666, eye pos(-0.3782, -1.1346, 0.3682) fwd(0.3015, 0.9045, -0.3015))

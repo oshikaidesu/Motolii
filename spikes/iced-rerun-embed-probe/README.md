@@ -15,8 +15,12 @@
 | (a) | iced のランタイム device 1つで `re_renderer` も動く(device を2つ作らない) | **成立。ただし iced の `max_bind_groups = 2` に `LineRenderer` が当たる** |
 | (b) | E0 と同じ4象限シーンが iced の窓に出て、E0 の期待色 oracle を通る | **PASS** |
 | (c) | shader widget の click が型付き Message になり、`set_camera` で絵が変わる | **PASS(配送の最終区間だけ人手)** |
+| (d) | iced の入力を egui の `RawInput` へ翻訳すると、`SpatialStage` **自身の** orbit / zoom が動く | **到達は PASS。絵の追随は iced の device で FAIL。姿勢の保持は device に関係なく FAIL** |
+| (e) | egui が要求する cursor icon を `Program::mouse_interaction` へ写せる | **PASS(1フレーム遅れ。実際の OS カーソル変化は未確認)** |
+| (f) | repaint 要求 / IME / キーボード / フォーカスの経路 | **repaint と IME に口が無い。キーボードは素通し、フォーカス調停は存在しない** |
 
 証拠(PNG と実行ログ)は `docs/reviews/evidence/iced-rerun-embed-probe/`。
+(d)(e)(f) の分は `interactive-bridge-` 接頭辞。
 
 ## pin
 
@@ -43,9 +47,19 @@ cargo run -j 5 -- gui <出力ディレクトリ>
 
 # (c) を人の click で確かめたいとき。窓は click まで開いたまま待つ。
 cargo run -j 5 -- gui-interactive <出力ディレクトリ>
+
+# (d)(e)(f)。窓を開き、合成した drag / wheel の列を台本どおり流して自分で終了する。
+cargo run -j 5 -- bridge <出力ディレクトリ>
+
+# 同じ (d)(e)(f) を人のドラッグで。窓は開いたまま待つ(未実施の口)。
+cargo run -j 5 -- bridge-interactive <出力ディレクトリ>
+
+# (d) の対照群。窓を開かずに**同じ台本**を、指定した device 記述の上で回す。
+cargo run -j 5 -- bridge-offscreen re_renderer <出力ディレクトリ>
+cargo run -j 5 -- bridge-offscreen iced-windowed <出力ディレクトリ>
 ```
 
-`cargo test` は oracle と素材の単体テストだけを回す(GPU 不要)。
+`cargo test` は oracle・素材・**翻訳と台本**の単体テストを回す(GPU 不要)。
 
 ## 詰まった箇所(そのまま壁の一覧でもある)
 
@@ -135,6 +149,121 @@ probe は依存を増やさずに済ませたいので `iced::window::frames()` 
   (`PipelineLayoutDescriptor` の `bind_group_layouts: &[Option<&_>]` と `immediate_size`、
   `RenderPipelineDescriptor::multiview_mask`、`push_error_scope` が guard を返すようになった点)。
 
+### 7. 入力の翻訳そのものは薄い(壁ではない)
+
+`probe/src/bridge.rs`(442 行、うち約半分は説明とテスト)が iced の
+`Program::update` が受けた `iced::Event` を `egui::Event` へ変換して1フレーム分溜め、
+`Primitive::prepare` が `egui::RawInput.events` へ載せる。egui-winit がやっていることの
+iced 版で、差は2つだけだった。
+
+- **原点**。egui へ渡す座標は「stage が描かれている領域」の左上原点。iced は
+  `Program::update` に widget の `bounds`(論理座標)をくれるので引ける。
+- **pixels_per_point**。`Offscreen` は widget の**物理**画素数で作られ、
+  `egui_ctx.set_pixels_per_point(1.0)` にしてあるので、論理座標 × scale factor が
+  egui の座標になる。scale factor は `Viewport` にしか無いので、キューには論理座標のまま
+  積んで prepare 側で掛ける。`ScrollDelta::Pixels` は論理 point のままで
+  `MouseWheelUnit::Point` に載せる(ここで scale を掛けると2倍速く回る)。
+
+翻訳の結果は数値で確かめてある。左ドラッグ12手で `SpatialStage::last_eye()` が動き、
+ホイール6ノッチで軌道半径が変わる。**`set_camera` は一度も呼んでいない** — 動かしたのは
+Rerun 自身の `EyeController` である。
+
+### 8. `LineRenderer` は「作れない」だけでなく「触った瞬間に毎フレーム落ちる」
+
+(a) の但し書きは「gizmo が出ないだけ」ではなかった。Rerun の 3D view は
+**操作が始まった瞬間に orbit 中心の目印を線分で描く**(`ui_3d.rs` の
+"center orbit orientation help"、最後の操作から 0.35 秒 + fade 0.1 秒だけ出る)。
+その1バッチが `LineRenderer` を使うので、iced の device では
+
+```
+In a CommandEncoder, label = '/'
+  In a set_pipeline command
+    RenderPipeline with 'LineRenderer::render_pipeline_color_opaque' label is invalid
+```
+
+となり、**コマンドバッファごと捨てられて offscreen texture が更新されない**。
+つまり「ドラッグしている間だけ絵が止まり、手を離して 0.45 秒ほど経つと動き出す」。
+
+同じ台本を2つの device 記述で回した対照群がそれを1行で言い切っている。
+
+| device 記述 | ドラッグ18フレームの絵 | 検証エラー |
+|---|---|---|
+| `re_renderer`(`max_bind_groups = 4`) | **18通り**(毎フレーム変わる) | 0 |
+| `iced-windowed`(`max_bind_groups = 2`) | **2通り**(2フレーム目で固まる) | 16 |
+
+`last_eye()` の数列は**両者で完全に一致する**(どちらも 0.07682 動いた)。
+入力は同じだけ届いていて、違うのは絵が出るかどうかだけである。
+証拠: `interactive-bridge-offscreen-{re_renderer,iced-windowed}-run.txt`。
+
+### 9. orbit は残らない — `SpatialStage` がブループリント書き戻しを握り潰す
+
+これは iced とは無関係で、**対照群でも同じように失敗する**。
+
+Rerun の 3D カメラの姿勢はブループリント (`EyeControls3D`) が正本で、ドラッグの結果は
+`EyeController::save_to_blueprint` → `SystemCommand::AppendToStore` で書き戻される。
+`SpatialStage::process_system_commands` は `SetSelection` と `SetFocus` しか見ておらず、
+`AppendToStore` は `_ => {}` で落ちる。ブループリントに何も無いままなので
+`EyeController::from_blueprint` は毎フレーム fallback(シーンの自動フレーミング)を返し、
+さらに fallback を使っている間は `start_interpolation()` が呼ばれ続ける。
+
+結果として:
+
+- そのフレームの drag_delta は効く(絵も eye も動く)
+- 次のフレームには既定の姿勢へ向かって補間で戻り始める
+- 64 フレーム後にはほぼ元の位置に戻っている(0.15286 → 0.00319)
+
+「入力は通る。姿勢が残らない」。埋め込み側から Rerun のカメラを**持続的に**動かす道は、
+今のところ `set_camera`(こちらは sticky)しか無い。
+
+### 10. egui の再描画要求に答える口が `Primitive::prepare` に無い
+
+egui は毎フレーム `ViewportOutput::repaint_delay` で「次はいつ描いてほしいか」を言う。
+この走行では `0`(すぐ)と「無限」の2値が観測された。iced 側で答えられるのは
+`Program::update` が返す `Action::request_redraw_at` だけで、**`Primitive::prepare` の
+戻り値は `()`** である。つまり「入力が無いのに egui が再描画したい」場合
+(補間・アニメーション・非同期の読み込み)を伝える経路が無い。
+
+probe は `iced::window::frames()` で毎フレーム描いて回避している。実運用では
+「常時再描画」か「`prepare` から `window::RedrawRequest` を送れる seam を iced に足す」の
+どちらかになる。
+
+### 11. shader widget は IME を要求できない
+
+iced の IME は `Widget::update` の中で `Shell::request_input_method` を呼んで有効化する。
+`shader::Program::update` は `Shell` を受け取らないので、**呼ぶ手段が無い**。
+`shader::Event` は `iced::Event` そのものなので `InputMethod(Preedit/Commit)` は型としては
+届きうるが、要求していない以上イベントは来ない。egui 側 (`platform_output.ime`) の
+出力も同じ理由で行き先が無い。今回は実装せず、経路の有無だけ確かめた。
+
+### 12. フォーカスの奪い合いは「起きない」— 調停が存在しないから
+
+iced は**すべてのイベントをすべての widget に配る**
+(`user_interface.rs`: overlay が capture しない限り `root.update` を必ず呼ぶ)。
+キーボードイベントも focus に関係なく shader widget に届く。iced の focus は
+`operation::focusable` を実装した widget が自分で名乗る規約で、shader widget は
+それを実装していない。したがって
+
+- egui が `wants_pointer_input = true` と言っていても、iced はそれを見ない
+- 捕まえたければ埋め込み側が `Action::and_capture()` を返して**自分で決める**
+- 逆に何もしなければ他の widget にも同じイベントが流れる
+
+本 probe は `and_capture()` を返していない(窓いっぱいで競合が無く、
+捕まえると (f) の観測そのものを潰すため)。
+
+### 13. cursor icon は写せる。ただし1フレーム遅れる
+
+`platform_output.cursor_icon` は `SpatialStage::show` を回した**後**にしか読めず、
+`Program::mouse_interaction` はその次のフレームに呼ばれる。写像自体は
+egui の 26 種のうち `VerticalText` を除く全部が `iced::mouse::Interaction` に対応した
+(8方向のリサイズは iced の2軸+2斜めへ丸める)。走行中に Rerun が要求したのは
+`Default` と `Crosshair` の2つだけで、どちらも写せた。
+
+なお **ホバー中は `Crosshair`、ドラッグ中は `Default`** だった。Rerun は orbit 中に
+`Grab`/`Grabbing` を要求しない。「掴んでいる感」を出したいなら埋め込み側が足す話になる。
+
+自動走行は `Program::mouse_interaction` の戻り値までしか見ていない。
+**OS のカーソルが実際に変わるか**は `bridge-interactive` で人が確かめる必要がある(未実施)。
+
 ## ビルドの重さ
 
 - 依存グラフ: 836 package(Cargo.lock)。wgpu も egui もグラフ上に1つずつしかない。
@@ -144,9 +273,17 @@ probe は依存を増やさずに済ませたいので `iced::window::frames()` 
 
 ## 測っていないこと
 
-- `iced_test` / Simulator の統合、AccessKit、IME、タイムライン widget(発注時の範囲外)。
-- **OS のマウス click の配送**。自動走行の (c) は widget の `Program::update` を直接叩いて
-  型付き Message を取り出し、それを**ランタイム経由で** `App::update` へ流している。
-  winit → widget tree の配送区間だけは `gui-interactive` で人が押して確かめる必要がある。
+- `iced_test` / Simulator の統合、AccessKit、タイムライン widget(発注時の範囲外)。
+- **IME とキーボードの実装**。経路の有無だけ調べた(上の 11 番)。`bridge.rs` が翻訳するのは
+  mouse move / press / release / wheel と `ModifiersChanged` だけで、`Key` / `Text` /
+  `Ime` は意図的に落としている。
+- **OS のマウス入力の配送**。自動走行の (c)(d)(e)(f) はいずれも widget の
+  `Program::update` を直接叩いている。翻訳から先(egui・Rerun・GPU)は全部本物だが、
+  winit → widget tree の配送区間だけは通っていない。そこは `gui-interactive` /
+  `bridge-interactive` で人が押して確かめる必要がある。**どちらも未実施**。
+- **OS カーソルが実際に変わるか**(上の 13 番)。写像と `Program::mouse_interaction` の
+  戻り値までしか見ていない。
 - 長時間動かしたときの安定性、resize の追従(size 変更時は stage を作り直す実装になっている)、
   MSAA の有無による差。
+- Rerun 側の picking(クリックでエンティティを選ぶ)。入力は届くようになったので
+  `take_selected_entity_path()` が動くはずだが、今回は測っていない。

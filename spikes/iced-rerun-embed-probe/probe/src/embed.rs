@@ -83,6 +83,57 @@ struct Embed {
     startup_validation: Vec<String>,
 }
 
+/// stage のカメラを誰が握るか。
+///
+/// - `Document` は元 probe の (c) と同じ「iced 側が `set_camera` で置く」形。
+///   置かれている間、Rerun 自身の入力処理は `EyeState::update` の頭で短絡される。
+/// - `Free` は `clear_camera` した状態で、カメラは Rerun のブループリント既定 +
+///   Rerun 自身の入力処理が決める。**(d) の orbit を測れるのはこちらだけ**である。
+#[derive(Debug, Clone, Copy)]
+pub enum CameraMode {
+    Document { pull_back: f32 },
+    Free,
+}
+
+/// 直近フレームの eye(位置と前方)。(d) を画素だけでなく数値でも言うため。
+pub static EYE: Mutex<Option<[f32; 6]>> = Mutex::new(None);
+
+pub fn eye() -> Option<[f32; 6]> {
+    EYE.lock().ok().and_then(|slot| *slot)
+}
+
+/// (e)(f) の観測値を1フレーム分まとめて外へ出す。
+#[derive(Debug, Clone, Copy, Default)]
+#[allow(dead_code, reason = "走行ログに Debug で丸ごと出す欄がある")]
+pub struct FrameObservation {
+    pub cursor_icon_is_default: bool,
+    pub wants_pointer_input: bool,
+    pub repaint_delay_ms: Option<u128>,
+}
+
+pub static OBSERVATION: Mutex<Option<FrameObservation>> = Mutex::new(None);
+
+pub fn observation() -> FrameObservation {
+    OBSERVATION
+        .lock()
+        .ok()
+        .and_then(|slot| *slot)
+        .unwrap_or_default()
+}
+
+/// wgpu が文句を言った回数の通算。フレーム間の差が「このフレームは落ちた」の印。
+pub static VALIDATION_TOTAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// 直近の検証エラー本文。同じ物が毎フレーム出るので1本だけ持つ。
+pub static LAST_VALIDATION: Mutex<Option<String>> = Mutex::new(None);
+
+pub fn validation_total() -> u64 {
+    VALIDATION_TOTAL.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn last_validation() -> Option<String> {
+    LAST_VALIDATION.lock().ok().and_then(|slot| slot.clone())
+}
+
 thread_local! {
     static EMBED: RefCell<Option<Embed>> = const { RefCell::new(None) };
     /// 初期化に失敗したらもう試さない。毎フレーム同じ検証エラーを吐かせない。
@@ -249,7 +300,7 @@ impl shader::Pipeline for StagePipeline {
 /// GPU 資源は `StagePipeline` と thread_local が持つ。
 #[derive(Debug, Clone, Copy)]
 pub struct StagePrimitive {
-    pub pull_back: f32,
+    pub camera: CameraMode,
     pub generation: u64,
 }
 
@@ -302,21 +353,58 @@ impl shader::Primitive for StagePrimitive {
             let embed = slot.as_mut().expect("just built");
 
             if embed.applied_generation != self.generation {
-                embed
-                    .stage
-                    .set_camera(stage::document_camera(self.pull_back));
+                match self.camera {
+                    CameraMode::Document { pull_back } => {
+                        embed.stage.set_camera(stage::document_camera(pull_back));
+                        log(format!(
+                            "applied camera generation {} (document, pull_back = {pull_back:.3})",
+                            self.generation
+                        ));
+                    }
+                    CameraMode::Free => {
+                        embed.stage.clear_camera();
+                        log(format!(
+                            "applied camera generation {} (free — Rerun's own camera state is \
+                             back in charge)",
+                            self.generation
+                        ));
+                    }
+                }
                 embed.applied_generation = self.generation;
                 for _ in 0..stage::SETTLE_FRAMES {
                     embed.offscreen.frame(&mut embed.stage)?;
                     embed.frames += 1;
                 }
-                log(format!(
-                    "applied camera generation {} (pull_back = {:.3})",
-                    self.generation, self.pull_back
-                ));
-            } else {
-                embed.offscreen.frame(&mut embed.stage)?;
-                embed.frames += 1;
+            }
+
+            // **入力ブリッジの出口**。この frame までに iced が配ったイベントを
+            // egui の RawInput へ載せて、`SpatialStage::show` を1回だけ回す。
+            let (events, modifiers) = crate::bridge::drain(scale);
+            embed
+                .offscreen
+                .frame_with_input(&mut embed.stage, events, modifiers)?;
+            embed.frames += 1;
+
+            // (d) の数値側。Rerun 自身が持っている eye を読み戻す。
+            if let Ok(mut slot) = EYE.lock() {
+                *slot = embed.stage.last_eye().map(|eye| {
+                    let position = eye.pos_in_world();
+                    let forward = eye.forward_in_world();
+                    [
+                        position.x, position.y, position.z, forward.x, forward.y, forward.z,
+                    ]
+                });
+            }
+            if let Ok(mut slot) = OBSERVATION.lock() {
+                *slot = Some(FrameObservation {
+                    cursor_icon_is_default: embed.offscreen.last_cursor_icon()
+                        == egui::CursorIcon::Default,
+                    wants_pointer_input: embed.offscreen.wants_pointer_input(),
+                    repaint_delay_ms: embed
+                        .offscreen
+                        .last_repaint_delay()
+                        .map(|delay| delay.as_millis()),
+                });
             }
 
             let mut validation_errors = embed.startup_validation.clone();
@@ -432,6 +520,71 @@ pub struct StageProgram {
     pub generation: u64,
 }
 
+// ---------------------------------------------------------------------------
+// BridgeProgram: 入力 → egui の RawInput(本レーンが新しく測る経路)
+// ---------------------------------------------------------------------------
+
+/// **(d)(e)(f) の要**。`StageProgram` が click を1つだけ型付き Message にしていたのに対し、
+/// こちらは mouse move / press / release / wheel を丸ごと `egui::RawInput` へ渡す。
+/// カメラを動かすのは `set_camera` ではなく `SpatialStage` 自身の orbit である。
+pub struct BridgeProgram {
+    pub camera: CameraMode,
+    pub generation: u64,
+}
+
+impl<Message> shader::Program<Message> for BridgeProgram {
+    type State = ();
+    type Primitive = StagePrimitive;
+
+    fn update(
+        &self,
+        _state: &mut Self::State,
+        event: &iced::Event,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> Option<iced::widget::Action<Message>> {
+        let pending = crate::bridge::translate(event, bounds, cursor);
+        if pending.is_empty() {
+            return None;
+        }
+        crate::bridge::push(pending);
+        // Message は publish しない。カメラを動かすのは stage 自身であって
+        // アプリではないので、アプリへ渡す物が無い。次のフレームで絵が変わる
+        // ことだけが要るので、再描画だけ頼む。
+        //
+        // `and_capture` はしない。この widget は窓いっぱいで他に競合が無く、
+        // 捕まえると (f) の「フォーカスの奪い合い」を自分で潰してしまう。
+        Some(iced::widget::Action::request_redraw())
+    }
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        _cursor: mouse::Cursor,
+        _bounds: Rectangle,
+    ) -> Self::Primitive {
+        StagePrimitive {
+            camera: self.camera,
+            generation: self.generation,
+        }
+    }
+
+    /// **(e)**: egui が要求した cursor icon を iced の `Interaction` へ写す。
+    /// 写せない icon(`VerticalText`)だけは iced の既定へ落ちる。
+    fn mouse_interaction(
+        &self,
+        _state: &Self::State,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> mouse::Interaction {
+        if !cursor.is_over(bounds) {
+            return mouse::Interaction::default();
+        }
+        crate::bridge::to_iced_interaction(crate::bridge::cursor_icon())
+            .unwrap_or(mouse::Interaction::default())
+    }
+}
+
 impl shader::Program<Message> for StageProgram {
     type State = ();
     type Primitive = StagePrimitive;
@@ -468,7 +621,9 @@ impl shader::Program<Message> for StageProgram {
         _bounds: Rectangle,
     ) -> Self::Primitive {
         StagePrimitive {
-            pull_back: self.pull_back,
+            camera: CameraMode::Document {
+                pull_back: self.pull_back,
+            },
             generation: self.generation,
         }
     }
