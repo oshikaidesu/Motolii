@@ -22,9 +22,12 @@
 //! - **訊くこと**。dialog(`ShellPrompts`)は intent の外に居て、**決まった答え**
 //!   (`NewProject { path }` の path)だけが intent の中へ入る。だから replay は
 //!   dialog を二度と開かない
-//! - **view の操作**。camera・選択・panel の並びは本レーンのスコープ外(将来枠)
-//! - **timeline_editor の中の編集**と Undo/Redo。あれは既に D2 Command として
-//!   `motolii-doc` の journal を通る。shell 層の intent 化は wave E
+//! - **view の操作**。camera・panel の並びは本レーンのスコープ外(将来枠)。
+//!   Timeline の zoom / pan / scroll も view の状態なので intent にしない
+//!   (再現は shell 側の Message 列 replay が持つ)
+//! - **egui pane の中の編集の intent 化**。Timeline の編集 intent
+//!   (`SelectLayer` 〜 `StepPlayhead`)は 2026-08-18 M-3 で入り、iced shell は
+//!   これだけを通る。egui pane は当面 `project_mut` の穴(下記)で D2 へ直行する
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -34,6 +37,17 @@ use serde::{Deserialize, Serialize};
 use super::drive::ShellTranscript;
 use crate::export_seat::{can_start_export, ExportFinish, ExportRequest, ExportRun};
 use crate::timeline_editor::TimelineEditor;
+
+/// intent が運ぶ µs を秒へ。逆(秒 → µs)は shell 側([`seconds_to_us`])が持つ。
+fn us_to_seconds(us: i64) -> f32 {
+    (us as f64 / 1_000_000.0) as f32
+}
+
+/// 秒 → µs(intent へ入れる側)。shell(iced / egui)が dispatch の前に呼ぶ。
+/// 丸めは 1µs で、フレーム境界(実行側の `seconds_to_time`)より2桁以上細かい。
+pub fn seconds_to_us(seconds: f32) -> i64 {
+    (f64::from(seconds) * 1_000_000.0).round() as i64
+}
 
 // ---------------------------------------------------------------------------
 // ログ: 型付き intent と、その台帳
@@ -60,9 +74,51 @@ pub enum UiIntent {
     /// 素材を取り込んで playhead へ置く。**OS ドロップと Browser のカードの
     /// ダブルクリックが合流する1点**で、入口が増えても intent は1種類のまま。
     AdmitPaths { paths: Vec<PathBuf> },
-    // 将来枠(本レーンのスコープ外。足す時はフェンスの禁止リストも一緒に伸ばす):
-    // - view: camera 操作・選択・panel の開閉/並び
-    // - wave E: timeline_editor / inspector の編集、Undo/Redo
+
+    // ---- Timeline の編集(2026-08-18 iced ホスト移行 M-3 で intent 化) ----
+    //
+    // 時刻は **マイクロ秒の整数**で運ぶ(`*_us`)。秒の f32 を入れると `Eq` と
+    // JSONL の決定性が壊れる。フレーム境界への吸着は intent の後ろ
+    // (`commit_drag` の `seconds_to_time`)がやるので、µs 量子化は意味に届かない。
+    //
+    // ドラッグ系(Move / Trim)は **release の1件だけ**が intent になる。
+    // ドラッグ中の絵は shell 側の preview で、Document は release まで触らない —
+    // 途中で Esc したら intent が1つも残らず、復元がそのまま成立する
+    // (`timeline_move_gesture.rs` / `timeline_trim_gesture.rs` の transient
+    // lifecycle と同じ判断)。egui pane の live-commit とはここが違う。
+    /// Timeline: 行 / bar のクリックで layer を選ぶ。`additive` = Cmd 併用
+    /// (足す / 外すのトグル)。素のクリックはその1つに置き換える。
+    SelectLayer { layer: motolii_doc::LayerId, additive: bool },
+    /// Timeline: 何も無い所のクリック = 選択を空にする。
+    ClearSelection,
+    /// Timeline: 選択中の clip 群を move gesture 1回ぶん動かす(release で1件)。
+    /// 実行は `begin_selected_clips_move` → `drag_to` → `release` —
+    /// egui のドラッグと同じ経路・同じクランプ(端は塊のまま止まる)・同じキー追従。
+    MoveClips {
+        grabbed: motolii_doc::LayerId,
+        grab_at_us: i64,
+        drop_at_us: i64,
+    },
+    /// Timeline: clip の端の trim(release で1件)。D2 の
+    /// `prepare_trim_clip_in` / `prepare_trim_clip_out` が最終判断を持つ。
+    TrimClip {
+        layer: motolii_doc::LayerId,
+        edge: crate::timeline_editor::TrimEdge,
+        at_us: i64,
+    },
+    /// Timeline: 選択中のものを消す(キー選択が先、無ければ層。Group は中身ごと)。
+    DeleteSelection,
+    /// Undo(Cmd+Z / 帯のボタン)。1 gesture = 1 Undo 単位で戻る。
+    Undo,
+    /// Redo(Shift+Cmd+Z / 帯のボタン)。
+    Redo,
+    /// playhead を置く(ルーラのスクラブの確定)。フレーム境界へ乗る。
+    SetPlayhead { at_us: i64 },
+    /// playhead を矢印キーでコマ送りする(±1 / Shift ±10)。
+    StepPlayhead { frames: i32 },
+    // 将来枠(足す時はフェンスの禁止リストも一緒に伸ばす):
+    // - view: camera 操作・panel の開閉/並び
+    // - inspector の編集の intent 化(いまは egui pane の D2 直行が残る)
 }
 
 /// journal の1行。`seq` は 1 始まりの通し番号で、`--intent-log` の JSONL
@@ -344,7 +400,85 @@ impl ShellGateway {
                     .as_ref()
                     .is_some_and(|seat| seat.editor().revision() > placed)
             }
+
+            // ---- Timeline の編集。実体は全部 TimelineEditor の操作 API で、
+            //      D2 command(1 gesture = 1 Undo)へ落ちる。断られた理由は
+            //      editor の控え(`take_rejections`)から transcript へ写す。 ----
+            UiIntent::SelectLayer { layer, additive } => self.with_editor(|editor| {
+                if *additive {
+                    editor.add_to_selection(*layer);
+                } else {
+                    editor.select_layer(*layer);
+                }
+                true
+            }),
+            UiIntent::ClearSelection => self.with_editor(|editor| {
+                editor.clear_selection();
+                true
+            }),
+            UiIntent::MoveClips {
+                grabbed,
+                grab_at_us,
+                drop_at_us,
+            } => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.begin_selected_clips_move(*grabbed, us_to_seconds(*grab_at_us));
+                editor.drag_to(us_to_seconds(*drop_at_us));
+                editor.release();
+                editor.revision() > before
+            }),
+            UiIntent::TrimClip { layer, edge, at_us } => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.begin_trim(*layer, *edge);
+                editor.drag_to(us_to_seconds(*at_us));
+                editor.release();
+                editor.revision() > before
+            }),
+            UiIntent::DeleteSelection => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.delete_selection_gesture();
+                editor.revision() > before
+            }),
+            UiIntent::Undo => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.undo_gesture();
+                editor.revision() != before
+            }),
+            UiIntent::Redo => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.redo_gesture();
+                editor.revision() != before
+            }),
+            UiIntent::SetPlayhead { at_us } => self.with_editor(|editor| {
+                editor.scrub_to_seconds(us_to_seconds(*at_us));
+                true
+            }),
+            UiIntent::StepPlayhead { frames } => self.with_editor(|editor| {
+                editor.step_playhead_frames(*frames);
+                true
+            }),
         }
+    }
+
+    /// Timeline 系 intent の共通口: 座席が無ければ案内して `false`、在れば
+    /// editor を1回貸して、**断られた理由を transcript へ写してから**答えを返す。
+    ///
+    /// egui shell の pane が `relay_editor_rejections` でやっているのと同じ写しで、
+    /// intent 経由の編集でも「押しても無反応」を作らない(外部診断 F-07)。
+    fn with_editor(
+        &mut self,
+        operate: impl FnOnce(&mut crate::timeline_editor::TimelineEditor) -> bool,
+    ) -> bool {
+        let Some(seat) = self.project.as_mut() else {
+            self.transcript
+                .report("open a project first — Cmd+N to create one, Cmd+O to open one");
+            return false;
+        };
+        let ok = operate(seat.editor_mut());
+        for rejection in seat.editor_mut().take_rejections() {
+            self.transcript.report(rejection);
+        }
+        ok
     }
 
     /// 座席を差し替えて、成否を帯に言う。判断そのものは [`reseat_project`]。
@@ -415,8 +549,10 @@ impl ShellGateway {
         self.project.as_ref()
     }
 
-    /// 座席(書き)。**wave E まで残る穴**: Timeline エディタの中の編集は
-    /// まだ intent を通らず、`motolii-doc` 側の D2 journal だけが受けている。
+    /// 座席(書き)。**egui pane にだけ残る穴**: あちらの Timeline / Inspector の
+    /// 編集はまだ intent を通らず、`motolii-doc` 側の D2 journal だけが受けている。
+    /// iced shell はこの穴を持たない(`pub(crate)` なので届かない) — あちらは
+    /// Timeline 編集も `UiIntent` 経由である(2026-08-18 M-3)。
     /// 新しい shell 層の副作用をここから足さないこと(フェンスは呼び出しの
     /// 有無ではなく「禁止 API 名」で見ているので、増やせば黙って通ってしまう)。
     pub(crate) fn project_mut(&mut self) -> Option<&mut ProjectSeat> {
@@ -726,6 +862,53 @@ mod tests {
 
         let cancel = serde_json::to_string(&UiIntent::CancelExport).expect("unit variant");
         assert_eq!(cancel, r#"{"kind":"cancel_export"}"#);
+    }
+
+    /// Timeline 系 intent の JSONL の形(M-3)。時刻は µs の整数 — f32 を入れて
+    /// `Eq` と決定性を壊さない、が形として読める。
+    #[test]
+    fn a_timeline_intent_round_trips_through_the_jsonl_shape() {
+        let mv = UiIntent::MoveClips {
+            grabbed: motolii_doc::LayerId::from_raw(7),
+            grab_at_us: 2_000_000,
+            drop_at_us: 4_000_000,
+        };
+        let line = serde_json::to_string(&mv).expect("機械可読");
+        assert_eq!(
+            line,
+            r#"{"kind":"move_clips","grabbed":7,"grab_at_us":2000000,"drop_at_us":4000000}"#
+        );
+        let back: UiIntent = serde_json::from_str(&line).expect("読み戻せる");
+        assert_eq!(back, mv);
+
+        let trim = UiIntent::TrimClip {
+            layer: motolii_doc::LayerId::from_raw(3),
+            edge: crate::timeline_editor::TrimEdge::Out,
+            at_us: 10_000_000,
+        };
+        assert_eq!(
+            serde_json::to_string(&trim).expect("機械可読"),
+            r#"{"kind":"trim_clip","layer":3,"edge":"out","at_us":10000000}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&UiIntent::Undo).expect("unit variant"),
+            r#"{"kind":"undo"}"#
+        );
+    }
+
+    /// 座席なしの Timeline intent は案内だけ言って何も起こさない(黙らない)。
+    #[test]
+    fn a_timeline_intent_without_a_seat_says_what_to_do_first() {
+        let mut gateway = ShellGateway::new(ShellTranscript::default());
+        assert!(!gateway.dispatch(UiIntent::DeleteSelection));
+        assert!(
+            gateway
+                .transcript()
+                .latest()
+                .is_some_and(|text| text.contains("Cmd+N")),
+            "作る/開く口を名指しで案内する: {:?}",
+            gateway.transcript().latest()
+        );
     }
 
     /// **落ちた行動も記録される。** intent は行動の前に journal へ入るので、
