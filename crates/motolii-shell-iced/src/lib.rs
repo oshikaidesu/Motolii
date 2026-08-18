@@ -20,6 +20,10 @@
 //! - **書き出し**。帯の Export → 保存先 dialog → 既存の `export_seat` が別 thread で走る。
 //!   実行中は `Exporting… {経過}s` と Cancel が帯に出て、Export は消える(二重起動なし)
 //! - **status 帯**。`ShellTranscript::latest()` の1行を下端に出す
+//! - **見た目の token**([`theme`])。iced 既定 palette を残さず、
+//!   `ui/motolii-tokens/generated/` の生成正本から写した [`theme::Tokens`] で
+//!   塗る。照合は `tests/theme_matches_generated_tokens.rs`、絵そのものは
+//!   `tests/snapshot_start_screen.rs` の golden が固定する
 //! - **記録2本**。[`IntentLog`](`--intent-log`)と [`StatusLog`](`--status-log`)が
 //!   journal / transcript を JSONL で追記する。行の形は egui runner と同型
 //! - **運転席**。`iced_test::Simulator` で窓を開かずに押して・叩いて・落として読む
@@ -44,6 +48,7 @@ mod message;
 mod prompts;
 mod shell;
 mod status_log;
+pub mod theme;
 pub mod view;
 mod window_input;
 
