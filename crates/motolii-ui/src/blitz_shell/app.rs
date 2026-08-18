@@ -29,7 +29,7 @@ use eframe::egui_wgpu::RenderState;
 use egui_tiles::{Container, Linear, LinearDir, Tile, TileId, Tiles, Tree, UiResponse};
 
 use super::drive::{NativePrompts, ShellPrompts, ShellTranscript};
-use super::intent::{IntentJournal, ProjectSeat, ShellGateway, UiIntent};
+use super::intent::{IntentJournal, ProjectSeat, Resume, ShellGateway, UiIntent};
 use super::pane::{BlitzPane, PaneKind};
 use crate::browser_panel::BrowserRequest;
 use crate::timeline_editor::TimelineEditor;
@@ -176,20 +176,23 @@ impl BlitzShellApp {
     /// - wgpu の `RenderState` が取れない場合（glow バックエンドで起動された等）
     /// - Tokio runtime を作れない場合
     pub(crate) fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        Self::with_seat(cc, None, true)
+        Self::with_seat(cc, Resume::Nothing, true)
     }
 
-    /// 座席ごと作る。`Some(seat)` なら Timeline / Stage は fixture ではなく
+    /// 座席ごと作る。`Resume::Seated` なら Timeline / Stage は fixture ではなく
     /// その project の Document（writer の snapshot）を映す。
     ///
     /// `CreationContext` から取り出せるものを取り出して [`Self::with_deps`] へ渡す
     /// **薄皮**で、判断はここに無い。訊き手は窓の `NativePrompts`（= 現行の rfd）。
     ///
+    /// **窓を開く経路だけが**「最後に開いていた project」の置き場を渡す — テストと
+    /// replay が利用者の設定を踏まないための境目である（F-01）。
+    ///
     /// # Panics
     /// `new` と同じ。
     pub(crate) fn with_seat(
         cc: &eframe::CreationContext<'_>,
-        project: Option<ProjectSeat>,
+        resume: Resume,
         fixture: bool,
     ) -> Self {
         let render_state = cc
@@ -200,10 +203,11 @@ impl BlitzShellApp {
             &cc.egui_ctx,
             render_state,
             Box::new(NativePrompts),
-            project,
+            resume,
             fixture,
             // 窓は従来どおり `docs/mocks` を見る(Browser の根はこのレーンの主題ではない)。
             None,
+            crate::last_project::default_last_project_path(),
         )
     }
 
@@ -218,13 +222,17 @@ impl BlitzShellApp {
     ///
     /// `browser_root` は Browser が見るフォルダ。`None` は製品の既定(`docs/mocks`)で、
     /// 運転席だけが実 media の入った folder を座らせる(窓を開かずにカードを触るため)。
+    ///
+    /// `last_project` は「最後に開いていた project」の置き場。`None` は**覚えない**で、
+    /// 渡すのは窓を開く経路だけである(F-01)。
     pub(crate) fn with_deps(
         egui_ctx: &egui::Context,
         render_state: RenderState,
         prompts: Box<dyn ShellPrompts>,
-        project: Option<ProjectSeat>,
+        resume: Resume,
         fixture: bool,
         browser_root: Option<PathBuf>,
+        last_project: Option<PathBuf>,
     ) -> Self {
         // 記号(◆ ◇ ▶ ← ↔ →)が豆腐にならないよう、既定fontの後ろにHackを連ねる。
         // 新しいフォントは足していない。詳細は `egui_fonts`。
@@ -233,21 +241,20 @@ impl BlitzShellApp {
         let runtime = tokio::runtime::Runtime::new()
             .expect("blitz_net::Provider 用の Tokio runtime を作れなかった");
 
-        // snapshot はここで1度だけ取り、Stage が writer の出した `Arc` そのものを持つ。
-        let snapshot = project.as_ref().map(ProjectSeat::snapshot);
-        let seated = project.as_ref().map(|seat| seat.path().to_path_buf());
-        let seated_revision = project
-            .as_ref()
-            .map(|seat| seat.editor().revision())
-            .unwrap_or(0);
         // 帯の台帳は面より先に作る。pane は clone を持って同じ場所へ言う。
         let transcript = ShellTranscript::default();
-        // 製品状態は最初からゲートウェイの中。`--project` で開いた座席も
-        // 「どうやって着いたか」を journal の第1行に持つ（`ShellGateway::seated`）。
-        let gateway = match project {
-            Some(seat) => ShellGateway::seated(transcript.clone(), seat),
-            None => ShellGateway::new(transcript.clone()),
-        };
+        // 製品状態は最初からゲートウェイの中。`--project` で開いた座席も、
+        // 引数なし起動が開き直した座席も、「どうやって着いたか」を journal の
+        // 第1行に持つ（`ShellGateway::resumed` → `seated`）。開けなかった時の
+        // 理由もここで帯へ入る。
+        let gateway = ShellGateway::resumed(transcript.clone(), resume).remembering(last_project);
+        // snapshot はここで1度だけ取り、Stage が writer の出した `Arc` そのものを持つ。
+        let snapshot = gateway.project().map(ProjectSeat::snapshot);
+        let seated = gateway.project().map(|seat| seat.path().to_path_buf());
+        let seated_revision = gateway
+            .project()
+            .map(|seat| seat.editor().revision())
+            .unwrap_or(0);
         Self {
             runtime,
             render_state,

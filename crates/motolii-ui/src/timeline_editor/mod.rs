@@ -1346,6 +1346,31 @@ impl TimelineEditor {
         self.playhead = seconds.clamp(0.0, comp);
     }
 
+    /// playhead を `frames` コマぶん動かす(矢印キーのコマ送りの実体)。
+    ///
+    /// **動くのは playhead だけ**で、選択も clip もキーも触らない。着地は必ず
+    /// フレーム境界なので、そこで ◇ を押せばキーが打てる — 丸めは
+    /// `seconds_to_time` に任せ、`(秒 * fps)` を自前で書かない(fps は有理数)。
+    /// 両端(0 と composition の終わり)では止まる。
+    pub fn step_playhead_frames(&mut self, frames: i32) {
+        if frames == 0 {
+            return;
+        }
+        let fps = self.document.composition.fps;
+        // いま居る位置の**最寄りのコマ**から数える。スクラブでコマの間に居ても、
+        // 1回目の矢印で格子へ乗る。
+        let Some(here) = seconds_to_time(self.playhead, fps) else {
+            return;
+        };
+        let Ok(frame) = here.try_to_frame_round(fps) else {
+            return;
+        };
+        let Ok(at) = RationalTime::try_from_frame(frame + i64::from(frames), fps) else {
+            return;
+        };
+        self.set_playhead_seconds(at.as_seconds_f64() as f32);
+    }
+
     /// OS から落ちてきた media を**1本ずつ** playhead へ取り込む。
     ///
     /// probe できないもの(拡張子が対象外、stream が無い、読めない)は
@@ -4922,6 +4947,23 @@ impl TimelineEditor {
             self.begin_rename(layer);
         }
 
+        // ← / →。**playhead を1コマずつ動かす**(Shift で10コマ)。AE / Premiere と
+        // 同型で、動くのは playhead だけ — 選択も clip も動かさない。
+        // 名前・locator を打っている最中と、他所の text field に focus が居る間は
+        // 効かせない(矢印はキャレットのもの)。
+        let steps = ctx.input(|i| {
+            frame_step(
+                i.key_pressed(egui::Key::ArrowLeft),
+                i.key_pressed(egui::Key::ArrowRight),
+                i.modifiers.shift,
+                self.renaming.is_some() || self.editing_locator.is_some(),
+            )
+        });
+        if steps != 0 && !ctx.egui_wants_keyboard_input() {
+            self.step_playhead_frames(steps);
+            self.status = format!("{}", timecode(self.playhead, fps));
+        }
+
         // Cmd/Ctrl + A。**見えている行を全部選ぶ**(閉じた Group の中は見えていない)
         if select_all {
             self.selected = object_layers.clone();
@@ -5004,6 +5046,29 @@ fn movable_clips(document: &Document, layer: LayerId) -> Vec<(LayerId, f32, f32)
 
 /// 吸着の間合い(px)。**画面の距離で決める** — 寄れば時間としては細かくなる
 const SNAP_PX: f32 = 7.0;
+
+/// Shift 付きの矢印が飛ぶコマ数。AE / Premiere と同じ 10 コマ。
+const COARSE_FRAME_STEP: i32 = 10;
+
+/// 押されている矢印を**コマ数**へ解く(外部診断 F-04)。
+///
+/// `docs/ux-check-first-ten-minutes.md` P2:4「矢印キー等でのコマ確認」の割り当てで、
+/// AE / Premiere と同型: ← / → が 1 コマ、Shift 付きで [`COARSE_FRAME_STEP`] コマ。
+///
+/// - **文字を打っている最中は 0**。矢印はキャレットのもので、playhead が横取りしない
+///   (既知の「text input focus 中にも M が発火しうる」穴を、こちらでは開けない)
+/// - **左右同時も 0**。どちらへ動かすべきか決まらない所で値を発明しない
+fn frame_step(left: bool, right: bool, shift: bool, text_focus: bool) -> i32 {
+    if text_focus || left == right {
+        return 0;
+    }
+    let magnitude = if shift { COARSE_FRAME_STEP } else { 1 };
+    if right {
+        magnitude
+    } else {
+        -magnitude
+    }
+}
 
 /// 秒 → **最寄りのフレーム境界**の時刻。
 ///
@@ -7906,5 +7971,106 @@ mod tests {
         lab.status = "selected Background".to_owned();
         lab.reject(format!("{} is locked", lab.name(layer)));
         assert_eq!(lab.take_rejections().len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // 矢印キーのコマ送り(外部診断 F-04)
+    // -----------------------------------------------------------------------
+
+    /// **矢印キーは playhead を1コマずつ動かす。**
+    ///
+    /// `docs/ux-check-first-ten-minutes.md` P2:4「矢印キー等でのコマ確認」の実体で、
+    /// AE / Premiere と同じ割り当て(← / → = 1コマ、Shift 付きで 10コマ)。
+    /// 押した鍵の**解決**だけをここで固定する — 面も窓も要らない。
+    #[test]
+    fn the_arrow_keys_resolve_to_one_frame_and_shift_makes_it_ten() {
+        // (left, right, shift, text_focus) → コマ数
+        assert_eq!(frame_step(false, true, false, false), 1, "→ は1コマ進む");
+        assert_eq!(frame_step(true, false, false, false), -1, "← は1コマ戻る");
+        assert_eq!(
+            frame_step(false, true, true, false),
+            COARSE_FRAME_STEP,
+            "Shift+→ は10コマ進む"
+        );
+        assert_eq!(
+            frame_step(true, false, true, false),
+            -COARSE_FRAME_STEP,
+            "Shift+← は10コマ戻る"
+        );
+        assert_eq!(frame_step(false, false, false, false), 0, "押していない");
+        assert_eq!(
+            frame_step(true, true, false, false),
+            0,
+            "両方同時はどちらへも動かさない(値を発明しない)"
+        );
+    }
+
+    /// **文字を打っている最中の矢印は playhead を動かさない。**
+    ///
+    /// 既知の「text input focus 中にも M が発火しうる」と同じ穴を、こちらでは
+    /// 最初から開けない。名前の編集・locator の編集・他所の text field の
+    /// いずれでも、矢印はキャレットのものである。
+    #[test]
+    fn a_focused_text_field_keeps_the_arrow_keys_to_itself() {
+        assert_eq!(frame_step(false, true, false, true), 0, "→ は文字送りへ行く");
+        assert_eq!(frame_step(true, false, true, true), 0, "Shift+← も同じ");
+    }
+
+    /// コマ送りは **playhead だけ**を動かし、フレーム境界に着地する。
+    /// 選択も clip も動かさない(移動でも複製でもない)。
+    #[test]
+    fn stepping_frames_moves_only_the_playhead_and_lands_on_a_frame() {
+        let mut lab = TimelineEditor::with_fixture();
+        let layer = layer_named(&lab.names, "Background");
+        let fps = lab.document.composition.fps;
+        let per_frame = fps.den() as f32 / fps.num() as f32;
+        let before = clip_span(&lab.document, layer).expect("span");
+        lab.select_layer(layer);
+        let selected = lab.selected.clone();
+
+        lab.set_playhead_seconds(2.0);
+        lab.step_playhead_frames(1);
+        assert!(
+            (lab.playhead_seconds() - (2.0 + per_frame)).abs() < per_frame * 0.25,
+            "1コマ進んでいない: {}",
+            lab.playhead_seconds()
+        );
+        assert!(
+            lab.playhead_time().is_some(),
+            "コマ送りの着地はフレーム格子の上(キーを打てる時刻)"
+        );
+
+        lab.step_playhead_frames(-COARSE_FRAME_STEP);
+        assert!(
+            (lab.playhead_seconds() - (2.0 - 9.0 * per_frame)).abs() < per_frame * 0.25,
+            "10コマ戻れていない: {}",
+            lab.playhead_seconds()
+        );
+
+        assert_eq!(lab.selected, selected, "コマ送りは選択を変えない");
+        assert_eq!(
+            clip_span(&lab.document, layer),
+            Some(before),
+            "コマ送りは clip を動かさない"
+        );
+    }
+
+    /// **端では止まる。** 0 より前にも composition の終わりより後にも出ない。
+    #[test]
+    fn stepping_frames_stops_at_both_ends_of_the_composition() {
+        let mut lab = TimelineEditor::with_fixture();
+        let comp = lab.document.composition.duration.as_seconds_f64() as f32;
+
+        lab.set_playhead_seconds(0.0);
+        lab.step_playhead_frames(-COARSE_FRAME_STEP);
+        assert_eq!(lab.playhead_seconds(), 0.0, "頭より前へは出ない");
+
+        lab.set_playhead_seconds(comp);
+        lab.step_playhead_frames(COARSE_FRAME_STEP);
+        assert!(
+            lab.playhead_seconds() <= comp + 1e-3,
+            "終わりより後へは出ない: {}",
+            lab.playhead_seconds()
+        );
     }
 }

@@ -36,6 +36,8 @@ mod layout_authority;
 mod layout_geometry;
 mod layout_runtime;
 mod layout_runtime_adapter;
+/// 「最後に開いていた project」の置き場。引数なし起動で続きを開く(F-01)。
+mod last_project;
 mod media_library;
 mod native_host_layout;
 mod palette_settings;
@@ -102,6 +104,10 @@ pub use motolii_input::{
     PRODUCT_HOST_KIND_TOGGLE_PLAYBACK, PRODUCT_HOST_KIND_TRIM_CLIP_IN,
     PRODUCT_HOST_KIND_TRIM_CLIP_OUT, PRODUCT_KEYMAP_PROFILE_ID, PRODUCT_UNWIRED_DUPLICATE,
     PRODUCT_UNWIRED_MUTE, PRODUCT_UNWIRED_SOLO, PRODUCT_UNWIRED_SPLIT,
+};
+pub use last_project::{
+    default_last_project_path, load_last_project, remember_last_project, LastProjectError,
+    LAST_PROJECT_FILE_NAME, LAST_PROJECT_VERSION,
 };
 pub use palette_settings::{
     default_user_palette_settings_path, Palette, PaletteColor, PaletteColorId, PaletteId,

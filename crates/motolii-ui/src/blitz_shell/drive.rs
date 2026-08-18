@@ -197,7 +197,7 @@ mod driven {
 
     use super::{ScriptedPrompts, ShellPrompts, ShellTranscript};
     use crate::blitz_shell::app::BlitzShellApp;
-    use crate::blitz_shell::intent::UiIntent;
+    use crate::blitz_shell::intent::{Resume, UiIntent};
 
     /// 運転席の窓の大きさ(論理px)。`runner.rs` の最小寸法(980x650)に合わせる —
     /// 実行時より狭い窓でだけ通るテストにしないため。
@@ -264,9 +264,13 @@ mod driven {
                         ctx,
                         render_state,
                         prompts.take().expect("prompts は1度だけ使う"),
-                        None,
+                        // 運転席は常にスタート画面から始める。**利用者の
+                        // 「最後に開いていた project」は読みも書きもしない**
+                        // (テストが人の設定を踏まない)。
+                        Resume::Nothing,
                         false,
                         browser_root,
+                        None,
                     )
                 })),
                 app: None,
