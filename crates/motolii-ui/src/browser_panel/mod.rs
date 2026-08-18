@@ -11,7 +11,12 @@
 //!
 //! モックの COLLECTIONS(favorite 等)と Effects / Create / Panels の項目は
 //! preview-local データで model が無いため、**項目を発明せず**空で出す。
-//! 配置 intent / drag&drop / tag 編集は後続レーン。
+//! drag&drop / tag 編集は後続レーン。
+//!
+//! **配置は要求として外へ出す。** カードをダブルクリックすると
+//! [`BrowserRequest::PlaceFile`] が返る — このパネルは Document を1バイトも書かない。
+//! 取り込むか・どこへ置くか・失敗を何と言うかを決めるのは shell 側で、経路は
+//! OS ドロップ(`blitz_shell::admit_dropped_paths`)と同じ1本である。
 
 mod theme;
 
@@ -72,6 +77,21 @@ pub struct BrowserCardModel {
     /// card の2行目(browser-library.html:123 `video · B-roll` の席)。
     pub meta: String,
     pub selected: bool,
+}
+
+/// Browser が shell へ出す**型付きの要求**。
+///
+/// パネルは自分で import しない。カードが指しているのは project の asset ではなく
+/// **フォルダの中の実ファイル**で、それを Document へ入れてよいか・どこへ置くか・
+/// 入らなかった時に何と言うかは shell の判断である(Document の writer は
+/// エディタの中に1つだけ = single writer)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BrowserRequest {
+    /// カードのダブルクリック = 「この実ファイルを置いてくれ」。
+    ///
+    /// 意味は OS ドロップ1本ぶんと同じで、shell は
+    /// `blitz_shell::admit_dropped_paths` と同じ経路へ流す(2つ目の import 経路を作らない)。
+    PlaceFile(PathBuf),
 }
 
 /// Browser native pane 1面。
@@ -205,6 +225,16 @@ impl BrowserPanel {
         self.visible_cards().len()
     }
 
+    /// card 1枚が指している実ファイルの配置要求。
+    ///
+    /// path の解決は既存 `MediaLibrary::resolve` のままで、ここで走査し直さない。
+    /// 知らない id(filter で消えた後の古い選択など)は `None` — 存在しない path を
+    /// 作って shell に投げない。
+    pub fn place_request(&self, id: &str) -> Option<BrowserRequest> {
+        let resolved = self.library.resolve(id)?;
+        Some(BrowserRequest::PlaceFile(resolved.path))
+    }
+
     /// 縮小実体の path(image kind のみ)。元画像 path は返さない。
     pub fn thumbnail_path(&self, id: &str) -> Option<&Path> {
         self.thumbnails.get(id).map(PathBuf::as_path)
@@ -237,8 +267,11 @@ impl BrowserPanel {
 
     // ---- 描画 ----
 
-    /// pane いっぱいに描く。
-    pub(crate) fn show(&mut self, ui: &mut egui::Ui) {
+    /// pane いっぱいに描き、**このフレームで人が出した要求**を返す。
+    ///
+    /// 返るのは今のところカードのダブルクリック 1 種だけ(`BrowserRequest::PlaceFile`)。
+    /// 選択・filter・tab の切り替えはパネルの中で閉じるので何も返さない。
+    pub(crate) fn show(&mut self, ui: &mut egui::Ui) -> Option<BrowserRequest> {
         let rect = ui.available_rect_before_wrap();
         let painter = ui.painter().with_clip_rect(rect);
         painter.rect_filled(rect, 0.0, theme::PANEL_BG);
@@ -263,7 +296,7 @@ impl BrowserPanel {
         );
         self.draw_sidebar(ui, sidebar);
         // css:348 の `@media (max-width: 420px)` は文書幅 = pane 幅で効く。
-        self.draw_catalog(ui, catalog, rect.width());
+        self.draw_catalog(ui, catalog, rect.width())
     }
 
     /// browser-library.css:28-38 `.browserHeader`。
@@ -649,7 +682,13 @@ impl BrowserPanel {
     }
 
     /// catalog 列(header / shelf / summary / grid / tray)。
-    fn draw_catalog(&mut self, ui: &mut egui::Ui, rect: Rect, panel_w: f32) {
+    /// 要求が出るのは grid(カード)だけなので、返り値もそこから来る。
+    fn draw_catalog(
+        &mut self,
+        ui: &mut egui::Ui,
+        rect: Rect,
+        panel_w: f32,
+    ) -> Option<BrowserRequest> {
         let painter = ui.painter().with_clip_rect(rect);
         let mut cursor = rect.top();
         cursor = self.draw_catalog_header(ui, &painter, rect, cursor, panel_w);
@@ -662,8 +701,9 @@ impl BrowserPanel {
             Pos2::new(rect.left(), cursor),
             Pos2::new(rect.right(), tray_top),
         );
-        self.draw_grid(ui, grid);
+        let request = self.draw_grid(ui, grid);
         self.draw_selection_tray(&painter, rect, tray_top);
+        request
     }
 
     /// browser-library.css:155-168 `.catalogHeader` + view modes。
@@ -911,7 +951,7 @@ impl BrowserPanel {
     }
 
     /// browser-library.css:215-276 `.thumbnailGrid` + `.libraryCard`(3 view)。
-    fn draw_grid(&mut self, ui: &mut egui::Ui, rect: Rect) {
+    fn draw_grid(&mut self, ui: &mut egui::Ui, rect: Rect) -> Option<BrowserRequest> {
         let cards = self.visible_cards();
         // css:218 / 269 / 273: 列数は view で決まる(grid 2 / thumbnails 4 / list 1)。
         let columns = match self.view {
@@ -920,6 +960,9 @@ impl BrowserPanel {
             BrowserView::List => 1,
         };
         let mut clicked: Option<String> = None;
+        // 「置いてくれ」と言われたカード。**選択とは別の入れ物**で持つ —
+        // ダブルクリックは単クリック(選択)も同時に真になるため。
+        let mut place: Option<String> = None;
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         egui::ScrollArea::vertical()
             .id_salt("browser-grid")
@@ -961,7 +1004,19 @@ impl BrowserPanel {
                     );
                     let response =
                         ui.interact(cell, ui.id().with(("card", &card.id)), Sense::click());
-                    if response.clicked() {
+                    // card は painter で描く面なので、名乗らせないと AccessKit の木に
+                    // 出ない = 運転席(kittest)からも支援技術からも掴めない。
+                    // ここで名前を出すのは見た目を変えず、**触れることを機械が言える**
+                    // ようにするためである。
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &card.name)
+                    });
+                    // **ダブルクリック = 配置**(Finder / Ableton / AM と同じ既定の
+                    // 「開く」の位置)。判定は同じ response の `double_clicked()` で、
+                    // 単クリックの選択と同居させるため先に見る。
+                    if response.double_clicked() {
+                        place = Some(card.id.clone());
+                    } else if response.clicked() {
                         clicked = Some(card.id.clone());
                     }
                     self.draw_card(ui.ctx(), &painter, cell, card, response.hovered());
@@ -970,6 +1025,10 @@ impl BrowserPanel {
         if let Some(id) = clicked {
             self.select(&id);
         }
+        // 置いたカードは選ばれてもいる(触った物が selection tray に残る)。
+        let id = place?;
+        self.select(&id);
+        self.place_request(&id)
     }
 
     /// card 1枚。hover / selected の視覚は css:236-250。
@@ -1253,6 +1312,143 @@ fn load_color_image(path: &Path) -> Option<egui::ColorImage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// repo に入っている実 media(starter kit)。動画・画像・音声が1本ずつ在る。
+    fn starter_media_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/mocks-ui/starter-media/media")
+            .canonicalize()
+            .expect("starter media lives in the repo")
+    }
+
+    /// パネルを headless に回す運転席(GPU 不要 — 見るのは AccessKit だけ)。
+    /// 返るのは harness と、そのフレームでパネルが出した要求の置き場。
+    fn drive(
+        root: PathBuf,
+    ) -> egui_kittest::Harness<'static, (BrowserPanel, Option<BrowserRequest>)> {
+        egui_kittest::Harness::builder()
+            .with_size([420.0, 520.0])
+            .build_ui_state(
+                |ui, state: &mut (BrowserPanel, Option<BrowserRequest>)| {
+                    if let Some(request) = state.0.show(ui) {
+                        state.1 = Some(request);
+                    }
+                },
+                (BrowserPanel::with_root(root), None),
+            )
+    }
+
+    /// 2 連打ぶんの押下/離しを**同じフレーム**へ積む。フレームを跨ぐと kittest の
+    /// `step_dt`(0.25s)が egui の double-click 判定窓(0.3s)を食い潰す。
+    fn double_click_at<S>(harness: &mut egui_kittest::Harness<'_, S>, center: egui::Pos2) {
+        harness
+            .input_mut()
+            .events
+            .push(egui::Event::PointerMoved(center));
+        harness.step();
+        for _ in 0..2 {
+            for pressed in [true, false] {
+                harness.input_mut().events.push(egui::Event::PointerButton {
+                    pos: center,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::default(),
+                });
+            }
+        }
+        harness.step();
+    }
+
+    /// カードの中心(AccessKit の bounds から)。名乗っていない面は掴めない。
+    fn card_center<S>(harness: &egui_kittest::Harness<'_, S>, name: &str) -> egui::Pos2 {
+        use egui_kittest::kittest::Queryable as _;
+        harness
+            .query_all_by_label_contains(name)
+            .next()
+            .unwrap_or_else(|| panic!("card {name:?} が AccessKit の木に出ていない"))
+            .rect()
+            .center()
+    }
+
+    /// **ダブルクリックは配置要求になる。** パネルは Document を書かず、
+    /// 指しているのは card の id ではなく**実ファイルの path** である
+    /// (shell がそのままドロップと同じ経路へ流せる形)。
+    #[test]
+    fn double_clicking_a_card_asks_for_that_file_to_be_placed() {
+        let root = starter_media_dir();
+        let mut harness = drive(root.clone());
+        harness.run();
+
+        let center = card_center(&harness, "starter-clip.mp4");
+        double_click_at(&mut harness, center);
+
+        assert_eq!(
+            harness.state().1,
+            Some(BrowserRequest::PlaceFile(root.join("starter-clip.mp4"))),
+            "カードのダブルクリックは、その実ファイルの配置要求として返らねばならない"
+        );
+    }
+
+    /// 単クリックは従来どおり**選択だけ**。要求は出ない
+    /// (選ぶたびに clip が増えたら人は選べない)。
+    #[test]
+    fn a_single_click_only_selects_and_asks_for_nothing() {
+        let root = starter_media_dir();
+        let mut harness = drive(root);
+        harness.run();
+
+        let center = card_center(&harness, "starter-clip.mp4");
+        harness
+            .input_mut()
+            .events
+            .push(egui::Event::PointerMoved(center));
+        harness.step();
+        for pressed in [true, false] {
+            harness.input_mut().events.push(egui::Event::PointerButton {
+                pos: center,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::default(),
+            });
+        }
+        harness.step();
+
+        let selected = harness
+            .state()
+            .0
+            .selected_id()
+            .map(str::to_owned)
+            .expect("単クリックは選択する");
+        assert!(
+            selected.ends_with("starter-clip.mp4"),
+            "選ばれたのは触ったカード。実際: {selected:?}"
+        );
+        assert_eq!(
+            harness.state().1,
+            None,
+            "単クリックは配置要求を出さない(選ぶだけ)"
+        );
+    }
+
+    /// 知らない id は要求を作らない — 存在しない path を shell へ投げない。
+    #[test]
+    fn an_unknown_card_id_yields_no_request() {
+        let root = starter_media_dir();
+        let panel = BrowserPanel::with_root(root.clone());
+        assert!(panel.place_request("no-such-card").is_none());
+
+        let clip = panel
+            .visible_cards()
+            .into_iter()
+            .find(|card| card.name == "starter-clip.mp4")
+            .expect("starter kit の動画カード")
+            .id;
+        assert_eq!(
+            panel.place_request(&clip),
+            Some(BrowserRequest::PlaceFile(root.join("starter-clip.mp4"))),
+            "id → 実 path の解決は既存 MediaLibrary::resolve を通る"
+        );
+    }
 
     /// css:158 flex + css:166 `margin-left: auto`。
     /// **見出しの席と view-mode ボタンの席は決して重ならない。**
