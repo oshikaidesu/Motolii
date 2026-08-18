@@ -127,3 +127,26 @@ egui 固有なのは view 層と kittest だけ。
   なら「柵の維持費が高すぎる」証拠として乗り換え判断の材料に数える。なお
   timeline 等の密な面は iced でも custom widget(painter 的コード)になるため、
   DX 差が最大なのは chrome 側・最小なのは密な面である。
+  **→ 後段は同日の仮タイムライン spike で半分反証された**(下記)。
+
+## 仮タイムライン spike の DX 実測(同日・4巡目。利用者依頼)
+
+`spikes/iced-rerun-embed-probe/timeline/`(iced canvas、製品と同じ行高20px・
+trim 8px・AE 同型の面割り当て。20テスト+500/5000 clips 計測。証拠は
+`evidence/iced-timeline-probe/`)。同じ4ジェスチャ(移動/トリム/スクラブ/zoom)の比較:
+
+- **行数**: egui 約1,415行(非テストの26%、**1,724行の単一 `show()` 関数内**)
+  vs iced **342行**(model/update/view 分離)
+- **if 沼度(数えた)**: egui は `show()` 内の永続状態書き換え **97文**(うち
+  Document/undo 到達26)、draw パス内の input 読み14、最悪例は**行を描くループの
+  中から undo 可能な Document コマンドを毎フレーム積む**箇所。iced は draw パス
+  副作用 **0 — 規律でなく型**(`Program::draw(&self)` が書く道を持たない)。
+  状態を書くのは `update()` 系の16文が全て
+- **描画は速い**: 500 clips draw 0.27–0.37ms、5000 clips でも 1.57ms(vsync 張付き)
+- **iced が明確に不利な点は1つ**: `WheelScrolled` が modifiers を運ばない
+  (Cmd+ホイール= zoom に `ModifiersChanged` の別購読が要る)。他: canvas に
+  フォーカス概念が無い(複数 canvas のキー調停は自前)
+- **訂正**: 「密な面は DX 差最小」は**描画については真、対話については偽**。
+  対話の状態機械は iced では型で守られ、egui では draw パスに滲む — 利用者の
+  if 沼批判は密な面でこそ最大だった。egui 側の緩和(action 化+フェンス)で
+  同じ規律は作れるが、型が禁じるのと柵が禁じるのの維持費差は残る
