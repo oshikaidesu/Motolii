@@ -66,6 +66,19 @@ fn make_portrait_video(path: &Path) {
     ]);
 }
 
+/// 単色の静止画1枚(16:9)。`-frames:v 1` なので中身は本当に1フレーム。
+fn make_still_image(path: &Path) {
+    run_ffmpeg(&[
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=red:s=640x360:d=0.04",
+        "-frames:v",
+        "1",
+        path.to_str().unwrap(),
+    ]);
+}
+
 /// ffprobeで出力の実解像度を独立確認する。
 fn probe_dimensions(path: &Path) -> (u32, u32) {
     let output = Command::new("ffprobe")
@@ -200,6 +213,76 @@ fn full_chain_import_place_soundtrack_export() {
         audio.sample_rate.unwrap_or(0) > 0,
         "audio stream must have a sample rate"
     );
+}
+
+/// 静止画の貫通(2026-08-18 レーンA): new → import(PNG) → place → export で、
+/// 出力フレームに**その画像の色が実際に乗る**。
+///
+/// [利用者の初回タッチ観察](../../../docs/reviews/2026-08-18-user-first-touch-observations.md)(2)
+/// が閉まっていると報告した扉が、export まで一本で開いていることの審判。
+#[test]
+fn a_still_image_travels_from_import_to_an_exported_frame() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let Some(_gpu_probe) = gpu_or_skip() else {
+        return;
+    };
+
+    let dir = tmp_dir("headless_mv_e2e_still");
+    let still = dir.join("still.png");
+    make_still_image(&still);
+
+    let project = dir.join("mv.json");
+    new_project(&project).expect("new project");
+
+    // 1. 画像も動画と同じ import 経路を通る。
+    let asset = import_asset(&project, &still).expect("import still image");
+
+    // 2. 置いた clip は「尺不明」= comp の残り全部(既定コンポ 10s)。
+    place_clip(&project, asset, 0.0).expect("place still image");
+    {
+        let runtime = motolii_plugins_firstparty::first_party_runtime().expect("runtime");
+        let opened = motolii_doc::open_project_resolved(
+            &project,
+            &motolii_doc::ResourceLimits::production(),
+            runtime.catalog(),
+        )
+        .expect("reopen");
+        let doc = &opened.recovered.document;
+        let asset_row = doc.assets.get(asset).expect("asset persisted");
+        assert_eq!(asset_row.asset_type, "image/png");
+        assert_eq!(asset_row.duration, None, "静止画に尺は無い");
+        let clip = doc
+            .tracks
+            .iter()
+            .flat_map(|track| track.items.iter())
+            .find_map(|item| match item {
+                motolii_doc::TrackItem::Clip(clip) => Some(clip),
+                _ => None,
+            })
+            .expect("clip persisted");
+        assert_eq!(
+            clip.duration, doc.composition.duration,
+            "尺不明の既存の意味どおり、comp の残り全部を占める"
+        );
+    }
+
+    // 3. 書き出し(動画と同じ export 経路そのまま)。
+    let gpu = GpuCtx::new_headless().expect("headless gpu");
+    let out = dir.join("out.mp4");
+    export_document(&gpu, &project, &out, Some(2), true).expect("export the still image");
+
+    // 4. 画素の審判: 640x360 の 16:9 は 1920x1080 を埋めるので、中央も端も赤。
+    assert_eq!(probe_dimensions(&out), (1920, 1080));
+    let frame = extract_rgb_frame(&out, &dir.join("out-frame.rgb"), 1920, 1080);
+    for (x, y) in [(960u32, 540u32), (100, 100), (1800, 980)] {
+        let pixel = rgb_at(&frame, 1920, x, y);
+        assert!(
+            pixel[0] > 150 && pixel[1] < 80 && pixel[2] < 80,
+            "({x},{y}) must carry the red still, got {pixel:?}"
+        );
+    }
 }
 
 /// 2026-08-17決定のE2E: 新規projectの既定解像度は1920x1080で、9:16縦動画は

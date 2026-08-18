@@ -43,6 +43,22 @@ fn starter_tone() -> PathBuf {
         .expect("starter tone lives in the repo")
 }
 
+/// 落とすための静止画1枚を作る(repo に置かず、その場で作って捨てる)。
+fn make_still_image(path: &Path) {
+    let status = std::process::Command::new("ffmpeg")
+        .args(["-v", "error", "-y"])
+        .args(["-f", "lavfi", "-i", "color=c=red:s=64x48:d=0.04"])
+        .args(["-frames:v", "1"])
+        .arg(path)
+        .status()
+        .expect("spawn ffmpeg");
+    assert!(
+        status.success(),
+        "ffmpeg failed to write {}",
+        path.display()
+    );
+}
+
 fn clips(document: &Document) -> Vec<&motolii_doc::Clip> {
     document
         .tracks
@@ -112,6 +128,43 @@ fn dropping_media_imports_it_and_places_a_clip_at_the_playhead() {
         status.contains("starter-clip"),
         "何が入ったかを言う: {status}"
     );
+}
+
+/// **画像のドロップも clip になる**(2026-08-18 レーンA)。
+/// [初回タッチ観察](../../../docs/reviews/2026-08-18-user-first-touch-observations.md)(2)
+/// では、ここで理由つきの skip になっていた。
+#[test]
+fn dropping_a_still_image_places_a_clip_like_any_other_media() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = work_dir("drop-image");
+    let path = dir.join("project.json");
+    create_project_file(&path).expect("create a new project");
+    let still = dir.join("hero.png");
+    make_still_image(&still);
+
+    let mut seat = ProjectSeat::open(&path).expect("open");
+    let outcome = seat.editor_mut().import_dropped_media(&[still.clone()]);
+
+    assert!(
+        outcome.skipped.is_empty(),
+        "画像はもう飛ばされない: {:?}",
+        outcome.skipped
+    );
+    assert_eq!(outcome.placed.len(), 1, "画像も clip として着地する");
+
+    let document = seat.snapshot();
+    assert_eq!(document.assets.len(), 1, "素材が1つ入った");
+    let asset = document.assets.iter().next().expect("the admitted asset");
+    assert_eq!(asset.asset_type, "image/png");
+    let clips = clips(&document);
+    assert_eq!(clips.len(), 1, "clip が1つ置かれた");
+    assert!(
+        document.soundtrack.is_none(),
+        "画像は曲にならない(音声だけの分岐)"
+    );
+    assert_eq!(seat.editor().undo_len(), 1, "1本のドロップ = 1 Undo 単位");
 }
 
 // ---------------------------------------------------------------------------

@@ -131,6 +131,32 @@ struct FfprobeSideData {
 #[derive(Deserialize)]
 struct FfprobeFormat {
     duration: Option<String>,
+    format_name: Option<String>,
+}
+
+/// この container は**静止画1枚**か(png/jpeg/webp…)。
+///
+/// ffmpegは静止画ファイルを「1枚だけ入った image pipe」として開く
+/// (`png_pipe` / `jpeg_pipe` / `webp_pipe` / 連番の `image2`)。動画 container と
+/// 見分けるのはこの format 名で、codec 名では見ない — MJPEG は本物の動画 container
+/// (`.avi`/`.mov`)にも入り得るため、そちらを静止画扱いにしないため。
+fn is_still_image_format(format_name: Option<&str>) -> bool {
+    let Some(names) = format_name else {
+        return false;
+    };
+    names.split(',').any(|name| {
+        matches!(
+            name.trim(),
+            "png_pipe"
+                | "jpeg_pipe"
+                | "mjpeg_pipe"
+                | "webp_pipe"
+                | "bmp_pipe"
+                | "tiff_pipe"
+                | "image2"
+                | "image2pipe"
+        )
+    })
 }
 
 /// ffprobeで先頭映像ストリームを解析する(後方互換)。
@@ -179,6 +205,12 @@ pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
         .map_err(|e| MediaError::Probe(format!("json parse: {e}")))?;
 
     let format_duration = parsed.format.as_ref().and_then(|f| f.duration.as_deref());
+    let still_image = is_still_image_format(
+        parsed
+            .format
+            .as_ref()
+            .and_then(|f| f.format_name.as_deref()),
+    );
     let mut video_streams = Vec::new();
     let mut audio_streams = Vec::new();
 
@@ -190,7 +222,12 @@ pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
                     continue;
                 }
                 let ordinal = video_streams.len() as u32;
-                video_streams.push(parse_video_stream(stream, ordinal, format_duration)?);
+                video_streams.push(parse_video_stream(
+                    stream,
+                    ordinal,
+                    format_duration,
+                    still_image,
+                )?);
             }
             Some("audio") => {
                 let ordinal = audio_streams.len() as u32;
@@ -200,7 +237,13 @@ pub fn probe_container(path: impl AsRef<Path>) -> Result<ContainerInfo> {
         }
     }
 
-    let duration = format_duration.and_then(|s| RationalTime::try_from_decimal_str(s).ok());
+    // 静止画に尺は無い。format levelに何か書いてあっても運ばない
+    // (place側の「長さ不明」= composition の残り、という既存の意味へ落とすため)。
+    let duration = if still_image {
+        None
+    } else {
+        format_duration.and_then(|s| RationalTime::try_from_decimal_str(s).ok())
+    };
 
     Ok(ContainerInfo {
         video_streams,
@@ -292,6 +335,7 @@ fn parse_video_stream(
     stream: &FfprobeStream,
     ordinal: u32,
     format_duration: Option<&str>,
+    still_image: bool,
 ) -> Result<ProbedVideoStream> {
     let (mut width, mut height) = match (stream.width, stream.height) {
         (Some(w), Some(h)) if w > 0 && h > 0 => (w, h),
@@ -327,15 +371,32 @@ fn parse_video_stream(
         .or(avg_fps)
         .ok_or_else(|| MediaError::Probe("missing frame rate".into()))?;
 
-    let duration = stream
-        .duration
-        .as_deref()
-        .or(format_duration)
-        .and_then(|s| parse_duration_snapped(s, fps));
-    let nb_frames = stream.nb_frames.as_deref().and_then(|s| s.parse().ok());
+    // 静止画は「尺の無い1フレーム」。fpsはdemuxerが置いた作り値(png_pipeなら25/1)で、
+    // 絵そのものには無い数なので、ここから先(composition)へは波及させない。
+    let (duration, nb_frames) = if still_image {
+        (None, Some(1))
+    } else {
+        (
+            stream
+                .duration
+                .as_deref()
+                .or(format_duration)
+                .and_then(|s| parse_duration_snapped(s, fps)),
+            stream.nb_frames.as_deref().and_then(|s| s.parse().ok()),
+        )
+    };
 
-    let color_space = map_color_space(stream.color_space.as_deref(), stream.color_range.as_deref())
-        .map_err(MediaError::Probe)?;
+    let color_space = if still_image {
+        // 静止画の色タグは素材の**見え方**を決めない。motoliiのdecodeは必ず
+        // ffmpegのRGB→yuv420pを通り、その出力はBT.601 limitedである
+        // (2026-08-18実測: 赤PNG → Y=81 U=91 V=239。601 limitedの81/90/240に一致し、
+        // 709 limitedの63/102/240ではない)。ffprobeが返す 'gbr'(PNG)や
+        // 'bt470bg'+pc(JPEG)をそのまま解釈すると、実際に流れるYUVと食い違う。
+        ColorSpace::Rec601Limited
+    } else {
+        map_color_space(stream.color_space.as_deref(), stream.color_range.as_deref())
+            .map_err(MediaError::Probe)?
+    };
 
     Ok(ProbedVideoStream {
         ordinal,
@@ -509,6 +570,18 @@ mod tests {
     fn rejects_601_full_range() {
         assert!(map_color_space(Some("smpte170m"), Some("pc")).is_err());
         assert!(map_color_space(Some("bt470bg"), Some("jpeg")).is_err());
+    }
+
+    #[test]
+    fn still_image_containers_are_recognised_by_format_name() {
+        assert!(is_still_image_format(Some("png_pipe")));
+        assert!(is_still_image_format(Some("jpeg_pipe")));
+        assert!(is_still_image_format(Some("webp_pipe")));
+        assert!(is_still_image_format(Some("image2")));
+        // 動画containerは静止画扱いにしない(MJPEGの.avi/.movを巻き込まない)。
+        assert!(!is_still_image_format(Some("mov,mp4,m4a,3gp,3g2,mj2")));
+        assert!(!is_still_image_format(Some("matroska,webm")));
+        assert!(!is_still_image_format(None));
     }
 
     #[test]

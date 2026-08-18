@@ -28,10 +28,17 @@ pub struct AdmissionSource {
     pub duration: Option<RationalTime>,
 }
 
-/// 拡張子→admission対象のasset_type(video/audioのみ。imageはこの経路の範囲外)。
+/// 拡張子→admission対象のasset_type(video / audio / 静止画)。
 ///
 /// UI側`crates/motolii-ui/src/media_library.rs`の`asset_type_for_name`と同表
 /// (UIコードは動かさない決定のため、library側はここが持つ)。
+///
+/// 静止画は2026-08-18に開いた扉(利用者の初回タッチ観察(2))。ffmpegが**1枚の絵
+/// として**開けるものだけを載せる: png / jpeg / webp。ここに無いのは意図的で、
+/// - svg … ラスタライザが要る(ffmpegは開けない)
+/// - gif / exr / tiff … 動く絵・HDR・多ページで、静止画1枚の意味に収まらない
+/// UI の library 表(絵の一覧に出す側)はもっと広いままで構わない — 出せる物と
+/// 取り込める物が違うのは、取り込みで理由つきに落ちるので人には見える。
 pub fn admission_asset_type_for_path(path: &Path) -> Option<&'static str> {
     let ext = path
         .extension()
@@ -47,16 +54,22 @@ pub fn admission_asset_type_for_path(path: &Path) -> Option<&'static str> {
         "aac" | "m4a" => Some("audio/mp4"),
         "aiff" | "aif" => Some("audio/aiff"),
         "flac" => Some("audio/flac"),
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "webp" => Some("image/webp"),
         _ => None,
     }
 }
 
-/// 実mediaファイル(動画/音声)をadmission用にprobeする。
+/// 実mediaファイル(動画/音声/静止画)をadmission用にprobeする。
 ///
 /// 1. 拡張子からasset_typeを導出(未対応拡張子はprobe前にtyped error)
 /// 2. `probe_container`で全stream列挙
-/// 3. 粗いkind整合(`video/*`はvideo stream必須、`audio/*`はaudio stream必須)
+/// 3. 粗いkind整合(`video/*`と`image/*`はvideo stream必須、`audio/*`はaudio stream必須)
 /// 4. exact source bytesを`SourceFingerprintV1`でfull hash
+///
+/// 静止画は ffmpeg からも video stream として見える(png_pipe等の1枚 container)。
+/// 尺は無く`duration`は`None`のまま — placeの「長さ不明」の意味がそれを受ける。
 pub fn probe_admission_source(path: impl AsRef<Path>) -> Result<AdmissionSource> {
     let path = path.as_ref();
     let asset_type = admission_asset_type_for_path(path).ok_or_else(|| {
@@ -67,6 +80,12 @@ pub fn probe_admission_source(path: impl AsRef<Path>) -> Result<AdmissionSource>
     })?;
 
     let container = probe_container(path)?;
+    if asset_type.starts_with("image/") && container.video_streams.is_empty() {
+        return Err(MediaError::Probe(format!(
+            "extension says {asset_type} but no image could be read from: {}",
+            path.display()
+        )));
+    }
     if asset_type.starts_with("video/") && container.video_streams.is_empty() {
         return Err(MediaError::Probe(format!(
             "extension says {asset_type} but container has no video stream: {}",

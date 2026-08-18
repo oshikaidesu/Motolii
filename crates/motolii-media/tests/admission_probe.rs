@@ -8,11 +8,12 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 
+use motolii_core::ColorSpace;
 use motolii_doc::{
     resolve_asset_path, AssetDraft, AssetId, Document, DocumentWriter, SourceFingerprintDecode,
     SourceFingerprintV1,
 };
-use motolii_media::{probe_admission_source, MediaError};
+use motolii_media::{probe, probe_admission_source, MediaError};
 use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
 use motolii_testkit::cpu_reference::expected_source_content_hash_of_file;
 
@@ -60,6 +61,104 @@ fn make_audio_m4a(path: &Path) {
     ]);
 }
 
+/// 単色の静止画1枚。`-frames:v 1` なので中身は本当に1フレームしか無い。
+fn make_still(path: &Path, color: &str) {
+    run_ffmpeg(&[
+        "-f",
+        "lavfi",
+        "-i",
+        &format!("color=c={color}:s=64x48:d=0.04"),
+        "-frames:v",
+        "1",
+        path.to_str().unwrap(),
+    ]);
+}
+
+// ---------------------------------------------------------------------------
+// 静止画の入口(2026-08-18 レーンA)
+//
+// 利用者の初回タッチで閉まっていた扉。ffprobe の実測(同日)はこうだった:
+//   png  … codec_type=video / codec_name=png   / format=png_pipe  / duration 無し
+//   jpg  … codec_type=video / codec_name=mjpeg / format=jpeg_pipe / duration 無し
+//   webp … codec_type=video / codec_name=webp  / format=webp_pipe / duration 無し
+// r_frame_rate は demuxer が置く 25/1 の作り値で、静止画に fps は無い。
+// 色タグも素材の見た目とは無関係(png は gbr/pc、jpg は bt470bg/pc)で、
+// motolii の decode は必ず ffmpeg の RGB→yuv420p を通る。その変換の出力は
+// **BT.601 limited** であることを実測した(赤の PNG → Y=81 U=91 V=239。
+// 601 limited の理論値 81/90/240 に一致、709 limited の 63/102/240 ではない)。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn probes_a_still_png_as_an_image_with_no_duration() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = tmp_dir("admission_probe_still_png");
+    let path = dir.join("still.png");
+    make_still(&path, "red");
+
+    let source = probe_admission_source(&path).unwrap();
+    assert_eq!(source.asset_type, "image/png");
+    assert_eq!(
+        source.container.video_streams.len(),
+        1,
+        "静止画も video stream として現れる"
+    );
+    assert!(source.container.audio_streams.is_empty());
+    assert_eq!(
+        source.duration, None,
+        "静止画に尺は無い。place は尺不明の意味(comp の残り)へ落ちる"
+    );
+    assert_eq!(
+        source.fingerprint.content_hash(),
+        expected_source_content_hash_of_file(&path)
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn probes_still_jpeg_and_webp_too() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = tmp_dir("admission_probe_still_others");
+    for (name, asset_type) in [
+        ("still.jpg", "image/jpeg"),
+        ("still.jpeg", "image/jpeg"),
+        ("still.webp", "image/webp"),
+    ] {
+        let path = dir.join(name);
+        make_still(&path, "green");
+        let source = probe_admission_source(&path).unwrap();
+        assert_eq!(source.asset_type, asset_type, "{name}");
+        assert_eq!(source.container.video_streams.len(), 1, "{name}");
+        assert_eq!(source.duration, None, "{name}");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// 静止画の1枚は `probe`(MediaInfo)からも1フレームとして見える。
+/// 尺が無いので export 側の freeze は nb_frames を頼りにクランプする。
+#[test]
+fn a_still_image_probes_as_exactly_one_frame() {
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = tmp_dir("admission_probe_still_frames");
+    let path = dir.join("still.png");
+    make_still(&path, "red");
+
+    let info = probe(&path).unwrap();
+    assert_eq!((info.width, info.height), (64, 48));
+    assert_eq!(info.duration, None, "静止画に尺は無い");
+    assert_eq!(info.nb_frames, Some(1), "静止画はちょうど1フレーム");
+    assert_eq!(
+        info.color_space,
+        ColorSpace::Rec601Limited,
+        "decode の RGB→yuv420p が実際に出す行列(実測)。素材の gbr/pc タグではない"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
 
 #[test]
 fn probes_video_container_fingerprint_and_duration() {
