@@ -122,7 +122,6 @@ pub fn view(shell: &Shell) -> Element<'_, Message> {
         .width(Fill)
         .height(Fill);
 
-
     // 帯は「座席が居るあいだ」と「言われたことがある時」に出る。空の帯を常設しない
     // (egui 版と同じ判断)。
     if let Some(band) = status_band(shell) {
@@ -138,7 +137,11 @@ fn start_screen<'a>() -> Element<'a, Message> {
         text(TITLE).size(34),
         text(TAGLINE).style(style::text_secondary),
         column![
-            action_button(NEW_PROJECT, NEW_PROJECT_SHORTCUT, Message::NewProjectPressed),
+            action_button(
+                NEW_PROJECT,
+                NEW_PROJECT_SHORTCUT,
+                Message::NewProjectPressed
+            ),
             action_button(
                 OPEN_PROJECT,
                 OPEN_PROJECT_SHORTCUT,
@@ -248,7 +251,10 @@ fn browser_panel(shell: &Shell) -> Element<'_, Message> {
 
     // source rail(機能する3席だけ = Q0)。選択中と hover の段階は
     // `theme::Tokens` の semantic role から(独自 hex を発明しない)。
-    let mut rail = column![].spacing(2).width(96);
+    // 見た目は browser-library.css:126-147 `.locationRow` の写し
+    // (この製品の色は raw hex で token 対応が無いので、role だけを合わせる:
+    // 選択 = action_active の字 + surface_raised の地、hover = surface_hover)。
+    let mut rail = column![].spacing(1).width(96);
     for (label, value) in [
         (BROWSER_RAIL_ALL, BrowserRail::AllMedia),
         (BROWSER_RAIL_PROJECT, BrowserRail::Project),
@@ -256,7 +262,8 @@ fn browser_panel(shell: &Shell) -> Element<'_, Message> {
     ] {
         let selected = pane.rail() == value;
         rail = rail.push(
-            button(text(label).size(13))
+            button(text(label).size(11))
+                .padding([3, 7])
                 .style(move |theme, status| rail_button_style(theme, status, selected))
                 .width(Fill)
                 .on_press(Message::BrowserRailChosen(value)),
@@ -295,9 +302,27 @@ fn browser_panel(shell: &Shell) -> Element<'_, Message> {
         scrollable(grid).height(Fill).into()
     };
 
-    let mut panel = column![text(BROWSER_HEADER).size(13)]
+    // header 帯 — browser-library.css:28-38 の写し: 太字の見出し + 右に
+    // library root の名前(reference の "LOCAL LIBRARY" に当たる、既存データ)。
+    let header = container(
+        row![
+            text(BROWSER_HEADER)
+                .size(11)
+                .font(bold_font(iced::font::Weight::Bold)),
+            space().width(Fill),
+            text(pane.library_root_name())
+                .size(9)
+                .style(style::text_muted),
+        ]
         .spacing(6)
-        .padding(8)
+        .align_y(Center),
+    )
+    .padding([6, 8])
+    .width(Fill)
+    .style(browser_band_style);
+
+    let mut panel = column![header]
+        .spacing(6)
         .width(BROWSER_PANE_W)
         .height(Fill);
     if pane.drop_hover() {
@@ -309,8 +334,19 @@ fn browser_panel(shell: &Shell) -> Element<'_, Message> {
                 .style(drop_hover_style),
         );
     }
-    panel = panel.push(row![rail, body].spacing(8).height(Fill));
-    panel = panel.push(text(tray_line).size(12));
+    panel = panel.push(
+        row![rail, body]
+            .spacing(8)
+            .padding(iced::padding::left(8).right(8))
+            .height(Fill),
+    );
+    // selection tray — browser-library.css:278-293 の写し(帯 + 頭に選択の点)。
+    panel = panel.push(
+        container(text(tray_line).size(11))
+            .padding([5, 8])
+            .width(Fill)
+            .style(browser_band_style),
+    );
 
     os_file_drop_zone(
         container(panel)
@@ -406,8 +442,7 @@ where
                     shell.publish((self.on_event)(DropEvent::HoverEnter));
                 }
                 Event::Window(
-                    iced::window::Event::FilesHoveredLeft
-                    | iced::window::Event::FileDropped(_),
+                    iced::window::Event::FilesHoveredLeft | iced::window::Event::FileDropped(_),
                 ) => {
                     shell.publish((self.on_event)(DropEvent::HoverLeave));
                 }
@@ -489,7 +524,11 @@ fn rail_button_style(theme: &iced::Theme, status: button::Status, selected: bool
     };
     button::Style {
         background,
-        text_color: if selected { t.action_active } else { t.text_secondary },
+        text_color: if selected {
+            t.action_active
+        } else {
+            t.text_secondary
+        },
         border: iced::Border::default(),
         ..button::Style::default()
     }
@@ -499,10 +538,41 @@ fn rail_button_style(theme: &iced::Theme, status: button::Status, selected: bool
 fn drop_hover_style(theme: &iced::Theme) -> container::Style {
     let t = crate::theme::Tokens::resolve(theme);
     container::Style {
-        background: Some(iced::Color { a: 0.12, ..t.action_active }.into()),
+        background: Some(
+            iced::Color {
+                a: 0.12,
+                ..t.action_active
+            }
+            .into(),
+        ),
         border: iced::Border {
             color: t.action_active,
             width: 1.0,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    }
+}
+
+/// 太字 font(section 見出し・header title に使う。`inspector_pane::weight` と
+/// 同じ写し — letter-spacing はこの iced fork に無いので持たない)。
+fn bold_font(weight: iced::font::Weight) -> iced::Font {
+    iced::Font {
+        weight,
+        ..iced::Font::DEFAULT
+    }
+}
+
+/// header / selection tray の帯 — `surface_raised`(browser-library.css の
+/// header/tray は panel 地より僅かに明るい面を使う。この製品では raw hex に
+/// token 対応が無いので、意味の近い `surface_raised` を採る)。
+fn browser_band_style(theme: &iced::Theme) -> container::Style {
+    let t = crate::theme::Tokens::resolve(theme);
+    container::Style {
+        background: Some(t.surface_raised.into()),
+        border: iced::Border {
+            color: t.border_default,
+            width: 0.0,
             radius: 0.0.into(),
         },
         ..container::Style::default()
@@ -542,7 +612,19 @@ fn browser_card(card: BrowserCard) -> Element<'static, Message> {
             .into(),
     };
     let selected = card.selected;
-    let body = column![thumb, text(card.name).size(11), text(card.meta).size(9)].spacing(2);
+    // caption 2行 — browser-library.css:264-267 の写し(name = bold、
+    // meta = muted の小字)。
+    let body = column![
+        container(thumb)
+            .style(move |theme: &iced::Theme| browser_thumb_style(theme, selected))
+            .width(Fill)
+            .height(48),
+        text(card.name)
+            .size(10)
+            .font(bold_font(iced::font::Weight::Bold)),
+        text(card.meta).size(9).style(style::text_muted),
+    ]
+    .spacing(2);
     mouse_area(
         container(body)
             .padding(4)
@@ -553,6 +635,24 @@ fn browser_card(card: BrowserCard) -> Element<'static, Message> {
     .on_press(Message::BrowserCardClicked(card.id.clone()))
     .on_double_click(Message::BrowserCardActivated(card.id))
     .into()
+}
+
+/// thumbnail 枠 — browser-library.css:240-250 の写し(既定 `border_default`、
+/// hover は素通し、選択は `action_active`)。
+fn browser_thumb_style(theme: &iced::Theme, selected: bool) -> container::Style {
+    let t = crate::theme::Tokens::resolve(theme);
+    container::Style {
+        border: iced::Border {
+            color: if selected {
+                t.action_active
+            } else {
+                t.border_default
+            },
+            width: 1.0,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    }
 }
 
 /// card の面。選択の強調は `theme::Tokens` の semantic role から
@@ -592,16 +692,12 @@ fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
     // Undo / Redo(M-3)。`Cmd+Z` / `Shift+Cmd+Z` と同じ入口へ流れる。
     // 台帳が空の側は押せない(触れそうで触れない物にしない — 灰色は「無効」の意味)。
     if shell.is_seated() {
-        band = band.push(
-            button(text(UNDO).size(13)).on_press_maybe(
-                (shell.undo_len() > 0).then_some(Message::Timeline(TimelineMsg::UndoPressed)),
-            ),
-        );
-        band = band.push(
-            button(text(REDO).size(13)).on_press_maybe(
-                (shell.redo_len() > 0).then_some(Message::Timeline(TimelineMsg::RedoPressed)),
-            ),
-        );
+        band = band.push(button(text(UNDO).size(13)).on_press_maybe(
+            (shell.undo_len() > 0).then_some(Message::Timeline(TimelineMsg::UndoPressed)),
+        ));
+        band = band.push(button(text(REDO).size(13)).on_press_maybe(
+            (shell.redo_len() > 0).then_some(Message::Timeline(TimelineMsg::RedoPressed)),
+        ));
     }
 
     // 書き出し面。実行中は経過秒と Cancel、そうでなければ Export。

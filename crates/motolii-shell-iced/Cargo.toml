@@ -54,10 +54,15 @@ motolii-gpu.workspace = true
 serde_json.workspace = true
 # 同上(JSONL の1行を組む側の trait)。
 serde.workspace = true
+# `--screenshot` が撮った `iced::window::Screenshot`(RGBA bytes)をPNGへ書く側。
+# egui 版 `blitz_shell::runner::write_png` と同じ用途(`image::codecs::png`)。
+# 表示用の `iced::widget::image`(feature側)とは別口。
+image.workspace = true
 
 [dev-dependencies]
 # 運転席。egui shell の `egui_kittest` に対応する物で、iced が公式に持っている。
 iced_test.workspace = true
 motolii-testkit.workspace = true
 # pixel 証拠(運転席 snapshot の PNG)を読み戻して画素 oracle に掛ける。
-image.workspace = true
+# (`image` そのものは `--screenshot` 用に通常 dependency 側へ上げたので、ここは
+# dev 専用の追加無し — features は上の1本と共有される)

@@ -105,7 +105,9 @@ pub fn left_pressed() -> iced::event::Event {
 
 /// 左ボタン離し。
 pub fn left_released() -> iced::event::Event {
-    iced::event::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left))
+    iced::event::Event::Mouse(iced::mouse::Event::ButtonReleased(
+        iced::mouse::Button::Left,
+    ))
 }
 
 /// cursor が窓から出た。
@@ -120,10 +122,36 @@ pub fn cursor_left() -> iced::event::Event {
 /// (単クリックの選択と同居する。egui 版と同じ)。
 pub fn double_click(mut ui: iced_test::Simulator<'_, Message>, selector: &str) -> Vec<Message> {
     for _ in 0..2 {
-        ui.click(selector).unwrap_or_else(|error| {
-            panic!("{selector:?} が押せる物として立っていない: {error}")
-        });
+        ui.click(selector)
+            .unwrap_or_else(|error| panic!("{selector:?} が押せる物として立っていない: {error}"));
     }
+    ui.into_messages().collect()
+}
+
+/// scrollable の中身を下まで送ってから押す。Inspector の TRANSFORM/EFFECTS は
+/// 行数が伸びる分だけ scrollable に包んである(2026-08-18 視覚再現レーン —
+/// 包まないと伸びた分だけ既存行が押し潰されて 0 高さになる、を実測して足した)。
+/// 押したい的が最初のビューポートに入っているとは限らないので、同じ
+/// `Simulator` の上で先にホイールを送ってから click する(scroll 位置は
+/// widget 内部 state なので、別の `Simulator` を新しく作ると失われる)。
+pub fn scroll_then_click(
+    mut ui: iced_test::Simulator<'_, Message>,
+    over: iced::Point,
+    selector: &str,
+) -> Vec<Message> {
+    // `simulate` の cursor 引数は `Simulator::point_at` が控えた値であって、
+    // 流した `CursorMoved` event の座標ではない — `point_and_move` と同じ
+    // 二段構え(ここを外すと scrollable の `WheelScrolled` handler が
+    // `cursor_over_scrollable` を得られず、ホイールが素通りする)。
+    ui.point_at(over);
+    let _ = ui.simulate([
+        cursor_moved(over.x, over.y),
+        iced::event::Event::Mouse(iced::mouse::Event::WheelScrolled {
+            delta: iced::mouse::ScrollDelta::Lines { x: 0.0, y: -80.0 },
+        }),
+    ]);
+    ui.click(selector)
+        .unwrap_or_else(|error| panic!("{selector:?} が押せる物として立っていない: {error}"));
     ui.into_messages().collect()
 }
 

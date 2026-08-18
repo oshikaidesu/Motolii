@@ -99,7 +99,11 @@ fn pressing_an_unkeyed_diamond_becomes_an_intent_and_a_current_key() {
         .transform_row(UiEditParam::Position)
         .expect("Position 行がある")
         .clone();
-    assert_eq!(position.key_state, KeyState::Unkeyed, "前提: まだキーが無い");
+    assert_eq!(
+        position.key_state,
+        KeyState::Unkeyed,
+        "前提: まだキーが無い"
+    );
     assert_eq!(position.components.len(), 2, "Vec2 は X/Y の2成分");
     let rows_before = before.transform.len();
     let intents_before = shell.intent_count();
@@ -178,9 +182,7 @@ fn mute_and_solo_toggle_through_the_document() {
         .iter()
         .flat_map(|track| &track.items)
         .find_map(|item| match item {
-            motolii_doc::TrackItem::Clip(clip)
-                if clip.envelope.layer_id.get() == layer =>
-            {
+            motolii_doc::TrackItem::Clip(clip) if clip.envelope.layer_id.get() == layer => {
                 Some(clip.envelope.visible)
             }
             _ => None,
@@ -222,7 +224,10 @@ fn a_scrub_commit_writes_the_document_once() {
         })],
     );
 
-    assert!(shell.revision() > revision, "確定が Document へ入っていない");
+    assert!(
+        shell.revision() > revision,
+        "確定が Document へ入っていない"
+    );
     let opacity = ready_model(&shell)
         .transform_row(UiEditParam::Opacity)
         .expect("Opacity 行")
@@ -340,11 +345,9 @@ fn an_effect_toggle_writes_the_shared_definition() {
             definition_id: motolii_doc::EffectDefinitionId::from_raw(definition_id),
         });
     }
-    let mut session = motolii_doc::ProjectSession::acquire(
-        &path,
-        &motolii_doc::ResourceLimits::production(),
-    )
-    .expect("acquire");
+    let mut session =
+        motolii_doc::ProjectSession::acquire(&path, &motolii_doc::ResourceLimits::production())
+            .expect("acquire");
     session
         .save_document(&document, &motolii_doc::SaveOptions::default())
         .expect("save");
@@ -383,7 +386,13 @@ fn an_effect_toggle_writes_the_shared_definition() {
     );
 
     // ON を押す → OFF になる(実 intent。見た目だけの反転ではない)。
-    let pressed = press(iced_test::simulator(view(&shell)), "ON");
+    // EFFECTS section は scrollable の中(2026-08-18 視覚再現レーンで TRANSFORM
+    // が伸びたので、既定ビューポートには入らないことがある) — 先に送ってから押す。
+    let pressed = common::scroll_then_click(
+        iced_test::simulator(view(&shell)),
+        iced::Point::new(900.0, 300.0),
+        "ON",
+    );
     drain(&mut shell, pressed);
     assert_eq!(
         shell.intents().last().map(|event| event.intent.clone()),

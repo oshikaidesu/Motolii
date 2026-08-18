@@ -4,14 +4,31 @@
 //! 中に埋めると「引数をどう読むか」を窓を開かずに確かめられない
 //! (egui 側の `BlitzShellLaunch` と同じ分担)。
 //!
-//! M-1 の範囲は記録の2本だけだった。`--screenshot` / `--fixture` は
-//! 中身(Stage / Timeline)が来てから。
+//! M-1 の範囲は記録の2本だけだった。その後2つ増えた: `--project`(M-2 で座席を
+//! 起動時に据える)と `--screenshot`(見た目の検収に常設器具が要るため。egui shell
+//! `crates/motolii-ui/src/blitz_shell/main.rs` と**同じ引数の形**
+//! `--screenshot <out.png> [frames]`、frames 省略時は [`DEFAULT_SCREENSHOT_FRAMES`])。
+//! `--fixture` は中身が来てから。
 //!
-//! M-2 で `--project` が加わった。読むだけがここの仕事で、開く・座らせる判断は
+//! `--project` は読むだけがここの仕事で、開く・座らせる判断は
 //! [`crate::resume::decide_resume`] が持つ(窓を開く前に呼べるようにするため、
 //! 意図的にここへは書かない)。
 
 use std::path::PathBuf;
+
+/// 既定の待ちフレーム数。egui 版 `blitz_shell::DEFAULT_SCREENSHOT_FRAMES` と
+/// 同じ値 — 非同期の届き物(サムネイル・波形)が来るのを待つ。
+pub const DEFAULT_SCREENSHOT_FRAMES: u32 = 10;
+
+/// `--screenshot` の要求。窓を1枚だけ描いてPNGにし、そのまま終了する。
+/// 合体した絵を**人が窓を開かずに確認する**ための口で、製品機能ではない
+/// (egui 版 `blitz_shell::ScreenshotRequest` と同じ役目)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScreenshotRequest {
+    pub path: PathBuf,
+    /// 待つフレーム数。
+    pub frames: u32,
+}
 
 /// 起動要求。toolkit 型を含まない。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -24,6 +41,8 @@ pub struct Launch {
     /// 起動時に開く project(`--project`)。指定が無ければ引数なし起動の
     /// 「続きが開く」(`crate::resume::decide_resume`)へ回る。
     pub project: Option<PathBuf>,
+    /// 撮影の要求(`--screenshot`)。製品機能ではない検証器具。
+    pub screenshot: Option<ScreenshotRequest>,
 }
 
 impl Launch {
@@ -53,6 +72,16 @@ impl Launch {
             } else if arg == "--project" {
                 launch.project = Some(PathBuf::from(value_after(&args, i, arg)?));
                 i += 2;
+            } else if arg == "--screenshot" {
+                let path = PathBuf::from(value_after(&args, i, arg)?);
+                i += 2;
+                let mut frames = DEFAULT_SCREENSHOT_FRAMES;
+                // frames は省略可能(次の引数が数値のときだけ食う。egui 版と同じ)。
+                if let Some(parsed) = args.get(i).and_then(|value| value.parse().ok()) {
+                    frames = parsed;
+                    i += 1;
+                }
+                launch.screenshot = Some(ScreenshotRequest { path, frames });
             } else {
                 return Err(format!("知らない引数: {arg}"));
             }

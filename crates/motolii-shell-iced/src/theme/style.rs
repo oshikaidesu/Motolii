@@ -65,6 +65,14 @@ pub fn text_secondary(theme: &Theme) -> text::Style {
     }
 }
 
+/// 主文字 — 値・行ラベルなど本文(`text_primary`)。iced 既定の text 色と
+/// ほぼ同じだが、token 経由にして palette と同じ出所へ揃える。
+pub fn text_primary_style(theme: &Theme) -> text::Style {
+    text::Style {
+        color: Some(Tokens::resolve(theme).text_primary),
+    }
+}
+
 /// 添え物の文字 — 近道キーの表示など(`text_muted`)。
 pub fn text_muted(theme: &Theme) -> text::Style {
     text::Style {
