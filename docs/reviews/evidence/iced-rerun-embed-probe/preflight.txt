@@ -1,0 +1,66 @@
+# preflight — does re_renderer run on the device iced would have made?
+
+Each case is a separate child process so that a validation panic in one
+does not take the other's result with it.
+
+## case: iced-windowed
+
+```
+device kind: iced-windowed
+  requested max_bind_groups = 2
+  requested features = Features { features_wgpu: FeaturesWGPU(0x0), features_webgpu: FeaturesWebGPU(SHADER_F16) }
+  adapter = AdapterInfo { name: "Apple M4", vendor: 0, device: 0, device_type: IntegratedGpu, device_pci_bus_id: "", driver: "", driver_info: "", backend: Metal, subgroup_min_size: 4, subgroup_max_size: 64, transient_saves_memory: true }
+PNG: /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-a75ad764af63acf47/docs/reviews/evidence/iced-rerun-embed-probe/preflight-iced-windowed.png
+fnv1a: 4c4186b2e5256325
+  hue histogram: red=76800 green=76800 blue=76800 yellow=76800 dark=0 other=0 (minimum per quadrant = 1996 of 307200)
+  all four quadrants are present
+  frame corner top-left (6, 6): red Some([230, 30, 30]) (expected red)
+  frame corner top-right (633, 6): green Some([30, 230, 30]) (expected green)
+  frame corner bottom-left (6, 473): blue Some([30, 30, 230]) (expected blue)
+  frame corner bottom-right (633, 473): yellow Some([230, 230, 30]) (expected yellow)
+wgpu validation errors:
+  SpatialStage frame: Validation Error
+
+Caused by:
+  In Device::create_pipeline_layout, label = 'LineRenderer::pipeline_layout'
+    Bind group layout count 3 exceeds device bind group limit 2
+
+
+PASS (picture) / COMPLAINED (wgpu) — the oracle is satisfied but wgpu refused to build part of re_renderer on this device
+
+-- stderr --
+WGPU VALIDATION: SpatialStage frame: Validation Error
+
+Caused by:
+  In Device::create_pipeline_layout, label = 'LineRenderer::pipeline_layout'
+    Bind group layout count 3 exceeds device bind group limit 2
+
+```
+
+exit: Some(3)
+
+## case: re_renderer
+
+```
+device kind: re_renderer
+  requested max_bind_groups = 4
+  requested features = Features { features_wgpu: FeaturesWGPU(0x0), features_webgpu: FeaturesWebGPU(0x0) }
+  adapter = AdapterInfo { name: "Apple M4", vendor: 0, device: 0, device_type: IntegratedGpu, device_pci_bus_id: "", driver: "", driver_info: "", backend: Metal, subgroup_min_size: 4, subgroup_max_size: 64, transient_saves_memory: true }
+PNG: /Users/member_ottoto/rust_ae/Motolii/.claude/worktrees/agent-a75ad764af63acf47/docs/reviews/evidence/iced-rerun-embed-probe/preflight-re_renderer.png
+fnv1a: 4c4186b2e5256325
+  hue histogram: red=76800 green=76800 blue=76800 yellow=76800 dark=0 other=0 (minimum per quadrant = 1996 of 307200)
+  all four quadrants are present
+  frame corner top-left (6, 6): red Some([230, 30, 30]) (expected red)
+  frame corner top-right (633, 6): green Some([30, 230, 30]) (expected green)
+  frame corner bottom-left (6, 473): blue Some([30, 30, 230]) (expected blue)
+  frame corner bottom-right (633, 473): yellow Some([230, 230, 30]) (expected yellow)
+no wgpu validation errors
+
+PASS
+```
+
+exit: Some(0)
+
+## verdict
+
+(a) ESTABLISHED WITH A CAVEAT: one device serves both, and the picture matches the re_renderer-shaped device exactly — but wgpu refused to build part of re_renderer on iced's limits (see the case above). Whatever needs that part will be missing.
