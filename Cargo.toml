@@ -62,23 +62,16 @@ motolii-input = { path = "crates/motolii-input" }
 # ---------------------------------------------------------------------------
 # iced fork(2026-08-18 ホスト移行 M-0)
 # ---------------------------------------------------------------------------
-# **この2行の絶対パスは検収で消える。** fork はまだ push されておらず、検収側が
-# push して rev を固定した時点で rerun と同じ形へ差し替える:
-#
-#   iced      = { git = "https://github.com/oshikaidesu/iced", rev = "<push 後の rev>", features = [...] }
-#   iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "<同じ rev>" }
-#
-# 相対パスにしないのは、この repo が `.claude/worktrees/*` の worktree からも
-# 建つためである(worktree と本チェックアウトでは `../` の深さが違うので、
-# 相対パスだとどちらか片方で必ず壊れる)。絶対パスは「機械ローカルである」ことを
-# 隠さない分だけ正直で、差し替え忘れは**他所の機械で必ず落ちる**ので見逃せない。
+# push 済み fork の rev pin(検収で絶対パスから差し替え済み)。rev 更新の検収は
+# 新運転席(drive_seat)を回す。ローカル開発で fork を直接触る時だけ一時的に
+# path = "~/rust_ae/iced-motolii-20260818" へ向け、commit する前に rev pin へ戻す。
 #
 # fork の中身(上流との乖離2件・再適用手順・上流 PR 候補である旨)は
 # docs/reviews/2026-08-18-iced-fork-seam-ledger.md。
 # branch = `motolii/host-seams`、上流 pin = `3de451447bd28217bb535632867550908e29d5d0`。
-iced = { path = "/Users/member_ottoto/rust_ae/iced-motolii-20260818", features = ["wgpu", "advanced"] }
+iced = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c", features = ["wgpu", "advanced"] }
 # 運転席(headless Simulator)。dev-dependencies 専用。
-iced_test = { path = "/Users/member_ottoto/rust_ae/iced-motolii-20260818/test" }
+iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
 cargo_metadata = "0.23"
 serde = { version = "1", features = ["derive"] }
 egui = "0.35"
