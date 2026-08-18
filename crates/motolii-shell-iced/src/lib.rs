@@ -95,7 +95,7 @@ pub use browser::{BrowserCard, BrowserPane, BrowserRail};
 pub use inspector_model::{InspectorModel, InspectorSeat};
 pub use inspector_pane::InspectorEvent;
 pub use intent_log::IntentLog;
-pub use launch::Launch;
+pub use launch::{Launch, ScreenshotRequest, DEFAULT_SCREENSHOT_FRAMES};
 pub use message::Message;
 pub use prompts::{NativePrompts, ScriptedPrompts, ShellPrompts};
 pub use shell::{Outcome, Shell};

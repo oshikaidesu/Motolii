@@ -44,8 +44,12 @@ const TRACK_B: Color =
 const RULE: Color = Color::from_rgb(0x11 as f32 / 255.0, 0x11 as f32 / 255.0, 0x11 as f32 / 255.0);
 const INK: Color = Color::from_rgb(0xd4 as f32 / 255.0, 0xd4 as f32 / 255.0, 0xd4 as f32 / 255.0);
 const DIM: Color = Color::from_rgb(0x8d as f32 / 255.0, 0x8d as f32 / 255.0, 0x8d as f32 / 255.0);
-const ACCENT: Color =
-    Color::from_rgb(0xe9 as f32 / 255.0, 0xcf as f32 / 255.0, 0x72 as f32 / 255.0);
+// 元は playhead に使っていた gold(#e9cf72)。timeline-library.css:93,96 では
+// この色は `.timeGuide`(drag 中の snap 案内線)のもので、`.playhead` は白
+// (2026-08-18 訂正、下の `SELECTED` へ差し替えた)。この canvas にはまだ
+// snap 案内線の描画が無い(`snap_candidates`/`snapped` は当たりだけ返し、絵は
+// 描かない)ので、定数ごと削った — 描くようになったら同じ #e9cf72 を
+// ここへ戻す(README に残差として記載)。
 const SELECTED: Color =
     Color::from_rgb(0xf2 as f32 / 255.0, 0xf2 as f32 / 255.0, 0xf2 as f32 / 255.0);
 const WAVE: Color = Color::from_rgb(0x7f as f32 / 255.0, 0x92 as f32 / 255.0, 0x8c as f32 / 255.0);
@@ -568,14 +572,14 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
         let playhead = pane.scrub_preview().unwrap_or(scene.playhead);
         let px = geometry.time_to_x(view, playhead);
         if px >= geometry.track_left() - 1.0 && px <= size.width + 1.0 {
-            frame.fill_rectangle(Point::new(px, 0.0), Size::new(1.0, size.height), ACCENT);
+            frame.fill_rectangle(Point::new(px, 0.0), Size::new(1.0, size.height), SELECTED);
             let head = Path::new(|p| {
                 p.move_to(Point::new(px - 5.0, 0.0));
                 p.line_to(Point::new(px + 5.0, 0.0));
                 p.line_to(Point::new(px, 9.0));
                 p.close();
             });
-            frame.fill(&head, ACCENT);
+            frame.fill(&head, SELECTED);
         }
 
         vec![frame.into_geometry()]

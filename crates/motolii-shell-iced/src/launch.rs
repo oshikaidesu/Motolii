@@ -4,10 +4,28 @@
 //! 中に埋めると「引数をどう読むか」を窓を開かずに確かめられない
 //! (egui 側の `BlitzShellLaunch` と同じ分担)。
 //!
-//! M-1 の範囲は記録の2本だけ。`--project` / `--screenshot` / `--fixture` は
-//! 中身(Stage / Timeline)が来てから。
+//! M-1 の範囲は記録の2本だけだったが、見た目の検収に常設器具が要る
+//! (2026-08-18 視覚再現レーン)ので `--screenshot` を足した。egui shell
+//! (`crates/motolii-ui/src/blitz_shell/main.rs`)と**同じ引数の形**
+//! (`--screenshot <out.png> [frames]`、frames 省略時は
+//! [`DEFAULT_SCREENSHOT_FRAMES`])。`--project` / `--fixture` は中身
+//! (Stage / Timeline)が来てから。
 
 use std::path::PathBuf;
+
+/// 既定の待ちフレーム数。egui 版 `blitz_shell::DEFAULT_SCREENSHOT_FRAMES` と
+/// 同じ値 — 非同期の届き物(サムネイル・波形)が来るのを待つ。
+pub const DEFAULT_SCREENSHOT_FRAMES: u32 = 10;
+
+/// `--screenshot` の要求。窓を1枚だけ描いてPNGにし、そのまま終了する。
+/// 合体した絵を**人が窓を開かずに確認する**ための口で、製品機能ではない
+/// (egui 版 `blitz_shell::ScreenshotRequest` と同じ役目)。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScreenshotRequest {
+    pub path: PathBuf,
+    /// 待つフレーム数。
+    pub frames: u32,
+}
 
 /// 起動要求。toolkit 型を含まない。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -17,6 +35,8 @@ pub struct Launch {
     pub intent_log: Option<PathBuf>,
     /// 窓が**言ったこと**の流し先(`--status-log`)。
     pub status_log: Option<PathBuf>,
+    /// 撮影の要求(`--screenshot`)。製品機能ではない検証器具。
+    pub screenshot: Option<ScreenshotRequest>,
 }
 
 impl Launch {
@@ -40,6 +60,16 @@ impl Launch {
             } else if arg == "--status-log" {
                 launch.status_log = Some(PathBuf::from(value_after(&args, i, arg)?));
                 i += 2;
+            } else if arg == "--screenshot" {
+                let path = PathBuf::from(value_after(&args, i, arg)?);
+                i += 2;
+                let mut frames = DEFAULT_SCREENSHOT_FRAMES;
+                // frames は省略可能(次の引数が数値のときだけ食う。egui 版と同じ)。
+                if let Some(parsed) = args.get(i).and_then(|value| value.parse().ok()) {
+                    frames = parsed;
+                    i += 1;
+                }
+                launch.screenshot = Some(ScreenshotRequest { path, frames });
             } else {
                 return Err(format!("知らない引数: {arg}"));
             }
