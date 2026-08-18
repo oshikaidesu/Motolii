@@ -23,15 +23,35 @@
 
 use motolii_core::{Fps, RationalTime};
 use motolii_doc::{Document, LayerId, TrackItem};
+use motolii_ui::blitz_shell::UiItemFlag;
 use motolii_ui::timeline_editor::{TimelineView, TrimEdge};
 use motolii_ui::timeline_rows::TimelineRow;
 
-/// 左レール(名前の列)の幅。egui 版 `RAIL_W` と同値。
-pub const RAIL_W: f32 = 196.0;
+/// 左レール(名前の列)の幅。egui 版 `RAIL_W` より少し広い — M/S(2 個)と
+/// 種別色の四角を横に並べても名前が詰まらない値(2026-08-19、同一 document を
+/// 並べた `/tmp/egui-same-doc.png` に合わせて 196→210 へ)。
+pub const RAIL_W: f32 = 210.0;
+/// transport 帯(playhead 読み・`N rows`・`view a-bs`・`grid n`)の高さ。
+/// `/tmp/egui-same-doc.png` の最上段 — 再生ボタンや `space=play` 等の
+/// **対応する intent が無い項目は描かない**(2026-08-19 裁定、Q0)。
+pub const TRANSPORT_H: f32 = 30.0;
+/// ARRANGEMENT 俯瞰帯の高さ。`/tmp/egui-same-doc.png` は他の object 行より
+/// 低い、灰色の丸みを帯びた1本の帯(セグメント表示ではない)。
+pub const OVERVIEW_H: f32 = 22.0;
 /// ルーラの高さ。egui 版 `RULER_H` と同値。
 pub const RULER_H: f32 = 36.0;
 /// object 行の高さ。egui 版 `ROW_H`(小)と同値。
 pub const ROW_H: f32 = 24.0;
+/// M / S ボタン1枚の幅。
+const FLAG_BTN_W: f32 = 22.0;
+/// M / S ボタンの高さ。
+const FLAG_BTN_H: f32 = 18.0;
+/// M / S ボタン間の隙間。
+const FLAG_BTN_GAP: f32 = 4.0;
+/// レール右端からの余白。
+const FLAG_BTN_MARGIN: f32 = 8.0;
+/// ARRANGEMENT 帯の右余白。
+const OVERVIEW_MARGIN: f32 = 10.0;
 /// trim の端の幅。egui 版 `TRIM_EDGE` と同値(spike も同じ 8.0 を採った)。
 pub const TRIM_EDGE: f32 = 8.0;
 /// 吸着の間合い(px)。egui 版 `SNAP_PX` と同値。
@@ -59,9 +79,43 @@ impl PaneGeometry {
         (self.width - RAIL_W).max(1.0)
     }
 
-    /// 行の面の上端(ルーラ + 波形帯の下)。
+    /// transport 帯(playhead 読み・`N rows`・`view a-bs`・`grid n`)の下端。
+    pub fn transport_bottom(&self) -> f32 {
+        TRANSPORT_H
+    }
+
+    /// ARRANGEMENT 帯の下端(= ルーラの上端)。
+    pub fn overview_bottom(&self) -> f32 {
+        TRANSPORT_H + OVERVIEW_H
+    }
+
+    /// ルーラの上端。ARRANGEMENT 帯の下。
+    pub fn ruler_top(&self) -> f32 {
+        TRANSPORT_H + OVERVIEW_H
+    }
+
+    /// ルーラの下端(= 波形帯 / 行の面の上端の手前)。
+    pub fn ruler_bottom(&self) -> f32 {
+        TRANSPORT_H + OVERVIEW_H + RULER_H
+    }
+
+    /// 行の面の上端(transport + ARRANGEMENT + ルーラ + 波形帯の下)。
     pub fn rows_top(&self) -> f32 {
-        RULER_H + self.wave_h
+        TRANSPORT_H + OVERVIEW_H + RULER_H + self.wave_h
+    }
+
+    /// ARRANGEMENT 帯のトラック部分(レールの右)の x 範囲。ルーラ/行と同じ
+    /// track_left で揃える(この行だけ列が割れているわけではない)。
+    pub fn overview_track_x(&self) -> (f32, f32) {
+        let x0 = self.track_left();
+        let x1 = (self.width - OVERVIEW_MARGIN).max(x0 + 1.0);
+        (x0, x1)
+    }
+
+    /// 最下段の横スクロールバー(表示専用)の y 範囲。
+    pub fn scrollbar_y(&self) -> (f32, f32) {
+        let h = 6.0;
+        ((self.height - h - 4.0).max(0.0), h)
     }
 
     pub fn row_top(&self, index: usize, scroll_y: f32) -> f32 {
@@ -94,6 +148,25 @@ impl PaneGeometry {
     }
 }
 
+/// S ボタンの x 範囲(レール右端基準・RAIL_W だけに依る定数なので `PaneGeometry`
+/// を要らない)。`hit_test` と描画(`canvas.rs`)が同じこれを呼ぶ。
+pub fn solo_button_x() -> (f32, f32) {
+    let x1 = RAIL_W - FLAG_BTN_MARGIN;
+    (x1 - FLAG_BTN_W, x1)
+}
+
+/// M ボタンの x 範囲。S の左隣。
+pub fn mute_button_x() -> (f32, f32) {
+    let (solo_x0, _) = solo_button_x();
+    let x1 = solo_x0 - FLAG_BTN_GAP;
+    (x1 - FLAG_BTN_W, x1)
+}
+
+/// M / S ボタンの高さ・行内の上端オフセット。描画がボタン矩形を作るのに使う。
+pub fn flag_button_rect_y(row_top: f32) -> (f32, f32) {
+    (row_top + (ROW_H - FLAG_BTN_H) * 0.5, FLAG_BTN_H)
+}
+
 /// bar のどこに居るか。egui 版 `BarPart` の対応物(名前は zone にして、
 /// intent の `TrimEdge` と別物であることを保つ)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,8 +179,12 @@ pub enum BarZone {
 /// canvas ローカル座標が何の上に居るか。**純関数 `hit_test` の戻り値**であって状態ではない。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TimelineHit {
+    /// ARRANGEMENT 俯瞰帯のトラックの上(押下 / 引きずり = その時刻へ view を寄せる)。
+    Overview { at_seconds: f32 },
     /// ルーラの上(スクラブ)。`at_seconds` は指した時刻。
     Ruler { at_seconds: f32 },
+    /// 行の M / S ボタンの上(押下 = `ToggleItemFlag`)。
+    FlagButton { layer: LayerId, flag: UiItemFlag },
     /// 左レールの行の上(クリック = 選択)。
     Rail { layer: LayerId },
     /// bar の上。`at_seconds` は掴んだ時刻(スナップ前)。
@@ -174,8 +251,29 @@ pub fn hit_test(
     x: f32,
     y: f32,
 ) -> TimelineHit {
+    // transport 帯(playhead 読み・`N rows`・`view a-bs`・`grid n`)は表示専用 —
+    // 対応する intent が無い(2026-08-19 裁定、Q0)。
+    if y < geometry.transport_bottom() {
+        return TimelineHit::Empty;
+    }
+    // ARRANGEMENT 俯瞰帯はレールの右のトラック部分だけ(composition 全体が相手 —
+    // view の span/start ではなく comp の 0..duration に写す)。
+    if y < geometry.overview_bottom() {
+        let (x0, x1) = geometry.overview_track_x();
+        if x < x0 || x > x1 {
+            return TimelineHit::Empty;
+        }
+        let comp = document.composition.duration.as_seconds_f64() as f32;
+        if comp <= 0.0 {
+            return TimelineHit::Empty;
+        }
+        let ratio = ((x - x0) / (x1 - x0)).clamp(0.0, 1.0);
+        return TimelineHit::Overview {
+            at_seconds: ratio * comp,
+        };
+    }
     // ルーラはトラック面の上だけ(レールの頭は何でもない)。
-    if y < RULER_H {
+    if y < geometry.ruler_bottom() {
         if x >= geometry.track_left() {
             return TimelineHit::Ruler {
                 at_seconds: geometry.x_to_time(view, x),
@@ -188,6 +286,24 @@ pub fn hit_test(
     };
     let row = rows[index];
     if x < geometry.track_left() {
+        let row_top = geometry.row_top(index, scroll_y);
+        let (btn_y0, btn_h) = flag_button_rect_y(row_top);
+        if y >= btn_y0 && y <= btn_y0 + btn_h {
+            let (mute_x0, mute_x1) = mute_button_x();
+            let (solo_x0, solo_x1) = solo_button_x();
+            if x >= mute_x0 && x <= mute_x1 {
+                return TimelineHit::FlagButton {
+                    layer: row.layer,
+                    flag: UiItemFlag::Mute,
+                };
+            }
+            if x >= solo_x0 && x <= solo_x1 {
+                return TimelineHit::FlagButton {
+                    layer: row.layer,
+                    flag: UiItemFlag::Solo,
+                };
+            }
+        }
         return TimelineHit::Rail { layer: row.layer };
     }
     let Some((start, end, is_group)) = bar_span(document, row.layer) else {
@@ -364,6 +480,17 @@ pub fn find_item(document: &Document, layer: LayerId) -> Option<&TrackItem> {
     document.tracks.iter().find_map(|t| walk(&t.items, layer))
 }
 
+/// その layer の `(muted, solo)`。egui 版 `item_flags`(private)の移植 —
+/// **押下状態の正本は Document**(`ItemEnvelope.visible` / `.solo`)で、
+/// M ボタンの点灯は `!visible` の裏返し(Mute に専用の bool は無い)。
+pub fn item_mute_solo(document: &Document, layer: LayerId) -> (bool, bool) {
+    match find_item(document, layer) {
+        Some(TrackItem::Clip(c)) => (!c.envelope.visible, c.envelope.solo),
+        Some(TrackItem::Group(g)) => (!g.envelope.visible, g.envelope.solo),
+        None => (false, false),
+    }
+}
+
 /// egui 版 `movable_clips` の移植(Group は子の clip を全部返す)。
 pub fn movable_clips(document: &Document, layer: LayerId) -> Vec<(LayerId, f32, f32)> {
     fn collect(item: &TrackItem, out: &mut Vec<(LayerId, f32, f32)>) {
@@ -525,16 +652,58 @@ mod tests {
             other => panic!("右端を外した: {other:?}"),
         }
 
-        // ルーラ。
-        match hit_test(&document, &rows, view, &geometry, 0.0, 400.0, 10.0) {
+        // ルーラ(ARRANGEMENT 帯の下)。
+        match hit_test(
+            &document,
+            &rows,
+            view,
+            &geometry,
+            0.0,
+            400.0,
+            geometry.ruler_top() + 10.0,
+        ) {
             TimelineHit::Ruler { .. } => {}
             other => panic!("ルーラを外した: {other:?}"),
+        }
+
+        // ARRANGEMENT 俯瞰帯(ラベルの右のトラック部分)。
+        let (ov_x0, ov_x1) = geometry.overview_track_x();
+        match hit_test(
+            &document,
+            &rows,
+            view,
+            &geometry,
+            0.0,
+            (ov_x0 + ov_x1) / 2.0,
+            (geometry.transport_bottom() + geometry.overview_bottom()) / 2.0,
+        ) {
+            TimelineHit::Overview { .. } => {}
+            other => panic!("ARRANGEMENT 帯を外した: {other:?}"),
         }
 
         // レール。
         match hit_test(&document, &rows, view, &geometry, 0.0, 10.0, y) {
             TimelineHit::Rail { layer } => assert_eq!(layer, background),
             other => panic!("レールを外した: {other:?}"),
+        }
+
+        // M ボタン。
+        let (btn_y0, btn_h) = flag_button_rect_y(geometry.row_top(1, 0.0));
+        let (mute_x0, mute_x1) = mute_button_x();
+        match hit_test(
+            &document,
+            &rows,
+            view,
+            &geometry,
+            0.0,
+            (mute_x0 + mute_x1) / 2.0,
+            btn_y0 + btn_h / 2.0,
+        ) {
+            TimelineHit::FlagButton { layer, flag } => {
+                assert_eq!(layer, background);
+                assert_eq!(flag, UiItemFlag::Mute);
+            }
+            other => panic!("M ボタンを外した: {other:?}"),
         }
     }
 
