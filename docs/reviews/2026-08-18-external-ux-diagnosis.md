@@ -8,6 +8,8 @@
 全10 findingの引用をsupervisorが回し直し **10/10 CONFIRMED**。
 原文orderと証跡: `/private/tmp/motolii-ux-diagnosis-20260818{,-logs}`。
 
+**全10件着地(同日)**: wave C(`b3b7e57b` F-07〜F-10)・wave D(`11331403` F-01/F-04/F-05)・wave E(`d82b7b40` F-02/F-03/F-06)。各merge後のworkspace gate失敗ゼロ。F-03は枝A(document意味が実在し結線・局所bool削除)。
+
 検収後の優先度(supervisor付記): 高=F-01(再起動で続きが開かない)・F-02(死んだ3面)・
 F-05(台本乖離Export)・F-06(Stage選択の読み捨て)・F-03(M/S・FXが見た目だけ)。
 黙殺系F-07〜F-10はフェンス拡張1レーンに束ねる。F-04(矢印コマ送り)は小。
