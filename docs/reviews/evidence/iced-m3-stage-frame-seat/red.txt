@@ -1,0 +1,38 @@
+$ cargo test -p motolii-shell-iced -j 5
+...
+     Running tests/stage_island_live_frame.rs (target/debug/deps/stage_island_live_frame-798f97c2e710dad2)
+
+running 2 tests
+test an_evaluated_document_frame_lands_on_the_stage_island ... FAILED
+test moving_the_playhead_changes_the_frame_on_the_stage_island ... FAILED
+
+failures:
+
+---- an_evaluated_document_frame_lands_on_the_stage_island stdout ----
+
+thread 'an_evaluated_document_frame_lands_on_the_stage_island' (21564121) panicked at crates/motolii-shell-iced/tests/stage_island_live_frame.rs:252:5:
+assertion `left == right` failed: 画枠の内側が Red でなく Other(占有 1.00)。live Document の評価済みフレームが Stage 島へ渡っていない。証拠: .../docs/reviews/evidence/iced-m3-stage-frame-seat/live-frame-lands-red-wgpu.png
+  left: Other
+ right: Red
+
+---- moving_the_playhead_changes_the_frame_on_the_stage_island stdout ----
+
+thread 'moving_the_playhead_changes_the_frame_on_the_stage_island' (21564122) panicked at crates/motolii-shell-iced/tests/stage_island_live_frame.rs:282:5:
+assertion `left == right` failed: t=0 は Red のはずが Other(占有 1.00)。証拠: .../docs/reviews/evidence/iced-m3-stage-frame-seat/live-frame-follows-t0-red-wgpu.png
+  left: Other
+ right: Red
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+--- second failure round, after fixing the retry-loop's early-break bug, with --nocapture diagnostics added ---
+
+test an_evaluated_document_frame_lands_on_the_stage_island ... live-frame-lands-red: attempt=0 winner=Other share=1.00 frame_seat_evidence=Some(StageFrameEvidence { submitted: 1, accepted: 0, overlapped: 0, outstanding: true })
+...
+live-frame-lands-red: StageReported 診断: ["stage: 評価済みフレームの合成に失敗: frame 64x48 does not match camera aspect 16/9"]
+
+thread 'an_evaluated_document_frame_lands_on_the_stage_island' (21576682) panicked at crates/motolii-shell-iced/tests/stage_island_live_frame.rs:288:5:
+assertion `left == right` failed: 画枠の内側が Red でなく Other(占有 1.00)。...
+  left: Other
+ right: Red
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 200.53s

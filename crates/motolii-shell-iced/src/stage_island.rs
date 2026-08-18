@@ -42,16 +42,35 @@
 //! [`install_rerun_device_floor`] を**窓 / headless renderer を建てる前に**呼ぶ。
 //! 効いていることの常設 oracle は `tests/stage_bind_groups_oracle.rs` — 台帳 §4 が
 //! 「M-2 の受け入れ条件に含める」とした穴を塞ぐ物である。
+//!
+//! ## 評価済みフレームの席(M-3)
+//!
+//! M-2 は `install_probe_frame` で CPU から差した既知絵だけを持っていた
+//! (`presented_frame` / `frame_texture`)。M-3 はその隣に
+//! `motolii_ui::stage_frame_seat::StageFrameSeat` を立て、**live Document が
+//! 座っている間はそちらを使う** — export と同じ評価
+//! (`build_document_frame_graph` + `render_graph_cached`)を経た、いまの
+//! playhead 時刻の合成フレームが `EmbeddedSpatialStage::render` の
+//! `evaluated_frame` へ渡る。probe 経路は消していない: `document: None` の
+//! fixture 展示(および `stage_island_pixels.rs` の pixel oracle)はそのまま
+//! `present_probe_frame` を通る。
+//!
+//! 非同期の完成を拾う repaint の合図は、egui 版の `on_frame_ready`
+//! コールバックではなく `main.rs::Host::subscription` の `window::frames()`
+//! 購読(live Document が座っている間だけ)に任せている — 詳しくは
+//! [`Embed::drive_frame_seat`] の doc を見る。
 
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use iced::mouse;
 use iced::widget::shader::{self, Viewport};
 use iced::{Element, Fill, Rectangle};
 
+use motolii_doc::Document;
 use motolii_ui::rerun_stage::{EmbeddedSpatialStage, PointerPhase, StagePointerButton};
+use motolii_ui::stage_frame_seat::{StageFrameEvidence, StageFrameSeat};
 
 use crate::message::Message;
 use crate::shell::Shell;
@@ -78,6 +97,11 @@ pub fn install_rerun_device_floor() {
 pub fn stage_island(shell: &Shell) -> Element<'_, Message> {
     iced::widget::shader(StageIsland {
         composition_aspect: shell.composition_aspect(),
+        // live 座席の Document + playhead(M-3)。座席が無ければ `None` —
+        // 従来どおり幾何だけの fixture 展示のまま(egui shell の
+        // `wants_evaluated_frame` と同じ分担)。
+        document: shell.document(),
+        playhead: shell.timeline_playhead(),
         grab_probe: None,
     })
     .width(Fill)
@@ -87,19 +111,31 @@ pub fn stage_island(shell: &Shell) -> Element<'_, Message> {
 
 /// shader widget の `Program`。製品は `grab_probe = None`(掴みは発生しない)。
 /// テストはダミー領域を差して3状態を審判する。
-#[derive(Debug, Clone, Copy)]
+///
+/// `Copy` は持てない — `document` が `Arc<Document>` を運ぶ(M-3 の stage frame
+/// seat 結線)。
+#[derive(Debug, Clone)]
 pub struct StageIsland {
     /// composition の縦横比(幅/高さ)。座席の Document から。
     pub composition_aspect: Option<f32>,
+    /// live 座席の Document snapshot。`None` なら fixture 展示のまま
+    /// (`present_probe_frame` 経路。pixel oracle が使う)。
+    pub document: Option<Arc<Document>>,
+    /// `document` を評価する playhead(秒)。`document` が `None` の間は読まれない。
+    pub playhead: f32,
     /// 掴み判定の seam(M-2 はテスト専用のダミー。ギズモ本体は M-2 後)。
     pub grab_probe: Option<GrabRegion>,
 }
 
 /// `Primitive` は `Debug + Send + Sync` を要求するので素のデータしか持てない。
-/// GPU 資源は thread_local(`EMBED`)が持つ。
-#[derive(Debug, Clone, Copy)]
+/// GPU 資源は thread_local(`EMBED`)が持つ。`Document` は render worker が
+/// 別 thread へ渡す物と同じ型で、既に `Send + Sync`(`Arc<Document>` を跨いで
+/// 使い回している)。
+#[derive(Debug, Clone)]
 pub struct StagePrimitive {
     composition_aspect: Option<f32>,
+    document: Option<Arc<Document>>,
+    playhead: f32,
 }
 
 /// `Pipeline::new` は iced のランタイム device を渡してくる唯一の場所。
@@ -176,6 +212,8 @@ impl shader::Primitive for StagePrimitive {
                 height,
                 scale,
                 self.composition_aspect,
+                self.document.as_ref(),
+                self.playhead,
             )
         });
 
@@ -256,6 +294,8 @@ impl shader::Program<Message> for StageIsland {
     ) -> Self::Primitive {
         StagePrimitive {
             composition_aspect: self.composition_aspect,
+            document: self.document.clone(),
+            playhead: self.playhead,
         }
     }
 
@@ -305,9 +345,18 @@ struct Embed {
     last_pointer: (f32, f32),
     /// 直近の modifiers ビット。手ごとに stage へ渡す。
     modifiers: u32,
-    /// 評価済みフレームの席に載せた世代。変わった時だけ upload し直す。
+    /// probe 経路(fixture 展示・pixel oracle)が載せた世代。変わった時だけ
+    /// upload し直す。**`document` が座っている間は使わない** — その間は
+    /// `frame_seat` の texture がそのまま評価済みフレームになる。
     presented_frame: Option<u64>,
     frame_texture: Option<wgpu::Texture>,
+    /// live Document の評価済みフレームの席(M-3)。`document` が初めて座った
+    /// 時に立てる。egui shell の `StagePane::frame_seat` と同じ役目 —
+    /// 第二の render 経路を作らず、`motolii_ui::stage_frame_seat` を1つ共有する。
+    frame_seat: Option<StageFrameSeat>,
+    /// 席を立てられなかった(GPU/worker)。理由は1度だけ言い、以後は probe 経路
+    /// (絵は出ないまま)にとどまる。
+    frame_seat_failed: bool,
 }
 
 struct Target {
@@ -341,6 +390,8 @@ impl Embed {
             modifiers: 0,
             presented_frame: None,
             frame_texture: None,
+            frame_seat: None,
+            frame_seat_failed: false,
         })
     }
 
@@ -354,6 +405,8 @@ impl Embed {
         height: u32,
         scale: f32,
         composition_aspect: Option<f32>,
+        document: Option<&Arc<Document>>,
+        playhead: f32,
     ) -> Result<(), String> {
         // 面の大きさに合わせて offscreen target と blit を持ち替える。
         if self
@@ -397,8 +450,14 @@ impl Embed {
             self.fitted = Some((width, height));
         }
 
-        // 評価済みフレームの席(M-3 で stage_frame_seat が置き換える)。
-        self.present_probe_frame(device, queue)?;
+        // 評価済みフレームの席。**live Document が座っている間だけ**
+        // `stage_frame_seat` を回す — 座っていなければ probe 経路のまま
+        // (`present_probe_frame`。pixel oracle が使う fixture 展示)。
+        if let Some(document) = document {
+            self.drive_frame_seat(device, queue, document, playhead);
+        } else {
+            self.present_probe_frame(device, queue)?;
+        }
 
         // 入力を流す(論理 → 物理)。調停済みの分だけがここへ来ている。
         for input in take_inputs() {
@@ -454,12 +513,18 @@ impl Embed {
         // (spike の実測 8 番: 蹴られたフレームは絵ごと捨てられ、黙ると
         // 「ドラッグ中だけ絵が止まる」が原因不明のまま残る)。
         let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let evaluated_is_current =
-            self.presented_frame.is_some() && self.presented_frame == probe_frame_generation();
-        let evaluated = if evaluated_is_current {
-            self.frame_texture.as_ref()
+        let evaluated: Option<&wgpu::Texture> = if document.is_some() {
+            // live: 席が完成させた最新の合成フレーム。間に合っていなければ
+            // `None`(seat 自身が前の絵を保つ側の面倒を見る — ここは持たない)。
+            self.frame_seat.as_ref().and_then(StageFrameSeat::frame)
         } else {
-            None
+            let evaluated_is_current = self.presented_frame.is_some()
+                && self.presented_frame == probe_frame_generation();
+            if evaluated_is_current {
+                self.frame_texture.as_ref()
+            } else {
+                None
+            }
         };
         let target = self.target.as_ref().expect("target was just ensured");
         let render_result = self
@@ -483,8 +548,54 @@ impl Embed {
         Ok(())
     }
 
-    /// 評価済みフレームの席。CPU の RGBA を device の texture へ上げ、
+    /// live Document の評価済みフレームの席を回す。**戻すものは無い** —
+    /// 出す1枚は `frame_seat.frame()` から `frame()` が直接取る
+    /// (egui shell の `StagePane::drive_frame_seat` と同じ分担)。
+    ///
+    /// repaint の合図は egui 版の `on_frame_ready` コールバックではなく、
+    /// `main.rs::Host::subscription` の `window::frames()` 購読(document が
+    /// 座っている間だけ)に任せている — iced の shader widget はホストの
+    /// redraw に乗じて `prepare` が回るので、非同期の完成を毎フレーム
+    /// `poll()` で見に行けば足りる(egui のように自分で repaint を起こす
+    /// 手段がここには無い)。
+    fn drive_frame_seat(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        document: &Arc<Document>,
+        playhead: f32,
+    ) {
+        if self.frame_seat.is_none() && !self.frame_seat_failed {
+            // **iced のランタイム device と同じ device** で立てる。完成 texture は
+            // Rerun の texture pool へ実 handle のまま渡すので、別 device のものは
+            // import できない(`StageFrameSeat::spawn` の doc と同じ理由)。
+            let gpu = Arc::new(motolii_gpu::GpuCtx::from_device_queue(
+                device.clone(),
+                queue.clone(),
+            ));
+            match StageFrameSeat::spawn(gpu) {
+                Ok(seat) => self.frame_seat = Some(seat),
+                Err(error) => {
+                    self.frame_seat_failed = true;
+                    report_once(format!("stage: 評価済みフレームの席を立てられない: {error}"));
+                }
+            }
+        }
+        let Some(seat) = self.frame_seat.as_mut() else {
+            return;
+        };
+        seat.request(document, playhead);
+        seat.poll();
+        record_frame_seat_evidence(seat.evidence());
+        if let Some(error) = seat.take_error() {
+            report_once(format!("stage: 評価済みフレームの合成に失敗: {error}"));
+        }
+    }
+
+    /// 評価済みフレームの席(probe 経路)。CPU の RGBA を device の texture へ上げ、
     /// `render(…, evaluated_frame)` として stage の comp 平面に載せる。
+    /// **`document` が `None`(fixture 展示・pixel oracle)の間だけ使う** —
+    /// live 座席は [`Self::drive_frame_seat`] が `stage_frame_seat` で評価する。
     fn present_probe_frame(
         &mut self,
         device: &wgpu::Device,
@@ -792,4 +903,23 @@ pub fn input_tally() -> (u64, u64) {
         FORWARDED.load(Ordering::Relaxed),
         SWALLOWED.load(Ordering::Relaxed),
     )
+}
+
+/// live 評価済みフレームの席(`stage_frame_seat`)の直近の実測。
+/// `document` が一度でも座って `drive_frame_seat` が回った後だけ `Some`。
+///
+/// 運転席が「submit した」「受けた」を確定的に見るための口(`thread_local`
+/// の `Embed` は crate 外から直接読めないので、他の観測口と同じ static 経由)。
+static FRAME_SEAT_EVIDENCE: Mutex<Option<StageFrameEvidence>> = Mutex::new(None);
+
+fn record_frame_seat_evidence(evidence: StageFrameEvidence) {
+    if let Ok(mut slot) = FRAME_SEAT_EVIDENCE.lock() {
+        *slot = Some(evidence);
+    }
+}
+
+/// [`FRAME_SEAT_EVIDENCE`] の読み口。運転席が `submitted`/`accepted` の
+/// 変化をポーリングして「評価済みフレームが実際に流れた」ことを審判する。
+pub fn frame_seat_evidence() -> Option<StageFrameEvidence> {
+    FRAME_SEAT_EVIDENCE.lock().ok().and_then(|slot| *slot)
 }

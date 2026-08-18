@@ -21,7 +21,11 @@ use motolii_eval::DataTracks;
 use motolii_gpu::GpuCtx;
 
 use crate::display_slot::DisplaySlot;
-use crate::render_worker::{RenderGeneration, RenderRequest, RenderWorker, RenderWorkerStartError};
+use crate::render_worker::{RenderGeneration, RenderRequest, RenderWorker};
+// iced shell(外部 crate)は `spawn` の戻り値としてこの型を名指しできる必要がある
+// (`Result<StageFrameSeat, RenderWorkerStartError>`)。`render_worker` module 自体は
+// private のままなので、ここで path を1本だけ通す。
+pub use crate::render_worker::RenderWorkerStartError;
 
 /// 出力解像度を持たない Document の既定。CLI `new_document` と
 /// `static_preview::bootstrap_frame_desc` と同じ値で、**ここで新しい既定を決めない**。
@@ -34,24 +38,25 @@ pub(crate) struct StageFrameKey {
     pub(crate) desc: FrameDesc,
 }
 
-/// 席の実測。テストと再生中の追従の観測が見る。
+/// 席の実測。テストと再生中の追従の観測が見る。egui/iced 両殻の運転席が
+/// 外から読む(`pub`。M-1 前例)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) struct StageFrameEvidence {
+pub struct StageFrameEvidence {
     /// submit した回数。
-    pub(crate) submitted: u32,
+    pub submitted: u32,
     /// 完成を受けて slot へ写した回数。
-    pub(crate) accepted: u32,
+    pub accepted: u32,
     /// 前の要求がまだ返っていないうちに次を出した回数。
     /// **落ちたフレーム数ではない** — 走り始めていた要求はこの後も返る。
-    pub(crate) overlapped: u32,
+    pub overlapped: u32,
     /// 実行中/待機中の要求があるか。
-    pub(crate) outstanding: bool,
+    pub outstanding: bool,
 }
 
 impl StageFrameEvidence {
     /// 一度も出ないまま捨てられたフレームの数。
     /// 追い越された「待ち」だけがここに落ちる(走っていた要求は返って `accepted` になる)。
-    pub(crate) fn dropped(self) -> u32 {
+    pub fn dropped(self) -> u32 {
         self.submitted
             .saturating_sub(self.accepted)
             .saturating_sub(u32::from(self.outstanding))
@@ -101,7 +106,9 @@ pub(crate) fn stage_frame_key(document: &Document, playhead_seconds: f32) -> Opt
     Some(StageFrameKey { time, desc })
 }
 
-pub(crate) struct StageFrameSeat {
+/// egui shell(`blitz_shell::pane`)と iced shell(`stage_island`)が共に立てる席。
+/// **`pub`**(M-1 前例) — 第二の render 経路を作らず、この1つを両殻で使い回す。
+pub struct StageFrameSeat {
     gpu: Arc<GpuCtx>,
     worker: RenderWorker,
     submitted: Option<(StageFrameKey, Arc<Document>)>,
@@ -116,7 +123,7 @@ impl StageFrameSeat {
     /// 席を立てる。`gpu` は **Stage を塗るのと同じ device** でなければならない
     /// — 完成 texture は Rerun の texture pool へ実 handle のまま渡すので、
     /// 別 device のものは import できない。
-    pub(crate) fn spawn(gpu: Arc<GpuCtx>) -> Result<Self, RenderWorkerStartError> {
+    pub fn spawn(gpu: Arc<GpuCtx>) -> Result<Self, RenderWorkerStartError> {
         let worker = RenderWorker::spawn(Arc::clone(&gpu))?;
         Ok(Self {
             gpu,
@@ -144,7 +151,7 @@ impl StageFrameSeat {
 
     /// playhead 時刻の合成を要求する。**鍵が変わっていなければ何もしない。**
     /// 戻り値は「今回 submit したか」。
-    pub(crate) fn request(&mut self, document: &Arc<Document>, playhead_seconds: f32) -> bool {
+    pub fn request(&mut self, document: &Arc<Document>, playhead_seconds: f32) -> bool {
         if self.stopped {
             return false;
         }
@@ -190,7 +197,7 @@ impl StageFrameSeat {
     }
 
     /// 完成していれば受けて slot へ写す。**来ていなければ何も変えない。**
-    pub(crate) fn poll(&mut self) {
+    pub fn poll(&mut self) {
         let Some(result) = self.worker.try_take_latest() else {
             return;
         };
@@ -223,16 +230,16 @@ impl StageFrameSeat {
     }
 
     /// Stage へ渡す1枚。**完成した最新のフレーム**で、次が間に合わない間もこれが残る。
-    pub(crate) fn frame(&self) -> Option<&wgpu::Texture> {
+    pub fn frame(&self) -> Option<&wgpu::Texture> {
         self.slot.as_ref().map(DisplaySlot::texture)
     }
 
-    pub(crate) fn evidence(&self) -> StageFrameEvidence {
+    pub fn evidence(&self) -> StageFrameEvidence {
         self.evidence
     }
 
     /// 溜まった理由を1度だけ返す(呼び手が言う。毎フレーム同じ行を吐かない)。
-    pub(crate) fn take_error(&mut self) -> Option<String> {
+    pub fn take_error(&mut self) -> Option<String> {
         self.last_error.take()
     }
 }

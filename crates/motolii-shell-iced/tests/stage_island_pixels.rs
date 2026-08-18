@@ -111,6 +111,8 @@ fn the_known_frame_maps_head_on_through_the_iced_widget() {
     let island = StageIsland {
         composition_aspect: Some(320.0 / 240.0),
         grab_probe: None,
+        document: None,
+        playhead: 0.0,
     };
     let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> = iced_test::Simulator::with_size(
         iced_test::core::Settings::default(),
@@ -188,6 +190,8 @@ fn a_drag_through_the_widget_reaches_the_stage_without_validation_errors() {
     let island = StageIsland {
         composition_aspect: Some(1.0),
         grab_probe: None,
+        document: None,
+        playhead: 0.0,
     };
     let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> = iced_test::Simulator::with_size(
         iced_test::core::Settings::default(),
@@ -271,6 +275,8 @@ fn a_gesture_inside_the_dummy_grab_region_is_swallowed() {
             width: 40.0,
             height: 40.0,
         }),
+        document: None,
+        playhead: 0.0,
     };
     let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> = iced_test::Simulator::with_size(
         iced_test::core::Settings::default(),

@@ -61,6 +61,8 @@ fn a_broken_probe_frame_is_reported_not_swallowed() {
 
     let island = stage_island::StageIsland {
         composition_aspect: Some(1.0),
+        document: None,
+        playhead: 0.0,
         grab_probe: None,
     };
     let mut ui: iced_test::Simulator<'_, motolii_shell_iced::Message> = iced_test::Simulator::with_size(

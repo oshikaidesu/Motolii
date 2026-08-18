@@ -47,6 +47,9 @@ motolii-core.workspace = true
 motolii-doc.workspace = true
 motolii-eval.workspace = true
 motolii-plugin.workspace = true
+# 評価済みフレームの席(`motolii_ui::stage_frame_seat::StageFrameSeat`)が要求する
+# `GpuCtx`。iced の runtime device をそのまま包むだけ(第二 device を作らない)。
+motolii-gpu.workspace = true
 # `--intent-log` / `--status-log` の1行。形は `IntentEvent` / `StatusEvent` が名乗る。
 serde_json.workspace = true
 # 同上(JSONL の1行を組む側の trait)。

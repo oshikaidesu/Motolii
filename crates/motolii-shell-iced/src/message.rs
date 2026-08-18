@@ -88,4 +88,10 @@ pub enum Message {
     /// 波形の生成座席を1歩進める合図。**intent ではない** — decode thread からの
     /// 返事を受けるだけ(`ExportPolled` と同じ型の解決)。
     WaveformPolled,
+    /// Stage 島の評価済みフレームの席(`stage_frame_seat`)を1歩進める合図。
+    /// **intent ではない** — render worker thread からの返事を受け取り、
+    /// widget 木を再描画させるためだけの合図(`ExportPolled` / `WaveformPolled`
+    /// と同じ型の解決)。実際の `request`/`poll` は `stage_island::Embed` の
+    /// `prepare` が持つ(ここは redraw の刻みを起こすだけ)。
+    StagePolled,
 }
