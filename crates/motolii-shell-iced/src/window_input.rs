@@ -50,8 +50,10 @@ pub fn window_input<'a>(content: impl Into<Element<'a, Message>>) -> WindowInput
     }
 }
 
-/// 近道キーの表。**ここが窓の keymap の全部**である(egui shell の
-/// `handle_file_entry` が `consume_shortcut` で並べていた3本と同じ)。
+/// 近道キーの表。New/Open/Save の3本(egui shell の `handle_file_entry` が
+/// `consume_shortcut` で並べていた物と同じ)。**窓ぜんたいの近道キーの正本は
+/// これだけではない** — `crate::shortcuts` のモジュール doc に、この殻へ
+/// 散った実装の全体地図がある(2026-08-19 iced 近道キー移植レーン)。
 fn shortcut(character: &str) -> Option<Message> {
     match character.to_ascii_lowercase().as_str() {
         "n" => Some(Message::NewProjectPressed),
@@ -137,7 +139,12 @@ impl Widget<Message, iced::Theme, iced::Renderer> for WindowInput<'_> {
                 let iced::keyboard::Key::Character(character) = key else {
                     return;
                 };
-                let Some(message) = shortcut(character) else {
+                // New/Open/Save はこの file の表(`shortcut`)、それ以外で
+                // このレーンが足した近道(Cmd+A = 全選択)は `crate::shortcuts`
+                // の表(単一の正本 — モジュール doc に理由がある)。
+                let Some(message) = shortcut(character)
+                    .or_else(|| crate::shortcuts::additional_window_shortcut(character))
+                else {
                     return;
                 };
                 shell.publish(message);

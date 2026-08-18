@@ -28,6 +28,7 @@ use motolii_core::Fps;
 use motolii_doc::{Document, LayerId};
 use motolii_ui::blitz_shell::{seconds_to_us, UiIntent, UiItemFlag};
 use motolii_ui::timeline_editor::{TimelineView, TrimEdge};
+use motolii_ui::timeline_rows::{RowKind, TimelineFoldState};
 
 use super::semantics::{
     clamped_move_delta, clamped_trim, frame_snapped, initial_view, move_targets,
@@ -74,6 +75,11 @@ pub enum TimelineMsg {
     RedoPressed,
     /// ← / →(Shift で ±10 コマ)。
     PlayheadStepped { frames: i32 },
+    /// Cmd+A。**見えている object 行を全部選ぶ**(egui 版 `TimelineEditor` の
+    /// `self.selected = object_layers.clone()` と同じ意味。閉じた Group の
+    /// 中は見えていない = 選ばれない — この殻はまだ Group の開閉 UI が無い
+    /// ので `TimelineFoldState::default()` が常に「全部閉じ」を意味する)。
+    SelectAllPressed,
     /// Cmd+ホイール = 横 zoom。`anchor_seconds` の時刻が動かない。
     ZoomedAt { anchor_seconds: f32, factor: f32 },
     /// Shift+ホイール / 横スワイプ = 横パン(秒)。
@@ -238,6 +244,23 @@ impl TimelinePane {
             TimelineMsg::PlayheadStepped { frames } => {
                 vec![UiIntent::StepPlayhead { frames: *frames }]
             }
+            // Cmd+A。**足す(`additive: true`)だけを、まだ選ばれていない行にだけ
+            // 出す。** `UiIntent::SelectLayer { additive: true }` は
+            // `add_to_selection` = Cmd+click と同じトグルなので、既に選ばれて
+            // いる行にもう一度出すと外れてしまう(egui に無いバグを iced 側で
+            // 作らないための filter)。
+            TimelineMsg::SelectAllPressed => {
+                motolii_ui::timeline_rows::rows(&ctx.document, &TimelineFoldState::default())
+                    .into_iter()
+                    .filter(|row| row.kind == RowKind::Object)
+                    .map(|row| row.layer)
+                    .filter(|layer| !ctx.selected.contains(layer))
+                    .map(|layer| UiIntent::SelectLayer {
+                        layer: layer.get(),
+                        additive: true,
+                    })
+                    .collect()
+            }
             // view の操作・preview の途中経過は intent にならない
             // (再現は Message 列 replay が持つ — `drive_timeline.rs` の oracle)。
             TimelineMsg::ScrubStarted { .. }
@@ -368,7 +391,8 @@ impl TimelinePane {
             | TimelineMsg::DeletePressed
             | TimelineMsg::UndoPressed
             | TimelineMsg::RedoPressed
-            | TimelineMsg::PlayheadStepped { .. } => {}
+            | TimelineMsg::PlayheadStepped { .. }
+            | TimelineMsg::SelectAllPressed => {}
         }
     }
 

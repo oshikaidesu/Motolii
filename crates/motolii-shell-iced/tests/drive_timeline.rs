@@ -543,6 +543,72 @@ fn arrow_keys_step_the_playhead_by_frames() {
     );
 }
 
+/// **Cmd+A = 全選択。** 見えている top-level object 行(Group は畳んだまま
+/// 1行 — 中身の a/b/c は見えていないので選ばれない)が全部選ばれる。
+/// egui 版 `self.selected = object_layers.clone()` と同じ意味(2026-08-19
+/// 近道キー移植レーン)。
+#[test]
+fn command_a_selects_every_visible_object_row() {
+    let (path, names) = fixture_project("select_all");
+    let title_scene = layer_named(&names, "Title scene");
+    let background = layer_named(&names, "Background");
+    let audio = layer_named(&names, "starter-tone.wav");
+    let mut shell = seated_shell(&path);
+
+    assert!(
+        shell.timeline_selection().is_empty(),
+        "座った直後は何も選ばれていない"
+    );
+
+    key_step(&mut shell, common::command_key('a'));
+    let mut selected = shell.timeline_selection();
+    selected.sort_by_key(|layer| layer.get());
+    let mut want = vec![title_scene, background, audio];
+    want.sort_by_key(|layer| layer.get());
+    assert_eq!(
+        selected, want,
+        "Cmd+A で見えている3行(Group 1 + clip 2)が選ばれない"
+    );
+
+    let select_all_intents = shell
+        .intents()
+        .iter()
+        .filter(|event| {
+            serde_json::to_string(&event.intent)
+                .expect("serializable")
+                .contains(r#""kind":"select_layer""#)
+        })
+        .count();
+    assert_eq!(
+        select_all_intents, 3,
+        "3行ぶんの select_layer intent が journal に載る"
+    );
+
+    // もう一度 Cmd+A を押しても、既に選ばれている行を外してはいけない
+    // (`additive: true` は Cmd+click と同じトグルなので、素朴に全行へ
+    // もう一度出すと選択が消える — その回帰を防ぐ)。
+    key_step(&mut shell, common::command_key('a'));
+    let mut selected_again = shell.timeline_selection();
+    selected_again.sort_by_key(|layer| layer.get());
+    assert_eq!(
+        selected_again, want,
+        "2回目の Cmd+A で選択が変わってはいけない(トグルで外れる回帰)"
+    );
+    assert_eq!(
+        shell
+            .intents()
+            .iter()
+            .filter(|event| {
+                serde_json::to_string(&event.intent)
+                    .expect("serializable")
+                    .contains(r#""kind":"select_layer""#)
+            })
+            .count(),
+        select_all_intents,
+        "2回目の Cmd+A で新しい select_layer intent が増えてはいけない(全部既に選ばれている)"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // zoom / pan(view 状態 — intent にはならず、Message 列 replay で再現される)
 // ---------------------------------------------------------------------------

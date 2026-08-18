@@ -38,6 +38,7 @@ const SCANNED: &[(&str, &str)] = &[
     ("prompts.rs", include_str!("../src/prompts.rs")),
     ("resume.rs", include_str!("../src/resume.rs")),
     ("shell.rs", include_str!("../src/shell.rs")),
+    ("shortcuts.rs", include_str!("../src/shortcuts.rs")),
     ("stage_arbiter.rs", include_str!("../src/stage_arbiter.rs")),
     ("stage_bridge.rs", include_str!("../src/stage_bridge.rs")),
     ("stage_island.rs", include_str!("../src/stage_island.rs")),

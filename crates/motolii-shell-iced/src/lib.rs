@@ -89,6 +89,10 @@ mod message;
 mod prompts;
 pub mod resume;
 mod shell;
+/// 近道キーの表の正本(2026-08-19 iced 近道キー移植レーン)。`window_input.rs`
+/// と `timeline/canvas.rs` の両方に散った実装を1箇所から説明し、status 帯の
+/// legend もここから作る(モジュール doc に詳細)。
+mod shortcuts;
 pub mod stage_arbiter;
 pub mod stage_bridge;
 pub mod stage_island;
