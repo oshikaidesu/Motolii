@@ -17,10 +17,14 @@ const SCANNED: &[(&str, &str)] = &[
     ("lib.rs", include_str!("../src/lib.rs")),
     ("main.rs", include_str!("../src/main.rs")),
     ("intent_log.rs", include_str!("../src/intent_log.rs")),
+    ("jsonl.rs", include_str!("../src/jsonl.rs")),
+    ("launch.rs", include_str!("../src/launch.rs")),
     ("message.rs", include_str!("../src/message.rs")),
     ("prompts.rs", include_str!("../src/prompts.rs")),
     ("shell.rs", include_str!("../src/shell.rs")),
+    ("status_log.rs", include_str!("../src/status_log.rs")),
     ("view.rs", include_str!("../src/view.rs")),
+    ("window_input.rs", include_str!("../src/window_input.rs")),
 ];
 
 /// 禁止する呼び出しと、代わりに通すべき intent。
@@ -67,6 +71,29 @@ fn no_shell_code_touches_product_state_outside_the_gateway() {
          journal を通らない副作用は --intent-log に載らず replay で再現できない。\
          `ShellGateway::dispatch(UiIntent::…)` へ寄せること",
         breaches.join("\n")
+    );
+}
+
+/// **走査漏れが無い**ことの担保。[`SCANNED`] は手で並べた表なので、`src/` に
+/// file を足して表に足し忘れると、この柵は静かに何も守らなくなる。
+#[test]
+fn every_product_source_is_scanned() {
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut on_disk: Vec<String> = std::fs::read_dir(&src)
+        .expect("src/ を読める")
+        .filter_map(|entry| {
+            let name = entry.expect("dir entry").file_name();
+            let name = name.to_string_lossy().into_owned();
+            name.ends_with(".rs").then_some(name)
+        })
+        .collect();
+    on_disk.sort();
+    let mut listed: Vec<String> = SCANNED.iter().map(|(name, _)| (*name).to_owned()).collect();
+    listed.sort();
+    assert_eq!(
+        on_disk, listed,
+        "SCANNED が src/ の実体と噛み合っていない — 足した file は表にも足すこと\
+         (表に無い file はフェンスを素通りする)"
     );
 }
 

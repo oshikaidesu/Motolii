@@ -19,13 +19,15 @@ path = "src/main.rs"
 # `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs`。この crate は iced 系の
 # allowlist にだけ載っていて、egui 系の allowlist には載っていない)。
 iced.workspace = true
-# 背骨(`UiIntent` / `ShellGateway` / `ShellTranscript`)。host 非依存の契約なので
-# egui shell と同じ物を通す — 2つ目の journal も 2つ目の transcript も作らない。
+# 背骨(`UiIntent` / `ShellGateway` / `ShellTranscript` / `ShellPrompts`)。host 非依存の
+# 契約なので egui shell と同じ物を通す — 2つ目の journal も transcript も dialog 層も
+# 作らない。**`rfd` はここに要らない**: native dialog は向こうの `NativePrompts` に
+# 1箇所だけ在り、この crate はその trait を差すだけである。
 motolii-ui.workspace = true
-# `--intent-log` 相当。行の形は `motolii_ui::blitz_shell::IntentEvent` が名乗る。
+# `--intent-log` / `--status-log` の1行。形は `IntentEvent` / `StatusEvent` が名乗る。
 serde_json.workspace = true
-# New / Open の native dialog。egui shell と同じ版・同じ役目。
-rfd.workspace = true
+# 同上(JSONL の1行を組む側の trait)。
+serde.workspace = true
 
 [dev-dependencies]
 # 運転席。egui shell の `egui_kittest` に対応する物で、iced が公式に持っている。

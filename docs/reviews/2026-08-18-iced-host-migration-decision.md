@@ -42,6 +42,19 @@ plugin(D2・journal・評価器)。**UiIntent 背骨は設計どおり持ち越�
   成立している
 - **M-1 殻**: スタート画面・New/Open/Save・status 帯・prompts 台本・
   `--intent-log`/replay・iced_test の新運転席(kittest 相当の駆動+replay oracle)
+  — **完了**(2026-08-18)。`Cmd+S`+未保存 guard(3択は egui と同じ `decide_unsaved`)・
+  OS ドロップ→`AdmitPaths`・Export 開始/キャンセル(`export_seat` 共用)・
+  `--status-log`・replay oracle の iced 版が green(運転席 27本)。
+  dialog は**共用**になった: `ShellPrompts`/`NativePrompts`/`ScriptedPrompts` を
+  `motolii_ui::blitz_shell` から `pub` にして差すので、`rfd` を呼ぶ場所は repo に
+  1箇所のまま(新殻から `rfd` 依存を落とした)。
+  **実測できた注入の境目**: `iced_test::Simulator` は生の `iced::Event` を流せるので、
+  近道キー(修飾つき `KeyPressed`)・OS ドロップ(`window::Event::FileDropped`)・
+  閉じる要求(`CloseRequested`)は**全部 headless で注入できる** — ただし
+  それらを widget 木で受けている限りである(購読 `keyboard::listen` /
+  `window::events()` に置くと Simulator の外に出る)。木で受ける薄い widget
+  (`window_input`)を1枚置いたのはこのため。購読に残るのは書き出しの刻み
+  (`window::frames()` → `ExportPolled`)だけで、そこは同じ Message を直に流して審判する
 - **M-2 Stage 島**: 入力ブリッジ probe を製品 adapter 化(camera seat・正対既定・
   transcript 相当の失敗報告)
 - **M-3 Timeline**: spike を種に Document へ結線(prepare_*/D2 は既存。egui 版の

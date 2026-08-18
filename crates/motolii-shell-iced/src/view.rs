@@ -5,18 +5,24 @@
 //!
 //! ## 文言は egui 版と同じ
 //!
-//! 移行の途中で利用者の見る言葉が揺れないよう、スタート画面の5つの文字列は
-//! `blitz_shell/app.rs` の `shows_welcome()` 側からそのまま写している。
-//! 違うのは**組み方**だけ: egui は "New Project…   Cmd+N" を1つの label に
-//! 詰めているが、ここは行(`row`)に割った。近道の表示は別の物なので別の
-//! widget にする方が iced では素直で、運転席の selector(`&str` は**完全一致**)も
-//! 「押したいボタンの名前」だけを名指しできる。
+//! 移行の途中で利用者の見る言葉が揺れないよう、スタート画面と status 帯の
+//! 文字列は `blitz_shell/app.rs` からそのまま写している。違うのは**組み方**だけ:
+//! egui は "New Project…   Cmd+N" を1つの label に詰めているが、ここは行(`row`)に
+//! 割った。近道の表示は別の物なので別の widget にする方が iced では素直で、
+//! 運転席の selector(`&str` は**完全一致**)も「押したいボタンの名前」だけを
+//! 名指しできる。
+//!
+//! ## M-1 の帯に無い物
+//!
+//! Undo / Redo ボタンは編集面(Timeline)と一緒に来る(M-3)。**触れそうで触れない
+//! 物を先に置かない**(2026-08-12 の Q0)。
 
 use iced::widget::{button, column, container, row, text};
 use iced::{Center, Element, Fill};
 
 use crate::message::Message;
 use crate::shell::Shell;
+use crate::window_input::window_input;
 
 /// スタート画面の見出し。
 pub const TITLE: &str = "Motolii";
@@ -32,14 +38,31 @@ pub const OPEN_PROJECT: &str = "Open\u{2026}";
 pub const OPEN_PROJECT_SHORTCUT: &str = "Cmd+O";
 /// スタート画面の末尾の一行。
 pub const DROP_HINT: &str = "Then just drop video and audio into this window.";
-/// 座った後に出る、いまの M-0 の正直な中身。
+/// 座った後に出る、いまの正直な中身。
 ///
 /// **編集面のふりをした空箱を置かない**(2026-08-12 の Q0「触れそうで触れない物は
-/// 不合格」)。M-1 が Timeline / Browser / Inspector を持ってくるまで、ここは
-/// 「何がまだ無いか」を言うだけの一行である。
-pub const SEATED_PLACEHOLDER: &str = "Project is open. The editing surface arrives in M-1.";
+/// 不合格」)。M-2 以降が Stage / Timeline / Browser / Inspector を持ってくるまで、
+/// ここは「何がまだ無いか」を言うだけの一行である。
+pub const SEATED_PLACEHOLDER: &str = "Project is open. The editing surface arrives in M-2.";
+/// 書き出しを始めるボタン。
+pub const EXPORT: &str = "Export";
+/// 走っている書き出しを止めるボタン。
+pub const CANCEL_EXPORT: &str = "Cancel";
+
+/// 未保存の座席の名乗り方。egui shell の status 帯と**一字も違わない**。
+pub fn unsaved_label(name: &str) -> String {
+    format!("\u{25cf} {name} \u{2014} unsaved")
+}
+
+/// 走っている書き出しの名乗り方(進捗口が無い v0 の「まだ生きている」表示)。
+pub fn exporting_label(seconds: u64) -> String {
+    format!("Exporting\u{2026} {seconds}s")
+}
 
 /// 窓ぜんたい。
+///
+/// 一番外は [`window_input`] — 近道キー・OS ドロップ・閉じる要求はここで
+/// [`Message`] になる。中身は「座席の有無で変わる本体」と「status 帯」の2段。
 pub fn view(shell: &Shell) -> Element<'_, Message> {
     let body = if shell.is_seated() {
         seated()
@@ -49,13 +72,13 @@ pub fn view(shell: &Shell) -> Element<'_, Message> {
 
     let mut page = column![container(body).center(Fill)].width(Fill).height(Fill);
 
-    // 帯は「言われたことがある時だけ」出る。空の帯を常設しない
-    // (egui 版と同じ判断: `latest()` が `None` なら帯を出さない)。
-    if let Some(latest) = shell.latest_report() {
-        page = page.push(status_band(latest));
+    // 帯は「座席が居るあいだ」と「言われたことがある時」に出る。空の帯を常設しない
+    // (egui 版と同じ判断)。
+    if let Some(band) = status_band(shell) {
+        page = page.push(band);
     }
 
-    page.into()
+    window_input(page).into()
 }
 
 /// 座席が無いときの画面。
@@ -88,12 +111,53 @@ fn action_button<'a>(name: &'a str, shortcut: &'a str, message: Message) -> Elem
         .into()
 }
 
-/// 座席が在るときの画面(M-0 は一行だけ)。
+/// 座席が在るときの画面(M-1 は一行だけ)。
 fn seated<'a>() -> Element<'a, Message> {
     text(SEATED_PLACEHOLDER).into()
 }
 
-/// status 帯 — **窓が言ったことの最新1行**。全文は transcript に残っている。
-fn status_band<'a>(latest: String) -> Element<'a, Message> {
-    container(text(latest)).padding(8).width(Fill).into()
+/// status 帯 — **信用の可視化と、窓が言ったことの最新1行**。
+///
+/// 並びは egui shell と同じ: 保存状態 → 書き出し面 → 最新の一言。
+/// 言うことも座席も無ければ帯そのものを出さない。
+fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
+    let latest = shell.latest_report();
+    if !shell.is_seated() && latest.is_none() {
+        return None;
+    }
+
+    let mut band = row![].spacing(12).align_y(Center);
+
+    // 保存状態(保存済みなら project 名、未保存なら ● 付き)。
+    if let Some(name) = shell.project_name() {
+        let label = if shell.is_dirty() {
+            unsaved_label(&name)
+        } else {
+            name
+        };
+        band = band.push(text(label).size(13));
+    }
+
+    // 書き出し面。実行中は経過秒と Cancel、そうでなければ Export。
+    // **実行中に Export は出さない** = 二重起動の口が無い。
+    if let Some(seconds) = shell.export_elapsed_seconds() {
+        band = band.push(text(exporting_label(seconds)).size(13));
+        let mut cancel = button(text(CANCEL_EXPORT).size(13));
+        if !shell.export_cancel_requested() {
+            cancel = cancel.on_press(Message::CancelExportPressed);
+        }
+        band = band.push(cancel);
+    } else if shell.is_seated() {
+        let mut export = button(text(EXPORT).size(13));
+        if shell.can_start_export() {
+            export = export.on_press(Message::ExportPressed);
+        }
+        band = band.push(export);
+    }
+
+    if let Some(latest) = latest {
+        band = band.push(text(latest).size(13));
+    }
+
+    Some(container(band).padding(8).width(Fill).into())
 }

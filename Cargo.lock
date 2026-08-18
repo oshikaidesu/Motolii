@@ -4999,7 +4999,7 @@ dependencies = [
  "iced_test",
  "motolii-testkit",
  "motolii-ui",
- "rfd",
+ "serde",
  "serde_json",
 ]
 
