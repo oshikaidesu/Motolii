@@ -119,11 +119,16 @@ impl Host {
     /// `iced_test::Simulator` の外に居るので、置くと運転席から注入できなくなる —
     /// あれらは widget 木の中(`window_input`)で受ける。
     fn subscription(&self) -> iced::Subscription<Message> {
+        let mut ticks = Vec::new();
         if self.shell.export_running() {
-            iced::window::frames().map(|_| Message::ExportPolled)
-        } else {
-            iced::Subscription::none()
+            ticks.push(iced::window::frames().map(|_| Message::ExportPolled));
         }
+        // 波形の decode が別 thread で走っているあいだだけ、受け取りの刻みを持つ
+        // (書き出しと同じ型の解決。生成が済めば購読ごと消える)。
+        if self.shell.waveform_building() {
+            ticks.push(iced::window::frames().map(|_| Message::WaveformPolled));
+        }
+        iced::Subscription::batch(ticks)
     }
 
     /// **`fn` 項目であって closure ではない。**

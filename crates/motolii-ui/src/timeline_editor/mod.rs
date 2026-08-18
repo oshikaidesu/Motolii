@@ -934,6 +934,19 @@ enum BarPart {
     TrimOut,
 }
 
+/// clip のどちらの端か。**shell 層の intent(`UiIntent::TrimClip`)が運ぶ値**なので、
+/// toolkit 型を持たず、JSONL(`--intent-log`)に載る形を serde で名乗る。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TrimEdge {
+    /// 左端 = 入り点(`prepare_trim_clip_in`)。
+    In,
+    /// 右端 = 出し点(`prepare_trim_clip_out`)。
+    Out,
+}
+
 /// トリムの端の幅。モックの `.trimHandle{width:7px}` は**見た目の幅**で、
 /// 掴む幅としては細い。8px にして、同じ幅の帯を絵にも出す(掴める所を見せる)
 const TRIM_EDGE: f32 = 8.0;
@@ -1475,6 +1488,65 @@ impl TimelineEditor {
     pub fn begin_clip_move(&mut self, layer: LayerId, grab_at_seconds: f32) {
         let grab = begin_move_many(&self.document, &[layer], layer, grab_at_seconds);
         self.hold_item(grab);
+    }
+
+    /// **選択ごと掴む** — egui 版の bar 本体 `drag_started` と同じ意味
+    /// (`show` の同名分岐から写した1手): ロックは断り、選ばれていない bar を
+    /// 掴んだらその1つを選び直し、`selection_roots` の全員が同じ差分で動く。
+    ///
+    /// shell 層の intent(`UiIntent::MoveClips`)がマウスの代わりに呼ぶ入口で、
+    /// 経路(`begin_move_many` → `hold_item`)は egui のドラッグと同じである。
+    pub fn begin_selected_clips_move(&mut self, grabbed: LayerId, grab_at_seconds: f32) {
+        if self.is_locked(grabbed) {
+            let name = self.name(grabbed).to_owned();
+            self.reject(format!("{name} is locked"));
+            return;
+        }
+        if !self.is_selected(grabbed) {
+            self.selected = vec![grabbed];
+        }
+        let roots = self.selection_roots();
+        let grab = begin_move_many(&self.document, &roots, grabbed, grab_at_seconds);
+        self.hold_item(grab);
+    }
+
+    /// **端を掴む** — egui 版の `BarPart::TrimIn` / `TrimOut` と同じ意味。
+    /// ロックは断る。Group の端は D2 が `TrackItemNotClip` で断る(発明しない)。
+    pub fn begin_trim(&mut self, layer: LayerId, edge: TrimEdge) {
+        if self.is_locked(layer) {
+            let name = self.name(layer).to_owned();
+            self.reject(format!("{name} is locked"));
+            return;
+        }
+        self.hold_item(match edge {
+            TrimEdge::In => Grab::TrimIn { layer },
+            TrimEdge::Out => Grab::TrimOut { layer },
+        });
+    }
+
+    /// Delete キーの1手 — egui 版の Delete / Backspace 分岐と同じ意味:
+    /// **キーが選ばれていればキーが先**、無ければ層(Group は中身ごと)。
+    /// ドラッグ中は効かせない — 掴んだものが消えると gesture の行き先が無くなる。
+    pub fn delete_selection_gesture(&mut self) {
+        if self.hold.is_some() {
+            return;
+        }
+        if !self.delete_selected_keys() {
+            self.delete_selected();
+        }
+    }
+
+    /// ルーラのスクラブ1点ぶん — egui 版の scrub と同じ意味: 再生は止まり、
+    /// composition へクランプし、**playhead はフレームに乗る**。
+    pub fn scrub_to_seconds(&mut self, seconds: f32) {
+        self.playing = false;
+        let comp = self.document.composition.duration.as_seconds_f64() as f32;
+        let fps = self.document.composition.fps;
+        let at = seconds.clamp(0.0, comp);
+        self.playhead = seconds_to_time(at, fps)
+            .map(|t| t.as_seconds_f64() as f32)
+            .unwrap_or(at);
+        self.status = format!("{:.2}s", self.playhead);
     }
 
     /// ドラッグ中の着地(吸着なし)。`commit_drag` と同じ。

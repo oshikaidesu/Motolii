@@ -20,7 +20,8 @@ path = "src/main.rs"
 # allowlist にだけ載っていて、egui 系の allowlist には載っていない)。
 # `image` feature は Browser pane(M-4a)のサムネイル表示のため。縮小実体そのもの
 # は既存座席(`motolii_ui::browser_blitz::thumbnail`)が作り、ここは表示だけ。
-iced = { workspace = true, features = ["image"] }
+# `canvas` は Timeline pane(M-3)の描画面。
+iced = { workspace = true, features = ["image", "canvas"] }
 # fork seam 2(bind group 床)の口。iced 本体は `iced_wgpu` を再公開しないので
 # 直接引く(同 repo 同 rev = iced 内部と同一 package。床の static は1つ)。
 # 柵上も合法: `ICED_CRATE_ALLOWLIST` はこの crate に iced 系依存を許している。
@@ -31,13 +32,16 @@ wgpu.workspace = true
 # adapter の再列挙(iced は adapter を渡してこない — spike の詰まった箇所その3)。
 # `RenderContext` を作るのは motolii-ui 側だが、adapter を選ぶのはこちらの仕事。
 re_renderer.workspace = true
+# soundtrack 波形の decode(egui 版と同じ経路 `decode_file_audio_ordinal` →
+# `to_canonical`。別の decoder を作らない)。
+motolii-audio.workspace = true
 # 背骨(`UiIntent` / `ShellGateway` / `ShellTranscript` / `ShellPrompts`)。host 非依存の
 # 契約なので egui shell と同じ物を通す — 2つ目の journal も transcript も dialog 層も
 # 作らない。**`rfd` はここに要らない**: native dialog は向こうの `NativePrompts` に
 # 1箇所だけ在り、この crate はその trait を差すだけである。
 motolii-ui.workspace = true
-# Inspector の read-model 投影(M-4b)。**読むだけ** — Document を書く道は
-# `ShellGateway::dispatch` の編集 intent だけで、この crate は writer に触れない。
+# Timeline の意味関数・Inspector の read-model 投影が読む Document 型と時間。
+# **書く道はここに無い** — 編集は `UiIntent` → `ShellGateway`(motolii-ui)だけを通る。
 # 移植元は `crates/motolii-ui/src/inspector_panel/read_model.rs`(toolkit-free)。
 motolii-core.workspace = true
 motolii-doc.workspace = true
