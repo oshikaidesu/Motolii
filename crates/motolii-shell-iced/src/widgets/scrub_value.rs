@@ -62,6 +62,11 @@ pub struct ScrubSpec {
     pub step: f64,
     /// true なら整数へ snap する。
     pub integer: bool,
+    /// この欄の行が持つ `--property-color`。inspector-library.css:391
+    /// `.valueCell:focus-within, .valueCell.dragging { box-shadow: inset 0 0 0
+    /// 1px var(--property-color); }` — 枠色は行ごとに違う(全欄で
+    /// action-active 固定ではない)。呼び出し側が行の帯色をそのまま渡す。
+    pub accent: iced::Color,
 }
 
 impl ScrubSpec {
@@ -402,29 +407,33 @@ impl<M> Widget<M, iced::Theme, iced::Renderer> for ScrubValue<'_, M> {
         let state: &State = tree.state.downcast_ref();
         let bounds = layout.bounds();
 
-        // 地と枠。段階は全部 token の2色から混ぜる(token 以外の色を作らない)。
-        let (fill, border_color) = match &state.phase {
-            Phase::Editing { .. } => (
-                theme::mix(t.action_active, 8.0, t.surface_raised),
-                t.action_active,
-            ),
-            Phase::Pressed { .. } | Phase::Dragging { .. } => (
-                theme::mix(t.action_active, 14.0, t.surface_raised),
-                t.action_active,
-            ),
-            Phase::Idle if state.hovered => (
-                theme::mix(t.action_active, 6.0, t.surface_raised),
-                t.text_secondary,
-            ),
-            Phase::Idle => (t.surface_raised, t.border_default),
+        // 地と枠。inspector-library.css:369-392 `.valueCell` の写し:
+        // 既定は枠なしの沈んだ地(surface_app 側へ寄る)、hover は
+        // `--property-color` を薄く混ぜた地、drag/編集だけ inset 1px の枠が立つ
+        // (地色そのものは変わらない — box-shadow は塗りを置き換えない)。
+        // 角丸は css 側にも無い(Ableton 風フラット、2026-07-14 裁定)ので
+        // 0 にする — 旧 radius 3.0 は正本に無い値だった。
+        let accent = self.spec.accent;
+        let sunken = theme::mix(t.surface_app, 74.0, t.surface_panel);
+        let tinted = theme::mix(accent, 9.0, t.surface_app);
+        let (fill, border) = match &state.phase {
+            Phase::Editing { .. } | Phase::Pressed { .. } | Phase::Dragging { .. } => {
+                (tinted, Some(accent))
+            }
+            Phase::Idle if state.hovered => (tinted, None),
+            Phase::Idle => (sunken, None),
+        };
+        let (border_color, border_width) = match border {
+            Some(color) => (color, 1.0),
+            None => (iced::Color::TRANSPARENT, 0.0),
         };
         renderer.fill_quad(
             renderer::Quad {
                 bounds,
                 border: iced::Border {
                     color: border_color,
-                    width: 1.0,
-                    radius: 3.0.into(),
+                    width: border_width,
+                    radius: 0.0.into(),
                 },
                 ..renderer::Quad::default()
             },

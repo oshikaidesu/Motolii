@@ -25,6 +25,7 @@ fn spec(value: f64) -> ScrubSpec {
         max: None,
         step: 0.5,
         integer: false,
+        accent: iced::Color::WHITE,
     }
 }
 
@@ -88,6 +89,7 @@ fn changes_are_clamped_and_never_repeated() {
         max: Some(12.0),
         step: 0.5,
         integer: false,
+        accent: iced::Color::WHITE,
     });
     point_and_move(&mut ui, 100.0, 10.0);
     let _ = ui.simulate([left_pressed()]);
@@ -117,6 +119,7 @@ fn integer_specs_snap_to_whole_numbers() {
         max: None,
         step: 0.2,
         integer: true,
+        accent: iced::Color::WHITE,
     });
     point_and_move(&mut ui, 100.0, 10.0);
     let _ = ui.simulate([left_pressed()]);

@@ -25,7 +25,7 @@
 //! スクラブ部品と key ボタンは [`crate::widgets`] の本物(統合 wave で stub から
 //! 差し替えた)。
 
-use iced::widget::{button, column, container, row, space, text};
+use iced::widget::{button, column, container, row, rule, space, text};
 use iced::{Center, Element, Fill};
 
 use motolii_ui::blitz_shell::UiEditParam;
@@ -43,6 +43,8 @@ pub const TITLE: &str = "Inspector";
 pub const NO_SELECTION: &str = "No selection \u{2014} pick a layer in the Timeline";
 /// TRANSFORM section の見出し。
 pub const TRANSFORM: &str = "TRANSFORM";
+/// APPEARANCE section の見出し(inspector-library.html:29-60 — TRANSFORM の下)。
+pub const APPEARANCE: &str = "APPEARANCE";
 /// EFFECTS section の見出し。
 pub const EFFECTS: &str = "EFFECTS";
 /// 共有 FX が1つも無いときの正直な一言(幽霊行を出さない — Q7)。
@@ -81,6 +83,10 @@ mod dims {
     /// inspector-library.css:217 `.effectEnable { min-width:25px; height:15px }`
     pub const FX_PILL_MIN_W: f32 = 25.0;
     pub const FX_PILL_H: f32 = 15.0;
+    /// inspector-library.css:313-314 `.propertyName i { width:15px; height:15px }`
+    /// (host TRANSFORM/APPEARANCE 行の kind icon。Q0: FX param 行はこの round の
+    /// 残差指示に無いので触らない — icon は host 4 param だけに足す)。
+    pub const KIND_ICON: f32 = 15.0;
 }
 
 /// Inspector で押された事実。「では何をするか」(intent 化)は
@@ -129,7 +135,11 @@ pub fn inspector<'a>(seat: InspectorSeat, editor_status: Option<String>) -> Elem
         InspectorSeat::Unreadable(reason) => muted_notice(&reason),
         InspectorSeat::Ready(model) => {
             header = header.push(identity(&model)).push(column_header());
-            column![transform(&model), effects(model.effects)].into()
+            let mut body = column![transform(&model)];
+            if let Some(appearance) = appearance(&model) {
+                body = body.push(appearance);
+            }
+            body.push(effects(model.effects)).into()
         }
     };
 
@@ -183,16 +193,19 @@ fn panel_header<'a>(meta: Option<String>) -> Element<'a, Message> {
             .push(space().width(Fill))
             .push(text(meta).size(9).style(crate::theme::style::text_muted));
     }
-    container(header)
-        .padding(iced::padding::left(9).right(9))
-        .width(Fill)
-        .height(dims::PANEL_HEADER_H)
-        .align_y(Center)
-        .style(bottom_border_style)
-        .into()
+    column![
+        container(header)
+            .padding(iced::padding::left(9).right(9))
+            .width(Fill)
+            .height(dims::PANEL_HEADER_H)
+            .align_y(Center)
+            .style(bottom_border_style),
+        rule::horizontal(1).style(crate::theme::style::separator),
+    ]
+    .into()
 }
 
-/// 塗りだけの帯(accent bar / row band / FX 左帯 に共通)。
+/// 塗りだけの帯(accent bar に使う。固定高さ)。
 fn color_bar<'a>(w: f32, h: f32, color: iced::Color) -> Element<'a, Message> {
     container(space().width(w).height(h))
         .width(w)
@@ -202,6 +215,62 @@ fn color_bar<'a>(w: f32, h: f32, color: iced::Color) -> Element<'a, Message> {
             ..container::Style::default()
         })
         .into()
+}
+
+/// 行の左に立つ縦帯(property row / FX header 帯)。行の実高さは呼び出し側の
+/// 内容で決まる(可変)ので、固定高さでは潰れる — `color_bar` の h=0 で帯が
+/// 消えていたのがこの round で見つかった不具合(2026-08-19)。ここは `Fill` で
+/// 親の高さに追随する。inspector-library.css:291 `.propertyRow::before`。
+fn row_band<'a>(w: f32, color: iced::Color) -> Element<'a, Message> {
+    container(space().width(w).height(Fill))
+        .width(w)
+        .height(Fill)
+        .style(move |_theme: &iced::Theme| container::Style {
+            background: Some(color.into()),
+            ..container::Style::default()
+        })
+        .into()
+}
+
+/// TRANSFORM/APPEARANCE の host param 1つぶんの kind icon。
+/// inspector-library.css:313-326 `.propertyName i`(border + glyph は両方
+/// `--property-color`)。角丸は css 側にも無いので足さない(Ableton 風フラット、
+/// 2026-07-14 裁定)。
+fn kind_icon<'a>(glyph: &'static str, color: iced::Color) -> Element<'a, Message> {
+    container(
+        text(glyph)
+            .size(9)
+            .shaping(text::Shaping::Advanced)
+            .align_x(Center)
+            .align_y(Center)
+            .style(move |_theme: &iced::Theme| iced::widget::text::Style { color: Some(color) }),
+    )
+    .width(dims::KIND_ICON)
+    .height(dims::KIND_ICON)
+    .center_x(dims::KIND_ICON)
+    .center_y(dims::KIND_ICON)
+    .style(move |_theme: &iced::Theme| container::Style {
+        border: iced::Border {
+            color,
+            width: 1.0,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    })
+    .into()
+}
+
+/// host TRANSFORM/APPEARANCE param → kind icon の字。inspector-library.css:
+/// 328-355 の絵を単一グリフへ簡約(色は property-color 側で運ぶので、ここは
+/// 形の意味だけ選ぶ): Position=十字、Rotation=回転矢印、Scale=双方向矢印、
+/// Opacity=半月。Fill は口が無いので割り当てない(Q0)。
+fn transform_kind_glyph(param: UiEditParam) -> &'static str {
+    match param {
+        UiEditParam::Position => "+",
+        UiEditParam::Rotation => "\u{21bb}",
+        UiEditParam::Scale => "\u{2194}",
+        UiEditParam::Opacity => "\u{25d0}",
+    }
 }
 
 /// 下辺だけの区切り線を持つ帯。`iced::Border` は4辺一律なので、
@@ -270,13 +339,16 @@ fn identity<'a>(model: &InspectorModel) -> Element<'a, Message> {
     .spacing(6)
     .align_y(Center);
 
-    container(body)
-        .padding([6, 10])
-        .width(Fill)
-        .height(dims::SUMMARY_H)
-        .align_y(Center)
-        .style(raised_panel_style)
-        .into()
+    column![
+        container(body)
+            .padding([6, 10])
+            .width(Fill)
+            .height(dims::SUMMARY_H)
+            .align_y(Center)
+            .style(raised_panel_style),
+        rule::horizontal(1).style(crate::theme::style::separator),
+    ]
+    .into()
 }
 
 /// identity 行の面 — `surface_raised`(inspector-library.css:83)。
@@ -355,25 +427,30 @@ fn column_header<'a>() -> Element<'a, Message> {
             .font(weight(iced::font::Weight::Bold))
             .style(crate::theme::style::text_muted)
     };
-    container(
-        row![
-            heading("Property"),
-            space().width(Fill),
-            container(heading("X"))
-                .width(dims::VALUE_COL_W)
-                .center_x(dims::VALUE_COL_W),
-            container(heading("Y"))
-                .width(dims::VALUE_COL_W)
-                .center_x(dims::VALUE_COL_W),
-        ]
-        .spacing(0)
-        .align_y(Center),
-    )
-    .padding(iced::padding::left(11).right(6))
-    .width(Fill)
-    .height(dims::COLUMN_HEADER_H)
-    .align_y(Center)
-    .style(section_band_style)
+    column![
+        container(
+            row![
+                heading("Property"),
+                space().width(Fill),
+                container(heading("X"))
+                    .width(dims::VALUE_COL_W)
+                    .center_x(dims::VALUE_COL_W),
+                container(heading("Y"))
+                    .width(dims::VALUE_COL_W)
+                    .center_x(dims::VALUE_COL_W),
+            ]
+            .spacing(0)
+            .align_y(Center),
+        )
+        // property_row の content padding([4,8])と揃える — X/Y 見出しの右端が
+        // 値セルの右端の真上に来る(残差5: 「列が揃っていない」の対処)。
+        .padding(iced::padding::left(8).right(8))
+        .width(Fill)
+        .height(dims::COLUMN_HEADER_H)
+        .align_y(Center)
+        .style(section_band_style),
+        rule::horizontal(1).style(crate::theme::style::separator),
+    ]
     .into()
 }
 
@@ -392,13 +469,30 @@ fn section_band_style(theme: &iced::Theme) -> container::Style {
     }
 }
 
-/// 2. TRANSFORM section。
+/// 2. TRANSFORM section — Position / Scale / Rotation。
+/// APPEARANCE(Opacity)はここでは出さない — inspector-library.html:29-60 の
+/// 並びどおり TRANSFORM の下に別 section として立てる(`appearance` 関数)。
+/// この分割は表示のグルーピングだけで、`model.transform` の中身・順序・
+/// read-model は一切変えていない(意味は触らない柵)。
 fn transform<'a>(model: &InspectorModel) -> Element<'a, Message> {
     let mut section = column![section_heading(TRANSFORM, None)];
     for param_row in &model.transform {
-        section = section.push(transform_rows(param_row));
+        if param_row.param != UiEditParam::Opacity {
+            section = section.push(transform_rows(param_row));
+        }
     }
     section.into()
+}
+
+/// APPEARANCE section — この read-model が実際に持つ intent は Opacity だけ
+/// (Fill は書き口が無いので出さない、Q0)。1行も無ければ section ごと省く
+/// (幽霊 section を作らない — Q7 と同じ規律)。
+fn appearance<'a>(model: &InspectorModel) -> Option<Element<'a, Message>> {
+    let opacity = model
+        .transform
+        .iter()
+        .find(|row| row.param == UiEditParam::Opacity)?;
+    Some(column![section_heading(APPEARANCE, None), transform_rows(opacity)].into())
 }
 
 /// section 見出し行。inspector-library.css:141-162。fold chevron は**足さない**
@@ -416,13 +510,16 @@ fn section_heading<'a>(label: &'static str, count: Option<String>) -> Element<'a
             .push(space().width(Fill))
             .push(text(count).size(8).style(crate::theme::style::text_muted));
     }
-    container(row)
-        .padding(iced::padding::left(10).right(10))
-        .width(Fill)
-        .height(dims::SECTION_H)
-        .align_y(Center)
-        .style(section_band_style)
-        .into()
+    column![
+        container(row)
+            .padding(iced::padding::left(10).right(10))
+            .width(Fill)
+            .height(dims::SECTION_H)
+            .align_y(Center)
+            .style(section_band_style),
+        rule::horizontal(1).style(crate::theme::style::separator),
+    ]
+    .into()
 }
 
 /// Transform 1 param ぶんの行。Vec2 は 1 header + 1 key ボタン + X/Y 値行、
@@ -435,18 +532,20 @@ fn transform_rows<'a>(param_row: &ParamRow) -> Element<'a, Message> {
     let param = param_row.param;
     let label = param_label(param);
     let band = row_band_color(param);
+    let glyph = transform_kind_glyph(param);
     if !param_row.editable {
         // 閉じていない DocParam 種。値は出すが、触れる部品を置かない(Q0)。
         return property_row(
             band,
             row![
+                kind_icon(glyph, band),
                 text(label)
                     .size(10)
                     .style(crate::theme::style::text_primary_style),
                 space().width(Fill),
                 text(format_components(&param_row.components)).size(10),
             ]
-            .spacing(6)
+            .spacing(7)
             .align_y(Center),
         );
     }
@@ -455,17 +554,18 @@ fn transform_rows<'a>(param_row: &ParamRow) -> Element<'a, Message> {
         Message::Inspector(InspectorEvent::KeyPressed(param)),
     );
     if arity(param) == 2 {
-        // header 行(名前 + key ボタン)。X / Y は独立キーに見せない。
+        // header 行(icon + 名前 + key ボタン)。X / Y は独立キーに見せない。
         let header = property_row(
             band,
             row![
+                kind_icon(glyph, band),
                 text(label)
                     .size(10)
                     .font(weight(iced::font::Weight::Semibold)),
                 space().width(Fill),
                 key,
             ]
-            .spacing(6)
+            .spacing(7)
             .align_y(Center),
         );
         let mut rows = column![header];
@@ -474,11 +574,15 @@ fn transform_rows<'a>(param_row: &ParamRow) -> Element<'a, Message> {
             rows = rows.push(property_row(
                 band,
                 row![
-                    text(axis).size(9).style(crate::theme::style::text_muted),
+                    // css:410 `.valueCell > b { color: var(--property-color) }`
+                    // — X/Y の字は property-color を持つ小さなラベル。
+                    text(axis).size(9).style(move |_theme: &iced::Theme| {
+                        iced::widget::text::Style { color: Some(band) }
+                    }),
                     space().width(Fill),
-                    container(scrub(param, component, value)).width(dims::VALUE_COL_W),
+                    container(scrub(param, component, value, band)).width(dims::VALUE_COL_W),
                 ]
-                .padding(iced::padding::left(12))
+                .padding(iced::padding::left(dims::KIND_ICON + 7.0 + 12.0))
                 .spacing(6)
                 .align_y(Center),
             ));
@@ -489,14 +593,15 @@ fn transform_rows<'a>(param_row: &ParamRow) -> Element<'a, Message> {
         property_row(
             band,
             row![
+                kind_icon(glyph, band),
                 text(label)
                     .size(10)
                     .font(weight(iced::font::Weight::Semibold)),
                 space().width(Fill),
-                container(scrub(param, 0, value)).width(dims::VALUE_COL_W),
+                container(scrub(param, 0, value, band)).width(dims::VALUE_COL_W),
                 key,
             ]
-            .spacing(6)
+            .spacing(7)
             .align_y(Center),
         )
     }
@@ -513,18 +618,23 @@ fn row_band_color(param: UiEditParam) -> iced::Color {
     }
 }
 
-/// 1行を組む共通の chrome — 左の 3px 色帯 + `surface_panel` の地。
-/// inspector-library.css:282-294。
+/// 1行を組む共通の chrome — 左の 3px 色帯 + `surface_panel` の地 +
+/// 下罫線1px。inspector-library.css:282-294(`.propertyRow` / `::before`)。
+/// 下罫線はこのレーンで見つかった欠落 — bg 用 style の border は width 0 の
+/// まま(コメントの意図どおり別 widget で積む約束だったが積んでいなかった)。
 fn property_row<'a>(
     band: iced::Color,
     content: impl Into<Element<'a, Message>>,
 ) -> Element<'a, Message> {
-    row![
-        color_bar(dims::ROW_BAND_W, 0.0, band),
-        container(content.into())
-            .padding([4, 8])
-            .width(Fill)
-            .style(row_panel_style),
+    column![
+        row![
+            row_band(dims::ROW_BAND_W, band),
+            container(content.into())
+                .padding([4, 8])
+                .width(Fill)
+                .style(row_panel_style),
+        ],
+        rule::horizontal(1).style(crate::theme::style::separator),
     ]
     .into()
 }
@@ -538,7 +648,14 @@ fn row_panel_style(theme: &iced::Theme) -> container::Style {
 }
 
 /// 値行のスクラブ部品1枚。仕様(範囲・刻み)は param ごとにここで決める。
-fn scrub<'a>(param: UiEditParam, component: usize, value: f64) -> Element<'a, Message> {
+/// `accent` は行の property-color(inspector-library.css:391 `.valueCell.dragging`
+/// の枠色 = `--property-color` — action-active 固定ではなく行ごとに違う)。
+fn scrub<'a>(
+    param: UiEditParam,
+    component: usize,
+    value: f64,
+    accent: iced::Color,
+) -> Element<'a, Message> {
     let spec = ScrubSpec {
         value,
         decimals: 3,
@@ -549,6 +666,7 @@ fn scrub<'a>(param: UiEditParam, component: usize, value: f64) -> Element<'a, Me
         // DragValue の speed 0.005 と同じ判断で、刻みは細かく)。
         step: 0.01,
         integer: false,
+        accent,
     };
     scrub_value(spec, move |event| {
         Message::Inspector(InspectorEvent::Scrub {
@@ -644,7 +762,7 @@ fn effect_header<'a>(definition_id: u64, plugin_id: String, enabled: bool) -> El
     .align_y(Center);
 
     row![
-        color_bar(dims::ROW_BAND_W, 0.0, accent),
+        row_band(dims::ROW_BAND_W, accent),
         container(content)
             .padding([0, 8])
             .width(Fill)
