@@ -19,8 +19,13 @@
 
 use std::path::PathBuf;
 
-/// この窓で起きうることの全部(M-1 の範囲)。
-#[derive(Debug, Clone, PartialEq, Eq)]
+use crate::timeline::TimelineMsg;
+
+/// この窓で起きうることの全部(M-1 の殻 + M-3 の Timeline)。
+///
+/// `Eq` を降ろして `PartialEq` だけにしてある — Timeline の Message は
+/// 秒(f32)を運ぶ。intent(`UiIntent`)側は µs の整数なので `Eq` のまま。
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     /// New Project ボタン / `Cmd+N`。dialog が答えたら `UiIntent::NewProject` になる。
     NewProjectPressed,
@@ -40,4 +45,10 @@ pub enum Message {
     CloseRequested,
     /// 走っている書き出しの返事を受ける合図。**intent ではない。**
     ExportPolled,
+    /// Timeline pane で起きたこと(M-3)。canvas が intent まで解決して運び、
+    /// `Shell::update` が `UiIntent` へ写して dispatch する。
+    Timeline(TimelineMsg),
+    /// 波形の生成座席を1歩進める合図。**intent ではない** — decode thread からの
+    /// 返事を受けるだけ(`ExportPolled` と同じ型の解決)。
+    WaveformPolled,
 }

@@ -44,6 +44,9 @@ mod message;
 mod prompts;
 mod shell;
 mod status_log;
+/// Timeline pane(M-3)。spike を種に、実 Document の投影と Q1 文法の操作を持つ。
+/// 編集は全部 `UiIntent` になって `ShellGateway` を通る(gateway 迂回なし)。
+pub mod timeline;
 pub mod view;
 mod window_input;
 

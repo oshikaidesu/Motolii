@@ -13,14 +13,19 @@
 //! egui shell が見ているのと同じ関数で、host を替えても答えが変わらない
 //! (=「意味は不変のまま iced へ移る」)。
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
+use motolii_audio::PcmCache;
+use motolii_doc::{Document, LayerId};
 use motolii_ui::blitz_shell::{
     decide_unsaved, IntentEvent, ShellGateway, ShellPrompts, ShellTranscript, StatusEvent,
     UiIntent, UnsavedDecision,
 };
 
 use crate::message::Message;
+use crate::timeline::{TimelineCtx, TimelinePane, WaveformBandState, WaveformSeat};
 
 /// `update` 1件のあとで窓に残る唯一の要求。
 ///
@@ -43,6 +48,13 @@ pub struct Shell {
     /// 人に訊く口。窓は `NativePrompts`、テスト・CLI 駆動は `ScriptedPrompts`。
     /// **egui shell と同じ trait の同じ実装**である(`crate::prompts` の注記)。
     prompts: Box<dyn ShellPrompts>,
+    /// Timeline pane の view 状態(zoom / pan / scroll / 進行中ジェスチャ)。
+    /// Document には入らない Project session の棚(M-3)。
+    timeline: TimelinePane,
+    /// soundtrack 波形の生成座席と、その最新の答え・decode 済み PCM の控え。
+    waveform: WaveformSeat,
+    waveform_state: WaveformBandState,
+    pcm_caches: HashMap<(String, u32), Arc<PcmCache>>,
 }
 
 impl Shell {
@@ -51,6 +63,10 @@ impl Shell {
         Self {
             gateway: ShellGateway::new(ShellTranscript::default()),
             prompts: Box::new(prompts),
+            timeline: TimelinePane::default(),
+            waveform: WaveformSeat::default(),
+            waveform_state: WaveformBandState::Absent,
+            pcm_caches: HashMap::new(),
         }
     }
 
@@ -68,7 +84,12 @@ impl Shell {
                 let Some(path) = self.prompts.new_project_path() else {
                     return Outcome::Stay;
                 };
-                let _ = self.gateway.dispatch(UiIntent::NewProject { path });
+                if self.gateway.dispatch(UiIntent::NewProject { path }) {
+                    // 座り直したら Timeline の view も最初から(別 project の
+                    // zoom / ジェスチャを引き継がない)。
+                    self.timeline.reset();
+                }
+                self.poll_waveform();
             }
             Message::OpenProjectPressed => {
                 if !self.clear_unsaved_or_stay() {
@@ -77,7 +98,10 @@ impl Shell {
                 let Some(path) = self.prompts.open_project_path() else {
                     return Outcome::Stay;
                 };
-                let _ = self.gateway.dispatch(UiIntent::OpenProject { path });
+                if self.gateway.dispatch(UiIntent::OpenProject { path }) {
+                    self.timeline.reset();
+                }
+                self.poll_waveform();
             }
             Message::SavePressed => {
                 // 訊くことは無い(保存先は座席が知っている)。座席が無い時に
@@ -103,6 +127,28 @@ impl Shell {
             }
             Message::FilesDropped(paths) => {
                 let _ = self.gateway.dispatch(UiIntent::AdmitPaths { paths });
+                // 落ちた音声が曲になっていたら、波形の生成がここから始まる。
+                self.poll_waveform();
+            }
+            Message::Timeline(timeline_message) => {
+                // 座席が無ければ Timeline は立っていない(絵も出ていない)。
+                let Some(ctx) = self.timeline_ctx() else {
+                    return Outcome::Stay;
+                };
+                // 1) この Message で起こす intent を pane に訊く(pane は書かない)。
+                let intents = self.timeline.plan(&timeline_message, &ctx);
+                // 2) dispatch はここ1箇所(journal → 実行。egui 版と同じ背骨)。
+                for intent in intents {
+                    let _ = self.gateway.dispatch(intent);
+                }
+                // 3) intent が効いた後の座席を見て、pane が自分の状態を進める。
+                if let Some(ctx) = self.timeline_ctx() {
+                    self.timeline.note(&timeline_message, &ctx);
+                }
+            }
+            Message::WaveformPolled => {
+                // **intent ではない** — decode thread からの返事を受けるだけ。
+                self.poll_waveform();
             }
             Message::CloseRequested => {
                 // 窓を閉じるのも「未保存のまま座席を捨てる」操作。
@@ -237,6 +283,83 @@ impl Shell {
     /// transcript に溜まっている行数。
     pub(crate) fn status_count(&self) -> usize {
         self.gateway.transcript().len()
+    }
+
+    // ---- Timeline pane の読み口(M-3)。canvas と view はここからしか読まない ----
+
+    /// Timeline pane の view 状態(読み)。
+    pub fn timeline_pane(&self) -> &TimelinePane {
+        &self.timeline
+    }
+
+    /// pane へ流す immutable snapshot。座席が無ければ `None`。
+    pub fn timeline_snapshot(&self) -> Option<Arc<Document>> {
+        self.gateway.project().map(|seat| seat.snapshot())
+    }
+
+    /// いま選ばれている layer(選んだ順)。
+    pub fn timeline_selection(&self) -> Vec<LayerId> {
+        self.gateway
+            .project()
+            .map(|seat| seat.editor().selected_layers().to_vec())
+            .unwrap_or_default()
+    }
+
+    /// playhead(秒)。座席が無ければ 0。
+    pub fn timeline_playhead(&self) -> f32 {
+        self.gateway
+            .project()
+            .map(|seat| seat.editor().playhead_seconds())
+            .unwrap_or(0.0)
+    }
+
+    /// undo 台帳の深さ(帯の Undo ボタンの enabled)。
+    pub fn undo_len(&self) -> usize {
+        self.gateway
+            .project()
+            .map(|seat| seat.editor().undo_len())
+            .unwrap_or(0)
+    }
+
+    /// redo 台帳の深さ(帯の Redo ボタンの enabled)。
+    pub fn redo_len(&self) -> usize {
+        self.gateway
+            .project()
+            .map(|seat| seat.editor().redo_len())
+            .unwrap_or(0)
+    }
+
+    /// 波形帯のいまの答え(読み)。canvas が描く。
+    pub fn waveform_state(&self) -> WaveformBandState {
+        self.waveform_state.clone()
+    }
+
+    /// 波形の生成が走っているか(`window::frames()` を刻み続けるかの判断)。
+    pub fn waveform_building(&self) -> bool {
+        self.waveform.is_building()
+    }
+
+    /// plan / note へ渡す読み取り一式。座席が無ければ `None`。
+    fn timeline_ctx(&self) -> Option<TimelineCtx> {
+        let seat = self.gateway.project()?;
+        Some(TimelineCtx {
+            document: seat.snapshot(),
+            selected: seat.editor().selected_layers().to_vec(),
+            playhead: seat.editor().playhead_seconds(),
+        })
+    }
+
+    /// 波形の生成座席を1歩進める。decode は別 thread — ここでは受け取るだけ。
+    fn poll_waveform(&mut self) {
+        let Some(seat) = self.gateway.project() else {
+            self.waveform_state = WaveformBandState::Absent;
+            return;
+        };
+        let document = seat.snapshot();
+        let root = seat.editor().project_root().map(Path::to_path_buf);
+        self.waveform_state =
+            self.waveform
+                .poll(&document, root.as_deref(), &mut self.pcm_caches);
     }
 }
 

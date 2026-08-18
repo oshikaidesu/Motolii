@@ -11,6 +11,10 @@
 //!
 //! 走査の規約は egui 版と同じ: `#[cfg(test)]` から先と `//` で始まる行
 //! (この禁止リストを説明する doc コメント自身)は落とす。
+//!
+//! M-3 から Timeline の編集がある。編集の唯一の書き口
+//! (`ProjectSeat::editor_mut`)を禁止リストへ足したので、canvas / pane が
+//! intent を通らずにエディタを動かす道は名前ごと塞がっている。
 
 /// この crate の製品ソース全部。**足したらここへ足す**(走査漏れは静かな穴になる)。
 const SCANNED: &[(&str, &str)] = &[
@@ -25,15 +29,35 @@ const SCANNED: &[(&str, &str)] = &[
     ("status_log.rs", include_str!("../src/status_log.rs")),
     ("view.rs", include_str!("../src/view.rs")),
     ("window_input.rs", include_str!("../src/window_input.rs")),
+    ("timeline/mod.rs", include_str!("../src/timeline/mod.rs")),
+    ("timeline/canvas.rs", include_str!("../src/timeline/canvas.rs")),
+    ("timeline/pane.rs", include_str!("../src/timeline/pane.rs")),
+    (
+        "timeline/semantics.rs",
+        include_str!("../src/timeline/semantics.rs"),
+    ),
+    (
+        "timeline/waveform.rs",
+        include_str!("../src/timeline/waveform.rs"),
+    ),
 ];
 
 /// 禁止する呼び出しと、代わりに通すべき intent。
 /// `motolii_ui::blitz_shell` が `pub` で出している「製品状態を進める関数」である。
+///
+/// M-3 で `editor_mut(` を足した: `ProjectSeat::editor_mut` は Timeline エディタの
+/// **唯一の書き口**で、これさえ出て来なければ移動・トリム・削除・Undo など
+/// エディタの可変 API は1つも呼べない(egui shell が持つ `project_mut()` の穴を
+/// この crate に作らない、の機械化)。
 const FORBIDDEN: &[(&str, &str)] = &[
     ("create_project_file(", "UiIntent::NewProject"),
     ("reseat_project(", "UiIntent::NewProject / OpenProject"),
     ("admit_dropped_paths(", "UiIntent::AdmitPaths"),
     ("ProjectSeat::open(", "UiIntent::OpenProject"),
+    (
+        "editor_mut(",
+        "UiIntent::SelectLayer / MoveClips / TrimClip / DeleteSelection / Undo / Redo / SetPlayhead / StepPlayhead",
+    ),
 ];
 
 /// `ShellGateway::dispatch` を通らずに済む唯一の道は `Shell::update` である、
@@ -78,15 +102,23 @@ fn no_shell_code_touches_product_state_outside_the_gateway() {
 /// file を足して表に足し忘れると、この柵は静かに何も守らなくなる。
 #[test]
 fn every_product_source_is_scanned() {
+    fn walk(dir: &std::path::Path, prefix: &str, out: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).expect("src/ を読める") {
+            let entry = entry.expect("dir entry");
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let path = entry.path();
+            if path.is_dir() {
+                // 子ディレクトリも掘る(M-3 で `timeline/` が増えた —
+                // ここが平らな read_dir のままだと、下の file は柵を素通りする)。
+                walk(&path, &format!("{prefix}{name}/"), out);
+            } else if name.ends_with(".rs") {
+                out.push(format!("{prefix}{name}"));
+            }
+        }
+    }
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut on_disk: Vec<String> = std::fs::read_dir(&src)
-        .expect("src/ を読める")
-        .filter_map(|entry| {
-            let name = entry.expect("dir entry").file_name();
-            let name = name.to_string_lossy().into_owned();
-            name.ends_with(".rs").then_some(name)
-        })
-        .collect();
+    let mut on_disk: Vec<String> = Vec::new();
+    walk(&src, "", &mut on_disk);
     on_disk.sort();
     let mut listed: Vec<String> = SCANNED.iter().map(|(name, _)| (*name).to_owned()).collect();
     listed.sort();
@@ -106,6 +138,8 @@ fn the_forbidden_names_are_real_public_api_of_motolii_ui() {
         motolii_ui::blitz_shell::create_project_file;
     let _: fn(&std::path::Path) -> Result<motolii_ui::blitz_shell::ProjectSeat, String> =
         motolii_ui::blitz_shell::ProjectSeat::open;
+    // `editor_mut` — Timeline エディタの唯一の書き口が実在することの担保。
+    let _ = motolii_ui::blitz_shell::ProjectSeat::editor_mut;
 }
 
 /// 副作用の唯一の入口が `Shell::update` の中に**実在する**こと。

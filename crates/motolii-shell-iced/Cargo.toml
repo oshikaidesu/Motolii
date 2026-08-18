@@ -18,7 +18,15 @@ path = "src/main.rs"
 # ホストの toolkit。**egui は入れない**(dep policy の柵:
 # `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs`。この crate は iced 系の
 # allowlist にだけ載っていて、egui 系の allowlist には載っていない)。
-iced.workspace = true
+# `canvas` は Timeline pane(M-3)の描画面。
+iced = { workspace = true, features = ["canvas"] }
+# Timeline の意味関数が読む Document 型と時間。**書く道はここに無い** —
+# 編集は `UiIntent` → `ShellGateway`(motolii-ui)だけを通る。
+motolii-core.workspace = true
+motolii-doc.workspace = true
+# soundtrack 波形の decode(egui 版と同じ経路 `decode_file_audio_ordinal` →
+# `to_canonical`。別の decoder を作らない)。
+motolii-audio.workspace = true
 # 背骨(`UiIntent` / `ShellGateway` / `ShellTranscript` / `ShellPrompts`)。host 非依存の
 # 契約なので egui shell と同じ物を通す — 2つ目の journal も transcript も dialog 層も
 # 作らない。**`rfd` はここに要らない**: native dialog は向こうの `NativePrompts` に

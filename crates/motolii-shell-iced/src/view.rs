@@ -12,16 +12,18 @@
 //! 運転席の selector(`&str` は**完全一致**)も「押したいボタンの名前」だけを
 //! 名指しできる。
 //!
-//! ## M-1 の帯に無い物
+//! ## M-3 で帯に来た物
 //!
-//! Undo / Redo ボタンは編集面(Timeline)と一緒に来る(M-3)。**触れそうで触れない
-//! 物を先に置かない**(2026-08-12 の Q0)。
+//! Undo / Redo ボタン(編集面 = Timeline と一緒に来た)。`Cmd+Z` / `Shift+Cmd+Z`
+//! と同じ `UiIntent::Undo` / `Redo` へ流れる — 経路も意味も1つ。
 
+use iced::widget::canvas::Canvas;
 use iced::widget::{button, column, container, row, text};
 use iced::{Center, Element, Fill};
 
 use crate::message::Message;
 use crate::shell::Shell;
+use crate::timeline::{TimelineMsg, TimelineProgram};
 use crate::window_input::window_input;
 
 /// スタート画面の見出し。
@@ -38,16 +40,14 @@ pub const OPEN_PROJECT: &str = "Open\u{2026}";
 pub const OPEN_PROJECT_SHORTCUT: &str = "Cmd+O";
 /// スタート画面の末尾の一行。
 pub const DROP_HINT: &str = "Then just drop video and audio into this window.";
-/// 座った後に出る、いまの正直な中身。
-///
-/// **編集面のふりをした空箱を置かない**(2026-08-12 の Q0「触れそうで触れない物は
-/// 不合格」)。M-2 以降が Stage / Timeline / Browser / Inspector を持ってくるまで、
-/// ここは「何がまだ無いか」を言うだけの一行である。
-pub const SEATED_PLACEHOLDER: &str = "Project is open. The editing surface arrives in M-2.";
 /// 書き出しを始めるボタン。
 pub const EXPORT: &str = "Export";
 /// 走っている書き出しを止めるボタン。
 pub const CANCEL_EXPORT: &str = "Cancel";
+/// 帯の Undo ボタン(`Cmd+Z` と同じ入口 — 経路も意味も1つ)。
+pub const UNDO: &str = "Undo";
+/// 帯の Redo ボタン(`Shift+Cmd+Z` と同じ入口)。
+pub const REDO: &str = "Redo";
 
 /// 未保存の座席の名乗り方。egui shell の status 帯と**一字も違わない**。
 pub fn unsaved_label(name: &str) -> String {
@@ -64,13 +64,15 @@ pub fn exporting_label(seconds: u64) -> String {
 /// 一番外は [`window_input`] — 近道キー・OS ドロップ・閉じる要求はここで
 /// [`Message`] になる。中身は「座席の有無で変わる本体」と「status 帯」の2段。
 pub fn view(shell: &Shell) -> Element<'_, Message> {
-    let body = if shell.is_seated() {
-        seated()
+    let mut page = if shell.is_seated() {
+        // Timeline pane が面の全部(M-3)。Stage / Browser / Inspector は M-2 / M-4。
+        // 触れない枠(Inbox・M/S レール・帯高 resize)は**置かない** — Q0。
+        column![seated(shell)].width(Fill).height(Fill)
     } else {
-        start_screen()
+        column![container(start_screen()).center(Fill)]
+            .width(Fill)
+            .height(Fill)
     };
-
-    let mut page = column![container(body).center(Fill)].width(Fill).height(Fill);
 
     // 帯は「座席が居るあいだ」と「言われたことがある時」に出る。空の帯を常設しない
     // (egui 版と同じ判断)。
@@ -111,9 +113,15 @@ fn action_button<'a>(name: &'a str, shortcut: &'a str, message: Message) -> Elem
         .into()
 }
 
-/// 座席が在るときの画面(M-1 は一行だけ)。
-fn seated<'a>() -> Element<'a, Message> {
-    text(SEATED_PLACEHOLDER).into()
+/// 座席が在るときの画面 — Timeline pane(iced canvas)。
+///
+/// canvas は窓の左上 (0,0) から立つ(帯は下)。運転席がポインタ座標を
+/// `timeline::semantics::PaneGeometry` の同じ式で計算できるのはこの配置による。
+fn seated(shell: &Shell) -> Element<'_, Message> {
+    Canvas::new(TimelineProgram { shell })
+        .width(Fill)
+        .height(Fill)
+        .into()
 }
 
 /// status 帯 — **信用の可視化と、窓が言ったことの最新1行**。
@@ -136,6 +144,21 @@ fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
             name
         };
         band = band.push(text(label).size(13));
+    }
+
+    // Undo / Redo(M-3)。`Cmd+Z` / `Shift+Cmd+Z` と同じ入口へ流れる。
+    // 台帳が空の側は押せない(触れそうで触れない物にしない — 灰色は「無効」の意味)。
+    if shell.is_seated() {
+        band = band.push(
+            button(text(UNDO).size(13)).on_press_maybe(
+                (shell.undo_len() > 0).then_some(Message::Timeline(TimelineMsg::UndoPressed)),
+            ),
+        );
+        band = band.push(
+            button(text(REDO).size(13)).on_press_maybe(
+                (shell.redo_len() > 0).then_some(Message::Timeline(TimelineMsg::RedoPressed)),
+            ),
+        );
     }
 
     // 書き出し面。実行中は経過秒と Cancel、そうでなければ Export。
