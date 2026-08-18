@@ -54,8 +54,11 @@ pub fn prepare_add_group(
 ///   CU-101は「startからcomposition endまで」だったが、実走(2026-08-18観察(1))で
 ///   4sの素材が10sのclipになり終端がフリーズフレームの尾になると分かったので置き換えた。
 ///   `Asset.duration`を持たない素材(生成系・stream・旧文書)は従来どおりcomposition endまで
-/// - componentはasset_typeの大分類から: `video/*`→video ordinal 0、`audio/*`→audio ordinal 0。
-///   stream実在の細部はexport/mix時の検証に任せる
+/// - componentはasset_typeの大分類から: `video/*`と`image/*`→video ordinal 0、
+///   `audio/*`→audio ordinal 0。stream実在の細部はexport/mix時の検証に任せる。
+///   静止画が絵の列に入るのは、mediaが**1フレームのvideo stream**として読むから
+///   (2026-08-18: 利用者の初回タッチで閉まっていた扉。尺が無い素材なので、
+///   上の「長さ不明→composition end まで」がそのまま静止画の尺の意味になる)
 /// - `LayerId`はreserveのみ。表示名はasset名で`layer_names`に載せる(`prepare_add_group`と同型)
 pub fn prepare_place_asset_clip(
     doc: &mut Document,
@@ -68,15 +71,16 @@ pub fn prepare_place_asset_clip(
         .ok_or(CommandError::Validate(
             crate::validate::DocumentError::UnknownAssetId { id: asset_id.get() },
         ))?;
-    let (video, audio) = if asset.asset_type.starts_with("video/") {
-        (Some(VideoComponent::ordinal(0)), Vec::new())
-    } else if asset.asset_type.starts_with("audio/") {
-        (None, vec![AudioComponent::ordinal(0)])
-    } else {
-        return Err(CommandError::UnsupportedPlacementAssetType {
-            asset_type: asset.asset_type.clone(),
-        });
-    };
+    let (video, audio) =
+        if asset.asset_type.starts_with("video/") || asset.asset_type.starts_with("image/") {
+            (Some(VideoComponent::ordinal(0)), Vec::new())
+        } else if asset.asset_type.starts_with("audio/") {
+            (None, vec![AudioComponent::ordinal(0)])
+        } else {
+            return Err(CommandError::UnsupportedPlacementAssetType {
+                asset_type: asset.asset_type.clone(),
+            });
+        };
     let name = asset.name.clone();
     // 素材の長さ。非正値は「測れていない」と同じ扱いにする(壊れたヒントで
     // 置けなくなるより、従来のcomposition end挙動へ落ちる方が人にとって普通)。

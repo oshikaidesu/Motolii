@@ -165,14 +165,17 @@ fn double_clicking_a_browser_card_places_that_file_at_the_playhead() {
     );
 }
 
-/// 入らない file のダブルクリックは、**理由つきで帯に出て** Document を動かさない。
+/// **静止画のダブルクリックも clip を立てる。**
 ///
-/// 画像 admission はまだ開いていない(別レーン)。開いていない事実が
-/// 黙って消えるのが一番分からないので、ここで固定する — 開いた時に
-/// このテストが赤くなって「もう1つの入口も通った」と教える。
+/// このテストは元々「画像 admission はまだ開いていない」を固定していた
+/// (レーンB が置いた合図)。2026-08-18 レーンAで扉が開いたので、赤くなった所を
+/// 新しい事実へ書き換えた — もう1つの入口も同じ一本の経路を通る。
 #[test]
-fn double_clicking_a_card_we_cannot_admit_says_why_and_leaves_the_document_alone() {
-    let dir = motolii_testkit::tmp_dir("drive_browser_skip");
+fn double_clicking_a_still_image_card_places_it_too() {
+    if !motolii_testkit::ffmpeg_or_skip() {
+        return;
+    }
+    let dir = motolii_testkit::tmp_dir("drive_browser_still");
     let project = dir.join("fresh.json");
     let prompts = ScriptedPrompts {
         new_project_path: Some(project),
@@ -190,7 +193,41 @@ fn double_clicking_a_card_we_cannot_admit_says_why_and_leaves_the_document_alone
 
     let report = shell.latest_report();
     assert!(
-        report.contains("starter-still.png"),
+        report.contains("placed") && report.contains("starter-still.png"),
+        "配置の成立は帯が名指しで言う。実際: {report:?}"
+    );
+    assert_eq!(
+        shell.track_item_count(),
+        1,
+        "帯が言うだけで Document が動かないのは不合格"
+    );
+}
+
+/// 入らない file のダブルクリックは、**理由つきで帯に出て** Document を動かさない。
+///
+/// SVG はラスタライザが要るので admission に載っていない(レーンAの NON-GOAL)。
+/// 入らない物が黙って消えるのが一番分からないので、ここで固定する。
+#[test]
+fn double_clicking_a_card_we_cannot_admit_says_why_and_leaves_the_document_alone() {
+    let dir = motolii_testkit::tmp_dir("drive_browser_skip");
+    let project = dir.join("fresh.json");
+    let prompts = ScriptedPrompts {
+        new_project_path: Some(project),
+        ..ScriptedPrompts::default()
+    };
+    let Some(mut shell) = DrivenShell::seatless_browsing(prompts, &starter_media_dir()) else {
+        return;
+    };
+    shell.click_label_containing("New Project");
+    shell.run_frames(2);
+    assert!(shell.seated());
+
+    shell.double_click_label_containing("starter-mark.svg");
+    shell.run_frames(2);
+
+    let report = shell.latest_report();
+    assert!(
+        report.contains("starter-mark.svg"),
         "入らなかった file は名指しで言う(無反応にしない)。実際: {report:?}"
     );
     assert!(

@@ -633,6 +633,8 @@ struct CachedAssetReader {
     reader: FrameReader,
     /// Freeze: EOF 到達後も最後に読めたフレームを保持する。
     last_frame: Option<motolii_core::CpuFrame>,
+    /// `last_frame` が実際に何番だったか(EOF 保持で配った番号ではない)。
+    last_frame_index: Option<i64>,
 }
 
 impl CachedAssetReader {
@@ -643,6 +645,7 @@ impl CachedAssetReader {
             info,
             reader,
             last_frame: None,
+            last_frame_index: None,
         })
     }
 
@@ -650,14 +653,27 @@ impl CachedAssetReader {
         if frame_index < 0 {
             return Err(ExportError::NegativeSourceFrame(frame_index));
         }
+        // 直前に配ったのと同じ番号なら、それをそのまま返す。ffmpeg を開き直すのは
+        // 「戻る」動きだけでよい。静止画(常に0番)や停止スクラブでは毎フレーム
+        // 子プロセスを立て直すことになるため、ここが効く。
+        if self.last_frame_index == Some(frame_index) {
+            if let Some(frame) = &self.last_frame {
+                return Ok(frame.clone());
+            }
+        }
         let next = self.reader.next_frame_index();
         if frame_index < next {
             self.reader = FrameReader::open(&self.path, &self.info, frame_index)?;
             self.last_frame = None;
+            self.last_frame_index = None;
         }
         while self.reader.next_frame_index() < frame_index {
+            let index = self.reader.next_frame_index();
             match self.reader.next_frame()? {
-                Some(f) => self.last_frame = Some(f),
+                Some(f) => {
+                    self.last_frame = Some(f);
+                    self.last_frame_index = Some(index);
+                }
                 None => {
                     // EOF: Freeze = 最終フレーム保持
                     return self.last_frame.clone().ok_or(ExportError::EmptyVideoAsset);
@@ -667,6 +683,7 @@ impl CachedAssetReader {
         match self.reader.next_frame()? {
             Some(f) => {
                 self.last_frame = Some(f.clone());
+                self.last_frame_index = Some(frame_index);
                 Ok(f)
             }
             None => self.last_frame.clone().ok_or(ExportError::EmptyVideoAsset),
