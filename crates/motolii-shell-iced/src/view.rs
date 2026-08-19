@@ -31,6 +31,26 @@
 //! - font size / spacing は [`crate::theme::type_scale`] /
 //!   [`crate::theme::space`] を通す(ここに残る生の数字は、対応する role が
 //!   無い一過性の値だけ)。
+//!
+//! ## ヘッダ帯 + 下帯1行化(2026-08-19 campaign 第2波レーンE)
+//!
+//! 利用者裁定(`docs/reviews/2026-08-19-ui-tone-unification-campaign.md` 追記節):
+//! 「Undo とかエクスポートはヘッダに出て欲しい」「ログは下に出て欲しい」
+//! 「タイムラインから下がかなりデカい」。これを受けて:
+//!
+//! - [`header_band`] を新設。座席があるときだけ window 最上部に立つ。
+//!   旧 status 帯の project 行(保存状態 → Undo/Redo → 書き出し面)を丸ごと
+//!   移設した — 経路も文言も変えていない。RN chrome 正本
+//!   (`ui/motolii-rn/src/productStyles.ts` + `chrome.tsx`)の titlebar が
+//!   Export を置く構成と向きが合う。
+//! - [`status_band`] は legend 行だけの1行に軽くなった。project 行が無く
+//!   なった分、旧「2行の panel」から「1行の panel」へ帯の高さそのものが
+//!   縮む(「タイムラインから下がデカい」への直接の答え)。
+//! - 下帯の左(最新の一言)は折り返し禁止(`text::Wrapping::None`)+ 幅超過は
+//!   `container::clip` で切れるに任せる。UI label は1行固定・折り返さない
+//!   という規約(ui-visual-language)を、帯の高さが伸びない形で満たす。
+//!   `…` の自作挿入はしていない(iced の `Ellipsis` にも触れていない —
+//!   ただ切れるだけで足りる、と裁定にある)。
 
 use iced::widget::canvas::Canvas;
 use iced::widget::{button, column, container, row, rule, stack, text};
@@ -96,11 +116,16 @@ pub fn view(shell: &Shell) -> Element<'_, Message> {
         container(start_screen()).center(Fill).into()
     };
 
-    let mut page = column![container(body).width(Fill).height(Fill)]
-        .width(Fill)
-        .height(Fill);
+    let mut page = column![].width(Fill).height(Fill);
 
-    // 帯は「座席が居るあいだ」と「言われたことがある時」に出る。空の帯を常設しない
+    // ヘッダ帯は「座席が居るあいだ」だけ出る(2026-08-19 第2波)。
+    if let Some(header) = header_band(shell) {
+        page = page.push(header);
+    }
+
+    page = page.push(container(body).width(Fill).height(Fill));
+
+    // 下帯は「座席が居るあいだ」と「言われたことがある時」に出る。空の帯を常設しない
     // (egui 版と同じ判断)。
     if let Some(band) = status_band(shell) {
         page = page.push(band);
@@ -232,109 +257,126 @@ fn timeline_pane(shell: &Shell) -> Element<'_, Message> {
     stack(vec![canvas, overlay]).width(Fill).height(Fill).into()
 }
 
-/// status 帯 — **信用の可視化と、窓が言ったことの最新1行**。
+/// ヘッダ帯 — **座席があるあいだだけ**、window 最上部(pane 群の上)に立つ
+/// 1本(2026-08-19 campaign 第2波レーンE。旧 status 帯の project 行を丸ごと
+/// 移設 — 経路も文言も変えていない)。
 ///
-/// 1つの panel の中に最大2行を積む(egui shell と同じ内容、組み方だけ
-/// 変えた, 2026-08-19 トンマナ統一 campaign レーンB):
+/// 左 = 保存状態(project 名、未保存なら ● 付き)、右 = Undo/Redo → 書き出し面。
+/// 左を `Fill` の container に包んで両端へ振る(下帯の legend 行と同じ
+/// space-between の組み方)。高さはモック `.timelineHead` と同じ 34px を上限に
+/// `padding([4, 8])` + [`type_scale::BODY`] で収める(対応する [`space`] role
+/// が無い一過性の値なので `4`/`8` は生の数字のまま — [`style`] には手を触れて
+/// いない、面の role は下帯と同じ [`style::status_band`])。
+fn header_band(shell: &Shell) -> Option<Element<'_, Message>> {
+    if !shell.is_seated() {
+        return None;
+    }
+
+    let mut header_row = row![].spacing(space::M).align_y(Center);
+
+    // 保存状態(保存済みなら project 名、未保存なら ● 付き)。muted —
+    // 名乗りは主役ではない(UI視覚言語「面」: 階層は明度差で作る)。
+    // `Fill` で包んで Undo/Redo/書き出し面を右端へ押し出す。
+    let name_label: Element<'_, Message> = match shell.project_name() {
+        Some(name) => {
+            let label = if shell.is_dirty() {
+                unsaved_label(&name)
+            } else {
+                name
+            };
+            text(label)
+                .size(type_scale::BODY)
+                .style(style::text_muted)
+                .into()
+        }
+        None => text("").size(type_scale::BODY).into(),
+    };
+    header_row = header_row.push(container(name_label).width(Fill));
+
+    // Undo / Redo(M-3)。`Cmd+Z` / `Shift+Cmd+Z` と同じ入口へ流れる。
+    // 台帳が空の側は押せない(触れそうで触れない物にしない — 灰色は「無効」の意味)。
+    // Export/Cancel と同じ出所(`style::action`)へ揃える。
+    header_row = header_row.push(
+        button(text(UNDO).size(type_scale::BODY))
+            .style(style::action)
+            .on_press_maybe(
+                (shell.undo_len() > 0).then_some(Message::Timeline(TimelineMsg::UndoPressed)),
+            ),
+    );
+    header_row = header_row.push(
+        button(text(REDO).size(type_scale::BODY))
+            .style(style::action)
+            .on_press_maybe(
+                (shell.redo_len() > 0).then_some(Message::Timeline(TimelineMsg::RedoPressed)),
+            ),
+    );
+
+    // 書き出し面。実行中は経過秒と Cancel、そうでなければ Export。
+    // **実行中に Export は出さない** = 二重起動の口が無い。
+    if let Some(seconds) = shell.export_elapsed_seconds() {
+        header_row = header_row.push(text(exporting_label(seconds)).size(type_scale::BODY));
+        let mut cancel = button(text(CANCEL_EXPORT).size(type_scale::BODY)).style(style::action);
+        if !shell.export_cancel_requested() {
+            cancel = cancel.on_press(Message::CancelExportPressed);
+        }
+        header_row = header_row.push(cancel);
+    } else {
+        let mut export = button(text(EXPORT).size(type_scale::BODY)).style(style::action);
+        if shell.can_start_export() {
+            export = export.on_press(Message::ExportPressed);
+        }
+        header_row = header_row.push(export);
+    }
+
+    Some(
+        column![
+            container(header_row)
+                .padding([4, 8])
+                .width(Fill)
+                .style(style::status_band),
+            rule::horizontal(1).style(style::separator),
+        ]
+        .into(),
+    )
+}
+
+/// status 帯 — **窓が言ったことの最新1行**(2026-08-19 第2波: project 行は
+/// [`header_band`] へ移った。ここに残るのは legend 行だけ)。
 ///
-/// - project 行(上): 保存状態 → Undo/Redo → 書き出し面。座席が在るときだけ。
-/// - legend 行(下): 左 = 最新の一言、右 = 効くキーのヒント。手本
-///   (`docs/mocks-ui/public/timeline-library.html` の footer:
-///   `Wheel: pan time · Shift/⌘ click: multi-key · …`)と同じ「左=状況・
-///   右=ヒント」の1行文法。最新の一言は**座席の有無に関わらず**出す
-///   (project の無いところへドロップした案内など — `drive_drop.rs` 参照)。
-///   ヒントは座席がある(= Timeline が立っている)ときだけ。
+/// 左 = 最新の一言、右 = 効くキーのヒント。手本
+/// (`docs/mocks-ui/public/timeline-library.html` の footer:
+/// `Wheel: pan time · Shift/⌘ click: multi-key · …`)と同じ「左=状況・
+/// 右=ヒント」の1行文法。最新の一言は**座席の有無に関わらず**出す
+/// (project の無いところへドロップした案内など — `drive_drop.rs` 参照)。
+/// ヒントは座席がある(= Timeline が立っている)ときだけ。
 ///
-/// 2行とも同じ `style::status_band` panel を共有する — 以前は legend 行
-/// だけ地の色のまま浮いていた。言うことも座席も無ければ帯そのものを出さない。
+/// **1行固定** — `text::Wrapping::None` で折り返しを止め、幅を超えた分は
+/// `container::clip` で切れるに任せる(`…` の自作挿入はしない。ui-visual-
+/// language の「UI label は原則1行固定で折り返さず、幅を超えた部分を
+/// elide」を、帯の高さを増やさない形で満たす)。
+/// 言うことも座席も無ければ帯そのものを出さない。
 fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
     let latest = shell.latest_report();
     if !shell.is_seated() && latest.is_none() {
         return None;
     }
 
-    let mut inner = column![].spacing(space::XS);
-
-    // project 行 — 保存状態 / Undo・Redo / 書き出し面。座席が無ければ
-    // 名乗る project も操作できる編集もないので出さない。
+    let status: Element<'_, Message> = match latest {
+        Some(report) => text(report)
+            .size(type_scale::CAPTION)
+            .style(style::text_secondary)
+            .wrapping(text::Wrapping::None)
+            .into(),
+        None => text("").size(type_scale::CAPTION).into(),
+    };
+    let mut legend_row = row![container(status).width(Fill).clip(true)].align_y(Center);
     if shell.is_seated() {
-        let mut project_row = row![].spacing(space::M).align_y(Center);
-
-        // 保存状態(保存済みなら project 名、未保存なら ● 付き)。muted —
-        // 名乗りは主役ではない(UI視覚言語「面」: 階層は明度差で作る)。
-        if let Some(name) = shell.project_name() {
-            let label = if shell.is_dirty() {
-                unsaved_label(&name)
-            } else {
-                name
-            };
-            project_row =
-                project_row.push(text(label).size(type_scale::BODY).style(style::text_muted));
-        }
-
-        // Undo / Redo(M-3)。`Cmd+Z` / `Shift+Cmd+Z` と同じ入口へ流れる。
-        // 台帳が空の側は押せない(触れそうで触れない物にしない — 灰色は「無効」の意味)。
-        // Export/Cancel と同じ出所(`style::action`)へ揃える — 以前はここだけ
-        // `.style()` が無く iced 既定 palette(ベージュ)に落ちていた
-        // (2026-08-19 トンマナ統一 campaign レーンB、実測: 旧 view.rs:251-256)。
-        project_row = project_row.push(
-            button(text(UNDO).size(type_scale::BODY))
-                .style(style::action)
-                .on_press_maybe(
-                    (shell.undo_len() > 0).then_some(Message::Timeline(TimelineMsg::UndoPressed)),
-                ),
-        );
-        project_row = project_row.push(
-            button(text(REDO).size(type_scale::BODY))
-                .style(style::action)
-                .on_press_maybe(
-                    (shell.redo_len() > 0).then_some(Message::Timeline(TimelineMsg::RedoPressed)),
-                ),
-        );
-
-        // 書き出し面。実行中は経過秒と Cancel、そうでなければ Export。
-        // **実行中に Export は出さない** = 二重起動の口が無い。
-        if let Some(seconds) = shell.export_elapsed_seconds() {
-            project_row = project_row.push(text(exporting_label(seconds)).size(type_scale::BODY));
-            let mut cancel =
-                button(text(CANCEL_EXPORT).size(type_scale::BODY)).style(style::action);
-            if !shell.export_cancel_requested() {
-                cancel = cancel.on_press(Message::CancelExportPressed);
-            }
-            project_row = project_row.push(cancel);
-        } else {
-            let mut export = button(text(EXPORT).size(type_scale::BODY)).style(style::action);
-            if shell.can_start_export() {
-                export = export.on_press(Message::ExportPressed);
-            }
-            project_row = project_row.push(export);
-        }
-
-        inner = inner.push(project_row);
-    }
-
-    // legend 行 — 左 = 最新の一言(座席の有無に関わらず、言うことがあれば出す)、
-    // 右 = 効くキーのヒント(2026-08-19 iced 近道キー移植レーン。**実際に効く
-    // キーだけ**(Q0)— 表は `crate::shortcuts` が正本で、ここは読むだけ)。
-    // 左 container を `Fill` にして両端へ振る(手本の footer と同じ
-    // space-between)。
-    if shell.is_seated() || latest.is_some() {
-        let status: Element<'_, Message> = match latest {
-            Some(report) => text(report)
+        legend_row = legend_row.push(
+            text(crate::shortcuts::legend_line())
                 .size(type_scale::CAPTION)
-                .style(style::text_secondary)
-                .into(),
-            None => text("").size(type_scale::CAPTION).into(),
-        };
-        let mut legend_row = row![container(status).width(Fill)].align_y(Center);
-        if shell.is_seated() {
-            legend_row = legend_row.push(
-                text(crate::shortcuts::legend_line())
-                    .size(type_scale::CAPTION)
-                    .style(style::text_muted),
-            );
-        }
-        inner = inner.push(legend_row);
+                .style(style::text_muted)
+                .wrapping(text::Wrapping::None),
+        );
     }
 
     // 帯は panel 面 + 上辺の区切り線。土台との段差は明度差と 1px の線で作る
@@ -342,8 +384,8 @@ fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
     Some(
         column![
             rule::horizontal(1).style(style::separator),
-            container(inner)
-                .padding(space::S)
+            container(legend_row)
+                .padding([space::XS, space::S])
                 .width(Fill)
                 .style(style::status_band),
         ]
