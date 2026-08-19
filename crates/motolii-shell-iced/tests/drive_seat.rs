@@ -109,6 +109,59 @@ fn the_start_screen_seats_a_project_without_a_native_dialog() {
     );
 }
 
+/// ヘッダ帯(2026-08-19 campaign 第2波レーンE)— Undo/Redo/Export は
+/// window 最上部、Timeline pane より**上**に居る。利用者裁定「Undo とか
+/// エクスポートはヘッダに出て欲しい」の絵での確認。
+/// 座席前(スタート画面)にヘッダは無い(座席と一緒に来る)。
+#[test]
+fn undo_and_export_live_in_the_header_above_the_timeline() {
+    let dir = motolii_testkit::tmp_dir("iced_drive_seat_header");
+    let project = dir.join("fresh.json");
+    let mut shell = Shell::new(ScriptedPrompts {
+        new_project_path: Some(project.clone()),
+        ..ScriptedPrompts::default()
+    });
+
+    // 座席前: スタート画面にはヘッダ(Undo/Export)が無い。
+    let mut before = iced_test::simulator(view(&shell));
+    assert!(
+        before.find(motolii_shell_iced::view::UNDO).is_err(),
+        "座席の無いスタート画面に Undo が出てはいけない"
+    );
+    drop(before); // `Simulator` は `&shell` を借りたまま Drop を持つ — 次の可変借用の前に手放す。
+
+    let pressed = press(
+        iced_test::simulator(view(&shell)),
+        motolii_shell_iced::view::NEW_PROJECT,
+    );
+    drain(&mut shell, pressed);
+    assert!(shell.is_seated(), "前提: New で座席が要る");
+
+    let mut ui = iced_test::simulator(view(&shell));
+    let undo = ui
+        .find(motolii_shell_iced::view::UNDO)
+        .expect("座席後のヘッダに Undo が無い");
+    let export = ui
+        .find(motolii_shell_iced::view::EXPORT)
+        .expect("座席後のヘッダに Export が無い");
+    let timeline = ui
+        .find(motolii_shell_iced::view::TIMELINE_PANE_ID)
+        .expect("Timeline pane が座席上に立っていない");
+
+    assert!(
+        undo.bounds().y < timeline.bounds().y,
+        "Undo は Timeline より上(ヘッダ)に居るはず。undo.y={} timeline.y={}",
+        undo.bounds().y,
+        timeline.bounds().y
+    );
+    assert!(
+        export.bounds().y < timeline.bounds().y,
+        "Export は Timeline より上(ヘッダ)に居るはず。export.y={} timeline.y={}",
+        export.bounds().y,
+        timeline.bounds().y
+    );
+}
+
 /// 押したことは**行動の前に** journal へ載り、`--intent-log` 相当の JSONL は
 /// egui shell と同じ形の行になる。
 #[test]
