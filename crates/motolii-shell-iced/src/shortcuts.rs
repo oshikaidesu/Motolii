@@ -107,14 +107,18 @@ pub const SHORTCUTS: &[ShortcutRow] = &[
 ];
 
 /// status 帯に出す一行。**実際に効くキーだけ**(Q0: 触れそうで触れない物を
-/// 提示に書かない)。
+/// 提示に書かない)。区切り文法は手本
+/// (`docs/mocks-ui/public/timeline-library.html` の footer:
+/// `Wheel: pan time · Shift/⌘ click: multi-key · …`)と同じ「`:` で意味を継ぎ、
+/// `·` で項目を継ぐ」形(2026-08-19 トンマナ統一 campaign レーンB。
+/// 以前は `キー=意味` を3スペースで並べていた)。
 pub fn legend_line() -> String {
     SHORTCUTS
         .iter()
         .filter(|row| row.implemented)
-        .map(|row| format!("{}={}", row.keys, row.meaning))
+        .map(|row| format!("{}: {}", row.keys, row.meaning))
         .collect::<Vec<_>>()
-        .join("   ")
+        .join(" · ")
 }
 
 /// 窓ぜんたいが受ける近道のうち、このレーンが `window_input.rs` へ足した
@@ -180,7 +184,7 @@ mod tests {
             "実装済みの Space(play/pause)が legend に無い: {line}"
         );
         assert!(
-            line.contains("L=loop"),
+            line.contains("L: loop"),
             "実装済みの L(loop)が legend に無い: {line}"
         );
         assert!(
@@ -190,6 +194,30 @@ mod tests {
         assert!(
             !line.contains("marker"),
             "口の無い marker が legend に出た: {line}"
+        );
+    }
+
+    /// 区切り文法は手本(`docs/mocks-ui/public/timeline-library.html` の
+    /// footer)と同じ「`キー: 意味` を ` · ` で継ぐ」形(2026-08-19
+    /// トンマナ統一)。旧文法の `キー=意味` (3スペース区切り)へ戻さない。
+    #[test]
+    fn legend_uses_the_mock_footers_punctuation() {
+        let line = legend_line();
+        assert!(
+            line.contains("Space: play / pause"),
+            "「キー: 意味」の形になっていない: {line}"
+        );
+        assert!(
+            line.contains(" · "),
+            "項目区切りが ` · ` になっていない: {line}"
+        );
+        assert!(
+            !line.contains("Space=play / pause"),
+            "旧文法(`キー=意味`)が残っている: {line}"
+        );
+        assert!(
+            !line.contains("pause   L"),
+            "旧の3スペース区切りが残っている: {line}"
         );
     }
 

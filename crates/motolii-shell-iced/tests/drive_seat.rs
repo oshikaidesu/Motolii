@@ -87,6 +87,26 @@ fn the_start_screen_seats_a_project_without_a_native_dialog() {
         after.find(latest.as_str()).is_ok(),
         "status 帯が最新の一言を映していない。実際: {latest:?}"
     );
+
+    // legend 行の文法(2026-08-19 トンマナ統一 campaign レーンB): 左 = 最新の
+    // 一言、右 = 効くキーのヒント。手本
+    // (`docs/mocks-ui/public/timeline-library.html` の footer)と同じ
+    // 「左=状況・右=ヒント」を、絵の実座標(bounds)まで見て確かめる —
+    // 「同じ帯に両方出ている」だけでは「左右が入れ替わっていない」を
+    // 保証しないため。
+    let status = after
+        .find(latest.as_str())
+        .expect("最新の一言の bounds が取れる");
+    let hint_text = motolii_shell_iced::legend_line();
+    let hint = after
+        .find(hint_text.as_str())
+        .expect("近道キーのヒントが legend 行に出ていない");
+    assert!(
+        status.bounds().x < hint.bounds().x,
+        "最新の一言(左)がヒント(右)より右に出ている。status.x={} hint.x={}",
+        status.bounds().x,
+        hint.bounds().x
+    );
 }
 
 /// 押したことは**行動の前に** journal へ載り、`--intent-log` 相当の JSONL は

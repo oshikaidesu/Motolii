@@ -129,6 +129,12 @@ pub use message::Message;
 pub use prompts::{NativePrompts, ScriptedPrompts, ShellPrompts};
 pub use resume::decide_resume;
 pub use shell::{Outcome, Shell};
+/// legend 行の文言そのもの。`status_band`(`view.rs`)が読む物と**同じ関数**
+/// (2026-08-19 トンマナ統一 campaign レーンB)。モジュール自体は非公開のまま
+/// この1関数だけを外へ出す — `tests/drive_seat.rs` が「最新の一言が legend
+/// 行の左に出る」ことを組み立てるのに、正本と同じ文字列がここからしか
+/// 手に入らないため。
+pub use shortcuts::legend_line;
 pub use status_log::StatusLog;
 pub use view::view;
 pub use widgets::{KeyState, ScrubEvent};

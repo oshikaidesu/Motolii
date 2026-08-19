@@ -35,6 +35,46 @@
 
 pub mod style;
 
+/// 文字サイズの中央スケール — **これも「発明しない」対象**。生成 token に
+/// 文字サイズの正本は無い(色だけが DTCG 正本を持つ)ので、値そのものは
+/// `view.rs` に既にベタ書きされていた数字をそのまま拾い上げた(2026-08-19
+/// トンマナ統一 campaign レーンB)。新しい大きさを1つも思いつかない —
+/// 3値とも移植元がある。
+///
+/// 型は `f32`(`u16` ではない) — iced の `Text::size` / `Row::spacing` /
+/// `Column::spacing` は `impl Into<iced::Pixels>` を取るが、`Pixels` は
+/// `From<f32>` と `From<u32>` しか持たず `From<u16>` が無い
+/// (`iced::core::pixels` 実測)。`u16` は `padding()`(`Into<Padding>`、
+/// こちらは `From<u16>` あり)でしか通らず、両方で使うこの中央スケールは
+/// `f32` で揃える。
+pub mod type_scale {
+    /// 本文 — 帯のボタン・project 名・書き出しの一言(旧 `view.rs` の
+    /// `.size(13)` 各所)。
+    pub const BODY: f32 = 13.0;
+    /// 添え物 — legend 行の状況・ヒント(旧 `view.rs:286` の `.size(11)`)。
+    pub const CAPTION: f32 = 11.0;
+    /// 現状 view.rs に出番は無いが、CAPTION よりさらに小さい添え物のための
+    /// 予約 role(3値の対称性を保つ — 2値だけだと「たまたま2つ拾った」に
+    /// 見えてしまう)。
+    pub const MICRO: f32 = 10.0;
+}
+
+/// 余白の中央スケール — 同じく view.rs のベタ書き数値からの拾い上げ。
+/// 型は `f32`([`type_scale`] と同じ理由 — `spacing()` も `Into<Pixels>`)。
+pub mod space {
+    /// status 帯の中で project 行と legend 行を継ぐ、行間の最小 spacing
+    /// (旧 `view.rs` の legend 行 `.padding([2, 8])` の前者の値を引き継ぐ)。
+    /// **例に出がちな 4 ではなく実測の 2** — 帯の合計高さを増やさない
+    /// (campaign D2 の制約)を、丸めた値より優先した。
+    pub const XS: f32 = 2.0;
+    /// 帯 panel の padding・start 画面ボタン間の spacing(旧 `.padding(8)` /
+    /// `.spacing(8)`)。
+    pub const S: f32 = 8.0;
+    /// 帯の項目間 spacing・action_button 内の名前と近道の間(旧
+    /// `.spacing(12)` 各所)。
+    pub const M: f32 = 12.0;
+}
+
 use iced::Color;
 
 /// `#rrggbb`(不透明)を [`Color`] へ。生成 CSS の `#rrggbbaa` は全 role `ff` な
