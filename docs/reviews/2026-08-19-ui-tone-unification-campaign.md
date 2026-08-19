@@ -64,6 +64,22 @@
 - ライトテーマの同時実装(同格提供の方針は不変だが、本 campaign は dark の適合まで)
 - G0-6 の全審判の前倒し(contrast 実測などは campaign 後の区切りで)
 
+## 追記 — 第2波: 密度と配置の利用者裁定(2026-08-19 午後)
+
+第1波(A〜D)着地の絵を見た利用者の追加裁定:
+
+1. **「タイムラインから下がかなりどデカい」— skia や egui を参考に圧縮する**。実測比較:
+   iced は行より上に transport 30 + overview 22 + ruler 36 = **88px** 積んでいる
+   (egui 正本は 84px だが HEAD_H 34 に操作を同居、skia 死蔵は 22+18=**40px**)。
+   行高は iced/egui/css とも 24(skia 最小 20、2026-08-08 決定「行高は固定・最小20px」の最小側)。
+   rail は iced 234 vs egui/css 196。M/S/L ボタンは iced 22×18 vs モック css `.ms` **16×16**
+2. **Undo / Export は下帯でなくヘッダに出す**(RN chrome 正本の titlebar 構成とも一致)
+3. **ログ(状況報告)は下に出す** — 下帯は「左=最新の報告 / 右=近道ヒント」の薄い status 帯だけにする
+
+対応レーン: E(ヘッダ新設+下帯薄化)、F(Timeline 縦密度: D9 表の値へ)。
+oracle の pin(RAIL_W / TRANSPORT_H / ROW_H)は**根拠ごと更新**する
+(RAIL_W 196 は css と真の一致へ戻る。ROW_H 20 は css 24 との既知乖離として本裁定を根拠に pin)。
+
 ## 記録
 
 - 起点: 第4区切り引き継ぎ [2026-08-19-session-handoff-timeline-port-and-instruments.md](2026-08-19-session-handoff-timeline-port-and-instruments.md)
