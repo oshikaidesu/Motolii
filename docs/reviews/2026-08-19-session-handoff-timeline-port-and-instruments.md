@@ -109,3 +109,37 @@ HTML にあるが intent が無い物)は round3 evidence の README に列挙�
   (残作業)+ [配置土台裁定](2026-08-19-timeline-packing-model-decision.md) + decision-index の 2026-08-19 行群
 - メモリ: `normal-editor-campaign-playbook` / `capsule-gaps-are-the-defect-source` /
   `structure-over-supervision` / `iced-webview-v2-observation` / `fable-for-design-work`(sonnet 明示)
+
+## 追記 — 全レーン着地(2026-08-19 12:50)
+
+**main tip = `d1fe8ea1`。`cargo test -p motolii-shell-iced` = 172 passed / 0 failed。**
+
+引き継ぎ本文で「走行中」としていた2本は着地した:
+
+- `e5928e8f` **Browser 改定** — `browser_pane.rs` へ切り出し、約50定数を `browser-library.css:行` つきで写し器具と照合。検索 / フィルタ chip / 表示モードを **egui の意味関数だけ**移植。**絵を見て2つのバグ発見**: `iced::Border` は4辺すべてを塗る(単辺のつもりが箱になる)/ `Shrink` の中の `Fill` サムネイルが高さ0に潰れる(今朝の「帯が高さ0.0」と同じ family)
+- `d1fe8ea1` **構造操作** — **レーンのプロセスが死亡**(transcript 消失・再開不能)。worktree に 688行が未 commit で残っていたのを supervisor が commit(`ab4ff63e`)→ テスト green 確認 → merge。畳み開閉 / Group 子帯 / rename / lock / 構造系近道キー / **ロック中 clip の嘘の修復**
+
+### merge で解いた**意味の衝突**(記録に値する)
+
+キー編集レーンと構造操作レーンが `semantics.rs::hit_test` の Property 行で**逆の要求**を書いていた:
+キー編集=「菱形を掴ませる」/ 構造操作=「Property 行では何も掴ませない」。
+**菱形が掴めないとキー編集が機能しない**ので、Property 行はキー判定を先に返し、
+構造側のガードは**それ以外の非 Object 行**に適用する形で解決した。
+
+### 器具が仕事をした実例
+
+構造レーンが `RAIL_W` を 210→234 に変更(L ボタン追加で名前欄が詰まるため)したのを、
+`css_metrics_oracle::timeline_known_divergences_are_pinned` が**落として検出**した。
+コード側に理由が書かれていたので正当と判断し、**根拠ごと固定値を更新**した。
+「定数が黙って変わる」を器具が防いだ最初の実例。
+
+### 掃除
+
+完了レーンの target を一括削除し、**空き 161GB → 655GB**(+494GB)。
+残置は走行中だった2レーンの worktree と本体 target のみ。ソース・commit・evidence は無傷。
+
+### この時点の UI
+
+`/tmp/ui-final.png`(`--screenshot ... 130`)。4面 + Stage に合成結果 + transport 帯 +
+行の色丸/M/S/L + 効く近道キーだけの legend。**Inspector の Opacity 行が下端で切れている**
+(スクロール要)、Browser のカードが縦に詰まる、等は残差として残っている。
