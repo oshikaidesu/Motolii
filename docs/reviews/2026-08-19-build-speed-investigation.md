@@ -84,6 +84,17 @@ cp -Rc <warm>/target <lane-worktree>/target
 - `[profile.dev.package."*"] opt-level`: 依存の再ビルドコストが大きく、
   テスト**実行**時間が現状の律速でないため今回は見送り(将来の候補)
 
+## レーン運用の落とし穴(実測)
+
+- **worktree は `.git` を共有するので stash スタックも共有される**。無名の `git stash pop` は
+  **他レーンの stash を掴む**(2026-08-19 に2件実測: レーンI-c が他レーンの stash を掴みかけて
+  中断、supervisor も自分の profile 変更を stash して見失った)。
+  レーン内では **`stash@{N}` を明示**し、`apply` → 確認 → `drop` の順で扱う。
+  そもそも成果を stash に置いたまま turn を終えない
+- **Edit 直後の cargo は mtime 同期の遅れで stale fingerprint を掴む**ことがある。
+  結果が編集内容と食い違う時は `touch` してから回し、**出力のテスト名が手元のソースと一致するか**を見る
+- subagent は背景 cargo を待って中間停止する。発注文に「**cargo は前景・timeout 600000**」を最初から書く
+
 ## 未検証の候補(次に効きそうな順)
 
 1. **cargo-hakari**(workspace-hack)— `-p <crate>` 運用の feature 分裂による重複ビルドの解消
