@@ -22,6 +22,15 @@
 //! Browser pane の絵は [`crate::browser_pane`] へ切り出した
 //! (`inspector_pane.rs` と対称 — 他レーンとの衝突を減らす目的も兼ねる)。
 //! ここに残るのは `browser_pane::browser_pane(shell)` の呼び出しだけ。
+//!
+//! ## トンマナ統一(2026-08-19 campaign レーンB)
+//!
+//! - 帯の全ボタン(New/Open/Export/Cancel/Undo/Redo)は同じ出所
+//!   [`style::action`] を通る。Undo/Redo だけ `.style()` が無く iced 既定
+//!   palette(ベージュ)に落ちていたのを揃えた。
+//! - font size / spacing は [`crate::theme::type_scale`] /
+//!   [`crate::theme::space`] を通す(ここに残る生の数字は、対応する role が
+//!   無い一過性の値だけ)。
 
 use iced::widget::canvas::Canvas;
 use iced::widget::{button, column, container, row, rule, stack, text};
@@ -29,7 +38,7 @@ use iced::{Center, Element, Fill};
 
 use crate::message::Message;
 use crate::shell::Shell;
-use crate::theme::style;
+use crate::theme::{space, style, type_scale};
 use crate::timeline::keys::interp_menu_items;
 use crate::timeline::{TimelineMsg, TimelineProgram};
 use crate::widgets::context_menu::{context_menu, MenuEvent};
@@ -117,7 +126,7 @@ fn start_screen<'a>() -> Element<'a, Message> {
                 Message::OpenProjectPressed
             ),
         ]
-        .spacing(8)
+        .spacing(space::S)
         .align_x(Center),
         text(DROP_HINT).style(style::text_muted),
     ]
@@ -135,7 +144,7 @@ fn action_button<'a>(name: &'a str, shortcut: &'a str, message: Message) -> Elem
             text(name).size(16),
             text(shortcut).size(16).style(style::text_muted)
         ]
-        .spacing(12),
+        .spacing(space::M),
     )
     .style(style::action)
     .on_press(message)
@@ -225,79 +234,119 @@ fn timeline_pane(shell: &Shell) -> Element<'_, Message> {
 
 /// status 帯 — **信用の可視化と、窓が言ったことの最新1行**。
 ///
-/// 並びは egui shell と同じ: 保存状態 → 書き出し面 → 最新の一言。
-/// 言うことも座席も無ければ帯そのものを出さない。
+/// 1つの panel の中に最大2行を積む(egui shell と同じ内容、組み方だけ
+/// 変えた, 2026-08-19 トンマナ統一 campaign レーンB):
+///
+/// - project 行(上): 保存状態 → Undo/Redo → 書き出し面。座席が在るときだけ。
+/// - legend 行(下): 左 = 最新の一言、右 = 効くキーのヒント。手本
+///   (`docs/mocks-ui/public/timeline-library.html` の footer:
+///   `Wheel: pan time · Shift/⌘ click: multi-key · …`)と同じ「左=状況・
+///   右=ヒント」の1行文法。最新の一言は**座席の有無に関わらず**出す
+///   (project の無いところへドロップした案内など — `drive_drop.rs` 参照)。
+///   ヒントは座席がある(= Timeline が立っている)ときだけ。
+///
+/// 2行とも同じ `style::status_band` panel を共有する — 以前は legend 行
+/// だけ地の色のまま浮いていた。言うことも座席も無ければ帯そのものを出さない。
 fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
     let latest = shell.latest_report();
     if !shell.is_seated() && latest.is_none() {
         return None;
     }
 
-    let mut band = row![].spacing(12).align_y(Center);
+    let mut inner = column![].spacing(space::XS);
 
-    // 保存状態(保存済みなら project 名、未保存なら ● 付き)。
-    if let Some(name) = shell.project_name() {
-        let label = if shell.is_dirty() {
-            unsaved_label(&name)
-        } else {
-            name
-        };
-        band = band.push(text(label).size(13));
-    }
-
-    // Undo / Redo(M-3)。`Cmd+Z` / `Shift+Cmd+Z` と同じ入口へ流れる。
-    // 台帳が空の側は押せない(触れそうで触れない物にしない — 灰色は「無効」の意味)。
+    // project 行 — 保存状態 / Undo・Redo / 書き出し面。座席が無ければ
+    // 名乗る project も操作できる編集もないので出さない。
     if shell.is_seated() {
-        band = band.push(button(text(UNDO).size(13)).on_press_maybe(
-            (shell.undo_len() > 0).then_some(Message::Timeline(TimelineMsg::UndoPressed)),
-        ));
-        band = band.push(button(text(REDO).size(13)).on_press_maybe(
-            (shell.redo_len() > 0).then_some(Message::Timeline(TimelineMsg::RedoPressed)),
-        ));
-    }
+        let mut project_row = row![].spacing(space::M).align_y(Center);
 
-    // 書き出し面。実行中は経過秒と Cancel、そうでなければ Export。
-    // **実行中に Export は出さない** = 二重起動の口が無い。
-    if let Some(seconds) = shell.export_elapsed_seconds() {
-        band = band.push(text(exporting_label(seconds)).size(13));
-        let mut cancel = button(text(CANCEL_EXPORT).size(13)).style(style::action);
-        if !shell.export_cancel_requested() {
-            cancel = cancel.on_press(Message::CancelExportPressed);
+        // 保存状態(保存済みなら project 名、未保存なら ● 付き)。muted —
+        // 名乗りは主役ではない(UI視覚言語「面」: 階層は明度差で作る)。
+        if let Some(name) = shell.project_name() {
+            let label = if shell.is_dirty() {
+                unsaved_label(&name)
+            } else {
+                name
+            };
+            project_row =
+                project_row.push(text(label).size(type_scale::BODY).style(style::text_muted));
         }
-        band = band.push(cancel);
-    } else if shell.is_seated() {
-        let mut export = button(text(EXPORT).size(13)).style(style::action);
-        if shell.can_start_export() {
-            export = export.on_press(Message::ExportPressed);
-        }
-        band = band.push(export);
-    }
 
-    if let Some(latest) = latest {
-        band = band.push(text(latest).size(13).style(style::text_secondary));
-    }
-
-    // 近道キーの提示(2026-08-19 iced 近道キー移植レーン)。**実際に効く
-    // キーだけ**(Q0)— 表は `crate::shortcuts` が正本で、ここは読むだけ。
-    // Timeline が立っている(= 座席がある)ときだけ出す。
-    let mut column = column![].push(rule::horizontal(1).style(style::separator));
-    if shell.is_seated() {
-        column = column.push(
-            container(text(crate::shortcuts::legend_line()).size(11).style(style::text_muted))
-                .padding([2, 8]),
+        // Undo / Redo(M-3)。`Cmd+Z` / `Shift+Cmd+Z` と同じ入口へ流れる。
+        // 台帳が空の側は押せない(触れそうで触れない物にしない — 灰色は「無効」の意味)。
+        // Export/Cancel と同じ出所(`style::action`)へ揃える — 以前はここだけ
+        // `.style()` が無く iced 既定 palette(ベージュ)に落ちていた
+        // (2026-08-19 トンマナ統一 campaign レーンB、実測: 旧 view.rs:251-256)。
+        project_row = project_row.push(
+            button(text(UNDO).size(type_scale::BODY))
+                .style(style::action)
+                .on_press_maybe(
+                    (shell.undo_len() > 0).then_some(Message::Timeline(TimelineMsg::UndoPressed)),
+                ),
         );
+        project_row = project_row.push(
+            button(text(REDO).size(type_scale::BODY))
+                .style(style::action)
+                .on_press_maybe(
+                    (shell.redo_len() > 0).then_some(Message::Timeline(TimelineMsg::RedoPressed)),
+                ),
+        );
+
+        // 書き出し面。実行中は経過秒と Cancel、そうでなければ Export。
+        // **実行中に Export は出さない** = 二重起動の口が無い。
+        if let Some(seconds) = shell.export_elapsed_seconds() {
+            project_row = project_row.push(text(exporting_label(seconds)).size(type_scale::BODY));
+            let mut cancel =
+                button(text(CANCEL_EXPORT).size(type_scale::BODY)).style(style::action);
+            if !shell.export_cancel_requested() {
+                cancel = cancel.on_press(Message::CancelExportPressed);
+            }
+            project_row = project_row.push(cancel);
+        } else {
+            let mut export = button(text(EXPORT).size(type_scale::BODY)).style(style::action);
+            if shell.can_start_export() {
+                export = export.on_press(Message::ExportPressed);
+            }
+            project_row = project_row.push(export);
+        }
+
+        inner = inner.push(project_row);
+    }
+
+    // legend 行 — 左 = 最新の一言(座席の有無に関わらず、言うことがあれば出す)、
+    // 右 = 効くキーのヒント(2026-08-19 iced 近道キー移植レーン。**実際に効く
+    // キーだけ**(Q0)— 表は `crate::shortcuts` が正本で、ここは読むだけ)。
+    // 左 container を `Fill` にして両端へ振る(手本の footer と同じ
+    // space-between)。
+    if shell.is_seated() || latest.is_some() {
+        let status: Element<'_, Message> = match latest {
+            Some(report) => text(report)
+                .size(type_scale::CAPTION)
+                .style(style::text_secondary)
+                .into(),
+            None => text("").size(type_scale::CAPTION).into(),
+        };
+        let mut legend_row = row![container(status).width(Fill)].align_y(Center);
+        if shell.is_seated() {
+            legend_row = legend_row.push(
+                text(crate::shortcuts::legend_line())
+                    .size(type_scale::CAPTION)
+                    .style(style::text_muted),
+            );
+        }
+        inner = inner.push(legend_row);
     }
 
     // 帯は panel 面 + 上辺の区切り線。土台との段差は明度差と 1px の線で作る
     // (UI視覚言語「面」: 階層は小さな明度差と境界線で作る)。
     Some(
-        column
-            .push(
-                container(band)
-                    .padding(8)
-                    .width(Fill)
-                    .style(style::status_band),
-            )
-            .into(),
+        column![
+            rule::horizontal(1).style(style::separator),
+            container(inner)
+                .padding(space::S)
+                .width(Fill)
+                .style(style::status_band),
+        ]
+        .into(),
     )
 }
