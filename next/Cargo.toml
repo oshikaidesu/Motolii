@@ -6,7 +6,12 @@
 #     dep policy は宣言だけで、iced 殻が egui 非optional の crate を引いていた。
 [workspace]
 resolver = "2"
-members = ["probes/r0-store-edit"]
+members = [
+    "core/motolii-core",
+    "core/motolii-eval",
+    "core/motolii-store",
+    "probes/r0-store-edit",
+]
 
 [workspace.package]
 edition = "2021"
@@ -30,6 +35,20 @@ re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "483b85596
 re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
 
 arrow = { version = "58.3", default-features = false }
+
+# ---------------------------------------------------------------------------
+# Motolii 自身(旧 workspace からの移植。再実装ではない)
+# ---------------------------------------------------------------------------
+motolii-core = { path = "core/motolii-core" }
+motolii-eval = { path = "core/motolii-eval" }
+motolii-store = { path = "core/motolii-store" }
+
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+# 移植した crate の dev-dependencies(不変量試験をそのまま持ってくるため)
+proptest = "1"
+serde_json = "1"
 
 # 旧 workspace の build-speed 調査(../docs/reviews/2026-08-19-build-speed-investigation.md)の採用値。
 # 16GB RAM で swap 2.3GB / pageout 223万回が出たのは debug 情報が stock 完全だったため。

@@ -1,0 +1,125 @@
+use serde::{Deserialize, Serialize};
+
+/// パラメータ値。補間は同一バリアント間のみ定義される。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Value {
+    F64(f64),
+    Vec2([f64; 2]),
+    Vec3([f64; 3]),
+    /// RGBA: 非線形sRGB・straight-alpha・各成分0.0–1.0(M2E-13。リニア化はレンダ側)
+    Color([f64; 4]),
+    /// アセットID参照(F-10 / D1h)。永続層の`AssetId`生値と同一。補間なし。
+    AssetRef(u64),
+    /// 同種のものの並び。keyframeはlist全体で1キーとし、補間は要素ごとに走る。
+    /// 要素が既存型に限られること(入れ子の禁止)は`ValueType`側の検証が担う。
+    List(Vec<Value>),
+}
+
+impl Value {
+    /// 線形補間。バリアント不一致はaを返す(型不一致はドキュメント検証層で弾く前提)。
+    pub fn lerp(a: &Value, b: &Value, u: f64) -> Value {
+        match (a, b) {
+            (Value::F64(x), Value::F64(y)) => Value::F64(x + (y - x) * u),
+            (Value::Vec2(x), Value::Vec2(y)) => {
+                Value::Vec2(std::array::from_fn(|i| x[i] + (y[i] - x[i]) * u))
+            }
+            (Value::Vec3(x), Value::Vec3(y)) => {
+                Value::Vec3(std::array::from_fn(|i| x[i] + (y[i] - x[i]) * u))
+            }
+            (Value::Color(x), Value::Color(y)) => {
+                Value::Color(std::array::from_fn(|i| x[i] + (y[i] - x[i]) * u))
+            }
+            // 長さが同じなら要素ごと、違えば補間せずaを返す(バリアント不一致と同じ扱い)。
+            (Value::List(x), Value::List(y)) if x.len() == y.len() => Value::List(
+                x.iter()
+                    .zip(y.iter())
+                    .map(|(x, y)| Value::lerp(x, y, u))
+                    .collect(),
+            ),
+            _ => a.clone(),
+        }
+    }
+
+    pub fn as_list(&self) -> Option<&[Value]> {
+        match self {
+            Value::List(items) => Some(items),
+            _ => None,
+        }
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Value::F64(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    pub fn as_vec2(&self) -> Option<[f64; 2]> {
+        match self {
+            Value::Vec2(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    pub fn as_color(&self) -> Option<[f64; 4]> {
+        match self {
+            Value::Color(v) => Some(*v),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lerp_scalar_and_vector() {
+        assert_eq!(
+            Value::lerp(&Value::F64(0.0), &Value::F64(10.0), 0.25),
+            Value::F64(2.5)
+        );
+        assert_eq!(
+            Value::lerp(&Value::Vec2([0.0, 100.0]), &Value::Vec2([10.0, 200.0]), 0.5),
+            Value::Vec2([5.0, 150.0])
+        );
+        assert_eq!(
+            Value::lerp(
+                &Value::Vec3([0.0, 10.0, 100.0]),
+                &Value::Vec3([10.0, 20.0, 200.0]),
+                0.5
+            ),
+            Value::Vec3([5.0, 15.0, 150.0])
+        );
+    }
+
+    #[test]
+    fn lerp_mismatched_variants_returns_first() {
+        let a = Value::F64(1.0);
+        let b = Value::Vec2([0.0, 0.0]);
+        assert_eq!(Value::lerp(&a, &b, 0.5), a);
+    }
+
+    #[test]
+    fn lerp_list_of_equal_length_interpolates_each_element() {
+        let a = Value::List(vec![Value::F64(0.0), Value::Color([0.0, 0.0, 0.0, 0.0])]);
+        let b = Value::List(vec![Value::F64(10.0), Value::Color([1.0, 1.0, 1.0, 1.0])]);
+        assert_eq!(
+            Value::lerp(&a, &b, 0.5),
+            Value::List(vec![Value::F64(5.0), Value::Color([0.5, 0.5, 0.5, 0.5])])
+        );
+    }
+
+    #[test]
+    fn lerp_list_of_differing_length_returns_first() {
+        let a = Value::List(vec![Value::F64(0.0)]);
+        let b = Value::List(vec![Value::F64(10.0), Value::F64(20.0)]);
+        assert_eq!(Value::lerp(&a, &b, 0.5), a);
+    }
+
+    #[test]
+    fn lerp_empty_lists_stay_empty() {
+        let a = Value::List(Vec::new());
+        assert_eq!(Value::lerp(&a, &a, 0.5), a);
+    }
+}

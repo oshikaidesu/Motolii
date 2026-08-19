@@ -17,7 +17,7 @@ MV 制作のためのモーショングラフィック指向コンポジット�
 
 ## 規律 — たった1つ
 
-**すべての `.rs` は、1行目の doc コメントが `//! wraps:` か `//! owns:` で始まること。**
+**各 crate の根(`lib.rs` / `main.rs`)の1行目 doc コメントが `//! wraps:` か `//! owns:` で始まること。**
 
 ```rust
 //! wraps: re_entity_db::EntityDb — Document の実体。undo は edit timeline の latest-at。
@@ -31,9 +31,21 @@ MV 制作のためのモーショングラフィック指向コンポジット�
 - `owns:` = 上流に無いと**主張**している。この行だけがレビュー対象であり、
   「読んでいなかったから再発明した」は `owns:` の一覧を見れば全部そこに出る
 
-`./check.sh` が (1) marker の書き忘れ (2) `owns:` の全一覧 を出す。
+`./check.sh` が (1) marker の書き忘れ (2) `owns:` の全一覧を**行数つきで** (3) `wraps:` の一覧 を出す。
+行数を並べるのは、3,000行の `owns:` と 50行の `owns:` が同じ重さの主張ではないため。
 **リンク台帳も索引も持たない** — ラッパーに必要なのは「どの上流を包んだか」だけで、
 それはコードの隣にあるのが最も腐りにくい。
+
+## 現在の crate
+
+| crate | marker | 中身 |
+|---|---|---|
+| `core/motolii-store` | `wraps:` | `EntityDb` の口。Document / StoreView / Intent / undo / redo |
+| `core/motolii-core` | `owns:` | 有理数フレーム時刻。rerun の `TimeInt` は有理 fps を持てない(旧 workspace から移植) |
+| `core/motolii-eval` | `owns:` | keyframe 補間と bezier 分割。rerun の latest-at は step 補間のみ(旧 workspace から移植) |
+| `probes/r0-store-edit` | `owns:` | 軸が立つことの実測。fork の rev を上げたら回す |
+
+`engine/`(compositor・media・export)と `shell/`(iced)はまだ無い。
 
 ## 裁定
 

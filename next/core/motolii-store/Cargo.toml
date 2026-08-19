@@ -1,0 +1,19 @@
+[package]
+name = "motolii-store"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+arrow.workspace = true
+motolii-core.workspace = true
+motolii-eval.workspace = true
+re_byte_size.workspace = true
+re_chunk.workspace = true
+re_chunk_store.workspace = true
+re_entity_db.workspace = true
+re_log_types.workspace = true
+re_query.workspace = true
+re_types_core.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
