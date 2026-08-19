@@ -80,6 +80,22 @@
 oracle の pin(RAIL_W / TRANSPORT_H / ROW_H)は**根拠ごと更新**する
 (RAIL_W 196 は css と真の一致へ戻る。ROW_H 20 は css 24 との既知乖離として本裁定を根拠に pin)。
 
+## 追記 — 第3波: 正本改定の裁定(2026-08-19 夕)
+
+第2波(E: ヘッダ+下帯 / F: Timeline 縦密度)着地後の利用者裁定:
+
+> ここから先は正本改定を土台とし、Ableton 系の余白を作らないフラット UI を調査する。
+
+含意:
+1. **モック正本(`docs/mocks-ui/public/*-library.html`+css)の改定が第3波以降の土台**。
+   これまでの「正本適合のみ」から一段進み、正本そのものを Ableton 実測へ寄せる
+2. 方向 = **余白を作らないフラット UI**: 分離は罫線(1px)と明度差で作り、padding/gap を
+   詰める。ui-visual-language の既存規約「余白は装飾や高級感の手段にしない・領域の分離は
+   罫線と明度差で行う」の徹底形
+3. 文字クラスの一段下げ(BODY 13 → Ableton 主文字帯 11px 級)も正本改定に含めて設計する
+4. 手順: 調査(Ableton フラット文法の画素実測+現行モック余白の器具実測)→ 正本改定の
+   設計 → モック css 改定 → 器具(css-metrics)で再抽出 → iced 追随+oracle 更新
+
 ## 記録
 
 - 起点: 第4区切り引き継ぎ [2026-08-19-session-handoff-timeline-port-and-instruments.md](2026-08-19-session-handoff-timeline-port-and-instruments.md)
