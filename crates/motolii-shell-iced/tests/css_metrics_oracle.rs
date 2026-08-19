@@ -36,15 +36,19 @@
 //!
 //! ## 既知の不一致は「一致」を主張しない
 //!
-//! Timeline の `TRANSPORT_H` / `OVERVIEW_H` / `ROW_H` は css mock の値と
-//! 食い違う(`timeline/semantics.rs` のコメントが出所を egui スクショや
-//! 2026-08-19 第2波利用者裁定(密度圧縮)だと自己申告しており、css mock
-//! からの転記ではないと明言している — review 文書参照)。ここでは不一致を
-//! 等値 assert にしない: 現状の両側の値をそれぞれ literal で pin するだけの
-//! [`timeline_known_divergences_are_pinned`] にして、テストを赤いまま残さずに
-//! 将来の無自覚なドリフトだけ拾う。`RAIL_W` は2026-08-19 第2波裁定で css/egui
-//! 値へ復帰したので、唯一の真の一致 assert として
-//! [`timeline_rail_w_matches_css`] へ移した。
+//! Timeline の `OVERVIEW_H` は css mock の値と食い違う(`timeline/semantics.rs`
+//! のコメントが出所を egui スクショや 2026-08-19 第2波利用者裁定(密度圧縮)
+//! だと自己申告しており、css mock からの転記ではないと明言している —
+//! review 文書参照)。ここでは不一致を等値 assert にしない: 現状の両側の値を
+//! それぞれ literal で pin するだけの [`timeline_known_divergences_are_pinned`]
+//! にして、テストを赤いまま残さずに将来の無自覚なドリフトだけ拾う。
+//! `RAIL_W` は2026-08-19 第2波裁定で css/egui 値へ復帰したので、真の一致
+//! assert として [`timeline_rail_w_matches_css`] にしている。
+//! `TRANSPORT_H` / `ROW_H` は2026-08-19 第3波(flat grammar 改定、レーンG)で
+//! css 側(`.timelineHead` 34→24 / `.timelineRow` 24→20)を iced 側の値へ
+//! 詰めたことで、既知乖離から真の一致へ戻った —
+//! [`timeline_transport_h_matches_css`] / [`timeline_row_h_matches_css`]
+//! を参照。
 
 use std::path::PathBuf;
 
@@ -281,9 +285,10 @@ fn inspector_dims_match_css_computed_values() {
 // Timeline — timeline::semantics は pub const なので実物を比較する。
 // ---------------------------------------------------------------------------
 
-/// `RAIL_W` は css の `.columnHead` 実測幅と実際に一致する — 唯一の
-/// 「一致」を主張する Timeline 側の assert(2026-08-19 第2波利用者裁定で
-/// css/egui 値へ復帰したため、`ROW_H` からこちらへ役目が移った)。
+/// `RAIL_W` は css の `.columnHead` 実測幅と実際に一致する — Timeline 側で
+/// 最初に「一致」を主張した assert(2026-08-19 第2波利用者裁定で css/egui
+/// 値へ復帰したため、`ROW_H` からこちらへ役目が移った。第3波(flat grammar
+/// 改定)で `TRANSPORT_H`/`ROW_H` も一致側へ加わった — 下記2テスト参照)。
 #[test]
 fn timeline_rail_w_matches_css() {
     let html = repo_path("docs/mocks-ui/public/timeline-library.html");
@@ -298,7 +303,47 @@ fn timeline_rail_w_matches_css() {
     );
 }
 
-/// 2026-08-19 時点で iced 側の値が css mock と一致しない箇所。
+/// `.timelineHead` は2026-08-19 第3波(flat grammar 改定、レーンG)で
+/// 34px→24px に詰められ、iced 側の `TRANSPORT_H`(24、第2波裁定で密度圧縮
+/// 済み)と真に一致するようになった。既知乖離から「一致」側へ移った
+/// ([`timeline_known_divergences_are_pinned`] のコメント参照)。
+#[test]
+fn timeline_transport_h_matches_css() {
+    let html = repo_path("docs/mocks-ui/public/timeline-library.html");
+    let rows = extract(&html, (1200, 760)).expect("extract timeline-library.html");
+
+    let head = find(&rows, "header.timelineHead", |r| {
+        has_class(r, "timelineHead")
+    });
+    assert_eq!(
+        box_h(head),
+        f64::from(TRANSPORT_H),
+        "timeline::semantics::TRANSPORT_H は .timelineHead の計算済み高さと一致するはず \
+         (2026-08-19 第3波 flat grammar 改定で css 34→24)"
+    );
+}
+
+/// `.timelineRow` は2026-08-19 第3波(flat grammar 改定、レーンG)で
+/// 24px→20px に詰められ、iced 側の `ROW_H`(20、2026-08-08 決定の下限を
+/// 第2波裁定で実際に採った値)と真に一致するようになった。既知乖離から
+/// 「一致」側へ移った([`timeline_known_divergences_are_pinned`] のコメント参照)。
+#[test]
+fn timeline_row_h_matches_css() {
+    let html = repo_path("docs/mocks-ui/public/timeline-library.html");
+    let rows = extract(&html, (1200, 760)).expect("extract timeline-library.html");
+
+    let row = find(&rows, "div.timelineRow (visible)", |r| {
+        has_class(r, "timelineRow") && box_h(r) > 0.0
+    });
+    assert_eq!(
+        box_h(row),
+        f64::from(ROW_H),
+        "timeline::semantics::ROW_H は .timelineRow の計算済み高さと一致するはず \
+         (2026-08-19 第3波 flat grammar 改定で css 24→20)"
+    );
+}
+
+/// 2026-08-19 時点で iced 側の値が css mock と一致しない箇所(`OVERVIEW_H` のみ)。
 /// `timeline/semantics.rs` のコメントは寸法の出所を `/tmp/egui-same-doc.png`
 /// (egui 版のスクリーンショット)だと自己申告しており、css mock からの転記
 /// だと主張していない — ここでの不一致はその申告と矛盾しない。
@@ -306,49 +351,23 @@ fn timeline_rail_w_matches_css() {
 /// 「一致」を主張する assert にはしない: 現状の両側の値をそれぞれ literal で
 /// pin するだけにして、どちらかが無自覚に動いたらこのテストが落ちるように
 /// する(指示: 不一致は現状の実測値で固定し、テストを赤いまま残さない)。
-///
-/// 2026-08-19 第2波利用者裁定(密度圧縮、campaign 文書の追記節): 「タイムライン
-/// から下がかなりどデカい」という利用者指摘を受け、`TRANSPORT_H` 30→24・
-/// `ROW_H` 24→20 とした。どちらも css 側の値(34px / 24px)とはまだ食い違う
-/// ままなので、既知乖離として pin し直す(ROW_H はこの回で「一致」側から
-/// こちらへ移った — 一致を失ったのではなく、利用者裁定で意図的に css より
-/// 詰めた)。
+/// `TRANSPORT_H` / `ROW_H` は2026-08-19 第3波(flat grammar 改定)で css 側が
+/// 詰まったことで真の一致へ移り、[`timeline_transport_h_matches_css`] /
+/// [`timeline_row_h_matches_css`] へ引っ越した — このテストには `OVERVIEW_H`
+/// だけが残る。
 #[test]
 fn timeline_known_divergences_are_pinned() {
     let html = repo_path("docs/mocks-ui/public/timeline-library.html");
     let rows = extract(&html, (1200, 760)).expect("extract timeline-library.html");
 
-    // css: `.timelineHead{height:34px}`。TRANSPORT_H(24) は意味的に別の帯
-    // (playhead読み・行数・grid刻み)を指しており、.overview とは別物
-    // (review 文書参照)。
-    let head = find(&rows, "header.timelineHead", |r| {
-        has_class(r, "timelineHead")
-    });
-    assert_eq!(box_h(head), 34.0, "css .timelineHead の計算済み高さ");
-    assert_eq!(
-        TRANSPORT_H, 24.0,
-        "timeline::semantics::TRANSPORT_H(意味の違う帯、2026-08-19 第2波裁定で密度圧縮)"
-    );
-
     // css: `.overview{height:30px}`。OVERVIEW_H(14) は egui NAV_H と同値
-    // (2026-08-19 第2波裁定で egui 側へ寄せ直した)。
+    // (2026-08-19 第2波裁定で egui 側へ寄せ直した)。本レーン(第3波レーンG)
+    // は timeline-library.css の .overview 高さを対象にしていないので未変更。
     let overview = find(&rows, "section.overview", |r| {
         has_class(r, "overview") && tag_is(r, "section")
     });
     assert_eq!(box_h(overview), 30.0, "css .overview の計算済み高さ");
     assert_eq!(OVERVIEW_H, 14.0, "timeline::semantics::OVERVIEW_H");
-
-    // css: `.timelineRow{height:24px}`。ROW_H(20) は 2026-08-08 決定の
-    // 「行高は固定・最小 20px」の下限を、2026-08-19 第2波裁定(密度圧縮)で
-    // 実際に採った値。
-    let row = find(&rows, "div.timelineRow (visible)", |r| {
-        has_class(r, "timelineRow") && box_h(r) > 0.0
-    });
-    assert_eq!(box_h(row), 24.0, "css .timelineRow の計算済み高さ");
-    assert_eq!(
-        ROW_H, 20.0,
-        "timeline::semantics::ROW_H(2026-08-19 第2波裁定で css より詰めた下限値)"
-    );
 }
 
 // ---------------------------------------------------------------------------
