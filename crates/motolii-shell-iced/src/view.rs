@@ -29,8 +29,9 @@
 //!   [`style::action`] を通る。Undo/Redo だけ `.style()` が無く iced 既定
 //!   palette(ベージュ)に落ちていたのを揃えた。
 //! - font size / spacing は [`crate::theme::type_scale`] /
-//!   [`crate::theme::space`] を通す(ここに残る生の数字は、対応する role が
-//!   無い一過性の値だけ)。
+//!   [`crate::theme::space`] を通す(ここに残る生の数字は、定数表
+//!   (`docs/reviews/2026-08-19-flat-grammar-canon-revision.md`)が明示的に
+//!   逃がしている一点――スタート画面の見出しだけ)。
 //!
 //! ## ヘッダ帯 + 下帯1行化(2026-08-19 campaign 第2波レーンE)
 //!
@@ -135,9 +136,16 @@ pub fn view(shell: &Shell) -> Element<'_, Message> {
 }
 
 /// 座席が無いときの画面。
+///
+/// 見出しの `20` は定数表(`docs/reviews/2026-08-19-flat-grammar-canon-
+/// revision.md`)が唯一明示的に許した圧縮値 — 旧 `34` はスタート画面専用の
+/// 見出しで、[`type_scale`] の4段(本文11/補助9/添字8/title12)のどれも
+/// 「見出し」役ではないため、新しい役を1つ発明する代わりに定数表の指示
+/// どおり 20 へ圧縮しただけの一過性の値。外周の `spacing` は scale の上限
+/// [`space::L`] へ。
 fn start_screen<'a>() -> Element<'a, Message> {
     column![
-        text(TITLE).size(34),
+        text(TITLE).size(20),
         text(TAGLINE).style(style::text_secondary),
         column![
             action_button(
@@ -155,7 +163,7 @@ fn start_screen<'a>() -> Element<'a, Message> {
         .align_x(Center),
         text(DROP_HINT).style(style::text_muted),
     ]
-    .spacing(18)
+    .spacing(space::L)
     .align_x(Center)
     .into()
 }
@@ -166,10 +174,12 @@ fn start_screen<'a>() -> Element<'a, Message> {
 fn action_button<'a>(name: &'a str, shortcut: &'a str, message: Message) -> Element<'a, Message> {
     button(
         row![
-            text(name).size(16),
-            text(shortcut).size(16).style(style::text_muted)
+            text(name).size(type_scale::BASE),
+            text(shortcut)
+                .size(type_scale::BASE)
+                .style(style::text_muted)
         ]
-        .spacing(space::M),
+        .spacing(space::L),
     )
     .style(style::action)
     .on_press(message)
@@ -264,15 +274,14 @@ fn timeline_pane(shell: &Shell) -> Element<'_, Message> {
 /// 左 = 保存状態(project 名、未保存なら ● 付き)、右 = Undo/Redo → 書き出し面。
 /// 左を `Fill` の container に包んで両端へ振る(下帯の legend 行と同じ
 /// space-between の組み方)。高さはモック `.timelineHead` と同じ 34px を上限に
-/// `padding([4, 8])` + [`type_scale::BODY`] で収める(対応する [`space`] role
-/// が無い一過性の値なので `4`/`8` は生の数字のまま — [`style`] には手を触れて
-/// いない、面の role は下帯と同じ [`style::status_band`])。
+/// `padding([space::S, space::L])` + [`type_scale::BASE`] で収める
+/// (面の role は下帯と同じ [`style::status_band`])。
 fn header_band(shell: &Shell) -> Option<Element<'_, Message>> {
     if !shell.is_seated() {
         return None;
     }
 
-    let mut header_row = row![].spacing(space::M).align_y(Center);
+    let mut header_row = row![].spacing(space::L).align_y(Center);
 
     // 保存状態(保存済みなら project 名、未保存なら ● 付き)。muted —
     // 名乗りは主役ではない(UI視覚言語「面」: 階層は明度差で作る)。
@@ -285,11 +294,11 @@ fn header_band(shell: &Shell) -> Option<Element<'_, Message>> {
                 name
             };
             text(label)
-                .size(type_scale::BODY)
+                .size(type_scale::BASE)
                 .style(style::text_muted)
                 .into()
         }
-        None => text("").size(type_scale::BODY).into(),
+        None => text("").size(type_scale::BASE).into(),
     };
     header_row = header_row.push(container(name_label).width(Fill));
 
@@ -297,14 +306,14 @@ fn header_band(shell: &Shell) -> Option<Element<'_, Message>> {
     // 台帳が空の側は押せない(触れそうで触れない物にしない — 灰色は「無効」の意味)。
     // Export/Cancel と同じ出所(`style::action`)へ揃える。
     header_row = header_row.push(
-        button(text(UNDO).size(type_scale::BODY))
+        button(text(UNDO).size(type_scale::BASE))
             .style(style::action)
             .on_press_maybe(
                 (shell.undo_len() > 0).then_some(Message::Timeline(TimelineMsg::UndoPressed)),
             ),
     );
     header_row = header_row.push(
-        button(text(REDO).size(type_scale::BODY))
+        button(text(REDO).size(type_scale::BASE))
             .style(style::action)
             .on_press_maybe(
                 (shell.redo_len() > 0).then_some(Message::Timeline(TimelineMsg::RedoPressed)),
@@ -314,14 +323,14 @@ fn header_band(shell: &Shell) -> Option<Element<'_, Message>> {
     // 書き出し面。実行中は経過秒と Cancel、そうでなければ Export。
     // **実行中に Export は出さない** = 二重起動の口が無い。
     if let Some(seconds) = shell.export_elapsed_seconds() {
-        header_row = header_row.push(text(exporting_label(seconds)).size(type_scale::BODY));
-        let mut cancel = button(text(CANCEL_EXPORT).size(type_scale::BODY)).style(style::action);
+        header_row = header_row.push(text(exporting_label(seconds)).size(type_scale::BASE));
+        let mut cancel = button(text(CANCEL_EXPORT).size(type_scale::BASE)).style(style::action);
         if !shell.export_cancel_requested() {
             cancel = cancel.on_press(Message::CancelExportPressed);
         }
         header_row = header_row.push(cancel);
     } else {
-        let mut export = button(text(EXPORT).size(type_scale::BODY)).style(style::action);
+        let mut export = button(text(EXPORT).size(type_scale::BASE)).style(style::action);
         if shell.can_start_export() {
             export = export.on_press(Message::ExportPressed);
         }
@@ -331,7 +340,7 @@ fn header_band(shell: &Shell) -> Option<Element<'_, Message>> {
     Some(
         column![
             container(header_row)
-                .padding([4, 8])
+                .padding([space::S, space::L])
                 .width(Fill)
                 .style(style::status_band),
             rule::horizontal(1).style(style::separator),
@@ -363,17 +372,17 @@ fn status_band(shell: &Shell) -> Option<Element<'_, Message>> {
 
     let status: Element<'_, Message> = match latest {
         Some(report) => text(report)
-            .size(type_scale::CAPTION)
+            .size(type_scale::DENSE)
             .style(style::text_secondary)
             .wrapping(text::Wrapping::None)
             .into(),
-        None => text("").size(type_scale::CAPTION).into(),
+        None => text("").size(type_scale::DENSE).into(),
     };
     let mut legend_row = row![container(status).width(Fill).clip(true)].align_y(Center);
     if shell.is_seated() {
         legend_row = legend_row.push(
             text(crate::shortcuts::legend_line())
-                .size(type_scale::CAPTION)
+                .size(type_scale::DENSE)
                 .style(style::text_muted)
                 .wrapping(text::Wrapping::None),
         );
