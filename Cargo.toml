@@ -31,6 +31,9 @@ members = [
     # E0: Rerunを空間合成の基盤に据えられるか(窓なし描画・カメラ注入・遮蔽)の隔離probe。同上。
     "spikes/rerun-e0-composition-probe",
 ]
+# リセット後の正本 workspace(2026-08-20裁定)。旧 shell を巻き込まずにビルドするため、
+# また柵を宣言でなく依存グラフで成立させるため、独立した workspace にしてある。
+exclude = ["next"]
 
 [workspace.package]
 edition = "2021"

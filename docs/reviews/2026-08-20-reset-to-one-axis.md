@@ -61,6 +61,14 @@
 | camera layer | `SpatialStage::set_camera` seam(2026-08-18 に新設済み) |
 | precomp | entity path の入れ子 |
 
+> **訂正(2026-08-20・同日の R0 実測)**: 上表のうち **keyframe と「現在時刻の値」の2行は誤り**だった。
+> `LatestAtQuery` は単一 timeline しか取らないので、「comp=F の値を edit=E 時点で」という
+> 2次元の問い合わせが書けない。したがって Document は `comp` 軸に載らない。
+> 正しくは **keyframe = property track まるごと1行(`edit` 軸上)**、
+> **現在時刻の値 = Motolii の評価器**(track を latest-at で1回取って補間)。
+> 他の行は変わらず、undo/redo は両方とも query の移動だけで成立する(むしろ強くなる)。
+> 実測と理由は [R0 probe §2](2026-08-20-r0-store-edit-probe.md#2-訂正--document-は-comp-軸に載らないr0-a)。
+
 ### 「バックとフロントが一致する段差の無い」の意味
 
 front は store への query の**投影**、write は chunk の **append**。それ以外の状態を front は持たない。
@@ -163,6 +171,13 @@ motolii/
    1 frame 分の値を引く時間が実時間再生(60fps = 16.6ms)に収まること
 4. **保存・読込**: 上記 store を保存 → 読込 → 全 query の結果が byte 一致すること
    (`.rrd` をそのまま document 形式にするか別 serialize かは、この実測の結果で決める)
+
+> **結果(2026-08-20)**: **6/6 通過・軸は立つ**。1000編集 × 300打点で query 9µs・store 3.5MB、
+> 10 property × 300打点 × 300フレームの全評価が 10µs/フレーム(60fps 予算の 1,600倍の余裕)。
+> 依存グラフに egui/eframe/winit/iced は 0件。実測の全量は
+> [R0 probe](2026-08-20-r0-store-edit-probe.md)。器具は `next/probes/r0-store-edit`。
+> 上記4項目は R0-1/2/3/4 として常設試験になっており、加えて R0-5(custom component)と
+> R0-A(2次元 query が書けないこと)を機械で固定した。
 
 **不成立時の分岐**: (1)(3) が落ちたら store を「編集中は自前の疎な表現、確定時に store へ」の2段にする
 (= 段差が1つ戻るので、その時点で軸を再裁定する)。(2) だけが落ちるなら fork seam で対処(既存の型)。

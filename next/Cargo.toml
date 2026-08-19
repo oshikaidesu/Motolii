@@ -1,0 +1,40 @@
+# リセット後の正本 workspace(2026-08-20裁定)。旧 workspace(../crates, ../plugins,
+# ../ui, ../spikes)は歴史証拠であり、ここからは参照しない。
+#
+# 分離した理由は2つ: (1) 旧 shell 75,293行(egui + iced)を巻き込まずにビルドできる
+# (2) 柵が「依存グラフ上ほんとうに切れている」ことを構造で保証する — 旧 workspace の
+#     dep policy は宣言だけで、iced 殻が egui 非optional の crate を引いていた。
+[workspace]
+resolver = "2"
+members = ["probes/r0-store-edit"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# ---------------------------------------------------------------------------
+# rerun fork(store のみ。viewer 層は引かない)
+# ---------------------------------------------------------------------------
+# rev は旧 workspace と同じ `motolii/stage-camera-seat`(483b8559)。乖離台帳は
+# ../docs/reviews/2026-08-18-rerun-fork-seam-ledger.md。
+#
+# **ここに re_view_spatial / re_ui / re_viewer_context を足さないこと** —
+# それらは egui を引き、front が iced だけであるという軸が壊れる。
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+
+arrow = { version = "58.3", default-features = false }
+
+# 旧 workspace の build-speed 調査(../docs/reviews/2026-08-19-build-speed-investigation.md)の採用値。
+# 16GB RAM で swap 2.3GB / pageout 223万回が出たのは debug 情報が stock 完全だったため。
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.test]
+debug = "line-tables-only"
