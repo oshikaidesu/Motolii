@@ -11,6 +11,8 @@
 //!   右クリックの補間メニュー(2026-08-19 M-6 キー編集レーン)
 //! - [`structure`] … 構造操作(fold・rename・lock)の描画・補助
 //!   (2026-08-19 構造操作レーン。柵: 新しい描画・hit のコードはここへ)
+//! - [`palette`] … クリップ8色・param チップ色の一元化(2026-08-19
+//!   UIトンマナ統一 campaign レーンD。新しい色定数はここにしか置かない)
 //! - [`waveform`] … soundtrack 波形の生成座席(縮約の意味は egui 版と共用)
 //!
 //! 編集が Document へ届く道は `Shell::update` の
@@ -19,6 +21,7 @@
 
 pub mod canvas;
 pub mod keys;
+pub mod palette;
 pub mod pane;
 pub mod semantics;
 pub mod structure;

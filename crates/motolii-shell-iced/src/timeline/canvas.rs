@@ -33,8 +33,12 @@ use super::semantics::{
     RULER_H,
 };
 use super::structure::{
-    draw_fold_arrow, draw_lock_button, draw_params_toggle, draw_property_row, draw_rename_box,
-    is_double_click, truncate_name,
+    draw_fold_arrow, draw_lock_button, draw_params_toggle, draw_rename_box, is_double_click,
+    truncate_name,
+};
+use super::palette;
+use super::palette::{
+    BG, CELL, DIM, HEAD_BG, INK, OVERVIEW_BG, RULE, SELECTED, TRACK_A, TRACK_B, TRIM_BAND, WAVE,
 };
 use super::waveform::WaveformBandState;
 use crate::message::Message;
@@ -42,52 +46,10 @@ use crate::shell::Shell;
 use crate::theme::Tokens;
 
 // ── 配色 ───────────────────────────────────────────────────────────────────
-// egui 版 `timeline_editor/mod.rs` の mock_tokens 採用値をそのまま写す
-// (見た目の正本は mock_tokens — ここで色を発明しない)。
-const BG: Color = Color::from_rgb(0x29 as f32 / 255.0, 0x29 as f32 / 255.0, 0x29 as f32 / 255.0);
-const HEAD_BG: Color =
-    Color::from_rgb(0x38 as f32 / 255.0, 0x38 as f32 / 255.0, 0x38 as f32 / 255.0);
-const CELL: Color = Color::from_rgb(0x36 as f32 / 255.0, 0x36 as f32 / 255.0, 0x36 as f32 / 255.0);
-const TRACK_A: Color =
-    Color::from_rgb(0x37 as f32 / 255.0, 0x37 as f32 / 255.0, 0x37 as f32 / 255.0);
-const TRACK_B: Color =
-    Color::from_rgb(0x25 as f32 / 255.0, 0x25 as f32 / 255.0, 0x25 as f32 / 255.0);
-const RULE: Color = Color::from_rgb(0x11 as f32 / 255.0, 0x11 as f32 / 255.0, 0x11 as f32 / 255.0);
-const INK: Color = Color::from_rgb(0xd4 as f32 / 255.0, 0xd4 as f32 / 255.0, 0xd4 as f32 / 255.0);
-const DIM: Color = Color::from_rgb(0x8d as f32 / 255.0, 0x8d as f32 / 255.0, 0x8d as f32 / 255.0);
-// 元は playhead に使っていた gold(#e9cf72)。timeline-library.css:93,96 では
-// この色は `.timeGuide`(drag 中の snap 案内線)のもので、`.playhead` は白
-// (2026-08-18 訂正、下の `SELECTED` へ差し替えた)。この canvas にはまだ
-// snap 案内線の描画が無い(`snap_candidates`/`snapped` は当たりだけ返し、絵は
-// 描かない)ので、定数ごと削った — 描くようになったら同じ #e9cf72 を
-// ここへ戻す(README に残差として記載)。
-const SELECTED: Color =
-    Color::from_rgb(0xf2 as f32 / 255.0, 0xf2 as f32 / 255.0, 0xf2 as f32 / 255.0);
-const WAVE: Color = Color::from_rgb(0x7f as f32 / 255.0, 0x92 as f32 / 255.0, 0x8c as f32 / 255.0);
-const WAVE_BG: Color =
-    Color::from_rgb(0x22 as f32 / 255.0, 0x22 as f32 / 255.0, 0x22 as f32 / 255.0);
-const TRIM_BAND: Color = Color::from_rgba(1.0, 1.0, 1.0, 0.28);
-// ARRANGEMENT 俯瞰帯の下地。`timeline-library.css:3` `.overview{background:#242424}`
-// (TRACK_B の #252525 とほぼ同値だが、帯とトラック縞は別要素なので取り違えないよう
-// 別定数にする。egui 版参照は overview 行に専用の下地色を持たないので、この帯だけ
-// 周りの行から浮かせる目的でこの値を採る)。
-const OVERVIEW_BG: Color =
-    Color::from_rgb(0x24 as f32 / 255.0, 0x24 as f32 / 255.0, 0x24 as f32 / 255.0);
-/// 仮のパレット(egui 版 `LAYER_COLORS` と同じ並び。id から導く側だけを写す)。
-const LAYER_COLORS: [Color; 8] = [
-    Color::from_rgb(0x8c as f32 / 255.0, 0x6b as f32 / 255.0, 0x6b as f32 / 255.0),
-    Color::from_rgb(0x8c as f32 / 255.0, 0x7d as f32 / 255.0, 0x5c as f32 / 255.0),
-    Color::from_rgb(0x7d as f32 / 255.0, 0x8c as f32 / 255.0, 0x5c as f32 / 255.0),
-    Color::from_rgb(0x5c as f32 / 255.0, 0x8c as f32 / 255.0, 0x6f as f32 / 255.0),
-    Color::from_rgb(0x5c as f32 / 255.0, 0x7f as f32 / 255.0, 0x8c as f32 / 255.0),
-    Color::from_rgb(0x64 as f32 / 255.0, 0x66 as f32 / 255.0, 0x8c as f32 / 255.0),
-    Color::from_rgb(0x7d as f32 / 255.0, 0x5c as f32 / 255.0, 0x8c as f32 / 255.0),
-    Color::from_rgb(0x8c as f32 / 255.0, 0x5c as f32 / 255.0, 0x74 as f32 / 255.0),
-];
-
-fn layer_color(layer: LayerId) -> Color {
-    LAYER_COLORS[(layer.get() % LAYER_COLORS.len() as u64) as usize]
-}
+// クリップ色・param チップ色・ここに元あった raw 定数は
+// `super::palette`(2026-08-19 UIトンマナ統一 campaign レーンD で新設)へ
+// 集約した。ここで新しい色を発明しない、という元の柵は palette モジュール
+// 側のコメントへ引き継いである。
 
 /// 角丸の矩形。行頭スウォッチ・bar・ARRANGEMENT の窓・下端スクロールバーが
 /// 共用する(`/tmp/egui-same-doc.png` はどれも角丸 — 直角の矩形は無い)。
@@ -522,24 +484,23 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     &pane.selected_keys,
                     pane.drag.as_ref(),
                     hover,
+                    tokens,
                 );
                 continue;
             }
             let selected = scene.selected.contains(&row.layer);
             let indent = row_indent(row.depth);
 
-            // Property 行(param の子行): チップ + ラベルだけ描いて、この行の
-            // 残り(bar・M/S/L・fold)は全部飛ばす(egui 版 `RowKind::Property`
-            // 分岐と同じ最小限の見た目 — 2026-08-19 構造操作レーン)。
-            if let RowKind::Property(param) = row.kind {
-                draw_property_row(&mut frame, indent, y, ROW_H, param, DIM);
-                frame.fill_rectangle(
-                    Point::new(0.0, y + ROW_H - 1.0),
-                    Size::new(size.width, 1.0),
-                    RULE,
-                );
-                continue;
-            }
+            // NOTE(2026-08-19 UIトンマナ統一 campaign): ここに以前あった
+            // `if let RowKind::Property(param) = row.kind { ... continue; }`
+            // 分岐は削除した — 直前の `if matches!(row.kind, RowKind::Property(_))`
+            // (このループの数行上)が同じ条件で無条件 `continue` するため、
+            // この行のこの分岐へは1回も到達しない(実測、到達不能コード)。
+            // 実体は `keys::draw_property_row`(上の到達可能な呼び出し)が
+            // 一手に引き受けている。到達不能だったこのコードとともに
+            // `structure::param_color`
+            // (Position だけ赤系という、`keys::param_chip_color` の青系と食い違う
+            // 値を返していた)も削除した — 経緯は `timeline/palette.rs` のモジュール doc。
 
             let span = bar_span(&scene.document, row.layer);
             let is_group_icon = span.map(|(_, _, g)| g).unwrap_or(false);
@@ -554,7 +515,7 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 if is_group_icon {
                     HEAD_BG
                 } else {
-                    layer_color(row.layer)
+                    palette::clip_color(row.layer)
                 },
             );
             // **名前は ◇/◆ や M/S/L の手前で切る。** egui 版は `with_clip_rect`
@@ -706,7 +667,7 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
             let bar_color = if is_group {
                 HEAD_BG
             } else {
-                layer_color(row.layer)
+                palette::clip_color(row.layer)
             };
             frame.fill(
                 &rounded_rect(Point::new(x0c, bar_top), Size::new(wc, bar_h), 3.0),
@@ -729,7 +690,7 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                         frame.fill_rectangle(
                             Point::new(cx0, bar_top + bar_h * 0.55),
                             Size::new(cx1 - cx0, bar_h * 0.45 - 1.0),
-                            layer_color(child),
+                            palette::clip_color(child),
                         );
                     }
                 }
@@ -836,15 +797,23 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
         // 最初の空きから)。
         let (_, play_x1, _, _) = play_pause_button_rect(&geometry);
         let clock_x = play_x1 + 10.0;
+        // タイムコードは元々 monospace(触っていない)。色だけ、各所の強調に
+        // 使っている accent role(`tokens.action_active` — `widgets/key_button.rs`
+        // 等と同じ role)へ寄せた(2026-08-19 UIトンマナ統一 campaign)。
         frame.fill_text(Text {
             content: playhead_clock(scene.playhead),
             position: Point::new(clock_x, geometry.transport_bottom() * 0.5),
-            color: INK,
+            color: tokens.action_active,
             size: Pixels(15.0),
             font: iced::Font::MONOSPACE,
             align_y: alignment::Vertical::Center.into(),
             ..Text::default()
         });
+        // `N rows / view a-bs / grid n` は編集できない内部状態の read-only 表示
+        // (対応する intent が無い、2026-08-19 裁定)。タイムコードと並べて左に
+        // 置くと本体の情報と同格に見えるので、帯の右端へ寄せてサイズを1段
+        // 落とす(10.0→9.0、既存の語彙 — `draw_flag_button` のラベル等と同じ
+        // 値)。色は muted のまま(`DIM`、変更なし)。
         frame.fill_text(Text {
             content: format!(
                 "{} rows   view {:.2}-{:.2}s   grid {}",
@@ -853,10 +822,11 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 view.start + view.span,
                 grid_label(step),
             ),
-            position: Point::new(clock_x + 88.0, geometry.transport_bottom() * 0.5),
+            position: Point::new(size.width - 10.0, geometry.transport_bottom() * 0.5),
             color: DIM,
-            size: Pixels(10.0),
+            size: Pixels(9.0),
             font: iced::Font::MONOSPACE,
+            align_x: alignment::Horizontal::Right.into(),
             align_y: alignment::Vertical::Center.into(),
             ..Text::default()
         });
@@ -961,10 +931,14 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
         // ── 波形帯(ルーラの直下・同じ時間換算)──────────────────────
         if geometry.wave_h > 0.0 {
             let top = geometry.ruler_bottom();
+            // 旧 `WAVE_BG`(#222222)は `Tokens::surface_raised` と完全一致
+            // だったので定数を削除し、token 参照へ置換した(2026-08-19
+            // UIトンマナ統一 campaign。他の canvas.rs 定数は完全一致する role
+            // が無かったので `palette.rs` へ移しただけで値は変えていない)。
             frame.fill_rectangle(
                 Point::new(0.0, top),
                 Size::new(size.width, geometry.wave_h),
-                WAVE_BG,
+                tokens.surface_raised,
             );
             frame.fill_text(Text {
                 content: "soundtrack".to_owned(),
