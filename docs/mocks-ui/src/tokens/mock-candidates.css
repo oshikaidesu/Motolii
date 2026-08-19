@@ -8,6 +8,10 @@
 :root {
   color-scheme: dark;
 
+  /* 2026-08-19 第3波(docs/reviews/2026-08-19-flat-grammar-canon-revision.md)
+   * hairline: パネル間・ドック間の分離専用(gap 0 で線1本)。border-default/
+   * strong とは別role — 面3段には属さない4本目の「線」定数。 */
+  --mock-candidate-color-neutral-975: #111111;
   --mock-candidate-color-neutral-950: #141414;
   --mock-candidate-color-neutral-925: #1a1a1a;
   --mock-candidate-color-neutral-875: #222222;
@@ -36,10 +40,13 @@
   --mock-candidate-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas,
     monospace;
 
-  --mock-candidate-space-1: 3px;
-  --mock-candidate-space-2: 5px;
-  --mock-candidate-space-3: 7px;
-  --mock-candidate-space-4: 9px;
+  /* 2026-08-19 第3波: spacing scale を {2,4,6,8} へ(旧 3/5/7/9 の場当たり値は
+   * scale外禁止。各 role は nearest-neighbor で新 scale へ丸めた —
+   * gap-tight 3→2 / gap-control 5→4 / gap-group 7→6 / inset-control 9→8)。 */
+  --mock-candidate-space-1: 2px;
+  --mock-candidate-space-2: 4px;
+  --mock-candidate-space-3: 6px;
+  --mock-candidate-space-4: 8px;
   --mock-candidate-control-height: 25px;
   --mock-candidate-tab-height: 28px;
   --mock-candidate-panel-header-height: 29px;
@@ -50,6 +57,7 @@
   --mock-role-surface-panel: var(--mock-candidate-color-neutral-925);
   --mock-role-surface-raised: var(--mock-candidate-color-neutral-875);
   --mock-role-surface-hover: var(--mock-candidate-color-neutral-800);
+  --mock-role-hairline: var(--mock-candidate-color-neutral-975);
   --mock-role-border-default: var(--mock-candidate-color-neutral-700);
   --mock-role-border-strong: var(--mock-candidate-color-neutral-500);
   --mock-role-text-primary: var(--mock-candidate-color-neutral-050);
