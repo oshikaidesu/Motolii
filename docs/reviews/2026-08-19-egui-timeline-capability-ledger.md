@@ -215,3 +215,25 @@ mod.rs冒頭のモジュールdoc(21–23行)が「選択・並べ替え・跳�
 ---
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+## 追記 — 再計測(2026-08-19 夕、tip=e0f739fa)
+
+キー編集・再生・構造操作・拒否理由テスト固定の着地後に48行を静的読解で再判定した。
+
+**集計: 有 32 / 部分 2 / 無 14**(制定時: 有16 / 部分4 / 無28)。無→有14件、部分→有2件。
+
+危険候補4件の現状:
+1. ロック中 clip の嘘 → **解消**(canvas.rs:1119 で NotAllowed カーソル、pane.rs の plan/note が preview 自体を開始しない)
+2. 拒否理由が届かない → **解消**。制定時の「crate 内に take_rejections 呼び出し0件」は
+   **crate スコープの狭い観測からの誤った一般化**だった — 共有ゲートウェイ(intent.rs の
+   edit/with_editor)内で report まで完結しており、iced は latest_report()/view.rs で描画する。
+   drive_rejections.rs(11テスト)が実描画まで審判
+3. fold 既定が全閉じ → **解消**(#28/#29 実装、描画は実 fold 状態を使う)
+4. snap 候補にループ端・キーが無い → **未解消**(semantics.rs:489 のコメントごと現役)
+
+**再計測が見つけた新しい不整合**: `pane.rs:394` の `SelectAllPressed` だけが
+`TimelineFoldState::default()`(全閉じ)を固定で使い、実 fold 状態(canvas.rs:94)と食い違う。
+開いた Group がある状態の Cmd+A で選び過ぎ/漏れの可能性(要実機)。
+
+残る「無」14件: ループ帯drag / ロケータ機構全般(5件) / marquee選択 / split / 行reorder /
+行色設定 / 色表示on-off / 行高さ切替 / Fit to composition。
