@@ -66,6 +66,7 @@ const SCANNED: &[(&str, &str)] = &[
     ("window_input.rs", include_str!("../src/window_input.rs")),
     ("timeline/mod.rs", include_str!("../src/timeline/mod.rs")),
     ("timeline/canvas.rs", include_str!("../src/timeline/canvas.rs")),
+    ("timeline/keys.rs", include_str!("../src/timeline/keys.rs")),
     ("timeline/pane.rs", include_str!("../src/timeline/pane.rs")),
     (
         "timeline/semantics.rs",

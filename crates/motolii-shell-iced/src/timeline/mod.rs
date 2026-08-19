@@ -7,6 +7,8 @@
 //! - [`semantics`] … egui 版から移植した**意味関数**(純関数のみ)
 //! - [`pane`] … ジェスチャの状態機械。**release の1件だけが `UiIntent` になる**
 //! - [`canvas`] … 絵と、生イベント → [`pane::TimelineMsg`] の翻訳
+//! - [`keys`] … property 行(`RowKind::Property`)のキー菱形 — 描画・hit・
+//!   右クリックの補間メニュー(2026-08-19 M-6 キー編集レーン)
 //! - [`waveform`] … soundtrack 波形の生成座席(縮約の意味は egui 版と共用)
 //!
 //! 編集が Document へ届く道は `Shell::update` の
@@ -14,10 +16,11 @@
 //! (フェンス: `tests/intent_gateway_fence.rs` — `editor_mut(` はこの crate で禁止)。
 
 pub mod canvas;
+pub mod keys;
 pub mod pane;
 pub mod semantics;
 pub mod waveform;
 
 pub use canvas::TimelineProgram;
-pub use pane::{GrabZone, TimelineCtx, TimelineDrag, TimelineMsg, TimelinePane};
+pub use pane::{GrabZone, KeyMenuState, TimelineCtx, TimelineDrag, TimelineMsg, TimelinePane};
 pub use waveform::{WaveformBandState, WaveformSeat};

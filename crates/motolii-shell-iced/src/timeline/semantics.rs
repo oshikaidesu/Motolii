@@ -23,9 +23,9 @@
 
 use motolii_core::{Fps, RationalTime};
 use motolii_doc::{Document, LayerId, TrackItem};
-use motolii_ui::blitz_shell::UiItemFlag;
+use motolii_ui::blitz_shell::{UiEditParam, UiItemFlag};
 use motolii_ui::timeline_editor::{TimelineView, TrimEdge};
-use motolii_ui::timeline_rows::TimelineRow;
+use motolii_ui::timeline_rows::{ParamRef, RowKind, TimelineRow};
 
 /// 左レール(名前の列)の幅。egui 版 `RAIL_W` より少し広い — M/S(2 個)と
 /// 種別色の四角を横に並べても名前が詰まらない値(2026-08-19、同一 document を
@@ -193,9 +193,25 @@ pub enum TimelineHit {
         zone: BarZone,
         at_seconds: f32,
     },
+    /// property 行(`RowKind::Property`)の菱形の上。`at_seconds` は**その
+    /// キーの実時刻**(Document から読んだ値そのもの — クリック位置ではない)。
+    /// `param` は `ParamRef` のまま(Anchor も含む)なので、掴める/選べるかの
+    /// 判断は消費側(`key_ui_param`)に任せる(2026-08-19 M-6 キー編集レーン)。
+    Key {
+        layer: LayerId,
+        param: ParamRef,
+        at_seconds: f32,
+    },
+    /// property 行の、菱形の外側(時間トラック面)。**Timeline から playhead へ
+    /// キーを打つ**入口(左クリック = `KeyTrackClicked`)。
+    PropertyTrack { layer: LayerId, param: ParamRef },
     /// 何も無い所。
     Empty,
 }
+
+/// 菱形の当たり判定の半径(px)。egui 版 `Rect::from_center_size(c, 12x12)` と同値
+/// (`timeline_editor/mod.rs` の `RowKind::Property` 描画ループ)。
+pub const KEY_HIT_HALF: f32 = 6.0;
 
 /// その行の bar の範囲(秒)と「Group か」。egui 版 `clip_span` の移植
 /// (Group は**直接の clip 子**の範囲を包む — 移植元と同じ規則)。
@@ -285,6 +301,13 @@ pub fn hit_test(
         return TimelineHit::Empty;
     };
     let row = rows[index];
+    // property 行(`RowKind::Property`)は object 行と別の当たり判定を持つ:
+    // 名前/M/S/L のレールは object 行だけの物なので、property 行では
+    // トラック面(菱形・空白)しか当たらない(2026-08-19 M-6 キー編集レーン)。
+    if let RowKind::Property(param) = row.kind {
+        let row_top = geometry.row_top(index, scroll_y);
+        return key_hit_test(document, row.layer, param, view, geometry, row_top, x, y);
+    }
     if x < geometry.track_left() {
         let row_top = geometry.row_top(index, scroll_y);
         let (btn_y0, btn_h) = flag_button_rect_y(row_top);
@@ -542,6 +565,67 @@ pub fn ruler_step_seconds(px_per_second: f32) -> f32 {
         }
     }
     *SERIES.last().expect("series is not empty")
+}
+
+// ---------------------------------------------------------------------------
+// キー行(RowKind::Property)の意味関数 — 2026-08-19 M-6 キー編集レーン
+//
+// 描画([`crate::timeline::keys`])と hit test(この module の `hit_test`)が
+// 同じこれを呼ぶ(egui 版 `param_keys` を1本だけ持ち回る — 複製しない)。
+// ---------------------------------------------------------------------------
+
+/// 秒どうしが「同じキー」と見なせるか。**画面座標ではなく秒の絶対誤差**
+/// (µs 往復・f32 丸めの桁より充分粗い — フレーム間隔よりずっと狭いので
+/// 隣のキーとは取り違えない)。
+pub const KEY_TIME_EPS: f32 = 1e-4;
+
+pub fn key_times_match(a: f32, b: f32) -> bool {
+    (a - b).abs() <= KEY_TIME_EPS
+}
+
+/// `ParamRef` → wire(`UiEditParam`)。Inspector が Anchor に行を持たない
+/// 2026-08-18 の決定をそのまま引くので、Anchor は `None`(見えるが、この版では
+/// 掴めない — 選択・drag・削除を許さない。触れそうで触れない物を作らない
+/// ため、hit test 側でこの判定を通す)。
+pub fn key_ui_param(param: ParamRef) -> Option<UiEditParam> {
+    match param {
+        ParamRef::Position => Some(UiEditParam::Position),
+        ParamRef::Scale => Some(UiEditParam::Scale),
+        ParamRef::Rotation => Some(UiEditParam::Rotation),
+        ParamRef::Opacity => Some(UiEditParam::Opacity),
+        ParamRef::Anchor => None,
+    }
+}
+
+/// property 行の上での当たり。菱形なら `Key`、トラック面の余白なら
+/// `PropertyTrack`、行の外(レール側)なら `Empty`(egui 版はレールに
+/// チップ+ラベルしか出さない — M/S/名前は object 行だけの物)。
+#[allow(clippy::too_many_arguments)]
+pub fn key_hit_test(
+    document: &Document,
+    layer: LayerId,
+    param: ParamRef,
+    view: TimelineView,
+    geometry: &PaneGeometry,
+    row_top: f32,
+    x: f32,
+    y: f32,
+) -> TimelineHit {
+    if x < geometry.track_left() {
+        return TimelineHit::Empty;
+    }
+    let cy = row_top + ROW_H * 0.5;
+    for (_, t) in motolii_ui::timeline_editor::param_keys(document, layer, param) {
+        let kx = geometry.time_to_x(view, t);
+        if (x - kx).abs() <= KEY_HIT_HALF && (y - cy).abs() <= KEY_HIT_HALF {
+            return TimelineHit::Key {
+                layer,
+                param,
+                at_seconds: t,
+            };
+        }
+    }
+    TimelineHit::PropertyTrack { layer, param }
 }
 
 #[cfg(test)]

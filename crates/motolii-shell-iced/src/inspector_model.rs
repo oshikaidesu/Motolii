@@ -203,6 +203,40 @@ fn project_one(
     })
 }
 
+/// Timeline の property 行が playhead へキーを打つ(`UiIntent::KeyParamAtPlayhead`)
+/// のに要る成分値だけを、**選択とは無関係な layer**から直接引く(2026-08-19 M-6
+/// キー編集レーン)。`project_one` の item 解決だけを再利用する — 効果(FX)は
+/// 要らないので catalog は取らない。
+///
+/// `Inspector` が「いま選ばれている layer」でしか投影しないのに対し、Timeline は
+/// 選択とは別の行にもキーを打てる(egui 版 `row_menu` の "Add key at playhead"
+/// と同じ自由度)。
+pub fn transform_component_values(
+    document: &Document,
+    layer: LayerId,
+    param: UiEditParam,
+    at: RationalTime,
+) -> Option<Vec<f64>> {
+    let mut matches: Vec<&TrackItem> = Vec::new();
+    for track in &document.tracks {
+        collect_items_for_layer(&track.items, layer, &mut matches);
+    }
+    let [item] = matches.as_slice() else {
+        return None;
+    };
+    let envelope = match item {
+        TrackItem::Clip(clip) => &clip.envelope,
+        TrackItem::Group(group) => &group.envelope,
+    };
+    let doc_param = match param {
+        UiEditParam::Position => &envelope.transform.position,
+        UiEditParam::Scale => &envelope.transform.scale,
+        UiEditParam::Rotation => &envelope.transform.rotation,
+        UiEditParam::Opacity => &envelope.opacity,
+    };
+    Some(param_row(param, doc_param, at).components)
+}
+
 /// 2026-08-13 mapping の4行。Position / Scale は Vec2、Rotation / Opacity は scalar。
 fn transform_rows(envelope: &ItemEnvelope, at: RationalTime) -> Vec<ParamRow> {
     [

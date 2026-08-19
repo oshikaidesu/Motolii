@@ -89,6 +89,13 @@ Cursor / Claude Code / その他のLLMエージェント共通の入口。本書
 - test helperは`motolii-testkit`へ集約し、`gpu_or_skip`等を複製しない
 - コメントは日本語で「なぜ」だけを書く
 
+## ビルドのtarget共有(2026-08-19規約)
+
+- **worktreeレーンは `CARGO_TARGET_DIR=/private/tmp/motolii-lane-target` を必ず設定する。** 設定しないと各worktreeが依存ツリー全体(wgpu / Rerun / iced / Blitz)を個別にビルドし、5レーン並走で同じ3分ビルドを5回払う。実測(2026-08-19): 並走中はディスクが飽和し `ls` すら返らなくなった
+- 共有すると cargo は target dir 単位でロックを取るのでレーン同士は**直列化する**が、依存は一度しか建たないため合計は大幅に短い。ロック待ちで中断しないこと(既存規約どおり)
+- **supervisor(検収する側)は本チェックアウトの `target/` をそのまま使う**(共有しない)。レーンのWIPバイナリが `target/debug/motolii-shell-iced` を上書きすると、screenshot検証が「mainではなくレーンの絵」を撮ってしまうため
+- 走行中のレーンに後から共有を強制しない(温まった target を捨てて全ビルドし直しになる)。**次に切るレーンから適用する**
+
 ## 検証と完了報告
 
 - 各粒へ`PRIMARY_ORACLE / REPO_LANES / EXTERNAL_GATES`を固定する。`cargo test`はRust laneであり、React、docs、製品E2E、実機、人間審判を代替しない
