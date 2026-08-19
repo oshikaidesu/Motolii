@@ -26,9 +26,15 @@ use super::keys;
 use super::pane::{GrabZone, TimelineDrag, TimelineMsg};
 use super::semantics::{
     bar_span, flag_button_rect_y, frame_step, hit_test, item_mute_solo, movable_clips,
-    mute_button_x, play_pause_button_rect, ruler_step_seconds, snap_candidates, snapped,
+    mute_button_x, play_pause_button_rect, row_effective_lock, row_fold_arrow_x, row_has_keys,
+    row_indent, row_lock_button_x, row_name_right_edge, row_name_x, row_own_lock,
+    row_params_toggle_x, row_swatch_x, ruler_step_seconds, snap_candidates, snapped,
     solo_button_x, to_start_button_rect, BarZone, PaneGeometry, TimelineHit, OVERVIEW_H, ROW_H,
     RULER_H,
+};
+use super::structure::{
+    draw_fold_arrow, draw_lock_button, draw_params_toggle, draw_property_row, draw_rename_box,
+    is_double_click, truncate_name,
 };
 use super::waveform::WaveformBandState;
 use crate::message::Message;
@@ -100,6 +106,10 @@ pub struct TimelineProgram<'a> {
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct TimelineCanvasState {
     overview_dragging: bool,
+    /// 直前に Rail を押した layer と時刻。二重クリック(rename の入口)の判定に使う
+    /// (2026-08-19 構造操作レーン。Document を持たない canvas ローカルの transient
+    /// なので `overview_dragging` と同じ立ち位置)。
+    last_rail_click: Option<(LayerId, std::time::Instant)>,
 }
 
 /// この canvas が読む一式。座席が無い時は `None`(canvas 自体が立たないはずだが、
@@ -117,7 +127,9 @@ struct Scene {
 impl TimelineProgram<'_> {
     fn scene(&self) -> Option<Scene> {
         let document = self.shell.timeline_snapshot()?;
-        let rows = rows(&document, &TimelineFoldState::default());
+        // fold は Document には無い session 状態(`TimelinePane::fold` が正本 —
+        // 2026-08-19 構造操作レーン、M-3 の view-state 扱いと同じ立ち位置)。
+        let rows = rows(&document, &self.shell.timeline_pane().fold);
         Some(Scene {
             selected: self.shell.timeline_selection(),
             playhead: self.shell.timeline_playhead(),
@@ -195,7 +207,25 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     TimelineHit::FlagButton { layer, flag } => {
                         TimelineMsg::FlagPressed { layer, flag }
                     }
-                    TimelineHit::Rail { layer } => TimelineMsg::RowPicked { layer, additive },
+                    TimelineHit::LockButton { layer } => TimelineMsg::LockPressed { layer },
+                    TimelineHit::FoldArrow { layer } => {
+                        TimelineMsg::FoldToggled { layer, params: false }
+                    }
+                    TimelineHit::ParamsToggle { layer } => {
+                        TimelineMsg::FoldToggled { layer, params: true }
+                    }
+                    // Rail: 二重クリックは rename の入口(egui 版に前例は無い —
+                    // 2026-08-19 構造操作レーンの新規判断。RETURN 参照)。
+                    TimelineHit::Rail { layer } => {
+                        let now = std::time::Instant::now();
+                        let dbl = is_double_click(state.last_rail_click, layer, now);
+                        state.last_rail_click = if dbl { None } else { Some((layer, now)) };
+                        if dbl {
+                            TimelineMsg::RenameStarted { layer }
+                        } else {
+                            TimelineMsg::RowPicked { layer, additive }
+                        }
+                    }
                     TimelineHit::Bar {
                         layer,
                         zone,
@@ -336,6 +366,41 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 publish(TimelineMsg::ModifiersChanged(*modifiers))
             }
             Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => {
+                // rename 編集中は Esc/Enter/文字/Backspace をここで横取りする
+                // (2026-08-19 構造操作レーン担当分。**進行中の move/trim
+                // ジェスチャの Esc は別レーン担当** — renaming が無いときは
+                // 素通りして下の既存の腕へ落ちる)。
+                if pane.renaming.is_some() {
+                    let msg = match key {
+                        Key::Named(Named::Escape) => Some(TimelineMsg::RenameCancelled),
+                        Key::Named(Named::Enter) => Some(TimelineMsg::RenameCommitted),
+                        Key::Named(Named::Backspace) => {
+                            let mut buffer = pane
+                                .renaming
+                                .as_ref()
+                                .map(|(_, name)| name.clone())
+                                .unwrap_or_default();
+                            buffer.pop();
+                            Some(TimelineMsg::RenameEdited(buffer))
+                        }
+                        // command / control 併用の文字は近道キーの側(コピペ等)
+                        // かもしれないので、そのまま文字入力にはしない。
+                        Key::Character(character) if !modifiers.command() && !modifiers.control() => {
+                            let mut buffer = pane
+                                .renaming
+                                .as_ref()
+                                .map(|(_, name)| name.clone())
+                                .unwrap_or_default();
+                            buffer.push_str(character.as_str());
+                            Some(TimelineMsg::RenameEdited(buffer))
+                        }
+                        _ => None,
+                    };
+                    return match msg {
+                        Some(msg) => publish(msg),
+                        None => None,
+                    };
+                }
                 let msg = match key {
                     Key::Named(Named::Escape) if pane.drag.is_some() => {
                         TimelineMsg::GestureCancelled
@@ -354,6 +419,11 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                         }
                         TimelineMsg::PlayheadStepped { frames }
                     }
+                    // Enter: 単独選択の行の rename を始める(egui 版 `timeline_editor`
+                    // の Enter 分岐と同じ意味 — 二重クリックとは別のもう1つの入口)。
+                    Key::Named(Named::Enter) if scene.selected.len() == 1 => {
+                        TimelineMsg::RenameStarted { layer: scene.selected[0] }
+                    }
                     Key::Character(character)
                         if modifiers.command() && character.eq_ignore_ascii_case("z") =>
                     {
@@ -362,6 +432,22 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                         } else {
                             TimelineMsg::UndoPressed
                         }
+                    }
+                    // Cmd+G / Cmd+Shift+G: Group / Ungroup(構造操作レーン担当分)。
+                    Key::Character(character)
+                        if modifiers.command() && character.eq_ignore_ascii_case("g") =>
+                    {
+                        if modifiers.shift() {
+                            TimelineMsg::UngroupPressed
+                        } else {
+                            TimelineMsg::GroupPressed
+                        }
+                    }
+                    // Cmd+D: Duplicate(構造操作レーン担当分 — D2 の口が実在したので実装)。
+                    Key::Character(character)
+                        if modifiers.command() && character.eq_ignore_ascii_case("d") =>
+                    {
+                        TimelineMsg::DuplicatePressed
                     }
                     _ => return None,
                 };
@@ -440,14 +526,28 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 continue;
             }
             let selected = scene.selected.contains(&row.layer);
+            let indent = row_indent(row.depth);
+
+            // Property 行(param の子行): チップ + ラベルだけ描いて、この行の
+            // 残り(bar・M/S/L・fold)は全部飛ばす(egui 版 `RowKind::Property`
+            // 分岐と同じ最小限の見た目 — 2026-08-19 構造操作レーン)。
+            if let RowKind::Property(param) = row.kind {
+                draw_property_row(&mut frame, indent, y, ROW_H, param, DIM);
+                frame.fill_rectangle(
+                    Point::new(0.0, y + ROW_H - 1.0),
+                    Size::new(size.width, 1.0),
+                    RULE,
+                );
+                continue;
+            }
+
             let span = bar_span(&scene.document, row.layer);
             let is_group_icon = span.map(|(_, _, g)| g).unwrap_or(false);
-            let indent = 8.0 + f32::from(row.depth) * 12.0;
             // 種別色の四角(角丸)。`/tmp/egui-same-doc.png` の行頭スウォッチ —
             // bar に既に使っている色をそのまま流用する(新しい色は発明しない)。
             frame.fill(
                 &rounded_rect(
-                    Point::new(indent, y + ROW_H * 0.5 - 7.0),
+                    Point::new(row_swatch_x(indent), y + ROW_H * 0.5 - 7.0),
                     Size::new(14.0, 14.0),
                     3.0,
                 ),
@@ -457,21 +557,53 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                     layer_color(row.layer)
                 },
             );
+            // **名前は ◇/◆ や M/S/L の手前で切る。** egui 版は `with_clip_rect`
+            // で「名前は名前の枠から出さない」— この canvas に clip rect の口が
+            // 無いので、代わりに描く前の文字数で切る(2026-08-19 発見: 長い名前
+            // が隣のボタン/トグルに重なって描かれていたのを直した)。
+            let has_keys = row_has_keys(&scene.document, row.layer);
+            let name_x = row_name_x(indent);
+            let name_right = row_name_right_edge(has_keys);
+            let name_max_w = (name_right - name_x).max(1.0);
             let name = scene
                 .document
                 .layers
                 .display_name(row.layer)
                 .unwrap_or("?")
                 .to_owned();
-            frame.fill_text(Text {
-                content: name,
-                position: Point::new(indent + 20.0, y + ROW_H * 0.5),
-                color: if selected { SELECTED } else { INK },
-                size: Pixels(11.0),
-                align_y: alignment::Vertical::Center.into(),
-                ..Text::default()
-            });
-            // M / S。押下状態は Document(`ItemEnvelope`)から読む — ボタン側に
+            let renaming_here = pane
+                .renaming
+                .as_ref()
+                .filter(|(layer, _)| *layer == row.layer);
+            if let Some((_, buffer)) = renaming_here {
+                let name_rect = Rectangle {
+                    x: name_x,
+                    y: y + 2.0,
+                    width: name_max_w,
+                    height: ROW_H - 4.0,
+                };
+                draw_rename_box(&mut frame, name_rect, &truncate_name(buffer, name_max_w), tokens);
+            } else {
+                frame.fill_text(Text {
+                    content: truncate_name(&name, name_max_w),
+                    position: Point::new(name_x, y + ROW_H * 0.5),
+                    color: if selected { SELECTED } else { INK },
+                    size: Pixels(11.0),
+                    align_y: alignment::Vertical::Center.into(),
+                    ..Text::default()
+                });
+            }
+            // 子の開閉(▶)。has_children の行だけ。
+            if row.has_children {
+                let (ax0, ax1) = row_fold_arrow_x(indent);
+                draw_fold_arrow(&mut frame, ax0, ax1, y + ROW_H * 0.5, row.children_open, DIM);
+            }
+            // param 行の開閉(◇/◆)。キーを持つ行だけ。
+            if has_keys {
+                let (px0, px1) = row_params_toggle_x();
+                draw_params_toggle(&mut frame, px0, px1, y + ROW_H * 0.5, row.params_open, DIM);
+            }
+            // M / S / L。押下状態は Document(`ItemEnvelope`)から読む — ボタン側に
             // 状態を持たない(egui 版 `item_flags_for` と同じ判断)。
             let (muted, solo) = item_mute_solo(&scene.document, row.layer);
             let (btn_y0, btn_h) = flag_button_rect_y(y);
@@ -483,6 +615,8 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 hover,
                 Some(TimelineHit::FlagButton { layer, flag: UiItemFlag::Solo }) if layer == row.layer
             );
+            let lock_hovered =
+                matches!(hover, Some(TimelineHit::LockButton { layer }) if layer == row.layer);
             draw_flag_button(
                 &mut frame,
                 mute_button_x(),
@@ -503,6 +637,18 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
                 solo,
                 solo_hovered,
                 tokens.action_active,
+                tokens,
+            );
+            let own_lock = row_own_lock(&scene.document, row.layer);
+            let inherited_lock = row_effective_lock(&scene.document, row.layer) && !own_lock;
+            draw_lock_button(
+                &mut frame,
+                row_lock_button_x(),
+                btn_y0,
+                btn_h,
+                own_lock,
+                inherited_lock,
+                lock_hovered,
                 tokens,
             );
             frame.fill_rectangle(
@@ -985,7 +1131,16 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
         ) {
             TimelineHit::Overview { .. } => mouse::Interaction::Pointer,
             TimelineHit::Ruler { .. } => mouse::Interaction::ResizingHorizontally,
-            TimelineHit::FlagButton { .. } => mouse::Interaction::Pointer,
+            TimelineHit::FlagButton { .. }
+            | TimelineHit::LockButton { .. }
+            | TimelineHit::FoldArrow { .. }
+            | TimelineHit::ParamsToggle { .. } => mouse::Interaction::Pointer,
+            // **ロック中は掴む前に手の形で言う。** D2 は lock を検査しないので、
+            // ここで揃えないと「触れそうで実は掴めない」を作ってしまう
+            // (2026-08-19 能力台帳の指摘。egui 版 `is_locked` → `NotAllowed` と同じ判断)。
+            TimelineHit::Bar { layer, .. } if row_effective_lock(&scene.document, layer) => {
+                mouse::Interaction::NotAllowed
+            }
             TimelineHit::Bar {
                 zone: BarZone::In | BarZone::Out,
                 ..

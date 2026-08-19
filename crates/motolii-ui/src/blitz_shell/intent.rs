@@ -195,6 +195,39 @@ pub enum UiIntent {
     // 将来枠(足す時はフェンスの禁止リストも一緒に伸ばす):
     // - view: camera 操作・panel の開閉/並び
     // - wave E 残り: audio gain(エディタに操作 API が立ってから)
+    // ---- Timeline の構造操作(2026-08-19 iced ホスト移行 M-3 追加ラウンド) ----
+    // 行の rename / lock / group / ungroup。畳み開閉は Document に入らない
+    // session 状態なので intent にしない(zoom/pan と同じ scope、iced 側
+    // `TimelinePane::fold` が正本)。
+    /// 行名を確定する(ダブルクリック / Enter → 編集 → Enter)。D2 は
+    /// `prepare_set_layer_name`(`SetLayerName`)。
+    RenameLayer { layer: u64, name: String },
+    /// 行の L ボタン。**明示値**(Toggle ではなく Set — 押すたびに「いまの自分の
+    /// lock の反対」を pane 側で計算して積む)。D2 は `prepare_set_item_lock`
+    /// (`SetItemLock`)。親から受けているだけの lock は、これでは外れない
+    /// (`TimelineEditor::set_item_lock` が `toggle_flag_gesture` 経由でそのまま断る)。
+    SetLayerLock { layer: u64, locked: bool },
+    /// 選択した複数 clip を1つの Group にまとめる(Cmd+G)。D2 は
+    /// `AddTrackItem`(空の Group を置く)+ `ReparentClip`(中へ入れる) —
+    /// 新しい意味の command は増やしていない(既存 `group_selected` と同じ経路)。
+    GroupLayers { layers: Vec<u64> },
+    /// Group を解いて、直下の子を Group が居た場所(親・index)へ展開する
+    /// (Cmd+Shift+G)。D2 は `ReparentClip` のみ — **Group 自体を消す口が無い**ので、
+    /// 空になった Group はそのまま残る(RETURN の「足りなかった D2 の口」参照)。
+    UngroupLayer { layer: u64 },
+    /// 選択を複製する(Cmd+D)。D2 に `prepare_duplicate_track_item` の口が
+    /// 実在した(capsule の想定「口が無ければ見送る」に反して在ったので実装。
+    /// **凍結された4本には無い追加**だが `DeleteSelection` と同じ unit variant の
+    /// 形なので union の邪魔にはならない)。深いところ(新しい LayerId の採番・
+    /// Group の中身ごとの複製)は D2 がやる。
+    DuplicateSelection,
+    // 将来枠(足す時はフェンスの禁止リストも一緒に伸ばす):
+    // - view: camera 操作・panel の開閉/並び
+    // - wave E 残り: Timeline 内の編集(key drag)、
+    //   audio gain(エディタに操作 API が立ってから)
+    // - Reorder(drag = 並べ替え): D2 の口(`prepare_reparent_clip`)は Group と
+    //   共用で実在するが、drag gesture 自体をこのラウンドでは実装していない
+    //   (RETURN 参照)。
 }
 
 /// intent が運ぶ M / S。Timeline 側の `ItemFlag` と一対一(Lock は Timeline の
@@ -701,6 +734,36 @@ impl ShellGateway {
                     us_to_seconds(*at_us),
                     interp.to_interp(),
                 );
+                editor.revision() > before
+            }),
+            // ---- Timeline の構造操作 ----
+            UiIntent::RenameLayer { layer, name } => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.rename_layer(motolii_doc::LayerId::from_raw(*layer), name.clone());
+                editor.revision() > before
+            }),
+            UiIntent::SetLayerLock { layer, locked } => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.set_item_lock(motolii_doc::LayerId::from_raw(*layer), *locked);
+                editor.revision() > before
+            }),
+            UiIntent::GroupLayers { layers } => self.with_editor(|editor| {
+                let before = editor.revision();
+                let layers = layers
+                    .iter()
+                    .map(|l| motolii_doc::LayerId::from_raw(*l))
+                    .collect();
+                editor.group_layers(layers);
+                editor.revision() > before
+            }),
+            UiIntent::UngroupLayer { layer } => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.ungroup_layer(motolii_doc::LayerId::from_raw(*layer));
+                editor.revision() > before
+            }),
+            UiIntent::DuplicateSelection => self.with_editor(|editor| {
+                let before = editor.revision();
+                editor.duplicate_selection_gesture();
                 editor.revision() > before
             }),
         }

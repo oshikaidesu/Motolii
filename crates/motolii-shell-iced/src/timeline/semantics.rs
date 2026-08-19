@@ -25,12 +25,17 @@ use motolii_core::{Fps, RationalTime};
 use motolii_doc::{Document, LayerId, TrackItem};
 use motolii_ui::blitz_shell::{UiEditParam, UiItemFlag};
 use motolii_ui::timeline_editor::{TimelineView, TrimEdge};
-use motolii_ui::timeline_rows::{ParamRef, RowKind, TimelineRow};
+use motolii_ui::timeline_rows::{keyed_params, ParamRef, RowKind, TimelineRow};
 
 /// 左レール(名前の列)の幅。egui 版 `RAIL_W` より少し広い — M/S(2 個)と
 /// 種別色の四角を横に並べても名前が詰まらない値(2026-08-19、同一 document を
 /// 並べた `/tmp/egui-same-doc.png` に合わせて 196→210 へ)。
-pub const RAIL_W: f32 = 210.0;
+///
+/// 210→234 (2026-08-19 構造操作レーン): L ボタンを足した分、fold 矢印 + ◇/◆ と
+/// 合わせて名前の残り幅がきつくなった(`row_name_right_edge` 参照)。
+/// `truncate_name` の省略記号だけに頼らず、fixture の代表的な名前
+/// (`Title scene` 等)がそのまま収まる程度まで広げた。
+pub const RAIL_W: f32 = 234.0;
 /// transport 帯(playhead 読み・`N rows`・`view a-bs`・`grid n`)の高さ。
 /// `/tmp/egui-same-doc.png` の最上段 — 再生ボタンや `space=play` 等の
 /// **対応する intent が無い項目は描かない**(2026-08-19 裁定、Q0)。
@@ -155,10 +160,18 @@ impl PaneGeometry {
     }
 }
 
-/// S ボタンの x 範囲(レール右端基準・RAIL_W だけに依る定数なので `PaneGeometry`
-/// を要らない)。`hit_test` と描画(`canvas.rs`)が同じこれを呼ぶ。
-pub fn solo_button_x() -> (f32, f32) {
+/// L(ロック)ボタンの x 範囲。**レール右端に一番近い**(egui 版 `[M, S, L]` の
+/// 並びで L が `i=2` = 一番右と同じ位置関係)。2026-08-19 構造操作レーンで追加 —
+/// M / S はここから左へ1ピッチずつ詰める(`solo_button_x` / `mute_button_x` を参照)。
+pub fn row_lock_button_x() -> (f32, f32) {
     let x1 = RAIL_W - FLAG_BTN_MARGIN;
+    (x1 - FLAG_BTN_W, x1)
+}
+
+/// S ボタンの x 範囲。L の左隣(`hit_test` と描画(`canvas.rs`)が同じこれを呼ぶ)。
+pub fn solo_button_x() -> (f32, f32) {
+    let (lock_x0, _) = row_lock_button_x();
+    let x1 = lock_x0 - FLAG_BTN_GAP;
     (x1 - FLAG_BTN_W, x1)
 }
 
@@ -167,6 +180,53 @@ pub fn mute_button_x() -> (f32, f32) {
     let (solo_x0, _) = solo_button_x();
     let x1 = solo_x0 - FLAG_BTN_GAP;
     (x1 - FLAG_BTN_W, x1)
+}
+
+/// 行の入れ子インデント(px)。egui 版は `8.0 + depth*14.0`、この canvas は
+/// 手描きの寸法に合わせて `8.0 + depth*12.0`(既存の draw ループが使っていた
+/// 値をそのまま定数化 — 見た目を変えない)。fold 矢印・swatch・名前の位置は
+/// 全部ここを基準にする。
+pub fn row_indent(depth: u16) -> f32 {
+    8.0 + f32::from(depth) * 12.0
+}
+
+/// 子の開閉(▶)矢印の当たり判定・描画の x 範囲。`row_indent` の左寄りに
+/// 幅 `ROW_FOLD_W` を確保する — has_children が無い行では描かないだけで、
+/// 列そのものは全行で同じ位置に居る(名前の縦位置が行ごとにぶれない)。
+pub const ROW_FOLD_W: f32 = 14.0;
+
+pub fn row_fold_arrow_x(indent: f32) -> (f32, f32) {
+    (indent, indent + ROW_FOLD_W)
+}
+
+/// swatch(色札)の左端。fold 矢印の右。
+pub fn row_swatch_x(indent: f32) -> f32 {
+    indent + ROW_FOLD_W
+}
+
+/// 名前の左端。swatch の右。
+pub fn row_name_x(indent: f32) -> f32 {
+    row_swatch_x(indent) + 20.0
+}
+
+/// param 行の開閉(◇/◆)の当たり判定・描画の x 範囲。M/S/L の左、名前との間。
+pub fn row_params_toggle_x() -> (f32, f32) {
+    let (mute_x0, _) = mute_button_x();
+    let x1 = mute_x0 - FLAG_BTN_GAP - 6.0;
+    (x1 - 16.0, x1)
+}
+
+/// 名前が伸びてよい右端。◇/◆ が出る行はその手前まで、出ない行は M ボタンの手前まで。
+/// **egui 版は名前を `with_clip_rect` で枠から出さない**(「はみ出すと ◇ や
+/// M/S/L に被る」)— この canvas に clip rect の口が無いので、代わりに描く前の
+/// 文字数で切る(`structure::truncate_name` と対で使う)。
+pub fn row_name_right_edge(has_params_toggle: bool) -> f32 {
+    let x0 = if has_params_toggle {
+        row_params_toggle_x().0
+    } else {
+        mute_button_x().0
+    };
+    x0 - 6.0
 }
 
 /// M / S ボタンの高さ・行内の上端オフセット。描画がボタン矩形を作るのに使う。
@@ -209,6 +269,14 @@ pub enum TimelineHit {
     Ruler { at_seconds: f32 },
     /// 行の M / S ボタンの上(押下 = `ToggleItemFlag`)。
     FlagButton { layer: LayerId, flag: UiItemFlag },
+    /// 行の L ボタンの上(押下 = `UiIntent::SetLayerLock`)。
+    LockButton { layer: LayerId },
+    /// 子の開閉(▶)矢印の上(押下 = `FoldToggled { params: false }`)。
+    /// `has_children` の行だけがここを返す。
+    FoldArrow { layer: LayerId },
+    /// param 行の開閉(◇/◆)の上(押下 = `FoldToggled { params: true }`)。
+    /// キーを持つ行だけがここを返す。
+    ParamsToggle { layer: LayerId },
     /// 左レールの行の上(クリック = 選択)。
     Rail { layer: LayerId },
     /// bar の上。`at_seconds` は掴んだ時刻(スナップ前)。
@@ -346,12 +414,19 @@ pub fn hit_test(
         let row_top = geometry.row_top(index, scroll_y);
         return key_hit_test(document, row.layer, param, view, geometry, row_top, x, y);
     }
+    // Object 以外の行(将来の行種)は掴ませない。**Property 行は上で処理済み** —
+    // `row.layer` は親 object の物を流用しているので(`timeline_rows::rows` の規則)、
+    // bar / M / S / L / fold の当たりを親と取り違えないためのガードである。
+    if row.kind != RowKind::Object {
+        return TimelineHit::Empty;
+    }
     if x < geometry.track_left() {
         let row_top = geometry.row_top(index, scroll_y);
         let (btn_y0, btn_h) = flag_button_rect_y(row_top);
         if y >= btn_y0 && y <= btn_y0 + btn_h {
             let (mute_x0, mute_x1) = mute_button_x();
             let (solo_x0, solo_x1) = solo_button_x();
+            let (lock_x0, lock_x1) = row_lock_button_x();
             if x >= mute_x0 && x <= mute_x1 {
                 return TimelineHit::FlagButton {
                     layer: row.layer,
@@ -363,6 +438,22 @@ pub fn hit_test(
                     layer: row.layer,
                     flag: UiItemFlag::Solo,
                 };
+            }
+            if x >= lock_x0 && x <= lock_x1 {
+                return TimelineHit::LockButton { layer: row.layer };
+            }
+            if row_has_keys(document, row.layer) {
+                let (pt_x0, pt_x1) = row_params_toggle_x();
+                if x >= pt_x0 && x <= pt_x1 {
+                    return TimelineHit::ParamsToggle { layer: row.layer };
+                }
+            }
+        }
+        if row.has_children {
+            let indent = row_indent(row.depth);
+            let (ax0, ax1) = row_fold_arrow_x(indent);
+            if x >= ax0 && x <= ax1 {
+                return TimelineHit::FoldArrow { layer: row.layer };
             }
         }
         return TimelineHit::Rail { layer: row.layer };
@@ -549,6 +640,55 @@ pub fn item_mute_solo(document: &Document, layer: LayerId) -> (bool, bool) {
         Some(TrackItem::Clip(c)) => (!c.envelope.visible, c.envelope.solo),
         Some(TrackItem::Group(g)) => (!g.envelope.visible, g.envelope.solo),
         None => (false, false),
+    }
+}
+
+/// その layer 自身の lock。egui 版 `item_flags`(private)の lock 成分の移植 —
+/// **親から受けている分は含まない**(L ボタンの点灯そのもの。トグルの向きを
+/// 決めるのに要る。継承ぶんの薄い塗りは `row_effective_lock` を使う)。
+pub fn row_own_lock(document: &Document, layer: LayerId) -> bool {
+    match find_item(document, layer) {
+        Some(TrackItem::Clip(c)) => c.envelope.lock,
+        Some(TrackItem::Group(g)) => g.envelope.lock,
+        None => false,
+    }
+}
+
+/// 効いているロックか(親から受けている分も含む)。egui 版 `effective_lock`
+/// (private)の移植 — ジェスチャの拒否は D2 dispatch 側(`TimelineEditor::is_locked`)
+/// が最終判断を持つので、ここは **描画(薄い塗り)専用の先読み**である。
+pub fn row_effective_lock(document: &Document, layer: LayerId) -> bool {
+    fn walk(items: &[TrackItem], layer: LayerId, inherited: bool) -> Option<bool> {
+        for item in items {
+            let (id, own_lock) = match item {
+                TrackItem::Clip(c) => (c.envelope.layer_id, c.envelope.lock),
+                TrackItem::Group(g) => (g.envelope.layer_id, g.envelope.lock),
+            };
+            let locked = inherited || own_lock;
+            if id == layer {
+                return Some(locked);
+            }
+            if let TrackItem::Group(g) = item {
+                if let Some(found) = walk(&g.children, layer, locked) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    document
+        .tracks
+        .iter()
+        .find_map(|t| walk(&t.items, layer, false))
+        .unwrap_or(false)
+}
+
+/// キーを持つパラメータが1つでもあるか。◇/◆ トグルを描くかどうかの判定
+/// (egui 版 `visible_params` の移植 — `timeline_rows::keyed_params` を共用する)。
+pub fn row_has_keys(document: &Document, layer: LayerId) -> bool {
+    match find_item(document, layer) {
+        Some(item) => !keyed_params(item).is_empty(),
+        None => false,
     }
 }
 

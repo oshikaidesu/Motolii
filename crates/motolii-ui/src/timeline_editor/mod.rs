@@ -1600,6 +1600,126 @@ impl TimelineEditor {
         item_flags(&self.document, layer)
     }
 
+    // ---- 構造操作の入口(2026-08-19 iced 構造操作レーン) ----
+    //
+    // rename / lock / group / ungroup。iced shell 側の intent
+    // (`UiIntent::RenameLayer` 〜 `UngroupLayer`)がマウス/キーボードの代わりに
+    // 呼ぶ。書く先(`self.writer` の `prepare_*`)と断りの言葉は egui 版の私用
+    // メソッド(`commit_rename` / `toggle_flag_gesture` / `group_selected`)と
+    // 揃え、経路(1手 = 1 `GestureId` = 1 Undo)も同じにする。
+
+    /// shell intent(`UiIntent::RenameLayer`)の入口。**1回で確定済みの名前を
+    /// 書く** — iced 側は rename の編集状態を pane(session)に持つので、
+    /// egui 版の `begin_rename`/`commit_rename`(その場 `TextEdit` の staging)
+    /// のような2段構えは要らない。空名は断る(行が読めなくなる)。
+    pub fn rename_layer(&mut self, layer: LayerId, name: String) {
+        if self.is_locked(layer) {
+            let current = self.name(layer).to_owned();
+            self.reject(format!("{current} is locked"));
+            return;
+        }
+        let name = name.trim().to_owned();
+        if name.is_empty() {
+            self.reject("name cannot be empty".to_owned());
+            return;
+        }
+        let prepared = self.writer.prepare_set_layer_name(layer, &name);
+        if self.apply_one("rename", prepared) {
+            self.names.remove(&layer);
+            self.status = format!("renamed to {name}  undo {}", self.writer.undo_len());
+        }
+    }
+
+    /// shell intent(`UiIntent::SetLayerLock`)の入口。**明示値**を書く —
+    /// Timeline の L ボタンは押すたびに「いまの値の反対」を intent へ載せるので、
+    /// ここでは反転しない。既に望む値なら accepted no-op(何も書かない)。
+    /// 親から受けているだけの lock は、`toggle_flag_gesture` の断りがそのまま効く
+    /// (自分の L を押しても外れない)。
+    pub fn set_item_lock(&mut self, layer: LayerId, locked: bool) {
+        let Some((_, _, own_lock)) = item_flags(&self.document, layer) else {
+            return;
+        };
+        if own_lock == locked {
+            return;
+        }
+        self.toggle_flag_gesture(layer, ItemFlag::Lock);
+    }
+
+    /// shell intent(`UiIntent::GroupLayers`)の入口。**intent が運んできた
+    /// 層の集合を選択にしてから**、既存の Group 化(`group_selected`)へ委ねる —
+    /// 経路も Undo の粒度も新しく作らない(空の Group を置く + 順に入れる)。
+    pub fn group_layers(&mut self, layers: Vec<LayerId>) {
+        self.selected = layers;
+        self.group_selected();
+    }
+
+    /// shell intent(`UiIntent::UngroupLayer`)の入口。**egui 版に前例が無い**
+    /// (`Cmd+Shift+G` は egui `timeline_editor` に実装が無かった — 2026-08-19
+    /// 構造操作レーンの新規実装)。直下の子を、Group 自身が居た場所(親・index)
+    /// へ差し込む。1回 = 1 `GestureId` = 1 Undo 単位。
+    ///
+    /// **D2 に「Group を消す」口が無い**ので、空になった Group はそのまま残る
+    /// (`RETURN` の残差 — `prepare_remove_track_item` は使える経路だが、
+    /// 「解く」の意味に「消す」まで含めるかは製品判断なのでここでは足さない)。
+    pub fn ungroup_layer(&mut self, layer: LayerId) {
+        if self.is_locked(layer) {
+            let name = self.name(layer).to_owned();
+            self.reject(format!("{name} is locked"));
+            return;
+        }
+        let Some((parent, index, item)) = find_item_location(&self.document, layer) else {
+            self.reject("not found".to_owned());
+            return;
+        };
+        let TrackItem::Group(group) = item else {
+            self.reject(format!("{} is not a group", self.name(layer)));
+            return;
+        };
+        let children: Vec<LayerId> = group
+            .children
+            .iter()
+            .map(|child| match child {
+                TrackItem::Clip(c) => c.envelope.layer_id,
+                TrackItem::Group(g) => g.envelope.layer_id,
+            })
+            .collect();
+        if children.is_empty() {
+            // **`self.status` だけでは iced shell の主 status 帯へ届かない。**
+            // `with_editor` は `take_rejections()` しか transcript へ写さないので、
+            // 空の Group を解こうとした理由も reject 経由で言う
+            // (2026-08-19 能力台帳の指摘: 追加した操作の拒否は必ず理由が出ること)。
+            self.reject(format!("{} has nothing to ungroup", self.name(layer)));
+            return;
+        }
+        let gesture = self.writer.begin_gesture();
+        for (i, child) in children.iter().enumerate() {
+            match self.writer.prepare_reparent_clip(*child, parent, index + i, None) {
+                Ok(Some(command)) => {
+                    if let Err(error) = self.writer.apply_command(gesture, command) {
+                        self.reject(format!("{} rejected: {error}", self.name(*child)));
+                        return;
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    self.reject(format!("{} rejected: {error}", self.name(*child)));
+                    return;
+                }
+            }
+        }
+        refresh_if_stale(&self.writer, &mut self.document, &mut self.revision);
+        self.selected = children;
+        self.status = format!("ungrouped  undo {}", self.writer.undo_len());
+    }
+
+    /// shell intent(`UiIntent::DuplicateSelection`)の入口。**既存の
+    /// `duplicate_selected` をそのまま呼ぶ** — D2 に `prepare_duplicate_track_item`
+    /// の口が実在した(capsule の「口が無ければ見送る」想定に反して在ったので
+    /// 実装。2026-08-19 追加指示)。
+    pub fn duplicate_selection_gesture(&mut self) {
+        self.duplicate_selected();
+    }
+
     /// **共有 FX の ON/OFF。** 相手は `EffectDefinition` — 文書模型では
     /// `enabled` が定義側に在り、評価(`motolii_doc::graph`)がこの旗で
     /// effect を飛ばす。Inspector の要約が「N shared FX」と言っているのと同じ単位。

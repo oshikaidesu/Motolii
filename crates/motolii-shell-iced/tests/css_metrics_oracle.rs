@@ -318,15 +318,16 @@ fn timeline_known_divergences_are_pinned() {
     assert_eq!(OVERVIEW_H, 22.0, "timeline::semantics::OVERVIEW_H");
 
     // css: `.arrangement{grid-template-columns:196px ...}`(rail 列の実測幅)。
-    // RAIL_W(210) は semantics.rs:30-33 のコメントで意図的な拡張だと明言
-    // 済み(M/S ボタンが名前を圧迫しないための +14px、2026-08-19)。
+    // RAIL_W(234) は semantics.rs のコメントで意図的な拡張だと明言済み:
+    // 196→210 が M/S ボタン分、210→234 が構造操作レーンの L ボタン分
+    // (fold 矢印 + ◇/◆ と並べても代表的な名前が収まる幅、2026-08-19)。
     let rail = find(&rows, "div.columnHead", |r| has_class(r, "columnHead"));
     assert_eq!(
         box_w(rail),
         196.0,
         "css の rail 列(.columnHead)の計算済み幅"
     );
-    assert_eq!(RAIL_W, 210.0, "timeline::semantics::RAIL_W(意図的な拡張)");
+    assert_eq!(RAIL_W, 234.0, "timeline::semantics::RAIL_W(意図的な拡張)");
 }
 
 // ---------------------------------------------------------------------------
