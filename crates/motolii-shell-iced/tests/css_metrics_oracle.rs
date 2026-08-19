@@ -3,11 +3,17 @@
 //! `docs/mocks-ui/public/*.html` を実測し、iced 側の主要寸法定数と突き合わせる
 //! oracle。GPU 不要・描画無し(layout だけ解いて読み戻す)。
 //!
-//! ## 両側性が違う2本立て
+//! ## 両側性が違う3本立て
 //!
 //! - **Timeline 側**(`timeline::semantics` の `pub const`)は実物を `use`
 //!   して比較する — css か semantics.rs のどちらが変わってもこのテストが
 //!   落ちる、正真の両側チェック
+//! - **Browser 側**(`browser_pane::dims` の `pub const`)も実物を `use` して
+//!   比較する **正真の両側チェック**。前レーンが「Inspector の `dims` を
+//!   `pub(crate)` へ上げられれば両側化できる」と書き残していた提案を実行した
+//!   ([`browser_pane`](motolii_shell_iced::browser_pane) は
+//!   browser-revise レーンの新規ファイルなので、最初から `pub mod dims` で
+//!   書ける — Inspector 側のような書き換え柵が無い)
 //! - **Inspector 側**(`inspector_pane.rs` の `mod dims`)は private module
 //!   で外部 crate から到達できず、かつ `inspector_pane.rs` は本レーンの柵
 //!   (3レーン並走中のパネル実装)で書き換え禁止なので、`dims` の値を
@@ -28,6 +34,7 @@
 
 use std::path::PathBuf;
 
+use motolii_shell_iced::browser_pane::dims as browser_dims;
 use motolii_shell_iced::timeline::semantics::{OVERVIEW_H, RAIL_W, ROW_H, TRANSPORT_H};
 use motolii_ui::css_metrics::extract;
 use serde_json::Value;
@@ -59,6 +66,18 @@ fn box_w(row: &Value) -> f64 {
 
 fn box_h(row: &Value) -> f64 {
     row["box"]["h"].as_f64().expect("box.h is a number")
+}
+
+fn box_x(row: &Value) -> f64 {
+    row["box"]["x"].as_f64().expect("box.x is a number")
+}
+
+fn pad_left(row: &Value) -> f64 {
+    row["padding"]["left"].as_f64().expect("padding.left is a number")
+}
+
+fn pad_top(row: &Value) -> f64 {
+    row["padding"]["top"].as_f64().expect("padding.top is a number")
 }
 
 /// 条件に合う最初の行を返す。無ければ、探した条件と行数を添えて panic する
@@ -231,4 +250,252 @@ fn timeline_known_divergences_are_pinned() {
         "css の rail 列(.columnHead)の計算済み幅"
     );
     assert_eq!(RAIL_W, 210.0, "timeline::semantics::RAIL_W(意図的な拡張)");
+}
+
+// ---------------------------------------------------------------------------
+// Browser — browser_pane::dims は pub const なので実物を比較する
+// (browser-revise レーン、2026-08-19)。
+// ---------------------------------------------------------------------------
+
+/// html:16 `<main class="libraryBrowser">` に静的な `data-tab`/`data-view` を
+/// 差し込んだ一時 copy を作って `extract()` へ渡す。
+///
+/// html:205 `const state = {tab: 'media', ..., view: 'grid', ...}` の初期値を
+/// そのまま属性へ写すだけ(JS エンジンは持ち込まない — 決定的な代入なので
+/// 静的な文字列置換で足りる)。**`docs/mocks-ui` は書き換えない** — 一時 dir
+/// (`std::env::temp_dir()`)へ copy を書く。
+///
+/// これが要るのは sidebar(`.tabScoped-media`)と filter shelf の中身
+/// (`.filterGroup[data-filter-group="media"]`)だけ — どちらも `data-tab`
+/// 一致の CSS attribute selector 経由でしか `display:block`/`flex` にならず、
+/// Blitz は `<script>` を実行しないので既定の `display:none` のまま
+/// (`docs/reviews/2026-08-19-css-computed-metrics-extraction.md`
+/// 「Blitz 側で詰まった点」4 — 同文書が次の一手として書いていた自動化を実行)。
+fn extract_browser_with_initial_media_tab() -> Vec<Value> {
+    let html_path = repo_path("docs/mocks-ui/public/browser-library.html");
+    let raw = std::fs::read_to_string(&html_path).expect("browser-library.html を読める");
+    let marker = "<main class=\"libraryBrowser\" aria-label=\"Browser library concept\">";
+    let patched_marker =
+        "<main class=\"libraryBrowser\" data-tab=\"media\" data-view=\"grid\" aria-label=\"Browser library concept\">";
+    assert!(
+        raw.contains(marker),
+        "html:16 の <main> tag が見つからない — mock の marker が変わっていないか確認 \
+         (browser-library.html の変更に合わせてこの oracle も直す)"
+    );
+    let patched = raw.replacen(marker, patched_marker, 1);
+
+    let dir = std::env::temp_dir().join("motolii-css-metrics-oracle-browser");
+    std::fs::create_dir_all(&dir).expect("一時 dir を作れる");
+    let patched_html = dir.join("browser-library-media-tab.html");
+    std::fs::write(&patched_html, &patched).expect("一時 html を書ける");
+    // `<link href="/browser-library.css">` は html 自身の隣(`resolve_href`)を
+    // 見るので、css も同じ一時 dir へ複製する。
+    std::fs::copy(
+        html_path.with_file_name("browser-library.css"),
+        dir.join("browser-library.css"),
+    )
+    .expect("browser-library.css を一時 dir へ複製できる");
+
+    extract(&patched_html, (900, 600)).expect("extract patched browser-library.html")
+}
+
+/// JS の初期状態が要らない箇所(header/toolbar/catalogHeader/resultSummary/
+/// grid/selectionTray)は素の html をそのまま実測する。
+#[test]
+fn browser_dims_match_css_computed_values() {
+    let html = repo_path("docs/mocks-ui/public/browser-library.html");
+    let rows = extract(&html, (900, 600)).expect("extract browser-library.html");
+    assert!(!rows.is_empty(), "抽出結果が空");
+
+    // browser-library.css:29 `.browserHeader{height:26px}` — dims::HEADER_H。
+    let header = find(&rows, "header.browserHeader", |r| {
+        has_class(r, "browserHeader")
+    });
+    assert_eq!(box_h(header), browser_dims::HEADER_H as f64, "dims::HEADER_H");
+    assert_eq!(pad_left(header), browser_dims::HEADER_PAD_X as f64, "dims::HEADER_PAD_X");
+
+    // browser-library.css:41 `.browserToolbar{height:30px}` — dims::TOOLBAR_H。
+    let toolbar = find(&rows, "div.browserToolbar", |r| {
+        has_class(r, "browserToolbar")
+    });
+    assert_eq!(box_h(toolbar), browser_dims::TOOLBAR_H as f64, "dims::TOOLBAR_H");
+    assert_eq!(pad_top(toolbar), browser_dims::TOOLBAR_PAD_Y as f64, "dims::TOOLBAR_PAD_Y");
+    assert_eq!(pad_left(toolbar), browser_dims::TOOLBAR_PAD_X as f64, "dims::TOOLBAR_PAD_X");
+
+    // browser-library.css:53 共通 control 高さ(history/toolbar/viewModes button)
+    // — dims::CONTROL_H。ここでは検索欄(実測 21px)で確かめる。
+    let search = find(&rows, "input#library-search", |r| {
+        r["id"].as_str() == Some("library-search")
+    });
+    assert_eq!(box_h(search), browser_dims::CONTROL_H as f64, "dims::CONTROL_H");
+
+    // browser-library.css:156 `.catalogHeader{height:31px}` — dims::CATALOG_HEADER_H。
+    let catalog_header = find(&rows, "header.catalogHeader", |r| {
+        has_class(r, "catalogHeader") && tag_is(r, "header")
+    });
+    assert_eq!(
+        box_h(catalog_header),
+        browser_dims::CATALOG_HEADER_H as f64,
+        "dims::CATALOG_HEADER_H"
+    );
+    assert_eq!(
+        pad_left(catalog_header),
+        browser_dims::CATALOG_HEADER_PAD_X as f64,
+        "dims::CATALOG_HEADER_PAD_X"
+    );
+
+    // browser-library.css:167 `.viewModes button{width:21px}` + css:166 `gap:2px`
+    // — dims::VIEW_BUTTON_W / VIEW_BUTTON_GAP。
+    let view_buttons: Vec<&Value> = rows
+        .iter()
+        .filter(|r| r["path"].as_str().is_some_and(|p| p.ends_with("viewModes > button")))
+        .collect();
+    assert_eq!(view_buttons.len(), 3, "view mode ボタンは3つ(html:95-97)");
+    for button in &view_buttons {
+        assert_eq!(box_w(button), browser_dims::VIEW_BUTTON_W as f64, "dims::VIEW_BUTTON_W");
+        assert_eq!(box_h(button), browser_dims::CONTROL_H as f64, "dims::CONTROL_H(view button)");
+    }
+    let gap = box_x(view_buttons[1]) - (box_x(view_buttons[0]) + box_w(view_buttons[0]));
+    assert_eq!(gap, browser_dims::VIEW_BUTTON_GAP as f64, "dims::VIEW_BUTTON_GAP");
+
+    // browser-library.css:205 `.resultSummary{height:21px}` — dims::SUMMARY_H。
+    let summary = find(&rows, "div.resultSummary", |r| {
+        has_class(r, "resultSummary")
+    });
+    assert_eq!(box_h(summary), browser_dims::SUMMARY_H as f64, "dims::SUMMARY_H");
+    assert_eq!(pad_left(summary), browser_dims::SUMMARY_PAD_X as f64, "dims::SUMMARY_PAD_X");
+
+    // browser-library.css:222 `.thumbnailGrid{padding:0 1px 3px}` — dims::GRID_PAD_X/BOTTOM。
+    let grid = find(&rows, "div#thumbnail-grid.thumbnailGrid", |r| {
+        has_class(r, "thumbnailGrid")
+    });
+    assert_eq!(pad_left(grid), browser_dims::GRID_PAD_X as f64, "dims::GRID_PAD_X");
+    assert_eq!(
+        grid["padding"]["bottom"].as_f64(),
+        Some(browser_dims::GRID_PAD_BOTTOM as f64),
+        "dims::GRID_PAD_BOTTOM"
+    );
+
+    // browser-library.css:227 `.libraryCard{padding:3px}` — dims::CARD_PAD。
+    let card = find(&rows, "button.libraryCard (first)", |r| {
+        has_class(r, "libraryCard")
+    });
+    assert_eq!(pad_left(card), browser_dims::CARD_PAD as f64, "dims::CARD_PAD");
+
+    // browser-library.css:245 `.libraryThumb{padding:3px}` — dims::THUMB_PAD。
+    let thumb = find(&rows, "span.libraryThumb (first)", |r| {
+        has_class(r, "libraryThumb")
+    });
+    assert_eq!(pad_left(thumb), browser_dims::THUMB_PAD as f64, "dims::THUMB_PAD");
+
+    // browser-library.css:279 `.selectionTray{height:27px}` — dims::TRAY_H。
+    let tray = find(&rows, "footer.selectionTray", |r| {
+        has_class(r, "selectionTray")
+    });
+    assert_eq!(box_h(tray), browser_dims::TRAY_H as f64, "dims::TRAY_H");
+    assert_eq!(pad_left(tray), browser_dims::TRAY_PAD_X as f64, "dims::TRAY_PAD_X");
+
+    // browser-library.css:291 `.selectionDot{width:5px;height:5px}` — dims::TRAY_DOT。
+    let dot = find(&rows, "span.selectionDot", |r| has_class(r, "selectionDot"));
+    assert_eq!(box_w(dot), browser_dims::TRAY_DOT as f64, "dims::TRAY_DOT (width)");
+    assert_eq!(box_h(dot), browser_dims::TRAY_DOT as f64, "dims::TRAY_DOT (height)");
+}
+
+/// sidebar(`.locationRow`)と filter shelf(chip)は `data-tab="media"` が
+/// 無いと静的抽出で 0×0 になる — [`extract_browser_with_initial_media_tab`]
+/// で JS の初期状態を静的に補ってから実測する。
+#[test]
+fn browser_sidebar_and_filter_shelf_dims_match_css_computed_values() {
+    let rows = extract_browser_with_initial_media_tab();
+    assert!(!rows.is_empty(), "抽出結果が空");
+
+    // browser-library.css:111 `.librarySidebar h2{height:16px}` — dims::SIDEBAR_H2_H。
+    let heading = find(&rows, "aside.librarySidebar h2 (first, visible)", |r| {
+        tag_is(r, "h2") && box_h(r) > 0.0
+    });
+    assert_eq!(box_h(heading), browser_dims::SIDEBAR_H2_H as f64, "dims::SIDEBAR_H2_H");
+    assert_eq!(
+        pad_left(heading),
+        browser_dims::ROW_PAD_X as f64,
+        "dims::ROW_PAD_X(sidebar h2 の左 padding も同じ 7px)"
+    );
+
+    // browser-library.css:128 `.locationRow{height:19px}` + css:130
+    // `padding:3px 7px 0` — dims::ROW_H / ROW_PAD_X。
+    let row = find(&rows, "button.locationRow (visible, no modifier class)", |r| {
+        r.get("classes")
+            .and_then(|c| c.as_array())
+            .is_some_and(|c| {
+                c.iter().any(|c| c.as_str() == Some("locationRow"))
+                    && c.len() == 1 // indent/selected/collection 修飾なしの素の行
+            })
+            && box_h(r) > 0.0
+    });
+    assert_eq!(box_h(row), browser_dims::ROW_H as f64, "dims::ROW_H");
+    assert_eq!(pad_left(row), browser_dims::ROW_PAD_X as f64, "dims::ROW_PAD_X");
+
+    // browser-library.css:143 `.locationRow.indent{padding-left:13px}`
+    // (7px を上書き) — dims::ROW_INDENT。
+    let indent = find(&rows, "button.locationRow.indent", |r| {
+        has_class(r, "indent") && has_class(r, "locationRow")
+    });
+    assert_eq!(pad_left(indent), browser_dims::ROW_INDENT as f64, "dims::ROW_INDENT");
+
+    // browser-library.css:171 `.filterShelf{min-height:24px}` + css:176
+    // `padding:3px 5px` — dims::SHELF_MIN_H / SHELF_PAD_X / SHELF_PAD_Y。
+    let shelf = find(&rows, "div#filter-shelf.filterShelf", |r| {
+        has_class(r, "filterShelf")
+    });
+    assert_eq!(box_h(shelf), browser_dims::SHELF_MIN_H as f64, "dims::SHELF_MIN_H");
+    assert_eq!(pad_top(shelf), browser_dims::SHELF_PAD_Y as f64, "dims::SHELF_PAD_Y");
+    assert_eq!(pad_left(shelf), browser_dims::SHELF_PAD_X as f64, "dims::SHELF_PAD_X");
+
+    // browser-library.css:191-192 `.filterShelf button{min-height:17px;
+    // padding:2px 5px}` — dims::CHIP_MIN_H / CHIP_PAD_X / CHIP_PAD_Y。
+    let chip = find(&rows, "div.filterGroup > button (first)", |r| {
+        r["path"]
+            .as_str()
+            .is_some_and(|p| p.ends_with("filterGroup > button") && box_h(r) > 0.0)
+    });
+    assert_eq!(box_h(chip), browser_dims::CHIP_MIN_H as f64, "dims::CHIP_MIN_H");
+    assert_eq!(pad_top(chip), browser_dims::CHIP_PAD_Y as f64, "dims::CHIP_PAD_Y");
+    assert_eq!(pad_left(chip), browser_dims::CHIP_PAD_X as f64, "dims::CHIP_PAD_X");
+}
+
+/// pane 幅から解く2つの派生値(module doc「iced の flex 相当」節): 実測できない
+/// (幅依存の box は css_metrics の対象外 — 上記2テストのコメント参照)ので、
+/// css の宣言値(narrow media query の breakpoint と幅)を直接検証する。
+#[test]
+fn browser_sidebar_width_and_thumb_height_follow_the_css_declarations() {
+    // browser-library.css:348-349 `@media (max-width: 420px) { .librarySidebar { width: 92px } }`。
+    assert_eq!(browser_dims::sidebar_width(900.0), browser_dims::SIDEBAR_W);
+    assert_eq!(
+        browser_dims::sidebar_width(browser_pane_pane_w()),
+        browser_dims::SIDEBAR_W_NARROW,
+        "既定 pane 幅は narrow 側(css:348 の breakpoint 420px 以下)"
+    );
+
+    // browser-library.css:241 `aspect-ratio: 16/9` — `thumb_height` が列幅から
+    // 高さを逆算する式そのものを、独立に組み直して突き合わせる(実装の
+    // 中身をコピーしているのではなく、css の宣言 `aspect-ratio:16/9` と
+    // `.thumbnailGrid`/`.libraryCard` の padding という**別々の入力**から
+    // 同じ答えに辿り着くかを見る)。
+    let pane_w = browser_pane_pane_w();
+    let columns = 2;
+    let catalog_w = pane_w - browser_dims::sidebar_width(pane_w) - 2.0 * browser_dims::GRID_PAD_X;
+    let cell_w = catalog_w / columns as f32;
+    let expected_content_w = cell_w - 2.0 * browser_dims::CARD_PAD;
+    let height = browser_dims::thumb_height(pane_w, columns);
+    assert!(
+        (height * browser_dims::THUMB_ASPECT - expected_content_w).abs() < 0.01,
+        "thumb_height({pane_w}, {columns}) = {height} は 16:9 で列幅から解いた \
+         高さと一致するはず(期待 content 幅 {expected_content_w})"
+    );
+}
+
+/// `browser_pane::PANE_W` は private ではなく `pub` だが、この oracle は
+/// `dims` だけを `use` しているので、循環的に依存を増やさないようここだけ
+/// 直接参照する小さなヘルパにしている。
+fn browser_pane_pane_w() -> f32 {
+    motolii_shell_iced::browser_pane::PANE_W
 }
