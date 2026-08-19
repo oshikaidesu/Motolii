@@ -35,11 +35,12 @@
 
 pub mod style;
 
-/// 文字サイズの中央スケール — **これも「発明しない」対象**。生成 token に
-/// 文字サイズの正本は無い(色だけが DTCG 正本を持つ)ので、値そのものは
-/// `view.rs` に既にベタ書きされていた数字をそのまま拾い上げた(2026-08-19
-/// トンマナ統一 campaign レーンB)。新しい大きさを1つも思いつかない —
-/// 3値とも移植元がある。
+/// 文字サイズの中央スケール — **これも「発明しない」対象**。値の正本は
+/// `docs/reviews/2026-08-19-flat-grammar-canon-revision.md` の定数表
+/// (「文字 — 1バンド3段」)。第3波レーンIでこの定数表へ改定した — 旧
+/// `BODY 13 / CAPTION 11 / MICRO 10` は Ableton 実測(主文字帯 11px)と揃って
+/// いなかった暫定値で、ここに新しい大きさを1つも発明していない(4値とも
+/// 定数表からの写し)。
 ///
 /// 型は `f32`(`u16` ではない) — iced の `Text::size` / `Row::spacing` /
 /// `Column::spacing` は `impl Into<iced::Pixels>` を取るが、`Pixels` は
@@ -48,31 +49,59 @@ pub mod style;
 /// こちらは `From<u16>` あり)でしか通らず、両方で使うこの中央スケールは
 /// `f32` で揃える。
 pub mod type_scale {
-    /// 本文 — 帯のボタン・project 名・書き出しの一言(旧 `view.rs` の
-    /// `.size(13)` 各所)。
-    pub const BODY: f32 = 13.0;
-    /// 添え物 — legend 行の状況・ヒント(旧 `view.rs:286` の `.size(11)`)。
-    pub const CAPTION: f32 = 11.0;
-    /// 現状 view.rs に出番は無いが、CAPTION よりさらに小さい添え物のための
-    /// 予約 role(3値の対称性を保つ — 2値だけだと「たまたま2つ拾った」に
-    /// 見えてしまう)。
-    pub const MICRO: f32 = 10.0;
+    /// 本文・行ラベル — 帯のボタン・project 名・書き出しの一言(旧 `BODY`
+    /// を吸収。Ableton実測の主文字帯と同値)。
+    pub const BASE: f32 = 11.0;
+    /// 補助・メタ行 — legend 行の状況・ヒント(旧 `CAPTION` を吸収)。
+    pub const DENSE: f32 = 9.0;
+    /// 単位・添字 — これ未満は禁止(定数表の下限フロア)。現状 view.rs に
+    /// 出番は無いが、4値の対称性を保つための予約 role(旧 `MICRO` の後継)。
+    pub const MICRO: f32 = 8.0;
+    /// panel title(旧 14 から1段圧縮)。現状 view.rs に出番は無い —
+    /// browser_pane / inspector_pane 側が自前の title を持つため
+    /// (このレーンの allowlist 外)。
+    pub const TITLE: f32 = 12.0;
 }
 
-/// 余白の中央スケール — 同じく view.rs のベタ書き数値からの拾い上げ。
+/// 余白の中央スケール — 値の正本は同じく上記定数表の「spacing scale」。
 /// 型は `f32`([`type_scale`] と同じ理由 — `spacing()` も `Into<Pixels>`)。
 pub mod space {
-    /// status 帯の中で project 行と legend 行を継ぐ、行間の最小 spacing
-    /// (旧 `view.rs` の legend 行 `.padding([2, 8])` の前者の値を引き継ぐ)。
-    /// **例に出がちな 4 ではなく実測の 2** — 帯の合計高さを増やさない
-    /// (campaign D2 の制約)を、丸めた値より優先した。
+    /// status 帯の中で project 行と legend 行を継ぐ、行間の最小 spacing。
+    /// scale の最小値 — 帯の合計高さを増やさない(campaign D2 の制約)。
     pub const XS: f32 = 2.0;
-    /// 帯 panel の padding・start 画面ボタン間の spacing(旧 `.padding(8)` /
-    /// `.spacing(8)`)。
-    pub const S: f32 = 8.0;
-    /// 帯の項目間 spacing・action_button 内の名前と近道の間(旧
-    /// `.spacing(12)` 各所)。
-    pub const M: f32 = 12.0;
+    /// 帯 panel の padding・start 画面ボタン間の spacing。
+    pub const S: f32 = 4.0;
+    /// scale の中央値 — 現状 view.rs に単独の出番は無いが、4値の対称性を
+    /// 保つための予約 role。
+    pub const M: f32 = 6.0;
+    /// 帯の項目間 spacing・action_button 内の名前と近道の間(旧 `M=12`
+    /// だった箇所を吸収 — scale の上限を超えるので L へ付け替えた)。
+    pub const L: f32 = 8.0;
+}
+
+#[cfg(test)]
+mod scale_matches_canon {
+    //! `docs/reviews/2026-08-19-flat-grammar-canon-revision.md` の定数表
+    //! (文字 1バンド3段+title、spacing scale {2,4,6,8})が正本。ここが
+    //! 定数表からずれたら red — 旧値(BODY13/CAPTION11/MICRO10、
+    //! XS2/S8/M12)へ戻すとどちらのテストも fail する。
+    use super::{space, type_scale};
+
+    #[test]
+    fn type_scale_is_the_canon_band() {
+        assert_eq!(type_scale::BASE, 11.0);
+        assert_eq!(type_scale::DENSE, 9.0);
+        assert_eq!(type_scale::MICRO, 8.0);
+        assert_eq!(type_scale::TITLE, 12.0);
+    }
+
+    #[test]
+    fn space_is_the_canon_scale() {
+        assert_eq!(space::XS, 2.0);
+        assert_eq!(space::S, 4.0);
+        assert_eq!(space::M, 6.0);
+        assert_eq!(space::L, 8.0);
+    }
 }
 
 use iced::Color;
