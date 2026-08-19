@@ -7,7 +7,7 @@ body { width: 100%; height: 100%; margin: 0; }
 
 body {
   overflow: hidden;
-  background: #111315;
+  background: var(--mock-role-surface-app, #141414);
   color: #e5e6e2;
   color-scheme: dark;
   font-family: system-ui, sans-serif;
@@ -22,7 +22,7 @@ input { font: inherit; }
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #202225;
+  background: var(--mock-role-surface-panel, #1a1a1a);
 }
 
 .browserHeader {
@@ -31,44 +31,45 @@ input { font: inherit; }
   display: flex;
   align-items: center;
   padding: 0 8px;
-  border-bottom: 1px solid #3a3c40;
+  border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b);
 }
 
-.browserHeader strong { font-size: 10px; letter-spacing: .025em; }
-.browserHeader span { margin-left: auto; color: #7d8284; font-size: 6px; letter-spacing: .12em; }
+/* 2026-08-19 第3波: panel title を 12px へ統一(現行10から拡大)。 */
+.browserHeader strong { font-size: 12px; letter-spacing: .025em; }
+.browserHeader span { margin-left: auto; color: #7d8284; font-size: 8px; letter-spacing: .12em; }
 
 .browserToolbar {
   height: 30px;
   flex: 0 0 30px;
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 3px 5px;
-  border-bottom: 1px solid #383b3e;
+  gap: 2px;
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b);
 }
 
 .historyButton,
 .toolbarButton,
 .viewModes button {
   height: 21px;
-  border: 1px solid #45494d;
-  background: #1a1c1f;
+  border: 1px solid var(--mock-role-border-default, #3b3b3b);
+  background: var(--mock-role-surface-raised, #222222);
   color: #bec1bf;
   cursor: pointer;
 }
 
-.historyButton { width: 18px; color: #8b8e8d; font-size: 14px; line-height: 1; }
+.historyButton { width: 18px; color: #8b8e8d; font-size: 11px; line-height: 1; }
 .historyButton:disabled { cursor: default; opacity: .4; }
-.toolbarButton { padding: 0 5px; font-size: 7px; }
+.toolbarButton { padding: 0 4px; font-size: 8px; }
 
 #library-search {
   min-width: 0;
   flex: 1;
   height: 21px;
   padding: 0 6px;
-  border: 1px solid #474b50;
+  border: 1px solid var(--mock-role-border-default, #3b3b3b);
   outline: 0;
-  background: #15171a;
+  background: var(--mock-role-surface-raised, #222222);
   color: #eeefeb;
   font-size: 8px;
 }
@@ -80,7 +81,7 @@ input { font: inherit; }
   height: 26px;
   flex: 0 0 26px;
   display: flex;
-  border-bottom: 1px solid #3a3c40;
+  border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b);
 }
 
 .libraryTabs button {
@@ -94,7 +95,7 @@ input { font: inherit; }
   font-size: 8px;
 }
 
-.libraryTabs button[aria-selected="true"] { border-bottom-color: #b9a660; background: #191b1e; color: #f0f0ec; }
+.libraryTabs button[aria-selected="true"] { border-bottom-color: #b9a660; background: var(--mock-role-surface-app, #141414); color: #f0f0ec; }
 
 .browserWorkspace { min-height: 0; display: flex; flex: 1; }
 
@@ -102,17 +103,17 @@ input { font: inherit; }
   width: 112px;
   flex: 0 0 112px;
   overflow: auto;
-  padding: 3px 0 6px;
-  border-right: 1px solid #3a3c40;
-  background: #181a1d;
+  padding: 2px 0 6px;
+  border-right: 1px solid var(--mock-role-hairline, #111111);
+  background: var(--mock-role-surface-panel, #1a1a1a);
 }
 
 .librarySidebar h2 {
   height: 16px;
   margin: 0;
-  padding: 6px 7px 0;
+  padding: 6px 6px 0;
   color: #727679;
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 600;
   letter-spacing: .11em;
 }
@@ -127,7 +128,7 @@ input { font: inherit; }
   width: 100%;
   height: 19px;
   overflow: hidden;
-  padding: 3px 7px 0;
+  padding: 2px 6px 0;
   border: 0;
   border-left: 2px solid transparent;
   background: transparent;
@@ -140,12 +141,15 @@ input { font: inherit; }
   white-space: nowrap;
 }
 
-.locationRow.indent { padding-left: 13px; }
-.locationRow.selected { border-left-color: #b9a660; background: #353738; color: #f1f1ed; }
-.locationRow:hover:not(:disabled) { background: #292c2f; }
+/* 2026-08-19 第3波: インデント単位6pxの倍数へ(旧13→12)。 */
+.locationRow.indent { padding-left: 12px; }
+/* 2026-08-19 第3波: neutral 状態 overlay(canon 借用技法 — pressed/selected=α0.20,
+   hover=α0.10)。accent色ではなく面3段の上に白alphaを重ねるだけ。 */
+.locationRow.selected { border-left-color: #b9a660; background: color-mix(in srgb, #fff 20%, var(--mock-role-surface-panel, #1a1a1a)); color: #f1f1ed; }
+.locationRow:hover:not(:disabled) { background: color-mix(in srgb, #fff 10%, var(--mock-role-surface-panel, #1a1a1a)); }
 .locationRow.addFolder { color: #767a7c; }
 .locationRow:disabled { cursor: default; opacity: .45; }
-.collection i { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 50%; }
+.collection i { display: inline-block; width: 6px; height: 6px; margin-right: 2px; border-radius: 50%; }
 .collection.amber i { background: #c89a40; }
 .collection.cyan i { background: #4db7bd; }
 .collection.violet i { background: #a676c5; }
@@ -158,11 +162,11 @@ input { font: inherit; }
   display: flex;
   align-items: center;
   padding: 0 6px;
-  border-bottom: 1px solid #373a3d;
+  border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b);
 }
 
 .catalogHeader strong { display: block; color: #e2e3df; font-size: 9px; }
-.catalogHeader span { display: block; max-width: 205px; overflow: hidden; margin-top: 1px; color: #808487; font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
+.catalogHeader span { display: block; max-width: 205px; overflow: hidden; margin-top: 1px; color: #808487; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .viewModes { display: flex; gap: 2px; margin-left: auto; }
 .viewModes button { width: 21px; padding: 0; font-size: 8px; }
 .viewModes button[aria-pressed="true"] { border-color: #b9a660; background: #38362c; color: #f0ebce; }
@@ -171,31 +175,31 @@ input { font: inherit; }
   min-height: 24px;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   overflow-x: auto;
-  padding: 3px 5px;
-  border-bottom: 1px solid #34373a;
-  background: #1b1d20;
+  padding: 2px 4px;
+  border-bottom: 1px solid var(--mock-role-border-default, #3b3b3b);
+  background: var(--mock-role-surface-panel, #1a1a1a);
 }
 
 .filterShelf[hidden] { display: none; }
-.filterGroup { display: none; align-items: center; gap: 3px; min-width: max-content; }
+.filterGroup { display: none; align-items: center; gap: 2px; min-width: max-content; }
 .libraryBrowser[data-tab="media"] .filterGroup[data-filter-group="media"],
 .libraryBrowser[data-tab="effects"] .filterGroup[data-filter-group="effects"],
 .libraryBrowser[data-tab="create"] .filterGroup[data-filter-group="create"],
 .libraryBrowser[data-tab="panels"] .filterGroup[data-filter-group="panels"] { display: flex; }
-.filterShelf span { flex: 0 0 auto; color: #777c7e; font-size: 6px; letter-spacing: .08em; }
+.filterShelf span { flex: 0 0 auto; color: #777c7e; font-size: 8px; letter-spacing: .08em; }
 .filterShelf button,
 .editorTags button {
   flex: 0 0 auto;
   min-height: 17px;
-  padding: 2px 5px;
-  border: 1px solid #484b4e;
+  padding: 2px 4px;
+  border: 1px solid var(--mock-role-border-default, #3b3b3b);
   border-radius: 8px;
-  background: #26292c;
+  background: var(--mock-role-surface-raised, #222222);
   color: #c9ccca;
   cursor: pointer;
-  font-size: 7px;
+  font-size: 8px;
 }
 
 .filterShelf button.selected { border-color: #b9a660; background: #3c382b; color: #f1e8bd; }
@@ -210,7 +214,7 @@ input { font: inherit; }
 }
 
 .resultSummary strong { font-size: 8px; }
-.resultSummary span { margin-left: auto; color: #898d8e; font-size: 7px; font-variant-numeric: tabular-nums; }
+.resultSummary span { margin-left: auto; color: #898d8e; font-size: 8px; font-variant-numeric: tabular-nums; }
 
 .thumbnailGrid {
   min-height: 0;
@@ -224,7 +228,7 @@ input { font: inherit; }
 
 .libraryCard {
   min-width: 0;
-  padding: 3px;
+  padding: 2px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -234,7 +238,7 @@ input { font: inherit; }
 }
 
 .libraryCard[hidden] { display: none; }
-.libraryCard.selected { background: #36393a; }
+.libraryCard.selected { background: color-mix(in srgb, #fff 20%, var(--mock-role-surface-panel, #1a1a1a)); }
 .libraryCard[draggable="true"] { user-select: none; }
 .libraryBrowser.isDragging .libraryCard.selected { opacity: .55; }
 .libraryThumb {
@@ -242,11 +246,11 @@ input { font: inherit; }
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 3px;
-  border: 1px solid #3e4245;
+  padding: 2px;
+  border: 1px solid var(--mock-role-border-default, #3b3b3b);
 }
 
-.libraryCard:hover .libraryThumb { border-color: #85898b; }
+.libraryCard:hover .libraryThumb { border-color: var(--mock-role-border-strong, #686868); }
 .libraryCard.selected .libraryThumb { border-color: #b9a660; box-shadow: inset 0 0 0 1px #b9a66055; }
 .libraryThumb b { color: #f2f2ed; font-size: 8px; font-weight: 600; }
 .thumb-blue { background: #5d7899; }
@@ -257,6 +261,10 @@ input { font: inherit; }
 .thumb-slate { background: #546a75; }
 .thumb-magenta { background: #8a5b83; }
 .thumb-create { align-items: center; justify-content: center; background: #302e28; }
+/* icon-in-tile glyph (large "+"/camera pictogram sized to the tile), not body
+   text — kept at 20px on purpose (2026-08-19; clamping to 12 would make the
+   glyph unreadably small inside its fixed tile — flagged in RETURN as the
+   one deliberate exemption from the {8,9,11,12} band). */
 .thumb-create b { color: #e7dba2; font-size: 20px; font-weight: 400; }
 .thumb-cyan { align-items: center; justify-content: center; background: #477d81; }
 .thumb-cyan b { font-size: 20px; }
@@ -264,7 +272,7 @@ input { font: inherit; }
 .cardCopy strong,
 .cardCopy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cardCopy strong { margin-top: 2px; color: #edede9; font-size: 8px; }
-.cardCopy small { color: #9ea2a3; font-size: 6.5px; }
+.cardCopy small { color: #9ea2a3; font-size: 8px; }
 
 .libraryBrowser[data-view="thumbnails"] .thumbnailGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .libraryBrowser[data-view="thumbnails"] .libraryCard { padding: 2px; }
@@ -273,7 +281,7 @@ input { font: inherit; }
 .libraryBrowser[data-view="list"] .thumbnailGrid { grid-template-columns: 1fr; }
 .libraryBrowser[data-view="list"] .libraryCard { display: flex; align-items: center; }
 .libraryBrowser[data-view="list"] .libraryThumb { width: 46px; flex: 0 0 46px; }
-.libraryBrowser[data-view="list"] .cardCopy { min-width: 0; flex: 1; padding-left: 5px; }
+.libraryBrowser[data-view="list"] .cardCopy { min-width: 0; flex: 1; padding-left: 4px; }
 
 .selectionTray {
   height: 27px;
@@ -283,16 +291,16 @@ input { font: inherit; }
   gap: 4px;
   overflow: hidden;
   padding: 0 6px;
-  border-top: 1px solid #3a3d40;
-  background: #191b1e;
+  border-top: 1px solid var(--mock-role-border-default, #3b3b3b);
+  background: var(--mock-role-surface-app, #141414);
   white-space: nowrap;
 }
 
 .selectionDot { width: 5px; height: 5px; flex: 0 0 5px; background: #b9a660; }
-.selectionTray strong { overflow: hidden; color: #e8e9e4; font-size: 7px; text-overflow: ellipsis; }
-.selectionTray > span:not(.selectionDot) { overflow: hidden; color: #83888a; font-size: 6px; text-overflow: ellipsis; }
+.selectionTray strong { overflow: hidden; color: #e8e9e4; font-size: 8px; text-overflow: ellipsis; }
+.selectionTray > span:not(.selectionDot) { overflow: hidden; color: #83888a; font-size: 8px; text-overflow: ellipsis; }
 .selectionTray #gesture-status { color: #c6b875; }
-.selectionTray button { margin-left: auto; padding: 2px 0 2px 4px; border: 0; background: transparent; color: #c7b66c; cursor: pointer; font-size: 7px; }
+.selectionTray button { margin-left: auto; padding: 2px 0 2px 4px; border: 0; background: transparent; color: #c7b66c; cursor: pointer; font-size: 8px; }
 
 .tagEditor {
   position: absolute;
@@ -300,39 +308,41 @@ input { font: inherit; }
   top: 35px;
   right: 5px;
   width: min(235px, calc(100% - 10px));
-  padding: 7px;
-  border: 1px solid #52565a;
-  background: #1a1c20;
+  padding: 6px;
+  border: 1px solid var(--mock-role-border-strong, #686868);
+  background: var(--mock-role-surface-raised, #222222);
   box-shadow: 0 8px 24px #000a;
 }
 
 .tagEditor[hidden] { display: none; }
 .tagEditor header { display: flex; align-items: center; }
 .tagEditor header strong { font-size: 9px; }
-.tagEditor header button { width: 17px; height: 17px; margin-left: auto; border: 0; background: transparent; color: #babdbb; cursor: pointer; font-size: 13px; }
-.tagEditor p { margin: 7px 0 0; color: #e5e6e1; font-size: 8px; font-weight: 600; }
-.tagEditor small { display: block; overflow: hidden; margin-top: 2px; color: #85898b; font-size: 6px; text-overflow: ellipsis; white-space: nowrap; }
-#tag-form { display: flex; gap: 3px; margin-top: 7px; }
-#tag-input { min-width: 0; flex: 1; height: 21px; padding: 0 5px; border: 1px solid #494d51; background: #121417; color: #f0f0ec; font-size: 8px; }
-#tag-form button { min-width: 31px; border: 1px solid #5c5639; background: #373326; color: #eee2aa; cursor: pointer; font-size: 7px; }
-.editorTags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 7px; }
+.tagEditor header button { width: 17px; height: 17px; margin-left: auto; border: 0; background: transparent; color: #babdbb; cursor: pointer; font-size: 11px; }
+.tagEditor p { margin: 6px 0 0; color: #e5e6e1; font-size: 8px; font-weight: 600; }
+.tagEditor small { display: block; overflow: hidden; margin-top: 2px; color: #85898b; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+#tag-form { display: flex; gap: 2px; margin-top: 6px; }
+/* html:#tag-input はinspectorのNotes/Tags実装と同一idコンポーネント —
+   同じrole接続にする(inspector-library.css:512と同じ意図)。 */
+#tag-input { min-width: 0; flex: 1; height: 21px; padding: 0 4px; border: 1px solid var(--mock-role-border-strong, #686868); background: var(--mock-role-surface-app, #141414); color: #f0f0ec; font-size: 8px; }
+#tag-form button { min-width: 31px; border: 1px solid #5c5639; background: #373326; color: #eee2aa; cursor: pointer; font-size: 8px; }
+.editorTags { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 6px; }
 
 .contextMenu {
   position: fixed;
   z-index: 4;
   width: 164px;
-  padding: 3px;
-  border: 1px solid #585c60;
-  background: #202326;
+  padding: 2px;
+  border: 1px solid var(--mock-role-border-strong, #686868);
+  background: var(--mock-role-surface-raised, #222222);
   box-shadow: 0 8px 20px #000c;
 }
 
 .contextMenu[hidden] { display: none; }
 .contextMenu button { width: 100%; height: 21px; padding: 0 6px; border: 0; background: transparent; color: #dedfda; cursor: pointer; font-size: 8px; text-align: left; }
 .contextMenu button:hover:not(:disabled),
-.contextMenu button:focus-visible { background: #3a3c3c; outline: 0; }
+.contextMenu button:focus-visible { background: color-mix(in srgb, #fff 10%, var(--mock-role-surface-raised, #222222)); outline: 0; }
 .contextMenu button:disabled { color: #767a7b; cursor: default; }
-.contextMenu span { display: block; height: 1px; margin: 3px 0; background: #46494d; }
+.contextMenu span { display: block; height: 1px; margin: 2px 0; background: var(--mock-role-border-default, #3b3b3b); }
 
 .libraryTabs button:focus-visible,
 .locationRow:focus-visible,
@@ -347,9 +357,9 @@ input { font: inherit; }
 
 @media (max-width: 420px) {
   .librarySidebar { width: 92px; flex-basis: 92px; }
-  .locationRow { padding-left: 5px; padding-right: 4px; }
-  .locationRow.indent { padding-left: 9px; }
-  .toolbarButton { padding-inline: 3px; }
+  .locationRow { padding-left: 4px; padding-right: 4px; }
+  .locationRow.indent { padding-left: 6px; }
+  .toolbarButton { padding-inline: 4px; }
   .catalogHeader span { max-width: 110px; }
   .selectionTray > span:not(.selectionDot) { display: none; }
 }
