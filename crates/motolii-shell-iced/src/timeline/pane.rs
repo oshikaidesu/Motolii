@@ -28,9 +28,11 @@ use motolii_core::Fps;
 use motolii_doc::{Document, LayerId};
 use motolii_ui::blitz_shell::{seconds_to_us, UiIntent, UiItemFlag};
 use motolii_ui::timeline_editor::{TimelineView, TrimEdge};
+use motolii_ui::timeline_rows::TimelineFoldState;
 
 use super::semantics::{
     clamped_move_delta, clamped_trim, frame_snapped, initial_view, move_targets,
+    row_effective_lock, row_own_lock,
 };
 
 /// canvas が出す **意図(intent)まで解決済み**の Message。生イベント中継は無い —
@@ -83,6 +85,31 @@ pub enum TimelineMsg {
     /// 修飾キーの状態。`WheelScrolled` が modifiers を運ばないので追いかける
     /// (spike の詰まった箇所その1と同じ回避)。
     ModifiersChanged(iced::keyboard::Modifiers),
+
+    // ---- 構造操作(2026-08-19)。畳み開閉は Document に入らない session 状態
+    //      なので intent にならない — zoom/pan と同じ scope(M-3 の決定と整合)。
+    //      Rename / Lock / Group / Ungroup は最終的に `UiIntent` を1件だけ出す。
+    /// 子(`params: false`)/ param(`params: true`)の開閉矢印を押した。
+    /// `TimelinePane::fold` を直接動かす — intent は無い。
+    FoldToggled { layer: LayerId, params: bool },
+    /// 行名をダブルクリック(または Enter・単独選択時)= その場編集を始める。
+    RenameStarted { layer: LayerId },
+    /// 編集中バッファの1手ぶんの差し替え(1キー = 1つの新しい全文字列)。
+    RenameEdited(String),
+    /// Enter = 確定。`UiIntent::RenameLayer` が1件飛ぶ。
+    RenameCommitted,
+    /// Esc = 取消(rename 編集中だけを横取りする — ジェスチャの Esc とは別腕)。
+    RenameCancelled,
+    /// L ボタンを押した。**送るのは「いまの自分の lock の反対」**(Toggle ではなく
+    /// 明示値の `UiIntent::SetLayerLock`)。
+    LockPressed { layer: LayerId },
+    /// Cmd+G。選択を1つの Group にまとめる。
+    GroupPressed,
+    /// Cmd+Shift+G。選ばれている Group を解く。
+    UngroupPressed,
+    /// Cmd+D。D2 に `prepare_duplicate_track_item` の口があるので実装する
+    /// (RETURN 参照 — capsule は「口が無ければ見送る」だったが実測で在った)。
+    DuplicatePressed,
 }
 
 /// bar のどこを掴んだか(Message が運ぶ側)。
@@ -140,6 +167,11 @@ pub struct TimelinePane {
     pub scroll_y: f32,
     pub modifiers: iced::keyboard::Modifiers,
     pub drag: Option<TimelineDrag>,
+    /// 行の畳み開閉。**Document には入らない**(zoom/pan と同じ scope — M-3 の
+    /// 決定と整合)。`canvas.rs` の `scene()` がここを読んで `rows()` を作る。
+    pub fold: TimelineFoldState,
+    /// rename のその場編集バッファ。`Some((layer, 表示中の文字列))`。
+    pub renaming: Option<(LayerId, String)>,
     /// 最初の ctx で view を composition に合わせて据えたか。
     initialized: bool,
 }
@@ -151,6 +183,8 @@ impl Default for TimelinePane {
             scroll_y: 0.0,
             modifiers: iced::keyboard::Modifiers::empty(),
             drag: None,
+            fold: TimelineFoldState::default(),
+            renaming: None,
             initialized: false,
         }
     }
@@ -168,13 +202,37 @@ impl TimelinePane {
             TimelineMsg::BarGrabbed {
                 layer,
                 zone,
+                at_seconds,
                 additive,
-                ..
-            } => match zone {
-                // 端の掴みは選択を変えない(egui と同じ)。
-                GrabZone::Edge(_) => Vec::new(),
-                GrabZone::Body => press_selection_intents(&ctx.selected, *layer, *additive),
-            },
+            } => {
+                // **ロック中は掴む前に断る。** D2(`prepare_set_clip_start` /
+                // `prepare_trim_clip_in/out`)は lock を検査しない — 拒否は
+                // `TimelineEditor::begin_selected_clips_move` / `begin_trim` の
+                // 層でしか起きないので、実際に1回そこを通してもらわないと
+                // 理由が status 帯へ出ない。掴んだ瞬間に「進まない0幅の
+                // move/trim」を1件飛ばし、断りをその場で journal ⇄ 帯へ写す
+                // (2026-08-19 能力台帳の指摘: 掴めないことが掴む前に分かる
+                // ようにする・拒否は無言にしない)。
+                if row_effective_lock(&ctx.document, *layer) {
+                    return match zone {
+                        GrabZone::Body => vec![UiIntent::MoveClips {
+                            grabbed: *layer,
+                            grab_at_us: seconds_to_us(*at_seconds),
+                            drop_at_us: seconds_to_us(*at_seconds),
+                        }],
+                        GrabZone::Edge(edge) => vec![UiIntent::TrimClip {
+                            layer: *layer,
+                            edge: *edge,
+                            at_us: seconds_to_us(*at_seconds),
+                        }],
+                    };
+                }
+                match zone {
+                    // 端の掴みは選択を変えない(egui と同じ)。
+                    GrabZone::Edge(_) => Vec::new(),
+                    GrabZone::Body => press_selection_intents(&ctx.selected, *layer, *additive),
+                }
+            }
             TimelineMsg::RowPicked { layer, additive } => vec![UiIntent::SelectLayer {
                 layer: layer.get(),
                 additive: *additive,
@@ -238,6 +296,62 @@ impl TimelinePane {
             TimelineMsg::PlayheadStepped { frames } => {
                 vec![UiIntent::StepPlayhead { frames: *frames }]
             }
+            // ---- 構造操作 ----
+            // rename の確定だけが intent になる(`UiIntent::RenameLayer`)。
+            // 空文字は送らない — `TimelineEditor::rename_layer` も断るが、
+            // journal を「入力ミスのたび1件」で汚さないための先回り。
+            TimelineMsg::RenameCommitted => match &self.renaming {
+                Some((layer, name)) if !name.trim().is_empty() => vec![UiIntent::RenameLayer {
+                    layer: layer.get(),
+                    name: name.clone(),
+                }],
+                _ => Vec::new(),
+            },
+            // L ボタン: **明示値**を送る(Toggle ではなく Set — 押すたびに
+            // 「いまの自分の lock の反対」を document から読んで積む)。
+            TimelineMsg::LockPressed { layer } => vec![UiIntent::SetLayerLock {
+                layer: layer.get(),
+                locked: !row_own_lock(&ctx.document, *layer),
+            }],
+            TimelineMsg::GroupPressed => {
+                if ctx.selected.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![UiIntent::GroupLayers {
+                        layers: ctx.selected.iter().map(|layer| layer.get()).collect(),
+                    }]
+                }
+            }
+            // Ungroup は**単独選択**のときだけ意味を持つ(束ねた複数の Group を
+            // 一度に解く操作は無い — egui 側にも前例が無いので発明しない)。
+            TimelineMsg::UngroupPressed => match ctx.selected.as_slice() {
+                [layer] => vec![UiIntent::UngroupLayer { layer: layer.get() }],
+                _ => Vec::new(),
+            },
+            TimelineMsg::DuplicatePressed => {
+                if ctx.selected.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![UiIntent::DuplicateSelection]
+                }
+            }
+            // **ロック中は rename も掴む前に断る。** egui 版 `begin_rename` と同じ
+            // 判断(コミット時ではなく、始めようとした時点で断る) — 編集欄を
+            // 開いてから Enter で初めて断られるのは「入れたのに後出しで
+            // 拒否される」体験になる(2026-08-19 能力台帳の指摘と同じ型)。
+            // 名前は空でよい — `rename_layer` は lock を空名チェックより先に見る。
+            TimelineMsg::RenameStarted { layer } if row_effective_lock(&ctx.document, *layer) => {
+                vec![UiIntent::RenameLayer {
+                    layer: layer.get(),
+                    name: String::new(),
+                }]
+            }
+            // fold・rename の編集途中(バッファの1手ぶん)は view の preview と
+            // 同じ scope — Document には入らない(再現は Message 列 replay)。
+            TimelineMsg::FoldToggled { .. }
+            | TimelineMsg::RenameStarted { .. }
+            | TimelineMsg::RenameEdited(_)
+            | TimelineMsg::RenameCancelled => Vec::new(),
             // view の操作・preview の途中経過は intent にならない
             // (再現は Message 列 replay が持つ — `drive_timeline.rs` の oracle)。
             TimelineMsg::ScrubStarted { .. }
@@ -264,7 +378,16 @@ impl TimelinePane {
                 zone,
                 at_seconds,
                 ..
-            } => match zone {
+            } => {
+                // **ロック中は preview のジェスチャを始めない。** `plan()` が
+                // 断りだけを journal ⇄ 帯へ既に送っている(D2 は lock を見ないので、
+                // ここで揃えないと「preview は動くが release で無言で戻る」という
+                // 嘘になる — 2026-08-19 能力台帳の指摘)。
+                if row_effective_lock(&ctx.document, *layer) {
+                    self.drag = None;
+                    return;
+                }
+                match zone {
                 GrabZone::Body => {
                     // Cmd+クリックが**選択を外した**場合、掴んだ物はもう選択に
                     // 居ない。ここでドラッグを始めると「外したはずの clip を
@@ -307,7 +430,8 @@ impl TimelinePane {
                         preview,
                     });
                 }
-            },
+                }
+            }
             TimelineMsg::ScrubStarted { at_seconds } => {
                 self.drag = Some(TimelineDrag::Scrub {
                     preview: frame_snapped(at_seconds.clamp(0.0, comp), ctx.fps()),
@@ -361,9 +485,62 @@ impl TimelinePane {
             TimelineMsg::ModifiersChanged(modifiers) => {
                 self.modifiers = *modifiers;
             }
-            // 選択・M/S・削除・Undo/Redo・コマ送りは座席側の状態で、pane は何も控えない。
+            // ---- 構造操作 ----
+            // fold は Document に入らないのでここが正本(intent 経由の反映ではない)。
+            TimelineMsg::FoldToggled { layer, params } => {
+                if *params {
+                    if self.fold.params_are_open(*layer) {
+                        self.fold.close_params(*layer);
+                    } else {
+                        self.fold.open_params(*layer);
+                    }
+                } else if self.fold.children_are_open(*layer) {
+                    self.fold.close_children(*layer);
+                } else {
+                    self.fold.open_children(*layer);
+                }
+            }
+            // rename の編集バッファは pane の session 状態(egui 版 `self.renaming`
+            // と同じ立ち位置)。**いま見えている名前を初期値にする**。
+            //
+            // ロック中は編集欄を開かない — `plan()` が既に `RenameLayer` の
+            // probe を1件飛ばして断りを帯へ書いた後なので、ここは黙って
+            // 何もしない(二重に言わない)。
+            TimelineMsg::RenameStarted { layer } => {
+                if row_effective_lock(&ctx.document, *layer) {
+                    return;
+                }
+                let name = ctx
+                    .document
+                    .layers
+                    .display_name(*layer)
+                    .unwrap_or("?")
+                    .to_owned();
+                self.renaming = Some((*layer, name));
+            }
+            TimelineMsg::RenameEdited(text) => {
+                if let Some((_, buffer)) = self.renaming.as_mut() {
+                    *buffer = text.clone();
+                }
+            }
+            TimelineMsg::RenameCommitted | TimelineMsg::RenameCancelled => {
+                self.renaming = None;
+            }
+            // まとめたら中が見えている状態にする(egui 版 `group_selected` の
+            // `self.fold.open_children(group)` と同じ手触り — dispatch 後の
+            // `ctx.selected` が新しい Group の singleton になっている)。
+            TimelineMsg::GroupPressed => {
+                if let [group] = ctx.selected.as_slice() {
+                    self.fold.open_children(*group);
+                }
+            }
+            // 選択・M/S/L・Ungroup・Duplicate・削除・Undo/Redo・コマ送りは
+            // 座席側の状態で、pane は何も控えない。
             TimelineMsg::RowPicked { .. }
             | TimelineMsg::FlagPressed { .. }
+            | TimelineMsg::LockPressed { .. }
+            | TimelineMsg::UngroupPressed
+            | TimelineMsg::DuplicatePressed
             | TimelineMsg::EmptyPressed { .. }
             | TimelineMsg::DeletePressed
             | TimelineMsg::UndoPressed

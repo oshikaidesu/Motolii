@@ -71,6 +71,10 @@ const SCANNED: &[(&str, &str)] = &[
         include_str!("../src/timeline/semantics.rs"),
     ),
     (
+        "timeline/structure.rs",
+        include_str!("../src/timeline/structure.rs"),
+    ),
+    (
         "timeline/waveform.rs",
         include_str!("../src/timeline/waveform.rs"),
     ),
