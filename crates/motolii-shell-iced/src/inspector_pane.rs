@@ -4,23 +4,27 @@
 //! 構成は 2026-08-13 裁定の採択案 A(4 section 常設)+ 同日の key add UX 決定:
 //!
 //! 1. identity 行(名前・種別・M / S)。押下状態は Document 由来の model から
-//! 2. TRANSFORM: Position / Scale(Vec2 = 1 header + 1 key ボタン + X/Y 値行)、
-//!    Rotation / Opacity(値行に key ボタン)。key ボタンは3状態
+//! 2. TRANSFORM: Position / Scale / Rotation / Opacity — **1 param = 1 行**、
+//!    Property|X|Y|Key の4列を1行の中に並べる([`transform_rows`])。
+//!    key ボタンは3状態
 //! 3. EFFECTS: 共有 FX の一覧 + ON/OFF。param は F64 / Vec2 / Vec3 / Color だけ行を出す
 //! 4. Audio: **出さない** — gain のエディタ操作 API がまだ無く、接続できない
 //!    chrome は置かない(Q0。座席が立ったら section ごと足す)
 //!
-//! ## 見た目の正本(2026-08-18 視覚再現レーン)
+//! ## 見た目の正本(2026-08-18 視覚再現レーン、2026-08-19 訂正)
 //!
-//! 訂正後の正本は egui shell の絵ではなく、`docs/mocks-ui/public/
-//! inspector-library.css` + `inspector-library.html` そのもの(この節の関数の
-//! doc コメントは全部 `css:行番号` でそこを指す)。色は [`theme::Tokens`] の
-//! semantic role だけを読み、**独自 hex は1つも置かない**。ここで足した寸法
-//! (`dims` module)は行高・帯幅など幅に依らない値だけを css から写した —
-//! 3D の Z 列や shape swatch など、この製品の read-model
-//! (`crate::inspector_model`)にまだ無いデータを要求する箇所は**足さない**
-//! (Q0: 死に chrome 禁止。無い物は無いままにして、`docs/reviews/evidence/
-//! iced-visual-fidelity/README.md` に残差として書く)。
+//! 正本は egui shell の絵ではなく、`docs/mocks-ui/public/inspector-library.css`
+//! + `inspector-library.html` そのもの(この節の関数の doc コメントは
+//! `css:行番号` に加えて html の要素・class・grid 構造も指す)。**egui 版
+//! `crates/motolii-ui/src/inspector_panel/` は変換がうまくいかなかった側で、
+//! 見た目・構造の手本にしない**(2026-08-19 訂正 — egui を見てよいのは
+//! 「振る舞いの結線」= key ボタン3状態の意味・accepted からのみ導出、といった
+//! 既決の意味論だけ)。色は [`theme::Tokens`] の semantic role だけを読み、
+//! **独自 hex は1つも置かない**。ここで足した寸法(`dims` module)は行高・
+//! 帯幅など幅に依らない値だけを css から写した — 3D の Z 列や shape swatch
+//! など、この製品の read-model(`crate::inspector_model`)にまだ無いデータを
+//! 要求する箇所は**足さない**(Q0: 死に chrome 禁止。無い物は無いままにして、
+//! `docs/reviews/evidence/iced-visual-fidelity/README.md` に残差として書く)。
 //!
 //! スクラブ部品と key ボタンは [`crate::widgets`] の本物(統合 wave で stub から
 //! 差し替えた)。
@@ -54,10 +58,33 @@ pub const NO_EFFECTS: &str = "No shared FX";
 /// ドラッグ/ダブルクリック/Esc しか持たず、右クリックのリセットは無い)。
 pub const HINT: &str = "Drag to scrub \u{b7} double-click to type \u{b7} Esc to cancel";
 
-/// 寸法 — `docs/mocks-ui/public/inspector-library.css` の写し(幅に依らない
-/// 値だけ。pane 幅は 300px で css 正本の 496px より狭いので、列幅そのものは
-/// [`transform_rows`] 側で pane 幅に収まる値を別に決めている)。
-mod dims {
+/// `TimelineState::new`(`motolii_ui::timeline_editor::mod.rs`)の既定 status
+/// 文言 — Timeline 機構がまだ持たない `space=play` / `L=loop` /
+/// `Cmd+G=group` を宣伝する固定ヒントで、[`inspector`] はこれを
+/// `editor_status` としてそのまま映していた(2026-08-19 近道キー移植レーンが
+/// 発見・`spawn_task` 済み — 効かないキーを固定文で宣伝するのは Q0 違反で
+/// 実害がある)。近道キーの正本は [`crate::shortcuts`] で、実際に効く行だけを
+/// status 帯側(`view.rs` の `status_band` → `shortcuts::legend_line`)が
+/// 既に出しているので、Inspector 側はこの1文だけを黙らせて一本化する
+/// (undo/redo・削除・拒否理由など、他の editor_status は実際に起きた事実
+/// なのでそのまま通す — 撤去は本当に古いこの固定文だけ)。
+///
+/// `motolii_ui` は egui 版とも共有するクレートなので、既定値そのものは
+/// ここでは書き換えない(egui shell 本体を変えない柵)— 表示側だけを直す。
+const STALE_KEY_HINT: &str = "space=play  L=loop  Cmd+G=group  Del=delete  drag name=reorder";
+
+/// 寸法 — `docs/mocks-ui/public/inspector-library.css` の写し。**独自に
+/// 縮めた値は無い** — pane 幅は 300px で css 正本の 496px より狭いが、列幅は
+/// css の実測値をそのまま使う(はみ出れば `scrollable` が拾う。2026-08-19
+/// 訂正: 以前のここの注記は「pane 幅に収まる値を別に決めている」と書いていたが
+/// 実際のコードは既に css の生値をそのまま使っていた — 注記だけが古かった)。
+///
+/// `pub` なのは [`crate::inspector_pane`] の oracle テスト
+/// (`crates/motolii-shell-iced/tests/css_metrics_oracle.rs`)が
+/// `motolii_ui::css_metrics::extract` の実測値と直接突き合わせるため
+/// (2026-08-19 の提案どおり引き上げた — 外部の統合テスト crate からは
+/// `pub(crate)` は見えないので、真に両方向にするには `pub` が要る)。
+pub mod dims {
     /// inspector-library.css:29 `.panelHeader { height: 29px }`
     pub const PANEL_HEADER_H: f32 = 29.0;
     /// inspector-library.css:37 `.panelHeader::before { width:3px; height:13px }`
@@ -149,7 +176,9 @@ pub fn inspector<'a>(seat: InspectorSeat, editor_status: Option<String>) -> Elem
     let scroller = iced::widget::scrollable(sections).width(Fill).height(Fill);
 
     let mut whole = column![header, scroller];
-    if let Some(status) = editor_status.filter(|status| !status.is_empty()) {
+    if let Some(status) =
+        editor_status.filter(|status| !status.is_empty() && status != STALE_KEY_HINT)
+    {
         whole = whole.push(
             container(text(status).size(11).style(crate::theme::style::text_muted)).padding([4, 9]),
         );
@@ -418,8 +447,17 @@ fn flag_button_style(
     }
 }
 
-/// 列見出し行(Property / X / Y)。inspector-library.css:115-138。
-/// この pane は Z 列を持たない(製品が2D transformなので発明しない)。
+/// 列見出し行 — `<header class="columnHeader"><span>Property</span>
+/// <span>X</span><span>Y</span><span>Z</span><span aria-label="Keyframe">◇
+/// </span></header>`(inspector-library.html:25)の写し。この pane は Z 列を
+/// 持たない(製品が2D transformなので発明しない)が、**Key 列は持つ** —
+/// 元は Property|X|Y の3列しか出しておらず、値行が実際に持つ4本目の列
+/// (key ボタン)を見出しが1本も約束していなかった(2026-08-19 残差1の
+/// 半分: 「3列だけ約束して値は4列出す」という内部矛盾)。ここを直したので、
+/// 見出しと [`transform_rows`] の列構成が完全に一致する。
+///
+/// `.columnHeader span:last-child { color: action-active }`
+/// (inspector-library.css:138)— Key 見出しだけ amber に色づく。
 fn column_header<'a>() -> Element<'a, Message> {
     let heading = |label: &'static str| {
         text(label)
@@ -427,24 +465,48 @@ fn column_header<'a>() -> Element<'a, Message> {
             .font(weight(iced::font::Weight::Bold))
             .style(crate::theme::style::text_muted)
     };
+    // html は最後の見出しに ◇ グリフそのものを置く(`aria-label="Keyframe"`)。
+    // ここは字ではなく "Key" にする — `key_button` の実物ボタンも同じ ◇/◆
+    // グリフを表示文字列として持つので、見出しにも同じグリフを置くと
+    // `iced_test::Simulator::click("\u{25c7}")` が実物ボタンより先にこの
+    // 見出しへ当たってしまい、`tests/inspector_drive.rs` /
+    // `tests/replay_oracle.rs` の「depth-first の先頭 = Position の
+    // ボタン」という前提を静かに壊す(既存の意味を壊さない柵)。
+    let key_heading = container(
+        text("Key")
+            .size(8)
+            .font(weight(iced::font::Weight::Bold))
+            .style(|theme: &iced::Theme| iced::widget::text::Style {
+                color: Some(Tokens::resolve(theme).action_active),
+            }),
+    )
+    .width(crate::widgets::key_button::KEY_BUTTON_SIZE)
+    .center_x(crate::widgets::key_button::KEY_BUTTON_SIZE);
     column![
         container(
             row![
                 heading("Property"),
                 space().width(Fill),
-                container(heading("X"))
-                    .width(dims::VALUE_COL_W)
-                    .center_x(dims::VALUE_COL_W),
-                container(heading("Y"))
-                    .width(dims::VALUE_COL_W)
-                    .center_x(dims::VALUE_COL_W),
+                row![
+                    container(heading("X"))
+                        .width(dims::VALUE_COL_W)
+                        .center_x(dims::VALUE_COL_W),
+                    container(heading("Y"))
+                        .width(dims::VALUE_COL_W)
+                        .center_x(dims::VALUE_COL_W),
+                ]
+                .spacing(0),
+                key_heading,
             ]
-            .spacing(0)
+            .spacing(7)
             .align_y(Center),
         )
-        // property_row の content padding([4,8])と揃える — X/Y 見出しの右端が
-        // 値セルの右端の真上に来る(残差5: 「列が揃っていない」の対処)。
-        .padding(iced::padding::left(8).right(8))
+        // .propertyName の左 padding(11px = 3px の帯 + 8px の内側 padding)と
+        // 揃える(inspector-library.css:137 `.columnHeader span:first-child
+        // { padding-left: 11px }` — header 自身は帯を持たないが、値行の帯ぶんを
+        // 見た目で埋め合わせている)。右は property_row の content padding(8)
+        // と揃える。
+        .padding(iced::padding::left(11).right(8))
         .width(Fill)
         .height(dims::COLUMN_HEADER_H)
         .align_y(Center)
@@ -522,8 +584,19 @@ fn section_heading<'a>(label: &'static str, count: Option<String>) -> Element<'a
     .into()
 }
 
-/// Transform 1 param ぶんの行。Vec2 は 1 header + 1 key ボタン + X/Y 値行、
-/// scalar は 1 行に値と key ボタン(2026-08-13 mapping)。
+/// Transform 1 param ぶんの行。**1 param = 1 行**(Vec2 も scalar も) —
+/// `<div class="propertyRow" data-control="Position">` は `.propertyName`
+/// (icon+名前)・`.valueCell`(X)・`.valueCell`(Y)・`.keyButton` を**同じ行の
+/// 中の grid 列として**並べる(inspector-library.css:115-120
+/// `grid-template-columns: minmax(132px,1fr) repeat(3,64px) 26px`、
+/// inspector-library.html:29-35)。
+///
+/// 訂正前はここを「header 行 + X 行 + Y 行」の3行へ縦積みにしていた —
+/// それは [`column_header`] が `Property | X | Y` と3列を約束しているのに
+/// 実物は縦に3行積むという内部矛盾だった(2026-08-19 残差1)。html/css の
+/// grid はそもそも1行しか無いので、正しい直し方は列見出しどおり**1行に
+/// 詰める**ことだった(pane を広げる側は選ばない — 300px 幅は他 wave の
+/// 既定で、ここだけの都合で変える理由が無い)。
 ///
 /// 左の色帯(`property-color`)は inspector-library.html の host 行と同じ
 /// 割当: Position=data / Rotation=action-active / Scale=shape /
@@ -533,78 +606,117 @@ fn transform_rows<'a>(param_row: &ParamRow) -> Element<'a, Message> {
     let label = param_label(param);
     let band = row_band_color(param);
     let glyph = transform_kind_glyph(param);
+    let name = row![
+        kind_icon(glyph, band),
+        text(label)
+            .size(10)
+            .font(weight(iced::font::Weight::Semibold)),
+    ]
+    .spacing(7)
+    .align_y(Center);
+
     if !param_row.editable {
         // 閉じていない DocParam 種。値は出すが、触れる部品を置かない(Q0)。
+        // 列数は他行と揃える — html の `<span class="keyPlaceholder">—</span>`
+        // (inspector-library.html:57,73,83…)と同じ「操作口が無い」印。
         return property_row(
             band,
             row![
-                kind_icon(glyph, band),
-                text(label)
-                    .size(10)
-                    .style(crate::theme::style::text_primary_style),
+                name,
                 space().width(Fill),
                 text(format_components(&param_row.components)).size(10),
+                key_placeholder(),
             ]
             .spacing(7)
             .align_y(Center),
         );
     }
+
     let key = key_button(
         param_row.key_state,
         Message::Inspector(InspectorEvent::KeyPressed(param)),
     );
-    if arity(param) == 2 {
-        // header 行(icon + 名前 + key ボタン)。X / Y は独立キーに見せない。
-        let header = property_row(
-            band,
-            row![
-                kind_icon(glyph, band),
-                text(label)
-                    .size(10)
-                    .font(weight(iced::font::Weight::Semibold)),
-                space().width(Fill),
-                key,
-            ]
-            .spacing(7)
-            .align_y(Center),
-        );
-        let mut rows = column![header];
-        for (component, axis) in ["X", "Y"].into_iter().enumerate() {
-            let value = param_row.components.get(component).copied().unwrap_or(0.0);
-            rows = rows.push(property_row(
+
+    let values: Element<'_, Message> = if arity(param) == 2 {
+        // X / Y は同じ行の隣り合う grid 列(html: 2つの独立した
+        // `<label class="valueCell">`)。1つの key ボタンを共有し、
+        // X/Y それぞれが独立キーに見えることはない(2026-08-13 mapping)。
+        row![
+            value_cell(
+                "X",
+                param,
+                0,
+                param_row.components.first().copied().unwrap_or(0.0),
                 band,
-                row![
-                    // css:410 `.valueCell > b { color: var(--property-color) }`
-                    // — X/Y の字は property-color を持つ小さなラベル。
-                    text(axis).size(9).style(move |_theme: &iced::Theme| {
-                        iced::widget::text::Style { color: Some(band) }
-                    }),
-                    space().width(Fill),
-                    container(scrub(param, component, value, band)).width(dims::VALUE_COL_W),
-                ]
-                .padding(iced::padding::left(dims::KIND_ICON + 7.0 + 12.0))
-                .spacing(6)
-                .align_y(Center),
-            ));
-        }
-        rows.into()
+            ),
+            value_cell(
+                "Y",
+                param,
+                1,
+                param_row.components.get(1).copied().unwrap_or(0.0),
+                band,
+            ),
+        ]
+        .spacing(0)
+        .into()
     } else {
-        let value = param_row.components.first().copied().unwrap_or(0.0);
-        property_row(
+        // scalar は X/Y 2列ぶんの幅を1つの値欄が占める
+        // (inspector-library.css:415 `.valueCell.scalar { grid-column: span 3 }`
+        // の写し — このパネルは Z が無いので2列ぶん)。
+        container(scrub(
+            param,
+            0,
+            param_row.components.first().copied().unwrap_or(0.0),
             band,
-            row![
-                kind_icon(glyph, band),
-                text(label)
-                    .size(10)
-                    .font(weight(iced::font::Weight::Semibold)),
-                space().width(Fill),
-                container(scrub(param, 0, value, band)).width(dims::VALUE_COL_W),
-                key,
-            ]
+        ))
+        .width(dims::VALUE_COL_W * 2.0)
+        .into()
+    };
+
+    property_row(
+        band,
+        row![name, space().width(Fill), values, key]
             .spacing(7)
             .align_y(Center),
-        )
-    }
+    )
+}
+
+/// 値セル1本(X または Y)。html は `<b aria-hidden="true">X</b>` を
+/// `position:absolute` で値の上に重ねる(inspector-library.css:410)が、
+/// この iced 版は絶対配置のオーバーレイを持たないので、字を値の**前に
+/// 並べる**簡略形にする(色は `.valueCell > b { color: var(--property-color) }`
+/// と同じく行の帯色)。既知の簡略化 — RETURN に明記する。
+fn value_cell<'a>(
+    axis: &'static str,
+    param: UiEditParam,
+    component: usize,
+    value: f64,
+    accent: iced::Color,
+) -> Element<'a, Message> {
+    let tag = container(text(axis).size(7).style(move |_theme: &iced::Theme| {
+        iced::widget::text::Style {
+            color: Some(accent),
+        }
+    }))
+    .width(8.0);
+    row![tag, scrub(param, component, value, accent)]
+        .spacing(2)
+        .align_y(Center)
+        .width(dims::VALUE_COL_W)
+        .into()
+}
+
+/// key 列に操作口が無い行の埋め草。inspector-library.css:442-458
+/// `.keyPlaceholder`(`color: text-muted`)の写し。
+fn key_placeholder<'a>() -> Element<'a, Message> {
+    container(
+        text("\u{2014}")
+            .size(9)
+            .style(crate::theme::style::text_muted),
+    )
+    .width(crate::widgets::key_button::KEY_BUTTON_SIZE)
+    .center_x(crate::widgets::key_button::KEY_BUTTON_SIZE)
+    .into()
 }
 
 /// TRANSFORM host param の帯色。inspector-library.html:29-60 の写し。
@@ -810,6 +922,10 @@ fn fx_pill_style(accent: iced::Color, enabled: bool) -> button::Style {
 /// (`data-param-kind`)を `EffectParamValue` の閉じた語彙へ写す:
 /// F64=scalar→data、Vec2/Vec3=vector→way_inspector、Color はその値自身を
 /// 帯にする(新色の発明ではなく、param が既に持っている値)。
+///
+/// kind icon(`.propertyName i`)は前 round は host TRANSFORM/APPEARANCE 行
+/// だけに足していた(`dims::KIND_ICON` のコメントに残した残差)。この round
+/// で FX param 行にも同じ部品を適用する — [`effect_kind_glyph`]。
 fn effect_param_row<'a>(param: crate::inspector_model::EffectParamRow) -> Element<'a, Message> {
     let t = &Tokens::DARK;
     let band = match param.value {
@@ -822,9 +938,11 @@ fn effect_param_row<'a>(param: crate::inspector_model::EffectParamRow) -> Elemen
             a: a as f32,
         },
     };
+    let glyph = effect_kind_glyph(param.value);
     property_row(
         band,
         row![
+            kind_icon(glyph, band),
             text(param.id)
                 .size(9)
                 .style(crate::theme::style::text_primary_style),
@@ -837,6 +955,24 @@ fn effect_param_row<'a>(param: crate::inspector_model::EffectParamRow) -> Elemen
         .spacing(6)
         .align_y(Center),
     )
+}
+
+/// FX param の kind icon の字。inspector-library.css:338-343
+/// `.parameterKind.{scalar,vector,integer,angle,boolean,choice}` は6種の
+/// 語彙を持つが、`EffectParamValue` はまだ F64/Vec2/Vec3/Color の4種しか
+/// 閉じていない(`crate::inspector_model` は書き換えない柵)ので、
+/// integer/angle/boolean/choice の3種は**この round では表せない**
+/// (RETURN の残差に明記する — Q0: 無い語彙を発明しない)。
+fn effect_kind_glyph(value: EffectParamValue) -> &'static str {
+    match value {
+        // inspector-library.css:338 `.parameterKind.scalar::before`(●)
+        EffectParamValue::F64(_) => "\u{2022}",
+        // inspector-library.css:328 `.parameterKind.vector`(格子点)を
+        // 単一グリフへ簡約 — host Scale の "\u{2194}" と同じ選び方。
+        EffectParamValue::Vec2(_) | EffectParamValue::Vec3(_) => "\u{2194}",
+        // inspector-library.css:339 `.parameterKind.color`(塗り swatch)。
+        EffectParamValue::Color(_) => "\u{25a0}",
+    }
 }
 
 /// footer のヒント行。inspector-library.css:519 相当(footer)。
