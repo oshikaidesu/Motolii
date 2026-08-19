@@ -286,6 +286,15 @@ impl Host {
         if self.shell.document().is_some() {
             ticks.push(iced::window::frames().map(|_| HostMessage::App(Message::StagePolled)));
         }
+        // 再生中だけ playhead を進める刻みを持つ(egui 版が毎フレームの `show()`
+        // で `ctx.input(|i| i.stable_dt)` を読んでいるのと同じ役目 —
+        // iced にはそれを持ってくるフレームワークの仕組みが無いので、
+        // 購読が生きているあいだだけ `window::frames()` を dt の刻みに使う)。
+        // pause 中は購読ごと外れるので、壁時計は動かない
+        // (2026-08-19 iced 再生機構移植レーン)。
+        if self.shell.timeline_playing() {
+            ticks.push(iced::window::frames().map(|_| HostMessage::App(Message::PlaybackTick)));
+        }
         iced::Subscription::batch(ticks)
     }
 

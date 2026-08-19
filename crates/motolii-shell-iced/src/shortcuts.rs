@@ -1,13 +1,18 @@
 //! 窓ぜんたいの近道キーの正本 — **表と、そこから外れた理由**を1箇所に置く。
 //!
 //! 移植元は `crates/motolii-ui/src/timeline_editor/mod.rs` の `egui::Key::` 各所
-//! (2026-08-19 iced 近道キー移植レーン)。**この殻の実装は2箇所に分かれている**
-//! — 表(この file)は両方をまとめて説明する:
+//! (2026-08-19 iced 近道キー移植レーン)。**この殻の実装は3箇所に分かれている**
+//! — 表(この file)は3つともまとめて説明する:
 //!
 //! - [`additional_window_shortcut`] … 窓ぜんたいが受ける近道のうち、この
 //!   移植レーンが `window_input.rs` へ足した1本(Cmd+A = 全選択)。
 //!   New/Open/Save は `window_input.rs` 自身の表のまま(このレーンの持ち物
 //!   ではない)。
+//! - [`playback_shortcut`] … `Space`(play/pause)・`L`(loop)。同じ
+//!   `window_input.rs` の、command 修飾**の無い**キーを受ける別アーム
+//!   (2026-08-19 再生機構移植レーンで追加。`motolii_ui::blitz_shell::
+//!   ShellGateway::toggle_playing` / `toggle_loop` — `UiIntent` を通らない、
+//!   `intent.rs` module doc の「ここに無いもの」参照)。
 //! - `timeline/canvas.rs` の `Program::update`(既存, M-3) … Undo/Redo・
 //!   Esc(gesture 取消)・Delete/Backspace・← / → は**この移植レーンの前から
 //!   既に居た**(`drive_timeline.rs` の既存テストが審判している)。canvas
@@ -22,9 +27,6 @@
 //!
 //! ## ここに置かなかったキー(Q0: 機構が無いものは近道として書かない)
 //!
-//! - **Space**(再生 / 一時停止)・**`L`**(loop): iced shell に再生機構
-//!   (`playing` フラグ・audio clock との同期)がまだ無い。押しても何も
-//!   起きない近道を作るのは Q0 違反なので、`Message` にも足さない。
 //! - **Cmd+K**(split)・**`M`**(playhead へ locator): `motolii_doc::Command::
 //!   SplitClip` / `AddLocator` は D2(`crates/motolii-doc`)に既に在るが、
 //!   iced 側の製品状態への唯一の口は `ShellGateway::dispatch(UiIntent)`
@@ -55,12 +57,12 @@ pub const SHORTCUTS: &[ShortcutRow] = &[
     ShortcutRow {
         keys: "Space",
         meaning: "play / pause",
-        implemented: false,
+        implemented: true,
     },
     ShortcutRow {
         keys: "L",
         meaning: "loop",
-        implemented: false,
+        implemented: true,
     },
     ShortcutRow {
         keys: "Cmd+Z",
@@ -136,6 +138,27 @@ fn shortcut_for_key(key: &iced::keyboard::Key) -> Option<Message> {
     additional_window_shortcut(character)
 }
 
+/// `Space`(play/pause)・`L`(loop)の生 key → `Message`。
+///
+/// 呼び手(`window_input.rs`)のアームは command 修飾が付いた事象を先に取るので、
+/// ここへ来る時点で Cmd は押されていない — 改めて `modifiers` を見る必要は無い
+/// (`additional_window_shortcut` が `shortcut()` の後にだけ呼ばれるのと同じ分担)。
+///
+/// **`L` に `!command` の除外は要らない** — 上のアームが既に弾いている。egui 版
+/// (`timeline_editor/mod.rs`)の `i.key_pressed(egui::Key::L) && !i.modifiers.command`
+/// と同じ効きを、iced 側は「2つのアームの順」で作っている。
+pub fn playback_shortcut(key: &iced::keyboard::Key) -> Option<Message> {
+    match key {
+        iced::keyboard::Key::Named(iced::keyboard::key::Named::Space) => {
+            Some(Message::TogglePlayPressed)
+        }
+        iced::keyboard::Key::Character(character) if character.eq_ignore_ascii_case("l") => {
+            Some(Message::ToggleLoopPressed)
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,8 +176,12 @@ mod tests {
             "実装済みの Cmd+Z が legend に無い: {line}"
         );
         assert!(
-            !line.contains("Space"),
-            "機構の無い Space が legend に出た: {line}"
+            line.contains("Space"),
+            "実装済みの Space(play/pause)が legend に無い: {line}"
+        );
+        assert!(
+            line.contains("L=loop"),
+            "実装済みの L(loop)が legend に無い: {line}"
         );
         assert!(
             !line.contains("Cmd+K"),
@@ -185,5 +212,27 @@ mod tests {
     fn unrelated_characters_stay_none() {
         let key = Key::Character("z".into());
         assert_eq!(shortcut_for_key(&key), None);
+    }
+
+    #[test]
+    fn space_toggles_play() {
+        let key = Key::Named(iced::keyboard::key::Named::Space);
+        assert_eq!(playback_shortcut(&key), Some(Message::TogglePlayPressed));
+    }
+
+    #[test]
+    fn l_toggles_loop_case_insensitively() {
+        let key = Key::Character("l".into());
+        assert_eq!(playback_shortcut(&key), Some(Message::ToggleLoopPressed));
+        let key = Key::Character("L".into());
+        assert_eq!(playback_shortcut(&key), Some(Message::ToggleLoopPressed));
+    }
+
+    #[test]
+    fn playback_shortcut_ignores_unrelated_keys() {
+        let key = Key::Character("k".into());
+        assert_eq!(playback_shortcut(&key), None);
+        let key = Key::Named(iced::keyboard::key::Named::Enter);
+        assert_eq!(playback_shortcut(&key), None);
     }
 }

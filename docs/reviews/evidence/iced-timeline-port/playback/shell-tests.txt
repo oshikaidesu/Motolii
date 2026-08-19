@@ -1,0 +1,402 @@
+    |                   ^^^^^^^
+...
+102 |     pub(crate) fn release(
+    |                   ^^^^^^^
+
+warning: constant `TIME_QUANTUM_DENOMINATOR` is never used
+  --> crates/motolii-ui/src/timeline_viewport_state.rs:10:7
+   |
+10 | const TIME_QUANTUM_DENOMINATOR: i64 = 1_000_000;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `DEFAULT_MIN_SPAN_SECONDS` is never used
+  --> crates/motolii-ui/src/timeline_viewport_state.rs:11:7
+   |
+11 | const DEFAULT_MIN_SPAN_SECONDS: f64 = 0.001;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `TimelineViewportStateError` is never used
+  --> crates/motolii-ui/src/timeline_viewport_state.rs:14:17
+   |
+14 | pub(crate) enum TimelineViewportStateError {
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `TimelineViewportState` is never constructed
+  --> crates/motolii-ui/src/timeline_viewport_state.rs:27:19
+   |
+27 | pub(crate) struct TimelineViewportState {
+   |                   ^^^^^^^^^^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> crates/motolii-ui/src/timeline_viewport_state.rs:35:19
+    |
+ 34 | impl TimelineViewportState {
+    | -------------------------- associated items in this implementation
+ 35 |     pub(crate) fn new(
+    |                   ^^^
+...
+ 57 |     pub(crate) fn viewport(&self) -> TimelineViewport {
+    |                   ^^^^^^^^
+...
+ 61 |     pub(crate) fn vertical_offset(&self) -> f32 {
+    |                   ^^^^^^^^^^^^^^^
+...
+ 66 |     pub(crate) fn select_overview(
+    |                   ^^^^^^^^^^^^^^^
+...
+ 87 |     pub(crate) fn pan_horizontal_pixels(
+    |                   ^^^^^^^^^^^^^^^^^^^^^
+...
+104 |     pub(crate) fn scroll_vertical_pixels(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^
+...
+125 |     pub(crate) fn zoom_at(
+    |                   ^^^^^^^
+...
+151 |     pub(crate) fn apply_wheel(
+    |                   ^^^^^^^^^^^
+...
+181 |     pub(crate) fn snap_time(
+    |                   ^^^^^^^^^
+...
+212 |     fn viewport_span_seconds(&self) -> f64 {
+    |        ^^^^^^^^^^^^^^^^^^^^^
+...
+216 |     fn set_viewport_seconds(
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `seconds_to_time` is never used
+   --> crates/motolii-ui/src/timeline_viewport_state.rs:253:4
+    |
+253 | fn seconds_to_time(seconds: f64) -> Result<RationalTime, TimelineViewportStateError> {
+    |    ^^^^^^^^^^^^^^^
+
+warning: function `emit` is never used
+ --> crates/motolii-ui/src/ui_numeric_trace.rs:3:15
+  |
+3 | pub(crate) fn emit(arguments: std::fmt::Arguments<'_>) {
+  |               ^^^^
+
+warning: function `enabled` is never used
+ --> crates/motolii-ui/src/ui_numeric_trace.rs:9:4
+  |
+9 | fn enabled() -> bool {
+  |    ^^^^^^^
+
+warning: `motolii-ui` (lib) generated 219 warnings (run `cargo fix --lib -p motolii-ui` to apply 6 suggestions)
+   Compiling motolii-shell-iced v0.1.0 (/private/tmp/motolii-playback-20260819/crates/motolii-shell-iced)
+warning: unused imports: `PointerPhase` and `StagePointerButton`
+  --> crates/motolii-shell-iced/src/stage_island.rs:72:53
+   |
+72 | use motolii_ui::rerun_stage::{EmbeddedSpatialStage, PointerPhase, StagePointerButton};
+   |                                                     ^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `motolii-shell-iced` (lib test) generated 1 warning (run `cargo fix --lib -p motolii-shell-iced --tests` to apply 1 suggestion)
+warning: `motolii-shell-iced` (lib) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17m 00s
+     Running unittests src/lib.rs (target/debug/deps/motolii_shell_iced-931df3f9312f478c)
+
+running 30 tests
+test shortcuts::tests::l_toggles_loop_case_insensitively ... ok
+test shortcuts::tests::playback_shortcut_ignores_unrelated_keys ... ok
+test inspector_model::tests::unsupported_effect_params_get_no_row ... ok
+test shortcuts::tests::space_toggles_play ... ok
+test shortcuts::tests::select_all_maps_the_a_character ... ok
+test shortcuts::tests::legend_lists_only_implemented_keys ... ok
+test stage_arbiter::tests::a_press_inside_the_grab_region_starves_rerun_of_the_whole_gesture ... ok
+test shortcuts::tests::unrelated_characters_stay_none ... ok
+test stage_arbiter::tests::a_second_button_follows_the_current_owner ... ok
+test stage_arbiter::tests::a_press_outside_the_grab_region_starts_an_orbit_that_rerun_sees ... ok
+test stage_arbiter::tests::leaving_the_window_resets_the_owner ... ok
+test stage_arbiter::tests::modifiers_always_flow ... ok
+test stage_arbiter::tests::pass_through_forwards_hover_and_wheel ... ok
+test stage_arbiter::tests::without_a_grab_region_grabbing_never_happens ... ok
+test stage_bridge::tests::a_press_without_a_known_cursor_produces_nothing ... ok
+test stage_bridge::tests::cursor_moved_is_relative_to_the_widget_origin ... ok
+test stage_bridge::tests::a_press_carries_the_cursor_position_in_widget_space ... ok
+test stage_bridge::tests::leaving_the_window_cancels_the_pointer ... ok
+test stage_bridge::tests::modifiers_bits_match_the_stage_reading ... ok
+test stage_bridge::tests::wheel_lines_become_points_and_pixels_pass_through ... ok
+test timeline::semantics::tests::groups_and_thin_bars_have_no_trim_edges ... ok
+test timeline::semantics::tests::a_selection_stops_together_at_the_left_edge ... ok
+test timeline::semantics::tests::snapping_uses_screen_distance ... ok
+test timeline::semantics::tests::trim_preview_is_clamped_to_a_frame_and_the_composition ... ok
+test timeline::semantics::tests::zooming_keeps_the_time_under_the_anchor ... ok
+test timeline::semantics::tests::hit_test_resolves_the_transport_buttons ... ok
+test timeline::semantics::tests::move_targets_fold_parent_and_child_selections ... ok
+test timeline::semantics::tests::hit_test_resolves_bar_zones_on_the_fixture ... ok
+test resume::tests::an_unopenable_project_flag_is_explained ... ok
+test resume::tests::the_project_flag_wins_over_the_remembered_project ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running unittests src/main.rs (target/debug/deps/motolii_shell_iced-9a2e4746029cd87e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/drive_browser.rs (target/debug/deps/drive_browser-5392e006cafd6801)
+
+running 9 tests
+test an_empty_library_is_honestly_empty ... ok
+test choosing_a_rail_switches_the_pane_without_touching_the_journal ... ok
+test the_seated_window_offers_exactly_the_three_working_rails ... ok
+test a_card_whose_file_vanished_says_why_and_admits_nothing ... ok
+test a_card_click_selects_and_asks_for_nothing ... ok
+test a_hovering_file_lights_the_drop_target_without_stealing_the_drop ... ok
+test a_double_clicked_card_lands_at_the_playhead ... ok
+test the_project_rail_shows_the_documents_assets_and_all_media_dedupes ... ok
+test the_recent_rail_lists_the_newest_admission_first ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.37s
+
+     Running tests/drive_drop.rs (target/debug/deps/drive_drop-eae103ce14ed46a4)
+
+running 4 tests
+test a_drop_without_a_project_says_to_make_one_first ... ok
+test a_drop_we_cannot_admit_says_why_and_leaves_the_document_alone ... ok
+test two_files_dropped_together_are_one_admission ... ok
+test a_dropped_clip_lands_at_the_playhead_and_the_band_names_it ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.85s
+
+     Running tests/drive_export.rs (target/debug/deps/drive_export-3f7f9fc344745c7e)
+
+running 4 tests
+test the_start_screen_offers_no_export ... ok
+test an_export_dialog_that_is_cancelled_leaves_no_trace ... ok
+test pressing_export_starts_a_run_and_the_band_offers_cancel ... ok
+test cancel_is_dispatched_and_the_band_closes_the_run ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.85s
+
+     Running tests/drive_playback.rs (target/debug/deps/drive_playback-53f226883e62fc21)
+
+running 6 tests
+test play_pause_tick_and_loop_are_not_logged_as_intents ... ok
+test playback_tick_advances_the_playhead_over_real_time ... ok
+test l_toggles_loop_through_the_real_keyboard_path ... ok
+test space_toggles_play_through_the_real_keyboard_path ... ok
+test clicking_to_start_dispatches_the_set_playhead_intent ... ok
+test clicking_the_play_pause_button_toggles_playing ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.72s
+
+     Running tests/drive_save_guard.rs (target/debug/deps/drive_save_guard-f2e3efb51dd5ce9e)
+
+running 7 tests
+test saving_without_a_seat_says_what_to_do_first ... ok
+test an_unsaved_open_that_discards_does_not_save ... ok
+test closing_with_unsaved_changes_can_be_cancelled ... ok
+test an_unsaved_open_that_is_cancelled_keeps_the_seat ... ok
+test an_unsaved_open_saves_first_and_the_journal_shows_the_order ... ok
+test closing_after_discarding_or_when_clean_lets_the_window_go ... ok
+test cmd_s_saves_and_the_band_drops_the_unsaved_mark ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.77s
+
+     Running tests/drive_seat.rs (target/debug/deps/drive_seat-cebaedf99de9fd44)
+
+running 4 tests
+test every_report_lands_in_the_transcript_and_the_band_shows_the_latest ... ok
+test a_cancelled_dialog_leaves_no_trace ... ok
+test the_press_lands_in_the_journal_as_a_replayable_line ... ok
+test the_start_screen_seats_a_project_without_a_native_dialog ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/drive_timeline.rs (target/debug/deps/drive_timeline-72bf67343a6fed5d)
+
+running 15 tests
+test command_a_selects_every_visible_object_row ... ok
+test arrow_keys_step_the_playhead_by_frames ... ok
+test a_dropped_soundtrack_grows_a_waveform_band ... ok
+test command_wheel_zooms_around_the_cursor ... ok
+test clicking_a_bar_selects_the_layer_through_the_gateway ... ok
+test dragging_the_left_edge_trims_the_in_point ... ok
+test delete_removes_the_selection_and_undo_brings_it_back ... ok
+test dragging_a_body_moves_the_clip_and_lands_one_undo_unit ... ok
+test shift_wheel_pans_horizontally_inside_the_composition ... ok
+test dragging_the_right_edge_trims_the_out_point ... ok
+test escape_during_a_drag_restores_without_a_trace ... ok
+test scrubbing_the_ruler_seeks_the_playhead ... ok
+test the_same_message_sequence_reproduces_the_view_state ... ok
+test a_timeline_session_replays_from_its_intent_log ... ok
+test a_multi_selection_moves_as_a_block_and_stops_at_zero ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.83s
+
+     Running tests/inspector_drive.rs (target/debug/deps/inspector_drive-3c44e6246bfb7e92)
+
+running 6 tests
+test an_unselected_inspector_says_no_selection ... ok
+test a_rejected_edit_reports_a_reason_and_does_not_advance ... ok
+test a_scrub_commit_writes_the_document_once ... ok
+test pressing_an_unkeyed_diamond_becomes_an_intent_and_a_current_key ... ok
+test mute_and_solo_toggle_through_the_document ... ok
+test an_effect_toggle_writes_the_shared_definition ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.89s
+
+     Running tests/intent_gateway_fence.rs (target/debug/deps/intent_gateway_fence-3e6ee07f246afcfe)
+
+running 4 tests
+test the_forbidden_names_are_real_public_api_of_motolii_ui ... ok
+test the_only_door_is_shell_update ... ok
+test no_shell_code_touches_product_state_outside_the_gateway ... ok
+test every_product_source_is_scanned ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/jsonl_logs.rs (target/debug/deps/jsonl_logs-a54f35cb39378ff5)
+
+running 3 tests
+test the_launch_arguments_name_both_logs ... ok
+test the_status_log_writes_the_same_jsonl_shape_as_the_egui_runner ... ok
+test both_logs_append_only_what_is_new ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.60s
+
+     Running tests/launch_project_flag.rs (target/debug/deps/launch_project_flag-cf8ad5c41fd68670)
+
+running 5 tests
+test no_arguments_leaves_project_unset ... ok
+test the_project_flag_combines_with_the_existing_logs ... ok
+test a_project_flag_without_a_value_fails_to_launch ... ok
+test the_project_flag_is_read_with_a_separate_argument ... ok
+test the_project_flag_is_read_with_an_equals_sign ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/launch_resume.rs (target/debug/deps/launch_resume-a0c38fc6ea89650e)
+
+running 9 tests
+test no_arguments_with_nothing_remembered_is_silent_start_screen ... ok
+test the_project_flag_that_cannot_open_explains_instead_of_seating ... ok
+test the_project_flag_opens_and_seats ... ok
+test no_arguments_resumes_the_remembered_project ... ok
+test the_project_flag_takes_priority_over_the_remembered_project ... ok
+test shell_resumed_with_explained_reason_shows_it_on_the_band_and_stays_on_start_screen ... ok
+test shell_without_a_store_remembers_nothing ... ok
+test shell_resumed_with_a_store_remembers_the_next_seat ... ok
+test shell_resumed_with_a_seated_project_skips_the_start_screen ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+     Running tests/playback_stage_pixels.rs (target/debug/deps/playback_stage_pixels-5f7d6bd3d598cf85)
+
+running 1 test
+test playback_stops_on_the_correct_frame_after_ticking_into_the_second_shot ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.67s
+
+     Running tests/replay_oracle.rs (target/debug/deps/replay_oracle-0e51a1d493b19ba6)
+
+running 3 tests
+test timeline_row_pick_selects_the_same_layer_the_inspector_reads ... ok
+test a_session_with_stage_reports_replays_from_intents_alone ... ok
+test a_recorded_session_replays_into_the_same_shell_state ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.57s
+
+     Running tests/snapshot_start_screen.rs (target/debug/deps/snapshot_start_screen-c3d1c2dd8ddc23e8)
+
+running 1 test
+test the_start_screen_matches_its_golden_image ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.44s
+
+     Running tests/stage_bind_groups_oracle.rs (target/debug/deps/stage_bind_groups_oracle-760feba74dad3a0c)
+
+running 2 tests
+test the_floor_constant_covers_what_re_renderer_actually_asks_for ... ok
+test the_bind_group_floor_reaches_iceds_real_device ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s
+
+     Running tests/stage_island_live_frame.rs (target/debug/deps/stage_island_live_frame-1de7d4d7bba917a4)
+
+running 2 tests
+test an_evaluated_document_frame_lands_on_the_stage_island ... ok
+test moving_the_playhead_changes_the_frame_on_the_stage_island ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.80s
+
+     Running tests/stage_island_pixels.rs (target/debug/deps/stage_island_pixels-67d3bd00136a344c)
+
+running 3 tests
+test a_gesture_inside_the_dummy_grab_region_is_swallowed ... ok
+test a_drag_through_the_widget_reaches_the_stage_without_validation_errors ... ok
+test the_known_frame_maps_head_on_through_the_iced_widget ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/stage_reports.rs (target/debug/deps/stage_reports-2867fa0001b62fe6)
+
+running 2 tests
+test a_stage_report_lands_in_the_transcript_but_never_the_journal ... ok
+test a_broken_probe_frame_is_reported_not_swallowed ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/theme_matches_generated_tokens.rs (target/debug/deps/theme_matches_generated_tokens-1c7694e12e5ef498)
+
+running 2 tests
+test the_custom_iced_theme_is_seeded_from_the_tokens ... ok
+test tokens_dark_matches_the_generated_css_one_to_one ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/widgets_context_menu.rs (target/debug/deps/widgets_context_menu-a8f949ee4fa3f403)
+
+running 4 tests
+test a_disabled_item_stays_silent ... ok
+test choosing_an_enabled_item_says_chosen_with_its_id ... ok
+test escape_dismisses ... ok
+test pressing_outside_dismisses ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.05s
+
+     Running tests/widgets_drop_zone.rs (target/debug/deps/widgets_drop_zone-018b3a9e74ba557d)
+
+running 3 tests
+test the_cursor_leaving_the_window_counts_as_leave ... ok
+test a_rejecting_zone_still_reports_hover ... ok
+test entering_and_leaving_speak_once_each ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/widgets_key_button.rs (target/debug/deps/widgets_key_button-389e716cadc5f991)
+
+running 3 tests
+test the_three_states_follow_the_2026_08_13_vocabulary ... ok
+test pressing_the_button_emits_on_press ... ok
+test a_current_key_button_shows_a_filled_diamond ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/widgets_scrub_value.rs (target/debug/deps/widgets_scrub_value-f7836929c8652f78)
+
+running 8 tests
+test the_display_is_fixed_to_the_requested_decimals ... ok
+test integer_specs_snap_to_whole_numbers ... ok
+test escape_during_a_drag_cancels_instead_of_committing ... ok
+test double_click_opens_text_entry_and_enter_commits ... ok
+test changes_are_clamped_and_never_repeated ... ok
+test a_plain_click_does_not_speak ... ok
+test a_drag_changes_and_release_commits ... ok
+test escape_during_text_entry_cancels ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+   Doc-tests motolii_shell_iced
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+[exited with code 0]

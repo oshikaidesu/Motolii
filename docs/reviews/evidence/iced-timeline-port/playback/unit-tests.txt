@@ -1,0 +1,12 @@
+test timeline_editor::playback::tests::toggle_loop_flips_loop_on ... ok
+test timeline_editor::playback::tests::playback_wraps_inside_an_active_loop_region_instead_of_ending ... ok
+test timeline_editor::playback::tests::advance_playback_is_a_no_op_while_paused ... ok
+test timeline_editor::playback::tests::toggling_play_at_the_end_restarts_from_zero ... ok
+test timeline_editor::playback::tests::playback_stops_at_the_composition_end ... ok
+test timeline_editor::playback::tests::toggle_playing_flips_and_pause_freezes_the_playhead ... ok
+test timeline_editor::playback::tests::playing_advances_the_playhead_by_dt_on_the_wall_clock ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 353 filtered out; finished in 0.00s
+
+
+[exited with code 0]

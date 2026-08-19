@@ -50,6 +50,10 @@
 
 mod audio_seat;
 mod import_seat;
+// iced shell(`motolii-shell-iced`)向けの再生 tick/toggle。egui 版 `show()` の
+// 再生ブロックとは別の呼ばれ方をするだけで、材料(audio_seat / wrap_playhead /
+// advance_playhead)は共用する(2026-08-19 iced 再生機構移植レーン)。
+mod playback;
 pub mod waveform_band;
 
 use std::collections::HashMap;
