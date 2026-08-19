@@ -78,6 +78,33 @@ fn an_unselected_inspector_says_no_selection() {
         .expect("空状態の理由が面に出ていない");
 }
 
+/// **APPEARANCE section と Opacity 行は選択さえあれば必ず存在する(潰れ回帰
+/// レーン、2026-08-19)。** 存在の pin であって、可視性/クリップの pin では
+/// **ない** — 実測したところ `iced_test::Simulator::find` はレイアウト木を
+/// 文字列一致で辿るだけで、`scrollable`/`container` の viewport clip を
+/// 考慮しない(意図的に `scroller` を高さ固定+`clip(true)` の潰れた箱へ
+/// 差し替えて確認済み。それでもこの `find` は変わらず成功した)。「潰れて
+/// 見えない」という視覚回帰を実際に検出するのは、クリック位置がクリップ域
+/// 外だと失敗する [`common::scroll_then_click`] 経由の押下テスト
+/// (`an_effect_toggle_writes_the_shared_definition` が EFFECTS 側で既に
+/// 実践している型)。この test はそれより弱い保証 — 「APPEARANCE section
+/// 自体を丸ごと落とす」「Opacity 行を出し忘れる」といった構造欠落だけを拾う。
+#[test]
+fn the_appearance_section_and_opacity_row_are_reachable() {
+    let dir = motolii_testkit::tmp_dir("iced_inspector_opacity_reachable");
+    let mut shell = Shell::new(ScriptedPrompts {
+        new_project_path: Some(dir.join("fresh.json")),
+        ..ScriptedPrompts::default()
+    });
+    seat_with_selected_layer(&mut shell);
+
+    let mut ui = iced_test::simulator(view(&shell));
+    ui.find(inspector_pane::APPEARANCE)
+        .expect("APPEARANCE 見出しが面に無い(scrollable が欠けると潰れて消える)");
+    ui.find("Opacity")
+        .expect("Opacity 行が面に無い(scrollable が欠けると潰れて消える)");
+}
+
 /// **2026-08-13 Oracle の Positive 列。** unkeyed の ◇ を1回押すと:
 /// 1. `KeyParamAtPlayhead` が layer / property / 画面の成分値を**1回だけ**運び、
 /// 2. accepted snapshot からの再投影で同じ行が current(◆)になり、
