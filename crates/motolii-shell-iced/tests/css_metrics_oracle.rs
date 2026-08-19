@@ -25,14 +25,6 @@
 //!   ([`browser_pane`](motolii_shell_iced::browser_pane) は
 //!   browser-revise レーンの新規ファイルなので、最初から `pub mod dims` で
 //!   書ける — Inspector 側のような書き換え柵が無い)
-//! - **Inspector 側**(`inspector_pane.rs` の `mod dims`)は private module
-//!   で外部 crate から到達できず、かつ `inspector_pane.rs` は本レーンの柵
-//!   (3レーン並走中のパネル実装)で書き換え禁止なので、`dims` の値を
-//!   2026-08-19 時点の実測としてこのテストへ literal で転記して pin した。
-//!   **片側の保証**にしかならない: css 側が変われば落ちるが、
-//!   `inspector_pane.rs` の `dims` を変えても気づかない
-//!   (`dims` を触る変更をする人が、このテストの literal も一緒に見直す
-//!   運用が要る — 詳細は上記 review 文書)
 //!
 //! ## 既知の不一致は「一致」を主張しない
 //!
@@ -187,11 +179,10 @@ fn inspector_dims_match_css_computed_values() {
     // inspector-library.css:141-142 `.tableSection h2 { height: 26px }` —
     // 第3波レーンG3(2026-08-19 フラット文法正本改定、
     // docs/reviews/2026-08-19-flat-grammar-canon-revision.md)でセクション区切りを
-    // 23→26px(=行ピッチ1.3倍の定数)へ改定した。`inspector_pane::dims::SECTION_H`
-    // は本レーンの柵(`inspector_pane.rs` 書き換え禁止)のため未追随でまだ 23 の
-    // まま — 「一致」を主張せず、既知乖離として両側を literal で pin し直す
-    // (`timeline_known_divergences_are_pinned` と同型。第3波レーンI(iced追随)
-    // で収束予定)。
+    // 23→26px(=行ピッチ1.3倍の定数)へ改定した。第3波レーンI-c で
+    // `inspector_pane::dims::SECTION_H` を 23→26 へ追随させ、既知乖離だった
+    // pin を真の一致 assert へ戻した(`dims` は既に `pub` — 実物を `use` して
+    // 直接突き合わせる。`timeline_rail_w_matches_css` と同じ形)。
     let section_h2 = find(&rows, "section.tableSection > h2", |r| {
         tag_is(r, "h2")
             && r["path"]
@@ -200,13 +191,8 @@ fn inspector_dims_match_css_computed_values() {
     });
     assert_eq!(
         box_h(section_h2),
-        26.0,
-        "css .tableSection h2 の計算済み高さ(2026-08-19 第3波フラット文法改定)"
-    );
-    assert_eq!(
-        dims::SECTION_H,
-        23.0,
-        "dims::SECTION_H(iced 側未追随、第3波レーンI で収束予定)"
+        f64::from(dims::SECTION_H),
+        "dims::SECTION_H"
     );
 
     // inspector-library.css:291 `.propertyRow::before { width: 3px }` — dims::ROW_BAND_W
