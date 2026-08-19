@@ -27,36 +27,47 @@ use motolii_ui::blitz_shell::{UiEditParam, UiItemFlag};
 use motolii_ui::timeline_editor::{TimelineView, TrimEdge};
 use motolii_ui::timeline_rows::{keyed_params, ParamRef, RowKind, TimelineRow};
 
-/// 左レール(名前の列)の幅。egui 版 `RAIL_W` より少し広い — M/S(2 個)と
-/// 種別色の四角を横に並べても名前が詰まらない値(2026-08-19、同一 document を
-/// 並べた `/tmp/egui-same-doc.png` に合わせて 196→210 へ)。
+/// 左レール(名前の列)の幅。
 ///
-/// 210→234 (2026-08-19 構造操作レーン): L ボタンを足した分、fold 矢印 + ◇/◆ と
-/// 合わせて名前の残り幅がきつくなった(`row_name_right_edge` 参照)。
-/// `truncate_name` の省略記号だけに頼らず、fixture の代表的な名前
-/// (`Title scene` 等)がそのまま収まる程度まで広げた。
-pub const RAIL_W: f32 = 234.0;
+/// 196→210→234 の経緯(egui 版に寄せる過程で M/S・L ボタン分を足していった)
+/// は 2026-08-19 第2波利用者裁定(「タイムラインから下がかなりどデカい」、
+/// campaign 文書の追記節)で 196 へ差し戻した — css(`.columnHead`)/ egui
+/// (`RAIL_W`)と同値に復帰。M/S/L が `FLAG_BTN_W` 16px 化(旧 22px)で3個分
+/// 18px 縮んだため、名前欄はボタン膨張前の余裕へ戻る(`row_name_right_edge`
+/// 参照。長い名前は `truncate_name` の省略記号に任せる)。
+pub const RAIL_W: f32 = 196.0;
 /// transport 帯(playhead 読み・`N rows`・`view a-bs`・`grid n`)の高さ。
-/// `/tmp/egui-same-doc.png` の最上段 — 再生ボタンや `space=play` 等の
-/// **対応する intent が無い項目は描かない**(2026-08-19 裁定、Q0)。
-pub const TRANSPORT_H: f32 = 30.0;
-/// ARRANGEMENT 俯瞰帯の高さ。`/tmp/egui-same-doc.png` は他の object 行より
-/// 低い、灰色の丸みを帯びた1本の帯(セグメント表示ではない)。
-pub const OVERVIEW_H: f32 = 22.0;
-/// ルーラの高さ。egui 版 `RULER_H` と同値。
-pub const RULER_H: f32 = 36.0;
-/// object 行の高さ。egui 版 `ROW_H`(小)と同値。
-pub const ROW_H: f32 = 24.0;
-/// M / S ボタン1枚の幅。
-const FLAG_BTN_W: f32 = 22.0;
-/// M / S ボタンの高さ。
-const FLAG_BTN_H: f32 = 18.0;
+/// 元は `/tmp/egui-same-doc.png` の最上段(30px) — 再生ボタンや `space=play`
+/// 等の**対応する intent が無い項目は描かない**(2026-08-19 裁定、Q0)。
+/// 2026-08-19 第2波利用者裁定(密度圧縮、campaign 文書の追記節)で 24 へ詰めた
+/// — skia(`HEADER_HEIGHT` 22)と egui(`HEAD_H` 34)の間、css(`.timelineHead`
+/// 34px)とは意味の違う帯のまま食い違う(oracle 参照)。
+pub const TRANSPORT_H: f32 = 24.0;
+/// ARRANGEMENT 俯瞰帯の高さ。元は `/tmp/egui-same-doc.png` の 22px(他の
+/// object 行より低い、灰色の丸みを帯びた1本の帯 — セグメント表示ではない)。
+/// 2026-08-19 第2波利用者裁定(密度圧縮)で egui 版 `NAV_H`(14)と同値へ。
+pub const OVERVIEW_H: f32 = 14.0;
+/// ルーラの高さ。元は egui 版 `RULER_H`(36)と同値。2026-08-19 第2波利用者
+/// 裁定(密度圧縮)で 20 へ詰めた — skia(`RULER_HEIGHT` 18)と egui(36)の間、
+/// 目盛ラベル(font size 10)が入る最小。
+pub const RULER_H: f32 = 20.0;
+/// object 行の高さ。元は egui 版 `ROW_H`(小、24)と同値。2026-08-08 決定
+/// 「行高は固定・最小 20px」の下限まで、2026-08-19 第2波利用者裁定(密度圧縮)
+/// で詰めた。
+pub const ROW_H: f32 = 20.0;
+/// M / S / L ボタン1枚の幅。モック `.ms`(`docs/mocks-ui/public/timeline-library.css`)
+/// と同値の 16px — 2026-08-19 第2波利用者裁定(密度圧縮)で 22→16。
+const FLAG_BTN_W: f32 = 16.0;
+/// M / S / L ボタンの高さ。同上、18→16(モック `.ms` と同値の正方形)。
+const FLAG_BTN_H: f32 = 16.0;
 /// M / S ボタン間の隙間。
 const FLAG_BTN_GAP: f32 = 4.0;
 /// レール右端からの余白。
 const FLAG_BTN_MARGIN: f32 = 8.0;
 /// transport の2ボタン(to_start / play-pause)1枚の一辺。egui 版(18px, `HEAD_H`
-/// 34px の帯)より少し詰める(`TRANSPORT_H` 30px の帯に合わせた比率)。
+/// 34px の帯)より詰める。2026-08-19 第2波利用者裁定で `TRANSPORT_H` が
+/// 24px へ詰まった後も、値そのものは変えていない(24px 帯に上下 4px ずつの
+/// 余白が残り、既存の値のままで収まる)。
 const TRANSPORT_BTN: f32 = 16.0;
 /// transport 帯の左端から to_start ボタンの左端までの余白。
 const TRANSPORT_BTN_MARGIN: f32 = 8.0;

@@ -36,12 +36,15 @@
 //!
 //! ## 既知の不一致は「一致」を主張しない
 //!
-//! Timeline の `RAIL_W` / `TRANSPORT_H` / `OVERVIEW_H` は現時点で css mock の
-//! 値と食い違う(`timeline/semantics.rs` のコメントが `/tmp/egui-same-doc.png`
-//! を出所と自己申告しており、css mock からの転記ではないと明言している —
-//! review 文書参照)。ここでは不一致を等値 assert にしない: 現状の両側の値を
-//! それぞれ literal で pin するだけの [`timeline_known_divergences_are_pinned`]
-//! にして、テストを赤いまま残さずに将来の無自覚なドリフトだけ拾う。
+//! Timeline の `TRANSPORT_H` / `OVERVIEW_H` / `ROW_H` は css mock の値と
+//! 食い違う(`timeline/semantics.rs` のコメントが出所を egui スクショや
+//! 2026-08-19 第2波利用者裁定(密度圧縮)だと自己申告しており、css mock
+//! からの転記ではないと明言している — review 文書参照)。ここでは不一致を
+//! 等値 assert にしない: 現状の両側の値をそれぞれ literal で pin するだけの
+//! [`timeline_known_divergences_are_pinned`] にして、テストを赤いまま残さずに
+//! 将来の無自覚なドリフトだけ拾う。`RAIL_W` は2026-08-19 第2波裁定で css/egui
+//! 値へ復帰したので、唯一の真の一致 assert として
+//! [`timeline_rail_w_matches_css`] へ移した。
 
 use std::path::PathBuf;
 
@@ -266,22 +269,20 @@ fn inspector_dims_match_css_computed_values() {
 // Timeline — timeline::semantics は pub const なので実物を比較する。
 // ---------------------------------------------------------------------------
 
-/// `ROW_H` は css の `.timelineRow{height:24px}` と実際に一致する — 唯一の
-/// 「一致」を主張する Timeline 側の assert。
+/// `RAIL_W` は css の `.columnHead` 実測幅と実際に一致する — 唯一の
+/// 「一致」を主張する Timeline 側の assert(2026-08-19 第2波利用者裁定で
+/// css/egui 値へ復帰したため、`ROW_H` からこちらへ役目が移った)。
 #[test]
-fn timeline_row_h_matches_css() {
+fn timeline_rail_w_matches_css() {
     let html = repo_path("docs/mocks-ui/public/timeline-library.html");
     let rows = extract(&html, (1200, 760)).expect("extract timeline-library.html");
 
-    // 折りたたみ済みの group の中身は `hidden` で height=0 になるので、
-    // height>0 の実物(root row)を拾う。
-    let row = find(&rows, "div.timelineRow (visible)", |r| {
-        has_class(r, "timelineRow") && box_h(r) > 0.0
-    });
+    // css: `.arrangement{grid-template-columns:196px ...}`(rail 列の実測幅)。
+    let rail = find(&rows, "div.columnHead", |r| has_class(r, "columnHead"));
     assert_eq!(
-        box_h(row) as f32,
-        ROW_H,
-        "timeline::semantics::ROW_H は .timelineRow の計算済み高さと一致するはず"
+        box_w(rail),
+        f64::from(RAIL_W),
+        "timeline::semantics::RAIL_W は .columnHead の計算済み幅と一致するはず"
     );
 }
 
@@ -293,41 +294,49 @@ fn timeline_row_h_matches_css() {
 /// 「一致」を主張する assert にはしない: 現状の両側の値をそれぞれ literal で
 /// pin するだけにして、どちらかが無自覚に動いたらこのテストが落ちるように
 /// する(指示: 不一致は現状の実測値で固定し、テストを赤いまま残さない)。
+///
+/// 2026-08-19 第2波利用者裁定(密度圧縮、campaign 文書の追記節): 「タイムライン
+/// から下がかなりどデカい」という利用者指摘を受け、`TRANSPORT_H` 30→24・
+/// `ROW_H` 24→20 とした。どちらも css 側の値(34px / 24px)とはまだ食い違う
+/// ままなので、既知乖離として pin し直す(ROW_H はこの回で「一致」側から
+/// こちらへ移った — 一致を失ったのではなく、利用者裁定で意図的に css より
+/// 詰めた)。
 #[test]
 fn timeline_known_divergences_are_pinned() {
     let html = repo_path("docs/mocks-ui/public/timeline-library.html");
     let rows = extract(&html, (1200, 760)).expect("extract timeline-library.html");
 
-    // css: `.timelineHead{height:34px}`。TRANSPORT_H(30) は意味的に別の帯
-    // (playhead読み・行数・grid刻み)を指しており、たまたま .overview と
-    // 同じ 30px なだけで .timelineHead とは無関係(review 文書参照)。
+    // css: `.timelineHead{height:34px}`。TRANSPORT_H(24) は意味的に別の帯
+    // (playhead読み・行数・grid刻み)を指しており、.overview とは別物
+    // (review 文書参照)。
     let head = find(&rows, "header.timelineHead", |r| {
         has_class(r, "timelineHead")
     });
     assert_eq!(box_h(head), 34.0, "css .timelineHead の計算済み高さ");
     assert_eq!(
-        TRANSPORT_H, 30.0,
-        "timeline::semantics::TRANSPORT_H(意味の違う帯)"
+        TRANSPORT_H, 24.0,
+        "timeline::semantics::TRANSPORT_H(意味の違う帯、2026-08-19 第2波裁定で密度圧縮)"
     );
 
-    // css: `.overview{height:30px}`。OVERVIEW_H(22) は egui スクショ由来。
+    // css: `.overview{height:30px}`。OVERVIEW_H(14) は egui NAV_H と同値
+    // (2026-08-19 第2波裁定で egui 側へ寄せ直した)。
     let overview = find(&rows, "section.overview", |r| {
         has_class(r, "overview") && tag_is(r, "section")
     });
     assert_eq!(box_h(overview), 30.0, "css .overview の計算済み高さ");
-    assert_eq!(OVERVIEW_H, 22.0, "timeline::semantics::OVERVIEW_H");
+    assert_eq!(OVERVIEW_H, 14.0, "timeline::semantics::OVERVIEW_H");
 
-    // css: `.arrangement{grid-template-columns:196px ...}`(rail 列の実測幅)。
-    // RAIL_W(234) は semantics.rs のコメントで意図的な拡張だと明言済み:
-    // 196→210 が M/S ボタン分、210→234 が構造操作レーンの L ボタン分
-    // (fold 矢印 + ◇/◆ と並べても代表的な名前が収まる幅、2026-08-19)。
-    let rail = find(&rows, "div.columnHead", |r| has_class(r, "columnHead"));
+    // css: `.timelineRow{height:24px}`。ROW_H(20) は 2026-08-08 決定の
+    // 「行高は固定・最小 20px」の下限を、2026-08-19 第2波裁定(密度圧縮)で
+    // 実際に採った値。
+    let row = find(&rows, "div.timelineRow (visible)", |r| {
+        has_class(r, "timelineRow") && box_h(r) > 0.0
+    });
+    assert_eq!(box_h(row), 24.0, "css .timelineRow の計算済み高さ");
     assert_eq!(
-        box_w(rail),
-        196.0,
-        "css の rail 列(.columnHead)の計算済み幅"
+        ROW_H, 20.0,
+        "timeline::semantics::ROW_H(2026-08-19 第2波裁定で css より詰めた下限値)"
     );
-    assert_eq!(RAIL_W, 234.0, "timeline::semantics::RAIL_W(意図的な拡張)");
 }
 
 // ---------------------------------------------------------------------------

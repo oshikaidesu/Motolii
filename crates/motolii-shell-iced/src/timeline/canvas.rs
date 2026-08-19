@@ -800,11 +800,15 @@ impl canvas::Program<Message> for TimelineProgram<'_> {
         // タイムコードは元々 monospace(触っていない)。色だけ、各所の強調に
         // 使っている accent role(`tokens.action_active` — `widgets/key_button.rs`
         // 等と同じ role)へ寄せた(2026-08-19 UIトンマナ統一 campaign)。
+        // font size は 15→11(2026-08-19 第2波利用者裁定・密度圧縮で
+        // `TRANSPORT_H` が 24px に詰まったのに合わせて1段落とした — 11 は
+        // `widgets/context_menu.rs` / `widgets/scrub_value.rs` の
+        // `FONT_SIZE` と同じ、この crate で使用実績のある値)。
         frame.fill_text(Text {
             content: playhead_clock(scene.playhead),
             position: Point::new(clock_x, geometry.transport_bottom() * 0.5),
             color: tokens.action_active,
-            size: Pixels(15.0),
+            size: Pixels(11.0),
             font: iced::Font::MONOSPACE,
             align_y: alignment::Vertical::Center.into(),
             ..Text::default()
