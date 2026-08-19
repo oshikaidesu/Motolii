@@ -19,10 +19,12 @@ use iced::{alignment, Color, Pixels, Point, Size};
 use motolii_doc::{Document, LayerId};
 use motolii_ui::blitz_shell::{UiEditParam, UiKeyInterp};
 use motolii_ui::timeline_editor::param_keys;
-use motolii_ui::timeline_rows::{ParamRef, RowKind, TimelineRow};
+use motolii_ui::timeline_rows::{RowKind, TimelineRow};
 
+use super::palette;
 use super::pane::{TimelineDrag, TimelineMsg};
 use super::semantics::{key_times_match, key_ui_param, PaneGeometry, TimelineHit, ROW_H};
+use crate::theme::Tokens;
 use crate::widgets::context_menu::MenuItem;
 
 /// 菱形の中心から辺までの半径。egui 版 `d = 4.0`(菱形は8px四方)と同値。
@@ -66,29 +68,6 @@ const ROW_RULE: Color = Color::from_rgb(
     0x11 as f32 / 255.0,
 );
 
-/// `ParamRef` の種別色(チップ)。egui 版 `param_color` の簡約 — Timeline は
-/// 5種類とも同じ寒色系のチップで並べているだけで、bar のような layer 色は
-/// 持たない(egui 版もチップは param 種別だけに依る)。
-fn param_chip_color(param: ParamRef) -> Color {
-    match param {
-        ParamRef::Position => Color::from_rgb(0.55, 0.72, 0.86),
-        ParamRef::Anchor => Color::from_rgb(0.62, 0.62, 0.86),
-        ParamRef::Scale => Color::from_rgb(0.55, 0.86, 0.62),
-        ParamRef::Rotation => Color::from_rgb(0.86, 0.72, 0.55),
-        ParamRef::Opacity => Color::from_rgb(0.78, 0.78, 0.78),
-    }
-}
-
-fn param_label(param: ParamRef) -> &'static str {
-    match param {
-        ParamRef::Position => "Position",
-        ParamRef::Anchor => "Anchor",
-        ParamRef::Scale => "Scale",
-        ParamRef::Rotation => "Rotation",
-        ParamRef::Opacity => "Opacity",
-    }
-}
-
 /// property 行1本を描く: レール側はチップ+ラベル(名前欄・M/S/L は object 行
 /// だけの物)、トラック側はその param のキーを菱形で並べる。
 ///
@@ -106,6 +85,7 @@ pub fn draw_property_row(
     selected: &[(LayerId, UiEditParam, f32)],
     drag: Option<&TimelineDrag>,
     hover: Option<TimelineHit>,
+    tokens: &Tokens,
 ) {
     let RowKind::Property(param) = row.kind else {
         return;
@@ -113,13 +93,21 @@ pub fn draw_property_row(
     let cy = row_top + ROW_H * 0.5;
     let indent = 8.0 + f32::from(row.depth) * 12.0;
 
-    // レール: チップ + ラベル(egui 版 `RowKind::Property` 描画の移植)。
+    // トラック: キーの列。ドラッグ中のキーは preview 位置で描く(Document は
+    // release まで無傷 — `pane.rs` のドラッグ設計と同じ)。
+    let ui_param = key_ui_param(param);
+    let keys_here = param_keys(document, row.layer, param);
+    // レール: チップ + ラベル。チップ色は `palette::param_chip_color` へ一本化
+    // した(2026-08-19 UIトンマナ統一 campaign — 以前はここに独自の param 別
+    // 虹色があり、`structure.rs` の別実装と食い違っていた。経緯は
+    // `timeline/palette.rs` のモジュール doc)。この行にキーが1つでもあれば
+    // accent(Inspector モックの「keyed 行だけ amber」と同型)。
     frame.fill(
         &Path::rectangle(Point::new(indent, cy - 5.5), Size::new(4.0, 11.0)),
-        param_chip_color(param),
+        palette::param_chip_color(tokens, !keys_here.is_empty()),
     );
     frame.fill_text(Text {
-        content: param_label(param).to_owned(),
+        content: palette::param_label(param).to_owned(),
         position: Point::new(indent + 12.0, cy),
         color: PARAM_LABEL,
         size: Pixels(10.0),
@@ -127,10 +115,7 @@ pub fn draw_property_row(
         ..Text::default()
     });
 
-    // トラック: キーの列。ドラッグ中のキーは preview 位置で描く(Document は
-    // release まで無傷 — `pane.rs` のドラッグ設計と同じ)。
-    let ui_param = key_ui_param(param);
-    for (_, t) in param_keys(document, row.layer, param) {
+    for (_, t) in keys_here {
         let dragging_this = matches!(
             drag,
             Some(TimelineDrag::Key { layer, param: dparam, from_seconds, .. })
@@ -266,6 +251,7 @@ pub fn interp_menu_items(param: UiEditParam) -> Vec<MenuItem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motolii_ui::timeline_rows::ParamRef;
 
     #[test]
     fn anchor_never_produces_a_grab_or_menu_message() {

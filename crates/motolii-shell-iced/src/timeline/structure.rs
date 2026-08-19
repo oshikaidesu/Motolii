@@ -13,15 +13,21 @@
 //! | [`draw_fold_arrow`] | `rail_glyph` の ▾/▸ 呼び出し | 子の開閉矢印 |
 //! | [`draw_params_toggle`] | `rail_glyph` の ◆/◇ 呼び出し | param 行の開閉 |
 //! | [`draw_lock_button`] | `rail_button` の `("L", ItemFlag::Lock)` | ロック |
-//! | [`draw_property_row`] | `RowKind::Property(param)` 分岐 | param の子行 |
 //! | [`draw_rename_box`] | `TextEdit::singleline` 分岐 | 行名のその場編集 |
-//! | [`param_color`] / [`param_label`] | 同名(private) | param チップの色・文字 |
+//!
+//! **`RowKind::Property(param)` 分岐(param の子行の絵)は [`super::keys`] へ
+//! ある。** 元々ここにも `draw_property_row` / `param_color` / `param_label`
+//! の重複実装があったが、`canvas.rs` の draw ループが `RowKind::Property` を
+//! 先に判定して無条件 `continue` するため、ここの実装は1度も呼ばれない
+//! 到達不能コードだった(2026-08-19 UIトンマナ統一 campaign で実測・削除。
+//! `param_color` は `keys.rs` 側の実装と同じ `ParamRef::Position` に別々の
+//! 色を返す食い違いも持っていた — 経緯は `timeline/palette.rs` のモジュール
+//! doc)。
 
 use iced::widget::canvas::{Frame, Path, Stroke, Text};
 use iced::{alignment, Color, Pixels, Point, Size};
 
 use motolii_doc::LayerId;
-use motolii_ui::timeline_rows::ParamRef;
 
 use crate::theme::Tokens;
 
@@ -98,33 +104,6 @@ pub fn draw_lock_button(
     });
 }
 
-/// Property 行(param の子行)。egui 版 `RowKind::Property(param)` 分岐の移植:
-/// 色つきの細い縦チップ + ラベルだけ。bar も M/S/L も無い(親の物と取り違えない)。
-pub fn draw_property_row(
-    frame: &mut Frame,
-    indent: f32,
-    y: f32,
-    row_h: f32,
-    param: ParamRef,
-    dim: Color,
-) {
-    let cy = y + row_h * 0.5;
-    let chip = Path::rounded_rectangle(
-        Point::new(indent + 6.0, cy - 5.5),
-        Size::new(4.0, 11.0),
-        2.0.into(),
-    );
-    frame.fill(&chip, param_color(param));
-    frame.fill_text(Text {
-        content: param_label(param).to_owned(),
-        position: Point::new(indent + 18.0, cy),
-        color: dim,
-        size: Pixels(10.0),
-        align_y: alignment::Vertical::Center.into(),
-        ..Text::default()
-    });
-}
-
 /// rename 中の行の、その場編集の見た目。**本物のテキスト入力は持たない**
 /// (canvas 手描きの制約 — 文字はキーボード event から `TimelinePane::renaming`
 /// の buffer へ積み、ここは buffer をそのまま描くだけ)。カーソルは末尾固定の
@@ -163,30 +142,6 @@ pub fn draw_rename_box(
             Size::new(1.0, name_rect.height - 6.0),
             tokens.text_primary,
         );
-    }
-}
-
-/// param チップの色。**egui 版 `param_color` と同じ値を写す**(新しい hex は
-/// 発明しない — 2026-08-19 の柵)。
-pub fn param_color(param: ParamRef) -> Color {
-    let (r, g, b) = match param {
-        ParamRef::Position => (0xcf, 0x75, 0x6d),
-        ParamRef::Anchor => (0xe1, 0xb8, 0x66),
-        ParamRef::Scale => (0x75, 0xa9, 0x78),
-        ParamRef::Rotation => (0x77, 0x9b, 0xd0),
-        ParamRef::Opacity => (0xb1, 0x8e, 0xc0),
-    };
-    Color::from_rgb8(r, g, b)
-}
-
-/// param チップのラベル。egui 版 `param_label` と同じ文字列。
-pub fn param_label(param: ParamRef) -> &'static str {
-    match param {
-        ParamRef::Position => "Position",
-        ParamRef::Anchor => "Anchor",
-        ParamRef::Scale => "Scale",
-        ParamRef::Rotation => "Rotation",
-        ParamRef::Opacity => "Opacity",
     }
 }
 
