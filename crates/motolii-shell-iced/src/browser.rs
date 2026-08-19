@@ -49,6 +49,21 @@ pub enum BrowserRail {
     Recent,
 }
 
+/// 結果 grid の表示形(browser-library.html:94-97 `.viewModes` の3席)。
+/// **browser-revise レーンの追加**(egui 版 `browser_panel::BrowserView` と
+/// 同じ意味関数の移植 — 見た目は `browser_pane.rs` 側、ここは列数に効く
+/// 状態を持つだけ)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BrowserViewMode {
+    /// browser-library.css:269 `[data-view="thumbnails"]` — 4列、名前無し。
+    Thumbnails,
+    /// 既定(html:96 `aria-pressed="true"`)。2列、名前+meta 付き。
+    #[default]
+    Grid,
+    /// browser-library.css:273 `[data-view="list"]` — 1列、横並びの行。
+    List,
+}
+
 /// card 1枚ぶんの表示投影。egui 版 `BrowserCardModel` の対応物。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BrowserCard {
@@ -88,6 +103,18 @@ pub struct BrowserPane {
     rail: BrowserRail,
     selected: Option<String>,
     drop_hover: bool,
+    /// browser-library.html:25 検索欄の移植(egui `BrowserPanel::query` と同じ
+    /// 意味関数 — 小文字化して trim 済みの語彙で name/meta を照合する)。
+    query: String,
+    /// browser-library.html:103 filter chip(Video/Image/Audio)の移植。
+    /// `card.kind` と完全一致する物だけを残す(egui `BrowserPanel::kind` と同じ)。
+    kind_filter: Option<&'static str>,
+    /// 結果の表示形(html:94-97)。列数は `browser_pane.rs` 側が読む。
+    view: BrowserViewMode,
+    /// filter shelf の開閉(html:26 `#filter-toggle` — 既定は開、
+    /// `docs/ui-interaction-language.md`:122 の「常時同時表示しない」を
+    /// 利用者が自分で開閉できる形で満たす)。
+    shelf_open: bool,
 }
 
 impl BrowserPane {
@@ -119,6 +146,10 @@ impl BrowserPane {
             rail: BrowserRail::default(),
             selected: None,
             drop_hover: false,
+            query: String::new(),
+            kind_filter: None,
+            view: BrowserViewMode::default(),
+            shelf_open: true,
         };
         // 登録 folder の image kind の縮小実体(既存座席)。
         let items: Vec<BrowserItem> = pane
@@ -156,6 +187,43 @@ impl BrowserPane {
         self.drop_hover = hovering;
     }
 
+    /// いまの検索語(小文字化・trim 済み)。空 = 絞り込み無し。
+    pub fn query(&self) -> &str {
+        &self.query
+    }
+
+    /// 検索欄の移植(egui `BrowserPanel::set_query` と同じ正規化)。
+    pub fn set_query(&mut self, query: &str) {
+        self.query = query.trim().to_lowercase();
+    }
+
+    /// filter chip(Video/Image/Audio)のいまの選択。`None` = 絞り込み無し。
+    pub fn kind_filter(&self) -> Option<&'static str> {
+        self.kind_filter
+    }
+
+    pub fn set_kind_filter(&mut self, kind: Option<&'static str>) {
+        self.kind_filter = kind;
+    }
+
+    /// 結果の表示形(html:94-97 view mode)。
+    pub fn view(&self) -> BrowserViewMode {
+        self.view
+    }
+
+    pub fn set_view(&mut self, view: BrowserViewMode) {
+        self.view = view;
+    }
+
+    /// filter shelf が開いているか(html:26 `#filter-toggle` の押下状態)。
+    pub fn shelf_open(&self) -> bool {
+        self.shelf_open
+    }
+
+    pub fn set_shelf_open(&mut self, open: bool) {
+        self.shelf_open = open;
+    }
+
     /// 登録 folder の名乗り(空状態の文言が folder を名指しするのに使う)。
     pub fn library_root_name(&self) -> String {
         self.projection
@@ -165,8 +233,35 @@ impl BrowserPane {
             .unwrap_or_else(|| "library".to_owned())
     }
 
-    /// いまの rail の card 一覧。
+    /// いまの rail の card 一覧。検索欄・kind chip の絞り込みを最後に通す
+    /// (browser-revise レーンの追加)。**既定(空文字・`None`)は常に真** —
+    /// 呼び出し側が絞り込みを一度も触らなければ、この関数の挙動は
+    /// 絞り込み追加前と一字も変わらない(既存の意味を壊さない)。
     pub fn cards(
+        &self,
+        document: Option<&Document>,
+        project_root: Option<&Path>,
+    ) -> Vec<BrowserCard> {
+        let cards = self.rail_cards(document, project_root);
+        cards
+            .into_iter()
+            .filter(|card| self.passes_filters(card))
+            .collect()
+    }
+
+    /// 検索欄(名前+meta の部分一致)と kind chip(完全一致)。
+    /// meta には html:123 と同じ形(`kind · secondary[· in project]`)が
+    /// 既に入っているので、tag 相当の語彙(拡張子・登録状態)もここで拾える。
+    fn passes_filters(&self, card: &BrowserCard) -> bool {
+        let kind_ok = self.kind_filter.is_none_or(|kind| card.kind == kind);
+        let query_ok = self.query.is_empty() || {
+            let haystack = format!("{} {}", card.name, card.meta).to_lowercase();
+            haystack.contains(&self.query)
+        };
+        kind_ok && query_ok
+    }
+
+    fn rail_cards(
         &self,
         document: Option<&Document>,
         project_root: Option<&Path>,

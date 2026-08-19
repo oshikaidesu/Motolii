@@ -314,6 +314,26 @@ impl Shell {
                 // panel 内の受け皿表示だけ。取り込みは `FilesDropped` のまま。
                 self.browser.set_drop_hover(hovering);
             }
+            Message::BrowserQueryChanged(query) => {
+                // pane 内の表示切替(Document には触れない)。
+                self.browser.set_query(&query);
+            }
+            Message::BrowserKindFilterChosen(kind) => {
+                // html:339-343 と同じトグル: 選び直しは解除。
+                let next = (self.browser.kind_filter() != Some(kind)).then_some(kind);
+                self.browser.set_kind_filter(next);
+            }
+            Message::BrowserFiltersCleared => {
+                // html:344-350 clearFilter: kind chip と検索語を両方戻す。
+                self.browser.set_kind_filter(None);
+                self.browser.set_query("");
+            }
+            Message::BrowserFilterShelfToggled => {
+                self.browser.set_shelf_open(!self.browser.shelf_open());
+            }
+            Message::BrowserViewChosen(mode) => {
+                self.browser.set_view(mode);
+            }
         }
         // Document が進んでいれば、新しく載った image asset の縮小実体を用意する
         // (既に在る分は fs metadata を見るだけ)。作れなかった理由は帯経路へ。

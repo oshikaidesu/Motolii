@@ -128,6 +128,18 @@ pub fn double_click(mut ui: iced_test::Simulator<'_, Message>, selector: &str) -
     ui.into_messages().collect()
 }
 
+/// text_input へ実際に打鍵する(browser-revise レーンの検索欄など)。
+/// **先に click で focus してから** typewrite する — iced の text_input は
+/// focus が無いとキー入力を受け取らない(実機の挙動と同じ)。空の
+/// text_input は placeholder 文字列そのもので selector に掴める
+/// (`iced_test` の `TextInput::text()` は空なら placeholder を返す)。
+pub fn type_into(mut ui: iced_test::Simulator<'_, Message>, selector: &str, text: &str) -> Vec<Message> {
+    ui.click(selector)
+        .unwrap_or_else(|error| panic!("{selector:?} が押せる物として立っていない: {error}"));
+    ui.typewrite(text);
+    ui.into_messages().collect()
+}
+
 /// scrollable の中身を下まで送ってから押す。Inspector の TRANSFORM/EFFECTS は
 /// 行数が伸びる分だけ scrollable に包んである(2026-08-18 視覚再現レーン —
 /// 包まないと伸びた分だけ既存行が押し潰されて 0 高さになる、を実測して足した)。

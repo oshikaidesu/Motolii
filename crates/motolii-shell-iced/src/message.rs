@@ -19,7 +19,7 @@
 
 use std::path::PathBuf;
 
-use crate::browser::BrowserRail;
+use crate::browser::{BrowserRail, BrowserViewMode};
 use crate::inspector_pane::InspectorEvent;
 use crate::timeline::TimelineMsg;
 
@@ -82,6 +82,19 @@ pub enum Message {
     /// **panel 内の受け皿表示だけ**を切り替える。取り込みそのものは従来どおり
     /// [`Message::FilesDropped`] = 殻の `AdmitPaths` で、ここでは奪わない。
     BrowserDropHover(bool),
+    /// browser-library.html:25 検索欄への入力(browser-revise レーン)。
+    /// egui `BrowserPanel::set_query` と同じ意味関数を通すだけで、pane 内の
+    /// 表示切替に留まる(Document には触れない)。
+    BrowserQueryChanged(String),
+    /// browser-library.html:103 filter chip(Video/Image/Audio)を押した。
+    /// 押し直しは解除(html:339-343 のトグルと同じ)。
+    BrowserKindFilterChosen(&'static str),
+    /// browser-library.html:344-350 `Clear`。kind chip と検索語を両方戻す。
+    BrowserFiltersCleared,
+    /// browser-library.html:26 `#filter-toggle`。filter shelf の開閉。
+    BrowserFilterShelfToggled,
+    /// browser-library.html:94-97 view mode(Thumbnails/Grid/List)を選んだ。
+    BrowserViewChosen(BrowserViewMode),
     /// Timeline pane で起きたこと(M-3)。canvas が intent まで解決して運び、
     /// `Shell::update` が `UiIntent` へ写して dispatch する。
     Timeline(TimelineMsg),

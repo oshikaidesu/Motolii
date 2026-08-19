@@ -65,13 +65,24 @@
 //!   [`widgets`](crate::widgets)の本物を Browser / Inspector 双方が使う
 //!   (統合 wave で `widgets_stub` を退役させた)
 //!
+//! ## browser-revise レーンで加わったもの(2026-08-19)
+//!
+//! Browser pane の絵を [`browser_pane`] へ切り出し、見た目の正本を
+//! egui 実装ではなく `docs/mocks-ui/public/browser-library.html` + `.css`
+//! そのものへ差し替えた(module doc に詳細)。**検索欄・kind filter chip
+//! (Video/Image/Audio + Clear)・表示モード切替(Thumbnails/Grid/List)**が
+//! egui 版の意味関数を移植する形で新しく効くようになった(以前の M-4a では
+//! 非目標だった3点)。Tags 編集・Collections・複数登録 folder(PLACES)・
+//! 右クリック context menu は、対応する機能が product に無いため
+//! 引き続き置いていない(判断は module doc の Q0 節)。
+//!
 //! ## ここに無いもの(意図的に)
 //!
 //! - Timeline(M-3)。ギズモの絵と意味論・書き出しカメラ枠 overlay は M-3 後。
 //!   Undo / Redo ボタンは編集面と一緒に来る。Inspector の Audio(gain)section は
 //!   エディタに gain の操作 API が立つまで**出さない**(Q0: 死に chrome 禁止)
-//! - Browser の preview 再生・検索/フィルタ・Collections・Timeline への DnD 受け
-//!   (M-4a の非目標)
+//! - Browser の preview 再生・tag 編集・Collections・Timeline への DnD 受け
+//!   (対応する機能が product に無い — [`browser_pane`] module doc の Q0 節)
 //! - Stage / Timeline からの layer 選択 → Inspector 反映。M-3 後の統合 wave 第2弾
 //! - egui。**この crate に egui 系の直接依存は1つも無い**
 //!   (柵: `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs` の
@@ -80,6 +91,10 @@
 //!   (`motolii_ui::blitz_shell::NativePrompts`)の後ろに1箇所だけ在る
 
 pub mod browser;
+/// Browser pane の絵(browser-revise レーン、2026-08-19)。`view.rs` から
+/// 切り出した(`inspector_pane.rs` と対称)。見た目の正本は
+/// `docs/mocks-ui/public/browser-library.html` + `.css`(module doc に詳細)。
+pub mod browser_pane;
 pub mod inspector_model;
 pub mod inspector_pane;
 mod intent_log;
@@ -105,7 +120,7 @@ pub mod view;
 pub mod widgets;
 mod window_input;
 
-pub use browser::{BrowserCard, BrowserPane, BrowserRail};
+pub use browser::{BrowserCard, BrowserPane, BrowserRail, BrowserViewMode};
 pub use inspector_model::{InspectorModel, InspectorSeat};
 pub use inspector_pane::InspectorEvent;
 pub use intent_log::IntentLog;
