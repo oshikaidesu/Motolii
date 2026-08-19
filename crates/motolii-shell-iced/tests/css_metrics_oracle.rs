@@ -3,19 +3,21 @@
 //! `docs/mocks-ui/public/*.html` を実測し、iced 側の主要寸法定数と突き合わせる
 //! oracle。GPU 不要・描画無し(layout だけ解いて読み戻す)。
 //!
-//! ## 両側性が違う2本立て
+//! ## 両側とも実物を突き合わせる
 //!
 //! - **Timeline 側**(`timeline::semantics` の `pub const`)は実物を `use`
 //!   して比較する — css か semantics.rs のどちらが変わってもこのテストが
 //!   落ちる、正真の両側チェック
-//! - **Inspector 側**(`inspector_pane.rs` の `mod dims`)は private module
-//!   で外部 crate から到達できず、かつ `inspector_pane.rs` は本レーンの柵
-//!   (3レーン並走中のパネル実装)で書き換え禁止なので、`dims` の値を
-//!   2026-08-19 時点の実測としてこのテストへ literal で転記して pin した。
-//!   **片側の保証**にしかならない: css 側が変われば落ちるが、
-//!   `inspector_pane.rs` の `dims` を変えても気づかない
-//!   (`dims` を触る変更をする人が、このテストの literal も一緒に見直す
-//!   運用が要る — 詳細は上記 review 文書)
+//! - **Inspector 側**(`inspector_pane::dims`)も同じ形にした。2026-08-19時点
+//!   では `dims` が private module で外部 crate から到達できず、値を
+//!   literal で転記して片側だけ(css 側が変われば落ちるが `dims` 自身の変更
+//!   には気づかない)pin していた — 前レーンが「`pub` へ上げれば真の両方向に
+//!   なる」と残した提案どおり、この round で `inspector_pane::dims` を
+//!   `pub` に上げ(`inspector_pane.rs` の柵は「既存の意味を壊さない」で
+//!   あって「可視性を変えない」ではない)、ここも `use` で実物を読むように
+//!   直した。**注意**: `pub(crate)` では足りない — 統合テスト crate は
+//!   ライブラリ crate の外側なので `pub(crate)` は見えず、真に両方向にする
+//!   には `pub` が要る(実測済み)。
 //!
 //! ## 既知の不一致は「一致」を主張しない
 //!
@@ -28,6 +30,7 @@
 
 use std::path::PathBuf;
 
+use motolii_shell_iced::inspector_pane::dims;
 use motolii_shell_iced::timeline::semantics::{OVERVIEW_H, RAIL_W, ROW_H, TRANSPORT_H};
 use motolii_ui::css_metrics::extract;
 use serde_json::Value;
@@ -70,8 +73,8 @@ fn find<'a>(rows: &'a [Value], what: &str, pred: impl Fn(&Value) -> bool) -> &'a
 }
 
 // ---------------------------------------------------------------------------
-// Inspector — inspector_pane.rs の `mod dims`(private)から2026-08-19に
-// 実測値を転記した pin。
+// Inspector — `inspector_pane::dims` は pub なので実物を比較する
+// (2026-08-19 に private → pub へ上げて両方向にした)。
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -87,7 +90,11 @@ fn inspector_dims_match_css_computed_values() {
     let panel_header = find(&rows, "header.panelHeader", |r| {
         has_class(r, "panelHeader") && tag_is(r, "header")
     });
-    assert_eq!(box_h(panel_header), 29.0, "dims::PANEL_HEADER_H");
+    assert_eq!(
+        box_h(panel_header),
+        f64::from(dims::PANEL_HEADER_H),
+        "dims::PANEL_HEADER_H"
+    );
 
     // inspector-library.css:37 `.panelHeader::before { width:3px; height:13px }`
     // — dims::HEADER_ACCENT_W / HEADER_ACCENT_H。`::before` を歩かないと
@@ -95,28 +102,52 @@ fn inspector_dims_match_css_computed_values() {
     let accent = find(&rows, "header.panelHeader::before", |r| {
         path_ends_with(r, "panelHeader::before")
     });
-    assert_eq!(box_w(accent), 3.0, "dims::HEADER_ACCENT_W");
-    assert_eq!(box_h(accent), 13.0, "dims::HEADER_ACCENT_H");
+    assert_eq!(
+        box_w(accent),
+        f64::from(dims::HEADER_ACCENT_W),
+        "dims::HEADER_ACCENT_W"
+    );
+    assert_eq!(
+        box_h(accent),
+        f64::from(dims::HEADER_ACCENT_H),
+        "dims::HEADER_ACCENT_H"
+    );
 
     // inspector-library.css:76 `.selectionSummary { height: 46px }` — dims::SUMMARY_H
     let summary = find(&rows, "section.selectionSummary", |r| {
         has_class(r, "selectionSummary")
     });
-    assert_eq!(box_h(summary), 46.0, "dims::SUMMARY_H");
+    assert_eq!(
+        box_h(summary),
+        f64::from(dims::SUMMARY_H),
+        "dims::SUMMARY_H"
+    );
 
     // inspector-library.css:99 `.layerStateButton { width:22px; height:21px }`
     // — dims::LAYER_STATE_W / LAYER_STATE_H
     let layer_state = find(&rows, "button.layerStateButton", |r| {
         has_class(r, "layerStateButton")
     });
-    assert_eq!(box_w(layer_state), 22.0, "dims::LAYER_STATE_W");
-    assert_eq!(box_h(layer_state), 21.0, "dims::LAYER_STATE_H");
+    assert_eq!(
+        box_w(layer_state),
+        f64::from(dims::LAYER_STATE_W),
+        "dims::LAYER_STATE_W"
+    );
+    assert_eq!(
+        box_h(layer_state),
+        f64::from(dims::LAYER_STATE_H),
+        "dims::LAYER_STATE_H"
+    );
 
     // inspector-library.css:122-126 `.columnHeader { height: 21px }` — dims::COLUMN_HEADER_H
     let column_header = find(&rows, "header.columnHeader", |r| {
         has_class(r, "columnHeader")
     });
-    assert_eq!(box_h(column_header), 21.0, "dims::COLUMN_HEADER_H");
+    assert_eq!(
+        box_h(column_header),
+        f64::from(dims::COLUMN_HEADER_H),
+        "dims::COLUMN_HEADER_H"
+    );
 
     // inspector-library.css:141-142 `.tableSection h2 { height: 23px }` — dims::SECTION_H
     let section_h2 = find(&rows, "section.tableSection > h2", |r| {
@@ -125,13 +156,21 @@ fn inspector_dims_match_css_computed_values() {
                 .as_str()
                 .is_some_and(|p| p.contains("tableSection"))
     });
-    assert_eq!(box_h(section_h2), 23.0, "dims::SECTION_H");
+    assert_eq!(
+        box_h(section_h2),
+        f64::from(dims::SECTION_H),
+        "dims::SECTION_H"
+    );
 
     // inspector-library.css:291 `.propertyRow::before { width: 3px }` — dims::ROW_BAND_W
     let row_band = find(&rows, "div.propertyRow::before", |r| {
         path_ends_with(r, "propertyRow::before")
     });
-    assert_eq!(box_w(row_band), 3.0, "dims::ROW_BAND_W");
+    assert_eq!(
+        box_w(row_band),
+        f64::from(dims::ROW_BAND_W),
+        "dims::ROW_BAND_W"
+    );
 
     // inspector-library.css:118 `repeat(3, 64px)`(値セルの grid 列)— dims::VALUE_COL_W。
     // 解決後の実測幅(css の literal をそのまま読むのではなく、grid が実際に
@@ -139,31 +178,60 @@ fn inspector_dims_match_css_computed_values() {
     let value_col = find(&rows, "header.columnHeader > span (64px)", |r| {
         tag_is(r, "span") && path_ends_with(r, "columnHeader > span") && box_w(r) == 64.0
     });
-    assert_eq!(box_w(value_col), 64.0, "dims::VALUE_COL_W");
+    assert_eq!(
+        box_w(value_col),
+        f64::from(dims::VALUE_COL_W),
+        "dims::VALUE_COL_W"
+    );
 
     // inspector-library.css:207 `.effectBadge { width:17px; height:13px }`
     // — dims::FX_BADGE_W / FX_BADGE_H
     let fx_badge = find(&rows, "span.effectBadge", |r| has_class(r, "effectBadge"));
-    assert_eq!(box_w(fx_badge), 17.0, "dims::FX_BADGE_W");
-    assert_eq!(box_h(fx_badge), 13.0, "dims::FX_BADGE_H");
+    assert_eq!(
+        box_w(fx_badge),
+        f64::from(dims::FX_BADGE_W),
+        "dims::FX_BADGE_W"
+    );
+    assert_eq!(
+        box_h(fx_badge),
+        f64::from(dims::FX_BADGE_H),
+        "dims::FX_BADGE_H"
+    );
 
     // inspector-library.css:217 `.effectEnable { min-width:25px; height:15px }`
     // — dims::FX_PILL_MIN_W / FX_PILL_H
     let fx_pill = find(&rows, "button.effectEnable", |r| {
         has_class(r, "effectEnable")
     });
-    assert_eq!(box_w(fx_pill), 25.0, "dims::FX_PILL_MIN_W");
-    assert_eq!(box_h(fx_pill), 15.0, "dims::FX_PILL_H");
+    assert_eq!(
+        box_w(fx_pill),
+        f64::from(dims::FX_PILL_MIN_W),
+        "dims::FX_PILL_MIN_W"
+    );
+    assert_eq!(
+        box_h(fx_pill),
+        f64::from(dims::FX_PILL_H),
+        "dims::FX_PILL_H"
+    );
 
     // inspector-library.css:313-314 `.propertyName i { width:15px; height:15px }`
-    // — dims::KIND_ICON(host TRANSFORM/APPEARANCE 行の kind icon)。
+    // — dims::KIND_ICON(host TRANSFORM/APPEARANCE 行の kind icon。この round から
+    // FX param 行にも同じ部品を使うが、値は host/FX で共通なのでここは1本のまま)。
     let kind_icon = find(&rows, "div.propertyName > i.hostIcon", |r| {
         tag_is(r, "i")
             && has_class(r, "hostIcon")
             && !r["path"].as_str().unwrap_or("").contains("::")
     });
-    assert_eq!(box_w(kind_icon), 15.0, "dims::KIND_ICON (width)");
-    assert_eq!(box_h(kind_icon), 15.0, "dims::KIND_ICON (height)");
+    assert_eq!(
+        box_w(kind_icon),
+        f64::from(dims::KIND_ICON),
+        "dims::KIND_ICON (width)"
+    );
+    assert_eq!(
+        box_h(kind_icon),
+        f64::from(dims::KIND_ICON),
+        "dims::KIND_ICON (height)"
+    );
 }
 
 // ---------------------------------------------------------------------------
