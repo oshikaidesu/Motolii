@@ -1387,4 +1387,24 @@ mod tests {
         assert_eq!(dims::columns(BrowserViewMode::Grid), 2);
         assert_eq!(dims::columns(BrowserViewMode::List), 1);
     }
+
+    /// **thumbnail は0高さへ潰れない(潰れ回帰レーン、2026-08-19)。**
+    /// `Shrink` の中の `Fill` は iced ではレイアウト前に高さが定まらず0になる
+    /// 既知の罠(module doc「移植した機能」節・`thumb_height` の doc コメント
+    /// 参照) — この pane は列数が一番多い Thumbnails(4列、最も潰れやすい)を
+    /// 含め、`thumb_height` で先に実 px を解いてから `browser_thumb` へ渡す
+    /// ことでその罠を避けている。両方の grid view で常に正の高さを返す
+    /// ことをここで固定する(List view は `LIST_THUMB_W` 由来の別式なので
+    /// 対象外)。
+    #[test]
+    fn thumb_height_is_never_crushed_flat() {
+        for columns in [dims::COLUMNS_THUMBNAILS, dims::COLUMNS_GRID] {
+            let height = dims::thumb_height(PANE_W, columns);
+            assert!(
+                height > 1.0,
+                "thumb_height(PANE_W={PANE_W}, columns={columns}) = {height} — \
+                 潰れたサムネイルの回帰"
+            );
+        }
+    }
 }
