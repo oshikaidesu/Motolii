@@ -167,6 +167,23 @@ proptest = "1"
 # release は既定で `incremental = false` なので、1行の変更でも motolii-ui を
 # 丸ごと焼き直す。ここでは incremental を入れ、自分のcrateの最適化を落とし、
 # 依存だけ opt-level 3 に保つ。
+# 日常のビルド/テスト(`cargo test` は test プロファイル = dev 継承)。
+# 2026-08-19 実測で「ビルド待ちが開発の律速」と判明したため調整した。
+# 既定の `debug = true`(完全 debug 情報)は macOS の object/リンク時間を大きく食う
+# (Rust Performance Book の目安で 20〜40% のコンパイル時間差)。
+# `line-tables-only` は **backtrace の行番号を残したまま**その大半を落とす
+# (Zed の `debug = "limited"` と同じ狙い。出典と比較は
+# docs/reviews/2026-08-19-build-speed-investigation.md)。
+# 完全な debug 情報が要る時は `--profile dbg` を使う。
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+# デバッガでシンボルを追う必要がある時だけ使う待避プロファイル。
+[profile.dbg]
+inherits = "dev"
+debug = "full"
+
 [profile.fast]
 inherits = "release"
 incremental = true
