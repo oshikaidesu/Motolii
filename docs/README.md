@@ -8,6 +8,7 @@
 
 ## 30秒サマリ
 
+- **リセット(2026-08-20裁定・最優先で読む)**: ドリフトの累積を1度リセットし、軸を1本にする。rerun の `crates/store/*` と `re_renderer` を pin fork から引いて **Document と合成器の実体**にし(AE の意味は `re_types_core` の custom component として Motolii 側に建てる)、front は **iced のみ**で store 投影に徹し、拡張口を **trait 1本**へ収束させる。器は**新 workspace**。これにより下記「技術スタック」「shell現在地」「M3現在地」の各行は**リセット前の記述**になった(歴史記録として残す)。正本=[リセット裁定](reviews/2026-08-20-reset-to-one-axis.md)
 - **何を作るか**: MV(ミュージックビデオ)制作のための、モーショングラフィック指向のコンポジットツール。AEの重さへの構造的な回答。3〜5分の動画を書き出せたら完成
 - **長期の北極星**: 映像表現を、時刻・入力・型付きparameterから決まる再利用可能な単位として実行・保存・配布できる共通環境にする。制作者と開発者を固定身分にせず、利用→調整→構成→inspection→fork→authoring→共有を一つの経路にする。多数のcreator-authorが公開境界の上で独立して表現を増やせることを成長力とする。「映像制作におけるVST」はHostと拡張単位を分ける構造の類比に限り、音楽中心の製品像やDAW化は目標ではない([concept.md](concept.md#長期の北極星-映像表現を実行再利用配布できる単位にする)、[連続体決定](reviews/2026-07-22-creator-developer-continuum-decision.md))
 - **技術スタック**: Rerun Spatial Viewer（Stage／spatial runtime）/ eframe・egui＋egui_tiles（窓とドッキング）/ Blitz(HTML/CSS)（Browser、Inspector、Timeline、chrome の各panel）/ Rust Host（Document、D2、media、resource policy）/ FFmpeg（media／export）。MotoliiはRerunのcreator-facing wrapperとして、永続意味と薄いidentity／time／asset翻訳だけを持ち、scene／view／query／camera／picking／rendererを再構築しない。全surfaceは同じrevision付きsnapshotを読む
