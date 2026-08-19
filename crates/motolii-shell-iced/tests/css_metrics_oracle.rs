@@ -180,7 +180,14 @@ fn inspector_dims_match_css_computed_values() {
         "dims::COLUMN_HEADER_H"
     );
 
-    // inspector-library.css:141-142 `.tableSection h2 { height: 23px }` — dims::SECTION_H
+    // inspector-library.css:141-142 `.tableSection h2 { height: 26px }` —
+    // 第3波レーンG3(2026-08-19 フラット文法正本改定、
+    // docs/reviews/2026-08-19-flat-grammar-canon-revision.md)でセクション区切りを
+    // 23→26px(=行ピッチ1.3倍の定数)へ改定した。`inspector_pane::dims::SECTION_H`
+    // は本レーンの柵(`inspector_pane.rs` 書き換え禁止)のため未追随でまだ 23 の
+    // まま — 「一致」を主張せず、既知乖離として両側を literal で pin し直す
+    // (`timeline_known_divergences_are_pinned` と同型。第3波レーンI(iced追随)
+    // で収束予定)。
     let section_h2 = find(&rows, "section.tableSection > h2", |r| {
         tag_is(r, "h2")
             && r["path"]
@@ -189,8 +196,13 @@ fn inspector_dims_match_css_computed_values() {
     });
     assert_eq!(
         box_h(section_h2),
-        f64::from(dims::SECTION_H),
-        "dims::SECTION_H"
+        26.0,
+        "css .tableSection h2 の計算済み高さ(2026-08-19 第3波フラット文法改定)"
+    );
+    assert_eq!(
+        dims::SECTION_H,
+        23.0,
+        "dims::SECTION_H(iced 側未追随、第3波レーンI で収束予定)"
     );
 
     // inspector-library.css:291 `.propertyRow::before { width: 3px }` — dims::ROW_BAND_W
