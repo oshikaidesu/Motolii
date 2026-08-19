@@ -38,7 +38,7 @@ use crate::inspector_model::{
     arity, param_label, EffectParamValue, EffectSection, InspectorModel, InspectorSeat, ParamRow,
 };
 use crate::message::Message;
-use crate::theme::Tokens;
+use crate::theme::{type_scale, Tokens};
 use crate::widgets::{key_button, scrub_value, ScrubEvent, ScrubSpec};
 
 /// pane の見出し。
@@ -97,8 +97,10 @@ pub mod dims {
     pub const LAYER_STATE_H: f32 = 21.0;
     /// inspector-library.css:122-126 `.columnHeader { height: 21px }`
     pub const COLUMN_HEADER_H: f32 = 21.0;
-    /// inspector-library.css:141-142 `.tableSection h2 { height: 23px }`
-    pub const SECTION_H: f32 = 23.0;
+    /// inspector-library.css:141-142 `.tableSection h2 { height: 26px }`
+    /// (第3波レーンG3で 23→26 = 行ピッチ1.3倍の定数へ改定。この lane で
+    /// iced 側を追随させた — `docs/reviews/2026-08-19-flat-grammar-canon-revision.md`)。
+    pub const SECTION_H: f32 = 26.0;
     /// inspector-library.css:291 `.propertyRow::before { width: 3px }`
     pub const ROW_BAND_W: f32 = 3.0;
     /// 値セル1本ぶんの幅。css 正本は 64px(inspector-library.css:118) — pane が
@@ -213,14 +215,16 @@ fn panel_header<'a>(meta: Option<String>) -> Element<'a, Message> {
             dims::HEADER_ACCENT_H,
             Tokens::DARK.way_inspector
         ),
-        text(TITLE).size(11).font(weight(iced::font::Weight::Bold)),
+        text(TITLE)
+            .size(type_scale::TITLE)
+            .font(weight(iced::font::Weight::Bold)),
     ]
     .spacing(7)
     .align_y(Center);
     if let Some(meta) = meta {
         header = header
             .push(space().width(Fill))
-            .push(text(meta).size(9).style(crate::theme::style::text_muted));
+            .push(text(meta).size(type_scale::DENSE).style(crate::theme::style::text_muted));
     }
     column![
         container(header)
@@ -268,7 +272,7 @@ fn row_band<'a>(w: f32, color: iced::Color) -> Element<'a, Message> {
 fn kind_icon<'a>(glyph: &'static str, color: iced::Color) -> Element<'a, Message> {
     container(
         text(glyph)
-            .size(9)
+            .size(type_scale::DENSE)
             .shaping(text::Shaping::Advanced)
             .align_x(Center)
             .align_y(Center)
@@ -348,9 +352,11 @@ fn identity<'a>(model: &InspectorModel) -> Element<'a, Message> {
     let body = row![
         column![
             text(model.layer_name.clone())
-                .size(11)
+                .size(type_scale::BASE)
                 .font(weight(iced::font::Weight::Bold)),
-            text(meta).size(9).style(crate::theme::style::text_muted)
+            text(meta)
+                .size(type_scale::DENSE)
+                .style(crate::theme::style::text_muted)
         ]
         .spacing(2),
         space().width(Fill),
@@ -399,7 +405,7 @@ fn raised_panel_style(theme: &iced::Theme) -> container::Style {
 fn flag_button<'a>(label: &'a str, pressed: bool, message: Message) -> Element<'a, Message> {
     button(
         text(label)
-            .size(9)
+            .size(type_scale::DENSE)
             .font(weight(iced::font::Weight::ExtraBold)),
     )
     .padding(0)
@@ -461,7 +467,7 @@ fn flag_button_style(
 fn column_header<'a>() -> Element<'a, Message> {
     let heading = |label: &'static str| {
         text(label)
-            .size(8)
+            .size(type_scale::MICRO)
             .font(weight(iced::font::Weight::Bold))
             .style(crate::theme::style::text_muted)
     };
@@ -474,7 +480,7 @@ fn column_header<'a>() -> Element<'a, Message> {
     // ボタン」という前提を静かに壊す(既存の意味を壊さない柵)。
     let key_heading = container(
         text("Key")
-            .size(8)
+            .size(type_scale::MICRO)
             .font(weight(iced::font::Weight::Bold))
             .style(|theme: &iced::Theme| iced::widget::text::Style {
                 color: Some(Tokens::resolve(theme).action_active),
@@ -562,15 +568,17 @@ fn appearance<'a>(model: &InspectorModel) -> Option<Element<'a, Message>> {
 /// 何も起きないボタンは Q0 違反になる(残差として README に書く)。
 fn section_heading<'a>(label: &'static str, count: Option<String>) -> Element<'a, Message> {
     let mut row = row![text(label)
-        .size(8)
+        .size(type_scale::MICRO)
         .font(weight(iced::font::Weight::ExtraBold))
         .style(crate::theme::style::text_secondary)]
     .spacing(0)
     .align_y(Center);
     if let Some(count) = count {
-        row = row
-            .push(space().width(Fill))
-            .push(text(count).size(8).style(crate::theme::style::text_muted));
+        row = row.push(space().width(Fill)).push(
+            text(count)
+                .size(type_scale::MICRO)
+                .style(crate::theme::style::text_muted),
+        );
     }
     column![
         container(row)
@@ -609,7 +617,7 @@ fn transform_rows<'a>(param_row: &ParamRow) -> Element<'a, Message> {
     let name = row![
         kind_icon(glyph, band),
         text(label)
-            .size(10)
+            .size(type_scale::BASE)
             .font(weight(iced::font::Weight::Semibold)),
     ]
     .spacing(7)
@@ -624,7 +632,7 @@ fn transform_rows<'a>(param_row: &ParamRow) -> Element<'a, Message> {
             row![
                 name,
                 space().width(Fill),
-                text(format_components(&param_row.components)).size(10),
+                text(format_components(&param_row.components)).size(type_scale::DENSE),
                 key_placeholder(),
             ]
             .spacing(7)
@@ -693,7 +701,7 @@ fn value_cell<'a>(
     value: f64,
     accent: iced::Color,
 ) -> Element<'a, Message> {
-    let tag = container(text(axis).size(7).style(move |_theme: &iced::Theme| {
+    let tag = container(text(axis).size(type_scale::MICRO).style(move |_theme: &iced::Theme| {
         iced::widget::text::Style {
             color: Some(accent),
         }
@@ -711,7 +719,7 @@ fn value_cell<'a>(
 fn key_placeholder<'a>() -> Element<'a, Message> {
     container(
         text("\u{2014}")
-            .size(9)
+            .size(type_scale::DENSE)
             .style(crate::theme::style::text_muted),
     )
     .width(crate::widgets::key_button::KEY_BUTTON_SIZE)
@@ -828,7 +836,7 @@ fn effect_header<'a>(definition_id: u64, plugin_id: String, enabled: bool) -> El
     let accent = t.way_plugins;
     let badge = container(
         text("FX")
-            .size(7)
+            .size(type_scale::MICRO)
             .font(weight(iced::font::Weight::ExtraBold))
             .style(move |_theme: &iced::Theme| iced::widget::text::Style {
                 color: Some(accent),
@@ -850,7 +858,7 @@ fn effect_header<'a>(definition_id: u64, plugin_id: String, enabled: bool) -> El
 
     let toggle = button(
         text(if enabled { "ON" } else { "OFF" })
-            .size(7)
+            .size(type_scale::MICRO)
             .font(weight(iced::font::Weight::ExtraBold)),
     )
     .padding([0, 4])
@@ -865,7 +873,7 @@ fn effect_header<'a>(definition_id: u64, plugin_id: String, enabled: bool) -> El
     let content = row![
         badge,
         text(plugin_id.to_uppercase())
-            .size(8)
+            .size(type_scale::MICRO)
             .font(weight(iced::font::Weight::ExtraBold)),
         space().width(Fill),
         toggle,
@@ -944,11 +952,11 @@ fn effect_param_row<'a>(param: crate::inspector_model::EffectParamRow) -> Elemen
         row![
             kind_icon(glyph, band),
             text(param.id)
-                .size(9)
+                .size(type_scale::DENSE)
                 .style(crate::theme::style::text_primary_style),
             space().width(Fill),
             text(format_effect_value(param.value))
-                .size(9)
+                .size(type_scale::DENSE)
                 .font(iced::Font::MONOSPACE),
         ]
         .padding(iced::padding::left(12))
@@ -977,7 +985,7 @@ fn effect_kind_glyph(value: EffectParamValue) -> &'static str {
 
 /// footer のヒント行。inspector-library.css:519 相当(footer)。
 fn footer_hint<'a>() -> Element<'a, Message> {
-    container(text(HINT).size(9).style(crate::theme::style::text_muted))
+    container(text(HINT).size(type_scale::DENSE).style(crate::theme::style::text_muted))
         .padding([5, 9])
         .width(Fill)
         .style(section_band_style)
