@@ -2050,6 +2050,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-export"
+version = "0.1.0"
+dependencies = [
+ "motolii-compositor",
+ "motolii-core",
+ "motolii-engine",
+ "motolii-media",
+ "motolii-store",
+ "motolii-testkit",
+ "thiserror",
+]
+
+[[package]]
 name = "motolii-media"
 version = "0.1.0"
 dependencies = [

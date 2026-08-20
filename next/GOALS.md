@@ -17,17 +17,17 @@
 | M6 | split(Cmd+K)・Delete・複製(Cmd+D)・複数選択(Shift/Cmd/marquee/Cmd+A) | 同上 | 未 |
 | M7 | **Copy / Cut / Paste が効く** — 旧 egui は menu に項目があるのに何も起きない(Q0違反の現物) | 同上、egui能力台帳§2 | 未 |
 | M8 | Space で再生。**音が鳴り**、playhead が音に同期。scrub で Stage 追従 | ui-inherited-grammar-gap Tier0 | 未 |
-| M9 | Export → mp4。**音声mux込み**。報告フレーム数=現物、cancel で残骸なし | concept、first-real-run 欠陥(2) | 未 |
+| M9 | Export → mp4。**音声mux込み**。報告フレーム数=現物、cancel で残骸なし | concept、first-real-run 欠陥(2) | **部分**(報告=現物・cancel は済。音声mux は未結線) |
 | M10 | Document を変える操作は**1回の Undo で戻る**。1 gesture = 1 Undo | ui-quality-bar Q2 | **済**(R0-2 / store の時間旅行) |
 | M11 | Cmd+S・未保存●・閉じる確認・**再起動で続きが開く** | ux-check P2/P5、外部診断F-01 | 未 |
 | M12 | **触れそうな物は全部機能する**。未実装の chrome を置かない(disabled も不可=撤去) | ui-quality-bar **Q0**(利用者裁定) | 未 |
 | M13 | **無反応ゼロ**。拒否は理由がその場で分かる。旧 iced は拒否を `let _ =` で捨てていた | ui-quality-bar Q3、能力台帳§5-2 | 未 |
 | M14 | 選択・時刻・幾何の正本は1つ。全面が同じ真実を映す | ui-quality-bar Q5 | **済**(StoreView 投影で構造的に) |
-| M15 | **Preview = Export**。同じ評価関数を通り byte 一致 | concept 絶対規律、DECISIONS #15 | **済**(旧は最後まで未検証だった) |
+| M15 | **Preview = Export**。同じ評価関数を通り byte 一致 | concept 絶対規律、DECISIONS #15 | **済**。可逆書き出しした**現物を decode し直して** preview と突き合わせる試験まで通した(旧は最後まで未検証) |
 | M16 | どの入力でも panic/クラッシュ/喪失なし。render 失敗でも画面を空にしない | ui-quality-bar Q6 | 未 |
 | M17 | 空 project は空として表示。空でも place/scrub/keymap が効く | ui-quality-bar Q7 | 未 |
 | M18 | Zoom(カーソル下の時刻を保つ)と Fit | prior-art 必須12件 | 未 |
-| M19 | keyframe の追加/削除/移動が property 単位で効く | 同上 | **部分**(store/eval は済、UI が無い) |
+| M19 | keyframe の追加/削除/移動が property 単位で効く | 同上 | **部分**(store/eval/書き出しまで済、UI が無い) |
 | M20 | undo/redo/delete がどの面からでも。TextInput 中はテキスト優先。IME を壊さない | ui-quality-bar Q9 | 未 |
 
 ## 標準 — 普通は持っている
@@ -76,8 +76,8 @@ Browser から **drag で配置** / Export 設定 UI と割合進捗 /
 
 ## 順序
 
-1. media を移植して compositor に**実素材**を流す(静止画も動画も同じ口)
-2. export を移植して **CLI で鎖を閉じる**(素材 → mp4 + 音声mux)。M15 の byte 一致をここで効かせる
+1. ~~media を移植して compositor に**実素材**を流す~~ — **済**(2026-08-20)
+2. ~~export で **鎖を閉じる**~~ — **済**(2026-08-20。音声 mux だけ残)。M15 をここで閉じた
 3. iced shell の骨。**背骨1を型で作る**(`StoreView` と Intent の送り口しか渡らない)
 4. **核の一周**を1本ずつ: ドロップ → clip が立つ → Stage に絵 → Space で音同期再生 → Export
 5. 編集の必須12件(M5〜M7。**Copy-Paste の死に席を最初に潰す**)

@@ -13,6 +13,7 @@ members = [
     "core/motolii-testkit",
     "engine/motolii-compositor",
     "engine/motolii-engine",
+    "engine/motolii-export",
     "engine/motolii-media",
     "probes/r0-store-edit",
     "probes/r1-frame-throughput",
@@ -58,6 +59,7 @@ motolii-store = { path = "core/motolii-store" }
 motolii-testkit = { path = "core/motolii-testkit" }
 motolii-compositor = { path = "engine/motolii-compositor" }
 motolii-engine = { path = "engine/motolii-engine" }
+motolii-export = { path = "engine/motolii-export" }
 motolii-media = { path = "engine/motolii-media" }
 
 serde = { version = "1", features = ["derive"] }
