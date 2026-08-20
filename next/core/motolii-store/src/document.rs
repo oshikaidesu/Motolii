@@ -15,7 +15,7 @@ use crate::components::{
     descriptor_track, LayerPresent, TrackJson,
 };
 use crate::view::StoreView;
-use crate::{LayerAttrs, StoreError, EDIT_TIMELINE};
+use crate::{LayerAttrsPatch, StoreError, EDIT_TIMELINE};
 
 /// layer の安定 ID。entity path はこれ1つから決まる。
 ///
@@ -145,13 +145,17 @@ pub enum Intent {
         timing: crate::LayerTiming,
     },
     /// layer の非アニメーション属性(hidden / parent / blend mode / matte / name /
-    /// auto-orient)。**丸ごと差し替え**(`SetMasks`/`SetMarkers` と同型) —
-    /// `meta` とは別 component なので `timing`/`source`/`order` を巻き込まない。
+    /// auto-orient)の**部分更新**([`LayerAttrsPatch`] — フィールドごとに「触るか」を
+    /// 持つ)。`meta` とは別 component なので `timing`/`source`/`order` を巻き込まない。
+    ///
+    /// **丸ごと差し替えではない**(2026-08-20 の敵対的レビュー修正) — `write` が現在の
+    /// `attrs` を読んでから `patch` の `Some` なフィールドだけ重ねるので、
+    /// 「読まずに組んだ値で他フィールドが黙って戻る」呼び出しが型的に書けない。
     ///
     /// `parent` に循環参照を作ろうとすると拒まれる(layer-meta 束の柵)。
     SetAttrs {
         layer: LayerId,
-        attrs: LayerAttrs,
+        patch: LayerAttrsPatch,
     },
     /// layer が持つ effect インスタンスの列(id・plugin id・順序のみ。param 値は
     /// `effect` 束が別途扱う)。丸ごと差し替え。
@@ -303,6 +307,19 @@ impl Document {
     ///
     /// ドラッグは対象外 — 途中経過は pane が持ち、**確定の1件だけが intent** なので
     /// もともと1 undo になる。ここが要るのは「本質的に複数 intent な1操作」だけ。
+    ///
+    /// **原子性**(2026-08-20 の敵対的レビュー修正): バッチ内の intent が1つでも `Err`
+    /// を返したら、**バッチ全体を無かったことにする** — `view()` が呼ぶ前と一致する。
+    /// 修正前は `write` が intent ごとに即 `ingest`(store へ追記 + `head`/`tip` 前進)
+    /// していたので、`apply_all([正当, 不正])` は「正当な分だけ store に確定し、
+    /// `head` も進んだまま `Err` を返す」という部分コミットになっていた。
+    ///
+    /// **実装**: バッチ内の全 intent は同じ edit 刻み `at` へ書く。失敗したら、
+    /// その `at` に書いた分をこの batch の途中経過ごと畳んで(`drop_time_range`)
+    /// `head`/`tip` をバッチ前の値へ戻す。**undo 履歴には何も残らない** —
+    /// この batch は最初から `head` を進めていないので、undo/redo の意味
+    /// (裁定2「undo は時間の移動」/ 裁定47「undo floor」/ 裁定48「redo は時間を
+    /// 進めるだけ」)は一切変わらない。
     pub fn apply_all(
         &mut self,
         intents: impl IntoIterator<Item = Intent>,
@@ -313,13 +330,32 @@ impl Document {
         }
 
         self.drop_redo_space();
+        let original_head = self.head;
+        let original_tip = self.tip;
         let at = self.head + 1;
         for intent in intents {
-            self.write(intent, at)?;
+            if let Err(error) = self.write(intent, at) {
+                self.discard_batch_at(at, original_head, original_tip);
+                return Err(error);
+            }
         }
         self.head = at;
         self.tip = at;
         Ok(())
+    }
+
+    /// 失敗した batch がこの edit 刻みに残した分を消し、`head`/`tip` を batch 前へ戻す。
+    /// **`drop_redo_space` と同じ変種**(上流が undo/redo スタック操作用に用意した
+    /// `ExplicitDrop`)を使う — この batch は一度も「確定した編集」になっていないので、
+    /// undo で戻すべき履歴ではなく、単に「無かったことにする」対象である。
+    fn discard_batch_at(&mut self, at: i64, original_head: i64, original_tip: i64) {
+        self.db.drop_time_range(
+            &Self::timeline_name(),
+            AbsoluteTimeRange::new(at, at),
+            re_chunk_store::ChunkDeletionReason::ExplicitDrop,
+        );
+        self.head = original_head;
+        self.tip = original_tip;
     }
 
     /// 唯一の書き口。
@@ -519,8 +555,15 @@ impl Document {
                     }],
                 )
             }
-            Intent::SetAttrs { layer, attrs } => {
-                validate_no_parent_cycle(&self.view(), layer, attrs.parent)?;
+            Intent::SetAttrs { layer, patch } => {
+                // read-modify-write — `attrs` が無い layer への初回書き込みは
+                // `LayerAttrs::default()` を土台にする(`meta` と違い、属性は元々
+                // 省略可能なので「まだ無い」ことがエラーではない)。
+                let current = self.view().attrs(layer)?.unwrap_or_default();
+                if let Some(new_parent) = patch.parent {
+                    validate_no_parent_cycle(&self.view(), layer, new_parent)?;
+                }
+                let attrs = patch.apply_to(current);
                 let json = serde_json::to_string(&attrs)?;
                 (
                     layer.entity_path(),
@@ -663,4 +706,47 @@ fn serialize_present(present: bool) -> Result<SerializedComponentBatch, StoreErr
         array: <LayerPresent as re_types_core::Loggable>::to_arrow([LayerPresent(present)])
             .map_err(|e| StoreError::Chunk(e.to_string()))?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// defect 4 の再現(2026-08-20 の敵対的レビュー):
+    /// `StoreView::track_json_components`(→ `flattened()`/`save()` の核)は
+    /// `Layer:present` だけを別扱いし、それ以外は全部 `TrackJson` として読める前提で
+    /// 書かれていた。**別 `Loggable` 型の component が増えると、黙って保存から消えていた**
+    /// — `component_batch::<TrackJson>` が型不一致で `None` を返すのを「値が無い」と
+    /// 同じ扱いで `filter_map` が飲み込んでいたため。
+    ///
+    /// この試験は `Document::ingest`(private、同一モジュール内なので白箱で叩ける)を
+    /// 直接使い、`present` ではない component 名に `LayerPresent`(bool)という
+    /// 別 `Loggable` 型の値を直に置く — 「将来 present 以外にも別型の component が
+    /// 増えた日」の模倣。**今は黙って消えず `Err` になる**ことを固定する。
+    #[test]
+    fn a_non_track_json_component_other_than_present_is_reported_not_silently_dropped() {
+        let mut doc = Document::new();
+        let layer = LayerId(99);
+        doc.apply(Intent::AddLayer(layer)).unwrap();
+
+        let bogus = re_types_core::ComponentDescriptor {
+            archetype: Some("motolii.archetypes.Layer".into()),
+            component: "Layer:bogus".into(),
+            component_type: Some(<LayerPresent as Component>::name()),
+        };
+        let batch = SerializedComponentBatch {
+            descriptor: bogus,
+            array: <LayerPresent as re_types_core::Loggable>::to_arrow([LayerPresent(true)])
+                .unwrap(),
+        };
+        let at = doc.head + 1;
+        doc.ingest(layer.entity_path(), vec![batch], at).unwrap();
+
+        let result = doc.flattened();
+        assert!(
+            result.is_err(),
+            "TrackJson でない component(present 以外)を静かに落としてしまっている \
+             (flattened()/save() から黙って消える)"
+        );
+    }
 }

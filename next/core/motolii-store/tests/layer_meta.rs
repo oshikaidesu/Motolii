@@ -13,9 +13,9 @@
 //! - `Intent::SetMeta` は新規配置専用で、既存 layer には使えない(裁定108(c) の柵)
 
 use motolii_store::{
-    BlendMode, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerAttrs, LayerId,
-    LayerMeta, LayerSource, LayerTiming, Matte, MatteMode, PropertyId, RationalTime, Shape, Speed,
-    Value, property,
+    BlendMode, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerAttrsPatch,
+    LayerId, LayerMeta, LayerSource, LayerTiming, Matte, MatteMode, PropertyId, RationalTime,
+    Shape, Speed, Value, property,
 };
 
 fn t(frame: i64) -> RationalTime {
@@ -76,8 +76,8 @@ fn hidden_layer_does_not_resolve_but_still_exists() {
 
     doc.apply(Intent::SetAttrs {
         layer,
-        attrs: LayerAttrs {
-            hidden: true,
+        patch: LayerAttrsPatch {
+            hidden: Some(true),
             ..Default::default()
         },
     })
@@ -103,8 +103,8 @@ fn parent_cannot_point_at_itself() {
 
     let result = doc.apply(Intent::SetAttrs {
         layer,
-        attrs: LayerAttrs {
-            parent: Some(layer),
+        patch: LayerAttrsPatch {
+            parent: Some(Some(layer)),
             ..Default::default()
         },
     });
@@ -122,16 +122,16 @@ fn parent_chain_cannot_form_a_cycle() {
     // a ← b ← c(c の親が b、b の親が a)。ここまでは正常。
     doc.apply(Intent::SetAttrs {
         layer: b,
-        attrs: LayerAttrs {
-            parent: Some(a),
+        patch: LayerAttrsPatch {
+            parent: Some(Some(a)),
             ..Default::default()
         },
     })
     .unwrap();
     doc.apply(Intent::SetAttrs {
         layer: c,
-        attrs: LayerAttrs {
-            parent: Some(b),
+        patch: LayerAttrsPatch {
+            parent: Some(Some(b)),
             ..Default::default()
         },
     })
@@ -140,8 +140,8 @@ fn parent_chain_cannot_form_a_cycle() {
     // a の親を c にすると a→c→b→a の循環になる。
     let result = doc.apply(Intent::SetAttrs {
         layer: a,
-        attrs: LayerAttrs {
-            parent: Some(c),
+        patch: LayerAttrsPatch {
+            parent: Some(Some(c)),
             ..Default::default()
         },
     });
@@ -164,12 +164,12 @@ fn blend_mode_and_matte_reach_the_resolved_layer() {
 
     doc.apply(Intent::SetAttrs {
         layer: top,
-        attrs: LayerAttrs {
-            blend_mode: BlendMode::Multiply,
-            matte: Some(Matte {
+        patch: LayerAttrsPatch {
+            blend_mode: Some(BlendMode::Multiply),
+            matte: Some(Some(Matte {
                 layer: base,
                 mode: MatteMode::Luma,
-            }),
+            })),
             ..Default::default()
         },
     })
@@ -203,9 +203,9 @@ fn name_and_auto_orient_round_trip_through_attrs() {
 
     doc.apply(Intent::SetAttrs {
         layer,
-        attrs: LayerAttrs {
-            name: "背景".to_owned(),
-            auto_orient: true,
+        patch: LayerAttrsPatch {
+            name: Some("背景".to_owned()),
+            auto_orient: Some(true),
             ..Default::default()
         },
     })
@@ -243,9 +243,9 @@ fn setting_attrs_never_touches_timing_or_source() {
 
     doc.apply(Intent::SetAttrs {
         layer,
-        attrs: LayerAttrs {
-            hidden: true,
-            name: "x".to_owned(),
+        patch: LayerAttrsPatch {
+            hidden: Some(true),
+            name: Some("x".to_owned()),
             ..Default::default()
         },
     })
@@ -255,6 +255,81 @@ fn setting_attrs_never_touches_timing_or_source() {
     assert_eq!(meta.timing, timing, "SetAttrs が timing を巻き込んだ");
     assert_eq!(meta.order, 5, "SetAttrs が order を巻き込んだ");
     assert_eq!(meta.source, solid(), "SetAttrs が source を巻き込んだ");
+}
+
+/// 敵対的レビュー(2026-08-20)が実証した事故の再現: `SetAttrs` が `attrs` を丸ごと
+/// 差し替えていた頃は `SetAttrs{ hidden: true, ..Default::default() }` を書くだけで
+/// name/blend_mode/auto_orient が黙って既定値へ戻った。`LayerAttrsPatch` は
+/// 触らないフィールドを `None`(=無変更)にできるので、1フィールドだけの更新が
+/// 他のフィールドを巻き込まないことをここで固定する。
+#[test]
+fn patching_one_field_leaves_the_others_alone() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place(&mut doc, layer, solid(), 0, 100);
+
+    doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch {
+            name: Some("背景".to_owned()),
+            blend_mode: Some(BlendMode::Multiply),
+            auto_orient: Some(true),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    // 別の1フィールドだけを触る呼び出し。`..Default::default()` を使っても
+    // 上で立てた3フィールドは無変更のまま残らなければならない。
+    doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch {
+            hidden: Some(true),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    let attrs = doc.view().attrs(layer).unwrap().expect("attrs が無い");
+    assert!(attrs.hidden, "hidden が反映されていない");
+    assert_eq!(attrs.name, "背景", "SetAttrs の別フィールド更新で name が消えた");
+    assert_eq!(
+        attrs.blend_mode,
+        BlendMode::Multiply,
+        "SetAttrs の別フィールド更新で blend_mode が消えた"
+    );
+    assert!(attrs.auto_orient, "SetAttrs の別フィールド更新で auto_orient が消えた");
+}
+
+/// `parent` を触らない `SetAttrs` は、既存の parent を黙って外さない
+/// (丸ごと差し替え時代は `parent` も struct-update の既定 `None` に巻き込まれていた)。
+#[test]
+fn patching_unrelated_fields_does_not_clear_an_existing_parent() {
+    let mut doc = doc_with_comp(300);
+    let (a, b) = (LayerId(1), LayerId(2));
+    place(&mut doc, a, solid(), 0, 100);
+    place(&mut doc, b, solid(), 0, 100);
+
+    doc.apply(Intent::SetAttrs {
+        layer: b,
+        patch: LayerAttrsPatch {
+            parent: Some(Some(a)),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    doc.apply(Intent::SetAttrs {
+        layer: b,
+        patch: LayerAttrsPatch {
+            hidden: Some(true),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    let attrs = doc.view().attrs(b).unwrap().expect("attrs が無い");
+    assert_eq!(attrs.parent, Some(a), "無関係な更新で parent が外れた");
 }
 
 // ---------------------------------------------------------------------------
@@ -443,6 +518,41 @@ fn speed_defaults_to_normal_and_matches_the_old_one_to_one_mapping() {
     place(&mut doc, layer, solid(), 0, 100);
     let resolved = doc.view().resolve(layer, t(10)).unwrap().expect("居る");
     assert_eq!(resolved.source_frame, 10);
+}
+
+/// 未クランプの記録(2026-08-20 の敵対的レビュー、`LayerTiming::source_frame` の
+/// doc コメント参照)。負の `speed`(逆再生)で `source_in` が小さいと
+/// `source_frame` は**負のまま**返る — store は 0 へ丸めない。この値をどう扱うか
+/// (0 でクランプ / ループ / エラー)は engine 側の判断で store の仕事ではないが、
+/// **黙った穴のままにはしない** — この試験が現状の(意図的に未クランプな)挙動を
+/// 固定し、doc コメントの説明と食い違わないようにする。
+#[test]
+fn negative_speed_can_make_source_frame_go_negative_and_this_is_not_clamped_by_the_store() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    doc.apply_all([
+        Intent::AddLayer(layer),
+        Intent::SetMeta {
+            layer,
+            meta: LayerMeta {
+                source: solid(),
+                order: 0,
+                timing: LayerTiming {
+                    start: 0,
+                    duration: 100,
+                    source_in: 0,
+                    speed: Speed::try_new(-1, 1).unwrap(),
+                },
+            },
+        },
+    ])
+    .unwrap();
+
+    let resolved = doc.view().resolve(layer, t(10)).unwrap().expect("居る");
+    assert_eq!(
+        resolved.source_frame, -10,
+        "store が未クランプのままなら -10 のはず(engine 側の対処はここでは行わない)"
+    );
 }
 
 // ---------------------------------------------------------------------------

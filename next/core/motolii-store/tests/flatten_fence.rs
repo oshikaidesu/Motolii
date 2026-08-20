@@ -11,8 +11,8 @@
 //! (`attrs` を運ぶ分岐が無いので)ここで確実に落ちる。
 
 use motolii_store::{
-    BlendMode, Composition, Document, Fps, Intent, LayerAttrs, LayerId, LayerMeta, LayerSource,
-    LayerTiming,
+    BlendMode, Composition, Document, Fps, Intent, LayerAttrsPatch, LayerId, LayerMeta,
+    LayerSource, LayerTiming,
 };
 
 fn doc_with_layer_and_attrs() -> (Document, LayerId) {
@@ -45,14 +45,14 @@ fn doc_with_layer_and_attrs() -> (Document, LayerId) {
 
     doc.apply(Intent::SetAttrs {
         layer,
-        attrs: LayerAttrs {
-            hidden: false,
-            parent: None,
-            blend_mode: BlendMode::Multiply,
-            matte: None,
-            name: "circle".to_owned(),
-            auto_orient: true,
-            pinned: false,
+        patch: LayerAttrsPatch {
+            hidden: Some(false),
+            parent: Some(None),
+            blend_mode: Some(BlendMode::Multiply),
+            matte: Some(None),
+            name: Some("circle".to_owned()),
+            auto_orient: Some(true),
+            pinned: Some(false),
         },
     })
     .unwrap();

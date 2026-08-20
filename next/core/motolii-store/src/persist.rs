@@ -14,6 +14,7 @@
 
 use std::path::Path;
 
+use crate::components::{archetype_composition, archetype_layer};
 use crate::{Document, Intent, StoreError};
 
 impl Document {
@@ -36,11 +37,11 @@ impl Document {
         // 履歴を1 edit 刻みへ畳む(裁定56)。全コピーを同じ `at` で書く。
         let at = 1;
 
-        for (component, json) in view.track_json_components(&Document::composition_path()) {
+        for (component, json) in view.track_json_components(&Document::composition_path())? {
             out.copy_track_json(
                 Document::composition_path(),
                 component,
-                "motolii.archetypes.Composition",
+                archetype_composition(),
                 json,
                 at,
             )?;
@@ -48,8 +49,8 @@ impl Document {
 
         for layer in view.layers() {
             out.write(Intent::AddLayer(layer), at)?;
-            for (component, json) in view.track_json_components(&layer.entity_path()) {
-                out.copy_track_json(layer.entity_path(), component, "motolii.archetypes.Layer", json, at)?;
+            for (component, json) in view.track_json_components(&layer.entity_path())? {
+                out.copy_track_json(layer.entity_path(), component, archetype_layer(), json, at)?;
             }
         }
 
