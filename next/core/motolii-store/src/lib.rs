@@ -46,7 +46,7 @@ pub use text::{
 pub use view::StoreView;
 
 pub use motolii_core::{CompSpec, Fps, LayerPlacement, RationalTime, ResolvedCamera};
-pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, Value};
+pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, SpatialTangent, Value};
 /// shape-layer(`layers/shape-layer/shapes`)の中身。語彙の正本は `motolii-vector`
 /// (shape-1/2/3 が既に決めた)— ここでは作り直さない(裁定10)。`Path` は再輸出しない
 /// (`motolii_eval::Path` と名前が衝突する — マスク形状の `Value::Path` が正本のまま)。
@@ -92,6 +92,11 @@ pub mod property {
     /// スタイル表の行([`crate::TextStyleId`])が持つ動く量(今のところ可変フォント軸
     /// の絶対値だけ、裁定92の唯一の例外)の名前は `text_style.{id}.…` で始まる。
     pub const TEXT_STYLE_PREFIX: &str = "text_style.";
+
+    /// effect インスタンス([`crate::EffectId`])の param トラックの名前は
+    /// `effect.{id}.param.{name}` で始まる。マスク/テキストと同じ平坦な流儀
+    /// (裁定92 が先に見つけた形と同じ、裁定72「新機構ゼロ」)。
+    pub const EFFECT_PREFIX: &str = "effect.";
 
     /// 変換の中心。**レイヤ自身の座標単位の点**であって 0..1 の正規化ピボットではない。
     pub const ANCHOR: &str = "anchor";

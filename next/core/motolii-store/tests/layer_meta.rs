@@ -436,6 +436,7 @@ fn level_is_a_plain_animatable_property() {
         t: t(0),
         value: Value::F64(0.5),
         interp: motolii_store::Interp::Hold,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer,
@@ -465,6 +466,7 @@ fn time_remap_overrides_the_normal_source_frame_mapping() {
         t: t(0),
         value: Value::F64(77.0),
         interp: motolii_store::Interp::Hold,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer,
@@ -626,10 +628,12 @@ fn effects_are_an_ordered_list_identified_by_id_not_index() {
         EffectInstance {
             id: EffectId(1),
             plugin_id: "motolii.gaussian-blur".to_owned(),
+            enabled: true,
         },
         EffectInstance {
             id: EffectId(2),
             plugin_id: "motolii.drop-shadow".to_owned(),
+            enabled: false,
         },
     ];
     doc.apply(Intent::SetEffects {
@@ -653,10 +657,12 @@ fn duplicate_effect_ids_are_rejected() {
             EffectInstance {
                 id: EffectId(1),
                 plugin_id: "a".to_owned(),
+                enabled: true,
             },
             EffectInstance {
                 id: EffectId(1),
                 plugin_id: "b".to_owned(),
+                enabled: true,
             },
         ],
     });

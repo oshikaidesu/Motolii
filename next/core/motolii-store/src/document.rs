@@ -75,6 +75,16 @@ impl PropertyId {
         Self::new(&name).expect("マスクの property 名は予約語でも空でもない")
     }
 
+    /// effect インスタンスの param トラック(`effects/effect ef`、effect 発注単位)。
+    /// **平坦な名前**(`effect.{id}.param.{name}`)にしてあるので、マスク/テキストと
+    /// 同じく新しい機構を足さずに `KeyframeTrack` へ乗る(裁定72)。`name` は plugin が
+    /// 決める param 名で、値は `motolii_eval::Value` の該当バリアント
+    /// (`F64`/`Bool`/`Enum`/`Color`/`Vec2`/`LayerId`)。
+    pub fn effect_param(effect: crate::EffectId, name: &str) -> Result<Self, StoreError> {
+        let property_name = format!("{}{effect}.param.{name}", crate::property::EFFECT_PREFIX);
+        Self::new(&property_name)
+    }
+
     /// アニメーターの selector が動かす値(`text-range-selector s`/Start)。**平坦な
     /// 名前**(`text_range.{id}.selector.{attr}`)にしてあるので、マスク/effect と
     /// 同じく新しい機構を足さずに `KeyframeTrack` へ乗る。

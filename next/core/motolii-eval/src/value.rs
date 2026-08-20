@@ -29,8 +29,17 @@ pub struct Path {
 ///   `Vec3` の用途は全部 3D 系(裁定65 で不採用)、素材参照は `LayerMeta` 側で
 ///   property ではなく、`List` は載せる物が無い
 ///
+/// **`Enum` / `LayerId` を effect 発注単位(裁定72)で足した**: effect の param 型語彙
+/// (scalar / Bool / Enum / color / Vec2 / LayerId、effect-values の catalog から)を
+/// 「全部 animatable なので既存の `KeyframeTrack` にそのまま乗る」ためには、この `Value`
+/// 自身がその2つを表現できる必要がある。**F64 で代用しない**理由は `Bool` を足した理由と
+/// 同じ形 — drop-down の選択肢 index も layer 参照も、連続量として linear 補間すると
+/// 意味の無い中間状態(存在しない選択肢・存在しない層)が作れてしまう。
+///
 /// **列挙(blend mode / matte mode / mask mode 等)はここに入れない**。キーを打たない
 /// 静止設定なので `LayerMeta` 側の component が持つ。入れると「補間できない `Value`」が増える。
+/// `Value::Enum` はそれとは別物 — こちらは effect param のように「animatable だが
+/// 中間値が無意味」なケース用(`Bool` と同じ扱い)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     F64(f64),
@@ -41,6 +50,17 @@ pub enum Value {
     Bool(bool),
     /// ベジェパス。頂点数が同じ時だけ頂点ごとに補間する。
     Path(Path),
+    /// effect の drop-down param(`effect-values/drop-down v`)。plugin が定義する
+    /// 選択肢表への index。**選択肢そのもの(文字列表)は Document が持たない**
+    /// (裁定70 — plugin の一次資料)。**補間は Hold**(`Bool` と同じ理由 — 0.5 番目の
+    /// 選択肢は存在しない)。
+    Enum(i64),
+    /// effect の layer param(`effect-values/layer v`)。**Lottie の `ind` ではなく
+    /// 安定 `LayerId`**(裁定65 — 挿入削除で崩れる index を参照に使わない)。
+    /// `crate::LayerId` を再輸出しない(motolii-eval は motolii-store に依存しない
+    /// 下位 crate なので、生の `u64` で持ち store 側が `LayerId(v)` へ包み直す)。
+    /// **補間は Hold**(層の参照先が半分だけ変わる中間状態は無い)。
+    LayerId(u64),
 }
 
 impl Value {
@@ -56,6 +76,9 @@ impl Value {
             }
             // 真偽の中間は意味を持たないので、切り替わるまで手前の値を保つ。
             (Value::Bool(_), Value::Bool(_)) => a.clone(),
+            // 選択肢 index / layer 参照も同じ理由で Hold(存在しない中間状態を作らない)。
+            (Value::Enum(_), Value::Enum(_)) => a.clone(),
+            (Value::LayerId(_), Value::LayerId(_)) => a.clone(),
             // 頂点数が違うパスの補間は定義しない(AE も頂点数を揃えないと補間しない)。
             (Value::Path(x), Value::Path(y))
                 if x.vertices.len() == y.vertices.len() && x.closed == y.closed =>
@@ -118,6 +141,20 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn as_enum(&self) -> Option<i64> {
+        match self {
+            Value::Enum(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    pub fn as_layer_id(&self) -> Option<u64> {
+        match self {
+            Value::LayerId(v) => Some(*v),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -158,6 +195,27 @@ mod tests {
         let b = Value::Bool(true);
         assert_eq!(Value::lerp(&a, &b, 0.5), Value::Bool(false));
         assert_eq!(Value::lerp(&a, &b, 0.99), Value::Bool(false));
+    }
+
+    /// drop-down の選択肢 index も同じ理由で Hold(effect-values/drop-down、裁定72)。
+    #[test]
+    fn enum_holds_until_the_next_key() {
+        let a = Value::Enum(0);
+        let b = Value::Enum(3);
+        assert_eq!(Value::lerp(&a, &b, 0.5), Value::Enum(0));
+        assert_eq!(Value::lerp(&a, &b, 0.99), Value::Enum(0));
+        assert_eq!(Value::Enum(3).as_enum(), Some(3));
+        assert_eq!(Value::F64(3.0).as_enum(), None);
+    }
+
+    /// effect の layer 参照も同じ理由で Hold(effect-values/layer、裁定65/72)。
+    #[test]
+    fn layer_id_holds_until_the_next_key() {
+        let a = Value::LayerId(1);
+        let b = Value::LayerId(2);
+        assert_eq!(Value::lerp(&a, &b, 0.5), Value::LayerId(1));
+        assert_eq!(Value::LayerId(7).as_layer_id(), Some(7));
+        assert_eq!(Value::F64(7.0).as_layer_id(), None);
     }
 
     #[test]

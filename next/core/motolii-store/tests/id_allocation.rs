@@ -89,6 +89,7 @@ fn removing_the_highest_layer_then_replacing_it_does_not_collide_with_the_tombst
         t: t(0),
         value: Value::F64(0.25),
         interp: Interp::Hold,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer: l2,

@@ -41,6 +41,7 @@ fn still(value: Value) -> KeyframeTrack {
         t: t(0),
         value,
         interp: Interp::Hold,
+        spatial: None,
     });
     track
 }

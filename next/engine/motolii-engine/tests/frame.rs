@@ -118,11 +118,13 @@ fn keyframes_move_the_picture_over_time() {
         t: t(0),
         value: Value::Vec2([0.0, 0.0]),
         interp: Interp::Linear,
+        spatial: None,
     });
     x.insert(Keyframe {
         t: t(30),
         value: Value::Vec2([48.0, 0.0]),
         interp: Interp::Linear,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer,

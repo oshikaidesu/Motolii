@@ -54,6 +54,7 @@ fn still(value: Value) -> KeyframeTrack {
         t: t(0),
         value,
         interp: Interp::Hold,
+        spatial: None,
     });
     track
 }
@@ -563,11 +564,13 @@ fn selector_offset_is_an_ordinary_animatable_property() {
         t: t(0),
         value: Value::F64(0.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     wipe.insert(Keyframe {
         t: t(150),
         value: Value::F64(100.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer,
@@ -1245,11 +1248,13 @@ fn variation_modifier_axis_tag_is_static_but_its_delta_is_an_animatable_track() 
         t: t(0),
         value: Value::F64(0.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     delta.insert(Keyframe {
         t: t(150),
         value: Value::F64(300.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer,
