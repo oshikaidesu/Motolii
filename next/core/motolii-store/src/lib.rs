@@ -30,7 +30,7 @@ mod mask;
 mod persist;
 mod view;
 
-pub use attrs::{BlendMode, LayerAttrs, Matte, MatteMode};
+pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, Matte, MatteMode};
 pub use document::{Document, Intent, LayerId, PropertyId, Revision};
 pub use effect::{EffectId, EffectInstance};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
@@ -263,6 +263,14 @@ impl LayerTiming {
     ///
     /// **素材の終端でフリーズさせない**(M4)。居ない時刻は描かない。
     /// `speed` が等速でない場合、進み幅を比でスケールする(裁定63)。
+    ///
+    /// **未クランプ**(2026-08-20 の敵対的レビューが指摘): `speed` が負(逆再生)で
+    /// `source_in` が小さいと、返る値が負になりうる — `source_in=0` の逆速度 layer は
+    /// `covers` している間ずっと負の素材フレームを返す。store はここで 0 へ丸めない
+    /// (`0` は「素材の先頭」という意味のある値なので、それとの区別が付かなくなる方が
+    /// 危険)。**負の `source_frame` をどう扱うか(0 でクランプ / ループ / エラー)は
+    /// engine 側の判断で、この store の仕事ではない** — ここでは実測どおりの数値を
+    /// そのまま返す。
     pub fn source_frame(&self, comp_frame: i64) -> Option<i64> {
         self.covers(comp_frame).then(|| {
             let offset = comp_frame - self.start;

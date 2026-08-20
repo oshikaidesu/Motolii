@@ -13,7 +13,7 @@
 //! 正しく出入りするか」だけを縛る。
 
 use motolii_store::{
-    property, Composition, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack, LayerAttrs,
+    property, Composition, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack, LayerAttrsPatch,
     LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, ResolvedCamera, Value,
 };
 
@@ -227,8 +227,8 @@ fn pinned_attr_reaches_the_resolved_layer() {
 
     doc.apply(Intent::SetAttrs {
         layer,
-        attrs: LayerAttrs {
-            pinned: true,
+        patch: LayerAttrsPatch {
+            pinned: Some(true),
             ..Default::default()
         },
     })
@@ -265,8 +265,8 @@ fn pinning_a_layer_never_touches_timing_or_source() {
 
     doc.apply(Intent::SetAttrs {
         layer,
-        attrs: LayerAttrs {
-            pinned: true,
+        patch: LayerAttrsPatch {
+            pinned: Some(true),
             ..Default::default()
         },
     })

@@ -330,13 +330,10 @@ impl Shell {
         .into()
     }
 
+    /// 採番の正本は store 側([`StoreView::next_layer_id`])。**墓標を含む最大 id + 1**
+    /// を返すので、削除した layer の id が再利用されない(2026-08-20 の敵対的レビュー修正)。
     fn next_layer_id(&self) -> u64 {
-        self.doc
-            .view()
-            .layers()
-            .last()
-            .map(|last| last.0 + 1)
-            .unwrap_or(1)
+        self.doc.view().next_layer_id()
     }
 
     /// Document か再生位置が変わった時だけ描き直す。

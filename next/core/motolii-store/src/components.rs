@@ -141,11 +141,24 @@ impl Component for LayerPresent {
     }
 }
 
+/// `motolii.archetypes.Layer` の archetype 名。**正本はここ1箇所** — 以前は
+/// `components.rs` の各 `descriptor_*` と `persist.rs::flattened()` の両方が
+/// ベタ書きしており、名前を変える時に2箇所を揃える必要があった(2026-08-20 の
+/// 敵対的レビュー、DRY の指摘)。
+pub fn archetype_layer() -> &'static str {
+    "motolii.archetypes.Layer"
+}
+
+/// `motolii.archetypes.Composition` の archetype 名。同上の理由でここへ寄せる。
+pub fn archetype_composition() -> &'static str {
+    "motolii.archetypes.Composition"
+}
+
 /// property ごとに別の `ComponentIdentifier` を割り当てる。
 /// 1 layer = 1 entity、property は component として並ぶ(AE の property list と同じ形)。
 pub fn descriptor_track(property: &crate::PropertyId) -> ComponentDescriptor {
     ComponentDescriptor {
-        archetype: Some("motolii.archetypes.Layer".into()),
+        archetype: Some(archetype_layer().into()),
         component: property.component(),
         component_type: Some(TrackJson::name()),
     }
@@ -155,7 +168,7 @@ pub fn descriptor_track(property: &crate::PropertyId) -> ComponentDescriptor {
 /// (符号化の流儀を2つにしない)。
 pub fn descriptor_meta() -> ComponentDescriptor {
     ComponentDescriptor {
-        archetype: Some("motolii.archetypes.Layer".into()),
+        archetype: Some(archetype_layer().into()),
         component: "Layer:meta".into(),
         component_type: Some(TrackJson::name()),
     }
@@ -168,7 +181,7 @@ pub fn descriptor_meta() -> ComponentDescriptor {
 /// 形状と不透明度は普通の property track なので、ここには並びと重ね方だけが入る。
 pub fn descriptor_masks() -> ComponentDescriptor {
     ComponentDescriptor {
-        archetype: Some("motolii.archetypes.Layer".into()),
+        archetype: Some(archetype_layer().into()),
         component: "Layer:masks".into(),
         component_type: Some(TrackJson::name()),
     }
@@ -177,7 +190,7 @@ pub fn descriptor_masks() -> ComponentDescriptor {
 /// comp の設定。**layer と同じ JSON 経路を使い回す**(符号化の流儀を増やさない)。
 pub fn descriptor_composition() -> ComponentDescriptor {
     ComponentDescriptor {
-        archetype: Some("motolii.archetypes.Composition".into()),
+        archetype: Some(archetype_composition().into()),
         component: "Composition:settings".into(),
         component_type: Some(TrackJson::name()),
     }
@@ -189,7 +202,7 @@ pub fn descriptor_composition() -> ComponentDescriptor {
 /// 同じ理由、裁定108(c))。
 pub fn descriptor_markers() -> ComponentDescriptor {
     ComponentDescriptor {
-        archetype: Some("motolii.archetypes.Composition".into()),
+        archetype: Some(archetype_composition().into()),
         component: "Composition:markers".into(),
         component_type: Some(TrackJson::name()),
     }
@@ -197,7 +210,7 @@ pub fn descriptor_markers() -> ComponentDescriptor {
 
 pub fn descriptor_present() -> ComponentDescriptor {
     ComponentDescriptor {
-        archetype: Some("motolii.archetypes.Layer".into()),
+        archetype: Some(archetype_layer().into()),
         component: "Layer:present".into(),
         component_type: Some(LayerPresent::name()),
     }
@@ -207,7 +220,7 @@ pub fn descriptor_present() -> ComponentDescriptor {
 /// auto-orient)。**`meta` の外**(layer-meta 束、裁定108(c) の構造修正)。
 pub fn descriptor_attrs() -> ComponentDescriptor {
     ComponentDescriptor {
-        archetype: Some("motolii.archetypes.Layer".into()),
+        archetype: Some(archetype_layer().into()),
         component: "Layer:attrs".into(),
         component_type: Some(TrackJson::name()),
     }
@@ -216,7 +229,7 @@ pub fn descriptor_attrs() -> ComponentDescriptor {
 /// layer が持つ effect インスタンスの列(id + plugin id のみ、`layer-meta` 束)。
 pub fn descriptor_effects() -> ComponentDescriptor {
     ComponentDescriptor {
-        archetype: Some("motolii.archetypes.Layer".into()),
+        archetype: Some(archetype_layer().into()),
         component: "Layer:effects".into(),
         component_type: Some(TrackJson::name()),
     }
@@ -225,7 +238,7 @@ pub fn descriptor_effects() -> ComponentDescriptor {
 /// shape-layer の図形列(`Vec<motolii_vector::Shape>`)。
 pub fn descriptor_shapes() -> ComponentDescriptor {
     ComponentDescriptor {
-        archetype: Some("motolii.archetypes.Layer".into()),
+        archetype: Some(archetype_layer().into()),
         component: "Layer:shapes".into(),
         component_type: Some(TrackJson::name()),
     }
@@ -234,7 +247,7 @@ pub fn descriptor_shapes() -> ComponentDescriptor {
 /// text-layer の文字列内容(`layers/text-layer/t`)。範囲スタイル等は `text` 束の仕事。
 pub fn descriptor_text() -> ComponentDescriptor {
     ComponentDescriptor {
-        archetype: Some("motolii.archetypes.Layer".into()),
+        archetype: Some(archetype_layer().into()),
         component: "Layer:text".into(),
         component_type: Some(TrackJson::name()),
     }

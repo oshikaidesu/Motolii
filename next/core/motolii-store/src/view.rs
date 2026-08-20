@@ -59,6 +59,28 @@ impl<'a> StoreView<'a> {
         self.layers().contains(&layer)
     }
 
+    /// 新規 layer の id 採番の**正本**。**墓標(tombstone)込みの最大 id + 1**を返す。
+    ///
+    /// [`Self::layers`] は present な layer だけを返すので、それを基に採番すると
+    /// 「削除した最大 id の layer を再び置く」瞬間に墓標の id を再利用してしまう
+    /// (2026-08-20 の敵対的レビュー)。id はトラック/マスクの entity path
+    /// (`/layer/{id}`)そのものなので、再利用すると死んだ layer の component が
+    /// 新しい layer へ「復活」して付き直る — かつ `Intent::SetMeta` は
+    /// 新規配置専用の柵(裁定108(c))を持つため、墓標の id には既に `meta` component が
+    /// 残っており、正当な新規配置がその柵に引っかかって `Err` になる。
+    ///
+    /// `sorted_entity_paths()` は tombstone を含め**一度でも書かれた entity path**を
+    /// 全部返すので、present かどうかを見ずに id だけを拾う。
+    pub fn next_layer_id(&self) -> u64 {
+        self.db
+            .sorted_entity_paths()
+            .filter_map(layer_id_of)
+            .map(|id| id.0)
+            .max()
+            .map(|max| max + 1)
+            .unwrap_or(1)
+    }
+
     /// この layer が持っている property の名前。
     ///
     /// **store に聞く**(`all_components_for_entity`)。Document 側に「property の一覧」を
@@ -96,29 +118,50 @@ impl<'a> StoreView<'a> {
     ///
     /// `Layer:present`(`LayerPresent`、bool)だけは対象外 — 別型で `TrackJson` として
     /// 読めないのと、存在は `Intent::AddLayer` が別途持つため。
+    ///
+    /// **`present` 以外は全部 `TrackJson` のはず、という前提を検査する**
+    /// (2026-08-20 の敵対的レビュー修正)。以前は component が値を持っているのに
+    /// `TrackJson` として型が合わない場合、`component_batch::<TrackJson>` が
+    /// `None` を返すのを「値が無い」と同じ扱いで `filter_map` が黙って捨てていた —
+    /// `Layer:present` 以外に別 `Loggable` 型の component が増えた日、その component は
+    /// `flattened()`/`save()` から**エラーも出さず静かに消える**。「値が無い」
+    /// (`component_batch_raw` も `None`)と「値はあるが `TrackJson` として読めない」
+    /// (`component_batch_raw` は `Some` なのに型付き読みが `None`)を区別し、
+    /// 後者だけ `Err` にする(裁定37 と同じ「無い」と「壊れている」の非同義)。
     pub(crate) fn track_json_components(
         &self,
         path: &EntityPath,
-    ) -> Vec<(re_types_core::ComponentIdentifier, String)> {
+    ) -> Result<Vec<(re_types_core::ComponentIdentifier, String)>, StoreError> {
         let engine = self.db.storage_engine();
         let Some(components) = engine.store().schema().all_components_for_entity(path) else {
-            return Vec::new();
+            return Ok(Vec::new());
         };
         let query = self.query();
         let present = descriptor_present().component;
-        let mut out: Vec<(re_types_core::ComponentIdentifier, String)> = components
-            .iter()
-            .filter(|component| **component != present)
-            .filter_map(|component| {
-                let results = self.db.latest_at(&query, path, [*component]);
-                let json = results
-                    .component_batch::<TrackJson>(*component)
-                    .and_then(|batch| batch.into_iter().next())?;
-                Some((*component, json.0))
-            })
-            .collect();
+        let mut out: Vec<(re_types_core::ComponentIdentifier, String)> = Vec::new();
+        for component in components.iter().copied().filter(|component| *component != present) {
+            let results = self.db.latest_at(&query, path, [component]);
+            if results.component_batch_raw(component).is_none() {
+                // この edit 時点では値を持たない(別の時点でだけ書かれた component が
+                // entity の schema に残っているだけ) — 「無い」なので飛ばしてよい。
+                continue;
+            }
+            let Some(json) = results
+                .component_batch::<TrackJson>(component)
+                .and_then(|batch| batch.into_iter().next())
+            else {
+                return Err(StoreError::Property(format!(
+                    "component `{}` は値を持っているが `TrackJson` として読めない — \
+                     `Layer:present` 以外の component は flattened()/save() が\
+                     機械的に全部運ぶ前提なので、型が違う component が増えたらここで\
+                     気付く必要がある(黙って保存から消してはいけない)",
+                    component.as_str()
+                )));
+            };
+            out.push((component, json.0));
+        }
         out.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
-        out
+        Ok(out)
     }
 
     /// property の keyframe track。**評価はしない** — 生の意味をそのまま返す。

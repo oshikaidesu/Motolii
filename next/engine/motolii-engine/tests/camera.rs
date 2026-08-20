@@ -7,7 +7,7 @@
 
 use motolii_engine::Engine;
 use motolii_store::{
-    property, Composition, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack, LayerAttrs,
+    property, Composition, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack, LayerAttrsPatch,
     LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
 };
 
@@ -140,8 +140,8 @@ fn a_pinned_layer_does_not_move_when_the_document_camera_moves() {
     .unwrap();
     doc.apply(Intent::SetAttrs {
         layer,
-        attrs: LayerAttrs {
-            pinned: true,
+        patch: LayerAttrsPatch {
+            pinned: Some(true),
             ..Default::default()
         },
     })

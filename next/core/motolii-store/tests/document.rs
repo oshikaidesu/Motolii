@@ -3,7 +3,8 @@
 use std::time::Instant;
 
 use motolii_store::{
-    Document, Interp, Intent, Keyframe, KeyframeTrack, LayerId, PropertyId, RationalTime, Value,
+    Document, EffectId, EffectInstance, Interp, Intent, Keyframe, KeyframeTrack, LayerId,
+    PropertyId, RationalTime, Value,
 };
 
 fn prop(name: &str) -> PropertyId {
@@ -124,6 +125,91 @@ fn remove_layer_is_a_tombstone_not_a_delete() {
         doc.view().has_layer(layer),
         "削除を drop で実装すると undo で戻らない"
     );
+}
+
+/// 敵対的レビュー(2026-08-20)が実証した部分コミットの再現。修正前は `write` が
+/// intent ごとに即座に store へ確定していたので、`apply_all([正当, 不正])` は
+/// 「正当な分だけ確定し `head` も進んだまま `Err` を返す」という部分コミットに
+/// なっていた。**原子性**: `Err` の後は `view()` がバッチ前と完全に一致しなければ
+/// ならない(`has_layer` も `edit_head` も)。
+#[test]
+fn apply_all_is_atomic_the_valid_intent_does_not_stick_when_a_later_one_fails() {
+    let mut doc = Document::new();
+    let layer = LayerId(1);
+    let before_head = doc.edit_head();
+
+    let result = doc.apply_all([
+        Intent::AddLayer(layer),
+        // 同じ id の effect が2枚 — `write` が `Err` を返す(mask と同型の検査)。
+        Intent::SetEffects {
+            layer,
+            effects: vec![
+                EffectInstance {
+                    id: EffectId(1),
+                    plugin_id: "a".to_owned(),
+                },
+                EffectInstance {
+                    id: EffectId(1),
+                    plugin_id: "b".to_owned(),
+                },
+            ],
+        },
+    ]);
+
+    assert!(result.is_err(), "重複 effect id が通ってしまっている");
+    assert!(
+        !doc.view().has_layer(layer),
+        "先行 intent(AddLayer)がバッチの失敗を跨いで確定してしまっている(部分コミット)"
+    );
+    assert_eq!(
+        doc.edit_head(),
+        before_head,
+        "失敗した batch の後で edit_head が前進してしまっている"
+    );
+    assert!(!doc.can_undo(), "確定していない batch が undo 履歴に残っている");
+}
+
+/// 複数の失敗パターンで同じ原子性が成り立つことを確かめる(`SetMeta` の新規配置専用の
+/// 柵、裁定108(c))— `AddLayer` + `SetMeta` の後にもう一度 `SetMeta` を同じバッチへ
+/// 混ぜると2つ目が `Err` になるが、1つ目の配置も含めてバッチ全体が無かったことになる。
+#[test]
+fn apply_all_rolls_back_even_when_the_batch_writes_multiple_components() {
+    let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(motolii_store::Composition {
+        width: 64,
+        height: 64,
+        fps: motolii_store::Fps::try_new(30, 1).unwrap(),
+        duration_frames: 300,
+    }))
+    .unwrap();
+    let after_setup_head = doc.edit_head();
+    let layer = LayerId(1);
+
+    let meta = motolii_store::LayerMeta {
+        source: motolii_store::LayerSource::Solid {
+            rgba: [1, 2, 3, 255],
+            width: 4,
+            height: 4,
+        },
+        order: 0,
+        timing: motolii_store::LayerTiming::place(0, None, 300),
+    };
+
+    let result = doc.apply_all([
+        Intent::AddLayer(layer),
+        Intent::SetMeta {
+            layer,
+            meta: meta.clone(),
+        },
+        // 同じバッチ内でもう一度 `SetMeta` — 直前の物と合わせて「既に meta を持つ」
+        // 判定に引っかかり `Err` になる。
+        Intent::SetMeta { layer, meta },
+    ]);
+
+    assert!(result.is_err());
+    assert!(!doc.view().has_layer(layer), "AddLayer が部分コミットしている");
+    assert_eq!(doc.view().meta(layer).unwrap(), None, "SetMeta が部分コミットしている");
+    assert_eq!(doc.edit_head(), after_setup_head);
 }
 
 #[test]
