@@ -26,3 +26,25 @@
 - stash 禁止(worktree 間で共有)/ Edit 直後の stale fingerprint は touch / CARGO_TARGET_DIR 共有禁止(後勝ち事故の実測あり)
 - 時間予算試験2本(`edit_storm_with_the_real_track_type`・r2 `timeline_projection_fits_a_frame`)は**負荷で落ちるのが既知**。単独実行で緑なら自分の変更と無関係。予算は緩めない
 - 一次ソースの取得結果は終了報告に URL/rev を書く(次のレーンが KNOWN 経由で再利用できるように)
+
+## store の流儀(読む前にこれで足りる場合が多い)
+- Intent の型は3種: **丸ごと置換**(`SetShapes`/`SetEffects`/`SetTextDocument` — 検証を write arm で)/ **read-modify-write**(`SetTiming`/`SetSource`/`SetOrder`)/ **Patch**(`LayerAttrsPatch` — 全フィールド Option、None=不変。丸ごと置換の黙戻り事故を型で禁止)
+- 動く値は struct field にしない — **平坦 PropertyId の KeyframeTrack**(`mask.{id}.shape` / `text_range.{id}.selector.start` の形、裁定92)。トラックの有無=意味の有無(裁定20)
+- id は専用 newtype(LayerId/MaskId/TextRangeId/EffectId/TextStyleId)。**採番は store 正本 `StoreView::next_layer_id()`(墓石込み)** — 現存最大+1 を自前計算しない
+- `apply_all` は原子的(失敗でロールバック、裁定118)。削除=tombstone(`present=false`)。`RESERVED` 名と `Document::mark_undo_floor()` に注意
+- 保存は `flattened()` が store に聞く(手列挙禁止、裁定108/118)。component 追加時は `flatten_fence.rs` が守る
+- ファイル地図: mask.rs / marker.rs / attrs.rs / text.rs / effect.rs(store)、frame.rs+camera.rs(core)、timeline_pane.rs+tokens.rs(shell)
+
+## 既知の穴(発見報告不要。直すのも別途裁定してから)
+- bm / matte / ao は store にあるが**合成器が未消費**(地図 note に明記済み)
+- `parent` の変換合成は未実装(循環検査のみ)
+- near-plane より手前の層は透視でクリップ(裁定116)
+- 負の Speed の source_frame は未クランプ(doc 明記済み)
+- テキストのアニメータ transform に skew が無い(Lottie/Rive とも語彙なし、text.rs doc 明記)
+- alpha 付き書き出し不可(裁定16。直す口は fork 2箇所と特定済み)
+- eval の未使用 import 警告等の fmt ドリフトが数ファイルに既存
+
+## 採番・報告プロトコル(統一)
+- **レーンは DECISIONS.md に書かない**(番号衝突が実際に起きた)。設計判断は終了報告に列挙し、supervisor が採番する
+- 地図(tsv)の自分の束の行は書き換えてよい。束の外の行は報告のみ
+- 既知の穴・KNOWN 記載事実は報告に書かない(新発見だけを書く)
