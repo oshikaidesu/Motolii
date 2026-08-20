@@ -15,6 +15,7 @@ members = [
     "engine/motolii-engine",
     "engine/motolii-export",
     "engine/motolii-media",
+    "engine/motolii-vector",
     "shell/motolii-shell",
     "probes/r0-store-edit",
     "probes/r1-frame-throughput",
@@ -73,6 +74,7 @@ motolii-compositor = { path = "engine/motolii-compositor" }
 motolii-engine = { path = "engine/motolii-engine" }
 motolii-export = { path = "engine/motolii-export" }
 motolii-media = { path = "engine/motolii-media" }
+motolii-vector = { path = "engine/motolii-vector" }
 
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"

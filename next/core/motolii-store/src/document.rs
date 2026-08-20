@@ -112,8 +112,13 @@ impl Default for Document {
 
 impl Document {
     pub fn new() -> Self {
+        Self::with_store_id(StoreId::random(StoreKind::Recording, "motolii"))
+    }
+
+    /// 同一性を指定して作る。**読込のためだけの口** — file が持つ id をそのまま使う。
+    pub(crate) fn with_store_id(store_id: StoreId) -> Self {
         Self {
-            db: EntityDb::new(StoreId::random(StoreKind::Recording, "motolii")),
+            db: EntityDb::new(store_id),
             head: 0,
             tip: 0,
             floor: 0,

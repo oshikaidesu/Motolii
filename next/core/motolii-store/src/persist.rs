@@ -73,19 +73,36 @@ impl Document {
     }
 
     /// 読込。開いた直後は**戻せない**(`mark_undo_floor`)。
+    ///
+    /// **store の同一性は file が持つ**。`Document::new()` で新しい `StoreId` を作ってから
+    /// file のメッセージを流し込むと、store 自身の id とメッセージの id が食い違う。
+    /// upstream は `debug_assert` で叩くだけなので release では黙って通り、
+    /// **保存した file と store の同一性がずれたまま動く**(2026-08-20、shape-1 レーンが
+    /// debug ビルドで踏んで発覚)。
     pub fn load(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let file = std::fs::File::open(path.as_ref()).map_err(|e| StoreError::Io(e.to_string()))?;
         let decoder = re_log_encoding::rrd::DecoderApp::decode_eager(std::io::BufReader::new(file))
             .map_err(|e| StoreError::Io(e.to_string()))?;
 
-        let mut out = Self::new();
+        let mut out: Option<Self> = None;
         for message in decoder {
             let message = message.map_err(|e| StoreError::Io(e.to_string()))?;
-            out.db
+            let doc = match &mut out {
+                Some(doc) => doc,
+                None => {
+                    // 最初のメッセージが store の同一性を決める。
+                    out = Some(Self::with_store_id(message.store_id().clone()));
+                    out.as_mut().expect("直前に入れた")
+                }
+            };
+            doc.db
                 .add_log_msg(&message)
                 .map_err(|e| StoreError::Ingest(e.to_string()))?;
         }
+
+        let mut out = out.ok_or_else(|| StoreError::Io("空の file(メッセージが1つも無い)".into()))?;
         out.rebuild_head_from_store();
+        out.mark_undo_floor();
         Ok(out)
     }
 }

@@ -181,7 +181,11 @@ fn r0_4_save_load_roundtrip() {
         .collect::<Result<Vec<_>, _>>()
         .expect("to_messages");
 
-    let mut restored = new_store();
+    // **store の同一性は file(= メッセージ)が持つ**。新しい id の store へ流し込むと
+    // upstream の `debug_assert` が叩く(release では黙って通り、保存物と store の
+    // 同一性がずれたまま動く)。2026-08-20 に製品側で同じ誤りを踏んだので、
+    // probe も正しい形に揃える。
+    let mut restored = re_entity_db::EntityDb::new(messages[0].store_id().clone());
     for msg in &messages {
         restored.add_log_msg(msg).expect("add_log_msg");
     }
