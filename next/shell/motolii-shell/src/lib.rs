@@ -18,14 +18,17 @@ use iced::{Element, Length, Task};
 
 use motolii_engine::Engine;
 use motolii_store::{
-    Composition, Document, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, RationalTime,
-    Revision, StoreView,
+    Composition, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
+    RationalTime, Revision, StoreView,
 };
 
 pub mod fixture;
+pub mod inspector_pane;
 pub mod screenshot;
 pub mod timeline_pane;
 pub mod tokens;
+
+use inspector_pane::{FieldDraft, TransformField};
 
 use tokens::{Colors, Dimensions, Tokens};
 
@@ -140,6 +143,21 @@ pub enum Message {
     /// トークンファイル(寸法・色)が変わった。**debug ビルドでしか実際には届かない**
     /// (裁定117)— release は [`tokens::watch_subscription`] が何も発行しない。
     TokensFileChanged,
+
+    // ---- Inspector pane(第1波) ----
+    /// Transform 行の値セルへの打鍵。**まだ Document を書かない** — 下書きを
+    /// 更新するだけ(`Shell::inspector_field_draft`、`pending_drops` と同じ形)。
+    InspectorFieldInput(TransformField, String),
+    /// Transform 行の Enter — **ここで初めて `Intent::SetTrack` を1回出す**
+    /// (1 gesture = 1 undo)。
+    InspectorFieldSubmit(TransformField),
+    /// Attrs の Name 欄への打鍵。同上、まだ書かない。
+    InspectorNameInput(String),
+    /// Attrs の Name 欄の Enter — `Intent::SetAttrs` を1回出す。
+    InspectorNameSubmit,
+    /// Attrs の Hidden トグル。下書きを経由せず即 `Intent::SetAttrs` を1回出す
+    /// (header の Undo/Redo ボタンと同じ即時操作の形)。
+    InspectorToggleHidden,
 }
 
 /// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
@@ -169,6 +187,12 @@ pub struct Shell {
     pending_drops: Vec<std::path::PathBuf>,
     /// デザイン値(裁定117)。全 pane がここ経由で寸法・色を読む — raw 値の直書き禁止。
     tokens: Tokens,
+    /// Inspector の Transform 行、編集中の下書き。**Document ではない** —
+    /// `Message::InspectorFieldSubmit` が来るまで store に触らない
+    /// (`pending_drops` と同じ「確定するまで front だけが持つ一時状態」の形)。
+    inspector_field_draft: Option<FieldDraft>,
+    /// Inspector の Name 欄、編集中の下書き。同上。
+    inspector_name_draft: Option<String>,
 }
 
 impl Shell {
@@ -196,6 +220,8 @@ impl Shell {
                 status: None,
                 pending_drops: Vec::new(),
                 tokens: Tokens::load(),
+                inspector_field_draft: None,
+                inspector_name_draft: None,
             },
             Task::none(),
         )
@@ -219,6 +245,8 @@ impl Shell {
             status: Some(built.status),
             pending_drops: Vec::new(),
             tokens: Tokens::load(),
+            inspector_field_draft: None,
+            inspector_name_draft: None,
         };
         // `update()` を経由しないので、通常なら `update` の末尾が呼ぶ
         // `refresh_frame` をここで代わりに呼ぶ(Stage を空のまま起動しない、M17)。
@@ -271,6 +299,15 @@ impl Shell {
                 self.tokens = Tokens::load();
                 metrics::record_tokens_reload();
             }
+            Message::InspectorFieldInput(field, text) => {
+                self.inspector_field_draft = Some(FieldDraft { field, text });
+            }
+            Message::InspectorFieldSubmit(field) => self.commit_inspector_field(field),
+            Message::InspectorNameInput(text) => {
+                self.inspector_name_draft = Some(text);
+            }
+            Message::InspectorNameSubmit => self.commit_inspector_name(),
+            Message::InspectorToggleHidden => self.toggle_inspector_hidden(),
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
                 // **1操作 = 1 undo**。`AddLayer` と `SetMeta` を別々に書くと
@@ -367,6 +404,103 @@ impl Shell {
         }
     }
 
+    /// 今の playhead を comp の fps で時刻へ写す。comp が無い/fps が壊れているなら
+    /// `None`(M16: panic しない)。
+    fn time_at_playhead(&self) -> Option<RationalTime> {
+        let composition = self.doc.view().composition().ok().flatten()?;
+        RationalTime::try_from_frame(self.session.playhead, composition.fps).ok()
+    }
+
+    /// Inspector の Transform 行 — 下書きを確定して1回の `Intent::SetTrack` を出す
+    /// (1 gesture = 1 undo)。数値として読めない・選択が無い等は**黙って消さず**
+    /// status 帯へ理由を出す(M13)。
+    fn commit_inspector_field(&mut self, field: TransformField) {
+        let Some(draft) = self.inspector_field_draft.take() else {
+            return;
+        };
+        if draft.field != field {
+            // 別の field の submit(起こらないはずだが、安全側で下書きを戻す)。
+            self.inspector_field_draft = Some(draft);
+            return;
+        }
+        let Some(layer) = self.session.selection else {
+            return;
+        };
+        let Some(input) = inspector_pane::parse_number(&draft.text) else {
+            self.status = Some(format!("数値として読めない: {}", draft.text));
+            return;
+        };
+        let Ok(property) = inspector_pane::property_id(field) else {
+            self.status = Some("property を作れない".to_owned());
+            return;
+        };
+
+        // 編集不可(animated = 2キー以上)の field は、UI が control を出していない
+        // はずだが、**書き口自体でも二重に拒む**(M13/Q0 — chrome と書き口の食い違いを
+        // 構造的に作らない)。
+        let store = self.doc.view();
+        if let Ok(Some(track)) = store.track(layer, &property) {
+            if track.keys().len() > 1 {
+                self.status = Some("animated な property はこの第1波では編集できない".to_owned());
+                return;
+            }
+        }
+
+        let t = self.time_at_playhead().unwrap_or(RationalTime::ZERO);
+        let current_vec2 = match store.value_at(layer, &property, t) {
+            Ok(Some(motolii_store::Value::Vec2(v))) => v,
+            _ => inspector_pane::default_vec2(field),
+        };
+        let value = inspector_pane::next_value(field, input, current_vec2);
+        let track = inspector_pane::single_hold_track(value);
+        if let Err(error) = self.doc.apply(Intent::SetTrack {
+            layer,
+            property,
+            track,
+        }) {
+            self.status = Some(format!("値を書けない: {error}"));
+        }
+    }
+
+    /// Attrs の Name 欄 — 下書きを確定して1回の `Intent::SetAttrs` を出す。
+    fn commit_inspector_name(&mut self) {
+        let Some(text) = self.inspector_name_draft.take() else {
+            return;
+        };
+        let Some(layer) = self.session.selection else {
+            return;
+        };
+        let patch = LayerAttrsPatch {
+            name: Some(text),
+            ..Default::default()
+        };
+        if let Err(error) = self.doc.apply(Intent::SetAttrs { layer, patch }) {
+            self.status = Some(format!("名前を書けない: {error}"));
+        }
+    }
+
+    /// Attrs の Hidden トグル — 即 `Intent::SetAttrs` を1回出す(下書きを経由しない)。
+    fn toggle_inspector_hidden(&mut self) {
+        let Some(layer) = self.session.selection else {
+            return;
+        };
+        let current = self
+            .doc
+            .view()
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+            .hidden;
+        let patch = LayerAttrsPatch {
+            hidden: Some(!current),
+            ..Default::default()
+        };
+        if let Err(error) = self.doc.apply(Intent::SetAttrs { layer, patch }) {
+            self.status = Some(format!("hidden を書けない: {error}"));
+        }
+    }
+
     // ---- 運転席が見るための口。**書けない** ----
 
     pub fn layer_count(&self) -> usize {
@@ -430,6 +564,14 @@ impl Shell {
         self.doc.view().markers().unwrap_or_default()
     }
 
+    /// 今の Inspector 投影。運転席が「選択→行が出る」「編集→store が変わる」を
+    /// 確かめる口(pane 自身が `view()` で使う投影と同じ関数を呼ぶ)。
+    pub fn inspector_selection(&self) -> Option<inspector_pane::SelectionProjection> {
+        inspector_pane::project(&self.doc.view(), &self.session)
+            .ok()
+            .flatten()
+    }
+
     /// 今のデザイン値。運転席がトークン再読込を確かめる口。
     pub fn tokens(&self) -> &Tokens {
         &self.tokens
@@ -441,10 +583,25 @@ impl Shell {
         let dims = self.tokens.dims;
         let colors = self.tokens.colors;
         let timeline = timeline_pane::TimelinePane::new(&store, &self.session, dims, colors);
+        // Inspector は canvas を使わない標準 widget 構成(inspector_pane.rs 冒頭の
+        // doc comment)なので、投影自体が `Element<'static, _>` を返す — Stage の
+        // `self.frame` を借りる `stage_pane` と同じ `row!` に同居できる(共変性)。
+        let inspector_selection = inspector_pane::project(&store, &self.session)
+            .ok()
+            .flatten();
+        let inspector = inspector_pane::view(
+            inspector_selection.as_ref(),
+            self.inspector_field_draft.as_ref(),
+            self.inspector_name_draft.as_deref(),
+            dims,
+            colors,
+        );
 
         column![
             self.header(),
-            stage_pane(self.frame.as_ref(), dims, colors),
+            row![inspector, stage_pane(self.frame.as_ref(), dims, colors)]
+                .spacing(dims.spacing_m)
+                .height(Length::FillPortion(3)),
             timeline.view(),
             transport(&self.session, &store, dims, colors),
             status_band(self.status.as_deref(), &self.doc, dims, colors),
@@ -549,9 +706,12 @@ fn stage_pane(
     };
     // letterbox は neutral dark(D8: 装飾 gradient 禁止・余白は neutral)。raw 値ではなく
     // token 経由の面色 + 罫線幅。
+    // **高さは `Length::Fill`**(Inspector と並ぶ `row!` の中にいるため、以前の
+    // `FillPortion(3)` は `Shell::view` 側のその `row!` 自身が持つ — 2箇所で
+    // portion を重ねて割合をずらさない)。
     container(body)
         .width(Length::Fill)
-        .height(Length::FillPortion(3))
+        .height(Length::Fill)
         .style(move |_theme| container::Style {
             background: Some(iced::Background::Color(colors.surface_app)),
             border: iced::Border {

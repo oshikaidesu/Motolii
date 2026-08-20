@@ -69,6 +69,12 @@
 //! - 1回の scan は Shell の**1状態**しか見ない。[`no_pane_leaves_a_captured_click_silent`]
 //!   は代表的な3状態(空・layer1枚・layer1枚→Undo)を個別に回すだけで、
 //!   全状態空間を尽くしてはいない
+//! - **`text_input`(Inspector pane、2026-08-20 追加)は打鍵なしの素の click を
+//!   capture するが、それだけでは Message を出さない**(iced 標準 — click は
+//!   focus するだけ)。[`point_is_over_a_text_input`] がこの座標を判定から除外する
+//!   — 除外は「click 点が実在する `TextInput` の bounds に重なる場合」だけに絞って
+//!   あるので、無関係な widget の繋ぎ忘れは従来どおり捕まる(打鍵経由の実結線は
+//!   `tests/inspector_drive.rs` が Message レベルで別途確認する)
 
 use iced::advanced::widget::{Operation, Tree};
 use iced::advanced::{layout, mouse, renderer, Layout, Shell as WidgetShell, Widget};
@@ -129,6 +135,17 @@ fn click_at(element: iced::Element<'_, Message>, point: iced::Point) -> (bool, V
     (captured, ui.into_messages().collect())
 }
 
+/// **`TextInput` の上か**(Inspector pane 追加で見つかった柵の限界 — 下の doc 参照)。
+/// `bounds` ではなく `visible_bounds`(スクロール等で切れた分を除く、他の判定と揃える)。
+fn point_is_over_a_text_input(targets: &[Target], point: iced::Point) -> bool {
+    targets.iter().any(|target| {
+        matches!(target, Target::TextInput { .. })
+            && target
+                .visible_bounds()
+                .is_some_and(|bounds| bounds.contains(point))
+    })
+}
+
 /// 1状態を Q0 で検査する。違反があれば理由つきで返す(空 = 合格)。
 fn scan_state(build: impl Fn() -> Shell, label: &str) -> Vec<String> {
     let seed = build();
@@ -152,6 +169,20 @@ fn scan_state(build: impl Fn() -> Shell, label: &str) -> Vec<String> {
         let (captured, messages) = click_at(probe.view(), point);
 
         if captured && messages.is_empty() {
+            // **Inspector pane が見つけた柵の限界**(Timeline の canvas/slider と同種、
+            // ただし理由は違う): `text_input` は素の click(press→release、打鍵なし)を
+            // capture するが、それだけでは `on_input`/`on_submit` のどちらも Message を
+            // 出さない — iced 標準の挙動(click はカーソルを置いて focus するだけ)。
+            // これは死に chrome ではない(実際に打鍵すれば `Message` が出る —
+            // `tests/inspector_drive.rs` が Message 経由で確認済み)。この click 点が
+            // 実在する `TextInput` 候補の bounds に重なる場合だけ除外する
+            // (`row`/`container` が Container として一緒に登録され、同じ点で同じ
+            // capture-but-silent が多重に出る — 判定は「その TextInput 自身」ではなく
+            // 「その点が TextInput の上か」で行うので、無関係な Container の
+            // 繋ぎ忘れは従来どおり捕まる)。
+            if point_is_over_a_text_input(&targets, point) {
+                continue;
+            }
             violations.push(format!(
                 "{label}: {point:?} 付近({target:?})が click に反応した(event captured)のに \
                  Message が出ない — 触れそうで触れない(Q0)"

@@ -46,6 +46,24 @@ pub struct Dimensions {
     pub border_width: f32,
     /// panel header 帯の高さ。
     pub panel_header_height: f32,
+    /// Inspector pane の固定幅。出典は Ableton 実測ではなく**視覚正本 HTML/CSS 自体**
+    /// (`docs/mocks-ui/public/inspector-library.css` `.inspectorShell { width:
+    /// min(100%, 496px) }`)— Inspector 第1波の発注書が正本として名指ししたのは
+    /// この HTML/CSS そのものなので、他寸法と違い Ableton 密度表ではなくここから写す。
+    pub inspector_panel_width: f32,
+    /// Inspector property 行の高さ。出典: 同 CSS `.propertyRow { min-height: 25px }`。
+    pub inspector_row_height: f32,
+    /// Inspector section 見出し(TRANSFORM/ATTRS)の高さ。出典: 同 CSS
+    /// `.tableSection h2 { height: 26px }`。
+    pub inspector_section_header_height: f32,
+    /// Inspector 値セル(X/Y/Z 等)の幅。出典: 同 CSS `.propertyRow` の
+    /// `grid-template-columns: minmax(132px, 1fr) repeat(3, 64px) 26px` の `64px` 段。
+    pub inspector_value_width: f32,
+    /// Inspector 行のラベル列(Property 名)の幅。出典: 同 CSS の
+    /// `grid-template-columns` 先頭 `minmax(132px, 1fr)` の `132px`。
+    pub inspector_label_width: f32,
+    /// Inspector 選択サマリ帯の高さ。出典: 同 CSS `.selectionSummary { height: 46px }`。
+    pub inspector_summary_height: f32,
 }
 
 impl Default for Dimensions {
@@ -67,6 +85,12 @@ impl Default for Dimensions {
             spacing_l: 12.0,
             border_width: 1.0,
             panel_header_height: 29.0,
+            inspector_panel_width: 496.0,
+            inspector_row_height: 25.0,
+            inspector_section_header_height: 26.0,
+            inspector_value_width: 64.0,
+            inspector_label_width: 132.0,
+            inspector_summary_height: 46.0,
         }
     }
 }

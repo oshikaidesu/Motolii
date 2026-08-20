@@ -35,5 +35,23 @@
   "_note_border_width": "ui-visual-language の規約『フラット・細罫線』= 1px hairline。実測というより意匠規約そのものの値(発明ではなく既定の視覚言語)",
 
   "panel_header_height": 29,
-  "_note_panel_header_height": "実測表『Browser ツールバー』の実測値(29)を転用。旧実装は独自に34を使っていた(第2波レーンFでも『未変更』のまま据え置かれていた暫定値)が、指示『値の初期値はAbleton実測から』に従い実測値へ差し替える — 34→29は本レーンの新しい適用で、他chromeの見え方に影響し得るため終了報告の設計判断に列挙する"
+  "_note_panel_header_height": "実測表『Browser ツールバー』の実測値(29)を転用。旧実装は独自に34を使っていた(第2波レーンFでも『未変更』のまま据え置かれていた暫定値)が、指示『値の初期値はAbleton実測から』に従い実測値へ差し替える — 34→29は本レーンの新しい適用で、他chromeの見え方に影響し得るため終了報告の設計判断に列挙する",
+
+  "inspector_panel_width": 496,
+  "_note_inspector_panel_width": "Ableton実測ではなく、Inspector第1波の視覚正本そのもの(docs/mocks-ui/public/inspector-library.css `.inspectorShell { width: min(100%, 496px) }`)から転記。発注書がこのHTML/CSSを正本と名指ししているため、他キーと違いAbleton密度表を出典にしない",
+
+  "inspector_row_height": 25,
+  "_note_inspector_row_height": "同CSS `.propertyRow { min-height: 25px }` から転記",
+
+  "inspector_section_header_height": 26,
+  "_note_inspector_section_header_height": "同CSS `.tableSection h2 { height: 26px }` から転記",
+
+  "inspector_value_width": 64,
+  "_note_inspector_value_width": "同CSS `.propertyRow`/`.columnHeader` の grid-template-columns: minmax(132px, 1fr) repeat(3, 64px) 26px のうち64px段から転記",
+
+  "inspector_label_width": 132,
+  "_note_inspector_label_width": "同 grid-template-columns 先頭の minmax(132px, 1fr) から転記",
+
+  "inspector_summary_height": 46,
+  "_note_inspector_summary_height": "同CSS `.selectionSummary { height: 46px }` から転記"
 }
