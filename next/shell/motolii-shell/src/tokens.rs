@@ -40,11 +40,21 @@ pub struct Dimensions {
     /// **現時点でどの pane からも未消費**(mock 自体もこの断片では使っていない —
     /// バンド4段のうち予約されているだけの段)。
     pub micro_text: f32,
-    /// spacing scale の最小段。
+    /// spacing scale の最小段。**mock `ui-scale-and-z.html` の `--sp1`(2)と同値**
+    /// — Inspector の grid gap(X/Y/Z/Key の間隔、`inspector_pane.rs` の
+    /// `.spacing(dims.spacing_xs)`)と glyph 高の窪み(`row - spacing_xs` =
+    /// `--hit` 相当の `calc(row - 2*s*1px)`)の両方の出典(`tests/
+    /// inspector_pixel_fence.rs` が実測で確認)。
     pub spacing_xs: f32,
-    /// spacing scale の小段。
+    /// spacing scale の小段。**mock の `--sp2`(4)と同値** — ident 帯 padding
+    /// (縦)と値セル高の窪み(`row - spacing_s` = `.prow .v` の
+    /// `calc(row - 4*s*1px)`)の出典。
     pub spacing_s: f32,
-    /// spacing scale の中段。
+    /// spacing scale の中段。**mock の `--sp4`(8)と同値** — ident/cols/prow/
+    /// sec/hint の左右 padding の出典(`--sp3`(6、`.ptitle` の icon-to-text
+    /// gap)に対応する token は無い — 現実装は `.ptitle` の icon/em バッジを
+    /// 描かないので消費先が無いため未採番、`tests/inspector_pixel_fence.rs`
+    /// 冒頭の「対象外」に明記)。
     pub spacing_m: f32,
     /// spacing scale の大段。
     pub spacing_l: f32,
