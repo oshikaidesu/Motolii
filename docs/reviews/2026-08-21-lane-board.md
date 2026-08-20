@@ -8,7 +8,7 @@
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
 | トンマナ柵 | 実装(cargo) | lane-shell | pane の raw 色値・px 直書きを落とすテスト(裁定142、除外3種の列挙式) |
-| iced theme 結線 | 実装(cargo) | lane-engine | `.theme()` 未結線(実窓が Light フォールバック疑い)の調査・修正+柵 |
+| effect 縫い目調査 | 調査 | 読み専 | engine の effect 消費の挿入点候補+重み均等の切片割り案(vism 第1号の前段) |
 
 ## 完了・main 着地済み(実装)
 
@@ -22,6 +22,7 @@
 | 器具 Inspector 拡張 | screenshot 器具が Inspector を描く(線化の視覚検分ギャップ解消) |
 | transient drag 書き換え | 幽霊 redo エントリのワークアラウンド撤去。履歴構造的無傷 |
 | 線化第2弾+明暗リズム | Timeline ゼブラ×時間陰影(絶対時刻基準・パンで動かない)・Settings/chrome 線化・token 3ロール追加。egui グループ階層の構造メモ(第2波用)付き |
+| iced theme 結線 | 実窓の地色が OS 外観フォールバック(Light になり得た)→ tokens 由来 `Theme::custom` へ。watch 追随可・柵4本。注: palette の danger ロールは正本に無く status_warning を仮当て |
 | (supervisor 直) 色 token 追随 fix / 市松レーン回収 / 引き継ぎ123コミット着地 | main 前提の整地 |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
