@@ -16,6 +16,11 @@ serde_json.workspace = true
 # 実際に使う — 依存グラフには re_renderer 経由で既に入っているので、direct
 # dependency への昇格として扱う(発注書の「新依存は notify の direct 昇格のみ可」)。
 notify = "8"
+# `--fixture --screenshot` 器具(screenshot.rs)が PNG を書き出すのに使う。iced の
+# "image" feature が既に `image`(png codec 込み)を依存グラフへ引いているので、
+# workspace の Cargo.toml 自身が既に明記している「裁定117 が許す direct 昇格」
+# (notify と同じ扱い、R3 probe が先行昇格済み)であって新規の依存ではない。
+image.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true

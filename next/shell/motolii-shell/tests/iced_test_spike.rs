@@ -145,7 +145,9 @@ fn clicking_a_bar_in_the_timeline_canvas_publishes_select_via_raw_coordinates() 
     ui.point_at(iced::Point::new(x, y));
     let _ = ui.simulate([
         iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
-        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)),
+        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+            iced::mouse::Button::Left,
+        )),
     ]);
 
     let messages: Vec<_> = ui.into_messages().collect();
@@ -172,7 +174,9 @@ fn clicking_the_ruler_band_publishes_scrub_to_via_raw_coordinates() {
     ui.point_at(iced::Point::new(x, 5.0)); // ルーラー帯(高さ = row_height の内側)は常に scrub
     let _ = ui.simulate([
         iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
-        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)),
+        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+            iced::mouse::Button::Left,
+        )),
     ]);
 
     let messages: Vec<_> = ui.into_messages().collect();

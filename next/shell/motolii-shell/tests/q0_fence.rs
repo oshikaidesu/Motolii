@@ -119,7 +119,9 @@ fn click_at(element: iced::Element<'_, Message>, point: iced::Point) -> (bool, V
     ui.point_at(point);
     let statuses = ui.simulate([
         iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
-        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)),
+        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+            iced::mouse::Button::Left,
+        )),
     ]);
     let captured = statuses
         .iter()
@@ -141,7 +143,10 @@ fn scan_state(build: impl Fn() -> Shell, label: &str) -> Vec<String> {
         if bounds.width <= 0.0 || bounds.height <= 0.0 {
             continue;
         }
-        let point = iced::Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0);
+        let point = iced::Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        );
 
         let probe = build();
         let (captured, messages) = click_at(probe.view(), point);
@@ -261,7 +266,9 @@ impl Widget<Message, iced::Theme, iced::Renderer> for SilentTrap {
         shell: &mut WidgetShell<'_, Message>,
         _viewport: &iced::Rectangle,
     ) {
-        if let iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)) = event {
+        if let iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)) =
+            event
+        {
             if cursor.is_over(layout.bounds()) {
                 // わざと publish しない — これが柵の検出対象。
                 shell.capture_event();
@@ -298,10 +305,16 @@ fn the_fence_catches_a_captured_but_silent_widget() {
     let bounds = targets[0]
         .visible_bounds()
         .expect("SilentTrap の bounds が見える");
-    let point = iced::Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0);
+    let point = iced::Point::new(
+        bounds.x + bounds.width / 2.0,
+        bounds.y + bounds.height / 2.0,
+    );
 
     let (captured, messages) = click_at(build_element(), point);
-    assert!(captured, "SilentTrap 自体が capture していない(前提が崩れている)");
+    assert!(
+        captured,
+        "SilentTrap 自体が capture していない(前提が崩れている)"
+    );
     assert!(
         messages.is_empty(),
         "SilentTrap のはずが Message を出している(前提が崩れている): {messages:?}"

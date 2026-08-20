@@ -1,7 +1,39 @@
 {
-  "$comment": "寸法トークンの機械可読正本(裁定117)。値は Ableton Live 12 実測から写す — ここで発明しない。出典: docs/reviews/2026-08-19-ableton-density-measurements.md。debug ビルドはこのファイルを直接読み、notify で変更を検知して再読込する。release は include_str! で埋め込み、file I/O は行わない。raw 値の直書きは禁止 — 全 pane は `motolii_shell::tokens::Tokens` 経由でここを読む。",
+  "$comment": "寸法トークンの機械可読正本(裁定117)。値は Ableton Live 12 実測から写す — ここで発明しない。出典: docs/reviews/2026-08-19-ableton-density-measurements.md。実測に無い値は近縁値から導出し、各キーの `_note_*` に出典・根拠を書く(コメントはJSONに書けないため)。debug ビルドはこのファイルを直接読み、notify で変更を検知して再読込する。release は include_str! で埋め込み、file I/O は行わない。raw 値の直書きは禁止 — 全 pane は `motolii_shell::tokens::Tokens` 経由でここを読む。",
+
   "row_height": 20,
+  "_note_row_height": "Ableton Arrangement トラック行高の実測値そのもの(20)。裁定117以来の既存値",
+
   "transport_band": 30,
+  "_note_transport_band": "Ableton Control Bar 帯の実測値そのもの(30)。裁定117以来の既存値",
+
+  "title_text": 15,
+  "_note_title_text": "実測表に直接の title 段は無い。panel header/section title 用の一段大きい文字として body_text(13、実測)から+2して導出 — Ableton 本文帯 10〜13 の上限に接する程度に留め、任意の飛躍をしない",
+
   "body_text": 13,
-  "small_text": 11
+  "_note_body_text": "実測表『本文相当文字 推定10〜13(芯7.5)』のうち、第1波で採用済みの上限値(裁定117以来の既存値)",
+
+  "caption_text": 11,
+  "_note_caption_text": "実測表『本文相当文字』の下限寄り。旧 small_text から改名(型スケール語彙 title/body/caption/micro への統一、2026-08-20)。値そのものは裁定117以来変更なし",
+
+  "micro_text": 9,
+  "_note_micro_text": "実測表に直接の micro 段は無い。caption(11)からさらに1段下げた最小可読帯として、本文帯の芯(7.5)を下限の目安に caption-2 で導出 — 発明ではなく caption からの機械的な一段下げ",
+
+  "spacing_xs": 2,
+  "_note_spacing_xs": "実測ではなく、既存コード(timeline_pane.rs の bar 縦インセット `row_top + 2.0` / ルーラー目盛りラベルの縦オフセット `x, 0.0` 系)で既に使われていた値を採番しただけ。新規発明ではなく現状追認",
+
+  "spacing_s": 4,
+  "_note_spacing_s": "既存コード(timeline_pane.rs の bar 高さインセット `row_height - 4.0` / ラベルの横オフセット `start_x + 4.0`)の既存慣用値を採番",
+
+  "spacing_m": 8,
+  "_note_spacing_m": "既存コード(lib.rs の `column![...].spacing(8)`)の既存慣用値を採番",
+
+  "spacing_l": 12,
+  "_note_spacing_l": "既存コード(lib.rs の `column![...].padding(12)`)の既存慣用値を採番",
+
+  "border_width": 1.0,
+  "_note_border_width": "ui-visual-language の規約『フラット・細罫線』= 1px hairline。実測というより意匠規約そのものの値(発明ではなく既定の視覚言語)",
+
+  "panel_header_height": 29,
+  "_note_panel_header_height": "実測表『Browser ツールバー』の実測値(29)を転用。旧実装は独自に34を使っていた(第2波レーンFでも『未変更』のまま据え置かれていた暫定値)が、指示『値の初期値はAbleton実測から』に従い実測値へ差し替える — 34→29は本レーンの新しい適用で、他chromeの見え方に影響し得るため終了報告の設計判断に列挙する"
 }

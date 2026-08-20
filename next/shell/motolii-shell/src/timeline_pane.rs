@@ -58,7 +58,10 @@ pub fn rows(store: &StoreView<'_>, session: &Session) -> Vec<RowProjection> {
 }
 
 /// comp フレーム → x px。`duration_frames <= 0` の空 comp では常に 0。
-fn frame_to_x(frame: i64, width: f32, duration_frames: i64) -> f32 {
+///
+/// `pub(crate)`: screenshot 器具(`crate::screenshot`)が Timeline canvas と同じ
+/// x 座標計算を使うため(マーカー・bar の位置を2箇所で別の式にしない)。
+pub(crate) fn frame_to_x(frame: i64, width: f32, duration_frames: i64) -> f32 {
     if duration_frames <= 0 || width <= 0.0 {
         return 0.0;
     }
@@ -137,12 +140,7 @@ pub struct TimelinePane {
 }
 
 impl TimelinePane {
-    pub fn new(
-        store: &StoreView<'_>,
-        session: &Session,
-        dims: Dimensions,
-        colors: Colors,
-    ) -> Self {
+    pub fn new(store: &StoreView<'_>, session: &Session, dims: Dimensions, colors: Colors) -> Self {
         let composition = store.composition().ok().flatten();
         Self {
             rows: rows(store, session),
@@ -246,6 +244,10 @@ impl canvas::Program<Message> for TimelinePane {
         let width = bounds.width;
         let ruler_height = self.ruler_height();
         let row_height = self.dims.row_height;
+        // 罫線幅の倍数で意味を分ける — 1x: ルーラー目盛り(hairline)、1.5x: playhead、
+        // 2x: マーカー(最も強い accent)。新しい寸法トークンを増やさず、単一の
+        // `border_width` から比で導出する(裁定117 の「寸法は token 経由」の範囲内)。
+        let hairline = self.dims.border_width;
 
         // 背景。
         frame.fill_rectangle(Point::ORIGIN, bounds.size(), self.colors.surface_panel);
@@ -268,7 +270,7 @@ impl canvas::Program<Message> for TimelinePane {
                     &marker_path,
                     canvas::Stroke::default()
                         .with_color(self.colors.way_timeline)
-                        .with_width(2.0),
+                        .with_width(hairline * 2.0),
                 );
             }
         }
@@ -278,10 +280,12 @@ impl canvas::Program<Message> for TimelinePane {
             let row_top = ruler_height + row_height * index as f32;
 
             if row.selected {
+                // 状態: 選択(`state_selected`)。hover(`surface_hover`、中立グレー)とは
+                // 別ロール — 選択は accent 味、hover は明度差だけ(意味色ロールの区別)。
                 frame.fill_rectangle(
                     Point::new(0.0, row_top),
                     Size::new(width, row_height),
-                    self.colors.surface_hover,
+                    self.colors.state_selected,
                 );
             }
 
@@ -294,8 +298,11 @@ impl canvas::Program<Message> for TimelinePane {
                 self.colors.way_timeline
             };
             frame.fill_rectangle(
-                Point::new(start_x, row_top + 2.0),
-                Size::new((end_x - start_x).max(1.0), (row_height - 4.0).max(1.0)),
+                Point::new(start_x, row_top + self.dims.spacing_xs),
+                Size::new(
+                    (end_x - start_x).max(1.0),
+                    (row_height - self.dims.spacing_s).max(1.0),
+                ),
                 bar_color,
             );
 
@@ -311,9 +318,9 @@ impl canvas::Program<Message> for TimelinePane {
             };
             frame.fill_text(canvas::Text {
                 content: label,
-                position: Point::new(start_x + 4.0, row_top + row_height / 2.0),
+                position: Point::new(start_x + self.dims.spacing_s, row_top + row_height / 2.0),
                 color: label_color,
-                size: iced::Pixels(self.dims.small_text),
+                size: iced::Pixels(self.dims.caption_text),
                 align_y: iced::alignment::Vertical::Center,
                 ..Default::default()
             });
@@ -321,13 +328,15 @@ impl canvas::Program<Message> for TimelinePane {
 
         // playhead(Session が正本)。
         let playhead_x = frame_to_x(self.playhead, width, self.duration_frames);
-        let playhead_path =
-            canvas::Path::line(Point::new(playhead_x, 0.0), Point::new(playhead_x, bounds.height));
+        let playhead_path = canvas::Path::line(
+            Point::new(playhead_x, 0.0),
+            Point::new(playhead_x, bounds.height),
+        );
         frame.stroke(
             &playhead_path,
             canvas::Stroke::default()
                 .with_color(self.colors.action_active)
-                .with_width(1.5),
+                .with_width(hairline * 1.5),
         );
 
         vec![frame.into_geometry()]
@@ -368,19 +377,21 @@ impl TimelinePane {
         for tick in 0..=DIVISIONS {
             let frame_no = (self.duration_frames - 1).max(0) * tick / DIVISIONS;
             let x = frame_to_x(frame_no, width, self.duration_frames);
-            let tick_path =
-                canvas::Path::line(Point::new(x, height - 4.0), Point::new(x, height));
+            let tick_path = canvas::Path::line(
+                Point::new(x, height - self.dims.spacing_s),
+                Point::new(x, height),
+            );
             frame.stroke(
                 &tick_path,
                 canvas::Stroke::default()
                     .with_color(self.colors.border_strong)
-                    .with_width(1.0),
+                    .with_width(self.dims.border_width),
             );
             frame.fill_text(canvas::Text {
                 content: frame_no.to_string(),
-                position: Point::new(x + 2.0, 0.0),
+                position: Point::new(x + self.dims.spacing_xs, 0.0),
                 color: self.colors.text_secondary,
-                size: iced::Pixels(self.dims.small_text),
+                size: iced::Pixels(self.dims.caption_text),
                 ..Default::default()
             });
         }
