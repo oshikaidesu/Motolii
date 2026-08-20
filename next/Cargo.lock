@@ -4766,6 +4766,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "r3-pointcloud"
+version = "0.1.0"
+dependencies = [
+ "glam 0.30.10",
+ "image",
+ "macaw",
+ "motolii-compositor",
+ "motolii-testkit",
+ "re_renderer",
+ "thiserror 2.0.20",
+ "wgpu 29.0.4",
+]
+
+[[package]]
 name = "rand"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

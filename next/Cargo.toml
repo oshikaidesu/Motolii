@@ -20,6 +20,7 @@ members = [
     "probes/r0-store-edit",
     "probes/r1-frame-throughput",
     "probes/r2-view-projection",
+    "probes/r3-pointcloud",
 ]
 
 [workspace.package]
@@ -65,6 +66,12 @@ iced = { version = "0.14", features = ["wgpu", "advanced", "image", "canvas"] }
 # 依存グラフには re_renderer 経由で既に入っている(裁定117 が許す direct 昇格)。
 # デザイン値の外出しの debug watch(`motolii-shell/src/tokens.rs`)だけが使う。
 notify = "8"
+# iced の "image" feature が既に `image`(png codec 込み)を依存グラフへ引いている
+# (Cargo.lock 実測: version 0.25.10、png/gif/tiff 等のフル codec)。R3 probe が
+# PNG を書き出すのに同じ crate を direct dependency へ昇格するのは、上の notify と
+# 同じ「裁定117 が許す direct 昇格」であって新規の依存ではない。png codec だけ要る
+# ので default-features は切る。
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 # ---------------------------------------------------------------------------
 # Motolii 自身(旧 workspace からの移植。再実装ではない)

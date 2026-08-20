@@ -51,6 +51,7 @@ MV 制作のためのモーショングラフィック指向コンポジット�
 | `probes/r0-store-edit` | `owns:` | store が編集に耐えるか |
 | `probes/r1-frame-throughput` | `owns:` | 1080p 40枚が破綻しないか |
 | `probes/r2-view-projection` | `owns:` | 毎フレーム投影が予算に収まるか |
+| `probes/r3-pointcloud` | `owns:` | 実データの PLY 点群が point_cloud renderer で撮れ、カメラ移動で視差が出るか(D12) |
 
 `shell/`(iced)は骨が立っている(store 投影+Session のみ。2026-08-20 実機起動済み)。
 
