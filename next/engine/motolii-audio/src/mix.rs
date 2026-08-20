@@ -254,6 +254,7 @@ mod tests {
             t: RationalTime::ZERO,
             value: Value::F64(value),
             interp: Interp::Hold,
+            spatial: None,
         });
         Some(track)
     }
@@ -443,11 +444,13 @@ mod tests {
             t: RationalTime::ZERO,
             value: Value::F64(0.5),
             interp: Interp::Hold,
+            spatial: None,
         });
         track.insert(Keyframe {
             t: RationalTime::try_new(2, CANONICAL_SAMPLE_RATE as i64).unwrap(),
             value: Value::F64(2.0),
             interp: Interp::Hold,
+            spatial: None,
         });
         let mid = RationalTime::try_new(1, CANONICAL_SAMPLE_RATE as i64).unwrap();
         let expected = match track.eval(mid) {
@@ -485,6 +488,7 @@ mod tests {
             t: RationalTime::ZERO,
             value: Value::F64(0.2),
             interp: Interp::Linear,
+            spatial: None,
         });
         track.insert(Keyframe {
             t: RationalTime::try_new(64, CANONICAL_SAMPLE_RATE as i64).unwrap(),
@@ -495,6 +499,7 @@ mod tests {
                 x2: 0.75,
                 y2: 0.9,
             },
+            spatial: None,
         });
         let source = MixSource {
             pcm: a,

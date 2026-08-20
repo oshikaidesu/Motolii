@@ -88,6 +88,7 @@ fn media_layers_become_mix_sources() {
         t: RationalTime::ZERO,
         value: Value::F64(0.5),
         interp: Interp::Hold,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer: clip_layer,
