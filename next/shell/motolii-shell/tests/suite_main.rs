@@ -30,5 +30,7 @@ mod inspector_pixel_fence;
 mod q0_fence;
 #[path = "suite/settings_drive.rs"]
 mod settings_drive;
+#[path = "suite/theme_wiring_fence.rs"]
+mod theme_wiring_fence;
 #[path = "suite/ui_scale_fence.rs"]
 mod ui_scale_fence;

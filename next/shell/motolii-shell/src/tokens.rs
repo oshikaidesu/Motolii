@@ -371,6 +371,56 @@ impl Colors {
     }
 }
 
+/// `iced::application` の `.theme()` に渡す、tokens 由来の `iced::Theme`。
+///
+/// **未結線だと何が起きるか**(実測 — `next/` workspace の `iced` は crates.io
+/// 版 0.14.0 そのもの、fork/patch なし。`cargo metadata` で確認済み):
+/// `.theme()` を呼ばないと `Program::theme` の既定実装
+/// (`iced_program-0.14.0/src/lib.rs` 100-106行)が常に `None` を返し、winit 側は
+/// `<Theme as theme::Base>::default(system_theme)`
+/// (`iced_winit-0.14.0/src/window/state.rs` 60行)へフォールバックする。
+/// `system_theme` は OS の外観設定(`event_loop.system_theme()`、
+/// `iced_winit-0.14.0/src/lib.rs` 182行)から来るが、取得できない場合は
+/// `Mode::None` → `iced_core-0.14.0/src/theme.rs` 277-280行の
+/// `Mode::None | Mode::Light => Self::Light` で **iced 組み込みの
+/// `Theme::Light`**(tokens と無関係な既定パレット)に落ちる。OS が Dark でも
+/// 得られるのは iced 組み込みの `Theme::Dark` であって、`Colors`(このモジュール
+/// の tokens 正本)由来の色ではない — どちらの分岐でも実窓の地色
+/// (`theme::Style::background_color` = `extended_palette().background.base.color`、
+/// `iced_core-0.14.0/src/theme.rs` 291-336行の `Base::base`/`default`)は
+/// tokens と切れている。
+///
+/// 直書き禁止(裁定142)なので raw な `Color::from_rgb(..)` を並べず、
+/// `Colors` から `iced::theme::palette::Palette`(background/text/primary/
+/// success/warning/danger の6色だけを持つ「種」— `iced_core-0.14.0/src/
+/// theme/palette.rs` 9-22行)を組んで `Theme::custom` に渡す。`Theme::custom`
+/// は内部で `palette::Extended::generate` を呼び、そこから widget 既定色一式
+/// (`Background`/`Primary`/… の各段)を導出する(同ファイル 395-419行の
+/// `Extended::generate`、上流の標準経路)。
+///
+/// **danger ロールが正本に無い**(`Colors` のフィールド一覧参照) —
+/// `status_warning` を仮当てする(発明ではなく既存ロールの再利用。危険色が
+/// 要る場面が実装されたら正本側にロールを起こす)。
+///
+/// **watch 追随**: この関数は `Colors` の純粋関数(ファイル I/O をしない)。
+/// `.theme(|state| theme_from_colors(&state.colors()))` の形で結線すれば、
+/// winit は毎 `synchronize`(`iced_winit-0.14.0/src/window/state.rs` 219行、
+/// update のたびに走る)でこのクロージャを呼び直すので、
+/// `Message::TokensFileChanged` で `Shell.tokens` が debug watch 経由で
+/// 差し替わった次の再描画には新しい色がそのまま反映される — 追加の配線は
+/// 要らない。
+pub fn theme_from_colors(colors: &Colors) -> iced::Theme {
+    let palette = iced::theme::palette::Palette {
+        background: colors.surface_app,
+        text: colors.text_primary,
+        primary: colors.action_active,
+        success: colors.status_ok,
+        warning: colors.status_warning,
+        danger: colors.status_warning,
+    };
+    iced::Theme::custom("Motolii Dark".to_owned(), palette)
+}
+
 /// DTCG の `{"$value": {"components": [r,g,b]}}` を辿って `Color` を取り出す。
 fn color_at(root: &serde_json::Value, path: &[&str]) -> Result<Color, String> {
     let mut node = root;

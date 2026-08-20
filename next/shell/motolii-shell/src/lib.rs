@@ -992,6 +992,13 @@ impl Shell {
         self.tokens.dims.scaled(self.tokens.ui_scale)
     }
 
+    /// 現在の色トークン。`main.rs` の `iced::application(...).theme(...)` 結線
+    /// (`tokens::theme_from_colors` 参照)が窓の外から読む唯一の口 — `dims()`
+    /// と対になる公開アクセサ(`tokens` フィールド自体は private のまま)。
+    pub fn colors(&self) -> Colors {
+        self.tokens.colors
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         // pane が受け取るのは不変の投影だけ。
         let store = self.doc.view();

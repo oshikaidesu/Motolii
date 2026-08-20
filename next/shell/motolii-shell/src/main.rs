@@ -57,5 +57,9 @@ fn main() -> iced::Result {
     )
     .title(motolii_shell::Shell::title)
     .subscription(motolii_shell::Shell::subscription)
+    // `.theme(...)` が無いと `Program::theme` の既定実装が常に `None` を返し、
+    // 実窓は tokens と無関係な iced 組み込み Light/Dark(OS 設定依存)へ落ちる
+    // (`tokens::theme_from_colors` の doc comment に該当行の引用あり)。
+    .theme(|shell: &motolii_shell::Shell| motolii_shell::tokens::theme_from_colors(&shell.colors()))
     .run()
 }
