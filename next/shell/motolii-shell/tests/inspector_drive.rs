@@ -34,6 +34,8 @@ fn selecting_a_layer_shows_transform_and_attrs_rows() {
     // 新規 layer は attrs 未設定なので name は空(既定)。
     assert_eq!(selection.attrs.name, "");
     assert!(!selection.attrs.hidden);
+    // ident 帯の種別 — `AddLayer`(lib.rs)は `LayerSource::Solid` を置く。
+    assert_eq!(selection.kind, "solid", "ident 帯の種別ラベルが実データと違う");
 }
 
 /// **編集→store が変わる / undo 1回で戻る**(静的値、Scale X)。

@@ -577,10 +577,19 @@ impl Shell {
         &self.tokens
     }
 
+    /// `ui_scale` を適用した寸法。**全 pane・全 instrument(`screenshot.rs` 含む)は
+    /// ここ経由で寸法を読む** — `tokens.dims` を直接読まない。`ui_scale` を掛ける
+    /// のはこの関数(=[`tokens::Dimensions::scaled`] を呼ぶ唯一の場所)だけ
+    /// (発注書「適用点1箇所」)。
+    pub fn dims(&self) -> Dimensions {
+        self.tokens.dims.scaled(self.tokens.ui_scale)
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         // pane が受け取るのは不変の投影だけ。
         let store = self.doc.view();
-        let dims = self.tokens.dims;
+        // `ui_scale` 適用済み(`Shell::dims` — 適用点1箇所)。
+        let dims = self.dims();
         let colors = self.tokens.colors;
         let timeline = timeline_pane::TimelinePane::new(&store, &self.session, dims, colors);
         // Inspector は canvas を使わない標準 widget 構成(inspector_pane.rs 冒頭の
@@ -612,7 +621,7 @@ impl Shell {
     }
 
     fn header(&self) -> Element<'_, Message> {
-        let dims = self.tokens.dims;
+        let dims = self.dims();
         let colors = self.tokens.colors;
         row![
             button(text("Undo").size(dims.body_text))

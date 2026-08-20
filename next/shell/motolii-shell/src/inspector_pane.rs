@@ -30,7 +30,8 @@
 
 use motolii_core::RationalTime;
 use motolii_store::{
-    property, Interp, Keyframe, KeyframeTrack, LayerId, PropertyId, StoreError, StoreView, Value,
+    property, Interp, Keyframe, KeyframeTrack, LayerId, LayerSource, PropertyId, StoreError,
+    StoreView, Value,
 };
 
 use crate::tokens::{Colors, Dimensions};
@@ -190,8 +191,25 @@ pub struct AttrsProjection {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectionProjection {
     pub layer: LayerId,
+    /// ident 帯の種別ラベル(mock の `.ident s` = 「clip · 0 shared FX」相当)。
+    /// **`LayerSource` の実データから引く** — mock の「shared FX」は store に
+    /// 対応する概念が無い(effect に "shared" フラグは無い)ので、種別だけ載せ、
+    /// FX 件数は捏造しない(M13: 無い意味を有るふりで出さない)。
+    pub kind: &'static str,
     pub transform: Vec<TransformRowProjection>,
     pub attrs: AttrsProjection,
+}
+
+/// [`SelectionProjection::kind`] の出典。`LayerSource` の variant 名をそのまま
+/// 小文字化した語彙(発明ではなく store の型そのものを読める言葉にしただけ)。
+fn source_kind_label(source: &LayerSource) -> &'static str {
+    match source {
+        LayerSource::Solid { .. } => "solid",
+        LayerSource::Media { .. } => "media",
+        LayerSource::Null => "null",
+        LayerSource::Shape => "shape",
+        LayerSource::Text => "text",
+    }
 }
 
 fn scalar_component(
@@ -364,8 +382,14 @@ pub fn project(
         blend_mode: format!("{:?}", attrs.blend_mode),
     };
 
+    let kind = store
+        .meta(layer)?
+        .map(|meta| source_kind_label(&meta.source))
+        .unwrap_or("layer");
+
     Ok(Some(SelectionProjection {
         layer,
+        kind,
         transform: vec![
             position_row,
             scale_row,
@@ -381,7 +405,7 @@ pub fn project(
 // view — StoreView の投影(SelectionProjection)と下書きだけを受け取る。書けない。
 // ---------------------------------------------------------------------------
 
-use iced::widget::{button, column, container, row as row_widget, scrollable, text, text_input};
+use iced::widget::{button, column, container, row as row_widget, scrollable, text, text_input, Space};
 use iced::{Element, Length};
 
 pub fn view(
@@ -391,12 +415,15 @@ pub fn view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
+    // **`--section`(26)**: mock の ptitle(パネルタイトル)は section 見出しと
+    // 同じ高さトークンを共有する(`inspector_section_header_height`) — 旧実装は
+    // Shell 全体の `panel_header_height`(29、Ableton実測)を誤って流用していた。
     let header = container(
         text("Inspector")
             .size(dims.title_text)
             .color(colors.text_primary),
     )
-    .height(Length::Fixed(dims.panel_header_height))
+    .height(Length::Fixed(dims.inspector_section_header_height))
     .padding([0.0, dims.spacing_m])
     .align_y(iced::alignment::Vertical::Center)
     .style(move |_theme| container::Style {
@@ -439,6 +466,11 @@ fn empty_state(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     .into()
 }
 
+/// **視覚正本 `next/reference/mocks/ui-scale-and-z.html` の構造をそのまま写す**:
+/// ident 帯 → column header 行 → TRANSFORM(Position/Scale/Rotation/Anchor)→
+/// APPEARANCE(Opacity)→ ATTRS(Blend)→ hint 行。`selection.transform` 自体の
+/// 並び(既存 `inspector_drive.rs` が固定している)は変えず、view 側で
+/// ラベルによって TRANSFORM/APPEARANCE の見出しへ振り分けるだけ。
 fn selected_body(
     selection: &SelectionProjection,
     field_draft: Option<&FieldDraft>,
@@ -446,18 +478,74 @@ fn selected_body(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let name_label = if selection.attrs.name.is_empty() {
-        format!("layer {}", selection.layer.0)
-    } else {
-        selection.attrs.name.clone()
-    };
-    let summary = container(
-        text(name_label)
-            .size(dims.body_text)
-            .color(colors.text_primary),
+    let mut rows = column![
+        ident_band(selection, name_draft, dims, colors),
+        column_header_row(dims, colors),
+        section_header("TRANSFORM", dims, colors),
+    ];
+    for row_projection in selection.transform.iter().filter(|r| r.label != "Opacity") {
+        rows = rows.push(transform_row(row_projection, field_draft, dims, colors));
+    }
+    rows = rows.push(section_header("APPEARANCE", dims, colors));
+    for row_projection in selection.transform.iter().filter(|r| r.label == "Opacity") {
+        rows = rows.push(transform_row(row_projection, field_draft, dims, colors));
+    }
+    rows = rows.push(attrs_section(&selection.attrs, dims, colors));
+    rows = rows.push(hint_row(dims, colors));
+
+    scrollable(rows).height(Length::Fill).into()
+}
+
+/// mock の `.ident` 帯: 名前(編集可)+ 種別(読み取り専用)+ M/S glyph。
+///
+/// **M は結線する**(supervisor 訂正、2026-08-20): `LayerAttrs.hidden` は既に
+/// `Intent::SetAttrs` で動いている(旧「Hidden [On/Off]」行と同じ Message)。
+/// M glyph へ置き換えることで重複 chrome を残さない。
+///
+/// **S はまだ出さない**: solo(非 solo 層を描かない)は engine/store 未実装
+/// (別レーンが実装中)。幅の予約だけ([`reserved_glyph`]、内容も border も無い —
+/// 「押せそうに見えて押せない」を Q0 的に作らない)。
+fn ident_band(
+    selection: &SelectionProjection,
+    name_draft: Option<&str>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let name_text = name_draft
+        .map(|draft| draft.to_owned())
+        .unwrap_or_else(|| selection.attrs.name.clone());
+    let placeholder = format!("layer {}", selection.layer.0);
+
+    // 名前欄は mock の `.ident b`(bold, t-base)の役目を持つが、実体は
+    // `text_input`(既に結線済みの改名 — `Message::InspectorNameInput/Submit`)。
+    // 未フォーカス時は枠を消して静止テキストに見せる([`name_input_style`])。
+    let name_field = text_input(&placeholder, &name_text)
+        .on_input(Message::InspectorNameInput)
+        .on_submit(Message::InspectorNameSubmit)
+        .size(dims.body_text)
+        .style(move |_theme, status| name_input_style(dims, colors, status));
+
+    let subtitle = text(selection.kind)
+        .size(dims.caption_text)
+        .color(colors.text_muted);
+
+    let identity = column![name_field, subtitle]
+        .spacing(0.0)
+        .width(Length::Fill);
+
+    let glyphs = row_widget![
+        mute_glyph(dims, colors, selection.attrs.hidden),
+        reserved_glyph(dims),
+    ]
+    .spacing(dims.spacing_xs)
+    .align_y(iced::alignment::Vertical::Center);
+
+    container(
+        row_widget![identity, glyphs]
+            .spacing(dims.spacing_s)
+            .align_y(iced::alignment::Vertical::Center),
     )
-    .height(Length::Fixed(dims.inspector_summary_height))
-    .padding(dims.spacing_m)
+    .padding([dims.spacing_s, dims.spacing_m])
     .style(move |_theme| container::Style {
         background: Some(iced::Background::Color(colors.surface_raised)),
         border: iced::Border {
@@ -466,21 +554,46 @@ fn selected_body(
             radius: 0.0.into(),
         },
         ..container::Style::default()
-    });
+    })
+    .into()
+}
 
-    let mut rows = column![summary, section_header("TRANSFORM", dims, colors)];
-    for row_projection in &selection.transform {
-        rows = rows.push(transform_row(row_projection, field_draft, dims, colors));
-    }
-    rows = rows.push(attrs_section(&selection.attrs, name_draft, dims, colors));
+/// mock の `.cols` 行: 「Property X Y Z Key」を1度だけ出す。各 `.prow` 側は
+/// もう軸ラベルを繰り返さない(旧実装は cell ごとに X/Y/Z を再掲していた —
+/// mock にその繰り返しは無い)。
+fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    let value_width = Length::Fixed(dims.inspector_value_width);
+    let axis = |label: &'static str| {
+        text(label)
+            .size(dims.caption_text)
+            .color(colors.text_muted)
+            .width(value_width)
+            .align_x(iced::alignment::Horizontal::Center)
+    };
 
-    scrollable(rows).height(Length::Fill).into()
+    row_widget![
+        text("Property")
+            .size(dims.caption_text)
+            .color(colors.text_muted)
+            .width(Length::Fill),
+        row_widget![axis("X"), axis("Y"), axis("Z")].spacing(dims.spacing_xs),
+        text("Key")
+            .size(dims.caption_text)
+            .color(colors.action_active)
+            .width(Length::Fixed(dims.inspector_glyph_width))
+            .align_x(iced::alignment::Horizontal::Center),
+    ]
+    .spacing(dims.spacing_xs)
+    .height(Length::Fixed(dims.inspector_row_height))
+    .align_y(iced::alignment::Vertical::Center)
+    .padding([0.0, dims.spacing_m])
+    .into()
 }
 
 fn section_header(label: &'static str, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     container(
         text(label)
-            .size(dims.micro_text)
+            .size(dims.caption_text)
             .color(colors.text_muted),
     )
     .height(Length::Fixed(dims.inspector_section_header_height))
@@ -493,6 +606,10 @@ fn section_header(label: &'static str, dims: Dimensions, colors: Colors) -> Elem
     .into()
 }
 
+/// 発注書の固定列グリッド `Property | X | Y | Z | Key` = `1fr + 3×value幅 + hit`。
+/// scalar 行(Opacity)は mock どおり3列目(Z の位置)へ値を置き、残り2列は
+/// 空箱で埋める([`blank_value_cell`] — `absent_component` の「このモデルに
+/// 無い軸」とは別の意味で、単に scalar 行が3値グリッドに収まるための穴埋め)。
 fn transform_row(
     row_projection: &TransformRowProjection,
     field_draft: Option<&FieldDraft>,
@@ -500,29 +617,38 @@ fn transform_row(
     colors: Colors,
 ) -> Element<'static, Message> {
     let label = text(row_projection.label)
-        .size(dims.caption_text)
+        .size(dims.body_text)
         .color(colors.text_primary)
-        .width(Length::Fixed(dims.inspector_label_width));
+        .width(Length::Fill);
 
-    let cells: Vec<Element<'static, Message>> = match &row_projection.value {
+    let value_cells: Vec<Element<'static, Message>> = match &row_projection.value {
         RowValue::Vector(components) => components
             .iter()
-            .map(|slot| component_cell(slot, field_draft, row_projection.decimals, dims, colors))
+            .map(|slot| value_cell(slot, field_draft, row_projection.decimals, dims, colors))
             .collect(),
-        RowValue::Scalar(slot) => {
-            vec![component_cell(slot, field_draft, row_projection.decimals, dims, colors)]
-        }
+        RowValue::Scalar(slot) => vec![
+            blank_value_cell(dims, colors),
+            blank_value_cell(dims, colors),
+            value_cell(slot, field_draft, row_projection.decimals, dims, colors),
+        ],
     };
 
-    row_widget![label, row_widget(cells).spacing(dims.spacing_xs)]
-        .spacing(dims.spacing_s)
-        .height(Length::Fixed(dims.inspector_row_height))
-        .align_y(iced::alignment::Vertical::Center)
-        .padding([0.0, dims.spacing_m])
-        .into()
+    row_widget![
+        label,
+        row_widget(value_cells).spacing(dims.spacing_xs),
+        reserved_glyph(dims), // Key 列 — keyframe UI 未実装(Q0)。幅の予約だけ、空のまま。
+    ]
+    .spacing(dims.spacing_xs)
+    .height(Length::Fixed(dims.inspector_row_height))
+    .align_y(iced::alignment::Vertical::Center)
+    .padding([0.0, dims.spacing_m])
+    .into()
 }
 
-fn component_cell(
+/// 発注書「読み取り専用値は編集セルと同一形状で色だけ落とす」を1箇所で守る —
+/// absent(muted)・editable(text_input)・animated(accent, 表示のみ)のどれでも
+/// 同じ箱(背景 `surface_app`・同じ幅高さ)を作る。
+fn value_cell(
     slot: &ComponentSlot,
     field_draft: Option<&FieldDraft>,
     decimals: usize,
@@ -530,141 +656,225 @@ fn component_cell(
     colors: Colors,
 ) -> Element<'static, Message> {
     if !slot.present {
-        // mock の `emptyComponent`(Turbulent Displace Offset の Z)と同じ意味 —
-        // このモデルに無い軸だと明示する(空欄ではなく `—`)。
-        return text("—")
-            .size(dims.caption_text)
-            .color(colors.text_muted)
-            .width(Length::Fixed(dims.inspector_value_width))
-            .into();
+        // mock の absent 表現と同じ意味 — このモデルに無い軸だと明示する
+        // (空欄ではなく「—」)。読み取り専用値と同じ箱形。
+        return boxed_value("—".to_owned(), colors.text_muted, dims, colors);
     }
 
-    let displayed = match (slot.field, field_draft) {
-        (Some(field), Some(draft)) if draft.field == field => draft.text.clone(),
-        _ => format_number(slot.value, decimals),
-    };
-
-    let value_widget: Element<'static, Message> = match (slot.editable, slot.field) {
-        (true, Some(field)) => text_input("", &displayed)
-            .on_input(move |text| Message::InspectorFieldInput(field, text))
-            .on_submit(Message::InspectorFieldSubmit(field))
-            .size(dims.caption_text)
-            .width(Length::Fill)
-            .into(),
+    match (slot.editable, slot.field) {
+        (true, Some(field)) => {
+            let displayed = match field_draft {
+                Some(draft) if draft.field == field => draft.text.clone(),
+                _ => format_number(slot.value, decimals),
+            };
+            container(
+                text_input("", &displayed)
+                    .on_input(move |text| Message::InspectorFieldInput(field, text))
+                    .on_submit(Message::InspectorFieldSubmit(field))
+                    .size(dims.body_text)
+                    .width(Length::Fill)
+                    .align_x(iced::alignment::Horizontal::Center)
+                    .style(move |_theme, status| value_input_style(dims, colors, status)),
+            )
+            .width(Length::Fixed(dims.inspector_value_width))
+            .height(Length::Fixed(value_cell_height(dims)))
+            .align_y(iced::alignment::Vertical::Center)
+            .into()
+        }
         // animated(2キー以上) — **表示のみと明示**(理由つきdisabledではなく、
-        // そもそも編集 control を出さない。accent 色で「動いている値」と分かる形)。
-        _ => text(displayed)
-            .size(dims.caption_text)
-            .color(colors.action_active)
-            .width(Length::Fill)
-            .into(),
-    };
-
-    row_widget![
-        text(slot.axis)
-            .size(dims.micro_text)
-            .color(colors.text_muted),
-        value_widget,
-    ]
-    .spacing(dims.spacing_xs)
-    .width(Length::Fixed(dims.inspector_value_width))
-    .align_y(iced::alignment::Vertical::Center)
-    .into()
+        // そもそも編集 control を出さない。accent 色で「動いている値」と分かる —
+        // 箱形自体は編集セルと同じ)。
+        _ => boxed_value(format_number(slot.value, decimals), colors.action_active, dims, colors),
+    }
 }
 
-fn attrs_section(
-    attrs: &AttrsProjection,
-    name_draft: Option<&str>,
+/// mock `.prow .v { height: calc(var(--row) - 4*var(--s)*1px) }` の `4` は
+/// `spacing_s`(既定4)と同じ値 — スケール済みの `spacing_s` を使うことで
+/// `ui_scale` を再度掛け直さずに済む(適用点は `Dimensions::scaled` の1箇所だけ)。
+fn value_cell_height(dims: Dimensions) -> f32 {
+    (dims.inspector_row_height - dims.spacing_s).max(1.0)
+}
+
+fn boxed_value(
+    content: String,
+    color: iced::Color,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let name_text = name_draft
-        .map(|draft| draft.to_owned())
-        .unwrap_or_else(|| attrs.name.clone());
-
-    let name_row = row_widget![
-        text("Name")
-            .size(dims.caption_text)
-            .color(colors.text_primary)
-            .width(Length::Fixed(dims.inspector_label_width)),
-        text_input("", &name_text)
-            .on_input(Message::InspectorNameInput)
-            .on_submit(Message::InspectorNameSubmit)
-            .size(dims.caption_text),
-    ]
-    .spacing(dims.spacing_s)
-    .height(Length::Fixed(dims.inspector_row_height))
+    container(
+        text(content)
+            .size(dims.body_text)
+            .color(color)
+            .align_x(iced::alignment::Horizontal::Center)
+            .align_y(iced::alignment::Vertical::Center),
+    )
+    .width(Length::Fixed(dims.inspector_value_width))
+    .height(Length::Fixed(value_cell_height(dims)))
+    .align_x(iced::alignment::Horizontal::Center)
     .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m]);
-
-    // `hidden` を先に値として取り出す — closure が `attrs`(呼び出し元の借用)を
-    // そのまま move すると `Element<'static, _>` を返せなくなる(bool は Copy なので
-    // 値だけ取り出せば closure は借用を持たない)。
-    let hidden = attrs.hidden;
-    let hidden_row = row_widget![
-        text("Hidden")
-            .size(dims.caption_text)
-            .color(colors.text_primary)
-            .width(Length::Fixed(dims.inspector_label_width)),
-        button(
-            text(if hidden { "On" } else { "Off" }).size(dims.caption_text)
-        )
-        .on_press(Message::InspectorToggleHidden)
-        .style(move |_theme, status| toggle_button_style(dims, colors, status, hidden)),
-    ]
-    .spacing(dims.spacing_s)
-    .height(Length::Fixed(dims.inspector_row_height))
-    .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m]);
-
-    // blend: **表示のみ**(対応 mode が Normal だけなのは KNOWN の既知の穴)。
-    let blend_row = row_widget![
-        text("Blend")
-            .size(dims.caption_text)
-            .color(colors.text_primary)
-            .width(Length::Fixed(dims.inspector_label_width)),
-        text(attrs.blend_mode.clone())
-            .size(dims.caption_text)
-            .color(colors.text_muted),
-    ]
-    .spacing(dims.spacing_s)
-    .height(Length::Fixed(dims.inspector_row_height))
-    .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m]);
-
-    column![
-        section_header("ATTRS", dims, colors),
-        name_row,
-        hidden_row,
-        blend_row,
-    ]
+    .style(move |_theme| container::Style {
+        background: Some(iced::Background::Color(colors.surface_app)),
+        ..container::Style::default()
+    })
     .into()
 }
 
-fn toggle_button_style(
+/// scalar 行(Opacity)の空き枠(X/Y列)。中身の無い箱 — grid の穴埋めであって
+/// 「このモデルに無い軸」ではない(`value_cell` の absent 表現とは別の意味)。
+fn blank_value_cell(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    container(text(""))
+        .width(Length::Fixed(dims.inspector_value_width))
+        .height(Length::Fixed(value_cell_height(dims)))
+        .style(move |_theme| container::Style {
+            background: Some(iced::Background::Color(colors.surface_app)),
+            ..container::Style::default()
+        })
+        .into()
+}
+
+/// Key/M/S glyph 列の高さ。mock `.glyph { height: calc(var(--row) - 2*var(--s)*1px) }`
+/// の `2` は `spacing_xs`(既定2)と同じ値。
+fn glyph_height(dims: Dimensions) -> f32 {
+    (dims.inspector_row_height - dims.spacing_xs).max(1.0)
+}
+
+/// **M glyph — 結線済み**(supervisor 訂正、2026-08-20)。`LayerAttrs.hidden` を
+/// トグルする。on(hidden=true)は mock `.glyph.on` と同じ accent 縁取り+文字色。
+fn mute_glyph(dims: Dimensions, colors: Colors, hidden: bool) -> Element<'static, Message> {
+    button(
+        text("M")
+            .size(dims.caption_text)
+            .align_x(iced::alignment::Horizontal::Center)
+            .align_y(iced::alignment::Vertical::Center),
+    )
+    .width(Length::Fixed(dims.inspector_glyph_width))
+    .height(Length::Fixed(glyph_height(dims)))
+    .padding(0.0)
+    .on_press(Message::InspectorToggleHidden)
+    .style(move |_theme, status| glyph_button_style(dims, colors, status, hidden))
+    .into()
+}
+
+/// 列幅の予約だけ(**空のまま** — Q0: 押せそうに見えて押せない chrome を作らない)。
+/// S glyph(solo、engine/store 未実装)と各行の Key 列(keyframe UI 未実装)の両方が
+/// これを使う — 内容も枠も無い、幅だけの `Space`。
+fn reserved_glyph(dims: Dimensions) -> Element<'static, Message> {
+    Space::new()
+        .width(Length::Fixed(dims.inspector_glyph_width))
+        .height(Length::Fixed(glyph_height(dims)))
+        .into()
+}
+
+fn glyph_button_style(
     dims: Dimensions,
     colors: Colors,
     status: button::Status,
     active: bool,
 ) -> button::Style {
-    let background = if active {
-        colors.state_selected
+    let (border_color, text_color) = if active {
+        (colors.action_active, colors.action_active)
     } else {
-        match status {
-            button::Status::Hovered => colors.surface_hover,
-            _ => colors.surface_raised,
-        }
+        (colors.border_default, colors.text_muted)
+    };
+    let background = match status {
+        button::Status::Hovered => colors.surface_hover,
+        _ => iced::Color::TRANSPARENT,
     };
     button::Style {
         background: Some(iced::Background::Color(background)),
-        text_color: colors.text_primary,
+        text_color,
         border: iced::Border {
-            color: colors.border_default,
+            color: border_color,
             width: dims.border_width,
             radius: 0.0.into(),
         },
         ..button::Style::default()
     }
+}
+
+/// ident 帯の名前欄。未フォーカス時は枠・背景を消して静止 bold テキストに見せ、
+/// フォーカス時だけ枠と背景を出す(mock はここを編集可能な `text_input` として
+/// 描いていない — 実装が実際に持つ機能=改名を隠さないための最小限の意匠)。
+fn name_input_style(dims: Dimensions, colors: Colors, status: text_input::Status) -> text_input::Style {
+    let (background, border_color) = match status {
+        text_input::Status::Focused { .. } => (colors.surface_app, colors.action_active),
+        text_input::Status::Hovered => (colors.surface_hover, colors.border_default),
+        _ => (iced::Color::TRANSPARENT, iced::Color::TRANSPARENT),
+    };
+    text_input::Style {
+        background: iced::Background::Color(background),
+        border: iced::Border {
+            color: border_color,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        icon: colors.text_muted,
+        placeholder: colors.text_muted,
+        value: colors.text_primary,
+        selection: colors.action_active,
+    }
+}
+
+fn value_input_style(dims: Dimensions, colors: Colors, status: text_input::Status) -> text_input::Style {
+    let border_color = match status {
+        text_input::Status::Focused { .. } => colors.action_active,
+        _ => colors.border_default,
+    };
+    text_input::Style {
+        background: iced::Background::Color(colors.surface_app),
+        border: iced::Border {
+            color: border_color,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        icon: colors.text_muted,
+        placeholder: colors.text_muted,
+        value: colors.text_primary,
+        selection: colors.action_active,
+    }
+}
+
+/// **ATTRS**: mock 断片には対応が無い行(Blend)だけ残す — Name は ident 帯へ、
+/// Hidden は M glyph へ移した(重複 chrome を残さない、supervisor 訂正 2026-08-20)。
+/// blend 自体は**表示のみ**(対応 mode が Normal だけなのは KNOWN の既知の穴)。
+fn attrs_section(attrs: &AttrsProjection, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    let blend_row = row_widget![
+        text("Blend")
+            .size(dims.body_text)
+            .color(colors.text_primary)
+            .width(Length::Fill),
+        text(attrs.blend_mode.clone())
+            .size(dims.body_text)
+            .color(colors.text_muted),
+    ]
+    .spacing(dims.spacing_xs)
+    .height(Length::Fixed(dims.inspector_row_height))
+    .align_y(iced::alignment::Vertical::Center)
+    .padding([0.0, dims.spacing_m]);
+
+    column![section_header("ATTRS", dims, colors), blend_row].into()
+}
+
+/// mock の hint 行。**「Drag to scrub」は未実装機能なので落とす**(Q0)。
+/// 「double-click to type」も実際の挙動と違う — この実装の `text_input` は
+/// 単クリックで打鍵できる(二度打ちは要らない)ので「click」へ言い換える
+/// (M13: 実装と違う手順を案内しない)。
+fn hint_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    container(
+        text("click to type · Esc to cancel")
+            .size(dims.caption_text)
+            .color(colors.text_muted),
+    )
+    .padding([dims.spacing_xs, dims.spacing_m])
+    .style(move |_theme| container::Style {
+        border: iced::Border {
+            color: colors.border_default,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    })
+    .into()
 }
 
 #[cfg(test)]
@@ -719,5 +929,29 @@ mod tests {
         assert_eq!(default_vec2(TransformField::ScaleX), [1.0, 1.0]);
         assert_eq!(default_vec2(TransformField::PositionX), [0.0, 0.0]);
         assert_eq!(default_vec2(TransformField::AnchorY), [0.0, 0.0]);
+    }
+
+    /// ident 帯の種別ラベルは `LayerSource` の実 variant から引く(mock の
+    /// 「shared FX」件数のような捏造値ではない)。
+    #[test]
+    fn source_kind_label_covers_every_layer_source_variant() {
+        assert_eq!(
+            source_kind_label(&LayerSource::Solid {
+                rgba: [0, 0, 0, 255],
+                width: 1,
+                height: 1,
+            }),
+            "solid"
+        );
+        assert_eq!(
+            source_kind_label(&LayerSource::Media {
+                path: "x.mp4".to_owned(),
+                fingerprint: None,
+            }),
+            "media"
+        );
+        assert_eq!(source_kind_label(&LayerSource::Null), "null");
+        assert_eq!(source_kind_label(&LayerSource::Shape), "shape");
+        assert_eq!(source_kind_label(&LayerSource::Text), "text");
     }
 }

@@ -25,14 +25,20 @@ pub struct Dimensions {
     pub row_height: f32,
     /// transport/Control 帯の高さ。
     pub transport_band: f32,
-    /// type scale: panel header・section title 相当。
+    /// type scale: panel header・section title 相当。出典: 視覚正本
+    /// `next/reference/mocks/ui-scale-and-z.html` の `--t-title`(正典バンド
+    /// `{8,9,11,12}` の最大段)。旧値15(裁定117以来)から更新(2026-08-20)。
     pub title_text: f32,
-    /// type scale: 本文相当の文字サイズ。
+    /// type scale: 本文・property 行相当の文字サイズ。出典: 同 mock `--t-base`。
+    /// 旧値13から更新。
     pub body_text: f32,
-    /// type scale: 小さめの文字サイズ(caption 相当)。旧 `small_text`
-    /// (型スケール語彙 title/body/caption/micro への統一、2026-08-20)。
+    /// type scale: section 見出し・column header・hint・glyph 相当(caption)。
+    /// 出典: 同 mock `--t-dense`。旧 `small_text`(型スケール語彙統一、2026-08-20)。
+    /// 旧値11から更新。
     pub caption_text: f32,
-    /// type scale: 最小の可読文字サイズ(status 帯の脇役文言等)。
+    /// type scale: 正典バンド最小段。出典: 同 mock `--t-micro`。旧値9から更新。
+    /// **現時点でどの pane からも未消費**(mock 自体もこの断片では使っていない —
+    /// バンド4段のうち予約されているだけの段)。
     pub micro_text: f32,
     /// spacing scale の最小段。
     pub spacing_xs: f32,
@@ -42,28 +48,56 @@ pub struct Dimensions {
     pub spacing_m: f32,
     /// spacing scale の大段。
     pub spacing_l: f32,
-    /// 罫線幅(ui-visual-language: フラット・細罫線)。
+    /// 罫線幅(ui-visual-language: フラット・細罫線)。**`ui_scale` を掛けない**
+    /// (`Dimensions::scaled` 参照 — mock `--line: 1px` が `--s` の calc から独立して
+    /// いる=「拡大しない」ことの直接の出典)。
     pub border_width: f32,
-    /// panel header 帯の高さ。
+    /// panel header 帯の高さ。Shell 全体の header(Undo/Redo/+Layer 帯)専用 —
+    /// Ableton 実測(`docs/reviews/2026-08-19-ableton-density-measurements.md`)。
+    /// Inspector 自身のタイトル帯は `inspector_section_header_height` を使う
+    /// (mock の `--section` が `.ptitle`/`.sec` 両方に効くのと同じ理由、下記参照)。
     pub panel_header_height: f32,
     /// Inspector pane の固定幅。出典は Ableton 実測ではなく**視覚正本 HTML/CSS 自体**
-    /// (`docs/mocks-ui/public/inspector-library.css` `.inspectorShell { width:
-    /// min(100%, 496px) }`)— Inspector 第1波の発注書が正本として名指ししたのは
-    /// この HTML/CSS そのものなので、他寸法と違い Ableton 密度表ではなくここから写す。
+    /// (旧 `docs/mocks-ui/public/inspector-library.css` `.inspectorShell { width:
+    /// min(100%, 496px) }`)。**496 のまま据え置き**(300 への変更は利用者裁定待ち、
+    /// CANON 記載)— 新 mock(`ui-scale-and-z.html`)の `--pane: 300` はこの pane 幅の
+    /// 出典として採らない。
     pub inspector_panel_width: f32,
-    /// Inspector property 行の高さ。出典: 同 CSS `.propertyRow { min-height: 25px }`。
+    /// Inspector property 行 / column header 行の高さ。出典: 視覚正本
+    /// `ui-scale-and-z.html` `--row`(20)。旧値25(旧 CSS `.propertyRow
+    /// { min-height: 25px }` 由来)から新 mock へ更新。
     pub inspector_row_height: f32,
-    /// Inspector section 見出し(TRANSFORM/ATTRS)の高さ。出典: 同 CSS
-    /// `.tableSection h2 { height: 26px }`。
+    /// Inspector の `--section`(26)。**2箇所で共有**: panel タイトル帯(`.ptitle`、
+    /// 旧実装は `panel_header_height` を誤用していた)と section 見出し
+    /// (TRANSFORM/APPEARANCE、`.sec`)。mock 自身がこの2つに同じ変数を使っている
+    /// ので、token も1本のまま両方へ渡す。
     pub inspector_section_header_height: f32,
-    /// Inspector 値セル(X/Y/Z 等)の幅。出典: 同 CSS `.propertyRow` の
-    /// `grid-template-columns: minmax(132px, 1fr) repeat(3, 64px) 26px` の `64px` 段。
+    /// Inspector 値セル(X/Y/Z)1つぶんの幅。出典: 視覚正本の
+    /// `grid-template-columns: 1fr repeat(3, 38px) hit` の `38px` 段。
+    /// 旧値64(旧 CSS 由来)から新 mock へ更新。
     pub inspector_value_width: f32,
-    /// Inspector 行のラベル列(Property 名)の幅。出典: 同 CSS の
-    /// `grid-template-columns` 先頭 `minmax(132px, 1fr)` の `132px`。
-    pub inspector_label_width: f32,
-    /// Inspector 選択サマリ帯の高さ。出典: 同 CSS `.selectionSummary { height: 46px }`。
-    pub inspector_summary_height: f32,
+    /// Inspector の Key/M/S glyph 列の幅。出典: 視覚正本 `--hit`(18)。
+    /// **Key 列自体は空のまま**(Q0: keyframe UI 未実装、列幅の予約だけ)。
+    #[serde(default = "default_inspector_glyph_width")]
+    pub inspector_glyph_width: f32,
+    /// mock `--s` 相当の UI 拡大率(1.00 基準、0.01 刻み)。**適用点は
+    /// [`Dimensions::scaled`] の1箇所だけ** — 個々の pane はここを直接読まず、
+    /// [`crate::Shell::dims`] が返す「掛け算済みの」`Dimensions` を読む。
+    ///
+    /// **仮の置き場**: 発注書は正本を Workspace 永続に置くよう指示しているが、
+    /// この裁定時点で Workspace 機構がまだ無いため、暫定的にこの JSON トークン
+    /// ファイル(`tokens/dimensions.json`)の値として持つ。Workspace が実装され
+    /// 次第そちらへ移す。
+    #[serde(default = "default_ui_scale")]
+    pub ui_scale: f32,
+}
+
+fn default_inspector_glyph_width() -> f32 {
+    18.0
+}
+
+fn default_ui_scale() -> f32 {
+    1.0
 }
 
 impl Default for Dimensions {
@@ -75,10 +109,10 @@ impl Default for Dimensions {
         Self {
             row_height: 20.0,
             transport_band: 30.0,
-            title_text: 15.0,
-            body_text: 13.0,
-            caption_text: 11.0,
-            micro_text: 9.0,
+            title_text: 12.0,
+            body_text: 11.0,
+            caption_text: 9.0,
+            micro_text: 8.0,
             spacing_xs: 2.0,
             spacing_s: 4.0,
             spacing_m: 8.0,
@@ -86,11 +120,11 @@ impl Default for Dimensions {
             border_width: 1.0,
             panel_header_height: 29.0,
             inspector_panel_width: 496.0,
-            inspector_row_height: 25.0,
+            inspector_row_height: 20.0,
             inspector_section_header_height: 26.0,
-            inspector_value_width: 64.0,
-            inspector_label_width: 132.0,
-            inspector_summary_height: 46.0,
+            inspector_value_width: 38.0,
+            inspector_glyph_width: 18.0,
+            ui_scale: 1.0,
         }
     }
 }
@@ -109,6 +143,41 @@ impl Dimensions {
     pub fn load_from_path(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
         Self::parse(&text)
+    }
+
+    /// `ui_scale` を全寸法・全文字サイズへ適用する**唯一の乗算点**(発注書:
+    /// 「全寸法・全文字サイズの読み出し口で乗算(適用点1箇所)」)。呼び出すのは
+    /// [`crate::Shell::dims`] だけ — 個々の pane 関数は掛け算済みの `Dimensions`
+    /// を受け取るだけで、自分で `ui_scale` を読まない。
+    ///
+    /// **罫線幅だけ例外**: mock(`ui-scale-and-z.html`)の `--line: 1px` は `--s` の
+    /// calc から独立している(拡大しない、コメント「線だけは物理1px床」)。ここでは
+    /// 掛け算せず、物理1px の床にだけクランプする(トークン側の設定が万一1未満でも
+    /// 沈み込まない防波堤)。
+    pub fn scaled(&self, ui_scale: f32) -> Self {
+        let s = ui_scale;
+        Self {
+            row_height: self.row_height * s,
+            transport_band: self.transport_band * s,
+            title_text: self.title_text * s,
+            body_text: self.body_text * s,
+            caption_text: self.caption_text * s,
+            micro_text: self.micro_text * s,
+            spacing_xs: self.spacing_xs * s,
+            spacing_s: self.spacing_s * s,
+            spacing_m: self.spacing_m * s,
+            spacing_l: self.spacing_l * s,
+            border_width: self.border_width.max(1.0),
+            panel_header_height: self.panel_header_height * s,
+            inspector_panel_width: self.inspector_panel_width * s,
+            inspector_row_height: self.inspector_row_height * s,
+            inspector_section_header_height: self.inspector_section_header_height * s,
+            inspector_value_width: self.inspector_value_width * s,
+            inspector_glyph_width: self.inspector_glyph_width * s,
+            // 自分自身は「寸法」ではないので掛けない。この結果を再度 `scaled()`
+            // に通す呼び出し側は無い(適用点は `Shell::dims` の1箇所だけ)。
+            ui_scale: self.ui_scale,
+        }
     }
 }
 
@@ -280,12 +349,19 @@ fn color_at(root: &serde_json::Value, path: &[&str]) -> Result<Color, String> {
 pub struct Tokens {
     pub dims: Dimensions,
     pub colors: Colors,
+    /// mock `--s` 相当の UI 拡大率。**正本は `dims.ui_scale`**(JSON トークン
+    /// ファイル経由でホットリロードされる) — ここへは [`Tokens::load`]/
+    /// [`Default`] がその値をそのまま写す(発注書が指定した置き場 `Tokens.ui_scale`
+    /// を公開しつつ、実体は1つに保つ)。
+    pub ui_scale: f32,
 }
 
 impl Default for Tokens {
     fn default() -> Self {
+        let dims = Dimensions::default();
         Self {
-            dims: Dimensions::default(),
+            ui_scale: dims.ui_scale,
+            dims,
             colors: Colors::default(),
         }
     }
@@ -306,13 +382,20 @@ impl Tokens {
             let dims =
                 Dimensions::load_from_path(&Dimensions::debug_source_path()).unwrap_or_default();
             let colors = Colors::load_from_path(&Colors::debug_source_path()).unwrap_or_default();
-            Self { dims, colors }
+            Self {
+                ui_scale: dims.ui_scale,
+                dims,
+                colors,
+            }
         }
         #[cfg(not(debug_assertions))]
         {
+            let dims = Dimensions::parse(DIMENSIONS_JSON).unwrap_or_default();
+            let colors = Colors::parse(COLOR_TOKENS_JSON).unwrap_or_default();
             Self {
-                dims: Dimensions::parse(DIMENSIONS_JSON).unwrap_or_default(),
-                colors: Colors::parse(COLOR_TOKENS_JSON).unwrap_or_default(),
+                ui_scale: dims.ui_scale,
+                dims,
+                colors,
             }
         }
     }
@@ -480,5 +563,81 @@ mod debounce_tests {
         let (tx, rx) = std::sync::mpsc::channel::<()>();
         drop(tx);
         assert!(debounce_recv(&rx, Duration::from_millis(10), |_| true).is_none());
+    }
+}
+
+#[cfg(test)]
+mod ui_scale_tests {
+    use super::Dimensions;
+
+    /// **適用点そのものの柵**: 100%(恒等)。`ui_scale: 1.0` は何も変えない —
+    /// 変えてしまうと「掛けているのに1倍で変化が無い」ことすら保証できなくなる。
+    #[test]
+    fn scaling_by_one_is_the_identity() {
+        let dims = Dimensions::default();
+        let scaled = dims.scaled(1.0);
+        assert_eq!(scaled, dims, "1.0倍で寸法が変わってしまっている");
+    }
+
+    /// 150%: mock(`--s: 1.50`)と同じ倍率。**罫線幅以外の全寸法・全文字サイズ**が
+    /// 掛かること(発注書「全寸法・全文字サイズの読み出し口で乗算」)。
+    #[test]
+    fn scaling_by_one_point_five_multiplies_every_dimension_but_the_border() {
+        let dims = Dimensions::default();
+        let scaled = dims.scaled(1.5);
+
+        assert_eq!(scaled.row_height, dims.row_height * 1.5);
+        assert_eq!(scaled.transport_band, dims.transport_band * 1.5);
+        assert_eq!(scaled.title_text, dims.title_text * 1.5);
+        assert_eq!(scaled.body_text, dims.body_text * 1.5);
+        assert_eq!(scaled.caption_text, dims.caption_text * 1.5);
+        assert_eq!(scaled.micro_text, dims.micro_text * 1.5);
+        assert_eq!(scaled.spacing_xs, dims.spacing_xs * 1.5);
+        assert_eq!(scaled.spacing_s, dims.spacing_s * 1.5);
+        assert_eq!(scaled.spacing_m, dims.spacing_m * 1.5);
+        assert_eq!(scaled.spacing_l, dims.spacing_l * 1.5);
+        assert_eq!(scaled.panel_header_height, dims.panel_header_height * 1.5);
+        assert_eq!(scaled.inspector_panel_width, dims.inspector_panel_width * 1.5);
+        assert_eq!(scaled.inspector_row_height, dims.inspector_row_height * 1.5);
+        assert_eq!(
+            scaled.inspector_section_header_height,
+            dims.inspector_section_header_height * 1.5
+        );
+        assert_eq!(scaled.inspector_value_width, dims.inspector_value_width * 1.5);
+        assert_eq!(scaled.inspector_glyph_width, dims.inspector_glyph_width * 1.5);
+    }
+
+    /// **罫線だけ物理1px床(クランプ)**: mock `--line: 1px` は `--s` の calc から
+    /// 独立している(拡大しない)。150%でも罫線幅は1.0のまま。
+    #[test]
+    fn the_border_width_never_scales_past_its_one_pixel_floor() {
+        let dims = Dimensions::default();
+        assert_eq!(dims.scaled(1.5).border_width, 1.0);
+        assert_eq!(dims.scaled(1.0).border_width, 1.0);
+        // 設定側が万一1未満でも沈み込まない(防波堤)。
+        let thin = Dimensions {
+            border_width: 0.4,
+            ..dims
+        };
+        assert_eq!(thin.scaled(1.0).border_width, 1.0);
+        assert_eq!(thin.scaled(1.5).border_width, 1.0);
+    }
+
+    /// 正典バンド `{8,9,11,12}`(mock `ui-scale-and-z.html` の出典)が
+    /// title>body>caption>micro の順序を保ったまま tokens に入っていること。
+    #[test]
+    fn the_canonical_type_band_matches_the_mock() {
+        let dims = Dimensions::default();
+        assert_eq!(dims.title_text, 12.0);
+        assert_eq!(dims.body_text, 11.0);
+        assert_eq!(dims.caption_text, 9.0);
+        assert_eq!(dims.micro_text, 8.0);
+    }
+
+    /// `--section`(26)が Inspector の section 高そのものであること
+    /// (発注書「section 高 26」)。
+    #[test]
+    fn the_inspector_section_height_matches_the_mock() {
+        assert_eq!(Dimensions::default().inspector_section_header_height, 26.0);
     }
 }

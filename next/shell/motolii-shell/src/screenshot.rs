@@ -123,7 +123,9 @@ const CANVAS_WIDTH: u32 = 1600;
 /// `shell.view()` の並び(header/stage/timeline/transport/status、`spacing_m` の
 /// 間隔・`spacing_l` の全体 padding)を、Tokens の実値でそのまま再現する。
 pub fn render(shell: &Shell) -> RgbaImage {
-    let dims = shell.tokens().dims;
+    // `ui_scale` 適用済み(`Shell::dims` — 適用点1箇所)。この instrument も
+    // 生の `tokens.dims` を直接読まない。
+    let dims = shell.dims();
     let colors = shell.tokens().colors;
     let rows = shell.timeline_rows();
     let markers = shell.markers();
