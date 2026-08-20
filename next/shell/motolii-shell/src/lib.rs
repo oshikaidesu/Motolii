@@ -902,6 +902,14 @@ impl Shell {
         &self.session
     }
 
+    /// 市松トグルの今の状態。**screenshot 器具**が「実際に画面へ出る絵」を
+    /// 再現するのに使う(`frame_rgba()` は市松を絶対に乗せない生値なので、
+    /// この状態と `settings_pane::composite_checkerboard` を screenshot 側が
+    /// 自分で組み合わせる必要がある — `lib.rs::build_stage_handle` と同じ形)。
+    pub fn checkerboard_enabled(&self) -> bool {
+        self.checkerboard
+    }
+
     /// 描き上がった Stage フレームの生 RGBA。**screenshot 器具専用**
     /// (`screenshot.rs`)— 通常描画は `image::Handle` を持つ `stage_pane` を通る。
     pub fn frame_rgba(&self) -> Option<(u32, u32, &[u8])> {

@@ -14,7 +14,7 @@
 //! 意図的に叩かない。
 
 use motolii_shell::settings_pane::{BackgroundChannel, BackgroundPreset};
-use motolii_shell::{Message, Shell};
+use motolii_shell::{screenshot, Message, Shell};
 
 fn shell() -> Shell {
     Shell::new().0
@@ -120,6 +120,141 @@ fn checkerboard_toggle_never_touches_the_raw_export_rgba() {
     assert_eq!(
         before, after,
         "市松トグルが export/screenshot 用の生 rgba を変えてしまった(書き出しに乗ってはいけない)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 実機報告の修正: その場の理由(M13)が実際に木へ現れる/消える
+// ---------------------------------------------------------------------------
+
+use motolii_shell::settings_pane::CHECKERBOARD_INVISIBLE_HINT;
+
+/// **本命**: Settings パネルを開いて市松を ON にすると(既定の不透明背景の
+/// まま)、その場の理由が実際に `view()` の木へ現れる。理由テキストが
+/// 現れないまま黙って無反応 = Q0/M13 違反(この試験が今回の実バグの直接固定)。
+#[test]
+fn opening_settings_and_toggling_checkerboard_on_an_opaque_background_shows_the_reason() {
+    let mut shell = shell();
+    shell.update(Message::ToggleSettingsPanel);
+    shell.update(Message::ToggleCheckerboard);
+
+    let mut ui = iced_test::simulator(shell.view());
+    assert!(
+        ui.click(CHECKERBOARD_INVISIBLE_HINT).is_ok(),
+        "不透明背景+市松ONでその場の理由が木に現れていない"
+    );
+}
+
+/// 理由は「今まさに無反応」の時だけ — 市松 OFF なら出ない(常時表示の chrome を
+/// 増やさない、既存の静的 hint_row とは別物であることの確認)。
+#[test]
+fn the_reason_does_not_appear_while_checkerboard_is_off() {
+    let mut shell = shell();
+    shell.update(Message::ToggleSettingsPanel);
+
+    let mut ui = iced_test::simulator(shell.view());
+    assert!(
+        ui.click(CHECKERBOARD_INVISIBLE_HINT).is_err(),
+        "市松OFFなのにその場の理由が出てしまっている"
+    );
+}
+
+/// 理由は「Transparent」プリセットへ切り替えると消える — 1クリックで
+/// 「市松が見える状態」を作れることの裏付け(発注書の修正方針そのもの)。
+#[test]
+fn the_reason_disappears_after_switching_to_the_transparent_preset() {
+    let mut shell = shell();
+    shell.update(Message::ToggleSettingsPanel);
+    shell.update(Message::ToggleCheckerboard);
+    shell.update(Message::SettingsBackgroundPreset(BackgroundPreset::Transparent));
+
+    let mut ui = iced_test::simulator(shell.view());
+    assert!(
+        ui.click(CHECKERBOARD_INVISIBLE_HINT).is_err(),
+        "Transparent プリセット適用後もその場の理由が残っている"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 実機報告の修正: 市松トグルが screenshot 器具の絵へ実際に届くこと
+// ---------------------------------------------------------------------------
+
+/// **容疑1の直接固定(真因側)、内側画素限定**: 既定 comp(不透明黒)のままだと、
+/// 市松トグルは**内容を持つ内側の画素**を1つも変えない(容疑1の結論どおり、
+/// 不透明背景では市松が原理的に見えない仕様 — 容疑2「`composite_checkerboard`
+/// 自体のバグ」を切り分ける試験でもある)。
+///
+/// **発見(shellの外、この発注の write-set の外)**: `frame_rgba()` の生値には
+/// engine 側の readback に由来する1px境界のアーティファクトが実測される
+/// (640x360 comp で外周ちょうど1996画素が alpha=0 — perimeter
+/// `2*(640+360)-4` と厳密に一致、複数回実行で再現、非乱数的)。comp の実内容と
+/// 無関係に comp の外周1周だけ透明になっており、engine/motolii-engine か
+/// motolii-compositor の readback/ラスタライズ側の別問題(`Composition.
+/// background` を不透明にしても消えない)。ここでは内側画素だけを見ることで
+/// shell 側の主張(市松トグルの連動)をこの別問題と混ぜずに固定する。
+#[test]
+fn checkerboard_toggle_does_not_touch_interior_pixels_when_background_is_opaque() {
+    let mut shell = shell();
+    let before = shell.composition().expect("既定 comp がある").background;
+    assert_eq!(before, [0.0, 0.0, 0.0, 1.0], "既定は不透明黒のはず");
+    // `Shell::new()` は `refresh_frame` をまだ呼んでいない(`frame` が `None`)
+    // — `update` を1回通してフレームを立てておく(`Message::FlushDrops` は
+    // `pending_drops` が空なら何も変えない、`new_fixture` が `refresh_frame` を
+    // 明示的に呼ぶのと同じ理由)。
+    shell.update(Message::FlushDrops);
+
+    let (w, h, without) = shell
+        .frame_rgba()
+        .map(|(w, h, px)| (w, h, px.to_vec()))
+        .expect("frame がある");
+
+    // `frame_rgba()` 自体は市松に触れない(`checkerboard_toggle_never_touches_
+    // the_raw_export_rgba` で既に固定済み)ので、ここでは screenshot.rs が
+    // 実際に行うのと同じ組み合わせ(`composite_checkerboard` を明示的に当てる)
+    // を自分で再現する。
+    let mut with = without.clone();
+    motolii_shell::settings_pane::composite_checkerboard(w, h, &mut with, shell.tokens().colors);
+
+    let pixel = |buf: &[u8], x: u32, y: u32| -> [u8; 4] {
+        let i = ((y * w + x) * 4) as usize;
+        [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
+    };
+    let mut mismatches = Vec::new();
+    for y in 1..h.saturating_sub(1) {
+        for x in 1..w.saturating_sub(1) {
+            if pixel(&without, x, y) != pixel(&with, x, y) {
+                mismatches.push((x, y));
+            }
+        }
+    }
+    assert!(
+        mismatches.is_empty(),
+        "不透明背景なのに内側画素が市松で変わった(容疑2の疑いあり): {} 件、例: {:?}",
+        mismatches.len(),
+        &mismatches[..mismatches.len().min(5)]
+    );
+}
+
+/// **修正の本命**: 背景を「Transparent」プリセットへ動かした状態でなら、
+/// 市松トグルは screenshot の画素を実際に変える — `settings_pane::
+/// composite_checkerboard` の単体試験は既にあったが、それが
+/// `--fixture --screenshot` 器具の出力にまで実際に繋がっていることは
+/// この試験までは固定されていなかった(容疑1「連動不足」がこの繋ぎ目の
+/// 話であって、`composite_checkerboard` 自体のバグではないことの裏付け)。
+#[test]
+fn checkerboard_toggle_changes_the_screenshot_pixels_when_background_is_transparent() {
+    let mut shell = shell();
+    shell.update(Message::SettingsBackgroundPreset(BackgroundPreset::Transparent));
+    let background = shell.composition().expect("comp がある").background;
+    assert_eq!(background, [0.0, 0.0, 0.0, 0.0], "Transparent プリセットが反映されていない");
+
+    let without = screenshot::render(&shell).into_raw();
+    shell.update(Message::ToggleCheckerboard);
+    let with = screenshot::render(&shell).into_raw();
+
+    assert_ne!(
+        without, with,
+        "透明背景なら市松トグルで screenshot の画素が変わるはず"
     );
 }
 
