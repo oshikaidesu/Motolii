@@ -208,6 +208,16 @@ fn with_one_layer_then_undo() -> Shell {
     shell
 }
 
+/// **タスク#18**: Settings パネルを開いた状態(歯車トグル)。プリセットボタン・
+/// 市松トグル・背景/ui_scale の数値欄が全部木に現れる — この柵がそのまま
+/// 「見えて押せそうなのに何も起きない」を検分する(パネル別の知識をこのファイルへ
+/// 増やさない、という冒頭 doc 通りの拡張)。
+fn with_settings_open() -> Shell {
+    let mut shell = fresh();
+    let _ = shell.update(Message::ToggleSettingsPanel);
+    shell
+}
+
 /// **本命**。3状態(空 / layer1枚で Undo が有効 / Undo 済みで Redo が有効)を
 /// 横断して、「見た目は反応したのに何も起きない」widget が無いことを見る。
 /// 状態を分けているのは、Undo/Redo が文脈disabled(=on_press無し=captureしない)
@@ -222,6 +232,7 @@ fn no_pane_leaves_a_captured_click_silent() {
         with_one_layer_then_undo,
         "layer追加→Undo(Redoが有効なはず)",
     ));
+    violations.extend(scan_state(with_settings_open, "Settingsパネル開"));
 
     assert!(
         violations.is_empty(),

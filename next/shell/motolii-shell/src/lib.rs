@@ -25,10 +25,12 @@ use motolii_store::{
 pub mod fixture;
 pub mod inspector_pane;
 pub mod screenshot;
+pub mod settings_pane;
 pub mod timeline_pane;
 pub mod tokens;
 
 use inspector_pane::{FieldDraft, TransformField};
+use settings_pane::{BackgroundChannel, BackgroundFieldDraft, BackgroundPreset};
 
 use tokens::{Colors, Dimensions, Tokens};
 
@@ -177,6 +179,27 @@ pub enum Message {
     KeyboardModifiersChanged(iced::keyboard::Modifiers),
     /// Esc — drag 中なら復元、typing 下書き中(値セル/名前欄)ならそれを破棄。
     EscapePressed,
+
+    // ---- Settings パネル(タスク#18) ----
+    /// ヘッダの歯車ボタン。表示だけのトグル — Document にも undo 履歴にも乗らない。
+    ToggleSettingsPanel,
+    /// Stage の下に市松を敷くかどうか。**表示専用** — Document には一切乗らない
+    /// (書き出しに影響しない、`settings_pane` モジュール doc 参照)。
+    ToggleCheckerboard,
+    /// 背景色プリセット(黒/白/グレー18%)。押した瞬間に確定する
+    /// (`Intent::SetComposition` を1回、1 gesture = 1 undo)。
+    SettingsBackgroundPreset(BackgroundPreset),
+    /// 背景 RGBA の1チャンネルへの打鍵。**まだ Document を書かない** —
+    /// 下書きを更新するだけ(`InspectorFieldInput` と同じ形)。
+    SettingsBackgroundChannelInput(BackgroundChannel, String),
+    /// 背景 RGBA の1チャンネルの Enter — ここで初めて `Intent::SetComposition` を
+    /// 1回出す(read-modify-write、他チャンネルは現在値のまま)。
+    SettingsBackgroundChannelSubmit(BackgroundChannel),
+    /// ui_scale(%)欄への打鍵。まだ書かない。
+    UiScaleInput(String),
+    /// ui_scale(%)欄の Enter — 50..200 にクランプして `Tokens`/`Dimensions` を
+    /// 更新し、debug ビルドでは正本 JSON へも書き戻す(`tokens::save_ui_scale`)。
+    UiScaleSubmit,
 }
 
 /// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
@@ -192,7 +215,14 @@ struct RenderedFrame {
     /// `handle` と同じ画素の生 RGBA。**screenshot 器具専用**(`screenshot.rs`)—
     /// 通常描画は `handle` だけで足りる(iced の `image::Handle` から画素を
     /// 取り戻す公開 API が無いため、この用途だけのために複製して持つ)。
+    /// **市松は絶対にここへ乗せない** — `frame_rgba()` 経由で screenshot/export
+    /// が読むのはこの生値そのもの(`settings_pane` doc「合成器が出せる」と
+    /// 「書き出しが吐く」は別問題、参照)。
     rgba: Vec<u8>,
+    /// `handle` が市松込みで作られているか。**Document・playhead 非依存**の
+    /// 表示分岐なので、`revision()`/`playhead` が同じでもここが変わっていれば
+    /// `refresh_frame` は(engine を再度回さず)`handle` だけ作り直す。
+    checkerboard: bool,
 }
 
 /// Inspector 値セルの drag-to-scrub、進行中の一時状態。**Document ではない**
@@ -239,6 +269,21 @@ pub struct Shell {
     /// 直近の Shift 押下状態。`CursorMoved` は modifiers を運ばないので
     /// `ModifiersChanged` から別途追う(drag の1/10微調整に使う)。
     keyboard_modifiers: iced::keyboard::Modifiers,
+
+    // ---- Settings パネル(タスク#18) ----
+    /// パネルの開閉。**表示だけの状態** — Document でも `Session`(選択・再生
+    /// 位置)でもない。発注書は「Workspace 側」と指示しているが、Workspace 永続
+    /// 機構がまだ無い(裁定127/128)ため、`tokens::Dimensions::ui_scale` の
+    /// 「仮の置き場」と同じ理由でここに仮置きする。
+    settings_panel_open: bool,
+    /// Stage の下に市松を敷くか。**表示専用** — Document には一切乗らない
+    /// (`settings_pane::composite_checkerboard` 参照、書き出しに影響しない)。
+    checkerboard: bool,
+    /// 背景 RGBA チャンネルの編集下書き。**Document ではない**
+    /// (`inspector_field_draft` と同じ形 — Enter まで store に触らない)。
+    background_draft: Option<BackgroundFieldDraft>,
+    /// ui_scale(%)欄の編集下書き。同上。
+    ui_scale_draft: Option<String>,
 }
 
 impl Shell {
@@ -271,6 +316,10 @@ impl Shell {
                 inspector_name_draft: None,
                 inspector_drag: None,
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
+                settings_panel_open: false,
+                checkerboard: false,
+                background_draft: None,
+                ui_scale_draft: None,
             },
             Task::none(),
         )
@@ -298,6 +347,10 @@ impl Shell {
             inspector_name_draft: None,
             inspector_drag: None,
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
+            settings_panel_open: false,
+            checkerboard: false,
+            background_draft: None,
+            ui_scale_draft: None,
         };
         // `update()` を経由しないので、通常なら `update` の末尾が呼ぶ
         // `refresh_frame` をここで代わりに呼ぶ(Stage を空のまま起動しない、M17)。
@@ -375,6 +428,17 @@ impl Shell {
             }
             Message::KeyboardModifiersChanged(modifiers) => self.keyboard_modifiers = modifiers,
             Message::EscapePressed => self.cancel_inspector_interaction(),
+            Message::ToggleSettingsPanel => self.settings_panel_open = !self.settings_panel_open,
+            Message::ToggleCheckerboard => self.checkerboard = !self.checkerboard,
+            Message::SettingsBackgroundPreset(preset) => self.apply_background_preset(preset),
+            Message::SettingsBackgroundChannelInput(channel, text) => {
+                self.background_draft = Some(BackgroundFieldDraft { channel, text });
+            }
+            Message::SettingsBackgroundChannelSubmit(channel) => {
+                self.commit_background_channel(channel);
+            }
+            Message::UiScaleInput(text) => self.ui_scale_draft = Some(text),
+            Message::UiScaleSubmit => self.commit_ui_scale(),
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
                 // **1操作 = 1 undo**。`AddLayer` と `SetMeta` を別々に書くと
@@ -568,6 +632,66 @@ impl Shell {
         }
     }
 
+    // ---- Settings パネル(タスク#18) ----
+
+    /// 背景色プリセット — 現在の `Composition` を読み、`background` だけ書き換えて
+    /// 丸ごと書き戻す(read-modify-write、`Intent::SetComposition` は丸ごと置換の
+    /// intent なので width/height/fps/duration_frames を巻き込まないよう毎回読む)。
+    fn apply_background_preset(&mut self, preset: BackgroundPreset) {
+        let Some(mut composition) = self.doc.view().composition().ok().flatten() else {
+            self.status = Some("comp が無い".to_owned());
+            return;
+        };
+        composition.background = settings_pane::preset_rgba(preset);
+        if let Err(error) = self.doc.apply(Intent::SetComposition(composition)) {
+            self.status = Some(format!("背景を書けない: {error}"));
+        }
+    }
+
+    /// 背景 RGBA の1チャンネル — 下書きを確定して1回の `Intent::SetComposition`
+    /// を出す(read-modify-write、他チャンネルは今の値のまま)。
+    fn commit_background_channel(&mut self, channel: BackgroundChannel) {
+        let Some(draft) = self.background_draft.take() else {
+            return;
+        };
+        if draft.channel != channel {
+            self.background_draft = Some(draft);
+            return;
+        }
+        let Some(mut composition) = self.doc.view().composition().ok().flatten() else {
+            self.status = Some("comp が無い".to_owned());
+            return;
+        };
+        let Some(value_0_255) = settings_pane::parse_channel_u8(&draft.text) else {
+            self.status = Some(format!("数値として読めない: {}", draft.text));
+            return;
+        };
+        composition.background[channel.index()] = value_0_255 / 255.0;
+        if let Err(error) = self.doc.apply(Intent::SetComposition(composition)) {
+            self.status = Some(format!("背景を書けない: {error}"));
+        }
+    }
+
+    /// ui_scale(%)欄 — 下書きを確定して 50..200 にクランプ、`Tokens`/`Dimensions`
+    /// を更新する。**Document を経由しない**(`ui_scale` は既存の置き場どおり
+    /// トークン扱い、undo 対象ではない)。debug ビルドでは正本 JSON へも書き戻す —
+    /// 失敗しても in-memory の値は既に更新済みなので、画面上は反映される
+    /// (書き込み失敗は status 帯へ理由を出すだけで機能は止めない、M16)。
+    fn commit_ui_scale(&mut self) {
+        let Some(text) = self.ui_scale_draft.take() else {
+            return;
+        };
+        let Some(ui_scale) = settings_pane::parse_ui_scale_percent(&text) else {
+            self.status = Some(format!("数値として読めない: {text}"));
+            return;
+        };
+        self.tokens.dims.ui_scale = ui_scale;
+        self.tokens.ui_scale = ui_scale;
+        if let Err(error) = tokens::save_ui_scale(ui_scale) {
+            self.status = Some(format!("ui_scale を保存できない: {error}"));
+        }
+    }
+
     // ---- Inspector の drag-to-scrub ----
 
     /// 値セルの press — click か drag かはまだ未確定
@@ -730,6 +854,9 @@ impl Shell {
             return;
         }
         self.inspector_name_draft = None;
+        // Settings パネルの下書きも同じ Esc で破棄する(hint 文言との整合)。
+        self.background_draft = None;
+        self.ui_scale_draft = None;
     }
 
     // ---- 運転席が見るための口。**書けない** ----
@@ -844,18 +971,34 @@ impl Shell {
             colors,
         );
 
-        column![
-            self.header(),
-            row![inspector, stage_pane(self.frame.as_ref(), dims, colors)]
-                .spacing(dims.spacing_m)
-                .height(Length::FillPortion(3)),
-            timeline.view(),
-            transport(&self.session, &store, dims, colors),
-            status_band(self.status.as_deref(), &self.doc, dims, colors),
-        ]
-        .spacing(dims.spacing_m)
-        .padding(dims.spacing_l)
-        .into()
+        // Settings パネル(タスク#18)。**表示だけの分岐** — 開いていなければ
+        // 木に一切現れない(Q0: 効かない chrome を並べない、閉じている間は
+        // 下書き入力欄も存在しないので誤操作の的にならない)。
+        let mut layout = column![self.header()];
+        if self.settings_panel_open {
+            layout = layout.push(settings_pane::view(
+                self.composition().as_ref(),
+                self.background_draft.as_ref(),
+                self.tokens.ui_scale,
+                self.ui_scale_draft.as_deref(),
+                self.checkerboard,
+                dims,
+                colors,
+            ));
+        }
+
+        layout
+            .push(
+                row![inspector, stage_pane(self.frame.as_ref(), dims, colors)]
+                    .spacing(dims.spacing_m)
+                    .height(Length::FillPortion(3)),
+            )
+            .push(timeline.view())
+            .push(transport(&self.session, &store, dims, colors))
+            .push(status_band(self.status.as_deref(), &self.doc, dims, colors))
+            .spacing(dims.spacing_m)
+            .padding(dims.spacing_l)
+            .into()
     }
 
     fn header(&self) -> Element<'_, Message> {
@@ -871,6 +1014,14 @@ impl Shell {
             button(text("+ Layer").size(dims.body_text))
                 .style(move |_theme, status| button_style(dims, colors, status))
                 .on_press(Message::AddLayer),
+            // **歯車ボタン**(発注書)。他3ボタンと同じく文言ボタン — この codebase
+            // は一貫してアイコンではなく文字で chrome を作る(M/S glyph も文字、
+            // `inspector_pane.rs` 冒頭 doc 参照)ので、絵文字/unicode グリフの
+            // フォント欠け(`../reference/KNOWN.md` の letter-spacing 欠けと同種の
+            // iced 0.14 の未確認リスク)を踏まない選択。
+            button(text("Settings").size(dims.body_text))
+                .style(move |_theme, status| button_style(dims, colors, status))
+                .on_press(Message::ToggleSettingsPanel),
         ]
         .spacing(dims.spacing_m)
         .height(Length::Fixed(dims.panel_header_height))
@@ -884,13 +1035,31 @@ impl Shell {
         self.doc.view().next_layer_id()
     }
 
-    /// Document か再生位置が変わった時だけ描き直す。
+    /// Document・再生位置・市松トグルのいずれかが変わった時だけ描き直す。
     /// 判定は `revision()` — front が「前回の Document」を自分で持たないため。
+    ///
+    /// **市松は Document・playhead に依存しない表示分岐**なので、その2つが
+    /// 同じでも市松の有無だけ変わっていれば engine を再度回さず(=
+    /// `Engine::render_frame` を呼び直さず)`RenderedFrame::rgba`(既に持っている
+    /// 生値、市松を乗せない方)から Handle だけ作り直す(`build_stage_handle`)。
     fn refresh_frame(&mut self) {
         let revision = self.doc.revision();
         let playhead = self.session.playhead;
+        let checkerboard = self.checkerboard;
+        let colors = self.tokens.colors;
+
         if let Some(frame) = &self.frame {
             if frame.revision == revision && frame.playhead == playhead {
+                if frame.checkerboard == checkerboard {
+                    return;
+                }
+                let (handle, handle_bytes) =
+                    build_stage_handle(frame.width, frame.height, &frame.rgba, checkerboard, colors);
+                metrics::record_handle_creation(handle_bytes);
+                if let Some(frame) = self.frame.as_mut() {
+                    frame.handle = handle;
+                    frame.checkerboard = checkerboard;
+                }
                 return;
             }
         }
@@ -909,10 +1078,13 @@ impl Shell {
         metrics::record_render_frame(render_start.elapsed());
         match render_result {
             Ok(rgba) => {
-                let (handle_width, handle_height, handle_rgba) =
-                    stage_handle_rgba(composition.width, composition.height, &rgba);
-                let handle_bytes = handle_rgba.len();
-                let handle = image::Handle::from_rgba(handle_width, handle_height, handle_rgba);
+                let (handle, handle_bytes) = build_stage_handle(
+                    composition.width,
+                    composition.height,
+                    &rgba,
+                    checkerboard,
+                    colors,
+                );
                 metrics::record_handle_creation(handle_bytes);
                 self.frame = Some(RenderedFrame {
                     revision,
@@ -921,6 +1093,7 @@ impl Shell {
                     height: composition.height,
                     handle,
                     rgba,
+                    checkerboard,
                 });
             }
             Err(error) => {
@@ -929,6 +1102,28 @@ impl Shell {
             }
         }
     }
+}
+
+/// Stage 表示用の Handle を作る唯一の場所。`stage_handle_rgba` で縮め、
+/// **市松が有効なら display 用の複製にだけ**
+/// [`settings_pane::composite_checkerboard`] を乗せる — 呼び出し側が渡す
+/// `full_rgba`(`RenderedFrame::rgba`、screenshot/export 用)自体は一切変更しない。
+fn build_stage_handle(
+    width: u32,
+    height: u32,
+    full_rgba: &[u8],
+    checkerboard: bool,
+    colors: Colors,
+) -> (image::Handle, usize) {
+    let (handle_width, handle_height, mut handle_rgba) = stage_handle_rgba(width, height, full_rgba);
+    if checkerboard {
+        settings_pane::composite_checkerboard(handle_width, handle_height, &mut handle_rgba, colors);
+    }
+    let handle_bytes = handle_rgba.len();
+    (
+        image::Handle::from_rgba(handle_width, handle_height, handle_rgba),
+        handle_bytes,
+    )
 }
 
 /// `Shell::subscription` が使う、Inspector drag-to-scrub 用の window 全体の
@@ -1051,7 +1246,9 @@ fn status_band<'a>(
 
 /// header の3ボタン共通スタイル。**意味色ロール経由**(raw 値の直書き禁止) —
 /// hover/pressed/disabled をそれぞれ別ロールで塗り分ける(状態: hover・選択・無効)。
-fn button_style(dims: Dimensions, colors: Colors, status: button::Status) -> button::Style {
+/// `pub(crate)`: `settings_pane` のプリセット/市松トグルボタンも同じ意味色
+/// ロールを使う — 状態ごとに専用の色を新設しない。
+pub(crate) fn button_style(dims: Dimensions, colors: Colors, status: button::Status) -> button::Style {
     let background = match status {
         button::Status::Hovered => colors.surface_hover,
         button::Status::Pressed => colors.state_selected,

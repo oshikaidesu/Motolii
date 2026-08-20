@@ -722,7 +722,13 @@ fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'static, Messa
     .into()
 }
 
-fn section_header(label: &'static str, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+/// `pub(crate)`: `settings_pane` も同じ見出し帯(パネルタイトル/section 見出し
+/// 共通トークン)を再利用する — 2箇所で別の意匠を発明しない。
+pub(crate) fn section_header(
+    label: &'static str,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
     // `.width(Length::Fill)`: `header` と同じ理由(柵で発見) — mock の `.sec` も
     // block 要素で pane 全幅の帯。無いと "TRANSFORM"/"APPEARANCE"/"ATTRS" の
     // 文字幅ぶんしか背景 `surface_app` が塗られない(実測: 修正前は幅 65〜68px)。
@@ -1007,7 +1013,13 @@ fn name_input_style(dims: Dimensions, colors: Colors, status: text_input::Status
     }
 }
 
-fn value_input_style(dims: Dimensions, colors: Colors, status: text_input::Status) -> text_input::Style {
+/// `pub(crate)`: `settings_pane` の数値欄(背景RGBA・ui_scale%)も同じ枠色
+/// ロールを使う — 2箇所で別の意匠を発明しない。
+pub(crate) fn value_input_style(
+    dims: Dimensions,
+    colors: Colors,
+    status: text_input::Status,
+) -> text_input::Style {
     let border_color = match status {
         text_input::Status::Focused { .. } => colors.action_active,
         _ => colors.border_default,
