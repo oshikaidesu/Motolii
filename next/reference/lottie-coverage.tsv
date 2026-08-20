@@ -44,7 +44,7 @@ composition	animation	mb	Motion Blur	不採用	モーションブラーは合成
 composition	animation	meta	Metadata	不採用	配信物メタ(作者・説明・生成器)。編集の意味ではない			lottie
 composition	animation	metadata	User Metadata	不採用	同上(利用者メタ)			lottie
 composition	animation	op	Out Point	採用済	Composition.duration_frames	pub duration_frames: i64		lottie
-composition	animation	slots	Slots	採用予定	Vism(型付き input を持つ再利用単位)の先例になりうる		slot	lottie
+composition	animation	slots	Slots	採用済	comp 水準の Slots 表(slot 発注単位)。Vec<Slot> を SetSlots が丸ごと差し替え(SetMasks/SetMarkers と同じ形)。並びは編集順で保つ	pub fn slots(&self) -> Result<Vec<Slot>, StoreError>	slot	lottie
 composition	animation	v	Bodymovin version, on very old versions some things might be slightly different from what is explained here	不採用	書き出した器具のバージョン。保存形式は上流の .rrd(裁定55)で版は store 側が持つ			lottie
 composition	animation	ver	Specification Version	不採用	仕様版。document に持つと .rrd の版と2つになる			lottie
 composition	animation	w	Width	採用済	Composition.width	pub width: u32		lottie
@@ -195,8 +195,8 @@ helpers	mask	mode	Mode	採用済	constants/mask-mode。前のマスクとの重�
 helpers	mask	o	Opacity	採用済	マスクの不透明度。1.0 基準(パーセントを採らない)。動くので property track 側 `mask.{id}.opacity`	pub fn mask_opacity	mask	lottie
 helpers	mask	pt	Shape	採用済	マスク形状 = values/bezier のトラック(`Value::Path`)。名前は `mask.{id}.shape` で**添字ではなく id** — 添字だと1枚消した時に形状が別のマスクへ付き直す(裁定65 と同型)	pub fn mask_shape	mask	lottie
 helpers	mask	x	Expand	不採用	マスクの膨張/収縮はパスのオフセット演算。要る日に effect として足す			lottie
-helpers	slot	p	Property Value	採用予定	スロットが差し込む値		slot	lottie
-helpers	slottable-object	sid	Slot Id	採用予定	スロット参照の識別子		slot	lottie
+helpers	slot	p	Property Value	採用済	スロットが差し込む値。KeyframeTrack をそのまま使う(裁定92の平坦トラックと同じ形、スロット専用の値表現を新設しない)	pub track: motolii_eval::KeyframeTrack,	slot	lottie
+helpers	slottable-object	sid	Slot Id	採用済	スロット参照の識別子。SlotId は Lottie 実物どおり文字列(mask/effect の連番 id とは別物)。TextDocument::slot_id と同じ型	pub struct SlotId(pub String);	slot	lottie
 helpers	transform	a	Anchor Point	採用済	anchor。行列の中心	pub const ANCHOR		lottie
 helpers	transform	o	Opacity	採用済	opacity。ただし行列の外(裁定62)	pub const OPACITY		lottie
 helpers	transform	or	Orientation	不採用	3D の向き(裁定65)			lottie
@@ -312,8 +312,8 @@ properties	gradient-stops	@extends	properties/property	該当なし	継承元			
 properties	gradient-stops	a	Animated	不採用	JSON の discriminator			lottie
 properties	gradient-stops	k	Keyframes	不採用	同上			lottie
 properties	position-keyframe	@extends	properties/vector-keyframe	該当なし	継承元			lottie
-properties	position-keyframe	ti	Value In Tangent	採用予定	空間ベジェ。position を Vec2 単一にしたので入る余地がある(裁定61)		motion-path	lottie
-properties	position-keyframe	to	Value Out Tangent	採用予定	同上		motion-path	lottie
+properties	position-keyframe	ti	Value In Tangent	採用済	空間ベジェ。position を Vec2 単一にしたので入る余地がある(裁定61)。実測: SpatialTangent が Keyframe.spatial に乗り、motolii-eval::track のテストが直線/湾曲/速さ非依存の3点を固定済み	pub in_tangent: [f64; 2]	motion-path	lottie
+properties	position-keyframe	to	Value Out Tangent	採用済	同上	pub out_tangent: [f64; 2]	motion-path	lottie
 properties	position-property	@extends	properties/property	該当なし	継承元			lottie
 properties	position-property	a	Animated	不採用	JSON の discriminator			lottie
 properties	position-property	ix	Property Index	不採用	番号台帳			lottie
@@ -321,7 +321,7 @@ properties	position-property	k	Keyframes	採用済	KeyframeTrack(Value::Vec2)。
 properties	position-property	l	Length	不採用	成分数は型が持つ			lottie
 properties	property	a	Animated	不採用	JSON の discriminator			lottie
 properties	property	ix	Property Index	不採用	番号台帳			lottie
-properties	property	sid	Slot ID	採用予定	スロット参照。値/トラック か スロット参照 かの enum にする		slot	lottie
+properties	property	sid	Slot ID	採用済	スロット参照。PropertySource::{Track,Slot} の2択(#[serde(untagged)]で既存track JSONと非互換を作らない)。descriptor_track(property)と同じcomponentに書く(第二の差し替え機構を作らない)	pub enum PropertySource {	slot	lottie
 properties	property	x	Expression	不採用	AE の JS 式。処理系を1本抱えることになり軸4に反する			lottie
 properties	scalar-property	@extends	properties/property	該当なし	継承元			lottie
 properties	scalar-property	a	Animated	不採用	JSON の discriminator			lottie
@@ -571,7 +571,7 @@ styles	stroke-style	c	Color	不採用	レイヤスタイルは effect の第二�
 styles	stroke-style	s	Size	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む			lottie
 styles	stroke-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む			lottie
 text	animated-text-document	k	Keyframes	採用済	content だけの Hold track。Lottie 側も keyframe に i/o が無く**構造でホールドを保証**している	pub struct ContentTrack	text	lottie
-text	animated-text-document	sid	Slot ID	採用済	歌詞テンプレートの差し替え口。slots と同じ口に乗せ第二の差し替え機構を作らない — slots 機構自体(`slot` 発注単位)は未着手なので、ここでは参照識別子だけ持てる	pub slot_id: Option<String>	text	lottie
+text	animated-text-document	sid	Slot ID	採用済	歌詞テンプレートの差し替え口。slots(slot 発注単位、実装済)と同じ口に乗る — SlotId は slot 束が実装した型そのもの(第二の差し替え機構ではない)	pub slot_id: Option<SlotId>,	text	lottie
 text	animated-text-document	x	Expression	不採用	JS 文字列式は要らないもの(GOALS)			lottie
 text	character-data	ch	Character	不採用	グリフ輪郭を JSON へ焼く経路。実フォント+shaper を持つので焼いた輪郭は正本が2つ			lottie
 text	character-data	data	Data	不採用	同上			lottie

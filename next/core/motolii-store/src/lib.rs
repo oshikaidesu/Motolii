@@ -28,6 +28,7 @@ mod fingerprint;
 mod marker;
 mod mask;
 mod persist;
+mod slot;
 mod text;
 mod view;
 
@@ -37,6 +38,7 @@ pub use effect::{EffectId, EffectInstance};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use marker::Marker;
 pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
+pub use slot::{PropertySource, Slot, SlotId};
 pub use text::{
     ContentKeyframe, ContentTrack, FontRef, TextAlignmentOptions, TextBasedOn, TextDocument,
     TextDocumentStyle, TextGrouping, TextJustify, TextRandomize, TextRange, TextRangeId,
