@@ -63,3 +63,4 @@
 - **timeline_projection probe の慢性超過の真因(2026-08-21 計測)**: (a) `track()` コストの97%が `serde_json` の KeyframeTrack 解析(~88µs/call — 裁定11「track まるごと1 component」の代償が投影側に出た形)。恒久解候補= revision 鍵の解析済み track キャッシュ(裁定は未起草) (b) **このマシンに旧 MotoliiRn プロセスが火曜から常駐**(累計2184 CPU分・70%持続)し load を汚染 — 利用者に終了を推奨(勝手に kill しない)
 - **subagent は cargo を背景実行しない** — 完了通知との噛み合わせで自停止する実測2件(2026-08-21)。常に前景・timeout 600000
 - iced 0.14 の API 欠け(実測): text に letter-spacing 無し / Border は4辺一律(per-edge 無し)/ text_input の既定 padding は5px(固定高セルでは文字領域を圧縮する — 明示 padding(0) が要る)
+- **sccache は却下(2026-08-21 実測、2系統一致)**: 冷313s → hit75%でも331s(**むしろ遅い**)。理由は公式doc確認済み — bin/proc-macro/リンクは非キャッシュ・incremental(workspace crate全部)も非対象で、律速(リンク+ローカルcrate)に一切効かない。再提案しないこと
