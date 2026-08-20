@@ -80,6 +80,18 @@ pub fn frame_at_x(x: f32, width: f32, duration_frames: i64) -> i64 {
     frame.clamp(0, (duration_frames - 1).max(0))
 }
 
+/// 時間方向の明暗リズム(裁定148(1))の区間幅(フレーム数)。fps が引ければ
+/// 1秒、引けなければ [`RULER_TICK_DIVISIONS`] 等分へ落ちる。`draw_time_bands`
+/// と screenshot 器具の両方がこの1つの式から区間境界を出す(2箇所で別の
+/// フォールバックを持たない)。
+///
+/// `pub(crate)`: `crate::screenshot` が Timeline canvas と同じ区間の刻み方を
+/// 再現するため(`frame_to_x` と同じ理由)。
+pub(crate) fn time_band_segment_frames(fps: Option<Fps>, duration_frames: i64) -> i64 {
+    fps.map(|fps| fps.as_f64().round().max(1.0) as i64)
+        .unwrap_or_else(|| (duration_frames / RULER_TICK_DIVISIONS).max(1))
+}
+
 /// click/drag した先が何か。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hit {
@@ -260,6 +272,12 @@ impl canvas::Program<Message> for TimelinePane {
         );
         self.draw_ruler_ticks(&mut frame, width, ruler_height);
 
+        // ルーラー帯とクリップ面の境界(裁定139: 面色の塗り分け=`surface_raised`
+        // だけに頼らず hairline を足す — `.tp`/`.ruler` が border-bottom を持つ
+        // mock と同じ扱い。ルーラーは「地」の第2段なので不透明な強い hairline
+        // (`border_default`、`.cols`/`.ptitle` と同じロール)を使う)。
+        self.draw_hairline(&mut frame, 0.0, width, ruler_height, self.colors.border_default);
+
         // マーカー(comp 側の名前つきロケータ)。ルーラー帯へ縦線として重ねる。
         for marker in &self.markers {
             if let Some(frame_no) = self.marker_frame(marker) {
@@ -274,6 +292,26 @@ impl canvas::Program<Message> for TimelinePane {
                 );
             }
         }
+
+        // 明暗のリズム(裁定148・正典 §1.6): クリップ面の「地」に2方向の読解補助を
+        // 重ねる。**区切りの手段ではない**(裁定137 との両立整理) — 区切りは
+        // 上の hairline と、行ごとの下 hairline([`Self::draw`] 末尾)が担う。
+        // 順序は 行方向ゼブラ → 時間方向 の順で薄い wash を積む(どちらも
+        // token 経由の白 wash、raw 値直書きではない)。
+        let rows_top = ruler_height;
+        let rows_bottom = self.content_height();
+        for index in 0..self.rows.len() {
+            if index % 2 == 0 {
+                continue; // 偶数行は地のまま(奇数行だけへ wash を乗せる)。
+            }
+            let row_top = rows_top + row_height * index as f32;
+            frame.fill_rectangle(
+                Point::new(0.0, row_top),
+                Size::new(width, row_height),
+                self.colors.timeline_row_zebra,
+            );
+        }
+        self.draw_time_bands(&mut frame, width, rows_top, rows_bottom);
 
         // 層の行。
         for (index, row) in self.rows.iter().enumerate() {
@@ -324,6 +362,18 @@ impl canvas::Program<Message> for TimelinePane {
                 align_y: iced::alignment::Vertical::Center,
                 ..Default::default()
             });
+
+            // 行の区切り(裁定139: 面色の塗り分け=ゼブラの明暗だけに頼らず
+            // hairline を足す — mock `.trow{border-bottom:...}` と同じ役目)。
+            // 行同士は `.prow` と同じ弱い hairline ロール(区切り=線、
+            // リズム=地の微差 — §1.6 の両立整理どおり見て区別がつく)。
+            self.draw_hairline(
+                &mut frame,
+                0.0,
+                width,
+                row_top + row_height,
+                self.colors.border_hairline_weak,
+            );
         }
 
         // playhead(Session が正本)。
@@ -368,14 +418,20 @@ impl canvas::Program<Message> for TimelinePane {
     }
 }
 
+/// ルーラー目盛りの分割数。fps が引けない(comp 無し)時の時間方向リズム
+/// ([`TimelinePane::draw_time_bands`])のフォールバックも同じ分割を使う —
+/// 「ルーラーと違う区間の刻み方」という新しい規則を増やさない。
+/// `pub(crate)`: `screenshot.rs` 器具が同じ区間の刻み方を再現するのにも使う
+/// (`frame_to_x` と同じ「同じ位置関係を再現する」理由)。
+pub(crate) const RULER_TICK_DIVISIONS: i64 = 8;
+
 impl TimelinePane {
     fn draw_ruler_ticks(&self, frame: &mut canvas::Frame, width: f32, height: f32) {
         if self.duration_frames <= 0 || width <= 0.0 {
             return;
         }
-        const DIVISIONS: i64 = 8;
-        for tick in 0..=DIVISIONS {
-            let frame_no = (self.duration_frames - 1).max(0) * tick / DIVISIONS;
+        for tick in 0..=RULER_TICK_DIVISIONS {
+            let frame_no = (self.duration_frames - 1).max(0) * tick / RULER_TICK_DIVISIONS;
             let x = frame_to_x(frame_no, width, self.duration_frames);
             let tick_path = canvas::Path::line(
                 Point::new(x, height - self.dims.spacing_s),
@@ -394,6 +450,50 @@ impl TimelinePane {
                 size: iced::Pixels(self.dims.caption_text),
                 ..Default::default()
             });
+        }
+    }
+
+    /// 水平の hairline を1本引く(`Point`/`Size` を毎回組まずに済む共通口)。
+    /// `inspector_pane.rs::bordered_row` の canvas 版 — こちらは per-edge の
+    /// border-bottom そのもの(canvas は4辺一律の制約が無いので、Inspector側の
+    /// 「既知の限界」はここには適用されない)。
+    fn draw_hairline(&self, frame: &mut canvas::Frame, x0: f32, x1: f32, y: f32, color: iced::Color) {
+        let path = canvas::Path::line(Point::new(x0, y), Point::new(x1, y));
+        frame.stroke(
+            &path,
+            canvas::Stroke::default()
+                .with_color(color)
+                .with_width(self.dims.border_width),
+        );
+    }
+
+    /// 時間方向の明暗リズム(裁定148(1)・正典 §1.6)。区間幅は fps が引ければ
+    /// 1秒(Ableton の拍グリッド陰影と同型)、comp が無く fps が引けない時は
+    /// ルーラー目盛りと同じ [`RULER_TICK_DIVISIONS`] 分割へ落ちる(新しい
+    /// フォールバック規則を増やさない)。奇数番目の区間にだけ
+    /// `timeline_time_band` の薄い wash を乗せる — 偶数番目は地のまま
+    /// (行方向ゼブラと同じ「交互」の言葉遣い)。
+    fn draw_time_bands(&self, frame: &mut canvas::Frame, width: f32, top: f32, bottom: f32) {
+        if self.duration_frames <= 0 || width <= 0.0 || bottom <= top {
+            return;
+        }
+        let segment_frames = time_band_segment_frames(self.fps, self.duration_frames);
+
+        let mut segment_index: i64 = 0;
+        let mut start_frame: i64 = 0;
+        while start_frame < self.duration_frames {
+            let end_frame = (start_frame + segment_frames).min(self.duration_frames);
+            if segment_index % 2 == 1 {
+                let x0 = frame_to_x(start_frame, width, self.duration_frames);
+                let x1 = frame_to_x(end_frame, width, self.duration_frames).max(x0 + 1.0);
+                frame.fill_rectangle(
+                    Point::new(x0, top),
+                    Size::new(x1 - x0, bottom - top),
+                    self.colors.timeline_time_band,
+                );
+            }
+            start_frame = end_frame;
+            segment_index += 1;
         }
     }
 }

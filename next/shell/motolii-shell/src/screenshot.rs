@@ -16,11 +16,14 @@
 //! export 真値)をそのまま貼ると市松トグルの効果が画面から消えてしまう
 //! (裁定141以降、市松は不透明背景でも見えるはずの状態)。`frame_rgba()`
 //! 自体は書き換えない(export/screenshot 生値の不変は保つ)。
-//! Timeline は `timeline_pane` と**同じ投影関数**(`rows`/`frame_to_x`)を使って
-//! 同じ位置関係を再現するが、**ここで実際に塗るのはこのモジュール自身**
+//! Timeline は `timeline_pane` と**同じ投影関数**(`rows`/`frame_to_x`/
+//! `time_band_segment_frames`)を使って同じ位置関係(明暗リズム・hairline の
+//! 位置含む、裁定148)を再現するが、**ここで実際に塗るのはこのモジュール自身**
 //! (iced の `canvas::Frame` ではなく `image::RgbaImage` へ矩形・線を直接塗る —
 //! iced の canvas 描画パスは wgpu レンダラを要るため headless では使えない)。
-//! header/transport/status 帯は色面だけの帯として再現する。
+//! header/transport/status 帯は色面 + hairline 縁で再現する(裁定139 の
+//! shell chrome への展開)。Settings パネルは `--settings-open` フラグが立って
+//! いる間だけ、header の下へ Inspector と同じ hairline 積みで描く。
 //!
 //! **正直な限界**: 文字(層名・timecode・status 文言)は描かない。フォント
 //! ラスタライズには新しい依存(ab_glyph 等)が要り、発注書の「新依存禁止」に
@@ -29,7 +32,7 @@
 
 use image::{Rgba, RgbaImage};
 
-use crate::inspector_pane::{self, SelectionProjection};
+use crate::inspector_pane::SelectionProjection;
 use crate::tokens::{Colors, Dimensions};
 use crate::{settings_pane, timeline_pane, Shell};
 
@@ -76,6 +79,20 @@ fn stroke_v(canvas: &mut RgbaImage, x: f32, y0: f32, y1: f32, width_px: f32, col
         y0,
         width_px.max(1.0),
         (y1 - y0).max(1.0),
+        color,
+    );
+}
+
+/// 横線(Timeline の行区切り hairline)。`stroke_v` の水平版 — `stroke_rect`
+/// (4辺一律)とは違い、こちらは border-bottom 1本だけを直接引ける(canvas 描画
+/// なので Inspector 側の「既知の限界」は無い)。
+fn stroke_h(canvas: &mut RgbaImage, x0: f32, x1: f32, y: f32, width_px: f32, color: Rgba<u8>) {
+    fill_rect(
+        canvas,
+        x0,
+        y - width_px / 2.0,
+        (x1 - x0).max(1.0),
+        width_px.max(1.0),
         color,
     );
 }
@@ -224,17 +241,18 @@ pub fn inspector_region_height(shell: &Shell) -> f32 {
     inspector_content_height(shell.dims(), shell.inspector_selection().as_ref())
 }
 
-/// property 行1本(`inspector_pane.rs::transform_row` と同じ形): PROW_HAIRLINE
-/// の枠 + 3値セル(常に `surface_app` 背景 — absent/animated/editable のどれでも
-/// `value_cell`/`boxed_value`/`blank_value_cell` は同じ箱色を使う、実装参照)。
-/// Key 列(`reserved_glyph`)は Q0 により中身も枠も無いので描かない。
+/// property 行1本(`inspector_pane.rs::transform_row` と同じ形):
+/// `border_hairline_weak` の枠 + 3値セル(常に `surface_app` 背景 —
+/// absent/animated/editable のどれでも `value_cell`/`boxed_value`/
+/// `blank_value_cell` は同じ箱色を使う、実装参照)。Key 列(`reserved_glyph`)は
+/// Q0 により中身も枠も無いので描かない。
 fn draw_property_row(canvas: &mut RgbaImage, dims: Dimensions, colors: Colors, x: f32, y: f32, width: f32) {
     let row_h = dims.inspector_row_height;
     stroke_rect(
         canvas,
         Rect { x, y, w: width, h: row_h },
         dims.border_width,
-        to_rgba(inspector_pane::PROW_HAIRLINE, inspector_pane::PROW_HAIRLINE.a),
+        to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
     );
 
     let cell_w = dims.inspector_value_width;
@@ -334,7 +352,7 @@ fn draw_inspector(
         canvas,
         Rect { x, y: cy, w: width, h: blend_h },
         dims.border_width,
-        to_rgba(inspector_pane::PROW_HAIRLINE, inspector_pane::PROW_HAIRLINE.a),
+        to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
     );
     cy += blend_h;
 
@@ -350,8 +368,76 @@ fn draw_inspector(
     total_h
 }
 
-/// `shell.view()` の並び(header/stage/timeline/transport/status、`spacing_m` の
-/// 間隔・`spacing_l` の全体 padding)を、Tokens の実値でそのまま再現する。
+// ---------------------------------------------------------------------------
+// Settings 領域 — `settings_pane.rs` と同じ行の並び(裁定139 の線化展開)。
+// `--settings-open` フラグ(`main.rs`)が立っている間だけ描く。
+// ---------------------------------------------------------------------------
+
+/// Settings の各行高の近似。実 widget は文字を含む自然高(`preset_row`)や
+/// `inspector_row_height` 固定高(background/checkerboard/ui_scale)が混在する
+/// — このインストゥルメントは文字を描かないので、`preset_row`(ボタン列)も
+/// 同じ `inspector_row_height` で近似する(`inspector_hint_height` と同じ
+/// 「正直な限界」の割り切り)。
+fn settings_content_height(dims: Dimensions, has_composition: bool) -> f32 {
+    let header_h = dims.inspector_section_header_height;
+    if !has_composition {
+        return header_h + dims.inspector_row_height; // 「comp が無い」文言1行ぶん。
+    }
+    let row_h = dims.inspector_row_height;
+    let hint_h = inspector_hint_height(dims);
+    // background・preset(近似)・hint・checkerboard・hint・ui_scale の6行。
+    header_h + row_h + row_h + hint_h + row_h + hint_h + row_h
+}
+
+/// Settings 領域全体を描く。`(x, y)` は左上、返り値は描いた高さ
+/// (`settings_content_height` と同じ値)。`inspector_pane.rs::bordered_row`/
+/// `settings_pane.rs::hairline_bottom` と同じ「各行を hairline で区切る」を
+/// 矩形の枠(4辺一律の既知の近似、`draw_property_row` と同じ trade-off)で
+/// 再現する。
+fn draw_settings(
+    canvas: &mut RgbaImage,
+    dims: Dimensions,
+    colors: Colors,
+    x: f32,
+    y: f32,
+    width: f32,
+    has_composition: bool,
+) -> f32 {
+    let total_h = settings_content_height(dims, has_composition);
+
+    fill_rect(canvas, x, y, width, total_h, to_rgba(colors.surface_panel, 1.0));
+    stroke_rect(
+        canvas,
+        Rect { x, y, w: width, h: total_h },
+        dims.border_width,
+        to_rgba(colors.border_default, 1.0),
+    );
+
+    let header_h = dims.inspector_section_header_height;
+    let mut cy = y + header_h; // "SETTINGS" 見出しは背景/border 無し(裁定137/139)、高さだけ。
+
+    if !has_composition {
+        return total_h;
+    }
+
+    let row_h = dims.inspector_row_height;
+    let hint_h = inspector_hint_height(dims);
+    for row_h_i in [row_h, row_h, hint_h, row_h, hint_h, row_h] {
+        stroke_rect(
+            canvas,
+            Rect { x, y: cy, w: width, h: row_h_i },
+            dims.border_width,
+            to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
+        );
+        cy += row_h_i;
+    }
+
+    total_h
+}
+
+/// `shell.view()` の並び(header/[settings]/stage/timeline/transport/status、
+/// `spacing_m` の間隔・`spacing_l` の全体 padding)を、Tokens の実値でそのまま
+/// 再現する。
 pub fn render(shell: &Shell) -> RgbaImage {
     // `ui_scale` 適用済み(`Shell::dims` — 適用点1箇所)。この instrument も
     // 生の `tokens.dims` を直接読まない。
@@ -380,16 +466,35 @@ pub fn render(shell: &Shell) -> RgbaImage {
     let transport_h = dims.transport_band;
     let status_h = dims.row_height;
 
-    let total_h =
-        padding * 2.0 + header_h + stage_h + timeline_h + transport_h + status_h + gap * 4.0;
+    // Settings パネル(`--settings-open`)。開いている間だけ header の下へ差し込む
+    // — 実レイアウト(`Shell::view` の `column![header, [settings], row!, ...]`)
+    // と同じく、開いた分だけ gap が1本増える(header-settings 間も spacing_m)。
+    let settings_open = shell.settings_panel_open();
+    let settings_h = if settings_open {
+        settings_content_height(dims, composition.is_some())
+    } else {
+        0.0
+    };
+    let settings_gap_count = if settings_open { 1 } else { 0 };
+
+    let total_h = padding * 2.0
+        + header_h
+        + settings_h
+        + stage_h
+        + timeline_h
+        + transport_h
+        + status_h
+        + gap * (4.0 + settings_gap_count as f32);
 
     // Inspector 領域(Stage/Timeline 列の右) — 幅・高さの両方で canvas を広げる。
     // `Shell::view` の実レイアウトでは Inspector は Stage と同じ行に同居する
     // (`row![inspector, stage_pane]`)が、この instrument は元々 Stage/Timeline を
     // 1列の手組み合成で描いており、その列を左に残したまま右へ新しい列を足す
-    // (発注書 EXACT TARGET 1「右側に」)。
+    // (発注書 EXACT TARGET 1「右側に」)。[`inspector_region_top`] は「Settings
+    // 閉」を前提にした固定式(既存 fixture テストの契約)なので、開いている分は
+    // ここで自前に足す。
     let inspector_x = inspector_region_x(dims);
-    let inspector_top = inspector_region_top(dims);
+    let inspector_top = inspector_region_top(dims) + settings_h + gap * settings_gap_count as f32;
     let inspector_h = inspector_content_height(dims, inspector_selection.as_ref());
     let canvas_width = (inspector_x + dims.inspector_panel_width).round().max(CANVAS_WIDTH as f32) as u32;
     let canvas_height = total_h.max(inspector_top + inspector_h + padding);
@@ -403,6 +508,8 @@ pub fn render(shell: &Shell) -> RgbaImage {
     let mut y = padding;
 
     // header — panel header 帯。中身のボタン矩形3枚は色面だけ(文字は描かない)。
+    // `lib.rs::Shell::header` と同じ地(`surface_panel`)+ hairline 縁(裁定139 の
+    // shell chrome への展開)。
     fill_rect(
         &mut canvas,
         padding,
@@ -410,6 +517,12 @@ pub fn render(shell: &Shell) -> RgbaImage {
         content_width,
         header_h,
         to_rgba(colors.surface_panel, 1.0),
+    );
+    stroke_rect(
+        &mut canvas,
+        Rect { x: padding, y, w: content_width, h: header_h },
+        dims.border_width,
+        to_rgba(colors.border_default, 1.0),
     );
     let button_w = 72.0_f32.min((content_width - gap * 2.0) / 3.0);
     let mut bx = padding + dims.spacing_s;
@@ -425,6 +538,12 @@ pub fn render(shell: &Shell) -> RgbaImage {
         bx += button_w + dims.spacing_s;
     }
     y += header_h + gap;
+
+    // settings — 開いている時だけ(裁定139 の Settings 線化)。
+    if settings_open {
+        draw_settings(&mut canvas, dims, colors, padding, y, content_width, composition.is_some());
+        y += settings_h + gap;
+    }
 
     // stage — neutral letterbox(D8)+ 実際に GPU 合成された RGBA。
     fill_rect(
@@ -484,6 +603,58 @@ pub fn render(shell: &Shell) -> RgbaImage {
         ruler_h,
         to_rgba(colors.surface_raised, 1.0),
     );
+    // ルーラー帯とクリップ面の境界(`timeline_pane.rs::TimelinePane::draw` と
+    // 同じ hairline — 面色の塗り分け=`surface_raised` だけに頼らない)。
+    stroke_rect(
+        &mut canvas,
+        Rect { x: padding, y, w: content_width, h: ruler_h },
+        dims.border_width,
+        to_rgba(colors.border_default, 1.0),
+    );
+
+    // 明暗のリズム(裁定148・§1.6): 行方向ゼブラ → 時間方向の順に「地」を
+    // 重ねる。`timeline_pane.rs::TimelinePane::draw` と同じ token・同じ順序
+    // (区切りの手段ではない — 区切りは下の行 hairline が担う)。
+    let rows_top = timeline_top + ruler_h;
+    let rows_bottom = timeline_top + timeline_h;
+    for index in 0..rows.len() {
+        if index % 2 == 0 {
+            continue;
+        }
+        let row_top = rows_top + dims.row_height * index as f32;
+        fill_rect(
+            &mut canvas,
+            padding,
+            row_top,
+            content_width,
+            dims.row_height,
+            to_rgba(colors.timeline_row_zebra, colors.timeline_row_zebra.a),
+        );
+    }
+    if duration_frames > 0 && content_width > 0.0 && rows_bottom > rows_top {
+        let segment_frames = timeline_pane::time_band_segment_frames(fps, duration_frames);
+        let mut segment_index: i64 = 0;
+        let mut start_frame: i64 = 0;
+        while start_frame < duration_frames {
+            let end_frame = (start_frame + segment_frames).min(duration_frames);
+            if segment_index % 2 == 1 {
+                let x0 = padding + timeline_pane::frame_to_x(start_frame, content_width, duration_frames);
+                let x1 = (padding
+                    + timeline_pane::frame_to_x(end_frame, content_width, duration_frames))
+                .max(x0 + 1.0);
+                fill_rect(
+                    &mut canvas,
+                    x0,
+                    rows_top,
+                    x1 - x0,
+                    rows_bottom - rows_top,
+                    to_rgba(colors.timeline_time_band, colors.timeline_time_band.a),
+                );
+            }
+            start_frame = end_frame;
+            segment_index += 1;
+        }
+    }
 
     for marker in &markers {
         let Some(fps) = fps else { continue };
@@ -531,6 +702,17 @@ pub fn render(shell: &Shell) -> RgbaImage {
             (dims.row_height - dims.spacing_s).max(1.0),
             to_rgba(bar_color, 1.0),
         );
+
+        // 行の区切り(裁定139: 面色の塗り分け=ゼブラの明暗だけに頼らず hairline
+        // を足す — `TimelinePane::draw` の行末 hairline と同じ)。
+        stroke_h(
+            &mut canvas,
+            padding,
+            padding + content_width,
+            row_top + dims.row_height,
+            dims.border_width,
+            to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
+        );
     }
 
     let playhead_x =
@@ -557,18 +739,18 @@ pub fn render(shell: &Shell) -> RgbaImage {
     y += transport_h + gap;
 
     // status — 拒否・警告があれば警告色の細い縁取りだけ付ける(色トンマナの照合用)。
+    // `lib.rs::status_band` と同じ hairline 縁(裁定139 の shell chrome への展開 —
+    // 背景は塗らない、`inspector_pane.rs::hint_row` と同じ「border のみ」grammar)。
     let status_color = if shell.status().is_some() {
         colors.status_warning
     } else {
         colors.text_muted
     };
-    fill_rect(
+    stroke_rect(
         &mut canvas,
-        padding,
-        y,
-        content_width,
-        status_h,
-        to_rgba(colors.surface_panel, 1.0),
+        Rect { x: padding, y, w: content_width, h: status_h },
+        dims.border_width,
+        to_rgba(colors.border_default, 1.0),
     );
     fill_rect(
         &mut canvas,
