@@ -1,0 +1,273 @@
+//! wraps: iced — front。**store への query の投影**であって、Document の写しを持たない。
+//!
+//! 背骨1 を型で作る:
+//! - **書き口は [`Shell::update`] の1箇所だけ**。pane 関数は `StoreView`(不変)と
+//!   `&Session` しか受け取らないので、**書ける物を持っていない**
+//! - `view(&self)` が `&self` を取るので、描画中に Document を触る道が無い
+//!
+//! Stage は **CPU 経路**(合成結果の RGBA を `image` widget へ渡す)。
+//! iced の device の上に `re_renderer` を建てる道は裁定44 で撤回した。
+//!
+//! **front が持ってよい状態**は [`Session`] だけ — 選択と再生位置。これらは
+//! Document の写しではなく、undo の対象でもない(rerun も選択は blueprint store の
+//! 外に置いている)。**1箇所で持ち、全 pane がそこを読む**ので M14 は満たされる。
+
+use iced::widget::{button, column, container, image, row, slider, text};
+use iced::{Element, Length, Task};
+
+use motolii_engine::Engine;
+use motolii_store::{
+    Composition, Document, Intent, LayerId, LayerMeta, LayerSource, RationalTime, Revision,
+    StoreView,
+};
+
+/// front だけが持つ状態。**Document の写しは1つも入れないこと**。
+#[derive(Debug, Clone)]
+pub struct Session {
+    /// 再生位置(フレーム番号)。
+    pub playhead: i64,
+    pub selection: Option<LayerId>,
+}
+
+impl Default for Session {
+    fn default() -> Self {
+        Self {
+            playhead: 0,
+            selection: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    Undo,
+    Redo,
+    ScrubTo(i64),
+    Select(LayerId),
+    AddLayer,
+}
+
+/// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
+///
+/// いつ捨てるかは [`Document::revision`] が決める(store 世代 + edit 位置)。
+/// front が「前回の値」を自分で持たないための口がこれ。
+struct RenderedFrame {
+    revision: Revision,
+    playhead: i64,
+    handle: image::Handle,
+}
+
+pub struct Shell {
+    doc: Document,
+    session: Session,
+    engine: Engine,
+    frame: Option<RenderedFrame>,
+    /// 直近の拒否理由。**握り潰さない**(M13: 無反応ゼロ)。
+    status: Option<String>,
+}
+
+impl Shell {
+    pub fn new() -> (Self, Task<Message>) {
+        let mut doc = Document::new();
+        // 空の Document には comp が無く、Stage が何も出せない。
+        // 起動直後に何も見えないのは M17 に反するので、既定の comp を置く。
+        let _ = doc.apply(Intent::SetComposition(Composition {
+            width: 640,
+            height: 360,
+            fps: motolii_store::Fps::try_new(30, 1).expect("30fps"),
+            duration_frames: 300,
+        }));
+
+        // 既定値は「編集」ではないので戻せてはいけない。
+        doc.mark_undo_floor();
+
+        let engine = Engine::new().expect("GPU を用意できない");
+        (
+            Self {
+                doc,
+                session: Session::default(),
+                engine,
+                frame: None,
+                status: None,
+            },
+            Task::none(),
+        )
+    }
+
+    pub fn title(&self) -> String {
+        "Motolii".to_owned()
+    }
+
+    /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
+    pub fn update(&mut self, message: Message) -> Task<Message> {
+        self.status = None;
+        match message {
+            Message::Undo => {
+                if !self.doc.undo() {
+                    self.status = Some("これ以上戻せない".to_owned());
+                }
+            }
+            Message::Redo => {
+                if !self.doc.redo() {
+                    self.status = Some("これ以上進めない".to_owned());
+                }
+            }
+            Message::ScrubTo(frame) => self.session.playhead = frame.max(0),
+            Message::Select(layer) => self.session.selection = Some(layer),
+            Message::AddLayer => {
+                let id = LayerId(self.next_layer_id());
+                let placed = self.doc.apply(Intent::AddLayer(id)).and_then(|()| {
+                    self.doc.apply(Intent::SetMeta {
+                        layer: id,
+                        meta: LayerMeta {
+                            source: LayerSource::Solid {
+                                rgba: [80, 160, 220, 255],
+                                width: 240,
+                                height: 135,
+                            },
+                            order: id.0 as i16,
+                        },
+                    })
+                });
+                match placed {
+                    Ok(()) => self.session.selection = Some(id),
+                    // 拒否は必ず出す。黙って消さない。
+                    Err(error) => self.status = Some(format!("layer を置けない: {error}")),
+                }
+            }
+        }
+        self.refresh_frame();
+        Task::none()
+    }
+
+    // ---- 運転席が見るための口。**書けない** ----
+
+    pub fn layer_count(&self) -> usize {
+        self.doc.view().layers().len()
+    }
+
+    pub fn status(&self) -> Option<&str> {
+        self.status.as_deref()
+    }
+
+    /// 描き上がったフレームの識別。同じなら描き直していない。
+    pub fn frame_token(&self) -> Option<(Revision, i64)> {
+        self.frame
+            .as_ref()
+            .map(|frame| (frame.revision.clone(), frame.playhead))
+    }
+
+    pub fn view(&self) -> Element<'_, Message> {
+        // pane が受け取るのは不変の投影だけ。
+        let store = self.doc.view();
+
+        column![
+            self.header(),
+            stage_pane(self.frame.as_ref()),
+            transport(&self.session, &store),
+            status_band(self.status.as_deref(), &self.doc),
+        ]
+        .spacing(8)
+        .padding(12)
+        .into()
+    }
+
+    fn header(&self) -> Element<'_, Message> {
+        row![
+            button("Undo").on_press_maybe(self.doc.can_undo().then_some(Message::Undo)),
+            button("Redo").on_press_maybe(self.doc.can_redo().then_some(Message::Redo)),
+            button("+ Layer").on_press(Message::AddLayer),
+        ]
+        .spacing(8)
+        .into()
+    }
+
+    fn next_layer_id(&self) -> u64 {
+        self.doc
+            .view()
+            .layers()
+            .last()
+            .map(|last| last.0 + 1)
+            .unwrap_or(1)
+    }
+
+    /// Document か再生位置が変わった時だけ描き直す。
+    /// 判定は `revision()` — front が「前回の Document」を自分で持たないため。
+    fn refresh_frame(&mut self) {
+        let revision = self.doc.revision();
+        let playhead = self.session.playhead;
+        if let Some(frame) = &self.frame {
+            if frame.revision == revision && frame.playhead == playhead {
+                return;
+            }
+        }
+
+        let Ok(Some(composition)) = self.doc.view().composition() else {
+            self.frame = None;
+            return;
+        };
+        let Ok(t) = RationalTime::try_from_frame(playhead, composition.fps) else {
+            self.status = Some("再生位置を時刻へ写せない".to_owned());
+            return;
+        };
+
+        match self.engine.render_frame(&self.doc.view(), t) {
+            Ok(rgba) => {
+                self.frame = Some(RenderedFrame {
+                    revision,
+                    playhead,
+                    handle: image::Handle::from_rgba(composition.width, composition.height, rgba),
+                });
+            }
+            Err(error) => {
+                // 絵が出せなくても**画面は空にしない**(M16)。理由は帯に出す。
+                self.status = Some(format!("Stage を描けない: {error}"));
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// pane — **`StoreView`(不変)と `&Session` しか取らない**。書ける物を持たない。
+// ---------------------------------------------------------------------------
+
+fn stage_pane(frame: Option<&RenderedFrame>) -> Element<'_, Message> {
+    let body: Element<'_, Message> = match frame {
+        Some(frame) => image(frame.handle.clone())
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into(),
+        None => text("comp がまだ無い").into(),
+    };
+    container(body)
+        .width(Length::Fill)
+        .height(Length::FillPortion(3))
+        .into()
+}
+
+fn transport<'a>(session: &Session, store: &StoreView<'a>) -> Element<'a, Message> {
+    let last = store
+        .composition()
+        .ok()
+        .flatten()
+        .map(|c| (c.duration_frames - 1).max(0) as i32)
+        .unwrap_or(0);
+
+    row![
+        text(format!("frame {}", session.playhead)),
+        slider(0..=last, session.playhead as i32, |frame| {
+            Message::ScrubTo(i64::from(frame))
+        }),
+    ]
+    .spacing(8)
+    .into()
+}
+
+fn status_band<'a>(status: Option<&str>, doc: &Document) -> Element<'a, Message> {
+    let layers = doc.view().layers().len();
+    let message = match status {
+        Some(status) => status.to_owned(),
+        None => format!("layer {layers} / edit {}", doc.edit_head()),
+    };
+    text(message).into()
+}

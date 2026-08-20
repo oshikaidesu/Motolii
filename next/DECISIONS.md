@@ -48,3 +48,7 @@
 | 41 | 2026-08-20 | 置き方は `motolii-core::LayerPlacement` を store と合成器で**共有**する。並べ直すと property を1つ足すたびに6箇所を触ることになり、旧 `inspector_model.rs` が3世代になった構造の1世代目になる |
 | 42 | 2026-08-20 | 変化検出は `Document::revision()`(store 世代 + edit 位置)。`EntityDb::generation` だけでは undo/redo を捉えられず、front が `last_edit_head` を自分で持つ入口になる |
 | 43 | 2026-08-20 | **「保守をしたくない」を軸に格上げ**(利用者裁定)。自前で持つコードは資産ではなく負債で、薄いラッパーであることはその負債を最小にするための手段にすぎない。禁じるのは6つ: 上流にある物を書かない / 使われていない物を置かない / 使う分だけ移植する / 抽象を先に作らない / 器具と台帳を増やさない / 「一時的に」を作らない。`check.sh` が毎回 `owns:` の総行数を出し、**それは下がるべき数字**として扱う |
+| 44 | 2026-08-20 | **裁定26 を撤回**。Stage は iced の device に re_renderer を建てるのではなく、**CPU 経路**(合成結果の RGBA を `image` widget へ渡す)にする。軸4「保守をしたくない」で計算が変わった: GPU 共有は (a) iced が `Primitive::prepare` に adapter を渡さないので instance を作り直して adapter を選び直す迂回が要る (b) `max_bind_groups` の床という fork seam を1本抱え続ける。CPU 経路の代償は読み戻し 1.7ms/1080p(preview 解像度ならその 1/4)で、**fork を1本減らせる**方を採る |
+| 45 | 2026-08-20 | **iced は上流をそのまま引く**(fork しない)。裁定44 で seam 2 が要らなくなり、seam 1(web-sys の完全一致解除)も 0.14 では解決に出てこなかった。fork が1本減った |
+| 46 | 2026-08-20 | front が持ってよい状態は `Session`(選択と再生位置)だけ。Document の写しは持たない。選択と再生位置は undo の対象ではない(rerun も選択は blueprint store の外)。**1箇所で持ち全 pane がそこを読む**ので M14 は満たされる |
+| 47 | 2026-08-20 | `Document::mark_undo_floor()` — 起動直後や project を開いた直後の状態は編集ではないので戻せてはいけない。呼ばないと利用者が既定値を undo で消し、**Stage が理由もなく空になる**(実際に起きた) |

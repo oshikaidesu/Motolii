@@ -92,6 +92,11 @@ pub struct Document {
     head: i64,
     /// 到達済みの最大 edit 位置。redo の上限。
     tip: i64,
+    /// undo の底。**ここより前へは戻れない**。
+    ///
+    /// 起動直後に置いた既定の comp や、project を開いた直後の状態は「編集」ではないので
+    /// 戻せてはいけない。戻せると Stage が理由もなく空になる(実際に起きた)。
+    floor: i64,
 }
 
 impl Default for Document {
@@ -106,6 +111,7 @@ impl Document {
             db: EntityDb::new(StoreId::random(StoreKind::Recording, "motolii")),
             head: 0,
             tip: 0,
+            floor: 0,
         }
     }
 
@@ -131,8 +137,16 @@ impl Document {
         self.head
     }
 
+    /// 今の状態を **undo の底**にする。
+    ///
+    /// 「新規作成した」「project を開いた」の直後に呼ぶ。ここより前は編集ではないので
+    /// 戻せない。呼ばないと、起動時に置いた既定値を利用者が undo で消せてしまう。
+    pub fn mark_undo_floor(&mut self) {
+        self.floor = self.head;
+    }
+
     pub fn can_undo(&self) -> bool {
-        self.head > 0
+        self.head > self.floor
     }
 
     pub fn can_redo(&self) -> bool {
