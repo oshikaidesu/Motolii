@@ -57,8 +57,13 @@ if [ -f reference/lottie-coverage.tsv ]; then
   echo "=== Lottie 地図(AE の意味のうち、まだ向き合っていない量) ==="
   awk -F'\t' '$1 !~ /^#/ && $1 != "group" && $5 != "該当なし" { n[$5]++; total++ }
     END { for (s in n) printf "  %-8s %4d\n", s, n[s];
-          printf "  → 未判定 %d / %d = %.0f%%\n", n["未判定"], total, n["未判定"]/total*100 }' \
+          printf "  → 未判定 %d / %d\n", n["未判定"]+0, total }' \
     reference/lottie-coverage.tsv
+  echo
+  echo "=== 発注単位(採用予定 = 残り)==="
+  awk -F'\t' '$1 !~ /^#/ && $1 != "group" && $5 == "採用予定" && $8 != "" { n[$8]++ }
+    END { for (u in n) printf "  %-16s %3d\n", u, n[u] }' \
+    reference/lottie-coverage.tsv | sort -k2 -rn
 fi
 
 echo

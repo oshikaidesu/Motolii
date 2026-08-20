@@ -95,6 +95,10 @@ fn vocabulary_from_schema() -> BTreeSet<(String, String, String)> {
 struct Row {
     key: (String, String, String),
     status: String,
+    /// 採用済 の行が指す**コード中に実在する識別子**。自己申告にしないための欄。
+    evidence: String,
+    /// 採用予定 の行が属する**発注単位**。
+    unit: String,
 }
 
 fn coverage_rows() -> Vec<Row> {
@@ -122,6 +126,8 @@ fn coverage_rows() -> Vec<Row> {
         out.push(Row {
             key: (group.to_owned(), object.to_owned(), field),
             status: status.to_owned(),
+            evidence: cols.get(6).unwrap_or(&"").trim().to_owned(),
+            unit: cols.get(7).unwrap_or(&"").trim().to_owned(),
         });
     }
     out
@@ -157,6 +163,106 @@ fn the_map_covers_the_whole_schema() {
             .map(|(g, o, f)| format!("  {g}/{o}/{f}"))
             .collect::<Vec<_>>()
             .join("\n")
+    );
+}
+
+/// **「採用済」を自己申告にしない。**
+///
+/// 採用済 の行は evidence 欄に識別子を書き、それが `next/` のコードに実在することを確かめる。
+/// これが無いと「実装した」と書くだけで地図が埋まってしまい、地図が嘘をつく。
+#[test]
+fn adopted_rows_point_at_real_code() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut sources = String::new();
+    collect_sources(&root, &mut sources);
+    assert!(!sources.is_empty(), "走査対象のコードが無い");
+
+    let mut bad = Vec::new();
+    for row in coverage_rows() {
+        if row.status != "採用済" {
+            continue;
+        }
+        let (g, o, f) = &row.key;
+        if row.evidence.is_empty() {
+            bad.push(format!("  {g}/{o}/{f}: evidence 欄が空"));
+        } else if !sources.contains(&row.evidence) {
+            bad.push(format!(
+                "  {g}/{o}/{f}: evidence 「{}」がコードに無い",
+                row.evidence
+            ));
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "採用済 と書いてあるのに裏付けが無い行が {}件:\n{}",
+        bad.len(),
+        bad.join("\n")
+    );
+}
+
+fn collect_sources(dir: &std::path::Path, out: &mut String) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name == "target" || name == ".git" || name == "reference" {
+                continue;
+            }
+            collect_sources(&path, out);
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                out.push_str(&text);
+            }
+        }
+    }
+}
+
+/// **発注単位を地図から導く。**新しい台帳を作らない — 束は地図の見え方の1つにすぎない。
+///
+/// `採用予定` の行が持つ `unit` でまとめる。**完了条件は「その束の行が全部 採用済 になる」**で、
+/// 採用済 には evidence(コード中の識別子)が要るので、機械で判定できる。
+#[test]
+fn report_work_packages() {
+    use std::collections::BTreeMap;
+    let rows = coverage_rows();
+    let mut units: BTreeMap<String, (usize, usize)> = BTreeMap::new();
+    for row in &rows {
+        if row.status == "採用予定" {
+            units.entry(row.unit.clone()).or_default().0 += 1;
+        }
+    }
+    // 同じ束の 採用済 も数えて進捗にする。
+    for row in &rows {
+        if row.status == "採用済" && !row.unit.is_empty() {
+            units.entry(row.unit.clone()).or_default().1 += 1;
+        }
+    }
+
+    let mut sorted: Vec<_> = units.into_iter().collect();
+    sorted.sort_by_key(|(_, (todo, _))| std::cmp::Reverse(*todo));
+
+    println!("発注単位(採用予定 = 残り / 束の完了条件 = 全部 採用済 + evidence):");
+    for (unit, (todo, done)) in &sorted {
+        println!("  {unit:<16} 残り {todo:>3} / 済 {done:>3}");
+    }
+    println!("  合計 残り {}", sorted.iter().map(|(_, (t, _))| t).sum::<usize>());
+}
+
+#[test]
+fn every_planned_row_has_a_work_package() {
+    let orphans: Vec<_> = coverage_rows()
+        .into_iter()
+        .filter(|r| r.status == "採用予定" && r.unit.is_empty())
+        .map(|r| format!("  {}/{}/{}", r.key.0, r.key.1, r.key.2))
+        .collect();
+    assert!(
+        orphans.is_empty(),
+        "採用予定 なのに発注単位が無い行が {}件。束ねないと誰の仕事か決まらない:\n{}",
+        orphans.len(),
+        orphans.join("\n")
     );
 }
 
