@@ -3482,6 +3482,7 @@ dependencies = [
  "motolii-core",
  "motolii-eval",
  "motolii-vector",
+ "proptest",
  "re_build_info",
  "re_byte_size",
  "re_chunk",
