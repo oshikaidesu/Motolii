@@ -8,13 +8,14 @@ use re_log_types::{EntityPath, Timeline};
 
 use crate::components::{
     descriptor_attrs, descriptor_composition, descriptor_effects, descriptor_markers,
-    descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes, descriptor_text,
-    descriptor_track, LayerPresent, TrackJson,
+    descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes, descriptor_slots,
+    descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
+use crate::slot::PropertySource;
 use crate::{
     property, Composition, Document, EffectInstance, LayerAttrs, LayerId, LayerMeta,
-    LayerPlacement, Marker, Mask, PropertyId, ResolvedLayer, ResolvedMask, Shape, StoreError,
-    TextDocument, EDIT_TIMELINE,
+    LayerPlacement, Marker, Mask, PropertyId, ResolvedLayer, ResolvedMask, Shape, Slot, SlotId,
+    StoreError, TextDocument, EDIT_TIMELINE,
 };
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
@@ -164,20 +165,19 @@ impl<'a> StoreView<'a> {
         Ok(out)
     }
 
-    /// property の keyframe track。**評価はしない** — 生の意味をそのまま返す。
-    /// `Ok(None)` = **その property に track が無い**。
-    /// `Err` = **track はあるが読めない**。この2つを同義にしない — 同義にすると
+    /// property の値の出処(`PropertySource::{Track,Slot}`、`slot` 発注単位)。
+    /// **評価はしない** — 生の意味をそのまま返す。`Ok(None)` = **その property に
+    /// 値が無い**。`Err` = **値はあるが読めない**。この2つを同義にしない — 同義にすると
     /// 壊れた Document が静かに既定値へ落ち、利用者には「値が勝手に戻った」としか
     /// 見えない(M13: 無反応ゼロ / 拒否は理由が分かる)。
     ///
-    /// **実体は [`Self::track_at_path`]**。layer の property もカメラの property
-    /// (裁定116)も同じ読み方(どの entity の component を latest-at で引くか)しか
-    /// 違わないので、経路を1本に保つ。
-    fn track_at_path(
+    /// layer の property もカメラの property(裁定116)も同じ読み方(どの entity の
+    /// component を latest-at で引くか)しか違わないので、経路を1本に保つ。
+    fn source_at_path(
         &self,
         path: &EntityPath,
         property: &PropertyId,
-    ) -> Result<Option<KeyframeTrack>, StoreError> {
+    ) -> Result<Option<PropertySource>, StoreError> {
         let descriptor = descriptor_track(property);
         let results = self
             .db
@@ -193,6 +193,22 @@ impl<'a> StoreView<'a> {
             .map_err(StoreError::Encode)
     }
 
+    /// property の keyframe track。**`PropertySource::Slot` を指している property は
+    /// ここでは `None`** — この property 自身は track を持たない(値はスロット表の
+    /// 側にある)。「track が無い」と「スロットへ委譲している」を区別したい場合は
+    /// [`Self::property_source`] を使う。評価込みの値が欲しい場合は [`Self::value_at`]
+    /// (スロット参照も解決する)。
+    fn track_at_path(
+        &self,
+        path: &EntityPath,
+        property: &PropertyId,
+    ) -> Result<Option<KeyframeTrack>, StoreError> {
+        Ok(match self.source_at_path(path, property)? {
+            Some(PropertySource::Track(track)) => Some(track),
+            Some(PropertySource::Slot(_)) | None => None,
+        })
+    }
+
     pub fn track(
         &self,
         layer: LayerId,
@@ -202,9 +218,55 @@ impl<'a> StoreView<'a> {
     }
 
     /// カメラの property の keyframe track(`PropertyId::camera` で作った物のみ意味を
-    /// 持つ)。無ければ `Ok(None)`(その property はまだキーを打っていない)。
+    /// 持つ)。無ければ `Ok(None)`(その property はまだキーを打っていない、またはスロット
+    /// 参照へ委譲している)。
     pub fn camera_track(&self, property: &PropertyId) -> Result<Option<KeyframeTrack>, StoreError> {
         self.track_at_path(&Document::composition_path(), property)
+    }
+
+    /// この property の生の出処(`Track` か `Slot` か)。`track()`/`value_at()` は
+    /// この2つを区別しない読み方(片方は「値なし」に潰す、片方は解決する)なので、
+    /// Inspector 等が「この行はスロット参照だ」と表示したい時はここを使う。
+    pub fn property_source(
+        &self,
+        layer: LayerId,
+        property: &PropertyId,
+    ) -> Result<Option<PropertySource>, StoreError> {
+        self.source_at_path(&layer.entity_path(), property)
+    }
+
+    /// カメラの property 版(同上)。
+    pub fn camera_property_source(
+        &self,
+        property: &PropertyId,
+    ) -> Result<Option<PropertySource>, StoreError> {
+        self.source_at_path(&Document::composition_path(), property)
+    }
+
+    /// comp の Slots 表(`composition/animation/slots`)。並びは編集順
+    /// (`Intent::SetSlots` が渡した `Vec` の並びをそのまま保つ、mask/effect と同じ流儀)。
+    pub fn slots(&self) -> Result<Vec<Slot>, StoreError> {
+        let descriptor = descriptor_slots();
+        let results = self
+            .db
+            .latest_at(&self.query(), &Document::composition_path(), [descriptor.component]);
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(Vec::new());
+        };
+        serde_json::from_str(&json.0).map_err(StoreError::Encode)
+    }
+
+    /// `id` を持つスロットの track。**表に無い id は `Ok(None)`**(まだキーを打って
+    /// いない property と同じ扱い、裁定20 の応用 — 参照先が無いだけで壊れてはいない)。
+    fn slot_track(&self, id: &SlotId) -> Result<Option<KeyframeTrack>, StoreError> {
+        Ok(self
+            .slots()?
+            .into_iter()
+            .find(|slot| &slot.id == id)
+            .map(|slot| slot.track))
     }
 
     fn value_at_path(
@@ -213,12 +275,20 @@ impl<'a> StoreView<'a> {
         property: &PropertyId,
         t: RationalTime,
     ) -> Result<Option<Value>, StoreError> {
-        Ok(self
-            .track_at_path(path, property)?
-            .map(|track| track.eval(t)))
+        match self.source_at_path(path, property)? {
+            Some(PropertySource::Track(track)) => Ok(Some(track.eval(t))),
+            // **スロット参照はここで解決する** — `value_at`/`camera_value_at` を
+            // 呼ぶ側は「この property がスロットへ委譲しているか」を意識しなくてよい
+            // (`properties/property sid` の意味そのもの、地図の note どおり)。
+            Some(PropertySource::Slot(slot_id)) => {
+                Ok(self.slot_track(&slot_id)?.map(|track| track.eval(t)))
+            }
+            None => Ok(None),
+        }
     }
 
     /// comp 時刻の値。**補間の意味は `motolii-eval` が持つ**ので、ここは呼ぶだけ。
+    /// スロット参照も含めて解決済みの値を返す。
     pub fn value_at(
         &self,
         layer: LayerId,

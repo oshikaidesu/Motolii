@@ -225,21 +225,25 @@ pub fn build() -> Fixture {
         t: t(0),
         value: Value::F64(0.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     logo_opacity.insert(Keyframe {
         t: t(20),
         value: Value::F64(1.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     logo_opacity.insert(Keyframe {
         t: t(70),
         value: Value::F64(1.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     logo_opacity.insert(Keyframe {
         t: t(90),
         value: Value::F64(0.0),
         interp: Interp::Hold,
+        spatial: None,
     });
     intents.push(Intent::SetTrack {
         layer: logo_id,
@@ -258,11 +262,13 @@ pub fn build() -> Fixture {
             x2: 0.25,
             y2: 1.0,
         },
+        spatial: None,
     });
     sabi_position.insert(Keyframe {
         t: t(570),
         value: Value::Vec2([960.0, 540.0]),
         interp: Interp::Linear,
+        spatial: None,
     });
     intents.push(Intent::SetTrack {
         layer: sabi_id,
@@ -276,16 +282,19 @@ pub fn build() -> Fixture {
         t: t(0),
         value: Value::F64(1.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     vocal_opacity.insert(Keyframe {
         t: t(1770),
         value: Value::F64(1.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     vocal_opacity.insert(Keyframe {
         t: t(1799),
         value: Value::F64(0.0),
         interp: Interp::Hold,
+        spatial: None,
     });
     intents.push(Intent::SetTrack {
         layer: vocal_id,

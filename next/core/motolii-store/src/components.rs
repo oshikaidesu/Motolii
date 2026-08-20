@@ -208,6 +208,17 @@ pub fn descriptor_markers() -> ComponentDescriptor {
     }
 }
 
+/// comp の Slots 表(`composition/animation/slots`)。**comp の設定/マーカーとも
+/// 別 component** — `SetComposition`/`SetMarkers` と同じ理由で、テンプレートの
+/// 差し替え口という別の編集操作を巻き込まない([`descriptor_markers`] の doc 参照)。
+pub fn descriptor_slots() -> ComponentDescriptor {
+    ComponentDescriptor {
+        archetype: Some(archetype_composition().into()),
+        component: "Composition:slots".into(),
+        component_type: Some(TrackJson::name()),
+    }
+}
+
 pub fn descriptor_present() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),

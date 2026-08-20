@@ -11,11 +11,12 @@ use re_types_core::{Component, SerializedComponentBatch};
 
 use crate::components::{
     descriptor_attrs, descriptor_composition, descriptor_effects, descriptor_markers,
-    descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes, descriptor_text,
-    descriptor_track, LayerPresent, TrackJson,
+    descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes, descriptor_slots,
+    descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
+use crate::slot::PropertySource;
 use crate::view::StoreView;
-use crate::{LayerAttrsPatch, StoreError, EDIT_TIMELINE};
+use crate::{LayerAttrsPatch, Slot, SlotId, StoreError, EDIT_TIMELINE};
 
 /// layer の安定 ID。entity path はこれ1つから決まる。
 ///
@@ -249,6 +250,16 @@ pub enum Intent {
         property: PropertyId,
         track: motolii_eval::KeyframeTrack,
     },
+    /// この property をスロット参照へ切り替える(`properties/property sid`、`slot`
+    /// 発注単位)。**`SetTrack` と書く先は同じ component** — `PropertySource::Slot` を
+    /// そこへ書くだけで、新しい component は増やさない(地図の note「第二の差し替え
+    /// 機構を作らない」)。`SetTrack` を再び投げれば普通の track へ戻せる(同じ場所を
+    /// 上書きするだけなので、専用の「解除」variant は要らない)。
+    SetPropertySlot {
+        layer: LayerId,
+        property: PropertyId,
+        slot: SlotId,
+    },
     /// 素材と重ね順の**新規配置専用**。
     ///
     /// **既に `meta` を持つ layer には使えない**(`write` が拒む、裁定108(c))。
@@ -325,6 +336,17 @@ pub enum Intent {
     SetCameraTrack {
         property: PropertyId,
         track: motolii_eval::KeyframeTrack,
+    },
+    /// カメラの property をスロット参照へ切り替える。[`Intent::SetPropertySlot`] の
+    /// カメラ版(`SetCameraTrack`/`SetTrack` が entity を分けているのと同じ形)。
+    SetCameraPropertySlot {
+        property: PropertyId,
+        slot: SlotId,
+    },
+    /// comp の Slots 表(`composition/animation/slots`)。追加・削除・並べ替え・
+    /// 値の差し替えはすべてこれ1つ(`SetMasks`/`SetMarkers` と同じ考え方)。
+    SetSlots {
+        slots: Vec<Slot>,
     },
 }
 
@@ -758,7 +780,10 @@ impl Document {
                 property,
                 track,
             } => {
-                let json = serde_json::to_string(&track)?;
+                // **`PropertySource::Track` でラップして書く**(`slot` 発注単位)。
+                // untagged なので wire 形は今までの `KeyframeTrack` の JSON と同じ —
+                // 既存の呼び手・読み手(`view.track()`)は何も変わらない。
+                let json = serde_json::to_string(&PropertySource::Track(track))?;
                 (
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
@@ -769,11 +794,49 @@ impl Document {
                 )
             }
             Intent::SetCameraTrack { property, track } => {
-                let json = serde_json::to_string(&track)?;
+                let json = serde_json::to_string(&PropertySource::Track(track))?;
                 (
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_track(&property),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetPropertySlot {
+                layer,
+                property,
+                slot,
+            } => {
+                let json = serde_json::to_string(&PropertySource::Slot(slot))?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_track(&property),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetCameraPropertySlot { property, slot } => {
+                let json = serde_json::to_string(&PropertySource::Slot(slot))?;
+                (
+                    Self::composition_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_track(&property),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetSlots { slots } => {
+                crate::slot::validate_unique_ids(&slots)?;
+                let json = serde_json::to_string(&slots)?;
+                (
+                    Self::composition_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_slots(),
                         array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],

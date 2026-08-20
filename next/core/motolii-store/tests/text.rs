@@ -38,7 +38,7 @@
 
 use motolii_store::{
     Composition, ContentKeyframe, ContentTrack, Document, FontRef, Fps, Interp, Intent, Keyframe,
-    KeyframeTrack, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime,
+    KeyframeTrack, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, SlotId,
     TextAlignmentOptions, TextBasedOn, TextDocument, TextDocumentStyle, TextGrouping, TextJustify,
     TextRandomize, TextRange, TextRangeId, TextRangeSelector, TextRangeUnits, TextRun, TextShape,
     TextStyleAxis, TextStyleFeature, TextStyleId, TextVariationAxis, Value,
@@ -385,11 +385,11 @@ fn wrap_size_none_means_point_text_some_means_a_fixed_box() {
 }
 
 // ---------------------------------------------------------------------------
-// sid — slots と同じ口(まだ解決しない、参照識別子だけ持てる)
+// sid — slots と同じ口([`SlotId`]、`slot` 発注単位が実装した型そのもの)
 // ---------------------------------------------------------------------------
 
 #[test]
-fn slot_id_is_carried_but_not_resolved_this_slice() {
+fn slot_id_is_carried_as_the_shared_slot_id_type() {
     let mut doc = doc_with_comp(300);
     let layer = LayerId(1);
     place_text_layer(&mut doc, layer, 0, 100);
@@ -397,20 +397,16 @@ fn slot_id_is_carried_but_not_resolved_this_slice() {
     doc.apply(Intent::SetTextDocument {
         layer,
         document: TextDocument {
-            slot_id: Some("lyric_line_1".to_owned()),
+            slot_id: Some(SlotId("lyric_line_1".to_owned())),
             ..lyric_document("")
         },
     })
     .unwrap();
 
     assert_eq!(
-        doc.view()
-            .text_document(layer)
-            .unwrap()
-            .unwrap()
-            .slot_id
-            .as_deref(),
-        Some("lyric_line_1")
+        doc.view().text_document(layer).unwrap().unwrap().slot_id,
+        Some(SlotId("lyric_line_1".to_owned())),
+        "text-1 の sid が slot 束の SlotId と別の型になっている(第二の差し替え機構)"
     );
 }
 

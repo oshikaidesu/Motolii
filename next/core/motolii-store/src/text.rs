@@ -94,6 +94,8 @@ use serde::{Deserialize, Serialize};
 
 use motolii_core::RationalTime;
 
+use crate::SlotId;
+
 /// フォント参照。実体は path + 指紋(**素材と同じ形**、裁定79/97 — Lottie の名前参照は
 /// 採らない)。family/style は解決キー(編集時だけ要る、Rive `runtime: false` の裏、裁定97)。
 ///
@@ -447,10 +449,12 @@ pub struct TextDocument {
     /// はこの表の**既定行(`id 0`)**として読み直す — 独立した document 値ではない。
     pub styles: Vec<TextDocumentStyle>,
     /// `animated-text-document sid`(Slot ID)。歌詞テンプレートの差し替え口。
-    /// **slots(`slot` 発注単位、未着手)と同じ口に乗せる** — 第二の差し替え機構を
-    /// 作らない(地図の note どおり)。slots 機構自体がまだ store に無いので、
-    /// ここでは参照識別子だけを持つ(解決は slots が生えた日の engine 側の仕事)。
-    pub slot_id: Option<String>,
+    /// **slots(`slot` 発注単位)と同じ口に乗る** — `slot` 束が実装した
+    /// [`crate::SlotId`]/[`crate::Slot`]/[`crate::PropertySource`] をそのまま指す
+    /// (第二の差し替え機構を作らない、地図の note どおり)。値の解決自体は
+    /// comp の Slots 表を引く evaluator(engine、未着手)の仕事のままだが、参照の型は
+    /// もう素の `String` ではない — スロット表の行と1つの型で結ばれている。
+    pub slot_id: Option<SlotId>,
     /// `text-data a`(Ranges)。アニメーターの列 — MV タイポグラフィの核心(裁定75)。
     /// 並び=適用順。動く量は `id` で名前空間が決まる `PropertyId` 経由で別途乗る
     /// ([`TextRange`] のドキュメント参照)。
