@@ -21,4 +21,4 @@ mod value;
 
 pub use bezier::cubic_bezier_ease;
 pub use track::{Interp, Keyframe, KeyframeTrack, TrackError};
-pub use value::Value;
+pub use value::{Path, PathVertex, Value};

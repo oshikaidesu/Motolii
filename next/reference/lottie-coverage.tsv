@@ -651,10 +651,10 @@ text	text-style	so	Stroke Opacity	不採用	sc の alpha が正本
 text	text-style	ss	Stroke Saturation	不採用	同上(HSB 相対調整)		
 text	text-style	sw	Stroke Width	採用予定	文字ごとの縁取り幅		text
 text	text-style	t	Letter Spacing	採用予定	トラッキング。**アニメーターだが送り幅を動かす** — text-model §1 の2層分離では足りず3層が要る		text
-values	bezier	c	Closed	採用予定	パスを閉じるか		mask
-values	bezier	i	In Tangents	採用予定	頂点ごとの in 接線。keyframe の時間ベジェとは別物		mask
-values	bezier	o	Out Tangents	採用予定	同 out 接線		mask
-values	bezier	v	Vertices	採用予定	頂点列。**v/i/o が同じ長さであることを型で縛る**		mask
+values	bezier	c	Closed	採用済	パスを閉じるか	pub closed: bool	
+values	bezier	i	In Tangents	採用済	頂点ごとの in 接線。keyframe の時間ベジェとは別物	pub in_tangent: [f64; 2]	
+values	bezier	o	Out Tangents	採用済	同 out 接線	pub out_tangent: [f64; 2]	
+values	bezier	v	Vertices	採用済	頂点列。**v/i/o が同じ長さであることを型で縛る**	pub vertices: Vec<PathVertex>	
 values	color		Color	採用済	Value::Color と一致。ただし常に4成分で、Lottie の alpha 省略は採らない	Color([f64; 4])	
 values	data-url		Data URL	不採用	素材を base64 で Document に埋めない。project file が素材ごと膨らむ		
 values	gradient		Gradient	不採用	色停止と透明度停止を1本の float 列に混ぜた平坦配列。列だけでは読めない不正状態		
