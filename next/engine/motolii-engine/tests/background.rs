@@ -95,6 +95,64 @@ fn background_sits_behind_every_real_layer() {
     );
 }
 
+/// **readback アーティファクトの回帰試験**: 不透明背景の comp を合成した結果、
+/// **外周含む全画素**の alpha が 255 になるはず。
+///
+/// 主担当が実測した症状(shell 側の `checkerboard_toggle_does_not_touch_interior_
+/// pixels_when_background_is_opaque` の doc コメント参照): 640x360 comp の
+/// `Shell::frame_rgba()` で外周ちょうど 1996 画素(= `2*(640+360)-4`、perimeter と
+/// 厳密一致)が alpha=0 になる。ここでは同じ寸法・同じ「comp 全域を覆う不透明な
+/// pinned 背景 layer」という条件を `Engine::render_frame` 単体で再現する。
+#[test]
+fn opaque_background_leaves_no_transparent_border_pixels() {
+    const BW: u32 = 640;
+    const BH: u32 = 360;
+
+    let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: BW,
+        height: BH,
+        fps: Fps::try_new(30, 1).unwrap(),
+        duration_frames: 60,
+        background: [0.0, 0.0, 0.0, 1.0],
+    }))
+    .unwrap();
+
+    let mut engine = Engine::new().expect("engine");
+    let frame = engine.render_frame(&doc.view(), t(0)).unwrap();
+    assert_eq!(frame.len(), (BW * BH * 4) as usize);
+
+    let px = |buf: &[u8], x: u32, y: u32| -> [u8; 4] {
+        let i = ((y * BW + x) * 4) as usize;
+        [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
+    };
+
+    let mut transparent = Vec::new();
+    for x in 0..BW {
+        if px(&frame, x, 0)[3] != 255 {
+            transparent.push((x, 0));
+        }
+        if px(&frame, x, BH - 1)[3] != 255 {
+            transparent.push((x, BH - 1));
+        }
+    }
+    for y in 1..BH - 1 {
+        if px(&frame, 0, y)[3] != 255 {
+            transparent.push((0, y));
+        }
+        if px(&frame, BW - 1, y)[3] != 255 {
+            transparent.push((BW - 1, y));
+        }
+    }
+
+    assert!(
+        transparent.is_empty(),
+        "不透明背景なのに外周に alpha!=255 の画素が {} 個ある(例: {:?})",
+        transparent.len(),
+        &transparent[..transparent.len().min(8)]
+    );
+}
+
 /// undo で戻ると背景色も戻る — `SetComposition` は普通の編集(裁定40 の丸ごと置換)
 /// なので、他の編集と同じく undo が効くはず。
 #[test]

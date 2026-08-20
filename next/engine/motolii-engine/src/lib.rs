@@ -39,6 +39,33 @@ pub enum EngineError {
     UnsupportedMatte(Matte),
 }
 
+/// 背景 layer の `LayerPlacement::order`(= `re_renderer::DepthOffset`、`i16`)。
+///
+/// **`i16::MIN` を使ってはいけない**(2026-08-21 実測・真因)。`order` は
+/// `motolii-compositor::render_with_timing` で `RectangleOptions::depth_offset` へ
+/// そのまま渡り、上流 shader `depth_offset.wgsl` の `apply_depth_offset` が
+/// `w_scale = 1.0 - f32eps * offset`(`f32eps = 2^-23`)で clip 空間の `w` を
+/// スケールする。これは NDC 座標(= `x_proj / w_proj`)を原点へ向けて一様に縮める —
+/// `order` の絶対値が大きいほど、板が画面中心へわずかに縮む。
+///
+/// 縮み幅は近似的に `half_dimension_px * f32eps * |offset|`(画素)。
+/// `order = i16::MIN`(32768)・640x360 comp(横の半幅 320px)では
+/// `320 * 2^-23 * 32768 = 1.25px` — 0.5px を超えるので**外周ちょうど1画素幅**が
+/// ラスタライズから漏れる(ピクセル中心 0.5 が板の左端 1.25 より内側に入ってしまい
+/// カバーされない。右端・上端・下端も対称に同じだけ縮むので四辺とも同様)。
+/// これが 640x360 comp で外周 1996 画素(`2*(640+360)-4`)が alpha=0 になっていた
+/// 直接の機序 —「comp 実内容と無関係」「非乱数的」「厳密に外周1周ぶん」という
+/// 観測はすべてこの一様スケールで説明がつく(回帰試験:
+/// `tests/background.rs::opaque_background_leaves_no_transparent_border_pixels`)。
+///
+/// 背景 layer に要る性質は「実 layer より必ず奥」だけで、`i16` の理論最小値である
+/// 必要はない。実 layer の `order` は今のところ `LayerId` 由来の小さい非負整数
+/// (`motolii-shell::Message::AddLayer`/`admit` の `order: id.0 as i16` が唯一の
+/// 発生源)なので、`-1` で十分かつ厳密に安全 — このスケール式での縮みは
+/// `half_dimension_px * f32eps * 1` で、8K(半幅 3840px)でも `3840 * 2^-23 ≈ 0.00046px`
+/// と機械精度未満(0.5px 閾値の千倍以上小さい)。
+const BACKGROUND_ORDER: i16 = -1;
+
 pub struct Engine {
     compositor: Compositor,
     /// 素材 → GPU texture。同じ素材を毎フレーム上げ直さない。
@@ -102,9 +129,11 @@ impl Engine {
         // comp の背景色(`Composition::background`、利用者要望: 黒だと気分が上がらない)。
         // **`motolii-compositor` の clear 色は変えない**(compositor は書き込み禁止の
         // 並列レーンが触っている最中)。代わりに comp 全域を覆う不透明の layer を
-        // どの実 layer よりも奥(`order = i16::MIN`)に足す — pinned layer(裁定113、
-        // カメラの pan/zoom を受けず画面に張り付く機構)を流用すれば、camera が
-        // どこを向いていても render target をちょうど覆う「クリア色」として働く。
+        // どの実 layer よりも奥(`order = BACKGROUND_ORDER`、定数の doc 参照 —
+        // `i16::MIN` は depth_offset の shader 側スケールで外周1px を欠落させる
+        // ので使わない)に足す — pinned layer(裁定113、カメラの pan/zoom を受けず
+        // 画面に張り付く機構)を流用すれば、camera がどこを向いていても render
+        // target をちょうど覆う「クリア色」として働く。
         // 既定値([0,0,0,1] 不透明黒)は旧 clear 色と同じ見た目になるので、
         // 既存テストの期待画素は変わらない(合成器の実測: `TRANSPARENT` clear は
         // 読み戻すと不透明黒になる — `motolii-compositor` の
@@ -125,7 +154,7 @@ impl Engine {
             texture: background_texture.expect("LayerSource::Solid は常に texture を返す"),
             size: [comp.width as f32, comp.height as f32],
             placement: LayerPlacement {
-                order: i16::MIN,
+                order: BACKGROUND_ORDER,
                 ..Default::default()
             },
             pinned: true,
