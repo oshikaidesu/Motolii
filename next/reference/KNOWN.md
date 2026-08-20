@@ -55,3 +55,5 @@
 - **M8 の音声クロック→playhead は旧 `motolii-transport` に設計済み・実働済み**(audio-clock-master: `frames_supplied` − `device_wait`、wall-clock 不使用、無音補填で論理位置を進めない)。移植元として名指し可
 - **export の音声 mux は現 motolii-media で解決済み**(`mux_soundtrack` / `mux_mixed_pcm`)。音声束は PCM を作るだけでよい
 - **iced×リアルタイム音声は nih-plug エコシステムで実証済み**(`nih_plug_iced` — VST3/CLAP プラグイン GUI adapter)。ただし nih-plug は「プラグインを作る側」でありホスト側には使えない。VST ホスティング自体は GOALS の除外のまま(利用者確認 2026-08-20)
+- **mix/program/MixProducer の必然scratch判定は反証検索済み(2026-08-20、覆らず)**: Firewheel(BillyDM現行、最有力)が設計文書で timeline/シーケンサを非目標と明記 / dropseed は 0.0.0 placeholder / creek は「本番未使用の非mix経路」にしか当たらず条件付き(現構成は decode-then-RAM でディスクストリーミング自体をしていない — PcmCache は5分ステレオ≈110MBを全展開、将来の穴)/ fundsp・dasp は誤差レベル。**削減0行で確定**
+- 音声の規律 crate 候補(owns削減でなく柵): `assert_no_alloc`(コールバック内 alloc 禁止の機械化)・`audio-thread-priority`(スレッド優先度 — 現状未設定という穴あり)
