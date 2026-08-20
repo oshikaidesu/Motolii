@@ -61,3 +61,5 @@
 - **KNOWN 運用規則の追加**: 「探したが無い」と書く時は**探索範囲を必ず併記**する(今夜2回の教訓: gizmo=語彙の壁、音声=界隈の壁。範囲の宣言なき「無い」は嘘になる)
 - **iced 0.14 の image 同期アップロード予算は 2MiB**(実測 2026-08-20): それ以上の RGBA は背景スレッド行きになり、完了まで**何も描かれない**(= チラつきの真因。1080p フレーム 8.3MB は4倍超過)。対策: Handle は 1.5MB 以下へ縮小して同期経路に収める(柵テスト `render_pipeline_fence.rs` あり)。preview 縮小は裁定21(preview 1/2 既定)と整合。恒久解の候補は iced 上流修正 or GPU 埋め込み(裁定26)
 - **timeline_projection probe の慢性超過の真因(2026-08-21 計測)**: (a) `track()` コストの97%が `serde_json` の KeyframeTrack 解析(~88µs/call — 裁定11「track まるごと1 component」の代償が投影側に出た形)。恒久解候補= revision 鍵の解析済み track キャッシュ(裁定は未起草) (b) **このマシンに旧 MotoliiRn プロセスが火曜から常駐**(累計2184 CPU分・70%持続)し load を汚染 — 利用者に終了を推奨(勝手に kill しない)
+- **subagent は cargo を背景実行しない** — 完了通知との噛み合わせで自停止する実測2件(2026-08-21)。常に前景・timeout 600000
+- iced 0.14 の API 欠け(実測): text に letter-spacing 無し / Border は4辺一律(per-edge 無し)/ text_input の既定 padding は5px(固定高セルでは文字領域を圧縮する — 明示 padding(0) が要る)
