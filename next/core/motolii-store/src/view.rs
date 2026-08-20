@@ -7,7 +7,7 @@ use re_entity_db::EntityDb;
 use re_log_types::{EntityPath, Timeline};
 
 use crate::components::{descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
-use crate::{property, LayerId, LayerMeta, PropertyId, ResolvedLayer, EDIT_TIMELINE};
+use crate::{property, LayerId, LayerMeta, PropertyId, ResolvedLayer, StoreError, EDIT_TIMELINE};
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
 #[derive(Clone, Copy)]
@@ -52,17 +52,29 @@ impl<'a> StoreView<'a> {
     }
 
     /// property の keyframe track。**評価はしない** — 生の意味をそのまま返す。
-    pub fn track(&self, layer: LayerId, property: &PropertyId) -> Option<KeyframeTrack> {
+    /// `Ok(None)` = **その property に track が無い**。
+    /// `Err` = **track はあるが読めない**。この2つを同義にしない — 同義にすると
+    /// 壊れた Document が静かに既定値へ落ち、利用者には「値が勝手に戻った」としか
+    /// 見えない(M13: 無反応ゼロ / 拒否は理由が分かる)。
+    pub fn track(
+        &self,
+        layer: LayerId,
+        property: &PropertyId,
+    ) -> Result<Option<KeyframeTrack>, StoreError> {
         let descriptor = descriptor_track(property);
         let path = layer.entity_path();
         let results = self
             .db
             .latest_at(&self.query(), &path, [descriptor.component]);
-        let json = results
-            .component_batch::<TrackJson>(descriptor.component)?
-            .into_iter()
-            .next()?;
-        serde_json::from_str(&json.0).ok()
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(None);
+        };
+        serde_json::from_str(&json.0)
+            .map(Some)
+            .map_err(StoreError::Encode)
     }
 
     /// comp 時刻の値。**補間の意味は `motolii-eval` が持つ**ので、ここは呼ぶだけ。
@@ -71,67 +83,82 @@ impl<'a> StoreView<'a> {
         layer: LayerId,
         property: &PropertyId,
         t: RationalTime,
-    ) -> Option<Value> {
-        self.track(layer, property).map(|track| track.eval(t))
+    ) -> Result<Option<Value>, StoreError> {
+        Ok(self.track(layer, property)?.map(|track| track.eval(t)))
     }
 
-    pub fn meta(&self, layer: LayerId) -> Option<LayerMeta> {
+    pub fn meta(&self, layer: LayerId) -> Result<Option<LayerMeta>, StoreError> {
         let descriptor = descriptor_meta();
         let path = layer.entity_path();
         let results = self
             .db
             .latest_at(&self.query(), &path, [descriptor.component]);
-        let json = results
-            .component_batch::<TrackJson>(descriptor.component)?
-            .into_iter()
-            .next()?;
-        serde_json::from_str(&json.0).ok()
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(None);
+        };
+        serde_json::from_str(&json.0)
+            .map(Some)
+            .map_err(StoreError::Encode)
     }
 
     /// comp 時刻での layer の姿。**合成器へ渡す唯一の形**。
     ///
     /// track が無い property は既定値になる(位置 0、不透明度 1、大きさは素材のまま)。
     /// これは AE で「キーを打っていない property は静止値」と同じ扱いである。
-    pub fn resolve(&self, layer: LayerId, t: RationalTime) -> Option<ResolvedLayer> {
-        let meta = self.meta(layer)?;
+    pub fn resolve(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+    ) -> Result<Option<ResolvedLayer>, StoreError> {
+        let Some(meta) = self.meta(layer)? else {
+            return Ok(None);
+        };
         // 実素材の大きさは probe しないと分からない。ここでは 0 を置き、engine が
         // 「track が無く declared も無い」場合だけ素材の実寸で埋める。
         let size = meta.source.declared_size().unwrap_or([0.0, 0.0]);
 
-        let scalar = |name: &str, default: f32| -> f32 {
-            let Ok(property) = PropertyId::new(name) else {
-                return default;
-            };
-            match self.value_at(layer, &property, t) {
-                Some(Value::F64(v)) => v as f32,
-                _ => default,
+        // 標準 property は必ず構築できる(予約語でない・空でない)ので、
+        // ここで失敗したら**コードの誤り**であって Document の内容ではない。
+        let scalar = |name: &str, default: f32| -> Result<f32, StoreError> {
+            let property = PropertyId::new(name)?;
+            match self.value_at(layer, &property, t)? {
+                Some(Value::F64(v)) => Ok(v as f32),
+                // track はあるが型が違う。既定値へ落とすと「打ったキーが効かない」に見える。
+                Some(other) => Err(StoreError::Property(format!(
+                    "{name} に数値でない値が入っている: {other:?}"
+                ))),
+                None => Ok(default),
             }
         };
 
-        Some(ResolvedLayer {
+        Ok(Some(ResolvedLayer {
             top_left: [
-                scalar(property::POSITION_X, 0.0),
-                scalar(property::POSITION_Y, 0.0),
+                scalar(property::POSITION_X, 0.0)?,
+                scalar(property::POSITION_Y, 0.0)?,
             ],
             size: [
-                scalar(property::WIDTH, size[0]),
-                scalar(property::HEIGHT, size[1]),
+                scalar(property::WIDTH, size[0])?,
+                scalar(property::HEIGHT, size[1])?,
             ],
-            opacity: scalar(property::OPACITY, 1.0).clamp(0.0, 1.0),
+            opacity: scalar(property::OPACITY, 1.0)?.clamp(0.0, 1.0),
             order: meta.order,
             source: meta.source,
-        })
+        }))
     }
 
     /// この時刻に描くべき layer を**奥から手前の順**で返す。
-    pub fn resolved_layers(&self, t: RationalTime) -> Vec<ResolvedLayer> {
-        let mut out: Vec<ResolvedLayer> = self
-            .layers()
-            .into_iter()
-            .filter_map(|layer| self.resolve(layer, t))
-            .collect();
+    pub fn resolved_layers(&self, t: RationalTime) -> Result<Vec<ResolvedLayer>, StoreError> {
+        let mut out = Vec::new();
+        for layer in self.layers() {
+            if let Some(resolved) = self.resolve(layer, t)? {
+                out.push(resolved);
+            }
+        }
         out.sort_by_key(|layer| layer.order);
-        out
+        Ok(out)
     }
 }
 

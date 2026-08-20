@@ -9,7 +9,8 @@
 use std::collections::{HashMap, VecDeque};
 
 use motolii_compositor::GpuTexture2D;
-use motolii_compositor::{CompSpec, Compositor, CompositorError, Layer};
+use motolii_compositor::{Compositor, CompositorError, Layer};
+use motolii_core::CompSpec;
 use motolii_media::{probe, read_frame_at, MediaError, MediaInfo};
 use motolii_store::{LayerSource, RationalTime, StoreView};
 
@@ -19,6 +20,10 @@ pub enum EngineError {
     Compositor(#[from] CompositorError),
     #[error(transparent)]
     Media(#[from] MediaError),
+    #[error("時刻をフレームへ写せない: {0}")]
+    Time(String),
+    #[error("Document を読めない: {0}")]
+    Store(String),
 }
 
 pub struct Engine {
@@ -61,11 +66,17 @@ impl Engine {
         t: RationalTime,
         comp: CompSpec,
     ) -> Result<Vec<u8>, EngineError> {
-        let resolved = view.resolved_layers(t);
+        let resolved = view
+            .resolved_layers(t)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
 
         let mut layers = Vec::with_capacity(resolved.len());
         for layer in resolved {
             let (texture, natural) = self.texture_for(&layer.source, t)?;
+            let Some(texture) = texture else {
+                // 素材の外の時刻。この layer は今フレームに居ない。
+                continue;
+            };
             // track も declared も無い軸は素材の実寸で埋める(AE と同じ「キーを
             // 打っていない property は静止値」の延長)。
             let size = [
@@ -85,8 +96,16 @@ impl Engine {
     }
 
     /// 素材の texture と、その実寸を返す。
-    /// 抱えるフレーム数の上限。順次走査で要るのは直近の数枚だけ。
-    const FRAME_CACHE_LIMIT: usize = 8;
+    ///
+    /// texture が `None` = **この時刻にこの layer は無い**(素材の外)。
+    /// エラーではないので、フレーム全体を落とさずにこの layer だけ描かない。
+    /// 抱えるフレーム数の上限。
+    ///
+    /// 大きさの根拠は「直近の数枚」ではなく **同時に描ける media layer の枚数**である。
+    /// これより小さいと、layer 数がこれを超えた瞬間に毎フレーム全 evict になり
+    /// **1フレームあたり layer 数ぶんの ffmpeg 起動**が走る。捨てる順も FIFO では
+    /// 「最初に描く layer から捨てる」= 最悪順になるので、**最後に触った物を残す**。
+    pub const FRAME_CACHE_LIMIT: usize = 64;
 
     /// 実測用。抱えているフレーム数。
     pub fn cached_frame_count(&self) -> usize {
@@ -96,6 +115,8 @@ impl Engine {
     fn remember_frame(&mut self, key: (String, i64), texture: GpuTexture2D) {
         if self.frames.insert(key.clone(), texture).is_none() {
             self.frame_order.push_back(key);
+        } else {
+            self.touch_frame(&key);
         }
         while self.frame_order.len() > Self::FRAME_CACHE_LIMIT {
             if let Some(oldest) = self.frame_order.pop_front() {
@@ -104,11 +125,19 @@ impl Engine {
         }
     }
 
+    /// 触った物を末尾へ回す(= 捨てるのは最後に触ってから最も古い物)。
+    fn touch_frame(&mut self, key: &(String, i64)) {
+        if let Some(at) = self.frame_order.iter().position(|k| k == key) {
+            let key = self.frame_order.remove(at).expect("position が指した要素");
+            self.frame_order.push_back(key);
+        }
+    }
+
     fn texture_for(
         &mut self,
         source: &LayerSource,
         t: RationalTime,
-    ) -> Result<(GpuTexture2D, [f32; 2]), EngineError> {
+    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
         match source {
             LayerSource::Solid {
                 rgba,
@@ -117,7 +146,7 @@ impl Engine {
             } => {
                 let natural = [*width as f32, *height as f32];
                 if let Some(texture) = self.textures.get(source) {
-                    return Ok((texture.clone(), natural));
+                    return Ok((Some(texture.clone()), natural));
                 }
                 let pixels: Vec<u8> = rgba
                     .iter()
@@ -129,7 +158,7 @@ impl Engine {
                     .compositor
                     .upload_rgba("solid", &pixels, *width, *height)?;
                 self.textures.insert(source.clone(), texture.clone());
-                Ok((texture, natural))
+                Ok((Some(texture), natural))
             }
             LayerSource::Media { path, .. } => {
                 let info = match self.probes.get(path) {
@@ -142,17 +171,28 @@ impl Engine {
                 };
                 let natural = [info.width as f32, info.height as f32];
 
-                // comp 時刻 → 素材のフレーム番号。素材の尺を超えたら最終フレームで止める
-                // のではなく、**素材が無い時刻は描かない**(フリーズフレーム禁止、M4)。
-                let frame = (t.num() as f64 / t.den() as f64
-                    * info.fps.num() as f64
-                    / info.fps.den() as f64)
-                    .floor() as i64;
-                let frame = frame.max(0);
+                // comp 時刻 → 素材のフレーム番号。
+                //
+                // **`RationalTime` の正準口を通す**。`motolii-core` の doc が
+                // 「f64×fps の独自丸めは禁止」と明記しているとおりで、ここを f64 で
+                // 書くと 30000/1001 のような有理 fps で preview と export が
+                // **同じようにずれる**(同じ関数を通るので M15 は保たれたまま両方間違う)。
+                let frame = t
+                    .try_to_frame_floor(info.fps)
+                    .map_err(|e| EngineError::Time(e.to_string()))?;
+
+                // 素材の外の時刻は**描かない**(フリーズフレーム禁止、M4)。
+                // ここで Err を返すとフレーム全体が出なくなるので、この layer だけ落とす。
+                let last_frame = info.nb_frames.map(|n| n - 1);
+                if frame < 0 || last_frame.is_some_and(|last| frame > last) {
+                    return Ok((None, natural));
+                }
 
                 let key = (path.clone(), frame);
                 if let Some(texture) = self.frames.get(&key) {
-                    return Ok((texture.clone(), natural));
+                    let texture = texture.clone();
+                    self.touch_frame(&key);
+                    return Ok((Some(texture), natural));
                 }
 
                 let cpu = read_frame_at(path, &info, frame)?;
@@ -164,7 +204,7 @@ impl Engine {
                     info.color_space,
                 )?;
                 self.remember_frame(key, texture.clone());
-                Ok((texture, natural))
+                Ok((Some(texture), natural))
             }
         }
     }

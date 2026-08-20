@@ -82,12 +82,37 @@ fn long_export_does_not_accumulate_frames() {
     let report = export(&mut engine, &doc.view(), &job).unwrap();
     assert_eq!(report.frames_written, 300);
 
-    // 順次走査なら、抱えるのは直近の数フレームで足りる。
-    const WINDOW: usize = 8;
+    // 判定は「**フレーム数に比例して伸びない**」こと。マジックナンバーではなく
+    // 性質を見る — 上限の値そのものは「同時に描ける media layer の枚数」で決まり、
+    // 変わりうるから。
     assert!(
-        engine.cached_frame_count() <= WINDOW,
-        "書き出し後も {} フレームぶんの texture を抱えている(上限 {WINDOW})。\
-         3〜5分の MV(5,400〜9,000フレーム)ではメモリで死ぬ",
+        engine.cached_frame_count() <= Engine::FRAME_CACHE_LIMIT,
+        "300フレーム書き出し後に {} フレームぶんの texture を抱えている(上限 {})",
+        engine.cached_frame_count(),
+        Engine::FRAME_CACHE_LIMIT
+    );
+    let after_300 = engine.cached_frame_count();
+
+    // 倍のフレーム数を回しても抱える量が増えないこと。
+    // (増えるなら上限が効いておらず、3〜5分の MV でメモリが死ぬ)
+    let long_job = ExportJob {
+        out_path: dir.join("long-out-2.mp4"),
+        comp: CompSpec {
+            width: 320,
+            height: 240,
+        },
+        fps: Fps::try_new(30, 1).unwrap(),
+        frame_count: 300,
+        qp0: false,
+    };
+    let src2 = make_video(&dir, 10);
+    let doc2 = document_with_media(src2);
+    export(&mut engine, &doc2.view(), &long_job).unwrap();
+
+    assert!(
+        engine.cached_frame_count() <= Engine::FRAME_CACHE_LIMIT,
+        "600フレームぶん回した後に {} 枚(300フレーム時点は {after_300} 枚)。\
+         フレーム数に比例して伸びている",
         engine.cached_frame_count()
     );
 }

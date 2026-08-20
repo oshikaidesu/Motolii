@@ -69,6 +69,11 @@ impl RationalTime {
     }
 
     /// フレーム番号から時刻へ(frame / fps)。
+    /// フレーム番号 → その先頭時刻。**`try_to_frame_floor` の逆**。
+    ///
+    /// 2026-08-20: `motolii-export` がこれを使わず `try_new(frame * den, num)` を
+    /// 手で書いていた。**正準口が在るのに使われない**のが実際の失敗の形なので、
+    /// 見つけたら口を足すのではなく呼び出し側を直すこと。
     pub fn try_from_frame(frame: i64, fps: Fps) -> Result<Self, RationalTimeError> {
         let num = (frame as i128)
             .checked_mul(fps.den() as i128)

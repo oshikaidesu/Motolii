@@ -31,8 +31,15 @@
 | 24 | 2026-08-20 | decode/encode は **ffmpeg サイドカーを維持**する。`re_video` は既にグラフに居るが (a) MP4 のみ (b) 再生指向でフレーム正確ランダムアクセスではない (c) 全バイトをメモリに載せる (d) encode/mux を持たない — 書き出しの契約と噛み合わない。この4点が変わったら再裁定する |
 | 25 | 2026-08-20 | 合否の定義は `GOALS.md` 1枚。ここに無い物を「足りない」と数えない(除外リストを含む) |
 | 26 | 2026-08-20 | Stage は **iced の `shader::Primitive` 経由で iced の device の上に re_renderer を建てる**(= 本当の埋め込み)。CPU 読み戻しは export と試験だけに使う。根拠: 一次資料(pin 済み fork `wgpu/src/primitive.rs:14-64`)で `prepare(.., device: &wgpu::Device, queue: &wgpu::Queue, ..)` と `render(.., encoder: &mut CommandEncoder, target: &TextureView, ..)` が生の wgpu を渡すことを確認 — iced の拡張点は **toolkit の層ではなく wgpu の層**にある。読み戻しは 1080p で 1.7ms かかる |
-| 27 | 2026-08-20 | 別 device でも絵は byte 一致することを実測した(`two_devices_produce_the_same_frame`)。よって preview(iced の device)と export(headless)が別 device でも背骨2は崩れない |
+| 27 | 2026-08-20 | ~~別 device でも byte 一致するので preview(iced の device)と export(headless)が別 device でも背骨2は崩れない~~ → **主張が過大だった**(同日の敵対的レビュー)。実測したのは `Compositor::headless()` を2回呼んだだけで、**iced の device は1度も通していない**。言えるのは「同じ adapter・同じ limits・同じ RenderConfig の device 2個なら一致する」まで。iced の device を跨ぐ一致は**未検証**で、裁定26 を実装する時に測る |
 | 28 | 2026-08-20 | `LayerSource::Media` は **動画も静止画も同じ variant**。素材種で経路を分けない(分けると片方だけ直る欠陥が生まれる — 初回タッチ観察の再発) |
 | 29 | 2026-08-20 | 素材の大きさは Document が持たない。probe が決め、engine が「track も declared も無い軸」だけを実寸で埋める。AE の「キーを打っていない property は静止値」の延長 |
 | 30 | 2026-08-20 | 旧 `motolii-export`(913行)は移植しない。大半が graph / plugin 機構で、評価経路が1本になった今は要らない。移すのは**機構ではなく意味**(報告=現物 / 中断で残骸なし / 音声は後段 mux)。新 export は `Engine::render_frame` を回すだけの薄い口にする |
 | 31 | 2026-08-20 | engine が抱えるフレーム texture は**上限つき**(8枚)。3〜5分の MV は 5,400〜9,000フレームあり、溜め込むと約27GBでメモリが死ぬ。順次走査で要るのは直近の数枚だけ。試験 `long_export_does_not_accumulate_frames` が上限を守らせる |
+| 32 | 2026-08-20 | 時刻⇄フレームの写像は `motolii-core` の正準口のみ。柵は**パターン列挙をやめ**、「fps と f64/f32 が同じ式に出てくること」自体を禁じる(`tm4_no_float_frame_math.rs`)。旧の5文字列 grep は engine の f64 換算を素通りさせた |
+| 33 | 2026-08-20 | `CompSpec` は `motolii-core` に置く。`motolii-export` が `motolii-compositor` を引くと第二の合成器を建てられるので、**型を出して依存を切る**。柵は `motolii-export/tests/fence.rs` が依存グラフを見る |
+| 34 | 2026-08-20 | `motolii-store` の marker は `owns:`。`wraps:` を名乗った crate の中に `owns:` の中身(`fingerprint.rs` / `resolve`)が入ると、crate の根しか見ない `check.sh` が空振りする |
+| 35 | 2026-08-20 | `PropertyId` は layer 自身の component 名(`meta` / `present`)を予約語として弾く。弾かないと `PropertyId::new("meta")` が素材と重ね順を上書きする |
+| 36 | 2026-08-20 | 重ね順の型は上流の `re_renderer::DepthOffset`(`i16`)に合わせる。`i32` のまま渡すと 32768 以上で符号が反転し、CPU の並べ替えと GPU の前後関係が食い違う |
+| 37 | 2026-08-20 | 読み口は「無い」と「読めない」を区別する(`Result<Option<T>>`)。同義にすると壊れた Document が静かに既定値へ落ち、利用者には「値が勝手に戻った」としか見えない(M13) |
+| 38 | 2026-08-20 | 素材の外の時刻はその layer だけ描かない(フレーム全体を落とさない)。`nb_frames` を見る。M4 と M16 の両方に効く |

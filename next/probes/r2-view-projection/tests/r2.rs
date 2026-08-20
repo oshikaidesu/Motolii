@@ -29,7 +29,7 @@ fn realistic_document() -> Document {
                     width: 1920,
                     height: 1080,
                 },
-                order: i as i32,
+                order: i as i16,
             },
         })
         .unwrap();
@@ -65,11 +65,11 @@ fn stage_projection_fits_a_frame() {
     let doc = realistic_document();
     let t = RationalTime::try_new(100, 30).unwrap();
 
-    let _ = doc.view().resolved_layers(t);
+    let _ = doc.view().resolved_layers(t).unwrap();
     let start = Instant::now();
     let mut count = 0usize;
     for _ in 0..RUNS {
-        count += doc.view().resolved_layers(t).len();
+        count += doc.view().resolved_layers(t).unwrap().len();
     }
     let per_call = start.elapsed().as_micros() / RUNS;
 
@@ -109,7 +109,7 @@ fn timeline_projection_fits_a_frame() {
         let mut keys = 0usize;
         for layer in view.layers() {
             for property in &props {
-                if let Some(track) = view.track(layer, property) {
+                if let Some(track) = view.track(layer, property).unwrap() {
                     keys += track.keys().len();
                 }
             }

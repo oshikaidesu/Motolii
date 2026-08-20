@@ -331,3 +331,16 @@ mod tests {
         FrameDesc::yuv(63, 48, PixelFormat::Yuv420p, ColorSpace::Rec709Limited);
     }
 }
+
+/// 合成の器。comp の解像度だけを持つ。
+///
+/// **`motolii-compositor` ではなく core に置いてある**。ここに置く前は
+/// `motolii-export` が `CompSpec` を取るためだけに `motolii-compositor` を直接
+/// 引いており、**export が第二の `Compositor` を建てられる**状態だった
+/// (2026-08-20 の敵対的レビュー。背骨2「第二経路を作れる公開 API を置かない」に反する)。
+/// 型を core へ出すと依存ごと切れて、**建てられなくなる**。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CompSpec {
+    pub width: u32,
+    pub height: u32,
+}

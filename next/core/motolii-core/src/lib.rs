@@ -20,7 +20,7 @@ pub use camera::{CompCamera, CompCameraError};
 pub use canonical::{
     CanonicalPoint, CanonicalSize, PixelPoint, PixelSize, ViewportTransform, ViewportTransformError,
 };
-pub use frame::{
+pub use frame::{CompSpec, 
     premultiply_rgba_f32, premultiply_rgba_u8, ColorSpace, CpuFrame, FrameDesc, FrameDescError,
     PixelFormat,
 };

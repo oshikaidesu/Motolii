@@ -35,6 +35,11 @@ pub struct PropertyId {
 
 impl PropertyId {
     pub fn new(name: &str) -> Result<Self, StoreError> {
+        if crate::property::RESERVED.contains(&name) {
+            return Err(StoreError::Property(format!(
+                "`{name}` は layer 自身の component 名なので property に使えない"
+            )));
+        }
         let component = re_types_core::ComponentIdentifier::try_new(format!("Layer:{name}"))
             .map_err(|e| StoreError::Property(e.to_string()))?;
         Ok(Self {

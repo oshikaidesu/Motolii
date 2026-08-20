@@ -46,7 +46,7 @@ fn document_scaled(layers: u64, source_scale: u32) -> Document {
                     width: sw,
                     height: sh,
                 },
-                order: i as i32,
+                order: i as i16,
             },
         })
         .unwrap();
@@ -68,7 +68,7 @@ fn document_with(layers: u64) -> Document {
                     width: FHD[0],
                     height: FHD[1],
                 },
-                order: i as i32,
+                order: i as i16,
             },
         })
         .unwrap();

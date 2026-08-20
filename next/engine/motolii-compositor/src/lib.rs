@@ -27,12 +27,8 @@ pub use headless::HeadlessError;
 /// 素材ハンドル。上流の型をそのまま通す(包み直さない)。
 pub use re_renderer::resource_managers::GpuTexture2D;
 
-/// 合成の器。comp の解像度だけを持つ。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CompSpec {
-    pub width: u32,
-    pub height: u32,
-}
+/// 合成の器。**定義は `motolii-core`** にある(背骨2を依存グラフで守るため)。
+pub use motolii_core::CompSpec;
 
 /// 1枚の layer。**空間に立つ板**であり、2D の完成フレームではない。
 #[derive(Clone)]
@@ -42,8 +38,9 @@ pub struct Layer {
     pub top_left: [f32; 2],
     /// comp 座標での大きさ。
     pub size: [f32; 2],
-    /// 重ね順。**大きいほど手前**。
-    pub order: i32,
+    /// 重ね順。**大きいほど手前**。上流の `DepthOffset` と同じ型にしてある
+    /// (`i32` から落とすと 32768 以上で符号が反転し、並べ替えと前後関係が食い違う)。
+    pub order: re_renderer::DepthOffset,
     /// 0.0〜1.0。
     pub opacity: f32,
 }
@@ -224,7 +221,7 @@ impl Compositor {
                         layer.opacity,
                         layer.opacity,
                     ),
-                    depth_offset: layer.order as re_renderer::DepthOffset,
+                    depth_offset: layer.order,
                     ..Default::default()
                 },
             })

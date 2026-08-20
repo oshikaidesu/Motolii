@@ -74,10 +74,15 @@ fn layers_stack_by_order_and_position() {
     );
 }
 
-/// 背骨2 — preview と export は同じ関数を通る。ゆえに同じ入力からは
-/// **byte 単位で同じ絵**が出なければならない。
+/// **決定性**の試験。同じ入力から同じ絵が出ること。
+///
+/// **これは「経路が1本であること」の試験ではない**(2026-08-20 の敵対的レビュー)。
+/// 同じ関数を2回呼んでいるだけなので、第二経路が生えても絶対に落ちない。
+/// 以前は `preview` / `export` という変数名で試験のふりをしていたので、名前を正した。
+/// 経路が1本であることは**依存グラフ**が守る — `motolii-export` は
+/// `motolii-compositor` を引いておらず、第二の `Compositor` を建てられない。
 #[test]
-fn render_is_byte_identical_across_calls() {
+fn render_is_deterministic() {
     let mut compositor = Compositor::headless().expect("headless GPU");
     let red = compositor
         .upload_rgba("red", &solid([255, 0, 0, 255], W, H), W, H)
@@ -91,13 +96,10 @@ fn render_is_byte_identical_across_calls() {
         opacity: 1.0,
     };
 
-    let preview = compositor.render(comp(), std::slice::from_ref(&layer)).unwrap();
-    let export = compositor.render(comp(), std::slice::from_ref(&layer)).unwrap();
+    let first = compositor.render(comp(), std::slice::from_ref(&layer)).unwrap();
+    let second = compositor.render(comp(), std::slice::from_ref(&layer)).unwrap();
 
-    assert_eq!(
-        preview, export,
-        "同じ入力・同じ関数なのに絵が違う = 第二経路が生まれている"
-    );
+    assert_eq!(first, second, "同じ入力から違う絵が出る(決定的でない)");
 }
 
 #[test]

@@ -40,14 +40,19 @@ MV 制作のためのモーショングラフィック指向コンポジット�
 
 | crate | marker | 中身 |
 |---|---|---|
-| `core/motolii-store` | `wraps:` | `EntityDb` の口。Document / StoreView / Intent / undo / redo |
-| `core/motolii-core` | `owns:` | 有理数フレーム時刻。rerun の `TimeInt` は有理 fps を持てない(旧 workspace から移植) |
-| `core/motolii-eval` | `owns:` | keyframe 補間と bezier 分割。rerun の latest-at は step 補間のみ(旧 workspace から移植) |
-| `engine/motolii-compositor` | `wraps:` | `re_renderer` の口。layer = 板、preview と export は同じ `render()` |
-| `engine/motolii-engine` | `wraps:` | store と compositor を繋ぐ。**1フレームを出す唯一の経路** |
-| `probes/r0-store-edit` | `owns:` | 軸が立つことの実測。fork の rev を上げたら回す |
+| `core/motolii-core` | `owns:` | 有理数フレーム時刻と frame 記述(旧 workspace から移植) |
+| `core/motolii-eval` | `owns:` | keyframe 補間と bezier 分割(同上) |
+| `core/motolii-store` | `owns:` | Document の意味。保存と検索は `EntityDb` に寄せる |
+| `core/motolii-testkit` | `owns:` | 外部ツールが無い時のスキップ方針(旧 8,106行から使う分だけ) |
+| `engine/motolii-compositor` | `wraps:` | `re_renderer` の口 |
+| `engine/motolii-engine` | `wraps:` | **1フレームを出す唯一の経路** |
+| `engine/motolii-media` | `owns:` | フレーム正確 decode / encode / mux(移植) |
+| `engine/motolii-export` | `wraps:` | 回して書いて報告するだけ。**compositor を引かない**(背骨2) |
+| `probes/r0-store-edit` | `owns:` | store が編集に耐えるか |
+| `probes/r1-frame-throughput` | `owns:` | 1080p 40枚が破綻しないか |
+| `probes/r2-view-projection` | `owns:` | 毎フレーム投影が予算に収まるか |
 
-`engine/` の media・export と、`shell/`(iced)はまだ無い。
+`shell/`(iced)はまだ無い。
 
 ## 時間の予算を測る
 

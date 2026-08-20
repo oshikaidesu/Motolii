@@ -18,12 +18,12 @@
 | M7 | **Copy / Cut / Paste が効く** — 旧 egui は menu に項目があるのに何も起きない(Q0違反の現物) | 同上、egui能力台帳§2 | 未 |
 | M8 | Space で再生。**音が鳴り**、playhead が音に同期。scrub で Stage 追従 | ui-inherited-grammar-gap Tier0 | 未 |
 | M9 | Export → mp4。**音声mux込み**。報告フレーム数=現物、cancel で残骸なし | concept、first-real-run 欠陥(2) | **部分**(報告=現物・cancel は済。音声mux は未結線) |
-| M10 | Document を変える操作は**1回の Undo で戻る**。1 gesture = 1 Undo | ui-quality-bar Q2 | **済**(R0-2 / store の時間旅行) |
+| M10 | Document を変える操作は**1回の Undo で戻る**。1 gesture = 1 Undo | ui-quality-bar Q2 | **部分**。undo/redo は時間移動で成立(R0-2)。だが **1 Intent = 1 undo 単位**であって、ドラッグを1単位へ畳む口(`begin`/`commit`)が**無い**。R0 が確かめたのは「1000編集を1回のクエリで飛び越せる」ことだけで、畳む機構は誰も確かめていない |
 | M11 | Cmd+S・未保存●・閉じる確認・**再起動で続きが開く** | ux-check P2/P5、外部診断F-01 | 未 |
 | M12 | **触れそうな物は全部機能する**。未実装の chrome を置かない(disabled も不可=撤去) | ui-quality-bar **Q0**(利用者裁定) | 未 |
 | M13 | **無反応ゼロ**。拒否は理由がその場で分かる。旧 iced は拒否を `let _ =` で捨てていた | ui-quality-bar Q3、能力台帳§5-2 | 未 |
-| M14 | 選択・時刻・幾何の正本は1つ。全面が同じ真実を映す | ui-quality-bar Q5 | **済**(StoreView 投影で構造的に) |
-| M15 | **Preview = Export**。同じ評価関数を通り byte 一致 | concept 絶対規律、DECISIONS #15 | **済**。可逆書き出しした**現物を decode し直して** preview と突き合わせる試験まで通した(旧は最後まで未検証) |
+| M14 | 選択・時刻・幾何の正本は1つ。全面が同じ真実を映す | ui-quality-bar Q5 | **未**。幾何は store にあるが、**選択・playhead・fps・解像度・尺が store に1つも無い**。`comp`/`fps` は `render_frame`/`ExportJob` の引数。このままだと shell がそれらを自分で持ち、そこが次の翻訳層になる |
+| M15 | **Preview = Export**。同じ評価関数を通る | concept 絶対規律、DECISIONS #15 | **部分**。可逆書き出しした現物を decode し直して preview と突き合わせ、**Y の最大差 ≤ 8**(h264 が YUV420 を通るため byte 一致ではない)。経路が1本であることは依存グラフが守る(export は compositor を引かない)。**残る穴**: `comp`/`fps` が Document の中に無いので、preview と export が違う入力を渡せてしまう |
 | M16 | どの入力でも panic/クラッシュ/喪失なし。render 失敗でも画面を空にしない | ui-quality-bar Q6 | 未 |
 | M17 | 空 project は空として表示。空でも place/scrub/keymap が効く | ui-quality-bar Q7 | 未 |
 | M18 | Zoom(カーソル下の時刻を保つ)と Fit | prior-art 必須12件 | 未 |
@@ -46,7 +46,7 @@ Browser から **drag で配置** / Export 設定 UI と割合進捗 /
 
 | # | 条件 | `next/` |
 |---|---|---|
-| D1 | **Preview = Export を機械で示す**(byte 一致試験が常設) | **済** |
+| D1 | **Preview = Export を機械で示す** | **部分**(M15 と同じ。byte 一致ではなく Y ≤ 8。入力の正本が Document に無い) |
 | D2 | **Undo が壊れない・深さで落ちない**(AE の痛点Aの逆) | **済**(R0)。GC 方針は空席 |
 | D3 | ネイティブな区間イージング(Bounce/Elastic/Steps、オーバーシュート可) | 部分(Bezier まで) |
 | D4 | プリコンポ地獄が無い(グループ+fold+ベイク) | 未 |
@@ -90,3 +90,14 @@ Browser から **drag で配置** / Export 設定 UI と割合進捗 /
     **旧実装の「良い」判定は全て機械検証止まりで、実機の手触りは人間未検証**
 
 7 を 8 より前に置くのは、Q0/Q3 が「機能を足すたびに再発する型の穴」だから。
+
+## いま空いている穴(2026-08-20 の敵対的レビューで判明)
+
+順序3(shell)に入る前に塞ぐべきもの:
+
+- **comp 設定(fps・解像度・尺)と選択・playhead が Document に無い**。`render_frame` の
+  引数のままだと preview と export が違う入力を渡せる。shell を建てる人は必ず shell 側に置く
+- **gesture を1 undo へ畳む口が無い**(M10)。ドラッグが100 undo になる
+- **`ResolvedLayer` と `Layer` が同じ形で2つある**。property を1つ足すと6箇所を触る =
+  旧 `inspector_model.rs` が3世代になった構造の1世代目
+- **`generation()` が undo/redo で変わらない**。front が `last_edit_head` を自分で持つ入口

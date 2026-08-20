@@ -1,7 +1,15 @@
-//! wraps: re_entity_db::EntityDb — Document の実体。
+//! owns: Document の意味(layer の同一性・素材の指紋・comp 時刻での解決)。
 //!
-//! **undo / redo は `edit` timeline の latest-at 移動そのもの**であり、自前の履歴機構を
-//! 持たない(rerun blueprint の undo と同じ機構。R0-2 で1000編集跨ぎを実測)。
+//! **`wraps:` ではない**。当初 `wraps: re_entity_db::EntityDb` と名乗っていたが、
+//! 敵対的レビュー(2026-08-20)で「`fingerprint.rs` と `resolve`/`ResolvedLayer` は
+//! 上流に無い物 = `owns:` の中身」と指摘され、訂正した。**marker は crate の根しか
+//! 見ないので、`wraps:` を名乗った crate の中に `owns:` の中身が入ると規律が空振りする**。
+//!
+//! 上流に**寄せている**もの(ここで再実装していないもの):
+//!
+//! - 保存と検索: `re_entity_db::EntityDb` / `re_chunk_store`
+//! - **undo / redo は `edit` timeline の latest-at 移動そのもの**で、自前の履歴機構を
+//!   持たない(rerun blueprint の undo と同じ機構。R0-2 で1000編集跨ぎを実測)
 //! 「新しい編集をする前に redo 空間を落とす」も rerun の規則をそのまま踏襲する。
 //!
 //! ここに書いてよいのは「store の口をどう開けるか」だけである。時刻→値の意味は
@@ -41,6 +49,11 @@ pub enum StoreError {
 
 /// 標準 property の名前。**ここに無い名前も置けるが、標準面はこれを見る**。
 pub mod property {
+    /// component 識別子は `Layer:{name}` なので、**layer 自身の component と衝突する
+    /// 名前は禁止**(`PropertyId::new` が弾く)。弾かないと `PropertyId::new("meta")` が
+    /// layer の素材と重ね順を上書きする。
+    pub const RESERVED: &[&str] = &["meta", "present"];
+
     pub const POSITION_X: &str = "position.x";
     pub const POSITION_Y: &str = "position.y";
     pub const WIDTH: &str = "size.width";
@@ -84,15 +97,15 @@ impl LayerSource {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LayerMeta {
     pub source: LayerSource,
-    /// 大きいほど手前。
-    pub order: i32,
+    /// 大きいほど手前。上流の `re_renderer::DepthOffset` と同じ `i16`。
+    pub order: i16,
 }
 
 /// ある comp 時刻に解決済みの layer。**合成器が要るのはこれだけ**。
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedLayer {
     pub source: LayerSource,
-    pub order: i32,
+    pub order: i16,
     pub top_left: [f32; 2],
     pub size: [f32; 2],
     pub opacity: f32,

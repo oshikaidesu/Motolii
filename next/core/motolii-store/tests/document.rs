@@ -46,20 +46,20 @@ fn undo_and_redo_are_only_time_movement() {
     })
     .unwrap();
 
-    assert_eq!(doc.view().value_at(layer, &opacity, t(0)), Some(Value::F64(0.5)));
+    assert_eq!(doc.view().value_at(layer, &opacity, t(0)).unwrap(), Some(Value::F64(0.5)));
 
     assert!(doc.undo());
-    assert_eq!(doc.view().value_at(layer, &opacity, t(0)), Some(Value::F64(0.0)));
+    assert_eq!(doc.view().value_at(layer, &opacity, t(0)).unwrap(), Some(Value::F64(0.0)));
 
     assert!(doc.undo());
-    assert_eq!(doc.view().value_at(layer, &opacity, t(0)), None, "track を打つ前へ戻る");
+    assert_eq!(doc.view().value_at(layer, &opacity, t(0)).unwrap(), None, "track を打つ前へ戻る");
     assert!(doc.view().has_layer(layer), "layer 追加はまだ生きている");
 
     // redo は store から何も失われていないので、時間を進めるだけで戻る
     assert!(doc.redo());
-    assert_eq!(doc.view().value_at(layer, &opacity, t(0)), Some(Value::F64(0.0)));
+    assert_eq!(doc.view().value_at(layer, &opacity, t(0)).unwrap(), Some(Value::F64(0.0)));
     assert!(doc.redo());
-    assert_eq!(doc.view().value_at(layer, &opacity, t(0)), Some(Value::F64(0.5)));
+    assert_eq!(doc.view().value_at(layer, &opacity, t(0)).unwrap(), Some(Value::F64(0.5)));
     assert!(!doc.redo(), "先端では redo できない");
 }
 
@@ -104,7 +104,7 @@ fn new_edit_after_undo_drops_the_redo_space() {
 
     assert!(!doc.can_redo(), "分岐後に redo 先が残っていてはならない");
     assert_eq!(
-        doc.view().value_at(layer, &opacity, t(0)),
+        doc.view().value_at(layer, &opacity, t(0)).unwrap(),
         Some(Value::F64(0.25))
     );
 }
@@ -153,7 +153,7 @@ fn value_at_goes_through_the_ported_evaluator() {
     })
     .unwrap();
 
-    let Some(Value::F64(mid)) = doc.view().value_at(layer, &position, t(15)) else {
+    let Some(Value::F64(mid)) = doc.view().value_at(layer, &position, t(15)).unwrap() else {
         panic!("中点が取れない");
     };
     assert!(
@@ -161,7 +161,7 @@ fn value_at_goes_through_the_ported_evaluator() {
         "ease-in-out の中点は 0.5 付近のはず: {mid}"
     );
 
-    let Some(Value::F64(quarter)) = doc.view().value_at(layer, &position, t(7)) else {
+    let Some(Value::F64(quarter)) = doc.view().value_at(layer, &position, t(7)).unwrap() else {
         panic!("1/4 点が取れない");
     };
     assert!(
@@ -201,7 +201,7 @@ fn edit_storm_with_the_real_track_type() {
     let write_elapsed = start.elapsed();
 
     let query_start = Instant::now();
-    let value = doc.view().value_at(layer, &position, t(0));
+    let value = doc.view().value_at(layer, &position, t(0)).unwrap();
     let query_us = query_start.elapsed().as_micros();
     assert_eq!(value, Some(Value::F64((EDITS - 1) as f64)));
 
