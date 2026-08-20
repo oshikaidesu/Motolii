@@ -3356,7 +3356,9 @@ dependencies = [
  "iced",
  "motolii-core",
  "motolii-engine",
+ "motolii-media",
  "motolii-store",
+ "motolii-testkit",
 ]
 
 [[package]]

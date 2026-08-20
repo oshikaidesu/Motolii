@@ -8,4 +8,8 @@ license.workspace = true
 iced.workspace = true
 motolii-core.workspace = true
 motolii-engine.workspace = true
+motolii-media.workspace = true
 motolii-store.workspace = true
+
+[dev-dependencies]
+motolii-testkit.workspace = true

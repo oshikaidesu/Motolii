@@ -173,12 +173,44 @@ impl Document {
         }
     }
 
+    /// **1操作 = 1 undo**。複数の intent をまとめて1つの edit 刻みへ書く。
+    ///
+    /// 「layer を置く」のような操作は本来 `AddLayer` + `SetMeta` + `SetTrack` の
+    /// 複数 intent だが、利用者から見れば1操作である。個別に `apply` すると
+    /// **1操作を戻すのに Undo を何回も押すことになる**(ui-quality-bar Q2)。
+    ///
+    /// ドラッグは対象外 — 途中経過は pane が持ち、**確定の1件だけが intent** なので
+    /// もともと1 undo になる。ここが要るのは「本質的に複数 intent な1操作」だけ。
+    pub fn apply_all(
+        &mut self,
+        intents: impl IntoIterator<Item = Intent>,
+    ) -> Result<(), StoreError> {
+        let intents: Vec<Intent> = intents.into_iter().collect();
+        if intents.is_empty() {
+            return Ok(());
+        }
+
+        self.drop_redo_space();
+        let at = self.head + 1;
+        for intent in intents {
+            self.write(intent, at)?;
+        }
+        self.head = at;
+        self.tip = at;
+        Ok(())
+    }
+
     /// 唯一の書き口。
     ///
     /// undo 後に新しい編集をしたら redo 空間を落とす — rerun blueprint と同じ規則
     /// (`re_viewer_context/src/undo.rs`: "When editing, we first drop all data after
     /// the current time.")。
     pub fn apply(&mut self, intent: Intent) -> Result<(), StoreError> {
+        self.apply_all([intent])
+    }
+
+    /// undo 後に新しい編集をしたら redo 空間を落とす — rerun blueprint と同じ規則。
+    fn drop_redo_space(&mut self) {
         if self.head < self.tip {
             self.db.drop_time_range(
                 &Self::timeline_name(),
@@ -188,8 +220,9 @@ impl Document {
             );
             self.tip = self.head;
         }
+    }
 
-        let at = self.head + 1;
+    fn write(&mut self, intent: Intent, at: i64) -> Result<(), StoreError> {
         let batches = match intent {
             Intent::AddLayer(layer) => (layer.entity_path(), vec![serialize_present(true)?]),
             Intent::RemoveLayer(layer) => (layer.entity_path(), vec![serialize_present(false)?]),

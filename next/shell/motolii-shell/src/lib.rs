@@ -45,6 +45,17 @@ pub enum Message {
     ScrubTo(i64),
     Select(LayerId),
     AddLayer,
+    /// OS から落ちてきた path。**受理も拒否もここ1箇所**で決める。
+    ///
+    /// 窓の event として直に受けず Message にしてあるのは、運転席が窓を開けずに
+    /// 同じ道を通せるようにするため(旧 workspace の `window_input` widget と
+    /// 同じ目的を、より少ないコードで満たす)。
+    AdmitPaths(Vec<std::path::PathBuf>),
+    /// 落下を1件ずつ溜める。winit は1ファイル1事象で送ってくるので、
+    /// **そのまま処理すると3本落として3 undo になる**。
+    DropReceived(std::path::PathBuf),
+    /// 落下の区切り。次の描画要求が来た時点で、溜めた分を**まとめて1操作**にする。
+    FlushDrops,
 }
 
 /// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
@@ -64,6 +75,8 @@ pub struct Shell {
     frame: Option<RenderedFrame>,
     /// 直近の拒否理由。**握り潰さない**(M13: 無反応ゼロ)。
     status: Option<String>,
+    /// 区切りが来るまで溜めておく落下 path。
+    pending_drops: Vec<std::path::PathBuf>,
 }
 
 impl Shell {
@@ -89,6 +102,7 @@ impl Shell {
                 engine,
                 frame: None,
                 status: None,
+                pending_drops: Vec::new(),
             },
             Task::none(),
         )
@@ -96,6 +110,16 @@ impl Shell {
 
     pub fn title(&self) -> String {
         "Motolii".to_owned()
+    }
+
+    /// 窓の事象 → Message。**ここは翻訳だけで、判断を持たない**。
+    pub fn subscription(&self) -> iced::Subscription<Message> {
+        iced::window::events().map(|(_id, event)| match event {
+            iced::window::Event::FileDropped(path) => Message::DropReceived(path),
+            // winit は1ファイル1事象で送るので、描画要求を落下の区切りにする。
+            // 3本まとめて落として1操作になるのはこのため。
+            _ => Message::FlushDrops,
+        })
     }
 
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
@@ -114,10 +138,21 @@ impl Shell {
             }
             Message::ScrubTo(frame) => self.session.playhead = frame.max(0),
             Message::Select(layer) => self.session.selection = Some(layer),
+            Message::AdmitPaths(paths) => self.admit(paths),
+            Message::DropReceived(path) => self.pending_drops.push(path),
+            Message::FlushDrops => {
+                if !self.pending_drops.is_empty() {
+                    let paths = std::mem::take(&mut self.pending_drops);
+                    self.admit(paths);
+                }
+            }
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
-                let placed = self.doc.apply(Intent::AddLayer(id)).and_then(|()| {
-                    self.doc.apply(Intent::SetMeta {
+                // **1操作 = 1 undo**。`AddLayer` と `SetMeta` を別々に書くと
+                // 利用者は Undo を2回押すことになる(ui-quality-bar Q2)。
+                let placed = self.doc.apply_all([
+                    Intent::AddLayer(id),
+                    Intent::SetMeta {
                         layer: id,
                         meta: LayerMeta {
                             source: LayerSource::Solid {
@@ -127,8 +162,8 @@ impl Shell {
                             },
                             order: id.0 as i16,
                         },
-                    })
-                });
+                    },
+                ]);
                 match placed {
                     Ok(()) => self.session.selection = Some(id),
                     // 拒否は必ず出す。黙って消さない。
@@ -140,10 +175,62 @@ impl Shell {
         Task::none()
     }
 
+    /// 落ちてきた path を素材として受ける。
+    ///
+    /// **開けない物は理由つきで飛ばす**(M2)。黙って消すと利用者は
+    /// 「落としたのに何も起きない」としか分からない。
+    fn admit(&mut self, paths: Vec<std::path::PathBuf>) {
+        let mut intents = Vec::new();
+        let mut rejected = Vec::new();
+        let mut next = self.next_layer_id();
+
+        for path in paths {
+            let text = path.to_string_lossy().into_owned();
+            match motolii_media::probe(&path) {
+                Ok(_) => {
+                    let id = LayerId(next);
+                    next += 1;
+                    intents.push(Intent::AddLayer(id));
+                    intents.push(Intent::SetMeta {
+                        layer: id,
+                        meta: LayerMeta {
+                            source: LayerSource::Media {
+                                path: text,
+                                fingerprint: None,
+                            },
+                            order: id.0 as i16,
+                        },
+                    });
+                }
+                Err(error) => {
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or(text);
+                    rejected.push(format!("{name}: {error}"));
+                }
+            }
+        }
+
+        // 落とした分は**まとめて1 undo**(1操作 = 1 undo)。
+        if !intents.is_empty() {
+            if let Err(error) = self.doc.apply_all(intents) {
+                rejected.push(format!("置けなかった: {error}"));
+            }
+        }
+        if !rejected.is_empty() {
+            self.status = Some(format!("受け取れない素材 {}件 — {}", rejected.len(), rejected.join(" / ")));
+        }
+    }
+
     // ---- 運転席が見るための口。**書けない** ----
 
     pub fn layer_count(&self) -> usize {
         self.doc.view().layers().len()
+    }
+
+    pub fn can_undo(&self) -> bool {
+        self.doc.can_undo()
     }
 
     pub fn status(&self) -> Option<&str> {

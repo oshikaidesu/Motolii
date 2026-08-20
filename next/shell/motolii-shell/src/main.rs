@@ -5,5 +5,6 @@ fn main() -> iced::Result {
         motolii_shell::Shell::view,
     )
     .title(motolii_shell::Shell::title)
+    .subscription(motolii_shell::Shell::subscription)
     .run()
 }
