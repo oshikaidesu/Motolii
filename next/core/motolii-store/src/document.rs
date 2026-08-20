@@ -75,6 +75,21 @@ impl PropertyId {
         Self::new(&name).expect("マスクの property 名は予約語でも空でもない")
     }
 
+    /// カメラの property(`Composition.camera` の center/zoom/roll、裁定113/115)。
+    ///
+    /// **layer とは別の entity(`/composition`)へ書く**ので、component 識別子の
+    /// 名前空間も分ける(`Composition:{name}` — layer 側の `Layer:{name}` と
+    /// 衝突しない)。`RESERVED` は layer 自身の component 名(`meta`/`present`/…)を
+    /// 弾く仕組みなので、別名前空間のここには適用しない(そもそも衝突しない)。
+    pub fn camera(name: &str) -> Result<Self, StoreError> {
+        let component = re_types_core::ComponentIdentifier::try_new(format!("Composition:{name}"))
+            .map_err(|e| StoreError::Property(e.to_string()))?;
+        Ok(Self {
+            name: name.to_owned(),
+            component,
+        })
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -156,6 +171,13 @@ pub enum Intent {
     /// comp のマーカー一覧。追加・削除・並べ替え・改名はすべてこれ1つ
     /// (`SetMasks`/`SetTiming` と同じ考え方)。
     SetMarkers { markers: Vec<crate::Marker> },
+    /// カメラの property(`camera.center`/`camera.zoom`/`camera.roll`、裁定113/115)。
+    /// **新しい機構ではない** — `SetTrack` と同じ形で、書く先が layer ではなく
+    /// `/composition` entity なだけ(`PropertyId::camera` が経路を分ける)。
+    SetCameraTrack {
+        property: PropertyId,
+        track: motolii_eval::KeyframeTrack,
+    },
 }
 
 /// 「見えている Document が変わったか」の印。
@@ -551,6 +573,17 @@ impl Document {
                 let json = serde_json::to_string(&track)?;
                 (
                     layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_track(&property),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetCameraTrack { property, track } => {
+                let json = serde_json::to_string(&track)?;
+                (
+                    Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_track(&property),
                         array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])

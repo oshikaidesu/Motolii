@@ -374,6 +374,11 @@ pub struct LayerPlacement {
     pub order: i16,
     /// 0.0〜1.0。
     pub opacity: f32,
+    /// `position.z`(裁定113/116)。**世界は1つ・全員 z=0 既定**。単位はピクセルと同じ
+    /// world 単位。AE と同じ符号(大きいほどカメラから遠ざかる、奥)。
+    /// `transform`(`Affine2`)は2D のままなので、奥行きはこのフィールドが別に持つ —
+    /// 板は常に自分の z 平面に対して平行(裁定115: 姿勢の表現はまだ開けない)。
+    pub z: f32,
 }
 
 impl Default for LayerPlacement {
@@ -382,6 +387,7 @@ impl Default for LayerPlacement {
             transform: glam::Affine2::IDENTITY,
             order: 0,
             opacity: 1.0,
+            z: 0.0,
         }
     }
 }

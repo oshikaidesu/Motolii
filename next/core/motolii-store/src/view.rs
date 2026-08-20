@@ -126,16 +126,19 @@ impl<'a> StoreView<'a> {
     /// `Err` = **track はあるが読めない**。この2つを同義にしない — 同義にすると
     /// 壊れた Document が静かに既定値へ落ち、利用者には「値が勝手に戻った」としか
     /// 見えない(M13: 無反応ゼロ / 拒否は理由が分かる)。
-    pub fn track(
+    ///
+    /// **実体は [`Self::track_at_path`]**。layer の property もカメラの property
+    /// (裁定116)も同じ読み方(どの entity の component を latest-at で引くか)しか
+    /// 違わないので、経路を1本に保つ。
+    fn track_at_path(
         &self,
-        layer: LayerId,
+        path: &EntityPath,
         property: &PropertyId,
     ) -> Result<Option<KeyframeTrack>, StoreError> {
         let descriptor = descriptor_track(property);
-        let path = layer.entity_path();
         let results = self
             .db
-            .latest_at(&self.query(), &path, [descriptor.component]);
+            .latest_at(&self.query(), path, [descriptor.component]);
         let Some(json) = results
             .component_batch::<TrackJson>(descriptor.component)
             .and_then(|batch| batch.into_iter().next())
@@ -147,6 +150,31 @@ impl<'a> StoreView<'a> {
             .map_err(StoreError::Encode)
     }
 
+    pub fn track(
+        &self,
+        layer: LayerId,
+        property: &PropertyId,
+    ) -> Result<Option<KeyframeTrack>, StoreError> {
+        self.track_at_path(&layer.entity_path(), property)
+    }
+
+    /// カメラの property の keyframe track(`PropertyId::camera` で作った物のみ意味を
+    /// 持つ)。無ければ `Ok(None)`(その property はまだキーを打っていない)。
+    pub fn camera_track(&self, property: &PropertyId) -> Result<Option<KeyframeTrack>, StoreError> {
+        self.track_at_path(&Document::composition_path(), property)
+    }
+
+    fn value_at_path(
+        &self,
+        path: &EntityPath,
+        property: &PropertyId,
+        t: RationalTime,
+    ) -> Result<Option<Value>, StoreError> {
+        Ok(self
+            .track_at_path(path, property)?
+            .map(|track| track.eval(t)))
+    }
+
     /// comp 時刻の値。**補間の意味は `motolii-eval` が持つ**ので、ここは呼ぶだけ。
     pub fn value_at(
         &self,
@@ -154,7 +182,63 @@ impl<'a> StoreView<'a> {
         property: &PropertyId,
         t: RationalTime,
     ) -> Result<Option<Value>, StoreError> {
-        Ok(self.track(layer, property)?.map(|track| track.eval(t)))
+        self.value_at_path(&layer.entity_path(), property, t)
+    }
+
+    /// カメラの property の comp 時刻の値。
+    pub fn camera_value_at(
+        &self,
+        property: &PropertyId,
+        t: RationalTime,
+    ) -> Result<Option<Value>, StoreError> {
+        self.value_at_path(&Document::composition_path(), property, t)
+    }
+
+    /// この comp 時刻でのカメラ(裁定113/115)。track が無い property は既定値になる
+    /// (パン無し・zoom=1・roll=0)— 裁定20「キーを打っていない property は静止値」を
+    /// カメラにもそのまま適用する。
+    pub fn resolve_camera(&self, t: RationalTime) -> Result<motolii_core::ResolvedCamera, StoreError> {
+        let center_property = PropertyId::camera(property::CAMERA_CENTER)?;
+        let center = match self.camera_value_at(&center_property, t)? {
+            Some(Value::Vec2(v)) => [v[0] as f32, v[1] as f32],
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "{} に2成分でない値が入っている: {other:?}",
+                    property::CAMERA_CENTER
+                )))
+            }
+            None => [0.0, 0.0],
+        };
+
+        let zoom_property = PropertyId::camera(property::CAMERA_ZOOM)?;
+        let zoom = match self.camera_value_at(&zoom_property, t)? {
+            Some(Value::F64(v)) => v as f32,
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "{} に数値でない値が入っている: {other:?}",
+                    property::CAMERA_ZOOM
+                )))
+            }
+            None => 1.0,
+        };
+
+        let roll_property = PropertyId::camera(property::CAMERA_ROLL)?;
+        let roll_degrees = match self.camera_value_at(&roll_property, t)? {
+            Some(Value::F64(v)) => v as f32,
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "{} に数値でない値が入っている: {other:?}",
+                    property::CAMERA_ROLL
+                )))
+            }
+            None => 0.0,
+        };
+
+        Ok(motolii_core::ResolvedCamera {
+            center,
+            zoom,
+            roll_degrees,
+        })
     }
 
     /// comp の設定。**preview も export もここから取る** — 引数で渡さない。
@@ -440,6 +524,9 @@ impl<'a> StoreView<'a> {
                 transform,
                 opacity: scalar(property::OPACITY, 1.0)?.clamp(0.0, 1.0),
                 order: meta.order,
+                // 裁定113/116: 全員 z=0 既定。`position.x`/`position.y`(split-position)
+                // の隣に同じ流儀で置いた `position.z`。
+                z: scalar(property::POSITION_Z, 0.0)?,
             },
             declared_size: size,
             source: meta.source,
@@ -447,6 +534,7 @@ impl<'a> StoreView<'a> {
             masks: self.resolved_masks(layer, t)?,
             blend_mode: attrs.blend_mode,
             matte: attrs.matte,
+            pinned: attrs.pinned,
         }))
     }
 

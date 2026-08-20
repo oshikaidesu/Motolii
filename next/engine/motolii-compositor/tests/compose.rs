@@ -1,6 +1,6 @@
 //! 合成の契約 — 重ね順・不透明度・**preview と export が同じ絵になること**。
 
-use motolii_compositor::{CompSpec, Compositor, Layer, LayerPlacement};
+use motolii_compositor::{CompSpec, Compositor, Layer, LayerPlacement, ResolvedCamera};
 
 const W: u32 = 64;
 const H: u32 = 64;
@@ -39,6 +39,7 @@ fn layers_stack_by_order_and_position() {
     let frame = compositor
         .render(
             comp(),
+            ResolvedCamera::default(),
             &[
                 Layer {
                     texture: red,
@@ -54,7 +55,9 @@ fn layers_stack_by_order_and_position() {
                         ),
                         order: 0,
                         opacity: 1.0,
+                        z: 0.0,
                     },
+                    pinned: false,
                 },
                 Layer {
                     texture: green,
@@ -71,7 +74,9 @@ fn layers_stack_by_order_and_position() {
                         ),
                         order: 1,
                         opacity: 1.0,
+                        z: 0.0,
                     },
+                    pinned: false,
                 },
             ],
         )
@@ -120,11 +125,13 @@ fn render_is_deterministic() {
             ),
             order: 0,
             opacity: 1.0,
+            z: 0.0,
         },
+        pinned: false,
     };
 
-    let first = compositor.render(comp(), std::slice::from_ref(&layer)).unwrap();
-    let second = compositor.render(comp(), std::slice::from_ref(&layer)).unwrap();
+    let first = compositor.render(comp(), ResolvedCamera::default(), std::slice::from_ref(&layer)).unwrap();
+    let second = compositor.render(comp(), ResolvedCamera::default(), std::slice::from_ref(&layer)).unwrap();
 
     assert_eq!(first, second, "同じ入力から違う絵が出る(決定的でない)");
 }
@@ -150,12 +157,14 @@ fn opacity_dims_the_layer() {
             ),
             order: 0,
             opacity,
+            z: 0.0,
         },
+        pinned: false,
     };
 
-    let full = compositor.render(comp(), &[make(1.0)]).unwrap();
-    let half = compositor.render(comp(), &[make(0.5)]).unwrap();
-    let none = compositor.render(comp(), &[make(0.0)]).unwrap();
+    let full = compositor.render(comp(), ResolvedCamera::default(), &[make(1.0)]).unwrap();
+    let half = compositor.render(comp(), ResolvedCamera::default(), &[make(0.5)]).unwrap();
+    let none = compositor.render(comp(), ResolvedCamera::default(), &[make(0.0)]).unwrap();
 
     let full_px = pixel(&full, 32, 32);
     let half_px = pixel(&half, 32, 32);
@@ -171,7 +180,7 @@ fn opacity_dims_the_layer() {
 #[test]
 fn empty_comp_is_the_clear_color() {
     let mut compositor = Compositor::headless().expect("headless GPU");
-    let frame = compositor.render(comp(), &[]).unwrap();
+    let frame = compositor.render(comp(), ResolvedCamera::default(), &[]).unwrap();
     assert_eq!(frame.len(), (W * H * 4) as usize);
 
     let px = pixel(&frame, 32, 32);
@@ -190,7 +199,7 @@ fn empty_comp_is_the_clear_color() {
 fn alpha_is_flattened_by_the_composite_step() {
     let mut compositor = Compositor::headless().expect("headless GPU");
 
-    let empty = compositor.render(comp(), &[]).unwrap();
+    let empty = compositor.render(comp(), ResolvedCamera::default(), &[]).unwrap();
     assert_eq!(
         pixel(&empty, 32, 32)[3],
         255,
@@ -203,6 +212,7 @@ fn alpha_is_flattened_by_the_composite_step() {
     let out = compositor
         .render(
             comp(),
+            ResolvedCamera::default(),
             &[Layer {
                 texture: half_alpha,
                 size: [W as f32, H as f32],
@@ -217,7 +227,9 @@ fn alpha_is_flattened_by_the_composite_step() {
                     ),
                     order: 0,
                     opacity: 1.0,
+                    z: 0.0,
                 },
+                pinned: false,
             }],
         )
         .unwrap();
@@ -258,7 +270,9 @@ fn two_devices_produce_the_same_frame() {
                     ),
                     order: 0,
                     opacity: 1.0,
+                    z: 0.0,
                 },
+                pinned: false,
             },
             Layer {
                 texture: small,
@@ -274,18 +288,20 @@ fn two_devices_produce_the_same_frame() {
                     ),
                     order: 1,
                     opacity: 0.5,
+                    z: 0.0,
                 },
+                pinned: false,
             },
         ]
     };
 
     let mut a = Compositor::headless().expect("device A");
     let layers_a = make(&mut a);
-    let frame_a = a.render(comp(), &layers_a).unwrap();
+    let frame_a = a.render(comp(), ResolvedCamera::default(), &layers_a).unwrap();
 
     let mut b = Compositor::headless().expect("device B");
     let layers_b = make(&mut b);
-    let frame_b = b.render(comp(), &layers_b).unwrap();
+    let frame_b = b.render(comp(), ResolvedCamera::default(), &layers_b).unwrap();
 
     assert_eq!(
         frame_a, frame_b,

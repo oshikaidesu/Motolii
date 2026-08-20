@@ -57,7 +57,7 @@ Browser から **drag で配置** / Export 設定 UI と割合進捗 /
 | D9 | 起動〜最初の結果が数秒 | 数値バーが空席 |
 | D10 | first-party パーティクル(音楽同期) | 未 |
 | D11 | **文字MV が作れる** — 1つのテキストレイヤー内で文字範囲ごとにフォント・サイズを変えられ(`style_spans`、裁定82)、文字ごとのアニメーションが AE のアニメータ模型で表せる(裁定75) | 未。Lottie から 39項目を採用予定、範囲スタイルだけ別の先例待ち |
-| D12 | **rerun だからこそ: 3D**。世界は1つ(全員 z=0 既定の 2.5D、空間を分けない — 裁定113)で、**preview は透視カメラのインパクト重視**(層の z を動かした瞬間に視差が出る)。将来の点群・深度クラウド・3Dメッシュの撮影は `re_renderer` がネイティブに持つ(point_cloud / depth_cloud / mesh_renderer、rev 483b855 実確認) | 未(camera 束、裁定115) |
+| D12 | **rerun だからこそ: 3D**。世界は1つ(全員 z=0 既定の 2.5D、空間を分けない — 裁定113)で、**preview は透視カメラのインパクト重視**(層の z を動かした瞬間に視差が出る)。将来の点群・深度クラウド・3Dメッシュの撮影は `re_renderer` がネイティブに持つ(point_cloud / depth_cloud / mesh_renderer、rev 483b855 実確認) | **camera 束は済**(裁定116。`Composition.camera` の center/zoom/roll・`position.z`・pinned 属性・`Projection::Perspective` 化。全層 z=0・既定カメラで旧正射影と画素一致 = 済)。点群・深度クラウド・3Dメッシュの撮影は引き続き未(裁定113 の Spatial 変種と同じく将来の additive スコープ、向きの表現はまだ開けない) |
 
 ## 要らないもの — 欠落ではなく設計上の除外
 

@@ -38,7 +38,7 @@ pub use marker::Marker;
 pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
 pub use view::StoreView;
 
-pub use motolii_core::{CompSpec, Fps, LayerPlacement, RationalTime};
+pub use motolii_core::{CompSpec, Fps, LayerPlacement, RationalTime, ResolvedCamera};
 pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, Value};
 /// shape-layer(`layers/shape-layer/shapes`)の中身。語彙の正本は `motolii-vector`
 /// (shape-1/2/3 が既に決めた)— ここでは作り直さない(裁定10)。`Path` は再輸出しない
@@ -104,6 +104,19 @@ pub mod property {
     /// 裏返し — Time Remap は timing ではなく property)。track が無ければ通常どおり
     /// `LayerTiming::source_frame` の写像を使う。
     pub const TIME_REMAP: &str = "time_remap";
+    /// layer の奥行き(裁定113/116)。**既定 0**(全員 z=0)。`position.x`/`position.y`
+    /// (split-position 束、裁定111(b))の隣に同じ流儀で置く。単位は `position` と同じ
+    /// world = ピクセル。AE と同じ符号(大きいほどカメラから遠い)。
+    pub const POSITION_Z: &str = "position.z";
+
+    /// カメラの property(裁定113/115、裁定116 で実装)。`layer` ではなく `/composition`
+    /// entity へ書く(`PropertyId::camera` が別の component 名前空間を作る)。
+    /// comp 中心からのパン量(ピクセル)。既定 [0,0](パン無し)。
+    pub const CAMERA_CENTER: &str = "camera.center";
+    /// 既定 1.0(zoom 無し)。
+    pub const CAMERA_ZOOM: &str = "camera.zoom";
+    /// 度・時計回り。既定 0.0(roll 無し)。
+    pub const CAMERA_ROLL: &str = "camera.roll";
 }
 
 /// layer の素材。media が入るまでは単色だけ。
@@ -335,4 +348,7 @@ pub struct ResolvedLayer {
     pub blend_mode: BlendMode,
     /// matte(裁定66)。**同上、まだ合成器は読んでいない**。
     pub matte: Option<Matte>,
+    /// `LayerAttrs::pinned`(裁定113)。true ならカメラ変換を受けず画面に張り付く —
+    /// 合成器が `placement.transform`/`z` をカメラで動かす前に打ち消す(裁定116 実装)。
+    pub pinned: bool,
 }

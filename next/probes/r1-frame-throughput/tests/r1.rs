@@ -119,7 +119,7 @@ fn measure(engine: &mut Engine, doc: &Document, runs: u32) -> u128 {
 #[test]
 #[ignore = "GPU を単独で使う必要がある — 冒頭の doc を参照"]
 fn where_the_frame_time_goes() {
-    use motolii_compositor::{Compositor, Layer, LayerPlacement};
+    use motolii_compositor::{Compositor, Layer, LayerPlacement, ResolvedCamera};
 
     let mut compositor = Compositor::headless().expect("compositor");
     let texture = compositor
@@ -146,11 +146,13 @@ fn where_the_frame_time_goes() {
                 ),
                 order: i,
                 opacity: 1.0,
+                z: 0.0,
             },
+            pinned: false,
         })
         .collect();
 
-    let _ = compositor.render(comp(), &layers[..1]).unwrap();
+    let _ = compositor.render(comp(), ResolvedCamera::default(), &layers[..1]).unwrap();
 
     for count in [1usize, 10, 40] {
         let mut build = 0u128;
@@ -159,7 +161,7 @@ fn where_the_frame_time_goes() {
         const RUNS: u128 = 10;
         for _ in 0..RUNS {
             let (_, timing) = compositor
-                .render_with_timing(comp(), &layers[..count])
+                .render_with_timing(comp(), ResolvedCamera::default(), &layers[..count])
                 .unwrap();
             build += timing.build_us;
             gpu += timing.gpu_us;
@@ -180,7 +182,7 @@ fn where_the_frame_time_goes() {
 #[test]
 #[ignore = "GPU を単独で使う必要がある — 冒頭の doc を参照"]
 fn preview_resolution_is_the_lever() {
-    use motolii_compositor::{Compositor, Layer, LayerPlacement};
+    use motolii_compositor::{Compositor, Layer, LayerPlacement, ResolvedCamera};
 
     let mut compositor = Compositor::headless().expect("compositor");
 
@@ -205,19 +207,21 @@ fn preview_resolution_is_the_lever() {
                     ),
                     order: i,
                     opacity: 1.0,
+                    z: 0.0,
                 },
+                pinned: false,
             })
             .collect();
         let spec = CompSpec {
             width: w,
             height: h,
         };
-        let _ = compositor.render(spec, &layers).unwrap();
+        let _ = compositor.render(spec, ResolvedCamera::default(), &layers).unwrap();
 
         const RUNS: u128 = 5;
         let mut total = 0u128;
         for _ in 0..RUNS {
-            let (_, timing) = compositor.render_with_timing(spec, &layers).unwrap();
+            let (_, timing) = compositor.render_with_timing(spec, ResolvedCamera::default(), &layers).unwrap();
             total += timing.total_us();
         }
         println!(
