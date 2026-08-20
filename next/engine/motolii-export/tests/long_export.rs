@@ -8,6 +8,7 @@ use motolii_core::Fps;
 use motolii_engine::Engine;
 use motolii_export::{export, ExportJob};
 use motolii_store::{Composition, Document, Intent, LayerId, LayerMeta, LayerSource};
+use motolii_store::LayerTiming;
 use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
 use std::process::Command;
 
@@ -36,6 +37,7 @@ fn document_with_media(path: String) -> Document {
                 fingerprint: None,
             },
             order: 0,
+            timing: LayerTiming::place(0, None, 100_000),
         },
     })
     .unwrap();

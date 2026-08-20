@@ -8,6 +8,7 @@ use std::process::Command;
 use motolii_compositor::CompSpec;
 use motolii_engine::Engine;
 use motolii_store::{Composition, Document, Intent, LayerId, LayerMeta, LayerSource, RationalTime};
+use motolii_store::LayerTiming;
 use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
 
 const W: u32 = 64;
@@ -81,6 +82,7 @@ fn real_media_becomes_a_layer() {
                 fingerprint: None,
             },
             order: 0,
+            timing: LayerTiming::place(0, None, 100_000),
         },
     })
     .unwrap();
@@ -143,6 +145,7 @@ fn media_natural_size_fills_the_layer() {
                 fingerprint: None,
             },
             order: 0,
+            timing: LayerTiming::place(0, None, 100_000),
         },
     })
     .unwrap();

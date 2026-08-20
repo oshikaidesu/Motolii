@@ -54,3 +54,7 @@
 | 47 | 2026-08-20 | `Document::mark_undo_floor()` — 起動直後や project を開いた直後の状態は編集ではないので戻せてはいけない。呼ばないと利用者が既定値を undo で消し、**Stage が理由もなく空になる**(実際に起きた) |
 | 48 | 2026-08-20 | **1操作 = 1 undo** は `Document::apply_all`(複数 intent を1つの edit 刻みへ)で満たす。ドラッグは途中経過を pane が持ち確定の1件だけが intent なので元から1 undo — 畳む口が要るのは「本質的に複数 intent な1操作」だけ |
 | 49 | 2026-08-20 | 落下は Message にして受ける(窓の event を直に処理しない)。運転席が窓を開けずに同じ道を通せる。winit は1ファイル1事象なので**描画要求を区切り**にして溜めた分をまとめて1操作にする |
+| 50 | 2026-08-20 | **バックの完成を先に**(利用者裁定)。iced を採ったのは「バックができていれば UI は後から生えてくる」ため。よって UI の見栄えより、Document の意味の穴を先に塞ぐ |
+| 51 | 2026-08-20 | layer は `LayerTiming { start, duration, source_in }` を持つ。**move / trim / split / 速度はすべてこの型の上に乗り、intent は `SetTiming` 1つ**。専用 intent を操作ごとに足さない |
+| 52 | 2026-08-20 | 置いた時の尺 = **min(素材の尺, comp の残り)** は `LayerTiming::place` が持つ。**shell に書かせない** — 書かせると面ごとに違う置き方が生まれる(旧 workspace の import_seat と browser で起きた形) |
+| 53 | 2026-08-20 | comp 時刻 → 素材フレームの写像は **Document が持つ**(`resolve` が `source_frame` まで解決して返す)。engine は時間の計算をしない — engine が別の写像を持つと時刻の正本が2本になる(2026-08-20 に一度やった失敗) |

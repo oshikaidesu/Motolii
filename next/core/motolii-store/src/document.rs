@@ -73,6 +73,11 @@ pub enum Intent {
         layer: LayerId,
         meta: crate::LayerMeta,
     },
+    /// comp 上の配置と、素材のどこを使うか。move / trim / split はすべてこれ1つ。
+    SetTiming {
+        layer: LayerId,
+        timing: crate::LayerTiming,
+    },
     /// comp の設定(解像度・fps・尺)。**undo が効く**ので普通の編集と同じ経路。
     SetComposition(crate::Composition),
 }
@@ -232,6 +237,27 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_composition(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetTiming { layer, timing } => {
+                // meta の一部なので、読んで差し替えて書き戻す。
+                // **専用の component を足さない** — 増やすと読み口も増える。
+                let current = self.view().meta(layer)?;
+                let Some(mut meta) = current else {
+                    return Err(StoreError::Property(format!(
+                        "layer {} に素材が置かれていないので配置を決められない",
+                        layer.0
+                    )));
+                };
+                meta.timing = timing;
+                let json = serde_json::to_string(&meta)?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_meta(),
                         array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],

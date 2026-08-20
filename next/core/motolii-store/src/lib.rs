@@ -121,12 +121,78 @@ impl Composition {
     }
 }
 
+/// layer が comp 上のどこに、素材のどこから乗るか。
+///
+/// **これが無いと「常に存在し、素材フレーム = comp フレーム」しか表現できない** —
+/// 配置も trim も split も速度も、全部この型の上に乗る。
+///
+/// 上流に相当物は無い。rerun の `AbsoluteTimeRange` は store の時間範囲であって
+/// 「素材のどこを使うか」を持たないので、これは Motolii の意味である。
+///
+/// 単位はフレーム。comp の fps で数える(`RationalTime` を持たないのは、
+/// 配置が fps に紐づく整数だからで、時刻へ写す時は正準口を通る)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct LayerTiming {
+    /// comp 上の開始フレーム。
+    pub start: i64,
+    /// 尺(フレーム数)。半開 `[start, start + duration)`。
+    pub duration: i64,
+    /// 素材の何フレーム目から使うか。
+    pub source_in: i64,
+}
+
+impl Default for LayerTiming {
+    fn default() -> Self {
+        Self {
+            start: 0,
+            // 0 は「まだ決まっていない」ではなく「尺ゼロ」なので、既定は置かない。
+            // `LayerMeta::new` が素材の実尺から埋める。
+            duration: 0,
+            source_in: 0,
+        }
+    }
+}
+
+impl LayerTiming {
+    /// この comp フレームで layer は居るか。
+    pub fn covers(&self, comp_frame: i64) -> bool {
+        comp_frame >= self.start && comp_frame < self.start + self.duration
+    }
+
+    /// 素材を置く時の尺 = **min(素材の尺, comp の残り)**(M4)。
+    ///
+    /// 素材の尺が分からない場合(静止画など)は comp の残り全部。
+    /// **この規則を shell に書かせない** — 書かせると面ごとに違う置き方が生まれる。
+    pub fn place(start: i64, source_frames: Option<i64>, comp_duration: i64) -> Self {
+        let remaining = (comp_duration - start).max(0);
+        let duration = match source_frames {
+            Some(frames) => frames.min(remaining),
+            None => remaining,
+        };
+        Self {
+            start,
+            duration,
+            source_in: 0,
+        }
+    }
+
+    /// comp フレーム → 素材のフレーム。居ない時刻なら `None`。
+    ///
+    /// **素材の終端でフリーズさせない**(M4)。居ない時刻は描かない。
+    pub fn source_frame(&self, comp_frame: i64) -> Option<i64> {
+        self.covers(comp_frame)
+            .then(|| self.source_in + (comp_frame - self.start))
+    }
+}
+
 /// layer の非アニメーション属性。
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LayerMeta {
     pub source: LayerSource,
     /// 大きいほど手前。上流の `re_renderer::DepthOffset` と同じ `i16`。
     pub order: i16,
+    /// comp 上の配置と、素材のどこを使うか。
+    pub timing: LayerTiming,
 }
 
 /// ある comp 時刻に解決済みの layer。**合成器が要るのはこれだけ**。
@@ -138,4 +204,7 @@ pub struct LayerMeta {
 pub struct ResolvedLayer {
     pub source: LayerSource,
     pub placement: LayerPlacement,
+    /// この comp 時刻に対応する**素材のフレーム**。
+    /// 解決済みなので、engine はもう時間の計算をしない。
+    pub source_frame: i64,
 }

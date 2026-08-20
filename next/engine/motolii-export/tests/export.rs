@@ -6,6 +6,7 @@ use motolii_engine::Engine;
 use motolii_export::{export, export_with_cancel, Cancel, ExportError, ExportJob};
 use motolii_media::probe;
 use motolii_store::{Composition, Document, Intent, LayerId, LayerMeta, LayerSource, RationalTime};
+use motolii_store::LayerTiming;
 use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
 
 const W: u32 = 64;
@@ -46,6 +47,7 @@ fn moving_document() -> Document {
                 height: 16,
             },
             order: 0,
+            timing: LayerTiming::place(0, None, 100_000),
         },
     })
     .unwrap();

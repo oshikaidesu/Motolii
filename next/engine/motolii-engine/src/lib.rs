@@ -82,7 +82,7 @@ impl Engine {
 
         let mut layers = Vec::with_capacity(resolved.len());
         for layer in resolved {
-            let (texture, natural) = self.texture_for(&layer.source, t)?;
+            let (texture, natural) = self.texture_for(&layer.source, layer.source_frame)?;
             let Some(texture) = texture else {
                 // 素材の外の時刻。この layer は今フレームに居ない。
                 continue;
@@ -144,7 +144,7 @@ impl Engine {
     fn texture_for(
         &mut self,
         source: &LayerSource,
-        t: RationalTime,
+        source_frame: i64,
     ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
         match source {
             LayerSource::Solid {
@@ -179,18 +179,13 @@ impl Engine {
                 };
                 let natural = [info.width as f32, info.height as f32];
 
-                // comp 時刻 → 素材のフレーム番号。
-                //
-                // **`RationalTime` の正準口を通す**。`motolii-core` の doc が
-                // 「f64×fps の独自丸めは禁止」と明記しているとおりで、ここを f64 で
-                // 書くと 30000/1001 のような有理 fps で preview と export が
-                // **同じようにずれる**(同じ関数を通るので M15 は保たれたまま両方間違う)。
-                let frame = t
-                    .try_to_frame_floor(info.fps)
-                    .map_err(|e| EngineError::Time(e.to_string()))?;
+                // **時間の計算はしない**。comp 時刻 → 素材フレームの写像は Document が
+                // 持つ(`LayerTiming::source_frame`)。engine が別の写像を持つと
+                // 時刻の正本が2本になる(2026-08-20 の敵対的レビューで一度やった失敗)。
+                let frame = source_frame;
 
-                // 素材の外の時刻は**描かない**(フリーズフレーム禁止、M4)。
-                // ここで Err を返すとフレーム全体が出なくなるので、この layer だけ落とす。
+                // 素材の外は描かない(フリーズフレーム禁止、M4)。ここで Err を返すと
+                // フレーム全体が出なくなるので、この layer だけ落とす。
                 let last_frame = info.nb_frames.map(|n| n - 1);
                 if frame < 0 || last_frame.is_some_and(|last| frame > last) {
                     return Ok((None, natural));

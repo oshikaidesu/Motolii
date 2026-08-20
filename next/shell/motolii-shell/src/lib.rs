@@ -17,8 +17,8 @@ use iced::{Element, Length, Task};
 
 use motolii_engine::Engine;
 use motolii_store::{
-    Composition, Document, Intent, LayerId, LayerMeta, LayerSource, RationalTime, Revision,
-    StoreView,
+    Composition, Document, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, RationalTime,
+    Revision, StoreView,
 };
 
 /// front だけが持つ状態。**Document の写しは1つも入れないこと**。
@@ -161,6 +161,12 @@ impl Shell {
                                 height: 135,
                             },
                             order: id.0 as i16,
+                            // 尺の決め方は Document が持つ(M4)。
+                            timing: LayerTiming::place(
+                                self.session.playhead,
+                                None,
+                                self.comp_duration(),
+                            ),
                         },
                     },
                 ]);
@@ -184,10 +190,14 @@ impl Shell {
         let mut rejected = Vec::new();
         let mut next = self.next_layer_id();
 
+        let comp_duration = self.comp_duration();
+        let start = self.session.playhead;
+        let _ = start;
+
         for path in paths {
             let text = path.to_string_lossy().into_owned();
             match motolii_media::probe(&path) {
-                Ok(_) => {
+                Ok(info) => {
                     let id = LayerId(next);
                     next += 1;
                     intents.push(Intent::AddLayer(id));
@@ -199,6 +209,11 @@ impl Shell {
                                 fingerprint: None,
                             },
                             order: id.0 as i16,
+                            timing: LayerTiming::place(
+                                self.session.playhead,
+                                info.nb_frames,
+                                comp_duration,
+                            ),
                         },
                     });
                 }
@@ -227,6 +242,16 @@ impl Shell {
 
     pub fn layer_count(&self) -> usize {
         self.doc.view().layers().len()
+    }
+
+    fn comp_duration(&self) -> i64 {
+        self.doc
+            .view()
+            .composition()
+            .ok()
+            .flatten()
+            .map(|c| c.duration_frames)
+            .unwrap_or(0)
     }
 
     pub fn can_undo(&self) -> bool {

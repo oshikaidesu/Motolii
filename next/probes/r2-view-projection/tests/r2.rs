@@ -6,6 +6,7 @@ use motolii_store::{
     property, Document, Interp, Intent, Keyframe, KeyframeTrack, LayerId, LayerMeta, LayerSource,
     PropertyId, RationalTime, Value,
 };
+use motolii_store::LayerTiming;
 
 /// 実寸に近い Document: 40 layer × 5 property × 30 keyframe。
 fn realistic_document() -> Document {
@@ -30,6 +31,7 @@ fn realistic_document() -> Document {
                     height: 1080,
                 },
                 order: i as i16,
+                timing: LayerTiming::place(0, None, 100_000),
             },
         })
         .unwrap();

@@ -16,6 +16,7 @@ use std::time::Instant;
 use motolii_compositor::{CompSpec, LayerPlacement};
 use motolii_engine::Engine;
 use motolii_store::{Composition, Document, Intent, LayerId, LayerMeta, LayerSource};
+use motolii_store::LayerTiming;
 use r1_frame_throughput::FHD;
 
 fn comp() -> CompSpec {
@@ -54,6 +55,7 @@ fn document_scaled(layers: u64, source_scale: u32) -> Document {
                     height: sh,
                 },
                 order: i as i16,
+                timing: LayerTiming::place(0, None, 100_000),
             },
         })
         .unwrap();
@@ -83,6 +85,7 @@ fn document_with(layers: u64) -> Document {
                     height: FHD[1],
                 },
                 order: i as i16,
+                timing: LayerTiming::place(0, None, 100_000),
             },
         })
         .unwrap();

@@ -126,12 +126,24 @@ impl<'a> StoreView<'a> {
     ///
     /// track が無い property は既定値になる(位置 0、不透明度 1、大きさは素材のまま)。
     /// これは AE で「キーを打っていない property は静止値」と同じ扱いである。
+    /// `Ok(None)` = **この時刻にこの layer は居ない**(配置の外)。
     pub fn resolve(
         &self,
         layer: LayerId,
         t: RationalTime,
     ) -> Result<Option<ResolvedLayer>, StoreError> {
         let Some(meta) = self.meta(layer)? else {
+            return Ok(None);
+        };
+
+        // 時間の判定は Document がする。engine は解決済みの素材フレームを受け取るだけ。
+        let Some(composition) = self.composition()? else {
+            return Ok(None);
+        };
+        let comp_frame = t
+            .try_to_frame_floor(composition.fps)
+            .map_err(|e| StoreError::Property(e.to_string()))?;
+        let Some(source_frame) = meta.timing.source_frame(comp_frame) else {
             return Ok(None);
         };
         // 実素材の大きさは probe しないと分からない。ここでは 0 を置き、engine が
@@ -166,6 +178,7 @@ impl<'a> StoreView<'a> {
                 order: meta.order,
             },
             source: meta.source,
+            source_frame,
         }))
     }
 

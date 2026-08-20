@@ -9,6 +9,7 @@ use motolii_store::{Composition,
     property, Document, Interp, Intent, Keyframe, KeyframeTrack, LayerId, LayerMeta, LayerSource,
     PropertyId, RationalTime, Value,
 };
+use motolii_store::LayerTiming;
 
 const W: u32 = 64;
 const H: u32 = 64;
@@ -56,6 +57,7 @@ fn document_becomes_a_frame() {
         meta: LayerMeta {
             source: solid([255, 0, 0, 255], W, H),
             order: 0,
+            timing: LayerTiming::place(0, None, 100_000),
         },
     })
     .unwrap();
@@ -66,6 +68,7 @@ fn document_becomes_a_frame() {
         meta: LayerMeta {
             source: solid([0, 255, 0, 255], 32, 32),
             order: 1,
+            timing: LayerTiming::place(0, None, 100_000),
         },
     })
     .unwrap();
@@ -104,6 +107,7 @@ fn keyframes_move_the_picture_over_time() {
         meta: LayerMeta {
             source: solid([255, 255, 255, 255], 16, 16),
             order: 0,
+            timing: LayerTiming::place(0, None, 100_000),
         },
     })
     .unwrap();
@@ -162,6 +166,7 @@ fn undo_changes_the_rendered_frame() {
         meta: LayerMeta {
             source: solid([255, 0, 0, 255], W, H),
             order: 0,
+            timing: LayerTiming::place(0, None, 100_000),
         },
     })
     .unwrap();
@@ -174,6 +179,7 @@ fn undo_changes_the_rendered_frame() {
         meta: LayerMeta {
             source: solid([0, 0, 255, 255], W, H),
             order: 0,
+            timing: LayerTiming::place(0, None, 100_000),
         },
     })
     .unwrap();

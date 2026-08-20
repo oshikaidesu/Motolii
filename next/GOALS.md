@@ -12,7 +12,7 @@
 | M1 | 起動して project を新規/既存で開ける。無ければスタート画面 | ux-check-first-ten-minutes | 未 |
 | M2 | Finder からドロップで素材が入る。開けない物は**理由つきで skip**(黙って消えない) | ux-check P3/P5、first-touch観察 | **済**。3本まとめて落として1操作(winit は1ファイル1事象なので描画要求を区切りにする)。拒否はファイル名つきで status 帯へ |
 | M3 | 置いた clip が Timeline に立ち、**Stage に絵が出る**。待たされない | ui-inherited-grammar-gap | **部分**。Stage に絵は出る(運転席が画素まで確認)。**Timeline pane がまだ無い** |
-| M4 | clip の尺は min(source, comp残り)。source 終端の先はフリーズせず背景 | first-real-run 欠陥(1) | 未 |
+| M4 | clip の尺は min(source, comp残り)。source 終端の先はフリーズせず背景 | first-real-run 欠陥(1) | **済**。`LayerTiming::place` が尺を決め、配置の外は描かない(フレーム全体は落とさない) |
 | M5 | drag=移動 / 端drag=trim / release=確定 / Esc=復元。snap は clip端・key・playhead・loop端・0・終端 | normal-timeline-prior-art | 未 |
 | M6 | split(Cmd+K)・Delete・複製(Cmd+D)・複数選択(Shift/Cmd/marquee/Cmd+A) | 同上 | 未 |
 | M7 | **Copy / Cut / Paste が効く** — 旧 egui は menu に項目があるのに何も起きない(Q0違反の現物) | 同上、egui能力台帳§2 | 未 |
@@ -73,6 +73,20 @@ Browser から **drag で配置** / Export 設定 UI と割合進捗 /
 - rerun の viewer 層 / egui shell / `ui/motolii-rn`
 
 空席のまま(禁止ではない): 3点編集、A/V link-unlink、マルチカム、J/K/L shuttle。
+
+## バック優先(2026-08-20 裁定50)
+
+iced を採ったのは「**バックができていれば UI は後から生えてくる**」ため。
+よって UI の見栄えより Document の意味の穴を先に塞ぐ。バック側に残っている穴:
+
+| 穴 | 状態 |
+|---|---|
+| layer の時間(配置・trim・頭出し) | **塞いだ**(裁定51〜53) |
+| 保存・読込(M11) | **未**。R0-4 で store の往復は実証済み、project 形式が未決 |
+| Transform 全軸(anchor / scale / rotation) | **未**。今あるのは position / size / opacity |
+| 音声(decode / mix / 再生 / export mux) | **未**。旧 `motolii-audio` 4,286行が移植候補(`motolii-doc` 依存を切る要) |
+| 再生の時計(M8) | 未 |
+| 拡張の口 | 意図的に未着手(裁定13) |
 
 ## 順序
 
