@@ -179,3 +179,52 @@ fn alpha_is_flattened_by_the_composite_step() {
     assert!(px[0] > 0 && px[0] < 255, "RGB 側は正しく混ざっている: {px:?}");
 }
 
+
+/// **preview を iced の device で、export を別 device で回しても同じ絵か**。
+///
+/// iced の `shader::Primitive` は `prepare(&self, .., device: &wgpu::Device, queue: &wgpu::Queue, ..)`
+/// と `render(.., encoder: &mut wgpu::CommandEncoder, target: &wgpu::TextureView, ..)` を渡すので、
+/// re_renderer を **iced の device の上に**建てられる(= 読み戻し無しの埋め込み)。
+/// その時 preview と export は別 device になりうる。背骨2(preview = export)が
+/// **device を跨いでも**成り立つかは仮定してはいけないので、ここで測る。
+#[test]
+fn two_devices_produce_the_same_frame() {
+    let make = |compositor: &mut Compositor| {
+        let tex = compositor
+            .upload_rgba("checker", &solid([200, 40, 90, 255], W, H), W, H)
+            .unwrap();
+        let small = compositor
+            .upload_rgba("small", &solid([20, 180, 60, 128], 32, 32), 32, 32)
+            .unwrap();
+        vec![
+            Layer {
+                texture: tex,
+                top_left: [0.0, 0.0],
+                size: [W as f32, H as f32],
+                order: 0,
+                opacity: 1.0,
+            },
+            Layer {
+                texture: small,
+                top_left: [8.0, 12.0],
+                size: [32.0, 32.0],
+                order: 1,
+                opacity: 0.5,
+            },
+        ]
+    };
+
+    let mut a = Compositor::headless().expect("device A");
+    let layers_a = make(&mut a);
+    let frame_a = a.render(comp(), &layers_a).unwrap();
+
+    let mut b = Compositor::headless().expect("device B");
+    let layers_b = make(&mut b);
+    let frame_b = b.render(comp(), &layers_b).unwrap();
+
+    assert_eq!(
+        frame_a, frame_b,
+        "別 device で絵が変わるなら、preview(iced の device)と export(別 device)を\
+         同じと言えなくなる"
+    );
+}

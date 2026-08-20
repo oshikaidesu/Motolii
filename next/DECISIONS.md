@@ -30,3 +30,5 @@
 | 23 | 2026-08-20 | YUV→RGB は **`re_renderer` の `SourceImageDataFormat::Yuv` に載せる**。ffmpeg `-pix_fmt yuv420p` の生バイトが上流の `Y_U_V420` レイアウトとそのまま一致する。自前 WGSL を書かない(色事故の動機ごと上流へ移る) |
 | 24 | 2026-08-20 | decode/encode は **ffmpeg サイドカーを維持**する。`re_video` は既にグラフに居るが (a) MP4 のみ (b) 再生指向でフレーム正確ランダムアクセスではない (c) 全バイトをメモリに載せる (d) encode/mux を持たない — 書き出しの契約と噛み合わない。この4点が変わったら再裁定する |
 | 25 | 2026-08-20 | 合否の定義は `GOALS.md` 1枚。ここに無い物を「足りない」と数えない(除外リストを含む) |
+| 26 | 2026-08-20 | Stage は **iced の `shader::Primitive` 経由で iced の device の上に re_renderer を建てる**(= 本当の埋め込み)。CPU 読み戻しは export と試験だけに使う。根拠: 一次資料(pin 済み fork `wgpu/src/primitive.rs:14-64`)で `prepare(.., device: &wgpu::Device, queue: &wgpu::Queue, ..)` と `render(.., encoder: &mut CommandEncoder, target: &TextureView, ..)` が生の wgpu を渡すことを確認 — iced の拡張点は **toolkit の層ではなく wgpu の層**にある。読み戻しは 1080p で 1.7ms かかる |
+| 27 | 2026-08-20 | 別 device でも絵は byte 一致することを実測した(`two_devices_produce_the_same_frame`)。よって preview(iced の device)と export(headless)が別 device でも背骨2は崩れない |

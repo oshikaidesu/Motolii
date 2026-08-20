@@ -2769,6 +2769,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "r2-view-projection"
+version = "0.1.0"
+dependencies = [
+ "motolii-store",
+]
+
+[[package]]
 name = "rand"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

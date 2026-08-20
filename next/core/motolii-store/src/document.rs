@@ -208,6 +208,14 @@ impl Document {
         Ok(())
     }
 
+    /// 変化検出。**上流の物をそのまま出す**(`EntityDb::generation`)。
+    ///
+    /// front がこれを見れば「前回と同じか」が分かるので、**前回の値を自分で持つ必要が無い**。
+    /// 二重帳簿の入口を1つ塞ぐための口である。
+    pub fn generation(&self) -> re_chunk_store::ChunkStoreGeneration {
+        self.db.generation()
+    }
+
     /// 実測用。製品経路ではない。
     pub fn store_bytes(&self) -> u64 {
         self.db.byte_size_of_physical_chunks()
