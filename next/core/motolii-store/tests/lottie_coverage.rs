@@ -99,6 +99,8 @@ struct Row {
     evidence: String,
     /// 採用予定 の行が属する**発注単位**。
     unit: String,
+    /// どの上流スキーマ由来か(`lottie` / `rive`)。
+    source: String,
 }
 
 fn coverage_rows() -> Vec<Row> {
@@ -128,6 +130,7 @@ fn coverage_rows() -> Vec<Row> {
             status: status.to_owned(),
             evidence: cols.get(6).unwrap_or(&"").trim().to_owned(),
             unit: cols.get(7).unwrap_or(&"").trim().to_owned(),
+            source: cols.get(8).unwrap_or(&"lottie").trim().to_owned(),
         });
     }
     out
@@ -137,7 +140,12 @@ fn coverage_rows() -> Vec<Row> {
 fn the_map_covers_the_whole_schema() {
     let schema = vocabulary_from_schema();
     let rows = coverage_rows();
-    let mapped: BTreeSet<_> = rows.iter().map(|r| r.key.clone()).collect();
+    // Lottie スキーマとの照合なので、他の上流由来の行は対象外。
+    let mapped: BTreeSet<_> = rows
+        .iter()
+        .filter(|r| r.source == "lottie")
+        .map(|r| r.key.clone())
+        .collect();
 
     let missing: Vec<_> = schema.difference(&mapped).collect();
     assert!(
