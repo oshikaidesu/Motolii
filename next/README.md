@@ -52,7 +52,12 @@ MV 制作のためのモーショングラフィック指向コンポジット�
 | `probes/r1-frame-throughput` | `owns:` | 1080p 40枚が破綻しないか |
 | `probes/r2-view-projection` | `owns:` | 毎フレーム投影が予算に収まるか |
 
-`shell/`(iced)はまだ無い。
+`shell/`(iced)は骨が立っている(store 投影+Session のみ。2026-08-20 実機起動済み)。
+
+## 旧ステージの理想文書
+
+実装の正本はこの workspace だが、**理想・概念(vism 候補・空間モデル・UI 品質バー・拡張の憲法)は旧 `docs/` に正本が残っている**。
+どれがまだ拘束するかは [reference/CANON.md](reference/CANON.md) — **発注前に該当領域の行を確認する**こと(2.5D 見落とし事故の再発防止、2026-08-20)。
 
 ## Lottie を地図として使う
 
