@@ -27,6 +27,7 @@
 - **並走上限の再較正(2026-08-21 利用者裁定)**: 旧「cargo 同時2本まで」は MotoliiRn 常駐(累計2184 CPU分)+使い捨て worktree の cold full build 時代の実測。常設 warm worktree+`-p` 固定+開始前の常駐プロセス確認(裁定138)を満たすなら**3本可**。時間予算 probe の合否だけは並走中に確定させない(アイドルで単独再実行)
 - 時間予算試験2本(`edit_storm_with_the_real_track_type`・r2 `timeline_projection_fits_a_frame`)は**負荷で落ちるのが既知**。単独実行で緑なら自分の変更と無関係。予算は緩めない
 - 一次ソースの取得結果は終了報告に URL/rev を書く(次のレーンが KNOWN 経由で再利用できるように)
+- **OpenTimelineIO は操作文法には無関係**(利用者確認 2026-08-21): データ交換形式であり UI/ジェスチャ意味論を持たない。効くのは将来の (a) プロジェクト交換口 (b) 時間・用語の業界標準語彙のみ。track は Gap 詰め込み型=Motolii 不採用の gapless 系(対比資料)
 
 ## store の流儀(読む前にこれで足りる場合が多い)
 - Intent の型は3種: **丸ごと置換**(`SetShapes`/`SetEffects`/`SetTextDocument` — 検証を write arm で)/ **read-modify-write**(`SetTiming`/`SetSource`/`SetOrder`)/ **Patch**(`LayerAttrsPatch` — 全フィールド Option、None=不変。丸ごと置換の黙戻り事故を型で禁止)
