@@ -36,7 +36,7 @@
 | `docs/mocks-ui/public/browser-library.html` + `.css`、同 `inspector-library.html` + `.css` | Browser / Inspector の**視覚正本そのもの**。構造・階層・状態表現を HTML から解析して写す | **旧 egui 実装は手本にしない**(2026-08-19 利用者裁定「egui 変換が上手くできなかった部分」) |
 | `ui/motolii-tokens/sources/motolii-dark.json` | token 正本(Dark 既定、ライト同格) | raw color 直書き禁止は ui-visual-language の規約 |
 | Ableton `.ask` テーマ18本(実機の Live 12 Beta に実在) | **色文法の一次資料**。実測可能(screencapture 照合 ±3/ch) | 色のみで寸法を含まない(実物確認済み) |
-| `crates/motolii-ui/src/timeline_editor/`(旧 egui、9,059行) | **Timeline だけは逆**: 機能・UI とも旧 egui 実装が手本(2026-08-19 利用者裁定「egui 版が最も機能を詰めれていて優れている、UI も」)。`ui-score-model.md` の契約と併読 | コードは egui 結合なので**意味と機能リストを写す**(写経しない) |
+| Timeline の仕様源 | **旧 egui 実装の機能リストは使わない**(2026-08-20 利用者裁定、2026-08-19「egui 版が手本」を上書き)。**名詞は地図から逆算**(採用済行に無い物を表示しない)、**動詞は GOALS M5〜M7**(drag/trim/snap/split/複製/Copy-Paste)+ `ui-score-model.md` の時間面契約 | 旧 `crates/motolii-ui/src/timeline_editor/` は迷った時の参照に降格 |
 
 ## 未回収の目標(concept.md / catalog にあり、GOALS/DECISIONS が未言及)
 
