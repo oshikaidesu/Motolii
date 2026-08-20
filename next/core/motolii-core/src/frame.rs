@@ -392,18 +392,76 @@ impl LayerPlacement {
     /// - `anchor` / `position`: comp 座標のピクセル
     /// - `scale`: 1.0 が等倍(Lottie のパーセントは採らない、裁定58)
     /// - `rotation_degrees`: 時計回りの度(AE と同じ。ラジアンは人が読めない)
+    /// - `skew_degrees` / `skew_axis_degrees`: skew の量と軸。**軸に沿った点は動かない**
+    ///   (`skew_axis_degrees=0` なら x 軸上、`90` なら y 軸上の点が不動点になる)。
+    ///   式は `velato`(linebender/velato, `src/runtime/model/animated.rs`)の
+    ///   `Transform::evaluate` と一致させてある: `R(-axis) · shear_x(tan(skew)) · R(axis)`。
     pub fn from_transform(
         anchor: [f32; 2],
         position: [f32; 2],
         scale: [f32; 2],
         rotation_degrees: f32,
+        skew_degrees: f32,
+        skew_axis_degrees: f32,
     ) -> glam::Affine2 {
-        use glam::{Affine2, Vec2};
+        use glam::{Affine2, Mat2, Vec2};
 
-        // 列ベクトル規約。右から順に「anchor を引く → 拡大 → 回転 → position へ」。
+        let skew_matrix = if skew_degrees == 0.0 {
+            Affine2::IDENTITY
+        } else {
+            let skew = skew_degrees.to_radians();
+            let axis = skew_axis_degrees.to_radians();
+            // x 方向だけの shear。x' = x + tan(skew)*y, y' = y。
+            let shear = Affine2::from_mat2(Mat2::from_cols(
+                Vec2::new(1.0, 0.0),
+                Vec2::new(skew.tan(), 1.0),
+            ));
+            Affine2::from_angle(-axis) * shear * Affine2::from_angle(axis)
+        };
+
+        // 列ベクトル規約。右から順に「anchor を引く → 拡大 → skew → 回転 → position へ」。
         Affine2::from_translation(Vec2::new(position[0], position[1]))
             * Affine2::from_angle(rotation_degrees.to_radians())
+            * skew_matrix
             * Affine2::from_scale(Vec2::new(scale[0], scale[1]))
             * Affine2::from_translation(Vec2::new(-anchor[0], -anchor[1]))
+    }
+}
+
+#[cfg(test)]
+mod layer_placement_tests {
+    use super::LayerPlacement;
+    use glam::Vec2;
+
+    fn approx(a: Vec2, b: Vec2) {
+        assert!(
+            (a.x - b.x).abs() < 1e-5 && (a.y - b.y).abs() < 1e-5,
+            "{a:?} != {b:?}"
+        );
+    }
+
+    /// skew=0 は恒等。skew_axis がどんな値でも、量が0なら何も動かさない。
+    #[test]
+    fn zero_skew_does_not_move_points() {
+        let t = LayerPlacement::from_transform([0.0, 0.0], [0.0, 0.0], [1.0, 1.0], 0.0, 0.0, 37.0);
+        approx(t.transform_point2(Vec2::new(1.0, 0.0)), Vec2::new(1.0, 0.0));
+        approx(t.transform_point2(Vec2::new(0.0, 1.0)), Vec2::new(0.0, 1.0));
+    }
+
+    /// skew_axis=0(x軸)で skew すると、x軸上の点は不動、y方向の点は x へずれる。
+    #[test]
+    fn skew_along_x_axis_leaves_the_x_axis_fixed() {
+        let t = LayerPlacement::from_transform([0.0, 0.0], [0.0, 0.0], [1.0, 1.0], 0.0, 45.0, 0.0);
+        approx(t.transform_point2(Vec2::new(1.0, 0.0)), Vec2::new(1.0, 0.0));
+        approx(t.transform_point2(Vec2::new(0.0, 1.0)), Vec2::new(1.0, 1.0));
+    }
+
+    /// skew_axis=90(y軸)で skew すると、y軸上の点は不動、x方向の点が y へずれる。
+    /// **軸が変わると不動点も変わる** — sk/sa が独立変数であることの実証。
+    #[test]
+    fn skew_along_y_axis_leaves_the_y_axis_fixed() {
+        let t = LayerPlacement::from_transform([0.0, 0.0], [0.0, 0.0], [1.0, 1.0], 0.0, 45.0, 90.0);
+        approx(t.transform_point2(Vec2::new(0.0, 1.0)), Vec2::new(0.0, 1.0));
+        approx(t.transform_point2(Vec2::new(1.0, 0.0)), Vec2::new(1.0, -1.0));
     }
 }

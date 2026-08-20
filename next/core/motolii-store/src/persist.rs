@@ -26,6 +26,10 @@ impl Document {
         if let Some(composition) = view.composition()? {
             intents.push(Intent::SetComposition(composition));
         }
+        let markers = view.markers()?;
+        if !markers.is_empty() {
+            intents.push(Intent::SetMarkers { markers });
+        }
         for layer in view.layers() {
             let Some(meta) = view.meta(layer)? else {
                 continue;

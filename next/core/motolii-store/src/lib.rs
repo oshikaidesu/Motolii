@@ -23,12 +23,14 @@
 mod components;
 mod document;
 mod fingerprint;
+mod marker;
 mod mask;
 mod persist;
 mod view;
 
 pub use document::{Document, Intent, LayerId, PropertyId, Revision};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
+pub use marker::Marker;
 pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
 pub use view::StoreView;
 
@@ -68,11 +70,20 @@ pub mod property {
     pub const ANCHOR: &str = "anchor";
     /// **anchor が着地する点**。`top_left` ではない(裁定60)。
     pub const POSITION: &str = "position";
+    /// split(x/y 別 track)の X 側。`position` 本体が無い時だけ読む(裁定61: 別 track が
+    /// 既定なのではなく、後から選べる variant)。
+    pub const POSITION_X: &str = "position.x";
+    /// 同 Y 側。
+    pub const POSITION_Y: &str = "position.y";
     /// 1.0 が等倍(Lottie のパーセントは採らない、裁定58)。
     pub const SCALE: &str = "scale";
     /// 度・時計回り(AE と同じ。ラジアンは人が読めない)。
     pub const ROTATION: &str = "rotation";
     pub const OPACITY: &str = "opacity";
+    /// skew の量(度)。`LayerPlacement::from_transform` の穴だった箇所(裁定69)。
+    pub const SKEW: &str = "skew";
+    /// skew の軸(度)。0 なら x 軸、90 なら y 軸に沿った点が不動点になる。
+    pub const SKEW_AXIS: &str = "skew_axis";
 }
 
 /// layer の素材。media が入るまでは単色だけ。
