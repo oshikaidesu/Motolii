@@ -368,8 +368,8 @@ fn color_tokens_load_from_the_single_source_of_truth() {
     let colors = Colors::load_from_path(&Colors::debug_source_path())
         .expect("ui/motolii-tokens/sources/motolii-dark.json を読めない");
     assert!(
-        (colors.text_primary.r - 0.9412).abs() < 0.001,
-        "text.primary が正本 JSON の値と一致しない: {:?}",
+        (colors.text_primary.r - 0.7216).abs() < 0.001,
+        "text.primary が正本 JSON(候補B)の値と一致しない: {:?}",
         colors.text_primary
     );
 }
