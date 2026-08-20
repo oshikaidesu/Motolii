@@ -616,7 +616,7 @@ text	text-document	sz	Wrap Size	採用済	折返し幅。None = point text	pub w
 text	text-document	t	Text	採用済	本文。Lottie の改行 \r は採らず \n で持つ	pub content: ContentTrack	text	lottie
 text	text-document	tr	Tracking	採用済	基底トラッキング。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub tracking: f32	text	lottie
 text	text-document-keyframe	s	Start	不採用	**document 丸ごとを1キーの値にする形は採らない**。色もサイズもホールドになる			lottie
-text	text-document-keyframe	t	Time	採用予定	RationalTime で持つ。打つ相手は content track		text	lottie
+text	text-document-keyframe	t	Time	採用済	RationalTime で持つ。打つ相手は content track	ContentKeyframe	text	lottie
 text	text-follow-path	a	Force Alignment	不採用	パス沿いテキスト一式。後から animator として足せるので凍結は妨げない			lottie
 text	text-follow-path	f	First Margin	不採用	同上			lottie
 text	text-follow-path	l	Last Margin	不採用	同上			lottie
