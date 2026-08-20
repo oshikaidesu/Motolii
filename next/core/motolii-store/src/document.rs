@@ -1,5 +1,6 @@
 //! Document 本体 — 書き口1本 + undo/redo。
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use re_chunk::{Chunk, RowId};
@@ -8,6 +9,8 @@ use re_log_types::{
     AbsoluteTimeRange, EntityPath, StoreId, StoreKind, TimePoint, Timeline, TimelineName,
 };
 use re_types_core::{Component, SerializedComponentBatch};
+
+use motolii_eval::Value;
 
 use crate::components::{
     descriptor_attrs, descriptor_composition, descriptor_effects, descriptor_markers,
@@ -353,10 +356,42 @@ pub enum Intent {
 /// 「見えている Document が変わったか」の印。
 ///
 /// store の世代だけでは undo/redo を捉えられないので、edit 位置と一組にしてある。
+///
+/// **transient overlay(下記)は含まない** — `revision()` は履歴の意味だけを表す。
+/// overlay の変化だけを理由に再描画したい呼び手は [`Document::display_revision`] を
+/// 見ること。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Revision {
     store: re_chunk_store::ChunkStoreGeneration,
     head: i64,
+}
+
+/// 「見えている絵が変わったか」の印。**再描画専用** — undo/redo/保存の意味には一切
+/// 関わらない。`revision()`(履歴)と transient overlay の世代を一組にしてあるので、
+/// ドラッグ中に overlay だけが動いても front はここを見れば再描画できる。
+///
+/// front は `revision()` ではなくこちらを見ること(裁定: ドラッグ中の途中経過は
+/// 履歴に入れないが、再描画は要る)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DisplayRevision {
+    revision: Revision,
+    transient_generation: u64,
+}
+
+/// transient overlay 1件の宛先。**layer property もカメラ property も同じ形**
+/// (`Intent::SetTrack`/`Intent::SetCameraTrack` が entity を分けているのと同じ線引き、
+/// `PropertyId::camera` の doc 参照)。
+///
+/// `PropertyId` 単体では「どの layer か」を持たない(`Layer:position` は全 layer で
+/// 同じ component 識別子)ので、layer をまたいで同名 property を持つ Document で
+/// overlay を安全に効かせるには scope が要る — これが無いと、layer A の `position` を
+/// ドラッグ中に layer B の `position` を読んでも overlay 値が誤って返ってしまう
+/// (`resolved_layers` は comp の全 layer を毎フレーム評価するので、この誤爆は
+/// 理論上ではなく実際に毎フレーム起こる)。
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum TransientKey {
+    Layer(LayerId, PropertyId),
+    Camera(PropertyId),
 }
 
 pub struct Document {
@@ -370,6 +405,17 @@ pub struct Document {
     /// 起動直後に置いた既定の comp や、project を開いた直後の状態は「編集」ではないので
     /// 戻せてはいけない。戻せると Stage が理由もなく空になる(実際に起きた)。
     floor: i64,
+    /// 非履歴の overlay(タスク#20 の恒久解)。**edit timeline には一切書かない** —
+    /// undo/redo/保存/`revision()` の履歴意味に無関係。`StoreView::value_at` が
+    /// track の評価より優先して読む(`track()` 自身は読まない、下記 doc 参照)。
+    ///
+    /// ドラッグ中の途中経過はここに置き、確定時は呼び手が通常の `Intent` を1発
+    /// `apply` してから [`Self::clear_transient`] する — 1 gesture が自然に 1 undo に
+    /// なる。キャンセルは `clear_transient` だけで履歴は無傷のまま。
+    transient: HashMap<TransientKey, Value>,
+    /// overlay の世代。[`Self::display_revision`] に混ぜて再描画のためだけに使う。
+    /// `revision()` には混ぜない(履歴の意味を変えないため)。
+    transient_generation: u64,
 }
 
 impl Default for Document {
@@ -390,6 +436,8 @@ impl Document {
             head: 0,
             tip: 0,
             floor: 0,
+            transient: HashMap::new(),
+            transient_generation: 0,
         }
     }
 
@@ -408,7 +456,7 @@ impl Document {
 
     /// 読み手が受け取る唯一の物。可変ハンドルは外へ出さない。
     pub fn view(&self) -> StoreView<'_> {
-        StoreView::new(&self.db, self.head)
+        StoreView::new(&self.db, self.head, &self.transient)
     }
 
     pub fn edit_head(&self) -> i64 {
@@ -899,6 +947,73 @@ impl Document {
             store: self.db.generation(),
             head: self.head,
         }
+    }
+
+    /// 再描画専用の変化検出。[`Self::revision`] に transient overlay の世代を
+    /// 混ぜたもの — overlay だけが動いた(ドラッグ中)場合も front はここを見れば
+    /// 再描画できる。`revision()` 自体は overlay で動かない(履歴の意味を保つため)。
+    pub fn display_revision(&self) -> DisplayRevision {
+        DisplayRevision {
+            revision: self.revision(),
+            transient_generation: self.transient_generation,
+        }
+    }
+
+    /// layer property の overlay を置く(無ければ足す、あれば置き換える)。**edit
+    /// timeline には一切触れない** — undo/redo/保存/`revision()` の履歴意味に無関係。
+    /// [`StoreView::value_at`] が track の評価より優先して読む。`StoreView::track` は
+    /// 読まない(生の意味だけを返す線引きは変えない)。
+    ///
+    /// ドラッグ中は mouse-move ごとにここを呼ぶだけでよい(history には一切触れない
+    /// ので、以前のような「undo してから apply し直す」squash は不要になる)。
+    pub fn set_transient(&mut self, layer: LayerId, property: PropertyId, value: Value) {
+        self.transient
+            .insert(TransientKey::Layer(layer, property), value);
+        self.bump_transient_generation();
+    }
+
+    /// カメラ property 版(`Intent::SetCameraTrack`/`Intent::SetTrack` が entity を
+    /// 分けているのと同じ形)。
+    pub fn set_camera_transient(&mut self, property: PropertyId, value: Value) {
+        self.transient.insert(TransientKey::Camera(property), value);
+        self.bump_transient_generation();
+    }
+
+    /// この layer property の overlay を外す。**キャンセルはこれだけでよい**(履歴は
+    /// 最初から無傷)。存在しない宛先を指定しても何も起きない(黙って no-op)。
+    pub fn clear_transient(&mut self, layer: LayerId, property: &PropertyId) {
+        if self
+            .transient
+            .remove(&TransientKey::Layer(layer, property.clone()))
+            .is_some()
+        {
+            self.bump_transient_generation();
+        }
+    }
+
+    /// カメラ property 版(同上)。
+    pub fn clear_camera_transient(&mut self, property: &PropertyId) {
+        if self
+            .transient
+            .remove(&TransientKey::Camera(property.clone()))
+            .is_some()
+        {
+            self.bump_transient_generation();
+        }
+    }
+
+    /// 今持っている overlay を全部外す。**確定/キャンセルの両方で最後に呼んでよい
+    /// 保険口** — 個別の宛先を覚えていなくても、ジェスチャの終わりにこれ1つで
+    /// overlay を必ず空にできる。
+    pub fn clear_all_transients(&mut self) {
+        if !self.transient.is_empty() {
+            self.transient.clear();
+            self.bump_transient_generation();
+        }
+    }
+
+    fn bump_transient_generation(&mut self) {
+        self.transient_generation = self.transient_generation.wrapping_add(1);
     }
 
     /// 実測用。製品経路ではない。
