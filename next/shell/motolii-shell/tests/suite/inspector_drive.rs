@@ -322,6 +322,81 @@ fn clicking_a_value_cell_without_dragging_enters_type_editing() {
     assert_eq!(shell.layer_count(), 0, "click だけで別の undo entry が足されている");
 }
 
+// ---------------------------------------------------------------------------
+// transient overlay 化(旧ハック撤去)の落とし穴 — 履歴の無傷性
+// ---------------------------------------------------------------------------
+
+/// **Esc → undo 履歴が完全に無傷**。旧実装の `cancel_inspector_interaction` は
+/// 「同じ値で1回上書きしてから undo」して辻褄を合わせていたが、この無害化は
+/// `tip`(redo 境界)を1つ先へ進めたまま残す — `can_undo` だけを見ると
+/// drag 開始前と同じに見えてしまうが、`can_redo` を見ると drag していないのに
+/// 「redo できる」という嘘の状態が残る(何もない所へ redo すると幽霊の
+/// no-op エントリが生える)。transient overlay は `Document` の edit timeline に
+/// 一切触れないので、drag→Esc の前後で `can_redo` も含めて完全に無傷のはず。
+#[test]
+fn escape_during_a_drag_leaves_undo_history_completely_untouched() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+
+    let can_undo_before = shell.can_undo();
+    let can_redo_before = shell.can_redo();
+    assert!(can_undo_before, "AddLayer 直後は undo 可能なはず(前提)");
+    assert!(!can_redo_before, "drag 前から redo できてしまっている(前提が崩れている)");
+
+    shell.update(Message::InspectorValuePressed(TransformField::ScaleX));
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(0.0, 0.0)));
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(50.0, 0.0)));
+    assert!((scale_x(&shell) - 1.5).abs() < 1e-9, "drag 中なのに値が動いていない");
+
+    shell.update(Message::EscapePressed);
+
+    assert_eq!(
+        shell.can_undo(),
+        can_undo_before,
+        "Esc の後で can_undo が drag 開始前と違う"
+    );
+    assert_eq!(
+        shell.can_redo(),
+        can_redo_before,
+        "Esc の後で can_redo が drag 開始前と違う — 履歴に幽霊エントリが残っている"
+    );
+}
+
+/// **ドラッグ確定 → undo 1回で開始前の値へ戻り、中間値は履歴に残らない**。
+/// commit 後に Undo→Redo を1往復させ、Redo で戻ってくる値が最後の move の値
+/// (中間値ではなく確定値そのもの)であることまで確かめる — 途中経過が history
+/// のどこにも紛れ込んでいないことの直接証拠。
+#[test]
+fn committing_a_drag_undoes_in_one_step_with_no_intermediate_value_in_history() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+    let start = scale_x(&shell);
+    assert_eq!(start, 1.0);
+
+    shell.update(Message::InspectorValuePressed(TransformField::ScaleX));
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(0.0, 0.0)));
+    // 中間値 1.1 を経由する。
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(10.0, 0.0)));
+    assert!((scale_x(&shell) - 1.1).abs() < 1e-9, "中間 move で値が動いていない");
+    // 最終値 1.3 で確定する。
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(30.0, 0.0)));
+    shell.update(Message::InspectorPointerReleased);
+    assert!((scale_x(&shell) - 1.3).abs() < 1e-9, "release で確定値になっていない");
+
+    // Undo 1回で drag 前まで戻る(中間値 1.1 では止まらない)。
+    shell.update(Message::Undo);
+    assert_eq!(scale_x(&shell), start, "Undo 1回で drag 前の値へ戻らない");
+
+    // Redo で戻る先は確定値 1.3 そのもの — 中間値 1.1 が history に紛れて
+    // いれば、ここが 1.1 になったり、Redo が複数回要る形で壊れるはず。
+    shell.update(Message::Redo);
+    assert!(
+        (scale_x(&shell) - 1.3).abs() < 1e-9,
+        "Redo で確定値(1.3)へ戻らない: {}",
+        scale_x(&shell)
+    );
+}
+
 /// animated(2キー以上)な field は drag も始まらない(`commit_inspector_field`
 /// の書き口側の柵と同じ二重防御)。
 #[test]
