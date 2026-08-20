@@ -6,7 +6,7 @@
 //! この crate 自身は意味を持たない。Document の意味は `motolii-store`、
 //! 補間は `motolii-eval`、描画は `re_renderer` にある。ここは繋ぐだけ。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use motolii_compositor::GpuTexture2D;
 use motolii_compositor::{CompSpec, Compositor, CompositorError, Layer};
@@ -28,12 +28,19 @@ pub struct Engine {
     textures: HashMap<LayerSource, GpuTexture2D>,
     /// パス → probe 結果。probe は ffprobe のプロセス起動なので毎フレームは回さない。
     probes: HashMap<String, MediaInfo>,
-    /// (パス, フレーム番号)→ GPU texture。
+    /// (パス, フレーム番号)→ GPU texture。**上限つき**。
+    ///
+    /// 上限が要る理由: 3〜5分の MV は 1080p30 で 5,400〜9,000フレームある。
+    /// 溜め込むと 1フレーム 3MB(YUV420)× 9,000 = 約 27GB になり、書き出しが
+    /// メモリで死ぬ。順次走査で要るのは直近の数枚だけなので、それを超えたら古い順に捨てる。
+    /// (試験 `long_export_does_not_accumulate_frames` がこの上限を守らせる)
     ///
     /// **暫定**: フレームごとに reader を開き直している。書き出しのような順次走査では
     /// これは無駄で、本来は1本の reader を進めるべき。UI が付いて「どう走査するか」が
     /// 決まってから直す(先に最適化すると、決まっていない走査順に合わせた形になる)。
     frames: HashMap<(String, i64), GpuTexture2D>,
+    /// `frames` の投入順。古い順に捨てるためだけに持つ。
+    frame_order: VecDeque<(String, i64)>,
 }
 
 impl Engine {
@@ -43,6 +50,7 @@ impl Engine {
             textures: HashMap::new(),
             probes: HashMap::new(),
             frames: HashMap::new(),
+            frame_order: VecDeque::new(),
         })
     }
 
@@ -77,6 +85,25 @@ impl Engine {
     }
 
     /// 素材の texture と、その実寸を返す。
+    /// 抱えるフレーム数の上限。順次走査で要るのは直近の数枚だけ。
+    const FRAME_CACHE_LIMIT: usize = 8;
+
+    /// 実測用。抱えているフレーム数。
+    pub fn cached_frame_count(&self) -> usize {
+        self.frames.len()
+    }
+
+    fn remember_frame(&mut self, key: (String, i64), texture: GpuTexture2D) {
+        if self.frames.insert(key.clone(), texture).is_none() {
+            self.frame_order.push_back(key);
+        }
+        while self.frame_order.len() > Self::FRAME_CACHE_LIMIT {
+            if let Some(oldest) = self.frame_order.pop_front() {
+                self.frames.remove(&oldest);
+            }
+        }
+    }
+
     fn texture_for(
         &mut self,
         source: &LayerSource,
@@ -136,7 +163,7 @@ impl Engine {
                     info.height,
                     info.color_space,
                 )?;
-                self.frames.insert(key, texture.clone());
+                self.remember_frame(key, texture.clone());
                 Ok((texture, natural))
             }
         }
