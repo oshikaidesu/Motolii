@@ -561,6 +561,25 @@ impl<'a> StoreView<'a> {
         layer: LayerId,
         t: RationalTime,
     ) -> Result<Option<ResolvedLayer>, StoreError> {
+        // `any_solo` は comp 全体を見ないと判定できないので、単発呼び出しではここで
+        // 1回だけ走査する。`resolved_layers` は全 layer を回る側で既に同じ走査を
+        // 1回すませているので、そちらは `resolve_with_solo` を直接呼んで
+        // この再走査を踏まない(2026-08-20 の性能回帰: 層数 N に対し、ここで毎回
+        // `any_solo` を呼ぶと `resolved_layers` 経由で N 回 × 全層走査 = O(N²) の
+        // attrs 二重読みになっていた)。
+        let any_solo = self.any_solo()?;
+        self.resolve_with_solo(layer, t, any_solo)
+    }
+
+    /// [`Self::resolve`] の本体。`any_solo` を呼び出し側から受け取ることで、
+    /// 全層を回る [`Self::resolved_layers`] が層ごとに `any_solo` を再走査しなくて
+    /// 済むようにする(1パスで導出した solo 判定を使い回す)。
+    fn resolve_with_solo(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+        any_solo: bool,
+    ) -> Result<Option<ResolvedLayer>, StoreError> {
         let Some(meta) = self.meta(layer)? else {
             return Ok(None);
         };
@@ -581,7 +600,7 @@ impl<'a> StoreView<'a> {
         // hidden かどうかを問わず含める — solo フラグは hidden と独立な「意図」の
         // 表明であって、hidden がそれを見えなくするだけで無かったことにはしない
         // (裁定119 のグループ AND 導出と衝突しない、単層の bool のまま)。
-        if self.any_solo()? && !attrs.solo {
+        if any_solo && !attrs.solo {
             return Ok(None);
         }
 
@@ -719,10 +738,17 @@ impl<'a> StoreView<'a> {
     }
 
     /// この時刻に描くべき layer を**奥から手前の順**で返す。
+    ///
+    /// `any_solo` はここで**1回だけ**走査する。`resolve` を層ごとに呼ぶ素朴な実装だと、
+    /// `resolve` が毎回 comp 全層を re-scan するので N layer で O(N²) の attrs 二重読みに
+    /// なる(2026-08-20 の性能回帰の原因、r2 probe 実測で発覚)。resolve は既に
+    /// layer ごとに自分の attrs を読んでいるので、その1パスから solo の有無だけ
+    /// 先に導出して使い回す。
     pub fn resolved_layers(&self, t: RationalTime) -> Result<Vec<ResolvedLayer>, StoreError> {
+        let any_solo = self.any_solo()?;
         let mut out = Vec::new();
         for layer in self.layers() {
-            if let Some(resolved) = self.resolve(layer, t)? {
+            if let Some(resolved) = self.resolve_with_solo(layer, t, any_solo)? {
                 out.push(resolved);
             }
         }
