@@ -29,6 +29,79 @@ pub mod tokens;
 
 use tokens::{Colors, Dimensions, Tokens};
 
+/// Stage 描画の計測。**debug のみ実測**(実機チラつき調査、2026-08-20)。
+/// release は `metrics::*` が全部 no-op になる(呼び出し側はどちらも同じ形で呼べる)。
+#[cfg(debug_assertions)]
+pub mod metrics;
+#[cfg(not(debug_assertions))]
+pub mod metrics {
+    //! release では計測しない。呼び出し側([`crate::Shell::refresh_frame`])は
+    //! debug と同じ関数名を no-op として叩くだけで、cfg 分岐を呼び出し箇所へ
+    //! 増やさずに済む。
+    pub fn record_handle_creation(_bytes: usize) {}
+    pub fn record_render_frame(_elapsed: std::time::Duration) {}
+    pub fn record_tokens_reload() {}
+    pub fn handle_creations() -> u64 {
+        0
+    }
+    pub fn last_handle_bytes() -> usize {
+        0
+    }
+    pub fn render_frame_calls() -> u64 {
+        0
+    }
+    pub fn render_frame_nanos() -> u64 {
+        0
+    }
+    pub fn tokens_reloads() -> u64 {
+        0
+    }
+    pub fn reset() {}
+}
+
+/// iced(`next/` が実際に使う crates.io `iced 0.14.0`、`iced_wgpu-0.14.0/src/
+/// image/cache.rs::upload_raster`)が同期アップロードを選ぶ上限を**転記した
+/// 定数**(`MAX_SYNC_SIZE = 2 * 1024 * 1024`、実測済み)。これを超える RGBA を
+/// `image::Handle::from_rgba` に渡すと、iced はバックグラウンドスレッドへ
+/// 非同期アップロードへ回し、完了までの1フレーム以上 `draw_image` は何も
+/// 描かない(`iced_core-0.14.0/src/image.rs` の `Allocation` doc comment に
+/// 明記: "If you are animating images, this can cause undesirable flicker")。
+///
+/// fixture の comp は 1920×1080 = 8,294,400 byte(この上限の約4倍)。scrub の
+/// たびに新しい Handle → 非同期アップロード → 空白フレーム、が実機チラつきの
+/// 一次原因と特定した(2026-08-20)。上限ぴったりでなく余裕を持たせてある。
+const STAGE_HANDLE_SYNC_BUDGET_BYTES: usize = 1_500_000;
+
+/// Stage 表示用に RGBA を縮める。**画面には `Length::Fill` で引き伸ばして出す
+/// ので実素材解像度である必要が無い**(screenshot 器具は `frame_rgba()` が返す
+/// 元解像度の RGBA を別途持っている — 縮めるのは Handle 用のコピーだけで、
+/// pixel 精度が要る経路には触らない)。nearest-neighbor(プレビュー用途なので
+/// 品質は問わない — `screenshot.rs::blit_letterboxed` と同じ考え方)。
+fn stage_handle_rgba(width: u32, height: u32, rgba: &[u8]) -> (u32, u32, Vec<u8>) {
+    let total_bytes = (width as usize) * (height as usize) * 4;
+    if width == 0 || height == 0 || total_bytes <= STAGE_HANDLE_SYNC_BUDGET_BYTES {
+        return (width, height, rgba.to_vec());
+    }
+
+    let scale = (STAGE_HANDLE_SYNC_BUDGET_BYTES as f64 / total_bytes as f64).sqrt();
+    let dst_w = ((width as f64 * scale).floor() as u32).max(1);
+    let dst_h = ((height as f64 * scale).floor() as u32).max(1);
+
+    let mut out = vec![0u8; (dst_w as usize) * (dst_h as usize) * 4];
+    for dy in 0..dst_h {
+        let sy = ((u64::from(dy) * u64::from(height)) / u64::from(dst_h)).min(u64::from(height) - 1)
+            as u32;
+        for dx in 0..dst_w {
+            let sx = ((u64::from(dx) * u64::from(width)) / u64::from(dst_w))
+                .min(u64::from(width) - 1) as u32;
+            let si = ((sy * width + sx) * 4) as usize;
+            let di = ((dy * dst_w + dx) * 4) as usize;
+            out[di..di + 4].copy_from_slice(&rgba[si..si + 4]);
+        }
+    }
+    (dst_w, dst_h, out)
+}
+
 /// front だけが持つ状態。**Document の写しは1つも入れないこと**。
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -196,6 +269,7 @@ impl Shell {
             }
             Message::TokensFileChanged => {
                 self.tokens = Tokens::load();
+                metrics::record_tokens_reload();
             }
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
@@ -426,18 +500,22 @@ impl Shell {
             return;
         };
 
-        match self.engine.render_frame(&self.doc.view(), t) {
+        let render_start = std::time::Instant::now();
+        let render_result = self.engine.render_frame(&self.doc.view(), t);
+        metrics::record_render_frame(render_start.elapsed());
+        match render_result {
             Ok(rgba) => {
+                let (handle_width, handle_height, handle_rgba) =
+                    stage_handle_rgba(composition.width, composition.height, &rgba);
+                let handle_bytes = handle_rgba.len();
+                let handle = image::Handle::from_rgba(handle_width, handle_height, handle_rgba);
+                metrics::record_handle_creation(handle_bytes);
                 self.frame = Some(RenderedFrame {
                     revision,
                     playhead,
                     width: composition.width,
                     height: composition.height,
-                    handle: image::Handle::from_rgba(
-                        composition.width,
-                        composition.height,
-                        rgba.clone(),
-                    ),
+                    handle,
                     rgba,
                 });
             }
