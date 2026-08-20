@@ -11,7 +11,7 @@
 |---|---|---|---|
 | M1 | 起動して project を新規/既存で開ける。無ければスタート画面 | ux-check-first-ten-minutes | 未 |
 | M2 | Finder からドロップで素材が入る。開けない物は**理由つきで skip**(黙って消えない) | ux-check P3/P5、first-touch観察 | **済**。3本まとめて落として1操作(winit は1ファイル1事象なので描画要求を区切りにする)。拒否はファイル名つきで status 帯へ |
-| M3 | 置いた clip が Timeline に立ち、**Stage に絵が出る**。待たされない | ui-inherited-grammar-gap | **部分**。Stage に絵は出る(運転席が画素まで確認)。**Timeline pane がまだ無い** |
+| M3 | 置いた clip が Timeline に立ち、**Stage に絵が出る**。待たされない | ui-inherited-grammar-gap | **部分→ほぼ済**。Stage に絵が出て、Timeline pane 第1波(行・bar・ruler・playhead・scrub・選択)が実機で稼働(裁定120)。残りはドロップ→行が立つ一周の実機確認 |
 | M4 | clip の尺は min(source, comp残り)。source 終端の先はフリーズせず背景 | first-real-run 欠陥(1) | **済**。`LayerTiming::place` が尺を決め、配置の外は描かない(フレーム全体は落とさない) |
 | M5 | drag=移動 / 端drag=trim / release=確定 / Esc=復元。snap は clip端・key・playhead・loop端・0・終端 | normal-timeline-prior-art | 未 |
 | M6 | split(Cmd+K)・Delete・複製(Cmd+D)・複数選択(Shift/Cmd/marquee/Cmd+A) | 同上 | 未 |
@@ -22,7 +22,7 @@
 | M11 | Cmd+S・未保存●・閉じる確認・**再起動で続きが開く** | ux-check P2/P5、外部診断F-01 | **部分**。`Document::save` / `load` が往復(bezier・NTSC fps 込み)、保存で履歴を畳む。UI 側(Cmd+S・未保存●・閉じる確認)が残り |
 | M12 | **触れそうな物は全部機能する**。未実装の chrome を置かない(disabled も不可=撤去) | ui-quality-bar **Q0**(利用者裁定) | 未 |
 | M13 | **無反応ゼロ**。拒否は理由がその場で分かる。旧 iced は拒否を `let _ =` で捨てていた | ui-quality-bar Q3、能力台帳§5-2 | **部分**。読み口が「無い」と「読めない」を区別し、shell の拒否は status 帯へ出る。運転席が「戻せない」「開けない素材」の2件を確認。全操作を通した確認は Timeline 後 |
-| M14 | 選択・時刻・幾何の正本は1つ。全面が同じ真実を映す | ui-quality-bar Q5 | **未**。幾何は store にあるが、**選択・playhead・fps・解像度・尺が store に1つも無い**。`comp`/`fps` は `render_frame`/`ExportJob` の引数。このままだと shell がそれらを自分で持ち、そこが次の翻訳層になる |
+| M14 | 選択・時刻・幾何の正本は1つ。全面が同じ真実を映す | ui-quality-bar Q5 | **済**。幾何=store、fps/解像度/尺=Document の `Composition`(裁定40)、選択/playhead=`Session` 1箇所(裁定46/107)。Timeline と Stage が同じ正本を映すことを利用者が実機確認(裁定120) |
 | M15 | **Preview = Export**。同じ評価関数を通る | concept 絶対規律、DECISIONS #15 | **済**。(1) 経路の一本性は依存グラフが守る(export は compositor を引かない) (2) 入力の一本性は `Composition` が Document にあることで守る(裁定40) (3) 現物での照合は可逆書き出しを decode し直して Y の最大差 ≤ 8(h264 が YUV420 を通るため byte 一致にはならない) |
 | M16 | どの入力でも panic/クラッシュ/喪失なし。render 失敗でも画面を空にしない | ui-quality-bar Q6 | 未 |
 | M17 | 空 project は空として表示。空でも place/scrub/keymap が効く | ui-quality-bar Q7 | 未 |
