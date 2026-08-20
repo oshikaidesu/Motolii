@@ -18,8 +18,8 @@ use iced::{Element, Length, Task};
 
 use motolii_engine::Engine;
 use motolii_store::{
-    Composition, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
-    RationalTime, Revision, StoreView,
+    Composition, DisplayRevision, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta,
+    LayerSource, LayerTiming, RationalTime, StoreView, Value,
 };
 
 pub mod fixture;
@@ -207,7 +207,11 @@ pub enum Message {
 /// いつ捨てるかは [`Document::revision`] が決める(store 世代 + edit 位置)。
 /// front が「前回の値」を自分で持たないための口がこれ。
 struct RenderedFrame {
-    revision: Revision,
+    /// `Document::display_revision()`(履歴 + transient overlay の世代の組)。
+    /// **`revision()` ではない** — drag-to-scrub 中は overlay だけが動き、履歴の
+    /// `revision()` は不変のままなので、`revision()` だけを見ていると drag 中の
+    /// 再描画が起きない(transient overlay 化の要点そのもの)。
+    revision: DisplayRevision,
     playhead: i64,
     width: u32,
     height: u32,
@@ -235,13 +239,14 @@ struct RenderedFrame {
 }
 
 /// Inspector 値セルの drag-to-scrub、進行中の一時状態。**Document ではない**
-/// (`FieldDraft` と同じ「pane が持つ transient」の形 — `motolii_store::document`
-/// の `apply_all` doc comment「ドラッグは対象外…途中経過は pane が持ち、
-/// 確定の1件だけが intent」のとおり)。
+/// (`FieldDraft` と同じ「pane が持つ transient」の形)。値そのものの置き場は
+/// `Document` の transient overlay(`Document::set_transient`)— ここは overlay
+/// の宛先と、click/drag 判定・確定時の Intent 組み立てに要る最小限だけを持つ。
 struct FieldDragState {
     field: TransformField,
     layer: LayerId,
     /// press 時点の表示単位の値(`inspector_pane::drag_origin` が投影から読む)。
+    /// 確定 Intent・Esc(overlay を外すだけで使わない)双方が参照する起点。
     start_value: f64,
     /// Vec2 系(Position/Scale/Anchor)の動かさない方の成分。scalar 系では未使用。
     current_vec2: [f64; 2],
@@ -249,10 +254,15 @@ struct FieldDragState {
     /// 間は click か drag かまだ未確定 — 確定前に値を動かすと press 直後の
     /// sub-pixel な揺れで値が動いてしまう。
     origin_x: Option<f32>,
-    /// 少なくとも1回 transient を `doc.apply` したか。2手目以降の分岐
-    /// (`doc.undo()` してから書き直す — 履歴を1件に畳む)と、release 時の
-    /// click/drag 判定の両方に使う。
-    applied: bool,
+    /// 少なくとも1回 `set_transient` を呼んだか。release 時の click/drag 判定と、
+    /// Esc で overlay を外す必要があるかどうかの両方に使う(`applied` に代わる —
+    /// 履歴には一切触れないので「squash」の意味は無くなった)。
+    moved: bool,
+    /// 直近の `set_transient` に渡した値。release の確定 Intent はこれをそのまま
+    /// 1回 `apply` する — pointer の最終座標を release 時に持っていない
+    /// (`InspectorPointerReleased` は位置を運ばない)ので、最後に計算した値を
+    /// ここへ持ち回す。`moved` が `false` の間は未使用。
+    last_value: Option<Value>,
 }
 
 pub struct Shell {
@@ -729,7 +739,8 @@ impl Shell {
             start_value,
             current_vec2,
             origin_x: None,
-            applied: false,
+            moved: false,
+            last_value: None,
         });
     }
 
@@ -738,12 +749,11 @@ impl Shell {
     /// 最初の move は基準点を確定するだけで値は動かさない(そうしないと press
     /// した瞬間の sub-pixel な揺れで値が動く)。
     ///
-    /// **transient は `Document` へ直接書く**: 2手目以降は `doc.undo()` してから
-    /// 書き直すことで、直前の transient を `apply_all` の `drop_redo_space` に
-    /// 畳ませて消す — history には常に「元の状態 + 今の transient」の2点しか
-    /// 残らない。release 時点の最後の1手がそのまま確定値になる(1 gesture =
-    /// 1 undo)。Stage・Inspector セルの「ドラッグ中の即応」はこの apply が
-    /// `refresh_frame` の revision 判定・投影を通して自然に見えるだけ。
+    /// **transient overlay(`Document::set_transient`)を毎 move 呼ぶだけ** —
+    /// `edit timeline` には一切触れないので、undo/redo の意味論(`revision()`)は
+    /// drag 中ずっと不変。Stage・Inspector セルの「ドラッグ中の即応」は
+    /// `refresh_frame` が `display_revision()`(履歴 + overlay 世代)を見て
+    /// 再描画することで出る。
     fn continue_field_drag(&mut self, point: iced::Point) {
         let Some(drag) = self.inspector_drag.as_mut() else {
             return;
@@ -754,8 +764,7 @@ impl Shell {
         };
 
         let delta_px = point.x - origin_x;
-        let applied_before = drag.applied;
-        if delta_px == 0.0 && !applied_before {
+        if delta_px == 0.0 && !drag.moved {
             return; // まだ実質的に動いていない — click 候補のまま据え置く
         }
 
@@ -770,40 +779,44 @@ impl Shell {
         };
         let new_display = inspector_pane::dragged_value(field, start_value, delta_px, fine);
         let value = inspector_pane::next_value(field, new_display, current_vec2);
-        let track = inspector_pane::single_hold_track(value);
 
-        if applied_before {
-            self.doc.undo();
-        }
-        match self.doc.apply(Intent::SetTrack {
-            layer,
-            property,
-            track,
-        }) {
-            Ok(()) => {
-                if let Some(drag) = self.inspector_drag.as_mut() {
-                    drag.applied = true;
-                }
-            }
-            Err(error) => {
-                self.status = Some(format!("値を書けない: {error}"));
-            }
+        self.doc.set_transient(layer, property, value.clone());
+        if let Some(drag) = self.inspector_drag.as_mut() {
+            drag.moved = true;
+            drag.last_value = Some(value);
         }
     }
 
     /// 左クリック release(window 全体から — `mouse_area` 自身の `on_release` は
     /// bounds を出た drag を捉えられないので使わない)。**drag が実際に動いて
-    /// いたら確定**(直前の move の `doc.apply` が最終値そのものなので、ここでは
-    /// 何もしない = 1 gesture 1 undo)。動いていなければ click として type 編集
-    /// へ切り替える。
+    /// いたら確定**: 最後の transient 値そのものを1回の本編集 `Intent` として
+    /// `apply` してから `clear_transient`(1 gesture = 1 undo、overlay を残さない)。
+    /// 動いていなければ click として type 編集へ切り替える。
     fn finish_field_drag(&mut self) -> Task<Message> {
         let Some(drag) = self.inspector_drag.take() else {
             return Task::none();
         };
-        if drag.applied {
-            return Task::none();
+        if !drag.moved {
+            return self.enter_field_editing(drag.field);
         }
-        self.enter_field_editing(drag.field)
+        let Ok(property) = inspector_pane::property_id(drag.field) else {
+            // 起こらないはず(`moved` は property_id が通った move でしか立たない)
+            // だが、安全側で overlay だけは残さず抜ける実害は無い(次の press で
+            // 上書きされる)。
+            return Task::none();
+        };
+        if let Some(value) = drag.last_value {
+            let track = inspector_pane::single_hold_track(value);
+            if let Err(error) = self.doc.apply(Intent::SetTrack {
+                layer: drag.layer,
+                property: property.clone(),
+                track,
+            }) {
+                self.status = Some(format!("値を書けない: {error}"));
+            }
+        }
+        self.doc.clear_transient(drag.layer, &property);
+        Task::none()
     }
 
     /// click(ドラッグせず release)→ type 編集。下書きを立て、text_input へ
@@ -826,35 +839,17 @@ impl Shell {
 
     /// Esc — 進行中の drag があれば復元、無ければ typing 下書き(値セル/名前欄)
     /// を破棄する(hint 行「Esc to cancel」を両方について正直にする)。
+    ///
+    /// drag の復元は **`clear_transient` だけ**でよい — overlay は edit timeline に
+    /// 一切触れていないので、undo/redo 履歴は最初から無傷(旧実装が抱えていた
+    /// 「同じ値で1回上書きしてから undo」という無害化ワークアラウンドは不要になった
+    /// — `Document` に「squash」API が無いことが理由で存在した迂回であり、transient
+    /// overlay 自体が squash を要らなくする)。
     fn cancel_inspector_interaction(&mut self) {
         if let Some(drag) = self.inspector_drag.take() {
-            if drag.applied {
-                // 直前の transient を戻す — press 前の状態に一旦戻る。
-                self.doc.undo();
-                // **既知の限界**(`motolii-store` に「squash」API が無い —
-                // write-set がこの shell crate に限られており store は直せない):
-                // `undo()` だけだと直前の transient chunk が tip に残り、Redo
-                // すると中断した値が復元されてしまう。同じ元の値で1回上書き
-                // してから undo し、万一 Redo されても見た目上は無変化になる
-                // よう無害化する(undo 深さが1つ増えるが、Redo しても値は
-                // 動かない)。
+            if drag.moved {
                 if let Ok(property) = inspector_pane::property_id(drag.field) {
-                    let track = inspector_pane::single_hold_track(inspector_pane::next_value(
-                        drag.field,
-                        drag.start_value,
-                        drag.current_vec2,
-                    ));
-                    if self
-                        .doc
-                        .apply(Intent::SetTrack {
-                            layer: drag.layer,
-                            property,
-                            track,
-                        })
-                        .is_ok()
-                    {
-                        self.doc.undo();
-                    }
+                    self.doc.clear_transient(drag.layer, &property);
                 }
             }
             return;
@@ -888,12 +883,19 @@ impl Shell {
         self.doc.can_undo()
     }
 
+    /// `Message::Redo` の可否。**運転席が見るための口**(`can_undo` と同じ形)。
+    /// drag-to-scrub がキャンセル時に redo 空間を汚していないかを運転席から
+    /// 確かめるのに使う(`inspector_drive.rs`)。
+    pub fn can_redo(&self) -> bool {
+        self.doc.can_redo()
+    }
+
     pub fn status(&self) -> Option<&str> {
         self.status.as_deref()
     }
 
     /// 描き上がったフレームの識別。同じなら描き直していない。
-    pub fn frame_token(&self) -> Option<(Revision, i64)> {
+    pub fn frame_token(&self) -> Option<(DisplayRevision, i64)> {
         self.frame
             .as_ref()
             .map(|frame| (frame.revision.clone(), frame.playhead))
@@ -1068,7 +1070,10 @@ impl Shell {
     }
 
     /// Document・再生位置・市松トグルのいずれかが変わった時だけ描き直す。
-    /// 判定は `revision()` — front が「前回の Document」を自分で持たないため。
+    /// 判定は `display_revision()`(履歴 + transient overlay の世代の組) —
+    /// front が「前回の Document」を自分で持たないため。drag-to-scrub 中は
+    /// overlay だけが動いて履歴の `revision()` は不変なので、`display_revision()`
+    /// を見ないと drag 中の再描画が起きない。
     ///
     /// **市松は Document・playhead に依存しない表示分岐**だが、裁定141以降は
     /// 「背景を敷かない」別入力(`Engine::render_frame_without_background`)を
@@ -1077,7 +1082,7 @@ impl Shell {
     /// (`Document`/`StoreView` 自体の再評価が増えるわけではない — 合成の
     /// 入力差分を取り直すだけ、裁定141「同一合成器への入力の違い」)。
     fn refresh_frame(&mut self) {
-        let revision = self.doc.revision();
+        let revision = self.doc.display_revision();
         let playhead = self.session.playhead;
         let checkerboard = self.checkerboard;
         let colors = self.tokens.colors;
