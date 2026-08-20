@@ -7,8 +7,8 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| S1: store resolve 拡張 | 実装(cargo) | lane-store | effect stack を ResolvedLayer へ(時刻評価済み param、probe コスト不変証明つき) |
-| S2: compositor 枠 | 実装(cargo) | lane-engine | layer 単位オフスクリーン+identity pass(裁定153。空 stack コスト増ゼロ) |
+| S3: engine 語彙変換 | 実装(cargo) | lane-engine | ResolvedEffect→EffectPass(translate_blend_mode と同型)。render を render_with_effects へ切替 |
+| Timeline 切片0: ファイル分割 | 実装(cargo) | lane-shell | timeline_pane.rs → timeline/ modules(挙動ゼロ変更・--list 一致検収・後続 write-set 割り表つき) |
 
 ## 完了・main 着地済み(実装)
 
@@ -25,6 +25,8 @@
 | iced theme 結線 | 実窓の地色が OS 外観フォールバック(Light になり得た)→ tokens 由来 `Theme::custom` へ。watch 追随可・柵4本。注: palette の danger ロールは正本に無く status_warning を仮当て |
 | トンマナ柵 | 裁定142 完結。**現行コード違反ゼロの実証**+実ファイル赤→緑証明+除外表の識別子存在ガード。曖昧4件(器具幾何)は現状維持と検収判断 |
 | effect 縫い目調査 | 縫い目不在の確定・挿入点3案比較・5切片割り(→裁定153。保全: docs/reviews/2026-08-21-effect-seam-survey.md) |
+| S1: store resolve 拡張 | ResolvedEffect(ResolvedMask と同型)・時刻評価済み param・空 stack 早期 return。probe 平坦(r2 289〜300µs) |
+| S2: compositor 枠 | LayerWithPasses 別口(Layer 不変)・Identity=copy_texture_to_texture・scratch pool 再利用証明・同一 submission で第二パス禁止維持 |
 | (supervisor 直) 色 token 追随 fix / 市松レーン回収 / 引き継ぎ123コミット着地 | main 前提の整地 |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
