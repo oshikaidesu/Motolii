@@ -174,6 +174,91 @@ fn the_map_covers_the_whole_schema() {
     );
 }
 
+/// **Rive の defs も同じ規則で照合する。**
+///
+/// `source=rive` の行は `reference/rive-text-defs/`(**固定 revision で vendor したもの**)と
+/// 突き合わせる。vendor せずに調査結果だけを表へ写すと、上流が動いた時に黙ってずれる —
+/// 実際、調査の初回(61 property)と2回目(65)で差が出ている。
+#[test]
+fn the_map_covers_the_rive_defs() {
+    let dir = reference_dir().join("rive-text-defs");
+    let mut defs: BTreeSet<(String, String)> = BTreeSet::new();
+    let entries = std::fs::read_dir(&dir).expect("rive-text-defs が無い");
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == "json") {
+            let text = std::fs::read_to_string(&path).expect("def を読めない");
+            let def: serde_json::Value = serde_json::from_str(&text).expect("def が JSON でない");
+            let name = def["name"].as_str().expect("name が無い");
+            // `TextStyle` → `text-style`(地図の object 欄と同じ綴り)
+            let object = kebab(name);
+            match def.get("properties").and_then(|p| p.as_object()) {
+                Some(props) if !props.is_empty() => {
+                    for field in props.keys() {
+                        defs.insert((object.clone(), field.clone()));
+                    }
+                }
+                // property を持たないクラスは1行で表す(`@class` / `@abstract`)。
+                _ => {
+                    defs.insert((object.clone(), String::new()));
+                }
+            }
+        }
+    }
+    assert!(!defs.is_empty(), "def を1つも読めていない");
+
+    let mapped: BTreeSet<(String, String)> = coverage_rows()
+        .into_iter()
+        .filter(|r| r.source == "rive")
+        .map(|r| {
+            let field = if r.key.2.starts_with('@') {
+                String::new()
+            } else {
+                r.key.2.clone()
+            };
+            (r.key.1.clone(), field)
+        })
+        .collect();
+
+    let missing: Vec<_> = defs.difference(&mapped).collect();
+    assert!(
+        missing.is_empty(),
+        "Rive の defs にあって地図に無い項目が {}件。**読み落とし**なので表へ足すこと:\n{}",
+        missing.len(),
+        missing
+            .iter()
+            .take(20)
+            .map(|(o, f)| format!("  {o}/{f}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+
+    let stale: Vec<_> = mapped.difference(&defs).collect();
+    assert!(
+        stale.is_empty(),
+        "地図にあって Rive の defs に無い項目が {}件。上流更新で消えた行:\n{}",
+        stale.len(),
+        stale
+            .iter()
+            .take(20)
+            .map(|(o, f)| format!("  {o}/{f}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+/// `TextStyleAxis` → `text-style-axis`
+fn kebab(name: &str) -> String {
+    let mut out = String::new();
+    for (i, ch) in name.char_indices() {
+        if ch.is_uppercase() && i != 0 {
+            out.push('-');
+        }
+        out.extend(ch.to_lowercase());
+    }
+    out
+}
+
 /// **「採用済」を自己申告にしない。**
 ///
 /// 採用済 の行は evidence 欄に識別子を書き、それが `next/` のコードに実在することを確かめる。
