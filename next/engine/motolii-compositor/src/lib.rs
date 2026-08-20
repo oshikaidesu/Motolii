@@ -60,6 +60,7 @@ use re_renderer::view_builder::{
 };
 use re_renderer::{RenderContext, Rgba};
 
+mod effects;
 mod headless;
 
 /// 合成器がその場で表現できる blend mode。**`re_renderer::renderer::RectangleOptions` が
@@ -95,6 +96,9 @@ fn to_vector3(v: glam::Vec2) -> glam::Vec3 {
 /// 二重化の危険は無い。
 pub use headless::{HeadlessError, HeadlessGpu};
 
+/// layer 単位オフスクリーンパスの枠(裁定153 S2)。`effects` モジュール doc 参照。
+pub use effects::EffectPass;
+
 /// 素材ハンドル。上流の型をそのまま通す(包み直さない)。
 pub use re_renderer::resource_managers::GpuTexture2D;
 
@@ -124,6 +128,24 @@ pub struct Layer {
     pub blend_mode: BlendMode,
 }
 
+/// [`Layer`] + そこへ掛ける GPU pass 列(裁定153 S2)。
+///
+/// **`Layer` 自体は無改造**——`motolii-engine` は今も裸の `Layer` を組み立てて
+/// [`Compositor::render`]/[`Compositor::render_with_timing`] へ渡しており(並走レーン、
+/// この crate の外)、その2つの入口とシグネチャ・挙動を一切変えないことでそちらを
+/// 壊さない。effect を持つ layer はこの型を経由する新しい入口
+/// [`Compositor::render_with_effects`] を使う。
+///
+/// `passes` が空なら[`Compositor::render_with_effects`] は**その layer についてだけ**
+/// オフスクリーンを作らず元の texture をそのまま使う——[`Compositor::render`] と
+/// 完全に同じ経路(`tests/effects.rs` の
+/// `passless_layer_matches_the_traditional_render_path` が縛る)。
+#[derive(Clone)]
+pub struct LayerWithPasses {
+    pub layer: Layer,
+    pub passes: Vec<EffectPass>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum CompositorError {
     #[error("GPU の用意に失敗した: {0}")]
@@ -138,6 +160,8 @@ pub enum CompositorError {
     Draw(String),
     #[error("読み戻しが返ってこなかった")]
     ReadbackMissing,
+    #[error("effect pass のオフスクリーン往復に失敗した: {0}")]
+    Effect(String),
 }
 
 /// 1フレームの内訳。どこで時間を使っているかを隠さない。
@@ -161,6 +185,13 @@ pub struct Compositor {
     ctx: RenderContext,
     /// 読み戻しの識別子。1つの Compositor で連番にする。
     next_readback: u64,
+    /// [`Compositor::render_with_effects`] が texture_manager_2d へ import する時の
+    /// cache key。`next_readback` とは別の keyspace(`import_gpu_premultiplied` の
+    /// `key` は screenshot の識別子と無関係)。
+    next_effect_key: u64,
+    /// layer 単位オフスクリーンパスの中間 texture プール(裁定153 S2)。
+    /// **Compositor 所有・フレームをまたいで再利用** — `effects` モジュール doc 参照。
+    effect_scratch: effects::EffectScratch,
 }
 
 impl Compositor {
@@ -187,6 +218,8 @@ impl Compositor {
         Ok(Self {
             ctx,
             next_readback: 1,
+            next_effect_key: 1,
+            effect_scratch: effects::EffectScratch::default(),
         })
     }
 
@@ -436,5 +469,249 @@ impl Compositor {
         let frame = out.ok_or(CompositorError::ReadbackMissing)?;
         timing.readback_us = readback_start.elapsed().as_micros();
         Ok((frame, timing))
+    }
+
+    /// **layer 単位オフスクリーンパスの入口**(裁定153 S2、2026-08-21)。
+    ///
+    /// [`Self::render`]/[`Self::render_with_timing`] は**無改造のまま** — `motolii-engine`
+    /// は今もそちらへ裸の `Layer` を渡しており(並走レーン、この crate の外)、
+    /// この関数を新設するだけならその経路を一切変えない。effect を持たせたい呼び手は
+    /// [`Layer`] を [`LayerWithPasses`] で包んでここへ渡す。
+    ///
+    /// **分岐はここ、layer 1枚ごと**: `passes` が空なら元の `layer.texture` を
+    /// そのまま合成へ渡す(オフスクリーンを一切作らない — コスト増ゼロ)。非空なら
+    /// [`effects::EffectScratch`] から中間 texture を借り、`passes` を順に適用してから
+    /// その結果を合成へ渡す。texture(と、将来 pipeline が増えた時のそれ)は
+    /// `Compositor` が所有し**フレームをまたいで再利用**する(毎フレーム作り直さない
+    /// — `effects` モジュール doc の M5 proof 参照)。
+    ///
+    /// **第二 render パス禁止(裁定15/18)との関係**: `Compositor::render`/`render_frame`
+    /// の呼び出し回数はこの関数を通っても増えない。増えるのは同じ `RenderContext`・
+    /// 同じ `queue.submit` 呼び出しへ同乗する追加の `copy_texture_to_texture` コマンドで
+    /// あって、別の合成器や別の描画エントリではない — `render_frame_without_background`
+    /// (裁定141)が「第二経路ではなく同一合成器への入力差分」と整理したのと同じ論法。
+    pub fn render_with_effects(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layers: &[LayerWithPasses],
+    ) -> Result<Vec<u8>, CompositorError> {
+        let projection = motolii_core::camera_projection(comp, camera);
+        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
+
+        // 1) layer ごとに「合成へ渡す実効 texture」を決める。pass が空な layer は
+        //    `GpuTexture2D::clone()`(Arc clone 相当)だけで、新規 GPU texture を作らない。
+        let mut effective_textures: Vec<GpuTexture2D> = Vec::with_capacity(layers.len());
+        // GPU が読み終わってからプールへ返すための控え(読み終わり前に返すと、次の
+        // `acquire` が使用中の texture を上書きしてしまう)。
+        let mut checked_out: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)> = Vec::new();
+        let mut copy_encoder: Option<wgpu::CommandEncoder> = None;
+
+        for lwp in layers {
+            if lwp.passes.is_empty() {
+                effective_textures.push(lwp.layer.texture.clone());
+                continue;
+            }
+
+            let [width, height] = lwp.layer.texture.width_height();
+            let format = lwp.layer.texture.format();
+
+            let src_handle = lwp.layer.texture.handle();
+            let src = self
+                .ctx
+                .gpu_resources
+                .textures
+                .get_from_handle(src_handle)
+                .map_err(|e| CompositorError::Effect(e.to_string()))?;
+
+            let scratch = self
+                .effect_scratch
+                .acquire(&self.ctx.device, width, height, format);
+
+            let encoder = copy_encoder.get_or_insert_with(|| {
+                self.ctx
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("motolii-compositor-effect-pass"),
+                    })
+            });
+
+            for pass in &lwp.passes {
+                match pass {
+                    // 恒等 pass。画素単位の copy がそのまま「絵を変えない」を満たす。
+                    // S4 以降が実 shader pass(bright/blur/composite 等)をここへ足す時、
+                    // この match 腕を増やす(`crate::effects` モジュール doc 参照)。
+                    EffectPass::Identity => {
+                        encoder.copy_texture_to_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &src.texture,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d::ZERO,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &scratch,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d::ZERO,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::Extent3d {
+                                width,
+                                height,
+                                depth_or_array_layers: 1,
+                            },
+                        );
+                    }
+                }
+            }
+
+            self.next_effect_key += 1;
+            let key = self.next_effect_key;
+            let imported = self
+                .ctx
+                .texture_manager_2d
+                .import_gpu_premultiplied(key, &self.ctx, &scratch)
+                .map_err(|e| CompositorError::Effect(e.to_string()))?;
+
+            effective_textures.push(imported);
+            checked_out.push((width, height, format, scratch));
+        }
+
+        // 2) 通常合成。組み立ては `render_with_timing` と同型 — 使う texture だけが
+        //    「元の layer.texture」から「上で決めた実効 texture」に変わる。
+        let rects: Vec<TexturedRect> = layers
+            .iter()
+            .zip(effective_textures.iter())
+            .map(|(lwp, texture)| {
+                let layer = &lwp.layer;
+                let (transform, z) = if layer.pinned {
+                    (pinned_cancel * layer.placement.transform, 0.0)
+                } else {
+                    (layer.placement.transform, layer.placement.z)
+                };
+                TexturedRect {
+                    top_left_corner_position: to_point3(
+                        transform.transform_point2(glam::Vec2::ZERO),
+                        z,
+                    ),
+                    extent_u: to_vector3(
+                        transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)),
+                    ),
+                    extent_v: to_vector3(
+                        transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
+                    ),
+                    colormapped_texture:
+                        re_renderer::renderer::ColormappedTexture::from_unorm_rgba(
+                            texture.clone(),
+                        ),
+                    options: RectangleOptions {
+                        multiplicative_tint: {
+                            let a = match layer.blend_mode {
+                                BlendMode::Normal => layer.placement.opacity,
+                                BlendMode::Add => 0.0,
+                            };
+                            Rgba::from_rgba_premultiplied(
+                                layer.placement.opacity,
+                                layer.placement.opacity,
+                                layer.placement.opacity,
+                                a,
+                            )
+                        },
+                        depth_offset: layer.placement.order,
+                        ..Default::default()
+                    },
+                }
+            })
+            .collect();
+
+        self.ctx.begin_frame();
+
+        let draw_data = RectangleDrawData::new(&self.ctx, &rects)
+            .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
+
+        let view_from_world = macaw::IsoTransform::from_rotation_translation(
+            projection.rotation,
+            -(projection.rotation * projection.eye),
+        );
+
+        let mut view_builder = ViewBuilder::new(
+            &self.ctx,
+            TargetConfiguration {
+                name: "motolii-comp".into(),
+                render_mode: RenderMode::Deterministic,
+                resolution_in_pixel: [comp.width, comp.height],
+                view_from_world,
+                projection_from_view: Projection::Perspective {
+                    vertical_fov: projection.vertical_fov_radians,
+                    near_plane_distance: projection.near_plane_distance,
+                    aspect_ratio: projection.aspect_ratio,
+                },
+                pixels_per_point: 1.0,
+                blend_with_background: BlendWithBackground::Premultiplied,
+                ..Default::default()
+            },
+            re_renderer::ViewBuilderId::new(self.next_readback),
+        )
+        .map_err(|e| CompositorError::View(e.to_string()))?;
+
+        view_builder.queue_draw(&self.ctx, draw_data);
+
+        let identifier = self.next_readback;
+        self.next_readback += 1;
+        view_builder
+            .schedule_screenshot(&self.ctx, identifier, ())
+            .map_err(|e| CompositorError::View(e.to_string()))?;
+
+        let command_buffer = view_builder
+            .draw(&self.ctx, Rgba::TRANSPARENT)
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+        self.ctx.before_submit();
+        // effect pass の copy(あれば)を最終合成と**同じ submit 呼び出し**に同乗させる。
+        // 同一キューへの提出はこの順で実行される(裁定15/18: 第二 render パス禁止は
+        // `Compositor::render` の呼び出し回数の話であって、同一 RenderContext 内の
+        // 追加コマンドバッファは対象外)。
+        match copy_encoder {
+            Some(encoder) => {
+                self.ctx.queue.submit([encoder.finish(), command_buffer]);
+            }
+            None => {
+                self.ctx.queue.submit([command_buffer]);
+            }
+        }
+
+        self.ctx.begin_frame();
+        self.ctx
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+        self.ctx.begin_frame();
+
+        let mut out: Option<Vec<u8>> = None;
+        re_renderer::ScreenshotProcessor::next_readback_result::<()>(
+            &self.ctx,
+            identifier,
+            |data, _extent, ()| {
+                out = Some(data.to_vec());
+            },
+        );
+
+        let frame = out.ok_or(CompositorError::ReadbackMissing)?;
+
+        // GPU が読み終わった後なので、scratch をプールへ返して次フレームで使い回す
+        // (毎フレーム作り直さない)。
+        for (width, height, format, texture) in checked_out {
+            self.effect_scratch.release(width, height, format, texture);
+        }
+
+        Ok(frame)
+    }
+
+    /// 試験専用の introspection。`effect_scratch` が実際に**新規生成**した
+    /// (プール再利用ではない)texture の総数。`RenderTiming` が時間の内訳を
+    /// 隠さないのと同じ規律で、資源生成も隠さない。
+    pub fn effect_passes_created_textures(&self) -> u64 {
+        self.effect_scratch.created_count()
     }
 }
