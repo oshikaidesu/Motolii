@@ -254,21 +254,21 @@ impl Default for Colors {
     fn default() -> Self {
         // Dimensions と同じ理由の最終防波堤。数値は motolii-dark.json のスナップショットだが
         // **正本はあくまで JSON 側**(読めた時は常にそちらを使う)。
-        let surface_raised = Color::from_rgb(0.1333, 0.1333, 0.1333);
-        let surface_panel = Color::from_rgb(0.1020, 0.1020, 0.1020);
-        let text_muted = Color::from_rgb(0.5725, 0.5725, 0.5725);
+        let surface_raised = Color::from_rgb(0.2431, 0.2431, 0.2431);
+        let surface_panel = Color::from_rgb(0.2118, 0.2118, 0.2118);
+        let text_muted = Color::from_rgb(0.4588, 0.4588, 0.4588);
         let action_active = Color::from_rgb(0.8471, 0.7098, 0.4549);
         let (state_selected, state_disabled) =
             derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
         Self {
-            surface_app: Color::from_rgb(0.0784, 0.0784, 0.0784),
+            surface_app: Color::from_rgb(0.1412, 0.1412, 0.1412),
             surface_panel,
             surface_raised,
-            surface_hover: Color::from_rgb(0.1725, 0.1725, 0.1725),
-            border_default: Color::from_rgb(0.2314, 0.2314, 0.2314),
-            border_strong: Color::from_rgb(0.4078, 0.4078, 0.4078),
-            text_primary: Color::from_rgb(0.9412, 0.9412, 0.9412),
-            text_secondary: Color::from_rgb(0.7765, 0.7765, 0.7765),
+            surface_hover: Color::from_rgb(0.2745, 0.2745, 0.2745),
+            border_default: Color::from_rgb(0.1020, 0.1020, 0.1020),
+            border_strong: Color::from_rgb(0.3569, 0.3569, 0.3569),
+            text_primary: Color::from_rgb(0.7216, 0.7216, 0.7216),
+            text_secondary: Color::from_rgb(0.5490, 0.5490, 0.5490),
             text_muted,
             focus: Color::from_rgb(0.9412, 0.9412, 0.9412),
             action_active,
