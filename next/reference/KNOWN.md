@@ -64,3 +64,4 @@
 - **subagent は cargo を背景実行しない** — 完了通知との噛み合わせで自停止する実測2件(2026-08-21)。常に前景・timeout 600000
 - iced 0.14 の API 欠け(実測): text に letter-spacing 無し / Border は4辺一律(per-edge 無し)/ text_input の既定 padding は5px(固定高セルでは文字領域を圧縮する — 明示 padding(0) が要る)
 - **sccache は却下(2026-08-21 実測、2系統一致)**: 冷313s → hit75%でも331s(**むしろ遅い**)。理由は公式doc確認済み — bin/proc-macro/リンクは非キャッシュ・incremental(workspace crate全部)も非対象で、律速(リンク+ローカルcrate)に一切効かない。再提案しないこと
+- **ビルド運用(裁定138、2026-08-21)**: 使い捨て worktree 禁止 → **常設 warm worktree を役割別に再利用**(reset --hard で追随、target 温存)。レーンの cargo は **`-p` 集合を固定**(build/test で混在させない)。60s 合格線は warm+`-p` 固定で達成済み(16〜33s)。魔法フラグは無い(却下表は裁定138)。shell の test バイナリ統合が次の構造レバー
