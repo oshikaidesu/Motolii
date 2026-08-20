@@ -12,7 +12,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use motolii_compositor::GpuTexture2D;
-use motolii_compositor::{Compositor, CompositorError, Layer};
+use motolii_compositor::{Compositor, CompositorError, Layer, LayerWithPasses};
 
 use motolii_media::{probe, read_frame_at, MediaError, MediaInfo};
 use motolii_store::{LayerPlacement, LayerSource, Matte, RationalTime, StoreView};
@@ -161,7 +161,13 @@ impl Engine {
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
 
-        let mut layers = Vec::with_capacity(resolved.len() + 1);
+        // `LayerWithPasses` で包んで `Compositor::render_with_effects` へ渡す(裁定153 S3、
+        // S2 の注意書きどおり)。`passes` が空な layer は `render_with_effects` 内部で
+        // オフスクリーンを一切作らず元の texture をそのまま使う従来コストの分岐を通るので
+        // (`motolii-compositor` のモジュール doc/`tests/effects.rs` 参照)、effect を
+        // 持たない layer(今のところ背景 layer を含め全部——`translate_effect_passes` は
+        // 2026-08-21 時点で常に空を返す)はここを経由しても速度もアロケーションも変わらない。
+        let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
 
         if include_background {
             // comp の背景色(`Composition::background`、利用者要望: 黒だと気分が上がらない)。
@@ -188,15 +194,21 @@ impl Engine {
                 },
                 0,
             )?;
-            layers.push(Layer {
-                texture: background_texture.expect("LayerSource::Solid は常に texture を返す"),
-                size: [comp.width as f32, comp.height as f32],
-                placement: LayerPlacement {
-                    order: BACKGROUND_ORDER,
-                    ..Default::default()
+            // 背景 layer には pass を積まない(S3 EXACT TARGET 3) — 背景は engine が
+            // ここで直接組み立てる単色 pinned layer であって `ResolvedLayer` を経由しない
+            // ので、そもそも effect スタックを持ち得ない。`passes: vec![]` で明示する。
+            layers.push(LayerWithPasses {
+                layer: Layer {
+                    texture: background_texture.expect("LayerSource::Solid は常に texture を返す"),
+                    size: [comp.width as f32, comp.height as f32],
+                    placement: LayerPlacement {
+                        order: BACKGROUND_ORDER,
+                        ..Default::default()
+                    },
+                    pinned: true,
+                    blend_mode: motolii_compositor::BlendMode::Normal,
                 },
-                pinned: true,
-                blend_mode: motolii_compositor::BlendMode::Normal,
+                passes: vec![],
             });
         }
 
@@ -208,6 +220,10 @@ impl Engine {
                 return Err(EngineError::UnsupportedMatte(matte));
             }
             let blend_mode = translate_blend_mode(layer.blend_mode)?;
+            // store→compositor の effect 語彙変換(裁定153 S3、EXACT TARGET 1)。
+            // texture のアップロードより前に計算しても副作用は無い(純関数)ので、
+            // 上の matte/blend と同じ「早く判定する」並びに合わせてここに置く。
+            let passes = translate_effect_passes(&layer.effects);
 
             let (texture, natural) = self.texture_for(&layer.source, layer.source_frame)?;
             let Some(texture) = texture else {
@@ -229,17 +245,20 @@ impl Engine {
                     natural[1]
                 },
             ];
-            layers.push(Layer {
-                texture,
-                size,
-                // **置き方はそのまま持ち回る** — 並べ直すとそこが翻訳層になる。
-                placement: layer.placement,
-                pinned: layer.pinned,
-                blend_mode,
+            layers.push(LayerWithPasses {
+                layer: Layer {
+                    texture,
+                    size,
+                    // **置き方はそのまま持ち回る** — 並べ直すとそこが翻訳層になる。
+                    placement: layer.placement,
+                    pinned: layer.pinned,
+                    blend_mode,
+                },
+                passes,
             });
         }
 
-        Ok(self.compositor.render(comp, camera, &layers)?)
+        Ok(self.compositor.render_with_effects(comp, camera, &layers)?)
     }
 
     /// 素材の texture と、その実寸を返す。
@@ -380,5 +399,75 @@ fn translate_blend_mode(
     match mode {
         motolii_store::BlendMode::Normal => Ok(motolii_compositor::BlendMode::Normal),
         other => Err(EngineError::UnsupportedBlendMode(other)),
+    }
+}
+
+/// `motolii_store::ResolvedEffect` の列(裁定153 S1、`resolve()` が運ぶ effect スタック)を
+/// `motolii_compositor::EffectPass` の列(裁定153 S2、`LayerWithPasses::passes`)へ写す。
+/// `translate_blend_mode` と**同型の語彙変換**だが、失敗のさせ方は逆にしてある:
+///
+/// **未知 plugin_id は `Err` にしない。無音で skip する**(pass を1本も積まない)。
+/// 理由 — 2026-08-21 時点で `motolii_compositor::EffectPass` は `Identity`
+/// (絵を変えない pass、枠の正しさを固定するためだけの variant)しか持たない
+/// (`motolii_compositor::effects` モジュール doc 参照)。つまり**「対応している」
+/// plugin_id はこの時点で1つも存在せず、全ての effect が未知**である。
+/// `translate_blend_mode` のように未知を `Err` で fail-closed にすると、
+/// effect を1つでも積んだ layer が S3 のこのコミットから一律描画不能になる —
+/// それは S1 が「まだ合成器/engine は読んでいない」を解消しに行った意図にも、
+/// 「壊れているのではなくまだ描けない」という effect の実情にも反する。
+/// blend mode(16値のうち対応外があれば明確に壊れている)と effect
+/// (対応する pass がまだ1つも実装されていないのが今の常態)とでは
+/// 「未対応」の意味が違う、というのがこの非対称の理由。
+///
+/// **plugin_id ⇄ EffectPass の対応表はまだ無い**。S4(Glow 等の最初の実 shader pass)が
+/// `motolii_compositor::EffectPass` へ variant を足す時に、ここへ match 腕を1本足す
+/// (`motolii_compositor::effects` モジュール doc の「S4 がこの enum へ変種を足す」と対)。
+/// それまでは常に empty(=その layer は `LayerWithPasses { passes: vec![] }` になり、
+/// `Compositor::render_with_effects` 内でオフスクリーンを一切作らない従来コストの分岐を通る
+/// — `tests/effects.rs`
+/// `passless_layer_matches_the_traditional_render_path_and_allocates_nothing` と同じ分岐)。
+///
+/// パニックしない: `effects` が空でも、全 plugin_id が未知でも、ここは常に正常終了する。
+fn translate_effect_passes(
+    effects: &[motolii_store::ResolvedEffect],
+) -> Vec<motolii_compositor::EffectPass> {
+    effects
+        .iter()
+        .filter_map(|effect| match effect.plugin_id.as_str() {
+            // 既知 plugin_id はまだ無い。S4 が最初の腕(例: "motolii.glow" →
+            // `EffectPass::Glow(..)`)を足すまで、ここは常に `None`
+            // (= pass を積まない、未知 id を無音 skip)。
+            _ => None,
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod translate_effect_passes_tests {
+    use super::translate_effect_passes;
+    use motolii_store::ResolvedEffect;
+
+    /// effect が無い layer は pass も無い(空 → 空)。
+    #[test]
+    fn no_effects_yields_no_passes() {
+        assert_eq!(translate_effect_passes(&[]), Vec::new());
+    }
+
+    /// 未知 plugin_id はパニックせず無音で skip される —
+    /// 2026-08-21 時点は「既知」の plugin_id が1つも無いので、これは
+    /// 「何を入れても今は空になる」ことの直接固定でもある。
+    #[test]
+    fn unknown_plugin_id_is_skipped_silently() {
+        let effects = vec![
+            ResolvedEffect {
+                plugin_id: "motolii.not-yet-implemented".to_owned(),
+                params: vec![],
+            },
+            ResolvedEffect {
+                plugin_id: "third-party.whatever".to_owned(),
+                params: vec![],
+            },
+        ];
+        assert_eq!(translate_effect_passes(&effects), Vec::new());
     }
 }
