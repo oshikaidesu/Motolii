@@ -153,6 +153,67 @@ fn opaque_background_leaves_no_transparent_border_pixels() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// 裁定141: `render_frame_without_background`(市松の透明可視化専用の口)
+// ---------------------------------------------------------------------------
+
+/// **裁定141 の本命**: 既定の不透明黒背景と同じ Document でも、背景を敷かない
+/// 入力を使えば覆われていない画素の alpha は 0 になる — `render_frame`(背景込み、
+/// `default_background_is_opaque_black` 参照)との対比。
+#[test]
+fn render_frame_without_background_leaves_uncovered_pixels_transparent() {
+    let doc = doc_with_background([0.0, 0.0, 0.0, 1.0]);
+    let mut engine = Engine::new().expect("engine");
+
+    let with_background = engine.render_frame(&doc.view(), t(0)).unwrap();
+    assert_eq!(
+        pixel(&with_background, 32, 32),
+        [0, 0, 0, 255],
+        "対比: 背景込みは不透明黒のはず"
+    );
+
+    let without_background = engine
+        .render_frame_without_background(&doc.view(), t(0))
+        .unwrap();
+    assert_eq!(
+        pixel(&without_background, 32, 32)[3],
+        0,
+        "背景を省いたのに層の無い画素の alpha が0でない"
+    );
+}
+
+/// 背景を省いても実 layer は消えない — 差分は背景 layer 1枚だけであることの確認
+/// (`background_sits_behind_every_real_layer` と対の試験)。
+#[test]
+fn render_frame_without_background_still_shows_real_layers() {
+    let mut doc = doc_with_background([0.0, 0.0, 0.0, 1.0]);
+    let layer = LayerId(1);
+    doc.apply(Intent::AddLayer(layer)).unwrap();
+    doc.apply(Intent::SetMeta {
+        layer,
+        meta: LayerMeta {
+            source: LayerSource::Solid {
+                rgba: [0, 0, 255, 255],
+                width: W,
+                height: H,
+            },
+            order: 0,
+            timing: LayerTiming::place(0, None, 100_000),
+        },
+    })
+    .unwrap();
+
+    let mut engine = Engine::new().expect("engine");
+    let frame = engine
+        .render_frame_without_background(&doc.view(), t(0))
+        .unwrap();
+    let px = pixel(&frame, 32, 32);
+    assert!(
+        px[2] > 200 && px[3] == 255,
+        "背景を省いても comp 全域を覆う実 layer は不透明のまま出るはず: {px:?}"
+    );
+}
+
 /// undo で戻ると背景色も戻る — `SetComposition` は普通の編集(裁定40 の丸ごと置換)
 /// なので、他の編集と同じく undo が効くはず。
 #[test]

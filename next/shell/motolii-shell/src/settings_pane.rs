@@ -21,14 +21,16 @@
 //! - **ui_scale(%)**: 既存 `tokens::Dimensions::ui_scale` をそのまま読み書きする —
 //!   ここでは新しい置き場を作らない。書き戻しは [`crate::tokens::save_ui_scale`]。
 //!
-//! ## 市松トグルと背景 alpha の連動(実機報告の修正)
-//! 既定 comp の背景は不透明黒(`Shell::new`)。市松は「フレームの alpha < 1 の
-//! 画素」だけに乗るので、背景が不透明な間は**トグルを押しても1画素も変わらない**
-//! (`engine::render_frame` が comp 全面を覆う不透明 pinned layer を最奥に敷く
-//! ため、これは一般に真 — 層の中身に依存しない)。これ自体は現仕様どおりだが、
-//! 黙って無反応に見えるのは Q0/M13 違反なので2点で塞ぐ:
-//! [`checkerboard_invisible_reason`](その場の理由をトグルの隣に出す)と
-//! [`BackgroundPreset::Transparent`](1クリックで市松が見える状態を作る)。
+//! ## 市松 = AE型の透明可視化モード(裁定141)
+//! 市松 ON の間、Stage プレビューは `Composition.background` を敷かずに合成した
+//! 結果(`motolii_engine::Engine::render_frame_without_background`)へ市松を敷く
+//! — 既定の不透明黒背景のままでもトグルは実際に画面を変える。Document・undo・
+//! 書き出しは不変(プレビュー専用の入力差分、`motolii-engine` 側の裁定141 doc
+//! 参照)。結線は `crate::Shell::refresh_frame`。旧仕様(「フレームの alpha<1 の
+//! 画素にだけ乗るので不透明背景では無反応」)が実機で不合格になった経緯と、
+//! その場しのぎだった `checkerboard_invisible_reason` の理由文が今回撤去された
+//! 経緯は `next/DECISIONS.md` 裁定141 参照。[`BackgroundPreset::Transparent`] は
+//! 背景を実際に透明で書き出したい人向けとして引き続き残す。
 
 use iced::widget::{button, column, container, row, text, text_input};
 use iced::{Element, Length};
@@ -92,12 +94,9 @@ pub enum BackgroundPreset {
     /// (46 ≈ 255*0.18)。反射率換算のガンマ補正はしない — store の既存 solid
     /// rgba(`fixture.rs::LayerSpec::rgba` 等)と同じ「素の8bit値」慣習を保つ。
     Gray18,
-    /// alpha=0 の1クリック経路。**市松を見るための唯一の入口**
-    /// (`checkerboard_invisible_reason` 参照) — 他3プリセットはすべて不透明
-    /// なので、市松トグルを押しても背景がこのプリセットへ動かない限り1画素も
-    /// 変わらない(既定 comp の背景が不透明黒であるため、engine が最奥の
-    /// 全面不透明 pinned layer として合成し、上に何が乗っていても最終 alpha は
-    /// 常に1になる — `engine/motolii-engine/src/lib.rs::render_frame` 実測)。
+    /// alpha=0 の1クリック経路。背景そのものを実際に透明で書き出したい人向け
+    /// (裁定141以降、市松を見るための必須経路ではない — 市松は不透明背景の
+    /// ままでも `render_frame_without_background` 経由で見える)。
     Transparent,
 }
 
@@ -192,32 +191,6 @@ pub fn composite_checkerboard(width: u32, height: u32, rgba: &mut [u8], colors: 
     }
 }
 
-/// [`checkerboard_invisible_reason`] が出す文言そのもの。`pub` にして
-/// テスト側(`tests/settings_drive.rs`)が文字列を複製せず同じ定数を
-/// selector に渡せるようにする(drift 防止)。
-pub const CHECKERBOARD_INVISIBLE_HINT: &str =
-    "背景が不透明のため市松は見えません — 下の「Transparent」プリセットで背景の A を 0 に";
-
-/// 市松トグルの隣にその場で出す理由(M13: 無反応の禁止 — トグル自体は常に
-/// `bool` を反転させるが、**背景が不透明なら見た目は1画素も変わらない**のが
-/// 現仕様。トグルが無反応に見えるのを黙らせず、その場で言う)。
-///
-/// `background[3]`(alpha)が1.0未満なら engine が合成する最終フレームに
-/// 透明画素が残り得るので理由は無い。1.0(=不透明)なら
-/// `engine/motolii-engine::render_frame` が comp 全面を覆う不透明 pinned
-/// layer を最奥に敷くため、上に何が乗っていても最終 alpha は常に1になり、
-/// 市松の分岐(`composite_checkerboard` の `alpha == 255` スキップ)が
-/// 全画素で成立する — 一般に真(層の中身に依存しない)。
-pub fn checkerboard_invisible_reason(checkerboard: bool, background: [f32; 4]) -> Option<&'static str> {
-    if !checkerboard {
-        return None;
-    }
-    if background[3] < 1.0 {
-        return None;
-    }
-    Some(CHECKERBOARD_INVISIBLE_HINT)
-}
-
 fn color_u8(color: iced::Color) -> [u8; 3] {
     [
         (color.r * 255.0).round().clamp(0.0, 255.0) as u8,
@@ -255,15 +228,8 @@ pub fn view(
                 hint_row("書き出しにもこの背景色が乗ります", dims, colors),
                 checkerboard_row(checkerboard, dims, colors),
             ];
-            // **その場の理由**(M13)。トグルの直下 — status 帯ではなくここに出す
-            // (発注書「status でなくトグルの隣」)。
-            if let Some(reason) =
-                checkerboard_invisible_reason(checkerboard, composition.background)
-            {
-                rows.push(checkerboard_warning_row(reason, dims, colors));
-            }
             rows.push(hint_row(
-                "市松は表示だけ — 書き出しには乗りません(背景の alpha=0 で確かめられます)",
+                "市松は表示だけ — 書き出しには乗りません",
                 dims,
                 colors,
             ));
@@ -356,7 +322,8 @@ fn preset_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
         preset_button("Black", BackgroundPreset::Black, dims, colors),
         preset_button("White", BackgroundPreset::White, dims, colors),
         preset_button("Gray 18%", BackgroundPreset::Gray18, dims, colors),
-        // 市松を見るための1クリック経路(`checkerboard_invisible_reason` 参照)。
+        // 背景を実際に透明で書き出したい人向け(裁定141以降、市松を見るための
+        // 必須経路ではない — `BackgroundPreset::Transparent` の doc 参照)。
         preset_button("Transparent", BackgroundPreset::Transparent, dims, colors),
     ]
     .spacing(dims.spacing_xs)
@@ -395,20 +362,6 @@ fn checkerboard_row(checkerboard: bool, dims: Dimensions, colors: Colors) -> Ele
     .height(Length::Fixed(dims.inspector_row_height))
     .align_y(iced::alignment::Vertical::Center)
     .padding([0.0, dims.spacing_m])
-    .into()
-}
-
-/// `checkerboard_invisible_reason` が `Some` の時だけ木に現れる、警告色の
-/// その場理由(`hint_row` と同じ形だが `text_muted` ではなく
-/// `status_warning` — 「常にある案内」ではなく「今まさに無反応な理由」なので
-/// 目立たせる)。
-fn checkerboard_warning_row(message: &'static str, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
-    container(
-        text(message)
-            .size(dims.caption_text)
-            .color(colors.status_warning),
-    )
-    .padding([dims.spacing_xs, dims.spacing_m])
     .into()
 }
 
@@ -469,48 +422,12 @@ mod tests {
         assert_eq!(gray[3], 1.0, "Black/White/Gray18 は常に不透明のはず");
     }
 
-    /// **市松を見るための唯一の入口**。他3プリセットと違い、これだけが
-    /// alpha=0 を出す(発注書「透明背景プリセットを1クリックで」)。
+    /// 背景を実際に透明で書き出したい人向けのプリセット。他3プリセットと違い、
+    /// これだけが alpha=0 を出す(裁定141以降、市松を見るための必須経路では
+    /// ない — `render_frame_without_background` が不透明背景でも市松を見せる)。
     #[test]
     fn transparent_preset_is_fully_transparent() {
         assert_eq!(preset_rgba(BackgroundPreset::Transparent), [0.0, 0.0, 0.0, 0.0]);
-    }
-
-    // -----------------------------------------------------------------
-    // checkerboard_invisible_reason — 容疑1(設計上の連動不足)の直接固定
-    // -----------------------------------------------------------------
-
-    /// **本命**: 市松 ON + 既定 comp と同じ不透明背景 → その場で理由が出る。
-    /// これが `None` のままだと「トグルを押しても1画素も変わらないのに何も
-    /// 言わない」= M13/Q0 違反(この行が無い状態が今回の実バグ)。
-    #[test]
-    fn checkerboard_on_with_opaque_background_gives_a_reason() {
-        let reason = checkerboard_invisible_reason(true, [0.0, 0.0, 0.0, 1.0]);
-        assert!(reason.is_some(), "不透明背景+市松ONで理由が出ていない");
-    }
-
-    #[test]
-    fn checkerboard_on_with_transparent_background_gives_no_reason() {
-        assert_eq!(
-            checkerboard_invisible_reason(true, [0.0, 0.0, 0.0, 0.0]),
-            None,
-            "透明背景なら市松が実際に見えるので理由は不要"
-        );
-    }
-
-    #[test]
-    fn checkerboard_on_with_partially_transparent_background_gives_no_reason() {
-        assert_eq!(
-            checkerboard_invisible_reason(true, [0.0, 0.0, 0.0, 0.5]),
-            None,
-            "半透明でも一部画素は市松が見えるので理由は不要"
-        );
-    }
-
-    #[test]
-    fn checkerboard_off_never_gives_a_reason_regardless_of_background() {
-        assert_eq!(checkerboard_invisible_reason(false, [0.0, 0.0, 0.0, 1.0]), None);
-        assert_eq!(checkerboard_invisible_reason(false, [0.0, 0.0, 0.0, 0.0]), None);
     }
 
     #[test]
