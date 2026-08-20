@@ -53,7 +53,7 @@ use motolii_store::{
     StoreView, Value,
 };
 
-use crate::tokens::{Colors, Dimensions};
+use crate::tokens::{Colors, Dimensions, Ink, TextWeight};
 use crate::{Message, Session};
 
 // ---------------------------------------------------------------------------
@@ -529,6 +529,53 @@ use iced::widget::{
 };
 use iced::{Element, Length};
 
+/// mock `.prow`(値行)の border-bottom 色。生の CSS リテラル `rgba(0,0,0,.35)`
+/// — `Colors` の意味色ロールには対応が無い(`ui/motolii-tokens` の DTCG 正本は
+/// この lane の write-set 外なので新ロールを追加しない)。`.cols`/header 等が
+/// 使う不透明 `#1a1a1a`(`Colors::border_default` と同値)より薄い、行同士の
+/// 弱い区切り(裁定137「区切りは面でなく線」)。
+const PROW_HAIRLINE: iced::Color = iced::Color {
+    r: 0.0,
+    g: 0.0,
+    b: 0.0,
+    a: 0.35,
+};
+
+/// mock の `.cols`/`.prow` 系の行の border-bottom を模す共通ラッパー(裁定137
+/// 「区切りは面でなく線」・裁定139「面色の塗り分けで区切っている残余を
+/// hairline へ置換する」)。padding・固定高・pane 全幅は**ここ(外側
+/// container)だけ**が持つ — `content` 自身は spacing/align_y だけを持ち、
+/// 自分の width/height を宣言しない(`ident_band` と同じ構造。Fill な子孫
+/// [label 等]を持つ Shrink な row は祖先の container が与える Limits の上限
+/// までしか伸びないので、外側 container の bounds とは一致しない — 496幅
+/// ちょうど/20px高ちょうどの `Container` candidate が二重に現れて
+/// `tests/inspector_pixel_fence.rs` の数え上げを壊す事故を避けられる、実測)。
+///
+/// **既知の限界**(`tests/inspector_pixel_fence.rs` 冒頭に明記済みの限界と
+/// 同じ trade-off): mock は border-bottom のみだが `iced_core::Border`
+/// (0.14.0 実測)は4辺一律にしかできない(per-edge API 無し)。header/
+/// ident_band/section_header と同じ trade-off をここでも受け入れる。
+fn bordered_row(
+    content: Element<'static, Message>,
+    dims: Dimensions,
+    border_color: iced::Color,
+) -> Element<'static, Message> {
+    container(content)
+        .width(Length::Fill)
+        .height(Length::Fixed(dims.inspector_row_height))
+        .padding([0.0, dims.spacing_m])
+        .align_y(iced::alignment::Vertical::Center)
+        .style(move |_theme| container::Style {
+            border: iced::Border {
+                color: border_color,
+                width: dims.border_width,
+                radius: 0.0.into(),
+            },
+            ..container::Style::default()
+        })
+        .into()
+}
+
 pub fn view(
     projection: Option<&SelectionProjection>,
     field_draft: Option<&FieldDraft>,
@@ -643,23 +690,29 @@ fn ident_band(
         .unwrap_or_else(|| selection.attrs.name.clone());
     let placeholder = format!("layer {}", selection.layer.0);
 
-    // 名前欄は mock の `.ident b`(bold, t-base)の役目を持つが、実体は
-    // `text_input`(既に結線済みの改名 — `Message::InspectorNameInput/Submit`)。
-    // 未フォーカス時は枠を消して静止テキストに見せる([`name_input_style`])。
+    // 名前欄は mock の `.ident b`(font-weight:600, t-base)の役目を持つが、
+    // 実体は `text_input`(既に結線済みの改名 —
+    // `Message::InspectorNameInput/Submit`)。未フォーカス時は枠を消して
+    // 静止テキストに見せる([`name_input_style`])。`.font(TextWeight::
+    // Semibold)` で mock の 600 を写す(裁定137)。
     //
-    // `.padding(0.0)`: `value_cell` と同じ柵発見(既定 padding 5px が乗ると
-    // ident 帯の高さが mock の「b(11px)+s(9px)を2行積んだだけ」より約10px
-    // 余計に伸びる — 実測: 修正前 name_field 高 24.3px、修正後 14.3px)。
+    // padding は縦0を維持(`value_cell` と同じ柵発見 — 既定 padding 5px が
+    // 乗ると ident 帯の高さが mock の「b(11px)+s(9px)を2行積んだだけ」より
+    // 約10px 余計に伸びる、実測: 修正前 name_field 高 24.3px、修正後
+    // 14.3px)。**横だけ** [`name_field_padding`] で戻す(裁定139)。
     let name_field = text_input(&placeholder, &name_text)
         .on_input(Message::InspectorNameInput)
         .on_submit(Message::InspectorNameSubmit)
         .size(dims.body_text)
-        .padding(0.0)
+        .font(TextWeight::Semibold.font())
+        .padding(name_field_padding(dims))
         .style(move |_theme, status| name_input_style(dims, colors, status));
 
+    // mock `.ident s{color:var(--ink2)}` — 旧実装は ink3(`text_muted`)を
+    // 誤用していた(2026-08-21 更正)。
     let subtitle = text(selection.kind)
         .size(dims.caption_text)
-        .color(colors.text_muted);
+        .color(Ink::Secondary.resolve(&colors));
 
     let identity = column![name_field, subtitle]
         .spacing(0.0)
@@ -703,7 +756,7 @@ fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'static, Messa
             .align_x(iced::alignment::Horizontal::Center)
     };
 
-    row_widget![
+    let content = row_widget![
         text("Property")
             .size(dims.caption_text)
             .color(colors.text_muted)
@@ -716,10 +769,11 @@ fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'static, Messa
             .align_x(iced::alignment::Horizontal::Center),
     ]
     .spacing(dims.spacing_xs)
-    .height(Length::Fixed(dims.inspector_row_height))
-    .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
-    .into()
+    .align_y(iced::alignment::Vertical::Center);
+
+    // mock `.cols{border-bottom:var(--line) solid #1a1a1a}` — 不透明な hairline
+    // (`border_default` と同値)。
+    bordered_row(content.into(), dims, colors.border_default)
 }
 
 /// `pub(crate)`: `settings_pane` も同じ見出し帯(パネルタイトル/section 見出し
@@ -730,21 +784,22 @@ pub(crate) fn section_header(
     colors: Colors,
 ) -> Element<'static, Message> {
     // `.width(Length::Fill)`: `header` と同じ理由(柵で発見) — mock の `.sec` も
-    // block 要素で pane 全幅の帯。無いと "TRANSFORM"/"APPEARANCE"/"ATTRS" の
-    // 文字幅ぶんしか背景 `surface_app` が塗られない(実測: 修正前は幅 65〜68px)。
+    // block 要素で pane 全幅の帯(実測: 修正前は幅 65〜68px)。
+    //
+    // **背景は塗らない**(裁定137/139、2026-08-21 更正): mock `.sec` は
+    // `background`/`border` のどちらも持たない — 見出しは letter-spacing +
+    // ink3(`text_muted`)+ 行高だけで区別する(旧実装は `surface_app` で塗って
+    // 「面色の塗り分けで区切る」を犯していた — TRANSFORM/APPEARANCE/ATTRS の
+    // 帯が周囲の `.prow` 行と違う沈んだ色の箱に見えていたのが実体)。
     container(
         text(label)
             .size(dims.caption_text)
-            .color(colors.text_muted),
+            .color(Ink::Muted.resolve(&colors)),
     )
     .width(Length::Fill)
     .height(Length::Fixed(dims.inspector_section_header_height))
     .padding([0.0, dims.spacing_m])
     .align_y(iced::alignment::Vertical::Center)
-    .style(move |_theme| container::Style {
-        background: Some(iced::Background::Color(colors.surface_app)),
-        ..container::Style::default()
-    })
     .into()
 }
 
@@ -775,16 +830,17 @@ fn transform_row(
         ],
     };
 
-    row_widget![
+    let content = row_widget![
         label,
         row_widget(value_cells).spacing(dims.spacing_xs),
         reserved_glyph(dims), // Key 列 — keyframe UI 未実装(Q0)。幅の予約だけ、空のまま。
     ]
     .spacing(dims.spacing_xs)
-    .height(Length::Fixed(dims.inspector_row_height))
-    .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
-    .into()
+    .align_y(iced::alignment::Vertical::Center);
+
+    // mock `.prow{border-bottom:var(--line) solid rgba(0,0,0,.35)}` — `.cols`
+    // より薄い hairline。
+    bordered_row(content.into(), dims, PROW_HAIRLINE)
 }
 
 /// 発注書「読み取り専用値は編集セルと同一形状で色だけ落とす」を1箇所で守る —
@@ -818,14 +874,14 @@ fn value_cell(
                         .on_submit(Message::InspectorFieldSubmit(field))
                         .size(dims.body_text)
                         .width(Length::Fill)
-                        // `.padding(0.0)`: 柵で発見した実修正 — `text_input` の既定
-                        // padding(`iced_widget::text_input::DEFAULT_PADDING` = 5px 全辺)
-                        // が固定高 `value_cell_height`(row-4 = 16px)を食い潰し、文字の
-                        // 描画領域が 16 - 2*5 = 6px まで押し潰される(実測: 修正前は
-                        // text_input 内の paragraph 高が 6px、mock の `.prow .v` は
-                        // padding 無しで 16px 丸ごと使える)。0 にして箱の高さをそのまま
-                        // 使わせ、`align_y(Center)` で縦中央寄せする。
-                        .padding(0.0)
+                        // 縦0を維持(柵で発見した実修正 — `text_input` の既定 padding
+                        // `iced_widget::text_input::DEFAULT_PADDING` = 5px 全辺が固定高
+                        // `value_cell_height`(row-4 = 16px)を食い潰し、文字の描画領域が
+                        // 16 - 2*5 = 6px まで押し潰される、実測: 修正前は text_input 内の
+                        // paragraph 高が 6px)。**横だけ** [`value_cell_padding`] で戻す
+                        // (裁定139: セル幅38pxいっぱいに文字が縁へ接触しないよう最小段
+                        // トークン `spacing_xs` を左右に確保)。
+                        .padding(value_cell_padding(dims))
                         .align_x(iced::alignment::Horizontal::Center)
                         .style(move |_theme, status| value_input_style(dims, colors, status)),
                 )
@@ -893,6 +949,23 @@ fn value_cell_height(dims: Dimensions) -> f32 {
     (dims.inspector_row_height - dims.spacing_s).max(1.0)
 }
 
+/// 値セル(`.prow .v`)の text_input 横内余白(裁定139)。**縦は0のまま** —
+/// 行高合わせの実測修正([`value_cell_height`] の doc 参照)。mock 自身の
+/// `.prow .v` は padding を持たない(flex center)ので実測値の直接転記では
+/// なく、grid gap の最小段トークン `spacing_xs`(mock `--sp1`=2px、cols/prow
+/// の X→Y→Z 間隔と同じ token)を左右に使う — セル幅38pxの縁へ数字グリフが
+/// 接触しない最小限の呼吸(セル幅自体は変えない、38px のまま)。
+fn value_cell_padding(dims: Dimensions) -> iced::Padding {
+    iced::Padding::from([0.0, dims.spacing_xs])
+}
+
+/// ident 帯の名前欄(`.ident b`)の横内余白。[`value_cell_padding`] と同じ
+/// 理由・同じトークンを使う(裁定139 は `value_cell`/`name_field` を並記して
+/// いる — 2箇所で別の値を発明しない)。
+fn name_field_padding(dims: Dimensions) -> iced::Padding {
+    iced::Padding::from([0.0, dims.spacing_xs])
+}
+
 fn boxed_value(
     content: String,
     color: iced::Color,
@@ -938,10 +1011,12 @@ fn glyph_height(dims: Dimensions) -> f32 {
 
 /// **M glyph — 結線済み**(supervisor 訂正、2026-08-20)。`LayerAttrs.hidden` を
 /// トグルする。on(hidden=true)は mock `.glyph.on` と同じ accent 縁取り+文字色。
+/// `.font(TextWeight::Bold)` で mock `.glyph{font-weight:800}` を写す(裁定137)。
 fn mute_glyph(dims: Dimensions, colors: Colors, hidden: bool) -> Element<'static, Message> {
     button(
         text("M")
             .size(dims.caption_text)
+            .font(TextWeight::Bold.font())
             .align_x(iced::alignment::Horizontal::Center)
             .align_y(iced::alignment::Vertical::Center),
     )
@@ -969,10 +1044,12 @@ fn glyph_button_style(
     status: button::Status,
     active: bool,
 ) -> button::Style {
+    // mock `.glyph{color:var(--ink2)}` — 非 active 状態は ink2(secondary)。
+    // 旧実装は ink3(`text_muted`)を誤用していた(2026-08-21 更正)。
     let (border_color, text_color) = if active {
         (colors.action_active, colors.action_active)
     } else {
-        (colors.border_default, colors.text_muted)
+        (colors.border_default, Ink::Secondary.resolve(&colors))
     };
     let background = match status {
         button::Status::Hovered => colors.surface_hover,
@@ -1042,7 +1119,7 @@ pub(crate) fn value_input_style(
 /// Hidden は M glyph へ移した(重複 chrome を残さない、supervisor 訂正 2026-08-20)。
 /// blend 自体は**表示のみ**(対応 mode が Normal だけなのは KNOWN の既知の穴)。
 fn attrs_section(attrs: &AttrsProjection, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
-    let blend_row = row_widget![
+    let blend_content = row_widget![
         text("Blend")
             .size(dims.body_text)
             .color(colors.text_primary)
@@ -1052,9 +1129,12 @@ fn attrs_section(attrs: &AttrsProjection, dims: Dimensions, colors: Colors) -> E
             .color(colors.text_muted),
     ]
     .spacing(dims.spacing_xs)
-    .height(Length::Fixed(dims.inspector_row_height))
-    .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m]);
+    .align_y(iced::alignment::Vertical::Center);
+
+    // `.prow` 系の行として同じ hairline を使う(mock 断片には Blend 行自体は
+    // 無いが、`.prow` の row grammar をそのまま延長する — 発注書 NON-GOALS に
+    // ある「新しい視覚言語の発明」ではなく、既存 grammar の適用)。
+    let blend_row = bordered_row(blend_content.into(), dims, PROW_HAIRLINE);
 
     column![section_header("ATTRS", dims, colors), blend_row].into()
 }
@@ -1088,6 +1168,63 @@ fn hint_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -----------------------------------------------------------------------
+    // 裁定139: value_cell/name_field は縦0を維持したまま横だけ内余白を戻す
+    // -----------------------------------------------------------------------
+
+    /// **本命(red→green の柵)**: 旧実装は `.padding(0.0)` で縦横とも0だった
+    /// (`git log` 参照 — このテストを旧コードに当てると
+    /// `padding.left == 0.0`/`padding.right == 0.0` が真になり fail する)。
+    /// 縦は行高合わせのため0のまま、横だけ `spacing_xs`(mock `--sp1`)が
+    /// 入っていること。
+    #[test]
+    fn value_cell_padding_keeps_the_vertical_zero_and_restores_only_horizontal_inset() {
+        let dims = Dimensions::default();
+        let padding = value_cell_padding(dims);
+        assert_eq!(padding.top, 0.0, "縦(上)は行高合わせのため0のはず");
+        assert_eq!(padding.bottom, 0.0, "縦(下)は行高合わせのため0のはず");
+        assert_eq!(padding.left, dims.spacing_xs, "横(左)の内余白が戻っていない");
+        assert_eq!(padding.right, dims.spacing_xs, "横(右)の内余白が戻っていない");
+        assert!(padding.left > 0.0, "横の内余白が0のまま(旧バグの再発)");
+    }
+
+    #[test]
+    fn name_field_padding_matches_value_cell_padding_the_same_way() {
+        let dims = Dimensions::default();
+        assert_eq!(name_field_padding(dims), value_cell_padding(dims));
+    }
+
+    /// 150%でも横内余白がスケールに追従すること(適用点は `Dimensions::scaled`
+    /// の1箇所だけ、という裁定117の不変量をここでも保つ)。
+    #[test]
+    fn value_cell_padding_scales_with_ui_scale() {
+        let dims = Dimensions::default().scaled(1.5);
+        let padding = value_cell_padding(dims);
+        assert_eq!(padding.left, Dimensions::default().spacing_xs * 1.5);
+    }
+
+    // -----------------------------------------------------------------------
+    // 裁定137: weight/ink の実使用箇所(.glyph/.ident)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn mute_glyph_uses_bold_800_weight() {
+        // `mute_glyph` 自体は `Element` を返すので font を直接読み出せない —
+        // `iced_selector::Target`(`Container`/`TextInput`/…)は style(色/font
+        // /padding)を一切運ばない実測(`tests/inspector_pixel_fence.rs` 冒頭
+        // 参照)なので、iced_test 経由でも実配線の font weight は照合できない。
+        // ここは token 側の対応(`TextWeight::Bold` = 800)を固定するだけの
+        // 薄い柵 — 実際に `.font(TextWeight::Bold.font())` へ繋がっている
+        // ことは呼び出し箇所のコードレビュー相当でしか確認できない、正直な
+        // 限界(`--screenshot` 器具は Stage+Timeline のみの手組み合成で
+        // Inspector を一切描かない — `screenshot.rs` 実測、write-set 外の
+        // finding として最終報告に記録)。
+        assert_eq!(
+            crate::tokens::TextWeight::Bold.font().weight,
+            iced::font::Weight::ExtraBold
+        );
+    }
 
     #[test]
     fn parse_number_accepts_the_mock_minus_sign() {

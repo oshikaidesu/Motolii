@@ -44,10 +44,24 @@
 //!   `iced_widget::text` を実測したが letter-spacing に相当するフィールドが
 //!   存在しない(0.14.0 時点)。新依存無しでは実装不可 — 既知の限界として
 //!   ここに書くだけに留める(token 化のしようがない)。
-//! - **border-bottom-only**: mock の `.ptitle`/`.ident`/`.sec`/`.hint` は下辺
-//!   (または上辺)だけの罫線だが、`iced_core::Border`(`border.rs` 実測)は
-//!   4辺一律にしかできない(per-edge API が無い)。現実装はコンテナ全周へ
-//!   同じ罫線を引いている — 新依存無しでは直せない、既知の限界。
+//! - **border-bottom-only**: mock の `.ptitle`/`.ident`/`.cols`/`.prow`/`.hint`
+//!   は下辺(または上辺)だけの罫線だが、`iced_core::Border`(`border.rs` 実測)
+//!   は4辺一律にしかできない(per-edge API が無い)。現実装はコンテナ全周へ
+//!   同じ罫線を引いている — 新依存無しでは直せない、既知の限界(2026-08-21
+//!   線化 pass で `.cols`/`.prow` 行にも同じ trade-off を拡張した —
+//!   `inspector_pane.rs::bordered_row`)。**`.sec` だけは例外** — mock 自体が
+//!   `.sec` に border を持たない(letter-spacing/ink だけで見出しを作る)ので、
+//!   2026-08-21 に `section_header` の背景塗り(`surface_app`)を削除し、
+//!   border も付けていない(mock どおり無地)。
+//! - **`Target::TextInput`/`Target::Container` は style(背景色・border色・
+//!   padding)を一切持たない**(`iced_selector::target::Target` 実測 — 公開
+//!   フィールドは `id`/`bounds`/`visible_bounds`/`content` のみ)。このため
+//!   hairline の色や `value_cell`/`name_field` の内余白そのものは、この柵
+//!   (widget bounds の幾何比較)では原理的に検証できない — 2026-08-21 の
+//!   線化 pass はこれらを `inspector_pane.rs` 側の純粋関数
+//!   (`value_cell_padding`/`name_field_padding`)へ切り出し、
+//!   `inspector_pane.rs::tests` でトークン値そのものを直接照合する形に
+//!   倒した(この柵の対象外として正直に記録するだけに留める)。
 //! - mock `.ptitle` の `<i>` アイコン・`<em>` 種別バッジ、`.sec` の letter-spacing
 //!   ぶんの gap(`--sp3`=6px)はこの実装では未描画(header は文言のみ) —
 //!   sp3 を消費する場所が無いので token 化していない。
