@@ -222,18 +222,24 @@ pub fn view(
         .padding([0.0, dims.spacing_m])
         .into(),
         Some(composition) => {
-            let mut rows: Vec<Element<'static, Message>> = vec![
-                background_row(composition, background_draft, dims, colors),
-                preset_row(dims, colors),
-                hint_row("書き出しにもこの背景色が乗ります", dims, colors),
-                checkerboard_row(checkerboard, dims, colors),
+            // 各行を hairline で区切る(裁定139「面色の塗り分けで区切っている
+            // 残余を全部 hairline へ置換する」を Settings へ展開)。旧実装は
+            // 行同士の区切りを何も持たず(面色でも線でもない、無地のまま
+            // 積んでいた)、Inspector の `.prow` と同格の情報行として同じ
+            // 弱い hairline ロール([`inspector_pane::border_hairline_weak`]、
+            // `tokens::Colors` 経由)を延長する — 新しい視覚言語の発明ではない。
+            let rows: Vec<Element<'static, Message>> = vec![
+                hairline_bottom(background_row(composition, background_draft, dims, colors), dims, colors),
+                hairline_bottom(preset_row(dims, colors), dims, colors),
+                hairline_bottom(hint_row("書き出しにもこの背景色が乗ります", dims, colors), dims, colors),
+                hairline_bottom(checkerboard_row(checkerboard, dims, colors), dims, colors),
+                hairline_bottom(
+                    hint_row("市松は表示だけ — 書き出しには乗りません", dims, colors),
+                    dims,
+                    colors,
+                ),
+                hairline_bottom(ui_scale_row(ui_scale, ui_scale_draft, dims, colors), dims, colors),
             ];
-            rows.push(hint_row(
-                "市松は表示だけ — 書き出しには乗りません",
-                dims,
-                colors,
-            ));
-            rows.push(ui_scale_row(ui_scale, ui_scale_draft, dims, colors));
             column(rows).into()
         }
     };
@@ -244,6 +250,30 @@ pub fn view(
             background: Some(iced::Background::Color(colors.surface_panel)),
             border: iced::Border {
                 color: colors.border_default,
+                width: dims.border_width,
+                radius: 0.0.into(),
+            },
+            ..container::Style::default()
+        })
+        .into()
+}
+
+/// 行の下 hairline(裁定139)。`inspector_pane.rs::bordered_row` と同じ
+/// trade-off(`iced_core::Border` は per-edge API が無く4辺一律にしかできない —
+/// border-bottom の近似として4辺を使う、同 doc 参照)。**`.width(Length::Fill)`
+/// をここで明示するのが本体**: `content` 側(row!)が自分の幅を宣言していなくても、
+/// 外側 container が Fill を持てば hairline は pane 全幅に伸びる(Inspector の
+/// `header`/`hint_row` と同じ実修正パターン)。
+fn hairline_bottom(
+    content: Element<'static, Message>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    container(content)
+        .width(Length::Fill)
+        .style(move |_theme| container::Style {
+            border: iced::Border {
+                color: colors.border_hairline_weak,
                 width: dims.border_width,
                 radius: 0.0.into(),
             },

@@ -226,6 +226,40 @@ pub struct Colors {
     /// 状態: 無効。正本に無いロール — `text.muted` を `surface.panel` へ 40%
     /// ブレンドして導出(text.muted より一段暗く、読めるが「押せない」と分かる)。
     pub state_disabled: Color,
+    /// hairline(弱)。**裁定142 の先行整備で `inspector_pane.rs` の
+    /// `PROW_HAIRLINE`(生 `rgba(0,0,0,.35)` リテラル)をここへ昇格**したロール —
+    /// 出典は mock `ui-scale-and-z.html` の `.prow{border-bottom:...rgba(0,0,0,.35)}`
+    /// (`.trow{border-bottom:...rgba(0,0,0,.4)}` も同系統だが、正本ロールを2本に
+    /// 割らず1本へ丸める — 裁定142「値の正本は tokens 1箇所」)。`border_default`
+    /// (不透明 `#1a1a1a` 相当、`.cols`/`.ptitle` 系の強い区切り)より薄い、
+    /// 行同士の弱い区切り。DTCG 正本(`ui/motolii-tokens`)にロールが無いので
+    /// `state_selected`/`state_disabled` と同じ「合成して1箇所に持つ」扱い
+    /// ([`fixed_wash_colors`] 参照、`Default`/`parse` の両方が同じ値を使う)。
+    pub border_hairline_weak: Color,
+    /// Timeline 明暗リズム — 時間方向(裁定148(1))。区間(秒)ごとに交互に乗せる
+    /// 白の薄い wash。出典: mock `ui-scale-and-z.html` の
+    /// `.tick{background:rgba(255,255,255,.035)}`(裁定148 doc「Ableton の拍
+    /// グリッド陰影と同型」の実装形そのもの)。区切りの手段ではない —
+    /// 読解補助の「地」の微差(§1.6)。
+    pub timeline_time_band: Color,
+    /// Timeline 明暗リズム — 行方向(裁定148(2))。レーン交互のゼブラ、奇数行
+    /// にだけ乗せる白の薄い wash。**直接の実測ソースは無い** —
+    /// [`docs/reviews/2026-08-19-flat-grammar-canon-revision.md`] が転記した
+    /// cosmic-theme の状態 α ladder(hover=0.10)を上限に、hover(操作可能性の
+    /// 合図)より弱い ambient な差にとどまるよう `timeline_time_band` と同じ
+    /// 桁の値(0.05)を採る(発明ではなく上限からの逆算、2026-08-21)。
+    pub timeline_row_zebra: Color,
+}
+
+/// [`Colors::border_hairline_weak`]/[`Colors::timeline_time_band`]/
+/// [`Colors::timeline_row_zebra`] の固定値。DTCG 正本にロールが無い3本を
+/// `Default`/`parse` の両方で同じ式にするための唯一の実装
+/// ([`derive_state_colors`] と同じ理由)。
+fn fixed_wash_colors() -> (Color, Color, Color) {
+    let border_hairline_weak = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.35 };
+    let timeline_time_band = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.035 };
+    let timeline_row_zebra = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.05 };
+    (border_hairline_weak, timeline_time_band, timeline_row_zebra)
 }
 
 /// `surface.raised`/`text.muted`/`surface.panel`/`action.active` から
@@ -260,6 +294,7 @@ impl Default for Colors {
         let action_active = Color::from_rgb(0.8471, 0.7098, 0.4549);
         let (state_selected, state_disabled) =
             derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
+        let (border_hairline_weak, timeline_time_band, timeline_row_zebra) = fixed_wash_colors();
         Self {
             surface_app: Color::from_rgb(0.1412, 0.1412, 0.1412),
             surface_panel,
@@ -279,6 +314,9 @@ impl Default for Colors {
             way_timeline: Color::from_rgb(0.8000, 0.5843, 0.5294),
             state_selected,
             state_disabled,
+            border_hairline_weak,
+            timeline_time_band,
+            timeline_row_zebra,
         }
     }
 }
@@ -294,6 +332,7 @@ impl Colors {
         let action_active = color_at(color, &["action", "active"])?;
         let (state_selected, state_disabled) =
             derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
+        let (border_hairline_weak, timeline_time_band, timeline_row_zebra) = fixed_wash_colors();
         Ok(Self {
             surface_app: color_at(color, &["surface", "app"])?,
             surface_panel,
@@ -313,6 +352,9 @@ impl Colors {
             way_timeline: color_at(color, &["way", "timeline"])?,
             state_selected,
             state_disabled,
+            border_hairline_weak,
+            timeline_time_band,
+            timeline_row_zebra,
         })
     }
 
@@ -855,5 +897,36 @@ mod text_weight_and_ink_tests {
         assert_eq!(Ink::Primary.resolve(&colors), colors.text_primary);
         assert_eq!(Ink::Secondary.resolve(&colors), colors.text_secondary);
         assert_eq!(Ink::Muted.resolve(&colors), colors.text_muted);
+    }
+}
+
+#[cfg(test)]
+mod hairline_and_rhythm_wash_tests {
+    use super::Colors;
+
+    /// **本命**: `border_hairline_weak`(旧 `inspector_pane::PROW_HAIRLINE`)が
+    /// tokens 側へ昇格していて、`Default`/`parse` の両経路で同じ黒 35% wash に
+    /// なること(裁定142 の先行整備 — 2箇所で別の値を発明しない)。
+    #[test]
+    fn border_hairline_weak_is_a_black_alpha_35_wash() {
+        let colors = Colors::default();
+        assert_eq!(colors.border_hairline_weak.r, 0.0);
+        assert_eq!(colors.border_hairline_weak.g, 0.0);
+        assert_eq!(colors.border_hairline_weak.b, 0.0);
+        assert!((colors.border_hairline_weak.a - 0.35).abs() < 1e-6);
+    }
+
+    /// Timeline 明暗リズム(裁定148)の2ロールは、hairline と混同しない**白**の
+    /// 薄い wash であること(区切り=黒hairline、リズム=白wash — 見て区別が
+    /// つく、§1.6 の両立整理)。
+    #[test]
+    fn timeline_rhythm_washes_are_white_and_distinct_from_the_hairline() {
+        let colors = Colors::default();
+        for wash in [colors.timeline_time_band, colors.timeline_row_zebra] {
+            assert_eq!(wash.r, 1.0);
+            assert_eq!(wash.g, 1.0);
+            assert_eq!(wash.b, 1.0);
+            assert!(wash.a > 0.0 && wash.a < 0.35, "hairline と紛れない薄さのはず");
+        }
     }
 }

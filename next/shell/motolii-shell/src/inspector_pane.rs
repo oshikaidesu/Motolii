@@ -529,20 +529,6 @@ use iced::widget::{
 };
 use iced::{Element, Length};
 
-/// mock `.prow`(値行)の border-bottom 色。生の CSS リテラル `rgba(0,0,0,.35)`
-/// — `Colors` の意味色ロールには対応が無い(`ui/motolii-tokens` の DTCG 正本は
-/// この lane の write-set 外なので新ロールを追加しない)。`.cols`/header 等が
-/// 使う不透明 `#1a1a1a`(`Colors::border_default` と同値)より薄い、行同士の
-/// 弱い区切り(裁定137「区切りは面でなく線」)。
-// `pub(crate)`: `screenshot.rs` の検分器具が同じ hairline 色を再利用する
-// (発注書「同じ tokens・同じ読み口から描く」— 別の rgba リテラルを新規発明しない)。
-pub(crate) const PROW_HAIRLINE: iced::Color = iced::Color {
-    r: 0.0,
-    g: 0.0,
-    b: 0.0,
-    a: 0.35,
-};
-
 /// mock の `.cols`/`.prow` 系の行の border-bottom を模す共通ラッパー(裁定137
 /// 「区切りは面でなく線」・裁定139「面色の塗り分けで区切っている残余を
 /// hairline へ置換する」)。padding・固定高・pane 全幅は**ここ(外側
@@ -841,8 +827,9 @@ fn transform_row(
     .align_y(iced::alignment::Vertical::Center);
 
     // mock `.prow{border-bottom:var(--line) solid rgba(0,0,0,.35)}` — `.cols`
-    // より薄い hairline。
-    bordered_row(content.into(), dims, PROW_HAIRLINE)
+    // より薄い hairline(裁定142 の先行整備で `tokens::Colors::border_hairline_weak`
+    // へ昇格済み)。
+    bordered_row(content.into(), dims, colors.border_hairline_weak)
 }
 
 /// 発注書「読み取り専用値は編集セルと同一形状で色だけ落とす」を1箇所で守る —
@@ -1136,7 +1123,7 @@ fn attrs_section(attrs: &AttrsProjection, dims: Dimensions, colors: Colors) -> E
     // `.prow` 系の行として同じ hairline を使う(mock 断片には Blend 行自体は
     // 無いが、`.prow` の row grammar をそのまま延長する — 発注書 NON-GOALS に
     // ある「新しい視覚言語の発明」ではなく、既存 grammar の適用)。
-    let blend_row = bordered_row(blend_content.into(), dims, PROW_HAIRLINE);
+    let blend_row = bordered_row(blend_content.into(), dims, colors.border_hairline_weak);
 
     column![section_header("ATTRS", dims, colors), blend_row].into()
 }

@@ -921,6 +921,14 @@ impl Shell {
         self.checkerboard
     }
 
+    /// Settings パネルの開閉状態。**screenshot 器具専用**の読み口
+    /// (`checkerboard_enabled` と同じ形) — `--settings-open` CLI フラグ
+    /// (`main.rs`)経由で `Message::ToggleSettingsPanel` を実際に通した後の
+    /// 状態を screenshot.rs が読み、Settings 領域を描くかどうかを分岐する。
+    pub fn settings_panel_open(&self) -> bool {
+        self.settings_panel_open
+    }
+
     /// 描き上がった Stage フレームの生 RGBA。**常に背景込みの export 真値**
     /// (`Engine::render_frame`)— 市松トグルで一切変わらない。**screenshot
     /// 器具専用**(`screenshot.rs`)— 通常描画は `image::Handle` を持つ
@@ -1035,10 +1043,17 @@ impl Shell {
             .into()
     }
 
+    /// shell chrome の線化(裁定137/139 の Inspector 以外の面への展開)。
+    /// 旧実装はこの帯にコンテナが無く、地(背景)も境界(hairline)も持たない
+    /// 生の `row!` だった — 帯の下の Stage/Inspector 行とは `spacing_m` の
+    /// gap だけで離れており「面色の塗り分けで区切る」違反ではなかったが、
+    /// 帯自身が「パネル」だと分かる縁を持っていなかった。Timeline の `.tp`
+    /// (transport 帯、background=panel + border-bottom hairline)と同じ
+    /// grammar をここへも延長する — 新しい視覚言語の発明ではない。
     fn header(&self) -> Element<'_, Message> {
         let dims = self.dims();
         let colors = self.tokens.colors;
-        row![
+        let buttons = row![
             button(text("Undo").size(dims.body_text))
                 .style(move |_theme, status| button_style(dims, colors, status))
                 .on_press_maybe(self.doc.can_undo().then_some(Message::Undo)),
@@ -1058,9 +1073,23 @@ impl Shell {
                 .on_press(Message::ToggleSettingsPanel),
         ]
         .spacing(dims.spacing_m)
-        .height(Length::Fixed(dims.panel_header_height))
-        .align_y(iced::alignment::Vertical::Center)
-        .into()
+        .align_y(iced::alignment::Vertical::Center);
+
+        container(buttons)
+            .width(Length::Fill)
+            .height(Length::Fixed(dims.panel_header_height))
+            .padding([0.0, dims.spacing_s])
+            .align_y(iced::alignment::Vertical::Center)
+            .style(move |_theme| container::Style {
+                background: Some(iced::Background::Color(colors.surface_panel)),
+                border: iced::Border {
+                    color: colors.border_default,
+                    width: dims.border_width,
+                    radius: 0.0.into(),
+                },
+                ..container::Style::default()
+            })
+            .into()
     }
 
     /// 採番の正本は store 側([`StoreView::next_layer_id`])。**墓標を含む最大 id + 1**
@@ -1316,6 +1345,11 @@ fn transport<'a>(
     .into()
 }
 
+/// shell chrome の線化(裁定137/139)。旧実装は帯に境界を一切持たない生の
+/// `text` で、Stage/Timeline との違いが `spacing_m` の gap だけに頼っていた。
+/// `inspector_pane.rs::hint_row`(footer 注記、border のみ・背景は塗らない)
+/// と同じ grammar をそのまま延長する — status 帯も「今どこからが summary か」
+/// を線で示す。
 fn status_band<'a>(
     status: Option<&str>,
     doc: &Document,
@@ -1332,7 +1366,18 @@ fn status_band<'a>(
             colors.text_muted,
         ),
     };
-    text(message).size(dims.caption_text).color(color).into()
+    container(text(message).size(dims.caption_text).color(color))
+        .width(Length::Fill)
+        .padding([dims.spacing_xs, dims.spacing_m])
+        .style(move |_theme| container::Style {
+            border: iced::Border {
+                color: colors.border_default,
+                width: dims.border_width,
+                radius: 0.0.into(),
+            },
+            ..container::Style::default()
+        })
+        .into()
 }
 
 /// header の3ボタン共通スタイル。**意味色ロール経由**(raw 値の直書き禁止) —

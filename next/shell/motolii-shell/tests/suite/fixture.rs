@@ -198,7 +198,7 @@ fn to_u8(color: iced::Color) -> [u8; 3] {
 /// 両フラグが偽のまま fail する。
 ///
 /// 実装後は `inspector_pane.rs` と同じ tokens(`surface_panel`=pane 地・
-/// `surface_app`=値セルの窪み・`PROW_HAIRLINE`/`border_default`=区切り線)で
+/// `surface_app`=値セルの窪み・`border_hairline_weak`/`border_default`=区切り線)で
 /// 描いた領域から、(a) hairline 色の画素・(b) 値セルの窪み(`surface_app`、
 /// pane 地の `surface_panel` とは異なる面色)の両方を実測する。
 #[test]
@@ -243,7 +243,7 @@ fn screenshot_draws_the_inspector_region_with_hairlines_and_value_cell_insets() 
             } else if rgb != raised {
                 // panel/inset/raised のどれでもない画素 = hairline(不透明
                 // `border_default` か、`surface_panel` へ blend した
-                // `PROW_HAIRLINE` のどちらか)。
+                // `border_hairline_weak` のどちらか)。
                 found_hairline = true;
             }
         }
