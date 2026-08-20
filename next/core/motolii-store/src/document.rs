@@ -1,5 +1,6 @@
 //! Document 本体 — 書き口1本 + undo/redo。
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -394,6 +395,52 @@ pub(crate) enum TransientKey {
     Camera(PropertyId),
 }
 
+/// 解析済み `PropertySource`(= `serde_json` で `TrackJson` を解いた結果)の
+/// revision 鍵キャッシュ(裁定140)。
+///
+/// **`track()` コストの97%が serde_json 解析だった**(2026-08-21 計測、
+/// `next/reference/KNOWN.md`)— `KeyframeTrack` まるごと1 component にした代償
+/// (裁定11)が投影の読み側に出ていた。置き場は front ではなく**単一 writer(store)の
+/// 読み口の裏**一択(R2 probe の目的そのもの、裁定140 の doc 参照)。
+///
+/// 無効化は [`Document::revision`] との比較で機械的に行う — **手動 invalidate 口は
+/// 持たない**。`apply` の後に呼び手が何かを呼び忘れて古い値が残る事故を型で塞ぐ。
+/// キー(`TransientKey`)は transient overlay と全く同じ「layer property か camera
+/// property か」の scope なので、新しい鍵の形を増やさずに使い回す。
+#[derive(Default)]
+pub(crate) struct TrackCache {
+    revision: Option<Revision>,
+    entries: HashMap<TransientKey, Option<PropertySource>>,
+}
+
+impl TrackCache {
+    /// `current` が前回と違えば中身を丸ごと捨てる。呼び手ごとに古さを判定させず、
+    /// ここへ一括する。
+    fn sync(&mut self, current: &Revision) {
+        if self.revision.as_ref() != Some(current) {
+            self.entries.clear();
+            self.revision = Some(current.clone());
+        }
+    }
+
+    /// `key` が無ければ `miss` を呼んで解析し、結果をキャッシュしてから返す。
+    /// RefCell の borrow を1回に畳むため get/put を分けない。
+    pub(crate) fn get_or_try_insert_with(
+        &mut self,
+        current: &Revision,
+        key: TransientKey,
+        miss: impl FnOnce() -> Result<Option<PropertySource>, StoreError>,
+    ) -> Result<Option<PropertySource>, StoreError> {
+        self.sync(current);
+        if let Some(cached) = self.entries.get(&key) {
+            return Ok(cached.clone());
+        }
+        let value = miss()?;
+        self.entries.insert(key, value.clone());
+        Ok(value)
+    }
+}
+
 pub struct Document {
     pub(crate) db: EntityDb,
     /// 現在の edit 位置。0 = 空の Document。
@@ -416,6 +463,11 @@ pub struct Document {
     /// overlay の世代。[`Self::display_revision`] に混ぜて再描画のためだけに使う。
     /// `revision()` には混ぜない(履歴の意味を変えないため)。
     transient_generation: u64,
+    /// 解析済み track の revision 鍵キャッシュ(裁定140)。`StoreView` は `&self` の
+    /// 借用しか持たないので `RefCell` — 可変なのはキャッシュだけで、Document の
+    /// 意味上の状態(履歴・overlay)は今までどおり `apply`/`set_transient` 経由でしか
+    /// 動かない。
+    track_cache: RefCell<TrackCache>,
 }
 
 impl Default for Document {
@@ -438,6 +490,7 @@ impl Document {
             floor: 0,
             transient: HashMap::new(),
             transient_generation: 0,
+            track_cache: RefCell::new(TrackCache::default()),
         }
     }
 
@@ -456,7 +509,13 @@ impl Document {
 
     /// 読み手が受け取る唯一の物。可変ハンドルは外へ出さない。
     pub fn view(&self) -> StoreView<'_> {
-        StoreView::new(&self.db, self.head, &self.transient)
+        StoreView::new(
+            &self.db,
+            self.head,
+            &self.transient,
+            self.revision(),
+            &self.track_cache,
+        )
     }
 
     pub fn edit_head(&self) -> i64 {

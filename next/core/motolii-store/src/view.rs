@@ -1,5 +1,6 @@
 //! 読み口 — front が受け取る唯一の物。可変な口を1つも持たない。
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use motolii_core::RationalTime;
@@ -13,24 +14,33 @@ use crate::components::{
     descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes, descriptor_slots,
     descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
-use crate::document::TransientKey;
+use crate::document::{TrackCache, TransientKey};
 use crate::slot::PropertySource;
 use crate::{
     property, Composition, Document, EffectInstance, LayerAttrs, LayerId, LayerMeta,
-    LayerPlacement, Marker, Mask, PropertyId, ResolvedLayer, ResolvedMask, Shape, Slot, SlotId,
-    StoreError, TextDocument, EDIT_TIMELINE,
+    LayerPlacement, Marker, Mask, PropertyId, ResolvedLayer, ResolvedMask, Revision, Shape, Slot,
+    SlotId, StoreError, TextDocument, EDIT_TIMELINE,
 };
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
 ///
 /// `transient` は例外的に「独自の状態」に見えるが、これは Document が持つ overlay
 /// への**借用**であって、`StoreView` 自身は何も所有しない(overlay の正本は
-/// `Document::transient` のまま、ここはそれを読むだけ)。
-#[derive(Clone, Copy)]
+/// `Document::transient` のまま、ここはそれを読むだけ)。`track_cache` も同様 —
+/// 解析済み track の**正本は `Document::track_cache`**、ここはその借用越しに
+/// 読み書き(`RefCell`)するだけで、`StoreView` 自身が新しい状態を持つわけではない
+/// (裁定140)。
+///
+/// `revision` を値で持つため(`Revision` は `ChunkStoreGeneration` を含み `Copy` では
+/// ない)、以前の `Copy` 派生は落とした。呼び手は全員 `&StoreView<'_>` で受け取って
+/// いるので(shell/engine/export/audio、2026-08-21 確認)実害は無い。
+#[derive(Clone)]
 pub struct StoreView<'a> {
     db: &'a EntityDb,
     at: i64,
     transient: &'a HashMap<TransientKey, Value>,
+    revision: Revision,
+    track_cache: &'a RefCell<TrackCache>,
 }
 
 impl<'a> StoreView<'a> {
@@ -38,8 +48,27 @@ impl<'a> StoreView<'a> {
         db: &'a EntityDb,
         at: i64,
         transient: &'a HashMap<TransientKey, Value>,
+        revision: Revision,
+        track_cache: &'a RefCell<TrackCache>,
     ) -> Self {
-        Self { db, at, transient }
+        Self {
+            db,
+            at,
+            transient,
+            revision,
+            track_cache,
+        }
+    }
+
+    /// `path`/`property` を track キャッシュの鍵(`TransientKey`)へ写す。transient
+    /// overlay と全く同じ scope の切り方(layer property か camera property か)を
+    /// 使い回す — 鍵の形をもう1種類増やさない。
+    fn cache_key(path: &EntityPath, property: &PropertyId) -> Option<TransientKey> {
+        if *path == Document::composition_path() {
+            Some(TransientKey::Camera(property.clone()))
+        } else {
+            Some(TransientKey::Layer(layer_id_of(path)?, property.clone()))
+        }
     }
 
     fn query(&self) -> LatestAtQuery {
@@ -186,6 +215,29 @@ impl<'a> StoreView<'a> {
     /// layer の property もカメラの property(裁定116)も同じ読み方(どの entity の
     /// component を latest-at で引くか)しか違わないので、経路を1本に保つ。
     fn source_at_path(
+        &self,
+        path: &EntityPath,
+        property: &PropertyId,
+    ) -> Result<Option<PropertySource>, StoreError> {
+        // **解析済み track の revision 鍵キャッシュ**(裁定140)。`track()` コストの
+        // 97%が serde_json 解析だった(2026-08-21 計測、KNOWN.md)ので、ここで
+        // parse 済みの `PropertySource` を revision ごとに再利用する。無効化は
+        // `TrackCache::sync` が revision 比較で機械的に行う — 手動 invalidate 口は
+        // 無い。鍵を作れない path(layer でも camera でもない、現状の呼び手には
+        // 存在しない)はキャッシュを経由せず素で読む。
+        let Some(key) = Self::cache_key(path, property) else {
+            return self.parse_source_at_path(path, property);
+        };
+        self.track_cache.borrow_mut().get_or_try_insert_with(
+            &self.revision,
+            key,
+            || self.parse_source_at_path(path, property),
+        )
+    }
+
+    /// `source_at_path` の素読み本体(キャッシュ未経由)。`TrackJson` を
+    /// `serde_json` で `PropertySource` へ解く、この crate で唯一の parse 経路。
+    fn parse_source_at_path(
         &self,
         path: &EntityPath,
         property: &PropertyId,
