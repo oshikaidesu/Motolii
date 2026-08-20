@@ -29,6 +29,8 @@
 
 use image::{Rgba, RgbaImage};
 
+use crate::inspector_pane::{self, SelectionProjection};
+use crate::tokens::{Colors, Dimensions};
 use crate::{settings_pane, timeline_pane, Shell};
 
 fn to_rgba(color: iced::Color, alpha: f32) -> Rgba<u8> {
@@ -88,6 +90,18 @@ struct Rect {
     h: f32,
 }
 
+/// 矩形の4辺だけを塗る(`iced_core::Border` の実装どおり — per-edge API が無く
+/// 4辺一律にしかできない、`inspector_pane.rs::bordered_row` の doc 参照)。
+/// Inspector の hairline はこの形で再現する — `stroke_v` は縦線1本(playhead/
+/// marker)専用なので使い回さない。
+fn stroke_rect(canvas: &mut RgbaImage, rect: Rect, width_px: f32, color: Rgba<u8>) {
+    let w = width_px.max(1.0);
+    fill_rect(canvas, rect.x, rect.y, rect.w, w, color); // top
+    fill_rect(canvas, rect.x, rect.y + rect.h - w, rect.w, w, color); // bottom
+    fill_rect(canvas, rect.x, rect.y, w, rect.h, color); // left
+    fill_rect(canvas, rect.x + rect.w - w, rect.y, w, rect.h, color); // right
+}
+
 /// Stage の RGBA(comp 解像度)を、letterbox を保ったまま矩形へ最近傍でブリットする
 /// (D8: letterbox は neutral — 呼び出し側が先に背景を塗ってから呼ぶ)。
 fn blit_letterboxed(canvas: &mut RgbaImage, src: &[u8], src_w: u32, src_h: u32, dst: Rect) {
@@ -127,6 +141,215 @@ fn blit_letterboxed(canvas: &mut RgbaImage, src: &[u8], src_w: u32, src_h: u32, 
 
 const CANVAS_WIDTH: u32 = 1600;
 
+// ---------------------------------------------------------------------------
+// Inspector 領域 — `inspector_pane.rs` と同じ tokens・同じ読み口
+// (`Shell::inspector_selection`)から、寸法・区切り・面色だけを再現する。
+// **文字は描かない**(このファイル冒頭の「正直な限界」と同じ理由 — 新依存
+// 禁止)。ident 帯・column header 行・TRANSFORM/APPEARANCE/ATTRS の
+// section spacer・property 行(hairline + 3値セル)・hint 行を、矩形と
+// hairline 罫線だけで積む。
+// ---------------------------------------------------------------------------
+
+/// Inspector 領域の左端 x 座標。既存の Stage/Timeline 列(`CANVAS_WIDTH` 幅、
+/// 手つかず)のすぐ右に `spacing_m`(pane 間の gap、`Shell::view` の
+/// `row![inspector, stage_pane].spacing(dims.spacing_m)` と同じ token)を
+/// 空けて置く。
+pub fn inspector_region_x(dims: Dimensions) -> f32 {
+    CANVAS_WIDTH as f32 + dims.spacing_m
+}
+
+/// Inspector 領域の上端 y 座標。`Shell::view` の実レイアウトでは
+/// `row![inspector, stage_pane]` が同じ高さを分け合う(inspector は Stage と
+/// 同じ行に同居する)ので、この instrument でも Stage と同じ y から始める
+/// (header 帯の直下)。
+pub fn inspector_region_top(dims: Dimensions) -> f32 {
+    dims.spacing_l + dims.panel_header_height + dims.spacing_m
+}
+
+/// ident 帯の高さ。実 widget は `column![name_field, subtitle].spacing(0.0)`
+/// を `padding([spacing_s, spacing_m])` で包む(`ident_band` 参照) — 文字を
+/// 描かないこの instrument では、行高の近似(`body_text` + `caption_text` +
+/// 上下 `spacing_s`)で矩形の高さだけ再現する。
+fn inspector_ident_height(dims: Dimensions) -> f32 {
+    dims.spacing_s * 2.0 + dims.body_text + dims.caption_text
+}
+
+/// hint 行の高さ。実 widget は `padding([spacing_xs, spacing_m])` (`hint_row`
+/// 参照) — 同じ近似。
+fn inspector_hint_height(dims: Dimensions) -> f32 {
+    dims.spacing_xs * 2.0 + dims.caption_text
+}
+
+/// Inspector 領域全体の高さ。`selection` が `None`(選択なし)なら
+/// `empty_state` 相当(header 帯だけ)、`Some` なら
+/// `selected_body`(`inspector_pane.rs`)と同じ行の並びを積む —
+/// ident 帯 → column header 行 → TRANSFORM(4行: Position/Scale/Rotation/
+/// Anchor)→ APPEARANCE(1行: Opacity)→ ATTRS(Blend 1行)→ hint 行。
+/// 各 section 見出し自体は背景/border を持たない(裁定137/139)ので、
+/// 高さだけ足す spacer として数える。
+pub fn inspector_content_height(dims: Dimensions, selection: Option<&SelectionProjection>) -> f32 {
+    let header_h = dims.inspector_section_header_height;
+    let Some(selection) = selection else {
+        return header_h;
+    };
+    let transform_rows = selection
+        .transform
+        .iter()
+        .filter(|row| row.label != "Opacity")
+        .count() as f32;
+    let opacity_rows = selection
+        .transform
+        .iter()
+        .filter(|row| row.label == "Opacity")
+        .count() as f32;
+    let section_h = dims.inspector_section_header_height;
+    let row_h = dims.inspector_row_height;
+
+    header_h
+        + inspector_ident_height(dims)
+        + row_h // column header 行
+        + section_h // "TRANSFORM"
+        + transform_rows * row_h
+        + section_h // "APPEARANCE"
+        + opacity_rows * row_h
+        + section_h // "ATTRS"
+        + row_h // Blend 行
+        + inspector_hint_height(dims)
+}
+
+/// `shell` の実際の選択(`Shell::inspector_selection` — `render` と同じ読み口)
+/// から Inspector 領域の高さを引く。テストが `render` と同じ数値を二重に
+/// 書かずに済むための口。
+pub fn inspector_region_height(shell: &Shell) -> f32 {
+    inspector_content_height(shell.dims(), shell.inspector_selection().as_ref())
+}
+
+/// property 行1本(`inspector_pane.rs::transform_row` と同じ形): PROW_HAIRLINE
+/// の枠 + 3値セル(常に `surface_app` 背景 — absent/animated/editable のどれでも
+/// `value_cell`/`boxed_value`/`blank_value_cell` は同じ箱色を使う、実装参照)。
+/// Key 列(`reserved_glyph`)は Q0 により中身も枠も無いので描かない。
+fn draw_property_row(canvas: &mut RgbaImage, dims: Dimensions, colors: Colors, x: f32, y: f32, width: f32) {
+    let row_h = dims.inspector_row_height;
+    stroke_rect(
+        canvas,
+        Rect { x, y, w: width, h: row_h },
+        dims.border_width,
+        to_rgba(inspector_pane::PROW_HAIRLINE, inspector_pane::PROW_HAIRLINE.a),
+    );
+
+    let cell_w = dims.inspector_value_width;
+    let cell_h = (row_h - dims.spacing_s).max(1.0);
+    let cell_y = y + (row_h - cell_h) / 2.0;
+    let gap = dims.spacing_xs;
+    let block_w = cell_w * 3.0 + gap * 2.0 + gap + dims.inspector_glyph_width;
+    let mut cx = x + width - dims.spacing_m - block_w;
+    for _ in 0..3 {
+        fill_rect(canvas, cx, cell_y, cell_w, cell_h, to_rgba(colors.surface_app, 1.0));
+        cx += cell_w + gap;
+    }
+}
+
+/// Inspector 領域全体を描く。`(x, y)` は左上、返り値は描いた高さ
+/// (`inspector_content_height` と同じ値 — 呼び手が2度計算しない)。
+fn draw_inspector(
+    canvas: &mut RgbaImage,
+    dims: Dimensions,
+    colors: Colors,
+    x: f32,
+    y: f32,
+    selection: Option<&SelectionProjection>,
+) -> f32 {
+    let width = dims.inspector_panel_width;
+    let total_h = inspector_content_height(dims, selection);
+
+    // pane 全体の背景(`inspector_pane::view` の外側 container と同じ
+    // `surface_panel`)+ 縁(`border_default`)。
+    fill_rect(canvas, x, y, width, total_h, to_rgba(colors.surface_panel, 1.0));
+    stroke_rect(
+        canvas,
+        Rect { x, y, w: width, h: total_h },
+        dims.border_width,
+        to_rgba(colors.border_default, 1.0),
+    );
+
+    let mut cy = y;
+
+    // header("Inspector" タイトル帯) — 背景は panel 地のまま、縁だけ持つ。
+    let header_h = dims.inspector_section_header_height;
+    stroke_rect(
+        canvas,
+        Rect { x, y: cy, w: width, h: header_h },
+        dims.border_width,
+        to_rgba(colors.border_default, 1.0),
+    );
+    cy += header_h;
+
+    let Some(selection) = selection else {
+        // `empty_state` 相当 — これ以上描く行が無い。
+        return total_h;
+    };
+
+    // ident 帯 — `surface_raised` 背景 + `border_default` 縁。
+    let ident_h = inspector_ident_height(dims);
+    fill_rect(canvas, x, cy, width, ident_h, to_rgba(colors.surface_raised, 1.0));
+    stroke_rect(
+        canvas,
+        Rect { x, y: cy, w: width, h: ident_h },
+        dims.border_width,
+        to_rgba(colors.border_default, 1.0),
+    );
+    cy += ident_h;
+
+    // column header 行(`.cols`)— `border_default` の不透明 hairline。
+    let col_h = dims.inspector_row_height;
+    stroke_rect(
+        canvas,
+        Rect { x, y: cy, w: width, h: col_h },
+        dims.border_width,
+        to_rgba(colors.border_default, 1.0),
+    );
+    cy += col_h;
+
+    // TRANSFORM section spacer(背景/border 無し、高さだけ)+ 行本体。
+    // 行の中身(値)は読まない — この instrument は箱の寸法だけ検分する。
+    cy += dims.inspector_section_header_height;
+    let transform_rows = selection.transform.iter().filter(|r| r.label != "Opacity").count();
+    for _ in 0..transform_rows {
+        draw_property_row(canvas, dims, colors, x, cy, width);
+        cy += dims.inspector_row_height;
+    }
+
+    // APPEARANCE section spacer + Opacity 行。
+    cy += dims.inspector_section_header_height;
+    let opacity_rows = selection.transform.iter().filter(|r| r.label == "Opacity").count();
+    for _ in 0..opacity_rows {
+        draw_property_row(canvas, dims, colors, x, cy, width);
+        cy += dims.inspector_row_height;
+    }
+
+    // ATTRS section spacer + Blend 行(hairline のみ、値セルは無い)。
+    cy += dims.inspector_section_header_height;
+    let blend_h = dims.inspector_row_height;
+    stroke_rect(
+        canvas,
+        Rect { x, y: cy, w: width, h: blend_h },
+        dims.border_width,
+        to_rgba(inspector_pane::PROW_HAIRLINE, inspector_pane::PROW_HAIRLINE.a),
+    );
+    cy += blend_h;
+
+    // hint 行 — `border_default` 縁のみ。
+    let hint_h = inspector_hint_height(dims);
+    stroke_rect(
+        canvas,
+        Rect { x, y: cy, w: width, h: hint_h },
+        dims.border_width,
+        to_rgba(colors.border_default, 1.0),
+    );
+
+    total_h
+}
+
 /// `shell.view()` の並び(header/stage/timeline/transport/status、`spacing_m` の
 /// 間隔・`spacing_l` の全体 padding)を、Tokens の実値でそのまま再現する。
 pub fn render(shell: &Shell) -> RgbaImage {
@@ -140,6 +363,7 @@ pub fn render(shell: &Shell) -> RgbaImage {
     let composition = shell.composition();
     let duration_frames = composition.as_ref().map(|c| c.duration_frames).unwrap_or(0);
     let fps = composition.as_ref().map(|c| c.fps);
+    let inspector_selection = shell.inspector_selection();
 
     let padding = dims.spacing_l;
     let gap = dims.spacing_m;
@@ -159,9 +383,20 @@ pub fn render(shell: &Shell) -> RgbaImage {
     let total_h =
         padding * 2.0 + header_h + stage_h + timeline_h + transport_h + status_h + gap * 4.0;
 
+    // Inspector 領域(Stage/Timeline 列の右) — 幅・高さの両方で canvas を広げる。
+    // `Shell::view` の実レイアウトでは Inspector は Stage と同じ行に同居する
+    // (`row![inspector, stage_pane]`)が、この instrument は元々 Stage/Timeline を
+    // 1列の手組み合成で描いており、その列を左に残したまま右へ新しい列を足す
+    // (発注書 EXACT TARGET 1「右側に」)。
+    let inspector_x = inspector_region_x(dims);
+    let inspector_top = inspector_region_top(dims);
+    let inspector_h = inspector_content_height(dims, inspector_selection.as_ref());
+    let canvas_width = (inspector_x + dims.inspector_panel_width).round().max(CANVAS_WIDTH as f32) as u32;
+    let canvas_height = total_h.max(inspector_top + inspector_h + padding);
+
     let mut canvas = RgbaImage::from_pixel(
-        CANVAS_WIDTH,
-        total_h.round().max(1.0) as u32,
+        canvas_width,
+        canvas_height.round().max(1.0) as u32,
         to_rgba(colors.surface_app, 1.0),
     );
 
@@ -342,6 +577,15 @@ pub fn render(shell: &Shell) -> RgbaImage {
         dims.spacing_xs,
         status_h,
         to_rgba(status_color, 1.0),
+    );
+
+    draw_inspector(
+        &mut canvas,
+        dims,
+        colors,
+        inspector_x,
+        inspector_top,
+        inspector_selection.as_ref(),
     );
 
     canvas
