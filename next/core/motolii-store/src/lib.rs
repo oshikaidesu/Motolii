@@ -33,7 +33,7 @@ mod text;
 mod view;
 
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, Matte, MatteMode};
-pub use document::{Document, Intent, LayerId, PropertyId, Revision};
+pub use document::{DisplayRevision, Document, Intent, LayerId, PropertyId, Revision};
 pub use effect::{EffectId, EffectInstance};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use marker::Marker;

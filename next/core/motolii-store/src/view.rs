@@ -1,5 +1,7 @@
 //! 読み口 — front が受け取る唯一の物。可変な口を1つも持たない。
 
+use std::collections::HashMap;
+
 use motolii_core::RationalTime;
 use motolii_eval::{KeyframeTrack, Value};
 use re_chunk_store::LatestAtQuery;
@@ -11,6 +13,7 @@ use crate::components::{
     descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes, descriptor_slots,
     descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
+use crate::document::TransientKey;
 use crate::slot::PropertySource;
 use crate::{
     property, Composition, Document, EffectInstance, LayerAttrs, LayerId, LayerMeta,
@@ -19,15 +22,24 @@ use crate::{
 };
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
+///
+/// `transient` は例外的に「独自の状態」に見えるが、これは Document が持つ overlay
+/// への**借用**であって、`StoreView` 自身は何も所有しない(overlay の正本は
+/// `Document::transient` のまま、ここはそれを読むだけ)。
 #[derive(Clone, Copy)]
 pub struct StoreView<'a> {
     db: &'a EntityDb,
     at: i64,
+    transient: &'a HashMap<TransientKey, Value>,
 }
 
 impl<'a> StoreView<'a> {
-    pub(crate) fn new(db: &'a EntityDb, at: i64) -> Self {
-        Self { db, at }
+    pub(crate) fn new(
+        db: &'a EntityDb,
+        at: i64,
+        transient: &'a HashMap<TransientKey, Value>,
+    ) -> Self {
+        Self { db, at, transient }
     }
 
     fn query(&self) -> LatestAtQuery {
@@ -275,6 +287,13 @@ impl<'a> StoreView<'a> {
         property: &PropertyId,
         t: RationalTime,
     ) -> Result<Option<Value>, StoreError> {
+        // **overlay が最優先**(タスク#20 の恒久解)。track の評価より先に見る —
+        // ドラッグ中は時刻に関わらずこの固定値を返す(overlay は「評価済みの値」を
+        // 直接持つので、ここでは `track.eval(t)` を呼ばない)。`track()`/`camera_track()`
+        // はこの overlay を一切見ない(裁定134 の線引きのまま — 生の意味だけを返す)。
+        if let Some(value) = self.transient_value_at(path, property) {
+            return Ok(Some(value));
+        }
         match self.source_at_path(path, property)? {
             Some(PropertySource::Track(track)) => Ok(Some(track.eval(t))),
             // **スロット参照はここで解決する** — `value_at`/`camera_value_at` を
@@ -285,6 +304,19 @@ impl<'a> StoreView<'a> {
             }
             None => Ok(None),
         }
+    }
+
+    /// `path` が指す entity(layer か `/composition`)に、`property` の overlay が
+    /// 置かれていればその値を返す。**layer をまたいで誤爆しない**よう、`path` から
+    /// layer/カメラの scope を復元してから overlay の key と突き合わせる
+    /// (`TransientKey` の doc 参照)。
+    fn transient_value_at(&self, path: &EntityPath, property: &PropertyId) -> Option<Value> {
+        let key = if *path == Document::composition_path() {
+            TransientKey::Camera(property.clone())
+        } else {
+            TransientKey::Layer(layer_id_of(path)?, property.clone())
+        };
+        self.transient.get(&key).cloned()
     }
 
     /// comp 時刻の値。**補間の意味は `motolii-eval` が持つ**ので、ここは呼ぶだけ。
