@@ -19,3 +19,7 @@ notify = "8"
 
 [dev-dependencies]
 motolii-testkit.workspace = true
+# タスク#15: iced_test spike + Q0横断柵。iced 0.14 と同一ラインの公式 crate
+# (upstream iced-rs/iced、workspace の fork 版ではない — fork は tester/test rev
+# 0.15.0-dev で next/ の iced 0.14 とは別線)。dev-only、shell の外へは出さない。
+iced_test = "0.14"
