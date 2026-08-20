@@ -11,6 +11,7 @@ members = [
     "core/motolii-eval",
     "core/motolii-store",
     "core/motolii-testkit",
+    "engine/motolii-audio",
     "engine/motolii-compositor",
     "engine/motolii-engine",
     "engine/motolii-export",
