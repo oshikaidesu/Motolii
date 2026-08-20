@@ -61,7 +61,10 @@ arrow = { version = "58.3", default-features = false }
 # seam 2(`max_bind_groups` の床)は「iced の device の上で re_renderer を回す」ための
 # ものだった。裁定44 で Stage を CPU 経路にしたので要らない。
 # seam 1(web-sys の完全一致解除)が要るかどうかは解決してみて決める。
-iced = { version = "0.14", features = ["wgpu", "advanced", "image"] }
+iced = { version = "0.14", features = ["wgpu", "advanced", "image", "canvas"] }
+# 依存グラフには re_renderer 経由で既に入っている(裁定117 が許す direct 昇格)。
+# デザイン値の外出しの debug watch(`motolii-shell/src/tokens.rs`)だけが使う。
+notify = "8"
 
 # ---------------------------------------------------------------------------
 # Motolii 自身(旧 workspace からの移植。再実装ではない)
