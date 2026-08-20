@@ -54,3 +54,4 @@
 - **rodio / kira は採らない** — cpal だけが生のコールバックタイムスタンプ(`OutputCallbackInfo::timestamp()`)を露出。高レベル crate はクロック所有権の契約(D4/D5)を守れない
 - **M8 の音声クロック→playhead は旧 `motolii-transport` に設計済み・実働済み**(audio-clock-master: `frames_supplied` − `device_wait`、wall-clock 不使用、無音補填で論理位置を進めない)。移植元として名指し可
 - **export の音声 mux は現 motolii-media で解決済み**(`mux_soundtrack` / `mux_mixed_pcm`)。音声束は PCM を作るだけでよい
+- **iced×リアルタイム音声は nih-plug エコシステムで実証済み**(`nih_plug_iced` — VST3/CLAP プラグイン GUI adapter)。ただし nih-plug は「プラグインを作る側」でありホスト側には使えない。VST ホスティング自体は GOALS の除外のまま(利用者確認 2026-08-20)
