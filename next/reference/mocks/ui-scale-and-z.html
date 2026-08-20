@@ -1,0 +1,154 @@
+<meta charset="utf-8">
+<title>ui-scale-and-z</title>
+<style>
+/* ============================================================
+   トンマナを決める定数は これ 1 本だけ。1% 刻みで動かせる。
+   他の全寸法は --s からの導出で、局所 px を持たない。
+   ============================================================ */
+:root{
+  --s: 1.00;                       /* ← ここだけ動かす(1% = 0.01) */
+
+  /* 文字: 正典バンド {8,9,11,12} */
+  --t-micro: calc(8  * var(--s) * 1px);
+  --t-dense: calc(9  * var(--s) * 1px);
+  --t-base:  calc(11 * var(--s) * 1px);
+  --t-title: calc(12 * var(--s) * 1px);
+  /* 格子 */
+  --row:     calc(20 * var(--s) * 1px);
+  --section: calc(26 * var(--s) * 1px);
+  --sp1: calc(2 * var(--s) * 1px);
+  --sp2: calc(4 * var(--s) * 1px);
+  --sp3: calc(6 * var(--s) * 1px);
+  --sp4: calc(8 * var(--s) * 1px);
+  --pane: calc(300 * var(--s) * 1px);
+  --hit:  calc(18 * var(--s) * 1px);
+  --line: 1px;                     /* 線だけは物理 1px 床(拡大しない) */
+
+  /* 面: 候補B(Ableton 実測整合)。地の高さは未裁定なのでここも定数1本で動く */
+  --app:#242424; --panel:#363636; --raised:#3e3e3e; --hover:#464646;
+  --bd:#5b5b5b; --ink:#b8b8b8; --ink2:#8c8c8c; --ink3:#757575; --accent:#d8b574;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#101010;font-family:-apple-system,"Helvetica Neue",sans-serif;color:var(--ink);
+     display:flex;flex-direction:column;gap:22px;padding:18px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:10px}
+.cap{font-size:13px;color:#9a9a9a}
+.pane{background:var(--panel);border:var(--line) solid #1a1a1a;width:var(--pane)}
+
+/* ---- 共通: 記号は必ず中央揃え ---- */
+.glyph{display:inline-flex;align-items:center;justify-content:center;
+       width:var(--hit);height:calc(var(--row) - 2 * var(--s) * 1px);
+       border:var(--line) solid var(--bd);font-size:var(--t-dense);color:var(--ink2);
+       font-weight:800;line-height:1}
+.glyph.on{color:var(--accent);border-color:var(--accent)}
+
+/* ---- Inspector ---- */
+.ptitle{height:var(--section);display:flex;align-items:center;gap:var(--sp3);
+        padding:0 var(--sp4);font-size:var(--t-title);border-bottom:var(--line) solid #1a1a1a}
+.ptitle i{width:calc(3 * var(--s) * 1px);height:calc(12 * var(--s) * 1px);background:#8eb086;font-style:normal}
+.ptitle em{margin-left:auto;font-size:var(--t-dense);color:var(--ink3);font-style:normal}
+.ident{display:flex;align-items:center;gap:var(--sp2);padding:var(--sp2) var(--sp4);
+       background:var(--raised);border-bottom:var(--line) solid #1a1a1a}
+.ident b{font-size:var(--t-base);font-weight:600}
+.ident s{font-size:var(--t-dense);color:var(--ink2);text-decoration:none;display:block}
+.ident .sp{margin-left:auto;display:flex;gap:var(--sp1)}
+.cols,.prow{display:grid;grid-template-columns:1fr repeat(3,calc(38 * var(--s) * 1px)) var(--hit);
+            align-items:center;gap:var(--sp1);padding:0 var(--sp4);height:var(--row)}
+.cols{font-size:var(--t-dense);color:var(--ink3);border-bottom:var(--line) solid #1a1a1a}
+.cols span,.prow .v{text-align:center}
+.cols .k,.prow .k{text-align:center}
+.sec{height:var(--section);display:flex;align-items:center;padding:0 var(--sp4);
+     font-size:var(--t-dense);color:var(--ink3);letter-spacing:.08em}
+.prow{font-size:var(--t-base);border-bottom:var(--line) solid rgba(0,0,0,.35)}
+.prow .n{display:flex;align-items:center;gap:var(--sp2)}
+.prow .v{background:var(--app);font-variant-numeric:tabular-nums;font-size:var(--t-base);
+         height:calc(var(--row) - 4 * var(--s) * 1px);display:flex;align-items:center;justify-content:center}
+.prow .v.z{color:var(--ink2)}
+.hint{padding:var(--sp1) var(--sp4);font-size:var(--t-dense);color:var(--ink3);
+      border-top:var(--line) solid #1a1a1a}
+
+/* ---- Timeline ---- */
+.tl{width:calc(560 * var(--s) * 1px);background:var(--app);border:var(--line) solid #1a1a1a}
+.tp{height:var(--section);display:flex;align-items:center;gap:var(--sp4);padding:0 var(--sp4);
+    background:var(--panel);font-size:var(--t-base);border-bottom:var(--line) solid #1a1a1a}
+.tp .tc{color:var(--accent);font-variant-numeric:tabular-nums}
+.tp em{margin-left:auto;font-size:var(--t-dense);color:var(--ink3);font-style:normal}
+.grid{position:relative}
+.tick{position:absolute;top:0;bottom:0;width:calc(70 * var(--s) * 1px);background:rgba(255,255,255,.035)}
+.ruler{height:var(--row);display:flex;font-size:var(--t-dense);color:var(--ink3);
+       border-bottom:var(--line) solid #1a1a1a;position:relative}
+.ruler b{position:absolute;top:calc(4 * var(--s) * 1px);font-weight:400;
+         font-variant-numeric:tabular-nums;padding-left:var(--sp1);border-left:var(--line) solid var(--bd)}
+.trow{height:var(--row);display:flex;align-items:center;position:relative;
+      border-bottom:var(--line) solid rgba(0,0,0,.4)}
+.thead{width:calc(150 * var(--s) * 1px);display:flex;align-items:center;gap:var(--sp2);
+       padding:0 var(--sp2);background:var(--panel);height:100%;
+       border-right:var(--line) solid #1a1a1a;font-size:var(--t-base)}
+.sw{width:calc(10 * var(--s) * 1px);height:calc(10 * var(--s) * 1px)}
+.thead .sp{margin-left:auto;display:flex;gap:calc(1 * var(--s) * 1px)}
+.clip{position:absolute;top:0;height:calc(var(--row) - 1px)}
+.name{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+</style>
+
+<div class="col">
+  <div class="cap">--s: 1.00(100%)</div>
+  <div id="a"></div>
+</div>
+<div class="col" style="--s:1.50">
+  <div class="cap">--s: 1.50(150%) — 定数1本を変えただけ</div>
+  <div id="b"></div>
+</div>
+
+<script>
+const rows = [
+  ['#6f8fb5','starter-clip', 0, 120],
+  ['#8f7fb8','starter-still', 150, 330],
+  ['#b59a6f','starter-clip', 210, 95],
+];
+function build(){
+  const insp = `
+  <div class="pane">
+    <div class="ptitle"><i></i>Inspector<em>clip</em></div>
+    <div class="ident">
+      <div><b>starter-clip</b><s>clip · 0 shared FX</s></div>
+      <div class="sp"><span class="glyph">M</span><span class="glyph on">S</span></div>
+    </div>
+    <div class="cols"><span style="text-align:left">Property</span><span>X</span><span>Y</span><span>Z</span><span class="k" style="color:var(--accent)">Key</span></div>
+    <div class="sec">TRANSFORM</div>
+    ${[['Position','0.000','0.000','0.000'],['Scale','1.000','1.000','1.000'],['Anchor','0.000','0.000','0.000']]
+      .map(([n,x,y,z])=>`<div class="prow"><span class="n">${n}</span>
+        <span class="v">${x}</span><span class="v">${y}</span><span class="v z">${z}</span>
+        <span class="glyph">◇</span></div>`).join('')}
+    <div class="prow"><span class="n">Rotation</span><span class="v"></span><span class="v"></span>
+      <span class="v z">0.000</span><span class="glyph">◇</span></div>
+    <div class="sec">APPEARANCE</div>
+    <div class="prow"><span class="n">Opacity</span><span class="v"></span><span class="v"></span>
+      <span class="v">1.000</span><span class="glyph">◇</span></div>
+    <div class="sec">EFFECTS</div>
+    <div class="prow"><span class="n" style="color:var(--ink3)">No shared FX</span>
+      <span class="v"></span><span class="v"></span><span class="v"></span><span></span></div>
+    <div class="hint">Drag to scrub · double-click to type · Esc to cancel</div>
+  </div>`;
+
+  const ticks = [...Array(8)].map((_,i)=> i%2 ? `<div class="tick" style="left:calc(${150+i*70} * var(--s) * 1px)"></div>` : '').join('');
+  const labels = [...Array(6)].map((_,i)=>`<b style="left:calc(${150+i*70} * var(--s) * 1px)">0:0${i*2}.0</b>`).join('');
+  const tl = `
+  <div class="tl">
+    <div class="tp"><span>▎▶</span><span class="tc">0:00:00</span><em>3 rows · grid 2</em></div>
+    <div class="grid">
+      ${ticks}
+      <div class="ruler">${labels}</div>
+      <div class="trow"><div class="thead" style="color:var(--ink3)">soundtrack</div></div>
+      ${rows.map(([c,n,off,w])=>`<div class="trow">
+        <div class="thead"><span class="sw" style="background:${c}"></span><span class="name">${n}</span>
+          <span class="sp"><span class="glyph">M</span><span class="glyph">S</span><span class="glyph">L</span></span></div>
+        <div class="clip" style="left:calc(${150+off} * var(--s) * 1px);width:calc(${w} * var(--s) * 1px);background:${c}"></div>
+      </div>`).join('')}
+      <div class="trow"></div><div class="trow"></div>
+    </div>
+  </div>`;
+  return `<div style="display:flex;gap:8px;align-items:flex-start">${insp}${tl}</div>`;
+}
+document.getElementById('a').innerHTML = build();
+document.getElementById('b').innerHTML = build();
+</script>

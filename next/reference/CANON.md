@@ -75,3 +75,4 @@
 - **「エフェクト分析」の正体 = 旧称「解析駆動」**(解析プラグイン→DataTrack→パラメータ駆動。concept.md の長期差別化)。Browser のタグ/検索とは**別の口**。ただし Ableton 12 は解析(Sound Similarity)を**自動タグとして発見側にも流している** — 「Motolii の解析を Browser の自動タグにも使うか」は旧 docs に無い新しい分岐点
 - Q0 拘束: 実データ生成の無いサムネイル/波形欄を出さない(旧 mock のプレースホルダをそのまま持ち込むと即違反)
 - タブ構成は配布3層(日常の棚 / 発見の地図 / 外部推薦、2026-07-23)を同一 UI に潰さない
+| `next/reference/mocks/ui-scale-and-z.html`(2026-08-20、別セッション産を正典化) | **Inspector 列グリッド(Property/X/Y/Z/Key)・ui_scale(--s 1本、罫線のみ物理1px床)・Timeline 行ヘッダ列(スウォッチ+名前+M/S/L)の視覚仕様**。read-only は同一セル形状で色のみ落とす。type scale {8,9,11,12}・section 26 | Key列/M/S/L グリフは結線まで出さない(Q0)。pane 幅 300 vs 496 は利用者裁定待ち |
