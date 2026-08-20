@@ -40,6 +40,7 @@ fn realistic_document() -> Document {
                     t: RationalTime::try_new(k * 10, 30).unwrap(),
                     value: Value::F64(k as f64),
                     interp: Interp::Linear,
+                    spatial: None,
                 });
             }
             doc.apply(Intent::SetTrack {

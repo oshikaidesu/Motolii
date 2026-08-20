@@ -196,11 +196,36 @@ fn is_valid_bezier_control(interp: Interp) -> bool {
     }
 }
 
+/// 空間ベジェの接線(`position-keyframe ti`/`to`)。**Vec2 の position 系 track だけが
+/// 意味を持つ** — position が Vec2 単一 property なので入る余地ができた(裁定61 の
+/// 見込みどおり)。このキー自身の値からの相対オフセットという規約は
+/// [`crate::value::PathVertex`] の `in_tangent`/`out_tangent` とそろえてある(新しい
+/// 規約を作らない)。
+///
+/// **モーションパスの形**(位置が辿る曲線)を決めるだけで、**速さ**
+/// ([`Keyframe::interp`] のイージング)とは独立(Lottie/AE と同じ分離 — `ti`/`to` は
+/// 空間、`i`/`o` は時間)。描画は不要(地図の note どおり)なので、ここでは
+/// [`KeyframeTrack::eval`] が返す `Value::Vec2` の値そのものが曲線に沿うことだけを保証する。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SpatialTangent {
+    /// `to`(Value Out Tangent)。次のキーへ向かう側の接線。
+    pub out_tangent: [f64; 2],
+    /// `ti`(Value In Tangent)。前のキーから来る側の接線。
+    pub in_tangent: [f64; 2],
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Keyframe {
     pub t: RationalTime,
     pub value: Value,
     pub interp: Interp,
+    /// 空間ベジェの接線。`None` = 直線(補間は今までどおり [`Value::lerp`])。
+    /// 補間の**速さ**は `interp` が別に決める(上記 [`SpatialTangent`] のドキュメント参照)。
+    /// **`None` の時は JSON に出さない**(`skip_serializing_if`) — position 以外の
+    /// 大半の track はこのフィールドを一切使わないので、書かないと R2 の予算試験
+    /// (track を生で読む投影コスト)を巻き込まずに済む。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spatial: Option<SpatialTangent>,
 }
 
 /// 時刻順にソートされたキーフレーム列。
@@ -283,13 +308,46 @@ impl KeyframeTrack {
         let (a, b) = (&keys[i], &keys[i + 1]);
         match a.interp {
             Interp::Hold => a.value.clone(),
-            Interp::Linear => Value::lerp(&a.value, &b.value, segment_u(a.t, b.t, t)),
+            Interp::Linear => interpolate_value(a, b, segment_u(a.t, b.t, t)),
             Interp::Bezier { x1, y1, x2, y2 } => {
                 let u = cubic_bezier_ease(x1, y1, x2, y2, segment_u(a.t, b.t, t));
-                Value::lerp(&a.value, &b.value, u)
+                interpolate_value(a, b, u)
             }
         }
     }
+}
+
+/// `a` → `b` 区間の値。**空間タンジェントが片方でもあれば空間ベジェを通る**
+/// (`u` は呼び手が渡す — 時間の速さ [`Interp`] のイージング後の値で、ここでは
+/// 「どの経路を通るか」だけを決める、[`SpatialTangent`] のドキュメント参照)。
+/// 両方 `None`、または `Vec2` 同士でない組は今までどおり [`Value::lerp`]。
+fn interpolate_value(a: &Keyframe, b: &Keyframe, u: f64) -> Value {
+    if let (Value::Vec2(p0), Value::Vec2(p3)) = (&a.value, &b.value) {
+        if a.spatial.is_some() || b.spatial.is_some() {
+            let p1 = match &a.spatial {
+                Some(s) => [p0[0] + s.out_tangent[0], p0[1] + s.out_tangent[1]],
+                None => *p0,
+            };
+            let p2 = match &b.spatial {
+                Some(s) => [p3[0] + s.in_tangent[0], p3[1] + s.in_tangent[1]],
+                None => *p3,
+            };
+            return Value::Vec2(cubic_bezier_point(*p0, p1, p2, *p3, u));
+        }
+    }
+    Value::lerp(&a.value, &b.value, u)
+}
+
+/// 一般形の3次ベジェ(端点固定の [`crate::bezier::sample`] とは別 —
+/// あちらは `y(0)=0, y(1)=1` のイージング専用で、こちらは4制御点そのものを補間する)。
+fn cubic_bezier_point(p0: [f64; 2], p1: [f64; 2], p2: [f64; 2], p3: [f64; 2], u: f64) -> [f64; 2] {
+    let inv = 1.0 - u;
+    std::array::from_fn(|i| {
+        inv * inv * inv * p0[i]
+            + 3.0 * inv * inv * u * p1[i]
+            + 3.0 * inv * u * u * p2[i]
+            + u * u * u * p3[i]
+    })
 }
 
 /// 区間内正規化位置u ∈ [0,1)。区間端は有理数で厳密に扱い、u自体はf64でよい
@@ -323,6 +381,7 @@ mod tests {
             t,
             value: Value::F64(v),
             interp,
+            spatial: None,
         }
     }
 
@@ -382,6 +441,7 @@ mod tests {
                 x2: 0.58,
                 y2: 1.0,
             },
+            spatial: None,
         });
         tr.insert(key(RationalTime::from_seconds(2), 100.0, Interp::Linear));
         let mid = tr.eval(RationalTime::from_seconds(1)).as_f64().unwrap();
@@ -418,6 +478,7 @@ mod tests {
                         x2: 0.5,
                         y2: 1.0,
                     },
+                    spatial: None,
                 },
                 key(RationalTime::from_seconds(1), 1.0, Interp::Linear),
             ],
@@ -469,7 +530,91 @@ mod tests {
         );
     }
 
+    fn vec2_key(t: RationalTime, v: [f64; 2], spatial: Option<SpatialTangent>) -> Keyframe {
+        Keyframe {
+            t,
+            value: Value::Vec2(v),
+            interp: Interp::Linear,
+            spatial,
+        }
+    }
 
+    /// 空間タンジェントが無ければ、position-keyframe 前と同じ直線補間(`Value::lerp`)。
+    /// **motion-path(裁定61)を足しても既存の Vec2 track の挙動を変えない**ことの固定。
+    #[test]
+    fn vec2_without_spatial_tangents_still_lerps_in_a_straight_line() {
+        let mut tr = KeyframeTrack::new();
+        tr.insert(vec2_key(RationalTime::ZERO, [0.0, 0.0], None));
+        tr.insert(vec2_key(RationalTime::from_seconds(1), [100.0, 0.0], None));
+        let mid = tr.eval(RationalTime::try_new(1, 2).unwrap());
+        assert_eq!(mid, Value::Vec2([50.0, 0.0]));
+    }
+
+    /// **空間ベジェの形はタンジェントが決める** — 区間の中点(u=0.5)が直線の中点から
+    /// 外れることで、モーションパスが曲がっていることを固定する。
+    #[test]
+    fn spatial_tangent_bows_the_position_path_off_the_straight_line() {
+        let mut tr = KeyframeTrack::new();
+        // 出タンジェントを+yへ大きく振る、入タンジェントは無し(0)。
+        tr.insert(vec2_key(
+            RationalTime::ZERO,
+            [0.0, 0.0],
+            Some(SpatialTangent {
+                out_tangent: [0.0, 100.0],
+                in_tangent: [0.0, 0.0],
+            }),
+        ));
+        tr.insert(vec2_key(RationalTime::from_seconds(1), [100.0, 0.0], None));
+        let mid = tr.eval(RationalTime::try_new(1, 2).unwrap());
+        let Value::Vec2([x, y]) = mid else {
+            panic!("Vec2 が返らない");
+        };
+        // 直線なら y=0 のまま。タンジェントが効いていれば y が持ち上がる。
+        assert!(y > 10.0, "空間タンジェントが効いていない: mid={x},{y}");
+    }
+
+    /// **速さ(`interp` のイージング)と形(空間タンジェント)は独立**。同じ空間タンジェント
+    /// でも、時間イージングを変えれば区間内の「どこまで進んだか」(u)が変わるので、
+    /// 曲線上の位置(点)も変わる — が、その点は常に同じ空間曲線の上に乗る。
+    #[test]
+    fn temporal_easing_moves_along_the_same_spatial_curve() {
+        fn curve_with(interp: Interp) -> Value {
+            let mut tr = KeyframeTrack::new();
+            tr.insert(Keyframe {
+                t: RationalTime::ZERO,
+                value: Value::Vec2([0.0, 0.0]),
+                interp,
+                spatial: Some(SpatialTangent {
+                    out_tangent: [0.0, 100.0],
+                    in_tangent: [0.0, 0.0],
+                }),
+            });
+            tr.insert(vec2_key(RationalTime::from_seconds(1), [100.0, 0.0], None));
+            // 中点(u=0.5)は避ける — ease-in-out は対称カーブなので中点だけは
+            // 直線と偶然一致する(f(0.5)=0.5)。1/4点なら常にズレる。
+            tr.eval(RationalTime::try_new(1, 4).unwrap())
+        }
+
+        let linear = curve_with(Interp::Linear);
+        let eased = curve_with(Interp::Bezier {
+            x1: 0.42,
+            y1: 0.0,
+            x2: 0.58,
+            y2: 1.0,
+        });
+        assert_ne!(
+            linear, eased,
+            "イージングを変えても同じ点になっている(速さが形と独立していない)"
+        );
+    }
+
+    /// `spatial` フィールドが無い旧 JSON も読める(`#[serde(default)]`)。
+    #[test]
+    fn keyframe_without_spatial_field_deserializes_as_none() {
+        let json = r#"{"t":{"num":0,"den":1},"value":{"F64":0.0},"interp":"Linear"}"#;
+        let key: Keyframe = serde_json::from_str(json).expect("旧形式の JSON が読めない");
+        assert_eq!(key.spatial, None);
+    }
 }
 
 #[cfg(test)]

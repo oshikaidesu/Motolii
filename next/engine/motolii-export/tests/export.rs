@@ -57,11 +57,13 @@ fn moving_document() -> Document {
         t: RationalTime::try_new(0, 30).unwrap(),
         value: Value::Vec2([0.0, 0.0]),
         interp: Interp::Linear,
+        spatial: None,
     });
     x.insert(Keyframe {
         t: RationalTime::try_new(30, 30).unwrap(),
         value: Value::Vec2([48.0, 0.0]),
         interp: Interp::Linear,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer,

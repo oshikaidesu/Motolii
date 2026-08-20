@@ -36,6 +36,7 @@ fn still(value: Value) -> KeyframeTrack {
         t: t(0),
         value,
         interp: Interp::Hold,
+        spatial: None,
     });
     track
 }
@@ -304,11 +305,13 @@ fn the_mask_shape_interpolates_between_keys() {
         t: t(0),
         value: Value::Path(marker_path(0.0)),
         interp: Interp::Linear,
+        spatial: None,
     });
     track.insert(Keyframe {
         t: t(30),
         value: Value::Path(marker_path(100.0)),
         interp: Interp::Linear,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer,

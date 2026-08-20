@@ -8,3 +8,8 @@ license.workspace = true
 motolii-core.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+# 既に workspace 全体で使っている crate(motolii-store 等)を、この crate の
+# テストからも使えるようにするだけ — 新規依存の追加ではない。
+serde_json.workspace = true

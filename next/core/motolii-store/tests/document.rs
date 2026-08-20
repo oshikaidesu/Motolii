@@ -22,6 +22,7 @@ fn track(points: &[(i64, f64, Interp)]) -> KeyframeTrack {
             t: t(*frame),
             value: Value::F64(*value),
             interp: interp.clone(),
+            spatial: None,
         });
     }
     track

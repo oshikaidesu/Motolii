@@ -46,7 +46,7 @@ pub use text::{
 pub use view::StoreView;
 
 pub use motolii_core::{CompSpec, Fps, LayerPlacement, RationalTime, ResolvedCamera};
-pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, Value};
+pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, SpatialTangent, Value};
 /// shape-layer(`layers/shape-layer/shapes`)の中身。語彙の正本は `motolii-vector`
 /// (shape-1/2/3 が既に決めた)— ここでは作り直さない(裁定10)。`Path` は再輸出しない
 /// (`motolii_eval::Path` と名前が衝突する — マスク形状の `Value::Path` が正本のまま)。

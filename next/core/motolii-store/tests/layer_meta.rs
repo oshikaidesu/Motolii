@@ -436,6 +436,7 @@ fn level_is_a_plain_animatable_property() {
         t: t(0),
         value: Value::F64(0.5),
         interp: motolii_store::Interp::Hold,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer,
@@ -465,6 +466,7 @@ fn time_remap_overrides_the_normal_source_frame_mapping() {
         t: t(0),
         value: Value::F64(77.0),
         interp: motolii_store::Interp::Hold,
+        spatial: None,
     });
     doc.apply(Intent::SetTrack {
         layer,

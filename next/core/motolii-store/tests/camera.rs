@@ -27,6 +27,7 @@ fn still(value: Value) -> KeyframeTrack {
         t: t(0),
         value,
         interp: Interp::Hold,
+        spatial: None,
     });
     track
 }
@@ -95,11 +96,13 @@ fn camera_zoom_can_be_keyframed_over_time() {
         t: t(0),
         value: Value::F64(1.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     track.insert(Keyframe {
         t: t(30),
         value: Value::F64(2.0),
         interp: Interp::Linear,
+        spatial: None,
     });
     doc.apply(Intent::SetCameraTrack {
         property: camera_prop(property::CAMERA_ZOOM),

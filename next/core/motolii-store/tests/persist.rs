@@ -37,11 +37,13 @@ fn authored() -> Document {
                 x2: 0.58,
                 y2: 1.0,
             },
+            spatial: None,
         });
         track.insert(Keyframe {
             t: t(60),
             value: Value::Vec2([500.0, 0.0]),
             interp: Interp::Linear,
+            spatial: None,
         });
 
         doc.apply_all([
