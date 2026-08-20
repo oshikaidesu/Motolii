@@ -418,11 +418,17 @@ pub fn view(
     // **`--section`(26)**: mock の ptitle(パネルタイトル)は section 見出しと
     // 同じ高さトークンを共有する(`inspector_section_header_height`) — 旧実装は
     // Shell 全体の `panel_header_height`(29、Ableton実測)を誤って流用していた。
+    //
+    // **`.width(Length::Fill)` は柵で見つかった実修正**(`tests/inspector_pixel_fence.rs`):
+    // `container(text(...))` の既定幅は content の `size_hint` 追従(`Length::Shrink`)
+    // なので、これが無いと帯が "Inspector" の文字幅ぶんしか広がらず、mock の
+    // `.ptitle`(block要素、pane 全幅の帯)と食い違う(実測: 修正前は幅 67.5px)。
     let header = container(
         text("Inspector")
             .size(dims.title_text)
             .color(colors.text_primary),
     )
+    .width(Length::Fill)
     .height(Length::Fixed(dims.inspector_section_header_height))
     .padding([0.0, dims.spacing_m])
     .align_y(iced::alignment::Vertical::Center)
@@ -519,10 +525,15 @@ fn ident_band(
     // 名前欄は mock の `.ident b`(bold, t-base)の役目を持つが、実体は
     // `text_input`(既に結線済みの改名 — `Message::InspectorNameInput/Submit`)。
     // 未フォーカス時は枠を消して静止テキストに見せる([`name_input_style`])。
+    //
+    // `.padding(0.0)`: `value_cell` と同じ柵発見(既定 padding 5px が乗ると
+    // ident 帯の高さが mock の「b(11px)+s(9px)を2行積んだだけ」より約10px
+    // 余計に伸びる — 実測: 修正前 name_field 高 24.3px、修正後 14.3px)。
     let name_field = text_input(&placeholder, &name_text)
         .on_input(Message::InspectorNameInput)
         .on_submit(Message::InspectorNameSubmit)
         .size(dims.body_text)
+        .padding(0.0)
         .style(move |_theme, status| name_input_style(dims, colors, status));
 
     let subtitle = text(selection.kind)
@@ -591,11 +602,15 @@ fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'static, Messa
 }
 
 fn section_header(label: &'static str, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    // `.width(Length::Fill)`: `header` と同じ理由(柵で発見) — mock の `.sec` も
+    // block 要素で pane 全幅の帯。無いと "TRANSFORM"/"APPEARANCE"/"ATTRS" の
+    // 文字幅ぶんしか背景 `surface_app` が塗られない(実測: 修正前は幅 65〜68px)。
     container(
         text(label)
             .size(dims.caption_text)
             .color(colors.text_muted),
     )
+    .width(Length::Fill)
     .height(Length::Fixed(dims.inspector_section_header_height))
     .padding([0.0, dims.spacing_m])
     .align_y(iced::alignment::Vertical::Center)
@@ -673,6 +688,14 @@ fn value_cell(
                     .on_submit(Message::InspectorFieldSubmit(field))
                     .size(dims.body_text)
                     .width(Length::Fill)
+                    // `.padding(0.0)`: 柵で発見した実修正 — `text_input` の既定
+                    // padding(`iced_widget::text_input::DEFAULT_PADDING` = 5px 全辺)
+                    // が固定高 `value_cell_height`(row-4 = 16px)を食い潰し、文字の
+                    // 描画領域が 16 - 2*5 = 6px まで押し潰される(実測: 修正前は
+                    // text_input 内の paragraph 高が 6px、mock の `.prow .v` は
+                    // padding 無しで 16px 丸ごと使える)。0 にして箱の高さをそのまま
+                    // 使わせ、`align_y(Center)` で縦中央寄せする。
+                    .padding(0.0)
                     .align_x(iced::alignment::Horizontal::Center)
                     .style(move |_theme, status| value_input_style(dims, colors, status)),
             )
@@ -860,11 +883,13 @@ fn attrs_section(attrs: &AttrsProjection, dims: Dimensions, colors: Colors) -> E
 /// 単クリックで打鍵できる(二度打ちは要らない)ので「click」へ言い換える
 /// (M13: 実装と違う手順を案内しない)。
 fn hint_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    // `.width(Length::Fill)`: 同上(柵で発見)— mock の `.hint` も pane 全幅の帯。
     container(
         text("click to type · Esc to cancel")
             .size(dims.caption_text)
             .color(colors.text_muted),
     )
+    .width(Length::Fill)
     .padding([dims.spacing_xs, dims.spacing_m])
     .style(move |_theme| container::Style {
         border: iced::Border {

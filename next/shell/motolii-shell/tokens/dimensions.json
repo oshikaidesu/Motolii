@@ -20,13 +20,13 @@
   "_note_micro_text": "同 mock の --t-micro(正典バンド最小段)。現時点でどの pane からも未消費 — バンド4段のうち予約されているだけの段。旧値9から更新",
 
   "spacing_xs": 2,
-  "_note_spacing_xs": "実測ではなく、既存コード(timeline_pane.rs の bar 縦インセット `row_top + 2.0` / ルーラー目盛りラベルの縦オフセット `x, 0.0` 系)で既に使われていた値を採番しただけ。新規発明ではなく現状追認",
+  "_note_spacing_xs": "既存コード(timeline_pane.rs の bar 縦インセット `row_top + 2.0` / ルーラー目盛りラベルの縦オフセット `x, 0.0` 系)で既に使われていた値を採番しただけ — 新規発明ではなく現状追認。**同値が視覚正本 ui-scale-and-z.html の --sp1(2)とも一致**(2026-08-21確認): Inspector の grid gap(X/Y/Z/Key の間隔)と glyph 高の窪み(`row - spacing_xs` = `.glyph{height:calc(row - 2*s*1px)}`)の出典も兼ねる(inspector_pane.rs、tests/inspector_pixel_fence.rs)",
 
   "spacing_s": 4,
-  "_note_spacing_s": "既存コード(timeline_pane.rs の bar 高さインセット `row_height - 4.0` / ラベルの横オフセット `start_x + 4.0`)の既存慣用値を採番",
+  "_note_spacing_s": "既存コード(timeline_pane.rs の bar 高さインセット `row_height - 4.0` / ラベルの横オフセット `start_x + 4.0`)の既存慣用値を採番。**同値が視覚正本 ui-scale-and-z.html の --sp2(4)とも一致**(2026-08-21確認): Inspector の ident 帯 padding(縦)と値セル高の窪み(`row - spacing_s` = `.prow .v{height:calc(row - 4*s*1px)}`)の出典も兼ねる",
 
   "spacing_m": 8,
-  "_note_spacing_m": "既存コード(lib.rs の `column![...].spacing(8)`)の既存慣用値を採番",
+  "_note_spacing_m": "既存コード(lib.rs の `column![...].spacing(8)`)の既存慣用値を採番。**同値が視覚正本 ui-scale-and-z.html の --sp4(8)とも一致**(2026-08-21確認): Inspector の ident/cols/prow/sec/hint 帯の左右 padding の出典も兼ねる。mock の --sp3(6、`.ptitle` の icon-to-text gap)に対応する token は無い — 現実装は icon/em バッジを描かないので消費先が無く未採番(tests/inspector_pixel_fence.rs 冒頭に明記)",
 
   "spacing_l": 12,
   "_note_spacing_l": "既存コード(lib.rs の `column![...].padding(12)`)の既存慣用値を採番",
