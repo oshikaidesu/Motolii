@@ -1,6 +1,6 @@
 //! 合成の契約 — 重ね順・不透明度・**preview と export が同じ絵になること**。
 
-use motolii_compositor::{CompSpec, Compositor, Layer, LayerPlacement, ResolvedCamera};
+use motolii_compositor::{BlendMode, CompSpec, Compositor, Layer, LayerPlacement, ResolvedCamera};
 
 const W: u32 = 64;
 const H: u32 = 64;
@@ -58,6 +58,7 @@ fn layers_stack_by_order_and_position() {
                         z: 0.0,
                     },
                     pinned: false,
+                    blend_mode: BlendMode::Normal,
                 },
                 Layer {
                     texture: green,
@@ -77,6 +78,7 @@ fn layers_stack_by_order_and_position() {
                         z: 0.0,
                     },
                     pinned: false,
+                    blend_mode: BlendMode::Normal,
                 },
             ],
         )
@@ -128,6 +130,7 @@ fn render_is_deterministic() {
             z: 0.0,
         },
         pinned: false,
+        blend_mode: BlendMode::Normal,
     };
 
     let first = compositor.render(comp(), ResolvedCamera::default(), std::slice::from_ref(&layer)).unwrap();
@@ -160,6 +163,7 @@ fn opacity_dims_the_layer() {
             z: 0.0,
         },
         pinned: false,
+        blend_mode: BlendMode::Normal,
     };
 
     let full = compositor.render(comp(), ResolvedCamera::default(), &[make(1.0)]).unwrap();
@@ -175,6 +179,140 @@ fn opacity_dims_the_layer() {
         "不透明度は単調に効くはず: 0.0={none_px:?} 0.5={half_px:?} 1.0={full_px:?}"
     );
     assert_eq!(full_px[0], 255, "1.0 は元の白のまま");
+}
+
+/// **落ちるテスト先行**で確かめた blend mode の消費(裁定67・KNOWN.md「bm 未消費」)。
+///
+/// `BlendMode::Add` は `multiplicative_tint.a = 0` で加算合成そのものになる
+/// (`out = src + dst`、`motolii-compositor` のモジュール doc の式変形を参照)。
+/// 同じ layer を2枚 Normal で重ねると「手前が奥を覆い隠す」(置き換え)だけなのに対し、
+/// Add で重ねると**画素が明るくなる**(和になる) — この違いを両方測って区別する。
+#[test]
+fn add_blend_brightens_the_overlap_while_normal_replaces() {
+    let mut compositor = Compositor::headless().expect("headless GPU");
+    // 半端な値(飽和・丸めを避ける)。premultiplied alpha=255(不透明)。
+    let dim_red = compositor
+        .upload_rgba("dim-red", &solid([80, 0, 0, 255], W, H), W, H)
+        .unwrap();
+
+    let base =
+        |texture: motolii_compositor::GpuTexture2D, order: i16, blend_mode: BlendMode| Layer {
+            texture,
+            size: [W as f32, H as f32],
+            placement: LayerPlacement {
+                transform: LayerPlacement::from_transform(
+                    [0.0, 0.0],
+                    [0.0, 0.0],
+                    [1.0, 1.0],
+                    0.0,
+                    0.0,
+                    0.0,
+                ),
+                order,
+                opacity: 1.0,
+                z: 0.0,
+            },
+            pinned: false,
+            blend_mode,
+        };
+
+    // 1枚だけの基準値。
+    let alone = compositor
+        .render(
+            comp(),
+            ResolvedCamera::default(),
+            &[base(dim_red.clone(), 0, BlendMode::Normal)],
+        )
+        .unwrap();
+    let alone_px = pixel(&alone, 32, 32);
+
+    // 同じ layer を Normal で重ねる — 手前が奥を置き換えるだけなので画素は変わらない。
+    let stacked_normal = compositor
+        .render(
+            comp(),
+            ResolvedCamera::default(),
+            &[
+                base(dim_red.clone(), 0, BlendMode::Normal),
+                base(dim_red.clone(), 1, BlendMode::Normal),
+            ],
+        )
+        .unwrap();
+    let stacked_normal_px = pixel(&stacked_normal, 32, 32);
+
+    // 同じ layer を Add で重ねる — 画素が明るくなる(和)。
+    let stacked_add = compositor
+        .render(
+            comp(),
+            ResolvedCamera::default(),
+            &[
+                base(dim_red.clone(), 0, BlendMode::Normal),
+                base(dim_red, 1, BlendMode::Add),
+            ],
+        )
+        .unwrap();
+    let stacked_add_px = pixel(&stacked_add, 32, 32);
+
+    assert_eq!(
+        stacked_normal_px[0], alone_px[0],
+        "Normal で重ねても置き換えなので画素は変わらないはず: alone={alone_px:?} stacked={stacked_normal_px:?}"
+    );
+    assert!(
+        stacked_add_px[0] > stacked_normal_px[0],
+        "Add で重ねた場所は Normal で重ねた場所より明るいはず(和 > 置き換え): \
+         add={stacked_add_px:?} normal={stacked_normal_px:?}"
+    );
+}
+
+/// Add は**linear 空間で** `out = src + dst` になる —
+/// `ColormappedTexture::from_unorm_rgba` が `decode_srgb = !format.is_srgb()` を立てるので
+/// (一次確認: 上流 `rectangles.rs`)、`Rgba8Unorm` で上げた素材は sRGB gamma と見なして
+/// linear へ復元してから混ぜ、結果は `MAIN_TARGET_COLOR_FORMAT`(`Rgba8UnormSrgb`)へ
+/// 書き戻る際に GPU が再エンコードする。8bit のままの単純な整数和(255単位)にはならない
+/// ので、`add_blend_brightens_the_overlap_while_normal_replaces` は「明るくなる」だけを
+/// 測り、ここでは **linear 側で 1.0 を超えて確実に飽和するはず**の値で
+/// クランプ(255)だけを縛る — sRGB の正確な式を試験に埋め込まない。
+#[test]
+fn add_blend_saturates_to_white_when_the_linear_sum_exceeds_one() {
+    let mut compositor = Compositor::headless().expect("headless GPU");
+    // sRGB decode 後の linear 値がおよそ 0.58(200/255 の sRGB→linear)。2枚足すと
+    // 1.0 を超えるので、blend 後は確実に白へクランプされる。
+    let bright_red = compositor
+        .upload_rgba("bright-red", &solid([200, 0, 0, 255], W, H), W, H)
+        .unwrap();
+
+    let layer = |order: i16, blend_mode: BlendMode| Layer {
+        texture: bright_red.clone(),
+        size: [W as f32, H as f32],
+        placement: LayerPlacement {
+            transform: LayerPlacement::from_transform(
+                [0.0, 0.0],
+                [0.0, 0.0],
+                [1.0, 1.0],
+                0.0,
+                0.0,
+                0.0,
+            ),
+            order,
+            opacity: 1.0,
+            z: 0.0,
+        },
+        pinned: false,
+        blend_mode,
+    };
+
+    let frame = compositor
+        .render(
+            comp(),
+            ResolvedCamera::default(),
+            &[layer(0, BlendMode::Normal), layer(1, BlendMode::Add)],
+        )
+        .unwrap();
+    let px = pixel(&frame, 32, 32);
+
+    assert_eq!(
+        px[0], 255,
+        "linear 和が 1.0 を超えたら R は白へクランプされるはず: {px:?}"
+    );
 }
 
 #[test]
@@ -230,6 +368,7 @@ fn alpha_is_flattened_by_the_composite_step() {
                     z: 0.0,
                 },
                 pinned: false,
+                blend_mode: BlendMode::Normal,
             }],
         )
         .unwrap();
@@ -273,6 +412,7 @@ fn two_devices_produce_the_same_frame() {
                     z: 0.0,
                 },
                 pinned: false,
+                blend_mode: BlendMode::Normal,
             },
             Layer {
                 texture: small,
@@ -291,6 +431,7 @@ fn two_devices_produce_the_same_frame() {
                     z: 0.0,
                 },
                 pinned: false,
+                blend_mode: BlendMode::Normal,
             },
         ]
     };

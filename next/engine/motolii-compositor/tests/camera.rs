@@ -5,7 +5,7 @@
 //! 数学が正しくても `re_renderer` への詰め替え(`Projection::Perspective` /
 //! `macaw::IsoTransform` への変換)を間違えれば画は狂うので、その繋ぎ目を GPU 込みで縛る。
 
-use motolii_compositor::{CompSpec, Compositor, Layer, LayerPlacement, ResolvedCamera};
+use motolii_compositor::{BlendMode, CompSpec, Compositor, Layer, LayerPlacement, ResolvedCamera};
 
 fn solid(rgba: [u8; 4], w: u32, h: u32) -> Vec<u8> {
     rgba.iter()
@@ -43,6 +43,7 @@ fn flat_layer(
             z,
         },
         pinned: false,
+        blend_mode: BlendMode::Normal,
     }
 }
 

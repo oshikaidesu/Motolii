@@ -149,6 +149,7 @@ fn where_the_frame_time_goes() {
                 z: 0.0,
             },
             pinned: false,
+            blend_mode: motolii_compositor::BlendMode::Normal,
         })
         .collect();
 
@@ -210,6 +211,7 @@ fn preview_resolution_is_the_lever() {
                     z: 0.0,
                 },
                 pinned: false,
+                blend_mode: motolii_compositor::BlendMode::Normal,
             })
             .collect();
         let spec = CompSpec {
