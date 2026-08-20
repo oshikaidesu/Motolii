@@ -219,6 +219,12 @@ impl Engine {
                 self.remember_frame(key, texture.clone());
                 Ok((Some(texture), natural))
             }
+            // layer-meta 束が足した3 variant。**まだ描画に繋いでいない** — null layer は
+            // 元々絵を持たず(裁定どおり)、shape/text は演算子/組版から RGBA を焼く経路が
+            // 未実装(`motolii-vector::render` はまだ engine から呼ばれていない)。
+            // texture 無し = 「この layer は今描かない」という既存の意味(素材の外の
+            // 時刻と同じ扱い)に乗せてあるので、フレーム全体は落ちない。
+            LayerSource::Null | LayerSource::Shape | LayerSource::Text => Ok((None, [0.0, 0.0])),
         }
     }
 }

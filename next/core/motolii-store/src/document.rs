@@ -7,14 +7,23 @@ use re_entity_db::EntityDb;
 use re_log_types::{
     AbsoluteTimeRange, EntityPath, StoreId, StoreKind, TimePoint, Timeline, TimelineName,
 };
-use re_types_core::SerializedComponentBatch;
+use re_types_core::{Component, SerializedComponentBatch};
 
-use crate::components::{descriptor_composition, descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
+use crate::components::{
+    descriptor_attrs, descriptor_composition, descriptor_effects, descriptor_markers,
+    descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes, descriptor_text,
+    descriptor_track, LayerPresent, TrackJson,
+};
 use crate::view::StoreView;
-use crate::{StoreError, EDIT_TIMELINE};
+use crate::{LayerAttrs, StoreError, EDIT_TIMELINE};
 
 /// layer の安定 ID。entity path はこれ1つから決まる。
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+///
+/// `Serialize`/`Deserialize` は layer-meta 束で足した — `LayerAttrs.parent` /
+/// `Matte.layer` が参照として持つため(裁定65 の「参照は `LayerId`」をそのまま辿れる)。
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct LayerId(pub u64);
 
 impl LayerId {
@@ -86,11 +95,26 @@ pub enum Intent {
         property: PropertyId,
         track: motolii_eval::KeyframeTrack,
     },
-    /// 素材と重ね順。アニメーションしない属性はこちら。
+    /// 素材と重ね順の**新規配置専用**。
+    ///
+    /// **既に `meta` を持つ layer には使えない**(`write` が拒む、裁定108(c))。
+    /// 呼び手が読まずに組んだ `LayerMeta` で丸ごと差し替えると、他のフィールド
+    /// (代表例: `timing`)が黙って初期値へ戻る事故が起きていた。既存 layer の
+    /// 素材・重ね順・配置を変えるのは [`Intent::SetSource`] / [`Intent::SetOrder`] /
+    /// [`Intent::SetTiming`] の**フィールド単位の口**で、これらは内部で現在の
+    /// `meta` を読んでから該当フィールドだけ書き換えるので、他のフィールドを
+    /// 巻き込むことが構造的にできない。
     SetMeta {
         layer: LayerId,
         meta: crate::LayerMeta,
     },
+    /// 既存 layer の素材を差し替える(`meta` を読んで `source` だけ書き換える)。
+    SetSource {
+        layer: LayerId,
+        source: crate::LayerSource,
+    },
+    /// 既存 layer の重ね順を変える(`meta` を読んで `order` だけ書き換える)。
+    SetOrder { layer: LayerId, order: i16 },
     /// マスクの並びと重ね方。**追加・削除・並べ替え・モード変更はすべてこれ1つ**
     /// (`LayerTiming` と同じ考え方で、操作ごとの専用 intent を足さない)。
     ///
@@ -105,6 +129,28 @@ pub enum Intent {
         layer: LayerId,
         timing: crate::LayerTiming,
     },
+    /// layer の非アニメーション属性(hidden / parent / blend mode / matte / name /
+    /// auto-orient)。**丸ごと差し替え**(`SetMasks`/`SetMarkers` と同型) —
+    /// `meta` とは別 component なので `timing`/`source`/`order` を巻き込まない。
+    ///
+    /// `parent` に循環参照を作ろうとすると拒まれる(layer-meta 束の柵)。
+    SetAttrs {
+        layer: LayerId,
+        attrs: LayerAttrs,
+    },
+    /// layer が持つ effect インスタンスの列(id・plugin id・順序のみ。param 値は
+    /// `effect` 束が別途扱う)。丸ごと差し替え。
+    SetEffects {
+        layer: LayerId,
+        effects: Vec<crate::EffectInstance>,
+    },
+    /// shape-layer の図形列。丸ごと差し替え。
+    SetShapes {
+        layer: LayerId,
+        shapes: Vec<crate::Shape>,
+    },
+    /// text-layer の文字列内容。丸ごと差し替え。
+    SetTextContent { layer: LayerId, content: String },
     /// comp の設定(解像度・fps・尺)。**undo が効く**ので普通の編集と同じ経路。
     SetComposition(crate::Composition),
     /// comp のマーカー一覧。追加・削除・並べ替え・改名はすべてこれ1つ
@@ -276,7 +322,63 @@ impl Document {
         }
     }
 
-    fn write(&mut self, intent: Intent, at: i64) -> Result<(), StoreError> {
+    /// 唯一の物理書き口(`Intent` の意味づけを終えた [`SerializedComponentBatch`] を
+    /// 1つの chunk として store へ足す)。`write` の末尾と [`Self::copy_track_json`]
+    /// (`persist.rs` の `flattened()` 専用)が両方ここへ落ちる — **書き口が2系統に
+    /// 分岐しても、物理的な追記経路は1本のまま**。
+    fn ingest(
+        &mut self,
+        path: EntityPath,
+        batches: Vec<SerializedComponentBatch>,
+        at: i64,
+    ) -> Result<(), StoreError> {
+        let chunk = Chunk::builder(path)
+            .with_serialized_batches(
+                RowId::new(),
+                TimePoint::default().with(Self::timeline(), at),
+                batches,
+            )
+            .build()
+            .map_err(|e| StoreError::Chunk(e.to_string()))?;
+
+        self.db
+            .add_chunk(&Arc::new(chunk))
+            .map_err(|e| StoreError::Ingest(e.to_string()))?;
+
+        self.head = at;
+        self.tip = at;
+        Ok(())
+    }
+
+    /// `flattened()` 専用: component の意味を知らずに、読んだ JSON をそのまま
+    /// 別の component へコピーする。**store に聞く**(裁定57/108(a))形の核 —
+    /// `persist.rs` が `meta`/`masks`/`attrs`/… を名前で列挙しなくてよいのは、
+    /// この口が「どんな component 名でも」コピーできるため。新しい component を
+    /// 足しても `flattened()` を直さなくてよい。
+    pub(crate) fn copy_track_json(
+        &mut self,
+        path: EntityPath,
+        component: re_types_core::ComponentIdentifier,
+        archetype: &'static str,
+        json: String,
+        at: i64,
+    ) -> Result<(), StoreError> {
+        let descriptor = re_types_core::ComponentDescriptor {
+            archetype: Some(archetype.into()),
+            component,
+            component_type: Some(TrackJson::name()),
+        };
+        let batch = SerializedComponentBatch {
+            descriptor,
+            array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                .map_err(|e| StoreError::Chunk(e.to_string()))?,
+        };
+        self.ingest(path, vec![batch], at)
+    }
+
+    /// 唯一の意味づけ書き口。`pub(crate)` なのは `persist.rs` が `AddLayer` を
+    /// 同じ edit 刻みで書くため(履歴を畳む = 1 tick にまとめる、裁定56)。
+    pub(crate) fn write(&mut self, intent: Intent, at: i64) -> Result<(), StoreError> {
         let batches = match intent {
             Intent::AddLayer(layer) => (layer.entity_path(), vec![serialize_present(true)?]),
             Intent::RemoveLayer(layer) => (layer.entity_path(), vec![serialize_present(false)?]),
@@ -336,11 +438,106 @@ impl Document {
                 )
             }
             Intent::SetMeta { layer, meta } => {
+                // **新規配置専用**(裁定108(c))。既に meta があるのに丸ごと差し替えを
+                // 許すと、呼び手が読まずに組んだ値で timing/source/order のどれかが
+                // 黙って戻る事故が構造的に作れてしまう。既存 layer は
+                // SetSource/SetOrder/SetTiming のフィールド単位の口を使うこと。
+                if self.view().meta(layer)?.is_some() {
+                    return Err(StoreError::Property(format!(
+                        "layer {} は既に meta を持つ。SetMeta は新規配置専用 — 既存 layer の \
+                         素材/重ね順/配置を変えるには SetSource/SetOrder/SetTiming を使うこと",
+                        layer.0
+                    )));
+                }
                 let json = serde_json::to_string(&meta)?;
                 (
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_meta(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetSource { layer, source } => {
+                let current = self.view().meta(layer)?;
+                let Some(mut meta) = current else {
+                    return Err(StoreError::Property(format!(
+                        "layer {} に meta が無い(先に SetMeta で配置すること)",
+                        layer.0
+                    )));
+                };
+                meta.source = source;
+                let json = serde_json::to_string(&meta)?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_meta(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetOrder { layer, order } => {
+                let current = self.view().meta(layer)?;
+                let Some(mut meta) = current else {
+                    return Err(StoreError::Property(format!(
+                        "layer {} に meta が無い(先に SetMeta で配置すること)",
+                        layer.0
+                    )));
+                };
+                meta.order = order;
+                let json = serde_json::to_string(&meta)?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_meta(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetAttrs { layer, attrs } => {
+                validate_no_parent_cycle(&self.view(), layer, attrs.parent)?;
+                let json = serde_json::to_string(&attrs)?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_attrs(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetEffects { layer, effects } => {
+                crate::effect::validate_unique_ids(&effects)?;
+                let json = serde_json::to_string(&effects)?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_effects(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetShapes { layer, shapes } => {
+                let json = serde_json::to_string(&shapes)?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_shapes(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetTextContent { layer, content } => {
+                let json = serde_json::to_string(&content)?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_text(),
                         array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
@@ -364,22 +561,7 @@ impl Document {
         };
 
         let (path, batches) = batches;
-        let chunk = Chunk::builder(path)
-            .with_serialized_batches(
-                RowId::new(),
-                TimePoint::default().with(Self::timeline(), at),
-                batches,
-            )
-            .build()
-            .map_err(|e| StoreError::Chunk(e.to_string()))?;
-
-        self.db
-            .add_chunk(&Arc::new(chunk))
-            .map_err(|e| StoreError::Ingest(e.to_string()))?;
-
-        self.head = at;
-        self.tip = at;
-        Ok(())
+        self.ingest(path, batches, at)
     }
 
     /// 変化検出。front がこれを見れば「前回と同じか」が分かるので、
@@ -406,6 +588,40 @@ impl Document {
     pub fn store_chunks(&self) -> usize {
         self.db.num_physical_chunks()
     }
+}
+
+/// `parent` の親鎖を辿って `layer` 自身へ戻ってこないことを確かめる。
+///
+/// **循環参照は絶対に作れない**(layer-meta 束の柵)。作れると、親を辿って transform を
+/// 合成する日(未実装、resolve はまだ parent を読んでいない)に無限ループになる。
+/// `seen` は防御的な保険 — 既存の親鎖が(バグ等で)既に壊れて循環していても、
+/// この呼び出しが無限に回らないようにする。
+fn validate_no_parent_cycle(
+    view: &StoreView,
+    layer: LayerId,
+    new_parent: Option<LayerId>,
+) -> Result<(), StoreError> {
+    let mut current = new_parent;
+    let mut seen = std::collections::HashSet::new();
+    while let Some(candidate) = current {
+        if candidate == layer {
+            return Err(StoreError::Property(format!(
+                "layer {} の parent を layer {} にすると循環参照になる(親鎖を辿ると \
+                 自分自身へ戻ってくる)",
+                layer.0,
+                new_parent.expect("new_parent が None なら親鎖を辿らない").0
+            )));
+        }
+        if !seen.insert(candidate) {
+            break;
+        }
+        current = view
+            .attrs(candidate)
+            .ok()
+            .flatten()
+            .and_then(|attrs| attrs.parent);
+    }
+    Ok(())
 }
 
 fn serialize_present(present: bool) -> Result<SerializedComponentBatch, StoreError> {

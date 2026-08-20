@@ -20,15 +20,19 @@
 //! - 書き口は [`Document::apply`] 1本だけ
 //! - **削除も append**(tombstone)。`drop_entity_path` を使うと undo で戻せなくなる
 
+mod attrs;
 mod components;
 mod document;
+mod effect;
 mod fingerprint;
 mod marker;
 mod mask;
 mod persist;
 mod view;
 
+pub use attrs::{BlendMode, LayerAttrs, Matte, MatteMode};
 pub use document::{Document, Intent, LayerId, PropertyId, Revision};
+pub use effect::{EffectId, EffectInstance};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use marker::Marker;
 pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
@@ -36,6 +40,10 @@ pub use view::StoreView;
 
 pub use motolii_core::{CompSpec, Fps, LayerPlacement, RationalTime};
 pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, Value};
+/// shape-layer(`layers/shape-layer/shapes`)の中身。語彙の正本は `motolii-vector`
+/// (shape-1/2/3 が既に決めた)— ここでは作り直さない(裁定10)。`Path` は再輸出しない
+/// (`motolii_eval::Path` と名前が衝突する — マスク形状の `Value::Path` が正本のまま)。
+pub use motolii_vector::{PathSource, Point as VectorPoint, Shape};
 
 /// `edit` timeline の名前。undo/redo はこの軸の移動である。
 pub const EDIT_TIMELINE: &str = "edit";
@@ -58,8 +66,11 @@ pub enum StoreError {
 pub mod property {
     /// component 識別子は `Layer:{name}` なので、**layer 自身の component と衝突する
     /// 名前は禁止**(`PropertyId::new` が弾く)。弾かないと `PropertyId::new("meta")` が
-    /// layer の素材と重ね順を上書きする。
-    pub const RESERVED: &[&str] = &["meta", "present", "masks"];
+    /// layer の素材と重ね順を上書きする。`attrs`/`effects`/`shapes`/`text` は
+    /// layer-meta 束が足した component(裁定108(c) の構造修正)。
+    pub const RESERVED: &[&str] = &[
+        "meta", "present", "masks", "attrs", "effects", "shapes", "text",
+    ];
 
     /// マスクの形状・不透明度トラックの名前は `mask.{id}.…` で始まる。
     /// **平坦な名前**にしてあるので、新しい機構を足さずに `KeyframeTrack` へ乗る
@@ -84,12 +95,27 @@ pub mod property {
     pub const SKEW: &str = "skew";
     /// skew の軸(度)。0 なら x 軸、90 なら y 軸に沿った点が不動点になる。
     pub const SKEW_AXIS: &str = "skew_axis";
+    /// `layers/audio-settings/lv`(Level)。clip の音量(gain)。1.0 が等倍。
+    /// GOALS 標準。専用の component にしない — 普通の property track で十分
+    /// (裁定20「キーを打っていない property は静止値」がそのまま効く)。
+    pub const LEVEL: &str = "level";
+    /// `layers/precomposition-layer/tm`(Time Remap)。値がそのまま**素材のフレーム番号**
+    /// (comp のフレームではない)。timing に混ぜない(裁定65 が `tm` を落とした理由の
+    /// 裏返し — Time Remap は timing ではなく property)。track が無ければ通常どおり
+    /// `LayerTiming::source_frame` の写像を使う。
+    pub const TIME_REMAP: &str = "time_remap";
 }
 
 /// layer の素材。media が入るまでは単色だけ。
 ///
 /// **variant を足すのが素材種を増やす唯一の道**にしてある(動画・静止画・生成物が
 /// 別々の経路を持たないようにするため)。
+///
+/// `Null` / `Shape` / `Text` に中身のフィールドを持たせていないのは、この enum が
+/// `Eq + Hash`(engine の texture cache のキー)である必要があるため — 図形の頂点や
+/// テキストの内容は `f64` を含み `Eq` になれない。中身は layer 自身の別 component
+/// (`Layer:shapes` / `Layer:text`)が持ち、ここは「この層の素材はどの種類か」の印だけ
+/// (mask を `meta` の外に置いたのと同じ理由、裁定108(a))。
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum LayerSource {
     Solid {
@@ -106,14 +132,27 @@ pub enum LayerSource {
         path: String,
         fingerprint: Option<String>,
     },
+    /// 絵を持たず transform だけ持つ(AE の Null Object)。親子の受け皿
+    /// (`layers/null-layer/ty`、layer-meta 束)。
+    Null,
+    /// ベクタ生成物(`layers/shape-layer/ty`)。中身(パス源+演算子スタック+fill/stroke)は
+    /// `Layer:shapes` component が `Vec<motolii_vector::Shape>` として持つ
+    /// (`layers/shape-layer/shapes`)。語彙の正本は `motolii-vector`(shape-1/2/3 が既に決めた)
+    /// — ここで作り直さない(裁定10)。
+    Shape,
+    /// テキスト生成物(`layers/text-layer/ty`)。中身は `Layer:text` component。
+    /// **今は素の文字列1本だけ**(`layers/text-layer/t`)— 範囲スタイル・アニメーターの
+    /// 語彙(裁定82/85 等)は `text` 発注単位(75行)の仕事で、ここでは作らない。
+    Text,
 }
 
 impl LayerSource {
     /// Document が知っている大きさ。実素材は probe しないと分からないので `None`。
+    /// `Null`/`Shape`/`Text` も `None` — 寸法は素材ではなく中身(演算子・組版)が決める。
     pub fn declared_size(&self) -> Option<[f32; 2]> {
         match self {
             Self::Solid { width, height, .. } => Some([*width as f32, *height as f32]),
-            Self::Media { .. } => None,
+            Self::Media { .. } | Self::Null | Self::Shape | Self::Text => None,
         }
     }
 }
@@ -164,6 +203,10 @@ pub struct LayerTiming {
     pub duration: i64,
     /// 素材の何フレーム目から使うか。
     pub source_in: i64,
+    /// `layers/layer/sr`(Time Stretch)。comp が1フレーム進む間に素材が何フレーム
+    /// 進むかの比。`Speed::NORMAL`(1/1)が等速。**穴は裁定63 で空けてあった** —
+    /// 元の `source_in + (comp_frame - start)` は 1:1 固定しか表せなかった。
+    pub speed: Speed,
 }
 
 impl Default for LayerTiming {
@@ -174,6 +217,7 @@ impl Default for LayerTiming {
             // `LayerMeta::new` が素材の実尺から埋める。
             duration: 0,
             source_in: 0,
+            speed: Speed::NORMAL,
         }
     }
 }
@@ -198,15 +242,60 @@ impl LayerTiming {
             start,
             duration,
             source_in: 0,
+            speed: Speed::NORMAL,
         }
     }
 
     /// comp フレーム → 素材のフレーム。居ない時刻なら `None`。
     ///
     /// **素材の終端でフリーズさせない**(M4)。居ない時刻は描かない。
+    /// `speed` が等速でない場合、進み幅を比でスケールする(裁定63)。
     pub fn source_frame(&self, comp_frame: i64) -> Option<i64> {
-        self.covers(comp_frame)
-            .then(|| self.source_in + (comp_frame - self.start))
+        self.covers(comp_frame).then(|| {
+            let offset = comp_frame - self.start;
+            self.source_in + self.speed.scale_frame_offset(offset)
+        })
+    }
+}
+
+/// `sr`(Time Stretch)。**比率であって時刻ではない** — `motolii-core::RationalTime` を
+/// 再利用しない(あちらは秒の正本で、意味を混ぜると「速度なのか時刻なのか」が
+/// 型から読めなくなる)。f64 を経由しないので TM-4 の柵(`fps` と `f64` が同じ式に
+/// 出ないこと)の対象外のまま保てる — この型はそもそも `fps` を参照しない。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Speed {
+    num: i64,
+    den: i64,
+}
+
+impl Speed {
+    pub const NORMAL: Speed = Speed { num: 1, den: 1 };
+
+    /// `den` は正でなければならない(符号は `num` が持つ — 負の速度 = 逆再生)。
+    pub fn try_new(num: i64, den: i64) -> Result<Self, StoreError> {
+        if den <= 0 {
+            return Err(StoreError::Property(
+                "speed の分母は正でなければならない".to_owned(),
+            ));
+        }
+        Ok(Self { num, den })
+    }
+
+    pub const fn num(self) -> i64 {
+        self.num
+    }
+
+    pub const fn den(self) -> i64 {
+        self.den
+    }
+
+    /// comp 上のオフセット(フレーム)を、この速度で素材側のオフセットへ写す(床関数)。
+    /// `den > 0` は構築時に保証済みなので `div_euclid` がそのまま床除算になる
+    /// (逆速度で `offset` が実質負になる場合も含めて)。
+    fn scale_frame_offset(self, offset: i64) -> i64 {
+        let num = offset as i128 * self.num as i128;
+        let den = self.den as i128;
+        (num.div_euclid(den)) as i64
     }
 }
 
@@ -240,4 +329,10 @@ pub struct ResolvedLayer {
     /// ここに置くのは、`ResolvedLayer` が「この時刻のこの layer の姿」の全部だからである。
     /// 別の口にすると `ResolvedLayer` から `LayerId` が引けず、描く側がマスクへ辿り着けない。
     pub masks: Vec<ResolvedMask>,
+    /// `layers/visual-layer/bm`。**まだ合成器は読んでいない**(`motolii-compositor` は
+    /// `re_renderer` の `multiplicative_tint` しか使っておらず、blend mode の合成式は
+    /// 未実装)。Document 側の意味はここで解決済みにしておき、engine が繋ぐ日を待つ。
+    pub blend_mode: BlendMode,
+    /// matte(裁定66)。**同上、まだ合成器は読んでいない**。
+    pub matte: Option<Matte>,
 }

@@ -43,6 +43,7 @@ fn a_layer_only_exists_inside_its_placement() {
                     start: 10,
                     duration: 20,
                     source_in: 0,
+                    ..Default::default()
                 },
             },
         },
@@ -74,6 +75,7 @@ fn source_in_shifts_which_frame_is_used() {
                     start: 100,
                     duration: 50,
                     source_in: 7,
+                    ..Default::default()
                 },
             },
         },
@@ -132,6 +134,7 @@ fn move_trim_and_split_are_all_one_intent() {
             start: 50,
             duration: 100,
             source_in: 0,
+            ..Default::default()
         },
     })
     .unwrap();
@@ -145,6 +148,7 @@ fn move_trim_and_split_are_all_one_intent() {
             start: 60,
             duration: 90,
             source_in: 10,
+            ..Default::default()
         },
     })
     .unwrap();

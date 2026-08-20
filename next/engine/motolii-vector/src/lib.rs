@@ -25,10 +25,20 @@
 //! その代わり [`PathSource::Bezier`] が**輪郭の列**を持つ。Lottie では複数輪郭は
 //! `group.it` に `path` を並べて作るが、ここでは1つのパス源が最初から複数輪郭を持てる。
 //! **中マドは [`FillRule::EvenOdd`] が開ける**ので、パスブーリアンは要らない(裁定74)。
+//!
+//! # 保存(layer-meta 束)
+//!
+//! `Shape` とその内側の型に `serde` を足してある。**中身の語彙は増やしていない**
+//! (derive を足しただけ)。`motolii-store` の shape-layer が `Vec<Shape>` を
+//! そのまま Document の component として持つ — 「1つのパス源+演算子スタック」の
+//! 正本はここ1つのままで、store 側に別のパス表現を発明させない(裁定10 と同じ考え方)。
+//! `Canvas` / `Raster` / `VectorError` は描画専用の値なので保存の対象外(derive していない)。
 
 mod geom;
 mod ops;
 mod raster;
+
+use serde::{Deserialize, Serialize};
 
 // パスの器は**入力の語彙**なので公開する。`rect` / `ellipse` は公開しない —
 // 同じパスが `PathSource::Rectangle` からも作れることになり、口が2本になる(軸4)。
@@ -42,7 +52,7 @@ use ops::Instance;
 // ---------------------------------------------------------------------------
 
 /// 図形1つ。`shape-1` が扱う全語彙がここに集まっている。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Shape {
     /// パス源(`path.ks` / `rectangle.s` / `ellipse.s`)。
     pub source: PathSource,
@@ -74,7 +84,7 @@ impl Shape {
 /// 位置・回転を持たないのは裁定74 — 層の transform と repeater の anchor で賄える。
 /// `polystar` の `is`/`os`(Inner/Outer Roundness)も同じ理由で持たない
 /// ([`OpKind::RoundedCorners`] と同じ見た目に2つ目の口を作ることになる)。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PathSource {
     /// `path.ks` — **ベジェパスの正本**。SVG・テキストアウトライン・primitive は
     /// すべてこの型へ落ちる。輪郭が複数持てるのが `group.it` を落とした代わり。
@@ -114,7 +124,7 @@ impl PathSource {
 }
 
 /// 演算子スタックの1段。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShapeOp {
     /// `graphic-element.hd` — この1段だけの有効/無効。**層の visible とは別**で、
     /// 消すのではなく黙らせる(設定を失わずに切れる)。
@@ -136,7 +146,7 @@ impl ShapeOp {
 ///
 /// **どれも「パス → パス」**(repeater だけが1枚を複数枚へ増やす)。
 /// 段の意味は「1つ前の出力を受け取って次へ渡す」以上でも以下でもない。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum OpKind {
     /// `trim-path` — MV で最も使う語彙。`start`/`end` は 0..1、`offset` は窓の回転。
     TrimPath {
@@ -209,7 +219,7 @@ pub enum OpKind {
 ///
 /// 適用順序は `T(position) · R(rotation) · S(scale) · T(-anchor)` で、裁定58 と同じ。
 /// `rotation` は**度**(裁定58「度のまま。人が読める」)、`scale` は 1.0 基準。
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct RepeaterTransform {
     pub anchor: Point,
     pub position: Point,
@@ -238,7 +248,7 @@ impl Default for RepeaterTransform {
 
 /// 直線(非 premultiplied)RGB。**alpha を持たない** — 不透明度は `shape-style.o` が
 /// 1本で持つ。両方持つと同じことを言う正本が2つになる(裁定59 の形)。
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Rgb {
     pub r: f64,
     pub g: f64,
@@ -259,7 +269,7 @@ impl Rgb {
 /// `fill-rule` も `opacity` も `hidden` も全部持っており、違うのは「単色か色停止列か」
 /// だけである。型を割ると**同じ意味の property が2箇所に生える**(裁定59 の形)。
 /// Brush は fill/stroke に**直交**するので、線にも同じ塗りがそのまま乗る。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Brush {
     /// `fill.c` / `stroke.c`
     Solid(Rgb),
@@ -279,7 +289,7 @@ impl Default for Brush {
 /// `shape-style.o` 1本である(裁定59 の形を作らない)。Lottie は `g` の中に
 /// 色停止と不透明度停止を混ぜて置けるが、それは1枚 JSON へ畳むための都合であって
 /// 編集器の意味ではない。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Gradient {
     /// `base-gradient.t`
     pub kind: GradientType,
@@ -292,7 +302,7 @@ pub struct Gradient {
 }
 
 /// 色停止1つ。
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct GradientStop {
     /// 0..1。
     pub offset: f64,
@@ -300,7 +310,7 @@ pub struct GradientStop {
 }
 
 /// `constants/gradient-type`。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum GradientType {
     #[default]
     Linear,
@@ -308,7 +318,7 @@ pub enum GradientType {
 }
 
 /// `fill` / `gradient-fill`。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Fill {
     /// `fill.c` か `base-gradient`。
     pub brush: Brush,
@@ -332,7 +342,7 @@ impl Default for Fill {
 }
 
 /// `stroke` / `gradient-stroke` + `base-stroke`。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Stroke {
     /// `stroke.c` か `base-gradient`。
     pub brush: Brush,
@@ -372,7 +382,7 @@ impl Default for Stroke {
 /// Lottie は `[{n:"d",v:..},{n:"g",v:..},{n:"o",v:..}]` という**種別つきの列**で持つが、
 /// 採らない — 同じ破線が何通りにも書けてしまい(`d,g,d,g` と `d,g` の繰り返しが同義)、
 /// 正本が1つにならない。ラスタライザが受け取る平坦形(長さの列 + 位相)で持つ。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Dash {
     /// 線・間隙の長さが交互に並ぶ。**偶数個**でないと上流が破線として受け付けない。
     pub pattern: Vec<f64>,
@@ -381,7 +391,7 @@ pub struct Dash {
 }
 
 /// `constants/fill-rule`。**中マドを賄う**(裁定74)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum FillRule {
     #[default]
     NonZero,
@@ -389,7 +399,7 @@ pub enum FillRule {
 }
 
 /// `constants/line-cap`。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum LineCap {
     #[default]
     Butt,
@@ -398,7 +408,7 @@ pub enum LineCap {
 }
 
 /// `constants/line-join`。`offset-path`(shape-2)と共有する enum。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum LineJoin {
     #[default]
     Miter,
@@ -407,7 +417,7 @@ pub enum LineJoin {
 }
 
 /// `constants/star-type`。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum StarType {
     /// 外半径と内半径が交互に並ぶ。
     #[default]
@@ -419,7 +429,7 @@ pub enum StarType {
 /// `zig-zag.pt` — 山の頂点をコーナーにするか滑らかにするか。
 ///
 /// `constants` に独立した行を持たない(Lottie では zig-zag だけが使う語彙)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum PointType {
     #[default]
     Corner,
@@ -427,7 +437,7 @@ pub enum PointType {
 }
 
 /// `constants/composite` — repeater の Above/Below。**描く順**を決める。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Composite {
     /// コピー0 が先に描かれ、後のコピーが上に載る。
     #[default]
@@ -437,7 +447,7 @@ pub enum Composite {
 }
 
 /// `constants/trim-multiple-shapes` — trim の複数輪郭モード。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum TrimMultiple {
     /// 輪郭ごとに**同じ窓**で切る。全部が同時に伸びる。
     #[default]

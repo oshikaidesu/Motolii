@@ -18,12 +18,14 @@
 //! それは Lottie/AE の rotation の向きそのもの(裁定58)。よって式は1行も変えず、
 //! 空間の宣言だけを comp 座標へ合わせてある。
 
+use serde::{Deserialize, Serialize};
+
 /// 正準空間の2Dベクトル/点。
 ///
 /// Lottie の `s`(Size)は Vec2 の**単一 property** なので、幅・高さもこの型で持つ
 /// (`x` = 幅 / `y` = 高さ)。x と y を別 property へ割らない理由は裁定61 と同じ —
 /// 割ると片方だけキーが打たれた不正状態が作れる。
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
@@ -85,7 +87,7 @@ impl Point {
 
 /// パス頂点。`in_tangent`/`out_tangent` は頂点相対の cubic bezier ハンドルで、
 /// **Lottie `bezier` の `v`/`i`/`o` と同型**。両方ゼロなら直線(コーナー)。
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Vertex {
     pub point: Point,
     pub in_tangent: Point,
@@ -103,7 +105,7 @@ impl Vertex {
 }
 
 /// 1輪郭。`closed` は Lottie `bezier.c`。
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Contour {
     pub vertices: Vec<Vertex>,
     pub closed: bool,

@@ -202,3 +202,40 @@ pub fn descriptor_present() -> ComponentDescriptor {
         component_type: Some(LayerPresent::name()),
     }
 }
+
+/// layer の小さな非アニメーション属性(hidden / parent / blend mode / matte / name /
+/// auto-orient)。**`meta` の外**(layer-meta 束、裁定108(c) の構造修正)。
+pub fn descriptor_attrs() -> ComponentDescriptor {
+    ComponentDescriptor {
+        archetype: Some("motolii.archetypes.Layer".into()),
+        component: "Layer:attrs".into(),
+        component_type: Some(TrackJson::name()),
+    }
+}
+
+/// layer が持つ effect インスタンスの列(id + plugin id のみ、`layer-meta` 束)。
+pub fn descriptor_effects() -> ComponentDescriptor {
+    ComponentDescriptor {
+        archetype: Some("motolii.archetypes.Layer".into()),
+        component: "Layer:effects".into(),
+        component_type: Some(TrackJson::name()),
+    }
+}
+
+/// shape-layer の図形列(`Vec<motolii_vector::Shape>`)。
+pub fn descriptor_shapes() -> ComponentDescriptor {
+    ComponentDescriptor {
+        archetype: Some("motolii.archetypes.Layer".into()),
+        component: "Layer:shapes".into(),
+        component_type: Some(TrackJson::name()),
+    }
+}
+
+/// text-layer の文字列内容(`layers/text-layer/t`)。範囲スタイル等は `text` 束の仕事。
+pub fn descriptor_text() -> ComponentDescriptor {
+    ComponentDescriptor {
+        archetype: Some("motolii.archetypes.Layer".into()),
+        component: "Layer:text".into(),
+        component_type: Some(TrackJson::name()),
+    }
+}

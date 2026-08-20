@@ -8,6 +8,11 @@ license.workspace = true
 arrow.workspace = true
 motolii-core.workspace = true
 motolii-eval.workspace = true
+# shape-layer の `shapes` 束(layer-meta): 図形の語彙は shape-1/2/3 が既に決めた
+# `motolii-vector::Shape` が正本。store 側で別のパス表現を発明しない(裁定10)。
+# 依存の向きは engine → store が主だが、これは型を借りるだけの片方向で、
+# motolii-vector は motolii-store を引かない(循環にならない)。
+motolii-vector.workspace = true
 re_byte_size.workspace = true
 re_chunk.workspace = true
 re_chunk_store.workspace = true

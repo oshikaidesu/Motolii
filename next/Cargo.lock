@@ -3369,6 +3369,7 @@ dependencies = [
  "arrow",
  "motolii-core",
  "motolii-eval",
+ "motolii-vector",
  "re_build_info",
  "re_byte_size",
  "re_chunk",
@@ -3392,6 +3393,7 @@ version = "0.1.0"
 name = "motolii-vector"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "thiserror 2.0.20",
  "tiny-skia",
 ]

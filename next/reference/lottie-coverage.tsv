@@ -39,7 +39,7 @@ composition	animation	fonts	Fonts	不採用	document にフォント表を建て
 composition	animation	fr	Framerate	採用済	Composition.fps。**有理数で持つ**(Lottie の f64 は 30000/1001 を表せない。裁定64)	pub fps: motolii_core::Fps		lottie
 composition	animation	h	Height	採用済	Composition.height	pub height: u32		lottie
 composition	animation	ip	In Point	不採用	作業領域は view の関心であって document の関心ではない(裁定64)			lottie
-composition	animation	markers	Markers	採用予定	ロケータに写る		layer-meta	lottie
+composition	animation	markers	Markers	採用済	ロケータに写る。marker 束が実装済み(裁定111) — component・読み書き・永続化まで完了しており、layer-meta 束は状態と evidence の書き換えだけ	Intent::SetMarkers	layer-meta	lottie
 composition	animation	mb	Motion Blur	不採用	モーションブラーは合成器側の関心で document には持たない			lottie
 composition	animation	meta	Metadata	不採用	配信物メタ(作者・説明・生成器)。編集の意味ではない			lottie
 composition	animation	metadata	User Metadata	不採用	同上(利用者メタ)			lottie
@@ -60,7 +60,7 @@ composition	motion-blur	sp	Shutter Phase	不採用	同上(シャッター位相)
 composition	motion-blur	spf	Samples per Frame	不採用	同上(フレームあたりサンプル数)			lottie
 composition	user-metadata	customProps	Custom Properties	不採用	型のない袋を document に開けると、そこが第二の意味の置き場になる			lottie
 composition	user-metadata	filename	Filename	不採用	file 名を file の中に書く形。名前を変えた瞬間ずれるので正本が2つになる			lottie
-constants	blend-mode		Blend Mode	採用予定	0..15。発明の余地が無い(裁定67)。層の語彙なので束を shape-2 から layer-meta へ付け替え(2026-08-20、shape-2レーンの指摘)		layer-meta	lottie
+constants	blend-mode		Blend Mode	採用済	0..15。発明の余地が無い(裁定67)。層の語彙なので束を shape-2 から layer-meta へ付け替え(2026-08-20、shape-2レーンの指摘)	pub enum BlendMode	layer-meta	lottie
 constants	composite		Composite	採用済	repeater の Above/Below	pub enum Composite	shape-1	lottie
 constants	fill-rule		Fill Rule	採用済	nonzero / evenodd。中マドを賄う	pub enum FillRule	shape-1	lottie
 constants	font-path-origin		Font Path Origin	不採用	フォント取得元4種は Web プレイヤの都合			lottie
@@ -68,7 +68,7 @@ constants	gradient-type		Gradient Type	採用済	linear / radial	pub enum Gradie
 constants	line-cap		Line Cap	採用済	butt/round/square	pub enum LineCap	shape-1	lottie
 constants	line-join		Line Join	採用済	miter/round/bevel。offset-path と共有	pub enum LineJoin	shape-1	lottie
 constants	mask-mode		Mask Mode	採用済	Add/Subtract/Intersect/Lighten/Darken/Difference。`None` は列挙に混ぜない — 消すことはモードではない(serde が `"None"` を弾くことを試験で縛る)	pub enum MaskMode	mask	lottie
-constants	matte-mode		Matte Mode	採用予定	Alpha/InvertedAlpha/Luma/InvertedLuma は AE の語彙(裁定66)。層の語彙なので束を shape-2 から layer-meta へ付け替え(2026-08-20、shape-2レーンの指摘)		layer-meta	lottie
+constants	matte-mode		Matte Mode	採用済	Alpha/InvertedAlpha/Luma/InvertedLuma は AE の語彙(裁定66)。層の語彙なので束を shape-2 から layer-meta へ付け替え(2026-08-20、shape-2レーンの指摘)	pub enum MatteMode	layer-meta	lottie
 constants	merge-mode		Merge Mode	不採用	パスブーリアンは対象外			lottie
 constants	shape-direction		Shape Direction	不採用	頂点順で表現する			lottie
 constants	star-type		Star Type	採用済	star / polygon	pub enum StarType	shape-2	lottie
@@ -209,7 +209,7 @@ helpers	transform	s	Scale	採用済	scale。単位は 1.0 基準(パーセント
 helpers	transform	sa	Skew Axis	採用済	skew axis(度)。0=x軸/90=y軸に沿った点が不動点	skew_axis_degrees	transform-skew	lottie
 helpers	transform	sk	Skew	採用済	skew(度)。from_transform の穴を埋めた(velato の式と一致させた)	skew_degrees	transform-skew	lottie
 helpers	visual-object	mn	Match Name	不採用	expression 用の第二の識別子。LayerId/PropertyId がある			lottie
-helpers	visual-object	nm	Name	採用予定	人が付ける表示名。同一性は LayerId のまま		layer-meta	lottie
+helpers	visual-object	nm	Name	採用済	人が付ける表示名。同一性は LayerId のまま。`meta` とは別 component(`LayerAttrs`)に置く — SetMeta は新規配置専用なので同居させると触れなくなる	pub name: String	layer-meta	lottie
 layers	all-layers	@extends	layers/precomposition-layer	該当なし	継承元			lottie
 layers	all-layers	@extends	layers/solid-layer	該当なし	継承元			lottie
 layers	all-layers	@extends	layers/image-layer	該当なし	継承元			lottie
@@ -224,7 +224,7 @@ layers	audio-layer	@extends	layers/layer	該当なし	継承元			lottie
 layers	audio-layer	au	Audio Settings	不採用	音量を専用の入れ子に畳む形は採らない。level は普通の property track として持つ			lottie
 layers	audio-layer	refId	Sound Id	不採用	asset 表への間接参照。素材は layer が直に持つ			lottie
 layers	audio-layer	ty	Type	採用済	音声だけの素材も LayerSource::Media を通る(裁定28)。鳴るかどうかは probe が決める	LayerSource::Media		lottie
-layers	audio-settings	lv	Level	採用予定	clip の音量(gain)。GOALS 標準。普通の property track として持つ		layer-meta	lottie
+layers	audio-settings	lv	Level	採用済	clip の音量(gain)。GOALS 標準。普通の property track として持つ(専用 component ではなく `property::LEVEL`)	pub const LEVEL: &str = "level";	layer-meta	lottie
 layers	camera-layer	@extends	layers/layer	該当なし	継承元			lottie
 layers	camera-layer	ks	Transform	不採用	3D カメラの transform。3D 系は不採用(裁定65)			lottie
 layers	camera-layer	pe	Perspective	不採用	Z=0 平面までの距離。3D 系は不採用(裁定65)			lottie
@@ -237,42 +237,42 @@ layers	image-layer	refId	Reference Id	不採用	asset 表への間接参照。�
 layers	image-layer	ty	Type	採用済	静止画も LayerSource::Media(動画と同じ variant、裁定28)	LayerSource::Media		lottie
 layers	layer	@extends	helpers/visual-object	該当なし	継承元			lottie
 layers	layer	ddd	Threedimensional	不採用	3D 系は不採用(裁定65)			lottie
-layers	layer	hd	Hidden	採用予定	行の表示/非表示(GOALS 標準の mute)。tombstone の present(削除)とは別物		layer-meta	lottie
+layers	layer	hd	Hidden	採用済	行の表示/非表示(GOALS 標準の mute)。tombstone の present(削除)とは別物。`LayerAttrs`(`meta` とは別 component)に置き、hidden な layer は resolve が None を返す(present とは別に「今フレームは描かない」を作れる)	pub hidden: bool	layer-meta	lottie
 layers	layer	ind	Index	不採用	配列位置による同一性は挿入削除で壊れる。LayerId がある(裁定65)			lottie
 layers	layer	ip	In Point	採用済	LayerTiming.start	pub start: i64		lottie
 layers	layer	op	Out Point	採用済	LayerTiming.duration として持つ。終端フレームだと start > op の不正状態が作れる	pub duration: i64		lottie
-layers	layer	parent	Parent Index	採用予定	親子(GOALS 標準)。参照は ind ではなく LayerId(裁定65)		layer-meta	lottie
-layers	layer	sr	Time Stretch	採用予定	速度。LayerTiming に足す。今の写像は 1:1 固定しか表せない(裁定63 で空けた穴)		layer-meta	lottie
+layers	layer	parent	Parent Index	採用済	親子(GOALS 標準)。参照は ind ではなく LayerId(裁定65)。**循環参照は書き口(SetAttrs)が拒む**(親鎖を辿って自分自身へ戻ってこないことを試験で縛った)。まだ transform の合成は実装していない(resolve は parent を読まない、記録のみ)	validate_no_parent_cycle	layer-meta	lottie
+layers	layer	sr	Time Stretch	採用済	速度。LayerTiming に足す。今の写像は 1:1 固定しか表せない(裁定63 で空けた穴)。`Speed`(有理数 num/den)を新設し `source_frame` の進み幅をスケールする。f64/fps を経由しないので TM-4 の柵の対象外のまま	pub speed: Speed	layer-meta	lottie
 layers	layer	st	Start Time	採用済	代数的に等価な LayerTiming.source_in(st = start - source_in、裁定63)	pub source_in: i64		lottie
 layers	layer	ty	Type	採用済	LayerSource の variant が兼ねる(裁定19)。数値の型タグは持たない	pub enum LayerSource		lottie
 layers	null-layer	@extends	layers/visual-layer	該当なし	継承元			lottie
-layers	null-layer	ty	Type	採用予定	絵を持たず transform だけ持つ layer(AE の Null Object)。親子の受け皿		layer-meta	lottie
+layers	null-layer	ty	Type	採用済	絵を持たず transform だけ持つ layer(AE の Null Object)。親子の受け皿。`LayerSource::Null`(unit variant)— texture を持たないので engine は他の「今フレームは描かない」経路と同じ扱いで飛ばす	LayerSource::Null	layer-meta	lottie
 layers	precomposition-layer	@extends	layers/visual-layer	該当なし	継承元			lottie
 layers	precomposition-layer	h	Height	不採用	プリコンポは設計上の除外(GOALS)。グループ化+fold+ベイクへ置換済み			lottie
 layers	precomposition-layer	refId	Reference Id	不採用	同上			lottie
 layers	precomposition-layer	st	Start Time	不採用	同上。st の意味は layer/st 側で決着済み			lottie
-layers	precomposition-layer	tm	Time Remap	採用予定	Time Remap(GOALS 標準)。timing ではなく property track として持ち precomp 専用にしない — 素材時刻を返す property なので Media にそのまま効く		layer-meta	lottie
+layers	precomposition-layer	tm	Time Remap	採用済	Time Remap(GOALS 標準)。timing ではなく property track として持ち precomp 専用にしない — 素材時刻を返す property なので Media にそのまま効く。`property::TIME_REMAP` の値があれば `source_frame` を直接上書きする(通常の speed/trim 写像より優先)	pub const TIME_REMAP: &str = "time_remap";	layer-meta	lottie
 layers	precomposition-layer	ty	Type	不採用	プリコンポは設計上の除外(GOALS)			lottie
 layers	precomposition-layer	w	Width	不採用	同上(クリップ矩形)			lottie
 layers	shape-layer	@extends	layers/visual-layer	該当なし	継承元			lottie
-layers	shape-layer	shapes	Shapes	採用予定	図形の列を layer が持つ形は採る。中身の語彙は shapes 群の判断		layer-meta	lottie
-layers	shape-layer	ty	Type	採用予定	ベクタ生成物。LayerSource の variant として足す。パスラスタライザはテキストで結局要る		layer-meta	lottie
+layers	shape-layer	shapes	Shapes	採用済	図形の列を layer が持つ形は採る。中身の語彙は shapes 群の判断 — `motolii-vector::Shape`(shape-1/2/3 が既に決めた正本、裁定10)を作り直さず `Vec<Shape>` をそのまま `Layer:shapes` component に乗せる(`serde` を追加しただけ)	SetShapes	layer-meta	lottie
+layers	shape-layer	ty	Type	採用済	ベクタ生成物。LayerSource の variant として足す。パスラスタライザはテキストで結局要る。`LayerSource::Shape`(unit variant — texture cache のキーである `LayerSource` は `Eq`+`Hash` が要るため、`f64` を含む図形本体は同居できない。中身は `shapes` 行の component が持つ)	LayerSource::Shape	layer-meta	lottie
 layers	solid-layer	@extends	layers/visual-layer	該当なし	継承元			lottie
 layers	solid-layer	sc	Color	採用済	LayerSource::Solid.rgba	rgba: [u8; 4]		lottie
 layers	solid-layer	sh	Height	採用済	LayerSource::Solid.height。単色は素材が無いので Document が寸法を持つ	height: u32		lottie
 layers	solid-layer	sw	Width	採用済	LayerSource::Solid.width	width: u32		lottie
 layers	solid-layer	ty	Type	採用済	LayerSource::Solid	Solid {		lottie
 layers	text-layer	@extends	layers/visual-layer	該当なし	継承元			lottie
-layers	text-layer	t	Data	採用予定	テキストの中身。語彙は text 群の判断		layer-meta	lottie
-layers	text-layer	ty	Type	採用予定	LayerSource の variant として足す(裁定19)		layer-meta	lottie
+layers	text-layer	t	Data	採用済	テキストの中身。語彙は text 群の判断 — layer-meta が持つのは**素の文字列1本だけ**(`Layer:text` component)。範囲スタイル・アニメーター(裁定82/85/92 等)は `text` 発注単位(75行)の仕事で、まだ持たない	SetTextContent	layer-meta	lottie
+layers	text-layer	ty	Type	採用済	LayerSource の variant として足す(裁定19)。`LayerSource::Text`(unit variant、shape-layer/ty と同じ理由で中身を持たない)	LayerSource::Text	layer-meta	lottie
 layers	unknown-layer	ty		不採用	仕様外の型を黙って通すのは再生器の規則。LayerSource は閉じた enum で、置けない素材は理由つきで拒否する(M2/M13)			lottie
 layers	visual-layer	@extends	layers/layer	該当なし	継承元			lottie
-layers	visual-layer	ao	Auto Orient	採用予定	auto-orient。position が Vec2 単一なら定義できる		layer-meta	lottie
-layers	visual-layer	bm	Blend Mode	採用予定	blend mode。Lottie の 0..15 をそのまま(裁定67)		layer-meta	lottie
+layers	visual-layer	ao	Auto Orient	採用済	auto-orient。position が Vec2 単一なら定義できる。`LayerAttrs` に bool として置く(**まだ resolve は読んでいない** — 実際に向きを合わせる計算は未実装、フラグの保存/読み出しのみ)	pub auto_orient: bool	layer-meta	lottie
+layers	visual-layer	bm	Blend Mode	採用済	blend mode。Lottie の 0..15 をそのまま(裁定67)。`LayerAttrs.blend_mode` → `ResolvedLayer.blend_mode` まで届く。**まだ合成器は読んでいない**(`motolii-compositor` の blend 実装待ち、Document 側の意味は解決済み)	pub blend_mode: BlendMode	layer-meta	lottie
 layers	visual-layer	cl	CSS Class	不採用	SVG レンダラ用の CSS class。再生フォーマットの都合			lottie
 layers	visual-layer	cp	Collapse Transform	不採用	deprecated(ct に置換済み)。同じことを言う正本が2つになる			lottie
 layers	visual-layer	ct	Collapse Transform	不採用	collapse transform は再生器の都合			lottie
-layers	visual-layer	ef	Effects	採用予定	効果の列。GOALS 標準。拡張の口(裁定6/13)が刺さる先		layer-meta	lottie
+layers	visual-layer	ef	Effects	採用済	効果の列。GOALS 標準。拡張の口(裁定6/13)が刺さる先。layer-meta が持つのは「どの effect(plugin id 文字列)を・どの順で」だけ(`EffectInstance{id, plugin_id}` の `Vec`、id は添字ではなく安定 ID)。`en`(Enabled)と param 値(`effects/effect/*`・`effect-values/*` の10行)は別行のまま — `effect` 発注単位の仕事でここでは作っていない	SetEffects	layer-meta	lottie
 layers	visual-layer	hasMask	Has Masks	不採用	masksProperties があるかどうかの複製。片方だけ書ける二重帳簿(裁定66 と同じ形)			lottie
 layers	visual-layer	ks	Transform	採用済	LayerPlacement(裁定58/69)。行列を組むのは from_transform 1箇所。opacity は箱の外(裁定62)	pub fn from_transform		lottie
 layers	visual-layer	ln	Layer XML ID	不採用	SVG レンダラ用の id 属性			lottie

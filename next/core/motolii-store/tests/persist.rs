@@ -59,6 +59,7 @@ fn authored() -> Document {
                         start: i as i64 * 30,
                         duration: 120,
                         source_in: 5,
+                        ..Default::default()
                     },
                 },
             },
@@ -129,6 +130,7 @@ fn saving_folds_the_edit_history() {
                 start: i,
                 duration: 120,
                 source_in: 5,
+                ..Default::default()
             },
         })
         .unwrap();

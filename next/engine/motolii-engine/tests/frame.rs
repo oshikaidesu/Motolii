@@ -174,13 +174,11 @@ fn undo_changes_the_rendered_frame() {
     let mut engine = Engine::new().expect("engine");
     let red = engine.render_frame(&doc.view(), t(0)).unwrap();
 
-    doc.apply(Intent::SetMeta {
+    // 2回目は既存 layer の素材差し替えなので `SetSource`(裁定108(c) の構造修正 —
+    // `SetMeta` は新規配置専用で、既存 layer には使えない)。
+    doc.apply(Intent::SetSource {
         layer,
-        meta: LayerMeta {
-            source: solid([0, 0, 255, 255], W, H),
-            order: 0,
-            timing: LayerTiming::place(0, None, 100_000),
-        },
+        source: solid([0, 0, 255, 255], W, H),
     })
     .unwrap();
     let blue = engine.render_frame(&doc.view(), t(0)).unwrap();

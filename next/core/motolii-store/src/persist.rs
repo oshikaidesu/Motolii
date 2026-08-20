@@ -18,41 +18,41 @@ use crate::{Document, Intent, StoreError};
 
 impl Document {
     /// 今見えている状態だけを持つ新しい Document を作る(履歴を畳む)。
+    ///
+    /// **component を名前で列挙しない**(裁定108(a) の構造修正)。以前はここに
+    /// `meta`/`masks`/`markers`/`composition`/property track を1つずつ名指しした
+    /// コピー処理が並んでおり、**新しい component を1つ足すたびにここを直す**必要が
+    /// あった — 直し忘れると保存から黙って消える。今は
+    /// [`crate::StoreView::track_json_components`] が「この entity が今持っている
+    /// component 全部」を store に聞いて返すので、`attrs`/`effects`/`shapes`/`text`
+    /// のような後発の component も1行も足さずに運ばれる(裁定57)。
+    ///
+    /// `AddLayer`(存在)だけは別扱い — `TrackJson` ではなく `LayerPresent`(bool)で、
+    /// かつ「今 present な layer の集合」は `view.layers()` が既に tombstone を
+    /// 弾いた形で返すため。
     pub fn flattened(&self) -> Result<Self, StoreError> {
         let view = self.view();
         let mut out = Self::new();
-        let mut intents = Vec::new();
+        // 履歴を1 edit 刻みへ畳む(裁定56)。全コピーを同じ `at` で書く。
+        let at = 1;
 
-        if let Some(composition) = view.composition()? {
-            intents.push(Intent::SetComposition(composition));
+        for (component, json) in view.track_json_components(&Document::composition_path()) {
+            out.copy_track_json(
+                Document::composition_path(),
+                component,
+                "motolii.archetypes.Composition",
+                json,
+                at,
+            )?;
         }
-        let markers = view.markers()?;
-        if !markers.is_empty() {
-            intents.push(Intent::SetMarkers { markers });
-        }
+
         for layer in view.layers() {
-            let Some(meta) = view.meta(layer)? else {
-                continue;
-            };
-            intents.push(Intent::AddLayer(layer));
-            intents.push(Intent::SetMeta { layer, meta });
-            let masks = view.masks(layer)?;
-            if !masks.is_empty() {
-                intents.push(Intent::SetMasks { layer, masks });
-            }
-            // property の一覧は store に聞く(別の台帳を持たない)。
-            for property in view.properties(layer) {
-                if let Some(track) = view.track(layer, &property)? {
-                    intents.push(Intent::SetTrack {
-                        layer,
-                        property,
-                        track,
-                    });
-                }
+            out.write(Intent::AddLayer(layer), at)?;
+            for (component, json) in view.track_json_components(&layer.entity_path()) {
+                out.copy_track_json(layer.entity_path(), component, "motolii.archetypes.Layer", json, at)?;
             }
         }
 
-        out.apply_all(intents)?;
         // 開いた直後は「編集していない」ので戻せない。
         out.mark_undo_floor();
         Ok(out)

@@ -6,8 +6,16 @@ use re_chunk_store::LatestAtQuery;
 use re_entity_db::EntityDb;
 use re_log_types::{EntityPath, Timeline};
 
-use crate::components::{descriptor_composition, descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
-use crate::{property, Composition, Document, LayerId, LayerMeta, LayerPlacement, Marker, Mask, PropertyId, ResolvedLayer, ResolvedMask, StoreError, EDIT_TIMELINE};
+use crate::components::{
+    descriptor_attrs, descriptor_composition, descriptor_effects, descriptor_markers,
+    descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes, descriptor_text,
+    descriptor_track, LayerPresent, TrackJson,
+};
+use crate::{
+    property, Composition, Document, EffectInstance, LayerAttrs, LayerId, LayerMeta,
+    LayerPlacement, Marker, Mask, PropertyId, ResolvedLayer, ResolvedMask, Shape, StoreError,
+    EDIT_TIMELINE,
+};
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
 #[derive(Clone, Copy)]
@@ -74,6 +82,42 @@ impl<'a> StoreView<'a> {
             })
             .collect();
         out.sort();
+        out
+    }
+
+    /// この entity(layer か `/composition`)が今の edit 時点で持つ、`TrackJson` で
+    /// 符号化された component **全部**を、component 名を知らずに読む。
+    ///
+    /// **`persist.rs::flattened()` の核**(裁定108(a) の構造修正)。`meta`/`masks`/
+    /// `attrs`/`effects`/`shapes`/`text`/`Composition:settings`/`Composition:markers`/
+    /// 個々の property track を1つずつ名指しする代わりに、この口が
+    /// `all_components_for_entity` へ**store に聞く**(裁定57)。新しい component を
+    /// 足しても、ここにもコピー先にも1行も足さずに保存へ乗る。
+    ///
+    /// `Layer:present`(`LayerPresent`、bool)だけは対象外 — 別型で `TrackJson` として
+    /// 読めないのと、存在は `Intent::AddLayer` が別途持つため。
+    pub(crate) fn track_json_components(
+        &self,
+        path: &EntityPath,
+    ) -> Vec<(re_types_core::ComponentIdentifier, String)> {
+        let engine = self.db.storage_engine();
+        let Some(components) = engine.store().schema().all_components_for_entity(path) else {
+            return Vec::new();
+        };
+        let query = self.query();
+        let present = descriptor_present().component;
+        let mut out: Vec<(re_types_core::ComponentIdentifier, String)> = components
+            .iter()
+            .filter(|component| **component != present)
+            .filter_map(|component| {
+                let results = self.db.latest_at(&query, path, [*component]);
+                let json = results
+                    .component_batch::<TrackJson>(*component)
+                    .and_then(|batch| batch.into_iter().next())?;
+                Some((*component, json.0))
+            })
+            .collect();
+        out.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
         out
     }
 
@@ -185,6 +229,77 @@ impl<'a> StoreView<'a> {
         serde_json::from_str(&json.0).map_err(StoreError::Encode)
     }
 
+    /// layer の非アニメーション属性(hidden/parent/blend mode/matte/name/auto-orient)。
+    ///
+    /// `Ok(None)` = **まだ一度も `SetAttrs` で書かれていない**。`meta` と同じく
+    /// 「無い」と「空」を同義にしない(裁定37)— ただし読み手側(`resolve`)は
+    /// `None` を「既定値」として扱ってよい(属性は元々省略可能なので、これは
+    /// マスク一覧の「無い=0枚」と同じ形)。
+    pub fn attrs(&self, layer: LayerId) -> Result<Option<LayerAttrs>, StoreError> {
+        let descriptor = descriptor_attrs();
+        let path = layer.entity_path();
+        let results = self
+            .db
+            .latest_at(&self.query(), &path, [descriptor.component]);
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(None);
+        };
+        serde_json::from_str(&json.0)
+            .map(Some)
+            .map_err(StoreError::Encode)
+    }
+
+    /// layer が持つ effect インスタンスの列。無ければ空(masks と同じ扱い)。
+    pub fn effects(&self, layer: LayerId) -> Result<Vec<EffectInstance>, StoreError> {
+        let descriptor = descriptor_effects();
+        let path = layer.entity_path();
+        let results = self
+            .db
+            .latest_at(&self.query(), &path, [descriptor.component]);
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(Vec::new());
+        };
+        serde_json::from_str(&json.0).map_err(StoreError::Encode)
+    }
+
+    /// shape-layer の図形列。無ければ空。
+    pub fn shapes(&self, layer: LayerId) -> Result<Vec<Shape>, StoreError> {
+        let descriptor = descriptor_shapes();
+        let path = layer.entity_path();
+        let results = self
+            .db
+            .latest_at(&self.query(), &path, [descriptor.component]);
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(Vec::new());
+        };
+        serde_json::from_str(&json.0).map_err(StoreError::Encode)
+    }
+
+    /// text-layer の文字列内容。無ければ空文字列。
+    pub fn text_content(&self, layer: LayerId) -> Result<String, StoreError> {
+        let descriptor = descriptor_text();
+        let path = layer.entity_path();
+        let results = self
+            .db
+            .latest_at(&self.query(), &path, [descriptor.component]);
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(String::new());
+        };
+        serde_json::from_str(&json.0).map_err(StoreError::Encode)
+    }
+
     /// comp 時刻でのマスク。形状も不透明度も普通の property track から取る。
     fn resolved_masks(
         &self,
@@ -249,6 +364,13 @@ impl<'a> StoreView<'a> {
             return Ok(None);
         };
 
+        // hidden は「今フレームは描かない」— present(削除)とは別物(裁定108(c) 系)。
+        // 属性が一度も書かれていない layer は既定(非 hidden)として扱う。
+        let attrs = self.attrs(layer)?.unwrap_or_default();
+        if attrs.hidden {
+            return Ok(None);
+        }
+
         // 時間の判定は Document がする。engine は解決済みの素材フレームを受け取るだけ。
         let Some(composition) = self.composition()? else {
             return Ok(None);
@@ -256,9 +378,24 @@ impl<'a> StoreView<'a> {
         let comp_frame = t
             .try_to_frame_floor(composition.fps)
             .map_err(|e| StoreError::Property(e.to_string()))?;
-        let Some(source_frame) = meta.timing.source_frame(comp_frame) else {
+        let Some(mut source_frame) = meta.timing.source_frame(comp_frame) else {
             return Ok(None);
         };
+        // `tm`(Time Remap、precomposition-layer)。track があれば**素材のフレーム番号を
+        // 直接**上書きする — 通常の speed/trim による写像より優先する(裁定65 が
+        // timing から追い出した分、property 側で戻す)。timing が「居る/居ない」を
+        // 決める点は変わらないので、上の `covers` 判定はそのまま活きる。
+        if let Some(remap) = self.value_at(layer, &PropertyId::new(property::TIME_REMAP)?, t)? {
+            match remap {
+                Value::F64(v) => source_frame = v.floor() as i64,
+                other => {
+                    return Err(StoreError::Property(format!(
+                        "{} に数値でない値が入っている: {other:?}",
+                        property::TIME_REMAP
+                    )))
+                }
+            }
+        }
         // 実素材の大きさは probe しないと分からない。ここでは 0 を置き、engine が
         // 「track が無く declared も無い」場合だけ素材の実寸で埋める。
         let size = meta.source.declared_size().unwrap_or([0.0, 0.0]);
@@ -308,6 +445,8 @@ impl<'a> StoreView<'a> {
             source: meta.source,
             source_frame,
             masks: self.resolved_masks(layer, t)?,
+            blend_mode: attrs.blend_mode,
+            matte: attrs.matte,
         }))
     }
 
