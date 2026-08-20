@@ -65,3 +65,13 @@
 - `ui-runtime-architecture.md` 等の旧shell責任境界・用語・反映辞書
 - `decision-index.md` — 旧世界の歴史台帳として凍結(自己宣言あり)。ただし「実装でなく意味」の行(Creator/Developer連続体、first/third同一境界の源流、`.vism`名称)は上のA文書経由で生きる
 - **要注意の失効例**: 「Motolii は Rerun Spatial Viewer の creator-facing wrapper」という旧記述は裁定3(viewer層を引かない)と正面衝突。この文言を根拠に viewer 層を引き込まない
+
+## Browser の意味源(2026-08-20 回収。裁定起草の材料)
+
+- **視覚と操作構造の正本** = `docs/mocks-ui/public/browser-library.html`(filter rail の固定 taxonomy / Tag Editor flyout / 検索は横断自由文字列、の3層)。ただし **JS 内の tag 配列は fixture であり所有権の決定ではない**
+- **`ui/motolii-rn/src/panels/AssetTaggingPanel.tsx` はタグ設計ではなく registry 機構の probe**(自己申告あり)。タグの意味をここから読まない
+- **effect の分類タグは決定済み**(concept.md 2026-07-09: NodeDesc に表示名・カテゴリ・タグ+将来サムネの口を必須メタデータ)— **作者宣言の固定層**。利用者自由タグとは語彙も所有者も別(Ableton 12 の Factory tags / User tags 分離と同型)
+- **タグの所有者は未決のまま持ち越し**(旧 CU-G09 が最後まで「S」)。第一候補は User Palette Library 契約(2026-08-14)の類推 = **User Settings 所有・Document に入れない**。ただし要新規裁定
+- **「エフェクト分析」の正体 = 旧称「解析駆動」**(解析プラグイン→DataTrack→パラメータ駆動。concept.md の長期差別化)。Browser のタグ/検索とは**別の口**。ただし Ableton 12 は解析(Sound Similarity)を**自動タグとして発見側にも流している** — 「Motolii の解析を Browser の自動タグにも使うか」は旧 docs に無い新しい分岐点
+- Q0 拘束: 実データ生成の無いサムネイル/波形欄を出さない(旧 mock のプレースホルダをそのまま持ち込むと即違反)
+- タブ構成は配布3層(日常の棚 / 発見の地図 / 外部推薦、2026-07-23)を同一 UI に潰さない
