@@ -9,7 +9,7 @@ use re_log_types::{
 };
 use re_types_core::SerializedComponentBatch;
 
-use crate::components::{descriptor_composition, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
+use crate::components::{descriptor_composition, descriptor_masks, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
 use crate::view::StoreView;
 use crate::{StoreError, EDIT_TIMELINE};
 
@@ -48,6 +48,24 @@ impl PropertyId {
         })
     }
 
+    /// マスクの形状トラック。**id で名前が決まる**ので、並べ替えても消しても
+    /// 別のマスクへ付き直さない。
+    ///
+    /// 標準 property と同じく予約語でも空でもないので、構築は失敗し得ない。
+    pub fn mask_shape(mask: crate::MaskId) -> Self {
+        Self::mask_property(mask, "shape")
+    }
+
+    /// マスクの不透明度トラック(1.0 基準)。
+    pub fn mask_opacity(mask: crate::MaskId) -> Self {
+        Self::mask_property(mask, "opacity")
+    }
+
+    fn mask_property(mask: crate::MaskId, attr: &str) -> Self {
+        let name = format!("{}{mask}.{attr}", crate::property::MASK_PREFIX);
+        Self::new(&name).expect("マスクの property 名は予約語でも空でもない")
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -72,6 +90,15 @@ pub enum Intent {
     SetMeta {
         layer: LayerId,
         meta: crate::LayerMeta,
+    },
+    /// マスクの並びと重ね方。**追加・削除・並べ替え・モード変更はすべてこれ1つ**
+    /// (`LayerTiming` と同じ考え方で、操作ごとの専用 intent を足さない)。
+    ///
+    /// 形状と不透明度は `SetTrack` が書く。「マスクを1枚足す」は
+    /// `SetMasks` + `SetTrack` を `apply_all` で束ねた **1操作 = 1 undo** になる。
+    SetMasks {
+        layer: LayerId,
+        masks: Vec<crate::Mask>,
     },
     /// comp 上の配置と、素材のどこを使うか。move / trim / split はすべてこれ1つ。
     SetTiming {
@@ -256,6 +283,18 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_composition(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetMasks { layer, masks } => {
+                crate::mask::validate_unique_ids(&masks)?;
+                let json = serde_json::to_string(&masks)?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_masks(),
                         array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],

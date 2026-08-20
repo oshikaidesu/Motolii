@@ -67,7 +67,7 @@ constants	font-path-origin		Font Path Origin	不採用	フォント取得元4種
 constants	gradient-type		Gradient Type	採用済	linear / radial	pub enum GradientType	shape-2	lottie
 constants	line-cap		Line Cap	採用済	butt/round/square	pub enum LineCap	shape-1	lottie
 constants	line-join		Line Join	採用済	miter/round/bevel。offset-path と共有	pub enum LineJoin	shape-1	lottie
-constants	mask-mode		Mask Mode	採用予定	Add/Subtract/Intersect/Lighten/Darken/Difference。`None` は列挙に混ぜない — 消すことはモードではない		mask	lottie
+constants	mask-mode		Mask Mode	採用済	Add/Subtract/Intersect/Lighten/Darken/Difference。`None` は列挙に混ぜない — 消すことはモードではない(serde が `"None"` を弾くことを試験で縛る)	pub enum MaskMode	mask	lottie
 constants	matte-mode		Matte Mode	採用予定	Alpha/InvertedAlpha/Luma/InvertedLuma は AE の語彙(裁定66)。層の語彙なので束を shape-2 から layer-meta へ付け替え(2026-08-20、shape-2レーンの指摘)		layer-meta	lottie
 constants	merge-mode		Merge Mode	不採用	パスブーリアンは対象外			lottie
 constants	shape-direction		Shape Direction	不採用	頂点順で表現する			lottie
@@ -190,10 +190,10 @@ effects	wavy-effect	ty	Type	不採用	Document は effect を型で持たない(
 helpers	marker	cm	Comment	採用予定	ロケータの名前		marker	lottie
 helpers	marker	dr	Duration	採用予定	範囲ロケータの尺。out point ではなく duration(裁定64 と同じ理由)		marker	lottie
 helpers	marker	tm	Time	採用予定	ロケータの時刻。RationalTime で持つ		marker	lottie
-helpers	mask	inv	Inverted	採用予定	マスクの反転。mode:Subtract とは別物		mask	lottie
-helpers	mask	mode	Mode	採用予定	constants/mask-mode。前のマスクとの重ね方		mask	lottie
-helpers	mask	o	Opacity	採用予定	マスクの不透明度。1.0 基準		mask	lottie
-helpers	mask	pt	Shape	採用予定	マスク形状 = values/bezier のトラック。**Value にパス型を足す必要がある**		mask	lottie
+helpers	mask	inv	Inverted	採用済	マスクの反転。mode:Subtract とは別物。**Lottie も AE も静止値**なので `Value::Bool` のトラックではなくマスク一覧側の bool(裁定78 が Bool の用例に挙げていたが、実際の用例は effect param 側)	pub inverted: bool	mask	lottie
+helpers	mask	mode	Mode	採用済	constants/mask-mode。前のマスクとの重ね方。畳む順は `Vec<Mask>` の並びが明示する(暗黙の隣接参照を作らない、裁定66)	pub mode: MaskMode	mask	lottie
+helpers	mask	o	Opacity	採用済	マスクの不透明度。1.0 基準(パーセントを採らない)。動くので property track 側 `mask.{id}.opacity`	pub fn mask_opacity	mask	lottie
+helpers	mask	pt	Shape	採用済	マスク形状 = values/bezier のトラック(`Value::Path`)。名前は `mask.{id}.shape` で**添字ではなく id** — 添字だと1枚消した時に形状が別のマスクへ付き直す(裁定65 と同型)	pub fn mask_shape	mask	lottie
 helpers	mask	x	Expand	不採用	マスクの膨張/収縮はパスのオフセット演算。要る日に effect として足す			lottie
 helpers	slot	p	Property Value	採用予定	スロットが差し込む値		slot	lottie
 helpers	slottable-object	sid	Slot Id	採用予定	スロット参照の識別子		slot	lottie
@@ -276,7 +276,7 @@ layers	visual-layer	ef	Effects	採用予定	効果の列。GOALS 標準。拡張
 layers	visual-layer	hasMask	Has Masks	不採用	masksProperties があるかどうかの複製。片方だけ書ける二重帳簿(裁定66 と同じ形)			lottie
 layers	visual-layer	ks	Transform	採用済	LayerPlacement(裁定58/69)。行列を組むのは from_transform 1箇所。opacity は箱の外(裁定62)	pub fn from_transform		lottie
 layers	visual-layer	ln	Layer XML ID	不採用	SVG レンダラ用の id 属性			lottie
-layers	visual-layer	masksProperties	Masks	採用予定	layer 内のパス切り抜き。matte(他 layer の alpha)とは別物		layer-meta	lottie
+layers	visual-layer	masksProperties	Masks	採用済	layer 内のパス切り抜き。matte(他 layer の alpha)とは別物。**`meta` とは別 component** — 同居させると素材の差し替えでマスクが消える。mask 束と一緒に着地した(型だけ作って置き場が無いと死蔵になるため)	descriptor_masks	layer-meta	lottie
 layers	visual-layer	mb	Motion Blur	不採用	モーションブラーは合成器側の関心			lottie
 layers	visual-layer	sy	Layer style	不採用	レイヤスタイルは効果の第二経路。ef 1本に畳む			lottie
 layers	visual-layer	td	Matte Target	不採用	同上			lottie
@@ -289,11 +289,11 @@ properties	base-keyframe	o	Out Tangent	採用済	Interp::Bezier の x1,y1	cubic_
 properties	base-keyframe	t	Time	採用済	RationalTime で持つ(裁定64)	pub t: RationalTime		lottie
 properties	bezier-keyframe	@extends	properties/base-keyframe	該当なし	継承元			lottie
 properties	bezier-keyframe	e	End value	不採用	deprecated。正本が2つになる			lottie
-properties	bezier-keyframe	s	Value	採用予定	マスク形状のキー値。**Keyframe::value にパス型を足す**		mask	lottie
+properties	bezier-keyframe	s	Value	採用済	マスク形状のキー値。`Keyframe::value` がパス型を持つ。頂点数と開閉が一致する時だけ補間する(裁定96)	Path(Path)	mask	lottie
 properties	bezier-property	@extends	properties/property	該当なし	継承元			lottie
 properties	bezier-property	a	Animated	不採用	JSON の discriminator。Rust の enum で表す			lottie
 properties	bezier-property	ix	Property Index	不採用	expression 用の番号台帳。property は名前で引く			lottie
-properties	bezier-property	k	Keyframes	採用予定	KeyframeTrack に載る。載せる Value の側(パス型)がまだ無い		mask	lottie
+properties	bezier-property	k	Keyframes	採用済	KeyframeTrack にそのまま載る。パス専用の機構を1つも足していない	pub struct KeyframeTrack	mask	lottie
 properties	color-keyframe	@extends	properties/base-keyframe	該当なし	継承元			lottie
 properties	color-keyframe	e	End value	不採用	deprecated			lottie
 properties	color-keyframe	s	Value	採用済	Keyframe::value = Value::Color	Color([f64; 4])		lottie
