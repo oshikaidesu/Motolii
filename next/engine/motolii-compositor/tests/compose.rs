@@ -325,23 +325,45 @@ fn empty_comp_is_the_clear_color() {
     assert_eq!([px[0], px[1], px[2]], [0, 0, 0], "layer が無ければ RGB は clear 色");
 }
 
-/// **現状の限界を固定する試験**(R0-A と同じ役割)。
+/// **alpha は composite 後の readback でも生き残る**(2026-08-20 実測。旧
+/// `alpha_is_flattened_by_the_composite_step` を置き換える)。
 ///
-/// `ScreenshotProcessor` は compositing phase の結果を撮るので、**alpha は clear 色へ
-/// 潰れて常に 255 になる**。preview はこれで良いが、alpha 付き書き出し
-/// (ProRes 4444 / PNG 連番)はこの経路では出せない。
+/// 「無改造で直せる」仮説の実測: `TargetConfiguration::blend_with_background` を
+/// 既定 `No`(shader が `color = vec4f(color.rgb, 1.0)` へ強制的に潰す、上流
+/// `composite.wgsl` 一次確認)から `Premultiplied` へ変えるだけの1行(fork 改造なし)。
+/// `Premultiplied` 分岐は `color = vec4f(color.rgb, color.a)` — 素通し。
+/// `CompositingScreenshot` フェーズの bind group も `Compositing` フェーズと**同じ
+/// `CompositorDrawData` インスタンス**(同じ uniform 値)を使う(`view_builder.rs`
+/// `ViewBuilder::new` が一度だけ作って両フェーズへ queue する。一次確認: `view_builder.rs`
+/// 695-707行)ので、screenshot 読み戻しにもこの分岐がそのまま効く。
 ///
-/// 直す時は `ViewBuilder` の main target を composite 前に読む経路を足すことになる
-/// (fork seam は要らない見込み)。**その日にこの試験が落ちるので、忘れずに気付ける**。
+/// KNOWN.md の「alpha 付き書き出しには getter 追加+COPY_SRC 付与の2箇所の fork 改造が
+/// 必要(裁定16 の『無改造』は楽観だった)」は**この経路とは別の言及**だったと考えられる
+/// (main target を composite 前に直接読む経路の話)。この1行だけでも
+/// `ScreenshotProcessor` 経由の alpha は生きる ── ただし screenshot 読み戻し自体は
+/// 元から compositing **後**の値を撮る設計なので、alpha が生きるようになったのは
+/// 「blend_with_background の分岐を変えた」ためであって「読み戻し経路を変えた」ためでは
+/// ない。両者は独立した論点。
+///
+/// **実測値**(この GPU・この一次確認、`cargo test -- --nocapture` で再現可能):
+/// - 空 comp(layer 無し): `[0, 0, 0, 0]` — 全チャンネル透明。clear color
+///   (`Rgba::TRANSPARENT`)がそのまま出る。
+/// - premultiplied `[128, 0, 0, 128]` の層を不透明度1.0で1枚: `[65, 0, 0, 128]`。
+///   alpha は **入力の128をそのまま素通し**(sRGB gamma の対象は RGB だけで、alpha は
+///   shader 内で unmultiply→gamma→remultiply を経ても最終的に `color.a` は触られない
+///   ─ 上流 `composite.wgsl` 一次確認)。R が65なのは premultiplied sRGB→linear→
+///   unmultiply→gamma再変換→remultiply の丸め込みの結果で、この試験の主張には関係ない
+///   (別試験 `opacity_dims_the_layer` が RGB 側の単調性を縛っている)。
+/// - 2回連続実行で同じ入力から同じ alpha(128)が出ることを確認済み(決定論)。
 #[test]
-fn alpha_is_flattened_by_the_composite_step() {
+fn alpha_survives_the_composite_step() {
     let mut compositor = Compositor::headless().expect("headless GPU");
 
     let empty = compositor.render(comp(), ResolvedCamera::default(), &[]).unwrap();
     assert_eq!(
-        pixel(&empty, 32, 32)[3],
-        255,
-        "layer が1枚も無い comp でも alpha は 255 になる(透明が出せない)"
+        pixel(&empty, 32, 32),
+        [0, 0, 0, 0],
+        "layer が1枚も無い comp は全チャンネル透明になるはず(alpha が生きている証拠)"
     );
 
     let half_alpha = compositor
@@ -373,7 +395,10 @@ fn alpha_is_flattened_by_the_composite_step() {
         )
         .unwrap();
     let px = pixel(&out, 32, 32);
-    assert_eq!(px[3], 255, "半透明 layer を1枚置いても alpha は 255 になる");
+    assert_eq!(
+        px[3], 128,
+        "半透明 layer(入力 alpha=128)は composite 後も alpha=128 のまま出るはず(潰れない): {px:?}"
+    );
     assert!(px[0] > 0 && px[0] < 255, "RGB 側は正しく混ざっている: {px:?}");
 }
 

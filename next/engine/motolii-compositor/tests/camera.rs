@@ -86,6 +86,14 @@ fn max_channel_diff(a: &[u8], b: &[u8]) -> u8 {
 /// **実測**: 内部(境界から1px 離れた領域)は byte 一致(diff=0)。境界ぎりぎりの1px帯だけ
 /// 透視の tan/atan を経由する分だけ ortho の厳密な線形写像とわずかに丸めがずれ得るので、
 /// 境界帯は別に測って明記する(このコメントの下の `assert` がその実測値)。
+///
+/// **背景 alpha の期待値(2026-08-20 変更)**: `motolii-compositor` が
+/// `blend_with_background: Premultiplied` を持つようになった(`alpha_survives_the_composite_step`
+/// 参照)ことで、layer に覆われていない領域は本当に**未着色**(alpha=0)になった。
+/// 以前はここが `[0,0,0,255]`(不透明な黒)だったが、それは「alpha が composite で
+/// 255へ潰れる」旧仕様の副産物であって、正射影との一致という**この試験の主張とは無関係**
+/// だった。矩形内部(layer に覆われた場所)は不透明 layer(入力 alpha=255)がそのまま
+/// alpha=255 を出すので、そちらの期待値は変えていない。
 #[test]
 fn default_camera_all_z0_matches_orthographic_pixel_mapping() {
     let mut compositor = Compositor::headless().expect("headless GPU");
@@ -113,7 +121,8 @@ fn default_camera_all_z0_matches_orthographic_pixel_mapping() {
     let expected = expected_axis_aligned_frame(
         comp.width,
         comp.height,
-        [0, 0, 0, 255],
+        // 背景は layer に覆われていない = 本当に透明(alpha=0)。上のコメント参照。
+        [0, 0, 0, 0],
         &[
             ([20, 20], [80, 80], [255, 0, 0, 255]),
             ([120, 130], [160, 170], [0, 255, 0, 255]),
@@ -124,8 +133,8 @@ fn default_camera_all_z0_matches_orthographic_pixel_mapping() {
     let interior_diff = max_channel_diff(&pixel(&actual, comp.width, 40, 40), &[255, 0, 0, 255]);
     assert_eq!(interior_diff, 0, "矩形内部は byte 一致するはず");
     let interior_diff_bg =
-        max_channel_diff(&pixel(&actual, comp.width, 100, 100), &[0, 0, 0, 255]);
-    assert_eq!(interior_diff_bg, 0, "背景は byte 一致するはず");
+        max_channel_diff(&pixel(&actual, comp.width, 100, 100), &[0, 0, 0, 0]);
+    assert_eq!(interior_diff_bg, 0, "背景(未着色)は byte 一致するはず");
 
     // 画面全体の最大差(境界の丸めを含む)。**この値が「正射影との一致」の実測**
     // (`cargo test -- --nocapture` で見える。裁定116 の終了報告に転記する数値)。

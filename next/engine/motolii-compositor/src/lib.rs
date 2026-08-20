@@ -55,7 +55,9 @@
 
 use re_renderer::renderer::{RectangleDrawData, RectangleOptions, TexturedRect};
 use re_renderer::resource_managers::ImageDataDesc;
-use re_renderer::view_builder::{Projection, RenderMode, TargetConfiguration, ViewBuilder};
+use re_renderer::view_builder::{
+    BlendWithBackground, Projection, RenderMode, TargetConfiguration, ViewBuilder,
+};
 use re_renderer::{RenderContext, Rgba};
 
 mod headless;
@@ -371,6 +373,16 @@ impl Compositor {
                     aspect_ratio: projection.aspect_ratio,
                 },
                 pixels_per_point: 1.0,
+                // 既定 `No` は composite shader が `color = vec4f(color.rgb, 1.0)` へ
+                // 強制する(上流 `composite.wgsl` 一次確認)ので、readback の alpha が
+                // 常に 255 へ潰れる。`Premultiplied` は `color = vec4f(color.rgb, color.a)`
+                // の素通し分岐 — 我々の layer は premultiplied alpha で描いているので
+                // 意味が合う。`CompositingScreenshot` フェーズも同じ `CompositorDrawData`
+                // (同じ uniform)を使う(`ViewBuilder::new` が一度だけ作って両フェーズへ
+                // queue する)ので、screenshot 読み戻しにもこの分岐がそのまま効く
+                // — fork 改造なしで alpha が生きることを `alpha_survives_the_composite_step`
+                // (tests/compose.rs)で実測済み(2026-08-20)。
+                blend_with_background: BlendWithBackground::Premultiplied,
                 ..Default::default()
             },
             re_renderer::ViewBuilderId::new(self.next_readback),
