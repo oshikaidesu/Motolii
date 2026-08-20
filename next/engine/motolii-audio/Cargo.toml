@@ -1,0 +1,39 @@
+# symphonia / rubato は workspace.dependencies へ足していない(motolii-vector の
+# tiny-skia と同じ理由 — 軸4「抽象を先に作らない」、2人目の利用者が現れるまで
+# ここだけに置く)。KNOWN.md「音声(2026-08-20解析済み)」で調達は確定済み:
+# rodio/kira は採らず cpal 直叩き。cpal 自体はこの束(第1切片)ではまだ足さない
+# (デバイス結線は第2切片)。
+[package]
+name = "motolii-audio"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+motolii-core.workspace = true
+motolii-eval.workspace = true
+motolii-store.workspace = true
+thiserror.workspace = true
+# D4契約(旧 motolii-audio から継承): WAV/FLAC/Ogg-Vorbis/PCM に加え、MV素材で使う
+# 楽曲コンテナ(MP3/AAC/AIFF/ALAC/MP4系)を明示featureで追加する。
+symphonia = { version = "0.6", default-features = false, features = [
+    "aac",
+    "aiff",
+    "alac",
+    "flac",
+    "isomp4",
+    "mp1",
+    "mp2",
+    "mp3",
+    "ogg",
+    "pcm",
+    "vorbis",
+    "wav",
+] }
+# デバイスレート≠素材レート時の固定比変換(プロデューサ側で使う。第1切片では
+# `to_canonical` が呼ぶ)。
+rubato = "0.16"
+
+[dev-dependencies]
+motolii-testkit.workspace = true
+serde_json.workspace = true
