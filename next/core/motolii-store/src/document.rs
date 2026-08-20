@@ -75,6 +75,77 @@ impl PropertyId {
         Self::new(&name).expect("マスクの property 名は予約語でも空でもない")
     }
 
+    /// アニメーターの selector が動かす値(`text-range-selector s`/Start)。**平坦な
+    /// 名前**(`text_range.{id}.selector.{attr}`)にしてあるので、マスク/effect と
+    /// 同じく新しい機構を足さずに `KeyframeTrack` へ乗る。
+    pub fn text_range_selector_start(range: crate::TextRangeId) -> Self {
+        Self::text_range_selector_property(range, "start")
+    }
+
+    /// `text-range-selector e`(End)。
+    pub fn text_range_selector_end(range: crate::TextRangeId) -> Self {
+        Self::text_range_selector_property(range, "end")
+    }
+
+    /// `text-range-selector o`(Offset)。**カラオケワイプはこれを時間駆動するだけに
+    /// 畳める**(offset に打った track を再生位置で動かすだけで実現できる、地図の
+    /// note どおり)。
+    pub fn text_range_selector_offset(range: crate::TextRangeId) -> Self {
+        Self::text_range_selector_property(range, "offset")
+    }
+
+    /// `text-range-selector a`(Max Amount)。重みの倍率。
+    pub fn text_range_selector_max_amount(range: crate::TextRangeId) -> Self {
+        Self::text_range_selector_property(range, "max_amount")
+    }
+
+    fn text_range_selector_property(range: crate::TextRangeId, attr: &str) -> Self {
+        let name = format!(
+            "{}{range}.selector.{attr}",
+            crate::property::TEXT_RANGE_PREFIX
+        );
+        Self::new(&name).expect("text-range の property 名は予約語でも空でもない")
+    }
+
+    /// アニメーターが動かす property の束(`text-range a` Style、Lottie `text-style`
+    /// 側の5フィールド)。**track の有無自体が「この animator がその属性を触るか」を
+    /// 表す**(裁定20 の応用)。`text-style` が継承する `helpers/transform`
+    /// (position/scale/rotation/opacity/skew)はこの切片では持たない — Rive の
+    /// `text-modifier-group`(次切片)が正本を持つまでの持ち越し。
+    pub fn text_range_fill_color(range: crate::TextRangeId) -> Self {
+        Self::text_range_style_property(range, "fill_color")
+    }
+
+    /// `text-style sc`(Stroke Color)。
+    pub fn text_range_stroke_color(range: crate::TextRangeId) -> Self {
+        Self::text_range_style_property(range, "stroke_color")
+    }
+
+    /// `text-style sw`(Stroke Width)。
+    pub fn text_range_stroke_width(range: crate::TextRangeId) -> Self {
+        Self::text_range_style_property(range, "stroke_width")
+    }
+
+    /// `text-style ls`(Line Spacing)。**組版に触る**アニメーター(裁定76 — 送り幅/
+    /// 行送りを動かすので2層分離では足りない)。
+    pub fn text_range_line_spacing(range: crate::TextRangeId) -> Self {
+        Self::text_range_style_property(range, "line_spacing")
+    }
+
+    /// `text-style t`(Letter Spacing)。トラッキング。**アニメーターだが送り幅を
+    /// 動かす**(裁定76)。
+    pub fn text_range_tracking(range: crate::TextRangeId) -> Self {
+        Self::text_range_style_property(range, "tracking")
+    }
+
+    fn text_range_style_property(range: crate::TextRangeId, attr: &str) -> Self {
+        let name = format!(
+            "{}{range}.style.{attr}",
+            crate::property::TEXT_RANGE_PREFIX
+        );
+        Self::new(&name).expect("text-range の property 名は予約語でも空でもない")
+    }
+
     /// カメラの property(`Composition.camera` の center/zoom/roll、裁定113/115)。
     ///
     /// **layer とは別の entity(`/composition`)へ書く**ので、component 識別子の
@@ -603,6 +674,7 @@ impl Document {
                 )
             }
             Intent::SetTextDocument { layer, document } => {
+                crate::text::validate_unique_ids(&document.ranges)?;
                 let json = serde_json::to_string(&document)?;
                 (
                     layer.entity_path(),

@@ -73,12 +73,12 @@ constants	merge-mode		Merge Mode	不採用	パスブーリアンは対象外			l
 constants	shape-direction		Shape Direction	不採用	頂点順で表現する			lottie
 constants	star-type		Star Type	採用済	star / polygon	pub enum StarType	shape-2	lottie
 constants	stroke-dash-type		Stroke Dash Type	不採用	pattern + offset の2フィールドに畳む			lottie
-constants	text-based		Text Based	採用予定	範囲選択器の粒度。AE 由来で発明の余地が無い。「文字」はクラスタに読み替える		text	lottie
+constants	text-based		Text Based	採用済	範囲選択器の粒度。AE 由来で発明の余地が無い。「文字」はクラスタに読み替える	pub enum TextBasedOn	text	lottie
 constants	text-caps		Text Caps	不採用	表示だけ大文字化は元文字列と表示の二重帳簿。SmallCaps は OpenType 側			lottie
-constants	text-grouping		Text Grouping	採用予定	グループ内アンカーの粒度。text-model §6 の未決が埋まる		text	lottie
-constants	text-justify		Text Justify	採用予定	Left/Right/Center。両端揃え4種は後回し		text	lottie
-constants	text-range-units		Text Range Units	採用予定	Percent/Index。歌詞は index、テンプレートは percent		text	lottie
-constants	text-shape		Text Shape	採用予定	重みカーブ6種。§6「shape の初期セット」の未決が埋まる		text	lottie
+constants	text-grouping		Text Grouping	採用済	グループ内アンカーの粒度。text-model §6 の未決が埋まる	pub enum TextGrouping	text	lottie
+constants	text-justify		Text Justify	採用済	Left/Right/Center。両端揃え4種は後回し	pub enum TextJustify	text	lottie
+constants	text-range-units		Text Range Units	採用済	Percent/Index。歌詞は index、テンプレートは percent	pub enum TextRangeUnits	text	lottie
+constants	text-shape		Text Shape	採用済	重みカーブ6種。§6「shape の初期セット」の未決が埋まる	pub enum TextShape	text	lottie
 constants	trim-multiple-shapes		Trim Multiple Shapes	採用済	trim の複数輪郭モード	pub enum TrimMultiple	shape-1	lottie
 effect-values	all-effect-values	@extends	effect-values/angle	該当なし	継承元			lottie
 effect-values	all-effect-values	@extends	effect-values/checkbox	該当なし	継承元			lottie
@@ -595,11 +595,11 @@ text	font	fStyle	Font Style	採用済	face 選択キー	pub style: String	text	l
 text	font	fWeight	Weight	不採用	fStyle と同じことを言う二重帳簿。可変フォントでは wght 軸が正本			lottie
 text	font	origin	Origin	不採用	web ローダの都合。ローカル以外を持たない			lottie
 text	font-list	list	List	採用済	document 単位のフォント表。ただし**素材と同じ置き場に載せる** — 第二の素材台帳を作らない	font-list は第二の素材台帳を作らない	text	lottie
-text	text-alignment-options	a	Alignment	採用予定	グループ内アンカーのオフセット。**意味は採り既定だけ変える** — 既定=字面中心		text	lottie
-text	text-alignment-options	g	Grouping	採用予定	Characters/Word/Line/All。text-model §6 の未決がここで埋まる		text	lottie
-text	text-data	a	Ranges	採用予定	アニメーターの列。MV タイポグラフィの核心		text	lottie
+text	text-alignment-options	a	Alignment	採用済	グループ内アンカーのオフセット。**意味は採り既定だけ変える** — 既定=字面中心	pub anchor_offset: [f32; 2]	text	lottie
+text	text-alignment-options	g	Grouping	採用済	Characters/Word/Line/All。text-model §6 の未決がここで埋まる	pub grouping: TextGrouping	text	lottie
+text	text-data	a	Ranges	採用済	アニメーターの列。MV タイポグラフィの核心	pub ranges: Vec<TextRange>	text	lottie
 text	text-data	d	Document	採用済	content と基底スタイル	pub struct TextDocument	text	lottie
-text	text-data	m	Alignment	採用予定	grouping alignment。§6 の未決が埋まる		text	lottie
+text	text-data	m	Alignment	採用済	grouping alignment。§6 の未決が埋まる	pub alignment: TextAlignmentOptions	text	lottie
 text	text-data	p	Follow Path	不採用	パス沿いテキスト。mask index の暗黙参照(裁定66)+ 一subsystem			lottie
 text	text-document	ca	Text Caps	不採用	Small Caps は OpenType feature が正本			lottie
 text	text-document	f	Font Family	採用済	フォント参照。Lottie の名前参照は採らず**素材と同じ path + 指紋**にする。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub font: FontRef	text	lottie
@@ -623,36 +623,36 @@ text	text-follow-path	l	Last Margin	不採用	同上			lottie
 text	text-follow-path	m	Mask	不採用	同上。index 参照は並べ替えが結果を黙って変える(裁定66)			lottie
 text	text-follow-path	p	Perpendicular To Path	不採用	同上			lottie
 text	text-follow-path	r	Reverse Path	不採用	同上			lottie
-text	text-range	a	Style	採用予定	アニメーターが動かす property の束		text	lottie
-text	text-range	nm	Name	採用予定	利用者が付ける名前。並び順=適用順を明示する UI に要る		text	lottie
-text	text-range	s	Selector	採用予定	**1アニメーター=セレクタ1個**。AE の複数セレクタ交差は採らない(軸4)		text	lottie
-text	text-range-selector	a	Max Amount	採用予定	重みの倍率		text	lottie
-text	text-range-selector	b	Based On	採用予定	Characters/CharExcludingSpaces/Words/Lines。ただし「文字」=**クラスタ**に読み替える		text	lottie
-text	text-range-selector	e	End	採用予定	範囲の終端		text	lottie
+text	text-range	a	Style	採用済	アニメーターが動かす property の束。**フィールドとして持たず** PropertyId 経由の KeyframeTrack に乗せる(マスク/effect と同型)	fn text_range_style_property	text	lottie
+text	text-range	nm	Name	採用済	利用者が付ける名前。並び順=適用順を明示する UI に要る	pub name: String	text	lottie
+text	text-range	s	Selector	採用済	**1アニメーター=セレクタ1個**。AE の複数セレクタ交差は採らない(軸4)	pub selector: TextRangeSelector	text	lottie
+text	text-range-selector	a	Max Amount	採用済	重みの倍率	pub fn text_range_selector_max_amount	text	lottie
+text	text-range-selector	b	Based On	採用済	Characters/CharExcludingSpaces/Words/Lines。ただし「文字」=**クラスタ**に読み替える	pub based_on: TextBasedOn	text	lottie
+text	text-range-selector	e	End	採用済	範囲の終端	pub fn text_range_selector_end	text	lottie
 text	text-range-selector	ne	Min Ease	不採用	sh と同じ「重み曲線の形」を二重に持つ。曲線は区間イージング1系統へ			lottie
-text	text-range-selector	o	Offset	採用予定	**カラオケワイプはこれを時間駆動するだけに畳める**		text	lottie
-text	text-range-selector	r	Range Units	採用予定	Percent/Index。歌詞は index、テンプレートは percent		text	lottie
-text	text-range-selector	rn	Randomize	採用予定	ただし **seed を必ず持つ**。Lottie の rn は seed が無く Preview=Export と両立しない		text	lottie
-text	text-range-selector	s	Start	採用予定	範囲の始端		text	lottie
-text	text-range-selector	sh	Shape	採用予定	Square/RampUp/RampDown/Triangle/Round/Smooth。§6 の未決が埋まる		text	lottie
+text	text-range-selector	o	Offset	採用済	**カラオケワイプはこれを時間駆動するだけに畳める**	pub fn text_range_selector_offset	text	lottie
+text	text-range-selector	r	Range Units	採用済	Percent/Index。歌詞は index、テンプレートは percent	pub range_units: TextRangeUnits	text	lottie
+text	text-range-selector	rn	Randomize	採用済	ただし **seed を必ず持つ**。Lottie の rn は seed が無く Preview=Export と両立しない	pub struct TextRandomize	text	lottie
+text	text-range-selector	s	Start	採用済	範囲の始端	pub fn text_range_selector_start	text	lottie
+text	text-range-selector	sh	Shape	採用済	Square/RampUp/RampDown/Triangle/Round/Smooth。§6 の未決が埋まる	pub shape: TextShape	text	lottie
 text	text-range-selector	sm	Selector Smoothness	不採用	ne/xe と同じ理由。Square の硬い縁はカラオケワイプにむしろ要る			lottie
 text	text-range-selector	t	Expressible	不採用	式駆動フラグ。文字列式は要らないもの			lottie
 text	text-range-selector	xe	Max Ease	不採用	ne と同じ理由			lottie
 text	text-style	@extends	helpers/transform	該当なし	継承元			lottie
 text	text-style	bl	Blur	不採用	グリフごとの blur は 1グリフ1レンダタゲになり板1枚の合成器と噛み合わない			lottie
 text	text-style	fb	Fill Brightness	不採用	HSB 相対調整。色空間をもう1つ抱える			lottie
-text	text-style	fc	Fill Color	採用予定	文字ごとの字面色		text	lottie
+text	text-style	fc	Fill Color	採用済	文字ごとの字面色	pub fn text_range_fill_color	text	lottie
 text	text-style	fh	Fill Hue	不採用	同上(HSB 相対調整)			lottie
 text	text-style	fo	Fill Opacity	不採用	Value::Color は RGBA なので fc の alpha が正本			lottie
 text	text-style	fs	Fill Saturation	不採用	同上(HSB 相対調整)			lottie
-text	text-style	ls	Line Spacing	採用予定	行ごとの送り加算。**組版に触る**アニメーター		text	lottie
+text	text-style	ls	Line Spacing	採用済	行ごとの送り加算。**組版に触る**アニメーター	pub fn text_range_line_spacing	text	lottie
 text	text-style	sb	Stroke Brightness	不採用	同上(HSB 相対調整)			lottie
-text	text-style	sc	Stroke Color	採用予定	文字ごとの縁取り色		text	lottie
+text	text-style	sc	Stroke Color	採用済	文字ごとの縁取り色	pub fn text_range_stroke_color	text	lottie
 text	text-style	sh	Stroke Hue	不採用	同上(HSB 相対調整)			lottie
 text	text-style	so	Stroke Opacity	不採用	sc の alpha が正本			lottie
 text	text-style	ss	Stroke Saturation	不採用	同上(HSB 相対調整)			lottie
-text	text-style	sw	Stroke Width	採用予定	文字ごとの縁取り幅		text	lottie
-text	text-style	t	Letter Spacing	採用予定	トラッキング。**アニメーターだが送り幅を動かす** — text-model §1 の2層分離では足りず3層が要る		text	lottie
+text	text-style	sw	Stroke Width	採用済	文字ごとの縁取り幅	pub fn text_range_stroke_width	text	lottie
+text	text-style	t	Letter Spacing	採用済	トラッキング。**アニメーターだが送り幅を動かす** — text-model §1 の2層分離では足りず3層が要る	pub fn text_range_tracking	text	lottie
 values	bezier	c	Closed	採用済	パスを閉じるか	pub closed: bool		lottie
 values	bezier	i	In Tangents	採用済	頂点ごとの in 接線。keyframe の時間ベジェとは別物	pub in_tangent: [f64; 2]		lottie
 values	bezier	o	Out Tangents	採用済	同 out 接線	pub out_tangent: [f64; 2]		lottie

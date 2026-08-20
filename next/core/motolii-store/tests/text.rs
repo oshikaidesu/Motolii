@@ -1,6 +1,6 @@
-//! text 束(75行)の第1切片 — **静的組版の Document 意味**。
+//! text 束(75行)の第1・第2切片。
 //!
-//! ここで固定するのは:
+//! **第1切片(静的組版の Document 意味)で固定したもの**:
 //! - text-layer の中身(`Layer:text`)は content・組版既定値・フォント参照を持つ
 //!   1個の component(裁定112(k) の後継)
 //! - content(`t`)は**構造で Hold が保証された**時間変化(`animated-text-document k`)。
@@ -11,14 +11,37 @@
 //! - `sz`(Wrap Size)は `None` = point text。Rive `text.width`/`text.height` と同じ静止設定
 //! - `SetTextDocument` は**丸ごと差し替え**(`SetShapes`/`SetEffects` と同じ形)
 //! - `sid`(Slot ID)は解決せずただ持てる(slots 機構自体は別発注単位、未着手)
+//!
+//! **第2切片(range selector とアニメータの Document 意味)で固定するもの**:
+//! - [`TextRange`] は id で名前空間が決まるだけの入れ物。**動く量(selector の
+//!   Start/End/Offset/Max Amount、style の fill/stroke/line-spacing/tracking)は
+//!   フィールドとして持たず**、`PropertyId::text_range_*` の平坦な `KeyframeTrack`
+//!   に乗る(マスク・effect と同じ形)
+//! - `text-range-selector rn`(Randomize)は [`TextRandomize`] で **seed を必ず持つ**
+//!   (Lottie の int-boolean のままでは Preview=Export と両立しない、裁定75/101)
+//! - `TextDocument::ranges`(`Vec<TextRange>`)の**並び=適用順**。id の同一性は
+//!   [`motolii_store`] 側の柵(重複 id は `SetTextDocument` が `Err`)で守る
+//! - `TextDocument::alignment`(`text-data m`)はグループ内アンカーのオフセットと粒度
 
 use motolii_store::{
-    Composition, ContentKeyframe, ContentTrack, Document, FontRef, Fps, Intent, LayerId, LayerMeta,
-    LayerSource, LayerTiming, RationalTime, TextDocument, TextDocumentStyle, TextJustify,
+    Composition, ContentKeyframe, ContentTrack, Document, FontRef, Fps, Interp, Intent, Keyframe,
+    KeyframeTrack, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime,
+    TextAlignmentOptions, TextBasedOn, TextDocument, TextDocumentStyle, TextGrouping, TextJustify,
+    TextRandomize, TextRange, TextRangeId, TextRangeSelector, TextRangeUnits, TextShape, Value,
 };
 
 fn t(frame: i64) -> RationalTime {
     RationalTime::try_from_frame(frame, Fps::try_new(30, 1).unwrap()).unwrap()
+}
+
+fn still(value: Value) -> KeyframeTrack {
+    let mut track = KeyframeTrack::new();
+    track.insert(Keyframe {
+        t: t(0),
+        value,
+        interp: Interp::Hold,
+    });
+    track
 }
 
 fn doc_with_comp(duration_frames: i64) -> Document {
@@ -84,6 +107,22 @@ fn lyric_document(content: &str) -> TextDocument {
         wrap_size: None,
         style: lyric_style(),
         slot_id: None,
+        ranges: Vec::new(),
+        alignment: TextAlignmentOptions::default(),
+    }
+}
+
+/// 分かりやすいアニメーター1個(カラオケワイプの selector を想定)。
+fn karaoke_range(id: TextRangeId) -> TextRange {
+    TextRange {
+        id,
+        name: "karaoke".to_owned(),
+        selector: TextRangeSelector {
+            based_on: TextBasedOn::CharactersExcludingSpaces,
+            range_units: TextRangeUnits::Index,
+            shape: TextShape::Square,
+            randomize: None,
+        },
     }
 }
 
@@ -356,6 +395,376 @@ fn slot_id_is_carried_but_not_resolved_this_slice() {
 }
 
 // ---------------------------------------------------------------------------
+// a / nm / s — text-range(アニメーター)の列。並び=適用順、id は同一性を持つ
+// ---------------------------------------------------------------------------
+
+#[test]
+fn text_ranges_are_empty_until_set() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: lyric_document("歌詞"),
+    })
+    .unwrap();
+
+    assert!(doc.view().text_document(layer).unwrap().unwrap().ranges.is_empty());
+}
+
+#[test]
+fn text_ranges_round_trip_with_stable_ids_and_order() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let ranges = vec![karaoke_range(TextRangeId(0)), karaoke_range(TextRangeId(1))];
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            ranges: ranges.clone(),
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    let read_back = doc.view().text_document(layer).unwrap().unwrap();
+    assert_eq!(read_back.ranges, ranges, "並び=適用順がそのまま往復する");
+}
+
+/// 同じ id が2枚あると、selector/style の property track の持ち主が決まらない
+/// ([`motolii_store::TextRange`] のドキュメント参照)。マスクの
+/// `validate_unique_ids` と同型の柵。
+#[test]
+fn duplicate_text_range_ids_are_rejected() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let err = doc
+        .apply(Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                ranges: vec![karaoke_range(TextRangeId(0)), karaoke_range(TextRangeId(0))],
+                ..lyric_document("歌詞")
+            },
+        })
+        .unwrap_err();
+    assert!(format!("{err}").contains("text-range id 0 が2枚ある"));
+}
+
+// ---------------------------------------------------------------------------
+// b / r / sh / rn — text-range-selector の静止部分
+// ---------------------------------------------------------------------------
+
+#[test]
+fn selector_static_fields_round_trip() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let range = TextRange {
+        id: TextRangeId(0),
+        name: "wipe".to_owned(),
+        selector: TextRangeSelector {
+            based_on: TextBasedOn::Words,
+            range_units: TextRangeUnits::Percent,
+            shape: TextShape::RampUp,
+            randomize: None,
+        },
+    };
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            ranges: vec![range.clone()],
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    let read_back = &doc.view().text_document(layer).unwrap().unwrap().ranges[0];
+    assert_eq!(read_back.selector.based_on, TextBasedOn::Words);
+    assert_eq!(read_back.selector.range_units, TextRangeUnits::Percent);
+    assert_eq!(read_back.selector.shape, TextShape::RampUp);
+    assert_eq!(read_back.selector.randomize, None);
+}
+
+/// `rn`(Randomize)は Lottie の int-boolean のままでは Preview=Export と両立しない
+/// (裁定75/101)。**有効なら必ず seed を伴う**ことを型で保証する。
+#[test]
+fn randomize_carries_a_seed_when_enabled_and_is_absent_otherwise() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let mut range = karaoke_range(TextRangeId(0));
+    range.selector.randomize = Some(TextRandomize { seed: 424242 });
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            ranges: vec![range],
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    assert_eq!(
+        doc.view().text_document(layer).unwrap().unwrap().ranges[0]
+            .selector
+            .randomize,
+        Some(TextRandomize { seed: 424242 }),
+        "seed は番兵ではなく実値として保たれる"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// s / e / o / a — text-range-selector の動く部分は普通の KeyframeTrack
+// ---------------------------------------------------------------------------
+
+/// 「カラオケワイプは Offset を時間駆動するだけに畳める」(地図の note)。
+/// Offset がただの静止フィールドでは表現できないことを、実際に動かして確かめる。
+#[test]
+fn selector_offset_is_an_ordinary_animatable_property() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 300);
+    let range_id = TextRangeId(0);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            ranges: vec![karaoke_range(range_id)],
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    let mut wipe = KeyframeTrack::new();
+    wipe.insert(Keyframe {
+        t: t(0),
+        value: Value::F64(0.0),
+        interp: Interp::Linear,
+    });
+    wipe.insert(Keyframe {
+        t: t(150),
+        value: Value::F64(100.0),
+        interp: Interp::Linear,
+    });
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::text_range_selector_offset(range_id),
+        track: wipe,
+    })
+    .unwrap();
+
+    let track = doc
+        .view()
+        .track(layer, &PropertyId::text_range_selector_offset(range_id))
+        .unwrap()
+        .expect("offset track が読めない");
+    assert_eq!(track.eval(t(0)), Value::F64(0.0));
+    assert_eq!(track.eval(t(75)), Value::F64(50.0), "線形補間で中間値が出る");
+    assert_eq!(track.eval(t(150)), Value::F64(100.0));
+}
+
+/// Start/End/Max Amount も同じ形の平坦な property。
+#[test]
+fn selector_start_end_and_max_amount_are_ordinary_properties() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    let range_id = TextRangeId(0);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            ranges: vec![karaoke_range(range_id)],
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    doc.apply_all([
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_selector_start(range_id),
+            track: still(Value::F64(0.0)),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_selector_end(range_id),
+            track: still(Value::F64(100.0)),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_selector_max_amount(range_id),
+            track: still(Value::F64(1.0)),
+        },
+    ])
+    .unwrap();
+
+    let view = doc.view();
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_selector_start(range_id), t(0))
+            .unwrap(),
+        Some(Value::F64(0.0))
+    );
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_selector_end(range_id), t(0))
+            .unwrap(),
+        Some(Value::F64(100.0))
+    );
+    assert_eq!(
+        view.value_at(
+            layer,
+            &PropertyId::text_range_selector_max_amount(range_id),
+            t(0)
+        )
+        .unwrap(),
+        Some(Value::F64(1.0))
+    );
+}
+
+// ---------------------------------------------------------------------------
+// fc / sc / sw / ls / t — text-style(アニメーター側)。track の有無が「触るか」を表す
+// ---------------------------------------------------------------------------
+
+/// **track が無い属性は、この animator が触らない属性**(裁定20 の応用)。
+/// 一部の property だけ動かす animator を作れることを確かめる。
+#[test]
+fn animator_style_properties_are_present_only_when_the_animator_touches_them() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    let range_id = TextRangeId(0);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            ranges: vec![karaoke_range(range_id)],
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    // fill_color だけ触るアニメーター。stroke 系は触らない。
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::text_range_fill_color(range_id),
+        track: still(Value::Color([1.0, 1.0, 0.0, 1.0])),
+    })
+    .unwrap();
+
+    let view = doc.view();
+    assert_eq!(
+        view.track(layer, &PropertyId::text_range_fill_color(range_id))
+            .unwrap()
+            .map(|track| track.eval(t(0))),
+        Some(Value::Color([1.0, 1.0, 0.0, 1.0]))
+    );
+    assert_eq!(
+        view.track(layer, &PropertyId::text_range_stroke_color(range_id))
+            .unwrap(),
+        None,
+        "触っていない属性は track 自体が無い"
+    );
+}
+
+/// `ls`(Line Spacing)/`t`(Letter Spacing)。**組版に触るアニメーター**(裁定76)。
+/// ここでは値がただの `KeyframeTrack` であることだけ確かめる(実際に組版を
+/// 動かすのは engine の仕事、次切片以降)。
+#[test]
+fn line_spacing_and_tracking_animator_properties_round_trip() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    let range_id = TextRangeId(0);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            ranges: vec![karaoke_range(range_id)],
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    doc.apply_all([
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_line_spacing(range_id),
+            track: still(Value::F64(12.0)),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_tracking(range_id),
+            track: still(Value::F64(0.1)),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_stroke_width(range_id),
+            track: still(Value::F64(2.0)),
+        },
+    ])
+    .unwrap();
+
+    let view = doc.view();
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_line_spacing(range_id), t(0))
+            .unwrap(),
+        Some(Value::F64(12.0))
+    );
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_tracking(range_id), t(0))
+            .unwrap(),
+        Some(Value::F64(0.1))
+    );
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_stroke_width(range_id), t(0))
+            .unwrap(),
+        Some(Value::F64(2.0))
+    );
+}
+
+// ---------------------------------------------------------------------------
+// m — text-alignment-options(グループ内アンカーのオフセットと粒度)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn alignment_options_default_to_centered_characters() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: lyric_document("歌詞"),
+    })
+    .unwrap();
+
+    let alignment = doc.view().text_document(layer).unwrap().unwrap().alignment;
+    assert_eq!(alignment.anchor_offset, [0.0, 0.0], "既定=字面中心");
+    assert_eq!(alignment.grouping, TextGrouping::Characters);
+}
+
+#[test]
+fn alignment_options_round_trip() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            alignment: TextAlignmentOptions {
+                anchor_offset: [-50.0, 25.0],
+                grouping: TextGrouping::Line,
+            },
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    let alignment = doc.view().text_document(layer).unwrap().unwrap().alignment;
+    assert_eq!(alignment.anchor_offset, [-50.0, 25.0]);
+    assert_eq!(alignment.grouping, TextGrouping::Line);
+}
+
+// ---------------------------------------------------------------------------
 // 保存/読込 — `flattened()`/`save()` は「store に聞く」形なので新 component も自動で運ぶ
 // (裁定108(a))。ここでは text 束固有の中身が実際に往復することだけ確かめる。
 // ---------------------------------------------------------------------------
@@ -381,5 +790,71 @@ fn text_document_survives_save_and_load() {
         loaded.view().text_document(layer).unwrap(),
         doc.view().text_document(layer).unwrap(),
         "text-layer の中身が保存/読込で往復しない"
+    );
+}
+
+/// **第2切片固有**: ranges(アニメーターの列)と、その動く量(selector の property
+/// track)の両方が保存/読込で往復する。`flattened()` は「store に聞く」形(裁定108(a))
+/// なので、`text_range.*` の property component も他の property と同じ経路で運ばれる
+/// — ここでは実際に運ばれることを確かめるだけ。
+#[test]
+fn text_ranges_and_their_property_tracks_survive_save_and_load() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 300);
+    let range_id = TextRangeId(0);
+
+    let mut range = karaoke_range(range_id);
+    range.selector.randomize = Some(TextRandomize { seed: 7 });
+    doc.apply_all([
+        Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                ranges: vec![range],
+                ..lyric_document("歌詞1行目")
+            },
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_selector_offset(range_id),
+            track: still(Value::F64(50.0)),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_fill_color(range_id),
+            track: still(Value::Color([1.0, 0.0, 1.0, 1.0])),
+        },
+    ])
+    .unwrap();
+
+    let dir = std::env::temp_dir().join(format!(
+        "motolii-text-range-roundtrip-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("text_range_roundtrip.motolii");
+    doc.save(&path).expect("保存できない");
+
+    let loaded = Document::load(&path).expect("読み込めない");
+    assert_eq!(
+        loaded.view().text_document(layer).unwrap(),
+        doc.view().text_document(layer).unwrap(),
+        "ranges が保存/読込で往復しない"
+    );
+    assert_eq!(
+        loaded
+            .view()
+            .value_at(layer, &PropertyId::text_range_selector_offset(range_id), t(0))
+            .unwrap(),
+        Some(Value::F64(50.0)),
+        "selector の property track が保存/読込で往復しない"
+    );
+    assert_eq!(
+        loaded
+            .view()
+            .value_at(layer, &PropertyId::text_range_fill_color(range_id), t(0))
+            .unwrap(),
+        Some(Value::Color([1.0, 0.0, 1.0, 1.0])),
+        "style の property track が保存/読込で往復しない"
     );
 }

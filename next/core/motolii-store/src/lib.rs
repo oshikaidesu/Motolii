@@ -38,7 +38,9 @@ pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFin
 pub use marker::Marker;
 pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
 pub use text::{
-    ContentKeyframe, ContentTrack, FontRef, TextDocument, TextDocumentStyle, TextJustify,
+    ContentKeyframe, ContentTrack, FontRef, TextAlignmentOptions, TextBasedOn, TextDocument,
+    TextDocumentStyle, TextGrouping, TextJustify, TextRandomize, TextRange, TextRangeId,
+    TextRangeSelector, TextRangeUnits, TextShape,
 };
 pub use view::StoreView;
 
@@ -80,6 +82,11 @@ pub mod property {
     /// **平坦な名前**にしてあるので、新しい機構を足さずに `KeyframeTrack` へ乗る
     /// (裁定92 が text.style で先に見つけた形と同じ)。
     pub const MASK_PREFIX: &str = "mask.";
+
+    /// テキストアニメーター([`crate::TextRangeId`])の selector/style トラックの名前は
+    /// `text_range.{id}.…` で始まる。マスクと同じ平坦な流儀(裁定92 が text.style で
+    /// 先に見つけた形と同じ)。
+    pub const TEXT_RANGE_PREFIX: &str = "text_range.";
 
     /// 変換の中心。**レイヤ自身の座標単位の点**であって 0..1 の正規化ピボットではない。
     pub const ANCHOR: &str = "anchor";
