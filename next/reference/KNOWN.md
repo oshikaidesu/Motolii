@@ -19,7 +19,7 @@
 - rerun viewer の selection panel には**型別 component editor registry**(re_component_ui)がある — Inspector の型の先例(コードは egui 層、引かない)
 - pucker/bloat の極性ラベル「正で bloat」は**正しい**(lottie-web 実コード+AE/Illustrator 3系統一致、裁定110)
 - tiny-skia の gradient は stops 空/1本/半径0 で panic しない。**非昇順 stops は自動ソートされない**(構築時ソート実装済み、裁定109)
-- Ravel の ShellManipulator は 2D・toolkit 非依存だが**利用者裁定でギズモはスクラッチ**(2026-08-20、Ravel はダサいため。plan B=transform-gizmo+自前カメラ行列)
+- **Ravel は全面除外**(裁定145、2026-08-21 — ギズモ除外を全面へ拡大。参照・移植・協働いずれも不可。調査レーンもリポジトリを特定できなかった)
 
 ## レーン運用(実測済み)
 - **worktree の base はほぼ必ず stale**。作業前に `git reset --hard main` を無条件で行う(確認に時間を使わない)。旧 base の `claude/motolii-reset-handoff-bda7f3` は 2026-08-21 に main へ着地済みで、以後 main が正
@@ -62,7 +62,7 @@
 - **音声の調達調査 DONE(2026-08-20、全界隈掃討済み)**: owns ~950行(mix/program/MixProducer)の最終根拠 = 「無いから」ではなく「**産業内の同型実装(Tracktion/GES/MLT/Ardour/FMOD/Wwise/Unity/Unreal/CasparCG)を比較した上で、いずれも (a)ソース非公開 (b)ホスト不可分結合で移植コスト超過 (c)別問題領域、のどれかに落ちるため意図的に自作**」。定量の決め手: 最有力 GES は Rust バインディング層だけで 94k LOC(依存込み281k = owns の100〜300倍)+ GObject 伝播モデルが store/Intent と異質。再訪条件: Motolii が別目的で GStreamer に厚く依存した場合のみ。意味の先例として Unreal `-deterministicaudio` と Tone.js Transport は設計追認の傍証
 - **KNOWN 運用規則の追加**: 「探したが無い」と書く時は**探索範囲を必ず併記**する(今夜2回の教訓: gizmo=語彙の壁、音声=界隈の壁。範囲の宣言なき「無い」は嘘になる)
 - **iced 0.14 の image 同期アップロード予算は 2MiB**(実測 2026-08-20): それ以上の RGBA は背景スレッド行きになり、完了まで**何も描かれない**(= チラつきの真因。1080p フレーム 8.3MB は4倍超過)。対策: Handle は 1.5MB 以下へ縮小して同期経路に収める(柵テスト `render_pipeline_fence.rs` あり)。preview 縮小は裁定21(preview 1/2 既定)と整合。恒久解の候補は iced 上流修正 or GPU 埋め込み(裁定26)
-- **timeline_projection probe の慢性超過の真因(2026-08-21 計測)**: (a) `track()` コストの97%が `serde_json` の KeyframeTrack 解析(~88µs/call — 裁定11「track まるごと1 component」の代償が投影側に出た形)。恒久解候補= revision 鍵の解析済み track キャッシュ(裁定は未起草) (b) **このマシンに旧 MotoliiRn プロセスが火曜から常駐**(累計2184 CPU分・70%持続)し load を汚染 — 利用者に終了を推奨(勝手に kill しない)
+- **timeline_projection probe の慢性超過は根治済み**(裁定140 実装、2026-08-21): 真因 (a) `track()` コストの97%が serde_json 解析 → `Document::track_cache`(revision 鍵・自動無効化)で 15530µs→**495µs**(予算の12%)。意味等価は proptest 柵 `track_cache_equivalence.rs` が保証。真因 (b) の MotoliiRn 常駐は終了済み(2026-08-21 確認、不在)
 - **subagent は cargo を背景実行しない** — 完了通知との噛み合わせで自停止する実測2件(2026-08-21)。常に前景・timeout 600000
 - iced 0.14 の API 欠け(実測): text に letter-spacing 無し / Border は4辺一律(per-edge 無し)/ text_input の既定 padding は5px(固定高セルでは文字領域を圧縮する — 明示 padding(0) が要る)
 - **sccache は却下(2026-08-21 実測、2系統一致)**: 冷313s → hit75%でも331s(**むしろ遅い**)。理由は公式doc確認済み — bin/proc-macro/リンクは非キャッシュ・incremental(workspace crate全部)も非対象で、律速(リンク+ローカルcrate)に一切効かない。再提案しないこと
