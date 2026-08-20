@@ -68,7 +68,7 @@ constants	gradient-type		Gradient Type	採用済	linear / radial	pub enum Gradie
 constants	line-cap		Line Cap	採用済	butt/round/square	pub enum LineCap	shape-1	lottie
 constants	line-join		Line Join	採用済	miter/round/bevel。offset-path と共有	pub enum LineJoin	shape-1	lottie
 constants	mask-mode		Mask Mode	採用済	Add/Subtract/Intersect/Lighten/Darken/Difference。`None` は列挙に混ぜない — 消すことはモードではない(serde が `"None"` を弾くことを試験で縛る)	pub enum MaskMode	mask	lottie
-constants	matte-mode		Matte Mode	採用済	Alpha/InvertedAlpha/Luma/InvertedLuma は AE の語彙(裁定66)。層の語彙なので束を shape-2 から layer-meta へ付け替え(2026-08-20、shape-2レーンの指摘)	pub enum MatteMode	layer-meta	lottie
+constants	matte-mode		Matte Mode	採用済	Alpha/InvertedAlpha/Luma/InvertedLuma は AE の語彙(裁定66)。層の語彙なので束を shape-2 から layer-meta へ付け替え(2026-08-20、shape-2レーンの指摘)。**まだ合成器は読んでいない**(bm と同じ未消費 — 敵対的レビューが黙った穴として指摘、2026-08-20)	pub enum MatteMode	layer-meta	lottie
 constants	merge-mode		Merge Mode	不採用	パスブーリアンは対象外			lottie
 constants	shape-direction		Shape Direction	不採用	頂点順で表現する			lottie
 constants	star-type		Star Type	採用済	star / polygon	pub enum StarType	shape-2	lottie
