@@ -9,6 +9,8 @@
 //!   track の有無が「この param を触っているか」を表す(裁定20 の応用)
 //! - param の型語彙(scalar/Bool/Enum/color/Vec2/LayerId、effect-values の catalog)は
 //!   `motolii_eval::Value` の既存/新設バリアントがそのまま担う
+//! - `resolve()` は effect stack を運ぶ(裁定153 S1)。**enabled な effect だけ**が
+//!   宣言順で並び、param は時刻 t で評価済み。disabled/track の無い param は現れない
 
 use motolii_store::{
     Composition, Document, EffectId, EffectInstance, Fps, Interp, Intent, Keyframe,
@@ -447,4 +449,164 @@ fn duplicate_effect_ids_are_still_rejected_with_the_enabled_field() {
         ],
     });
     assert!(result.is_err(), "同じ id の effect が2枚置けてしまっている");
+}
+
+// ---------------------------------------------------------------------------
+// resolve() が effect stack を運ぶ(裁定153 S1)
+// ---------------------------------------------------------------------------
+
+/// **effect を積んだ layer の resolve 結果に評価済み effect 列が現れる。**
+/// `resolve()` が `effects()`/param track を一度も読まなかった旧状態
+/// (2026-08-21 縫い目調査)の直接の固定。
+#[test]
+fn resolve_carries_the_enabled_effect_stack_with_evaluated_params() {
+    let (mut doc, layer) = doc_with_layer();
+    let effect = EffectId(0);
+    doc.apply(Intent::SetEffects {
+        layer,
+        effects: vec![EffectInstance {
+            id: effect,
+            plugin_id: "motolii.gaussian-blur".to_owned(),
+            enabled: true,
+        }],
+    })
+    .unwrap();
+    let radius = PropertyId::effect_param(effect, "radius").unwrap();
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: radius,
+        track: still(Value::F64(12.5)),
+    })
+    .unwrap();
+
+    let resolved = doc.view().resolve(layer, t(0)).unwrap().expect("居る");
+    assert_eq!(
+        resolved.effects.len(),
+        1,
+        "effect が resolve() に運ばれていない: {:?}",
+        resolved.effects
+    );
+    assert_eq!(resolved.effects[0].plugin_id, "motolii.gaussian-blur");
+    assert_eq!(
+        resolved.effects[0].params,
+        vec![("radius".to_owned(), Value::F64(12.5))]
+    );
+}
+
+/// **disabled は現れない。** 列から消えていない(`en` は「消さずに切る」)ことは
+/// `effects()` 側で既に固定済みだが、resolve() の出力側は disabled をそもそも運ばない
+/// — hidden な layer が `resolve()` の外へ落ちるのと同じ形。
+#[test]
+fn resolve_does_not_carry_disabled_effects() {
+    let (mut doc, layer) = doc_with_layer();
+    doc.apply(Intent::SetEffects {
+        layer,
+        effects: vec![
+            EffectInstance {
+                id: EffectId(0),
+                plugin_id: "motolii.gaussian-blur".to_owned(),
+                enabled: false,
+            },
+            EffectInstance {
+                id: EffectId(1),
+                plugin_id: "motolii.drop-shadow".to_owned(),
+                enabled: true,
+            },
+        ],
+    })
+    .unwrap();
+
+    let resolved = doc.view().resolve(layer, t(0)).unwrap().expect("居る");
+    assert_eq!(
+        resolved.effects.len(),
+        1,
+        "disabled な effect が resolve() に現れている: {:?}",
+        resolved.effects
+    );
+    assert_eq!(resolved.effects[0].plugin_id, "motolii.drop-shadow");
+}
+
+/// **param のキーフレームが時刻で効く。** 平坦 track の既存評価経路
+/// (`StoreView::value_at`)をそのまま再利用していることの固定 — 新しい評価器を
+/// 書いていれば補間の挙動がここでずれる。
+#[test]
+fn resolved_effect_params_interpolate_with_time() {
+    let (mut doc, layer) = doc_with_layer();
+    let effect = EffectId(0);
+    doc.apply(Intent::SetEffects {
+        layer,
+        effects: vec![EffectInstance {
+            id: effect,
+            plugin_id: "motolii.gaussian-blur".to_owned(),
+            enabled: true,
+        }],
+    })
+    .unwrap();
+
+    let mut track = KeyframeTrack::new();
+    track.insert(Keyframe {
+        t: t(0),
+        value: Value::F64(0.0),
+        interp: Interp::Linear,
+        spatial: None,
+    });
+    track.insert(Keyframe {
+        t: t(30),
+        value: Value::F64(30.0),
+        interp: Interp::Linear,
+        spatial: None,
+    });
+    let radius = PropertyId::effect_param(effect, "radius").unwrap();
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: radius,
+        track,
+    })
+    .unwrap();
+
+    let at_start = doc.view().resolve(layer, t(0)).unwrap().expect("居る");
+    assert_eq!(
+        at_start.effects[0].params,
+        vec![("radius".to_owned(), Value::F64(0.0))]
+    );
+
+    let mid = doc.view().resolve(layer, t(15)).unwrap().expect("居る");
+    assert_eq!(
+        mid.effects[0].params,
+        vec![("radius".to_owned(), Value::F64(15.0))],
+        "param のキーフレームが時刻で効いていない: {:?}",
+        mid.effects[0].params
+    );
+}
+
+/// track の無い param は effect が有効でも運ばれない — store は plugin の param
+/// カタログを知らない(裁定70)ので、既定値を埋めるのは呼び手の役目。
+#[test]
+fn resolved_effect_omits_params_with_no_track() {
+    let (mut doc, layer) = doc_with_layer();
+    doc.apply(Intent::SetEffects {
+        layer,
+        effects: vec![EffectInstance {
+            id: EffectId(0),
+            plugin_id: "motolii.gaussian-blur".to_owned(),
+            enabled: true,
+        }],
+    })
+    .unwrap();
+
+    let resolved = doc.view().resolve(layer, t(0)).unwrap().expect("居る");
+    assert_eq!(resolved.effects.len(), 1, "enabled な effect 自体は現れるべき");
+    assert!(
+        resolved.effects[0].params.is_empty(),
+        "触っていない param が既定値で埋まっている: {:?}",
+        resolved.effects[0].params
+    );
+}
+
+/// effect を持たない layer は空スタック。
+#[test]
+fn resolve_yields_an_empty_effect_stack_when_none_are_set() {
+    let (doc, layer) = doc_with_layer();
+    let resolved = doc.view().resolve(layer, t(0)).unwrap().expect("居る");
+    assert!(resolved.effects.is_empty());
 }
