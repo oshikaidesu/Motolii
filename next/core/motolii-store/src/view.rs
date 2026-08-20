@@ -190,19 +190,32 @@ impl<'a> StoreView<'a> {
             }
         };
 
+        let vec2 = |name: &str, default: [f32; 2]| -> Result<[f32; 2], StoreError> {
+            let property = PropertyId::new(name)?;
+            match self.value_at(layer, &property, t)? {
+                Some(Value::Vec2(v)) => Ok([v[0] as f32, v[1] as f32]),
+                Some(other) => Err(StoreError::Property(format!(
+                    "{name} に2成分でない値が入っている: {other:?}"
+                ))),
+                None => Ok(default),
+            }
+        };
+
+        // 行列は `motolii-core` が組む。**適用順序の正本はそこ1箇所**(裁定58)。
+        let transform = LayerPlacement::from_transform(
+            vec2(property::ANCHOR, [0.0, 0.0])?,
+            vec2(property::POSITION, [0.0, 0.0])?,
+            vec2(property::SCALE, [1.0, 1.0])?,
+            scalar(property::ROTATION, 0.0)?,
+        );
+
         Ok(Some(ResolvedLayer {
             placement: LayerPlacement {
-                top_left: [
-                    scalar(property::POSITION_X, 0.0)?,
-                    scalar(property::POSITION_Y, 0.0)?,
-                ],
-                size: [
-                    scalar(property::WIDTH, size[0])?,
-                    scalar(property::HEIGHT, size[1])?,
-                ],
+                transform,
                 opacity: scalar(property::OPACITY, 1.0)?.clamp(0.0, 1.0),
                 order: meta.order,
             },
+            declared_size: size,
             source: meta.source,
             source_frame,
         }))

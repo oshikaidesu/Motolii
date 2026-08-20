@@ -42,9 +42,14 @@ fn layers_stack_by_order_and_position() {
             &[
                 Layer {
                     texture: red,
+                    size: [W as f32, H as f32],
                     placement: LayerPlacement {
-                        top_left: [0.0, 0.0],
-                        size: [W as f32, H as f32],
+                        transform: LayerPlacement::from_transform(
+                            [0.0, 0.0],
+                            [0.0, 0.0],
+                            [1.0, 1.0],
+                            0.0,
+                        ),
                         order: 0,
                         opacity: 1.0,
                     },
@@ -52,9 +57,14 @@ fn layers_stack_by_order_and_position() {
                 Layer {
                     texture: green,
                     // comp 座標は左上原点。左上の 1/4 を覆う。
+                    size: [32.0, 32.0],
                     placement: LayerPlacement {
-                        top_left: [0.0, 0.0],
-                        size: [32.0, 32.0],
+                        transform: LayerPlacement::from_transform(
+                            [0.0, 0.0],
+                            [0.0, 0.0],
+                            [1.0, 1.0],
+                            0.0,
+                        ),
                         order: 1,
                         opacity: 1.0,
                     },
@@ -94,9 +104,14 @@ fn render_is_deterministic() {
 
     let layer = Layer {
         texture: red,
+        size: [W as f32, H as f32],
         placement: LayerPlacement {
-            top_left: [0.0, 0.0],
-            size: [W as f32, H as f32],
+            transform: LayerPlacement::from_transform(
+                [0.0, 0.0],
+                [0.0, 0.0],
+                [1.0, 1.0],
+                0.0,
+            ),
             order: 0,
             opacity: 1.0,
         },
@@ -117,9 +132,14 @@ fn opacity_dims_the_layer() {
 
     let make = |opacity: f32| Layer {
         texture: white.clone(),
+        size: [W as f32, H as f32],
         placement: LayerPlacement {
-            top_left: [0.0, 0.0],
-            size: [W as f32, H as f32],
+            transform: LayerPlacement::from_transform(
+                [0.0, 0.0],
+                [0.0, 0.0],
+                [1.0, 1.0],
+                0.0,
+            ),
             order: 0,
             opacity,
         },
@@ -177,9 +197,14 @@ fn alpha_is_flattened_by_the_composite_step() {
             comp(),
             &[Layer {
                 texture: half_alpha,
+                size: [W as f32, H as f32],
                 placement: LayerPlacement {
-                    top_left: [0.0, 0.0],
-                    size: [W as f32, H as f32],
+                    transform: LayerPlacement::from_transform(
+                        [0.0, 0.0],
+                        [0.0, 0.0],
+                        [1.0, 1.0],
+                        0.0,
+                    ),
                     order: 0,
                     opacity: 1.0,
                 },
@@ -211,18 +236,28 @@ fn two_devices_produce_the_same_frame() {
         vec![
             Layer {
                 texture: tex,
+                size: [W as f32, H as f32],
                 placement: LayerPlacement {
-                    top_left: [0.0, 0.0],
-                    size: [W as f32, H as f32],
+                    transform: LayerPlacement::from_transform(
+                        [0.0, 0.0],
+                        [0.0, 0.0],
+                        [1.0, 1.0],
+                        0.0,
+                    ),
                     order: 0,
                     opacity: 1.0,
                 },
             },
             Layer {
                 texture: small,
+                size: [32.0, 32.0],
                 placement: LayerPlacement {
-                    top_left: [8.0, 12.0],
-                    size: [32.0, 32.0],
+                    transform: LayerPlacement::from_transform(
+                        [0.0, 0.0],
+                        [8.0, 12.0],
+                        [1.0, 1.0],
+                        0.0,
+                    ),
                     order: 1,
                     opacity: 0.5,
                 },

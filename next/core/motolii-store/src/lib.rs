@@ -57,10 +57,14 @@ pub mod property {
     /// layer の素材と重ね順を上書きする。
     pub const RESERVED: &[&str] = &["meta", "present"];
 
-    pub const POSITION_X: &str = "position.x";
-    pub const POSITION_Y: &str = "position.y";
-    pub const WIDTH: &str = "size.width";
-    pub const HEIGHT: &str = "size.height";
+    /// 変換の中心。**レイヤ自身の座標単位の点**であって 0..1 の正規化ピボットではない。
+    pub const ANCHOR: &str = "anchor";
+    /// **anchor が着地する点**。`top_left` ではない(裁定60)。
+    pub const POSITION: &str = "position";
+    /// 1.0 が等倍(Lottie のパーセントは採らない、裁定58)。
+    pub const SCALE: &str = "scale";
+    /// 度・時計回り(AE と同じ。ラジアンは人が読めない)。
+    pub const ROTATION: &str = "rotation";
     pub const OPACITY: &str = "opacity";
 }
 
@@ -207,6 +211,9 @@ pub struct LayerMeta {
 pub struct ResolvedLayer {
     pub source: LayerSource,
     pub placement: LayerPlacement,
+    /// Document が知っている素材の寸法。`[0,0]` = **probe しないと分からない**ので
+    /// engine が実寸で埋める。
+    pub declared_size: [f32; 2],
     /// この comp 時刻に対応する**素材のフレーム**。
     /// 解決済みなので、engine はもう時間の計算をしない。
     pub source_frame: i64,

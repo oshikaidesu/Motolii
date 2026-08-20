@@ -30,7 +30,7 @@ fn authored() -> Document {
         let mut track = KeyframeTrack::new();
         track.insert(Keyframe {
             t: t(0),
-            value: Value::F64(0.0),
+            value: Value::Vec2([0.0, 0.0]),
             interp: Interp::Bezier {
                 x1: 0.42,
                 y1: 0.0,
@@ -40,7 +40,7 @@ fn authored() -> Document {
         });
         track.insert(Keyframe {
             t: t(60),
-            value: Value::F64(500.0),
+            value: Value::Vec2([500.0, 0.0]),
             interp: Interp::Linear,
         });
 
@@ -64,7 +64,7 @@ fn authored() -> Document {
             },
             Intent::SetTrack {
                 layer,
-                property: PropertyId::new(property::POSITION_X).unwrap(),
+                property: PropertyId::new(property::POSITION).unwrap(),
                 track,
             },
         ])

@@ -87,17 +87,27 @@ impl Engine {
                 // 素材の外の時刻。この layer は今フレームに居ない。
                 continue;
             };
-            // track も declared も無い軸は素材の実寸で埋める(AE と同じ「キーを
-            // 打っていない property は静止値」の延長)。**置き方はそのまま持ち回る** —
-            // フィールドを並べ直すとそこが翻訳層になる。
-            let mut placement = layer.placement;
-            if placement.size[0] <= 0.0 {
-                placement.size[0] = natural[0];
-            }
-            if placement.size[1] <= 0.0 {
-                placement.size[1] = natural[1];
-            }
-            layers.push(Layer { texture, placement });
+            // 素材の寸法は Document が知らないことがある(実素材は probe しないと
+            // 分からない)。その時だけ実寸で埋める。**大きさは transform の scale で
+            // 動く**ので、ここは「板のローカル矩形」を決めているだけ(裁定59)。
+            let size = [
+                if layer.declared_size[0] > 0.0 {
+                    layer.declared_size[0]
+                } else {
+                    natural[0]
+                },
+                if layer.declared_size[1] > 0.0 {
+                    layer.declared_size[1]
+                } else {
+                    natural[1]
+                },
+            ];
+            layers.push(Layer {
+                texture,
+                size,
+                // **置き方はそのまま持ち回る** — 並べ直すとそこが翻訳層になる。
+                placement: layer.placement,
+            });
         }
 
         Ok(self.compositor.render(comp, &layers)?)

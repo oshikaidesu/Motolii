@@ -134,9 +134,14 @@ fn where_the_frame_time_goes() {
     let layers: Vec<Layer> = (0..40)
         .map(|i| Layer {
             texture: texture.clone(),
+            size: [FHD[0] as f32, FHD[1] as f32],
             placement: LayerPlacement {
-                top_left: [0.0, 0.0],
-                size: [FHD[0] as f32, FHD[1] as f32],
+                transform: LayerPlacement::from_transform(
+                    [0.0, 0.0],
+                    [0.0, 0.0],
+                    [1.0, 1.0],
+                    0.0,
+                ),
                 order: i,
                 opacity: 1.0,
             },
@@ -186,9 +191,14 @@ fn preview_resolution_is_the_lever() {
         let layers: Vec<Layer> = (0..40)
             .map(|i| Layer {
                 texture: texture.clone(),
+                size: [w as f32, h as f32],
                 placement: LayerPlacement {
-                    top_left: [0.0, 0.0],
-                    size: [w as f32, h as f32],
+                    transform: LayerPlacement::from_transform(
+                        [0.0, 0.0],
+                        [0.0, 0.0],
+                        [1.0, 1.0],
+                        0.0,
+                    ),
                     order: i,
                     opacity: 1.0,
                 },

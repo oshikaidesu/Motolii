@@ -347,19 +347,29 @@ pub struct CompSpec {
 
 /// comp 座標(ピクセル・左上原点)での layer の置き方。
 ///
-/// **`motolii-store` の `ResolvedLayer` と `motolii-compositor` の `Layer` が
-/// 同じフィールドを並べていた**ので、共有の型へ畳んだ(2026-08-20 の敵対的レビュー:
-/// 「property を1つ足すと6箇所を触る」= 旧 `inspector_model.rs` が3世代になった構造の
-/// 1世代目)。畳んだ後に触るのは 3箇所 — property 名 / `resolve` / 板の組み立て。
+/// **意味は Lottie(= 実質 OSS の AE 解析)から取っている**(裁定58)。
+/// 公式仕様 + velato + zimond/lottie-rs の3つで裏を取った適用順序:
 ///
-/// **ここに増やしてよいのは「置き方」だけ**。素材の中身(色・effect)や時間の意味は
-/// 別の型が持つ。ここが何でも入る箱になったら、それは翻訳層に戻った合図である。
+/// ```text
+/// translate(position) · rotate(rotation) · skew · scale · translate(-anchor)
+/// ```
+///
+/// 読み方: anchor をローカル原点へ引き寄せる → 拡大 → skew → 回転 → position へ置く。
+/// **anchor は 0..1 の正規化ピボットではなく、レイヤ自身の座標単位の点**。
+///
+/// 以前は `top_left` + `size` を持っていたが両方とも捨てた(裁定59・60):
+/// - `top_left` は回転を入れた瞬間に保存値として意味を失う。**position は anchor が
+///   着地する点**である
+/// - 「レイヤの寸法」property は Lottie に存在しない。寸法は素材固有で、大きさは
+///   `scale` でしか動かない。両方持つと**同じことを言う正本が2つ**になる
+///
+/// `opacity` は**行列の外**にある。Lottie は形式上 transform の中に置くが、行列に
+/// 合成せず親からも継承しない(velato も剥がして返す)。
+/// **継承しないものを継承する箱に入れない**(裁定62)。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LayerPlacement {
-    /// comp 座標での左上位置。
-    pub top_left: [f32; 2],
-    /// comp 座標での大きさ。
-    pub size: [f32; 2],
+    /// レイヤ座標 → comp 座標。上の順序で組んである。
+    pub transform: glam::Affine2,
     /// 重ね順。大きいほど手前。上流の `re_renderer::DepthOffset` と同じ `i16`。
     pub order: i16,
     /// 0.0〜1.0。
@@ -369,10 +379,31 @@ pub struct LayerPlacement {
 impl Default for LayerPlacement {
     fn default() -> Self {
         Self {
-            top_left: [0.0, 0.0],
-            size: [0.0, 0.0],
+            transform: glam::Affine2::IDENTITY,
             order: 0,
             opacity: 1.0,
         }
+    }
+}
+
+impl LayerPlacement {
+    /// Lottie の適用順序で行列を組む。**ここが transform の意味の正本**。
+    ///
+    /// - `anchor` / `position`: comp 座標のピクセル
+    /// - `scale`: 1.0 が等倍(Lottie のパーセントは採らない、裁定58)
+    /// - `rotation_degrees`: 時計回りの度(AE と同じ。ラジアンは人が読めない)
+    pub fn from_transform(
+        anchor: [f32; 2],
+        position: [f32; 2],
+        scale: [f32; 2],
+        rotation_degrees: f32,
+    ) -> glam::Affine2 {
+        use glam::{Affine2, Vec2};
+
+        // 列ベクトル規約。右から順に「anchor を引く → 拡大 → 回転 → position へ」。
+        Affine2::from_translation(Vec2::new(position[0], position[1]))
+            * Affine2::from_angle(rotation_degrees.to_radians())
+            * Affine2::from_scale(Vec2::new(scale[0], scale[1]))
+            * Affine2::from_translation(Vec2::new(-anchor[0], -anchor[1]))
     }
 }

@@ -12,10 +12,7 @@ use motolii_store::LayerTiming;
 fn realistic_document() -> Document {
     let mut doc = Document::new();
     let props = [
-        property::POSITION_X,
-        property::POSITION_Y,
-        property::WIDTH,
-        property::HEIGHT,
+        property::POSITION,
         property::OPACITY,
     ];
 
@@ -96,10 +93,7 @@ fn timeline_projection_fits_a_frame() {
 
     let doc = realistic_document();
     let props: Vec<PropertyId> = [
-        property::POSITION_X,
-        property::POSITION_Y,
-        property::WIDTH,
-        property::HEIGHT,
+        property::POSITION,
         property::OPACITY,
     ]
     .iter()

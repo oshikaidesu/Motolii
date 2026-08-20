@@ -116,17 +116,17 @@ fn keyframes_move_the_picture_over_time() {
     let mut x = KeyframeTrack::new();
     x.insert(Keyframe {
         t: t(0),
-        value: Value::F64(0.0),
+        value: Value::Vec2([0.0, 0.0]),
         interp: Interp::Linear,
     });
     x.insert(Keyframe {
         t: t(30),
-        value: Value::F64(48.0),
+        value: Value::Vec2([48.0, 0.0]),
         interp: Interp::Linear,
     });
     doc.apply(Intent::SetTrack {
         layer,
-        property: PropertyId::new(property::POSITION_X).unwrap(),
+        property: PropertyId::new(property::POSITION).unwrap(),
         track: x,
     })
     .unwrap();

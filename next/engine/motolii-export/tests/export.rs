@@ -55,17 +55,17 @@ fn moving_document() -> Document {
     let mut x = KeyframeTrack::new();
     x.insert(Keyframe {
         t: RationalTime::try_new(0, 30).unwrap(),
-        value: Value::F64(0.0),
+        value: Value::Vec2([0.0, 0.0]),
         interp: Interp::Linear,
     });
     x.insert(Keyframe {
         t: RationalTime::try_new(30, 30).unwrap(),
-        value: Value::F64(48.0),
+        value: Value::Vec2([48.0, 0.0]),
         interp: Interp::Linear,
     });
     doc.apply(Intent::SetTrack {
         layer,
-        property: PropertyId::new(property::POSITION_X).unwrap(),
+        property: PropertyId::new(property::POSITION).unwrap(),
         track: x,
     })
     .unwrap();

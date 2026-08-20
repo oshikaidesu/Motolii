@@ -1,0 +1,661 @@
+# Lottie の全語彙と、Motolii がそれをどう扱うかの地図。
+# lottie.schema.json(上流そのまま)から機械生成した骨に、判断を書き込む。
+# 状態: 採用済 / 採用予定 / 不採用 / 未判定 / 該当なし
+# 試験 lottie_coverage.rs が「スキーマにあって表に無い」「表にあってスキーマに無い」を落とす。
+group	object	field	title	status	note
+assets	all-assets	@extends	assets/precomposition	該当なし	継承元
+assets	all-assets	@extends	assets/image	該当なし	継承元
+assets	all-assets	@extends	assets/data-source	該当なし	継承元
+assets	all-assets	@extends	assets/sound	該当なし	継承元
+assets	asset	@extends	helpers/visual-object	該当なし	継承元
+assets	asset	id	ID	未判定	
+assets	data-source	@extends	assets/file-asset	該当なし	継承元
+assets	data-source	t	Type	未判定	
+assets	file-asset	@extends	assets/asset	該当なし	継承元
+assets	file-asset	e	Embedded	未判定	
+assets	file-asset	p	File Name	未判定	
+assets	file-asset	u	File Path	未判定	
+assets	image	@extends	assets/file-asset	該当なし	継承元
+assets	image	@extends	helpers/slottable-object	該当なし	継承元
+assets	image	h	Height	未判定	
+assets	image	t	Type	未判定	
+assets	image	w	Width	未判定	
+assets	precomposition	@extends	assets/asset	該当なし	継承元
+assets	precomposition	@extends	composition/composition	該当なし	継承元
+assets	precomposition	fr	Framerate	未判定	
+assets	precomposition	xt	Extra	未判定	
+assets	sound	@extends	assets/file-asset	該当なし	継承元
+composition	animation	@extends	helpers/visual-object	該当なし	継承元
+composition	animation	@extends	composition/composition	該当なし	継承元
+composition	animation	assets	Assets	未判定	
+composition	animation	chars	Characters	未判定	
+composition	animation	comps	Extra Compositions	未判定	
+composition	animation	ddd	Threedimensional	不採用	3D
+composition	animation	fonts	Fonts	未判定	
+composition	animation	fr	Framerate	採用済	Composition.fps。**有理数で持つ**(Lottie の f64 は 30000/1001 を表せない。裁定64)
+composition	animation	h	Height	採用済	Composition.height
+composition	animation	ip	In Point	不採用	作業領域は view の関心であって document の関心ではない(裁定64)
+composition	animation	markers	Markers	採用予定	ロケータに写る
+composition	animation	mb	Motion Blur	未判定	
+composition	animation	meta	Metadata	未判定	
+composition	animation	metadata	User Metadata	未判定	
+composition	animation	op	Out Point	採用済	Composition.duration_frames
+composition	animation	slots	Slots	採用予定	Vism(型付き input を持つ再利用単位)の先例になりうる
+composition	animation	v	Bodymovin version, on very old versions some things might be slightly different from what is explained here	未判定	
+composition	animation	ver	Specification Version	未判定	
+composition	animation	w	Width	採用済	Composition.width
+composition	composition	layers	Layers	未判定	
+composition	metadata	a	Author	未判定	
+composition	metadata	d	Description	未判定	
+composition	metadata	g	Generator	未判定	
+composition	metadata	k	Keywords	未判定	
+composition	metadata	tc	Theme Color	未判定	
+composition	motion-blur	asl	Adaptive Sample Limit	未判定	
+composition	motion-blur	sa	Shutter Angle	未判定	
+composition	motion-blur	sp	Shutter Phase	未判定	
+composition	motion-blur	spf	Samples per Frame	未判定	
+composition	user-metadata	customProps	Custom Properties	未判定	
+composition	user-metadata	filename	Filename	未判定	
+constants	blend-mode		Blend Mode	採用予定	0..15。発明の余地が無い(裁定67)
+constants	composite		Composite	未判定	
+constants	fill-rule		Fill Rule	未判定	
+constants	font-path-origin		Font Path Origin	未判定	
+constants	gradient-type		Gradient Type	未判定	
+constants	line-cap		Line Cap	未判定	
+constants	line-join		Line Join	未判定	
+constants	mask-mode		Mask Mode	未判定	
+constants	matte-mode		Matte Mode	採用予定	Alpha/InvertedAlpha/Luma/InvertedLuma は AE の語彙(裁定66)
+constants	merge-mode		Merge Mode	未判定	
+constants	shape-direction		Shape Direction	未判定	
+constants	star-type		Star Type	未判定	
+constants	stroke-dash-type		Stroke Dash Type	未判定	
+constants	text-based		Text Based	未判定	
+constants	text-caps		Text Caps	未判定	
+constants	text-grouping		Text Grouping	未判定	
+constants	text-justify		Text Justify	未判定	
+constants	text-range-units		Text Range Units	未判定	
+constants	text-shape		Text Shape	未判定	
+constants	trim-multiple-shapes		Trim Multiple Shapes	未判定	
+effect-values	all-effect-values	@extends	effect-values/angle	該当なし	継承元
+effect-values	all-effect-values	@extends	effect-values/checkbox	該当なし	継承元
+effect-values	all-effect-values	@extends	effect-values/color	該当なし	継承元
+effect-values	all-effect-values	@extends	effect-values/drop-down	該当なし	継承元
+effect-values	all-effect-values	@extends	effect-values/ignored	該当なし	継承元
+effect-values	all-effect-values	@extends	effect-values/layer	該当なし	継承元
+effect-values	all-effect-values	@extends	effect-values/no-value	該当なし	継承元
+effect-values	all-effect-values	@extends	effect-values/point	該当なし	継承元
+effect-values	all-effect-values	@extends	effect-values/slider	該当なし	継承元
+effect-values	angle	@extends	effect-values/effect-value	該当なし	継承元
+effect-values	angle	ty	Type	未判定	
+effect-values	angle	v	Value	未判定	
+effect-values	checkbox	@extends	effect-values/effect-value	該当なし	継承元
+effect-values	checkbox	ty	Type	未判定	
+effect-values	checkbox	v	Value	未判定	
+effect-values	color	@extends	effect-values/effect-value	該当なし	継承元
+effect-values	color	ty	Type	未判定	
+effect-values	color	v	Value	未判定	
+effect-values	drop-down	@extends	effect-values/effect-value	該当なし	継承元
+effect-values	drop-down	ty	Type	未判定	
+effect-values	drop-down	v	Value	未判定	
+effect-values	effect-value	@extends	helpers/visual-object	該当なし	継承元
+effect-values	effect-value	ix	Effect Index	未判定	
+effect-values	effect-value	ty	Type	未判定	
+effect-values	ignored	@extends	effect-values/effect-value	該当なし	継承元
+effect-values	ignored	ty	Type	未判定	
+effect-values	ignored	v	Value	未判定	
+effect-values	layer	@extends	effect-values/effect-value	該当なし	継承元
+effect-values	layer	ty	Type	未判定	
+effect-values	layer	v	Value	未判定	
+effect-values	no-value		Effect No Value	未判定	
+effect-values	point	@extends	effect-values/effect-value	該当なし	継承元
+effect-values	point	ty	Type	未判定	
+effect-values	point	v	Value	未判定	
+effect-values	slider	@extends	effect-values/effect-value	該当なし	継承元
+effect-values	slider	ty	Type	未判定	
+effect-values	slider	v	Value	未判定	
+effects	all-effects	@extends	effects/custom-effect	該当なし	継承元
+effects	all-effects	@extends	effects/displacement-map-effect	該当なし	継承元
+effects	all-effects	@extends	effects/drop-shadow-effect	該当なし	継承元
+effects	all-effects	@extends	effects/effect	該当なし	継承元
+effects	all-effects	@extends	effects/fill-effect	該当なし	継承元
+effects	all-effects	@extends	effects/gaussian-blur-effect	該当なし	継承元
+effects	all-effects	@extends	effects/matte3-effect	該当なし	継承元
+effects	all-effects	@extends	effects/mesh-warp-effect	該当なし	継承元
+effects	all-effects	@extends	effects/pro-levels-effect	該当なし	継承元
+effects	all-effects	@extends	effects/puppet-effect	該当なし	継承元
+effects	all-effects	@extends	effects/radial-wipe-effect	該当なし	継承元
+effects	all-effects	@extends	effects/spherize-effect	該当なし	継承元
+effects	all-effects	@extends	effects/stroke-effect	該当なし	継承元
+effects	all-effects	@extends	effects/tint-effect	該当なし	継承元
+effects	all-effects	@extends	effects/tritone-effect	該当なし	継承元
+effects	all-effects	@extends	effects/twirl-effect	該当なし	継承元
+effects	all-effects	@extends	effects/wavy-effect	該当なし	継承元
+effects	custom-effect	@extends	effects/effect	該当なし	継承元
+effects	custom-effect	ty	Type	未判定	
+effects	displacement-map-effect	@extends	effects/effect	該当なし	継承元
+effects	displacement-map-effect	ef	Effect values	未判定	
+effects	displacement-map-effect	ty	Type	未判定	
+effects	drop-shadow-effect	@extends	effects/effect	該当なし	継承元
+effects	drop-shadow-effect	ef	Effect values	未判定	
+effects	drop-shadow-effect	ty	Type	未判定	
+effects	effect	@extends	helpers/visual-object	該当なし	継承元
+effects	effect	ef	Effect Values	未判定	
+effects	effect	en	Enabled	未判定	
+effects	effect	ix	Effect Index	未判定	
+effects	effect	np	Property Count	未判定	
+effects	effect	ty	Type	未判定	
+effects	fill-effect	@extends	effects/effect	該当なし	継承元
+effects	fill-effect	ef	Effect values	未判定	
+effects	fill-effect	ty	Type	未判定	
+effects	gaussian-blur-effect	@extends	effects/effect	該当なし	継承元
+effects	gaussian-blur-effect	ef	Effect values	未判定	
+effects	gaussian-blur-effect	ty	Type	未判定	
+effects	matte3-effect	@extends	effects/effect	該当なし	継承元
+effects	matte3-effect	ef	Effect values	未判定	
+effects	matte3-effect	ty	Type	未判定	
+effects	mesh-warp-effect	@extends	effects/effect	該当なし	継承元
+effects	mesh-warp-effect	ef	Effect values	未判定	
+effects	mesh-warp-effect	ty	Type	未判定	
+effects	pro-levels-effect	@extends	effects/effect	該当なし	継承元
+effects	pro-levels-effect	ef	Effect values	未判定	
+effects	pro-levels-effect	ty	Type	未判定	
+effects	puppet-effect	@extends	effects/effect	該当なし	継承元
+effects	puppet-effect	ef	Effect values	未判定	
+effects	puppet-effect	ty	Type	未判定	
+effects	radial-wipe-effect	@extends	effects/effect	該当なし	継承元
+effects	radial-wipe-effect	ef	Effect values	未判定	
+effects	radial-wipe-effect	ty	Type	未判定	
+effects	spherize-effect	@extends	effects/effect	該当なし	継承元
+effects	spherize-effect	ef	Effect values	未判定	
+effects	spherize-effect	ty	Type	未判定	
+effects	stroke-effect	@extends	effects/effect	該当なし	継承元
+effects	stroke-effect	ef	Effect values	未判定	
+effects	stroke-effect	ty	Type	未判定	
+effects	tint-effect	@extends	effects/effect	該当なし	継承元
+effects	tint-effect	ef	Effect values	未判定	
+effects	tint-effect	ty	Type	未判定	
+effects	tritone-effect	@extends	effects/effect	該当なし	継承元
+effects	tritone-effect	ef	Effect values	未判定	
+effects	tritone-effect	ty	Type	未判定	
+effects	twirl-effect	@extends	effects/effect	該当なし	継承元
+effects	twirl-effect	ef	Effect values	未判定	
+effects	twirl-effect	ty	Type	未判定	
+effects	wavy-effect	@extends	effects/effect	該当なし	継承元
+effects	wavy-effect	ef	Effect values	未判定	
+effects	wavy-effect	ty	Type	未判定	
+helpers	marker	cm	Comment	未判定	
+helpers	marker	dr	Duration	未判定	
+helpers	marker	tm	Time	未判定	
+helpers	mask	inv	Inverted	未判定	
+helpers	mask	mode	Mode	未判定	
+helpers	mask	o	Opacity	未判定	
+helpers	mask	pt	Shape	未判定	
+helpers	mask	x	Expand	未判定	
+helpers	slot	p	Property Value	未判定	
+helpers	slottable-object	sid	Slot Id	未判定	
+helpers	transform	a	Anchor Point	採用済	anchor。行列の中心
+helpers	transform	o	Opacity	採用済	opacity。ただし行列の外(裁定62)
+helpers	transform	or	Orientation	未判定	
+helpers	transform	p	Position	採用済	position。anchor が着地する点
+helpers	transform	r	Rotation	採用済	rotation。度・時計回り
+helpers	transform	rx	X Rotation	未判定	
+helpers	transform	ry	Y Rotation	未判定	
+helpers	transform	rz	Z Rotation	未判定	
+helpers	transform	s	Scale	採用済	scale。単位は 1.0 基準(パーセントは採らない)
+helpers	transform	sa	Skew Axis	採用予定	skew axis
+helpers	transform	sk	Skew	採用予定	skew。順序上の穴は空けてある
+helpers	visual-object	mn	Match Name	未判定	
+helpers	visual-object	nm	Name	未判定	
+layers	all-layers	@extends	layers/precomposition-layer	該当なし	継承元
+layers	all-layers	@extends	layers/solid-layer	該当なし	継承元
+layers	all-layers	@extends	layers/image-layer	該当なし	継承元
+layers	all-layers	@extends	layers/null-layer	該当なし	継承元
+layers	all-layers	@extends	layers/shape-layer	該当なし	継承元
+layers	all-layers	@extends	layers/text-layer	該当なし	継承元
+layers	all-layers	@extends	layers/audio-layer	該当なし	継承元
+layers	all-layers	@extends	layers/data-layer	該当なし	継承元
+layers	all-layers	@extends	layers/camera-layer	該当なし	継承元
+layers	all-layers	@extends	layers/unknown-layer	該当なし	継承元
+layers	audio-layer	@extends	layers/layer	該当なし	継承元
+layers	audio-layer	au	Audio Settings	未判定	
+layers	audio-layer	refId	Sound Id	未判定	
+layers	audio-layer	ty	Type	未判定	
+layers	audio-settings	lv	Level	未判定	
+layers	camera-layer	@extends	layers/layer	該当なし	継承元
+layers	camera-layer	ks	Transform	未判定	
+layers	camera-layer	pe	Perspective	未判定	
+layers	camera-layer	ty	Type	未判定	
+layers	data-layer	@extends	layers/layer	該当なし	継承元
+layers	data-layer	refId	Data source Id	未判定	
+layers	data-layer	ty	Type	未判定	
+layers	image-layer	@extends	layers/visual-layer	該当なし	継承元
+layers	image-layer	refId	Reference Id	未判定	
+layers	image-layer	ty	Type	未判定	
+layers	layer	@extends	helpers/visual-object	該当なし	継承元
+layers	layer	ddd	Threedimensional	未判定	
+layers	layer	hd	Hidden	未判定	
+layers	layer	ind	Index	未判定	
+layers	layer	ip	In Point	未判定	
+layers	layer	op	Out Point	未判定	
+layers	layer	parent	Parent Index	未判定	
+layers	layer	sr	Time Stretch	未判定	
+layers	layer	st	Start Time	未判定	
+layers	layer	ty	Type	未判定	
+layers	null-layer	@extends	layers/visual-layer	該当なし	継承元
+layers	null-layer	ty	Type	未判定	
+layers	precomposition-layer	@extends	layers/visual-layer	該当なし	継承元
+layers	precomposition-layer	h	Height	未判定	
+layers	precomposition-layer	refId	Reference Id	未判定	
+layers	precomposition-layer	st	Start Time	未判定	
+layers	precomposition-layer	tm	Time Remap	未判定	
+layers	precomposition-layer	ty	Type	未判定	
+layers	precomposition-layer	w	Width	未判定	
+layers	shape-layer	@extends	layers/visual-layer	該当なし	継承元
+layers	shape-layer	shapes	Shapes	未判定	
+layers	shape-layer	ty	Type	未判定	
+layers	solid-layer	@extends	layers/visual-layer	該当なし	継承元
+layers	solid-layer	sc	Color	未判定	
+layers	solid-layer	sh	Height	未判定	
+layers	solid-layer	sw	Width	未判定	
+layers	solid-layer	ty	Type	未判定	
+layers	text-layer	@extends	layers/visual-layer	該当なし	継承元
+layers	text-layer	t	Data	未判定	
+layers	text-layer	ty	Type	未判定	
+layers	unknown-layer	ty		未判定	
+layers	visual-layer	@extends	layers/layer	該当なし	継承元
+layers	visual-layer	ao	Auto Orient	採用予定	auto-orient。position が Vec2 単一なら定義できる
+layers	visual-layer	bm	Blend Mode	採用予定	blend mode。Lottie の 0..15 をそのまま(裁定67)
+layers	visual-layer	cl	CSS Class	未判定	
+layers	visual-layer	cp	Collapse Transform	未判定	
+layers	visual-layer	ct	Collapse Transform	不採用	collapse transform は再生器の都合
+layers	visual-layer	ef	Effects	未判定	
+layers	visual-layer	hasMask	Has Masks	未判定	
+layers	visual-layer	ks	Transform	未判定	
+layers	visual-layer	ln	Layer XML ID	未判定	
+layers	visual-layer	masksProperties	Masks	未判定	
+layers	visual-layer	mb	Motion Blur	未判定	
+layers	visual-layer	sy	Layer style	未判定	
+layers	visual-layer	td	Matte Target	不採用	同上
+layers	visual-layer	tg	Layer XML tag name	未判定	
+layers	visual-layer	tp	Matte Parent	不採用	同上。暗黙隣接参照は絶対に採らない(裁定66)
+layers	visual-layer	tt	Matte Mode	不採用	matte の3フィールド分割は採らず1フィールドに畳む(裁定66)
+properties	base-keyframe	h	Hold	採用済	Interp::Hold
+properties	base-keyframe	i	In Tangent	採用済	Interp::Bezier の x2,y2
+properties	base-keyframe	o	Out Tangent	採用済	Interp::Bezier の x1,y1
+properties	base-keyframe	t	Time	採用済	RationalTime で持つ(裁定64)
+properties	bezier-keyframe	@extends	properties/base-keyframe	該当なし	継承元
+properties	bezier-keyframe	e	End value	未判定	
+properties	bezier-keyframe	s	Value	未判定	
+properties	bezier-property	@extends	properties/property	該当なし	継承元
+properties	bezier-property	a	Animated	未判定	
+properties	bezier-property	ix	Property Index	未判定	
+properties	bezier-property	k	Keyframes	未判定	
+properties	color-keyframe	@extends	properties/base-keyframe	該当なし	継承元
+properties	color-keyframe	e	End value	未判定	
+properties	color-keyframe	s	Value	未判定	
+properties	color-property	@extends	properties/property	該当なし	継承元
+properties	color-property	a	Animated	未判定	
+properties	color-property	ix	Property Index	未判定	
+properties	color-property	k	Keyframes	未判定	
+properties	easing-handle	x	X	未判定	
+properties	easing-handle	y	Y	未判定	
+properties	gradient-keyframe	@extends	properties/base-keyframe	該当なし	継承元
+properties	gradient-keyframe	e	End value	未判定	
+properties	gradient-keyframe	s	Value	未判定	
+properties	gradient-property	k	Gradient stops	未判定	
+properties	gradient-property	p	Color stop count	未判定	
+properties	gradient-stops	@extends	properties/property	該当なし	継承元
+properties	gradient-stops	a	Animated	未判定	
+properties	gradient-stops	k	Keyframes	未判定	
+properties	position-keyframe	@extends	properties/vector-keyframe	該当なし	継承元
+properties	position-keyframe	ti	Value In Tangent	採用予定	空間ベジェ。position を Vec2 単一にしたので入る余地がある(裁定61)
+properties	position-keyframe	to	Value Out Tangent	採用予定	同上
+properties	position-property	@extends	properties/property	該当なし	継承元
+properties	position-property	a	Animated	未判定	
+properties	position-property	ix	Property Index	未判定	
+properties	position-property	k	Keyframes	未判定	
+properties	position-property	l	Length	未判定	
+properties	property	a	Animated	未判定	
+properties	property	ix	Property Index	未判定	
+properties	property	sid	Slot ID	未判定	
+properties	property	x	Expression	未判定	
+properties	scalar-property	@extends	properties/property	該当なし	継承元
+properties	scalar-property	a	Animated	未判定	
+properties	scalar-property	ix	Property Index	未判定	
+properties	scalar-property	k	Keyframes	未判定	
+properties	split-position	s	Split	採用予定	split は variant として後で
+properties	split-position	x	X Position	未判定	
+properties	split-position	y	Y Position	未判定	
+properties	splittable-position-property	@extends	properties/position-property	該当なし	継承元
+properties	splittable-position-property	@extends	properties/split-position	該当なし	継承元
+properties	vector-keyframe	@extends	properties/base-keyframe	該当なし	継承元
+properties	vector-keyframe	e	End value	未判定	
+properties	vector-keyframe	s	Value	未判定	
+properties	vector-property	@extends	properties/property	該当なし	継承元
+properties	vector-property	a	Animated	未判定	
+properties	vector-property	k	Keyframes	未判定	
+properties	vector-property	l	Length	未判定	
+shapes	all-graphic-elements	@extends	shapes/ellipse	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/fill	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/gradient-fill	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/gradient-stroke	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/group	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/merge	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/no-style	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/offset-path	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/path	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/polystar	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/pucker-bloat	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/rectangle	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/repeater	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/rounded-corners	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/stroke	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/transform	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/trim-path	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/twist	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/zig-zag	該当なし	継承元
+shapes	all-graphic-elements	@extends	shapes/unknown-shape	該当なし	継承元
+shapes	base-gradient	a	Highlight Angle	未判定	
+shapes	base-gradient	e	End Point	未判定	
+shapes	base-gradient	g	Colors	未判定	
+shapes	base-gradient	h	Highlight Length	未判定	
+shapes	base-gradient	s	Start Point	未判定	
+shapes	base-gradient	t	Gradient Type	未判定	
+shapes	base-stroke	d	Dashes	未判定	
+shapes	base-stroke	lc	Line Cap	未判定	
+shapes	base-stroke	lj	Line Join	未判定	
+shapes	base-stroke	ml	Miter Limit	未判定	
+shapes	base-stroke	ml2	Miter Limit	未判定	
+shapes	base-stroke	w	Width	未判定	
+shapes	ellipse	@extends	shapes/shape	該当なし	継承元
+shapes	ellipse	p	Position	未判定	
+shapes	ellipse	s	Size	未判定	
+shapes	ellipse	ty	Shape Type	未判定	
+shapes	fill	@extends	shapes/shape-style	該当なし	継承元
+shapes	fill	c	Color	未判定	
+shapes	fill	r	Fill Rule	未判定	
+shapes	fill	ty	Shape Type	未判定	
+shapes	gradient-fill	@extends	shapes/shape-style	該当なし	継承元
+shapes	gradient-fill	@extends	shapes/base-gradient	該当なし	継承元
+shapes	gradient-fill	r	Fill Rule	未判定	
+shapes	gradient-fill	ty	Shape Type	未判定	
+shapes	gradient-stroke	@extends	shapes/shape-style	該当なし	継承元
+shapes	gradient-stroke	@extends	shapes/base-stroke	該当なし	継承元
+shapes	gradient-stroke	@extends	shapes/base-gradient	該当なし	継承元
+shapes	gradient-stroke	ty	Shape Type	未判定	
+shapes	graphic-element	@extends	helpers/visual-object	該当なし	継承元
+shapes	graphic-element	bm	Blend Mode	未判定	
+shapes	graphic-element	cl	CSS Class	未判定	
+shapes	graphic-element	hd	Hidden	未判定	
+shapes	graphic-element	ix	Property index	未判定	
+shapes	graphic-element	ln	Layer XML ID	未判定	
+shapes	graphic-element	ty	Shape Type	未判定	
+shapes	group	@extends	shapes/graphic-element	該当なし	継承元
+shapes	group	cix	Property index	未判定	
+shapes	group	it	Shapes	未判定	
+shapes	group	np	Number Of Properties	未判定	
+shapes	group	ty	Shape Type	未判定	
+shapes	merge	@extends	shapes/graphic-element	該当なし	継承元
+shapes	merge	mm	Merge Mode	未判定	
+shapes	merge	ty	Shape Type	未判定	
+shapes	modifier	@extends	shapes/graphic-element	該当なし	継承元
+shapes	no-style	@extends	shapes/shape-style	該当なし	継承元
+shapes	no-style	ty	Shape Type	未判定	
+shapes	offset-path	@extends	shapes/modifier	該当なし	継承元
+shapes	offset-path	a	Amount	未判定	
+shapes	offset-path	lj	Line Join	未判定	
+shapes	offset-path	ml	Miter Limit	未判定	
+shapes	offset-path	ty	Shape Type	未判定	
+shapes	path	@extends	shapes/shape	該当なし	継承元
+shapes	path	ks	Shape	未判定	
+shapes	path	ty	Shape Type	未判定	
+shapes	polystar	@extends	shapes/shape	該当なし	継承元
+shapes	polystar	ir	Inner Radius	未判定	
+shapes	polystar	is	Inner Roundness	未判定	
+shapes	polystar	or	Outer Radius	未判定	
+shapes	polystar	os	Outer Roundness	未判定	
+shapes	polystar	p	Position	未判定	
+shapes	polystar	pt	Points	未判定	
+shapes	polystar	r	Rotation	未判定	
+shapes	polystar	sy	Star Type	未判定	
+shapes	polystar	ty	Shape Type	未判定	
+shapes	pucker-bloat	@extends	shapes/modifier	該当なし	継承元
+shapes	pucker-bloat	a	Amount	未判定	
+shapes	pucker-bloat	ty	Shape Type	未判定	
+shapes	rectangle	@extends	shapes/shape	該当なし	継承元
+shapes	rectangle	p	Position	未判定	
+shapes	rectangle	r	Rounded	未判定	
+shapes	rectangle	s	Size	未判定	
+shapes	rectangle	ty	Shape Type	未判定	
+shapes	repeater	@extends	shapes/modifier	該当なし	継承元
+shapes	repeater	c	Copies	未判定	
+shapes	repeater	m	Composite	未判定	
+shapes	repeater	o	Offset	未判定	
+shapes	repeater	tr	Transform	未判定	
+shapes	repeater	ty	Shape Type	未判定	
+shapes	repeater-transform	@extends	helpers/transform	該当なし	継承元
+shapes	repeater-transform	eo	End Opacity	未判定	
+shapes	repeater-transform	so	Start Opacity	未判定	
+shapes	rounded-corners	@extends	shapes/modifier	該当なし	継承元
+shapes	rounded-corners	r	Radius	未判定	
+shapes	rounded-corners	ty	Shape Type	未判定	
+shapes	shape	@extends	shapes/graphic-element	該当なし	継承元
+shapes	shape	d	Direction	未判定	
+shapes	shape-style	@extends	shapes/graphic-element	該当なし	継承元
+shapes	shape-style	o	Opacity	未判定	
+shapes	stroke	@extends	shapes/shape-style	該当なし	継承元
+shapes	stroke	@extends	shapes/base-stroke	該当なし	継承元
+shapes	stroke	c	Color	未判定	
+shapes	stroke	ty	Shape Type	未判定	
+shapes	stroke-dash	@extends	helpers/visual-object	該当なし	継承元
+shapes	stroke-dash	n	Dash Type	未判定	
+shapes	stroke-dash	v	Length	未判定	
+shapes	transform	@extends	shapes/graphic-element	該当なし	継承元
+shapes	transform	@extends	helpers/transform	該当なし	継承元
+shapes	transform	ty	Shape Type	未判定	
+shapes	trim-path	@extends	shapes/modifier	該当なし	継承元
+shapes	trim-path	e	End	未判定	
+shapes	trim-path	m	Multiple	未判定	
+shapes	trim-path	o	Offset	未判定	
+shapes	trim-path	s	Start	未判定	
+shapes	trim-path	ty	Shape Type	未判定	
+shapes	twist	@extends	shapes/modifier	該当なし	継承元
+shapes	twist	a	Angle	未判定	
+shapes	twist	c	Center	未判定	
+shapes	twist	ty	Shape Type	未判定	
+shapes	unknown-shape	ty		未判定	
+shapes	zig-zag	@extends	shapes/modifier	該当なし	継承元
+shapes	zig-zag	pt	Point Type	未判定	
+shapes	zig-zag	r	Frequency	未判定	
+shapes	zig-zag	s	Amplitude	未判定	
+shapes	zig-zag	ty	Shape Type	未判定	
+styles	all-layer-styles	@extends	styles/bevel-emboss-style	該当なし	継承元
+styles	all-layer-styles	@extends	styles/color-overlay-style	該当なし	継承元
+styles	all-layer-styles	@extends	styles/drop-shadow-style	該当なし	継承元
+styles	all-layer-styles	@extends	styles/gradient-overlay-style	該当なし	継承元
+styles	all-layer-styles	@extends	styles/inner-glow-style	該当なし	継承元
+styles	all-layer-styles	@extends	styles/inner-shadow-style	該当なし	継承元
+styles	all-layer-styles	@extends	styles/outer-glow-style	該当なし	継承元
+styles	all-layer-styles	@extends	styles/satin-style	該当なし	継承元
+styles	all-layer-styles	@extends	styles/stroke-style	該当なし	継承元
+styles	bevel-emboss-style	@extends	styles/layer-style	該当なし	継承元
+styles	bevel-emboss-style	a	Angle	未判定	
+styles	bevel-emboss-style	bs	Bevel Style	未判定	
+styles	bevel-emboss-style	bt	Technique	未判定	
+styles	bevel-emboss-style	ga	Global Angle	未判定	
+styles	bevel-emboss-style	hc	Highlight Color	未判定	
+styles	bevel-emboss-style	hm	Highlight Mode	未判定	
+styles	bevel-emboss-style	ho	Highlight Opacity	未判定	
+styles	bevel-emboss-style	ll	Altitude	未判定	
+styles	bevel-emboss-style	s	Size	未判定	
+styles	bevel-emboss-style	sc	Shadow Color	未判定	
+styles	bevel-emboss-style	sf	Soften	未判定	
+styles	bevel-emboss-style	sm	Shadow Mode	未判定	
+styles	bevel-emboss-style	so	Shadow Opacity	未判定	
+styles	bevel-emboss-style	sr	Strength	未判定	
+styles	bevel-emboss-style	ty	Type	未判定	
+styles	color-overlay-style	@extends	styles/layer-style	該当なし	継承元
+styles	color-overlay-style	bm	Blend Mode	未判定	
+styles	color-overlay-style	c	Color	未判定	
+styles	color-overlay-style	so	Opacity	未判定	
+styles	color-overlay-style	ty	Type	未判定	
+styles	drop-shadow-style	@extends	styles/layer-style	該当なし	継承元
+styles	drop-shadow-style	a	Angle	未判定	
+styles	drop-shadow-style	bm	Blend Mode	未判定	
+styles	drop-shadow-style	c	Color	未判定	
+styles	drop-shadow-style	ch	Choke Spread	未判定	
+styles	drop-shadow-style	d	Distance	未判定	
+styles	drop-shadow-style	lc	Layer Conceal	未判定	
+styles	drop-shadow-style	no	Noise	未判定	
+styles	drop-shadow-style	o	Opacity	未判定	
+styles	drop-shadow-style	s	Size	未判定	
+styles	drop-shadow-style	ty	Type	未判定	
+styles	gradient-overlay-style	@extends	styles/layer-style	該当なし	継承元
+styles	gradient-overlay-style	a	Angle	未判定	
+styles	gradient-overlay-style	al	Align	未判定	
+styles	gradient-overlay-style	bm	Blend Mode	未判定	
+styles	gradient-overlay-style	gf	Gradient	未判定	
+styles	gradient-overlay-style	gs	Smoothness	未判定	
+styles	gradient-overlay-style	gt	Gradient Type	未判定	
+styles	gradient-overlay-style	o	Opacity	未判定	
+styles	gradient-overlay-style	of	Offset	未判定	
+styles	gradient-overlay-style	re	Reverse	未判定	
+styles	gradient-overlay-style	s	Scale	未判定	
+styles	gradient-overlay-style	ty	Type	未判定	
+styles	inner-glow-style	@extends	styles/layer-style	該当なし	継承元
+styles	inner-glow-style	bm	Blend Mode	未判定	
+styles	inner-glow-style	c	Color	未判定	
+styles	inner-glow-style	ch	Choke Spread	未判定	
+styles	inner-glow-style	j	Jitter	未判定	
+styles	inner-glow-style	no	Noise	未判定	
+styles	inner-glow-style	o	Opacity	未判定	
+styles	inner-glow-style	r	Range	未判定	
+styles	inner-glow-style	sr	Source	未判定	
+styles	inner-glow-style	ty	Type	未判定	
+styles	inner-shadow-style	@extends	styles/layer-style	該当なし	継承元
+styles	inner-shadow-style	a	Angle	未判定	
+styles	inner-shadow-style	bm	Blend Mode	未判定	
+styles	inner-shadow-style	c	Color	未判定	
+styles	inner-shadow-style	ch	Choke Spread	未判定	
+styles	inner-shadow-style	d	Distance	未判定	
+styles	inner-shadow-style	no	Noise	未判定	
+styles	inner-shadow-style	o	Opacity	未判定	
+styles	inner-shadow-style	s	Size	未判定	
+styles	inner-shadow-style	ty	Type	未判定	
+styles	layer-style	@extends	helpers/visual-object	該当なし	継承元
+styles	layer-style	ty	Type	未判定	
+styles	outer-glow-style	@extends	styles/layer-style	該当なし	継承元
+styles	outer-glow-style	bm	Blend Mode	未判定	
+styles	outer-glow-style	c	Color	未判定	
+styles	outer-glow-style	ch	Choke Spread	未判定	
+styles	outer-glow-style	j	Jitter	未判定	
+styles	outer-glow-style	no	Noise	未判定	
+styles	outer-glow-style	o	Opacity	未判定	
+styles	outer-glow-style	r	Range	未判定	
+styles	outer-glow-style	ty	Type	未判定	
+styles	satin-style	@extends	styles/layer-style	該当なし	継承元
+styles	satin-style	a	Angle	未判定	
+styles	satin-style	bm	Blend Mode	未判定	
+styles	satin-style	c	Color	未判定	
+styles	satin-style	d	Distance	未判定	
+styles	satin-style	in	Invert	未判定	
+styles	satin-style	o	Opacity	未判定	
+styles	satin-style	s	Size	未判定	
+styles	satin-style	ty	Type	未判定	
+styles	stroke-style	@extends	styles/layer-style	該当なし	継承元
+styles	stroke-style	c	Color	未判定	
+styles	stroke-style	s	Size	未判定	
+styles	stroke-style	ty	Type	未判定	
+text	animated-text-document	k	Keyframes	未判定	
+text	animated-text-document	sid	Slot ID	未判定	
+text	animated-text-document	x	Expression	未判定	
+text	character-data	ch	Character	未判定	
+text	character-data	data	Data	未判定	
+text	character-data	fFamily	Font Family	未判定	
+text	character-data	size	Font Size	未判定	
+text	character-data	style	Font Style	未判定	
+text	character-data	w	Width	未判定	
+text	character-precomp	ip	In Point	未判定	
+text	character-precomp	ks	Transform	未判定	
+text	character-precomp	op	Out Point	未判定	
+text	character-precomp	refId	Reference Id	未判定	
+text	character-precomp	sr	Time Stretch	未判定	
+text	character-precomp	st	Start Time	未判定	
+text	character-shapes	shapes	Shapes	未判定	
+text	font	ascent	Ascent	未判定	
+text	font	fClass	CSS Class	未判定	
+text	font	fFamily	Font Family	未判定	
+text	font	fName	Name	未判定	
+text	font	fPath	Path	未判定	
+text	font	fStyle	Font Style	未判定	
+text	font	fWeight	Weight	未判定	
+text	font	origin	Origin	未判定	
+text	font-list	list	List	未判定	
+text	text-alignment-options	a	Alignment	未判定	
+text	text-alignment-options	g	Grouping	未判定	
+text	text-data	a	Ranges	未判定	
+text	text-data	d	Document	未判定	
+text	text-data	m	Alignment	未判定	
+text	text-data	p	Follow Path	未判定	
+text	text-document	ca	Text Caps	未判定	
+text	text-document	f	Font Family	未判定	
+text	text-document	fc	Fill Color	未判定	
+text	text-document	j	Justify	未判定	
+text	text-document	lh	Line Height	未判定	
+text	text-document	ls	Baseline Shift	未判定	
+text	text-document	of	Stroke Over Fill	未判定	
+text	text-document	ps	Wrap Position	未判定	
+text	text-document	s	Font Size	未判定	
+text	text-document	sc	Stroke Color	未判定	
+text	text-document	sw	Stroke Width	未判定	
+text	text-document	sz	Wrap Size	未判定	
+text	text-document	t	Text	未判定	
+text	text-document	tr	Tracking	未判定	
+text	text-document-keyframe	s	Start	未判定	
+text	text-document-keyframe	t	Time	未判定	
+text	text-follow-path	a	Force Alignment	未判定	
+text	text-follow-path	f	First Margin	未判定	
+text	text-follow-path	l	Last Margin	未判定	
+text	text-follow-path	m	Mask	未判定	
+text	text-follow-path	p	Perpendicular To Path	未判定	
+text	text-follow-path	r	Reverse Path	未判定	
+text	text-range	a	Style	未判定	
+text	text-range	nm	Name	未判定	
+text	text-range	s	Selector	未判定	
+text	text-range-selector	a	Max Amount	未判定	
+text	text-range-selector	b	Based On	未判定	
+text	text-range-selector	e	End	未判定	
+text	text-range-selector	ne	Min Ease	未判定	
+text	text-range-selector	o	Offset	未判定	
+text	text-range-selector	r	Range Units	未判定	
+text	text-range-selector	rn	Randomize	未判定	
+text	text-range-selector	s	Start	未判定	
+text	text-range-selector	sh	Shape	未判定	
+text	text-range-selector	sm	Selector Smoothness	未判定	
+text	text-range-selector	t	Expressible	未判定	
+text	text-range-selector	xe	Max Ease	未判定	
+text	text-style	@extends	helpers/transform	該当なし	継承元
+text	text-style	bl	Blur	未判定	
+text	text-style	fb	Fill Brightness	未判定	
+text	text-style	fc	Fill Color	未判定	
+text	text-style	fh	Fill Hue	未判定	
+text	text-style	fo	Fill Opacity	未判定	
+text	text-style	fs	Fill Saturation	未判定	
+text	text-style	ls	Line Spacing	未判定	
+text	text-style	sb	Stroke Brightness	未判定	
+text	text-style	sc	Stroke Color	未判定	
+text	text-style	sh	Stroke Hue	未判定	
+text	text-style	so	Stroke Opacity	未判定	
+text	text-style	ss	Stroke Saturation	未判定	
+text	text-style	sw	Stroke Width	未判定	
+text	text-style	t	Letter Spacing	未判定	
+values	bezier	c	Closed	未判定	
+values	bezier	i	In Tangents	未判定	
+values	bezier	o	Out Tangents	未判定	
+values	bezier	v	Vertices	未判定	
+values	color		Color	未判定	
+values	data-url		Data URL	未判定	
+values	gradient		Gradient	未判定	
+values	hexcolor		Hex Color	未判定	
+values	int-boolean		Integer Boolean	未判定	
+values	vector		Vector	未判定	

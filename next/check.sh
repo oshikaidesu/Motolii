@@ -50,6 +50,17 @@ while IFS= read -r f; do
   printf '          %s\n          %s\n' "${f#./}" "$(echo "$claim" | sed 's|^\s*//! wraps: ||')"
 done <<< "$roots"
 
+# Lottie の地図(= 実質 OSS の AE 解析)をどこまで判断したか。
+# 「作る瞬間に読む」だと読み落としが見えないので、先に全語彙を並べて未判定を数える。
+if [ -f reference/lottie-coverage.tsv ]; then
+  echo
+  echo "=== Lottie 地図(AE の意味のうち、まだ向き合っていない量) ==="
+  awk -F'\t' '$1 !~ /^#/ && $1 != "group" && $5 != "該当なし" { n[$5]++; total++ }
+    END { for (s in n) printf "  %-8s %4d\n", s, n[s];
+          printf "  → 未判定 %d / %d = %.0f%%\n", n["未判定"], total, n["未判定"]/total*100 }' \
+    reference/lottie-coverage.tsv
+fi
+
 echo
 [ "$fail" -eq 0 ] && echo "OK: wraps/owns marker 全通過" || echo "NG: marker 未記入あり"
 exit $fail

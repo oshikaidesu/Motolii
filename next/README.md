@@ -54,6 +54,19 @@ MV 制作のためのモーショングラフィック指向コンポジット�
 
 `shell/`(iced)はまだ無い。
 
+## Lottie を地図として使う
+
+`reference/lottie.schema.json` は **Lottie 公式の機械可読スキーマを上流そのまま**置いたもの。
+Lottie は Bodymovin が After Effects のデータ模型を吐いた物なので、**実質 OSS の AE 解析**である。
+
+`reference/lottie-coverage.tsv` はそこから機械生成した**全語彙 656項目の地図**で、
+1項目ずつ「採用済 / 採用予定 / 不採用 / 未判定」を書く。
+
+**「作る瞬間に読む」方式は採らない** — 読まなかった物が構造的に見えないから。
+先に全部並べて、`cargo test -p motolii-store --test lottie_coverage` が
+「スキーマにあって表に無い」「表にあってスキーマに無い」を落とす。
+`./check.sh` が毎回 **未判定の数**を出す = **AE の意味のうちまだ向き合っていない量**。
+
 ## 時間の予算を測る
 
 R1(合成のスループット)は GPU を単独で使う必要があるので既定の `cargo test` では走らない。

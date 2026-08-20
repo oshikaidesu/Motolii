@@ -22,6 +22,11 @@ use re_renderer::{RenderContext, Rgba};
 
 mod headless;
 
+/// comp は 2D なので z は常に 0。板は同一平面に並び、前後は `depth_offset` が決める。
+fn to_vec3(v: glam::Vec2) -> glam::Vec3 {
+    glam::vec3(v.x, v.y, 0.0)
+}
+
 pub use headless::HeadlessError;
 
 /// 素材ハンドル。上流の型をそのまま通す(包み直さない)。
@@ -38,6 +43,9 @@ pub use motolii_core::{CompSpec, LayerPlacement};
 #[derive(Clone)]
 pub struct Layer {
     pub texture: GpuTexture2D,
+    /// 素材の実寸(ピクセル)。板のローカル矩形は `(0,0)-(size)` で、
+    /// そこへ `placement.transform` を掛けて comp 座標の四角形にする。
+    pub size: [f32; 2],
     pub placement: LayerPlacement,
 }
 
@@ -203,13 +211,24 @@ impl Compositor {
         let rects: Vec<TexturedRect> = layers
             .iter()
             .map(|layer| TexturedRect {
-                top_left_corner_position: glam::vec3(
-                    layer.placement.top_left[0],
-                    layer.placement.top_left[1],
-                    0.0,
+                // **affine のまま板にする**。`TexturedRect` は左上と2本の辺ベクトルで
+                // 四角形を表すので、変換後の基底ベクトルをそのまま渡せば
+                // 回転も拡大も skew も**シェーダを1行も変えずに**通る。
+                top_left_corner_position: to_vec3(
+                    layer.placement.transform.transform_point2(glam::Vec2::ZERO),
                 ),
-                extent_u: glam::vec3(layer.placement.size[0], 0.0, 0.0),
-                extent_v: glam::vec3(0.0, layer.placement.size[1], 0.0),
+                extent_u: to_vec3(
+                    layer
+                        .placement
+                        .transform
+                        .transform_vector2(glam::Vec2::new(layer.size[0], 0.0)),
+                ),
+                extent_v: to_vec3(
+                    layer
+                        .placement
+                        .transform
+                        .transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
+                ),
                 colormapped_texture: re_renderer::renderer::ColormappedTexture::from_unorm_rgba(
                     layer.texture.clone(),
                 ),

@@ -3296,6 +3296,7 @@ dependencies = [
 name = "motolii-core"
 version = "0.1.0"
 dependencies = [
+ "glam 0.30.10",
  "proptest",
  "serde",
  "serde_json",
