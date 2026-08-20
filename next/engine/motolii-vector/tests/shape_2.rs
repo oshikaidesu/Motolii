@@ -339,6 +339,34 @@ fn offset_path_refuses_an_open_contour() {
     );
 }
 
+/// 全辺が曲線の閉路(楕円)への `offset-path`。**裁定109 defect#2 の柵**。
+///
+/// `geom.rs::contour_polyline_samples` は閉路の最終辺で「終点が始点そのもの」を
+/// 二重に積まないガードを持つ。直す前は曲線の枝にだけこのガードが**無く**、
+/// 楕円のような全辺曲線の閉路では末尾の標本が始点と重なって長さ0の辺ができ、
+/// `offset_contour` がその辺を「移動できない辺」として素通しして輪郭の1点
+/// (最初の頂点 = 右端、角度0)だけが offset されずに元の半径へ残っていた。
+///
+/// 楕円(size 100×100、半径50)に `OffsetPath{amount:20, Round}` を掛けると
+/// 半径は 70 まで外へ伸びるはず。右端頂点の直近(半径50〜69の範囲)の画素は
+/// **完全不透明(alpha=255)** になるべきで、旧欠陥ではここが alpha=191 (アンチ
+/// エイリアスの縁だけが立って中身が埋まらない)になっていた。
+#[test]
+fn offset_path_fills_the_rim_of_an_all_curve_closed_contour() {
+    let ellipse = PathSource::Ellipse {
+        size: Point { x: 100.0, y: 100.0 },
+    };
+    let out = filled(ellipse, vec![offset_path(20.0, LineJoin::Round, 4.0)]);
+    // 中心(100,100)から右へ半径50(元の縁)〜69(伸びた縁の直前)の間。
+    // 欠陥時は右端頂点だけ offset されず alpha=191 に留まる。
+    assert_eq!(
+        alpha_at(&out, 165, 100),
+        255,
+        "全曲線閉路の offset で右端頂点の外側画素が埋まっていない\
+         (旧欠陥: 閉路ガードが曲線の枝に無いため始点が offset されず残る)"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // polystar — `pt`(頂点数)/`or`(外半径)/`ir`(内半径)/`sy`(星か多角形か)
 // ---------------------------------------------------------------------------
@@ -401,6 +429,40 @@ fn polystar_inner_radius_only_matters_for_the_star() {
     assert_eq!(
         a.premultiplied_rgba8, b.premultiplied_rgba8,
         "多角形が内半径に反応している"
+    );
+}
+
+/// 起点(先頭頂点、角度 `-π/2` = 真上)は spike(外半径)であって valley(内半径)
+/// ではない。**裁定109 defect#3 の柵** — `geom.rs::polystar` の `Star` 腕は
+/// `i % 2 == 0` を外半径に割り当てて起点を固定しているが、この対応を
+/// (`i % 2 == 0` ↔ 内外半径)入れ替えても既存試験は全部緑のまま(位相が半歩
+/// ずれるだけで、太さ・頂点数・大きさの比較には効かない)。
+///
+/// 中心から真上に外半径寄りの距離(内半径20 < 60 < 外半径80)を取った画素は、
+/// 起点が spike なら塗られているはずで、起点が valley(内外逆転)なら
+/// 塗られない(旧欠陥のミューテーションで実測: alpha 255→0)。
+#[test]
+fn polystar_first_vertex_at_the_top_is_a_spike_not_a_valley() {
+    let star = filled(polystar(5.0, 80.0, 20.0, StarType::Star), vec![]);
+    // 中心(100,100)から真上(y減少方向)へ60 進んだ点 = (100, 40)。
+    assert_eq!(
+        alpha_at(&star, 100, 40),
+        255,
+        "起点(真上)が spike でない — 内外半径の割り当てが逆転している"
+    );
+}
+
+/// `polystar.pt`(Points)が3未満なら**空のパス**(輪郭にならない値でも
+/// [`VectorError`] を出さず、何も描かない)。**裁定109 defect#4 の柵** —
+/// `n < 3` の境界に試験が無く、`n < 1` へ緩めても既存試験は全部緑のまま
+/// (既存試験は 3 以上の points しか使っていない)。
+#[test]
+fn polystar_below_three_points_paints_nothing() {
+    let out = filled(polystar(2.0, 80.0, 20.0, StarType::Star), vec![]);
+    assert_eq!(
+        painted(&out),
+        0,
+        "points=2 が空パスに落ちていない(pt<3 の境界が抜けている)"
     );
 }
 
@@ -557,6 +619,60 @@ fn gradient_fill_honours_the_fill_rule() {
     );
 }
 
+/// `base-gradient.g` の停止点は**構築時に offset 昇順へソートする**(裁定109
+/// 付随裁定)。上流(`tiny-skia`)は停止点を自動ソートせずクランプするだけで、
+/// 非昇順の入力に対する見た目が未定義になる。停止点の並びが 0.0→1.0(昇順)
+/// でも 1.0→0.0→0.5(スクランブル)でも、同じ意味の gradient なら**同じ画**に
+/// ならなければならない。
+#[test]
+fn gradient_stops_render_identically_regardless_of_input_order() {
+    fn stop(offset: f64, color: Rgb) -> GradientStop {
+        GradientStop { offset, color }
+    }
+    fn green() -> Rgb {
+        Rgb {
+            r: 0.0,
+            g: 1.0,
+            b: 0.0,
+        }
+    }
+    let ascending = vec![
+        stop(0.0, red()),
+        stop(0.5, green()),
+        stop(1.0, blue()),
+    ];
+    let scrambled = vec![
+        stop(1.0, blue()),
+        stop(0.0, red()),
+        stop(0.5, green()),
+    ];
+    let render_with = |stops: Vec<GradientStop>| {
+        let g = Gradient {
+            kind: GradientType::Linear,
+            start: Point { x: -50.0, y: 0.0 },
+            end: Point { x: 50.0, y: 0.0 },
+            stops,
+        };
+        render(
+            &Shape {
+                fill: Some(Fill {
+                    brush: Brush::Gradient(g),
+                    ..Fill::default()
+                }),
+                ..Shape::new(square())
+            },
+            &canvas(),
+        )
+        .unwrap()
+    };
+    let sorted_first = render_with(ascending);
+    let unsorted_first = render_with(scrambled);
+    assert_eq!(
+        sorted_first.premultiplied_rgba8, unsorted_first.premultiplied_rgba8,
+        "gradient stops の入力順で画が変わっている(構築時にソートされていない)"
+    );
+}
+
 /// `gradient-stroke.ty`。Brush は fill/stroke に直交する — 線にも同じ塗りが乗る。
 #[test]
 fn gradient_stroke_paints_the_line_with_the_gradient() {
@@ -703,5 +819,28 @@ fn twist_centre_moves_the_pivot() {
     assert!(
         origin.premultiplied_rgba8 != shifted.premultiplied_rgba8,
         "center を動かしても画が変わらない"
+    );
+}
+
+/// `twist.a` の単位は**度**であって**ラジアン**ではない(裁定58/裁定109 defect#3)。
+/// `ops.rs::twist_contour` は `degrees.to_radians()` を1度だけ通す — これを外すと
+/// `angle: 60.0` が「60ラジアン」(≈ 3.451ラジアン = 約197.75°、mod 2π)として
+/// 解釈され、正しい「60度」回転とは別の画になる。
+///
+/// 画素 (108,50) は実測(度として解釈した回転)で alpha=255、
+/// ラジアンとして解釈するミューテーションでは alpha=0 になる境界点。
+#[test]
+fn twist_angle_unit_is_degrees_not_radians() {
+    let twisted = filled(
+        star(),
+        vec![ShapeOp::new(OpKind::Twist {
+            angle: 60.0,
+            center: Point::ZERO,
+        })],
+    );
+    assert_eq!(
+        alpha_at(&twisted, 108, 50),
+        255,
+        "twist.a=60 が「度」として効いていない(ラジアンとして解釈されている疑い)"
     );
 }

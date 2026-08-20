@@ -113,10 +113,19 @@ fn paint_for(brush: &Brush, origin: Point, alpha: f64) -> Paint<'static> {
 
 /// `base-gradient` を上流の shader へ。`origin` を足すのは頂点と同じ理由
 /// (`Transform` で渡すと停止点の位置まで一緒に変換されうる)。
+///
+/// **停止点を offset 昇順へ並べ替えてから渡す**(裁定109)。上流
+/// (`tiny-skia`)は停止点を自動ソートせず、`gradient.rs` はクランプするだけで
+/// 非昇順の入力に対する見た目を保証しない — 未定義動作を engine 側の入力に
+/// させないため、この crate が上流へ渡す直前でソート済みにする。**唯一の出口
+/// `render` がここを必ず通る**ので、`Gradient` をどう組み立てても(構造体
+/// リテラルで直接組んでも)ここで正規化される。安定ソートで同一 offset の
+/// 相対順は入力順のまま保つ(Lottie の同一 offset ハードストップに壊れずに対応する)。
 fn gradient_shader(g: &Gradient, origin: Point, alpha: f64) -> Option<Shader<'static>> {
     let at = |p: Point| tiny_skia::Point::from_xy((p.x + origin.x) as f32, (p.y + origin.y) as f32);
-    let stops: Vec<TsStop> = g
-        .stops
+    let mut sorted_stops = g.stops.clone();
+    sorted_stops.sort_by(|a, b| a.offset.total_cmp(&b.offset));
+    let stops: Vec<TsStop> = sorted_stops
         .iter()
         .map(|s| TsStop::new(clamp01(s.offset) as f32, color_of(s.color, alpha)))
         .collect();
