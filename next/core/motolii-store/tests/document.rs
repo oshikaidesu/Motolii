@@ -148,10 +148,12 @@ fn apply_all_is_atomic_the_valid_intent_does_not_stick_when_a_later_one_fails() 
                 EffectInstance {
                     id: EffectId(1),
                     plugin_id: "a".to_owned(),
+                    enabled: true,
                 },
                 EffectInstance {
                     id: EffectId(1),
                     plugin_id: "b".to_owned(),
+                    enabled: true,
                 },
             ],
         },

@@ -93,6 +93,11 @@ pub mod property {
     /// の絶対値だけ、裁定92の唯一の例外)の名前は `text_style.{id}.…` で始まる。
     pub const TEXT_STYLE_PREFIX: &str = "text_style.";
 
+    /// effect インスタンス([`crate::EffectId`])の param トラックの名前は
+    /// `effect.{id}.param.{name}` で始まる。マスク/テキストと同じ平坦な流儀
+    /// (裁定92 が先に見つけた形と同じ、裁定72「新機構ゼロ」)。
+    pub const EFFECT_PREFIX: &str = "effect.";
+
     /// 変換の中心。**レイヤ自身の座標単位の点**であって 0..1 の正規化ピボットではない。
     pub const ANCHOR: &str = "anchor";
     /// **anchor が着地する点**。`top_left` ではない(裁定60)。

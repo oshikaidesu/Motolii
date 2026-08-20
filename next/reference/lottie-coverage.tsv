@@ -91,16 +91,16 @@ effect-values	all-effect-values	@extends	effect-values/point	該当なし	継承
 effect-values	all-effect-values	@extends	effect-values/slider	該当なし	継承元			lottie
 effect-values	angle	@extends	effect-values/effect-value	該当なし	継承元			lottie
 effect-values	angle	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
-effect-values	angle	v	Value	採用予定	scalar param + 角度の意味域		effect	lottie
+effect-values	angle	v	Value	採用済	scalar param + 角度の意味域	slider_and_angle_params_are_plain_scalar_tracks	effect	lottie
 effect-values	checkbox	@extends	effect-values/effect-value	該当なし	継承元			lottie
 effect-values	checkbox	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
-effect-values	checkbox	v	Value	採用予定	**Bool** param。旧 ValueType に無かった穴		effect	lottie
+effect-values	checkbox	v	Value	採用済	**Bool** param。旧 ValueType に無かった穴	checkbox_param_is_bool_not_int_boolean	effect	lottie
 effect-values	color	@extends	effect-values/effect-value	該当なし	継承元			lottie
 effect-values	color	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
-effect-values	color	v	Value	採用予定	color param(animatable)		effect	lottie
+effect-values	color	v	Value	採用済	color param(animatable)	color_param_round_trips	effect	lottie
 effect-values	drop-down	@extends	effect-values/effect-value	該当なし	継承元			lottie
 effect-values	drop-down	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
-effect-values	drop-down	v	Value	採用予定	**Enum** param。旧 ValueType に無かった穴		effect	lottie
+effect-values	drop-down	v	Value	採用済	**Enum** param。旧 ValueType に無かった穴	Value::Enum	effect	lottie
 effect-values	effect-value	@extends	helpers/visual-object	該当なし	継承元			lottie
 effect-values	effect-value	ix	Effect Index	不採用	位置による同一性。param は名前で持つ(裁定35/65)			lottie
 effect-values	effect-value	ty	Type	不採用	payload 型と UI hint の混合。Motolii は2つに分ける			lottie
@@ -109,14 +109,14 @@ effect-values	ignored	ty	Type	不採用	上流の穴埋め			lottie
 effect-values	ignored	v	Value	不採用	唯一 animatable でない値。「読めない」を「無い」に潰す形(裁定37 の逆)			lottie
 effect-values	layer	@extends	effect-values/effect-value	該当なし	継承元			lottie
 effect-values	layer	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
-effect-values	layer	v	Value	採用予定	**LayerId** param。Lottie の layer index は採らない(裁定65)		effect	lottie
+effect-values	layer	v	Value	採用済	**LayerId** param。Lottie の layer index は採らない(裁定65)	Value::LayerId	effect	lottie
 effect-values	no-value		Effect No Value	不採用	空 object を param の場所に置く上流の穴埋め			lottie
 effect-values	point	@extends	effect-values/effect-value	該当なし	継承元			lottie
 effect-values	point	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
-effect-values	point	v	Value	採用予定	Vec2 param		effect	lottie
+effect-values	point	v	Value	採用済	Vec2 param	point_param_round_trips	effect	lottie
 effect-values	slider	@extends	effect-values/effect-value	該当なし	継承元			lottie
 effect-values	slider	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
-effect-values	slider	v	Value	採用予定	scalar param。既存の KeyframeTrack にそのまま乗る		effect	lottie
+effect-values	slider	v	Value	採用済	scalar param。既存の KeyframeTrack にそのまま乗る	slider_and_angle_params_are_plain_scalar_tracks	effect	lottie
 effects	all-effects	@extends	effects/custom-effect	該当なし	継承元			lottie
 effects	all-effects	@extends	effects/displacement-map-effect	該当なし	継承元			lottie
 effects	all-effects	@extends	effects/drop-shadow-effect	該当なし	継承元			lottie
@@ -143,11 +143,11 @@ effects	drop-shadow-effect	@extends	effects/effect	該当なし	継承元			lott
 effects	drop-shadow-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
 effects	drop-shadow-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
 effects	effect	@extends	helpers/visual-object	該当なし	継承元			lottie
-effects	effect	ef	Effect Values	採用予定	param 列は持つ。ただし**名前つき map**(位置配列にしない)		effect	lottie
-effects	effect	en	Enabled	採用予定	消さずに切る。int-boolean ではなく bool		effect	lottie
+effects	effect	ef	Effect Values	採用済	param 列は持つ。ただし**名前つき map**(位置配列にしない) — 平坦 PropertyId の KeyframeTrack で持つ(専用フィールドは無い)	PropertyId::effect_param	effect	lottie
+effects	effect	en	Enabled	採用済	消さずに切る。int-boolean ではなく bool	pub enabled: bool	effect	lottie
 effects	effect	ix	Effect Index	不採用	位置=同一性。順序は配列順、同一性は id(裁定65)			lottie
 effects	effect	np	Property Count	不採用	`ef` の長さと同じことを言う正本が2つ(裁定59 の形)			lottie
-effects	effect	ty	Type	採用予定	「どの effect か」は持つ。ただし**plugin id 文字列**。閉じた int registry では first/third-party が同じ口にならない(D6)		effect	lottie
+effects	effect	ty	Type	採用済	「どの effect か」は持つ。ただし**plugin id 文字列**。閉じた int registry では first/third-party が同じ口にならない(D6)	pub plugin_id: String	effect	lottie
 effects	fill-effect	@extends	effects/effect	該当なし	継承元			lottie
 effects	fill-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
 effects	fill-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie

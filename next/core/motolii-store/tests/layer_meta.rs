@@ -628,10 +628,12 @@ fn effects_are_an_ordered_list_identified_by_id_not_index() {
         EffectInstance {
             id: EffectId(1),
             plugin_id: "motolii.gaussian-blur".to_owned(),
+            enabled: true,
         },
         EffectInstance {
             id: EffectId(2),
             plugin_id: "motolii.drop-shadow".to_owned(),
+            enabled: false,
         },
     ];
     doc.apply(Intent::SetEffects {
@@ -655,10 +657,12 @@ fn duplicate_effect_ids_are_rejected() {
             EffectInstance {
                 id: EffectId(1),
                 plugin_id: "a".to_owned(),
+                enabled: true,
             },
             EffectInstance {
                 id: EffectId(1),
                 plugin_id: "b".to_owned(),
+                enabled: true,
             },
         ],
     });
