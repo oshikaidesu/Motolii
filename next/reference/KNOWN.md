@@ -11,7 +11,7 @@
 - re_renderer に **mipmap 自動生成は無い**(TODO のまま)→ preview 高速化は素材 proxy 一本(裁定21)
 - `re_video::load_mp4_from_reader` は **moov だけ先読みのストリーミング対応**(裁定24 の理由(c)は誤りだった)。encode/mux は無し(理由(d)は真)
 - `re_chunk_store::gc` / `EntityDb::drop_time_range` は**既存 API**(store 層、即呼べる)
-- alpha 付き書き出しには ViewBuilder への **getter 追加+COPY_SRC 付与の2箇所の fork 改造が必要**(裁定16 の「無改造」は楽観だった)
+- (失効 2026-08-20: 実測で覆った)~~alpha には fork 改造2箇所が必要~~ → **`blend_with_background: Premultiplied` の1行(fork 改造ゼロ)で readback に実 alpha が乗る**(実測: 空comp=[0,0,0,0]、半透明層 alpha=128 素通し。試験 `alpha_survives_the_composite_step`)。「2箇所」判定は非公開 main target 直読み経路の話で、公開 API 経路を見落としていた(探索の壁の3例目)。**残り: export が alpha 付きファイル(ProRes/PNG連番)を吐く経路と、shell プレビューの alpha 合成(市松)は未実装** — 「合成器が出せる」と「書き出しが吐く」は別問題
 - fork = 上流ほぼ素+seam 13個(全部旧 egui 埋め込み向け=next/ には死蔵)。pin 後の上流250コミットに関連変更なし
 - **iced の Theme/Style は色・境界・影のみ。寸法は持てない**(API 実測)。iced 0.14 の公式ホットリロードは実験的すぎて前提にしない(裁定117)
 - iced_test 0.14 は動く。ただし **canvas と slider は Simulator から構造的に不可視**
