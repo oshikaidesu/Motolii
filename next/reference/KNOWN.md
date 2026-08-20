@@ -48,3 +48,9 @@
 - **レーンは DECISIONS.md に書かない**(番号衝突が実際に起きた)。設計判断は終了報告に列挙し、supervisor が採番する
 - 地図(tsv)の自分の束の行は書き換えてよい。束の外の行は報告のみ
 - 既知の穴・KNOWN 記載事実は報告に書かない(新発見だけを書く)
+
+## 音声(2026-08-20 解析済み)
+- 旧 `motolii-audio` 4,286行の内訳: wraps 743(symphonia/rubato/cpal — 維持)/ 必然scratch 1,451(mix/producer/program — Document型と不可分、**移植価値の本体**)/ 再発明 367(`ring.rs` — 上流 `rtrb` が既にある)/ テスト 1,194
+- **rodio / kira は採らない** — cpal だけが生のコールバックタイムスタンプ(`OutputCallbackInfo::timestamp()`)を露出。高レベル crate はクロック所有権の契約(D4/D5)を守れない
+- **M8 の音声クロック→playhead は旧 `motolii-transport` に設計済み・実働済み**(audio-clock-master: `frames_supplied` − `device_wait`、wall-clock 不使用、無音補填で論理位置を進めない)。移植元として名指し可
+- **export の音声 mux は現 motolii-media で解決済み**(`mux_soundtrack` / `mux_mixed_pcm`)。音声束は PCM を作るだけでよい
