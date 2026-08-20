@@ -57,6 +57,7 @@ Browser から **drag で配置** / Export 設定 UI と割合進捗 /
 | D9 | 起動〜最初の結果が数秒 | 数値バーが空席 |
 | D10 | first-party パーティクル(音楽同期) | 未 |
 | D11 | **文字MV が作れる** — 1つのテキストレイヤー内で文字範囲ごとにフォント・サイズを変えられ(`style_spans`、裁定82)、文字ごとのアニメーションが AE のアニメータ模型で表せる(裁定75) | 未。Lottie から 39項目を採用予定、範囲スタイルだけ別の先例待ち |
+| D12 | **rerun だからこそ: 3D**。世界は1つ(全員 z=0 既定の 2.5D、空間を分けない — 裁定113)で、**preview は透視カメラのインパクト重視**(層の z を動かした瞬間に視差が出る)。将来の点群・深度クラウド・3Dメッシュの撮影は `re_renderer` がネイティブに持つ(point_cloud / depth_cloud / mesh_renderer、rev 483b855 実確認) | 未(camera 束、裁定115) |
 
 ## 要らないもの — 欠落ではなく設計上の除外
 
@@ -111,8 +112,7 @@ iced を採ったのは「**バックができていれば UI は後から生え
 順序3(shell)に入る前に塞ぐべきもの:
 
 - ~~comp 設定(fps・解像度・尺)が Document に無い~~ — **塞いだ**(裁定40)。
-  **選択・playhead はまだ無い**。これらは undo の対象にすべきでない(rerun も選択は
-  blueprint store の外に置いている)ので、`edit` timeline とは別の置き場が要る。未決
-- **gesture を1 undo へ畳む口が無い**(M10)。ドラッグが100 undo になる
+  ~~選択・playhead はまだ無い~~ — **塞いだ**(裁定46/107。shell の `Session`、undo 対象外)
+- ~~gesture を1 undo へ畳む口が無い~~ — **塞いだ**(裁定48。`Document::apply_all`)
 - ~~`ResolvedLayer` と `Layer` が同じ形で2つある~~ — **塞いだ**(裁定41。共有の `LayerPlacement`)
 - ~~`generation()` が undo/redo で変わらない~~ — **塞いだ**(裁定42。`revision()`)
