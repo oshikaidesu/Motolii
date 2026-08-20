@@ -1,7 +1,9 @@
-//! owns: パス演算子(trim-path / repeater / rounded-corners)。上流のラスタライザは
-//!       パスを**塗る**ことしか知らず、「パスを弧長で切る」「アフィンの実数冪でコピーを
-//!       並べる」「角を fillet へ置換する」を持っている 2D crate は無い。旧 workspace
-//!       `crates/motolii-doc/src/pathgeom.rs` からの**移植**であって再実装ではない(裁定10)。
+//! owns: パス演算子(trim-path / repeater / rounded-corners / pucker-bloat / zig-zag /
+//!       offset-path / twist)と星形のパス源。上流のラスタライザはパスを**塗る**ことしか
+//!       知らず、「パスを弧長で切る」「アフィンの実数冪でコピーを並べる」「角を fillet へ
+//!       置換する」「頂点を重心へ寄せる」「辺を法線方向へ振る」「輪郭を太らせる」を
+//!       持っている 2D crate は無い。旧 workspace `crates/motolii-doc/src/pathgeom.rs`
+//!       からの**移植**であって再実装ではない(裁定10)。
 //!
 //! **ラスタライズは自前で持っていない** — `raster.rs` は `tiny-skia` を包んだだけで、
 //! そちらの marker は module の doc が持つ(crate の根しか見ない `check.sh` の
@@ -32,7 +34,7 @@ mod raster;
 // 同じパスが `PathSource::Rectangle` からも作れることになり、口が2本になる(軸4)。
 pub use geom::{Contour, Path, Point, Vertex};
 
-use geom::{ellipse, rect};
+use geom::{ellipse, polystar, rect};
 use ops::Instance;
 
 // ---------------------------------------------------------------------------
@@ -67,9 +69,11 @@ impl Shape {
     }
 }
 
-/// パス源。`shapes/path` `shapes/rectangle` `shapes/ellipse` の3つ。
+/// パス源。`shapes/path` `shapes/rectangle` `shapes/ellipse` `shapes/polystar` の4つ。
 ///
 /// 位置・回転を持たないのは裁定74 — 層の transform と repeater の anchor で賄える。
+/// `polystar` の `is`/`os`(Inner/Outer Roundness)も同じ理由で持たない
+/// ([`OpKind::RoundedCorners`] と同じ見た目に2つ目の口を作ることになる)。
 #[derive(Debug, Clone, PartialEq)]
 pub enum PathSource {
     /// `path.ks` — **ベジェパスの正本**。SVG・テキストアウトライン・primitive は
@@ -80,6 +84,17 @@ pub enum PathSource {
     Rectangle { size: Point },
     /// `ellipse.s` — 同上。
     Ellipse { size: Point },
+    /// `polystar` — 星と正多角形。
+    PolyStar {
+        /// `polystar.pt` — 星なら腕の数(頂点は 2倍)、多角形なら辺の数。
+        points: f64,
+        /// `polystar.or`
+        outer_radius: f64,
+        /// `polystar.ir` — **[`StarType::Star`] のときだけ意味を持つ**。
+        inner_radius: f64,
+        /// `polystar.sy`
+        star_type: StarType,
+    },
 }
 
 impl PathSource {
@@ -88,6 +103,12 @@ impl PathSource {
             PathSource::Bezier(p) => p.clone(),
             PathSource::Rectangle { size } => rect(*size),
             PathSource::Ellipse { size } => ellipse(*size),
+            PathSource::PolyStar {
+                points,
+                outer_radius,
+                inner_radius,
+                star_type,
+            } => polystar(*points, *outer_radius, *inner_radius, *star_type),
         }
     }
 }
@@ -111,7 +132,10 @@ impl ShapeOp {
     }
 }
 
-/// 演算子。`shape-1` の範囲は3つ。
+/// 演算子。`shape-1` で3つ、`shape-2` で3つ、`shape-3` で1つ。
+///
+/// **どれも「パス → パス」**(repeater だけが1枚を複数枚へ増やす)。
+/// 段の意味は「1つ前の出力を受け取って次へ渡す」以上でも以下でもない。
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
     /// `trim-path` — MV で最も使う語彙。`start`/`end` は 0..1、`offset` は窓の回転。
@@ -144,6 +168,40 @@ pub enum OpKind {
     RoundedCorners {
         /// `rounded-corners.r`
         radius: f64,
+    },
+    /// `pucker-bloat` — 頂点を重心へ寄せる(+)/遠ざける(-)。
+    PuckerBloat {
+        /// `pucker-bloat.a` — `0` が恒等、`+1` で重心へ潰れる。
+        amount: f64,
+    },
+    /// `zig-zag` — 辺を法線方向へ交互に振る。
+    ZigZag {
+        /// `zig-zag.s` — 山谷の振幅。
+        amplitude: f64,
+        /// `zig-zag.r` — **辺あたり**の山数。
+        frequency: f64,
+        /// `zig-zag.pt`
+        point_type: PointType,
+    },
+    /// `offset-path` — 輪郭を法線方向へ平行移動して太らせる/痩せさせる。
+    ///
+    /// **v1 は閉路限定**。開いた輪郭が来たら [`VectorError::OpenPathOffset`] で、
+    /// 静かに恒等へ落とさない(裁定37)。
+    OffsetPath {
+        /// `offset-path.a` — 正で外側、負で内側。
+        amount: f64,
+        /// `offset-path.lj` — `base-stroke.lj` と**同じ enum を共有する**。
+        join: LineJoin,
+        /// `offset-path.ml`
+        miter_limit: f64,
+    },
+    /// `twist` — 中心ほど強くねじる。輪郭自身の外縁でねじれがゼロになる
+    /// (半径パラメータを持たない = AE Twist と同じ自己正規化)。
+    Twist {
+        /// `twist.a` — **度**(裁定58)。
+        angle: f64,
+        /// `twist.c`
+        center: Point,
     },
 }
 
@@ -195,12 +253,66 @@ impl Rgb {
     };
 }
 
-/// `fill`。
+/// 塗り方。`fill` と `gradient-fill`、`stroke` と `gradient-stroke` の違いは**これ1つ**。
+///
+/// Lottie は4つの型を並べるが、採らない — `gradient-fill` は `fill` に
+/// `fill-rule` も `opacity` も `hidden` も全部持っており、違うのは「単色か色停止列か」
+/// だけである。型を割ると**同じ意味の property が2箇所に生える**(裁定59 の形)。
+/// Brush は fill/stroke に**直交**するので、線にも同じ塗りがそのまま乗る。
+#[derive(Debug, Clone, PartialEq)]
+pub enum Brush {
+    /// `fill.c` / `stroke.c`
+    Solid(Rgb),
+    /// `gradient-fill` / `gradient-stroke` の `g`(= `base-gradient`)。
+    Gradient(Gradient),
+}
+
+impl Default for Brush {
+    fn default() -> Self {
+        Brush::Solid(Rgb::BLACK)
+    }
+}
+
+/// `shapes/base-gradient`。
+///
+/// **停止点は alpha を持たない** — [`Rgb`] と同じ理由で、不透明度の正本は
+/// `shape-style.o` 1本である(裁定59 の形を作らない)。Lottie は `g` の中に
+/// 色停止と不透明度停止を混ぜて置けるが、それは1枚 JSON へ畳むための都合であって
+/// 編集器の意味ではない。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Gradient {
+    /// `base-gradient.t`
+    pub kind: GradientType,
+    /// `base-gradient.s` — linear なら始点、radial なら**中心**。
+    pub start: Point,
+    /// `base-gradient.e` — linear なら終点、radial なら**外周上の1点**(半径を決める)。
+    pub end: Point,
+    /// `base-gradient.g` — 色停止列。
+    pub stops: Vec<GradientStop>,
+}
+
+/// 色停止1つ。
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Fill {
-    /// `fill.c`
+pub struct GradientStop {
+    /// 0..1。
+    pub offset: f64,
     pub color: Rgb,
-    /// `fill.r` — **merge-paths を落とした分の中マドをここで賄う**(裁定74)。
+}
+
+/// `constants/gradient-type`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GradientType {
+    #[default]
+    Linear,
+    Radial,
+}
+
+/// `fill` / `gradient-fill`。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Fill {
+    /// `fill.c` か `base-gradient`。
+    pub brush: Brush,
+    /// `fill.r` / `gradient-fill.r` — **merge-paths を落とした分の中マドをここで賄う**(裁定74)。
     pub rule: FillRule,
     /// `shape-style.o` — 1.0 基準(パーセントは採らない。裁定65)。
     pub opacity: f64,
@@ -211,7 +323,7 @@ pub struct Fill {
 impl Default for Fill {
     fn default() -> Self {
         Self {
-            color: Rgb::BLACK,
+            brush: Brush::default(),
             rule: FillRule::NonZero,
             opacity: 1.0,
             hidden: false,
@@ -219,11 +331,11 @@ impl Default for Fill {
     }
 }
 
-/// `stroke` + `base-stroke`。
+/// `stroke` / `gradient-stroke` + `base-stroke`。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Stroke {
-    /// `stroke.c`
-    pub color: Rgb,
+    /// `stroke.c` か `base-gradient`。
+    pub brush: Brush,
     /// `base-stroke.w`
     pub width: f64,
     /// `base-stroke.lc`
@@ -243,7 +355,7 @@ pub struct Stroke {
 impl Default for Stroke {
     fn default() -> Self {
         Self {
-            color: Rgb::BLACK,
+            brush: Brush::default(),
             width: 1.0,
             cap: LineCap::Butt,
             join: LineJoin::Miter,
@@ -292,6 +404,26 @@ pub enum LineJoin {
     Miter,
     Round,
     Bevel,
+}
+
+/// `constants/star-type`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StarType {
+    /// 外半径と内半径が交互に並ぶ。
+    #[default]
+    Star,
+    /// 外半径だけ。`inner_radius` は読まれない。
+    Polygon,
+}
+
+/// `zig-zag.pt` — 山の頂点をコーナーにするか滑らかにするか。
+///
+/// `constants` に独立した行を持たない(Lottie では zig-zag だけが使う語彙)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PointType {
+    #[default]
+    Corner,
+    Smooth,
 }
 
 /// `constants/composite` — repeater の Above/Below。**描く順**を決める。
@@ -356,6 +488,13 @@ pub enum VectorError {
     /// 同義にすると、壊れた入力が黙って既定値へ落ちる(裁定37)。
     #[error("canvas size {width}x{height} cannot be rasterized")]
     CanvasSize { width: u32, height: u32 },
+    /// `offset-path` は v1 では閉路しか扱わない。開いた輪郭を**黙って素通しにしない** —
+    /// 素通しにすると「演算子を足したのに何も起きない」という、**利用者から見て
+    /// 何も壊れていないように見える欠陥**になる(裁定37 と同じ話)。
+    ///
+    /// `trim-path` は閉路を開くので、`trim` → `offset` の並びがここに来る。
+    #[error("offset-path is closed-contour only; an open contour reached it")]
+    OpenPathOffset,
 }
 
 /// **この crate の唯一の公開口**: 図形の記述 → premultiplied RGBA8。
@@ -368,7 +507,7 @@ pub fn render(shape: &Shape, canvas: &Canvas) -> Result<Raster, VectorError> {
         x: canvas.origin_x as f64,
         y: canvas.origin_y as f64,
     };
-    for instance in resolve(shape) {
+    for instance in resolve(shape)? {
         raster::draw(
             &mut pixmap,
             &instance.path,
@@ -386,7 +525,7 @@ pub fn render(shape: &Shape, canvas: &Canvas) -> Result<Raster, VectorError> {
 /// スタックが**順序付き**であるとはここが `for` で回ることに他ならない。
 /// 「手前の兄弟に暗黙に効く」模型(`group.it`)を採らなかったので、
 /// 段の意味は「1つ前の出力を受け取って次へ渡す」以上でも以下でもない。
-fn resolve(shape: &Shape) -> Vec<Instance> {
+fn resolve(shape: &Shape) -> Result<Vec<Instance>, VectorError> {
     let mut instances = vec![Instance {
         path: shape.source.to_path(),
         opacity: 1.0,
@@ -415,6 +554,44 @@ fn resolve(shape: &Shape) -> Vec<Instance> {
                     opacity: i.opacity,
                 })
                 .collect(),
+            OpKind::PuckerBloat { amount } => instances
+                .into_iter()
+                .map(|i| Instance {
+                    path: ops::pucker_bloat(&i.path, *amount),
+                    opacity: i.opacity,
+                })
+                .collect(),
+            OpKind::ZigZag {
+                amplitude,
+                frequency,
+                point_type,
+            } => instances
+                .into_iter()
+                .map(|i| Instance {
+                    path: ops::zigzag(&i.path, *amplitude, *frequency, *point_type),
+                    opacity: i.opacity,
+                })
+                .collect(),
+            OpKind::OffsetPath {
+                amount,
+                join,
+                miter_limit,
+            } => instances
+                .into_iter()
+                .map(|i| {
+                    Ok(Instance {
+                        path: ops::offset_path(&i.path, *amount, *join, *miter_limit)?,
+                        opacity: i.opacity,
+                    })
+                })
+                .collect::<Result<Vec<_>, VectorError>>()?,
+            OpKind::Twist { angle, center } => instances
+                .into_iter()
+                .map(|i| Instance {
+                    path: ops::twist(&i.path, *angle, *center),
+                    opacity: i.opacity,
+                })
+                .collect(),
             OpKind::Repeater {
                 copies,
                 offset,
@@ -433,7 +610,7 @@ fn resolve(shape: &Shape) -> Vec<Instance> {
             ),
         };
     }
-    instances
+    Ok(instances)
 }
 
 /// 幾何だけを見たい試験はここに置く。
@@ -453,6 +630,7 @@ mod geometry_tests {
 
     fn vertex_count(shape: &Shape) -> usize {
         resolve(shape)
+            .expect("この試験の入力に offset-path は無い")
             .iter()
             .flat_map(|i| i.path.iter())
             .map(|c| c.vertices.len())
@@ -479,7 +657,8 @@ mod geometry_tests {
         let out = resolve(&Shape {
             ops: vec![ShapeOp::new(OpKind::RoundedCorners { radius: 20.0 })],
             ..Shape::new(square())
-        });
+        })
+        .expect("この試験の入力に offset-path は無い");
         assert!(out.iter().flat_map(|i| i.path.iter()).all(|c| c.closed));
     }
 
@@ -494,7 +673,8 @@ mod geometry_tests {
                 multiple: TrimMultiple::Simultaneously,
             })],
             ..Shape::new(square())
-        });
+        })
+        .expect("この試験の入力に offset-path は無い");
         let contours: Vec<_> = out.iter().flat_map(|i| i.path.iter()).collect();
         assert!(!contours.is_empty(), "trim で全部消えた");
         assert!(contours.iter().all(|c| !c.closed));

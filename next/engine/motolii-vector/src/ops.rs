@@ -1,23 +1,31 @@
 //! 演算子スタックの中身。**旧 `pathgeom.rs` からの移植**(裁定10)。
 //!
-//! 移植したのは `shape-1` が名指しした3つだけ: `trim` / `repeater` / `round_corners`。
-//! 同じファイルに居た `pucker_bloat` / `zigzag` / `offset` / `twist` / `wiggle` は
-//! **持ってきていない** — 使わない物を抱えると `check.sh` の `owns:` が自前実装の量を
-//! 偽る(軸4)。`shape-2` を作る日に、その束のぶんだけ旧 workspace から取る。
+//! `shape-1` で移植したのは3つ(`trim` / `repeater` / `round_corners`)。
+//! `shape-2`/`shape-3` でその続き4つ(`pucker_bloat` / `zigzag` / `offset` / `twist`)を
+//! 同じ file から取った。
 //!
-//! 移植元との差は2箇所だけで、どちらも意図がある:
+//! **`wiggle` だけは今日も取っていない**。移植元には実装があるが、Lottie の語彙に
+//! 対応する物が無く(地図に行が立たない)、`shape-2`/`shape-3` のどちらの束にも
+//! 属していない。使わない物を抱えると `check.sh` の `owns:` が自前実装の量を偽る
+//! (軸4)。加えて移植元の wiggle は seed 付きなので、裁定101(「seed 付き
+//! randomize には先例が1つも無い」)の設計が済むまでは持ってくる先が定まらない。
+//!
+//! 移植元との差は3箇所だけで、どれも意図がある:
 //!
 //! 1. `Path` が構造体から `Vec<Contour>` の別名になった(輪郭の列以外を持たないため)
 //! 2. **repeater が `Path` ではなく [`Instance`] の列を返す**。移植元は
 //!    「opacity は幾何に影響しないので合成側の責務」と書いて `so`/`eo` を捨てていたが、
 //!    **この crate が合成側**なので、捨て先がここになった。幾何(`affine_pow_real` 他)は
 //!    1行も変えていない。
+//! 3. `twist` の角度を**度**で受ける(裁定58「rotation は度のまま。人が読める」)。
+//!    移植元はラジアンで受けていたが、`repeater` の `rotation` を度にした時と同じ理由で
+//!    揃える — 同じ crate の中に角度の単位が2つあると、必ずどちらかを取り違える。
 
 use crate::geom::{
-    arc_vertices, is_straight, lerp_point, normalize_angle, segment_sample_lengths, t_at_length,
-    Contour, Path, Point, Vertex,
+    arc_vertices, bezier_point, bezier_tangent, centroid_of, contour_polyline_samples, is_straight,
+    lerp_point, normalize_angle, segment_sample_lengths, t_at_length, Contour, Path, Point, Vertex,
 };
-use crate::{Composite, RepeaterTransform, TrimMultiple};
+use crate::{Composite, LineJoin, PointType, RepeaterTransform, TrimMultiple, VectorError};
 
 /// パス1つと、それに掛かる不透明度の重み。
 ///
@@ -101,6 +109,357 @@ pub(crate) fn round_corners_contour(c: &Contour, radius: f64) -> Contour {
 pub(crate) fn round_corners(path: &Path, radius: f64) -> Path {
     path.iter()
         .map(|c| round_corners_contour(c, radius))
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// pucker-bloat(移植: pucker_bloat_contour)
+// amount∈[-1,1]。0=恒等、+1=頂点が重心へ、-1=重心から距離2倍。
+// 接線は Lottie 同様に絶対ハンドル位置を重心から逆向きへ補間する。
+// 相対接線へ戻すと `(1 + amount) * tangent + 2 * amount * (vertex - centroid)` になる。
+// ---------------------------------------------------------------------------
+
+fn pucker_bloat_contour(c: &Contour, amount: f64) -> Contour {
+    if c.vertices.len() <= 1 {
+        return c.clone();
+    }
+    let centroid = centroid_of(&c.vertices);
+    let vertices = c
+        .vertices
+        .iter()
+        .map(|v| {
+            let d = v.point.sub(centroid);
+            let new_point = centroid.add(d.scale(1.0 - amount));
+            let handle_shift = d.scale(2.0 * amount);
+            let tangent_scale = 1.0 + amount;
+            Vertex {
+                point: new_point,
+                in_tangent: v.in_tangent.scale(tangent_scale).add(handle_shift),
+                out_tangent: v.out_tangent.scale(tangent_scale).add(handle_shift),
+            }
+        })
+        .collect();
+    Contour {
+        vertices,
+        closed: c.closed,
+    }
+}
+
+pub(crate) fn pucker_bloat(path: &Path, amount: f64) -> Path {
+    path.iter()
+        .map(|c| pucker_bloat_contour(c, amount))
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// zig-zag(移植: zigzag_contour / build_point_type_vertices)
+// ベジエ弧長に沿って frequency*2 分割し、法線方向に交互に amplitude だけ変位する。
+// point_type=Corner → ゼロタンジェント、Smooth → 前後点方向の自動タンジェント。
+// ---------------------------------------------------------------------------
+
+fn zigzag_contour(c: &Contour, amplitude: f64, frequency: f64, point_type: PointType) -> Contour {
+    if c.vertices.len() <= 1 {
+        return c.clone();
+    }
+    let ridge_count = frequency.max(0.0).round() as usize;
+    if ridge_count == 0 || amplitude == 0.0 {
+        return c.clone();
+    }
+    let n = c.vertices.len();
+    let edge_count = if c.closed { n } else { n - 1 };
+    let mut points: Vec<Point> = Vec::new();
+    let steps = ridge_count * 2;
+    for e in 0..edge_count {
+        let v0 = &c.vertices[e];
+        let v1 = &c.vertices[(e + 1) % n];
+        let (cum, seg_len) = segment_sample_lengths(v0, v1);
+        if seg_len < f64::EPSILON {
+            continue;
+        }
+        points.push(bezier_point(v0, v1, 0.0));
+        for k in 1..steps {
+            let target = (k as f64 / steps as f64) * seg_len;
+            let t = t_at_length(&cum, seg_len, target);
+            let base = bezier_point(v0, v1, t);
+            let tangent = bezier_tangent(v0, v1, t);
+            let tlen = tangent.length();
+            let unit = if tlen < f64::EPSILON {
+                let chord = v1.point.sub(v0.point);
+                if chord.length() < f64::EPSILON {
+                    continue;
+                }
+                chord.normalized()
+            } else {
+                tangent.scale(1.0 / tlen)
+            };
+            let normal = Point {
+                x: -unit.y,
+                y: unit.x,
+            };
+            let sign = if k % 2 == 1 { 1.0 } else { -1.0 };
+            points.push(base.add(normal.scale(sign * amplitude)));
+        }
+    }
+    if !c.closed {
+        points.push(c.vertices[n - 1].point);
+    }
+    Contour {
+        vertices: build_point_type_vertices(&points, point_type, c.closed),
+        closed: c.closed,
+    }
+}
+
+fn build_point_type_vertices(points: &[Point], point_type: PointType, closed: bool) -> Vec<Vertex> {
+    let n = points.len();
+    (0..n)
+        .map(|i| {
+            let p = points[i];
+            match point_type {
+                PointType::Corner => Vertex::corner(p),
+                PointType::Smooth => {
+                    let prev = if i == 0 {
+                        if closed {
+                            points[n - 1]
+                        } else {
+                            p
+                        }
+                    } else {
+                        points[i - 1]
+                    };
+                    let next = if i == n - 1 {
+                        if closed {
+                            points[0]
+                        } else {
+                            p
+                        }
+                    } else {
+                        points[i + 1]
+                    };
+                    let handle = next.sub(prev).scale(1.0 / 6.0);
+                    Vertex {
+                        point: p,
+                        in_tangent: handle.scale(-1.0),
+                        out_tangent: handle,
+                    }
+                }
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn zigzag(path: &Path, amplitude: f64, frequency: f64, point_type: PointType) -> Path {
+    path.iter()
+        .map(|c| zigzag_contour(c, amplitude, frequency, point_type))
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// offset-path(移植: offset_contour / polygon_signed_area / points_close /
+//              line_intersection / join_corner)
+// **閉路限定**(地図の note「v1 は閉路限定」)。エッジを外向き法線方向に amount だけ
+// 平行移動し、`line_join` で角を結合する(Clipper2 offset 型)。自己交差の修復はしない。
+// ---------------------------------------------------------------------------
+
+fn offset_contour(
+    c: &Contour,
+    amount: f64,
+    line_join: LineJoin,
+    miter_limit: f64,
+) -> Result<Contour, VectorError> {
+    if c.vertices.len() <= 1 {
+        return Ok(c.clone());
+    }
+    if !c.closed {
+        return Err(VectorError::OpenPathOffset);
+    }
+    let pts = contour_polyline_samples(c);
+    let n = pts.len();
+    let orientation_sign = if polygon_signed_area(&pts) >= 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
+
+    let mut offset_edges: Vec<(Point, Point)> = Vec::with_capacity(n);
+    for i in 0..n {
+        let a = pts[i];
+        let b = pts[(i + 1) % n];
+        let dir = b.sub(a);
+        let len = dir.length();
+        if len < f64::EPSILON {
+            offset_edges.push((a, b));
+            continue;
+        }
+        let unit = dir.scale(1.0 / len);
+        let outward = Point {
+            x: unit.y,
+            y: -unit.x,
+        }
+        .scale(orientation_sign);
+        let shift = outward.scale(amount);
+        offset_edges.push((a.add(shift), b.add(shift)));
+    }
+
+    let mut out_points: Vec<Point> = Vec::new();
+    for i in 0..n {
+        let (prev_a, prev_b) = offset_edges[(i + n - 1) % n];
+        let (cur_a, cur_b) = offset_edges[i];
+        join_corner(
+            &mut out_points,
+            prev_a,
+            prev_b,
+            cur_a,
+            cur_b,
+            pts[i],
+            amount,
+            line_join,
+            miter_limit,
+        );
+    }
+    Ok(Contour {
+        vertices: out_points.into_iter().map(Vertex::corner).collect(),
+        closed: true,
+    })
+}
+
+fn polygon_signed_area(pts: &[Point]) -> f64 {
+    let n = pts.len();
+    let mut sum = 0.0;
+    for i in 0..n {
+        let a = pts[i];
+        let b = pts[(i + 1) % n];
+        sum += a.x * b.y - b.x * a.y;
+    }
+    sum * 0.5
+}
+
+fn points_close(a: Point, b: Point) -> bool {
+    a.sub(b).length() < 1e-9
+}
+
+fn line_intersection(p1: Point, p2: Point, p3: Point, p4: Point) -> Option<Point> {
+    let d1 = p2.sub(p1);
+    let d2 = p4.sub(p3);
+    let denom = d1.x * d2.y - d1.y * d2.x;
+    if denom.abs() < 1e-12 {
+        return None;
+    }
+    let t = ((p3.x - p1.x) * d2.y - (p3.y - p1.y) * d2.x) / denom;
+    Some(p1.add(d1.scale(t)))
+}
+
+/// `prev_b`(前エッジの終点)と `cur_a`(現エッジの始点)の間隙を `line_join` で塞ぐ。
+/// Miter 成立時は交点1つが両者を置き換える(prev_b/cur_a どちらも残らない)。
+/// Bevel/Round、また Miter の `miter_limit` 超過フォールバックは prev_b/cur_a を両方残す。
+#[allow(clippy::too_many_arguments)]
+fn join_corner(
+    out: &mut Vec<Point>,
+    prev_a: Point,
+    prev_b: Point,
+    cur_a: Point,
+    cur_b: Point,
+    vertex: Point,
+    amount: f64,
+    line_join: LineJoin,
+    miter_limit: f64,
+) {
+    if points_close(prev_b, cur_a) {
+        out.push(prev_b);
+        return;
+    }
+    if line_join == LineJoin::Miter {
+        if let Some(p) = line_intersection(prev_a, prev_b, cur_a, cur_b) {
+            let miter_len = p.sub(vertex).length();
+            let limit_len = miter_limit * amount.abs().max(f64::EPSILON);
+            if miter_len <= limit_len {
+                out.push(p);
+                return;
+            }
+        }
+        // 交点なし(平行)または miter_limit 超過: Clipper2 既定と同じく bevel へ縮退。
+    }
+    out.push(prev_b);
+    if line_join == LineJoin::Round {
+        let r = amount.abs();
+        if r > f64::EPSILON {
+            let a0 = (prev_b.y - vertex.y).atan2(prev_b.x - vertex.x);
+            let a1 = (cur_a.y - vertex.y).atan2(cur_a.x - vertex.x);
+            let diff = normalize_angle(a1 - a0);
+            // **移植元の欠陥を1つ直してある。** 旧 `pathgeom.rs::join_corner` は
+            // `arc_vertices`(90°ごとに分割する cubic 近似)を呼び、その**内側の点だけ**を
+            // 積んでいた。ところが 90°以下の角では分割数が1、つまり頂点は2つしか出ず、
+            // 内側の点は**1つも無い** — `LineJoin::Round` が `Bevel` と完全に同じ画になる。
+            // 矩形の角(90°)を含む「ほとんどの角」がここに当たるので、round は事実上
+            // 効いていなかった。ここでは角度あたりの刻みで直に標本化して、
+            // 丸みが必ず1点以上出るようにする。
+            const MAX_STEP: f64 = std::f64::consts::FRAC_PI_8;
+            let steps = (diff.abs() / MAX_STEP).ceil().max(2.0) as usize;
+            for i in 1..steps {
+                let ang = a0 + diff * (i as f64 / steps as f64);
+                out.push(vertex.add(Point {
+                    x: r * ang.cos(),
+                    y: r * ang.sin(),
+                }));
+            }
+        }
+    }
+    out.push(cur_a);
+}
+
+pub(crate) fn offset_path(
+    path: &Path,
+    amount: f64,
+    line_join: LineJoin,
+    miter_limit: f64,
+) -> Result<Path, VectorError> {
+    path.iter()
+        .map(|c| offset_contour(c, amount, line_join, miter_limit))
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// twist(移植: twist_contour)
+// 各輪郭内で中心からの最大距離を基準に自己正規化する減衰回転(AE Twist)。
+// 中心で最大角度、輪郭自身の外縁でゼロになる — 外部半径パラメータを持たない。
+// ---------------------------------------------------------------------------
+
+fn twist_contour(c: &Contour, degrees: f64, center: Point) -> Contour {
+    if c.vertices.len() <= 1 {
+        return c.clone();
+    }
+    let max_r = c
+        .vertices
+        .iter()
+        .map(|v| v.point.sub(center).length())
+        .fold(0.0_f64, f64::max);
+    if max_r <= f64::EPSILON {
+        return c.clone();
+    }
+    // 移植元との唯一の差: 角度を度で受け、ここで1度だけラジアンへ落とす(裁定58)。
+    let angle = degrees.to_radians();
+    let vertices = c
+        .vertices
+        .iter()
+        .map(|v| {
+            let d = v.point.sub(center);
+            let r = d.length();
+            let local_angle = angle * (1.0 - r / max_r);
+            Vertex {
+                point: center.add(d.rotate(local_angle)),
+                in_tangent: v.in_tangent.rotate(local_angle),
+                out_tangent: v.out_tangent.rotate(local_angle),
+            }
+        })
+        .collect();
+    Contour {
+        vertices,
+        closed: c.closed,
+    }
+}
+
+pub(crate) fn twist(path: &Path, degrees: f64, center: Point) -> Path {
+    path.iter()
+        .map(|c| twist_contour(c, degrees, center))
         .collect()
 }
 
