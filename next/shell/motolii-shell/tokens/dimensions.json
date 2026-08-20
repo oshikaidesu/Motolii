@@ -1,5 +1,5 @@
 {
-  "$comment": "寸法トークンの機械可読正本(裁定117)。値は Ableton Live 12 実測から写す — ここで発明しない。出典: docs/reviews/2026-08-19-ableton-density-measurements.md。実測に無い値は近縁値から導出し、各キーの `_note_*` に出典・根拠を書く(コメントはJSONに書けないため)。debug ビルドはこのファイルを直接読み、notify で変更を検知して再読込する。release は include_str! で埋め込み、file I/O は行わない。raw 値の直書きは禁止 — 全 pane は `motolii_shell::tokens::Tokens` 経由でここを読む。",
+  "$comment": "寸法トークンの機械可読正本(裁定117)。値は Ableton Live 12 実測から写す — ここで発明しない(Inspector 関連のキーだけは視覚正本 next/reference/mocks/ui-scale-and-z.html から転記、各 _note に明記)。実測に無い値は近縁値から導出し、各キーの `_note_*` に出典・根拠を書く(コメントはJSONに書けないため)。debug ビルドはこのファイルを直接読み、notify で変更を検知して再読込する。release は include_str! で埋め込み、file I/O は行わない。raw 値の直書きは禁止 — 全 pane は `motolii_shell::tokens::Tokens` 経由でここを読む。",
 
   "row_height": 20,
   "_note_row_height": "Ableton Arrangement トラック行高の実測値そのもの(20)。裁定117以来の既存値",
@@ -7,17 +7,17 @@
   "transport_band": 30,
   "_note_transport_band": "Ableton Control Bar 帯の実測値そのもの(30)。裁定117以来の既存値",
 
-  "title_text": 15,
-  "_note_title_text": "実測表に直接の title 段は無い。panel header/section title 用の一段大きい文字として body_text(13、実測)から+2して導出 — Ableton 本文帯 10〜13 の上限に接する程度に留め、任意の飛躍をしない",
+  "title_text": 12,
+  "_note_title_text": "視覚正本 next/reference/mocks/ui-scale-and-z.html の正典バンド {8,9,11,12} の最大段(--t-title)。Inspector の ptitle(パネルタイトル)が使う。旧値15(Ableton本文帯からの導出値)から2026-08-20に更新",
 
-  "body_text": 13,
-  "_note_body_text": "実測表『本文相当文字 推定10〜13(芯7.5)』のうち、第1波で採用済みの上限値(裁定117以来の既存値)",
+  "body_text": 11,
+  "_note_body_text": "同 mock の --t-base。Inspector の property 行(ラベル・値とも)が使う。旧値13から更新",
 
-  "caption_text": 11,
-  "_note_caption_text": "実測表『本文相当文字』の下限寄り。旧 small_text から改名(型スケール語彙 title/body/caption/micro への統一、2026-08-20)。値そのものは裁定117以来変更なし",
+  "caption_text": 9,
+  "_note_caption_text": "同 mock の --t-dense。Inspector の section 見出し・column header・hint・glyph が使う。旧 small_text から改名(型スケール語彙 title/body/caption/micro への統一、2026-08-20)。値は旧11から更新",
 
-  "micro_text": 9,
-  "_note_micro_text": "実測表に直接の micro 段は無い。caption(11)からさらに1段下げた最小可読帯として、本文帯の芯(7.5)を下限の目安に caption-2 で導出 — 発明ではなく caption からの機械的な一段下げ",
+  "micro_text": 8,
+  "_note_micro_text": "同 mock の --t-micro(正典バンド最小段)。現時点でどの pane からも未消費 — バンド4段のうち予約されているだけの段。旧値9から更新",
 
   "spacing_xs": 2,
   "_note_spacing_xs": "実測ではなく、既存コード(timeline_pane.rs の bar 縦インセット `row_top + 2.0` / ルーラー目盛りラベルの縦オフセット `x, 0.0` 系)で既に使われていた値を採番しただけ。新規発明ではなく現状追認",
@@ -32,26 +32,26 @@
   "_note_spacing_l": "既存コード(lib.rs の `column![...].padding(12)`)の既存慣用値を採番",
 
   "border_width": 1.0,
-  "_note_border_width": "ui-visual-language の規約『フラット・細罫線』= 1px hairline。実測というより意匠規約そのものの値(発明ではなく既定の視覚言語)",
+  "_note_border_width": "ui-visual-language の規約『フラット・細罫線』= 1px hairline。実測というより意匠規約そのものの値(発明ではなく既定の視覚言語)。`Dimensions::scaled` はこの値へ ui_scale を掛けない(mock `--line: 1px` が `--s` の calc から独立している=『拡大しない』ことの出典どおり)",
 
   "panel_header_height": 29,
-  "_note_panel_header_height": "実測表『Browser ツールバー』の実測値(29)を転用。旧実装は独自に34を使っていた(第2波レーンFでも『未変更』のまま据え置かれていた暫定値)が、指示『値の初期値はAbleton実測から』に従い実測値へ差し替える — 34→29は本レーンの新しい適用で、他chromeの見え方に影響し得るため終了報告の設計判断に列挙する",
+  "_note_panel_header_height": "実測表『Browser ツールバー』の実測値(29)を転用。Shell 全体の header(Undo/Redo/+Layer 帯)専用 — Inspector 自身のタイトル帯(ptitle)は inspector_section_header_height を使う(mock の --section が両方に効くのと同じ理由)",
 
   "inspector_panel_width": 496,
-  "_note_inspector_panel_width": "Ableton実測ではなく、Inspector第1波の視覚正本そのもの(docs/mocks-ui/public/inspector-library.css `.inspectorShell { width: min(100%, 496px) }`)から転記。発注書がこのHTML/CSSを正本と名指ししているため、他キーと違いAbleton密度表を出典にしない",
+  "_note_inspector_panel_width": "Ableton実測ではなく、Inspector第1波の視覚正本そのもの(旧 docs/mocks-ui/public/inspector-library.css `.inspectorShell { width: min(100%, 496px) }`)から転記。496のまま据え置き(300への変更は利用者裁定待ち、CANON記載) — 新 mock(ui-scale-and-z.html)の --pane:300 はこの pane 幅の出典として採らない",
 
-  "inspector_row_height": 25,
-  "_note_inspector_row_height": "同CSS `.propertyRow { min-height: 25px }` から転記",
+  "inspector_row_height": 20,
+  "_note_inspector_row_height": "視覚正本 ui-scale-and-z.html の --row(20)。Inspector の property 行・column header 行の高さ。旧値25(旧CSS `.propertyRow{min-height:25px}` 由来)から新 mock へ更新(2026-08-20)",
 
   "inspector_section_header_height": 26,
-  "_note_inspector_section_header_height": "同CSS `.tableSection h2 { height: 26px }` から転記",
+  "_note_inspector_section_header_height": "同 mock の --section(26)。ptitle(パネルタイトル帯)と sec(TRANSFORM/APPEARANCE見出し)の両方が共有する — mock 自身がこの2箇所に同じ変数を使っているため",
 
-  "inspector_value_width": 64,
-  "_note_inspector_value_width": "同CSS `.propertyRow`/`.columnHeader` の grid-template-columns: minmax(132px, 1fr) repeat(3, 64px) 26px のうち64px段から転記",
+  "inspector_value_width": 38,
+  "_note_inspector_value_width": "同 mock の grid-template-columns: 1fr repeat(3, 38px) hit の 38px 段(X/Y/Z 値セル1つぶんの幅)。旧値64(旧CSS由来)から新 mock へ更新",
 
-  "inspector_label_width": 132,
-  "_note_inspector_label_width": "同 grid-template-columns 先頭の minmax(132px, 1fr) から転記",
+  "inspector_glyph_width": 18,
+  "_note_inspector_glyph_width": "同 mock の --hit(18)。Key/M/S glyph 列の幅。Key 列自体は空のまま(Q0: keyframe UI 未実装、列幅の予約だけ)",
 
-  "inspector_summary_height": 46,
-  "_note_inspector_summary_height": "同CSS `.selectionSummary { height: 46px }` から転記"
+  "ui_scale": 1.00,
+  "_note_ui_scale": "mock --s 相当の UI 拡大率(1.00 基準、0.01刻み)。適用点は Dimensions::scaled の1箇所だけ(Shell::dims が呼ぶ)。仮の置き場 — Workspace 永続機構がまだ無いため、暫定的にこの JSON トークンファイルへ置く(発注書の指示どおり)。Workspace 実装後はそちらへ移す"
 }

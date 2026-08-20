@@ -330,13 +330,13 @@ fn dimension_tokens_reload_when_the_file_changes() {
 
     let full = |row_height: i32| {
         format!(
-            r#"{{"row_height": {row_height}, "transport_band": 32, "title_text": 15,
-                "body_text": 14, "caption_text": 12, "micro_text": 9,
+            r#"{{"row_height": {row_height}, "transport_band": 32, "title_text": 12,
+                "body_text": 11, "caption_text": 9, "micro_text": 8,
                 "spacing_xs": 2, "spacing_s": 4, "spacing_m": 8, "spacing_l": 12,
                 "border_width": 1.0, "panel_header_height": 29,
-                "inspector_panel_width": 496, "inspector_row_height": 25,
-                "inspector_section_header_height": 26, "inspector_value_width": 64,
-                "inspector_label_width": 132, "inspector_summary_height": 46}}"#
+                "inspector_panel_width": 496, "inspector_row_height": 20,
+                "inspector_section_header_height": 26, "inspector_value_width": 38,
+                "inspector_glyph_width": 18, "ui_scale": 1.0}}"#
         )
     };
 
