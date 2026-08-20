@@ -94,7 +94,9 @@ impl<'a> StoreView<'a> {
     /// これは AE で「キーを打っていない property は静止値」と同じ扱いである。
     pub fn resolve(&self, layer: LayerId, t: RationalTime) -> Option<ResolvedLayer> {
         let meta = self.meta(layer)?;
-        let size = meta.source.size();
+        // 実素材の大きさは probe しないと分からない。ここでは 0 を置き、engine が
+        // 「track が無く declared も無い」場合だけ素材の実寸で埋める。
+        let size = meta.source.declared_size().unwrap_or([0.0, 0.0]);
 
         let scalar = |name: &str, default: f32| -> f32 {
             let Ok(property) = PropertyId::new(name) else {

@@ -10,8 +10,10 @@ members = [
     "core/motolii-core",
     "core/motolii-eval",
     "core/motolii-store",
+    "core/motolii-testkit",
     "engine/motolii-compositor",
     "engine/motolii-engine",
+    "engine/motolii-media",
     "probes/r0-store-edit",
     "probes/r1-frame-throughput",
     "probes/r2-view-projection",
@@ -53,10 +55,13 @@ arrow = { version = "58.3", default-features = false }
 motolii-core = { path = "core/motolii-core" }
 motolii-eval = { path = "core/motolii-eval" }
 motolii-store = { path = "core/motolii-store" }
+motolii-testkit = { path = "core/motolii-testkit" }
 motolii-compositor = { path = "engine/motolii-compositor" }
 motolii-engine = { path = "engine/motolii-engine" }
+motolii-media = { path = "engine/motolii-media" }
 
 serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
 thiserror = "2"
 
 # 移植した crate の dev-dependencies(不変量試験をそのまま持ってくるため)

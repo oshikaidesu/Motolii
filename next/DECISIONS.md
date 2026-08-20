@@ -32,3 +32,5 @@
 | 25 | 2026-08-20 | 合否の定義は `GOALS.md` 1枚。ここに無い物を「足りない」と数えない(除外リストを含む) |
 | 26 | 2026-08-20 | Stage は **iced の `shader::Primitive` 経由で iced の device の上に re_renderer を建てる**(= 本当の埋め込み)。CPU 読み戻しは export と試験だけに使う。根拠: 一次資料(pin 済み fork `wgpu/src/primitive.rs:14-64`)で `prepare(.., device: &wgpu::Device, queue: &wgpu::Queue, ..)` と `render(.., encoder: &mut CommandEncoder, target: &TextureView, ..)` が生の wgpu を渡すことを確認 — iced の拡張点は **toolkit の層ではなく wgpu の層**にある。読み戻しは 1080p で 1.7ms かかる |
 | 27 | 2026-08-20 | 別 device でも絵は byte 一致することを実測した(`two_devices_produce_the_same_frame`)。よって preview(iced の device)と export(headless)が別 device でも背骨2は崩れない |
+| 28 | 2026-08-20 | `LayerSource::Media` は **動画も静止画も同じ variant**。素材種で経路を分けない(分けると片方だけ直る欠陥が生まれる — 初回タッチ観察の再発) |
+| 29 | 2026-08-20 | 素材の大きさは Document が持たない。probe が決め、engine が「track も declared も無い軸」だけを実寸で埋める。AE の「キーを打っていない property は静止値」の延長 |

@@ -8,20 +8,32 @@
 
 use std::collections::HashMap;
 
-use motolii_compositor::{CompSpec, Compositor, CompositorError, Layer};
-use motolii_store::{LayerSource, RationalTime, StoreView};
 use motolii_compositor::GpuTexture2D;
+use motolii_compositor::{CompSpec, Compositor, CompositorError, Layer};
+use motolii_media::{probe, read_frame_at, MediaError, MediaInfo};
+use motolii_store::{LayerSource, RationalTime, StoreView};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
     #[error(transparent)]
     Compositor(#[from] CompositorError),
+    #[error(transparent)]
+    Media(#[from] MediaError),
 }
 
 pub struct Engine {
     compositor: Compositor,
     /// 素材 → GPU texture。同じ素材を毎フレーム上げ直さない。
+    /// **静止した素材だけ**が入る(実素材は時刻ごとに絵が違うので下の `frames` へ)。
     textures: HashMap<LayerSource, GpuTexture2D>,
+    /// パス → probe 結果。probe は ffprobe のプロセス起動なので毎フレームは回さない。
+    probes: HashMap<String, MediaInfo>,
+    /// (パス, フレーム番号)→ GPU texture。
+    ///
+    /// **暫定**: フレームごとに reader を開き直している。書き出しのような順次走査では
+    /// これは無駄で、本来は1本の reader を進めるべき。UI が付いて「どう走査するか」が
+    /// 決まってから直す(先に最適化すると、決まっていない走査順に合わせた形になる)。
+    frames: HashMap<(String, i64), GpuTexture2D>,
 }
 
 impl Engine {
@@ -29,6 +41,8 @@ impl Engine {
         Ok(Self {
             compositor: Compositor::headless()?,
             textures: HashMap::new(),
+            probes: HashMap::new(),
+            frames: HashMap::new(),
         })
     }
 
@@ -43,11 +57,17 @@ impl Engine {
 
         let mut layers = Vec::with_capacity(resolved.len());
         for layer in resolved {
-            let texture = self.texture_for(&layer.source)?;
+            let (texture, natural) = self.texture_for(&layer.source, t)?;
+            // track も declared も無い軸は素材の実寸で埋める(AE と同じ「キーを
+            // 打っていない property は静止値」の延長)。
+            let size = [
+                if layer.size[0] > 0.0 { layer.size[0] } else { natural[0] },
+                if layer.size[1] > 0.0 { layer.size[1] } else { natural[1] },
+            ];
             layers.push(Layer {
                 texture,
                 top_left: layer.top_left,
-                size: layer.size,
+                size,
                 order: layer.order,
                 opacity: layer.opacity,
             });
@@ -56,29 +76,69 @@ impl Engine {
         Ok(self.compositor.render(comp, &layers)?)
     }
 
-    fn texture_for(&mut self, source: &LayerSource) -> Result<GpuTexture2D, EngineError> {
-        if let Some(texture) = self.textures.get(source) {
-            return Ok(texture.clone());
-        }
-
-        let texture = match source {
+    /// 素材の texture と、その実寸を返す。
+    fn texture_for(
+        &mut self,
+        source: &LayerSource,
+        t: RationalTime,
+    ) -> Result<(GpuTexture2D, [f32; 2]), EngineError> {
+        match source {
             LayerSource::Solid {
                 rgba,
                 width,
                 height,
             } => {
+                let natural = [*width as f32, *height as f32];
+                if let Some(texture) = self.textures.get(source) {
+                    return Ok((texture.clone(), natural));
+                }
                 let pixels: Vec<u8> = rgba
                     .iter()
                     .copied()
                     .cycle()
                     .take((width * height * 4) as usize)
                     .collect();
-                self.compositor
-                    .upload_rgba("solid", &pixels, *width, *height)?
+                let texture = self
+                    .compositor
+                    .upload_rgba("solid", &pixels, *width, *height)?;
+                self.textures.insert(source.clone(), texture.clone());
+                Ok((texture, natural))
             }
-        };
+            LayerSource::Media { path, .. } => {
+                let info = match self.probes.get(path) {
+                    Some(info) => info.clone(),
+                    None => {
+                        let info = probe(path)?;
+                        self.probes.insert(path.clone(), info.clone());
+                        info
+                    }
+                };
+                let natural = [info.width as f32, info.height as f32];
 
-        self.textures.insert(source.clone(), texture.clone());
-        Ok(texture)
+                // comp 時刻 → 素材のフレーム番号。素材の尺を超えたら最終フレームで止める
+                // のではなく、**素材が無い時刻は描かない**(フリーズフレーム禁止、M4)。
+                let frame = (t.num() as f64 / t.den() as f64
+                    * info.fps.num() as f64
+                    / info.fps.den() as f64)
+                    .floor() as i64;
+                let frame = frame.max(0);
+
+                let key = (path.clone(), frame);
+                if let Some(texture) = self.frames.get(&key) {
+                    return Ok((texture.clone(), natural));
+                }
+
+                let cpu = read_frame_at(path, &info, frame)?;
+                let texture = self.compositor.upload_yuv420p(
+                    "media",
+                    &cpu.data,
+                    info.width,
+                    info.height,
+                    info.color_space,
+                )?;
+                self.frames.insert(key, texture.clone());
+                Ok((texture, natural))
+            }
+        }
     }
 }

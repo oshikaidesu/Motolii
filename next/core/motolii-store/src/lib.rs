@@ -14,9 +14,11 @@
 
 mod components;
 mod document;
+mod fingerprint;
 mod view;
 
 pub use document::{Document, Intent, LayerId, PropertyId};
+pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use view::StoreView;
 
 pub use motolii_core::RationalTime;
@@ -57,12 +59,23 @@ pub enum LayerSource {
         width: u32,
         height: u32,
     },
+    /// 実素材。**動画も静止画も同じ variant**を通す — 経路を分けると、
+    /// 片方だけ直る欠陥が生まれる(初回タッチ観察の再発防止)。
+    ///
+    /// 大きさは probe が決めるので Document は持たない。`fingerprint` はパスが
+    /// 動いても同じ物だと言えるようにするための内容識別で、無くても描ける。
+    Media {
+        path: String,
+        fingerprint: Option<String>,
+    },
 }
 
 impl LayerSource {
-    pub fn size(&self) -> [f32; 2] {
+    /// Document が知っている大きさ。実素材は probe しないと分からないので `None`。
+    pub fn declared_size(&self) -> Option<[f32; 2]> {
         match self {
-            Self::Solid { width, height, .. } => [*width as f32, *height as f32],
+            Self::Solid { width, height, .. } => Some([*width as f32, *height as f32]),
+            Self::Media { .. } => None,
         }
     }
 }

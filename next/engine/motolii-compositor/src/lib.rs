@@ -137,6 +137,57 @@ impl Compositor {
             .map_err(|e| CompositorError::Rectangles(e.to_string()))
     }
 
+    /// デコード直後の YUV420p(planar)をそのまま GPU へ載せる。
+    ///
+    /// **色変換は上流(`re_renderer`)がやる**(裁定23)。ffmpeg の
+    /// `-f rawvideo -pix_fmt yuv420p` が吐くバイト列は、上流の `Y_U_V420` が期待する
+    /// `width × (height + height/2)` の R8 連番そのものなので、詰め替えが要らない。
+    /// 自前で WGSL を書くと「色事故を防ぐために自分で変換する」動機ごと二重になる。
+    pub fn upload_yuv420p(
+        &self,
+        label: &str,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        color: motolii_core::ColorSpace,
+    ) -> Result<GpuTexture2D, CompositorError> {
+        use re_renderer::resource_managers::{SourceImageDataFormat, YuvMatrixCoefficients, YuvPixelLayout, YuvRange};
+
+        let (coefficients, range) = match color {
+            motolii_core::ColorSpace::Rec709Limited => {
+                (YuvMatrixCoefficients::Bt709, YuvRange::Limited)
+            }
+            motolii_core::ColorSpace::Rec709Full => (YuvMatrixCoefficients::Bt709, YuvRange::Full),
+            motolii_core::ColorSpace::Rec601Limited => {
+                (YuvMatrixCoefficients::Bt601, YuvRange::Limited)
+            }
+            // RGB 系の色空間で YUV を載せようとしている = 呼び手の取り違え。
+            other => {
+                return Err(CompositorError::Rectangles(format!(
+                    "YUV420p に RGB 系の色空間が渡された: {other:?}"
+                )))
+            }
+        };
+
+        self.ctx
+            .texture_manager_2d
+            .create(
+                &self.ctx,
+                ImageDataDesc {
+                    label: label.into(),
+                    data: data.to_vec().into(),
+                    format: SourceImageDataFormat::Yuv {
+                        layout: YuvPixelLayout::Y_U_V420,
+                        coefficients,
+                        range,
+                    },
+                    width_height: [width, height],
+                    alpha_channel_usage: re_renderer::AlphaChannelUsage::Opaque,
+                },
+            )
+            .map_err(|e| CompositorError::Rectangles(e.to_string()))
+    }
+
     /// **唯一の評価経路**。RGBA8(premultiplied)を返す。
     ///
     /// preview はこの結果を窓へ出し、export は同じ結果を mux へ渡す。

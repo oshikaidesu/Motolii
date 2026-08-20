@@ -2011,6 +2011,7 @@ version = "0.1.0"
 dependencies = [
  "glam",
  "macaw",
+ "motolii-core",
  "pollster",
  "re_renderer",
  "thiserror",
@@ -2032,7 +2033,10 @@ name = "motolii-engine"
 version = "0.1.0"
 dependencies = [
  "motolii-compositor",
+ "motolii-core",
+ "motolii-media",
  "motolii-store",
+ "motolii-testkit",
  "thiserror",
 ]
 
@@ -2042,6 +2046,19 @@ version = "0.1.0"
 dependencies = [
  "motolii-core",
  "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "motolii-media"
+version = "0.1.0"
+dependencies = [
+ "motolii-core",
+ "motolii-store",
+ "motolii-testkit",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror",
 ]
 
@@ -2061,8 +2078,13 @@ dependencies = [
  "re_types_core",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
 ]
+
+[[package]]
+name = "motolii-testkit"
+version = "0.1.0"
 
 [[package]]
 name = "moxcms"

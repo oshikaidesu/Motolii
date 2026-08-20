@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 glam.workspace = true
+motolii-core.workspace = true
 macaw.workspace = true
 pollster.workspace = true
 re_renderer.workspace = true
