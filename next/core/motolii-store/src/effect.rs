@@ -51,6 +51,28 @@ pub struct EffectInstance {
     pub enabled: bool,
 }
 
+/// ある comp 時刻に解決済みの effect インスタンス。**描く側が要るのはこれだけ**
+/// (`ResolvedMask` と同じ形)。
+///
+/// `enabled` でない effect は**ここに現れない** — `id` フィールドも持たない。
+/// これは `attrs.hidden` な layer が `resolve()` の外(`None`)へ落ちて `ResolvedLayer`
+/// 自体を作らないのと同じ型: 「切る」は運ぶ情報ではなく、resolve の入口で弾く
+/// 判定でしかない。順序は [`crate::StoreView::effects`] が返す宣言順のまま
+/// (裁定66、マスクと同じ)。
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedEffect {
+    /// `effects/effect/ty` に相当する識別。plugin id 文字列(裁定70)。
+    pub plugin_id: String,
+    /// この時刻で評価済みの param 値。名前つき(param 名 → 値)、param の宣言順ではなく
+    /// track が実在する param だけを名前のアルファベット順で並べる
+    /// (`StoreView::properties` が返す順をそのまま使う、裁定57「store に聞く」)。
+    ///
+    /// track の無い param(触っていない param)は**ここに現れない** — store は
+    /// plugin の param カタログを知らない(裁定70)ので、既定値を埋める仕事は
+    /// ここではなく呼び手(plugin 定義を知っている層)の役目。
+    pub params: Vec<(String, crate::Value)>,
+}
+
 /// 同じ id の effect が2枚あると、将来の param track(`effect.{id}.…`)の持ち主が
 /// 決まらない。[`crate::mask::validate_unique_ids`] と同型の検査。
 pub(crate) fn validate_unique_ids(effects: &[EffectInstance]) -> Result<(), StoreError> {

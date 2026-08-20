@@ -18,8 +18,8 @@ use crate::document::{TrackCache, TransientKey};
 use crate::slot::PropertySource;
 use crate::{
     property, Composition, Document, EffectInstance, LayerAttrs, LayerId, LayerMeta,
-    LayerPlacement, Marker, Mask, PropertyId, ResolvedLayer, ResolvedMask, Revision, Shape, Slot,
-    SlotId, StoreError, TextDocument, EDIT_TIMELINE,
+    LayerPlacement, Marker, Mask, PropertyId, ResolvedEffect, ResolvedLayer, ResolvedMask,
+    Revision, Shape, Slot, SlotId, StoreError, TextDocument, EDIT_TIMELINE,
 };
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
@@ -635,6 +635,51 @@ impl<'a> StoreView<'a> {
         Ok(out)
     }
 
+    /// comp 時刻での effect スタック。**disabled な effect はここに現れない**
+    /// (`resolve_with_solo` が hidden な layer を `None` で弾くのと同じ形 — 「切る」を
+    /// フラグとして運ばず、入口で除く)。空スタックは `self.effects(layer)?` の1回の
+    /// 読み出しだけで即 return し、`self.properties(layer)`(component 一覧の走査)
+    /// までは踏まない — effect の無い layer の resolve コストを増やさないため。
+    fn resolved_effects(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+    ) -> Result<Vec<ResolvedEffect>, StoreError> {
+        let effects = self.effects(layer)?;
+        if effects.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // param 名の発見は既存の汎用列挙(裁定57「store に聞く」) — effect 専用の
+        // 列挙 API を新設しない(縫い目調査 1a)。
+        let properties = self.properties(layer);
+
+        let mut out = Vec::with_capacity(effects.len());
+        for effect in effects {
+            if !effect.enabled {
+                continue;
+            }
+            let prefix = format!("{}{}.param.", property::EFFECT_PREFIX, effect.id);
+            let mut params = Vec::new();
+            for candidate in &properties {
+                let Some(param_name) = candidate.name().strip_prefix(prefix.as_str()) else {
+                    continue;
+                };
+                // track の評価は既存の汎用経路(`value_at`)をそのまま再利用する —
+                // 新しい評価器は書かない(EXACT TARGET #2)。track が実在すれば
+                // `value_at` は必ず `Some` を返す(scalar/vec2 と同じ前提)。
+                if let Some(value) = self.value_at(layer, candidate, t)? {
+                    params.push((param_name.to_owned(), value));
+                }
+            }
+            out.push(ResolvedEffect {
+                plugin_id: effect.plugin_id,
+                params,
+            });
+        }
+        Ok(out)
+    }
+
     /// comp 時刻での layer の姿。**合成器へ渡す唯一の形**。
     ///
     /// track が無い property は既定値になる(位置 0、不透明度 1、大きさは素材のまま)。
@@ -765,6 +810,7 @@ impl<'a> StoreView<'a> {
             source: meta.source,
             source_frame,
             masks: self.resolved_masks(layer, t)?,
+            effects: self.resolved_effects(layer, t)?,
             blend_mode: attrs.blend_mode,
             matte: attrs.matte,
             pinned: attrs.pinned,

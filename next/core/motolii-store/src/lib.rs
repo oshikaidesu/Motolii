@@ -34,7 +34,7 @@ mod view;
 
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, Matte, MatteMode};
 pub use document::{DisplayRevision, Document, Intent, LayerId, PropertyId, Revision};
-pub use effect::{EffectId, EffectInstance};
+pub use effect::{EffectId, EffectInstance, ResolvedEffect};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use marker::Marker;
 pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
@@ -388,6 +388,13 @@ pub struct ResolvedLayer {
     /// ここに置くのは、`ResolvedLayer` が「この時刻のこの layer の姿」の全部だからである。
     /// 別の口にすると `ResolvedLayer` から `LayerId` が引けず、描く側がマスクへ辿り着けない。
     pub masks: Vec<ResolvedMask>,
+    /// この時刻の effect スタック。**スタックの順**(手前へ畳んでいく mask と違い、
+    /// こちらは「上から下へ適用する」順、裁定70)で並ぶ。disabled な effect と
+    /// track の無い param は含まれない(型の doc、`ResolvedEffect` 参照)。
+    /// **まだ合成器/engine は読んでいない**(裁定153 S1 — 縫い目調査
+    /// `docs/reviews/2026-08-21-effect-seam-survey.md` の「resolve() の外に出ていない」
+    /// 状態をここで解消する。S2/S3 が compositor/engine 側の消費を続ける)。
+    pub effects: Vec<ResolvedEffect>,
     /// `layers/visual-layer/bm`。**まだ合成器は読んでいない**(`motolii-compositor` は
     /// `re_renderer` の `multiplicative_tint` しか使っておらず、blend mode の合成式は
     /// 未実装)。Document 側の意味はここで解決済みにしておき、engine が繋ぐ日を待つ。
