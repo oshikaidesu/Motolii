@@ -52,6 +52,7 @@ fn doc_with_layer_and_attrs() -> (Document, LayerId) {
             matte: None,
             name: "circle".to_owned(),
             auto_orient: true,
+            pinned: false,
         },
     })
     .unwrap();

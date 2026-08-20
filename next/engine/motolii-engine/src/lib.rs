@@ -76,6 +76,12 @@ impl Engine {
             .map_err(|e| EngineError::Store(e.to_string()))?
             .ok_or(EngineError::NoComposition)?
             .spec();
+        // カメラも comp と同じく Document が持つ(裁定113/115)。preview/export が
+        // 違うカメラを渡せないよう、ここでも引数ではなく `view` から読む
+        // (裁定40 が comp について立てた規律と同じ形)。
+        let camera = view
+            .resolve_camera(t)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
         let resolved = view
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
@@ -107,10 +113,11 @@ impl Engine {
                 size,
                 // **置き方はそのまま持ち回る** — 並べ直すとそこが翻訳層になる。
                 placement: layer.placement,
+                pinned: layer.pinned,
             });
         }
 
-        Ok(self.compositor.render(comp, &layers)?)
+        Ok(self.compositor.render(comp, camera, &layers)?)
     }
 
     /// 素材の texture と、その実寸を返す。

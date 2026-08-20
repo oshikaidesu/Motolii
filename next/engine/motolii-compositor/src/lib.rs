@@ -1,8 +1,11 @@
 //! wraps: re_renderer — 合成器。
 //!
 //! layer は **板**(`TexturedRect`)、重ね順は `depth_offset`、不透明度は
-//! `multiplicative_tint` の alpha。カメラは正射影の `TopLeftCornerAndExtendZ` で、
-//! world 単位 = ピクセル・原点左上 = **AE の comp 座標そのもの**。
+//! `multiplicative_tint` の alpha。カメラは**透視**(`Projection::Perspective`、裁定115) —
+//! world 単位 = ピクセル・原点左上 = **AE の comp 座標**(裁定14)のまま、層の z が
+//! 動いた瞬間に視差が出る 2.5D になる。既定カメラ(center=[0,0]・zoom=1・roll=0)で
+//! 全層 z=0 のときは、旧正射影(裁定14)と一致する(`motolii-core::camera` が投影の
+//! 正本で、機械精度でそれを縛る単体試験を持つ)。
 //!
 //! 背骨2: **評価経路は1本**。preview も export も [`Compositor::render`] を呼び、
 //! 違いは窓の有無だけである。第二経路を作れる公開 API をここに置かない。
@@ -15,15 +18,19 @@
 
 use re_renderer::renderer::{RectangleDrawData, RectangleOptions, TexturedRect};
 use re_renderer::resource_managers::ImageDataDesc;
-use re_renderer::view_builder::{
-    self, Projection, RenderMode, TargetConfiguration, ViewBuilder,
-};
+use re_renderer::view_builder::{Projection, RenderMode, TargetConfiguration, ViewBuilder};
 use re_renderer::{RenderContext, Rgba};
 
 mod headless;
 
-/// comp は 2D なので z は常に 0。板は同一平面に並び、前後は `depth_offset` が決める。
-fn to_vec3(v: glam::Vec2) -> glam::Vec3 {
+/// 板の**位置**(原点や角)。z は `LayerPlacement::z`(pinned は常に 0、裁定113)。
+fn to_point3(v: glam::Vec2, z: f32) -> glam::Vec3 {
+    glam::vec3(v.x, v.y, z)
+}
+
+/// 板の**辺ベクトル**(`extent_u`/`extent_v`)。板は自分の z 平面に対して常に平行
+/// (裁定115: 姿勢の表現はまだ開けない)なので、方向ベクトルの z 成分は常に 0。
+fn to_vector3(v: glam::Vec2) -> glam::Vec3 {
     glam::vec3(v.x, v.y, 0.0)
 }
 
@@ -32,8 +39,9 @@ pub use headless::HeadlessError;
 /// 素材ハンドル。上流の型をそのまま通す(包み直さない)。
 pub use re_renderer::resource_managers::GpuTexture2D;
 
-/// 合成の器。**定義は `motolii-core`** にある(背骨2を依存グラフで守るため)。
-pub use motolii_core::{CompSpec, LayerPlacement};
+/// 合成の器・カメラの投影数学。**定義は `motolii-core`** にある(背骨2を依存グラフで
+/// 守るため)。
+pub use motolii_core::{CompSpec, LayerPlacement, ResolvedCamera};
 
 /// 1枚の layer。**空間に立つ板**であり、2D の完成フレームではない。
 ///
@@ -47,6 +55,11 @@ pub struct Layer {
     /// そこへ `placement.transform` を掛けて comp 座標の四角形にする。
     pub size: [f32; 2],
     pub placement: LayerPlacement,
+    /// `LayerAttrs::pinned`(裁定113)。true ならカメラ(center/zoom/roll)を一切受けず
+    /// 画面に張り付く。実装は「z=0 平面でのカメラの写像の逆行列」を層の transform に
+    /// 掛けてから同じ透視カメラへ渡す形(`motolii_core::camera_screen_from_world_z0`)
+    /// — 2パス目を増やさない。
+    pub pinned: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -195,54 +208,68 @@ impl Compositor {
     pub fn render(
         &mut self,
         comp: CompSpec,
+        camera: ResolvedCamera,
         layers: &[Layer],
     ) -> Result<Vec<u8>, CompositorError> {
-        self.render_with_timing(comp, layers).map(|(frame, _)| frame)
+        self.render_with_timing(comp, camera, layers)
+            .map(|(frame, _)| frame)
     }
 
     /// 内訳つき。**どこが遅いかを隠さない**ための口で、製品経路は [`Self::render`]。
     pub fn render_with_timing(
         &mut self,
         comp: CompSpec,
+        camera: ResolvedCamera,
         layers: &[Layer],
     ) -> Result<(Vec<u8>, RenderTiming), CompositorError> {
         let mut timing = RenderTiming::default();
         let build_start = std::time::Instant::now();
+
+        // **投影の正本は `motolii-core::camera`**。ここでは組み立てず、そこが返す
+        // 値をそのまま `macaw`/`re_renderer` の型へ詰め替えるだけ。
+        let projection = motolii_core::camera_projection(comp, camera);
+        // pinned layer(裁定113)用: z=0 平面でのカメラの写像の逆行列。層の transform に
+        // 前もって掛けておけば、この後カメラを通しても打ち消し合って画面上不動になる。
+        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
+
         let rects: Vec<TexturedRect> = layers
             .iter()
-            .map(|layer| TexturedRect {
-                // **affine のまま板にする**。`TexturedRect` は左上と2本の辺ベクトルで
-                // 四角形を表すので、変換後の基底ベクトルをそのまま渡せば
-                // 回転も拡大も skew も**シェーダを1行も変えずに**通る。
-                top_left_corner_position: to_vec3(
-                    layer.placement.transform.transform_point2(glam::Vec2::ZERO),
-                ),
-                extent_u: to_vec3(
-                    layer
-                        .placement
-                        .transform
-                        .transform_vector2(glam::Vec2::new(layer.size[0], 0.0)),
-                ),
-                extent_v: to_vec3(
-                    layer
-                        .placement
-                        .transform
-                        .transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
-                ),
-                colormapped_texture: re_renderer::renderer::ColormappedTexture::from_unorm_rgba(
-                    layer.texture.clone(),
-                ),
-                options: RectangleOptions {
-                    // premultiplied なので alpha も色も同じ係数で掛ける。
-                    multiplicative_tint: Rgba::from_rgba_premultiplied(
-                        layer.placement.opacity,
-                        layer.placement.opacity,
-                        layer.placement.opacity,
-                        layer.placement.opacity,
+            .map(|layer| {
+                let (transform, z) = if layer.pinned {
+                    (pinned_cancel * layer.placement.transform, 0.0)
+                } else {
+                    (layer.placement.transform, layer.placement.z)
+                };
+                TexturedRect {
+                    // **affine のまま板にする**。`TexturedRect` は左上と2本の辺ベクトルで
+                    // 四角形を表すので、変換後の基底ベクトルをそのまま渡せば
+                    // 回転も拡大も skew も**シェーダを1行も変えずに**通る。
+                    top_left_corner_position: to_point3(
+                        transform.transform_point2(glam::Vec2::ZERO),
+                        z,
                     ),
-                    depth_offset: layer.placement.order,
-                    ..Default::default()
-                },
+                    extent_u: to_vector3(
+                        transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)),
+                    ),
+                    extent_v: to_vector3(
+                        transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
+                    ),
+                    colormapped_texture:
+                        re_renderer::renderer::ColormappedTexture::from_unorm_rgba(
+                            layer.texture.clone(),
+                        ),
+                    options: RectangleOptions {
+                        // premultiplied なので alpha も色も同じ係数で掛ける。
+                        multiplicative_tint: Rgba::from_rgba_premultiplied(
+                            layer.placement.opacity,
+                            layer.placement.opacity,
+                            layer.placement.opacity,
+                            layer.placement.opacity,
+                        ),
+                        depth_offset: layer.placement.order,
+                        ..Default::default()
+                    },
+                }
             })
             .collect();
 
@@ -251,6 +278,15 @@ impl Compositor {
         let draw_data = RectangleDrawData::new(&self.ctx, &rects)
             .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
 
+        // `rotation`/`eye` は `motolii-core::CameraProjection` が返す形(world → view の
+        // 回転 + カメラ位置)。`macaw::IsoTransform::transform_point3` は
+        // `rotation*p + translation` を計算するので、`translation = -(rotation*eye)`
+        // にすれば `view = rotation*(p - eye)` になる。
+        let view_from_world = macaw::IsoTransform::from_rotation_translation(
+            projection.rotation,
+            -(projection.rotation * projection.eye),
+        );
+
         let mut view_builder = ViewBuilder::new(
             &self.ctx,
             TargetConfiguration {
@@ -258,11 +294,11 @@ impl Compositor {
                 // 「同じ絵が出る」ことが preview=export の前提なので beauty より決定性。
                 render_mode: RenderMode::Deterministic,
                 resolution_in_pixel: [comp.width, comp.height],
-                view_from_world: macaw::IsoTransform::IDENTITY,
-                projection_from_view: Projection::Orthographic {
-                    camera_mode: view_builder::OrthographicCameraMode::TopLeftCornerAndExtendZ,
-                    vertical_world_size: comp.height as f32,
-                    far_plane_distance: 1000.0,
+                view_from_world,
+                projection_from_view: Projection::Perspective {
+                    vertical_fov: projection.vertical_fov_radians,
+                    near_plane_distance: projection.near_plane_distance,
+                    aspect_ratio: projection.aspect_ratio,
                 },
                 pixels_per_point: 1.0,
                 ..Default::default()

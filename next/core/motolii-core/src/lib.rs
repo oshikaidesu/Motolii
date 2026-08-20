@@ -16,11 +16,16 @@
 //!
 //! 仕様: docs/specs/M1-vertical-slice.md「インターフェース契約」
 
+mod camera;
 mod frame;
 mod time;
 mod wide_div;
 
-pub use frame::{CompSpec, LayerPlacement, 
+pub use camera::{
+    camera_projection, camera_screen_from_world_at_z, camera_screen_from_world_z0,
+    distance_from_camera, CameraProjection, ResolvedCamera, CAMERA_BASE_VERTICAL_FOV_DEGREES,
+};
+pub use frame::{CompSpec, LayerPlacement,
     premultiply_rgba_f32, premultiply_rgba_u8, ColorSpace, CpuFrame, FrameDesc, FrameDescError,
     PixelFormat,
 };

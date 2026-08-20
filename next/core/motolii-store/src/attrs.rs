@@ -83,6 +83,10 @@ pub struct LayerAttrs {
     /// `layers/visual-layer/ao`(Auto Orient)。`position` が Vec2 単一 track なので
     /// 定義できる(裁定61 の余得)。
     pub auto_orient: bool,
+    /// **カメラ変換を受けず画面に張り付く**(裁定113)。AE の「2Dレイヤはカメラを
+    /// 無視」という空間分割の形は採らず、明示属性1つに畳んである。既定 false
+    /// (裁定113「pinned は明示属性」)。
+    pub pinned: bool,
 }
 
 impl Default for LayerAttrs {
@@ -94,6 +98,7 @@ impl Default for LayerAttrs {
             matte: None,
             name: String::new(),
             auto_orient: false,
+            pinned: false,
         }
     }
 }
