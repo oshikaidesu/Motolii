@@ -60,7 +60,7 @@ composition	motion-blur	sp	Shutter Phase	不採用	同上(シャッター位相)
 composition	motion-blur	spf	Samples per Frame	不採用	同上(フレームあたりサンプル数)			lottie
 composition	user-metadata	customProps	Custom Properties	不採用	型のない袋を document に開けると、そこが第二の意味の置き場になる			lottie
 composition	user-metadata	filename	Filename	不採用	file 名を file の中に書く形。名前を変えた瞬間ずれるので正本が2つになる			lottie
-constants	blend-mode		Blend Mode	採用予定	0..15。発明の余地が無い(裁定67)		shape-2	lottie
+constants	blend-mode		Blend Mode	採用予定	0..15。発明の余地が無い(裁定67)。層の語彙なので束を shape-2 から layer-meta へ付け替え(2026-08-20、shape-2レーンの指摘)		layer-meta	lottie
 constants	composite		Composite	採用済	repeater の Above/Below	pub enum Composite	shape-1	lottie
 constants	fill-rule		Fill Rule	採用済	nonzero / evenodd。中マドを賄う	pub enum FillRule	shape-1	lottie
 constants	font-path-origin		Font Path Origin	不採用	フォント取得元4種は Web プレイヤの都合			lottie
@@ -68,7 +68,7 @@ constants	gradient-type		Gradient Type	採用済	linear / radial	pub enum Gradie
 constants	line-cap		Line Cap	採用済	butt/round/square	pub enum LineCap	shape-1	lottie
 constants	line-join		Line Join	採用済	miter/round/bevel。offset-path と共有	pub enum LineJoin	shape-1	lottie
 constants	mask-mode		Mask Mode	採用予定	Add/Subtract/Intersect/Lighten/Darken/Difference。`None` は列挙に混ぜない — 消すことはモードではない		mask	lottie
-constants	matte-mode		Matte Mode	採用予定	Alpha/InvertedAlpha/Luma/InvertedLuma は AE の語彙(裁定66)		shape-2	lottie
+constants	matte-mode		Matte Mode	採用予定	Alpha/InvertedAlpha/Luma/InvertedLuma は AE の語彙(裁定66)。層の語彙なので束を shape-2 から layer-meta へ付け替え(2026-08-20、shape-2レーンの指摘)		layer-meta	lottie
 constants	merge-mode		Merge Mode	不採用	パスブーリアンは対象外			lottie
 constants	shape-direction		Shape Direction	不採用	頂点順で表現する			lottie
 constants	star-type		Star Type	採用済	star / polygon	pub enum StarType	shape-2	lottie
