@@ -8,74 +8,74 @@ assets	all-assets	@extends	assets/image	該当なし	継承元
 assets	all-assets	@extends	assets/data-source	該当なし	継承元
 assets	all-assets	@extends	assets/sound	該当なし	継承元
 assets	asset	@extends	helpers/visual-object	該当なし	継承元
-assets	asset	id	ID	未判定	
+assets	asset	id	ID	不採用	素材は layer が直に持つ(LayerSource::Media の path + fingerprint)。表+refId の間接参照は1枚 JSON を自己完結させる配信フォーマットの都合で、編集器では layer/表の二重帳簿になる
 assets	data-source	@extends	assets/file-asset	該当なし	継承元
-assets	data-source	t	Type	未判定	
+assets	data-source	t	Type	不採用	外部 JSON でデータ駆動する再生フォーマットの機能。外から値を注ぐ口は型付き link で持つ
 assets	file-asset	@extends	assets/asset	該当なし	継承元
-assets	file-asset	e	Embedded	未判定	
-assets	file-asset	p	File Name	未判定	
-assets	file-asset	u	File Path	未判定	
+assets	file-asset	e	Embedded	不採用	素材の base64 埋め込み。1枚で配るための物。Motolii は FFmpeg でファイルを読み project file に素材を抱えない
+assets	file-asset	p	File Name	採用済	LayerSource::Media.path。ただし asset 表の中ではなく layer が直に持つ
+assets	file-asset	u	File Path	不採用	パスは1本で持つ。名前とディレクトリに割ると片方だけ書き換えた「開けないパス」が作れる
 assets	image	@extends	assets/file-asset	該当なし	継承元
 assets	image	@extends	helpers/slottable-object	該当なし	継承元
-assets	image	h	Height	未判定	
-assets	image	t	Type	未判定	
-assets	image	w	Width	未判定	
+assets	image	h	Height	不採用	素材の寸法は Document が持たない。probe が決め engine が実寸で埋める(裁定29)
+assets	image	t	Type	不採用	連番静止画を真偽値で表す形は採らない。要る日に LayerSource の variant として足す(裁定19)
+assets	image	w	Width	不採用	h と同じ。寸法は probe の担当(裁定29)
 assets	precomposition	@extends	assets/asset	該当なし	継承元
 assets	precomposition	@extends	composition/composition	該当なし	継承元
-assets	precomposition	fr	Framerate	未判定	
-assets	precomposition	xt	Extra	未判定	
+assets	precomposition	fr	Framerate	不採用	プリコンポは設計上の除外(GOALS)。comp ごとに fps を持つと時刻の正本が増える
+assets	precomposition	xt	Extra	不採用	同上。「どこからも参照されない comp」は不正状態の温床
 assets	sound	@extends	assets/file-asset	該当なし	継承元
 composition	animation	@extends	helpers/visual-object	該当なし	継承元
 composition	animation	@extends	composition/composition	該当なし	継承元
-composition	animation	assets	Assets	未判定	
-composition	animation	chars	Characters	未判定	
-composition	animation	comps	Extra Compositions	未判定	
+composition	animation	assets	Assets	不採用	project 素材表。表を建てない。素材の同一性は fingerprint(内容識別)が持つ
+composition	animation	chars	Characters	不採用	グリフを図形に焼いた表。フォントを持たない再生環境のための物
+composition	animation	comps	Extra Compositions	不採用	参照されないプリコンポの置き場。プリコンポ自体が除外(GOALS)
 composition	animation	ddd	Threedimensional	不採用	3D
-composition	animation	fonts	Fonts	未判定	
+composition	animation	fonts	Fonts	不採用	document にフォント表を建てない。指定はテキストレイヤが直に持つ
 composition	animation	fr	Framerate	採用済	Composition.fps。**有理数で持つ**(Lottie の f64 は 30000/1001 を表せない。裁定64)
 composition	animation	h	Height	採用済	Composition.height
 composition	animation	ip	In Point	不採用	作業領域は view の関心であって document の関心ではない(裁定64)
 composition	animation	markers	Markers	採用予定	ロケータに写る
-composition	animation	mb	Motion Blur	未判定	
-composition	animation	meta	Metadata	未判定	
-composition	animation	metadata	User Metadata	未判定	
+composition	animation	mb	Motion Blur	不採用	モーションブラーは合成器側の関心で document には持たない
+composition	animation	meta	Metadata	不採用	配信物メタ(作者・説明・生成器)。編集の意味ではない
+composition	animation	metadata	User Metadata	不採用	同上(利用者メタ)
 composition	animation	op	Out Point	採用済	Composition.duration_frames
 composition	animation	slots	Slots	採用予定	Vism(型付き input を持つ再利用単位)の先例になりうる
-composition	animation	v	Bodymovin version, on very old versions some things might be slightly different from what is explained here	未判定	
-composition	animation	ver	Specification Version	未判定	
+composition	animation	v	Bodymovin version, on very old versions some things might be slightly different from what is explained here	不採用	書き出した器具のバージョン。保存形式は上流の .rrd(裁定55)で版は store 側が持つ
+composition	animation	ver	Specification Version	不採用	仕様版。document に持つと .rrd の版と2つになる
 composition	animation	w	Width	採用済	Composition.width
-composition	composition	layers	Layers	未判定	
-composition	metadata	a	Author	未判定	
-composition	metadata	d	Description	未判定	
-composition	metadata	g	Generator	未判定	
-composition	metadata	k	Keywords	未判定	
-composition	metadata	tc	Theme Color	未判定	
-composition	motion-blur	asl	Adaptive Sample Limit	未判定	
-composition	motion-blur	sa	Shutter Angle	未判定	
-composition	motion-blur	sp	Shutter Phase	未判定	
-composition	motion-blur	spf	Samples per Frame	未判定	
-composition	user-metadata	customProps	Custom Properties	未判定	
-composition	user-metadata	filename	Filename	未判定	
+composition	composition	layers	Layers	採用済	layer の集合。store の entity(LayerId)。重ね順は配列順ではなく LayerMeta.order(裁定36)
+composition	metadata	a	Author	不採用	配信物のメタ(著者)
+composition	metadata	d	Description	不採用	配信物のメタ(説明)
+composition	metadata	g	Generator	不採用	生成した器具の名前。編集の意味ではない
+composition	metadata	k	Keywords	不採用	配信物のメタ(キーワード)
+composition	metadata	tc	Theme Color	不採用	表示側の飾りで document の意味ではない
+composition	motion-blur	asl	Adaptive Sample Limit	不採用	モーションブラーの実装パラメータ。合成器側の関心
+composition	motion-blur	sa	Shutter Angle	不採用	同上(シャッター角)
+composition	motion-blur	sp	Shutter Phase	不採用	同上(シャッター位相)
+composition	motion-blur	spf	Samples per Frame	不採用	同上(フレームあたりサンプル数)
+composition	user-metadata	customProps	Custom Properties	不採用	型のない袋を document に開けると、そこが第二の意味の置き場になる
+composition	user-metadata	filename	Filename	不採用	file 名を file の中に書く形。名前を変えた瞬間ずれるので正本が2つになる
 constants	blend-mode		Blend Mode	採用予定	0..15。発明の余地が無い(裁定67)
-constants	composite		Composite	未判定	
-constants	fill-rule		Fill Rule	未判定	
-constants	font-path-origin		Font Path Origin	未判定	
-constants	gradient-type		Gradient Type	未判定	
-constants	line-cap		Line Cap	未判定	
-constants	line-join		Line Join	未判定	
-constants	mask-mode		Mask Mode	未判定	
+constants	composite		Composite	採用予定	repeater の Above/Below
+constants	fill-rule		Fill Rule	採用予定	nonzero / evenodd。中マドを賄う
+constants	font-path-origin		Font Path Origin	不採用	フォント取得元4種は Web プレイヤの都合
+constants	gradient-type		Gradient Type	採用予定	linear / radial
+constants	line-cap		Line Cap	採用予定	butt/round/square
+constants	line-join		Line Join	採用予定	miter/round/bevel。offset-path と共有
+constants	mask-mode		Mask Mode	採用予定	Add/Subtract/Intersect/Lighten/Darken/Difference。`None` は列挙に混ぜない — 消すことはモードではない
 constants	matte-mode		Matte Mode	採用予定	Alpha/InvertedAlpha/Luma/InvertedLuma は AE の語彙(裁定66)
-constants	merge-mode		Merge Mode	未判定	
-constants	shape-direction		Shape Direction	未判定	
-constants	star-type		Star Type	未判定	
-constants	stroke-dash-type		Stroke Dash Type	未判定	
-constants	text-based		Text Based	未判定	
-constants	text-caps		Text Caps	未判定	
-constants	text-grouping		Text Grouping	未判定	
-constants	text-justify		Text Justify	未判定	
-constants	text-range-units		Text Range Units	未判定	
-constants	text-shape		Text Shape	未判定	
-constants	trim-multiple-shapes		Trim Multiple Shapes	未判定	
+constants	merge-mode		Merge Mode	不採用	パスブーリアンは対象外
+constants	shape-direction		Shape Direction	不採用	頂点順で表現する
+constants	star-type		Star Type	採用予定	star / polygon
+constants	stroke-dash-type		Stroke Dash Type	不採用	pattern + offset の2フィールドに畳む
+constants	text-based		Text Based	採用予定	範囲選択器の粒度。AE 由来で発明の余地が無い。「文字」はクラスタに読み替える
+constants	text-caps		Text Caps	不採用	表示だけ大文字化は元文字列と表示の二重帳簿。SmallCaps は OpenType 側
+constants	text-grouping		Text Grouping	採用予定	グループ内アンカーの粒度。text-model §6 の未決が埋まる
+constants	text-justify		Text Justify	採用予定	Left/Right/Center。両端揃え4種は後回し
+constants	text-range-units		Text Range Units	採用予定	Percent/Index。歌詞は index、テンプレートは percent
+constants	text-shape		Text Shape	採用予定	重みカーブ6種。§6「shape の初期セット」の未決が埋まる
+constants	trim-multiple-shapes		Trim Multiple Shapes	採用予定	trim の複数輪郭モード
 effect-values	all-effect-values	@extends	effect-values/angle	該当なし	継承元
 effect-values	all-effect-values	@extends	effect-values/checkbox	該当なし	継承元
 effect-values	all-effect-values	@extends	effect-values/color	該当なし	継承元
@@ -86,33 +86,33 @@ effect-values	all-effect-values	@extends	effect-values/no-value	該当なし	継
 effect-values	all-effect-values	@extends	effect-values/point	該当なし	継承元
 effect-values	all-effect-values	@extends	effect-values/slider	該当なし	継承元
 effect-values	angle	@extends	effect-values/effect-value	該当なし	継承元
-effect-values	angle	ty	Type	未判定	
-effect-values	angle	v	Value	未判定	
+effect-values	angle	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effect-values	angle	v	Value	採用予定	scalar param + 角度の意味域
 effect-values	checkbox	@extends	effect-values/effect-value	該当なし	継承元
-effect-values	checkbox	ty	Type	未判定	
-effect-values	checkbox	v	Value	未判定	
+effect-values	checkbox	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effect-values	checkbox	v	Value	採用予定	**Bool** param。旧 ValueType に無かった穴
 effect-values	color	@extends	effect-values/effect-value	該当なし	継承元
-effect-values	color	ty	Type	未判定	
-effect-values	color	v	Value	未判定	
+effect-values	color	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effect-values	color	v	Value	採用予定	color param(animatable)
 effect-values	drop-down	@extends	effect-values/effect-value	該当なし	継承元
-effect-values	drop-down	ty	Type	未判定	
-effect-values	drop-down	v	Value	未判定	
+effect-values	drop-down	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effect-values	drop-down	v	Value	採用予定	**Enum** param。旧 ValueType に無かった穴
 effect-values	effect-value	@extends	helpers/visual-object	該当なし	継承元
-effect-values	effect-value	ix	Effect Index	未判定	
-effect-values	effect-value	ty	Type	未判定	
+effect-values	effect-value	ix	Effect Index	不採用	位置による同一性。param は名前で持つ(裁定35/65)
+effect-values	effect-value	ty	Type	不採用	payload 型と UI hint の混合。Motolii は2つに分ける
 effect-values	ignored	@extends	effect-values/effect-value	該当なし	継承元
-effect-values	ignored	ty	Type	未判定	
-effect-values	ignored	v	Value	未判定	
+effect-values	ignored	ty	Type	不採用	上流の穴埋め
+effect-values	ignored	v	Value	不採用	唯一 animatable でない値。「読めない」を「無い」に潰す形(裁定37 の逆)
 effect-values	layer	@extends	effect-values/effect-value	該当なし	継承元
-effect-values	layer	ty	Type	未判定	
-effect-values	layer	v	Value	未判定	
-effect-values	no-value		Effect No Value	未判定	
+effect-values	layer	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effect-values	layer	v	Value	採用予定	**LayerId** param。Lottie の layer index は採らない(裁定65)
+effect-values	no-value		Effect No Value	不採用	空 object を param の場所に置く上流の穴埋め
 effect-values	point	@extends	effect-values/effect-value	該当なし	継承元
-effect-values	point	ty	Type	未判定	
-effect-values	point	v	Value	未判定	
+effect-values	point	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effect-values	point	v	Value	採用予定	Vec2 param
 effect-values	slider	@extends	effect-values/effect-value	該当なし	継承元
-effect-values	slider	ty	Type	未判定	
-effect-values	slider	v	Value	未判定	
+effect-values	slider	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effect-values	slider	v	Value	採用予定	scalar param。既存の KeyframeTrack にそのまま乗る
 effects	all-effects	@extends	effects/custom-effect	該当なし	継承元
 effects	all-effects	@extends	effects/displacement-map-effect	該当なし	継承元
 effects	all-effects	@extends	effects/drop-shadow-effect	該当なし	継承元
@@ -131,81 +131,81 @@ effects	all-effects	@extends	effects/tritone-effect	該当なし	継承元
 effects	all-effects	@extends	effects/twirl-effect	該当なし	継承元
 effects	all-effects	@extends	effects/wavy-effect	該当なし	継承元
 effects	custom-effect	@extends	effects/effect	該当なし	継承元
-effects	custom-effect	ty	Type	未判定	
+effects	custom-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	displacement-map-effect	@extends	effects/effect	該当なし	継承元
-effects	displacement-map-effect	ef	Effect values	未判定	
-effects	displacement-map-effect	ty	Type	未判定	
+effects	displacement-map-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	displacement-map-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	drop-shadow-effect	@extends	effects/effect	該当なし	継承元
-effects	drop-shadow-effect	ef	Effect values	未判定	
-effects	drop-shadow-effect	ty	Type	未判定	
+effects	drop-shadow-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	drop-shadow-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	effect	@extends	helpers/visual-object	該当なし	継承元
-effects	effect	ef	Effect Values	未判定	
-effects	effect	en	Enabled	未判定	
-effects	effect	ix	Effect Index	未判定	
-effects	effect	np	Property Count	未判定	
-effects	effect	ty	Type	未判定	
+effects	effect	ef	Effect Values	採用予定	param 列は持つ。ただし**名前つき map**(位置配列にしない)
+effects	effect	en	Enabled	採用予定	消さずに切る。int-boolean ではなく bool
+effects	effect	ix	Effect Index	不採用	位置=同一性。順序は配列順、同一性は id(裁定65)
+effects	effect	np	Property Count	不採用	`ef` の長さと同じことを言う正本が2つ(裁定59 の形)
+effects	effect	ty	Type	採用予定	「どの effect か」は持つ。ただし**plugin id 文字列**。閉じた int registry では first/third-party が同じ口にならない(D6)
 effects	fill-effect	@extends	effects/effect	該当なし	継承元
-effects	fill-effect	ef	Effect values	未判定	
-effects	fill-effect	ty	Type	未判定	
+effects	fill-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	fill-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	gaussian-blur-effect	@extends	effects/effect	該当なし	継承元
-effects	gaussian-blur-effect	ef	Effect values	未判定	
-effects	gaussian-blur-effect	ty	Type	未判定	
+effects	gaussian-blur-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	gaussian-blur-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	matte3-effect	@extends	effects/effect	該当なし	継承元
-effects	matte3-effect	ef	Effect values	未判定	
-effects	matte3-effect	ty	Type	未判定	
+effects	matte3-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	matte3-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	mesh-warp-effect	@extends	effects/effect	該当なし	継承元
-effects	mesh-warp-effect	ef	Effect values	未判定	
-effects	mesh-warp-effect	ty	Type	未判定	
+effects	mesh-warp-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	mesh-warp-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	pro-levels-effect	@extends	effects/effect	該当なし	継承元
-effects	pro-levels-effect	ef	Effect values	未判定	
-effects	pro-levels-effect	ty	Type	未判定	
+effects	pro-levels-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	pro-levels-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	puppet-effect	@extends	effects/effect	該当なし	継承元
-effects	puppet-effect	ef	Effect values	未判定	
-effects	puppet-effect	ty	Type	未判定	
+effects	puppet-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	puppet-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	radial-wipe-effect	@extends	effects/effect	該当なし	継承元
-effects	radial-wipe-effect	ef	Effect values	未判定	
-effects	radial-wipe-effect	ty	Type	未判定	
+effects	radial-wipe-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	radial-wipe-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	spherize-effect	@extends	effects/effect	該当なし	継承元
-effects	spherize-effect	ef	Effect values	未判定	
-effects	spherize-effect	ty	Type	未判定	
+effects	spherize-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	spherize-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	stroke-effect	@extends	effects/effect	該当なし	継承元
-effects	stroke-effect	ef	Effect values	未判定	
-effects	stroke-effect	ty	Type	未判定	
+effects	stroke-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	stroke-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	tint-effect	@extends	effects/effect	該当なし	継承元
-effects	tint-effect	ef	Effect values	未判定	
-effects	tint-effect	ty	Type	未判定	
+effects	tint-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	tint-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	tritone-effect	@extends	effects/effect	該当なし	継承元
-effects	tritone-effect	ef	Effect values	未判定	
-effects	tritone-effect	ty	Type	未判定	
+effects	tritone-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	tritone-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	twirl-effect	@extends	effects/effect	該当なし	継承元
-effects	twirl-effect	ef	Effect values	未判定	
-effects	twirl-effect	ty	Type	未判定	
+effects	twirl-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	twirl-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
 effects	wavy-effect	@extends	effects/effect	該当なし	継承元
-effects	wavy-effect	ef	Effect values	未判定	
-effects	wavy-effect	ty	Type	未判定	
-helpers	marker	cm	Comment	未判定	
-helpers	marker	dr	Duration	未判定	
-helpers	marker	tm	Time	未判定	
-helpers	mask	inv	Inverted	未判定	
-helpers	mask	mode	Mode	未判定	
-helpers	mask	o	Opacity	未判定	
-helpers	mask	pt	Shape	未判定	
-helpers	mask	x	Expand	未判定	
-helpers	slot	p	Property Value	未判定	
-helpers	slottable-object	sid	Slot Id	未判定	
+effects	wavy-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+effects	wavy-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む
+helpers	marker	cm	Comment	採用予定	ロケータの名前
+helpers	marker	dr	Duration	採用予定	範囲ロケータの尺。out point ではなく duration(裁定64 と同じ理由)
+helpers	marker	tm	Time	採用予定	ロケータの時刻。RationalTime で持つ
+helpers	mask	inv	Inverted	採用予定	マスクの反転。mode:Subtract とは別物
+helpers	mask	mode	Mode	採用予定	constants/mask-mode。前のマスクとの重ね方
+helpers	mask	o	Opacity	採用予定	マスクの不透明度。1.0 基準
+helpers	mask	pt	Shape	採用予定	マスク形状 = values/bezier のトラック。**Value にパス型を足す必要がある**
+helpers	mask	x	Expand	不採用	マスクの膨張/収縮はパスのオフセット演算。要る日に effect として足す
+helpers	slot	p	Property Value	採用予定	スロットが差し込む値
+helpers	slottable-object	sid	Slot Id	採用予定	スロット参照の識別子
 helpers	transform	a	Anchor Point	採用済	anchor。行列の中心
 helpers	transform	o	Opacity	採用済	opacity。ただし行列の外(裁定62)
-helpers	transform	or	Orientation	未判定	
+helpers	transform	or	Orientation	不採用	3D の向き(裁定65)
 helpers	transform	p	Position	採用済	position。anchor が着地する点
 helpers	transform	r	Rotation	採用済	rotation。度・時計回り
-helpers	transform	rx	X Rotation	未判定	
-helpers	transform	ry	Y Rotation	未判定	
-helpers	transform	rz	Z Rotation	未判定	
+helpers	transform	rx	X Rotation	不採用	3D の分割回転(裁定65)
+helpers	transform	ry	Y Rotation	不採用	同上
+helpers	transform	rz	Z Rotation	不採用	同上。split でない時は r と等価 = 二重帳簿でもある
 helpers	transform	s	Scale	採用済	scale。単位は 1.0 基準(パーセントは採らない)
 helpers	transform	sa	Skew Axis	採用予定	skew axis
 helpers	transform	sk	Skew	採用予定	skew。順序上の穴は空けてある
-helpers	visual-object	mn	Match Name	未判定	
-helpers	visual-object	nm	Name	未判定	
+helpers	visual-object	mn	Match Name	不採用	expression 用の第二の識別子。LayerId/PropertyId がある
+helpers	visual-object	nm	Name	採用予定	人が付ける表示名。同一性は LayerId のまま
 layers	all-layers	@extends	layers/precomposition-layer	該当なし	継承元
 layers	all-layers	@extends	layers/solid-layer	該当なし	継承元
 layers	all-layers	@extends	layers/image-layer	該当なし	継承元
@@ -217,66 +217,66 @@ layers	all-layers	@extends	layers/data-layer	該当なし	継承元
 layers	all-layers	@extends	layers/camera-layer	該当なし	継承元
 layers	all-layers	@extends	layers/unknown-layer	該当なし	継承元
 layers	audio-layer	@extends	layers/layer	該当なし	継承元
-layers	audio-layer	au	Audio Settings	未判定	
-layers	audio-layer	refId	Sound Id	未判定	
-layers	audio-layer	ty	Type	未判定	
-layers	audio-settings	lv	Level	未判定	
+layers	audio-layer	au	Audio Settings	不採用	音量を専用の入れ子に畳む形は採らない。level は普通の property track として持つ
+layers	audio-layer	refId	Sound Id	不採用	asset 表への間接参照。素材は layer が直に持つ
+layers	audio-layer	ty	Type	採用済	音声だけの素材も LayerSource::Media を通る(裁定28)。鳴るかどうかは probe が決める
+layers	audio-settings	lv	Level	採用予定	clip の音量(gain)。GOALS 標準。普通の property track として持つ
 layers	camera-layer	@extends	layers/layer	該当なし	継承元
-layers	camera-layer	ks	Transform	未判定	
-layers	camera-layer	pe	Perspective	未判定	
-layers	camera-layer	ty	Type	未判定	
+layers	camera-layer	ks	Transform	不採用	3D カメラの transform。3D 系は不採用(裁定65)
+layers	camera-layer	pe	Perspective	不採用	Z=0 平面までの距離。3D 系は不採用(裁定65)
+layers	camera-layer	ty	Type	不採用	カメラレイヤ自体を持たない。3D 系は不採用(裁定65)
 layers	data-layer	@extends	layers/layer	該当なし	継承元
-layers	data-layer	refId	Data source Id	未判定	
-layers	data-layer	ty	Type	未判定	
+layers	data-layer	refId	Data source Id	不採用	外部 JSON を差し込むデータ駆動レイヤ
+layers	data-layer	ty	Type	不採用	同上
 layers	image-layer	@extends	layers/visual-layer	該当なし	継承元
-layers	image-layer	refId	Reference Id	未判定	
-layers	image-layer	ty	Type	未判定	
+layers	image-layer	refId	Reference Id	不採用	asset 表への間接参照。素材は layer が直に持つ
+layers	image-layer	ty	Type	採用済	静止画も LayerSource::Media(動画と同じ variant、裁定28)
 layers	layer	@extends	helpers/visual-object	該当なし	継承元
-layers	layer	ddd	Threedimensional	未判定	
-layers	layer	hd	Hidden	未判定	
-layers	layer	ind	Index	未判定	
-layers	layer	ip	In Point	未判定	
-layers	layer	op	Out Point	未判定	
-layers	layer	parent	Parent Index	未判定	
-layers	layer	sr	Time Stretch	未判定	
-layers	layer	st	Start Time	未判定	
-layers	layer	ty	Type	未判定	
+layers	layer	ddd	Threedimensional	不採用	3D 系は不採用(裁定65)
+layers	layer	hd	Hidden	採用予定	行の表示/非表示(GOALS 標準の mute)。tombstone の present(削除)とは別物
+layers	layer	ind	Index	不採用	配列位置による同一性は挿入削除で壊れる。LayerId がある(裁定65)
+layers	layer	ip	In Point	採用済	LayerTiming.start
+layers	layer	op	Out Point	採用済	LayerTiming.duration として持つ。終端フレームだと start > op の不正状態が作れる
+layers	layer	parent	Parent Index	採用予定	親子(GOALS 標準)。参照は ind ではなく LayerId(裁定65)
+layers	layer	sr	Time Stretch	採用予定	速度。LayerTiming に足す。今の写像は 1:1 固定しか表せない(裁定63 で空けた穴)
+layers	layer	st	Start Time	採用済	代数的に等価な LayerTiming.source_in(st = start - source_in、裁定63)
+layers	layer	ty	Type	採用済	LayerSource の variant が兼ねる(裁定19)。数値の型タグは持たない
 layers	null-layer	@extends	layers/visual-layer	該当なし	継承元
-layers	null-layer	ty	Type	未判定	
+layers	null-layer	ty	Type	採用予定	絵を持たず transform だけ持つ layer(AE の Null Object)。親子の受け皿
 layers	precomposition-layer	@extends	layers/visual-layer	該当なし	継承元
-layers	precomposition-layer	h	Height	未判定	
-layers	precomposition-layer	refId	Reference Id	未判定	
-layers	precomposition-layer	st	Start Time	未判定	
-layers	precomposition-layer	tm	Time Remap	未判定	
-layers	precomposition-layer	ty	Type	未判定	
-layers	precomposition-layer	w	Width	未判定	
+layers	precomposition-layer	h	Height	不採用	プリコンポは設計上の除外(GOALS)。グループ化+fold+ベイクへ置換済み
+layers	precomposition-layer	refId	Reference Id	不採用	同上
+layers	precomposition-layer	st	Start Time	不採用	同上。st の意味は layer/st 側で決着済み
+layers	precomposition-layer	tm	Time Remap	採用予定	Time Remap(GOALS 標準)。timing ではなく property track として持ち precomp 専用にしない — 素材時刻を返す property なので Media にそのまま効く
+layers	precomposition-layer	ty	Type	不採用	プリコンポは設計上の除外(GOALS)
+layers	precomposition-layer	w	Width	不採用	同上(クリップ矩形)
 layers	shape-layer	@extends	layers/visual-layer	該当なし	継承元
-layers	shape-layer	shapes	Shapes	未判定	
-layers	shape-layer	ty	Type	未判定	
+layers	shape-layer	shapes	Shapes	採用予定	図形の列を layer が持つ形は採る。中身の語彙は shapes 群の判断
+layers	shape-layer	ty	Type	採用予定	ベクタ生成物。LayerSource の variant として足す。パスラスタライザはテキストで結局要る
 layers	solid-layer	@extends	layers/visual-layer	該当なし	継承元
-layers	solid-layer	sc	Color	未判定	
-layers	solid-layer	sh	Height	未判定	
-layers	solid-layer	sw	Width	未判定	
-layers	solid-layer	ty	Type	未判定	
+layers	solid-layer	sc	Color	採用済	LayerSource::Solid.rgba
+layers	solid-layer	sh	Height	採用済	LayerSource::Solid.height。単色は素材が無いので Document が寸法を持つ
+layers	solid-layer	sw	Width	採用済	LayerSource::Solid.width
+layers	solid-layer	ty	Type	採用済	LayerSource::Solid
 layers	text-layer	@extends	layers/visual-layer	該当なし	継承元
-layers	text-layer	t	Data	未判定	
-layers	text-layer	ty	Type	未判定	
-layers	unknown-layer	ty		未判定	
+layers	text-layer	t	Data	採用予定	テキストの中身。語彙は text 群の判断
+layers	text-layer	ty	Type	採用予定	LayerSource の variant として足す(裁定19)
+layers	unknown-layer	ty		不採用	仕様外の型を黙って通すのは再生器の規則。LayerSource は閉じた enum で、置けない素材は理由つきで拒否する(M2/M13)
 layers	visual-layer	@extends	layers/layer	該当なし	継承元
 layers	visual-layer	ao	Auto Orient	採用予定	auto-orient。position が Vec2 単一なら定義できる
 layers	visual-layer	bm	Blend Mode	採用予定	blend mode。Lottie の 0..15 をそのまま(裁定67)
-layers	visual-layer	cl	CSS Class	未判定	
-layers	visual-layer	cp	Collapse Transform	未判定	
+layers	visual-layer	cl	CSS Class	不採用	SVG レンダラ用の CSS class。再生フォーマットの都合
+layers	visual-layer	cp	Collapse Transform	不採用	deprecated(ct に置換済み)。同じことを言う正本が2つになる
 layers	visual-layer	ct	Collapse Transform	不採用	collapse transform は再生器の都合
-layers	visual-layer	ef	Effects	未判定	
-layers	visual-layer	hasMask	Has Masks	未判定	
-layers	visual-layer	ks	Transform	未判定	
-layers	visual-layer	ln	Layer XML ID	未判定	
-layers	visual-layer	masksProperties	Masks	未判定	
-layers	visual-layer	mb	Motion Blur	未判定	
-layers	visual-layer	sy	Layer style	未判定	
+layers	visual-layer	ef	Effects	採用予定	効果の列。GOALS 標準。拡張の口(裁定6/13)が刺さる先
+layers	visual-layer	hasMask	Has Masks	不採用	masksProperties があるかどうかの複製。片方だけ書ける二重帳簿(裁定66 と同じ形)
+layers	visual-layer	ks	Transform	採用済	LayerPlacement(裁定58/69)。行列を組むのは from_transform 1箇所。opacity は箱の外(裁定62)
+layers	visual-layer	ln	Layer XML ID	不採用	SVG レンダラ用の id 属性
+layers	visual-layer	masksProperties	Masks	採用予定	layer 内のパス切り抜き。matte(他 layer の alpha)とは別物
+layers	visual-layer	mb	Motion Blur	不採用	モーションブラーは合成器側の関心
+layers	visual-layer	sy	Layer style	不採用	レイヤスタイルは効果の第二経路。ef 1本に畳む
 layers	visual-layer	td	Matte Target	不採用	同上
-layers	visual-layer	tg	Layer XML tag name	未判定	
+layers	visual-layer	tg	Layer XML tag name	不採用	SVG レンダラ用の tag 名
 layers	visual-layer	tp	Matte Parent	不採用	同上。暗黙隣接参照は絶対に採らない(裁定66)
 layers	visual-layer	tt	Matte Mode	不採用	matte の3フィールド分割は採らず1フィールドに畳む(裁定66)
 properties	base-keyframe	h	Hold	採用済	Interp::Hold
@@ -284,57 +284,57 @@ properties	base-keyframe	i	In Tangent	採用済	Interp::Bezier の x2,y2
 properties	base-keyframe	o	Out Tangent	採用済	Interp::Bezier の x1,y1
 properties	base-keyframe	t	Time	採用済	RationalTime で持つ(裁定64)
 properties	bezier-keyframe	@extends	properties/base-keyframe	該当なし	継承元
-properties	bezier-keyframe	e	End value	未判定	
-properties	bezier-keyframe	s	Value	未判定	
+properties	bezier-keyframe	e	End value	不採用	deprecated。正本が2つになる
+properties	bezier-keyframe	s	Value	採用予定	マスク形状のキー値。**Keyframe::value にパス型を足す**
 properties	bezier-property	@extends	properties/property	該当なし	継承元
-properties	bezier-property	a	Animated	未判定	
-properties	bezier-property	ix	Property Index	未判定	
-properties	bezier-property	k	Keyframes	未判定	
+properties	bezier-property	a	Animated	不採用	JSON の discriminator。Rust の enum で表す
+properties	bezier-property	ix	Property Index	不採用	expression 用の番号台帳。property は名前で引く
+properties	bezier-property	k	Keyframes	採用予定	KeyframeTrack に載る。載せる Value の側(パス型)がまだ無い
 properties	color-keyframe	@extends	properties/base-keyframe	該当なし	継承元
-properties	color-keyframe	e	End value	未判定	
-properties	color-keyframe	s	Value	未判定	
+properties	color-keyframe	e	End value	不採用	deprecated
+properties	color-keyframe	s	Value	採用済	Keyframe::value = Value::Color
 properties	color-property	@extends	properties/property	該当なし	継承元
-properties	color-property	a	Animated	未判定	
-properties	color-property	ix	Property Index	未判定	
-properties	color-property	k	Keyframes	未判定	
-properties	easing-handle	x	X	未判定	
-properties	easing-handle	y	Y	未判定	
+properties	color-property	a	Animated	不採用	JSON の discriminator
+properties	color-property	ix	Property Index	不採用	番号台帳
+properties	color-property	k	Keyframes	採用済	KeyframeTrack。Lottie が payload ごとに property 型を6つ作るのは JSON に直和型が無いため
+properties	easing-handle	x	X	採用済	Interp::Bezier の x1/x2。[0,1] 検証も入っている
+properties	easing-handle	y	Y	採用済	同 y1/y2。オーバーシュート可。成分ごとに別イージングは採らない
 properties	gradient-keyframe	@extends	properties/base-keyframe	該当なし	継承元
-properties	gradient-keyframe	e	End value	未判定	
-properties	gradient-keyframe	s	Value	未判定	
-properties	gradient-property	k	Gradient stops	未判定	
-properties	gradient-property	p	Color stop count	未判定	
+properties	gradient-keyframe	e	End value	不採用	deprecated、かつ gradient の平坦表現ごと採らない
+properties	gradient-keyframe	s	Value	不採用	同上
+properties	gradient-property	k	Gradient stops	不採用	停止列は KeyframeTrack + Value::List に載る。専用 property 型は不要
+properties	gradient-property	p	Color stop count	不採用	停止数は k の長さから出る。別に持つと食い違う
 properties	gradient-stops	@extends	properties/property	該当なし	継承元
-properties	gradient-stops	a	Animated	未判定	
-properties	gradient-stops	k	Keyframes	未判定	
+properties	gradient-stops	a	Animated	不採用	JSON の discriminator
+properties	gradient-stops	k	Keyframes	不採用	同上
 properties	position-keyframe	@extends	properties/vector-keyframe	該当なし	継承元
 properties	position-keyframe	ti	Value In Tangent	採用予定	空間ベジェ。position を Vec2 単一にしたので入る余地がある(裁定61)
 properties	position-keyframe	to	Value Out Tangent	採用予定	同上
 properties	position-property	@extends	properties/property	該当なし	継承元
-properties	position-property	a	Animated	未判定	
-properties	position-property	ix	Property Index	未判定	
-properties	position-property	k	Keyframes	未判定	
-properties	position-property	l	Length	未判定	
-properties	property	a	Animated	未判定	
-properties	property	ix	Property Index	未判定	
-properties	property	sid	Slot ID	未判定	
-properties	property	x	Expression	未判定	
+properties	position-property	a	Animated	不採用	JSON の discriminator
+properties	position-property	ix	Property Index	不採用	番号台帳
+properties	position-property	k	Keyframes	採用済	KeyframeTrack(Value::Vec2)。x/y に割らない(裁定61)
+properties	position-property	l	Length	不採用	成分数は型が持つ
+properties	property	a	Animated	不採用	JSON の discriminator
+properties	property	ix	Property Index	不採用	番号台帳
+properties	property	sid	Slot ID	採用予定	スロット参照。値/トラック か スロット参照 かの enum にする
+properties	property	x	Expression	不採用	AE の JS 式。処理系を1本抱えることになり軸4に反する
 properties	scalar-property	@extends	properties/property	該当なし	継承元
-properties	scalar-property	a	Animated	未判定	
-properties	scalar-property	ix	Property Index	未判定	
-properties	scalar-property	k	Keyframes	未判定	
+properties	scalar-property	a	Animated	不採用	JSON の discriminator
+properties	scalar-property	ix	Property Index	不採用	番号台帳
+properties	scalar-property	k	Keyframes	採用済	KeyframeTrack(Value::F64)
 properties	split-position	s	Split	採用予定	split は variant として後で
-properties	split-position	x	X Position	未判定	
-properties	split-position	y	Y Position	未判定	
+properties	split-position	x	X Position	採用予定	split variant の X 側 track
+properties	split-position	y	Y Position	採用予定	同 Y 側
 properties	splittable-position-property	@extends	properties/position-property	該当なし	継承元
 properties	splittable-position-property	@extends	properties/split-position	該当なし	継承元
 properties	vector-keyframe	@extends	properties/base-keyframe	該当なし	継承元
-properties	vector-keyframe	e	End value	未判定	
-properties	vector-keyframe	s	Value	未判定	
+properties	vector-keyframe	e	End value	不採用	deprecated
+properties	vector-keyframe	s	Value	採用済	Keyframe::value = Value::Vec2
 properties	vector-property	@extends	properties/property	該当なし	継承元
-properties	vector-property	a	Animated	未判定	
-properties	vector-property	k	Keyframes	未判定	
-properties	vector-property	l	Length	未判定	
+properties	vector-property	a	Animated	不採用	JSON の discriminator
+properties	vector-property	k	Keyframes	採用済	KeyframeTrack
+properties	vector-property	l	Length	不採用	成分数は型が持つ
 shapes	all-graphic-elements	@extends	shapes/ellipse	該当なし	継承元
 shapes	all-graphic-elements	@extends	shapes/fill	該当なし	継承元
 shapes	all-graphic-elements	@extends	shapes/gradient-fill	該当なし	継承元
@@ -355,120 +355,120 @@ shapes	all-graphic-elements	@extends	shapes/trim-path	該当なし	継承元
 shapes	all-graphic-elements	@extends	shapes/twist	該当なし	継承元
 shapes	all-graphic-elements	@extends	shapes/zig-zag	該当なし	継承元
 shapes	all-graphic-elements	@extends	shapes/unknown-shape	該当なし	継承元
-shapes	base-gradient	a	Highlight Angle	未判定	
-shapes	base-gradient	e	End Point	未判定	
-shapes	base-gradient	g	Colors	未判定	
-shapes	base-gradient	h	Highlight Length	未判定	
-shapes	base-gradient	s	Start Point	未判定	
-shapes	base-gradient	t	Gradient Type	未判定	
-shapes	base-stroke	d	Dashes	未判定	
-shapes	base-stroke	lc	Line Cap	未判定	
-shapes	base-stroke	lj	Line Join	未判定	
-shapes	base-stroke	ml	Miter Limit	未判定	
-shapes	base-stroke	ml2	Miter Limit	未判定	
-shapes	base-stroke	w	Width	未判定	
+shapes	base-gradient	a	Highlight Angle	不採用	AE 固有の焦点ずらし。要るなら radial の焦点1点で表す
+shapes	base-gradient	e	End Point	採用予定	linear/radial の終点
+shapes	base-gradient	g	Colors	採用予定	色停止列。peniko::Gradient の stops に落ちる
+shapes	base-gradient	h	Highlight Length	不採用	`a` と対の焦点ずらし
+shapes	base-gradient	s	Start Point	採用予定	linear/radial の始点
+shapes	base-gradient	t	Gradient Type	採用予定	linear / radial の2値
+shapes	base-stroke	d	Dashes	採用予定	第2弾。kurbo::dash が上流にある。ただし「線が引かれていく」の大半は trim-path が吸う
+shapes	base-stroke	lc	Line Cap	採用予定	butt/round/square。上流の Cap をそのまま
+shapes	base-stroke	lj	Line Join	採用予定	miter/round/bevel。offset-path と同じ enum を共有
+shapes	base-stroke	ml	Miter Limit	不採用	`ml2` と同じ意味の正本が2つ。Lottie が両方持つのは互換のため
+shapes	base-stroke	ml2	Miter Limit	採用予定	miter limit はこの1本
+shapes	base-stroke	w	Width	採用予定	線幅
 shapes	ellipse	@extends	shapes/shape	該当なし	継承元
-shapes	ellipse	p	Position	未判定	
-shapes	ellipse	s	Size	未判定	
-shapes	ellipse	ty	Shape Type	未判定	
+shapes	ellipse	p	Position	不採用	層の position/anchor と同じことを言う。入れ子を採らない以上二重帳簿
+shapes	ellipse	s	Size	採用予定	パスを生成するパラメータであって素材の寸法ではない(裁定59 とは別物)
+shapes	ellipse	ty	Shape Type	採用予定	第1弾。pathgeom.rs に ellipse() がある
 shapes	fill	@extends	shapes/shape-style	該当なし	継承元
-shapes	fill	c	Color	未判定	
-shapes	fill	r	Fill Rule	未判定	
-shapes	fill	ty	Shape Type	未判定	
+shapes	fill	c	Color	採用予定	塗り色
+shapes	fill	r	Fill Rule	採用予定	nonzero / evenodd。**merge を落とした分の中マドをここで賄う**
+shapes	fill	ty	Shape Type	採用予定	第1弾。層は fill を Option で1つ持つ
 shapes	gradient-fill	@extends	shapes/shape-style	該当なし	継承元
 shapes	gradient-fill	@extends	shapes/base-gradient	該当なし	継承元
-shapes	gradient-fill	r	Fill Rule	未判定	
-shapes	gradient-fill	ty	Shape Type	未判定	
+shapes	gradient-fill	r	Fill Rule	採用予定	fill と同じ
+shapes	gradient-fill	ty	Shape Type	採用予定	第2弾。MV の背景・ロゴで頻出
 shapes	gradient-stroke	@extends	shapes/shape-style	該当なし	継承元
 shapes	gradient-stroke	@extends	shapes/base-stroke	該当なし	継承元
 shapes	gradient-stroke	@extends	shapes/base-gradient	該当なし	継承元
-shapes	gradient-stroke	ty	Shape Type	未判定	
+shapes	gradient-stroke	ty	Shape Type	採用予定	第2弾。Brush は fill/stroke に直交なので追加費用がほぼ無い
 shapes	graphic-element	@extends	helpers/visual-object	該当なし	継承元
-shapes	graphic-element	bm	Blend Mode	未判定	
-shapes	graphic-element	cl	CSS Class	未判定	
-shapes	graphic-element	hd	Hidden	未判定	
-shapes	graphic-element	ix	Property index	未判定	
-shapes	graphic-element	ln	Layer XML ID	未判定	
-shapes	graphic-element	ty	Shape Type	未判定	
+shapes	graphic-element	bm	Blend Mode	不採用	blend は層が持つ(裁定67)。shape 単位の blend は層の中にもう1つ合成器を建てる(背骨2)
+shapes	graphic-element	cl	CSS Class	不採用	SVG 再生器の都合
+shapes	graphic-element	hd	Hidden	採用予定	演算子スタック1段の有効/無効。層の visible とは別
+shapes	graphic-element	ix	Property index	不採用	式から参照する索引。文字列式を採らない(D5)
+shapes	graphic-element	ln	Layer XML ID	不採用	SVG 再生器の都合
+shapes	graphic-element	ty	Shape Type	採用予定	Rust の enum variant tag として自然に出る
 shapes	group	@extends	shapes/graphic-element	該当なし	継承元
-shapes	group	cix	Property index	未判定	
-shapes	group	it	Shapes	未判定	
-shapes	group	np	Number Of Properties	未判定	
-shapes	group	ty	Shape Type	未判定	
+shapes	group	cix	Property index	不採用	式の索引
+shapes	group	it	Shapes	不採用	**shape 内の入れ子を持たない**。修飾子が「同じ配列の手前の兄弟」に暗黙に効く模型は裁定66 と同型で、並べ替えが結果を黙って変える
+shapes	group	np	Number Of Properties	不採用	再生器の都合の冗長な数え
+shapes	group	ty	Shape Type	不採用	同上
 shapes	merge	@extends	shapes/graphic-element	該当なし	継承元
-shapes	merge	mm	Merge Mode	未判定	
-shapes	merge	ty	Shape Type	未判定	
+shapes	merge	mm	Merge Mode	不採用	パスブーリアンは対象外(concept.md 2026-07-10)。中マドは fill-rule で賄う
+shapes	merge	ty	Shape Type	不採用	同上
 shapes	modifier	@extends	shapes/graphic-element	該当なし	継承元
 shapes	no-style	@extends	shapes/shape-style	該当なし	継承元
-shapes	no-style	ty	Shape Type	未判定	
+shapes	no-style	ty	Shape Type	不採用	層が fill/stroke を Option で持てば None がそれ
 shapes	offset-path	@extends	shapes/modifier	該当なし	継承元
-shapes	offset-path	a	Amount	未判定	
-shapes	offset-path	lj	Line Join	未判定	
-shapes	offset-path	ml	Miter Limit	未判定	
-shapes	offset-path	ty	Shape Type	未判定	
+shapes	offset-path	a	Amount	採用予定	拡張/収縮量。pathgeom.rs offset_contour が実装済み
+shapes	offset-path	lj	Line Join	採用予定	base-stroke と同じ enum を共有
+shapes	offset-path	ml	Miter Limit	採用予定	同上
+shapes	offset-path	ty	Shape Type	採用予定	第2弾。v1 は閉路限定
 shapes	path	@extends	shapes/shape	該当なし	継承元
-shapes	path	ks	Shape	未判定	
-shapes	path	ty	Shape Type	未判定	
+shapes	path	ks	Shape	採用予定	**ベジェパスの正本**。pathgeom.rs の Vertex が Lottie の v/i/o と同型
+shapes	path	ty	Shape Type	採用予定	第1弾。SVG・テキストアウトライン・primitive はすべてこの型へ落ちる
 shapes	polystar	@extends	shapes/shape	該当なし	継承元
-shapes	polystar	ir	Inner Radius	未判定	
-shapes	polystar	is	Inner Roundness	未判定	
-shapes	polystar	or	Outer Radius	未判定	
-shapes	polystar	os	Outer Roundness	未判定	
-shapes	polystar	p	Position	未判定	
-shapes	polystar	pt	Points	未判定	
-shapes	polystar	r	Rotation	未判定	
-shapes	polystar	sy	Star Type	未判定	
-shapes	polystar	ty	Shape Type	未判定	
+shapes	polystar	ir	Inner Radius	採用予定	星のときだけ意味を持つ
+shapes	polystar	is	Inner Roundness	不採用	rounded-corners と同じ見た目に2つ目の口を作る
+shapes	polystar	or	Outer Radius	採用予定	外半径
+shapes	polystar	os	Outer Roundness	不採用	同上
+shapes	polystar	p	Position	不採用	層の transform と repeater の anchor で賄える
+shapes	polystar	pt	Points	採用予定	頂点数
+shapes	polystar	r	Rotation	不採用	層の rotation と同じ。放射状配置は repeater の transform の anchor が持つ
+shapes	polystar	sy	Star Type	採用予定	star / polygon の2値
+shapes	polystar	ty	Shape Type	採用予定	第2弾。pathgeom.rs に無いので新規(= owns: が増える側)
 shapes	pucker-bloat	@extends	shapes/modifier	該当なし	継承元
-shapes	pucker-bloat	a	Amount	未判定	
-shapes	pucker-bloat	ty	Shape Type	未判定	
+shapes	pucker-bloat	a	Amount	採用予定	pathgeom.rs pucker_bloat_contour が実装済み
+shapes	pucker-bloat	ty	Shape Type	採用予定	第2弾。演算子ファミリー(concept.md 2026-07-10 のコア要件)
 shapes	rectangle	@extends	shapes/shape	該当なし	継承元
-shapes	rectangle	p	Position	未判定	
-shapes	rectangle	r	Rounded	未判定	
-shapes	rectangle	s	Size	未判定	
-shapes	rectangle	ty	Shape Type	未判定	
+shapes	rectangle	p	Position	不採用	ellipse/p と同じ理由
+shapes	rectangle	r	Rounded	不採用	rounded-corners と重なる。UI は演算子を1段積む糖衣にする
+shapes	rectangle	s	Size	採用予定	パスを生成するパラメータ。scale と違い線幅・角丸が伸びない
+shapes	rectangle	ty	Shape Type	採用予定	第1弾。pathgeom.rs に rect() がある
 shapes	repeater	@extends	shapes/modifier	該当なし	継承元
-shapes	repeater	c	Copies	未判定	
-shapes	repeater	m	Composite	未判定	
-shapes	repeater	o	Offset	未判定	
-shapes	repeater	tr	Transform	未判定	
-shapes	repeater	ty	Shape Type	未判定	
+shapes	repeater	c	Copies	採用予定	**第1弾**。pathgeom.rs repeater_path が実装済み
+shapes	repeater	m	Composite	採用予定	Above/Below の重ね順
+shapes	repeater	o	Offset	採用予定	開始インデックスのずらし
+shapes	repeater	tr	Transform	採用予定	コピーごとの変換。**anchor を持つので放射状配置がここで成立**
+shapes	repeater	ty	Shape Type	採用予定	**第1弾**。trim-path と並ぶ MV の主語彙
 shapes	repeater-transform	@extends	helpers/transform	該当なし	継承元
-shapes	repeater-transform	eo	End Opacity	未判定	
-shapes	repeater-transform	so	Start Opacity	未判定	
+shapes	repeater-transform	eo	End Opacity	採用予定	最後のコピーの不透明度。幾何ではなく合成側の重み
+shapes	repeater-transform	so	Start Opacity	採用予定	同上
 shapes	rounded-corners	@extends	shapes/modifier	該当なし	継承元
-shapes	rounded-corners	r	Radius	未判定	
-shapes	rounded-corners	ty	Shape Type	未判定	
+shapes	rounded-corners	r	Radius	採用予定	pathgeom.rs round_corners_contour が実装済み
+shapes	rounded-corners	ty	Shape Type	採用予定	**第1弾**。rect の r と polystar の roundness を落とした受け皿
 shapes	shape	@extends	shapes/graphic-element	該当なし	継承元
-shapes	shape	d	Direction	未判定	
+shapes	shape	d	Direction	不採用	頂点順で表現できる。フラグと頂点順の二重帳簿になる
 shapes	shape-style	@extends	shapes/graphic-element	該当なし	継承元
-shapes	shape-style	o	Opacity	未判定	
+shapes	shape-style	o	Opacity	採用予定	fill/stroke の不透明度。1.0 基準
 shapes	stroke	@extends	shapes/shape-style	該当なし	継承元
 shapes	stroke	@extends	shapes/base-stroke	該当なし	継承元
-shapes	stroke	c	Color	未判定	
-shapes	stroke	ty	Shape Type	未判定	
+shapes	stroke	c	Color	採用予定	線色
+shapes	stroke	ty	Shape Type	採用予定	第1弾。層は stroke を Option で1つ持つ
 shapes	stroke-dash	@extends	helpers/visual-object	該当なし	継承元
-shapes	stroke-dash	n	Dash Type	未判定	
-shapes	stroke-dash	v	Length	未判定	
+shapes	stroke-dash	n	Dash Type	不採用	タグ付き項目の列で並べる形は採らない。pattern + offset の2フィールドに畳む
+shapes	stroke-dash	v	Length	採用予定	dash pattern の1要素の長さ
 shapes	transform	@extends	shapes/graphic-element	該当なし	継承元
 shapes	transform	@extends	helpers/transform	該当なし	継承元
-shapes	transform	ty	Shape Type	未判定	
+shapes	transform	ty	Shape Type	不採用	shape の中に第二の変換木を建てない。変換は層の transform 1つ(裁定58/69)
 shapes	trim-path	@extends	shapes/modifier	該当なし	継承元
-shapes	trim-path	e	End	未判定	
-shapes	trim-path	m	Multiple	未判定	
-shapes	trim-path	o	Offset	未判定	
-shapes	trim-path	s	Start	未判定	
-shapes	trim-path	ty	Shape Type	未判定	
+shapes	trim-path	e	End	採用予定	**第1弾の筆頭**
+shapes	trim-path	m	Multiple	採用予定	複数輪郭を個別に切るか一続きに切るか
+shapes	trim-path	o	Offset	採用予定	切り出し窓の回転。ぐるぐる回る線はこれ
+shapes	trim-path	s	Start	採用予定	**第1弾の筆頭**
+shapes	trim-path	ty	Shape Type	採用予定	**第1弾の筆頭**。MV で最も使う。pathgeom.rs trim が実装済み
 shapes	twist	@extends	shapes/modifier	該当なし	継承元
-shapes	twist	a	Angle	未判定	
-shapes	twist	c	Center	未判定	
-shapes	twist	ty	Shape Type	未判定	
-shapes	unknown-shape	ty		未判定	
+shapes	twist	a	Angle	採用予定	pathgeom.rs twist_contour が実装済み
+shapes	twist	c	Center	採用予定	ねじりの中心
+shapes	twist	ty	Shape Type	採用予定	第3弾。使用頻度は低いが実装が既にある
+shapes	unknown-shape	ty		不採用	未知の型を通す口は再生器の互換の都合。Motolii の enum は閉集合
 shapes	zig-zag	@extends	shapes/modifier	該当なし	継承元
-shapes	zig-zag	pt	Point Type	未判定	
-shapes	zig-zag	r	Frequency	未判定	
-shapes	zig-zag	s	Amplitude	未判定	
-shapes	zig-zag	ty	Shape Type	未判定	
+shapes	zig-zag	pt	Point Type	採用予定	corner / smooth
+shapes	zig-zag	r	Frequency	採用予定	辺あたりの山数
+shapes	zig-zag	s	Amplitude	採用予定	山谷の振幅
+shapes	zig-zag	ty	Shape Type	採用予定	第2弾。pathgeom.rs zigzag_contour が実装済み
 styles	all-layer-styles	@extends	styles/bevel-emboss-style	該当なし	継承元
 styles	all-layer-styles	@extends	styles/color-overlay-style	該当なし	継承元
 styles	all-layer-styles	@extends	styles/drop-shadow-style	該当なし	継承元
@@ -479,183 +479,183 @@ styles	all-layer-styles	@extends	styles/outer-glow-style	該当なし	継承元
 styles	all-layer-styles	@extends	styles/satin-style	該当なし	継承元
 styles	all-layer-styles	@extends	styles/stroke-style	該当なし	継承元
 styles	bevel-emboss-style	@extends	styles/layer-style	該当なし	継承元
-styles	bevel-emboss-style	a	Angle	未判定	
-styles	bevel-emboss-style	bs	Bevel Style	未判定	
-styles	bevel-emboss-style	bt	Technique	未判定	
-styles	bevel-emboss-style	ga	Global Angle	未判定	
-styles	bevel-emboss-style	hc	Highlight Color	未判定	
-styles	bevel-emboss-style	hm	Highlight Mode	未判定	
-styles	bevel-emboss-style	ho	Highlight Opacity	未判定	
-styles	bevel-emboss-style	ll	Altitude	未判定	
-styles	bevel-emboss-style	s	Size	未判定	
-styles	bevel-emboss-style	sc	Shadow Color	未判定	
-styles	bevel-emboss-style	sf	Soften	未判定	
-styles	bevel-emboss-style	sm	Shadow Mode	未判定	
-styles	bevel-emboss-style	so	Shadow Opacity	未判定	
-styles	bevel-emboss-style	sr	Strength	未判定	
-styles	bevel-emboss-style	ty	Type	未判定	
+styles	bevel-emboss-style	a	Angle	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	bs	Bevel Style	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	bt	Technique	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	ga	Global Angle	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	hc	Highlight Color	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	hm	Highlight Mode	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	ho	Highlight Opacity	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	ll	Altitude	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	s	Size	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	sc	Shadow Color	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	sf	Soften	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	sm	Shadow Mode	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	so	Shadow Opacity	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	sr	Strength	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	bevel-emboss-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
 styles	color-overlay-style	@extends	styles/layer-style	該当なし	継承元
-styles	color-overlay-style	bm	Blend Mode	未判定	
-styles	color-overlay-style	c	Color	未判定	
-styles	color-overlay-style	so	Opacity	未判定	
-styles	color-overlay-style	ty	Type	未判定	
+styles	color-overlay-style	bm	Blend Mode	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	color-overlay-style	c	Color	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	color-overlay-style	so	Opacity	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	color-overlay-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
 styles	drop-shadow-style	@extends	styles/layer-style	該当なし	継承元
-styles	drop-shadow-style	a	Angle	未判定	
-styles	drop-shadow-style	bm	Blend Mode	未判定	
-styles	drop-shadow-style	c	Color	未判定	
-styles	drop-shadow-style	ch	Choke Spread	未判定	
-styles	drop-shadow-style	d	Distance	未判定	
-styles	drop-shadow-style	lc	Layer Conceal	未判定	
-styles	drop-shadow-style	no	Noise	未判定	
-styles	drop-shadow-style	o	Opacity	未判定	
-styles	drop-shadow-style	s	Size	未判定	
-styles	drop-shadow-style	ty	Type	未判定	
+styles	drop-shadow-style	a	Angle	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	drop-shadow-style	bm	Blend Mode	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	drop-shadow-style	c	Color	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	drop-shadow-style	ch	Choke Spread	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	drop-shadow-style	d	Distance	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	drop-shadow-style	lc	Layer Conceal	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	drop-shadow-style	no	Noise	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	drop-shadow-style	o	Opacity	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	drop-shadow-style	s	Size	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	drop-shadow-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
 styles	gradient-overlay-style	@extends	styles/layer-style	該当なし	継承元
-styles	gradient-overlay-style	a	Angle	未判定	
-styles	gradient-overlay-style	al	Align	未判定	
-styles	gradient-overlay-style	bm	Blend Mode	未判定	
-styles	gradient-overlay-style	gf	Gradient	未判定	
-styles	gradient-overlay-style	gs	Smoothness	未判定	
-styles	gradient-overlay-style	gt	Gradient Type	未判定	
-styles	gradient-overlay-style	o	Opacity	未判定	
-styles	gradient-overlay-style	of	Offset	未判定	
-styles	gradient-overlay-style	re	Reverse	未判定	
-styles	gradient-overlay-style	s	Scale	未判定	
-styles	gradient-overlay-style	ty	Type	未判定	
+styles	gradient-overlay-style	a	Angle	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	gradient-overlay-style	al	Align	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	gradient-overlay-style	bm	Blend Mode	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	gradient-overlay-style	gf	Gradient	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	gradient-overlay-style	gs	Smoothness	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	gradient-overlay-style	gt	Gradient Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	gradient-overlay-style	o	Opacity	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	gradient-overlay-style	of	Offset	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	gradient-overlay-style	re	Reverse	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	gradient-overlay-style	s	Scale	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	gradient-overlay-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
 styles	inner-glow-style	@extends	styles/layer-style	該当なし	継承元
-styles	inner-glow-style	bm	Blend Mode	未判定	
-styles	inner-glow-style	c	Color	未判定	
-styles	inner-glow-style	ch	Choke Spread	未判定	
-styles	inner-glow-style	j	Jitter	未判定	
-styles	inner-glow-style	no	Noise	未判定	
-styles	inner-glow-style	o	Opacity	未判定	
-styles	inner-glow-style	r	Range	未判定	
-styles	inner-glow-style	sr	Source	未判定	
-styles	inner-glow-style	ty	Type	未判定	
+styles	inner-glow-style	bm	Blend Mode	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-glow-style	c	Color	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-glow-style	ch	Choke Spread	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-glow-style	j	Jitter	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-glow-style	no	Noise	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-glow-style	o	Opacity	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-glow-style	r	Range	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-glow-style	sr	Source	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-glow-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
 styles	inner-shadow-style	@extends	styles/layer-style	該当なし	継承元
-styles	inner-shadow-style	a	Angle	未判定	
-styles	inner-shadow-style	bm	Blend Mode	未判定	
-styles	inner-shadow-style	c	Color	未判定	
-styles	inner-shadow-style	ch	Choke Spread	未判定	
-styles	inner-shadow-style	d	Distance	未判定	
-styles	inner-shadow-style	no	Noise	未判定	
-styles	inner-shadow-style	o	Opacity	未判定	
-styles	inner-shadow-style	s	Size	未判定	
-styles	inner-shadow-style	ty	Type	未判定	
+styles	inner-shadow-style	a	Angle	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-shadow-style	bm	Blend Mode	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-shadow-style	c	Color	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-shadow-style	ch	Choke Spread	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-shadow-style	d	Distance	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-shadow-style	no	Noise	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-shadow-style	o	Opacity	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-shadow-style	s	Size	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	inner-shadow-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
 styles	layer-style	@extends	helpers/visual-object	該当なし	継承元
-styles	layer-style	ty	Type	未判定	
+styles	layer-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
 styles	outer-glow-style	@extends	styles/layer-style	該当なし	継承元
-styles	outer-glow-style	bm	Blend Mode	未判定	
-styles	outer-glow-style	c	Color	未判定	
-styles	outer-glow-style	ch	Choke Spread	未判定	
-styles	outer-glow-style	j	Jitter	未判定	
-styles	outer-glow-style	no	Noise	未判定	
-styles	outer-glow-style	o	Opacity	未判定	
-styles	outer-glow-style	r	Range	未判定	
-styles	outer-glow-style	ty	Type	未判定	
+styles	outer-glow-style	bm	Blend Mode	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	outer-glow-style	c	Color	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	outer-glow-style	ch	Choke Spread	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	outer-glow-style	j	Jitter	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	outer-glow-style	no	Noise	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	outer-glow-style	o	Opacity	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	outer-glow-style	r	Range	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	outer-glow-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
 styles	satin-style	@extends	styles/layer-style	該当なし	継承元
-styles	satin-style	a	Angle	未判定	
-styles	satin-style	bm	Blend Mode	未判定	
-styles	satin-style	c	Color	未判定	
-styles	satin-style	d	Distance	未判定	
-styles	satin-style	in	Invert	未判定	
-styles	satin-style	o	Opacity	未判定	
-styles	satin-style	s	Size	未判定	
-styles	satin-style	ty	Type	未判定	
+styles	satin-style	a	Angle	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	satin-style	bm	Blend Mode	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	satin-style	c	Color	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	satin-style	d	Distance	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	satin-style	in	Invert	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	satin-style	o	Opacity	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	satin-style	s	Size	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	satin-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
 styles	stroke-style	@extends	styles/layer-style	該当なし	継承元
-styles	stroke-style	c	Color	未判定	
-styles	stroke-style	s	Size	未判定	
-styles	stroke-style	ty	Type	未判定	
-text	animated-text-document	k	Keyframes	未判定	
-text	animated-text-document	sid	Slot ID	未判定	
-text	animated-text-document	x	Expression	未判定	
-text	character-data	ch	Character	未判定	
-text	character-data	data	Data	未判定	
-text	character-data	fFamily	Font Family	未判定	
-text	character-data	size	Font Size	未判定	
-text	character-data	style	Font Style	未判定	
-text	character-data	w	Width	未判定	
-text	character-precomp	ip	In Point	未判定	
-text	character-precomp	ks	Transform	未判定	
-text	character-precomp	op	Out Point	未判定	
-text	character-precomp	refId	Reference Id	未判定	
-text	character-precomp	sr	Time Stretch	未判定	
-text	character-precomp	st	Start Time	未判定	
-text	character-shapes	shapes	Shapes	未判定	
-text	font	ascent	Ascent	未判定	
-text	font	fClass	CSS Class	未判定	
-text	font	fFamily	Font Family	未判定	
-text	font	fName	Name	未判定	
-text	font	fPath	Path	未判定	
-text	font	fStyle	Font Style	未判定	
-text	font	fWeight	Weight	未判定	
-text	font	origin	Origin	未判定	
-text	font-list	list	List	未判定	
-text	text-alignment-options	a	Alignment	未判定	
-text	text-alignment-options	g	Grouping	未判定	
-text	text-data	a	Ranges	未判定	
-text	text-data	d	Document	未判定	
-text	text-data	m	Alignment	未判定	
-text	text-data	p	Follow Path	未判定	
-text	text-document	ca	Text Caps	未判定	
-text	text-document	f	Font Family	未判定	
-text	text-document	fc	Fill Color	未判定	
-text	text-document	j	Justify	未判定	
-text	text-document	lh	Line Height	未判定	
-text	text-document	ls	Baseline Shift	未判定	
-text	text-document	of	Stroke Over Fill	未判定	
-text	text-document	ps	Wrap Position	未判定	
-text	text-document	s	Font Size	未判定	
-text	text-document	sc	Stroke Color	未判定	
-text	text-document	sw	Stroke Width	未判定	
-text	text-document	sz	Wrap Size	未判定	
-text	text-document	t	Text	未判定	
-text	text-document	tr	Tracking	未判定	
-text	text-document-keyframe	s	Start	未判定	
-text	text-document-keyframe	t	Time	未判定	
-text	text-follow-path	a	Force Alignment	未判定	
-text	text-follow-path	f	First Margin	未判定	
-text	text-follow-path	l	Last Margin	未判定	
-text	text-follow-path	m	Mask	未判定	
-text	text-follow-path	p	Perpendicular To Path	未判定	
-text	text-follow-path	r	Reverse Path	未判定	
-text	text-range	a	Style	未判定	
-text	text-range	nm	Name	未判定	
-text	text-range	s	Selector	未判定	
-text	text-range-selector	a	Max Amount	未判定	
-text	text-range-selector	b	Based On	未判定	
-text	text-range-selector	e	End	未判定	
-text	text-range-selector	ne	Min Ease	未判定	
-text	text-range-selector	o	Offset	未判定	
-text	text-range-selector	r	Range Units	未判定	
-text	text-range-selector	rn	Randomize	未判定	
-text	text-range-selector	s	Start	未判定	
-text	text-range-selector	sh	Shape	未判定	
-text	text-range-selector	sm	Selector Smoothness	未判定	
-text	text-range-selector	t	Expressible	未判定	
-text	text-range-selector	xe	Max Ease	未判定	
+styles	stroke-style	c	Color	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	stroke-style	s	Size	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+styles	stroke-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む
+text	animated-text-document	k	Keyframes	採用予定	content だけの Hold track。Lottie 側も keyframe に i/o が無く**構造でホールドを保証**している
+text	animated-text-document	sid	Slot ID	採用予定	歌詞テンプレートの差し替え口。slots と同じ口に乗せ第二の差し替え機構を作らない
+text	animated-text-document	x	Expression	不採用	JS 文字列式は要らないもの(GOALS)
+text	character-data	ch	Character	不採用	グリフ輪郭を JSON へ焼く経路。実フォント+shaper を持つので焼いた輪郭は正本が2つ
+text	character-data	data	Data	不採用	同上
+text	character-data	fFamily	Font Family	不採用	同上
+text	character-data	size	Font Size	不採用	同上
+text	character-data	style	Font Style	不採用	同上
+text	character-data	w	Width	不採用	送り幅を焼くとフォント差し替え・カーニング・合字が効かなくなる
+text	character-precomp	ip	In Point	不採用	1文字=1プリコンポ層。プリコンポは要らないもの(GOALS)
+text	character-precomp	ks	Transform	不採用	同上
+text	character-precomp	op	Out Point	不採用	同上
+text	character-precomp	refId	Reference Id	不採用	同上
+text	character-precomp	sr	Time Stretch	不採用	同上
+text	character-precomp	st	Start Time	不採用	同上
+text	character-shapes	shapes	Shapes	不採用	輪郭焼き込みの実体
+text	font	ascent	Ascent	不採用	フォントから読める値を焼く=正本が2つ
+text	font	fClass	CSS Class	不採用	web 再生器の関心
+text	font	fFamily	Font Family	採用予定	family 名。実体解決のキー
+text	font	fName	Name	不採用	fFamily+fStyle の連結。同じことを言う正本が2つ
+text	font	fPath	Path	採用予定	フォント実体の在処。素材と同じ path で持つ
+text	font	fStyle	Font Style	採用予定	face 選択キー
+text	font	fWeight	Weight	不採用	fStyle と同じことを言う二重帳簿。可変フォントでは wght 軸が正本
+text	font	origin	Origin	不採用	web ローダの都合。ローカル以外を持たない
+text	font-list	list	List	採用予定	document 単位のフォント表。ただし**素材と同じ置き場に載せる** — 第二の素材台帳を作らない
+text	text-alignment-options	a	Alignment	採用予定	グループ内アンカーのオフセット。**意味は採り既定だけ変える** — 既定=字面中心
+text	text-alignment-options	g	Grouping	採用予定	Characters/Word/Line/All。text-model §6 の未決がここで埋まる
+text	text-data	a	Ranges	採用予定	アニメーターの列。MV タイポグラフィの核心
+text	text-data	d	Document	採用予定	content と基底スタイル
+text	text-data	m	Alignment	採用予定	grouping alignment。§6 の未決が埋まる
+text	text-data	p	Follow Path	不採用	パス沿いテキスト。mask index の暗黙参照(裁定66)+ 一subsystem
+text	text-document	ca	Text Caps	不採用	Small Caps は OpenType feature が正本
+text	text-document	f	Font Family	採用予定	フォント参照。Lottie の名前参照は採らず**素材と同じ path + 指紋**にする
+text	text-document	fc	Fill Color	採用予定	字面色
+text	text-document	j	Justify	採用予定	Left/Right/Center。両端揃え4種は行分割器が要るので後回し
+text	text-document	lh	Line Height	採用予定	行送り。未指定はフォントのメトリクスから
+text	text-document	ls	Baseline Shift	不採用	document 全体のベースラインずらしは position で同じことができる
+text	text-document	of	Stroke Over Fill	採用予定	縁取りと字面の重ね順
+text	text-document	ps	Wrap Position	不採用	箱の位置は layer の position/anchor と二重帳簿(裁定59/60 と同じ形)
+text	text-document	s	Font Size	採用予定	組版のサイズ。animator の scale とは別物
+text	text-document	sc	Stroke Color	採用予定	縁取り色。歌詞では必須級
+text	text-document	sw	Stroke Width	採用予定	縁取り幅
+text	text-document	sz	Wrap Size	採用予定	折返し幅。None = point text
+text	text-document	t	Text	採用予定	本文。Lottie の改行 \r は採らず \n で持つ
+text	text-document	tr	Tracking	採用予定	基底トラッキング
+text	text-document-keyframe	s	Start	不採用	**document 丸ごとを1キーの値にする形は採らない**。色もサイズもホールドになる
+text	text-document-keyframe	t	Time	採用予定	RationalTime で持つ。打つ相手は content track
+text	text-follow-path	a	Force Alignment	不採用	パス沿いテキスト一式。後から animator として足せるので凍結は妨げない
+text	text-follow-path	f	First Margin	不採用	同上
+text	text-follow-path	l	Last Margin	不採用	同上
+text	text-follow-path	m	Mask	不採用	同上。index 参照は並べ替えが結果を黙って変える(裁定66)
+text	text-follow-path	p	Perpendicular To Path	不採用	同上
+text	text-follow-path	r	Reverse Path	不採用	同上
+text	text-range	a	Style	採用予定	アニメーターが動かす property の束
+text	text-range	nm	Name	採用予定	利用者が付ける名前。並び順=適用順を明示する UI に要る
+text	text-range	s	Selector	採用予定	**1アニメーター=セレクタ1個**。AE の複数セレクタ交差は採らない(軸4)
+text	text-range-selector	a	Max Amount	採用予定	重みの倍率
+text	text-range-selector	b	Based On	採用予定	Characters/CharExcludingSpaces/Words/Lines。ただし「文字」=**クラスタ**に読み替える
+text	text-range-selector	e	End	採用予定	範囲の終端
+text	text-range-selector	ne	Min Ease	不採用	sh と同じ「重み曲線の形」を二重に持つ。曲線は区間イージング1系統へ
+text	text-range-selector	o	Offset	採用予定	**カラオケワイプはこれを時間駆動するだけに畳める**
+text	text-range-selector	r	Range Units	採用予定	Percent/Index。歌詞は index、テンプレートは percent
+text	text-range-selector	rn	Randomize	採用予定	ただし **seed を必ず持つ**。Lottie の rn は seed が無く Preview=Export と両立しない
+text	text-range-selector	s	Start	採用予定	範囲の始端
+text	text-range-selector	sh	Shape	採用予定	Square/RampUp/RampDown/Triangle/Round/Smooth。§6 の未決が埋まる
+text	text-range-selector	sm	Selector Smoothness	不採用	ne/xe と同じ理由。Square の硬い縁はカラオケワイプにむしろ要る
+text	text-range-selector	t	Expressible	不採用	式駆動フラグ。文字列式は要らないもの
+text	text-range-selector	xe	Max Ease	不採用	ne と同じ理由
 text	text-style	@extends	helpers/transform	該当なし	継承元
-text	text-style	bl	Blur	未判定	
-text	text-style	fb	Fill Brightness	未判定	
-text	text-style	fc	Fill Color	未判定	
-text	text-style	fh	Fill Hue	未判定	
-text	text-style	fo	Fill Opacity	未判定	
-text	text-style	fs	Fill Saturation	未判定	
-text	text-style	ls	Line Spacing	未判定	
-text	text-style	sb	Stroke Brightness	未判定	
-text	text-style	sc	Stroke Color	未判定	
-text	text-style	sh	Stroke Hue	未判定	
-text	text-style	so	Stroke Opacity	未判定	
-text	text-style	ss	Stroke Saturation	未判定	
-text	text-style	sw	Stroke Width	未判定	
-text	text-style	t	Letter Spacing	未判定	
-values	bezier	c	Closed	未判定	
-values	bezier	i	In Tangents	未判定	
-values	bezier	o	Out Tangents	未判定	
-values	bezier	v	Vertices	未判定	
-values	color		Color	未判定	
-values	data-url		Data URL	未判定	
-values	gradient		Gradient	未判定	
-values	hexcolor		Hex Color	未判定	
-values	int-boolean		Integer Boolean	未判定	
-values	vector		Vector	未判定	
+text	text-style	bl	Blur	不採用	グリフごとの blur は 1グリフ1レンダタゲになり板1枚の合成器と噛み合わない
+text	text-style	fb	Fill Brightness	不採用	HSB 相対調整。色空間をもう1つ抱える
+text	text-style	fc	Fill Color	採用予定	文字ごとの字面色
+text	text-style	fh	Fill Hue	不採用	同上(HSB 相対調整)
+text	text-style	fo	Fill Opacity	不採用	Value::Color は RGBA なので fc の alpha が正本
+text	text-style	fs	Fill Saturation	不採用	同上(HSB 相対調整)
+text	text-style	ls	Line Spacing	採用予定	行ごとの送り加算。**組版に触る**アニメーター
+text	text-style	sb	Stroke Brightness	不採用	同上(HSB 相対調整)
+text	text-style	sc	Stroke Color	採用予定	文字ごとの縁取り色
+text	text-style	sh	Stroke Hue	不採用	同上(HSB 相対調整)
+text	text-style	so	Stroke Opacity	不採用	sc の alpha が正本
+text	text-style	ss	Stroke Saturation	不採用	同上(HSB 相対調整)
+text	text-style	sw	Stroke Width	採用予定	文字ごとの縁取り幅
+text	text-style	t	Letter Spacing	採用予定	トラッキング。**アニメーターだが送り幅を動かす** — text-model §1 の2層分離では足りず3層が要る
+values	bezier	c	Closed	採用予定	パスを閉じるか
+values	bezier	i	In Tangents	採用予定	頂点ごとの in 接線。keyframe の時間ベジェとは別物
+values	bezier	o	Out Tangents	採用予定	同 out 接線
+values	bezier	v	Vertices	採用予定	頂点列。**v/i/o が同じ長さであることを型で縛る**
+values	color		Color	採用済	Value::Color と一致。ただし常に4成分で、Lottie の alpha 省略は採らない
+values	data-url		Data URL	不採用	素材を base64 で Document に埋めない。project file が素材ごと膨らむ
+values	gradient		Gradient	不採用	色停止と透明度停止を1本の float 列に混ぜた平坦配列。列だけでは読めない不正状態
+values	hexcolor		Hex Color	不採用	色の正本は Value::Color。文字列表現をもう1つ持つと2つの書き方ができる
+values	int-boolean		Integer Boolean	不採用	JSON に bool があるのに 0/1 で持つのは Lottie の都合。Rust は bool
+values	vector		Vector	採用済	Value::Vec2/Vec3。長さは型が持つ
