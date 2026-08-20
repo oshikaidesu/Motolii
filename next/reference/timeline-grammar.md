@@ -121,7 +121,51 @@ Timeline は5つの面から成り、**各面の仕事を混ぜない**:
 5. 入れ子(Group/precomp 相当)の時間伸縮(Time Stretch)— R5 横断観察6 の共通装備。store 側の意味設計から
 6. 矩形選択の開始閾値(明示 3px か egui 既定か)
 
-## 8. 検収への接続
+## 8. 逆算監査の処置台帳(R6=AE・R7=Godot/Blender・R8=Unity/Unreal/Spine、2026-08-21 統合)
+
+3本の監査(採集原文は surveys ディレクトリ)の「抜け」39件を拘束7(借用既定)・使用人口タイブレーク・キー仮置きで処置した。**ここで「正」になった項目は §2〜§5 の本文と同格**(移植 oracle の対象)。
+
+### 8.1 正へ採用(キーボード入口 — 既存動詞への別入口が中心。キーは全部仮の既定割当)
+
+| アクション | 意味 | 仮キー | 出典 |
+|---|---|---|---|
+| JumpPrev/NextMeaningPoint | 見えているキー・locator・ループ端を時系列で辿って playhead ジャンプ。**Shift 付きで選択レイヤー限定**の2段構え | J / K(+Shift) | AE(公式)+Unity/Cavalry の次/前キージャンプも同義に畳む |
+| JumpToClipIn/Out | 選択 clip の In/Out へ playhead ジャンプ(トリムではない)。**全レイヤー横断**の変種つき | I / O、横断= Cmd+Alt+Shift+←/→ | AE |
+| JumpToCompStart/End・JumpToLoopStart/End | 0秒/終端・ループ帯両端へ瞬間移動 | Home / End・Shift+Home / End | AE |
+| TrimInToPlayhead / TrimOutToPlayhead | playhead 位置で In/Out を瞬間トリム(§2 trim と同一意味論の別入口) | Alt+[ / Alt+] | **AE+Unity+Unreal の三社一致** |
+| MoveClipInToPlayhead / OutToPlayhead | 長さを保ったまま clip 全体をスライドし端を playhead へ(純粋な自己移動 — trim family 非該当) | [ / ] | AE |
+| NudgeKeyframe | 選択キーを 1(Shift で 10)フレーム前後へ(§3 時刻ドラッグのキーボード等価) | Alt+←/→(+Shift) | AE |
+| SelectAllKeysOfProperty | property 名クリックでその property の全キー選択 | (クリック) | AE |
+| ReorderLayerUp/Down(+ToEnd) | 並べ替え(§4)のキーボード等価: 1段階/最前面・最背面 | Cmd+Alt+↑/↓(+Shift) | AE |
+| FocusRowPrev/Next(+Extend) | レーンバーの行フォーカス移動・拡張選択(キーボードのみで行を渡る) | Cmd+↑/↓(+Shift) | AE |
+| CopyKeys / PasteKeys | キーのコピー/ペースト(§3 に動詞ごと欠けていた基本動詞) | Cmd+C / Cmd+V | AE(逆順ペースト Cmd+Shift+V は低優先で同時採用) |
+| ScrollToPlayhead | ズームを変えず playhead が見える位置へビュー復帰 | D | AE |
+| **キャンセルの一般化** | **Esc に加え右クリックでも、全ドラッグ共通で取消**(§2 の Esc 規定を全面へ拡張) | Esc / RMB | Godot+Blender の2ソース独立標準 |
+| **Duplicate の配置規則** | 複製は**元と同時刻**(その場複製)。Godot の「playhead へ再配置」は人口ルールで不採用 | — | AE |
+
+### 8.2 候(利用者の実機・設計判断待ち)
+
+- **レイヤーマーカー**(AE `*`): comp 単位 locator と**別軸**の、レイヤーに紐付き一緒に動く注釈点(リップシンク・SE ヒットの合図)。唯一の「概念ごと抜け」。**推奨採用**だが Document 概念の追加なので store 設計から。ダイアログ挙動(locator の「名前入力に入らない」思想との整合)も論点
+- **番号マーカー**(AE Shift+0〜9 登録 / 0〜9 ジャンプ): ラジオプリセット型の高速呼び出し — MV 拍合わせに有効
+- **時間反転**(AE Cmd+Alt+R)・**Time Remapping**(可変速カーブ): 拘束抵触なしの独立動詞だが store の速度意味論が未設計
+- **Timeline 内検索**(Cmd+F): プロジェクトが育つと必要度上昇
+- **スナップの一時反転 XOR**(Godot: 既定 OFF でも Ctrl で一時 ON): 現行「常時 ON+Alt OFF」と両立可能な追加
+- **playhead 境の片側キー一括選択**(Unreal Ctrl+[/])・矩形選択のハンドル込み(Blender B13)
+- **VSE Retiming Keys 型の可変速**(Blender B9): §7-5(入れ子の時間伸縮)の具体案
+
+### 8.3 保留(判断材料不足・別の面の束で再訪)
+
+グラフ編集面の語彙(ベジエ4モード・包絡スケール(時刻+値)・Blend スライダ)/ Absolute vs 相対増分スナップ(Blender B3)/ Dope Sheet Slide(B6)/ 整理用チャンネルグループ(B11 — 構造グループとの関係整理が先)/ 時刻直接入力ジャンプ(器具未定)/ RetimeSelection の反転・0点跨ぎ挙動(裁定146 の実装細部 — 実装時に仕様化)/ 複数トラック横断のプロパティ積集合編集(A8)
+
+### 8.4 対象外で特筆(拘束の正しさを補強した実例)
+
+- Blender VSE の Overlap Mode(Expand/Overwrite/Shuffle)・Slip — **拘束1が名指しした語彙そのもの**が独立ソースで確認された
+- Godot の「ダブルクリック=シーク兼任」— 拘束4(ダブルクリック不使用)の反例実証
+- Blender の「マウス位置文脈で同一キーの意味が変わる」(B12)— §5.5「場所で意味を変えない」の反例実証
+- Unity/Unreal の clip blend(重なりクロスフェード)— 合成は compositing の仕事、配置と混ぜない(§1.5)
+- Godot の「掴んでも選択を差し替えず離した時に単独化」— §2 の「掴んだ瞬間に差し替え」と衝突、人口ルールで AE/egui 側を維持
+
+## 9. 検収への接続
 
 - 移植レーンの oracle はこの台帳の**正**項目から起こす(1項目=1〜数テスト)。「egui 版と同じ」ではなく「台帳と同じ」を合格条件にする
 - 数値(§1)を変える時はこの台帳を先に改訂する(コードが正本にならないための床)
