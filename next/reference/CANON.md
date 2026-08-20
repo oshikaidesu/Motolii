@@ -25,6 +25,19 @@
 | `docs/ae-pain-points.md` | AE不満の体系分類 = 製品ポジショニングの一次資料。D5(文字列式不要)と直結 | — |
 | `docs/community-distribution-model.md` | ガバナンス: 中央marketplaceを主回路にしない、人気を正本にしない、Project Lock=再現 | Kit機構部分は下記Cへ |
 
+## デザイン(視覚)の正本 — UI 束の必読(2026-08-20 追記)
+
+新 shell の見た目は発明しない。正本は旧ステージに揃っている:
+
+| 正本 | 中身 | 注意 |
+|---|---|---|
+| `docs/reviews/2026-08-19-ui-tone-unification-campaign.md` | **利用者の実機裁定**: 「Ableton のようなトンマナで、一目で情報を多く受け取れる UI。普通に使えるソフトにする」。実機裁定は品質バー・文法地図より上位([ux-authority-order]) | リセット直前の裁定なので鮮度最高 |
+| `docs/reviews/2026-08-19-ableton-density-measurements.md` | **Ableton Live 12 の密度実測**(論理px・高信頼): Timeline 行高 **20** / transport 帯 **30** / Browser 行 19 / 本文 10〜13。Blender 併記 | iced pane の寸法はここを根拠にする(発明しない) |
+| `docs/mocks-ui/public/browser-library.html` + `.css`、同 `inspector-library.html` + `.css` | Browser / Inspector の**視覚正本そのもの**。構造・階層・状態表現を HTML から解析して写す | **旧 egui 実装は手本にしない**(2026-08-19 利用者裁定「egui 変換が上手くできなかった部分」) |
+| `ui/motolii-tokens/sources/motolii-dark.json` | token 正本(Dark 既定、ライト同格) | raw color 直書き禁止は ui-visual-language の規約 |
+| Ableton `.ask` テーマ18本(実機の Live 12 Beta に実在) | **色文法の一次資料**。実測可能(screencapture 照合 ±3/ch) | 色のみで寸法を含まない(実物確認済み) |
+| `crates/motolii-ui/src/timeline_editor/`(旧 egui、9,059行) | **Timeline だけは逆**: 機能・UI とも旧 egui 実装が手本(2026-08-19 利用者裁定「egui 版が最も機能を詰めれていて優れている、UI も」)。`ui-score-model.md` の契約と併読 | コードは egui 結合なので**意味と機能リストを写す**(写経しない) |
+
 ## 未回収の目標(concept.md / catalog にあり、GOALS/DECISIONS が未言及)
 
 - **「解析→生成」路線**(色解析→DataTrack→パラメータ駆動。concept.md の最終フェーズ)
