@@ -602,19 +602,19 @@ text	text-data	d	Document	採用予定	content と基底スタイル		text	lotti
 text	text-data	m	Alignment	採用予定	grouping alignment。§6 の未決が埋まる		text	lottie
 text	text-data	p	Follow Path	不採用	パス沿いテキスト。mask index の暗黙参照(裁定66)+ 一subsystem			lottie
 text	text-document	ca	Text Caps	不採用	Small Caps は OpenType feature が正本			lottie
-text	text-document	f	Font Family	採用予定	フォント参照。Lottie の名前参照は採らず**素材と同じ path + 指紋**にする		text	lottie
-text	text-document	fc	Fill Color	採用予定	字面色		text	lottie
+text	text-document	f	Font Family	採用予定	フォント参照。Lottie の名前参照は採らず**素材と同じ path + 指紋**にする。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
+text	text-document	fc	Fill Color	採用予定	字面色。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
 text	text-document	j	Justify	採用予定	Left/Right/Center。両端揃え4種は行分割器が要るので後回し		text	lottie
-text	text-document	lh	Line Height	採用予定	行送り。未指定はフォントのメトリクスから		text	lottie
+text	text-document	lh	Line Height	採用予定	行送り。未指定はフォントのメトリクスから。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
 text	text-document	ls	Baseline Shift	不採用	document 全体のベースラインずらしは position で同じことができる			lottie
-text	text-document	of	Stroke Over Fill	採用予定	縁取りと字面の重ね順		text	lottie
+text	text-document	of	Stroke Over Fill	採用予定	縁取りと字面の重ね順。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
 text	text-document	ps	Wrap Position	不採用	箱の位置は layer の position/anchor と二重帳簿(裁定59/60 と同じ形)			lottie
-text	text-document	s	Font Size	採用予定	組版のサイズ。animator の scale とは別物		text	lottie
-text	text-document	sc	Stroke Color	採用予定	縁取り色。歌詞では必須級		text	lottie
-text	text-document	sw	Stroke Width	採用予定	縁取り幅		text	lottie
+text	text-document	s	Font Size	採用予定	組版のサイズ。animator の scale とは別物。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
+text	text-document	sc	Stroke Color	採用予定	縁取り色。歌詞では必須級。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
+text	text-document	sw	Stroke Width	採用予定	縁取り幅。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
 text	text-document	sz	Wrap Size	採用予定	折返し幅。None = point text		text	lottie
 text	text-document	t	Text	採用予定	本文。Lottie の改行 \r は採らず \n で持つ		text	lottie
-text	text-document	tr	Tracking	採用予定	基底トラッキング		text	lottie
+text	text-document	tr	Tracking	採用予定	基底トラッキング。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
 text	text-document-keyframe	s	Start	不採用	**document 丸ごとを1キーの値にする形は採らない**。色もサイズもホールドになる			lottie
 text	text-document-keyframe	t	Time	採用予定	RationalTime で持つ。打つ相手は content track		text	lottie
 text	text-follow-path	a	Force Alignment	不採用	パス沿いテキスト一式。後から animator として足せるので凍結は妨げない			lottie
