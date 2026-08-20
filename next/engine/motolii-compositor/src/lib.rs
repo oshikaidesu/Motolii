@@ -34,7 +34,13 @@ fn to_vector3(v: glam::Vec2) -> glam::Vec3 {
     glam::vec3(v.x, v.y, 0.0)
 }
 
-pub use headless::HeadlessError;
+/// `HeadlessGpu` を公開しているのは、`Compositor` が持たない描画(点群など)を
+/// probe が組み立てたい時に、adapter/device の起こし方だけはここの物を使わせるため
+/// (module doc の警告どおり、自前で limits を書くと rerun shader の床とずれた時に
+/// 原因が分からなくなる)。`RenderContext` の組み立て自体は probe 側に任せる —
+/// それは `Compositor::headless()` を薄く読み直せば分かる程度の量で、ここに
+/// 二重化の危険は無い。
+pub use headless::{HeadlessError, HeadlessGpu};
 
 /// 素材ハンドル。上流の型をそのまま通す(包み直さない)。
 pub use re_renderer::resource_managers::GpuTexture2D;
