@@ -146,6 +146,64 @@ impl PropertyId {
         Self::new(&name).expect("text-range の property 名は予約語でも空でもない")
     }
 
+    /// アニメーターがグリフに適用する変形(Rive `text-modifier-group`)。**アンカー**
+    /// (`originX`/`originY`)。既定=字面中心(地図の note どおり、`text-alignment-options a`
+    /// が同じ意味を Alignment 側に持つ)。
+    pub fn text_range_origin(range: crate::TextRangeId) -> Self {
+        Self::text_range_transform_property(range, "origin")
+    }
+
+    /// `text-modifier-group opacity`。適用先がグリフになるだけで、意味は普通の不透明度。
+    pub fn text_range_opacity(range: crate::TextRangeId) -> Self {
+        Self::text_range_transform_property(range, "opacity")
+    }
+
+    /// `text-modifier-group x`/`y`。Rive の `"group": "position"` が「保存が2成分に
+    /// 割れているだけで意味は Vec2」と明示しており、裁定61(position は Vec2 単一
+    /// property)と衝突しない。
+    pub fn text_range_position(range: crate::TextRangeId) -> Self {
+        Self::text_range_transform_property(range, "position")
+    }
+
+    /// `text-modifier-group rotation`。グリフ適用の回転(度)。
+    pub fn text_range_rotation(range: crate::TextRangeId) -> Self {
+        Self::text_range_transform_property(range, "rotation")
+    }
+
+    /// `text-modifier-group scaleX`/`scaleY`。`"group": "scale"` で Vec2(`position` と
+    /// 同じ理由)。
+    pub fn text_range_scale(range: crate::TextRangeId) -> Self {
+        Self::text_range_transform_property(range, "scale")
+    }
+
+    fn text_range_transform_property(range: crate::TextRangeId, attr: &str) -> Self {
+        let name = format!(
+            "{}{range}.transform.{attr}",
+            crate::property::TEXT_RANGE_PREFIX
+        );
+        Self::new(&name).expect("text-range の property 名は予約語でも空でもない")
+    }
+
+    /// `text-variation-modifier axisValue`(Δ)。裁定76 の3層のうち「再シェープする層」
+    /// の唯一の住人 — [`crate::TextRange::variation_axes`] が持つタグに対応する動く量。
+    /// スパン側の絶対値([`Self::text_style_axis`])とは別の track(層が違う、二重帳簿
+    /// ではない、地図の note どおり)。
+    pub fn text_range_variation_axis(range: crate::TextRangeId, tag: &str) -> Self {
+        let name = format!(
+            "{}{range}.variation.{tag}",
+            crate::property::TEXT_RANGE_PREFIX
+        );
+        Self::new(&name).expect("text-range の property 名は予約語でも空でもない")
+    }
+
+    /// `text-style-axis axisValue`。スタイル表の行が持つ可変フォント軸の**絶対値**。
+    /// **裁定92 の唯一の例外** — 他のスタイル属性は v1 で静止だが、軸値はシェーピングの
+    /// 入力そのものなので P6「軸だけはスタイル層でアニメ可」に当たる(裁定93)。
+    pub fn text_style_axis(style: crate::TextStyleId, tag: &str) -> Self {
+        let name = format!("{}{style}.axis.{tag}", crate::property::TEXT_STYLE_PREFIX);
+        Self::new(&name).expect("text-style の property 名は予約語でも空でもない")
+    }
+
     /// カメラの property(`Composition.camera` の center/zoom/roll、裁定113/115)。
     ///
     /// **layer とは別の entity(`/composition`)へ書く**ので、component 識別子の
@@ -674,7 +732,7 @@ impl Document {
                 )
             }
             Intent::SetTextDocument { layer, document } => {
-                crate::text::validate_unique_ids(&document.ranges)?;
+                crate::text::validate(&document)?;
                 let json = serde_json::to_string(&document)?;
                 (
                     layer.entity_path(),
