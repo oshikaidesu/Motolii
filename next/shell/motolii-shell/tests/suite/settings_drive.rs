@@ -179,21 +179,18 @@ fn the_reason_disappears_after_switching_to_the_transparent_preset() {
 // 実機報告の修正: 市松トグルが screenshot 器具の絵へ実際に届くこと
 // ---------------------------------------------------------------------------
 
-/// **容疑1の直接固定(真因側)、内側画素限定**: 既定 comp(不透明黒)のままだと、
-/// 市松トグルは**内容を持つ内側の画素**を1つも変えない(容疑1の結論どおり、
+/// **容疑1の直接固定(真因側)、全画素**: 既定 comp(不透明黒)のままだと、
+/// 市松トグルは frame のどの画素も変えない(容疑1の結論どおり、
 /// 不透明背景では市松が原理的に見えない仕様 — 容疑2「`composite_checkerboard`
 /// 自体のバグ」を切り分ける試験でもある)。
 ///
-/// **発見(shellの外、この発注の write-set の外)**: `frame_rgba()` の生値には
-/// engine 側の readback に由来する1px境界のアーティファクトが実測される
-/// (640x360 comp で外周ちょうど1996画素が alpha=0 — perimeter
-/// `2*(640+360)-4` と厳密に一致、複数回実行で再現、非乱数的)。comp の実内容と
-/// 無関係に comp の外周1周だけ透明になっており、engine/motolii-engine か
-/// motolii-compositor の readback/ラスタライズ側の別問題(`Composition.
-/// background` を不透明にしても消えない)。ここでは内側画素だけを見ることで
-/// shell 側の主張(市松トグルの連動)をこの別問題と混ぜずに固定する。
+/// 歴史注記: 市松レーンの初回実装時、外周1周だけ alpha=0 になる engine 側の
+/// アーティファクトが見つかり、このテストは一時的に内側画素限定だった。
+/// 真因は背景 layer の `order: i16::MIN` が depth_offset シェーダで quad を
+/// 全辺 ~1.25px 縮めていたことで、根治済み(`BACKGROUND_ORDER = -1`、
+/// `next/engine/motolii-engine/tests/background.rs` が回帰柵)。以後は全画素比較。
 #[test]
-fn checkerboard_toggle_does_not_touch_interior_pixels_when_background_is_opaque() {
+fn checkerboard_toggle_does_not_touch_any_pixel_when_background_is_opaque() {
     let mut shell = shell();
     let before = shell.composition().expect("既定 comp がある").background;
     assert_eq!(before, [0.0, 0.0, 0.0, 1.0], "既定は不透明黒のはず");
@@ -220,8 +217,8 @@ fn checkerboard_toggle_does_not_touch_interior_pixels_when_background_is_opaque(
         [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
     };
     let mut mismatches = Vec::new();
-    for y in 1..h.saturating_sub(1) {
-        for x in 1..w.saturating_sub(1) {
+    for y in 0..h {
+        for x in 0..w {
             if pixel(&without, x, y) != pixel(&with, x, y) {
                 mismatches.push((x, y));
             }
