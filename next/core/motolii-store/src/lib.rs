@@ -25,11 +25,11 @@ mod document;
 mod fingerprint;
 mod view;
 
-pub use document::{Document, Intent, LayerId, PropertyId};
+pub use document::{Document, Intent, LayerId, PropertyId, Revision};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use view::StoreView;
 
-pub use motolii_core::RationalTime;
+pub use motolii_core::{CompSpec, Fps, LayerPlacement, RationalTime};
 pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Value};
 
 /// `edit` timeline の名前。undo/redo はこの軸の移動である。
@@ -93,6 +93,34 @@ impl LayerSource {
     }
 }
 
+/// comp の設定。**Document が持つ**。
+///
+/// ここに置く理由(2026-08-20 の敵対的レビュー): 以前は `render_frame(view, t, comp)` と
+/// `ExportJob { comp, fps }` が別々に持っていたので、**preview と export が違う入力を
+/// 渡せた**。「評価経路が1本」は入力が同じ時だけの保証であり、その入力の正本が
+/// どこにも無かった。
+///
+/// 上流の `EntityDb::set_recording_property` は `TimePoint::STATIC` で書くので
+/// **undo が効かない**。解像度や fps の変更は戻せるべきなので、layer と同じく
+/// `edit` timeline 上の普通の entity として置く(新しい機構を足さない)。
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Composition {
+    pub width: u32,
+    pub height: u32,
+    pub fps: motolii_core::Fps,
+    /// 尺(フレーム数)。半開 `[0, duration_frames)`。
+    pub duration_frames: i64,
+}
+
+impl Composition {
+    pub fn spec(&self) -> motolii_core::CompSpec {
+        motolii_core::CompSpec {
+            width: self.width,
+            height: self.height,
+        }
+    }
+}
+
 /// layer の非アニメーション属性。
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct LayerMeta {
@@ -102,11 +130,12 @@ pub struct LayerMeta {
 }
 
 /// ある comp 時刻に解決済みの layer。**合成器が要るのはこれだけ**。
+///
+/// 置き方は `motolii-core::LayerPlacement` を**そのまま持つ**(フィールドを並べ直さない)。
+/// 並べ直すと、property を1つ足すたびに store と合成器の両方を触ることになり、
+/// それが翻訳層の始まりになる。
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedLayer {
     pub source: LayerSource,
-    pub order: i16,
-    pub top_left: [f32; 2],
-    pub size: [f32; 2],
-    pub opacity: f32,
+    pub placement: LayerPlacement,
 }

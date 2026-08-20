@@ -6,8 +6,8 @@ use re_chunk_store::LatestAtQuery;
 use re_entity_db::EntityDb;
 use re_log_types::{EntityPath, Timeline};
 
-use crate::components::{descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
-use crate::{property, LayerId, LayerMeta, PropertyId, ResolvedLayer, StoreError, EDIT_TIMELINE};
+use crate::components::{descriptor_composition, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
+use crate::{property, Composition, Document, LayerId, LayerMeta, LayerPlacement, PropertyId, ResolvedLayer, StoreError, EDIT_TIMELINE};
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
 #[derive(Clone, Copy)]
@@ -87,6 +87,24 @@ impl<'a> StoreView<'a> {
         Ok(self.track(layer, property)?.map(|track| track.eval(t)))
     }
 
+    /// comp の設定。**preview も export もここから取る** — 引数で渡さない。
+    pub fn composition(&self) -> Result<Option<Composition>, StoreError> {
+        let descriptor = descriptor_composition();
+        let path = Document::composition_path();
+        let results = self
+            .db
+            .latest_at(&self.query(), &path, [descriptor.component]);
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(None);
+        };
+        serde_json::from_str(&json.0)
+            .map(Some)
+            .map_err(StoreError::Encode)
+    }
+
     pub fn meta(&self, layer: LayerId) -> Result<Option<LayerMeta>, StoreError> {
         let descriptor = descriptor_meta();
         let path = layer.entity_path();
@@ -135,16 +153,18 @@ impl<'a> StoreView<'a> {
         };
 
         Ok(Some(ResolvedLayer {
-            top_left: [
-                scalar(property::POSITION_X, 0.0)?,
-                scalar(property::POSITION_Y, 0.0)?,
-            ],
-            size: [
-                scalar(property::WIDTH, size[0])?,
-                scalar(property::HEIGHT, size[1])?,
-            ],
-            opacity: scalar(property::OPACITY, 1.0)?.clamp(0.0, 1.0),
-            order: meta.order,
+            placement: LayerPlacement {
+                top_left: [
+                    scalar(property::POSITION_X, 0.0)?,
+                    scalar(property::POSITION_Y, 0.0)?,
+                ],
+                size: [
+                    scalar(property::WIDTH, size[0])?,
+                    scalar(property::HEIGHT, size[1])?,
+                ],
+                opacity: scalar(property::OPACITY, 1.0)?.clamp(0.0, 1.0),
+                order: meta.order,
+            },
             source: meta.source,
         }))
     }
@@ -157,7 +177,7 @@ impl<'a> StoreView<'a> {
                 out.push(resolved);
             }
         }
-        out.sort_by_key(|layer| layer.order);
+        out.sort_by_key(|layer| layer.placement.order);
         Ok(out)
     }
 }

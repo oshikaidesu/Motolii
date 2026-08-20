@@ -161,6 +161,15 @@ pub fn descriptor_meta() -> ComponentDescriptor {
     }
 }
 
+/// comp の設定。**layer と同じ JSON 経路を使い回す**(符号化の流儀を増やさない)。
+pub fn descriptor_composition() -> ComponentDescriptor {
+    ComponentDescriptor {
+        archetype: Some("motolii.archetypes.Composition".into()),
+        component: "Composition:settings".into(),
+        component_type: Some(TrackJson::name()),
+    }
+}
+
 pub fn descriptor_present() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some("motolii.archetypes.Layer".into()),

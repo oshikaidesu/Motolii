@@ -7,7 +7,7 @@ use std::process::Command;
 
 use motolii_compositor::CompSpec;
 use motolii_engine::Engine;
-use motolii_store::{Document, Intent, LayerId, LayerMeta, LayerSource, RationalTime};
+use motolii_store::{Composition, Document, Intent, LayerId, LayerMeta, LayerSource, RationalTime};
 use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
 
 const W: u32 = 64;
@@ -64,6 +64,13 @@ fn real_media_becomes_a_layer() {
     let path = make_video(&dir);
 
     let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: W,
+        height: H,
+        fps: motolii_store::Fps::try_new(30, 1).unwrap(),
+        duration_frames: 60,
+    }))
+    .unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta {
@@ -86,13 +93,13 @@ fn real_media_becomes_a_layer() {
 
     // 0.5秒 = 赤の区間
     let early = engine
-        .render_frame(&doc.view(), RationalTime::try_new(1, 2).unwrap(), comp)
+        .render_frame(&doc.view(), RationalTime::try_new(1, 2).unwrap())
         .unwrap();
     let early_px = pixel(&early, 32, 32);
 
     // 1.5秒 = 青の区間
     let late = engine
-        .render_frame(&doc.view(), RationalTime::try_new(3, 2).unwrap(), comp)
+        .render_frame(&doc.view(), RationalTime::try_new(3, 2).unwrap())
         .unwrap();
     let late_px = pixel(&late, 32, 32);
 
@@ -119,6 +126,13 @@ fn media_natural_size_fills_the_layer() {
     let path = make_video(&dir);
 
     let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: W,
+        height: H,
+        fps: motolii_store::Fps::try_new(30, 1).unwrap(),
+        duration_frames: 60,
+    }))
+    .unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta {
@@ -136,14 +150,7 @@ fn media_natural_size_fills_the_layer() {
     let mut engine = Engine::new().expect("engine");
     // comp は 64x64、素材は 128x128。素材の実寸で置かれるので comp を覆い切る。
     let frame = engine
-        .render_frame(
-            &doc.view(),
-            RationalTime::try_new(0, 30).unwrap(),
-            CompSpec {
-                width: W,
-                height: H,
-            },
-        )
+        .render_frame(&doc.view(), RationalTime::try_new(0, 30).unwrap())
         .unwrap();
 
     for (x, y) in [(1, 1), (62, 1), (1, 62), (62, 62), (32, 32)] {

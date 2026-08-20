@@ -43,3 +43,7 @@
 | 36 | 2026-08-20 | 重ね順の型は上流の `re_renderer::DepthOffset`(`i16`)に合わせる。`i32` のまま渡すと 32768 以上で符号が反転し、CPU の並べ替えと GPU の前後関係が食い違う |
 | 37 | 2026-08-20 | 読み口は「無い」と「読めない」を区別する(`Result<Option<T>>`)。同義にすると壊れた Document が静かに既定値へ落ち、利用者には「値が勝手に戻った」としか見えない(M13) |
 | 38 | 2026-08-20 | 素材の外の時刻はその layer だけ描かない(フレーム全体を落とさない)。`nb_frames` を見る。M4 と M16 の両方に効く |
+| 39 | 2026-08-20 | **スクラッチは最低限・保守はしたくない**(利用者裁定)。移植したが `next/` から未参照のコードは落とす — 抱えると保守対象になり、`check.sh` が `owns:` の重さとして数えて自前実装の量を偽る。要る日に旧 workspace から持ってくればよい。第1弾: `motolii-core` の camera / canonical / time_map / quality = 1,256行 |
+| 40 | 2026-08-20 | comp の設定(解像度・fps・尺)は **Document が持つ**(`Composition`)。以前は `render_frame(view, t, comp)` と `ExportJob { comp, fps }` が別々に持ち、**preview と export が違う入力を渡せた**。上流の `set_recording_property` は `TimePoint::STATIC` で undo が効かないので、layer と同じ `edit` timeline 上の普通の entity として置く(新しい機構を足さない) |
+| 41 | 2026-08-20 | 置き方は `motolii-core::LayerPlacement` を store と合成器で**共有**する。並べ直すと property を1つ足すたびに6箇所を触ることになり、旧 `inspector_model.rs` が3世代になった構造の1世代目になる |
+| 42 | 2026-08-20 | 変化検出は `Document::revision()`(store 世代 + edit 位置)。`EntityDb::generation` だけでは undo/redo を捉えられず、front が `last_edit_head` を自分で持つ入口になる |

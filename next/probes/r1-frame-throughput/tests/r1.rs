@@ -13,9 +13,9 @@
 
 use std::time::Instant;
 
-use motolii_compositor::CompSpec;
+use motolii_compositor::{CompSpec, LayerPlacement};
 use motolii_engine::Engine;
-use motolii_store::{Document, Intent, LayerId, LayerMeta, LayerSource};
+use motolii_store::{Composition, Document, Intent, LayerId, LayerMeta, LayerSource};
 use r1_frame_throughput::FHD;
 
 fn comp() -> CompSpec {
@@ -35,6 +35,13 @@ fn document_scaled(layers: u64, source_scale: u32) -> Document {
     let sw = FHD[0] / source_scale;
     let sh = FHD[1] / source_scale;
     let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: sw,
+        height: sh,
+        fps: motolii_store::Fps::try_new(30, 1).unwrap(),
+        duration_frames: 1,
+    }))
+    .unwrap();
     for i in 0..layers {
         let id = LayerId(i);
         doc.apply(Intent::AddLayer(id)).unwrap();
@@ -56,6 +63,13 @@ fn document_scaled(layers: u64, source_scale: u32) -> Document {
 
 fn document_with(layers: u64) -> Document {
     let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: FHD[0],
+        height: FHD[1],
+        fps: motolii_store::Fps::try_new(30, 1).unwrap(),
+        duration_frames: 1,
+    }))
+    .unwrap();
     for i in 0..layers {
         let id = LayerId(i);
         doc.apply(Intent::AddLayer(id)).unwrap();
@@ -77,21 +91,21 @@ fn document_with(layers: u64) -> Document {
 }
 
 fn measure_at(engine: &mut Engine, doc: &Document, spec: CompSpec, runs: u32) -> u128 {
-    let _ = engine.render_frame(&doc.view(), t(), spec).unwrap();
+    let _ = engine.render_frame(&doc.view(), t()).unwrap();
     let start = Instant::now();
     for _ in 0..runs {
-        engine.render_frame(&doc.view(), t(), spec).unwrap();
+        engine.render_frame(&doc.view(), t()).unwrap();
     }
     start.elapsed().as_micros() / runs as u128
 }
 
 fn measure(engine: &mut Engine, doc: &Document, runs: u32) -> u128 {
     // 1回目は pipeline / texture の用意が入るので捨てる。
-    let _ = engine.render_frame(&doc.view(), t(), comp()).unwrap();
+    let _ = engine.render_frame(&doc.view(), t()).unwrap();
 
     let start = Instant::now();
     for _ in 0..runs {
-        let frame = engine.render_frame(&doc.view(), t(), comp()).unwrap();
+        let frame = engine.render_frame(&doc.view(), t()).unwrap();
         assert_eq!(frame.len(), (FHD[0] * FHD[1] * 4) as usize);
     }
     start.elapsed().as_micros() / runs as u128
@@ -102,7 +116,7 @@ fn measure(engine: &mut Engine, doc: &Document, runs: u32) -> u128 {
 #[test]
 #[ignore = "GPU を単独で使う必要がある — 冒頭の doc を参照"]
 fn where_the_frame_time_goes() {
-    use motolii_compositor::{Compositor, Layer};
+    use motolii_compositor::{Compositor, Layer, LayerPlacement};
 
     let mut compositor = Compositor::headless().expect("compositor");
     let texture = compositor
@@ -117,10 +131,12 @@ fn where_the_frame_time_goes() {
     let layers: Vec<Layer> = (0..40)
         .map(|i| Layer {
             texture: texture.clone(),
-            top_left: [0.0, 0.0],
-            size: [FHD[0] as f32, FHD[1] as f32],
-            order: i,
-            opacity: 1.0,
+            placement: LayerPlacement {
+                top_left: [0.0, 0.0],
+                size: [FHD[0] as f32, FHD[1] as f32],
+                order: i,
+                opacity: 1.0,
+            },
         })
         .collect();
 
@@ -154,7 +170,7 @@ fn where_the_frame_time_goes() {
 #[test]
 #[ignore = "GPU を単独で使う必要がある — 冒頭の doc を参照"]
 fn preview_resolution_is_the_lever() {
-    use motolii_compositor::{Compositor, Layer};
+    use motolii_compositor::{Compositor, Layer, LayerPlacement};
 
     let mut compositor = Compositor::headless().expect("compositor");
 
@@ -167,10 +183,12 @@ fn preview_resolution_is_the_lever() {
         let layers: Vec<Layer> = (0..40)
             .map(|i| Layer {
                 texture: texture.clone(),
-                top_left: [0.0, 0.0],
-                size: [w as f32, h as f32],
-                order: i,
-                opacity: 1.0,
+                placement: LayerPlacement {
+                    top_left: [0.0, 0.0],
+                    size: [w as f32, h as f32],
+                    order: i,
+                    opacity: 1.0,
+                },
             })
             .collect();
         let spec = CompSpec {

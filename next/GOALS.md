@@ -23,7 +23,7 @@
 | M12 | **触れそうな物は全部機能する**。未実装の chrome を置かない(disabled も不可=撤去) | ui-quality-bar **Q0**(利用者裁定) | 未 |
 | M13 | **無反応ゼロ**。拒否は理由がその場で分かる。旧 iced は拒否を `let _ =` で捨てていた | ui-quality-bar Q3、能力台帳§5-2 | 未 |
 | M14 | 選択・時刻・幾何の正本は1つ。全面が同じ真実を映す | ui-quality-bar Q5 | **未**。幾何は store にあるが、**選択・playhead・fps・解像度・尺が store に1つも無い**。`comp`/`fps` は `render_frame`/`ExportJob` の引数。このままだと shell がそれらを自分で持ち、そこが次の翻訳層になる |
-| M15 | **Preview = Export**。同じ評価関数を通る | concept 絶対規律、DECISIONS #15 | **部分**。可逆書き出しした現物を decode し直して preview と突き合わせ、**Y の最大差 ≤ 8**(h264 が YUV420 を通るため byte 一致ではない)。経路が1本であることは依存グラフが守る(export は compositor を引かない)。**残る穴**: `comp`/`fps` が Document の中に無いので、preview と export が違う入力を渡せてしまう |
+| M15 | **Preview = Export**。同じ評価関数を通る | concept 絶対規律、DECISIONS #15 | **済**。(1) 経路の一本性は依存グラフが守る(export は compositor を引かない) (2) 入力の一本性は `Composition` が Document にあることで守る(裁定40) (3) 現物での照合は可逆書き出しを decode し直して Y の最大差 ≤ 8(h264 が YUV420 を通るため byte 一致にはならない) |
 | M16 | どの入力でも panic/クラッシュ/喪失なし。render 失敗でも画面を空にしない | ui-quality-bar Q6 | 未 |
 | M17 | 空 project は空として表示。空でも place/scrub/keymap が効く | ui-quality-bar Q7 | 未 |
 | M18 | Zoom(カーソル下の時刻を保つ)と Fit | prior-art 必須12件 | 未 |
@@ -46,7 +46,7 @@ Browser から **drag で配置** / Export 設定 UI と割合進捗 /
 
 | # | 条件 | `next/` |
 |---|---|---|
-| D1 | **Preview = Export を機械で示す** | **部分**(M15 と同じ。byte 一致ではなく Y ≤ 8。入力の正本が Document に無い) |
+| D1 | **Preview = Export を機械で示す** | **済**(M15 と同じ3点。byte 一致ではなく Y ≤ 8 なのは codec の都合) |
 | D2 | **Undo が壊れない・深さで落ちない**(AE の痛点Aの逆) | **済**(R0)。GC 方針は空席 |
 | D3 | ネイティブな区間イージング(Bounce/Elastic/Steps、オーバーシュート可) | 部分(Bezier まで) |
 | D4 | プリコンポ地獄が無い(グループ+fold+ベイク) | 未 |
@@ -95,9 +95,9 @@ Browser から **drag で配置** / Export 設定 UI と割合進捗 /
 
 順序3(shell)に入る前に塞ぐべきもの:
 
-- **comp 設定(fps・解像度・尺)と選択・playhead が Document に無い**。`render_frame` の
-  引数のままだと preview と export が違う入力を渡せる。shell を建てる人は必ず shell 側に置く
+- ~~comp 設定(fps・解像度・尺)が Document に無い~~ — **塞いだ**(裁定40)。
+  **選択・playhead はまだ無い**。これらは undo の対象にすべきでない(rerun も選択は
+  blueprint store の外に置いている)ので、`edit` timeline とは別の置き場が要る。未決
 - **gesture を1 undo へ畳む口が無い**(M10)。ドラッグが100 undo になる
-- **`ResolvedLayer` と `Layer` が同じ形で2つある**。property を1つ足すと6箇所を触る =
-  旧 `inspector_model.rs` が3世代になった構造の1世代目
-- **`generation()` が undo/redo で変わらない**。front が `last_edit_head` を自分で持つ入口
+- ~~`ResolvedLayer` と `Layer` が同じ形で2つある~~ — **塞いだ**(裁定41。共有の `LayerPlacement`)
+- ~~`generation()` が undo/redo で変わらない~~ — **塞いだ**(裁定42。`revision()`)

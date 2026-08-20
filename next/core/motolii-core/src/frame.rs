@@ -344,3 +344,35 @@ pub struct CompSpec {
     pub width: u32,
     pub height: u32,
 }
+
+/// comp 座標(ピクセル・左上原点)での layer の置き方。
+///
+/// **`motolii-store` の `ResolvedLayer` と `motolii-compositor` の `Layer` が
+/// 同じフィールドを並べていた**ので、共有の型へ畳んだ(2026-08-20 の敵対的レビュー:
+/// 「property を1つ足すと6箇所を触る」= 旧 `inspector_model.rs` が3世代になった構造の
+/// 1世代目)。畳んだ後に触るのは 3箇所 — property 名 / `resolve` / 板の組み立て。
+///
+/// **ここに増やしてよいのは「置き方」だけ**。素材の中身(色・effect)や時間の意味は
+/// 別の型が持つ。ここが何でも入る箱になったら、それは翻訳層に戻った合図である。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LayerPlacement {
+    /// comp 座標での左上位置。
+    pub top_left: [f32; 2],
+    /// comp 座標での大きさ。
+    pub size: [f32; 2],
+    /// 重ね順。大きいほど手前。上流の `re_renderer::DepthOffset` と同じ `i16`。
+    pub order: i16,
+    /// 0.0〜1.0。
+    pub opacity: f32,
+}
+
+impl Default for LayerPlacement {
+    fn default() -> Self {
+        Self {
+            top_left: [0.0, 0.0],
+            size: [0.0, 0.0],
+            order: 0,
+            opacity: 1.0,
+        }
+    }
+}

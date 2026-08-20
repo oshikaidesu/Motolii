@@ -5,10 +5,11 @@ use motolii_core::Fps;
 use motolii_engine::Engine;
 use motolii_export::{export, export_with_cancel, Cancel, ExportError, ExportJob};
 use motolii_media::probe;
-use motolii_store::{Document, Intent, LayerId, LayerMeta, LayerSource, RationalTime};
+use motolii_store::{Composition, Document, Intent, LayerId, LayerMeta, LayerSource, RationalTime};
 use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
 
 const W: u32 = 64;
+const FRAMES: i64 = 30;
 const H: u32 = 64;
 
 fn comp() -> CompSpec {
@@ -24,9 +25,16 @@ fn fps() -> Fps {
 
 /// 動く白い板。時間で絵が変わるので、書き出しが本当に各フレームを回したか分かる。
 fn moving_document() -> Document {
-    use motolii_store::{property, Interp, Keyframe, KeyframeTrack, PropertyId, Value};
+    use motolii_store::{Composition, property, Interp, Keyframe, KeyframeTrack, PropertyId, Value};
 
     let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: W,
+        height: H,
+        fps: Fps::try_new(30, 1).unwrap(),
+        duration_frames: FRAMES,
+    }))
+    .unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta {
@@ -74,9 +82,6 @@ fn report_matches_the_artifact() {
 
     let job = ExportJob {
         out_path: out.clone(),
-        comp: comp(),
-        fps: fps(),
-        frame_count: 30,
         qp0: false,
     };
     let report = export(&mut engine, &doc.view(), &job).unwrap();
@@ -111,9 +116,6 @@ fn cancel_leaves_no_artifact() {
 
     let job = ExportJob {
         out_path: out.clone(),
-        comp: comp(),
-        fps: fps(),
-        frame_count: 30,
         qp0: false,
     };
     let result = export_with_cancel(&mut engine, &doc.view(), &job, &cancel);
@@ -146,9 +148,6 @@ fn exported_frames_are_the_preview_frames() {
 
     let job = ExportJob {
         out_path: out.clone(),
-        comp: comp(),
-        fps: fps(),
-        frame_count: 5,
         // 可逆。codec の量子化を判定から外す。
         qp0: true,
     };
@@ -157,11 +156,7 @@ fn exported_frames_are_the_preview_frames() {
     let info = probe(&out).unwrap();
     for frame in [0i64, 2, 4] {
         let preview = engine
-            .render_frame(
-                &doc.view(),
-                RationalTime::try_new(frame, 30).unwrap(),
-                comp(),
-            )
+            .render_frame(&doc.view(), RationalTime::try_new(frame, 30).unwrap())
             .unwrap();
 
         let decoded = motolii_media::read_frame_at(&out, &info, frame).unwrap();

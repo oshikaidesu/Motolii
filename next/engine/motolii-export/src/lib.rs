@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use motolii_core::{CompSpec, Fps, FrameDesc, PixelFormat, RationalTime};
+use motolii_core::{FrameDesc, PixelFormat, RationalTime};
 use motolii_engine::{Engine, EngineError};
 use motolii_media::{Encoder, MediaError};
 use motolii_store::StoreView;
@@ -34,18 +34,19 @@ pub enum ExportError {
     Desc(String),
     #[error("中断された(残骸は消してある)")]
     Cancelled,
+    #[error("comp の設定が Document に無い")]
+    NoComposition,
 }
 
 /// 書き出しの注文。
 pub struct ExportJob {
     pub out_path: PathBuf,
-    pub comp: CompSpec,
-    pub fps: Fps,
-    /// 書き出すフレーム数。半開 `[0, frame_count)`。
-    pub frame_count: i64,
     /// 可逆(qp0)で書くか。
     pub qp0: bool,
 }
+
+// 解像度・fps・尺は **Document が持つ**(`Composition`)。ここに書かないのは、
+// 書けると preview と違う入力で書き出せてしまうから(2026-08-20 の敵対的レビュー)。
 
 /// 書き出しの結果。**言ったことと現物が一致する**ための報告。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,19 +89,26 @@ pub fn export_with_cancel(
     cancel: &Cancel,
 ) -> Result<ExportReport, ExportError> {
     // 合成器が返すのは premultiplied RGBA8。
+    let composition = view
+        .composition()
+        .map_err(|e| ExportError::Desc(e.to_string()))?
+        .ok_or(ExportError::NoComposition)?;
+    let comp = composition.spec();
+    let fps = composition.fps;
+
     let desc = FrameDesc::try_packed(
-        job.comp.width,
-        job.comp.height,
+        comp.width,
+        comp.height,
         PixelFormat::Rgba8Unorm,
         motolii_core::ColorSpace::Srgb,
         true,
     )
     .map_err(|e| ExportError::Desc(e.to_string()))?;
 
-    let mut encoder = Encoder::open(&job.out_path, &desc, job.fps, job.qp0)?;
+    let mut encoder = Encoder::open(&job.out_path, &desc, fps, job.qp0)?;
     let mut written = 0i64;
 
-    for frame in 0..job.frame_count {
+    for frame in 0..composition.duration_frames {
         if cancel.is_cancelled() {
             drop(encoder);
             remove_partial(&job.out_path);
@@ -110,9 +118,9 @@ pub fn export_with_cancel(
         // **preview と同じ関数**。ここを別経路にした瞬間「見た絵 ≠ 出る絵」になる。
         // 正準口を通す(手で `frame * den / num` を書かない。core の doc が
         // 「時刻とフレームの写像は正準口のみ」と言っている)。
-        let t = RationalTime::try_from_frame(frame, job.fps)
+        let t = RationalTime::try_from_frame(frame, fps)
             .map_err(|e| ExportError::Desc(e.to_string()))?;
-        let rgba = engine.render_frame(view, t, job.comp)?;
+        let rgba = engine.render_frame(view, t)?;
         encoder.write_frame(&rgba)?;
         written += 1;
     }

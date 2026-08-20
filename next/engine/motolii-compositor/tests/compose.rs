@@ -1,6 +1,6 @@
 //! 合成の契約 — 重ね順・不透明度・**preview と export が同じ絵になること**。
 
-use motolii_compositor::{CompSpec, Compositor, Layer};
+use motolii_compositor::{CompSpec, Compositor, Layer, LayerPlacement};
 
 const W: u32 = 64;
 const H: u32 = 64;
@@ -42,18 +42,22 @@ fn layers_stack_by_order_and_position() {
             &[
                 Layer {
                     texture: red,
-                    top_left: [0.0, 0.0],
-                    size: [W as f32, H as f32],
-                    order: 0,
-                    opacity: 1.0,
+                    placement: LayerPlacement {
+                        top_left: [0.0, 0.0],
+                        size: [W as f32, H as f32],
+                        order: 0,
+                        opacity: 1.0,
+                    },
                 },
                 Layer {
                     texture: green,
                     // comp 座標は左上原点。左上の 1/4 を覆う。
-                    top_left: [0.0, 0.0],
-                    size: [32.0, 32.0],
-                    order: 1,
-                    opacity: 1.0,
+                    placement: LayerPlacement {
+                        top_left: [0.0, 0.0],
+                        size: [32.0, 32.0],
+                        order: 1,
+                        opacity: 1.0,
+                    },
                 },
             ],
         )
@@ -90,10 +94,12 @@ fn render_is_deterministic() {
 
     let layer = Layer {
         texture: red,
-        top_left: [0.0, 0.0],
-        size: [W as f32, H as f32],
-        order: 0,
-        opacity: 1.0,
+        placement: LayerPlacement {
+            top_left: [0.0, 0.0],
+            size: [W as f32, H as f32],
+            order: 0,
+            opacity: 1.0,
+        },
     };
 
     let first = compositor.render(comp(), std::slice::from_ref(&layer)).unwrap();
@@ -111,10 +117,12 @@ fn opacity_dims_the_layer() {
 
     let make = |opacity: f32| Layer {
         texture: white.clone(),
-        top_left: [0.0, 0.0],
-        size: [W as f32, H as f32],
-        order: 0,
-        opacity,
+        placement: LayerPlacement {
+            top_left: [0.0, 0.0],
+            size: [W as f32, H as f32],
+            order: 0,
+            opacity,
+        },
     };
 
     let full = compositor.render(comp(), &[make(1.0)]).unwrap();
@@ -169,10 +177,12 @@ fn alpha_is_flattened_by_the_composite_step() {
             comp(),
             &[Layer {
                 texture: half_alpha,
-                top_left: [0.0, 0.0],
-                size: [W as f32, H as f32],
-                order: 0,
-                opacity: 1.0,
+                placement: LayerPlacement {
+                    top_left: [0.0, 0.0],
+                    size: [W as f32, H as f32],
+                    order: 0,
+                    opacity: 1.0,
+                },
             }],
         )
         .unwrap();
@@ -201,17 +211,21 @@ fn two_devices_produce_the_same_frame() {
         vec![
             Layer {
                 texture: tex,
-                top_left: [0.0, 0.0],
-                size: [W as f32, H as f32],
-                order: 0,
-                opacity: 1.0,
+                placement: LayerPlacement {
+                    top_left: [0.0, 0.0],
+                    size: [W as f32, H as f32],
+                    order: 0,
+                    opacity: 1.0,
+                },
             },
             Layer {
                 texture: small,
-                top_left: [8.0, 12.0],
-                size: [32.0, 32.0],
-                order: 1,
-                opacity: 0.5,
+                placement: LayerPlacement {
+                    top_left: [8.0, 12.0],
+                    size: [32.0, 32.0],
+                    order: 1,
+                    opacity: 0.5,
+                },
             },
         ]
     };

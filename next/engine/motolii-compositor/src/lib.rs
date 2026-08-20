@@ -28,21 +28,17 @@ pub use headless::HeadlessError;
 pub use re_renderer::resource_managers::GpuTexture2D;
 
 /// 合成の器。**定義は `motolii-core`** にある(背骨2を依存グラフで守るため)。
-pub use motolii_core::CompSpec;
+pub use motolii_core::{CompSpec, LayerPlacement};
 
 /// 1枚の layer。**空間に立つ板**であり、2D の完成フレームではない。
+///
+/// 置き方は `motolii-core::LayerPlacement` をそのまま持つ。store 側の
+/// `ResolvedLayer` と**同じ型**を共有しているので、置き方の property が増えても
+/// ここで並べ直さない。
 #[derive(Clone)]
 pub struct Layer {
     pub texture: GpuTexture2D,
-    /// comp 座標(ピクセル・左上原点)での左上位置。
-    pub top_left: [f32; 2],
-    /// comp 座標での大きさ。
-    pub size: [f32; 2],
-    /// 重ね順。**大きいほど手前**。上流の `DepthOffset` と同じ型にしてある
-    /// (`i32` から落とすと 32768 以上で符号が反転し、並べ替えと前後関係が食い違う)。
-    pub order: re_renderer::DepthOffset,
-    /// 0.0〜1.0。
-    pub opacity: f32,
+    pub placement: LayerPlacement,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -207,21 +203,25 @@ impl Compositor {
         let rects: Vec<TexturedRect> = layers
             .iter()
             .map(|layer| TexturedRect {
-                top_left_corner_position: glam::vec3(layer.top_left[0], layer.top_left[1], 0.0),
-                extent_u: glam::vec3(layer.size[0], 0.0, 0.0),
-                extent_v: glam::vec3(0.0, layer.size[1], 0.0),
+                top_left_corner_position: glam::vec3(
+                    layer.placement.top_left[0],
+                    layer.placement.top_left[1],
+                    0.0,
+                ),
+                extent_u: glam::vec3(layer.placement.size[0], 0.0, 0.0),
+                extent_v: glam::vec3(0.0, layer.placement.size[1], 0.0),
                 colormapped_texture: re_renderer::renderer::ColormappedTexture::from_unorm_rgba(
                     layer.texture.clone(),
                 ),
                 options: RectangleOptions {
                     // premultiplied なので alpha も色も同じ係数で掛ける。
                     multiplicative_tint: Rgba::from_rgba_premultiplied(
-                        layer.opacity,
-                        layer.opacity,
-                        layer.opacity,
-                        layer.opacity,
+                        layer.placement.opacity,
+                        layer.placement.opacity,
+                        layer.placement.opacity,
+                        layer.placement.opacity,
                     ),
-                    depth_offset: layer.order,
+                    depth_offset: layer.placement.order,
                     ..Default::default()
                 },
             })

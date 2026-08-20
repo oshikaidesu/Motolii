@@ -5,7 +5,7 @@
 
 use motolii_compositor::CompSpec;
 use motolii_engine::Engine;
-use motolii_store::{
+use motolii_store::{Composition, 
     property, Document, Interp, Intent, Keyframe, KeyframeTrack, LayerId, LayerMeta, LayerSource,
     PropertyId, RationalTime, Value,
 };
@@ -40,6 +40,13 @@ fn solid(rgba: [u8; 4], w: u32, h: u32) -> LayerSource {
 #[test]
 fn document_becomes_a_frame() {
     let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: W,
+        height: H,
+        fps: motolii_store::Fps::try_new(30, 1).unwrap(),
+        duration_frames: 60,
+    }))
+    .unwrap();
     let back = LayerId(1);
     let front = LayerId(2);
 
@@ -64,7 +71,7 @@ fn document_becomes_a_frame() {
     .unwrap();
 
     let mut engine = Engine::new().expect("engine");
-    let frame = engine.render_frame(&doc.view(), t(0), comp()).unwrap();
+    let frame = engine.render_frame(&doc.view(), t(0)).unwrap();
 
     assert!(
         pixel(&frame, 10, 10)[1] > pixel(&frame, 10, 10)[0],
@@ -82,6 +89,13 @@ fn document_becomes_a_frame() {
 #[test]
 fn keyframes_move_the_picture_over_time() {
     let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: W,
+        height: H,
+        fps: motolii_store::Fps::try_new(30, 1).unwrap(),
+        duration_frames: 60,
+    }))
+    .unwrap();
     let layer = LayerId(1);
 
     doc.apply(Intent::AddLayer(layer)).unwrap();
@@ -114,9 +128,9 @@ fn keyframes_move_the_picture_over_time() {
     .unwrap();
 
     let mut engine = Engine::new().expect("engine");
-    let at_start = engine.render_frame(&doc.view(), t(0), comp()).unwrap();
-    let at_mid = engine.render_frame(&doc.view(), t(15), comp()).unwrap();
-    let at_end = engine.render_frame(&doc.view(), t(30), comp()).unwrap();
+    let at_start = engine.render_frame(&doc.view(), t(0)).unwrap();
+    let at_mid = engine.render_frame(&doc.view(), t(15)).unwrap();
+    let at_end = engine.render_frame(&doc.view(), t(30)).unwrap();
 
     assert!(pixel(&at_start, 4, 4)[0] > 128, "0フレームでは左上に居る");
     assert!(pixel(&at_start, 56, 4)[0] < 128, "0フレームでは右上に居ない");
@@ -133,6 +147,13 @@ fn keyframes_move_the_picture_over_time() {
 #[test]
 fn undo_changes_the_rendered_frame() {
     let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: W,
+        height: H,
+        fps: motolii_store::Fps::try_new(30, 1).unwrap(),
+        duration_frames: 60,
+    }))
+    .unwrap();
     let layer = LayerId(1);
 
     doc.apply(Intent::AddLayer(layer)).unwrap();
@@ -146,7 +167,7 @@ fn undo_changes_the_rendered_frame() {
     .unwrap();
 
     let mut engine = Engine::new().expect("engine");
-    let red = engine.render_frame(&doc.view(), t(0), comp()).unwrap();
+    let red = engine.render_frame(&doc.view(), t(0)).unwrap();
 
     doc.apply(Intent::SetMeta {
         layer,
@@ -156,10 +177,10 @@ fn undo_changes_the_rendered_frame() {
         },
     })
     .unwrap();
-    let blue = engine.render_frame(&doc.view(), t(0), comp()).unwrap();
+    let blue = engine.render_frame(&doc.view(), t(0)).unwrap();
     assert_ne!(red, blue);
 
     assert!(doc.undo());
-    let back_to_red = engine.render_frame(&doc.view(), t(0), comp()).unwrap();
+    let back_to_red = engine.render_frame(&doc.view(), t(0)).unwrap();
     assert_eq!(red, back_to_red, "undo は絵まで byte 一致で戻るべき");
 }

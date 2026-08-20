@@ -7,14 +7,25 @@ use motolii_compositor::CompSpec;
 use motolii_core::Fps;
 use motolii_engine::Engine;
 use motolii_export::{export, ExportJob};
-use motolii_store::{Document, Intent, LayerId, LayerMeta, LayerSource};
+use motolii_store::{Composition, Document, Intent, LayerId, LayerMeta, LayerSource};
 use motolii_testkit::{ffmpeg_or_skip, tmp_dir};
 use std::process::Command;
+
+const W: u32 = 320;
+const H: u32 = 240;
+const FRAMES: i64 = 300;
 
 /// 実素材を持つ Document。**素材があると engine はフレームを持つ**ので、
 /// 単色だけで測ると溜め込みを見逃す。
 fn document_with_media(path: String) -> Document {
     let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: W,
+        height: H,
+        fps: Fps::try_new(30, 1).unwrap(),
+        duration_frames: FRAMES,
+    }))
+    .unwrap();
     let layer = LayerId(1);
     doc.apply(Intent::AddLayer(layer)).unwrap();
     doc.apply(Intent::SetMeta {
@@ -71,12 +82,6 @@ fn long_export_does_not_accumulate_frames() {
     let mut engine = Engine::new().unwrap();
     let job = ExportJob {
         out_path: out.clone(),
-        comp: CompSpec {
-            width: 320,
-            height: 240,
-        },
-        fps: Fps::try_new(30, 1).unwrap(),
-        frame_count: 300,
         qp0: false,
     };
     let report = export(&mut engine, &doc.view(), &job).unwrap();
@@ -97,12 +102,6 @@ fn long_export_does_not_accumulate_frames() {
     // (増えるなら上限が効いておらず、3〜5分の MV でメモリが死ぬ)
     let long_job = ExportJob {
         out_path: dir.join("long-out-2.mp4"),
-        comp: CompSpec {
-            width: 320,
-            height: 240,
-        },
-        fps: Fps::try_new(30, 1).unwrap(),
-        frame_count: 300,
         qp0: false,
     };
     let src2 = make_video(&dir, 10);

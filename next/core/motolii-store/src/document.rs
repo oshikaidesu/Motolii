@@ -9,7 +9,7 @@ use re_log_types::{
 };
 use re_types_core::SerializedComponentBatch;
 
-use crate::components::{descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
+use crate::components::{descriptor_composition, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
 use crate::view::StoreView;
 use crate::{StoreError, EDIT_TIMELINE};
 
@@ -73,6 +73,17 @@ pub enum Intent {
         layer: LayerId,
         meta: crate::LayerMeta,
     },
+    /// comp の設定(解像度・fps・尺)。**undo が効く**ので普通の編集と同じ経路。
+    SetComposition(crate::Composition),
+}
+
+/// 「見えている Document が変わったか」の印。
+///
+/// store の世代だけでは undo/redo を捉えられないので、edit 位置と一組にしてある。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Revision {
+    store: re_chunk_store::ChunkStoreGeneration,
+    head: i64,
 }
 
 pub struct Document {
@@ -96,6 +107,11 @@ impl Document {
             head: 0,
             tip: 0,
         }
+    }
+
+    /// comp 設定の置き場。layer(`/layer/{id}`)と混ざらない固定の path。
+    pub(crate) fn composition_path() -> EntityPath {
+        EntityPath::from("/composition")
     }
 
     fn timeline() -> Timeline {
@@ -161,15 +177,23 @@ impl Document {
 
         let at = self.head + 1;
         let batches = match intent {
-            Intent::AddLayer(layer) => (
-                layer,
-                vec![serialize_present(true)?],
-            ),
-            Intent::RemoveLayer(layer) => (layer, vec![serialize_present(false)?]),
+            Intent::AddLayer(layer) => (layer.entity_path(), vec![serialize_present(true)?]),
+            Intent::RemoveLayer(layer) => (layer.entity_path(), vec![serialize_present(false)?]),
+            Intent::SetComposition(composition) => {
+                let json = serde_json::to_string(&composition)?;
+                (
+                    Self::composition_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_composition(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
             Intent::SetMeta { layer, meta } => {
                 let json = serde_json::to_string(&meta)?;
                 (
-                    layer,
+                    layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_meta(),
                         array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
@@ -184,7 +208,7 @@ impl Document {
             } => {
                 let json = serde_json::to_string(&track)?;
                 (
-                    layer,
+                    layer.entity_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_track(&property),
                         array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
@@ -194,8 +218,8 @@ impl Document {
             }
         };
 
-        let (layer, batches) = batches;
-        let chunk = Chunk::builder(layer.entity_path())
+        let (path, batches) = batches;
+        let chunk = Chunk::builder(path)
             .with_serialized_batches(
                 RowId::new(),
                 TimePoint::default().with(Self::timeline(), at),
@@ -213,12 +237,19 @@ impl Document {
         Ok(())
     }
 
-    /// 変化検出。**上流の物をそのまま出す**(`EntityDb::generation`)。
+    /// 変化検出。front がこれを見れば「前回と同じか」が分かるので、
+    /// **前回の値を自分で持つ必要が無い**。二重帳簿の入口を1つ塞ぐための口である。
     ///
-    /// front がこれを見れば「前回と同じか」が分かるので、**前回の値を自分で持つ必要が無い**。
-    /// 二重帳簿の入口を1つ塞ぐための口である。
-    pub fn generation(&self) -> re_chunk_store::ChunkStoreGeneration {
-        self.db.generation()
+    /// **上流の `EntityDb::generation` だけでは足りない**(2026-08-20 の敵対的レビュー):
+    /// `undo`/`redo` は `head` を動かすだけで store に触らないので generation が変わらず、
+    /// **undo しても front が再描画しない**。それでは front が `last_edit_head` を自分で
+    /// 持つことになり、塞ぐと言った入口が逆に開く。よって **(store の世代, edit 位置)** を
+    /// 一組で返す。
+    pub fn revision(&self) -> Revision {
+        Revision {
+            store: self.db.generation(),
+            head: self.head,
+        }
     }
 
     /// 実測用。製品経路ではない。

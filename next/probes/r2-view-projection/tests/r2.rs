@@ -143,24 +143,36 @@ fn change_detection_is_upstream_and_cheap() {
     const RUNS: u128 = 10_000;
 
     let mut doc = realistic_document();
-    let before = doc.generation();
+    let before = doc.revision();
 
     let start = Instant::now();
     let mut sink = 0u64;
     for _ in 0..RUNS {
-        sink += u64::from(doc.generation() == before);
+        sink += u64::from(doc.revision() == before);
     }
     let per_call = start.elapsed().as_nanos() / RUNS;
     assert_eq!(sink, RUNS as u64);
 
     doc.apply(Intent::AddLayer(LayerId(999))).unwrap();
     assert_ne!(
-        doc.generation(),
+        doc.revision(),
         before,
         "編集しても generation が動かないなら変化検出に使えない"
     );
 
     assert!(doc.undo());
-    println!("R2 変化検出: generation() = {per_call}ns/回(上流 `EntityDb::generation`)");
-    assert!(per_call < 1_000, "generation() が {per_call}ns。毎フレーム呼べない");
+    println!("R2 変化検出: revision() = {per_call}ns/回(store 世代 + edit 位置)");
+    assert!(per_call < 1_000, "revision() が {per_call}ns。毎フレーム呼べない");
+
+    // **undo/redo でも変わること**。store の世代だけを見ていた頃は undo で変わらず、
+    // front が `last_edit_head` を自分で持つ入口になっていた(2026-08-20 の敵対的レビュー)。
+    let after_edit = doc.revision();
+    assert!(doc.undo());
+    assert_ne!(
+        doc.revision(),
+        after_edit,
+        "undo しても revision が変わらないなら front は再描画できない"
+    );
+    assert!(doc.redo());
+    assert_eq!(doc.revision(), after_edit, "redo で元の revision へ戻る");
 }

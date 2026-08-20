@@ -10,7 +10,7 @@ use std::collections::{HashMap, VecDeque};
 
 use motolii_compositor::GpuTexture2D;
 use motolii_compositor::{Compositor, CompositorError, Layer};
-use motolii_core::CompSpec;
+
 use motolii_media::{probe, read_frame_at, MediaError, MediaInfo};
 use motolii_store::{LayerSource, RationalTime, StoreView};
 
@@ -24,6 +24,8 @@ pub enum EngineError {
     Time(String),
     #[error("Document を読めない: {0}")]
     Store(String),
+    #[error("comp の設定が Document に無い(解像度も fps も決まっていない)")]
+    NoComposition,
 }
 
 pub struct Engine {
@@ -60,12 +62,20 @@ impl Engine {
     }
 
     /// **唯一の評価経路**。Document のある時刻の姿を1枚の RGBA8 にする。
+    ///
+    /// **comp を引数で取らない**。取れると preview と export が違う解像度を渡せてしまい、
+    /// 「評価経路が1本」が入力の一致に依存する保証に落ちる(2026-08-20 の敵対的レビュー)。
+    /// 解像度も fps も Document が持つ。
     pub fn render_frame(
         &mut self,
         view: &StoreView<'_>,
         t: RationalTime,
-        comp: CompSpec,
     ) -> Result<Vec<u8>, EngineError> {
+        let comp = view
+            .composition()
+            .map_err(|e| EngineError::Store(e.to_string()))?
+            .ok_or(EngineError::NoComposition)?
+            .spec();
         let resolved = view
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
@@ -78,18 +88,16 @@ impl Engine {
                 continue;
             };
             // track も declared も無い軸は素材の実寸で埋める(AE と同じ「キーを
-            // 打っていない property は静止値」の延長)。
-            let size = [
-                if layer.size[0] > 0.0 { layer.size[0] } else { natural[0] },
-                if layer.size[1] > 0.0 { layer.size[1] } else { natural[1] },
-            ];
-            layers.push(Layer {
-                texture,
-                top_left: layer.top_left,
-                size,
-                order: layer.order,
-                opacity: layer.opacity,
-            });
+            // 打っていない property は静止値」の延長)。**置き方はそのまま持ち回る** —
+            // フィールドを並べ直すとそこが翻訳層になる。
+            let mut placement = layer.placement;
+            if placement.size[0] <= 0.0 {
+                placement.size[0] = natural[0];
+            }
+            if placement.size[1] <= 0.0 {
+                placement.size[1] = natural[1];
+            }
+            layers.push(Layer { texture, placement });
         }
 
         Ok(self.compositor.render(comp, &layers)?)
