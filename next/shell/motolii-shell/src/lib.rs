@@ -205,6 +205,7 @@ impl Shell {
             height: 360,
             fps: motolii_store::Fps::try_new(30, 1).expect("30fps"),
             duration_frames: 300,
+            background: [0.0, 0.0, 0.0, 1.0],
         }));
 
         // 既定値は「編集」ではないので戻せてはいけない。

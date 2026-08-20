@@ -34,6 +34,7 @@ fn moving_document() -> Document {
         height: H,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames: FRAMES,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     let layer = LayerId(1);

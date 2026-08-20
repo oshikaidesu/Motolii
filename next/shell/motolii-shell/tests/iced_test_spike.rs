@@ -101,6 +101,7 @@ fn one_layer_timeline() -> (motolii_store::Document, Session) {
         height: 360,
         fps: Fps::try_new(30, 1).expect("30fps"),
         duration_frames: 300,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .expect("comp を置ける");
     doc.mark_undo_floor();

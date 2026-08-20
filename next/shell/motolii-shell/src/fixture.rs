@@ -148,6 +148,7 @@ pub fn build() -> Fixture {
         height: 1080,
         fps: Fps::try_new(FPS_NUM, 1).expect("30fps"),
         duration_frames: DURATION_FRAMES,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .expect("comp を置ける");
 

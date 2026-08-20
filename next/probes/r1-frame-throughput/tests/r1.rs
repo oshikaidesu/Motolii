@@ -41,6 +41,7 @@ fn document_scaled(layers: u64, source_scale: u32) -> Document {
         height: sh,
         fps: motolii_store::Fps::try_new(30, 1).unwrap(),
         duration_frames: 1,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     for i in 0..layers {
@@ -70,6 +71,7 @@ fn document_with(layers: u64) -> Document {
         height: FHD[1],
         fps: motolii_store::Fps::try_new(30, 1).unwrap(),
         duration_frames: 1,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     for i in 0..layers {
