@@ -32,5 +32,7 @@ mod q0_fence;
 mod settings_drive;
 #[path = "suite/theme_wiring_fence.rs"]
 mod theme_wiring_fence;
+#[path = "suite/tonmana_token_fence.rs"]
+mod tonmana_token_fence;
 #[path = "suite/ui_scale_fence.rs"]
 mod ui_scale_fence;
