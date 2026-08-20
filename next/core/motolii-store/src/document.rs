@@ -629,6 +629,7 @@ impl Document {
                 )
             }
             Intent::SetMasks { layer, masks } => {
+                check_not_locked(&self.view(), layer)?;
                 crate::mask::validate_unique_ids(&masks)?;
                 let json = serde_json::to_string(&masks)?;
                 (
@@ -641,6 +642,7 @@ impl Document {
                 )
             }
             Intent::SetTiming { layer, timing } => {
+                check_not_locked(&self.view(), layer)?;
                 // meta の一部なので、読んで差し替えて書き戻す。
                 // **専用の component を足さない** — 増やすと読み口も増える。
                 let current = self.view().meta(layer)?;
@@ -684,6 +686,7 @@ impl Document {
                 )
             }
             Intent::SetSource { layer, source } => {
+                check_not_locked(&self.view(), layer)?;
                 let current = self.view().meta(layer)?;
                 let Some(mut meta) = current else {
                     return Err(StoreError::Property(format!(
@@ -703,6 +706,7 @@ impl Document {
                 )
             }
             Intent::SetOrder { layer, order } => {
+                check_not_locked(&self.view(), layer)?;
                 let current = self.view().meta(layer)?;
                 let Some(mut meta) = current else {
                     return Err(StoreError::Property(format!(
@@ -726,6 +730,28 @@ impl Document {
                 // `LayerAttrs::default()` を土台にする(`meta` と違い、属性は元々
                 // 省略可能なので「まだ無い」ことがエラーではない)。
                 let current = self.view().attrs(layer)?.unwrap_or_default();
+                // locked は `locked` 自身の解除(または再ロック)だけ常に通す —
+                // 他のどれか1つでも `Some` なら「locked 以外のフィールド」を触ろうと
+                // しているので拒む。自分をロックしたら二度と触れなくなる詰みを
+                // 作らないよう、`locked` を触るだけの patch は現在の locked 状態に
+                // 関わらず素通しする。
+                if current.locked {
+                    let touches_other_than_locked = patch.hidden.is_some()
+                        || patch.parent.is_some()
+                        || patch.blend_mode.is_some()
+                        || patch.matte.is_some()
+                        || patch.name.is_some()
+                        || patch.auto_orient.is_some()
+                        || patch.pinned.is_some()
+                        || patch.solo.is_some();
+                    if touches_other_than_locked {
+                        return Err(StoreError::Property(format!(
+                            "layer {} は locked なので attrs を変更できない(先に \
+                             locked を外すこと)",
+                            layer.0
+                        )));
+                    }
+                }
                 if let Some(new_parent) = patch.parent {
                     validate_no_parent_cycle(&self.view(), layer, new_parent)?;
                 }
@@ -741,6 +767,7 @@ impl Document {
                 )
             }
             Intent::SetEffects { layer, effects } => {
+                check_not_locked(&self.view(), layer)?;
                 crate::effect::validate_unique_ids(&effects)?;
                 let json = serde_json::to_string(&effects)?;
                 (
@@ -753,6 +780,7 @@ impl Document {
                 )
             }
             Intent::SetShapes { layer, shapes } => {
+                check_not_locked(&self.view(), layer)?;
                 let json = serde_json::to_string(&shapes)?;
                 (
                     layer.entity_path(),
@@ -764,6 +792,7 @@ impl Document {
                 )
             }
             Intent::SetTextDocument { layer, document } => {
+                check_not_locked(&self.view(), layer)?;
                 crate::text::validate(&document)?;
                 let json = serde_json::to_string(&document)?;
                 (
@@ -780,6 +809,7 @@ impl Document {
                 property,
                 track,
             } => {
+                check_not_locked(&self.view(), layer)?;
                 // **`PropertySource::Track` でラップして書く**(`slot` 発注単位)。
                 // untagged なので wire 形は今までの `KeyframeTrack` の JSON と同じ —
                 // 既存の呼び手・読み手(`view.track()`)は何も変わらない。
@@ -809,6 +839,7 @@ impl Document {
                 property,
                 slot,
             } => {
+                check_not_locked(&self.view(), layer)?;
                 let json = serde_json::to_string(&PropertySource::Slot(slot))?;
                 (
                     layer.entity_path(),
@@ -904,6 +935,20 @@ fn validate_no_parent_cycle(
             .ok()
             .flatten()
             .and_then(|attrs| attrs.parent);
+    }
+    Ok(())
+}
+
+/// locked な layer への層変更 Intent を拒む(`SetAttrs` は別扱い — 上の
+/// `Intent::SetAttrs` 腕を参照。`locked` 自身の解除/再ロックだけ通す規則は
+/// `SetAttrs` にしか無い、他の Intent には「触ってよい locked 以外のフィールド」が
+/// 無いので単純に全拒否でよい)。
+fn check_not_locked(view: &StoreView, layer: LayerId) -> Result<(), StoreError> {
+    if view.attrs(layer)?.unwrap_or_default().locked {
+        return Err(StoreError::Property(format!(
+            "layer {} は locked なので編集できない(先に SetAttrs で locked を外すこと)",
+            layer.0
+        )));
     }
     Ok(())
 }

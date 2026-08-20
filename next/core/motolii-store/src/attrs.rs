@@ -91,6 +91,20 @@ pub struct LayerAttrs {
     /// 無視」という空間分割の形は採らず、明示属性1つに畳んである。既定 false
     /// (裁定113「pinned は明示属性」)。
     pub pinned: bool,
+    /// solo。**描画に効く** — comp 内のいずれかの layer が `solo=true` のとき、
+    /// solo でない layer は(hidden と同じ経路で)描かれない([`crate::view`] の
+    /// `resolve` 参照)。**hidden が勝つ**: hidden な layer は自分が solo でも出ない
+    /// (隠した層を solo で復活させない)。将来のグループ AND 導出(裁定119)に矛盾しない
+    /// よう、単層の bool のまま素直に持つ(グループの solo は子の solo から導出する側の
+    /// 仕事であって、ここに特別な意味を足さない)。既定 false。
+    pub solo: bool,
+    /// locked。**描画には無関係**(合成器・resolve は読まない) — 効くのは書き口。
+    /// `Document::write` が locked な layer への層変更 Intent(`SetTiming`/`SetSource`/
+    /// `SetOrder`/`SetMasks`/`SetEffects`/`SetShapes`/`SetTextDocument`/`SetTrack`/
+    /// `SetPropertySlot`、および `SetAttrs` の `locked` 以外のフィールド)を理由つき
+    /// `Err` で拒む。**`locked` 自身の解除だけは常に通す** — 自分をロックしたら二度と
+    /// 触れなくなる、という詰みを作らない。既定 false。
+    pub locked: bool,
 }
 
 impl Default for LayerAttrs {
@@ -103,6 +117,8 @@ impl Default for LayerAttrs {
             name: String::new(),
             auto_orient: false,
             pinned: false,
+            solo: false,
+            locked: false,
         }
     }
 }
@@ -130,6 +146,8 @@ pub struct LayerAttrsPatch {
     pub name: Option<String>,
     pub auto_orient: Option<bool>,
     pub pinned: Option<bool>,
+    pub solo: Option<bool>,
+    pub locked: Option<bool>,
 }
 
 impl LayerAttrsPatch {
@@ -155,6 +173,12 @@ impl LayerAttrsPatch {
         }
         if let Some(v) = self.pinned {
             current.pinned = v;
+        }
+        if let Some(v) = self.solo {
+            current.solo = v;
+        }
+        if let Some(v) = self.locked {
+            current.locked = v;
         }
         current
     }

@@ -572,6 +572,19 @@ impl<'a> StoreView<'a> {
             return Ok(None);
         }
 
+        // solo: comp のどこかに solo な layer が居るなら、solo でない layer は
+        // hidden と同じ経路でここに落ちる。**hidden が勝つ** — 上の hidden 判定を
+        // 通り抜けた(= 自分は hidden ではない)layer だけがここへ来るので、
+        // 「隠した層を solo で復活させる」ことは構造的に起きない。solo な layer
+        // 自身が同時に hidden なら、その layer は上で既に弾かれているが、
+        // 「comp のどこかに solo な layer が居る」という判定(`any_solo`)には
+        // hidden かどうかを問わず含める — solo フラグは hidden と独立な「意図」の
+        // 表明であって、hidden がそれを見えなくするだけで無かったことにはしない
+        // (裁定119 のグループ AND 導出と衝突しない、単層の bool のまま)。
+        if self.any_solo()? && !attrs.solo {
+            return Ok(None);
+        }
+
         // 時間の判定は Document がする。engine は解決済みの素材フレームを受け取るだけ。
         let Some(composition) = self.composition()? else {
             return Ok(None);
@@ -692,6 +705,17 @@ impl<'a> StoreView<'a> {
             ))),
             None => Ok(None),
         }
+    }
+
+    /// comp のどこかに `solo=true` な layer が居るか。**hidden は問わない**
+    /// (`resolve` のコメント参照 — solo という意図の表明は hidden と独立)。
+    fn any_solo(&self) -> Result<bool, StoreError> {
+        for layer in self.layers() {
+            if self.attrs(layer)?.unwrap_or_default().solo {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// この時刻に描くべき layer を**奥から手前の順**で返す。

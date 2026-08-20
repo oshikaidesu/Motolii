@@ -53,6 +53,8 @@ fn doc_with_layer_and_attrs() -> (Document, LayerId) {
             name: Some("circle".to_owned()),
             auto_orient: Some(true),
             pinned: Some(false),
+            solo: Some(false),
+            locked: Some(false),
         },
     })
     .unwrap();
