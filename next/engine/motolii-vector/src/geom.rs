@@ -4,10 +4,14 @@
 //! `Point` / `Vertex` / `Contour` / `Path` / `rect` / `ellipse` は**そのまま**持ってきた。
 //! 名前も変えていない — 変えると移植元を辿れなくなり、次に直す人が二重に読む。
 //!
-//! **落としたもの**(軸4「使う分だけ移植する」): `Point::rotate`(twist 専用)/
-//! `Point::dot` 以外の未使用ヘルパ / `axis_aligned_rect` / `axis_aligned_ellipse`
-//! (GPU OverlayRect 退化判定。この crate は板1枚を返すので要らない)/
-//! `centroid_of`(pucker-bloat 専用)。要る日に旧 workspace から取る。
+//! **落としたもの**(軸4「使う分だけ移植する」): `axis_aligned_rect` /
+//! `axis_aligned_ellipse`(GPU OverlayRect 退化判定。この crate は板1枚を返すので要らない)。
+//! `Point::rotate` と `centroid_of` は `shape-1` の時点では落としてあったが、
+//! **その「要る日」が来たので取り戻した** — 前者は twist(`shape-3`)、後者は
+//! pucker-bloat(`shape-2`)が使う。
+//!
+//! **`polystar` だけは移植ではない**。旧 `pathgeom.rs` はパス源を `rect`/`ellipse` しか
+//! 持っておらず、星は無かった。ここが `shape-2` で `owns:` が増える唯一の箇所である。
 //!
 //! **座標系**: 原点左上・Y 下向きの **AE comp 座標**(裁定14)。移植元は Y-up
 //! 前提だったが、同じ回転行列を Y-down 空間に置くと画面上は**時計回り**になり、
@@ -63,6 +67,18 @@ impl Point {
             Point::ZERO
         } else {
             self.scale(1.0 / l)
+        }
+    }
+
+    /// 回転(角度はラジアン)。移植元は Y-up 前提で「CCW」と書いていたが、
+    /// **式は1行も変えていない** — この crate の空間は Y 下向きの comp 座標なので、
+    /// 同じ行列が画面上では時計回りになり、それが Lottie/AE の rotation の向き
+    /// そのものである(この file の頭のとおり)。
+    pub(crate) fn rotate(self, angle: f64) -> Point {
+        let (s, c) = angle.sin_cos();
+        Point {
+            x: self.x * c - self.y * s,
+            y: self.x * s + self.y * c,
         }
     }
 }
@@ -161,6 +177,65 @@ pub(crate) fn ellipse(size: Point) -> Path {
     }]
 }
 
+/// `polystar` — 星と正多角形(`shapes/polystar`)。
+///
+/// **ここだけは移植ではなく新規**(旧 `pathgeom.rs` にパス源は rect/ellipse しか無い)。
+///
+/// 起点は真上(`-π/2`)に固定してある。Lottie の `polystar.r`(Rotation)は
+/// 不採用(裁定74 — 層の rotation と同じ物になる)なので、**起点を選ばせる口が
+/// 無い以上、起点は1つに決まっていなければならない**。真上を採るのは AE / Lottie の
+/// 既定と同じで、「星は上向き」が人の期待だからである。
+///
+/// `points` が3未満なら**空のパス**。輪郭にならない値だが、`points` はキーを打てる
+/// property なので、アニメーションの途中で 2.4 を通ることがある。そこで
+/// [`VectorError`](crate::VectorError) を出すと**再生が止まる** — 描く物が無いのは
+/// 壊れた入力ではないので、空で返す。
+pub(crate) fn polystar(
+    points: f64,
+    outer_radius: f64,
+    inner_radius: f64,
+    star_type: crate::StarType,
+) -> Path {
+    let n = points.max(0.0).round() as usize;
+    if n < 3 {
+        return Path::new();
+    }
+    let start = -std::f64::consts::FRAC_PI_2;
+    let at = |angle: f64, radius: f64| {
+        Vertex::corner(Point {
+            x: radius * angle.cos(),
+            y: radius * angle.sin(),
+        })
+    };
+    let vertices = match star_type {
+        // 外半径だけを使う。`inner_radius` は多角形では意味を持たない。
+        crate::StarType::Polygon => {
+            let step = std::f64::consts::TAU / n as f64;
+            (0..n)
+                .map(|i| at(start + step * i as f64, outer_radius))
+                .collect()
+        }
+        // 外・内が交互に並ぶので頂点は 2n 個。
+        crate::StarType::Star => {
+            let step = std::f64::consts::PI / n as f64;
+            (0..n * 2)
+                .map(|i| {
+                    let radius = if i % 2 == 0 {
+                        outer_radius
+                    } else {
+                        inner_radius
+                    };
+                    at(start + step * i as f64, radius)
+                })
+                .collect()
+        }
+    };
+    vec![Contour {
+        vertices,
+        closed: true,
+    }]
+}
+
 // ---------------------------------------------------------------------------
 // ベジエの共通部品(移植)。trim と rounded-corners が共有する。
 // ---------------------------------------------------------------------------
@@ -189,6 +264,70 @@ pub(crate) fn bezier_point(v0: &Vertex, v1: &Vertex, t: f64) -> Point {
         .add(p1.scale(3.0 * mt * mt * t))
         .add(p2.scale(3.0 * mt * t * t))
         .add(p3.scale(t * t * t))
+}
+
+/// 接線ベクトル(1階微分)。zig-zag が法線を出すために使う。
+pub(crate) fn bezier_tangent(v0: &Vertex, v1: &Vertex, t: f64) -> Point {
+    if is_straight(v0, v1) {
+        return v1.point.sub(v0.point);
+    }
+    let p0 = v0.point;
+    let p1 = v0.point.add(v0.out_tangent);
+    let p2 = v1.point.add(v1.in_tangent);
+    let p3 = v1.point;
+    let mt = 1.0 - t;
+    p1.sub(p0)
+        .scale(3.0 * mt * mt)
+        .add(p2.sub(p1).scale(6.0 * mt * t))
+        .add(p3.sub(p2).scale(3.0 * t * t))
+}
+
+/// 頂点の重心。pucker-bloat が寄せ先として使う。
+pub(crate) fn centroid_of(vertices: &[Vertex]) -> Point {
+    let sum = vertices.iter().fold(Point::ZERO, |acc, v| acc.add(v.point));
+    sum.scale(1.0 / vertices.len() as f64)
+}
+
+/// offset 入力用: 輪郭をベジエ沿いの折れ線へ密化する(trim と同じ [`ARC_SAMPLES`])。
+///
+/// **移植元の欠陥を1つ直してある**。旧 `pathgeom.rs::contour_polyline_samples` は
+/// 「閉路の最終辺で始点を二重に積まない」ガードを**直線の枝にしか置いていない**。
+/// 曲線の枝は `t=1` の標本を無条件に積むので、楕円のような全辺が曲線の閉路では
+/// 末尾が始点と重なる。重なった点は長さ 0 の辺を作り、`offset_contour` がそれを
+/// 「移動できない辺」として素通しするため、**輪郭の1点だけが offset されずに
+/// 元の位置へ残る**。ここでは閉路判定を枝の外へ出した。
+pub(crate) fn contour_polyline_samples(c: &Contour) -> Vec<Point> {
+    let n = c.vertices.len();
+    if n <= 1 {
+        return c.vertices.iter().map(|v| v.point).collect();
+    }
+    let edge_count = if c.closed { n } else { n - 1 };
+    let mut pts = Vec::new();
+    for e in 0..edge_count {
+        let v0 = &c.vertices[e];
+        let v1 = &c.vertices[(e + 1) % n];
+        if pts.is_empty() {
+            pts.push(v0.point);
+        }
+        // 閉路の最終辺は終点が始点そのものなので積まない(直線でも曲線でも同じ)。
+        let is_closing = c.closed && e == edge_count - 1;
+        if is_straight(v0, v1) {
+            if !is_closing {
+                pts.push(v1.point);
+            }
+        } else {
+            let last = if is_closing {
+                ARC_SAMPLES - 1
+            } else {
+                ARC_SAMPLES
+            };
+            for i in 1..=last {
+                let t = i as f64 / ARC_SAMPLES as f64;
+                pts.push(bezier_point(v0, v1, t));
+            }
+        }
+    }
+    pts
 }
 
 pub(crate) const ARC_SAMPLES: usize = 24;

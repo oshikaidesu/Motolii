@@ -5,8 +5,9 @@
 //! 観測できる限り緑であってほしいため。
 
 use motolii_vector::{
-    render, Canvas, Composite, Contour, Fill, FillRule, LineCap, LineJoin, OpKind, PathSource,
-    Point, Raster, RepeaterTransform, Rgb, Shape, ShapeOp, Stroke, TrimMultiple, Vertex,
+    render, Brush, Canvas, Composite, Contour, Fill, FillRule, LineCap, LineJoin, OpKind,
+    PathSource, Point, Raster, RepeaterTransform, Rgb, Shape, ShapeOp, Stroke, TrimMultiple,
+    Vertex,
 };
 
 // ---------------------------------------------------------------------------
@@ -39,7 +40,7 @@ fn square() -> PathSource {
 
 fn black_stroke(width: f64) -> Stroke {
     Stroke {
-        color: Rgb::BLACK,
+        brush: Brush::Solid(Rgb::BLACK),
         width,
         ..Stroke::default()
     }
@@ -47,7 +48,7 @@ fn black_stroke(width: f64) -> Stroke {
 
 fn black_fill() -> Fill {
     Fill {
-        color: Rgb::BLACK,
+        brush: Brush::Solid(Rgb::BLACK),
         ..Fill::default()
     }
 }
@@ -358,19 +359,19 @@ fn repeater_composite_changes_the_stacking_order() {
                 end_opacity: 1.0,
             })],
             fill: Some(Fill {
-                color: Rgb {
+                brush: Brush::Solid(Rgb {
                     r: 1.0,
                     g: 0.0,
                     b: 0.0,
-                },
+                }),
                 ..Fill::default()
             }),
             stroke: Some(Stroke {
-                color: Rgb {
+                brush: Brush::Solid(Rgb {
                     r: 0.0,
                     g: 0.0,
                     b: 1.0,
-                },
+                }),
                 width: 10.0,
                 ..Stroke::default()
             }),
@@ -450,7 +451,7 @@ fn fill_rule_opens_the_hole() {
     let make = |rule| {
         let shape = Shape {
             fill: Some(Fill {
-                color: Rgb::BLACK,
+                brush: Brush::Solid(Rgb::BLACK),
                 rule,
                 ..Fill::default()
             }),
@@ -505,17 +506,17 @@ fn the_same_description_renders_byte_identical_twice() {
             }),
         ],
         fill: Some(Fill {
-            color: Rgb {
+            brush: Brush::Solid(Rgb {
                 r: 0.2,
                 g: 0.6,
                 b: 0.9,
-            },
+            }),
             rule: FillRule::EvenOdd,
             opacity: 0.75,
             hidden: false,
         }),
         stroke: Some(Stroke {
-            color: Rgb::BLACK,
+            brush: Brush::Solid(Rgb::BLACK),
             width: 3.5,
             cap: LineCap::Round,
             join: LineJoin::Bevel,
@@ -634,11 +635,11 @@ fn stroke_width_and_color_reach_the_pixels() {
     let red = render(
         &Shape {
             stroke: Some(Stroke {
-                color: Rgb {
+                brush: Brush::Solid(Rgb {
                     r: 1.0,
                     g: 0.0,
                     b: 0.0,
-                },
+                }),
                 width: 12.0,
                 ..Stroke::default()
             }),
@@ -663,7 +664,7 @@ fn line_cap_extends_the_open_ends() {
         render(
             &Shape {
                 stroke: Some(Stroke {
-                    color: Rgb::BLACK,
+                    brush: Brush::Solid(Rgb::BLACK),
                     width: 16.0,
                     cap,
                     ..Stroke::default()
@@ -703,7 +704,7 @@ fn line_join_and_miter_limit_change_the_corner() {
         render(
             &Shape {
                 stroke: Some(Stroke {
-                    color: Rgb::BLACK,
+                    brush: Brush::Solid(Rgb::BLACK),
                     width: 14.0,
                     join,
                     miter_limit,
@@ -742,7 +743,7 @@ fn dashes_break_the_line_into_pieces() {
         render(
             &Shape {
                 stroke: Some(Stroke {
-                    color: Rgb::BLACK,
+                    brush: Brush::Solid(Rgb::BLACK),
                     width: 6.0,
                     dash,
                     ..Stroke::default()
@@ -769,7 +770,7 @@ fn shape_style_opacity_scales_the_alpha() {
         render(
             &Shape {
                 fill: Some(Fill {
-                    color: Rgb::BLACK,
+                    brush: Brush::Solid(Rgb::BLACK),
                     opacity,
                     ..Fill::default()
                 }),
@@ -882,11 +883,11 @@ fn the_output_is_premultiplied() {
     let out = render(
         &Shape {
             fill: Some(Fill {
-                color: Rgb {
+                brush: Brush::Solid(Rgb {
                     r: 1.0,
                     g: 1.0,
                     b: 1.0,
-                },
+                }),
                 opacity: 0.5,
                 ..Fill::default()
             }),

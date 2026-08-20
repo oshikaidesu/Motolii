@@ -64,14 +64,14 @@ constants	blend-mode		Blend Mode	採用予定	0..15。発明の余地が無い(�
 constants	composite		Composite	採用済	repeater の Above/Below	pub enum Composite	shape-1	lottie
 constants	fill-rule		Fill Rule	採用済	nonzero / evenodd。中マドを賄う	pub enum FillRule	shape-1	lottie
 constants	font-path-origin		Font Path Origin	不採用	フォント取得元4種は Web プレイヤの都合			lottie
-constants	gradient-type		Gradient Type	採用予定	linear / radial		shape-2	lottie
+constants	gradient-type		Gradient Type	採用済	linear / radial	pub enum GradientType	shape-2	lottie
 constants	line-cap		Line Cap	採用済	butt/round/square	pub enum LineCap	shape-1	lottie
 constants	line-join		Line Join	採用済	miter/round/bevel。offset-path と共有	pub enum LineJoin	shape-1	lottie
 constants	mask-mode		Mask Mode	採用予定	Add/Subtract/Intersect/Lighten/Darken/Difference。`None` は列挙に混ぜない — 消すことはモードではない		mask	lottie
 constants	matte-mode		Matte Mode	採用予定	Alpha/InvertedAlpha/Luma/InvertedLuma は AE の語彙(裁定66)		shape-2	lottie
 constants	merge-mode		Merge Mode	不採用	パスブーリアンは対象外			lottie
 constants	shape-direction		Shape Direction	不採用	頂点順で表現する			lottie
-constants	star-type		Star Type	採用予定	star / polygon		shape-2	lottie
+constants	star-type		Star Type	採用済	star / polygon	pub enum StarType	shape-2	lottie
 constants	stroke-dash-type		Stroke Dash Type	不採用	pattern + offset の2フィールドに畳む			lottie
 constants	text-based		Text Based	採用予定	範囲選択器の粒度。AE 由来で発明の余地が無い。「文字」はクラスタに読み替える		text	lottie
 constants	text-caps		Text Caps	不採用	表示だけ大文字化は元文字列と表示の二重帳簿。SmallCaps は OpenType 側			lottie
@@ -360,11 +360,11 @@ shapes	all-graphic-elements	@extends	shapes/twist	該当なし	継承元			lotti
 shapes	all-graphic-elements	@extends	shapes/zig-zag	該当なし	継承元			lottie
 shapes	all-graphic-elements	@extends	shapes/unknown-shape	該当なし	継承元			lottie
 shapes	base-gradient	a	Highlight Angle	不採用	AE 固有の焦点ずらし。要るなら radial の焦点1点で表す			lottie
-shapes	base-gradient	e	End Point	採用予定	linear/radial の終点		shape-2	lottie
-shapes	base-gradient	g	Colors	採用予定	色停止列。peniko::Gradient の stops に落ちる		shape-2	lottie
+shapes	base-gradient	e	End Point	採用済	linear なら終点、radial なら外周上の1点(= 半径を決める)	pub end: Point	shape-2	lottie
+shapes	base-gradient	g	Colors	採用済	色停止列。tiny-skia の GradientStop へ落ちる。**停止点は alpha を持たない** — 不透明度の正本は shape-style.o 1本(裁定59 の形を作らない)	pub stops: Vec<GradientStop>	shape-2	lottie
 shapes	base-gradient	h	Highlight Length	不採用	`a` と対の焦点ずらし			lottie
-shapes	base-gradient	s	Start Point	採用予定	linear/radial の始点		shape-2	lottie
-shapes	base-gradient	t	Gradient Type	採用予定	linear / radial の2値		shape-2	lottie
+shapes	base-gradient	s	Start Point	採用済	linear なら始点、radial なら中心	pub start: Point	shape-2	lottie
+shapes	base-gradient	t	Gradient Type	採用済	linear / radial の2値	pub kind: GradientType	shape-2	lottie
 shapes	base-stroke	d	Dashes	採用済	第2弾。kurbo::dash が上流にある。ただし「線が引かれていく」の大半は trim-path が吸う	pub dash: Option<Dash>	shape-1	lottie
 shapes	base-stroke	lc	Line Cap	採用済	butt/round/square。上流の Cap をそのまま	pub cap: LineCap	shape-1	lottie
 shapes	base-stroke	lj	Line Join	採用済	miter/round/bevel。offset-path と同じ enum を共有	pub join: LineJoin	shape-1	lottie
@@ -376,17 +376,17 @@ shapes	ellipse	p	Position	不採用	層の position/anchor と同じことを言
 shapes	ellipse	s	Size	採用済	パスを生成するパラメータであって素材の寸法ではない(裁定59 とは別物)	Ellipse { size: Point }	shape-1	lottie
 shapes	ellipse	ty	Shape Type	採用済	第1弾。pathgeom.rs に ellipse() がある	PathSource::Ellipse	shape-1	lottie
 shapes	fill	@extends	shapes/shape-style	該当なし	継承元			lottie
-shapes	fill	c	Color	採用済	塗り色	paint_for(f.color.r, f.color.g, f.color.b	shape-1	lottie
+shapes	fill	c	Color	採用済	塗り色	&f.brush	shape-1	lottie
 shapes	fill	r	Fill Rule	採用済	nonzero / evenodd。**merge を落とした分の中マドをここで賄う**	pub rule: FillRule	shape-1	lottie
 shapes	fill	ty	Shape Type	採用済	第1弾。層は fill を Option で1つ持つ	pub fill: Option<Fill>	shape-1	lottie
 shapes	gradient-fill	@extends	shapes/shape-style	該当なし	継承元			lottie
 shapes	gradient-fill	@extends	shapes/base-gradient	該当なし	継承元			lottie
-shapes	gradient-fill	r	Fill Rule	採用予定	fill と同じ		shape-2	lottie
-shapes	gradient-fill	ty	Shape Type	採用予定	第2弾。MV の背景・ロゴで頻出		shape-2	lottie
+shapes	gradient-fill	r	Fill Rule	採用済	fill と同じ(Brush が直交なので型を割っていない)	pub rule: FillRule	shape-2	lottie
+shapes	gradient-fill	ty	Shape Type	採用済	fill との違いは Brush 1つ。型を割ると同じ property が2箇所に生える(裁定59 の形)	Brush::Gradient	shape-2	lottie
 shapes	gradient-stroke	@extends	shapes/shape-style	該当なし	継承元			lottie
 shapes	gradient-stroke	@extends	shapes/base-stroke	該当なし	継承元			lottie
 shapes	gradient-stroke	@extends	shapes/base-gradient	該当なし	継承元			lottie
-shapes	gradient-stroke	ty	Shape Type	採用予定	第2弾。Brush は fill/stroke に直交なので追加費用がほぼ無い		shape-2	lottie
+shapes	gradient-stroke	ty	Shape Type	採用済	Brush は fill/stroke に直交なので追加費用がほぼ無い(実際、線側に増えた行は0)	fn gradient_shader	shape-2	lottie
 shapes	graphic-element	@extends	helpers/visual-object	該当なし	継承元			lottie
 shapes	graphic-element	bm	Blend Mode	不採用	blend は層が持つ(裁定67)。shape 単位の blend は層の中にもう1つ合成器を建てる(背骨2)			lottie
 shapes	graphic-element	cl	CSS Class	不採用	SVG 再生器の都合			lottie
@@ -406,26 +406,26 @@ shapes	modifier	@extends	shapes/graphic-element	該当なし	継承元			lottie
 shapes	no-style	@extends	shapes/shape-style	該当なし	継承元			lottie
 shapes	no-style	ty	Shape Type	不採用	層が fill/stroke を Option で持てば None がそれ			lottie
 shapes	offset-path	@extends	shapes/modifier	該当なし	継承元			lottie
-shapes	offset-path	a	Amount	採用予定	拡張/収縮量。pathgeom.rs offset_contour が実装済み		shape-2	lottie
-shapes	offset-path	lj	Line Join	採用予定	base-stroke と同じ enum を共有		shape-2	lottie
-shapes	offset-path	ml	Miter Limit	採用予定	同上		shape-2	lottie
-shapes	offset-path	ty	Shape Type	採用予定	第2弾。v1 は閉路限定		shape-2	lottie
+shapes	offset-path	a	Amount	採用済	拡張/収縮量。pathgeom.rs offset_contour を移植	fn offset_contour	shape-2	lottie
+shapes	offset-path	lj	Line Join	採用済	base-stroke と同じ enum を共有	line_join: LineJoin	shape-2	lottie
+shapes	offset-path	ml	Miter Limit	採用済	同上。超過は Clipper2 既定と同じく bevel へ縮退	miter_limit * amount.abs()	shape-2	lottie
+shapes	offset-path	ty	Shape Type	採用済	**v1 は閉路限定**。開路は VectorError::OpenPathOffset で、黙って恒等へ落とさない(裁定37)	OpKind::OffsetPath	shape-2	lottie
 shapes	path	@extends	shapes/shape	該当なし	継承元			lottie
 shapes	path	ks	Shape	採用済	**ベジェパスの正本**。pathgeom.rs の Vertex が Lottie の v/i/o と同型	PathSource::Bezier	shape-1	lottie
 shapes	path	ty	Shape Type	採用済	第1弾。SVG・テキストアウトライン・primitive はすべてこの型へ落ちる	Bezier(Path)	shape-1	lottie
 shapes	polystar	@extends	shapes/shape	該当なし	継承元			lottie
-shapes	polystar	ir	Inner Radius	採用予定	星のときだけ意味を持つ		shape-2	lottie
+shapes	polystar	ir	Inner Radius	採用済	星のときだけ意味を持つ	inner_radius: f64	shape-2	lottie
 shapes	polystar	is	Inner Roundness	不採用	rounded-corners と同じ見た目に2つ目の口を作る			lottie
-shapes	polystar	or	Outer Radius	採用予定	外半径		shape-2	lottie
+shapes	polystar	or	Outer Radius	採用済	外半径	outer_radius: f64	shape-2	lottie
 shapes	polystar	os	Outer Roundness	不採用	同上			lottie
 shapes	polystar	p	Position	不採用	層の transform と repeater の anchor で賄える			lottie
-shapes	polystar	pt	Points	採用予定	頂点数		shape-2	lottie
+shapes	polystar	pt	Points	採用済	頂点数(星なら腕の数で、頂点は2倍出る)	points: f64	shape-2	lottie
 shapes	polystar	r	Rotation	不採用	層の rotation と同じ。放射状配置は repeater の transform の anchor が持つ			lottie
-shapes	polystar	sy	Star Type	採用予定	star / polygon の2値		shape-2	lottie
-shapes	polystar	ty	Shape Type	採用予定	第2弾。pathgeom.rs に無いので新規(= owns: が増える側)		shape-2	lottie
+shapes	polystar	sy	Star Type	採用済	star / polygon の2値	star_type: StarType	shape-2	lottie
+shapes	polystar	ty	Shape Type	採用済	pathgeom.rs に無いので新規(= owns: が増えた唯一の箇所)。起点は真上に固定 — polystar.r を落とした以上、起点を選ばせる口が無い	PathSource::PolyStar	shape-2	lottie
 shapes	pucker-bloat	@extends	shapes/modifier	該当なし	継承元			lottie
-shapes	pucker-bloat	a	Amount	採用予定	pathgeom.rs pucker_bloat_contour が実装済み		shape-2	lottie
-shapes	pucker-bloat	ty	Shape Type	採用予定	第2弾。演算子ファミリー(concept.md 2026-07-10 のコア要件)		shape-2	lottie
+shapes	pucker-bloat	a	Amount	採用済	**正で bloat / 負で pucker**(AE・Lottie と同じ向き)。頂点が重心へ寄りつつハンドルが逆向きへ伸びるので、角が抜けて辺が膨らむ	fn pucker_bloat_contour	shape-2	lottie
+shapes	pucker-bloat	ty	Shape Type	採用済	演算子ファミリー(concept.md 2026-07-10 のコア要件)	OpKind::PuckerBloat	shape-2	lottie
 shapes	rectangle	@extends	shapes/shape	該当なし	継承元			lottie
 shapes	rectangle	p	Position	不採用	ellipse/p と同じ理由			lottie
 shapes	rectangle	r	Rounded	不採用	rounded-corners と重なる。UI は演算子を1段積む糖衣にする			lottie
@@ -449,11 +449,11 @@ shapes	shape-style	@extends	shapes/graphic-element	該当なし	継承元			lott
 shapes	shape-style	o	Opacity	採用済	fill/stroke の不透明度。1.0 基準	f.opacity * weight	shape-1	lottie
 shapes	stroke	@extends	shapes/shape-style	該当なし	継承元			lottie
 shapes	stroke	@extends	shapes/base-stroke	該当なし	継承元			lottie
-shapes	stroke	c	Color	採用済	線色	paint_for(s.color.r, s.color.g, s.color.b	shape-1	lottie
+shapes	stroke	c	Color	採用済	線色	&s.brush	shape-1	lottie
 shapes	stroke	ty	Shape Type	採用済	第1弾。層は stroke を Option で1つ持つ	pub stroke: Option<Stroke>	shape-1	lottie
 shapes	stroke-dash	@extends	helpers/visual-object	該当なし	継承元			lottie
 shapes	stroke-dash	n	Dash Type	不採用	タグ付き項目の列で並べる形は採らない。pattern + offset の2フィールドに畳む			lottie
-shapes	stroke-dash	v	Length	採用予定	dash pattern の1要素の長さ		shape-2	lottie
+shapes	stroke-dash	v	Length	採用済	dash pattern の1要素の長さ。種別つきの列は採らず平坦形で持つ	pub pattern: Vec<f64>	shape-2	lottie
 shapes	transform	@extends	shapes/graphic-element	該当なし	継承元			lottie
 shapes	transform	@extends	helpers/transform	該当なし	継承元			lottie
 shapes	transform	ty	Shape Type	不採用	shape の中に第二の変換木を建てない。変換は層の transform 1つ(裁定58/69)			lottie
@@ -464,15 +464,15 @@ shapes	trim-path	o	Offset	採用済	切り出し窓の回転。ぐるぐる回�
 shapes	trim-path	s	Start	採用済	**第1弾の筆頭**	start: f64,	shape-1	lottie
 shapes	trim-path	ty	Shape Type	採用済	**第1弾の筆頭**。MV で最も使う。pathgeom.rs trim が実装済み	OpKind::TrimPath	shape-1	lottie
 shapes	twist	@extends	shapes/modifier	該当なし	継承元			lottie
-shapes	twist	a	Angle	採用予定	pathgeom.rs twist_contour が実装済み		shape-3	lottie
-shapes	twist	c	Center	採用予定	ねじりの中心		shape-3	lottie
-shapes	twist	ty	Shape Type	採用予定	第3弾。使用頻度は低いが実装が既にある		shape-3	lottie
+shapes	twist	a	Angle	採用済	pathgeom.rs twist_contour を移植。**度**で受ける(裁定58)	fn twist_contour	shape-3	lottie
+shapes	twist	c	Center	採用済	ねじりの中心。輪郭自身の外縁でねじれがゼロになる自己正規化	v.point.sub(center)	shape-3	lottie
+shapes	twist	ty	Shape Type	採用済	第3弾。中心ほど強くねじる(AE Twist と同じで半径パラメータを持たない)	OpKind::Twist	shape-3	lottie
 shapes	unknown-shape	ty		不採用	未知の型を通す口は再生器の互換の都合。Motolii の enum は閉集合			lottie
 shapes	zig-zag	@extends	shapes/modifier	該当なし	継承元			lottie
-shapes	zig-zag	pt	Point Type	採用予定	corner / smooth		shape-2	lottie
-shapes	zig-zag	r	Frequency	採用予定	辺あたりの山数		shape-2	lottie
-shapes	zig-zag	s	Amplitude	採用予定	山谷の振幅		shape-2	lottie
-shapes	zig-zag	ty	Shape Type	採用予定	第2弾。pathgeom.rs zigzag_contour が実装済み		shape-2	lottie
+shapes	zig-zag	pt	Point Type	採用済	corner / smooth。constants に独立した行を持たない語彙	pub enum PointType	shape-2	lottie
+shapes	zig-zag	r	Frequency	採用済	辺あたりの山数	frequency: f64	shape-2	lottie
+shapes	zig-zag	s	Amplitude	採用済	山谷の振幅	amplitude: f64	shape-2	lottie
+shapes	zig-zag	ty	Shape Type	採用済	pathgeom.rs zigzag_contour を移植	OpKind::ZigZag	shape-2	lottie
 styles	all-layer-styles	@extends	styles/bevel-emboss-style	該当なし	継承元			lottie
 styles	all-layer-styles	@extends	styles/color-overlay-style	該当なし	継承元			lottie
 styles	all-layer-styles	@extends	styles/drop-shadow-style	該当なし	継承元			lottie
