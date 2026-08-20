@@ -158,6 +158,25 @@ pub enum Message {
     /// Attrs の Hidden トグル。下書きを経由せず即 `Intent::SetAttrs` を1回出す
     /// (header の Undo/Redo ボタンと同じ即時操作の形)。
     InspectorToggleHidden,
+
+    // ---- Inspector の drag-to-scrub ----
+    /// 値セルの press。**まだ Document を書かない** — click か drag かは
+    /// release まで未確定(`Shell::inspector_drag`)。
+    InspectorValuePressed(TransformField),
+    /// window 全体の cursor 移動(`subscription()` の `inspector_pointer_event`
+    /// 経由)。`mouse_area` 自身の bounds を出た cursor は iced 0.14 に pointer
+    /// capture が無く追えない(実測)ので、drag 中の主経路はここ。drag が
+    /// armed/dragging でなければ即 no-op。
+    InspectorPointerMoved(iced::Point),
+    /// 左クリック release(同じく window 全体から)。drag が実際に動いていれば
+    /// 直前の move が確定値(1 gesture = 1 undo)、動いていなければ click として
+    /// type 編集へ切り替える。
+    InspectorPointerReleased,
+    /// Shift の押下状態。`CursorMoved` 自体は modifiers を運ばないので
+    /// `ModifiersChanged` を別途追って持つ(drag 中の1/10微調整に使う)。
+    KeyboardModifiersChanged(iced::keyboard::Modifiers),
+    /// Esc — drag 中なら復元、typing 下書き中(値セル/名前欄)ならそれを破棄。
+    EscapePressed,
 }
 
 /// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
@@ -174,6 +193,27 @@ struct RenderedFrame {
     /// 通常描画は `handle` だけで足りる(iced の `image::Handle` から画素を
     /// 取り戻す公開 API が無いため、この用途だけのために複製して持つ)。
     rgba: Vec<u8>,
+}
+
+/// Inspector 値セルの drag-to-scrub、進行中の一時状態。**Document ではない**
+/// (`FieldDraft` と同じ「pane が持つ transient」の形 — `motolii_store::document`
+/// の `apply_all` doc comment「ドラッグは対象外…途中経過は pane が持ち、
+/// 確定の1件だけが intent」のとおり)。
+struct FieldDragState {
+    field: TransformField,
+    layer: LayerId,
+    /// press 時点の表示単位の値(`inspector_pane::drag_origin` が投影から読む)。
+    start_value: f64,
+    /// Vec2 系(Position/Scale/Anchor)の動かさない方の成分。scalar 系では未使用。
+    current_vec2: [f64; 2],
+    /// 最初の `InspectorPointerMoved` で確定する基準 x(window 座標)。`None` の
+    /// 間は click か drag かまだ未確定 — 確定前に値を動かすと press 直後の
+    /// sub-pixel な揺れで値が動いてしまう。
+    origin_x: Option<f32>,
+    /// 少なくとも1回 transient を `doc.apply` したか。2手目以降の分岐
+    /// (`doc.undo()` してから書き直す — 履歴を1件に畳む)と、release 時の
+    /// click/drag 判定の両方に使う。
+    applied: bool,
 }
 
 pub struct Shell {
@@ -193,6 +233,12 @@ pub struct Shell {
     inspector_field_draft: Option<FieldDraft>,
     /// Inspector の Name 欄、編集中の下書き。同上。
     inspector_name_draft: Option<String>,
+    /// Inspector 値セルの drag-to-scrub。**Document ではない** — 同上
+    /// (`FieldDragState` doc comment 参照)。
+    inspector_drag: Option<FieldDragState>,
+    /// 直近の Shift 押下状態。`CursorMoved` は modifiers を運ばないので
+    /// `ModifiersChanged` から別途追う(drag の1/10微調整に使う)。
+    keyboard_modifiers: iced::keyboard::Modifiers,
 }
 
 impl Shell {
@@ -223,6 +269,8 @@ impl Shell {
                 tokens: Tokens::load(),
                 inspector_field_draft: None,
                 inspector_name_draft: None,
+                inspector_drag: None,
+                keyboard_modifiers: iced::keyboard::Modifiers::default(),
             },
             Task::none(),
         )
@@ -248,6 +296,8 @@ impl Shell {
             tokens: Tokens::load(),
             inspector_field_draft: None,
             inspector_name_draft: None,
+            inspector_drag: None,
+            keyboard_modifiers: iced::keyboard::Modifiers::default(),
         };
         // `update()` を経由しないので、通常なら `update` の末尾が呼ぶ
         // `refresh_frame` をここで代わりに呼ぶ(Stage を空のまま起動しない、M17)。
@@ -269,12 +319,21 @@ impl Shell {
         });
         // debug ビルドのみ実際に発行する(裁定117)。release は `Subscription::none()`。
         let tokens = tokens::watch_subscription().map(|()| Message::TokensFileChanged);
-        iced::Subscription::batch([window, tokens])
+        // Inspector の drag-to-scrub 用。`mouse_area` は自分の bounds を出た
+        // cursor を追えない(iced 0.14 に pointer capture が無い実測)ので、
+        // move/release/Escape の主経路を window 全体からここで拾う
+        // (`inspector_pointer_event` — 翻訳だけで、drag 中かどうかの判断は
+        // `Shell::update` 側 = `inspector_drag` の有無)。
+        let pointer = iced::event::listen_with(inspector_pointer_event);
+        iced::Subscription::batch([window, tokens, pointer])
     }
 
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
     pub fn update(&mut self, message: Message) -> Task<Message> {
         self.status = None;
+        // click→type 編集への切り替え(`finish_field_drag`)だけがフォーカス
+        // task を返す。他の枝は既定どおり `Task::none()`。
+        let mut task = Task::none();
         match message {
             Message::Undo => {
                 if !self.doc.undo() {
@@ -309,6 +368,13 @@ impl Shell {
             }
             Message::InspectorNameSubmit => self.commit_inspector_name(),
             Message::InspectorToggleHidden => self.toggle_inspector_hidden(),
+            Message::InspectorValuePressed(field) => self.start_field_drag(field),
+            Message::InspectorPointerMoved(point) => self.continue_field_drag(point),
+            Message::InspectorPointerReleased => {
+                task = self.finish_field_drag();
+            }
+            Message::KeyboardModifiersChanged(modifiers) => self.keyboard_modifiers = modifiers,
+            Message::EscapePressed => self.cancel_inspector_interaction(),
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
                 // **1操作 = 1 undo**。`AddLayer` と `SetMeta` を別々に書くと
@@ -341,7 +407,7 @@ impl Shell {
             }
         }
         self.refresh_frame();
-        Task::none()
+        task
     }
 
     /// 落ちてきた path を素材として受ける。
@@ -502,6 +568,170 @@ impl Shell {
         }
     }
 
+    // ---- Inspector の drag-to-scrub ----
+
+    /// 値セルの press — click か drag かはまだ未確定
+    /// (`FieldDragState::origin_x` が `None` のまま)。選択なし・animated(編集
+    /// 不可)・対応する field が投影に無い、のいずれも黙って無視
+    /// (`mouse_area` の `on_press` は常にこの Message を出すが、UI がそもそも
+    /// animated field には draggable なセルを出していない — `commit_inspector_field`
+    /// と同じ二重の柵)。
+    fn start_field_drag(&mut self, field: TransformField) {
+        if self.inspector_drag.is_some() {
+            return; // 既に別の drag が進行中 — 多重起動しない
+        }
+        let Some(layer) = self.session.selection else {
+            return;
+        };
+        let Some(selection) = self.inspector_selection() else {
+            return;
+        };
+        let Some((start_value, current_vec2)) = inspector_pane::drag_origin(&selection, field)
+        else {
+            return;
+        };
+        self.inspector_drag = Some(FieldDragState {
+            field,
+            layer,
+            start_value,
+            current_vec2,
+            origin_x: None,
+            applied: false,
+        });
+    }
+
+    /// window 全体の cursor 移動。drag が armed/dragging でなければ即 no-op。
+    /// **1px = 感度表の刻み**(`inspector_pane::dragged_value`)。press 直後の
+    /// 最初の move は基準点を確定するだけで値は動かさない(そうしないと press
+    /// した瞬間の sub-pixel な揺れで値が動く)。
+    ///
+    /// **transient は `Document` へ直接書く**: 2手目以降は `doc.undo()` してから
+    /// 書き直すことで、直前の transient を `apply_all` の `drop_redo_space` に
+    /// 畳ませて消す — history には常に「元の状態 + 今の transient」の2点しか
+    /// 残らない。release 時点の最後の1手がそのまま確定値になる(1 gesture =
+    /// 1 undo)。Stage・Inspector セルの「ドラッグ中の即応」はこの apply が
+    /// `refresh_frame` の revision 判定・投影を通して自然に見えるだけ。
+    fn continue_field_drag(&mut self, point: iced::Point) {
+        let Some(drag) = self.inspector_drag.as_mut() else {
+            return;
+        };
+        let Some(origin_x) = drag.origin_x else {
+            drag.origin_x = Some(point.x);
+            return;
+        };
+
+        let delta_px = point.x - origin_x;
+        let applied_before = drag.applied;
+        if delta_px == 0.0 && !applied_before {
+            return; // まだ実質的に動いていない — click 候補のまま据え置く
+        }
+
+        let field = drag.field;
+        let layer = drag.layer;
+        let start_value = drag.start_value;
+        let current_vec2 = drag.current_vec2;
+        let fine = self.keyboard_modifiers.shift();
+
+        let Ok(property) = inspector_pane::property_id(field) else {
+            return;
+        };
+        let new_display = inspector_pane::dragged_value(field, start_value, delta_px, fine);
+        let value = inspector_pane::next_value(field, new_display, current_vec2);
+        let track = inspector_pane::single_hold_track(value);
+
+        if applied_before {
+            self.doc.undo();
+        }
+        match self.doc.apply(Intent::SetTrack {
+            layer,
+            property,
+            track,
+        }) {
+            Ok(()) => {
+                if let Some(drag) = self.inspector_drag.as_mut() {
+                    drag.applied = true;
+                }
+            }
+            Err(error) => {
+                self.status = Some(format!("値を書けない: {error}"));
+            }
+        }
+    }
+
+    /// 左クリック release(window 全体から — `mouse_area` 自身の `on_release` は
+    /// bounds を出た drag を捉えられないので使わない)。**drag が実際に動いて
+    /// いたら確定**(直前の move の `doc.apply` が最終値そのものなので、ここでは
+    /// 何もしない = 1 gesture 1 undo)。動いていなければ click として type 編集
+    /// へ切り替える。
+    fn finish_field_drag(&mut self) -> Task<Message> {
+        let Some(drag) = self.inspector_drag.take() else {
+            return Task::none();
+        };
+        if drag.applied {
+            return Task::none();
+        }
+        self.enter_field_editing(drag.field)
+    }
+
+    /// click(ドラッグせず release)→ type 編集。下書きを立て、text_input へ
+    /// フォーカスを戻す(値セルは編集していない間は `mouse_area` + 静止
+    /// `text` なので、click 直後にはまだ text_input が木に無く自動フォーカス
+    /// されない — 明示的な focus task が要る)。
+    fn enter_field_editing(&mut self, field: TransformField) -> Task<Message> {
+        let Some(selection) = self.inspector_selection() else {
+            return Task::none();
+        };
+        let Some((value, _)) = inspector_pane::drag_origin(&selection, field) else {
+            return Task::none();
+        };
+        self.inspector_field_draft = Some(FieldDraft {
+            field,
+            text: inspector_pane::format_number(value, inspector_pane::field_decimals(field)),
+        });
+        iced::widget::operation::focus(inspector_pane::field_input_id(field))
+    }
+
+    /// Esc — 進行中の drag があれば復元、無ければ typing 下書き(値セル/名前欄)
+    /// を破棄する(hint 行「Esc to cancel」を両方について正直にする)。
+    fn cancel_inspector_interaction(&mut self) {
+        if let Some(drag) = self.inspector_drag.take() {
+            if drag.applied {
+                // 直前の transient を戻す — press 前の状態に一旦戻る。
+                self.doc.undo();
+                // **既知の限界**(`motolii-store` に「squash」API が無い —
+                // write-set がこの shell crate に限られており store は直せない):
+                // `undo()` だけだと直前の transient chunk が tip に残り、Redo
+                // すると中断した値が復元されてしまう。同じ元の値で1回上書き
+                // してから undo し、万一 Redo されても見た目上は無変化になる
+                // よう無害化する(undo 深さが1つ増えるが、Redo しても値は
+                // 動かない)。
+                if let Ok(property) = inspector_pane::property_id(drag.field) {
+                    let track = inspector_pane::single_hold_track(inspector_pane::next_value(
+                        drag.field,
+                        drag.start_value,
+                        drag.current_vec2,
+                    ));
+                    if self
+                        .doc
+                        .apply(Intent::SetTrack {
+                            layer: drag.layer,
+                            property,
+                            track,
+                        })
+                        .is_ok()
+                    {
+                        self.doc.undo();
+                    }
+                }
+            }
+            return;
+        }
+        if self.inspector_field_draft.take().is_some() {
+            return;
+        }
+        self.inspector_name_draft = None;
+    }
+
     // ---- 運転席が見るための口。**書けない** ----
 
     pub fn layer_count(&self) -> usize {
@@ -571,6 +801,13 @@ impl Shell {
         inspector_pane::project(&self.doc.view(), &self.session)
             .ok()
             .flatten()
+    }
+
+    /// 今の Inspector 値セル編集下書き。運転席が「click(ドラッグせず release)
+    /// → type 編集」への切り替わりを確かめる口(`pane` 自身が `view()` で
+    /// 使うのと同じ状態)。
+    pub fn inspector_field_draft(&self) -> Option<&FieldDraft> {
+        self.inspector_field_draft.as_ref()
     }
 
     /// 今のデザイン値。運転席がトークン再読込を確かめる口。
@@ -691,6 +928,38 @@ impl Shell {
                 self.status = Some(format!("Stage を描けない: {error}"));
             }
         }
+    }
+}
+
+/// `Shell::subscription` が使う、Inspector drag-to-scrub 用の window 全体の
+/// 事象フィルタ。**翻訳だけ**(`subscription()` 冒頭の規律どおり、判断は持たない)
+/// — 実際に drag 中かどうかの判断・Shift の要否は `Shell::update` 側
+/// (`inspector_drag`/`keyboard_modifiers` の状態)。
+///
+/// `iced::event::listen_with` を選んだ理由: `_status` を見ずに常に拾う。
+/// `iced::keyboard::listen()`(Ignored 限定)だと、typing 中の text_input は
+/// Escape を自分で `shell.capture_event()` する(`iced_widget::text_input`
+/// 実測)ので、typing の Esc-cancel に使いたい場合に届かなくなる。
+fn inspector_pointer_event(
+    event: iced::Event,
+    _status: iced::event::Status,
+    _window: iced::window::Id,
+) -> Option<Message> {
+    match event {
+        iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
+            Some(Message::InspectorPointerMoved(position))
+        }
+        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)) => {
+            Some(Message::InspectorPointerReleased)
+        }
+        iced::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(modifiers)) => {
+            Some(Message::KeyboardModifiersChanged(modifiers))
+        }
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+            ..
+        }) => Some(Message::EscapePressed),
+        _ => None,
     }
 }
 

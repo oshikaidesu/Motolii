@@ -27,6 +27,25 @@
 //! `Bool` は Attrs の hidden トグル(`Value` 経由ではなく `LayerAttrs::hidden` だが、
 //! 型としては同格の on/off editor)。`Color`/`Enum`/`Path`/`LayerId` は Effect 束
 //! (第1波の範囲外)の仕事。
+//!
+//! **drag-to-scrub**(第2波の一部を前倒し、利用者の直接依頼): 値セルは
+//! `mouse_area` でラップし、press→(実質的な移動があれば)drag、移動が無いまま
+//! release なら従来どおり click→type 編集(併存、[`value_cell`] 参照)。
+//! **transient 値は `Document` へ直接書く**([`crate::Shell::continue_field_drag`]) —
+//! 1手ごとに `doc.undo()` してから書き直すことで history を1件に畳み、
+//! release 時点の最後の1手がそのまま確定値になる(= 1 gesture 1 undo、
+//! `next/core/motolii-store/src/document.rs` の `apply_all` doc comment
+//! 「ドラッグは対象外…途中経過は pane が持ち、確定の1件だけが intent」を
+//! 素直に実装した形)。Stage・Inspector セルの「ドラッグ中の即応」は**この
+//! transient apply が投影を通して自然に見えるだけ**で、専用の preview 経路は
+//! 持たない(`refresh_frame` の revision 判定がそのまま効く)。
+//!
+//! **iced 0.14 の制約**: `mouse_area` は自分の bounds を出た cursor を追えない
+//! (pointer capture が無い実測、`mouse_area.rs::update` が `cursor.is_over` で
+//! 弾く)。値セルは幅38pxしか無いので、感度どおりに大きく動かすとすぐ bounds を
+//! 出てしまう — window 全体の `CursorMoved`/`ButtonReleased` を
+//! `iced::event::listen_with` で拾う形に倒した(`crate::inspector_pointer_event`)。
+//! mouse_area の `on_press` は「この field の drag を armed にする」ためだけに使う。
 
 use motolii_core::RationalTime;
 use motolii_store::{
@@ -132,6 +151,106 @@ pub fn parse_number(text: &str) -> Option<f64> {
 
 pub fn format_number(value: f64, decimals: usize) -> String {
     format!("{value:.decimals$}")
+}
+
+/// [`project`] が組む行の decimals は field ごとに固定(Position/Scale/Anchor=3、
+/// Rotation=1、Opacity=0)。click→type 編集の下書き初期値を作るのに要る
+/// (`TransformRowProjection::decimals` を持つ行を毎回作り直さずに済む)。
+pub fn field_decimals(field: TransformField) -> usize {
+    match field {
+        TransformField::Rotation => 1,
+        TransformField::Opacity => 0,
+        _ => 3,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// drag-to-scrub — 1px の cursor 移動を「表示単位」の量へ写す(editor registry)
+// ---------------------------------------------------------------------------
+
+/// `field` の drag 感度(1px あたりの表示単位の変化量)。**tokens ではなくここに
+/// 置く** — 寸法・色ではなく値の型に紐づく振る舞いなので([`crate::tokens`] は
+/// 裁定117により寸法・色専用、Document 由来でも値の意味でもない — 型別 editor の
+/// 一部としてここへ置く)。
+///
+/// | field                | 1px    | 理由 |
+/// |-----------------------|--------|------|
+/// | Position X/Y/Z        | 1.0    | 画面座標と1:1(After Effects 系の慣習) |
+/// | Anchor X/Y             | 1.0    | Position と同じ空間感覚(単位が同じ) |
+/// | Scale X/Y              | 0.01   | 既定1.0からの微調整域 — 1px=1.0では数pxで0や負へ振り切れる |
+/// | Rotation                | 0.5(度)| 720px の drag で1周(360度)分 — 粗すぎず細かすぎない |
+/// | Opacity                  | 1(%)   | 0〜100の全域が100pxの drag で動く |
+fn drag_step_per_pixel(field: TransformField) -> f64 {
+    match field {
+        TransformField::PositionX
+        | TransformField::PositionY
+        | TransformField::PositionZ
+        | TransformField::AnchorX
+        | TransformField::AnchorY => 1.0,
+        TransformField::ScaleX | TransformField::ScaleY => 0.01,
+        TransformField::Rotation => 0.5,
+        TransformField::Opacity => 1.0,
+    }
+}
+
+/// Shift 押下中の微調整係数(発注書「Shift+drag = 1/10 微調整」)。
+pub const DRAG_SHIFT_FACTOR: f64 = 0.1;
+
+/// press 開始点からの x 差分(px)を「表示単位」の新しい値へ写す。`fine` は
+/// Shift 押下中かどうか([`DRAG_SHIFT_FACTOR`] を掛ける)。純粋関数 — 呼び手
+/// (`crate::Shell::continue_field_drag`)が結果を `next_value` へ渡して store の
+/// `Value` へ変換する。
+pub fn dragged_value(field: TransformField, start_value: f64, delta_px: f32, fine: bool) -> f64 {
+    let step = drag_step_per_pixel(field);
+    let factor = if fine { DRAG_SHIFT_FACTOR } else { 1.0 };
+    start_value + f64::from(delta_px) * step * factor
+}
+
+/// drag(または click→type 編集)を始める前に読む、`field` の現在値。
+/// **投影から読むだけ** — `project` が計算した表示単位の値をそのまま使う
+/// (Opacity の % 換算などを2箇所に書かない)。animated(編集不可)/対応する
+/// field が投影に無い、のいずれも `None`(呼び手はドラッグも編集も始めない —
+/// `commit_inspector_field` と同じ二重の柵)。
+///
+/// 戻り値の第2要素は Vec2 系(Position/Scale/Anchor)の「動かさない方の成分」
+/// ([`next_value`] にそのまま渡す) — scalar 系(Z/Rotation/Opacity)では未使用
+/// (`[0.0, 0.0]` のダミー)。
+pub fn drag_origin(selection: &SelectionProjection, field: TransformField) -> Option<(f64, [f64; 2])> {
+    for row in &selection.transform {
+        match &row.value {
+            RowValue::Vector(components) => {
+                if let Some(slot) = components.iter().find(|s| s.field == Some(field)) {
+                    let current_vec2 = [components[0].value, components[1].value];
+                    return slot.editable.then_some((slot.value, current_vec2));
+                }
+            }
+            RowValue::Scalar(slot) => {
+                if slot.field == Some(field) {
+                    return slot.editable.then_some((slot.value, [0.0, 0.0]));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// text_input へ確定的な `Id` を割る — click→type 編集へ切り替わった直後、
+/// `iced::widget::operation::focus` でこのセルへフォーカスを戻すために要る
+/// (mouse_area は press を own できても、フォーカスは text_input 自身の仕事
+/// — click 直後にはまだ text_input が木に無いので自動フォーカスされない)。
+pub fn field_input_id(field: TransformField) -> iced::widget::Id {
+    let name: &'static str = match field {
+        TransformField::PositionX => "inspector-field-position-x",
+        TransformField::PositionY => "inspector-field-position-y",
+        TransformField::PositionZ => "inspector-field-position-z",
+        TransformField::ScaleX => "inspector-field-scale-x",
+        TransformField::ScaleY => "inspector-field-scale-y",
+        TransformField::Rotation => "inspector-field-rotation",
+        TransformField::Opacity => "inspector-field-opacity",
+        TransformField::AnchorX => "inspector-field-anchor-x",
+        TransformField::AnchorY => "inspector-field-anchor-y",
+    };
+    iced::widget::Id::new(name)
 }
 
 // ---------------------------------------------------------------------------
@@ -405,7 +524,9 @@ pub fn project(
 // view — StoreView の投影(SelectionProjection)と下書きだけを受け取る。書けない。
 // ---------------------------------------------------------------------------
 
-use iced::widget::{button, column, container, row as row_widget, scrollable, text, text_input, Space};
+use iced::widget::{
+    button, column, container, mouse_area, row as row_widget, scrollable, text, text_input, Space,
+};
 use iced::{Element, Length};
 
 pub fn view(
@@ -678,37 +799,85 @@ fn value_cell(
 
     match (slot.editable, slot.field) {
         (true, Some(field)) => {
-            let displayed = match field_draft {
-                Some(draft) if draft.field == field => draft.text.clone(),
-                _ => format_number(slot.value, decimals),
-            };
-            container(
-                text_input("", &displayed)
-                    .on_input(move |text| Message::InspectorFieldInput(field, text))
-                    .on_submit(Message::InspectorFieldSubmit(field))
-                    .size(dims.body_text)
-                    .width(Length::Fill)
-                    // `.padding(0.0)`: 柵で発見した実修正 — `text_input` の既定
-                    // padding(`iced_widget::text_input::DEFAULT_PADDING` = 5px 全辺)
-                    // が固定高 `value_cell_height`(row-4 = 16px)を食い潰し、文字の
-                    // 描画領域が 16 - 2*5 = 6px まで押し潰される(実測: 修正前は
-                    // text_input 内の paragraph 高が 6px、mock の `.prow .v` は
-                    // padding 無しで 16px 丸ごと使える)。0 にして箱の高さをそのまま
-                    // 使わせ、`align_y(Center)` で縦中央寄せする。
-                    .padding(0.0)
-                    .align_x(iced::alignment::Horizontal::Center)
-                    .style(move |_theme, status| value_input_style(dims, colors, status)),
-            )
-            .width(Length::Fixed(dims.inspector_value_width))
-            .height(Length::Fixed(value_cell_height(dims)))
-            .align_y(iced::alignment::Vertical::Center)
-            .into()
+            let editing = field_draft.is_some_and(|draft| draft.field == field);
+            if editing {
+                let displayed = field_draft
+                    .filter(|draft| draft.field == field)
+                    .map(|draft| draft.text.clone())
+                    .unwrap_or_else(|| format_number(slot.value, decimals));
+                container(
+                    text_input("", &displayed)
+                        .id(field_input_id(field))
+                        .on_input(move |text| Message::InspectorFieldInput(field, text))
+                        .on_submit(Message::InspectorFieldSubmit(field))
+                        .size(dims.body_text)
+                        .width(Length::Fill)
+                        // `.padding(0.0)`: 柵で発見した実修正 — `text_input` の既定
+                        // padding(`iced_widget::text_input::DEFAULT_PADDING` = 5px 全辺)
+                        // が固定高 `value_cell_height`(row-4 = 16px)を食い潰し、文字の
+                        // 描画領域が 16 - 2*5 = 6px まで押し潰される(実測: 修正前は
+                        // text_input 内の paragraph 高が 6px、mock の `.prow .v` は
+                        // padding 無しで 16px 丸ごと使える)。0 にして箱の高さをそのまま
+                        // 使わせ、`align_y(Center)` で縦中央寄せする。
+                        .padding(0.0)
+                        .align_x(iced::alignment::Horizontal::Center)
+                        .style(move |_theme, status| value_input_style(dims, colors, status)),
+                )
+                .width(Length::Fixed(dims.inspector_value_width))
+                .height(Length::Fixed(value_cell_height(dims)))
+                .align_y(iced::alignment::Vertical::Center)
+                .into()
+            } else {
+                // click せず(まだ)編集していない見た目 — drag-to-scrub の起点
+                // ([`draggable_value_cell`])。表示する値は投影(`slot.value`)
+                // そのものなので、drag 中の transient 値もここが自動で映す。
+                draggable_value_cell(field, format_number(slot.value, decimals), dims, colors)
+            }
         }
         // animated(2キー以上) — **表示のみと明示**(理由つきdisabledではなく、
         // そもそも編集 control を出さない。accent 色で「動いている値」と分かる —
         // 箱形自体は編集セルと同じ)。
         _ => boxed_value(format_number(slot.value, decimals), colors.action_active, dims, colors),
     }
+}
+
+/// present・editable(un-keyed)な field の**まだ編集していない**見た目。
+/// `mouse_area` は press だけを own する — move/release は window 全体を追う
+/// `Shell::subscription` 側の担当(`crate::inspector_pointer_event`)。iced 0.14
+/// の `mouse_area` は自分の bounds を出た cursor を追えない(pointer capture が
+/// 無い実測)ので、値セル自身の当たり判定は「drag を armed にする press」だけに
+/// 絞ってある — 感度どおりに動かすとすぐこの38px幅を出るため。
+fn draggable_value_cell(
+    field: TransformField,
+    displayed: String,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    mouse_area(
+        container(
+            text(displayed)
+                .size(dims.body_text)
+                .color(colors.text_primary)
+                .align_x(iced::alignment::Horizontal::Center)
+                .align_y(iced::alignment::Vertical::Center),
+        )
+        .width(Length::Fixed(dims.inspector_value_width))
+        .height(Length::Fixed(value_cell_height(dims)))
+        .align_x(iced::alignment::Horizontal::Center)
+        .align_y(iced::alignment::Vertical::Center)
+        .style(move |_theme| container::Style {
+            background: Some(iced::Background::Color(colors.surface_app)),
+            border: iced::Border {
+                color: colors.border_default,
+                width: dims.border_width,
+                radius: 0.0.into(),
+            },
+            ..container::Style::default()
+        }),
+    )
+    .interaction(iced::mouse::Interaction::ResizingHorizontally)
+    .on_press(Message::InspectorValuePressed(field))
+    .into()
 }
 
 /// mock `.prow .v { height: calc(var(--row) - 4*var(--s)*1px) }` の `4` は
@@ -878,14 +1047,16 @@ fn attrs_section(attrs: &AttrsProjection, dims: Dimensions, colors: Colors) -> E
     column![section_header("ATTRS", dims, colors), blend_row].into()
 }
 
-/// mock の hint 行。**「Drag to scrub」は未実装機能なので落とす**(Q0)。
-/// 「double-click to type」も実際の挙動と違う — この実装の `text_input` は
-/// 単クリックで打鍵できる(二度打ちは要らない)ので「click」へ言い換える
-/// (M13: 実装と違う手順を案内しない)。
+/// mock の hint 行。**「Drag to scrub」は実装済みなので復活させる**
+/// (drag-to-scrub、利用者依頼)。「double-click to type」も実際の挙動と違う —
+/// この実装の値セルは、動かさず release すれば単クリックで打鍵できる
+/// (二度打ちは要らない)ので「click」へ言い換える(M13: 実装と違う手順を
+/// 案内しない)。「Esc to cancel」も drag の復元・打鍵下書きの破棄の両方で
+/// 今回初めて本当に効く(`crate::Shell::cancel_inspector_interaction`)。
 fn hint_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     // `.width(Length::Fill)`: 同上(柵で発見)— mock の `.hint` も pane 全幅の帯。
     container(
-        text("click to type · Esc to cancel")
+        text("drag to scrub · click to type · Esc to cancel")
             .size(dims.caption_text)
             .color(colors.text_muted),
     )
@@ -978,5 +1149,116 @@ mod tests {
         assert_eq!(source_kind_label(&LayerSource::Null), "null");
         assert_eq!(source_kind_label(&LayerSource::Shape), "shape");
         assert_eq!(source_kind_label(&LayerSource::Text), "text");
+    }
+
+    // -----------------------------------------------------------------------
+    // drag-to-scrub — 感度表(発注書の表そのもの)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn dragged_value_applies_the_registry_sensitivity_per_field() {
+        // Position/Anchor/Z = 1px→1.0。
+        assert_eq!(dragged_value(TransformField::PositionX, 0.0, 10.0, false), 10.0);
+        assert_eq!(dragged_value(TransformField::AnchorY, 0.0, -4.0, false), -4.0);
+        assert_eq!(dragged_value(TransformField::PositionZ, 0.0, 3.0, false), 3.0);
+        // Scale = 1px→0.01。
+        assert!((dragged_value(TransformField::ScaleX, 1.0, 10.0, false) - 1.1).abs() < 1e-9);
+        // Rotation = 1px→0.5度。
+        assert!((dragged_value(TransformField::Rotation, 0.0, 10.0, false) - 5.0).abs() < 1e-9);
+        // Opacity = 1px→1(%)。
+        assert_eq!(dragged_value(TransformField::Opacity, 50.0, 20.0, false), 70.0);
+    }
+
+    #[test]
+    fn shift_drag_uses_a_tenth_of_the_normal_sensitivity() {
+        let normal = dragged_value(TransformField::PositionX, 0.0, 100.0, false);
+        let fine = dragged_value(TransformField::PositionX, 0.0, 100.0, true);
+        assert_eq!(normal, 100.0);
+        assert!((fine - 10.0).abs() < 1e-9, "Shift+drag は1/10のはず: {fine}");
+    }
+
+    #[test]
+    fn drag_origin_reads_the_projected_value_and_keeps_the_other_vec2_component() {
+        // Scale の既定(un-keyed)は X=Y=1.0 — X をドラッグ対象にしても
+        // current_vec2 の Y は保たれる。
+        let selection = SelectionProjection {
+            layer: LayerId(1),
+            kind: "solid",
+            transform: vec![TransformRowProjection {
+                label: "Scale",
+                value: RowValue::Vector([
+                    ComponentSlot {
+                        axis: "X",
+                        present: true,
+                        value: 1.0,
+                        editable: true,
+                        field: Some(TransformField::ScaleX),
+                    },
+                    ComponentSlot {
+                        axis: "Y",
+                        present: true,
+                        value: 2.0,
+                        editable: true,
+                        field: Some(TransformField::ScaleY),
+                    },
+                    absent_component("Z"),
+                ]),
+                decimals: 3,
+            }],
+            attrs: AttrsProjection {
+                name: String::new(),
+                hidden: false,
+                blend_mode: "Normal".to_owned(),
+            },
+        };
+
+        let (start, current_vec2) =
+            drag_origin(&selection, TransformField::ScaleX).expect("editable のはず");
+        assert_eq!(start, 1.0);
+        assert_eq!(current_vec2, [1.0, 2.0], "動かさない方(Y)を保っていない");
+
+        // 対応する field が投影に無ければ `None`(呼び手はドラッグを始めない)。
+        assert!(drag_origin(&selection, TransformField::Rotation).is_none());
+    }
+
+    #[test]
+    fn drag_origin_refuses_animated_fields() {
+        let selection = SelectionProjection {
+            layer: LayerId(1),
+            kind: "solid",
+            transform: vec![TransformRowProjection {
+                label: "Rotation",
+                value: RowValue::Vector([
+                    absent_component("X"),
+                    absent_component("Y"),
+                    ComponentSlot {
+                        axis: "Z",
+                        present: true,
+                        value: 45.0,
+                        editable: false, // animated(2キー以上)
+                        field: Some(TransformField::Rotation),
+                    },
+                ]),
+                decimals: 1,
+            }],
+            attrs: AttrsProjection {
+                name: String::new(),
+                hidden: false,
+                blend_mode: "Normal".to_owned(),
+            },
+        };
+        assert!(
+            drag_origin(&selection, TransformField::Rotation).is_none(),
+            "animated な field はドラッグを始められないはず"
+        );
+    }
+
+    #[test]
+    fn field_decimals_matches_the_projection_rows() {
+        assert_eq!(field_decimals(TransformField::PositionX), 3);
+        assert_eq!(field_decimals(TransformField::ScaleY), 3);
+        assert_eq!(field_decimals(TransformField::AnchorX), 3);
+        assert_eq!(field_decimals(TransformField::Rotation), 1);
+        assert_eq!(field_decimals(TransformField::Opacity), 0);
     }
 }

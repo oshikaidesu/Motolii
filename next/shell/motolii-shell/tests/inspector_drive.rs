@@ -1,7 +1,13 @@
-//! 運転席 — Inspector pane(第1波)。
+//! 運転席 — Inspector pane(第1波 + drag-to-scrub)。
 //!
 //! `drive.rs` と同じ流儀(窓を開けずに `Shell` を動かす)。見るのは発注書の3点:
 //! 選択→行が出る / 編集→store が変わる / undo 1回で戻る。
+//!
+//! drag-to-scrub(利用者の直接依頼)は同じ流儀で、window 全体から拾う
+//! `Message::InspectorPointerMoved`/`InspectorPointerReleased`/
+//! `KeyboardModifiersChanged`/`EscapePressed` を直接送って検証する
+//! (`lib.rs::inspector_pointer_event` が実際に window から拾うのと同じ形の
+//! Message を、実 window を開かずに直送する)。
 
 use motolii_shell::inspector_pane::{RowValue, TransformField};
 use motolii_shell::{Message, Shell};
@@ -180,4 +186,162 @@ fn unparseable_input_is_rejected_with_a_reason() {
         panic!("Rotation 行が Vector でない");
     };
     assert_eq!(rotation[2].value, 0.0, "書けないはずの値で store が動いている");
+}
+
+// ---------------------------------------------------------------------------
+// drag-to-scrub(利用者の直接依頼)
+// ---------------------------------------------------------------------------
+
+fn scale_x(shell: &Shell) -> f64 {
+    let RowValue::Vector(scale) = &shell.inspector_selection().unwrap().transform[1].value else {
+        panic!("Scale 行が Vector でない");
+    };
+    scale[0].value
+}
+
+fn scale_y(shell: &Shell) -> f64 {
+    let RowValue::Vector(scale) = &shell.inspector_selection().unwrap().transform[1].value else {
+        panic!("Scale 行が Vector でない");
+    };
+    scale[1].value
+}
+
+/// **drag で値が変わり undo 1回で戻る**(発注書の柵そのもの)。途中の複数手
+/// (最初の move は基準確定のみ・以降が実際の drag)は history を1件に畳んで
+/// いる — Undo 1回で press 前まで戻ることで検証する。他成分(Y)も保つ。
+#[test]
+fn dragging_a_value_cell_updates_the_store_live_and_commits_on_release_with_one_undo() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+    assert_eq!(scale_x(&shell), 1.0);
+
+    shell.update(Message::InspectorValuePressed(TransformField::ScaleX));
+    // 最初の move は基準確定のみ — まだ値は動かない。
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(100.0, 0.0)));
+    assert_eq!(scale_x(&shell), 1.0, "基準確定の move で値が動いている");
+
+    // +10px * 0.01(Scale の感度) = +0.1、複数手でも history は畳まれて1件。
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(110.0, 0.0)));
+    assert!((scale_x(&shell) - 1.1).abs() < 1e-9, "1手目の drag で値が動いていない");
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(130.0, 0.0)));
+    assert!((scale_x(&shell) - 1.3).abs() < 1e-9, "2手目の drag で値が動いていない");
+    assert_eq!(scale_y(&shell), 1.0, "動かしていない Y まで動いた");
+
+    shell.update(Message::InspectorPointerReleased);
+    assert!((scale_x(&shell) - 1.3).abs() < 1e-9, "release で値が変わってしまった");
+    assert!(shell.can_undo());
+
+    // **1 gesture = 1 undo**: 複数 move があっても Undo 1回で press 前まで戻る。
+    shell.update(Message::Undo);
+    assert_eq!(shell.layer_count(), 1, "drag の Undo が AddLayer まで戻した");
+    assert_eq!(scale_x(&shell), 1.0, "Undo 1回で drag 前の値へ戻らない");
+}
+
+/// **Shift+drag = 1/10 微調整**。
+#[test]
+fn shift_held_during_a_drag_uses_a_tenth_sensitivity() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+
+    shell.update(Message::InspectorValuePressed(TransformField::ScaleX));
+    shell.update(Message::KeyboardModifiersChanged(
+        iced::keyboard::Modifiers::SHIFT,
+    ));
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(0.0, 0.0)));
+    // +10px * 0.01 * 1/10 = +0.01。
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(10.0, 0.0)));
+    assert!(
+        (scale_x(&shell) - 1.01).abs() < 1e-9,
+        "Shift+drag が1/10感度になっていない: {}",
+        scale_x(&shell)
+    );
+}
+
+/// **Esc で復元**。drag 中に Esc を押すと press 前の値まで戻り、AddLayer 以外の
+/// 痕跡を undo 履歴に残さない(Undo 1回で AddLayer 自体が戻る = drag は
+/// history に何も足していない)。
+#[test]
+fn escape_during_a_drag_restores_the_original_value_and_leaves_no_undo_trace() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+
+    shell.update(Message::InspectorValuePressed(TransformField::PositionX));
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(0.0, 0.0)));
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(50.0, 0.0)));
+    let RowValue::Vector(position) = &shell.inspector_selection().unwrap().transform[0].value
+    else {
+        panic!("Position 行が Vector でない");
+    };
+    assert_eq!(position[0].value, 50.0, "drag 中なのに値が動いていない");
+
+    shell.update(Message::EscapePressed);
+    let RowValue::Vector(position_after) =
+        &shell.inspector_selection().unwrap().transform[0].value
+    else {
+        panic!("Position 行が Vector でない");
+    };
+    assert_eq!(position_after[0].value, 0.0, "Esc で元の値へ戻らない");
+
+    // drag が history に痕跡を残していなければ、Undo 1回で AddLayer 自体が戻る。
+    shell.update(Message::Undo);
+    assert_eq!(
+        shell.layer_count(),
+        0,
+        "Esc で中断した drag が undo 履歴に何か残している"
+    );
+}
+
+/// **click(ドラッグせず release)は従来どおり type 編集へ**。move が一度も
+/// 無ければ store は動かず、`inspector_field_draft` が該当 field で立つ。
+#[test]
+fn clicking_a_value_cell_without_dragging_enters_type_editing() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+    assert!(shell.inspector_field_draft().is_none());
+    // AddLayer 自体は undo 可能な1手 — click がそれ「以上」を足さないことを
+    // この後の layer_count(Undo すると AddLayer まで戻る)で確かめる。
+    assert!(shell.can_undo(), "AddLayer 直後は undo 可能なはず(前提)");
+
+    shell.update(Message::InspectorValuePressed(TransformField::Rotation));
+    shell.update(Message::InspectorPointerReleased);
+
+    let draft = shell
+        .inspector_field_draft()
+        .expect("click は type 編集への切り替えのはず");
+    assert_eq!(draft.field, TransformField::Rotation);
+    assert_eq!(draft.text, "0.0", "下書きの初期値が今の store 値と違う");
+
+    // click だけでは store は動いていない — Undo 1回で AddLayer 自体が戻る
+    // (click が別の undo entry を足していれば layer は残ってしまう)。
+    let RowValue::Vector(rotation) = &shell.inspector_selection().unwrap().transform[2].value
+    else {
+        panic!("Rotation 行が Vector でない");
+    };
+    assert_eq!(rotation[2].value, 0.0);
+    shell.update(Message::Undo);
+    assert_eq!(shell.layer_count(), 0, "click だけで別の undo entry が足されている");
+}
+
+/// animated(2キー以上)な field は drag も始まらない(`commit_inspector_field`
+/// の書き口側の柵と同じ二重防御)。
+#[test]
+fn dragging_an_animated_field_is_refused() {
+    let (mut shell, _) = Shell::new_fixture();
+    let selection = shell.inspector_selection().expect("fixture は選択済みのはず");
+    let RowValue::Vector(position) = &selection.transform[0].value else {
+        panic!("Position 行が Vector でない");
+    };
+    assert!(!position[0].editable, "fixture の前提(animated)が崩れている");
+    let before = position[0].value;
+
+    shell.update(Message::InspectorValuePressed(TransformField::PositionX));
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(0.0, 0.0)));
+    shell.update(Message::InspectorPointerMoved(iced::Point::new(50.0, 0.0)));
+
+    let RowValue::Vector(position_after) =
+        &shell.inspector_selection().unwrap().transform[0].value
+    else {
+        panic!("Position 行が Vector でない");
+    };
+    assert_eq!(position_after[0].value, before, "animated な field が動いてしまった");
 }
