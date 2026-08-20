@@ -22,3 +22,6 @@
 | 15 | 2026-08-20 | preview も export も `Compositor::render` 1本。同じ入力から byte 一致することを常設試験で縛る(第二経路が生まれたらここが落ちる) |
 | 16 | 2026-08-20 | **alpha 付き書き出しは現経路では出せない**。`ScreenshotProcessor` は compositing 後を撮るので alpha が 255 へ潰れる。直し方は `ViewBuilder` の main target を composite 前に読む経路の追加(fork seam は要らない見込み)。限界は試験で固定済みなので、直った日に試験が落ちて気付ける |
 | 17 | 2026-08-20 | headless GPU の instance / adapter 選択 / device limits は `re_renderer::device_caps` の物をそのまま使う。自前で limits を書かない(rerun の shader が要求する床とずれた時に原因が追えなくなる) |
+| 18 | 2026-08-20 | 1フレームを出す経路は `Engine::render_frame(&StoreView, t, comp)` 1本。preview も export もこれを呼ぶ。「書き出し専用の速い道」を足さない |
+| 19 | 2026-08-20 | 素材の種類は `LayerSource` の variant を足すことだけで増やす。動画・静止画・生成物が別経路を持たないようにする |
+| 20 | 2026-08-20 | キーを打っていない property は静止値(位置0・不透明度1・大きさは素材のまま)。AE と同じ扱いで、track の有無が意味の有無と一致する |

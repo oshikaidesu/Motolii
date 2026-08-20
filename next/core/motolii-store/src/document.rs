@@ -9,7 +9,7 @@ use re_log_types::{
 };
 use re_types_core::SerializedComponentBatch;
 
-use crate::components::{descriptor_present, descriptor_track, LayerPresent, TrackJson};
+use crate::components::{descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
 use crate::view::StoreView;
 use crate::{StoreError, EDIT_TIMELINE};
 
@@ -62,6 +62,11 @@ pub enum Intent {
         layer: LayerId,
         property: PropertyId,
         track: motolii_eval::KeyframeTrack,
+    },
+    /// 素材と重ね順。アニメーションしない属性はこちら。
+    SetMeta {
+        layer: LayerId,
+        meta: crate::LayerMeta,
     },
 }
 
@@ -156,6 +161,17 @@ impl Document {
                 vec![serialize_present(true)?],
             ),
             Intent::RemoveLayer(layer) => (layer, vec![serialize_present(false)?]),
+            Intent::SetMeta { layer, meta } => {
+                let json = serde_json::to_string(&meta)?;
+                (
+                    layer,
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_meta(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
             Intent::SetTrack {
                 layer,
                 property,

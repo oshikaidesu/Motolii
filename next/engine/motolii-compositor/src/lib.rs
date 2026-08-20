@@ -14,7 +14,7 @@
 //! device limits はいずれも `re_renderer::device_caps` が持っている(自前で書かない)。
 
 use re_renderer::renderer::{RectangleDrawData, RectangleOptions, TexturedRect};
-use re_renderer::resource_managers::{GpuTexture2D, ImageDataDesc};
+use re_renderer::resource_managers::ImageDataDesc;
 use re_renderer::view_builder::{
     self, Projection, RenderMode, TargetConfiguration, ViewBuilder,
 };
@@ -23,6 +23,9 @@ use re_renderer::{RenderContext, Rgba};
 mod headless;
 
 pub use headless::HeadlessError;
+
+/// 素材ハンドル。上流の型をそのまま通す(包み直さない)。
+pub use re_renderer::resource_managers::GpuTexture2D;
 
 /// 合成の器。comp の解像度だけを持つ。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

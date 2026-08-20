@@ -151,6 +151,16 @@ pub fn descriptor_track(property: &crate::PropertyId) -> ComponentDescriptor {
     }
 }
 
+/// layer の素材と重ね順。track と同じく serde 表現を1つの文字列で持つ
+/// (符号化の流儀を2つにしない)。
+pub fn descriptor_meta() -> ComponentDescriptor {
+    ComponentDescriptor {
+        archetype: Some("motolii.archetypes.Layer".into()),
+        component: "Layer:meta".into(),
+        component_type: Some(TrackJson::name()),
+    }
+}
+
 pub fn descriptor_present() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some("motolii.archetypes.Layer".into()),

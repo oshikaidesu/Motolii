@@ -36,3 +36,51 @@ pub enum StoreError {
     #[error("property 名が不正: {0}")]
     Property(String),
 }
+
+/// 標準 property の名前。**ここに無い名前も置けるが、標準面はこれを見る**。
+pub mod property {
+    pub const POSITION_X: &str = "position.x";
+    pub const POSITION_Y: &str = "position.y";
+    pub const WIDTH: &str = "size.width";
+    pub const HEIGHT: &str = "size.height";
+    pub const OPACITY: &str = "opacity";
+}
+
+/// layer の素材。media が入るまでは単色だけ。
+///
+/// **variant を足すのが素材種を増やす唯一の道**にしてある(動画・静止画・生成物が
+/// 別々の経路を持たないようにするため)。
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum LayerSource {
+    Solid {
+        rgba: [u8; 4],
+        width: u32,
+        height: u32,
+    },
+}
+
+impl LayerSource {
+    pub fn size(&self) -> [f32; 2] {
+        match self {
+            Self::Solid { width, height, .. } => [*width as f32, *height as f32],
+        }
+    }
+}
+
+/// layer の非アニメーション属性。
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct LayerMeta {
+    pub source: LayerSource,
+    /// 大きいほど手前。
+    pub order: i32,
+}
+
+/// ある comp 時刻に解決済みの layer。**合成器が要るのはこれだけ**。
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolvedLayer {
+    pub source: LayerSource,
+    pub order: i32,
+    pub top_left: [f32; 2],
+    pub size: [f32; 2],
+    pub opacity: f32,
+}

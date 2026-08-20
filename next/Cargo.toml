@@ -11,6 +11,7 @@ members = [
     "core/motolii-eval",
     "core/motolii-store",
     "engine/motolii-compositor",
+    "engine/motolii-engine",
     "probes/r0-store-edit",
 ]
 
@@ -51,6 +52,7 @@ motolii-core = { path = "core/motolii-core" }
 motolii-eval = { path = "core/motolii-eval" }
 motolii-store = { path = "core/motolii-store" }
 motolii-compositor = { path = "engine/motolii-compositor" }
+motolii-engine = { path = "engine/motolii-engine" }
 
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
