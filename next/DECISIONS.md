@@ -86,3 +86,6 @@
 | 79 | 2026-08-20 | Lottie の「表 + refId」(assets / fonts / chars / 各 layer の refId)は**1枚 JSON を自己完結させる配信の都合**で、編集器の Document の意味ではない。素材は layer が直に持ち(`LayerSource::Media`)、同一性は fingerprint が持つ。**これ1本で 20件以上が落ちた** |
 | 80 | 2026-08-20 | **「採用済」を自己申告にしない**。地図の `evidence` 列に**コード中に実在する識別子**を書き、試験 `adopted_rows_point_at_real_code` が `next/` 全体を grep して確かめる。書くだけで地図が埋まると、地図が嘘をつく |
 | 81 | 2026-08-20 | **発注単位は地図の `unit` 列**。別の台帳(backlog / roadmap)を作らない — 束は地図の見え方の1つにすぎない(軸4「台帳を増やさない」)。**完了条件 = その束の行が全部 採用済 + evidence 実在**なので機械で判定できる。12束: text 44 / shape-1 38 / shape-2 27 / layer-meta 16 / mask 11 / effect 10 / slot 4 / split-position 3 / shape-3 3 / marker 3 / transform-skew 2 / motion-path 2 |
+| 82 | 2026-08-20 | **`style_spans`(1つのテキストレイヤー内で文字範囲ごとにフォント・サイズ・色を変える)は v1 必須**(利用者裁定)。**「文字MV」ならなおさら**。`scale` アニメーターでの代用は成立しない — アニメーターは変形だけで**組版が動かない**ので、拡大しても周りの文字が詰まらず隙間が不自然になる(`text-model.md:62-64` が既にこの区別を書いている)。裁定77 の分岐はこちらで決着 |
+| 83 | 2026-08-20 | **テキストは「あると強い」ではなく製品の芯**(利用者の「文字MV」発言)。GOALS の分類を標準 S22 から引き上げる。ただし合否条件としての観測可能な形はこれから書く |
+| 84 | 2026-08-20 | 範囲スタイルは **Lottie から凍結できない**ので、別の先例を1回引く(CSS inline / DirectWrite `IDWriteTextLayout` / Rive text / AttributedString / Flutter TextSpan)。最大の分岐は **flat span list か木か** — 裁定66/73 が「修飾子が兄弟に暗黙に効く模型は並べ替えが結果を黙って変えるので採らない」と既に決めており、同じ論理が効く見込み |
