@@ -605,7 +605,14 @@ impl Document {
     pub(crate) fn write(&mut self, intent: Intent, at: i64) -> Result<(), StoreError> {
         let batches = match intent {
             Intent::AddLayer(layer) => (layer.entity_path(), vec![serialize_present(true)?]),
-            Intent::RemoveLayer(layer) => (layer.entity_path(), vec![serialize_present(false)?]),
+            Intent::RemoveLayer(layer) => {
+                // 削除は最も破壊的な編集(元に戻すには undo するしかない)。locked は
+                // 他の層変更 Intent と同じく理由つき Err で拒む(supervisor 裁定、
+                // AE と同じ意味論)。解除→削除の2手は常に可能 — `check_not_locked` は
+                // `locked` 自身の解除/再ロックだけを別扱いする `SetAttrs` を経由しない。
+                check_not_locked(&self.view(), layer)?;
+                (layer.entity_path(), vec![serialize_present(false)?])
+            }
             Intent::SetComposition(composition) => {
                 let json = serde_json::to_string(&composition)?;
                 (

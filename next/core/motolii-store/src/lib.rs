@@ -210,9 +210,24 @@ pub struct Composition {
     pub fps: motolii_core::Fps,
     /// 尺(フレーム数)。半開 `[0, duration_frames)`。
     pub duration_frames: i64,
+    /// comp の背景色(RGBA、0.0〜1.0)。**静的値でキーフレーム化しない** — 動く背景は
+    /// 層でやる(裁定20 の精神。KeyframeTrack にすると「層と comp の2箇所に動く値の
+    /// 経路ができる」という同じ問題を繰り返す)。
+    ///
+    /// 既定は不透明黒(現行の見た目のまま)。`#[serde(default)]` は**新規保存だけの
+    /// ためではない** — 既存の保存ファイルにはこの component が無いので、読み込み時に
+    /// 必ずこの既定を通る(persist の後方互換)。
+    #[serde(default = "Composition::default_background")]
+    pub background: [f32; 4],
 }
 
 impl Composition {
+    /// [`Composition::background`] の既定値。旧描画(合成器の clear 色)と同じ見た目に
+    /// なる不透明黒 — 利用者が明示的に変えるまで絵は変わらない。
+    pub fn default_background() -> [f32; 4] {
+        [0.0, 0.0, 0.0, 1.0]
+    }
+
     pub fn spec(&self) -> motolii_core::CompSpec {
         motolii_core::CompSpec {
             width: self.width,
