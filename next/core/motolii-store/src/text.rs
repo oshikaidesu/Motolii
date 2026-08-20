@@ -14,6 +14,30 @@
 //! [`TextDocumentStyle`] は将来の範囲スタイル表(裁定85、`text-style`/`text-value-run` 束、
 //! 次切片)の**行の形そのもの**になるよう作ってある — 今回は表と `runs` 分割を建てず、
 //! 1行(`TextDocument::style`)だけを持つ。
+//!
+//! ## 第2切片: range selector とアニメータの Document 意味(裁定75/76)
+//!
+//! ここに足すのは Lottie の `text-data`(`a`=Ranges/`m`=Alignment)・`text-range`・
+//! `text-range-selector`・`text-style`(アニメーター側の5フィールド: fc/ls/sc/sw/t)。
+//! **Rive の `text-modifier-group`/`text-modifier-range`(グリフの位置・回転・拡大・
+//! 不透明度)・`text-value-run`・`style_spans`・字形ラスタライズは触らない**(次切片)。
+//!
+//! - [`TextRange`] は AE のアニメーター1個。**動かす property(`text-range a` Style)を
+//!   フィールドとして持たない** — マスク([`crate::MaskId`])/effect([`crate::EffectId`])
+//!   と同じ理由で、動く量は [`crate::PropertyId::text_range_fill_color`] 等の平坦な
+//!   `KeyframeTrack` に乗る。**track の有無自体が「この animator がその属性を触るか」を
+//!   表す**(裁定20 の応用)。position/scale/rotation/opacity/skew(`helpers/transform`
+//!   継承)は Rive の `text-modifier-group` が正本を持つまで持ち越し。
+//! - [`TextRangeSelector`] も同じ理由で **動く部分(Start/End/Offset/Max Amount)を
+//!   持たない** — `PropertyId::text_range_selector_offset` 等に乗る。「カラオケワイプは
+//!   Offset を時間駆動するだけに畳める」という地図の note どおり、offset は本質的に
+//!   時間変化する値なので静止フィールドでは表現できない。
+//! - `text-range-selector rn`(Randomize)は Lottie の int-boolean のままでは
+//!   Preview=Export(M15/D1)と両立しない(裁定75/101)。[`TextRandomize`] で seed を
+//!   必ず持たせる — 先例が無いのでここで自前設計する。
+//! - 複数アニメーターの合成規則(旧 text-model.md の骨格: 並び順=逐次適用、
+//!   各アニメーターは全 property を加算)は `TextDocument::ranges`(`Vec<TextRange>`)の
+//!   **並びと `id` の同一性**だけを固定する。加算そのものは評価器(engine、未着手)の仕事。
 
 use serde::{Deserialize, Serialize};
 
@@ -130,6 +154,142 @@ pub struct TextDocumentStyle {
     pub stroke_over_fill: bool,
 }
 
+/// アニメーターの安定 ID。マスク([`crate::MaskId`])/effect([`crate::EffectId`])と
+/// 同型の理由 — 添字だと並べ替え/削除で別アニメーターの property track へ付き直る
+/// (裁定65/85 と同型の問題)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct TextRangeId(pub u32);
+
+impl std::fmt::Display for TextRangeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// 範囲選択器の粒度(`constants/text-based`)。AE 由来で発明の余地が無い。
+/// **「文字」はクラスタに読み替える**(裁定75 — 単語分割器を回避する安い代替)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TextBasedOn {
+    Characters,
+    CharactersExcludingSpaces,
+    Words,
+    Lines,
+}
+
+/// 範囲値の単位(`constants/text-range-units`)。歌詞は Index、テンプレートは Percent。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TextRangeUnits {
+    Percent,
+    Index,
+}
+
+/// 重みカーブの形(`constants/text-shape`)。text-model §6「shape の初期セット」の
+/// 未決がこれで埋まる(裁定75)。`text-range-selector sh` が使う。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TextShape {
+    Square,
+    RampUp,
+    RampDown,
+    Triangle,
+    Round,
+    Smooth,
+}
+
+/// グループ内アンカーの粒度(`constants/text-grouping`)。`text-alignment-options g`
+/// が使う。text-model §6 の未決がここで埋まる(裁定75)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TextGrouping {
+    Characters,
+    Word,
+    Line,
+    All,
+}
+
+/// **seed 付き randomize**(裁定75/101)。Lottie の `text-range-selector rn` は
+/// int-boolean で seed を持たず、再生器ごとに結果が変わって Preview=Export(M15/D1)と
+/// 両立しない。有効/無効は `Option` の有無で表し(番兵を採らない、裁定94 と同じ形)、
+/// 有効なら必ず seed を伴う形にする。**先例が無いのでここで自前設計する**(裁定101)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextRandomize {
+    pub seed: u64,
+}
+
+/// `text-range-selector` の**静止部分**だけ。動く部分(`s`/`e`/`o`/`a` — Start/End/
+/// Offset/Max Amount)はマスクの形状・不透明度と同じ理由で property track に乗る
+/// ([`crate::PropertyId::text_range_selector_start`] 等)。**カラオケワイプは
+/// `o`(Offset)を時間駆動するだけに畳める**という地図の note どおり、offset は
+/// 本質的に時間変化する値なので静止フィールドでは表現できない。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextRangeSelector {
+    /// `text-range-selector b`(Based On)。
+    pub based_on: TextBasedOn,
+    /// `text-range-selector r`(Range Units)。
+    pub range_units: TextRangeUnits,
+    /// `text-range-selector sh`(Shape)。
+    pub shape: TextShape,
+    /// `text-range-selector rn`(Randomize)。`None` = 無効。
+    pub randomize: Option<TextRandomize>,
+}
+
+/// AE のアニメーター1個。**1アニメーター=セレクタ1個**(AE の複数セレクタ交差は
+/// 採らない、裁定75 — 軸4「拡張の口は trait 1本」と同じ形の単純化)。
+///
+/// `text-range a`(Style、アニメーターが動かす property の束)は**フィールドとして
+/// 持たない** — マスクの形状・effect の param と同じ理由で、動く property は
+/// [`crate::PropertyId::text_range_fill_color`] 等(この id が名前空間を作る)の
+/// 平坦な `KeyframeTrack` に乗る。**track が存在するかどうか自体が「この animator が
+/// その属性を触るか」を表す**(裁定20「キーを打っていない property は静止値」の応用)
+/// — 触らない属性のために空の値を持たせる必要が無い。
+///
+/// 複数アニメーターの合成規則(旧 text-model.md の骨格: 並び順=逐次適用、各
+/// アニメーターは全 property を加算)は `Vec<TextRange>` の並びと `id` の同一性だけを
+/// 固定すれば表現できる — 加算そのものは評価器(engine、未着手)の仕事。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TextRange {
+    pub id: TextRangeId,
+    /// `text-range nm`(Name)。利用者が付ける名前。並び順=適用順を明示する UI に要る。
+    pub name: String,
+    /// `text-range s`(Selector)。
+    pub selector: TextRangeSelector,
+}
+
+/// 同じ id のアニメーターが2枚あると、selector/style の property track
+/// (`text_range.{id}.…`)の持ち主が決まらない。[`crate::mask::validate_unique_ids`]と
+/// 同型の検査 — [`crate::Intent::SetTextDocument`] の中で `document.ranges` に対して
+/// 呼ぶ(この列を書く道はそこ1本しか無い)。
+pub(crate) fn validate_unique_ids(ranges: &[TextRange]) -> Result<(), crate::StoreError> {
+    for (i, range) in ranges.iter().enumerate() {
+        if ranges[..i].iter().any(|other| other.id == range.id) {
+            return Err(crate::StoreError::Property(format!(
+                "text-range id {} が2枚ある",
+                range.id
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// `text-alignment-options`(`text-data m`)。グループ内アンカーのオフセットと粒度 —
+/// text-model §6 の未決がここで埋まる(裁定75)。
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TextAlignmentOptions {
+    /// `text-alignment-options a`(Alignment)。グループ内アンカーのオフセット
+    /// (Lottie と同じくパーセント)。**意味は採り既定だけ変える** — 既定
+    /// `[0.0, 0.0]` は「字面中心」を指す(Lottie の既定=左寄せ原点とは異なる)。
+    pub anchor_offset: [f32; 2],
+    /// `text-alignment-options g`(Grouping)。アンカー点の粒度。
+    pub grouping: TextGrouping,
+}
+
+impl Default for TextAlignmentOptions {
+    fn default() -> Self {
+        Self {
+            anchor_offset: [0.0, 0.0],
+            grouping: TextGrouping::Characters,
+        }
+    }
+}
+
 /// text-layer の中身。**`Layer:text` component 1個**(素材と同じ JSON 経路)。
 /// `LayerSource::Text` の中身の正本(裁定112(k) の後継 — 素の文字列1本だった所を
 /// content track・スタイル既定値・フォント参照まで持つ形へ広げる)。
@@ -152,6 +312,13 @@ pub struct TextDocument {
     /// 作らない(地図の note どおり)。slots 機構自体がまだ store に無いので、
     /// ここでは参照識別子だけを持つ(解決は slots が生えた日の engine 側の仕事)。
     pub slot_id: Option<String>,
+    /// `text-data a`(Ranges)。アニメーターの列 — MV タイポグラフィの核心(裁定75)。
+    /// 並び=適用順。動く量は `id` で名前空間が決まる `PropertyId` 経由で別途乗る
+    /// ([`TextRange`] のドキュメント参照)。
+    pub ranges: Vec<TextRange>,
+    /// `text-data m`(Alignment、`text-alignment-options`)。グループ内アンカーの
+    /// オフセットと粒度。
+    pub alignment: TextAlignmentOptions,
 }
 
 #[cfg(test)]
