@@ -212,16 +212,25 @@ struct RenderedFrame {
     width: u32,
     height: u32,
     handle: image::Handle,
-    /// `handle` と同じ画素の生 RGBA。**screenshot 器具専用**(`screenshot.rs`)—
-    /// 通常描画は `handle` だけで足りる(iced の `image::Handle` から画素を
-    /// 取り戻す公開 API が無いため、この用途だけのために複製して持つ)。
-    /// **市松は絶対にここへ乗せない** — `frame_rgba()` 経由で screenshot/export
-    /// が読むのはこの生値そのもの(`settings_pane` doc「合成器が出せる」と
+    /// `Engine::render_frame`(背景込み)の生 RGBA。**export/screenshot 真値専用**
+    /// (`screenshot.rs`・`frame_rgba()`)— 通常描画は `handle` だけで足りる
+    /// (iced の `image::Handle` から画素を取り戻す公開 API が無いため、この
+    /// 用途だけのために複製して持つ)。**市松は絶対にここへ乗せない**し、
+    /// 市松トグルで一切変わらない(`settings_pane` doc「合成器が出せる」と
     /// 「書き出しが吐く」は別問題、参照)。
     rgba: Vec<u8>,
+    /// 市松 ON の間だけ `Some` — 裁定141「AE型の透明可視化モード」の入力
+    /// (`Engine::render_frame_without_background`、背景 layer を省いた合成結果)。
+    /// `handle`(Stage 表示)と `screenshot.rs` は市松 ON の間、`rgba` の代わりに
+    /// これへ [`settings_pane::composite_checkerboard`] を当てる。市松 OFF の
+    /// 間は `None`(`rgba` をそのまま使う)。**export 真値(`rgba`)には一切
+    /// 影響しない** — 別フィールド。
+    checkerboard_preview_rgba: Option<Vec<u8>>,
     /// `handle` が市松込みで作られているか。**Document・playhead 非依存**の
     /// 表示分岐なので、`revision()`/`playhead` が同じでもここが変わっていれば
-    /// `refresh_frame` は(engine を再度回さず)`handle` だけ作り直す。
+    /// `refresh_frame` は Document の再評価をせず Handle だけ作り直す(市松 ON
+    /// の間は `checkerboard_preview_rgba` を取り直すため engine を1回追加で
+    /// 回すが、`Document`/`StoreView` の評価が増えるわけではない)。
     checkerboard: bool,
 }
 
@@ -910,12 +919,27 @@ impl Shell {
         self.checkerboard
     }
 
-    /// 描き上がった Stage フレームの生 RGBA。**screenshot 器具専用**
-    /// (`screenshot.rs`)— 通常描画は `image::Handle` を持つ `stage_pane` を通る。
+    /// 描き上がった Stage フレームの生 RGBA。**常に背景込みの export 真値**
+    /// (`Engine::render_frame`)— 市松トグルで一切変わらない。**screenshot
+    /// 器具専用**(`screenshot.rs`)— 通常描画は `image::Handle` を持つ
+    /// `stage_pane` を通る。
     pub fn frame_rgba(&self) -> Option<(u32, u32, &[u8])> {
         self.frame
             .as_ref()
             .map(|frame| (frame.width, frame.height, frame.rgba.as_slice()))
+    }
+
+    /// 市松 ON の間だけ `Some` — 裁定141「AE型の透明可視化モード」の入力
+    /// (`Engine::render_frame_without_background` の結果そのもの、市松タイルは
+    /// **まだ乗っていない**生値)。**screenshot 器具専用**(`screenshot.rs`)。
+    /// `frame_rgba()` とは別物 — あちらは常に背景込みの export 真値。
+    pub fn checkerboard_preview_rgba(&self) -> Option<(u32, u32, &[u8])> {
+        self.frame.as_ref().and_then(|frame| {
+            frame
+                .checkerboard_preview_rgba
+                .as_deref()
+                .map(|rgba| (frame.width, frame.height, rgba))
+        })
     }
 
     /// 今の Timeline の行。運転席が「層3枚の行が立つ」「選択が行と一致する」を
@@ -1046,10 +1070,12 @@ impl Shell {
     /// Document・再生位置・市松トグルのいずれかが変わった時だけ描き直す。
     /// 判定は `revision()` — front が「前回の Document」を自分で持たないため。
     ///
-    /// **市松は Document・playhead に依存しない表示分岐**なので、その2つが
-    /// 同じでも市松の有無だけ変わっていれば engine を再度回さず(=
-    /// `Engine::render_frame` を呼び直さず)`RenderedFrame::rgba`(既に持っている
-    /// 生値、市松を乗せない方)から Handle だけ作り直す(`build_stage_handle`)。
+    /// **市松は Document・playhead に依存しない表示分岐**だが、裁定141以降は
+    /// 「背景を敷かない」別入力(`Engine::render_frame_without_background`)を
+    /// 見せるモードなので、市松の有無だけ変わった時でも
+    /// [`Self::checkerboard_preview_source`] 経由で engine をもう一度だけ回す
+    /// (`Document`/`StoreView` 自体の再評価が増えるわけではない — 合成の
+    /// 入力差分を取り直すだけ、裁定141「同一合成器への入力の違い」)。
     fn refresh_frame(&mut self) {
         let revision = self.doc.revision();
         let playhead = self.session.playhead;
@@ -1061,12 +1087,21 @@ impl Shell {
                 if frame.checkerboard == checkerboard {
                     return;
                 }
-                let (handle, handle_bytes) =
-                    build_stage_handle(frame.width, frame.height, &frame.rgba, checkerboard, colors);
+                let width = frame.width;
+                let height = frame.height;
+                let preview = self.checkerboard_preview_source(checkerboard, playhead);
+                let (handle, handle_bytes) = match &preview {
+                    Some(preview) => build_stage_handle(width, height, preview, true, colors),
+                    None => {
+                        let frame = self.frame.as_ref().expect("直前の if let で確認済み");
+                        build_stage_handle(width, height, &frame.rgba, false, colors)
+                    }
+                };
                 metrics::record_handle_creation(handle_bytes);
                 if let Some(frame) = self.frame.as_mut() {
                     frame.handle = handle;
                     frame.checkerboard = checkerboard;
+                    frame.checkerboard_preview_rgba = preview;
                 }
                 return;
             }
@@ -1086,13 +1121,27 @@ impl Shell {
         metrics::record_render_frame(render_start.elapsed());
         match render_result {
             Ok(rgba) => {
-                let (handle, handle_bytes) = build_stage_handle(
-                    composition.width,
-                    composition.height,
-                    &rgba,
-                    checkerboard,
-                    colors,
-                );
+                let preview = if checkerboard {
+                    self.checkerboard_preview_source(true, playhead)
+                } else {
+                    None
+                };
+                let (handle, handle_bytes) = match &preview {
+                    Some(preview) => build_stage_handle(
+                        composition.width,
+                        composition.height,
+                        preview,
+                        true,
+                        colors,
+                    ),
+                    None => build_stage_handle(
+                        composition.width,
+                        composition.height,
+                        &rgba,
+                        false,
+                        colors,
+                    ),
+                };
                 metrics::record_handle_creation(handle_bytes);
                 self.frame = Some(RenderedFrame {
                     revision,
@@ -1101,6 +1150,7 @@ impl Shell {
                     height: composition.height,
                     handle,
                     rgba,
+                    checkerboard_preview_rgba: preview,
                     checkerboard,
                 });
             }
@@ -1110,12 +1160,40 @@ impl Shell {
             }
         }
     }
+
+    /// 市松 ON の間だけ「背景を敷かない」合成をもう一度取る(裁定141)。
+    /// `checkerboard` が `false` なら常に `None`(呼び出し側は `RenderedFrame::rgba`
+    /// を使う)。comp が無い/時刻を写せない/engine が描けない、のいずれかなら
+    /// `None` を返し、呼び出し側は背景込みへ**安全側にフォールバック**する
+    /// (無反応より、背景込みのまま出す方が M16 に近い — 市松が一時的に効かない
+    /// だけで Stage 自体は空にならない)。描けなかった時は理由を status へ出す
+    /// (M13)。
+    fn checkerboard_preview_source(&mut self, checkerboard: bool, playhead: i64) -> Option<Vec<u8>> {
+        if !checkerboard {
+            return None;
+        }
+        let composition = self.doc.view().composition().ok().flatten()?;
+        let t = RationalTime::try_from_frame(playhead, composition.fps).ok()?;
+        match self.engine.render_frame_without_background(&self.doc.view(), t) {
+            Ok(rgba) => Some(rgba),
+            Err(error) => {
+                self.status = Some(format!("市松プレビューを描けない: {error}"));
+                None
+            }
+        }
+    }
 }
 
 /// Stage 表示用の Handle を作る唯一の場所。`stage_handle_rgba` で縮め、
 /// **市松が有効なら display 用の複製にだけ**
 /// [`settings_pane::composite_checkerboard`] を乗せる — 呼び出し側が渡す
-/// `full_rgba`(`RenderedFrame::rgba`、screenshot/export 用)自体は一切変更しない。
+/// `full_rgba` 自体は一切変更しない。
+///
+/// `full_rgba` は呼び出し側(`refresh_frame`)が選ぶ: 市松 OFF なら
+/// `RenderedFrame::rgba`(背景込みの export 真値)、市松 ON なら
+/// `Engine::render_frame_without_background` の結果(裁定141、背景を敷かない
+/// 可視化専用の合成)— どちらの場合も、export/screenshot が読む生値
+/// (`RenderedFrame::rgba`)自体はここでは一切変更しない。
 fn build_stage_handle(
     width: u32,
     height: u32,

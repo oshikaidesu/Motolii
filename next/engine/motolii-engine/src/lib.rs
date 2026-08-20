@@ -2,6 +2,9 @@
 //!
 //! 背骨2: preview も export も [`Engine::render_frame`] を呼ぶ。窓の有無だけが違う。
 //! ここに「書き出し専用の速い道」を足さない — 足した瞬間に「見た絵 ≠ 出る絵」が生まれる。
+//! **唯一の例外**: [`Engine::render_frame_without_background`](市松の透明可視化専用、
+//! 裁定141)。export は絶対に使わない。preview だけが市松 ON の間に切り替える口で、
+//! 同じ合成器・同じ層構築を共有する差分入力として実装してある(第二経路ではない)。
 //!
 //! この crate 自身は意味を持たない。Document の意味は `motolii-store`、
 //! 補間は `motolii-eval`、描画は `re_renderer` にある。ここは繋ぐだけ。
@@ -104,10 +107,44 @@ impl Engine {
     /// **comp を引数で取らない**。取れると preview と export が違う解像度を渡せてしまい、
     /// 「評価経路が1本」が入力の一致に依存する保証に落ちる(2026-08-20 の敵対的レビュー)。
     /// 解像度も fps も Document が持つ。
+    ///
+    /// **export は常にこれを呼ぶ**(背景込み)。preview は市松 OFF の間もこれを呼ぶが、
+    /// 市松 ON の間だけ [`Self::render_frame_without_background`] へ切り替わる
+    /// (裁定141、呼び分けは `motolii-shell` 側の仕事 — この crate は市松を知らない)。
     pub fn render_frame(
         &mut self,
         view: &StoreView<'_>,
         t: RationalTime,
+    ) -> Result<Vec<u8>, EngineError> {
+        self.render(view, t, true)
+    }
+
+    /// 市松「AE型の透明可視化モード」専用の入力(裁定141)。[`Self::render_frame`]と
+    /// **同じ合成器・同じ層**を使い、`Composition.background` の pinned layer だけを
+    /// 省く — 第二 render パスではなく、同一合成器への入力差分として実装してある
+    /// (裁定141「同一合成器へ『背景を敷かない』入力を渡す可視化モードと整理する」)。
+    ///
+    /// **export はこの口を使わない**。背景 layer が無い分、層に覆われていない画素は
+    /// 合成器の clear 色(`motolii-compositor::render_with_timing` が渡す
+    /// `Rgba::TRANSPARENT`、`blend_with_background: Premultiplied` で alpha も
+    /// 素通しになる)がそのまま出る — つまり alpha=0(回帰試験:
+    /// `tests/background.rs::render_frame_without_background_leaves_uncovered_pixels_transparent`)。
+    pub fn render_frame_without_background(
+        &mut self,
+        view: &StoreView<'_>,
+        t: RationalTime,
+    ) -> Result<Vec<u8>, EngineError> {
+        self.render(view, t, false)
+    }
+
+    /// `render_frame`/`render_frame_without_background` の共通実装。
+    /// `include_background` だけが分岐点(背景 pinned layer を足すかどうか) —
+    /// それ以外の層の組み立て・合成呼び出しは完全に同じ経路を通る。
+    fn render(
+        &mut self,
+        view: &StoreView<'_>,
+        t: RationalTime,
+        include_background: bool,
     ) -> Result<Vec<u8>, EngineError> {
         let composition = view
             .composition()
@@ -126,40 +163,42 @@ impl Engine {
 
         let mut layers = Vec::with_capacity(resolved.len() + 1);
 
-        // comp の背景色(`Composition::background`、利用者要望: 黒だと気分が上がらない)。
-        // **`motolii-compositor` の clear 色は変えない**(compositor は書き込み禁止の
-        // 並列レーンが触っている最中)。代わりに comp 全域を覆う不透明の layer を
-        // どの実 layer よりも奥(`order = BACKGROUND_ORDER`、定数の doc 参照 —
-        // `i16::MIN` は depth_offset の shader 側スケールで外周1px を欠落させる
-        // ので使わない)に足す — pinned layer(裁定113、カメラの pan/zoom を受けず
-        // 画面に張り付く機構)を流用すれば、camera がどこを向いていても render
-        // target をちょうど覆う「クリア色」として働く。
-        // 既定値([0,0,0,1] 不透明黒)は旧 clear 色と同じ見た目になるので、
-        // 既存テストの期待画素は変わらない(合成器の実測: `TRANSPARENT` clear は
-        // 読み戻すと不透明黒になる — `motolii-compositor` の
-        // `default_camera_all_z0_matches_orthographic_pixel_mapping` 参照)。
-        // preview/export は同じ [`Self::render_frame`] を通るので、背景も
-        // 書き出しに乗る。
-        let (background_texture, _) = self.texture_for(
-            &LayerSource::Solid {
-                rgba: to_u8_rgba(composition.background),
-                // 1x1 で足りる — 単色は quad の `size` で comp 全域まで引き伸ばすので、
-                // texture 自体の解像度は意味を持たない。
-                width: 1,
-                height: 1,
-            },
-            0,
-        )?;
-        layers.push(Layer {
-            texture: background_texture.expect("LayerSource::Solid は常に texture を返す"),
-            size: [comp.width as f32, comp.height as f32],
-            placement: LayerPlacement {
-                order: BACKGROUND_ORDER,
-                ..Default::default()
-            },
-            pinned: true,
-            blend_mode: motolii_compositor::BlendMode::Normal,
-        });
+        if include_background {
+            // comp の背景色(`Composition::background`、利用者要望: 黒だと気分が上がらない)。
+            // **`motolii-compositor` の clear 色は変えない**(compositor は書き込み禁止の
+            // 並列レーンが触っている最中)。代わりに comp 全域を覆う不透明の layer を
+            // どの実 layer よりも奥(`order = BACKGROUND_ORDER`、定数の doc 参照 —
+            // `i16::MIN` は depth_offset の shader 側スケールで外周1px を欠落させる
+            // ので使わない)に足す — pinned layer(裁定113、カメラの pan/zoom を受けず
+            // 画面に張り付く機構)を流用すれば、camera がどこを向いていても render
+            // target をちょうど覆う「クリア色」として働く。
+            // 既定値([0,0,0,1] 不透明黒)は旧 clear 色と同じ見た目になるので、
+            // 既存テストの期待画素は変わらない(合成器の実測: `TRANSPARENT` clear は
+            // 読み戻すと不透明黒になる — `motolii-compositor` の
+            // `default_camera_all_z0_matches_orthographic_pixel_mapping` 参照)。
+            // export は必ずこの分岐を通る([`Self::render_frame`] からしか
+            // `include_background = false` は選ばれない)ので、背景も書き出しに乗る。
+            let (background_texture, _) = self.texture_for(
+                &LayerSource::Solid {
+                    rgba: to_u8_rgba(composition.background),
+                    // 1x1 で足りる — 単色は quad の `size` で comp 全域まで引き伸ばすので、
+                    // texture 自体の解像度は意味を持たない。
+                    width: 1,
+                    height: 1,
+                },
+                0,
+            )?;
+            layers.push(Layer {
+                texture: background_texture.expect("LayerSource::Solid は常に texture を返す"),
+                size: [comp.width as f32, comp.height as f32],
+                placement: LayerPlacement {
+                    order: BACKGROUND_ORDER,
+                    ..Default::default()
+                },
+                pinned: true,
+                blend_mode: motolii_compositor::BlendMode::Normal,
+            });
+        }
 
         for layer in resolved {
             // matte/blend の判定を texture のアップロードより先にやる — 対応外なら

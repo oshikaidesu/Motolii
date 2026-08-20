@@ -9,11 +9,13 @@
 //!
 //! 発注書が明示的に許す代替(「無理なら stage+pane の合成PNG」)を採る:
 //! Stage は `motolii_engine::Engine` が実際に GPU 合成した RGBA を貼るが、
-//! **市松が有効なら `lib.rs::build_stage_handle` と同じ組み合わせ
-//! (`settings_pane::composite_checkerboard`)を自分でも当てる** — この器具の
-//! 仕事は「実際に画面へ出る絵」の検分なので、`frame_rgba()`(export と同じ
-//! 生値、市松なし)をそのまま貼ると市松トグルの効果だけ画面から消えてしまう。
-//! `frame_rgba()` 自体は書き換えない(export/screenshot 生値の不変は保つ)。
+//! **市松が有効なら `lib.rs::refresh_frame`/`build_stage_handle` と同じ入力
+//! (`Shell::checkerboard_preview_rgba`、裁定141「背景を敷かない」合成)へ
+//! `settings_pane::composite_checkerboard` を自分でも当てる** — この器具の
+//! 仕事は「実際に画面へ出る絵」の検分なので、`frame_rgba()`(常に背景込みの
+//! export 真値)をそのまま貼ると市松トグルの効果が画面から消えてしまう
+//! (裁定141以降、市松は不透明背景でも見えるはずの状態)。`frame_rgba()`
+//! 自体は書き換えない(export/screenshot 生値の不変は保つ)。
 //! Timeline は `timeline_pane` と**同じ投影関数**(`rows`/`frame_to_x`)を使って
 //! 同じ位置関係を再現するが、**ここで実際に塗るのはこのモジュール自身**
 //! (iced の `canvas::Frame` ではなく `image::RgbaImage` へ矩形・線を直接塗る —
@@ -198,41 +200,32 @@ pub fn render(shell: &Shell) -> RgbaImage {
         stage_h,
         to_rgba(colors.surface_app, 1.0),
     );
-    if let Some((w, h, pixels)) = shell.frame_rgba() {
-        // `frame_rgba()` は市松を絶対に乗せない生値(export と同じ、
-        // `settings_pane` doc 参照)。この instrument は「実際に画面へ出る絵」の
-        // 検分が目的なので、`lib.rs::build_stage_handle` と同じ組み合わせを
-        // ここでも自分で行う — `frame_rgba()` 自体は一切書き換えない
-        // (`tests/settings_drive.rs::checkerboard_toggle_never_touches_the_raw_export_rgba`
-        // の不変を screenshot 側からも壊さない)。
+    // `frame_rgba()` は常に背景込みの export 真値(市松を絶対に乗せない、
+    // `settings_pane` doc 参照)。この instrument は「実際に画面へ出る絵」の
+    // 検分が目的なので、市松 ON の間は
+    // `lib.rs::build_stage_handle`/`refresh_frame` と同じ入力(裁定141の
+    // 「背景を敷かない」合成、`Shell::checkerboard_preview_rgba`)へ
+    // `composite_checkerboard` を当てる — `frame_rgba()` 自体は一切書き換えない
+    // (`tests/settings_drive.rs::checkerboard_toggle_never_touches_the_raw_export_rgba`
+    // の不変を screenshot 側からも壊さない)。
+    let stage_source = if shell.checkerboard_enabled() {
+        shell.checkerboard_preview_rgba().or_else(|| shell.frame_rgba())
+    } else {
+        shell.frame_rgba()
+    };
+    if let Some((w, h, pixels)) = stage_source {
+        let rect = Rect {
+            x: padding,
+            y,
+            w: content_width,
+            h: stage_h,
+        };
         if shell.checkerboard_enabled() {
             let mut composited = pixels.to_vec();
             settings_pane::composite_checkerboard(w, h, &mut composited, colors);
-            blit_letterboxed(
-                &mut canvas,
-                &composited,
-                w,
-                h,
-                Rect {
-                    x: padding,
-                    y,
-                    w: content_width,
-                    h: stage_h,
-                },
-            );
+            blit_letterboxed(&mut canvas, &composited, w, h, rect);
         } else {
-            blit_letterboxed(
-                &mut canvas,
-                pixels,
-                w,
-                h,
-                Rect {
-                    x: padding,
-                    y,
-                    w: content_width,
-                    h: stage_h,
-                },
-            );
+            blit_letterboxed(&mut canvas, pixels, w, h, rect);
         }
     }
     y += stage_h + gap;
