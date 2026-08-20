@@ -6,8 +6,8 @@ use re_chunk_store::LatestAtQuery;
 use re_entity_db::EntityDb;
 use re_log_types::{EntityPath, Timeline};
 
-use crate::components::{descriptor_composition, descriptor_masks, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
-use crate::{property, Composition, Document, LayerId, LayerMeta, LayerPlacement, Mask, PropertyId, ResolvedLayer, ResolvedMask, StoreError, EDIT_TIMELINE};
+use crate::components::{descriptor_composition, descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
+use crate::{property, Composition, Document, LayerId, LayerMeta, LayerPlacement, Marker, Mask, PropertyId, ResolvedLayer, ResolvedMask, StoreError, EDIT_TIMELINE};
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
 #[derive(Clone, Copy)]
@@ -129,6 +129,24 @@ impl<'a> StoreView<'a> {
         serde_json::from_str(&json.0)
             .map(Some)
             .map_err(StoreError::Encode)
+    }
+
+    /// comp のマーカー一覧。**宣言順**(マスクと同じく暗黙の隣接参照を作らない、裁定66)。
+    ///
+    /// component が無い = マーカーが1枚も無いので空を返す(マスクの `masks()` と同じ扱い)。
+    pub fn markers(&self) -> Result<Vec<Marker>, StoreError> {
+        let descriptor = descriptor_markers();
+        let path = Document::composition_path();
+        let results = self
+            .db
+            .latest_at(&self.query(), &path, [descriptor.component]);
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(Vec::new());
+        };
+        serde_json::from_str(&json.0).map_err(StoreError::Encode)
     }
 
     pub fn meta(&self, layer: LayerId) -> Result<Option<LayerMeta>, StoreError> {
@@ -273,9 +291,11 @@ impl<'a> StoreView<'a> {
         // 行列は `motolii-core` が組む。**適用順序の正本はそこ1箇所**(裁定58)。
         let transform = LayerPlacement::from_transform(
             vec2(property::ANCHOR, [0.0, 0.0])?,
-            vec2(property::POSITION, [0.0, 0.0])?,
+            self.resolve_position(layer, t)?,
             vec2(property::SCALE, [1.0, 1.0])?,
             scalar(property::ROTATION, 0.0)?,
+            scalar(property::SKEW, 0.0)?,
+            scalar(property::SKEW_AXIS, 0.0)?,
         );
 
         Ok(Some(ResolvedLayer {
@@ -289,6 +309,45 @@ impl<'a> StoreView<'a> {
             source_frame,
             masks: self.resolved_masks(layer, t)?,
         }))
+    }
+
+    /// position の値。**`position`(Vec2 単一 track)を優先し、無ければ split(x/y 別
+    /// track)を試す**(裁定61)。どちらも無ければ既定 `[0,0]`。
+    ///
+    /// split は「x か y のどちらかだけキーを打つ」も許す — 片方が無い場合はその成分だけ
+    /// 0.0(AE で「そちらの軸は動かしていない」と同じ扱い)。
+    fn resolve_position(&self, layer: LayerId, t: RationalTime) -> Result<[f32; 2], StoreError> {
+        let position = PropertyId::new(property::POSITION)?;
+        match self.value_at(layer, &position, t)? {
+            Some(Value::Vec2(v)) => return Ok([v[0] as f32, v[1] as f32]),
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "{} に2成分でない値が入っている: {other:?}",
+                    property::POSITION
+                )))
+            }
+            None => {}
+        }
+
+        let x = self.split_position_component(layer, property::POSITION_X, t)?;
+        let y = self.split_position_component(layer, property::POSITION_Y, t)?;
+        Ok([x.unwrap_or(0.0), y.unwrap_or(0.0)])
+    }
+
+    fn split_position_component(
+        &self,
+        layer: LayerId,
+        name: &str,
+        t: RationalTime,
+    ) -> Result<Option<f32>, StoreError> {
+        let property = PropertyId::new(name)?;
+        match self.value_at(layer, &property, t)? {
+            Some(Value::F64(v)) => Ok(Some(v as f32)),
+            Some(other) => Err(StoreError::Property(format!(
+                "{name} に数値でない値が入っている: {other:?}"
+            ))),
+            None => Ok(None),
+        }
     }
 
     /// この時刻に描くべき layer を**奥から手前の順**で返す。

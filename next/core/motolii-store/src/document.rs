@@ -9,7 +9,7 @@ use re_log_types::{
 };
 use re_types_core::SerializedComponentBatch;
 
-use crate::components::{descriptor_composition, descriptor_masks, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
+use crate::components::{descriptor_composition, descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
 use crate::view::StoreView;
 use crate::{StoreError, EDIT_TIMELINE};
 
@@ -107,6 +107,9 @@ pub enum Intent {
     },
     /// comp の設定(解像度・fps・尺)。**undo が効く**ので普通の編集と同じ経路。
     SetComposition(crate::Composition),
+    /// comp のマーカー一覧。追加・削除・並べ替え・改名はすべてこれ1つ
+    /// (`SetMasks`/`SetTiming` と同じ考え方)。
+    SetMarkers { markers: Vec<crate::Marker> },
 }
 
 /// 「見えている Document が変わったか」の印。
@@ -283,6 +286,17 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_composition(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetMarkers { markers } => {
+                let json = serde_json::to_string(&markers)?;
+                (
+                    Self::composition_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_markers(),
                         array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],

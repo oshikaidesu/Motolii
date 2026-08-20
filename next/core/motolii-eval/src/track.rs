@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use motolii_core::{Fps, RationalTime};
+use motolii_core::RationalTime;
 
 use crate::bezier::{cubic_bezier_ease, sample, solve_curve_x};
 use crate::value::Value;
@@ -316,6 +316,7 @@ fn seconds_since(t: RationalTime, origin: RationalTime) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use motolii_core::Fps;
 
     fn key(t: RationalTime, v: f64, interp: Interp) -> Keyframe {
         Keyframe {

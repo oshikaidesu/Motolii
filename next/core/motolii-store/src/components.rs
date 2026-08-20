@@ -183,6 +183,18 @@ pub fn descriptor_composition() -> ComponentDescriptor {
     }
 }
 
+/// comp のマーカー一覧。**comp の設定とは別 component**にしてある —
+/// `SetComposition` は解像度/fps/尺の意味の口であって、マーカーは別の編集操作
+/// (`Intent::SetMarkers`)なので同居させない(`SetMeta` がマスクを巻き込まないのと
+/// 同じ理由、裁定108(c))。
+pub fn descriptor_markers() -> ComponentDescriptor {
+    ComponentDescriptor {
+        archetype: Some("motolii.archetypes.Composition".into()),
+        component: "Composition:markers".into(),
+        component_type: Some(TrackJson::name()),
+    }
+}
+
 pub fn descriptor_present() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some("motolii.archetypes.Layer".into()),

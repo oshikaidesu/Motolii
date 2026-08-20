@@ -187,9 +187,9 @@ effects	twirl-effect	ty	Type	不採用	Document は effect を型で持たない
 effects	wavy-effect	@extends	effects/effect	該当なし	継承元			lottie
 effects	wavy-effect	ef	Effect values	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
 effects	wavy-effect	ty	Type	不採用	Document は effect を型で持たない(裁定70)。param は first-party plugin の一次資料としてだけ読む			lottie
-helpers	marker	cm	Comment	採用予定	ロケータの名前		marker	lottie
-helpers	marker	dr	Duration	採用予定	範囲ロケータの尺。out point ではなく duration(裁定64 と同じ理由)		marker	lottie
-helpers	marker	tm	Time	採用予定	ロケータの時刻。RationalTime で持つ		marker	lottie
+helpers	marker	cm	Comment	採用済	ロケータの名前	pub name: String	marker	lottie
+helpers	marker	dr	Duration	採用済	範囲ロケータの尺。out point ではなく duration(裁定64 と同じ理由)。time と同じ RationalTime で持つ	pub duration: RationalTime	marker	lottie
+helpers	marker	tm	Time	採用済	ロケータの時刻。RationalTime で持つ	pub time: RationalTime	marker	lottie
 helpers	mask	inv	Inverted	採用済	マスクの反転。mode:Subtract とは別物。**Lottie も AE も静止値**なので `Value::Bool` のトラックではなくマスク一覧側の bool(裁定78 が Bool の用例に挙げていたが、実際の用例は effect param 側)	pub inverted: bool	mask	lottie
 helpers	mask	mode	Mode	採用済	constants/mask-mode。前のマスクとの重ね方。畳む順は `Vec<Mask>` の並びが明示する(暗黙の隣接参照を作らない、裁定66)	pub mode: MaskMode	mask	lottie
 helpers	mask	o	Opacity	採用済	マスクの不透明度。1.0 基準(パーセントを採らない)。動くので property track 側 `mask.{id}.opacity`	pub fn mask_opacity	mask	lottie
@@ -206,8 +206,8 @@ helpers	transform	rx	X Rotation	不採用	3D の分割回転(裁定65)			lottie
 helpers	transform	ry	Y Rotation	不採用	同上			lottie
 helpers	transform	rz	Z Rotation	不採用	同上。split でない時は r と等価 = 二重帳簿でもある			lottie
 helpers	transform	s	Scale	採用済	scale。単位は 1.0 基準(パーセントは採らない)	pub const SCALE		lottie
-helpers	transform	sa	Skew Axis	採用予定	skew axis		transform-skew	lottie
-helpers	transform	sk	Skew	採用予定	skew。順序上の穴は空けてある		transform-skew	lottie
+helpers	transform	sa	Skew Axis	採用済	skew axis(度)。0=x軸/90=y軸に沿った点が不動点	skew_axis_degrees	transform-skew	lottie
+helpers	transform	sk	Skew	採用済	skew(度)。from_transform の穴を埋めた(velato の式と一致させた)	skew_degrees	transform-skew	lottie
 helpers	visual-object	mn	Match Name	不採用	expression 用の第二の識別子。LayerId/PropertyId がある			lottie
 helpers	visual-object	nm	Name	採用予定	人が付ける表示名。同一性は LayerId のまま		layer-meta	lottie
 layers	all-layers	@extends	layers/precomposition-layer	該当なし	継承元			lottie
@@ -327,9 +327,9 @@ properties	scalar-property	@extends	properties/property	該当なし	継承元		
 properties	scalar-property	a	Animated	不採用	JSON の discriminator			lottie
 properties	scalar-property	ix	Property Index	不採用	番号台帳			lottie
 properties	scalar-property	k	Keyframes	採用済	KeyframeTrack(Value::F64)	F64(f64)		lottie
-properties	split-position	s	Split	採用予定	split は variant として後で		split-position	lottie
-properties	split-position	x	X Position	採用予定	split variant の X 側 track		split-position	lottie
-properties	split-position	y	Y Position	採用予定	同 Y 側		split-position	lottie
+properties	split-position	s	Split	採用済	split は variant として後で。position(Vec2)が無い時だけ split(x/y)へ落ちる	resolve_position	split-position	lottie
+properties	split-position	x	X Position	採用済	split variant の X 側 track	POSITION_X	split-position	lottie
+properties	split-position	y	Y Position	採用済	同 Y 側	POSITION_Y	split-position	lottie
 properties	splittable-position-property	@extends	properties/position-property	該当なし	継承元			lottie
 properties	splittable-position-property	@extends	properties/split-position	該当なし	継承元			lottie
 properties	vector-keyframe	@extends	properties/base-keyframe	該当なし	継承元			lottie
