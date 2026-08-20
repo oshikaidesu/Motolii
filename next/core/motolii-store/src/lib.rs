@@ -23,6 +23,7 @@
 mod components;
 mod document;
 mod fingerprint;
+mod persist;
 mod view;
 
 pub use document::{Document, Intent, LayerId, PropertyId, Revision};
@@ -45,6 +46,8 @@ pub enum StoreError {
     Encode(#[from] serde_json::Error),
     #[error("property 名が不正: {0}")]
     Property(String),
+    #[error("file の読み書きに失敗した: {0}")]
+    Io(String),
 }
 
 /// 標準 property の名前。**ここに無い名前も置けるが、標準面はこれを見る**。

@@ -92,7 +92,7 @@ pub struct Revision {
 }
 
 pub struct Document {
-    db: EntityDb,
+    pub(crate) db: EntityDb,
     /// 現在の edit 位置。0 = 空の Document。
     head: i64,
     /// 到達済みの最大 edit 位置。redo の上限。
@@ -140,6 +140,20 @@ impl Document {
 
     pub fn edit_head(&self) -> i64 {
         self.head
+    }
+
+    /// 読み込んだ store から edit 位置を復元する。
+    ///
+    /// 保存は履歴を畳むので刻みは1つだが、**それを決め打ちにしない** — store に聞く。
+    pub(crate) fn rebuild_head_from_store(&mut self) {
+        let head = self
+            .db
+            .time_range_for(&Self::timeline_name())
+            .map(|range| range.max().as_i64())
+            .unwrap_or(0);
+        self.head = head;
+        self.tip = head;
+        self.floor = head;
     }
 
     /// 今の状態を **undo の底**にする。

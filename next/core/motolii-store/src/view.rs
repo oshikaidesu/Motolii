@@ -51,6 +51,32 @@ impl<'a> StoreView<'a> {
         self.layers().contains(&layer)
     }
 
+    /// この layer が持っている property の名前。
+    ///
+    /// **store に聞く**(`all_components_for_entity`)。Document 側に「property の一覧」を
+    /// 別に持つと、実体とずれた台帳がもう1つ生まれる。
+    /// Inspector が行を並べる時もここを使う。
+    pub fn properties(&self, layer: LayerId) -> Vec<PropertyId> {
+        let path = layer.entity_path();
+        let engine = self.db.storage_engine();
+        let Some(components) = engine.store().schema().all_components_for_entity(&path) else {
+            return Vec::new();
+        };
+        let mut out: Vec<PropertyId> = components
+            .iter()
+            .filter_map(|component| {
+                let name = component.as_str().strip_prefix("Layer:")?;
+                // layer 自身の component は property ではない。
+                if crate::property::RESERVED.contains(&name) {
+                    return None;
+                }
+                PropertyId::new(name).ok()
+            })
+            .collect();
+        out.sort();
+        out
+    }
+
     /// property の keyframe track。**評価はしない** — 生の意味をそのまま返す。
     /// `Ok(None)` = **その property に track が無い**。
     /// `Err` = **track はあるが読めない**。この2つを同義にしない — 同義にすると

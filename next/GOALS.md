@@ -19,7 +19,7 @@
 | M8 | Space で再生。**音が鳴り**、playhead が音に同期。scrub で Stage 追従 | ui-inherited-grammar-gap Tier0 | 未 |
 | M9 | Export → mp4。**音声mux込み**。報告フレーム数=現物、cancel で残骸なし | concept、first-real-run 欠陥(2) | **部分**(報告=現物・cancel は済。音声mux は未結線) |
 | M10 | Document を変える操作は**1回の Undo で戻る**。1 gesture = 1 Undo | ui-quality-bar Q2 | **済**。`Document::apply_all` が複数 intent を1つの edit 刻みへ書く。運転席が「layer 追加」「3本ドロップ」の両方で Undo 1回を確認。ドラッグは途中経過を pane が持ち確定の1件だけが intent なので元から1 undo |
-| M11 | Cmd+S・未保存●・閉じる確認・**再起動で続きが開く** | ux-check P2/P5、外部診断F-01 | 未 |
+| M11 | Cmd+S・未保存●・閉じる確認・**再起動で続きが開く** | ux-check P2/P5、外部診断F-01 | **部分**。`Document::save` / `load` が往復(bezier・NTSC fps 込み)、保存で履歴を畳む。UI 側(Cmd+S・未保存●・閉じる確認)が残り |
 | M12 | **触れそうな物は全部機能する**。未実装の chrome を置かない(disabled も不可=撤去) | ui-quality-bar **Q0**(利用者裁定) | 未 |
 | M13 | **無反応ゼロ**。拒否は理由がその場で分かる。旧 iced は拒否を `let _ =` で捨てていた | ui-quality-bar Q3、能力台帳§5-2 | **部分**。読み口が「無い」と「読めない」を区別し、shell の拒否は status 帯へ出る。運転席が「戻せない」「開けない素材」の2件を確認。全操作を通した確認は Timeline 後 |
 | M14 | 選択・時刻・幾何の正本は1つ。全面が同じ真実を映す | ui-quality-bar Q5 | **未**。幾何は store にあるが、**選択・playhead・fps・解像度・尺が store に1つも無い**。`comp`/`fps` は `render_frame`/`ExportJob` の引数。このままだと shell がそれらを自分で持ち、そこが次の翻訳層になる |
@@ -82,7 +82,7 @@ iced を採ったのは「**バックができていれば UI は後から生え
 | 穴 | 状態 |
 |---|---|
 | layer の時間(配置・trim・頭出し) | **塞いだ**(裁定51〜53) |
-| 保存・読込(M11) | **未**。R0-4 で store の往復は実証済み、project 形式が未決 |
+| 保存・読込(M11) | **バックは済**。形式は上流の `.rrd` そのまま、保存時に履歴を畳む。shell の Cmd+S 結線が残り |
 | Transform 全軸(anchor / scale / rotation) | **未**。今あるのは position / size / opacity |
 | 音声(decode / mix / 再生 / export mux) | **未**。旧 `motolii-audio` 4,286行が移植候補(`motolii-doc` 依存を切る要) |
 | 再生の時計(M8) | 未 |

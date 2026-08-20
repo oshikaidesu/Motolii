@@ -58,3 +58,7 @@
 | 51 | 2026-08-20 | layer は `LayerTiming { start, duration, source_in }` を持つ。**move / trim / split / 速度はすべてこの型の上に乗り、intent は `SetTiming` 1つ**。専用 intent を操作ごとに足さない |
 | 52 | 2026-08-20 | 置いた時の尺 = **min(素材の尺, comp の残り)** は `LayerTiming::place` が持つ。**shell に書かせない** — 書かせると面ごとに違う置き方が生まれる(旧 workspace の import_seat と browser で起きた形) |
 | 53 | 2026-08-20 | comp 時刻 → 素材フレームの写像は **Document が持つ**(`resolve` が `source_frame` まで解決して返す)。engine は時間の計算をしない — engine が別の写像を持つと時刻の正本が2本になる(2026-08-20 に一度やった失敗) |
+| 54 | 2026-08-20 | **保存形式を決める時に Lottie のスキーマを参照する**(利用者の着想。調査プロジェクトは立てない)。Lottie は JSON で仕様が公開されており、comp / layer / transform / bezier イージング付き keyframe / mask / effect を持つ = Motolii の模型に近い。**自前スキーマを発明しないための一次資料**として、保存形式を決める瞬間に読む。AE の `.aep` は非公開バイナリで保存形式の候補ではない(将来の import 経路として別問題)。Rust 側の先例に `velato`(Vello 用 Lottie レンダラ)と `lottie-rs` がある |
+| 55 | 2026-08-20 | **保存形式は上流の `.rrd` をそのまま使う**(自前形式を発明しない)。store の中身がそのまま file になる。**危険**: fork の rev を上げると古い project が読めなくなりうるので、rev を上げる時は往復試験を必ず回す |
+| 56 | 2026-08-20 | **保存する時は履歴を畳む**。store は全 edit 刻みを持つので、そのまま書くと project file が編集回数に比例して伸びる(R0-1 実測で 1000編集×300打点 = 18.8MB)。畳んだ実測は 204編集のあと 30KB。セッションを跨いだ undo は捨てる — 普通の編集ソフトと同じ |
+| 57 | 2026-08-20 | property の一覧は **store に聞く**(`all_components_for_entity`)。Document 側に一覧を別に持つと、実体とずれた台帳がもう1つ生まれる。Inspector が行を並べる時も同じ口を使う |

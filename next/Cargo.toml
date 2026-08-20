@@ -40,6 +40,8 @@ re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961
 re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
 re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
 re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c", features = ["encoder", "decoder"] }
+re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
 re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
 re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c", default-features = false }
 
