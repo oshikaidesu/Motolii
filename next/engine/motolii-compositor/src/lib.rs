@@ -64,6 +64,23 @@ pub enum CompositorError {
     ReadbackMissing,
 }
 
+/// 1フレームの内訳。どこで時間を使っているかを隠さない。
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RenderTiming {
+    /// 板の組み立てと view の用意。
+    pub build_us: u128,
+    /// GPU への提出と完了待ち。
+    pub gpu_us: u128,
+    /// GPU → CPU の読み戻し。**preview には本来要らない**。
+    pub readback_us: u128,
+}
+
+impl RenderTiming {
+    pub fn total_us(&self) -> u128 {
+        self.build_us + self.gpu_us + self.readback_us
+    }
+}
+
 pub struct Compositor {
     ctx: RenderContext,
     /// 読み戻しの識別子。1つの Compositor で連番にする。
@@ -80,7 +97,14 @@ impl Compositor {
             gpu.queue,
             // 読み戻し形式に合わせる。窓へ出す時はここが surface の形式になる。
             re_renderer::ScreenshotProcessor::SCREENSHOT_COLOR_FORMAT,
-            |_caps| re_renderer::RenderConfig::testing(),
+            // **MSAA は切る**。layer は軸に沿った板であって、アンチエイリアスすべき
+            // 幾何エッジを持たない。上流の `MsaaMode::Off` の doc も「device 差が出にくい」
+            // と言っているので、決定性の点でもこちらが良い。
+            // ただし **速度の理由ではない**: R1 実測で 1080p 40枚は 41.6ms → 37.8ms
+            // (9%)しか変わらなかった。律速は fragment の量そのものである。
+            |_caps| re_renderer::RenderConfig {
+                msaa_mode: re_renderer::MsaaMode::Off,
+            },
         )
         .map_err(|e| CompositorError::Context(e.to_string()))?;
 
@@ -121,6 +145,17 @@ impl Compositor {
         comp: CompSpec,
         layers: &[Layer],
     ) -> Result<Vec<u8>, CompositorError> {
+        self.render_with_timing(comp, layers).map(|(frame, _)| frame)
+    }
+
+    /// 内訳つき。**どこが遅いかを隠さない**ための口で、製品経路は [`Self::render`]。
+    pub fn render_with_timing(
+        &mut self,
+        comp: CompSpec,
+        layers: &[Layer],
+    ) -> Result<(Vec<u8>, RenderTiming), CompositorError> {
+        let mut timing = RenderTiming::default();
+        let build_start = std::time::Instant::now();
         let rects: Vec<TexturedRect> = layers
             .iter()
             .map(|layer| TexturedRect {
@@ -180,6 +215,9 @@ impl Compositor {
         let command_buffer = view_builder
             .draw(&self.ctx, Rgba::TRANSPARENT)
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        timing.build_us = build_start.elapsed().as_micros();
+
+        let gpu_start = std::time::Instant::now();
 
         self.ctx.before_submit();
         self.ctx.queue.submit([command_buffer]);
@@ -196,6 +234,9 @@ impl Compositor {
             .device
             .poll(wgpu::PollType::wait_indefinitely())
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
+        timing.gpu_us = gpu_start.elapsed().as_micros();
+
+        let readback_start = std::time::Instant::now();
         self.ctx.begin_frame();
 
         let mut out: Option<Vec<u8>> = None;
@@ -207,6 +248,8 @@ impl Compositor {
             },
         );
 
-        out.ok_or(CompositorError::ReadbackMissing)
+        let frame = out.ok_or(CompositorError::ReadbackMissing)?;
+        timing.readback_us = readback_start.elapsed().as_micros();
+        Ok((frame, timing))
     }
 }

@@ -141,7 +141,21 @@ motolii/
 | `motolii-ui`(egui shell) | 54,053 | **落とす** |
 | `ui/motolii-rn`(TS) / `ui/motolii-web` | 9,159 | **落とす** |
 | `spikes/**` 21本 | — | 旧 workspace に歴史証拠として残す。移さない |
-| `docs/**` 646本 | — | 移さない。新 workspace は本書 + CANON + decision-index の3枚から始める |
+| `docs/**` 646本 | — | 移さない。新 workspace は `next/README.md` + `DECISIONS.md` + `GOALS.md` の3枚から始める |
+
+> **移植表の穴(2026-08-20・同日の調査で判明)**: 上表は**視覚の正本を2つ落としていた**。
+>
+> 1. **`ui/motolii-tokens`** が表に無い。`sources/motolii-dark.json`(手書き正本)→ 生成 →
+>    `generated/tokens.css` / `tokens.rs` が **色 token の唯一の出所**([CANON](../CANON.md))。
+>    落とすと iced 殻が色の根拠を失う。**移す**
+> 2. **chrome(titlebar / splitter / modal)の正本は `ui/motolii-rn/src/productStyles.ts` +
+>    `chrome.tsx`** であって HTML モックではない([CANON](../CANON.md))。上表は
+>    `ui/motolii-rn` を「落とす」としているので、そのままでは chrome の視覚正本が消える。
+>    現に旧 iced 殻の窓サイズ 980×650 の出所が `productStyles.ts` である。
+>    **落とす前に chrome の寸法・色を新 workspace 側へ写し取る**
+>
+> Browser / Inspector の HTML/CSS 正本(`docs/mocks-ui/public/*-library.html`)は
+> 旧 workspace に残したまま参照する(視覚の手本は移動させない)。
 
 ## 5. このリセットが撤回するもの(目をつぶらない)
 

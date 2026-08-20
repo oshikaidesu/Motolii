@@ -49,6 +49,17 @@ MV 制作のためのモーショングラフィック指向コンポジット�
 
 `engine/` の media・export と、`shell/`(iced)はまだ無い。
 
+## 時間の予算を測る
+
+R1(合成のスループット)は GPU を単独で使う必要があるので既定の `cargo test` では走らない。
+
+```sh
+cargo test --release -p r1-frame-throughput -- --ignored --nocapture --test-threads=1
+```
+
+他の GPU 試験と並列に走らせると等倍40枚が 40ms → 77ms へ倍近く伸びる。
+予算を緩めて通すと見張りとして死ぬので、単独で走らせる方を選んでいる。
+
 ## 裁定
 
 [DECISIONS.md](DECISIONS.md) に追記だけする。1裁定1行、リンクを張らない。

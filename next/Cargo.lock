@@ -2760,6 +2760,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "r1-frame-throughput"
+version = "0.1.0"
+dependencies = [
+ "motolii-compositor",
+ "motolii-engine",
+ "motolii-store",
+]
+
+[[package]]
 name = "rand"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

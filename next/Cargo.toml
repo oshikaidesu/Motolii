@@ -13,6 +13,7 @@ members = [
     "engine/motolii-compositor",
     "engine/motolii-engine",
     "probes/r0-store-edit",
+    "probes/r1-frame-throughput",
 ]
 
 [workspace.package]
