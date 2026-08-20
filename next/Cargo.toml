@@ -10,6 +10,7 @@ members = [
     "core/motolii-core",
     "core/motolii-eval",
     "core/motolii-store",
+    "engine/motolii-compositor",
     "probes/r0-store-edit",
 ]
 
@@ -33,6 +34,13 @@ re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961
 re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
 re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
 re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c", default-features = false }
+
+# 版は rerun の workspace に合わせる。ずれると `IsoTransform` / `Vec3` が別型になる。
+wgpu = "29.0"
+glam = "0.30.10"
+macaw = "0.30.0"
+pollster = "0.4"
 
 arrow = { version = "58.3", default-features = false }
 
@@ -42,6 +50,7 @@ arrow = { version = "58.3", default-features = false }
 motolii-core = { path = "core/motolii-core" }
 motolii-eval = { path = "core/motolii-eval" }
 motolii-store = { path = "core/motolii-store" }
+motolii-compositor = { path = "engine/motolii-compositor" }
 
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"

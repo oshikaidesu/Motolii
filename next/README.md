@@ -43,9 +43,10 @@ MV 制作のためのモーショングラフィック指向コンポジット�
 | `core/motolii-store` | `wraps:` | `EntityDb` の口。Document / StoreView / Intent / undo / redo |
 | `core/motolii-core` | `owns:` | 有理数フレーム時刻。rerun の `TimeInt` は有理 fps を持てない(旧 workspace から移植) |
 | `core/motolii-eval` | `owns:` | keyframe 補間と bezier 分割。rerun の latest-at は step 補間のみ(旧 workspace から移植) |
+| `engine/motolii-compositor` | `wraps:` | `re_renderer` の口。layer = 板、preview と export は同じ `render()` |
 | `probes/r0-store-edit` | `owns:` | 軸が立つことの実測。fork の rev を上げたら回す |
 
-`engine/`(compositor・media・export)と `shell/`(iced)はまだ無い。
+`engine/` の media・export と、`shell/`(iced)はまだ無い。
 
 ## 裁定
 

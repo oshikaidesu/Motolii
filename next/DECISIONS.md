@@ -18,3 +18,7 @@
 | 11 | 2026-08-20 | track は `KeyframeTrack` の serde 表現を **1つの component** に入れる。arrow schema へ割らない — 同じ意味の正本が2つになるため。代償は実測で 5.4倍(1000編集×300打点で 3.5MB → 18.8MB)、予算 64MB 内 |
 | 12 | 2026-08-20 | 削除は tombstone(`present = false` の append)。`drop_entity_path` を使わない — undo で戻らなくなる |
 | 13 | 2026-08-20 | 拡張の trait は**まだ作らない**。2つ目の利用者(compositor)が現れるまで待つ。口を先に決めると、決めた口に合わせて中身が歪む |
+| 14 | 2026-08-20 | 合成は `re_renderer` 直叩き。layer = `TexturedRect` の板、重ね順 = `depth_offset`、不透明度 = `multiplicative_tint`、カメラは正射影 `TopLeftCornerAndExtendZ`(world 単位 = ピクセル・原点左上 = AE の comp 座標)。2026-08-11「direct `re_renderer` 禁止」の撤回を実装で確定した |
+| 15 | 2026-08-20 | preview も export も `Compositor::render` 1本。同じ入力から byte 一致することを常設試験で縛る(第二経路が生まれたらここが落ちる) |
+| 16 | 2026-08-20 | **alpha 付き書き出しは現経路では出せない**。`ScreenshotProcessor` は compositing 後を撮るので alpha が 255 へ潰れる。直し方は `ViewBuilder` の main target を composite 前に読む経路の追加(fork seam は要らない見込み)。限界は試験で固定済みなので、直った日に試験が落ちて気付ける |
+| 17 | 2026-08-20 | headless GPU の instance / adapter 選択 / device limits は `re_renderer::device_caps` の物をそのまま使う。自前で limits を書かない(rerun の shader が要求する床とずれた時に原因が追えなくなる) |
