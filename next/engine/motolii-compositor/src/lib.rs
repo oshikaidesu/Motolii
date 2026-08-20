@@ -15,6 +15,43 @@
 //!
 //! GPU の起こし方も上流のものをそのまま使う — instance descriptor・adapter 選択・
 //! device limits はいずれも `re_renderer::device_caps` が持っている(自前で書かない)。
+//!
+//! ## blend mode(2026-08-20、KNOWN.md「bm/matte/ao 未消費」を1個塞ぐ)
+//!
+//! [`RectangleOptions`] は `multiplicative_tint`/`depth_offset`/`outline_mask` の3つしか
+//! 持たず、上流 `rectangles.rs` は transparent phase 用のパイプラインを1本
+//! (`wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING`)しか作らない —
+//! `RectangleRenderer` の内部で固定されていて、呼び手からパイプラインを選べない
+//! (一次確認: `rectangles.rs` の `render_pipeline_color_{opaque,transparent}` の2つのみ、
+//! `lines.rs`/`point_cloud.rs`/`voxel_grid.rs`/`mesh_renderer.rs`/`world_grid.rs` も全部
+//! 同じ定数を使い回している = crate 全体でこれ以外の blend equation が無い)。
+//! この固定式 `out = 1×src + (1-src.a)×dst`(色・alpha とも同じ係数)は
+//! [`BlendMode::Normal`] そのものなので**それだけは無改造で厳密に出せる**。
+//!
+//! [`BlendMode::Add`] も実は無改造で出せる: `multiplicative_tint` の **alpha だけ 0** に
+//! すると(RGB は opacity のまま)、上の式は `out = src + dst`(alpha は dst のまま不変)
+//! になる — 加算合成の定義そのもの。`fs_main` が返すのは
+//! `texture_color * rect_info.multiplicative_tint` で tint の4成分は独立に効くので、
+//! rgb と a を別の値にして良い(`Rgba::from_rgba_premultiplied` は素の4引数で不変式を
+//! 強制しない)。**Store 側の `motolii_store::BlendMode` に `Add` 相当の値はまだ無い**
+//! (裁定67「Add は velato も落としているので後回し」)ので今はどこからも選べないが、
+//! 将来そこへ足された時にこの crate 側は無改造で受けられる。
+//!
+//! それ以外の14モード(Multiply/Screen/Overlay/Darken/Lighten/ColorDodge/ColorBurn/
+//! HardLight/SoftLight/Difference/Exclusion/Hue/Saturation/Color/Luminosity)は
+//! **固定式の係数を振るだけでは表現できない**(Multiply は `dst_factor` に src の色を
+//! 使う必要があり、Screen 以降は非線形で dst を shader 内で読む必要がある — どちらも
+//! `RectangleOptions` の外)。ここでは実装せず、`motolii-engine` 側が明示的に弾く
+//! (fork seam 候補、終了報告に記載)。
+//!
+//! **色空間の注意**: `ColormappedTexture::from_unorm_rgba`(一次確認)は
+//! `decode_srgb = !texture.format().is_srgb()` を立てる。`upload_rgba`/`upload_yuv420p`
+//! が使う format は srgb タグ無しなので、**shader は素材を sRGB gamma と見なして
+//! linear へ復元してから混ぜ**、結果は `MAIN_TARGET_COLOR_FORMAT`(`Rgba8UnormSrgb`)へ
+//! 書き戻る時に GPU が再エンコードする。上の式(`out = src + dst` 等)は
+//! blend 演算に**渡る値**についての式であって、読み戻す8bit値の単純な整数和には
+//! ならない(`tests/compose.rs` の `add_blend_*` 系はこれを踏まえて exact値ではなく
+//! 「明るくなる」「1.0超えは白に飽和する」で縛っている)。
 
 use re_renderer::renderer::{RectangleDrawData, RectangleOptions, TexturedRect};
 use re_renderer::resource_managers::ImageDataDesc;
@@ -22,6 +59,20 @@ use re_renderer::view_builder::{Projection, RenderMode, TargetConfiguration, Vie
 use re_renderer::{RenderContext, Rgba};
 
 mod headless;
+
+/// 合成器がその場で表現できる blend mode。**`re_renderer::renderer::RectangleOptions` が
+/// 賄える範囲**(上のモジュール doc 参照)に絞ってあり、Document 側の
+/// `motolii_store::BlendMode`(16値)とは1対1ではない — 変換と「対応外は弾く」判断は
+/// `motolii-engine` の仕事(この crate は Document の語彙を知らない)。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BlendMode {
+    /// 通常の alpha-over。`re_renderer` の transparent パイプラインの既定そのもの。
+    #[default]
+    Normal,
+    /// 加算合成。`multiplicative_tint.a = 0` で無改造に出せる(モジュール doc 参照)。
+    /// Document 側にまだ対応する値が無いので、今は誰も選べない(将来のための先取り)。
+    Add,
+}
 
 /// 板の**位置**(原点や角)。z は `LayerPlacement::z`(pinned は常に 0、裁定113)。
 fn to_point3(v: glam::Vec2, z: f32) -> glam::Vec3 {
@@ -66,6 +117,9 @@ pub struct Layer {
     /// 掛けてから同じ透視カメラへ渡す形(`motolii_core::camera_screen_from_world_z0`)
     /// — 2パス目を増やさない。
     pub pinned: bool,
+    /// `LayerAttrs::blend_mode` のうち、この合成器が表現できる分だけ
+    /// (モジュール doc 参照)。既定 `Normal`。
+    pub blend_mode: BlendMode,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -265,13 +319,23 @@ impl Compositor {
                             layer.texture.clone(),
                         ),
                     options: RectangleOptions {
-                        // premultiplied なので alpha も色も同じ係数で掛ける。
-                        multiplicative_tint: Rgba::from_rgba_premultiplied(
-                            layer.placement.opacity,
-                            layer.placement.opacity,
-                            layer.placement.opacity,
-                            layer.placement.opacity,
-                        ),
+                        // premultiplied なので rgb は opacity で揃えて掛ける。alpha だけ
+                        // blend mode で分かれる: Normal は opacity と同じ(通常の
+                        // premultiplied alpha-over)。Add は 0(module doc の式変形どおり、
+                        // `out = 1×src + (1-src.a)×dst` の `src.a` を 0 にすると
+                        // `out = src + dst` になる — 加算合成そのもの、alpha は不変)。
+                        multiplicative_tint: {
+                            let a = match layer.blend_mode {
+                                BlendMode::Normal => layer.placement.opacity,
+                                BlendMode::Add => 0.0,
+                            };
+                            Rgba::from_rgba_premultiplied(
+                                layer.placement.opacity,
+                                layer.placement.opacity,
+                                layer.placement.opacity,
+                                a,
+                            )
+                        },
                         depth_offset: layer.placement.order,
                         ..Default::default()
                     },

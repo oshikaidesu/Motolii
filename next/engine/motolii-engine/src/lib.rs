@@ -12,7 +12,7 @@ use motolii_compositor::GpuTexture2D;
 use motolii_compositor::{Compositor, CompositorError, Layer};
 
 use motolii_media::{probe, read_frame_at, MediaError, MediaInfo};
-use motolii_store::{LayerSource, RationalTime, StoreView};
+use motolii_store::{LayerSource, Matte, RationalTime, StoreView};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -26,6 +26,17 @@ pub enum EngineError {
     Store(String),
     #[error("comp の設定が Document に無い(解像度も fps も決まっていない)")]
     NoComposition,
+    /// `motolii_store::BlendMode` の16値のうち、合成器がまだ表現できない分
+    /// (`motolii_compositor::BlendMode` のモジュール doc 参照 — 固定式の
+    /// blend equation では出せず fork 改造が要る)。黙って Normal へ近似しない。
+    #[error("blend mode {0:?} はまだ合成器が対応していない(Normal のみ対応。fork 改造候補)")]
+    UnsupportedBlendMode(motolii_store::BlendMode),
+    /// matte はまだ合成器に繋いでいない。単一 `TexturedRect` は自分の texture 1枚しか
+    /// 持てず、matte 元レイヤーの alpha/luma を per-pixel で参照するには2枚目の texture
+    /// を読む shader が要る(`rectangle_fs.wgsl` は現状1枚専用) — fork seam 候補。
+    /// 黙って型抜き前の絵を出すよりは、ここで明示的に止める。
+    #[error("matte はまだ合成器が対応していない({0:?}。fork seam 候補)")]
+    UnsupportedMatte(Matte),
 }
 
 pub struct Engine {
@@ -88,6 +99,14 @@ impl Engine {
 
         let mut layers = Vec::with_capacity(resolved.len());
         for layer in resolved {
+            // matte/blend の判定を texture のアップロードより先にやる — 対応外なら
+            // 無駄な ffmpeg 起動/GPU アップロードをする前に落とす(裁定108(c) 系の
+            // 「素材の外なら描かない」と同じく、ここも早く判定する)。
+            if let Some(matte) = layer.matte {
+                return Err(EngineError::UnsupportedMatte(matte));
+            }
+            let blend_mode = translate_blend_mode(layer.blend_mode)?;
+
             let (texture, natural) = self.texture_for(&layer.source, layer.source_frame)?;
             let Some(texture) = texture else {
                 // 素材の外の時刻。この layer は今フレームに居ない。
@@ -114,6 +133,7 @@ impl Engine {
                 // **置き方はそのまま持ち回る** — 並べ直すとそこが翻訳層になる。
                 placement: layer.placement,
                 pinned: layer.pinned,
+                blend_mode,
             });
         }
 
@@ -233,5 +253,18 @@ impl Engine {
             // 時刻と同じ扱い)に乗せてあるので、フレーム全体は落ちない。
             LayerSource::Null | LayerSource::Shape | LayerSource::Text => Ok((None, [0.0, 0.0])),
         }
+    }
+}
+
+/// `motolii_store::BlendMode`(Document の16値、裁定67)を
+/// `motolii_compositor::BlendMode`(合成器が固定式 blend equation で表現できる分だけ、
+/// `motolii-compositor` のモジュール doc 参照)へ写す。対応外は
+/// [`EngineError::UnsupportedBlendMode`] — 黙って `Normal` へ近似しない。
+fn translate_blend_mode(
+    mode: motolii_store::BlendMode,
+) -> Result<motolii_compositor::BlendMode, EngineError> {
+    match mode {
+        motolii_store::BlendMode::Normal => Ok(motolii_compositor::BlendMode::Normal),
+        other => Err(EngineError::UnsupportedBlendMode(other)),
     }
 }
