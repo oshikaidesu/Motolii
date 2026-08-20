@@ -698,41 +698,41 @@ text	text-input-text	@class	Text Input Text	不採用	同上			rive
 text	text-modifier	@abstract	Text Modifier	該当なし	アニメーター一族の抽象基底			rive
 text	text-shape-modifier	@abstract	Text Shape Modifier	該当なし	**型の名前が層を宣言している** — 「出力が shaping の入力に戻る修飾子」だけがこの下に来る。裁定76 の3層分離に先例がつく行			rive
 text	text-modifier-group	modifierFlags	Modifier Flags	不採用	どの property を動かすかのビットマスク。Motolii は track が打たれているかが正本で、有効フラグの第二の帳簿を持たない			rive
-text	text-modifier-group	originX	Origin X	採用予定	グリフ変形のアンカー。Lottie `text-alignment-options a` が正本。既定=字面中心		text	rive
-text	text-modifier-group	originY	Origin Y	採用予定	同上		text	rive
-text	text-modifier-group	opacity	Opacity	採用予定	アニメーターの不透明度。適用先がグリフになるだけ		text	rive
-text	text-modifier-group	x	Position X	採用予定	`"group": "position"` が「保存が2成分に割れているだけで意味は Vec2」と明示しており裁定61 と衝突しない		text	rive
-text	text-modifier-group	y	Position Y	採用予定	同上		text	rive
-text	text-modifier-group	rotation	Rotation	採用予定	グリフ適用の回転		text	rive
-text	text-modifier-group	scaleX	Scale X	採用予定	`"group": "scale"` で Vec2		text	rive
-text	text-modifier-group	scaleY	Scale Y	採用予定	同上		text	rive
-text	text-modifier-range	modifyFrom	Modify From	採用予定	セレクタ始端。Lottie `text-range-selector s` が正本		text	rive
-text	text-modifier-range	modifyTo	Modify To	採用予定	セレクタ終端。Lottie `e` が正本		text	rive
-text	text-modifier-range	strength	Strength	採用予定	重みの倍率。Lottie `a` が正本		text	rive
-text	text-modifier-range	unitsValue	Units	採用予定	Percent/Index。Lottie `r` が正本		text	rive
-text	text-modifier-range	typeValue	Type	採用予定	Character/Word/Line。Lottie `b` が正本(4値)。「文字」= クラスタと読み替える(裁定90)		text	rive
+text	text-modifier-group	originX	Origin X	採用済	グリフ変形のアンカー。Lottie `text-alignment-options a` が正本。既定=字面中心	pub fn text_range_origin	text	rive
+text	text-modifier-group	originY	Origin Y	採用済	同上	pub fn text_range_origin	text	rive
+text	text-modifier-group	opacity	Opacity	採用済	アニメーターの不透明度。適用先がグリフになるだけ	pub fn text_range_opacity	text	rive
+text	text-modifier-group	x	Position X	採用済	`"group": "position"` が「保存が2成分に割れているだけで意味は Vec2」と明示しており裁定61 と衝突しない	pub fn text_range_position	text	rive
+text	text-modifier-group	y	Position Y	採用済	同上	pub fn text_range_position	text	rive
+text	text-modifier-group	rotation	Rotation	採用済	グリフ適用の回転	pub fn text_range_rotation	text	rive
+text	text-modifier-group	scaleX	Scale X	採用済	`"group": "scale"` で Vec2	pub fn text_range_scale	text	rive
+text	text-modifier-group	scaleY	Scale Y	採用済	同上	pub fn text_range_scale	text	rive
+text	text-modifier-range	modifyFrom	Modify From	採用済	セレクタ始端。Lottie `text-range-selector s` が正本	pub fn text_range_selector_start	text	rive
+text	text-modifier-range	modifyTo	Modify To	採用済	セレクタ終端。Lottie `e` が正本	pub fn text_range_selector_end	text	rive
+text	text-modifier-range	strength	Strength	採用済	重みの倍率。Lottie `a` が正本	pub fn text_range_selector_max_amount	text	rive
+text	text-modifier-range	unitsValue	Units	採用済	Percent/Index。Lottie `r` が正本	pub range_units: TextRangeUnits	text	rive
+text	text-modifier-range	typeValue	Type	採用済	Character/Word/Line。Lottie `b` が正本(4値)。「文字」= クラスタと読み替える(裁定90)	pub based_on: TextBasedOn	text	rive
 text	text-modifier-range	modeValue	Mode	不採用	セレクタ合成モード。Motolii は「1アニメーター = セレクタ1個」なので合成する相手がいない			rive
 text	text-modifier-range	clamp	Clamp	不採用	falloff の外側を留めるか。falloff を採らない			rive
 text	text-modifier-range	falloffFrom	Falloff From	不採用	重み曲線の形を2点で作る Rive の口。Lottie `sh`(Shape 列挙)を採ったので第二の口になる			rive
 text	text-modifier-range	falloffTo	Falloff To	不採用	同上			rive
-text	text-modifier-range	offset	Offset	採用予定	Lottie `o` が正本。カラオケワイプはこれを時間駆動するだけに畳める		text	rive
+text	text-modifier-range	offset	Offset	採用済	Lottie `o` が正本。カラオケワイプはこれを時間駆動するだけに畳める	pub fn text_range_selector_offset	text	rive
 text	text-modifier-range	runId	Run Id	不採用	セレクタを特定のランだけに効かせる口。v1 の範囲は裁定93 で閉じている。**ただし裁定85 のスタイル表は既に同一性を持つので、後日「この単語だけ跳ねる」が添字ではなく id で安く乗る** — Lottie にも text-model にも無い			rive
-text	text-style	fontSize	Font Size	採用予定	スパンの絶対サイズ(裁定91/93)。**Lottie に無かった語彙そのもの**(裁定77/84)。Rive は animates だが v1 は静止(裁定92)		text	rive
-text	text-style	lineHeight	Line Height	採用予定	スパンの行送り。Rive は -1.0 の番兵だが Motolii は Option(番兵を採らない)。v1 は静止		text	rive
-text	text-style	letterSpacing	Letter Spacing	採用予定	スパンのトラッキング。v1 は静止		text	rive
-text	text-style	fontAssetId	Font Asset Id	採用予定	スパンのフォント参照。id ではなく素材と同じ path + 指紋(裁定79)。**Rive でもここだけ animates が無い**		text	rive
-text	text-style	familyName	Family Name	採用予定	family 名。`runtime: false` = 編集時だけ要る、と Rive が明示していて「実体は path+指紋・名前は解決キー」の裏が取れる		text	rive
-text	text-style	styleName	Style Name	採用予定	face 選択キー。同じく `runtime: false`		text	rive
+text	text-style	fontSize	Font Size	採用済	スパンの絶対サイズ(裁定91/93)。**Lottie に無かった語彙そのもの**(裁定77/84)。Rive は animates だが v1 は静止(裁定92)	pub size: f32	text	rive
+text	text-style	lineHeight	Line Height	採用済	スパンの行送り。Rive は -1.0 の番兵だが Motolii は Option(番兵を採らない)。v1 は静止	pub line_height: Option<f32>	text	rive
+text	text-style	letterSpacing	Letter Spacing	採用済	スパンのトラッキング。v1 は静止	pub tracking: f32	text	rive
+text	text-style	fontAssetId	Font Asset Id	採用済	スパンのフォント参照。id ではなく素材と同じ path + 指紋(裁定79)。**Rive でもここだけ animates が無い**	pub path: String	text	rive
+text	text-style	familyName	Family Name	採用済	family 名。`runtime: false` = 編集時だけ要る、と Rive が明示していて「実体は path+指紋・名前は解決キー」の裏が取れる	pub family: String	text	rive
+text	text-style	styleName	Style Name	採用済	face 選択キー。同じく `runtime: false`	pub style: String	text	rive
 text	text-style	isCustomFont	Is Custom Font	不採用	埋め込みか既製かの配信分岐。ローカル実体しか持たない			rive
-text	text-style-axis	tag	Axis Tag	採用予定	可変フォントの軸タグ。裁定93 が可変軸を v1 に入れる根拠にした行		text	rive
-text	text-style-axis	axisValue	Axis Value	採用予定	**裁定92 の唯一の例外** — 軸値はシェーピングの入力なので P6「軸だけはスタイル層でアニメ可」に当たる		text	rive
+text	text-style-axis	tag	Axis Tag	採用済	可変フォントの軸タグ。裁定93 が可変軸を v1 に入れる根拠にした行	pub struct TextStyleAxis	text	rive
+text	text-style-axis	axisValue	Axis Value	採用済	**裁定92 の唯一の例外** — 軸値はシェーピングの入力なので P6「軸だけはスタイル層でアニメ可」に当たる	pub fn text_style_axis	text	rive
 text	text-style-background	cornerRadius	Corner Radius	不採用	ラン背後の角丸背景。ラン1つにつき第二の描画対象が増える(軸4)。歌詞のハイライト帯は shape layer で置ける			rive
-text	text-style-feature	tag	Feature Tag	採用予定	OpenType feature タグ(smcp/liga/**palt**)。**地図の穴を塞ぐ行** — `text-document ca` 不採用が「Small Caps は OpenType feature が正本」と書いたのに、その正本の置き場が地図に無かった。日本語歌詞は `palt` の有無で詰め方が別物になる		text	rive
-text	text-style-feature	featureValue	Feature Value	採用予定	同上。値側		text	rive
-text	text-style-paint	@class	Text Style Paint	採用予定	fill / stroke を持つ形。Motolii は子ではなくスタイル表の1行に平坦に持つ(裁定85/86)。Rive は子の並び順が重ね順 = 裁定86 が嫌う形なので、Motolii は `of` の bool 1個で持つ		text	rive
+text	text-style-feature	tag	Feature Tag	採用済	OpenType feature タグ(smcp/liga/**palt**)。**地図の穴を塞ぐ行** — `text-document ca` 不採用が「Small Caps は OpenType feature が正本」と書いたのに、その正本の置き場が地図に無かった。日本語歌詞は `palt` の有無で詰め方が別物になる	pub struct TextStyleFeature	text	rive
+text	text-style-feature	featureValue	Feature Value	採用済	同上。値側	pub struct TextStyleFeature	text	rive
+text	text-style-paint	@class	Text Style Paint	採用済	fill / stroke を持つ形。Motolii は子ではなくスタイル表の1行に平坦に持つ(裁定85/86)。Rive は子の並び順が重ね順 = 裁定86 が嫌う形なので、Motolii は `of` の bool 1個で持つ	pub stroke_over_fill: bool	text	rive
 text	text-target-modifier	targetId	Target Id	不採用	修飾対象への id 参照。Lottie `text-follow-path m` を裁定66 で落としたのと同型			rive
-text	text-value-run	styleId	Style Id	採用予定	**裁定85 の `runs: [(len, style_index)]` の style_index そのもの**。Rive は animates だが v1 は静止		text	rive
+text	text-value-run	styleId	Style Id	採用済	**裁定85 の `runs: [(len, style_index)]` の style_index そのもの**。Rive は animates だが v1 は静止	pub struct TextRun	text	rive
 text	text-value-run	text	Text	不採用	本文をランごとに切り刻んで持つ形。Motolii は content 1本 + 長さの分割(裁定85/87)。Rive 形だと裁定94 を書く場所が無い			rive
 text	text-value-run	fieldHeight	Field Height	不採用	インスペクタの欄の高さ。`runtime: false`			rive
-text	text-variation-modifier	axisTag	Axis Tag	採用予定	アニメーター側の軸タグ。スパン側の軸値とは層が違い二重帳簿ではない		text	rive
-text	text-variation-modifier	axisValue	Axis Value	採用予定	軸のΔ値。**裁定76 の3層のうち「再シェープする層」の唯一の住人**		text	rive
+text	text-variation-modifier	axisTag	Axis Tag	採用済	アニメーター側の軸タグ。スパン側の軸値とは層が違い二重帳簿ではない	pub struct TextVariationAxis	text	rive
+text	text-variation-modifier	axisValue	Axis Value	採用済	軸のΔ値。**裁定76 の3層のうち「再シェープする層」の唯一の住人**	pub fn text_range_variation_axis	text	rive

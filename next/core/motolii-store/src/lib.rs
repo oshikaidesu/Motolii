@@ -40,7 +40,8 @@ pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
 pub use text::{
     ContentKeyframe, ContentTrack, FontRef, TextAlignmentOptions, TextBasedOn, TextDocument,
     TextDocumentStyle, TextGrouping, TextJustify, TextRandomize, TextRange, TextRangeId,
-    TextRangeSelector, TextRangeUnits, TextShape,
+    TextRangeSelector, TextRangeUnits, TextRun, TextShape, TextStyleAxis, TextStyleFeature,
+    TextStyleId, TextVariationAxis,
 };
 pub use view::StoreView;
 
@@ -83,10 +84,14 @@ pub mod property {
     /// (裁定92 が text.style で先に見つけた形と同じ)。
     pub const MASK_PREFIX: &str = "mask.";
 
-    /// テキストアニメーター([`crate::TextRangeId`])の selector/style トラックの名前は
-    /// `text_range.{id}.…` で始まる。マスクと同じ平坦な流儀(裁定92 が text.style で
-    /// 先に見つけた形と同じ)。
+    /// テキストアニメーター([`crate::TextRangeId`])の selector/style/transform/variation
+    /// トラックの名前は `text_range.{id}.…` で始まる。マスクと同じ平坦な流儀
+    /// (裁定92 が text.style で先に見つけた形と同じ)。
     pub const TEXT_RANGE_PREFIX: &str = "text_range.";
+
+    /// スタイル表の行([`crate::TextStyleId`])が持つ動く量(今のところ可変フォント軸
+    /// の絶対値だけ、裁定92の唯一の例外)の名前は `text_style.{id}.…` で始まる。
+    pub const TEXT_STYLE_PREFIX: &str = "text_style.";
 
     /// 変換の中心。**レイヤ自身の座標単位の点**であって 0..1 の正規化ピボットではない。
     pub const ANCHOR: &str = "anchor";

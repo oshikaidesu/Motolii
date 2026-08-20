@@ -22,12 +22,26 @@
 //! - `TextDocument::ranges`(`Vec<TextRange>`)の**並び=適用順**。id の同一性は
 //!   [`motolii_store`] 側の柵(重複 id は `SetTextDocument` が `Err`)で守る
 //! - `TextDocument::alignment`(`text-data m`)はグループ内アンカーのオフセットと粒度
+//!
+//! **第3切片(Rive 由来の modifier/style span、text 束の最終切片)で固定するもの**:
+//! - `TextDocument::style`(単数)は `styles`(`Vec<TextDocumentStyle>`)へ広がった —
+//!   裁定98「Lottie の f/s/fc/lh/tr/sc/sw/of はスタイル表の既定行(id 0)」を型で体現する
+//! - [`TextRun`]([`TextDocument::runs`])が「表 + 分割」の分割側(裁定85/87/88/89)。
+//!   `len`(長さ、絶対オフセットではない)+ `style`([`TextStyleId`])。空は「既定行が
+//!   全体を覆う」
+//! - `text-modifier-group`(グリフの位置・回転・拡大・不透明度)は
+//!   `PropertyId::text_range_origin`/`position`/`rotation`/`scale`/`opacity`
+//! - `text-style-axis`/`text-variation-modifier` は可変フォント軸の**唯一動く例外**
+//!   (裁定92/93) — スパン側の絶対値は `PropertyId::text_style_axis`、アニメーター側の
+//!   Δ値は `PropertyId::text_range_variation_axis`。層が違うので二重帳簿ではない
+//! - `text-style-feature`(OpenType feature)は [`TextStyleFeature`] で静止設定のまま
 
 use motolii_store::{
     Composition, ContentKeyframe, ContentTrack, Document, FontRef, Fps, Interp, Intent, Keyframe,
     KeyframeTrack, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime,
     TextAlignmentOptions, TextBasedOn, TextDocument, TextDocumentStyle, TextGrouping, TextJustify,
-    TextRandomize, TextRange, TextRangeId, TextRangeSelector, TextRangeUnits, TextShape, Value,
+    TextRandomize, TextRange, TextRangeId, TextRangeSelector, TextRangeUnits, TextRun, TextShape,
+    TextStyleAxis, TextStyleFeature, TextStyleId, TextVariationAxis, Value,
 };
 
 fn t(frame: i64) -> RationalTime {
@@ -76,9 +90,10 @@ fn place_text_layer(doc: &mut Document, layer: LayerId, start: i64, duration: i6
     .unwrap();
 }
 
-/// 分かりやすい既定スタイル(歌詞1行を想定)。
+/// 分かりやすい既定スタイル(歌詞1行を想定)。**id 0 = スタイル表の既定行**(裁定98)。
 fn lyric_style() -> TextDocumentStyle {
     TextDocumentStyle {
+        id: TextStyleId(0),
         font: FontRef {
             path: "/fonts/NotoSansJP-Bold.otf".to_owned(),
             fingerprint: Some("motolii-source-v1:sha256:aa".repeat(2)),
@@ -92,6 +107,8 @@ fn lyric_style() -> TextDocumentStyle {
         stroke_color: Some([0.0, 0.0, 0.0, 1.0]),
         stroke_width: 4.0,
         stroke_over_fill: false,
+        axes: Vec::new(),
+        features: Vec::new(),
     }
 }
 
@@ -105,10 +122,11 @@ fn lyric_document(content: &str) -> TextDocument {
         content: content_track,
         justify: TextJustify::Center,
         wrap_size: None,
-        style: lyric_style(),
+        styles: vec![lyric_style()],
         slot_id: None,
         ranges: Vec::new(),
         alignment: TextAlignmentOptions::default(),
+        runs: Vec::new(),
     }
 }
 
@@ -123,6 +141,7 @@ fn karaoke_range(id: TextRangeId) -> TextRange {
             shape: TextShape::Square,
             randomize: None,
         },
+        variation_axes: Vec::new(),
     }
 }
 
@@ -236,10 +255,10 @@ fn font_ref_is_identified_by_path_and_fingerprint_not_by_name_alone() {
     .unwrap();
 
     let read_back = doc.view().text_document(layer).unwrap().unwrap();
-    assert_eq!(read_back.style.font.path, "/fonts/NotoSansJP-Bold.otf");
-    assert!(read_back.style.font.fingerprint.is_some());
-    assert_eq!(read_back.style.font.family, "Noto Sans JP");
-    assert_eq!(read_back.style.font.style, "Bold");
+    assert_eq!(read_back.styles[0].font.path, "/fonts/NotoSansJP-Bold.otf");
+    assert!(read_back.styles[0].font.fingerprint.is_some());
+    assert_eq!(read_back.styles[0].font.family, "Noto Sans JP");
+    assert_eq!(read_back.styles[0].font.style, "Bold");
 }
 
 // ---------------------------------------------------------------------------
@@ -263,19 +282,19 @@ fn document_style_fields_are_the_default_row_not_animated_this_slice() {
     doc.apply(Intent::SetTextDocument {
         layer,
         document: TextDocument {
-            style,
+            styles: vec![style],
             ..lyric_document("歌詞")
         },
     })
     .unwrap();
 
     let read_back = doc.view().text_document(layer).unwrap().unwrap();
-    assert_eq!(read_back.style.fill, [1.0, 0.0, 0.0, 1.0]);
-    assert_eq!(read_back.style.line_height, Some(72.0));
-    assert_eq!(read_back.style.tracking, 0.05);
-    assert_eq!(read_back.style.stroke_color, Some([0.0, 0.0, 0.0, 1.0]));
-    assert_eq!(read_back.style.stroke_width, 6.0);
-    assert!(read_back.style.stroke_over_fill);
+    assert_eq!(read_back.styles[0].fill, [1.0, 0.0, 0.0, 1.0]);
+    assert_eq!(read_back.styles[0].line_height, Some(72.0));
+    assert_eq!(read_back.styles[0].tracking, 0.05);
+    assert_eq!(read_back.styles[0].stroke_color, Some([0.0, 0.0, 0.0, 1.0]));
+    assert_eq!(read_back.styles[0].stroke_width, 6.0);
+    assert!(read_back.styles[0].stroke_over_fill);
 }
 
 /// `lh` 未指定はフォントのメトリクスから(store は `None` をそのまま持つだけ — 解決は
@@ -297,7 +316,7 @@ fn unset_line_height_stays_none_not_a_sentinel() {
             .text_document(layer)
             .unwrap()
             .unwrap()
-            .style
+            .styles[0]
             .line_height,
         None
     );
@@ -472,6 +491,7 @@ fn selector_static_fields_round_trip() {
             shape: TextShape::RampUp,
             randomize: None,
         },
+        variation_axes: Vec::new(),
     };
     doc.apply(Intent::SetTextDocument {
         layer,
@@ -856,5 +876,664 @@ fn text_ranges_and_their_property_tracks_survive_save_and_load() {
             .unwrap(),
         Some(Value::Color([1.0, 0.0, 1.0, 1.0])),
         "style の property track が保存/読込で往復しない"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// text-modifier-group — アニメーターがグリフに適用する変形。裁定20 の応用で
+// track の有無=触るかを表す(text-range-selector/text-style と同じ形)。
+// ---------------------------------------------------------------------------
+
+/// origin/opacity/position/rotation/scale は普通の平坦 property。
+/// x/y・scaleX/scaleY は Rive の `"group"` 注記どおり Vec2 1個(裁定61 と衝突しない)。
+#[test]
+fn transform_group_properties_are_ordinary_animatable_vec2_and_scalar_tracks() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    let range_id = TextRangeId(0);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            ranges: vec![karaoke_range(range_id)],
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    doc.apply_all([
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_origin(range_id),
+            track: still(Value::Vec2([0.5, 0.5])),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_position(range_id),
+            track: still(Value::Vec2([10.0, -4.0])),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_scale(range_id),
+            track: still(Value::Vec2([1.5, 1.5])),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_rotation(range_id),
+            track: still(Value::F64(45.0)),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_opacity(range_id),
+            track: still(Value::F64(0.5)),
+        },
+    ])
+    .unwrap();
+
+    let view = doc.view();
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_origin(range_id), t(0))
+            .unwrap(),
+        Some(Value::Vec2([0.5, 0.5]))
+    );
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_position(range_id), t(0))
+            .unwrap(),
+        Some(Value::Vec2([10.0, -4.0]))
+    );
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_scale(range_id), t(0))
+            .unwrap(),
+        Some(Value::Vec2([1.5, 1.5]))
+    );
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_rotation(range_id), t(0))
+            .unwrap(),
+        Some(Value::F64(45.0))
+    );
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_opacity(range_id), t(0))
+            .unwrap(),
+        Some(Value::F64(0.5))
+    );
+}
+
+/// **触っていない変形は track 自体が無い**(`modifierFlags` を第二の帳簿として持たない
+/// — 地図の note どおり、track の有無自体が有効フラグ)。
+#[test]
+fn transform_group_properties_are_present_only_when_the_animator_touches_them() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    let range_id = TextRangeId(0);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            ranges: vec![karaoke_range(range_id)],
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::text_range_opacity(range_id),
+        track: still(Value::F64(0.2)),
+    })
+    .unwrap();
+
+    let view = doc.view();
+    assert!(view
+        .track(layer, &PropertyId::text_range_opacity(range_id))
+        .unwrap()
+        .is_some());
+    assert_eq!(
+        view.track(layer, &PropertyId::text_range_position(range_id))
+            .unwrap(),
+        None,
+        "位置を触っていないアニメーターは position track を持たない"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// styles / runs — スタイル表 + 分割(裁定85/87/88/89)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn styles_default_to_a_single_default_row_and_runs_default_to_empty() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: lyric_document("歌詞"),
+    })
+    .unwrap();
+
+    let read_back = doc.view().text_document(layer).unwrap().unwrap();
+    assert_eq!(read_back.styles.len(), 1, "裁定98: 既定行が1枚だけある");
+    assert_eq!(read_back.styles[0].id, TextStyleId(0));
+    assert!(
+        read_back.runs.is_empty(),
+        "runs 空 = 既定行が本文全体を覆う(ranges 空と同じ形、裁定20 の応用)"
+    );
+}
+
+/// 2行のスタイル表 + それを覆う runs が並びのまま往復する。
+#[test]
+fn styles_and_runs_round_trip_and_cover_the_content_without_gaps() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let mut second = lyric_style();
+    second.id = TextStyleId(1);
+    second.fill = [1.0, 0.0, 0.0, 1.0];
+
+    let runs = vec![
+        TextRun {
+            len: 2,
+            style: TextStyleId(0),
+        },
+        TextRun {
+            len: 3,
+            style: TextStyleId(1),
+        },
+    ];
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            styles: vec![lyric_style(), second],
+            runs: runs.clone(),
+            ..lyric_document("歌詞1行目")
+        },
+    })
+    .unwrap();
+
+    let read_back = doc.view().text_document(layer).unwrap().unwrap();
+    assert_eq!(read_back.styles.len(), 2);
+    assert_eq!(read_back.runs, runs, "並びと len がそのまま往復する");
+}
+
+/// 同じ id のスタイル行が2枚あると `text_style.{id}.axis.{tag}` の track や
+/// [`TextRun::style`] の参照先が決まらない。
+#[test]
+fn duplicate_text_style_ids_are_rejected() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let err = doc
+        .apply(Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                styles: vec![lyric_style(), lyric_style()],
+                ..lyric_document("歌詞")
+            },
+        })
+        .unwrap_err();
+    assert!(format!("{err}").contains("text-style id 0 が2枚ある"));
+}
+
+/// run が存在しない styleId を指すと、どのスタイルも指さない宙ぶらりんの参照になる
+/// (裁定37「無いと読めないを区別する」— 書けてしまうと後で気付けない)。
+#[test]
+fn a_run_referencing_a_missing_style_id_is_rejected() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let err = doc
+        .apply(Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                runs: vec![TextRun {
+                    len: 3,
+                    style: TextStyleId(99),
+                }],
+                ..lyric_document("歌詞")
+            },
+        })
+        .unwrap_err();
+    assert!(format!("{err}").contains("styleId 99"));
+}
+
+/// `len == 0` の run は本文を1文字も覆わない空の分割で、意味を持たない。
+#[test]
+fn a_zero_length_run_is_rejected() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let err = doc
+        .apply(Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                runs: vec![TextRun {
+                    len: 0,
+                    style: TextStyleId(0),
+                }],
+                ..lyric_document("歌詞")
+            },
+        })
+        .unwrap_err();
+    assert!(format!("{err}").contains("len が 0"));
+}
+
+/// **裁定89: 隣接同値ランの併合は最適化ではなく正しさの契約** — 併合しないと
+/// 合字/カーニングがスパン境界で切れ、意味が同じ2つの Document が違う画を出す。
+#[test]
+fn adjacent_runs_pointing_at_the_same_style_are_rejected() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let err = doc
+        .apply(Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                runs: vec![
+                    TextRun {
+                        len: 2,
+                        style: TextStyleId(0),
+                    },
+                    TextRun {
+                        len: 3,
+                        style: TextStyleId(0),
+                    },
+                ],
+                ..lyric_document("歌詞")
+            },
+        })
+        .unwrap_err();
+    assert!(format!("{err}").contains("隣接"));
+}
+
+// ---------------------------------------------------------------------------
+// text-style-axis / text-variation-modifier — 可変フォント軸。裁定92 の唯一の例外
+// (裁定93) — 軸値だけはスタイル層/アニメーター層でアニメ可。
+// ---------------------------------------------------------------------------
+
+/// tag は静止(どの軸に乗るか)、値(axisValue)は普通の `KeyframeTrack`。
+#[test]
+fn style_axis_tag_is_static_but_its_value_is_an_animatable_track() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let mut style = lyric_style();
+    style.axes = vec![TextStyleAxis {
+        tag: "wght".to_owned(),
+    }];
+    doc.apply_all([
+        Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                styles: vec![style],
+                ..lyric_document("歌詞")
+            },
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_style_axis(TextStyleId(0), "wght"),
+            track: still(Value::F64(700.0)),
+        },
+    ])
+    .unwrap();
+
+    let read_back = doc.view().text_document(layer).unwrap().unwrap();
+    assert_eq!(read_back.styles[0].axes[0].tag, "wght");
+    assert_eq!(
+        doc.view()
+            .value_at(layer, &PropertyId::text_style_axis(TextStyleId(0), "wght"), t(0))
+            .unwrap(),
+        Some(Value::F64(700.0))
+    );
+}
+
+#[test]
+fn duplicate_axis_tags_within_one_style_are_rejected() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let mut style = lyric_style();
+    style.axes = vec![
+        TextStyleAxis {
+            tag: "wght".to_owned(),
+        },
+        TextStyleAxis {
+            tag: "wght".to_owned(),
+        },
+    ];
+    let err = doc
+        .apply(Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                styles: vec![style],
+                ..lyric_document("歌詞")
+            },
+        })
+        .unwrap_err();
+    assert!(format!("{err}").contains("axis タグ「wght」が2枚ある"));
+}
+
+/// **裁定76 の3層のうち「再シェープする層」の唯一の住人**。axisTag は静止、
+/// Δ値(axisValue)は普通の `KeyframeTrack`。
+#[test]
+fn variation_modifier_axis_tag_is_static_but_its_delta_is_an_animatable_track() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 300);
+    let range_id = TextRangeId(0);
+
+    let mut range = karaoke_range(range_id);
+    range.variation_axes = vec![TextVariationAxis {
+        tag: "wght".to_owned(),
+    }];
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            ranges: vec![range],
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    let mut delta = KeyframeTrack::new();
+    delta.insert(Keyframe {
+        t: t(0),
+        value: Value::F64(0.0),
+        interp: Interp::Linear,
+    });
+    delta.insert(Keyframe {
+        t: t(150),
+        value: Value::F64(300.0),
+        interp: Interp::Linear,
+    });
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::text_range_variation_axis(range_id, "wght"),
+        track: delta,
+    })
+    .unwrap();
+
+    let read_back = doc.view().text_document(layer).unwrap().unwrap();
+    assert_eq!(read_back.ranges[0].variation_axes[0].tag, "wght");
+    let view = doc.view();
+    assert_eq!(
+        view.value_at(
+            layer,
+            &PropertyId::text_range_variation_axis(range_id, "wght"),
+            t(75)
+        )
+        .unwrap(),
+        Some(Value::F64(150.0)),
+        "線形補間で中間の Δ が出る"
+    );
+}
+
+#[test]
+fn duplicate_variation_axis_tags_within_one_range_are_rejected() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    let range_id = TextRangeId(0);
+
+    let mut range = karaoke_range(range_id);
+    range.variation_axes = vec![
+        TextVariationAxis {
+            tag: "wght".to_owned(),
+        },
+        TextVariationAxis {
+            tag: "wght".to_owned(),
+        },
+    ];
+    let err = doc
+        .apply(Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                ranges: vec![range],
+                ..lyric_document("歌詞")
+            },
+        })
+        .unwrap_err();
+    assert!(format!("{err}").contains("variation axis タグ「wght」が2枚ある"));
+}
+
+/// スパン側の絶対値とアニメーター側のΔは**別 track**(層が違うので二重帳簿ではない、
+/// 地図の note どおり) — 同じタグ "wght" でも独立に読み書きできることを確かめる。
+#[test]
+fn style_axis_and_range_variation_axis_use_independent_tracks_for_the_same_tag() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    let range_id = TextRangeId(0);
+
+    let mut style = lyric_style();
+    style.axes = vec![TextStyleAxis {
+        tag: "wght".to_owned(),
+    }];
+    let mut range = karaoke_range(range_id);
+    range.variation_axes = vec![TextVariationAxis {
+        tag: "wght".to_owned(),
+    }];
+
+    doc.apply_all([
+        Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                styles: vec![style],
+                ranges: vec![range],
+                ..lyric_document("歌詞")
+            },
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_style_axis(TextStyleId(0), "wght"),
+            track: still(Value::F64(400.0)),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_variation_axis(range_id, "wght"),
+            track: still(Value::F64(100.0)),
+        },
+    ])
+    .unwrap();
+
+    let view = doc.view();
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_style_axis(TextStyleId(0), "wght"), t(0))
+            .unwrap(),
+        Some(Value::F64(400.0)),
+        "スパンの絶対値"
+    );
+    assert_eq!(
+        view.value_at(
+            layer,
+            &PropertyId::text_range_variation_axis(range_id, "wght"),
+            t(0)
+        )
+        .unwrap(),
+        Some(Value::F64(100.0)),
+        "アニメーターのΔ(独立)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// text-style-feature — OpenType feature。**v1 は静止**(裁定92のまま)。
+// ---------------------------------------------------------------------------
+
+/// 地図の穴を塞ぐ行(裁定99): `text-document ca`(Small Caps)不採用が「正本は
+/// OpenType feature」と書いたのに置き場が無かった。ここがその置き場。
+#[test]
+fn style_features_round_trip_as_static_settings() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let mut style = lyric_style();
+    style.features = vec![
+        TextStyleFeature {
+            tag: "palt".to_owned(),
+            value: 1,
+        },
+        TextStyleFeature {
+            tag: "smcp".to_owned(),
+            value: 1,
+        },
+    ];
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: TextDocument {
+            styles: vec![style],
+            ..lyric_document("歌詞")
+        },
+    })
+    .unwrap();
+
+    let read_back = doc.view().text_document(layer).unwrap().unwrap();
+    assert_eq!(
+        read_back.styles[0].features,
+        vec![
+            TextStyleFeature {
+                tag: "palt".to_owned(),
+                value: 1,
+            },
+            TextStyleFeature {
+                tag: "smcp".to_owned(),
+                value: 1,
+            },
+        ]
+    );
+}
+
+#[test]
+fn duplicate_feature_tags_within_one_style_are_rejected() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+
+    let mut style = lyric_style();
+    style.features = vec![
+        TextStyleFeature {
+            tag: "palt".to_owned(),
+            value: 1,
+        },
+        TextStyleFeature {
+            tag: "palt".to_owned(),
+            value: 0,
+        },
+    ];
+    let err = doc
+        .apply(Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                styles: vec![style],
+                ..lyric_document("歌詞")
+            },
+        })
+        .unwrap_err();
+    assert!(format!("{err}").contains("feature タグ「palt」が2枚ある"));
+}
+
+// ---------------------------------------------------------------------------
+// 保存/読込 — 第3切片固有: styles/runs と、その新しい property track
+// ---------------------------------------------------------------------------
+
+#[test]
+fn styles_runs_and_their_property_tracks_survive_save_and_load() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 300);
+    let range_id = TextRangeId(0);
+
+    let mut style0 = lyric_style();
+    style0.axes = vec![TextStyleAxis {
+        tag: "wght".to_owned(),
+    }];
+    style0.features = vec![TextStyleFeature {
+        tag: "palt".to_owned(),
+        value: 1,
+    }];
+    let mut style1 = lyric_style();
+    style1.id = TextStyleId(1);
+    style1.fill = [1.0, 0.0, 0.0, 1.0];
+
+    let mut range = karaoke_range(range_id);
+    range.variation_axes = vec![TextVariationAxis {
+        tag: "wght".to_owned(),
+    }];
+
+    doc.apply_all([
+        Intent::SetTextDocument {
+            layer,
+            document: TextDocument {
+                styles: vec![style0, style1],
+                runs: vec![
+                    TextRun {
+                        len: 2,
+                        style: TextStyleId(0),
+                    },
+                    TextRun {
+                        len: 3,
+                        style: TextStyleId(1),
+                    },
+                ],
+                ranges: vec![range],
+                ..lyric_document("歌詞1行目")
+            },
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_style_axis(TextStyleId(0), "wght"),
+            track: still(Value::F64(650.0)),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_variation_axis(range_id, "wght"),
+            track: still(Value::F64(50.0)),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_range_position(range_id),
+            track: still(Value::Vec2([0.0, -8.0])),
+        },
+    ])
+    .unwrap();
+
+    let dir = std::env::temp_dir().join(format!(
+        "motolii-text-style-span-roundtrip-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("text_style_span_roundtrip.motolii");
+    doc.save(&path).expect("保存できない");
+
+    let loaded = Document::load(&path).expect("読み込めない");
+    assert_eq!(
+        loaded.view().text_document(layer).unwrap(),
+        doc.view().text_document(layer).unwrap(),
+        "styles/runs/variation_axes が保存/読込で往復しない"
+    );
+    let view = loaded.view();
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_style_axis(TextStyleId(0), "wght"), t(0))
+            .unwrap(),
+        Some(Value::F64(650.0))
+    );
+    assert_eq!(
+        view.value_at(
+            layer,
+            &PropertyId::text_range_variation_axis(range_id, "wght"),
+            t(0)
+        )
+        .unwrap(),
+        Some(Value::F64(50.0))
+    );
+    assert_eq!(
+        view.value_at(layer, &PropertyId::text_range_position(range_id), t(0))
+            .unwrap(),
+        Some(Value::Vec2([0.0, -8.0]))
     );
 }
