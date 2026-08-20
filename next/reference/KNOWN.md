@@ -22,7 +22,7 @@
 - Ravel の ShellManipulator は 2D・toolkit 非依存だが**利用者裁定でギズモはスクラッチ**(2026-08-20、Ravel はダサいため。plan B=transform-gizmo+自前カメラ行列)
 
 ## レーン運用(実測済み)
-- **worktree の base はほぼ必ず stale**。作業前に `git reset --hard claude/motolii-reset-handoff-bda7f3` を無条件で行う(確認に時間を使わない)
+- **worktree の base はほぼ必ず stale**。作業前に `git reset --hard main` を無条件で行う(確認に時間を使わない)。旧 base の `claude/motolii-reset-handoff-bda7f3` は 2026-08-21 に main へ着地済みで、以後 main が正
 - stash 禁止(worktree 間で共有)/ Edit 直後の stale fingerprint は touch / CARGO_TARGET_DIR 共有禁止(後勝ち事故の実測あり)
 - 時間予算試験2本(`edit_storm_with_the_real_track_type`・r2 `timeline_projection_fits_a_frame`)は**負荷で落ちるのが既知**。単独実行で緑なら自分の変更と無関係。予算は緩めない
 - 一次ソースの取得結果は終了報告に URL/rev を書く(次のレーンが KNOWN 経由で再利用できるように)
