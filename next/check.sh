@@ -25,6 +25,7 @@ done <<< "$roots"
 echo
 echo "=== owns: 上流に無いと主張している箇所(ここだけがレビュー対象) ==="
 found=0
+owns_total=0
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   claim="$(grep -m1 -E '^\s*//! owns:' "$f" || true)"
@@ -32,9 +33,13 @@ while IFS= read -r f; do
   found=1
   dir="$(dirname "$f")"
   lines="$(find "$dir" -name '*.rs' -exec cat {} + | wc -l | tr -d ' ')"
+  owns_total=$((owns_total + lines))
   printf '%7s行  %s\n          %s\n' "$lines" "${f#./}" "$(echo "$claim" | sed 's|^\s*//! owns: ||')"
 done <<< "$roots"
 [ "$found" -eq 0 ] && echo "(なし)"
+echo
+printf '  合計 %s行 — 自前で持っているコードの総量 = 保守の負債。**下がるべき数字**。\n' "$owns_total"
+echo '  上がった時は「上流に無い物を作った」か「使わない物を抱えた」かのどちらか。'
 
 echo
 echo "=== wraps: 上流の薄い口(中身を知りたければ上流を読む) ==="

@@ -311,44 +311,11 @@ fn seconds_since(t: RationalTime, origin: RationalTime) -> f64 {
     }
 }
 
-/// 解析結果などの等間隔サンプル列。start位置からsample_rateで並ぶ。
-/// キーフレームと同じく「時刻→値」として評価できる(ParamSource::Dataから参照)。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct DataTrack {
-    pub start: RationalTime,
-    pub sample_rate: Fps,
-    pub values: Vec<Value>,
-}
 
-impl DataTrack {
-    /// 時刻tでの値(サンプル間は線形補間、範囲外は端でクランプ)。空ならF64(0.0)。
-    pub fn eval(&self, t: RationalTime) -> Value {
-        if self.values.is_empty() {
-            return Value::F64(0.0);
-        }
-        // Ord比較は交差乗算がi128に収まる。差分のRationalTime化より先に端クランプする。
-        if t <= self.start {
-            return self.values[0].clone();
-        }
-        let last = self.values.len() - 1;
-        // 添字は有理数床(S7)。i128溢れでも256bit乗除で床を求める。
-        // Err(Overflow)は商がi64に収まらない巨大添字のみ → 末尾クランプでよい。
-        let (i, u) = match t.try_to_sample_index_since(self.start, self.sample_rate) {
-            Ok((idx, _)) if idx < 0 => return self.values[0].clone(),
-            Ok((idx, frac)) => (idx as usize, frac),
-            Err(_) => return self.values[last].clone(),
-        };
-        if i >= last {
-            return self.values[last].clone();
-        }
-        Value::lerp(&self.values[i], &self.values[i + 1], u)
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DataTrackId, DataTracks, ParamSource};
 
     fn key(t: RationalTime, v: f64, interp: Interp) -> Keyframe {
         Keyframe {
@@ -470,117 +437,11 @@ mod tests {
         assert_eq!(tr.eval(RationalTime::ZERO), Value::F64(5.0));
     }
 
-    #[test]
-    fn data_track_sampling() {
-        let dt = DataTrack {
-            start: RationalTime::from_seconds(1),
-            sample_rate: Fps::try_new(10, 1).unwrap(),
-            values: (0..=10).map(|i| Value::F64(i as f64)).collect(),
-        };
-        // start前はクランプ
-        assert_eq!(dt.eval(RationalTime::ZERO), Value::F64(0.0));
-        // start + 0.55秒 = サンプル位置5.5 → 5.5
-        let v = dt
-            .eval(RationalTime::try_new(155, 100).unwrap())
-            .as_f64()
-            .unwrap();
-        assert!((v - 5.5).abs() < 1e-9);
-        // 末尾以降はクランプ
-        assert_eq!(dt.eval(RationalTime::from_seconds(10)), Value::F64(10.0));
-    }
 
-    /// S7: NTSC rate でフレーム格子上の時刻が values[i] に一致する(f64床で1つ前に落ちない)。
-    #[test]
-    fn data_track_ntsc_exact_frame_hits_sample() {
-        let rate = Fps::try_new(30000, 1001).unwrap();
-        let values: Vec<Value> = (0..=30).map(|i| Value::F64(i as f64)).collect();
-        let dt = DataTrack {
-            start: RationalTime::ZERO,
-            sample_rate: rate,
-            values,
-        };
-        for frame in [0i64, 1, 14, 15, 29, 30] {
-            let t = RationalTime::try_from_frame(frame, rate).unwrap();
-            assert_eq!(
-                dt.eval(t),
-                Value::F64(frame as f64),
-                "frame {frame} must hit sample {frame}"
-            );
-        }
-    }
 
-    /// S7: 非補間型は境界で1サンプル前に落ちず、区間内は Hold(先頭側)。
-    #[test]
-    fn data_track_asset_ref_hold_at_ntsc_boundary() {
-        let rate = Fps::try_new(30000, 1001).unwrap();
-        let dt = DataTrack {
-            start: RationalTime::ZERO,
-            sample_rate: rate,
-            values: vec![Value::AssetRef(1), Value::AssetRef(2), Value::AssetRef(3)],
-        };
-        assert_eq!(
-            dt.eval(RationalTime::try_from_frame(1, rate).unwrap()),
-            Value::AssetRef(2)
-        );
-        // サンプル0と1の中間 → lerp が非補間のため先頭側を保持
-        let half = rate
-            .frame_duration()
-            .try_mul(RationalTime::try_new(1, 2).unwrap())
-            .unwrap();
-        assert_eq!(dt.eval(half), Value::AssetRef(1));
-        assert_eq!(
-            dt.eval(RationalTime::try_from_frame(2, rate).unwrap()),
-            Value::AssetRef(3)
-        );
-    }
 
-    /// S7: i128中間積が溢れても先頭近傍なら index 0(末尾へ誤クランプしない)。
-    #[test]
-    fn data_track_near_start_despite_i128_mul_overflow() {
-        let d = i64::MAX;
-        let start = RationalTime::try_new(1, d - 2).unwrap();
-        let t = RationalTime::try_new(1000, d).unwrap();
-        let rate = Fps::try_new(d - 1, d).unwrap();
-        let dt = DataTrack {
-            start,
-            sample_rate: rate,
-            values: vec![Value::F64(10.0), Value::F64(20.0), Value::F64(30.0)],
-        };
-        assert!(t > start);
-        let v = dt.eval(t).as_f64().unwrap();
-        // index 0・微小 u なので values[0] 近傍(末尾30へ誤クランプしない)
-        assert!(
-            (v - 10.0).abs() < 1e-6,
-            "expected near 10.0 at start of track, got {v}"
-        );
-    }
 
-    #[test]
-    fn data_track_end_clamps_when_relative_overflows_i64() {
-        // start=MIN, t=MAX の差分は RationalTime に再格納できないが、末尾クランプの20を返す。
-        let dt = DataTrack {
-            start: RationalTime::from_seconds(i64::MIN),
-            sample_rate: Fps::try_new(1, 1).unwrap(),
-            values: vec![Value::F64(10.0), Value::F64(20.0)],
-        };
-        assert_eq!(
-            dt.eval(RationalTime::from_seconds(i64::MAX)),
-            Value::F64(20.0)
-        );
-    }
 
-    #[test]
-    fn data_track_start_clamps_across_i64_bounds() {
-        let dt = DataTrack {
-            start: RationalTime::from_seconds(i64::MAX),
-            sample_rate: Fps::try_new(1, 1).unwrap(),
-            values: vec![Value::F64(10.0), Value::F64(20.0)],
-        };
-        assert_eq!(
-            dt.eval(RationalTime::from_seconds(i64::MIN)),
-            Value::F64(10.0)
-        );
-    }
 
     #[test]
     fn keyframe_linear_across_i64_span_does_not_collapse_to_zero() {
@@ -607,53 +468,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn param_source_data_with_fallback() {
-        let mut ctx = DataTracks::new();
-        ctx.insert(
-            "centroid.x",
-            DataTrack {
-                start: RationalTime::ZERO,
-                sample_rate: Fps::try_new(30, 1).unwrap(),
-                values: vec![Value::F64(3.0), Value::F64(5.0)],
-            },
-        );
-        let p = ParamSource::Data {
-            track: "centroid.x".into(),
-            fallback: Value::F64(-1.0),
-        };
-        assert_eq!(p.eval(RationalTime::ZERO, &ctx), Value::F64(3.0));
 
-        let missing = ParamSource::Data {
-            track: DataTrackId("nope".into()),
-            fallback: Value::F64(-1.0),
-        };
-        assert_eq!(missing.eval(RationalTime::ZERO, &ctx), Value::F64(-1.0));
-    }
-
-    #[test]
-    fn vec2_axes_uses_data_fallback_when_track_is_not_scalar() {
-        let mut tracks = DataTracks::new();
-        tracks.insert(
-            "vec",
-            DataTrack {
-                start: RationalTime::ZERO,
-                sample_rate: Fps::try_new(1, 1).unwrap(),
-                values: vec![Value::Vec2([9.0, 9.0])],
-            },
-        );
-        let source = ParamSource::Vec2Axes {
-            x: Box::new(ParamSource::Data {
-                track: DataTrackId("vec".into()),
-                fallback: Value::F64(0.42),
-            }),
-            y: Box::new(ParamSource::Const(Value::F64(0.0))),
-        };
-        assert_eq!(
-            source.eval(RationalTime::ZERO, &tracks),
-            Value::Vec2([0.42, 0.0])
-        );
-    }
 }
 
 #[cfg(test)]

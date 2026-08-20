@@ -10,8 +10,11 @@
 //! この4点が変わったら再裁定する。
 //!
 //! 旧 workspace `crates/motolii-media` からの移植(2026-08-20 リセット)。再実装ではない。
-//! **持ってこなかったもの**: `source_binding.rs`(202行)— `motolii-gpu` の
-//! `ResourceLedger`(予算 admission)に丸ごと乗っており、これは別の関心事(裁定22)。
+//! **持ってこなかったもの**(軸4「保守をしたくない」):
+//! - `source_binding.rs` 202行 — `motolii-gpu` の `ResourceLedger`(予算 admission)に
+//!   丸ごと乗っており、別の関心事(裁定22)
+//! - `admission.rs` 111行 — 未使用で、doc が解体済みの `motolii-doc` / `motolii-ui` を
+//!   契約先として指していた。M2「理由つき skip」を結線する日に持ってくる
 //!
 //!
 //! 方針(落とし穴B-2対策): FFmpegはリンクせずサイドカーで叩く。
@@ -23,7 +26,6 @@
 //! YUV→RGB変換・色空間の解釈はffmpeg側に寄せ、motolii-gpu側の変換シェーダ実装(M1-T3)
 //! までの間もパイプライン全体をRGBAで一貫させる。
 
-mod admission;
 mod decode;
 mod encode;
 mod mux;
@@ -32,7 +34,6 @@ mod probe;
 use std::io::Read;
 use std::process::Command;
 
-pub use admission::{admission_asset_type_for_path, probe_admission_source, AdmissionSource};
 pub use decode::{read_frame_at, FrameReader, FrameReaderCancel, FrameReaderKillHandle};
 pub use encode::Encoder;
 pub use mux::{
