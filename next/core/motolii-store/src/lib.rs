@@ -23,15 +23,17 @@
 mod components;
 mod document;
 mod fingerprint;
+mod mask;
 mod persist;
 mod view;
 
 pub use document::{Document, Intent, LayerId, PropertyId, Revision};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
+pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
 pub use view::StoreView;
 
 pub use motolii_core::{CompSpec, Fps, LayerPlacement, RationalTime};
-pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Value};
+pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, Value};
 
 /// `edit` timeline の名前。undo/redo はこの軸の移動である。
 pub const EDIT_TIMELINE: &str = "edit";
@@ -55,7 +57,12 @@ pub mod property {
     /// component 識別子は `Layer:{name}` なので、**layer 自身の component と衝突する
     /// 名前は禁止**(`PropertyId::new` が弾く)。弾かないと `PropertyId::new("meta")` が
     /// layer の素材と重ね順を上書きする。
-    pub const RESERVED: &[&str] = &["meta", "present"];
+    pub const RESERVED: &[&str] = &["meta", "present", "masks"];
+
+    /// マスクの形状・不透明度トラックの名前は `mask.{id}.…` で始まる。
+    /// **平坦な名前**にしてあるので、新しい機構を足さずに `KeyframeTrack` へ乗る
+    /// (裁定92 が text.style で先に見つけた形と同じ)。
+    pub const MASK_PREFIX: &str = "mask.";
 
     /// 変換の中心。**レイヤ自身の座標単位の点**であって 0..1 の正規化ピボットではない。
     pub const ANCHOR: &str = "anchor";
@@ -217,4 +224,9 @@ pub struct ResolvedLayer {
     /// この comp 時刻に対応する**素材のフレーム**。
     /// 解決済みなので、engine はもう時間の計算をしない。
     pub source_frame: i64,
+    /// この時刻のマスク。**スタックの順**(手前のマスクへ畳んでいく順)で並ぶ。
+    ///
+    /// ここに置くのは、`ResolvedLayer` が「この時刻のこの layer の姿」の全部だからである。
+    /// 別の口にすると `ResolvedLayer` から `LayerId` が引けず、描く側がマスクへ辿り着けない。
+    pub masks: Vec<ResolvedMask>,
 }

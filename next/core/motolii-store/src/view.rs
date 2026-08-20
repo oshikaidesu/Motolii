@@ -6,8 +6,8 @@ use re_chunk_store::LatestAtQuery;
 use re_entity_db::EntityDb;
 use re_log_types::{EntityPath, Timeline};
 
-use crate::components::{descriptor_composition, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
-use crate::{property, Composition, Document, LayerId, LayerMeta, LayerPlacement, PropertyId, ResolvedLayer, StoreError, EDIT_TIMELINE};
+use crate::components::{descriptor_composition, descriptor_masks, descriptor_meta, descriptor_present, descriptor_track, LayerPresent, TrackJson};
+use crate::{property, Composition, Document, LayerId, LayerMeta, LayerPlacement, Mask, PropertyId, ResolvedLayer, ResolvedMask, StoreError, EDIT_TIMELINE};
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
 #[derive(Clone, Copy)]
@@ -148,6 +148,75 @@ impl<'a> StoreView<'a> {
             .map_err(StoreError::Encode)
     }
 
+    /// この layer のマスク一覧(キーを打たない部分だけ)。**スタックの順**。
+    ///
+    /// component が無い = **マスクが1枚も無い**なので空を返す。ここは `meta` と違って
+    /// 「無い」と「空」が同じ意味である。読めた上で壊れている場合だけ `Err`(裁定37)。
+    pub fn masks(&self, layer: LayerId) -> Result<Vec<Mask>, StoreError> {
+        let descriptor = descriptor_masks();
+        let path = layer.entity_path();
+        let results = self
+            .db
+            .latest_at(&self.query(), &path, [descriptor.component]);
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(Vec::new());
+        };
+        serde_json::from_str(&json.0).map_err(StoreError::Encode)
+    }
+
+    /// comp 時刻でのマスク。形状も不透明度も普通の property track から取る。
+    fn resolved_masks(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+    ) -> Result<Vec<ResolvedMask>, StoreError> {
+        let mut out = Vec::new();
+        for mask in self.masks(layer)? {
+            let shape_property = PropertyId::mask_shape(mask.id);
+            let shape = match self.value_at(layer, &shape_property, t)? {
+                Some(Value::Path(path)) => path,
+                // **黙って飛ばさない**。形状の無いマスクは壊れた Document であって、
+                // 既定値で描くと利用者には「マスクが勝手に消えた」としか見えない。
+                Some(other) => {
+                    return Err(StoreError::Property(format!(
+                        "マスク {} の形状にパスでない値が入っている: {other:?}",
+                        mask.id
+                    )))
+                }
+                None => {
+                    return Err(StoreError::Property(format!(
+                        "マスク {} に形状が無い(`mask.{}.shape` が未設定)",
+                        mask.id, mask.id
+                    )))
+                }
+            };
+
+            let opacity_property = PropertyId::mask_opacity(mask.id);
+            // キーを打っていない property は静止値(裁定20)。既定は不透明。
+            let opacity = match self.value_at(layer, &opacity_property, t)? {
+                Some(Value::F64(v)) => v as f32,
+                Some(other) => {
+                    return Err(StoreError::Property(format!(
+                        "マスク {} の不透明度に数値でない値が入っている: {other:?}",
+                        mask.id
+                    )))
+                }
+                None => 1.0,
+            };
+
+            out.push(ResolvedMask {
+                mode: mask.mode,
+                inverted: mask.inverted,
+                opacity: opacity.clamp(0.0, 1.0),
+                shape,
+            });
+        }
+        Ok(out)
+    }
+
     /// comp 時刻での layer の姿。**合成器へ渡す唯一の形**。
     ///
     /// track が無い property は既定値になる(位置 0、不透明度 1、大きさは素材のまま)。
@@ -218,6 +287,7 @@ impl<'a> StoreView<'a> {
             declared_size: size,
             source: meta.source,
             source_frame,
+            masks: self.resolved_masks(layer, t)?,
         }))
     }
 

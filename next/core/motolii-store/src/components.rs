@@ -161,6 +161,19 @@ pub fn descriptor_meta() -> ComponentDescriptor {
     }
 }
 
+/// layer のマスク一覧(キーを打たない部分だけ)。
+///
+/// **`meta` の中へ入れない** — `SetMeta` は素材と重ね順を丸ごと差し替える口なので、
+/// マスクを同居させると「素材を差し替えたらマスクが消えた」が作れる。
+/// 形状と不透明度は普通の property track なので、ここには並びと重ね方だけが入る。
+pub fn descriptor_masks() -> ComponentDescriptor {
+    ComponentDescriptor {
+        archetype: Some("motolii.archetypes.Layer".into()),
+        component: "Layer:masks".into(),
+        component_type: Some(TrackJson::name()),
+    }
+}
+
 /// comp の設定。**layer と同じ JSON 経路を使い回す**(符号化の流儀を増やさない)。
 pub fn descriptor_composition() -> ComponentDescriptor {
     ComponentDescriptor {

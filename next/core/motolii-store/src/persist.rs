@@ -32,6 +32,10 @@ impl Document {
             };
             intents.push(Intent::AddLayer(layer));
             intents.push(Intent::SetMeta { layer, meta });
+            let masks = view.masks(layer)?;
+            if !masks.is_empty() {
+                intents.push(Intent::SetMasks { layer, masks });
+            }
             // property の一覧は store に聞く(別の台帳を持たない)。
             for property in view.properties(layer) {
                 if let Some(track) = view.track(layer, &property)? {
