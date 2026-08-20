@@ -70,6 +70,7 @@ fn real_media_becomes_a_layer() {
         height: H,
         fps: motolii_store::Fps::try_new(30, 1).unwrap(),
         duration_frames: 60,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     let layer = LayerId(1);
@@ -133,6 +134,7 @@ fn media_natural_size_fills_the_layer() {
         height: H,
         fps: motolii_store::Fps::try_new(30, 1).unwrap(),
         duration_frames: 60,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     let layer = LayerId(1);

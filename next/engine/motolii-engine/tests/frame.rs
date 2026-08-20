@@ -46,6 +46,7 @@ fn document_becomes_a_frame() {
         height: H,
         fps: motolii_store::Fps::try_new(30, 1).unwrap(),
         duration_frames: 60,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     let back = LayerId(1);
@@ -97,6 +98,7 @@ fn keyframes_move_the_picture_over_time() {
         height: H,
         fps: motolii_store::Fps::try_new(30, 1).unwrap(),
         duration_frames: 60,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     let layer = LayerId(1);
@@ -158,6 +160,7 @@ fn undo_changes_the_rendered_frame() {
         height: H,
         fps: motolii_store::Fps::try_new(30, 1).unwrap(),
         duration_frames: 60,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     let layer = LayerId(1);

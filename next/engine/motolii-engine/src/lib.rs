@@ -12,7 +12,7 @@ use motolii_compositor::GpuTexture2D;
 use motolii_compositor::{Compositor, CompositorError, Layer};
 
 use motolii_media::{probe, read_frame_at, MediaError, MediaInfo};
-use motolii_store::{LayerSource, Matte, RationalTime, StoreView};
+use motolii_store::{LayerPlacement, LayerSource, Matte, RationalTime, StoreView};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -82,11 +82,11 @@ impl Engine {
         view: &StoreView<'_>,
         t: RationalTime,
     ) -> Result<Vec<u8>, EngineError> {
-        let comp = view
+        let composition = view
             .composition()
             .map_err(|e| EngineError::Store(e.to_string()))?
-            .ok_or(EngineError::NoComposition)?
-            .spec();
+            .ok_or(EngineError::NoComposition)?;
+        let comp = composition.spec();
         // カメラも comp と同じく Document が持つ(裁定113/115)。preview/export が
         // 違うカメラを渡せないよう、ここでも引数ではなく `view` から読む
         // (裁定40 が comp について立てた規律と同じ形)。
@@ -97,7 +97,41 @@ impl Engine {
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
 
-        let mut layers = Vec::with_capacity(resolved.len());
+        let mut layers = Vec::with_capacity(resolved.len() + 1);
+
+        // comp の背景色(`Composition::background`、利用者要望: 黒だと気分が上がらない)。
+        // **`motolii-compositor` の clear 色は変えない**(compositor は書き込み禁止の
+        // 並列レーンが触っている最中)。代わりに comp 全域を覆う不透明の layer を
+        // どの実 layer よりも奥(`order = i16::MIN`)に足す — pinned layer(裁定113、
+        // カメラの pan/zoom を受けず画面に張り付く機構)を流用すれば、camera が
+        // どこを向いていても render target をちょうど覆う「クリア色」として働く。
+        // 既定値([0,0,0,1] 不透明黒)は旧 clear 色と同じ見た目になるので、
+        // 既存テストの期待画素は変わらない(合成器の実測: `TRANSPARENT` clear は
+        // 読み戻すと不透明黒になる — `motolii-compositor` の
+        // `default_camera_all_z0_matches_orthographic_pixel_mapping` 参照)。
+        // preview/export は同じ [`Self::render_frame`] を通るので、背景も
+        // 書き出しに乗る。
+        let (background_texture, _) = self.texture_for(
+            &LayerSource::Solid {
+                rgba: to_u8_rgba(composition.background),
+                // 1x1 で足りる — 単色は quad の `size` で comp 全域まで引き伸ばすので、
+                // texture 自体の解像度は意味を持たない。
+                width: 1,
+                height: 1,
+            },
+            0,
+        )?;
+        layers.push(Layer {
+            texture: background_texture.expect("LayerSource::Solid は常に texture を返す"),
+            size: [comp.width as f32, comp.height as f32],
+            placement: LayerPlacement {
+                order: i16::MIN,
+                ..Default::default()
+            },
+            pinned: true,
+            blend_mode: motolii_compositor::BlendMode::Normal,
+        });
+
         for layer in resolved {
             // matte/blend の判定を texture のアップロードより先にやる — 対応外なら
             // 無駄な ffmpeg 起動/GPU アップロードをする前に落とす(裁定108(c) 系の
@@ -254,6 +288,18 @@ impl Engine {
             LayerSource::Null | LayerSource::Shape | LayerSource::Text => Ok((None, [0.0, 0.0])),
         }
     }
+}
+
+/// `Composition::background`([f32;4]・0.0〜1.0)を素材アップロードが取る 8bit RGBA
+/// へ写す。`round` で丸める(`as u8` の単純切り捨てだと 1.0 が 254 に落ちて
+/// 「不透明のつもりが微妙に透ける」事故になる)。
+fn to_u8_rgba(c: [f32; 4]) -> [u8; 4] {
+    [
+        (c[0] * 255.0).round().clamp(0.0, 255.0) as u8,
+        (c[1] * 255.0).round().clamp(0.0, 255.0) as u8,
+        (c[2] * 255.0).round().clamp(0.0, 255.0) as u8,
+        (c[3] * 255.0).round().clamp(0.0, 255.0) as u8,
+    ]
 }
 
 /// `motolii_store::BlendMode`(Document の16値、裁定67)を

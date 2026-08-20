@@ -38,6 +38,7 @@ fn doc_with_comp(duration_frames: i64) -> Document {
         height: 64,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     doc
@@ -265,6 +266,51 @@ fn locked_layer_rejects_set_order() {
 
     let result = doc.apply(Intent::SetOrder { layer, order: 7 });
     assert!(result.is_err(), "locked 層への SetOrder は拒まれるはず");
+}
+
+/// 削除は最も破壊的な編集(supervisor 裁定): locked な layer への RemoveLayer は
+/// 他の層変更 Intent と同じく理由つき Err で拒まれる(AE と同じ意味論)。
+#[test]
+fn locked_layer_rejects_remove_layer() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place(&mut doc, layer, solid([255, 0, 0, 255]), 0, 100);
+    set_locked(&mut doc, layer, true).unwrap();
+
+    let result = doc.apply(Intent::RemoveLayer(layer));
+    let err = result.expect_err("locked 層への RemoveLayer は拒まれるはず");
+    assert!(
+        err.to_string().contains("locked"),
+        "エラーは理由(locked)を含むはず: {err}"
+    );
+
+    // 実際に消えていないことも確かめる(present は `has_layer` が見る — `resolve`
+    // 単体は present を見ないので、削除の成否の確認には使えない)。
+    assert!(
+        doc.view().has_layer(layer),
+        "拒否されたのに layer が消えている"
+    );
+}
+
+/// 解除→削除の2手は常に可能(詰みを作らない、`locking_yourself_is_not_a_dead_end`
+/// と同じ形の確認を RemoveLayer で行う)。
+#[test]
+fn unlock_then_remove_layer_always_succeeds() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place(&mut doc, layer, solid([255, 0, 0, 255]), 0, 100);
+    set_locked(&mut doc, layer, true).unwrap();
+
+    assert!(doc.apply(Intent::RemoveLayer(layer)).is_err());
+
+    set_locked(&mut doc, layer, false).expect("解除できないと詰む");
+    doc.apply(Intent::RemoveLayer(layer))
+        .expect("解除後の RemoveLayer は通るはず");
+
+    assert!(
+        !doc.view().has_layer(layer),
+        "解除後に削除したのに layer がまだ present"
+    );
 }
 
 #[test]

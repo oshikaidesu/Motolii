@@ -66,6 +66,7 @@ fn doc_with_comp(duration_frames: i64) -> Document {
         height: 360,
         fps: Fps::try_new(30, 1).unwrap(),
         duration_frames,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     doc

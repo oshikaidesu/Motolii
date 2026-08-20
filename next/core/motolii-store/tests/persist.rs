@@ -22,6 +22,7 @@ fn authored() -> Document {
         height: 1080,
         fps: Fps::try_new(30000, 1001).unwrap(),
         duration_frames: 900,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
 
@@ -118,6 +119,60 @@ fn save_and_load_round_trips_the_whole_document() {
             );
         }
     }
+}
+
+/// `Composition::background`(黒だと気分が上がらない、利用者要望)専用の保存往復。
+/// 既定でない値を使い、シリアライズ漏れを検出する。
+#[test]
+fn composition_background_round_trips_through_save_and_load() {
+    let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: 640,
+        height: 360,
+        fps: Fps::try_new(30, 1).unwrap(),
+        duration_frames: 300,
+        background: [0.2, 0.4, 0.6, 0.8],
+    }))
+    .unwrap();
+
+    let path = tmp("background_roundtrip.motolii");
+    doc.save(&path).expect("保存できない");
+    let loaded = Document::load(&path).expect("読み込めない");
+
+    assert_eq!(
+        loaded.view().composition().unwrap().unwrap().background,
+        [0.2, 0.4, 0.6, 0.8],
+        "background が保存往復で消えた/変わった"
+    );
+}
+
+/// 旧保存ファイル(`background` component が無い版)を模した JSON でも読める —
+/// `#[serde(default = "Composition::default_background")]` の後方互換確認。
+/// 実ファイルではなく JSON 直操作で確かめる: 現行の `Composition` を一度シリアライズし、
+/// `background` キーだけを取り除いてから読み戻す(旧 Fps の num/den 等、他フィールドの
+/// 形式をハードコードしないための遠回り)。
+#[test]
+fn composition_without_a_background_field_defaults_to_opaque_black() {
+    let current = Composition {
+        width: 640,
+        height: 360,
+        fps: Fps::try_new(30, 1).unwrap(),
+        duration_frames: 300,
+        background: [0.9, 0.9, 0.9, 0.9],
+    };
+    let mut value = serde_json::to_value(&current).unwrap();
+    value
+        .as_object_mut()
+        .expect("Composition は JSON object のはず")
+        .remove("background")
+        .expect("旧形式を模すには background キーが無いことが前提");
+
+    let loaded: Composition = serde_json::from_value(value).expect("旧形式の JSON を読めない");
+    assert_eq!(
+        loaded.background,
+        Composition::default_background(),
+        "background 欠落時は既定(不透明黒)へ落ちるはず"
+    );
 }
 
 /// **保存で履歴を畳む**。畳まないと project file が編集回数に比例して伸びる。

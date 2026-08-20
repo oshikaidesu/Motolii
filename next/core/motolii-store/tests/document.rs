@@ -183,6 +183,7 @@ fn apply_all_rolls_back_even_when_the_batch_writes_multiple_components() {
         height: 64,
         fps: motolii_store::Fps::try_new(30, 1).unwrap(),
         duration_frames: 300,
+        background: [0.0, 0.0, 0.0, 1.0],
     }))
     .unwrap();
     let after_setup_head = doc.edit_head();
