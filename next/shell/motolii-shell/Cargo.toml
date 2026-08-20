@@ -1,0 +1,30 @@
+[package]
+name = "motolii-shell"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+iced.workspace = true
+motolii-core.workspace = true
+motolii-engine.workspace = true
+motolii-media.workspace = true
+motolii-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# デザイン値の外出し(裁定117)。debug ビルドの `tokens::watch_subscription` だけが
+# 実際に使う — 依存グラフには re_renderer 経由で既に入っているので、direct
+# dependency への昇格として扱う(発注書の「新依存は notify の direct 昇格のみ可」)。
+notify = "8"
+# `--fixture --screenshot` 器具(screenshot.rs)が PNG を書き出すのに使う。iced の
+# "image" feature が既に `image`(png codec 込み)を依存グラフへ引いているので、
+# workspace の Cargo.toml 自身が既に明記している「裁定117 が許す direct 昇格」
+# (notify と同じ扱い、R3 probe が先行昇格済み)であって新規の依存ではない。
+image.workspace = true
+
+[dev-dependencies]
+motolii-testkit.workspace = true
+# タスク#15: iced_test spike + Q0横断柵。iced 0.14 と同一ラインの公式 crate
+# (upstream iced-rs/iced、workspace の fork 版ではない — fork は tester/test rev
+# 0.15.0-dev で next/ の iced 0.14 とは別線)。dev-only、shell の外へは出さない。
+iced_test = "0.14"

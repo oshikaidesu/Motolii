@@ -1,4 +1,6 @@
 /target
+# リセット後の workspace(2026-08-20)。旧 workspace とは target を共有しない。
+next/target
 **/*.rs.bk
 spikes/s1-slint/target
 spikes/vello-eval/target

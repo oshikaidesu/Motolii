@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# ラッパーの規律チェック。やることは2つだけ。
+#   1. 各 crate の根(lib.rs / main.rs)が `//! wraps:` か `//! owns:` で始まることを確かめる
+#   2. `owns:`(= 上流に無いと主張している箇所)を、行数つきで全部並べる
+#
+# リンクも索引も検査しない。ラッパーに要るのは「どの上流を包んだか」だけで、
+# それはコードの隣にあるのが最も腐りにくい。
+# 粒度が crate 単位なのは、`owns:` が「この crate は上流に無い物を実装している」という
+# 主張だからである。ファイル単位にすると宣言が増えるだけで、読む人が減る。
+set -u
+cd "$(dirname "$0")"
+fail=0
+
+roots="$(find . \( -name 'lib.rs' -o -name 'main.rs' \) -not -path './target/*' | sort)"
+
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  head1="$(grep -m1 -E '^\s*//!' "$f" || true)"
+  case "$head1" in
+    *"//! wraps:"*|*"//! owns:"*) ;;
+    *) echo "NG: crate の根が wraps:/owns: で始まらない — ${f#./}"; fail=1 ;;
+  esac
+done <<< "$roots"
+
+echo
+echo "=== owns: 上流に無いと主張している箇所(ここだけがレビュー対象) ==="
+found=0
+owns_total=0
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  claim="$(grep -m1 -E '^\s*//! owns:' "$f" || true)"
+  [ -z "$claim" ] && continue
+  found=1
+  dir="$(dirname "$f")"
+  lines="$(find "$dir" -name '*.rs' -exec cat {} + | wc -l | tr -d ' ')"
+  owns_total=$((owns_total + lines))
+  printf '%7s行  %s\n          %s\n' "$lines" "${f#./}" "$(echo "$claim" | sed 's|^\s*//! owns: ||')"
+done <<< "$roots"
+[ "$found" -eq 0 ] && echo "(なし)"
+echo
+printf '  合計 %s行 — 自前で持っているコードの総量 = 保守の負債。**下がるべき数字**。\n' "$owns_total"
+echo '  上がった時は「上流に無い物を作った」か「使わない物を抱えた」かのどちらか。'
+
+echo
+echo "=== wraps: 上流の薄い口(中身を知りたければ上流を読む) ==="
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  claim="$(grep -m1 -E '^\s*//! wraps:' "$f" || true)"
+  [ -z "$claim" ] && continue
+  printf '          %s\n          %s\n' "${f#./}" "$(echo "$claim" | sed 's|^\s*//! wraps: ||')"
+done <<< "$roots"
+
+# Lottie の地図(= 実質 OSS の AE 解析)をどこまで判断したか。
+# 「作る瞬間に読む」だと読み落としが見えないので、先に全語彙を並べて未判定を数える。
+if [ -f reference/lottie-coverage.tsv ]; then
+  echo
+  echo "=== Lottie 地図(AE の意味のうち、まだ向き合っていない量) ==="
+  awk -F'\t' '$1 !~ /^#/ && $1 != "group" && $5 != "該当なし" { n[$5]++; total++ }
+    END { for (s in n) printf "  %-8s %4d\n", s, n[s];
+          printf "  → 未判定 %d / %d\n", n["未判定"]+0, total }' \
+    reference/lottie-coverage.tsv
+  echo
+  echo "=== 発注単位(採用予定 = 残り)==="
+  awk -F'\t' '$1 !~ /^#/ && $1 != "group" && $5 == "採用予定" && $8 != "" { n[$8]++ }
+    END { for (u in n) printf "  %-16s %3d\n", u, n[u] }' \
+    reference/lottie-coverage.tsv | sort -k2 -rn
+fi
+
+echo
+[ "$fail" -eq 0 ] && echo "OK: wraps/owns marker 全通過" || echo "NG: marker 未記入あり"
+exit $fail

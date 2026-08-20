@@ -1,0 +1,104 @@
+# リセット後の正本 workspace(2026-08-20裁定)。旧 workspace(../crates, ../plugins,
+# ../ui, ../spikes)は歴史証拠であり、ここからは参照しない。
+#
+# 分離した理由は2つ: (1) 旧 shell 75,293行(egui + iced)を巻き込まずにビルドできる
+# (2) 柵が「依存グラフ上ほんとうに切れている」ことを構造で保証する — 旧 workspace の
+#     dep policy は宣言だけで、iced 殻が egui 非optional の crate を引いていた。
+[workspace]
+resolver = "2"
+members = [
+    "core/motolii-core",
+    "core/motolii-eval",
+    "core/motolii-store",
+    "core/motolii-testkit",
+    "engine/motolii-audio",
+    "engine/motolii-compositor",
+    "engine/motolii-engine",
+    "engine/motolii-export",
+    "engine/motolii-media",
+    "engine/motolii-vector",
+    "shell/motolii-shell",
+    "probes/r0-store-edit",
+    "probes/r1-frame-throughput",
+    "probes/r2-view-projection",
+    "probes/r3-pointcloud",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# ---------------------------------------------------------------------------
+# rerun fork(store のみ。viewer 層は引かない)
+# ---------------------------------------------------------------------------
+# rev は旧 workspace と同じ `motolii/stage-camera-seat`(483b8559)。乖離台帳は
+# ../docs/reviews/2026-08-18-rerun-fork-seam-ledger.md。
+#
+# **ここに re_view_spatial / re_ui / re_viewer_context を足さないこと** —
+# それらは egui を引き、front が iced だけであるという軸が壊れる。
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c", features = ["encoder", "decoder"] }
+re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c", default-features = false }
+
+# 版は rerun の workspace に合わせる。ずれると `IsoTransform` / `Vec3` が別型になる。
+wgpu = "29.0"
+glam = "0.30.10"
+macaw = "0.30.0"
+pollster = "0.4"
+
+arrow = { version = "58.3", default-features = false }
+
+# ---------------------------------------------------------------------------
+# front
+# ---------------------------------------------------------------------------
+# **上流をそのまま引く**(fork ではない)。旧 workspace は fork を2 seam 抱えていたが、
+# seam 2(`max_bind_groups` の床)は「iced の device の上で re_renderer を回す」ための
+# ものだった。裁定44 で Stage を CPU 経路にしたので要らない。
+# seam 1(web-sys の完全一致解除)が要るかどうかは解決してみて決める。
+iced = { version = "0.14", features = ["wgpu", "advanced", "image", "canvas"] }
+# 依存グラフには re_renderer 経由で既に入っている(裁定117 が許す direct 昇格)。
+# デザイン値の外出しの debug watch(`motolii-shell/src/tokens.rs`)だけが使う。
+notify = "8"
+# iced の "image" feature が既に `image`(png codec 込み)を依存グラフへ引いている
+# (Cargo.lock 実測: version 0.25.10、png/gif/tiff 等のフル codec)。R3 probe が
+# PNG を書き出すのに同じ crate を direct dependency へ昇格するのは、上の notify と
+# 同じ「裁定117 が許す direct 昇格」であって新規の依存ではない。png codec だけ要る
+# ので default-features は切る。
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# ---------------------------------------------------------------------------
+# Motolii 自身(旧 workspace からの移植。再実装ではない)
+# ---------------------------------------------------------------------------
+motolii-core = { path = "core/motolii-core" }
+motolii-eval = { path = "core/motolii-eval" }
+motolii-store = { path = "core/motolii-store" }
+motolii-testkit = { path = "core/motolii-testkit" }
+motolii-compositor = { path = "engine/motolii-compositor" }
+motolii-engine = { path = "engine/motolii-engine" }
+motolii-export = { path = "engine/motolii-export" }
+motolii-media = { path = "engine/motolii-media" }
+motolii-vector = { path = "engine/motolii-vector" }
+
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+thiserror = "2"
+
+# 移植した crate の dev-dependencies(不変量試験をそのまま持ってくるため)
+proptest = "1"
+serde_json = "1"
+
+# 旧 workspace の build-speed 調査(../docs/reviews/2026-08-19-build-speed-investigation.md)の採用値。
+# 16GB RAM で swap 2.3GB / pageout 223万回が出たのは debug 情報が stock 完全だったため。
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.test]
+debug = "line-tables-only"

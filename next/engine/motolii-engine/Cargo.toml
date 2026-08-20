@@ -1,0 +1,15 @@
+[package]
+name = "motolii-engine"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+motolii-compositor.workspace = true
+motolii-core.workspace = true
+motolii-media.workspace = true
+motolii-store.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+motolii-testkit.workspace = true

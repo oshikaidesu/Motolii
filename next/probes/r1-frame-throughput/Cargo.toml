@@ -1,0 +1,11 @@
+[package]
+name = "r1-frame-throughput"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+motolii-compositor.workspace = true
+motolii-engine.workspace = true
+motolii-store.workspace = true

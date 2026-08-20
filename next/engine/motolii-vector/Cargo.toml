@@ -1,0 +1,19 @@
+# tiny-skia を workspace.dependencies へ足していないのは、この crate 以外に利用者が
+# 居ないため(軸4「抽象を先に作らない」)。2人目が現れた日に上げる。
+#
+# **依存は1本も増えていない**: tiny-skia 0.11.4 は既に `next/Cargo.lock` に居る
+# (`iced_tiny_skia` = iced 自身の software renderer が引いている)。
+[package]
+name = "motolii-vector"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# `png-format` を切ってあるのは、既存グラフの tiny-skia が png を引いていないため。
+# 既定のまま引くと png 0.17 が lock へ増える — 出す物は RGBA8 の生バイトなので要らない。
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
+thiserror.workspace = true
+# layer-meta 束: `Shape` を Document の component として保存するために足した。
+# 依存は増えない — `serde` は既に workspace 全体で引いている(`Cargo.lock` は変わらない)。
+serde.workspace = true
