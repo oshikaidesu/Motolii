@@ -3,9 +3,9 @@
 //! 見るのは背骨1(書き口が1箇所)と M13(拒否が必ず出る)と、
 //! **描画キャッシュが `revision()` で正しく落ちること**。
 
-use motolii_shell::{Message, Shell};
 use motolii_shell::timeline_pane::{self, Hit, RowProjection};
 use motolii_shell::tokens::{Colors, Dimensions};
+use motolii_shell::{Message, Shell};
 
 fn shell() -> Shell {
     Shell::new().0
@@ -53,17 +53,29 @@ fn frame_cache_follows_revision_and_playhead() {
 
     // 同じ入力なら描き直さない。
     shell.update(Message::Select(motolii_store::LayerId(1)));
-    assert_eq!(shell.frame_token(), Some(first.clone()), "選択だけで描き直している");
+    assert_eq!(
+        shell.frame_token(),
+        Some(first.clone()),
+        "選択だけで描き直している"
+    );
 
     // 再生位置が動いたら描き直す。
     shell.update(Message::ScrubTo(10));
-    assert_ne!(shell.frame_token(), Some(first.clone()), "scrub で描き直していない");
+    assert_ne!(
+        shell.frame_token(),
+        Some(first.clone()),
+        "scrub で描き直していない"
+    );
 
     // undo で Document が戻ったら描き直す(store 世代は変わらないので
     // `revision()` が edit 位置も見ていないとここが落ちる)。
     let scrubbed = shell.frame_token().expect("frame");
     shell.update(Message::Undo);
-    assert_ne!(shell.frame_token(), Some(scrubbed), "undo で描き直していない");
+    assert_ne!(
+        shell.frame_token(),
+        Some(scrubbed),
+        "undo で描き直していない"
+    );
 }
 
 /// **核の一周の前半** — 落とす → 素材が立つ → Stage に絵が出る。
@@ -190,7 +202,11 @@ fn timeline_rows_reflect_layer_count_and_selection() {
     assert_eq!(rows.len(), 3, "層3枚の行が立たない");
     // `AddLayer` は置いた layer を選択する(lib.rs)ので、この時点で最後に足した
     // 行だけが selected のはず — Timeline の投影が同じ Session を読めているかの確認。
-    let selected_after_add: Vec<_> = rows.iter().filter(|row| row.selected).map(|row| row.id).collect();
+    let selected_after_add: Vec<_> = rows
+        .iter()
+        .filter(|row| row.selected)
+        .map(|row| row.id)
+        .collect();
     assert_eq!(
         selected_after_add,
         vec![rows[2].id],
@@ -312,19 +328,20 @@ fn dimension_tokens_reload_when_the_file_changes() {
     let dir = motolii_testkit::tmp_dir("shell-tokens-dims");
     let path = dir.join("dimensions.json");
 
-    std::fs::write(
-        &path,
-        r#"{"row_height": 24, "transport_band": 32, "body_text": 14, "small_text": 12}"#,
-    )
-    .unwrap();
+    let full = |row_height: i32| {
+        format!(
+            r#"{{"row_height": {row_height}, "transport_band": 32, "title_text": 15,
+                "body_text": 14, "caption_text": 12, "micro_text": 9,
+                "spacing_xs": 2, "spacing_s": 4, "spacing_m": 8, "spacing_l": 12,
+                "border_width": 1.0, "panel_header_height": 29}}"#
+        )
+    };
+
+    std::fs::write(&path, full(24)).unwrap();
     let dims = Dimensions::load_from_path(&path).expect("dimensions.json を読めない");
     assert_eq!(dims.row_height, 24.0, "変更後の値を読めていない");
 
-    std::fs::write(
-        &path,
-        r#"{"row_height": 18, "transport_band": 32, "body_text": 14, "small_text": 12}"#,
-    )
-    .unwrap();
+    std::fs::write(&path, full(18)).unwrap();
     let dims = Dimensions::load_from_path(&path).expect("dimensions.json を読めない");
     assert_eq!(
         dims.row_height, 18.0,
@@ -351,5 +368,73 @@ fn color_tokens_load_from_the_single_source_of_truth() {
         (colors.text_primary.r - 0.9412).abs() < 0.001,
         "text.primary が正本 JSON の値と一致しない: {:?}",
         colors.text_primary
+    );
+}
+
+/// **正本ファイルが実際に語彙拡張の全フィールドを持つ**(json の `_note_*` は
+/// serde が無視するだけで、値そのものは全キー要求どおり読めること)。
+#[test]
+fn dimensions_json_source_of_truth_has_the_full_vocabulary() {
+    let dims = Dimensions::load_from_path(&Dimensions::debug_source_path())
+        .expect("tokens/dimensions.json を読めない");
+    assert_eq!(dims.row_height, 20.0);
+    assert_eq!(dims.transport_band, 30.0);
+    assert!(
+        dims.title_text > dims.body_text,
+        "title は body より大きいはず"
+    );
+    assert!(
+        dims.body_text > dims.caption_text && dims.caption_text > dims.micro_text,
+        "type scale が title>body>caption>micro の順になっていない: {dims:?}"
+    );
+    assert!(
+        dims.spacing_xs < dims.spacing_s
+            && dims.spacing_s < dims.spacing_m
+            && dims.spacing_m < dims.spacing_l,
+        "spacing scale が xs<s<m<l の順になっていない: {dims:?}"
+    );
+    assert!(dims.border_width > 0.0, "罫線幅が0以下");
+    assert!(
+        dims.panel_header_height > dims.row_height,
+        "panel header が行高より低い"
+    );
+}
+
+/// 状態: 選択・無効は正本 JSON に無いロールなので**近縁色から導出**している
+/// (発注書の指示)。導出結果が hover / muted と別の色になっていることを見る
+/// — 「導出したつもりが既存ロールのコピーだった」事故を防ぐ。
+#[test]
+fn derived_state_colors_are_distinct_from_their_neighbors() {
+    let colors = Colors::default();
+    assert_ne!(
+        colors.state_selected, colors.surface_hover,
+        "選択の色が hover と同じ — 状態を区別できない"
+    );
+    assert_ne!(
+        colors.state_disabled, colors.text_muted,
+        "無効の色が muted と同じ — 状態を区別できない"
+    );
+    // 導出式(`derive_state_colors`)が Default と `parse()` の両方で同じ式を通る
+    // こと(2箇所で別の式にならない事故を防ぐ)。`Default` の元値は JSON の
+    // スナップショット(4桁丸め)であって同一 f64 ではないので、既存の
+    // `color_tokens_load_from_the_single_source_of_truth` と同じ許容誤差で比べる。
+    let parsed = Colors::load_from_path(&Colors::debug_source_path())
+        .expect("ui/motolii-tokens/sources/motolii-dark.json を読めない");
+    let close = |a: f32, b: f32| (a - b).abs() < 0.001;
+    assert!(
+        close(colors.state_selected.r, parsed.state_selected.r)
+            && close(colors.state_selected.g, parsed.state_selected.g)
+            && close(colors.state_selected.b, parsed.state_selected.b),
+        "Default と正本 JSON 読み込みで state_selected が食い違う: {:?} vs {:?}",
+        colors.state_selected,
+        parsed.state_selected
+    );
+    assert!(
+        close(colors.state_disabled.r, parsed.state_disabled.r)
+            && close(colors.state_disabled.g, parsed.state_disabled.g)
+            && close(colors.state_disabled.b, parsed.state_disabled.b),
+        "Default と正本 JSON 読み込みで state_disabled が食い違う: {:?} vs {:?}",
+        colors.state_disabled,
+        parsed.state_disabled
     );
 }

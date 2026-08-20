@@ -22,10 +22,12 @@ use motolii_store::{
     Revision, StoreView,
 };
 
+pub mod fixture;
+pub mod screenshot;
 pub mod timeline_pane;
 pub mod tokens;
 
-use tokens::Tokens;
+use tokens::{Colors, Dimensions, Tokens};
 
 /// front だけが持つ状態。**Document の写しは1つも入れないこと**。
 #[derive(Debug, Clone)]
@@ -74,7 +76,13 @@ pub enum Message {
 struct RenderedFrame {
     revision: Revision,
     playhead: i64,
+    width: u32,
+    height: u32,
     handle: image::Handle,
+    /// `handle` と同じ画素の生 RGBA。**screenshot 器具専用**(`screenshot.rs`)—
+    /// 通常描画は `handle` だけで足りる(iced の `image::Handle` から画素を
+    /// 取り戻す公開 API が無いため、この用途だけのために複製して持つ)。
+    rgba: Vec<u8>,
 }
 
 pub struct Shell {
@@ -118,6 +126,31 @@ impl Shell {
             },
             Task::none(),
         )
+    }
+
+    /// `--fixture` 起動が使う口。**トンマナ検分の器具**(発注書)— `fixture::build()`
+    /// が既存 Intent(`apply_all`)だけで組んだ Document を、通常の `new()` と同じ形で
+    /// `Shell` へ包む。`update()` を経由しない点だけが `new()` と違う(初期状態の
+    /// 組み立ては元々 `new()` も `doc.apply` を直に呼んでおり、同じ扱い)。
+    pub fn new_fixture() -> (Self, Task<Message>) {
+        let built = fixture::build();
+        let engine = Engine::new().expect("GPU を用意できない");
+        let mut shell = Self {
+            doc: built.doc,
+            session: Session {
+                playhead: built.playhead,
+                selection: Some(built.selected),
+            },
+            engine,
+            frame: None,
+            status: Some(built.status),
+            pending_drops: Vec::new(),
+            tokens: Tokens::load(),
+        };
+        // `update()` を経由しないので、通常なら `update` の末尾が呼ぶ
+        // `refresh_frame` をここで代わりに呼ぶ(Stage を空のまま起動しない、M17)。
+        shell.refresh_frame();
+        (shell, Task::none())
     }
 
     pub fn title(&self) -> String {
@@ -252,7 +285,11 @@ impl Shell {
             }
         }
         if !rejected.is_empty() {
-            self.status = Some(format!("受け取れない素材 {}件 — {}", rejected.len(), rejected.join(" / ")));
+            self.status = Some(format!(
+                "受け取れない素材 {}件 — {}",
+                rejected.len(),
+                rejected.join(" / ")
+            ));
         }
     }
 
@@ -287,10 +324,36 @@ impl Shell {
             .map(|frame| (frame.revision.clone(), frame.playhead))
     }
 
+    /// 今の comp 設定。**screenshot 器具**が Stage の letterbox を組むのに使う
+    /// (`timeline_pane::TimelinePane::new` も同じ `composition()` 呼び出しをする)。
+    pub fn composition(&self) -> Option<Composition> {
+        self.doc.view().composition().ok().flatten()
+    }
+
+    /// 今の Session(選択・再生位置)。**読むだけ** — `Session` 自体のフィールドは
+    /// pub だが、書ける口は `Message` 経由の `update()` だけ。
+    pub fn session(&self) -> &Session {
+        &self.session
+    }
+
+    /// 描き上がった Stage フレームの生 RGBA。**screenshot 器具専用**
+    /// (`screenshot.rs`)— 通常描画は `image::Handle` を持つ `stage_pane` を通る。
+    pub fn frame_rgba(&self) -> Option<(u32, u32, &[u8])> {
+        self.frame
+            .as_ref()
+            .map(|frame| (frame.width, frame.height, frame.rgba.as_slice()))
+    }
+
     /// 今の Timeline の行。運転席が「層3枚の行が立つ」「選択が行と一致する」を
     /// 確かめる口(pane 自身が使う投影と同じ関数を呼ぶ)。
     pub fn timeline_rows(&self) -> Vec<timeline_pane::RowProjection> {
         timeline_pane::rows(&self.doc.view(), &self.session)
+    }
+
+    /// 今のマーカー一覧。**screenshot 器具**が Timeline のマーカー線を描くのに使う
+    /// (`timeline_pane::TimelinePane::new` も同じ `markers()` 呼び出しをする)。
+    pub fn markers(&self) -> Vec<motolii_store::Marker> {
+        self.doc.view().markers().unwrap_or_default()
     }
 
     /// 今のデザイン値。運転席がトークン再読込を確かめる口。
@@ -301,32 +364,39 @@ impl Shell {
     pub fn view(&self) -> Element<'_, Message> {
         // pane が受け取るのは不変の投影だけ。
         let store = self.doc.view();
-        let timeline = timeline_pane::TimelinePane::new(
-            &store,
-            &self.session,
-            self.tokens.dims,
-            self.tokens.colors,
-        );
+        let dims = self.tokens.dims;
+        let colors = self.tokens.colors;
+        let timeline = timeline_pane::TimelinePane::new(&store, &self.session, dims, colors);
 
         column![
             self.header(),
-            stage_pane(self.frame.as_ref()),
+            stage_pane(self.frame.as_ref(), dims, colors),
             timeline.view(),
-            transport(&self.session, &store),
-            status_band(self.status.as_deref(), &self.doc),
+            transport(&self.session, &store, dims, colors),
+            status_band(self.status.as_deref(), &self.doc, dims, colors),
         ]
-        .spacing(8)
-        .padding(12)
+        .spacing(dims.spacing_m)
+        .padding(dims.spacing_l)
         .into()
     }
 
     fn header(&self) -> Element<'_, Message> {
+        let dims = self.tokens.dims;
+        let colors = self.tokens.colors;
         row![
-            button("Undo").on_press_maybe(self.doc.can_undo().then_some(Message::Undo)),
-            button("Redo").on_press_maybe(self.doc.can_redo().then_some(Message::Redo)),
-            button("+ Layer").on_press(Message::AddLayer),
+            button(text("Undo").size(dims.body_text))
+                .style(move |_theme, status| button_style(dims, colors, status))
+                .on_press_maybe(self.doc.can_undo().then_some(Message::Undo)),
+            button(text("Redo").size(dims.body_text))
+                .style(move |_theme, status| button_style(dims, colors, status))
+                .on_press_maybe(self.doc.can_redo().then_some(Message::Redo)),
+            button(text("+ Layer").size(dims.body_text))
+                .style(move |_theme, status| button_style(dims, colors, status))
+                .on_press(Message::AddLayer),
         ]
-        .spacing(8)
+        .spacing(dims.spacing_m)
+        .height(Length::Fixed(dims.panel_header_height))
+        .align_y(iced::alignment::Vertical::Center)
         .into()
     }
 
@@ -361,7 +431,14 @@ impl Shell {
                 self.frame = Some(RenderedFrame {
                     revision,
                     playhead,
-                    handle: image::Handle::from_rgba(composition.width, composition.height, rgba),
+                    width: composition.width,
+                    height: composition.height,
+                    handle: image::Handle::from_rgba(
+                        composition.width,
+                        composition.height,
+                        rgba.clone(),
+                    ),
+                    rgba,
                 });
             }
             Err(error) => {
@@ -377,21 +454,44 @@ impl Shell {
 // 取らない**。書ける物を持たない。`timeline_pane::TimelinePane` も同じ制約。
 // ---------------------------------------------------------------------------
 
-fn stage_pane(frame: Option<&RenderedFrame>) -> Element<'_, Message> {
+fn stage_pane(
+    frame: Option<&RenderedFrame>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'_, Message> {
     let body: Element<'_, Message> = match frame {
         Some(frame) => image(frame.handle.clone())
             .width(Length::Fill)
             .height(Length::Fill)
             .into(),
-        None => text("comp がまだ無い").into(),
+        None => text("comp がまだ無い")
+            .size(dims.body_text)
+            .color(colors.text_muted)
+            .into(),
     };
+    // letterbox は neutral dark(D8: 装飾 gradient 禁止・余白は neutral)。raw 値ではなく
+    // token 経由の面色 + 罫線幅。
     container(body)
         .width(Length::Fill)
         .height(Length::FillPortion(3))
+        .style(move |_theme| container::Style {
+            background: Some(iced::Background::Color(colors.surface_app)),
+            border: iced::Border {
+                color: colors.border_default,
+                width: dims.border_width,
+                radius: 0.0.into(),
+            },
+            ..container::Style::default()
+        })
         .into()
 }
 
-fn transport<'a>(session: &Session, store: &StoreView<'a>) -> Element<'a, Message> {
+fn transport<'a>(
+    session: &Session,
+    store: &StoreView<'a>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'a, Message> {
     let last = store
         .composition()
         .ok()
@@ -400,20 +500,60 @@ fn transport<'a>(session: &Session, store: &StoreView<'a>) -> Element<'a, Messag
         .unwrap_or(0);
 
     row![
-        text(format!("frame {}", session.playhead)),
+        text(format!("frame {}", session.playhead))
+            .size(dims.body_text)
+            .color(colors.action_active),
         slider(0..=last, session.playhead as i32, |frame| {
             Message::ScrubTo(i64::from(frame))
         }),
     ]
-    .spacing(8)
+    .spacing(dims.spacing_m)
+    .height(Length::Fixed(dims.transport_band))
+    .align_y(iced::alignment::Vertical::Center)
     .into()
 }
 
-fn status_band<'a>(status: Option<&str>, doc: &Document) -> Element<'a, Message> {
+fn status_band<'a>(
+    status: Option<&str>,
+    doc: &Document,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'a, Message> {
     let layers = doc.view().layers().len();
-    let message = match status {
-        Some(status) => status.to_owned(),
-        None => format!("layer {layers} / edit {}", doc.edit_head()),
+    // 拒否・警告は status 帯の警告色(D2/D7: 文脈連動の status 帯文法)。
+    // 通常の要約(layer数/edit位置)は弱文字 — 警告と同格に見せない。
+    let (message, color) = match status {
+        Some(status) => (status.to_owned(), colors.status_warning),
+        None => (
+            format!("layer {layers} / edit {}", doc.edit_head()),
+            colors.text_muted,
+        ),
     };
-    text(message).into()
+    text(message).size(dims.caption_text).color(color).into()
+}
+
+/// header の3ボタン共通スタイル。**意味色ロール経由**(raw 値の直書き禁止) —
+/// hover/pressed/disabled をそれぞれ別ロールで塗り分ける(状態: hover・選択・無効)。
+fn button_style(dims: Dimensions, colors: Colors, status: button::Status) -> button::Style {
+    let background = match status {
+        button::Status::Hovered => colors.surface_hover,
+        button::Status::Pressed => colors.state_selected,
+        button::Status::Disabled => colors.surface_panel,
+        button::Status::Active => colors.surface_raised,
+    };
+    let text_color = if status == button::Status::Disabled {
+        colors.state_disabled
+    } else {
+        colors.text_primary
+    };
+    button::Style {
+        background: Some(iced::Background::Color(background)),
+        text_color,
+        border: iced::Border {
+            color: colors.border_default,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        ..button::Style::default()
+    }
 }

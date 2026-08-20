@@ -17,28 +17,56 @@ use std::path::{Path, PathBuf};
 use iced::Color;
 
 /// 寸法トークン。**Ableton 実測**(`docs/reviews/2026-08-19-ableton-density-measurements.md`)。
+/// 実測に無い値の導出根拠は `tokens/dimensions.json` の `_note_*` キーに書く
+/// (JSON はコメントを持てないため)。
 #[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
 pub struct Dimensions {
     /// Timeline の行高。
     pub row_height: f32,
     /// transport/Control 帯の高さ。
     pub transport_band: f32,
-    /// 本文相当の文字サイズ。
+    /// type scale: panel header・section title 相当。
+    pub title_text: f32,
+    /// type scale: 本文相当の文字サイズ。
     pub body_text: f32,
-    /// 小さめの文字サイズ(caption 相当)。
-    pub small_text: f32,
+    /// type scale: 小さめの文字サイズ(caption 相当)。旧 `small_text`
+    /// (型スケール語彙 title/body/caption/micro への統一、2026-08-20)。
+    pub caption_text: f32,
+    /// type scale: 最小の可読文字サイズ(status 帯の脇役文言等)。
+    pub micro_text: f32,
+    /// spacing scale の最小段。
+    pub spacing_xs: f32,
+    /// spacing scale の小段。
+    pub spacing_s: f32,
+    /// spacing scale の中段。
+    pub spacing_m: f32,
+    /// spacing scale の大段。
+    pub spacing_l: f32,
+    /// 罫線幅(ui-visual-language: フラット・細罫線)。
+    pub border_width: f32,
+    /// panel header 帯の高さ。
+    pub panel_header_height: f32,
 }
 
 impl Default for Dimensions {
     fn default() -> Self {
         // ファイルが読めない・壊れている時の最終防波堤(M16: render 失敗でも画面を
-        // 空にしない、と同じ理由)。値は正本 JSON と同じ Ableton 実測 — 正本が2つに
-        // 増えるわけではなく、正本を読めなかった時だけ使う既定値。
+        // 空にしない、と同じ理由)。値は正本 JSON と同じ Ableton 実測(または
+        // dimensions.json の `_note_*` と同じ導出根拠) — 正本が2つに増えるわけでは
+        // なく、正本を読めなかった時だけ使う既定値。
         Self {
             row_height: 20.0,
             transport_band: 30.0,
+            title_text: 15.0,
             body_text: 13.0,
-            small_text: 11.0,
+            caption_text: 11.0,
+            micro_text: 9.0,
+            spacing_xs: 2.0,
+            spacing_s: 4.0,
+            spacing_m: 8.0,
+            spacing_l: 12.0,
+            border_width: 1.0,
+            panel_header_height: 29.0,
         }
     }
 }
@@ -62,11 +90,16 @@ impl Dimensions {
 
 /// 色トークン。**正本は `ui/motolii-tokens/sources/motolii-dark.json`**(DTCG 形式)。
 /// ここへ色そのものを複製しない — 読む口だけを持つ。
+///
+/// `state_selected`/`state_disabled` は正本 JSON に対応するロールが無い
+/// (`ui/motolii-tokens` はこのレーンの変更範囲外 — shell のみ)。近縁色から
+/// [`derive_state_colors`] で導出する(発明ではなく、正本ロールの合成)。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Colors {
     pub surface_app: Color,
     pub surface_panel: Color,
     pub surface_raised: Color,
+    /// 状態: hover(正本ロール `surface.hover`)。
     pub surface_hover: Color,
     pub border_default: Color,
     pub border_strong: Color,
@@ -74,37 +107,75 @@ pub struct Colors {
     pub text_secondary: Color,
     pub text_muted: Color,
     pub focus: Color,
+    /// accent(正本ロール `action.active`)。
     pub action_active: Color,
     pub data: Color,
     pub shape: Color,
+    /// status 帯の警告系(正本ロール `status.warning`)。
     pub status_warning: Color,
     pub status_ok: Color,
     /// Timeline pane 専用のアクセント色(`way.timeline`)。他 pane も同族の `way.*`
     /// を同じ要領で足せる。
     pub way_timeline: Color,
+    /// 状態: 選択。正本に無いロール — `surface.raised` を `action.active` へ 18%
+    /// ブレンドして導出(hover の中立グレーと区別が付く、accent 味の選択強調)。
+    pub state_selected: Color,
+    /// 状態: 無効。正本に無いロール — `text.muted` を `surface.panel` へ 40%
+    /// ブレンドして導出(text.muted より一段暗く、読めるが「押せない」と分かる)。
+    pub state_disabled: Color,
+}
+
+/// `surface.raised`/`text.muted`/`surface.panel`/`action.active` から
+/// `state_selected`/`state_disabled` を合成する。**正本 JSON にも [`Default`] にも
+/// 同じ式を使う**(2箇所で別の値にならないようにするための唯一の実装)。
+fn derive_state_colors(
+    surface_raised: Color,
+    surface_panel: Color,
+    text_muted: Color,
+    action_active: Color,
+) -> (Color, Color) {
+    let selected = blend(surface_raised, action_active, 0.18);
+    let disabled = blend(text_muted, surface_panel, 0.40);
+    (selected, disabled)
+}
+
+fn blend(from: Color, to: Color, t: f32) -> Color {
+    Color::from_rgb(
+        from.r + (to.r - from.r) * t,
+        from.g + (to.g - from.g) * t,
+        from.b + (to.b - from.b) * t,
+    )
 }
 
 impl Default for Colors {
     fn default() -> Self {
         // Dimensions と同じ理由の最終防波堤。数値は motolii-dark.json のスナップショットだが
         // **正本はあくまで JSON 側**(読めた時は常にそちらを使う)。
+        let surface_raised = Color::from_rgb(0.1333, 0.1333, 0.1333);
+        let surface_panel = Color::from_rgb(0.1020, 0.1020, 0.1020);
+        let text_muted = Color::from_rgb(0.5725, 0.5725, 0.5725);
+        let action_active = Color::from_rgb(0.8471, 0.7098, 0.4549);
+        let (state_selected, state_disabled) =
+            derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
         Self {
             surface_app: Color::from_rgb(0.0784, 0.0784, 0.0784),
-            surface_panel: Color::from_rgb(0.1020, 0.1020, 0.1020),
-            surface_raised: Color::from_rgb(0.1333, 0.1333, 0.1333),
+            surface_panel,
+            surface_raised,
             surface_hover: Color::from_rgb(0.1725, 0.1725, 0.1725),
             border_default: Color::from_rgb(0.2314, 0.2314, 0.2314),
             border_strong: Color::from_rgb(0.4078, 0.4078, 0.4078),
             text_primary: Color::from_rgb(0.9412, 0.9412, 0.9412),
             text_secondary: Color::from_rgb(0.7765, 0.7765, 0.7765),
-            text_muted: Color::from_rgb(0.5725, 0.5725, 0.5725),
+            text_muted,
             focus: Color::from_rgb(0.9412, 0.9412, 0.9412),
-            action_active: Color::from_rgb(0.8471, 0.7098, 0.4549),
+            action_active,
             data: Color::from_rgb(0.4706, 0.7098, 0.6902),
             shape: Color::from_rgb(0.6667, 0.6275, 0.8157),
             status_warning: Color::from_rgb(0.8824, 0.5412, 0.4275),
             status_ok: Color::from_rgb(0.5647, 0.6980, 0.5294),
             way_timeline: Color::from_rgb(0.8000, 0.5843, 0.5294),
+            state_selected,
+            state_disabled,
         }
     }
 }
@@ -114,30 +185,39 @@ impl Colors {
         let root: serde_json::Value =
             serde_json::from_str(json).map_err(|error| error.to_string())?;
         let color = root.get("color").ok_or("color 節が無い")?;
+        let surface_raised = color_at(color, &["surface", "raised"])?;
+        let surface_panel = color_at(color, &["surface", "panel"])?;
+        let text_muted = color_at(color, &["text", "muted"])?;
+        let action_active = color_at(color, &["action", "active"])?;
+        let (state_selected, state_disabled) =
+            derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
         Ok(Self {
             surface_app: color_at(color, &["surface", "app"])?,
-            surface_panel: color_at(color, &["surface", "panel"])?,
-            surface_raised: color_at(color, &["surface", "raised"])?,
+            surface_panel,
+            surface_raised,
             surface_hover: color_at(color, &["surface", "hover"])?,
             border_default: color_at(color, &["border", "default"])?,
             border_strong: color_at(color, &["border", "strong"])?,
             text_primary: color_at(color, &["text", "primary"])?,
             text_secondary: color_at(color, &["text", "secondary"])?,
-            text_muted: color_at(color, &["text", "muted"])?,
+            text_muted,
             focus: color_at(color, &["focus"])?,
-            action_active: color_at(color, &["action", "active"])?,
+            action_active,
             data: color_at(color, &["data"])?,
             shape: color_at(color, &["shape"])?,
             status_warning: color_at(color, &["status", "warning"])?,
             status_ok: color_at(color, &["status", "ok"])?,
             way_timeline: color_at(color, &["way", "timeline"])?,
+            state_selected,
+            state_disabled,
         })
     }
 
     /// debug ビルドでの読み込み元。**正本は1つ** — `ui/motolii-tokens` 配下のこのファイル
     /// をそのまま読み、コピーは作らない。
     pub fn debug_source_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../ui/motolii-tokens/sources/motolii-dark.json")
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../ui/motolii-tokens/sources/motolii-dark.json")
     }
 
     pub fn load_from_path(path: &Path) -> Result<Self, String> {
@@ -199,10 +279,9 @@ impl Tokens {
     pub fn load() -> Self {
         #[cfg(debug_assertions)]
         {
-            let dims = Dimensions::load_from_path(&Dimensions::debug_source_path())
-                .unwrap_or_default();
-            let colors =
-                Colors::load_from_path(&Colors::debug_source_path()).unwrap_or_default();
+            let dims =
+                Dimensions::load_from_path(&Dimensions::debug_source_path()).unwrap_or_default();
+            let colors = Colors::load_from_path(&Colors::debug_source_path()).unwrap_or_default();
             Self { dims, colors }
         }
         #[cfg(not(debug_assertions))]
@@ -232,53 +311,56 @@ pub fn watch_subscription() -> iced::Subscription<()> {
 
 #[cfg(debug_assertions)]
 fn watch_stream() -> impl iced::futures::Stream<Item = ()> {
-    iced::stream::channel(8, |mut output: iced::futures::channel::mpsc::Sender<()>| async move {
-        let dims_path = Dimensions::debug_source_path();
-        let colors_path = Colors::debug_source_path();
+    iced::stream::channel(
+        8,
+        |mut output: iced::futures::channel::mpsc::Sender<()>| async move {
+            let dims_path = Dimensions::debug_source_path();
+            let colors_path = Colors::debug_source_path();
 
-        // notify の watcher は監視対象スレッドでコールバックを呼ぶ実装のため、
-        // 受信は専用の OS スレッドへ逃がす(async executor を止めない)。
-        // `try_send` は poll を要らないので、executor を挟まず同期コールバックから
-        // 直接呼べる — 詰まっていたら単に取りこぼす(M16: 見張りが完璧でなくても
-        // shell 自体は止めない)。
-        std::thread::spawn(move || {
-            use notify::Watcher;
+            // notify の watcher は監視対象スレッドでコールバックを呼ぶ実装のため、
+            // 受信は専用の OS スレッドへ逃がす(async executor を止めない)。
+            // `try_send` は poll を要らないので、executor を挟まず同期コールバックから
+            // 直接呼べる — 詰まっていたら単に取りこぼす(M16: 見張りが完璧でなくても
+            // shell 自体は止めない)。
+            std::thread::spawn(move || {
+                use notify::Watcher;
 
-            let (tx, rx) = std::sync::mpsc::channel();
-            let mut watcher = match notify::recommended_watcher(tx) {
-                Ok(watcher) => watcher,
-                // 見張れなくても shell 自体は動く(M16)。token は起動時の値のまま。
-                Err(_) => return,
-            };
-            if watcher
-                .watch(&dims_path, notify::RecursiveMode::NonRecursive)
-                .is_err()
-            {
-                return;
-            }
-            if watcher
-                .watch(&colors_path, notify::RecursiveMode::NonRecursive)
-                .is_err()
-            {
-                return;
-            }
-
-            for event in rx {
-                if event.is_err() {
-                    continue;
+                let (tx, rx) = std::sync::mpsc::channel();
+                let mut watcher = match notify::recommended_watcher(tx) {
+                    Ok(watcher) => watcher,
+                    // 見張れなくても shell 自体は動く(M16)。token は起動時の値のまま。
+                    Err(_) => return,
+                };
+                if watcher
+                    .watch(&dims_path, notify::RecursiveMode::NonRecursive)
+                    .is_err()
+                {
+                    return;
                 }
-                if let Err(error) = output.try_send(()) {
-                    // 詰まっているだけ(容量超過)なら次の event を待てばよい。
-                    // 受け手(Shell)がもう無い(disconnected)なら見張りを終える。
-                    if error.is_disconnected() {
-                        return;
+                if watcher
+                    .watch(&colors_path, notify::RecursiveMode::NonRecursive)
+                    .is_err()
+                {
+                    return;
+                }
+
+                for event in rx {
+                    if event.is_err() {
+                        continue;
+                    }
+                    if let Err(error) = output.try_send(()) {
+                        // 詰まっているだけ(容量超過)なら次の event を待てばよい。
+                        // 受け手(Shell)がもう無い(disconnected)なら見張りを終える。
+                        if error.is_disconnected() {
+                            return;
+                        }
                     }
                 }
-            }
-        });
+            });
 
-        // 実際の送信は上の OS スレッドが行う。この Future 自体は消費されないまま
-        // stream を生かしておくためだけに待ち続ける。
-        std::future::pending::<()>().await;
-    })
+            // 実際の送信は上の OS スレッドが行う。この Future 自体は消費されないまま
+            // stream を生かしておくためだけに待ち続ける。
+            std::future::pending::<()>().await;
+        },
+    )
 }
