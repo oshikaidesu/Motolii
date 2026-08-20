@@ -1,8 +1,9 @@
 //! wraps: iced — front。**store への query の投影**であって、Document の写しを持たない。
 //!
 //! 背骨1 を型で作る:
-//! - **書き口は [`Shell::update`] の1箇所だけ**。pane 関数は `StoreView`(不変)と
-//!   `&Session` しか受け取らないので、**書ける物を持っていない**
+//! - **書き口は [`Shell::update`] の1箇所だけ**。pane 関数は `StoreView`(不変)・
+//!   `&Session`・[`tokens::Tokens`](裁定117、寸法・色。Document 由来ではなく書けない)
+//!   しか受け取らないので、**書ける物を持っていない**
 //! - `view(&self)` が `&self` を取るので、描画中に Document を触る道が無い
 //!
 //! Stage は **CPU 経路**(合成結果の RGBA を `image` widget へ渡す)。
@@ -20,6 +21,11 @@ use motolii_store::{
     Composition, Document, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, RationalTime,
     Revision, StoreView,
 };
+
+pub mod timeline_pane;
+pub mod tokens;
+
+use tokens::Tokens;
 
 /// front だけが持つ状態。**Document の写しは1つも入れないこと**。
 #[derive(Debug, Clone)]
@@ -56,6 +62,9 @@ pub enum Message {
     DropReceived(std::path::PathBuf),
     /// 落下の区切り。次の描画要求が来た時点で、溜めた分を**まとめて1操作**にする。
     FlushDrops,
+    /// トークンファイル(寸法・色)が変わった。**debug ビルドでしか実際には届かない**
+    /// (裁定117)— release は [`tokens::watch_subscription`] が何も発行しない。
+    TokensFileChanged,
 }
 
 /// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
@@ -77,6 +86,8 @@ pub struct Shell {
     status: Option<String>,
     /// 区切りが来るまで溜めておく落下 path。
     pending_drops: Vec<std::path::PathBuf>,
+    /// デザイン値(裁定117)。全 pane がここ経由で寸法・色を読む — raw 値の直書き禁止。
+    tokens: Tokens,
 }
 
 impl Shell {
@@ -103,6 +114,7 @@ impl Shell {
                 frame: None,
                 status: None,
                 pending_drops: Vec::new(),
+                tokens: Tokens::load(),
             },
             Task::none(),
         )
@@ -114,12 +126,15 @@ impl Shell {
 
     /// 窓の事象 → Message。**ここは翻訳だけで、判断を持たない**。
     pub fn subscription(&self) -> iced::Subscription<Message> {
-        iced::window::events().map(|(_id, event)| match event {
+        let window = iced::window::events().map(|(_id, event)| match event {
             iced::window::Event::FileDropped(path) => Message::DropReceived(path),
             // winit は1ファイル1事象で送るので、描画要求を落下の区切りにする。
             // 3本まとめて落として1操作になるのはこのため。
             _ => Message::FlushDrops,
-        })
+        });
+        // debug ビルドのみ実際に発行する(裁定117)。release は `Subscription::none()`。
+        let tokens = tokens::watch_subscription().map(|()| Message::TokensFileChanged);
+        iced::Subscription::batch([window, tokens])
     }
 
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
@@ -145,6 +160,9 @@ impl Shell {
                     let paths = std::mem::take(&mut self.pending_drops);
                     self.admit(paths);
                 }
+            }
+            Message::TokensFileChanged => {
+                self.tokens = Tokens::load();
             }
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
@@ -269,13 +287,31 @@ impl Shell {
             .map(|frame| (frame.revision.clone(), frame.playhead))
     }
 
+    /// 今の Timeline の行。運転席が「層3枚の行が立つ」「選択が行と一致する」を
+    /// 確かめる口(pane 自身が使う投影と同じ関数を呼ぶ)。
+    pub fn timeline_rows(&self) -> Vec<timeline_pane::RowProjection> {
+        timeline_pane::rows(&self.doc.view(), &self.session)
+    }
+
+    /// 今のデザイン値。運転席がトークン再読込を確かめる口。
+    pub fn tokens(&self) -> &Tokens {
+        &self.tokens
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         // pane が受け取るのは不変の投影だけ。
         let store = self.doc.view();
+        let timeline = timeline_pane::TimelinePane::new(
+            &store,
+            &self.session,
+            self.tokens.dims,
+            self.tokens.colors,
+        );
 
         column![
             self.header(),
             stage_pane(self.frame.as_ref()),
+            timeline.view(),
             transport(&self.session, &store),
             status_band(self.status.as_deref(), &self.doc),
         ]
@@ -340,7 +376,8 @@ impl Shell {
 }
 
 // ---------------------------------------------------------------------------
-// pane — **`StoreView`(不変)と `&Session` しか取らない**。書ける物を持たない。
+// pane — **`StoreView`(不変)・`&Session`・`Tokens`(読み取り専用の意匠値)しか
+// 取らない**。書ける物を持たない。`timeline_pane::TimelinePane` も同じ制約。
 // ---------------------------------------------------------------------------
 
 fn stage_pane(frame: Option<&RenderedFrame>) -> Element<'_, Message> {

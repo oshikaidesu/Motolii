@@ -4,6 +4,8 @@
 //! **描画キャッシュが `revision()` で正しく落ちること**。
 
 use motolii_shell::{Message, Shell};
+use motolii_shell::timeline_pane::{self, Hit, RowProjection};
+use motolii_shell::tokens::{Colors, Dimensions};
 
 fn shell() -> Shell {
     Shell::new().0
@@ -170,4 +172,184 @@ fn three_drops_become_one_operation() {
 
     shell.update(Message::Undo);
     assert_eq!(shell.layer_count(), 0, "3本の取り込みが Undo 1回で消えない");
+}
+
+// ---------------------------------------------------------------------------
+// Timeline pane(第1波)
+// ---------------------------------------------------------------------------
+
+/// **層3枚の行が立つ / 選択が行と Session で一致する**。
+#[test]
+fn timeline_rows_reflect_layer_count_and_selection() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+    shell.update(Message::AddLayer);
+    shell.update(Message::AddLayer);
+
+    let rows = shell.timeline_rows();
+    assert_eq!(rows.len(), 3, "層3枚の行が立たない");
+    // `AddLayer` は置いた layer を選択する(lib.rs)ので、この時点で最後に足した
+    // 行だけが selected のはず — Timeline の投影が同じ Session を読めているかの確認。
+    let selected_after_add: Vec<_> = rows.iter().filter(|row| row.selected).map(|row| row.id).collect();
+    assert_eq!(
+        selected_after_add,
+        vec![rows[2].id],
+        "AddLayer 直後の選択が Session と一致しない"
+    );
+
+    let target = rows[0].id;
+    shell.update(Message::Select(target));
+
+    let rows = shell.timeline_rows();
+    let selected: Vec<_> = rows
+        .iter()
+        .filter(|row| row.selected)
+        .map(|row| row.id)
+        .collect();
+    assert_eq!(
+        selected,
+        vec![target],
+        "選択が Timeline の行と Session で一致しない(Stage も同じ Session を読む)"
+    );
+}
+
+/// hidden な層はグレー表現の元になる `hidden` フラグを行が持つ。present(削除)とは
+/// 別物なので、hidden でも present な限り行は立ち続ける。
+#[test]
+fn timeline_rows_carry_hidden_flag_without_dropping_the_row() {
+    let rows = vec![RowProjection {
+        id: motolii_store::LayerId(1),
+        name: String::new(),
+        hidden: true,
+        start: 0,
+        duration: 10,
+        selected: false,
+    }];
+    assert!(rows[0].hidden, "hidden 属性が投影へ届いていない");
+}
+
+/// canvas の click/drag が送る frame 番号を決める**純粋な変換**。Message::ScrubTo が
+/// 実際に playhead を動かし Stage を描き直すことは
+/// `frame_cache_follows_revision_and_playhead` が既に見ている。
+#[test]
+fn timeline_scrub_math_maps_pixel_to_frame() {
+    assert_eq!(timeline_pane::frame_at_x(0.0, 300.0, 300), 0);
+    assert_eq!(timeline_pane::frame_at_x(150.0, 300.0, 300), 150);
+    assert_eq!(timeline_pane::frame_at_x(299.0, 300.0, 300), 299);
+    // canvas の外まで drag しても端で止まる。
+    assert_eq!(timeline_pane::frame_at_x(-50.0, 300.0, 300), 0);
+    assert_eq!(timeline_pane::frame_at_x(1000.0, 300.0, 300), 299);
+    // 空 comp では 0 に落ちる(M16: panic しない)。
+    assert_eq!(timeline_pane::frame_at_x(10.0, 300.0, 0), 0);
+}
+
+/// ルーラー帯は常に scrub、bar の区間だけが選択、同じ行のそれ以外は scrub。
+#[test]
+fn timeline_hit_test_distinguishes_bar_ruler_and_blank_row() {
+    let rows = vec![RowProjection {
+        id: motolii_store::LayerId(1),
+        name: "clip".to_owned(),
+        hidden: false,
+        start: 100,
+        duration: 50,
+        selected: false,
+    }];
+    let width = 300.0;
+    let duration_frames = 300;
+    let ruler_height = 20.0;
+    let row_height = 20.0;
+
+    assert_eq!(
+        timeline_pane::hit_test(
+            iced::Point::new(120.0, 5.0),
+            &rows,
+            ruler_height,
+            row_height,
+            width,
+            duration_frames,
+        ),
+        Hit::Blank,
+        "ルーラー帯は click/drag で常に scrub のはず"
+    );
+
+    // frame 100..150 は 1:1 縮尺(width == duration_frames)なので x も 100..150。
+    assert_eq!(
+        timeline_pane::hit_test(
+            iced::Point::new(120.0, 25.0),
+            &rows,
+            ruler_height,
+            row_height,
+            width,
+            duration_frames,
+        ),
+        Hit::Bar(motolii_store::LayerId(1)),
+        "bar の区間内が選択に化けない"
+    );
+
+    assert_eq!(
+        timeline_pane::hit_test(
+            iced::Point::new(10.0, 25.0),
+            &rows,
+            ruler_height,
+            row_height,
+            width,
+            duration_frames,
+        ),
+        Hit::Blank,
+        "同じ行でも bar の外は行の空白部(scrub)のはず"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// デザイン値の外出し(裁定117)
+// ---------------------------------------------------------------------------
+
+/// **トークンファイル変更で(debug)寸法が変わる**。debug watch が呼ぶのと同じ
+/// `Dimensions::load_from_path` を直接叩く — 実ファイル監視(notify Subscription)は
+/// 非同期の runtime を要るため、ここでは再読込ロジックそのものを headless に縛る。
+#[test]
+fn dimension_tokens_reload_when_the_file_changes() {
+    let dir = motolii_testkit::tmp_dir("shell-tokens-dims");
+    let path = dir.join("dimensions.json");
+
+    std::fs::write(
+        &path,
+        r#"{"row_height": 24, "transport_band": 32, "body_text": 14, "small_text": 12}"#,
+    )
+    .unwrap();
+    let dims = Dimensions::load_from_path(&path).expect("dimensions.json を読めない");
+    assert_eq!(dims.row_height, 24.0, "変更後の値を読めていない");
+
+    std::fs::write(
+        &path,
+        r#"{"row_height": 18, "transport_band": 32, "body_text": 14, "small_text": 12}"#,
+    )
+    .unwrap();
+    let dims = Dimensions::load_from_path(&path).expect("dimensions.json を読めない");
+    assert_eq!(
+        dims.row_height, 18.0,
+        "トークンファイルを書き換えても寸法が変わらない"
+    );
+}
+
+/// 読めない・壊れている時は既定値へ落ちる(M16: 落ちても画面を空にしない)。
+#[test]
+fn dimension_tokens_reject_unreadable_paths() {
+    let missing = std::path::Path::new("/nonexistent/motolii-dimensions-test/dimensions.json");
+    assert!(
+        Dimensions::load_from_path(missing).is_err(),
+        "無い path を読めてしまっている(Shell 側は `unwrap_or_default` で拾う)"
+    );
+}
+
+/// 色は `ui/motolii-tokens/sources/motolii-dark.json` を**そのまま**読む — 複製ではない。
+#[test]
+fn color_tokens_load_from_the_single_source_of_truth() {
+    let colors = Colors::load_from_path(&Colors::debug_source_path())
+        .expect("ui/motolii-tokens/sources/motolii-dark.json を読めない");
+    assert!(
+        (colors.text_primary.r - 0.9412).abs() < 0.001,
+        "text.primary が正本 JSON の値と一致しない: {:?}",
+        colors.text_primary
+    );
 }

@@ -1,0 +1,7 @@
+{
+  "$comment": "寸法トークンの機械可読正本(裁定117)。値は Ableton Live 12 実測から写す — ここで発明しない。出典: docs/reviews/2026-08-19-ableton-density-measurements.md。debug ビルドはこのファイルを直接読み、notify で変更を検知して再読込する。release は include_str! で埋め込み、file I/O は行わない。raw 値の直書きは禁止 — 全 pane は `motolii_shell::tokens::Tokens` 経由でここを読む。",
+  "row_height": 20,
+  "transport_band": 30,
+  "body_text": 13,
+  "small_text": 11
+}

@@ -10,6 +10,12 @@ motolii-core.workspace = true
 motolii-engine.workspace = true
 motolii-media.workspace = true
 motolii-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# デザイン値の外出し(裁定117)。debug ビルドの `tokens::watch_subscription` だけが
+# 実際に使う — 依存グラフには re_renderer 経由で既に入っているので、direct
+# dependency への昇格として扱う(発注書の「新依存は notify の direct 昇格のみ可」)。
+notify = "8"
 
 [dev-dependencies]
 motolii-testkit.workspace = true
