@@ -30,5 +30,7 @@ mod inspector_pixel_fence;
 mod q0_fence;
 #[path = "suite/settings_drive.rs"]
 mod settings_drive;
+#[path = "suite/tonmana_token_fence.rs"]
+mod tonmana_token_fence;
 #[path = "suite/ui_scale_fence.rs"]
 mod ui_scale_fence;
