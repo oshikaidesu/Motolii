@@ -190,3 +190,69 @@ fn to_u8(color: iced::Color) -> [u8; 3] {
     let c = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     [c(color.r), c(color.g), c(color.b)]
 }
+
+/// **本命(red→green の柵)**: `--screenshot` 器具に Inspector 領域が無かった穴
+/// (発注書 OUTCOME)。旧実装(このテスト追加前の `screenshot.rs`)へ当てると
+/// canvas 幅が Stage/Timeline 列(1600px)止まりで Inspector の x 座標
+/// (`inspector_region_x`)が画像の外に出るため、走査ループが1度も回らず
+/// 両フラグが偽のまま fail する。
+///
+/// 実装後は `inspector_pane.rs` と同じ tokens(`surface_panel`=pane 地・
+/// `surface_app`=値セルの窪み・`PROW_HAIRLINE`/`border_default`=区切り線)で
+/// 描いた領域から、(a) hairline 色の画素・(b) 値セルの窪み(`surface_app`、
+/// pane 地の `surface_panel` とは異なる面色)の両方を実測する。
+#[test]
+fn screenshot_draws_the_inspector_region_with_hairlines_and_value_cell_insets() {
+    let shell = fixture();
+    let dims = shell.dims();
+    let colors = shell.tokens().colors;
+    let image = motolii_shell::screenshot::render(&shell);
+
+    let x0 = motolii_shell::screenshot::inspector_region_x(dims).round() as u32;
+    let y0 = motolii_shell::screenshot::inspector_region_top(dims).round() as u32;
+    let width = dims.inspector_panel_width.round() as u32;
+    let height = motolii_shell::screenshot::inspector_region_height(&shell).round() as u32;
+
+    assert!(
+        x0 + width <= image.width(),
+        "Inspector 領域が画像の外にはみ出している(canvas 幅を広げ忘れ): x0={x0} width={width} image.width={}",
+        image.width()
+    );
+    assert!(
+        y0 + height <= image.height(),
+        "Inspector 領域が画像の下にはみ出している: y0={y0} height={height} image.height={}",
+        image.height()
+    );
+
+    let panel = to_u8(colors.surface_panel);
+    let inset = to_u8(colors.surface_app);
+    let raised = to_u8(colors.surface_raised);
+
+    let mut found_panel = false;
+    let mut found_inset = false;
+    let mut found_hairline = false;
+
+    for y in y0..(y0 + height) {
+        for x in x0..(x0 + width) {
+            let pixel = image.get_pixel(x, y);
+            let rgb = [pixel[0], pixel[1], pixel[2]];
+            if rgb == panel {
+                found_panel = true;
+            } else if rgb == inset {
+                found_inset = true;
+            } else if rgb != raised {
+                // panel/inset/raised のどれでもない画素 = hairline(不透明
+                // `border_default` か、`surface_panel` へ blend した
+                // `PROW_HAIRLINE` のどちらか)。
+                found_hairline = true;
+            }
+        }
+    }
+
+    assert!(found_panel, "Inspector pane 地の色(surface_panel)の画素が無い");
+    assert!(
+        found_inset,
+        "値セルの窪み(surface_app、pane 地と異なる面色)の画素が無い"
+    );
+    assert!(found_hairline, "hairline 色の画素が無い(区切り線が描かれていない)");
+}

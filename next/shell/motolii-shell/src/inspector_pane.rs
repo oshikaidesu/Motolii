@@ -534,7 +534,9 @@ use iced::{Element, Length};
 /// この lane の write-set 外なので新ロールを追加しない)。`.cols`/header 等が
 /// 使う不透明 `#1a1a1a`(`Colors::border_default` と同値)より薄い、行同士の
 /// 弱い区切り(裁定137「区切りは面でなく線」)。
-const PROW_HAIRLINE: iced::Color = iced::Color {
+// `pub(crate)`: `screenshot.rs` の検分器具が同じ hairline 色を再利用する
+// (発注書「同じ tokens・同じ読み口から描く」— 別の rgba リテラルを新規発明しない)。
+pub(crate) const PROW_HAIRLINE: iced::Color = iced::Color {
     r: 0.0,
     g: 0.0,
     b: 0.0,
