@@ -263,7 +263,7 @@ layers	solid-layer	sh	Height	採用済	LayerSource::Solid.height。単色は素�
 layers	solid-layer	sw	Width	採用済	LayerSource::Solid.width	width: u32		lottie
 layers	solid-layer	ty	Type	採用済	LayerSource::Solid	Solid {		lottie
 layers	text-layer	@extends	layers/visual-layer	該当なし	継承元			lottie
-layers	text-layer	t	Data	採用済	テキストの中身。語彙は text 群の判断 — layer-meta が持つのは**素の文字列1本だけ**(`Layer:text` component)。範囲スタイル・アニメーター(裁定82/85/92 等)は `text` 発注単位(75行)の仕事で、まだ持たない	SetTextContent	layer-meta	lottie
+layers	text-layer	t	Data	採用済	テキストの中身。語彙は text 群の判断 — layer-meta が土台を敷いた `Layer:text` component は、text 束第1切片で content track・スタイル既定値・フォント参照を持つ形(`TextDocument`)へ広がった(裁定112(k) の後継)。範囲ごとの複数行(runs)はまだ持たない(次切片)	SetTextDocument	layer-meta	lottie
 layers	text-layer	ty	Type	採用済	LayerSource の variant として足す(裁定19)。`LayerSource::Text`(unit variant、shape-layer/ty と同じ理由で中身を持たない)	LayerSource::Text	layer-meta	lottie
 layers	unknown-layer	ty		不採用	仕様外の型を黙って通すのは再生器の規則。LayerSource は閉じた enum で、置けない素材は理由つきで拒否する(M2/M13)			lottie
 layers	visual-layer	@extends	layers/layer	該当なし	継承元			lottie
@@ -570,8 +570,8 @@ styles	stroke-style	@extends	styles/layer-style	該当なし	継承元			lottie
 styles	stroke-style	c	Color	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む			lottie
 styles	stroke-style	s	Size	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む			lottie
 styles	stroke-style	ty	Type	不採用	レイヤスタイルは effect の第二機構。`drop-shadow-style` の5 param が `drop-shadow-effect` と1対1で重なり、両方持つと同じ画の正本が2つになる(裁定59 の形)。effect stack 1本に畳む			lottie
-text	animated-text-document	k	Keyframes	採用予定	content だけの Hold track。Lottie 側も keyframe に i/o が無く**構造でホールドを保証**している		text	lottie
-text	animated-text-document	sid	Slot ID	採用予定	歌詞テンプレートの差し替え口。slots と同じ口に乗せ第二の差し替え機構を作らない		text	lottie
+text	animated-text-document	k	Keyframes	採用済	content だけの Hold track。Lottie 側も keyframe に i/o が無く**構造でホールドを保証**している	pub struct ContentTrack	text	lottie
+text	animated-text-document	sid	Slot ID	採用済	歌詞テンプレートの差し替え口。slots と同じ口に乗せ第二の差し替え機構を作らない — slots 機構自体(`slot` 発注単位)は未着手なので、ここでは参照識別子だけ持てる	pub slot_id: Option<String>	text	lottie
 text	animated-text-document	x	Expression	不採用	JS 文字列式は要らないもの(GOALS)			lottie
 text	character-data	ch	Character	不採用	グリフ輪郭を JSON へ焼く経路。実フォント+shaper を持つので焼いた輪郭は正本が2つ			lottie
 text	character-data	data	Data	不採用	同上			lottie
@@ -588,33 +588,33 @@ text	character-precomp	st	Start Time	不採用	同上			lottie
 text	character-shapes	shapes	Shapes	不採用	輪郭焼き込みの実体			lottie
 text	font	ascent	Ascent	不採用	フォントから読める値を焼く=正本が2つ			lottie
 text	font	fClass	CSS Class	不採用	web 再生器の関心			lottie
-text	font	fFamily	Font Family	採用予定	family 名。実体解決のキー		text	lottie
+text	font	fFamily	Font Family	採用済	family 名。実体解決のキー	pub family: String	text	lottie
 text	font	fName	Name	不採用	fFamily+fStyle の連結。同じことを言う正本が2つ			lottie
-text	font	fPath	Path	採用予定	フォント実体の在処。素材と同じ path で持つ		text	lottie
-text	font	fStyle	Font Style	採用予定	face 選択キー		text	lottie
+text	font	fPath	Path	採用済	フォント実体の在処。素材と同じ path で持つ	pub path: String	text	lottie
+text	font	fStyle	Font Style	採用済	face 選択キー	pub style: String	text	lottie
 text	font	fWeight	Weight	不採用	fStyle と同じことを言う二重帳簿。可変フォントでは wght 軸が正本			lottie
 text	font	origin	Origin	不採用	web ローダの都合。ローカル以外を持たない			lottie
-text	font-list	list	List	採用予定	document 単位のフォント表。ただし**素材と同じ置き場に載せる** — 第二の素材台帳を作らない		text	lottie
+text	font-list	list	List	採用済	document 単位のフォント表。ただし**素材と同じ置き場に載せる** — 第二の素材台帳を作らない	font-list は第二の素材台帳を作らない	text	lottie
 text	text-alignment-options	a	Alignment	採用予定	グループ内アンカーのオフセット。**意味は採り既定だけ変える** — 既定=字面中心		text	lottie
 text	text-alignment-options	g	Grouping	採用予定	Characters/Word/Line/All。text-model §6 の未決がここで埋まる		text	lottie
 text	text-data	a	Ranges	採用予定	アニメーターの列。MV タイポグラフィの核心		text	lottie
-text	text-data	d	Document	採用予定	content と基底スタイル		text	lottie
+text	text-data	d	Document	採用済	content と基底スタイル	pub struct TextDocument	text	lottie
 text	text-data	m	Alignment	採用予定	grouping alignment。§6 の未決が埋まる		text	lottie
 text	text-data	p	Follow Path	不採用	パス沿いテキスト。mask index の暗黙参照(裁定66)+ 一subsystem			lottie
 text	text-document	ca	Text Caps	不採用	Small Caps は OpenType feature が正本			lottie
-text	text-document	f	Font Family	採用予定	フォント参照。Lottie の名前参照は採らず**素材と同じ path + 指紋**にする。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
-text	text-document	fc	Fill Color	採用予定	字面色。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
-text	text-document	j	Justify	採用予定	Left/Right/Center。両端揃え4種は行分割器が要るので後回し		text	lottie
-text	text-document	lh	Line Height	採用予定	行送り。未指定はフォントのメトリクスから。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
+text	text-document	f	Font Family	採用済	フォント参照。Lottie の名前参照は採らず**素材と同じ path + 指紋**にする。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub font: FontRef	text	lottie
+text	text-document	fc	Fill Color	採用済	字面色。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub fill: [f64; 4]	text	lottie
+text	text-document	j	Justify	採用済	Left/Right/Center。両端揃え4種は行分割器が要るので後回し	pub enum TextJustify	text	lottie
+text	text-document	lh	Line Height	採用済	行送り。未指定はフォントのメトリクスから。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub line_height: Option<f32>	text	lottie
 text	text-document	ls	Baseline Shift	不採用	document 全体のベースラインずらしは position で同じことができる			lottie
-text	text-document	of	Stroke Over Fill	採用予定	縁取りと字面の重ね順。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
+text	text-document	of	Stroke Over Fill	採用済	縁取りと字面の重ね順。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub stroke_over_fill: bool	text	lottie
 text	text-document	ps	Wrap Position	不採用	箱の位置は layer の position/anchor と二重帳簿(裁定59/60 と同じ形)			lottie
-text	text-document	s	Font Size	採用予定	組版のサイズ。animator の scale とは別物。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
-text	text-document	sc	Stroke Color	採用予定	縁取り色。歌詞では必須級。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
-text	text-document	sw	Stroke Width	採用予定	縁取り幅。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
-text	text-document	sz	Wrap Size	採用予定	折返し幅。None = point text		text	lottie
-text	text-document	t	Text	採用予定	本文。Lottie の改行 \r は採らず \n で持つ		text	lottie
-text	text-document	tr	Tracking	採用予定	基底トラッキング。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)		text	lottie
+text	text-document	s	Font Size	採用済	組版のサイズ。animator の scale とは別物。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub size: f32	text	lottie
+text	text-document	sc	Stroke Color	採用済	縁取り色。歌詞では必須級。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub stroke_color: Option<[f64; 4]>	text	lottie
+text	text-document	sw	Stroke Width	採用済	縁取り幅。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub stroke_width: f32	text	lottie
+text	text-document	sz	Wrap Size	採用済	折返し幅。None = point text	pub wrap_size: Option<[f32; 2]>	text	lottie
+text	text-document	t	Text	採用済	本文。Lottie の改行 \r は採らず \n で持つ	pub content: ContentTrack	text	lottie
+text	text-document	tr	Tracking	採用済	基底トラッキング。独立した document 値ではなく**スタイル表の既定行(index 0)**として読む(裁定98)	pub tracking: f32	text	lottie
 text	text-document-keyframe	s	Start	不採用	**document 丸ごとを1キーの値にする形は採らない**。色もサイズもホールドになる			lottie
 text	text-document-keyframe	t	Time	採用予定	RationalTime で持つ。打つ相手は content track		text	lottie
 text	text-follow-path	a	Force Alignment	不採用	パス沿いテキスト一式。後から animator として足せるので凍結は妨げない			lottie
@@ -663,11 +663,11 @@ values	gradient		Gradient	不採用	色停止と透明度停止を1本の float 
 values	hexcolor		Hex Color	不採用	色の正本は Value::Color。文字列表現をもう1つ持つと2つの書き方ができる			lottie
 values	int-boolean		Integer Boolean	不採用	JSON に bool があるのに 0/1 で持つのは Lottie の都合。Rust は bool			lottie
 values	vector		Vector	採用済	Value::Vec2/Vec3。長さは型が持つ	Vec2([f64; 2])		lottie
-text	text	alignValue	Align	採用予定	水平揃え。Lottie `text-document j` が正本。Rive も animates を持たない = 静止設定という点まで一致		text	rive
+text	text	alignValue	Align	採用済	水平揃え。Lottie `text-document j` が正本。Rive も animates を持たない = 静止設定という点まで一致	Rive text.alignValue	text	rive
 text	text	sizingValue	Sizing	不採用	fixed/autoWidth/autoHeight。同じ分岐を `sz`(折返し幅)の有無で既に持つので列挙を別に置くと正本が2つ			rive
 text	text	overflowValue	Overflow	不採用	visible/hidden/clipped/ellipsis/fit。組版器に5分岐を増やす(軸4)。`fit` だけは歌詞で効くので行組段の option として後日			rive
-text	text	width	Width	採用予定	折返し幅。Lottie `text-document sz` の第1成分が正本。箱幅を動かすと毎フレーム行分割なので v1 は静止		text	rive
-text	text	height	Height	採用予定	同上、`sz` の第2成分		text	rive
+text	text	width	Width	採用済	折返し幅。Lottie `text-document sz` の第1成分が正本。箱幅を動かすと毎フレーム行分割なので v1 は静止	Rive text.width	text	rive
+text	text	height	Height	採用済	同上、`sz` の第2成分	Rive text.height	text	rive
 text	text	highlightTextRuns	Highlight Text Runs	不採用	ランを色付き下線で見せる編集器の表示トグル。`runtime: false` が「保存する設計値ではない」と機械で言っている			rive
 text	text	originX	Origin X	不採用	テキスト箱の正規化アンカー。層の anchor と二重帳簿(`text-document ps` を落としたのと同じ理由)			rive
 text	text	originY	Origin Y	不採用	同上			rive

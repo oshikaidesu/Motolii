@@ -28,6 +28,7 @@ mod fingerprint;
 mod marker;
 mod mask;
 mod persist;
+mod text;
 mod view;
 
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, Matte, MatteMode};
@@ -36,6 +37,9 @@ pub use effect::{EffectId, EffectInstance};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use marker::Marker;
 pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
+pub use text::{
+    ContentKeyframe, ContentTrack, FontRef, TextDocument, TextDocumentStyle, TextJustify,
+};
 pub use view::StoreView;
 
 pub use motolii_core::{CompSpec, Fps, LayerPlacement, RationalTime, ResolvedCamera};

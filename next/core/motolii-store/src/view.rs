@@ -14,7 +14,7 @@ use crate::components::{
 use crate::{
     property, Composition, Document, EffectInstance, LayerAttrs, LayerId, LayerMeta,
     LayerPlacement, Marker, Mask, PropertyId, ResolvedLayer, ResolvedMask, Shape, StoreError,
-    EDIT_TIMELINE,
+    TextDocument, EDIT_TIMELINE,
 };
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
@@ -411,8 +411,10 @@ impl<'a> StoreView<'a> {
         serde_json::from_str(&json.0).map_err(StoreError::Encode)
     }
 
-    /// text-layer の文字列内容。無ければ空文字列。
-    pub fn text_content(&self, layer: LayerId) -> Result<String, StoreError> {
+    /// text-layer の中身(content・組版既定値・フォント参照)。`Ok(None)` = **まだ一度も
+    /// `SetTextDocument` で書かれていない** — `meta`/`attrs` と同じく「無い」と「壊れている」
+    /// を同義にしない(裁定37)。
+    pub fn text_document(&self, layer: LayerId) -> Result<Option<TextDocument>, StoreError> {
         let descriptor = descriptor_text();
         let path = layer.entity_path();
         let results = self
@@ -422,9 +424,11 @@ impl<'a> StoreView<'a> {
             .component_batch::<TrackJson>(descriptor.component)
             .and_then(|batch| batch.into_iter().next())
         else {
-            return Ok(String::new());
+            return Ok(None);
         };
-        serde_json::from_str(&json.0).map_err(StoreError::Encode)
+        serde_json::from_str(&json.0)
+            .map(Some)
+            .map_err(StoreError::Encode)
     }
 
     /// comp 時刻でのマスク。形状も不透明度も普通の property track から取る。

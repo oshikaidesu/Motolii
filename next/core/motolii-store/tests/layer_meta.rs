@@ -598,20 +598,16 @@ fn shape_layer_holds_an_ordered_list_of_shapes() {
 }
 
 #[test]
-fn text_layer_holds_its_content_string() {
+fn text_layer_exists_as_a_layer_source_variant_and_holds_no_document_until_set() {
     let mut doc = doc_with_comp(300);
     let layer = LayerId(1);
     place(&mut doc, layer, LayerSource::Text, 0, 100);
 
-    assert_eq!(doc.view().text_content(layer).unwrap(), "");
-
-    doc.apply(Intent::SetTextContent {
-        layer,
-        content: "歌詞1行目".to_owned(),
-    })
-    .unwrap();
-
-    assert_eq!(doc.view().text_content(layer).unwrap(), "歌詞1行目");
+    // `Layer:text` の中身(裁定112(k) の後継)は `text` 発注単位(未着手時点)の仕事。
+    // ここでは layer-meta 束の関心である「`LayerSource::Text` という variant が存在し、
+    // 中身は別 component」までを固定する。中身の意味(content/style/font)は
+    // `tests/text.rs` が縛る。
+    assert_eq!(doc.view().text_document(layer).unwrap(), None);
 }
 
 // ---------------------------------------------------------------------------

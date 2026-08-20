@@ -168,8 +168,13 @@ pub enum Intent {
         layer: LayerId,
         shapes: Vec<crate::Shape>,
     },
-    /// text-layer の文字列内容。丸ごと差し替え。
-    SetTextContent { layer: LayerId, content: String },
+    /// text-layer の中身(content・組版既定値・フォント参照)。丸ごと差し替え —
+    /// `SetShapes`/`SetEffects` と同じ形。`Layer:text` component はこの意味しか
+    /// 持たない(他の関心事と同居しない)ので、`SetAttrs` のような部分更新は要らない。
+    SetTextDocument {
+        layer: LayerId,
+        document: crate::TextDocument,
+    },
     /// comp の設定(解像度・fps・尺)。**undo が効く**ので普通の編集と同じ経路。
     SetComposition(crate::Composition),
     /// comp のマーカー一覧。追加・削除・並べ替え・改名はすべてこれ1つ
@@ -597,8 +602,8 @@ impl Document {
                     }],
                 )
             }
-            Intent::SetTextContent { layer, content } => {
-                let json = serde_json::to_string(&content)?;
+            Intent::SetTextDocument { layer, document } => {
+                let json = serde_json::to_string(&document)?;
                 (
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
