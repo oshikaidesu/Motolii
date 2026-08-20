@@ -12,16 +12,8 @@ This project keeps its design decisions in the repository rather than in convers
 | [`VISION.ja.md`](VISION.ja.md) | Problem statement and long-term direction (Japanese) |
 | [`docs/README.md`](docs/README.md) | Reading order, glossary, and the file map for `docs/` |
 | [`docs/decision-index.md`](docs/decision-index.md) | Reverse index: search it by topic keyword before touching that topic |
-| [`AGENTS.md`](AGENTS.md) | Working rules — written for coding agents, but the discipline applies to everyone |
 
 Most design documents under `docs/` are written in Japanese. `README.md`, this file, and the GitHub issue/PR templates are English.
-
-The parts of `AGENTS.md` that apply to every contributor:
-
-- **One contract boundary = one owner = one commit = one PR.** Do not bundle unrelated fixes.
-- **A finding is not authorization.** If you discover a second problem while working, report it in the issue or PR; do not implement it in the same change.
-- **Settled decisions stay settled.** Search `docs/decision-index.md` first. If your change contradicts something already decided, quote the exact document and line you are contradicting and ask before implementing.
-- **Prefer the existing implementation.** Search the repository for an equivalent before writing a new helper, mechanism, or dependency.
 
 ## Build
 
@@ -53,7 +45,7 @@ Verification is your responsibility and runs locally. Run the commands below, th
 # Portable local profile: docs, then Rust fmt / clippy / locked workspace tests.
 ./scripts/validate.sh local
 
-# Required whenever you change docs/ or AGENTS.md.
+# Required whenever you change docs/.
 ./scripts/check-docs.sh
 
 # The Rust lane.
@@ -100,7 +92,7 @@ Practical consequence: review is serialized through one person. Small, self-cont
 - **Do not reverse a settled decision implicitly.** If your change contradicts a decision recorded in `docs/`, quote the exact file and passage in the issue and PR, and get agreement before implementing. Silently reintroducing a rejected approach is the single most expensive mistake here.
 - **Do not add generic helpers or speculative abstraction.** No "for future use" traits, config knobs, plugin hooks, or generic frameworks. Search for an existing equivalent first; test helpers belong in `motolii-testkit` rather than being duplicated.
 - **Do not widen scope from a finding.** Fix what the contract covers; report the rest.
-- **Do not put pixel processing on the CPU, split preview and export into separate render paths, give plugins hidden mutable state, or expose vendor/OS GPU APIs through the plugin contract.** These are absolute rules; `AGENTS.md` states them in full.
+- **Do not put pixel processing on the CPU, split preview and export into separate render paths, give plugins hidden mutable state, or expose vendor/OS GPU APIs through the plugin contract.** These product contracts are documented in [`docs/README.md`](docs/README.md).
 - **Do not rely on remote checks.** There are none.
 
 Code comments are written in Japanese and explain *why*, not *what*.

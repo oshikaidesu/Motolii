@@ -78,7 +78,7 @@ The value is in the composition of these parts, the removal of accidental comple
 
 ## A small core is a long-term capability
 
-Motolii uses Rust, wgpu, WGSL, rust-skia, React Native, and ffmpeg today. Those are implementation choices, not project-file semantics or articles of faith.
+Motolii uses Rust, wgpu, WGSL, iced, Rerun Spatial Viewer, and ffmpeg today. Those are implementation choices, not project-file semantics or articles of faith.
 
 ```mermaid
 flowchart LR
@@ -174,11 +174,11 @@ Heavy asset creation, character rigging, simulation authoring, grading, and spec
 | M0 | Complete | GPU/UI, decode, and rational-time risks measured |
 | M1 | Complete and internally frozen | Video → typed animation → GPU composite → mp4 vertical slice |
 | M2 | Foundation reclosed; narrow follow-ups pending | Document model, validation, commands/Undo, audio transport/mux, masks, portability |
-| M3 | R0 accepted; R1 rolling integration | React Native shell with native Stage/Timeline surfaces; the VS-1 product route and later creation/platform gates remain open |
+| M3 | Iced product route active | `motolii-shell-iced` integrates Browser, Inspector, Timeline, and the Rerun Stage island; capability, visual, device, and platform closure remains open |
 | M4 | Partial foundations on main | Test-only K0 contract, ResourceLedger, and canonical recipe/artifact codec are present; cache, proxy, and bake runtime remain incomplete |
-| M5 | Subsystem adopted; probes only | Rerun Spatial Viewer is the adopted spatial subsystem and focused visual probes are on main; the product Document/Vism/runtime connection remains open |
+| M5 | Rerun Stage island active; product closure open | Rerun Spatial Viewer is adopted and integrated as the wrapped iced Stage island; expression probes are evidence only, and full product connection is not complete |
 
-The M1 demo above is generated through the real export path and protected by automated tests. On current main, the M3 R0 product runtime seat is accepted and collaborative R1 integration is active. The repository also contains an RN probe with a Skia Timeline and the B001/B002 Rerun-derived Stage proofs on one device/queue/surface. Those are main-integrated probe evidence, not proof that the M3 creation route or M5 product runtime is complete. Product closure still requires the accepted snapshot/D2 identity path, R1/R2 end-to-end exits, and the named platform and human gates.
+The M1 demo above is generated through the real export path and protected by automated tests. Under the current working-tree authority, `motolii-shell-iced` is the current product host and new-feature target, with Browser, Inspector, Timeline, and the wrapped Rerun Stage island integrated through the existing Document/D2 single-writer route. `motolii-blitz-shell` and egui remain legacy/reference implementations, while the React Native product host has been removed and `ui/motolii-rn/src` remains only as a migration reference. This integrated route is not proof that M3 or M5 is product-complete; remaining capability, visual, device/platform, and human gates must still be named and verified.
 
 Current milestone truth and task dependencies live in the [`implementation ledger`](docs/implementation-ledger.md) and under [`docs/specs/`](docs/specs/); this README intentionally stays at project level and does not assign a speculative completion percentage.
 
@@ -189,7 +189,7 @@ Current milestone truth and task dependencies live in the [`implementation ledge
 | Language | Rust |
 | Render core | [wgpu](https://github.com/gfx-rs/wgpu) + WGSL, GPU-resident textures |
 | Vector rendering | Vello/usvg boundary |
-| UI | React Native shell/panels, rust-skia Timeline/Curve/Stage overlay, and wgpu Stage preview; legacy egui/Vello surfaces remain migration oracles rather than the target product UI |
+| UI | iced shell/panels as the current product host, with a wrapped Rerun Spatial Viewer Stage island; egui and `motolii-blitz-shell` remain legacy/reference, and React Native sources are migration references rather than the product host |
 | Decode / encode | ffmpeg sidecar process, raw tagged frames at the boundary |
 | Project model | serde data, stable IDs, typed validation, command edits |
 | Verification | Rust tests, property tests, semantic and image goldens |
@@ -214,7 +214,6 @@ Start here:
 - [`docs/interaction-simplicity-model.md`](docs/interaction-simplicity-model.md) — simplicity as user and implementation performance
 - [`docs/pitfalls-and-roadmap.md`](docs/pitfalls-and-roadmap.md) — failure catalog and roadmap
 - [`docs/specs/`](docs/specs/) — milestone specifications and task contracts
-- [`AGENTS.md`](AGENTS.md) — contribution rules for human and AI agents
 
 ## Build and run
 
@@ -249,8 +248,7 @@ Before implementing a task:
 
 1. Read [`docs/README.md`](docs/README.md).
 2. Read the relevant milestone specification, including its implementation-guard section.
-3. Read [`AGENTS.md`](AGENTS.md).
-4. Preserve the protected tests and existing user changes.
+3. Preserve the protected tests and existing user changes.
 
 Issues and design discussions belong in GitHub Issues. Small, independently verifiable pull requests are preferred.
 

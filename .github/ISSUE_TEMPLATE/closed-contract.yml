@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        One issue is one contract boundary. This form mirrors the closed-order capsule in `AGENTS.md`; it does not create new authority.
+        This optional form records a bounded implementation contract. For external LLM dispatch, follow the Launch card in `docs/llm-dispatch-observation-and-allocation-runbook.md`; this form does not create new authority.
 
   - type: textarea
     id: capsule

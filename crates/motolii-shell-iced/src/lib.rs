@@ -1,8 +1,9 @@
-//! iced ホストの殻 — M-1。
+//! Motolii の現行製品ホスト。
 //!
 //! [2026-08-18裁定](../../../docs/reviews/2026-08-18-iced-host-migration-decision.md)
-//! の絞め殺し移行の受け皿である。egui shell(`motolii_ui::blitz_shell`)は**並走したまま**で、
-//! こちらが「窓としてやること」を1つずつ引き取っていく。
+//! の絞め殺し移行を経て、4 pane(Timeline / Stage / Browser / Inspector)と
+//! `UiIntent` gateway を統合した。egui shell(`motolii_ui::blitz_shell`)は
+//! Timeline・Rerun Stage 島の参照実装、比較・回帰器具として残る。
 //!
 //! ## ここに在るもの
 //!
@@ -76,14 +77,12 @@
 //! 右クリック context menu は、対応する機能が product に無いため
 //! 引き続き置いていない(判断は module doc の Q0 節)。
 //!
-//! ## ここに無いもの(意図的に)
+//! ## まだここに無いもの(意図的に)
 //!
-//! - Timeline(M-3)。ギズモの絵と意味論・書き出しカメラ枠 overlay は M-3 後。
-//!   Undo / Redo ボタンは編集面と一緒に来る。Inspector の Audio(gain)section は
-//!   エディタに gain の操作 API が立つまで**出さない**(Q0: 死に chrome 禁止)
+//! - Inspector の Audio(gain)section。エディタに gain の操作 API が立つまで
+//!   **出さない**(Q0: 死に chrome 禁止)
 //! - Browser の preview 再生・tag 編集・Collections・Timeline への DnD 受け
 //!   (対応する機能が product に無い — [`browser_pane`] module doc の Q0 節)
-//! - Stage / Timeline からの layer 選択 → Inspector 反映。M-3 後の統合 wave 第2弾
 //! - egui。**この crate に egui 系の直接依存は1つも無い**
 //!   (柵: `crates/motolii-testkit/src/ui_toolkit_dep_policy.rs` の
 //!   `UI_TOOLKIT_CRATE_ALLOWLIST` にこの crate を**入れていない**)

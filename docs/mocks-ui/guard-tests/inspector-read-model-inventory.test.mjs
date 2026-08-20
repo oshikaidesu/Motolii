@@ -27,7 +27,6 @@ const REF_DOC_PATH = join(
 );
 
 const AUTHORITY_SHA256 = {
-  "AGENTS.md": "13916917966a51d0437f091870e996903081ec35d856fa51cee5100371ec19ba",
   "docs/reviews/2026-07-26-cu-0a08i-inspector-read-model-split-decision.md":
     "4ec2a5296944d60b9e75275b69b841d3600d9f158d63ffccf345dca05ae12182",
   "docs/reviews/2026-07-22-m3-react-product-asset-promotion-contract.md":
@@ -52,8 +51,6 @@ const AUTHORITY_SHA256 = {
     "8f5a32efdac280d7ea9c07b3336995828199d44dc743e613b4b6111236444a0b",
   "docs/mocks-ui/package.json":
     "f0272ac3b744463a5af28e24c843205b43d98c5c4b4f5c6cf51c80c651013f38",
-  "scripts/check-docs.sh":
-    "7af62c013e65416c61ffc79ede7f125254231a6b4b88c0fe53c52c85868e6cd8",
 };
 
 const STALE_PATTERNS = [

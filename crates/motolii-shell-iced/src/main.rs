@@ -11,8 +11,9 @@
 //! `--project` が無い通常起動は**最後に開いていた project へ座り直す**
 //! (egui 側 wave D の `last_project` を共用。`resume` モジュール参照)。
 //!
-//! egui shell(`cargo run -p motolii-ui --bin motolii-blitz-shell`)は**そのまま在る**。
-//! 既定 bin の切り替えは M-5 で、UX 台本が iced 側で通ってからである。
+//! この bin が現行製品ホストであり、新規製品機能の追加先である。
+//! egui shell(`cargo run -p motolii-ui --bin motolii-blitz-shell`)は Timeline・
+//! Rerun Stage 島の参照実装、比較・回帰器具として残る。
 //!
 //! `--screenshot` は egui 版(`crates/motolii-ui/src/blitz_shell/runner.rs`)と
 //! **同じ引数の形・同じ役目**: 窓を1枚だけ描いてPNGにし、そのまま終了する。

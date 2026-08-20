@@ -118,6 +118,12 @@ plugin(D2・journal・評価器)。**UiIntent 背骨は設計どおり持ち越�
 
 各 M は red 先行+検収+gate の通常レーン運転。M 間は直列、M 内は並列可。
 
+## 2026-08-19 authority cutover
+
+利用者判断により、製品開発の現行hostと新規機能targetをicedへ切り替えた。egui shellはlegacy/referenceであり、Timelineの参照実装、Rerun Stage島の内部詳細、比較・回帰器具として残す。上記M-5の既定bin名やlauncher切替に残余があっても、それはhost authorityをeguiへ戻さない。
+
+この切替は製品完成宣言ではない。個別能力、視覚忠実度、実機、performanceの残余とhost authorityの現在値は[CANON](../CANON.md)と能力台帳で追跡する。後続で全面退役したagent入口縮約は[歴史記録](../archive/agent-governance/2026-08-19-agent-entry-reset-and-iced-authority-cutover.md)として保存する。
+
 ## 既存決定との関係
 
 - [2026-08-16 Timeline 実行時基盤=egui](2026-08-16-timeline-runtime-reselection-to-egui.md):

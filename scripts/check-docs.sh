@@ -11,37 +11,9 @@ FAIL=0
 
 err() { echo "NG: $1"; FAIL=1; }
 
-# 1. root AGENTS.md はCodexの既定読込上限より余白を持たせ、権限保存則を先頭へ固定する
-AGENTS_MAX_BYTES=30000
-AGENTS_PREFIX_BYTES=8192
-agents_bytes="$(LC_ALL=C wc -c < "$ROOT/AGENTS.md" | tr -d '[:space:]')"
-if [ "$agents_bytes" -gt "$AGENTS_MAX_BYTES" ]; then
-  err "AGENTS.md が ${agents_bytes} bytes (上限 ${AGENTS_MAX_BYTES})。詳細を正本docsへ移し、入口を校正すること"
-fi
-agents_prefix="$(LC_ALL=C head -c "$AGENTS_PREFIX_BYTES" "$ROOT/AGENTS.md")"
-for marker in '**自己発注禁止**' '**findingは権限ではない**' '**既決を未決へ戻さない**'; do
-  case "$agents_prefix" in
-    *"$marker"*) ;;
-    *) err "AGENTS.md の先頭 ${AGENTS_PREFIX_BYTES} bytes に必須規則がない: $marker" ;;
-  esac
-done
-
-# 入口規約から撤回済みrunner protocolを再生成しない。歴史文書内の記録は対象外。
-for retired_runner_term in \
-  'ROUTE_CONTRACT_VERSION' \
-  'LOOP_PROFILE' \
-  'RUNNER_SHA256' \
-  'SPARK_GRAIN_VERSION' \
-  'CODEX PRECHECK' \
-  'READ_MODE: CAPSULE' \
-  'ORDER: STOP' \
-  'canonical runner' \
-  'prepare/execute/inspect/cancel' \
-  'compiled grain'; do
-  if grep -Fq "$retired_runner_term" "$ROOT/AGENTS.md"; then
-    err "AGENTS.md に撤回済みrunner protocolが再登場: $retired_runner_term"
-  fi
-done
+# 1. root AGENTS.md は古い参照を壊さないためのtombstoneとして存在だけ確認する。
+# 内容へrepo固有のagent policyは課さない。
+[ -f "$ROOT/AGENTS.md" ] || err "root AGENTS.md tombstoneがない"
 
 # 旧監督ループ正本は短い撤回tombstoneに固定し、規則集として復活させない。
 RETIRED_SUPERVISION="$DOCS/reviews/2026-07-25-opus-spark-grok-supervision-loop-decision.md"
@@ -71,7 +43,7 @@ if [ -n "$dups" ]; then
   done <<< "$dups"
 fi
 
-# 4. AGENTS.md と docs/**/*.md のローカルmdリンクが実在すること
+# 4. root tombstone と docs/**/*.md のローカルmdリンクが実在すること
 # (#fragmentは除去して判定)。必読入口のリンク切れもdocsと同じ失敗にする。
 python3 - "$ROOT" <<'PY'
 import os, re, sys
@@ -121,13 +93,12 @@ else
   err "docs/decision-index.md が存在しない"
 fi
 
-# 6. UI表示・起動の入口が、成果物用語正本を参照地図より先に通ること
+# 6. UI表示・起動のdocs入口が成果物用語正本を保持すること
 python3 - "$ROOT" <<'PY'
 import pathlib
 import sys
 
 root = pathlib.Path(sys.argv[1])
-agents = (root / "AGENTS.md").read_text(encoding="utf-8")
 readme = (root / "docs/README.md").read_text(encoding="utf-8")
 terms = (root / "docs/ui-artifact-terminology.md").read_text(encoding="utf-8")
 fail = False
@@ -138,14 +109,6 @@ def require(condition, message):
         print(f"NG: {message}")
         fail = True
 
-agent_terms = agents.find("docs/ui-artifact-terminology.md")
-agent_map = agents.find("docs/ui-reference-map.md")
-require(agent_terms >= 0, "AGENTS.md のM3必読動線にUI成果物用語正本がない")
-require(agent_map >= 0, "AGENTS.md のM3必読動線にUI参照地図がない")
-require(
-    agent_terms >= 0 and agent_map >= 0 and agent_terms < agent_map,
-    "AGENTS.md はUI成果物用語正本をUI参照地図より先に読ませること",
-)
 require(
     "[ui-artifact-terminology.md](ui-artifact-terminology.md)" in readme,
     "docs/README.md の読む順序にUI成果物用語正本がない",

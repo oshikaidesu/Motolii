@@ -4,6 +4,13 @@
 
 現在の正本一覧は[docs/CANON.md](../CANON.md)を見よ。ここは「何が置き換わったか」の記録であり、「今どれが正本か」の索引ではない。
 
+## agent-governance/ (2026-08-19移動)
+
+Codexの判断を事前に絞っていたrepo固有agent規則と、その入口縮約決定を保存する。root `AGENTS.md`は既存参照を壊さないための無規則stubだけとし、このディレクトリの文書は現行指示として読み込まない。Document/single writer、GPU、色、座標、Preview/Export、plugin契約などの製品契約はagent行動規則ではないため移動していない。
+
+- `AGENTS-2026-08-19.md`: 退役直前のroot agent規則全文
+- `2026-08-19-agent-entry-reset-and-iced-authority-cutover.md`: 全面退役直前に行った入口縮約の決定記録
+
 ## 移動の判断基準
 
 1. 後継が別の場所に存在し、リポ内のどこからも(コード・スクリプト・decision台帳の固定ID参照として)当該パスへ依存していないこと

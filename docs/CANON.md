@@ -30,7 +30,7 @@ RN由来のBrowserモックが別にもう1つある: `docs/mocks-ui/public/rn-b
 |---|---|---|
 | `crates/motolii-ui/src/timeline_editor/`(`mod.rs` 8,186行 + `audio_seat.rs` + `import_seat.rs` + `waveform_band.rs`、計**9,059行**) | 2026-08-18 | **正本**。`crates/motolii-ui/src/lib.rs`のdocコメント「egui Timelineエディタ(旧labの本体)」。`blitz_shell`のTimeline paneと`examples/timeline_egui_lab.rs`の薄殻が同じ実装を呼ぶ(`grep -rn timeline_editor crates/motolii-ui/src/blitz_shell/`で配線確認可) |
 | `crates/motolii-ui/src/timeline_skia_raster.rs` | 2026-08-16 | **死蔵**。`lib.rs`に`#[cfg(target_os = "macos")] mod timeline_skia_raster;`とだけ宣言され、他のどこからも参照されていない(2026-08-16に一度は製品正本と裁定されたが、同日中にegui再選定で上書きされた経緯は[decision-index.md](decision-index.md)のTimeline行を参照) |
-| `crates/motolii-shell-iced/src/timeline/`(semantics / pane / canvas / waveform) | 2026-08-19 | **移植途上**。egui版にあってiced版に無い操作(2026-08-19時点): Group/Ungroup・Duplicate・Reorder・Rename・AddKey/DeleteKeys/SetInterp・Locator・Loop範囲・行の畳み開閉・Property/キー行・キー菱形・Inbox列・帯高resize・Lock。詳細は[2026-08-18セッション引き継ぎ](reviews/2026-08-18-session-handoff-iced-four-pane-campaign.md)の「次の本題」節 |
+| `crates/motolii-shell-iced/src/timeline/`(semantics / pane / canvas / waveform) | 2026-08-19 | **現行製品route**。egui版を視覚・機能参照としてicedへ移植する。個別能力の現在値と残余は[egui Timeline能力台帳](reviews/2026-08-19-egui-timeline-capability-ledger.md)で確認し、日付付きhandoffの欠落一覧を現在値にしない |
 
 **`crates/motolii-ui/src/timeline_egui.rs`という名のファイルは存在しない**(旧`timeline_egui/`961行は2026-08-16に削除。原文は`git show f209da9d^:crates/motolii-ui/src/timeline_egui/mod.rs`)。この名前で発注されたレーンが「移植元が無い」と誤報告した実例が[2026-08-18セッション引き継ぎ](reviews/2026-08-18-session-handoff-iced-four-pane-campaign.md#追記3--視覚第2ラウンド着地と次の本題2026-08-19-朝)にある。
 
@@ -49,10 +49,10 @@ RN由来のBrowserモックが別にもう1つある: `docs/mocks-ui/public/rn-b
 
 | shell | crate / bin | 最終更新 | 現在地 |
 |---|---|---|---|
-| egui | `crates/motolii-ui`(`blitz_shell`モジュール)、bin `motolii-blitz-shell` | 2026-08-19 | **現行既定**。[iced移行裁定](reviews/2026-08-18-iced-host-migration-decision.md)のM-5(既定bin切替)完了後は`--legacy`として残す予定だが、**M-5は未実施**なのでまだ既定のまま |
-| iced | `crates/motolii-shell-iced`、bin `motolii-shell-iced` | 2026-08-19 | **移行先**。2026-08-18裁定「変な感じはしない、なによりコード数が決定的すぎる、乗り換えるか」。M-0(土台)〜M-4(Browser/Inspector/Stage島/Timeline統合)は完了・`cargo test --workspace`が2131 passed/0 failed(2026-08-18時点)。M-5(既定bin切替)は未実施、現在は視覚忠実度の作り込み中(2026-08-19朝時点でInspector/Timeline R2着地) |
+| iced | `crates/motolii-shell-iced`、bin `motolii-shell-iced` | 2026-08-19 | **現行製品host / 新規機能target**。M-0〜M-4で4 pane、Stage島、`UiIntent` gateway、drive/replay oracleが統合済み。未実装能力や視覚残余があるため製品完成を意味しない |
+| egui | `crates/motolii-ui`(`blitz_shell`モジュール)、bin `motolii-blitz-shell` | 2026-08-19 | **legacy/reference**。Timelineの参照実装、Rerun Stage島の内部実装、比較・回帰器具として残る。明示依頼なしに製品機能を追加したりfallback先にしない |
 
-egui/iced両shellは**並走中**であり、どちらか一方だけが正しいという状態ではない。「Motolii Studioを起動」等の要求への応答は[ui-artifact-terminology.md](ui-artifact-terminology.md)の起動ルールに従う(ただし同文書の`motolii_ui_shell`関連の記述は2026-08-16に撤去済みの旧shellを指しているので鵜呑みにしない。同文書内の訂正注記を参照)。
+2026-08-19にhost authorityをicedへ切り替えた。既定bin名やlauncherに機械的な残余があっても、それはauthorityをeguiへ戻さない。「Motolii Studioを起動」等の要求への応答は[ui-artifact-terminology.md](ui-artifact-terminology.md)の起動ルールと本表を併用する。
 
 ## 撮影器具 — それぞれ何を撮るか
 
