@@ -1912,6 +1912,7 @@ impl Shell {
         let observation = self.observation;
         let resolution_cap = self.resolution_cap;
         let colors = self.tokens.colors;
+        let ui_scale = self.tokens.ui_scale;
 
         if let Some(frame) = &self.frame {
             if frame.revision == revision && frame.playhead == playhead {
@@ -1925,12 +1926,18 @@ impl Shell {
                 let height = frame.height;
                 let display = self.compute_display_source(observation, checkerboard, playhead);
                 let (handle, handle_bytes) = match &display.full_rgba {
-                    Some(rgba) => {
-                        build_stage_handle(width, height, rgba, display.checkerboard, resolution_cap, colors)
-                    }
+                    Some(rgba) => build_stage_handle(
+                        width,
+                        height,
+                        rgba,
+                        display.checkerboard,
+                        resolution_cap,
+                        colors,
+                        ui_scale,
+                    ),
                     None => {
                         let frame = self.frame.as_ref().expect("直前の if let で確認済み");
-                        build_stage_handle(width, height, &frame.rgba, false, resolution_cap, colors)
+                        build_stage_handle(width, height, &frame.rgba, false, resolution_cap, colors, ui_scale)
                     }
                 };
                 metrics::record_handle_creation(handle_bytes);
@@ -1974,6 +1981,7 @@ impl Shell {
                         display.checkerboard,
                         resolution_cap,
                         colors,
+                        ui_scale,
                     ),
                     None => build_stage_handle(
                         composition.width,
@@ -1982,6 +1990,7 @@ impl Shell {
                         false,
                         resolution_cap,
                         colors,
+                        ui_scale,
                     ),
                 };
                 metrics::record_handle_creation(handle_bytes);
@@ -2104,14 +2113,22 @@ impl Shell {
 
 /// Stage 表示用の Handle を作る唯一の場所。`stage_handle_rgba` で縮め、
 /// **市松が有効なら display 用の複製にだけ**
-/// [`settings_pane::composite_checkerboard`] を乗せる — 呼び出し側が渡す
-/// `full_rgba` 自体は一切変更しない。
+/// [`settings_pane::composite_checkerboard_with_tile_px`] を乗せる — 呼び出し
+/// 側が渡す `full_rgba` 自体は一切変更しない。
 ///
 /// `full_rgba` は呼び出し側(`refresh_frame`)が選ぶ: 市松 OFF なら
 /// `RenderedFrame::rgba`(背景込みの export 真値)、市松 ON なら
 /// `Engine::render_frame_without_background` の結果(裁定141、背景を敷かない
 /// 可視化専用の合成)— どちらの場合も、export/screenshot が読む生値
 /// (`RenderedFrame::rgba`)自体はここでは一切変更しない。
+///
+/// **市松v2(利用者較正 2026-08-21「市松が見えない」の根治)**: `ui_scale` を
+/// 明示的に受け取り、`stage_handle_rgba` と同じ縮小率
+/// (`stage::effective_preview_scale(stage_auto_scale(width, height),
+/// resolution_cap)`)を自分でも算出して
+/// [`settings_pane::checkerboard_tile_px`] に渡す — comp 画素空間固定だった
+/// 旧タイル寸(8px)が Auto 縮小後にさらに痩せて実質不可視になっていた
+/// 根因1をここで補正する(`settings_pane::checkerboard_tile_px` doc 参照)。
 fn build_stage_handle(
     width: u32,
     height: u32,
@@ -2119,11 +2136,20 @@ fn build_stage_handle(
     checkerboard: bool,
     resolution_cap: stage::PreviewResolutionCap,
     colors: Colors,
+    ui_scale: f32,
 ) -> (image::Handle, usize) {
     let (handle_width, handle_height, mut handle_rgba) =
         stage_handle_rgba(width, height, full_rgba, resolution_cap);
     if checkerboard {
-        settings_pane::composite_checkerboard(handle_width, handle_height, &mut handle_rgba, colors);
+        let effective_scale = stage::effective_preview_scale(stage_auto_scale(width, height), resolution_cap);
+        let tile_px = settings_pane::checkerboard_tile_px(ui_scale, effective_scale);
+        settings_pane::composite_checkerboard_with_tile_px(
+            handle_width,
+            handle_height,
+            &mut handle_rgba,
+            colors,
+            tile_px,
+        );
     }
     let handle_bytes = handle_rgba.len();
     (
