@@ -94,7 +94,7 @@ pub(crate) use motolii_settings_pane::chrome;
 /// 持つ(下記参照、関数名は無改名)。
 pub use motolii_stage_pane as stage;
 
-use chrome::{button_style, parse_number};
+use chrome::button_style;
 use inspector_pane::{FieldDraft, TransformField};
 use settings_pane::BackgroundFieldDraft;
 
@@ -1010,92 +1010,6 @@ impl Shell {
         self.session.playhead = timeline::nav::clip_edge_frame(row.start, row.duration, edge);
     }
 
-    /// 選択キー群の移動結果を Document へ確定する(Move/retime/Nudge 共通の
-    /// 書き口)。`origins`/`news` は同じ添字で対応する(選択は単一 layer 限定)。
-    /// property ごとにまとめて `KeyframeTrack` を再構築し、1回の `apply_all` で
-    /// 書き戻す(**1操作 = 1 undo**、`delete_selected_keys` と同じ形)。
-    /// **同時刻衝突は移動方向でソートしてから書く**(`representative_delta` の
-    /// 符号、正典 §3 — `timeline::key_gesture::key_write_order`)。
-    fn commit_key_frames(
-        &mut self,
-        origins: &[timeline_pane::KeySelector],
-        news: &[i64],
-        representative_delta: i64,
-    ) {
-        if origins.is_empty() || origins.len() != news.len() {
-            return;
-        }
-        let Some(composition) = self.composition() else {
-            return;
-        };
-        let fps = composition.fps;
-
-        let mut groups: std::collections::BTreeMap<(LayerId, PropertyId), Vec<(i64, i64)>> =
-            std::collections::BTreeMap::new();
-        for (origin, &new_frame) in origins.iter().zip(news) {
-            groups.entry((origin.layer, origin.property.clone())).or_default().push((origin.frame, new_frame));
-        }
-
-        let store = self.doc.view();
-        let mut intents = Vec::new();
-        for ((layer, property), moves) in &groups {
-            let Ok(Some(track)) = store.track(*layer, property) else {
-                continue;
-            };
-            let old_frames: std::collections::HashSet<i64> = moves.iter().map(|(old, _)| *old).collect();
-            let mut new_track = KeyframeTrack::new();
-            for existing in track.keys() {
-                let Ok(frame) = existing.t.try_to_frame_round(fps) else {
-                    continue;
-                };
-                if old_frames.contains(&frame) {
-                    continue; // 動いたキーは後段でまとめて書き直す。
-                }
-                new_track.insert(existing.clone());
-            }
-            let origin_frames: Vec<i64> = moves.iter().map(|(old, _)| *old).collect();
-            let order = timeline::key_gesture::key_write_order(&origin_frames, representative_delta);
-            for idx in order {
-                let (old_frame, new_frame) = moves[idx];
-                let Some(original_key) = track
-                    .keys()
-                    .iter()
-                    .find(|k| k.t.try_to_frame_round(fps) == Ok(old_frame))
-                else {
-                    continue;
-                };
-                let mut moved_key = original_key.clone();
-                let Ok(t) = RationalTime::try_from_frame(new_frame, fps) else {
-                    continue;
-                };
-                moved_key.t = t;
-                new_track.insert(moved_key);
-            }
-            intents.push(Intent::SetTrack { layer: *layer, property: property.clone(), track: new_track });
-        }
-        drop(store);
-
-        if intents.is_empty() {
-            return;
-        }
-        if let Err(error) = self.doc.apply_all(intents) {
-            self.status = Some(format!("キー時刻を書けない: {error}"));
-            return;
-        }
-
-        // 選択も新しい frame へ追従させる(§5.5「選択は生きたまま」— 書いた後の
-        // Session が古い frame を指したままだと次の操作で選択が失われる)。
-        for (origin, &new_frame) in origins.iter().zip(news) {
-            if let Some(selected) = self.session.selected_keys.iter_mut().find(|k| *k == origin) {
-                selected.frame = new_frame;
-            }
-            if let Some(anchor) = self.session.key_anchor.as_mut() {
-                if anchor == origin {
-                    anchor.frame = new_frame;
-                }
-            }
-        }
-    }
 
     // ---- Settings パネル(タスク#18、裁定160 切片9) ----
 
