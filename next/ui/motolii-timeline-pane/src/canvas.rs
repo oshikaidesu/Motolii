@@ -102,6 +102,13 @@ pub(crate) fn draw(
     }
     draw_time_bands(pane, &mut frame, rail_width, clip_width, rows_top, rows_bottom);
 
+    // 時間方向の縦線(利用者裁定 2026-08-21 夜・σ EXACT TARGET 2、mock
+    // `timeline-semantics.html` の `bands()` 第2ループが出典)。帯(面・粗い
+    // リズム)とは別の周波数(線・全目盛の細かいリズム) — 描画順は
+    // 帯→縦線→bar(地の上・内容物の下)なので、bar を描く層の行ループより
+    // 先にここへ置く。
+    draw_tick_lines(pane, &mut frame, rail_width, clip_width, rows_top, rows_bottom);
+
     // 層の行。
     for (index, row) in pane.rows.iter().enumerate() {
         let row_top = ruler_height + pane.layer_row_top(index);
@@ -322,5 +329,47 @@ fn draw_time_bands(
         }
         start_frame = end_frame;
         segment_index += 1;
+    }
+}
+
+/// 時間方向の縦線 — 全目盛の投影(利用者裁定 2026-08-21 夜・σ EXACT TARGET 2、
+/// mock `timeline-semantics.html` の `bands()` 第2ループが出典)。時間方向は
+/// 周波数で役割分担する: [`draw_time_bands`](面、大目盛周期の粗いリズム)に
+/// 対して、この関数は**線**(全目盛の細かいリズム)を描く — [`tick_steps`]
+/// (唯一の出典、`draw_ruler_ticks`/screenshot 器具と共有)から小目盛ごとに
+/// 1本、大目盛の位置だけ `timeline_grid_major`(わずかに強い「帯の境界の
+/// 確認線」)、他は `timeline_grid_minor`(弱)。
+///
+/// **時間場のみ**(rail は時間カメラの外 — `draw_time_bands` と同じ
+/// `x_offset`)。mock は f=0(rail 境界と重なる位置)を引かない —
+/// `frame_no = minor` から開始してその踏襲。
+fn draw_tick_lines(
+    pane: &TimelinePane,
+    frame: &mut canvas::Frame,
+    x_offset: f32,
+    width: f32,
+    top: f32,
+    bottom: f32,
+) {
+    if pane.duration_frames <= 0 || width <= 0.0 || bottom <= top {
+        return;
+    }
+    let (minor, major) = tick_steps(pane.fps, pane.duration_frames, width);
+    let last_frame = (pane.duration_frames - 1).max(0);
+    let mut frame_no = minor;
+    while frame_no <= last_frame {
+        let is_major = frame_no % major == 0;
+        let x = x_offset + frame_to_x(frame_no, width, pane.duration_frames);
+        let color = if is_major {
+            pane.colors.timeline_grid_major
+        } else {
+            pane.colors.timeline_grid_minor
+        };
+        let path = canvas::Path::line(Point::new(x, top), Point::new(x, bottom));
+        frame.stroke(
+            &path,
+            canvas::Stroke::default().with_color(color).with_width(pane.dims.border_width),
+        );
+        frame_no += minor;
     }
 }

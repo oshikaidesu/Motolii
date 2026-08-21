@@ -797,6 +797,29 @@ pub fn render(shell: &Shell) -> RgbaImage {
         }
     }
 
+    // 時間方向の縦線 — 全目盛の投影(利用者裁定 2026-08-21 夜・σ EXACT
+    // TARGET 3、`timeline/canvas.rs::draw_tick_lines` と同じ刻み・追随のみ)。
+    // 帯(面・粗いリズム)とは別の周波数(線・全目盛の細かいリズム) — 帯の
+    // 直後・bar 描画(下の層の行ループ)の前に置く(帯→縦線→bar の描画順)。
+    // mock は f=0(rail 境界と重なる位置)を引かない — `frame_no = minor` から
+    // 開始してその踏襲(`timeline/canvas.rs::draw_tick_lines` と同じ)。
+    if duration_frames > 0 && clip_width > 0.0 && rows_bottom > rows_top {
+        let (minor, major) = timeline_pane::tick_steps(fps, duration_frames, clip_width);
+        let last_frame = (duration_frames - 1).max(0);
+        let mut frame_no = minor;
+        while frame_no <= last_frame {
+            let is_major = frame_no % major == 0;
+            let x = clip_x0 + timeline_pane::frame_to_x(frame_no, clip_width, duration_frames);
+            let color = if is_major {
+                to_rgba(colors.timeline_grid_major, colors.timeline_grid_major.a)
+            } else {
+                to_rgba(colors.timeline_grid_minor, colors.timeline_grid_minor.a)
+            };
+            stroke_v(&mut canvas, x, rows_top, rows_bottom, dims.border_width, color);
+            frame_no += minor;
+        }
+    }
+
     for marker in &markers {
         let Some(fps) = fps else { continue };
         let Ok(frame_no) = marker.time.try_to_frame_floor(fps) else {

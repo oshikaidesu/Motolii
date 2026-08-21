@@ -276,6 +276,24 @@ pub struct Colors {
     /// 合図)より弱い ambient な差にとどまるよう `timeline_time_band` と同じ
     /// 桁の値(0.05)を採る(発明ではなく上限からの逆算、2026-08-21)。
     pub timeline_row_zebra: Color,
+    /// Timeline 縦線 — 全目盛の投影(利用者裁定 2026-08-21 夜、mock
+    /// `timeline-semantics.html` 意味層注記が出典)。時間方向は周波数で役割
+    /// 分担する: [`Colors::timeline_time_band`](面、大目盛周期の粗いリズム)
+    /// に対して、この2ロールは**線**(全目盛の細かいリズム)を担う。
+    /// `timeline_grid_minor` は小目盛(弱)。S4 柵(裁定164「意味役割が新しい
+    /// 時は既存段を借用せず専用ロールを起こす」)適用 — mock 注記は
+    /// 「既存 hairline_weak 流用 or 新 grid ロール」を実装時の裁定点として
+    /// 残していたが、[`Colors::border_hairline_weak`] は「区切り」の意味役割
+    /// (行/面の境界線)であって「時間の細かいリズムの投影」ではないため、
+    /// 専用ロールを起こす側を採る。DTCG 正本にロールが無いので
+    /// [`Colors::border_hairline_weak`] 等と同じ「固定値を1箇所に持つ」扱い
+    /// ([`fixed_grid_colors`] 参照)。値は黒 α0.18(mock 実測値の写し)。
+    pub timeline_grid_minor: Color,
+    /// Timeline 縦線 — 大目盛(わずかに強い確認線)。[`Colors::
+    /// timeline_grid_minor`] と対 — 面の分割ではなく「帯の境界の確認線」
+    /// (mock 注記)。値は黒 α0.30(mock 実測値の写し、`timeline_grid_minor`
+    /// より強いが `border_hairline_weak` の α0.35 より弱い)。
+    pub timeline_grid_major: Color,
     /// 市松(透明の可視化、`motolii_settings_pane::composite_checkerboard`)の
     /// 明タイル。**`surface_raised`/`surface_panel`(パネル面ロール)からの
     /// 独立ロール** — 市松v2(利用者較正 2026-08-21「市松が見えない」)の
@@ -374,6 +392,17 @@ fn fixed_checkerboard_colors() -> (Color, Color) {
     (checkerboard_light, checkerboard_dark)
 }
 
+/// [`Colors::timeline_grid_minor`]/[`Colors::timeline_grid_major`] の固定値。
+/// `Default`/`parse` の両方で同じ式にするための唯一の実装([`fixed_wash_colors`]
+/// と同じ理由)。値は mock `timeline-semantics.html` の `bands()` 第2ループ
+/// (`rgba(0,0,0,${f%major===0?0.30:0.18})`)の実測写し — 黒(区切り hairline と
+/// 同じ色相)、α だけ2段(小=弱・大=わずかに強い確認線)。
+fn fixed_grid_colors() -> (Color, Color) {
+    let timeline_grid_minor = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.18 };
+    let timeline_grid_major = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.30 };
+    (timeline_grid_minor, timeline_grid_major)
+}
+
 /// `surface.raised`/`text.muted`/`surface.panel`/`action.active` から
 /// `state_selected`/`state_disabled` を合成する。**正本 JSON にも [`Default`] にも
 /// 同じ式を使う**(2箇所で別の値にならないようにするための唯一の実装)。
@@ -407,6 +436,7 @@ impl Default for Colors {
         let (state_selected, state_disabled) =
             derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
         let (border_hairline_weak, timeline_time_band, timeline_row_zebra) = fixed_wash_colors();
+        let (timeline_grid_minor, timeline_grid_major) = fixed_grid_colors();
         let (checkerboard_light, checkerboard_dark) = fixed_checkerboard_colors();
         let label_palette = fixed_label_palette();
         Self {
@@ -431,6 +461,8 @@ impl Default for Colors {
             border_hairline_weak,
             timeline_time_band,
             timeline_row_zebra,
+            timeline_grid_minor,
+            timeline_grid_major,
             checkerboard_light,
             checkerboard_dark,
             label_palette,
@@ -450,6 +482,7 @@ impl Colors {
         let (state_selected, state_disabled) =
             derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
         let (border_hairline_weak, timeline_time_band, timeline_row_zebra) = fixed_wash_colors();
+        let (timeline_grid_minor, timeline_grid_major) = fixed_grid_colors();
         let (checkerboard_light, checkerboard_dark) = fixed_checkerboard_colors();
         let label_palette = fixed_label_palette();
         Ok(Self {
@@ -474,6 +507,8 @@ impl Colors {
             border_hairline_weak,
             timeline_time_band,
             timeline_row_zebra,
+            timeline_grid_minor,
+            timeline_grid_major,
             checkerboard_light,
             checkerboard_dark,
             label_palette,
@@ -1099,6 +1134,35 @@ mod hairline_and_rhythm_wash_tests {
             assert_eq!(wash.b, 1.0);
             assert!(wash.a > 0.0 && wash.a < 0.35, "hairline と紛れない薄さのはず");
         }
+    }
+
+    /// **本命(σ EXACT TARGET 1)**: `timeline_grid_minor`/`timeline_grid_major`
+    /// は mock `timeline-semantics.html` の実測値どおり黒 α0.18/0.30 で、
+    /// 大目盛の方が小目盛より強い(「わずかに強い確認線」)。
+    #[test]
+    fn timeline_grid_roles_are_black_with_the_mock_alphas() {
+        let colors = Colors::default();
+        for grid in [colors.timeline_grid_minor, colors.timeline_grid_major] {
+            assert_eq!(grid.r, 0.0);
+            assert_eq!(grid.g, 0.0);
+            assert_eq!(grid.b, 0.0);
+        }
+        assert!((colors.timeline_grid_minor.a - 0.18).abs() < 1e-6);
+        assert!((colors.timeline_grid_major.a - 0.30).abs() < 1e-6);
+        assert!(
+            colors.timeline_grid_major.a > colors.timeline_grid_minor.a,
+            "大目盛の縦線は小目盛よりわずかに強いはず(帯の境界の確認線)"
+        );
+    }
+
+    /// `timeline_grid_major` は `border_hairline_weak`(区切りロール、α0.35)
+    /// より弱い — 縦線は「区切り」ではなく「時間の細かいリズムの投影」
+    /// なので、同じ黒でも区切り hairline より控えめであるべき(mock 実測値
+    /// 0.30 < 0.35 の関係を固定する)。
+    #[test]
+    fn timeline_grid_major_is_weaker_than_the_hairline_separator() {
+        let colors = Colors::default();
+        assert!(colors.timeline_grid_major.a < colors.border_hairline_weak.a);
     }
 }
 
