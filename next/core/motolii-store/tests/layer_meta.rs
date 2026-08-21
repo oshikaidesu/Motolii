@@ -13,9 +13,9 @@
 //! - `Intent::SetMeta` は新規配置専用で、既存 layer には使えない(裁定108(c) の柵)
 
 use motolii_store::{
-    BlendMode, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerAttrsPatch,
-    LayerId, LayerMeta, LayerSource, LayerTiming, Matte, MatteMode, PropertyId, RationalTime,
-    Shape, ShapeNode, Speed, Value, property,
+    property, BlendMode, Composition, Document, EffectId, EffectInstance, Fps, Intent,
+    LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, Matte, MatteMode, PropertyId,
+    RationalTime, Shape, ShapeNode, Speed, Value,
 };
 
 fn t(frame: i64) -> RationalTime {
@@ -85,7 +85,10 @@ fn hidden_layer_does_not_resolve_but_still_exists() {
     .unwrap();
 
     // hidden ≠ present=false。layer 自体はまだ在る(一覧に出る)。
-    assert!(doc.view().has_layer(layer), "hidden で layer 自体が消えてはいけない");
+    assert!(
+        doc.view().has_layer(layer),
+        "hidden で layer 自体が消えてはいけない"
+    );
     assert!(
         doc.view().resolve(layer, t(0)).unwrap().is_none(),
         "hidden な layer が描かれてしまっている"
@@ -213,6 +216,71 @@ fn add_blend_mode_reaches_the_resolved_layer() {
     assert_eq!(resolved.blend_mode, BlendMode::Add);
 }
 
+/// **BL3**: `BlendMode` の serde は名前ベース(unit variant → 文字列)——`derive`が
+/// 追加した並び(Normal の直後に Multiply〜Exclusion の11値、`attrs.rs` の enum 宣言)
+/// が index を持たないので、並び順を変えても JSON 互換は壊れない(α の `Add` 追加時に
+/// 確認済みの前例と同じ流儀、`mask.rs::none_is_not_a_mask_mode` とも同型)。
+/// 17値(Lottie16 + Add)を全部往復させる。
+#[test]
+fn blend_mode_serde_is_name_based_and_round_trips_for_all_seventeen_values() {
+    for (name, mode) in [
+        ("\"Normal\"", BlendMode::Normal),
+        ("\"Add\"", BlendMode::Add),
+        ("\"Multiply\"", BlendMode::Multiply),
+        ("\"Screen\"", BlendMode::Screen),
+        ("\"Overlay\"", BlendMode::Overlay),
+        ("\"Darken\"", BlendMode::Darken),
+        ("\"Lighten\"", BlendMode::Lighten),
+        ("\"ColorDodge\"", BlendMode::ColorDodge),
+        ("\"ColorBurn\"", BlendMode::ColorBurn),
+        ("\"HardLight\"", BlendMode::HardLight),
+        ("\"SoftLight\"", BlendMode::SoftLight),
+        ("\"Difference\"", BlendMode::Difference),
+        ("\"Exclusion\"", BlendMode::Exclusion),
+        ("\"Hue\"", BlendMode::Hue),
+        ("\"Saturation\"", BlendMode::Saturation),
+        ("\"Color\"", BlendMode::Color),
+        ("\"Luminosity\"", BlendMode::Luminosity),
+    ] {
+        let back: BlendMode = serde_json::from_str(name)
+            .unwrap_or_else(|e| panic!("{name} を読めない({mode:?} のはず): {e}"));
+        assert_eq!(back, mode, "{name} が {mode:?} 以外へ解けた");
+        assert_eq!(
+            serde_json::to_string(&mode).unwrap(),
+            name,
+            "{mode:?} の書き出しが {name} と一致しない"
+        );
+    }
+}
+
+/// **旧 JSON は不変**(ORACLE「旧JSON(Normal/Add のみ)不変」): BL3 より前に保存された
+/// `"Normal"`/`"Add"` 文字列が、BL3 で11値を enum へ足した後もそのまま読める——
+/// `LayerAttrs` を丸ごと組んで往復させ、`blend_mode` フィールドだけの断片ではなく
+/// 実際の保存形(`LayerAttrs` は `Serialize`/`Deserialize`)で確かめる。
+#[test]
+fn legacy_normal_and_add_json_still_parses_after_bl3() {
+    use motolii_store::LayerAttrs;
+
+    for (name, mode) in [
+        ("\"Normal\"", BlendMode::Normal),
+        ("\"Add\"", BlendMode::Add),
+    ] {
+        let attrs = LayerAttrs {
+            blend_mode: mode,
+            ..Default::default()
+        };
+        let value = serde_json::to_value(&attrs).unwrap();
+        assert_eq!(
+            value.get("blend_mode").and_then(|v| v.as_str()),
+            Some(&name[1..name.len() - 1]),
+            "書き出し形が変わっている(旧 JSON との互換に影響)"
+        );
+
+        let back: LayerAttrs = serde_json::from_value(value).expect("旧形式の JSON を読めない");
+        assert_eq!(back.blend_mode, mode);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // nm (Name) / ao (Auto Orient)
 // ---------------------------------------------------------------------------
@@ -314,13 +382,19 @@ fn patching_one_field_leaves_the_others_alone() {
 
     let attrs = doc.view().attrs(layer).unwrap().expect("attrs が無い");
     assert!(attrs.hidden, "hidden が反映されていない");
-    assert_eq!(attrs.name, "背景", "SetAttrs の別フィールド更新で name が消えた");
+    assert_eq!(
+        attrs.name, "背景",
+        "SetAttrs の別フィールド更新で name が消えた"
+    );
     assert_eq!(
         attrs.blend_mode,
         BlendMode::Multiply,
         "SetAttrs の別フィールド更新で blend_mode が消えた"
     );
-    assert!(attrs.auto_orient, "SetAttrs の別フィールド更新で auto_orient が消えた");
+    assert!(
+        attrs.auto_orient,
+        "SetAttrs の別フィールド更新で auto_orient が消えた"
+    );
 }
 
 /// `parent` を触らない `SetAttrs` は、既存の parent を黙って外さない
@@ -589,7 +663,11 @@ fn null_layer_resolves_but_has_no_declared_size() {
     let layer = LayerId(1);
     place(&mut doc, layer, LayerSource::Null, 0, 100);
 
-    let resolved = doc.view().resolve(layer, t(0)).unwrap().expect("居る(絵は無くても解決はする)");
+    let resolved = doc
+        .view()
+        .resolve(layer, t(0))
+        .unwrap()
+        .expect("居る(絵は無くても解決はする)");
     assert_eq!(resolved.source, LayerSource::Null);
     assert_eq!(resolved.declared_size, [0.0, 0.0]);
 }
@@ -704,7 +782,10 @@ fn label_color_defaults_to_unassigned() {
     place(&mut doc, layer, solid(), 0, 100);
 
     let attrs = doc.view().attrs(layer).unwrap().unwrap_or_default();
-    assert_eq!(attrs.label_color, None, "SetAttrs で一度も触っていない layer は未割当のはず");
+    assert_eq!(
+        attrs.label_color, None,
+        "SetAttrs で一度も触っていない layer は未割当のはず"
+    );
 }
 
 #[test]
@@ -723,7 +804,11 @@ fn set_attrs_writes_and_reads_back_label_color() {
     .unwrap();
 
     let attrs = doc.view().attrs(layer).unwrap().unwrap();
-    assert_eq!(attrs.label_color, Some(5), "label_color の patch が読み戻らない");
+    assert_eq!(
+        attrs.label_color,
+        Some(5),
+        "label_color の patch が読み戻らない"
+    );
 }
 
 #[test]
@@ -750,7 +835,10 @@ fn set_attrs_can_clear_label_color_back_to_unassigned() {
     .unwrap();
 
     let attrs = doc.view().attrs(layer).unwrap().unwrap();
-    assert_eq!(attrs.label_color, None, "外側 Some(None) で未割当へ戻せるはず");
+    assert_eq!(
+        attrs.label_color, None,
+        "外側 Some(None) で未割当へ戻せるはず"
+    );
 }
 
 #[test]
@@ -777,6 +865,10 @@ fn patching_an_unrelated_field_does_not_touch_label_color() {
     .unwrap();
 
     let attrs = doc.view().attrs(layer).unwrap().unwrap();
-    assert_eq!(attrs.label_color, Some(7), "無関係な patch で label_color が黙って消えてはいけない");
+    assert_eq!(
+        attrs.label_color,
+        Some(7),
+        "無関係な patch で label_color が黙って消えてはいけない"
+    );
     assert!(attrs.hidden);
 }
