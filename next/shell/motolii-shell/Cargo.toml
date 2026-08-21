@@ -48,6 +48,13 @@ motolii-inspector-pane.workspace = true
 # `motolii-stage-pane/Cargo.toml` へ一緒に移した(motolii-shell からは直接
 # 使わなくなった)。
 motolii-stage-pane.workspace = true
+# ζ 縫い目調査(docs/reviews/2026-08-21-browser-seam-survey.md)+裁定162 切片
+# B0: Browser pane 骨格 crate。`pub use motolii_browser_pane as browser_pane;`
+# (lib.rs)で他 pane と同じ命名口を張る。`Message::Browser(browser_pane::Message)`
+# の腕は追加するが中身は無い match(`browser_pane::Message` がまだ空 enum の
+# ため)——**`Shell::view` にはまだ組み込まない**(描画ゼロ = 挙動ゼロ変更の
+# 証明、view 配線は B3 で絵と一緒に)。
+motolii-browser-pane.workspace = true
 # `--fixture --screenshot` 器具(screenshot.rs)が PNG を書き出すのに使う。iced の
 # "image" feature が既に `image`(png codec 込み)を依存グラフへ引いているので、
 # workspace の Cargo.toml 自身が既に明記している「裁定117 が許す direct 昇格」

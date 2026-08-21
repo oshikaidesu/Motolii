@@ -3466,6 +3466,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-browser-pane"
+version = "0.1.0"
+dependencies = [
+ "iced",
+]
+
+[[package]]
 name = "motolii-compositor"
 version = "0.1.0"
 dependencies = [
@@ -3567,6 +3574,7 @@ dependencies = [
  "iced_test",
  "image",
  "motolii-audio",
+ "motolii-browser-pane",
  "motolii-core",
  "motolii-engine",
  "motolii-inspector-pane",

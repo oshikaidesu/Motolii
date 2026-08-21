@@ -95,6 +95,14 @@ pub(crate) use motolii_settings_pane::chrome;
 /// 持つ(下記参照、関数名は無改名)。
 pub use motolii_stage_pane as stage;
 
+/// `browser_pane` は ζ 縫い目調査(`docs/reviews/2026-08-21-browser-seam-survey.md`)
+/// +裁定162 切片 B0 で新規追加した骨格 crate(`motolii-browser-pane`、既存 pane の
+/// 「型 alias で外部参照を壊さない」手口と同じ命名 — こちらは移設ではなく新規
+/// なので壊す既存参照は無い)。**B0 時点では `Message::Browser` の腕はあるが
+/// `Shell::view` には組み込まない**(描画ゼロ = 挙動ゼロ変更の証明、view 配線は
+/// B3 で絵と一緒に)。
+pub use motolii_browser_pane as browser_pane;
+
 use chrome::button_style;
 use inspector_pane::{FieldDraft, TransformField};
 use settings_pane::BackgroundFieldDraft;
@@ -258,6 +266,13 @@ pub enum Message {
     /// Message を親が wrap する」形、`Message::Settings`/`Message::Timeline`
     /// と同型)。腕ごとの doc は `stage::Message` 側を参照。
     Stage(stage::Message),
+
+    // ---- Browser pane 骨格(ζ 縫い目調査+裁定162 切片 B0、まだ何も描かない) ----
+    /// `motolii_browser_pane::Message` を1本で畳む(`Message::Settings`/
+    /// `Message::Stage` と同型)。**B0 時点では `browser_pane::Message` が
+    /// 空 enum なので、この腕は実質発行されない**(B1 以降、素材列挙/rail・
+    /// filter の腕が増えるのに追随して `Shell::update` 側の match 中身も足す)。
+    Browser(browser_pane::Message),
 
     // ---- layer クリップボード(普通地図 消化第1波 U1、正典 §4) ----
     // キーは全部仮の既定割当(Cmd+C/V/X/D/A・Cmd+Shift+A) — keymap 層は未実装なので
@@ -621,6 +636,10 @@ impl Shell {
             }
             Message::Settings(msg) => self.update_settings(msg),
             Message::Stage(msg) => self.update_stage(msg),
+            // B0: `browser_pane::Message` はまだ空 enum なので、この match は
+            // 中身が無い(`msg` に variant が無い = 到達しない、B1 以降で腕が
+            // 増えたらここへ追随させる)。
+            Message::Browser(msg) => match msg {},
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
                 // **1操作 = 1 undo**。`AddLayer` と `SetMeta` を別々に書くと
