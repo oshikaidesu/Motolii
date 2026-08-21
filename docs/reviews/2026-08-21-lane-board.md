@@ -11,6 +11,8 @@
 
 (T2/T3 は着地済み — 下の完了表へ移動済み。前回終了時の書き残し)
 
+| 調査: backend 消費ギャップ縫い目 | 調査(read-only・sonnet) | main checkout(書き込み禁止) | blend14種/mask/speed の台帳・経路比較(EffectPass 基盤 vs rerun fork shader vs 旧 crates 移植)・S1〜S5 同型の切片割り。A2 の write-set(audio/shell/shell-state/Cargo.toml)と衝突する切片は「A2 着地後」と明記させる |
+
 ## 完了・main 着地済み(実装)
 
 | レーン | 結果 |
@@ -50,6 +52,7 @@
 | GitHub 置き換え+README | origin へ472コミット push(旧世界は歴史として保存)。README フック書き換え(「2つの if」— 意味を保つ合成の遊び場×架けられなかった橋)。AviUtl への評価は不記載に修正済み |
 | **カメラ campaign 完結(裁定156/157)** | S0 engine 第二エントリ+Shell 側 S1〜S3。観測=wheel アンカーズーム/中ボタンパン・Shift+F で復帰・**フレーム枠 overlay 視覚合格**・export 汚染ゼロ直接証明+構造柵(呼び出し点 grep 固定)。既知境界: 観測中は市松プレビュー非合成(doc 明記) |
 | (supervisor 直) 色 token 追随 fix / 市松レーン回収 / 引き継ぎ123コミット着地 | main 前提の整地 |
+| (supervisor 直・後任) multi-select 行ハイライト配線 | U1 finding 根治(`830bce23`)。`row_selected` 純関数抽出+赤→緑・pane36+shell156 全緑。primary 区別は property 行展開のまま(AE 同型)。実窓合否は利用者チェックリストへ追加 |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
 
@@ -82,6 +85,7 @@
 ## 利用者の目待ち(貯め — 裁定151 で操作意味論は自走確定に変更。残るのは見た目の実窓合否のみ)
 
 - 実窓での線化(第1弾+第2弾の明暗リズム強度)+値セル余白+市松の手触り+glow の halo
+- multi-select 行ハイライト(`830bce23`): Cmd/Shift 複数選択で全行が同色ハイライト・focus だけ property 行展開、の見え方
 - リタイムが**複数プロパティ選択を一括で比例スケール**する解釈(T4 逸脱4 — 文法は範囲を限定していないため広く取った。実機で違和感があれば property 単位へ絞る)
 - ~~正典の候~~ → 裁定151 で人口多数決により一括確定済み(§8.2)
 
