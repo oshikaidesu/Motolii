@@ -214,7 +214,9 @@ fn with_one_layer_then_undo() -> Shell {
 /// 増やさない、という冒頭 doc 通りの拡張)。
 fn with_settings_open() -> Shell {
     let mut shell = fresh();
-    let _ = shell.update(Message::ToggleSettingsPanel);
+    let _ = shell.update(Message::Settings(
+        motolii_shell::settings_pane::Message::ToggleSettingsPanel,
+    ));
     shell
 }
 

@@ -8,9 +8,11 @@
 //! `next/DECISIONS.md` 裁定142 EXACT TARGET が名指しした5ファイル(すべて
 //! `src/` 直下): [`SCANNED_FILES`]。**`tokens.rs` 自身・`fixture.rs`(テスト
 //! データ)は対象外**(発注書 KNOWN) — 値の正本と、正本を読むための試験データは
-//! この柵の対象ではない。`inspector_pane.rs`/`settings_pane.rs` はソース内に
-//! `#[cfg(test)] mod tests { .. }` を持つ — [`scannable_prefix`] がその手前で
-//! 切り、test 内の生値(assert の期待値等)は対象にしない。
+//! この柵の対象ではない。`inspector_pane.rs` はソース内に `#[cfg(test)] mod
+//! tests { .. }` を持つ — [`scannable_prefix`] がその手前で切り、test 内の
+//! 生値(assert の期待値等)は対象にしない(`settings_pane.rs` は裁定160
+//! 切片9で `motolii-settings-pane` crate へ抽出済み、SCANNED_FILES 側の
+//! doc comment参照)。
 //!
 //! ## 何を「違反」とするか(境界線はここで決める — 発注書 KNOWN 4)
 //! 全ての raw 数値・raw 色を1文字残らず禁止すると、ループ範囲・opacity%換算・
@@ -86,7 +88,11 @@ const SCANNED_FILES: &[&str] = &[
     "timeline/input.rs",
     "timeline/key_rows.rs",
     "timeline/lane_bar.rs",
-    "settings_pane.rs",
+    // `settings_pane.rs` は裁定160 切片9で `motolii-settings-pane` crate へ
+    // 抽出済み(`next/ui/motolii-settings-pane/src/lib.rs`)——この柵は
+    // `motolii-shell` の `src/` だけを見るので、抽出後のソースはもう対象外
+    // (crate 抽出に伴う fence 走査ギャップ、抽出先での再構築は本切片の
+    // スコープ外 — pane split survey §6 切片9 の write-set にこの柵は無い)。
     "lib.rs",
     "screenshot.rs",
     // 裁定157(観測カメラ)S3: Stage overlay の `canvas::Stroke` 呼び出しが
@@ -390,21 +396,16 @@ const EXCLUSIONS: &[Exclusion] = &[
         identifier: "fn stroke_h",
         reason: "(x1 - x0).max(1.0) / width_px.max(1.0) — 同上。",
     },
-    // --- (2) データ由来の色 ---------------------------------------------
-    Exclusion {
-        file: "settings_pane.rs",
-        identifier: "pub fn preset_rgba",
-        reason: "Composition.background(Stage 背景プリセット)の実値。UI chrome ではなく\
-                 ユーザ作品(書き出しに乗る)の内容 — token化すると「テーマ変更で作品の色が\
-                 変わる」逆事故になる(裁定142除外2)。",
-    },
-    // --- (3) 製品意味の定数 -----------------------------------------------
-    Exclusion {
-        file: "settings_pane.rs",
-        identifier: "BackgroundPreset::Gray18 => [channel(46), channel(46), channel(46), 1.0]",
-        reason: "「18%グレー」という写真用語をそのまま8bit値(255*0.18≈46)へ当てた値そのものが\
-                 仕様(裁定142除外3)。散在させず preset_rgba 1箇所にしか定義しない。",
-    },
+    // --- (2)/(3) は元は "settings_pane.rs"(`pub fn preset_rgba`・
+    // `BackgroundPreset::Gray18` の18%グレー定数)を指していたが、裁定160
+    // 切片9で当該ファイルが `motolii-settings-pane` crate(`next/ui/
+    // motolii-settings-pane/src/lib.rs`)へ抽出された——この柵は `src_dir()`
+    // (`motolii-shell` の `src/` のみ)を見るため、抽出先のファイルは
+    // `exclusion_identifiers_still_exist_in_their_named_file` から読めなく
+    // なる。除外の理由自体は今も有効(値は無改変で移設しただけ)だが、この
+    // 柵の走査範囲がもう及ばないので表からは落とした——抽出先での柵の再構築は
+    // 本切片のスコープ外(pane split survey §6 切片9 の write-set に本ファイルは
+    // 無い、`docs/reviews/2026-08-21-pane-split-survey.md`)。
 ];
 
 /// 除外リストの識別子が実ソースに存在し続けることを見張る — コードが変わって

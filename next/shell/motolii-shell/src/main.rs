@@ -34,15 +34,21 @@ fn main() -> iced::Result {
     if let Some(path) = screenshot_path {
         let (mut shell, _task) = motolii_shell::Shell::new_fixture();
         if transparent_bg {
-            let _ = shell.update(motolii_shell::Message::SettingsBackgroundPreset(
-                motolii_shell::settings_pane::BackgroundPreset::Transparent,
+            let _ = shell.update(motolii_shell::Message::Settings(
+                motolii_shell::settings_pane::Message::BackgroundPreset(
+                    motolii_shell::settings_pane::BackgroundPreset::Transparent,
+                ),
             ));
         }
         if checkerboard {
-            let _ = shell.update(motolii_shell::Message::ToggleCheckerboard);
+            let _ = shell.update(motolii_shell::Message::Settings(
+                motolii_shell::settings_pane::Message::ToggleCheckerboard,
+            ));
         }
         if settings_open {
-            let _ = shell.update(motolii_shell::Message::ToggleSettingsPanel);
+            let _ = shell.update(motolii_shell::Message::Settings(
+                motolii_shell::settings_pane::Message::ToggleSettingsPanel,
+            ));
         }
         if observe {
             // Stage のホイール/中ボタンドラッグが実際に計算する物と同じ形の

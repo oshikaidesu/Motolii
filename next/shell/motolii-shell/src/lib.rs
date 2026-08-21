@@ -22,12 +22,10 @@ use motolii_store::{
     LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, StoreView, Value,
 };
 
-mod chrome;
 pub mod clipboard;
 pub mod fixture;
 pub mod inspector_pane;
 pub mod screenshot;
-pub mod settings_pane;
 pub mod stage;
 pub mod state;
 pub mod timeline;
@@ -52,9 +50,26 @@ pub use motolii_tokens_rs as tokens;
 /// `tests/suite/*.rs`)を壊さないための re-export。
 pub use timeline as timeline_pane;
 
+/// `settings_pane` は裁定160 切片9 で `motolii-settings-pane` crate へ抽出済み
+/// (pane split survey §6 切片9)。`pub use timeline as timeline_pane;` と同じ
+/// 「型 alias で外部参照を壊さない」手口 — 既存の `crate::settings_pane::X`・
+/// `motolii_shell::settings_pane::X` 参照(`screenshot.rs`・`tests/suite/*.rs`)
+/// は無改修で済む。write ロジック(`apply_background_preset`/
+/// `commit_background_channel`/`commit_ui_scale`)もこの crate 側へ移設済み —
+/// `Shell::update_settings` はそれらを呼ぶ glue だけを持つ(下記参照)。
+pub use motolii_settings_pane as settings_pane;
+
+/// `chrome`(pane 横断スタイルヘルパ、裁定160 切片5)は settings-pane crate 抽出
+/// (切片9)時に settings_pane が4関数全部を必要としていたため一緒に移設した
+/// (survey §2.4「必要最小の共有を crate 側へ移す」)。`inspector_pane.rs`・
+/// このファイル自身の `crate::chrome::X` 参照はこの re-export だけで無改修の
+/// まま通る — `motolii-shell` は assembler として `motolii-settings-pane` に
+/// 依存する側なので、新しい循環にはならない(root → pane の一方向)。
+pub(crate) use motolii_settings_pane::chrome;
+
 use chrome::{button_style, parse_number};
 use inspector_pane::{FieldDraft, TransformField};
-use settings_pane::{BackgroundChannel, BackgroundFieldDraft, BackgroundPreset};
+use settings_pane::BackgroundFieldDraft;
 
 use tokens::{Colors, Dimensions, Tokens};
 
@@ -278,26 +293,11 @@ pub enum Message {
     /// Esc — drag 中なら復元、typing 下書き中(値セル/名前欄)ならそれを破棄。
     EscapePressed,
 
-    // ---- Settings パネル(タスク#18) ----
-    /// ヘッダの歯車ボタン。表示だけのトグル — Document にも undo 履歴にも乗らない。
-    ToggleSettingsPanel,
-    /// Stage の下に市松を敷くかどうか。**表示専用** — Document には一切乗らない
-    /// (書き出しに影響しない、`settings_pane` モジュール doc 参照)。
-    ToggleCheckerboard,
-    /// 背景色プリセット(黒/白/グレー18%)。押した瞬間に確定する
-    /// (`Intent::SetComposition` を1回、1 gesture = 1 undo)。
-    SettingsBackgroundPreset(BackgroundPreset),
-    /// 背景 RGBA の1チャンネルへの打鍵。**まだ Document を書かない** —
-    /// 下書きを更新するだけ(`InspectorFieldInput` と同じ形)。
-    SettingsBackgroundChannelInput(BackgroundChannel, String),
-    /// 背景 RGBA の1チャンネルの Enter — ここで初めて `Intent::SetComposition` を
-    /// 1回出す(read-modify-write、他チャンネルは現在値のまま)。
-    SettingsBackgroundChannelSubmit(BackgroundChannel),
-    /// ui_scale(%)欄への打鍵。まだ書かない。
-    UiScaleInput(String),
-    /// ui_scale(%)欄の Enter — 50..200 にクランプして `Tokens`/`Dimensions` を
-    /// 更新し、debug ビルドでは正本 JSON へも書き戻す(`tokens::save_ui_scale`)。
-    UiScaleSubmit,
+    // ---- Settings パネル(タスク#18、裁定160 切片9で pane ローカル Message へ集約) ----
+    /// `motolii_settings_pane::Message` を1本で畳む(iced 標準型 — 子 pane の
+    /// `Message` を親が wrap する形)。腕ごとの doc は `settings_pane::Message`
+    /// 側を参照。
+    Settings(settings_pane::Message),
 
     // ---- Stage 観測カメラ(裁定157) ----
     /// `stage::StageOverlay`(ホイール/中ボタンドラッグ)が計算済みの観測カメラ値
@@ -738,17 +738,7 @@ impl Shell {
                     self.cancel_inspector_interaction();
                 }
             }
-            Message::ToggleSettingsPanel => self.settings_panel_open = !self.settings_panel_open,
-            Message::ToggleCheckerboard => self.checkerboard = !self.checkerboard,
-            Message::SettingsBackgroundPreset(preset) => self.apply_background_preset(preset),
-            Message::SettingsBackgroundChannelInput(channel, text) => {
-                self.background_draft = Some(BackgroundFieldDraft { channel, text });
-            }
-            Message::SettingsBackgroundChannelSubmit(channel) => {
-                self.commit_background_channel(channel);
-            }
-            Message::UiScaleInput(text) => self.ui_scale_draft = Some(text),
-            Message::UiScaleSubmit => self.commit_ui_scale(),
+            Message::Settings(msg) => self.update_settings(msg),
             Message::StageObserve(camera) => self.observation = Some(camera),
             Message::ResetToRenderCamera => self.observation = None,
             Message::AddLayer => {
@@ -1688,63 +1678,47 @@ impl Shell {
         }
     }
 
-    // ---- Settings パネル(タスク#18) ----
+    // ---- Settings パネル(タスク#18、裁定160 切片9) ----
 
-    /// 背景色プリセット — 現在の `Composition` を読み、`background` だけ書き換えて
-    /// 丸ごと書き戻す(read-modify-write、`Intent::SetComposition` は丸ごと置換の
-    /// intent なので width/height/fps/duration_frames を巻き込まないよう毎回読む)。
-    fn apply_background_preset(&mut self, preset: BackgroundPreset) {
-        let Some(mut composition) = self.doc.view().composition().ok().flatten() else {
-            self.status = Some("comp が無い".to_owned());
-            return;
-        };
-        composition.background = settings_pane::preset_rgba(preset);
-        if let Err(error) = self.doc.apply(Intent::SetComposition(composition)) {
-            self.status = Some(format!("背景を書けない: {error}"));
-        }
-    }
-
-    /// 背景 RGBA の1チャンネル — 下書きを確定して1回の `Intent::SetComposition`
-    /// を出す(read-modify-write、他チャンネルは今の値のまま)。
-    fn commit_background_channel(&mut self, channel: BackgroundChannel) {
-        let Some(draft) = self.background_draft.take() else {
-            return;
-        };
-        if draft.channel != channel {
-            self.background_draft = Some(draft);
-            return;
-        }
-        let Some(mut composition) = self.doc.view().composition().ok().flatten() else {
-            self.status = Some("comp が無い".to_owned());
-            return;
-        };
-        let Some(value_0_255) = settings_pane::parse_channel_u8(&draft.text) else {
-            self.status = Some(format!("数値として読めない: {}", draft.text));
-            return;
-        };
-        composition.background[channel.index()] = value_0_255 / 255.0;
-        if let Err(error) = self.doc.apply(Intent::SetComposition(composition)) {
-            self.status = Some(format!("背景を書けない: {error}"));
-        }
-    }
-
-    /// ui_scale(%)欄 — 下書きを確定して 50..200 にクランプ、`Tokens`/`Dimensions`
-    /// を更新する。**Document を経由しない**(`ui_scale` は既存の置き場どおり
-    /// トークン扱い、undo 対象ではない)。debug ビルドでは正本 JSON へも書き戻す —
-    /// 失敗しても in-memory の値は既に更新済みなので、画面上は反映される
-    /// (書き込み失敗は status 帯へ理由を出すだけで機能は止めない、M16)。
-    fn commit_ui_scale(&mut self) {
-        let Some(text) = self.ui_scale_draft.take() else {
-            return;
-        };
-        let Some(ui_scale) = settings_pane::parse_ui_scale_percent(&text) else {
-            self.status = Some(format!("数値として読めない: {text}"));
-            return;
-        };
-        self.tokens.dims.ui_scale = ui_scale;
-        self.tokens.ui_scale = ui_scale;
-        if let Err(error) = tokens::save_ui_scale(ui_scale) {
-            self.status = Some(format!("ui_scale を保存できない: {error}"));
+    /// pane ローカル `Message` を畳んで書き口へ渡す glue。write ロジックの実体は
+    /// `motolii_settings_pane::{apply_background_preset, commit_background_channel,
+    /// commit_ui_scale}`(自由関数、`&mut Document`/`&mut Tokens`/下書きを明示
+    /// 引数で受け取る形 — pane crate は `&mut self` を持てないため)。ここでは
+    /// `self.doc`/`self.tokens`/下書きフィールドをそのまま貸すだけで、拒否理由
+    /// (`Result::Err`)を `self.status` へ writeする以外の判断は持たない。
+    fn update_settings(&mut self, message: settings_pane::Message) {
+        match message {
+            settings_pane::Message::ToggleSettingsPanel => {
+                self.settings_panel_open = !self.settings_panel_open;
+            }
+            settings_pane::Message::ToggleCheckerboard => {
+                self.checkerboard = !self.checkerboard;
+            }
+            settings_pane::Message::BackgroundPreset(preset) => {
+                if let Err(error) = settings_pane::apply_background_preset(&mut self.doc, preset) {
+                    self.status = Some(error);
+                }
+            }
+            settings_pane::Message::BackgroundChannelInput(channel, text) => {
+                self.background_draft = Some(BackgroundFieldDraft { channel, text });
+            }
+            settings_pane::Message::BackgroundChannelSubmit(channel) => {
+                if let Err(error) = settings_pane::commit_background_channel(
+                    &mut self.doc,
+                    &mut self.background_draft,
+                    channel,
+                ) {
+                    self.status = Some(error);
+                }
+            }
+            settings_pane::Message::UiScaleInput(text) => self.ui_scale_draft = Some(text),
+            settings_pane::Message::UiScaleSubmit => {
+                if let Err(error) =
+                    settings_pane::commit_ui_scale(&mut self.tokens, &mut self.ui_scale_draft)
+                {
+                    self.status = Some(error);
+                }
+            }
         }
     }
 
@@ -2155,15 +2129,18 @@ impl Shell {
         // 下書き入力欄も存在しないので誤操作の的にならない)。
         let mut layout = column![self.header()];
         if self.settings_panel_open {
-            layout = layout.push(settings_pane::view(
-                self.composition().as_ref(),
-                self.background_draft.as_ref(),
-                self.tokens.ui_scale,
-                self.ui_scale_draft.as_deref(),
-                self.checkerboard,
-                dims,
-                colors,
-            ));
+            layout = layout.push(
+                settings_pane::view(
+                    self.composition().as_ref(),
+                    self.background_draft.as_ref(),
+                    self.tokens.ui_scale,
+                    self.ui_scale_draft.as_deref(),
+                    self.checkerboard,
+                    dims,
+                    colors,
+                )
+                .map(Message::Settings),
+            );
         }
 
         layout
@@ -2210,7 +2187,7 @@ impl Shell {
             // iced 0.14 の未確認リスク)を踏まない選択。
             button(text("Settings").size(dims.body_text))
                 .style(move |_theme, status| button_style(dims, colors, status))
-                .on_press(Message::ToggleSettingsPanel),
+                .on_press(Message::Settings(settings_pane::Message::ToggleSettingsPanel)),
         ]
         .spacing(dims.spacing_m)
         .align_y(iced::alignment::Vertical::Center);
