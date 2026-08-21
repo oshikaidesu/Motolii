@@ -1,7 +1,8 @@
-//! property 行(キー行、第2波 T3・裁定148/151)の draw + hit。**自己完結** —
-//! `input.rs`/`hit.rs`/`lane_bar.rs::hit_test` は一切呼ばない(`mod.rs` doc の
-//! [`super::key_rows`] 節、`projection::layer_row_top` の write-set 外
-//! finding 参照)。
+//! property 行(キー行、第2波 T3・裁定148/151)の draw + hit
+//! **+ 第2波T4(正典 §3・§8.1・裁定146)のキー時刻ドラッグ/リタイム**。
+//! **自己完結** — `input.rs`/`hit.rs`/`lane_bar.rs::hit_test` は一切呼ばない
+//! (`mod.rs` doc の [`super::key_rows`] 節、`projection::layer_row_top` の
+//! write-set 外 finding 参照)。
 //!
 //! - **描画**: 行の帯(ゼブラのリズムを layer 行と共有、EXACT TARGET 2)+
 //!   rail 側の property 名 + キー菱形(描画 8×8・当たり 12×12、単一菱形 —
@@ -11,6 +12,15 @@
 //!   `Session::selected_keys`/`key_anchor` の読み書きは唯一の書き口
 //!   (`crate::Shell::update`/`apply_key_selection`)へ委ねる
 //!   ([`super::KeySelectionOp`])
+//! - **時刻ドラッグ/リタイム**(第2波T4): 修飾キー無しの press は
+//!   [`Message::TimelineKeyGrabbed`]{retime:false} を出す(選択の差し替え+
+//!   drag 開始を兼ねる、確定は `Shell` 側)。Cmd+press が「選択済み・選択が
+//!   2本以上・掴んだキーがその選択の端(最小/最大 frame)」を満たせば
+//!   `retime:true` で同じ Message を出す(RetimeSelection、裁定146) —
+//!   満たさなければ従来どおり Cmd=トグル。**継続イベント**(press 後の
+//!   move/release/右クリック)は `TimelinePane::key_drag_active`
+//!   (`mod.rs` doc の [`super::key_rows`] 節参照)を見て、drag 中は
+//!   ButtonPressed 以外もここで拾う — `input::Interaction` は一切触らない
 //! - **Delete**: グローバルの window リスナー(`crate::inspector_pointer_event`)
 //!   が Backspace/Delete を拾って `Message::TimelineDeleteSelectedKeys` を出す
 //!   — ここは選択の判定だけを持ち、削除には関与しない
@@ -18,7 +28,7 @@
 use iced::widget::canvas;
 use iced::{mouse, Point, Rectangle, Size};
 
-use super::projection::frame_to_x;
+use super::projection::{frame_at_x, frame_to_x};
 use super::{KeySelectionOp, KeySelector, TimelinePane};
 use crate::Message;
 
@@ -128,18 +138,78 @@ pub(crate) fn draw(
     }
 }
 
-/// property 行の帯内の click を判定する。**帯の内側に入った click は、菱形に
-/// 当たっても外れても必ず `capture()` で吸収する** — `input.rs`/`hit.rs` は
-/// 押し下げ([`super::projection::layer_row_top`])を知らないので、そのまま
-/// 通すと後続層への誤爆(誤選択/誤 scrub)になる(`layer_row_top` の doc の
-/// write-set 外 finding 参照)。帯の外なら `None` を返し、通常の経路
-/// (`input::update`)に委ねる。
+/// 今選択されているキー全員(全 property 行を横断)の frame の最小・最大・本数。
+/// RetimeSelection(裁定146)の「範囲端」判定に使う — 1本しか選ばれていなければ
+/// 端の概念が無い(retime 不成立)。
+fn selected_frame_bounds(pane: &TimelinePane) -> Option<(i64, i64, usize)> {
+    let mut min = i64::MAX;
+    let mut max = i64::MIN;
+    let mut count = 0usize;
+    for row in &pane.property_rows {
+        for key in &row.keys {
+            if key.selected {
+                min = min.min(key.frame);
+                max = max.max(key.frame);
+                count += 1;
+            }
+        }
+    }
+    (count > 0).then_some((min, max, count))
+}
+
+/// press 時点の座標だけで求める comp frame と px/frame(第2波T4、
+/// `input::update` の `DragKind::Clip` 腕と同じ換算式)。
+fn frame_at_position(pane: &TimelinePane, bounds: Rectangle, position: Point) -> (i64, f32) {
+    let rail_width = pane.rail_width();
+    let clip_width = (bounds.width - rail_width).max(0.0);
+    let at_frame = frame_at_x(position.x - rail_width, clip_width, pane.duration_frames);
+    let px_per_frame = if pane.duration_frames > 0 {
+        clip_width / pane.duration_frames as f32
+    } else {
+        0.0
+    };
+    (at_frame, px_per_frame)
+}
+
+/// property 行の帯内の click を判定する、**及び**進行中のキー drag の継続
+/// イベント(第2波T4)。**帯の内側に入った click は、菱形に当たっても外れても
+/// 必ず `capture()` で吸収する** — `input.rs`/`hit.rs` は押し下げ
+/// ([`super::projection::layer_row_top`])を知らないので、そのまま通すと
+/// 後続層への誤爆(誤選択/誤 scrub)になる(`layer_row_top` の doc の
+/// write-set 外 finding 参照)。帯の外・drag 非進行中なら `None` を返し、
+/// 通常の経路(`input::update`)に委ねる。
 pub(crate) fn update(
     pane: &TimelinePane,
     event: &canvas::Event,
     bounds: Rectangle,
     cursor: mouse::Cursor,
 ) -> Option<canvas::Action<Message>> {
+    // 進行中のキー drag(第2波T4) — 種類(move/retime)を問わず、bounds 内の
+    // 継続イベントはここで拾う。press した位置がどこだったかは関係ない
+    // (clip drag と同じ「掴んだ後は canvas 全体が対象」— `input::update` の
+    // `DragKind::Clip` の move/release 腕と同じ形)。
+    if pane.key_drag_active {
+        return match event {
+            canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                let position = cursor.position_in(bounds)?;
+                let (at_frame, px_per_frame) = frame_at_position(pane, bounds, position);
+                Some(
+                    canvas::Action::publish(Message::TimelineKeyDragMoved { at_frame, px_per_frame })
+                        .and_capture(),
+                )
+            }
+            canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                Some(canvas::Action::publish(Message::TimelineKeyDragReleased).and_capture())
+            }
+            // 右クリック = キャンセル(裁定151「キャンセルの一般化」、正典 §2 を
+            // キーへ延長)。Esc は window 全体の subscription から別経路で届く。
+            canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) => {
+                Some(canvas::Action::publish(Message::TimelineKeyDragCancelled).and_capture())
+            }
+            _ => None,
+        };
+    }
+
     let canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event else {
         return None;
     };
@@ -176,27 +246,63 @@ pub(crate) fn update(
         property: row.property.clone(),
         frame: key.frame,
     };
+    let (at_frame, _) = frame_at_position(pane, bounds, position);
 
-    // 正典 §3・§4: クリック=単独 / Cmd=トグル / Shift=範囲。確定は
-    // `Shell::apply_key_selection`(唯一の書き口)側 — ここは操作の種別だけ選ぶ。
-    let op = if pane.modifiers.shift() {
-        KeySelectionOp::Range(clicked)
-    } else if pane.modifiers.command() {
-        KeySelectionOp::Toggle(clicked)
-    } else {
-        KeySelectionOp::Single(clicked)
-    };
-    Some(canvas::Action::publish(Message::TimelineKeySelect(op)).and_capture())
+    // 正典 §3・§4: クリック=単独 / Cmd=トグル / Shift=範囲。第2波T4:
+    // 修飾キー無しの press は選択の差し替え+drag 開始を兼ねる
+    // (`Message::TimelineKeyGrabbed`、確定/選択の実際の読み書きは
+    // `Shell::update` 側 — ここは操作の種別だけ選ぶのは変わらない)。
+    if pane.modifiers.shift() {
+        // Shift 範囲選択は drag を伴わない(範囲選択そのものが動詞)。
+        return Some(
+            canvas::Action::publish(Message::TimelineKeySelect(KeySelectionOp::Range(clicked))).and_capture(),
+        );
+    }
+    if pane.modifiers.command() {
+        // RetimeSelection(裁定146): 選択済み・選択2本以上・掴んだキーがその
+        // 選択の端(最小/最大 frame)なら Cmd+drag は retime。それ以外は従来の
+        // Cmd=トグル(クリックのみで動かなければ `Shell::finish_timeline_key_drag`
+        // が Toggle へ安全側で倒す — click/drag 判定は `inspector_drag` と同じ形)。
+        let is_retime_edge = key.selected
+            && selected_frame_bounds(pane)
+                .is_some_and(|(min, max, count)| count >= 2 && (key.frame == min || key.frame == max));
+        if is_retime_edge {
+            return Some(
+                canvas::Action::publish(Message::TimelineKeyGrabbed {
+                    key: clicked,
+                    at_frame,
+                    retime: true,
+                })
+                .and_capture(),
+            );
+        }
+        return Some(
+            canvas::Action::publish(Message::TimelineKeySelect(KeySelectionOp::Toggle(clicked))).and_capture(),
+        );
+    }
+    Some(
+        canvas::Action::publish(Message::TimelineKeyGrabbed {
+            key: clicked,
+            at_frame,
+            retime: false,
+        })
+        .and_capture(),
+    )
 }
 
 /// 帯の内側にいる間だけカーソル形状を判定する(Q0: 触れそうな物には予告を
 /// 出す)。帯の外なら `None` — 呼び出し側(`super::mod`)が通常の経路
-/// (`input::mouse_interaction`)へ落ちる。
+/// (`input::mouse_interaction`)へ落ちる。**進行中のキー drag(第2波T4)は
+/// 帯の外でも `Grabbing`**(`input::mouse_interaction` の `state.drag.is_some()`
+/// 腕と同じ「掴んでいる間はどこでも Grabbing」)。
 pub(crate) fn mouse_interaction(
     pane: &TimelinePane,
     bounds: Rectangle,
     cursor: mouse::Cursor,
 ) -> Option<mouse::Interaction> {
+    if pane.key_drag_active {
+        return Some(mouse::Interaction::Grabbing);
+    }
     let position = cursor.position_in(bounds)?;
     let top = band_top(pane)?;
     let bottom = band_bottom(pane, top);

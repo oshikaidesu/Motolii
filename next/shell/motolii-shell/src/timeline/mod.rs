@@ -26,14 +26,23 @@
 //! - [`lane_bar`] … レーンバー(行ヘッダ列、裁定147)専用の draw+hit。
 //!   スウォッチ・名前・M/S/L トグル。自分のゾーン(`x < rail_width`)だけを
 //!   自己完結で持ち、`hit`/`canvas` のクリップ面ロジックには触れない
-//! - [`key_rows`] … property 行(キー行、第2波 T3・裁定148/151)専用の draw+hit。
+//! - [`key_rows`] … property 行(キー行、第2波 T3・裁定148/151)専用の draw+hit
+//!   **+ 第2波T4(正典 §3・§8.1・裁定146)のキー時刻ドラッグ/リタイム**。
 //!   `Program::update` はここを**先に**試し、掴めなければ `input::update` へ
 //!   落ちる(`x < rail_width` のレーンバーと同じ「自分のゾーンだけ自己完結」の形 —
 //!   ただしゾーンは x ではなく y の帯: 選択 layer の下に挿入された property 行の
-//!   `y` 範囲)。**`input.rs`/`hit.rs` は編集しない**(並走レーン lane-shell の
-//!   write-set)ので、その2ファイルが知らない行の押し下げ
+//!   `y` 範囲)。**`input.rs`/`hit.rs` は編集しない**(T4 時点で並走レーンは
+//!   無い — `next/DECISIONS.md` T4 発注書 KNOWN「並走レーンなし」— が、既存の
+//!   自己完結の形をそのまま踏襲する)ので、その2ファイルが知らない行の押し下げ
 //!   ([`projection::layer_row_top`])が絡む座標はここで完結して吸収する
 //!   (`projection::layer_row_top` の doc の write-set 外 finding 参照)。
+//!   キー drag の**継続イベント**(press 後の move/release/右クリック)は
+//!   `input::Interaction`(canvas widget state)を触らずに済ませてある —
+//!   `TimelinePane::key_drag_active`(`Shell::timeline_key_drag` を `view()` が
+//!   焼き込むだけの読み取り専用フラグ、`modifiers` と同じ「Shell 状態を pane へ
+//!   運ぶ」形)を毎 event の頭で見て、drag 中は種類を問わずここで拾う
+//! - [`key_gesture`] … キー(菱形)の時刻編集の**意味関数**(第2波T4)。
+//!   `clip_gesture` と対になる置き場 — 同じく Document 型を持たない純関数のみ
 //!
 //! `canvas::Program` は1トレイトにつき1つの impl しか持てない(Rust の制約)ので、
 //! 本体の trait impl はここ(mod.rs)に置き、各メソッドは対応する層の関数へ
@@ -47,6 +56,7 @@ mod canvas;
 pub mod clip_gesture;
 mod hit;
 mod input;
+pub mod key_gesture;
 mod key_rows;
 mod lane_bar;
 mod projection;
@@ -87,6 +97,13 @@ pub struct TimelinePane {
     /// drag-to-scrub が既に同じ理由で `Shell::keyboard_modifiers` を別経路で
     /// 持ち回っているのと同じ形)。
     modifiers: iced::keyboard::Modifiers,
+    /// Timeline キーの時刻ドラッグ/リタイムが進行中か(第2波T4)。**Shell 状態
+    /// (`Shell::timeline_key_drag`)を読み取り専用で pane へ運ぶだけ** —
+    /// `modifiers` と同じ形で、canvas の `mouse::Event` 自体は「今 drag 中か」を
+    /// 運ばないので別経路が要る。既定 `false`([`Self::with_key_drag_active`]
+    /// でしか立たない) — 呼び出し元(試験含む)は継続イベントを試験しない限り
+    /// 触らなくてよい。
+    key_drag_active: bool,
 }
 
 impl TimelinePane {
@@ -113,7 +130,16 @@ impl TimelinePane {
             dims,
             colors,
             modifiers,
+            key_drag_active: false,
         }
+    }
+
+    /// `Shell::view` だけが呼ぶ(第2波T4)。`Shell::timeline_key_drag.is_some()`
+    /// をそのまま渡すだけの薄い builder — 新しい `TimelinePane::new` の必須引数に
+    /// しない(既存の呼び出し元・試験を1つも壊さないため、`with_` 形にしてある)。
+    pub fn with_key_drag_active(mut self, active: bool) -> Self {
+        self.key_drag_active = active;
+        self
     }
 
     /// 第1波は測定済みの行高をそのまま流用する(独自の寸法を発明しない)。
