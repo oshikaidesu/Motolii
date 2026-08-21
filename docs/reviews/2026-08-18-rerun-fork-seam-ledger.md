@@ -134,3 +134,12 @@ reset_view(): 既定カメラの PNG と sha256 まで一致(Rerun の画作り�
 - oracle: fork 側 `crates/viewer/re_renderer/tests/motolii_main_target_accessor.rs`(`main_target_reflects_the_view_that_was_drawn`)。Motolii 側は `motolii-compositor/tests/sequential.rs`(`sequential_matches_render_for_overlapping_alpha_and_pinned_fixture`、バイト一致)がこの accessor に依存する消費者
 - 消費者: `motolii-compositor::Compositor::render_sequential`(`next/engine/motolii-compositor/src/lib.rs`)。新規 WGSL ゼロ(既存 RectangleDrawData+import_gpu_premultiplied+ScreenshotProcessor の再利用)。実装の罠2件は同 lib.rs doc に file:line 込みで記録(ViewBuilder drop 時の texture destroy / 背景 rect の Nearest 固定)
 - pin rev: **反映済み**(fork commit `856f597c3`、GitHub push 済み・`next/Cargo.toml` 全10 entry を bump、検証用 [patch] は除去済み — `cbbe4f2b`)
+
+## Seam: RenderContext::new_from_device + DeviceCaps::from_device(裁定170 M3、2026-08-22)
+
+- 上流 file: `crates/viewer/re_renderer/src/context.rs`(+56/-5、`new()` の本体を私的 `new_impl` へ畳む挙動不変リファクタ込み)・`crates/viewer/re_renderer/src/device_caps.rs`(+35)
+- 内容: adapter の実物なしで `RenderContext` を組む姉妹コンストラクタ。`DeviceCaps::from_device` は wgpu 29 `Device` の `features()/limits()/adapter_info()` から導出し、downlevel 判定は backend 分岐(`Gl` のみ保守的に `Limited` — 裁定170 §2)。既存呼び手5箇所は無改変
+- 理由: iced 0.15 shader widget の `Pipeline::new(device, queue, format)` に adapter が渡ってこない(iced 側 compositor のフィールドは private) — iced fork へ trait 改変を入れる案Aは rebase 複利で棄却し、こちらの口で閉じた
+- oracle: `next/engine/motolii-compositor/tests/with_device.rs::with_device_matches_headless` — **adapter を明示 drop してから**組んだ Compositor が `headless()` とフレームバイト一致(常設)
+- 消費者: `motolii-compositor::Compositor::with_device`(M4 で stage presenter の Pipeline が使う)
+- pin rev: **反映済み**(fork commit `7cca401e`、branch `motolii/m3-device-caps` GitHub push 済み・`next/Cargo.toml` 全 entry bump・検証用 [patch] は除去済み)
