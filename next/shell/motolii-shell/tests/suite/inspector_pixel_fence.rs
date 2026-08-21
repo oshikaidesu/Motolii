@@ -1,19 +1,32 @@
 //! Inspector ピクセル忠実度の柵(発注書: 「mock の CSS 計算値を期待表として
 //! 固定し、iced_test で実 widget ツリーの bounds を読んで ±1px で照合する」)。
 //!
-//! ## 出典(視覚正本 `next/reference/mocks/ui-scale-and-z.html`, `--s:1.00` 時の
-//! CSS 計算値・手計算)
+//! ## 出典(視覚正本 `next/reference/mocks/inspector-library.html` v3.1、
+//! `inspector-library.css` の CSS 計算値・手計算)
+//!
+//! **I-tokens(2026-08-22)で更新**: 視覚正本を旧 `ui-scale-and-z.html` から
+//! `inspector-library.html` v3.1(利用者合格・転写正本統一)へ切り替え、
+//! `inspector_row_height`/`inspector_value_width`/`inspector_glyph_width`/
+//! `inspector_panel_width` の4値を束で再転写した(I-ratio 台帳が発見した
+//! 二重モック構造 — この4値のうち3値だけ別モック由来だった状態 — の根治)。
 //!
 //! ```text
-//! --row:      20px         property/column-header 行高
-//! --section:  26px         ptitle(パネルタイトル)/sec(TRANSFORM等)見出し高
-//! --sp1:       2px         grid gap(X/Y/Z/Key の間隔)
-//! --sp2:       4px         ident 帯 padding(縦)
-//! --sp4:       8px         ident/cols/prow/sec/hint 帯 padding(横)
-//! 値セル:     38 × (row-4=16) px   grid-template-columns の 38px 段、`.prow .v` 高
-//! glyph:       18 × (row-2=18) px  --hit、`.glyph` 高
-//! pane:       300px        **例外**扱い(下記)
+//! --row:      25px         .propertyRow(min-height) — property/column-header 行高
+//! --section:  26px         .tableSection h2/panelHeader 相当 — 見出し高(値は旧mockと元々一致・不変)
+//! --sp1:       2px         spacing_xs(グローバル token、この mock 自身には対応する gap 定義なし)
+//! --sp2:       4px         spacing_s(同上)
+//! --sp4:       8px         ident/cols/prow/sec/hint 帯 padding(横、グローバル token)
+//! 値セル:     64 × (row-4=21) px   grid-template-columns の 64px 段(`.valueCell`)
+//! glyph:       26 × (row-2=23) px  グリッド末尾26px段(Key列)・`.glyph` 高
+//! pane:       496px        mock `.inspectorShell{width:min(100%,496px)}` と**直接一致**(旧裁定172 §3 時点は「例外」だったが、4値統一によりもう例外ではない)
 //! ```
+//!
+//! **値セル/glyph の高さ式(row-4/row-2)は旧 mock(ui-scale-and-z.html)由来の
+//! 内部式のまま維持**: `inspector-library.css` の `.valueCell`/`.glyph` 相当は
+//! grid の `align-items:stretch` で行高いっぱいに伸びる(高さを縮める式を
+//! 持たない)— この式を「グリッドの構成」まで転写し直すのは NON-GOALS
+//! (「行の構成変更」)に該当するため、この発注では触れていない。既知の乖離
+//! として RETURN の FINDING に記録する。
 //!
 //! これらの数値そのものは既に `motolii_shell::tokens::Dimensions::default()` の
 //! 各フィールドと `tokens.rs::ui_scale_tests`(`the_canonical_type_band_matches_
@@ -24,14 +37,15 @@
 //! 初めて分かる(この柵が最初に見つけた実例が
 //! [`the_full_width_section_bars_span_the_entire_pane_at_the_mock_section_height`])。
 //!
-//! ## 例外(意図的に mock と違える点)
+//! ## pane 幅(496px)— もう例外ではない
 //!
-//! - **pane 幅 496px**(mock `--pane:300`ではない): 旧 `docs/mocks-ui/public/
-//!   inspector-library.css` `.inspectorShell{width:496px}` を出典として据え置き
-//!   (`tokens.rs::Dimensions::inspector_panel_width` doc、`next/reference/
-//!   CANON.md` に明記)。300 への変更は利用者裁定待ち — この柵は 496 が
-//!   token どおりに描画へ反映されていることだけを確かめる
-//!   ([`the_pane_frame_uses_the_documented_width_exception`])。
+//! **I-tokens(2026-08-22)以前**: pane 幅は旧 `docs/mocks-ui/public/
+//! inspector-library.css` `.inspectorShell{width:496px}` から据え置いた値で、
+//! 当時の視覚正本(`ui-scale-and-z.html`, `--pane:300`)とは食い違う「意図的な
+//! 例外」だった。**I-tokens 後**: 視覚正本そのものを inspector-library v3.1 へ
+//! 統一したので、496 は今の正本の値そのもの — 例外ではなく通常の一致項目に
+//! なった([`the_pane_frame_uses_the_documented_width_and_source`] が496と
+//! token の一致を確かめる、テスト自体は継続)。
 //!
 //! ## 対象外(正直な限界 — 照合しない)
 //!
@@ -139,18 +153,29 @@ fn selected_inspector_targets() -> (Vec<Target>, Dimensions) {
     (targets, dims)
 }
 
-const EPS: f32 = 1.0; // 発注書の許容 ±1px
+const EPS: f32 = 1.0; // 発注書の許容 ±1px(フォント依存の位置比較など)
 
-/// 指定した幅・高さ(±1px)の `Container` candidate を全部集める。button/row/
-/// column/container はどれも自分を `Container` として登録する(`q0_fence.rs`
-/// doc 実測どおり)ので、grid の箱・帯はすべてこれで拾える。
+/// **I-tokens(2026-08-22)追い施工**: `containers_matching` 専用の厳格な
+/// 許容(±0.05px)。`inspector_row_height`(25)を再転写した結果、
+/// `inspector_section_header_height`(26)とわずか1px差の隣接値になった —
+/// 元の `EPS`(1.0px、フォント計測のブレを吸収するための許容)のままだと
+/// 25px高の箱と26px高の箱が互いを ±1px 以内とみなして誤って混ざる(実測:
+/// 帯4本のはずが両方12本を返す衝突を発見)。ここで比較する高さはどれも
+/// `Length::Fixed(dims....)` から直接来る決定論値(フォント計測を経由しない)
+/// なので、浮動小数点の丸め誤差だけを吸収できれば十分 — 厳格側へ倒しても
+/// 誤検出は増えない。
+const EPS_EXACT: f32 = 0.05;
+
+/// 指定した幅・高さ(`EPS_EXACT`)の `Container` candidate を全部集める。
+/// button/row/column/container はどれも自分を `Container` として登録する
+/// (`q0_fence.rs` doc 実測どおり)ので、grid の箱・帯はすべてこれで拾える。
 fn containers_matching<'a>(targets: &'a [Target], width: f32, height: f32) -> Vec<&'a Target> {
     targets
         .iter()
         .filter(|t| matches!(t, Target::Container { .. }))
         .filter(|t| {
             let b = t.bounds();
-            (b.width - width).abs() <= EPS && (b.height - height).abs() <= EPS
+            (b.width - width).abs() <= EPS_EXACT && (b.height - height).abs() <= EPS_EXACT
         })
         .collect()
 }
@@ -164,14 +189,16 @@ fn find_text<'a>(targets: &'a [Target], content: &str) -> iced::Rectangle {
 }
 
 // ---------------------------------------------------------------------------
-// 例外: pane 幅
+// pane 幅(I-tokens 後はもう例外ではない — mock 実測値そのもの)
 // ---------------------------------------------------------------------------
 
-/// mock `--pane:300` に対する意図的な例外(496px 据え置き)。この柵は
-/// 「496 が token どおりに描画されている」ことだけを確かめる — 300 を要求する
-/// 柵ではない(`tokens.rs::Dimensions::inspector_panel_width` doc 参照)。
+/// **I-tokens(2026-08-22)で「例外」から「一致」へ**: 視覚正本を
+/// inspector-library v3.1 へ統一したため、496 はもう `ui-scale-and-z.html`
+/// との食い違いではなく現正本の値そのもの。この柵は「496 が token どおりに
+/// 描画されている」ことを確かめる(旧テスト名の `..._exception` は誤解を招く
+/// ため `..._and_source` へ改名)。
 #[test]
-fn the_pane_frame_uses_the_documented_width_exception() {
+fn the_pane_frame_uses_the_documented_width_and_source() {
     let (targets, dims) = selected_inspector_targets();
     let pane_width = targets
         .first()
@@ -185,13 +212,15 @@ fn the_pane_frame_uses_the_documented_width_exception() {
     );
     assert_eq!(
         dims.inspector_panel_width, 496.0,
-        "例外の値そのものが動いた — 496 据え置きの前提が崩れている(利用者裁定待ちの数値なので、\
-         意図的な変更なら exceptions 一覧のコメントも合わせて更新すること)"
+        "pane 幅の値そのものが動いた — inspector-library v3.1 実測(496)から \
+         動いたなら、この柵冒頭の doc・`tokens.rs::Dimensions::inspector_panel_width` \
+         doc も合わせて更新すること"
     );
 }
 
 // ---------------------------------------------------------------------------
-// 帯(header/section)— row=20 / section=26 の box が pane 全幅で並ぶこと
+// 帯(header/section)— row=25(I-tokens 2026-08-22 再転写) / section=26 の
+// box が pane 全幅で並ぶこと
 // ---------------------------------------------------------------------------
 
 /// **この柵が見つけたバグの回帰**: header(ptitle)/TRANSFORM/APPEARANCE/ATTRS
@@ -217,7 +246,8 @@ fn the_full_width_section_bars_span_the_entire_pane_at_the_mock_section_height()
 /// column-header 行(Property/X/Y/Z/Key)+ Transform 5行(Position/Scale/
 /// Rotation/Anchor/Opacity)+ Blend 行 + Speed 行(SP1 第一波、supervisor
 /// 決定1 — Blend の下に同じ `.prow` grammar で足した) = 8本、すべて
-/// 「pane 全幅 × row 高(20)」であること(mock `.cols`/`.prow` の box)。
+/// 「pane 全幅 × row 高(25、I-tokens 2026-08-22 再転写)」であること
+/// (mock `.columnHeader`/`.propertyRow` の box)。
 #[test]
 fn the_full_width_property_rows_span_the_entire_pane_at_the_mock_row_height() {
     let (targets, dims) = selected_inspector_targets();
@@ -225,7 +255,8 @@ fn the_full_width_property_rows_span_the_entire_pane_at_the_mock_row_height() {
     assert_eq!(
         rows.len(),
         8,
-        "pane 全幅×20px の行(cols見出し+Transform5行+Blend+Speed)が8本のはずが{}本: {rows:?}",
+        "pane 全幅×{}px の行(cols見出し+Transform5行+Blend+Speed)が8本のはずが{}本: {rows:?}",
+        dims.inspector_row_height,
         rows.len()
     );
 }
@@ -255,52 +286,59 @@ fn the_ident_band_spans_the_full_pane_width() {
 }
 
 // ---------------------------------------------------------------------------
-// grid の箱 — 値セル 38×(row-4) / glyph 18×(row-2)
+// grid の箱 — 値セル 64×(row-4) / glyph 26×(row-2)(I-tokens 2026-08-22 再転写)
 // ---------------------------------------------------------------------------
 
-/// mock `.prow .v { height: calc(var(--row) - 4*var(--s)*1px) }` の箱。
+/// `.prow .v { height: calc(row - 4*spacing_s) }` の箱(高さの縮小式は
+/// 旧 mock 由来の内部式のまま維持 — ファイル冒頭 doc の「値セル/glyph の
+/// 高さ式」注記参照、NON-GOALS「行の構成変更」に該当するため今回は不変)。
 /// present(編集可)/absent(「—」)/animated(表示のみ)/blank(Opacity の空セル)
 /// のどの状態でも同じ形(`value_cell` の doc コメントどおり)— Transform 5行
 /// × 3セル(X/Y/Z)= 15個。
 #[test]
-fn the_value_cells_match_the_mock_38_by_row_minus_4_grid() {
+fn the_value_cells_match_the_mock_64_by_row_minus_4_grid() {
     let (targets, dims) = selected_inspector_targets();
+    assert_eq!(dims.inspector_value_width, 64.0, "値セル幅がずれている(I-tokens 再転写値)");
     let expected_height = dims.inspector_row_height - dims.spacing_s; // mock の `4` = spacing_s
     let cells = containers_matching(&targets, dims.inspector_value_width, expected_height);
     assert_eq!(
         cells.len(),
         15,
-        "38×{expected_height}px の値セルが15個(5行×3列)のはずが{}個: {cells:?}",
+        "64×{expected_height}px の値セルが15個(5行×3列)のはずが{}個: {cells:?}",
         cells.len()
     );
 }
 
-/// mock `.glyph { width: var(--hit); height: calc(var(--row) - 2*var(--s)*1px) }`。
-/// M(mute)glyph は結線済みなので `button` の `Container` candidate として
-/// 見える(S/Key の予約枠は `Space` = `operate()` 未実装で不可視、
-/// `ident_band_drive.rs` doc のとおり)— ちょうど1個のはず。
+/// mock グリッド末尾26px段(Key 列幅)・高さは旧 mock 由来の内部式
+/// `row - 2*spacing_xs` のまま(上記と同じ理由)。M(mute)glyph は結線済みなので
+/// `button` の `Container` candidate として見える(S/Key の予約枠は `Space` =
+/// `operate()` 未実装で不可視、`ident_band_drive.rs` doc のとおり)— ちょうど
+/// 1個のはず。
 #[test]
-fn the_mute_glyph_matches_the_mock_18_by_row_minus_2_square() {
+fn the_mute_glyph_matches_the_mock_26_by_row_minus_2_square() {
     let (targets, dims) = selected_inspector_targets();
-    assert_eq!(dims.inspector_glyph_width, 18.0, "--hit の値がずれている");
+    assert_eq!(dims.inspector_glyph_width, 26.0, "Key 列幅がずれている(I-tokens 再転写値)");
     let expected_height = dims.inspector_row_height - dims.spacing_xs; // mock の `2` = spacing_xs
     let glyphs = containers_matching(&targets, dims.inspector_glyph_width, expected_height);
     assert_eq!(
         glyphs.len(),
         1,
-        "18×{expected_height}px の M glyph 箱が1個のはずが{}個: {glyphs:?}",
+        "26×{expected_height}px の M glyph 箱が1個のはずが{}個: {glyphs:?}",
         glyphs.len()
     );
 }
 
 // ---------------------------------------------------------------------------
-// column-header の grid gap(sp1=2)・左右 padding(sp4=8)
+// column-header の grid gap(spacing_xs=2)・左右 padding(spacing_m=8)
 // ---------------------------------------------------------------------------
 
-/// mock `.cols,.prow { grid-template-columns: 1fr repeat(3,38px) hit;
-/// gap: var(--sp1) }` — X→Y→Z→Key の間隔が一律 `38 + sp1(2)` = 40px、
-/// 左端(Property)は `spacing_m`(--sp4=8)、右端(Key の右)も同じ8pxで
-/// pane 幅ちょうどに収まること。
+/// mock の grid 自体には列間 gap の宣言が無い(`.columnHeader,.propertyRow`
+/// は `grid-template-columns` のみ、`gap` プロパティ未指定)— この gap は
+/// 実装内部の兄弟間隔式(`sibling_gap_px` = `spacing_xs` 段のグローバル
+/// spacing token)によるもので、値セル幅そのもの(64px)とは独立(NON-GOALS
+/// 「行の構成変更」により今回は不変、ファイル冒頭 doc 参照)。X→Y→Z→Key の
+/// 間隔が一律 `64 + spacing_xs(2)` = 66px、左端(Property)は
+/// `spacing_m`(8)、右端(Key の右)も同じ8pxで pane 幅ちょうどに収まること。
 #[test]
 fn the_column_header_grid_matches_the_mock_gap_and_side_padding() {
     let (targets, dims) = selected_inspector_targets();
@@ -310,23 +348,23 @@ fn the_column_header_grid_matches_the_mock_gap_and_side_padding() {
     let z = find_text(&targets, "Z");
     let key = find_text(&targets, "Key");
 
-    let hop = dims.inspector_value_width + dims.spacing_xs; // 38 + sp1(2) = 40
-    assert!((y.x - x.x - hop).abs() <= EPS, "X→Y の gap が sp1(2px) どおりでない: {} vs {hop}", y.x - x.x);
-    assert!((z.x - y.x - hop).abs() <= EPS, "Y→Z の gap が sp1(2px) どおりでない: {} vs {hop}", z.x - y.x);
+    let hop = dims.inspector_value_width + dims.spacing_xs; // 64 + spacing_xs(2) = 66
+    assert!((y.x - x.x - hop).abs() <= EPS, "X→Y の gap が spacing_xs(2px) どおりでない: {} vs {hop}", y.x - x.x);
+    assert!((z.x - y.x - hop).abs() <= EPS, "Y→Z の gap が spacing_xs(2px) どおりでない: {} vs {hop}", z.x - y.x);
     assert!(
         (key.x - z.x - hop).abs() <= EPS,
-        "Z→Key の gap が sp1(2px) どおりでない: {} vs {hop}",
+        "Z→Key の gap が spacing_xs(2px) どおりでない: {} vs {hop}",
         key.x - z.x
     );
 
     assert!(
         (property.x - dims.spacing_m).abs() <= EPS,
-        "Property の左 padding が spacing_m(--sp4=8) と違う: {}",
+        "Property の左 padding が spacing_m(8) と違う: {}",
         property.x
     );
     assert!(
         (key.x + dims.inspector_glyph_width + dims.spacing_m - dims.inspector_panel_width).abs() <= EPS,
-        "Key 列の右 padding が spacing_m(--sp4=8) と違う(pane 幅に収まらない)"
+        "Key 列の右 padding が spacing_m(8) と違う(pane 幅に収まらない)"
     );
 }
 
@@ -336,8 +374,9 @@ fn the_column_header_grid_matches_the_mock_gap_and_side_padding() {
 
 /// mock の2枚目(`--s:1.50`)と同じ倍率。`ui_scale_fence.rs` は「全寸法に
 /// 1.5 が掛かる」ことを `Dimensions` 単体で見ているが、ここでは実際に描いた
-/// widget 木でも 26px 高の帯が4本・20px 高の行が8本のまま(数が変わらない
-/// = grid の**形**が保たれる)ことを見る(SP1 で行数が7→8に増えた上での基準)。
+/// widget 木でも 26px 高の帯が4本・25px 高(I-tokens 再転写)の行が8本のまま
+/// (数が変わらない = grid の**形**が保たれる)ことを見る(SP1 で行数が7→8に
+/// 増えた上での基準)。
 #[test]
 fn the_grid_shape_is_preserved_at_150_percent_scale() {
     let mut shell = Shell::new().0;
@@ -357,7 +396,7 @@ fn the_grid_shape_is_preserved_at_150_percent_scale() {
     assert_eq!(bars.len(), 4, "150%でも26px相当の帯が4本のはずが{}本", bars.len());
 
     let rows = containers_matching(&targets, dims.inspector_panel_width, dims.inspector_row_height);
-    assert_eq!(rows.len(), 8, "150%でも20px相当の行が8本のはずが{}本", rows.len());
+    assert_eq!(rows.len(), 8, "150%でも25px相当(I-tokens 再転写)の行が8本のはずが{}本", rows.len());
 
     let value_height = dims.inspector_row_height - dims.spacing_s;
     let cells = containers_matching(&targets, dims.inspector_value_width, value_height);

@@ -245,11 +245,33 @@ pub fn format_number(value: f64, decimals: usize) -> String {
     format!("{value:.decimals$}")
 }
 
-/// 値セルの**表示**文字数の上限(裁定169)。38px セル+0.6em 横余白の実測
-/// アンカー2点から決めた: 「1.000」(5字)は収まる(実窓実測)・「960.000」
-/// (7字)は先頭末尾が clip される(実窓実測 2026-08-21 深夜、φ 検収)。
-/// 幅 px からの近似換算は等幅仮定が崩れて信用できないため、文字数で縛る。
-pub const MAX_VALUE_CELL_CHARS: usize = 6;
+/// 値セルの**表示**文字数の上限(裁定169、**I-tokens(2026-08-22)で再較正**)。
+/// 旧値6は `inspector_value_width=38px` 時代のアンカー(「1.000」5字は収まる・
+/// 「960.000」7字は先頭末尾が clip される、いずれも 2026-08-21 深夜の実窓実測、
+/// φ 検収)—`inspector_value_width` が I-tokens で 38→64px へ束ごと再転写された
+/// ため、このアンカーも引き直す必要がある(発注書の指示どおり)。
+///
+/// **再較正の方法**: 実窓実測(φ 期のように実際のビルドを目で見る)がこの
+/// レーンでは行えないため、`value_cell_legibility.rs` と同じ手口 —
+/// `iced_test` で実フォント(0.15 fork の "Fira Sans" スタック、実窓と同一
+/// レンダラ)を使い `text(content).size(dims.body_text)` の自然幅(`Target::Text`
+/// の layout bounds、`iced_widget::text::layout` が `Length::Shrink` を
+/// clamp する前の値)を直接測る決定論的な代替測定を採った(px からの近似換算は
+/// 等幅仮定が崩れて信用できないという旧アンカーの理由はそのまま — ここでは
+/// 「文字数から px への換算」ではなく「候補文字列ごとの実測 px」を使うので、
+/// その理由に反しない)。新しいアンカー2点(数字のみ・小数点あり文字列の
+/// 自然幅、実測 2026-08-22):
+/// - 「1234567.000」(11字)の自然幅 58.861px は箱幅64pxの**内**(収まる)。
+/// - 「12345678.000」(12字)の自然幅 64.922px は箱幅64pxの**外**(clip される)。
+///
+/// 旧アンカー(箱幅38px)も同じ相対マージンで境界に立っていた(6字
+/// 「960.00」32.7px=箱の86%・7字「960.000」38.83px=箱の102%)— 新アンカー
+/// (11字58.9px=箱の92%・12字64.9px=箱の101%)は同型の境界なので、この
+/// 再較正は旧アンカーの選び方をそのまま踏襲した外挿(6→11は単純な比例
+/// 64/38≈1.68倍では6×1.68≈10.1になるところ、実測の境界に合わせて11とした)。
+/// **実窓での目視確認はこの発注の範囲外**(見送り — 利用者チェックリストへ
+/// 追加候補として RETURN に記録)。
+pub const MAX_VALUE_CELL_CHARS: usize = 11;
 
 /// セルに収まる精度へ落とした**表示専用**の整形(裁定169)。field 既定の
 /// `decimals` から始め、[`MAX_VALUE_CELL_CHARS`] を超える間 1 桁ずつ落とす
@@ -1842,19 +1864,27 @@ mod tests {
 
     /// 裁定169: 表示はセルに収まる精度へ落ちる(編集 draft は全精度のまま —
     /// [`value_cell`] の editing 分岐が `format_number` 直呼びであることが対)。
+    /// **I-tokens(2026-08-22)で cap を6→11へ再較正** — `inspector_value_width`
+    /// が38→64pxへ束で再転写されたため、旧アンカー値(960/3840)はもう clip の
+    /// 実例にならない(64px セルなら全精度のまま収まる)。[`MAX_VALUE_CELL_CHARS`]
+    /// のdoc に記載の新アンカー(11字/12字)に合わせて例を差し替える。
     #[test]
     fn display_number_shrinks_precision_to_fit_the_cell() {
-        // 収まる値は field 既定精度のまま(実窓実測アンカー: 5字は収まる)
+        // 収まる値は field 既定精度のまま。
         assert_eq!(display_number(1.0, 3), "1.000");
         assert_eq!(display_number(0.0, 3), "0.000");
-        // 実窓で clip した実例(φ 検収 2026-08-21): 7字 → 6字へ
-        assert_eq!(display_number(960.0, 3), "960.00");
-        // 4桁整数部: 8字 → 6字
-        assert_eq!(display_number(3840.0, 3), "3840.0");
-        // 負値も同じ規則
-        assert_eq!(display_number(-960.0, 3), "-960.0");
+        // 旧アンカー値(960/3840)は新セル幅(64px)では clip されず全精度のまま
+        // 収まる(旧cap=6時代は "960.00"/"3840.0"/"-960.0" へ短縮していた)。
+        assert_eq!(display_number(960.0, 3), "960.000");
+        assert_eq!(display_number(3840.0, 3), "3840.000");
+        assert_eq!(display_number(-960.0, 3), "-960.000");
+        // 新アンカー(MAX_VALUE_CELL_CHARS のdoc参照): 整数部7桁+小数3桁=11字は
+        // ちょうど cap に収まる(境界そのもの)。
+        assert_eq!(display_number(1234567.0, 3), "1234567.000");
+        // 整数部8桁+小数3桁=12字は cap を超える → 小数を1桁落として11字へ。
+        assert_eq!(display_number(12345678.0, 3), "12345678.00");
         // 整数部だけで上限超え: これ以上落とせない(clip(true) が防波堤)
-        assert_eq!(display_number(1234567.0, 3), "1234567");
+        assert_eq!(display_number(123456789012.0, 0), "123456789012");
     }
 
     #[test]
@@ -2067,29 +2097,20 @@ mod tests {
     // -----------------------------------------------------------------------
 
     /// 裁定168 は「文字寸 = 0.42 × 行高」を単行の余白計算の前提に置く。
-    /// **現状の Inspector の実値はこの帯(0.42±0.05)の外にある**
-    /// (`body_text`=11 / `inspector_row_height`=20 → 比 0.55)— 発注書の指示
-    /// どおり、この不一致は**変更せず FINDING として報告するだけ**に留める
-    /// (寸法変更は別裁定)。このテストは「柵」として、その現状の比を
-    /// **固定(regression-lock)**する — どちらかの値が黙って動いたら red に
-    /// なる。比が 0.42±0.05 に入る側への変更でこのテストが red になったら、
-    /// それは意図的な是正(通すために許容帯へ assert を更新してよい)。
+    /// **I-tokens(2026-08-22)で根治**: `inspector_row_height` を
+    /// `next/reference/mocks/inspector-library.html` v3.1 実測値(25)へ
+    /// 束で再転写した結果、`body_text`(11)/`inspector_row_height`(25)= **0.44**
+    /// となり、裁定168 の帯(0.42±0.05 = 0.37〜0.47)の**内**に入った
+    /// (旧値は 11/20=0.55 で帯の外 — `docs/reviews/
+    /// 2026-08-22-inspector-ratio-ledger.md` の FINDING そのもの)。
     ///
-    /// **裁定172 §3 の追い施工(2026-08-22)**: 「帯は pane ごとにモック実測
-    /// から導出する」という pane 相対化の指示により、`docs/mocks-ui/public/
-    /// inspector-library.css` を実測して Inspector 固有の帯を求めた
-    /// (`docs/reviews/2026-08-22-inspector-ratio-ledger.md`)。結果:
-    /// `.propertyName span`(11px)/`.propertyRow`(min-height 25px)= **0.44**
-    /// で、これは裁定168 の帯の**内**。つまりこの 0.55 は「Timeline 由来の
-    /// 汎用の帯」だけでなく「Inspector 自身のモック実測」からも外れている
-    /// ことが確認できた — FINDING はより強い根拠を持つに至ったが、直す手段
-    /// (`inspector_row_height` の書き換え)は `next/ui/motolii-tokens-rs/
-    /// tokens/dimensions.json` にあり、Inspector 比率化レーンの ALLOWLIST
-    /// (`next/ui/motolii-inspector-pane/**`)の外 — 引き続き変更せず、
-    /// このテストは pin のまま維持する(両側チェックの詳細は
-    /// `tests/inspector_ratio_ledger.rs`)。
+    /// このテストは旧 `..._is_locked_at_its_current_out_of_band_value`
+    /// (0.55 を固定していた pin)を置き換える —**0.55 の lock は撤去**し、
+    /// 「帯の内に入っている」ことを固定する regression lock へ更新した
+    /// (どちらかの値が黙って動いて帯の外へ出たら red になる)。両側チェックの
+    /// 詳細(モック実測 vs 実装値)は `tests/inspector_ratio_ledger.rs` 側。
     #[test]
-    fn inspector_character_size_ratio_is_locked_at_its_current_out_of_band_value() {
+    fn inspector_character_size_ratio_is_locked_within_the_charter_168_band() {
         let dims = Dimensions::default();
         let ratio = dims.body_text / dims.inspector_row_height;
 
@@ -2098,14 +2119,16 @@ mod tests {
         let in_band = (ratio - TARGET).abs() <= TOLERANCE;
 
         assert_eq!(
-            ratio, 0.55,
-            "body_text/inspector_row_height の実測比が動いた(意図した是正なら \
-             このテストと FINDING の記載を両方更新すること)"
+            ratio, 0.44,
+            "body_text/inspector_row_height の実測比が動いた(I-tokens の再転写値 \
+             0.44 から動いたなら、このテストと台帳・FINDING の記載を三箇所とも \
+             更新すること)"
         );
         assert!(
-            !in_band,
-            "FINDING が古い: 比 {ratio} は既に裁定168 の帯(0.42±0.05)に入っている — \
-             このテストの前提(現状は帯の外)が崩れているので assert を差し替えること"
+            in_band,
+            "比 {ratio} が裁定168 の帯(0.42±0.05)から外れた — I-tokens の \
+             再転写(inspector_row_height=25)がこの根治の前提なので、\
+             どちらかの値が意図せず動いた疑いがある"
         );
     }
 }

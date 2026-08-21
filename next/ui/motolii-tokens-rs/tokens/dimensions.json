@@ -38,19 +38,19 @@
   "_note_panel_header_height": "実測表『Browser ツールバー』の実測値(29)を転用。Shell 全体の header(Undo/Redo/+Layer 帯)専用 — Inspector 自身のタイトル帯(ptitle)は inspector_section_header_height を使う(mock の --section が両方に効くのと同じ理由)",
 
   "inspector_panel_width": 496,
-  "_note_inspector_panel_width": "Ableton実測ではなく、Inspector第1波の視覚正本そのもの(旧 docs/mocks-ui/public/inspector-library.css `.inspectorShell { width: min(100%, 496px) }`)から転記。496のまま据え置き(300への変更は利用者裁定待ち、CANON記載) — 新 mock(ui-scale-and-z.html)の --pane:300 はこの pane 幅の出典として採らない",
+  "_note_inspector_panel_width": "I-tokens(2026-08-22): 出典を next/reference/mocks/inspector-library.html v3.1(利用者合格・転写正本統一)の `.inspectorShell{width:min(100%,496px)}` へ更新。値そのものは旧 docs/mocks-ui/public/inspector-library.css から不変(496) — I-ratio 台帳が発見した二重モック構造(row_height/value_width/glyph_width だけ ui-scale-and-z.html 由来、panel_width だけ inspector-library 由来)を、4値とも同じ mock(inspector-library v3.1)へ揃えて解消(裁定172 §3 の後続裁定)。300 への変更は不採用として確定(v3.1 は 496 のまま利用者合格)",
 
-  "inspector_row_height": 20,
-  "_note_inspector_row_height": "視覚正本 ui-scale-and-z.html の --row(20)。Inspector の property 行・column header 行の高さ。旧値25(旧CSS `.propertyRow{min-height:25px}` 由来)から新 mock へ更新(2026-08-20)",
+  "inspector_row_height": 25,
+  "_note_inspector_row_height": "I-tokens(2026-08-22): 視覚正本を ui-scale-and-z.html から next/reference/mocks/inspector-library.html v3.1 へ統一。`.propertyRow{min-height:25px}`(inspector-library.css)= 25。旧値20(ui-scale-and-z.html `--row` 由来)は二重モック構造の片割れだったため撤去 — I-ratio 台帳(2026-08-22-inspector-ratio-ledger.md)の FINDING「body_text(11)/row_height 比 0.55 は inspector-library 実測 0.44 とも裁定168 帯(0.42±0.05)とも不一致」をこの書き換えで根治(11/25=0.44 は帯の内)",
 
   "inspector_section_header_height": 26,
-  "_note_inspector_section_header_height": "同 mock の --section(26)。ptitle(パネルタイトル帯)と sec(TRANSFORM/APPEARANCE見出し)の両方が共有する — mock 自身がこの2箇所に同じ変数を使っているため",
+  "_note_inspector_section_header_height": "inspector-library.css `.tableSection h2{height:26px}`(ptitle 相当)と ui-scale-and-z.html `--section` の両方が26で一致していたため値は不変。出典は I-tokens により inspector-library.html v3.1 へ統一(2026-08-22)",
 
-  "inspector_value_width": 38,
-  "_note_inspector_value_width": "同 mock の grid-template-columns: 1fr repeat(3, 38px) hit の 38px 段(X/Y/Z 値セル1つぶんの幅)。旧値64(旧CSS由来)から新 mock へ更新",
+  "inspector_value_width": 64,
+  "_note_inspector_value_width": "I-tokens(2026-08-22): 視覚正本を inspector-library.html v3.1 へ統一。`grid-template-columns: minmax(132px,1fr) repeat(3,64px) 26px` の 64px 段(X/Y/Z 値セル1つぶんの幅)。旧値38(ui-scale-and-z.html `--pane:300` 前提の別モック由来、300px pane 正規化でのみ旧値と辻褄が合っていた=I-ratio 台帳 §3.1)は撤去。inspector_panel_width(496)と同じ mock 由来になったことで二重モック構造が解消",
 
-  "inspector_glyph_width": 18,
-  "_note_inspector_glyph_width": "同 mock の --hit(18)。Key/M/S glyph 列の幅。Key 列自体は空のまま(Q0: keyframe UI 未実装、列幅の予約だけ)",
+  "inspector_glyph_width": 26,
+  "_note_inspector_glyph_width": "I-tokens(2026-08-22): 視覚正本を inspector-library.html v3.1 へ統一。同 grid-template-columns 末尾の 26px 段(Key 列幅)。旧値18(ui-scale-and-z.html `--hit` 由来)は撤去。Key 列自体は空のまま(Q0: keyframe UI 未実装、列幅の予約だけ) — Timeline レーンバーの M/S/L glyph は T-rail(裁定172 §2)で既にこの token の借用をやめ独自比率(`glyph_size_px`)へ転写済みなので、この値変更は Timeline 側に影響しない",
 
   "timeline_lane_bar_width": 150,
   "_note_timeline_lane_bar_width": "視覚正本 ui-scale-and-z.html の `.thead{width:calc(150 * var(--s) * 1px)}`(Timeline の行ヘッダ列=レーンバー幅、裁定147)。M/S/L glyph 自体の幅は新トークンを増やさず inspector_glyph_width(--hit)を使い回す",
