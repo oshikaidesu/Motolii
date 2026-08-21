@@ -6,3 +6,9 @@ license.workspace = true
 
 [dependencies]
 iced.workspace = true
+# B1(裁定162 切片 B1): `src/model.rs` が `StoreView::assets()` から一覧
+# projection を組む(`Asset`/`AssetId`/`StoreView` を読むだけ)。骨格 doc(lib.rs)
+# が予定していた pane split survey 許容構成の1本目 — B2 以降、rail/filter
+# (motolii-shell-state)・視覚(motolii-tokens-rs)・サムネ(motolii-media)を
+# 実装する腕から順にこの一覧へ足していく。
+motolii-store.workspace = true
