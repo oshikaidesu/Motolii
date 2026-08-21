@@ -39,7 +39,8 @@
 - ファイル地図: mask.rs / marker.rs / attrs.rs / text.rs / effect.rs(store)、frame.rs+camera.rs(core)、timeline/(旧timeline_pane.rs、5分割済み)+tokens.rs(shell)
 
 ## 既知の穴(発見報告不要。直すのも別途裁定してから)
-- **effect pass は layer 自身のテクスチャ境界内のみで計算**(2026-08-21、S5 実測): 単色矩形の glow は「均一増光」になり、縁からあふれる AE 型 halo にはならない(拡張領域 padding 未実装 — `render_with_effects` の scratch が layer 実寸)。直すなら pass ごとの出力拡張量を EffectPass が宣言する形
+- (失効 2026-08-21: 同日根治)~~effect pass は layer 境界内のみ~~ → `EffectPass::padding()` 宣言で halo あふれ実装済み(glow_golden の外側画素 assert が回帰柵)
+- **effect の複数 pass は連鎖しない(最後勝ち)**(2026-08-21 実測): `LayerWithPasses.passes` の各 pass は元 texture を独立に読み共有 scratch へ書く — 直列合成ではない。現在の呼び出しは全て単一 pass なので実害なし。複数 effect の stack を絵にする時(vism 第2号以降)に直列化が要る
 - bm / matte / ao は store にあるが**合成器が未消費**(地図 note に明記済み)
 - `parent` の変換合成は未実装(循環検査のみ)
 - near-plane より手前の層は透視でクリップ(裁定116)
