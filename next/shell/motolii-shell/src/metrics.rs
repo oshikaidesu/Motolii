@@ -1,7 +1,7 @@
 //! Stage 描画の計測器具。**debug ビルドのみ**(release は呼び出し側ごと
 //! `#[cfg(debug_assertions)]` で消える — 製品経路に一切残らない)。
 //!
-//! 実機チラつき調査(2026-08-20)の柵として追加。数える対象は3つだけ:
+//! 実機チラつき調査(2026-08-20)の柵として追加。当初数えていたのは3つ:
 //! - `HANDLE_CREATIONS`: `image::Handle::from_rgba` を呼んだ回数。iced の
 //!   `Handle::from_rgba` は呼ぶたび `Id::unique()` で新しい id を割る
 //!   (`iced_core-0.14.0/src/image.rs` 実測 — `next/` の実際の依存は
@@ -16,15 +16,32 @@
 //!   明記)— これが実測できたチラつきの一次原因。
 //! - `RENDER_FRAME_CALLS` / `RENDER_FRAME_NANOS`: `Engine::render_frame` の
 //!   呼び出し回数と合計時間。CPU 合成がボトルネックかどうかを実測で切り分ける。
+//!
+//! **裁定166**: Stage の絵を `image::Handle` から shader Program の永続
+//! `wgpu::Texture` へ置き換えた(`docs/reviews/2026-08-21-stage-presenter-
+//! decision.md`)。`HANDLE_CREATIONS`/`LAST_HANDLE_BYTES` は**そのまま残す**
+//! (oracle 側が「もう増えない = 経路自体が無くなった」ことの証拠に使う、
+//! `crate::lib.rs` は Stage 描画経路からはもう `record_handle_creation` を
+//! 呼ばない)。新設した2つ:
+//! - `PRESENTER_UPLOADS`: shader Pipeline が実際に `queue.write_texture` した
+//!   回数(世代カウンタが変わった時だけ — EXACT TARGET 1「フレーム内容が変わった
+//!   時だけアップロード」の直接の計測)。
+//! - `LAST_PRESENTER_UPLOAD_BYTES`: 直近でアップロードした RGBA の byte 数。
 
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 static HANDLE_CREATIONS: AtomicU64 = AtomicU64::new(0);
 static LAST_HANDLE_BYTES: AtomicUsize = AtomicUsize::new(0);
+static PRESENTER_UPLOADS: AtomicU64 = AtomicU64::new(0);
+static LAST_PRESENTER_UPLOAD_BYTES: AtomicUsize = AtomicUsize::new(0);
 static RENDER_FRAME_CALLS: AtomicU64 = AtomicU64::new(0);
 static RENDER_FRAME_NANOS: AtomicU64 = AtomicU64::new(0);
 static TOKENS_RELOADS: AtomicU64 = AtomicU64::new(0);
 
+/// **裁定166 以降、Stage 描画経路からはもう呼ばれない**(oracle (a) の
+/// 対象 — 呼び出し側が消えたので `handle_creations()` は増えなくなる)。
+/// 関数自体は残す(既存 oracle が「増えないこと」を確かめるのに
+/// `metrics::handle_creations()` を直接読むため)。
 pub fn record_handle_creation(bytes: usize) {
     HANDLE_CREATIONS.fetch_add(1, Ordering::Relaxed);
     LAST_HANDLE_BYTES.store(bytes, Ordering::Relaxed);
@@ -39,12 +56,28 @@ pub fn record_tokens_reload() {
     TOKENS_RELOADS.fetch_add(1, Ordering::Relaxed);
 }
 
+/// shader Pipeline(`crate::StagePresenterPipeline::upload`)が実際に
+/// `queue.write_texture` した時に呼ぶ。世代カウンタが前回アップロード時と
+/// 同じならこの関数自体呼ばれない(EXACT TARGET 1)。
+pub fn record_presenter_upload(bytes: usize) {
+    PRESENTER_UPLOADS.fetch_add(1, Ordering::Relaxed);
+    LAST_PRESENTER_UPLOAD_BYTES.store(bytes, Ordering::Relaxed);
+}
+
 pub fn handle_creations() -> u64 {
     HANDLE_CREATIONS.load(Ordering::Relaxed)
 }
 
 pub fn last_handle_bytes() -> usize {
     LAST_HANDLE_BYTES.load(Ordering::Relaxed)
+}
+
+pub fn presenter_uploads() -> u64 {
+    PRESENTER_UPLOADS.load(Ordering::Relaxed)
+}
+
+pub fn last_presenter_upload_bytes() -> usize {
+    LAST_PRESENTER_UPLOAD_BYTES.load(Ordering::Relaxed)
 }
 
 pub fn render_frame_calls() -> u64 {
@@ -64,6 +97,8 @@ pub fn tokens_reloads() -> u64 {
 pub fn reset() {
     HANDLE_CREATIONS.store(0, Ordering::Relaxed);
     LAST_HANDLE_BYTES.store(0, Ordering::Relaxed);
+    PRESENTER_UPLOADS.store(0, Ordering::Relaxed);
+    LAST_PRESENTER_UPLOAD_BYTES.store(0, Ordering::Relaxed);
     RENDER_FRAME_CALLS.store(0, Ordering::Relaxed);
     RENDER_FRAME_NANOS.store(0, Ordering::Relaxed);
     TOKENS_RELOADS.store(0, Ordering::Relaxed);
