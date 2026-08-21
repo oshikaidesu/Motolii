@@ -1,17 +1,19 @@
 //! 運転席 — 観測カメラ(裁定157)の Shell 側配線(S1〜S3)。
 //!
-//! `stage.rs` の純関数(ズーム/パン/フレーム枠の計算)は `stage::tests`
-//! (`src/stage.rs` 内 `#[cfg(test)] mod tests`)が直接縛る — ここは
-//! `Shell::update`/`refresh_frame` の配線(発注書 ORACLE (a)〜(d))と
-//! screenshot 器具の `--observe` 経路を見る。
+//! `stage.rs` の純関数(ズーム/パン/フレーム枠の計算)は `motolii-stage-pane`
+//! crate 側の `tests`(裁定160 切片10で `motolii-shell/src/stage.rs` から
+//! 抽出済み、`next/ui/motolii-stage-pane/src/lib.rs` 内 `#[cfg(test)] mod
+//! tests`)が直接縛る — ここは `Shell::update`/`refresh_frame` の配線
+//! (発注書 ORACLE (a)〜(d))と screenshot 器具の `--observe` 経路を見る。
 //!
 //! **canvas は iced_test に見えない**(KNOWN)ので、実 widget を経由せず
-//! `Message::StageObserve`/`Message::ResetToRenderCamera` を直接構成して
+//! `Message::Stage(stage::Message::Observe(_))`/
+//! `Message::Stage(stage::Message::ResetToRenderCamera)` を直接構成して
 //! `Shell::update` へ渡す(`TimelineDragMoved` 等、既存 drive 試験と同じ形 —
 //! 「widget が計算した結果」を Message として直接届ける)。
 
 use motolii_engine::ObservationCamera;
-use motolii_shell::{Message, Shell};
+use motolii_shell::{stage, Message, Shell};
 
 /// **中身のある** Shell(層1枚)。空の comp は既定背景1色で埋まるだけなので、
 /// ズーム/パンしても画素が変わらない(観測カメラがどこを向いても同じ単色) —
@@ -43,7 +45,7 @@ fn a_default_observation_is_none_and_frame_is_the_plain_render() {
     );
 }
 
-/// (b) ズーム相当の操作(`Message::StageObserve`)を1回出すと、
+/// (b) ズーム相当の操作(`Message::Stage(stage::Message::Observe(_))`)を1回出すと、
 /// `observation` が `None → Some` になり、Stage の表示 RGBA
 /// (`observation_rgba()`)が export 真値(`frame_rgba()`)とは違う絵になる。
 #[test]
@@ -54,7 +56,7 @@ fn b_observing_transitions_to_some_and_changes_the_displayed_frame() {
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("既定でも frame がある");
 
-    shell.update(Message::StageObserve(zoomed()));
+    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
 
     assert_eq!(shell.observation(), Some(zoomed()), "observation が Some になっていない");
     let observed = shell
@@ -72,7 +74,7 @@ fn b_observing_transitions_to_some_and_changes_the_displayed_frame() {
     );
 }
 
-/// (c) `Message::ResetToRenderCamera` で `None` へ戻ると、export 真値
+/// (c) `Message::Stage(stage::Message::ResetToRenderCamera)` で `None` へ戻ると、export 真値
 /// (`frame_rgba()`)はズーム前とバイト一致する(往復して汚染が残らない)。
 #[test]
 fn c_reset_to_render_camera_returns_to_none_and_the_export_rgba_round_trips() {
@@ -82,10 +84,10 @@ fn c_reset_to_render_camera_returns_to_none_and_the_export_rgba_round_trips() {
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("既定でも frame がある");
 
-    shell.update(Message::StageObserve(zoomed()));
+    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
     assert!(shell.observation().is_some());
 
-    shell.update(Message::ResetToRenderCamera);
+    shell.update(Message::Stage(stage::Message::ResetToRenderCamera));
 
     assert_eq!(shell.observation(), None, "カメラへ戻るはずが observation が残っている");
     assert!(
@@ -114,7 +116,7 @@ fn d_frame_rgba_stays_the_render_camera_picture_while_observing() {
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("frame がある");
 
-    shell.update(Message::StageObserve(zoomed()));
+    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
 
     let while_observing = shell
         .frame_rgba()
@@ -137,8 +139,8 @@ fn observing_never_touches_the_document_or_undo_history() {
     let can_undo_before = shell.can_undo();
     let layer_count_before = shell.layer_count();
 
-    shell.update(Message::StageObserve(zoomed()));
-    shell.update(Message::ResetToRenderCamera);
+    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
+    shell.update(Message::Stage(stage::Message::ResetToRenderCamera));
 
     assert_eq!(shell.can_undo(), can_undo_before, "観測カメラが undo 履歴を汚した");
     assert_eq!(shell.layer_count(), layer_count_before, "観測カメラが Document を書き換えた");
@@ -152,13 +154,13 @@ fn observing_never_touches_the_document_or_undo_history() {
 #[test]
 fn repeating_the_same_observation_keeps_the_displayed_pixels_stable() {
     let mut shell = shell();
-    shell.update(Message::StageObserve(zoomed()));
+    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
     let first = shell
         .observation_rgba()
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("観測中は observation_rgba があるはず");
 
-    shell.update(Message::StageObserve(zoomed()));
+    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
     let second = shell
         .observation_rgba()
         .map(|(w, h, px)| (w, h, px.to_vec()))
@@ -167,14 +169,20 @@ fn repeating_the_same_observation_keeps_the_displayed_pixels_stable() {
     assert_eq!(first, second, "同じ観測カメラを再送したら同じ絵になるはず");
 }
 
-/// **構造的隔離の柵**(縫い目調査 §3「担保案」): `Engine::render_frame_with_view_camera`
-/// の呼び手は `src/lib.rs::observation_preview_source` の1箇所だけ — export
-/// (`screenshot.rs`・`main.rs`・`motolii-export`)は観測カメラの存在自体を知らない。
-/// ソーステキストを grep するだけの軽い柵(`tonmana_token_fence.rs` と同型の
-/// 「ソースを読んで具体的な行で落とす」手段)。呼び手が増えたら意図的な変更か
-/// どうかをこの試験が問い直す。
+/// **構造的隔離の柵、assembler 側の片割れ**(縫い目調査 §3「担保案」、裁定160
+/// 切片10で `observation_preview_source` 自体が `motolii-stage-pane` crate へ
+/// 移設された)。`Engine::render_frame_with_view_camera` の唯一の呼び手
+/// (`motolii-stage-pane::observation_preview_source`)はもう `motolii-shell`
+/// の `src/` には無い — この柵はその逆、**`motolii-shell` 自身が直接呼んで
+/// いない**ことを縛る(export(`screenshot.rs`・`main.rs`・`motolii-export`)が
+/// pane crate を経由せず観測カメラの存在を知ってしまう抜け道を防ぐ)。対になる
+/// 「唯一の呼び手が1箇所だけ」の柵は `motolii-stage-pane` crate 側
+/// (`next/ui/motolii-stage-pane/src/lib.rs` 内
+/// `tests::render_frame_with_view_camera_is_only_called_from_this_crate`)に
+/// 移設済み。ソーステキストを grep するだけの軽い柵(`tonmana_token_fence.rs`
+/// と同型の「ソースを読んで具体的な行で落とす」手段)。
 #[test]
-fn render_frame_with_view_camera_is_only_called_from_observation_preview_source() {
+fn motolii_shell_never_calls_render_frame_with_view_camera_directly() {
     let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut call_sites: Vec<String> = Vec::new();
     for entry in std::fs::read_dir(&src_dir).expect("src/ を読める") {
@@ -193,16 +201,12 @@ fn render_frame_with_view_camera_is_only_called_from_observation_preview_source(
             }
         }
     }
-    assert_eq!(
-        call_sites.len(),
-        1,
-        "render_frame_with_view_camera の呼び手が1箇所ではない(export 経路が\
-         観測カメラを知ってしまった可能性 — 裁定157の最重要不変):\n{}",
-        call_sites.join("\n")
-    );
     assert!(
-        call_sites[0].contains("lib.rs"),
-        "唯一の呼び手が lib.rs 以外にある: {}",
-        call_sites[0]
+        call_sites.is_empty(),
+        "motolii-shell の src/ が render_frame_with_view_camera を直接呼んでいる\
+         (export 経路が pane crate を経由せず観測カメラを知ってしまった可能性 —\
+         裁定157の最重要不変。呼ぶのは motolii-stage-pane::observation_preview_source\
+         だけのはず):\n{}",
+        call_sites.join("\n")
     );
 }

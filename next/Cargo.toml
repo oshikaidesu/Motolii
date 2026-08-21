@@ -22,6 +22,7 @@ members = [
     "ui/motolii-tokens-rs",
     "ui/motolii-shell-state",
     "ui/motolii-timeline-pane",
+    "ui/motolii-stage-pane",
     "probes/r0-store-edit",
     "probes/r1-frame-throughput",
     "probes/r2-view-projection",
@@ -107,6 +108,13 @@ motolii-shell-state = { path = "ui/motolii-shell-state" }
 # 裁定160 切片7: `motolii-shell/src/timeline/` + 対応する write ロジックを
 # 抽出した pane crate(docs/reviews/2026-08-21-pane-split-survey.md §6 切片7)。
 motolii-timeline-pane = { path = "ui/motolii-timeline-pane" }
+# 裁定160 切片10: `motolii-shell/src/stage.rs`(観測カメラ、裁定157)+ 対応する
+# write ロジック(`observation_preview_source`)を抽出した pane crate。他 pane
+# 非依存だが `motolii-engine`(`ObservationCamera`・`render_frame_with_view_camera`)
+# には依存する唯一の pane crate(docs/reviews/2026-08-21-pane-split-survey.md
+# §4.2「stage レーン」・§6 切片10)。`motolii-shell` は `pub use` で `stage` path
+# 互換を保つ。
+motolii-stage-pane = { path = "ui/motolii-stage-pane" }
 
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"

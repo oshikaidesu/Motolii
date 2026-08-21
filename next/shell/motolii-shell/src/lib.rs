@@ -26,7 +26,6 @@ pub mod clipboard;
 pub mod fixture;
 pub mod inspector_pane;
 pub mod screenshot;
-pub mod stage;
 
 /// `state`(`Session`/`KeySelector`/`KeySelectionOp`)は裁定160 切片6 で
 /// `motolii-shell` 内の module へ移設し、切片7(timeline-pane crate 抽出、
@@ -71,6 +70,15 @@ pub use motolii_settings_pane as settings_pane;
 /// まま通る — `motolii-shell` は assembler として `motolii-settings-pane` に
 /// 依存する側なので、新しい循環にはならない(root → pane の一方向)。
 pub(crate) use motolii_settings_pane::chrome;
+
+/// `stage` は裁定160 切片10 で `motolii-stage-pane` crate へ抽出済み(pane
+/// split survey §6 切片10)。`pub use timeline as timeline_pane;` と同じ
+/// 「型 alias で外部参照を壊さない」手口 — 既存の `crate::stage::X` 参照
+/// (`screenshot.rs`・`main.rs` のコメント・`tests/suite/*.rs`)は無改修の
+/// まま通る。write ロジック(`observation_preview_source`)もこの crate 側へ
+/// 移設済み — `Shell::observation_preview_source` はそれを呼ぶ glue だけを
+/// 持つ(下記参照、関数名は無改名)。
+pub use motolii_stage_pane as stage;
 
 use chrome::{button_style, parse_number};
 use inspector_pane::{FieldDraft, TransformField};
@@ -247,16 +255,12 @@ pub enum Message {
     /// 側を参照。
     Settings(settings_pane::Message),
 
-    // ---- Stage 観測カメラ(裁定157) ----
-    /// `stage::StageOverlay`(ホイール/中ボタンドラッグ)が計算済みの観測カメラ値
-    /// をそのまま運ぶ — `Shell::update` はここでは計算をしない
-    /// (`stage.rs` 冒頭 doc の「純関数へ委譲」どおり)。**`None`(カメラを通して
-    /// 見る)から届いても `Some` になる** — 「観測に入る操作自体が None→Some 遷移」
-    /// (裁定157 EXACT TARGET 1)。
-    StageObserve(ObservationCamera),
-    /// 「カメラへ戻る」— 1アクション(既定割当 Shift+F、仮)。観測カメラを破棄して
-    /// `None`(カメラを通して見る)へ戻す。
-    ResetToRenderCamera,
+    // ---- Stage 観測カメラ(裁定157、裁定160 切片10で `motolii-stage-pane`
+    // crate へ抽出、pane split survey §6 切片10) ----
+    /// `motolii_stage_pane::Message` を1本で畳む(iced 標準の「子 pane の
+    /// Message を親が wrap する」形、`Message::Settings`/`Message::Timeline`
+    /// と同型)。腕ごとの doc は `stage::Message` 側を参照。
+    Stage(stage::Message),
 
     // ---- layer クリップボード(普通地図 消化第1波 U1、正典 §4) ----
     // キーは全部仮の既定割当(Cmd+C/V/X/D/A・Cmd+Shift+A) — keymap 層は未実装なので
@@ -622,8 +626,7 @@ impl Shell {
                 }
             }
             Message::Settings(msg) => self.update_settings(msg),
-            Message::StageObserve(camera) => self.observation = Some(camera),
-            Message::ResetToRenderCamera => self.observation = None,
+            Message::Stage(msg) => self.update_stage(msg),
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
                 // **1操作 = 1 undo**。`AddLayer` と `SetMeta` を別々に書くと
@@ -1168,6 +1171,21 @@ impl Shell {
                     self.status = Some(error);
                 }
             }
+        }
+    }
+
+    // ---- Stage 観測カメラ(裁定157、裁定160 切片10) ----
+
+    /// pane ローカル `Message` を畳んで書き口へ渡す glue(`update_settings` と
+    /// 同じ形)。**この2腕は元々 `self.observation` への直代入だけ**(計算を
+    /// 持たない)だったので、pane crate 側には移していない — `stage::Message`
+    /// の wrap だけがここで新たに要る作業(pane split survey §1.2 の
+    /// 「Stage 小計」に相当する私法ロジックは無い、[`Self::observation_preview_source`]
+    /// が唯一の書き口)。
+    fn update_stage(&mut self, message: stage::Message) {
+        match message {
+            stage::Message::Observe(camera) => self.observation = Some(camera),
+            stage::Message::ResetToRenderCamera => self.observation = None,
         }
     }
 
@@ -1787,16 +1805,18 @@ impl Shell {
     /// engine が描けない、のいずれかなら `None` を返し、呼び出し側は従来経路
     /// (市松/背景込み)へフォールバックする。描けなかった理由は status へ出す
     /// (M13)。
+    ///
+    /// **裁定160 切片10**: 計算の実体は `stage::observation_preview_source`
+    /// (`&mut Engine`/`&StoreView` を明示引数で受け取る自由関数、`motolii-stage-pane`
+    /// crate 側)へ移設済み — ここは `self.engine`/`self.doc.view()` を貸し、
+    /// `Some(Err(_))` の枝でだけ `self.status` へ書く glue(関数名・シグネチャは
+    /// 無改名、`update_settings` と同じ glue の形)。
     fn observation_preview_source(&mut self, observation: &ObservationCamera, playhead: i64) -> Option<Vec<u8>> {
-        let composition = self.doc.view().composition().ok().flatten()?;
-        let t = RationalTime::try_from_frame(playhead, composition.fps).ok()?;
-        match self
-            .engine
-            .render_frame_with_view_camera(&self.doc.view(), t, observation)
-        {
-            Ok(rgba) => Some(rgba),
-            Err(error) => {
-                self.status = Some(format!("観測カメラでの表示を描けない: {error}"));
+        match stage::observation_preview_source(&mut self.engine, &self.doc.view(), observation, playhead) {
+            None => None,
+            Some(Ok(rgba)) => Some(rgba),
+            Some(Err(error)) => {
+                self.status = Some(error);
                 None
             }
         }
@@ -1952,13 +1972,13 @@ fn inspector_pointer_event(
         }
         // ResetToRenderCamera(裁定157・EXACT TARGET 1「カメラへ戻るは1アクション」)。
         // **既定割当は仮**(NudgeKeyframe と同じ「keymap 層が無い今だけ直結」の
-        // 注記どおり) — アクション名(`Message::ResetToRenderCamera`)だけを正本
-        // として残す。Shift+F。
+        // 注記どおり) — アクション名(`stage::Message::ResetToRenderCamera`)だけを
+        // 正本として残す。Shift+F。
         iced::Event::Keyboard(iced::keyboard::Event::KeyPressed { key, modifiers, .. })
             if modifiers.shift()
                 && matches!(key.as_ref(), iced::keyboard::Key::Character(c) if c.eq_ignore_ascii_case("f")) =>
         {
-            Some(Message::ResetToRenderCamera)
+            Some(Message::Stage(stage::Message::ResetToRenderCamera))
         }
         // playhead ナビゲーション動詞束(U2、正典 §5・§8.1)。**この分岐だけ
         // `status` を見る**(上の doc 参照)— キーそのものの解決は
@@ -2060,7 +2080,11 @@ fn stage_pane(
             // (裁定157)。`image` の上に重ねるだけ — `image` 自体は変形しない
             // (Stage は image 貼りのまま、`stage.rs` モジュール doc 参照)。
             match overlay {
-                Some(overlay) => stack![picture, overlay.view()].into(),
+                // 裁定160 切片10: `StageOverlay::view()` は `stage::Message`
+                // (pane ローカル)を返すようになった — `.map(Message::Stage)`
+                // で root `Message` へ畳んでから `picture` と同じ `stack!` へ
+                // 積む(`timeline.view().map(Message::Timeline)` と同じ形)。
+                Some(overlay) => stack![picture, overlay.view().map(Message::Stage)].into(),
                 None => picture,
             }
         }

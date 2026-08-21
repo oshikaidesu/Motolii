@@ -30,17 +30,18 @@ motolii-shell-state.workspace = true
 # `pub use motolii_timeline_pane as timeline;`/`as timeline_pane;`(lib.rs)で
 # 既存 path を維持する。
 motolii-timeline-pane.workspace = true
+# 裁定160 切片10: `stage.rs`(観測カメラ、裁定157)+ 対応する write ロジック
+# (`observation_preview_source`)を crate 抽出。`pub use motolii_stage_pane as
+# stage;`(lib.rs)で既存 `crate::stage::` path を維持する(tokens/timeline と
+# 同じ手口)。`glam` は stage.rs 専用の直接依存だったため、抽出先の
+# `motolii-stage-pane/Cargo.toml` へ一緒に移した(motolii-shell からは直接
+# 使わなくなった)。
+motolii-stage-pane.workspace = true
 # `--fixture --screenshot` 器具(screenshot.rs)が PNG を書き出すのに使う。iced の
 # "image" feature が既に `image`(png codec 込み)を依存グラフへ引いているので、
 # workspace の Cargo.toml 自身が既に明記している「裁定117 が許す direct 昇格」
 # (notify と同じ扱い、R3 probe が先行昇格済み)であって新規の依存ではない。
 image.workspace = true
-# 観測カメラのフレーム枠 overlay(裁定157・S3)が `motolii_core::camera_screen_from_world_z0`
-# の返す `glam::Affine2` を直接使う(投影の正本1箇所を再利用するだけで、新しい
-# 投影数学は増やさない — 縫い目調査 `docs/reviews/2026-08-21-camera-seam-survey.md` §4)。
-# glam は `motolii-core`/`re_renderer` 経由で依存グラフに既に入っている
-# (workspace の `glam = "0.30.10"`) — notify/image と同じ「裁定117 が許す direct 昇格」。
-glam.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true

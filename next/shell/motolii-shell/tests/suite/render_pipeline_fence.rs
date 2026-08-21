@@ -22,7 +22,7 @@
 //! 同期アップロード予算を超えないこと**。
 
 use motolii_engine::ObservationCamera;
-use motolii_shell::{metrics, Message, Shell};
+use motolii_shell::{metrics, stage, Message, Shell};
 
 /// プロセス全体で共有される `metrics` の static を、テスト間で取り合わないための
 /// 排他(この1ファイル内の `#[test]` はデフォルトで並列実行されるため)。
@@ -139,13 +139,13 @@ fn idle_observation_does_not_recreate_the_stage_handle() {
         pan: [40.0, -15.0],
         zoom: 1.8,
     };
-    shell.update(Message::StageObserve(camera));
+    shell.update(Message::Stage(stage::Message::Observe(camera)));
     let after_observe = metrics::handle_creations();
     assert!(after_observe >= 1, "観測カメラへ入っても一度も描かれていない");
 
     // 同じ値をもう一度送る — アイドル相当。
     for _ in 0..5 {
-        shell.update(Message::StageObserve(camera));
+        shell.update(Message::Stage(stage::Message::Observe(camera)));
     }
     assert_eq!(
         metrics::handle_creations(),
@@ -155,10 +155,10 @@ fn idle_observation_does_not_recreate_the_stage_handle() {
 
     // 値を変えれば作り直す(鍵が本当に効いていることの裏付け — 変化を
     // 検知できないだけの「常に return」になっていないか)。
-    shell.update(Message::StageObserve(ObservationCamera {
+    shell.update(Message::Stage(stage::Message::Observe(ObservationCamera {
         pan: [40.0, -15.0],
         zoom: 2.5,
-    }));
+    })));
     assert!(
         metrics::handle_creations() > after_observe,
         "観測カメラの値が変わったのに Handle が作り直されていない"
