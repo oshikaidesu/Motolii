@@ -124,6 +124,9 @@ mod tests {
             duration,
             selected: false,
             dragging: false,
+            depth: 0,
+            has_children: false,
+            children_open: true,
         }
     }
 
