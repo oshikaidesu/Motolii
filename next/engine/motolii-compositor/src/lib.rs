@@ -509,6 +509,12 @@ impl Compositor {
         // 1) layer ごとに「合成へ渡す実効 texture」を決める。pass が空な layer は
         //    `GpuTexture2D::clone()`(Arc clone 相当)だけで、新規 GPU texture を作らない。
         let mut effective_textures: Vec<GpuTexture2D> = Vec::with_capacity(layers.len());
+        // **既知の穴の根治**(`next/reference/KNOWN.md`「effect pass は layer 自身の
+        // テクスチャ境界内のみで計算」): layer ごとの出力拡張量(texel、上下左右均等、
+        // `EffectPass::padding` 参照)。pass が空 or 全 pass が padding 0(Identity の
+        // み)なら 0 のまま——2) の quad 組み立てはこの値が 0 だと従来と完全に同じ
+        // 幾何になる。
+        let mut effective_paddings: Vec<u32> = Vec::with_capacity(layers.len());
         // GPU が読み終わってからプールへ返すための控え(読み終わり前に返すと、次の
         // `acquire` が使用中の texture を上書きしてしまう)。
         let mut checked_out: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)> = Vec::new();
@@ -517,10 +523,24 @@ impl Compositor {
         for lwp in layers {
             if lwp.passes.is_empty() {
                 effective_textures.push(lwp.layer.texture.clone());
+                effective_paddings.push(0);
                 continue;
             }
 
             let [width, height] = lwp.layer.texture.width_height();
+            // layer 単位で1つの padded canvas サイズへ揃える(複数 pass が居ても
+            // scratch は1枚——既存の「各 pass は常に元の layer.texture を読んで
+            // scratch へ書く」構造(下のループ)はそのまま、canvas サイズだけ最大の
+            // 要求へ合わせる)。
+            let padding = lwp
+                .passes
+                .iter()
+                .map(EffectPass::padding)
+                .max()
+                .unwrap_or(0);
+            let padded_width = width + 2 * padding;
+            let padded_height = height + 2 * padding;
+
             // Glow を含む layer は中間・出力とも常に `Rgba16Float`(裁定153 S4、
             // `effects::glow` モジュール doc 参照 — bright-pass の閾値判定と加算合成が
             // 1.0 を超える値を扱う必要があるため、layer 本体の元 format とは独立)。
@@ -543,9 +563,9 @@ impl Compositor {
                 .get_from_handle(src_handle)
                 .map_err(|e| CompositorError::Effect(e.to_string()))?;
 
-            let scratch = self
-                .effect_scratch
-                .acquire(&self.ctx.device, width, height, format);
+            let scratch =
+                self.effect_scratch
+                    .acquire(&self.ctx.device, padded_width, padded_height, format);
 
             let encoder = copy_encoder.get_or_insert_with(|| {
                 self.ctx
@@ -558,6 +578,10 @@ impl Compositor {
             for pass in &lwp.passes {
                 match pass {
                     // 恒等 pass。画素単位の copy がそのまま「絵を変えない」を満たす。
+                    // padding は常に 0(`EffectPass::padding` 参照)なので
+                    // `padded_width == width` — 中央 (padding, padding) へ置いても
+                    // 実質 (0, 0) のままで従来と同じ絵になる(同じ layer に padding>0
+                    // の別 pass が同居する場合に備えて、座標系を1本化しておく)。
                     EffectPass::Identity => {
                         encoder.copy_texture_to_texture(
                             wgpu::TexelCopyTextureInfo {
@@ -569,7 +593,11 @@ impl Compositor {
                             wgpu::TexelCopyTextureInfo {
                                 texture: &scratch,
                                 mip_level: 0,
-                                origin: wgpu::Origin3d::ZERO,
+                                origin: wgpu::Origin3d {
+                                    x: padding,
+                                    y: padding,
+                                    z: 0,
+                                },
                                 aspect: wgpu::TextureAspect::All,
                             },
                             wgpu::Extent3d {
@@ -581,25 +609,85 @@ impl Compositor {
                     }
                     // 内蔵 vism 第1号(裁定153 S4)。bright-pass→水平blur→垂直blur→
                     // 加算合成の5パスを同じ encoder へ積む(`effects::glow` 参照)。
-                    // 中間2枚(bloom/blur_ping)は `scratch`(dst)と同じ
-                    // `GLOW_INTERMEDIATE_FORMAT` の scratch pool から借り、GPU が
-                    // 読み終わってから他の scratch と同じ経路でプールへ返す
-                    // (下の `checked_out` へ積む)。
+                    //
+                    // **padding(既知の穴の根治)**: source をそのまま bright-pass へ
+                    // 渡さず、まず「layer 実寸+両側 padding」の透明な padded canvas
+                    // (`padded_source`)を用意し、実 layer を中央 (padding, padding)
+                    // へ copy してから5パスを回す。`blur_at`(glow.rs の WGSL)の
+                    // clamp は `textureDimensions(input_a)`(=呼ばれた pass の入力
+                    // texture の実サイズ)由来なので、bright/blur/composite 全パスの
+                    // 入出力を padded canvas サイズに揃えれば、clamp が padded canvas
+                    // の縁で効くようになる——layer 実寸の縁で足踏みしていた従来の
+                    // 穴が無くなり、blur が実際に周囲の透明領域へ滲み出す。
                     EffectPass::Glow {
                         threshold,
                         intensity,
                         radius,
                     } => {
+                        let padded_source = self.effect_scratch.acquire(
+                            &self.ctx.device,
+                            padded_width,
+                            padded_height,
+                            lwp.layer.texture.format(),
+                        );
+                        let padded_source_view = padded_source.create_view(&Default::default());
+                        // padding 領域を透明へ clear する——scratch プールの
+                        // 使い回しで前フレームの残骸を引きずると、`blur_at` の
+                        // clamp が縁で拾う値が汚れる(draw なしの render pass、
+                        // `draw_pass` の clear と同じ書き方)。
+                        {
+                            let _clear_pass =
+                                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                    label: Some("motolii-compositor-glow-padded-source-clear"),
+                                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                        view: &padded_source_view,
+                                        depth_slice: None,
+                                        resolve_target: None,
+                                        ops: wgpu::Operations {
+                                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                            store: wgpu::StoreOp::Store,
+                                        },
+                                    })],
+                                    depth_stencil_attachment: None,
+                                    timestamp_writes: None,
+                                    occlusion_query_set: None,
+                                    multiview_mask: None,
+                                });
+                        }
+                        encoder.copy_texture_to_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &src.texture,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d::ZERO,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &padded_source,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d {
+                                    x: padding,
+                                    y: padding,
+                                    z: 0,
+                                },
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::Extent3d {
+                                width,
+                                height,
+                                depth_or_array_layers: 1,
+                            },
+                        );
+
                         let bloom = self.effect_scratch.acquire(
                             &self.ctx.device,
-                            width,
-                            height,
+                            padded_width,
+                            padded_height,
                             effects::GLOW_INTERMEDIATE_FORMAT,
                         );
                         let blur_ping = self.effect_scratch.acquire(
                             &self.ctx.device,
-                            width,
-                            height,
+                            padded_width,
+                            padded_height,
                             effects::GLOW_INTERMEDIATE_FORMAT,
                         );
                         let bloom_view = bloom.create_view(&Default::default());
@@ -610,7 +698,7 @@ impl Compositor {
                             &self.ctx.device,
                             &self.ctx.queue,
                             encoder,
-                            &src.default_view,
+                            &padded_source_view,
                             &bloom_view,
                             &blur_ping_view,
                             &dst_view,
@@ -620,14 +708,20 @@ impl Compositor {
                         );
 
                         checked_out.push((
-                            width,
-                            height,
+                            padded_width,
+                            padded_height,
+                            lwp.layer.texture.format(),
+                            padded_source,
+                        ));
+                        checked_out.push((
+                            padded_width,
+                            padded_height,
                             effects::GLOW_INTERMEDIATE_FORMAT,
                             bloom,
                         ));
                         checked_out.push((
-                            width,
-                            height,
+                            padded_width,
+                            padded_height,
                             effects::GLOW_INTERMEDIATE_FORMAT,
                             blur_ping,
                         ));
@@ -644,7 +738,8 @@ impl Compositor {
                 .map_err(|e| CompositorError::Effect(e.to_string()))?;
 
             effective_textures.push(imported);
-            checked_out.push((width, height, format, scratch));
+            effective_paddings.push(padding);
+            checked_out.push((padded_width, padded_height, format, scratch));
         }
 
         // 2) 通常合成。組み立ては `render_with_timing` と同型 — 使う texture だけが
@@ -652,23 +747,33 @@ impl Compositor {
         let rects: Vec<TexturedRect> = layers
             .iter()
             .zip(effective_textures.iter())
-            .map(|(lwp, texture)| {
+            .zip(effective_paddings.iter())
+            .map(|((lwp, texture), &padding)| {
                 let layer = &lwp.layer;
                 let (transform, z) = if layer.pinned {
                     (pinned_cancel * layer.placement.transform, 0.0)
                 } else {
                     (layer.placement.transform, layer.placement.z)
                 };
+                // **既知の穴の根治**: pass が出力を拡張した分(`padding`、texel、
+                // `EffectPass::padding` 参照)だけ quad を local 空間で広げる——
+                // `LayerPlacement::transform` 自体は一切変えず、この rect の
+                // 組み立てだけが「実 texture が layer 実寸より大きい」事実を吸収
+                // する(transform は affine なので、広げた local 矩形にそのまま
+                // 掛ければ回転/拡大/skew があっても正しく追従する)。padding=0
+                // (pass 無し/Identity のみ)なら local_min=(0,0)・local_size=
+                // layer.size のまま、従来と完全に同じ幾何になる。
+                let pad = padding as f32;
+                let local_min = glam::Vec2::new(-pad, -pad);
+                let local_size =
+                    glam::Vec2::new(layer.size[0] + 2.0 * pad, layer.size[1] + 2.0 * pad);
                 TexturedRect {
-                    top_left_corner_position: to_point3(
-                        transform.transform_point2(glam::Vec2::ZERO),
-                        z,
-                    ),
+                    top_left_corner_position: to_point3(transform.transform_point2(local_min), z),
                     extent_u: to_vector3(
-                        transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)),
+                        transform.transform_vector2(glam::Vec2::new(local_size.x, 0.0)),
                     ),
                     extent_v: to_vector3(
-                        transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
+                        transform.transform_vector2(glam::Vec2::new(0.0, local_size.y)),
                     ),
                     colormapped_texture:
                         re_renderer::renderer::ColormappedTexture::from_unorm_rgba(
