@@ -85,6 +85,12 @@ notify = "8"
 # 同じ「裁定117 が許す direct 昇格」であって新規の依存ではない。png codec だけ要る
 # ので default-features は切る。
 image = { version = "0.25", default-features = false, features = ["png"] }
+# 裁定176(File 束、`docs/reviews/2026-08-22-file-dialog-decision.md`): New
+# Project/Save As/Save a Copy/Open の path 選択は native file dialog。
+# wraps>移植>スクラッチの自明適用 — 自前 file browser は作らない。
+# `motolii-shell` の `FileDialogs` trait(生 rfd 呼び出しは production 実装
+# `RfdDialogs` の中だけに閉じる、test は缶詰応答の fake を注入する)からのみ使う。
+rfd = "0.15"
 
 # ---------------------------------------------------------------------------
 # Motolii 自身(旧 workspace からの移植。再実装ではない)

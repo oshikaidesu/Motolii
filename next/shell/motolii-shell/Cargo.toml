@@ -60,6 +60,10 @@ motolii-browser-pane.workspace = true
 # workspace の Cargo.toml 自身が既に明記している「裁定117 が許す direct 昇格」
 # (notify と同じ扱い、R3 probe が先行昇格済み)であって新規の依存ではない。
 image.workspace = true
+# MB-1(File 束、裁定176): New Project/Save As/Save a Copy/Quit の path 選択・
+# 破棄確認は native file dialog。`file_dialogs.rs` の `FileDialogs` trait の
+# production 実装(`RfdDialogs`)だけがこの crate を直接呼ぶ。
+rfd.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true

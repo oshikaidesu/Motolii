@@ -30,15 +30,19 @@ use motolii_core::{CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
     AssetDraft, Composition, DisplayRevision, Document, Intent, LayerAttrsPatch, LayerId,
-    LayerMeta, LayerSource, LayerTiming, RationalTime, ResolvedLayer, SourceFingerprintV1, Speed,
-    StoreView,
+    LayerMeta, LayerSource, LayerTiming, RationalTime, ResolvedLayer, Revision, SourceFingerprintV1,
+    Speed, StoreView,
 };
 
 pub mod clipboard;
+/// File 束(MB-1、裁定176)の OS 副作用注入口([`FileDialogs`] trait +
+/// production 実装 [`RfdDialogs`])。`Shell::new_with_dialogs`/test の fake が
+/// 外から参照するため `pub`(`file_dialogs.rs` 冒頭 doc 参照)。
+pub mod file_dialogs;
 pub mod fixture;
-/// header の "Edit" トップレベルメニュー(M-menu MB-0+Edit、`menu.rs` 冒頭 doc
-/// 参照)。`view()`/`header()` からしか呼ばないため `pub` にしない
-/// (`crate::menu::` で足りる)。
+/// header のメニューバー(M-menu MB-0+Edit、MB-1、`menu.rs` 冒頭 doc 参照)。
+/// `view()`/`header()`/`resolve_navigation_key` からしか呼ばないため `pub` に
+/// しない(`crate::menu::` で足りる)。
 mod menu;
 pub mod screenshot;
 pub mod transport;
@@ -122,6 +126,7 @@ pub use motolii_stage_pane as stage;
 pub use motolii_browser_pane as browser_pane;
 
 use chrome::button_style;
+use file_dialogs::{FileDialogs, RfdDialogs};
 use inspector_pane::{FieldDraft, TransformField};
 use settings_pane::BackgroundFieldDraft;
 use transport::{open_real_playback, Transport};
@@ -400,6 +405,29 @@ pub enum Message {
     /// ではない)。
     ToggleEditMenu,
 
+    // ---- File メニュー(MB-1、裁定176、`menu.rs` 冒頭 doc 参照) ----
+    /// header の "File" トリガー開閉。`edit_menu_open` と同格の表示専用 view
+    /// flag。
+    ToggleFileMenu,
+    /// New Project(Cmd+N・File メニュー、normal-map id 1221)。dirty なら
+    /// [`file_dialogs::FileDialogs::confirm_discard`] を経由してから
+    /// `Shell::reset_document` を呼ぶ ── dirty でなければ確認なしで即リセット。
+    NewProjectRequested,
+    /// Save As(Cmd+Shift+S・File メニュー、id 1225)。
+    /// [`file_dialogs::FileDialogs::pick_save_path`] で path を選び、既存の
+    /// 汎用 persist 経路(`Document::save`、履歴を畳んだ flattened 書き)で
+    /// 書く。成功したら以後の `current_path` はこの path になる。
+    SaveAsRequested,
+    /// Save a Copy(File メニューのみ、id 1227 — normal-map の shortcut 出典が
+    /// ゼロなので shortcut を発明しない)。path 選択は Save As と同じ入口だが
+    /// **`current_path`/dirty 状態は据え置く**(「現 path 維持のまま別名へ
+    /// 書く」── 別ファイルへの書き出しであって、開いているプロジェクトの
+    /// 身分は変わらない)。
+    SaveACopyRequested,
+    /// Quit(Cmd+Q・File メニュー、id 1223)。dirty なら confirm_discard を
+    /// 経由してからプロセスを終了する([`file_dialogs::FileDialogs::quit`])。
+    QuitRequested,
+
     // ---- 実時間再生(A2、正典 §2 拘束5) ----
     /// Space。Play/Pause をトグルする。**ドラッグ中は無効**(拘束5「再生と
     /// 掴みは相互排他」)— 判断は `Shell::toggle_playback` 側(`is_dragging()`)
@@ -588,6 +616,9 @@ pub struct Shell {
     /// flag** — `settings_panel_open` と同格(Document・undo 履歴に乗らない、
     /// `menu.rs` 冒頭 doc 参照)。
     edit_menu_open: bool,
+    /// header "File" メニューの開閉(MB-1、裁定176)。`edit_menu_open` と同格
+    /// の表示専用 view flag。
+    file_menu_open: bool,
     /// Stage の下に市松を敷くか。**表示専用** — Document には一切乗らない
     /// (`settings_pane::composite_checkerboard` 参照、書き出しに影響しない)。
     checkerboard: bool,
@@ -621,23 +652,42 @@ pub struct Shell {
     /// `Session` でもない** — undo に一切乗らない表示/デバイス専用の状態
     /// (`observation`/`clipboard` と同じ身分)。
     transport: Transport,
+
+    // ---- File 束(MB-1、裁定176) ----
+    /// OS 副作用の注入口(`file_dialogs.rs` 冒頭 doc 参照)。production は
+    /// `Shell::new()` が [`RfdDialogs`] を渡す。test は
+    /// `Shell::new_with_dialogs` へ缶詰応答の fake を渡す。
+    dialogs: Box<dyn FileDialogs>,
+    /// 直近の Save As が書いた path。**Save a Copy では更新しない**
+    /// (`Message::SaveACopyRequested` doc 参照 — 「現 path 維持のまま別名へ
+    /// 書く」)。New Project でリセットされる。
+    current_path: Option<std::path::PathBuf>,
+    /// 直近の保存(Save As)時点の `Document::revision()`。**dirty 判定の唯一の
+    /// 鍵**(`Shell::is_dirty` 参照)── `revision()` は履歴の意味だけを表す
+    /// (transient overlay は含まない、`document.rs::Revision` doc)ので、
+    /// drag 中の途中経過だけで dirty が揺れることはない。
+    saved_revision: Revision,
 }
 
 impl Shell {
     pub fn new() -> (Self, Task<Message>) {
-        let mut doc = Document::new();
-        // 空の Document には comp が無く、Stage が何も出せない。
-        // 起動直後に何も見えないのは M17 に反するので、既定の comp を置く。
-        let _ = doc.apply(Intent::SetComposition(Composition {
-            width: 640,
-            height: 360,
-            fps: motolii_store::Fps::try_new(30, 1).expect("30fps"),
-            duration_frames: 300,
-            background: [0.0, 0.0, 0.0, 1.0],
-        }));
+        Self::new_with_dialogs(Box::new(RfdDialogs))
+    }
 
+    /// [`Shell::new`] の実体。[`file_dialogs::FileDialogs`] を注入できる形の
+    /// 入口(`file_dialogs.rs` 冒頭 doc「dialog 呼び出しを注入可能な境界へ」)。
+    /// production は `new()` がここへ [`RfdDialogs`] を渡すだけの薄い glue。
+    /// test(`tests/suite/file_drive.rs`)はここへ缶詰応答の fake を渡す —
+    /// `Shell::new()` の boot 関数ポインタとしての型(`fn() -> (Shell,
+    /// Task<Message>)`、`main.rs` の `boot` 参照)を崩さずに済む分割。
+    pub fn new_with_dialogs(dialogs: Box<dyn FileDialogs>) -> (Self, Task<Message>) {
+        let mut doc = Self::default_document();
         // 既定値は「編集」ではないので戻せてはいけない。
         doc.mark_undo_floor();
+        // 起動直後は「保存済み」扱い(未編集で Quit/New Project しても確認しない)
+        // — `mark_undo_floor` は `floor` だけを動かし `revision()` には効かない
+        // (`Document::mark_undo_floor` doc 参照)ので前後どちらで読んでも同じ値。
+        let saved_revision = doc.revision();
 
         let engine = Engine::new().expect("GPU を用意できない");
         (
@@ -658,6 +708,7 @@ impl Shell {
                 browser: browser_pane::PaneState::new(),
                 settings_panel_open: false,
                 edit_menu_open: false,
+                file_menu_open: false,
                 checkerboard: false,
                 background_draft: None,
                 ui_scale_draft: None,
@@ -665,9 +716,30 @@ impl Shell {
                 resolution_cap: stage::PreviewResolutionCap::default(),
                 clipboard: clipboard::Clipboard::default(),
                 transport: Transport::new(),
+                dialogs,
+                current_path: None,
+                saved_revision,
             },
             Task::none(),
         )
+    }
+
+    /// 既定 comp だけを持つ、空の Document を組む(`new_with_dialogs`/
+    /// `reset_document`(New Project、MB-1)が共有する)。空の Document には
+    /// comp が無く Stage が何も出せない(M17 違反)ので、起動直後・New Project
+    /// 直後のどちらも既定の comp を置く。**undo floor はここでは立てない**
+    /// (呼び手が `saved_revision` を確定させたい時点を制御できるように —
+    /// `new_with_dialogs`/`reset_document` の doc 参照)。
+    fn default_document() -> Document {
+        let mut doc = Document::new();
+        let _ = doc.apply(Intent::SetComposition(Composition {
+            width: 640,
+            height: 360,
+            fps: motolii_store::Fps::try_new(30, 1).expect("30fps"),
+            duration_frames: 300,
+            background: [0.0, 0.0, 0.0, 1.0],
+        }));
+        doc
     }
 
     /// `--fixture` 起動が使う口。**トンマナ検分の器具**(発注書)— `fixture::build()`
@@ -676,6 +748,9 @@ impl Shell {
     /// 組み立ては元々 `new()` も `doc.apply` を直に呼んでおり、同じ扱い)。
     pub fn new_fixture() -> (Self, Task<Message>) {
         let built = fixture::build();
+        // 器具の Document は「未編集」扱い(起動直後と同格 — dirty ではない)。
+        // `new_with_dialogs` の `saved_revision` と同じ考え方(doc 参照)。
+        let saved_revision = built.doc.revision();
         let engine = Engine::new().expect("GPU を用意できない");
         let mut shell = Self {
             doc: built.doc,
@@ -698,6 +773,7 @@ impl Shell {
             browser: browser_pane::PaneState::new(),
             settings_panel_open: false,
             edit_menu_open: false,
+            file_menu_open: false,
             checkerboard: false,
             background_draft: None,
             ui_scale_draft: None,
@@ -705,6 +781,14 @@ impl Shell {
             resolution_cap: stage::PreviewResolutionCap::default(),
             clipboard: clipboard::Clipboard::default(),
             transport: Transport::new(),
+            // 器具は screenshot 検分専用(発注書「トンマナ検分の器具」)なので
+            // production の rfd ではなく`RfdDialogs` をそのまま渡しておく ──
+            // 器具経路は `Message::NewProjectRequested` 等を一切発行しない
+            // (`main.rs` の `--fixture` フラグ群を参照、File 束の Message は
+            // 無い)ため実際に呼ばれることはない。
+            dialogs: Box::new(RfdDialogs),
+            current_path: None,
+            saved_revision,
         };
         // `update()` を経由しないので、通常なら `update` の末尾が呼ぶ
         // `refresh_frame` をここで代わりに呼ぶ(Stage を空のまま起動しない、M17)。
@@ -755,6 +839,16 @@ impl Shell {
         // 単純な形で代替する(不要な専用 wiring を各 8 動詞へ増やさない)。
         if self.edit_menu_open && !matches!(message, Message::ToggleEditMenu) {
             self.edit_menu_open = false;
+        }
+        // MB-1: File メニューも同じ自動クローズ規律(`ToggleFileMenu` 自身だけ
+        // 対象外)。**File/Edit は同時に開かない**(`ToggleFileMenu`/
+        // `ToggleEditMenu` のどちらの腕も、この2本より先に評価されるこの
+        // ブロックで「今開いている方のメニュー」が message 到達時点で先に
+        // 閉じる — 例: Edit が開いている間に File を押すと、上のブロックで
+        // まず `edit_menu_open` が false になり、その後の match 腕で
+        // `file_menu_open` が true になる)。
+        if self.file_menu_open && !matches!(message, Message::ToggleFileMenu) {
+            self.file_menu_open = false;
         }
         // click→type 編集への切り替え(`finish_field_drag`)だけがフォーカス
         // task を返す。他の枝は既定どおり `Task::none()`。
@@ -884,6 +978,20 @@ impl Shell {
             // M-menu MB-0+Edit: header "Edit" トリガーの開閉トグル。
             // `settings_panel_open` と同格の表示専用状態(Document 非依存)。
             Message::ToggleEditMenu => self.edit_menu_open = !self.edit_menu_open,
+            // MB-1: header "File" トリガーの開閉トグル。`ToggleEditMenu` と同格。
+            Message::ToggleFileMenu => self.file_menu_open = !self.file_menu_open,
+            Message::NewProjectRequested => {
+                if self.confirm_discard_if_dirty() {
+                    self.reset_document();
+                }
+            }
+            Message::SaveAsRequested => self.perform_save_as(),
+            Message::SaveACopyRequested => self.perform_save_a_copy(),
+            Message::QuitRequested => {
+                if self.confirm_discard_if_dirty() {
+                    self.dialogs.quit();
+                }
+            }
             Message::TogglePlayback => self.toggle_playback(),
             Message::PlaybackTick => self.advance_playback_tick(),
         }
@@ -897,6 +1005,66 @@ impl Shell {
     fn select_single(&mut self, layer: LayerId) {
         self.session.selection = Some(layer);
         self.session.selected_layers = vec![layer];
+    }
+
+    // ---- File 束(MB-1、裁定176) ----
+
+    /// 未保存の変更があるか。**`saved_revision` フィールドの doc が唯一の
+    /// 判定根拠** — `Document::revision()`(履歴のみ、transient overlay は
+    /// 含まない)を最後に保存した時点の値と比べるだけ。
+    fn is_dirty(&self) -> bool {
+        self.doc.revision() != self.saved_revision
+    }
+
+    /// New Project/Quit の dirty ガード。dirty でなければ確認そのものを
+    /// 出さない(不要な dialog を挟まない)。true = 続行してよい。
+    fn confirm_discard_if_dirty(&self) -> bool {
+        !self.is_dirty() || self.dialogs.confirm_discard()
+    }
+
+    /// New Project(id 1221)本体。**Document を丸ごと差し替える**
+    /// (`default_document` — 起動直後と同じ既定 comp)。`current_path`/
+    /// `saved_revision` も新しい Document 基準へ揃えるので、直後は dirty では
+    /// ない。`Session` も既定へ戻す(古い selection が存在しない layer を指す
+    /// 事故を避ける — playhead/selection は前の project の物なので引き継がない)。
+    fn reset_document(&mut self) {
+        let mut doc = Self::default_document();
+        doc.mark_undo_floor();
+        self.saved_revision = doc.revision();
+        self.doc = doc;
+        self.current_path = None;
+        self.session = Session::default();
+    }
+
+    /// Save As(id 1225)。path 選択→保存(既存の汎用 persist 経路、
+    /// `Document::save` = `flattened()` で履歴を畳んでから書く、`persist.rs`
+    /// doc 参照)→成功したら `current_path`/`saved_revision` を更新して dirty を
+    /// 解消する。キャンセル・書き込み失敗のどちらも `current_path` は不変。
+    fn perform_save_as(&mut self) {
+        let Some(path) = self.dialogs.pick_save_path() else {
+            return;
+        };
+        match self.doc.save(&path) {
+            Ok(()) => {
+                self.current_path = Some(path);
+                self.saved_revision = self.doc.revision();
+            }
+            // 拒否は必ず出す。黙って消さない(M13 と同じ規律)。
+            Err(error) => self.status = Some(format!("保存できない: {error}")),
+        }
+    }
+
+    /// Save a Copy(id 1227)。Save As と同じ path 選択・同じ persist 経路だが、
+    /// **`current_path`/`saved_revision` は据え置く**(`Message::
+    /// SaveACopyRequested` doc「現 path 維持のまま別名へ書く」)——開いている
+    /// project の身分(どの path と紐付いているか・dirty かどうか)は変わらない。
+    fn perform_save_a_copy(&mut self) {
+        let Some(path) = self.dialogs.pick_save_path() else {
+            return;
+        };
+        if let Err(error) = self.doc.save(&path) {
+            self.status = Some(format!("コピーを保存できない: {error}"));
+        }
     }
 
     // ---- layer クリップボード(普通地図 消化第1波 U1、正典 §4) ----
@@ -1731,6 +1899,18 @@ impl Shell {
         self.doc.can_undo()
     }
 
+    /// 直近の Save As が書いた path(未保存・Save a Copy 直後は前回のまま —
+    /// `Message::SaveACopyRequested` doc 参照)。**運転席が見るための口**。
+    pub fn current_path(&self) -> Option<&std::path::Path> {
+        self.current_path.as_deref()
+    }
+
+    /// 未保存の変更があるか。**運転席が見るための口**(`Shell::is_dirty` の
+    /// 公開版 — MB-1、`saved_revision` フィールド doc 参照)。
+    pub fn is_project_dirty(&self) -> bool {
+        self.is_dirty()
+    }
+
     /// `Message::Redo` の可否。**運転席が見るための口**(`can_undo` と同じ形)。
     /// drag-to-scrub がキャンセル時に redo 空間を汚していないかを運転席から
     /// 確かめるのに使う(`inspector_drive.rs`)。
@@ -2007,13 +2187,20 @@ impl Shell {
         // 木に一切現れない(Q0: 効かない chrome を並べない、閉じている間は
         // 下書き入力欄も存在しないので誤操作の的にならない)。
         let mut layout = column![self.header()];
+        // MB-1: File ドロップダウン。Edit と同型の表示分岐(下記)——
+        // `file_menu_open`/`edit_menu_open` は `Shell::update` の自動クローズ
+        // 規律により同時に true にならない(両方 if を置いても2段重ねには
+        // ならない)。
+        if self.file_menu_open {
+            layout = layout.push(row![crate::menu::file_dropdown(dims, colors)]);
+        }
         // M-menu MB-0+Edit: 開いている間だけ木へ現れる(`settings_panel_open`
         // と同型の表示分岐、`menu.rs` 冒頭 doc「Q0: 開いていなければ木に一切
         // 現れない」)。左寄せの `row!` で包み、残りの幅は埋めない — full
         // width の settings パネルとは違い、ドロップダウンらしく内容幅で
         // 止める。
         if self.edit_menu_open {
-            layout = layout.push(row![crate::menu::dropdown(dims, colors)]);
+            layout = layout.push(row![crate::menu::edit_dropdown(dims, colors)]);
         }
         if self.settings_panel_open {
             layout = layout.push(
@@ -2097,10 +2284,11 @@ impl Shell {
         let dims = self.dims();
         let colors = self.tokens.colors;
         let buttons = row![
-            // M-menu MB-0+Edit: header メニューバーのトップレベル第1号
-            // (`menu.rs` 冒頭 doc)。File 等の未実装トップレベルは構造だけの
-            // 予約をしない(空メニューを出さない)── Edit 1本だけがまず現れる。
-            crate::menu::trigger(dims, colors),
+            // MB-1: File はメニューバーの最左(`menu.rs` 冒頭 doc「MB-1」)。
+            crate::menu::file_trigger(dims, colors),
+            // M-menu MB-0+Edit: header メニューバーのトップレベル第2号
+            // (`menu.rs` 冒頭 doc)。
+            crate::menu::edit_trigger(dims, colors),
             button(text("Undo").size(dims.body_text))
                 .style(move |_theme, status| button_style(dims, colors, status))
                 .on_press_maybe(self.doc.can_undo().then_some(Message::Undo)),
@@ -3310,12 +3498,16 @@ fn inspector_pointer_event(
 ///   で追加した編集ショートカット腕 — 対応する `Message` は既に実装・テスト済み
 ///   だったが、この関数に腕が無かったため UI からは header の Undo/Redo ボタン
 ///   経由でしか届かなかった
+/// - Cmd+N/Cmd+Shift+S/Cmd+Q(New Project/Save As/Quit)は MB-1(裁定176)で
+///   足した File 束 — `menu.rs::file_items` と同じ4動詞・同じ割当(Save a
+///   Copy はメニューのみ、shortcut 出典ゼロ)
 ///
 /// **既定割当は仮**(拘束6・NudgeKeyframe と同じ「keymap 層が無い今だけ直結」
 /// の注記どおり) — アクション名(`Message::StepPlayhead`/`JumpPlayheadToStart`/
 /// `JumpPlayheadToEnd`/`JumpMeaningPoint`/`JumpClipEdge`/`Message::Undo`/`Redo`/
 /// `CopyLayer`/`PasteLayer`/`CutLayer`/`DuplicateLayer`/`SelectAllLayers`/
-/// `DeselectAllLayers`)だけを正本として残す。
+/// `DeselectAllLayers`/`NewProjectRequested`/`SaveAsRequested`/
+/// `QuitRequested`)だけを正本として残す。
 pub fn resolve_navigation_key(
     key: &iced::keyboard::Key,
     modifiers: iced::keyboard::Modifiers,
@@ -3389,6 +3581,23 @@ pub fn resolve_navigation_key(
         }
         Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("a") => {
             Some(Message::DeselectAllLayers)
+        }
+        // ---- File 束(MB-1、裁定176)。メニュー(`menu.rs::file_items`)と
+        // 同じ4動詞・同じ割当 — S6 併存(発注書「メニューと shortcut を同切片
+        // で併設する義務」、M-menu 調査の該当4行は着手前は入口ゼロだった)。
+        // `!modifiers.shift()` は Undo/SelectAll と同じ「将来の Cmd+Shift+N 系
+        // に予約を残す」防衛ガード(KNOWN.md の Cmd+O 教訓と同じ理由 —
+        // 修飾キーを厳密にしないと後から足す動詞と衝突する)。Save a Copy は
+        // normal-map の shortcut 出典がゼロなのでキーを発明しない
+        // (`menu.rs::file_items` doc 参照)。
+        Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("n") => {
+            Some(Message::NewProjectRequested)
+        }
+        Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("s") => {
+            Some(Message::SaveAsRequested)
+        }
+        Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("q") => {
+            Some(Message::QuitRequested)
         }
         // Play/Pause(A2、正典 §2 拘束5)。`captured`(text_input 入力中)なら
         // 上の早期returnで既に弾かれている — typing 中の Space は普通の

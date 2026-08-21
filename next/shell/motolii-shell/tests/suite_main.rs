@@ -24,6 +24,8 @@ mod clipboard_drive;
 mod drive;
 #[path = "suite/entrance_atlas_dump.rs"]
 mod entrance_atlas_dump;
+#[path = "suite/file_drive.rs"]
+mod file_drive;
 #[path = "suite/fixture.rs"]
 mod fixture;
 #[path = "suite/iced_test_spike.rs"]
