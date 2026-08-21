@@ -1,3 +1,4 @@
+//! wraps: iced — Inspector pane(選択レイヤの属性・transform の読み書き、drag-to-scrub)。書き込みは Intent 経由のみ。
 //! Inspector pane(第1波: Transform行 + Attrs行)。
 //!
 //! **視覚正本は `docs/mocks-ui/public/inspector-library.html` + `.css` そのもの**
