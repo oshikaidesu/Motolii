@@ -10,6 +10,9 @@
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
 | **M4: ゼロコピー presenter(widget 内蔵)** | 実装 | worktree(発注時に追記) | 裁定171 v2 — Pipeline 内に Compositor::with_device・prepare が描き render が main_target を直 blit。**スクラッチ禁止**: 移植元= 旧世界 `crates/motolii-ui/src/rerun_stage/adapter.rs`+rerun 本体の egui glue(利用者指摘) |
+| **T-rail: rail 転写(裁定172)** | 実装 | worktree(発注時に追記) | スウォッチ(寸 0.308・角丸 0.25・色=label_color 復帰)+M/S/L 12px 塗りチップ化。write-set= timeline-pane lane_bar.rs 系のみ |
+| **T-canvas: canvas 転写(裁定172)** | 実装 | worktree(発注時に追記) | bar inset 0.154・bar 角丸 0.111・ruler 高 0.846・目盛り長比 0.227/0.5。write-set= timeline-pane canvas.rs/lib.rs 系のみ(lane_bar.rs 触らず) |
+| **I-ratio: Inspector 比率化(裁定172 §3)** | 実装+調査 | worktree(発注時に追記) | inspector mock 実測→比率台帳(行高:帯高:値セル幅:文字寸比)→実装照合→機械的差分の転写。φ FINDING 0.55 の白黒込み。write-set= inspector-pane+台帳 doc |
 
 ## 完了・main 着地済み(実装)
 
