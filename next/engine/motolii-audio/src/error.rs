@@ -1,9 +1,11 @@
 //! D4契約(旧 motolii-audio から継承): 公開APIはpanicせず、入力起因の失敗を
 //! 全て型付き`AudioError`で返す。
 //!
-//! 旧クレートにあった `InvalidRingConfig` / `NoOutputDevice` / `UnsupportedOutputConfig` /
-//! `Cpal` / `ProducerSpawn` は落とした — 第1切片は device/ring を持ち込まない
-//! (発注書の柵)ので、対応する経路がこの crate に存在しない。
+//! 旧クレートにあった `InvalidRingConfig` は落としたまま(`ring` モジュールが
+//! 自前SPSCを持たない設計 — `ring.rs` doc 参照 — なので対応する経路が無い)。
+//! `NoOutputDevice`/`UnsupportedOutputConfig`/`Cpal`/`ProducerSpawn` は第1切片
+//! (A1)で落としていたが、実時間再生 第2切片(A2、device/producer 結線)で
+//! 旧 `crates/motolii-audio/src/error.rs` から戻した — 定義は無改造の移植。
 
 /// motolii-audioの全公開APIが返すエラー。
 #[derive(Debug, thiserror::Error)]
@@ -59,6 +61,33 @@ pub enum AudioError {
     /// store 側の読み取り(track/meta/attrs/composition)が失敗した。
     #[error("store read failed: {0}")]
     Store(#[from] motolii_store::StoreError),
+
+    /// A2: デフォルト出力デバイスが無い(旧 `crates/motolii-audio` から無改造)。
+    #[error("no default audio output device available")]
+    NoOutputDevice,
+
+    /// A2: 素材の channels/sample_rate に対応するデバイス出力 config が無い。
+    #[error(
+        "no output stream config for {channels} ch @ {sample_rate} Hz on this device ({detail})"
+    )]
+    UnsupportedOutputConfig {
+        channels: u16,
+        sample_rate: u32,
+        detail: &'static str,
+    },
+
+    /// A2: cpal 側のエラー(device列挙・stream構築・play/pause 等)。
+    #[error(transparent)]
+    Cpal(#[from] cpal::Error),
+
+    /// A2: producer スレッドの起動失敗。
+    #[error("failed to spawn producer thread: {0}")]
+    ProducerSpawn(std::io::Error),
+
+    /// A2: `PlaybackClock`/`RationalTime`演算の失敗(旧
+    /// `crates/motolii-transport::TransportError::Time`の移植)。
+    #[error(transparent)]
+    Time(#[from] motolii_core::RationalTimeError),
 }
 
 pub type Result<T> = std::result::Result<T, AudioError>;

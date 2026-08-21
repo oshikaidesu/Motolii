@@ -6,6 +6,13 @@ license.workspace = true
 
 [dependencies]
 iced.workspace = true
+# 実時間再生 第2切片(A2、2026-08-21): `transport.rs` が `PlaybackSession`
+# (device/producer 結線 + `PlaybackClock`)を開閉する。試験
+# (`tests/suite/playback_drive.rs`)も `PlaybackSession::for_simulation`/
+# `PlaybackClock`/`PlaybackCounters`/`DeviceWaitLatency` を直接叩くので、
+# integration test 側からも見える通常の `[dependencies]` に置く(dev-only の
+# `iced_test` とは違う扱い)。
+motolii-audio.workspace = true
 motolii-core.workspace = true
 motolii-engine.workspace = true
 motolii-media.workspace = true
