@@ -161,3 +161,11 @@ debug = "line-tables-only"
 
 [profile.test]
 debug = "line-tables-only"
+
+# fixture 窓・実窓検分用の高速リビルド profile(2026-08-22 利用者指示「毎回リリース
+# ビルドは時間かかるので改善」)。release と同じ opt-level を保ちつつ incremental を
+# 有効化 — 手触り判定の忠実度を落とさずに、差分ビルドで回す。初回のみ release 同等の
+# 時間を払う。合否判定のテスト(storm/r2 の無罪確認等)は従来どおり --release を使う。
+[profile.preview]
+inherits = "release"
+incremental = true

@@ -26,11 +26,11 @@ Repository-specific agent *conduct* rules were archived in [docs/archive/agent-g
 # フル関門(merge 前最終)— 合否は $? 直取り
 cargo test --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --workspace --locked --no-fail-fast -j 4 > /tmp/full.log 2>&1; echo "EXIT=$?"
 
-# release shell(fixture 窓)
-cargo build --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --release -p motolii-shell -j 4
+# fixture 窓のビルド(preview profile = release同等opt+incremental。初回のみ遅い)
+cargo build --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --profile preview -p motolii-shell -j 4
 
 # fixture 窓の起動(supervisor が main checkout から)
-"$(git rev-parse --show-toplevel)/next/target/release/motolii-shell" --fixture
+"$(git rev-parse --show-toplevel)/next/target/preview/motolii-shell" --fixture
 
 # storm/r2 の無罪確認(負荷 flake — release 単独)
 cargo test --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --release -p motolii-store --test document edit_storm_with_the_real_track_type
