@@ -275,8 +275,11 @@ pub enum Message {
     Browser(browser_pane::Message),
 
     // ---- layer クリップボード(普通地図 消化第1波 U1、正典 §4) ----
-    // キーは全部仮の既定割当(Cmd+C/V/X/D/A・Cmd+Shift+A) — keymap 層は未実装なので
-    // ここではアクション名だけを固定する(`next/reference/timeline-grammar.md` 拘束6)。
+    // キーは Cmd+C/V/X/D/A・Cmd+Shift+A(`resolve_navigation_key` へ配線済み、S0
+    // 段差 群0・κ 台帳 FINDING 1)。**割当自体はまだ仮**(keymap 層は未実装、
+    // `next/reference/timeline-grammar.md` 拘束6) — menu 入口(menubar)は
+    // まだ無いので、UI 入口はキーだけの半消化状態(normal-map の menu 側判定は
+    // 未着手のまま)。
     /// `Session::selection` の layer をアプリ内クリップボードへ写す(`clipboard.rs`
     /// doc 参照 — OS clipboard ではない)。**Document は触らない** — capture のみ
     /// なので undo に乗らない。
@@ -2166,10 +2169,17 @@ fn inspector_pointer_event(
 ///   (前任レーンの実測教訓: Cmd+O 等の既存/将来ショートカットを奪わない)
 /// - ←/→ は Alt 修飾時は対象外(`NudgeKeyframe` が既に使っている、二重発火
 ///   防止)
+/// - Cmd+Z/Cmd+Shift+Z(Undo/Redo)・Cmd+C/V/X/D(Copy/Paste/Cut/Duplicate)・
+///   Cmd+A/Cmd+Shift+A(SelectAll/DeselectAll)は S0 段差 群0(κ 台帳 FINDING 1)
+///   で追加した編集ショートカット腕 — 対応する `Message` は既に実装・テスト済み
+///   だったが、この関数に腕が無かったため UI からは header の Undo/Redo ボタン
+///   経由でしか届かなかった
 ///
 /// **既定割当は仮**(拘束6・NudgeKeyframe と同じ「keymap 層が無い今だけ直結」
 /// の注記どおり) — アクション名(`Message::StepPlayhead`/`JumpPlayheadToStart`/
-/// `JumpPlayheadToEnd`/`JumpMeaningPoint`/`JumpClipEdge`)だけを正本として残す。
+/// `JumpPlayheadToEnd`/`JumpMeaningPoint`/`JumpClipEdge`/`Message::Undo`/`Redo`/
+/// `CopyLayer`/`PasteLayer`/`CutLayer`/`DuplicateLayer`/`SelectAllLayers`/
+/// `DeselectAllLayers`)だけを正本として残す。
 pub fn resolve_navigation_key(
     key: &iced::keyboard::Key,
     modifiers: iced::keyboard::Modifiers,
@@ -2212,6 +2222,37 @@ pub fn resolve_navigation_key(
         }
         Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("o") => {
             Some(Message::JumpClipEdge(timeline::nav::ClipEdge::Out))
+        }
+        // ---- 編集ショートカット(S0 段差 群0、κ 台帳 FINDING 1)。`Message::Undo`/
+        // `Redo`/`CopyLayer`/`PasteLayer`/`CutLayer`/`DuplicateLayer`/
+        // `SelectAllLayers`/`DeselectAllLayers` は実装・テスト済みだったのに UI 入口
+        // (キー)が1本も無かった(header の Undo/Redo ボタンのみ) — ここへ Cmd+文字 の
+        // 腕を足して消化する。**既定割当は仮**(上の j/k/i/o と同じ「keymap 層が
+        // 無い今だけ直結」の注記どおり、拘束6)。Shift の有無で Undo/Redo・
+        // SelectAll/DeselectAll を振り分ける(NudgeKeyframe の歩幅振り分けと同じ形)。
+        Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("z") => {
+            Some(Message::Undo)
+        }
+        Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("z") => {
+            Some(Message::Redo)
+        }
+        Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("c") => {
+            Some(Message::CopyLayer)
+        }
+        Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("v") => {
+            Some(Message::PasteLayer)
+        }
+        Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("x") => {
+            Some(Message::CutLayer)
+        }
+        Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("d") => {
+            Some(Message::DuplicateLayer)
+        }
+        Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("a") => {
+            Some(Message::SelectAllLayers)
+        }
+        Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("a") => {
+            Some(Message::DeselectAllLayers)
         }
         // Play/Pause(A2、正典 §2 拘束5)。`captured`(text_input 入力中)なら
         // 上の早期returnで既に弾かれている — typing 中の Space は普通の
