@@ -724,7 +724,8 @@ pub fn render(shell: &Shell) -> RgbaImage {
     // (小目盛=短く弱い hairline、大目盛=長く強い)だけは既存の描画手段
     // (`stroke_v`)で再現できるので、階層そのものはこの PNG でも視認できる。
     if duration_frames > 0 && clip_width > 0.0 {
-        let (minor, major) = timeline_pane::tick_steps(fps, duration_frames, clip_width);
+        let (minor, major) =
+            timeline_pane::tick_steps(fps, duration_frames, clip_width, dims.row_height);
         let last_frame = (duration_frames - 1).max(0);
         let mut frame_no: i64 = 0;
         while frame_no <= last_frame {
@@ -773,7 +774,7 @@ pub fn render(shell: &Shell) -> RgbaImage {
     }
     if duration_frames > 0 && clip_width > 0.0 && rows_bottom > rows_top {
         let segment_frames =
-            timeline_pane::time_band_segment_frames(fps, duration_frames, clip_width);
+            timeline_pane::time_band_segment_frames(fps, duration_frames, clip_width, dims.row_height);
         let mut segment_index: i64 = 0;
         let mut start_frame: i64 = 0;
         while start_frame < duration_frames {
@@ -804,7 +805,8 @@ pub fn render(shell: &Shell) -> RgbaImage {
     // mock は f=0(rail 境界と重なる位置)を引かない — `frame_no = minor` から
     // 開始してその踏襲(`timeline/canvas.rs::draw_tick_lines` と同じ)。
     if duration_frames > 0 && clip_width > 0.0 && rows_bottom > rows_top {
-        let (minor, major) = timeline_pane::tick_steps(fps, duration_frames, clip_width);
+        let (minor, major) =
+            timeline_pane::tick_steps(fps, duration_frames, clip_width, dims.row_height);
         let last_frame = (duration_frames - 1).max(0);
         let mut frame_no = minor;
         while frame_no <= last_frame {
