@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 意味論先出しモック 第2号 v4: Stage(2026-08-21)
+<!-- 意味論先出しモック 第2号 v5: Stage(2026-08-21)
      v3(利用者裁定): (1) 状態帯の言葉はアイコンで(市松等 — 文字で説明しない。
      値そのものが意味の物[解像度倍率]だけ文字) (2) 視点は「タブ」— カメラボックス
      (レンダリングカメラ)の視点と自由視点(旧称: 観測)を上縁タブで切替。
@@ -7,7 +7,7 @@
      (3) 金枠=カメラボックスの写し(自由視点でのみ描画)。
      AE 先例: 3D View popup(Active Camera/Custom View)+comp タブ+View レイアウト
      (1/2/4画面)を「視点タブ」1語彙に畳む意図的設計(理由つき S0 逸脱)。 -->
-<html lang="ja"><head><meta charset="utf-8"><title>Stage 意味論モック v4</title>
+<html lang="ja"><head><meta charset="utf-8"><title>Stage 意味論モック v5</title>
 <style>
 :root{--surface-panel:#363636;--surface-raised:#3e3e3e;--text-muted:#757575;--text-primary:#cfcfcf;
 --action-active:#d8b574;--hairline-weak:rgba(0,0,0,.35);--sem:#e8c35a;
@@ -23,6 +23,10 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
 .vt.on{background:var(--void);color:var(--text-primary);border-bottom:1px solid var(--void);margin-bottom:-1px}
 .void{position:relative;height:448px;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .comp{position:relative;width:720px;height:405px;background:#000;overflow:hidden;transition:all .25s}
+/* v5: Camera タブ= boxcam 領域の切り取りを表示(利用者指摘 — モックの内部整合)。
+   world を 1/0.64 倍し boxcam 原点(14%,12%)を左上へ。User View では等倍へ戻す */
+.world{position:absolute;inset:0;transform-origin:0 0;transform:scale(1.5625) translate(-14%,-12%);transition:transform .25s}
+.free .world{transform:none}
 .checker .comp{background:repeating-conic-gradient(var(--checker-l) 0 25%,var(--checker-d) 0 50%) 0 0/16px 16px}
 .solid{position:absolute;left:5%;top:6.9%;width:18%;height:20.7%;background:#8ff9ff}
 .solid2{position:absolute;left:41.7%;top:37%;width:30.6%;height:34.6%;background:hsl(210 32% 62%)}
@@ -40,6 +44,13 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
 .free .camerabox{display:block}
 .safe{display:none;position:absolute;pointer-events:none;border:1px dashed rgba(255,255,255,.28)}
 .safeon .safe{display:block}.safe.a{inset:5%}.safe.t{inset:10%}
+/* v5: 方眼シート(構図ガイド・予約地)。方眼=薄グリッド/thirds・phi=線2対。
+   構図ガイドとしての黄金比は S4 の「魔法数棄却」と別物(ユーザーの道具) */
+.sheet{display:none;position:absolute;inset:0;pointer-events:none}
+.sheet i{position:absolute;background:rgba(255,255,255,.22)}
+.sheet i.v{top:0;bottom:0;width:1px}.sheet i.h{left:0;right:0;height:1px}
+.grid9{background:repeating-linear-gradient(0deg,rgba(255,255,255,.10) 0 1px,transparent 1px 45px),repeating-linear-gradient(90deg,rgba(255,255,255,.10) 0 1px,transparent 1px 45px)}
+.g-grid .grid9{display:block}.g-thirds .thirds{display:block}.g-phi .phi{display:block}
 /* 下縁: 状態帯 — アイコン化(v3)。値が意味の物だけ文字 */
 .band{display:flex;gap:14px;align-items:center;height:20px;background:var(--surface-panel);
   border-top:1px solid #555;padding:0 10px;font-size:11px;color:var(--text-muted)}
@@ -57,11 +68,14 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
 .legend b{color:var(--sem)}.legend table{border-collapse:collapse;margin-top:6px}
 .legend td,.legend th{border:1px solid #444;padding:3px 8px;text-align:left;font-weight:400}
 </style></head><body>
-<h1>Stage — 意味論先出しモック v4(boxcam・User View・英語UI)</h1>
+<h1>Stage — 意味論先出しモック v5(Camera=boxcam の切り取り・方眼シート・磁石予約)</h1>
 <div class="hint">上縁タブ=<b>何の視点か</b>(カメラボックスの視点 ⇄ 自由視点)。帯の言葉はアイコン(文字で説明しない — 値が意味の物だけ文字)。枠線は状態の言葉。</div>
 <div class="togs">
   <label><input type="checkbox" id="sem" checked> 意味層</label>
-  <label><input type="checkbox" id="safe"> セーフエリア(予約地)</label>
+  <label><input type="checkbox" id="safe"> Safe areas(予約地)</label>
+  <label><input type="checkbox" id="ggrid"> 方眼(予約地)</label>
+  <label><input type="checkbox" id="gthirds"> 三分割(予約地)</label>
+  <label><input type="checkbox" id="gphi"> 黄金比(予約地)</label>
   <span class="hint">視点はモック内のタブで・市松は帯のアイコンで切替(実操作の練習を兼ねる)</span>
 </div>
 
@@ -72,11 +86,16 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
   </div>
   <div class="void">
     <div class="comp">
-      <div class="solid"></div>
-      <div class="solid2"></div>
-      <div class="sel"></div>
+      <div class="world">
+        <div class="solid"></div>
+        <div class="solid2"></div>
+        <div class="sel"></div>
+      </div>
       <div class="safe a"></div>
       <div class="safe t"></div>
+      <div class="sheet grid9"></div>
+      <div class="sheet thirds"><i class="v" style="left:33.33%"></i><i class="v" style="left:66.67%"></i><i class="h" style="top:33.33%"></i><i class="h" style="top:66.67%"></i></div>
+      <div class="sheet phi"><i class="v" style="left:38.2%"></i><i class="v" style="left:61.8%"></i><i class="h" style="top:38.2%"></i><i class="h" style="top:61.8%"></i></div>
       <div class="camerabox"><i></i><i></i><i></i><i></i></div>
     </div>
   </div>
@@ -102,12 +121,13 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
     <tr><td>View レイアウト(1 View / 2 Views / 4 Views)</td><td>予約地: タブの分離表示(二画面)</td></tr>
     <tr><td>透明グリッド(市松)<b>アイコン</b></td><td>帯の ▦(同型)</td></tr>
     <tr><td>倍率 popup・解像度 popup</td><td>帯の解像度 cap(Auto/½/¼)。倍率は自由視点の値表示</td></tr>
-    <tr><td>セーフエリア/グリッド/ガイド options アイコン</td><td>予約地(セーフ=View トグル束)</td></tr>
+    <tr><td>セーフエリア/グリッド/ガイド options アイコン</td><td>予約地: <b>方眼シート束</b>(方眼・三分割・黄金比 — 構図ガイド。UI 寸法の黄金比棄却(裁定164)とは別物=ユーザーの道具)+Safe areas。入口は帯のアイコン(View 系)</td></tr>
+    <tr><td>スナップ(整列)</td><td>予約地: <b>ギズモの磁石</b>(snap 対象: 方眼シート・ガイド・セーフ・他レイヤーの辺/中心。Timeline の snap 7px と同じ文法家族・磁石アイコン= DAW/AE 共通文化)— ギズモ束と同時に設計</td></tr>
     <tr><td>RoI・チャンネル表示・露出</td><td>対象外(現段階の非目標)</td></tr>
     <tr><td>カメラのワイヤーフレーム(カメラ=オブジェクト)</td><td><b>boxcam</b>(破線+ハンドル。将来: カメラレイヤーで複数化・3D は Blender viewport 参考)</td></tr>
   </table>
   <b>比率の注記</b>: comp=16:9 / 帯高:pane高 ≈ 0.04 / セーフ内接 90%・80%
-  <br><b>未決</b>: User View の初期倍率(等倍か fit か)/ boxcam ハンドルの解禁束(カメラ直接操作 — ギズモ束と同時か)/ 市松×User View の併用(既知境界の解消時期)/ 二画面(タブ分離)の解禁束
+  <br><b>未決</b>: User View の初期倍率(等倍か fit か)/ boxcam ハンドル・磁石の解禁束(ギズモ束と同時か)/ 方眼シートの入口アイコン(帯に何個まで許すか — S4 重み)/ 市松×User View の併用 / 二画面(タブ分離)の解禁束
 </div>
 
 <script>
@@ -117,6 +137,7 @@ const bindChk=(id,cls,tgt)=>{const b=document.getElementById(id);
 bindChk('sem','semon',pane);
 (()=>{const b=document.getElementById('sem');const f=()=>{document.body.classList.toggle('semon2',b.checked)};b.addEventListener('change',f);f();})();
 bindChk('safe','safeon',pane);
+bindChk('ggrid','g-grid',pane);bindChk('gthirds','g-thirds',pane);bindChk('gphi','g-phi',pane);
 const cam=document.getElementById('vtcam'),free=document.getElementById('vtfree');
 cam.onclick=()=>{pane.classList.remove('free');cam.classList.add('on');free.classList.remove('on')};
 free.onclick=()=>{pane.classList.add('free');free.classList.add('on');cam.classList.remove('on')};
