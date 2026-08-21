@@ -3,7 +3,7 @@
 //! 見るのは背骨1(書き口が1箇所)と M13(拒否が必ず出る)と、
 //! **描画キャッシュが `revision()` で正しく落ちること**。
 
-use motolii_shell::timeline_pane::{self, Hit, RowProjection};
+use motolii_shell::timeline_pane::{self, BarPart, Hit, RowProjection};
 use motolii_shell::tokens::{Colors, Dimensions};
 use motolii_shell::{Message, Shell};
 
@@ -404,6 +404,285 @@ fn clip_face_source_no_longer_references_the_layer_name() {
         !source.contains("row.name"),
         "クリップ面(canvas.rs)がまだレイヤー名(row.name)を参照している — \
          裁定147: 名前の住所はレーンバー(lane_bar.rs)へ一本化したはず"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Timeline クリップの move/trim(第2波T2、正典 `next/reference/
+// timeline-grammar.md` §2)
+// ---------------------------------------------------------------------------
+//
+// 全試験共通のセットアップ: `Message::ScrubTo(50)` してから `Message::AddLayer`
+// すると、Solid layer は `LayerTiming::place(playhead, None, comp_duration)`
+// (`Shell::update` の `AddLayer` 腕)で `[50, 300)`(comp は 300frame、
+// `Shell::new` 参照)に置かれる — comp 終端まで埋まる Solid の性質を逆手に取り、
+// 左に 50frame ぶんの余地だけを持つ clip を作る(AddLayer 経由で任意の尺を
+// 指定する公開 API は無い — メディア admit は ffmpeg 依存なのでここでは使わない)。
+
+/// **オラクル(a)**: 本体ドラッグ → release で start が動き、Undo 1回で戻る。
+#[test]
+fn dragging_a_clip_body_moves_it_and_undoes_in_one_step() {
+    let mut shell = shell();
+    shell.update(Message::ScrubTo(50));
+    shell.update(Message::AddLayer);
+    let id = shell.timeline_rows()[0].id;
+    assert_eq!(shell.timeline_rows()[0].start, 50);
+
+    shell.update(Message::TimelineBarGrabbed {
+        layer: id,
+        part: BarPart::Body,
+        at_frame: 50,
+    });
+    shell.update(Message::TimelineDragMoved {
+        at_frame: 30,
+        px_per_frame: 1.0,
+    });
+    shell.update(Message::TimelineDragReleased);
+
+    assert_eq!(shell.timeline_rows()[0].start, 30, "本体ドラッグで start が動いていない");
+    assert_eq!(shell.status(), None, "動いただけなのに拒否理由が出ている");
+
+    shell.update(Message::Undo);
+    assert_eq!(
+        shell.timeline_rows()[0].start,
+        50,
+        "Undo 1回で戻らない(1操作=1undo、M10違反)"
+    );
+}
+
+/// **オラクル(b)**: ドラッグ中の Esc → 履歴完全無傷(can_undo/can_redo とも
+/// 開始前と同一)。preview は捨てられ、bar は元の位置のまま。
+#[test]
+fn escape_during_a_clip_drag_leaves_history_completely_untouched() {
+    let mut shell = shell();
+    shell.update(Message::ScrubTo(50));
+    shell.update(Message::AddLayer);
+    let id = shell.timeline_rows()[0].id;
+
+    let can_undo_before = shell.can_undo();
+    let can_redo_before = shell.can_redo();
+
+    shell.update(Message::TimelineBarGrabbed {
+        layer: id,
+        part: BarPart::Body,
+        at_frame: 50,
+    });
+    shell.update(Message::TimelineDragMoved {
+        at_frame: 10,
+        px_per_frame: 1.0,
+    });
+    shell.update(Message::EscapePressed);
+
+    assert_eq!(
+        shell.can_undo(),
+        can_undo_before,
+        "Esc がドラッグ以外の履歴まで動かしている"
+    );
+    assert_eq!(shell.can_redo(), can_redo_before, "Esc が redo 空間を汚している");
+    assert_eq!(
+        shell.timeline_rows()[0].start,
+        50,
+        "Esc なのに bar が動いてしまっている"
+    );
+
+    // 掴んだままのボタンで release が来ても、Esc で drag state は既に空 —
+    // 何も起きない(二重確定の防止)。
+    shell.update(Message::TimelineDragReleased);
+    assert_eq!(shell.timeline_rows()[0].start, 50);
+    assert_eq!(shell.can_undo(), can_undo_before);
+}
+
+/// 右クリックも Esc と同じ意味(裁定151「キャンセルの一般化」)。
+#[test]
+fn right_click_during_a_clip_drag_cancels_it_just_like_escape() {
+    let mut shell = shell();
+    shell.update(Message::ScrubTo(50));
+    shell.update(Message::AddLayer);
+    let id = shell.timeline_rows()[0].id;
+    let can_undo_before = shell.can_undo();
+
+    shell.update(Message::TimelineBarGrabbed {
+        layer: id,
+        part: BarPart::Body,
+        at_frame: 50,
+    });
+    shell.update(Message::TimelineDragMoved {
+        at_frame: 10,
+        px_per_frame: 1.0,
+    });
+    shell.update(Message::TimelineDragCancelled);
+
+    assert_eq!(shell.can_undo(), can_undo_before);
+    assert_eq!(shell.timeline_rows()[0].start, 50);
+}
+
+/// 掴んだだけで未移動なら release は no-op(正典 §2)。
+#[test]
+fn grabbing_without_moving_and_releasing_writes_nothing() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+    let id = shell.timeline_rows()[0].id;
+    let start_before = shell.timeline_rows()[0].start;
+    let can_undo_before = shell.can_undo();
+
+    shell.update(Message::TimelineBarGrabbed {
+        layer: id,
+        part: BarPart::Body,
+        at_frame: start_before,
+    });
+    shell.update(Message::TimelineDragReleased);
+
+    assert_eq!(shell.timeline_rows()[0].start, start_before);
+    assert_eq!(
+        shell.can_undo(),
+        can_undo_before,
+        "動いていないのに undo できる操作が積まれている"
+    );
+}
+
+/// **オラクル(c)**: trim In は start のみ動かし、end(`start + duration`)は
+/// 固定のまま。
+#[test]
+fn trimming_the_in_edge_moves_only_the_start_and_keeps_the_end_fixed() {
+    let mut shell = shell();
+    shell.update(Message::ScrubTo(50));
+    shell.update(Message::AddLayer);
+    let id = shell.timeline_rows()[0].id;
+    let original_end = shell.timeline_rows()[0].start + shell.timeline_rows()[0].duration;
+
+    shell.update(Message::TimelineBarGrabbed {
+        layer: id,
+        part: BarPart::EdgeIn,
+        at_frame: 50,
+    });
+    shell.update(Message::TimelineDragMoved {
+        at_frame: 80,
+        px_per_frame: 1.0,
+    });
+    shell.update(Message::TimelineDragReleased);
+
+    let row = &shell.timeline_rows()[0];
+    assert_eq!(row.start, 80, "trim In で start が動いていない");
+    assert_eq!(
+        row.start + row.duration,
+        original_end,
+        "trim In で end が動いてしまっている(固定のはず)"
+    );
+
+    shell.update(Message::Undo);
+    assert_eq!(shell.timeline_rows()[0].start, 50, "Undo 1回で戻らない");
+}
+
+/// **オラクル(c)**: trim Out は end のみ動かし、start は固定のまま。
+#[test]
+fn trimming_the_out_edge_moves_only_the_end_and_keeps_the_start_fixed() {
+    let mut shell = shell();
+    shell.update(Message::ScrubTo(50));
+    shell.update(Message::AddLayer);
+    let id = shell.timeline_rows()[0].id;
+    let original_start = shell.timeline_rows()[0].start;
+
+    shell.update(Message::TimelineBarGrabbed {
+        layer: id,
+        part: BarPart::EdgeOut,
+        at_frame: 299,
+    });
+    shell.update(Message::TimelineDragMoved {
+        at_frame: 250,
+        px_per_frame: 1.0,
+    });
+    shell.update(Message::TimelineDragReleased);
+
+    let row = &shell.timeline_rows()[0];
+    assert_eq!(
+        row.start, original_start,
+        "trim Out で start が動いてしまっている(固定のはず)"
+    );
+    assert_eq!(row.start + row.duration, 250, "trim Out で end が動いていない");
+}
+
+/// **オラクル(d)**: playhead 近傍(画面距離 `SNAP_PX` 相当)で吸着し、ドラッグ中の
+/// Cmd 押下でスナップが一時的に無効化される(正典 §2・裁定151)。
+#[test]
+fn dragging_near_the_playhead_snaps_to_it_and_command_disables_snapping() {
+    let mut shell = shell();
+    shell.update(Message::ScrubTo(50));
+    shell.update(Message::AddLayer);
+    let id = shell.timeline_rows()[0].id;
+    // clip 作成後に playhead を動かす — 0秒/終端とは別の、はっきりした候補にする。
+    shell.update(Message::ScrubTo(20));
+
+    // px_per_frame == 1.0(1px=1frame)。raw target は 50+(25-50)=25、playhead(20)
+    // との画面距離は5px(<= SNAP_PX=7px)なので吸着するはず。
+    shell.update(Message::TimelineBarGrabbed {
+        layer: id,
+        part: BarPart::Body,
+        at_frame: 50,
+    });
+    shell.update(Message::TimelineDragMoved {
+        at_frame: 25,
+        px_per_frame: 1.0,
+    });
+    shell.update(Message::TimelineDragReleased);
+    assert_eq!(
+        shell.timeline_rows()[0].start,
+        20,
+        "playhead 近傍で吸着していない"
+    );
+
+    shell.update(Message::Undo); // 50 へ戻す
+
+    // 同じ操作でも、ドラッグ中に Cmd を押していればスナップは一時的に無効
+    // (正典 §2・裁定151)。
+    shell.update(Message::KeyboardModifiersChanged(
+        iced::keyboard::Modifiers::COMMAND,
+    ));
+    shell.update(Message::TimelineBarGrabbed {
+        layer: id,
+        part: BarPart::Body,
+        at_frame: 50,
+    });
+    shell.update(Message::TimelineDragMoved {
+        at_frame: 25,
+        px_per_frame: 1.0,
+    });
+    shell.update(Message::TimelineDragReleased);
+    assert_eq!(
+        shell.timeline_rows()[0].start,
+        25,
+        "Cmd 押下中なのにスナップが素通りしていない"
+    );
+}
+
+/// **オラクル(e)**: ロック行は掴む前に拒否され、status 帯に理由が出る(M13)。
+/// 拒否されているので move/release を送っても何も書かれない。
+#[test]
+fn grabbing_a_locked_clip_is_refused_with_a_reason() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+    let id = shell.timeline_rows()[0].id;
+    shell.update(Message::LaneBarToggleLock(id));
+    let start_before = shell.timeline_rows()[0].start;
+
+    shell.update(Message::TimelineBarGrabbed {
+        layer: id,
+        part: BarPart::Body,
+        at_frame: start_before,
+    });
+    assert!(
+        shell.status().is_some(),
+        "ロック中の掴みが理由つきで拒否されていない(M13: 無反応ゼロ違反)"
+    );
+
+    shell.update(Message::TimelineDragMoved {
+        at_frame: start_before + 10,
+        px_per_frame: 1.0,
+    });
+    shell.update(Message::TimelineDragReleased);
+    assert_eq!(
+        shell.timeline_rows()[0].start,
+        start_before,
+        "ロック中なのに動いてしまっている"
     );
 }
 

@@ -15,7 +15,10 @@
 //! ## 層の分担(第2波レーン分割時の write-set の割り当て先)
 //! - [`projection`] … 投影の純関数(`rows`/`frame_to_x`/`frame_at_x`/
 //!   `time_band_segment_frames`)。Document/Session を読むだけ
-//! - [`hit`] … `Hit` 型と `hit_test`(座標 → 当たり判定、クリップ面専用)
+//! - [`hit`] … `Hit`/[`hit::BarPart`] 型と `hit_test`/[`hit::classify_bar_part`]
+//!   (座標 → 当たり判定、クリップ面専用)
+//! - [`clip_gesture`] … 単一クリップの move/trim の**意味関数**(第2波T2、
+//!   正典 §2)。スナップ・clamp。`motolii_store` を持たない自己完結な純関数
 //! - [`canvas`] … 絵(`draw`/`draw_ruler_ticks`/`draw_hairline`/`draw_time_bands`)
 //! - [`input`] … 入力(`update`/`mouse_interaction`)と drag 状態
 //!   ([`Interaction`])
@@ -32,12 +35,13 @@
 //! `crate::lib`側の `pub use timeline as timeline_pane;` エイリアスで壊さない。
 
 mod canvas;
+pub mod clip_gesture;
 mod hit;
 mod input;
 mod lane_bar;
 mod projection;
 
-pub use hit::{hit_test, Hit};
+pub use hit::{bar_span_x, classify_bar_part, hit_test, BarPart, Hit, TRIM_EDGE};
 pub use input::Interaction;
 pub use projection::{frame_at_x, rows, RowProjection};
 pub(crate) use projection::{frame_to_x, time_band_segment_frames};

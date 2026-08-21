@@ -35,7 +35,7 @@
 //! `crates/motolii-shell-iced/tests/drive_timeline.rs` と同じ型。
 //! Q0 横断柵(`tests/q0_fence.rs`)側の限界节にも同じ制約を明記してある。
 
-use motolii_shell::timeline_pane::{frame_at_x, TimelinePane};
+use motolii_shell::timeline_pane::{frame_at_x, BarPart, TimelinePane};
 use motolii_shell::tokens::Tokens;
 use motolii_shell::{Message, Session, Shell};
 
@@ -131,8 +131,16 @@ fn one_layer_timeline() -> (motolii_store::Document, Session) {
 /// selector が効かない canvas を座標で狙うので、この数値そのものが前提になる。
 const DEFAULT_WIDTH: f32 = 1024.0;
 
+/// 第2波T2(単一クリップの move/trim、正典 §2)より前は bar click が
+/// `Message::Select` を直接出していたが、今は掴む/離すの2手 —
+/// `Message::TimelineBarGrabbed`(本体を掴んだ = move の起点、
+/// `Shell::start_timeline_drag` が選択の差し替えも兼ねる)+
+/// `Message::TimelineDragReleased`(動いていない release は no-op、正典 §2
+/// 「掴んだだけで未移動なら no-op」)。選択が変わることは
+/// `drive.rs`(`Shell` 経由の統合試験)側で見る — この canvas 単体試験は
+/// 「bar 本体への click/release が正しい2手の Message を出すこと」だけを見る。
 #[test]
-fn clicking_a_bar_in_the_timeline_canvas_publishes_select_via_raw_coordinates() {
+fn clicking_a_bar_in_the_timeline_canvas_publishes_a_grab_and_release_via_raw_coordinates() {
     let (doc, session) = one_layer_timeline();
     let tokens = Tokens::default();
     let store = doc.view();
@@ -153,8 +161,18 @@ fn clicking_a_bar_in_the_timeline_canvas_publishes_select_via_raw_coordinates() 
 
     let messages: Vec<_> = ui.into_messages().collect();
     assert!(
-        matches!(messages.as_slice(), [Message::Select(id)] if *id == motolii_store::LayerId(1)),
-        "canvas 上の bar click が Message::Select を出していない: {messages:?}"
+        matches!(
+            messages.as_slice(),
+            [
+                Message::TimelineBarGrabbed {
+                    layer,
+                    part: BarPart::Body,
+                    ..
+                },
+                Message::TimelineDragReleased,
+            ] if *layer == motolii_store::LayerId(1)
+        ),
+        "canvas 上の bar click が掴む/離すの2手を出していない: {messages:?}"
     );
 }
 
