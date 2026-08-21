@@ -8,13 +8,14 @@ use iced::{Point, Rectangle, Size};
 
 use super::key_rows;
 use super::lane_bar;
-use super::projection::{frame_to_x, time_band_segment_frames, RULER_TICK_DIVISIONS};
+use super::projection::{frame_at_x, frame_to_x, time_band_segment_frames, RULER_TICK_DIVISIONS};
 use super::TimelinePane;
 
 pub(crate) fn draw(
     pane: &TimelinePane,
     renderer: &iced::Renderer,
     bounds: Rectangle,
+    cursor: iced::mouse::Cursor,
 ) -> Vec<canvas::Geometry> {
     let mut frame = canvas::Frame::new(renderer, bounds.size());
     let width = bounds.width;
@@ -117,7 +118,14 @@ pub(crate) fn draw(
             .max(start_local + 1.0);
         let start_x = rail_width + start_local;
         let end_x = rail_width + end_local;
-        let bar_color = if row.hidden {
+        // ドラッグ中の bar は ACCENT(第2波T5、`row.dragging` は
+        // `projection::apply_clip_preview` が掴んでいる1行にだけ立てる —
+        // R1 egui版実測「ドラッグ中のbarはACCENT色に変わる」を踏襲)。
+        // hidden との優先順位: 掴んで動かしている最中は見えていることの方が
+        // 重要なので dragging が hidden より優先。
+        let bar_color = if row.dragging {
+            pane.colors.action_active
+        } else if row.hidden {
             pane.colors.text_muted
         } else {
             pane.colors.way_timeline
@@ -171,6 +179,27 @@ pub(crate) fn draw(
 
     // レーンバー(行ヘッダ列、裁定147)— 同じ Frame の最後に重ねる。
     lane_bar::draw(pane, &mut frame, rail_width);
+
+    // ポインタ近くのタイムコードミニラベル(第2波T5、R1 egui版実測「掴んでいる
+    // 間ポインタ近くにタイムコードのミニラベルを出す」を踏襲)。drag 中
+    // (`pane.preview_active`、clip/key どちらでも)だけ・クリップ面上でだけ出す
+    // — rail 側(行ヘッダ列)は時間の面ではないので出さない。既存の
+    // `fill_text`(ルーラー目盛りと同じ描画手段)をそのまま使う、新しい描画
+    // 語彙は増やさない。
+    if pane.preview_active {
+        if let Some(position) = cursor.position_in(bounds) {
+            if position.x >= rail_width {
+                let frame_no = frame_at_x(position.x - rail_width, clip_width, pane.duration_frames);
+                frame.fill_text(canvas::Text {
+                    content: frame_no.to_string(),
+                    position: Point::new(position.x + pane.dims.spacing_xs, position.y - pane.dims.spacing_l),
+                    color: pane.colors.action_active,
+                    size: iced::Pixels(pane.dims.caption_text),
+                    ..Default::default()
+                });
+            }
+        }
+    }
 
     vec![frame.into_geometry()]
 }

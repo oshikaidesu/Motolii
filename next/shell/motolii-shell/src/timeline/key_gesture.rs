@@ -158,6 +158,7 @@ mod tests {
             start,
             duration,
             selected: false,
+            dragging: false,
         }
     }
 
