@@ -97,6 +97,42 @@ fn stroke_h(canvas: &mut RgbaImage, x0: f32, x1: f32, y: f32, width_px: f32, col
     );
 }
 
+/// 任意の2点を結ぶ線分(`stroke_v`/`stroke_h`は軸並行専用 — 観測カメラの
+/// フレーム枠 overlay はレンダリングカメラに roll が付くと軸並行にならない
+/// ので、こちらを使う)。AA は掛けない — 経路上を `width_px` 角の正方形で
+/// 敷き詰めるだけの素朴な実装(この instrument の「正直な限界」どおり、
+/// トンマナ照合が目的で描画品質は対象外)。
+fn stroke_line(canvas: &mut RgbaImage, x0: f32, y0: f32, x1: f32, y1: f32, width_px: f32, color: Rgba<u8>) {
+    let dx = x1 - x0;
+    let dy = y1 - y0;
+    let length = (dx * dx + dy * dy).sqrt();
+    let half = width_px.max(1.0) / 2.0;
+    if length < half {
+        fill_rect(canvas, x0 - half, y0 - half, width_px.max(1.0), width_px.max(1.0), color);
+        return;
+    }
+    let steps = length.ceil().max(1.0) as u32;
+    for i in 0..=steps {
+        let t = i as f32 / steps as f32;
+        let x = x0 + dx * t;
+        let y = y0 + dy * t;
+        fill_rect(canvas, x - half, y - half, width_px.max(1.0), width_px.max(1.0), color);
+    }
+}
+
+/// 閉じた多角形(頂点を順に結び、最後に先頭へ戻る)を [`stroke_line`] で描く。
+/// 観測カメラのフレーム枠(4隅)専用 — 頂点数を特定の4に固定しない一般形。
+fn stroke_closed_polyline(canvas: &mut RgbaImage, points: &[(f32, f32)], width_px: f32, color: Rgba<u8>) {
+    if points.len() < 2 {
+        return;
+    }
+    for i in 0..points.len() {
+        let (x0, y0) = points[i];
+        let (x1, y1) = points[(i + 1) % points.len()];
+        stroke_line(canvas, x0, y0, x1, y1, width_px, color);
+    }
+}
+
 /// 矩形1枚(x, y, w, h)。`fill_rect`/`blit_letterboxed` の引数をまとめて
 /// clippy の `too_many_arguments` を素直に避ける(意味も無い8引数を並べない)。
 #[derive(Clone, Copy)]
@@ -570,25 +606,50 @@ pub fn render(shell: &Shell) -> RgbaImage {
     // 「背景を敷かない」合成、`Shell::checkerboard_preview_rgba`)へ
     // `composite_checkerboard` を当てる — `frame_rgba()` 自体は一切書き換えない
     // (`tests/settings_drive.rs::checkerboard_toggle_never_touches_the_raw_export_rgba`
-    // の不変を screenshot 側からも壊さない)。
-    let stage_source = if shell.checkerboard_enabled() {
+    // の不変を screenshot 側からも壊さない)。**観測カメラ(裁定157)が最優先** —
+    // 有効な間は `Shell::observation_rgba()`(`Engine::render_frame_with_view_camera`
+    // の結果)を貼る。`frame_rgba()` 自体は観測中でも一切書き換えない(`lib.rs::
+    // refresh_frame` の不変と同じ)。
+    let stage_source = if shell.observation().is_some() {
+        shell.observation_rgba().or_else(|| shell.frame_rgba())
+    } else if shell.checkerboard_enabled() {
         shell.checkerboard_preview_rgba().or_else(|| shell.frame_rgba())
     } else {
         shell.frame_rgba()
     };
+    let stage_rect = Rect {
+        x: padding,
+        y,
+        w: content_width,
+        h: stage_h,
+    };
     if let Some((w, h, pixels)) = stage_source {
-        let rect = Rect {
-            x: padding,
-            y,
-            w: content_width,
-            h: stage_h,
-        };
-        if shell.checkerboard_enabled() {
+        if shell.observation().is_none() && shell.checkerboard_enabled() {
             let mut composited = pixels.to_vec();
             settings_pane::composite_checkerboard(w, h, &mut composited, colors);
-            blit_letterboxed(&mut canvas, &composited, w, h, rect);
+            blit_letterboxed(&mut canvas, &composited, w, h, stage_rect);
         } else {
-            blit_letterboxed(&mut canvas, pixels, w, h, rect);
+            blit_letterboxed(&mut canvas, pixels, w, h, stage_rect);
+        }
+    }
+    // フレーム枠 overlay(裁定157・S3)。観測中(`Some`)だけ、レンダリングカメラの
+    // 写る範囲を hairline で重ねる — `lib.rs::stage_pane`(実 canvas 描画)と
+    // **同じ計算**(`stage::StageOverlay::frame_corners_on_screen`)を呼ぶ。
+    if let Some(overlay) = shell.stage_overlay() {
+        let bounds = iced::Rectangle {
+            x: stage_rect.x,
+            y: stage_rect.y,
+            width: stage_rect.w,
+            height: stage_rect.h,
+        };
+        if let Some(corners) = overlay.frame_corners_on_screen(bounds) {
+            let points: Vec<(f32, f32)> = corners.iter().map(|p| (p.x, p.y)).collect();
+            stroke_closed_polyline(
+                &mut canvas,
+                &points,
+                dims.border_width * 1.5,
+                to_rgba(colors.action_active, 1.0),
+            );
         }
     }
     y += stage_h + gap;

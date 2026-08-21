@@ -21,6 +21,12 @@ notify = "8"
 # workspace の Cargo.toml 自身が既に明記している「裁定117 が許す direct 昇格」
 # (notify と同じ扱い、R3 probe が先行昇格済み)であって新規の依存ではない。
 image.workspace = true
+# 観測カメラのフレーム枠 overlay(裁定157・S3)が `motolii_core::camera_screen_from_world_z0`
+# の返す `glam::Affine2` を直接使う(投影の正本1箇所を再利用するだけで、新しい
+# 投影数学は増やさない — 縫い目調査 `docs/reviews/2026-08-21-camera-seam-survey.md` §4)。
+# glam は `motolii-core`/`re_renderer` 経由で依存グラフに既に入っている
+# (workspace の `glam = "0.30.10"`) — notify/image と同じ「裁定117 が許す direct 昇格」。
+glam.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true
