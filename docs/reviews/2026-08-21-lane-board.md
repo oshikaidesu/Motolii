@@ -7,7 +7,8 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-(なし — 第2ラウンド4レーン全て着地)
+| BL1b: fork accessor+線形化 | 実装(cargo・sonnet・**2リポ跨ぎ**) | fork checkout(`~/rust_ae/rerun-s2-seam-20260818` branch motolii/s2-append-to-store)+lane-engine | 裁定161 の実行: `ViewBuilder` へ main_target read accessor 純追加(camera seat 流儀)+`render_sequential` を線形空間 accumulator へ。受入= `#[ignore]` overlap テストの緑化。ローカル検証は `[patch]`(supervisor が検収時に rev pin へ差し替え)。push・rev bump・seam 台帳 commit は supervisor |
+| ζ: Browser 束の縫い目調査 | 調査(read-only・sonnet) | main checkout(書き込み禁止) | map の browser/bin/import 系採用予定行の全列挙+旧 browser_blitz 資産台帳+`motolii-browser-pane` 設計案(pane split 流儀・素材の正本・thumbnail 2MiB 予算整合)+切片割り |
 
 ## 完了・main 着地済み(実装)
 
