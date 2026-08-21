@@ -3392,6 +3392,54 @@ fn stage_pane(
 /// `StoreView`/`&Session`/`Tokens` しか取らない制約(このファイル冒頭の
 /// doc)の例外を増やさないため、他の pane と同じ「呼び出し側が明示引数で
 /// 渡す」形(`stage_pane`の`overlay`と同じ)にした。
+/// scrub slider の意匠(ψ 転写ギャップ台帳 #23、チグハグ知覚 主因1位・裁定172
+/// §1「transport 系は M4 後の転写レーンへ」の本体)。無 `.style()` の iced
+/// 既定(太トラック+丸い大玉つまみ)は token を一切経由しない唯一の生 widget
+/// だった(ψ 実測: `transport_zoom.png`)。**モックに transport 自体が無い**
+/// ため転写ではなく導出 — supervisor 発注書の意匠案をそのまま実装する:
+/// - トラック: `border_strong`(既に ruler 大目盛=強い罫線ロールとして
+///   `canvas.rs::draw_ruler_ticks` が使う token、`canvas.rs:323` 参照)を
+///   進捗側/残り側の両方に同色で敷く — 進捗の強調はしない(S5c: pane 内外
+///   問わず playhead だけが時間のアクセントを語る)。太さ=
+///   `border_width * 2.0`(`canvas.rs` の hairline 倍率パターン — playhead=
+///   `*1.5`、ruler 上端=`*2.0` — と同型、新トークンは起こさない)。
+/// - つまみ: 角丸ゼロの縦長方形(Ableton 型)。寸法は既存トークンの算術合成
+///   のみ(新トークン新設なし): 幅=`spacing_m - spacing_xs`(8-2=6px 級)・
+///   高さは呼び出し側で `slider().height()` へ渡す `spacing_m * 2.0`
+///   (8*2=16px 級)と揃える。色=`text_secondary`、hover/dragged で
+///   `text_primary`(chrome の hover コントラスト強調と同じ方向)。
+fn transport_slider_style(
+    dims: Dimensions,
+    colors: Colors,
+    status: slider::Status,
+) -> slider::Style {
+    let rail_background = iced::Background::Color(colors.border_strong);
+    let handle_color = match status {
+        slider::Status::Active => colors.text_secondary,
+        slider::Status::Hovered | slider::Status::Dragged => colors.text_primary,
+    };
+    slider::Style {
+        rail: slider::Rail {
+            backgrounds: (rail_background, rail_background),
+            width: dims.border_width * 2.0,
+            border: iced::Border {
+                color: colors.border_strong,
+                width: 0.0,
+                radius: 0.0.into(),
+            },
+        },
+        handle: slider::Handle {
+            shape: slider::HandleShape::Rectangle {
+                width: (dims.spacing_m - dims.spacing_xs) as u16,
+                border_radius: 0.0.into(),
+            },
+            background: iced::Background::Color(handle_color),
+            border_width: 0.0,
+            border_color: colors.border_strong,
+        },
+    }
+}
+
 fn transport<'a>(
     session: &Session,
     store: &StoreView<'a>,
@@ -3416,12 +3464,19 @@ fn transport<'a>(
         button(text(toggle_label).size(dims.body_text))
             .style(move |_theme, status| button_style(dims, colors, status))
             .on_press(Message::TogglePlayback),
+        // ψ #24: ACCENT(`action_active`)は playhead 専用(S5b「pane内の最大
+        // コントラストはヒーロー内にのみ」)— transport は pane の外(世界の
+        // 縁)なので accent を語らせない。等幅数字(`Font::MONOSPACE`)は
+        // フレーム数字の桁ブレでラベル幅が揺れないようにする副次効果も持つ。
         text(format!("frame {}", session.playhead))
             .size(dims.body_text)
-            .color(colors.action_active),
+            .font(iced::Font::MONOSPACE)
+            .color(colors.text_primary),
         slider(0..=last, session.playhead as i32, |frame| {
             Message::ScrubTo(i64::from(frame))
-        }),
+        })
+        .height(dims.spacing_m * 2.0)
+        .style(move |_theme, status| transport_slider_style(dims, colors, status)),
     ]
     .spacing(dims.spacing_m)
     .height(Length::Fixed(dims.transport_band))

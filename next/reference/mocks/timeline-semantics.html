@@ -14,6 +14,10 @@
   --state-selected:#565048; --hairline-weak:rgba(0,0,0,.35);
   --zebra:rgba(255,255,255,.05); --time-band:rgba(255,255,255,.035);
   --sem:#e8c35a;
+  /* TP(裁定172 §1・ψ #23/#24 転写レーン、2026-08-22追記): tokens 実値の写し
+     — `Colors::border_strong`(0.3569 → #5b5b5b)/`Colors::text_secondary`
+     (0.5490 → #8c8c8c)。本モックには元々無かった変数(このレーンで新規追記)。 */
+  --border-strong:#5b5b5b; --text-secondary:#8c8c8c;
 }
 body{background:#282828;color:var(--text-primary);font:12px/1.5 -apple-system,sans-serif;margin:24px}
 h1{font-size:14px;font-weight:600} .hint{color:var(--text-muted)}
@@ -38,6 +42,21 @@ label.t{display:inline-flex;gap:6px;align-items:center;cursor:pointer;user-selec
 .play{position:absolute;top:0;bottom:0;width:1.5px;background:var(--action-active);left:461px}
 .keys{height:18px}.keys .field{background:rgba(0,0,0,.12)}
 .dia{position:absolute;top:5px;width:8px;height:8px;background:#c8c8c8;transform:rotate(45deg)}
+/* ---- transport(TP、裁定172 §1・ψ #23/#24 — このモックに元々無かった要素。
+   S からの導出案として今回追記。**夜間導出案・朝の合否待ち**、絵の正本ではなく
+   実装が読む「意匠の宣言」) ---- */
+.transport{margin-top:12px;display:flex;align-items:center;gap:8px;height:30px}
+.tp-play{background:var(--surface-raised);color:var(--text-primary);
+  border:1px solid #1d1d1d;border-radius:0;padding:4px 12px;font:12px inherit;cursor:default}
+.tp-frame{font:12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text-primary)}
+.tp-slider{position:relative;flex:1;height:16px;display:flex;align-items:center}
+/* トラック: 2px・border-strong・進捗側/残り側を分けない(進捗の強調はしない —
+   S5c: playhead だけが時間のアクセントを語る。単一 div で表現) */
+.tp-slider-track{position:absolute;left:0;right:0;height:2px;background:var(--border-strong)}
+/* つまみ: 角丸ゼロの縦長方形(Ableton 型)。幅6px級・高さ16px級・色=text-secondary、
+   hover で text-primary(chrome の hover コントラスト強調と同じ方向) */
+.tp-slider-handle{position:absolute;width:6px;height:16px;background:var(--text-secondary);border-radius:0}
+.tp-slider-handle:hover{background:var(--text-primary)}
 /* ---- 意味層 ---- */
 #sem{display:none}
 .ann{display:none;position:absolute;z-index:9;pointer-events:none}
@@ -70,6 +89,27 @@ label.t{display:inline-flex;gap:6px;align-items:center;cursor:pointer;user-selec
   <div class="lb" style="left:420px;top:64px">時間方向は<b>周波数で役割分担</b>(利用者裁定 2026-08-21): 帯=大目盛周期(<b>面</b>の粗いリズム・動的)/縦線=<b>全目盛</b>(<b>線</b>の細かいリズム、小=弱・大=わずかに強い確認線)。Ableton 同構成。線の token ロール(既存 hairline_weak 流用 or 新 grid ロール)は実装時の裁定点</div>
   <div class="lb" style="left:640px;top:150px">bar の差し色 = label_color <b>index</b>(AE同型・S4 中重み=識別情報)。dragging=ACCENT・hidden=muted が優先</div>
   <div class="lb" style="left:430px;top:230px">playhead = ACCENT 1.5x。<b>S5b: pane 内の最大コントラストはヒーロー内にのみ許す</b></div>
+</div>
+
+<div class="pane transport" style="position:relative;padding:0 8px">
+  <button class="tp-play">Play</button>
+  <span class="tp-frame">frame 900</span>
+  <div class="tp-slider">
+    <div class="tp-slider-track"></div>
+    <div class="tp-slider-handle" style="left:61%"></div>
+  </div>
+  <div class="ann o" style="left:0;top:0;right:0;bottom:0"></div>
+  <div class="lb" style="left:0;top:-56px;max-width:560px">
+    <b>transport(裁定172 §1・ψ #23/#24)</b>: このモックには元々 transport 要素が
+    無かった(S5 表は「header/transport = pane ではなく世界の縁」と別身分を明記する
+    のみ)——ここは<b>転写ではなく S からの導出案</b>。<b>夜間導出案・朝の合否待ち</b>。
+    slider: track=hairline strong 2px・進捗側/残り側を同色にして強調しない
+    (S5c: playhead だけが時間のアクセント)。つまみ=角丸ゼロの縦長方形(Ableton
+    型、幅6px級・高さ16px級)・色=text-secondary、hover=text-primary。frame
+    カウンタは ACCENT(action-active)を使わず text-primary+等幅数字(ψ #24:
+    accent は pane 内のヒーローだけが語る、transport は世界の縁)。Play ボタンは
+    既存 chrome ボタン意匠のまま(変更なし)。
+  </div>
 </div>
 
 <div class="legend">
