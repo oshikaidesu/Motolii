@@ -11,7 +11,7 @@
 
 ## 裁定
 
-**(a) fork(rerun/re_renderer)へ main_target の read アクセサを1本足す** — [[wrapper-over-hack]](2026-08-18 裁定、初出=Rerun カメラ注入)の直接適用。境界に素直な口を1本作る方が、(b) `rectangles.rs` の頂点/フラグメント shader と srgb 数学を自 crate へ複製するより保守面積が桁で小さい。fork は rerun のみ許可(motolii-next-reset)の範囲内。
+**(a) fork(rerun/re_renderer)へ main_target の read アクセサを1本足す** — wrapper-over-hack 裁定(2026-08-18、初出=Rerun カメラ注入)の直接適用。境界に素直な口を1本作る方が、(b) `rectangles.rs` の頂点/フラグメント shader と srgb 数学を自 crate へ複製するより保守面積が桁で小さい。fork は rerun のみ許可(motolii-next-reset)の範囲内。
 
 - 却下 (b): shader 複製はスクラッチ再発明(保守最低限違反)。fork が既に持つ数学を2箇所目に増やす
 - BL3(分離可能11モード)/BL4(非分離4モード)は、この accessor 経由で線形空間の dst を読む WGSL として実装する — R9 の切片割りは write-set をこの前提で読み替える
