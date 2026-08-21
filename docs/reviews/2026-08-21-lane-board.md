@@ -14,7 +14,9 @@
 
 | レーン | 結果 |
 |---|---|
-| BL3: blend 分離可能11モード(検収合格・merge `118cdbf4`、後任セッション回収) | W3C 3.6節の2枚読みWGSL(`compositor/src/blend.rs`)+engine変換表11値(`_`なし網羅match)+Inspector巡回13値+golden 11枚(tol::EXACT)+独立Rust実装照合oracle。store enum は既存17値で無改造。3経路を `accumulate_sequential` コアへ統合。**副産物: `background_rect` の `depth_offset: i16::MIN` 縮みバグ再発見・修正**(レーン B と同型・2度目 — 極端値禁止を doc 化)。conflict解決1件(SR の scratch プール返却を finalize_texture 後へ移植・「確保5→1」テストが正しさを捕捉)。**FINDING: render_to_texture が all-Normal でも layer 毎 submit+poll を払う構造退行 → run-batching レーンで最小コア復元(発注済)** |
+| BL3: blend 分離可能11モード(検収合格・merge `118cdbf4`、後任セッション回収) | W3C 3.6節の2枚読みWGSL(`compositor/src/blend.rs`)+engine変換表11値(`_`なし網羅match)+Inspector巡回13値+golden 11枚(tol::EXACT)+独立Rust実装照合oracle。store enum は既存17値で無改造。3経路を `accumulate_sequential` コアへ統合。**副産物: `background_rect` の `depth_offset: i16::MIN` 縮みバグ再発見・修正**(レーン B と同型・2度目 — 極端値禁止を doc 化)。conflict解決1件(SR の scratch プール返却を finalize_texture 後へ移植・「確保5→1」テストが正しさを捕捉)。**FINDING: render_to_texture が all-Normal でも layer 毎 submit+poll を払う構造退行 → run-batching レーンで根治済(下記)** |
+| run-batching(検収合格・merge `09ef13a6`+柵 `4a214f7d`) | BL3 FINDING の根治 — Normal/Add 連続区間を単一 ViewBuilder/submit へ束ね、分離可能 blend の出現点だけで切る。all-Normal 3層= submit 1(実測、旧3)。`sequential_submits` introspection 新設・分離可能パス無改変・byte一致/golden 全緑。supervisor 追記: inputs=depth_offset 非減少の debug_assert(SetOrder 将来配線の黙殺防止) |
+| freeze/unfreeze 意図動詞(検収合格・merge `048978bf`) | 裁定119 §4 第1切片(store 層のみ)— `LayerAttrs.frozen`(**Patch から意図的に除外** — 汎用 patch の凍結すり抜けを型で封じ)+`Intent::Freeze/Unfreeze`+凍結ゲート11 arm+reparent 侵入拒否+ungroup 拒否/削除許可(tombstone 可逆の論証)。設計逸脱1件受理: `LayerSource::Group` の形は不変(下流4 crate の網羅 match 保護)。store suite 255 緑。後続: engine キャッシュ束(fingerprint)・MB-2 露出 |
 | A: shell テストバイナリ統合 | 10本→2本、フルリンク 45.5s→18〜26s(裁定138の本丸) |
 | B: 外周1px alpha=0 根治 | 真因= `order: i16::MIN` の depth_offset 縮み。`BACKGROUND_ORDER=-1` |
 | C: 線化第1弾 | tokens weight/ink 段・Inspector hairline 化・値セル横余白(裁定137/139) |
