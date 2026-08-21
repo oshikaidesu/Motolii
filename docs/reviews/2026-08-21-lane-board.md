@@ -64,6 +64,10 @@
 | R8 | Unity/Unreal/Spine | 37項目(既載13/抜け6/対象外12/保留6)。blend は理由つき対象外 |
 | **統合パス** | **完了** | R6+R7+R8 の抜け39件を正典 §8 処置台帳へ(正13アクション採用・候8・保留8・対象外実証5) |
 
+## **pane crate 分割 完了(裁定160、2026-08-21夜)**
+
+6 crate 抽出(tokens/shell-state/timeline/settings/inspector/stage)+assembler。検証: テスト union 維持・check.sh 全通過・**PNG SHA-256 は全切片を通して `ee217ba2…` 不変**・レーン単体時間 2.7〜7.4s(旧 30〜38s)。切片7残骸(dead code 87行)掃除済み。音声A1(PlaybackClock)も着地済み。
+
 ## campaign: UI 完成 =「普通」の地図(裁定154)— **地図フェーズ完了(裁定158)、消化フェーズへ**
 
 残作業=採用予定1,195件(正本 next/reference/normal-map.tsv)。運転: freq 降順に重み均等の切片で発注し、着地ごとに verdict を採用済へ更新(Lottie 地図と同じ)。最優先42件(freq≥2)から。
