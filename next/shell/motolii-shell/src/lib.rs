@@ -18,8 +18,8 @@ use iced::{Element, Length, Task};
 
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
-    Composition, DisplayRevision, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta,
-    LayerSource, LayerTiming, RationalTime, Speed, StoreView,
+    AssetDraft, Composition, DisplayRevision, Document, Intent, LayerAttrsPatch, LayerId,
+    LayerMeta, LayerSource, LayerTiming, RationalTime, SourceFingerprintV1, Speed, StoreView,
 };
 
 pub mod clipboard;
@@ -792,9 +792,19 @@ impl Shell {
     ///
     /// **開けない物は理由つきで飛ばす**(M2)。黙って消すと利用者は
     /// 「落としたのに何も起きない」としか分からない。
+    ///
+    /// 裁定162(B1、bin-first の下地): 各 path は**まず台帳へ記帳**
+    /// (`Intent::AdmitAsset`)し、その上で従来どおり layer として配置する。
+    /// 記帳と配置は別の関心事 — 記帳は「fingerprint が計算できたか」だけを見て
+    /// 判定し、配置できるかどうか(`motolii_media::probe` が成功するか)を
+    /// 問わない。junk file(probe が失敗する物)でも fingerprint さえ読めれば
+    /// 台帳には載る(bin-first: 取り込みと配置は別の判断)。同一ファイルの
+    /// 再 drop は `AssetTable::admit` の content_hash 重複統合にそのまま乗る
+    /// (shell 側で先回りの dedupe はしない、EXACT TARGET #3)。
     fn admit(&mut self, paths: Vec<std::path::PathBuf>) {
         let mut intents = Vec::new();
         let mut rejected = Vec::new();
+        let mut admission_skipped = Vec::new();
         let mut next = self.next_layer_id();
 
         let comp_duration = self.comp_duration();
@@ -803,6 +813,30 @@ impl Shell {
 
         for path in paths {
             let text = path.to_string_lossy().into_owned();
+            let file_name = || {
+                path.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| text.clone())
+            };
+
+            // **記帳**(台帳、裁定162)。fingerprint 計算(ファイル IO)が失敗
+            // したら記帳だけスキップする — 配置(下の probe)は独立に続行する。
+            match Self::fingerprint_source(&path) {
+                Ok(fingerprint) => {
+                    let draft = AssetDraft::from_probed_source(
+                        Self::guess_asset_type(&path),
+                        &fingerprint,
+                        &path,
+                        None,
+                    );
+                    intents.push(Intent::AdmitAsset { draft });
+                }
+                Err(error) => {
+                    admission_skipped.push(format!("{}: {error}", file_name()));
+                }
+            }
+
+            // **配置**(従来どおり)。
             match motolii_media::probe(&path) {
                 Ok(info) => {
                     let id = LayerId(next);
@@ -825,27 +859,66 @@ impl Shell {
                     });
                 }
                 Err(error) => {
-                    let name = path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or(text);
-                    rejected.push(format!("{name}: {error}"));
+                    rejected.push(format!("{}: {error}", file_name()));
                 }
             }
         }
 
-        // 落とした分は**まとめて1 undo**(1操作 = 1 undo)。
+        // 落とした分は**まとめて1 undo**(1操作 = 1 undo)。台帳記帳(AdmitAsset)も
+        // 同じ batch に同居させる — 呼び手(`Message::AdmitPaths`/`FlushDrops`)が
+        // 渡した path 列ぜんぶで1 undo という既存の粒をそのまま保つ(1 path = 1
+        // undo ではない、`admit` の doc 冒頭参照)。
         if !intents.is_empty() {
             if let Err(error) = self.doc.apply_all(intents) {
                 rejected.push(format!("置けなかった: {error}"));
             }
         }
+        let mut notices = Vec::new();
         if !rejected.is_empty() {
-            self.status = Some(format!(
+            notices.push(format!(
                 "受け取れない素材 {}件 — {}",
                 rejected.len(),
                 rejected.join(" / ")
             ));
+        }
+        if !admission_skipped.is_empty() {
+            notices.push(format!(
+                "台帳への記帳をスキップ {}件 — {}",
+                admission_skipped.len(),
+                admission_skipped.join(" / ")
+            ));
+        }
+        if !notices.is_empty() {
+            self.status = Some(notices.join(" / "));
+        }
+    }
+
+    /// `Intent::AdmitAsset` の draft を組むための fingerprint 計算(ファイル IO)。
+    /// `motolii_media::probe`(ffprobe サイドカー)とは独立 — 記帳は「読めるか」
+    /// だけを見る(EXACT TARGET #2)。
+    fn fingerprint_source(
+        path: &std::path::Path,
+    ) -> Result<SourceFingerprintV1, motolii_store::SourceFingerprintError> {
+        let file = std::fs::File::open(path)?;
+        SourceFingerprintV1::from_reader(file)
+    }
+
+    /// 台帳の `asset_type`(opaque 文字列)を拡張子から粗く推定する。**種別判定の
+    /// 精度はこの切片(B1)の非目標** — rail/filter(B2)以降が正確な種別判定
+    /// (意味起草タスク#14 の空席)を持つまでの暫定値。
+    fn guess_asset_type(path: &std::path::Path) -> String {
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        match ext.as_str() {
+            "mp4" | "mov" | "mkv" | "webm" | "avi" | "m4v" => format!("video/{ext}"),
+            "jpg" | "jpeg" => "image/jpeg".to_owned(),
+            "png" | "gif" | "webp" | "bmp" | "svg" => format!("image/{ext}"),
+            "wav" | "mp3" | "aac" | "flac" | "ogg" | "m4a" => format!("audio/{ext}"),
+            "" => "application/octet-stream".to_owned(),
+            other => format!("application/{other}"),
         }
     }
 
@@ -1544,6 +1617,13 @@ impl Shell {
     /// (`timeline_pane::TimelinePane::new` も同じ `markers()` 呼び出しをする)。
     pub fn markers(&self) -> Vec<motolii_store::Marker> {
         self.doc.view().markers().unwrap_or_default()
+    }
+
+    /// 素材台帳の一覧投影(裁定162 B1)。運転席/`browser_drive.rs` が
+    /// 「AdmitPaths → 台帳に載る」を確かめる口(`timeline_rows`/`markers` と
+    /// 同じ形 — pane 側の projection 関数をそのまま呼ぶだけ)。
+    pub fn assets(&self) -> Vec<browser_pane::AssetListItem> {
+        browser_pane::model::assets(&self.doc.view())
     }
 
     /// 今の Inspector 投影。運転席が「選択→行が出る」「編集→store が変わる」を

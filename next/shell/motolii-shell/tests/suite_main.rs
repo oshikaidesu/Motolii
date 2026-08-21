@@ -16,6 +16,8 @@
 
 #[path = "suite/blend_drive.rs"]
 mod blend_drive;
+#[path = "suite/browser_drive.rs"]
+mod browser_drive;
 #[path = "suite/clipboard_drive.rs"]
 mod clipboard_drive;
 #[path = "suite/drive.rs"]
