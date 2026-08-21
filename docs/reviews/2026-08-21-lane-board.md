@@ -7,6 +7,7 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| ρ: レイヤー差し色 第一波 | 実装(cargo・sonnet) | lane-shell | 利用者裁定「色が足りない」— `label_color: Option<u8>`(**index 保存**= AE 同型)+生成時 `id%12` 決定論割当+Timeline bar 塗り+**パレット候補 A/B/C(意図設計・同一 fixture)比較 PNG**。変更 UI は後続波 |
 
 ## 完了・main 着地済み(実装)
 
