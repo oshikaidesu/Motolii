@@ -40,6 +40,7 @@
 | 普通地図: AE/Premiere/Resolve 列挙 | AE 417/315/32/21(Adobe封鎖をプロキシ+community実機抽出で突破)/ Premiere 71/141/23/16(二次資料・質フラグ)/ Resolve 357/194/15/28(公式マニュアル完全列挙)。4本とも docs/reviews/2026-08-21-normal-map-sources/ へ保全 |
 | カメラ縫い目調査 | レンダリングカメラ実装済み・export 構造隔離確認。観測カメラ置き場= Shell 直下(→裁定157)。4切片割り |
 | カメラ S0: engine 第二エントリ | ObservationCamera(pan+zoom)+render_frame_with_view_camera。既定視点=レンダリングカメラの**バイト一致証明**・export 経路不変を grep 再確認 |
+| 普通地図: 併合 | **単一台帳 normal-map.tsv 1,551行**(捨て行ゼロの機械検証)。freq=4 は6行(Copy/Paste/Import/Inspector/Timeline/New Project)・freq≥2=58行・長い尾は語彙源密度差由来 |
 | T4: キー時刻編集 | ドラッグ・nudge・Cmd リタイム(数値証明: scale 3/7 で 70→41)・衝突の決定論解決。逸脱4件は理由つき(Cmd 二役は click-vs-drag 分離)。finding: ライブプレビュー不在 → T5 へ |
 | (supervisor 直) 色 token 追随 fix / 市松レーン回収 / 引き継ぎ123コミット着地 | main 前提の整地 |
 
