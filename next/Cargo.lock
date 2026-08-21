@@ -3498,6 +3498,7 @@ dependencies = [
  "motolii-media",
  "motolii-store",
  "motolii-testkit",
+ "motolii-vector",
  "thiserror 2.0.20",
 ]
 
