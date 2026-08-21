@@ -25,6 +25,7 @@
 - **worktree の base はほぼ必ず stale**。作業前に `git reset --hard main` を無条件で行う(確認に時間を使わない)。旧 base の `claude/motolii-reset-handoff-bda7f3` は 2026-08-21 に main へ着地済みで、以後 main が正
 - stash 禁止(worktree 間で共有)/ Edit 直後の stale fingerprint は touch / CARGO_TARGET_DIR 共有禁止(後勝ち事故の実測あり)
 - **並走上限の再較正(2026-08-21 利用者裁定、同日再拡大)**: 旧「cargo 同時2本まで」は MotoliiRn 常駐+cold full build 時代の実測。常設 warm worktree+`-p` 固定+開始前の常駐プロセス確認(裁定138)を満たすなら **cargo レーン5本程度まで実測しつつ増やしてよい**(調査レーン=非 cargo は実質別枠)。時間予算 probe の合否だけは並走中に確定させない(アイドルで単独再実行)
+- **発注書は対象 crate のフルパスを EXACT TARGET に必ず明記する**(2026-08-21 実事故: playhead ナビ束が `-p` 指定を無視して legacy の `crates/motolii-shell-iced` に実装され棄却(SHA f9739a0d)。正典・map だけ指しても現行正本 `next/shell/motolii-shell` に誘導されない — ファイルパスで縛る)。副教訓: Timeline canvas への裸キー追加は `!modifiers.command()` ガード必須(Cmd+O 衝突の実測)
 - **発注の粒は「項目別」でなく「重み均等」(supervisor が毎回忘れる — 発注前に必ずこの行を思い出す)**: 機能ごとに1レーンにせず、機能をさらに切片へ割って**行数+設計判断の重さ+跨る領域数**を均す。行数が少なくても判断領域が複数跨る束は1レーンに載せない。並列前提の切片割りでは**write-set が互いに素になるようファイル分割から設計する**(1ファイル大物へ複数レーンは不可)。走行中でも SendMessage で範囲縮小できる(実績あり)
 - 時間予算試験2本(`edit_storm_with_the_real_track_type`・r2 `timeline_projection_fits_a_frame`)は**負荷で落ちるのが既知**。単独実行で緑なら自分の変更と無関係。予算は緩めない
 - 一次ソースの取得結果は終了報告に URL/rev を書く(次のレーンが KNOWN 経由で再利用できるように)
