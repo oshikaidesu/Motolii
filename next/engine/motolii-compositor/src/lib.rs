@@ -259,6 +259,30 @@ impl Compositor {
         })
     }
 
+    /// [`Self::with_device`]の既定 config 版(裁定171 v2 M4、**additive** —
+    /// `with_device`/[`Self::headless`]自体は無改造)。[`Self::headless`]と
+    /// **同じ** `output_format`/`RenderConfig`(`MsaaMode::Off`、`headless()`の
+    /// doc 参照)を使う——呼び出し側(`motolii-engine::Engine::with_device`)が
+    /// `re_renderer::RenderConfig`/`MsaaMode`/`ScreenshotProcessor` を一切知らずに
+    /// 済むための薄いラッパー。`output_format` の実際の効き所は
+    /// `composite()`/screenshot 読み戻し側(`RenderContext` の「出力」format)で、
+    /// [`Self::render_to_texture`]はそちらを一切通らない(readback しない)ので
+    /// ここで固定しても実害が無い——`headless()`と同じ値を選んだのは新しい
+    /// 意味を持ち込まないため。
+    pub fn with_device_using_headless_defaults(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+    ) -> Result<Self, CompositorError> {
+        Self::with_device(
+            device,
+            queue,
+            re_renderer::ScreenshotProcessor::SCREENSHOT_COLOR_FORMAT,
+            |_caps| re_renderer::RenderConfig {
+                msaa_mode: re_renderer::MsaaMode::Off,
+            },
+        )
+    }
+
     /// premultiplied RGBA8 を GPU へ載せる。
     pub fn upload_rgba(
         &self,
@@ -910,6 +934,368 @@ impl Compositor {
         }
 
         Ok(frame)
+    }
+
+    /// **裁定171 v2(M4)— zero-copy GPU 出力**。[`Self::render_with_effects`]と
+    /// **同じ層構築・同じ合成**を通すが、CPU 読み戻し(`ScreenshotProcessor`)を
+    /// 一切しない——呼び出し側(embedder、`motolii-shell` の presenter Pipeline)が
+    /// 同じ `queue` へ後続の描画コマンドを積める GPU texture をそのまま返す。
+    ///
+    /// **既存4メソッド([`Self::render`]/[`Self::render_with_timing`]/
+    /// [`Self::render_with_effects`]/[`Self::render_sequential`])は無改造** ——
+    /// これは並設した新しい入口で、上の4つのどれの呼び出し元にも一切波及しない
+    /// (裁定171 M4 supervisor 裁定「additive のみ」)。
+    ///
+    /// ## 順序保証(fence 不要)
+    ///
+    /// このメソッドは `self.ctx.queue.submit(...)` までで止まる——`device.poll`
+    /// もしない。呼び出し側が返された texture を**同じ `queue`** 上の後続コマンド
+    /// (例: iced の render pass でこの texture を sample する)で使う限り、GPU は
+    /// submission 順に実行するので「書いてから読む」が構造的に成立する
+    /// (裁定171 v2 §0-5)。
+    ///
+    /// ## main_target の生存期間(fork の doc がそのまま保証を与える)
+    ///
+    /// fork の `GpuTexture`(`Arc<DynamicResource<..>>`)は「全参照が drop されたら
+    /// **次のフレーム**で回収対象になる」(`wgpu_resources/texture_pool.rs` の doc
+    /// comment)。ここで返す `wgpu::Texture`/`wgpu::TextureView` は
+    /// `view_builder`(このメソッドを抜けると drop される)が最後に握っていた
+    /// `GpuTexture` の中身の clone であって、次に `self.ctx.begin_frame()` が
+    /// 呼ばれる(= 次にこのメソッドか他の render系メソッドが呼ばれる)まで
+    /// 回収は起きない。呼び出し側がこのメソッドを「内容が変わった時だけ」
+    /// (世代ゲート)呼ぶ設計である限り、前回の texture は次回このメソッドを
+    /// 呼ぶ**その時**まで有効——ちょうど呼び出し側が新しい texture へ差し替える
+    /// タイミングと一致するので、古い方が消えても実害が無い。
+    ///
+    /// ## effect pass の scratch(`effect_scratch` を汚さない)
+    ///
+    /// [`Self::render_with_effects`]の scratch 解放(`effect_scratch.release`)は
+    /// 「GPU が読み終わってから」が前提(`effects::EffectScratch::release` の doc
+    /// 参照——読み終わりを `device.poll` で確認してから解放している)。この
+    /// メソッドは poll をしない(順序保証を queue の submission 順だけに置く
+    /// 設計、上記)ので、**取得した scratch は一度も `release` しない** ——
+    /// `effect_scratch.acquire` 自体は「空きが無ければ新規生成」なだけの
+    /// 安全な操作なので呼んでよいが(プールの再利用資産を消費するだけ)、
+    /// このメソッドが確保した scratch を `free` リストへ戻すと、まだ GPU が
+    /// 読み書き中かもしれない texture を次の `acquire` が上書き支給してしまう
+    /// (`effects::EffectScratch::release` の doc がまさにこの罠を警告している)。
+    /// 戻さなければ、その texture は関数を抜けた時点でこの関数のローカル変数
+    /// (`scratch_textures_kept_alive`)の drop に委ねられる——wgpu 自身が
+    /// 「GPU がその texture を参照するコマンドを使い終わるまで実体を残す」
+    /// (標準の refcount 付き Drop、fork の独自 `.destroy()` 即時破棄とは別物)
+    /// ので、poll なしでも安全。代償は「今回確保した scratch は次回使い回されない
+    /// (次のフレームでまた新規生成)」——effect 付き layer が動いている間だけ
+    /// 余分な確保が起きるが、`render_with_effects`(readback 経路、export/
+    /// screenshot が実際に使う)の scratch 資産とは別物なので、そちらの
+    /// oracle(`tests/effects.rs`)には一切影響しない。
+    pub fn render_to_texture(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layers: &[LayerWithPasses],
+    ) -> Result<(wgpu::Texture, wgpu::TextureView), CompositorError> {
+        let projection = motolii_core::camera_projection(comp, camera);
+        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
+
+        // 1) layer ごとに「合成へ渡す実効 texture」を決める。
+        // [`Self::render_with_effects`] の step 1 と**同じ構造**——唯一の違いは
+        // `effect_scratch.release` を一度も呼ばないこと(上のモジュール doc 参照)。
+        let mut effective_textures: Vec<GpuTexture2D> = Vec::with_capacity(layers.len());
+        let mut effective_paddings: Vec<u32> = Vec::with_capacity(layers.len());
+        // GPU が読み終わるまで実体を生かしておくための保持(release はしない —
+        // 単に drop に任せる、上のモジュール doc「effect pass の scratch」参照)。
+        let mut scratch_textures_kept_alive: Vec<wgpu::Texture> = Vec::new();
+        let mut copy_encoder: Option<wgpu::CommandEncoder> = None;
+
+        for lwp in layers {
+            if lwp.passes.is_empty() {
+                effective_textures.push(lwp.layer.texture.clone());
+                effective_paddings.push(0);
+                continue;
+            }
+
+            let [width, height] = lwp.layer.texture.width_height();
+            let padding = lwp
+                .passes
+                .iter()
+                .map(EffectPass::padding)
+                .max()
+                .unwrap_or(0);
+            let padded_width = width + 2 * padding;
+            let padded_height = height + 2 * padding;
+
+            let has_glow = lwp
+                .passes
+                .iter()
+                .any(|pass| matches!(pass, EffectPass::Glow { .. }));
+            let format = if has_glow {
+                effects::GLOW_INTERMEDIATE_FORMAT
+            } else {
+                lwp.layer.texture.format()
+            };
+
+            let src_handle = lwp.layer.texture.handle();
+            let src = self
+                .ctx
+                .gpu_resources
+                .textures
+                .get_from_handle(src_handle)
+                .map_err(|e| CompositorError::Effect(e.to_string()))?;
+
+            let scratch =
+                self.effect_scratch
+                    .acquire(&self.ctx.device, padded_width, padded_height, format);
+
+            let encoder = copy_encoder.get_or_insert_with(|| {
+                self.ctx
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("motolii-compositor-effect-pass-zero-copy"),
+                    })
+            });
+
+            for pass in &lwp.passes {
+                match pass {
+                    EffectPass::Identity => {
+                        encoder.copy_texture_to_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &src.texture,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d::ZERO,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &scratch,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d {
+                                    x: padding,
+                                    y: padding,
+                                    z: 0,
+                                },
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::Extent3d {
+                                width,
+                                height,
+                                depth_or_array_layers: 1,
+                            },
+                        );
+                    }
+                    EffectPass::Glow {
+                        threshold,
+                        intensity,
+                        radius,
+                    } => {
+                        let padded_source = self.effect_scratch.acquire(
+                            &self.ctx.device,
+                            padded_width,
+                            padded_height,
+                            lwp.layer.texture.format(),
+                        );
+                        let padded_source_view = padded_source.create_view(&Default::default());
+                        {
+                            let _clear_pass =
+                                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                                    label: Some(
+                                        "motolii-compositor-glow-padded-source-clear-zero-copy",
+                                    ),
+                                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                        view: &padded_source_view,
+                                        depth_slice: None,
+                                        resolve_target: None,
+                                        ops: wgpu::Operations {
+                                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                            store: wgpu::StoreOp::Store,
+                                        },
+                                    })],
+                                    depth_stencil_attachment: None,
+                                    timestamp_writes: None,
+                                    occlusion_query_set: None,
+                                    multiview_mask: None,
+                                });
+                        }
+                        encoder.copy_texture_to_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &src.texture,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d::ZERO,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &padded_source,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d {
+                                    x: padding,
+                                    y: padding,
+                                    z: 0,
+                                },
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            wgpu::Extent3d {
+                                width,
+                                height,
+                                depth_or_array_layers: 1,
+                            },
+                        );
+
+                        let bloom = self.effect_scratch.acquire(
+                            &self.ctx.device,
+                            padded_width,
+                            padded_height,
+                            effects::GLOW_INTERMEDIATE_FORMAT,
+                        );
+                        let blur_ping = self.effect_scratch.acquire(
+                            &self.ctx.device,
+                            padded_width,
+                            padded_height,
+                            effects::GLOW_INTERMEDIATE_FORMAT,
+                        );
+                        let bloom_view = bloom.create_view(&Default::default());
+                        let blur_ping_view = blur_ping.create_view(&Default::default());
+                        let dst_view = scratch.create_view(&Default::default());
+
+                        self.glow_pipelines.record(
+                            &self.ctx.device,
+                            &self.ctx.queue,
+                            encoder,
+                            &padded_source_view,
+                            &bloom_view,
+                            &blur_ping_view,
+                            &dst_view,
+                            *threshold,
+                            *intensity,
+                            *radius,
+                        );
+
+                        scratch_textures_kept_alive.push(padded_source);
+                        scratch_textures_kept_alive.push(bloom);
+                        scratch_textures_kept_alive.push(blur_ping);
+                    }
+                }
+            }
+
+            self.next_effect_key += 1;
+            let key = self.next_effect_key;
+            let imported = self
+                .ctx
+                .texture_manager_2d
+                .import_gpu_premultiplied(key, &self.ctx, &scratch)
+                .map_err(|e| CompositorError::Effect(e.to_string()))?;
+
+            effective_textures.push(imported);
+            effective_paddings.push(padding);
+            scratch_textures_kept_alive.push(scratch);
+        }
+
+        // 2) 通常合成。[`Self::render_with_effects`] の step 2 と同じ組み立て。
+        let rects: Vec<TexturedRect> = layers
+            .iter()
+            .zip(effective_textures.iter())
+            .zip(effective_paddings.iter())
+            .map(|((lwp, texture), &padding)| {
+                let layer = &lwp.layer;
+                let (transform, z) = if layer.pinned {
+                    (pinned_cancel * layer.placement.transform, 0.0)
+                } else {
+                    (layer.placement.transform, layer.placement.z)
+                };
+                let pad = padding as f32;
+                let local_min = glam::Vec2::new(-pad, -pad);
+                let local_size =
+                    glam::Vec2::new(layer.size[0] + 2.0 * pad, layer.size[1] + 2.0 * pad);
+                TexturedRect {
+                    top_left_corner_position: to_point3(transform.transform_point2(local_min), z),
+                    extent_u: to_vector3(
+                        transform.transform_vector2(glam::Vec2::new(local_size.x, 0.0)),
+                    ),
+                    extent_v: to_vector3(
+                        transform.transform_vector2(glam::Vec2::new(0.0, local_size.y)),
+                    ),
+                    colormapped_texture:
+                        re_renderer::renderer::ColormappedTexture::from_unorm_rgba(
+                            texture.clone(),
+                        ),
+                    options: RectangleOptions {
+                        multiplicative_tint: {
+                            let a = match layer.blend_mode {
+                                BlendMode::Normal => layer.placement.opacity,
+                                BlendMode::Add => 0.0,
+                            };
+                            Rgba::from_rgba_premultiplied(
+                                layer.placement.opacity,
+                                layer.placement.opacity,
+                                layer.placement.opacity,
+                                a,
+                            )
+                        },
+                        depth_offset: layer.placement.order,
+                        ..Default::default()
+                    },
+                }
+            })
+            .collect();
+
+        self.ctx.begin_frame();
+
+        let draw_data = RectangleDrawData::new(&self.ctx, &rects)
+            .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
+
+        let view_from_world = macaw::IsoTransform::from_rotation_translation(
+            projection.rotation,
+            -(projection.rotation * projection.eye),
+        );
+
+        let mut view_builder = ViewBuilder::new(
+            &self.ctx,
+            TargetConfiguration {
+                name: "motolii-comp-zero-copy".into(),
+                render_mode: RenderMode::Deterministic,
+                resolution_in_pixel: [comp.width, comp.height],
+                view_from_world,
+                projection_from_view: Projection::Perspective {
+                    vertical_fov: projection.vertical_fov_radians,
+                    near_plane_distance: projection.near_plane_distance,
+                    aspect_ratio: projection.aspect_ratio,
+                },
+                pixels_per_point: 1.0,
+                blend_with_background: BlendWithBackground::Premultiplied,
+                ..Default::default()
+            },
+            re_renderer::ViewBuilderId::new(self.next_readback),
+        )
+        .map_err(|e| CompositorError::View(e.to_string()))?;
+        self.next_readback += 1;
+
+        view_builder.queue_draw(&self.ctx, draw_data);
+
+        let command_buffer = view_builder
+            .draw(&self.ctx, Rgba::TRANSPARENT)
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+        // **readback をしない**——ここが `render_with_effects` との唯一の
+        // 構造的な違い。`before_submit`+`submit` までで止める(モジュール doc
+        // 「順序保証」参照)。
+        self.ctx.before_submit();
+        match copy_encoder {
+            Some(encoder) => {
+                self.ctx.queue.submit([encoder.finish(), command_buffer]);
+            }
+            None => {
+                self.ctx.queue.submit([command_buffer]);
+            }
+        }
+
+        let target = view_builder.main_target();
+        let texture = target.texture.clone();
+        let view = target.default_view.clone();
+
+        // `scratch_textures_kept_alive`/`view_builder` はここで drop される——
+        // モジュール doc「effect pass の scratch」「main_target の生存期間」の
+        // 保証がここで効く(GPU がまだ使用中でも wgpu 自身が実体を残す)。
+        drop(scratch_textures_kept_alive);
+        drop(view_builder);
+
+        Ok((texture, view))
     }
 
     /// 試験専用の introspection。`effect_scratch` が実際に**新規生成**した

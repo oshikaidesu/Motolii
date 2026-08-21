@@ -3361,6 +3361,7 @@ dependencies = [
  "motolii-testkit",
  "motolii-vector",
  "thiserror 2.0.20",
+ "wgpu",
 ]
 
 [[package]]

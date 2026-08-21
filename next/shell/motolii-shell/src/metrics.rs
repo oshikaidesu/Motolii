@@ -37,6 +37,10 @@ static LAST_PRESENTER_UPLOAD_BYTES: AtomicUsize = AtomicUsize::new(0);
 static RENDER_FRAME_CALLS: AtomicU64 = AtomicU64::new(0);
 static RENDER_FRAME_NANOS: AtomicU64 = AtomicU64::new(0);
 static TOKENS_RELOADS: AtomicU64 = AtomicU64::new(0);
+/// 裁定171 v2(M4)。GPU 高速路(`StagePresenterPipeline::resolve_gpu`)が
+/// 実際に `Engine::render_resolved_to_texture` を呼んだ回数——CPU readback
+/// (`RENDER_FRAME_CALLS`)を経由せずに Stage の絵が描けた回数の直接の証拠。
+static PRESENTER_BLITS: AtomicU64 = AtomicU64::new(0);
 
 /// **裁定166 以降、Stage 描画経路からはもう呼ばれない**(oracle (a) の
 /// 対象 — 呼び出し側が消えたので `handle_creations()` は増えなくなる)。
@@ -76,6 +80,16 @@ pub fn presenter_uploads() -> u64 {
     PRESENTER_UPLOADS.load(Ordering::Relaxed)
 }
 
+/// 裁定171 v2(M4): GPU 高速路(`StagePresenterPipeline::resolve_gpu`)が
+/// 実際に GPU へ描いた(readback しない main_target を作った)回数。
+pub fn record_presenter_blit() {
+    PRESENTER_BLITS.fetch_add(1, Ordering::Relaxed);
+}
+
+pub fn presenter_blits() -> u64 {
+    PRESENTER_BLITS.load(Ordering::Relaxed)
+}
+
 pub fn last_presenter_upload_bytes() -> usize {
     LAST_PRESENTER_UPLOAD_BYTES.load(Ordering::Relaxed)
 }
@@ -102,4 +116,5 @@ pub fn reset() {
     RENDER_FRAME_CALLS.store(0, Ordering::Relaxed);
     RENDER_FRAME_NANOS.store(0, Ordering::Relaxed);
     TOKENS_RELOADS.store(0, Ordering::Relaxed);
+    PRESENTER_BLITS.store(0, Ordering::Relaxed);
 }

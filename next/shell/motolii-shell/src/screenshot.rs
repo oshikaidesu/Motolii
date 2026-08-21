@@ -475,7 +475,11 @@ fn draw_settings(
 /// `shell.view()` の並び(header/[settings]/stage/timeline/transport/status、
 /// `spacing_m` の間隔・`spacing_l` の全体 padding)を、Tokens の実値でそのまま
 /// 再現する。
-pub fn render(shell: &Shell) -> RgbaImage {
+/// 裁定171 v2(M4)で `&mut Shell` になった — GPU 高速路の間 `frame_rgba()`
+/// (下記)が `&mut self` になったため(`Shell::ensure_rgba_fresh` doc 参照)。
+/// この instrument は元々 CLI 一発ツール専用(`main.rs` の `--screenshot`)なので
+/// 可変参照でも支障はない。
+pub fn render(shell: &mut Shell) -> RgbaImage {
     // `ui_scale` 適用済み(`Shell::dims` — 適用点1箇所)。この instrument も
     // 生の `tokens.dims` を直接読まない。
     let dims = shell.dims();
@@ -488,7 +492,11 @@ pub fn render(shell: &Shell) -> RgbaImage {
     let property_rows = shell.timeline_property_rows();
     let selected_row_index = timeline_pane::selected_row_index(&rows, shell.session());
     let markers = shell.markers();
-    let session = shell.session();
+    // 裁定171 v2(M4): `frame_rgba()` が `&mut self` になったので(`Shell::
+    // ensure_rgba_fresh` doc 参照)、`&Session` を長く借りたままにできない —
+    // 使う値(`playhead`)だけ先に所有値として抜き出す(下の `stage_source`
+    // 計算より前)。
+    let playhead = shell.session().playhead;
     let composition = shell.composition();
     let duration_frames = composition.as_ref().map(|c| c.duration_frames).unwrap_or(0);
     let fps = composition.as_ref().map(|c| c.fps);
@@ -618,12 +626,26 @@ pub fn render(shell: &Shell) -> RgbaImage {
     // 有効な間は `Shell::observation_rgba()`(`Engine::render_frame_with_view_camera`
     // の結果)を貼る。`frame_rgba()` 自体は観測中でも一切書き換えない(`lib.rs::
     // refresh_frame` の不変と同じ)。
-    let stage_source = if shell.observation().is_some() {
-        shell.observation_rgba().or_else(|| shell.frame_rgba())
-    } else if shell.checkerboard_enabled() {
-        shell.checkerboard_preview_rgba().or_else(|| shell.frame_rgba())
+    // 裁定171 v2(M4): `frame_rgba()`/`observation_rgba()`/
+    // `checkerboard_preview_rgba()` はどれも `&self.frame` を借りた
+    // `&[u8]` を返すので、`&mut self` になった `frame_rgba()`(`Shell::
+    // ensure_rgba_fresh` doc 参照)とチェーン(`.or_else(|| ...)`)すると
+    // 借用が衝突する——各枝で即座に `to_vec()` して所有値へ変換してから
+    // 分岐する(意味は無改造、借用の形だけ変えた)。
+    let observation_active = shell.observation().is_some();
+    let checkerboard_active = shell.checkerboard_enabled();
+    let stage_source: Option<(u32, u32, Vec<u8>)> = if observation_active {
+        match shell.observation_rgba() {
+            Some((w, h, pixels)) => Some((w, h, pixels.to_vec())),
+            None => shell.frame_rgba().map(|(w, h, pixels)| (w, h, pixels.to_vec())),
+        }
+    } else if checkerboard_active {
+        match shell.checkerboard_preview_rgba() {
+            Some((w, h, pixels)) => Some((w, h, pixels.to_vec())),
+            None => shell.frame_rgba().map(|(w, h, pixels)| (w, h, pixels.to_vec())),
+        }
     } else {
-        shell.frame_rgba()
+        shell.frame_rgba().map(|(w, h, pixels)| (w, h, pixels.to_vec()))
     };
     // 絵(ヒーロー、S5a)は帯の高さぶんだけ縮める — 実 widget の
     // `container(body).height(Length::Fill)` が状態帯と同じ column を分け合う
@@ -635,12 +657,12 @@ pub fn render(shell: &Shell) -> RgbaImage {
         h: stage_picture_h,
     };
     if let Some((w, h, pixels)) = stage_source {
-        if shell.observation().is_none() && shell.checkerboard_enabled() {
-            let mut composited = pixels.to_vec();
+        if !observation_active && checkerboard_active {
+            let mut composited = pixels;
             settings_pane::composite_checkerboard(w, h, &mut composited, colors);
             blit_letterboxed(&mut canvas, &composited, w, h, stage_rect);
         } else {
-            blit_letterboxed(&mut canvas, pixels, w, h, stage_rect);
+            blit_letterboxed(&mut canvas, &pixels, w, h, stage_rect);
         }
     }
     // フレーム枠 overlay(裁定157・S3)。観測中(`Some`)だけ、レンダリングカメラの
@@ -991,8 +1013,7 @@ pub fn render(shell: &Shell) -> RgbaImage {
         to_rgba(colors.border_default, 1.0),
     );
 
-    let playhead_x =
-        clip_x0 + timeline_pane::frame_to_x(session.playhead, clip_width, duration_frames);
+    let playhead_x = clip_x0 + timeline_pane::frame_to_x(playhead, clip_width, duration_frames);
     stroke_v(
         &mut canvas,
         playhead_x,
@@ -1051,7 +1072,7 @@ pub fn render(shell: &Shell) -> RgbaImage {
 
 /// 1フレーム描いて PNG を書き、終了する口。`main.rs` の `--fixture --screenshot`
 /// から呼ばれる。
-pub fn write_png(shell: &Shell, path: &std::path::Path) -> Result<(), String> {
+pub fn write_png(shell: &mut Shell, path: &std::path::Path) -> Result<(), String> {
     let canvas = render(shell);
     let (width, height) = (canvas.width(), canvas.height());
     image::save_buffer(

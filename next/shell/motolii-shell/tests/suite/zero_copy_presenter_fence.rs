@@ -1,36 +1,34 @@
-//! 裁定171 v2(M4 レーン、`docs/reviews/2026-08-22-zero-copy-seam-decision.md`)—
-//! 「再生中の Stage 経路で readback 呼び出し 0」の red 先行 oracle。
+//! 裁定171 v2(M4、`docs/reviews/2026-08-22-zero-copy-seam-decision.md`)—
+//! 「再生中の Stage 経路で readback 呼び出し 0」の oracle(ORACLE (a))。
 //!
-//! ## 現状(2026-08-22 施工時点): red のまま `#[ignore]` 付きで保存する
+//! ## 施工経緯(2026-08-22)
 //!
-//! M4 の EXACT TARGET 1〜3(Pipeline が自前の `Compositor::with_device` を持ち、
-//! `prepare` で直接 GPU へ描き、`render` で main_target を blit する)は、
-//! `motolii-compositor`(`next/engine/motolii-compositor/src/lib.rs`)に
-//! **GPU 出力を CPU 読み戻しせずに返す公開 API が1つも無い**ことで構造的に
-//! ブロックされている——既存の `render`/`render_with_timing`/
-//! `render_with_effects`/`render_sequential` はどれも内部で
-//! `ScreenshotProcessor::next_readback_result`(GPU→CPU 読み戻し)を呼んでから
-//! `Vec<u8>` を返す(`render_sequential` が `ViewBuilder::main_target()` を
-//! 保持するのも「次 layer の背景として使い回す」ためで、最終的には同じ
-//! readback で終わる——裁定161 BL1b のモジュール doc 参照)。
+//! 初回施工時点では `motolii-compositor` に GPU 出力を CPU 読み戻しせずに
+//! 返す公開 API が無く、この試験は `#[ignore]` 付きの red として保存した
+//! (施工報告参照)。supervisor 裁定で ALLOWLIST が
+//! `next/engine/motolii-compositor/src/lib.rs`+`tests/**`・
+//! `next/engine/motolii-engine/src/lib.rs`(いずれも additive のみ)へ拡張され、
+//! 次の3つが揃ったことで `#[ignore]` を外せる状態になった:
 //!
-//! `motolii-compositor` は M4 レーンの ALLOWLIST に入っていない
-//! (`next/shell/motolii-shell/**`・`next/shell/motolii-shell/tests/**`・
-//! `next/ui/motolii-stage-pane/src/**`・`next/engine/motolii-engine/src/lib.rs`
-//! のみ)ので、この施工ではそこへ手を出さず、代わりにこの oracle を
-//! **red のまま `#[ignore]` 付きで**保存する——次のレーンが
-//! `motolii-compositor` へ「readback しない GPU 出力口」を1つ足せば、
-//! `#[ignore]` を外すだけでこの試験がそのまま受入条件になる
-//! (提案シグネチャ・詳細は M4 施工報告 2026-08-22 参照)。
+//! 1. `Compositor::render_to_texture`(additive、既存4メソッド無改造)——
+//!    readback せず `(wgpu::Texture, wgpu::TextureView)` を返す
+//! 2. `Engine::with_device`/`render_resolved_to_texture`/`render_frame_to_texture`
+//!    (additive、headless 経路(`Engine::new`/`render_frame`)は無改造)
+//! 3. `motolii-shell` の presenter Pipeline(`StagePresenterPipeline`)が
+//!    `Engine::with_device` を自前で所有し、`prepare` で世代ゲート越しに
+//!    `render_resolved_to_texture` を呼ぶ——`Shell::refresh_frame` は
+//!    revision 不変・playhead のみ変化(市松 OFF・観測カメラ無効・
+//!    resolution cap = Auto)の間、`Engine::render_frame`(CPU readback)を
+//!    一切呼ばない(`RenderedFrame::rgba_stale`+`Shell::ensure_rgba_fresh`で
+//!    `frame_rgba()`/screenshot が実際に要求した時だけ追いつかせる、
+//!    EXACT TARGET 4)
 //!
 //! ## 主張(ORACLE (a) そのもの)
 //!
 //! 再生 tick を10回回しても、`metrics::render_frame_calls()`
 //! (`Engine::render_frame` の呼び出し回数 = CPU 読み戻しの回数そのもの、
 //! `Shell::refresh_frame` が `record_render_frame` で計測)は起動直後の初回
-//! 描画1回から**増えない**——現状は毎 tick 増える(red、`refresh_frame` の
-//! 「revision/playhead が変わったら engine.render_frame を呼ぶ」経路が
-//! 再生中も無条件に生きているため)。
+//! 描画1回から**増えない**。
 
 use std::sync::Arc;
 
@@ -38,10 +36,10 @@ use motolii_audio::{DeviceWaitLatency, PlaybackClock, PlaybackCounters, Playback
 use motolii_core::{Fps, RationalTime};
 use motolii_shell::{metrics, Message, Shell};
 
-/// `render_pipeline_fence.rs` の `METRICS_LOCK` と同型・別 static(`metrics`は
-/// プロセス共有 static なので、同バイナリ内で並列実行される `#[test]` 同士の
-/// 排他が要る)。
-static METRICS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// `metrics_main.rs` の crate root で定義された共有 lock(`metrics` はプロセス
+/// 共有 static なので、同バイナリ内で並列実行される `#[test]` 同士 — かつ
+/// `render_pipeline_fence` モジュールとの間も — の排他が要る)。
+use crate::METRICS_LOCK;
 
 fn fixture_fps() -> Fps {
     Fps::try_new(30, 1).expect("30fps")
@@ -59,12 +57,8 @@ fn fake_session_at(frame: i64) -> (PlaybackSession, Arc<PlaybackCounters>) {
     (PlaybackSession::for_simulation(clock), counters)
 }
 
-/// **裁定171 v2 ORACLE (a)**。次のレーンが `motolii-compositor` へ zero-copy
-/// GPU 出力口を足し、Pipeline 側の blit 配線を終えたら `#[ignore]` を外す。
+/// **裁定171 v2 ORACLE (a)**。
 #[test]
-#[ignore = "裁定171 M4: motolii-compositor に readback しない GPU 出力 API が無く構造的に red \
-            (この crate は M4 ALLOWLIST 外)。施工報告(2026-08-22)参照 — \
-            API が足されたら #[ignore] を外して受入条件にする。"]
 fn playback_ticks_do_not_trigger_cpu_readback_after_warmup() {
     let _guard = METRICS_LOCK.lock().unwrap();
     metrics::reset();
@@ -94,7 +88,7 @@ fn playback_ticks_do_not_trigger_cpu_readback_after_warmup() {
         metrics::render_frame_calls(),
         warmup_calls,
         "裁定171 v2 EXACT TARGET 3/4: 再生中の Stage 経路は readback ゼロのはず\
-         (現状 red — GPU→CPU→GPU 往復がまだ生きている、warmup後は{warmup_calls}回で\
-         横ばいのはずが、10 tick 回して増えている)"
+         (warmup後は{warmup_calls}回で横ばいのはずが、10 tick 回して増えている)"
     );
 }
+

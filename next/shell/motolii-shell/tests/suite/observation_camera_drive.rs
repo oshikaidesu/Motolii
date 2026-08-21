@@ -36,7 +36,7 @@ fn zoomed() -> ObservationCamera {
 /// 状態で `frame_rgba()` が空でないことをまず確かめる(以降の (c)(d) の基準点)。
 #[test]
 fn a_default_observation_is_none_and_frame_is_the_plain_render() {
-    let shell = shell();
+    let mut shell = shell();
     assert_eq!(shell.observation(), None, "既定は「カメラを通して見る」のはず");
     assert!(shell.frame_rgba().is_some(), "既定でも Stage に絵が出ているはず(M17)");
     assert!(

@@ -148,9 +148,9 @@ fn checkerboard_toggle_changes_the_screenshot_pixels_on_default_opaque_backgroun
     // 「市松の効果」ではなく「frame が None→Some になっただけ」を拾ってしまう。
     let _ = shell.update(Message::FlushDrops);
 
-    let without = screenshot::render(&shell).into_raw();
+    let without = screenshot::render(&mut shell).into_raw();
     let _ = shell.update(Message::Stage(stage::Message::ToggleCheckerboard));
-    let with = screenshot::render(&shell).into_raw();
+    let with = screenshot::render(&mut shell).into_raw();
 
     assert_ne!(
         without, with,
@@ -208,9 +208,9 @@ fn checkerboard_toggle_changes_the_screenshot_pixels_when_background_is_transpar
     let background = shell.composition().expect("comp がある").background;
     assert_eq!(background, [0.0, 0.0, 0.0, 0.0], "Transparent プリセットが反映されていない");
 
-    let without = screenshot::render(&shell).into_raw();
+    let without = screenshot::render(&mut shell).into_raw();
     let _ = shell.update(Message::Stage(stage::Message::ToggleCheckerboard));
-    let with = screenshot::render(&shell).into_raw();
+    let with = screenshot::render(&mut shell).into_raw();
 
     assert_ne!(
         without, with,

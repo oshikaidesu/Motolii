@@ -11,6 +11,11 @@ motolii-media.workspace = true
 motolii-store.workspace = true
 motolii-vector.workspace = true
 thiserror.workspace = true
+# 裁定171 v2(M4、supervisor 裁定で ALLOWLIST 拡張): `Engine::with_device`/
+# `render_*_to_texture` の公開シグネチャが `wgpu::Device`/`Queue`/`Texture`/
+# `TextureView` を運ぶために要る。単一版(next/Cargo.toml の `[workspace.dependencies]`
+# 参照)を workspace 経由で引くだけ — 新しい版を持ち込まない。
+wgpu.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true
