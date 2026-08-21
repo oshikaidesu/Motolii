@@ -54,11 +54,19 @@ pub fn rows(store: &StoreView<'_>, session: &Session) -> Vec<RowProjection> {
             locked: attrs.locked,
             start: meta.timing.start,
             duration: meta.timing.duration,
-            selected: session.selection == Some(id),
+            selected: row_selected(session, id),
             dragging: false,
         });
     }
     out
+}
+
+/// 行ハイライトの選択判定。`selection`(単一 focus)と `selected_layers`
+/// (U1 の複数選択集合)は身分が別(`Session` の doc 参照)だが、**行の見た目は
+/// どちらも同じ選択**(AE 同型: 複数選択の各 layer 行は同一ハイライト。primary の
+/// 区別は property 行の展開(`selected_row_index` = `selection` のみ)が担う)。
+pub fn row_selected(session: &Session, id: LayerId) -> bool {
+    session.selection == Some(id) || session.selected_layers.contains(&id)
 }
 
 /// comp フレーム → x px。`duration_frames <= 0` の空 comp では常に 0。
@@ -441,5 +449,22 @@ mod preview_tests {
         let rows = vec![key_row(layer, property, &[10, 20])];
         let out = apply_key_preview(rows.clone(), None);
         assert_eq!(out, rows);
+    }
+
+    /// **オラクル(U1 finding「multi-select のハイライト未配線」の根治)**:
+    /// `selected_layers` の一員は focus(`selection`)でなくても行が選択扱いに
+    /// なる。focus 単独・非選択も従来どおり。
+    #[test]
+    fn row_selected_includes_multi_selection_members() {
+        let mut session = Session::default();
+        session.selection = Some(LayerId(1));
+        session.selected_layers = vec![LayerId(1), LayerId(2)];
+
+        assert!(row_selected(&session, LayerId(1)), "focus 行が選択扱いでない");
+        assert!(
+            row_selected(&session, LayerId(2)),
+            "selected_layers の一員(非 focus)がハイライトされない — U1 finding の未配線"
+        );
+        assert!(!row_selected(&session, LayerId(3)), "非選択行まで選択扱いになっている");
     }
 }
