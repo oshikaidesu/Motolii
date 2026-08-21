@@ -5,6 +5,7 @@
 //! 参照を keyframe 込みで正しく複製すること)は既にそちらで固定済み — ここで見るのは
 //! **`Shell::update` 経由の配線**: 1操作 = 1 undo・選択の遷移・M13(拒否は理由つき)。
 
+use motolii_shell::timeline_pane;
 use motolii_shell::{Message, Shell};
 use motolii_store::LayerId;
 
@@ -92,7 +93,7 @@ fn cut_on_a_locked_layer_is_rejected_with_a_reason_and_does_not_touch_the_clipbo
     let mut shell = shell();
     shell.update(Message::AddLayer);
     let layer = shell.session().selection.expect("AddLayer は選択する");
-    shell.update(Message::LaneBarToggleLock(layer));
+    shell.update(Message::Timeline(timeline_pane::Message::ToggleLock(layer)));
     assert_eq!(shell.status(), None, "lock 自体は常に通るはず");
 
     shell.update(Message::CutLayer);

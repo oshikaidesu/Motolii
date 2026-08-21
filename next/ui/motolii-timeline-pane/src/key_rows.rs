@@ -13,7 +13,7 @@
 //!   (`crate::Shell::update`/`apply_key_selection`)へ委ねる
 //!   ([`super::KeySelectionOp`])
 //! - **時刻ドラッグ/リタイム**(第2波T4): 修飾キー無しの press は
-//!   [`Message::TimelineKeyGrabbed`]{retime:false} を出す(選択の差し替え+
+//!   [`Message::KeyGrabbed`]{retime:false} を出す(選択の差し替え+
 //!   drag 開始を兼ねる、確定は `Shell` 側)。Cmd+press が「選択済み・選択が
 //!   2本以上・掴んだキーがその選択の端(最小/最大 frame)」を満たせば
 //!   `retime:true` で同じ Message を出す(RetimeSelection、裁定146) —
@@ -22,7 +22,7 @@
 //!   (`mod.rs` doc の [`super::key_rows`] 節参照)を見て、drag 中は
 //!   ButtonPressed 以外もここで拾う — `input::Interaction` は一切触らない
 //! - **Delete**: グローバルの window リスナー(`crate::inspector_pointer_event`)
-//!   が Backspace/Delete を拾って `Message::TimelineDeleteSelectedKeys` を出す
+//!   が Backspace/Delete を拾って `Message::DeleteSelectedKeys` を出す
 //!   — ここは選択の判定だけを持ち、削除には関与しない
 
 use iced::widget::canvas;
@@ -194,17 +194,17 @@ pub(crate) fn update(
                 let position = cursor.position_in(bounds)?;
                 let (at_frame, px_per_frame) = frame_at_position(pane, bounds, position);
                 Some(
-                    canvas::Action::publish(Message::TimelineKeyDragMoved { at_frame, px_per_frame })
+                    canvas::Action::publish(Message::KeyDragMoved { at_frame, px_per_frame })
                         .and_capture(),
                 )
             }
             canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                Some(canvas::Action::publish(Message::TimelineKeyDragReleased).and_capture())
+                Some(canvas::Action::publish(Message::KeyDragReleased).and_capture())
             }
             // 右クリック = キャンセル(裁定151「キャンセルの一般化」、正典 §2 を
             // キーへ延長)。Esc は window 全体の subscription から別経路で届く。
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) => {
-                Some(canvas::Action::publish(Message::TimelineKeyDragCancelled).and_capture())
+                Some(canvas::Action::publish(Message::KeyDragCancelled).and_capture())
             }
             _ => None,
         };
@@ -250,12 +250,12 @@ pub(crate) fn update(
 
     // 正典 §3・§4: クリック=単独 / Cmd=トグル / Shift=範囲。第2波T4:
     // 修飾キー無しの press は選択の差し替え+drag 開始を兼ねる
-    // (`Message::TimelineKeyGrabbed`、確定/選択の実際の読み書きは
+    // (`Message::KeyGrabbed`、確定/選択の実際の読み書きは
     // `Shell::update` 側 — ここは操作の種別だけ選ぶのは変わらない)。
     if pane.modifiers.shift() {
         // Shift 範囲選択は drag を伴わない(範囲選択そのものが動詞)。
         return Some(
-            canvas::Action::publish(Message::TimelineKeySelect(KeySelectionOp::Range(clicked))).and_capture(),
+            canvas::Action::publish(Message::KeySelect(KeySelectionOp::Range(clicked))).and_capture(),
         );
     }
     if pane.modifiers.command() {
@@ -268,7 +268,7 @@ pub(crate) fn update(
                 .is_some_and(|(min, max, count)| count >= 2 && (key.frame == min || key.frame == max));
         if is_retime_edge {
             return Some(
-                canvas::Action::publish(Message::TimelineKeyGrabbed {
+                canvas::Action::publish(Message::KeyGrabbed {
                     key: clicked,
                     at_frame,
                     retime: true,
@@ -277,11 +277,11 @@ pub(crate) fn update(
             );
         }
         return Some(
-            canvas::Action::publish(Message::TimelineKeySelect(KeySelectionOp::Toggle(clicked))).and_capture(),
+            canvas::Action::publish(Message::KeySelect(KeySelectionOp::Toggle(clicked))).and_capture(),
         );
     }
     Some(
-        canvas::Action::publish(Message::TimelineKeyGrabbed {
+        canvas::Action::publish(Message::KeyGrabbed {
             key: clicked,
             at_frame,
             retime: false,

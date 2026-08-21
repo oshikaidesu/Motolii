@@ -13,7 +13,7 @@
 //! ## 単一クリップの move/trim(第2波T2、正典 §2)
 //!
 //! bar を掴んだ瞬間の座標だけで [`super::hit::classify_bar_part`] を1回呼び、
-//! `Body`/`EdgeIn`/`EdgeOut` を確定してから [`Message::TimelineBarGrabbed`] を
+//! `Body`/`EdgeIn`/`EdgeOut` を確定してから [`Message::BarGrabbed`] を
 //! 出す(正典 §1「判定は押した瞬間の座標」)。**ロック判定・スナップ・clamp・
 //! `Intent::SetTiming` はここでは一切やらない** — Document を読めるのは
 //! `Shell::update` だけなので、ここは「掴んだ座標」「今のポインタの frame と
@@ -44,7 +44,7 @@ pub struct Interaction {
 /// 進行中のドラッグの種類。scrub(ルーラー/空白部)と clip(bar の move/trim)は
 /// 別腕 — release 時に出す `Message` が違う(scrub は move ごとに `ScrubTo` を
 /// 出し切っているので release は無音、clip は release で初めて確定 intent が
-/// 要る、`Message::TimelineDragReleased`)。
+/// 要る、`Message::DragReleased`)。
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DragKind {
     Scrub,
@@ -57,9 +57,9 @@ enum DragKind {
 /// `check`/`SetAttrs` 腕が理由つきで拒む、`locked` 自身の解除だけは常に通す)。
 fn glyph_message(id: motolii_store::LayerId, glyph: Glyph) -> Message {
     match glyph {
-        Glyph::Mute => Message::LaneBarToggleMute(id),
-        Glyph::Solo => Message::LaneBarToggleSolo(id),
-        Glyph::Lock => Message::LaneBarToggleLock(id),
+        Glyph::Mute => Message::ToggleMute(id),
+        Glyph::Solo => Message::ToggleSolo(id),
+        Glyph::Lock => Message::ToggleLock(id),
     }
 }
 
@@ -125,7 +125,7 @@ pub(crate) fn update(
                     let at_frame = frame_at_x(clip_point.x, clip_width, pane.duration_frames);
                     state.drag = Some(DragKind::Clip);
                     Some(
-                        canvas::Action::publish(Message::TimelineBarGrabbed {
+                        canvas::Action::publish(Message::BarGrabbed {
                             layer: id,
                             part,
                             at_frame,
@@ -148,7 +148,7 @@ pub(crate) fn update(
         mouse::Event::ButtonPressed(mouse::Button::Right) => {
             if state.drag == Some(DragKind::Clip) {
                 state.drag = None;
-                Some(canvas::Action::publish(Message::TimelineDragCancelled).and_capture())
+                Some(canvas::Action::publish(Message::DragCancelled).and_capture())
             } else {
                 None
             }
@@ -172,7 +172,7 @@ pub(crate) fn update(
                     0.0
                 };
                 Some(
-                    canvas::Action::publish(Message::TimelineDragMoved {
+                    canvas::Action::publish(Message::DragMoved {
                         at_frame,
                         px_per_frame,
                     })
@@ -184,7 +184,7 @@ pub(crate) fn update(
         mouse::Event::ButtonReleased(mouse::Button::Left) => match state.drag.take() {
             Some(DragKind::Scrub) => Some(canvas::Action::capture()),
             Some(DragKind::Clip) => {
-                Some(canvas::Action::publish(Message::TimelineDragReleased).and_capture())
+                Some(canvas::Action::publish(Message::DragReleased).and_capture())
             }
             None => None,
         },

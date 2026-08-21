@@ -10,7 +10,7 @@
 //!   0/20/70/90、clip 範囲 [0,90])— 複数選択の相対間隔維持・nudge・retime・
 //!   同時刻衝突(ヘッドルームが要るので複数キーの試験はこちらに寄せてある)
 
-use motolii_shell::timeline_pane::KeySelector;
+use motolii_shell::timeline_pane::{self, KeySelector};
 use motolii_shell::{Message, Shell};
 use motolii_store::{property, LayerId, PropertyId};
 
@@ -52,9 +52,9 @@ fn a_dragging_a_single_key_moves_it_and_undoes_in_one_step() {
     assert_eq!(position_frames(&shell), vec![510, 570]);
 
     let key = KeySelector { layer, property, frame: 510 };
-    let _ = shell.update(Message::TimelineKeyGrabbed { key, at_frame: 510, retime: false });
-    let _ = shell.update(Message::TimelineKeyDragMoved { at_frame: 520, px_per_frame: 1.0 });
-    let _ = shell.update(Message::TimelineKeyDragReleased);
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key, at_frame: 510, retime: false }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragMoved{ at_frame: 520, px_per_frame: 1.0 }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragReleased));
 
     assert_eq!(
         position_frames(&shell),
@@ -81,8 +81,8 @@ fn b_escape_during_a_key_drag_leaves_history_completely_untouched() {
     let can_redo_before = shell.can_redo();
 
     let key = KeySelector { layer, property, frame: 510 };
-    let _ = shell.update(Message::TimelineKeyGrabbed { key, at_frame: 510, retime: false });
-    let _ = shell.update(Message::TimelineKeyDragMoved { at_frame: 520, px_per_frame: 1.0 });
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key, at_frame: 510, retime: false }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragMoved{ at_frame: 520, px_per_frame: 1.0 }));
     let _ = shell.update(Message::EscapePressed);
 
     assert_eq!(shell.can_undo(), can_undo_before, "Esc がドラッグ以外の履歴まで動かしている");
@@ -91,7 +91,7 @@ fn b_escape_during_a_key_drag_leaves_history_completely_untouched() {
 
     // 掴んだままのボタンで release が来ても、Esc で drag state は既に空 —
     // 何も起きない(二重確定の防止、clip drag の同名試験と同じ確認)。
-    let _ = shell.update(Message::TimelineKeyDragReleased);
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragReleased));
     assert_eq!(position_frames(&shell), vec![510, 570]);
     assert_eq!(shell.can_undo(), can_undo_before);
 }
@@ -109,18 +109,18 @@ fn c_dragging_multiple_selected_keys_preserves_their_relative_spacing() {
 
     let key0 = KeySelector { layer, property: property.clone(), frame: 0 };
     let key70 = KeySelector { layer, property: property.clone(), frame: 70 };
-    let _ = shell.update(Message::TimelineKeySelect(
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Single(key0.clone()),
-    ));
-    let _ = shell.update(Message::TimelineKeySelect(
+    )));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Range(key70),
-    ));
+    )));
 
     // 掴むのは選択の一員(0) — delta=10(SNAP_PX=7pxより外へ逃がして候補への
     // 誤吸着を避ける、0/60/90が候補に載っているため)。
-    let _ = shell.update(Message::TimelineKeyGrabbed { key: key0, at_frame: 0, retime: false });
-    let _ = shell.update(Message::TimelineKeyDragMoved { at_frame: 10, px_per_frame: 1.0 });
-    let _ = shell.update(Message::TimelineKeyDragReleased);
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key: key0, at_frame: 0, retime: false }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragMoved{ at_frame: 10, px_per_frame: 1.0 }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragReleased));
 
     assert_eq!(
         opacity_frames(&shell),
@@ -140,10 +140,10 @@ fn d_nudge_keyframe_moves_the_selected_key_by_one_frame() {
     let property = PropertyId::new(property::OPACITY).expect("opacity は予約語ではない");
     let key20 = KeySelector { layer, property, frame: 20 };
 
-    let _ = shell.update(Message::TimelineKeySelect(
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Single(key20),
-    ));
-    let _ = shell.update(Message::NudgeKeyframe(1));
+    )));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::NudgeKeyframe(1)));
 
     assert_eq!(opacity_frames(&shell), vec![0, 21, 70, 90], "Alt+→ 相当の1フレーム nudge が効いていない");
     assert!(shell.can_undo());
@@ -158,10 +158,10 @@ fn d_nudge_keyframe_moves_the_selected_key_by_ten_frames() {
     let property = PropertyId::new(property::OPACITY).expect("opacity は予約語ではない");
     let key70 = KeySelector { layer, property, frame: 70 };
 
-    let _ = shell.update(Message::TimelineKeySelect(
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Single(key70),
-    ));
-    let _ = shell.update(Message::NudgeKeyframe(-10));
+    )));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::NudgeKeyframe(-10)));
 
     assert_eq!(opacity_frames(&shell), vec![0, 20, 60, 90], "Alt+Shift+← 相当の10フレーム nudge が効いていない");
 }
@@ -182,16 +182,16 @@ fn e_retiming_a_selection_scales_the_middle_key_proportionally() {
     let key20 = KeySelector { layer, property: property.clone(), frame: 20 };
     let key90 = KeySelector { layer, property: property.clone(), frame: 90 };
 
-    let _ = shell.update(Message::TimelineKeySelect(
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Single(key20),
-    ));
-    let _ = shell.update(Message::TimelineKeySelect(
+    )));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Range(key90.clone()),
-    ));
+    )));
 
-    let _ = shell.update(Message::TimelineKeyGrabbed { key: key90, at_frame: 90, retime: true });
-    let _ = shell.update(Message::TimelineKeyDragMoved { at_frame: 50, px_per_frame: 1.0 });
-    let _ = shell.update(Message::TimelineKeyDragReleased);
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key: key90, at_frame: 90, retime: true }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragMoved{ at_frame: 50, px_per_frame: 1.0 }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragReleased));
 
     assert_eq!(
         opacity_frames(&shell),
@@ -216,16 +216,16 @@ fn retime_does_not_start_when_grabbing_a_non_edge_key() {
     let key70 = KeySelector { layer, property: property.clone(), frame: 70 };
     let key90 = KeySelector { layer, property: property.clone(), frame: 90 };
 
-    let _ = shell.update(Message::TimelineKeySelect(
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Single(key20),
-    ));
-    let _ = shell.update(Message::TimelineKeySelect(
+    )));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Range(key90),
-    ));
+    )));
     // 中間(70、端ではない)を retime:true で掴もうとしても不成立。
-    let _ = shell.update(Message::TimelineKeyGrabbed { key: key70, at_frame: 70, retime: true });
-    let _ = shell.update(Message::TimelineKeyDragMoved { at_frame: 50, px_per_frame: 1.0 });
-    let _ = shell.update(Message::TimelineKeyDragReleased);
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key: key70, at_frame: 70, retime: true }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragMoved{ at_frame: 50, px_per_frame: 1.0 }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragReleased));
 
     assert_eq!(opacity_frames(&shell), vec![0, 20, 70, 90], "端でないキーの Cmd 掴みで retime が始まってしまっている");
 }
@@ -246,17 +246,17 @@ fn f_retiming_two_keys_onto_the_same_frame_does_not_panic_and_collapses_determin
     let key20 = KeySelector { layer, property: property.clone(), frame: 20 };
     let key70 = KeySelector { layer, property: property.clone(), frame: 70 };
 
-    let _ = shell.update(Message::TimelineKeySelect(
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Single(key20),
-    ));
-    let _ = shell.update(Message::TimelineKeySelect(
+    )));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Range(key70.clone()),
-    ));
+    )));
 
-    let _ = shell.update(Message::TimelineKeyGrabbed { key: key70, at_frame: 70, retime: true });
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key: key70, at_frame: 70, retime: true }));
     // anchor(20)ちょうどへ — scale=0、選択2本とも frame 20 へ収束する。
-    let _ = shell.update(Message::TimelineKeyDragMoved { at_frame: 20, px_per_frame: 1.0 });
-    let _ = shell.update(Message::TimelineKeyDragReleased); // ここで panic しないことが本題。
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragMoved{ at_frame: 20, px_per_frame: 1.0 }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragReleased)); // ここで panic しないことが本題。
 
     assert_eq!(
         opacity_frames(&shell),
@@ -281,9 +281,9 @@ fn right_click_during_a_key_drag_cancels_it_just_like_escape() {
     let can_undo_before = shell.can_undo();
 
     let key = KeySelector { layer, property, frame: 510 };
-    let _ = shell.update(Message::TimelineKeyGrabbed { key, at_frame: 510, retime: false });
-    let _ = shell.update(Message::TimelineKeyDragMoved { at_frame: 520, px_per_frame: 1.0 });
-    let _ = shell.update(Message::TimelineKeyDragCancelled);
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key, at_frame: 510, retime: false }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragMoved{ at_frame: 520, px_per_frame: 1.0 }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragCancelled));
 
     assert_eq!(shell.can_undo(), can_undo_before);
     assert_eq!(position_frames(&shell), vec![510, 570]);
@@ -298,8 +298,8 @@ fn grabbing_a_key_without_moving_and_releasing_writes_nothing() {
     let can_undo_before = shell.can_undo();
 
     let key = KeySelector { layer, property, frame: 510 };
-    let _ = shell.update(Message::TimelineKeyGrabbed { key, at_frame: 510, retime: false });
-    let _ = shell.update(Message::TimelineKeyDragReleased);
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key, at_frame: 510, retime: false }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragReleased));
 
     assert_eq!(position_frames(&shell), vec![510, 570]);
     assert_eq!(shell.can_undo(), can_undo_before, "動いていないのに undo できる操作が積まれている");
@@ -311,13 +311,13 @@ fn grabbing_a_key_on_a_locked_layer_is_refused_with_a_reason() {
     let mut shell = Shell::new_fixture().0;
     let layer = shell.session().selection.expect("fixture は既定選択を持つ");
     let property = PropertyId::new(property::POSITION).expect("position は予約語ではない");
-    let _ = shell.update(Message::LaneBarToggleLock(layer));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::ToggleLock(layer)));
 
     let key = KeySelector { layer, property, frame: 510 };
-    let _ = shell.update(Message::TimelineKeyGrabbed { key, at_frame: 510, retime: false });
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key, at_frame: 510, retime: false }));
     assert!(shell.status().is_some(), "ロック中のキー掴みが理由つきで拒否されていない(M13違反)");
 
-    let _ = shell.update(Message::TimelineKeyDragMoved { at_frame: 520, px_per_frame: 1.0 });
-    let _ = shell.update(Message::TimelineKeyDragReleased);
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragMoved{ at_frame: 520, px_per_frame: 1.0 }));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeyDragReleased));
     assert_eq!(position_frames(&shell), vec![510, 570], "ロック中なのに動いてしまっている");
 }

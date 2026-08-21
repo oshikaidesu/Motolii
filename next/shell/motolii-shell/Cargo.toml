@@ -22,6 +22,14 @@ motolii-tokens-rs.workspace = true
 # `pub(crate) use motolii_settings_pane::chrome;` で同様に再輸出する
 # (`inspector_pane.rs`・本 crate 自身が引き続き読む、pane split survey §2.4)。
 motolii-settings-pane.workspace = true
+# 裁定160 切片7: `state.rs`(Session/KeySelector)を crate 抽出。
+# `pub use motolii_shell_state as state;`(lib.rs)で既存 `crate::state::` path を
+# 維持する(tokens と同じ手口)。
+motolii-shell-state.workspace = true
+# 裁定160 切片7: `timeline/` 9ファイル + 対応する write ロジックを crate 抽出。
+# `pub use motolii_timeline_pane as timeline;`/`as timeline_pane;`(lib.rs)で
+# 既存 path を維持する。
+motolii-timeline-pane.workspace = true
 # `--fixture --screenshot` 器具(screenshot.rs)が PNG を書き出すのに使う。iced の
 # "image" feature が既に `image`(png codec 込み)を依存グラフへ引いているので、
 # workspace の Cargo.toml 自身が既に明記している「裁定117 が許す direct 昇格」

@@ -27,28 +27,33 @@ pub mod fixture;
 pub mod inspector_pane;
 pub mod screenshot;
 pub mod stage;
-pub mod state;
-pub mod timeline;
 
-/// `Session`(+ `state::KeySelector`/`KeySelectionOp`)は裁定160 切片6 で
-/// `state.rs` へ移設済み(pane split survey §2.3: `Session ⇄ timeline` の型
-/// 循環解消)。`pub use timeline as timeline_pane;` と同じ「型 alias で外部参照を
-/// 壊さない」手口 — `crate::Session`/`motolii_shell::Session` を読む既存参照
-/// (`inspector_pane.rs`・`timeline/*.rs`・`tests/suite/*.rs`)は無改修で済む。
+/// `state`(`Session`/`KeySelector`/`KeySelectionOp`)は裁定160 切片6 で
+/// `motolii-shell` 内の module へ移設し、切片7(timeline-pane crate 抽出、
+/// pane split survey `docs/reviews/2026-08-21-pane-split-survey.md` §2.3/§6
+/// 切片7)で `motolii-shell-state` crate へさらに抽出した — `motolii-timeline-pane`
+/// (pane crate)は `motolii-shell` へ依存できない(循環になる)ので、
+/// `Session`/`KeySelector` を両者の共通の親として leaf crate 化する必要が
+/// あった。`pub use timeline as timeline_pane;`(旧)と同じ「型 alias で
+/// 外部参照を壊さない」手口 — `crate::Session`/`motolii_shell::Session` を
+/// 読む既存参照(`inspector_pane.rs`・`tests/suite/*.rs`)は無改修で済む。
+pub use motolii_shell_state as state;
 pub use state::Session;
 
 /// `tokens` は裁定160 切片1 で `motolii-tokens-rs` crate へ抽出済み(pane split
-/// survey `docs/reviews/2026-08-21-pane-split-survey.md` §2.2/§6)。純粋な再配置
-/// — `tokens.rs` 自体の値・シグネチャは無改変。`pub use timeline as timeline_pane;`
-/// と同じ「型 alias で外部参照を壊さない」手口(既存の `crate::tokens::X`・
+/// survey §2.2/§6)。純粋な再配置 — `tokens.rs` 自体の値・シグネチャは無改変。
+/// 「型 alias で外部参照を壊さない」手口(既存の `crate::tokens::X`・
 /// `motolii_shell::tokens::X` 参照はここを直せば無改修で済む)。
 pub use motolii_tokens_rs as tokens;
 
-/// `timeline_pane` は分割前の module path の互換エイリアス(第2波第1切片:
-/// 純粋なファイル分割 — `src/timeline/`(`projection`/`hit`/`canvas`/`input`))。
-/// `crate::timeline_pane::X` を読む既存参照(`screenshot.rs`・
-/// `tests/suite/*.rs`)を壊さないための re-export。
-pub use timeline as timeline_pane;
+/// `timeline`/`timeline_pane` は裁定160 切片7(pane split survey §6 切片7)で
+/// `motolii-timeline-pane` crate へ抽出済み — `src/timeline/` 9ファイル +
+/// 対応する write ロジック(§1.2 の584行主部)を丸ごと移した。両エイリアスとも
+/// 「型 alias で外部参照を壊さない」手口(既存の `crate::timeline::X`・
+/// `crate::timeline_pane::X`・`motolii_shell::timeline_pane::X` 参照
+/// (`screenshot.rs`・`stage.rs`・`tests/suite/*.rs`)は無改修で済む)。
+pub use motolii_timeline_pane as timeline;
+pub use motolii_timeline_pane as timeline_pane;
 
 /// `settings_pane` は裁定160 切片9 で `motolii-settings-pane` crate へ抽出済み
 /// (pane split survey §6 切片9)。`pub use timeline as timeline_pane;` と同じ
@@ -183,76 +188,19 @@ pub enum Message {
     /// (header の Undo/Redo ボタンと同じ即時操作の形)。
     InspectorToggleHidden,
 
-    // ---- Timeline レーンバー(裁定147・第2波T1) ----
-    /// レーンバーの M glyph クリック。`Intent::SetAttrs{hidden}` を1回出す
-    /// (`InspectorToggleHidden` と同じ形だが、対象は `Session::selection` では
-    /// なくクリックした行そのもの — 選択と無関係に M/S/L を操作できる)。
-    LaneBarToggleMute(LayerId),
-    /// レーンバーの S glyph クリック。`Intent::SetAttrs{solo}` を1回出す。
-    LaneBarToggleSolo(LayerId),
-    /// レーンバーの L glyph クリック。`Intent::SetAttrs{locked}` を1回出す。
-    /// **`locked` 自身の解除/再ロックだけは locked な行でも常に通る**
-    /// (`motolii_store::document::Intent::SetAttrs` 腕の規則、正典 §6)。
-    LaneBarToggleLock(LayerId),
-
-    // ---- Timeline クリップの move/trim(第2波T2、正典 §2) ----
-    /// bar を掴んだ。`part` で move(本体)か trim(端)かが既に決まっている
-    /// (`timeline::input::update` が押した瞬間の座標だけで
-    /// `timeline::classify_bar_part` を1回呼んで確定 — 正典 §1「判定は押した
-    /// 瞬間の座標」)。`at_frame` は**スナップ前**の掴んだ点(掴んだ点と clip
-    /// 頭のズレを保つのに要る、`Shell::start_timeline_drag` 参照)。
-    TimelineBarGrabbed {
-        layer: LayerId,
-        part: timeline::BarPart,
-        at_frame: i64,
-    },
-    /// ドラッグ中のポインタ移動。canvas は掴んでいる間だけこれを出す。
-    /// `px_per_frame` はスナップの画面距離しきい値(`timeline::clip_gesture::
-    /// SNAP_PX`)をフレームへ直すのに要る実測値(窓幅依存) — Shell 自身は
-    /// 窓幅を知らないので、届いた値をそのまま使う。
-    TimelineDragMoved { at_frame: i64, px_per_frame: f32 },
-    /// 左クリック release = 進行中ジェスチャの確定。**ここで初めて
-    /// `Intent::SetTiming` を1回出す**(1 gesture = 1 undo、正典 §2)。
-    TimelineDragReleased,
-    /// 右クリック = 進行中ジェスチャの破棄(裁定151「キャンセルの一般化」)。
-    /// Esc も同じ意味だが、Esc は window 全体の subscription から届く
-    /// `Message::EscapePressed` が別経路で `cancel_timeline_drag` を直接呼ぶ
-    /// (この variant は経由しない — 二重定義を避ける)。**Document は最初から
-    /// 触っていない**ので、復元は preview を捨てるだけで成立する(正典 §2)。
-    TimelineDragCancelled,
-    // ---- Timeline property 行(キー行、第2波 T3・裁定148/151) ----
-    /// キー菱形クリック。`timeline::key_rows` が「どのキーを・どの操作で」まで
-    /// 判定し、確定(`Session::selected_keys`/`key_anchor` の読み書き)は
-    /// `Shell::apply_key_selection`(唯一の書き口)へ委ねる。
-    TimelineKeySelect(timeline::KeySelectionOp),
-    /// 選択中のキーを消す(正典 §3「Delete はキー選択が層選択より優先」)。
-    /// `Session::selected_keys` が空なら no-op — layer 選択の Delete(未配線)
-    /// と衝突しない。1回の `apply_all` で複数 property をまとめて書くので
-    /// **1操作 = 1 undo**。
-    TimelineDeleteSelectedKeys,
-
-    // ---- Timeline キーの時刻編集(第2波T4、正典 §3・§8.1・裁定146) ----
-    /// キー菱形を掴んだ(`timeline::key_rows::update` が「単独 grab」か
-    /// 「RetimeSelection の端 grab」かを既に判定済み — `retime` フラグ)。
-    /// **選択の差し替え+drag 開始を兼ねる**(`Shell::start_timeline_key_drag`)。
-    TimelineKeyGrabbed {
-        key: timeline::KeySelector,
-        at_frame: i64,
-        retime: bool,
-    },
-    /// ドラッグ中のポインタ移動。`px_per_frame` は `TimelineDragMoved` と同じ
-    /// 意味(スナップの画面距離しきい値を frame へ直す実測値)。
-    TimelineKeyDragMoved { at_frame: i64, px_per_frame: f32 },
-    /// 左クリック release = 確定。**ここで初めて `Intent::SetTrack` を出す**
-    /// (property ごとに1本、まとめて1回の `apply_all` = 1 undo、正典 §3)。
-    TimelineKeyDragReleased,
-    /// 右クリック = 破棄(裁定151「キャンセルの一般化」)。Esc も同じ意味だが
-    /// 別経路(`Message::EscapePressed`)。
-    TimelineKeyDragCancelled,
-    /// NudgeKeyframe(正典 §8.1): 選択キーを固定 frame 数だけ前後へ。値の符号が
-    /// 方向、絶対値が歩幅(1 or 10、キー割当は `inspector_pointer_event` — 拘束6
-    /// によりここでは frame 数だけを運ぶ)。
-    NudgeKeyframe(i64),
+    // ---- Timeline pane(裁定160 切片7で `motolii-timeline-pane` crate へ
+    // 抽出、pane split survey §6 切片7) ----
+    /// レーンバー M/S/L・クリップ move/trim・property 行(キー行)のキー選択・
+    /// キー時刻ドラッグ/リタイム・NudgeKeyframe(旧 `LaneBarToggleMute/Solo/
+    /// Lock`・`TimelineBarGrabbed`・`TimelineDragMoved/Released/Cancelled`・
+    /// `TimelineKeySelect`・`TimelineDeleteSelectedKeys`・`TimelineKeyGrabbed`・
+    /// `TimelineKeyDragMoved/Released/Cancelled`・`NudgeKeyframe`、14腕)を
+    /// pane-local `Message` へ1回だけ畳む(pane crate 化のために構造上必須、
+    /// survey §3.1)。`Shell::update` の `Message::Timeline` 腕で中身を見る
+    /// (`timeline_pane::Message::Select`/`ScrubTo`/`ToggleMute`/`ToggleSolo`/
+    /// `ToggleLock` の5腕は survey §3.2 exception 1 により Shell が先取りし、
+    /// 残りは [`timeline_pane::PaneState::update`] へ委譲する)。
+    Timeline(timeline_pane::Message),
 
     // ---- Timeline playhead ナビゲーション動詞束(U2、正典 §5・§8.1) ----
     /// Step Forward/Back(正典 §5「矢印キー」)。符号つき frame 数(素で ±1、
@@ -425,65 +373,6 @@ struct FieldDragState {
     last_value: Option<Value>,
 }
 
-/// Timeline クリップの move/trim、進行中の一時状態(第2波T2)。**Document では
-/// ない** — `FieldDragState` と同じ「pane 側の transient」の形だが、
-/// `LayerTiming` は `Document::set_transient` が持てる `Value`(animatable
-/// property の型)ではない(`speed`/`source_in` を持つ配置情報であって、
-/// キーを打てる値ではない)ので、overlay ではなくこの構造体自身が
-/// press〜release の橋渡しを持つ。**Document は release まで一切触らない**
-/// (`finish_timeline_drag` が1回だけ `Intent::SetTiming` を出す) — Esc/
-/// 右クリックでの復元(`cancel_timeline_drag`)は履歴に触れていないぶん、
-/// 単にこの構造体を捨てるだけで完全に無傷になる(inspector drag の
-/// `clear_transient` と同じ役目を、ここでは「何もしない」が担う)。
-#[derive(Clone, Copy)]
-struct TimelineDragState {
-    layer: LayerId,
-    part: timeline::BarPart,
-    /// 掴んだ瞬間に Document から読んだそのままの値。**move/trim の計算は毎回
-    /// これを基準に絶対値で出し直す**(delta 蓄積禁止、正典 §2)。
-    origin: LayerTiming,
-    /// 掴んだ瞬間のポインタ位置(comp frame、スナップ前)。
-    grab_at_frame: i64,
-    /// 直近の move/trim 計算結果。release がこれを(`origin` と違えば)1回
-    /// `apply` する。
-    preview: LayerTiming,
-}
-
-/// Timeline キーの時刻ドラッグ/リタイム、進行中の一時状態(第2波T4、正典
-/// §3・裁定146)。**`TimelineDragState` と同じ「pane 側の transient」の形**
-/// — `Session::selected_keys` の `frame` は key の身分(track 上の位置)の一部
-/// なので `Document::set_transient` の overlay(`Value` 専用)には乗らない。
-/// **Document は release まで一切触らない**(`finish_timeline_key_drag` が
-/// 1回だけ `Intent::SetTrack`(property ごと)を `apply_all` する)。
-#[derive(Clone)]
-struct TimelineKeyDragState {
-    kind: TimelineKeyDragKind,
-    /// 実際に掴んだキー(`origins`/`preview` のどの添字かは毎回引き直す —
-    /// clip drag の `TimelineDragState::layer` と同じ「身分を持ち回る」形)。
-    grabbed: timeline::KeySelector,
-    /// 掴んだ瞬間のポインタ位置(comp frame、スナップ前)。
-    grab_at_frame: i64,
-    /// 掴んだキーが属する layer の clip 範囲(`[clip_start, clip_end]`)。
-    /// EXACT TARGET 1「0秒〜clip 範囲 clamp」の出典。
-    clip_start: i64,
-    clip_end: i64,
-    /// 掴んだ瞬間の選択キー全員(`Session::selected_keys` のクローン)。
-    /// **move/retime の計算は毎回これを基準に絶対値で出し直す**(delta 蓄積
-    /// 禁止、正典 §2 と同じ思想をキーへ延長)。
-    origins: Vec<timeline::KeySelector>,
-    /// 直近の計算結果。release がこれを(`origins` と違えば)1回書き戻す。
-    preview: Vec<timeline::KeySelector>,
-}
-
-#[derive(Clone, Copy)]
-enum TimelineKeyDragKind {
-    /// 通常の時刻ドラッグ(正典 §3・§8.1 の複数選択の一括移動)。
-    Move,
-    /// RetimeSelection(裁定146)。`anchor_frame` は固定端、`edge_origin_frame`
-    /// は掴んだ端の掴んだ瞬間の frame(スケール1.0の基準)。
-    Retime { anchor_frame: i64, edge_origin_frame: i64 },
-}
-
 pub struct Shell {
     doc: Document,
     session: Session,
@@ -507,12 +396,13 @@ pub struct Shell {
     /// 直近の Shift 押下状態。`CursorMoved` は modifiers を運ばないので
     /// `ModifiersChanged` から別途追う(drag の1/10微調整に使う)。
     keyboard_modifiers: iced::keyboard::Modifiers,
-    /// Timeline クリップの move/trim、進行中の一時状態(第2波T2)。**Document
-    /// ではない** — 同上(`TimelineDragState` doc comment 参照)。
-    timeline_drag: Option<TimelineDragState>,
-    /// Timeline キーの時刻ドラッグ/リタイム、進行中の一時状態(第2波T4)。
-    /// **Document ではない** — 同上(`TimelineKeyDragState` doc comment 参照)。
-    timeline_key_drag: Option<TimelineKeyDragState>,
+    /// Timeline pane 専用の transient 状態(クリップ move/trim・キー時刻
+    /// ドラッグ/リタイム、進行中の一時状態)。**Document ではない**
+    /// (`inspector_drag` と同じ「pane 側の transient」の形)。裁定160 切片7で
+    /// `motolii-timeline-pane` crate へ抽出済み — 旧 `timeline_drag`/
+    /// `timeline_key_drag` の2フィールドは `timeline_pane::PaneState` 内へ
+    /// まとまった(`PaneState` doc comment 参照)。
+    timeline: timeline_pane::PaneState,
 
     // ---- Settings パネル(タスク#18) ----
     /// パネルの開閉。**表示だけの状態** — Document でも `Session`(選択・再生
@@ -574,8 +464,7 @@ impl Shell {
                 inspector_name_draft: None,
                 inspector_drag: None,
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
-                timeline_drag: None,
-                timeline_key_drag: None,
+                timeline: timeline_pane::PaneState::new(),
                 settings_panel_open: false,
                 checkerboard: false,
                 background_draft: None,
@@ -610,8 +499,7 @@ impl Shell {
             inspector_name_draft: None,
             inspector_drag: None,
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
-            timeline_drag: None,
-            timeline_key_drag: None,
+            timeline: timeline_pane::PaneState::new(),
             settings_panel_open: false,
             checkerboard: false,
             background_draft: None,
@@ -688,32 +576,27 @@ impl Shell {
             }
             Message::InspectorNameSubmit => self.commit_inspector_name(),
             Message::InspectorToggleHidden => self.toggle_inspector_hidden(),
-            Message::LaneBarToggleMute(layer) => self.toggle_layer_hidden(layer),
-            Message::LaneBarToggleSolo(layer) => self.toggle_layer_solo(layer),
-            Message::LaneBarToggleLock(layer) => self.toggle_layer_lock(layer),
-            Message::TimelineBarGrabbed { layer, part, at_frame } => {
-                self.start_timeline_drag(layer, part, at_frame);
-            }
-            Message::TimelineDragMoved { at_frame, px_per_frame } => {
-                self.continue_timeline_drag(at_frame, px_per_frame);
-            }
-            Message::TimelineDragReleased => self.finish_timeline_drag(),
-            Message::TimelineDragCancelled => {
-                self.cancel_timeline_drag();
-            }
-            Message::TimelineKeySelect(op) => self.apply_key_selection(op),
-            Message::TimelineDeleteSelectedKeys => self.delete_selected_keys(),
-            Message::TimelineKeyGrabbed { key, at_frame, retime } => {
-                self.start_timeline_key_drag(key, at_frame, retime);
-            }
-            Message::TimelineKeyDragMoved { at_frame, px_per_frame } => {
-                self.continue_timeline_key_drag(at_frame, px_per_frame);
-            }
-            Message::TimelineKeyDragReleased => self.finish_timeline_key_drag(),
-            Message::TimelineKeyDragCancelled => {
-                self.cancel_timeline_key_drag();
-            }
-            Message::NudgeKeyframe(delta) => self.nudge_keyframe(delta),
+            // pane split survey §3.2 exception 1/裁定160 切片7: `Select`/
+            // `ScrubTo` は本来 core 腕、`ToggleMute`/`ToggleSolo`/`ToggleLock`
+            // は `toggle_layer_hidden` が Inspector とも共有する Shell 側の
+            // ヘルパーのため、この5腕だけ `timeline_pane::PaneState::update`
+            // へ渡す前に Shell が先取りする(`timeline_pane::write` モジュール
+            // doc 参照)。残りは pane 側の唯一の書き口(`PaneState::update`)へ
+            // 委譲する — 拒否理由があれば `self.status` へそのまま渡す。
+            Message::Timeline(msg) => match msg {
+                timeline_pane::Message::Select(layer) => self.select_single(layer),
+                timeline_pane::Message::ScrubTo(frame) => self.session.playhead = frame.max(0),
+                timeline_pane::Message::ToggleMute(layer) => self.toggle_layer_hidden(layer),
+                timeline_pane::Message::ToggleSolo(layer) => self.toggle_layer_solo(layer),
+                timeline_pane::Message::ToggleLock(layer) => self.toggle_layer_lock(layer),
+                other => {
+                    if let Some(reason) =
+                        self.timeline.update(other, &mut self.doc, &mut self.session, self.keyboard_modifiers)
+                    {
+                        self.status = Some(reason);
+                    }
+                }
+            },
             Message::StepPlayhead(delta) => self.step_playhead(delta),
             Message::JumpPlayheadToStart => self.session.playhead = 0,
             Message::JumpPlayheadToEnd => {
@@ -734,7 +617,7 @@ impl Shell {
             // どちらも掴んでいなければ Inspector 側(drag/typing 下書き)を試す
             // — 同時に成立するのは片方だけなので順序自体に意味は無い、排他)。
             Message::EscapePressed => {
-                if !self.cancel_timeline_drag() && !self.cancel_timeline_key_drag() {
+                if !self.timeline.cancel_drag() && !self.timeline.cancel_key_drag() {
                     self.cancel_inspector_interaction();
                 }
             }
@@ -1101,440 +984,6 @@ impl Shell {
         if let Err(error) = self.doc.apply(Intent::SetAttrs { layer, patch }) {
             self.status = Some(format!("locked を書けない: {error}"));
         }
-    }
-
-    // ---- Timeline クリップの move/trim(第2波T2、正典 §2) ----
-
-    /// bar を掴んだ瞬間。**ロック中は掴む前に断る**(正典 §2 拘束6・M13: 無反応
-    /// ゼロ) — `Intent::SetTiming` も `check_not_locked` で同じ理由を拒むが、
-    /// release まで待たせると「ドラッグは動いたのに戻る」という嘘になるので、
-    /// ここで先に断って理由を status 帯へ出す(`lane_bar` の M/S/L 拒否と同じ
-    /// 判断)。move(`Body`)は**未選択なら掴んだ瞬間に単独選択へ差し替える**
-    /// (正典 §2) — このソフトの選択は単一(`Session::selection`)なので、
-    /// 「差し替え」は常に「選ぶ」と同義。trim(`Edge*`)は選択を変えない
-    /// (旧 iced 実装 `crates/motolii-shell-iced` の egui 移植と同じ判断)。
-    fn start_timeline_drag(&mut self, layer: LayerId, part: timeline::BarPart, at_frame: i64) {
-        if self.timeline_drag.is_some() {
-            return; // 既に別のドラッグが進行中 — 多重起動しない
-        }
-        let Ok(Some(meta)) = self.doc.view().meta(layer) else {
-            return; // 素材が無い layer は掴めない(起こらないはずだが安全側)
-        };
-        let locked = self
-            .doc
-            .view()
-            .attrs(layer)
-            .ok()
-            .flatten()
-            .unwrap_or_default()
-            .locked;
-        if locked {
-            self.status = Some(format!("layer {} はロックされているので動かせない", layer.0));
-            return;
-        }
-        if matches!(part, timeline::BarPart::Body) {
-            self.select_single(layer);
-        }
-        self.timeline_drag = Some(TimelineDragState {
-            layer,
-            part,
-            origin: meta.timing,
-            grab_at_frame: at_frame,
-            preview: meta.timing,
-        });
-    }
-
-    /// ドラッグ中のポインタ移動。**掴んだ瞬間の値(`origin`)を基準に絶対値で
-    /// 出し直す**(delta 蓄積禁止、正典 §2) — 実際の計算は
-    /// `timeline::clip_gesture` の純関数(`hit.rs`/`clip_gesture.rs` と同じ
-    /// 「Document を持たない意味関数」の形)。**Document はまだ一切触らない**
-    /// (`preview` は `self` の transient な一時値、release まで `apply` しない)。
-    ///
-    /// スナップは既定 ON、**ドラッグ中の Cmd 押下で一時トグル**(正典 §2・
-    /// 裁定151)。候補(0秒・終端・playhead・他 clip の start/end)は
-    /// `timeline_rows()` から毎回引き直す — ドラッグ中に他の layer が動く
-    /// ことは無いので古くなる心配はない。
-    fn continue_timeline_drag(&mut self, at_frame: i64, px_per_frame: f32) {
-        let Some(drag) = self.timeline_drag else {
-            return;
-        };
-        let comp_duration = self.comp_duration();
-        let snap_enabled = !self.keyboard_modifiers.command();
-        let rows = self.timeline_rows();
-        let candidates = timeline::clip_gesture::snap_candidates(
-            &rows,
-            drag.layer,
-            self.session.playhead,
-            comp_duration,
-        );
-
-        let mut timing = drag.origin;
-        match drag.part {
-            timeline::BarPart::Body => {
-                timing.start = timeline::clip_gesture::moved_start(
-                    drag.origin.start,
-                    drag.origin.duration,
-                    drag.grab_at_frame,
-                    at_frame,
-                    comp_duration,
-                    &candidates,
-                    px_per_frame,
-                    snap_enabled,
-                );
-            }
-            timeline::BarPart::EdgeIn => {
-                let end = drag.origin.start + drag.origin.duration;
-                let new_start = timeline::clip_gesture::trimmed_in_start(
-                    end,
-                    at_frame,
-                    &candidates,
-                    px_per_frame,
-                    snap_enabled,
-                );
-                let delta = new_start - drag.origin.start;
-                timing.start = new_start;
-                timing.duration = drag.origin.duration - delta;
-                timing.source_in = drag.origin.source_in + delta;
-            }
-            timeline::BarPart::EdgeOut => {
-                let new_end = timeline::clip_gesture::trimmed_out_end(
-                    drag.origin.start,
-                    at_frame,
-                    comp_duration,
-                    &candidates,
-                    px_per_frame,
-                    snap_enabled,
-                );
-                timing.duration = new_end - drag.origin.start;
-            }
-        }
-
-        if let Some(drag) = self.timeline_drag.as_mut() {
-            drag.preview = timing;
-        }
-    }
-
-    /// release = 確定。**掴んだだけで未移動なら no-op**(正典 §2 Esc と同じ
-    /// 判断を release にも適用 — `preview == origin` は「何も変えていない」の
-    /// 意味そのもの)。動いていれば `Intent::SetTiming` を1回だけ出す
-    /// (1 gesture = 1 undo)。
-    fn finish_timeline_drag(&mut self) {
-        let Some(drag) = self.timeline_drag.take() else {
-            return;
-        };
-        if drag.preview == drag.origin {
-            return;
-        }
-        if let Err(error) = self.doc.apply(Intent::SetTiming {
-            layer: drag.layer,
-            timing: drag.preview,
-        }) {
-            self.status = Some(format!("timing を書けない: {error}"));
-        }
-    }
-
-    /// Esc / 右クリック = 進行中ジェスチャの破棄(正典 §2・裁定151「キャンセルの
-    /// 一般化」)。**Document は最初から触っていない**ので、復元は state を
-    /// 捨てるだけで成立する(履歴は完全に無傷 — `clear_transient` に相当する
-    /// 仕事が「何もしない」になっている、`TimelineDragState` doc comment 参照)。
-    /// 戻り値は「何か捨てたか」— `Message::EscapePressed` が Inspector 側の
-    /// cancel と排他に振り分けるのに使う。
-    fn cancel_timeline_drag(&mut self) -> bool {
-        self.timeline_drag.take().is_some()
-    }
-
-    // ---- Timeline property 行(キー行、第2波 T3・裁定148/151) ----
-
-    /// キー選択の確定。`timeline::key_rows::update` は「どのキーを・どの操作で」
-    /// までしか判定しない(canvas 側は Document/Session を直接書けない、mod
-    /// doc の背骨どおり)ので、`Session::selected_keys`/`key_anchor` の実際の
-    /// 読み書きはここ(唯一の書き口)で行う。
-    fn apply_key_selection(&mut self, op: timeline_pane::KeySelectionOp) {
-        use timeline_pane::KeySelectionOp;
-        match op {
-            KeySelectionOp::Single(key) => {
-                self.session.selected_keys = vec![key.clone()];
-                self.session.key_anchor = Some(key);
-            }
-            KeySelectionOp::Toggle(key) => {
-                if let Some(pos) = self.session.selected_keys.iter().position(|k| *k == key) {
-                    self.session.selected_keys.remove(pos);
-                } else {
-                    self.session.selected_keys.push(key.clone());
-                }
-                self.session.key_anchor = Some(key);
-            }
-            KeySelectionOp::Range(key) => {
-                let Some(anchor) = self.session.key_anchor.clone() else {
-                    // 基点が無ければ単独選択と同じ扱いへ安全側で倒す
-                    // (正典 §4 の「Shift=anchor から」— anchor が無い最初の
-                    // クリックは単独扱いにする既存の行選択と同じ考え方)。
-                    self.session.selected_keys = vec![key.clone()];
-                    self.session.key_anchor = Some(key);
-                    return;
-                };
-                let fps = self.composition().map(|c| c.fps);
-                let rows = timeline_pane::property_rows(&self.doc.view(), &self.session, fps);
-                let order = timeline_pane::key_order(&rows);
-                let anchor_pos = order.iter().position(|k| *k == anchor);
-                let clicked_pos = order.iter().position(|k| *k == key);
-                match (anchor_pos, clicked_pos) {
-                    (Some(a), Some(c)) => {
-                        let (lo, hi) = if a <= c { (a, c) } else { (c, a) };
-                        self.session.selected_keys = order[lo..=hi].to_vec();
-                    }
-                    _ => {
-                        // anchor/clicked のどちらかが今の property_rows に無い
-                        // (行の表示が変わった等) — 黙って壊れた選択のまま
-                        // 進めるより単独選択へ安全側で倒す(M16)。
-                        self.session.selected_keys = vec![key];
-                    }
-                }
-                // anchor は不変 — 同じ基点から Shift 連打で範囲を伸縮できる。
-            }
-        }
-    }
-
-    /// 選択中のキーを消す(正典 §3「Delete はキー選択が層選択より優先」)。
-    /// property ごとにまとめて読み直し、選択されたフレームだけを落とした
-    /// `KeyframeTrack` を1回の `apply_all` で書き戻す — **1操作 = 1 undo**
-    /// (`AddLayer` と同じ「まとめて1回」の形)。選択が空なら no-op。
-    fn delete_selected_keys(&mut self) {
-        if self.session.selected_keys.is_empty() {
-            return;
-        }
-        let keys = std::mem::take(&mut self.session.selected_keys);
-        self.session.key_anchor = None;
-        let Some(composition) = self.composition() else {
-            return;
-        };
-        let fps = composition.fps;
-
-        let mut groups: std::collections::BTreeMap<(LayerId, PropertyId), Vec<i64>> =
-            std::collections::BTreeMap::new();
-        for key in keys {
-            groups.entry((key.layer, key.property)).or_default().push(key.frame);
-        }
-
-        let store = self.doc.view();
-        let mut intents = Vec::new();
-        for ((layer, property), frames) in groups {
-            let Ok(Some(track)) = store.track(layer, &property) else {
-                continue;
-            };
-            let mut new_track = KeyframeTrack::new();
-            for existing in track.keys() {
-                let Ok(frame) = existing.t.try_to_frame_round(fps) else {
-                    continue;
-                };
-                if frames.contains(&frame) {
-                    continue; // 選択されたキーは書き戻さない = 削除。
-                }
-                new_track.insert(existing.clone());
-            }
-            intents.push(Intent::SetTrack { layer, property, track: new_track });
-        }
-        drop(store);
-
-        if !intents.is_empty() {
-            if let Err(error) = self.doc.apply_all(intents) {
-                self.status = Some(format!("キーを消せない: {error}"));
-            }
-        }
-    }
-
-    // ---- Timeline キーの時刻編集(第2波T4、正典 §3・§8.1・裁定146) ----
-
-    /// キー菱形を掴んだ瞬間(`timeline::key_rows::update` が判定済みの
-    /// `retime` フラグを受ける)。**ロック中は掴む前に断る**(`start_timeline_drag`
-    /// と同じ判断 — M13)。move は**未選択なら掴んだ瞬間に単独選択へ差し替え**
-    /// (正典 §2 をキーへ延長)、既に選択済みのキーを掴んだ場合は選択(複数)を
-    /// 保つ(一括ドラッグを壊さない)。retime は選択2本以上・掴んだキーがその
-    /// 端であることを呼び出し元が既に確認済み — ここでは安全側にもう一度
-    /// 検分するだけ(二重の柵、`commit_inspector_field` と同じ考え方)。
-    fn start_timeline_key_drag(&mut self, key: timeline_pane::KeySelector, at_frame: i64, retime: bool) {
-        if self.timeline_key_drag.is_some() {
-            return; // 既に別のキー drag が進行中 — 多重起動しない。
-        }
-        let Some(row) = self.timeline_rows().into_iter().find(|row| row.id == key.layer) else {
-            return; // 素材が無い layer は掴めない(起こらないはずだが安全側)。
-        };
-        if row.locked {
-            self.status = Some(format!("layer {} はロックされているのでキーを動かせない", key.layer.0));
-            return;
-        }
-        let clip_start = row.start;
-        // EXACT TARGET 1「0秒〜clip 範囲 clamp」: 上限は `start + duration`
-        // (`clip_gesture` の snap 候補・`bar_span_x` の end と同じ「clip の終端の
-        // 線」— 半開区間 `[start, start+duration)` の外側の frame ではなく、
-        // 「その線ちょうど」を含む。fixture のタイトルロゴ opacity は clip
-        // 終端(frame 90 = start(0)+duration(90))ちょうどにキーを置いている —
-        // 実データがこの解釈を裏付ける)。
-        let clip_end = (row.start + row.duration).max(row.start);
-
-        if retime {
-            let selected = self.session.selected_keys.clone();
-            if selected.len() < 2 || !selected.contains(&key) {
-                return; // key_rows 側の判定とズレていた — 安全側で不成立にする。
-            }
-            let min_frame = selected.iter().map(|k| k.frame).min().unwrap_or(key.frame);
-            let max_frame = selected.iter().map(|k| k.frame).max().unwrap_or(key.frame);
-            if key.frame != min_frame && key.frame != max_frame {
-                return; // 端ではないキーを掴んだ — retime は不成立。
-            }
-            let anchor_frame = if key.frame == min_frame { max_frame } else { min_frame };
-            self.timeline_key_drag = Some(TimelineKeyDragState {
-                kind: TimelineKeyDragKind::Retime { anchor_frame, edge_origin_frame: key.frame },
-                grabbed: key,
-                grab_at_frame: at_frame,
-                clip_start,
-                clip_end,
-                origins: selected.clone(),
-                preview: selected,
-            });
-            return;
-        }
-
-        if !self.session.selected_keys.contains(&key) {
-            self.session.selected_keys = vec![key.clone()];
-            self.session.key_anchor = Some(key.clone());
-        }
-        let origins = self.session.selected_keys.clone();
-        self.timeline_key_drag = Some(TimelineKeyDragState {
-            kind: TimelineKeyDragKind::Move,
-            grabbed: key,
-            grab_at_frame: at_frame,
-            clip_start,
-            clip_end,
-            origins: origins.clone(),
-            preview: origins,
-        });
-    }
-
-    /// ドラッグ中のポインタ移動。**掴んだ瞬間の値(`origins`)を基準に絶対値で
-    /// 出し直す**(delta 蓄積禁止、正典 §2・§3) — 実際の計算は
-    /// `timeline::key_gesture` の純関数。**Document はまだ一切触らない**
-    /// (`preview` は `self` の transient な一時値、release まで `apply` しない)。
-    ///
-    /// retime は Cmd 押下そのものが「掴む」の入口を兼ねるので、move のような
-    /// 「ドラッグ中の Cmd でスナップ一時トグル」は使えない(Cmd は drag 中ずっと
-    /// 押されたままが前提) — retime のスナップは常時 ON(掴んだ端の吸着のみ)。
-    fn continue_timeline_key_drag(&mut self, at_frame: i64, px_per_frame: f32) {
-        let Some(drag) = self.timeline_key_drag.clone() else {
-            return;
-        };
-        let candidates = timeline::key_gesture::key_snap_candidates(
-            &self.timeline_rows(),
-            self.session.playhead,
-            self.comp_duration(),
-        );
-        let origin_frames: Vec<i64> = drag.origins.iter().map(|k| k.frame).collect();
-
-        let new_frames = match drag.kind {
-            TimelineKeyDragKind::Move => {
-                let grabbed_origin_frame = drag
-                    .origins
-                    .iter()
-                    .find(|k| **k == drag.grabbed)
-                    .map(|k| k.frame)
-                    .unwrap_or(drag.grabbed.frame);
-                let snap_enabled = !self.keyboard_modifiers.command();
-                timeline::key_gesture::moved_key_group(
-                    &origin_frames,
-                    grabbed_origin_frame,
-                    drag.grab_at_frame,
-                    at_frame,
-                    drag.clip_start,
-                    drag.clip_end,
-                    &candidates,
-                    px_per_frame,
-                    snap_enabled,
-                )
-            }
-            TimelineKeyDragKind::Retime { anchor_frame, edge_origin_frame } => {
-                let raw_edge = edge_origin_frame + (at_frame - drag.grab_at_frame);
-                let snapped_edge = timeline::clip_gesture::snap_frame(raw_edge, &candidates, px_per_frame);
-                let clamped_edge = snapped_edge.clamp(drag.clip_start, drag.clip_end);
-                timeline::key_gesture::retimed_key_group(
-                    &origin_frames,
-                    anchor_frame,
-                    edge_origin_frame,
-                    clamped_edge,
-                )
-            }
-        };
-
-        if let Some(drag) = self.timeline_key_drag.as_mut() {
-            for (selector, frame) in drag.preview.iter_mut().zip(new_frames) {
-                selector.frame = frame;
-            }
-        }
-    }
-
-    /// release = 確定。**掴んだだけで未移動なら no-op**(正典 §2 と同じ判断を
-    /// キーへ延長) — ただし retime が未移動のまま release された場合は「Cmd
-    /// クリックで動かさなかった」と同義なので、`KeySelectionOp::Toggle` へ
-    /// 安全側で倒す(`inspector_drag` の click/drag 判定と同じ考え方 —
-    /// `key_rows::update` の doc comment 参照)。動いていれば property ごとに
-    /// `Intent::SetTrack` をまとめ、1回の `apply_all` で確定する
-    /// (**1操作 = 1 undo**、`delete_selected_keys` と同じ形)。
-    fn finish_timeline_key_drag(&mut self) {
-        let Some(drag) = self.timeline_key_drag.take() else {
-            return;
-        };
-        if drag.preview == drag.origins {
-            if matches!(drag.kind, TimelineKeyDragKind::Retime { .. }) {
-                self.apply_key_selection(timeline_pane::KeySelectionOp::Toggle(drag.grabbed));
-            }
-            return;
-        }
-        let origin_frames: Vec<i64> = drag.origins.iter().map(|k| k.frame).collect();
-        let new_frames: Vec<i64> = drag.preview.iter().map(|k| k.frame).collect();
-        let grabbed_index = drag.origins.iter().position(|k| *k == drag.grabbed).unwrap_or(0);
-        let representative_delta = new_frames.get(grabbed_index).copied().unwrap_or(0)
-            - origin_frames.get(grabbed_index).copied().unwrap_or(0);
-        self.commit_key_frames(&drag.origins, &new_frames, representative_delta);
-    }
-
-    /// Esc / 右クリック = 進行中ジェスチャの破棄(正典 §2・裁定151、キーへ延長)。
-    /// **Document は最初から触っていない**ので、復元は state を捨てるだけで
-    /// 成立する。retime の armed 状態(未移動)も含め、選択自体は grab 時点で
-    /// 既に確定済みの分だけ残る(move で未選択キーを掴んだ場合の単独選択差し替え
-    /// は clip の `start_timeline_drag` と同じく取り消さない — 選択は undo 対象
-    /// ではないので Esc の管轄外)。戻り値は「何か捨てたか」。
-    fn cancel_timeline_key_drag(&mut self) -> bool {
-        self.timeline_key_drag.take().is_some()
-    }
-
-    /// NudgeKeyframe(正典 §8.1): 選択キーを固定 frame 数だけ前後へ。選択が
-    /// 空、または全キーが同一 layer である保証が崩れていれば何もしない
-    /// (property 行は選択 layer 1本ぶんしか無いので、通常は必ず単一 layer)。
-    fn nudge_keyframe(&mut self, delta: i64) {
-        if self.session.selected_keys.is_empty() {
-            return;
-        }
-        let layer = self.session.selected_keys[0].layer;
-        let Some(row) = self.timeline_rows().into_iter().find(|row| row.id == layer) else {
-            return;
-        };
-        if row.locked {
-            self.status = Some(format!("layer {} はロックされているのでキーを動かせない", layer.0));
-            return;
-        }
-        let clip_start = row.start;
-        // EXACT TARGET 1「0秒〜clip 範囲 clamp」: 上限は `start + duration`
-        // (`clip_gesture` の snap 候補・`bar_span_x` の end と同じ「clip の終端の
-        // 線」— 半開区間 `[start, start+duration)` の外側の frame ではなく、
-        // 「その線ちょうど」を含む。fixture のタイトルロゴ opacity は clip
-        // 終端(frame 90 = start(0)+duration(90))ちょうどにキーを置いている —
-        // 実データがこの解釈を裏付ける)。
-        let clip_end = (row.start + row.duration).max(row.start);
-
-        let origins = self.session.selected_keys.clone();
-        let origin_frames: Vec<i64> = origins.iter().map(|k| k.frame).collect();
-        let new_frames =
-            timeline::key_gesture::nudge_key_group(&origin_frames, delta, clip_start, clip_end);
-        self.commit_key_frames(&origins, &new_frames, delta);
     }
 
     /// Step Forward/Back(正典 §5・U2)。`delta` の符号・歩幅はキー解決側
@@ -2039,39 +1488,26 @@ impl Shell {
     }
 
     /// `TimelinePane` の組み立て。`view()` はこれを呼ぶだけ(第2波T5、正典
-    /// §5.5「プレビューは毎フレーム」) — ドラッグ preview
-    /// (`timeline_drag`/`timeline_key_drag`)を投影へ焼き込む経路を運転席が
-    /// 検査できるよう関数化した。**`TimelinePane::new` 自体のシグネチャ・
-    /// 既存呼び出し元は汚さない** — `with_key_drag_active` と同じ「薄い
-    /// builder を積み増すだけ」の形をもう2つ足しただけ。
+    /// §5.5「プレビューは毎フレーム」) — ドラッグ preview(`self.timeline` =
+    /// `timeline_pane::PaneState`)を投影へ焼き込む経路を運転席が検査できる
+    /// よう関数化した。**`TimelinePane::new` 自体のシグネチャ・既存呼び出し元は
+    /// 汚さない** — `with_key_drag_active` と同じ「薄い builder を積み増す
+    /// だけ」の形をもう2つ足しただけ。裁定160 切片7で `self.timeline_drag`/
+    /// `timeline_key_drag` の2フィールド直読みから `self.timeline`(pane crate
+    /// 所有の `PaneState`)経由の読み取り専用アクセサへ差し替えた
+    /// (`clip_preview`/`key_preview`/`key_drag_active`、値は無改変)。
     pub fn build_timeline_pane(&self) -> timeline_pane::TimelinePane {
         let store = self.doc.view();
         // `ui_scale` 適用済み(`Shell::dims` — 適用点1箇所)。
         let dims = self.dims();
         let colors = self.tokens.colors;
-        // T2 clip drag のプレビュー。`TimelineDragState` は `Copy` なので
-        // `&self` のまま値で読める(`layer`/`preview` の組だけを純関数へ渡す —
-        // `projection::apply_clip_preview` は `TimelineDragState` 自体を知らない)。
-        let clip_preview = self.timeline_drag.map(|drag| (drag.layer, drag.preview));
-        // T4 key drag/リタイムのプレビュー。`origins`(掴んだ瞬間の selector・
-        // 旧 frame)と `preview`(同じ並びで frame だけ更新済み)を index で
-        // ゆわえ、(selector, 新frame) のペア列にして渡す(EXACT TARGET 4:
-        // move/retime どちらも同じ形でここを通る)。
-        let key_preview: Option<Vec<(timeline_pane::KeySelector, i64)>> =
-            self.timeline_key_drag.as_ref().map(|drag| {
-                drag.origins
-                    .iter()
-                    .cloned()
-                    .zip(drag.preview.iter().map(|key| key.frame))
-                    .collect()
-            });
         timeline_pane::TimelinePane::new(&store, &self.session, dims, colors, self.keyboard_modifiers)
             // 第2波T4: `timeline::key_rows` が継続イベント(move/release/右
             // クリック)を拾うかどうかの唯一の判断材料
             // (`TimelinePane::with_key_drag_active` の doc comment 参照)。
-            .with_key_drag_active(self.timeline_key_drag.is_some())
-            .with_clip_preview(clip_preview)
-            .with_key_preview(key_preview)
+            .with_key_drag_active(self.timeline.key_drag_active())
+            .with_clip_preview(self.timeline.clip_preview())
+            .with_key_preview(self.timeline.key_preview())
     }
 
     /// `stage::StageOverlay` の組み立て(裁定157・S1〜S3)。`Shell::view` が
@@ -2152,7 +1588,12 @@ impl Shell {
                 .spacing(dims.spacing_m)
                 .height(Length::FillPortion(3)),
             )
-            .push(timeline.view())
+            // pane crate 化(裁定160 切片7)で `timeline.view()` は
+            // `Element<'static, timeline_pane::Message>` を返すようになった
+            // (root の `Message` を pane crate から参照できないため — 循環
+            // 回避)。`.map(Message::Timeline)` で1回だけ畳む(§3.1 の
+            // 「pane-local Message を親が畳む」構成そのもの)。
+            .push(timeline.view().map(Message::Timeline))
             .push(transport(&self.session, &store, dims, colors))
             .push(status_band(self.status.as_deref(), &self.doc, dims, colors))
             .spacing(dims.spacing_m)
@@ -2488,18 +1929,18 @@ fn inspector_pointer_event(
         | iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
             key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Delete),
             ..
-        }) => Some(Message::TimelineDeleteSelectedKeys),
+        }) => Some(Message::Timeline(timeline_pane::Message::DeleteSelectedKeys)),
         // NudgeKeyframe(正典 §8.1)。**既定割当は仮**(拘束6・裁定146の隣接注記
         // どおり、キーの皮は keymap 層が無い今だけ直結) — アクション名
-        // (`Message::NudgeKeyframe`)だけを正本として残す。Alt+←/→=1フレーム、
-        // Alt+Shift+←/→=10フレーム。
+        // (`timeline_pane::Message::NudgeKeyframe`)だけを正本として残す。
+        // Alt+←/→=1フレーム、Alt+Shift+←/→=10フレーム。
         iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
             key: iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowLeft),
             modifiers,
             ..
         }) if modifiers.alt() => {
             let step = if modifiers.shift() { 10 } else { 1 };
-            Some(Message::NudgeKeyframe(-step))
+            Some(Message::Timeline(timeline_pane::Message::NudgeKeyframe(-step)))
         }
         iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
             key: iced::keyboard::Key::Named(iced::keyboard::key::Named::ArrowRight),
@@ -2507,7 +1948,7 @@ fn inspector_pointer_event(
             ..
         }) if modifiers.alt() => {
             let step = if modifiers.shift() { 10 } else { 1 };
-            Some(Message::NudgeKeyframe(step))
+            Some(Message::Timeline(timeline_pane::Message::NudgeKeyframe(step)))
         }
         // ResetToRenderCamera(裁定157・EXACT TARGET 1「カメラへ戻るは1アクション」)。
         // **既定割当は仮**(NudgeKeyframe と同じ「keymap 層が無い今だけ直結」の

@@ -7,7 +7,7 @@
 //!   行順→時刻順)
 //! - (c) キー選択中の Delete がキーを消し、Undo 1回で戻る
 
-use motolii_shell::timeline_pane::{frame_at_x, BarPart, KeySelectionOp, KeySelector, TimelinePane};
+use motolii_shell::timeline_pane::{self, frame_at_x, BarPart, KeySelectionOp, KeySelector, TimelinePane};
 use motolii_shell::tokens::Tokens;
 use motolii_shell::{Message, Session, Shell};
 
@@ -156,7 +156,11 @@ fn key_screen_point(dims: &motolii_shell::tokens::Dimensions, frame: i64) -> ice
     iced::Point::new(x, y)
 }
 
-fn click_at(pane: TimelinePane, point: iced::Point) -> Vec<Message> {
+// `pane.view()` は裁定160 切片7以降 `Element<'static, timeline_pane::Message>`
+// を返す(pane crate 化 — root の `Message` は pane から参照できない)。
+// この関数が集める `messages` はその pane-local 型そのもの(`Message::Timeline`
+// で畳む前の生の値)。
+fn click_at(pane: TimelinePane, point: iced::Point) -> Vec<timeline_pane::Message> {
     let mut ui = iced_test::simulator(pane.view());
     ui.point_at(point);
     let _ = ui.simulate([
@@ -184,7 +188,7 @@ fn clicking_a_key_diamond_with_no_modifier_publishes_a_grab() {
     assert!(
         matches!(
             messages.as_slice(),
-            [Message::TimelineKeyGrabbed { key, at_frame: 100, retime: false }] if *key == expected
+            [timeline_pane::Message::KeyGrabbed { key, at_frame: 100, retime: false }] if *key == expected
         ),
         "菱形クリックが grab(選択差し替え+drag開始)を出していない: {messages:?}"
     );
@@ -204,7 +208,7 @@ fn cmd_clicking_a_key_diamond_publishes_a_toggle() {
     assert!(
         matches!(
             messages.as_slice(),
-            [Message::TimelineKeySelect(KeySelectionOp::Toggle(k))] if *k == expected
+            [timeline_pane::Message::KeySelect(KeySelectionOp::Toggle(k))] if *k == expected
         ),
         "Cmd+クリックがトグルを出していない: {messages:?}"
     );
@@ -224,7 +228,7 @@ fn shift_clicking_a_key_diamond_publishes_a_range_op() {
     assert!(
         matches!(
             messages.as_slice(),
-            [Message::TimelineKeySelect(KeySelectionOp::Range(k))] if *k == expected
+            [timeline_pane::Message::KeySelect(KeySelectionOp::Range(k))] if *k == expected
         ),
         "Shift+クリックが範囲操作を出していない: {messages:?}"
     );
@@ -268,9 +272,13 @@ fn range_selection_on_the_fixture_selects_the_closed_interval_in_key_order() {
     let second = KeySelector { layer, property: property.clone(), frame: 570 };
 
     // 単独クリック相当 — anchor が first になる。
-    let _ = shell.update(Message::TimelineKeySelect(KeySelectionOp::Single(first.clone())));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(KeySelectionOp::Single(
+        first.clone(),
+    ))));
     // Shift クリック相当 — anchor(first)から second までの閉区間。
-    let _ = shell.update(Message::TimelineKeySelect(KeySelectionOp::Range(second.clone())));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(KeySelectionOp::Range(
+        second.clone(),
+    ))));
 
     let rows = shell.timeline_property_rows();
     let position_row = rows
@@ -307,8 +315,10 @@ fn deleting_a_selected_key_removes_only_that_key_and_undo_restores_it_in_one_ste
     );
 
     let target = KeySelector { layer, property: property.clone(), frame: 510 };
-    let _ = shell.update(Message::TimelineKeySelect(KeySelectionOp::Single(target)));
-    let _ = shell.update(Message::TimelineDeleteSelectedKeys);
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::KeySelect(KeySelectionOp::Single(
+        target,
+    ))));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DeleteSelectedKeys));
 
     let after_delete = shell.timeline_property_rows();
     let position_after = after_delete
@@ -347,7 +357,7 @@ fn deleting_a_selected_key_removes_only_that_key_and_undo_restores_it_in_one_ste
 fn deleting_with_no_key_selection_is_a_no_op() {
     let mut shell = Shell::new_fixture().0;
     assert!(!shell.can_undo(), "fixture は undo floor 直後で戻れないはず(前提の確認)");
-    let _ = shell.update(Message::TimelineDeleteSelectedKeys);
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DeleteSelectedKeys));
     assert!(
         !shell.can_undo(),
         "選択キーが無いのに Delete が何か undo 履歴を作っている"
@@ -499,7 +509,7 @@ fn clicking_a_bar_below_the_expanded_property_band_grabs_the_right_layer() {
     // `TimelineDragReleased`(release、`input.rs::update` の `DragKind::Clip`
     // 腕)が出る — ここで見るのは最初の1件(押した瞬間にどの layer を掴んだか)。
     match messages.first() {
-        Some(Message::TimelineBarGrabbed { layer, part: BarPart::Body, .. }) => {
+        Some(timeline_pane::Message::BarGrabbed { layer, part: BarPart::Body, .. }) => {
             assert_eq!(
                 *layer, layer1,
                 "property 行の押し下げ後、layer1 の bar クリックが layer2(1行下)を \
@@ -527,7 +537,7 @@ fn clicking_mute_below_the_expanded_property_band_toggles_the_right_layer() {
     let messages = click_at(pane, point);
 
     assert!(
-        matches!(messages.as_slice(), [Message::LaneBarToggleMute(id)] if *id == layer1),
+        matches!(messages.as_slice(), [timeline_pane::Message::ToggleMute(id)] if *id == layer1),
         "property 行の押し下げ後、layer1 の M glyph クリックが layer2({layer2:?})を \
          切り替えている — lane_bar.rs::hit_test がまだ layer_row_top を知らない: {messages:?}"
     );

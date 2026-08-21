@@ -20,6 +20,8 @@ members = [
     "shell/motolii-shell",
     "ui/motolii-settings-pane",
     "ui/motolii-tokens-rs",
+    "ui/motolii-shell-state",
+    "ui/motolii-timeline-pane",
     "probes/r0-store-edit",
     "probes/r1-frame-throughput",
     "probes/r2-view-projection",
@@ -98,6 +100,13 @@ motolii-tokens-rs = { path = "ui/motolii-tokens-rs" }
 # `motolii-shell` は `pub use` で `settings_pane` path 互換を保つ
 # (docs/reviews/2026-08-21-pane-split-survey.md §6 切片9)。
 motolii-settings-pane = { path = "ui/motolii-settings-pane" }
+# 裁定160 切片7: `motolii-shell/src/state.rs`(Session/KeySelector)を抽出した
+# leaf crate。timeline-pane crate が root(`motolii-shell`)へ依存せずに
+# `Session` を読めるようにするための共通の親(pane split survey §2.3/§5)。
+motolii-shell-state = { path = "ui/motolii-shell-state" }
+# 裁定160 切片7: `motolii-shell/src/timeline/` + 対応する write ロジックを
+# 抽出した pane crate(docs/reviews/2026-08-21-pane-split-survey.md §6 切片7)。
+motolii-timeline-pane = { path = "ui/motolii-timeline-pane" }
 
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"

@@ -1,59 +1,39 @@
-//! Timeline pane(第1波: 読み取り投影 + scrub + 選択)。
+//! Timeline pane crate(裁定160 切片7、pane split survey
+//! `docs/reviews/2026-08-21-pane-split-survey.md` §6 切片7)。
 //!
-//! **`StoreView` と `&Session` の投影のみ**(裁定5)。Document の写しは持たない —
-//! [`rows`] は毎 `view()` 呼び出しごとに `StoreView` から作り直す使い捨ての値であって、
-//! `Shell` はこれを保持しない。
+//! `motolii-shell/src/timeline/`(第2波第1切片で分割済みの9ファイル)+
+//! `motolii-shell/src/lib.rs` 内の Timeline 書き込みロジック(§1.2 の
+//! 584行主部: レーンバー M/S/L 以外の move/trim・キー選択・キー時刻
+//! ドラッグ/リタイム・NudgeKeyframe)を、この crate へ**丸ごと**移した。
 //!
-//! 名詞は地図(`LayerAttrs.name` / `LayerTiming` / `markers()`)から逆算し、そこに無い
-//! 物は表示しない。動詞は第1波の2つだけ(ルーラー/行の空白部の click・drag で scrub、
-//! bar の click で選択)— M5〜M7(drag 移動・trim・split・複製・Copy-Paste)は第2波。
-//! 死に chrome を避けるため、それらのボタンやメニューは1つも置かない(Q0)。
-//!
-//! bar の縦位置は [`crate::Session`] の選択に同期する読み取り専用のハイライトであり、
-//! Document 上の所有者ではない(`docs/ui-score-model.md` — Lane を所有者にしない)。
-//!
-//! ## 層の分担(第2波レーン分割時の write-set の割り当て先)
-//! - [`projection`] … 投影の純関数(`rows`/`frame_to_x`/`frame_at_x`/
-//!   `time_band_segment_frames`/`property_rows`/`layer_row_top`)。
-//!   Document/Session を読むだけ
-//! - [`hit`] … `Hit`/[`hit::BarPart`] 型と `hit_test`/[`hit::classify_bar_part`]
-//!   (座標 → 当たり判定、クリップ面専用)
-//! - [`clip_gesture`] … 単一クリップの move/trim の**意味関数**(第2波T2、
-//!   正典 §2)。スナップ・clamp。`motolii_store` を持たない自己完結な純関数
-//! - [`canvas`] … 絵(`draw`/`draw_ruler_ticks`/`draw_hairline`/`draw_time_bands`)
+//! ## 層の分担(元の `timeline/mod.rs` の節をそのまま踏襲)
+//! - [`projection`] … 投影の純関数。Document/Session を読むだけ
+//! - [`hit`] … 当たり判定(クリップ面専用)
+//! - [`clip_gesture`] … 単一クリップの move/trim の意味関数(純関数)
+//! - [`canvas`] … 絵
 //! - [`input`] … 入力(`update`/`mouse_interaction`)と drag 状態
-//!   ([`Interaction`])
-//! - [`lane_bar`] … レーンバー(行ヘッダ列、裁定147)専用の draw+hit。
-//!   スウォッチ・名前・M/S/L トグル。自分のゾーン(`x < rail_width`)だけを
-//!   自己完結で持ち、`hit`/`canvas` のクリップ面ロジックには触れない
-//! - [`key_rows`] … property 行(キー行、第2波 T3・裁定148/151)専用の draw+hit
-//!   **+ 第2波T4(正典 §3・§8.1・裁定146)のキー時刻ドラッグ/リタイム**。
-//!   `Program::update` はここを**先に**試し、掴めなければ `input::update` へ
-//!   落ちる(`x < rail_width` のレーンバーと同じ「自分のゾーンだけ自己完結」の形 —
-//!   ただしゾーンは x ではなく y の帯: 選択 layer の下に挿入された property 行の
-//!   `y` 範囲)。**`input.rs`/`hit.rs` は編集しない**(T4 時点で並走レーンは
-//!   無い — `next/DECISIONS.md` T4 発注書 KNOWN「並走レーンなし」— が、既存の
-//!   自己完結の形をそのまま踏襲する)ので、その2ファイルが知らない行の押し下げ
-//!   ([`projection::layer_row_top`])が絡む座標はここで完結して吸収する
-//!   (`projection::layer_row_top` の doc の write-set 外 finding 参照)。
-//!   キー drag の**継続イベント**(press 後の move/release/右クリック)は
-//!   `input::Interaction`(canvas widget state)を触らずに済ませてある —
-//!   `TimelinePane::key_drag_active`(`Shell::timeline_key_drag` を `view()` が
-//!   焼き込むだけの読み取り専用フラグ、`modifiers` と同じ「Shell 状態を pane へ
-//!   運ぶ」形)を毎 event の頭で見て、drag 中は種類を問わずここで拾う
-//! - [`key_gesture`] … キー(菱形)の時刻編集の**意味関数**(第2波T4)。
-//!   `clip_gesture` と対になる置き場 — 同じく Document 型を持たない純関数のみ
-//! - [`nav`] … playhead ナビゲーション動詞束の**意味関数**(U2、正典 §5・§8.1)。
-//!   `clip_gesture`/`key_gesture` と同じく Document/Session 型を持たない純関数のみ —
-//!   キー→`Message` の解決自体は `lib.rs`(`resolve_navigation_key`)側
+//! - [`lane_bar`] … レーンバー専用の draw+hit
+//! - [`key_rows`] … property 行専用の draw+hit + キー時刻ドラッグ/リタイム
+//! - [`key_gesture`] … キーの時刻編集の意味関数(純関数)
+//! - [`nav`] … playhead ナビゲーション動詞束の意味関数(純関数。
+//!   キー→`Message` の解決自体は `motolii-shell` 側に残る)
+//! - `write` … **新設**(裁定160 切片7)。pane-local [`Message`] と
+//!   [`PaneState`](旧 `Shell::timeline_drag`/`timeline_key_drag` + 対応する
+//!   private メソッド群の移設先)。
 //!
-//! `canvas::Program` は1トレイトにつき1つの impl しか持てない(Rust の制約)ので、
-//! 本体の trait impl はここ(mod.rs)に置き、各メソッドは対応する層の関数へ
-//! 委譲するだけ — 挙動は変えず、置き場所だけを変える(第2波第1切片: 純粋な
-//! ファイル分割)。
+//! ## pane-local `Message`(survey §3.1)
 //!
-//! 旧 `crate::timeline_pane` への参照(`screenshot.rs`・`tests/suite/*.rs`)は
-//! `crate::lib`側の `pub use timeline as timeline_pane;` エイリアスで壊さない。
+//! pane crate は root(`motolii-shell`)の `Message` を参照できない(循環に
+//! なる)ので、`timeline/input.rs`・`timeline/key_rows.rs` は widget
+//! コールバックの中でこの crate 自身の [`Message`] を組み立てる。
+//! `motolii-shell` 側は `Message::Timeline(motolii_timeline_pane::Message)`
+//! で1回だけ畳む([`write`] モジュール doc の「例外」節も参照)。
+//!
+//! ## 依存(survey §5 layer1)
+//!
+//! `motolii-tokens-rs`(寸法・色)・`motolii-shell-state`(`Session`/
+//! `KeySelector` — root と pane 両方が読む共通の親、循環回避に必須)・
+//! `motolii-store`・`iced` のみ。`motolii-shell`/他 pane crate への依存はゼロ。
 
 mod canvas;
 pub mod clip_gesture;
@@ -64,6 +44,7 @@ mod key_rows;
 mod lane_bar;
 pub mod nav;
 mod projection;
+mod write;
 
 pub use hit::{bar_span_x, classify_bar_part, hit_test, BarPart, Hit, TRIM_EDGE};
 pub use input::Interaction;
@@ -71,15 +52,28 @@ pub use projection::{
     frame_at_x, key_order, property_rows, rows, KeySelectionOp, KeySelector, PropertyKeyProjection,
     PropertyRowProjection, RowProjection,
 };
-pub(crate) use projection::{frame_to_x, layer_row_top, selected_row_index, time_band_segment_frames};
+/// **裁定160 切片7で `pub(crate)` → `pub` に緩めた**(`projection.rs` 側の
+/// 個々の宣言も同様)。`motolii-shell::screenshot`(cross-cutting な検分器具、
+/// pane split survey §2.5 — どの pane crate にも属さず assembler 側に残る)が
+/// これらを cross-crate で読む必要がある — 分割前は同一クレート内の
+/// `pub(crate)` で足りていたが、crate 境界を跨ぐには `pub` が要る。
+pub use projection::{frame_to_x, layer_row_top, selected_row_index, time_band_segment_frames};
+pub use write::{Message, PaneState};
 
 use iced::{Element, Length, Rectangle};
 
 use motolii_store::{Fps, LayerId, LayerTiming, Marker, StoreView};
 
-use crate::state::Session;
-use crate::tokens::{Colors, Dimensions};
-use crate::Message;
+/// `Session` は `motolii-shell-state` crate(裁定160 切片6→切片7で crate 化)。
+/// `motolii-shell` 側の `pub use motolii_shell_state as state;` と同じ
+/// 「型 alias で外部参照を壊さない」手口 — `crate::state::Session` を読む
+/// 既存参照(`projection.rs`・`write.rs`)は無改修で済む。
+pub use motolii_shell_state as state;
+/// `tokens` も同様(`motolii-tokens-rs` crate、裁定160 切片1)。
+pub use motolii_tokens_rs as tokens;
+
+use state::Session;
+use tokens::{Colors, Dimensions};
 
 /// Timeline pane 本体。1回の `view()` で作り捨てる、`StoreView`/`Session` の投影。
 pub struct TimelinePane {
@@ -103,7 +97,7 @@ pub struct TimelinePane {
     /// 持ち回っているのと同じ形)。
     modifiers: iced::keyboard::Modifiers,
     /// Timeline キーの時刻ドラッグ/リタイムが進行中か(第2波T4)。**Shell 状態
-    /// (`Shell::timeline_key_drag`)を読み取り専用で pane へ運ぶだけ** —
+    /// (`PaneState::key_drag_active`)を読み取り専用で pane へ運ぶだけ** —
     /// `modifiers` と同じ形で、canvas の `mouse::Event` 自体は「今 drag 中か」を
     /// 運ばないので別経路が要る。既定 `false`([`Self::with_key_drag_active`]
     /// でしか立たない) — 呼び出し元(試験含む)は継続イベントを試験しない限り
@@ -147,7 +141,7 @@ impl TimelinePane {
         }
     }
 
-    /// `Shell::view` だけが呼ぶ(第2波T4)。`Shell::timeline_key_drag.is_some()`
+    /// `Shell::view` だけが呼ぶ(第2波T4)。`PaneState::key_drag_active()`
     /// をそのまま渡すだけの薄い builder — 新しい `TimelinePane::new` の必須引数に
     /// しない(既存の呼び出し元・試験を1つも壊さないため、`with_` 形にしてある)。
     pub fn with_key_drag_active(mut self, active: bool) -> Self {
@@ -156,8 +150,8 @@ impl TimelinePane {
     }
 
     /// `Shell::view`(実際には `Shell::build_timeline_pane`)だけが呼ぶ
-    /// (第2波T5、正典 §5.5「プレビューは毎フレーム」)。`Shell::timeline_drag`
-    /// の `(layer, drag.preview)` をそのまま渡すだけの薄い builder —
+    /// (第2波T5、正典 §5.5「プレビューは毎フレーム」)。`PaneState::clip_preview()`
+    /// の `(layer, preview timing)` をそのまま渡すだけの薄い builder —
     /// `with_key_drag_active` と同じ形。**置換そのものは
     /// [`projection::apply_clip_preview`](投影段の純関数)がやる** — ここは
     /// 運ぶだけで if を持たない。`None`(非ドラッグ中)なら `rows` は無傷。
@@ -170,10 +164,10 @@ impl TimelinePane {
     }
 
     /// 同上(第2波T5)、キー drag/リタイム版。`preview` は「掴んだ瞬間の
-    /// selector(旧 frame)→ 新 frame」のペア列 — `Shell::timeline_key_drag` の
-    /// `origins`/`preview` を呼び出し側が index で ゆわえて渡す(EXACT TARGET 4:
-    /// リタイム中は選択キー全部がこの1本の列に並ぶので、move/retime を pane 側で
-    /// 区別しない)。置換は [`projection::apply_key_preview`] へ委譲。
+    /// selector(旧 frame)→ 新 frame」のペア列 — `PaneState::key_preview()` の
+    /// 結果を呼び出し側がそのまま渡す(EXACT TARGET 4: リタイム中は選択キー
+    /// 全部がこの1本の列に並ぶので、move/retime を pane 側で区別しない)。
+    /// 置換は [`projection::apply_key_preview`] へ委譲。
     pub fn with_key_preview(mut self, preview: Option<Vec<(KeySelector, i64)>>) -> Self {
         if preview.is_some() {
             self.preview_active = true;
