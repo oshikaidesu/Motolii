@@ -287,6 +287,9 @@ fn timeline_hit_test_distinguishes_bar_ruler_and_blank_row() {
             row_height,
             width,
             duration_frames,
+            0.0,
+            0,
+            None,
         ),
         Hit::Blank,
         "ルーラー帯は click/drag で常に scrub のはず"
@@ -301,6 +304,9 @@ fn timeline_hit_test_distinguishes_bar_ruler_and_blank_row() {
             row_height,
             width,
             duration_frames,
+            0.0,
+            0,
+            None,
         ),
         Hit::Bar(motolii_store::LayerId(1)),
         "bar の区間内が選択に化けない"
@@ -314,6 +320,9 @@ fn timeline_hit_test_distinguishes_bar_ruler_and_blank_row() {
             row_height,
             width,
             duration_frames,
+            0.0,
+            0,
+            None,
         ),
         Hit::Blank,
         "同じ行でも bar の外は行の空白部(scrub)のはず"

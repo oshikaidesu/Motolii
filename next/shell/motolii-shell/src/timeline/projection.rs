@@ -182,20 +182,12 @@ pub fn selected_row_index(rows: &[RowProjection], session: &Session) -> Option<u
 /// 挿入された property 行ぶんだけ、それより後ろの層行を押し下げる
 /// (EXACT TARGET 1)。
 ///
-/// **write-set 外 finding**(KNOWN 節: 本レーンは `input.rs`/`hit.rs` を編集
-/// しない): `super::hit::hit_test`(クリップ面の bar 当たり判定)と
-/// `super::lane_bar::hit_test`(レーンバー行/glyph の当たり判定)はどちらも
-/// この関数を経由しない旧来の一様な `ruler_height + row_height * index` の
-/// ままで、この拡張を知らない。選択 layer にキー付き property があり(=
-/// property 行が展開している)、かつ他の層がその**下に**並んでいる間、それらの
-/// 層の bar/M・S・L クリックは実際の描画位置(`super::canvas::draw`/
-/// `super::lane_bar::draw` はどちらも本関数で正しい位置に描く)から
-/// `property_row_count * param_row_height` ぶんズレる。解消には
-/// `hit.rs`/`lane_bar.rs::hit_test` の呼び出し元(`input.rs`)がこの関数(相当の
-/// 投影)を受け取れるよう署名を広げる必要があるが、それは本レーンの write-set
-/// (`mod.rs`/`canvas.rs`/`lane_bar.rs` の draw のみ/`projection.rs`/
-/// `key_rows.rs`)の外なので、ここでは直さず記録するだけに留める(並走レーン
-/// lane-shell が `input.rs`/`hit.rs` を触っている — 統合はそちら側の仕事)。
+/// 行 y 計算の唯一の正本(T3b・EXACT TARGET 3)。draw 側(`super::canvas::draw`/
+/// `super::lane_bar::draw`)はこの関数を直接呼び、hit 側(`super::hit::hit_test`/
+/// `super::lane_bar::hit_test`)はこの関数の逆写像である [`layer_row_at_y`] を
+/// 経由する — どちらも同じ式から縦位置を導くので、絵と当たりが常に一致する
+/// (旧 finding: 以前は hit 側だけがこの押し下げを知らず、展開行より下の
+/// layer への bar/M・S・L クリックが縦にズレていた。T3 が記録し T3b で解消)。
 pub fn layer_row_top(
     row_height: f32,
     param_row_height: f32,
@@ -208,6 +200,43 @@ pub fn layer_row_top(
         Some(selected) if index > selected => base + param_row_height * property_row_count as f32,
         _ => base,
     }
+}
+
+/// [`layer_row_top`] の逆写像 — y(ルーラー下相対)からレイヤー行の添字を返す。
+/// `super::hit::hit_test`(クリップ面の bar 当たり判定)と
+/// `super::lane_bar::hit_test`(レーンバー行/glyph の当たり判定)が共有する
+/// 唯一の逆算(T3b EXACT TARGET 3 — 2箇所で別の式を持たない)。
+///
+/// 選択 layer の下に挿入された property 行の帯(押し下げの隙間)の内側は
+/// どの層行にも属さないので `None` を返す(その y 範囲は `key_rows.rs` の
+/// 帯が `input.rs`/`hit.rs` より先に自己完結で吸収する — mod doc 参照。ここで
+/// `None` を返すのは、万一 key_rows の吸収を経ずに呼ばれても隣接する層へ
+/// 誤って割り当てない安全側の振る舞い)。
+pub(crate) fn layer_row_at_y(
+    y: f32,
+    row_height: f32,
+    param_row_height: f32,
+    property_row_count: usize,
+    selected_index: Option<usize>,
+) -> Option<usize> {
+    if y < 0.0 || row_height <= 0.0 {
+        return None;
+    }
+    let has_band = property_row_count > 0 && selected_index.is_some();
+    if !has_band {
+        return Some((y / row_height).floor() as usize);
+    }
+    let selected = selected_index.expect("has_band guards selected_index.is_some()");
+    let boundary = row_height * (selected as f32 + 1.0);
+    if y < boundary {
+        return Some((y / row_height).floor() as usize);
+    }
+    let band_height = param_row_height * property_row_count as f32;
+    if y < boundary + band_height {
+        return None; // property 行の帯の内側 — 層行ではない。
+    }
+    let shifted = y - band_height;
+    Some((shifted / row_height).floor() as usize)
 }
 
 /// property 行のキー選択操作(正典 §3・§4 と同じ文法: 単独/Cmd トグル/Shift 範囲)。

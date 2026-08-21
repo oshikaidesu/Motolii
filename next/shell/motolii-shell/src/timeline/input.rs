@@ -86,6 +86,9 @@ pub(crate) fn update(
                 pane.dims.row_height,
                 rail_width,
                 &pane.dims,
+                pane.param_row_height(),
+                pane.property_rows.len(),
+                pane.selected_row_index,
             ) {
                 return match hit {
                     lane_bar::Hit::Row(id) => {
@@ -105,6 +108,9 @@ pub(crate) fn update(
                 pane.dims.row_height,
                 clip_width,
                 pane.duration_frames,
+                pane.param_row_height(),
+                pane.property_rows.len(),
+                pane.selected_row_index,
             ) {
                 // **判定は押した瞬間の座標だけ**(正典 §1) — `classify_bar_part`
                 // に渡すのは今この1回の `clip_point.x` で、以降の move では
@@ -211,6 +217,9 @@ pub(crate) fn mouse_interaction(
         pane.dims.row_height,
         rail_width,
         &pane.dims,
+        pane.param_row_height(),
+        pane.property_rows.len(),
+        pane.selected_row_index,
     )
     .is_some()
     {
@@ -225,6 +234,9 @@ pub(crate) fn mouse_interaction(
         pane.dims.row_height,
         clip_width,
         pane.duration_frames,
+        pane.param_row_height(),
+        pane.property_rows.len(),
+        pane.selected_row_index,
     ) {
         Hit::Bar(id) => {
             let Some(row) = pane.rows.iter().find(|row| row.id == id) else {

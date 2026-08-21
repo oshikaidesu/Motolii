@@ -7,7 +7,7 @@
 //!   行順→時刻順)
 //! - (c) キー選択中の Delete がキーを消し、Undo 1回で戻る
 
-use motolii_shell::timeline_pane::{frame_at_x, KeySelectionOp, KeySelector, TimelinePane};
+use motolii_shell::timeline_pane::{frame_at_x, BarPart, KeySelectionOp, KeySelector, TimelinePane};
 use motolii_shell::tokens::Tokens;
 use motolii_shell::{Message, Session, Shell};
 
@@ -362,4 +362,169 @@ fn frame_at_x_is_still_the_untouched_pure_function() {
     let width = 874.0;
     assert_eq!(frame_at_x(0.0, width, 300), 0);
     assert_eq!(frame_at_x(width, width, 300), 299);
+}
+
+// ---------------------------------------------------------------------------
+// T3b: property 行の展開でズレていた hit 経路(行の縦位置)の統合。
+//
+// layer0(選択・opacity に2キー → property 行1本が展開)の下に layer1(標的)・
+// layer2(おとり)を並べる。**layer1 と layer2 は同じフレーム区間の bar を持つ**
+// ように仕組む — 修正前の `hit.rs::hit_test`/`lane_bar.rs::hit_test` は
+// `layer_row_top` の押し下げを知らず旧来の一様 `row_height * index` で行を
+// 割り出すので、layer1 の bar/M glyph の実描画位置(押し下げ後)をクリックすると
+// 誤って layer2(1行分ズレた添字)に当たる。x 座標(フレーム区間)が同じなので、
+// 「当たった layer が違う」という最も分かりやすい形で赤が出る。
+// ---------------------------------------------------------------------------
+
+/// layer0(選択・opacity に2キー、押し下げ1行ぶん=property_rows.len()==1)の下に
+/// layer1(標的、[150,230))・layer2(おとり、同じ [150,230))を持つ Document。
+fn three_layers_first_selected_and_keyed() -> (Document, Session, LayerId, LayerId, LayerId) {
+    let mut doc = Document::new();
+    doc.apply(Intent::SetComposition(Composition {
+        width: 640,
+        height: 360,
+        fps: Fps::try_new(30, 1).expect("30fps"),
+        duration_frames: 300,
+        background: [0.0, 0.0, 0.0, 1.0],
+    }))
+    .expect("comp を置ける");
+    doc.mark_undo_floor();
+
+    let layer0 = LayerId(1);
+    let layer1 = LayerId(2); // 標的 — 押し下げ後にクリックする層。
+    let layer2 = LayerId(3); // おとり — 修正前のバグが誤って当てる層(1行下)。
+    for (id, start, source_frames) in [
+        (layer0, 0_i64, 60_i64),
+        (layer1, 150, 80),
+        (layer2, 150, 80), // layer1 と全く同じ区間 — x だけでは区別が付かない。
+    ] {
+        doc.apply_all([
+            Intent::AddLayer(id),
+            Intent::SetMeta {
+                layer: id,
+                meta: LayerMeta {
+                    source: LayerSource::Solid { rgba: [80, 160, 220, 255], width: 240, height: 135 },
+                    order: 0,
+                    timing: LayerTiming::place(start, Some(source_frames), 300),
+                },
+            },
+        ])
+        .expect("layer を置ける");
+    }
+
+    let property = PropertyId::new(property::OPACITY).expect("opacity は予約語ではない");
+    let mut track = KeyframeTrack::new();
+    for frame in [0_i64, 50] {
+        track.insert(Keyframe {
+            t: RationalTime::try_new(frame, 30).expect("frame は収まる"),
+            value: Value::F64(1.0),
+            interp: Interp::Linear,
+            spatial: None,
+        });
+    }
+    doc.apply(Intent::SetTrack { layer: layer0, property, track })
+        .expect("track を書ける");
+
+    let mut session = Session::default();
+    session.selection = Some(layer0);
+    (doc, session, layer0, layer1, layer2)
+}
+
+/// `super::TimelinePane::layer_row_top`(pub(crate) につき外から直接呼べない)と
+/// **同じ式**をここでも組む(`key_screen_point` が `frame_to_x` にする扱いと同じ
+/// 理由)。押し下げは選択行(`selected_index`)より後ろの行にだけ掛かる。
+fn layer_row_top_mirror(
+    row_height: f32,
+    param_row_height: f32,
+    property_row_count: usize,
+    selected_index: usize,
+    index: usize,
+) -> f32 {
+    let base = row_height * index as f32;
+    if index > selected_index {
+        base + param_row_height * property_row_count as f32
+    } else {
+        base
+    }
+}
+
+/// layer1(押し下げ後の実描画位置、`rows` 内添字1)の bar 中心の画面座標。
+fn pushed_layer1_bar_point(dims: &motolii_shell::tokens::Dimensions) -> iced::Point {
+    let rail_width = dims.timeline_lane_bar_width;
+    let clip_width = DEFAULT_WIDTH - rail_width;
+    let ratio = 190.0 / 300.0; // [150,230) の中ほど。
+    let x = rail_width + (ratio * clip_width).clamp(0.0, clip_width);
+
+    let row_top =
+        dims.row_height + layer_row_top_mirror(dims.row_height, dims.timeline_param_row_height, 1, 0, 1);
+    let y = row_top + dims.row_height / 2.0;
+    iced::Point::new(x, y)
+}
+
+/// レーンバー内、layer1(押し下げ後)の M glyph 中心の画面座標。`lane_bar.rs::
+/// glyph_slots` と同じ式(rail 右端から `spacing_s` 空けて3個右詰め、M が先頭)。
+fn pushed_layer1_mute_glyph_point(dims: &motolii_shell::tokens::Dimensions) -> iced::Point {
+    let rail_width = dims.timeline_lane_bar_width;
+    let glyph_w = dims.inspector_glyph_width;
+    let gap = dims.spacing_xs;
+    let block_w = glyph_w * 3.0 + gap * 2.0;
+    let mute_x0 = rail_width - dims.spacing_s - block_w;
+
+    let row_top =
+        dims.row_height + layer_row_top_mirror(dims.row_height, dims.timeline_param_row_height, 1, 0, 1);
+    let glyph_h = (dims.row_height - dims.spacing_xs).max(1.0);
+    let glyph_y0 = row_top + (dims.row_height - glyph_h) / 2.0;
+
+    iced::Point::new(mute_x0 + glyph_w / 2.0, glyph_y0 + glyph_h / 2.0)
+}
+
+/// **ORACLE (1/2)**: property 行が展開されている間、その下の layer1 の bar を
+/// クリックすると layer1 が掴まる(`TimelineBarGrabbed{layer: layer1, part:
+/// Body, ..}`)— 修正前は1行ぶんズレて layer2(おとり)を掴んでいた。
+#[test]
+fn clicking_a_bar_below_the_expanded_property_band_grabs_the_right_layer() {
+    let (doc, session, _layer0, layer1, layer2) = three_layers_first_selected_and_keyed();
+    let tokens = Tokens::default();
+    let store = doc.view();
+    let pane = TimelinePane::new(&store, &session, tokens.dims, tokens.colors, iced::keyboard::Modifiers::default());
+
+    let point = pushed_layer1_bar_point(&tokens.dims);
+    let messages = click_at(pane, point);
+
+    // press+release を1回ずつ注入するので `TimelineBarGrabbed`(press)に続けて
+    // `TimelineDragReleased`(release、`input.rs::update` の `DragKind::Clip`
+    // 腕)が出る — ここで見るのは最初の1件(押した瞬間にどの layer を掴んだか)。
+    match messages.first() {
+        Some(Message::TimelineBarGrabbed { layer, part: BarPart::Body, .. }) => {
+            assert_eq!(
+                *layer, layer1,
+                "property 行の押し下げ後、layer1 の bar クリックが layer2(1行下)を \
+                 掴んでいる — hit.rs::hit_test がまだ layer_row_top を知らない: {messages:?}"
+            );
+        }
+        other => panic!(
+            "layer1 の bar クリックが TimelineBarGrabbed(Body) を出していない \
+             (layer2={layer2:?} は同じ x 区間のおとり): {other:?}"
+        ),
+    }
+}
+
+/// **ORACLE (2/2)**: 同状態で layer1 の M glyph をクリックすると
+/// `LaneBarToggleMute(layer1)` が出る — 修正前は1行ぶんズレて layer2 の
+/// mute を切り替えていた。
+#[test]
+fn clicking_mute_below_the_expanded_property_band_toggles_the_right_layer() {
+    let (doc, session, _layer0, layer1, layer2) = three_layers_first_selected_and_keyed();
+    let tokens = Tokens::default();
+    let store = doc.view();
+    let pane = TimelinePane::new(&store, &session, tokens.dims, tokens.colors, iced::keyboard::Modifiers::default());
+
+    let point = pushed_layer1_mute_glyph_point(&tokens.dims);
+    let messages = click_at(pane, point);
+
+    assert!(
+        matches!(messages.as_slice(), [Message::LaneBarToggleMute(id)] if *id == layer1),
+        "property 行の押し下げ後、layer1 の M glyph クリックが layer2({layer2:?})を \
+         切り替えている — lane_bar.rs::hit_test がまだ layer_row_top を知らない: {messages:?}"
+    );
 }
