@@ -3,14 +3,13 @@
 日付: 2026-08-21 / 状態: **第3セッション(深夜)走行中**(引き継ぎ= 2026-08-21-session-handoff-night-s-score.md。前任分= -ui-completion.md)
 運転手順: レーンの完了・発注のたびにこの表を更新する。TaskList はセッション死で消えるため、この文書が正本。
 
-**実窓較正第1回の初回収(2026-08-21深夜)**: 利用者「イージングがガタつく」— release ビルドでも再現=構造確定 → **裁定166**(Stage presenter shader 化+tick vsync 整列)。残りのチェックリスト(音・状態帯・市松・差し色・目盛り)は τ 着地後に再開。
+**実窓較正第1回の初回収(2026-08-21深夜)**: 利用者「イージングがガタつく」— release ビルドでも再現=構造確定 → **裁定166**(Stage presenter shader 化+tick vsync 整列)→ τ 着地後に**利用者確認「スムーズになった」= 合格**(実録動画 12s を利用者へ送付済み)。第2の較正収穫=「文字が酷い」(→裁定168・φ)、第3=「どの要素もチグハグ」(→ψ 台帳)。残りのチェックリスト(音・状態帯・市松・差し色・目盛り)は φ 着地後の窓で再開。
 
 ## 走行中(未返却)
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
 | **φ: 文字の不衝突+文字余白(裁定168 適用第1号)** | 実装 | worktree(発注時に追記) | rail 名前の省略記号切詰(`lane_bar.rs:181` fill_text)+Inspector 値セルの em 余白とセル間 gap。write-set は timeline-pane+inspector-pane のみ(τ と互いに素、shell 触らず) |
-| **ψ: Timeline 総転写差分台帳** | 調査(読み取り専用) | worktree | 利用者全体判定「どの要素もチグハグ」の構造化 — モック×実装の全要素台帳(適合/逸脱/欠落/余剰)+チグハグ主因 TOP3+転写レーン束割り案。cargo 禁止(τ/φ と target 取り合わないため) |
 
 ## 完了・main 着地済み(実装)
 
@@ -72,7 +71,8 @@
 | **ι: Browser B1(検収合格・merge `80577081`)** | drop が台帳へ記帳される — bin-first の下地開通。記帳と配置は独立(junk file も fingerprint が読めれば台帳に載る)・undo 粒は既存(1 drop batch=1 undo)に同居・dedup は η の content_hash 統合に一任。赤(E0599 5件)→緑 174/174。FINDING: multi-GB 素材の hash 時間未計測(KNOWN へ B7 リスクとして記録)・asset_type は拡張子の仮判定(意味起草タスク#14 待ち) |
 | **η: 素材台帳移植(検収合格・merge `d5370a0e`)** | 裁定162 の核心が着地 — 旧 asset.rs 740行を store へ(fingerprint は移植済みを参照)。`Intent::AdmitAsset/RemoveAsset`(read-modify-write、`Composition:assets` component の JSON blob = markers/slots と同じ流儀)・`StoreView::assets()/asset()`。persist は汎用経路が無改修で運ぶ。dedup の赤→緑実証あり((a)(c) は赤未保存 — 実装同時書きの逸脱として記録)。store 21 スイート+workspace 全緑 |
 | **θ: browser-pane B0 骨格(検収合格・merge `8a4e7ffb`)** | 新 crate(`//! wraps:` マーカー・空 Message enum・空 view)+shell 埋め込み(`Message::Browser` 腕のみ・view 未配線)。**PNG SHA `ee217ba2…` 前後一致を supervisor 再実測**(pane 分割以来の正準ハッシュ)。shell suite 170 全緑。B1 は η(素材台帳)着地後 |
-| **τ: Stage presenter shader 化(検収合格・merge `1f2660a5`)** | **裁定166 施工完了** — `StagePresenterProgram/Primitive/Pipeline`(永続 `wgpu::Texture`+世代ゲート `write_texture`)で image widget 置換・letterbox は stage-pane の既存 pub 関数再利用(2箇所目なし)・1.5MB 柵と auto sqrt 縮小を撤去し **Auto=1.00×(フル解像度)を実窓で supervisor 実画面確認**(旧 0.43×)。tick は `window::frames()`(vsync)へ。oracle 全通過を main checkout で再実行: handle_creations 10tick で 0・PNG SHA `01f71f0820d4…` 前後一致・shell 204+workspace 99 スイート 872 全緑。施工中の自己検出バグ1件(presenter_generation の 0 上書き — red で捕捉・修正済み)。KNOWN 追記2件(frames() occluded・GPU 実描画は headless 不可視)。**イージング滑らかさの最終審判=利用者の実窓**(裁定166 §4) |
+| **ψ: Timeline 転写ギャップ台帳(回収・merge `e7ae27ba`)** | 保全= `2026-08-21-timeline-transcription-gap-survey.md`。25要素: **適合9/逸脱8/余剰2/欠落0/EVIDENCE_GAP6** — 欠落ゼロ=チグハグの実体は「機能の不在」でなく「別世代正典の混在」と確定(利用者知覚の白)。主因TOP3(画素根拠つき): (1) transport slider が無style の iced 既定(金玉つまみ — token 非経由の唯一の生 widget) (2) rail 文字衝突(φ 施工中) (3) M/S/L glyph が Inspector 側 mock からの借用で行比 0.90(mock 0.46 の約2倍)+スウォッチ色が bar 色と無関係の単色。転写束割り案 3 レーン(rail/canvas/transport)。EVIDENCE_GAP 6件は裁定待ちに積む。**唯一の転写完結ファイル= projection.rs(0.52 比率)** |
+| **τ: Stage presenter shader 化(検収合格・merge `1f2660a5`・利用者合否=合格)** | **裁定166 施工完了** — `StagePresenterProgram/Primitive/Pipeline`(永続 `wgpu::Texture`+世代ゲート `write_texture`)で image widget 置換・letterbox は stage-pane の既存 pub 関数再利用(2箇所目なし)・1.5MB 柵と auto sqrt 縮小を撤去し **Auto=1.00×(フル解像度)を実窓で supervisor 実画面確認**(旧 0.43×)。tick は `window::frames()`(vsync)へ。oracle 全通過を main checkout で再実行: handle_creations 10tick で 0・PNG SHA `01f71f0820d4…` 前後一致・shell 204+workspace 99 スイート 872 全緑。施工中の自己検出バグ1件(presenter_generation の 0 上書き — red で捕捉・修正済み)。KNOWN 追記2件(frames() occluded・GPU 実描画は headless 不可視)。**イージング滑らかさの最終審判=利用者の実窓**(裁定166 §4) |
 | **υ: S 器具第一波(検収合格・merge `c86f9101`)** | 正典「器具」節 1-2 が着地 — `collect_targets` を `target_walk.rs` へ逐語抽出(q0_fence 判定無改変・柵は緑のまま)+`entrance_atlas_dump.rs`(通常 test= 既知 widget 存在+bounds 窓内、dev dump= `MOTOLII_ATLAS_OUT` ゲート)+`scripts/s-score.py`(S0 適合33行・S1 Fitts ランキング・S2 KLM 秒数、21 unittest)。red→緑証拠あり(walker 空実装で red 実証)。**S0 が実不一致を既に検出**(Undo/Redo: normal-map 3:3 タイの辞書式 tie-break vs κ の人裁定 — 上書きせず review 行き)。FINDING: (1) κ 台帳の「同/同上」参照セルは機械照合不能(次の κ 改訂で展開) (2) 書き出しは入口台帳に行ゼロ=ギャップとして顕在化 (3) S1 の距離起点は今波は窓中心固定(工程連鎖は次波) (4) Fitts 幾何は header ボタン5操作のみ(canvas 内は walker に構造的に不可視 — q0_fence 既知の限界と同根)。検収: main checkout で shell 191+python 21+workspace 99 スイート 866 全緑 |
 | **ε: SP1 第一波 Speed 数値欄(検収合格・merge済み)** | Inspector ATTRS に Speed 行(%表示・click→type・Reset)。`retimed_duration` 純関数(i128 整数丸め・最低1フレーム・start/source_in 不変)は第二波と共有。1 gesture=1 undo・ロック M13 拒否・100% reset は no-op。map 963(Time Stretch)+269(Reset speed)採用済(**消化 112/1,551**)。pixel fence 7→8 行は実描画差分への正しい追随として採択。FINDING: Speed だけ Shell 側で Intent 組み立て(ALLOWLIST 制約の非対称 — 次の inspector 発注で統一余地) |
 
