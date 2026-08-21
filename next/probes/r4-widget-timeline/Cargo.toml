@@ -1,0 +1,17 @@
+[package]
+name = "r4-widget-timeline"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+iced.workspace = true
+
+[dev-dependencies]
+# TL-arch survey(docs/reviews/2026-08-22-timeline-canvas-widget-survey.md)の
+# 性能 EVIDENCE_GAP を埋める器具。本体 `iced`(次行 workspace 依存)と同じ fork
+# rev(73e686ee, 裁定170/M01)へ揃える — 別revで放置すると本体と iced_test が
+# 別々の型を持つ2ライン共存事故になる(iced_test_spike.rs の既知の注意点と同じ
+# 理由)。dev-only、probe の外へは出さない(motolii-shell の運用と同型)。
+iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
