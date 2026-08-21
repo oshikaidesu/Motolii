@@ -1,28 +1,46 @@
-//! layer 単位オフスクリーンパスの枠(裁定153 S2、2026-08-21)。
+//! layer 単位オフスクリーンパスの枠(裁定153 S2、2026-08-21)。S4(2026-08-21)で
+//! 内蔵 vism 第1号 [`EffectPass::Glow`] を追加(`glow` サブモジュール参照)。
 //!
 //! [`EffectPass`] は compositor ローカルの**closed enum**(裁定13: trait はまだ
-//! 作らない — [`crate::BlendMode`] と同じ形)。今は [`EffectPass::Identity`] だけを
-//! 持つ: 絵を変えない pass で、枠(オフスクリーンへ描き・pass 列を適用し・結果を
-//! 通常合成へ戻す往復)そのものの正しさを固定するためだけに存在する。実 effect
-//! (Glow 等)は S4 がこの enum へ変種を足す(裁定153 の切片割り、
+//! 作らない — [`crate::BlendMode`] と同じ形)。[`EffectPass::Identity`] は
+//! 絵を変えない pass で、枠(オフスクリーンへ描き・pass 列を適用し・結果を
+//! 通常合成へ戻す往復)そのものの正しさを固定するためだけに存在する。
+//! [`EffectPass::Glow`] が最初の実 effect(裁定153 の切片割り、
 //! `docs/reviews/2026-08-21-effect-seam-survey.md` 4節)。
 //!
-//! [`EffectScratch`] は中間 texture の再利用プール。**pipeline はまだ無い** —
-//! Identity は `wgpu::CommandEncoder::copy_texture_to_texture` だけで画素単位に
-//! 表現できるので、shader/bind group を建てる理由が無い(S2 の要件「pipeline
-//! 未定でも通る形」をそのまま満たす、shader pipeline の設計は S4 の Glow が持ち込む)。
-//! texture は `(幅, 高さ, フォーマット)` をキーに使い回し、**フレームをまたいで
-//! 毎回作り直さない**(M5 proof `GlowFixture` の Host 所有パターンと同じ動機 —
-//! `spikes/m5-known-implementation/M5-R0/src/glow.rs` `new()` が texture/pipeline を
-//! 一括生成して `render()` では再生成しないのと同型)。
+//! [`EffectScratch`] は中間 texture の再利用プール。**pipeline は `glow` サブモジュールが
+//! 持つ**(S2 時点では Identity しか無く pipeline 不要だった、S4 で Glow が最初の
+//! shader pass を持ち込んだ)。texture は `(幅, 高さ, フォーマット)` をキーに使い回し、
+//! **フレームをまたいで毎回作り直さない**(M5 proof `GlowFixture` の Host 所有パターンと
+//! 同じ動機 — `spikes/m5-known-implementation/M5-R0/src/glow.rs` `new()` が
+//! texture/pipeline を一括生成して `render()` では再生成しないのと同型)。
 
 use std::collections::HashMap;
 
-/// layer に適用する GPU pass の記述。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+mod glow;
+
+pub(crate) use glow::{GlowPipelines, GLOW_INTERMEDIATE_FORMAT};
+
+/// layer に適用する GPU pass の記述。**f32 param を持つので `Eq` は導出できない**
+/// (`PartialEq` のみ — 既存の呼び手は `assert_eq!`/`PartialEq` 比較しか使っていない、
+/// `HashMap`/`HashSet` のキーには使われていない)。
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EffectPass {
     /// 恒等 pass。入力と出力が画素単位で一致する。
     Identity,
+    /// 内蔵 vism 第1号(裁定153 S4)。bright-pass→水平blur→垂直blur→加算合成の5パス
+    /// (`glow` サブモジュール参照、移植元は
+    /// `spikes/m5-known-implementation/M5-R0/src/glow.rs`)。
+    Glow {
+        /// 輝度がこの値を超えた分だけ bright-pass が抜き出す(proof 既定 1.0)。
+        threshold: f32,
+        /// 合成時に blur 結果へ掛ける係数(proof 既定 0.75、`intensity: 0.0` で
+        /// 実質 pass-through)。
+        intensity: f32,
+        /// 5-tap blur のタップ間隔(texel)。`1.0` が proof の固定オフセット
+        /// (1texel・2texel)と厳密に一致する。
+        radius: f32,
+    },
 }
 
 /// オフスクリーン texture のプール。**サイズ+フォーマットが同じ物は使い回す** —
