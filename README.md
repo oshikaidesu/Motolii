@@ -7,9 +7,17 @@
 </p>
 <p align="center"><em>M1 exit demo — a typed project recipe rendered headlessly to mp4</em></p>
 
-> **After Effects is too heavy. Let's build a lighter motion-graphics compositor in native Rust.**
+> **Everything you hand to After Effects becomes a flat rectangle.** A 3D scan, a particle field, a camera path, an audio waveform — the moment they enter the composition they are pressed into planar layers that no longer remember what they were.
 
-**GPU-resident rendering. Direct tools instead of setup rituals. Typed plugins. Local projects. One deterministic path from preview to export.**
+Motolii is built on two *what ifs* that were both nearly real:
+
+**What if a compositor never flattened meaning?** Motolii's stage is [Rerun](https://rerun.io) — a semantic data engine built for robotics and computer vision, where a point cloud stays a point cloud, a path stays a path, a time series stays a time series. Compositing on top of that store means you combine *meanings*, not rasters: the same scene can hold video, procedural shapes, spatial data, and audio-driven motion while every piece remains inspectable, animatable, and re-interpretable. That is a playground for expression nobody has planned yet — the interesting work happens in the combinations.
+
+**What if AviUtl's culture had met After Effects' grammar?** For two decades a free, local Japanese editor was bent by its extension community into shapes its author never imagined, and an entire MV/MAD culture grew in that gap. That route was lost — AviUtl aged out, and AE sealed its depth behind a vendor SDK. Motolii is the missing branch: the AE-family editing grammar your hands already know (reverse-derived into a [machine-checked operation canon](next/reference/timeline-grammar.md) from AE, Godot, Blender, Unity, Unreal, and the Lottie-era editors), with extension freedom as a constitution — every stage of the pipeline is a deliberate seam, proven by running a datamosh effect through the same contract as a blur.
+
+Both futures were plausible. Neither happened. Motolii is being built so they can — and the whole build is public: every design decision is a numbered ruling, every capability a row in a [ledger you can count](next/reference/normal-map.tsv).
+
+**And yes: native Rust, GPU-resident rendering, direct tools instead of setup rituals, typed plugins, local projects, one deterministic path from preview to export.**
 
 **Missing an effect? Describe it.** Motolii keeps its plugin contract small—typed parameters and GPU textures in/out—while the host generates the standard editing UI. Instead of spending weeks learning a large vendor SDK, an LLM can scaffold a plugin from the public contract and verify it with automated tests. Even a solo creator can grow the compositor around a particular project or style.
 
