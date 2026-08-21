@@ -26,8 +26,14 @@ pub mod fixture;
 pub mod inspector_pane;
 pub mod screenshot;
 pub mod settings_pane;
-pub mod timeline_pane;
+pub mod timeline;
 pub mod tokens;
+
+/// `timeline_pane` は分割前の module path の互換エイリアス(第2波第1切片:
+/// 純粋なファイル分割 — `src/timeline/`(`projection`/`hit`/`canvas`/`input`))。
+/// `crate::timeline_pane::X` を読む既存参照(`screenshot.rs`・
+/// `tests/suite/*.rs`)を壊さないための re-export。
+pub use timeline as timeline_pane;
 
 use inspector_pane::{FieldDraft, TransformField};
 use settings_pane::{BackgroundChannel, BackgroundFieldDraft, BackgroundPreset};
