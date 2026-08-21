@@ -29,7 +29,13 @@ pub mod screenshot;
 pub mod settings_pane;
 pub mod stage;
 pub mod timeline;
-pub mod tokens;
+
+/// `tokens` は裁定160 切片1 で `motolii-tokens-rs` crate へ抽出済み(pane split
+/// survey `docs/reviews/2026-08-21-pane-split-survey.md` §2.2/§6)。純粋な再配置
+/// — `tokens.rs` 自体の値・シグネチャは無改変。`pub use timeline as timeline_pane;`
+/// と同じ「型 alias で外部参照を壊さない」手口(既存の `crate::tokens::X`・
+/// `motolii_shell::tokens::X` 参照はここを直せば無改修で済む)。
+pub use motolii_tokens_rs as tokens;
 
 /// `timeline_pane` は分割前の module path の互換エイリアス(第2波第1切片:
 /// 純粋なファイル分割 — `src/timeline/`(`projection`/`hit`/`canvas`/`input`))。

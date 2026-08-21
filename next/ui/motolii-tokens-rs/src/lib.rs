@@ -952,8 +952,7 @@ mod ui_scale_tests {
 
 #[cfg(test)]
 mod text_weight_and_ink_tests {
-    use super::{Ink, TextWeight};
-    use crate::tokens::Colors;
+    use super::{Colors, Ink, TextWeight};
 
     /// 裁定137の3段(400/600/800)が `iced::font::Weight` の対応する段に
     /// 正しく写ること。CSS の値そのものが変数名に現れる上流列挙
