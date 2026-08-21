@@ -47,6 +47,15 @@ pub enum MaskMode {
     Difference,
 }
 
+/// 既定は `Add`(裁定160 発注γ MK2) — AE で新規マスクを描いた時の既定 mode と同型
+/// (`crate::attrs::BlendMode` の `Default` が `Normal` を既定にするのと同じ形)。
+/// `#[serde(default)]`(下記 [`Mask::mode`])が読み戻しに使う。
+impl Default for MaskMode {
+    fn default() -> Self {
+        Self::Add
+    }
+}
+
 /// マスク1枚のうち、**キーを打たない部分**。
 ///
 /// 形状と不透明度はここに入れない — 動くので property track が持つ
@@ -54,6 +63,10 @@ pub enum MaskMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Mask {
     pub id: MaskId,
+    /// `#[serde(default)]`: 旧ドキュメントの JSON にこのキーが無いことがある
+    /// (裁定160 発注γ MK2 で `mode` を足す前の保存)。無いと `Add` に読み戻す
+    /// (`label_color` と同じ後方互換の形、`crate::attrs::LayerAttrs` 参照)。
+    #[serde(default)]
     pub mode: MaskMode,
     /// 覆いの内外を入れ替える。**`Subtract` とは別物** — Subtract は手前までの
     /// 覆いから引く操作で、反転はこのマスク自身の覆いを裏返す。

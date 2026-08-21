@@ -260,3 +260,32 @@ fn attrs_without_a_label_color_field_defaults_to_unassigned() {
         serde_json::from_value(value).expect("旧形式の JSON を読めない");
     assert_eq!(loaded.label_color, None, "label_color 欠落時は未割当へ落ちるはず");
 }
+
+/// 旧保存ファイル(`Mask.mode` component が無い版、MK2 で `mode` を足す前)を模した
+/// JSON でも読める — `#[serde(default)]` の後方互換確認。
+/// `attrs_without_a_label_color_field_defaults_to_unassigned` と同じ手口
+/// (JSON からキーを取り除いてから読み戻す)。既定は `MaskMode::Add`
+/// (R9 発注の指定 — 手前の覆いに単純に足す、AE の新規マスクの既定モードと同型)。
+#[test]
+fn mask_without_a_mode_field_defaults_to_add() {
+    let current = motolii_store::Mask {
+        id: motolii_store::MaskId(1),
+        // Add 以外を仕込んでおく — テストが「たまたま Add だった」で通らないように。
+        mode: motolii_store::MaskMode::Subtract,
+        inverted: false,
+    };
+    let mut value = serde_json::to_value(current).unwrap();
+    value
+        .as_object_mut()
+        .expect("Mask は JSON object のはず")
+        .remove("mode")
+        .expect("旧形式を模すには mode キーが無いことが前提");
+
+    let loaded: motolii_store::Mask =
+        serde_json::from_value(value).expect("旧形式の JSON(mode 無し)を読めない");
+    assert_eq!(
+        loaded.mode,
+        motolii_store::MaskMode::Add,
+        "mode 欠落時は Add へ落ちるはず"
+    );
+}
