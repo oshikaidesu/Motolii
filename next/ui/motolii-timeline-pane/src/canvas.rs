@@ -2,6 +2,14 @@
 //! `TimelinePane`(`super::TimelinePane` の `canvas::Program` impl)の `draw` から
 //! 委譲されるだけ — **`&mut` は1つも無い**(`draw` は `&self` でモデルを借りる
 //! ので、描きながらモデルを直す道が型として無い)。
+//!
+//! ## 比率の出典(裁定172 §1/§2、転写元 `next/reference/mocks/timeline-semantics.html`)
+//!
+//! bar/ruler/目盛りの寸法は「梯子」(裁定165(1)・裁定167)— 独自の中間値を
+//! 発明せず、mock の実測比をそのまま使う。この節の関数群がその唯一の出典
+//! ([`ruler_height`]/[`bar_inset`]/[`bar_corner_radius`]/[`minor_tick_length`]/
+//! [`major_tick_length`])。全て「比率×分母」の丸め(`.round()`)— mock の
+//! 実測 px と比較する pure fn テストが末尾にある。
 
 use iced::widget::canvas;
 use iced::{Point, Rectangle, Size};
@@ -10,6 +18,42 @@ use super::key_rows;
 use super::lane_bar;
 use super::projection::{frame_at_x, frame_to_x, tick_steps, time_band_segment_frames};
 use super::TimelinePane;
+
+/// ルーラー帯の高さ(裁定172 §2: `0.846×行高`)。mock `.ruler{height:22px}` /
+/// `.row{height:26px}`(`22/26`)の実測。第1波の「行高をそのまま流用」
+/// (裁定167 が禁じる、比率梯子を無視した1.0倍という名の中間値)を廃した —
+/// `TimelinePane::ruler_height`(内部の private メソッド)がこの1関数だけを呼ぶ。
+/// `pub`(クレート外に見える)なのは他の比率と同じ理由(`lib.rs` の
+/// `pub use canvas::{...}` doc 参照 — `motolii-shell::screenshot` cross-crate 用)。
+pub fn ruler_height(row_height: f32) -> f32 {
+    (0.846 * row_height).round()
+}
+
+/// bar の縦 inset(裁定172 §2: `0.154×行高` — 「梯子中段」)。mock
+/// `.bar{top:4px}` / `.row{height:26px}`(`4/26`)の実測。現行の
+/// `spacing_xs`(0.10 相当)流用は裁定167(比率梯子の中間値禁止)違反だった。
+pub fn bar_inset(row_height: f32) -> f32 {
+    (0.154 * row_height).round()
+}
+
+/// bar の角丸半径(裁定172 §2: `0.111×bar高` — bar は inset 適用後の高さが
+/// 分母)。mock `.bar{height:18px;border-radius:2px}`(`2/18`)の実測。
+pub fn bar_corner_radius(bar_height: f32) -> f32 {
+    (0.111 * bar_height).round()
+}
+
+/// ルーラー小目盛りの長さ(裁定172 §1: `0.227×ruler高`)。mock `.tick{height:5px}`
+/// / `.ruler{height:22px}`(`5/22`)の実測 — 裁定165(1)「独自比を発明しない」の
+/// 素直な適用。現行の `spacing_s` 引き算式(ruler高からの天引き)を廃した。
+pub fn minor_tick_length(ruler_height: f32) -> f32 {
+    (0.227 * ruler_height).round()
+}
+
+/// ルーラー大目盛りの長さ(裁定172 §1: `0.5×ruler高`)。mock
+/// `.tick.major{height:11px}` / `.ruler{height:22px}`(`11/22`)の実測。
+pub fn major_tick_length(ruler_height: f32) -> f32 {
+    (0.5 * ruler_height).round()
+}
 
 pub(crate) fn draw(
     pane: &TimelinePane,
@@ -151,14 +195,19 @@ pub(crate) fn draw(
         } else {
             pane.colors.way_timeline
         };
-        frame.fill_rectangle(
-            Point::new(start_x, row_top + pane.dims.spacing_xs),
-            Size::new(
-                (end_x - start_x).max(1.0),
-                (row_height - pane.dims.spacing_s).max(1.0),
-            ),
-            bar_color,
+        // 縦 inset・角丸(裁定172 §2)— 比率の出典は [`bar_inset`]/
+        // [`bar_corner_radius`](モジュール冒頭「比率の出典」節)。`fill_rectangle`
+        // ではなく丸角 `Path::rounded_rectangle` を使う(iced canvas に既にある
+        // ネイティブ API — 近似ではない)。
+        let inset = bar_inset(row_height);
+        let bar_height = (row_height - inset * 2.0).max(1.0);
+        let radius = bar_corner_radius(bar_height);
+        let bar_path = canvas::Path::rounded_rectangle(
+            Point::new(start_x, row_top + inset),
+            Size::new((end_x - start_x).max(1.0), bar_height),
+            radius.into(),
         );
+        frame.fill(&bar_path, bar_color);
         // **名前は描かない**(裁定147): レイヤー名の住所はレーンバー
         // (`lane_bar::draw`)へ一本化した。クリップ上の余白は将来の
         // キーフレームオーバーレイのために空けておく。
@@ -234,6 +283,10 @@ pub(crate) fn draw(
 /// 大目盛= 長い線(`border_strong`)+ フレーム番号ラベル(旧実装の踏襲、
 /// NON-GOALS「ルーラーへの timecode 文字」は新設しないという意味なので、
 /// 既存のプレーンなフレーム番号表示はそのまま残す)。
+///
+/// 目盛りの長さは裁定172 §1: `spacing_m`/`spacing_s` の天引き式(token 経由
+/// だが mock 比とは無関係)を廃し、[`minor_tick_length`]/[`major_tick_length`]
+/// (ruler 高からの比率、モジュール冒頭「比率の出典」節)に一本化した。
 fn draw_ruler_ticks(pane: &TimelinePane, frame: &mut canvas::Frame, x0: f32, width: f32, height: f32) {
     if pane.duration_frames <= 0 || width <= 0.0 {
         return;
@@ -245,9 +298,9 @@ fn draw_ruler_ticks(pane: &TimelinePane, frame: &mut canvas::Frame, x0: f32, wid
         let is_major = frame_no % major == 0;
         let x = x0 + frame_to_x(frame_no, width, pane.duration_frames);
         let top = if is_major {
-            height - pane.dims.spacing_m
+            height - major_tick_length(height)
         } else {
-            height - pane.dims.spacing_s
+            height - minor_tick_length(height)
         };
         let color = if is_major {
             pane.colors.border_strong
@@ -372,5 +425,45 @@ fn draw_tick_lines(
             canvas::Stroke::default().with_color(color).with_width(pane.dims.border_width),
         );
         frame_no += minor;
+    }
+}
+
+#[cfg(test)]
+mod ratio_tests {
+    use super::*;
+
+    /// mock `timeline-semantics.html` `.row{height:26px}` を分母に、各比率が
+    /// mock の実測 px とそのまま一致することを固定する(裁定172 §1/§2 — ORACLE
+    /// 「比率の純関数テスト4本」)。梯子の途中(0.10 等)へ丸めていないことの
+    /// 検収 — これらは裁定172 施工前は red だった。
+    const MOCK_ROW_HEIGHT: f32 = 26.0;
+
+    #[test]
+    fn ruler_height_matches_mock_22_of_26() {
+        assert_eq!(ruler_height(MOCK_ROW_HEIGHT), 22.0);
+    }
+
+    #[test]
+    fn bar_inset_matches_mock_4_of_26() {
+        assert_eq!(bar_inset(MOCK_ROW_HEIGHT), 4.0);
+    }
+
+    #[test]
+    fn bar_corner_radius_matches_mock_2_of_18() {
+        // mock は inset=4 を row 高 26 から2回引いて bar 高 18 を得る
+        // (`.bar{top:4px;height:18px}`)— 角丸の分母はこの bar 高であって
+        // 行高ではない。
+        let inset = bar_inset(MOCK_ROW_HEIGHT);
+        let bar_height = MOCK_ROW_HEIGHT - inset * 2.0;
+        assert_eq!(bar_height, 18.0, "梯子の中間値: mock の bar 高は 18px");
+        assert_eq!(bar_corner_radius(bar_height), 2.0);
+    }
+
+    #[test]
+    fn tick_lengths_match_mock_5_and_11_of_22() {
+        let ruler = ruler_height(MOCK_ROW_HEIGHT);
+        assert_eq!(ruler, 22.0);
+        assert_eq!(minor_tick_length(ruler), 5.0, "mock `.tick{{height:5px}}`");
+        assert_eq!(major_tick_length(ruler), 11.0, "mock `.tick.major{{height:11px}}`");
     }
 }
