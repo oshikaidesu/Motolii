@@ -1,3 +1,4 @@
+//! wraps: iced — Settings pane(背景/市松/ui_scale)+pane 横断 chrome。書き込みは Intent 経由のみ。
 //! Settings パネル(タスク#18: Stage 背景色・市松・ui_scale)。ヘッダの歯車
 //! ボタン(`Message::ToggleSettingsPanel`)でトグルする。
 //!

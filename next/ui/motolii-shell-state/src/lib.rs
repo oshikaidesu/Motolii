@@ -1,3 +1,4 @@
+//! owns: shell 横断の共有状態型(Session/KeySelector/KeySelectionOp)。pane crate と assembler の共通の親 — 循環回避のための leaf。
 //! front だけが持つ共有状態の正本。裁定160 切片6(pane split survey
 //! `docs/reviews/2026-08-21-pane-split-survey.md` §2.3)で `motolii-shell` 内の
 //! `state.rs` モジュールへ移設し、切片7(timeline-pane crate 抽出)で

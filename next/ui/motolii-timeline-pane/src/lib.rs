@@ -1,3 +1,4 @@
+//! wraps: iced — Timeline pane(投影・hit・ジェスチャ・レーンバー・キー行)。書き込みは Intent 経由のみ、Document の写しを持たない。
 //! Timeline pane crate(裁定160 切片7、pane split survey
 //! `docs/reviews/2026-08-21-pane-split-survey.md` §6 切片7)。
 //!
