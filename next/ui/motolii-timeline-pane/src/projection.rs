@@ -121,10 +121,13 @@ pub(crate) const TARGET_CELL_RATIO: f32 = 0.52;
 /// 経路がほとんどなので、この短いラダーで実害は無い — [`TimelinePane::new`]
 /// 参照)。
 fn step_ladder_frames(fps: Option<Fps>) -> Vec<i64> {
-    let mut out: Vec<i64> = vec![1, 5, 10];
+    // 2f と半秒(fps/2)を含む(σ2 検収 FINDING の処置 2026-08-21: 梯子が粗いと
+    // 比率最近傍でも目標 0.52 に届かない — 30fps・幅1426px で 10f=0.305/30f=0.914 の
+    // 二択だった穴を 15f=0.457 が埋める。半秒は時間整列の正当な段)。
+    let mut out: Vec<i64> = vec![1, 2, 5, 10];
     if let Some(fps) = fps {
         let fps = fps.as_f64();
-        for seconds in [1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 300.0] {
+        for seconds in [0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 300.0] {
             out.push((fps * seconds).round().max(1.0) as i64);
         }
         out.sort_unstable();
@@ -246,12 +249,15 @@ mod tick_tests {
     /// から出しており、実装のマジックナンバーをそのまま複製していない。
     #[test]
     fn tick_steps_picks_the_ladder_step_nearest_the_target_cell_ratio() {
+        // 期待値 15f = 半秒(σ2 検収 FINDING の処置で梯子へ 2f・fps/2 を追加した後の
+        // 最近傍: 15f→比率0.457。旧梯子では 10f→0.305 が最善だった — 梯子の粗さが
+        // 比率原則の到達度を制約していた実例)。
         let expected_minor = nearest_minor_by_ratio(1800, 1426.0, MOCK_ROW_HEIGHT);
-        assert_eq!(expected_minor, 10, "テスト側の独立計算自体が想定値からずれている");
+        assert_eq!(expected_minor, 15, "テスト側の独立計算自体が想定値からずれている");
 
         let (minor, major) = tick_steps(Some(fps30()), 1800, 1426.0, MOCK_ROW_HEIGHT);
         assert_eq!(minor, expected_minor, "小目盛が比率最近傍のステップになっていない");
-        assert_eq!(minor, 10, "小目盛の具体値が想定(10f)とずれている");
+        assert_eq!(minor, 15, "小目盛の具体値が想定(15f=半秒)とずれている");
         assert_eq!(major % minor, 0, "大目盛が小目盛の整数倍でない");
     }
 
