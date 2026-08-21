@@ -115,9 +115,10 @@ pub use motolii_stage_pane as stage;
 /// +裁定162 切片 B0 で新規追加した骨格 crate(`motolii-browser-pane`、既存 pane の
 /// 「型 alias で外部参照を壊さない」手口と同じ命名 — こちらは移設ではなく新規
 /// なので壊す既存参照は無い)。B2(rail/filter)で `state::Message`/`PaneState`
-/// が非空になったが、**`Shell::view` にはまだ組み込まない**(描画ゼロ = 挙動
-/// ゼロ変更の証明、view 配線はパネル開閉トグルごと B3 で絵と一緒に —
-/// `browser_pane` crate 冒頭 doc 参照)。
+/// が非空になり、**B3 で `Shell::view` へ配線した**(header の "Browser" トグル
+/// (`self.header()`)+ `self.browser.is_open()` の間だけ木へ現れる、`view()`
+/// 参照)。開閉フラグは `PaneState::is_open`(`browser_pane` crate 冒頭 doc の
+/// 「B1/B2 からの委譲形を崩さない」設計選択)。
 pub use motolii_browser_pane as browser_pane;
 
 use chrome::button_style;
@@ -352,13 +353,15 @@ pub enum Message {
     /// と同型)。腕ごとの doc は `stage::Message` 側を参照。
     Stage(stage::Message),
 
-    // ---- Browser pane(ζ 縫い目調査+裁定162 切片 B0/B1/B2、まだ画面には出ない) ----
+    // ---- Browser pane(ζ 縫い目調査+裁定162 切片 B0/B1/B2/B3) ----
     /// `motolii_browser_pane::Message` を1本で畳む(`Message::Settings`/
-    /// `Message::Stage` と同型)。B2 で `browser_pane::Message` へ rail
-    /// scope 選択/検索欄/Clear の3腕が増えた — `Shell::update` は
+    /// `Message::Stage` と同型)。B2 で rail scope 選択/検索欄/Clear の3腕が、
+    /// B3 で `ToggleBrowserPanel` が増えた — `Shell::update` は
     /// `self.browser.update(msg)` (`timeline_pane::PaneState::update` と
-    /// 同型の委譲)へそのまま渡す。**`Shell::view` にはまだ何も現れない**
-    /// (`browser_pane` crate 冒頭 doc 参照、B3 でパネル開閉トグルごと配線)。
+    /// 同型の委譲)へそのまま渡す(`ToggleBrowserPanel` も含め — Shell 側は
+    /// per-variant 分岐を増やさない、`browser_pane::state` crate 冒頭 doc
+    /// 参照)。**B3 で `Shell::view` へ配線した**(`self.browser.is_open()`
+    /// の間だけ木へ現れる、`view()` 参照)。
     Browser(browser_pane::Message),
 
     // ---- layer クリップボード(普通地図 消化第1波 U1、正典 §4) ----
@@ -565,12 +568,14 @@ pub struct Shell {
     /// まとまった(`PaneState` doc comment 参照)。
     timeline: timeline_pane::PaneState,
 
-    // ---- Browser pane(裁定162 切片 B2) ----
-    /// rail scope + 検索欄の transient 状態(`browser_pane::state::PaneState`
-    /// doc 参照)。**Document ではない** — `timeline` フィールドと同じ
-    /// 「pane 側の transient を1個の PaneState へ集約する」形だが、Document/
-    /// Session を触らないぶん更に薄い(`Message::Browser` の match 腕は
-    /// `self.browser.update(msg)` だけで完結する)。
+    // ---- Browser pane(裁定162 切片 B2/B3) ----
+    /// rail scope + 検索欄 + パネル開閉(B3)の transient 状態
+    /// (`browser_pane::state::PaneState` doc 参照)。**Document ではない** —
+    /// `timeline` フィールドと同じ「pane 側の transient を1個の PaneState へ
+    /// 集約する」形だが、Document/Session を触らないぶん更に薄い
+    /// (`Message::Browser` の match 腕は `self.browser.update(msg)` だけで
+    /// 完結する — `settings_panel_open`/`edit_menu_open` と違い、パネル開閉
+    /// フラグもこの `PaneState` の内側にある)。
     browser: browser_pane::PaneState,
 
     // ---- Settings パネル(タスク#18) ----
@@ -824,12 +829,13 @@ impl Shell {
             }
             Message::Settings(msg) => self.update_settings(msg),
             Message::Stage(msg) => self.update_stage(msg),
-            // B2: rail scope 選択/検索欄/Clear の3腕(`browser_pane::Message`)を
-            // pane 側の唯一の書き口(`PaneState::update`)へそのまま委譲する
-            // (`timeline_pane::PaneState::update` への委譲と同型)。Document/
-            // Session を一切触らない pane-local 状態なので `&mut self.browser`
-            // だけで完結する(引数を追加で貸す必要が無い、`browser_pane::state`
-            // crate doc 参照)。
+            // B2/B3: rail scope 選択/検索欄/Clear/ToggleBrowserPanel の4腕
+            // (`browser_pane::Message`)を pane 側の唯一の書き口
+            // (`PaneState::update`)へそのまま委譲する(`timeline_pane::
+            // PaneState::update` への委譲と同型)。Document/Session を一切
+            // 触らない pane-local 状態なので `&mut self.browser` だけで完結
+            // する(引数を追加で貸す必要が無い、`browser_pane::state` crate
+            // doc 参照)。
             Message::Browser(msg) => self.browser.update(msg),
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
@@ -1772,6 +1778,17 @@ impl Shell {
         self.settings_panel_open
     }
 
+    /// Browser パネルの開閉状態(B3)。**screenshot 器具専用**の読み口
+    /// (`settings_panel_open` と同じ形) — `--browser-open` CLI フラグ
+    /// (`main.rs`)経由で `Message::Browser(browser_pane::Message::
+    /// ToggleBrowserPanel)` を実際に通した後の状態を screenshot.rs が読める
+    /// ようにする。フラグそのものは `browser::PaneState::is_open` に住む
+    /// (`state.rs` 冒頭 doc「Shell 側に per-variant 分岐を増やさない」) —
+    /// この口は単なる薄い委譲。
+    pub fn browser_panel_open(&self) -> bool {
+        self.browser.is_open()
+    }
+
     /// 描き上がった Stage フレームの生 RGBA。**常に背景込みの export 真値**
     /// (`Engine::render_frame`)— 市松トグルで一切変わらない。**screenshot
     /// 器具専用**(`screenshot.rs`)— 通常描画は shader Program(`stage_pane`)を
@@ -2011,6 +2028,33 @@ impl Shell {
                 .map(Message::Settings),
             );
         }
+        // Browser パネル(裁定162 切片 B3)。**表示だけの分岐**(Settings と
+        // 同型 — 開いていなければ木に一切現れない、Q0)。`browser_pane::view`
+        // 自身の内側は `Length::Fill` の scrollable を持つ(`card_grid_view`)
+        // ので、この位置で高さを明示的に区切る(`Length::Fixed`) — 区切らずに
+        // Shrink のまま積むと、内側の Fill が「無限に高くなりたい」要求として
+        // 上へ伝播し、下の Stage/Timeline/Transport/Status 帯を押し出してしまう
+        // (Settings の中身は Fill を一切使わないので、この問題は Settings には
+        // 無かった)。高さは `browser_pane::PANEL_HEIGHT_ROW_HEIGHT_RATIO`
+        // (`screenshot.rs` と共有する1つの値、doc 参照)。
+        if self.browser.is_open() {
+            let browser_height = dims.row_height * browser_pane::PANEL_HEIGHT_ROW_HEIGHT_RATIO;
+            let browser_items = browser_pane::model::assets(&store);
+            layout = layout.push(
+                container(
+                    browser_pane::view(
+                        &browser_items,
+                        self.browser.scope(),
+                        self.browser.query(),
+                        dims,
+                        colors,
+                    )
+                    .map(Message::Browser),
+                )
+                .width(Length::Fill)
+                .height(Length::Fixed(browser_height)),
+            );
+        }
 
         layout
             .push(
@@ -2066,6 +2110,14 @@ impl Shell {
             button(text("+ Layer").size(dims.body_text))
                 .style(move |_theme, status| button_style(dims, colors, status))
                 .on_press(Message::AddLayer),
+            // **Browser トグル**(裁定162 切片 B3、normal-map id980 Project/
+            // Media Pool panel — entries `0:0:3:0`=全出典が panel 型、menu/
+            // shortcut 出典ゼロなので S0 は「ヘッダボタン単独で適合」— Settings
+            // と同格の header トグル、S6 併設要件は無い)。他ボタンと同じく
+            // 文言ボタン(下の Settings ボタンの doc と同じ理由)。
+            button(text("Browser").size(dims.body_text))
+                .style(move |_theme, status| button_style(dims, colors, status))
+                .on_press(Message::Browser(browser_pane::Message::ToggleBrowserPanel)),
             // **歯車ボタン**(発注書)。他3ボタンと同じく文言ボタン — この codebase
             // は一貫してアイコンではなく文字で chrome を作る(M/S glyph も文字、
             // `inspector_pane.rs` 冒頭 doc 参照)ので、絵文字/unicode グリフの

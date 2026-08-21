@@ -6,11 +6,12 @@
 //! (既定起動は従来どおり空)。`--fixture --screenshot <path>` は窓を開かず
 //! 1フレームを PNG へ書いて終了する(`motolii_shell::screenshot`)。
 //!
-//! `--screenshot` と併用できる状態フラグ4本(実機報告の検分用): `--checkerboard`
+//! `--screenshot` と併用できる状態フラグ5本(実機報告の検分用): `--checkerboard`
 //! は Stage 下縁状態帯(裁定163)の市松トグルを ON にした状態を、`--transparent-bg` は背景
 //! プリセット「Transparent」(alpha=0)を適用した状態を、`--settings-open` は
 //! 歯車ボタンを押した状態を、`--observe` は観測カメラ(裁定157)を有効にした
-//! 状態を、それぞれ実際の `Message` 経由(`Shell::update`)で再現する —
+//! 状態を、**`--browser-open`(B3)は header の "Browser" ボタンを押した状態**
+//! を、それぞれ実際の `Message` 経由(`Shell::update`)で再現する —
 //! ボタン/ホイール/中ボタンドラッグを実際に操作した時と同じ経路
 //! (`--observe` は `stage::StageOverlay` が計算するのと同じ形の
 //! `Message::Stage(stage::Message::Observe(_))` を1回出すだけ — Stage の
@@ -28,6 +29,7 @@ fn main() -> iced::Result {
     let transparent_bg = args.iter().any(|a| a == "--transparent-bg");
     let settings_open = args.iter().any(|a| a == "--settings-open");
     let observe = args.iter().any(|a| a == "--observe");
+    let browser_open = args.iter().any(|a| a == "--browser-open");
 
     // `--screenshot` は窓を一切開かない一発ツール(検分器具の口)。fixture でしか
     // 意味を持たないので、`--fixture` の有無に関わらずここでは常に fixture を組む。
@@ -51,6 +53,11 @@ fn main() -> iced::Result {
         if settings_open {
             let _ = shell.update(motolii_shell::Message::Settings(
                 motolii_shell::settings_pane::Message::ToggleSettingsPanel,
+            ));
+        }
+        if browser_open {
+            let _ = shell.update(motolii_shell::Message::Browser(
+                motolii_shell::browser_pane::Message::ToggleBrowserPanel,
             ));
         }
         if observe {

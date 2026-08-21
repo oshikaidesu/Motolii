@@ -14,12 +14,14 @@
 //! `browser-semantics.html` 救出台帳で「予約地」(タグ束・filesystem 走査裁定
 //! 待ち)と明記済み — この切片では実装しない。
 
-use motolii_store::{AssetId, StoreView};
+use motolii_store::{AssetId, RationalTime, StoreView};
 
 /// 一覧1行ぶんの投影。`Asset` から Browser が要る最小の面だけを切り出す
-/// (`AssetListItem { id, name, kind, path, fingerprint }` — EXACT TARGET #1)。
-/// **`fingerprint` は B2 で追加**(`Asset::content_hash` をそのまま運ぶ) —
-/// 検索欄が「表示名/fingerprint マッチ」(OUTCOME)を満たすための面。
+/// (`AssetListItem { id, name, kind, path, fingerprint, duration }` — EXACT
+/// TARGET #1)。**`fingerprint` は B2 で追加**(`Asset::content_hash` をそのまま
+/// 運ぶ) — 検索欄が「表示名/fingerprint マッチ」(OUTCOME)を満たすための面。
+/// **`duration` は B3 で追加**(`Asset::duration` をそのまま運ぶ) — カード grid
+/// の「尺」表示(B3 OUTCOME「種別アイコン+名前+尺のカード骨格」)のための面。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssetListItem {
     pub id: AssetId,
@@ -30,6 +32,10 @@ pub struct AssetListItem {
     pub path: Option<String>,
     /// `Asset::content_hash` の写し(検索欄のマッチ対象、[`visible`] 参照)。
     pub fingerprint: String,
+    /// `Asset::duration` の写し。probe が尺を読めなかった素材は `None`
+    /// (`Asset::duration` の doc と同じ「分かる時だけ入る」)— カード grid は
+    /// [`format_duration`] で「—」へ丸める。
+    pub duration: Option<RationalTime>,
 }
 
 /// rail/filter が読む粗い種別。`AssetListItem::kind` の prefix(`/` 区切りの
@@ -55,6 +61,46 @@ pub fn category_of(kind: &str) -> Category {
         "audio" => Category::Audio,
         _ => Category::Other,
     }
+}
+
+impl Category {
+    /// カード grid の caption(B3)が読む表示文言。`RailScope::label` と語彙は
+    /// 揃えるが単数形(1件のカードの種別を言う文なので「Video」等そのまま —
+    /// rail 側は scope の複数件を言う文脈なので同じ語で兼用できる)。
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Video => "Video",
+            Self::Image => "Image",
+            Self::Audio => "Audio",
+            Self::Other => "Other",
+        }
+    }
+
+    /// カード grid の thumb に載せる種別グリフ(B3)。rail の種別行アイコン
+    /// (`browser-semantics.html` `▣ Video`/`▧ Images`/`♪ Audio`)と同じ語彙を
+    /// 再利用する — thumb とrail が別の記号語彙を持つと意味が2つに割れる。
+    pub fn glyph(self) -> &'static str {
+        match self {
+            Self::Video => "▣",
+            Self::Image => "▧",
+            Self::Audio => "♪",
+            Self::Other => "▪",
+        }
+    }
+}
+
+/// 尺の表示整形(mm:ss)。**IO なし・純関数**。`None`(probe が尺を読めなかった
+/// 素材、`Asset::duration` の doc 参照)は Inspector の「値が無い」慣用と同じ
+/// 1文字「—」へ丸める。負値・NaN は現実の `Asset::duration` からは出ない想定
+/// だが `max(0.0)` で防御的に 0 へ丸める(M2 系「入力起因で panic しない」流儀)。
+pub fn format_duration(duration: Option<RationalTime>) -> String {
+    let Some(duration) = duration else {
+        return "—".to_owned();
+    };
+    let total_seconds = duration.as_seconds_f64().max(0.0).round() as u64;
+    let minutes = total_seconds / 60;
+    let seconds = total_seconds % 60;
+    format!("{minutes}:{seconds:02}")
 }
 
 /// rail の scope(mock `.librarySidebar` `LIBRARY` 節、第一波は種別のみ)。
@@ -120,6 +166,7 @@ pub fn assets(store: &StoreView<'_>) -> Vec<AssetListItem> {
             kind: asset.asset_type,
             path: asset.path_absolute,
             fingerprint: asset.content_hash,
+            duration: asset.duration,
         })
         .collect()
 }
@@ -313,5 +360,33 @@ mod tests {
 
         // video scope だが image の名前で検索 → 0件。
         assert!(visible(&items, RailScope::Video, "logo").is_empty());
+    }
+
+    // -----------------------------------------------------------------
+    // B3 EXACT TARGET: format_duration(カード grid の「尺」表示、純関数)。
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn format_duration_renders_none_as_an_em_dash() {
+        assert_eq!(format_duration(None), "—");
+    }
+
+    #[test]
+    fn format_duration_renders_whole_seconds_as_mmss() {
+        let five_seconds = RationalTime::try_new(5, 1).unwrap();
+        assert_eq!(format_duration(Some(five_seconds)), "0:05");
+    }
+
+    #[test]
+    fn format_duration_carries_minutes_over() {
+        let two_minutes_five = RationalTime::try_new(125, 1).unwrap();
+        assert_eq!(format_duration(Some(two_minutes_five)), "2:05");
+    }
+
+    #[test]
+    fn format_duration_rounds_to_the_nearest_second() {
+        // 4.6秒 → 丸めて5秒(切り捨てだと利用者に「短く見える」誤差になる)。
+        let almost_five = RationalTime::try_new(23, 5).unwrap();
+        assert_eq!(format_duration(Some(almost_five)), "0:05");
     }
 }

@@ -1,51 +1,66 @@
 //! wraps: iced+motolii-store+motolii-tokens-rs — Browser pane 骨格(B0)+
-//! 一覧 projection(B1)+ rail/filter(B2、この波)。
+//! 一覧 projection(B1)+ rail/filter(B2)+ view 配線(B3、この波)。
 //!
 //! ζ 縫い目調査(`docs/reviews/2026-08-21-browser-seam-survey.md`)+裁定162 の
 //! 切片割り: B0 骨格(挙動ゼロ・PNG 一致)→ B1 素材列挙(`model.rs`)→
-//! **B2 rail/filter(この crate、この波)** → B3 view(視覚、
+//! B2 rail/filter → **B3 view(この crate、この波: 視覚、
 //! `browser-library.html` 構造のみ借用しトンマナは tokens 読み替え・
-//! `motolii-shell::Shell::view` への組み込み)→ B4 静止画サムネ ∥ B5 動画
+//! `motolii-shell::Shell::view` への組み込み)** → B4 静止画サムネ ∥ B5 動画
 //! サムネ → B6 ドラッグ配置。第一波は MEDIA 種別のみ(EFFECTS/CREATE は
 //! 意味起草タスク#14 が空席)。
 //!
-//! ## B2 の範囲(この波)
-//! [`model::visible`](rail scope + 検索文字列で一覧を絞る純関数)+
-//! [`state::PaneState`](scope/検索欄の transient 状態)+ [`view`](mock
-//! `.librarySidebar` の `LIBRARY` 節相当の rail 列 + `.filterShelf` 相当の
-//! filter shelf を実 widget として描く — **rail/filter だけ**、mock のカード
-//! grid・selection tray・tag editor 等は B3 が全体トンマナと一緒に転写する)。
-//! `Collections`/`Places` は `browser-semantics.html` 救出台帳が明記する
-//! 「予約地」のまま(タグ束・filesystem 走査裁定待ち) — この波では rail に
-//! 出さない。
+//! ## B3 の範囲(この波)
+//! - カード grid(mock `.thumbnailGrid`/`.libraryCard`/`.libraryThumb`/
+//!   `.cardCopy` の構造転写、[`card_grid_view`])。**サムネイルは代表フレーム
+//!   抽出なし**(B5 境界、`docs/reviews/2026-08-21-browser-seam-survey.md`
+//!   FINDING 1「動画サムネは旧世界でも未実装」)— thumb は種別グリフ
+//!   ([`model::Category::glyph`])+ 種別で塗り分けた色地のみ。名前+尺
+//!   ([`model::format_duration`])の「カード骨格」まで(OUTCOME (1))
+//! - `Shell::view` への実配線(パネル開閉トグル込み、[`state::Message::
+//!   ToggleBrowserPanel`]/[`state::PaneState::is_open`])。`Shell` 側は
+//!   `self.browser.view(...)` が返す木を `is_open()` の時だけ差し込むだけ
+//!   (`Settings` パネルと同じ「表示だけの分岐」)
+//! - rail/filter(B2)はそのまま残す — この波は「カード grid を実装し、
+//!   pane 全体を Shell へつなぐ」ことが範囲で、rail/filter 自体の意匠は
+//!   変えない
 //!
-//! **`motolii-shell::Shell::view` へはまだ組み込まない**(crate doc 冒頭・
-//! `motolii-shell::browser_pane` re-export の doc も参照)— B1 と同じ
-//! 「描画ゼロ = 挙動ゼロ変更の証明」を延長し、視覚配線(パネル開閉トグル込み)
-//! は B3 で絵の全体と一緒に行う。この波の [`view`] は crate 自身の dev-only
-//! `iced_test` 直叩き(`tests/rail_filter_atlas.rs`)でだけ検分される —
-//! `inspector_pane` の `tests/value_cell_legibility.rs` と同じ「shell を経由
-//! せず pane 単体を叩く」手口(Cargo.toml dev-dependency の doc 参照)。
+//! `Collections`/`Places`/タブ4種(EFFECTS/CREATE/PANELS)/selection tray/
+//! tag editor/context menu/履歴 ‹› は `browser-semantics.html` 救出台帳が
+//! 明記する「予約地」のまま(タグ束・filesystem 走査裁定・意味起草タスク#14
+//! 待ち) — この波でも出さない(B2 の留保をそのまま延長)。
+//!
+//! ## 寸法の裁定165/167/168 遵守(カード grid)
+//! `motolii-tokens-rs` は書き換えない(この波の allowlist 外) — 新しい寸法は
+//! 全部この crate 内のローカル定数として、既存 token(`Dimensions::
+//! row_height`)からの**比率**で導出する(裁定165「形は比率で定数化」)。
+//! [`CARD_WIDTH_ROW_HEIGHT_RATIO`]/[`THUMB_ASPECT_W`]/[`THUMB_ASPECT_H`] の
+//! doc に分母と出典を明記する。余白は既存の spacing ラダー
+//! (`dims.spacing_xs`/`spacing_s`)をそのまま再利用する(裁定167 のラダー自体
+//! は `Dimensions` 側で既に量子化済みの段 — 新しい段を発明しない)。文字は
+//! `dims.micro_text`(mock `.cardCopy strong/small{font-size:8px}` と一致する
+//! 既存の未消費段 — 裁定168 の em 族はこの crate 独自の余白計算をしない分
+//! 適用対象が無い、名前/caption の非衝突は rail.rs と同じ native ellipsis
+//! 手口([`card_view`] 参照)で満たす)。
 //!
 //! ## この crate の依存
 //! pane split 流儀(`docs/reviews/2026-08-21-pane-split-survey.md`)が許す
 //! 構成は `iced+motolii-core+motolii-store+motolii-tokens-rs+
 //! motolii-shell-state(+motolii-media、`motolii-stage-pane` の
 //! `motolii-engine` 依存と同型の単独例外)`。B1 で `motolii-store` を、
-//! B2 で `motolii-tokens-rs`(view の寸法・色)を足した。rail scope/検索欄の
-//! 状態は `Session` を必要としない pane-local な形(`state.rs` doc 参照)な
-//! ので、`motolii-shell-state` はまだ引かない — サムネ(`motolii-media`)は
-//! B4/B5。
+//! B2 で `motolii-tokens-rs`(view の寸法・色)を足した。rail scope/検索欄/
+//! パネル開閉の状態は `Session` を必要としない pane-local な形(`state.rs`
+//! doc 参照)なので、`motolii-shell-state` はまだ引かない — サムネ
+//! (`motolii-media`)は B4/B5。
 //!
-//! ## `motolii-shell` への組み込み(B1/B2 時点)
-//! root `motolii_shell::Message::Browser(Message)` が1本で畳む想定
-//! (`Settings`/`Stage`/`Timeline` と同型)。`motolii_shell::Message::Browser`
-//! の match 腕は `state::Message` が非空になったのに合わせて
-//! `self.browser.update(msg)`(`timeline_pane::PaneState::update` と同型の
-//! 委譲)へ更新済み — ただし呼び先が消費するだけで `Shell::view` には
-//! まだ何も現れない(上記「B2 の範囲」参照)。台帳への記帳自体
-//! (`Intent::AdmitAsset` の発行)は `Shell::admit`(`motolii-shell` 側)が
-//! 持つ — この crate は読み専用の projection+絞り込みしか持たない。
+//! ## `motolii-shell` への組み込み(B3、この波で完了)
+//! root `motolii_shell::Message::Browser(Message)` が1本で畳む
+//! (`Settings`/`Stage`/`Timeline` と同型)。`Shell::update` は
+//! `Message::Browser(msg) => self.browser.update(msg)` のまま(B1/B2 から
+//! 不変 — `ToggleBrowserPanel` も含め `PaneState` が丸ごと引き取る、`state.rs`
+//! 冒頭 doc 参照)。`Shell::view` はヘッダに "Browser" トグルボタンを持ち、
+//! `self.browser.is_open()` の間だけ [`view`] の出力を木へ差し込む。台帳への
+//! 記帳自体(`Intent::AdmitAsset` の発行)は `Shell::admit`(`motolii-shell`
+//! 側)が持つ — この crate は読み専用の projection+絞り込み+view しか持たない。
 
 pub mod model;
 pub mod state;
@@ -58,11 +73,21 @@ use iced::{Element, Length};
 
 use motolii_tokens_rs::{Colors, Dimensions};
 
+/// `Shell::view` がパネル全体へ割く高さ = `dims.row_height` の何倍か(裁定165
+/// 「形は比率で定数化・分母明記」、**分母 = `Dimensions::row_height`**)。
+/// filter shelf+結果件数(≈2行)+ カード2行ぶん([`CARD_WIDTH_ROW_HEIGHT_RATIO`]/
+/// [`THUMB_ASPECT_W`]/[`THUMB_ASPECT_H`] から逆算した1行あたりの高さ)+ 余白を
+/// 目安に丸めた値。**`pub`**: `motolii-shell::lib.rs::Shell::view`(実配線)と
+/// `motolii-shell::screenshot`(トンマナ検分 instrument)の両方がこの1つの値を
+/// 共有する(値を複製しない — 複製すると2箇所が食い違う典型的な二重保守)。
+/// スクロール自体は内側の `scrollable`(mock 同様)が持つので、この高さは
+/// 「全カードが常に見える高さ」である必要はない。
+pub const PANEL_HEIGHT_ROW_HEIGHT_RATIO: f32 = 14.0;
+
 /// rail(mock `.librarySidebar` `LIBRARY` 節)+ filter shelf(mock
-/// `.filterShelf`)+ 絞り込み結果の一覧を描く。**mock のカード grid/
-/// selection tray/tag editor はまだ描かない**(B3、crate 冒頭 doc 参照) —
-/// この波は「rail 選択+filter で一覧が絞れる」ことが実 widget で見える
-/// ところまで。`items` は [`model::assets`](B1)がそのまま返す未絞り込みの
+/// `.filterShelf`)+ カード grid(mock `.thumbnailGrid`、B3)を描く。
+/// **selection tray/tag editor/context menu はまだ描かない**(予約地、crate
+/// 冒頭 doc 参照)。`items` は [`model::assets`](B1)がそのまま返す未絞り込みの
 /// 投影 — 絞り込みはこの関数の中で [`model::visible`] を呼ぶ(呼び手は
 /// フィルタ済みリストを別途作らなくてよい)。
 pub fn view(
@@ -102,8 +127,8 @@ fn rail_view(scope: RailScope, dims: Dimensions, colors: Colors) -> Element<'sta
         .into()
 }
 
-/// filter shelf(mock `.filterShelf`)+ 結果件数 + 一覧(mock のカード grid
-/// ではなく、この波は簡易な行リスト — 視覚の grid/thumbnail は B3・B4)。
+/// filter shelf(mock `.filterShelf`)+ 結果件数 + カード grid(mock
+/// `.thumbnailGrid`、B3 — [`card_grid_view`])。
 fn catalog_view(
     scope: RailScope,
     query: &str,
@@ -117,28 +142,10 @@ fn catalog_view(
         .size(dims.caption_text)
         .color(colors.text_muted);
 
-    let list: Element<'static, Message> = if filtered.is_empty() {
-        container(
-            text("No matching media")
-                .size(dims.caption_text)
-                .color(colors.text_muted),
-        )
-        .padding(dims.spacing_m)
-        .into()
-    } else {
-        column(
-            filtered
-                .iter()
-                .cloned()
-                .map(|item| result_row(item, dims, colors))
-                .collect::<Vec<_>>(),
-        )
-        .spacing(dims.spacing_xs)
-        .into()
-    };
+    let grid = card_grid_view(filtered, dims, colors);
 
     container(
-        column![shelf, summary, scrollable(list).height(Length::Fill)]
+        column![shelf, summary, grid]
             .spacing(dims.spacing_xs)
             .padding(dims.spacing_m),
     )
@@ -275,12 +282,125 @@ fn search_input_style(
     }
 }
 
-/// 一覧の1行(mock のカード grid ではなく、この波の簡易表示 — 名前+種別)。
-fn result_row(item: AssetListItem, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
-    row![
-        text(item.name).size(dims.body_text).color(colors.text_primary).width(Length::Fill),
-        text(item.kind).size(dims.caption_text).color(colors.text_muted),
-    ]
-    .spacing(dims.spacing_xs)
-    .into()
+// ---------------------------------------------------------------------------
+// B3: カード grid(mock `.thumbnailGrid`/`.libraryCard` の構造転写)。
+// ---------------------------------------------------------------------------
+
+/// grid の列数(mock 既定表示 `data-view="grid"` の
+/// `grid-template-columns: repeat(2, minmax(0,1fr))` — 直接転写。thumbnails
+/// モード(4列)/list モード(1列)の view mode トグルは selection tray/tag
+/// editor と同様まだ描かない予約地、crate 冒頭 doc 参照)。**`pub`**:
+/// `motolii-shell::screenshot`(トンマナ検分 instrument)が同じ比率で近似矩形を
+/// 描くため、値を複製せずここから読む。
+pub const GRID_COLUMNS: usize = 2;
+
+/// カード幅 = `dims.row_height` の何倍か(裁定165「形は比率で定数化・分母
+/// 明記」)。**分母 = `Dimensions::row_height`**。旧世界のカード寸(意味論
+/// モック「未決」台帳が挙げる「旧124×84踏襲か」)を絶対px のまま転写せず、
+/// 既存 token への比率へ変換した値 — `6.0 × 20px(既定 row_height)= 120px`
+/// (旧値124との差3%は「絶対px正本を持たない」制約を比率丸めで解消した結果)。
+/// **`pub`**: [`GRID_COLUMNS`] と同じ理由(`motolii-shell::screenshot` 参照)。
+pub const CARD_WIDTH_ROW_HEIGHT_RATIO: f32 = 6.0;
+
+/// サムネの縦横比(mock `.libraryThumb{aspect-ratio:16/9}` の直接転写、
+/// 分母=9)。**`pub`**: [`GRID_COLUMNS`] と同じ理由。
+pub const THUMB_ASPECT_W: f32 = 16.0;
+pub const THUMB_ASPECT_H: f32 = 9.0;
+
+/// カード grid 本体。**サムネイルは代表フレーム抽出なし**(B5 境界、crate
+/// 冒頭 doc 参照)— thumb は種別グリフ+種別で塗り分けた色地のみ、名前+尺の
+/// 「カード骨格」まで(B3 OUTCOME (1))。`filtered` が空なら mock 同様「無い」
+/// ことを1行で言う(B2 から不変の文言)。
+fn card_grid_view(
+    filtered: &[AssetListItem],
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    if filtered.is_empty() {
+        return container(
+            text("No matching media")
+                .size(dims.caption_text)
+                .color(colors.text_muted),
+        )
+        .padding(dims.spacing_m)
+        .into();
+    }
+
+    let rows: Vec<Element<'static, Message>> = filtered
+        .chunks(GRID_COLUMNS)
+        .map(|chunk| {
+            let cards: Vec<Element<'static, Message>> = chunk
+                .iter()
+                .cloned()
+                .map(|item| card_view(item, dims, colors))
+                .collect();
+            row(cards).spacing(dims.spacing_s).into()
+        })
+        .collect();
+
+    scrollable(column(rows).spacing(dims.spacing_s))
+        .height(Length::Fill)
+        .into()
+}
+
+/// 1枚のカード(mock `.libraryCard` — thumb + `.cardCopy`)。名前/caption は
+/// `rail.rs`(Timeline)と同じ native ellipsis 手口(`Wrapping::None` +
+/// `Ellipsis::End`、`iced_test::simulator` 上の `canvas::Text` には効かない
+/// バグの回避 — この widget は実 `text()` なので影響しない、TL-arch §2.5
+/// 実測)で「隣の箱へ決して入らない」(裁定168 不衝突文法)。
+fn card_view(item: AssetListItem, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    let card_width = dims.row_height * CARD_WIDTH_ROW_HEIGHT_RATIO;
+    let thumb_height = card_width * THUMB_ASPECT_H / THUMB_ASPECT_W;
+    let category = model::category_of(&item.kind);
+
+    let thumb = container(
+        text(category.glyph())
+            .size(dims.micro_text)
+            .color(colors.text_primary),
+    )
+    .width(Length::Fixed(card_width))
+    .height(Length::Fixed(thumb_height))
+    .align_x(iced::alignment::Horizontal::Center)
+    .align_y(iced::alignment::Vertical::Center)
+    .style(move |_theme| container::Style {
+        background: Some(iced::Background::Color(thumb_fill(category, colors))),
+        border: iced::Border {
+            color: colors.border_default,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    });
+
+    let text_width = card_width;
+    let name = text(item.name)
+        .size(dims.micro_text)
+        .color(colors.text_primary)
+        .width(Length::Fixed(text_width))
+        .wrapping(iced::widget::text::Wrapping::None)
+        .ellipsis(iced::widget::text::Ellipsis::End);
+
+    let caption = text(format!("{} · {}", category.label(), model::format_duration(item.duration)))
+        .size(dims.micro_text)
+        .color(colors.text_muted)
+        .width(Length::Fixed(text_width))
+        .wrapping(iced::widget::text::Wrapping::None)
+        .ellipsis(iced::widget::text::Ellipsis::End);
+
+    container(column![thumb, name, caption].spacing(dims.spacing_xs))
+        .width(Length::Fixed(card_width))
+        .padding(dims.spacing_xs)
+        .into()
+}
+
+/// カード thumb の塗り(種別ごとに既存 `Colors` ロールを再利用 — 新ロールは
+/// 起こさない。装飾的な塗り分けであって新しい意味役割ではないため、裁定164
+/// 「意味役割が新しい時は専用ロールを起こす」の対象外と判断)。
+fn thumb_fill(category: model::Category, colors: Colors) -> iced::Color {
+    match category {
+        model::Category::Video => colors.way_timeline,
+        model::Category::Image => colors.shape,
+        model::Category::Audio => colors.data,
+        model::Category::Other => colors.surface_raised,
+    }
 }

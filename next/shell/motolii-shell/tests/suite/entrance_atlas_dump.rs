@@ -133,10 +133,12 @@ fn atlas_includes_known_widgets_within_window_bounds() {
     );
 
     // 既知 widget(header ボタンの文言、lib.rs 実測: Edit/Undo/Redo/+ Layer/
-    // Settings)が content 列に現れる — フル Shell::view を歩けていることの
-    // 証拠。"Edit" は M-menu MB-0+Edit(2026-08-22)で追加したメニューバー
+    // Browser/Settings)が content 列に現れる — フル Shell::view を歩けている
+    // ことの証拠。"Edit" は M-menu MB-0+Edit(2026-08-22)で追加したメニューバー
     // トップレベルの新規 target(発注書 RETURN「atlas に menubar が現れる」)。
-    for expected in ["Edit", "Undo", "Redo", "+ Layer", "Settings"] {
+    // "Browser" は裁定162 切片 B3(map id980 Project/Media Pool panel の
+    // 消化)で追加した header トグル。
+    for expected in ["Edit", "Undo", "Redo", "+ Layer", "Browser", "Settings"] {
         assert!(
             rows.iter().any(|row| row[5] == expected),
             "atlas に既知 widget の content={expected:?} が無い — フル Shell::view を歩けていない疑い"
