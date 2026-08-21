@@ -110,9 +110,10 @@ pub use motolii_stage_pane as stage;
 /// `browser_pane` は ζ 縫い目調査(`docs/reviews/2026-08-21-browser-seam-survey.md`)
 /// +裁定162 切片 B0 で新規追加した骨格 crate(`motolii-browser-pane`、既存 pane の
 /// 「型 alias で外部参照を壊さない」手口と同じ命名 — こちらは移設ではなく新規
-/// なので壊す既存参照は無い)。**B0 時点では `Message::Browser` の腕はあるが
-/// `Shell::view` には組み込まない**(描画ゼロ = 挙動ゼロ変更の証明、view 配線は
-/// B3 で絵と一緒に)。
+/// なので壊す既存参照は無い)。B2(rail/filter)で `state::Message`/`PaneState`
+/// が非空になったが、**`Shell::view` にはまだ組み込まない**(描画ゼロ = 挙動
+/// ゼロ変更の証明、view 配線はパネル開閉トグルごと B3 で絵と一緒に —
+/// `browser_pane` crate 冒頭 doc 参照)。
 pub use motolii_browser_pane as browser_pane;
 
 use chrome::button_style;
@@ -347,11 +348,13 @@ pub enum Message {
     /// と同型)。腕ごとの doc は `stage::Message` 側を参照。
     Stage(stage::Message),
 
-    // ---- Browser pane 骨格(ζ 縫い目調査+裁定162 切片 B0、まだ何も描かない) ----
+    // ---- Browser pane(ζ 縫い目調査+裁定162 切片 B0/B1/B2、まだ画面には出ない) ----
     /// `motolii_browser_pane::Message` を1本で畳む(`Message::Settings`/
-    /// `Message::Stage` と同型)。**B0 時点では `browser_pane::Message` が
-    /// 空 enum なので、この腕は実質発行されない**(B1 以降、素材列挙/rail・
-    /// filter の腕が増えるのに追随して `Shell::update` 側の match 中身も足す)。
+    /// `Message::Stage` と同型)。B2 で `browser_pane::Message` へ rail
+    /// scope 選択/検索欄/Clear の3腕が増えた — `Shell::update` は
+    /// `self.browser.update(msg)` (`timeline_pane::PaneState::update` と
+    /// 同型の委譲)へそのまま渡す。**`Shell::view` にはまだ何も現れない**
+    /// (`browser_pane` crate 冒頭 doc 参照、B3 でパネル開閉トグルごと配線)。
     Browser(browser_pane::Message),
 
     // ---- layer クリップボード(普通地図 消化第1波 U1、正典 §4) ----
@@ -549,6 +552,14 @@ pub struct Shell {
     /// まとまった(`PaneState` doc comment 参照)。
     timeline: timeline_pane::PaneState,
 
+    // ---- Browser pane(裁定162 切片 B2) ----
+    /// rail scope + 検索欄の transient 状態(`browser_pane::state::PaneState`
+    /// doc 参照)。**Document ではない** — `timeline` フィールドと同じ
+    /// 「pane 側の transient を1個の PaneState へ集約する」形だが、Document/
+    /// Session を触らないぶん更に薄い(`Message::Browser` の match 腕は
+    /// `self.browser.update(msg)` だけで完結する)。
+    browser: browser_pane::PaneState,
+
     // ---- Settings パネル(タスク#18) ----
     /// パネルの開閉。**表示だけの状態** — Document でも `Session`(選択・再生
     /// 位置)でもない。発注書は「Workspace 側」と指示しているが、Workspace 永続
@@ -622,6 +633,7 @@ impl Shell {
                 inspector_drag: None,
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
                 timeline: timeline_pane::PaneState::new(),
+                browser: browser_pane::PaneState::new(),
                 settings_panel_open: false,
                 checkerboard: false,
                 background_draft: None,
@@ -660,6 +672,7 @@ impl Shell {
             inspector_drag: None,
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
             timeline: timeline_pane::PaneState::new(),
+            browser: browser_pane::PaneState::new(),
             settings_panel_open: false,
             checkerboard: false,
             background_draft: None,
@@ -782,10 +795,13 @@ impl Shell {
             }
             Message::Settings(msg) => self.update_settings(msg),
             Message::Stage(msg) => self.update_stage(msg),
-            // B0: `browser_pane::Message` はまだ空 enum なので、この match は
-            // 中身が無い(`msg` に variant が無い = 到達しない、B1 以降で腕が
-            // 増えたらここへ追随させる)。
-            Message::Browser(msg) => match msg {},
+            // B2: rail scope 選択/検索欄/Clear の3腕(`browser_pane::Message`)を
+            // pane 側の唯一の書き口(`PaneState::update`)へそのまま委譲する
+            // (`timeline_pane::PaneState::update` への委譲と同型)。Document/
+            // Session を一切触らない pane-local 状態なので `&mut self.browser`
+            // だけで完結する(引数を追加で貸す必要が無い、`browser_pane::state`
+            // crate doc 参照)。
+            Message::Browser(msg) => self.browser.update(msg),
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
                 // **1操作 = 1 undo**。`AddLayer`/`SetMeta`/`SetAttrs`(差し色の

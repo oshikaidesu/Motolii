@@ -3323,7 +3323,9 @@ name = "motolii-browser-pane"
 version = "0.1.0"
 dependencies = [
  "iced",
+ "iced_test",
  "motolii-store",
+ "motolii-tokens-rs",
 ]
 
 [[package]]

@@ -12,3 +12,15 @@ iced.workspace = true
 # (motolii-shell-state)・視覚(motolii-tokens-rs)・サムネ(motolii-media)を
 # 実装する腕から順にこの一覧へ足していく。
 motolii-store.workspace = true
+# B2(切片 B2、この波): rail/filter の見た目(`view`)が `Dimensions`/`Colors` を
+# 読む — raw 値の直書き禁止(裁定117)。pane split survey の許容構成どおり
+# leaf crate をそのまま依存する(他 pane crate と同じ形)。
+motolii-tokens-rs.workspace = true
+
+[dev-dependencies]
+# `inspector_pane`(`tests/value_cell_legibility.rs`)と同じ手口: pane crate
+# 自身の `view()` を `iced_test::simulator` で直叩きし、rail/filter の
+# control が atlas(`iced_test::selector::Target`)として見えること・on_press
+# が実際に Message を publish することを shell(write-set 外)を経由せず
+# 確かめる。dev-only、この crate の外へは出さない。
+iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
