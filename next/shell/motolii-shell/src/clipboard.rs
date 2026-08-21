@@ -138,6 +138,11 @@ fn full_patch(attrs: &LayerAttrs) -> LayerAttrsPatch {
         pinned: Some(attrs.pinned),
         solo: Some(attrs.solo),
         locked: Some(attrs.locked),
+        // Copy/Paste/Duplicate は元 layer の複製(AE 同型) — 差し色も他の属性と
+        // 同じく「そのまま複製」で、新規生成点の決定論割当(`Shell::
+        // label_color_for_new_layer`)は使わない。複製した瞬間に色が変わったら
+        // 「複製した」という実感を裏切る。
+        label_color: Some(attrs.label_color),
     }
 }
 

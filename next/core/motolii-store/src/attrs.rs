@@ -112,6 +112,16 @@ pub struct LayerAttrs {
     /// `Err` で拒む。**`locked` 自身の解除だけは常に通す** — 自分をロックしたら二度と
     /// 触れなくなる、という詰みを作らない。既定 false。
     pub locked: bool,
+    /// レイヤー差し色(利用者裁定2026-08-21「色が足りない。Abletonはレイヤー全部に
+    /// 色」)。**RGB ではなくパレット index を保存**(AE ラベル色と同型 — テーマ
+    /// (パレットの実体色)を後から差し替えても既存ドキュメントの意味が保たれる)。
+    /// `None` = 未割当(旧ドキュメントの読み戻し・まだ一度も書かれていない layer)で、
+    /// 表示側は既定色(`way_timeline`)へ落ちる。生成時の決定論自動割当は
+    /// `motolii_shell` 側(`LayerId % パレット長`)が行う — ここは受け皿のみ。
+    /// `#[serde(default)]`: 旧ドキュメントの JSON にこのキーは無いので、無いと
+    /// `None` に読み戻す(欠落を `Err` にしない、他の任意フィールドと同じ扱い)。
+    #[serde(default)]
+    pub label_color: Option<u8>,
 }
 
 impl Default for LayerAttrs {
@@ -126,6 +136,7 @@ impl Default for LayerAttrs {
             pinned: false,
             solo: false,
             locked: false,
+            label_color: None,
         }
     }
 }
@@ -155,6 +166,9 @@ pub struct LayerAttrsPatch {
     pub pinned: Option<bool>,
     pub solo: Option<bool>,
     pub locked: Option<bool>,
+    /// 外側の `Option` が「触るか」、内側が「触るなら何にするか」(`None` で
+    /// 未割当へ戻す) — `parent` と同じ二重 `Option` の形。
+    pub label_color: Option<Option<u8>>,
 }
 
 impl LayerAttrsPatch {
@@ -186,6 +200,9 @@ impl LayerAttrsPatch {
         }
         if let Some(v) = self.locked {
             current.locked = v;
+        }
+        if let Some(v) = self.label_color {
+            current.label_color = v;
         }
         current
     }

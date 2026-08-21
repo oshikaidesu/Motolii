@@ -405,6 +405,28 @@ fn locked_layer_rejects_set_attrs_on_other_fields() {
     assert_eq!(attrs.name, "", "拒否されたのに name が変わっている");
 }
 
+/// `label_color` も「locked 以外のフィールド」の1つ — ロック中は触れない。
+#[test]
+fn locked_layer_rejects_label_color_change() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place(&mut doc, layer, solid([255, 0, 0, 255]), 0, 100);
+    set_locked(&mut doc, layer, true).unwrap();
+
+    let result = doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch {
+            label_color: Some(Some(4)),
+            ..Default::default()
+        },
+    });
+    let err = result.expect_err("locked 層への SetAttrs(label_color 変更)は拒まれるはず");
+    assert!(err.to_string().contains("locked"));
+
+    let attrs = doc.view().attrs(layer).unwrap().unwrap();
+    assert_eq!(attrs.label_color, None, "拒否されたのに label_color が変わっている");
+}
+
 // ---------------------------------------------------------------------------
 // locked — 解除だけは常に通る
 // ---------------------------------------------------------------------------

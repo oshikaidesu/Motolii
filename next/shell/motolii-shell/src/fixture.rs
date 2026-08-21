@@ -183,6 +183,13 @@ pub fn build() -> Fixture {
             layer: id,
             patch: LayerAttrsPatch {
                 name: Some(spec.name.to_owned()),
+                // レイヤー差し色(生成点の決定論割当と同じ式、`Shell::
+                // label_color_for_new_layer` 参照)。fixture 自体は
+                // `Message::AddLayer`/`admit` を経由しないので、比較PNG
+                // (発注書 ORACLE (e))が意味を持つようここでも同じ規則で
+                // 割り当てる — 15層が12色パレットを一周し、隣接色の
+                // 見分けやすさが検分できる。
+                label_color: Some(Some((id.0 % crate::tokens::LABEL_PALETTE_LEN as u64) as u8)),
                 ..Default::default()
             },
         });
