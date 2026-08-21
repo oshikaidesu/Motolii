@@ -9,6 +9,8 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| **H2: Timeline ツリー行(裁定173)** | 実装 | worktree(発注時に追記) | 旧世界 timeline_rows.rs 移植(fold 軸独立 flatten)+rail インデント/fold 三角。parent は表示の木のみ(変換合成は H1)。write-set= timeline-pane+shell-state+shell timeline系テスト |
+| **TP: transport 転写(ψ 主因1位根治)** | 実装 | worktree(発注時に追記) | slider tokens 化(細トラック+小方形つまみ・Ableton 型)・counter の ACCENT 撤去・モックへ transport 行追記(**夜間導出案 — 朝の合否待ち**)。write-set= shell/src transport 系+mock |
 | **B2: Browser rail/filter** | 実装 | worktree(発注時に追記) | ζ 切片 B2 — rail(bin/コレクション列)+filter shelf をモック転写・台帳一覧の絞り込み・map B束消化。write-set= browser-pane+shell Browser 腕のみ |
 | **MK2: mask 被覆代数** | 実装 | worktree(発注時に追記) | R9 切片 — coverage の Add/Subtract/Intersect/Difference 純関数+store mask mode(serde 後方互換)+engine 畳み込み。map mask 行消化。write-set= vector+store+engine のみ |
 | **M4: ゼロコピー presenter(widget 内蔵)** | 実装 | worktree(発注時に追記) | 裁定171 v2 — Pipeline 内に Compositor::with_device・prepare が描き render が main_target を直 blit。**スクラッチ禁止**: 移植元= 旧世界 `crates/motolii-ui/src/rerun_stage/adapter.rs`+rerun 本体の egui glue(利用者指摘) |
