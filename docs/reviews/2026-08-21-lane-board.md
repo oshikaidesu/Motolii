@@ -8,7 +8,6 @@
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
 | BL1b: fork accessor+線形化 | 実装(cargo・sonnet・**2リポ跨ぎ**) | fork checkout(`~/rust_ae/rerun-s2-seam-20260818` branch motolii/s2-append-to-store)+lane-engine | 裁定161 の実行: `ViewBuilder` へ main_target read accessor 純追加(camera seat 流儀)+`render_sequential` を線形空間 accumulator へ。受入= `#[ignore]` overlap テストの緑化。ローカル検証は `[patch]`(supervisor が検収時に rev pin へ差し替え)。push・rev bump・seam 台帳 commit は supervisor |
-| ι: B1 素材列挙+記帳結線 | 実装(cargo・sonnet) | lane-shell | browser-pane model(assets projection)+shell `AdmitPaths` が台帳へも記帳(配置挙動維持・IO 失敗は status+続行)。oracle= drop 2件→台帳2件・重複 drop 1件のまま |
 | κ: UI 入口台帳調査 | 調査(read-only・sonnet) | main checkout(書き込み禁止) | **S 空間スコア構想(利用者提起 2026-08-21 夜)の土台**: 全操作の種別(a 視界状態/b 対象動詞/c 大域動詞/d セッション既定)・現在の入口・到達性を台帳化+違反3群(入口なし/住所不適合/freq×遠い)+座標寸法の器具化材料。回収後= S 文法を品質バーの隣へ正典起草。**S0 慣習段差が支配項(利用者裁定・辞書式優先)**: normal-map の entries 分布=先例の期待入口とし、S0 適合>幾何最適(S1 Fitts・S2 工程動線・S3 視覚動線)。意図的逸脱は裁定文書がある場合のみ合格(拘束7(a) の型) |
 
 ## 完了・main 着地済み(実装)
@@ -57,6 +56,7 @@
 | **β: BL1 逐次合成の枠(検収合格・merge `22f8e436`)** | **狙いどおり EVIDENCE_GAP の確定が成果**: 重なり半透明でバイト不一致(1264/4096px・maxΔ49)、真因= gamma 空間(`composite()` が layer 毎に srgb round-trip)。ライフサイクル・第二パス禁止柵は障害でないと実証。scaffold+`#[ignore]` 証拠テストを歴史証拠として merge。**→ 裁定161**(fork へ main_target accessor、BL1b へ) |
 | **γ: MK1 mask ラスタ配線(検収合格・merge `fe0724d7`)** | 未配線 `motolii-vector` を engine へ。`Path`→`Shape` 橋(単一輪郭を輪郭列に包むだけ・別型ではないと確定)+白 fill=coverage の純関数。oracle 4本(二値・AA 縁有界・面積・byte 決定論)。EVIDENCE_GAP: mask 座標系(comp 絶対 vs layer local)は Canvas を呼び手が組む設計で MK3 へ先送り |
 | **δ: speed 操作面の文法調査(回収)** | 保全= `2026-08-21-speed-ui-grammar-survey.md`。採択=2段構成(第一波 Inspector 数値欄・第二波 Shift+端drag は**利用者実機確認後**)。speed でキー時刻は動かさない(拘束7(a))。bar 文脈の空き modifier は Shift のみとコードで確定 |
+| **ι: Browser B1(検収合格・merge `80577081`)** | drop が台帳へ記帳される — bin-first の下地開通。記帳と配置は独立(junk file も fingerprint が読めれば台帳に載る)・undo 粒は既存(1 drop batch=1 undo)に同居・dedup は η の content_hash 統合に一任。赤(E0599 5件)→緑 174/174。FINDING: multi-GB 素材の hash 時間未計測(KNOWN へ B7 リスクとして記録)・asset_type は拡張子の仮判定(意味起草タスク#14 待ち) |
 | **η: 素材台帳移植(検収合格・merge `d5370a0e`)** | 裁定162 の核心が着地 — 旧 asset.rs 740行を store へ(fingerprint は移植済みを参照)。`Intent::AdmitAsset/RemoveAsset`(read-modify-write、`Composition:assets` component の JSON blob = markers/slots と同じ流儀)・`StoreView::assets()/asset()`。persist は汎用経路が無改修で運ぶ。dedup の赤→緑実証あり((a)(c) は赤未保存 — 実装同時書きの逸脱として記録)。store 21 スイート+workspace 全緑 |
 | **θ: browser-pane B0 骨格(検収合格・merge `8a4e7ffb`)** | 新 crate(`//! wraps:` マーカー・空 Message enum・空 view)+shell 埋め込み(`Message::Browser` 腕のみ・view 未配線)。**PNG SHA `ee217ba2…` 前後一致を supervisor 再実測**(pane 分割以来の正準ハッシュ)。shell suite 170 全緑。B1 は η(素材台帳)着地後 |
 | **ε: SP1 第一波 Speed 数値欄(検収合格・merge済み)** | Inspector ATTRS に Speed 行(%表示・click→type・Reset)。`retimed_duration` 純関数(i128 整数丸め・最低1フレーム・start/source_in 不変)は第二波と共有。1 gesture=1 undo・ロック M13 拒否・100% reset は no-op。map 963(Time Stretch)+269(Reset speed)採用済(**消化 112/1,551**)。pixel fence 7→8 行は実描画差分への正しい追随として採択。FINDING: Speed だけ Shell 側で Intent 組み立て(ALLOWLIST 制約の非対称 — 次の inspector 発注で統一余地) |
