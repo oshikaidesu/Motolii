@@ -13,6 +13,7 @@
 | **T-rail: rail 転写(裁定172)** | 実装 | worktree(発注時に追記) | スウォッチ(寸 0.308・角丸 0.25・色=label_color 復帰)+M/S/L 12px 塗りチップ化。write-set= timeline-pane lane_bar.rs 系のみ |
 | **T-canvas: canvas 転写(裁定172)** | 実装 | worktree(発注時に追記) | bar inset 0.154・bar 角丸 0.111・ruler 高 0.846・目盛り長比 0.227/0.5。write-set= timeline-pane canvas.rs/lib.rs 系のみ(lane_bar.rs 触らず) |
 | **TL-probe: widget タイムラインの性能実測** | 実装(probe) | worktree(発注時に追記) | 4条件行列 — (a) 1000 pin widget 静止 (b) パン=カメラ translate(scrollable 手口) (c) パン=素朴再構築 (d) zoom= x-only 再配置。判定線: (b) が 8.3ms(120Hz)内なら Phase 2 GO |
+| **I-mock: Inspector 意味論モック(旧世界移植)** | モック(cargo なし) | worktree | 利用者裁定「旧世界モックのトンマナ整えだけで良い、Browser と一緒」— inspector-library.* を next/reference/mocks/ へ(構造逐語・色 tokens)+semantics 版(比率注記=I-ratio 台帳・救出台帳=解禁束5系)。着地で二重モック構造を解消(ui-scale-and-z は scale 資料へ降格) |
 
 ## 完了・main 着地済み(実装)
 
