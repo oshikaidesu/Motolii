@@ -9,6 +9,8 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| **B2: Browser rail/filter** | 実装 | worktree(発注時に追記) | ζ 切片 B2 — rail(bin/コレクション列)+filter shelf をモック転写・台帳一覧の絞り込み・map B束消化。write-set= browser-pane+shell Browser 腕のみ |
+| **MK2: mask 被覆代数** | 実装 | worktree(発注時に追記) | R9 切片 — coverage の Add/Subtract/Intersect/Difference 純関数+store mask mode(serde 後方互換)+engine 畳み込み。map mask 行消化。write-set= vector+store+engine のみ |
 | **H-survey: 親子変換木の縫い目調査** | 調査(読み取り専用・cargo なし) | worktree | 利用者裁定「グループ/親子/シェイプ階層をそろそろ — 全部再帰で決まる」— 単一再帰変換木仮説の検証・store schema 3案比較・eval/engine/Timeline ツリー行の縫い目・AE が parenting/precomp を分ける理由の反例調査・切片割り |
 | **I-tokens: Inspector 4値束再転写** | 実装 | worktree(発注時に追記) | 正本確定(利用者合格 v3.1)を受け、tokens の row_height/value_width/glyph_width/panel_width をセットで正本比へ・0.55 根治・裁定169 アンカー再較正。write-set= tokens+inspector-pane+inspector_pixel_fence のみ |
 | **TL-P1: rail widget 化(Phase 1)** | 実装 | worktree(発注時に追記) | TL-arch 推奨の採択(利用者「推奨で行く」)— rail を実 widget へ(名前= native ellipsis・M/S/L= 実 button・atlas 可視化)。時間場 canvas 不変・行 y 単一源共有。write-set= timeline-pane+shell timeline系テストのみ |
