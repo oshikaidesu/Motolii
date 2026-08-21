@@ -488,7 +488,12 @@ fn channel_cell(
             .color(colors.text_muted)
             .align_x(iced::alignment::Horizontal::Center)
             .width(Length::Fixed(dims.inspector_value_width)),
-        text_input("", &displayed)
+        // 裁定170 M01: fork(0.15.0-dev)の `text_input()` は `&str`/`&String`
+        // を `Fragment::Borrowed` として受け、返り値のライフタイムを入力の
+        // 借用に縛る。`displayed` はこの関数のローカルで `Element<'static, _>`
+        // を返す必要があるため、owned のまま move する(値は同じ、clone 済みの
+        // String を渡すだけで表示文字列は不変)。
+        text_input("", displayed)
             .on_input(move |text| Message::BackgroundChannelInput(channel, text))
             .on_submit(Message::BackgroundChannelSubmit(channel))
             .size(dims.body_text)
@@ -546,7 +551,10 @@ fn ui_scale_row(
             .size(dims.body_text)
             .color(colors.text_primary)
             .width(Length::Fill),
-        text_input("", &displayed)
+        // 裁定170 M01: channel_cell と同じ理由(fork の text_input が
+        // Fragment::Borrowed で借用寿命を縛るため、'static 返却には owned move
+        // が要る)。
+        text_input("", displayed)
             .on_input(Message::UiScaleInput)
             .on_submit(Message::UiScaleSubmit)
             .size(dims.body_text)

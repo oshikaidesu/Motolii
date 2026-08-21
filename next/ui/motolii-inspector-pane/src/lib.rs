@@ -1142,7 +1142,10 @@ fn ident_band(
     // 乗ると ident 帯の高さが mock の「b(11px)+s(9px)を2行積んだだけ」より
     // 約10px 余計に伸びる、実測: 修正前 name_field 高 24.3px、修正後
     // 14.3px)。**横だけ** [`name_field_padding`] で戻す(裁定139)。
-    let name_field = text_input(&placeholder, &name_text)
+    // 裁定170 M01: fork の text_input は借用寿命を返り値に縛る
+    // (Fragment::Borrowed)ため、'static 返却には owned move が要る
+    // (値は不変、clone 済みの String を渡すだけ)。
+    let name_field = text_input(placeholder, name_text)
         .on_input(Message::NameInput)
         .on_submit(Message::NameSubmit)
         .size(dims.body_text)
@@ -1287,7 +1290,9 @@ fn value_cell(
                     .map(|draft| draft.text.clone())
                     .unwrap_or_else(|| format_number(slot.value, decimals));
                 container(
-                    text_input("", &displayed)
+                    // 裁定170 M01: fork の text_input が借用寿命を返り値に縛るため
+                    // owned move(値不変)。
+                    text_input("", displayed)
                         .id(field_input_id(field))
                         .on_input(move |text| Message::FieldInput(field, text))
                         .on_submit(Message::FieldSubmit(field))
@@ -1502,7 +1507,8 @@ fn name_input_style(dims: Dimensions, colors: Colors, status: text_input::Status
             width: dims.border_width,
             radius: 0.0.into(),
         },
-        icon: colors.text_muted,
+        // 裁定170 M01: fork(0.15.0-dev)で `icon` フィールドが消えた。
+        // `.icon(..)` 呼び出しはこの crate に無い(usage 実測)ため見た目不変。
         placeholder: colors.text_muted,
         value: colors.text_primary,
         selection: colors.action_active,
@@ -1566,7 +1572,9 @@ fn speed_row(
         .map(|text| text.to_owned())
         .unwrap_or_else(|| format_number(attrs.speed_percent, 1));
 
-    let value_field = text_input("", &displayed)
+    // 裁定170 M01: fork の text_input が借用寿命を返り値に縛るため
+    // owned move(値不変)。
+    let value_field = text_input("", displayed)
         .on_input(Message::SpeedInput)
         .on_submit(Message::SpeedSubmit)
         .size(dims.body_text)

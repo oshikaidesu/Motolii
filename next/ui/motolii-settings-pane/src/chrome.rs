@@ -111,7 +111,10 @@ pub fn value_input_style(
             width: dims.border_width,
             radius: 0.0.into(),
         },
-        icon: colors.text_muted,
+        // 裁定170 M01: fork(0.15.0-dev)で `text_input::Style` から `icon`
+        // フィールドが消えた。この crate は `text_input(...)` に `.icon(..)`
+        // を一度も呼んでいない(usage 実測、icon glyph 自体が未設定)ため、
+        // 0.14 でもこの色は何も描いていなかった — 行削除は見た目不変。
         placeholder: colors.text_muted,
         value: colors.text_primary,
         selection: colors.action_active,
