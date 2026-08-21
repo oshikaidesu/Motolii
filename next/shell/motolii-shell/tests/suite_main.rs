@@ -28,6 +28,8 @@ mod entrance_atlas_dump;
 mod file_drive;
 #[path = "suite/fixture.rs"]
 mod fixture;
+#[path = "suite/group_drive.rs"]
+mod group_drive;
 #[path = "suite/iced_test_spike.rs"]
 mod iced_test_spike;
 #[path = "suite/ident_band_drive.rs"]

@@ -54,6 +54,15 @@
 //! 発注書「メニューと shortcut を同切片で併設する義務」(M-menu 調査 S6
 //! 併存表: 4動詞は着手前は入口ゼロだった)を満たすため、メニュー項目だけを
 //! 先に出して shortcut を後回しにしない。
+//!
+//! ## G1(裁定174「意図優先の原則」、2026-08-22 追加)
+//!
+//! `GroupLayers`/`UngroupLayers`(⌘G/⌘⇧G)を同じ形でこの Edit メニューへ足した
+//! — 独立した "Layer" トップレベル(調査が触れる MB-2)はまだ無いので、Cut/
+//! Copy/Duplicate と同じく layer 束の動詞として Edit に同居させる。上と同じ
+//! S6 併存(shortcut が正の入口、メニューは第3の発見用入口)、新しい
+//! `Message` はやはり増やさない(`Document::group_layers`/`ungroup_layers`
+//! doc 参照)。
 
 use iced::widget::{button, column, container, row, text, Space};
 use iced::{Element, Length};
@@ -102,6 +111,13 @@ fn edit_items() -> Vec<Item> {
             shortcut: Some("Cmd+Shift+A"),
             message: Message::DeselectAllLayers,
         }, // id 433
+        // G1(裁定174、normal-map id 無し — H3「Parent column」の置換動詞)。
+        Item { label: "Group", shortcut: Some("Cmd+G"), message: Message::GroupLayers },
+        Item {
+            label: "Ungroup",
+            shortcut: Some("Cmd+Shift+G"),
+            message: Message::UngroupLayers,
+        },
     ]
 }
 
