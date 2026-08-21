@@ -28,7 +28,15 @@ pub mod inspector_pane;
 pub mod screenshot;
 pub mod settings_pane;
 pub mod stage;
+pub mod state;
 pub mod timeline;
+
+/// `Session`(+ `state::KeySelector`/`KeySelectionOp`)は裁定160 切片6 で
+/// `state.rs` へ移設済み(pane split survey §2.3: `Session ⇄ timeline` の型
+/// 循環解消)。`pub use timeline as timeline_pane;` と同じ「型 alias で外部参照を
+/// 壊さない」手口 — `crate::Session`/`motolii_shell::Session` を読む既存参照
+/// (`inspector_pane.rs`・`timeline/*.rs`・`tests/suite/*.rs`)は無改修で済む。
+pub use state::Session;
 
 /// `tokens` は裁定160 切片1 で `motolii-tokens-rs` crate へ抽出済み(pane split
 /// survey `docs/reviews/2026-08-21-pane-split-survey.md` §2.2/§6)。純粋な再配置
@@ -119,40 +127,6 @@ fn stage_handle_rgba(width: u32, height: u32, rgba: &[u8]) -> (u32, u32, Vec<u8>
         }
     }
     (dst_w, dst_h, out)
-}
-
-/// front だけが持つ状態。**Document の写しは1つも入れないこと**。
-#[derive(Debug, Clone)]
-pub struct Session {
-    /// 再生位置(フレーム番号)。
-    pub playhead: i64,
-    pub selection: Option<LayerId>,
-    /// 複数 layer 選択(普通地図 消化第1波 U1: Select All / Deselect All が
-    /// 対象とする集合)。**`selection`(Inspector/Timeline が読む単一 focus)とは
-    /// 別の身分** — `Message::Select`/`AddLayer`/クリップボードの貼付/複製は
-    /// `select_single`(lib.rs)経由で両方を単一集合へ揃えるが、`timeline_pane`/
-    /// `inspector_pane` の行 UI 自体はまだこちらを読まない(multi-select の見た目
-    /// 表示は write-set 外、RETURN の finding 参照)。Document には乗らない。
-    pub selected_layers: Vec<LayerId>,
-    /// Timeline property 行(キー行)の選択(第2波 T3・EXACT TARGET 3)。
-    /// **Document には乗らない** — layer 選択と同じ Session の身分。
-    pub selected_keys: Vec<timeline::KeySelector>,
-    /// Shift 範囲選択の基点(直前に単独/Cmd クリックしたキー)。`key_order`
-    /// (行順→時刻順)上の範囲は毎回この基点から張り直す(正典 §3・§4 と同じ
-    /// 「anchor」文法)。
-    pub key_anchor: Option<timeline::KeySelector>,
-}
-
-impl Default for Session {
-    fn default() -> Self {
-        Self {
-            playhead: 0,
-            selection: None,
-            selected_layers: Vec::new(),
-            selected_keys: Vec::new(),
-            key_anchor: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
