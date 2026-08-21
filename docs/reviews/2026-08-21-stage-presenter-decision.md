@@ -43,5 +43,5 @@
 
 ## 5. 既知の残り
 
-- readback(engine→CPU)は残る(device 分離の帰結)。将来 iced が wgpu 29 系へ追随したら device 共有=ゼロコピーを再訪
+- readback(engine→CPU)は残る(device 分離の帰結)。~~将来 iced が wgpu 29 系へ追随したら再訪~~ → **訂正(2026-08-21 深夜・利用者指摘→一次資料確認)**: iced master(0.15.0-dev)は既に `wgpu = "29"` を宣言(raw Cargo.toml 実測)— re_renderer fork の 29.0.4 と同一線で解決可能で、**型障壁は master では既に無い**。残る障壁は wgpu でなく (1) next/ の pin が crates.io 0.14 安定線(0.15-dev への破壊的 API 追随が全 pane に及ぶ) (2) 検分器具 iced_test 0.14 線の tester 0.15-dev への揃え。手元に 0.15.0-dev 線の fork(tester/test rev)が既存のため、rerun と同型の rev pin+seam 台帳で載る余地あり — ゼロコピー spike は「待ち」でなく「発注可能な玉」へ格上げ
 - `frames()` は window が occluded の時に止まり得る(winit の RedrawRequested 依存)— 再生位置は wall-clock 由来なので絵が止まっても時間は正しく進む(復帰時に追いつく)。KNOWN へ記載
