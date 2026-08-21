@@ -7,10 +7,7 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| α: blend Add 縦一本(BL2拡張) | 実装(cargo・sonnet) | lane-shell | store `BlendMode::Add`+engine 変換腕+Inspector **クリック巡回ボタン**(pick_list 前例なしにつき supervisor 決定)+shell `SetAttrs` 結線+store stale doc 掃除(R9 FINDING 1)+map 行75。oracle: store/engine 単体+shell drive(blend_drive.rs 新設) |
-| β: BL1 逐次合成の枠 | 実装(cargo・sonnet) | lane-engine | compositor 単独。`render_sequential` 新入口(既存入口無改変)・no-op で既存 `render` と**バイト一致証明**・EVIDENCE_GAP 1(ライフサイクル衝突)の実装検証。**「fork 手術が要る」の確定返却も成果扱い**(止まる許可明記) |
-| γ: MK1 mask ラスタ配線 | 実装(cargo・sonnet) | lane-store | 未配線 `motolii-vector` → engine。新規 `mask.rs`(Path→Shape 橋+coverage 純関数、CPU まで)・**lib.rs は `mod` 宣言行のみ**(α と同ファイルのため hunk 分離)。oracle=既知形状の決定論バイト+AA 縁有界。GPU 化は MK3 へ |
-| δ: speed 操作面の文法調査 | 調査(read-only・sonnet) | main checkout(書き込み禁止) | AE Time Stretch/Premiere Rate Stretch/Resolve Retime/CapCut の意味論+正典 modifier 台帳との整合+map 行 269/270/272/273/963 対応 → 候補案2〜3(推し1つ)。SP1 発注の前段 |
+(なし — 第2ラウンド4レーン全て着地)
 
 ## 完了・main 着地済み(実装)
 
@@ -54,6 +51,10 @@
 | (supervisor 直・後任) multi-select 行ハイライト配線 | U1 finding 根治(`830bce23`)。`row_selected` 純関数抽出+赤→緑・pane36+shell156 全緑。primary 区別は property 行展開のまま(AE 同型)。実窓合否は利用者チェックリストへ追加 |
 | **A2: 実時間再生 第2切片(検収合格・merge `f026e7cc`)** | **再生できる動画ソフトになった**。cpal device/producer(旧 PlaybackSession 移植・rtrb 化)+`PlaybackSession`+shell `transport.rs`(Space=Play/Pause・拘束5 ドラッグ中無効・playhead 追随 tick・scrub=seek・終端自動停止・soundtrack 無しは無音成立)。oracle (a)〜(e) 7本+audio 59+5 全緑を後任 supervisor が main checkout target で再実行・workspace 94 スイート全緑。map 1041 採用済(消化 109/1,551)。発見: `iced::time::every` は本 workspace で使えない(KNOWN 追記済み、`stream::channel`+OS スレッドで自作)。既知の制約: seek 時リング容量 4,096 フレーム(~85ms)分だけ古い位置の音が流れきる。**前任セッション発注・後任検収の初のセッション跨ぎレーン** |
 | (supervisor 直・後任) テスト警告 196 件ゼロ化 | `2ed52c1e`。裸の `shell.update()` へ `let _ =`(T5 期からの蓄積、A2 起因ではない)+未使用 import 除去 |
+| **α: blend Add 縦一本(検収合格・merge `4569a366`)** | Normal 以外で初めて絵が変わる blend。store `Add` variant(serde は名前ベースで並び挿入安全を確認)+engine 変換腕+Inspector **クリック巡回ボタン**(Normal→Add→Normal、SUPPORTED 台帳に engine 同期義務 doc)+shell `SetAttrs` 即時1発。oracle 赤(コンパイル赤保存)→緑8本・shell suite 165 全緑・check.sh 通過。map 行75 採用済(**消化 110/1,551**)。store stale doc 2箇所も掃除(R9 FINDING 1 根治) |
+| **β: BL1 逐次合成の枠(検収合格・merge `22f8e436`)** | **狙いどおり EVIDENCE_GAP の確定が成果**: 重なり半透明でバイト不一致(1264/4096px・maxΔ49)、真因= gamma 空間(`composite()` が layer 毎に srgb round-trip)。ライフサイクル・第二パス禁止柵は障害でないと実証。scaffold+`#[ignore]` 証拠テストを歴史証拠として merge。**→ 裁定161**(fork へ main_target accessor、BL1b へ) |
+| **γ: MK1 mask ラスタ配線(検収合格・merge `fe0724d7`)** | 未配線 `motolii-vector` を engine へ。`Path`→`Shape` 橋(単一輪郭を輪郭列に包むだけ・別型ではないと確定)+白 fill=coverage の純関数。oracle 4本(二値・AA 縁有界・面積・byte 決定論)。EVIDENCE_GAP: mask 座標系(comp 絶対 vs layer local)は Canvas を呼び手が組む設計で MK3 へ先送り |
+| **δ: speed 操作面の文法調査(回収)** | 保全= `2026-08-21-speed-ui-grammar-survey.md`。採択=2段構成(第一波 Inspector 数値欄・第二波 Shift+端drag は**利用者実機確認後**)。speed でキー時刻は動かさない(拘束7(a))。bar 文脈の空き modifier は Shift のみとコードで確定 |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
 
