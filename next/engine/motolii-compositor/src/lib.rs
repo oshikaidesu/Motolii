@@ -1363,6 +1363,17 @@ impl Compositor {
         camera: ResolvedCamera,
         inputs: &[SequentialInput<'_>],
     ) -> Result<Option<(AccumulatorBacking, GpuTexture2D)>, CompositorError> {
+        // run-batching は「inputs の並び=重ね順=depth_offset 非減少」に依存する
+        // (run の background rect を `run[0].depth_offset - 1` に敷く前提と、逐次
+        // 累積の順序そのもの)。現状の唯一の発生源は `order: id.0 as i16`
+        // (BACKGROUND_ORDER doc 参照)なので常に成立するが、store の `SetOrder` が
+        // UI へ配線された時に黙って崩れないよう、ここで縛る。
+        debug_assert!(
+            inputs
+                .windows(2)
+                .all(|w| w[0].depth_offset <= w[1].depth_offset),
+            "accumulate_sequential: inputs は depth_offset 非減少(=重ね順)で渡すこと"
+        );
         let projection = motolii_core::camera_projection(comp, camera);
         let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
         let view_from_world = macaw::IsoTransform::from_rotation_translation(
