@@ -89,6 +89,11 @@ const SCANNED_FILES: &[&str] = &[
     "settings_pane.rs",
     "lib.rs",
     "screenshot.rs",
+    // 裁定157(観測カメラ)S3: Stage overlay の `canvas::Stroke` 呼び出しが
+    // `colors.action_active`/`dims.border_width` を直接使う — 新規ファイルは
+    // この柵へ追随する(モジュール doc「トンマナ柵へ新規ファイル追加があれば
+    // 追随」)。
+    "stage.rs",
 ];
 
 /// `#[cfg(test)]\nmod tests {` の手前までを返す(inline test module は対象外)。

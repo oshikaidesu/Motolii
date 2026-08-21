@@ -21,6 +21,7 @@
 //! 新しく縛るのはその先 — **実際に新しい Handle を作る時に、iced 自身の
 //! 同期アップロード予算を超えないこと**。
 
+use motolii_engine::ObservationCamera;
 use motolii_shell::{metrics, Message, Shell};
 
 /// プロセス全体で共有される `metrics` の static を、テスト間で取り合わないための
@@ -119,6 +120,48 @@ fn fixture_stage_handle_bytes_stay_inside_the_synchronous_upload_budget() {
         "Stage の Handle が iced の同期アップロード予算({ICED_SYNC_UPLOAD_BUDGET_BYTES} byte)を\
          超えている({handle_bytes} byte) — 非同期アップロード経路に落ち、\
          実機チラつきが再現する"
+    );
+}
+
+/// **観測カメラ(裁定157)の鍵拡張の柵**: `RenderedFrame` のキャッシュ早期
+/// return は `revision`/`playhead`/`checkerboard` に加えて `observation` も
+/// 見ている(`lib.rs::refresh_frame`)。同じ観測カメラ値をもう一度送っても
+/// Handle は作り直さない(`idle_messages_do_not_recreate_the_stage_handle` の
+/// 観測カメラ版)。
+#[test]
+fn idle_observation_does_not_recreate_the_stage_handle() {
+    let _guard = METRICS_LOCK.lock().unwrap();
+    metrics::reset();
+
+    let mut shell = Shell::new().0;
+    shell.update(Message::AddLayer);
+    let camera = ObservationCamera {
+        pan: [40.0, -15.0],
+        zoom: 1.8,
+    };
+    shell.update(Message::StageObserve(camera));
+    let after_observe = metrics::handle_creations();
+    assert!(after_observe >= 1, "観測カメラへ入っても一度も描かれていない");
+
+    // 同じ値をもう一度送る — アイドル相当。
+    for _ in 0..5 {
+        shell.update(Message::StageObserve(camera));
+    }
+    assert_eq!(
+        metrics::handle_creations(),
+        after_observe,
+        "同じ観測カメラの再送で Stage の Handle が作り直されている"
+    );
+
+    // 値を変えれば作り直す(鍵が本当に効いていることの裏付け — 変化を
+    // 検知できないだけの「常に return」になっていないか)。
+    shell.update(Message::StageObserve(ObservationCamera {
+        pan: [40.0, -15.0],
+        zoom: 2.5,
+    }));
+    assert!(
+        metrics::handle_creations() > after_observe,
+        "観測カメラの値が変わったのに Handle が作り直されていない"
     );
 }
 

@@ -13,10 +13,10 @@
 //! Document の写しではなく、undo の対象でもない(rerun も選択は blueprint store の
 //! 外に置いている)。**1箇所で持ち、全 pane がそこを読む**ので M14 は満たされる。
 
-use iced::widget::{button, column, container, image, row, slider, text};
+use iced::widget::{button, column, container, image, row, slider, stack, text};
 use iced::{Element, Length, Task};
 
-use motolii_engine::Engine;
+use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
     Composition, DisplayRevision, Document, Intent, KeyframeTrack, LayerAttrsPatch, LayerId,
     LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, StoreView, Value,
@@ -26,6 +26,7 @@ pub mod fixture;
 pub mod inspector_pane;
 pub mod screenshot;
 pub mod settings_pane;
+pub mod stage;
 pub mod timeline;
 pub mod tokens;
 
@@ -286,6 +287,17 @@ pub enum Message {
     /// ui_scale(%)欄の Enter — 50..200 にクランプして `Tokens`/`Dimensions` を
     /// 更新し、debug ビルドでは正本 JSON へも書き戻す(`tokens::save_ui_scale`)。
     UiScaleSubmit,
+
+    // ---- Stage 観測カメラ(裁定157) ----
+    /// `stage::StageOverlay`(ホイール/中ボタンドラッグ)が計算済みの観測カメラ値
+    /// をそのまま運ぶ — `Shell::update` はここでは計算をしない
+    /// (`stage.rs` 冒頭 doc の「純関数へ委譲」どおり)。**`None`(カメラを通して
+    /// 見る)から届いても `Some` になる** — 「観測に入る操作自体が None→Some 遷移」
+    /// (裁定157 EXACT TARGET 1)。
+    StageObserve(ObservationCamera),
+    /// 「カメラへ戻る」— 1アクション(既定割当 Shift+F、仮)。観測カメラを破棄して
+    /// `None`(カメラを通して見る)へ戻す。
+    ResetToRenderCamera,
 }
 
 /// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
@@ -322,6 +334,33 @@ struct RenderedFrame {
     /// の間は `checkerboard_preview_rgba` を取り直すため engine を1回追加で
     /// 回すが、`Document`/`StoreView` の評価が増えるわけではない)。
     checkerboard: bool,
+    /// この `handle` を作った時点の観測カメラ(裁定157)。`display_revision()`/
+    /// `playhead`/`checkerboard` と同じ「キャッシュを落とすかどうか」の鍵の
+    /// 一部 — `refresh_frame` の早期 return はこれも比較する(`checkerboard`
+    /// と同格の表示専用の鍵拡張)。
+    observation: Option<ObservationCamera>,
+    /// 観測カメラ有効時の Stage 表示 RGBA(`Engine::render_frame_with_view_camera`
+    /// の結果そのもの)。**`rgba`(export 真値)とは別物** — `checkerboard_preview_rgba`
+    /// と同じ「表示専用の複製」の形。`observation` が `None` の間は常に `None`。
+    observation_rgba: Option<Vec<u8>>,
+}
+
+/// [`Shell::compute_display_source`] の戻り値。Stage 表示(`handle`)用の入力を
+/// 1箇所へまとめただけの内部型 — `RenderedFrame` のフィールドへの書き戻しと
+/// `build_stage_handle` への引数の両方をこれ1つから作る(呼び出し側の
+/// `refresh_frame` が2箇所(キャッシュヒット/フル再計算)で同じ分岐を書かずに
+/// 済む)。
+struct DisplaySource {
+    /// `build_stage_handle` へ渡す実体。`None` なら呼び出し側は
+    /// `RenderedFrame::rgba`(export 真値)をそのまま使う(市松・観測カメラの
+    /// どちらも効いていない既定の場合)。
+    full_rgba: Option<Vec<u8>>,
+    /// `full_rgba` を市松タイルで覆うかどうか(`build_stage_handle` の第4引数)。
+    checkerboard: bool,
+    /// `RenderedFrame::checkerboard_preview_rgba` へそのまま書き戻す値。
+    checkerboard_preview_rgba: Option<Vec<u8>>,
+    /// `RenderedFrame::observation_rgba` へそのまま書き戻す値。
+    observation_rgba: Option<Vec<u8>>,
 }
 
 /// Inspector 値セルの drag-to-scrub、進行中の一時状態。**Document ではない**
@@ -454,6 +493,14 @@ pub struct Shell {
     background_draft: Option<BackgroundFieldDraft>,
     /// ui_scale(%)欄の編集下書き。同上。
     ui_scale_draft: Option<String>,
+
+    // ---- Stage 観測カメラ(裁定157) ----
+    /// 「自由に見る」ときの作業視点。**Document には乗らない** — `checkerboard`
+    /// と同格の表示専用状態(`docs/reviews/2026-08-21-camera-seam-survey.md` §3
+    /// の precedent どおり、`motolii_engine::ObservationCamera` の doc も参照)。
+    /// `None` = 「カメラを通して見る」(既定 — レンダリングカメラの絵とバイト一致、
+    /// `refresh_frame` が export 経路を一切汚さないことの直接の型的裏付け)。
+    observation: Option<ObservationCamera>,
 }
 
 impl Shell {
@@ -492,6 +539,7 @@ impl Shell {
                 checkerboard: false,
                 background_draft: None,
                 ui_scale_draft: None,
+                observation: None,
             },
             Task::none(),
         )
@@ -526,6 +574,7 @@ impl Shell {
             checkerboard: false,
             background_draft: None,
             ui_scale_draft: None,
+            observation: None,
         };
         // `update()` を経由しないので、通常なら `update` の末尾が呼ぶ
         // `refresh_frame` をここで代わりに呼ぶ(Stage を空のまま起動しない、M17)。
@@ -647,6 +696,8 @@ impl Shell {
             }
             Message::UiScaleInput(text) => self.ui_scale_draft = Some(text),
             Message::UiScaleSubmit => self.commit_ui_scale(),
+            Message::StageObserve(camera) => self.observation = Some(camera),
+            Message::ResetToRenderCamera => self.observation = None,
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
                 // **1操作 = 1 undo**。`AddLayer` と `SetMeta` を別々に書くと
@@ -1720,6 +1771,26 @@ impl Shell {
         })
     }
 
+    /// 今の観測カメラの状態(裁定157)。運転席/screenshot 器具が「カメラを通して
+    /// 見る」(`None`)/「自由に見る」(`Some`)のどちらかを確かめる口
+    /// (`checkerboard_enabled` と同じ形)。
+    pub fn observation(&self) -> Option<ObservationCamera> {
+        self.observation
+    }
+
+    /// 観測カメラ有効時の Stage 表示 RGBA(`Engine::render_frame_with_view_camera`
+    /// の結果そのもの)。**`frame_rgba()`(export 真値)とは別物** —
+    /// `checkerboard_preview_rgba` と同じ「screenshot 器具/試験専用」の形。
+    /// `observation()` が `None` の間は常に `None`。
+    pub fn observation_rgba(&self) -> Option<(u32, u32, &[u8])> {
+        self.frame.as_ref().and_then(|frame| {
+            frame
+                .observation_rgba
+                .as_deref()
+                .map(|rgba| (frame.width, frame.height, rgba))
+        })
+    }
+
     /// 今の Timeline の行。運転席が「層3枚の行が立つ」「選択が行と一致する」を
     /// 確かめる口(pane 自身が使う投影と同じ関数を呼ぶ)。
     pub fn timeline_rows(&self) -> Vec<timeline_pane::RowProjection> {
@@ -1811,6 +1882,36 @@ impl Shell {
             .with_key_preview(key_preview)
     }
 
+    /// `stage::StageOverlay` の組み立て(裁定157・S1〜S3)。`Shell::view` が
+    /// 毎フレーム呼ぶ(`build_timeline_pane` と同じ「不変な投影を作り直す」形)。
+    /// comp が無ければ `None`(`stage_pane` はその時 Stage 自体を出さないので
+    /// 呼ばれないが、防御的に `Option` にして panic しない、M16)。
+    ///
+    /// **`screenshot.rs` も呼ぶ**(`pub` — `checkerboard_enabled` 等と同じ
+    /// 「screenshot 器具専用」の公開理由)— 観測中のフレーム枠を同じ計算
+    /// (`stage::StageOverlay::frame_corners_on_screen`)で再現するため。
+    pub fn stage_overlay(&self) -> Option<stage::StageOverlay> {
+        let composition = self.composition()?;
+        let comp = motolii_core::CompSpec {
+            width: composition.width,
+            height: composition.height,
+        };
+        // レンダリングカメラ(`Composition.camera`、裁定113/115/116)。
+        // track が無ければ既定値 — `resolve_camera` 自体がその規約を守るので
+        // ここでは `unwrap_or_default` は「時刻が引けない」時のためだけの床。
+        let render_camera = self
+            .time_at_playhead()
+            .and_then(|t| self.doc.view().resolve_camera(t).ok())
+            .unwrap_or_default();
+        Some(stage::StageOverlay::new(
+            comp,
+            render_camera,
+            self.observation,
+            self.dims(),
+            self.tokens.colors,
+        ))
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         // pane が受け取るのは不変の投影だけ。
         let dims = self.dims();
@@ -1849,9 +1950,12 @@ impl Shell {
 
         layout
             .push(
-                row![inspector, stage_pane(self.frame.as_ref(), dims, colors)]
-                    .spacing(dims.spacing_m)
-                    .height(Length::FillPortion(3)),
+                row![
+                    inspector,
+                    stage_pane(self.frame.as_ref(), self.stage_overlay(), dims, colors)
+                ]
+                .spacing(dims.spacing_m)
+                .height(Length::FillPortion(3)),
             )
             .push(timeline.view())
             .push(transport(&self.session, &store, dims, colors))
@@ -1932,18 +2036,19 @@ impl Shell {
         let revision = self.doc.display_revision();
         let playhead = self.session.playhead;
         let checkerboard = self.checkerboard;
+        let observation = self.observation;
         let colors = self.tokens.colors;
 
         if let Some(frame) = &self.frame {
             if frame.revision == revision && frame.playhead == playhead {
-                if frame.checkerboard == checkerboard {
+                if frame.checkerboard == checkerboard && frame.observation == observation {
                     return;
                 }
                 let width = frame.width;
                 let height = frame.height;
-                let preview = self.checkerboard_preview_source(checkerboard, playhead);
-                let (handle, handle_bytes) = match &preview {
-                    Some(preview) => build_stage_handle(width, height, preview, true, colors),
+                let display = self.compute_display_source(observation, checkerboard, playhead);
+                let (handle, handle_bytes) = match &display.full_rgba {
+                    Some(rgba) => build_stage_handle(width, height, rgba, display.checkerboard, colors),
                     None => {
                         let frame = self.frame.as_ref().expect("直前の if let で確認済み");
                         build_stage_handle(width, height, &frame.rgba, false, colors)
@@ -1953,7 +2058,9 @@ impl Shell {
                 if let Some(frame) = self.frame.as_mut() {
                     frame.handle = handle;
                     frame.checkerboard = checkerboard;
-                    frame.checkerboard_preview_rgba = preview;
+                    frame.checkerboard_preview_rgba = display.checkerboard_preview_rgba;
+                    frame.observation = observation;
+                    frame.observation_rgba = display.observation_rgba;
                 }
                 return;
             }
@@ -1969,21 +2076,22 @@ impl Shell {
         };
 
         let render_start = std::time::Instant::now();
+        // **export 真値**(`RenderedFrame::rgba`)— 観測カメラ・市松に一切
+        // 影響されない唯一の経路(`Engine::render_frame`)。EXACT TARGET (d) の
+        // 「export 用経路は observation 中でもレンダリングカメラの絵のまま」の
+        // 直接の型的裏付け: この呼び出しは `observation`/`checkerboard` を
+        // 一切引数に取らない。
         let render_result = self.engine.render_frame(&self.doc.view(), t);
         metrics::record_render_frame(render_start.elapsed());
         match render_result {
             Ok(rgba) => {
-                let preview = if checkerboard {
-                    self.checkerboard_preview_source(true, playhead)
-                } else {
-                    None
-                };
-                let (handle, handle_bytes) = match &preview {
+                let display = self.compute_display_source(observation, checkerboard, playhead);
+                let (handle, handle_bytes) = match &display.full_rgba {
                     Some(preview) => build_stage_handle(
                         composition.width,
                         composition.height,
                         preview,
-                        true,
+                        display.checkerboard,
                         colors,
                     ),
                     None => build_stage_handle(
@@ -2002,8 +2110,10 @@ impl Shell {
                     height: composition.height,
                     handle,
                     rgba,
-                    checkerboard_preview_rgba: preview,
+                    checkerboard_preview_rgba: display.checkerboard_preview_rgba,
                     checkerboard,
+                    observation,
+                    observation_rgba: display.observation_rgba,
                 });
             }
             Err(error) => {
@@ -2032,6 +2142,77 @@ impl Shell {
                 self.status = Some(format!("市松プレビューを描けない: {error}"));
                 None
             }
+        }
+    }
+
+    /// 観測カメラ(裁定157)が有効な間だけ、その視点で再合成する
+    /// (`Engine::render_frame_with_view_camera`)。`checkerboard_preview_source`
+    /// と同じ「無反応より安全側フォールバック」— comp が無い/時刻を写せない/
+    /// engine が描けない、のいずれかなら `None` を返し、呼び出し側は従来経路
+    /// (市松/背景込み)へフォールバックする。描けなかった理由は status へ出す
+    /// (M13)。
+    fn observation_preview_source(&mut self, observation: &ObservationCamera, playhead: i64) -> Option<Vec<u8>> {
+        let composition = self.doc.view().composition().ok().flatten()?;
+        let t = RationalTime::try_from_frame(playhead, composition.fps).ok()?;
+        match self
+            .engine
+            .render_frame_with_view_camera(&self.doc.view(), t, observation)
+        {
+            Ok(rgba) => Some(rgba),
+            Err(error) => {
+                self.status = Some(format!("観測カメラでの表示を描けない: {error}"));
+                None
+            }
+        }
+    }
+
+    /// Stage 表示(`handle`)用の入力を決める。**`rgba`(export 真値)そのものには
+    /// 一切触れない** — ここが返す物は表示専用の複製(`build_stage_handle` へ
+    /// そのまま渡すか、`full_rgba: None` の時は呼び出し側が `RenderedFrame::rgba`
+    /// を使う、既存の市松分岐と同じ形)。
+    ///
+    /// **優先順位**(裁定157): 観測カメラが有効なら観測視点の再合成を最優先で
+    /// 使う([`Self::observation_preview_source`])。描けなければ(comp が無い等)
+    /// 安全側で従来経路へフォールバックする。観測カメラが無効(`None`)なら
+    /// 従来どおり市松の有無で分岐する([`Self::checkerboard_preview_source`]、
+    /// 裁定141)。
+    ///
+    /// **既知の限界**: 観測カメラ有効中は市松プレビューを試みない
+    /// (`Engine::render_frame_with_view_camera` は常に背景込み — 裁定157 の
+    /// engine 側実装がそう組んである、`motolii_engine` のモジュール doc 参照)。
+    /// 観測カメラは Stage 表示専用の別軸機能で、この2軸を同時に満たす engine
+    /// エントリは今回のスコープ外(NON-GOALS外だが、必要になれば
+    /// `render_frame_without_background_with_view_camera` 相当を engine 側へ
+    /// 追加する形で拡張できる)。
+    fn compute_display_source(
+        &mut self,
+        observation: Option<ObservationCamera>,
+        checkerboard: bool,
+        playhead: i64,
+    ) -> DisplaySource {
+        if let Some(observation) = observation {
+            if let Some(rgba) = self.observation_preview_source(&observation, playhead) {
+                return DisplaySource {
+                    full_rgba: Some(rgba.clone()),
+                    checkerboard: false,
+                    checkerboard_preview_rgba: None,
+                    observation_rgba: Some(rgba),
+                };
+            }
+        }
+        match self.checkerboard_preview_source(checkerboard, playhead) {
+            Some(preview) => DisplaySource {
+                full_rgba: Some(preview.clone()),
+                checkerboard: true,
+                checkerboard_preview_rgba: Some(preview),
+                observation_rgba: None,
+            },
+            None => DisplaySource {
+                full_rgba: None,
+                checkerboard: false,
+                checkerboard_preview_rgba: None,
+                observation_rgba: None,
+            },
         }
     }
 }
@@ -2127,6 +2308,16 @@ fn inspector_pointer_event(
             let step = if modifiers.shift() { 10 } else { 1 };
             Some(Message::NudgeKeyframe(step))
         }
+        // ResetToRenderCamera(裁定157・EXACT TARGET 1「カメラへ戻るは1アクション」)。
+        // **既定割当は仮**(NudgeKeyframe と同じ「keymap 層が無い今だけ直結」の
+        // 注記どおり) — アクション名(`Message::ResetToRenderCamera`)だけを正本
+        // として残す。Shift+F。
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed { key, modifiers, .. })
+            if modifiers.shift()
+                && matches!(key.as_ref(), iced::keyboard::Key::Character(c) if c.eq_ignore_ascii_case("f")) =>
+        {
+            Some(Message::ResetToRenderCamera)
+        }
         _ => None,
     }
 }
@@ -2138,14 +2329,24 @@ fn inspector_pointer_event(
 
 fn stage_pane(
     frame: Option<&RenderedFrame>,
+    overlay: Option<stage::StageOverlay>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'_, Message> {
     let body: Element<'_, Message> = match frame {
-        Some(frame) => image(frame.handle.clone())
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into(),
+        Some(frame) => {
+            let picture: Element<'_, Message> = image(frame.handle.clone())
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into();
+            // 観測カメラの入力(ホイール/中ボタンドラッグ)とフレーム枠 overlay
+            // (裁定157)。`image` の上に重ねるだけ — `image` 自体は変形しない
+            // (Stage は image 貼りのまま、`stage.rs` モジュール doc 参照)。
+            match overlay {
+                Some(overlay) => stack![picture, overlay.view()].into(),
+                None => picture,
+            }
+        }
         None => text("comp がまだ無い")
             .size(dims.body_text)
             .color(colors.text_muted)
