@@ -61,6 +61,13 @@ pub use projection::{
 pub use projection::{
     frame_to_x, layer_row_top, selected_row_index, tick_steps, time_band_segment_frames,
 };
+/// 裁定172 §1/§2 の比率(ruler 高・bar 縦 inset/角丸・目盛り長)— 上と同じ理由
+/// (`motolii-shell::screenshot` の cross-crate 参照)で `pub` にした。**この
+/// レーンの write-set は `next/ui/motolii-timeline-pane/src/**` のみ**
+/// (screenshot.rs は shell/M4 の領分)— screenshot 側が独自に持つ重複式
+/// (`ruler_h = dims.row_height`・inset = `spacing_xs` 等)は、この export を
+/// 使うよう置き換えるのが次の一手(未着手、report で明記)。
+pub use canvas::{bar_corner_radius, bar_inset, major_tick_length, minor_tick_length, ruler_height};
 pub use write::{Message, PaneState};
 
 use iced::{Element, Length, Rectangle};
@@ -192,9 +199,15 @@ impl TimelinePane {
         &self.property_rows
     }
 
-    /// 第1波は測定済みの行高をそのまま流用する(独自の寸法を発明しない)。
+    /// ルーラー帯の高さ(裁定172 §2: `0.846×行高` — mock `timeline-semantics.html`
+    /// `.ruler{height:22px}`/`.row{height:26px}` の実測 `22/26`)。第1波の
+    /// 「行高をそのまま流用」(裁定167 違反 — 独自の中間値ではなく実測比を使う)
+    /// を裁定172 で廃した。比の出典は [`canvas::ruler_height`] のみ(このメソッドと
+    /// `motolii-shell::screenshot` 両方の重複を避けたいが、screenshot 側は
+    /// crate 境界外の別 instrument — pane split survey §2.5 により M4/shell
+    /// レーンの担当、裁定172 のこのレーンの write-set 外)。
     fn ruler_height(&self) -> f32 {
-        self.dims.row_height
+        canvas::ruler_height(self.dims.row_height)
     }
 
     /// レーンバー(行ヘッダ列)幅。座標シフトの唯一の出典 — ルーラ/クリップ面は
