@@ -526,7 +526,9 @@ kbd { margin-left: 4px; color: var(--mock-role-text-muted, #757575); font-family
   background: color-mix(in srgb, var(--mock-role-surface-app, #242424) 74%, transparent);
 }
 
-.fillValue input[type="color"] { width: 16px; height: 16px; flex: 0 0 auto; padding: 1px; border: 1px solid var(--mock-role-border-strong, #5b5b5b); background: var(--mock-role-surface-app, #242424); } /* 利用者裁定 2026-08-22: 色パネルの形は正方形に統一(Recent の 16×16 と同文法 — 旧 26×19 の横長は Fill だけ形が違った) */
+.fillValue input[type="color"] { width: 16px; height: 16px; flex: 0 0 auto; padding: 0; border: 1px solid var(--mock-role-border-strong, #5b5b5b); background: none; appearance: none; -webkit-appearance: none; } /* 利用者裁定 2026-08-22: 色パネルは Recent チップと同文法(16×16・素の色面)。ネイティブ color input の内枠(UA が描く色井戸)ごと剥がす — 剥がさないと箱寸を揃えても描かれ方が違って見える */
+.fillValue input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.fillValue input[type="color"]::-webkit-color-swatch { border: none; }
 .fillValue code { width: 60px; color: var(--mock-role-text-secondary, #8c8c8c); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; }
 .fillValue > span { margin-left: auto; color: var(--mock-role-text-muted, #757575); font-size: 8px; }
 .recentColors { display: flex; gap: 3px; }
