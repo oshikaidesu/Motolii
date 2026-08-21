@@ -3525,6 +3525,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-inspector-pane"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "motolii-core",
+ "motolii-settings-pane",
+ "motolii-shell-state",
+ "motolii-store",
+ "motolii-tokens-rs",
+]
+
+[[package]]
 name = "motolii-media"
 version = "0.1.0"
 dependencies = [
@@ -3556,6 +3568,7 @@ dependencies = [
  "image",
  "motolii-core",
  "motolii-engine",
+ "motolii-inspector-pane",
  "motolii-media",
  "motolii-settings-pane",
  "motolii-shell-state",

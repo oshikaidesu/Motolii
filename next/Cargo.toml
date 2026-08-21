@@ -18,6 +18,7 @@ members = [
     "engine/motolii-media",
     "engine/motolii-vector",
     "shell/motolii-shell",
+    "ui/motolii-inspector-pane",
     "ui/motolii-settings-pane",
     "ui/motolii-tokens-rs",
     "ui/motolii-shell-state",
@@ -107,6 +108,13 @@ motolii-shell-state = { path = "ui/motolii-shell-state" }
 # 裁定160 切片7: `motolii-shell/src/timeline/` + 対応する write ロジックを
 # 抽出した pane crate(docs/reviews/2026-08-21-pane-split-survey.md §6 切片7)。
 motolii-timeline-pane = { path = "ui/motolii-timeline-pane" }
+# 裁定160 切片8: `motolii-shell/src/inspector_pane.rs` を抽出した pane crate
+# (`motolii-tokens-rs`/`motolii-store`/`motolii-core`/`motolii-settings-pane`
+# ——最後は chrome 共有ヘルパ用、pane split survey §2.4 —— に依存、pane 同士は
+# `settings-pane → inspector-pane` の一方向のみ)。`motolii-shell` は `pub use`
+# で `inspector_pane` path 互換を保つ
+# (docs/reviews/2026-08-21-pane-split-survey.md §6 切片8)。
+motolii-inspector-pane = { path = "ui/motolii-inspector-pane" }
 
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"

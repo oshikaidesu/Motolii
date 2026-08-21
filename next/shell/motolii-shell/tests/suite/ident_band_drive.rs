@@ -1,7 +1,7 @@
 //! ident 帯(名前+種別+M/S glyph)の運転席検分。
 //!
 //! supervisor 訂正(2026-08-20)への応答: 「M グリフは出して結線してください —
-//! 既に動いている `LayerAttrs.hidden` へ」。`Message::InspectorToggleHidden`
+//! 既に動いている `LayerAttrs.hidden` へ」。`Message::Inspector(inspector_pane::Message::ToggleHidden)`
 //! 自体の効果は `inspector_drive.rs` が Message レベルで確かめ済み — このファイルは
 //! **実際に描いた `view()` の木の上で** M glyph をクリックすると、期待した
 //! `Message` が本当に出ることを見る(「配線した」と「動く」の間の見落としを
@@ -15,8 +15,10 @@ use motolii_shell::{Message, Shell};
 
 /// `q0_fence.rs::collect_targets` と同じ手口(`find_all` が無いので `find` を
 /// 尽きるまで繰り返す)。ここでは1ファイル分の小さい検分にしか使わないので
-/// 複製で足りる(共有ヘルパー化は発注範囲の外)。
-fn collect_targets(element: iced::Element<'_, Message>) -> Vec<Target> {
+/// 複製で足りる(共有ヘルパー化は発注範囲の外)。**`inspector_pane::view` を
+/// 直叩きする**ので `Message` は pane ローカル(裁定160 切片8) — root
+/// `motolii_shell::Message` ではない。
+fn collect_targets(element: iced::Element<'_, inspector_pane::Message>) -> Vec<Target> {
     let mut ui = iced_test::simulator(element);
     let mut found: Vec<Target> = Vec::new();
     loop {
@@ -38,7 +40,10 @@ fn collect_targets(element: iced::Element<'_, Message>) -> Vec<Target> {
     found
 }
 
-fn click_at(element: iced::Element<'_, Message>, point: iced::Point) -> Vec<Message> {
+fn click_at(
+    element: iced::Element<'_, inspector_pane::Message>,
+    point: iced::Point,
+) -> Vec<inspector_pane::Message> {
     let mut ui = iced_test::simulator(element);
     ui.point_at(point);
     let _ = ui.simulate([
@@ -109,8 +114,8 @@ fn clicking_the_mute_glyph_in_the_rendered_view_sends_the_toggle_message() {
         "M glyph click が期待どおり1件の Message を出さない: {messages:?}"
     );
     assert!(
-        matches!(messages[0], Message::InspectorToggleHidden),
-        "M glyph click が InspectorToggleHidden 以外を出している: {messages:?}"
+        matches!(messages[0], inspector_pane::Message::ToggleHidden),
+        "M glyph click が ToggleHidden 以外を出している: {messages:?}"
     );
 }
 
@@ -121,7 +126,7 @@ fn clicking_the_mute_glyph_in_the_rendered_view_sends_the_toggle_message() {
 fn the_mute_glyph_still_renders_after_toggling_hidden_on() {
     let mut shell = Shell::new().0;
     let _ = shell.update(Message::AddLayer);
-    let _ = shell.update(Message::InspectorToggleHidden);
+    let _ = shell.update(Message::Inspector(inspector_pane::Message::ToggleHidden));
     let selection = shell.inspector_selection().expect("selection");
     assert!(selection.attrs.hidden, "toggle が効いていない");
 

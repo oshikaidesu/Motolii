@@ -1,68 +1,28 @@
-//! 裁定142の柵(利用者裁定「全パネルのルールにして、あとから変更すると全部
-//! 変わるやつ」): motolii-shell の pane コードへの **raw 色値・px 直書きを
-//! 落ちるテストで禁止する**。`crates/motolii-testkit/tests/ui_toolkit_dep_policy.rs`
-//! と同型のソース走査型の柵(依存グラフではなく、ソーステキストを読んで違反を
-//! 具体的な行で落とす)。
+//! 裁定142の柵、この crate 側の再構築(裁定160 切片8)。
+//!
+//! `motolii-shell/tests/suite/tonmana_token_fence.rs` が元々 `inspector_pane.rs`
+//! を走査していたが、切片8で当該ファイルがこの crate(`motolii-inspector-pane`)の
+//! `src/lib.rs` へ抽出された。**この柵はその走査対象をここへ移設したもの**——
+//! 切片9(`settings_pane.rs` → `motolii-settings-pane`)では同型の柵を抽出先に
+//! 再構築せず「fence 走査ギャップ」として記録するに留めたが(元ファイルの
+//! doc comment 参照)、この切片ではその前例を繰り返さない
+//! (`docs/reviews/2026-08-21-pane-split-survey.md` 切片8「柵は緩めない・消さない」
+//! の指示どおり)。走査ロジック・境界線の判断はすべて元の柵からの機械的な複製 —
+//! 新しい規則は増やしていない。
 //!
 //! ## 走査対象
-//! `next/DECISIONS.md` 裁定142 EXACT TARGET が名指しした5ファイル(すべて
-//! `src/` 直下): [`SCANNED_FILES`]。**`tokens.rs` 自身・`fixture.rs`(テスト
-//! データ)は対象外**(発注書 KNOWN) — 値の正本と、正本を読むための試験データは
-//! この柵の対象ではない。`#[cfg(test)] mod tests { .. }` を持つソースは
-//! [`scannable_prefix`] がその手前で切り、test 内の生値(assert の期待値等)は
-//! 対象にしない(`settings_pane.rs`/`inspector_pane.rs` は裁定160 切片9/切片8で
-//! それぞれ crate へ抽出済み、SCANNED_FILES 側の doc comment参照)。
+//! この crate の `src/lib.rs`(旧 `motolii-shell/src/inspector_pane.rs` の全内容)
+//! だけ。`#[cfg(test)] mod tests { .. }` 以降は対象外([`scannable_prefix`])。
 //!
-//! ## 何を「違反」とするか(境界線はここで決める — 発注書 KNOWN 4)
-//! 全ての raw 数値・raw 色を1文字残らず禁止すると、ループ範囲・opacity%換算・
-//! drag 感度表(`inspector_pane.rs::drag_step_per_pixel`)・RGBA→u8 変換の
-//! `255.0`・`decimals` 桁数のような**ドメインロジック**まで巻き込んで誤検出
-//! だらけになる。この柵が縛るのは **widget/描画の構築呼び出しへ直接渡る
-//! 色・寸法値だけ**:
-//!
+//! ## 何を「違反」とするか(境界線は元の柵と同一 — 詳細は
+//! `motolii-shell/tests/suite/tonmana_token_fence.rs` のモジュール doc 参照)
 //! - **色**: [`COLOR_MARKERS`] — `iced::Color::from_rgb[8]`/`from_rgba[8]` 呼び出し・
-//!   `Color { .. }` 構造体リテラル。マッチしたら**無条件に違反**(中身が変数でも
-//!   pane 側で `Color` を組み立てていること自体が裁定142違反 — 色は
-//!   `tokens::Colors` 経由でしか持ち出せない)。
-//! - **寸法**: [`DIMENSION_MARKERS`] — `.size(`/`.padding(`/`.spacing(`/
-//!   `Length::Fixed(`/`fill_rect(`/`stroke_rect(`/`stroke_v(`/`stroke_h(` の
-//!   呼び出し引数、および `iced::Border { .. }`/`Rect { .. }` リテラルの
-//!   `width:`/`radius:`/`w:`/`h:` フィールド。呼び出し・リテラルは複数行へ
-//!   またがることがある([`bracket_region_end`] が丸/波括弧の深さで実際の
-//!   終端行を追う — 固定行数の当てずっぽうにしない)。
-//!
-//! **`0`/`0.0`/`1`/`1.0`(符号つき含む)は対象外**([`is_exempt_literal`])。
-//! 0 は「寸法の不在」(padding 無し・spacing 無し・角丸無し)であって独立した
-//! 意匠値ではない。1.0 は `.max(1.0)` 系の**物理1px床**(除外リスト(1)の実例 —
-//! `screenshot.rs::stroke_v`/`stroke_h`。`inspector_pane.rs::value_cell_height`/
-//! `glyph_height` は裁定160 切片8で `motolii-inspector-pane` crate へ抽出済み、
-//! 同型のエントリは `next/ui/motolii-inspector-pane/tests/tonmana_token_fence.rs`
-//! 側の EXCLUSIONS に引き継いだ)の値そのものが仕様であり、raw 値として個別に
-//! 問い直す対象ではない。
-//!
-//! **同じ行に `dims.`/`colors.` があればその行は触らない**
-//! ([`line_is_token_derived`]): `dims.border_width * 2.0`(`screenshot.rs`
-//! のマーカー太さの倍率)のような「token 由来の値への係数」は発注書 KNOWN の
-//! 「レイアウト計算の中間値(`*0.5`/`+1`等)まで縛ると誤検出だらけ」に該当する。
-//!
-//! **この境界の外**(マーカーの呼び出し引数・リテラルフィールドの**外側**にある
-//! 独立した `let`/`const` 宣言)は意図的にこの柵の対象外として残す —
-//! `screenshot.rs::CANVAS_WIDTH`(診断器具のキャンバス幅)・`settings_pane.rs::
-//! CHECKERBOARD_TILE_PX`(市松タイル、hairline 床と同型の「装飾は物理px床」
-//! opt-out だが裁定142の3種そのものではない)・`screenshot.rs::render` 内の
-//! `let button_w = 72.0_f32.min(..)`(header ボタン幅の近似)・stage 高さの
-//! 安全上限 `700.0` は、いずれも**実 UI の意匠値ではなく instrument/フォール
-//! バック固有のジオメトリ**で、対応する token 概念が存在しない(NON-GOALS:
-//! 新規 token ロール追加はしない)。判断に迷う項目として作業報告へ列挙する。
-//!
-//! ## 明示除外リスト(裁定142 の3種)
-//! [`EXCLUSIONS`] にファイル名+識別子単位で列挙する。上記の走査設計自体が
-//! 0/1 の一般免除と「呼び出し引数・リテラルフィールドだけを見る」限定に
-//! よってこの3種の大半を自然に対象外にする(=能動的な抑制ロジックとして
-//! 個々に発火するわけではない)ため、[`EXCLUSIONS`] は**この3種を意識的に
-//! 分類した監査記録**として持つ。[`exclusion_identifiers_still_exist_in_their_named_file`]
-//! が各エントリの識別子が実ソースに存在し続けることを機械的に見張り、表が
-//! silently stale にならないようにする。
+//!   `Color { .. }` 構造体リテラル。
+//! - **寸法**: [`CALL_MARKERS`]/[`STRUCT_LITERAL_MARKERS`] — `.size(`/`.padding(`/
+//!   `.spacing(`/`Length::Fixed(` 等の呼び出し引数、`Border { .. }` の `width:`/
+//!   `radius:` フィールド。
+//! - `0`/`0.0`/`1`/`1.0`(符号つき含む)は対象外、`dims.`/`colors.`/`_px` を含む
+//!   行は「token 由来」として対象外。
 
 use std::path::{Path, PathBuf};
 
@@ -70,59 +30,12 @@ fn src_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
 }
 
-/// `motolii-timeline-pane` crate(裁定160 切片7で `motolii-shell/src/timeline/`
-/// から抽出済み)の `src/`。`motolii-shell` の `CARGO_MANIFEST_DIR` から
-/// 兄弟 crate(`next/ui/motolii-timeline-pane/`)へ相対で辿る。
-fn timeline_pane_src_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/motolii-timeline-pane/src")
-}
-
-/// 発注書 EXACT TARGET が名指しした pane 系ファイル。
-///
-/// `timeline_pane.rs` は第2波第1切片(純粋なファイル分割)で `src/timeline/`
-/// (`mod.rs`/`projection.rs`/`hit.rs`/`canvas.rs`/`input.rs`)へ分かれ、
-/// 第2波T1(裁定147)で `lane_bar.rs` が加わり、第2波T2(単一クリップの
-/// move/trim)で `clip_gesture.rs` が加わった — 柵は緩めず、分割後の全7
-/// ファイルへ対象を追随させる(色・寸法の直書きが実際に発生し得るのは主に
-/// `canvas.rs`/`lane_bar.rs` だが、将来の混入も拾えるよう分割後の全ファイルを
-/// 対象にする)。裁定160 切片7で `timeline/` 一式が `motolii-timeline-pane`
-/// crate へ抽出された — `"timeline/"` prefix のエントリは
-/// [`scan_file`] が `motolii-shell/src/` ではなく
-/// [`timeline_pane_src_dir`] から読む([`scan_file`] 側で振り分け)。
-/// `timeline/mod.rs` は抽出時にその crate の `lib.rs` になった
-/// (`TimelinePane`/`canvas::Program` impl 本体を含む点は無改変)。
-const SCANNED_FILES: &[&str] = &[
-    "timeline/lib.rs",
-    "timeline/projection.rs",
-    "timeline/hit.rs",
-    "timeline/clip_gesture.rs",
-    "timeline/canvas.rs",
-    "timeline/input.rs",
-    "timeline/key_rows.rs",
-    "timeline/lane_bar.rs",
-    // `settings_pane.rs` は裁定160 切片9で `motolii-settings-pane` crate へ
-    // 抽出済み(`next/ui/motolii-settings-pane/src/lib.rs`)——この柵は
-    // `motolii-shell` の `src/` だけを見るので、抽出後のソースはもう対象外
-    // (crate 抽出に伴う fence 走査ギャップ、抽出先での再構築は本切片の
-    // スコープ外 — pane split survey §6 切片9 の write-set にこの柵は無い)。
-    //
-    // `inspector_pane.rs` は裁定160 切片8で `motolii-inspector-pane` crate
-    // (`next/ui/motolii-inspector-pane/src/lib.rs`)へ抽出済み——切片9と違い、
-    // この切片は同型の柵を抽出先へ再構築した(`next/ui/motolii-inspector-pane/
-    // tests/tonmana_token_fence.rs`)ので、ここで「走査ギャップ」は生まれない
-    // (発注書「柵は緩めず・消さない」)。
-    "lib.rs",
-    "screenshot.rs",
-    // 裁定157(観測カメラ)S3: Stage overlay の `canvas::Stroke` 呼び出しが
-    // `colors.action_active`/`dims.border_width` を直接使う — 新規ファイルは
-    // この柵へ追随する(モジュール doc「トンマナ柵へ新規ファイル追加があれば
-    // 追随」)。
-    "stage.rs",
-];
+/// この crate は pane 1本ぶんの1ファイル crate なので `lib.rs` だけを見る
+/// (`motolii-shell` 側の `SCANNED_FILES` から `inspector_pane.rs` を落とし、
+/// この1エントリへ引き継いだ)。
+const SCANNED_FILES: &[&str] = &["lib.rs"];
 
 /// `#[cfg(test)]\nmod tests {` の手前までを返す(inline test module は対象外)。
-/// 見つからなければ全文を返す(`timeline_pane.rs`/`lib.rs`/`screenshot.rs` は
-/// inline test module を持たない)。
 fn scannable_prefix(source: &str) -> &str {
     const MARKER: &str = "#[cfg(test)]\nmod tests {";
     match source.find(MARKER) {
@@ -138,22 +51,14 @@ fn strip_comment(line: &str) -> &str {
     }
 }
 
-/// `dims.`/`colors.` 参照が同じ行にあれば「token 由来の式」とみなす。
-///
-/// **`_px` 接尾辞も同格に扱う**: `screenshot.rs::stroke_v`/`stroke_h`/
-/// `stroke_rect` の `width_px` パラメータがその実例 — 呼び出し元では常に
-/// `dims.border_width`(倍率つきのことも)を渡す(`stroke_v` 冒頭の doc
-/// コメント「`width_px` は罫線幅 token」参照)。関数境界を1つまたぐだけで
-/// `dims.`/`colors.` という文字列そのものは局所スコープから見えなくなるが、
-/// 値の出自は変わらない — `x - width_px / 2.0`(線を中心に置く `/2.0`)は
-/// 発注書 KNOWN 4「レイアウト計算の中間値(`*0.5`/`+1`等)まで縛ると誤検出
-/// だらけ」に該当する、`width_px` という既に token 由来の値の上の計算。
+/// `dims.`/`colors.` 参照が同じ行にあれば「token 由来の式」とみなす。`_px`
+/// 接尾辞も同格に扱う(元の柵の判断をそのまま引き継ぐ)。
 fn line_is_token_derived(line: &str) -> bool {
     line.contains("dims.") || line.contains("colors.") || line.contains("_px")
 }
 
 /// 「寸法の不在」(0)・「物理1px床」(1.0、`.max(1.0)` 系)の値そのものは
-/// 個別に問い直さない(モジュール doc 参照)。
+/// 個別に問い直さない。
 fn is_exempt_literal(token: &str) -> bool {
     matches!(token.trim_start_matches('-'), "0" | "0.0" | "1" | "1.0")
 }
@@ -242,9 +147,6 @@ const STRUCT_LITERAL_MARKERS: &[(&str, char, char, &[&str])] = &[
 
 /// `text` 内で `marker` の直後にある開き括弧(`open`)から、対応する閉じ括弧
 /// (`close`)までの行 index(0-indexed, inclusive)を、深さで追って返す。
-/// コメントは行ごとに [`strip_comment`] で落としてから数える。閉じが最後まで
-/// 見つからなければ最終行を返す(壊れた入力への防波堤 — この柵はソースが
-/// 構文的に正しいことを前提にしてよい、cargo が先に落ちる)。
 fn bracket_region_end(lines: &[&str], start_line: usize, marker: &str, open: char, close: char) -> usize {
     let marker_col = strip_comment(lines[start_line])
         .find(marker)
@@ -272,8 +174,7 @@ fn bracket_region_end(lines: &[&str], start_line: usize, marker: &str, open: cha
 
 /// [`bracket_region_end`] で決めた行範囲を、行ごとに(`dims.`/`colors.` を含む
 /// 行は除いて)[`bare_numeric_literals`] で走査し、免除以外を [`Violation`] へ
-/// 積む。`field_filter` が `Some` なら、そのマーカーを含む行だけを見る
-/// (構造体リテラルの特定フィールドだけを問う場合)。
+/// 積む。
 fn scan_region(
     file: &'static str,
     lines: &[&str],
@@ -308,8 +209,7 @@ fn scan_region(
 }
 
 /// 1ファイル分のテキストを走査する(実ファイル・合成 fixture 文字列の両方から
-/// 呼べるよう、`text` を引数で受け取る — [`fence_self_tests`] が合成文字列で
-/// この関数を直接検分する)。
+/// 呼べるよう、`text` を引数で受け取る)。
 fn scan_text(file: &'static str, text: &str) -> Vec<Violation> {
     let scannable = scannable_prefix(text);
     let lines: Vec<&str> = scannable.lines().collect();
@@ -349,13 +249,7 @@ fn scan_text(file: &'static str, text: &str) -> Vec<Violation> {
 }
 
 fn scan_file(file: &'static str) -> Vec<Violation> {
-    // `"timeline/"` prefix は裁定160 切片7で抽出済みの `motolii-timeline-pane`
-    // crate 側([`timeline_pane_src_dir`] 参照)。`mod.rs` → `lib.rs` の1件だけ
-    // ファイル名も変わっている(SCANNED_FILES のコメント参照)。
-    let path = match file.strip_prefix("timeline/") {
-        Some(rest) => timeline_pane_src_dir().join(rest),
-        None => src_dir().join(file),
-    };
+    let path = src_dir().join(file);
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("{} を読めない: {err}", path.display()));
     scan_text(file, &text)
@@ -369,8 +263,8 @@ fn format_violations(violations: &[Violation]) -> String {
         .join("\n")
 }
 
-/// **本命**: 発注書 EXACT TARGET の5ファイルに raw 色値・px 直書きが無いこと。
-/// 見つかったら具体的な行を列挙して落ちる(発注書 EXACT TARGET 1)。
+/// **本命**: `lib.rs`(旧 `inspector_pane.rs`)に raw 色値・px 直書きが無いこと。
+/// 見つかったら具体的な行を列挙して落ちる。
 #[test]
 fn pane_source_files_do_not_construct_raw_colors_or_dimension_literals() {
     let mut all_violations = Vec::new();
@@ -386,7 +280,9 @@ fn pane_source_files_do_not_construct_raw_colors_or_dimension_literals() {
 }
 
 // ---------------------------------------------------------------------------
-// 明示除外リスト(裁定142 の3種) — ファイル名+識別子単位、理由コメント必須。
+// 明示除外リスト(裁定142 の3種のうち、この crate が抱える分) — ファイル名+
+// 識別子単位、理由コメント必須。`motolii-shell` 側の柵と同じ2エントリを
+// `inspector_pane.rs` → `lib.rs` へ file だけ書き換えて引き継ぐ。
 // ---------------------------------------------------------------------------
 
 struct Exclusion {
@@ -398,34 +294,18 @@ struct Exclusion {
 const EXCLUSIONS: &[Exclusion] = &[
     // --- (1) 物理1px hairline 床 ---------------------------------------
     Exclusion {
-        file: "screenshot.rs",
-        identifier: "fn stroke_v",
-        reason: "width_px.max(1.0) / (y1 - y0).max(1.0) — hairline 床と同型の最小1px保証。",
+        file: "lib.rs",
+        identifier: "fn value_cell_height",
+        reason: "(dims.inspector_row_height - dims.spacing_s).max(1.0) — 物理1px床(裁定142除外1)。\
+                 1.0はゼロ/負幅セルを防ぐ最小可視化の床であって独立した意匠値ではない \
+                 (この柵は0/1リテラルを一般免除しているので実際には走査へ引っかからないが、\
+                 除外(1)の実例としてここに記録する)。",
     },
     Exclusion {
-        file: "screenshot.rs",
-        identifier: "fn stroke_h",
-        reason: "(x1 - x0).max(1.0) / width_px.max(1.0) — 同上。",
+        file: "lib.rs",
+        identifier: "fn glyph_height",
+        reason: "(dims.inspector_row_height - dims.spacing_xs).max(1.0) — 同上(Key/M/S glyph 列の床)。",
     },
-    // `value_cell_height`/`glyph_height`(元は "inspector_pane.rs")は裁定160
-    // 切片8で `motolii-inspector-pane` crate(`next/ui/motolii-inspector-pane/
-    // src/lib.rs`)へ抽出された——切片9の (2)/(3) と同じ理由でこの柵の
-    // `src_dir()`(`motolii-shell` の `src/` のみ)からはもう読めなくなるが、
-    // **表から落とさず抽出先へ引き継いだ**(`next/ui/motolii-inspector-pane/
-    // tests/tonmana_token_fence.rs::EXCLUSIONS`、同一2エントリ・file だけ
-    // `lib.rs` へ書き換え) — 切片9で settings カバレッジが走査ギャップとして
-    // 失われた前例を、この切片では繰り返さない(発注書「柵は緩めず・消さない」)。
-    //
-    // --- (2)/(3) は元は "settings_pane.rs"(`pub fn preset_rgba`・
-    // `BackgroundPreset::Gray18` の18%グレー定数)を指していたが、裁定160
-    // 切片9で当該ファイルが `motolii-settings-pane` crate(`next/ui/
-    // motolii-settings-pane/src/lib.rs`)へ抽出された——この柵は `src_dir()`
-    // (`motolii-shell` の `src/` のみ)を見るため、抽出先のファイルは
-    // `exclusion_identifiers_still_exist_in_their_named_file` から読めなく
-    // なる。除外の理由自体は今も有効(値は無改変で移設しただけ)だが、この
-    // 柵の走査範囲がもう及ばないので表からは落とした——抽出先での柵の再構築は
-    // 本切片のスコープ外(pane split survey §6 切片9 の write-set に本ファイルは
-    // 無い、`docs/reviews/2026-08-21-pane-split-survey.md`)。
 ];
 
 /// 除外リストの識別子が実ソースに存在し続けることを見張る — コードが変わって
@@ -449,8 +329,7 @@ fn exclusion_identifiers_still_exist_in_their_named_file() {
 
 // ---------------------------------------------------------------------------
 // 柵の自己検分 — 合成 fixture 文字列に対して、拾うべき違反を実際に拾い、
-// 免除すべきものを実際に免除することを確認する(実ファイルへの赤→緑の
-// 実地検分は作業報告に別記)。
+// 免除すべきものを実際に免除することを確認する(元の柵からの機械的な複製)。
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
@@ -553,16 +432,12 @@ mod fence_self_tests {
 
     #[test]
     fn the_rect_struct_definition_itself_is_not_a_false_positive() {
-        // `struct Rect { x: f32, y: f32, w: f32, h: f32 }` の型定義 — `f32` の
-        // 数字は識別子の一部であって裸のリテラルではない。
         let synthetic = "struct Rect {\n    x: f32,\n    y: f32,\n    w: f32,\n    h: f32,\n}\n";
         assert!(scan_text("synthetic.rs", synthetic).is_empty());
     }
 
     #[test]
     fn domain_math_outside_any_marker_is_never_touched() {
-        // opacity %換算・drag感度表・RGBA→u8変換等、widget構築呼び出しの外に
-        // ある raw 数値はこの柵の対象外(モジュール doc の境界線どおり)。
         let synthetic = "opacity.value *= 100.0;\nlet step = 0.5;\nlet byte = (c * 255.0).round();\n";
         assert!(scan_text("synthetic.rs", synthetic).is_empty());
     }

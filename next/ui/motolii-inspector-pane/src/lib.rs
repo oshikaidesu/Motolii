@@ -4,7 +4,7 @@
 //! (発注書 CANON)。旧 `crates/` 側の egui/iced 実装は手本にしない — `next/` は
 //! 移植元ではなく成果を作る側(`../GOALS.md` 冒頭の規律どおり)。
 //!
-//! [`project`] が `StoreView`/[`crate::Session`] から**Document の写しではない、
+//! [`project`] が `StoreView`/[`motolii_shell_state::Session`] から**Document の写しではない、
 //! 使い捨ての投影**(`timeline_pane::rows` と同じ形、裁定5)を作る。[`view`] は
 //! それを iced widget へ描くだけで、投影の中身を判断しない。
 //!
@@ -15,8 +15,8 @@
 //! 組み、柵がそのまま効く形を選んだ(視覚正本と食い違う点として終了報告に書く)。
 //!
 //! **編集の確定方式**: 打鍵のたびに `Intent` を出すと1文字ごとに undo が割れる
-//! (`ui-quality-bar` Q2)。[`crate::Shell`] は [`FieldDraft`]/name 下書きという
-//! **Document ではない一時状態**(`crate::Shell::pending_drops` と同じ形)を持ち、
+//! (`ui-quality-bar` Q2)。[`motolii_shell::Shell`] は [`FieldDraft`]/name 下書きという
+//! **Document ではない一時状態**(`motolii_shell::Shell::pending_drops` と同じ形)を持ち、
 //! `on_submit`(Enter)で初めて1回の `Intent::SetTrack`/`SetAttrs` を出す — 1 gesture
 //! = 1 undo。**静的値の編集は `SetTrack` に1キー `Hold`** で書く([`single_hold_track`])
 //! — 発注書がその流儀を名指ししている。
@@ -31,7 +31,7 @@
 //! **drag-to-scrub**(第2波の一部を前倒し、利用者の直接依頼): 値セルは
 //! `mouse_area` でラップし、press→(実質的な移動があれば)drag、移動が無いまま
 //! release なら従来どおり click→type 編集(併存、[`value_cell`] 参照)。
-//! **transient 値は `Document` へ直接書く**([`crate::Shell::continue_field_drag`]) —
+//! **transient 値は `Document` へ直接書く**([`continue_field_drag`]) —
 //! 1手ごとに `doc.undo()` してから書き直すことで history を1件に畳み、
 //! release 時点の最後の1手がそのまま確定値になる(= 1 gesture 1 undo、
 //! `next/core/motolii-store/src/document.rs` の `apply_all` doc comment
@@ -44,18 +44,95 @@
 //! (pointer capture が無い実測、`mouse_area.rs::update` が `cursor.is_over` で
 //! 弾く)。値セルは幅38pxしか無いので、感度どおりに大きく動かすとすぐ bounds を
 //! 出てしまう — window 全体の `CursorMoved`/`ButtonReleased` を
-//! `iced::event::listen_with` で拾う形に倒した(`crate::inspector_pointer_event`)。
+//! `iced::event::listen_with` で拾う形に倒した(`motolii_shell::inspector_pointer_event`)。
 //! mouse_area の `on_press` は「この field の drag を armed にする」ためだけに使う。
+//!
+//! ## 裁定160 切片8: crate 抽出(`motolii-shell` → `motolii-inspector-pane`)
+//! `docs/reviews/2026-08-21-pane-split-survey.md` §6 切片8。**挙動ゼロ変更**。
+//! 切片9(`motolii-settings-pane`)と同じ形を踏襲する。
+//!
+//! - **`Message` は pane ローカル**(この crate の [`Message`])。`motolii-shell`
+//!   root の `Message::Inspector(inspector_pane::Message)` が1本で畳む。旧腕名の
+//!   "Inspector" prefix は pane 名前空間で二重になるので剥がした
+//!   (`InspectorFieldInput` → `FieldInput` 等、切片9の "Settings" prefix 剥がしと
+//!   同じ判断)。cross-cutting な2 Message(`KeyboardModifiersChanged`/
+//!   `EscapePressed` — timeline drag と inspector drag 両方が読む)はここへは
+//!   移さず root に残した(pane split survey §1.3)。
+//! - **`project` は `&Session` を直接取る**: `Session` は裁定160 切片6→切片7で
+//!   `motolii-shell-state` leaf crate へ抽出済み(`motolii-timeline-pane` が
+//!   `Session`/`KeySelector` を読むのと同じ理由 — root(`motolii-shell`)へ
+//!   依存できない pane crate 同士の共通の親)。この crate も同じ leaf crate へ
+//!   依存するので、`project` のシグネチャ・判定ロジックとも無改変で通る
+//!   (root → pane の一方向依存を保ったまま、切片7で解消済みの循環回避策を
+//!   ここでも使い回しただけ)。
+//! - **書ける物を持たない、が書き口(自由関数)は持つ**(切片9と同じ形):
+//!   [`commit_inspector_field`]/[`commit_inspector_name`]/[`start_field_drag`]/
+//!   [`continue_field_drag`]/[`finish_field_drag`]/[`cancel_field_interaction`]
+//!   は `&mut Document`/`&mut Option<_>` 下書き・`&mut Option<FieldDragState>` を
+//!   明示引数で受け取る自由関数。呼び出し口は `motolii_shell::Shell::
+//!   update_inspector` + 個々の glue メソッド(`self.doc`/`self.session.selection`
+//!   等をそのまま貸すだけ)。
+//! - **`iced::widget::operation::focus` を返す軌道は Shell 側に残した**:
+//!   click→type 切替(`Shell::enter_field_editing`)は Document を一切読み書き
+//!   しない UI 純粋な focus orchestration — `Task<motolii_shell::Message>` を
+//!   直接組み立てられる root 側に置く方が pane crate を跨ぐ `Task` の型変換を
+//!   増やさずに済む(この crate 自身は `Task` を返す関数を持たない)。
+//!   [`finish_field_drag`] は「click だった」ことだけを `Ok(Some(field))` で
+//!   知らせ、`Task` の組み立ては呼び出し側に委ねる。
+//! - **`toggle_inspector_hidden` は移設していない**: 元の実装は
+//!   `Session::selection` を読んで cross-cutting な `Shell::toggle_layer_hidden`
+//!   (`LaneBarToggleMute` とも共有)へ委譲するだけで、Inspector 固有の書き
+//!   ロジックを1行も持たない — 「pane が自分の write ロジックを持つ」形に
+//!   当てはまらないので、この関数だけは `motolii-shell` root に残した
+//!   (RETURN の write-set 外 finding 参照)。
+//! - **`FieldDragState`(drag-to-scrub の transient 状態)はここへ移した**:
+//!   `Session::selection` と同じく置き場(`Shell::inspector_drag` フィールド)は
+//!   移設していないが、型定義とそれを読み書きする自由関数はこの crate 側
+//!   (発注書「transient overlay 経由の drag はそのまま移動」— 挙動不変)。
 
 use motolii_core::RationalTime;
 use motolii_store::{
-    property, Interp, Keyframe, KeyframeTrack, LayerId, LayerSource, PropertyId, StoreError,
-    StoreView, Value,
+    property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId,
+    LayerSource, PropertyId, StoreError, StoreView, Value,
 };
 
-use crate::chrome::{section_header, value_input_style};
-use crate::tokens::{Colors, Dimensions, Ink, TextWeight};
-use crate::{Message, Session};
+use motolii_settings_pane::chrome::{parse_number, section_header, value_input_style};
+use motolii_shell_state::Session;
+use motolii_tokens_rs::{Colors, Dimensions, Ink, TextWeight};
+
+// ---------------------------------------------------------------------------
+// pane ローカル Message(裁定160 切片8 — root `Message::Inspector(Message)` が
+// 1本で畳む、上記 crate doc 参照)。
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Message {
+    /// Transform 行の値セルへの打鍵。**まだ Document を書かない** — 下書きを
+    /// 更新するだけ(`FieldDraft`、`motolii_shell::Shell::pending_drops` と同じ形)。
+    FieldInput(TransformField, String),
+    /// Transform 行の Enter — **ここで初めて `Intent::SetTrack` を1回出す**
+    /// (1 gesture = 1 undo)。
+    FieldSubmit(TransformField),
+    /// Attrs の Name 欄への打鍵。同上、まだ書かない。
+    NameInput(String),
+    /// Attrs の Name 欄の Enter — `Intent::SetAttrs` を1回出す。
+    NameSubmit,
+    /// Attrs の Hidden トグル。下書きを経由せず即 `Intent::SetAttrs` を1回出す
+    /// (header の Undo/Redo ボタンと同じ即時操作の形)。
+    ToggleHidden,
+    /// 値セルの press。**まだ Document を書かない** — click か drag かは
+    /// release まで未確定(`Shell::inspector_drag`)。
+    ValuePressed(TransformField),
+    /// window 全体の cursor 移動(`subscription()` の `inspector_pointer_event`
+    /// 経由)。`mouse_area` 自身の bounds を出た cursor は iced 0.14 に pointer
+    /// capture が無く追えない(実測)ので、drag 中の主経路はここ。drag が
+    /// armed/dragging でなければ即 no-op。
+    PointerMoved(iced::Point),
+    /// 左クリック release(同じく window 全体から)。drag が実際に動いていれば
+    /// 直前の move が確定値(1 gesture = 1 undo)、動いていなければ click として
+    /// type 編集へ切り替える。
+    PointerReleased,
+}
 
 // ---------------------------------------------------------------------------
 // 型別 editor の対象 field
@@ -63,7 +140,7 @@ use crate::{Message, Session};
 
 /// Transform 行が動かす field の識別。**`LayerId` を持たない** — 対象は常に
 /// `Session::selection`(commit 時に読む)。選択が edit の合間に変わる稀なケースは
-/// 「そのまま捨てる」で安全側に倒す(`crate::Shell::commit_inspector_field` 参照)。
+/// 「そのまま捨てる」で安全側に倒す(`motolii_shell::Shell::commit_inspector_field` 参照)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TransformField {
     PositionX,
@@ -91,7 +168,7 @@ impl TransformField {
 }
 
 /// この field の store 上の property。標準 property は予約語でも空でもないので
-/// 失敗し得ない — `crate::Shell` はこの `Result` を「コードの誤り」として扱ってよい。
+/// 失敗し得ない — `motolii_shell::Shell` はこの `Result` を「コードの誤り」として扱ってよい。
 pub fn property_id(field: TransformField) -> Result<PropertyId, StoreError> {
     PropertyId::new(field.property_name())
 }
@@ -164,7 +241,7 @@ pub fn field_decimals(field: TransformField) -> usize {
 // ---------------------------------------------------------------------------
 
 /// `field` の drag 感度(1px あたりの表示単位の変化量)。**tokens ではなくここに
-/// 置く** — 寸法・色ではなく値の型に紐づく振る舞いなので([`crate::tokens`] は
+/// 置く** — 寸法・色ではなく値の型に紐づく振る舞いなので([`motolii_tokens_rs`] は
 /// 裁定117により寸法・色専用、Document 由来でも値の意味でもない — 型別 editor の
 /// 一部としてここへ置く)。
 ///
@@ -193,7 +270,7 @@ pub const DRAG_SHIFT_FACTOR: f64 = 0.1;
 
 /// press 開始点からの x 差分(px)を「表示単位」の新しい値へ写す。`fine` は
 /// Shift 押下中かどうか([`DRAG_SHIFT_FACTOR`] を掛ける)。純粋関数 — 呼び手
-/// (`crate::Shell::continue_field_drag`)が結果を `next_value` へ渡して store の
+/// (`continue_field_drag`)が結果を `next_value` へ渡して store の
 /// `Value` へ変換する。
 pub fn dragged_value(field: TransformField, start_value: f64, delta_px: f32, fine: bool) -> f64 {
     let step = drag_step_per_pixel(field);
@@ -388,6 +465,13 @@ fn vec2_components(
 /// `store`/`session` から選択層の Inspector 投影を組み立てる。**読むだけ**。
 /// 選択なし・選択層が削除済み(present でない)・comp が無い、のいずれも `Ok(None)`
 /// (M13: 壊れているのではなく「まだ映す物が無い」)。
+///
+/// **`&Session` を直接取る**(裁定160 切片7 以降、crate doc 参照)——`Session`
+/// は `motolii-shell-state` leaf crate に住む(`motolii-timeline-pane` と同じ
+/// 依存)ので、root(`motolii-shell`)を経由せずにここへ持ち込める。切片7以前は
+/// `Session` が `motolii-shell` root に残っていたため、循環を避けて
+/// `selection`/`playhead` の2引数へ分解する回避策を取っていたが、切片7の
+/// leaf crate 化でこの回避策は不要になった。
 pub fn project(
     store: &StoreView<'_>,
     session: &Session,
@@ -513,6 +597,267 @@ pub fn project(
         ],
         attrs: attrs_projection,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// drag-to-scrub、進行中の一時状態(裁定160 切片8で lib.rs から移設)。
+// ---------------------------------------------------------------------------
+
+/// Inspector 値セルの drag-to-scrub、進行中の一時状態。**Document ではない**
+/// (`FieldDraft` と同じ「pane が持つ transient」の形)。値そのものの置き場は
+/// `Document` の transient overlay(`Document::set_transient`)— ここは overlay
+/// の宛先と、click/drag 判定・確定時の Intent 組み立てに要る最小限だけを持つ。
+///
+/// **置き場(`motolii_shell::Shell::inspector_drag: Option<FieldDragState>`)は
+/// 移設していない**(crate doc 参照) — 型定義とこれを読み書きする自由関数
+/// ([`start_field_drag`]/[`continue_field_drag`]/[`finish_field_drag`]/
+/// [`cancel_field_interaction`])だけがここにある。
+pub struct FieldDragState {
+    field: TransformField,
+    layer: LayerId,
+    /// press 時点の表示単位の値([`drag_origin`] が投影から読む)。確定
+    /// Intent・Esc(overlay を外すだけで使わない)双方が参照する起点。
+    start_value: f64,
+    /// Vec2 系(Position/Scale/Anchor)の動かさない方の成分。scalar 系では未使用。
+    current_vec2: [f64; 2],
+    /// 最初の `PointerMoved` で確定する基準 x(window 座標)。`None` の間は
+    /// click か drag かまだ未確定 — 確定前に値を動かすと press 直後の
+    /// sub-pixel な揺れで値が動いてしまう。
+    origin_x: Option<f32>,
+    /// 少なくとも1回 `set_transient` を呼んだか。release 時の click/drag 判定と、
+    /// Esc で overlay を外す必要があるかどうかの両方に使う。
+    moved: bool,
+    /// 直近の `set_transient` に渡した値。release の確定 Intent はこれをそのまま
+    /// 1回 `apply` する — pointer の最終座標を release 時に持っていない
+    /// (`PointerReleased` は位置を運ばない)ので、最後に計算した値をここへ
+    /// 持ち回す。`moved` が `false` の間は未使用。
+    last_value: Option<Value>,
+}
+
+// ---------------------------------------------------------------------------
+// 書き口(裁定160 切片8で lib.rs から移設): `&mut Document`/`&mut Option<_>`
+// 下書き・`&mut Option<FieldDragState>` を明示引数で受け取る自由関数。
+// 呼び出し側(`motolii_shell::Shell::update_inspector` + 個々の glue メソッド)
+// が `self.doc`/`self.session.selection` 等をそのまま貸す — pane crate は
+// `Shell` を持てない(root → pane の一方向依存、循環禁止)ための形
+// (`motolii_settings_pane` の同型セクションと同じ判断)。
+// ---------------------------------------------------------------------------
+
+/// Inspector の Transform 行 — 下書きを確定して1回の `Intent::SetTrack` を出す
+/// (1 gesture = 1 undo)。数値として読めない・animated・書き込み失敗は**黙って
+/// 消さず** `Err` の理由文を返す(M13、呼び出し側が status 帯へ渡す)。下書きが
+/// 無い・別 field の submit・選択が無い、のいずれも `Ok(())`(何もしない)。
+pub fn commit_inspector_field(
+    doc: &mut Document,
+    draft: &mut Option<FieldDraft>,
+    selection: Option<LayerId>,
+    playhead_time: RationalTime,
+    field: TransformField,
+) -> Result<(), String> {
+    let Some(taken) = draft.take() else {
+        return Ok(());
+    };
+    if taken.field != field {
+        // 別の field の submit(起こらないはずだが、安全側で下書きを戻す)。
+        *draft = Some(taken);
+        return Ok(());
+    }
+    let Some(layer) = selection else {
+        return Ok(());
+    };
+    let Some(input) = parse_number(&taken.text) else {
+        return Err(format!("数値として読めない: {}", taken.text));
+    };
+    let Ok(property) = property_id(field) else {
+        return Err("property を作れない".to_owned());
+    };
+
+    // 編集不可(animated = 2キー以上)の field は、UI が control を出していない
+    // はずだが、**書き口自体でも二重に拒む**(M13/Q0 — chrome と書き口の食い違いを
+    // 構造的に作らない)。
+    let store = doc.view();
+    if let Ok(Some(track)) = store.track(layer, &property) {
+        if track.keys().len() > 1 {
+            return Err("animated な property はこの第1波では編集できない".to_owned());
+        }
+    }
+
+    let current_vec2 = match store.value_at(layer, &property, playhead_time) {
+        Ok(Some(Value::Vec2(v))) => v,
+        _ => default_vec2(field),
+    };
+    let value = next_value(field, input, current_vec2);
+    let track = single_hold_track(value);
+    doc.apply(Intent::SetTrack { layer, property, track })
+        .map_err(|error| format!("値を書けない: {error}"))
+}
+
+/// Attrs の Name 欄 — 下書きを確定して1回の `Intent::SetAttrs` を出す。下書きが
+/// 無い・選択が無い、のいずれも `Ok(())`(何もしない)。
+pub fn commit_inspector_name(
+    doc: &mut Document,
+    draft: &mut Option<String>,
+    selection: Option<LayerId>,
+) -> Result<(), String> {
+    let Some(text) = draft.take() else {
+        return Ok(());
+    };
+    let Some(layer) = selection else {
+        return Ok(());
+    };
+    let patch = LayerAttrsPatch {
+        name: Some(text),
+        ..Default::default()
+    };
+    doc.apply(Intent::SetAttrs { layer, patch })
+        .map_err(|error| format!("名前を書けない: {error}"))
+}
+
+/// 値セルの press — click か drag かはまだ未確定(`FieldDragState::origin_x` が
+/// `None` のまま)。選択なし・animated(編集不可)・対応する field が投影に無い、
+/// のいずれも黙って無視([`commit_inspector_field`] と同じ二重の柵)。既に別の
+/// drag が進行中なら多重起動しない。
+pub fn start_field_drag(
+    drag: &mut Option<FieldDragState>,
+    selection: Option<LayerId>,
+    projection: Option<&SelectionProjection>,
+    field: TransformField,
+) {
+    if drag.is_some() {
+        return; // 既に別の drag が進行中 — 多重起動しない
+    }
+    let Some(layer) = selection else {
+        return;
+    };
+    let Some(selection_projection) = projection else {
+        return;
+    };
+    let Some((start_value, current_vec2)) = drag_origin(selection_projection, field) else {
+        return;
+    };
+    *drag = Some(FieldDragState {
+        field,
+        layer,
+        start_value,
+        current_vec2,
+        origin_x: None,
+        moved: false,
+        last_value: None,
+    });
+}
+
+/// window 全体の cursor 移動。drag が armed/dragging でなければ即 no-op。
+/// **1px = 感度表の刻み**([`dragged_value`])。press 直後の最初の move は基準点を
+/// 確定するだけで値は動かさない(そうしないと press した瞬間の sub-pixel な
+/// 揺れで値が動く)。
+///
+/// **transient overlay(`Document::set_transient`)を毎 move 呼ぶだけ** —
+/// `edit timeline` には一切触れないので、undo/redo の意味論(`revision()`)は
+/// drag 中ずっと不変。
+pub fn continue_field_drag(
+    doc: &mut Document,
+    drag: &mut Option<FieldDragState>,
+    point: iced::Point,
+    fine: bool,
+) {
+    let Some(state) = drag.as_mut() else {
+        return;
+    };
+    let Some(origin_x) = state.origin_x else {
+        state.origin_x = Some(point.x);
+        return;
+    };
+
+    let delta_px = point.x - origin_x;
+    if delta_px == 0.0 && !state.moved {
+        return; // まだ実質的に動いていない — click 候補のまま据え置く
+    }
+
+    let field = state.field;
+    let layer = state.layer;
+    let start_value = state.start_value;
+    let current_vec2 = state.current_vec2;
+
+    let Ok(property) = property_id(field) else {
+        return;
+    };
+    let new_display = dragged_value(field, start_value, delta_px, fine);
+    let value = next_value(field, new_display, current_vec2);
+
+    doc.set_transient(layer, property, value.clone());
+    if let Some(state) = drag.as_mut() {
+        state.moved = true;
+        state.last_value = Some(value);
+    }
+}
+
+/// 左クリック release(window 全体から)。**drag が実際に動いていたら確定**:
+/// 最後の transient 値そのものを1回の本編集 `Intent` として `apply` してから
+/// `clear_transient`(1 gesture = 1 undo、overlay を残さない)。
+///
+/// **`Ok(Some(field))`**: drag が動かないまま release された(click) —
+/// 呼び出し側は `field` で type 編集へ切り替える
+/// (`motolii_shell::Shell::enter_field_editing`、focus task の構築は crate doc
+/// のとおり root 側の仕事)。**`Ok(None)`**: drag が実際に動いた(確定済み)、
+/// または drag 自体が無かった — 呼び出し側の追加作業なし。**`Err`**: 確定
+/// Intent の書き込みが失敗した理由文(呼び出し側が status 帯へ渡す —
+/// `clear_transient` は書き込み失敗時も必ず呼ぶ、元実装と同じ、overlay を
+/// 残さないため)。
+pub fn finish_field_drag(
+    doc: &mut Document,
+    drag: &mut Option<FieldDragState>,
+) -> Result<Option<TransformField>, String> {
+    let Some(state) = drag.take() else {
+        return Ok(None);
+    };
+    if !state.moved {
+        return Ok(Some(state.field));
+    }
+    let Ok(property) = property_id(state.field) else {
+        // 起こらないはず(`moved` は property_id が通った move でしか立たない)
+        // だが、安全側で overlay だけは残さず抜ける実害は無い(次の press で
+        // 上書きされる)。
+        return Ok(None);
+    };
+    let mut write_error = None;
+    if let Some(value) = state.last_value {
+        let track = single_hold_track(value);
+        if let Err(error) = doc.apply(Intent::SetTrack {
+            layer: state.layer,
+            property: property.clone(),
+            track,
+        }) {
+            write_error = Some(format!("値を書けない: {error}"));
+        }
+    }
+    doc.clear_transient(state.layer, &property);
+    match write_error {
+        Some(error) => Err(error),
+        None => Ok(None),
+    }
+}
+
+/// Esc: 進行中の drag があれば `clear_transient` で復元し(overlay は edit
+/// timeline に一切触れていないので undo/redo 履歴は最初から無傷)、無ければ
+/// typing 下書き(値セル)を破棄する。
+///
+/// **`true`** を返したら呼び出し側はここで終わり(元の `motolii_shell::Shell::
+/// cancel_inspector_interaction` の早期 return を保つ — 名前欄・Settings 下書き
+/// へは踏み込まない、それらは Inspector pane の write-set 外)。
+pub fn cancel_field_interaction(
+    doc: &mut Document,
+    drag: &mut Option<FieldDragState>,
+    field_draft: &mut Option<FieldDraft>,
+) -> bool {
+    if let Some(state) = drag.take() {
+        if state.moved {
+            if let Ok(property) = property_id(state.field) {
+                doc.clear_transient(state.layer, &property);
+            }
+        }
+        return true;
+    }
+    field_draft.take().is_some()
 }
 
 // ---------------------------------------------------------------------------
@@ -675,7 +1020,7 @@ fn ident_band(
 
     // 名前欄は mock の `.ident b`(font-weight:600, t-base)の役目を持つが、
     // 実体は `text_input`(既に結線済みの改名 —
-    // `Message::InspectorNameInput/Submit`)。未フォーカス時は枠を消して
+    // `Message::NameInput/NameSubmit`)。未フォーカス時は枠を消して
     // 静止テキストに見せる([`name_input_style`])。`.font(TextWeight::
     // Semibold)` で mock の 600 を写す(裁定137)。
     //
@@ -684,8 +1029,8 @@ fn ident_band(
     // 約10px 余計に伸びる、実測: 修正前 name_field 高 24.3px、修正後
     // 14.3px)。**横だけ** [`name_field_padding`] で戻す(裁定139)。
     let name_field = text_input(&placeholder, &name_text)
-        .on_input(Message::InspectorNameInput)
-        .on_submit(Message::InspectorNameSubmit)
+        .on_input(Message::NameInput)
+        .on_submit(Message::NameSubmit)
         .size(dims.body_text)
         .font(TextWeight::Semibold.font())
         .padding(name_field_padding(dims))
@@ -830,8 +1175,8 @@ fn value_cell(
                 container(
                     text_input("", &displayed)
                         .id(field_input_id(field))
-                        .on_input(move |text| Message::InspectorFieldInput(field, text))
-                        .on_submit(Message::InspectorFieldSubmit(field))
+                        .on_input(move |text| Message::FieldInput(field, text))
+                        .on_submit(Message::FieldSubmit(field))
                         .size(dims.body_text)
                         .width(Length::Fill)
                         // 縦0を維持(柵で発見した実修正 — `text_input` の既定 padding
@@ -865,7 +1210,7 @@ fn value_cell(
 
 /// present・editable(un-keyed)な field の**まだ編集していない**見た目。
 /// `mouse_area` は press だけを own する — move/release は window 全体を追う
-/// `Shell::subscription` 側の担当(`crate::inspector_pointer_event`)。iced 0.14
+/// `Shell::subscription` 側の担当(`motolii_shell::inspector_pointer_event`)。iced 0.14
 /// の `mouse_area` は自分の bounds を出た cursor を追えない(pointer capture が
 /// 無い実測)ので、値セル自身の当たり判定は「drag を armed にする press」だけに
 /// 絞ってある — 感度どおりに動かすとすぐこの38px幅を出るため。
@@ -898,7 +1243,7 @@ fn draggable_value_cell(
         }),
     )
     .interaction(iced::mouse::Interaction::ResizingHorizontally)
-    .on_press(Message::InspectorValuePressed(field))
+    .on_press(Message::ValuePressed(field))
     .into()
 }
 
@@ -983,7 +1328,7 @@ fn mute_glyph(dims: Dimensions, colors: Colors, hidden: bool) -> Element<'static
     .width(Length::Fixed(dims.inspector_glyph_width))
     .height(Length::Fixed(glyph_height(dims)))
     .padding(0.0)
-    .on_press(Message::InspectorToggleHidden)
+    .on_press(Message::ToggleHidden)
     .style(move |_theme, status| glyph_button_style(dims, colors, status, hidden))
     .into()
 }
@@ -1082,7 +1427,7 @@ fn attrs_section(attrs: &AttrsProjection, dims: Dimensions, colors: Colors) -> E
 /// この実装の値セルは、動かさず release すれば単クリックで打鍵できる
 /// (二度打ちは要らない)ので「click」へ言い換える(M13: 実装と違う手順を
 /// 案内しない)。「Esc to cancel」も drag の復元・打鍵下書きの破棄の両方で
-/// 今回初めて本当に効く(`crate::Shell::cancel_inspector_interaction`)。
+/// 今回初めて本当に効く(`motolii_shell::Shell::cancel_inspector_interaction`)。
 fn hint_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     // `.width(Length::Fill)`: 同上(柵で発見)— mock の `.hint` も pane 全幅の帯。
     container(
@@ -1107,11 +1452,12 @@ fn hint_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
 mod tests {
     use super::*;
     // `parse_number` は裁定160 切片5(pane split survey §2.4/§6)で
-    // `chrome::parse_number` へ関数本体を移設した(settings_pane →
-    // inspector_pane の import をゼロにするため)。テストの qualified name
-    // (`inspector_pane::tests::parse_number_accepts_the_mock_minus_sign`)は
+    // `chrome::parse_number` へ関数本体を移設し、切片9で `chrome` ごと
+    // `motolii-settings-pane` crate へ、切片8でこの crate 自身の依存先へ
+    // 移った(モジュール冒頭の `use motolii_settings_pane::chrome::{parse_number,
+    // ..}` で読み込み済み、`use super::*;` 経由でここへ入る)。テストの
+    // qualified name(`tests::parse_number_accepts_the_mock_minus_sign`)は
     // `--list` 完全一致のためここに残す — 呼ぶ本体だけ移設先を指す。
-    use crate::chrome::parse_number;
 
     // -----------------------------------------------------------------------
     // 裁定139: value_cell/name_field は縦0を維持したまま横だけ内余白を戻す
@@ -1165,7 +1511,7 @@ mod tests {
         // Inspector を一切描かない — `screenshot.rs` 実測、write-set 外の
         // finding として最終報告に記録)。
         assert_eq!(
-            crate::tokens::TextWeight::Bold.font().weight,
+            TextWeight::Bold.font().weight,
             iced::font::Weight::ExtraBold
         );
     }

@@ -1,0 +1,25 @@
+[package]
+name = "motolii-inspector-pane"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+iced.workspace = true
+motolii-core.workspace = true
+motolii-store.workspace = true
+# デザイン値の外出し(裁定117)。裁定160 切片1 で抽出済みの leaf crate をそのまま
+# 依存する — `Colors`/`Dimensions`/`Tokens` は raw 値の直書き禁止の唯一の読み口。
+motolii-tokens-rs.workspace = true
+# pane 横断スタイルヘルパ(`section_header`/`value_input_style`/`parse_number`/
+# `button_style`)は裁定160 切片5でここへ吸い上げられ、切片9で settings-pane
+# crate 側(`chrome` module)へ同居した。inspector-pane はその「必要最小の共有」を
+# 消費する側 — settings-pane → inspector-pane の依存方向はできても逆はない
+# (root → pane の一方向を保つ、切片9の判断に整合。
+# docs/reviews/2026-08-21-pane-split-survey.md §2.4)。
+motolii-settings-pane.workspace = true
+# `Session`(裁定160 切片6→切片7で `motolii-shell-state` crate 化、
+# `motolii-timeline-pane` と同じ理由)。`project` が `&Session` を直接取れる
+# ようにするための leaf crate 依存 — root(`motolii-shell`)へ依存できない
+# pane crate 同士の共通の親(pane split survey §2.3/§5)。
+motolii-shell-state.workspace = true
