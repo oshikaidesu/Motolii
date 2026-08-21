@@ -144,7 +144,7 @@ fn clicking_a_bar_in_the_timeline_canvas_publishes_a_grab_and_release_via_raw_co
     let (doc, session) = one_layer_timeline();
     let tokens = Tokens::default();
     let store = doc.view();
-    let pane = TimelinePane::new(&store, &session, tokens.dims, tokens.colors);
+    let pane = TimelinePane::new(&store, &session, tokens.dims, tokens.colors, iced::keyboard::Modifiers::default());
 
     let mut ui = iced_test::simulator(pane.view());
 
@@ -181,7 +181,7 @@ fn clicking_the_ruler_band_publishes_scrub_to_via_raw_coordinates() {
     let (doc, session) = one_layer_timeline();
     let tokens = Tokens::default();
     let store = doc.view();
-    let pane = TimelinePane::new(&store, &session, tokens.dims, tokens.colors);
+    let pane = TimelinePane::new(&store, &session, tokens.dims, tokens.colors, iced::keyboard::Modifiers::default());
 
     let x = 200.0_f32;
     // 期待値は timeline_pane 自身の純粋関数から出す(数値をここで再発明しない —

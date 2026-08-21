@@ -18,8 +18,8 @@ use iced::{Element, Length, Task};
 
 use motolii_engine::Engine;
 use motolii_store::{
-    Composition, DisplayRevision, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta,
-    LayerSource, LayerTiming, RationalTime, StoreView, Value,
+    Composition, DisplayRevision, Document, Intent, KeyframeTrack, LayerAttrsPatch, LayerId,
+    LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, StoreView, Value,
 };
 
 pub mod fixture;
@@ -119,6 +119,13 @@ pub struct Session {
     /// 再生位置(フレーム番号)。
     pub playhead: i64,
     pub selection: Option<LayerId>,
+    /// Timeline property 行(キー行)の選択(第2波 T3・EXACT TARGET 3)。
+    /// **Document には乗らない** — layer 選択と同じ Session の身分。
+    pub selected_keys: Vec<timeline::KeySelector>,
+    /// Shift 範囲選択の基点(直前に単独/Cmd クリックしたキー)。`key_order`
+    /// (行順→時刻順)上の範囲は毎回この基点から張り直す(正典 §3・§4 と同じ
+    /// 「anchor」文法)。
+    pub key_anchor: Option<timeline::KeySelector>,
 }
 
 impl Default for Session {
@@ -126,6 +133,8 @@ impl Default for Session {
         Self {
             playhead: 0,
             selection: None,
+            selected_keys: Vec::new(),
+            key_anchor: None,
         }
     }
 }
@@ -204,6 +213,16 @@ pub enum Message {
     /// (この variant は経由しない — 二重定義を避ける)。**Document は最初から
     /// 触っていない**ので、復元は preview を捨てるだけで成立する(正典 §2)。
     TimelineDragCancelled,
+    // ---- Timeline property 行(キー行、第2波 T3・裁定148/151) ----
+    /// キー菱形クリック。`timeline::key_rows` が「どのキーを・どの操作で」まで
+    /// 判定し、確定(`Session::selected_keys`/`key_anchor` の読み書き)は
+    /// `Shell::apply_key_selection`(唯一の書き口)へ委ねる。
+    TimelineKeySelect(timeline::KeySelectionOp),
+    /// 選択中のキーを消す(正典 §3「Delete はキー選択が層選択より優先」)。
+    /// `Session::selected_keys` が空なら no-op — layer 選択の Delete(未配線)
+    /// と衝突しない。1回の `apply_all` で複数 property をまとめて書くので
+    /// **1操作 = 1 undo**。
+    TimelineDeleteSelectedKeys,
 
     // ---- Inspector の drag-to-scrub ----
     /// 値セルの press。**まだ Document を書かない** — click か drag かは
@@ -428,6 +447,7 @@ impl Shell {
             session: Session {
                 playhead: built.playhead,
                 selection: Some(built.selected),
+                ..Session::default()
             },
             engine,
             frame: None,
@@ -526,6 +546,8 @@ impl Shell {
             Message::TimelineDragCancelled => {
                 self.cancel_timeline_drag();
             }
+            Message::TimelineKeySelect(op) => self.apply_key_selection(op),
+            Message::TimelineDeleteSelectedKeys => self.delete_selected_keys(),
             Message::InspectorValuePressed(field) => self.start_field_drag(field),
             Message::InspectorPointerMoved(point) => self.continue_field_drag(point),
             Message::InspectorPointerReleased => {
@@ -942,6 +964,106 @@ impl Shell {
         self.timeline_drag.take().is_some()
     }
 
+    // ---- Timeline property 行(キー行、第2波 T3・裁定148/151) ----
+
+    /// キー選択の確定。`timeline::key_rows::update` は「どのキーを・どの操作で」
+    /// までしか判定しない(canvas 側は Document/Session を直接書けない、mod
+    /// doc の背骨どおり)ので、`Session::selected_keys`/`key_anchor` の実際の
+    /// 読み書きはここ(唯一の書き口)で行う。
+    fn apply_key_selection(&mut self, op: timeline_pane::KeySelectionOp) {
+        use timeline_pane::KeySelectionOp;
+        match op {
+            KeySelectionOp::Single(key) => {
+                self.session.selected_keys = vec![key.clone()];
+                self.session.key_anchor = Some(key);
+            }
+            KeySelectionOp::Toggle(key) => {
+                if let Some(pos) = self.session.selected_keys.iter().position(|k| *k == key) {
+                    self.session.selected_keys.remove(pos);
+                } else {
+                    self.session.selected_keys.push(key.clone());
+                }
+                self.session.key_anchor = Some(key);
+            }
+            KeySelectionOp::Range(key) => {
+                let Some(anchor) = self.session.key_anchor.clone() else {
+                    // 基点が無ければ単独選択と同じ扱いへ安全側で倒す
+                    // (正典 §4 の「Shift=anchor から」— anchor が無い最初の
+                    // クリックは単独扱いにする既存の行選択と同じ考え方)。
+                    self.session.selected_keys = vec![key.clone()];
+                    self.session.key_anchor = Some(key);
+                    return;
+                };
+                let fps = self.composition().map(|c| c.fps);
+                let rows = timeline_pane::property_rows(&self.doc.view(), &self.session, fps);
+                let order = timeline_pane::key_order(&rows);
+                let anchor_pos = order.iter().position(|k| *k == anchor);
+                let clicked_pos = order.iter().position(|k| *k == key);
+                match (anchor_pos, clicked_pos) {
+                    (Some(a), Some(c)) => {
+                        let (lo, hi) = if a <= c { (a, c) } else { (c, a) };
+                        self.session.selected_keys = order[lo..=hi].to_vec();
+                    }
+                    _ => {
+                        // anchor/clicked のどちらかが今の property_rows に無い
+                        // (行の表示が変わった等) — 黙って壊れた選択のまま
+                        // 進めるより単独選択へ安全側で倒す(M16)。
+                        self.session.selected_keys = vec![key];
+                    }
+                }
+                // anchor は不変 — 同じ基点から Shift 連打で範囲を伸縮できる。
+            }
+        }
+    }
+
+    /// 選択中のキーを消す(正典 §3「Delete はキー選択が層選択より優先」)。
+    /// property ごとにまとめて読み直し、選択されたフレームだけを落とした
+    /// `KeyframeTrack` を1回の `apply_all` で書き戻す — **1操作 = 1 undo**
+    /// (`AddLayer` と同じ「まとめて1回」の形)。選択が空なら no-op。
+    fn delete_selected_keys(&mut self) {
+        if self.session.selected_keys.is_empty() {
+            return;
+        }
+        let keys = std::mem::take(&mut self.session.selected_keys);
+        self.session.key_anchor = None;
+        let Some(composition) = self.composition() else {
+            return;
+        };
+        let fps = composition.fps;
+
+        let mut groups: std::collections::BTreeMap<(LayerId, PropertyId), Vec<i64>> =
+            std::collections::BTreeMap::new();
+        for key in keys {
+            groups.entry((key.layer, key.property)).or_default().push(key.frame);
+        }
+
+        let store = self.doc.view();
+        let mut intents = Vec::new();
+        for ((layer, property), frames) in groups {
+            let Ok(Some(track)) = store.track(layer, &property) else {
+                continue;
+            };
+            let mut new_track = KeyframeTrack::new();
+            for existing in track.keys() {
+                let Ok(frame) = existing.t.try_to_frame_round(fps) else {
+                    continue;
+                };
+                if frames.contains(&frame) {
+                    continue; // 選択されたキーは書き戻さない = 削除。
+                }
+                new_track.insert(existing.clone());
+            }
+            intents.push(Intent::SetTrack { layer, property, track: new_track });
+        }
+        drop(store);
+
+        if !intents.is_empty() {
+            if let Err(error) = self.doc.apply_all(intents) {
+                self.status = Some(format!("キーを消せない: {error}"));
+            }
+        }
+    }
+
     // ---- Settings パネル(タスク#18) ----
 
     /// 背景色プリセット — 現在の `Composition` を読み、`background` だけ書き換えて
@@ -1249,6 +1371,14 @@ impl Shell {
         timeline_pane::rows(&self.doc.view(), &self.session)
     }
 
+    /// 今の property 行(キー行、第2波 T3)。選択 layer がキーを持つ property を
+    /// 持たなければ空。運転席/`screenshot.rs` 器具が pane 自身と同じ投影を読む口
+    /// (`timeline_rows` と同じ形)。
+    pub fn timeline_property_rows(&self) -> Vec<timeline_pane::PropertyRowProjection> {
+        let fps = self.composition().map(|c| c.fps);
+        timeline_pane::property_rows(&self.doc.view(), &self.session, fps)
+    }
+
     /// 今のマーカー一覧。**screenshot 器具**が Timeline のマーカー線を描くのに使う
     /// (`timeline_pane::TimelinePane::new` も同じ `markers()` 呼び出しをする)。
     pub fn markers(&self) -> Vec<motolii_store::Marker> {
@@ -1296,7 +1426,13 @@ impl Shell {
         // `ui_scale` 適用済み(`Shell::dims` — 適用点1箇所)。
         let dims = self.dims();
         let colors = self.tokens.colors;
-        let timeline = timeline_pane::TimelinePane::new(&store, &self.session, dims, colors);
+        let timeline = timeline_pane::TimelinePane::new(
+            &store,
+            &self.session,
+            dims,
+            colors,
+            self.keyboard_modifiers,
+        );
         // Inspector は canvas を使わない標準 widget 構成(inspector_pane.rs 冒頭の
         // doc comment)なので、投影自体が `Element<'static, _>` を返す — Stage の
         // `self.frame` を借りる `stage_pane` と同じ `row!` に同居できる(共変性)。
@@ -1572,6 +1708,21 @@ fn inspector_pointer_event(
             key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
             ..
         }) => Some(Message::EscapePressed),
+        // Timeline のキー削除(正典 §3)。**Mac の「Delete」キーラベルは
+        // `Named::Backspace` として届く**(`iced_core::keyboard::key` の doc
+        // コメント実測 — 主部の物理キーは Backspace、`Named::Delete` は
+        // `Fn+Delete`/外付けキーボードの forward-delete)。両方拾う —
+        // `Shell::delete_selected_keys` は選択が空なら no-op なので、text
+        // 編集中に Backspace で文字を消す操作とは(選択キーが無い限り)衝突
+        // しない。
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Backspace),
+            ..
+        })
+        | iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Delete),
+            ..
+        }) => Some(Message::TimelineDeleteSelectedKeys),
         _ => None,
     }
 }

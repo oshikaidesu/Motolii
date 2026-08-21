@@ -444,6 +444,12 @@ pub fn render(shell: &Shell) -> RgbaImage {
     let dims = shell.dims();
     let colors = shell.tokens().colors;
     let rows = shell.timeline_rows();
+    // property 行(キー行、第2波 T3・裁定148/151) — `timeline_pane::TimelinePane`
+    // と同じ投影(`Shell::timeline_property_rows`)。選択 layer の下に挿入する
+    // ぶんだけ、その後ろの層行を押し下げる(`timeline_pane::layer_row_top`、
+    // `timeline/canvas.rs::draw` と同じ計算)。
+    let property_rows = shell.timeline_property_rows();
+    let selected_row_index = timeline_pane::selected_row_index(&rows, shell.session());
     let markers = shell.markers();
     let session = shell.session();
     let composition = shell.composition();
@@ -462,7 +468,10 @@ pub fn render(shell: &Shell) -> RgbaImage {
         .unwrap_or(9.0 / 16.0);
     let stage_h = (content_width * stage_aspect).clamp(dims.row_height * 4.0, 700.0);
     // ルーラー帯 = row_height(timeline_pane::TimelinePane::ruler_height と同じ流用)。
-    let timeline_h = dims.row_height + dims.row_height * rows.len() as f32;
+    // + property 行(キー行)ぶん(`TimelinePane::content_height` と同じ式)。
+    let timeline_h = dims.row_height
+        + dims.row_height * rows.len() as f32
+        + dims.timeline_param_row_height * property_rows.len() as f32;
     let transport_h = dims.transport_band;
     let status_h = dims.row_height;
 
@@ -631,7 +640,14 @@ pub fn render(shell: &Shell) -> RgbaImage {
         if index % 2 == 0 {
             continue;
         }
-        let row_top = rows_top + dims.row_height * index as f32;
+        let row_top = rows_top
+            + timeline_pane::layer_row_top(
+                dims.row_height,
+                dims.timeline_param_row_height,
+                property_rows.len(),
+                selected_row_index,
+                index,
+            );
         fill_rect(
             &mut canvas,
             padding,
@@ -683,7 +699,15 @@ pub fn render(shell: &Shell) -> RgbaImage {
     }
 
     for (index, row) in rows.iter().enumerate() {
-        let row_top = timeline_top + ruler_h + dims.row_height * index as f32;
+        let row_top = timeline_top
+            + ruler_h
+            + timeline_pane::layer_row_top(
+                dims.row_height,
+                dims.timeline_param_row_height,
+                property_rows.len(),
+                selected_row_index,
+                index,
+            );
         if row.selected {
             // 全幅(rail 込み)— `timeline/canvas.rs::draw` と同じ理由
             // (選択は行そのものの状態、クリップ面だけの状態ではない)。
@@ -755,6 +779,54 @@ pub fn render(shell: &Shell) -> RgbaImage {
                 to_rgba(border_color, 1.0),
             );
             glyph_x += glyph_w + glyph_gap;
+        }
+    }
+
+    // property 行(キー行、第2波 T3・裁定148/151) — `timeline/key_rows.rs::draw`
+    // と同じ位置関係(選択 layer の行のすぐ下)。**文字は描かない**(この
+    // instrument の「正直な限界」どおり、property 名のラベルは省く)。キーは
+    // 菱形の代わりに正方形マーク(`dims.spacing_m` 角、canon の描画寸法8pxと
+    // 同値)で近似する — この instrument はトンマナ(色・位置)の照合が目的で、
+    // 形状の忠実さは対象外(モジュール doc 冒頭)。
+    if let Some(selected) = selected_row_index {
+        if !property_rows.is_empty() {
+            let param_h = dims.timeline_param_row_height;
+            let param_top = timeline_top + ruler_h + dims.row_height * (selected as f32 + 1.0);
+            for (index, row) in property_rows.iter().enumerate() {
+                let row_top = param_top + param_h * index as f32;
+                if index % 2 == 1 {
+                    fill_rect(
+                        &mut canvas,
+                        padding,
+                        row_top,
+                        content_width,
+                        param_h,
+                        to_rgba(colors.timeline_row_zebra, colors.timeline_row_zebra.a),
+                    );
+                }
+                stroke_h(
+                    &mut canvas,
+                    padding,
+                    padding + content_width,
+                    row_top + param_h,
+                    dims.border_width,
+                    to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
+                );
+                let mark = dims.spacing_m;
+                let half_mark = mark / 2.0;
+                let mark_y = row_top + (param_h - mark) / 2.0;
+                for key in &row.keys {
+                    let cx = clip_x0
+                        + timeline_pane::frame_to_x(key.frame, clip_width, duration_frames);
+                    let mark_x = cx - half_mark;
+                    let mark_color = if key.selected {
+                        colors.action_active
+                    } else {
+                        colors.way_timeline
+                    };
+                    fill_rect(&mut canvas, mark_x, mark_y, mark, mark, to_rgba(mark_color, 1.0));
+                }
+            }
         }
     }
 

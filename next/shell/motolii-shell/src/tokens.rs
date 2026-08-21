@@ -97,6 +97,13 @@ pub struct Dimensions {
     /// (Inspector の Key/M/S 列と同じ意味段、`timeline/lane_bar.rs` 参照)。
     #[serde(default = "default_timeline_lane_bar_width")]
     pub timeline_lane_bar_width: f32,
+    /// property 行(キー行、第2波 T3)1本の高さ。**本行(`row_height`)より低い**。
+    /// mock に対応する段が無いので新設 — 出典は egui 版
+    /// `timeline_editor::{ROW_H, PROP_H}`(24/20)の比を `row_height`(20)へ
+    /// 適用した値(`tokens/dimensions.json` の `_note_timeline_param_row_height`
+    /// 参照)。
+    #[serde(default = "default_timeline_param_row_height")]
+    pub timeline_param_row_height: f32,
     /// mock `--s` 相当の UI 拡大率(1.00 基準、0.01 刻み)。**適用点は
     /// [`Dimensions::scaled`] の1箇所だけ** — 個々の pane はここを直接読まず、
     /// [`crate::Shell::dims`] が返す「掛け算済みの」`Dimensions` を読む。
@@ -115,6 +122,10 @@ fn default_inspector_glyph_width() -> f32 {
 
 fn default_timeline_lane_bar_width() -> f32 {
     150.0
+}
+
+fn default_timeline_param_row_height() -> f32 {
+    16.67
 }
 
 fn default_ui_scale() -> f32 {
@@ -146,6 +157,7 @@ impl Default for Dimensions {
             inspector_value_width: 38.0,
             inspector_glyph_width: 18.0,
             timeline_lane_bar_width: 150.0,
+            timeline_param_row_height: 16.67,
             ui_scale: 1.0,
         }
     }
@@ -197,6 +209,7 @@ impl Dimensions {
             inspector_value_width: self.inspector_value_width * s,
             inspector_glyph_width: self.inspector_glyph_width * s,
             timeline_lane_bar_width: self.timeline_lane_bar_width * s,
+            timeline_param_row_height: self.timeline_param_row_height * s,
             // 自分自身は「寸法」ではないので掛けない。この結果を再度 `scaled()`
             // に通す呼び出し側は無い(適用点は `Shell::dims` の1箇所だけ)。
             ui_scale: self.ui_scale,

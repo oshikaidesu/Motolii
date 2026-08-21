@@ -139,7 +139,13 @@ pub(crate) fn draw(pane: &TimelinePane, frame: &mut canvas::Frame, rail_width: f
     );
 
     for (index, row) in pane.rows.iter().enumerate() {
-        let row_top = ruler_height + row_height * index as f32;
+        // 選択 layer の下に property 行(キー行、第2波 T3)が挿入されている間、
+        // 後続の層行は押し下がる — `canvas.rs` の層行ループと同じ
+        // `TimelinePane::layer_row_top` を使い、クリップ面の bar と rail の
+        // 名前/M・S・L が揃った位置で描かれるようにする(`hit_test` 自身は
+        // この押し下げを知らないまま — `projection::layer_row_top` の doc の
+        // write-set 外 finding 参照。ここは draw だけの最小修正)。
+        let row_top = ruler_height + pane.layer_row_top(index);
 
         // スウォッチ — Document に色ラベルが無いので `way_timeline`(Timeline
         // 全体のアクセント)を既定1色として使い回す(発明しない)。
