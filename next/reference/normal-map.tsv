@@ -1219,13 +1219,13 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1218	preferences	Video Plugins	OpenFXプラグイン有効/無効一覧	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		不採用	GOALS要らないもの「第三者SDK/VST互換」相当(OpenFXは映像版VST)
 1219	preferences	Video Preview	外部プレビュー出力デバイス(FireWire等)の設定	1	0	0	0	1	0:0:0:1	公式(Adobe)		不採用	領域外: 外部プレビュー出力デバイス(FireWire等プロ機材)
 1220	preferences	Warn User When Executing Files	スクリプトファイル実行時に警告	1	0	0	0	1	0:0:0:1	公式(Adobe)		不採用	裁定6: 拡張の口はtrait1本
-1221	project	New Project	新規プロジェクト作成	1	1	1	1	4	4:0:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式;公式(BMDマニュアルPDF)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
+1221	project	New Project	新規プロジェクト作成	1	1	1	1	4	4:0:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式;公式(BMDマニュアルPDF)		採用済	MB-1でFile束として実装(2026-08-22、rfd・dirty確認・shortcut併設=S6)
 1222	project	Project Settings	プロジェクト設定	1	1	1	0	3	5:0:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMDマニュアルPDF)		採用済	Composition component(fps/解像度/尺)実装済み(裁定40)
-1223	project	Quit / Exit	アプリケーションを終了	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
+1223	project	Quit / Exit	アプリケーションを終了	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-1でFile束として実装(2026-08-22、rfd・dirty確認・shortcut併設=S6)
 1224	project	Save (Project)	プロジェクトを保存	1	1	1	0	3	3:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	Document::save 実装済み(裁定55/56、GOALS M11「バックは済」)
-1225	project	Save As	名前を付けて保存	1	1	1	0	3	3:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
+1225	project	Save As	名前を付けて保存	1	1	1	0	3	3:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-1でFile束として実装(2026-08-22、rfd・dirty確認・shortcut併設=S6)
 1226	project	Open Project	プロジェクトを開く	1	1	0	0	2	2:0:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用済	Document::load 実装済み(裁定55/56)
-1227	project	Save a Copy	コピーを保存	1	1	0	0	2	2:0:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
+1227	project	Save a Copy	コピーを保存	1	1	0	0	2	2:0:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用済	MB-1でFile束として実装(2026-08-22、rfd・dirty確認・shortcut併設=S6)
 1228	project	About After Effects…	バージョン情報	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
 1229	project	About DaVinci Resolve	バージョン情報スプラッシュを開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
 1230	project	Appearance…	UI外観・ハイライト色設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
