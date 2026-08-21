@@ -77,8 +77,9 @@ use iced::{Element, Length, Rectangle};
 
 use motolii_store::{Fps, LayerId, LayerTiming, Marker, StoreView};
 
+use crate::state::Session;
 use crate::tokens::{Colors, Dimensions};
-use crate::{Message, Session};
+use crate::Message;
 
 /// Timeline pane 本体。1回の `view()` で作り捨てる、`StoreView`/`Session` の投影。
 pub struct TimelinePane {

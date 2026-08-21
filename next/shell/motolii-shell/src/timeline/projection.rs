@@ -4,7 +4,14 @@
 
 use motolii_store::{Fps, LayerId, LayerTiming, PropertyId, StoreView};
 
-use crate::Session;
+use crate::state::Session;
+
+/// `KeySelector`/`KeySelectionOp` は裁定160 切片6 で `crate::state` へ移設済み
+/// (pane split survey §2.3: `Session ⇄ timeline` の型循環解消 — `state` は
+/// leaf、`timeline` はそこへ依存する片方向)。`pub use` は `timeline::mod` の
+/// `pub use projection::{..., KeySelectionOp, KeySelector, ...}` を無改修で
+/// 保つための re-export(型 alias で外部参照を壊さない手口)。
+pub use crate::state::{KeySelectionOp, KeySelector};
 
 /// 1層分の読み取り投影。**Document の写しではなく、1度描くための使い捨て値**。
 #[derive(Clone, Debug, PartialEq)]
@@ -100,17 +107,6 @@ pub(crate) fn time_band_segment_frames(fps: Option<Fps>, duration_frames: i64) -
 // ---------------------------------------------------------------------------
 // property 行(キー行) — 第2波 T3(裁定148/151・正典 §1.5/§3)。
 // ---------------------------------------------------------------------------
-
-/// Timeline のキー選択の識別子。**Document ではなく [`Session`] が持つ**
-/// (EXACT TARGET 3: 選択状態は Session、undo の対象でも Document の写しでもない)。
-/// `frame` は同一 property 内で一意(`KeyframeTrack::insert` が同時刻キーを
-/// 上書きする — `motolii-eval` 側の保証)なので、この3つ組で1本のキーを指せる。
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct KeySelector {
-    pub layer: LayerId,
-    pub property: PropertyId,
-    pub frame: i64,
-}
 
 /// property 行の1キー(comp フレーム位置 + 選択状態)。
 #[derive(Clone, Debug, PartialEq)]
@@ -243,21 +239,6 @@ pub(crate) fn layer_row_at_y(
     }
     let shifted = y - band_height;
     Some((shifted / row_height).floor() as usize)
-}
-
-/// property 行のキー選択操作(正典 §3・§4 と同じ文法: 単独/Cmd トグル/Shift 範囲)。
-/// **選択の確定はここでは行わない** — `Session::selected_keys`/`key_anchor` の
-/// 読み取りが要るので、唯一の書き口である `Shell::update` 側が確定する
-/// (`super::key_rows` は「どのキーを・どの操作で」の判定だけを自己完結で持つ)。
-#[derive(Debug, Clone, PartialEq)]
-pub enum KeySelectionOp {
-    /// クリック=単独。
-    Single(KeySelector),
-    /// Cmd=トグル(足し引き)。
-    Toggle(KeySelector),
-    /// Shift=`Session::key_anchor` から `key_order` 上の範囲。基点が無ければ
-    /// 単独選択へ安全側で倒す(`Shell::apply_key_selection` 参照)。
-    Range(KeySelector),
 }
 
 /// 行順→時刻順(`key_order`、正典 §3・§4 と同じ文法)で並んだキー全体。
