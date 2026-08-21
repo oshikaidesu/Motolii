@@ -978,7 +978,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 977	misc	Zoom up to 100% to fit	100%上限でフィット表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 978	panel_window	Effect Controls / Inspector (per-clip properties)	選択クリップ/レイヤーのプロパティ編集パネル	1	1	1	1	4	0:0:4:0	一致(2件、「Right panel: Properties inspector」と明記);二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMDマニュアルPDF)		採用済	next/shell/motolii-shell/src/inspector_pane.rs実装済み(Transform行: Position/Scale/Rotation/Opacity/Anchor)
 979	panel_window	Timeline panel	編集タイムラインパネル	1	1	1	1	4	0:0:4:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMDマニュアルPDF);公式(「multi-track timeline」と明記)		採用済	next/shell/motolii-shell/src/timeline/実装済み(lane_bar/canvas/hit/input/key_gesture等、裁定120/147/148)
-980	panel_window	Project / Media Pool panel	素材・プロジェクトを管理するパネル	1	1	1	0	3	0:0:3:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMDマニュアルPDF)		採用予定	Browser骨格は裁定143で決定済みだが実装は未着手
+980	panel_window	Project / Media Pool panel	素材・プロジェクトを管理するパネル	1	1	1	0	3	0:0:3:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMDマニュアルPDF)		採用済	B3でBrowserパネルとして実窓出現(2026-08-22、トグル+カードgrid+端到端)
 981	panel_window	Tools / Toolbar panel	編集ツール格納パネル	1	1	1	0	3	0:0:3:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 982	panel_window	Effects / Effects & Presets panel	エフェクト一覧パネル	1	1	0	0	2	0:0:2:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用予定	裁定143のBrowser種別「エフェクト」として計画
 983	panel_window	Info panel	選択項目の情報パネル	1	1	0	0	2	0:0:2:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
