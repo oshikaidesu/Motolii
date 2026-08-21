@@ -18,6 +18,24 @@ Repository-specific agent *conduct* rules were archived in [docs/archive/agent-g
 - 時間予算試験(storm・r2)は debug+並列で走らせる事自体が矛盾 — 合否確認は単独 or release で
 - **合否の exit code をパイプ越しに取らない**: `cargo … | tail` は合否を殺す(前任の check-docs 事故)。zsh では `$PIPESTATUS` は空(bash 綴り — zsh は `$pipestatus`)で「検証したつもり」になる(2026-08-22 に2回実測)。**リダイレクトで log へ落とし `$?` を直接見る**のが唯一安全
 
+### 頻出コマンド(コピペ用 — 記憶から組み立てない。2026-08-22: cd 位置の誤り5連発の根治)
+
+正本 workspace は `next/`(リポ根の Cargo.toml は旧 workspace で `motolii-shell` を含まない)。**`--manifest-path` で cwd 依存を消す** — 背景実行はシェルの cd 履歴に関わらずリポ根で走るため、cd 前置は事故源:
+
+```bash
+# フル関門(merge 前最終)— 合否は $? 直取り
+cargo test --manifest-path /Users/member_ottoto/rust_ae/Motolii/next/Cargo.toml --workspace --locked --no-fail-fast -j 4 > /tmp/full.log 2>&1; echo "EXIT=$?"
+
+# release shell(fixture 窓)
+cargo build --manifest-path /Users/member_ottoto/rust_ae/Motolii/next/Cargo.toml --release -p motolii-shell -j 4
+
+# fixture 窓の起動(バイナリは絶対パス)
+/Users/member_ottoto/rust_ae/Motolii/next/target/release/motolii-shell --fixture
+
+# storm/r2 の無罪確認(負荷 flake — release 単独)
+cargo test --manifest-path /Users/member_ottoto/rust_ae/Motolii/next/Cargo.toml --release -p motolii-store --test document edit_storm_with_the_real_track_type
+```
+
 ### 既知の構造ギャップと改善ルート(未着手 — 変更時はここを更新)
 
 1. **レーン worktree が毎回 cold**: 裁定138 は「常設 warm worktree・使い捨て禁止」を定めるが、subagent の isolation:worktree は毎回新規作成= target 空。フル10分の正体。ルート: 役割別常設 worktree の再利用 or 発注時に main の target/ をコピーして持たせる(共有と違い書き戻らない)
