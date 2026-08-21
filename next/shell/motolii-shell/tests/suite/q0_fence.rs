@@ -78,7 +78,7 @@
 
 use iced::advanced::widget::{Operation, Tree};
 use iced::advanced::{layout, mouse, renderer, Layout, Shell as WidgetShell, Widget};
-use iced_test::selector::{Candidate, Target};
+use iced_test::selector::Target;
 
 use motolii_shell::{Message, Shell};
 
@@ -86,38 +86,10 @@ use motolii_shell::{Message, Shell};
 // 列挙 — `find_all` が無いので `find` を尽きるまで繰り返す
 // ---------------------------------------------------------------------------
 
-/// `element` の中で `widget::Operation` に登録されている候補を重複なく全部集める。
-/// 6種(Container/Focusable/Scrollable/TextInput/Text/Custom)を区別せず集める
-/// — button/row/column/container はどれも自分を `Container` として登録するので
-/// (upstream 実測)、種別を絞ると button を取りこぼす。
-fn collect_targets(element: iced::Element<'_, Message>) -> Vec<Target> {
-    let mut ui = iced_test::simulator(element);
-    let mut found: Vec<Target> = Vec::new();
-
-    loop {
-        let already = found.clone();
-        let selector = move |candidate: Candidate<'_>| -> Option<Target> {
-            let target = Target::from(candidate);
-            if already.contains(&target) {
-                None
-            } else {
-                Some(target)
-            }
-        };
-        match ui.find(selector) {
-            Ok(target) => found.push(target),
-            Err(_) => break,
-        }
-        // 暴走防止。現行 pane 構成なら数十件で尽きる。増えるのは pane が
-        // 増えた時の自然な成長であって、上げてよい — ここは無限ループだけを防ぐ。
-        assert!(
-            found.len() <= 5_000,
-            "widget candidate が5000件を超えた — dedup が効いていない疑い"
-        );
-    }
-
-    found
-}
+/// `collect_targets` の実装は `target_walk.rs` へ抽出済み(S 空間スコア
+/// atlas dump = `entrance_atlas_dump.rs` と共有するため)。この柵のテスト
+/// 本体・判定ロジックは無改変。
+use crate::target_walk::collect_targets;
 
 /// 1点へ press→release を送り、(捕まえた event があったか, 出た Message)を返す。
 fn click_at(element: iced::Element<'_, Message>, point: iced::Point) -> (bool, Vec<Message>) {
