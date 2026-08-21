@@ -1775,23 +1775,48 @@ impl Shell {
         self.tokens.colors
     }
 
-    pub fn view(&self) -> Element<'_, Message> {
-        // pane が受け取るのは不変の投影だけ。
+    /// `TimelinePane` の組み立て。`view()` はこれを呼ぶだけ(第2波T5、正典
+    /// §5.5「プレビューは毎フレーム」) — ドラッグ preview
+    /// (`timeline_drag`/`timeline_key_drag`)を投影へ焼き込む経路を運転席が
+    /// 検査できるよう関数化した。**`TimelinePane::new` 自体のシグネチャ・
+    /// 既存呼び出し元は汚さない** — `with_key_drag_active` と同じ「薄い
+    /// builder を積み増すだけ」の形をもう2つ足しただけ。
+    pub fn build_timeline_pane(&self) -> timeline_pane::TimelinePane {
         let store = self.doc.view();
         // `ui_scale` 適用済み(`Shell::dims` — 適用点1箇所)。
         let dims = self.dims();
         let colors = self.tokens.colors;
-        let timeline = timeline_pane::TimelinePane::new(
-            &store,
-            &self.session,
-            dims,
-            colors,
-            self.keyboard_modifiers,
-        )
-        // 第2波T4: `timeline::key_rows` が継続イベント(move/release/右クリック)
-        // を拾うかどうかの唯一の判断材料(`TimelinePane::with_key_drag_active`
-        // の doc comment 参照)。
-        .with_key_drag_active(self.timeline_key_drag.is_some());
+        // T2 clip drag のプレビュー。`TimelineDragState` は `Copy` なので
+        // `&self` のまま値で読める(`layer`/`preview` の組だけを純関数へ渡す —
+        // `projection::apply_clip_preview` は `TimelineDragState` 自体を知らない)。
+        let clip_preview = self.timeline_drag.map(|drag| (drag.layer, drag.preview));
+        // T4 key drag/リタイムのプレビュー。`origins`(掴んだ瞬間の selector・
+        // 旧 frame)と `preview`(同じ並びで frame だけ更新済み)を index で
+        // ゆわえ、(selector, 新frame) のペア列にして渡す(EXACT TARGET 4:
+        // move/retime どちらも同じ形でここを通る)。
+        let key_preview: Option<Vec<(timeline_pane::KeySelector, i64)>> =
+            self.timeline_key_drag.as_ref().map(|drag| {
+                drag.origins
+                    .iter()
+                    .cloned()
+                    .zip(drag.preview.iter().map(|key| key.frame))
+                    .collect()
+            });
+        timeline_pane::TimelinePane::new(&store, &self.session, dims, colors, self.keyboard_modifiers)
+            // 第2波T4: `timeline::key_rows` が継続イベント(move/release/右
+            // クリック)を拾うかどうかの唯一の判断材料
+            // (`TimelinePane::with_key_drag_active` の doc comment 参照)。
+            .with_key_drag_active(self.timeline_key_drag.is_some())
+            .with_clip_preview(clip_preview)
+            .with_key_preview(key_preview)
+    }
+
+    pub fn view(&self) -> Element<'_, Message> {
+        // pane が受け取るのは不変の投影だけ。
+        let dims = self.dims();
+        let colors = self.tokens.colors;
+        let store = self.doc.view();
+        let timeline = self.build_timeline_pane();
         // Inspector は canvas を使わない標準 widget 構成(inspector_pane.rs 冒頭の
         // doc comment)なので、投影自体が `Element<'static, _>` を返す — Stage の
         // `self.frame` を借りる `stage_pane` と同じ `row!` に同居できる(共変性)。

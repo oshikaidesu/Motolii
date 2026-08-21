@@ -71,7 +71,7 @@ pub(crate) use projection::{frame_to_x, layer_row_top, selected_row_index, time_
 
 use iced::{Element, Length, Rectangle};
 
-use motolii_store::{Fps, Marker, StoreView};
+use motolii_store::{Fps, LayerId, LayerTiming, Marker, StoreView};
 
 use crate::tokens::{Colors, Dimensions};
 use crate::{Message, Session};
@@ -104,6 +104,13 @@ pub struct TimelinePane {
     /// でしか立たない) — 呼び出し元(試験含む)は継続イベントを試験しない限り
     /// 触らなくてよい。
     key_drag_active: bool,
+    /// 第2波T5(正典 §5.5「プレビューは毎フレーム」): [`Self::with_clip_preview`]
+    /// / [`Self::with_key_preview`] のどちらかが `Some` を渡した(=今フレーム
+    /// ドラッグ中)ことを覚えるだけの読み取り専用フラグ。`canvas::draw` が
+    /// ポインタ近くのタイムコードミニラベルを出すかどうかの判断材料
+    /// (`key_drag_active` と同じ「Shell 状態を pane へ運ぶ」形だが、こちらは
+    /// 2つの builder のどちらが立てても真になる)。
+    preview_active: bool,
 }
 
 impl TimelinePane {
@@ -131,6 +138,7 @@ impl TimelinePane {
             colors,
             modifiers,
             key_drag_active: false,
+            preview_active: false,
         }
     }
 
@@ -140,6 +148,46 @@ impl TimelinePane {
     pub fn with_key_drag_active(mut self, active: bool) -> Self {
         self.key_drag_active = active;
         self
+    }
+
+    /// `Shell::view`(実際には `Shell::build_timeline_pane`)だけが呼ぶ
+    /// (第2波T5、正典 §5.5「プレビューは毎フレーム」)。`Shell::timeline_drag`
+    /// の `(layer, drag.preview)` をそのまま渡すだけの薄い builder —
+    /// `with_key_drag_active` と同じ形。**置換そのものは
+    /// [`projection::apply_clip_preview`](投影段の純関数)がやる** — ここは
+    /// 運ぶだけで if を持たない。`None`(非ドラッグ中)なら `rows` は無傷。
+    pub fn with_clip_preview(mut self, preview: Option<(LayerId, LayerTiming)>) -> Self {
+        if preview.is_some() {
+            self.preview_active = true;
+        }
+        self.rows = projection::apply_clip_preview(self.rows, preview);
+        self
+    }
+
+    /// 同上(第2波T5)、キー drag/リタイム版。`preview` は「掴んだ瞬間の
+    /// selector(旧 frame)→ 新 frame」のペア列 — `Shell::timeline_key_drag` の
+    /// `origins`/`preview` を呼び出し側が index で ゆわえて渡す(EXACT TARGET 4:
+    /// リタイム中は選択キー全部がこの1本の列に並ぶので、move/retime を pane 側で
+    /// 区別しない)。置換は [`projection::apply_key_preview`] へ委譲。
+    pub fn with_key_preview(mut self, preview: Option<Vec<(KeySelector, i64)>>) -> Self {
+        if preview.is_some() {
+            self.preview_active = true;
+        }
+        self.property_rows = projection::apply_key_preview(self.property_rows, preview.as_deref());
+        self
+    }
+
+    /// **運転席専用**(第2波T5): `with_clip_preview`/`with_key_preview` 適用後の
+    /// 行 — `canvas::draw` が実際に描くのと同じ値。`Shell::timeline_rows()`
+    /// (Document を直読みする投影、preview 抜き)とは別物 — ドラッグ中に両者が
+    /// 食い違うこと自体が「プレビューが絵に届いている」ことの証拠になる。
+    pub fn rows(&self) -> &[RowProjection] {
+        &self.rows
+    }
+
+    /// 同上、property 行(キー行)版。
+    pub fn property_rows(&self) -> &[PropertyRowProjection] {
+        &self.property_rows
     }
 
     /// 第1波は測定済みの行高をそのまま流用する(独自の寸法を発明しない)。
@@ -217,9 +265,9 @@ impl iced::widget::canvas::Program<Message> for TimelinePane {
         renderer: &iced::Renderer,
         _theme: &iced::Theme,
         bounds: Rectangle,
-        _cursor: iced::mouse::Cursor,
+        cursor: iced::mouse::Cursor,
     ) -> Vec<iced::widget::canvas::Geometry> {
-        canvas::draw(self, renderer, bounds)
+        canvas::draw(self, renderer, bounds, cursor)
     }
 
     fn mouse_interaction(
