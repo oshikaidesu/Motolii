@@ -9,6 +9,7 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| **M3: fork new_from_device+常設 oracle** | 実装 | worktree+fork 浅 clone(scratchpad) | 裁定170 §2 — `DeviceCaps::from_device`(backend 分岐)+`RenderContext::new_from_device` を fork へ(additive・push は supervisor)。`with_device` から adapter を落とし、adapter 非依存でのバイト一致 oracle 常設。patch 節は一時措置 |
 
 ## 完了・main 着地済み(実装)
 
