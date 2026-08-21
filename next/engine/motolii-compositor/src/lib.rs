@@ -284,6 +284,11 @@ pub struct Compositor {
     /// 分離可能 blend の shader pipeline(BL3)。`glow_pipelines` と同じ規律 —
     /// 初回生成して以後使い回す(`blend` モジュール doc 参照)。
     blend_pipelines: blend::SeparableBlendPipelines,
+    /// 試験専用の introspection 累計カウンタ(`effect_passes_created_textures` と
+    /// 同じ規律)。[`Self::accumulate_sequential`] 内で `queue.submit` を呼ぶ毎に
+    /// 増分する——run-batching(BL3 merge の構造退行の根治)が「blend の切れ目
+    /// (分離可能 blend layer の出現点)以外では submit が増えない」ことを縛る oracle。
+    sequential_submits: u64,
 }
 
 impl Compositor {
@@ -343,6 +348,7 @@ impl Compositor {
             effect_scratch: effects::EffectScratch::default(),
             glow_pipelines,
             blend_pipelines,
+            sequential_submits: 0,
         })
     }
 
@@ -1286,26 +1292,53 @@ impl Compositor {
         self.effect_scratch.created_count()
     }
 
+    /// 試験専用の introspection。[`Self::accumulate_sequential`] が `queue.submit`
+    /// を呼んだ累計回数(run-batching の oracle、`effect_passes_created_textures`
+    /// と同じ「資源生成/同期点も隠さない」規律)。
+    pub fn sequential_submits(&self) -> u64 {
+        self.sequential_submits
+    }
+
     /// [`Self::render_sequential`]/[`Self::render_with_effects`]/[`Self::render_to_texture`]
     /// が共有する、逐次合成の核(裁定161 BL1b が確立した main_target アクセサ経路を、
-    /// BL3で「Normal/Add の固定式高速路」と「分離可能 blend の2段パス」の分岐へ拡張)。
+    /// BL3で「Normal/Add の固定式高速路」と「分離可能 blend の2段パス」の分岐へ拡張、
+    /// その後 run-batching で BL3 merge(`118cdbf4`)の構造退行を根治)。
     ///
     /// layer を順に accumulator へ焼き込み、直前までの accumulator の裏付け
     /// ([`AccumulatorBacking`]、fork pool の reclaim から守る Arc か、自前 scratch か)を
     /// 返す——CPU 読み戻しをするか([`Self::finalize_readback`])・GPU texture のまま
     /// 返すか([`Self::finalize_texture`])は呼び手が選ぶ(この関数自体はどちらもしない)。
     ///
-    /// ## Normal/Add(`separable_mode_index` が `None`)
+    /// ## run-batching(Normal/Add、`separable_mode_index` が `None`)
     ///
-    /// 「background rect + layer rect を同じ `ViewBuilder` で描く」固定式の高速路
-    /// (旧 `render_sequential` の本体そのまま)。この2枚は**同じ main_target の中**で
-    /// 描かれるので、一括経路(`render_with_timing`)が N layer を1つの main_target の
-    /// 中で順に混ぜる時と**layer あたりの quantize 回数が同じ**になり、バイト一致する
-    /// (裁定161、`tests/sequential.rs` の overlap fixture が縛る)。
+    /// 分離可能 blend の layer の出現点**だけ**で「run」を切る——連続する Normal/Add
+    /// の layer は1つの `ViewBuilder` へ「background rect(run に直前 accumulator が
+    /// 有る時だけ) + run 内の全 layer rect」を深度順に積み、1回の submit+poll で
+    /// まとめて描く(旧 `render_sequential` 本体は「layer 1枚 = background rect 1枚 +
+    /// layer rect 1枚」だったのを、「layer N枚 = background rect 高々1枚 + layer rect
+    /// N枚」へ拡張しただけ——rect を1つの `ViewBuilder` に積む/`RectangleDrawData` へ
+    /// 複数 rect を渡す仕組み自体は元から複数枚対応だった、`render_with_timing` が
+    /// 全 layer をこの形で描いているのと同じ)。分離可能 blend が1つも無い合成(= 全 run
+    /// が1本)なら submit は1回だけになり、旧単一パスのゼロコピー経路(裁定171)と
+    /// 構造的に同等になる(`tests/run_batching.rs` の oracle 参照)。
+    ///
+    /// rect は同じ main_target の中で描かれるので、一括経路(`render_with_timing`)が
+    /// N layer を1つの main_target の中で順に混ぜる時と**layer あたりの quantize 回数が
+    /// 同じ**になり、バイト一致する(裁定161、`tests/sequential.rs` の overlap fixture が
+    /// 縛る——run-batching は「何回に分けて submit するか」だけを変え、各 layer が
+    /// 混ざる際の中間 quantize 回数は変えない)。
+    ///
+    /// `background_rect` の `depth_offset` は「run **先頭** layer の depth_offset より
+    /// 1小さい値」(`background_rect` doc「極端値を使わない」節、過去に `i16::MIN` で
+    /// 外周1px欠落を引いた実測が2度ある)。run 内の後続 layer は必ずそれより大きい
+    /// depth_offset を持つ(呼び手が `placement.order` を単調増加のまま渡す——
+    /// `render_sequential`/`render_with_effects`/`render_to_texture` のどの入口でも
+    /// layer の並び順=order の並び順)ので、run 先頭の1回で sort 順は保たれる。
     ///
     /// ## 分離可能 blend(`Some`、Multiply〜Exclusion)
     ///
-    /// 固定式では表現できない(`crate` module doc「分離可能 blend」節)ので2段:
+    /// 固定式では表現できない(`crate` module doc「分離可能 blend」節)ので2段
+    /// (この layer 単体で1つの run、run-batching の対象外——**変更なし**):
     /// 1. layer 単体を(dst 無しで)自分の main_target へ描く——「layer 単体を transparent
     ///    へ premultiplied-over した canvas」を得る。
     /// 2. 直前までの accumulator が有れば、[`blend::SeparableBlendPipelines`] で
@@ -1320,7 +1353,7 @@ impl Compositor {
     /// 尽きると reclaim 時に `res.texture.destroy()` を**明示的に**呼ぶ——import は
     /// 「別の `wgpu::Texture` clone」を作るだけで、元の pool エントリの生存とは独立に
     /// 守ってくれない。そのため `ViewBuilder::main_target().clone()` で `GpuTexture`
-    /// (Arc)を明示的に握り続け、次の layer の背景として使い終わる(= 次の submit を
+    /// (Arc)を明示的に握り続け、次の run/layer の背景として使い終わる(= 次の submit を
     /// poll で待ち終える)まで手放さない([`AccumulatorBacking::Fork`] 参照)。
     /// [`AccumulatorBacking::Scratch`](blend pass の出力)はこのプールに属さない
     /// 素の `wgpu::Texture` なので、この罠は無関係(Rust の所有権だけで足りる)。
@@ -1339,16 +1372,19 @@ impl Compositor {
 
         let mut background: Option<(AccumulatorBacking, GpuTexture2D)> = None;
 
-        for input in inputs {
-            self.ctx.begin_frame();
-
-            let (transform, z) = if input.pinned {
-                (pinned_cancel * input.transform, 0.0)
-            } else {
-                (input.transform, input.z)
-            };
+        let mut idx = 0;
+        while idx < inputs.len() {
+            let input = &inputs[idx];
 
             if let Some(mode_index) = separable_mode_index(input.blend_mode) {
+                self.ctx.begin_frame();
+
+                let (transform, z) = if input.pinned {
+                    (pinned_cancel * input.transform, 0.0)
+                } else {
+                    (input.transform, input.z)
+                };
+
                 // --- 分離可能 blend: layer 単体をまず自分の main_target へ描く ---
                 let solo_rect = TexturedRect {
                     top_left_corner_position: to_point3(
@@ -1396,6 +1432,7 @@ impl Compositor {
 
                 self.ctx.before_submit();
                 self.ctx.queue.submit([command_buffer]);
+                self.sequential_submits += 1;
                 self.ctx.begin_frame();
                 self.ctx
                     .device
@@ -1440,6 +1477,7 @@ impl Compositor {
                         );
                         self.ctx.before_submit();
                         self.ctx.queue.submit([encoder.finish()]);
+                        self.sequential_submits += 1;
                         self.ctx.begin_frame();
                         self.ctx
                             .device
@@ -1459,28 +1497,53 @@ impl Compositor {
                         // 関数 doc 参照、`Scratch` ならそもそも罠が無い)。
                     }
                 }
-            } else {
-                // --- 固定式高速路(Normal/Add): background rect + layer rect を
-                //     同じ ViewBuilder で描く(旧 `render_sequential` 本体そのまま)。
-                let mut rects: Vec<TexturedRect> = Vec::with_capacity(2);
-                if let Some((_, imported)) = &background {
-                    // 「今回重ねる layer より1小さい」だけ——`background_rect` doc の
-                    // 「極端値を使わない」節参照(過去に `i16::MIN` で外周1px欠落を
-                    // 引いた)。
-                    rects.push(background_rect(
-                        comp,
-                        pinned_cancel,
-                        imported.clone(),
-                        input.depth_offset.saturating_sub(1),
-                    ));
-                }
+
+                idx += 1;
+                continue;
+            }
+
+            // --- run-batching(Normal/Add の連続区間): 分離可能 blend の出現点だけで
+            //     run を切る。run 内は「background rect(直前 accumulator が有る時
+            //     だけ、run 先頭 layer 基準の depth_offset)+ run 内全 layer rect」を
+            //     同じ `ViewBuilder` へ積み、1回の submit+poll でまとめて描く
+            //     (関数 doc「run-batching」節、旧 `render_sequential` は「layer 1枚に
+            //     つき submit 1回」だったのをここで束ねる)。
+            self.ctx.begin_frame();
+
+            let run_start = idx;
+            while idx < inputs.len() && separable_mode_index(inputs[idx].blend_mode).is_none() {
+                idx += 1;
+            }
+            let run = &inputs[run_start..idx];
+
+            let mut rects: Vec<TexturedRect> = Vec::with_capacity(run.len() + 1);
+            if let Some((_, imported)) = &background {
+                // 「run 先頭の layer より1小さい」だけ——`background_rect` doc の
+                // 「極端値を使わない」節参照(過去に `i16::MIN` で外周1px欠落を
+                // 引いた)。run 内の後続 layer は必ずそれより大きい depth_offset を
+                // 持つ(関数 doc「run-batching」節)ので、この1回で sort 順は保たれる。
+                rects.push(background_rect(
+                    comp,
+                    pinned_cancel,
+                    imported.clone(),
+                    run[0].depth_offset.saturating_sub(1),
+                ));
+            }
+
+            for input in run {
+                let (transform, z) = if input.pinned {
+                    (pinned_cancel * input.transform, 0.0)
+                } else {
+                    (input.transform, input.z)
+                };
                 let a = match input.blend_mode {
                     BlendMode::Normal => input.opacity,
                     BlendMode::Add => 0.0,
                     // `separable_mode_index` が `None` を返した mode(Normal/Add)のみ
-                    // この分岐へ来る——他の全 variant は上の `if let Some(...)` 側。
+                    // run に入る——他の全 variant は上の `if let Some(...)` 側で
+                    // 個別処理され、run を切る側になる。
                     _ => unreachable!(
-                        "separable_mode_index が None を返した blend_mode のみここへ来る"
+                        "separable_mode_index が None を返した blend_mode のみ run に入る"
                     ),
                 };
                 rects.push(TexturedRect {
@@ -1506,46 +1569,47 @@ impl Compositor {
                         ..Default::default()
                     },
                 });
-
-                let draw_data = RectangleDrawData::new(&self.ctx, &rects)
-                    .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
-
-                let mut view_builder = ViewBuilder::new(
-                    &self.ctx,
-                    sequential_target_config(
-                        "motolii-comp-sequential-layer",
-                        comp,
-                        view_from_world,
-                        projection,
-                    ),
-                    ViewBuilderId::new(self.next_readback),
-                )
-                .map_err(|e| CompositorError::View(e.to_string()))?;
-                self.next_readback += 1;
-
-                view_builder.queue_draw(&self.ctx, draw_data);
-                let command_buffer = view_builder
-                    .draw(&self.ctx, Rgba::TRANSPARENT)
-                    .map_err(|e| CompositorError::Draw(e.to_string()))?;
-
-                self.ctx.before_submit();
-                self.ctx.queue.submit([command_buffer]);
-                self.ctx.begin_frame();
-                self.ctx
-                    .device
-                    .poll(wgpu::PollType::wait_indefinitely())
-                    .map_err(|e| CompositorError::Draw(e.to_string()))?;
-
-                let held: GpuTexture = view_builder.main_target().clone();
-                self.next_effect_key += 1;
-                let key = self.next_effect_key;
-                let imported = self
-                    .ctx
-                    .texture_manager_2d
-                    .import_gpu_premultiplied(key, &self.ctx, &held.texture)
-                    .map_err(|e| CompositorError::Effect(e.to_string()))?;
-                background = Some((AccumulatorBacking::Fork(held), imported));
             }
+
+            let draw_data = RectangleDrawData::new(&self.ctx, &rects)
+                .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
+
+            let mut view_builder = ViewBuilder::new(
+                &self.ctx,
+                sequential_target_config(
+                    "motolii-comp-sequential-run",
+                    comp,
+                    view_from_world,
+                    projection,
+                ),
+                ViewBuilderId::new(self.next_readback),
+            )
+            .map_err(|e| CompositorError::View(e.to_string()))?;
+            self.next_readback += 1;
+
+            view_builder.queue_draw(&self.ctx, draw_data);
+            let command_buffer = view_builder
+                .draw(&self.ctx, Rgba::TRANSPARENT)
+                .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+            self.ctx.before_submit();
+            self.ctx.queue.submit([command_buffer]);
+            self.sequential_submits += 1;
+            self.ctx.begin_frame();
+            self.ctx
+                .device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+            let held: GpuTexture = view_builder.main_target().clone();
+            self.next_effect_key += 1;
+            let key = self.next_effect_key;
+            let imported = self
+                .ctx
+                .texture_manager_2d
+                .import_gpu_premultiplied(key, &self.ctx, &held.texture)
+                .map_err(|e| CompositorError::Effect(e.to_string()))?;
+            background = Some((AccumulatorBacking::Fork(held), imported));
         }
 
         Ok(background)
