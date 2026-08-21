@@ -7,8 +7,9 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| S4: Glow 移植 | 実装(cargo) | lane-engine | M5 proof の5パス構成を EffectPass::Glow へ。plugin_id "motolii.glow"・param アニメが絵まで届く統合テスト込み |
-| T1: レーンバー | 実装(cargo) | lane-shell | 裁定147/148 — スウォッチ+名前+M/S/L、クリップ面から名前退去、座標系の rail シフト |
+| S5: golden+器具 | 実装(cargo) | lane-engine | Glow golden 2枚+fixture へ glow 搭載(利用者が絵で見られる形) |
+| T2: clip move/trim | 実装(cargo) | lane-shell | 正典 §2 — transient+SetTiming 1発・スナップ7px/Cmd トグル・Esc/RMB キャンセル |
+| T3: キー行+菱形 | 実装(cargo) | lane-shell2(新設) | params 行キー持ちのみ既定・菱形 8×8/hit 12×12・選択3種(key_rows.rs 自己完結) |
 
 ## 完了・main 着地済み(実装)
 
@@ -29,6 +30,8 @@
 | S2: compositor 枠 | LayerWithPasses 別口(Layer 不変)・Identity=copy_texture_to_texture・scratch pool 再利用証明・同一 submission で第二パス禁止維持 |
 | S3: engine 語彙変換 | translate_effect_passes(空 match、S4 が腕を足す)・render_with_effects 切替・背景 pass なし。全経路開通 |
 | Timeline 切片0 | timeline/ 5分割(--list 131/131 一致・PNG バイト一致・柵は対象拡大)。後続 write-set 割り表つき |
+| S4: Glow 移植 | vism 第1号が動いた(隣接画素 0→12 の加算 bloom 実証)。HDR>1.0 がマゼンタ破損検査に触れる経路を発見し白飽和規約へ clamp |
+| T1: レーンバー | rail 150px(mock 出典 token)・M/S/L 実 Intent 結線・名前のクリップ面退去・ゼブラ連続。視覚検収合格 |
 | (supervisor 直) 色 token 追随 fix / 市松レーン回収 / 引き継ぎ123コミット着地 | main 前提の整地 |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
