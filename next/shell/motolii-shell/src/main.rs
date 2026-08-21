@@ -13,8 +13,8 @@
 //! 状態を、それぞれ実際の `Message` 経由(`Shell::update`)で再現する —
 //! ボタン/ホイール/中ボタンドラッグを実際に操作した時と同じ経路
 //! (`--observe` は `stage::StageOverlay` が計算するのと同じ形の
-//! `Message::StageObserve` を1回出すだけ — Stage のホイールを実際に回した
-//! 状態を再現する)。
+//! `Message::Stage(stage::Message::Observe(_))` を1回出すだけ — Stage の
+//! ホイールを実際に回した状態を再現する)。
 
 fn main() -> iced::Result {
     let args: Vec<String> = std::env::args().collect();
@@ -53,17 +53,18 @@ fn main() -> iced::Result {
         if observe {
             // Stage のホイール/中ボタンドラッグが実際に計算する物と同じ形の
             // 観測カメラ値を1回出す(`stage::StageOverlay::update` が publish
-            // する `Message::StageObserve` と同じ経路)。**ズームアウト側**
-            // (zoom<1)を選ぶ — ズームインすると comp のフレーム枠が画面の
-            // 外側へ広がって screenshot 内に写らなくなる(数学的には正しい
-            // 挙動 — 観測がフレームの内側へ寄るほど枠は視界の外へ出る)ので、
-            // 枠が実際に写ることを目視で確かめる instrument としては枠が
-            // 画面内に収まるズームアウト+パンの組み合わせを選ぶ。
-            let _ = shell.update(motolii_shell::Message::StageObserve(
-                motolii_engine::ObservationCamera {
+            // する `Message::Stage(stage::Message::Observe(_))` と同じ経路)。
+            // **ズームアウト側**(zoom<1)を選ぶ — ズームインすると comp の
+            // フレーム枠が画面の外側へ広がって screenshot 内に写らなくなる
+            // (数学的には正しい挙動 — 観測がフレームの内側へ寄るほど枠は
+            // 視界の外へ出る)ので、枠が実際に写ることを目視で確かめる
+            // instrument としては枠が画面内に収まるズームアウト+パンの
+            // 組み合わせを選ぶ。
+            let _ = shell.update(motolii_shell::Message::Stage(
+                motolii_shell::stage::Message::Observe(motolii_engine::ObservationCamera {
                     pan: [100.0, 60.0],
                     zoom: 0.7,
-                },
+                }),
             ));
         }
         motolii_shell::screenshot::write_png(&shell, std::path::Path::new(&path))

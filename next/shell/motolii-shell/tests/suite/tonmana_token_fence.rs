@@ -113,11 +113,13 @@ const SCANNED_FILES: &[&str] = &[
     // (発注書「柵は緩めず・消さない」)。
     "lib.rs",
     "screenshot.rs",
-    // 裁定157(観測カメラ)S3: Stage overlay の `canvas::Stroke` 呼び出しが
-    // `colors.action_active`/`dims.border_width` を直接使う — 新規ファイルは
-    // この柵へ追随する(モジュール doc「トンマナ柵へ新規ファイル追加があれば
-    // 追随」)。
-    "stage.rs",
+    // `stage.rs` は裁定160 切片10で `motolii-stage-pane` crate へ抽出済み
+    // (`next/ui/motolii-stage-pane/src/lib.rs`)——`settings_pane.rs`(切片9)と
+    // 同じ理由でここから落とした: この柵は `src_dir()`(`motolii-shell` の
+    // `src/` のみ)を見るため、抽出後のソースはもう対象外。裁定157(観測カメラ)
+    // S3 の `canvas::Stroke` 呼び出し(`colors.action_active`/`dims.border_width`)
+    // 自体は無改変で移設しただけで、抽出先での柵の再構築は本切片のスコープ外
+    // (pane split survey §6 切片10 の write-set に本ファイルは無い)。
 ];
 
 /// `#[cfg(test)]\nmod tests {` の手前までを返す(inline test module は対象外)。

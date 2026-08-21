@@ -1,16 +1,54 @@
-//! Stage の観測カメラ(裁定157) — 「カメラを通して見る」/「自由に見る」の
-//! pan/zoom 入力と、観測中だけ出すレンダリングカメラのフレーム枠 overlay。
+//! wraps: motolii-core + motolii-engine — Stage の観測カメラ(裁定157)。
+//! 「カメラを通して見る」/「自由に見る」の pan/zoom 入力と、観測中だけ出す
+//! レンダリングカメラのフレーム枠 overlay。
 //!
 //! **engine 側は着地済み**(`motolii_engine::ObservationCamera`・
 //! `Engine::render_frame_with_view_camera`、裁定157)。ここは Shell 側の
 //! S1(状態・トグル/操作)・S3(overlay)の実装 — export 経路
-//! (`Engine::render_frame`)には一切触れない([`crate::Shell::refresh_frame`]
+//! (`Engine::render_frame`)には一切触れない([`motolii_shell::Shell::refresh_frame`]
 //! が export 真値と Stage 表示用の複製を別々に持つ、そちらの doc comment 参照)。
+//!
+//! ## 裁定160 切片10: crate 抽出(`motolii-shell` → `motolii-stage-pane`)
+//! `docs/reviews/2026-08-21-pane-split-survey.md` §6 切片10。**挙動ゼロ変更**。
+//!
+//! - **`Message` は pane ローカル**(この crate の [`Message`])。`motolii-shell`
+//!   root の `Message::Stage(stage::Message)` が1本で畳む(iced 標準の「子 pane
+//!   の Message を親が wrap する」形、`settings_pane`/`timeline_pane` と同型)。
+//!   旧腕名 `StageObserve`/`ResetToRenderCamera` のうち "Stage" prefix を持つ
+//!   `StageObserve` だけ剥がして [`Message::Observe`] に、prefix の無い
+//!   `ResetToRenderCamera` は無改名(settings-pane 抽出時の
+//!   `ToggleCheckerboard`/`UiScaleInput` と同じ扱い)。
+//! - **書ける物を持たない、が書き口(自由関数)は持つ**: [`observation_preview_source`]
+//!   は `&mut Engine`/`&StoreView`/観測カメラ値/playhead を明示引数で受け取る
+//!   自由関数(`&mut self` の暗黙アクセスではない、pane crate は `Shell` を
+//!   持てないため)。呼び出し口は `motolii_shell::Shell::observation_preview_source`
+//!   (`&mut self.engine`/`&self.doc.view()` をそのまま貸すだけの glue、関数名は
+//!   無改名)。
+//! - **`frame_rgba`/`refresh_frame`/`compute_display_source` の本体は assembler
+//!   (`motolii-shell`)側に残る** — 市松(`checkerboard_preview_source`、Settings
+//!   側の概念)と観測カメラの両方を合流させる orchestration は `RenderedFrame`/
+//!   `DisplaySource`(どちらも `motolii-shell` 側 private 型)に直結しているため、
+//!   ここで移設すると export 経路の「唯一の書き口」を pane crate へ割ることに
+//!   なり汚染ゼロ構造柵の意図(下記)に反する。
+//! - **`Shell` 側の状態**(`observation` フィールド・`RenderedFrame::observation`/
+//!   `observation_rgba`)は**移設していない** — pane split survey §1.2 と同じ
+//!   「struct 分割は判断要の別問題、このぶんは動かさない」の扱い。
+//! - **汚染ゼロ構造柵**(`Engine::render_frame_with_view_camera` の呼び手は
+//!   1箇所だけ)は、呼び手そのもの([`observation_preview_source`])がこの
+//!   crate へ移ったことに追随して**この crate 側**へ移設した
+//!   (`tests/render_frame_fence.rs` — 自分自身のソース内の柵コードが呼び出し
+//!   構文そのもの(メソッド名の直前にドットが付く形)を含むため、`src/` 直下の
+//!   `#[cfg(test)]` ではなく別バイナリの integration test にしてある。
+//!   `settings_pane.rs` 抽出時に落とした `tonmana_token_fence.rs` と違い、
+//!   こちらは呼び手そのものが移った先なので必ず追随させる)。`motolii-shell`
+//!   側には対になる「直接は呼ばない」柵を追加で残している
+//!   (`tests/suite/observation_camera_drive.rs` 参照 — 呼び手が2箇所に増える
+//!   ことも、assembler が pane を経由せず直接呼ぶことも両方拾う)。
 //!
 //! ## 設計: なぜ `canvas::Program` に入力とoverlay描画を両方持たせるか
 //!
 //! `canvas::Program::update`/`draw` は毎回 `bounds: Rectangle` を直接受け取れる
-//! ([`timeline/canvas.rs`]・[`timeline/input.rs`] と同じ形) — `mouse_area` の
+//! (`motolii-timeline-pane` の canvas と同じ形) — `mouse_area` の
 //! `on_scroll`/`on_move` はコールバックに widget の実サイズを運ばない
 //! (`iced_widget-0.14` の `MouseArea::update` 実測、位置は運ぶがサイズは運ばない)
 //! ため、letterbox(D8: `image` の既定 `ContentFit::Contain`)を踏まえた
@@ -23,18 +61,19 @@
 //! ([`letterboxed_rect`]・[`zoom_at_screen_point`]・[`pan_by_screen_delta`]・
 //! [`render_camera_frame_corners_on_screen`])にしてある —
 //! `canvas::Program::update`/`draw` はこれらへ委譲するだけの薄い翻訳層
-//! (`timeline/input.rs` と同じ構造)。試験は実 widget を経由せず、これらの
-//! 純関数を直接呼ぶ(`timeline_key_gesture_drive.rs` 等、既存の drive 系試験と
-//! 同じ形)。
+//! (`motolii-timeline-pane` の入力処理と同じ構造)。試験は実 widget を経由せず、
+//! これらの純関数を直接呼ぶ(既存の drive 系試験と同じ形)。`motolii-shell` 側
+//! (`tests/suite/observation_camera_drive.rs`)は `Shell::update`/`refresh_frame`
+//! の配線だけを見る(発注書 ORACLE (a)〜(d))。
 
 use iced::widget::canvas;
 use iced::{mouse, Point, Rectangle};
 
 use motolii_core::{camera_screen_from_world_z0, CompSpec, ResolvedCamera};
-use motolii_engine::ObservationCamera;
+use motolii_engine::{Engine, ObservationCamera};
+use motolii_store::{RationalTime, StoreView};
 
-use crate::tokens::{Colors, Dimensions};
-use crate::Message;
+use motolii_tokens_rs::{Colors, Dimensions};
 
 /// zoom の下限/上限。UI 上の作業視点であって Document の値ではないので、
 /// `motolii_core::camera::camera_projection` が持つ `zoom.max(1e-3)`
@@ -52,6 +91,26 @@ const ZOOM_STEP_FACTOR: f32 = 1.1;
 /// 「大きく動かすほど大きくズームする」の方向だけ合わせれば十分(自由な値)。
 const PIXELS_PER_NOTCH: f32 = 40.0;
 
+// ---------------------------------------------------------------------------
+// pane ローカル Message(裁定160 切片10 — root `Message::Stage(Message)` が
+// 1本で畳む)。旧腕名の "Stage" prefix は pane 名前空間で二重になるので
+// `StageObserve` → `Observe` だけ剥がした(`ResetToRenderCamera` はもともと
+// prefix が無いので無改名 — settings-pane 抽出時と同じ扱い)。
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Message {
+    /// `StageOverlay`(ホイール/中ボタンドラッグ)が計算済みの観測カメラ値を
+    /// そのまま運ぶ — `Shell::update` はここでは計算をしない(このモジュール
+    /// 冒頭 doc の「純関数へ委譲」どおり)。**`None`(カメラを通して見る)から
+    /// 届いても `Some` になる** — 「観測に入る操作自体が None→Some 遷移」
+    /// (裁定157 EXACT TARGET 1)。
+    Observe(ObservationCamera),
+    /// 「カメラへ戻る」— 1アクション(既定割当 Shift+F、仮)。観測カメラを破棄して
+    /// `None`(カメラを通して見る)へ戻す。
+    ResetToRenderCamera,
+}
+
 /// `ObservationCamera`(pan/zoom のみ・roll 無し)を `ResolvedCamera` へ写す。
 /// `motolii_engine::ObservationCamera::as_resolved_camera` と同じ変換だが、
 /// あちらは engine crate 内部専用(`pub` ではない)— フィールドは両方とも
@@ -68,12 +127,13 @@ fn observation_as_resolved(observation: ObservationCamera) -> ResolvedCamera {
 }
 
 /// comp を `bounds` へ letterbox で収めた実際の矩形(D8: letterbox は neutral)。
-/// `screenshot.rs::blit_letterboxed` と同じ計算 — 実描画(`image` widget の
-/// 既定 `ContentFit::Contain`)と同じ挙動を Rust 側で再現する(2箇所目の
-/// letterbox 実装だが、`screenshot.rs` 側は `image` crate の `RgbaImage` を
-/// 描く headless instrument で、こちらは iced の実 `Rectangle`/`Point` を扱う
-/// 実描画側 — 型が違うので1箇所へ統合すると instrument 側が iced 依存を
-/// 増やすことになり、`screenshot.rs` 冒頭 doc の設計方針に反する)。
+/// `screenshot.rs::blit_letterboxed`(`motolii-shell`)と同じ計算 — 実描画
+/// (`image` widget の既定 `ContentFit::Contain`)と同じ挙動を Rust 側で再現する
+/// (2箇所目の letterbox 実装だが、`screenshot.rs` 側は `image` crate の
+/// `RgbaImage` を描く headless instrument で、こちらは iced の実
+/// `Rectangle`/`Point` を扱う実描画側 — 型が違うので1箇所へ統合すると
+/// instrument 側が iced 依存を増やすことになり、`screenshot.rs` 冒頭 doc の
+/// 設計方針に反する)。
 pub fn letterboxed_rect(bounds: Rectangle, comp: CompSpec) -> Option<Rectangle> {
     if bounds.width <= 0.0 || bounds.height <= 0.0 || comp.width == 0 || comp.height == 0 {
         return None;
@@ -240,9 +300,10 @@ fn render_camera_frame_corners(
 }
 
 /// [`render_camera_frame_corners`] を実際の Stage screen 座標(letterbox 込み)
-/// へさらに写す。overlay の描画(`StageOverlay::draw`)と `screenshot.rs` 器具が
-/// 両方ここを呼ぶ(同じ絵になることを構造で保証する — 2箇所目の letterbox
-/// 実装を作らない)。letterbox が組めない(comp/bounds が退化)なら `None`。
+/// へさらに写す。overlay の描画(`StageOverlay::draw`)と `screenshot.rs` 器具
+/// (`motolii-shell`)が両方ここを呼ぶ(同じ絵になることを構造で保証する —
+/// 2箇所目の letterbox 実装を作らない)。letterbox が組めない(comp/bounds が
+/// 退化)なら `None`。
 pub fn render_camera_frame_corners_on_screen(
     bounds: Rectangle,
     comp: CompSpec,
@@ -309,31 +370,31 @@ impl StageOverlay {
 
     /// [`render_camera_frame_corners_on_screen`] をこの overlay 自身が持つ
     /// comp/レンダリングカメラ/観測カメラで呼ぶだけの薄い口。**`draw` と
-    /// `screenshot.rs` の両方がこれを呼ぶ**(2箇所目の計算を作らない — 実 canvas
-    /// (iced_wgpu の実描画)と headless instrument(`screenshot.rs`)が同じ絵に
-    /// なることを構造で保証する)。観測カメラが無効(`None`)なら `None`
-    /// (`draw` の「自明のため描かない」と同じ判断)。
+    /// `screenshot.rs`(`motolii-shell`)の両方がこれを呼ぶ**(2箇所目の計算を
+    /// 作らない — 実 canvas(iced_wgpu の実描画)と headless instrument
+    /// (`screenshot.rs`)が同じ絵になることを構造で保証する)。観測カメラが
+    /// 無効(`None`)なら `None`(`draw` の「自明のため描かない」と同じ判断)。
     pub fn frame_corners_on_screen(&self, bounds: Rectangle) -> Option<[Point; 4]> {
         let observation = self.observation?;
         render_camera_frame_corners_on_screen(bounds, self.comp, self.render_camera, observation)
     }
 }
 
-/// `iced::Element` の別名(`stage::StageOverlay::view` の戻り値専用) —
-/// 呼び出し側(`lib.rs::stage_pane`)が `iced::Element<'_, Message>` を直接
-/// 書かずに済む程度の軽い別名で、新しい抽象を増やす意図は無い。
+/// `iced::Element` の別名(`StageOverlay::view` の戻り値専用) — 呼び出し側
+/// (`motolii_shell::stage_pane`)が `iced::Element<'_, Message>` を直接書かずに
+/// 済む程度の軽い別名で、新しい抽象を増やす意図は無い。
 type Element<'a> = iced::Element<'a, Message>;
 
 impl canvas::Program<Message> for StageOverlay {
     type State = Interaction;
 
-    /// **翻訳だけ**(`timeline/input.rs` 冒頭の規律どおり)。ズーム/パンの
+    /// **翻訳だけ**(`motolii-timeline-pane` の入力処理と同じ規律)。ズーム/パンの
     /// 計算は全てモジュール冒頭の純関数(`zoom_at_screen_point`/
     /// `pan_by_screen_delta`)へ委譲する — ここは event を仕分けて渡すだけ。
     ///
     /// **観測に入る操作自体が None→Some 遷移**(裁定157 EXACT TARGET 1):
     /// `self.observation.unwrap_or_default()` を基準値として使うので、
-    /// `None` の間にホイール/中ボタンドラッグを始めた瞬間 `Message::StageObserve`
+    /// `None` の間にホイール/中ボタンドラッグを始めた瞬間 `Message::Observe`
     /// が飛び、`Shell::update` が `self.observation = Some(..)` にする。
     fn update(
         &self,
@@ -351,7 +412,7 @@ impl canvas::Program<Message> for StageOverlay {
                 let position = cursor.position_in(bounds)?;
                 let delta_notches = scroll_delta_notches(*delta);
                 let next = zoom_at_screen_point(current, bounds, self.comp, position, delta_notches)?;
-                Some(canvas::Action::publish(Message::StageObserve(next)).and_capture())
+                Some(canvas::Action::publish(Message::Observe(next)).and_capture())
             }
             mouse::Event::ButtonPressed(mouse::Button::Middle) => {
                 let position = cursor.position_in(bounds)?;
@@ -367,7 +428,7 @@ impl canvas::Program<Message> for StageOverlay {
                     return Some(canvas::Action::capture());
                 }
                 let next = pan_by_screen_delta(current, bounds, self.comp, delta);
-                Some(canvas::Action::publish(Message::StageObserve(next)).and_capture())
+                Some(canvas::Action::publish(Message::Observe(next)).and_capture())
             }
             mouse::Event::ButtonReleased(mouse::Button::Middle) => {
                 if state.pan_origin.take().is_some() {
@@ -413,11 +474,11 @@ impl canvas::Program<Message> for StageOverlay {
         vec![frame.into_geometry()]
     }
 
-    /// 中ボタンドラッグ中は掴んでいる手触り(`timeline/input.rs::mouse_interaction`
-    /// と同じ `Grabbing` の使い方)。それ以外は既定(observation の有無に関わらず
-    /// ホイール/中ボタンは常に効くので、常時 `Grab` を出すと「常設 chrome の
-    /// hover 色」のような誤読を招く — カーソル形状は「今まさに掴んでいる」時
-    /// だけ変える)。
+    /// 中ボタンドラッグ中は掴んでいる手触り(`motolii-timeline-pane` の
+    /// `mouse_interaction` と同じ `Grabbing` の使い方)。それ以外は既定
+    /// (observation の有無に関わらずホイール/中ボタンは常に効くので、常時
+    /// `Grab` を出すと「常設 chrome の hover 色」のような誤読を招く —
+    /// カーソル形状は「今まさに掴んでいる」時だけ変える)。
     fn mouse_interaction(
         &self,
         state: &Interaction,
@@ -430,6 +491,41 @@ impl canvas::Program<Message> for StageOverlay {
             mouse::Interaction::default()
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// 書き口(裁定160 切片10で lib.rs から移設): `&mut Engine`/`&StoreView` を
+// 明示引数で受け取る自由関数。呼び出し側(`motolii_shell::Shell::
+// observation_preview_source`)が `&mut self.engine`/`&self.doc.view()` を
+// そのまま貸す — pane crate は `Shell` を持てない(root → pane の一方向依存、
+// 循環禁止)ための形(`motolii_settings_pane::apply_background_preset` 等と同型)。
+// ---------------------------------------------------------------------------
+
+/// 観測カメラ(裁定157)が有効な間だけ、その視点で再合成する
+/// (`Engine::render_frame_with_view_camera`)。**唯一の呼び手**(下記
+/// [`tests::render_frame_with_view_camera_is_only_called_from_this_crate`]
+/// が縛る)。
+///
+/// 3通りの戻り値: comp が無い/時刻を写せない(呼び出し側は無反応より安全側の
+/// 既存経路(市松/背景込み)へフォールバックする、理由は出さない)なら `None`。
+/// engine が描けたら `Some(Ok(rgba))`。engine が描けなかったら
+/// `Some(Err(理由文))`(呼び出し側が `Shell::status` へそのまま渡す、M13)。
+/// この3分岐は旧 `motolii_shell::Shell::observation_preview_source`
+/// (`self.status` へ直接書いていた版)と挙動同値 — 呼び出し側の glue が
+/// `Some(Err(_))` の枝でだけ `self.status` を書く。
+pub fn observation_preview_source(
+    engine: &mut Engine,
+    view: &StoreView<'_>,
+    observation: &ObservationCamera,
+    playhead: i64,
+) -> Option<Result<Vec<u8>, String>> {
+    let composition = view.composition().ok().flatten()?;
+    let t = RationalTime::try_from_frame(playhead, composition.fps).ok()?;
+    Some(
+        engine
+            .render_frame_with_view_camera(view, t, observation)
+            .map_err(|error| format!("観測カメラでの表示を描けない: {error}")),
+    )
 }
 
 #[cfg(test)]

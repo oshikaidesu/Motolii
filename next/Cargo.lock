@@ -3562,7 +3562,6 @@ dependencies = [
 name = "motolii-shell"
 version = "0.1.0"
 dependencies = [
- "glam 0.30.10",
  "iced",
  "iced_test",
  "image",
@@ -3572,6 +3571,7 @@ dependencies = [
  "motolii-media",
  "motolii-settings-pane",
  "motolii-shell-state",
+ "motolii-stage-pane",
  "motolii-store",
  "motolii-testkit",
  "motolii-timeline-pane",
@@ -3583,6 +3583,18 @@ name = "motolii-shell-state"
 version = "0.1.0"
 dependencies = [
  "motolii-store",
+]
+
+[[package]]
+name = "motolii-stage-pane"
+version = "0.1.0"
+dependencies = [
+ "glam 0.30.10",
+ "iced",
+ "motolii-core",
+ "motolii-engine",
+ "motolii-store",
+ "motolii-tokens-rs",
 ]
 
 [[package]]
