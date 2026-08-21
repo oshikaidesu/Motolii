@@ -127,6 +127,41 @@ fn unsupported_blend_modes_are_rejected_not_silently_approximated() {
     );
 }
 
+/// **BL2**: `Add` は `Multiply` 等と違い明示的に受け付けられる(`multiplicative_tint.a
+/// = 0` で無改造に出せる、`motolii-compositor` のモジュール doc 参照)。視覚 golden は
+/// `motolii-compositor` の `tests/compose.rs::add_blend_*` 系が既に縛っているので、
+/// ここでは「エラーにならず、Normal より明るく出る」ことだけ確かめる(重ねた2枚が
+/// 加算されるので白い base の上に赤を足すと赤チャンネルが飽和する)。
+#[test]
+fn add_blend_mode_is_accepted_and_renders_brighter() {
+    let mut doc = doc_with_comp();
+    let (base, top) = (LayerId(1), LayerId(2));
+    place(&mut doc, base, [200, 0, 0, 255], 0);
+    place(&mut doc, top, [200, 0, 0, 255], 1);
+
+    let mut engine = Engine::new().expect("engine");
+    let before = engine.render_frame(&doc.view(), t(0)).unwrap();
+
+    doc.apply(Intent::SetAttrs {
+        layer: top,
+        patch: LayerAttrsPatch {
+            blend_mode: Some(BlendMode::Add),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+    let after = engine
+        .render_frame(&doc.view(), t(0))
+        .expect("Add は対応外として拒まれてはいけない");
+
+    let before_red = pixel(&before, 32, 32)[0];
+    let after_red = pixel(&after, 32, 32)[0];
+    assert!(
+        after_red >= before_red,
+        "Add で2枚重ねたのに Normal より明るくなっていない: before={before_red} after={after_red}"
+    );
+}
+
 /// matte もまだ合成器に繋いでいない(shader 拡張が要る、fork seam 候補) —
 /// 黙って型抜き前の絵を出さず、明示的に `Err` を返す。
 #[test]

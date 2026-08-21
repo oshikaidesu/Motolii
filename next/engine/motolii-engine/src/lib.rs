@@ -486,7 +486,39 @@ fn translate_blend_mode(
 ) -> Result<motolii_compositor::BlendMode, EngineError> {
     match mode {
         motolii_store::BlendMode::Normal => Ok(motolii_compositor::BlendMode::Normal),
+        motolii_store::BlendMode::Add => Ok(motolii_compositor::BlendMode::Add),
         other => Err(EngineError::UnsupportedBlendMode(other)),
+    }
+}
+
+#[cfg(test)]
+mod translate_blend_mode_tests {
+    use super::translate_blend_mode;
+    use crate::EngineError;
+
+    /// **BL2**: `Add` は `motolii-compositor` が無改造で出せる(モジュール doc
+    /// 参照)ので `Ok` — `translate_effect_passes_tests` と同型の、private 関数への
+    /// crate 内 unit test(`tests/` からは呼べないので colocate する)。
+    #[test]
+    fn add_is_accepted() {
+        // `EngineError` は `PartialEq` を derive していない(`CompositorError`/
+        // `MediaError` 由来の `#[from]` があるため)ので `Result` ごとの
+        // `assert_eq!` はできない — `Ok` の中身だけを比較する。
+        assert_eq!(
+            translate_blend_mode(motolii_store::BlendMode::Add).unwrap(),
+            motolii_compositor::BlendMode::Add
+        );
+    }
+
+    /// 対応外は従来どおり明示的に `Err`(黙って近似しない)。
+    #[test]
+    fn multiply_is_still_rejected() {
+        assert!(matches!(
+            translate_blend_mode(motolii_store::BlendMode::Multiply),
+            Err(EngineError::UnsupportedBlendMode(
+                motolii_store::BlendMode::Multiply
+            ))
+        ));
     }
 }
 

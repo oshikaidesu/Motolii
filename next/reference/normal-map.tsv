@@ -73,7 +73,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 72	audio	Voice filters	ボイスフィルター適用	0	0	0	1	1	1:0:0:0	公式		採用予定	ボイスフィルターは決定的な音声エフェクト(ピッチ/フォルマント変換)。Filter経路
 73	audio	Voiceover	ナレーション録音	0	0	0	1	1	1:0:0:0	公式		採用予定	ナレーション録音(マイク入力)は普通の動画ソフトが備える標準機能
 74	audio	Zoom Audio Waveform	音声波形ズーム	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	波形ズームは表示操作
-75	blend_mode	Add	加算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+75	blend_mode	Add	加算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	BL2(blend Add縦一本)で着地 — store BlendMode::Add + engine translate_blend_mode + Inspector 巡回ボタン(Normal/Add)で到達
 76	blend_mode	Alpha Add	アルファ加算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 77	blend_mode	Classic Difference	差(クラシック)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 78	blend_mode	Cycle through blending modes	ブレンドモードを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
