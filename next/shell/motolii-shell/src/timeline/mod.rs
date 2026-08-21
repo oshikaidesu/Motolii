@@ -43,6 +43,9 @@
 //!   運ぶ」形)を毎 event の頭で見て、drag 中は種類を問わずここで拾う
 //! - [`key_gesture`] … キー(菱形)の時刻編集の**意味関数**(第2波T4)。
 //!   `clip_gesture` と対になる置き場 — 同じく Document 型を持たない純関数のみ
+//! - [`nav`] … playhead ナビゲーション動詞束の**意味関数**(U2、正典 §5・§8.1)。
+//!   `clip_gesture`/`key_gesture` と同じく Document/Session 型を持たない純関数のみ —
+//!   キー→`Message` の解決自体は `lib.rs`(`resolve_navigation_key`)側
 //!
 //! `canvas::Program` は1トレイトにつき1つの impl しか持てない(Rust の制約)ので、
 //! 本体の trait impl はここ(mod.rs)に置き、各メソッドは対応する層の関数へ
@@ -59,6 +62,7 @@ mod input;
 pub mod key_gesture;
 mod key_rows;
 mod lane_bar;
+pub mod nav;
 mod projection;
 
 pub use hit::{bar_span_x, classify_bar_part, hit_test, BarPart, Hit, TRIM_EDGE};
