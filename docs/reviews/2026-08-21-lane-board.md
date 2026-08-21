@@ -35,6 +35,8 @@
 | T2: clip move/trim | 正典 §2 全部(BarPart 8px・スナップ7px 画面距離・Cmd 一時トグル・Esc/RMB・ロック拒否 M13)。逸脱1件は理由つき採択(timing preview は pane-local — §5.5 に実装注記) |
 | T3: キー行+菱形 | property_rows 投影(キー持ちのみ既定)・菱形選択3種・Delete キー優先。finding: hit 経路の縦ズレ → T3b へ |
 | T3b: hit 経路統合 | 縦ズレ根治(囮 layer での赤証明つき)。y 計算の正本= layer_row_top 一本化を grep 検証。第1ラウンド完結 |
+| halo 拡張領域 | EffectPass::padding 宣言で AE 型 halo 実装(縁外 0→114・統制点で有界証明)。golden 更新。発見: 複数 pass は連鎖しない(KNOWN へ) |
+| 普通地図: CapCut 列挙 | menu40/shortcut12/panel5/pref6。公式の薄さは既知どおり、矛盾ペア両論併記・未列挙領域明記 |
 | (supervisor 直) 色 token 追随 fix / 市松レーン回収 / 引き継ぎ123コミット着地 | main 前提の整地 |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
