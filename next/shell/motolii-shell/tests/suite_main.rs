@@ -46,6 +46,8 @@ mod settings_drive;
 mod shortcut_drive;
 #[path = "suite/speed_drive.rs"]
 mod speed_drive;
+#[path = "suite/stage_band_drive.rs"]
+mod stage_band_drive;
 #[path = "suite/theme_wiring_fence.rs"]
 mod theme_wiring_fence;
 #[path = "suite/timeline_key_gesture_drive.rs"]

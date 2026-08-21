@@ -1,6 +1,14 @@
-//! wraps: iced — Settings pane(背景/市松/ui_scale)+pane 横断 chrome。書き込みは Intent 経由のみ。
-//! Settings パネル(タスク#18: Stage 背景色・市松・ui_scale)。ヘッダの歯車
+//! wraps: iced — Settings pane(背景/ui_scale)+pane 横断 chrome。書き込みは Intent 経由のみ。
+//! Settings パネル(タスク#18: Stage 背景色・ui_scale)。ヘッダの歯車
 //! ボタン(`Message::ToggleSettingsPanel`)でトグルする。
+//!
+//! **市松トグルは裁定163(S 空間スコア)で Stage 下縁状態帯へ引っ越した** —
+//! `motolii_stage_pane::Message::ToggleCheckerboard`(`docs/ui-spatial-score.md`
+//! 初期違反在庫「市松トグル: a型が Settings に同居」の根治)。この crate は
+//! もう `Message::ToggleCheckerboard`/`checkerboard_row` を持たない —
+//! [`composite_checkerboard`](実際の市松合成ロジック)自体は Settings の
+//! UI 概念ではなく、`motolii-shell::build_stage_handle` が今も呼ぶ表示器具
+//! なのでここに残る(意味の置き場と実装の置き場は別問題)。
 //!
 //! **Inspector と同じ列グリッド/tokens 流儀**(発注書)を踏襲する — 見出し帯は
 //! `chrome::section_header` をそのまま再利用し、数値欄の枠色ロールは
@@ -16,26 +24,25 @@
 //!   root の `Message::Settings(settings_pane::Message)` が1本で畳む(iced
 //!   標準の「子 pane の Message を親が wrap する」形)。
 //! - **書ける物を持たない、が書き口(自由関数)は持つ**: [`view`] は他 pane と
-//!   同じく `&Composition`・下書き・`bool`・`Dimensions`・`Colors` しか受け
+//!   同じく `&Composition`・下書き・`Dimensions`・`Colors` しか受け
 //!   取らない。一方 [`apply_background_preset`]/[`commit_background_channel`]/
 //!   [`commit_ui_scale`] は「pane が自分の write ロジックを持つ」形の自由関数
 //!   ——`&mut Document`/`&mut Tokens`/下書きの `&mut Option<_>` を明示引数で
 //!   受け取る(`&mut self` の暗黙アクセスではない、pane crate は `Shell` を
 //!   持てないため)。呼び出し口は `motolii_shell::Shell::update_settings`
 //!   (`&mut self.doc` 等をそのまま貸すだけの glue)。
-//! - `Shell` 側の状態(`settings_panel_open`/`checkerboard`/`background_draft`/
+//! - `Shell` 側の状態(`settings_panel_open`/`background_draft`/
 //!   `ui_scale_draft`)は**移設していない** — pane split survey §1.2 の
 //!   「Settings 小計 63行」は3関数の write ロジックだけを指しており、フィールド
 //!   の置き場は対象外(struct 分割は判断要の別問題、このぶんは動かさない)。
+//!   `checkerboard` フィールド自体は裁定163で Stage 下縁状態帯の状態へ
+//!   意味が移ったが、置き場(`Shell::checkerboard`)は無改変(状態帯・旧
+//!   Settings のどちらから触っても同じフィールドを書く)。
 //!
-//! ## 3項目の置き場(発注書どおり)
+//! ## 2項目の置き場(発注書どおり、市松は裁定163で状態帯へ移設済み)
 //! - **Stage 背景色**: `Composition.background` そのもの(Document、undo が効く)。
 //!   [`apply_background_preset`]/[`commit_background_channel`] が
 //!   read-modify-write で `Intent::SetComposition` を出す。
-//! - **市松**: **表示専用**、Document には一切乗らない。仮の置き場は `Shell` 自身の
-//!   フィールド(`crate::Shell::checkerboard`) — 発注書は「Workspace 側」と指示して
-//!   いるが、`tokens.rs::Dimensions::ui_scale` の doc comment と同じ理由
-//!   (Workspace 永続機構がまだ無い、裁定127/128)で仮置きする。
 //! - **ui_scale(%)**: 既存 `motolii_tokens_rs::Tokens::ui_scale` をそのまま読み書きする
 //!   — ここでは新しい置き場を作らない。書き戻しは [`motolii_tokens_rs::save_ui_scale`]。
 //!
@@ -63,17 +70,16 @@ use chrome::{button_style, section_header, value_input_style};
 // ---------------------------------------------------------------------------
 // pane ローカル Message(裁定160 切片9 — root `Message::Settings(Message)` が
 // 1本で畳む)。旧腕名の "Settings" prefix は pane 名前空間で二重になるので
-// 剥がした(`ToggleSettingsPanel`/`ToggleCheckerboard`/`UiScaleInput`/
-// `UiScaleSubmit` はもともと prefix が無いので無改名)。
+// 剥がした(`ToggleSettingsPanel`/`UiScaleInput`/`UiScaleSubmit` はもともと
+// prefix が無いので無改名)。**`ToggleCheckerboard` は裁定163で
+// `motolii_stage_pane::Message::ToggleCheckerboard` へ引っ越した**(crate doc
+// 参照)——この enum にはもう無い。
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Message {
     /// ヘッダの歯車ボタン。表示だけのトグル — Document にも undo 履歴にも乗らない。
     ToggleSettingsPanel,
-    /// Stage の下に市松を敷くかどうか。**表示専用** — Document には一切乗らない
-    /// (書き出しに影響しない、本 crate doc 参照)。
-    ToggleCheckerboard,
     /// 背景色プリセット(黒/白/グレー18%)。押した瞬間に確定する
     /// (`Intent::SetComposition` を1回、1 gesture = 1 undo)。
     BackgroundPreset(BackgroundPreset),
@@ -313,13 +319,11 @@ fn color_u8(color: iced::Color) -> [u8; 3] {
 // view
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
 pub fn view(
     composition: Option<&Composition>,
     background_draft: Option<&BackgroundFieldDraft>,
     ui_scale: f32,
     ui_scale_draft: Option<&str>,
-    checkerboard: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -337,17 +341,12 @@ pub fn view(
             // 行同士の区切りを何も持たず(面色でも線でもない、無地のまま
             // 積んでいた)、Inspector の `.prow` と同格の情報行として同じ
             // 弱い hairline ロール(`tokens::Colors` 経由)を延長する — 新しい
-            // 視覚言語の発明ではない。
+            // 視覚言語の発明ではない。**市松の行は裁定163で Stage 下縁状態帯
+            // へ引っ越した**(crate doc 参照)— ここには残らない。
             let rows: Vec<Element<'static, Message>> = vec![
                 hairline_bottom(background_row(composition, background_draft, dims, colors), dims, colors),
                 hairline_bottom(preset_row(dims, colors), dims, colors),
                 hairline_bottom(hint_row("書き出しにもこの背景色が乗ります", dims, colors), dims, colors),
-                hairline_bottom(checkerboard_row(checkerboard, dims, colors), dims, colors),
-                hairline_bottom(
-                    hint_row("市松は表示だけ — 書き出しには乗りません", dims, colors),
-                    dims,
-                    colors,
-                ),
                 hairline_bottom(ui_scale_row(ui_scale, ui_scale_draft, dims, colors), dims, colors),
             ];
             column(rows).into()
@@ -483,27 +482,8 @@ fn preset_button(
         .into()
 }
 
-/// **表示専用**トグル。M glyph(`inspector_pane::mute_glyph`)と同じ「押すたび
-/// 即トグル」の形だが、glyph ではなく文言ボタン(専用の意味色ロールを新設せず
-/// 既存 `chrome::button_style` を再利用する — 新しい状態色を1個のためだけに
-/// 発明しない)。
-fn checkerboard_row(checkerboard: bool, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
-    let label = if checkerboard { "Checkerboard: On" } else { "Checkerboard: Off" };
-    row![
-        text("市松(透明の可視化)")
-            .size(dims.body_text)
-            .color(colors.text_primary)
-            .width(Length::Fill),
-        button(text(label).size(dims.caption_text))
-            .on_press(Message::ToggleCheckerboard)
-            .style(move |_theme, status| button_style(dims, colors, status)),
-    ]
-    .spacing(dims.spacing_xs)
-    .height(Length::Fixed(dims.inspector_row_height))
-    .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
-    .into()
-}
+// `checkerboard_row` は裁定163で撤去した(Stage 下縁状態帯へ引っ越し —
+// crate 冒頭 doc・`motolii_stage_pane::state_band_view` 参照)。
 
 fn ui_scale_row(
     ui_scale: f32,

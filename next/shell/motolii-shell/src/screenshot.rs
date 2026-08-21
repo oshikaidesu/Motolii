@@ -421,8 +421,9 @@ fn settings_content_height(dims: Dimensions, has_composition: bool) -> f32 {
     }
     let row_h = dims.inspector_row_height;
     let hint_h = inspector_hint_height(dims);
-    // background・preset(近似)・hint・checkerboard・hint・ui_scale の6行。
-    header_h + row_h + row_h + hint_h + row_h + hint_h + row_h
+    // background・preset(近似)・hint・ui_scale の4行(市松は裁定163で Stage
+    // 下縁状態帯へ引っ越し済み — `settings_pane::view` からも撤去済み)。
+    header_h + row_h + row_h + hint_h + row_h
 }
 
 /// Settings 領域全体を描く。`(x, y)` は左上、返り値は描いた高さ
@@ -458,7 +459,7 @@ fn draw_settings(
 
     let row_h = dims.inspector_row_height;
     let hint_h = inspector_hint_height(dims);
-    for row_h_i in [row_h, row_h, hint_h, row_h, hint_h, row_h] {
+    for row_h_i in [row_h, row_h, hint_h, row_h] {
         stroke_rect(
             canvas,
             Rect { x, y: cy, w: width, h: row_h_i },
@@ -503,6 +504,13 @@ pub fn render(shell: &Shell) -> RgbaImage {
         .map(|c| c.height as f32 / c.width.max(1) as f32)
         .unwrap_or(9.0 / 16.0);
     let stage_h = (content_width * stage_aspect).clamp(dims.row_height * 4.0, 700.0);
+    // Stage 下縁状態帯(裁定163 S 空間スコア)。`status_h`(下記)と同じ
+    // 「専用 token が無いので `row_height` を流用する」近似 — `lib.rs::
+    // stage_pane`/`stage::state_band_view` の実 widget は明示 `.height()` を
+    // 持たない自然高なので、この instrument 側も既存の帯(status)と同じ
+    // 近似で位置だけ再現する(モジュール冒頭 doc「正直な限界」どおり)。
+    let stage_band_h = dims.row_height;
+    let stage_picture_h = (stage_h - stage_band_h).max(dims.row_height);
     // ルーラー帯 = row_height(timeline_pane::TimelinePane::ruler_height と同じ流用)。
     // + property 行(キー行)ぶん(`TimelinePane::content_height` と同じ式)。
     let timeline_h = dims.row_height
@@ -617,11 +625,14 @@ pub fn render(shell: &Shell) -> RgbaImage {
     } else {
         shell.frame_rgba()
     };
+    // 絵(ヒーロー、S5a)は帯の高さぶんだけ縮める — 実 widget の
+    // `container(body).height(Length::Fill)` が状態帯と同じ column を分け合う
+    // のと同じ配分(`lib.rs::stage_pane` 参照)。
     let stage_rect = Rect {
         x: padding,
         y,
         w: content_width,
-        h: stage_h,
+        h: stage_picture_h,
     };
     if let Some((w, h, pixels)) = stage_source {
         if shell.observation().is_none() && shell.checkerboard_enabled() {
@@ -652,6 +663,20 @@ pub fn render(shell: &Shell) -> RgbaImage {
             );
         }
     }
+    // 状態帯そのもの(発注書 EXACT TARGET・ORACLE (d))。文字(倍率・市松の
+    // on/off・視点状態)は描かない(モジュール冒頭 doc の正直な限界どおり)——
+    // `lib.rs::status_band`/実 widget の `state_band_item` と同じ「border の
+    // みで背景は塗らない」grammar(S4 text 段・ink 弱)を位置だけ再現する。
+    // **S5b の実測点**: この帯は `action_active`(ヒーロー上の選択 ACCENT、
+    // 直前の frame 枠 overlay や後述の playhead に使われる色)を一切使わない
+    // — 弱い hairline(`border_hairline_weak`)だけなので、この PNG 上で帯の
+    // 最大 ink はヒーロー領域の ACCENT より必ず弱い。
+    stroke_rect(
+        &mut canvas,
+        Rect { x: padding, y: y + stage_picture_h, w: content_width, h: stage_band_h },
+        dims.border_width,
+        to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
+    );
     y += stage_h + gap;
 
     // timeline — timeline_pane::draw と同じ位置関係(frame_to_x を共有)。

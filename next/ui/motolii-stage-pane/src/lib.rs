@@ -66,14 +66,14 @@
 //! (`tests/suite/observation_camera_drive.rs`)は `Shell::update`/`refresh_frame`
 //! の配線だけを見る(発注書 ORACLE (a)〜(d))。
 
-use iced::widget::canvas;
+use iced::widget::{button, canvas, row, text};
 use iced::{mouse, Point, Rectangle};
 
 use motolii_core::{camera_screen_from_world_z0, CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{RationalTime, StoreView};
 
-use motolii_tokens_rs::{Colors, Dimensions};
+use motolii_tokens_rs::{Colors, Dimensions, Ink};
 
 /// zoom の下限/上限。UI 上の作業視点であって Document の値ではないので、
 /// `motolii_core::camera::camera_projection` が持つ `zoom.max(1e-3)`
@@ -107,8 +107,162 @@ pub enum Message {
     /// (裁定157 EXACT TARGET 1)。
     Observe(ObservationCamera),
     /// 「カメラへ戻る」— 1アクション(既定割当 Shift+F、仮)。観測カメラを破棄して
-    /// `None`(カメラを通して見る)へ戻す。
+    /// `None`(カメラを通して見る)へ戻す。**Stage 下縁状態帯(裁定163)の
+    /// 視点状態項目もこれをクリックで発行する** — キーと表面入口の両方が
+    /// 同じ動詞を指す(S6「唯一の入口を隠し場所にしない」)。
     ResetToRenderCamera,
+    /// Stage 下縁状態帯(裁定163 S 空間スコア): プレビュー解像度 cap のクリック
+    /// 巡回(Auto → ½ → ¼ → Auto、`inspector_pane::CycleBlendMode` と同じ
+    /// 「クリックで巡回するボタン」の型)。実際の値変更は
+    /// [`PreviewResolutionCap::next`]。
+    CycleResolutionCap,
+    /// Stage 下縁状態帯 — 市松トグル。**旧 `settings_pane::Message::
+    /// ToggleCheckerboard` の引っ越し**(κ台帳「a型(視界状態)が d住所
+    /// (Settings)に同居」違反の根治、`docs/ui-spatial-score.md` 初期違反在庫)。
+    /// 意味(表示専用・Document には一切乗らない)は無改名 — 発火元だけを
+    /// Settings パネルからここへ移した。
+    ToggleCheckerboard,
+}
+
+// ---------------------------------------------------------------------------
+// Stage 下縁状態帯(裁定163 S 空間スコア — S5「下縁=状態帯」・S6「状態は
+// 隠れない」の初適用)。3項目を左から並べる: 視点状態(観測中のみ)・
+// プレビュー解像度(常時)・市松(常時)。**全て S4 text 段**
+// (`body_text`・`Ink::Muted`/`Ink::Secondary` 級) — Undo/Redo・1/2プレビュー
+// と同格の「shortcut/直接操作が主経路、入口は存在表示+初回発見用」の重み
+// (`docs/ui-spatial-score.md` S4 の表がこの帯自身を例示している)。
+// ---------------------------------------------------------------------------
+
+/// プレビュー解像度の上限。ユーザーが明示的に選ぶ cap — 実効スケールは
+/// shell 側の自動導出スケール(sync 予算からの sqrt スケール、予算内なら
+/// 1.0、`motolii_shell::stage_handle_rgba` doc 参照)へこの cap を
+/// [`effective_preview_scale`] で min 合成する。`Auto` は cap を掛けない
+/// (予算導出のみ、発注書 EXACT TARGET 2)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PreviewResolutionCap {
+    #[default]
+    Auto,
+    Half,
+    Quarter,
+}
+
+impl PreviewResolutionCap {
+    /// クリック巡回の次の値(3値の wrap、`inspector_pane::next_blend_mode`
+    /// と同型)。
+    pub fn next(self) -> Self {
+        match self {
+            Self::Auto => Self::Half,
+            Self::Half => Self::Quarter,
+            Self::Quarter => Self::Auto,
+        }
+    }
+
+    /// この cap 自身の上限値。`Auto` は「cap 無し」を1.0として表す —
+    /// [`effective_preview_scale`] の min 合成で常に no-op になる。
+    fn cap_value(self) -> f64 {
+        match self {
+            Self::Auto => 1.0,
+            Self::Half => 0.5,
+            Self::Quarter => 0.25,
+        }
+    }
+}
+
+/// 自動導出スケール(`auto_scale`、shell 側の sync 予算 sqrt スケールまたは
+/// 予算内の1.0)へユーザー選択の cap を合成する純関数(min 合成、発注書
+/// ORACLE (a)): `auto=1.0` で `½` cap → `0.5`、`auto=0.4` で `½` cap →
+/// `0.4`(cap の方が緩いので no-op)、`¼` も同様。
+pub fn effective_preview_scale(auto_scale: f64, cap: PreviewResolutionCap) -> f64 {
+    auto_scale.min(cap.cap_value())
+}
+
+/// text 段のクリック可能ラベル(S4)。`button` widget そのものは Q0(触れそうで
+/// 触れない)の機械柵が拾える形にするためだけに使う — 背景・枠は透明にして
+/// 視覚的には地の文と同じ「text 段」に見せる(裁定142「新色ゼロ」と同型:
+/// 新しい意味色ロールは足さず、既存の `Ink::Muted`/`Ink::Secondary` だけを
+/// 使う)。`active` は ink を1段だけ上げる(hover/press でも同じ1段までしか
+/// 上げない — S4 の段以外を使わない)。
+fn state_band_item(
+    label: String,
+    message: Message,
+    dims: Dimensions,
+    colors: Colors,
+    active: bool,
+) -> Element<'static> {
+    let muted = Ink::Muted.resolve(&colors);
+    let raised = Ink::Secondary.resolve(&colors);
+    button(text(label).size(dims.body_text))
+        .on_press(message)
+        .padding(0.0)
+        .style(move |_theme, status| {
+            let hovered = matches!(status, button::Status::Hovered | button::Status::Pressed);
+            button::Style {
+                background: None,
+                text_color: if active || hovered { raised } else { muted },
+                border: iced::Border::default(),
+                ..button::Style::default()
+            }
+        })
+        .into()
+}
+
+/// Stage 下縁の状態帯そのもの(発注書 EXACT TARGET)。呼び出し側
+/// (`motolii_shell::stage_pane`)が `.map(Message::Stage)` で root `Message`
+/// へ畳んでから Stage pane の body の下に積む(`StageOverlay::view()` と
+/// 同じ「pane ローカル `Element` を返す」形)。
+///
+/// - **視点状態**(S6 — κ FINDING 4根治): `observation` が `Some` の間だけ
+///   表示する(既定視点では項目ごと非表示、EXACT TARGET 1「逸脱状態のみ表示」)。
+/// - **プレビュー解像度**: 常時表示。`Auto` は実効スケール(=`auto_scale`
+///   そのもの、`Auto` の cap は1.0固定なので合成しても変わらない)を
+///   `{:.2}×` で出す。`Half`/`Quarter` は分数記号のみ(cap 自身の値はクリック
+///   するまで見えなくてよい — 現在の cap 種別が分かれば十分、具体的な有効
+///   スケールは Auto の時だけ意味を持つ数)。
+/// - **市松**: 常時表示。旧 Settings 行から移設(モジュール冒頭 doc)。
+pub fn state_band_view(
+    observation: Option<ObservationCamera>,
+    resolution_cap: PreviewResolutionCap,
+    auto_scale: f64,
+    checkerboard: bool,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static> {
+    let mut items: Vec<Element<'static>> = Vec::new();
+
+    if let Some(observation) = observation {
+        let label = format!("観測 {:.1}×(Shift+F で復帰)", observation.zoom);
+        items.push(state_band_item(label, Message::ResetToRenderCamera, dims, colors, true));
+    }
+
+    let resolution_label = match resolution_cap {
+        PreviewResolutionCap::Auto => {
+            format!("Auto({:.2}×)", effective_preview_scale(auto_scale, resolution_cap))
+        }
+        PreviewResolutionCap::Half => "½".to_owned(),
+        PreviewResolutionCap::Quarter => "¼".to_owned(),
+    };
+    items.push(state_band_item(
+        resolution_label,
+        Message::CycleResolutionCap,
+        dims,
+        colors,
+        resolution_cap != PreviewResolutionCap::Auto,
+    ));
+
+    let checkerboard_label = if checkerboard { "市松: On" } else { "市松: Off" }.to_owned();
+    items.push(state_band_item(
+        checkerboard_label,
+        Message::ToggleCheckerboard,
+        dims,
+        colors,
+        checkerboard,
+    ));
+
+    row(items)
+        .spacing(dims.spacing_m)
+        .padding([dims.spacing_xs, dims.spacing_m])
+        .align_y(iced::alignment::Vertical::Center)
+        .into()
 }
 
 /// `ObservationCamera`(pan/zoom のみ・roll 無し)を `ResolvedCamera` へ写す。
@@ -655,5 +809,40 @@ mod tests {
 
         let width = corners[2].x - corners[0].x;
         assert!(width > 640.0 * 1.5, "枠が拡大していない: width={width}");
+    }
+
+    // -----------------------------------------------------------------
+    // Stage 下縁状態帯(裁定163 S 空間スコア)— ORACLE (a)。赤から。
+    // -----------------------------------------------------------------
+
+    /// **本命**: `auto=1.0` で `½` cap → `0.5`、`auto=0.4` で `½` cap → `0.4`
+    /// (cap の方が緩ければ auto 側がそのまま勝つ、min 合成)。`¼` も同様。
+    #[test]
+    fn effective_preview_scale_min_composes_the_cap_with_the_auto_derived_scale() {
+        assert_eq!(effective_preview_scale(1.0, PreviewResolutionCap::Half), 0.5);
+        assert_eq!(effective_preview_scale(0.4, PreviewResolutionCap::Half), 0.4);
+        assert_eq!(effective_preview_scale(1.0, PreviewResolutionCap::Quarter), 0.25);
+        assert_eq!(effective_preview_scale(0.2, PreviewResolutionCap::Quarter), 0.2);
+    }
+
+    /// `Auto` は cap=1.0固定なので合成しても auto 側の値がそのまま出る
+    /// (no-op、EXACT TARGET 2「Auto=予算導出のみ」)。
+    #[test]
+    fn effective_preview_scale_auto_is_a_no_op() {
+        assert_eq!(effective_preview_scale(0.4, PreviewResolutionCap::Auto), 0.4);
+        assert_eq!(effective_preview_scale(1.0, PreviewResolutionCap::Auto), 1.0);
+    }
+
+    /// クリック巡回は3値を wrap する(`inspector_pane::next_blend_mode` と同型)。
+    #[test]
+    fn preview_resolution_cap_cycles_through_three_values_and_wraps() {
+        assert_eq!(PreviewResolutionCap::Auto.next(), PreviewResolutionCap::Half);
+        assert_eq!(PreviewResolutionCap::Half.next(), PreviewResolutionCap::Quarter);
+        assert_eq!(PreviewResolutionCap::Quarter.next(), PreviewResolutionCap::Auto);
+    }
+
+    #[test]
+    fn preview_resolution_cap_defaults_to_auto() {
+        assert_eq!(PreviewResolutionCap::default(), PreviewResolutionCap::Auto);
     }
 }
