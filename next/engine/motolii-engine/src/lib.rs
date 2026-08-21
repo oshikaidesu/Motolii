@@ -21,10 +21,10 @@ pub mod mask;
 
 use motolii_compositor::GpuTexture2D;
 use motolii_compositor::{Compositor, CompositorError, Layer, LayerWithPasses};
-use motolii_core::ResolvedCamera;
+use motolii_core::{CompSpec, ResolvedCamera};
 
 use motolii_media::{probe, read_frame_at, MediaError, MediaInfo};
-use motolii_store::{LayerPlacement, LayerSource, Matte, RationalTime, StoreView};
+use motolii_store::{LayerPlacement, LayerSource, Matte, RationalTime, ResolvedLayer, StoreView};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -143,6 +143,25 @@ impl Engine {
     pub fn new() -> Result<Self, EngineError> {
         Ok(Self {
             compositor: Compositor::headless()?,
+            textures: HashMap::new(),
+            probes: HashMap::new(),
+            frames: HashMap::new(),
+            frame_order: VecDeque::new(),
+        })
+    }
+
+    /// **裁定171 v2(M4、supervisor 裁定でこのメソッドを additive 許可)**。iced
+    /// 側の device/queue の上に Engine を組む第二コンストラクタ——
+    /// [`Self::new`](headless)は無改造。実体は
+    /// `Compositor::with_device_using_headless_defaults`(`headless()` と同じ
+    /// format/config、モジュール doc 参照)の薄いラッパーで、decode/upload
+    /// キャッシュ(`textures`/`probes`/`frames`/`frame_order`)は**この Engine
+    /// インスタンス自身が新しく持つ**——呼び出し側(`motolii-shell` の presenter
+    /// Pipeline)が `Engine::new()` の headless インスタンスと取り違えて共有する
+    /// ことはない(構造的に別インスタンス)。
+    pub fn with_device(device: wgpu::Device, queue: wgpu::Queue) -> Result<Self, EngineError> {
+        Ok(Self {
+            compositor: Compositor::with_device_using_headless_defaults(device, queue)?,
             textures: HashMap::new(),
             probes: HashMap::new(),
             frames: HashMap::new(),
@@ -349,6 +368,140 @@ impl Engine {
         }
 
         Ok(self.compositor.render_with_effects(comp, camera, &layers)?)
+    }
+
+    /// **裁定171 v2(M4)**: [`Self::render_with_camera_override`]の層構築
+    /// (`include_background`/`for layer in resolved`のループ、上記)を
+    /// **そのまま複製**した private ヘルパー。既存の
+    /// [`Self::render_with_camera_override`](延いては
+    /// [`Self::render_frame`]/[`Self::render_frame_without_background`]/
+    /// [`Self::render_frame_with_view_camera`])は1行も触っていない
+    /// (supervisor 裁定「additive のみ」)——複製の理由は、この新しいヘルパーが
+    /// `&StoreView<'_>` を取らず**既に resolve 済みの所有データ**
+    /// (`comp`/`background`/`camera`/`resolved: &[ResolvedLayer]`)を取ることだけ
+    /// が違うため([`Self::render_resolved_to_texture`]のモジュール doc 参照 —
+    /// `motolii-shell` の presenter `Primitive` は `Document`(非 `Clone`、
+    /// `re_entity_db::EntityDb` が `testing` feature 外では `Clone` を持たない)
+    /// を共有できないので、`StoreView` を後から作り直せない)。
+    fn layers_from_resolved(
+        &mut self,
+        comp: CompSpec,
+        background: [f32; 4],
+        resolved: &[ResolvedLayer],
+    ) -> Result<Vec<LayerWithPasses>, EngineError> {
+        let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
+
+        let (background_texture, _) = self.texture_for(
+            &LayerSource::Solid {
+                rgba: to_u8_rgba(background),
+                width: 1,
+                height: 1,
+            },
+            0,
+        )?;
+        layers.push(LayerWithPasses {
+            layer: Layer {
+                texture: background_texture.expect("LayerSource::Solid は常に texture を返す"),
+                size: [comp.width as f32, comp.height as f32],
+                placement: LayerPlacement {
+                    order: BACKGROUND_ORDER,
+                    ..Default::default()
+                },
+                pinned: true,
+                blend_mode: motolii_compositor::BlendMode::Normal,
+            },
+            passes: vec![],
+        });
+
+        for layer in resolved {
+            if let Some(matte) = layer.matte {
+                return Err(EngineError::UnsupportedMatte(matte));
+            }
+            let blend_mode = translate_blend_mode(layer.blend_mode)?;
+            let passes = translate_effect_passes(&layer.effects);
+
+            let (texture, natural) = self.texture_for(&layer.source, layer.source_frame)?;
+            let Some(texture) = texture else {
+                continue;
+            };
+            let size = [
+                if layer.declared_size[0] > 0.0 {
+                    layer.declared_size[0]
+                } else {
+                    natural[0]
+                },
+                if layer.declared_size[1] > 0.0 {
+                    layer.declared_size[1]
+                } else {
+                    natural[1]
+                },
+            ];
+            layers.push(LayerWithPasses {
+                layer: Layer {
+                    texture,
+                    size,
+                    placement: layer.placement,
+                    pinned: layer.pinned,
+                    blend_mode,
+                },
+                passes,
+            });
+        }
+
+        Ok(layers)
+    }
+
+    /// **裁定171 v2(M4)— zero-copy GPU 出力、resolve 済みスナップショット版**。
+    /// CPU readback を一切しない([`motolii_compositor::Compositor::render_to_texture`]
+    /// をそのまま呼ぶ)。`motolii-shell` の presenter `Primitive::prepare` は
+    /// `Document`(非 `Clone`)を共有できないので、`Shell::refresh_frame` が
+    /// **世代が変わった時だけ**(裁定171 v2 EXACT TARGET 2 の世代ゲート)
+    /// `StoreView::resolved_layers`/`resolve_camera`/`composition` から
+    /// 抜き出した所有データのスナップショットをここへ渡す設計 — この関数自体は
+    /// `Document`/`StoreView` を一切知らない(層は既に resolve 済み)。
+    ///
+    /// `include_background` は常に `true` 固定(`Self::render_frame` と同じ
+    /// 「唯一の評価経路は背景込み」の規律——export 専用の
+    /// `render_frame_without_background` 相当は zero-copy 経路にはまだ無い、
+    /// NON-GOALS「市松の GPU 化」の裏返し。市松 ON は
+    /// `motolii-shell` 側が CPU フォールバック経路(`render_frame_without_background`)
+    /// へ切り替える、裁定171 v2 §0-6)。
+    pub fn render_resolved_to_texture(
+        &mut self,
+        comp: CompSpec,
+        background: [f32; 4],
+        camera: ResolvedCamera,
+        resolved: &[ResolvedLayer],
+    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
+        let layers = self.layers_from_resolved(comp, background, resolved)?;
+        Ok(self.compositor.render_to_texture(comp, camera, &layers)?)
+    }
+
+    /// [`Self::render_resolved_to_texture`]の `&StoreView<'_>` 版
+    /// (`Self::render_frame`の"resolve してから渡す"部分をここでもやるだけの
+    /// 薄いラッパー)。`view`/`t` から `comp`/`background`/`camera`/`resolved` を
+    /// 抜き出して委譲する——`motolii-shell` の presenter は(上記の理由で)
+    /// これを直接呼べない(`StoreView` を保持できない)ので、こちらは主に
+    /// この crate 自身のテスト・「将来 Document を直接持てる呼び手」向けの
+    /// 対称な入口として用意する。[`Self::render_frame`]/
+    /// [`Self::render_with_camera_override`]は無改造 — 独立した新規メソッド。
+    pub fn render_frame_to_texture(
+        &mut self,
+        view: &StoreView<'_>,
+        t: RationalTime,
+    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
+        let composition = view
+            .composition()
+            .map_err(|e| EngineError::Store(e.to_string()))?
+            .ok_or(EngineError::NoComposition)?;
+        let comp = composition.spec();
+        let camera = view
+            .resolve_camera(t)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
+        let resolved = view
+            .resolved_layers(t)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
+        self.render_resolved_to_texture(comp, composition.background, camera, &resolved)
     }
 
     /// 素材の texture と、その実寸を返す。

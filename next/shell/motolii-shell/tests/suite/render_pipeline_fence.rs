@@ -60,7 +60,13 @@ use motolii_shell::{metrics, stage, Message, Shell};
 
 /// プロセス全体で共有される `metrics` の static を、テスト間で取り合わないための
 /// 排他(この1ファイル内の `#[test]` はデフォルトで並列実行されるため)。
-static METRICS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+///
+/// **裁定171 v2(M4)**: `metrics_main.rs` の doc 参照 —
+/// `zero_copy_presenter_fence.rs` も同じバイナリ内で `metrics::*` を触るので、
+/// この lock はバイナリの crate root(`metrics_main.rs`)側で1本だけ定義し、
+/// ここは `use` するだけに変えた(モジュールごとに別々の lock を持つと
+/// 互いを排除しない事故を実測したため)。
+use crate::METRICS_LOCK;
 
 /// fixture(`Shell::new_fixture()`)の comp fps。`playback_drive.rs` の
 /// `fixture_fps` と同じ値(30fps) — フェイク再生セッションを組むのに要る。
@@ -134,6 +140,11 @@ fn playback_ticks_no_longer_increment_the_retired_handle_creations_counter() {
 /// `stage_auto_scale` の sqrt 縮小は撤去済み — 施工前は 816×459 だった)。
 #[test]
 fn fixture_stage_presenter_matches_native_composition_dimensions() {
+    // 裁定171 v2(M4): この1バイナリ内の `#[test]` は `metrics::render_frame_calls()`
+    // を(明示的に確かめていなくても)`Shell::update`/`new_fixture` 経由で必ず
+    // 動かす——`zero_copy_presenter_fence.rs` の厳密な差分計測を汚染しないよう
+    // 全試験がこの lock を取る(`metrics_main.rs` の doc 参照)。
+    let _guard = METRICS_LOCK.lock().unwrap();
     let shell = Shell::new_fixture().0;
     assert_eq!(shell.layer_count(), 15, "fixtureの前提(層15枚)が崩れている");
 
@@ -152,6 +163,8 @@ fn fixture_stage_presenter_matches_native_composition_dimensions() {
 /// 偶然ではない)。
 #[test]
 fn scrubbing_through_the_fixture_stays_at_native_resolution_while_auto() {
+    // 裁定171 v2(M4): `render_pipeline_fence.rs` 冒頭 doc 参照。
+    let _guard = METRICS_LOCK.lock().unwrap();
     let mut shell = Shell::new_fixture().0;
     let composition = shell.composition().expect("fixtureはcompを持つ");
 
@@ -175,6 +188,8 @@ fn scrubbing_through_the_fixture_stays_at_native_resolution_while_auto() {
 /// revision/playhead 早期 return が効いている)こと。
 #[test]
 fn idle_messages_do_not_bump_the_presenter_generation() {
+    // 裁定171 v2(M4): `render_pipeline_fence.rs` 冒頭 doc 参照。
+    let _guard = METRICS_LOCK.lock().unwrap();
     let mut shell = Shell::new().0;
     let _ = shell.update(Message::AddLayer);
     let after_first_edit = shell
@@ -197,6 +212,8 @@ fn idle_messages_do_not_bump_the_presenter_generation() {
 /// ちょうど N 回増える。
 #[test]
 fn scrubbing_bumps_the_presenter_generation_exactly_once_per_distinct_frame() {
+    // 裁定171 v2(M4): `render_pipeline_fence.rs` 冒頭 doc 参照。
+    let _guard = METRICS_LOCK.lock().unwrap();
     let mut shell = Shell::new().0;
     let _ = shell.update(Message::AddLayer);
     let before = shell.stage_presenter_generation().expect("layerを足した直後");
@@ -221,6 +238,8 @@ fn scrubbing_bumps_the_presenter_generation_exactly_once_per_distinct_frame() {
 /// generation` の観測カメラ版)。
 #[test]
 fn idle_observation_does_not_bump_the_presenter_generation() {
+    // 裁定171 v2(M4): `render_pipeline_fence.rs` 冒頭 doc 参照。
+    let _guard = METRICS_LOCK.lock().unwrap();
     let mut shell = Shell::new().0;
     let _ = shell.update(Message::AddLayer);
     let camera = ObservationCamera {
@@ -266,6 +285,8 @@ fn idle_observation_does_not_bump_the_presenter_generation() {
 /// ½ は native から確実に縮み、¼ はさらに縮む、という単純な単調減少になる。
 #[test]
 fn cycling_the_resolution_cap_scales_the_presenter_relative_to_native_resolution() {
+    // 裁定171 v2(M4): `render_pipeline_fence.rs` 冒頭 doc 参照。
+    let _guard = METRICS_LOCK.lock().unwrap();
     let shell = Shell::new_fixture().0;
     assert_eq!(shell.resolution_cap(), stage::PreviewResolutionCap::Auto);
     let native = shell.composition().expect("fixtureはcompを持つ");

@@ -26,11 +26,12 @@ use std::sync::Arc;
 use iced::widget::{button, column, container, row, shader, slider, stack, text, Shader};
 use iced::{wgpu, Element, Length, Task};
 
-use motolii_core::CompSpec;
+use motolii_core::{CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
     AssetDraft, Composition, DisplayRevision, Document, Intent, LayerAttrsPatch, LayerId,
-    LayerMeta, LayerSource, LayerTiming, RationalTime, SourceFingerprintV1, Speed, StoreView,
+    LayerMeta, LayerSource, LayerTiming, RationalTime, ResolvedLayer, SourceFingerprintV1, Speed,
+    StoreView,
 };
 
 pub mod clipboard;
@@ -146,6 +147,11 @@ pub mod metrics {
         0
     }
     pub fn last_presenter_upload_bytes() -> usize {
+        0
+    }
+    /// 裁定171 v2(M4): `record_presenter_upload` と同じ no-op 規律。
+    pub fn record_presenter_blit() {}
+    pub fn presenter_blits() -> u64 {
         0
     }
     pub fn render_frame_calls() -> u64 {
@@ -386,6 +392,33 @@ pub enum Message {
     PlaybackTick,
 }
 
+/// 裁定171 v2(M4)。GPU zero-copy 経路で使う resolve 済みスナップショット。
+/// `motolii_store::Document` を直接共有できない(`re_entity_db::EntityDb` が
+/// `testing` feature 外では `Clone` を持たない)ので、`Shell::build_preview_snapshot`
+/// が `StoreView` から抜き出した**所有データ**をここへ積む——
+/// `motolii_engine::Engine::render_resolved_to_texture` の入力そのもの。
+#[derive(Clone, Debug)]
+struct PreviewSnapshot {
+    comp: CompSpec,
+    background: [f32; 4],
+    camera: ResolvedCamera,
+    resolved: Vec<ResolvedLayer>,
+}
+
+/// Stage presenter shader へ渡す実体(裁定171 v2 M4)。
+#[derive(Clone, Debug)]
+enum PresenterSource {
+    /// **高速路**(EXACT TARGET 1〜3)。`StagePresenterPipeline::prepare` が
+    /// 世代ゲート越しに [`PreviewSnapshot`] を GPU 直接描画する——CPU
+    /// readback をしない。
+    Gpu(Arc<PreviewSnapshot>),
+    /// **フォールバック**(裁定171 v2 §0-6: 市松 ON、または観測カメラ/½・¼
+    /// resolution cap のように CPU 側で作った RGBA をそのまま見せたい場合)。
+    /// 旧 `presenter_rgba: Arc<Vec<u8>>` と同じ形——`queue.write_texture`
+    /// 経由で永続テクスチャへ上げる(裁定166 の経路、無改造で残す)。
+    Cpu(Arc<Vec<u8>>),
+}
+
 /// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
 ///
 /// いつ捨てるかは [`Document::revision`] が決める(store 世代 + edit 位置)。
@@ -399,24 +432,35 @@ struct RenderedFrame {
     playhead: i64,
     width: u32,
     height: u32,
-    /// Stage 表示用 RGBA(市松合成済み・resolution cap 縮小適用済み)。
-    /// **裁定166**: 旧 `handle: image::Handle` の置き換え — shader Program の
-    /// `Primitive`(`StagePresenterPrimitive`)が毎フレーム `Arc::clone` するだけ
-    /// で、内容が変わらない限り複製しない(`Program::draw` は描画のたびに
-    /// 呼ばれる、`iced_widget::shader::Program` doc 参照)。
-    presenter_rgba: Arc<Vec<u8>>,
+    /// Stage 表示用の実体(裁定171 v2 — 高速路/フォールバックの両対応、上記
+    /// [`PresenterSource`] 参照)。**裁定166**: 旧 `handle: image::Handle` の
+    /// 置き換え — shader Program の `Primitive`(`StagePresenterPrimitive`)が
+    /// 毎フレーム `Arc::clone`/`clone()` するだけで、内容が変わらない限り
+    /// 複製しない(`Program::draw` は描画のたびに呼ばれる、
+    /// `iced_widget::shader::Program` doc 参照)。
+    presenter_source: PresenterSource,
     presenter_width: u32,
     presenter_height: u32,
-    /// `presenter_rgba` を新しく作り直した回数(単調増加)。shader Pipeline
-    /// 側(`StagePresenterPipeline::upload`)が「前回アップロードした世代と
-    /// 同じか」をこれで比較し、違う時だけ `queue.write_texture` する
-    /// (EXACT TARGET 1 の核心 — oracle (a) の直接の鍵)。
+    /// `presenter_source` を新しく作り直した回数(単調増加)。shader Pipeline
+    /// 側(`StagePresenterPipeline::upload`/`resolve`)が「前回描いた世代と
+    /// 同じか」をこれで比較し、違う時だけ実際に描く/アップロードする
+    /// (EXACT TARGET 1/2 の核心 — oracle (a) の直接の鍵)。
     presenter_generation: u64,
     /// `Engine::render_frame`(背景込み)の生 RGBA。**export/screenshot 真値専用**
-    /// (`screenshot.rs`・`frame_rgba()`)— 通常描画は `presenter_rgba` だけで
-    /// 足りる。**市松は絶対にここへ乗せない**し、市松トグルで一切変わらない
+    /// (`screenshot.rs`・`frame_rgba()`)— 通常描画(GPU 高速路)は一切読まない。
+    /// **市松は絶対にここへ乗せない**し、市松トグルで一切変わらない
     /// (`settings_pane` doc「合成器が出せる」と「書き出しが吐く」は別問題、参照)。
+    ///
+    /// **裁定171 v2 EXACT TARGET 4**: GPU 高速路(`refresh_frame` の新しい早期
+    /// return 枝)はこのフィールドを更新しない——古いままにしておき、
+    /// [`rgba_stale`](RenderedFrame::rgba_stale)を立てる。`frame_rgba()` が
+    /// 実際に呼ばれた時だけ [`Shell::ensure_rgba_fresh`] が追いつかせる
+    /// (「readback は要求された時だけ」を型で保つ)。
     rgba: Vec<u8>,
+    /// `rgba` が今の `playhead` を反映していない(GPU 高速路がここを飛ばした)
+    /// ことを示す。`frame_rgba()`(screenshot 器具・試験専用)が呼ばれた時だけ
+    /// [`Shell::ensure_rgba_fresh`] がこれを見て CPU readback を1回だけ行う。
+    rgba_stale: bool,
     /// 市松 ON の間だけ `Some` — 裁定141「AE型の透明可視化モード」の入力
     /// (`Engine::render_frame_without_background`、背景 layer を省いた合成結果)。
     /// `presenter_rgba`(Stage 表示)と `screenshot.rs` は市松 ON の間、`rgba` の
@@ -1683,8 +1727,17 @@ impl Shell {
     /// 描き上がった Stage フレームの生 RGBA。**常に背景込みの export 真値**
     /// (`Engine::render_frame`)— 市松トグルで一切変わらない。**screenshot
     /// 器具専用**(`screenshot.rs`)— 通常描画は shader Program(`stage_pane`)を
-    /// 通る(裁定166 — `presenter_rgba` を渡す、`image::Handle` はもう作らない)。
-    pub fn frame_rgba(&self) -> Option<(u32, u32, &[u8])> {
+    /// 通る(裁定166 — GPU 高速路の間は `presenter_source: PresenterSource::Gpu`
+    /// を渡す、`image::Handle` はもう作らない)。
+    ///
+    /// **裁定171 v2(M4)で `&mut self` になった** — GPU 高速路(`refresh_frame`)
+    /// はこのフィールドを更新しない代わりに `rgba_stale` を立てるので、ここで
+    /// 呼ばれた時だけ [`Self::ensure_rgba_fresh`] が CPU readback を1回払って
+    /// 追いつかせる(EXACT TARGET 4「readback は要求された時だけ」)。呼び出し元は
+    /// `screenshot.rs`(CLI 器具、`&mut Shell` は元から手元にある)と試験のみ —
+    /// 通常描画(`Shell::view`)からは呼ばれない。
+    pub fn frame_rgba(&mut self) -> Option<(u32, u32, &[u8])> {
+        self.ensure_rgba_fresh();
         self.frame
             .as_ref()
             .map(|frame| (frame.width, frame.height, frame.rgba.as_slice()))
@@ -2047,7 +2100,7 @@ impl Shell {
                     }
                 };
                 if let Some(frame) = self.frame.as_mut() {
-                    frame.presenter_rgba = Arc::new(presenter_rgba);
+                    frame.presenter_source = PresenterSource::Cpu(Arc::new(presenter_rgba));
                     frame.presenter_width = presenter_width;
                     frame.presenter_height = presenter_height;
                     // 世代を進める(裁定166 EXACT TARGET 1) — shader Pipeline
@@ -2065,6 +2118,48 @@ impl Shell {
                     frame.resolution_cap = resolution_cap;
                 }
                 return;
+            }
+
+            // ---------------------------------------------------------------
+            // 裁定171 v2(M4)GPU 高速路 — playhead だけが動いた時
+            // (revision 不変・市松/観測/cap がどれもフォールバックを要求しない
+            // 組み合わせの時)。**ここでは `self.engine.render_frame` を一切
+            // 呼ばない**(CPU readback ゼロ、ORACLE (a) の核心)——
+            // `frame.rgba`(export 真値)は更新せず `rgba_stale` を立てるだけ
+            // (`Self::ensure_rgba_fresh` doc 参照)。
+            //
+            // 除外条件(すべて裁定171 v2 §0-6 のフォールバックへ委ねる):
+            // - `checkerboard`: CPU 合成フォールバック(市松の GPU 化は NON-GOAL)
+            // - `observation.is_some()`: 観測視点は今回まだ zero-copy 経路に
+            //   繋いでいない(NON-GOALS 外だが今回のスコープでもない、
+            //   `render_resolved_to_texture` は camera を差し替えられる形なので
+            //   将来はここを広げられる)
+            // - `resolution_cap != Auto`: ½/¼ は CPU 側の縮小(`stage_presenter_rgba`)
+            //   に依存しており、GPU 側の縮小はまだ実装していない
+            //
+            // 上のどれかに当たる、または snapshot が作れない(comp 消滅等)場合は
+            // 下の「フル再計算」(既存、無改造)へフォールスルーする——
+            // 「無反応より安全側」(M16)を保つ。
+            if frame.revision == revision
+                && !checkerboard
+                && observation.is_none()
+                && resolution_cap == stage::PreviewResolutionCap::Auto
+            {
+                if let Some(snapshot) = self.build_preview_snapshot(playhead) {
+                    if let Some(frame) = self.frame.as_mut() {
+                        frame.playhead = playhead;
+                        frame.width = snapshot.comp.width;
+                        frame.height = snapshot.comp.height;
+                        frame.presenter_width = snapshot.comp.width;
+                        frame.presenter_height = snapshot.comp.height;
+                        frame.presenter_source = PresenterSource::Gpu(Arc::new(snapshot));
+                        frame.presenter_generation += 1;
+                        frame.rgba_stale = true;
+                        frame.checkerboard_preview_rgba = None;
+                        frame.observation_rgba = None;
+                    }
+                    return;
+                }
             }
         }
 
@@ -2121,11 +2216,12 @@ impl Shell {
                     playhead,
                     width: composition.width,
                     height: composition.height,
-                    presenter_rgba: Arc::new(presenter_rgba),
+                    presenter_source: PresenterSource::Cpu(Arc::new(presenter_rgba)),
                     presenter_width,
                     presenter_height,
                     presenter_generation,
                     rgba,
+                    rgba_stale: false,
                     checkerboard_preview_rgba: display.checkerboard_preview_rgba,
                     checkerboard,
                     observation,
@@ -2135,6 +2231,59 @@ impl Shell {
             }
             Err(error) => {
                 // 絵が出せなくても**画面は空にしない**(M16)。理由は帯に出す。
+                self.status = Some(format!("Stage を描けない: {error}"));
+            }
+        }
+    }
+
+    /// 裁定171 v2(M4)GPU 高速路専用。`playhead` の時刻の resolve 済み
+    /// スナップショットを作る——GPU への実描画は Pipeline 側
+    /// (`StagePresenterPipeline::prepare`)がやる、ここは `Document` を読んで
+    /// **所有データ**へ変換するだけ(`motolii_engine::Engine::render_resolved_to_texture`
+    /// の入力そのもの)。comp が無い/時刻を写せない/camera・layer が解決でき
+    /// ない、のいずれかなら `None` — 呼び出し側([`Self::refresh_frame`])は
+    /// フル再計算(既存の CPU 経路)へ安全側フォールバックする。
+    fn build_preview_snapshot(&self, playhead: i64) -> Option<PreviewSnapshot> {
+        let view = self.doc.view();
+        let composition = view.composition().ok().flatten()?;
+        let t = RationalTime::try_from_frame(playhead, composition.fps).ok()?;
+        let camera = view.resolve_camera(t).ok()?;
+        let resolved = view.resolved_layers(t).ok()?;
+        Some(PreviewSnapshot {
+            comp: composition.spec(),
+            background: composition.background,
+            camera,
+            resolved,
+        })
+    }
+
+    /// 裁定171 v2(M4)EXACT TARGET 4:「readback は要求された時だけ」。GPU
+    /// 高速路(`refresh_frame` の早期 return 枝)は `frame.rgba`(export 真値)
+    /// を更新せず [`RenderedFrame::rgba_stale`] を立てる——このメソッドが
+    /// [`Self::frame_rgba`] から呼ばれた時だけ、その場で1回 CPU readback して
+    /// 追いつかせる。`checkerboard`/観測カメラ/½・¼ cap のいずれかが有効な
+    /// 間は GPU 高速路自体を通らない(`rgba_stale` は常に `false` のまま)ので、
+    /// このパスは「GPU 高速路を経由した後」だけ実際に readback を1回払う。
+    fn ensure_rgba_fresh(&mut self) {
+        let Some(frame) = &self.frame else { return };
+        if !frame.rgba_stale {
+            return;
+        }
+        let playhead = frame.playhead;
+        let Ok(Some(composition)) = self.doc.view().composition() else {
+            return;
+        };
+        let Ok(t) = RationalTime::try_from_frame(playhead, composition.fps) else {
+            return;
+        };
+        match self.engine.render_frame(&self.doc.view(), t) {
+            Ok(rgba) => {
+                if let Some(frame) = self.frame.as_mut() {
+                    frame.rgba = rgba;
+                    frame.rgba_stale = false;
+                }
+            }
+            Err(error) => {
                 self.status = Some(format!("Stage を描けない: {error}"));
             }
         }
@@ -2308,6 +2457,27 @@ const STAGE_PRESENTER_UNIFORM_BYTES: u64 = 16;
 /// Stage 提示 shader の WGSL。頂点は `vertex_index`(0..6)から生成する
 /// full-screen quad(2三角形)——専用の vertex buffer は持たない(letterbox の
 /// 位置/大きさは uniform 側で表現する)。
+///
+/// **裁定171 v2(M4)`fs_main` の unmultiply(実窓検分要)**: `stage_texture` は
+/// 常に `Rgba8UnormSrgb`(CPU 経路の `upload_cpu`・GPU 経路の main_target
+/// 双方)——GPU が `textureSample` 時に自動で sRGB→linear decode する。fork の
+/// `composite.wgsl`(`crates/viewer/re_renderer/shader/composite.wgsl`)は
+/// `BlendWithBackground::Premultiplied` モードで
+/// 「source is already premultiplied」と明記しており、CPU 経路の
+/// `frame.rgba`/`presenter_rgba` も同じ compositor 出力(`Compositor::render*`)
+/// を経由するので、**サンプル結果は経路によらず premultiplied な linear 値**
+/// になる(main_target を直接サンプルする GPU 高速路は composite.wgsl を
+/// 一切通らないが、`Compositor::render_to_texture` のモジュール doc
+/// 「main_target の生存期間」が main_target 自体は composite 前の
+/// premultiplied 値であることを示している)。この render pipeline の blend
+/// state(下記、`SrcAlpha`/`OneMinusSrcAlpha` — 非 premultiplied over)は
+/// straight alpha を前提にしているため、`fs_main` 側で明示的に unmultiply
+/// してから返す(alpha=0 での 0 除算は `max(a, eps)` で回避)。**不透明画素
+/// (alpha=1)では unmultiply は数学的に恒等**(`rgb/1.0 == rgb`)なので、
+/// 既定の不透明黒背景コンポジションでは無改造時と見た目が変わらないはず——
+/// 変わるのは半透明が絡む場合(市松 ON・透明背景プリセット)だけ。
+/// **KNOWN.md 記載どおり、Stage の GPU 実描画は headless では検証できない
+/// (`iced_test::simulator` が `Widget::draw` を叩かない)ので実窓検分が必須**。
 const STAGE_PRESENTER_WGSL: &str = r#"
 struct Uniforms {
     offset: vec2<f32>,
@@ -2348,7 +2518,12 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(stage_texture, stage_sampler, in.uv);
+    let sampled = textureSample(stage_texture, stage_sampler, in.uv);
+    // 裁定171 v2(M4、上のモジュール doc 参照): サンプル値は premultiplied
+    // alpha。この pipeline の blend state は straight alpha を前提にしている
+    // ので、ここで unmultiply する。alpha=1(不透明)では恒等。
+    let straight_rgb = sampled.rgb / max(sampled.a, 1e-6);
+    return vec4<f32>(straight_rgb, sampled.a);
 }
 "#;
 
@@ -2437,7 +2612,7 @@ mod stage_presenter_letterbox_ndc_tests {
 /// `stack!` でこの上に重なる)が受ける、既存構造は無改変(`stage_pane` 参照)。
 #[derive(Debug)]
 struct StagePresenterProgram {
-    rgba: Arc<Vec<u8>>,
+    source: PresenterSource,
     width: u32,
     height: u32,
     generation: u64,
@@ -2449,7 +2624,7 @@ impl shader::Program<Message> for StagePresenterProgram {
 
     fn draw(&self, _state: &Self::State, _cursor: iced::mouse::Cursor, bounds: iced::Rectangle) -> Self::Primitive {
         StagePresenterPrimitive {
-            rgba: Arc::clone(&self.rgba),
+            source: self.source.clone(),
             width: self.width,
             height: self.height,
             generation: self.generation,
@@ -2459,14 +2634,15 @@ impl shader::Program<Message> for StagePresenterProgram {
 }
 
 /// 1描画分の Stage 提示データ。**`Program::draw` が描画のたびに新しく作る**
-/// (`iced_widget::shader::Program::draw` の契約)——だが `rgba` は `Arc` を
-/// 貸すだけなので、内容が変わらない限り複製コストはゼロ。実際に GPU へ
-/// アップロードするかどうかは `generation` を `StagePresenterPipeline` 側の
-/// 記憶と比較して決める(裁定166 EXACT TARGET 1「フレーム内容が変わった時
-/// だけ `queue.write_texture`」)。
+/// (`iced_widget::shader::Program::draw` の契約)——だが [`PresenterSource`] は
+/// `Arc` を貸す/複製するだけなので、内容が変わらない限り実コピーのコストは
+/// ゼロ。実際に GPU 側の資源(CPU 経路= `queue.write_texture`・GPU 経路=
+/// `Engine::render_resolved_to_texture`)を動かすかどうかは `generation` を
+/// `StagePresenterPipeline` 側の記憶と比較して決める(裁定166/裁定171 v2
+/// EXACT TARGET 1/2「フレーム内容が変わった時だけ」)。
 #[derive(Debug)]
 struct StagePresenterPrimitive {
-    rgba: Arc<Vec<u8>>,
+    source: PresenterSource,
     width: u32,
     height: u32,
     generation: u64,
@@ -2489,7 +2665,7 @@ impl shader::Primitive for StagePresenterPrimitive {
         _bounds: &iced::Rectangle,
         _viewport: &shader::Viewport,
     ) {
-        pipeline.upload(device, queue, self);
+        pipeline.resolve(device, queue, self);
     }
 
     fn draw(&self, pipeline: &Self::Pipeline, render_pass: &mut wgpu::RenderPass<'_>) -> bool {
@@ -2500,7 +2676,9 @@ impl shader::Primitive for StagePresenterPrimitive {
 /// comp 寸法変化時だけ再作成する実体(裁定166 EXACT TARGET 1「永続
 /// `wgpu::Texture`」)。`bind_group` はテクスチャ view を束ねているので、
 /// テクスチャ再作成のたびに一緒に作り直す(`uniform_buffer`/`sampler` は
-/// `StagePresenterPipeline` 側で使い回す)。
+/// `StagePresenterPipeline` 側で使い回す)。**CPU フォールバック経路専用**
+/// (裁定171 v2 §0-6、`PresenterSource::Cpu`)——GPU 高速路は
+/// [`StagePresenterGpuTarget`] を使う。
 struct StagePresenterTexture {
     width: u32,
     height: u32,
@@ -2513,6 +2691,37 @@ struct StagePresenterTexture {
     uploaded_generation: Option<u64>,
 }
 
+/// 裁定171 v2(M4)。GPU 高速路が [`Engine::render_resolved_to_texture`] から
+/// 直接受け取った main_target(+それを束ねた bind_group)。**CPU readback も
+/// `queue.write_texture` もしない** — `texture`/`view` は fork の
+/// `GpuTexture`(main_target)から `clone()` した薄いハンドル
+/// (`motolii-compositor::Compositor::render_to_texture` のモジュール doc
+/// 「main_target の生存期間」参照——次にこの Pipeline が GPU 高速路を再度
+/// 呼ぶ時まで有効)。
+struct StagePresenterGpuTarget {
+    width: u32,
+    height: u32,
+    /// `bind_group` が参照している view の親 texture。**明示的に握り続ける**
+    /// (drop すると view 経由の参照だけが残る形になり得るため、texture 自体も
+    /// このスコープに留める——wgpu は resource の生存を内部で追跡するので
+    /// 実害は無いはずだが、疑わしきは持つ側に倒す)。
+    #[allow(dead_code)]
+    texture: wgpu::Texture,
+    bind_group: wgpu::BindGroup,
+    /// 直近でこの target を作った時の世代。`None` = まだ一度も描いていない。
+    resolved_generation: Option<u64>,
+}
+
+/// `StagePresenterPipeline::draw` がどちらの bind_group を使うかの選択
+/// (裁定171 v2 M4)。`prepare`(`resolve`)が世代ゲート越しに更新する。
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+enum ActivePresenter {
+    #[default]
+    None,
+    Cpu,
+    Gpu,
+}
+
 /// Stage 提示 shader の永続 GPU 状態。`iced_widget::shader::Storage` に
 /// `TypeId::of::<StagePresenterPrimitive>()` を鍵として1個だけ生きる
 /// (iced の仕組みそのもの、`shader::Program`/`Pipeline` の doc 参照)。
@@ -2521,11 +2730,24 @@ struct StagePresenterPipeline {
     sampler: wgpu::Sampler,
     texture_bind_group_layout: wgpu::BindGroupLayout,
     uniform_buffer: wgpu::Buffer,
-    texture: Option<StagePresenterTexture>,
+    /// CPU フォールバック経路(裁定171 v2 §0-6)。裁定166 の経路そのまま、
+    /// 無改造。
+    cpu_texture: Option<StagePresenterTexture>,
+    /// 裁定171 v2(M4)。`Compositor::with_device` の上に組んだ Engine —
+    /// **この Pipeline インスタンスが所有**(decode/upload キャッシュもここに
+    /// 付いてくる、supervisor 裁定の推奨構造どおり)。Shell 側の headless
+    /// `Engine`(export/screenshot 真値専用)とは完全に別インスタンス。
+    gpu_engine: Engine,
+    /// GPU 高速路が直近描いた main_target(裁定171 v2 M4)。
+    gpu_target: Option<StagePresenterGpuTarget>,
+    /// 直近の `resolve` がどちらの経路を使ったか——`draw` はこれで bind_group
+    /// を選ぶ(CPU/GPU 両方の bind_group が生きていても、表示すべきは
+    /// 「今のフレームで実際に描いた方」だけ)。
+    active: ActivePresenter,
 }
 
 impl shader::Pipeline for StagePresenterPipeline {
-    fn new(device: &wgpu::Device, _queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("motolii-shell::stage_presenter sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -2629,42 +2851,83 @@ impl shader::Pipeline for StagePresenterPipeline {
             cache: None,
         });
 
+        // 裁定171 v2(M4): iced が渡す device/queue の上に、この Pipeline
+        // 専用の Engine(`Compositor::with_device` 版)を組む——供給者側
+        // (compositor)のクローンではなく、`wgpu::Device`/`Queue` 自体が薄い
+        // ハンドル(clone 可能、compositor 側 doc・`with_device` の実測どおり)
+        // なので、ここで clone しても新しい GPU を建てるわけではない。
+        // 失敗したら panic(`Shell::new` の `Engine::new().expect(...)` と
+        // 同じ規律 — GPU が無ければ Stage 自体が成立しない)。
+        let gpu_engine =
+            Engine::with_device(device.clone(), queue.clone()).expect("GPU 高速路の Engine を用意できない");
+
         Self {
             render_pipeline,
             sampler,
             texture_bind_group_layout,
             uniform_buffer,
-            texture: None,
+            cpu_texture: None,
+            gpu_engine,
+            gpu_target: None,
+            active: ActivePresenter::None,
         }
     }
 }
 
 impl StagePresenterPipeline {
-    /// comp 寸法変化時だけテクスチャを作り直し、世代が前回と違う時だけ
-    /// `queue.write_texture` する(裁定166 EXACT TARGET 1)。letterbox uniform
-    /// は世代に関わらず毎回書く(widget bounds は世代と無関係に変わりうる —
-    /// pane resize)。引数を `&StagePresenterPrimitive` 1本にまとめてあるのは
-    /// clippy `too_many_arguments`(既定閾値7)を素直に踏まえた形 — 個々の値は
-    /// 呼び出し元(`prepare`)がすでに1個の primitive として持っている。
-    fn upload(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, primitive: &StagePresenterPrimitive) {
-        let width = primitive.width;
-        let height = primitive.height;
-        let generation = primitive.generation;
+    /// **裁定171 v2(M4)入口**。`primitive.source` を見て CPU/GPU いずれかの
+    /// 経路で実際に描き(世代ゲート越し)、letterbox uniform を書く。
+    /// letterbox は経路に関わらず毎回書く(widget bounds は世代と無関係に
+    /// 変わりうる — pane resize)。旧 `upload` の後継 — 引数を
+    /// `&StagePresenterPrimitive` 1本にまとめる規律(clippy
+    /// `too_many_arguments`)はそのまま引き継ぐ。
+    fn resolve(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, primitive: &StagePresenterPrimitive) {
+        match &primitive.source {
+            PresenterSource::Cpu(rgba) => {
+                self.upload_cpu(device, queue, primitive.width, primitive.height, primitive.generation, rgba);
+                self.active = ActivePresenter::Cpu;
+            }
+            PresenterSource::Gpu(snapshot) => {
+                self.resolve_gpu(device, primitive.width, primitive.height, primitive.generation, snapshot);
+                self.active = ActivePresenter::Gpu;
+            }
+        }
+
         let letterbox = primitive.letterbox;
-        let rgba = primitive.rgba.as_slice();
+        let mut uniform_bytes = [0u8; STAGE_PRESENTER_UNIFORM_BYTES as usize];
+        uniform_bytes[0..4].copy_from_slice(&letterbox[0].to_ne_bytes());
+        uniform_bytes[4..8].copy_from_slice(&letterbox[1].to_ne_bytes());
+        uniform_bytes[8..12].copy_from_slice(&letterbox[2].to_ne_bytes());
+        uniform_bytes[12..16].copy_from_slice(&letterbox[3].to_ne_bytes());
+        queue.write_buffer(&self.uniform_buffer, 0, &uniform_bytes);
+    }
+
+    /// 裁定166 の経路——**無改造**(旧 `upload` のこの部分をそのまま移した)。
+    /// comp 寸法変化時だけテクスチャを作り直し、世代が前回と違う時だけ
+    /// `queue.write_texture` する(裁定166 EXACT TARGET 1)。裁定171 v2 §0-6
+    /// の CPU フォールバック(市松 ON・観測カメラ中・½/¼ cap 中)がここを使う。
+    fn upload_cpu(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        width: u32,
+        height: u32,
+        generation: u64,
+        rgba: &Arc<Vec<u8>>,
+    ) {
         if width == 0 || height == 0 {
-            self.texture = None;
+            self.cpu_texture = None;
             return;
         }
 
-        let needs_new_texture = match &self.texture {
+        let needs_new_texture = match &self.cpu_texture {
             Some(existing) => existing.width != width || existing.height != height,
             None => true,
         };
 
         if needs_new_texture {
             let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("motolii-shell::stage_presenter texture"),
+                label: Some("motolii-shell::stage_presenter cpu texture"),
                 size: wgpu::Extent3d {
                     width,
                     height,
@@ -2676,14 +2939,17 @@ impl StagePresenterPipeline {
                 // `iced_wgpu::image` の atlas と同じ sRGB フォーマット(`color::
                 // GAMMA_CORRECTION` が既定 true の時に選ぶ物、実測)— iced 全体が
                 // 線形空間で合成する前提と合わせておかないと、他 widget(背景色
-                // 等)と並んだ時に明るさがズレる。
+                // 等)と並んだ時に明るさがズレる。GPU 高速路の main_target
+                // (`re_renderer::ViewBuilder::MAIN_TARGET_COLOR_FORMAT`)も同じ
+                // sRGB タグ付き format なので、`fs_main` は経路を区別せず同じ
+                // sampling で扱える(下の WGSL doc 参照)。
                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
             });
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("motolii-shell::stage_presenter bind group"),
+                label: Some("motolii-shell::stage_presenter cpu bind group"),
                 layout: &self.texture_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
@@ -2700,7 +2966,7 @@ impl StagePresenterPipeline {
                     },
                 ],
             });
-            self.texture = Some(StagePresenterTexture {
+            self.cpu_texture = Some(StagePresenterTexture {
                 width,
                 height,
                 texture,
@@ -2709,7 +2975,7 @@ impl StagePresenterPipeline {
             });
         }
 
-        let presenter_texture = self.texture.as_mut().expect("直前で確実に作成済み");
+        let presenter_texture = self.cpu_texture.as_mut().expect("直前で確実に作成済み");
 
         if presenter_texture.uploaded_generation != Some(generation) {
             queue.write_texture(
@@ -2734,21 +3000,87 @@ impl StagePresenterPipeline {
             presenter_texture.uploaded_generation = Some(generation);
             metrics::record_presenter_upload(rgba.len());
         }
+    }
 
-        let mut uniform_bytes = [0u8; STAGE_PRESENTER_UNIFORM_BYTES as usize];
-        uniform_bytes[0..4].copy_from_slice(&letterbox[0].to_ne_bytes());
-        uniform_bytes[4..8].copy_from_slice(&letterbox[1].to_ne_bytes());
-        uniform_bytes[8..12].copy_from_slice(&letterbox[2].to_ne_bytes());
-        uniform_bytes[12..16].copy_from_slice(&letterbox[3].to_ne_bytes());
-        queue.write_buffer(&self.uniform_buffer, 0, &uniform_bytes);
+    /// **裁定171 v2(M4)高速路**。CPU readback を一切しない —
+    /// `Engine::render_resolved_to_texture`(→ 内部で
+    /// `Compositor::render_to_texture`)が返す GPU texture/view をそのまま
+    /// bind_group へ束ねるだけ(EXACT TARGET 3「readback/write_texture が
+    /// 表示経路から消滅」)。世代が前回と同じなら何もしない(EXACT TARGET 2)。
+    /// 描画に失敗したら(comp/layer が読めない等)前回の `gpu_target` を
+    /// そのまま残す——M16「無反応より前フレームのまま」。
+    fn resolve_gpu(
+        &mut self,
+        device: &wgpu::Device,
+        width: u32,
+        height: u32,
+        generation: u64,
+        snapshot: &Arc<PreviewSnapshot>,
+    ) {
+        if width == 0 || height == 0 {
+            self.gpu_target = None;
+            return;
+        }
+
+        let needs_render = match &self.gpu_target {
+            Some(existing) => {
+                existing.width != width || existing.height != height || existing.resolved_generation != Some(generation)
+            }
+            None => true,
+        };
+        if !needs_render {
+            return;
+        }
+
+        let Ok((texture, view)) = self.gpu_engine.render_resolved_to_texture(
+            snapshot.comp,
+            snapshot.background,
+            snapshot.camera,
+            &snapshot.resolved,
+        ) else {
+            return;
+        };
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("motolii-shell::stage_presenter gpu bind group"),
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
+
+        self.gpu_target = Some(StagePresenterGpuTarget {
+            width,
+            height,
+            texture,
+            bind_group,
+            resolved_generation: Some(generation),
+        });
+        metrics::record_presenter_blit();
     }
 
     fn draw(&self, render_pass: &mut wgpu::RenderPass<'_>) -> bool {
-        let Some(texture) = &self.texture else {
+        let bind_group = match self.active {
+            ActivePresenter::Cpu => self.cpu_texture.as_ref().map(|texture| &texture.bind_group),
+            ActivePresenter::Gpu => self.gpu_target.as_ref().map(|target| &target.bind_group),
+            ActivePresenter::None => None,
+        };
+        let Some(bind_group) = bind_group else {
             return false;
         };
         render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &texture.bind_group, &[]);
+        render_pass.set_bind_group(0, bind_group, &[]);
         render_pass.draw(0..6, 0..1);
         true
     }
@@ -2985,7 +3317,7 @@ fn stage_pane(
             // 時点で `stage::letterboxed_rect` を呼んで組む(2箇所目の
             // letterbox 実装を作らない、EXACT TARGET 1)。
             let picture: Element<'_, Message> = Shader::new(StagePresenterProgram {
-                rgba: Arc::clone(&frame.presenter_rgba),
+                source: frame.presenter_source.clone(),
                 width: frame.presenter_width,
                 height: frame.presenter_height,
                 generation: frame.presenter_generation,

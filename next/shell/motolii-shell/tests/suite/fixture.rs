@@ -144,11 +144,11 @@ fn fixture_gives_some_layers_position_or_opacity_keyframes() {
 /// **1フレーム描いて PNG を書く**。トンマナ照合の機械化用の口そのもの。
 #[test]
 fn screenshot_writes_a_readable_png_sized_like_the_window() {
-    let shell = fixture();
+    let mut shell = fixture();
     let dir = motolii_testkit::tmp_dir("shell-screenshot");
     let path = dir.join("fixture.png");
 
-    motolii_shell::screenshot::write_png(&shell, &path).expect("screenshot を書き出せない");
+    motolii_shell::screenshot::write_png(&mut shell, &path).expect("screenshot を書き出せない");
 
     let bytes = std::fs::read(&path).expect("PNG が書かれていない");
     assert!(
@@ -174,8 +174,8 @@ fn screenshot_writes_a_readable_png_sized_like_the_window() {
 /// 四隅は Stage の実素材が絶対に届かない位置なので、letterbox 色そのものを拾える。
 #[test]
 fn screenshot_top_left_corner_is_the_app_surface_color() {
-    let shell = fixture();
-    let image = motolii_shell::screenshot::render(&shell);
+    let mut shell = fixture();
+    let image = motolii_shell::screenshot::render(&mut shell);
     let colors = shell.tokens().colors;
     let expected = to_u8(colors.surface_app);
     let pixel = image.get_pixel(0, 0);
@@ -203,10 +203,10 @@ fn to_u8(color: iced::Color) -> [u8; 3] {
 /// pane 地の `surface_panel` とは異なる面色)の両方を実測する。
 #[test]
 fn screenshot_draws_the_inspector_region_with_hairlines_and_value_cell_insets() {
-    let shell = fixture();
+    let mut shell = fixture();
     let dims = shell.dims();
     let colors = shell.tokens().colors;
-    let image = motolii_shell::screenshot::render(&shell);
+    let image = motolii_shell::screenshot::render(&mut shell);
 
     let x0 = motolii_shell::screenshot::inspector_region_x(dims).round() as u32;
     let y0 = motolii_shell::screenshot::inspector_region_top(dims).round() as u32;

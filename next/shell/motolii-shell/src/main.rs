@@ -70,7 +70,7 @@ fn main() -> iced::Result {
                 }),
             ));
         }
-        motolii_shell::screenshot::write_png(&shell, std::path::Path::new(&path))
+        motolii_shell::screenshot::write_png(&mut shell, std::path::Path::new(&path))
             .unwrap_or_else(|error| panic!("screenshot を書き出せない: {error}"));
         return Ok(());
     }
