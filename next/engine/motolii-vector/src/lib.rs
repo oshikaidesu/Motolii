@@ -38,6 +38,10 @@ mod geom;
 mod ops;
 mod raster;
 
+/// raster 後処理の被覆(coverage)合成代数(MK2)。crate 根の `pub use` には混ぜず、
+/// 独立した名前空間として公開する — module doc(`coverage.rs`)参照。
+pub mod coverage;
+
 use serde::{Deserialize, Serialize};
 
 // パスの器は**入力の語彙**なので公開する。`rect` / `ellipse` は公開しない —
