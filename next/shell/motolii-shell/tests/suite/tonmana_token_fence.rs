@@ -68,9 +68,19 @@ fn src_dir() -> PathBuf {
 }
 
 /// 発注書 EXACT TARGET が名指しした pane 系ファイル(すべて `src/` 直下)。
+///
+/// `timeline_pane.rs` は第2波第1切片(純粋なファイル分割)で `src/timeline/`
+/// (`mod.rs`/`projection.rs`/`hit.rs`/`canvas.rs`/`input.rs`)へ分かれた —
+/// 柵は緩めず、分割後の5ファイルへ対象を追随させる(色・寸法の直書きが
+/// 実際に発生し得るのは主に `canvas.rs` だが、将来の混入も拾えるよう
+/// 分割後の全ファイルを対象にする)。
 const SCANNED_FILES: &[&str] = &[
     "inspector_pane.rs",
-    "timeline_pane.rs",
+    "timeline/mod.rs",
+    "timeline/projection.rs",
+    "timeline/hit.rs",
+    "timeline/canvas.rs",
+    "timeline/input.rs",
     "settings_pane.rs",
     "lib.rs",
     "screenshot.rs",
