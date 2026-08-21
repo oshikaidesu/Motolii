@@ -1,4 +1,4 @@
-//! header の "Edit" トップレベルメニュー(M-menu 設計調査 MB-0+Edit、
+//! header のメニューバー(M-menu 設計調査 MB-0+Edit、MB-1、
 //! `docs/reviews/2026-08-22-menubar-foundation-survey.md` 準拠)。
 //!
 //! ## MB-0(基盤 widget)── 実装時に経路を変えた記録
@@ -40,9 +40,20 @@
 //! `SelectAllLayers`/`DeselectAllLayers` の8本を、右寄せのショートカット表記
 //! つきでそのまま `on_press` へぶら下げるだけ(意味の複製ゼロ)。
 //!
-//! File 等の他トップレベルは本切片では**構造だけの予約をしない**(空メニューを
-//! 出さない)── 実装された束から順に現れる方針(MB-1 の一部、New Project/
-//! Save As 等は rfd 裁定待ち、調査 §6 EVIDENCE_GAP 1)。
+//! ## MB-1(File 束、裁定176)── File トップレベルが2番目に着地
+//!
+//! MB-0 が構造だけ予約しないまま見送った File(New Project/Save As/Save a
+//! Copy/Quit、当時は rfd 裁定待ちの §6 EVIDENCE_GAP 1)を、裁定176(rfd 採用)
+//! を受けてここへ実配線する。**Edit と全く同じ形**(トリガー+開いている間
+//! だけ木へ現れる column dropdown)── 新しい見た目・新しい widget 構成を
+//! 発明していない。File/Edit の2トップレベルは中身(`Item` 列)以外を共有する
+//! ため、`trigger`/`dropdown` を汎用化した(下記)。
+//!
+//! File の4項目は本切片で**同時に**キーボード shortcut も持つ
+//! (`resolve_navigation_key` の Cmd+N/Cmd+Shift+S/Cmd+Q 腕、`lib.rs` 参照)──
+//! 発注書「メニューと shortcut を同切片で併設する義務」(M-menu 調査 S6
+//! 併存表: 4動詞は着手前は入口ゼロだった)を満たすため、メニュー項目だけを
+//! 先に出して shortcut を後回しにしない。
 
 use iced::widget::{button, column, container, row, text, Space};
 use iced::{Element, Length};
@@ -51,67 +62,122 @@ use crate::chrome::button_style;
 use crate::Message;
 use motolii_tokens_rs::{Colors, Dimensions};
 
-/// Edit メニューの1項目。**`message` は必須**(Option ではない)── captured→
+/// メニュー1項目。**`message` は必須**(Option ではない)── captured→
 /// publish 必須(q0 柵、silent 項目ゼロ)を型で保証する。ショートカット表記は
 /// プレーン ASCII(`Cmd+Z` 等)── `header()` の歯車ボタン doc が既に避けている
 /// 「絵文字/unicode グリフのフォント欠け」(`../reference/KNOWN.md` の
 /// letter-spacing 欠けと同種、iced 0.14 系の未確認リスク)を同じ理由で踏まない。
+/// `shortcut: None` は「shortcut 出典ゼロ」(normal-map の entries 列)を
+/// そのまま表す ── Save a Copy(id 1227)がこれ(下記 `file_items`)。
 struct Item {
     label: &'static str,
-    shortcut: &'static str,
+    shortcut: Option<&'static str>,
     message: Message,
 }
 
 /// §1 Edit 構造案(normal-map id 437/435/432/429/430/434/436/433)のうち、
 /// S6 併存表(調査 §4)で「既に別入口がある」と判定済みの8項目だけを実配線
-/// する。New Project/Save As/Paste Attributes/Find 等(入口ゼロ)は §6
-/// EVIDENCE_GAP 1(rfd 裁定待ち)のため出さない — Q0「効かない chrome を
-/// 並べない」に従い、未実装分はメニュー項目自体を出さない側を採る。
-fn items() -> Vec<Item> {
+/// する。Paste Attributes/Find 等(入口ゼロ)は §6 EVIDENCE_GAP 1 のため出さ
+/// ない — Q0「効かない chrome を並べない」に従い、未実装分はメニュー項目
+/// 自体を出さない側を採る。
+fn edit_items() -> Vec<Item> {
     vec![
-        Item { label: "Undo", shortcut: "Cmd+Z", message: Message::Undo }, // id 437
-        Item { label: "Redo", shortcut: "Cmd+Shift+Z", message: Message::Redo }, // id 435
-        Item { label: "Cut", shortcut: "Cmd+X", message: Message::CutLayer }, // id 432
-        Item { label: "Copy", shortcut: "Cmd+C", message: Message::CopyLayer }, // id 429
-        Item { label: "Paste", shortcut: "Cmd+V", message: Message::PasteLayer }, // id 430
-        Item { label: "Duplicate", shortcut: "Cmd+D", message: Message::DuplicateLayer }, // id 434
-        Item { label: "Select All", shortcut: "Cmd+A", message: Message::SelectAllLayers }, // id 436
+        Item { label: "Undo", shortcut: Some("Cmd+Z"), message: Message::Undo }, // id 437
+        Item { label: "Redo", shortcut: Some("Cmd+Shift+Z"), message: Message::Redo }, // id 435
+        Item { label: "Cut", shortcut: Some("Cmd+X"), message: Message::CutLayer }, // id 432
+        Item { label: "Copy", shortcut: Some("Cmd+C"), message: Message::CopyLayer }, // id 429
+        Item { label: "Paste", shortcut: Some("Cmd+V"), message: Message::PasteLayer }, // id 430
+        Item {
+            label: "Duplicate",
+            shortcut: Some("Cmd+D"),
+            message: Message::DuplicateLayer,
+        }, // id 434
+        Item {
+            label: "Select All",
+            shortcut: Some("Cmd+A"),
+            message: Message::SelectAllLayers,
+        }, // id 436
         Item {
             label: "Deselect All",
-            shortcut: "Cmd+Shift+A",
+            shortcut: Some("Cmd+Shift+A"),
             message: Message::DeselectAllLayers,
         }, // id 433
     ]
 }
 
-/// header の "Edit" トリガーボタン。他の header ボタン(Undo/Redo/+Layer/
-/// Settings)と同じ `chrome::button_style` — 独自の見た目を新設しない。
-pub fn trigger(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
-    button(text("Edit").size(dims.body_text))
+/// MB-1(裁定176)。map 1221/1225/1227/1223 の4項目全部 ── Open は本切片の
+/// NON-GOALS(発注書「read 経路の検証が重い」)なので出さない。
+fn file_items() -> Vec<Item> {
+    vec![
+        Item {
+            label: "New Project",
+            shortcut: Some("Cmd+N"),
+            message: Message::NewProjectRequested,
+        }, // id 1221
+        Item {
+            label: "Save As…",
+            shortcut: Some("Cmd+Shift+S"),
+            message: Message::SaveAsRequested,
+        }, // id 1225
+        // normal-map entries(menu:shortcut:panel:pref)= 2:0:0:0 ── shortcut
+        // 出典ゼロ。他3項目と違い shortcut を発明しない(`Item::shortcut` が
+        // `None` を運べる理由そのもの)。
+        Item {
+            label: "Save a Copy…",
+            shortcut: None,
+            message: Message::SaveACopyRequested,
+        }, // id 1227
+        Item { label: "Quit", shortcut: Some("Cmd+Q"), message: Message::QuitRequested }, // id 1223
+    ]
+}
+
+/// header のトリガーボタン(File/Edit 共通の骨格)。他の header ボタン
+/// (Undo/Redo/+Layer/Settings)と同じ `chrome::button_style` — 独自の見た目を
+/// 新設しない。
+fn trigger(label: &'static str, message: Message, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    button(text(label).size(dims.body_text))
         .style(move |_theme, status| button_style(dims, colors, status))
-        .on_press(Message::ToggleEditMenu)
+        .on_press(message)
         .into()
 }
 
-/// Edit ドロップダウン本体(開いている間だけ呼び出し側が木へ push する、
-/// crate 冒頭 doc 参照)。項目=動詞名+ショートカット表記(右寄せ・
-/// `text_muted`)── 全項目に shortcut が併記されていること自体が S6
-/// 「唯一の入口ゼロ」の構造証明(crate 冒頭 doc)。
-pub fn dropdown(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+/// header の "File" トリガーボタン(MB-1)。
+pub fn file_trigger(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    trigger("File", Message::ToggleFileMenu, dims, colors)
+}
+
+/// header の "Edit" トリガーボタン。
+pub fn edit_trigger(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    trigger("Edit", Message::ToggleEditMenu, dims, colors)
+}
+
+/// ドロップダウン本体(File/Edit 共通の骨格。開いている間だけ呼び出し側が
+/// 木へ push する、crate 冒頭 doc 参照)。項目=動詞名+ショートカット表記
+/// (右寄せ・`text_muted`)── shortcut を持つ項目は全部併記されていること
+/// 自体が S6「唯一の入口ゼロ」の構造証明(crate 冒頭 doc)。
+fn dropdown(items: Vec<Item>, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     // 算術合成のみ(新トークン新設なし、裁定142)── `inspector_value_width`
     // (64px級)の3倍 = "Deselect All" + "Cmd+Shift+A" が1行に収まる幅。
     // transport_slider_style の `dims.spacing_m * 2.0` と同型の「既存 token
     // への係数」。
     let item_width = dims.inspector_value_width * 3.0;
 
-    let rows: Vec<Element<'static, Message>> = items()
+    let rows: Vec<Element<'static, Message>> = items
         .into_iter()
         .map(|item| {
+            let shortcut: Element<'static, Message> = match item.shortcut {
+                Some(shortcut) => {
+                    text(shortcut).size(dims.caption_text).color(colors.text_muted).into()
+                }
+                // shortcut 出典ゼロの項目(Save a Copy)は右側を空けるだけ ──
+                // 存在しない shortcut を発明しない(`file_items` doc 参照)。
+                None => Space::new().into(),
+            };
             button(
                 row![
                     text(item.label).size(dims.body_text),
                     Space::new().width(Length::Fill),
-                    text(item.shortcut).size(dims.caption_text).color(colors.text_muted),
+                    shortcut,
                 ]
                 .spacing(dims.spacing_m)
                 .align_y(iced::alignment::Vertical::Center),
@@ -135,4 +201,14 @@ pub fn dropdown(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
             ..container::Style::default()
         })
         .into()
+}
+
+/// File ドロップダウン本体(MB-1)。
+pub fn file_dropdown(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    dropdown(file_items(), dims, colors)
+}
+
+/// Edit ドロップダウン本体。
+pub fn edit_dropdown(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    dropdown(edit_items(), dims, colors)
 }
