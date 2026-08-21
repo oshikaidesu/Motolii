@@ -31,4 +31,6 @@ motolii-shell-state.workspace = true
 # 歩き、実フォントで測った `Target::Text` の bounds を読む)を pane 単体へ
 # 小さく写した — shell(write-set 外)を経由せず `inspector_pane::view` を
 # 直叩きできる。dev-only、この crate の外へは出さない(shell と同じ扱い)。
-iced_test = "0.14"
+# 裁定170(M01)で本体 `iced` と同じ fork 同 rev へ(shell と同じ理由 —
+# 別 rev だと iced_core が2本入り Rectangle 等の型が衝突する、merge 後実測)。
+iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }

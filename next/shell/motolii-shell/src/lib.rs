@@ -2533,7 +2533,8 @@ impl shader::Pipeline for StagePresenterPipeline {
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Linear,
+            // wgpu 29(M01 統一後): mipmap は専用の `MipmapFilterMode` 型に分離された
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
             ..Default::default()
         });
 
@@ -2578,8 +2579,9 @@ impl shader::Pipeline for StagePresenterPipeline {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("motolii-shell::stage_presenter pipeline layout"),
-            bind_group_layouts: &[&texture_bind_group_layout],
-            push_constant_ranges: &[],
+            // wgpu 29: layout は Option 化・push_constant_ranges は immediate_size へ
+            bind_group_layouts: &[Some(&texture_bind_group_layout)],
+            immediate_size: 0,
         });
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -2623,7 +2625,7 @@ impl shader::Pipeline for StagePresenterPipeline {
             primitive: wgpu::PrimitiveState::default(),
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
