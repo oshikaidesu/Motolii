@@ -24,7 +24,7 @@
 //! `KeyframeTrack::insert` を叩く。
 
 use super::projection::RowProjection;
-use crate::timeline::clip_gesture::snap_frame;
+use crate::clip_gesture::snap_frame;
 
 /// キーのスナップ候補(正典 §3「スナップ…は clip と同じ対象」)。0秒・終端・
 /// playhead・**全 clip の start/end**。`clip_gesture::snap_candidates` と違い、

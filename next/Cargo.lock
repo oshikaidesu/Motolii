@@ -3468,9 +3468,18 @@ dependencies = [
  "motolii-core",
  "motolii-engine",
  "motolii-media",
+ "motolii-shell-state",
  "motolii-store",
  "motolii-testkit",
+ "motolii-timeline-pane",
  "motolii-tokens-rs",
+]
+
+[[package]]
+name = "motolii-shell-state"
+version = "0.1.0"
+dependencies = [
+ "motolii-store",
 ]
 
 [[package]]
@@ -3503,6 +3512,16 @@ version = "0.1.0"
 dependencies = [
  "image",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "motolii-timeline-pane"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "motolii-shell-state",
+ "motolii-store",
+ "motolii-tokens-rs",
 ]
 
 [[package]]

@@ -1,15 +1,20 @@
-//! front だけが持つ共有状態の正本(裁定160 切片6、pane split survey
-//! `docs/reviews/2026-08-21-pane-split-survey.md` §2.3/§6)。
+//! front だけが持つ共有状態の正本。裁定160 切片6(pane split survey
+//! `docs/reviews/2026-08-21-pane-split-survey.md` §2.3)で `motolii-shell` 内の
+//! `state.rs` モジュールへ移設し、切片7(timeline-pane crate 抽出)で
+//! この crate へさらに抽出した — `motolii-timeline-pane`(pane crate)は
+//! `motolii-shell`(root/assembler crate)へ依存できない(循環になる)ので、
+//! `Session`/`KeySelector` を両者の**共通の親**として leaf crate 化する必要が
+//! あった(§2.3 の Session ⇄ timeline 循環解消と同じ理由を、pane crate 分割へ
+//! もう一段延長した形)。
 //!
-//! [`Session`] は `timeline::KeySelector` を持ち、`timeline::projection::rows` は
-//! `&Session` を要求する — 循環(`Session ⇄ timeline`)を解くため、Session と
-//! それが持つ timeline 由来の型([`KeySelector`]/[`KeySelectionOp`])をこの1枚の
-//! leaf モジュールへ同居させた。**このファイルは `timeline`(または他の pane
-//! モジュール)を import しないこと** — 依存方向は常に
-//! `timeline`/`inspector_pane`/... → `state`(この向きだけ)。
+//! [`Session`] は [`KeySelector`] を持ち、`motolii_timeline_pane::rows`/
+//! `property_rows` は `&Session` を要求する — この2つを同じ leaf へ同居させて
+//! 依存方向を `motolii-timeline-pane`/`motolii-shell` → `motolii-shell-state`
+//! (この向きだけ)に保つ。**このクレートは `motolii-shell`/`motolii-timeline-pane`
+//! のどちらも import しないこと**。
 //!
-//! 純粋な再配置(裁定160 切片6): 型の定義・フィールド・ロジックは無改変、
-//! 置き場所だけを `lib.rs`/`timeline/projection.rs` からここへ移した。
+//! 純粋な再配置: 型の定義・フィールド・ロジックは無改変、置き場所だけを
+//! `motolii-shell/src/state.rs` からここへ移した。
 
 use motolii_store::{LayerId, PropertyId};
 

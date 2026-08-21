@@ -35,7 +35,7 @@
 //! `crates/motolii-shell-iced/tests/drive_timeline.rs` と同じ型。
 //! Q0 横断柵(`tests/q0_fence.rs`)側の限界节にも同じ制約を明記してある。
 
-use motolii_shell::timeline_pane::{frame_at_x, BarPart, TimelinePane};
+use motolii_shell::timeline_pane::{self, frame_at_x, BarPart, TimelinePane};
 use motolii_shell::tokens::Tokens;
 use motolii_shell::{Message, Session, Shell};
 
@@ -159,17 +159,21 @@ fn clicking_a_bar_in_the_timeline_canvas_publishes_a_grab_and_release_via_raw_co
         )),
     ]);
 
+    // `pane.view()` は裁定160 切片7以降 `Element<'static, timeline_pane::Message>`
+    // を返す(pane crate 化 — root の `Message` は pane から参照できない)。
+    // ここで集まる `messages` はその pane-local 型そのもの(`Message::Timeline`
+    // で畳む前の生の値) — `timeline_pane::Message::` で直接照合する。
     let messages: Vec<_> = ui.into_messages().collect();
     assert!(
         matches!(
             messages.as_slice(),
             [
-                Message::TimelineBarGrabbed {
+                timeline_pane::Message::BarGrabbed {
                     layer,
                     part: BarPart::Body,
                     ..
                 },
-                Message::TimelineDragReleased,
+                timeline_pane::Message::DragReleased,
             ] if *layer == motolii_store::LayerId(1)
         ),
         "canvas 上の bar click が掴む/離すの2手を出していない: {messages:?}"
@@ -203,9 +207,12 @@ fn clicking_the_ruler_band_publishes_scrub_to_via_raw_coordinates() {
         )),
     ]);
 
+    // 同上(生の pane-local `Message` — `timeline_pane::Message::ScrubTo` は
+    // pane crate 化に伴い追加した §3.2 exception 1 の複製腕、root の
+    // `Message::ScrubTo` とは別の型)。
     let messages: Vec<_> = ui.into_messages().collect();
     assert!(
-        matches!(messages.as_slice(), [Message::ScrubTo(frame)] if *frame == expected_frame),
-        "canvas 上のルーラー click が期待した Message::ScrubTo({expected_frame}) を出していない: {messages:?}"
+        matches!(messages.as_slice(), [timeline_pane::Message::ScrubTo(frame)] if *frame == expected_frame),
+        "canvas 上のルーラー click が期待した ScrubTo({expected_frame}) を出していない: {messages:?}"
     );
 }

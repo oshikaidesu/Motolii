@@ -14,7 +14,7 @@
 //! (T2 clip drag)・`timeline_key_gesture_drive.rs`(T4 key drag)が既に見ている
 //! ので再確認しない(同じ数値例を再利用するだけ)。
 
-use motolii_shell::timeline_pane::{BarPart, KeySelector};
+use motolii_shell::timeline_pane::{self, BarPart, KeySelector};
 use motolii_shell::{Message, Shell};
 use motolii_store::{property, LayerId, PropertyId};
 
@@ -37,15 +37,15 @@ fn clip_drag_preview_reaches_the_pane_before_release() {
     assert_eq!(baseline.rows()[0].start, 50);
     assert!(!baseline.rows()[0].dragging);
 
-    shell.update(Message::TimelineBarGrabbed {
+    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::Body,
         at_frame: 50,
-    });
-    shell.update(Message::TimelineDragMoved {
+    }));
+    shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
         at_frame: 30,
         px_per_frame: 1.0,
-    });
+    }));
 
     // **赤→緑の核心**: release 前、Document(`timeline_rows`)はまだ 50 のまま
     // だが、pane の投影(`build_timeline_pane().rows()`)はもう 30 を見せている。
@@ -61,7 +61,7 @@ fn clip_drag_preview_reaches_the_pane_before_release() {
         "ドラッグ中の行に dragging フラグが立っていない(ACCENT 強調の出典)"
     );
 
-    shell.update(Message::TimelineDragReleased);
+    shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
 
     // release 後: Document と pane の投影が再び一致し、dragging は消える。
     assert_eq!(shell.timeline_rows()[0].start, 30);
@@ -79,18 +79,18 @@ fn clip_drag_preview_reverts_on_cancel() {
     shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
 
-    shell.update(Message::TimelineBarGrabbed {
+    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::Body,
         at_frame: 50,
-    });
-    shell.update(Message::TimelineDragMoved {
+    }));
+    shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
         at_frame: 30,
         px_per_frame: 1.0,
-    });
+    }));
     assert_eq!(shell.build_timeline_pane().rows()[0].start, 30);
 
-    shell.update(Message::TimelineDragCancelled);
+    shell.update(Message::Timeline(timeline_pane::Message::DragCancelled));
 
     let after_cancel = shell.build_timeline_pane();
     assert_eq!(after_cancel.rows()[0].start, 50, "cancel 後の pane の投影が掴む前の値へ戻っていない");
@@ -112,8 +112,8 @@ fn key_drag_preview_reaches_the_pane_before_release() {
     let property = PropertyId::new(property::POSITION).expect("position は予約語ではない");
     let key = KeySelector { layer, property, frame: 510 };
 
-    shell.update(Message::TimelineKeyGrabbed { key: key.clone(), at_frame: 510, retime: false });
-    shell.update(Message::TimelineKeyDragMoved { at_frame: 520, px_per_frame: 1.0 });
+    shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key: key.clone(), at_frame: 510, retime: false }));
+    shell.update(Message::Timeline(timeline_pane::Message::KeyDragMoved{ at_frame: 520, px_per_frame: 1.0 }));
 
     // Document はまだ 510 のまま、pane の投影はもう 520 を見せている。
     let doc_frames: Vec<i64> = shell
@@ -137,7 +137,7 @@ fn key_drag_preview_reaches_the_pane_before_release() {
         "ドラッグ中の pane の投影にキー preview 値が乗っていない(§5.5 違反)"
     );
 
-    shell.update(Message::TimelineKeyDragReleased);
+    shell.update(Message::Timeline(timeline_pane::Message::KeyDragReleased));
 
     let after_release = shell.build_timeline_pane();
     let pane_frames_after: Vec<i64> = after_release
@@ -161,15 +161,15 @@ fn key_retime_preview_moves_every_selected_key_in_the_pane() {
     let key20 = KeySelector { layer, property: property.clone(), frame: 20 };
     let key90 = KeySelector { layer, property: property.clone(), frame: 90 };
 
-    shell.update(Message::TimelineKeySelect(
+    shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Single(key20),
-    ));
-    shell.update(Message::TimelineKeySelect(
+    )));
+    shell.update(Message::Timeline(timeline_pane::Message::KeySelect(
         motolii_shell::timeline_pane::KeySelectionOp::Range(key90.clone()),
-    ));
+    )));
 
-    shell.update(Message::TimelineKeyGrabbed { key: key90, at_frame: 90, retime: true });
-    shell.update(Message::TimelineKeyDragMoved { at_frame: 50, px_per_frame: 1.0 });
+    shell.update(Message::Timeline(timeline_pane::Message::KeyGrabbed{ key: key90, at_frame: 90, retime: true }));
+    shell.update(Message::Timeline(timeline_pane::Message::KeyDragMoved{ at_frame: 50, px_per_frame: 1.0 }));
 
     let mid_drag = shell.build_timeline_pane();
     let pane_frames: Vec<i64> = mid_drag
@@ -184,7 +184,7 @@ fn key_retime_preview_moves_every_selected_key_in_the_pane() {
         "retime 中、選択キー全部(中間キー含む)が比例位置で pane の投影に乗っていない"
     );
 
-    shell.update(Message::TimelineKeyDragReleased);
+    shell.update(Message::Timeline(timeline_pane::Message::KeyDragReleased));
     assert!(shell.can_undo());
 }
 

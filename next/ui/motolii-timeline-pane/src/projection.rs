@@ -63,9 +63,12 @@ pub fn rows(store: &StoreView<'_>, session: &Session) -> Vec<RowProjection> {
 
 /// comp フレーム → x px。`duration_frames <= 0` の空 comp では常に 0。
 ///
-/// `pub(crate)`: screenshot 器具(`crate::screenshot`)が Timeline canvas と同じ
-/// x 座標計算を使うため(マーカー・bar の位置を2箇所で別の式にしない)。
-pub(crate) fn frame_to_x(frame: i64, width: f32, duration_frames: i64) -> f32 {
+/// `pub`: screenshot 器具(`motolii_shell::screenshot`)が Timeline canvas と
+/// 同じ x 座標計算を使うため(マーカー・bar の位置を2箇所で別の式にしない)。
+/// **裁定160 切片7で `pub(crate)` → `pub` に緩めた** — screenshot.rs は
+/// crate 分割後 `motolii-shell` 側に残るので、`pub(crate)`(同一クレート限定)
+/// のままでは呼べなくなる。
+pub fn frame_to_x(frame: i64, width: f32, duration_frames: i64) -> f32 {
     if duration_frames <= 0 || width <= 0.0 {
         return 0.0;
     }
@@ -97,9 +100,9 @@ pub(crate) const RULER_TICK_DIVISIONS: i64 = 8;
 /// と screenshot 器具の両方がこの1つの式から区間境界を出す(2箇所で別の
 /// フォールバックを持たない)。
 ///
-/// `pub(crate)`: `crate::screenshot` が Timeline canvas と同じ区間の刻み方を
-/// 再現するため(`frame_to_x` と同じ理由)。
-pub(crate) fn time_band_segment_frames(fps: Option<Fps>, duration_frames: i64) -> i64 {
+/// `pub`: `motolii_shell::screenshot` が Timeline canvas と同じ区間の刻み方を
+/// 再現するため(`frame_to_x` と同じ理由、裁定160 切片7で緩めた)。
+pub fn time_band_segment_frames(fps: Option<Fps>, duration_frames: i64) -> i64 {
     fps.map(|fps| fps.as_f64().round().max(1.0) as i64)
         .unwrap_or_else(|| (duration_frames / RULER_TICK_DIVISIONS).max(1))
 }

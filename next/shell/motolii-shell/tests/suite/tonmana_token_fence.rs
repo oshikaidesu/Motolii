@@ -67,7 +67,14 @@ fn src_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
 }
 
-/// 発注書 EXACT TARGET が名指しした pane 系ファイル(すべて `src/` 直下)。
+/// `motolii-timeline-pane` crate(裁定160 切片7で `motolii-shell/src/timeline/`
+/// から抽出済み)の `src/`。`motolii-shell` の `CARGO_MANIFEST_DIR` から
+/// 兄弟 crate(`next/ui/motolii-timeline-pane/`)へ相対で辿る。
+fn timeline_pane_src_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/motolii-timeline-pane/src")
+}
+
+/// 発注書 EXACT TARGET が名指しした pane 系ファイル。
 ///
 /// `timeline_pane.rs` は第2波第1切片(純粋なファイル分割)で `src/timeline/`
 /// (`mod.rs`/`projection.rs`/`hit.rs`/`canvas.rs`/`input.rs`)へ分かれ、
@@ -75,10 +82,15 @@ fn src_dir() -> PathBuf {
 /// move/trim)で `clip_gesture.rs` が加わった — 柵は緩めず、分割後の全7
 /// ファイルへ対象を追随させる(色・寸法の直書きが実際に発生し得るのは主に
 /// `canvas.rs`/`lane_bar.rs` だが、将来の混入も拾えるよう分割後の全ファイルを
-/// 対象にする)。
+/// 対象にする)。裁定160 切片7で `timeline/` 一式が `motolii-timeline-pane`
+/// crate へ抽出された — `"timeline/"` prefix のエントリは
+/// [`scan_file`] が `motolii-shell/src/` ではなく
+/// [`timeline_pane_src_dir`] から読む([`scan_file`] 側で振り分け)。
+/// `timeline/mod.rs` は抽出時にその crate の `lib.rs` になった
+/// (`TimelinePane`/`canvas::Program` impl 本体を含む点は無改変)。
 const SCANNED_FILES: &[&str] = &[
     "inspector_pane.rs",
-    "timeline/mod.rs",
+    "timeline/lib.rs",
     "timeline/projection.rs",
     "timeline/hit.rs",
     "timeline/clip_gesture.rs",
@@ -325,7 +337,13 @@ fn scan_text(file: &'static str, text: &str) -> Vec<Violation> {
 }
 
 fn scan_file(file: &'static str) -> Vec<Violation> {
-    let path = src_dir().join(file);
+    // `"timeline/"` prefix は裁定160 切片7で抽出済みの `motolii-timeline-pane`
+    // crate 側([`timeline_pane_src_dir`] 参照)。`mod.rs` → `lib.rs` の1件だけ
+    // ファイル名も変わっている(SCANNED_FILES のコメント参照)。
+    let path = match file.strip_prefix("timeline/") {
+        Some(rest) => timeline_pane_src_dir().join(rest),
+        None => src_dir().join(file),
+    };
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("{} を読めない: {err}", path.display()));
     scan_text(file, &text)
