@@ -18,8 +18,8 @@ use iced::{Element, Length, Task};
 
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
-    Composition, DisplayRevision, Document, Intent, KeyframeTrack, LayerAttrsPatch, LayerId,
-    LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, StoreView,
+    Composition, DisplayRevision, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta,
+    LayerSource, LayerTiming, RationalTime, StoreView,
 };
 
 pub mod clipboard;

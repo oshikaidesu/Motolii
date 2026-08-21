@@ -26,11 +26,11 @@ fn background_preset_changes_composition_and_undoes_in_one_step() {
     let before = shell.composition().expect("既定 comp がある").background;
     assert_eq!(before, [0.0, 0.0, 0.0, 1.0], "既定は不透明黒のはず");
 
-    shell.update(Message::Settings(settings_pane::Message::BackgroundPreset(BackgroundPreset::White)));
+    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundPreset(BackgroundPreset::White)));
     let after = shell.composition().expect("comp がある").background;
     assert_eq!(after, [1.0, 1.0, 1.0, 1.0], "White プリセットが反映されていない");
 
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     let restored = shell.composition().expect("comp がある").background;
     assert_eq!(restored, before, "1回の Undo で背景プリセットが戻らない");
     assert!(!shell.can_undo(), "1回で床まで戻るはず(既定は編集ではない)");
@@ -39,7 +39,7 @@ fn background_preset_changes_composition_and_undoes_in_one_step() {
 #[test]
 fn gray18_preset_is_a_neutral_gray_not_black_or_white() {
     let mut shell = shell();
-    shell.update(Message::Settings(settings_pane::Message::BackgroundPreset(BackgroundPreset::Gray18)));
+    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundPreset(BackgroundPreset::Gray18)));
     let background = shell.composition().expect("comp がある").background;
     assert!(background[0] > 0.0 && background[0] < 1.0, "Gray18 が中間値でない: {background:?}");
     assert_eq!(background[0], background[1]);
@@ -51,11 +51,11 @@ fn gray18_preset_is_a_neutral_gray_not_black_or_white() {
 fn background_channel_submit_writes_only_that_channel_and_undoes_in_one_step() {
     let mut shell = shell();
 
-    shell.update(Message::Settings(settings_pane::Message::BackgroundChannelInput(
+    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelInput(
         BackgroundChannel::A,
         "0".to_owned(),
     )));
-    shell.update(Message::Settings(settings_pane::Message::BackgroundChannelSubmit(
+    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelSubmit(
         BackgroundChannel::A,
     )));
 
@@ -66,7 +66,7 @@ fn background_channel_submit_writes_only_that_channel_and_undoes_in_one_step() {
         "A だけ変えたはずが他チャンネルまで動いた"
     );
 
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     let restored = shell.composition().expect("comp がある").background;
     assert_eq!(
         restored,
@@ -79,11 +79,11 @@ fn background_channel_submit_writes_only_that_channel_and_undoes_in_one_step() {
 #[test]
 fn an_unreadable_channel_value_is_rejected_with_a_reason() {
     let mut shell = shell();
-    shell.update(Message::Settings(settings_pane::Message::BackgroundChannelInput(
+    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelInput(
         BackgroundChannel::R,
         "not a number".to_owned(),
     )));
-    shell.update(Message::Settings(settings_pane::Message::BackgroundChannelSubmit(
+    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelSubmit(
         BackgroundChannel::R,
     )));
 
@@ -97,11 +97,11 @@ fn an_unreadable_channel_value_is_rejected_with_a_reason() {
 fn checkerboard_toggle_never_touches_the_raw_export_rgba() {
     let mut shell = shell();
     // 透明を作る(市松が効く条件、発注書「背景の alpha を 0 にした時に効く」)。
-    shell.update(Message::Settings(settings_pane::Message::BackgroundChannelInput(
+    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelInput(
         BackgroundChannel::A,
         "0".to_owned(),
     )));
-    shell.update(Message::Settings(settings_pane::Message::BackgroundChannelSubmit(
+    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelSubmit(
         BackgroundChannel::A,
     )));
 
@@ -110,7 +110,7 @@ fn checkerboard_toggle_never_touches_the_raw_export_rgba() {
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("frame がある");
 
-    shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
+    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
 
     let after = shell
         .frame_rgba()
@@ -141,10 +141,10 @@ fn checkerboard_toggle_changes_the_screenshot_pixels_on_default_opaque_backgroun
     // `Shell::new()` は `refresh_frame` をまだ呼んでいない(`frame` が `None`)まま
     // — ここで初回描画を済ませておかないと、次の `screenshot::render` の差分が
     // 「市松の効果」ではなく「frame が None→Some になっただけ」を拾ってしまう。
-    shell.update(Message::FlushDrops);
+    let _ = shell.update(Message::FlushDrops);
 
     let without = screenshot::render(&shell).into_raw();
-    shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
+    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
     let with = screenshot::render(&shell).into_raw();
 
     assert_ne!(
@@ -170,14 +170,14 @@ fn checkerboard_toggle_does_not_touch_the_raw_export_rgba_when_background_is_opa
     // — `update` を1回通してフレームを立てておく(`Message::FlushDrops` は
     // `pending_drops` が空なら何も変えない、`new_fixture` が `refresh_frame` を
     // 明示的に呼ぶのと同じ理由)。
-    shell.update(Message::FlushDrops);
+    let _ = shell.update(Message::FlushDrops);
 
     let without = shell
         .frame_rgba()
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("frame がある");
 
-    shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
+    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
 
     let with = shell
         .frame_rgba()
@@ -199,12 +199,12 @@ fn checkerboard_toggle_does_not_touch_the_raw_export_rgba_when_background_is_opa
 #[test]
 fn checkerboard_toggle_changes_the_screenshot_pixels_when_background_is_transparent() {
     let mut shell = shell();
-    shell.update(Message::Settings(settings_pane::Message::BackgroundPreset(BackgroundPreset::Transparent)));
+    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundPreset(BackgroundPreset::Transparent)));
     let background = shell.composition().expect("comp がある").background;
     assert_eq!(background, [0.0, 0.0, 0.0, 0.0], "Transparent プリセットが反映されていない");
 
     let without = screenshot::render(&shell).into_raw();
-    shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
+    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
     let with = screenshot::render(&shell).into_raw();
 
     assert_ne!(
@@ -219,7 +219,7 @@ fn settings_panel_toggle_is_purely_a_view_flag() {
     let mut shell = shell();
     let layers_before = shell.layer_count();
 
-    shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
+    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
     assert_eq!(
         shell.layer_count(),
         layers_before,
@@ -231,8 +231,8 @@ fn settings_panel_toggle_is_purely_a_view_flag() {
     );
 
     // トグルなので、もう一度で元に戻る(座学的だが「トグル」の定義そのもの)。
-    shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
-    shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
+    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
+    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
     // 3回押した = 開いている状態のはず。ここでは直接の可視 API が無いので
     // view() が panic しないことだけ見る(Q0 の他の柵が widget 単位の検分を担う)。
     let _ = shell.view();

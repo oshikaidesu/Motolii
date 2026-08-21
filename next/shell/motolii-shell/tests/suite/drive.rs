@@ -16,12 +16,12 @@ fn adding_a_layer_shows_up_and_undo_takes_it_back() {
     let mut shell = shell();
     assert_eq!(shell.layer_count(), 0);
 
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     assert_eq!(shell.layer_count(), 1, "layer を足しても増えない");
 
     // **1操作 = 1 Undo**。`AddLayer` は内部では AddLayer + SetMeta の2 intent だが、
     // 利用者から見れば1操作なので Undo 1回で消えなければならない(M10)。
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert_eq!(
         shell.layer_count(),
         0,
@@ -33,7 +33,7 @@ fn adding_a_layer_shows_up_and_undo_takes_it_back() {
 #[test]
 fn rejection_reaches_the_status_band() {
     let mut shell = shell();
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert_eq!(
         shell.status(),
         Some("これ以上戻せない"),
@@ -41,18 +41,18 @@ fn rejection_reaches_the_status_band() {
     );
 
     // 次の操作で理由が消えること(古い理由が居座らない)。
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     assert_eq!(shell.status(), None);
 }
 
 #[test]
 fn frame_cache_follows_revision_and_playhead() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let first = shell.frame_token().expect("frame");
 
     // 同じ入力なら描き直さない。
-    shell.update(Message::Select(motolii_store::LayerId(1)));
+    let _ = shell.update(Message::Select(motolii_store::LayerId(1)));
     assert_eq!(
         shell.frame_token(),
         Some(first.clone()),
@@ -60,7 +60,7 @@ fn frame_cache_follows_revision_and_playhead() {
     );
 
     // 再生位置が動いたら描き直す。
-    shell.update(Message::ScrubTo(10));
+    let _ = shell.update(Message::ScrubTo(10));
     assert_ne!(
         shell.frame_token(),
         Some(first.clone()),
@@ -70,7 +70,7 @@ fn frame_cache_follows_revision_and_playhead() {
     // undo で Document が戻ったら描き直す(store 世代は変わらないので
     // `revision()` が edit 位置も見ていないとここが落ちる)。
     let scrubbed = shell.frame_token().expect("frame");
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert_ne!(
         shell.frame_token(),
         Some(scrubbed),
@@ -109,14 +109,14 @@ fn dropping_a_video_puts_a_layer_on_the_stage() {
     let mut shell = shell();
     let before = shell.frame_token();
 
-    shell.update(Message::AdmitPaths(vec![video]));
+    let _ = shell.update(Message::AdmitPaths(vec![video]));
 
     assert_eq!(shell.layer_count(), 1, "落とした素材が layer にならない");
     assert_eq!(shell.status(), None, "受理できたのに拒否理由が出ている");
     assert_ne!(shell.frame_token(), before, "Stage が描き直されていない");
 
     // 1操作 = 1 undo
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert_eq!(shell.layer_count(), 0, "落とした分が Undo 1回で消えない");
 }
 
@@ -130,7 +130,7 @@ fn unopenable_files_are_rejected_with_a_reason() {
     std::fs::write(&junk, b"hello").unwrap();
 
     let mut shell = shell();
-    shell.update(Message::AdmitPaths(vec![junk]));
+    let _ = shell.update(Message::AdmitPaths(vec![junk]));
 
     assert_eq!(shell.layer_count(), 0, "開けない物を layer にしてしまった");
     let status = shell.status().expect("拒否理由が出ていない = M2 違反");
@@ -175,14 +175,14 @@ fn three_drops_become_one_operation() {
 
     let mut shell = shell();
     for path in paths {
-        shell.update(Message::DropReceived(path));
+        let _ = shell.update(Message::DropReceived(path));
     }
     assert_eq!(shell.layer_count(), 0, "区切りが来る前に取り込んでいる");
 
-    shell.update(Message::FlushDrops);
+    let _ = shell.update(Message::FlushDrops);
     assert_eq!(shell.layer_count(), 3, "3本とも入っていない");
 
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert_eq!(shell.layer_count(), 0, "3本の取り込みが Undo 1回で消えない");
 }
 
@@ -194,9 +194,9 @@ fn three_drops_become_one_operation() {
 #[test]
 fn timeline_rows_reflect_layer_count_and_selection() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
-    shell.update(Message::AddLayer);
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
 
     let rows = shell.timeline_rows();
     assert_eq!(rows.len(), 3, "層3枚の行が立たない");
@@ -214,7 +214,7 @@ fn timeline_rows_reflect_layer_count_and_selection() {
     );
 
     let target = rows[0].id;
-    shell.update(Message::Select(target));
+    let _ = shell.update(Message::Select(target));
 
     let rows = shell.timeline_rows();
     let selected: Vec<_> = rows
@@ -340,17 +340,17 @@ fn timeline_hit_test_distinguishes_bar_ruler_and_blank_row() {
 #[test]
 fn lane_bar_mute_toggle_flips_hidden_and_undoes_in_one_step() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
     assert!(!shell.timeline_rows()[0].hidden, "初期状態が hidden であってはいけない");
 
-    shell.update(Message::Timeline(timeline_pane::Message::ToggleMute(id)));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::ToggleMute(id)));
     assert!(
         shell.timeline_rows()[0].hidden,
         "M glyph クリックで hidden が反転しない"
     );
 
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert!(
         !shell.timeline_rows()[0].hidden,
         "Undo 1回で hidden が元に戻らない(1操作=1undo、M10違反)"
@@ -363,10 +363,10 @@ fn lane_bar_mute_toggle_flips_hidden_and_undoes_in_one_step() {
 #[test]
 fn lane_bar_lock_blocks_other_writes_with_a_reason_but_unlock_always_wins() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
 
-    shell.update(Message::Timeline(timeline_pane::Message::ToggleLock(id)));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::ToggleLock(id)));
     assert!(shell.timeline_rows()[0].locked, "L glyph クリックで locked にならない");
     assert_eq!(
         shell.status(),
@@ -374,7 +374,7 @@ fn lane_bar_lock_blocks_other_writes_with_a_reason_but_unlock_always_wins() {
         "locked 自身の設定は常に通るはずなのに拒否理由が出ている"
     );
 
-    shell.update(Message::Timeline(timeline_pane::Message::ToggleMute(id)));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::ToggleMute(id)));
     assert!(
         !shell.timeline_rows()[0].hidden,
         "locked な行への M(hidden)書き込みが通ってしまっている"
@@ -384,7 +384,7 @@ fn lane_bar_lock_blocks_other_writes_with_a_reason_but_unlock_always_wins() {
         "locked な行への拒否が status 帯に出ていない(M13: 無反応ゼロ違反)"
     );
 
-    shell.update(Message::Timeline(timeline_pane::Message::ToggleSolo(id)));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::ToggleSolo(id)));
     assert!(
         !shell.timeline_rows()[0].solo,
         "locked な行への S(solo)書き込みが通ってしまっている"
@@ -395,7 +395,7 @@ fn lane_bar_lock_blocks_other_writes_with_a_reason_but_unlock_always_wins() {
     );
 
     // 解除(locked 自身の書き込み)だけは常に通る — 二度と触れなくなる詰みを作らない。
-    shell.update(Message::Timeline(timeline_pane::Message::ToggleLock(id)));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::ToggleLock(id)));
     assert!(
         !shell.timeline_rows()[0].locked,
         "locked の解除が locked な行自身の操作なのに拒否されている"
@@ -439,26 +439,26 @@ fn clip_face_source_no_longer_references_the_layer_name() {
 #[test]
 fn dragging_a_clip_body_moves_it_and_undoes_in_one_step() {
     let mut shell = shell();
-    shell.update(Message::ScrubTo(50));
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::ScrubTo(50));
+    let _ = shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
     assert_eq!(shell.timeline_rows()[0].start, 50);
 
-    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::Body,
         at_frame: 50,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
         at_frame: 30,
         px_per_frame: 1.0,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
 
     assert_eq!(shell.timeline_rows()[0].start, 30, "本体ドラッグで start が動いていない");
     assert_eq!(shell.status(), None, "動いただけなのに拒否理由が出ている");
 
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert_eq!(
         shell.timeline_rows()[0].start,
         50,
@@ -471,23 +471,23 @@ fn dragging_a_clip_body_moves_it_and_undoes_in_one_step() {
 #[test]
 fn escape_during_a_clip_drag_leaves_history_completely_untouched() {
     let mut shell = shell();
-    shell.update(Message::ScrubTo(50));
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::ScrubTo(50));
+    let _ = shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
 
     let can_undo_before = shell.can_undo();
     let can_redo_before = shell.can_redo();
 
-    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::Body,
         at_frame: 50,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
         at_frame: 10,
         px_per_frame: 1.0,
     }));
-    shell.update(Message::EscapePressed);
+    let _ = shell.update(Message::EscapePressed);
 
     assert_eq!(
         shell.can_undo(),
@@ -503,7 +503,7 @@ fn escape_during_a_clip_drag_leaves_history_completely_untouched() {
 
     // 掴んだままのボタンで release が来ても、Esc で drag state は既に空 —
     // 何も起きない(二重確定の防止)。
-    shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
     assert_eq!(shell.timeline_rows()[0].start, 50);
     assert_eq!(shell.can_undo(), can_undo_before);
 }
@@ -512,21 +512,21 @@ fn escape_during_a_clip_drag_leaves_history_completely_untouched() {
 #[test]
 fn right_click_during_a_clip_drag_cancels_it_just_like_escape() {
     let mut shell = shell();
-    shell.update(Message::ScrubTo(50));
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::ScrubTo(50));
+    let _ = shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
     let can_undo_before = shell.can_undo();
 
-    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::Body,
         at_frame: 50,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
         at_frame: 10,
         px_per_frame: 1.0,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragCancelled));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragCancelled));
 
     assert_eq!(shell.can_undo(), can_undo_before);
     assert_eq!(shell.timeline_rows()[0].start, 50);
@@ -536,17 +536,17 @@ fn right_click_during_a_clip_drag_cancels_it_just_like_escape() {
 #[test]
 fn grabbing_without_moving_and_releasing_writes_nothing() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
     let start_before = shell.timeline_rows()[0].start;
     let can_undo_before = shell.can_undo();
 
-    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::Body,
         at_frame: start_before,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
 
     assert_eq!(shell.timeline_rows()[0].start, start_before);
     assert_eq!(
@@ -561,21 +561,21 @@ fn grabbing_without_moving_and_releasing_writes_nothing() {
 #[test]
 fn trimming_the_in_edge_moves_only_the_start_and_keeps_the_end_fixed() {
     let mut shell = shell();
-    shell.update(Message::ScrubTo(50));
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::ScrubTo(50));
+    let _ = shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
     let original_end = shell.timeline_rows()[0].start + shell.timeline_rows()[0].duration;
 
-    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::EdgeIn,
         at_frame: 50,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
         at_frame: 80,
         px_per_frame: 1.0,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
 
     let row = &shell.timeline_rows()[0];
     assert_eq!(row.start, 80, "trim In で start が動いていない");
@@ -585,7 +585,7 @@ fn trimming_the_in_edge_moves_only_the_start_and_keeps_the_end_fixed() {
         "trim In で end が動いてしまっている(固定のはず)"
     );
 
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert_eq!(shell.timeline_rows()[0].start, 50, "Undo 1回で戻らない");
 }
 
@@ -593,21 +593,21 @@ fn trimming_the_in_edge_moves_only_the_start_and_keeps_the_end_fixed() {
 #[test]
 fn trimming_the_out_edge_moves_only_the_end_and_keeps_the_start_fixed() {
     let mut shell = shell();
-    shell.update(Message::ScrubTo(50));
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::ScrubTo(50));
+    let _ = shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
     let original_start = shell.timeline_rows()[0].start;
 
-    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::EdgeOut,
         at_frame: 299,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
         at_frame: 250,
         px_per_frame: 1.0,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
 
     let row = &shell.timeline_rows()[0];
     assert_eq!(
@@ -622,47 +622,47 @@ fn trimming_the_out_edge_moves_only_the_end_and_keeps_the_start_fixed() {
 #[test]
 fn dragging_near_the_playhead_snaps_to_it_and_command_disables_snapping() {
     let mut shell = shell();
-    shell.update(Message::ScrubTo(50));
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::ScrubTo(50));
+    let _ = shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
     // clip 作成後に playhead を動かす — 0秒/終端とは別の、はっきりした候補にする。
-    shell.update(Message::ScrubTo(20));
+    let _ = shell.update(Message::ScrubTo(20));
 
     // px_per_frame == 1.0(1px=1frame)。raw target は 50+(25-50)=25、playhead(20)
     // との画面距離は5px(<= SNAP_PX=7px)なので吸着するはず。
-    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::Body,
         at_frame: 50,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
         at_frame: 25,
         px_per_frame: 1.0,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
     assert_eq!(
         shell.timeline_rows()[0].start,
         20,
         "playhead 近傍で吸着していない"
     );
 
-    shell.update(Message::Undo); // 50 へ戻す
+    let _ = shell.update(Message::Undo); // 50 へ戻す
 
     // 同じ操作でも、ドラッグ中に Cmd を押していればスナップは一時的に無効
     // (正典 §2・裁定151)。
-    shell.update(Message::KeyboardModifiersChanged(
+    let _ = shell.update(Message::KeyboardModifiersChanged(
         iced::keyboard::Modifiers::COMMAND,
     ));
-    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::Body,
         at_frame: 50,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
         at_frame: 25,
         px_per_frame: 1.0,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
     assert_eq!(
         shell.timeline_rows()[0].start,
         25,
@@ -675,12 +675,12 @@ fn dragging_near_the_playhead_snaps_to_it_and_command_disables_snapping() {
 #[test]
 fn grabbing_a_locked_clip_is_refused_with_a_reason() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let id = shell.timeline_rows()[0].id;
-    shell.update(Message::Timeline(timeline_pane::Message::ToggleLock(id)));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::ToggleLock(id)));
     let start_before = shell.timeline_rows()[0].start;
 
-    shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::BarGrabbed{
         layer: id,
         part: BarPart::Body,
         at_frame: start_before,
@@ -690,11 +690,11 @@ fn grabbing_a_locked_clip_is_refused_with_a_reason() {
         "ロック中の掴みが理由つきで拒否されていない(M13: 無反応ゼロ違反)"
     );
 
-    shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragMoved{
         at_frame: start_before + 10,
         px_per_frame: 1.0,
     }));
-    shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::DragReleased));
     assert_eq!(
         shell.timeline_rows()[0].start,
         start_before,

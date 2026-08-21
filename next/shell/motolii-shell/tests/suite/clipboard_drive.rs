@@ -17,17 +17,17 @@ fn shell() -> Shell {
 #[test]
 fn copy_then_paste_adds_one_layer_and_undoes_in_one_step() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     assert_eq!(shell.layer_count(), 1);
 
-    shell.update(Message::CopyLayer);
+    let _ = shell.update(Message::CopyLayer);
     assert_eq!(shell.status(), None, "Copy で Document を触っていない=拒否は出ないはず");
 
-    shell.update(Message::PasteLayer);
+    let _ = shell.update(Message::PasteLayer);
     assert_eq!(shell.status(), None, "Paste が拒否されている: {:?}", shell.status());
     assert_eq!(shell.layer_count(), 2, "Paste で layer が増えていない");
 
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert_eq!(
         shell.layer_count(),
         1,
@@ -39,11 +39,11 @@ fn copy_then_paste_adds_one_layer_and_undoes_in_one_step() {
 #[test]
 fn paste_selects_the_new_layer() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let original = shell.session().selection.expect("AddLayer は選択する");
 
-    shell.update(Message::CopyLayer);
-    shell.update(Message::PasteLayer);
+    let _ = shell.update(Message::CopyLayer);
+    let _ = shell.update(Message::PasteLayer);
 
     let after = shell.session().selection.expect("Paste は選択する");
     assert_ne!(after, original, "Paste 後も元の layer が選ばれたまま");
@@ -54,10 +54,10 @@ fn paste_selects_the_new_layer() {
 #[test]
 fn cut_removes_the_layer_and_undoes_in_one_step() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     assert_eq!(shell.layer_count(), 1);
 
-    shell.update(Message::CutLayer);
+    let _ = shell.update(Message::CutLayer);
     assert_eq!(shell.status(), None, "Cut が拒否されている: {:?}", shell.status());
     assert_eq!(shell.layer_count(), 0, "Cut で layer が消えていない");
     assert!(
@@ -65,7 +65,7 @@ fn cut_removes_the_layer_and_undoes_in_one_step() {
         "切り取った layer をまだ選んだままにしている"
     );
 
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert_eq!(
         shell.layer_count(),
         1,
@@ -77,11 +77,11 @@ fn cut_removes_the_layer_and_undoes_in_one_step() {
 #[test]
 fn cut_then_paste_restores_a_copy_of_the_layer() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
-    shell.update(Message::CutLayer);
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::CutLayer);
     assert_eq!(shell.layer_count(), 0);
 
-    shell.update(Message::PasteLayer);
+    let _ = shell.update(Message::PasteLayer);
     assert_eq!(shell.status(), None, "Cut 後の Paste が拒否されている: {:?}", shell.status());
     assert_eq!(shell.layer_count(), 1, "Cut した中身が Paste で戻ってこない");
 }
@@ -91,12 +91,12 @@ fn cut_then_paste_restores_a_copy_of_the_layer() {
 #[test]
 fn cut_on_a_locked_layer_is_rejected_with_a_reason_and_does_not_touch_the_clipboard() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let layer = shell.session().selection.expect("AddLayer は選択する");
-    shell.update(Message::Timeline(timeline_pane::Message::ToggleLock(layer)));
+    let _ = shell.update(Message::Timeline(timeline_pane::Message::ToggleLock(layer)));
     assert_eq!(shell.status(), None, "lock 自体は常に通るはず");
 
-    shell.update(Message::CutLayer);
+    let _ = shell.update(Message::CutLayer);
     assert!(
         shell.status().is_some(),
         "locked layer の Cut が理由なく通っている(M13 違反)"
@@ -104,7 +104,7 @@ fn cut_on_a_locked_layer_is_rejected_with_a_reason_and_does_not_touch_the_clipbo
     assert_eq!(shell.layer_count(), 1, "locked layer が切り取れてしまっている");
 
     // クリップボードも書き換わっていないことを、Paste が空を理由に拒否することで確かめる。
-    shell.update(Message::PasteLayer);
+    let _ = shell.update(Message::PasteLayer);
     assert_eq!(
         shell.status(),
         Some("クリップボードが空"),
@@ -117,19 +117,19 @@ fn cut_on_a_locked_layer_is_rejected_with_a_reason_and_does_not_touch_the_clipbo
 #[test]
 fn duplicate_adds_a_layer_selects_it_and_undoes_in_one_step_without_touching_the_clipboard() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let original = shell.session().selection.expect("AddLayer は選択する");
 
     // 先に別の layer を Copy しておき、Duplicate がそれを上書きしないことを確かめる。
-    shell.update(Message::CopyLayer);
+    let _ = shell.update(Message::CopyLayer);
 
-    shell.update(Message::DuplicateLayer);
+    let _ = shell.update(Message::DuplicateLayer);
     assert_eq!(shell.status(), None, "Duplicate が拒否されている: {:?}", shell.status());
     assert_eq!(shell.layer_count(), 2, "Duplicate で layer が増えていない");
     let duplicated = shell.session().selection.expect("Duplicate は選択する");
     assert_ne!(duplicated, original, "複製後に増えた方を選んでいない");
 
-    shell.update(Message::Undo);
+    let _ = shell.update(Message::Undo);
     assert_eq!(
         shell.layer_count(),
         1,
@@ -137,7 +137,7 @@ fn duplicate_adds_a_layer_selects_it_and_undoes_in_one_step_without_touching_the
     );
 
     // クリップボードは Copy(original)のままのはず — Paste すれば original の複製が出る。
-    shell.update(Message::PasteLayer);
+    let _ = shell.update(Message::PasteLayer);
     assert_eq!(shell.status(), None, "Duplicate 後もクリップボードが生きているはず");
     assert_eq!(shell.layer_count(), 2);
 }
@@ -148,12 +148,12 @@ fn duplicate_adds_a_layer_selects_it_and_undoes_in_one_step_without_touching_the
 #[test]
 fn select_all_selects_every_present_layer() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
-    shell.update(Message::AddLayer);
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     assert_eq!(shell.layer_count(), 3);
 
-    shell.update(Message::SelectAllLayers);
+    let _ = shell.update(Message::SelectAllLayers);
     let mut selected = shell.session().selected_layers.clone();
     selected.sort();
     assert_eq!(selected, vec![LayerId(1), LayerId(2), LayerId(3)]);
@@ -167,11 +167,11 @@ fn select_all_selects_every_present_layer() {
 #[test]
 fn deselect_all_clears_both_single_and_multi_selection() {
     let mut shell = shell();
-    shell.update(Message::AddLayer);
-    shell.update(Message::SelectAllLayers);
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::SelectAllLayers);
     assert!(!shell.session().selected_layers.is_empty());
 
-    shell.update(Message::DeselectAllLayers);
+    let _ = shell.update(Message::DeselectAllLayers);
     assert!(shell.session().selected_layers.is_empty());
     assert!(shell.session().selection.is_none());
 }

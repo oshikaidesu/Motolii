@@ -20,7 +20,7 @@ use motolii_shell::{stage, Message, Shell};
 /// 「絵が変わる」を確かめる (b) には、位置に応じて画素が変わる中身が要る。
 fn shell() -> Shell {
     let mut shell = Shell::new().0;
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     shell
 }
 
@@ -56,7 +56,7 @@ fn b_observing_transitions_to_some_and_changes_the_displayed_frame() {
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("既定でも frame がある");
 
-    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
+    let _ = shell.update(Message::Stage(stage::Message::Observe(zoomed())));
 
     assert_eq!(shell.observation(), Some(zoomed()), "observation が Some になっていない");
     let observed = shell
@@ -84,10 +84,10 @@ fn c_reset_to_render_camera_returns_to_none_and_the_export_rgba_round_trips() {
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("既定でも frame がある");
 
-    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
+    let _ = shell.update(Message::Stage(stage::Message::Observe(zoomed())));
     assert!(shell.observation().is_some());
 
-    shell.update(Message::Stage(stage::Message::ResetToRenderCamera));
+    let _ = shell.update(Message::Stage(stage::Message::ResetToRenderCamera));
 
     assert_eq!(shell.observation(), None, "カメラへ戻るはずが observation が残っている");
     assert!(
@@ -116,7 +116,7 @@ fn d_frame_rgba_stays_the_render_camera_picture_while_observing() {
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("frame がある");
 
-    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
+    let _ = shell.update(Message::Stage(stage::Message::Observe(zoomed())));
 
     let while_observing = shell
         .frame_rgba()
@@ -139,8 +139,8 @@ fn observing_never_touches_the_document_or_undo_history() {
     let can_undo_before = shell.can_undo();
     let layer_count_before = shell.layer_count();
 
-    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
-    shell.update(Message::Stage(stage::Message::ResetToRenderCamera));
+    let _ = shell.update(Message::Stage(stage::Message::Observe(zoomed())));
+    let _ = shell.update(Message::Stage(stage::Message::ResetToRenderCamera));
 
     assert_eq!(shell.can_undo(), can_undo_before, "観測カメラが undo 履歴を汚した");
     assert_eq!(shell.layer_count(), layer_count_before, "観測カメラが Document を書き換えた");
@@ -154,13 +154,13 @@ fn observing_never_touches_the_document_or_undo_history() {
 #[test]
 fn repeating_the_same_observation_keeps_the_displayed_pixels_stable() {
     let mut shell = shell();
-    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
+    let _ = shell.update(Message::Stage(stage::Message::Observe(zoomed())));
     let first = shell
         .observation_rgba()
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("観測中は observation_rgba があるはず");
 
-    shell.update(Message::Stage(stage::Message::Observe(zoomed())));
+    let _ = shell.update(Message::Stage(stage::Message::Observe(zoomed())));
     let second = shell
         .observation_rgba()
         .map(|(w, h, px)| (w, h, px.to_vec()))

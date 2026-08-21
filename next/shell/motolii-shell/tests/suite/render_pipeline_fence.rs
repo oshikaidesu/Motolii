@@ -41,7 +41,7 @@ fn idle_messages_do_not_recreate_the_stage_handle() {
     metrics::reset();
 
     let mut shell = Shell::new().0;
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let after_first_edit = metrics::handle_creations();
     assert!(
         after_first_edit >= 1,
@@ -51,8 +51,8 @@ fn idle_messages_do_not_recreate_the_stage_handle() {
     // Document も playhead も動かさない Message を10回連打する
     // (旧発注書が名指しした容疑者: 無関係な Message で Handle が作り直されないか)。
     for _ in 0..10 {
-        shell.update(Message::Select(motolii_store::LayerId(1)));
-        shell.update(Message::FlushDrops); // pending_drops は空 — 何もしないはず
+        let _ = shell.update(Message::Select(motolii_store::LayerId(1)));
+        let _ = shell.update(Message::FlushDrops); // pending_drops は空 — 何もしないはず
     }
 
     assert_eq!(
@@ -70,12 +70,12 @@ fn scrubbing_creates_exactly_one_handle_per_distinct_frame() {
     metrics::reset();
 
     let mut shell = Shell::new().0;
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let before = metrics::handle_creations();
 
     let frames = [1, 5, 12, 40, 41, 100];
     for &frame in &frames {
-        shell.update(Message::ScrubTo(frame));
+        let _ = shell.update(Message::ScrubTo(frame));
     }
 
     assert_eq!(
@@ -134,18 +134,18 @@ fn idle_observation_does_not_recreate_the_stage_handle() {
     metrics::reset();
 
     let mut shell = Shell::new().0;
-    shell.update(Message::AddLayer);
+    let _ = shell.update(Message::AddLayer);
     let camera = ObservationCamera {
         pan: [40.0, -15.0],
         zoom: 1.8,
     };
-    shell.update(Message::Stage(stage::Message::Observe(camera)));
+    let _ = shell.update(Message::Stage(stage::Message::Observe(camera)));
     let after_observe = metrics::handle_creations();
     assert!(after_observe >= 1, "観測カメラへ入っても一度も描かれていない");
 
     // 同じ値をもう一度送る — アイドル相当。
     for _ in 0..5 {
-        shell.update(Message::Stage(stage::Message::Observe(camera)));
+        let _ = shell.update(Message::Stage(stage::Message::Observe(camera)));
     }
     assert_eq!(
         metrics::handle_creations(),
@@ -155,7 +155,7 @@ fn idle_observation_does_not_recreate_the_stage_handle() {
 
     // 値を変えれば作り直す(鍵が本当に効いていることの裏付け — 変化を
     // 検知できないだけの「常に return」になっていないか)。
-    shell.update(Message::Stage(stage::Message::Observe(ObservationCamera {
+    let _ = shell.update(Message::Stage(stage::Message::Observe(ObservationCamera {
         pan: [40.0, -15.0],
         zoom: 2.5,
     })));
@@ -175,7 +175,7 @@ fn scrubbing_through_the_fixture_never_exceeds_the_upload_budget() {
 
     let mut shell = Shell::new_fixture().0;
     for frame in [0, 300, 510, 900, 1500, 1799] {
-        shell.update(Message::ScrubTo(frame));
+        let _ = shell.update(Message::ScrubTo(frame));
         let handle_bytes = metrics::last_handle_bytes();
         assert!(
             handle_bytes < ICED_SYNC_UPLOAD_BUDGET_BYTES,
