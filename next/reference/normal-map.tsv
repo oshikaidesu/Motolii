@@ -842,9 +842,9 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 841	misc	Extend selection to next layer	次レイヤーまで選択拡張	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	timeline-grammar §8.1 FocusRowPrev/Next 正。未実装
 842	misc	Extend selection to previous item	前項目まで選択範囲を拡張	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	841と同根拠
 843	misc	Extend selection to previous layer	前レイヤーまで選択拡張	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	841と同根拠
-844	misc	Fast Previews > Draft	高速プレビュー:ドラフト	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
-845	misc	Fast Previews > Fast Draft	高速プレビュー:ファストドラフト	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
-846	misc	Fast Previews > Off	高速プレビュー:オフ	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+844	misc	Fast Previews > Draft	高速プレビュー:ドラフト	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	RB調査(2026-08-22): 理論条件は実在(ソース帯域律速・r1実測)だが実プロジェクト分布未測+現capは高速路を無効化するバグあり(要修理) — probe後に再判定
+845	misc	Fast Previews > Fast Draft	高速プレビュー:ファストドラフト	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	RB調査(2026-08-22): 理論条件は実在(ソース帯域律速・r1実測)だが実プロジェクト分布未測+現capは高速路を無効化するバグあり(要修理) — probe後に再判定
+846	misc	Fast Previews > Off	高速プレビュー:オフ	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	RB調査(2026-08-22): 理論条件は実在(ソース帯域律速・r1実測)だが実プロジェクト分布未測+現capは高速路を無効化するバグあり(要修理) — probe後に再判定
 847	misc	File…	プロキシファイルを指定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 848	misc	Filters	フィルター適用	0	0	0	1	1	1:0:0:0	公式		採用済	B2で種別フィルタとして実装(2026-08-22、rail/filter shelf)
 849	misc	Fit to Fill	尺に合わせて挿入	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし(gapless前提ではない自由配置と両立可)
@@ -1145,8 +1145,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1144	preferences	Preferences / Settings (entry point)	環境設定を開く入口	0	1	1	1	3	2:1:0:1	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF);公式(原文: "Click Settings in the upper-right corner of the screen")		採用済	next/shell ToggleSettingsPanel実装済み(settings_pane.rs)
 1145	preferences	Keyboard Shortcuts (editor)	キーボードショートカットのカスタマイズ画面	1	1	0	0	2	2:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe)		採用予定	裁定146でkeymap層による再割当方針は決定済みだが実装は未(lib.rsコメント「keymap層が無い今だけ直結」)
 1146	preferences	Advanced	特殊構成向け詳細設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
-1147	preferences	All Memory	全メモリを消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
-1148	preferences	All Memory & Disk Cache…	メモリとディスクキャッシュを全消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1147	preferences	All Memory	全メモリを消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
+1148	preferences	All Memory & Disk Cache…	メモリとディスクキャッシュを全消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
 1149	preferences	Allow Scripts to Write Files and Access Network	スクリプトによるファイル書込・ネットワークアクセスを許可	1	0	0	0	1	0:0:0:1	公式(Adobe)		不採用	裁定6: 拡張の口はtrait1本。スクリプトのファイル書込/ネットワークアクセス許可は別の口が前提
 1150	preferences	Appearance	UI外観・ラベル/マスクのハイライト色設定	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	token/theme機構は実装済み(裁定142)だがGUI設定パネルは未
 1151	preferences	Appearance	UIの明るさ・コントラストなど外観設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
@@ -1157,7 +1157,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1156	preferences	Audio Plugins	VSTエフェクト/外部音声処理設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		不採用	GOALS要らないもの「VST互換」(利用者確認2026-08-20、KNOWN.md記載)。VSTエフェクト設定そのもの
 1157	preferences	Auto Save	自動保存の間隔設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
 1158	preferences	Auto-Save	自動保存の間隔と保持世代数	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
-1159	preferences	Cache size / clear cache	キャッシュ容量表示・削除(プロジェクト/メディア自体は消えない)	0	0	0	1	1	0:0:0:1	単一(個別ページ未直接取得。WebSearch要約経由のため信頼度中)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1159	preferences	Cache size / clear cache	キャッシュ容量表示・削除(プロジェクト/メディア自体は消えない)	0	0	0	1	1	0:0:0:1	単一(個別ページ未直接取得。WebSearch要約経由のため信頼度中)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
 1160	preferences	Camera Raw	カメラメーカー別RAWデコード設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)	out-of-domain?	不採用	領域外: プロカメラRAWデコード設定(製品固有深部機能、ffmpegサイドカー経路の対象外、既flag)
 1161	preferences	Capture and Playback	デッキ設定/キャプチャ/プレイアウト	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		不採用	領域外: 放送デッキのキャプチャ/プレイアウト設定(プロ入出力機材)
 1162	preferences	Collaboration	共同編集関連設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
@@ -1181,7 +1181,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1180	preferences	Graphics	グラフィック関連の初期設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
 1181	preferences	Grid & Guides	グリッド色・サイズ、ガイド色、セーフマージン(Action Safe / Title Safe / Center-Cut)	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	裁定155で明示: Stageのグリッド/セーフマージン等カメラビュー系UIも回収対象
 1182	preferences	Hardware decoding / encoding toggle	ハードウェアデコード/エンコード高速化	0	0	0	1	1	0:0:0:1	単一(同上)		採用予定	既決との衝突なし
-1183	preferences	Image Cache Memory	画像キャッシュメモリを消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1183	preferences	Image Cache Memory	画像キャッシュメモリを消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
 1184	preferences	Image Scaling	入力/出力の画像スケーリング方式	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1185	preferences	Import	静止画の既定表示時間、埋め込みアルファの扱い、ドラッグ&ドロップ読み込みの挙動	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
 1186	preferences	Internet Accounts	クラウド/動画共有サービスのログイン連携	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
@@ -1192,12 +1192,12 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1191	preferences	Language	UI表示言語切替	0	0	0	1	1	0:0:0:1	公式(原文: "Go to the General > Language tab")		採用予定	既決との衝突なし
 1192	preferences	Master Settings	タイムライン形式/ビデオモニタリング/最適化メディア/作業フォルダ	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1193	preferences	Media	静止画スケーリング・プロキシ設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
-1194	preferences	Media & Disk Cache	キャッシュ・メディアフォルダの場所、Enable Disk Cache、Maximum Disk Cache Size、Enable Compressed Frames等	1	0	0	0	1	0:0:0:1	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
-1195	preferences	Media Cache	メディアキャッシュファイルの自動削除設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1194	preferences	Media & Disk Cache	キャッシュ・メディアフォルダの場所、Enable Disk Cache、Maximum Disk Cache Size、Enable Compressed Frames等	1	0	0	0	1	0:0:0:1	公式(Adobe)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
+1195	preferences	Media Cache	メディアキャッシュファイルの自動削除設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
 1196	preferences	Media Storage	メディアストレージの登録フォルダ管理	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
-1197	preferences	Memory	Premiere Proへ割り当てるRAM量の設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
-1198	preferences	Memory & Multiprocessing	メモリ割当・マルチフレームレンダリング・他アプリ用CPU予約	1	0	0	0	1	0:0:0:1	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
-1199	preferences	Memory and GPU	システムメモリ上限/GPU処理モード/GPU選択	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1197	preferences	Memory	Premiere Proへ割り当てるRAM量の設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
+1198	preferences	Memory & Multiprocessing	メモリ割当・マルチフレームレンダリング・他アプリ用CPU予約	1	0	0	0	1	0:0:0:1	公式(Adobe)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
+1199	preferences	Memory and GPU	システムメモリ上限/GPU処理モード/GPU選択	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
 1200	preferences	Metadata	メタデータプリセットのカスタム項目	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1201	preferences	Output	出力時のファイル分割、既定ファイル名/フォルダの使用可否	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
 1202	preferences	Path Mapping	パスマッピング/プロジェクトメディア所在地	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
@@ -1205,7 +1205,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1204	preferences	Playback Settings	UIオーバーレイ非表示/パフォーマンスモード	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1205	preferences	Previews	プレビュー全般の設定(オーディオプレビュー長、適応解像度品質、ハードウェアアクセラレーション等)	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	裁定21のproxy/quality方針と直結
 1206	preferences	Project Save and Load	自動保存/ライブセーブ/バックアップ設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	GOALS M11
-1207	preferences	Purge All Memory	全メモリをパージ	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1207	preferences	Purge All Memory	全メモリをパージ	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
 1208	preferences	Show Scripting Progress Dialog	スクリプト実行中の進捗ダイアログを表示	1	0	0	0	1	0:0:0:1	公式(Adobe)		不採用	裁定6: 拡張の口はtrait1本
 1209	preferences	Show Warning Banner When Project Contains Expression Errors	エクスプレッションエラー時に警告バナー表示	1	0	0	0	1	0:0:0:1	公式(Adobe)		拡張	裁定175: vism抽象化候補・拡張として戸を残す(expression勢力は実在) — コアには入れない
 1210	preferences	Subtitles and Transcription	字幕プリセット/文字起こし言語	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
@@ -1234,7 +1234,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1233	project	Close Project	プロジェクトを閉じる	0	1	0	0	1	1:0:0:0	二次(premiere全体注記)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
 1234	project	Display…	モーションパス等の表示設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
 1235	project	General…	その他一般設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
-1236	project	Media & Disk Cache…	メディア・ディスクキャッシュ設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1236	project	Media & Disk Cache…	メディア・ディスクキャッシュ設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
 1237	project	Memory & Multiprocessing…	メモリ・マルチプロセス設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
 1238	project	New project = Ctrl+N	新規プロジェクト	0	0	0	1	1	0:1:0:0	一致(2件)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
 1239	project	Output…	出力時の既定動作設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
