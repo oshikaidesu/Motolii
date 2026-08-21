@@ -2,9 +2,10 @@
 //! ボタン(`Message::ToggleSettingsPanel`)でトグルする。
 //!
 //! **Inspector と同じ列グリッド/tokens 流儀**(発注書)を踏襲する — 見出し帯は
-//! `inspector_pane::section_header` をそのまま再利用し、数値欄の枠色ロールは
-//! `inspector_pane::value_input_style` を、ボタンの意味色ロールは
-//! `crate::button_style` を共有する(2箇所で別の意匠を発明しない)。
+//! `chrome::section_header` をそのまま再利用し、数値欄の枠色ロールは
+//! `chrome::value_input_style` を、ボタンの意味色ロールは
+//! `chrome::button_style` を共有する(2箇所で別の意匠を発明しない、裁定160
+//! 切片5で `inspector_pane`/`lib.rs` から `chrome` へ吸い上げ済み)。
 //!
 //! **書ける物を持たない**(他 pane と同じ制約): [`view`] は `&Composition`・
 //! 下書き・`bool`・`Dimensions`・`Colors` しか受け取らない。書き口は
@@ -37,9 +38,9 @@ use iced::{Element, Length};
 
 use motolii_store::Composition;
 
-use crate::inspector_pane::{section_header, value_input_style};
+use crate::chrome::{button_style, section_header, value_input_style};
 use crate::tokens::{Colors, Dimensions};
-use crate::{button_style, Message};
+use crate::Message;
 
 // ---------------------------------------------------------------------------
 // 背景色
@@ -115,7 +116,7 @@ pub fn preset_rgba(preset: BackgroundPreset) -> [f32; 4] {
 /// 数値入力欄の文字列 → 0..255 にクランプした値。読めなければ `None`
 /// (`crate::Shell::commit_background_channel` が status 帯へ理由を出す)。
 pub fn parse_channel_u8(text: &str) -> Option<f32> {
-    crate::inspector_pane::parse_number(text).map(|value| value.clamp(0.0, 255.0) as f32)
+    crate::chrome::parse_number(text).map(|value| value.clamp(0.0, 255.0) as f32)
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +126,7 @@ pub fn parse_channel_u8(text: &str) -> Option<f32> {
 /// 入力文字列(%) → 50..200 にクランプ・1%刻みに丸めた `ui_scale`(1.00基準)。
 /// 読めなければ `None`。
 pub fn parse_ui_scale_percent(text: &str) -> Option<f32> {
-    crate::inspector_pane::parse_number(text).map(|value| {
+    crate::chrome::parse_number(text).map(|value| {
         let clamped_percent = value.clamp(50.0, 200.0).round();
         (clamped_percent / 100.0) as f32
     })

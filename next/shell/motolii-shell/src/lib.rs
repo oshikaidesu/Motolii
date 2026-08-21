@@ -22,6 +22,7 @@ use motolii_store::{
     LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, StoreView, Value,
 };
 
+mod chrome;
 pub mod clipboard;
 pub mod fixture;
 pub mod inspector_pane;
@@ -43,6 +44,7 @@ pub use motolii_tokens_rs as tokens;
 /// `tests/suite/*.rs`)を壊さないための re-export。
 pub use timeline as timeline_pane;
 
+use chrome::{button_style, parse_number};
 use inspector_pane::{FieldDraft, TransformField};
 use settings_pane::{BackgroundChannel, BackgroundFieldDraft, BackgroundPreset};
 
@@ -1004,7 +1006,7 @@ impl Shell {
         let Some(layer) = self.session.selection else {
             return;
         };
-        let Some(input) = inspector_pane::parse_number(&draft.text) else {
+        let Some(input) = parse_number(&draft.text) else {
             self.status = Some(format!("数値として読めない: {}", draft.text));
             return;
         };
@@ -2757,30 +2759,5 @@ fn status_band<'a>(
         .into()
 }
 
-/// header の3ボタン共通スタイル。**意味色ロール経由**(raw 値の直書き禁止) —
-/// hover/pressed/disabled をそれぞれ別ロールで塗り分ける(状態: hover・選択・無効)。
-/// `pub(crate)`: `settings_pane` のプリセット/市松トグルボタンも同じ意味色
-/// ロールを使う — 状態ごとに専用の色を新設しない。
-pub(crate) fn button_style(dims: Dimensions, colors: Colors, status: button::Status) -> button::Style {
-    let background = match status {
-        button::Status::Hovered => colors.surface_hover,
-        button::Status::Pressed => colors.state_selected,
-        button::Status::Disabled => colors.surface_panel,
-        button::Status::Active => colors.surface_raised,
-    };
-    let text_color = if status == button::Status::Disabled {
-        colors.state_disabled
-    } else {
-        colors.text_primary
-    };
-    button::Style {
-        background: Some(iced::Background::Color(background)),
-        text_color,
-        border: iced::Border {
-            color: colors.border_default,
-            width: dims.border_width,
-            radius: 0.0.into(),
-        },
-        ..button::Style::default()
-    }
-}
+// `button_style` は裁定160 切片5(pane split survey §2.4/§6)で
+// `chrome::button_style` へ移設した(純粋な再配置・挙動ゼロ変更)。

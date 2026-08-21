@@ -53,6 +53,7 @@ use motolii_store::{
     StoreView, Value,
 };
 
+use crate::chrome::{section_header, value_input_style};
 use crate::tokens::{Colors, Dimensions, Ink, TextWeight};
 use crate::{Message, Session};
 
@@ -141,12 +142,6 @@ pub fn single_hold_track(value: Value) -> KeyframeTrack {
         spatial: None,
     });
     track
-}
-
-/// 入力文字列 → 数値。mock(`inspector-library.html`)は負号に `−`(U+2212)を使うので
-/// 両対応する。
-pub fn parse_number(text: &str) -> Option<f64> {
-    text.trim().replace('\u{2212}', "-").parse::<f64>().ok()
 }
 
 pub fn format_number(value: f64, decimals: usize) -> String {
@@ -764,32 +759,8 @@ fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'static, Messa
     bordered_row(content.into(), dims, colors.border_default)
 }
 
-/// `pub(crate)`: `settings_pane` も同じ見出し帯(パネルタイトル/section 見出し
-/// 共通トークン)を再利用する — 2箇所で別の意匠を発明しない。
-pub(crate) fn section_header(
-    label: &'static str,
-    dims: Dimensions,
-    colors: Colors,
-) -> Element<'static, Message> {
-    // `.width(Length::Fill)`: `header` と同じ理由(柵で発見) — mock の `.sec` も
-    // block 要素で pane 全幅の帯(実測: 修正前は幅 65〜68px)。
-    //
-    // **背景は塗らない**(裁定137/139、2026-08-21 更正): mock `.sec` は
-    // `background`/`border` のどちらも持たない — 見出しは letter-spacing +
-    // ink3(`text_muted`)+ 行高だけで区別する(旧実装は `surface_app` で塗って
-    // 「面色の塗り分けで区切る」を犯していた — TRANSFORM/APPEARANCE/ATTRS の
-    // 帯が周囲の `.prow` 行と違う沈んだ色の箱に見えていたのが実体)。
-    container(
-        text(label)
-            .size(dims.caption_text)
-            .color(Ink::Muted.resolve(&colors)),
-    )
-    .width(Length::Fill)
-    .height(Length::Fixed(dims.inspector_section_header_height))
-    .padding([0.0, dims.spacing_m])
-    .align_y(iced::alignment::Vertical::Center)
-    .into()
-}
+// `section_header` は裁定160 切片5(pane split survey §2.4/§6)で
+// `chrome::section_header` へ移設した(純粋な再配置・挙動ゼロ変更)。
 
 /// 発注書の固定列グリッド `Property | X | Y | Z | Key` = `1fr + 3×value幅 + hit`。
 /// scalar 行(Opacity)は mock どおり3列目(Z の位置)へ値を置き、残り2列は
@@ -1079,30 +1050,8 @@ fn name_input_style(dims: Dimensions, colors: Colors, status: text_input::Status
     }
 }
 
-/// `pub(crate)`: `settings_pane` の数値欄(背景RGBA・ui_scale%)も同じ枠色
-/// ロールを使う — 2箇所で別の意匠を発明しない。
-pub(crate) fn value_input_style(
-    dims: Dimensions,
-    colors: Colors,
-    status: text_input::Status,
-) -> text_input::Style {
-    let border_color = match status {
-        text_input::Status::Focused { .. } => colors.action_active,
-        _ => colors.border_default,
-    };
-    text_input::Style {
-        background: iced::Background::Color(colors.surface_app),
-        border: iced::Border {
-            color: border_color,
-            width: dims.border_width,
-            radius: 0.0.into(),
-        },
-        icon: colors.text_muted,
-        placeholder: colors.text_muted,
-        value: colors.text_primary,
-        selection: colors.action_active,
-    }
-}
+// `value_input_style` は裁定160 切片5(pane split survey §2.4/§6)で
+// `chrome::value_input_style` へ移設した(純粋な再配置・挙動ゼロ変更)。
 
 /// **ATTRS**: mock 断片には対応が無い行(Blend)だけ残す — Name は ident 帯へ、
 /// Hidden は M glyph へ移した(重複 chrome を残さない、supervisor 訂正 2026-08-20)。
@@ -1157,6 +1106,12 @@ fn hint_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // `parse_number` は裁定160 切片5(pane split survey §2.4/§6)で
+    // `chrome::parse_number` へ関数本体を移設した(settings_pane →
+    // inspector_pane の import をゼロにするため)。テストの qualified name
+    // (`inspector_pane::tests::parse_number_accepts_the_mock_minus_sign`)は
+    // `--list` 完全一致のためここに残す — 呼ぶ本体だけ移設先を指す。
+    use crate::chrome::parse_number;
 
     // -----------------------------------------------------------------------
     // 裁定139: value_cell/name_field は縦0を維持したまま横だけ内余白を戻す
