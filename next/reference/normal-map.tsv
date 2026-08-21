@@ -78,30 +78,30 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 77	blend_mode	Classic Difference	差(クラシック)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 78	blend_mode	Cycle through blending modes	ブレンドモードを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 79	blend_mode	Dancing Dissolve	ダンシングディゾルブ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-80	blend_mode	Darken	比較(暗)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-81	blend_mode	Difference	差	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+80	blend_mode	Darken	比較(暗)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	BL3(2026-08-22)で実装完了 — compositor 2枚読みWGSL(W3C 3.6節)+engine変換表+Inspector巡回13値、golden/数値oracle付き(merge 118cdbf4)
+81	blend_mode	Difference	差	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	BL3(2026-08-22)で実装完了 — compositor 2枚読みWGSL(W3C 3.6節)+engine変換表+Inspector巡回13値、golden/数値oracle付き(merge 118cdbf4)
 82	blend_mode	Dissolve	ディゾルブ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 83	blend_mode	Divide	除算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-84	blend_mode	Exclusion	除外	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-85	blend_mode	Hard Light	ハードライト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+84	blend_mode	Exclusion	除外	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	BL3(2026-08-22)で実装完了 — compositor 2枚読みWGSL(W3C 3.6節)+engine変換表+Inspector巡回13値、golden/数値oracle付き(merge 118cdbf4)
+85	blend_mode	Hard Light	ハードライト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	BL3(2026-08-22)で実装完了 — compositor 2枚読みWGSL(W3C 3.6節)+engine変換表+Inspector巡回13値、golden/数値oracle付き(merge 118cdbf4)
 86	blend_mode	Hard Mix	ハードミックス	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 87	blend_mode	Hue	色相	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-88	blend_mode	Lighten	比較(明)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+88	blend_mode	Lighten	比較(明)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	BL3(2026-08-22)で実装完了 — compositor 2枚読みWGSL(W3C 3.6節)+engine変換表+Inspector巡回13値、golden/数値oracle付き(merge 118cdbf4)
 89	blend_mode	Linear Burn	焼き込み(リニア)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 90	blend_mode	Linear Dodge	覆い焼き(リニア)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 91	blend_mode	Linear Light	リニアライト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 92	blend_mode	Luminescent Premul	光有りプリマル	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 93	blend_mode	Luminosity	輝度	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-94	blend_mode	Multiply	乗算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+94	blend_mode	Multiply	乗算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	BL3(2026-08-22)で実装完了 — compositor 2枚読みWGSL(W3C 3.6節)+engine変換表+Inspector巡回13値、golden/数値oracle付き(merge 118cdbf4)
 95	blend_mode	Next Blending Mode	次のブレンドモードへ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 96	blend_mode	Normal	通常	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	motolii-compositor::BlendMode::Normal(engine translate_blend_mode)
-97	blend_mode	Overlay	オーバーレイ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+97	blend_mode	Overlay	オーバーレイ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	BL3(2026-08-22)で実装完了 — compositor 2枚読みWGSL(W3C 3.6節)+engine変換表+Inspector巡回13値、golden/数値oracle付き(merge 118cdbf4)
 98	blend_mode	Pin Light	ピンライト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 99	blend_mode	Saturation	彩度	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-100	blend_mode	Screen	スクリーン	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+100	blend_mode	Screen	スクリーン	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	BL3(2026-08-22)で実装完了 — compositor 2枚読みWGSL(W3C 3.6節)+engine変換表+Inspector巡回13値、golden/数値oracle付き(merge 118cdbf4)
 101	blend_mode	Silhouette Alpha	シルエットアルファ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 102	blend_mode	Silhouette Luma	シルエット輝度	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-103	blend_mode	Soft Light	ソフトライト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+103	blend_mode	Soft Light	ソフトライト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	BL3(2026-08-22)で実装完了 — compositor 2枚読みWGSL(W3C 3.6節)+engine変換表+Inspector巡回13値、golden/数値oracle付き(merge 118cdbf4)
 104	blend_mode	Stencil Alpha	ステンシルアルファ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 105	blend_mode	Stencil Luma	ステンシル輝度	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 106	blend_mode	Subtract	減算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
@@ -359,8 +359,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 358	color	Classic Color Burn	焼き込みカラー(クラシック)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	Lottie 0..15に無いAE/Photoshop拡張blend variant。不採用決定なし、後回しの位置づけ(裁定67「Add/HardMixは後回し」と同型)
 359	color	Classic Color Dodge	覆い焼きカラー(クラシック)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	Lottie 0..15に無いAE/Photoshop拡張blend variant。不採用決定なし、後回しの位置づけ(裁定67「Add/HardMixは後回し」と同型)
 360	color	Color	カラー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	next/core/motolii-store/src/attrs.rs の BlendMode enum に実装済み(裁定67 Lottie 0..15)(Color=BlendMode::Color)
-361	color	Color Burn	焼き込みカラー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	next/core/motolii-store/src/attrs.rs の BlendMode enum に実装済み(裁定67 Lottie 0..15)(Color Burn=BlendMode::ColorBurn)
-362	color	Color Dodge	覆い焼きカラー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	next/core/motolii-store/src/attrs.rs の BlendMode enum に実装済み(裁定67 Lottie 0..15)(Color Dodge=BlendMode::ColorDodge)
+361	color	Color Burn	焼き込みカラー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	next/core/motolii-store/src/attrs.rs の BlendMode enum に実装済み(裁定67 Lottie 0..15)(Color Burn=BlendMode::ColorBurn) / BL3(2026-08-22)で compositor/engine 配線まで完了(enum 存在だけでなく実描画、merge 118cdbf4)
+362	color	Color Dodge	覆い焼きカラー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	next/core/motolii-store/src/attrs.rs の BlendMode enum に実装済み(裁定67 Lottie 0..15)(Color Dodge=BlendMode::ColorDodge) / BL3(2026-08-22)で compositor/engine 配線まで完了(enum 存在だけでなく実描画、merge 118cdbf4)
 363	color	Color Overlay	カラーオーバーレイ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	レイヤースタイルは裁定71で全部不採用(effectと同じ画の正本が2つになるため)
 364	color	Darker Color	カラー比較(暗)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	Lottie 0..15に無いAE/Photoshop拡張blend variant。不採用決定なし、後回しの位置づけ(裁定67「Add/HardMixは後回し」と同型)
 365	color	Default Version	Command+U	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		不採用	カラーグレーディングスイート級(Resolveノードカラーページの版管理/ノード操作そのもの)。領域外(裁定154/155の除外基準)
@@ -1142,7 +1142,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1141	playback	Turn snapping to grid on or off	グリッドスナップ切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 1142	playback	Turn snapping to guides on or off	ガイドスナップ切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 1143	playback	Use Optimized Media if Available	最適化メディア使用	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
-1144	preferences	Preferences / Settings (entry point)	環境設定を開く入口	0	1	1	1	3	2:1:0:1	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF);公式(原文: "Click Settings in the upper-right corner of the screen")		採用済	next/shell ToggleSettingsPanel実装済み(settings_pane.rs)
+1144	preferences	Preferences / Settings (entry point)	環境設定を開く入口	0	1	1	1	3	2:1:0:1	"二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF);公式(原文: ""Click Settings in the upper-right corner of the screen"")"		採用済	next/shell ToggleSettingsPanel実装済み(settings_pane.rs)
 1145	preferences	Keyboard Shortcuts (editor)	キーボードショートカットのカスタマイズ画面	1	1	0	0	2	2:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe)		採用予定	裁定146でkeymap層による再割当方針は決定済みだが実装は未(lib.rsコメント「keymap層が無い今だけ直結」)
 1146	preferences	Advanced	特殊構成向け詳細設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1147	preferences	All Memory	全メモリを消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
@@ -1189,7 +1189,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1188	preferences	Keyboard Customization	ショートカットプリセット選択とカスタムマッピング	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	1187と同根拠
 1189	preferences	Labels	ラベル色とその割当の設定	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
 1190	preferences	Labels	ラベル色・既定ラベルの設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
-1191	preferences	Language	UI表示言語切替	0	0	0	1	1	0:0:0:1	公式(原文: "Go to the General > Language tab")		採用予定	既決との衝突なし
+1191	preferences	Language	UI表示言語切替	0	0	0	1	1	0:0:0:1	"公式(原文: ""Go to the General > Language tab"")"		採用予定	既決との衝突なし
 1192	preferences	Master Settings	タイムライン形式/ビデオモニタリング/最適化メディア/作業フォルダ	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1193	preferences	Media	静止画スケーリング・プロキシ設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
 1194	preferences	Media & Disk Cache	キャッシュ・メディアフォルダの場所、Enable Disk Cache、Maximum Disk Cache Size、Enable Compressed Frames等	1	0	0	0	1	0:0:0:1	公式(Adobe)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定
@@ -1308,7 +1308,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1307	text	Toggle paragraph composer	段落コンポーザ切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	段落コンポーザ切替は行分割器の実装方式選択(1276-1278と同束)
 1308	text	Tracking	トラッキング(字送り)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	tracking実装済み(1264/1265と同一機構)
 1309	text	Turn All Caps on or off	すべて大文字切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	全文字大文字化(text-transform)は未実装
-1310	text	Turn Small Caps on or off	スモールキャップ切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	TextStyleFeature{tag:"smcp"} 実装済み(裁定99 OpenType feature置き場)
+1310	text	Turn Small Caps on or off	スモールキャップ切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	"TextStyleFeature{tag:""smcp""} 実装済み(裁定99 OpenType feature置き場)"
 1311	text	Turn Subscript on or off	下付き文字切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	上付き/下付き文字は未実装(baseline-shift不採用の裁定93と関連するが、OpenType feature側での実現余地あり)
 1312	text	Turn Superscript on or off	上付き文字切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	上付き/下付き文字は未実装(baseline-shift不採用の裁定93と関連するが、OpenType feature側での実現余地あり)
 1313	text	Wiggly	ウィグリーセレクタ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	Wiggly SelectorはRange Selectorとは別のセレクタ種別で未実装(裁定75は1アニメーター=セレクタ1個をRange Selectorとして実装済みのみ)
@@ -1332,7 +1332,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1331	timeline	Enable/Disable Video Tracks	映像トラック有効/無効	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 1332	timeline	Find Current Timeline in Media Pool	Media Poolで現在タイムラインを探す	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 1333	timeline	Find in Timeline panel	Timelineパネル内検索	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
-1334	timeline	Group clips = Ctrl+G(droidcrunch記載、他NLE用語との混同疑い)	クリップをグループ化	0	0	0	1	1	0:1:0:0	単一(要検証、FCP/Premiere用語"compound clip"混入の疑い)		採用予定	
+1334	timeline	Group clips = Ctrl+G(droidcrunch記載、他NLE用語との混同疑い)	クリップをグループ化	0	0	0	1	1	0:1:0:0	"単一(要検証、FCP/Premiere用語""compound clip""混入の疑い)"		採用予定	
 1335	timeline	Increase Video Track Height	ビデオトラック高を拡大	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	
 1336	timeline	Join Clip	クリップ結合	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 1337	timeline	Linked Move Across Tracks	トラック横断リンク移動	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
