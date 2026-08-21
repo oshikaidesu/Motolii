@@ -40,6 +40,15 @@
 //! `SelectAllLayers`/`DeselectAllLayers` の8本を、右寄せのショートカット表記
 //! つきでそのまま `on_press` へぶら下げるだけ(意味の複製ゼロ)。
 //!
+//! ## G1(裁定174「意図優先の原則」、2026-08-22 追加)
+//!
+//! `GroupLayers`/`UngroupLayers`(⌘G/⌘⇧G)を同じ形でこの Edit メニューへ足した
+//! — 独立した "Layer" トップレベル(調査が触れる MB-2)はまだ無いので、Cut/
+//! Copy/Duplicate と同じく layer 束の動詞として Edit に同居させる。上と同じ
+//! S6 併存(shortcut が正の入口、メニューは第3の発見用入口)、新しい
+//! `Message` はやはり増やさない(`Document::group_layers`/`ungroup_layers`
+//! doc 参照)。
+//!
 //! File 等の他トップレベルは本切片では**構造だけの予約をしない**(空メニューを
 //! 出さない)── 実装された束から順に現れる方針(MB-1 の一部、New Project/
 //! Save As 等は rfd 裁定待ち、調査 §6 EVIDENCE_GAP 1)。
@@ -81,6 +90,13 @@ fn items() -> Vec<Item> {
             shortcut: "Cmd+Shift+A",
             message: Message::DeselectAllLayers,
         }, // id 433
+        // G1(裁定174、normal-map id 無し — H3「Parent column」の置換動詞)。
+        Item { label: "Group", shortcut: "Cmd+G", message: Message::GroupLayers },
+        Item {
+            label: "Ungroup",
+            shortcut: "Cmd+Shift+G",
+            message: Message::UngroupLayers,
+        },
     ]
 }
 

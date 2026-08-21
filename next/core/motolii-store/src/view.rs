@@ -889,6 +889,15 @@ impl<'a> StoreView<'a> {
         ))
     }
 
+    /// [`Self::local_placement_transform`] の外部公開口(裁定174 G1)。
+    ///
+    /// Ungroup が「Group の変換を子ローカルへ焼き込む」際に使う — 計算ロジックは
+    /// ここで複製せず、H1 の正本をそのまま呼ぶだけ(`Document::ungroup_layers` が
+    /// この口経由で group/子それぞれの local `Affine2` を読む、単一源)。
+    pub fn local_transform(&self, layer: LayerId, t: RationalTime) -> Result<glam::Affine2, StoreError> {
+        self.local_placement_transform(layer, t)
+    }
+
     /// この layer の**world(comp 空間)アフィン** = 親の world アフィン × 自分の
     /// local アフィン(裁定173 H1、キーフレームは各ノードローカルのまま・**合成だけが
     /// 再帰**という利用者仮説の実装形)。旧世界 `crates/motolii-doc/src/

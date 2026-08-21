@@ -176,3 +176,36 @@ fn all_eight_wired_verbs_appear_with_their_shortcut_and_publish_their_message() 
         );
     }
 }
+
+/// G1(裁定174、2026-08-22 追加)の Group/Ungroup が同じ Edit dropdown に
+/// 現れ、クリックで対応する `Message` を出す — 上の8項目テストと同型
+/// (`Group`/`Ungroup` は header ボタンの文言と重ならないので期待件数は常に1)。
+#[test]
+fn group_and_ungroup_appear_with_their_shortcut_and_publish_their_message() {
+    let mut shell = Shell::new().0;
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::ToggleEditMenu);
+
+    let targets = collect_targets(shell.view());
+    for (label, shortcut) in [("Group", "Cmd+G"), ("Ungroup", "Cmd+Shift+G")] {
+        assert_eq!(
+            text_targets(&targets, label).len(),
+            1,
+            "dropdown 項目 {label:?} が Target として見えない: {targets:?}"
+        );
+        assert_eq!(
+            text_targets(&targets, shortcut).len(),
+            1,
+            "dropdown 項目 {label:?} のショートカット表記 {shortcut:?} が見えない"
+        );
+    }
+
+    let group_target = text_targets(&targets, "Group");
+    let point = center(group_target[0]);
+    let messages = click_at(shell.view(), point);
+    assert_eq!(messages.len(), 1, "Group 項目クリックが期待どおり1件の Message を出さない: {messages:?}");
+    assert!(
+        matches!(messages[0], Message::GroupLayers),
+        "Group 項目クリックが GroupLayers 以外を出している: {messages:?}"
+    );
+}

@@ -158,6 +158,8 @@ pub fn build() -> Fixture {
     let mut logo_id = None;
     let mut vocal_id = None;
     let mut waveform_id = None;
+    let mut dance_id = None;
+    let mut glitch_id = None;
 
     for (index, spec) in LAYERS.iter().enumerate() {
         let id = LayerId((index + 1) as u64);
@@ -199,6 +201,8 @@ pub fn build() -> Fixture {
             "タイトルロゴ" => logo_id = Some(id),
             "メインボーカル映像" => vocal_id = Some(id),
             "波形ビジュアライザ" => waveform_id = Some(id),
+            "ダンスカット" => dance_id = Some(id),
+            "グリッチトランジション" => glitch_id = Some(id),
             _ => {}
         }
     }
@@ -357,6 +361,24 @@ pub fn build() -> Fixture {
     });
 
     doc.apply_all(intents).expect("fixture を1操作として置ける");
+
+    // 親子例(G1、裁定174 の H2 実証用): 「グリッチトランジション」の parent を
+    // 「ダンスカット」にする — H2 ツリー行(depth/has_children)が fixture 上で
+    // 検分できる最小の例。**新しい layer は増やさない**(`Intent::SetAttrs` の
+    // 既存 parent 口を使うだけ — 15層という他試験の前提を崩さない、
+    // `tests/suite/fixture.rs`/`render_pipeline_fence.rs` の層数15固定 oracle
+    // 参照)。`Document::group_layers`(実際に Group 層を生む G1 の動詞そのもの)
+    // は shell/store 双方の drive 試験(`tests/suite/group_drive.rs`・
+    // `motolii-store/tests/group_ungroup.rs`)が別途検分している。
+    let dance_id = dance_id.expect("ダンスカット layer がある");
+    doc.apply(Intent::SetAttrs {
+        layer: glitch_id.expect("グリッチトランジション layer がある"),
+        patch: LayerAttrsPatch {
+            parent: Some(Some(dance_id)),
+            ..Default::default()
+        },
+    })
+    .expect("親子例を置ける");
 
     // 既定 fixture は「編集」ではないので Undo で消えてはいけない
     // (`Shell::new` の既定 comp と同じ扱い)。

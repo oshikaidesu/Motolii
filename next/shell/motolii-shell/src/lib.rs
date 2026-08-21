@@ -391,6 +391,20 @@ pub enum Message {
     /// 選択を全解除する(正典: 空白クリックと同義のキーボード入口)。
     DeselectAllLayers,
 
+    // ---- G1 グループ化動詞(裁定174「意図優先の原則」) ----
+    // キーは Cmd+G/Cmd+Shift+G(`resolve_navigation_key` へ配線済み)。parent
+    // ポインタを直接編集する UI(H3、廃止)ではなく、「グループを作る/解除する」
+    // という意図の動詞だけを露出する(`Document::group_layers`/
+    // `ungroup_layers` doc 参照)。
+    /// ⌘G。`Session::selected_layers` を新しい `LayerSource::Group` layer の
+    /// 子へ束ねる。1 `apply_all` = 1 undo。空選択は no-op。成功したら Group
+    /// 自身を選ぶ(AE 同型、裁定174 選択規則)。
+    GroupLayers,
+    /// ⌘⇧G。選択に含まれる `LayerSource::Group` layer を解除する(Group でない
+    /// 選択は無視)。子の world 位置は保存される(`Document::ungroup_layers`
+    /// の焼き込み)。解除後は旧子らを選ぶ(裁定174 選択規則)。
+    UngroupLayers,
+
     // ---- Edit メニュー(M-menu MB-0+Edit、`menu.rs` 冒頭 doc 参照) ----
     /// header の "Edit" トリガー開閉。**表示専用の view flag**
     /// (`settings_panel_open` と同格 — Document にも undo 履歴にも乗らない)。
@@ -881,6 +895,8 @@ impl Shell {
             Message::DuplicateLayer => self.duplicate_layer(),
             Message::SelectAllLayers => self.select_all_layers(),
             Message::DeselectAllLayers => self.deselect_all_layers(),
+            Message::GroupLayers => self.group_selected_layers(),
+            Message::UngroupLayers => self.ungroup_selected_layers(),
             // M-menu MB-0+Edit: header "Edit" トリガーの開閉トグル。
             // `settings_panel_open` と同格の表示専用状態(Document 非依存)。
             Message::ToggleEditMenu => self.edit_menu_open = !self.edit_menu_open,
@@ -994,6 +1010,46 @@ impl Shell {
     fn deselect_all_layers(&mut self) {
         self.session.selection = None;
         self.session.selected_layers.clear();
+    }
+
+    // ---- G1 グループ化動詞(裁定174) ----
+
+    /// ⌘G。`selected_layers` は `select_single`/`select_all_layers` が常に
+    /// `selection` と同期させているので(単一選択でも `[layer]` が入っている)、
+    /// ここ1本を選択の正本として読めばよい。空選択は no-op(status も出さない
+    /// — 動詞が意味を持たない状態なので「拒否」ではない)。成功したら
+    /// Group 自身を選ぶ(AE 同型、裁定174 選択規則)。
+    fn group_selected_layers(&mut self) {
+        if self.session.selected_layers.is_empty() {
+            return;
+        }
+        match self.doc.group_layers(&self.session.selected_layers.clone()) {
+            Ok(Some(group)) => self.select_single(group),
+            Ok(None) => {}
+            // 拒否は必ず出す(M13: 無反応ゼロ) — locked な layer が選択に
+            // 混じっていた場合、`Document::group_layers` の `Intent::SetAttrs`
+            // 柵がバッチ全体を `Err` にする。
+            Err(error) => self.status = Some(format!("layer をグループ化できない: {error}")),
+        }
+    }
+
+    /// ⌘⇧G。選択に含まれる `LayerSource::Group` layer だけを解除する(Group
+    /// でない選択は `Document::ungroup_layers` が黙って飛ばす)。解除後は
+    /// 旧子らを選ぶ(裁定174 選択規則) — 1層だけなら `select_single` と同型、
+    /// 複数なら Select All と同型(単一 focus は持たない)。
+    fn ungroup_selected_layers(&mut self) {
+        if self.session.selected_layers.is_empty() {
+            return;
+        }
+        match self.doc.ungroup_layers(&self.session.selected_layers.clone()) {
+            Ok(children) if children.is_empty() => {}
+            Ok(children) if children.len() == 1 => self.select_single(children[0]),
+            Ok(children) => {
+                self.session.selected_layers = children;
+                self.session.selection = None;
+            }
+            Err(error) => self.status = Some(format!("グループを解除できない: {error}")),
+        }
     }
 
     /// 落ちてきた path を素材として受ける。
@@ -1715,6 +1771,15 @@ impl Shell {
 
     pub fn layer_count(&self) -> usize {
         self.doc.view().layers().len()
+    }
+
+    /// `StoreView` をそのまま返す(読むだけ)。**運転席の検分器具用**
+    /// (`layer_count`/`composition` と同じ「運転席が見るための口」の1つ) —
+    /// G1(裁定174)の ungroup 数値証明(`tests/suite/group_drive.rs`)が
+    /// `resolve()`/`local_transform()` を直接叩くのに使う。`view` という名前は
+    /// 既に `Shell::view() -> Element` が使っているので `store_view` にした。
+    pub fn store_view(&self) -> StoreView<'_> {
+        self.doc.view()
     }
 
     fn comp_duration(&self) -> i64 {
@@ -3389,6 +3454,14 @@ pub fn resolve_navigation_key(
         }
         Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("a") => {
             Some(Message::DeselectAllLayers)
+        }
+        // ---- G1 グループ化動詞(裁定174)。Undo/Redo・SelectAll/DeselectAll と
+        // 同じ Shift 振り分けの形(既定割当は仮、上の注記どおり)。
+        Key::Character(c) if modifiers.command() && !modifiers.shift() && c.eq_ignore_ascii_case("g") => {
+            Some(Message::GroupLayers)
+        }
+        Key::Character(c) if modifiers.command() && modifiers.shift() && c.eq_ignore_ascii_case("g") => {
+            Some(Message::UngroupLayers)
         }
         // Play/Pause(A2、正典 §2 拘束5)。`captured`(text_input 入力中)なら
         // 上の早期returnで既に弾かれている — typing 中の Space は普通の

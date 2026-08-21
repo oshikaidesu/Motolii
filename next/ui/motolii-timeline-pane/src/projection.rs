@@ -1059,4 +1059,45 @@ mod tree_tests {
         let out = rows(&doc.view(), &session);
         assert!(!out.iter().any(|r| r.id == ghost), "消えたLayerIdの行が出てしまっている");
     }
+
+    /// 裁定174 G1(グループ化動詞)の実証: `fixture()` は「Group は今回のスコープ
+    /// 外(H1)」と当時は注記していたが、G1 着地により `LayerSource::Group` を
+    /// 実際の親として使える。`Document::group_layers`(既存 Intent の合成)で
+    /// 組んだ Group が、H2 のツリー行へ**改造なしで**そのまま乗ることを見る
+    /// — projection.rs 自身は G1 のために1行も変わっていない(裁定174 doc の
+    /// 「H2 のツリー行が自動反映するはず」を直接確かめる)。
+    #[test]
+    fn a_group_layers_group_shows_up_as_a_tree_parent_with_no_projection_changes() {
+        let mut doc = doc_with_comp();
+        let (a, b, sibling) = (LayerId(1), LayerId(2), LayerId(3));
+        place(&mut doc, a, 0, 100);
+        place(&mut doc, b, 0, 100);
+        place(&mut doc, sibling, 0, 100);
+
+        let group = doc
+            .group_layers(&[a, b])
+            .expect("グループ化できる")
+            .expect("非空選択なので Group が必ず生まれる");
+        assert_eq!(doc.view().meta(group).unwrap().unwrap().source, LayerSource::Group);
+
+        let session = Session::default();
+        let out = rows(&doc.view(), &session);
+        let ids: Vec<LayerId> = out.iter().map(|r| r.id).collect();
+        // 兄弟は常に LayerId 昇順(`rows()` の doc 参照)。sibling(3) は
+        // group(4)より id が若いので Group より先に並ぶ — Group は最後に
+        // 生まれた layer なので `LayerId` が一番大きい(`next_layer_id` は
+        // 常に最大+1)。
+        assert_eq!(
+            ids,
+            vec![sibling, group, a, b],
+            "Group とその子がツリー行として順どおりに並んでいない"
+        );
+        let group_row = &out[1];
+        assert_eq!(group_row.id, group);
+        assert_eq!(group_row.depth, 0);
+        assert!(group_row.has_children, "Group 行が子持ち矢印を出していない");
+        assert_eq!(out[0].depth, 0, "Group に属さない兄弟が最上位のまま");
+        assert_eq!(out[2].depth, 1, "Group の子が深さ+1になっていない");
+        assert_eq!(out[3].depth, 1);
+    }
 }
