@@ -8,7 +8,7 @@ use iced::{Point, Rectangle, Size};
 
 use super::key_rows;
 use super::lane_bar;
-use super::projection::{frame_at_x, frame_to_x, time_band_segment_frames, RULER_TICK_DIVISIONS};
+use super::projection::{frame_at_x, frame_to_x, tick_steps, time_band_segment_frames};
 use super::TimelinePane;
 
 pub(crate) fn draw(
@@ -209,30 +209,50 @@ pub(crate) fn draw(
     vec![frame.into_geometry()]
 }
 
+/// 小目盛/大目盛の階層(利用者裁定 2026-08-21 夜、`projection::tick_steps` が
+/// 唯一の出典)。旧・全尺 `RULER_TICK_DIVISIONS` 等分を撤去 — 目盛りは常に
+/// 時刻へ絶対整列する(0, step, 2*step, ...)。
+///
+/// 小目盛= 短い線だけ(`border_hairline_weak` 級 — 既存 token のみ、S4)・
+/// ラベル無し(密度が上がるので毎ステップへラベルを置くと読めなくなる)。
+/// 大目盛= 長い線(`border_strong`)+ フレーム番号ラベル(旧実装の踏襲、
+/// NON-GOALS「ルーラーへの timecode 文字」は新設しないという意味なので、
+/// 既存のプレーンなフレーム番号表示はそのまま残す)。
 fn draw_ruler_ticks(pane: &TimelinePane, frame: &mut canvas::Frame, x0: f32, width: f32, height: f32) {
     if pane.duration_frames <= 0 || width <= 0.0 {
         return;
     }
-    for tick in 0..=RULER_TICK_DIVISIONS {
-        let frame_no = (pane.duration_frames - 1).max(0) * tick / RULER_TICK_DIVISIONS;
+    let (minor, major) = tick_steps(pane.fps, pane.duration_frames, width);
+    let last_frame = (pane.duration_frames - 1).max(0);
+    let mut frame_no = 0i64;
+    while frame_no <= last_frame {
+        let is_major = frame_no % major == 0;
         let x = x0 + frame_to_x(frame_no, width, pane.duration_frames);
-        let tick_path = canvas::Path::line(
-            Point::new(x, height - pane.dims.spacing_s),
-            Point::new(x, height),
-        );
+        let top = if is_major {
+            height - pane.dims.spacing_m
+        } else {
+            height - pane.dims.spacing_s
+        };
+        let color = if is_major {
+            pane.colors.border_strong
+        } else {
+            pane.colors.border_hairline_weak
+        };
+        let tick_path = canvas::Path::line(Point::new(x, top), Point::new(x, height));
         frame.stroke(
             &tick_path,
-            canvas::Stroke::default()
-                .with_color(pane.colors.border_strong)
-                .with_width(pane.dims.border_width),
+            canvas::Stroke::default().with_color(color).with_width(pane.dims.border_width),
         );
-        frame.fill_text(canvas::Text {
-            content: frame_no.to_string(),
-            position: Point::new(x + pane.dims.spacing_xs, 0.0),
-            color: pane.colors.text_secondary,
-            size: iced::Pixels(pane.dims.caption_text),
-            ..Default::default()
-        });
+        if is_major {
+            frame.fill_text(canvas::Text {
+                content: frame_no.to_string(),
+                position: Point::new(x + pane.dims.spacing_xs, 0.0),
+                color: pane.colors.text_secondary,
+                size: iced::Pixels(pane.dims.caption_text),
+                ..Default::default()
+            });
+        }
+        frame_no += minor;
     }
 }
 
@@ -257,10 +277,10 @@ fn draw_hairline(
     );
 }
 
-/// 時間方向の明暗リズム(裁定148(1)・正典 §1.6)。区間幅は fps が引ければ
-/// 1秒(Ableton の拍グリッド陰影と同型)、comp が無く fps が引けない時は
-/// ルーラー目盛りと同じ [`RULER_TICK_DIVISIONS`] 分割へ落ちる(新しい
-/// フォールバック規則を増やさない)。奇数番目の区間にだけ
+/// 時間方向の明暗リズム(裁定148(1)・正典 §1.6)。区間幅=**大目盛の周期**
+/// (`projection::tick_steps` の第2要素、利用者裁定 2026-08-21 夜 — 旧・固定
+/// 1秒/`RULER_TICK_DIVISIONS` 等分は撤去。目盛りの階層と同じラダーから出す
+/// ので、明暗帯は常に大目盛と同じ場所で切り替わる)。奇数番目の区間にだけ
 /// `timeline_time_band` の薄い wash を乗せる — 偶数番目は地のまま
 /// (行方向ゼブラと同じ「交互」の言葉遣い)。
 fn draw_time_bands(
@@ -274,7 +294,7 @@ fn draw_time_bands(
     if pane.duration_frames <= 0 || width <= 0.0 || bottom <= top {
         return;
     }
-    let segment_frames = time_band_segment_frames(pane.fps, pane.duration_frames);
+    let segment_frames = time_band_segment_frames(pane.fps, pane.duration_frames, width);
 
     let mut segment_index: i64 = 0;
     let mut start_frame: i64 = 0;

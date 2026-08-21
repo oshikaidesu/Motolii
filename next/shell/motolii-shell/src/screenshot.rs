@@ -717,6 +717,34 @@ pub fn render(shell: &Shell) -> RgbaImage {
         to_rgba(colors.border_default, 1.0),
     );
 
+    // ルーラーの小目盛/大目盛(利用者裁定 2026-08-21 夜、`timeline_pane::
+    // tick_steps` — `timeline/canvas.rs::draw_ruler_ticks` と同じ刻み・追随のみ)。
+    // 文字は描かない(モジュール冒頭 doc の「正直な限界」どおり — フレーム番号
+    // ラベルはフォントラスタライズが要るため見送り)が、線の長さ/強さの差
+    // (小目盛=短く弱い hairline、大目盛=長く強い)だけは既存の描画手段
+    // (`stroke_v`)で再現できるので、階層そのものはこの PNG でも視認できる。
+    if duration_frames > 0 && clip_width > 0.0 {
+        let (minor, major) = timeline_pane::tick_steps(fps, duration_frames, clip_width);
+        let last_frame = (duration_frames - 1).max(0);
+        let mut frame_no: i64 = 0;
+        while frame_no <= last_frame {
+            let is_major = frame_no % major == 0;
+            let x = clip_x0 + timeline_pane::frame_to_x(frame_no, clip_width, duration_frames);
+            // `timeline/canvas.rs::draw_ruler_ticks` と同じ「ルーラー下端から
+            // spacing 分だけ上へ」— 大目盛は spacing_m(長い)、小目盛は
+            // spacing_s(短い)。
+            let offset = if is_major { dims.spacing_m } else { dims.spacing_s };
+            let top = (y + ruler_h - offset).max(y);
+            let color = if is_major {
+                to_rgba(colors.border_strong, 1.0)
+            } else {
+                to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a)
+            };
+            stroke_v(&mut canvas, x, top, y + ruler_h, dims.border_width, color);
+            frame_no += minor;
+        }
+    }
+
     // 明暗のリズム(裁定148・§1.6): 行方向ゼブラ → 時間方向の順に「地」を
     // 重ねる。`timeline_pane.rs::TimelinePane::draw` と同じ token・同じ順序
     // (区切りの手段ではない — 区切りは下の行 hairline が担う)。
@@ -744,7 +772,8 @@ pub fn render(shell: &Shell) -> RgbaImage {
         );
     }
     if duration_frames > 0 && clip_width > 0.0 && rows_bottom > rows_top {
-        let segment_frames = timeline_pane::time_band_segment_frames(fps, duration_frames);
+        let segment_frames =
+            timeline_pane::time_band_segment_frames(fps, duration_frames, clip_width);
         let mut segment_index: i64 = 0;
         let mut start_frame: i64 = 0;
         while start_frame < duration_frames {
