@@ -10,6 +10,7 @@
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
 | **τ: Stage presenter shader 化+tick vsync 整列** | 実装 | worktree(発注時に追記) | 裁定166 の施工 — `lib.rs:2413` image widget 置換(永続テクスチャ・フル解像度復帰・1.5MB 柵撤去)+`transport.rs` tick を `window::frames()` へ。oracle: handle_creations 0・presenter 寸法=comp・PNG 不変 |
+| **φ: 文字の不衝突+文字余白(裁定168 適用第1号)** | 実装 | worktree(発注時に追記) | rail 名前の省略記号切詰(`lane_bar.rs:181` fill_text)+Inspector 値セルの em 余白とセル間 gap。write-set は timeline-pane+inspector-pane のみ(τ と互いに素、shell 触らず) |
 
 ## 完了・main 着地済み(実装)
 
