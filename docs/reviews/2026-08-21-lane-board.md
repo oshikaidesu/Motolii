@@ -9,6 +9,7 @@
 |---|---|---|---|
 | BL1b: fork accessor+線形化 | 実装(cargo・sonnet・**2リポ跨ぎ**) | fork checkout(`~/rust_ae/rerun-s2-seam-20260818` branch motolii/s2-append-to-store)+lane-engine | 裁定161 の実行: `ViewBuilder` へ main_target read accessor 純追加(camera seat 流儀)+`render_sequential` を線形空間 accumulator へ。受入= `#[ignore]` overlap テストの緑化。ローカル検証は `[patch]`(supervisor が検収時に rev pin へ差し替え)。push・rev bump・seam 台帳 commit は supervisor |
 | ι: B1 素材列挙+記帳結線 | 実装(cargo・sonnet) | lane-shell | browser-pane model(assets projection)+shell `AdmitPaths` が台帳へも記帳(配置挙動維持・IO 失敗は status+続行)。oracle= drop 2件→台帳2件・重複 drop 1件のまま |
+| κ: UI 入口台帳調査 | 調査(read-only・sonnet) | main checkout(書き込み禁止) | **S 空間スコア構想(利用者提起 2026-08-21 夜)の土台**: 全操作の種別(a 視界状態/b 対象動詞/c 大域動詞/d セッション既定)・現在の入口・到達性を台帳化+違反3群(入口なし/住所不適合/freq×遠い)+座標寸法の器具化材料。回収後= S 文法(S1 Fitts 到達コスト・S2 工程動線・S3 視覚動線)を品質バーの隣へ正典起草 |
 
 ## 完了・main 着地済み(実装)
 
