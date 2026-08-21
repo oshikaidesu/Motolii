@@ -453,9 +453,9 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 452	edit_basic	Deselect all layers	全レイヤー選択解除	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 453	edit_basic	Duplicate selected items	選択項目を複製	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 454	edit_basic	Duplicate Selection	選択クリップを複製(Fairlight)	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	領域外(Fairlight音声編集固有)不採用 — MVコンポジット製品命題外
-455	edit_basic	Group	グループ化	0	1	0	0	1	1:2:0:0	二次(premiere全体注記)		採用予定	
-456	edit_basic	Group selected shapes	選択シェイプをグループ化	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
-457	edit_basic	Group Shapes	シェイプをグループ化	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+455	edit_basic	Group	グループ化	0	1	0	0	1	1:2:0:0	二次(premiere全体注記)		採用済	G1でグループ化動詞として実装(2026-08-22、⌘G/⌘⇧G・world位置保存・裁定174)
+456	edit_basic	Group selected shapes	選択シェイプをグループ化	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	G1でグループ化動詞として実装(2026-08-22、⌘G/⌘⇧G・world位置保存・裁定174)
+457	edit_basic	Group Shapes	シェイプをグループ化	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	G1でグループ化動詞として実装(2026-08-22、⌘G/⌘⇧G・world位置保存・裁定174)
 458	edit_basic	History	操作履歴	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 459	edit_basic	History	アンドゥ履歴サブメニュー	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 460	edit_basic	Paste layers at current time	現在時刻にレイヤーを貼り付け	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
@@ -466,9 +466,9 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 465	edit_basic	Show Duplicate Frames	重複フレーム表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 466	edit_basic	Undo	アンドゥ履歴を消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 467	edit_basic	Undo = Ctrl+Z / Redo = Ctrl+Shift+Z	取り消し/やり直し	0	0	0	1	1	0:1:0:0	一致(2件)		採用済	Message::Undo/Redo(shell/lib.rs)
-468	edit_basic	Ungroup	グループ解除	0	1	0	0	1	1:2:0:0	二次(premiere全体注記)		採用予定	
-469	edit_basic	Ungroup selected shapes	選択シェイプのグループ解除	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
-470	edit_basic	Ungroup Shapes	シェイプのグループ解除	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+468	edit_basic	Ungroup	グループ解除	0	1	0	0	1	1:2:0:0	二次(premiere全体注記)		採用済	G1でグループ化動詞として実装(2026-08-22、⌘G/⌘⇧G・world位置保存・裁定174)
+469	edit_basic	Ungroup selected shapes	選択シェイプのグループ解除	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	G1でグループ化動詞として実装(2026-08-22、⌘G/⌘⇧G・world位置保存・裁定174)
+470	edit_basic	Ungroup Shapes	シェイプのグループ解除	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	G1でグループ化動詞として実装(2026-08-22、⌘G/⌘⇧G・world位置保存・裁定174)
 471	effects_animation	Add Expression	エクスプレッションを追加	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: vism抽象化候補・拡張として戸を残す(expression勢力は実在) — コアには入れない
 472	effects_animation	Add Keyframe	キーフレームを追加	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 473	effects_animation	Add Keyframe	キーフレーム追加	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
