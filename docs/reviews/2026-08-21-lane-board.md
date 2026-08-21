@@ -9,7 +9,8 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| **M4: ゼロコピー presenter(widget 内蔵)** | 実装 | worktree(発注時に追記) | 裁定171 v2 — Pipeline 内に Compositor::with_device・prepare が描き render が main_target を直 blit。**スクラッチ禁止**: 移植元= 旧世界 `crates/motolii-ui/src/rerun_stage/adapter.rs`+rerun 本体の egui glue(利用者指摘) |
+| **H1: 親変換合成(store)** | 実装 | worktree(発注時に追記) | 裁定173 — resolve へ親合成挿入(単一再帰・メモ化=旧世界 spatial_resolve 移植)+`LayerSource::Group` marker。数値証明 oracle。write-set= store+engine「描かない」腕 |
+| **MB-0: メニューバー基盤+Edit 束** | 実装 | worktree(発注時に追記) | M-menu 調査の採択 — overlay::menu 流用・Edit メニュー(既存入口持ち8動詞のみ= S6 安全)・map Edit 系消化。write-set= shell 一式 |
 
 ## 完了・main 着地済み(実装)
 
