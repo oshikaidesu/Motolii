@@ -153,18 +153,46 @@ pub mod metrics {
 /// 一次原因と特定した(2026-08-20)。上限ぴったりでなく余裕を持たせてある。
 const STAGE_HANDLE_SYNC_BUDGET_BYTES: usize = 1_500_000;
 
+/// 自動予算導出スケール(sync 予算を超える時だけ sqrt で縮める、超えなければ
+/// 無変更=1.0)。[`stage::effective_preview_scale`] へ渡す「auto」側の値
+/// そのもの(裁定163 Stage 下縁状態帯 ORACLE (a)) — 旧 `stage_handle_rgba`
+/// が抱えていた分岐をこの関数へ切り出しただけで、`width`/`height` が既に
+/// 予算内の時に1.0を返す挙動は無改変。
+fn stage_auto_scale(width: u32, height: u32) -> f64 {
+    let total_bytes = (width as usize) * (height as usize) * 4;
+    if width == 0 || height == 0 || total_bytes <= STAGE_HANDLE_SYNC_BUDGET_BYTES {
+        1.0
+    } else {
+        (STAGE_HANDLE_SYNC_BUDGET_BYTES as f64 / total_bytes as f64).sqrt()
+    }
+}
+
 /// Stage 表示用に RGBA を縮める。**画面には `Length::Fill` で引き伸ばして出す
 /// ので実素材解像度である必要が無い**(screenshot 器具は `frame_rgba()` が返す
 /// 元解像度の RGBA を別途持っている — 縮めるのは Handle 用のコピーだけで、
 /// pixel 精度が要る経路には触らない)。nearest-neighbor(プレビュー用途なので
 /// 品質は問わない — `screenshot.rs::blit_letterboxed` と同じ考え方)。
-fn stage_handle_rgba(width: u32, height: u32, rgba: &[u8]) -> (u32, u32, Vec<u8>) {
-    let total_bytes = (width as usize) * (height as usize) * 4;
-    if width == 0 || height == 0 || total_bytes <= STAGE_HANDLE_SYNC_BUDGET_BYTES {
+///
+/// **裁定163 Stage 下縁状態帯**: `resolution_cap` はユーザーが明示的に選ぶ
+/// 上限(Auto/½/¼)——[`stage_auto_scale`] の自動導出値へ
+/// [`stage::effective_preview_scale`] で min 合成する。`Auto` は cap=1.0固定
+/// なので合成しても値が変わらず、旧来の「予算内なら無変更・超えたら sqrt
+/// スケール」の挙動と完全に同値(ORACLE (a) 「auto=1.0で½cap→0.5・auto=0.4で
+/// ½cap→0.4」のとおり、cap の方が緩ければ auto 側がそのまま勝つ)。
+fn stage_handle_rgba(
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    resolution_cap: stage::PreviewResolutionCap,
+) -> (u32, u32, Vec<u8>) {
+    if width == 0 || height == 0 {
+        return (width, height, rgba.to_vec());
+    }
+    let scale = stage::effective_preview_scale(stage_auto_scale(width, height), resolution_cap);
+    if scale >= 1.0 {
         return (width, height, rgba.to_vec());
     }
 
-    let scale = (STAGE_HANDLE_SYNC_BUDGET_BYTES as f64 / total_bytes as f64).sqrt();
     let dst_w = ((width as f64 * scale).floor() as u32).max(1);
     let dst_h = ((height as f64 * scale).floor() as u32).max(1);
 
@@ -355,6 +383,12 @@ struct RenderedFrame {
     /// の結果そのもの)。**`rgba`(export 真値)とは別物** — `checkerboard_preview_rgba`
     /// と同じ「表示専用の複製」の形。`observation` が `None` の間は常に `None`。
     observation_rgba: Option<Vec<u8>>,
+    /// この `handle` を作った時点のプレビュー解像度 cap(裁定163 Stage 下縁
+    /// 状態帯)。**`checkerboard`/`observation` と同格の鍵拡張** —
+    /// `stage_handle_rgba` へ渡す実効スケールを変えるだけの表示専用の値なので、
+    /// `revision()`/`playhead` が同じでもここが変わっていれば Handle だけ
+    /// 作り直す(Document・engine の再評価は増えない)。
+    resolution_cap: stage::PreviewResolutionCap,
 }
 
 /// [`Shell::compute_display_source`] の戻り値。Stage 表示(`handle`)用の入力を
@@ -435,6 +469,11 @@ pub struct Shell {
     /// `None` = 「カメラを通して見る」(既定 — レンダリングカメラの絵とバイト一致、
     /// `refresh_frame` が export 経路を一切汚さないことの直接の型的裏付け)。
     observation: Option<ObservationCamera>,
+    /// Stage 下縁状態帯(裁定163 S 空間スコア)のプレビュー解像度 cap。
+    /// **セッション状態**(Document・export 不変 — S 空間スコア文書「種別 a.
+    /// 視界状態」、undo に乗らない・`checkerboard`/`observation` と同格)。
+    /// 既定 `Auto`(予算導出のみ、cap を掛けない)。
+    resolution_cap: stage::PreviewResolutionCap,
 
     // ---- layer クリップボード(普通地図 消化第1波 U1) ----
     /// アプリ内クリップボード(`clipboard.rs` doc 参照 — OS clipboard ではない)。
@@ -486,6 +525,7 @@ impl Shell {
                 background_draft: None,
                 ui_scale_draft: None,
                 observation: None,
+                resolution_cap: stage::PreviewResolutionCap::default(),
                 clipboard: clipboard::Clipboard::default(),
                 transport: Transport::new(),
             },
@@ -523,6 +563,7 @@ impl Shell {
             background_draft: None,
             ui_scale_draft: None,
             observation: None,
+            resolution_cap: stage::PreviewResolutionCap::default(),
             clipboard: clipboard::Clipboard::default(),
             transport: Transport::new(),
         };
@@ -1355,9 +1396,6 @@ impl Shell {
             settings_pane::Message::ToggleSettingsPanel => {
                 self.settings_panel_open = !self.settings_panel_open;
             }
-            settings_pane::Message::ToggleCheckerboard => {
-                self.checkerboard = !self.checkerboard;
-            }
             settings_pane::Message::BackgroundPreset(preset) => {
                 if let Err(error) = settings_pane::apply_background_preset(&mut self.doc, preset) {
                     self.status = Some(error);
@@ -1389,15 +1427,22 @@ impl Shell {
     // ---- Stage 観測カメラ(裁定157、裁定160 切片10) ----
 
     /// pane ローカル `Message` を畳んで書き口へ渡す glue(`update_settings` と
-    /// 同じ形)。**この2腕は元々 `self.observation` への直代入だけ**(計算を
-    /// 持たない)だったので、pane crate 側には移していない — `stage::Message`
-    /// の wrap だけがここで新たに要る作業(pane split survey §1.2 の
-    /// 「Stage 小計」に相当する私法ロジックは無い、[`Self::observation_preview_source`]
-    /// が唯一の書き口)。
+    /// 同じ形)。**最初の2腕は元々 `self.observation` への直代入だけ**(計算を
+    /// 持たない)だったので、pane crate 側には移していない。`CycleResolutionCap`/
+    /// `ToggleCheckerboard`(裁定163 Stage 下縁状態帯)も同型の直代入 —
+    /// `ToggleCheckerboard` は旧 `settings_pane::Message::ToggleCheckerboard`
+    /// と同じ本体(`self.checkerboard` の反転)をここへ引っ越しただけ
+    /// (`update_settings` 側の対応する腕は削除済み)。
     fn update_stage(&mut self, message: stage::Message) {
         match message {
             stage::Message::Observe(camera) => self.observation = Some(camera),
             stage::Message::ResetToRenderCamera => self.observation = None,
+            stage::Message::CycleResolutionCap => {
+                self.resolution_cap = self.resolution_cap.next();
+            }
+            stage::Message::ToggleCheckerboard => {
+                self.checkerboard = !self.checkerboard;
+            }
         }
     }
 
@@ -1602,6 +1647,12 @@ impl Shell {
         })
     }
 
+    /// Stage 下縁状態帯(裁定163)の今のプレビュー解像度 cap。運転席/試験が
+    /// 見るための口(`checkerboard_enabled`/`observation` と同じ形)。
+    pub fn resolution_cap(&self) -> stage::PreviewResolutionCap {
+        self.resolution_cap
+    }
+
     /// 今の Timeline の行。運転席が「層3枚の行が立つ」「選択が行と一致する」を
     /// 確かめる口(pane 自身が使う投影と同じ関数を呼ぶ)。
     pub fn timeline_rows(&self) -> Vec<timeline_pane::RowProjection> {
@@ -1750,7 +1801,6 @@ impl Shell {
                     self.background_draft.as_ref(),
                     self.tokens.ui_scale,
                     self.ui_scale_draft.as_deref(),
-                    self.checkerboard,
                     dims,
                     colors,
                 )
@@ -1762,7 +1812,15 @@ impl Shell {
             .push(
                 row![
                     inspector,
-                    stage_pane(self.frame.as_ref(), self.stage_overlay(), dims, colors)
+                    stage_pane(
+                        self.frame.as_ref(),
+                        self.stage_overlay(),
+                        self.observation,
+                        self.resolution_cap,
+                        self.checkerboard,
+                        dims,
+                        colors
+                    )
                 ]
                 .spacing(dims.spacing_m)
                 .height(Length::FillPortion(3)),
@@ -1852,21 +1910,27 @@ impl Shell {
         let playhead = self.session.playhead;
         let checkerboard = self.checkerboard;
         let observation = self.observation;
+        let resolution_cap = self.resolution_cap;
         let colors = self.tokens.colors;
 
         if let Some(frame) = &self.frame {
             if frame.revision == revision && frame.playhead == playhead {
-                if frame.checkerboard == checkerboard && frame.observation == observation {
+                if frame.checkerboard == checkerboard
+                    && frame.observation == observation
+                    && frame.resolution_cap == resolution_cap
+                {
                     return;
                 }
                 let width = frame.width;
                 let height = frame.height;
                 let display = self.compute_display_source(observation, checkerboard, playhead);
                 let (handle, handle_bytes) = match &display.full_rgba {
-                    Some(rgba) => build_stage_handle(width, height, rgba, display.checkerboard, colors),
+                    Some(rgba) => {
+                        build_stage_handle(width, height, rgba, display.checkerboard, resolution_cap, colors)
+                    }
                     None => {
                         let frame = self.frame.as_ref().expect("直前の if let で確認済み");
-                        build_stage_handle(width, height, &frame.rgba, false, colors)
+                        build_stage_handle(width, height, &frame.rgba, false, resolution_cap, colors)
                     }
                 };
                 metrics::record_handle_creation(handle_bytes);
@@ -1876,6 +1940,7 @@ impl Shell {
                     frame.checkerboard_preview_rgba = display.checkerboard_preview_rgba;
                     frame.observation = observation;
                     frame.observation_rgba = display.observation_rgba;
+                    frame.resolution_cap = resolution_cap;
                 }
                 return;
             }
@@ -1907,6 +1972,7 @@ impl Shell {
                         composition.height,
                         preview,
                         display.checkerboard,
+                        resolution_cap,
                         colors,
                     ),
                     None => build_stage_handle(
@@ -1914,6 +1980,7 @@ impl Shell {
                         composition.height,
                         &rgba,
                         false,
+                        resolution_cap,
                         colors,
                     ),
                 };
@@ -1929,6 +1996,7 @@ impl Shell {
                     checkerboard,
                     observation,
                     observation_rgba: display.observation_rgba,
+                    resolution_cap,
                 });
             }
             Err(error) => {
@@ -2049,9 +2117,11 @@ fn build_stage_handle(
     height: u32,
     full_rgba: &[u8],
     checkerboard: bool,
+    resolution_cap: stage::PreviewResolutionCap,
     colors: Colors,
 ) -> (image::Handle, usize) {
-    let (handle_width, handle_height, mut handle_rgba) = stage_handle_rgba(width, height, full_rgba);
+    let (handle_width, handle_height, mut handle_rgba) =
+        stage_handle_rgba(width, height, full_rgba, resolution_cap);
     if checkerboard {
         settings_pane::composite_checkerboard(handle_width, handle_height, &mut handle_rgba, colors);
     }
@@ -2269,9 +2339,18 @@ pub fn resolve_navigation_key(
 // 取らない**。書ける物を持たない。`timeline_pane::TimelinePane` も同じ制約。
 // ---------------------------------------------------------------------------
 
+/// **裁定163 S 空間スコア — 発注書 EXACT TARGET**: Stage pane の下縁に1行の
+/// 状態帯を追加した(S5「下縁=状態帯」・S6「状態は隠れない」の初適用)。
+/// `body`(ヒーロー、S5a 占有率)は `Length::Fill` のまま、帯は自然高
+/// (`stage::state_band_view` 自身が `.padding`/`.spacing` だけで決める、
+/// `status_band` と同じ「明示 `.height()` を持たない」形)——ヒーローの縁へ
+/// 退く低重み要素として全体高を食わない。
 fn stage_pane(
     frame: Option<&RenderedFrame>,
     overlay: Option<stage::StageOverlay>,
+    observation: Option<ObservationCamera>,
+    resolution_cap: stage::PreviewResolutionCap,
+    checkerboard: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'_, Message> {
@@ -2298,12 +2377,21 @@ fn stage_pane(
             .color(colors.text_muted)
             .into(),
     };
+
+    // 自動導出スケール(`stage_auto_scale` — sync 予算内なら1.0、超えれば
+    // sqrt スケール)。frame が無ければ縮める対象自体が無いので1.0固定
+    // (Auto 表示は「1.00×」になるが、band 自体は comp が無くても常時表示 —
+    // 発注書 EXACT TARGET 2「常時表示」)。
+    let auto_scale = frame.map(|f| stage_auto_scale(f.width, f.height)).unwrap_or(1.0);
+    let band = stage::state_band_view(observation, resolution_cap, auto_scale, checkerboard, dims, colors)
+        .map(Message::Stage);
+
     // letterbox は neutral dark(D8: 装飾 gradient 禁止・余白は neutral)。raw 値ではなく
     // token 経由の面色 + 罫線幅。
     // **高さは `Length::Fill`**(Inspector と並ぶ `row!` の中にいるため、以前の
     // `FillPortion(3)` は `Shell::view` 側のその `row!` 自身が持つ — 2箇所で
     // portion を重ねて割合をずらさない)。
-    container(body)
+    container(column![container(body).width(Length::Fill).height(Length::Fill), band].spacing(0.0))
         .width(Length::Fill)
         .height(Length::Fill)
         .style(move |_theme| container::Style {

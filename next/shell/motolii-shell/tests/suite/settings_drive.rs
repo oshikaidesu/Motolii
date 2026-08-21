@@ -4,7 +4,12 @@
 //!   `Intent::SetComposition` が1操作=1 intent であること)。
 //! - 市松トグルは Handle 表示だけを変える — screenshot/export が読む
 //!   `frame_rgba()`(生 rgba)には**一切乗らない**(`settings_pane` モジュール
-//!   doc「合成器が出せる」と「書き出しが吐く」は別問題)。
+//!   doc「合成器が出せる」と「書き出しが吐く」は別問題)。**発火元は裁定163で
+//!   Stage 下縁状態帯へ引っ越した**(`Message::Stage(stage::Message::
+//!   ToggleCheckerboard)`)が、書き込み先(`Shell::checkerboard`)・合成ロジック
+//!   (`settings_pane::composite_checkerboard`)は無改変なので、この試験は
+//!   引き続きここに置く(ピクセル合成の正しさを見る試験であって、発火元の
+//!   場所を見る試験ではない — 発火元の配線は `tests/stage_band_drive.rs` 側)。
 //! - パネルの開閉は表示だけの分岐 — Document にも undo 履歴にも乗らない。
 //!
 //! `ui_scale` の書き戻し(`tokens::write_ui_scale_to_path`)は `tests/
@@ -14,7 +19,7 @@
 //! 意図的に叩かない。
 
 use motolii_shell::settings_pane::{self, BackgroundChannel, BackgroundPreset};
-use motolii_shell::{screenshot, Message, Shell};
+use motolii_shell::{screenshot, stage, Message, Shell};
 
 fn shell() -> Shell {
     Shell::new().0
@@ -110,7 +115,7 @@ fn checkerboard_toggle_never_touches_the_raw_export_rgba() {
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("frame がある");
 
-    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
+    let _ = shell.update(Message::Stage(stage::Message::ToggleCheckerboard));
 
     let after = shell
         .frame_rgba()
@@ -144,7 +149,7 @@ fn checkerboard_toggle_changes_the_screenshot_pixels_on_default_opaque_backgroun
     let _ = shell.update(Message::FlushDrops);
 
     let without = screenshot::render(&shell).into_raw();
-    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
+    let _ = shell.update(Message::Stage(stage::Message::ToggleCheckerboard));
     let with = screenshot::render(&shell).into_raw();
 
     assert_ne!(
@@ -177,7 +182,7 @@ fn checkerboard_toggle_does_not_touch_the_raw_export_rgba_when_background_is_opa
         .map(|(w, h, px)| (w, h, px.to_vec()))
         .expect("frame がある");
 
-    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
+    let _ = shell.update(Message::Stage(stage::Message::ToggleCheckerboard));
 
     let with = shell
         .frame_rgba()
@@ -204,7 +209,7 @@ fn checkerboard_toggle_changes_the_screenshot_pixels_when_background_is_transpar
     assert_eq!(background, [0.0, 0.0, 0.0, 0.0], "Transparent プリセットが反映されていない");
 
     let without = screenshot::render(&shell).into_raw();
-    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleCheckerboard));
+    let _ = shell.update(Message::Stage(stage::Message::ToggleCheckerboard));
     let with = screenshot::render(&shell).into_raw();
 
     assert_ne!(

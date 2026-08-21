@@ -7,7 +7,7 @@
 //! 1フレームを PNG へ書いて終了する(`motolii_shell::screenshot`)。
 //!
 //! `--screenshot` と併用できる状態フラグ4本(実機報告の検分用): `--checkerboard`
-//! は Settings の市松トグルを ON にした状態を、`--transparent-bg` は背景
+//! は Stage 下縁状態帯(裁定163)の市松トグルを ON にした状態を、`--transparent-bg` は背景
 //! プリセット「Transparent」(alpha=0)を適用した状態を、`--settings-open` は
 //! 歯車ボタンを押した状態を、`--observe` は観測カメラ(裁定157)を有効にした
 //! 状態を、それぞれ実際の `Message` 経由(`Shell::update`)で再現する —
@@ -41,8 +41,11 @@ fn main() -> iced::Result {
             ));
         }
         if checkerboard {
-            let _ = shell.update(motolii_shell::Message::Settings(
-                motolii_shell::settings_pane::Message::ToggleCheckerboard,
+            // 裁定163: 市松トグルは Stage 下縁状態帯へ引っ越した
+            // (`motolii_shell::settings_pane::Message::ToggleCheckerboard` は
+            // もう存在しない — `motolii_shell::stage::Message` 側)。
+            let _ = shell.update(motolii_shell::Message::Stage(
+                motolii_shell::stage::Message::ToggleCheckerboard,
             ));
         }
         if settings_open {

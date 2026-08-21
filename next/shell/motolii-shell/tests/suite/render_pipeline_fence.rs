@@ -183,3 +183,43 @@ fn scrubbing_through_the_fixture_never_exceeds_the_upload_budget() {
         );
     }
 }
+
+/// **裁定163 Stage 下縁状態帯 ORACLE (b) の本命**: プレビュー解像度 cap の
+/// クリック巡回(`Message::Stage(stage::Message::CycleResolutionCap)`)が
+/// 実際に Stage Handle の実効スケールを変える。fixture(1920×1080)は Auto の
+/// 時点で既に sync 予算超過なので sqrt スケールが効いている(auto_scale≈0.43)
+/// — `½`(cap=0.5)は auto よりゆるいので **no-op**(min 合成で auto 側が勝つ、
+/// `stage::effective_preview_scale` の単体試験と対になる実地の証拠)。続けて
+/// `¼`(cap=0.25)へ回すと、今度は cap の方が厳しいので Handle bytes が実際に
+/// 縮む。「緩い cap は効かない・厳しい cap は効く」の両方を1本で通すことで、
+/// cap が本当に min 合成で効いていることを見る(handle_bytes が単調減少する
+/// だけの偶然ではない)。
+#[test]
+fn cycling_the_resolution_cap_composes_via_min_with_the_auto_derived_scale() {
+    let _guard = METRICS_LOCK.lock().unwrap();
+    metrics::reset();
+
+    let shell = Shell::new_fixture().0;
+    assert_eq!(shell.resolution_cap(), stage::PreviewResolutionCap::Auto);
+    let auto_bytes = metrics::last_handle_bytes();
+    assert!(auto_bytes > 0, "fixture 起動で Stage が一度も描かれていない");
+
+    let mut shell = shell;
+    let _ = shell.update(Message::Stage(stage::Message::CycleResolutionCap));
+    assert_eq!(shell.resolution_cap(), stage::PreviewResolutionCap::Half);
+    let half_bytes = metrics::last_handle_bytes();
+    assert_eq!(
+        half_bytes, auto_bytes,
+        "auto_scale が既に½より小さいはずの fixture で、½ cap が Handle bytes を変えてしまった\
+         (min 合成が効いていれば auto 側がそのまま勝つはず)"
+    );
+
+    let _ = shell.update(Message::Stage(stage::Message::CycleResolutionCap));
+    assert_eq!(shell.resolution_cap(), stage::PreviewResolutionCap::Quarter);
+    let quarter_bytes = metrics::last_handle_bytes();
+    assert!(
+        quarter_bytes < half_bytes,
+        "¼ cap(auto_scale より厳しいはず)で Handle bytes が縮んでいない: \
+         half={half_bytes} quarter={quarter_bytes}"
+    );
+}
