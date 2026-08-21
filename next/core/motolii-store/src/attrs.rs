@@ -122,6 +122,25 @@ pub struct LayerAttrs {
     /// `None` に読み戻す(欠落を `Err` にしない、他の任意フィールドと同じ扱い)。
     #[serde(default)]
     pub label_color: Option<u8>,
+    /// **`LayerSource::Group` の layer にのみ意味を持つ**(裁定119
+    /// `docs/reviews/2026-08-20-group-layer-semantics-decision.md` §4)。true の間、
+    /// この Group の部分木(子孫)への編集 Intent は理由つき `Err` になる
+    /// (`crate::document::check_not_frozen` — `Document::write` 参照)。
+    ///
+    /// **`LayerAttrsPatch` には frozen フィールドを持たせない** — 汎用の `SetAttrs`
+    /// 経由では触れず、専用の [`crate::Intent::Freeze`]/[`crate::Intent::Unfreeze`]
+    /// だけが書く(`hidden`/`solo`/`locked` のような汎用属性と違い、freeze は
+    /// 意味の重い操作なので専用の口を持たせる — 裁定119 の「明示動詞」の精神、
+    /// 裁定174「意図優先の原則」と同じ形)。
+    ///
+    /// Group でない layer に立っていても(型では防げない — Group 判定は `meta.source`
+    /// 側にあるため)描画・書き口のどちらにも一切効かない(`check_not_frozen` は
+    /// `meta.source == LayerSource::Group` の祖先だけを見る)。**Document の意味は
+    /// 1bit も変わらない**(裁定119 OUTCOME) — 凍結は導出キャッシュの許可証であって
+    /// Document データではない。解凍 = この bit を戻すだけで何も失われない。
+    /// `#[serde(default)]`: 旧ドキュメントに無いキーは `false`(未凍結)に読み戻す。
+    #[serde(default)]
+    pub frozen: bool,
 }
 
 impl Default for LayerAttrs {
@@ -137,6 +156,7 @@ impl Default for LayerAttrs {
             solo: false,
             locked: false,
             label_color: None,
+            frozen: false,
         }
     }
 }

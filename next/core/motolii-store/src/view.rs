@@ -18,8 +18,9 @@ use crate::document::{TrackCache, TransientKey};
 use crate::slot::PropertySource;
 use crate::{
     property, Asset, AssetId, AssetTable, Composition, Document, EffectInstance, LayerAttrs,
-    LayerId, LayerMeta, LayerPlacement, Marker, Mask, PropertyId, ResolvedEffect, ResolvedLayer,
-    ResolvedMask, Revision, ShapeNode, Slot, SlotId, StoreError, TextDocument, EDIT_TIMELINE,
+    LayerId, LayerMeta, LayerPlacement, LayerSource, Marker, Mask, PropertyId, ResolvedEffect,
+    ResolvedLayer, ResolvedMask, Revision, ShapeNode, Slot, SlotId, StoreError, TextDocument,
+    EDIT_TIMELINE,
 };
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
@@ -562,6 +563,36 @@ impl<'a> StoreView<'a> {
         serde_json::from_str(&json.0)
             .map(Some)
             .map_err(StoreError::Encode)
+    }
+
+    /// `layer` の祖先鎖(`attrs.parent` を辿る)に、`frozen == true` な
+    /// `LayerSource::Group` が居れば、そのうち最も近い物の id を返す(裁定119
+    /// `docs/reviews/2026-08-20-group-layer-semantics-decision.md` §4)。
+    ///
+    /// **`layer` 自身の `frozen` 状態は見ない** — 凍結が拒むのは「中身」への編集で
+    /// あって、凍結された Group 自身の attrs/timing/track への編集は含まない
+    /// (`crate::document::check_not_frozen` の doc 参照)。
+    ///
+    /// `document::validate_no_parent_cycle`/`world_affine` と同じ `seen` 防御 —
+    /// 書き込み時ガードで循環は作れないはずだが、壊れた Document を読んだ場合に
+    /// 備えて無限ループしない形にしてある。
+    pub fn frozen_ancestor(&self, layer: LayerId) -> Result<Option<LayerId>, StoreError> {
+        let mut current = self.attrs(layer)?.and_then(|attrs| attrs.parent);
+        let mut seen = std::collections::HashSet::new();
+        while let Some(ancestor) = current {
+            if !seen.insert(ancestor) {
+                break;
+            }
+            let is_group = self
+                .meta(ancestor)?
+                .map(|meta| meta.source == LayerSource::Group)
+                .unwrap_or(false);
+            if is_group && self.attrs(ancestor)?.unwrap_or_default().frozen {
+                return Ok(Some(ancestor));
+            }
+            current = self.attrs(ancestor)?.and_then(|attrs| attrs.parent);
+        }
+        Ok(None)
     }
 
     /// layer が持つ effect インスタンスの列。無ければ空(masks と同じ扱い)。

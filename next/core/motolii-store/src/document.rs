@@ -375,6 +375,34 @@ pub enum Intent {
     RemoveAsset {
         asset: crate::AssetId,
     },
+    /// **freeze 意図動詞**(裁定119、G1 に続く「意図優先の原則」の実装束)。
+    /// `group` を指す `LayerAttrs.frozen` を `true` にする。`group` は present な
+    /// `LayerSource::Group` layer でなければならない(そうでなければ理由つき `Err`)。
+    ///
+    /// **専用 Intent にした**(G1 の `group_layers`/`ungroup_layers` と違い既存語彙の
+    /// 合成では表さない) — freeze は `hidden`/`solo` のような汎用属性ではなく、
+    /// 「この部分木を今後編集させない」という意味の重い宣言なので、汎用の
+    /// `SetAttrs`/`LayerAttrsPatch` には乗せない(`LayerAttrs::frozen` の doc 参照)。
+    ///
+    /// **Document の意味は1bitも変わらない**(裁定119 OUTCOME) — frozen は
+    /// 「以後の編集 Intent を拒む」というゲートの状態であって、絵そのものは
+    /// このフラグの前後で同一(engine 側のキャッシュ/fingerprint は後続束)。
+    ///
+    /// 既に frozen な Group への `Freeze` は冪等(再度 `true` を書くだけ)。
+    /// `locked` な Group への `Freeze` は他の層変更 Intent と同じく拒む
+    /// (`check_not_locked`) — freeze も「この layer の状態を変える」書き込みである
+    /// ことに変わりはない。祖先に凍結中の Group が居る場合も拒む
+    /// (`check_not_frozen`) — 凍結中の部分木の中でさらに凍結状態を動かすのも
+    /// 「中身への編集」の一種(先に外側を unfreeze すること)。
+    Freeze {
+        group: LayerId,
+    },
+    /// **unfreeze 意図動詞**。`group` の `LayerAttrs.frozen` を `false` に戻すだけ
+    /// (裁定119「解凍 = flag を戻すだけで、何も失われない」)。検証・冪等性・
+    /// locked/frozen 祖先の扱いは [`Intent::Freeze`] と対称。
+    Unfreeze {
+        group: LayerId,
+    },
 }
 
 /// 「見えている Document が変わったか」の印。
@@ -741,6 +769,7 @@ impl Document {
                 // AE と同じ意味論)。解除→削除の2手は常に可能 — `check_not_locked` は
                 // `locked` 自身の解除/再ロックだけを別扱いする `SetAttrs` を経由しない。
                 check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
                 (layer.entity_path(), vec![serialize_present(false)?])
             }
             Intent::SetComposition(composition) => {
@@ -767,6 +796,7 @@ impl Document {
             }
             Intent::SetMasks { layer, masks } => {
                 check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
                 crate::mask::validate_unique_ids(&masks)?;
                 let json = serde_json::to_string(&masks)?;
                 (
@@ -780,6 +810,7 @@ impl Document {
             }
             Intent::SetTiming { layer, timing } => {
                 check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
                 // meta の一部なので、読んで差し替えて書き戻す。
                 // **専用の component を足さない** — 増やすと読み口も増える。
                 let current = self.view().meta(layer)?;
@@ -824,6 +855,7 @@ impl Document {
             }
             Intent::SetSource { layer, source } => {
                 check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
                 let current = self.view().meta(layer)?;
                 let Some(mut meta) = current else {
                     return Err(StoreError::Property(format!(
@@ -844,6 +876,7 @@ impl Document {
             }
             Intent::SetOrder { layer, order } => {
                 check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
                 let current = self.view().meta(layer)?;
                 let Some(mut meta) = current else {
                     return Err(StoreError::Property(format!(
@@ -863,6 +896,26 @@ impl Document {
                 )
             }
             Intent::SetAttrs { layer, patch } => {
+                // 凍結中の部分木への編集は理由つき拒否(裁定119)。`layer` 自身の
+                // frozen 状態は見ない(`LayerAttrs::frozen`/`check_not_frozen` の doc
+                // 参照) — 凍結された Group 自身の attrs(名前を変える・移動する等)は
+                // ここでは拒まない。
+                check_not_frozen(&self.view(), layer)?;
+                // `parent` を凍結中の Group(またはその部分木の中)へ向けようとしていな
+                // いかも確かめる。`check_not_frozen` は `layer` 自身の祖先だけを見るので、
+                // 「今は凍結の外に居る layer を、凍結中の Group の新しい子として迎え
+                // 入れる」経路はここが無いと素通りしてしまう(新しい子を迎えるのも
+                // 部分木の中身を変える編集の一種)。
+                if let Some(Some(new_parent)) = patch.parent {
+                    if is_frozen_or_within_frozen(&self.view(), new_parent)? {
+                        return Err(StoreError::Property(format!(
+                            "layer {} の parent を layer {} にはできない — \
+                             凍結中(frozen)のグループか、その部分木の中にある \
+                             (先に unfreeze すること)",
+                            layer.0, new_parent.0
+                        )));
+                    }
+                }
                 // read-modify-write — `attrs` が無い layer への初回書き込みは
                 // `LayerAttrs::default()` を土台にする(`meta` と違い、属性は元々
                 // 省略可能なので「まだ無い」ことがエラーではない)。
@@ -906,6 +959,7 @@ impl Document {
             }
             Intent::SetEffects { layer, effects } => {
                 check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
                 crate::effect::validate_unique_ids(&effects)?;
                 let json = serde_json::to_string(&effects)?;
                 (
@@ -919,6 +973,7 @@ impl Document {
             }
             Intent::SetShapes { layer, shapes } => {
                 check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
                 let json = serde_json::to_string(&shapes)?;
                 (
                     layer.entity_path(),
@@ -931,6 +986,7 @@ impl Document {
             }
             Intent::SetTextDocument { layer, document } => {
                 check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
                 crate::text::validate(&document)?;
                 let json = serde_json::to_string(&document)?;
                 (
@@ -948,6 +1004,7 @@ impl Document {
                 track,
             } => {
                 check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
                 // **`PropertySource::Track` でラップして書く**(`slot` 発注単位)。
                 // untagged なので wire 形は今までの `KeyframeTrack` の JSON と同じ —
                 // 既存の呼び手・読み手(`view.track()`)は何も変わらない。
@@ -978,6 +1035,7 @@ impl Document {
                 slot,
             } => {
                 check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
                 let json = serde_json::to_string(&PropertySource::Slot(slot))?;
                 (
                     layer.entity_path(),
@@ -1042,6 +1100,16 @@ impl Document {
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
                 )
+            }
+            Intent::Freeze { group } => {
+                check_not_locked(&self.view(), group)?;
+                check_not_frozen(&self.view(), group)?;
+                freeze_attrs_batch(&self.view(), group, true)?
+            }
+            Intent::Unfreeze { group } => {
+                check_not_locked(&self.view(), group)?;
+                check_not_frozen(&self.view(), group)?;
+                freeze_attrs_batch(&self.view(), group, false)?
             }
         };
 
@@ -1236,6 +1304,25 @@ impl Document {
             if meta.source != LayerSource::Group {
                 continue;
             }
+            // 凍結中の Group は ungroup を理由つき拒否する(裁定119、レーン仕様
+            // (c) の論証): ungroup は Group の変換を子ローカルへ焼き込んでから
+            // 子の parent を書き換える — これは「凍結中の中身への編集」そのもの
+            // (焼き込みは子の position/rotation/scale/skew track を書き換えうる)
+            // なので、他の子孫編集 Intent と同じく `check_not_frozen` 相当の扱いを
+            // 受けるべきだが、対象は「Group 自身が frozen か」であって「Group の
+            // "祖先"が frozen か」ではない(祖先が frozen な場合は、この後ろで
+            // 子へ積む `Intent::SetAttrs` が `check_not_frozen` に自然に引っかかって
+            // 拒否される — 二重にチェックする必要はない)。**黙って skip しない**
+            // (`meta.source != Group` の分岐と違い、これは「対象が正しいのに
+            // 凍結されているので今は無理」という積極的な拒否なので、理由つき Err
+            // にする — 裁定119「黙って自動解凍しない」)。
+            if view.attrs(group)?.unwrap_or_default().frozen {
+                return Err(StoreError::Property(format!(
+                    "layer {} は凍結中(frozen)なので ungroup できない \
+                     (先に unfreeze すること)",
+                    group.0
+                )));
+            }
             let new_parent = view.attrs(group)?.and_then(|attrs| attrs.parent);
             let group_local = view.local_transform(group, t)?;
             let identity = affine2_is_identity(group_local);
@@ -1320,6 +1407,85 @@ fn check_not_locked(view: &StoreView, layer: LayerId) -> Result<(), StoreError> 
         )));
     }
     Ok(())
+}
+
+/// 凍結中(`frozen`)の部分木への編集を理由つきで拒む(裁定119
+/// `docs/reviews/2026-08-20-group-layer-semantics-decision.md` §4「凍結中の中身への
+/// 編集は理由つき拒否。黙って自動解凍しない」)。
+///
+/// `layer` の祖先鎖に `frozen == true` な `LayerSource::Group` が居れば `Err`。
+/// **`layer` 自身の frozen 状態は見ない** — 凍結された Group 自身への編集(位置を
+/// 動かす・改名する等)は「中身」ではないので、ここでは拒まない
+/// (`StoreView::frozen_ancestor` の doc 参照。この非対称性が
+/// `Intent::RemoveLayer(frozen_group)` を許しつつ `Intent::RemoveLayer(child)` を
+/// 拒む仕組みそのもの — 凍結グループ自体の削除は tombstone なので可逆、grouping
+/// 束のテスト内コメント参照)。
+fn check_not_frozen(view: &StoreView, layer: LayerId) -> Result<(), StoreError> {
+    if let Some(group) = view.frozen_ancestor(layer)? {
+        return Err(StoreError::Property(format!(
+            "layer {} は凍結中(frozen)のグループ(layer {})の部分木にあるので編集できない \
+             (先にそのグループを unfreeze すること)",
+            layer.0, group.0
+        )));
+    }
+    Ok(())
+}
+
+/// `candidate` が(それ自身が)frozen な `LayerSource::Group` か、または frozen な
+/// Group の部分木の中に居るか。`check_not_frozen` は `layer` 自身の frozen 状態を
+/// 見ないので、「凍結中の Group そのものを新しい親にする」経路(= 部分木へ新しい
+/// 子を迎え入れる編集)はここでしか捕まえられない(`Intent::SetAttrs` の `parent`
+/// 検証が呼ぶ)。
+fn is_frozen_or_within_frozen(view: &StoreView, candidate: LayerId) -> Result<bool, StoreError> {
+    let self_frozen = view
+        .meta(candidate)?
+        .map(|meta| meta.source == LayerSource::Group)
+        .unwrap_or(false)
+        && view.attrs(candidate)?.unwrap_or_default().frozen;
+    Ok(self_frozen || view.frozen_ancestor(candidate)?.is_some())
+}
+
+/// [`Intent::Freeze`]/[`Intent::Unfreeze`] の共通実装。`group` が present な
+/// `LayerSource::Group` layer であることを確かめてから、`attrs.frozen` だけを
+/// 書き換えて返す(read-modify-write、`Intent::SetAttrs` と同じ物理形 —
+/// `descriptor_attrs()` の同じ component へ書くので、専用 component は増やさない)。
+///
+/// **locked/frozen な祖先の柵はここでは掛けない** — 呼び出し側([`Document::write`]
+/// の `Intent::Freeze`/`Intent::Unfreeze` 腕)が `check_not_locked`/`check_not_frozen`
+/// を先に呼んでから、この関数へは検証済みの `group` だけを渡す(他の read-modify-write
+/// 腕と同じ役割分担)。
+fn freeze_attrs_batch(
+    view: &StoreView,
+    group: LayerId,
+    frozen: bool,
+) -> Result<(EntityPath, Vec<SerializedComponentBatch>), StoreError> {
+    if !view.has_layer(group) {
+        return Err(StoreError::Property(format!(
+            "layer {} は存在しない(present ではない)ので freeze/unfreeze できない",
+            group.0
+        )));
+    }
+    let is_group = view
+        .meta(group)?
+        .map(|meta| meta.source == LayerSource::Group)
+        .unwrap_or(false);
+    if !is_group {
+        return Err(StoreError::Property(format!(
+            "layer {} は LayerSource::Group ではないので freeze/unfreeze できない",
+            group.0
+        )));
+    }
+    let mut attrs = view.attrs(group)?.unwrap_or_default();
+    attrs.frozen = frozen;
+    let json = serde_json::to_string(&attrs)?;
+    Ok((
+        group.entity_path(),
+        vec![SerializedComponentBatch {
+            descriptor: descriptor_attrs(),
+            array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                .map_err(|e| StoreError::Chunk(e.to_string()))?,
+        }],
+    ))
 }
 
 /// G1(裁定174)ungroup が子へ書き戻す、焼き込み後の local transform の5値。
