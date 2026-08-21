@@ -244,6 +244,9 @@ fn timeline_rows_carry_hidden_flag_without_dropping_the_row() {
         duration: 10,
         selected: false,
         dragging: false,
+        depth: 0,
+        has_children: false,
+        children_open: true,
     }];
     assert!(rows[0].hidden, "hidden 属性が投影へ届いていない");
 }
@@ -277,6 +280,9 @@ fn timeline_hit_test_distinguishes_bar_ruler_and_blank_row() {
         duration: 50,
         selected: false,
         dragging: false,
+        depth: 0,
+        has_children: false,
+        children_open: true,
     }];
     let width = 300.0;
     let duration_frames = 300;

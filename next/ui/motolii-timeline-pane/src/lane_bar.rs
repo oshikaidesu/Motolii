@@ -359,6 +359,9 @@ mod tests {
             duration: 100,
             selected: true,
             dragging: false,
+            depth: 0,
+            has_children: false,
+            children_open: true,
         }
     }
 

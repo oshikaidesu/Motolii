@@ -45,6 +45,15 @@
 //! capture 規則がそのまま再現する — 新しい調停ロジックを書く必要が無い)。
 //! 時間場側の gesture(move/trim・scrub・キー選択)は `super::input`/
 //! `super::key_rows` に無改修のまま残る。
+//!
+//! ## ツリー行(裁定173 H2)
+//! `RowProjection::depth`/`has_children`/`children_open`(`projection::rows`
+//! 参照 — `attrs.parent` を辺として読んだ木の flatten)を rail 側で描く。
+//! インデントは [`indent_step_px`]、開閉は [`fold_toggle`]。**朝の一瞥キュー**:
+//! インデント幅の比率(裁定167 の余白梯子の頂点段 `0.30×行高`)はモックに
+//! 親子行の実例が無いため実測ではなく宣言 — 実窓で親子行を見てから、梯子の
+//! 他段(0.15/0.075)の方が近ければ [`indent_step_px`] を直す(段の中間値は
+//! 発明しない、S4 段量子化柵と同型)。
 
 use iced::widget::{button, column, container, mouse_area, row, text, Space};
 use iced::{Background, Border, Element, Length};
@@ -76,11 +85,22 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
         Vec::with_capacity(pane.rows.len() + pane.property_rows.len() + 1);
     children.push(corner(dims, colors, ruler_height));
 
+    // **oracle「fold 既定=全展開で現行の見た目不変」の直接の実装**: 木が
+    // 1つも無い Document(全 layer が `depth == 0 && !has_children`、
+    // parent を1つも設定していない導入前の全 Document がこれに該当)では、
+    // ツリーの前置き(インデント+fold 三角)を**1px も足さない** — 行ごとに
+    // `depth`/`has_children` を見て可変長にすると、既存の全フラット
+    // Document でさえ rail の swatch/名前/M・S・L が一律で右へずれてしまい
+    // 「見た目不変」を破る。木が実在する時だけ、`layer_row` へ前置きの
+    // 有無を渡す(この bool は行ごとではなく Document 全体で1つ — 兄弟間の
+    // 縦の格子を崩さないため)。
+    let has_any_tree = pane.rows.iter().any(|row| row.depth > 0 || row.has_children);
+
     // **単一源節の実装そのもの**: `super::projection::layer_row_top` と
     // 同じ順序・同じ挿入位置(選択 layer の直後)で積むだけ — 押し下げ量を
     // 計算する式はここには無い(iced のレイアウトが累計する)。
     for (index, proj) in pane.rows.iter().enumerate() {
-        children.push(layer_row(proj, dims, colors, row_height, rail_width));
+        children.push(layer_row(proj, dims, colors, row_height, rail_width, has_any_tree));
         if pane.selected_row_index == Some(index) {
             for (band_index, prow) in pane.property_rows.iter().enumerate() {
                 children.push(property_row(prow, dims, colors, param_row_height, band_index));
@@ -121,18 +141,78 @@ fn corner(dims: Dimensions, colors: Colors, ruler_height: f32) -> Element<'stati
         .into()
 }
 
+/// ツリー行1段ぶんのインデント幅(裁定173 H2)。裁定167 の余白梯子
+/// (`MARGIN_RATIO` 系列 `{0.30, 0.15, 0.075}×行高`)の頂点段をそのまま
+/// 1段の量として転用する — **宣言であって実測ではない**(モックに親子行の
+/// 実例が無い、module doc「朝の一瞥キュー」節参照)。px へは梯子の他の比率
+/// 定数(`TARGET_CELL_RATIO` 等)と同じ「最近傍丸め」の作法を踏襲する。
+/// fold 三角のヒット領域も同じ幅を使う(`fold_toggle` — インデント1段と
+/// fold ボタンが同じ格子に揃う)。
+fn indent_step_px(row_height: f32) -> f32 {
+    (row_height * 0.30).round()
+}
+
+/// fold 三角(開閉ボタン)。`has_children` が `false` の行は同じ幅の空白を
+/// 返す(旧世界 `timeline_rows.rs`「空の Group は矢印を出さない」規則の踏襲
+/// — 矢印の有無に関わらずインデントの格子は揃う)。
+fn fold_toggle(proj: &RowProjection, colors: Colors, size: f32) -> Element<'static, Message> {
+    if !proj.has_children {
+        return Space::new().width(Length::Fixed(size)).height(Length::Fixed(size)).into();
+    }
+    let id = proj.id;
+    let glyph = if proj.children_open { "\u{25BE}" } else { "\u{25B8}" }; // ▾ / ▸
+    button(
+        text(glyph)
+            .size(size)
+            .color(colors.text_secondary)
+            .align_x(iced::alignment::Horizontal::Center)
+            .align_y(iced::alignment::Vertical::Center)
+            .width(Length::Fill)
+            .height(Length::Fill),
+    )
+    .width(Length::Fixed(size))
+    .height(Length::Fixed(size))
+    .padding(0)
+    .on_press(Message::ToggleFold(id))
+    .style(move |_theme, _status| button::Style {
+        background: None,
+        text_color: colors.text_secondary,
+        ..button::Style::default()
+    })
+    .into()
+}
+
 /// 1層ぶんの rail 行(スウォッチ+名前+M/S/L)。行全体を `mouse_area` で包み
 /// 選択(`Message::Select`)を発火する — M/S/L 自身のクリックは
 /// `button.on_press` が先に capture するので、行選択と二重発火しない
 /// (モジュール doc「gesture」節参照)。
+///
+/// `has_any_tree`(`view()` が Document 全体を1度見て決める、行ごとではない
+/// bool)が `false` の時はツリーの前置き(インデント・fold 三角)を**1px も
+/// 足さない** — oracle「fold 既定=全展開で現行の見た目不変」の実装本体
+/// (`view()` の doc 参照)。
 fn layer_row(
     proj: &RowProjection,
     dims: Dimensions,
     colors: Colors,
     row_height: f32,
     rail_width: f32,
+    has_any_tree: bool,
 ) -> Element<'static, Message> {
     let id = proj.id;
+    let indent_step = indent_step_px(row_height);
+    // ツリーの前置き幅(インデント + fold 三角の1段)。子の無い行も同じ幅の
+    // 空白を出す(`fold_toggle` 参照)ので、深さが揃っていれば縦の格子は
+    // 常に一致する。木が1つも無ければ幅0(`tree_prefix` 自体を積まない)。
+    let tree_prefix_width = if has_any_tree { indent_step * (proj.depth as f32 + 1.0) } else { 0.0 };
+    let tree_prefix: Option<Element<'static, Message>> = has_any_tree.then(|| {
+        let indent: Element<'static, Message> = Space::new()
+            .width(Length::Fixed(indent_step * proj.depth as f32))
+            .height(Length::Fixed(row_height))
+            .into();
+        let fold = fold_toggle(proj, colors, indent_step);
+        row([indent, fold]).into()
+    });
     let swatch_size = swatch_size_px(row_height);
     let swatch_radius = swatch_radius_px(swatch_size);
     let swatch_fill = swatch_color(proj, &colors);
@@ -157,7 +237,7 @@ fn layer_row(
     } else {
         proj.name.clone()
     };
-    let name_max_width = name_column_width(&dims, rail_width, row_height);
+    let name_max_width = (name_column_width(&dims, rail_width, row_height) - tree_prefix_width).max(0.0);
     let name: Element<'static, Message> = text(name_content)
         .size(dims.caption_text)
         .color(name_color)
@@ -176,15 +256,20 @@ fn layer_row(
     .align_y(iced::alignment::Vertical::Center)
     .into();
 
-    let content = row([
-        swatch,
-        Space::new().width(Length::Fixed(dims.spacing_s)).into(),
-        name,
-        Space::new().width(Length::Fill).into(),
-        glyphs,
-    ])
-    .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_s]);
+    // `tree_prefix` は木が実在する時だけ積む(`Vec` — `has_any_tree` で
+    // 要素数が変わるため固定長配列の `row![]` は使えない)。木が無ければ
+    // 導入前と要素数・幅ともに完全に同じ `Row` になる。
+    let mut content_children: Vec<Element<'static, Message>> = Vec::with_capacity(6);
+    if let Some(tree_prefix) = tree_prefix {
+        content_children.push(tree_prefix);
+    }
+    content_children.push(swatch);
+    content_children.push(Space::new().width(Length::Fixed(dims.spacing_s)).into());
+    content_children.push(name);
+    content_children.push(Space::new().width(Length::Fill).into());
+    content_children.push(glyphs);
+
+    let content = row(content_children).align_y(iced::alignment::Vertical::Center).padding([0.0, dims.spacing_s]);
 
     let selected = proj.selected;
     let row_container = container(content)

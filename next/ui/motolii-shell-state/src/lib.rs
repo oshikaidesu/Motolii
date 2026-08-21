@@ -17,6 +17,8 @@
 //! 純粋な再配置: 型の定義・フィールド・ロジックは無改変、置き場所だけを
 //! `motolii-shell/src/state.rs` からここへ移した。
 
+use std::collections::HashSet;
+
 use motolii_store::{LayerId, PropertyId};
 
 /// front だけが持つ状態。**Document の写しは1つも入れないこと**。
@@ -39,6 +41,10 @@ pub struct Session {
     /// (行順→時刻順)上の範囲は毎回この基点から張り直す(正典 §3・§4 と同じ
     /// 「anchor」文法)。
     pub key_anchor: Option<KeySelector>,
+    /// Timeline ツリー行の折り畳み状態(裁定173 H2)。**Document には乗らない**
+    /// — 旧世界 `timeline_rows.rs` の「開閉は Undo の対象ではなく Project
+    /// session に置く」思想をそのまま踏襲([`TimelineFoldState`] doc 参照)。
+    pub timeline_fold: TimelineFoldState,
 }
 
 impl Default for Session {
@@ -49,7 +55,50 @@ impl Default for Session {
             selected_layers: Vec::new(),
             selected_keys: Vec::new(),
             key_anchor: None,
+            timeline_fold: TimelineFoldState::default(),
         }
+    }
+}
+
+/// Timeline ツリー行の折り畳み状態(裁定173 H2、旧世界
+/// `crates/motolii-ui/src/timeline_rows.rs::TimelineFoldState` の概念移植)。
+/// **Document schema には入れない**(旧世界 module doc の踏襲: 開閉は Undo の
+/// 対象ではなく、Timeline の scroll/zoom と同じ棚)。
+///
+/// **旧世界と方向が逆**: 旧世界は `children_open: HashSet<LayerId>`(開いている
+/// ものだけを持つ、既定=全畳み)だった。新世界はツリー行の導入前、全 layer が
+/// 常にフラットな行として見えていた — 導入後にその見た目を壊さないことを
+/// H-survey 発注書の ORACLE が要求する(「fold 既定=全展開で現行の見た目不変」)。
+/// そのため、ここでは**畳んだものだけ**を持つ(`folded: HashSet<LayerId>`) —
+/// 何も触っていない `Session::default()` は自動的に「何も畳まれていない」
+/// (=全展開)になり、既存の PNG/atlas 出力を無改造で保つ。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TimelineFoldState {
+    folded: HashSet<LayerId>,
+}
+
+impl TimelineFoldState {
+    /// `layer` の子を畳む(矢印を閉じる)。
+    pub fn fold(&mut self, layer: LayerId) {
+        self.folded.insert(layer);
+    }
+
+    /// `layer` の子を開く。
+    pub fn unfold(&mut self, layer: LayerId) {
+        self.folded.remove(&layer);
+    }
+
+    /// 開閉を反転する(rail の fold 三角クリック1回ぶん)。
+    pub fn toggle(&mut self, layer: LayerId) {
+        if !self.folded.insert(layer) {
+            self.folded.remove(&layer);
+        }
+    }
+
+    /// `layer` の子が畳まれているか。**畳まれていない(既定)なら `false`** —
+    /// `children_open` は `!is_folded(layer)` として読む(`RowProjection` 参照)。
+    pub fn is_folded(&self, layer: LayerId) -> bool {
+        self.folded.contains(&layer)
     }
 }
 
@@ -77,4 +126,45 @@ pub enum KeySelectionOp {
     /// Shift=`Session::key_anchor` から `key_order` 上の範囲。基点が無ければ
     /// 単独選択へ安全側で倒す(`Shell::apply_key_selection` 参照)。
     Range(KeySelector),
+}
+
+#[cfg(test)]
+mod fold_tests {
+    use super::*;
+
+    /// **オラクル**: 何も触っていない既定状態は「畳まれていない」— H2 発注書
+    /// の「fold 既定=全展開で現行の見た目不変」の直接の柵。
+    #[test]
+    fn default_state_has_nothing_folded() {
+        let fold = TimelineFoldState::default();
+        assert!(!fold.is_folded(LayerId(1)));
+        assert!(!fold.is_folded(LayerId(999)));
+    }
+
+    #[test]
+    fn fold_and_unfold_round_trip() {
+        let mut fold = TimelineFoldState::default();
+        let layer = LayerId(7);
+        fold.fold(layer);
+        assert!(fold.is_folded(layer));
+        fold.unfold(layer);
+        assert!(!fold.is_folded(layer));
+    }
+
+    #[test]
+    fn toggle_flips_between_folded_and_unfolded() {
+        let mut fold = TimelineFoldState::default();
+        let layer = LayerId(3);
+        fold.toggle(layer);
+        assert!(fold.is_folded(layer), "1回目のtoggleで畳まれていない");
+        fold.toggle(layer);
+        assert!(!fold.is_folded(layer), "2回目のtoggleで開き直っていない");
+    }
+
+    #[test]
+    fn folding_one_layer_does_not_affect_another() {
+        let mut fold = TimelineFoldState::default();
+        fold.fold(LayerId(1));
+        assert!(!fold.is_folded(LayerId(2)), "無関係のlayerまで畳まれている");
+    }
 }

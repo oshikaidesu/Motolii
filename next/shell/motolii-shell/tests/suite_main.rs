@@ -60,6 +60,8 @@ mod timeline_key_gesture_drive;
 mod timeline_key_rows_drive;
 #[path = "suite/timeline_preview_drive.rs"]
 mod timeline_preview_drive;
+#[path = "suite/timeline_tree_rows_drive.rs"]
+mod timeline_tree_rows_drive;
 #[path = "suite/tonmana_token_fence.rs"]
 mod tonmana_token_fence;
 #[path = "suite/ui_scale_fence.rs"]
