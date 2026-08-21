@@ -21,7 +21,7 @@ use motolii_store::LayerId;
 
 use crate::tokens::Dimensions;
 
-use super::projection::RowProjection;
+use super::projection::{layer_row_at_y, layer_row_top, RowProjection};
 use super::TimelinePane;
 
 /// M/S/L のどれか。
@@ -79,6 +79,12 @@ fn glyph_label(glyph: Glyph) -> &'static str {
 /// `point` がレーンバー内(`0 <= x < rail_width`)のどこに当たったか。
 /// レーンバーの外は `None` — 呼び出し側(`super::input`)がクリップ面の
 /// `super::hit::hit_test` へ回す。
+///
+/// 行の縦位置は `super::projection::layer_row_top` が正本(T3b EXACT
+/// TARGET 3) — `param_row_height`/`property_row_count`/`selected_index` を
+/// 受けてその逆写像([`layer_row_at_y`])で行 index を求め、glyph の y 範囲も
+/// 同じ [`layer_row_top`] から出す(`super::lane_bar::draw` と同じ式)。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn hit_test(
     point: Point,
     rows: &[RowProjection],
@@ -86,18 +92,26 @@ pub(crate) fn hit_test(
     row_height: f32,
     rail_width: f32,
     dims: &Dimensions,
+    param_row_height: f32,
+    property_row_count: usize,
+    selected_index: Option<usize>,
 ) -> Option<Hit> {
     if point.x < 0.0 || point.x >= rail_width || point.y < ruler_height || row_height <= 0.0 {
         return None;
     }
-    let row_index = ((point.y - ruler_height) / row_height).floor();
-    if row_index < 0.0 {
-        return None;
-    }
-    let row = rows.get(row_index as usize)?;
+    let row_index = layer_row_at_y(
+        point.y - ruler_height,
+        row_height,
+        param_row_height,
+        property_row_count,
+        selected_index,
+    )?;
+    let row = rows.get(row_index)?;
 
+    let row_top = ruler_height
+        + layer_row_top(row_height, param_row_height, property_row_count, selected_index, row_index);
     let glyph_h = glyph_height(dims, row_height);
-    let glyph_y0 = ruler_height + row_height * row_index + (row_height - glyph_h) / 2.0;
+    let glyph_y0 = row_top + (row_height - glyph_h) / 2.0;
     let glyph_y1 = glyph_y0 + glyph_h;
     if point.y >= glyph_y0 && point.y < glyph_y1 {
         for slot in glyph_slots(dims, rail_width) {
