@@ -1,0 +1,83 @@
+<!doctype html>
+<!-- 意味論先出しモック 第3号: Browser(2026-08-21)
+     B2(rail/filter)・B3(絵)の発注仕様になる。一覧の正本= Document 素材台帳
+     (裁定162 bin-first)。Q0 実例集(旧 browser_pane の「機能が無い chrome は
+     置かない」判断列)を踏襲 — このモックに描いた物は全部実機能が付く前提。 -->
+<html lang="ja"><head><meta charset="utf-8"><title>Browser 意味論モック</title>
+<style>
+:root{--surface-panel:#363636;--surface-raised:#3e3e3e;--text-muted:#757575;--text-primary:#cfcfcf;
+--action-active:#d8b574;--hairline-weak:rgba(0,0,0,.35);--sem:#e8c35a}
+body{background:#282828;color:var(--text-primary);font:12px/1.5 -apple-system,sans-serif;margin:24px}
+h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted)}
+label.t{display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:8px 0 14px}
+.pane{position:relative;width:880px;background:var(--surface-panel);border:1px solid #1d1d1d;display:grid;grid-template-columns:140px 1fr;grid-template-rows:26px 1fr}
+.filter{grid-column:2;display:flex;align-items:center;gap:10px;padding:0 10px;background:var(--surface-raised);border-bottom:1px solid #555;font-size:11px;color:var(--text-muted)}
+.filter .q{flex:0 0 180px;height:16px;background:#2e2e2e;border:1px solid #4a4a4a;border-radius:2px}
+.railhead{grid-column:1;background:var(--surface-panel);border-bottom:1px solid #555}
+.rail{grid-column:1;border-right:1px solid var(--hairline-weak);padding:8px 0;font-size:11px}
+.rail div{padding:4px 12px;color:var(--text-muted)}
+.rail .on{color:var(--text-primary);background:rgba(255,255,255,.05)}
+.grid{padding:12px;display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-content:start;min-height:330px}
+.card{position:relative}
+.thumb{height:84px;border-radius:3px;background:linear-gradient(135deg,#555,#333);display:flex;align-items:center;justify-content:center;color:#999;font-size:10px}
+.card .nm{font-size:10px;color:var(--text-primary);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .k{font-size:9px;color:var(--text-muted)}
+.badge{position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--action-active)}
+/* 意味層 */
+#sem{display:none}
+.ann,.lb{display:none;position:absolute;z-index:9;pointer-events:none}
+#sem:checked ~ .pane .ann,#sem:checked ~ .pane .lb{display:block}
+.o{border:1.5px dashed var(--sem);border-radius:3px}
+.lb{background:#151515;color:var(--sem);font-size:10px;line-height:1.35;padding:3px 6px;border:1px solid var(--sem);border-radius:3px;max-width:250px}
+#sem:checked ~ .legend{display:block}.legend{display:none;margin-top:14px;font-size:11px;color:var(--text-muted)}
+.legend b{color:var(--sem)}.legend table{border-collapse:collapse;margin-top:6px}
+.legend td,.legend th{border:1px solid #444;padding:3px 8px;text-align:left;font-weight:400}
+</style></head><body>
+<h1>Browser — 意味論先出しモック(第3号)</h1>
+<div class="hint">一覧の正本= <b>Document 素材台帳</b>(裁定162 bin-first)。描いた物は全部実機能つき(Q0)。第一波= MEDIA のみ(EFFECTS/CREATE はタブごと置かない — 意味起草タスク#14 空席)。</div>
+<label class="t"><input type="checkbox" id="sem" checked> 意味層を表示(S 注記)</label>
+
+<div class="pane">
+  <div class="railhead"></div>
+  <div class="filter"><div class="q"></div><span>種別: すべて</span></div>
+  <div class="rail">
+    <div class="on">All media</div>
+    <div>Project(配置済み)</div>
+    <div>Recent</div>
+  </div>
+  <div class="grid" id="grid"></div>
+
+  <!-- 意味層 -->
+  <div class="ann o" style="left:146px;top:32px;right:6px;bottom:6px"></div>
+  <div class="lb" style="right:8px;top:-34px">S5 ヒーロー = 素材カード grid(S4 重み高 — 視覚発見が主経路の代表例: サムネ+名前+種別で「見て選ぶ」)</div>
+  <div class="lb" style="left:-8px;top:70px;max-width:150px">縁: rail = 台帳の <b>scope 切替(a: 視界状態)</b>。All media=台帳全件 / Project=配置済みのみ / Recent=記帳順。<b>台帳(AdmitAsset)が正本</b> — ファイルシステム走査は行わない(裁定点参照)</div>
+  <div class="lb" style="left:200px;top:22px">縁: filter = 検索+種別絞り(a)。tag/Collections は<b>機能が付くまで置かない</b>(Q0 実例集の踏襲)</div>
+  <div class="lb" style="left:250px;top:120px">カードの動詞(b): <b>drag= Stage/Timeline へ配置</b>(直接操作が第一階)。double-click の意味は裁定点。右クリック= 将来の対象動詞 menu(S6 併存原則つき — 唯一の入口にしない)</div>
+  <div class="lb" style="left:610px;top:196px">● バッジ = <b>配置済み</b>(bin-first の可視化= S6: 「取り込んだが未配置」が見て分かる)</div>
+</div>
+
+<div class="legend">
+  <b>この面の操作の家(種別)と裁定点</b>
+  <table>
+    <tr><th>操作</th><th>種別</th><th>入口</th><th>S0 期待</th></tr>
+    <tr><td>Import</td><td>c</td><td>D&D(全 pane)+<b>メニュー(欠落中 — menubar campaign)</b></td><td>592: 4:1:0:0 menu 優勢 — 既知の S0 強違反</td></tr>
+    <tr><td>配置</td><td>b</td><td>カード drag(直接)</td><td>―</td></tr>
+    <tr><td>scope/filter</td><td>a</td><td>rail/filter(縁)</td><td>980 Project panel: freq3 適合</td></tr>
+    <tr><td>素材の削除/置換/プロキシ</td><td>b</td><td>将来: カード右クリック(併存で)</td><td>C 束 9 行(未着手)</td></tr>
+  </table>
+  <b>未決(このモックで会話すべきこと)</b>: double-click の意味(既定位置へ配置 or プレビュー再生 — Resolve は再生・AE は footage パネル)/ filesystem 走査の要否(旧 browser.rs は台帳+走査の dedupe だった。新世界は台帳純化が筋か)/ 動画サムネの代表フレーム(0 か中央か)/ カード寸(旧実測 124×84 の踏襲か)
+</div>
+
+<script>
+const g=document.getElementById('grid');
+const items=[["intro_take2.mp4","video",1],["logo.png","image",1],["bass_drop.wav","audio",0],
+["cutaway_b.mp4","video",0],["texture_grain.png","image",1],["vo_line3.wav","audio",0],
+["ending_loop.mp4","video",0],["title_bg.png","image",0]];
+items.forEach(([n,k,placed],i)=>{
+  const c=document.createElement('div');c.className='card';
+  c.innerHTML=`<div class="thumb" style="background:linear-gradient(135deg,hsl(${i*40} 18% 38%),#2c2c2c)">${k==='audio'?'〜':''}</div>
+  <div class="nm">${n}</div><div class="k">${k}</div>${placed?'<div class="badge"></div>':''}`;
+  g.appendChild(c);
+});
+</script>
+</body></html>

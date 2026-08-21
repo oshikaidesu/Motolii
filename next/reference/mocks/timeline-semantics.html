@@ -1,0 +1,129 @@
+<!doctype html>
+<!-- 意味論先出しモック 第1号: Timeline(2026-08-21 利用者提起)
+
+     普通のモックとの違い: 絵の上に「意味層」をトグルで重ねられる。意味層の注記
+     (ヒーロー宣言・縁の役割・S 種別/重み段・リズムの根拠)がそのまま発注仕様に
+     なる — 「絵はどうあるべきか」の会話を、実装前にこの1枚の上で行う。
+     色値は tokens 実値の写し(2026-08-21)。tokens が動いたらここも追随させる
+     (乖離はレビューで検出 — 値の正本はあくまで motolii-tokens-rs)。 -->
+<html lang="ja"><head><meta charset="utf-8"><title>Timeline 意味論モック</title>
+<style>
+:root{
+  --surface-panel:#363636; --surface-raised:#3e3e3e; --text-muted:#757575;
+  --text-primary:#cfcfcf; --action-active:#d8b574; --way-timeline:#dc9f90;
+  --state-selected:#565048; --hairline-weak:rgba(0,0,0,.35);
+  --zebra:rgba(255,255,255,.05); --time-band:rgba(255,255,255,.035);
+  --sem:#e8c35a;
+}
+body{background:#282828;color:var(--text-primary);font:12px/1.5 -apple-system,sans-serif;margin:24px}
+h1{font-size:14px;font-weight:600} .hint{color:var(--text-muted)}
+label.t{display:inline-flex;gap:6px;align-items:center;cursor:pointer;user-select:none;margin:8px 0 14px}
+/* ---- 絵(実装と同じ構成規則で組む) ---- */
+.pane{position:relative;width:960px;background:var(--surface-panel);border:1px solid #1d1d1d}
+.grid{display:grid;grid-template-columns:150px 1fr}
+.ruler{grid-column:2;height:22px;background:var(--surface-raised);position:relative;border-bottom:1px solid #555}
+.corner{grid-column:1;height:22px;border-bottom:1px solid #555}
+.tick{position:absolute;bottom:0;width:1px;background:var(--hairline-weak);height:5px}
+.tick.major{height:11px;background:#666}
+.rows{grid-column:1/3;position:relative}
+.row{display:grid;grid-template-columns:150px 1fr;height:26px;border-bottom:1px solid var(--hairline-weak);position:relative}
+.rail{display:flex;align-items:center;gap:4px;padding:0 8px;font-size:11px;color:var(--text-primary)}
+.rail .g{width:12px;height:12px;background:#4a4a4a;border-radius:2px;font-size:8px;line-height:12px;text-align:center;color:var(--text-muted)}
+.field{position:relative}
+.row.z .field{background:var(--zebra)}         /* 行ゼブラ=時間場のみ(railは受けない) */
+.row.sel{background:var(--state-selected)}      /* 選択=行の属性(rail込み全幅) */
+.bands,.bandsr{position:absolute;inset:0;pointer-events:none}
+.band{position:absolute;top:0;bottom:0;background:var(--time-band)}
+.bar{position:absolute;top:4px;height:18px;border-radius:2px}
+.play{position:absolute;top:0;bottom:0;width:1.5px;background:var(--action-active);left:461px}
+.keys{height:18px}.keys .field{background:rgba(0,0,0,.12)}
+.dia{position:absolute;top:5px;width:8px;height:8px;background:#c8c8c8;transform:rotate(45deg)}
+/* ---- 意味層 ---- */
+#sem{display:none}
+.ann{display:none;position:absolute;z-index:9;pointer-events:none}
+#sem:checked ~ .pane .ann{display:block}
+.o{border:1.5px dashed var(--sem);border-radius:3px}
+.lb{position:absolute;background:#151515;color:var(--sem);font-size:10px;line-height:1.35;padding:3px 6px;border:1px solid var(--sem);border-radius:3px;max-width:240px;pointer-events:none}
+#sem:checked ~ .pane .lb{display:block} .lb{display:none}
+#sem:checked ~ .legend{display:block} .legend{display:none;margin-top:14px;font-size:11px;color:var(--text-muted)}
+.legend b{color:var(--sem);font-weight:600}
+.legend table{border-collapse:collapse;margin-top:6px}
+.legend td,.legend th{border:1px solid #444;padding:3px 8px;text-align:left;font-weight:400}
+</style></head><body>
+<h1>Timeline — 意味論先出しモック(第1号)</h1>
+<div class="hint">絵の正本ではなく<b>意味の正本</b>。トグルで意味層を重ねる — この注記がそのまま発注仕様(S 番号)になる。</div>
+<label class="t"><input type="checkbox" id="sem" checked> 意味層を表示(S 注記)</label>
+
+<div class="pane">
+  <div class="grid">
+    <div class="corner"></div>
+    <div class="ruler" id="ruler"></div>
+    <div class="rows" id="rows"></div>
+  </div>
+  <div class="play"></div>
+
+  <!-- 意味層(絵の上の宣言) -->
+  <div class="ann o" style="left:151px;top:0;right:0;bottom:0"></div>
+  <div class="lb" style="right:8px;top:-34px">S5 ヒーロー = 時間構造(bar・キー・playhead)。縁の chrome はこの枠内に浮かべない</div>
+  <div class="lb" style="left:-8px;top:40px;max-width:150px">縁: レーンバー = 座標軸。<b>時間カメラの外</b>(横スケール不通・縦スクロール共有)— 時間場の wash(ゼブラ・帯)を受けない</div>
+  <div class="lb" style="left:190px;top:-6px">縁: ルーラー = 座標軸。小目盛=px下限10を満たす最小ステップ(時間整列)/大目盛=その5·10倍・強ink(S4段)</div>
+  <div class="lb" style="left:420px;top:64px">時間方向は<b>周波数で役割分担</b>(利用者裁定 2026-08-21): 帯=大目盛周期(<b>面</b>の粗いリズム・動的)/縦線=<b>全目盛</b>(<b>線</b>の細かいリズム、小=弱・大=わずかに強い確認線)。Ableton 同構成。線の token ロール(既存 hairline_weak 流用 or 新 grid ロール)は実装時の裁定点</div>
+  <div class="lb" style="left:640px;top:150px">bar の差し色 = label_color <b>index</b>(AE同型・S4 中重み=識別情報)。dragging=ACCENT・hidden=muted が優先</div>
+  <div class="lb" style="left:430px;top:230px">playhead = ACCENT 1.5x。<b>S5b: pane 内の最大コントラストはヒーロー内にのみ許す</b></div>
+</div>
+
+<div class="legend">
+  <b>S0/種別の宣言(この面の操作の家)</b>
+  <table>
+    <tr><th>操作</th><th>種別</th><th>入口</th><th>S0 期待(m:s:p:pref)</th></tr>
+    <tr><td>scrub(ルーラー押下)</td><td>a(視界寄り・裁定保留)</td><td>直接操作</td><td>―</td></tr>
+    <tr><td>bar move/trim</td><td>b</td><td>直接操作(Cmd=snap一時トグル・Esc/RMB=取消)</td><td>―</td></tr>
+    <tr><td>M/S/L</td><td>b</td><td>rail glyph 直接</td><td>1:0:0:0(採取偏重疑い・信頼度低)</td></tr>
+    <tr><td>キー時刻 drag/Cmdリタイム</td><td>b</td><td>菱形直接(キー菱形の文脈でのみ Cmd=リタイム)</td><td>―</td></tr>
+    <tr><td>Play/Pause</td><td>c</td><td>Space+transport ボタン(併存= S6)</td><td>1:3:0:0 適合</td></tr>
+  </table>
+</div>
+
+<script>
+// 絵の生成(モック内の定数は「見本値」— 実装の正本は tick_steps / projection)
+const W=810, dur=1800, fps=30, minor=30, major=150;   // 30fps: 小=1s, 大=5s
+const px=f=>f/dur*W;
+const ruler=document.getElementById('ruler');
+for(let f=0;f<=dur;f+=minor){
+  const t=document.createElement('div');
+  t.className='tick'+(f%major===0?' major':'');
+  t.style.left=px(f)+'px'; ruler.appendChild(t);
+}
+const rows=document.getElementById('rows');
+const bands=(el)=>{
+  // 面の分割=大目盛周期(帯)。
+  for(let f=0;f<dur;f+=major*2){const b=document.createElement('div');
+    b.className='band';b.style.left=px(f+major)+'px';b.style.width=px(major)+'px';el.appendChild(b);}
+  // 線のリズム=全目盛(小目盛が主・弱)。帯(面・粗)と線(細)で周波数を分担する —
+  // 大目盛の縦線をわずかに強くするのは「帯の境界の確認線」であって面の分割ではない。
+  for(let f=minor;f<dur;f+=minor){const l=document.createElement('div');
+    l.style.cssText=`position:absolute;top:0;bottom:0;width:1px;left:${px(f)}px;`+
+      `background:rgba(0,0,0,${f%major===0?0.30:0.18});pointer-events:none`;
+    el.appendChild(l);}
+};
+const data=[[0,140],[30,1770],[90,320],[140,260],[300,200],[520,380],[560,300],[700,60],[830,250],[830,680]];
+data.forEach((d,i)=>{
+  const r=document.createElement('div');
+  r.className='row'+(i%2?' z':'')+(i===5?' sel':'');
+  const rail=document.createElement('div');rail.className='rail';
+  rail.innerHTML=`<span style="width:8px;height:8px;border-radius:2px;background:hsl(${i*30} 32% 62%)"></span>Layer ${i+1} <span class="g">M</span><span class="g">S</span><span class="g">L</span>`;
+  const fl=document.createElement('div');fl.className='field';
+  bands(fl);
+  const bar=document.createElement('div');bar.className='bar';
+  bar.style.left=px(d[0])+'px';bar.style.width=px(d[1])+'px';
+  bar.style.background=`hsl(${i*30} 32% 62%)`;   // 候補C: S=0.32 L=0.62(hue 30°刻み)
+  fl.appendChild(bar);
+  r.append(rail,fl);rows.appendChild(r);
+  if(i===5){const k=document.createElement('div');k.className='row keys';
+    const kr=document.createElement('div');kr.className='rail';kr.style.fontSize='10px';kr.style.color='var(--text-muted)';kr.textContent='position';
+    const kf=document.createElement('div');kf.className='field';bands(kf);
+    [560,700,790,860].forEach(f=>{const d2=document.createElement('div');d2.className='dia';d2.style.left=px(f)+'px';kf.appendChild(d2);});
+    k.append(kr,kf);rows.appendChild(k);}
+});
+</script>
+</body></html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<!-- 意味論先出しモック 第2号: Stage(2026-08-21)
+     Stage は「無視しがち」(利用者)— だが S5 のヒーロー原理が最も純粋に出る pane。
+     絵がヒーローで、他の全てはその説明か座標軸。色値は tokens 実値の写し。 -->
+<html lang="ja"><head><meta charset="utf-8"><title>Stage 意味論モック</title>
+<style>
+:root{--surface-panel:#363636;--surface-raised:#3e3e3e;--text-muted:#757575;--text-primary:#cfcfcf;
+--action-active:#d8b574;--hairline-weak:rgba(0,0,0,.35);--sem:#e8c35a;
+--checker-l:#6b6b6b;--checker-d:#4d4d4d}
+body{background:#282828;color:var(--text-primary);font:12px/1.5 -apple-system,sans-serif;margin:24px}
+h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted)}
+label.t{display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:8px 0 14px}
+.pane{position:relative;width:880px;background:#1c1c1c;border:1px solid #111}
+/* letterbox(カメラ外) */
+.void{position:relative;height:470px;display:flex;align-items:center;justify-content:center}
+/* comp フレーム(絵の領域) */
+.comp{position:relative;width:720px;height:405px;background:#000;overflow:hidden}
+.solid{position:absolute;left:36px;top:28px;width:130px;height:84px;background:#8ff9ff}
+.solid2{position:absolute;left:300px;top:150px;width:220px;height:140px;background:hsl(210 32% 62%)}
+.sel{position:absolute;left:296px;top:146px;width:226px;height:146px;border:1.5px solid var(--action-active)}
+/* 下縁: 状態帯(実装済み μ) */
+.band{display:flex;gap:18px;align-items:center;height:20px;background:var(--surface-panel);
+  border-top:1px solid #555;padding:0 10px;font-size:11px;color:var(--text-muted)}
+.band .clickable{cursor:pointer;border-bottom:1px dotted #555}
+/* 意味層 */
+#sem{display:none}
+.ann,.lb{display:none;position:absolute;z-index:9;pointer-events:none}
+#sem:checked ~ .pane .ann,#sem:checked ~ .pane .lb{display:block}
+.o{border:1.5px dashed var(--sem);border-radius:3px}
+.lb{background:#151515;color:var(--sem);font-size:10px;line-height:1.35;padding:3px 6px;border:1px solid var(--sem);border-radius:3px;max-width:250px}
+#sem:checked ~ .legend{display:block}.legend{display:none;margin-top:14px;font-size:11px;color:var(--text-muted)}
+.legend b{color:var(--sem)}.legend table{border-collapse:collapse;margin-top:6px}
+.legend td,.legend th{border:1px solid #444;padding:3px 8px;text-align:left;font-weight:400}
+</style></head><body>
+<h1>Stage — 意味論先出しモック(第2号)</h1>
+<div class="hint">ヒーロー原理が最も純粋な pane。<b>絵の内側に操作 chrome を浮かべない</b>が憲法。</div>
+<label class="t"><input type="checkbox" id="sem" checked> 意味層を表示(S 注記)</label>
+
+<div class="pane">
+  <div class="void">
+    <div class="comp">
+      <div class="solid"></div>
+      <div class="solid2"></div>
+      <div class="sel"></div>
+    </div>
+  </div>
+  <div class="band">
+    <span>Render View</span>
+    <span class="clickable">Auto (0.62×)</span>
+    <span class="clickable">市松</span>
+  </div>
+
+  <!-- 意味層 -->
+  <div class="ann o" style="left:79px;top:31px;width:722px;height:407px"></div>
+  <div class="lb" style="left:8px;top:6px">S5 ヒーロー = 合成結果の絵。overlay は<b>状態表示のみ</b>(選択枠・comp枠・観測金枠)— ボタン・ダイヤル等の操作 chrome を絵の内側に浮かべない(憲法)</div>
+  <div class="lb" style="left:8px;top:392px;max-width:170px">letterbox = <b>カメラ外の暗幕</b>。comp の外という意味を暗さで語る(chrome ではない)。ドロップは pane 全域で受ける(b: admit=台帳記帳+配置、裁定162)</div>
+  <div class="lb" style="left:560px;top:180px">選択枠 = 状態 overlay(ACCENT)。<b>S5b: pane 最大コントラストはヒーロー内のみ</b> — この枠と playhead 系だけが強い</div>
+  <div class="lb" style="left:300px;top:452px">下縁 = 状態帯(μ 実装済み)。「<b>どう見えているか</b>」の説明列(S6: 状態は隠れない/AE 下端列と同型= S0 適合)。視点は逸脱時のみ表示・解像度と市松はクリック可(a: 視界状態、text 段 ink 弱)</div>
+  <div class="lb" style="right:8px;top:6px;max-width:200px">観測カメラ(wheel/中ボタン)= a。観測中: 金枠=レンダリング枠の状態表示+状態帯に「観測 ×N(Shift+F)」が現れクリック復帰(S6 違反第1号の解消済み)</div>
+</div>
+
+<div class="legend">
+  <b>この面の操作の家(種別)と裁定点</b>
+  <table>
+    <tr><th>操作</th><th>種別</th><th>入口</th><th>備考</th></tr>
+    <tr><td>素材ドロップ</td><td>b</td><td>pane 全域(直接)</td><td><b>裁定点</b>: 配置座標=ドロップ点か既定位置か(現実装=既定位置)</td></tr>
+    <tr><td>レイヤーの掴み移動</td><td>b</td><td>絵の中の対象を直接(将来: ギズモ)</td><td>ギズモは rerun fork に概念を足さない柵の内側で(既決)。<b>未実装</b></td></tr>
+    <tr><td>観測 pan/zoom・復帰</td><td>a</td><td>wheel/中ボタン・Shift+F+状態帯クリック</td><td>併存= S6</td></tr>
+    <tr><td>解像度 cap 巡回・市松</td><td>a</td><td>状態帯(視界の縁)</td><td>μ 済み</td></tr>
+  </table>
+  <b>未決(このモックで会話すべきこと)</b>: 選択枠の見た目の実装確認(現行と一致か)/ comp 枠自体の常時表示(現在: 観測中のみ金枠 — 非観測時に枠線は要るか)/ ドロップ中のホバー反応(Q3 接触報酬)
+</div>
+</body></html>
