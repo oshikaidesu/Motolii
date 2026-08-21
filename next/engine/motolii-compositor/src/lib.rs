@@ -203,9 +203,13 @@ pub struct Compositor {
 
 impl Compositor {
     /// 窓を持たない GPU の上に合成器を建てる。**export も preview もこれ1つ**。
+    ///
+    /// 実体は [`Self::with_device`] の薄いラッパー——adapter/device/queue を
+    /// [`headless::HeadlessGpu`] で自前に建てて渡すだけで、渡す format/config は
+    /// 従来のまま(挙動は不変、`tests/with_device.rs` がバイト一致で縛る)。
     pub fn headless() -> Result<Self, CompositorError> {
         let gpu = headless::HeadlessGpu::new()?;
-        let ctx = RenderContext::new(
+        Self::with_device(
             &gpu.adapter,
             gpu.device,
             gpu.queue,
@@ -220,7 +224,29 @@ impl Compositor {
                 msaa_mode: re_renderer::MsaaMode::Off,
             },
         )
-        .map_err(|e| CompositorError::Context(e.to_string()))?;
+    }
+
+    /// 外部から与えられた GPU device/queue の上に合成器を組む第二コンストラクタ
+    /// (裁定170 M2、2026-08-21)。**まだ誰も呼ばない** — iced 側の配線はここでは
+    /// やらない(配線ゼロ = 挙動ゼロ変更、browser B0 骨格と同じ手口)。
+    ///
+    /// [`Self::headless`] が「device を建てた後」にやっていた共通部分をここへ
+    /// 抽出しただけで、`headless()` 自身の挙動は一切変えていない
+    /// (`tests/with_device.rs` の `with_device_matches_headless` が
+    /// バイト一致で縛る)。
+    ///
+    /// `adapter` を今も要求するのは、現行 fork rev(`Cargo.toml` の `[patch]` 参照)の
+    /// `RenderContext::new` がまだ `&wgpu::Adapter` を引数に取るため——fork へ
+    /// `new_from_device`(adapter 不要版)が入るのは M3 の仕事で、ここでは先取りしない。
+    pub fn with_device(
+        adapter: &wgpu::Adapter,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        output_format: wgpu::TextureFormat,
+        config_provider: impl FnOnce(&re_renderer::device_caps::DeviceCaps) -> re_renderer::RenderConfig,
+    ) -> Result<Self, CompositorError> {
+        let ctx = RenderContext::new(adapter, device, queue, output_format, config_provider)
+            .map_err(|e| CompositorError::Context(e.to_string()))?;
 
         let glow_pipelines = effects::GlowPipelines::new(&ctx.device);
 
