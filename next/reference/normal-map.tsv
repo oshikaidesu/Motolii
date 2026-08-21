@@ -439,7 +439,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 438	edit_basic	Edit Original	元アプリで編集	1	1	0	0	2	2:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用予定	
 439	edit_basic	Find	検索	1	1	0	0	2	2:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用予定	
 440	edit_basic	Paste Attributes	属性・プロパティを貼り付け	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	
-441	edit_basic	Paste Insert	挿入貼り付け	0	1	1	0	2	2:1:0:0	二次(premiere全体注記);公式(BMDマニュアルPDF)		採用予定	
+441	edit_basic	Paste Insert	挿入貼り付け	0	1	1	0	2	2:1:0:0	二次(premiere全体注記);公式(BMDマニュアルPDF)		不採用	裁定175: 跨カテゴリ重複(clip_edit側263が不採用済み)
 442	edit_basic	Auto Select/Deselect All Video	Option+F9	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
 443	edit_basic	Auto Select/Deselect Video V1-V8(grouped, pattern)	Option+F1..Option+F8	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
 444	edit_basic	Clear Selection	選択消去	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	
@@ -469,11 +469,11 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 468	edit_basic	Ungroup	グループ解除	0	1	0	0	1	1:2:0:0	二次(premiere全体注記)		採用予定	
 469	edit_basic	Ungroup selected shapes	選択シェイプのグループ解除	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 470	edit_basic	Ungroup Shapes	シェイプのグループ解除	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-471	effects_animation	Add Expression	エクスプレッションを追加	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	JS文字列式(AEのExpression)はGOALS「要らないもの」で明示不採用。型付きlink+区間イージング+ParamDriverへ写像する方針
+471	effects_animation	Add Expression	エクスプレッションを追加	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: vism抽象化候補・拡張として戸を残す(expression勢力は実在) — コアには入れない
 472	effects_animation	Add Keyframe	キーフレームを追加	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 473	effects_animation	Add Keyframe	キーフレーム追加	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 474	effects_animation	Add Keyframe	Command+[	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
-475	effects_animation	Add or remove expression for property	プロパティにエクスプレッションを追加/削除	1	0	0	0	1	0:1:0:0	公式(Adobe)		不採用	JS文字列式(AEのExpression)はGOALS「要らないもの」で明示不採用。型付きlink+区間イージング+ParamDriverへ写像する方針
+475	effects_animation	Add or remove expression for property	プロパティにエクスプレッションを追加/削除	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: vism抽象化候補・拡張として戸を残す(expression勢力は実在) — コアには入れない
 476	effects_animation	Add or remove keyframe at current time	現在時刻でキーフレームを追加/削除	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 477	effects_animation	Add Static Keyframe	静的キーフレーム追加	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 478	effects_animation	Add Static Keyframe	Command+]	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
@@ -490,8 +490,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 489	effects_animation	Easy ease selected keyframes in	イージーイーズイン	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 490	effects_animation	Easy ease selected keyframes out	イージーイーズアウト	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 491	effects_animation	Exponential Scale	指数スケール	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	Exponential Scaleは旧AEのキーフレームアシスタント。未実装、除外根拠なし
-492	effects_animation	Expression	エクスプレッションセレクタ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	JS文字列式(AEのExpression)はGOALS「要らないもの」で明示不採用。型付きlink+区間イージング+ParamDriverへ写像する方針
-493	effects_animation	Expression Reference…	エクスプレッションリファレンス	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	JS文字列式(AEのExpression)はGOALS「要らないもの」で明示不採用。型付きlink+区間イージング+ParamDriverへ写像する方針
+492	effects_animation	Expression	エクスプレッションセレクタ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: vism抽象化候補・拡張として戸を残す(expression勢力は実在) — コアには入れない
+493	effects_animation	Expression Reference…	エクスプレッションリファレンス	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: vism抽象化候補・拡張として戸を残す(expression勢力は実在) — コアには入れない
 494	effects_animation	Keyframe Animation and Motion Tracking	キーフレームアニメ/モーショントラッキング	0	0	0	1	1	1:0:0:0	公式		採用予定	
 495	effects_animation	Keyframe Interpolation…	キーフレーム補間法	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 496	effects_animation	Keyframe Timeline Mode	キーフレームタイムラインモード	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
@@ -694,8 +694,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 693	layer_transform	Position Objects to Left Title Safe Margin	左タイトルセーフに配置	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	
 694	layer_transform	Position Objects to Top Title Safe Margin	上タイトルセーフに配置	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	
 695	layer_transform	Position…	位置	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	inspector_pane.rs position_row
-696	layer_transform	Pre-render…	プリレンダー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-697	layer_transform	RAM Preview	RAMプレビュー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+696	layer_transform	Pre-render…	プリレンダー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	裁定175: freeze動詞で代用(意図=明示固定と同期保持、DAW由来) — pre-renderの機構は露出しない
+697	layer_transform	RAM Preview	RAMプレビュー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	裁定175: freeze動詞で代用(意図=明示固定と同期保持、DAW由来) — pre-renderの機構は露出しない
 698	layer_transform	Reference Reposition	Option+Shift+R	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
 699	layer_transform	Reposition shape during creation	作成中にシェイプを再配置	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 700	layer_transform	Reset	トランスフォームをリセット	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
@@ -703,7 +703,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 702	layer_transform	Reset Scale to 100%	スケールを100%にリセット	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 703	layer_transform	Rotation Tool	回転ツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	
 704	layer_transform	Rotation…	回転	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	inspector_pane.rs rotation_row
-705	layer_transform	Save RAM Preview…	RAMプレビューを保存	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+705	layer_transform	Save RAM Preview…	RAMプレビューを保存	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	裁定175: freeze動詞で代用(意図=明示固定と同期保持、DAW由来) — pre-renderの機構は露出しない
 706	layer_transform	Scale and reposition layers to fit composition	コンポにフィットさせスケール・再配置	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 707	layer_transform	Scale and reposition to fit composition height	コンポ高さにフィット	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 708	layer_transform	Scale and reposition to fit composition width	コンポ幅にフィット	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
@@ -738,7 +738,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 737	marker	Go to Out	アウト点へ	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
 738	marker	Modify Marker	マーカー編集	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
 739	marker	Modify Marker	Shift+M	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
-740	marker	Ripple Timeline Markers	タイムラインマーカーをリップル	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
+740	marker	Ripple Timeline Markers	タイムラインマーカーをリップル	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	裁定175: ripple編集不採用による空洞化
 741	marker	Set In and Out from Duration Marker	尺マーカーからイン/アウト設定	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
 742	marker	Show Flags	フラグ表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
 743	marker	Show Markers	マーカー表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済	Timeline第1波にマーカー表示が着地済み(裁定120「行・bar・ruler・playhead・マーカー・scrub・選択」)
@@ -842,9 +842,9 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 841	misc	Extend selection to next layer	次レイヤーまで選択拡張	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	timeline-grammar §8.1 FocusRowPrev/Next 正。未実装
 842	misc	Extend selection to previous item	前項目まで選択範囲を拡張	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	841と同根拠
 843	misc	Extend selection to previous layer	前レイヤーまで選択拡張	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	841と同根拠
-844	misc	Fast Previews > Draft	高速プレビュー:ドラフト	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	裁定21のproxy/品質方針、UIは未
-845	misc	Fast Previews > Fast Draft	高速プレビュー:ファストドラフト	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	844と同根拠
-846	misc	Fast Previews > Off	高速プレビュー:オフ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	844と同根拠
+844	misc	Fast Previews > Draft	高速プレビュー:ドラフト	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+845	misc	Fast Previews > Fast Draft	高速プレビュー:ファストドラフト	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+846	misc	Fast Previews > Off	高速プレビュー:オフ	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
 847	misc	File…	プロキシファイルを指定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 848	misc	Filters	フィルター適用	0	0	0	1	1	1:0:0:0	公式		採用済	B2で種別フィルタとして実装(2026-08-22、rail/filter shelf)
 849	misc	Fit to Fill	尺に合わせて挿入	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし(gapless前提ではない自由配置と両立可)
@@ -907,8 +907,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 906	misc	Outer Glow	光彩(外側)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	レイヤースタイルは裁定71で全廃
 907	misc	Output Module…	出力モジュールテンプレート	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 908	misc	Pixel Motion	ピクセルモーション	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
-909	misc	Pre-compose…	プリコンポーズ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	GOALS要らないもの「プリコンポ/Nest/Compound clip—グループ化+ベイクへ置換済み」(裁定119)
-910	misc	Precompose selected layers	選択レイヤーをプリコンポーズ	1	0	0	0	1	0:1:0:0	公式(Adobe)		不採用	909と同根拠
+909	misc	Pre-compose…	プリコンポーズ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	裁定173/174/175: グループレイヤー(G1)+freezeで意図を代替 — precomp機構は露出しない
+910	misc	Precompose selected layers	選択レイヤーをプリコンポーズ	1	0	0	0	1	0:1:0:0	公式(Adobe)		不採用	裁定173/174/175: 同上
 911	misc	Preserve Transparency	透明度を保持	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 912	misc	Preview specified number of frames	指定フレーム数をプレビュー	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 913	misc	Previous Still	Option+Command+P	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし
@@ -987,7 +987,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 986	panel_window	Audio Clip Mixer	クリップ単位の音声ミキサーパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし
 987	panel_window	Audio Meters	音量VUメーターパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし
 988	panel_window	Audio Track Mixer	トラック単位の音声ミキサーパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし
-989	panel_window	Brushes	ブラシ設定パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
+989	panel_window	Brushes	ブラシ設定パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)
 990	panel_window	Character	文字設定パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	text束は裁定121/122でほぼ完了だがCharacterパネルUI自体は未
 991	panel_window	Color Page	ノードベースのカラーグレーディングを行うページ	0	0	1	0	1	0:0:1:0	公式(BMDマニュアルPDF)		不採用	GOALS要らないもの「ノードグラフUI—ユーザーに見せない」。Color Pageはノードベース合成
 992	panel_window	Composition	コンポジションのプレビュー・編集パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用済	next/shell Stage実装済み(image widget + Engine::render_frame、裁定26/44)
@@ -1021,7 +1021,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1020	panel_window	Metadata	メタデータ表示パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 1021	panel_window	Metadata	クリップ/シーケンスのメタデータパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし
 1022	panel_window	Motion Sketch	モーションスケッチ記録パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)	out-of-domain?	採用予定	既決との衝突なし(D5の型付きwiggle方向性と対立しない)
-1023	panel_window	Paint	ペイントツールパネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
+1023	panel_window	Paint	ペイントツールパネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)
 1024	panel_window	Paragraph	段落設定パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 1025	panel_window	Preview	プレビュー再生制御パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	GOALS M8(未)
 1026	panel_window	Preview / Player window	プレビュー(再生モニター)	0	0	0	1	1	0:0:1:0	一致(2件)		採用済	Stage実装済み(992と同根拠。Preview/Player windowは同義の出力ビューア)
@@ -1052,7 +1052,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1051	playback	Display filename in Info panel	Infoパネルにファイル名を表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 1052	playback	Display snapshot in active viewer	スナップショットを表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 1053	playback	Extend Selected Edit to Playhead	選択編集点を延長	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		不採用	trim family(roll相当)不採用 — 拘束1
-1054	playback	Extract	エクストラクト	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	
+1054	playback	Extract	エクストラクト	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		不採用	裁定175: 跨カテゴリ重複(clip_edit 208-210/226-228が不採用済み)
 1055	playback	Fast Forward	早送り	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 1056	playback	Fast Forward	Shift+L	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
 1057	playback	Fast Reverse	早戻し	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
@@ -1078,7 +1078,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1077	playback	Jump Left	左へジャンプ	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 1078	playback	Jump Right	右へジャンプ	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 1079	playback	Last Frame	'(apostrophe)	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
-1080	playback	Lift	リフト	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	
+1080	playback	Lift	リフト	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		不採用	裁定175: 跨カテゴリ重複(同上)
 1081	playback	Lock or unlock guides	ガイドロック切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 1082	playback	Loop/Unloop	ループ切替	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 1083	playback	Loop/Unloop	Command+/	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
@@ -1145,8 +1145,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1144	preferences	Preferences / Settings (entry point)	環境設定を開く入口	0	1	1	1	3	2:1:0:1	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF);公式(原文: "Click Settings in the upper-right corner of the screen")		採用済	next/shell ToggleSettingsPanel実装済み(settings_pane.rs)
 1145	preferences	Keyboard Shortcuts (editor)	キーボードショートカットのカスタマイズ画面	1	1	0	0	2	2:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe)		採用予定	裁定146でkeymap層による再割当方針は決定済みだが実装は未(lib.rsコメント「keymap層が無い今だけ直結」)
 1146	preferences	Advanced	特殊構成向け詳細設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
-1147	preferences	All Memory	全メモリを消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
-1148	preferences	All Memory & Disk Cache…	メモリとディスクキャッシュを全消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
+1147	preferences	All Memory	全メモリを消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1148	preferences	All Memory & Disk Cache…	メモリとディスクキャッシュを全消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
 1149	preferences	Allow Scripts to Write Files and Access Network	スクリプトによるファイル書込・ネットワークアクセスを許可	1	0	0	0	1	0:0:0:1	公式(Adobe)		不採用	裁定6: 拡張の口はtrait1本。スクリプトのファイル書込/ネットワークアクセス許可は別の口が前提
 1150	preferences	Appearance	UI外観・ラベル/マスクのハイライト色設定	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	token/theme機構は実装済み(裁定142)だがGUI設定パネルは未
 1151	preferences	Appearance	UIの明るさ・コントラストなど外観設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
@@ -1157,7 +1157,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1156	preferences	Audio Plugins	VSTエフェクト/外部音声処理設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		不採用	GOALS要らないもの「VST互換」(利用者確認2026-08-20、KNOWN.md記載)。VSTエフェクト設定そのもの
 1157	preferences	Auto Save	自動保存の間隔設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
 1158	preferences	Auto-Save	自動保存の間隔と保持世代数	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
-1159	preferences	Cache size / clear cache	キャッシュ容量表示・削除(プロジェクト/メディア自体は消えない)	0	0	0	1	1	0:0:0:1	単一(個別ページ未直接取得。WebSearch要約経由のため信頼度中)		採用予定	既決との衝突なし
+1159	preferences	Cache size / clear cache	キャッシュ容量表示・削除(プロジェクト/メディア自体は消えない)	0	0	0	1	1	0:0:0:1	単一(個別ページ未直接取得。WebSearch要約経由のため信頼度中)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
 1160	preferences	Camera Raw	カメラメーカー別RAWデコード設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)	out-of-domain?	不採用	領域外: プロカメラRAWデコード設定(製品固有深部機能、ffmpegサイドカー経路の対象外、既flag)
 1161	preferences	Capture and Playback	デッキ設定/キャプチャ/プレイアウト	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		不採用	領域外: 放送デッキのキャプチャ/プレイアウト設定(プロ入出力機材)
 1162	preferences	Collaboration	共同編集関連設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
@@ -1171,7 +1171,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1170	preferences	Editing	新規タイムライン既定/スマートビン等の編集設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1171	preferences	Enable JavaScript Debugger	ExtendScriptデバッガを有効化	1	0	0	0	1	0:0:0:1	公式(Adobe)		不採用	裁定6: 拡張の口はtrait1本
 1172	preferences	Enable Proxy (+解像度選択)	プロキシ編集の有効化と解像度選択	0	0	0	1	1	0:0:0:1	単一(同上、要一次確認)		採用予定	裁定21のproxy方針とUI直結、未実装
-1173	preferences	Expression Pick Whip Writes Compact English	ピックウィップが簡潔な英語表記のエクスプレッションを生成	1	0	0	0	1	0:0:0:1	公式(Adobe)		不採用	GOALS D5/要らないもの「JS文字列式」(ピックウィップはexpression生成機能そのもの)
+1173	preferences	Expression Pick Whip Writes Compact English	ピックウィップが簡潔な英語表記のエクスプレッションを生成	1	0	0	0	1	0:0:0:1	公式(Adobe)		拡張	裁定175: vism抽象化候補・拡張として戸を残す(expression勢力は実在) — コアには入れない
 1174	preferences	Fairlight	ビデオI/Oオフセット/ループジョグ等の音声設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)	out-of-domain?	不採用	領域外: Fairlight級の音声I/O設定(裁定125)
 1175	preferences	Fairlight	タイムラインサンプルレート/バス/メータリング	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)	out-of-domain?	不採用	1174と同根拠
 1176	preferences	General	その他一般設定(アンドゥ回数、ツールチップ表示、OS標準ショートカット使用等)	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
@@ -1181,7 +1181,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1180	preferences	Graphics	グラフィック関連の初期設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
 1181	preferences	Grid & Guides	グリッド色・サイズ、ガイド色、セーフマージン(Action Safe / Title Safe / Center-Cut)	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	裁定155で明示: Stageのグリッド/セーフマージン等カメラビュー系UIも回収対象
 1182	preferences	Hardware decoding / encoding toggle	ハードウェアデコード/エンコード高速化	0	0	0	1	1	0:0:0:1	単一(同上)		採用予定	既決との衝突なし
-1183	preferences	Image Cache Memory	画像キャッシュメモリを消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
+1183	preferences	Image Cache Memory	画像キャッシュメモリを消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
 1184	preferences	Image Scaling	入力/出力の画像スケーリング方式	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1185	preferences	Import	静止画の既定表示時間、埋め込みアルファの扱い、ドラッグ&ドロップ読み込みの挙動	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
 1186	preferences	Internet Accounts	クラウド/動画共有サービスのログイン連携	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
@@ -1192,12 +1192,12 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1191	preferences	Language	UI表示言語切替	0	0	0	1	1	0:0:0:1	公式(原文: "Go to the General > Language tab")		採用予定	既決との衝突なし
 1192	preferences	Master Settings	タイムライン形式/ビデオモニタリング/最適化メディア/作業フォルダ	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1193	preferences	Media	静止画スケーリング・プロキシ設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
-1194	preferences	Media & Disk Cache	キャッシュ・メディアフォルダの場所、Enable Disk Cache、Maximum Disk Cache Size、Enable Compressed Frames等	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
-1195	preferences	Media Cache	メディアキャッシュファイルの自動削除設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
+1194	preferences	Media & Disk Cache	キャッシュ・メディアフォルダの場所、Enable Disk Cache、Maximum Disk Cache Size、Enable Compressed Frames等	1	0	0	0	1	0:0:0:1	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1195	preferences	Media Cache	メディアキャッシュファイルの自動削除設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
 1196	preferences	Media Storage	メディアストレージの登録フォルダ管理	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
-1197	preferences	Memory	Premiere Proへ割り当てるRAM量の設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
-1198	preferences	Memory & Multiprocessing	メモリ割当・マルチフレームレンダリング・他アプリ用CPU予約	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
-1199	preferences	Memory and GPU	システムメモリ上限/GPU処理モード/GPU選択	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
+1197	preferences	Memory	Premiere Proへ割り当てるRAM量の設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1198	preferences	Memory & Multiprocessing	メモリ割当・マルチフレームレンダリング・他アプリ用CPU予約	1	0	0	0	1	0:0:0:1	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
+1199	preferences	Memory and GPU	システムメモリ上限/GPU処理モード/GPU選択	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
 1200	preferences	Metadata	メタデータプリセットのカスタム項目	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1201	preferences	Output	出力時のファイル分割、既定ファイル名/フォルダの使用可否	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
 1202	preferences	Path Mapping	パスマッピング/プロジェクトメディア所在地	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
@@ -1205,9 +1205,9 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1204	preferences	Playback Settings	UIオーバーレイ非表示/パフォーマンスモード	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1205	preferences	Previews	プレビュー全般の設定(オーディオプレビュー長、適応解像度品質、ハードウェアアクセラレーション等)	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	裁定21のproxy/quality方針と直結
 1206	preferences	Project Save and Load	自動保存/ライブセーブ/バックアップ設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	GOALS M11
-1207	preferences	Purge All Memory	全メモリをパージ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
+1207	preferences	Purge All Memory	全メモリをパージ	1	0	0	0	1	0:1:0:0	公式(Adobe)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
 1208	preferences	Show Scripting Progress Dialog	スクリプト実行中の進捗ダイアログを表示	1	0	0	0	1	0:0:0:1	公式(Adobe)		不採用	裁定6: 拡張の口はtrait1本
-1209	preferences	Show Warning Banner When Project Contains Expression Errors	エクスプレッションエラー時に警告バナー表示	1	0	0	0	1	0:0:0:1	公式(Adobe)		不採用	GOALS D5(JS文字列式不要)によりexpressionエラー機構自体が不要
+1209	preferences	Show Warning Banner When Project Contains Expression Errors	エクスプレッションエラー時に警告バナー表示	1	0	0	0	1	0:0:0:1	公式(Adobe)		拡張	裁定175: vism抽象化候補・拡張として戸を残す(expression勢力は実在) — コアには入れない
 1210	preferences	Subtitles and Transcription	字幕プリセット/文字起こし言語	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 1211	preferences	Sync Settings	Creative Cloud経由でショートカット・設定を同期(Audio Hardware/Output Mapping/一部Media & Disk Cache設定は同期対象外)	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし
 1212	preferences	Sync Settings	Creative Cloud経由の設定同期	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし
@@ -1234,7 +1234,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1233	project	Close Project	プロジェクトを閉じる	0	1	0	0	1	1:0:0:0	二次(premiere全体注記)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
 1234	project	Display…	モーションパス等の表示設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
 1235	project	General…	その他一般設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
-1236	project	Media & Disk Cache…	メディア・ディスクキャッシュ設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
+1236	project	Media & Disk Cache…	メディア・ディスクキャッシュ設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		保留	裁定175: ゼロコピー下の残ボトルネック調査待ち(rerun側実測) — 何が低解像度を要求するのか未確定
 1237	project	Memory & Multiprocessing…	メモリ・マルチプロセス設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
 1238	project	New project = Ctrl+N	新規プロジェクト	0	0	0	1	1	0:1:0:0	一致(2件)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
 1239	project	Output…	出力時の既定動作設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	プロジェクト作成/保存派生操作・環境設定ダイアログ群・バージョン情報・プロジェクトマネージャ相当・XML書き出し等はGOALS M1/M11の範囲内または一般的なpreferences機能。除外根拠なし
@@ -1264,7 +1264,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1263	text	Decrease or increase font size by 2 units	フォントサイズを2単位増減	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	TextDocumentStyle.size: f32 実装済み(裁定91絶対サイズ)
 1264	text	Decrease or increase kerning/tracking 100 units	カーニング/トラッキングを100単位増減	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	tracking実装済み(TextDocumentStyle.tracking / PropertyId::text_range_tracking)
 1265	text	Decrease or increase kerning/tracking 20 units	カーニング/トラッキングを20単位増減	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	tracking実装済み(TextDocumentStyle.tracking / PropertyId::text_range_tracking)
-1266	text	Enable Per-character 3D	文字ごとの3Dを有効化	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	文字単位の3D回転は裁定113/115の2.5Dモデル(全層z=0既定・カメラは固定軸で向きの表現は未定義)と衝突。グリフ単位の姿勢表現はまだ開けていない
+1266	text	Enable Per-character 3D	文字ごとの3Dを有効化	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	2.5Dモデル(裁定113/115)と衝突。再訪条件=D12(3D差別化)の将来スコープ拡大時(裁定175)
 1267	text	Extend or reduce selection by one character in horizontal text	1文字ずつ選択範囲を拡大縮小(横書き)	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	テキストボックス内カーソル/選択範囲拡張はUIテキスト編集機能。未実装だが除外根拠なし
 1268	text	Extend or reduce selection by one character in vertical text	1文字ずつ選択範囲を拡大縮小(縦書き)	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	テキストボックス内カーソル/選択範囲拡張はUIテキスト編集機能。未実装だが除外根拠なし
 1269	text	Extend or reduce selection by one line in horizontal text	1行ずつ選択範囲を拡大縮小(横書き)	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	テキストボックス内カーソル/選択範囲拡張はUIテキスト編集機能。未実装だが除外根拠なし
@@ -1372,7 +1372,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1371	timeline	Track this Property	このプロパティをトラック	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 1372	timeline	Video Track Destination V1-V8(grouped, pattern)	Option+1..Option+8	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
 1373	timeline	Zoom Timeline to single-frame units	1フレーム単位までズーム	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
-1374	tool	Activate and cycle Brush, Clone Stamp, and Eraser tools	ブラシ/コピースタンプ/消しゴムを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
+1374	tool	Activate and cycle Brush, Clone Stamp, and Eraser tools	ブラシ/コピースタンプ/消しゴムを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)
 1375	tool	Activate and cycle Puppet tools	パペットツールを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		不採用	GOALS要らないもの「IK/キャラリグ」。Puppet toolはメッシュベースの2Dキャラリグ機構
 1376	tool	Activate and cycle Type tools	文字ツールを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 1377	tool	Activate Hand tool	手のひらツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
@@ -1425,10 +1425,10 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1424	tool	Script to Video	台本から動画生成(AI)	0	0	0	1	1	1:0:0:0	公式		採用予定	既決との衝突なし
 1425	tool	Select Tool	選択ツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし
 1426	tool	Selection Tool	選択ツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし
-1427	tool	Set brush hardness	ブラシ硬さを設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
-1428	tool	Set brush size	ブラシサイズを設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
-1429	tool	Set Clone Stamp starting sample point	コピースタンプの開始点を設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
-1430	tool	Set flow for paint tool	ペイントツールのフローを設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
+1427	tool	Set brush hardness	ブラシ硬さを設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)
+1428	tool	Set brush size	ブラシサイズを設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)
+1429	tool	Set Clone Stamp starting sample point	コピースタンプの開始点を設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)
+1430	tool	Set flow for paint tool	ペイントツールのフローを設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)
 1431	tool	Temporarily activate Hand tool	一時的に手のひらツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 1432	tool	Temporarily activate Pen tool with Selection selected	選択ツール中に一時的にペンツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 1433	tool	Temporarily activate Selection tool with pen selected	ペン選択中に一時的に選択ツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
@@ -1448,7 +1448,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1447	view_display	Clear Guides	ガイドを消去	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	裁定155(カメラビュー系UI回収対象)
 1448	view_display	Custom…	解像度:カスタム	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 1449	view_display	Enhanced Viewer	Option+F	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし
-1450	view_display	Fast Previews > Adaptive Resolution	高速プレビュー:適応解像度	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
+1450	view_display	Fast Previews > Adaptive Resolution	高速プレビュー:適応解像度	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	裁定175確認: μ裁定163の解像度capとして実装済み(verdict未反映の整合修正)
 1451	view_display	Fast Previews > Wireframe	高速プレビュー:ワイヤーフレーム	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 1452	view_display	Full	解像度:フル	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 1453	view_display	Full Screen Viewer	Shift+F	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし
@@ -1466,7 +1466,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1465	view_display	Safe Area	セーフエリア表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	裁定155で明示: Stageのセーフエリアは回収対象
 1466	view_display	Set Quality to Best, Draft, or Wireframe	画質を最高/下書き/ワイヤーフレームに設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 1467	view_display	Set resolution to Full, Half, or Custom	解像度をフル/半分/カスタムに設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
-1468	view_display	Show and move Clone Stamp overlay	コピースタンプオーバーレイを表示・移動	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
+1468	view_display	Show and move Clone Stamp overlay	コピースタンプオーバーレイを表示・移動	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)
 1469	view_display	Show Grid	グリッドを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	裁定155
 1470	view_display	Show Guides	ガイドを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	裁定155
 1471	view_display	Show Reference Wipe	Command+W	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし
@@ -1517,11 +1517,11 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1516	workspace	Move application window to main monitor and resize	メインモニタへ移動しリサイズ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 1517	workspace	New Workspace…	新規ワークスペース	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	裁定128
 1518	workspace	Open Flowchart panel for project	Flowchartパネルを開く	1	0	0	0	1	0:1:0:0	公式(Adobe)		不採用	GOALS要らないもの「ノードグラフUI」相当(Flowchartはprecomp依存グラフ表示、1003/1005と同根拠)
-1519	workspace	Open or close Brushes panel	Brushesパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
+1519	workspace	Open or close Brushes panel	Brushesパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)
 1520	workspace	Open or close Effect Controls panel for selected layer	Effect Controlsパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 1521	workspace	Open or close Effects & Presets panel	Effects & Presetsパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 1522	workspace	Open or close Info panel	Infoパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
-1523	workspace	Open or close Paint panel	Paintパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
+1523	workspace	Open or close Paint panel	Paintパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)
 1524	workspace	Open or close Preview panel	Previewパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 1525	workspace	Open or close Project panel	Projectパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
 1526	workspace	Open or close Render Queue panel	Render Queueパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
