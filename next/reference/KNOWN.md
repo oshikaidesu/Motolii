@@ -36,7 +36,7 @@
 - id は専用 newtype(LayerId/MaskId/TextRangeId/EffectId/TextStyleId)。**採番は store 正本 `StoreView::next_layer_id()`(墓石込み)** — 現存最大+1 を自前計算しない
 - `apply_all` は原子的(失敗でロールバック、裁定118)。削除=tombstone(`present=false`)。`RESERVED` 名と `Document::mark_undo_floor()` に注意
 - 保存は `flattened()` が store に聞く(手列挙禁止、裁定108/118)。component 追加時は `flatten_fence.rs` が守る
-- ファイル地図: mask.rs / marker.rs / attrs.rs / text.rs / effect.rs(store)、frame.rs+camera.rs(core)、timeline_pane.rs+tokens.rs(shell)
+- ファイル地図: mask.rs / marker.rs / attrs.rs / text.rs / effect.rs(store)、frame.rs+camera.rs(core)、timeline/(旧timeline_pane.rs、5分割済み)+tokens.rs(shell)
 
 ## 既知の穴(発見報告不要。直すのも別途裁定してから)
 - bm / matte / ao は store にあるが**合成器が未消費**(地図 note に明記済み)
