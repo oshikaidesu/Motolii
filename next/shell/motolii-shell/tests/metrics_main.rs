@@ -5,3 +5,5 @@
 
 #[path = "suite/render_pipeline_fence.rs"]
 mod render_pipeline_fence;
+#[path = "suite/zero_copy_presenter_fence.rs"]
+mod zero_copy_presenter_fence;
