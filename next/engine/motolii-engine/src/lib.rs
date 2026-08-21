@@ -638,17 +638,39 @@ fn to_u8_rgba(c: [f32; 4]) -> [u8; 4] {
     ]
 }
 
-/// `motolii_store::BlendMode`(Document の16値、裁定67)を
-/// `motolii_compositor::BlendMode`(合成器が固定式 blend equation で表現できる分だけ、
-/// `motolii-compositor` のモジュール doc 参照)へ写す。対応外は
+/// `motolii_store::BlendMode`(Document の17値、裁定67 + BL2 の `Add`)を
+/// `motolii_compositor::BlendMode`(合成器が表現できる分だけ、`motolii-compositor`
+/// のモジュール doc 参照)へ写す。対応外(非分離4種、BL4)は
 /// [`EngineError::UnsupportedBlendMode`] — 黙って `Normal` へ近似しない。
+///
+/// **BL3(2026-08-22)**: Multiply〜Exclusion の11値(分離可能 blend、
+/// `motolii_compositor::separable_mode_index` が扱う分)を Normal/Add と同じ1対1で
+/// 追加。**`_` を使わない**(全 variant を列挙)——`motolii_store::BlendMode` に
+/// variant が増えた時、ここを更新し忘れるとコンパイルが落ちる。
 fn translate_blend_mode(
     mode: motolii_store::BlendMode,
 ) -> Result<motolii_compositor::BlendMode, EngineError> {
+    use motolii_compositor::BlendMode as Dst;
+    use motolii_store::BlendMode as Src;
     match mode {
-        motolii_store::BlendMode::Normal => Ok(motolii_compositor::BlendMode::Normal),
-        motolii_store::BlendMode::Add => Ok(motolii_compositor::BlendMode::Add),
-        other => Err(EngineError::UnsupportedBlendMode(other)),
+        Src::Normal => Ok(Dst::Normal),
+        Src::Add => Ok(Dst::Add),
+        Src::Multiply => Ok(Dst::Multiply),
+        Src::Screen => Ok(Dst::Screen),
+        Src::Overlay => Ok(Dst::Overlay),
+        Src::Darken => Ok(Dst::Darken),
+        Src::Lighten => Ok(Dst::Lighten),
+        Src::ColorDodge => Ok(Dst::ColorDodge),
+        Src::ColorBurn => Ok(Dst::ColorBurn),
+        Src::HardLight => Ok(Dst::HardLight),
+        Src::SoftLight => Ok(Dst::SoftLight),
+        Src::Difference => Ok(Dst::Difference),
+        Src::Exclusion => Ok(Dst::Exclusion),
+        // 非分離4種(Hue/Saturation/Color/Luminosity、BL4)——`motolii-compositor` に
+        // 対応する variant が無い、まだ実装していない。
+        other @ (Src::Hue | Src::Saturation | Src::Color | Src::Luminosity) => {
+            Err(EngineError::UnsupportedBlendMode(other))
+        }
     }
 }
 
@@ -671,13 +693,27 @@ mod translate_blend_mode_tests {
         );
     }
 
-    /// 対応外は従来どおり明示的に `Err`(黙って近似しない)。
+    /// **BL3**: 分離可能 blend の11値も同じ1対1で `Ok`(代表して Multiply/SoftLight
+    /// の2つを固定 — 全11の網羅は `tests/blend_separable.rs` の数値検証が担う)。
     #[test]
-    fn multiply_is_still_rejected() {
+    fn separable_modes_are_accepted() {
+        assert_eq!(
+            translate_blend_mode(motolii_store::BlendMode::Multiply).unwrap(),
+            motolii_compositor::BlendMode::Multiply
+        );
+        assert_eq!(
+            translate_blend_mode(motolii_store::BlendMode::SoftLight).unwrap(),
+            motolii_compositor::BlendMode::SoftLight
+        );
+    }
+
+    /// 非分離4種(BL4)は依然として明示的に `Err`(黙って近似しない)。
+    #[test]
+    fn hue_is_still_rejected() {
         assert!(matches!(
-            translate_blend_mode(motolii_store::BlendMode::Multiply),
+            translate_blend_mode(motolii_store::BlendMode::Hue),
             Err(EngineError::UnsupportedBlendMode(
-                motolii_store::BlendMode::Multiply
+                motolii_store::BlendMode::Hue
             ))
         ));
     }

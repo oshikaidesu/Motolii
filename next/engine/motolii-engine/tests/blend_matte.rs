@@ -98,9 +98,12 @@ fn explicit_normal_blend_mode_matches_the_default() {
     assert_eq!(before, after);
 }
 
-/// **落ちるテスト先行**: `Normal` 以外の blend mode は合成器がまだ表現できないので、
-/// 黙って近似せず明示的に `Err` を返す(KNOWN.md に「未消費」と書かれていた穴を
-/// 「読むが対応外は拒む」まで塞いだ、というのがこの束の主張)。
+/// **落ちるテスト先行**: 非分離4種(Hue/Saturation/Color/Luminosity、BL4)はまだ
+/// 合成器が表現できないので、黙って近似せず明示的に `Err` を返す(KNOWN.md に
+/// 「未消費」と書かれていた穴を「読むが対応外は拒む」まで塞いだ、というのが
+/// この束の主張)。**分離可能11種(Multiply〜Exclusion)は BL3 で対応済み**——
+/// この不変式(対応外は拒む)を保つ代表として、まだ実装していない `Hue` を使う
+/// (数値検証は `tests/blend_separable.rs`)。
 #[test]
 fn unsupported_blend_modes_are_rejected_not_silently_approximated() {
     let mut doc = doc_with_comp();
@@ -110,7 +113,7 @@ fn unsupported_blend_modes_are_rejected_not_silently_approximated() {
     doc.apply(Intent::SetAttrs {
         layer,
         patch: LayerAttrsPatch {
-            blend_mode: Some(BlendMode::Multiply),
+            blend_mode: Some(BlendMode::Hue),
             ..Default::default()
         },
     })
@@ -121,9 +124,35 @@ fn unsupported_blend_modes_are_rejected_not_silently_approximated() {
     assert!(
         matches!(
             result,
-            Err(EngineError::UnsupportedBlendMode(BlendMode::Multiply))
+            Err(EngineError::UnsupportedBlendMode(BlendMode::Hue))
         ),
-        "Multiply は未対応のまま明示的に拒まれるはず: {result:?}"
+        "Hue(非分離、BL4)は未対応のまま明示的に拒まれるはず: {result:?}"
+    );
+}
+
+/// **BL3**: 分離可能 blend(Multiply〜Exclusion)は `Add` と同じ経路で受け付けられる
+/// (代表して Multiply — 数値の正しさは `tests/blend_separable.rs` が縛る)。
+#[test]
+fn separable_blend_mode_is_accepted_and_renders() {
+    let mut doc = doc_with_comp();
+    let (base, top) = (LayerId(1), LayerId(2));
+    place(&mut doc, base, [200, 200, 200, 255], 0);
+    place(&mut doc, top, [200, 0, 0, 255], 1);
+
+    doc.apply(Intent::SetAttrs {
+        layer: top,
+        patch: LayerAttrsPatch {
+            blend_mode: Some(BlendMode::Multiply),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    let mut engine = Engine::new().expect("engine");
+    let result = engine.render_frame(&doc.view(), t(0));
+    assert!(
+        result.is_ok(),
+        "Multiply は対応外として拒まれてはいけない: {result:?}"
     );
 }
 

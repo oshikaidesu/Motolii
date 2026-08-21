@@ -97,7 +97,9 @@ use motolii_store::{
     LayerSource, PropertyId, StoreError, StoreView, Value,
 };
 
-use motolii_settings_pane::chrome::{button_style, parse_number, section_header, value_input_style};
+use motolii_settings_pane::chrome::{
+    button_style, parse_number, section_header, value_input_style,
+};
 use motolii_shell_state::Session;
 use motolii_tokens_rs::{Colors, Dimensions, Ink, TextWeight};
 
@@ -334,11 +336,26 @@ pub fn speed_percent(num: i64, den: i64) -> f64 {
 /// Blend 巡回ボタンが回る mode の一覧。**engine 側の変換表
 /// (`next/engine/motolii-engine/src/lib.rs::translate_blend_mode`)と同期を保つ義務が
 /// ある**(発注書「決定済み事項」— 対応 mode の一覧を engine 側と同じ場所には置か
-/// ない、という決定に沿って Inspector 側にハードコードする)。現状2値なのでこの
-/// 二重化は許容し、将来 dropdown 化する時に解消する。
+/// ない、という決定に沿って Inspector 側にハードコードする)。**BL3(2026-08-22)**で
+/// 分離可能11種(Multiply〜Exclusion)を追加——並びは `motolii_store::BlendMode` の
+/// 宣言順(AE のメニュー順同型、Normal 直後に Add)のまま。非分離4種
+/// (Hue/Saturation/Color/Luminosity、BL4)はまだここに無い(engine 側 `translate_blend_mode`
+/// が対応するまで、対応 mode だけを巡る発注書の決定どおり)。dropdown 化する時に
+/// この二重化は解消する。
 pub const SUPPORTED_BLEND_MODES: &[motolii_store::BlendMode] = &[
     motolii_store::BlendMode::Normal,
     motolii_store::BlendMode::Add,
+    motolii_store::BlendMode::Multiply,
+    motolii_store::BlendMode::Screen,
+    motolii_store::BlendMode::Overlay,
+    motolii_store::BlendMode::Darken,
+    motolii_store::BlendMode::Lighten,
+    motolii_store::BlendMode::ColorDodge,
+    motolii_store::BlendMode::ColorBurn,
+    motolii_store::BlendMode::HardLight,
+    motolii_store::BlendMode::SoftLight,
+    motolii_store::BlendMode::Difference,
+    motolii_store::BlendMode::Exclusion,
 ];
 
 /// Blend 巡回ボタンの次の値。**現在値が [`SUPPORTED_BLEND_MODES`] に無い場合**
@@ -415,7 +432,10 @@ pub fn dragged_value(field: TransformField, start_value: f64, delta_px: f32, fin
 /// 戻り値の第2要素は Vec2 系(Position/Scale/Anchor)の「動かさない方の成分」
 /// ([`next_value`] にそのまま渡す) — scalar 系(Z/Rotation/Opacity)では未使用
 /// (`[0.0, 0.0]` のダミー)。
-pub fn drag_origin(selection: &SelectionProjection, field: TransformField) -> Option<(f64, [f64; 2])> {
+pub fn drag_origin(
+    selection: &SelectionProjection,
+    field: TransformField,
+) -> Option<(f64, [f64; 2])> {
     for row in &selection.transform {
         match &row.value {
             RowValue::Vector(components) => {
@@ -550,7 +570,10 @@ fn scalar_component(
 ) -> Result<ComponentSlot, StoreError> {
     let property = PropertyId::new(name)?;
     let track = store.track(layer, &property)?;
-    let editable = track.as_ref().map(|tr| tr.keys().len() <= 1).unwrap_or(true);
+    let editable = track
+        .as_ref()
+        .map(|tr| tr.keys().len() <= 1)
+        .unwrap_or(true);
     let value = match store.value_at(layer, &property, t)? {
         Some(Value::F64(v)) => v,
         _ => default,
@@ -575,7 +598,10 @@ fn vec2_components(
 ) -> Result<[ComponentSlot; 2], StoreError> {
     let property = PropertyId::new(name)?;
     let track = store.track(layer, &property)?;
-    let editable = track.as_ref().map(|tr| tr.keys().len() <= 1).unwrap_or(true);
+    let editable = track
+        .as_ref()
+        .map(|tr| tr.keys().len() <= 1)
+        .unwrap_or(true);
     let [x, y] = match store.value_at(layer, &property, t)? {
         Some(Value::Vec2(v)) => [v[0], v[1]],
         _ => default,
@@ -830,8 +856,12 @@ pub fn commit_inspector_field(
     };
     let value = next_value(field, input, current_vec2);
     let track = single_hold_track(value);
-    doc.apply(Intent::SetTrack { layer, property, track })
-        .map_err(|error| format!("値を書けない: {error}"))
+    doc.apply(Intent::SetTrack {
+        layer,
+        property,
+        track,
+    })
+    .map_err(|error| format!("値を書けない: {error}"))
 }
 
 /// Attrs の Name 欄 — 下書きを確定して1回の `Intent::SetAttrs` を出す。下書きが
@@ -1099,9 +1129,14 @@ pub fn view_with_speed_draft(
 
     let body: Element<'static, Message> = match projection {
         None => empty_state(dims, colors),
-        Some(selection) => {
-            selected_body(selection, field_draft, name_draft, speed_draft, dims, colors)
-        }
+        Some(selection) => selected_body(
+            selection,
+            field_draft,
+            name_draft,
+            speed_draft,
+            dims,
+            colors,
+        ),
     };
 
     container(column![header, body])
@@ -1385,7 +1420,12 @@ fn value_cell(
         // animated(2キー以上) — **表示のみと明示**(理由つきdisabledではなく、
         // そもそも編集 control を出さない。accent 色で「動いている値」と分かる —
         // 箱形自体は編集セルと同じ)。
-        _ => boxed_value(display_number(slot.value, decimals), colors.action_active, dims, colors),
+        _ => boxed_value(
+            display_number(slot.value, decimals),
+            colors.action_active,
+            dims,
+            colors,
+        ),
     }
 }
 
@@ -1583,7 +1623,11 @@ fn glyph_button_style(
 /// ident 帯の名前欄。未フォーカス時は枠・背景を消して静止 bold テキストに見せ、
 /// フォーカス時だけ枠と背景を出す(mock はここを編集可能な `text_input` として
 /// 描いていない — 実装が実際に持つ機能=改名を隠さないための最小限の意匠)。
-fn name_input_style(dims: Dimensions, colors: Colors, status: text_input::Status) -> text_input::Style {
+fn name_input_style(
+    dims: Dimensions,
+    colors: Colors,
+    status: text_input::Status,
+) -> text_input::Style {
     let (background, border_color) = match status {
         text_input::Status::Focused { .. } => (colors.surface_app, colors.action_active),
         text_input::Status::Hovered => (colors.surface_hover, colors.border_default),
@@ -1730,19 +1774,34 @@ mod tests {
     // BL2: Blend 巡回ボタンの次の値
     // -----------------------------------------------------------------------
 
-    /// Normal→Add→Normal と回る(現状 `SUPPORTED_BLEND_MODES` は2値)。
+    /// Normal→Add→Multiply→…→Exclusion→Normal と、宣言順どおり13値を一周して戻る
+    /// (**BL3** — `SUPPORTED_BLEND_MODES` を更新したらこのテストが長さのズレを拾う)。
     #[test]
     fn cycles_through_supported_modes_and_wraps() {
         use motolii_store::BlendMode;
+        assert_eq!(SUPPORTED_BLEND_MODES.len(), 13);
         assert_eq!(next_blend_mode(BlendMode::Normal), BlendMode::Add);
-        assert_eq!(next_blend_mode(BlendMode::Add), BlendMode::Normal);
+        assert_eq!(next_blend_mode(BlendMode::Add), BlendMode::Multiply);
+        assert_eq!(next_blend_mode(BlendMode::Multiply), BlendMode::Screen);
+        assert_eq!(next_blend_mode(BlendMode::Screen), BlendMode::Overlay);
+        assert_eq!(next_blend_mode(BlendMode::Overlay), BlendMode::Darken);
+        assert_eq!(next_blend_mode(BlendMode::Darken), BlendMode::Lighten);
+        assert_eq!(next_blend_mode(BlendMode::Lighten), BlendMode::ColorDodge);
+        assert_eq!(next_blend_mode(BlendMode::ColorDodge), BlendMode::ColorBurn);
+        assert_eq!(next_blend_mode(BlendMode::ColorBurn), BlendMode::HardLight);
+        assert_eq!(next_blend_mode(BlendMode::HardLight), BlendMode::SoftLight);
+        assert_eq!(next_blend_mode(BlendMode::SoftLight), BlendMode::Difference);
+        assert_eq!(next_blend_mode(BlendMode::Difference), BlendMode::Exclusion);
+        assert_eq!(next_blend_mode(BlendMode::Exclusion), BlendMode::Normal);
     }
 
     /// 現在値が非対応(将来の下位互換ケース)なら、エラーにせず一覧の先頭へ。
+    /// **BL3** で Multiply は対応済みになったので、まだ非対応な非分離4種(BL4)の
+    /// `Hue` で確かめる。
     #[test]
     fn unsupported_current_value_falls_back_to_the_first_supported_mode() {
         use motolii_store::BlendMode;
-        assert_eq!(next_blend_mode(BlendMode::Multiply), BlendMode::Normal);
+        assert_eq!(next_blend_mode(BlendMode::Hue), BlendMode::Normal);
     }
 
     // -----------------------------------------------------------------------
@@ -1804,10 +1863,19 @@ mod tests {
         let expected = single_row_horizontal_inset(dims.body_text);
         assert_eq!(padding.top, 0.0, "縦(上)は行高合わせのため0のはず");
         assert_eq!(padding.bottom, 0.0, "縦(下)は行高合わせのため0のはず");
-        assert_eq!(padding.left, expected, "横(左)の内余白が裁定168 の0.6emと違う");
-        assert_eq!(padding.right, expected, "横(右)の内余白が裁定168 の0.6emと違う");
+        assert_eq!(
+            padding.left, expected,
+            "横(左)の内余白が裁定168 の0.6emと違う"
+        );
+        assert_eq!(
+            padding.right, expected,
+            "横(右)の内余白が裁定168 の0.6emと違う"
+        );
         assert!(padding.left > 0.0, "横の内余白が0のまま(旧バグの再発)");
-        assert_eq!(expected, 7.0, "既定dims(body_text=11)での0.6em丸め値が想定と違う");
+        assert_eq!(
+            expected, 7.0,
+            "既定dims(body_text=11)での0.6em丸め値が想定と違う"
+        );
     }
 
     #[test]
@@ -1904,10 +1972,19 @@ mod tests {
 
     #[test]
     fn next_value_converts_opacity_percent_to_the_stored_fraction() {
-        assert_eq!(next_value(TransformField::Opacity, 50.0, [0.0, 0.0]), Value::F64(0.5));
+        assert_eq!(
+            next_value(TransformField::Opacity, 50.0, [0.0, 0.0]),
+            Value::F64(0.5)
+        );
         // クランプ: 100 を超える入力・負の入力は store の 0..1 に収める。
-        assert_eq!(next_value(TransformField::Opacity, 150.0, [0.0, 0.0]), Value::F64(1.0));
-        assert_eq!(next_value(TransformField::Opacity, -10.0, [0.0, 0.0]), Value::F64(0.0));
+        assert_eq!(
+            next_value(TransformField::Opacity, 150.0, [0.0, 0.0]),
+            Value::F64(1.0)
+        );
+        assert_eq!(
+            next_value(TransformField::Opacity, -10.0, [0.0, 0.0]),
+            Value::F64(0.0)
+        );
     }
 
     #[test]
@@ -1957,15 +2034,27 @@ mod tests {
     #[test]
     fn dragged_value_applies_the_registry_sensitivity_per_field() {
         // Position/Anchor/Z = 1px→1.0。
-        assert_eq!(dragged_value(TransformField::PositionX, 0.0, 10.0, false), 10.0);
-        assert_eq!(dragged_value(TransformField::AnchorY, 0.0, -4.0, false), -4.0);
-        assert_eq!(dragged_value(TransformField::PositionZ, 0.0, 3.0, false), 3.0);
+        assert_eq!(
+            dragged_value(TransformField::PositionX, 0.0, 10.0, false),
+            10.0
+        );
+        assert_eq!(
+            dragged_value(TransformField::AnchorY, 0.0, -4.0, false),
+            -4.0
+        );
+        assert_eq!(
+            dragged_value(TransformField::PositionZ, 0.0, 3.0, false),
+            3.0
+        );
         // Scale = 1px→0.01。
         assert!((dragged_value(TransformField::ScaleX, 1.0, 10.0, false) - 1.1).abs() < 1e-9);
         // Rotation = 1px→0.5度。
         assert!((dragged_value(TransformField::Rotation, 0.0, 10.0, false) - 5.0).abs() < 1e-9);
         // Opacity = 1px→1(%)。
-        assert_eq!(dragged_value(TransformField::Opacity, 50.0, 20.0, false), 70.0);
+        assert_eq!(
+            dragged_value(TransformField::Opacity, 50.0, 20.0, false),
+            70.0
+        );
     }
 
     #[test]
@@ -1973,7 +2062,10 @@ mod tests {
         let normal = dragged_value(TransformField::PositionX, 0.0, 100.0, false);
         let fine = dragged_value(TransformField::PositionX, 0.0, 100.0, true);
         assert_eq!(normal, 100.0);
-        assert!((fine - 10.0).abs() < 1e-9, "Shift+drag は1/10のはず: {fine}");
+        assert!(
+            (fine - 10.0).abs() < 1e-9,
+            "Shift+drag は1/10のはず: {fine}"
+        );
     }
 
     #[test]
@@ -2077,7 +2169,8 @@ mod tests {
     }
 
     #[test]
-    fn transform_row_widens_the_value_cell_gap_beyond_the_old_spacing_xs_token_at_a_larger_row_height() {
+    fn transform_row_widens_the_value_cell_gap_beyond_the_old_spacing_xs_token_at_a_larger_row_height(
+    ) {
         // 既定 dims(row_height=20)では旧 `spacing_xs`(2px)と新式(round(1.5)=2px)
         // が偶然一致してしまい、この2つの違いを既定 dims だけでは検分できない
         // (`sibling_gap_px` 自体は独立式であることを別テストで固定済み)。
