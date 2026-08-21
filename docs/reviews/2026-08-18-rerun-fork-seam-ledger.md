@@ -125,3 +125,12 @@ reset_view(): 既定カメラの PNG と sha256 まで一致(Rerun の画作り�
   (`fov_y` を必ず `Some` で渡している)。正対 2D を orthographic でやりたくなった
   時点で、`fov_y: None` を通す形へ広げられる
 - **既存 seam の各差分。** §1 の表は commit 題名と diffstat からの整理である
+
+## Seam: ViewBuilder::main_target() read accessor(裁定161 BL1b、2026-08-21)
+
+- 上流 file: `crates/viewer/re_renderer/src/view_builder.rs`
+- 実質差分: +15行(既存 struct/関数への追加メソッド1本のみ、既存コードの変更ゼロ)
+- 内容: `ViewTargetSetup.main_target_resolved`(private、Rgba8UnormSrgb)への read-only accessor。`ViewBuilder::composite()`(ガンマ round-trip 込み)を経由せずに、線形合成後・ガンマ変換前の中間結果を embedder が直接読める
+- oracle: fork 側 `crates/viewer/re_renderer/tests/motolii_main_target_accessor.rs`(`main_target_reflects_the_view_that_was_drawn`)。Motolii 側は `motolii-compositor/tests/sequential.rs`(`sequential_matches_render_for_overlapping_alpha_and_pinned_fixture`、バイト一致)がこの accessor に依存する消費者
+- 消費者: `motolii-compositor::Compositor::render_sequential`(`next/engine/motolii-compositor/src/lib.rs`)。新規 WGSL ゼロ(既存 RectangleDrawData+import_gpu_premultiplied+ScreenshotProcessor の再利用)。実装の罠2件は同 lib.rs doc に file:line 込みで記録(ViewBuilder drop 時の texture destroy / 背景 rect の Nearest 固定)
+- pin rev: **反映済み**(fork commit `856f597c3`、GitHub push 済み・`next/Cargo.toml` 全10 entry を bump、検証用 [patch] は除去済み — `cbbe4f2b`)
