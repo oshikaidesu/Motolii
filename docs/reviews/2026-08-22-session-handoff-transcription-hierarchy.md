@@ -55,3 +55,12 @@
 - ボード編集の正規表現で括弧をエスケープし忘れ M4 走行行の残骸を放置(後に発見・掃除)。README 索引行の merge conflict を3回発生させた(worktree 分岐点が古い時の定型 — 解決も定型化済みだが、発注時に「README は触らない・supervisor が書く」へ寄せる方が安い)
 - T-canvas 検収で timeline suite だけ回し shell suite を回さず merge → T-rail 検収時に red 発覚(fix-forward 済み。検収の型: 影響 crate の suite は必ず回す)
 - 市松トグルの実窓検分で座標クリックを2回外して打ち切り(利用者チェックリストへ委譲 — 判断は正しいが、CGEvent の frontmost 前提を最初から確認すべきだった)
+
+## 6. 延長戦(引き継ぎ初版の後 — 最終追記)
+
+- **利用者「まだまだ行きます」で延長**: 裁定175(争点束13件決着 — freeze 代用・**拡張 verdict 新設**(Expression/ペイント=戸を残す16行)・保留14)・裁定176(File束= rfd)・**裁定177(意図統合の原則 — 意図束・積極統合・1意図=1つの家)**
+- **着地**: MB-1(File メニュー・freq4 の New Project 消化)・G1(**グループ化動詞 — 変換階層が動詞まで完成**・新 Intent 不要・world 位置保存証明)・CF(cap 高速路修理=「速くするボタンが遅い」根治)・SR(scratch 再利用)・RB(残ボトルネック実像: ソース帯域律速・decode=ffmpeg起動/miss+64LRU)・SS(三層フィルタ台帳)・MA(map 全面精査)・**IB(意図束草案 44束 — 利用者の命名一瞥待ち)**。**map 消化 143/1,551**・裁定は166〜177 の12本
+- **走行中のまま終了: BL3(blend 分離可能11)** — 回収手順は前例どおり(worktree mtime+ListAgents 生存確認→検収。write-set= store attrs.rs+compositor+engine+inspector)
+- **次セッションの第1手候補**: (1) BL3 回収 (2) **IB 44束の利用者命名一瞥**→bundle 列を map へ+機械検査 (3) 朝の一瞥5件(実窓)は未消化のまま
+- **新 queue**: **検収の静的化**(利用者提起 — 毎回フルビルドしない検収: cargo check 層/純関数テスト層/フルの3段分離・nextest 等の調査)・Open 切片(MB-1 FINDING の3設計問題)・アニメ付き Group 解除の厳密化(G1 FINDING)・宿無し AI 系3行の verdict 再審(生成境界)
+- **supervisor の誤り(追加)**: check-docs の FAILED をパイプ exit code 取りこぼしで push(即 fix-forward。教訓: `check-docs.sh | tail` は合否を殺す — tail を外すか pipefail)・G1 merge の意味衝突(Item Option 化)は型が捕捉
