@@ -25,6 +25,7 @@ use motolii_store::{
 pub mod clipboard;
 pub mod fixture;
 pub mod screenshot;
+pub mod transport;
 
 /// `state`(`Session`/`KeySelector`/`KeySelectionOp`)は裁定160 切片6 で
 /// `motolii-shell` 内の module へ移設し、切片7(timeline-pane crate 抽出、
@@ -97,6 +98,7 @@ pub use motolii_stage_pane as stage;
 use chrome::button_style;
 use inspector_pane::{FieldDraft, TransformField};
 use settings_pane::BackgroundFieldDraft;
+use transport::{open_real_playback, Transport};
 
 use tokens::{Colors, Dimensions, Tokens};
 
@@ -280,6 +282,16 @@ pub enum Message {
     SelectAllLayers,
     /// 選択を全解除する(正典: 空白クリックと同義のキーボード入口)。
     DeselectAllLayers,
+
+    // ---- 実時間再生(A2、正典 §2 拘束5) ----
+    /// Space。Play/Pause をトグルする。**ドラッグ中は無効**(拘束5「再生と
+    /// 掴みは相互排他」)— 判断は `Shell::toggle_playback` 側(`is_dragging()`)
+    /// が持つ、翻訳層(`resolve_navigation_key`)は常にこの Message を出す。
+    TogglePlayback,
+    /// 再生中だけ発行される tick(`subscription()` が `is_running()` の間だけ
+    /// 束ねる)。`Session::playhead` を `PlaybackClock::position()` へ追随させ、
+    /// comp 終端に達したら自動で Pause する(発注書 ORACLE (a)/(e))。
+    PlaybackTick,
 }
 
 /// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
@@ -407,6 +419,12 @@ pub struct Shell {
     /// **表示専用の front 状態** — Document には乗らない、`Session` とも別の身分
     /// (undo/redo に一切関わらない)。
     clipboard: clipboard::Clipboard,
+
+    // ---- 実時間再生(A2、2026-08-21) ----
+    /// 再生セッションの生死(`transport.rs` doc 参照)。**Document でも
+    /// `Session` でもない** — undo に一切乗らない表示/デバイス専用の状態
+    /// (`observation`/`clipboard` と同じ身分)。
+    transport: Transport,
 }
 
 impl Shell {
@@ -446,6 +464,7 @@ impl Shell {
                 ui_scale_draft: None,
                 observation: None,
                 clipboard: clipboard::Clipboard::default(),
+                transport: Transport::new(),
             },
             Task::none(),
         )
@@ -481,6 +500,7 @@ impl Shell {
             ui_scale_draft: None,
             observation: None,
             clipboard: clipboard::Clipboard::default(),
+            transport: Transport::new(),
         };
         // `update()` を経由しないので、通常なら `update` の末尾が呼ぶ
         // `refresh_frame` をここで代わりに呼ぶ(Stage を空のまま起動しない、M17)。
@@ -508,7 +528,15 @@ impl Shell {
         // (`inspector_pointer_event` — 翻訳だけで、drag 中かどうかの判断は
         // `Shell::update` 側 = `inspector_drag` の有無)。
         let pointer = iced::event::listen_with(inspector_pointer_event);
-        iced::Subscription::batch([window, tokens, pointer])
+        // 実時間再生(A2): 再生中だけtickを束ねる — Pause中はSubscriptionから
+        // 落ちるので`transport::tick_stream`のOSスレッドも後始末される
+        // (`transport.rs`のdoc参照)。
+        let ticks = if self.transport.is_running() {
+            transport::tick_subscription().map(|()| Message::PlaybackTick)
+        } else {
+            iced::Subscription::none()
+        };
+        iced::Subscription::batch([window, tokens, pointer, ticks])
     }
 
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
@@ -528,7 +556,7 @@ impl Shell {
                     self.status = Some("これ以上進めない".to_owned());
                 }
             }
-            Message::ScrubTo(frame) => self.session.playhead = frame.max(0),
+            Message::ScrubTo(frame) => self.scrub_to(frame),
             Message::Select(layer) => self.select_single(layer),
             Message::AdmitPaths(paths) => self.admit(paths),
             Message::DropReceived(path) => self.pending_drops.push(path),
@@ -554,7 +582,7 @@ impl Shell {
             // 委譲する — 拒否理由があれば `self.status` へそのまま渡す。
             Message::Timeline(msg) => match msg {
                 timeline_pane::Message::Select(layer) => self.select_single(layer),
-                timeline_pane::Message::ScrubTo(frame) => self.session.playhead = frame.max(0),
+                timeline_pane::Message::ScrubTo(frame) => self.scrub_to(frame),
                 timeline_pane::Message::ToggleMute(layer) => self.toggle_layer_hidden(layer),
                 timeline_pane::Message::ToggleSolo(layer) => self.toggle_layer_solo(layer),
                 timeline_pane::Message::ToggleLock(layer) => self.toggle_layer_lock(layer),
@@ -623,6 +651,8 @@ impl Shell {
             Message::DuplicateLayer => self.duplicate_layer(),
             Message::SelectAllLayers => self.select_all_layers(),
             Message::DeselectAllLayers => self.deselect_all_layers(),
+            Message::TogglePlayback => self.toggle_playback(),
+            Message::PlaybackTick => self.advance_playback_tick(),
         }
         self.refresh_frame();
         task
@@ -1010,6 +1040,94 @@ impl Shell {
         self.session.playhead = timeline::nav::clip_edge_frame(row.start, row.duration, edge);
     }
 
+    // ---- 実時間再生(A2、正典 §2 拘束5) ----
+
+    /// `Message::ScrubTo`/`timeline_pane::Message::ScrubTo` の唯一の書き口。
+    /// **再生中の scrub = seek**(発注書 ORACLE (c))— `Transport::seek` は
+    /// `PlaybackClock::seek`(純粋、counters非依存)へ委譲するので実デバイス
+    /// 無しで検証できる(`transport.rs` doc参照)。
+    fn scrub_to(&mut self, frame: i64) {
+        let frame = frame.max(0);
+        self.session.playhead = frame;
+        if self.transport.is_running() {
+            if let Some(fps) = self.composition().map(|c| c.fps) {
+                if let Ok(at) = RationalTime::try_from_frame(frame, fps) {
+                    self.transport.seek(at);
+                }
+            }
+        }
+    }
+
+    /// Space(発注書 ORACLE (d))。**ドラッグ中は無効**(正典 §2 拘束5「再生と
+    /// 掴みは相互排他」)— Timeline の clip/key ドラッグと Inspector の
+    /// 値セルドラッグのどちらでも封じる(掴み全般が対象、Timeline に限らない)。
+    fn toggle_playback(&mut self) {
+        if self.is_dragging() {
+            return;
+        }
+        if self.transport.is_running() {
+            self.freeze_playhead_from_transport();
+            self.transport.stop();
+        } else if let Err(error) = self.transport.start(open_real_playback, &self.doc, &self.session) {
+            self.status = Some(error);
+        }
+    }
+
+    /// 進行中の掴みがあるか(Timeline clip/key ドラッグ + Inspector 値セル
+    /// ドラッグ)。`toggle_playback`(拘束5)専用の判定 — 個々の drag 状態は
+    /// それぞれの pane/フィールドの持ち物のまま(このメソッドは束ねて読むだけ)。
+    fn is_dragging(&self) -> bool {
+        self.timeline.is_dragging() || self.inspector_drag.is_some()
+    }
+
+    /// Pause の直前に呼ぶ: 今の再生位置を`Session::playhead`へ確定させる
+    /// (`transport.stop()`は位置を保存しないので、呼ぶ前にこれが要る —
+    /// `transport.rs::Transport::stop`のdoc参照)。
+    fn freeze_playhead_from_transport(&mut self) {
+        let Some(fps) = self.composition().map(|c| c.fps) else {
+            return;
+        };
+        if let Some(frame) = self.transport.position_frame(fps) {
+            self.session.playhead = frame.max(0);
+        }
+    }
+
+    /// 再生中tick(発注書 ORACLE (a)/(e))。`PlaybackClock::position()` を
+    /// `Session::playhead` へ写す。comp 終端に達したら位置を終端へ揃えて
+    /// 自動 Pause する(`JumpPlayheadToEnd`と同じ`comp_end_frame`を使うので
+    /// 「終端」の定義が二重にならない)。
+    fn advance_playback_tick(&mut self) {
+        let Some(fps) = self.composition().map(|c| c.fps) else {
+            self.transport.stop();
+            return;
+        };
+        let Some(frame) = self.transport.position_frame(fps) else {
+            return;
+        };
+        let duration = self.comp_duration();
+        let end = timeline::nav::comp_end_frame(duration);
+        if frame >= end {
+            self.session.playhead = end;
+            self.transport.stop();
+        } else {
+            self.session.playhead = frame.max(0);
+        }
+    }
+
+    /// **ORACLE の試験専用の縫い目**(「デバイス抽象はフェイクで — A1と同じ手」)。
+    /// `motolii_audio::PlaybackSession::for_simulation` で組んだフェイク
+    /// セッション(実cpal無し、`PlaybackCounters`を`advance_supplied_for_
+    /// simulation`で手動で進める)を、実デバイスを一切開かずに再生中状態へ
+    /// 直接採用する。本番経路(`toggle_playback`)はこれを経由しない
+    /// (`open_real_playback`を直接呼ぶ)。
+    pub fn debug_start_playback_with_session(&mut self, session: motolii_audio::PlaybackSession) {
+        self.transport.start_with_session(session);
+    }
+
+    /// 運転席が見るための口(`can_undo`/`can_redo`と同じ形)。
+    pub fn is_playing(&self) -> bool {
+        self.transport.is_running()
+    }
 
     // ---- Settings パネル(タスク#18、裁定160 切片9) ----
 
@@ -1433,7 +1551,7 @@ impl Shell {
             // 回避)。`.map(Message::Timeline)` で1回だけ畳む(§3.1 の
             // 「pane-local Message を親が畳む」構成そのもの)。
             .push(timeline.view().map(Message::Timeline))
-            .push(transport(&self.session, &store, dims, colors))
+            .push(transport(&self.session, &store, self.transport.is_running(), dims, colors))
             .push(status_band(self.status.as_deref(), &self.doc, dims, colors))
             .spacing(dims.spacing_m)
             .padding(dims.spacing_l)
@@ -1876,6 +1994,12 @@ pub fn resolve_navigation_key(
         Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("o") => {
             Some(Message::JumpClipEdge(timeline::nav::ClipEdge::Out))
         }
+        // Play/Pause(A2、正典 §2 拘束5)。`captured`(text_input 入力中)なら
+        // 上の早期returnで既に弾かれている — typing 中の Space は普通の
+        // スペース文字入力のまま(playback を奪わない)。ドラッグ中かどうかの
+        // 判断(拘束5)はここでは持たない — `Shell::toggle_playback` 側
+        // (`is_dragging()`)。
+        Key::Named(Named::Space) => Some(Message::TogglePlayback),
         _ => None,
     }
 }
@@ -1934,9 +2058,15 @@ fn stage_pane(
         .into()
 }
 
+/// `is_playing` は `Shell::transport`(Document/`Session`とは別の身分の
+/// front 状態、`transport.rs` doc 参照)から呼び出し側が渡す — pane 関数は
+/// `StoreView`/`&Session`/`Tokens` しか取らない制約(このファイル冒頭の
+/// doc)の例外を増やさないため、他の pane と同じ「呼び出し側が明示引数で
+/// 渡す」形(`stage_pane`の`overlay`と同じ)にした。
 fn transport<'a>(
     session: &Session,
     store: &StoreView<'a>,
+    is_playing: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'a, Message> {
@@ -1947,7 +2077,16 @@ fn transport<'a>(
         .map(|c| (c.duration_frames - 1).max(0) as i32)
         .unwrap_or(0);
 
+    // Play/Pause(A2)。**マウス完結**(ui-hand-feel-direction: 手触り方向 —
+    // Spaceキーだけに頼らない、クリックでも成立する)。ラベルは今の状態の
+    // 逆(ボタンは「次に何が起きるか」を示す慣習、多くの動画編集/音楽
+    // ソフトと同じ)。
+    let toggle_label = if is_playing { "Pause" } else { "Play" };
+
     row![
+        button(text(toggle_label).size(dims.body_text))
+            .style(move |_theme, status| button_style(dims, colors, status))
+            .on_press(Message::TogglePlayback),
         text(format!("frame {}", session.playhead))
             .size(dims.body_text)
             .color(colors.action_active),

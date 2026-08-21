@@ -87,6 +87,9 @@ motolii-core = { path = "core/motolii-core" }
 motolii-eval = { path = "core/motolii-eval" }
 motolii-store = { path = "core/motolii-store" }
 motolii-testkit = { path = "core/motolii-testkit" }
+# 実時間再生 第2切片(A2、2026-08-21): `motolii-shell` が `PlaybackSession`
+# (device/producer 結線 + `PlaybackClock`)を叩いて Space Play/Pause を結線する。
+motolii-audio = { path = "engine/motolii-audio" }
 motolii-compositor = { path = "engine/motolii-compositor" }
 motolii-engine = { path = "engine/motolii-engine" }
 motolii-export = { path = "engine/motolii-export" }

@@ -32,6 +32,8 @@ mod inspector_pixel_fence;
 mod nav_drive;
 #[path = "suite/observation_camera_drive.rs"]
 mod observation_camera_drive;
+#[path = "suite/playback_drive.rs"]
+mod playback_drive;
 #[path = "suite/q0_fence.rs"]
 mod q0_fence;
 #[path = "suite/settings_drive.rs"]

@@ -168,6 +168,13 @@ impl PaneState {
         self.key_drag.is_some()
     }
 
+    /// clip drag/keyドラッグのどちらかが進行中か。実時間再生(A2、正典 §2
+    /// 拘束5「再生と掴みは相互排他: ドラッグ中に Space は効かない」)が
+    /// `Shell::toggle_playback` から読む。
+    pub fn is_dragging(&self) -> bool {
+        self.drag.is_some() || self.key_drag.is_some()
+    }
+
     /// `TimelinePane::with_clip_preview` へそのまま渡す。`TimelineDragState` は
     /// `Copy` なので `&self` のまま値で読める。
     pub fn clip_preview(&self) -> Option<(LayerId, LayerTiming)> {

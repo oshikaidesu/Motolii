@@ -1039,7 +1039,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1038	panel_window	Tracker	モーション/カメラトラッカーパネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 1039	panel_window	Wiggler	キーフレームランダム化パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)	out-of-domain?	採用予定	
 1040	panel_window	Workspaces (submenu)	ワークスペース切替サブメニュー(パネル本体ではない)	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	裁定128のworkspace切替と関連
-1041	playback	Play / Pause	再生・一時停止	0	1	1	1	3	1:3:0:0	一致(2件);二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	
+1041	playback	Play / Pause	再生・一時停止	0	1	1	1	3	1:3:0:0	一致(2件);二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	A2(実時間再生、次のPlaybackClock+Space結線)で着地 — Space/Playボタンで再生・一時停止できる
 1042	playback	Step Back 1 Frame	1フレーム戻る	1	1	1	0	3	0:3:0:0	二次(premiere全体注記);公式(Adobe);公式(BMD, v11時点)		採用済	Message::StepPlayhead(-1)(shell/lib.rs、U2。既定割当←)
 1043	playback	Step Forward 1 Frame	1フレーム進む	1	1	1	0	3	0:3:0:0	二次(premiere全体注記);公式(Adobe);公式(BMD, v11時点)		採用済	Message::StepPlayhead(1)(shell/lib.rs、U2。既定割当→)
 1044	playback	Go to End / Timeline End	末尾へ移動	0	1	1	0	2	0:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用済	Message::JumpPlayheadToEnd(shell/lib.rs、U2。既定割当End)

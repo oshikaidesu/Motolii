@@ -18,6 +18,20 @@ pub fn canonical_format() -> PcmFormat {
     }
 }
 
+/// タイムライン時刻を正準(48kHz)サンプルフレーム数へ(旧
+/// `crates/motolii-audio/src/producer.rs::rational_to_canonical_frames` の移植)。
+/// A2 の `producer`/`session` モジュールが「動画フレーム(comp fps)ではなく
+/// 正準サンプルフレームで再生位置を持つ」契約(`mix_audio` の `start_frame` と
+/// 同じ単位)へ変換するのに使う。負の時刻は0(M16: panicしない、`saturating`側)。
+pub fn time_to_canonical_frames(t: motolii_core::RationalTime) -> u64 {
+    if t <= motolii_core::RationalTime::ZERO {
+        return 0;
+    }
+    let num = t.num().max(0) as u128;
+    let den = t.den().max(1) as u128;
+    ((num * u128::from(CANONICAL_SAMPLE_RATE)) / den) as u64
+}
+
 /// 任意形式のPCMを正準48k stereoへ変換する(channel-map → 必要なら固定比resample)。
 ///
 /// pan未対応のため mono→stereo は L=R 複製。3ch以上は拒否。
