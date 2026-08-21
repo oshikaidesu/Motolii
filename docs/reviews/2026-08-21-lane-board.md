@@ -1,6 +1,6 @@
 # レーンボード — 2026-08-21(このセッションの走行状態の正本)
 
-日付: 2026-08-21〜22 / 状態: **第3セッション終了時点**(引き継ぎ= 2026-08-22-session-handoff-transcription-hierarchy.md)(引き継ぎ= 2026-08-21-session-handoff-night-s-score.md。前任分= -ui-completion.md)
+日付: 2026-08-21〜22 / 状態: **第3セッション延長戦・走行中**(引き継ぎ文書は 2026-08-22-…-hierarchy.md — 延長戦分は本ボードが正)(引き継ぎ= 2026-08-21-session-handoff-night-s-score.md。前任分= -ui-completion.md)
 運転手順: レーンの完了・発注のたびにこの表を更新する。TaskList はセッション死で消えるため、この文書が正本。
 
 **実窓較正第1回の初回収(2026-08-21深夜)**: 利用者「イージングがガタつく」— release ビルドでも再現=構造確定 → **裁定166**(Stage presenter shader 化+tick vsync 整列)→ τ 着地後に**利用者確認「スムーズになった」= 合格**(実録動画 12s を利用者へ送付済み)。第2の較正収穫=「文字が酷い」(→裁定168・φ)、第3=「どの要素もチグハグ」(→ψ 台帳)。残りのチェックリスト(音・状態帯・市松・差し色・目盛り)は φ 着地後の窓で再開。
@@ -9,6 +9,11 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+
+| **G1: グループ化動詞(裁定174)** | 実装 | worktree(発注時に追記) | ⌘G= Group 層+parent N 本 1 undo・⌘⇧G= world 位置保存の解除(焼き込み数値証明)。map 455-457/468-470。write-set= store document.rs+shell shortcut+timeline 反映(attrs.rs 禁止 — BL3 並走) |
+| **BL3: blend 分離可能11モード** | 実装 | worktree(発注時に追記) | α/BL1b の型で Multiply/Screen/Overlay 等11種 — store attrs.rs+engine 変換腕+Inspector 巡回リスト+golden。map blend_mode 束の大口。write-set= attrs.rs+engine+inspector(document.rs 禁止 — G1 並走) |
+| **MB-1: File 束(裁定176)** | 実装 | worktree(発注時に追記) | File メニュー+New Project/Save As/Save a Copy/Quit(rfd・dirty 確認・persist 汎用経路)+shortcut 併設(S6)。map 1221(freq4)/1223/1225/1227 |
+| **RB: ゼロコピー下の残ボトルネック軽調査** | 調査(cargo なし) | worktree | 保留14行(Fast Previews/cache prefs)の鍵 — re_renderer/rerun 側で「何が低解像度・キャッシュを要求し得るか」を一次資料で軽く。重くしない(利用者「軽くでいい」の型) |
 
 ## 完了・main 着地済み(実装)
 
