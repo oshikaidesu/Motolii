@@ -174,11 +174,11 @@ Heavy asset creation, character rigging, simulation authoring, grading, and spec
 | M0 | Complete | GPU/UI, decode, and rational-time risks measured |
 | M1 | Complete and internally frozen | Video → typed animation → GPU composite → mp4 vertical slice |
 | M2 | Foundation reclosed; narrow follow-ups pending | Document model, validation, commands/Undo, audio transport/mux, masks, portability |
-| M3 | Iced product route active | `motolii-shell-iced` integrates Browser, Inspector, Timeline, and the Rerun Stage island; capability, visual, device, and platform closure remains open |
+| M3 | `next/` iced host active; editing verbs live | The current product host is `next/shell/motolii-shell` (iced): Timeline with lane bar, clip move/trim, keyframe editing/retiming and live drag preview; Inspector with drag-to-scrub; Settings; an app-internal clipboard; and a machine-checked "normal video editor" capability ledger (`next/reference/normal-map.tsv`, 1,551 items, zero unjudged) driving the remaining UI work |
 | M4 | Partial foundations on main | Test-only K0 contract, ResourceLedger, and canonical recipe/artifact codec are present; cache, proxy, and bake runtime remain incomplete |
-| M5 | Rerun Stage island active; product closure open | Rerun Spatial Viewer is adopted and integrated as the wrapped iced Stage island; expression probes are evidence only, and full product connection is not complete |
+| M5 | Stage island + first effect + camera split live | Rerun Spatial Viewer remains the adopted spatial subsystem. The effect seam is open end-to-end — the first built-in effect (`motolii.glow`, an AE-style halo) travels store → engine → GPU → picture under golden tests — and observation (viewport) and render cameras are separated with export structurally isolated from the view camera |
 
-The M1 demo above is generated through the real export path and protected by automated tests. Under the current working-tree authority, `motolii-shell-iced` is the current product host and new-feature target, with Browser, Inspector, Timeline, and the wrapped Rerun Stage island integrated through the existing Document/D2 single-writer route. `motolii-blitz-shell` and egui remain legacy/reference implementations, while the React Native product host has been removed and `ui/motolii-rn/src` remains only as a migration reference. This integrated route is not proof that M3 or M5 is product-complete; remaining capability, visual, device/platform, and human gates must still be named and verified.
+The M1 demo above is generated through the real export path and protected by automated tests. Current product work lives in the `next/` workspace (a 2026-08-20 reset around a Lottie-derived semantic map): `next/shell/motolii-shell` is the iced product host and new-feature target, backed by a single-writer Document store with transient-overlay previews, a design-token system enforced by mechanical fences, and an operation-grammar canon (`next/reference/timeline-grammar.md`) reverse-derived from AE/Godot/Blender/Unity/Unreal and the Lottie-era editors. Everything under `crates/` (including `motolii-shell-iced` and the egui `motolii-blitz-shell`) is legacy/reference; `ui/motolii-rn/src` remains only as a migration reference. This is not proof of product completeness: the capability ledger (`next/reference/normal-map.tsv`) currently counts 92 capabilities landed, 1,195 planned, and 264 rejected with recorded reasons.
 
 Current milestone truth and task dependencies live in the [`implementation ledger`](docs/implementation-ledger.md) and under [`docs/specs/`](docs/specs/); this README intentionally stays at project level and does not assign a speculative completion percentage.
 
@@ -189,7 +189,7 @@ Current milestone truth and task dependencies live in the [`implementation ledge
 | Language | Rust |
 | Render core | [wgpu](https://github.com/gfx-rs/wgpu) + WGSL, GPU-resident textures |
 | Vector rendering | Vello/usvg boundary |
-| UI | iced shell/panels as the current product host, with a wrapped Rerun Spatial Viewer Stage island; egui and `motolii-blitz-shell` remain legacy/reference, and React Native sources are migration references rather than the product host |
+| UI | iced shell/panels (`next/shell/motolii-shell`) as the current product host, with a wrapped Rerun Spatial Viewer Stage island; `crates/` (egui, `motolii-shell-iced`) is legacy/reference, and React Native sources are migration references rather than the product host |
 | Decode / encode | ffmpeg sidecar process, raw tagged frames at the boundary |
 | Project model | serde data, stable IDs, typed validation, command edits |
 | Verification | Rust tests, property tests, semantic and image goldens |
