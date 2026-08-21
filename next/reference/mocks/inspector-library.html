@@ -1,0 +1,1448 @@
+<!doctype html>
+<!--
+  Visual-review-only Inspector concept. The Effect tab is an always-visible
+  property table: values remain listed while selected/recent state is local.
+  No Document, Host, D2, Undo, persistence, or product Transform3D route is
+  attached.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Motolii Inspector concept</title>
+    <link rel="stylesheet" href="/src/tokens/mock-candidates.css" />
+    <style>
+/* 移植: docs/mocks-ui/public/inspector-library.css → next/reference/mocks/(2026-08-22、利用者裁定
+   「旧世界の視覚正本をトンマナ整えて移植」— browser-library.html/css(2026-08-21)と同じ型)。
+   レイアウト・寸法は逐語(無改変) — mock-role-control-height/corner-control/font-interface/
+   font-technical/inset-control/panel-header-height/tab-height は寸法・書体ロールなので不変。
+   色は現 tokens(motolii-tokens-rs `Colors::default()` 実値の写し、Ableton候補B)へ: root の
+   ロール変数+直書き hex の写像のみ。`--mock-role-way-inspector`(#8eb086)・
+   `--mock-role-way-plugins`(#9f9fcf)は現 tokens の `Colors` 構造体に対応ロールが無い
+   (`way_timeline` のみ実装済み・pane 別 way ロールは inspector/plugins とも未実装)ため、
+   旧 mock-candidates.css のフォールバック値のまま変更していない — 意味論モックの
+   救出台帳・RETURN に記載。`--fill-color`(#d8c97f)と `color-mix` の黒系混色補助値
+   (`#111`/`#222`/`#242424`/`#000`)はロールでなく意匠上の合成定数なので不変。 */
+:root{
+  --mock-role-surface-app:#242424;
+  --mock-role-surface-panel:#363636;
+  --mock-role-surface-raised:#3e3e3e;
+  --mock-role-border-default:#1a1a1a;
+  --mock-role-border-strong:#5b5b5b;
+  --mock-role-text-primary:#b8b8b8;
+  --mock-role-text-secondary:#8c8c8c;
+  --mock-role-text-muted:#757575;
+  --mock-role-action-active:#d8b574;
+  --mock-role-data:#78b5b0;
+  --mock-role-shape:#aaa0d0;
+}
+/* Visual-review-only inspector: persistent property matrix, never a product control path. */
+
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; }
+
+body {
+  overflow: hidden;
+  background: var(--mock-role-surface-app, #242424);
+  color: var(--mock-role-text-primary, #b8b8b8);
+  color-scheme: dark;
+  font-family: var(--mock-role-font-interface, Inter, system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, textarea { font: inherit; }
+button { color: inherit; cursor: pointer; }
+
+.inspectorShell {
+  --fill-color: #d8c97f;
+  width: min(100%, 496px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--mock-role-border-default, #1a1a1a);
+  background: var(--mock-role-surface-panel, #363636);
+}
+
+.panelHeader {
+  height: var(--mock-role-panel-header-height, 29px);
+  flex: 0 0 var(--mock-role-panel-header-height, 29px);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 var(--mock-role-inset-control, 8px);
+  border-bottom: 1px solid var(--mock-role-border-default, #1a1a1a);
+}
+
+.panelHeader::before {
+  width: 3px;
+  height: 13px;
+  background: var(--mock-role-way-inspector, #8eb086);
+  content: "";
+}
+
+.panelHeader strong { font-size: 12px; font-weight: 700; }
+.panelHeader span { margin-left: auto; color: var(--mock-role-text-muted, #757575); font-size: 9px; }
+
+.modeTabs {
+  height: var(--mock-role-tab-height, 28px);
+  flex: 0 0 var(--mock-role-tab-height, 28px);
+  display: flex;
+  border-bottom: 1px solid var(--mock-role-border-default, #1a1a1a);
+}
+
+.modeTabs button {
+  flex: 1;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--mock-role-text-muted, #757575);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.modeTabs [aria-selected="true"] {
+  border-bottom-color: var(--mock-role-way-inspector, #8eb086);
+  background: var(--mock-role-surface-app, #242424);
+  color: var(--mock-role-text-primary, #b8b8b8);
+}
+
+.modePanel { min-height: 0; flex: 1; overflow: hidden; }
+.modePanel[hidden], .extensionPanel[hidden] { display: none; }
+
+.selectionSummary {
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--mock-role-border-default, #1a1a1a);
+  background: var(--mock-role-surface-raised, #3e3e3e);
+}
+
+.shapeGlyph {
+  width: 27px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 2px solid var(--mock-role-shape, #aaa0d0);
+  background: color-mix(in srgb, var(--fill-color) 62%, #111 38%);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--fill-color) 32%, #111 68%);
+}
+
+.selectionSummary div:not(.shapeGlyph):not(.layerStateControls) { display: grid; gap: 2px; min-width: 0; }
+.selectionSummary strong { font-size: 11px; }
+.selectionSummary span { overflow: hidden; color: var(--mock-role-text-muted, #757575); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.layerStateControls { display: flex; flex: 0 0 auto; gap: 3px; margin-left: auto; }
+.layerStateButton { width: 22px; height: 21px; padding: 0; border: 1px solid var(--mock-role-border-default, #1a1a1a); background: var(--mock-role-surface-app, #242424); color: var(--mock-role-text-muted, #757575); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 9px; font-weight: 800; }
+.layerStateButton:hover,
+.layerStateButton:focus-visible { border-color: var(--mock-role-border-strong, #5b5b5b); background: var(--mock-role-surface-panel, #363636); color: var(--mock-role-text-primary, #b8b8b8); outline: 0; }
+.layerStateButton[data-layer-state="mute"][aria-pressed="true"] { border-color: var(--mock-role-text-muted, #757575); background: color-mix(in srgb, var(--mock-role-text-muted, #757575) 18%, var(--mock-role-surface-app, #242424)); color: var(--mock-role-text-primary, #b8b8b8); }
+.layerStateButton[data-layer-state="solo"][aria-pressed="true"] { border-color: var(--mock-role-action-active, #d8b574); background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 18%, var(--mock-role-surface-app, #242424)); color: var(--mock-role-action-active, #d8b574); }
+.selectionSummary.layerMuted .shapeGlyph { opacity: .42; }
+.selectionSummary.layerMuted strong,
+.selectionSummary.layerMuted span { color: var(--mock-role-text-muted, #757575); }
+
+.tableScroller { height: calc(100% - 46px); overflow: auto; }
+
+.propertyTable {
+  min-width: 390px;
+  padding-bottom: 4px;
+}
+
+.columnHeader,
+.propertyRow {
+  display: grid;
+  grid-template-columns: minmax(132px, 1fr) repeat(3, 64px) 26px;
+  align-items: stretch;
+}
+
+.columnHeader {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  height: 21px;
+  border-bottom: 1px solid var(--mock-role-border-default, #1a1a1a);
+  background: var(--mock-role-surface-app, #242424);
+  color: var(--mock-role-text-muted, #757575);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-align: center;
+}
+
+.columnHeader span { display: grid; place-items: center; }
+.columnHeader span:first-child { padding-left: 11px; text-align: left; place-items: center start; }
+.columnHeader span:last-child { color: var(--mock-role-action-active, #d8b574); }
+
+.tableSection { border-bottom: 1px solid var(--mock-role-border-default, #1a1a1a); }
+.tableSection h2 {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mock-role-border-default, #1a1a1a) 68%, transparent);
+  background: var(--mock-role-surface-app, #242424);
+  color: var(--mock-role-text-secondary, #8c8c8c);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+
+.tableSection h2 span {
+  margin-right: 8px;
+  color: var(--mock-role-text-muted, #757575);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.sectionToggle {
+  height: 100%;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+}
+
+.sectionToggle i { width: 7px; color: var(--property-color, var(--mock-role-text-muted, #757575)); font-size: 11px; font-style: normal; line-height: 1; }
+.sectionToggle:hover { background: color-mix(in srgb, var(--mock-role-way-inspector, #8eb086) 10%, transparent); color: var(--mock-role-text-primary, #b8b8b8); }
+.tableSection.collapsed { border-bottom-color: var(--mock-role-border-strong, #5b5b5b); }
+.tableSection.collapsed .propertyRow,
+.tableSection.collapsed .advancedToggle { display: none; }
+
+.dragHandle { width: 13px; display: grid; place-items: center; color: var(--mock-role-text-muted, #757575); cursor: grab; font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 11px; letter-spacing: -2px; touch-action: none; }
+.dragHandle:active { cursor: grabbing; }
+.effectStackToolbar { min-height: 22px; display: flex; align-items: center; gap: 7px; padding: 0 8px; border-bottom: 1px solid var(--mock-role-border-default, #1a1a1a); background: color-mix(in srgb, var(--mock-role-surface-app, #242424) 88%, #000); color: var(--mock-role-text-muted, #757575); font-size: 8px; }
+.effectStackToolbar strong { color: var(--mock-role-text-secondary, #8c8c8c); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; letter-spacing: .1em; }
+.effectStackToolbar > span { overflow: hidden; min-width: 0; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.effectStackToolbar input { width: 58px; height: 17px; padding: 0 5px; border: 1px solid var(--mock-role-border-default, #1a1a1a); outline: 0; background: var(--mock-role-surface-panel, #363636); color: var(--mock-role-text-primary, #b8b8b8); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; }
+.effectStackToolbar input:focus { width: 100px; border-color: var(--mock-role-way-inspector, #8eb086); }
+.effectStackToolbar input::placeholder { color: var(--mock-role-text-muted, #757575); }
+.effectStackToolbar button { height: 17px; padding: 0 5px; border: 1px solid var(--mock-role-border-default, #1a1a1a); background: transparent; color: var(--mock-role-text-secondary, #8c8c8c); font-size: 8px; font-weight: 700; }
+.effectStackToolbar button:not(:disabled):hover { border-color: var(--mock-role-action-active, #d8b574); color: var(--mock-role-text-primary, #b8b8b8); }
+.effectStackToolbar button:disabled { color: var(--mock-role-text-muted, #757575); opacity: .45; }
+kbd { margin-left: 4px; color: var(--mock-role-text-muted, #757575); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; font-weight: 600; }
+.effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 10%, var(--mock-role-surface-app, #242424)); }
+.effectSection .dragHandle,
+.effectSection .sectionToggle i { color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); }
+.effectSelect { width: 13px; height: 17px; display: grid; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; color: var(--mock-role-text-muted, #757575); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 12px; }
+.effectSelect:hover,
+.effectSelect:focus-visible { color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); outline: 0; }
+.effectSelect[aria-pressed="true"] { color: var(--mock-role-action-active, #d8b574); }
+.effectSection.selectedEffect .effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)), inset 0 -1px 0 var(--mock-role-action-active, #d8b574), inset 0 1px 0 color-mix(in srgb, var(--mock-role-action-active, #d8b574) 54%, transparent); }
+.effectBadge { width: 17px; height: 13px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 18%, transparent); color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; font-weight: 800; letter-spacing: 0; }
+.effectRename { width: 16px; height: 16px; display: grid; flex: 0 0 auto; place-items: center; margin-right: 3px; padding: 0; border: 0; background: transparent; color: var(--mock-role-text-muted, #757575); font-size: 9px; opacity: 0; }
+.effectHeader:hover .effectRename,
+.effectHeader:focus-within .effectRename { opacity: 1; }
+.effectRename:hover,
+.effectRename:focus-visible { color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); outline: 0; }
+.inlineRename { width: 100%; min-width: 0; height: 17px; padding: 0 3px; border: 1px solid var(--mock-role-action-active, #d8b574); outline: 0; background: var(--mock-role-surface-raised, #3e3e3e); color: var(--mock-role-text-primary, #b8b8b8); font: inherit; letter-spacing: inherit; text-transform: none; }
+.effectTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.effectSource { overflow: hidden; min-width: 0; margin-right: 3px; color: var(--mock-role-text-muted, #757575); font-size: 8px; font-weight: 500; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
+.effectSource b { color: var(--mock-role-text-secondary, #8c8c8c); font-weight: 650; }
+.effectEnable { min-width: 25px; height: 15px; margin-right: 7px; padding: 0 4px; border: 1px solid color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 72%, transparent); background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 16%, transparent); color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; font-weight: 800; letter-spacing: .04em; }
+.effectEnable:hover,
+.effectEnable:focus-visible { background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 26%, transparent); outline: 0; }
+.effectEnable[aria-pressed="false"] { border-color: var(--mock-role-border-default, #1a1a1a); background: transparent; color: var(--mock-role-text-muted, #757575); }
+.effectSection.effectDisabled > .propertyRow,
+.effectSection.effectDisabled > .advancedToggle { opacity: .48; }
+.effectSection.effectDisabled .effectBadge { border-color: var(--mock-role-border-default, #1a1a1a); background: transparent; color: var(--mock-role-text-muted, #757575); }
+.effectSection.contextTarget .effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)), inset 0 0 0 1px color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 68%, transparent); }
+.effectSection.dropBefore .effectHeader,
+.effectSection.dropAfter .effectHeader { position: relative; }
+.effectSection.dropBefore .effectHeader::before,
+.effectSection.dropAfter .effectHeader::after { position: absolute; z-index: 4; right: 0; left: 0; height: 3px; background: var(--mock-role-action-active, #d8b574); box-shadow: 0 0 7px color-mix(in srgb, var(--mock-role-action-active, #d8b574) 62%, transparent); content: ""; }
+.effectSection.dropBefore .effectHeader::before { top: -2px; }
+.effectSection.dropAfter .effectHeader::after { bottom: -2px; }
+.effectGroup { margin: 3px 5px; border: 1px solid color-mix(in srgb, var(--mock-role-border-strong, #5b5b5b) 80%, transparent); background: color-mix(in srgb, var(--mock-role-surface-app, #242424) 78%, #000); }
+.effectGroupHeader { min-height: 22px; display: flex; align-items: center; margin: 0; border-bottom: 1px solid color-mix(in srgb, var(--mock-role-border-default, #1a1a1a) 65%, transparent); background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 8%, var(--mock-role-surface-app, #242424)); }
+.effectGroupHeader::before { width: 3px; align-self: stretch; background: var(--mock-role-action-active, #d8b574); content: ""; }
+.effectGroupToggle { height: 22px; min-width: 0; flex: 1; display: flex; align-items: center; gap: 5px; padding: 0 7px; border: 0; background: transparent; color: var(--mock-role-text-secondary, #8c8c8c); font-size: 8px; font-weight: 800; letter-spacing: .08em; text-align: left; }
+.effectGroupToggle i { color: var(--mock-role-action-active, #d8b574); font-size: 11px; font-style: normal; }
+.effectGroupToggle small { margin-left: auto; color: var(--mock-role-text-muted, #757575); font-size: 8px; font-weight: 500; letter-spacing: 0; }
+.effectGroupToggle:hover { background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 12%, transparent); }
+.effectGroupRename,
+.effectGroupUngroup,
+.effectGroupEnable { height: 16px; margin-right: 4px; padding: 0 5px; border: 1px solid var(--mock-role-border-default, #1a1a1a); background: transparent; color: var(--mock-role-text-muted, #757575); font-size: 8px; }
+.effectGroupRename:hover,
+.effectGroupUngroup:hover,
+.effectGroupEnable:hover { border-color: var(--mock-role-action-active, #d8b574); color: var(--mock-role-text-primary, #b8b8b8); }
+.effectGroupEnable[aria-pressed="true"] { border-color: var(--mock-role-action-active, #d8b574); color: var(--mock-role-action-active, #d8b574); }
+.effectGroupBody { padding: 0 3px 3px; }
+.effectGroupBody > .effectSection { margin: 0; }
+.effectGroup.collapsed .effectGroupBody { display: none; }
+.effectGroup.effectGroupDisabled .effectGroupBody { opacity: .48; }
+.effectSection.filterHidden,
+.effectGroup.filterHidden { display: none; }
+.effectSection.filterMatch .effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)), inset 0 0 0 1px color-mix(in srgb, var(--mock-role-way-inspector, #8eb086) 52%, transparent); }
+
+.advancedToggle {
+  position: relative;
+  width: 100%;
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px 0 18px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--mock-role-border-default, #1a1a1a) 64%, transparent);
+  background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 5%, var(--mock-role-surface-app, #242424));
+  color: var(--mock-role-text-muted, #757575);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-align: left;
+}
+
+.advancedToggle::before { position: absolute; top: 0; bottom: 0; left: 8px; width: 1px; background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 48%, transparent); content: ""; }
+.advancedToggle::after { position: absolute; top: 50%; left: 8px; width: 8px; height: 1px; background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 48%, transparent); content: ""; }
+.advancedToggle i { width: 7px; color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); font-size: 11px; font-style: normal; line-height: 1; }
+.advancedToggle span { margin-left: auto; color: var(--mock-role-text-muted, #757575); font-size: 8px; font-weight: 500; letter-spacing: 0; }
+.advancedToggle:hover { background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 12%, var(--mock-role-surface-app, #242424)); color: var(--mock-role-text-primary, #b8b8b8); }
+.effectSection.advancedCollapsed .propertyRow[data-advanced-row] { display: none; }
+.effectSection > .propertyRow:not([data-advanced-row])::before { left: 8px; }
+.effectSection > .propertyRow:not([data-advanced-row]) .propertyName { padding-left: 18px; }
+.effectSection > .propertyRow[data-advanced-row]::before { left: 16px; }
+.effectSection > .propertyRow[data-advanced-row] .propertyName { padding-left: 24px; }
+
+.propertyRow {
+  --property-color: var(--mock-role-text-secondary, #8c8c8c);
+  position: relative;
+  min-height: 25px;
+  border-bottom: 1px solid color-mix(in srgb, var(--mock-role-border-default, #1a1a1a) 64%, transparent);
+  background: var(--mock-role-surface-panel, #363636);
+}
+
+.propertyRow:last-child { border-bottom: 0; }
+.propertyRow::before { position: absolute; z-index: 1; top: 0; bottom: 0; left: 0; width: 3px; background: var(--property-color); content: ""; }
+.propertyRow.recent { background: color-mix(in srgb, var(--property-color) 9%, var(--mock-role-surface-panel, #363636)); }
+.propertyRow.recent::before { width: 4px; }
+.propertyRow.contextTarget { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--property-color) 68%, transparent); }
+
+/* FX行では値型を帯・記号・操作時の輪郭へ渡し、名称依存の色分けを避ける。 */
+.effectSection .propertyRow[data-param-kind="scalar"] { --property-color: var(--mock-role-data, #78b5b0); }
+.effectSection .propertyRow[data-param-kind="vector"] { --property-color: var(--mock-role-way-inspector, #8eb086); }
+.effectSection .propertyRow[data-param-kind="angle"] { --property-color: var(--mock-role-action-active, #d8b574); }
+.effectSection .propertyRow[data-param-kind="integer"] { --property-color: var(--mock-role-shape, #aaa0d0); }
+.effectSection .propertyRow[data-param-kind="boolean"] { --property-color: var(--mock-role-way-inspector, #8eb086); }
+.effectSection .propertyRow[data-param-kind="choice"] { --property-color: var(--mock-role-action-active, #d8b574); }
+
+.propertyName {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px 0 11px;
+  border-right: 1px solid color-mix(in srgb, var(--mock-role-border-default, #1a1a1a) 60%, transparent);
+}
+
+.propertyName i {
+  width: 15px;
+  height: 15px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--property-color) 66%, #242424 34%);
+  color: var(--property-color);
+  font-family: var(--mock-role-font-technical, ui-monospace, monospace);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.parameterKind.vector {
+  background:
+    linear-gradient(var(--property-color) 0 0) 3px 3px / 3px 3px no-repeat,
+    linear-gradient(var(--property-color) 0 0) center 3px / 3px 3px no-repeat,
+    linear-gradient(var(--property-color) 0 0) right 3px top 3px / 3px 3px no-repeat,
+    linear-gradient(var(--property-color) 0 0) 3px bottom 3px / 3px 3px no-repeat,
+    linear-gradient(var(--property-color) 0 0) center bottom 3px / 3px 3px no-repeat,
+    linear-gradient(var(--property-color) 0 0) right 3px bottom 3px / 3px 3px no-repeat;
+}
+
+.parameterKind.scalar::before { width: 5px; height: 5px; border-radius: 50%; background: var(--property-color); content: ""; }
+.parameterKind.color { background: color-mix(in srgb, var(--fill-color) 68%, #222 32%); }
+.parameterKind.integer::before { color: var(--property-color); content: "#"; font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 9px; }
+.parameterKind.angle::before { width: 7px; height: 7px; border: 1px solid var(--property-color); border-top-color: transparent; border-radius: 50%; content: ""; }
+.parameterKind.boolean::before { width: 8px; height: 4px; border: 1px solid var(--property-color); border-radius: 5px; background: linear-gradient(90deg, var(--property-color) 0 40%, transparent 40%); content: ""; }
+.parameterKind.choice::before { color: var(--property-color); content: "≡"; font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 11px; }
+
+/* Hostが意味を持つ値だけは、型ではなく役割を固定形で示す。 */
+.parameterKind.hostIcon { position: relative; background: none; }
+.parameterKind.hostIcon.hostPosition { background: linear-gradient(var(--property-color) 0 0) center / 1px 9px no-repeat, linear-gradient(var(--property-color) 0 0) center / 9px 1px no-repeat; }
+.parameterKind.hostIcon.hostPosition::before { width: 3px; height: 3px; border: 1px solid var(--property-color); border-radius: 50%; background: var(--mock-role-surface-panel, #363636); content: ""; }
+.parameterKind.hostIcon.hostRotation::before { width: 8px; height: 8px; border: 1px solid var(--property-color); border-right-color: transparent; border-radius: 50%; content: ""; }
+.parameterKind.hostIcon.hostRotation::after { position: absolute; top: 1px; right: 1px; width: 0; height: 0; border: 3px solid transparent; border-bottom: 0; border-left-color: var(--property-color); content: ""; transform: rotate(-18deg); }
+.parameterKind.hostIcon.hostScale::before { position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-top: 1px solid var(--property-color); border-right: 1px solid var(--property-color); content: ""; }
+.parameterKind.hostIcon.hostScale::after { position: absolute; bottom: 2px; left: 2px; width: 5px; height: 5px; border-bottom: 1px solid var(--property-color); border-left: 1px solid var(--property-color); content: ""; }
+.parameterKind.hostIcon.hostFill { background: color-mix(in srgb, var(--fill-color) 68%, #222 32%); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--fill-color) 32%, #111 68%); }
+.parameterKind.hostIcon.hostOpacity { border-radius: 50%; background: linear-gradient(90deg, var(--property-color) 0 50%, transparent 50%); }
+.parameterKind.hostIcon.hostOpacity::before { width: 100%; height: 100%; border: 0; border-radius: inherit; background: transparent; content: ""; }
+
+.propertyName span {
+  overflow: hidden;
+  color: var(--mock-role-text-primary, #b8b8b8);
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.propertyName small { margin-left: auto; color: var(--mock-role-text-muted, #757575); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; font-weight: 500; }
+.propertyName.effectName span { font-size: 9px; }
+
+.valueCell {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid color-mix(in srgb, var(--mock-role-border-default, #1a1a1a) 58%, transparent);
+  background: color-mix(in srgb, var(--mock-role-surface-app, #242424) 74%, transparent);
+  cursor: ew-resize;
+}
+
+.valueCell::before {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 50%;
+  width: 1px;
+  background: transparent;
+  content: "";
+}
+
+.valueCell:hover { background: color-mix(in srgb, var(--property-color) 9%, var(--mock-role-surface-app, #242424)); }
+.valueCell:focus-within,
+.valueCell.dragging { box-shadow: inset 0 0 0 1px var(--property-color); }
+.valueCell.dragging::before { background: var(--property-color); }
+
+.valueCell input {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0 6px 0 17px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--mock-role-text-primary, #b8b8b8);
+  font-family: var(--mock-role-font-technical, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 650;
+  text-align: right;
+  pointer-events: none;
+}
+
+.valueCell > b { position: absolute; z-index: 1; left: 5px; color: var(--property-color); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; line-height: 1; }
+.valueCell.editing { cursor: text; }
+.valueCell.editing input { pointer-events: auto; }
+.valueCell.unit input { padding-right: 15px; }
+.valueCell.unit i { position: absolute; right: 5px; color: var(--mock-role-text-muted, #757575); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; font-style: normal; }
+.valueCell.scalar { grid-column: span 3; }
+.valueCell.scalar input { max-width: 88px; }
+.seedValue input { max-width: none; padding-left: 6px; }
+.seedValue button { height: 19px; margin-right: 4px; padding: 0 6px; border: 1px solid var(--mock-role-border-strong, #5b5b5b); background: var(--mock-role-surface-raised, #3e3e3e); color: var(--mock-role-text-secondary, #8c8c8c); font-size: 8px; font-weight: 700; }
+.seedValue button:hover { border-color: var(--property-color); color: var(--mock-role-text-primary, #b8b8b8); }
+
+.emptyComponent,
+.choiceControl,
+.toggleControl {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid color-mix(in srgb, var(--mock-role-border-default, #1a1a1a) 58%, transparent);
+  background: color-mix(in srgb, var(--mock-role-surface-app, #242424) 74%, transparent);
+  color: var(--mock-role-text-secondary, #8c8c8c);
+  font-size: 9px;
+}
+
+.emptyComponent { justify-content: center; color: var(--mock-role-text-muted, #757575); }
+.choiceControl,
+.toggleControl { grid-column: span 3; justify-content: flex-end; padding: 0 7px; border-top: 0; border-bottom: 0; border-left: 0; text-align: right; }
+.choiceControl i { margin-left: 5px; color: var(--property-color); font-size: 9px; font-style: normal; }
+.choiceControl:hover,
+.toggleControl:hover { background: color-mix(in srgb, var(--property-color) 9%, var(--mock-role-surface-app, #242424)); }
+.toggleControl { color: var(--mock-role-text-muted, #757575); }
+.toggleControl[aria-pressed="true"] { color: var(--mock-role-text-primary, #b8b8b8); }
+
+.keyButton,
+.keyPlaceholder {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--mock-role-border-default, #1a1a1a) 60%, transparent);
+  background: transparent;
+  color: var(--mock-role-text-muted, #757575);
+  font-family: var(--mock-role-font-technical, ui-monospace, monospace);
+  font-size: 9px;
+}
+
+.keyButton:hover { background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 12%, transparent); }
+.keyButton.animated { background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 12%, transparent); color: var(--mock-role-action-active, #d8b574); }
+.keyButton.current { background: color-mix(in srgb, var(--mock-role-action-active, #d8b574) 20%, transparent); color: var(--mock-role-action-active, #d8b574); }
+.keyPlaceholder { color: var(--mock-role-text-muted, #757575); font-size: 9px; }
+
+/* FXでは行全体を染めず、キー列だけを値型の視覚的な索引にする。 */
+.effectSection .keyButton,
+.effectSection .keyPlaceholder { background: color-mix(in srgb, var(--property-color) 12%, transparent); }
+.effectSection .keyButton:hover { background: color-mix(in srgb, var(--property-color) 20%, transparent); }
+.effectSection .keyButton.animated { background: color-mix(in srgb, var(--property-color) 18%, transparent); }
+.effectSection .keyButton.current { background: color-mix(in srgb, var(--property-color) 24%, transparent); }
+
+.parameterContextMenu {
+  position: fixed;
+  z-index: 8;
+  width: 148px;
+  padding: 3px;
+  border: 1px solid var(--mock-role-border-strong, #5b5b5b);
+  background: var(--mock-role-surface-raised, #3e3e3e);
+  box-shadow: 0 8px 20px #000c;
+}
+
+.parameterContextMenu[hidden] { display: none; }
+.parameterContextMenu strong { display: block; overflow: hidden; padding: 2px 6px 4px; color: var(--mock-role-text-muted, #757575); font-size: 8px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.parameterContextMenu button { width: 100%; height: 22px; padding: 0 6px; border: 0; background: transparent; color: var(--mock-role-text-primary, #b8b8b8); font-size: 9px; text-align: left; }
+.parameterContextMenu button:hover,
+.parameterContextMenu button:focus-visible { background: color-mix(in srgb, var(--mock-role-way-inspector, #8eb086) 18%, transparent); outline: 0; }
+.effectContextMenu { width: 194px; }
+.effectContextMenu button { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.effectContextMenu button kbd { margin-left: auto; white-space: nowrap; }
+
+.fillValue {
+  grid-column: span 3;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-right: 1px solid color-mix(in srgb, var(--mock-role-border-default, #1a1a1a) 58%, transparent);
+  background: color-mix(in srgb, var(--mock-role-surface-app, #242424) 74%, transparent);
+}
+
+.fillValue input[type="color"] { width: 26px; height: 19px; flex: 0 0 auto; padding: 2px; border: 1px solid var(--mock-role-border-strong, #5b5b5b); background: var(--mock-role-surface-app, #242424); }
+.fillValue code { width: 60px; color: var(--mock-role-text-secondary, #8c8c8c); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; }
+.fillValue > span { margin-left: auto; color: var(--mock-role-text-muted, #757575); font-size: 8px; }
+.recentColors { display: flex; gap: 3px; }
+.recentColors button { width: 16px; height: 16px; padding: 0; border: 1px solid var(--mock-role-border-strong, #5b5b5b); background: var(--swatch-color); }
+.recentColors button:first-child { outline: 1px solid var(--mock-role-text-primary, #b8b8b8); outline-offset: 1px; }
+
+.extensionTabs { display: flex; gap: 5px; padding: 7px; border-bottom: 1px solid var(--mock-role-border-default, #1a1a1a); }
+.extensionTabs button { padding: 5px 8px; border: 1px solid var(--mock-role-border-default, #1a1a1a); background: transparent; color: var(--mock-role-text-secondary, #8c8c8c); font-size: 9px; }
+.extensionTabs [aria-selected="true"] { border-color: var(--mock-role-way-inspector, #8eb086); background: color-mix(in srgb, var(--mock-role-way-inspector, #8eb086) 16%, transparent); color: var(--mock-role-text-primary, #b8b8b8); }
+.extensionPanel { padding: 12px; }
+.extensionPanel h1 { margin: 0; font-size: 12px; font-weight: 600; }
+.extensionPanel p { margin: 3px 0 0; color: var(--mock-role-text-muted, #757575); font-size: 11px; }
+
+#tag-form { margin-top: 14px; }
+#tag-input, .notesPanel textarea { width: 100%; border: 1px solid var(--mock-role-border-strong, #5b5b5b); border-radius: var(--mock-role-corner-control, 2px); background: var(--mock-role-surface-app, #242424); color: var(--mock-role-text-primary, #b8b8b8); outline-color: var(--mock-role-way-inspector, #8eb086); }
+#tag-input { height: var(--mock-role-control-height, 25px); padding: 0 8px; font-size: 11px; }
+#tag-input::placeholder, .notesPanel textarea::placeholder { color: var(--mock-role-text-muted, #757575); }
+.tagList { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tagList button { border: 1px solid var(--mock-role-border-default, #1a1a1a); border-radius: 9px; background: var(--mock-role-surface-raised, #3e3e3e); color: var(--mock-role-text-secondary, #8c8c8c); padding: 4px 8px; font-size: 9px; }
+.notesPanel textarea { min-height: 112px; margin-top: 14px; padding: 8px; resize: vertical; font-size: 11px; }
+
+footer { min-height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-top: 1px solid var(--mock-role-border-default, #1a1a1a); background: var(--mock-role-surface-app, #242424); color: var(--mock-role-text-muted, #757575); font-size: 9px; }
+.statusDot { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: var(--mock-role-way-inspector, #8eb086); }
+
+@media (max-width: 390px) {
+  .tableScroller { overflow-x: auto; }
+}
+    </style>
+  </head>
+  <body>
+    <main class="inspectorShell" aria-label="Inspector visual concept">
+      <header class="panelHeader"><strong id="panel-title">Inspector</strong><span>Rectangle · 3D</span></header>
+      <nav class="modeTabs" role="tablist" aria-label="Inspector modes"><button type="button" role="tab" aria-selected="true" data-mode="effect">Effect</button><button type="button" role="tab" aria-selected="false" data-mode="custom">Custom</button></nav>
+
+      <section class="modePanel" id="effect-panel" role="tabpanel" aria-label="Effect inspector">
+        <section class="selectionSummary"><div class="shapeGlyph" aria-hidden="true"></div><div><strong>Rectangle</strong><span>Shape layer · 3D transform · 2 keys</span></div><div class="layerStateControls" aria-label="Rectangle layer state"><button class="layerStateButton" type="button" data-layer-state="mute" aria-label="Mute Rectangle" aria-pressed="false">M</button><button class="layerStateButton" type="button" data-layer-state="solo" aria-label="Solo Rectangle" aria-pressed="false">S</button></div></section>
+        <div class="tableScroller">
+          <section class="propertyTable" aria-label="All selected layer properties">
+            <header class="columnHeader"><span>Property</span><span>X</span><span>Y</span><span>Z</span><span aria-label="Keyframe">◇</span></header>
+
+            <section class="tableSection">
+              <h2><button class="sectionToggle" type="button" aria-expanded="true"><i aria-hidden="true">⌄</i>TRANSFORM</button><span>3 · 2 keyed</span></h2>
+              <div class="propertyRow" data-control="Position" style="--property-color: var(--mock-role-data)">
+                <div class="propertyName"><i class="parameterKind vector hostIcon hostPosition" aria-hidden="true"></i><span>Position</span></div>
+                <label class="valueCell" data-label="Position X" data-step="0.025" data-decimals="3"><b aria-hidden="true">X</b><input id="position-x" type="text" inputmode="decimal" value="0.125" aria-label="Position X" spellcheck="false" /></label>
+                <label class="valueCell" data-label="Position Y" data-step="0.025" data-decimals="3"><b aria-hidden="true">Y</b><input id="position-y" type="text" inputmode="decimal" value="−0.075" aria-label="Position Y" spellcheck="false" /></label>
+                <label class="valueCell" data-label="Position Z" data-step="0.025" data-decimals="3"><b aria-hidden="true">Z</b><input id="position-z" type="text" inputmode="decimal" value="0.000" aria-label="Position Z" spellcheck="false" /></label>
+                <button class="keyButton current" type="button" aria-label="Position key at playhead" aria-pressed="true">◆</button>
+              </div>
+              <div class="propertyRow" data-control="Rotation" style="--property-color: var(--mock-role-action-active)">
+                <div class="propertyName"><i class="parameterKind vector hostIcon hostRotation" aria-hidden="true"></i><span>Rotation</span></div>
+                <label class="valueCell" data-label="Rotation X" data-step="1" data-decimals="1"><b aria-hidden="true">X</b><input id="rotation-x" type="text" inputmode="decimal" value="0.0" aria-label="Rotation X" spellcheck="false" /></label>
+                <label class="valueCell" data-label="Rotation Y" data-step="1" data-decimals="1"><b aria-hidden="true">Y</b><input id="rotation-y" type="text" inputmode="decimal" value="0.0" aria-label="Rotation Y" spellcheck="false" /></label>
+                <label class="valueCell unit" data-label="Rotation Z" data-step="1" data-decimals="1"><b aria-hidden="true">Z</b><input id="rotation-z" type="text" inputmode="decimal" value="24.0" aria-label="Rotation Z" spellcheck="false" /><i>°</i></label>
+                <button class="keyButton animated" type="button" aria-label="Rotation has keys" aria-pressed="false">◆</button>
+              </div>
+              <div class="propertyRow" data-control="Scale" style="--property-color: var(--mock-role-shape)">
+                <div class="propertyName"><i class="parameterKind vector hostIcon hostScale" aria-hidden="true"></i><span>Scale</span></div>
+                <label class="valueCell" data-label="Scale X" data-step="0.025" data-decimals="3"><b aria-hidden="true">X</b><input id="scale-x" type="text" inputmode="decimal" value="1.000" aria-label="Scale X" spellcheck="false" /></label>
+                <label class="valueCell" data-label="Scale Y" data-step="0.025" data-decimals="3"><b aria-hidden="true">Y</b><input id="scale-y" type="text" inputmode="decimal" value="1.000" aria-label="Scale Y" spellcheck="false" /></label>
+                <label class="valueCell" data-label="Scale Z" data-step="0.025" data-decimals="3"><b aria-hidden="true">Z</b><input id="scale-z" type="text" inputmode="decimal" value="1.000" aria-label="Scale Z" spellcheck="false" /></label>
+                <button class="keyButton" type="button" aria-label="Scale not keyed" aria-pressed="false">◇</button>
+              </div>
+            </section>
+
+            <section class="tableSection">
+              <h2><button class="sectionToggle" type="button" aria-expanded="true"><i aria-hidden="true">⌄</i>APPEARANCE</button><span>2 · 1 keyed</span></h2>
+              <div class="propertyRow" data-control="Fill" style="--property-color: var(--fill-color)">
+                <div class="propertyName"><i class="parameterKind color hostIcon hostFill" aria-hidden="true"></i><span>Fill</span></div>
+                <div class="fillValue"><input id="fill-color" type="color" value="#d8c97f" aria-label="Fill color preview" /><code id="fill-color-value">#D8C97F</code><span>Recent</span><div class="recentColors" id="recent-colors"><button type="button" data-color="#D8C97F" aria-label="Use recent #D8C97F"></button><button type="button" data-color="#78B5B0" aria-label="Use recent #78B5B0"></button><button type="button" data-color="#AAA0D0" aria-label="Use recent #AAA0D0"></button></div></div>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <div class="propertyRow" data-control="Opacity" style="--property-color: var(--mock-role-text-secondary)">
+                <div class="propertyName"><i class="parameterKind scalar hostIcon hostOpacity" aria-hidden="true"></i><span>Opacity</span></div>
+                <label class="valueCell scalar unit" data-label="Opacity" data-step="1" data-decimals="0"><input id="opacity" type="text" inputmode="decimal" value="100" aria-label="Opacity" spellcheck="false" /><i>%</i></label>
+                <button class="keyButton current" type="button" aria-label="Opacity key at playhead" aria-pressed="true">◆</button>
+              </div>
+            </section>
+
+            <div class="effectStackToolbar" aria-label="Effect stack actions"><strong id="effect-selection-summary">FX STACK</strong><span id="effect-selection-hint">Select effects to group</span><input id="effect-filter" type="search" placeholder="Find" aria-label="Filter effects and parameters" autocomplete="off" /><button id="group-selected-effects" type="button" disabled>Group <kbd>⌘G</kbd></button></div>
+
+            <section class="tableSection effectSection" data-effect-name="Turbulent Displace" data-effect-type="Turbulent Displace" style="--effect-color: var(--mock-role-way-plugins)">
+              <h2 class="effectHeader"><span class="dragHandle" aria-hidden="true">⠿</span><button class="effectSelect" type="button" aria-label="Select Turbulent Displace for grouping" aria-pressed="false">○</button><span class="effectBadge" aria-hidden="true">FX</span><button class="sectionToggle" type="button" aria-expanded="true"><i aria-hidden="true">⌄</i><span class="effectTitle">TURBULENT DISPLACE</span></button><span class="effectSource"><b>Turbulent Displace</b> · 8 params</span><button class="effectRename" type="button" aria-label="Rename Turbulent Displace" title="Rename effect (F2)">✎</button><button class="effectEnable" type="button" aria-label="Disable Turbulent Displace" aria-pressed="true">ON</button></h2>
+              <div class="propertyRow" data-control="Turbulent Displace Displacement" data-param-kind="choice">
+                <div class="propertyName effectName"><i class="parameterKind choice" aria-hidden="true"></i><span>Displacement</span></div>
+                <button class="choiceControl" type="button" data-options="Turbulent|Bulge|Twist|Horizontal|Vertical|Cross" aria-label="Displacement mode">Turbulent <i>⌄</i></button>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <div class="propertyRow" data-control="Turbulent Displace Amount" data-param-kind="scalar">
+                <div class="propertyName effectName"><i class="parameterKind scalar" aria-hidden="true"></i><span>Amount</span></div>
+                <label class="valueCell scalar" data-label="Turbulent Displace Amount" data-step="1" data-decimals="1"><input id="turbulent-amount" type="text" inputmode="decimal" value="42.0" aria-label="Turbulent Displace Amount" spellcheck="false" /></label>
+                <button class="keyButton" type="button" aria-label="Turbulent Displace Amount not keyed" aria-pressed="false">◇</button>
+              </div>
+              <div class="propertyRow" data-control="Turbulent Displace Size" data-param-kind="scalar">
+                <div class="propertyName effectName"><i class="parameterKind scalar" aria-hidden="true"></i><span>Size</span><small>px</small></div>
+                <label class="valueCell scalar" data-label="Turbulent Displace Size" data-step="1" data-decimals="1"><input id="turbulent-size" type="text" inputmode="decimal" value="80.0" aria-label="Turbulent Displace Size" spellcheck="false" /></label>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <div class="propertyRow" data-control="Turbulent Displace Offset" data-param-kind="vector">
+                <div class="propertyName effectName"><i class="parameterKind vector" aria-hidden="true"></i><span>Offset (Turbulence)</span></div>
+                <label class="valueCell" data-label="Offset X" data-step="1" data-decimals="1"><b aria-hidden="true">X</b><input id="offset-x" type="text" inputmode="decimal" value="0.0" aria-label="Offset X" spellcheck="false" /></label>
+                <label class="valueCell" data-label="Offset Y" data-step="1" data-decimals="1"><b aria-hidden="true">Y</b><input id="offset-y" type="text" inputmode="decimal" value="0.0" aria-label="Offset Y" spellcheck="false" /></label>
+                <span class="emptyComponent" aria-label="No Z component">—</span>
+                <button class="keyButton animated" type="button" aria-label="Offset has keys" aria-pressed="false">◆</button>
+              </div>
+              <div class="propertyRow" data-control="Turbulent Displace Complexity" data-param-kind="scalar">
+                <div class="propertyName effectName"><i class="parameterKind scalar" aria-hidden="true"></i><span>Complexity</span></div>
+                <label class="valueCell scalar" data-label="Turbulent Displace Complexity" data-step="0.1" data-decimals="1"><input id="turbulent-complexity" type="text" inputmode="decimal" value="1.0" aria-label="Turbulent Displace Complexity" spellcheck="false" /></label>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <button class="advancedToggle" type="button" aria-expanded="true"><i aria-hidden="true">⌄</i>ADVANCED <span>4 parameters</span></button>
+              <div class="propertyRow" data-advanced-row data-control="Turbulent Displace Evolution" data-param-kind="angle">
+                <div class="propertyName effectName"><i class="parameterKind angle" aria-hidden="true"></i><span>Evolution</span><small>rev</small></div>
+                <label class="valueCell scalar unit" data-label="Turbulent Displace Evolution" data-step="0.1" data-decimals="2"><input id="turbulent-evolution" type="text" inputmode="decimal" value="2.50" aria-label="Turbulent Displace Evolution" spellcheck="false" /><i>rev</i></label>
+                <button class="keyButton animated" type="button" aria-label="Evolution has keys" aria-pressed="false">◆</button>
+              </div>
+              <div class="propertyRow" data-advanced-row data-control="Turbulent Displace Random Seed" data-param-kind="integer">
+                <div class="propertyName effectName"><i class="parameterKind integer" aria-hidden="true"></i><span>Random Seed</span></div>
+                <label class="valueCell scalar seedValue" data-label="Turbulent Displace Random Seed" data-scrub="false"><input id="turbulent-seed" type="text" inputmode="numeric" value="18446744073709551615" aria-label="Turbulent Displace Random Seed" spellcheck="false" /><button class="seedRandomize" type="button" aria-label="Generate a new preview random seed">New</button></label>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <div class="propertyRow" data-advanced-row data-control="Turbulent Displace Cycle Evolution" data-param-kind="boolean">
+                <div class="propertyName effectName"><i class="parameterKind boolean" aria-hidden="true"></i><span>Cycle Evolution</span></div>
+                <button class="toggleControl" type="button" aria-pressed="true">On</button>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <div class="propertyRow" data-advanced-row data-control="Turbulent Displace Cycle" data-param-kind="integer">
+                <div class="propertyName effectName"><i class="parameterKind integer" aria-hidden="true"></i><span>Cycle</span></div>
+                <label class="valueCell scalar" data-label="Turbulent Displace Cycle" data-step="1" data-decimals="0"><input id="turbulent-cycle" type="text" inputmode="numeric" value="2" aria-label="Turbulent Displace Cycle" spellcheck="false" /></label>
+                <span class="keyPlaceholder">—</span>
+              </div>
+            </section>
+
+            <section class="tableSection effectSection" data-effect-name="Particle Playground · Gravity" data-effect-type="Particle Playground · Gravity" style="--effect-color: var(--mock-role-data)">
+              <h2 class="effectHeader"><span class="dragHandle" aria-hidden="true">⠿</span><button class="effectSelect" type="button" aria-label="Select Particle Playground Gravity for grouping" aria-pressed="false">○</button><span class="effectBadge" aria-hidden="true">FX</span><button class="sectionToggle" type="button" aria-expanded="true"><i aria-hidden="true">⌄</i><span class="effectTitle">PARTICLE PLAYGROUND · GRAVITY</span></button><span class="effectSource"><b>Particle Playground</b> · 6 params</span><button class="effectRename" type="button" aria-label="Rename Particle Playground Gravity" title="Rename effect (F2)">✎</button><button class="effectEnable" type="button" aria-label="Disable Particle Playground Gravity" aria-pressed="true">ON</button></h2>
+              <div class="propertyRow" data-control="Particle Playground Gravity Force" data-param-kind="scalar">
+                <div class="propertyName effectName"><i class="parameterKind scalar" aria-hidden="true"></i><span>Force</span></div>
+                <label class="valueCell scalar" data-label="Particle Playground Gravity Force" data-step="0.1" data-decimals="1"><input id="gravity-force" type="text" inputmode="decimal" value="1.0" aria-label="Particle Playground Gravity Force" spellcheck="false" /></label>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <div class="propertyRow" data-control="Particle Playground Gravity Force Random Spread" data-param-kind="scalar">
+                <div class="propertyName effectName"><i class="parameterKind scalar" aria-hidden="true"></i><span>Force Random Spread</span></div>
+                <label class="valueCell scalar" data-label="Particle Playground Force Random Spread" data-step="0.1" data-decimals="1"><input id="gravity-spread" type="text" inputmode="decimal" value="0.0" aria-label="Particle Playground Force Random Spread" spellcheck="false" /></label>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <div class="propertyRow" data-control="Particle Playground Gravity Direction" data-param-kind="angle">
+                <div class="propertyName effectName"><i class="parameterKind angle" aria-hidden="true"></i><span>Direction</span><small>°</small></div>
+                <label class="valueCell scalar unit" data-label="Particle Playground Gravity Direction" data-step="1" data-decimals="0"><input id="gravity-direction" type="text" inputmode="decimal" value="180" aria-label="Particle Playground Gravity Direction" spellcheck="false" /><i>°</i></label>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <button class="advancedToggle" type="button" aria-expanded="true"><i aria-hidden="true">⌄</i>ADVANCED <span>3 parameters</span></button>
+              <div class="propertyRow" data-advanced-row data-control="Particle Playground Gravity Characters" data-param-kind="choice">
+                <div class="propertyName effectName"><i class="parameterKind choice" aria-hidden="true"></i><span>Characters</span></div>
+                <button class="choiceControl" type="button" data-options="All|Selection Text 1|Selection Text 2|Selection Text 3" aria-label="Particle Playground Gravity characters">All <i>⌄</i></button>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <div class="propertyRow" data-advanced-row data-control="Particle Playground Gravity Older Younger Than" data-param-kind="scalar">
+                <div class="propertyName effectName"><i class="parameterKind scalar" aria-hidden="true"></i><span>Older/Younger Than</span><small>s</small></div>
+                <label class="valueCell scalar unit" data-label="Particle Playground Gravity Older Younger Than" data-step="0.1" data-decimals="1"><input id="gravity-age" type="text" inputmode="decimal" value="0.0" aria-label="Particle Playground Gravity Older Younger Than" spellcheck="false" /><i>s</i></label>
+                <span class="keyPlaceholder">—</span>
+              </div>
+              <div class="propertyRow" data-advanced-row data-control="Particle Playground Gravity Age Feather" data-param-kind="scalar">
+                <div class="propertyName effectName"><i class="parameterKind scalar" aria-hidden="true"></i><span>Age Feather</span><small>s</small></div>
+                <label class="valueCell scalar unit" data-label="Particle Playground Gravity Age Feather" data-step="0.1" data-decimals="1"><input id="gravity-feather" type="text" inputmode="decimal" value="0.0" aria-label="Particle Playground Gravity Age Feather" spellcheck="false" /><i>s</i></label>
+                <span class="keyPlaceholder">—</span>
+              </div>
+            </section>
+          </section>
+        </div>
+      </section>
+
+      <section class="modePanel" id="custom-panel" role="tabpanel" aria-label="Custom extensions" hidden>
+        <nav class="extensionTabs" role="tablist" aria-label="Custom extensions"><button type="button" role="tab" aria-selected="true" data-extension="tags">Tags</button><button type="button" role="tab" aria-selected="false" data-extension="notes">Notes</button></nav>
+        <section class="extensionPanel" id="tags-extension" role="tabpanel"><h1>Asset Tagging Extension</h1><p>Registered from a separate TypeScript module</p><form id="tag-form"><input id="tag-input" type="text" placeholder="Add tag and press Return" aria-label="New asset tag" autocomplete="off" /></form><div class="tagList" id="tag-list"><button type="button">Interview</button><button type="button">B-roll</button></div></section>
+        <section class="extensionPanel notesPanel" id="notes-extension" role="tabpanel" hidden><h1>Export Notes Extension</h1><p>A second panel proves registry-driven selection.</p><textarea aria-label="Export notes preview" placeholder="Notes stay local to this visual preview."></textarea></section>
+      </section>
+
+      <div class="parameterContextMenu" id="parameter-context-menu" role="menu" aria-label="Parameter actions" hidden>
+        <strong id="parameter-context-label">Parameter</strong>
+        <button id="parameter-reset" type="button" role="menuitem">Reset value</button>
+      </div>
+      <div class="parameterContextMenu effectContextMenu" id="effect-context-menu" role="menu" aria-label="Effect actions" hidden>
+        <strong id="effect-context-label">Effect</strong>
+        <button id="effect-rename" type="button" role="menuitem">Rename effect <kbd>F2</kbd></button>
+        <button id="effect-copy" type="button" role="menuitem">Copy effect <kbd>⌘C</kbd></button>
+        <button id="effect-paste" type="button" role="menuitem" disabled>Paste copied effect after <kbd>⌘V</kbd></button>
+        <button id="effect-duplicate" type="button" role="menuitem">Duplicate effect <kbd>⌘D</kbd></button>
+        <button id="effect-delete" type="button" role="menuitem">Delete effect <kbd>⌫</kbd></button>
+      </div>
+
+      <footer><span class="statusDot"></span><span id="preview-status">Drag value ↔ · click type · right-click reset · preview-local</span></footer>
+    </main>
+
+    <script>
+      const shell = document.querySelector('.inspectorShell');
+      const title = document.querySelector('#panel-title');
+      const status = document.querySelector('#preview-status');
+      const statusDot = document.querySelector('.statusDot');
+      const modeButtons = [...document.querySelectorAll('[data-mode]')];
+      const extensionButtons = [...document.querySelectorAll('[data-extension]')];
+      const recentColors = document.querySelector('#recent-colors');
+      const parameterContextMenu = document.querySelector('#parameter-context-menu');
+      const parameterContextLabel = document.querySelector('#parameter-context-label');
+      const effectContextMenu = document.querySelector('#effect-context-menu');
+      const effectContextLabel = document.querySelector('#effect-context-label');
+      const effectPaste = document.querySelector('#effect-paste');
+      const effectSelectionSummary = document.querySelector('#effect-selection-summary');
+      const effectSelectionHint = document.querySelector('#effect-selection-hint');
+      const effectFilter = document.querySelector('#effect-filter');
+      const groupSelectedEffectsButton = document.querySelector('#group-selected-effects');
+      let parameterContextRow = null;
+      let effectContextEffect = null;
+      let previewEffectClipboard = null;
+      let previewEffectCopyCount = 0;
+      let previewEffectGroupCount = 0;
+      let lastSelectedEffect = null;
+
+      const remember = (row, message) => {
+        document.querySelectorAll('.propertyRow.recent').forEach(item => item.classList.remove('recent'));
+        row?.classList.add('recent');
+        if (row) statusDot.style.background = getComputedStyle(row).getPropertyValue('--property-color');
+        status.textContent = message;
+      };
+      const paintRecents = () => recentColors.querySelectorAll('button').forEach(button => button.style.setProperty('--swatch-color', button.dataset.color));
+      const setFillColor = raw => {
+        const value = raw.toUpperCase();
+        shell.style.setProperty('--fill-color', value);
+        document.querySelector('#fill-color').value = value;
+        document.querySelector('#fill-color-value').textContent = value;
+        const existing = [...recentColors.children].find(button => button.dataset.color === value);
+        if (existing) existing.remove();
+        const swatch = document.createElement('button');
+        swatch.type = 'button';
+        swatch.dataset.color = value;
+        swatch.setAttribute('aria-label', `Use recent ${value}`);
+        recentColors.prepend(swatch);
+        while (recentColors.children.length > 4) recentColors.lastElementChild.remove();
+        paintRecents();
+        remember(document.querySelector('[data-control="Fill"]'), `Fill changed to ${value} in this preview`);
+      };
+
+      const setMode = mode => {
+        const custom = mode === 'custom';
+        document.querySelector('#effect-panel').hidden = custom;
+        document.querySelector('#custom-panel').hidden = !custom;
+        title.textContent = custom ? 'Extensions' : 'Inspector';
+        modeButtons.forEach(button => button.setAttribute('aria-selected', String(button.dataset.mode === mode)));
+        status.textContent = custom ? 'Preview-local extension state · no persistence' : 'Drag value ↔ · click type · right-click reset · preview-local';
+      };
+      modeButtons.forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
+
+      document.querySelectorAll('.layerStateButton').forEach(button => button.addEventListener('click', () => {
+        const on = button.getAttribute('aria-pressed') !== 'true';
+        button.setAttribute('aria-pressed', String(on));
+        const state = button.dataset.layerState;
+        const muted = document.querySelector('[data-layer-state="mute"]').getAttribute('aria-pressed') === 'true';
+        const solo = document.querySelector('[data-layer-state="solo"]').getAttribute('aria-pressed') === 'true';
+        document.querySelector('.selectionSummary').classList.toggle('layerMuted', muted);
+        statusDot.style.background = solo ? 'var(--mock-role-action-active)' : muted ? 'var(--mock-role-text-muted)' : 'var(--mock-role-way-inspector)';
+        status.textContent = `Rectangle ${state} ${on ? 'enabled' : 'cleared'} locally`;
+      }));
+
+      const setExtension = extension => {
+        document.querySelector('#tags-extension').hidden = extension !== 'tags';
+        document.querySelector('#notes-extension').hidden = extension !== 'notes';
+        extensionButtons.forEach(button => button.setAttribute('aria-selected', String(button.dataset.extension === extension)));
+      };
+      extensionButtons.forEach(button => button.addEventListener('click', () => setExtension(button.dataset.extension)));
+
+      const bindValueCell = cell => {
+        if (cell.dataset.valueBound === 'true') return;
+        cell.dataset.valueBound = 'true';
+        const input = cell.querySelector('input');
+        if (!input) return;
+        let drag = null;
+        const beginEditing = () => {
+          cell.classList.add('editing');
+          input.focus();
+          input.select();
+        };
+        input.addEventListener('input', () => remember(cell.closest('.propertyRow'), `${cell.dataset.label} preview adjusted locally`));
+        input.addEventListener('focus', () => cell.classList.add('editing'));
+        input.addEventListener('blur', () => cell.classList.remove('editing'));
+        input.addEventListener('keydown', event => {
+          if (event.key === 'Enter') input.blur();
+          if (event.key === 'Escape') input.blur();
+        });
+        cell.addEventListener('pointerdown', event => {
+          if (event.target.closest('button')) return;
+          if (cell.dataset.scrub === 'false') {
+            beginEditing();
+            return;
+          }
+          if (cell.classList.contains('editing')) return;
+          const value = Number(input.value.replace('−', '-'));
+          if (!Number.isFinite(value)) return;
+          drag = {x: event.clientX, value, moved: false};
+          cell.classList.add('dragging');
+          cell.setPointerCapture(event.pointerId);
+        });
+        cell.addEventListener('pointermove', event => {
+          if (!drag) return;
+          if (Math.abs(event.clientX - drag.x) > 2) drag.moved = true;
+          if (!drag.moved) return;
+          const delta = (event.clientX - drag.x) * Number(cell.dataset.step);
+          const next = drag.value + delta;
+          input.value = next.toFixed(Number(cell.dataset.decimals));
+          input.dispatchEvent(new Event('input', {bubbles: true}));
+          status.textContent = `${cell.dataset.label} ${delta >= 0 ? '+' : ''}${delta.toFixed(Number(cell.dataset.decimals))} · drag locally`;
+        });
+        const finishDrag = event => {
+          if (!drag) return;
+          const wasClick = !drag.moved;
+          const startValue = drag.value;
+          drag = null;
+          cell.classList.remove('dragging');
+          if (cell.hasPointerCapture(event.pointerId)) cell.releasePointerCapture(event.pointerId);
+          if (event.type === 'pointercancel') {
+            input.value = startValue.toFixed(Number(cell.dataset.decimals));
+            remember(cell.closest('.propertyRow'), `${cell.dataset.label} drag cancelled locally`);
+            return;
+          }
+          if (wasClick && event.type === 'pointerup') beginEditing();
+        };
+        cell.addEventListener('pointerup', finishDrag);
+        cell.addEventListener('pointercancel', finishDrag);
+      };
+
+      const bindKeyButton = button => {
+        if (button.dataset.keyBound === 'true') return;
+        button.dataset.keyBound = 'true';
+        button.addEventListener('click', () => {
+        const current = button.classList.toggle('current');
+        button.textContent = current || button.classList.contains('animated') ? '◆' : '◇';
+        button.setAttribute('aria-pressed', String(current));
+        remember(button.closest('.propertyRow'), current ? 'Key state previewed at playhead' : 'Key state preview cleared locally');
+        });
+      };
+
+      const bindSectionToggle = button => {
+        if (button.dataset.sectionBound === 'true') return;
+        button.dataset.sectionBound = 'true';
+        button.addEventListener('click', () => {
+        const section = button.closest('.tableSection');
+        const collapsed = section.classList.toggle('collapsed');
+        button.setAttribute('aria-expanded', String(!collapsed));
+        button.querySelector('i').textContent = collapsed ? '›' : '⌄';
+        status.textContent = collapsed ? 'Section folded locally; its summary remains visible' : 'Section expanded locally; all parameters remain listed';
+        });
+      };
+
+      const bindAdvancedToggle = button => {
+        if (button.dataset.advancedBound === 'true') return;
+        button.dataset.advancedBound = 'true';
+        button.addEventListener('click', () => {
+        const effect = button.closest('.effectSection');
+        const collapsed = effect.classList.toggle('advancedCollapsed');
+        button.setAttribute('aria-expanded', String(!collapsed));
+        button.querySelector('i').textContent = collapsed ? '›' : '⌄';
+        status.textContent = collapsed ? `${effect.dataset.effectName} advanced parameters folded locally` : `${effect.dataset.effectName} advanced parameters expanded locally`;
+        });
+      };
+
+      const bindEffectEnable = button => {
+        if (button.dataset.effectEnableBound === 'true') return;
+        button.dataset.effectEnableBound = 'true';
+        button.addEventListener('click', () => {
+        const effect = button.closest('.effectSection');
+        const enabled = button.getAttribute('aria-pressed') !== 'true';
+        effect.classList.toggle('effectDisabled', !enabled);
+        button.setAttribute('aria-pressed', String(enabled));
+        button.textContent = enabled ? 'ON' : 'OFF';
+        button.setAttribute('aria-label', `${enabled ? 'Disable' : 'Enable'} ${effect.dataset.effectName}`);
+        status.textContent = `${effect.dataset.effectName} ${enabled ? 'enabled' : 'disabled'} locally`;
+        });
+      };
+
+      const selectedEffects = () => [...document.querySelectorAll('.effectSection.selectedEffect')];
+      const effectTitle = effect => effect.querySelector('.effectTitle');
+      const setEffectName = (effect, name) => {
+        effect.dataset.effectName = name;
+        effectTitle(effect).textContent = name.toUpperCase();
+        effect.querySelector('.effectSelect').setAttribute('aria-label', `Select ${name} for grouping`);
+        const enable = effect.querySelector('.effectEnable');
+        const enabled = enable.getAttribute('aria-pressed') === 'true';
+        enable.setAttribute('aria-label', `${enabled ? 'Disable' : 'Enable'} ${name}`);
+        effect.querySelector('.effectRename').setAttribute('aria-label', `Rename ${name}`);
+      };
+      const updateEffectSelection = () => {
+        const effects = selectedEffects();
+        effectSelectionSummary.textContent = effects.length ? `${effects.length} FX SELECTED` : 'FX STACK';
+        if (!effectFilter.value.trim()) effectSelectionHint.textContent = effects.length > 1 ? 'Adjacent effects can become one group' : effects.length ? 'Shift-select a neighbor, then Group' : 'Select effects to group';
+        groupSelectedEffectsButton.disabled = effects.length < 2;
+        effects.forEach(effect => effect.querySelector('.effectSelect').setAttribute('aria-pressed', 'true'));
+        document.querySelectorAll('.effectSection:not(.selectedEffect) .effectSelect').forEach(button => button.setAttribute('aria-pressed', 'false'));
+      };
+      const clearEffectSelection = () => {
+        document.querySelectorAll('.effectSection.selectedEffect').forEach(effect => effect.classList.remove('selectedEffect'));
+        lastSelectedEffect = null;
+        updateEffectSelection();
+      };
+      const applyEffectFilter = () => {
+        const query = effectFilter.value.trim().toLowerCase();
+        document.querySelectorAll('.effectSection').forEach(effect => {
+          const haystack = [effect.dataset.effectName, effect.dataset.effectType, ...[...effect.querySelectorAll('.propertyName span')].map(label => label.textContent)].join(' ').toLowerCase();
+          const match = !query || haystack.includes(query);
+          effect.classList.toggle('filterHidden', !match);
+          effect.classList.toggle('filterMatch', Boolean(query) && match);
+        });
+        document.querySelectorAll('.effectGroup').forEach(group => {
+          const nameMatch = group.dataset.groupName.toLowerCase().includes(query);
+          const visibleEffect = [...group.querySelectorAll(':scope > .effectGroupBody > .effectSection')].some(effect => !effect.classList.contains('filterHidden'));
+          group.classList.toggle('filterHidden', Boolean(query) && !nameMatch && !visibleEffect);
+          if (nameMatch) group.querySelectorAll(':scope > .effectGroupBody > .effectSection').forEach(effect => effect.classList.remove('filterHidden'));
+        });
+        effectSelectionHint.textContent = query ? `Filtering: ${query}` : selectedEffects().length ? 'Shift-select a neighbor, then Group' : 'Select effects to group';
+      };
+      effectFilter.addEventListener('input', applyEffectFilter);
+      effectFilter.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && effectFilter.value) {
+          event.preventDefault();
+          effectFilter.value = '';
+          applyEffectFilter();
+          effectFilter.blur();
+        }
+      });
+      const bindEffectSelect = button => {
+        if (button.dataset.effectSelectBound === 'true') return;
+        button.dataset.effectSelectBound = 'true';
+        button.addEventListener('click', event => {
+          const effect = button.closest('.effectSection');
+          const siblings = [...effect.parentElement.children].filter(child => child.classList?.contains('effectSection'));
+          if (event.shiftKey && lastSelectedEffect?.parentElement === effect.parentElement) {
+            const start = siblings.indexOf(lastSelectedEffect);
+            const end = siblings.indexOf(effect);
+            siblings.slice(Math.min(start, end), Math.max(start, end) + 1).forEach(item => item.classList.add('selectedEffect'));
+          } else {
+            effect.classList.toggle('selectedEffect');
+            lastSelectedEffect = effect;
+          }
+          updateEffectSelection();
+        });
+      };
+      const beginRename = (owner, titleSelector, dataKey, noun) => {
+        const title = owner.querySelector(titleSelector);
+        if (title.querySelector('input')) return;
+        const before = owner.dataset[dataKey];
+        const input = document.createElement('input');
+        input.className = 'inlineRename';
+        input.type = 'text';
+        input.value = before;
+        input.setAttribute('aria-label', `Rename ${noun}`);
+        title.textContent = '';
+        title.append(input);
+        let settled = false;
+        const finish = commit => {
+          if (settled) return;
+          settled = true;
+          const next = input.value.trim();
+          if (commit && next) {
+            owner.dataset[dataKey] = next;
+            title.textContent = dataKey === 'effectName' ? next.toUpperCase() : next;
+            if (dataKey === 'effectName') setEffectName(owner, next);
+            status.textContent = `${noun} renamed to ${next} locally`;
+          } else {
+            title.textContent = dataKey === 'effectName' ? before.toUpperCase() : before;
+            status.textContent = `${noun} rename cancelled locally`;
+          }
+        };
+        input.addEventListener('keydown', event => {
+          if (event.key === 'Enter') { event.preventDefault(); finish(true); input.blur(); }
+          if (event.key === 'Escape') { event.preventDefault(); finish(false); input.blur(); }
+        });
+        input.addEventListener('blur', () => finish(true));
+        input.focus();
+        input.select();
+      };
+      const bindEffectRename = button => {
+        if (button.dataset.effectRenameBound === 'true') return;
+        button.dataset.effectRenameBound = 'true';
+        button.addEventListener('click', () => beginRename(button.closest('.effectSection'), '.effectTitle', 'effectName', 'Effect'));
+      };
+
+      const closeParameterContextMenu = () => {
+        parameterContextMenu.hidden = true;
+        parameterContextRow?.classList.remove('contextTarget');
+        parameterContextRow = null;
+      };
+      const placeParameterContextMenu = event => {
+        parameterContextMenu.hidden = false;
+        const margin = 4;
+        const x = Math.min(event.clientX, window.innerWidth - parameterContextMenu.offsetWidth - margin);
+        const y = Math.min(event.clientY, window.innerHeight - parameterContextMenu.offsetHeight - margin);
+        parameterContextMenu.style.left = `${Math.max(margin, x)}px`;
+        parameterContextMenu.style.top = `${Math.max(margin, y)}px`;
+      };
+      const openParameterContextMenu = (row, event) => {
+        closeEffectContextMenu();
+        closeParameterContextMenu();
+        parameterContextRow = row;
+        parameterContextRow.classList.add('contextTarget');
+        parameterContextLabel.textContent = row.querySelector('.propertyName span').textContent;
+        placeParameterContextMenu(event);
+        status.textContent = `${parameterContextLabel.textContent} actions opened locally`;
+      };
+      const closeEffectContextMenu = () => {
+        effectContextMenu.hidden = true;
+        effectContextEffect?.classList.remove('contextTarget');
+        effectContextEffect = null;
+      };
+      const placeEffectContextMenu = event => {
+        effectContextMenu.hidden = false;
+        const margin = 4;
+        const x = Math.min(event.clientX, window.innerWidth - effectContextMenu.offsetWidth - margin);
+        const y = Math.min(event.clientY, window.innerHeight - effectContextMenu.offsetHeight - margin);
+        effectContextMenu.style.left = `${Math.max(margin, x)}px`;
+        effectContextMenu.style.top = `${Math.max(margin, y)}px`;
+      };
+      const openEffectContextMenu = (effect, event) => {
+        closeParameterContextMenu();
+        closeEffectContextMenu();
+        effectContextEffect = effect;
+        effectContextEffect.classList.add('contextTarget');
+        effectContextLabel.textContent = effect.dataset.effectName;
+        effectPaste.disabled = previewEffectClipboard == null;
+        placeEffectContextMenu(event);
+        status.textContent = `${effect.dataset.effectName} actions opened locally`;
+      };
+      const bindParameterContext = row => {
+        if (row.dataset.parameterContextBound === 'true') return;
+        row.dataset.parameterContextBound = 'true';
+        row.addEventListener('contextmenu', event => {
+          event.preventDefault();
+          openParameterContextMenu(row, event);
+        });
+      };
+      const bindEffectContext = header => {
+        if (header.dataset.effectContextBound === 'true') return;
+        header.dataset.effectContextBound = 'true';
+        header.addEventListener('contextmenu', event => {
+          event.preventDefault();
+          openEffectContextMenu(header.closest('.effectSection'), event);
+        });
+      };
+      document.addEventListener('keydown', event => {
+        const isContextShortcut = event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10');
+        const row = document.activeElement?.closest('.propertyRow');
+        if (!isContextShortcut || !row) return;
+        event.preventDefault();
+        const rect = row.getBoundingClientRect();
+        openParameterContextMenu(row, {clientX: rect.left + 10, clientY: rect.top + rect.height / 2});
+      });
+      document.addEventListener('keydown', event => {
+        const isContextShortcut = event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10');
+        const header = document.activeElement?.closest('.effectHeader');
+        if (!isContextShortcut || !header) return;
+        event.preventDefault();
+        const rect = header.getBoundingClientRect();
+        openEffectContextMenu(header.closest('.effectSection'), {clientX: rect.left + 10, clientY: rect.top + rect.height / 2});
+      });
+      document.querySelector('#parameter-reset').addEventListener('click', () => {
+        if (!parameterContextRow) return;
+        const row = parameterContextRow;
+        row.querySelectorAll('input').forEach(input => {
+          if (input.type === 'color') setFillColor(input.defaultValue);
+          else input.value = input.defaultValue;
+        });
+        const choice = row.querySelector('.choiceControl');
+        if (choice) {
+          choice.dataset.choiceIndex = '0';
+          choice.firstChild.nodeValue = `${choice.dataset.options.split('|')[0]} `;
+        }
+        const toggle = row.querySelector('.toggleControl');
+        if (toggle) {
+          const on = toggle.dataset.defaultPressed === 'true';
+          toggle.setAttribute('aria-pressed', String(on));
+          toggle.textContent = on ? 'On' : 'Off';
+        }
+        const label = row.querySelector('.propertyName span').textContent;
+        closeParameterContextMenu();
+        remember(row, `${label} reset locally`);
+      });
+      const copyEffectToPreview = source => {
+        const snapshot = source.cloneNode(true);
+        const sourceInputs = [...source.querySelectorAll('input')];
+        snapshot.querySelectorAll('input').forEach((input, index) => { input.value = sourceInputs[index].value; });
+        previewEffectClipboard = {name: source.dataset.effectName, snapshot};
+        status.textContent = `${previewEffectClipboard.name} copied to the preview FX clipboard`;
+      };
+      const pasteCopiedEffectAfter = target => {
+        if (!target || !previewEffectClipboard) return null;
+        const pasted = previewEffectClipboard.snapshot.cloneNode(true);
+        const pastedName = `${previewEffectClipboard.name} · Copy ${++previewEffectCopyCount}`;
+        pasted.dataset.effectName = pastedName;
+        pasted.dataset.effectCopy = 'true';
+        pasted.classList.remove('contextTarget', 'dragging', 'dropBefore', 'dropAfter');
+        pasted.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'));
+        // cloneNodeは属性だけを複製する。元のリスナー済み印を外してから同じ操作を結び直す。
+        pasted.querySelectorAll('[data-value-bound], [data-key-bound], [data-section-bound], [data-advanced-bound], [data-effect-enable-bound], [data-parameter-context-bound], [data-effect-context-bound], [data-drag-bound], [data-seed-bound], [data-choice-bound], [data-toggle-bound], [data-effect-select-bound], [data-effect-rename-bound]').forEach(element => {
+          [...element.attributes].filter(attribute => attribute.name.endsWith('-bound')).forEach(attribute => element.removeAttribute(attribute.name));
+        });
+        const source = pasted.querySelector('.effectSource');
+        source.textContent = '';
+        const type = document.createElement('b');
+        type.textContent = pasted.dataset.effectType;
+        source.append(type, ' · copied');
+        const enable = pasted.querySelector('.effectEnable');
+        const enabled = enable.getAttribute('aria-pressed') === 'true';
+        enable.setAttribute('aria-label', `${enabled ? 'Disable' : 'Enable'} ${pastedName}`);
+        setEffectName(pasted, pastedName);
+        target.parentElement.insertBefore(pasted, target.nextElementSibling);
+        bindEffect(pasted);
+        target.closest('.effectGroup') && updateEffectGroupCount(target.closest('.effectGroup'));
+        status.textContent = `${previewEffectClipboard.name} pasted after ${target.dataset.effectName} locally`;
+        return pasted;
+      };
+      const deleteEffect = effect => {
+        const name = effect.dataset.effectName;
+        const group = effect.closest('.effectGroup');
+        effect.remove();
+        if (group) {
+          if (group.querySelector('.effectSection')) updateEffectGroupCount(group);
+          else group.remove();
+        }
+        clearEffectSelection();
+        status.textContent = `${name} deleted locally`;
+      };
+      document.querySelector('#effect-copy').addEventListener('click', () => {
+        if (!effectContextEffect) return;
+        copyEffectToPreview(effectContextEffect);
+        closeEffectContextMenu();
+      });
+      document.querySelector('#effect-rename').addEventListener('click', () => {
+        if (!effectContextEffect) return;
+        const effect = effectContextEffect;
+        closeEffectContextMenu();
+        beginRename(effect, '.effectTitle', 'effectName', 'Effect');
+      });
+      effectPaste.addEventListener('click', () => {
+        if (!effectContextEffect || !previewEffectClipboard) return;
+        const target = effectContextEffect;
+        pasteCopiedEffectAfter(target);
+        closeEffectContextMenu();
+      });
+      document.querySelector('#effect-duplicate').addEventListener('click', () => {
+        if (!effectContextEffect) return;
+        const target = effectContextEffect;
+        copyEffectToPreview(target);
+        pasteCopiedEffectAfter(target);
+        closeEffectContextMenu();
+      });
+      document.querySelector('#effect-delete').addEventListener('click', () => {
+        if (!effectContextEffect) return;
+        const effect = effectContextEffect;
+        closeEffectContextMenu();
+        deleteEffect(effect);
+      });
+      document.addEventListener('pointerdown', event => {
+        if (!parameterContextMenu.hidden && !parameterContextMenu.contains(event.target)) closeParameterContextMenu();
+        if (!effectContextMenu.hidden && !effectContextMenu.contains(event.target)) closeEffectContextMenu();
+      });
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && (!parameterContextMenu.hidden || !effectContextMenu.hidden)) {
+          event.preventDefault();
+          closeParameterContextMenu();
+          closeEffectContextMenu();
+        }
+      });
+      document.querySelector('.tableScroller').addEventListener('scroll', () => { closeParameterContextMenu(); closeEffectContextMenu(); });
+      window.addEventListener('resize', () => { closeParameterContextMenu(); closeEffectContextMenu(); });
+
+      let draggedEffect = null;
+      let dropTarget = null;
+      let dropBefore = false;
+      const effectPositions = () => new Map([...document.querySelectorAll('.effectSection')].map(section => [section, section.getBoundingClientRect().top]));
+      const animateEffectReorder = before => {
+        if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        before.forEach((top, section) => {
+          const deltaY = top - section.getBoundingClientRect().top;
+          if (deltaY) section.animate([{transform: `translateY(${deltaY}px)`}, {transform: 'translateY(0)'}], {duration: 120, easing: 'cubic-bezier(.2, 0, 0, 1)'});
+        });
+      };
+      const clearDropTargets = () => document.querySelectorAll('.effectSection').forEach(section => section.classList.remove('dropBefore', 'dropAfter'));
+      const finishEffectDrag = () => {
+        clearDropTargets();
+        draggedEffect?.classList.remove('dragging');
+        draggedEffect = null;
+        dropTarget = null;
+      };
+      const bindDragHandle = handle => {
+        if (handle.dataset.dragBound === 'true') return;
+        handle.dataset.dragBound = 'true';
+        handle.addEventListener('mousedown', event => {
+          event.preventDefault();
+          draggedEffect = handle.closest('.effectSection');
+          dropTarget = null;
+          draggedEffect.classList.add('dragging');
+        });
+      };
+      document.addEventListener('mousemove', event => {
+        if (!draggedEffect) return;
+        const targetHeader = [...document.querySelectorAll('.effectHeader')].find(header => {
+          const rect = header.getBoundingClientRect();
+          return event.clientY >= rect.top && event.clientY <= rect.bottom;
+        });
+        const target = targetHeader?.closest('.effectSection');
+        clearDropTargets();
+        if (!target || target === draggedEffect || target.parentElement !== draggedEffect.parentElement) {
+          dropTarget = null;
+          return;
+        }
+        dropTarget = target;
+        const rect = targetHeader.getBoundingClientRect();
+        dropBefore = event.clientY < rect.top + rect.height / 2;
+        target.classList.add(dropBefore ? 'dropBefore' : 'dropAfter');
+      });
+      document.addEventListener('mouseup', () => {
+        if (!draggedEffect) return;
+        if (dropTarget) {
+          const before = effectPositions();
+          dropTarget.parentElement.insertBefore(draggedEffect, dropBefore ? dropTarget : dropTarget.nextElementSibling);
+          animateEffectReorder(before);
+          status.textContent = `${draggedEffect.dataset.effectName} reordered locally`;
+        }
+        finishEffectDrag();
+      });
+
+      document.querySelector('#fill-color').addEventListener('input', event => setFillColor(event.currentTarget.value));
+      recentColors.addEventListener('click', event => {
+        const swatch = event.target.closest('button[data-color]');
+        if (swatch) setFillColor(swatch.dataset.color);
+      });
+      paintRecents();
+
+      const bindSeedRandomize = button => {
+        if (button.dataset.seedBound === 'true') return;
+        button.dataset.seedBound = 'true';
+        button.addEventListener('click', () => {
+        const words = new Uint32Array(2);
+        crypto.getRandomValues(words);
+        button.closest('.valueCell').querySelector('input').value = ((BigInt(words[0]) << 32n) | BigInt(words[1])).toString();
+        remember(button.closest('.propertyRow'), 'A new preview random seed was generated');
+        });
+      };
+
+      const bindChoiceControl = button => {
+        if (button.dataset.choiceBound === 'true') return;
+        button.dataset.choiceBound = 'true';
+        button.addEventListener('click', () => {
+        const options = button.dataset.options.split('|');
+        const next = (Number(button.dataset.choiceIndex || '0') + 1) % options.length;
+        button.dataset.choiceIndex = String(next);
+        button.firstChild.nodeValue = `${options[next]} `;
+        remember(button.closest('.propertyRow'), 'Choice changed in this preview');
+        });
+      };
+
+      const bindToggleControl = button => {
+        if (button.dataset.toggleBound === 'true') return;
+        button.dataset.toggleBound = 'true';
+        button.dataset.defaultPressed ||= button.getAttribute('aria-pressed');
+        button.addEventListener('click', () => {
+        const on = button.getAttribute('aria-pressed') !== 'true';
+        button.setAttribute('aria-pressed', String(on));
+        button.textContent = on ? 'On' : 'Off';
+        remember(button.closest('.propertyRow'), `Toggle set ${on ? 'on' : 'off'} in this preview`);
+        });
+      };
+
+      const updateEffectGroupCount = group => {
+        const count = group.querySelectorAll(':scope > .effectGroupBody > .effectSection').length;
+        group.querySelector('.effectGroupCount').textContent = `${count} FX`;
+      };
+      const bindEffectGroup = group => {
+        if (group.dataset.groupBound === 'true') return;
+        group.dataset.groupBound = 'true';
+        const toggle = group.querySelector('.effectGroupToggle');
+        toggle.addEventListener('click', () => {
+          const collapsed = group.classList.toggle('collapsed');
+          toggle.setAttribute('aria-expanded', String(!collapsed));
+          toggle.querySelector('i').textContent = collapsed ? '›' : '⌄';
+          status.textContent = `${group.dataset.groupName} ${collapsed ? 'folded' : 'expanded'} locally`;
+        });
+        group.querySelector('.effectGroupRename').addEventListener('click', () => beginRename(group, '.effectGroupName', 'groupName', 'Group'));
+        const enable = group.querySelector('.effectGroupEnable');
+        enable.addEventListener('click', () => {
+          const enabled = enable.getAttribute('aria-pressed') !== 'true';
+          enable.setAttribute('aria-pressed', String(enabled));
+          enable.textContent = enabled ? 'ON' : 'OFF';
+          group.classList.toggle('effectGroupDisabled', !enabled);
+          status.textContent = `${group.dataset.groupName} ${enabled ? 'enabled' : 'bypassed'} locally`;
+        });
+        group.querySelector('.effectGroupUngroup').addEventListener('click', () => {
+          const parent = group.parentElement;
+          const effects = [...group.querySelector('.effectGroupBody').children];
+          effects.forEach(effect => parent.insertBefore(effect, group));
+          const name = group.dataset.groupName;
+          group.remove();
+          clearEffectSelection();
+          status.textContent = `${name} ungrouped locally`;
+        });
+        updateEffectGroupCount(group);
+      };
+      const groupSelectedEffects = () => {
+        const effects = selectedEffects();
+        if (effects.length < 2) return;
+        const parent = effects[0].parentElement;
+        const siblings = [...parent.children].filter(child => child.classList?.contains('effectSection'));
+        const positions = effects.map(effect => siblings.indexOf(effect)).sort((a, b) => a - b);
+        const contiguous = effects.every(effect => effect.parentElement === parent) && positions.every((position, index) => index === 0 || position === positions[index - 1] + 1);
+        if (!contiguous) {
+          status.textContent = 'Select adjacent effects in one stack before grouping';
+          return;
+        }
+        const group = document.createElement('section');
+        const name = `Effect Group ${++previewEffectGroupCount}`;
+        group.className = 'effectGroup';
+        group.dataset.groupName = name;
+        group.innerHTML = `<h2 class="effectGroupHeader"><button class="effectGroupToggle" type="button" aria-expanded="true"><i aria-hidden="true">⌄</i><span class="effectGroupName"></span><small class="effectGroupCount"></small></button><button class="effectGroupRename" type="button" aria-label="Rename group" title="Rename group (F2)">✎</button><button class="effectGroupEnable" type="button" aria-label="Bypass group" aria-pressed="true">ON</button><button class="effectGroupUngroup" type="button" aria-label="Ungroup effects" title="Ungroup effects (⌘⇧G)">Ungroup</button></h2><div class="effectGroupBody"></div>`;
+        group.querySelector('.effectGroupName').textContent = name;
+        parent.insertBefore(group, effects[0]);
+        const body = group.querySelector('.effectGroupBody');
+        effects.forEach(effect => body.append(effect));
+        bindEffectGroup(group);
+        clearEffectSelection();
+        status.textContent = `${name} created with ${effects.length} effects locally`;
+      };
+      groupSelectedEffectsButton.addEventListener('click', groupSelectedEffects);
+
+      document.addEventListener('keydown', event => {
+        if (event.target.closest('input, textarea')) return;
+        const effect = document.activeElement?.closest('.effectSection');
+        const group = document.activeElement?.closest('.effectGroup');
+        const mod = event.metaKey || event.ctrlKey;
+        if (event.key === 'F2' && effect) {
+          event.preventDefault();
+          beginRename(effect, '.effectTitle', 'effectName', 'Effect');
+        } else if (event.key === 'F2' && group) {
+          event.preventDefault();
+          beginRename(group, '.effectGroupName', 'groupName', 'Group');
+        } else if (mod && event.key.toLowerCase() === 'g') {
+          event.preventDefault();
+          if (event.shiftKey && group) group.querySelector('.effectGroupUngroup').click();
+          else groupSelectedEffects();
+        } else if (mod && event.key.toLowerCase() === 'c' && effect) {
+          event.preventDefault();
+          copyEffectToPreview(effect);
+        } else if (mod && event.key.toLowerCase() === 'v' && effect && previewEffectClipboard) {
+          event.preventDefault();
+          pasteCopiedEffectAfter(effect);
+        } else if (mod && event.key.toLowerCase() === 'd' && effect) {
+          event.preventDefault();
+          copyEffectToPreview(effect);
+          pasteCopiedEffectAfter(effect);
+        } else if ((event.key === 'Delete' || event.key === 'Backspace') && effect) {
+          event.preventDefault();
+          deleteEffect(effect);
+        }
+      });
+
+      // 複製したFXも元と同じ局所操作を持たせ、表示だけの死んだブロックにしない。
+      const bindEffect = effect => {
+        effect.querySelectorAll('.propertyRow').forEach(bindParameterContext);
+        effect.querySelectorAll('.valueCell').forEach(bindValueCell);
+        effect.querySelectorAll('.keyButton').forEach(bindKeyButton);
+        effect.querySelectorAll('.sectionToggle').forEach(bindSectionToggle);
+        effect.querySelectorAll('.advancedToggle').forEach(bindAdvancedToggle);
+        effect.querySelectorAll('.effectEnable').forEach(bindEffectEnable);
+        effect.querySelectorAll('.effectHeader').forEach(bindEffectContext);
+        effect.querySelectorAll('.effectSelect').forEach(bindEffectSelect);
+        effect.querySelectorAll('.effectRename').forEach(bindEffectRename);
+        effect.querySelectorAll('.dragHandle').forEach(bindDragHandle);
+        effect.querySelectorAll('.seedRandomize').forEach(bindSeedRandomize);
+        effect.querySelectorAll('.choiceControl').forEach(bindChoiceControl);
+        effect.querySelectorAll('.toggleControl').forEach(bindToggleControl);
+      };
+
+      document.querySelectorAll('.propertyRow').forEach(bindParameterContext);
+      document.querySelectorAll('.valueCell').forEach(bindValueCell);
+      document.querySelectorAll('.keyButton').forEach(bindKeyButton);
+      document.querySelectorAll('.tableSection > h2 .sectionToggle').forEach(bindSectionToggle);
+      document.querySelectorAll('.advancedToggle').forEach(bindAdvancedToggle);
+      document.querySelectorAll('.effectEnable').forEach(bindEffectEnable);
+      document.querySelectorAll('.effectHeader').forEach(bindEffectContext);
+      document.querySelectorAll('.effectSelect').forEach(bindEffectSelect);
+      document.querySelectorAll('.effectRename').forEach(bindEffectRename);
+      document.querySelectorAll('.dragHandle').forEach(bindDragHandle);
+      document.querySelectorAll('.seedRandomize').forEach(bindSeedRandomize);
+      document.querySelectorAll('.choiceControl').forEach(bindChoiceControl);
+      document.querySelectorAll('.toggleControl').forEach(bindToggleControl);
+      updateEffectSelection();
+
+      document.querySelector('#tag-form').addEventListener('submit', event => {
+        event.preventDefault();
+        const input = document.querySelector('#tag-input');
+        const name = input.value.trim();
+        if (!name) return;
+        const tag = document.createElement('button');
+        tag.type = 'button';
+        tag.textContent = name;
+        document.querySelector('#tag-list').append(tag);
+        input.value = '';
+        status.textContent = `“${name}” added to preview tags`;
+      });
+      document.querySelector('#tag-list').addEventListener('click', event => {
+        const tag = event.target.closest('button');
+        if (!tag) return;
+        tag.remove();
+        status.textContent = 'Preview tag removed';
+      });
+    </script>
+  </body>
+</html>
