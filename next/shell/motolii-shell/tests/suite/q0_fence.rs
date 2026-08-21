@@ -192,6 +192,19 @@ fn with_settings_open() -> Shell {
     shell
 }
 
+/// **M-menu MB-0+Edit**: Edit メニューを開いた状態(header トグル)。
+/// dropdown の8項目(Undo/Redo/Cut/Copy/Paste/Duplicate/Select All/
+/// Deselect All)が木に現れる — `with_settings_open` と同じ理由でこの柵に
+/// 通す(パネル別知識をこのファイルへ増やさない、冒頭 doc の拡張方針どおり)。
+/// layer を1枚足しておく(Undo/Cut/Copy/Duplicate/Select All が有効になる
+/// 状態を経由させ、`Redo`(disabled のまま)との両方を1状態で見る)。
+fn with_edit_menu_open() -> Shell {
+    let mut shell = fresh();
+    let _ = shell.update(Message::AddLayer);
+    let _ = shell.update(Message::ToggleEditMenu);
+    shell
+}
+
 /// **本命**。3状態(空 / layer1枚で Undo が有効 / Undo 済みで Redo が有効)を
 /// 横断して、「見た目は反応したのに何も起きない」widget が無いことを見る。
 /// 状態を分けているのは、Undo/Redo が文脈disabled(=on_press無し=captureしない)
@@ -207,6 +220,7 @@ fn no_pane_leaves_a_captured_click_silent() {
         "layer追加→Undo(Redoが有効なはず)",
     ));
     violations.extend(scan_state(with_settings_open, "Settingsパネル開"));
+    violations.extend(scan_state(with_edit_menu_open, "Editメニュー開(M-menu MB-0+Edit)"));
 
     assert!(
         violations.is_empty(),

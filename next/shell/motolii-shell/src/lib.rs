@@ -36,6 +36,10 @@ use motolii_store::{
 
 pub mod clipboard;
 pub mod fixture;
+/// header の "Edit" トップレベルメニュー(M-menu MB-0+Edit、`menu.rs` 冒頭 doc
+/// 参照)。`view()`/`header()` からしか呼ばないため `pub` にしない
+/// (`crate::menu::` で足りる)。
+mod menu;
 pub mod screenshot;
 pub mod transport;
 
@@ -384,6 +388,15 @@ pub enum Message {
     /// 選択を全解除する(正典: 空白クリックと同義のキーボード入口)。
     DeselectAllLayers,
 
+    // ---- Edit メニュー(M-menu MB-0+Edit、`menu.rs` 冒頭 doc 参照) ----
+    /// header の "Edit" トリガー開閉。**表示専用の view flag**
+    /// (`settings_panel_open` と同格 — Document にも undo 履歴にも乗らない)。
+    /// メニュー項目自体は既存の `Message::Undo`/`CopyLayer`/... を直接
+    /// `on_press` へぶら下げるだけなので、この変種以外に新しい `Message` は
+    /// 増えない(意味の複製ゼロ、S6 は「唯一の入口」の話であって新動詞の話
+    /// ではない)。
+    ToggleEditMenu,
+
     // ---- 実時間再生(A2、正典 §2 拘束5) ----
     /// Space。Play/Pause をトグルする。**ドラッグ中は無効**(拘束5「再生と
     /// 掴みは相互排他」)— 判断は `Shell::toggle_playback` 側(`is_dragging()`)
@@ -566,6 +579,10 @@ pub struct Shell {
     /// 機構がまだ無い(裁定127/128)ため、`tokens::Dimensions::ui_scale` の
     /// 「仮の置き場」と同じ理由でここに仮置きする。
     settings_panel_open: bool,
+    /// header "Edit" メニューの開閉(M-menu MB-0+Edit)。**表示専用の view
+    /// flag** — `settings_panel_open` と同格(Document・undo 履歴に乗らない、
+    /// `menu.rs` 冒頭 doc 参照)。
+    edit_menu_open: bool,
     /// Stage の下に市松を敷くか。**表示専用** — Document には一切乗らない
     /// (`settings_pane::composite_checkerboard` 参照、書き出しに影響しない)。
     checkerboard: bool,
@@ -635,6 +652,7 @@ impl Shell {
                 timeline: timeline_pane::PaneState::new(),
                 browser: browser_pane::PaneState::new(),
                 settings_panel_open: false,
+                edit_menu_open: false,
                 checkerboard: false,
                 background_draft: None,
                 ui_scale_draft: None,
@@ -674,6 +692,7 @@ impl Shell {
             timeline: timeline_pane::PaneState::new(),
             browser: browser_pane::PaneState::new(),
             settings_panel_open: false,
+            edit_menu_open: false,
             checkerboard: false,
             background_draft: None,
             ui_scale_draft: None,
@@ -722,6 +741,16 @@ impl Shell {
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
     pub fn update(&mut self, message: Message) -> Task<Message> {
         self.status = None;
+        // M-menu MB-0+Edit: Edit メニュー項目(Undo 等)をクリックしたら
+        // メニュー自体は自動で閉じる(普通のメニューの慣習) —
+        // `Message::ToggleEditMenu` 自身(開く操作)だけは対象外にする。
+        // 生の overlay ではない今回の実装(`menu.rs` 冒頭 doc)には
+        // 「クリックが外へ外れたら閉じる」自動判定が無いため、ここで
+        // 「開いている間に他の Message が1本でも処理されたら閉じる」という
+        // 単純な形で代替する(不要な専用 wiring を各 8 動詞へ増やさない)。
+        if self.edit_menu_open && !matches!(message, Message::ToggleEditMenu) {
+            self.edit_menu_open = false;
+        }
         // click→type 編集への切り替え(`finish_field_drag`)だけがフォーカス
         // task を返す。他の枝は既定どおり `Task::none()`。
         let mut task = Task::none();
@@ -846,6 +875,9 @@ impl Shell {
             Message::DuplicateLayer => self.duplicate_layer(),
             Message::SelectAllLayers => self.select_all_layers(),
             Message::DeselectAllLayers => self.deselect_all_layers(),
+            // M-menu MB-0+Edit: header "Edit" トリガーの開閉トグル。
+            // `settings_panel_open` と同格の表示専用状態(Document 非依存)。
+            Message::ToggleEditMenu => self.edit_menu_open = !self.edit_menu_open,
             Message::TogglePlayback => self.toggle_playback(),
             Message::PlaybackTick => self.advance_playback_tick(),
         }
@@ -1958,6 +1990,14 @@ impl Shell {
         // 木に一切現れない(Q0: 効かない chrome を並べない、閉じている間は
         // 下書き入力欄も存在しないので誤操作の的にならない)。
         let mut layout = column![self.header()];
+        // M-menu MB-0+Edit: 開いている間だけ木へ現れる(`settings_panel_open`
+        // と同型の表示分岐、`menu.rs` 冒頭 doc「Q0: 開いていなければ木に一切
+        // 現れない」)。左寄せの `row!` で包み、残りの幅は埋めない — full
+        // width の settings パネルとは違い、ドロップダウンらしく内容幅で
+        // 止める。
+        if self.edit_menu_open {
+            layout = layout.push(row![crate::menu::dropdown(dims, colors)]);
+        }
         if self.settings_panel_open {
             layout = layout.push(
                 settings_pane::view(
@@ -2013,6 +2053,10 @@ impl Shell {
         let dims = self.dims();
         let colors = self.tokens.colors;
         let buttons = row![
+            // M-menu MB-0+Edit: header メニューバーのトップレベル第1号
+            // (`menu.rs` 冒頭 doc)。File 等の未実装トップレベルは構造だけの
+            // 予約をしない(空メニューを出さない)── Edit 1本だけがまず現れる。
+            crate::menu::trigger(dims, colors),
             button(text("Undo").size(dims.body_text))
                 .style(move |_theme, status| button_style(dims, colors, status))
                 .on_press_maybe(self.doc.can_undo().then_some(Message::Undo)),
