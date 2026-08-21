@@ -846,7 +846,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 845	misc	Fast Previews > Fast Draft	高速プレビュー:ファストドラフト	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	844と同根拠
 846	misc	Fast Previews > Off	高速プレビュー:オフ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	844と同根拠
 847	misc	File…	プロキシファイルを指定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
-848	misc	Filters	フィルター適用	0	0	0	1	1	1:0:0:0	公式		採用予定	既決との衝突なし
+848	misc	Filters	フィルター適用	0	0	0	1	1	1:0:0:0	公式		採用済	B2で種別フィルタとして実装(2026-08-22、rail/filter shelf)
 849	misc	Fit to Fill	尺に合わせて挿入	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし(gapless前提ではない自由配置と両立可)
 850	misc	Fit To Fill	Shift+F11	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	849と同根拠
 851	misc	Frame Mix	フレームミックス	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
