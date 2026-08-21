@@ -3538,6 +3538,7 @@ name = "motolii-inspector-pane"
 version = "0.1.0"
 dependencies = [
  "iced",
+ "iced_test",
  "motolii-core",
  "motolii-settings-pane",
  "motolii-shell-state",

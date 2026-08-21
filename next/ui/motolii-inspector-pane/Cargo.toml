@@ -23,3 +23,12 @@ motolii-settings-pane.workspace = true
 # ようにするための leaf crate 依存 — root(`motolii-shell`)へ依存できない
 # pane crate 同士の共通の親(pane split survey §2.3/§5)。
 motolii-shell-state.workspace = true
+
+[dev-dependencies]
+# 裁定168 施工: 値セルの文字が隣接セルへ重ならないことを実 widget bounds で
+# 照合する柵(`tests/value_cell_legibility.rs`)。`motolii-shell` の
+# `inspector_pixel_fence.rs` と同じ手口(`iced_test::simulator` で `view()` を
+# 歩き、実フォントで測った `Target::Text` の bounds を読む)を pane 単体へ
+# 小さく写した — shell(write-set 外)を経由せず `inspector_pane::view` を
+# 直叩きできる。dev-only、この crate の外へは出さない(shell と同じ扱い)。
+iced_test = "0.14"
