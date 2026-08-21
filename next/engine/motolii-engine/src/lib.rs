@@ -6,6 +6,12 @@
 //! 裁定141)。export は絶対に使わない。preview だけが市松 ON の間に切り替える口で、
 //! 同じ合成器・同じ層構築を共有する差分入力として実装してある(第二経路ではない)。
 //!
+//! **もう一つの入力差分**: [`Engine::render_frame_with_view_camera`](観測視点専用、
+//! 裁定157)。Document のレンダリングカメラ(`Composition.camera`)ではなく
+//! [`ObservationCamera`](Shell 直下の表示専用状態、Document 非搭載)で camera を組む
+//! ——上と同型で、export は知らない・呼ぶのは shell の Stage 表示だけ。
+//! [`Engine::render_frame`]の2引数固定シグネチャはこの追加で変わっていない。
+//!
 //! この crate 自身は意味を持たない。Document の意味は `motolii-store`、
 //! 補間は `motolii-eval`、描画は `re_renderer` にある。ここは繋ぐだけ。
 
@@ -13,6 +19,7 @@ use std::collections::{HashMap, VecDeque};
 
 use motolii_compositor::GpuTexture2D;
 use motolii_compositor::{Compositor, CompositorError, Layer, LayerWithPasses};
+use motolii_core::ResolvedCamera;
 
 use motolii_media::{probe, read_frame_at, MediaError, MediaInfo};
 use motolii_store::{LayerPlacement, LayerSource, Matte, RationalTime, StoreView};
@@ -68,6 +75,45 @@ pub enum EngineError {
 /// `half_dimension_px * f32eps * 1` で、8K(半幅 3840px)でも `3840 * 2^-23 ≈ 0.00046px`
 /// と機械精度未満(0.5px 閾値の千倍以上小さい)。
 const BACKGROUND_ORDER: i16 = -1;
+
+/// 観測視点(裁定157) — 作業用の見る位置。**Document には乗らない** —
+/// `Composition.camera`(裁定113/115/116、`view.resolve_camera` が読むレンダリング
+/// カメラ)とは別物で、意味を持たない純表示状態(縫い目調査
+/// `docs/reviews/2026-08-21-camera-seam-survey.md` §3 の「表示専用・Document 非搭載」
+/// precedent と同格)。
+///
+/// **最小の型**: z=0 平面上のパン(`center`と同じ単位・意味、`motolii_core::ResolvedCamera`
+/// 参照)+ ズームのみ(裁定113: 世界1つ・z=0 既定)。roll は持たない — 観測視点に
+/// ひねりを入れる要求がまだ無く、要る設計になれば `ResolvedCamera` と同じ形へ拡張できる。
+/// 3D 軌道(向きの回転)は裁定115 が「まだ開けない」と留保した領域なので今回は持ち込まない。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ObservationCamera {
+    /// comp 中心からのパン量(ピクセル、world 単位)。`ResolvedCamera::center` と同じ規約。
+    pub pan: [f32; 2],
+    /// 1.0 が既定。`ResolvedCamera::zoom` と同じ規約(値が大きいほど拡大)。
+    pub zoom: f32,
+}
+
+impl Default for ObservationCamera {
+    fn default() -> Self {
+        Self {
+            pan: [0.0, 0.0],
+            zoom: 1.0,
+        }
+    }
+}
+
+impl ObservationCamera {
+    /// `motolii_core::camera_projection` へそのまま渡せる形へ写す。roll は持たない
+    /// ので常に 0 度(基準姿勢のまま、`ResolvedCamera::default().roll_degrees` と同じ)。
+    fn as_resolved_camera(&self) -> ResolvedCamera {
+        ResolvedCamera {
+            center: self.pan,
+            zoom: self.zoom,
+            roll_degrees: 0.0,
+        }
+    }
+}
 
 pub struct Engine {
     compositor: Compositor,
@@ -137,14 +183,52 @@ impl Engine {
         self.render(view, t, false)
     }
 
+    /// 観測視点(裁定157)で描く第二エントリ。[`Self::render_frame`]と**同じ合成器・
+    /// 同じ層構築**を使い、camera だけ Document のレンダリングカメラ
+    /// (`view.resolve_camera(t)`)ではなく `observation` から組む — 第二 render パス
+    /// ではなく同一合成器への入力差分として実装してある([`Self::render_frame_without_background`]
+    /// が裁定141 でやったのと同型)。
+    ///
+    /// **export はこの口を一切知らない**。呼び手は shell の Stage 表示だけを想定する
+    /// (縫い目調査 `docs/reviews/2026-08-21-camera-seam-survey.md` §3)。[`Self::render_frame`]
+    /// の2引数固定シグネチャ・実装は本メソッド追加で1文字も変わっていない —
+    /// export/refresh_frame の呼び手2箇所は今まで通り `render_frame` だけを呼び続けられる。
+    pub fn render_frame_with_view_camera(
+        &mut self,
+        view: &StoreView<'_>,
+        t: RationalTime,
+        observation: &ObservationCamera,
+    ) -> Result<Vec<u8>, EngineError> {
+        self.render_with_camera_override(view, t, true, Some(observation.as_resolved_camera()))
+    }
+
     /// `render_frame`/`render_frame_without_background` の共通実装。
     /// `include_background` だけが分岐点(背景 pinned layer を足すかどうか) —
     /// それ以外の層の組み立て・合成呼び出しは完全に同じ経路を通る。
+    ///
+    /// camera の決め方だけ [`Self::render_with_camera_override`] へさらに委譲する
+    /// (camera_override 無し = 常に Document のレンダリングカメラを読む、今までと
+    /// 完全に同じ挙動)。
     fn render(
         &mut self,
         view: &StoreView<'_>,
         t: RationalTime,
         include_background: bool,
+    ) -> Result<Vec<u8>, EngineError> {
+        self.render_with_camera_override(view, t, include_background, None)
+    }
+
+    /// [`Self::render`]の実体。`camera_override` が `Some` の間だけ Document の
+    /// レンダリングカメラ(`view.resolve_camera(t)`)を読まず、渡された値をそのまま使う
+    /// (観測視点、[`Self::render_frame_with_view_camera`]専用の分岐)。`None` の間は
+    /// 今までの `render` と完全に同じ経路(`render_frame`/`render_frame_without_background`
+    /// はこの分岐に触れない)。
+    fn render_with_camera_override(
+        &mut self,
+        view: &StoreView<'_>,
+        t: RationalTime,
+        include_background: bool,
+        camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
         let composition = view
             .composition()
@@ -153,10 +237,14 @@ impl Engine {
         let comp = composition.spec();
         // カメラも comp と同じく Document が持つ(裁定113/115)。preview/export が
         // 違うカメラを渡せないよう、ここでも引数ではなく `view` から読む
-        // (裁定40 が comp について立てた規律と同じ形)。
-        let camera = view
-            .resolve_camera(t)
-            .map_err(|e| EngineError::Store(e.to_string()))?;
+        // (裁定40 が comp について立てた規律と同じ形)。**観測視点だけが例外**
+        // (`camera_override`、裁定157) — Document を一切読まず渡された値をそのまま使う。
+        let camera = match camera_override {
+            Some(camera) => camera,
+            None => view
+                .resolve_camera(t)
+                .map_err(|e| EngineError::Store(e.to_string()))?,
+        };
         let resolved = view
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
