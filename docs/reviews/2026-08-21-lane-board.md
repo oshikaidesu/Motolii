@@ -10,10 +10,6 @@
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
 
-| **CF: cap 高速路修理** | 実装 | worktree(発注時に追記) | RB 発見4の根治 — cap ½/¼ でもゼロコピー維持(縮小は GPU 側)。「速くするボタンが遅い」の解消。write-set= shell presenter 系のみ |
-| **SR: effect scratch 再利用** | 実装 | worktree(発注時に追記) | RB 発見3の根治 — render_to_texture の scratch pool 再利用(同一 queue 順序保証の紙上検証から)。write-set= compositor のみ |
-| **IB: 意図束の起案(裁定177)** | 起案(cargo なし) | worktree | 全行(採用予定+保留+拡張)を意図束 25〜45 へ割り付け・統合署名案・束単位 freq 再計算・**家の候補**(1意図=1つの家)。**束の命名は利用者が直す前提の草案** — 返却後に利用者の一瞥 |
-| **G1: グループ化動詞(裁定174)** | 実装 | worktree(発注時に追記) | ⌘G= Group 層+parent N 本 1 undo・⌘⇧G= world 位置保存の解除(焼き込み数値証明)。map 455-457/468-470。write-set= store document.rs+shell shortcut+timeline 反映(attrs.rs 禁止 — BL3 並走) |
 | **BL3: blend 分離可能11モード** | 実装 | worktree(発注時に追記) | α/BL1b の型で Multiply/Screen/Overlay 等11種 — store attrs.rs+engine 変換腕+Inspector 巡回リスト+golden。map blend_mode 束の大口。write-set= attrs.rs+engine+inspector(document.rs 禁止 — G1 並走) |
 
 ## 完了・main 着地済み(実装)
@@ -77,6 +73,10 @@
 | **η: 素材台帳移植(検収合格・merge `d5370a0e`)** | 裁定162 の核心が着地 — 旧 asset.rs 740行を store へ(fingerprint は移植済みを参照)。`Intent::AdmitAsset/RemoveAsset`(read-modify-write、`Composition:assets` component の JSON blob = markers/slots と同じ流儀)・`StoreView::assets()/asset()`。persist は汎用経路が無改修で運ぶ。dedup の赤→緑実証あり((a)(c) は赤未保存 — 実装同時書きの逸脱として記録)。store 21 スイート+workspace 全緑 |
 | **θ: browser-pane B0 骨格(検収合格・merge `8a4e7ffb`)** | 新 crate(`//! wraps:` マーカー・空 Message enum・空 view)+shell 埋め込み(`Message::Browser` 腕のみ・view 未配線)。**PNG SHA `ee217ba2…` 前後一致を supervisor 再実測**(pane 分割以来の正準ハッシュ)。shell suite 170 全緑。B1 は η(素材台帳)着地後 |
 | **M-menu: メニューバー基盤設計調査(回収・merge 済み)** | 保全= `2026-08-22-menubar-foundation-survey.md`。構造は map 分布から導出(AE 8トップレベルを Layer 語彙へ畳む・全項目に行 id+freq)・**アプリ内メニューバー推奨**(winit に NSMenu 統合なしの実測)・道具= iced の `overlay::menu` primitive が pub で流用可(wraps 層)、iced_aw は fork 互換未検証(GAP)。**S6 併存表の重要発見: New Project/Save As/Zoom In·Out/Paste Attributes/Find 等は現在入口ゼロ** — メニューだけ足すと S6 違反になるため、同切片で shortcut/直接操作の併設が義務。切片 MB-0(基盤 widget)→MB-1(File/Edit)→MB-2(Layer/View)→MB-3(右クリック基盤)。**MB-0 は TP 着地後**(shell write-set) |
+| **G1: グループ化動詞(検収合格・merge `922f6a27`)— 変換階層が動詞まで完成** | 裁定174 施工 — **新 Intent 不要**(既存語彙の合成で ⌘G/⌘⇧G)・ungroup は「祖父母 world が代数的に相殺」証明つき焼き込みで world 位置保存((95,10) 前後一致)・projection.rs 無改修でツリー反映。**map 6行採用済= 消化143/1,551**。merge 時の意味衝突2件(menu doc・Item Option 化)は supervisor 解決。FINDING: 焼き込みは t=0 評価(アニメ付き Group の解除は近似 — 在庫)。workspace 40 binary 全緑(レーン内)+storm flake は release 単独緑 |
+| **CF: cap 高速路修理(検収合格・merge 済み・supervisor 収容)** | RB 発見4根治 — cap≠Auto でもゼロコピー維持・縮小は fragment の pixel_scale 量子化(naga 検証済み)。「comp 出力縮小は帯域を救わない」(RB 発見1)を doc に正直化。red(cap=½ で何も描かれない)→緑。**未コミット報告3例目+1** — status 貼付指示が効いて即発見 |
+| **SR: effect scratch 再利用(検収合格・merge `b31c6a1f`)** | RB 発見3根治 — 同一 queue 順序論証(裁定171 §5 と同じ議論の直接適用・新機構なし)で poll なし再利用。確保 5→**1**・stale 画素の直接検証つき。compositor 41 緑 |
+| **IB: 意図束草案(回収・merge `16636fef` — **利用者の命名一瞥待ち**)** | **44束+宿無し3行**(AI 系3行 — 生成境界原則との衝突で verdict 再審要)・新規大型統合13件(7〜8カテゴリ跨ぎの束を発見 — 作業範囲束は8カテゴリ合流)・束単位 freq TOP10・全1,285行の機械検証(重複ゼロ・欠落ゼロ)。**次: 利用者が束の名前と形を直す→bundle 列を map へ+機械検査** |
 | **MB-1: File 束(検収合格・merge `46f4481d`)— File メニュー出現・freq4 の頭を消化** | 裁定176 施工 — `FileDialogs` trait(注入境界 — rfd を test で呼ばない構造)+New Project(⌘N・dirty 確認)/Save As(⌘⇧S・既存汎用 persist=.rrd)/Save a Copy/Quit(⌘Q)。**map 1221/1223/1225/1227 採用済= 消化137/1,551**。FINDING: q0 の File 除外は構造保証で代替(Quit=exit(0) が test binary を殺すため — 理由 doc 化)・**Open は境界 FINDING**(load は存在・Shell 配線+破損/recent/大型コストの3設計問題が未決 — 専用切片へ)。process 逸脱1(red checkpoint なし — 自己申告)。shell 221 緑 |
 | **RB: 残ボトルネック軽調査(回収・merge 済み)** | 保全= `2026-08-22-residual-bottleneck-survey.md`。**実像**: GPU=ソース解像度×層数の帯域律速(comp 解像度でない — r1 実測 40層1080p≈40ms・ソース1/4で5.9ms)・decode= ffmpeg プロセス起動/cache miss+64枚 LRU 永続なし(ゼロコピーと直交の日常コスト)。**バグ発見: resolution cap ½/¼ は高速路を無効化し CPU 後段縮小のみ=「速くするボタンが遅い」**(chip 発行済み・修理は MB-1 着地後 — shell 衝突回避)。M4 の effect scratch 非再利用も記録。保留14行の判定: cache 11行=(a) 根は実在(対処は永続 cache が先)・Fast Previews 3行=(b) probe 待ち。新玉: 永続 frame cache(大玉)・scratch 再利用・cap 修理 |
 | **H4: シェイプ入れ子(検収合格・merge `4df3aadd`)— 再帰の3つ目の顔** | `ShapeNode::Leaf/Group`(Shape 本体は1フィールドも触らない設計 — engine mask.rs 無改修の理由)+`flatten`(H1 と同一の合成数学 — 数値証明も同じ (110,5)/(95,20))。repeater の Affine を単一源へ昇格(core 依存を作らない)。移植/新設の区別を正直に報告。逸脱1件(clipboard 機械追従)理由正当。vector 67+workspace 111 スイート 978 全緑 |
