@@ -136,7 +136,7 @@ label.t{display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:8px
 
   <div class="fxbar future"><b>FX STACK</b><span style="color:var(--text-muted)">Select effects to group</span><input><button>Group ⌘G</button></div>
   <div class="fx future">
-    <div class="fxhd"><span class="dh">⠿</span><span class="sel"></span><span class="badge">FX</span><span class="ttl">TURBULENT DISPLACE</span><span class="src"><b style="color:var(--text-secondary)">Turbulent Displace</b> · 8 params</span><span class="en">ON</span></div>
+    <div class="fxhd"><span class="dh">⠿</span><span class="ttl">TURBULENT DISPLACE</span><span class="src">8 params</span><span class="en">ON</span></div>
     <div class="prow" style="--pc:var(--action-active)"><span class="n"><i></i>Displacement</span><span class="v" style="grid-column:2/5;text-align:right">Turbulent ⌄</span><span class="k">—</span></div>
     <div class="prow" style="--pc:var(--data)"><span class="n"><i></i>Amount</span><span class="v" style="grid-column:2/5;text-align:right">42.0</span><span class="k">◇</span></div>
     <div class="fxadv">ADVANCED<span>4 parameters</span></div>
@@ -160,7 +160,7 @@ label.t{display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:8px
   <div class="lb" style="left:340px;top:56px;max-width:180px">selectionSummary: shapeGlyph(種別図像)+M/S。<b>現行: M のみ配線済み(ident_band、簡略形)</b>。S は幅予約のみ(reserved_glyph — solo 未実装、engine/store 側の別レーン)。shapeGlyph は救出台帳へ</div>
   <div class="lb" style="left:-8px;top:180px;max-width:170px">propertyRow 左3px = 値型の色(--property-color)。FX 行では型(scalar/vector/angle/…)、TRANSFORM/APPEARANCE 行ではプロパティ個別色。M/S/L 相当の rail glyph は Timeline 側と同族(裁定164: 意味役割が新しい時は専用ロール)</div>
   <div class="lb" style="left:250px;top:210px;max-width:190px">Fill 行(color picker + Recent swatches)。<b>現行実装: 対応なし</b>(parameterKind.color 型・色プロパティが実装に無い)。解禁束: 色プロパティ型+Recent色履歴(browser 側の Recent 束とは別モデル)</div>
-  <div class="lb" style="left:-8px;top:290px;max-width:190px">effectStackToolbar〜effectGroup: FX スタック全体。<b>現行実装: 対応なし</b>(I-ratio台帳で確定済み — effect stack/mode tabs/selection summary/extension tabs/notes panel は Q0 スコープ外)。drag reorder・複数選択→Group・rename(F2)・enable(ON/OFF)・advanced折りたたみ・ungroup、いずれも救出台帳へ</div>
+  <div class="lb" style="left:-8px;top:290px;max-width:190px">effectStackToolbar〜effectGroup: FX スタック全体。<b>利用者裁定 2026-08-22</b>: (1) ○ 選択ボタン撤去 — 選択は行の地クリック+行アクセント線が唯一の語り手(S5c 二重発話の解消) (2) FX バッジ撤去 — FX STACK 内で全行が FX なのは自明(S4 発見依存度ゼロ、エフェクト証は色付き左端) (3) 型名はリネーム時のみ表示(表示名=型名なら沈黙)。<b>現行実装: 対応なし</b>(I-ratio台帳で確定済み — effect stack/mode tabs/selection summary/extension tabs/notes panel は Q0 スコープ外)。drag reorder・複数選択→Group・rename(F2)・enable(ON/OFF)・advanced折りたたみ・ungroup、いずれも救出台帳へ</div>
   <div class="lb" style="left:330px;top:400px;max-width:190px">parameterContextMenu/effectContextMenu(右クリック)。<b>解禁束: 右クリック基盤</b>(browser semantics の S6 併存原則と同じ束 — 唯一の入口にしない)。F2/⌘C/⌘V/⌘D/⌫ のキーボード等価は救出元 script に実装済み(意匠のみ未転写)</div>
   <div class="lb" style="left:-8px;top:470px;max-width:170px">extensionTabs+extensionPanel(Tags/Notes)。<b>現行実装: 対応なし</b>(Custom mode 自体が無い)。解禁束: タグ束(map D、browser semantics の Collections/tag editor と同根)</div>
   <div class="lb" style="left:250px;top:512px;max-width:190px">footer: 静的ヒント文のみ実装済み(hint_row)。statusDot と動的ステータス文(「Fill changed to … in this preview」等)は<b>解禁束: 局所プレビュー通知</b> — 現行は操作結果を文言化して返す口が無い</div>

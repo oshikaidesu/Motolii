@@ -223,12 +223,7 @@ kbd { margin-left: 4px; color: var(--mock-role-text-muted, #757575); font-family
 .effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 10%, var(--mock-role-surface-app, #242424)); }
 .effectSection .dragHandle,
 .effectSection .sectionToggle i { color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); }
-.effectSelect { width: 13px; height: 17px; display: grid; flex: 0 0 auto; place-items: center; padding: 0; border: 0; background: transparent; color: var(--mock-role-text-muted, #757575); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 12px; }
-.effectSelect:hover,
-.effectSelect:focus-visible { color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); outline: 0; }
-.effectSelect[aria-pressed="true"] { color: var(--mock-role-action-active, #d8b574); }
 .effectSection.selectedEffect .effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)), inset 0 -1px 0 var(--mock-role-action-active, #d8b574), inset 0 1px 0 color-mix(in srgb, var(--mock-role-action-active, #d8b574) 54%, transparent); }
-.effectBadge { width: 17px; height: 13px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); background: color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 18%, transparent); color: var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)); font-family: var(--mock-role-font-technical, ui-monospace, monospace); font-size: 8px; font-weight: 800; letter-spacing: 0; }
 .effectRename { width: 16px; height: 16px; display: grid; flex: 0 0 auto; place-items: center; margin-right: 3px; padding: 0; border: 0; background: transparent; color: var(--mock-role-text-muted, #757575); font-size: 9px; opacity: 0; }
 .effectHeader:hover .effectRename,
 .effectHeader:focus-within .effectRename { opacity: 1; }
@@ -244,7 +239,6 @@ kbd { margin-left: 4px; color: var(--mock-role-text-muted, #757575); font-family
 .effectEnable[aria-pressed="false"] { border-color: var(--mock-role-border-default, #1a1a1a); background: transparent; color: var(--mock-role-text-muted, #757575); }
 .effectSection.effectDisabled > .propertyRow,
 .effectSection.effectDisabled > .advancedToggle { opacity: .48; }
-.effectSection.effectDisabled .effectBadge { border-color: var(--mock-role-border-default, #1a1a1a); background: transparent; color: var(--mock-role-text-muted, #757575); }
 .effectSection.contextTarget .effectHeader { box-shadow: inset 3px 0 0 var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)), inset 0 0 0 1px color-mix(in srgb, var(--effect-color, var(--mock-role-way-plugins, #9f9fcf)) 68%, transparent); }
 .effectSection.dropBefore .effectHeader,
 .effectSection.dropAfter .effectHeader { position: relative; }
