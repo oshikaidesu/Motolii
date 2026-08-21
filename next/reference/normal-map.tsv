@@ -955,7 +955,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 954	misc	Show All	全レイヤースタイルを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	レイヤースタイル(裁定71で全廃)に依存する操作
 955	misc	Show File Names	ファイル名表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし
 956	misc	Show Layer Controls	レイヤーコントロールを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ギズモは裁定124でスクラッチ実装進行中
-957	misc	Show or hide Parent column	Parent列表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	parent実装済み(裁定112d)、UI列表示は未
+957	misc	Show or hide Parent column	Parent列表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		不採用	裁定174: 機構露出のUIは作らない(意図優先) — グループ化動詞G1で代替
 958	misc	Show Preview Marks	プレビューマーク表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー実装済み(裁定111)だが、このプレビューマーク表示トグルは未
 959	misc	Solid…	新規単色レイヤー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 960	misc	Start or stop preview	プレビュー開始/停止	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	GOALS M8(未)
