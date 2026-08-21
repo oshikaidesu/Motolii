@@ -245,6 +245,30 @@ pub fn format_number(value: f64, decimals: usize) -> String {
     format!("{value:.decimals$}")
 }
 
+/// 値セルの**表示**文字数の上限(裁定169)。38px セル+0.6em 横余白の実測
+/// アンカー2点から決めた: 「1.000」(5字)は収まる(実窓実測)・「960.000」
+/// (7字)は先頭末尾が clip される(実窓実測 2026-08-21 深夜、φ 検収)。
+/// 幅 px からの近似換算は等幅仮定が崩れて信用できないため、文字数で縛る。
+pub const MAX_VALUE_CELL_CHARS: usize = 6;
+
+/// セルに収まる精度へ落とした**表示専用**の整形(裁定169)。field 既定の
+/// `decimals` から始め、[`MAX_VALUE_CELL_CHARS`] を超える間 1 桁ずつ落とす
+/// (最小 0 — 整数部だけでも超える値はそのまま出す: clip(true) が防波堤)。
+/// **編集 draft は全精度のまま**([`value_cell`] の editing 分岐は
+/// [`format_number`] を直接呼ぶ) — 表示は丸め、編集は真値、の分担。
+/// モック出典: inspector-library の値サンプルは「24.0」「80.0」「2.50」と
+/// 幅広値ほど短精度(AE の Position 1桁小数と同型)。
+pub fn display_number(value: f64, decimals: usize) -> String {
+    let mut d = decimals;
+    loop {
+        let s = format_number(value, d);
+        if s.chars().count() <= MAX_VALUE_CELL_CHARS || d == 0 {
+            return s;
+        }
+        d -= 1;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Speed 欄(ATTRS、SP1 第一波)— %⇄`motolii_store::Speed` の写像だけをここに置く。
 // ---------------------------------------------------------------------------
@@ -1325,13 +1349,13 @@ fn value_cell(
                 // click せず(まだ)編集していない見た目 — drag-to-scrub の起点
                 // ([`draggable_value_cell`])。表示する値は投影(`slot.value`)
                 // そのものなので、drag 中の transient 値もここが自動で映す。
-                draggable_value_cell(field, format_number(slot.value, decimals), dims, colors)
+                draggable_value_cell(field, display_number(slot.value, decimals), dims, colors)
             }
         }
         // animated(2キー以上) — **表示のみと明示**(理由つきdisabledではなく、
         // そもそも編集 control を出さない。accent 色で「動いている値」と分かる —
         // 箱形自体は編集セルと同じ)。
-        _ => boxed_value(format_number(slot.value, decimals), colors.action_active, dims, colors),
+        _ => boxed_value(display_number(slot.value, decimals), colors.action_active, dims, colors),
     }
 }
 
@@ -1806,6 +1830,23 @@ mod tests {
         assert_eq!(format_number(1.0, 3), "1.000");
         assert_eq!(format_number(24.0, 1), "24.0");
         assert_eq!(format_number(100.0, 0), "100");
+    }
+
+    /// 裁定169: 表示はセルに収まる精度へ落ちる(編集 draft は全精度のまま —
+    /// [`value_cell`] の editing 分岐が `format_number` 直呼びであることが対)。
+    #[test]
+    fn display_number_shrinks_precision_to_fit_the_cell() {
+        // 収まる値は field 既定精度のまま(実窓実測アンカー: 5字は収まる)
+        assert_eq!(display_number(1.0, 3), "1.000");
+        assert_eq!(display_number(0.0, 3), "0.000");
+        // 実窓で clip した実例(φ 検収 2026-08-21): 7字 → 6字へ
+        assert_eq!(display_number(960.0, 3), "960.00");
+        // 4桁整数部: 8字 → 6字
+        assert_eq!(display_number(3840.0, 3), "3840.0");
+        // 負値も同じ規則
+        assert_eq!(display_number(-960.0, 3), "-960.0");
+        // 整数部だけで上限超え: これ以上落とせない(clip(true) が防波堤)
+        assert_eq!(display_number(1234567.0, 3), "1234567");
     }
 
     #[test]

@@ -39,7 +39,8 @@
 use iced_test::selector::{Candidate, Target};
 
 use motolii_inspector_pane::{
-    view, AttrsProjection, ComponentSlot, RowValue, SelectionProjection, TransformRowProjection,
+    display_number, view, AttrsProjection, ComponentSlot, RowValue, SelectionProjection,
+    TransformRowProjection,
 };
 use motolii_store::LayerId;
 use motolii_tokens_rs::{Colors, Dimensions};
@@ -78,9 +79,11 @@ fn present_editable(axis: &'static str, value: f64) -> ComponentSlot {
     }
 }
 
-/// 実窓較正の再現値(Position X=960 / Y=540 / Z=0)— 3桁小数(decimals=3)で
-/// `format_number` を通すと `"960.000"`/`"540.000"`(いずれも7文字)になる、
-/// 実測で報告された文字列そのもの。
+/// 実窓較正の再現値(Position X=960 / Y=540 / Z=0)。裁定169 以降、**表示**は
+/// [`display_number`] がセルに収まる精度へ落とす(960.0→"960.00" の6文字)—
+/// 旧表示 "960.000"(7文字)は実窓で先頭末尾が clip された実測(φ 検収)そのもの。
+/// このテストの期待文字列は正本([`display_number`])経由で組み、表示規則が
+/// 変わったらここも一緒に動く。
 fn position_row_matching_the_field_report() -> TransformRowProjection {
     TransformRowProjection {
         label: "Position",
@@ -138,8 +141,8 @@ fn adjacent_value_cell_boxes_are_separated_by_the_expected_gap() {
     let element = view(Some(&selection), None, None, dims, colors);
     let targets = collect_targets(element);
 
-    let x = number_text_bounds(&targets, "960.000");
-    let y = number_text_bounds(&targets, "540.000");
+    let x = number_text_bounds(&targets, &display_number(960.0, 3));
+    let y = number_text_bounds(&targets, &display_number(540.0, 3));
 
     // Position 行は X が先(左)・Y が後(右)に並ぶ(`transform_row` の
     // `RowValue::Vector` 順序どおり)。
