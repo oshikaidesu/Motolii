@@ -258,7 +258,9 @@ pub fn descriptor_effects() -> ComponentDescriptor {
     }
 }
 
-/// shape-layer の図形列(`Vec<motolii_vector::Shape>`)。
+/// shape-layer の図形列(`Vec<motolii_vector::ShapeNode>`、裁定173 H4)。
+/// 旧 `Vec<Shape>` の JSON は `ShapeNode::Leaf` の列として無改造で読める
+/// (`ShapeNode` の `#[serde(untagged)]`)。
 pub fn descriptor_shapes() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),

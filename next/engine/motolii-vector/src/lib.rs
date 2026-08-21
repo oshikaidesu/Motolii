@@ -9,32 +9,47 @@
 //! そちらの marker は module の doc が持つ(crate の根しか見ない `check.sh` の
 //! 空振りを避ける形は裁定34 と同じ)。選定理由も `raster.rs` に書いてある。
 //!
-//! # 出口は1本
+//! # 出口はラスタライズ経路1本(裁定173 H4 で2つの口に精密化)
 //!
-//! [`render`] だけ。**図形の記述 → premultiplied RGBA8** で、それ以外の公開口を
-//! 置かない(裁定18 と同じ趣旨 — 第二経路が作れる口があると、片方だけ直る欠陥が生まれる)。
-//! 出た RGBA は合成器の既存 `TexturedRect` 経路へそのまま流す想定で、
-//! **この crate は `motolii-compositor` を引かない**(背骨2)。
+//! [`render`](1つの `Shape`)と [`render_tree`](入れ子の [`ShapeNode`] 列)。
+//! **後者が唯一の実体**で、前者は `render_tree(&[ShapeNode::Leaf(shape.clone())],
+//! canvas)` と等価な糖衣 — ラスタライズする経路(`raster::new_pixmap`/`draw`/
+//! `finish`)は依然として1本のまま(裁定18 の趣旨は「同じ仕事を2箇所に書かない」
+//! であって「関数が1個だけ」ではない、と精密化)。**図形の記述 → premultiplied
+//! RGBA8** 以外の公開口は置かない。出た RGBA は合成器の既存 `TexturedRect` 経路へ
+//! そのまま流す想定で、**この crate は `motolii-compositor` を引かない**(背骨2)。
 //!
-//! # 形(裁定73)
+//! # 形(裁定73・裁定173 H4)
 //!
-//! 持つのは「**1つのパス源 + 順序付き演算子スタック + fill/stroke 各1**」。
-//! Lottie の `group.it`(兄弟順スコープ)は採らない — 修飾子が「同じ配列の手前の
-//! 兄弟」に暗黙に効く模型は、**並べ替えが結果を黙って変える**(裁定66 と同型)。
+//! `Shape` 1つが持つのは「**1つのパス源 + 順序付き演算子スタック + fill/stroke
+//! 各1**」——ここは裁定73 のまま1バイトも変えていない(`next/engine/
+//! motolii-engine/src/mask.rs` 等の既存呼び手が struct literal で直に組んでいる
+//! ため)。Lottie の `group.it`(兄弟順スコープ)は採らない — 修飾子が「同じ配列の
+//! 手前の兄弟」に暗黙に効く模型は、**並べ替えが結果を黙って変える**(裁定66 と同型)。
 //!
 //! その代わり [`PathSource::Bezier`] が**輪郭の列**を持つ。Lottie では複数輪郭は
 //! `group.it` に `path` を並べて作るが、ここでは1つのパス源が最初から複数輪郭を持てる。
 //! **中マドは [`FillRule::EvenOdd`] が開ける**ので、パスブーリアンは要らない(裁定74)。
 //!
+//! 複数の `Shape` を**入れ子**にする話(shape 間の共有 transform)は裁定73 の外に
+//! [`ShapeNode`]/[`ShapeGroup`]/[`flatten`] として足した(裁定173 H4、`group.rs`
+//! module doc 参照)。「1つの `Shape` の形」自体は変えていない。
+//!
 //! # 保存(layer-meta 束)
 //!
 //! `Shape` とその内側の型に `serde` を足してある。**中身の語彙は増やしていない**
-//! (derive を足しただけ)。`motolii-store` の shape-layer が `Vec<Shape>` を
-//! そのまま Document の component として持つ — 「1つのパス源+演算子スタック」の
+//! (derive を足しただけ)。`motolii-store` の shape-layer は `Vec<ShapeNode>` を
+//! そのまま Document の component として持つ(裁定173 H4 — 旧 `Vec<Shape>` は
+//! `ShapeNode::Leaf` の列として後方互換に読める)。「1つのパス源+演算子スタック」の
 //! 正本はここ1つのままで、store 側に別のパス表現を発明させない(裁定10 と同じ考え方)。
 //! `Canvas` / `Raster` / `VectorError` は描画専用の値なので保存の対象外(derive していない)。
 
 mod geom;
+/// シェイプ内の入れ子グループ(裁定173 H4)。`ShapeNode`/`ShapeGroup`/`flatten`/
+/// `render_tree` は crate 根から `pub use` で直に公開する — `coverage` と違い
+/// 「1つの図形の記述」という同じ関心事(`Shape` の隣)なので、独立した名前空間には
+/// 分けない(module doc の「出口」節参照)。
+mod group;
 mod ops;
 mod raster;
 
@@ -47,6 +62,8 @@ use serde::{Deserialize, Serialize};
 // パスの器は**入力の語彙**なので公開する。`rect` / `ellipse` は公開しない —
 // 同じパスが `PathSource::Rectangle` からも作れることになり、口が2本になる(軸4)。
 pub use geom::{Contour, Path, Point, Vertex};
+/// 入れ子グループ(裁定173 H4)。module doc(`group.rs`)参照。
+pub use group::{flatten, render_tree, ShapeGroup, ShapeNode};
 
 use geom::{ellipse, polystar, rect};
 use ops::Instance;
@@ -511,27 +528,15 @@ pub enum VectorError {
     OpenPathOffset,
 }
 
-/// **この crate の唯一の公開口**: 図形の記述 → premultiplied RGBA8。
+/// 図形1つの記述 → premultiplied RGBA8。**単一 `Shape` 用の糖衣**(裁定173 H4) —
+/// 中身は [`render_tree`]`(&[ShapeNode::Leaf(shape.clone())], canvas)` と文字通り
+/// 同じ呼び出しで、ラスタライズする経路は2箇所に書かれていない。既存呼び手
+/// (`next/engine/motolii-engine/src/mask.rs` 等)はシグネチャ・挙動とも無改修。
 ///
 /// 同じ記述からは何度呼んでも byte 一致する(上流も演算子も CPU の純関数)。
 /// 試験 `the_same_description_renders_byte_identical_twice` がそれを縛る。
 pub fn render(shape: &Shape, canvas: &Canvas) -> Result<Raster, VectorError> {
-    let mut pixmap = raster::new_pixmap(canvas)?;
-    let origin = Point {
-        x: canvas.origin_x as f64,
-        y: canvas.origin_y as f64,
-    };
-    for instance in resolve(shape)? {
-        raster::draw(
-            &mut pixmap,
-            &instance.path,
-            origin,
-            shape.fill.as_ref(),
-            shape.stroke.as_ref(),
-            instance.opacity,
-        );
-    }
-    Ok(raster::finish(pixmap, canvas))
+    render_tree(&[ShapeNode::Leaf(shape.clone())], canvas)
 }
 
 /// 演算子スタックを畳んで、描くべきパスと重みの列にする。

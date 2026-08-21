@@ -17,3 +17,8 @@ thiserror.workspace = true
 # layer-meta 束: `Shape` を Document の component として保存するために足した。
 # 依存は増えない — `serde` は既に workspace 全体で引いている(`Cargo.lock` は変わらない)。
 serde.workspace = true
+
+[dev-dependencies]
+# 裁定173 H4 の serde oracle(`tests/group.rs`)専用。workspace 全体で既に引いている
+# ため `Cargo.lock` は増えない(`next/Cargo.toml:149` 参照)。
+serde_json.workspace = true

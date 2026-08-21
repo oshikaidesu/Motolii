@@ -19,7 +19,7 @@ use crate::slot::PropertySource;
 use crate::{
     property, Asset, AssetId, AssetTable, Composition, Document, EffectInstance, LayerAttrs,
     LayerId, LayerMeta, LayerPlacement, Marker, Mask, PropertyId, ResolvedEffect, ResolvedLayer,
-    ResolvedMask, Revision, Shape, Slot, SlotId, StoreError, TextDocument, EDIT_TIMELINE,
+    ResolvedMask, Revision, ShapeNode, Slot, SlotId, StoreError, TextDocument, EDIT_TIMELINE,
 };
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
@@ -580,8 +580,10 @@ impl<'a> StoreView<'a> {
         serde_json::from_str(&json.0).map_err(StoreError::Encode)
     }
 
-    /// shape-layer の図形列。無ければ空。
-    pub fn shapes(&self, layer: LayerId) -> Result<Vec<Shape>, StoreError> {
+    /// shape-layer の図形列。無ければ空。裁定173 H4: `Vec<ShapeNode>` — 旧 `Vec<Shape>`
+    /// の JSON も `ShapeNode::Leaf` の列として無改造で読める(`ShapeNode` は
+    /// `#[serde(untagged)]`)。
+    pub fn shapes(&self, layer: LayerId) -> Result<Vec<ShapeNode>, StoreError> {
         let descriptor = descriptor_shapes();
         let path = layer.entity_path();
         let results = self
