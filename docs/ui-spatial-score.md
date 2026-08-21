@@ -39,6 +39,8 @@
 
 ペイン跨ぎ=P、修飾キー併用=K、入力切替=H、判断点=M(挿入規則は KLM Rule 0-4)。「このワークフローは何秒かかる設計か」が置く前に出る。方向反転回数は補助指標として残す。
 
+KLM は**儀式の見える化**でもある(利用者洞察 2026-08-21): AE の null 作法のような「意図の前の準備操作」(補助オブジェクト作成・命名・親子付け・組み方の思考)は M+P+K として全部計上される。ユーザーが直接意味を選べる動詞設計との差を秒数で比較できる — 将来の parent/rig 系設計の判定レンズ(直接意味選択 > 準備物経由、を定量で守る)。
+
 ## S3. 視覚動線
 
 screenshot 画素から判定。**基盤は自前の重心・分散でなく確立指標を使う**(裁定164): 第一候補 Rosenholtz **Feature Congestion / Subband Entropy**(2007、公開ツール有)、代替 Miniukovich & De Angeli の8指標(CHI 2015 — clutter・figure-ground contrast・contour congestion・grid quality・white space)。「注意の重みが意味のある場所(選択・再生位置・ヒーロー)に集中しているか」= clutter スコア+強調位置の照合。**F/Z パターンは反証済みにつきプライアとして採用しない**(NN/g 自身の訂正)。Itti-Koch saliency はオフライン計算可能な注意予測の第2波候補。
