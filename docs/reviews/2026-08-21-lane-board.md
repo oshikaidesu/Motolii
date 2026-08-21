@@ -5,13 +5,7 @@
 
 ## 走行中(未返却)
 
-| レーン | 種別 | 場所 | 中身 |
-|---|---|---|---|
-| A2: 実時間再生 第2切片 | 実装(cargo・**前任セッションの subagent が走行継続中**、2026-08-21 15:30 後任実測) | lane-engine | cpal device/stream(update_from_output_callback+fill_or_silence)+producer(旧 PlaybackSession 移植)+shell transport(Space=Play/Pause・ドラッグ中無効・playhead 追随・scrub=seek・終端停止・soundtrack 無しは無音で clock のみ)。oracle=フェイク デバイスで (a)Play進行 (b)Pause停止 (c)scrub=seek (d)ドラッグ中Space無効 (e)終端停止。map の Play/Pause 系行更新まで発注済み。**検収・merge・ボード更新は後任セッションへ全面移管済み**(SendMessage 往復で合意)。後任側が branch 監視中 |
-
-(T2/T3 は着地済み — 下の完了表へ移動済み。前回終了時の書き残し)
-
-| 調査: backend 消費ギャップ縫い目 | 調査(read-only・sonnet) | main checkout(書き込み禁止) | blend14種/mask/speed の台帳・経路比較(EffectPass 基盤 vs rerun fork shader vs 旧 crates 移植)・S1〜S5 同型の切片割り。A2 の write-set(audio/shell/shell-state/Cargo.toml)と衝突する切片は「A2 着地後」と明記させる |
+(なし — 2026-08-21 後任セッション時点)
 
 ## 完了・main 着地済み(実装)
 
@@ -53,6 +47,8 @@
 | **カメラ campaign 完結(裁定156/157)** | S0 engine 第二エントリ+Shell 側 S1〜S3。観測=wheel アンカーズーム/中ボタンパン・Shift+F で復帰・**フレーム枠 overlay 視覚合格**・export 汚染ゼロ直接証明+構造柵(呼び出し点 grep 固定)。既知境界: 観測中は市松プレビュー非合成(doc 明記) |
 | (supervisor 直) 色 token 追随 fix / 市松レーン回収 / 引き継ぎ123コミット着地 | main 前提の整地 |
 | (supervisor 直・後任) multi-select 行ハイライト配線 | U1 finding 根治(`830bce23`)。`row_selected` 純関数抽出+赤→緑・pane36+shell156 全緑。primary 区別は property 行展開のまま(AE 同型)。実窓合否は利用者チェックリストへ追加 |
+| **A2: 実時間再生 第2切片(検収合格・merge `f026e7cc`)** | **再生できる動画ソフトになった**。cpal device/producer(旧 PlaybackSession 移植・rtrb 化)+`PlaybackSession`+shell `transport.rs`(Space=Play/Pause・拘束5 ドラッグ中無効・playhead 追随 tick・scrub=seek・終端自動停止・soundtrack 無しは無音成立)。oracle (a)〜(e) 7本+audio 59+5 全緑を後任 supervisor が main checkout target で再実行・workspace 94 スイート全緑。map 1041 採用済(消化 109/1,551)。発見: `iced::time::every` は本 workspace で使えない(KNOWN 追記済み、`stream::channel`+OS スレッドで自作)。既知の制約: seek 時リング容量 4,096 フレーム(~85ms)分だけ古い位置の音が流れきる。**前任セッション発注・後任検収の初のセッション跨ぎレーン** |
+| (supervisor 直・後任) テスト警告 196 件ゼロ化 | `2ed52c1e`。裸の `shell.update()` へ `let _ =`(T5 期からの蓄積、A2 起因ではない)+未使用 import 除去 |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
 
@@ -67,6 +63,7 @@
 | R7 | Godot/Blender | Godot 14項目+Blender 15項目。モーダル対比・スナップ多層・RMB キャンセル |
 | R8 | Unity/Unreal/Spine | 37項目(既載13/抜け6/対象外12/保留6)。blend は理由つき対象外 |
 | **統合パス** | **完了** | R6+R7+R8 の抜け39件を正典 §8 処置台帳へ(正13アクション採用・候8・保留8・対象外実証5) |
+| R9(後任) | backend 消費ギャップ縫い目(blend/mask/speed) | 保全= `2026-08-21-backend-gap-seam-survey.md`。**speed「型だけ」claim は誤りと確定**(映像消費済み・欠落は UI 書き口)。mask は engine が黙って無視(matte と非対称)・`motolii-vector` が未配線資産と発見。blend は逐次合成の枠(BL1)が中核判断。切片割り SP1-2/BL1-5/MK1-4・EVIDENCE_GAP 4件・FINDING 4件(mask_apply.wgsl は実は matte の移植元、等) |
 
 ## **pane crate 分割 完了(裁定160、2026-08-21夜)**
 
@@ -86,6 +83,7 @@
 
 - 実窓での線化(第1弾+第2弾の明暗リズム強度)+値セル余白+市松の手触り+glow の halo
 - multi-select 行ハイライト(`830bce23`): Cmd/Shift 複数選択で全行が同色ハイライト・focus だけ property 行展開、の見え方
+- **A2 実機確認4点**(`f026e7cc` — 実デバイス経路はテスト不能のため実窓が最初の審判): (1) Play/Pause ボタン・Space で実際に音が鳴るか (2) 再生中 scrub で音が新位置へ追従するか(リング容量分 ~85ms だけ古い音が残る設計) (3) soundtrack 無し Document で無音 Play+playhead 追随が見えるか (4) 終端到達でボタンが Play 側へ自動で戻るか
 - リタイムが**複数プロパティ選択を一括で比例スケール**する解釈(T4 逸脱4 — 文法は範囲を限定していないため広く取った。実機で違和感があれば property 単位へ絞る)
 - ~~正典の候~~ → 裁定151 で人口多数決により一括確定済み(§8.2)
 

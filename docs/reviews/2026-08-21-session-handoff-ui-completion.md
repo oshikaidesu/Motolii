@@ -11,7 +11,7 @@
 | 0 | **音声A2レーンが走行中のまま終了** → **訂正(後任 2026-08-21 15:30 実測): 前任セッションは生きており、A2 subagent は lane-engine で施工継続中だった**(device.rs/producer.rs/session.rs をリアルタイム書き込み)。前任と SendMessage 往復で検収・merge・ボード更新の全面移管に合意済み。capsule 全容はボードの A2 行。**教訓: 「走行中のまま終了」の引き継ぎは、まずレーン worktree のファイル mtime と peer セッション生存(ListAgents)を見てから触る** — 後任は誤認のまま lane-engine へ `reset --hard main` を実行した(実害: branch 先端が docs 差分2ファイル分前進したのみ・untracked 実装3本は無傷・S5 残骸 .artifacts の PNG 削除。コード破壊ゼロは mtime 照合で確認済み) |
 | 1 | **実窓の目視合否がまだ一度も無い** | 視覚検収は全部 screenshot 器具(文字を描かない)経由。theme 結線(実窓の地色)以降、実窓は未起動。利用者の実機合否が最終審判(貯め一覧はボード「利用者の目待ち」) |
 | 2 | **採用済92 の中に過大判定が混じり得る** | J判定は grep 基準だが、重複39件の衝突11件を「J1優先」で機械解決した。消化レーンが該当行に触れる時は行単位で再確認 |
-| 3 | **backend 消費ギャップが本命の残り** | blend mode(Normal以外拒否)・mask(合成器未消費)・matte・parent変換・speed は**型だけ実在**。UI表層より先にこれらを埋めないと「メニューはあるが絵が変わらない」M13違反を量産する |
+| 3 | **backend 消費ギャップが本命の残り** → **台帳確定(後任・R9 調査、正本= `2026-08-21-backend-gap-seam-survey.md`)** | blend=fail-closed(14種は逐次合成の枠 BL1 が中核判断)・mask=**黙って無視**(matte と非対称。`motolii-vector` が未配線のラスタライザ資産)・**speed の「型だけ」は誤り**(映像は消費済み、欠落は UI 書き口 SP1)。切片割り SP/BL/MK が発注仕様。matte が mask より安い可能性(FINDING 4) |
 | 4 | Play/Pause は未実装のまま採用予定に残存 | 実時間再生=音声クロック束(旧 motolii-transport の audio-clock-master が移植元、KNOWN 参照)。U2 は意図的に除外した |
 | 5 | Premiere の語彙源は二次資料 | Adobe ドメインが本環境から全面不達(実測)。freq が過小の可能性 — 地図の頻度を絶対視しない |
 | 6 | 既知境界(doc 明記済み) | 観測カメラ中は市松プレビュー非合成 / multi-select のハイライト未配線 / effect 複数 pass は連鎖しない(最後勝ち) / fmt ドリフト既存 |
@@ -27,8 +27,8 @@
 
 ## 3. 走行中と直近キュー(順序)
 
-1. **A2 の回収**(疑うべきこと#0)→ 着地すれば「再生できる動画ソフト」
-2. **実窓の目視**(利用者): 線化トンマナ・値セル余白・市松・glow halo・観測カメラ(ホイールで金枠)・Timeline 手触り・(A2 済みなら)Space で再生
+1. ~~**A2 の回収**~~ → **着地済み(`f026e7cc`、後任検収)— 再生できる動画ソフトになった**
+2. **実窓の目視**(利用者): 線化トンマナ・値セル余白・市松・glow halo・観測カメラ(ホイールで金枠)・Timeline 手触り・**Space で再生(A2 実機4点はボード「利用者の目待ち」参照)**・multi-select ハイライト
 3. **消化フェーズ再開**: freq≥2 残り(Split・Mark In/Out 族・Find 等)・backend 消費ギャップ(blend/mask/speed — Glow の S1〜S5 と同じ縫い目の型)・pane_grid/multiwindow 束(裁定143)・キーのコピペ・multi-select ハイライト
 4. レーンは pane crate 単位(2.7〜7.4s)で本格並列可 — worktree 4本(lane-shell/shell2/engine/store)は常設のまま
 3. 分割後: 採用予定1,195 の本格並列消化(レーン= pane crate 単位、`-p` 数秒級)。優先= freq≥2 の残り+backend 消費ギャップ(blend/mask/speed — effect S1〜S5 と同じ縫い目の型で)
