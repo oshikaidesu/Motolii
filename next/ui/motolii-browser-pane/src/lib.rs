@@ -33,14 +33,28 @@
 //! `motolii-tokens-rs` は書き換えない(この波の allowlist 外) — 新しい寸法は
 //! 全部この crate 内のローカル定数として、既存 token(`Dimensions::
 //! row_height`)からの**比率**で導出する(裁定165「形は比率で定数化」)。
-//! [`CARD_WIDTH_ROW_HEIGHT_RATIO`]/[`THUMB_ASPECT_W`]/[`THUMB_ASPECT_H`] の
-//! doc に分母と出典を明記する。余白は既存の spacing ラダー
-//! (`dims.spacing_xs`/`spacing_s`)をそのまま再利用する(裁定167 のラダー自体
-//! は `Dimensions` 側で既に量子化済みの段 — 新しい段を発明しない)。文字は
-//! `dims.micro_text`(mock `.cardCopy strong/small{font-size:8px}` と一致する
-//! 既存の未消費段 — 裁定168 の em 族はこの crate 独自の余白計算をしない分
-//! 適用対象が無い、名前/caption の非衝突は rail.rs と同じ native ellipsis
-//! 手口([`card_view`] 参照)で満たす)。
+//! [`CARD_WIDTH_ROW_HEIGHT_RATIO`]/[`THUMB_ASPECT_W`]/[`THUMB_ASPECT_H`]/
+//! [`FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`] の doc に分母と出典を明記
+//! する。余白は既存の spacing ラダー(`dims.spacing_xs`/`spacing_s`/
+//! `spacing_m`)をそのまま再利用する(裁定167 のラダー自体は `Dimensions`
+//! 側で既に量子化済みの段 — 新しい段を発明しない)。文字は `dims.micro_text`
+//! (mock `.cardCopy strong/small{font-size:8px}` と一致する既存の未消費段 —
+//! 裁定168 の em 族はこの crate 独自の余白計算をしない分適用対象が無い、
+//! 名前/caption の非衝突は rail.rs と同じ native ellipsis 手口([`card_view`]
+//! 参照)で満たす)。
+//!
+//! ## B3 の比率台帳による転写(この波、利用者実窓不合格 2026-08-22 朝への対応)
+//! B3 着地時点は「構造は `browser-library.html` から借用したが比率・余白・
+//! 文字は自前判断」だったため実窓がモックと別物に見えていた。
+//! `docs/reviews/2026-08-22-browser-ratio-ledger.md`(`browser-library.css`
+//! 実測、Inspector I-ratio→I-tokens と同型の2段を1レーンで実施)により、
+//! rail 行/filter チップ/検索欄/結果件数の文字を `caption_text`(9、自前
+//! 判断)から `micro_text`(8、mock 実測)へ、filter チップ/Clear の角丸を
+//! `FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`(mock `border-radius:8px`
+//! 実測)へ、rail 行/filter チップの padding を mock 実測へ最近傍の既存
+//! token へ転写した。card 幅・rail:catalog 比・card 間 gap は
+//! `motolii-shell::screenshot`(ALLOWLIST 外)が同じ定数を直読みしており、
+//! 転写すると shell 側と desync するため据え置き(台帳4節 FINDING)。
 //!
 //! ## この crate の依存
 //! pane split 流儀(`docs/reviews/2026-08-21-pane-split-survey.md`)が許す
@@ -106,14 +120,32 @@ pub fn view(
 }
 
 /// rail 列(mock `.librarySidebar` の `LIBRARY` 節。`COLLECTIONS`/`PLACES` は
-/// 予約地、crate 冒頭 doc 参照)。
+/// 予約地、crate 冒頭 doc 参照)。**台帳(1c節)**: 行の padding は mock
+/// `.locationRow{padding:2px 6px 0}`(`browser-library.css:150`)実測 —
+/// 垂直は `spacing_xs`(2、一致)、水平は `spacing_s`(4)/`spacing_m`(8)が
+/// 6px から同着(差2)なので、このリポジトリ全体で単行ボタンの定番の組である
+/// `[spacing_xs, spacing_m]` を採る(inspector/settings/stage/shell が
+/// 同一の組を使用済み、台帳 1c 節)。角丸=0(mock `.locationRow` に角丸
+/// 指定なし)。容器自身の padding は `.librarySidebar{padding:2px 0 6px}`
+/// (横0 — 横方向は行側が持つ)を転写し、`[spacing_xs, 0.0]`(旧実装の
+/// 一律 `spacing_s` は行側 padding 新設後は横方向が二重になる、台帳 1c 節)。
 fn rail_view(scope: RailScope, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     let rows: Vec<Element<'static, Message>> = RAIL_SCOPES
         .into_iter()
-        .map(|option| scope_button(option, option == scope, Length::Fill, dims, colors))
+        .map(|option| {
+            scope_button(
+                option,
+                option == scope,
+                Length::Fill,
+                [dims.spacing_xs, dims.spacing_m],
+                0.0,
+                dims,
+                colors,
+            )
+        })
         .collect();
 
-    container(column(rows).spacing(dims.spacing_xs).padding(dims.spacing_s))
+    container(column(rows).spacing(dims.spacing_xs).padding([dims.spacing_xs, 0.0]))
         .width(Length::FillPortion(1))
         .style(move |_theme| container::Style {
             background: Some(iced::Background::Color(colors.surface_panel)),
@@ -138,8 +170,11 @@ fn catalog_view(
 ) -> Element<'static, Message> {
     let shelf = filter_shelf_view(scope, query, dims, colors);
 
+    // 台帳(1a節): `.resultSummary strong,span{font-size:8px}`
+    // (`browser-library.css:225-226`)— `caption_text`(9)ではなく
+    // `micro_text`(8)。
     let summary = text(format!("Results {}", filtered.len()))
-        .size(dims.caption_text)
+        .size(dims.micro_text)
         .color(colors.text_muted);
 
     let grid = card_grid_view(filtered, dims, colors);
@@ -162,18 +197,45 @@ fn catalog_view(
     .into()
 }
 
+/// filter chip/Clear の角丸 = `dims.row_height` の何倍か(裁定165「形は
+/// 比率で定数化・分母明記」)。**分母 = `Dimensions::row_height`**。mock
+/// `.filterShelf button,.editorTags button{border-radius:8px}`
+/// (`browser-library.css:206`、Clear ボタンも html:484 `class="clearFilter"`
+/// として同一セレクタに同居、css:229)を既定 `row_height`(20px)で割った値 —
+/// `0.4 × 20px = 8px`(mock の絶対pxと厳密一致、台帳1b節)。rail 行
+/// (`.locationRow`)には角丸指定が無い(直角のまま、[`scope_button`] の
+/// rail 呼び出し側は `0.0`)。
+pub const FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO: f32 = 0.4;
+
 /// filter shelf 本体(mock `.filterShelf` — 検索欄 + 種別チップ + Clear)。
 /// チップは [`FILTER_CHIPS`](rail の `RAIL_SCOPES` から `AllMedia` を除いた
-/// もの、mock に `All media` チップが無いのと同じ)。
+/// もの、mock に `All media` チップが無いのと同じ)。**台帳(1a/1c節)**:
+/// 検索欄・チップ・Clear の文字は mock 実測で例外なく8px
+/// (`#library-search`/`.filterShelf button` とも `browser-library.css`)—
+/// `micro_text` を使う。チップ/Clear の padding は mock `.filterShelf
+/// button{padding:2px 4px}`(css:205)と完全一致する `[spacing_xs,
+/// spacing_s]`。角丸は [`FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`]。
 fn filter_shelf_view(
     scope: RailScope,
     query: &str,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
+    let chip_radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
+    let chip_padding = [dims.spacing_xs, dims.spacing_s];
     let chips: Vec<Element<'static, Message>> = FILTER_CHIPS
         .into_iter()
-        .map(|option| scope_button(option, option == scope, Length::Shrink, dims, colors))
+        .map(|option| {
+            scope_button(
+                option,
+                option == scope,
+                Length::Shrink,
+                chip_padding,
+                chip_radius,
+                dims,
+                colors,
+            )
+        })
         .collect();
 
     // 裁定170 M01: fork(0.15.0-dev)の `text_input()` は `&str`/`&String` を
@@ -185,13 +247,14 @@ fn filter_shelf_view(
     row![
         text_input("Search files and tags", query_owned)
             .on_input(Message::QueryChanged)
-            .size(dims.caption_text)
+            .size(dims.micro_text)
             .width(Length::FillPortion(2))
             .style(move |_theme, status| search_input_style(dims, colors, status)),
         row(chips).spacing(dims.spacing_xs),
-        button(text("Clear").size(dims.caption_text))
+        button(text("Clear").size(dims.micro_text))
             .on_press(Message::ClearFilters)
-            .style(move |_theme, status| chip_style(dims, colors, false, status)),
+            .padding(chip_padding)
+            .style(move |_theme, status| chip_style(dims, colors, false, status, chip_radius)),
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center)
@@ -199,29 +262,39 @@ fn filter_shelf_view(
 }
 
 /// rail 行/filter チップ、共通のボタン(選択状態を1箇所で塗り分ける —
-/// 2つの入口が同じ意匠を共有する、Ableton可視性原理どおり)。
+/// 2つの入口が同じ意匠を共有する、Ableton可視性原理どおり)。**台帳
+/// (1a節)**: 文字は mock 実測でどちらも8px — `micro_text`(旧
+/// `caption_text`=9 は自前判断だった)。`padding`/`radius` は呼び出し側
+/// (rail 行 vs filter チップ)で異なる mock 実測値を渡す([`rail_view`]/
+/// [`filter_shelf_view`] の doc 参照 — 色/選択状態の意匠だけを共有し、
+/// 形(padding・角丸)は mock どおり呼び出し側で分ける)。
 fn scope_button(
     scope: RailScope,
     selected: bool,
     width: Length,
+    padding: [f32; 2],
+    radius: f32,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    button(text(scope.label()).size(dims.caption_text))
+    button(text(scope.label()).size(dims.micro_text))
         .on_press(Message::SelectScope(scope))
         .width(width)
-        .style(move |_theme, status| chip_style(dims, colors, selected, status))
+        .padding(padding)
+        .style(move |_theme, status| chip_style(dims, colors, selected, status, radius))
         .into()
 }
 
 /// [`scope_button`]/Clear ボタン共通のスタイル。選択中は `action_active`
 /// (accent、mock `.selected`/`.filterShelf button.selected` の金色枠と同じ
-/// 意味役割)で縁取る。
+/// 意味役割)で縁取る。`radius` は呼び出し側の mock 実測値
+/// ([`FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`]/rail の `0.0`)。
 fn chip_style(
     dims: Dimensions,
     colors: Colors,
     selected: bool,
     status: button::Status,
+    radius: f32,
 ) -> button::Style {
     let background = if selected {
         colors.state_selected
@@ -251,7 +324,7 @@ fn chip_style(
         border: iced::Border {
             color: border_color,
             width: dims.border_width,
-            radius: 0.0.into(),
+            radius: radius.into(),
         },
         ..button::Style::default()
     }
