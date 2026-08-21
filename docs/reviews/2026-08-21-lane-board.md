@@ -7,7 +7,6 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| S5: golden+器具 | 実装(cargo) | lane-engine | Glow golden 2枚+fixture へ glow 搭載(利用者が絵で見られる形) |
 | T2: clip move/trim | 実装(cargo) | lane-shell | 正典 §2 — transient+SetTiming 1発・スナップ7px/Cmd トグル・Esc/RMB キャンセル |
 | T3: キー行+菱形 | 実装(cargo) | lane-shell2(新設) | params 行キー持ちのみ既定・菱形 8×8/hit 12×12・選択3種(key_rows.rs 自己完結) |
 
@@ -32,6 +31,7 @@
 | Timeline 切片0 | timeline/ 5分割(--list 131/131 一致・PNG バイト一致・柵は対象拡大)。後続 write-set 割り表つき |
 | S4: Glow 移植 | vism 第1号が動いた(隣接画素 0→12 の加算 bloom 実証)。HDR>1.0 がマゼンタ破損検査に触れる経路を発見し白飽和規約へ clamp |
 | T1: レーンバー | rail 150px(mock 出典 token)・M/S/L 実 Intent 結線・名前のクリップ面退去・ゼブラ連続。視覚検収合格 |
+| S5: golden+器具 | Glow golden 2枚(max=0 安定)+fixture 搭載・実絵で視覚確認済み。**裁定153 の5切片完結 = vism 第1号開通**。既知の穴: pass は layer 境界内のみ(halo あふれ未実装、KNOWN 記載) |
 | (supervisor 直) 色 token 追随 fix / 市松レーン回収 / 引き継ぎ123コミット着地 | main 前提の整地 |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
