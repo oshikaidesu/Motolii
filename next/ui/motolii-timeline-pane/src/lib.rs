@@ -13,8 +13,16 @@
 //! - [`clip_gesture`] … 単一クリップの move/trim の意味関数(純関数)
 //! - [`canvas`] … 絵
 //! - [`input`] … 入力(`update`/`mouse_interaction`)と drag 状態
-//! - [`lane_bar`] … レーンバー専用の draw+hit
-//! - [`key_rows`] … property 行専用の draw+hit + キー時刻ドラッグ/リタイム
+//! - [`lane_bar`] … レーンバーの比率・測定純関数(裁定172 §2 のスウォッチ/
+//!   M・S・L 寸法比)。**draw/hit は持たない**(TL-arch Phase 1 で `rail` へ
+//!   移設済み — モジュール doc 参照)
+//! - [`rail`] … **新設**(TL-arch Phase 1、
+//!   `docs/reviews/2026-08-22-timeline-canvas-widget-survey.md` §6)。
+//!   レーンバー(行=container・スウォッチ=着色container・名前=widget text・
+//!   M/S/L=実button)を canvas 手描きから実 widget へ置換。時間場(bar・
+//!   ルーラー・菱形)は canvas のまま(Phase 2 の範囲、NON-GOALS)
+//! - [`key_rows`] … property 行専用の draw+hit(rail 側の property 名だけ
+//!   `rail` へ委譲、帯/菱形は canvas のまま) + キー時刻ドラッグ/リタイム
 //! - [`key_gesture`] … キーの時刻編集の意味関数(純関数)
 //! - [`nav`] … playhead ナビゲーション動詞束の意味関数(純関数。
 //!   キー→`Message` の解決自体は `motolii-shell` 側に残る)
@@ -45,6 +53,7 @@ mod key_rows;
 mod lane_bar;
 pub mod nav;
 mod projection;
+mod rail;
 mod write;
 
 pub use hit::{bar_span_x, classify_bar_part, hit_test, BarPart, Hit, TRIM_EDGE};
@@ -71,6 +80,7 @@ pub use canvas::{bar_corner_radius, bar_inset, major_tick_length, minor_tick_len
 pub use lane_bar::glyph_size_px;
 pub use write::{Message, PaneState};
 
+use iced::widget::row;
 use iced::{Element, Length, Rectangle};
 
 use motolii_store::{Fps, LayerId, LayerTiming, Marker, StoreView};
@@ -250,12 +260,24 @@ impl TimelinePane {
         marker.time.try_to_frame_floor(fps).ok()
     }
 
+    /// **TL-arch Phase 1**(`docs/reviews/2026-08-22-timeline-canvas-widget-survey.md`
+    /// §6): rail(行ヘッダ列)を実 widget として左に置き、canvas は時間場
+    /// (bar・ルーラー・菱形)だけを描く。`rail::view` は `&self` の借用で
+    /// widget を組み立て終える(rows/property_rows/dims/colors を読むだけ) —
+    /// その後で `self` を `canvas(self)` へ move する(`Program` impl は
+    /// `self` を値で持つ、下の `impl canvas::Program` 参照)。
+    ///
+    /// canvas の x 原点は rail の右端へ移る(旧: `rail_width` を各所で
+    /// 足していた/`bounds.width` から引いていた → 新: `canvas.rs`/`hit.rs`/
+    /// `input.rs`/`key_rows.rs` はどれも「自分の bounds がそのまま時間場」
+    /// という前提へ揃えた、意味は不変 — 発注書「座標系は関数境界で吸収」)。
     pub fn view(self) -> Element<'static, Message> {
         let height = self.content_height().max(self.ruler_height());
-        iced::widget::canvas(self)
+        let rail = rail::view(&self);
+        let field = iced::widget::canvas(self)
             .width(Length::Fill)
-            .height(Length::Fixed(height))
-            .into()
+            .height(Length::Fixed(height));
+        row![rail, field].height(Length::Fixed(height)).into()
     }
 }
 

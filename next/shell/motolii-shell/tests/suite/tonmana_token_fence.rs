@@ -100,6 +100,12 @@ const SCANNED_FILES: &[&str] = &[
     "timeline/input.rs",
     "timeline/key_rows.rs",
     "timeline/lane_bar.rs",
+    // TL-arch Phase 1(2026-08-22、`docs/reviews/2026-08-22-timeline-canvas-
+    // widget-survey.md` §6)で新設。rail(行ヘッダ列)の実 widget(container/
+    // text/button)を組み立てる — `container::Style`/`button::Style` の
+    // `background`/`border` を直接構築するので、`lane_bar.rs`/`canvas.rs` と
+    // 同じ理由でこの柵の対象に加える(柵は緩めず、新規ファイルも追随させる)。
+    "timeline/rail.rs",
     // `settings_pane.rs` は裁定160 切片9で `motolii-settings-pane` crate へ
     // 抽出済み(`next/ui/motolii-settings-pane/src/lib.rs`)——この柵は
     // `motolii-shell` の `src/` だけを見るので、抽出後のソースはもう対象外
