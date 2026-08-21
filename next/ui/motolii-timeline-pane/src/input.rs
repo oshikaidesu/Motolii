@@ -3,12 +3,14 @@
 //! されるだけの純粋な translation — Document/Session を直接書かない
 //! ([`Message`] 経由で `Shell::update` に委ねる、`super` モジュール doc 参照)。
 //!
-//! **座標の振り分け順**(裁定147・EXACT TARGET 3): まずレーンバー
-//! (`super::lane_bar::hit_test`、`x < rail_width`)を試し、当たらなければ
-//! クリップ面(`super::hit::hit_test`)へ回す。クリップ面側へは常に
-//! `rail_width` を引いたローカル座標を渡す — `projection::frame_to_x`/
-//! `frame_at_x` 自体は汚さない(`super::canvas` と同じ「呼び出し側で足す」
-//! 約束の裏返し=呼び出し側で引く)。
+//! **TL-arch Phase 1**(2026-08-22): レーンバー(`super::lane_bar::hit_test`
+//! への振り分け)はここから撤去した — rail は `super::rail::view` の実
+//! widget になり、行選択・M/S/L は iced 標準の `mouse_area`/`button` の
+//! event capture が担う(この canvas まで届く頃には rail 上のクリックは
+//! 存在しない、`super::rail` モジュール doc「gesture」節参照)。この
+//! canvas の `bounds` はもう時間場だけなので、`super::hit::hit_test` へは
+//! 受け取った座標をそのまま渡す(`rail_width` を引く必要はもう無い —
+//! `super::canvas` 冒頭のモジュール doc 参照)。
 //!
 //! ## 単一クリップの move/trim(第2波T2、正典 §2)
 //!
@@ -23,12 +25,11 @@
 
 use iced::mouse;
 use iced::widget::canvas;
-use iced::{Point, Rectangle};
+use iced::Rectangle;
 
 use crate::Message;
 
 use super::hit::{bar_span_x, classify_bar_part, hit_test, BarPart, Hit};
-use super::lane_bar::{self, Glyph};
 use super::projection::frame_at_x;
 use super::TimelinePane;
 
@@ -51,18 +52,6 @@ enum DragKind {
     Clip,
 }
 
-/// レーンバーの glyph → Message。M/S/L それぞれ独立した `Intent::SetAttrs` を
-/// 1回叩く(`crate::Shell` 側の `toggle_layer_hidden`/`toggle_layer_solo`/
-/// `toggle_layer_lock` — locked な行への hidden/solo 書き込みは Document 側の
-/// `check`/`SetAttrs` 腕が理由つきで拒む、`locked` 自身の解除だけは常に通す)。
-fn glyph_message(id: motolii_store::LayerId, glyph: Glyph) -> Message {
-    match glyph {
-        Glyph::Mute => Message::ToggleMute(id),
-        Glyph::Solo => Message::ToggleSolo(id),
-        Glyph::Lock => Message::ToggleLock(id),
-    }
-}
-
 pub(crate) fn update(
     pane: &TimelinePane,
     state: &mut Interaction,
@@ -73,36 +62,13 @@ pub(crate) fn update(
     let canvas::Event::Mouse(mouse_event) = event else {
         return None;
     };
-    let rail_width = pane.rail_width();
-    let clip_width = (bounds.width - rail_width).max(0.0);
+    let clip_width = bounds.width;
     match mouse_event {
         mouse::Event::ButtonPressed(mouse::Button::Left) => {
             let position = cursor.position_in(bounds)?;
 
-            if let Some(hit) = lane_bar::hit_test(
-                position,
-                &pane.rows,
-                pane.ruler_height(),
-                pane.dims.row_height,
-                rail_width,
-                &pane.dims,
-                pane.param_row_height(),
-                pane.property_rows.len(),
-                pane.selected_row_index,
-            ) {
-                return match hit {
-                    lane_bar::Hit::Row(id) => {
-                        Some(canvas::Action::publish(Message::Select(id)).and_capture())
-                    }
-                    lane_bar::Hit::Glyph(id, glyph) => {
-                        Some(canvas::Action::publish(glyph_message(id, glyph)).and_capture())
-                    }
-                };
-            }
-
-            let clip_point = Point::new(position.x - rail_width, position.y);
             match hit_test(
-                clip_point,
+                position,
                 &pane.rows,
                 pane.ruler_height(),
                 pane.dims.row_height,
@@ -113,7 +79,7 @@ pub(crate) fn update(
                 pane.selected_row_index,
             ) {
                 // **判定は押した瞬間の座標だけ**(正典 §1) — `classify_bar_part`
-                // に渡すのは今この1回の `clip_point.x` で、以降の move では
+                // に渡すのは今この1回の `position.x` で、以降の move では
                 // 呼び直さない(`Interaction` は `Body`/`Edge*` を覚えない —
                 // 呼び手の `Shell` 側 `TimelineDragState::part` が正本を持つ)。
                 Hit::Bar(id) => {
@@ -121,8 +87,8 @@ pub(crate) fn update(
                         return None;
                     };
                     let (start_x, end_x) = bar_span_x(row, clip_width, pane.duration_frames);
-                    let part = classify_bar_part(clip_point.x, start_x, end_x);
-                    let at_frame = frame_at_x(clip_point.x, clip_width, pane.duration_frames);
+                    let part = classify_bar_part(position.x, start_x, end_x);
+                    let at_frame = frame_at_x(position.x, clip_width, pane.duration_frames);
                     state.drag = Some(DragKind::Clip);
                     Some(
                         canvas::Action::publish(Message::BarGrabbed {
@@ -135,7 +101,7 @@ pub(crate) fn update(
                 }
                 Hit::Blank => {
                     state.drag = Some(DragKind::Scrub);
-                    let frame = frame_at_x(clip_point.x, clip_width, pane.duration_frames);
+                    let frame = frame_at_x(position.x, clip_width, pane.duration_frames);
                     Some(canvas::Action::publish(Message::ScrubTo(frame)).and_capture())
                 }
             }
@@ -156,12 +122,12 @@ pub(crate) fn update(
         mouse::Event::CursorMoved { .. } => match state.drag {
             Some(DragKind::Scrub) => {
                 let position = cursor.position_in(bounds)?;
-                let frame = frame_at_x(position.x - rail_width, clip_width, pane.duration_frames);
+                let frame = frame_at_x(position.x, clip_width, pane.duration_frames);
                 Some(canvas::Action::publish(Message::ScrubTo(frame)).and_capture())
             }
             Some(DragKind::Clip) => {
                 let position = cursor.position_in(bounds)?;
-                let at_frame = frame_at_x(position.x - rail_width, clip_width, pane.duration_frames);
+                let at_frame = frame_at_x(position.x, clip_width, pane.duration_frames);
                 // px/frame の換算は canvas 側でしか持てない実測値(窓幅依存) —
                 // Shell は自分の窓幅を知らないので、スナップの画面距離しきい値
                 // (`clip_gesture::SNAP_PX`)をフレームへ直すのに要るこの1個だけを
@@ -207,28 +173,10 @@ pub(crate) fn mouse_interaction(
     let Some(position) = cursor.position_in(bounds) else {
         return mouse::Interaction::default();
     };
-    let rail_width = pane.rail_width();
-    let clip_width = (bounds.width - rail_width).max(0.0);
+    let clip_width = bounds.width;
 
-    if lane_bar::hit_test(
-        position,
-        &pane.rows,
-        pane.ruler_height(),
-        pane.dims.row_height,
-        rail_width,
-        &pane.dims,
-        pane.param_row_height(),
-        pane.property_rows.len(),
-        pane.selected_row_index,
-    )
-    .is_some()
-    {
-        return mouse::Interaction::Pointer;
-    }
-
-    let clip_point = Point::new(position.x - rail_width, position.y);
     match hit_test(
-        clip_point,
+        position,
         &pane.rows,
         pane.ruler_height(),
         pane.dims.row_height,
@@ -248,7 +196,7 @@ pub(crate) fn mouse_interaction(
                 return mouse::Interaction::NotAllowed;
             }
             let (start_x, end_x) = bar_span_x(row, clip_width, pane.duration_frames);
-            match classify_bar_part(clip_point.x, start_x, end_x) {
+            match classify_bar_part(position.x, start_x, end_x) {
                 BarPart::Body => mouse::Interaction::Grab,
                 BarPart::EdgeIn | BarPart::EdgeOut => mouse::Interaction::ResizingHorizontally,
             }

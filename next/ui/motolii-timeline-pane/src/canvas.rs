@@ -3,6 +3,18 @@
 //! 委譲されるだけ — **`&mut` は1つも無い**(`draw` は `&self` でモデルを借りる
 //! ので、描きながらモデルを直す道が型として無い)。
 //!
+//! **TL-arch Phase 1**(`docs/reviews/2026-08-22-timeline-canvas-widget-survey.md`
+//! §6): rail(行ヘッダ列)を `super::rail` の実 widget へ切り出したことで、
+//! この canvas の `bounds` はもう pane 全幅ではなく**時間場だけ**(`row![rail,
+//! canvas]` の右腕 — `super::TimelinePane::view` 参照)。以前は各所で
+//! `rail_width` を足し引きしていたが(x 原点が pane 左端=rail 左端だったため)、
+//! 今は canvas 自身の x=0 が既に「rail の右端 = 時間場の左端」なので、その
+//! 足し引きは全廃した。**意味は不変**(発注書「座標系は関数境界で吸収し、
+//! 意味は不変」) — bar/ルーラー/目盛り/プレイヘッドの見た目・当たり判定は
+//! 1px も変わらない、変わったのは「どこが原点か」という関数境界の外側の
+//! 約束だけ。rail 側の見た目(スウォッチ・名前・M/S/L)はもうここでは描かない
+//! (`super::rail::view` が持つ)。
+//!
 //! ## 比率の出典(裁定172 §1/§2、転写元 `next/reference/mocks/timeline-semantics.html`)
 //!
 //! bar/ruler/目盛りの寸法は「梯子」(裁定165(1)・裁定167)— 独自の中間値を
@@ -15,7 +27,6 @@ use iced::widget::canvas;
 use iced::{Point, Rectangle, Size};
 
 use super::key_rows;
-use super::lane_bar;
 use super::projection::{frame_at_x, frame_to_x, tick_steps, time_band_segment_frames};
 use super::TimelinePane;
 
@@ -70,32 +81,36 @@ pub(crate) fn draw(
     // `border_width` から比で導出する(裁定117 の「寸法は token 経由」の範囲内)。
     let hairline = pane.dims.border_width;
 
-    // 座標シフト(裁定147・EXACT TARGET 3): レーンバー幅ぶんルーラー/クリップ面を
-    // 右へ。`projection::frame_to_x`/`frame_at_x` 自体はクリップ面ローカル座標の
-    // まま(純関数を汚さない)— ここ(呼び出し側)で `rail_width` を足す。
-    let rail_width = pane.rail_width();
-    let clip_width = (width - rail_width).max(0.0);
+    // **TL-arch Phase 1**: 座標シフトの足し引きは撤去した(モジュール doc
+    // 参照) — `width`(= `bounds.width`)は既に時間場だけの幅、`rail_width` を
+    // 足す/引く必要はもう無い(`projection::frame_to_x`/`frame_at_x` 自体は
+    // 元から時間場ローカル座標のまま — ここが呼び出し側でオフセットを足す
+    // 責任を持っていたが、その責任自体が rail 分離で不要になった)。
 
-    // 背景。ゼブラ(裁定148)・行区切り hairline・選択ハイライトは意図して
-    // rail 込みの全幅(`width`)で描く(下記) — レーンバーも同じ明暗リズムを
-    // 共有する(裁定148(2))ので、この初期背景がそのまま rail の地も兼ねる
-    // (mock `.thead{background:panel}` と同色、`lane_bar::draw` は塗り直さない)。
+    // 背景。ゼブラ(裁定148)・行区切り hairline・選択ハイライトはこの canvas
+    // の全幅(= 時間場だけ、rail は含まない)で描く — rail 側の同じ状態
+    // (選択ハイライト等)は `super::rail::view` が rail 側の container 背景で
+    // 独立に描く(2箇所で同じ `row.selected` を読むが、描画先の座標系が別なので
+    // 複製ではなく分担)。
     frame.fill_rectangle(Point::ORIGIN, bounds.size(), pane.colors.surface_panel);
 
-    // ルーラー帯 + 目盛り(クリップ面のみ — rail の corner は地のまま)。
+    // ルーラー帯 + 目盛り。
     frame.fill_rectangle(
-        Point::new(rail_width, 0.0),
-        Size::new(clip_width, ruler_height),
+        Point::new(0.0, 0.0),
+        Size::new(width, ruler_height),
         pane.colors.surface_raised,
     );
-    draw_ruler_ticks(pane, &mut frame, rail_width, clip_width, ruler_height);
+    draw_ruler_ticks(pane, &mut frame, 0.0, width, ruler_height);
 
     // ルーラー帯とクリップ面の境界(裁定139: 面色の塗り分け=`surface_raised`
     // だけに頼らず hairline を足す — `.tp`/`.ruler` が border-bottom を持つ
     // mock と同じ扱い。ルーラーは「地」の第2段なので不透明な強い hairline
-    // (`border_default`、`.cols`/`.ptitle` と同じロール)を使う)。**全幅**
-    // (rail 込み)で引く — レーンバーの corner とクリップ面のルーラーは同じ
-    // 横の区切りを共有する。
+    // (`border_default`、`.cols`/`.ptitle` と同じロール)を使う)。この canvas
+    // の全幅(= 時間場のみ)で引く — rail 側の corner が同じ境界線を
+    // `super::rail::view` の container border で独立に描く(TL-arch Phase 1、
+    // 元は同一 Frame 上の1本の線で「レーンバーの corner とクリップ面の
+    // ルーラーは同じ横の区切りを共有」していたが、描画先が2つの widget に
+    // 分かれたので、同じ y 位置に2本の等価な線を分担して引く形になった)。
     draw_hairline(
         pane,
         &mut frame,
@@ -108,7 +123,7 @@ pub(crate) fn draw(
     // マーカー(comp 側の名前つきロケータ)。ルーラー帯へ縦線として重ねる。
     for marker in &pane.markers {
         if let Some(frame_no) = pane.marker_frame(marker) {
-            let x = rail_width + frame_to_x(frame_no, clip_width, pane.duration_frames);
+            let x = frame_to_x(frame_no, width, pane.duration_frames);
             let marker_path = canvas::Path::line(Point::new(x, 0.0), Point::new(x, ruler_height));
             frame.stroke(
                 &marker_path,
@@ -133,25 +148,27 @@ pub(crate) fn draw(
         // 選択 layer の下に property 行が挿入されている間、後続の層行は押し下がる
         // (`TimelinePane::layer_row_top`、EXACT TARGET 1)。
         //
-        // x は rail の右から(時間帯 `draw_time_bands` と同じ起点)。**rail は
-        // 時間カメラの外**(利用者知覚モデル 2026-08-21: 横スケールのジェスチャーは
-        // rail に効かず、縦スクロールだけが通る — rail は時間場の上に乗る別レイヤー
-        // であって、時間場の wash(ゼブラ・時間帯)を受けない)。
+        // x=0 は既にこの canvas の左端(= 時間場の左端、TL-arch Phase 1 で
+        // rail が分離された)。**rail は時間カメラの外**(利用者知覚モデル
+        // 2026-08-21: 横スケールのジェスチャーは rail に効かず、縦スクロール
+        // だけが通る — rail は時間場の上に乗る別レイヤーであって、時間場の
+        // wash(ゼブラ・時間帯)を受けない、という意味は canvas が rail 領域を
+        // 描かなくなった今も不変)。
         let row_top = rows_top + pane.layer_row_top(index);
         frame.fill_rectangle(
-            Point::new(rail_width, row_top),
-            Size::new(clip_width, row_height),
+            Point::new(0.0, row_top),
+            Size::new(width, row_height),
             pane.colors.timeline_row_zebra,
         );
     }
-    draw_time_bands(pane, &mut frame, rail_width, clip_width, rows_top, rows_bottom);
+    draw_time_bands(pane, &mut frame, 0.0, width, rows_top, rows_bottom);
 
     // 時間方向の縦線(利用者裁定 2026-08-21 夜・σ EXACT TARGET 2、mock
     // `timeline-semantics.html` の `bands()` 第2ループが出典)。帯(面・粗い
     // リズム)とは別の周波数(線・全目盛の細かいリズム) — 描画順は
     // 帯→縦線→bar(地の上・内容物の下)なので、bar を描く層の行ループより
     // 先にここへ置く。
-    draw_tick_lines(pane, &mut frame, rail_width, clip_width, rows_top, rows_bottom);
+    draw_tick_lines(pane, &mut frame, 0.0, width, rows_top, rows_bottom);
 
     // 層の行。
     for (index, row) in pane.rows.iter().enumerate() {
@@ -160,8 +177,10 @@ pub(crate) fn draw(
         if row.selected {
             // 状態: 選択(`state_selected`)。hover(`surface_hover`、中立グレー)とは
             // 別ロール — 選択は accent 味、hover は明度差だけ(意味色ロールの区別)。
-            // **全幅**(rail 込み)— 選択は行そのものの状態であって、クリップ面
-            // だけの状態ではない(レーンバーも同じ行に属する、裁定147)。
+            // **この canvas の全幅**(= 時間場のみ、rail は含まない)— rail 側の
+            // 同じ選択ハイライトは `super::rail::view` が独立に描く(canvas.rs
+            // 冒頭のモジュール doc「分担」節参照、選択は行そのものの状態
+            // であって、レーンバーも同じ行に属する、裁定147)。
             frame.fill_rectangle(
                 Point::new(0.0, row_top),
                 Size::new(width, row_height),
@@ -169,11 +188,9 @@ pub(crate) fn draw(
             );
         }
 
-        let start_local = frame_to_x(row.start, clip_width, pane.duration_frames);
-        let end_local = frame_to_x(row.start + row.duration, clip_width, pane.duration_frames)
-            .max(start_local + 1.0);
-        let start_x = rail_width + start_local;
-        let end_x = rail_width + end_local;
+        let start_x = frame_to_x(row.start, width, pane.duration_frames);
+        let end_x = frame_to_x(row.start + row.duration, width, pane.duration_frames)
+            .max(start_x + 1.0);
         // ドラッグ中の bar は ACCENT(第2波T5、`row.dragging` は
         // `projection::apply_clip_preview` が掴んでいる1行にだけ立てる —
         // R1 egui版実測「ドラッグ中のbarはACCENT色に変わる」を踏襲)。
@@ -209,14 +226,16 @@ pub(crate) fn draw(
         );
         frame.fill(&bar_path, bar_color);
         // **名前は描かない**(裁定147): レイヤー名の住所はレーンバー
-        // (`lane_bar::draw`)へ一本化した。クリップ上の余白は将来の
+        // (`super::rail::view`)へ一本化した。クリップ上の余白は将来の
         // キーフレームオーバーレイのために空けておく。
 
         // 行の区切り(裁定139: 面色の塗り分け=ゼブラの明暗だけに頼らず
         // hairline を足す — mock `.trow{border-bottom:...}` と同じ役目)。
         // 行同士は `.prow` と同じ弱い hairline ロール(区切り=線、
-        // リズム=地の微差 — §1.6 の両立整理どおり見て区別がつく)。**全幅**
-        // (rail 込み)— レーンバーも同じ行区切りを共有する(EXACT TARGET 5)。
+        // リズム=地の微差 — §1.6 の両立整理どおり見て区別がつく)。この
+        // canvas の全幅(= 時間場のみ)— rail 側の同じ行区切りは
+        // `super::rail::view` が container の border で独立に描く
+        // (EXACT TARGET 5 の意味は不変、描画先が分かれただけ)。
         draw_hairline(
             pane,
             &mut frame,
@@ -228,14 +247,13 @@ pub(crate) fn draw(
     }
 
     // property 行(キー行、第2波 T3・裁定148/151) — 選択 layer の下に挿入する。
-    // 帯・キー菱形・rail 側のラベルは `key_rows.rs` が自己完結で描く(mod doc
-    // 参照)。
-    key_rows::draw(pane, &mut frame, rail_width, clip_width, width);
+    // 帯・キー菱形は `key_rows.rs` が描く(rail 側の property 名ラベルは
+    // TL-arch Phase 1 で `super::rail::view` へ移設済み — mod doc 参照)。
+    key_rows::draw(pane, &mut frame, width);
 
-    // playhead(Session が正本)。クリップ面ローカル座標に rail_width を足す —
-    // 結果として rail の外(x >= rail_width)にしか出ない(playhead は時間の
-    // 面の物であって行ヘッダ列の物ではない)。
-    let playhead_x = rail_width + frame_to_x(pane.playhead, clip_width, pane.duration_frames);
+    // playhead(Session が正本)。この canvas はもう時間場だけなので、
+    // オフセットを足す必要は無い(TL-arch Phase 1、モジュール doc 参照)。
+    let playhead_x = frame_to_x(pane.playhead, width, pane.duration_frames);
     let playhead_path = canvas::Path::line(
         Point::new(playhead_x, 0.0),
         Point::new(playhead_x, bounds.height),
@@ -247,27 +265,26 @@ pub(crate) fn draw(
             .with_width(hairline * 1.5),
     );
 
-    // レーンバー(行ヘッダ列、裁定147)— 同じ Frame の最後に重ねる。
-    lane_bar::draw(pane, &mut frame, rail_width);
+    // レーンバー(行ヘッダ列、裁定147)は TL-arch Phase 1 で実 widget へ移設
+    // 済み(`super::rail::view`、`super::TimelinePane::view` が `row![rail,
+    // canvas]` として組む) — この canvas はもう rail を描かない。
 
     // ポインタ近くのタイムコードミニラベル(第2波T5、R1 egui版実測「掴んでいる
     // 間ポインタ近くにタイムコードのミニラベルを出す」を踏襲)。drag 中
-    // (`pane.preview_active`、clip/key どちらでも)だけ・クリップ面上でだけ出す
-    // — rail 側(行ヘッダ列)は時間の面ではないので出さない。既存の
-    // `fill_text`(ルーラー目盛りと同じ描画手段)をそのまま使う、新しい描画
-    // 語彙は増やさない。
+    // (`pane.preview_active`、clip/key どちらでも)だけ出す。この canvas は
+    // もう時間場だけなので、rail 上かどうかの判定(旧 `position.x >=
+    // rail_width`)は不要になった — `cursor.position_in(bounds)` が返す座標は
+    // 常に時間場ローカル。
     if pane.preview_active {
         if let Some(position) = cursor.position_in(bounds) {
-            if position.x >= rail_width {
-                let frame_no = frame_at_x(position.x - rail_width, clip_width, pane.duration_frames);
-                frame.fill_text(canvas::Text {
-                    content: frame_no.to_string(),
-                    position: Point::new(position.x + pane.dims.spacing_xs, position.y - pane.dims.spacing_l),
-                    color: pane.colors.action_active,
-                    size: iced::Pixels(pane.dims.caption_text),
-                    ..Default::default()
-                });
-            }
+            let frame_no = frame_at_x(position.x, width, pane.duration_frames);
+            frame.fill_text(canvas::Text {
+                content: frame_no.to_string(),
+                position: Point::new(position.x + pane.dims.spacing_xs, position.y - pane.dims.spacing_l),
+                color: pane.colors.action_active,
+                size: iced::Pixels(pane.dims.caption_text),
+                ..Default::default()
+            });
         }
     }
 

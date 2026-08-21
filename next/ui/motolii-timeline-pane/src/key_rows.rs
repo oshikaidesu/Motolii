@@ -5,8 +5,10 @@
 //! write-set 外 finding 参照)。
 //!
 //! - **描画**: 行の帯(ゼブラのリズムを layer 行と共有、EXACT TARGET 2)+
-//!   rail 側の property 名 + キー菱形(描画 8×8・当たり 12×12、単一菱形 —
-//!   裁定151「形状コード不採用」)
+//!   キー菱形(描画 8×8・当たり 12×12、単一菱形 — 裁定151「形状コード
+//!   不採用」)。**rail 側の property 名は描かない**(TL-arch Phase 1、
+//!   2026-08-22 — `super::rail::view` が実 widget text として持つ。この
+//!   ファイルは時間場側の帯・菱形だけを描く)
 //! - **選択**: クリック=単独 / Cmd=トグル / Shift=範囲(正典 §3・§4 と同じ
 //!   文法)。ここでは「どのキーを・どの操作で」までしか判定しない —
 //!   `Session::selected_keys`/`key_anchor` の読み書きは唯一の書き口
@@ -74,15 +76,12 @@ fn diamond_path(cx: f32, cy: f32, half: f32) -> canvas::Path {
     })
 }
 
-/// property 行の帯・rail 側の名前・キー菱形を描く(`super::canvas::draw` から
-/// 委譲されるだけ — mod doc の層分担どおり)。
-pub(crate) fn draw(
-    pane: &TimelinePane,
-    frame: &mut canvas::Frame,
-    rail_width: f32,
-    clip_width: f32,
-    width: f32,
-) {
+/// property 行の帯・キー菱形を描く(`super::canvas::draw` から委譲される
+/// だけ — mod doc の層分担どおり)。`width` はこの canvas 自身の幅
+/// (= 時間場のみ、TL-arch Phase 1 で rail が分離されたので `super::canvas`
+/// と同じ意味 — オフセットは要らない、`super::canvas` 冒頭のモジュール doc
+/// 参照)。rail 側の property 名ラベルは `super::rail::view` が持つ。
+pub(crate) fn draw(pane: &TimelinePane, frame: &mut canvas::Frame, width: f32) {
     let Some(top) = band_top(pane) else {
         return;
     };
@@ -100,18 +99,6 @@ pub(crate) fn draw(
             );
         }
 
-        // rail 側の property 名(裁定147「名前の住所はレーンバー」を property
-        // 行にも延長)。layer 名より一段深く字下げして、選択 layer の子である
-        // ことを示す(§1.6 グループ階層のインデント方針)。
-        frame.fill_text(canvas::Text {
-            content: row.property.name().to_owned(),
-            position: Point::new(pane.dims.spacing_l * 2.0, row_top + row_h / 2.0),
-            color: pane.colors.text_secondary,
-            size: iced::Pixels(pane.dims.caption_text),
-            align_y: iced::alignment::Vertical::Center,
-            ..Default::default()
-        });
-
         // 行の区切り(layer 行と同じ弱い hairline ロール、EXACT TARGET 2)。
         let hairline_path = canvas::Path::line(
             Point::new(0.0, row_top + row_h),
@@ -126,7 +113,7 @@ pub(crate) fn draw(
 
         // キー菱形(描画 8×8、単一菱形 — 裁定151「形状コード不採用」)。
         for key in &row.keys {
-            let cx = rail_width + frame_to_x(key.frame, clip_width, pane.duration_frames);
+            let cx = frame_to_x(key.frame, width, pane.duration_frames);
             let cy = row_top + row_h / 2.0;
             let color = if key.selected {
                 pane.colors.action_active
@@ -158,13 +145,14 @@ fn selected_frame_bounds(pane: &TimelinePane) -> Option<(i64, i64, usize)> {
 }
 
 /// press 時点の座標だけで求める comp frame と px/frame(第2波T4、
-/// `input::update` の `DragKind::Clip` 腕と同じ換算式)。
+/// `input::update` の `DragKind::Clip` 腕と同じ換算式)。この canvas は
+/// TL-arch Phase 1 で時間場だけになった(`super::canvas` 冒頭のモジュール
+/// doc 参照)ので `bounds.width` がそのままクリップ幅、オフセットは不要。
 fn frame_at_position(pane: &TimelinePane, bounds: Rectangle, position: Point) -> (i64, f32) {
-    let rail_width = pane.rail_width();
-    let clip_width = (bounds.width - rail_width).max(0.0);
-    let at_frame = frame_at_x(position.x - rail_width, clip_width, pane.duration_frames);
+    let width = bounds.width;
+    let at_frame = frame_at_x(position.x, width, pane.duration_frames);
     let px_per_frame = if pane.duration_frames > 0 {
-        clip_width / pane.duration_frames as f32
+        width / pane.duration_frames as f32
     } else {
         0.0
     };
@@ -225,13 +213,12 @@ pub(crate) fn update(
     };
     let row = &pane.property_rows[row_index];
 
-    let rail_width = pane.rail_width();
-    if position.x < rail_width {
-        // rail 側(property 名)は今回クリック動詞を持たない — 吸収だけする。
-        return Some(canvas::Action::capture());
-    }
-    let clip_width = (bounds.width - rail_width).max(0.0);
-    let local_x = position.x - rail_width;
+    // rail 側(property 名)はもう TL-arch Phase 1 でこの canvas の外
+    // (`super::rail::view` が実 widget として持つ、`x < rail_width` の分岐は
+    // 撤去 — この canvas の bounds はもう時間場だけなので、その分岐自体が
+    // 意味を失った)。
+    let clip_width = bounds.width;
+    let local_x = position.x;
 
     let hit_key = row.keys.iter().find(|key| {
         let cx = frame_to_x(key.frame, clip_width, pane.duration_frames);
@@ -309,14 +296,12 @@ pub(crate) fn mouse_interaction(
     if position.y < top || position.y >= bottom {
         return None;
     }
-    let rail_width = pane.rail_width();
-    if position.x < rail_width {
-        return Some(mouse::Interaction::default());
-    }
+    // rail 側の分岐は撤去(`update` と同じ理由 — この canvas の bounds は
+    // もう時間場だけ、上のコメント参照)。
     let row_index = row_at_y(pane, top, position.y)?;
     let row = &pane.property_rows[row_index];
-    let clip_width = (bounds.width - rail_width).max(0.0);
-    let local_x = position.x - rail_width;
+    let clip_width = bounds.width;
+    let local_x = position.x;
     let over_key = row.keys.iter().any(|key| {
         let cx = frame_to_x(key.frame, clip_width, pane.duration_frames);
         (local_x - cx).abs() <= KEY_HIT / 2.0

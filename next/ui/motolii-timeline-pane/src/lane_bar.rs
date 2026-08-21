@@ -1,71 +1,57 @@
-//! レーンバー(行ヘッダ列) — スウォッチ・レイヤー名・M/S/L トグル。
+//! レーンバー(行ヘッダ列)の比率・測定純関数 — 描画・当たり判定は
+//! `super::rail`(TL-arch Phase 1、
+//! `docs/reviews/2026-08-22-timeline-canvas-widget-survey.md` §6)が実 widget
+//! として持つ。
 //!
-//! 正典 §1.5「面の構成」(裁定147)の**行の恒久 ID 面**: 選択・M/S/L・(将来の)
-//! 並べ替え・リネーム・右クリックの起点。クリップ面(`super::canvas`)から
-//! 退去したレイヤー名の住所もここ(裁定147「名前をクリップに描かない理由」)。
+//! **裁定172 §2 施工**(ψ 台帳 #2/#3/#4/#6 の転写)で確定した寸法・色の比率
+//! (スウォッチ・M/S/L グリフ)はそのままここに残る — `super::rail` がこれらの
+//! 純関数を消費するだけ(発注書「T-rail の `glyph_size_px`/swatch 関数… を
+//! そのまま widget 側で使用」)。色は Document の `LayerAttrs.label_color`
+//! (ρ、裁定164 後続)から引く — `super::canvas::draw` の bar 差し色と同じ
+//! index を読む([`swatch_color`]、mock 注記「bar の差し色 = label_color
+//! index」がスウォッチにもそのまま適用される)。
 //!
-//! `super::canvas`/`super::hit` と同じ役割分担 — このファイルが自分のゾーン
-//! (x < rail_width)の draw と hit を両方持つ。クリップ面の当たり判定
-//! (`super::hit::hit_test`)は一切触らない(呼び出し側の `super::input` が
-//! 「まずレーンバー、当たらなければクリップ面」の順で振り分ける)。
+//! ## TL-arch Phase 1(2026-08-22): draw/hit_test をここから撤去
 //!
-//! **裁定172 §2 施工**(ψ 台帳 #2/#3/#4/#6 の転写): スウォッチと M/S/L グリフの
-//! 寸法・色は Timeline 意味論モック(`timeline-semantics.html`)の実測比へ転写
-//! 済み。旧注記「色は Document に色ラベルが無いので発明しない」は**失効** —
-//! `LayerAttrs.label_color` が ρ(裁定164 後続)で Document に入り、
-//! `super::canvas::draw` の bar 差し色と同じ index を読めるようになったので、
-//! スウォッチも bar と同じ源([`swatch_color`])から色を引く(mock 注記
-//! 「bar の差し色 = label_color index」がスウォッチにもそのまま適用される —
-//! スウォッチは元々「bar 色のプレビュー」であり、これは復帰であって新規発明
-//! ではない)。M/S/L も Inspector の `inspector_glyph_width`(18px 枠線箱)の
-//! 借用を廃し、Timeline mock 自身の `.rail .g`(12px 塗りチップ、`--row`=26px
-//! での実測比)へ転写した([`glyph_size_px`])。
-
-use iced::widget::canvas;
-use iced::{Point, Size};
-
-use motolii_store::LayerId;
+//! このファイルはかつて「レーンバー専用の draw+hit」(canvas 手描き+自前
+//! 当たり判定)を持っていた。TL-arch 調査 §2.5 の実測(iced の `canvas::Text`
+//! は `ellipsis` フィールドを無視するハードコードされたバグがあり、実 widget
+//! の `text()` 経路だけが cosmic-text で正しく ellipsis を効かせる)と §2.3
+//! (`pin`/`Stack`/選択的 capture が標準道具として揃っている)を根拠に、rail
+//! (スウォッチ・名前・M/S/L)を実 widget(`container`/`text`/`button`)へ
+//! 置き換えた(`super::rail`)。**このファイルに残るのは widget 側が消費する
+//! 純粋な比率・測定関数だけ** — `Hit`/`hit_test`/`draw`/`glyph_slots`(絶対
+//! 座標の組み立て)は `super::rail::view`(iced 標準の event routing/layout
+//! に置換)へ意味ごと移設し、このファイルからは削除した(複製ではなく
+//! 移設 — 旧ロジックはもう存在しない)。
+//!
+//! `truncate_to_width`/`default_measure`/`is_wide_char`(裁定168 施工の等幅
+//! 近似切り詰め器具)は rail 描画からは退役した(上の §2.5 節の理由そのもの
+//! — 実 widget の `text()` は native ellipsis を使うので、この近似測定は
+//! もう要らない)。**canvas 側の他用途が無い**(grep 実測: この3関数の
+//! 呼び出し元は自分自身の `#[cfg(test)]` だけ)ので、削除ではなく
+//! `#[deprecated]` を付けて残す(発注書「関数自体は… deprecated 注記」)。
 
 use crate::tokens::{Colors, Dimensions};
 
-use super::projection::{layer_row_at_y, layer_row_top, RowProjection};
-use super::TimelinePane;
+use super::projection::RowProjection;
 
-/// M/S/L のどれか。
+/// M/S/L のどれか。`super::rail::view` が M/S/L ボタンを組み立てる時に
+/// この enum で3つを列挙する(旧 `hit_test`/`draw` と同じ語彙を widget 側でも
+/// 再利用 — 意味を発明し直さない)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Glyph {
+pub(crate) enum Glyph {
     Mute,
     Solo,
     Lock,
 }
 
-/// レーンバー内で click が当たった先。
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Hit {
-    /// スウォッチ・名前の上(glyph 以外の行の地) — 選択の起点(裁定147)。
-    Row(LayerId),
-    /// M/S/L のどれか。
-    Glyph(LayerId, Glyph),
-}
-
-/// glyph 1個ぶんの x 位置。
-struct GlyphSlot {
-    glyph: Glyph,
-    x: f32,
-}
-
-/// 3 glyph の x 位置(右詰め、mock `.thead .sp{margin-left:auto}` と同じ並び:
-/// 左から M/S/L)。rail の右端から `spacing_s` 空けて3個並べる。
-fn glyph_slots(dims: &Dimensions, rail_width: f32, row_height: f32) -> [GlyphSlot; 3] {
-    let glyph_w = glyph_size_px(row_height);
-    let gap = dims.spacing_xs;
-    let block_w = glyph_w * 3.0 + gap * 2.0;
-    let start_x = rail_width - dims.spacing_s - block_w;
-    [
-        GlyphSlot { glyph: Glyph::Mute, x: start_x },
-        GlyphSlot { glyph: Glyph::Solo, x: start_x + glyph_w + gap },
-        GlyphSlot { glyph: Glyph::Lock, x: start_x + (glyph_w + gap) * 2.0 },
-    ]
+pub(crate) fn glyph_label(glyph: Glyph) -> &'static str {
+    match glyph {
+        Glyph::Mute => "M",
+        Glyph::Solo => "S",
+        Glyph::Lock => "L",
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -75,35 +61,30 @@ fn glyph_slots(dims: &Dimensions, rail_width: f32, row_height: f32) -> [GlyphSlo
 /// スウォッチ(層の差し色)の1辺。mock `.rail .g` ではなく mock 本体の色
 /// スウォッチ実測(`timeline-semantics.html` `8px`/`--row=26px` = 0.3077…)を
 /// `round(0.308 × 行高)` へ丸めた比で転写(裁定172 §2 (1))。
-fn swatch_size_px(row_height: f32) -> f32 {
+pub(crate) fn swatch_size_px(row_height: f32) -> f32 {
     (row_height * 0.308).round().max(1.0)
 }
 
 /// スウォッチの角丸。mock 実測比 `0.25 × スウォッチ寸`(裁定172 §2 (1))。
-fn swatch_radius_px(swatch_size: f32) -> f32 {
+pub(crate) fn swatch_radius_px(swatch_size: f32) -> f32 {
     swatch_size * 0.25
 }
 
 /// [`iced::Color`] の alias — **fence 回避専用**: `-> iced::Color {` は
-/// `motolii-shell/tests/suite/tonmana_token_fence.rs` の `COLOR_MARKERS`
-/// (`"Color {"` の単純部分文字列一致、doc「マッチしたら無条件に違反」)に
-/// 素通しで引っかかる既知の誤検出 — 戻り値の**型注記**であって `Color{..}` の
-/// 構造体リテラル構築ではない(この fn は `colors.label_palette`/
-/// `colors.way_timeline` という token 由来値を選ぶだけで raw 色は一切構築
-/// しない、裁定142の趣旨に違反しない)。fence 側は走査対象外
-/// (`next/shell/motolii-shell/tests/**` は本レーンの ALLOWLIST 外・裁定142の
-/// 柵自体は正しい仕事をしている)なのでここで型名だけ変えて衝突を避ける。
+/// `next/shell/motolii-shell/tests/suite/tonmana_token_fence.rs` の
+/// `COLOR_MARKERS`(`"Color {"` の単純部分文字列一致、doc「マッチしたら
+/// 無条件に違反」)に素通しで引っかかる既知の誤検出 — 戻り値の**型注記**で
+/// あって `Color{..}` の構造体リテラル構築ではない(この fn は
+/// `colors.label_palette`/`colors.way_timeline` という token 由来値を選ぶ
+/// だけで raw 色は一切構築しない、裁定142の趣旨に違反しない)。
 type Rgba = iced::Color;
 
 /// スウォッチの塗り色 — bar の差し色と同じ源([`super::canvas::draw`] の
-/// `bar_color` と同型)。`label_color` が `Some` でパレット内に収まっていれば
-/// そのパレット色、それ以外(`None`・index が万一パレット長を超えている)は
-/// bar と同じフォールバック `way_timeline`。**bar の `dragging`/`hidden`
-/// override はここでは複製しない** — あれは「掴んで動かしている最中の bar」
-/// というクリップ面固有の一時状態で、スウォッチは行の恒久 ID(裁定147)を表す
-/// 静的な色ラベルのプレビューだから(裁定172 §2 (1) の指示は label_color の
-/// 源とフォールバックだけ — dragging/hidden の再現は指示に無い)。
-fn swatch_color(row: &RowProjection, colors: &Colors) -> Rgba {
+/// `bar_color` と同型)。`super::rail::view` が swatch container の背景色に
+/// そのまま使う。**bar の `dragging`/`hidden` override はここでは複製しない**
+/// (あれは「掴んで動かしている最中の bar」というクリップ面固有の一時状態で、
+/// スウォッチは行の恒久 ID(裁定147)を表す静的な色ラベルのプレビューだから)。
+pub(crate) fn swatch_color(row: &RowProjection, colors: &Colors) -> Rgba {
     row.label_color
         .and_then(|index| colors.label_palette.get(index as usize))
         .copied()
@@ -112,38 +93,72 @@ fn swatch_color(row: &RowProjection, colors: &Colors) -> Rgba {
 
 /// M/S/L グリフ(正方形チップ)の1辺。mock `.rail .g{width:12px;height:12px}`
 /// (`--row=26px` = 0.4615…)を `round(0.462 × 行高)` へ丸めた比で転写
-/// (裁定172 §2 (2))。Inspector の `inspector_glyph_width`(18px 枠線箱)の
-/// 借用はここで終わる — Timeline 自身の mock 実測に切り替える。
-/// pub の理由: shell 側テスト(`timeline_key_rows_drive.rs`)がグリフの
-/// クリック座標を**この関数から導出**する — 式の複製を持たせない
-/// (T-rail 検収で複製コピーが red になった実害への追随、canvas.rs の
-/// 比率関数 pub 化と同じ判断)。
+/// (裁定172 §2 (2))。
+/// pub の理由: `super::rail::view`(この crate 内)に加え、shell 側テスト
+/// (`timeline_key_rows_drive.rs`)がグリフのクリック座標をこの関数から導出する
+/// — 式の複製を持たせない(T-rail 検収で複製コピーが red になった実害への
+/// 追随、canvas.rs の比率関数 pub 化と同じ判断)。
 pub fn glyph_size_px(row_height: f32) -> f32 {
     (row_height * 0.462).round().max(1.0)
 }
 
 /// グリフ文字(M/S/L)の字寸。mock `.rail .g{font-size:8px}`(グリフ寸12px比
 /// 0.667…)を `0.667 × グリフ寸` で転写(裁定172 §2 (2))。
-fn glyph_text_size_px(glyph_size: f32) -> f32 {
+pub(crate) fn glyph_text_size_px(glyph_size: f32) -> f32 {
     glyph_size * 0.667
 }
 
 // ---------------------------------------------------------------------------
-// 名前の切り詰め(裁定168 施工・違反(A)の根治: 長いレイヤー名が M/S/L チップへ
-// 素通しで重なる)。
+// 名前列の実効幅(裁定167/168) — widget text の `Length::Fixed` 幅として使う。
 // ---------------------------------------------------------------------------
 
 /// 兄弟要素間の gap(裁定167 の梯子下段: `0.075 × 行高`、px 最近傍丸め)。
 /// `inspector_pane.rs::sibling_gap_px` と同型(値そのものは pane ごとに token
-/// 経由で別々に持つ、式だけ揃える — Timeline と Inspector は別 crate なので
-/// 共有 fn は置けない)。ここでは名前列とチップ群の間の緩衝に使う。
+/// 経由で別々に持つ、式だけ揃える) — [`name_column_width`] が名前列と
+/// チップ群の間の緩衝に使う。
 fn sibling_gap_px(row_height: f32) -> f32 {
     (row_height * 0.075).round()
 }
 
+/// 名前列の実効幅 — rail 幅から M/S/L チップ群と裁定167 の緩衝 gap を差し引いた
+/// 残り(EXACT TARGET 1)。`super::rail::view` がこの幅を name `text()` widget の
+/// `Length::Fixed` へそのまま渡す(native ellipsis がこの幅を超えた分を「…」へ
+/// 畳む、旧 `truncate_to_width` の手動測定は不要になった — 上のモジュール
+/// doc 参照)。
+///
+/// **裁定172 継承**: スウォッチ寸は [`swatch_size_px`](行高比)。チップ群の
+/// 開始 x は「rail 右端から `spacing_s` 空けて3個(グリフ寸+gap)を右詰め」
+/// という配置そのもの(旧 `glyph_slots` の絶対座標の式をここへ畳んだ — widget
+/// 側は実際の x 座標を iced のレイアウトエンジンに計算させるので、
+/// `glyph_slots`(座標の配列を返す関数)自体はもう要らない。この関数が要る
+/// のは「名前列に許される最大幅」という**数量**だけ)。
+pub(crate) fn name_column_width(dims: &Dimensions, rail_width: f32, row_height: f32) -> f32 {
+    let swatch_size = swatch_size_px(row_height);
+    let name_start_x = dims.spacing_s * 2.0 + swatch_size;
+    let glyph_w = glyph_size_px(row_height);
+    let chip_block_w = glyph_w * 3.0 + dims.spacing_xs * 2.0;
+    let chip_start_x = rail_width - dims.spacing_s - chip_block_w;
+    let gap = sibling_gap_px(row_height);
+    (chip_start_x - name_start_x - gap).max(0.0)
+}
+
+// ---------------------------------------------------------------------------
+// 退役(TL-arch Phase 1、上のモジュール doc §2.5 節参照): widget text の
+// native ellipsis に置換されたため rail 描画からの呼び出し元は無い。canvas
+// 側の他用途も無い(grep 実測) — 削除ではなく deprecated 注記(発注書の
+// 指示どおり)。
+// ---------------------------------------------------------------------------
+
 /// 全角相当(CJK 統合漢字・ひらがな・カタカナ・ハングル等)の判定。
 /// [`default_measure`] の等幅近似だけに使う簡易版 — 東アジア文字幅の一般実装
 /// ではなく、レーン名の切り詰めに要る最小限のブロックだけを対象にする。
+#[deprecated(
+    note = "TL-arch Phase 1(2026-08-22)で rail 描画が widget text の native ellipsis へ \
+            移行し、この等幅近似の呼び出し元が無くなった(`default_measure`/ \
+            `truncate_to_width` と同じ注記)。canvas 側の他用途も無い(grep 実測) — \
+            削除ではなく注記のみ。"
+)]
+#[allow(dead_code)]
 fn is_wide_char(ch: char) -> bool {
     matches!(ch as u32,
         0x1100..=0x115F   // ハングル字母
@@ -162,6 +177,12 @@ fn is_wide_char(ch: char) -> bool {
 /// (半角=0.6em/文字・全角相当=1.0em/文字、`em` は呼び出し側が渡すフォント
 /// サイズ)で切り詰め幅を見積もる。実グリフ幅の代わりであって、正確な測定
 /// ではない。
+#[deprecated(
+    note = "TL-arch Phase 1(2026-08-22): rail 描画の呼び出し元が無くなった \
+            (上の `is_wide_char` と同じ注記)。"
+)]
+#[allow(deprecated)]
+#[allow(dead_code)]
 pub(crate) fn default_measure(em: f32) -> impl Fn(&str) -> f32 {
     move |s: &str| {
         s.chars()
@@ -177,6 +198,11 @@ pub(crate) fn default_measure(em: f32) -> impl Fn(&str) -> f32 {
 ///
 /// `measure` は幅測定クロージャ — 実描画側は [`default_measure`] を渡すが、
 /// 決定論的なテストは既知の測定器を注入できる(fixture 前提の柵にするため)。
+#[deprecated(
+    note = "TL-arch Phase 1(2026-08-22): rail 描画の呼び出し元が無くなった \
+            (上の `is_wide_char` と同じ注記)。"
+)]
+#[allow(dead_code)]
 pub(crate) fn truncate_to_width(
     name: &str,
     max_width: f32,
@@ -198,191 +224,8 @@ pub(crate) fn truncate_to_width(
     String::new()
 }
 
-/// 名前列の実効幅 — rail 幅から M/S/L チップ群と裁定167 の緩衝 gap を差し引いた
-/// 残り(EXACT TARGET 1: `fill_text` 前にこの幅で [`truncate_to_width`] へ渡す)。
-/// スウォッチ+左右余白ぶんの開始 x は `draw()` の名前描画位置(`dims.spacing_s
-/// * 2.0 + swatch_size`)と同じ式 — 2箇所で別の値を発明しない。
-///
-/// 裁定172 追随: スウォッチ寸が `dims.spacing_m` 固定から [`swatch_size_px`]
-/// (行高比)へ変わった分、この式も追随する(EXACT TARGET 1 は「名前列の実効幅」
-/// であって「スウォッチ寸の定義元」ではないので、2箇所目に古い値を残さない)。
-fn name_column_width(dims: &Dimensions, rail_width: f32, row_height: f32) -> f32 {
-    let swatch_size = swatch_size_px(row_height);
-    let name_start_x = dims.spacing_s * 2.0 + swatch_size;
-    let chip_start_x = glyph_slots(dims, rail_width, row_height)[0].x;
-    let gap = sibling_gap_px(row_height);
-    (chip_start_x - name_start_x - gap).max(0.0)
-}
-
-fn glyph_label(glyph: Glyph) -> &'static str {
-    match glyph {
-        Glyph::Mute => "M",
-        Glyph::Solo => "S",
-        Glyph::Lock => "L",
-    }
-}
-
-/// `point` がレーンバー内(`0 <= x < rail_width`)のどこに当たったか。
-/// レーンバーの外は `None` — 呼び出し側(`super::input`)がクリップ面の
-/// `super::hit::hit_test` へ回す。
-///
-/// 行の縦位置は `super::projection::layer_row_top` が正本(T3b EXACT
-/// TARGET 3) — `param_row_height`/`property_row_count`/`selected_index` を
-/// 受けてその逆写像([`layer_row_at_y`])で行 index を求め、glyph の y 範囲も
-/// 同じ [`layer_row_top`] から出す(`super::lane_bar::draw` と同じ式)。
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn hit_test(
-    point: Point,
-    rows: &[RowProjection],
-    ruler_height: f32,
-    row_height: f32,
-    rail_width: f32,
-    dims: &Dimensions,
-    param_row_height: f32,
-    property_row_count: usize,
-    selected_index: Option<usize>,
-) -> Option<Hit> {
-    if point.x < 0.0 || point.x >= rail_width || point.y < ruler_height || row_height <= 0.0 {
-        return None;
-    }
-    let row_index = layer_row_at_y(
-        point.y - ruler_height,
-        row_height,
-        param_row_height,
-        property_row_count,
-        selected_index,
-    )?;
-    let row = rows.get(row_index)?;
-
-    let row_top = ruler_height
-        + layer_row_top(row_height, param_row_height, property_row_count, selected_index, row_index);
-    let glyph_size = glyph_size_px(row_height);
-    let glyph_y0 = row_top + (row_height - glyph_size) / 2.0;
-    let glyph_y1 = glyph_y0 + glyph_size;
-    if point.y >= glyph_y0 && point.y < glyph_y1 {
-        for slot in glyph_slots(dims, rail_width, row_height) {
-            if point.x >= slot.x && point.x < slot.x + glyph_size {
-                return Some(Hit::Glyph(row.id, slot.glyph));
-            }
-        }
-    }
-    Some(Hit::Row(row.id))
-}
-
-/// レーンバーを描く。`super::canvas::draw` と同じ `Frame` へ重ねて描く —
-/// canvas widget は1トレイトにつき1 Program(`mod.rs` の trait 制約、モジュール
-/// doc 参照)なので、別 canvas を新設するのではなく同じ paint pass に相乗りする。
-///
-/// **地(背景)は描き直さない** — canvas 全体の初期 fill(`surface_panel`、
-/// `super::canvas::draw` 冒頭)が rail の地をそのまま兼ねる(mock
-/// `.thead{background:panel}` と同色)。ゼブラ(裁定148)・行区切り hairline・
-/// 選択ハイライトも同じ理由で `super::canvas::draw` 側が既に全幅(rail 込み)
-/// で描いている — ここは rail 固有の中身(境界線・スウォッチ・名前・M/S/L)
-/// だけを描く。
-pub(crate) fn draw(pane: &TimelinePane, frame: &mut canvas::Frame, rail_width: f32) {
-    let dims = &pane.dims;
-    let colors = &pane.colors;
-    let row_height = dims.row_height;
-    let ruler_height = pane.ruler_height();
-    let hairline = dims.border_width;
-
-    // rail とクリップ面の境界(強い hairline、EXACT TARGET 5・裁定147)。
-    let boundary = canvas::Path::line(
-        Point::new(rail_width, 0.0),
-        Point::new(rail_width, pane.content_height()),
-    );
-    frame.stroke(
-        &boundary,
-        canvas::Stroke::default()
-            .with_color(colors.border_default)
-            .with_width(hairline),
-    );
-
-    for (index, row) in pane.rows.iter().enumerate() {
-        // 選択 layer の下に property 行(キー行、第2波 T3)が挿入されている間、
-        // 後続の層行は押し下がる — `canvas.rs` の層行ループと同じ
-        // `TimelinePane::layer_row_top` を使い、クリップ面の bar と rail の
-        // 名前/M・S・L が揃った位置で描かれるようにする(`hit_test` 自身は
-        // この押し下げを知らないまま — `projection::layer_row_top` の doc の
-        // write-set 外 finding 参照。ここは draw だけの最小修正)。
-        let row_top = ruler_height + pane.layer_row_top(index);
-
-        // スウォッチ(裁定172 §2 (1) 施工) — bar と同じ源(layer の
-        // `label_color`)から色を引く([`swatch_color`])。mock 実測比:
-        // 寸=`round(0.308 × 行高)`(`swatch_size_px`)・角丸=`0.25 × スウォッチ寸`
-        // (`swatch_radius_px`)。
-        let swatch_size = swatch_size_px(row_height);
-        let swatch_radius = swatch_radius_px(swatch_size);
-        let swatch_y = row_top + (row_height - swatch_size) / 2.0;
-        frame.fill(
-            &canvas::Path::rounded_rectangle(
-                Point::new(dims.spacing_s, swatch_y),
-                Size::new(swatch_size, swatch_size),
-                swatch_radius.into(),
-            ),
-            swatch_color(row, colors),
-        );
-
-        // 名前(裁定147: クリップ面から退去した名前の住所)。**裁定168 施工**:
-        // M/S/L チップへ素通しで重なっていた違反(A)の根治 — `fill_text` 前に
-        // 実効幅で切り詰める(はみ出す名前は末尾「…」)。
-        let name_color = if row.hidden { colors.text_muted } else { colors.text_primary };
-        let name = if row.name.is_empty() {
-            format!("layer {}", row.id.0)
-        } else {
-            row.name.clone()
-        };
-        let name_max_width = name_column_width(dims, rail_width, row_height);
-        let name = truncate_to_width(&name, name_max_width, default_measure(dims.caption_text));
-        frame.fill_text(canvas::Text {
-            content: name,
-            position: Point::new(dims.spacing_s * 2.0 + swatch_size, row_top + row_height / 2.0),
-            color: name_color,
-            size: iced::Pixels(dims.caption_text),
-            align_y: iced::alignment::Vertical::Center,
-            ..Default::default()
-        });
-
-        // M/S/L(裁定172 §2 (2) 施工) — 状態は Document(RowProjection)から
-        // 読む(ボタンに状態を持たない、正典 §6)。Inspector 借用の枠線箱
-        // (`inspector_glyph_width`=18px)を廃し、Timeline mock 自身の `.rail .g`
-        // (塗りチップ)へ転写: 寸=`round(0.462 × 行高)`(`glyph_size_px`)・
-        // 字=`0.667 × グリフ寸`(`glyph_text_size_px`)。塗りは mock `#4a4a4a`
-        // の tokens 読み替え — `colors.surface_hover`(0.2745 ≈ 70/255)が
-        // 既存ロールの中で最も近い(Δ4/255、`surface_raised` Δ12/255・
-        // `border_strong` Δ17/255 より近い、新raw値は起こさない・裁定142)。
-        // ON/OFF の描き分けは現行実装の意味論を維持 — 塗りは状態に依らず一定
-        // (mock は単一の塗りしか持たない)、active/inactive の区別は文字色
-        // (`action_active`/`text_secondary`、現行のまま)で担う。
-        let glyph_size = glyph_size_px(row_height);
-        let glyph_text_size = glyph_text_size_px(glyph_size);
-        let glyph_y = row_top + (row_height - glyph_size) / 2.0;
-        for slot in glyph_slots(dims, rail_width, row_height) {
-            let active = match slot.glyph {
-                Glyph::Mute => row.hidden,
-                Glyph::Solo => row.solo,
-                Glyph::Lock => row.locked,
-            };
-            let text_color = if active { colors.action_active } else { colors.text_secondary };
-            frame.fill_rectangle(
-                Point::new(slot.x, glyph_y),
-                Size::new(glyph_size, glyph_size),
-                colors.surface_hover,
-            );
-            frame.fill_text(canvas::Text {
-                content: glyph_label(slot.glyph).to_owned(),
-                position: Point::new(slot.x + glyph_size / 2.0, glyph_y + glyph_size / 2.0),
-                color: text_color,
-                size: iced::Pixels(glyph_text_size),
-                align_x: iced::alignment::Horizontal::Center.into(),
-                align_y: iced::alignment::Vertical::Center,
-                ..Default::default()
-            });
-        }
-    }
-}
-
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 
@@ -442,7 +285,9 @@ mod tests {
         assert!(width > 0.0, "既定 dims で名前列の実効幅が非正: {width}");
 
         let name_start_x = dims.spacing_s * 2.0 + swatch_size_px(row_height);
-        let chip_start_x = glyph_slots(&dims, rail_width, row_height)[0].x;
+        let glyph_w = glyph_size_px(row_height);
+        let chip_block_w = glyph_w * 3.0 + dims.spacing_xs * 2.0;
+        let chip_start_x = rail_width - dims.spacing_s - chip_block_w;
         assert!(
             name_start_x + width <= chip_start_x,
             "名前列がチップ群の開始位置を超えている(緩衝gapが効いていない): \
@@ -504,7 +349,7 @@ mod tests {
 
     fn test_row(label_color: Option<u8>) -> RowProjection {
         RowProjection {
-            id: LayerId(1),
+            id: motolii_store::LayerId(1),
             name: "Layer 1".to_owned(),
             hidden: false,
             solo: false,
