@@ -1,7 +1,7 @@
 //! 読み口 — front が受け取る唯一の物。可変な口を1つも持たない。
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use motolii_core::RationalTime;
 use motolii_eval::{KeyframeTrack, Value};
@@ -728,17 +728,32 @@ impl<'a> StoreView<'a> {
         // `any_solo` を呼ぶと `resolved_layers` 経由で N 回 × 全層走査 = O(N²) の
         // attrs 二重読みになっていた)。
         let any_solo = self.any_solo()?;
-        self.resolve_with_solo(layer, t, any_solo)
+        // 単発呼び出しなので世界合成のメモ/循環ガードもこの1回限りの使い捨て
+        // (裁定173 H1)。祖先を跨いで共有したいのは [`Self::resolved_layers`] が
+        // 1回の document-wide resolve の中で複数の子から同じ祖先を引く場面 —
+        // そちらは呼び出し側で1つの `memo` を作って全 layer 分使い回す。
+        let present: HashSet<LayerId> = self.layers().into_iter().collect();
+        let mut memo = HashMap::new();
+        let mut visiting = HashSet::new();
+        self.resolve_with_solo(layer, t, any_solo, &present, &mut memo, &mut visiting)
     }
 
     /// [`Self::resolve`] の本体。`any_solo` を呼び出し側から受け取ることで、
     /// 全層を回る [`Self::resolved_layers`] が層ごとに `any_solo` を再走査しなくて
     /// 済むようにする(1パスで導出した solo 判定を使い回す)。
+    ///
+    /// `present`/`memo`/`visiting` は世界合成(裁定173 H1、[`Self::world_affine`])の
+    /// 入出力 — 呼び出し側([`Self::resolve`]/[`Self::resolved_layers`])が1回の
+    /// resolve 呼び出し分だけ作り、複数 layer の resolve を跨いで使い回す
+    /// (「同じフレームで親を二度解決しない」がここで成立する)。
     fn resolve_with_solo(
         &self,
         layer: LayerId,
         t: RationalTime,
         any_solo: bool,
+        present: &HashSet<LayerId>,
+        memo: &mut HashMap<LayerId, glam::Affine2>,
+        visiting: &mut HashSet<LayerId>,
     ) -> Result<Option<ResolvedLayer>, StoreError> {
         let Some(meta) = self.meta(layer)? else {
             return Ok(None);
@@ -807,26 +822,12 @@ impl<'a> StoreView<'a> {
             }
         };
 
-        let vec2 = |name: &str, default: [f32; 2]| -> Result<[f32; 2], StoreError> {
-            let property = PropertyId::new(name)?;
-            match self.value_at(layer, &property, t)? {
-                Some(Value::Vec2(v)) => Ok([v[0] as f32, v[1] as f32]),
-                Some(other) => Err(StoreError::Property(format!(
-                    "{name} に2成分でない値が入っている: {other:?}"
-                ))),
-                None => Ok(default),
-            }
-        };
-
-        // 行列は `motolii-core` が組む。**適用順序の正本はそこ1箇所**(裁定58)。
-        let transform = LayerPlacement::from_transform(
-            vec2(property::ANCHOR, [0.0, 0.0])?,
-            self.resolve_position(layer, t)?,
-            vec2(property::SCALE, [1.0, 1.0])?,
-            scalar(property::ROTATION, 0.0)?,
-            scalar(property::SKEW, 0.0)?,
-            scalar(property::SKEW_AXIS, 0.0)?,
-        );
+        // **comp 空間へのアフィン**(裁定173 H1)。局所の行列そのものの意味の正本は
+        // 今まで通り `motolii-core`(裁定58)— ここは「親の world アフィンを左から
+        // 合成する」再帰の入口を呼ぶだけ([`Self::world_affine`] 参照)。parent が
+        // 無い/tombstone/循環なら local のみへ縮退するので、parent を1つも使って
+        // いない既存 Document はここまで含めて今まで通りの値を返す。
+        let transform = self.world_affine(layer, t, present, memo, visiting)?;
 
         Ok(Some(ResolvedLayer {
             placement: LayerPlacement {
@@ -846,6 +847,101 @@ impl<'a> StoreView<'a> {
             matte: attrs.matte,
             pinned: attrs.pinned,
         }))
+    }
+
+    /// **この layer 自身**の property track だけから local `Affine2` を組む(裁定58
+    /// の正本 `LayerPlacement::from_transform` をそのまま呼ぶ)。祖先を一切見ない —
+    /// [`Self::world_affine`] がこれを再帰の各段の部品として使う。
+    fn local_placement_transform(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+    ) -> Result<glam::Affine2, StoreError> {
+        let scalar = |name: &str, default: f32| -> Result<f32, StoreError> {
+            let property = PropertyId::new(name)?;
+            match self.value_at(layer, &property, t)? {
+                Some(Value::F64(v)) => Ok(v as f32),
+                Some(other) => Err(StoreError::Property(format!(
+                    "{name} に数値でない値が入っている: {other:?}"
+                ))),
+                None => Ok(default),
+            }
+        };
+        let vec2 = |name: &str, default: [f32; 2]| -> Result<[f32; 2], StoreError> {
+            let property = PropertyId::new(name)?;
+            match self.value_at(layer, &property, t)? {
+                Some(Value::Vec2(v)) => Ok([v[0] as f32, v[1] as f32]),
+                Some(other) => Err(StoreError::Property(format!(
+                    "{name} に2成分でない値が入っている: {other:?}"
+                ))),
+                None => Ok(default),
+            }
+        };
+        Ok(LayerPlacement::from_transform(
+            vec2(property::ANCHOR, [0.0, 0.0])?,
+            self.resolve_position(layer, t)?,
+            vec2(property::SCALE, [1.0, 1.0])?,
+            scalar(property::ROTATION, 0.0)?,
+            scalar(property::SKEW, 0.0)?,
+            scalar(property::SKEW_AXIS, 0.0)?,
+        ))
+    }
+
+    /// この layer の**world(comp 空間)アフィン** = 親の world アフィン × 自分の
+    /// local アフィン(裁定173 H1、キーフレームは各ノードローカルのまま・**合成だけが
+    /// 再帰**という利用者仮説の実装形)。旧世界 `crates/motolii-doc/src/
+    /// spatial_resolve.rs::ensure_resolve_affine` の概念移植 — メモ化 `HashMap` +
+    /// `visiting` の cycle ガードで「同じフレームで親を二度解決しない」を保証する。
+    ///
+    /// - **parent が無い**: local のみ(既存 Document は今まで通りの値)
+    /// - **parent が tombstone(present ではない)/存在しない**: `present` でのフィルタで
+    ///   `None` 扱いに縮退する — `next/ui/motolii-timeline-pane/src/projection.rs::rows`
+    ///   (裁定173 H2)の `attrs.parent.filter(|p| present.contains(p))` と**同じ意味論**
+    ///   (壊れた参照で resolve を落とさない、H2 到達性判定の踏襲)
+    /// - **parent 鎖に循環がある**(書き込み時ガード `document::validate_no_parent_cycle`
+    ///   を抜けた壊れた Document を読んだ場合の第二の柵、H-survey §2.2): 再訪を
+    ///   `visiting` で検知し、その枝は local のみへ縮退する。**memo には書かない** —
+    ///   循環中に観測される値は「本当の」world ではないので、後で(外側の呼び出しが)
+    ///   書く値を上書きしない
+    fn world_affine(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+        present: &HashSet<LayerId>,
+        memo: &mut HashMap<LayerId, glam::Affine2>,
+        visiting: &mut HashSet<LayerId>,
+    ) -> Result<glam::Affine2, StoreError> {
+        if let Some(world) = memo.get(&layer) {
+            return Ok(*world);
+        }
+        // メモ化の呼び出し回数証明(裁定173 H1 oracle)が数える「本当にこの layer を
+        // 解決した回数」— memo hit を素通りした、ここから先の1回だけを数える。
+        #[cfg(test)]
+        record_world_affine_compute();
+
+        let local = self.local_placement_transform(layer, t)?;
+
+        let parent = self
+            .attrs(layer)?
+            .unwrap_or_default()
+            .parent
+            .filter(|p| present.contains(p));
+        let Some(parent) = parent else {
+            memo.insert(layer, local);
+            return Ok(local);
+        };
+
+        if !visiting.insert(layer) {
+            // 防御的セカンドガード(H-survey §2.2)。壊れた Document でも無限再帰
+            // しない — memo には書かず、ローカルのみへ縮退した値をこの枝だけに返す。
+            return Ok(local);
+        }
+        let parent_world = self.world_affine(parent, t, present, memo, visiting)?;
+        visiting.remove(&layer);
+
+        let world = parent_world * local;
+        memo.insert(layer, world);
+        Ok(world)
     }
 
     /// position の値。**`position`(Vec2 単一 track)を優先し、無ければ split(x/y 別
@@ -905,11 +1001,21 @@ impl<'a> StoreView<'a> {
     /// なる(2026-08-20 の性能回帰の原因、r2 probe 実測で発覚)。resolve は既に
     /// layer ごとに自分の attrs を読んでいるので、その1パスから solo の有無だけ
     /// 先に導出して使い回す。
+    ///
+    /// **世界合成のメモ(裁定173 H1)もここで1回だけ作り、全 layer 分使い回す** —
+    /// 兄弟が同じ祖先を parent に持つ場合、祖先の world アフィンは document-wide の
+    /// この呼び出し1回につき1回しか解決されない(メモ化の呼び出し回数証明 oracle)。
     pub fn resolved_layers(&self, t: RationalTime) -> Result<Vec<ResolvedLayer>, StoreError> {
         let any_solo = self.any_solo()?;
+        let layers = self.layers();
+        let present: HashSet<LayerId> = layers.iter().copied().collect();
+        let mut memo = HashMap::new();
+        let mut visiting = HashSet::new();
         let mut out = Vec::new();
-        for layer in self.layers() {
-            if let Some(resolved) = self.resolve_with_solo(layer, t, any_solo)? {
+        for layer in layers {
+            if let Some(resolved) =
+                self.resolve_with_solo(layer, t, any_solo, &present, &mut memo, &mut visiting)?
+            {
                 out.push(resolved);
             }
         }
@@ -918,9 +1024,122 @@ impl<'a> StoreView<'a> {
     }
 }
 
+/// `world_affine` の呼び出し回数計測(裁定173 H1 oracle「メモ化の呼び出し回数証明」)。
+/// `#[cfg(test)]` なのでテスト以外のビルドには存在しない — `StoreView` は `&self` の
+/// 純粋な読み口という設計(モジュール doc)を壊さずに、白箱ユニットテスト
+/// (このファイル末尾の `mod tests`)だけがこのスレッドローカルを覗く。
+#[cfg(test)]
+thread_local! {
+    static WORLD_AFFINE_COMPUTE_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn record_world_affine_compute() {
+    WORLD_AFFINE_COMPUTE_COUNT.with(|c| c.set(c.get() + 1));
+}
+
+#[cfg(test)]
+fn reset_world_affine_compute_count() {
+    WORLD_AFFINE_COMPUTE_COUNT.with(|c| c.set(0));
+}
+
+#[cfg(test)]
+fn world_affine_compute_count() -> u32 {
+    WORLD_AFFINE_COMPUTE_COUNT.with(|c| c.get())
+}
+
 fn layer_id_of(path: &EntityPath) -> Option<LayerId> {
     let s = path.to_string();
     s.strip_prefix("/layer/")
         .and_then(|rest| rest.parse::<u64>().ok())
         .map(LayerId)
+}
+
+/// 裁定173 H1 の白箱ユニットテスト。`world_affine`/`resolve_with_solo` は
+/// `pub(crate)` ですらない完全 private なので、この crate 自身の `#[cfg(test)]`
+/// からしか叩けない(統合テスト `tests/*.rs` は別クレートなので届かない) —
+/// 数値証明・serde 往復・tombstone 縮退は公開 API だけで書けるので
+/// `tests/transform_hierarchy.rs` に置き、ここには**メモ化の呼び出し回数証明**
+/// (private な計測フックが要る)だけを置く。
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Composition, Fps, Intent, LayerAttrsPatch, LayerMeta, LayerSource, LayerTiming};
+
+    fn t(frame: i64) -> RationalTime {
+        RationalTime::try_from_frame(frame, Fps::try_new(30, 1).unwrap()).unwrap()
+    }
+
+    fn place(doc: &mut Document, layer: LayerId, parent: Option<LayerId>) {
+        doc.apply_all([
+            Intent::AddLayer(layer),
+            Intent::SetMeta {
+                layer,
+                meta: LayerMeta {
+                    source: LayerSource::Null,
+                    order: layer.0 as i16,
+                    timing: LayerTiming::place(0, None, 300),
+                },
+            },
+        ])
+        .unwrap();
+        if let Some(parent) = parent {
+            doc.apply(Intent::SetAttrs {
+                layer,
+                patch: LayerAttrsPatch {
+                    parent: Some(Some(parent)),
+                    ..Default::default()
+                },
+            })
+            .unwrap();
+        }
+    }
+
+    /// **メモ化の呼び出し回数証明**(裁定173 H1 oracle)。3階層(root A ← mid B ←
+    /// leaf C1/C2 の2兄弟)で、B(と A)を2人の子から引いても `world_affine` の
+    /// 本体計算(memo miss)は B/A それぞれちょうど1回しか起きない — 旧世界
+    /// `spatial_resolve.rs::ensure_resolve_affine`(メモ化 `HashMap` + 事前解決パス)の
+    /// 概念移植が効いていることの直接証拠。
+    #[test]
+    fn shared_ancestor_is_resolved_exactly_once_across_siblings() {
+        let mut doc = Document::new();
+        doc.apply(Intent::SetComposition(Composition {
+            width: 64,
+            height: 64,
+            fps: Fps::try_new(30, 1).unwrap(),
+            duration_frames: 300,
+            background: Composition::default_background(),
+        }))
+        .unwrap();
+
+        let (a, b, c1, c2) = (LayerId(1), LayerId(2), LayerId(3), LayerId(4));
+        place(&mut doc, a, None);
+        place(&mut doc, b, Some(a));
+        place(&mut doc, c1, Some(b));
+        place(&mut doc, c2, Some(b));
+
+        let view = doc.view();
+        let present: HashSet<LayerId> = view.layers().into_iter().collect();
+        let mut memo = HashMap::new();
+        let mut visiting = HashSet::new();
+        reset_world_affine_compute_count();
+
+        // C1 を解決: local(C1) + local(B) + local(A) の3回が「初めて」計算される。
+        view.world_affine(c1, t(0), &present, &mut memo, &mut visiting)
+            .unwrap();
+        assert_eq!(
+            world_affine_compute_count(),
+            3,
+            "root/mid/leaf1 の3層でちょうど3回のはず(まだ誰も共有していない)"
+        );
+
+        // C2 を解決: B と A は memo に既に居るので、C2 自身の local だけが増える。
+        view.world_affine(c2, t(0), &present, &mut memo, &mut visiting)
+            .unwrap();
+        assert_eq!(
+            world_affine_compute_count(),
+            4,
+            "B(と A)が2人目の子 C2 のために再計算されてしまっている(メモ化が効いていない)"
+        );
+    }
 }

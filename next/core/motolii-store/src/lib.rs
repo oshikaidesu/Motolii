@@ -182,15 +182,28 @@ pub enum LayerSource {
     /// **今は素の文字列1本だけ**(`layers/text-layer/t`)— 範囲スタイル・アニメーターの
     /// 語彙(裁定82/85 等)は `text` 発注単位(75行)の仕事で、ここでは作らない。
     Text,
+    /// **グループの印**(裁定173 (c))。Group は「子を持てる」という印だけを持つ特殊な
+    /// layer で、絵を持たない(`Null` と同じく engine は texture を焼かない —
+    /// `motolii-engine::texture_for` 参照)。
+    ///
+    /// **member 列を持たせない**(裁定173 §4.4 の二重帳簿回避)。所属は既存の
+    /// `LayerAttrs.parent: Option<LayerId>` 1本槍で表現する — ある layer が
+    /// このGroupの子かどうかは `attrs(child).parent == Some(group_id)` で毎回導出する
+    /// (正本は常に子側の1フィールド)。旧世界(`crates/motolii-doc::TrackItem::Group`)が
+    /// 持っていた `children: Vec<TrackItem>` に相当する列はここには**存在しない** —
+    /// 将来これを足すと「Group.members に入っている」と「子の parent が Group を指す」
+    /// という2つの正本が同時に生まれる(H-survey §4.4)。
+    Group,
 }
 
 impl LayerSource {
     /// Document が知っている大きさ。実素材は probe しないと分からないので `None`。
-    /// `Null`/`Shape`/`Text` も `None` — 寸法は素材ではなく中身(演算子・組版)が決める。
+    /// `Null`/`Shape`/`Text`/`Group` も `None` — 寸法は素材ではなく中身(演算子・組版)
+    /// が決める(`Group` は中身を子 layer が持つので、そもそも寸法という概念を持たない)。
     pub fn declared_size(&self) -> Option<[f32; 2]> {
         match self {
             Self::Solid { width, height, .. } => Some([*width as f32, *height as f32]),
-            Self::Media { .. } | Self::Null | Self::Shape | Self::Text => None,
+            Self::Media { .. } | Self::Null | Self::Shape | Self::Text | Self::Group => None,
         }
     }
 }

@@ -3470,6 +3470,7 @@ name = "motolii-store"
 version = "0.1.0"
 dependencies = [
  "arrow",
+ "glam 0.30.10",
  "motolii-core",
  "motolii-eval",
  "motolii-vector",

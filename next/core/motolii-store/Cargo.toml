@@ -8,6 +8,13 @@ license.workspace = true
 arrow.workspace = true
 motolii-core.workspace = true
 motolii-eval.workspace = true
+# 裁定173 H1: 親 world affine のメモ化キャッシュ(`HashMap<LayerId, glam::Affine2>`)の
+# 値型を名指しするために要る。`motolii_core::LayerPlacement::transform` が既に
+# `glam::Affine2` を公開フィールドとして持つので、この crate は元々「型としては」
+# glam に触れていた(推移的依存) — ここは直接依存に昇格させるだけで、新しい概念は
+# 増えない。tests/ 側は matrix2/x_axis 等のフィールド越しに読むだけで済むので、
+# dev-dependencies には足さない(`tests/transform_skew.rs` の既存の流儀のまま)。
+glam.workspace = true
 # shape-layer の `shapes` 束(layer-meta): 図形の語彙は shape-1/2/3 が既に決めた
 # `motolii-vector::Shape` が正本。store 側で別のパス表現を発明しない(裁定10)。
 # 依存の向きは engine → store が主だが、これは型を借りるだけの片方向で、

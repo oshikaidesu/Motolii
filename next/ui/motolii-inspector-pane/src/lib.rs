@@ -533,6 +533,9 @@ fn source_kind_label(source: &LayerSource) -> &'static str {
         LayerSource::Null => "null",
         LayerSource::Shape => "shape",
         LayerSource::Text => "text",
+        // 裁定173。H3(親選択 UI/Inspector の parent 表示)は非目標のまま —
+        // ここは非網羅マッチをコンパイラに教えてもらって埋めた最小限の一言のみ。
+        LayerSource::Group => "group",
     }
 }
 
@@ -1944,6 +1947,7 @@ mod tests {
         assert_eq!(source_kind_label(&LayerSource::Null), "null");
         assert_eq!(source_kind_label(&LayerSource::Shape), "shape");
         assert_eq!(source_kind_label(&LayerSource::Text), "text");
+        assert_eq!(source_kind_label(&LayerSource::Group), "group");
     }
 
     // -----------------------------------------------------------------------
