@@ -53,12 +53,15 @@
 //! ならない(`tests/compose.rs` の `add_blend_*` 系はこれを踏まえて exact値ではなく
 //! 「明るくなる」「1.0超えは白に飽和する」で縛っている)。
 
-use re_renderer::renderer::{RectangleDrawData, RectangleOptions, TexturedRect};
+use re_renderer::renderer::{
+    ColorMapper, ColormappedTexture, RectangleDrawData, RectangleOptions, TextureAlpha,
+    TexturedRect,
+};
 use re_renderer::resource_managers::ImageDataDesc;
 use re_renderer::view_builder::{
     BlendWithBackground, Projection, RenderMode, TargetConfiguration, ViewBuilder,
 };
-use re_renderer::{RenderContext, Rgba};
+use re_renderer::{GpuTexture, RenderContext, Rgba, ScreenshotProcessor, ViewBuilderId};
 
 mod effects;
 mod headless;
@@ -185,9 +188,9 @@ pub struct Compositor {
     ctx: RenderContext,
     /// 読み戻しの識別子。1つの Compositor で連番にする。
     next_readback: u64,
-    /// [`Compositor::render_with_effects`] が texture_manager_2d へ import する時の
-    /// cache key。`next_readback` とは別の keyspace(`import_gpu_premultiplied` の
-    /// `key` は screenshot の識別子と無関係)。
+    /// [`Compositor::render_with_effects`]/[`Compositor::render_sequential`] が
+    /// texture_manager_2d へ import する時の cache key。`next_readback` とは別の
+    /// keyspace(`import_gpu_premultiplied` の `key` は screenshot の識別子と無関係)。
     next_effect_key: u64,
     /// layer 単位オフスクリーンパスの中間 texture プール(裁定153 S2)。
     /// **Compositor 所有・フレームをまたいで再利用** — `effects` モジュール doc 参照。
@@ -890,91 +893,89 @@ impl Compositor {
         self.effect_scratch.created_count()
     }
 
-    /// **逐次合成(accumulator)経路の枠**(裁定160 BL1、2026-08-21、調査
-    /// `docs/reviews/2026-08-21-backend-gap-seam-survey.md` EVIDENCE_GAP 1 の検証)。
+    /// **逐次合成(accumulator)経路**(裁定161 BL1b、2026-08-21)。
+    ///
+    /// BL1(裁定160)は「layer を1枚ずつ焼き込んでも一括描画と同じ絵が出るか」を
+    /// **公開 API** [`ViewBuilder::composite`] だけで検証し、**赤**(半透明の重なりで
+    /// バイト不一致)という結果と、その理由(fork の `composite()` は
+    /// non-srgb-tagged 固定 format にしか描けず、本来1回で済む
+    /// 「unmultiply→ガンマ encode→re-multiply」の変換を layer 毎= N 回踏んでしまう)
+    /// を実測で固定した(`docs/reviews/2026-08-21-blend-fork-accessor-decision.md`)。
+    ///
+    /// 裁定161 は「fork へ read アクセサを1本足す」を選んだ
+    /// ([`ViewBuilder::main_target`]、fork 側 pinned rev には未反映——この crate の
+    /// `Cargo.toml` の `[patch]` section 参照)。この関数はその境界を実際に越える。
+    ///
+    /// ## 仕組み(実装は3段)
+    ///
+    /// layer i を描くたび、新しい [`ViewBuilder`] へ**2枚**の [`TexturedRect`] を
+    /// 積む:
+    ///
+    /// 1. **背景 rect**(`depth_offset = i16::MIN`、最背面): 直前までの逐次合成結果
+    ///    (前の layer の main_target、[`ViewBuilder::main_target`] で取得)を、
+    ///    そのまま画面いっぱいに敷く。`ColormappedTexture` は手組みで
+    ///    `decode_srgb: false`(main_target は既に `Rgba8UnormSrgb` — GPU が読み込み時に
+    ///    自動 decode するので、ここで**また** decode すると二重補正になる)・
+    ///    `texture_alpha: TextureAlpha::AlreadyPremultiplied`(accumulator は既に
+    ///    premultiplied——`from_unorm_rgba` の既定 `SeparateAlpha` は使えない)にする。
+    ///    位置は「画面に張り付く板」と同じ変換(`pinned_cancel`、pinned layer が
+    ///    既に使っている値をそのまま流用——新しい数式を持ち込まない)。
+    /// 2. **layer 自身の rect**(既存の `render_with_timing` と同型)を、その上に
+    ///    通常の premultiplied-over パイプラインで重ねる。
+    ///
+    /// この2枚は**同じ ViewBuilder・同じ main_target の中**で描かれるので、
+    /// GPU の blend(`LoadOp::Clear` → 背景を書く → layer を書く、2回とも
+    /// srgb-tagged な main_target への自動 decode/encode)は、一括経路
+    /// (`render_with_timing`)が N layer を1つの main_target の中で順に混ぜる時と
+    /// **layer あたりの quantize 回数が同じ**になる——「背景を敷く」書き込みは
+    /// 直前の main_target から dequantize した値をそのまま re-quantize するだけ
+    /// (8bit sRGB の decode/encode は往復で可逆、値は変わらない)なので、実質
+    /// タダで「前回までの答え」を持ち込める。`composite.wgsl` のガンマ変換は
+    /// **一切踏まない**(BL1 が赤だった原因そのものを避ける経路)。
+    ///
+    /// **layer 自身の main_target を次の背景として持ち越す時の罠**: fork の
+    /// `GpuTexturePool::begin_frame`(一次確認: `wgpu_resources/texture_pool.rs`)は、
+    /// 通常(import ではない)texture の参照が尽きると reclaim 時に
+    /// `res.texture.destroy()` を**明示的に**呼ぶ——`ViewBuilder` を drop した後の
+    /// `begin_frame()` サイクルで、`texture_manager_2d.import_gpu_premultiplied` 越しに
+    /// 持っている側から見ても実体が壊れる(import は「別の `wgpu::Texture` clone」を
+    /// 作るだけで、元の pool エントリの生存とは独立に守ってくれない——doc 参照:
+    /// `TextureManager2D::import_gpu_premultiplied` は「embedder は書き込み中に破棄
+    /// してはいけない」とは言うが、reclaim 側の `destroy()` は防いでくれない)。
+    /// そのため `view_builder.main_target().clone()` で `GpuTexture`(Arc)を
+    /// **明示的に握り続け**(`background` タプルの `.0`)、次の layer の背景として
+    /// 使い終わる(= 次の submit を poll で待ち終える)まで手放さない。
+    ///
+    /// 3. **最終変換は1回だけ**、既存の screenshot 経路
+    ///    ([`ViewBuilder::schedule_screenshot`]/[`ScreenshotProcessor`])を
+    ///    そのまま再利用する。全 layer を重ね終えた最後の main_target を、もう一度
+    ///    「背景 rect だけの ViewBuilder」として描き、その screenshot 読み戻しで
+    ///    `composite.wgsl` の unmultiply→ガンマ encode→re-multiply を**1回だけ**
+    ///    通す——[`Self::render`]/[`Self::render_with_timing`] が既にやっているのと
+    ///    **同じコード経路**を呼ぶだけで、この crate 側に新しい WGSL は1行も無い。
+    ///
+    /// **なぜこれでバイト一致するか**: 一括経路も逐次経路も、同じ順序で同じ
+    /// premultiplied-alpha over を同じ GPU の同じ srgb decode/encode 精度
+    /// (8bit 量子化込み)で行い、**最後に1回だけ**同じガンマ式を通す——
+    /// パスの境界(1つの render pass の中か・複数の submit にまたがるか)は
+    /// blend 演算そのものの数値には影響しない。`tests/sequential.rs` の overlap
+    /// fixture がこれをバイト一致で縛る(ORACLE、裁定161 受入条件)。
+    ///
+    /// **実装中に見つかった罠(背景 rect のフィルタ)**: `background_rect` は
+    /// `texture_filter_{magnification,minification}` を**両方明示的に `Nearest`**
+    /// にする必要がある(`RectangleOptions::default()` の既定は minification が
+    /// `Linear`)。`pinned_cancel` は既定カメラでも機械精度の恒等ではなく
+    /// (`motolii-core::camera` の試験が eps=1e-2 で縛る程度の近似)、この
+    /// full-canvas 矩形のスクリーン空間微分(`fwidth`)がちょうど 1.0 の際どい所を
+    /// 振れることがあり、既定の Linear minification へ落ちると直前までの合成結果
+    /// (内部に layer の縁を持つ)がバイリニアで滲んで layer の縁が最大 Δ29 ずれた
+    /// (実測、`background_rect` の doc 参照)。Nearest 固定で解消し、この関数の
+    /// バイト一致はそこに依存している。
     ///
     /// [`Self::render`]/[`Self::render_with_timing`]/[`Self::render_with_effects`] は
-    /// **無改造のまま** — この関数は並設した新しい入口で、既存3つの呼び出し元へ
+    /// **無改造のまま**——この関数は並設した入口で、既存3つの呼び出し元へ
     /// 一切波及しない。blend 式はまだ [`BlendMode::Normal`] 固定(式の分岐は
-    /// BL3/BL4)。ここで検証したのは「layer を1枚ずつ offscreen accumulator へ
-    /// 焼き込んでも、一括描画([`Self::render`])と同じ絵が出るか」——
-    /// **実測の結論は「出ない」**。理由と根拠は次のとおり(EVIDENCE_GAP 1 の解消)。
-    ///
-    /// ## 何を試したか
-    ///
-    /// layer ごとに独立した [`ViewBuilder`] を建て(既存 `render_with_timing` と同型の
-    /// 1-rect `RectangleDrawData`)、`view_builder.draw()` で layer 単体の
-    /// `main_target`(`Rgba8UnormSrgb`)を作り、**公開 API** [`ViewBuilder::composite`]
-    /// を呼んで、その結果を `Compositor` が所有する永続 accumulator texture
-    /// (`RenderContext::output_format_color()`、我々の headless 設定では
-    /// `Rgba8Unorm`)へ、`LoadOp::Load`(1枚目だけ `Clear`)で重ねて描いた。
-    /// `composite()` は fork 本体を1行も変えずに呼べる公開メソッドで、
-    /// `blend_with_background: BlendWithBackground::Premultiplied` を選ぶと
-    /// `render_pipeline_blended`(一次確認: `renderer/compositor.rs` の
-    /// `Compositor::create_renderer`)が `wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING`
-    /// で我々の accumulator の**現在の中身**に対して GPU 側 fixed-function blend を行う
-    /// ——「dst を読んで混ぜる」という accumulator の骨格そのものは、これで
-    /// fork を触らずに建った(EVIDENCE_GAP 1 の前半「fork 手術不要」はここまでは
-    /// 正しかった)。
-    ///
-    /// ## なぜバイト一致しないか(fork 手術なしでは越えられない境界)
-    ///
-    /// `composite.wgsl`(一次確認: `shader/composite.wgsl` 85-98行)は
-    /// `blend_with_background` の分岐と**無関係に無条件で**
-    /// 「unmultiply → 手動 `srgb_from_linear` → re-multiply」というガンマ変換を
-    /// 出力直前に必ず1回かける。これは「最終出力(non-srgb-tagged `Rgba8Unorm`)へ
-    /// 書き戻す時に1回だけ要る変換」として設計されている——上流の一括経路
-    /// (`render_with_timing`)では実際に**1回しか**通らない: 全 layer は同じ
-    /// `Rgba8UnormSrgb` main_target の中で GPU 自動 srgb decode/encode により
-    /// **linear 空間で**混ざり、その1枚の main_target が最後に1回だけ
-    /// `composite.wgsl` を通って `Rgba8Unorm` へ変換される。
-    ///
-    /// ところが `composite()` の render target format は
-    /// `ctx.output_format_color()` に**固定**されている(一次確認:
-    /// `renderer/compositor.rs` `render_pipeline_blended` の
-    /// `render_targets: [Some(ctx.output_format_color().into())]`、
-    /// pipeline 生成時に確定し差し替えられない)——これは我々の headless 設定では
-    /// `Rgba8Unorm`(non-srgb-tagged)である必要がある(`ScreenshotProcessor::
-    /// SCREENSHOT_COLOR_FORMAT` と一致させないと `RenderContext::new` 自体が
-    /// 想定と食い違う)。srgb-tagged でない format への書き込みは GPU 側の
-    /// 自動 srgb encode/decode を経ない、つまり **accumulator への `LoadOp::Load` は
-    /// 「ガンマ空間(non-linear)の8bit値」同士を fixed-function blend しているだけ**
-    /// になる。alpha-over は本来 linear 光量の空間でしか正しくない演算なので、
-    /// layer が**重ならない**か**不透明**な場合は問題が見えない(このモジュールの
-    /// `sequential_matches_render_for_a_single_opaque_layer`/`_for_empty_comp` は
-    /// 実測で緑)。しかし**半透明で重なる**代表 fixture
-    /// (`tests/sequential.rs::sequential_matches_render_for_overlapping_alpha_and_pinned_fixture`)
-    /// では実測で **赤**(バイト不一致)——重なり領域だけがガンマ空間 over と
-    /// linear 空間 over の差だけずれる。
-    ///
-    /// ## 境界を越えるには何が要るか(fork 手術の中身)
-    ///
-    /// linear 空間で正しく `over` するには、accumulator 自体を `Rgba8UnormSrgb`
-    /// (srgb-tagged)にし、GPU の自動 srgb decode/encode に blend を任せる必要がある。
-    /// しかし `composite()` の pipeline format は前述のとおり固定で、
-    /// `ViewBuilder` の `main_target_msaa`/`main_target_resolved`
-    /// (一次確認: `view_builder.rs` の `ViewTargetSetup` 構造体、59-63行)は
-    /// **private フィールドで公開アクセサが無い**——layer 単体の「まだガンマ変換前の
-    /// srgb-tagged 中間結果」を我々のコードから直接読み出す手段が無い。
-    /// つまり、この境界を越えるには次のどちらかが要る:
-    /// (a) `ViewTargetSetup` の main_target へのアクセサを fork へ追加する、
-    /// (b) `RectangleDrawData` を描く rectangles.rs のシェーダ/pipeline を
-    /// この crate 内へ丸ごと複製し、我々の srgb-tagged accumulator へ直接描く
-    /// (Glow のような「新規 shader を crate 内に建てる」型では済まない——
-    /// **既存 shader の複製**になり、複製元と数式・浮動小数演算順序が
-    /// 一致する保証を試験だけで背負うことになる)。
-    ///
-    /// どちらも本レーンの ALLOWLIST(fork 側ファイル不可)と NON-GOALS
-    /// (blend 式の実装は BL3/BL4)を超える——**この関数はここで止め、
-    /// EVIDENCE_GAP として返す**(裁定153 S2 の「无改造で通る」前例とは違い、
-    /// BL1 は「无改造では通らない」ことが実測の成果になったケース)。
-    ///
-    /// ## この関数が今なお存在する理由
-    ///
-    /// 「1枚ずつ描く」骨格・`composite()` を使った accumulator への civic な合流は
-    /// 現に動いており(既存3経路への影響ゼロ)、次に fork 手術判断をする時の
-    /// 具体的な着地点(`composite()` を使うなら何が越えられないか)を
-    /// 動くコードとテストで固定しておく方が、次のレーンの調査コストを下げる。
+    /// BL3/BL4、NON-GOALS)。
     pub fn render_sequential(
         &mut self,
         comp: CompSpec,
@@ -988,53 +989,10 @@ impl Compositor {
             -(projection.rotation * projection.eye),
         );
 
-        let accumulator_format = self.ctx.output_format_color();
-        let accumulator = self.ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("motolii-compositor-sequential-accumulator"),
-            size: wgpu::Extent3d {
-                width: comp.width,
-                height: comp.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: accumulator_format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let accumulator_view = accumulator.create_view(&Default::default());
-
-        // 空 comp、または少なくとも1回は accumulator を初期化する clear pass が要る
-        // (layer が無ければ以降のループが1度も回らない — `render` の「layer が無ければ
-        // clear 色」と同じ絵にするため、明示的に1回 clear する)。
-        {
-            let mut encoder = self
-                .ctx
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("motolii-compositor-sequential-init"),
-                });
-            {
-                let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("motolii-compositor-sequential-init-clear"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &accumulator_view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-            }
-            self.ctx.queue.submit([encoder.finish()]);
-        }
+        // 直前までの逐次合成結果。`.0` は fork pool の reclaim/destroy から実体を守る
+        // ための保持、`.1` はそれを rect の texture として使うための import(module doc
+        // 「罠」の節参照)。空 comp・1枚目の layer では背景 rect 自体を省く。
+        let mut background: Option<(GpuTexture, GpuTexture2D)> = None;
 
         for layer in layers {
             self.ctx.begin_frame();
@@ -1044,7 +1002,12 @@ impl Compositor {
             } else {
                 (layer.placement.transform, layer.placement.z)
             };
-            let rect = TexturedRect {
+
+            let mut rects: Vec<TexturedRect> = Vec::with_capacity(2);
+            if let Some((_, imported)) = &background {
+                rects.push(background_rect(comp, pinned_cancel, imported.clone()));
+            }
+            rects.push(TexturedRect {
                 top_left_corner_position: to_point3(
                     transform.transform_point2(glam::Vec2::ZERO),
                     z,
@@ -1074,9 +1037,9 @@ impl Compositor {
                     depth_offset: layer.placement.order,
                     ..Default::default()
                 },
-            };
+            });
 
-            let draw_data = RectangleDrawData::new(&self.ctx, &[rect])
+            let draw_data = RectangleDrawData::new(&self.ctx, &rects)
                 .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
 
             let mut view_builder = ViewBuilder::new(
@@ -1095,131 +1058,158 @@ impl Compositor {
                     blend_with_background: BlendWithBackground::Premultiplied,
                     ..Default::default()
                 },
-                re_renderer::ViewBuilderId::new(self.next_readback),
+                ViewBuilderId::new(self.next_readback),
             )
             .map_err(|e| CompositorError::View(e.to_string()))?;
             self.next_readback += 1;
 
             view_builder.queue_draw(&self.ctx, draw_data);
-            let layer_command_buffer = view_builder
+            let command_buffer = view_builder
                 .draw(&self.ctx, Rgba::TRANSPARENT)
                 .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-            // **第二 render パス禁止との関係は `render_with_effects` と同型**
-            // (裁定15/18・裁定141): 増えているのは同じ `RenderContext` への
-            // 追加コマンドバッファであって、別の合成器・別の描画エントリではない。
-            let mut composite_encoder =
-                self.ctx
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("motolii-compositor-sequential-composite"),
-                    });
-            {
-                let mut pass = composite_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("motolii-compositor-sequential-composite-pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &accumulator_view,
-                        depth_slice: None,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            // **accumulator へ dst を読んで重ねる骨格そのもの**:
-                            // `Load` は「今まで描いた分」を読み込む——ここが
-                            // 一括方式(`render_with_timing`)には無かった構造。
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                    multiview_mask: None,
-                });
-                // 公開 API。fork 側ファイルは1行も変更していない
-                // (上のモジュール doc 「なぜバイト一致しないか」参照)。
-                view_builder.composite(&self.ctx, &mut pass);
-            }
-
             self.ctx.before_submit();
-            self.ctx
-                .queue
-                .submit([layer_command_buffer, composite_encoder.finish()]);
-
+            self.ctx.queue.submit([command_buffer]);
             self.ctx.begin_frame();
             self.ctx
                 .device
                 .poll(wgpu::PollType::wait_indefinitely())
                 .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+            // **fork accessor 経由**(裁定161): 次の layer(または最終変換)の背景と
+            // して使えるよう、この main_target を握り続けたまま import する
+            // (module doc「罠」の節参照)。古い `background`(前回分)はここで
+            // drop されるが、直前の poll でその GPU 読み取りは完了済みなので安全。
+            let held: GpuTexture = view_builder.main_target().clone();
+            self.next_effect_key += 1;
+            let key = self.next_effect_key;
+            let imported = self
+                .ctx
+                .texture_manager_2d
+                .import_gpu_premultiplied(key, &self.ctx, &held.texture)
+                .map_err(|e| CompositorError::Effect(e.to_string()))?;
+            background = Some((held, imported));
         }
 
-        // accumulator を CPU へ読み戻す。`ScreenshotProcessor` は `ViewBuilder` に
-        // 紐づく仕組みなので、永続 accumulator には使えない——ここは素の
-        // `copy_texture_to_buffer` + `map_async` で読む(`ViewBuilder` が内部で
-        // やっていることと同じ wgpu の作法、この crate が独自に選んだものではない)。
-        let bytes_per_pixel = 4u32;
-        let unpadded_bytes_per_row = comp.width * bytes_per_pixel;
-        let padded_bytes_per_row =
-            wgpu::util::align_to(unpadded_bytes_per_row, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        // **最終変換は1回だけ**(module doc 3番)。既存の screenshot 経路を再利用する
+        // ——fork の `composite.wgsl` は無改造のまま、`render()`/`render_with_timing`
+        // と**同じ**コードで同じガンマ round-trip を1回だけ通す。
+        let mut final_rects: Vec<TexturedRect> = Vec::with_capacity(1);
+        if let Some((_, imported)) = &background {
+            final_rects.push(background_rect(comp, pinned_cancel, imported.clone()));
+        }
 
-        let readback_buffer = self.ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("motolii-compositor-sequential-readback"),
-            size: (padded_bytes_per_row * comp.height) as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+        let final_draw_data = RectangleDrawData::new(&self.ctx, &final_rects)
+            .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
 
-        let mut readback_encoder =
-            self.ctx
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("motolii-compositor-sequential-readback-copy"),
-                });
-        readback_encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                texture: &accumulator,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &readback_buffer,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded_bytes_per_row),
-                    rows_per_image: Some(comp.height),
+        let mut final_view_builder = ViewBuilder::new(
+            &self.ctx,
+            TargetConfiguration {
+                name: "motolii-comp-sequential-finalize".into(),
+                render_mode: RenderMode::Deterministic,
+                resolution_in_pixel: [comp.width, comp.height],
+                view_from_world,
+                projection_from_view: Projection::Perspective {
+                    vertical_fov: projection.vertical_fov_radians,
+                    near_plane_distance: projection.near_plane_distance,
+                    aspect_ratio: projection.aspect_ratio,
                 },
+                pixels_per_point: 1.0,
+                blend_with_background: BlendWithBackground::Premultiplied,
+                ..Default::default()
             },
-            wgpu::Extent3d {
-                width: comp.width,
-                height: comp.height,
-                depth_or_array_layers: 1,
-            },
-        );
-        self.ctx.queue.submit([readback_encoder.finish()]);
+            ViewBuilderId::new(self.next_readback),
+        )
+        .map_err(|e| CompositorError::View(e.to_string()))?;
+        self.next_readback += 1;
 
-        let slice = readback_buffer.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = tx.send(result);
-        });
+        final_view_builder.queue_draw(&self.ctx, final_draw_data);
+
+        let identifier = self.next_readback;
+        self.next_readback += 1;
+        final_view_builder
+            .schedule_screenshot(&self.ctx, identifier, ())
+            .map_err(|e| CompositorError::View(e.to_string()))?;
+
+        let command_buffer = final_view_builder
+            .draw(&self.ctx, Rgba::TRANSPARENT)
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+        self.ctx.before_submit();
+        self.ctx.queue.submit([command_buffer]);
+
+        self.ctx.begin_frame();
         self.ctx
             .device
             .poll(wgpu::PollType::wait_indefinitely())
             .map_err(|e| CompositorError::Draw(e.to_string()))?;
-        rx.recv()
-            .map_err(|_| CompositorError::ReadbackMissing)?
-            .map_err(|e| CompositorError::Draw(e.to_string()))?;
 
-        let mut frame = Vec::with_capacity((comp.width * comp.height * bytes_per_pixel) as usize);
-        {
-            let data = slice.get_mapped_range();
-            for row in 0..comp.height {
-                let start = (row * padded_bytes_per_row) as usize;
-                let end = start + unpadded_bytes_per_row as usize;
-                frame.extend_from_slice(&data[start..end]);
-            }
-        }
-        readback_buffer.unmap();
+        self.ctx.begin_frame();
 
-        Ok(frame)
+        let mut out: Option<Vec<u8>> = None;
+        ScreenshotProcessor::next_readback_result::<()>(&self.ctx, identifier, |data, _extent, ()| {
+            out = Some(data.to_vec());
+        });
+
+        out.ok_or(CompositorError::ReadbackMissing)
+    }
+}
+
+/// [`Compositor::render_sequential`] の「背景 rect」(module doc 参照): 直前までの
+/// 逐次合成結果を、画面に張り付く板として画面いっぱいに敷く。`pinned` layer が
+/// 使っているのと**同じ** `pinned_cancel` 変換を、full-canvas な矩形
+/// (`(0,0)-(comp.width,comp.height)`)に適用するだけ——新しい幾何は無い。
+fn background_rect(
+    comp: CompSpec,
+    pinned_cancel: glam::Affine2,
+    imported: GpuTexture2D,
+) -> TexturedRect {
+    TexturedRect {
+        top_left_corner_position: to_point3(pinned_cancel.transform_point2(glam::Vec2::ZERO), 0.0),
+        extent_u: to_vector3(
+            pinned_cancel.transform_vector2(glam::Vec2::new(comp.width as f32, 0.0)),
+        ),
+        extent_v: to_vector3(
+            pinned_cancel.transform_vector2(glam::Vec2::new(0.0, comp.height as f32)),
+        ),
+        colormapped_texture: ColormappedTexture {
+            texture: imported,
+            range: [0.0, 1.0],
+            // main_target は既に `Rgba8UnormSrgb`——GPU が読み込み時に自動 decode する。
+            // ここで software decode も重ねると二重補正になる(module doc 参照)。
+            decode_srgb: false,
+            // accumulator は既に premultiplied alpha——`from_unorm_rgba` の既定
+            // `SeparateAlpha`(もう一度 alpha を掛ける)は使えない。
+            texture_alpha: TextureAlpha::AlreadyPremultiplied,
+            gamma: 1.0,
+            color_mapper: ColorMapper::OffRGB,
+            shader_decoding: None,
+        },
+        options: RectangleOptions {
+            // 素通し(tint なし)。
+            multiplicative_tint: Rgba::from_rgba_premultiplied(1.0, 1.0, 1.0, 1.0),
+            // 常に最背面——同じ z(全て 0)の他 rect より必ず先に描かれる
+            // (`draw_phase_manager.rs` の transparent sort: 同じ distance では
+            // `depth_offset` 昇順、`i16::MIN` は他のどの layer の `order` よりも
+            // 小さい)。
+            depth_offset: i16::MIN,
+            // **両方 Nearest が必須**(実測で発見、`RectangleOptions::default()` は
+            // magnification=Nearest だが minification=Linear)。`pinned_cancel` は
+            // 既定カメラでも機械精度の恒等ではない(`motolii-core::camera` のテストが
+            // eps=1e-2 で縛っている程度の近似)ので、この full-canvas 矩形の
+            // スクリーン空間微分(`fwidth`)が 1.0 のごく僅か下に振れることがあり、
+            // `is_magnifying()` が稀に「縮小」側と判定して既定の Linear minification
+            // フィルタへ落ちる。すると直前までの合成結果(base+overlay の縁のような
+            // 内部エッジを持つ)がバイリニアで滲み、layer の縁が数 LSB〜Δ29 ずれる
+            // (実測: `debug_two_layer_grid` probe で overlay 左上角に集中して再現、
+            // Nearest/Nearest に固定した瞬間に消えた)。この矩形は「直前までの答えを
+            // そのまま複製する」だけの内部機構であって、ユーザー可視な layer の
+            // フィルタ方針(`render_with_timing` の既定のまま)とは別物なので、
+            // ここだけ明示的に固定する——layer 自身の rect(下のループ)は
+            // `render_with_timing` と同じ既定のまま変更しない。
+            texture_filter_magnification: re_renderer::renderer::TextureFilterMag::Nearest,
+            texture_filter_minification: re_renderer::renderer::TextureFilterMin::Nearest,
+            ..Default::default()
+        },
     }
 }

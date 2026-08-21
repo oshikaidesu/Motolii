@@ -39,21 +39,22 @@ license = "MIT OR Apache-2.0"
 # ---------------------------------------------------------------------------
 # rerun fork(store のみ。viewer 層は引かない)
 # ---------------------------------------------------------------------------
-# rev は旧 workspace と同じ `motolii/stage-camera-seat`(483b8559)。乖離台帳は
+# rev は fork `motolii/s2-append-to-store` tip(856f597c = camera seat 483b8559 の
+# 直上に `ViewBuilder::main_target()` accessor を1本足したコミット、裁定161 BL1b)。乖離台帳は
 # ../docs/reviews/2026-08-18-rerun-fork-seam-ledger.md。
 #
 # **ここに re_view_spatial / re_ui / re_viewer_context を足さないこと** —
 # それらは egui を引き、front が iced だけであるという軸が壊れる。
-re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
-re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
-re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
-re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
-re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
-re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
-re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c", features = ["encoder", "decoder"] }
-re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
-re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c" }
-re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "483b855961c0ccab7ef3f3854a8f1b040422572c", default-features = false }
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
+re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
+re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba", features = ["encoder", "decoder"] }
+re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
+re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba", default-features = false }
 
 # 版は rerun の workspace に合わせる。ずれると `IsoTransform` / `Vec3` が別型になる。
 wgpu = "29.0"
