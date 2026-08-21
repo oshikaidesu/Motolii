@@ -6,6 +6,7 @@
 use iced::widget::canvas;
 use iced::{Point, Rectangle, Size};
 
+use super::key_rows;
 use super::lane_bar;
 use super::projection::{frame_to_x, time_band_segment_frames, RULER_TICK_DIVISIONS};
 use super::TimelinePane;
@@ -84,7 +85,9 @@ pub(crate) fn draw(
         if index % 2 == 0 {
             continue; // 偶数行は地のまま(奇数行だけへ wash を乗せる)。
         }
-        let row_top = rows_top + row_height * index as f32;
+        // 選択 layer の下に property 行が挿入されている間、後続の層行は押し下がる
+        // (`TimelinePane::layer_row_top`、EXACT TARGET 1)。
+        let row_top = rows_top + pane.layer_row_top(index);
         frame.fill_rectangle(
             Point::new(0.0, row_top),
             Size::new(width, row_height),
@@ -95,7 +98,7 @@ pub(crate) fn draw(
 
     // 層の行。
     for (index, row) in pane.rows.iter().enumerate() {
-        let row_top = ruler_height + row_height * index as f32;
+        let row_top = ruler_height + pane.layer_row_top(index);
 
         if row.selected {
             // 状態: 選択(`state_selected`)。hover(`surface_hover`、中立グレー)とは
@@ -145,6 +148,11 @@ pub(crate) fn draw(
             pane.colors.border_hairline_weak,
         );
     }
+
+    // property 行(キー行、第2波 T3・裁定148/151) — 選択 layer の下に挿入する。
+    // 帯・キー菱形・rail 側のラベルは `key_rows.rs` が自己完結で描く(mod doc
+    // 参照)。
+    key_rows::draw(pane, &mut frame, rail_width, clip_width, width);
 
     // playhead(Session が正本)。クリップ面ローカル座標に rail_width を足す —
     // 結果として rail の外(x >= rail_width)にしか出ない(playhead は時間の

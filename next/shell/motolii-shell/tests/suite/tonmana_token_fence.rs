@@ -82,6 +82,7 @@ const SCANNED_FILES: &[&str] = &[
     "timeline/hit.rs",
     "timeline/canvas.rs",
     "timeline/input.rs",
+    "timeline/key_rows.rs",
     "timeline/lane_bar.rs",
     "settings_pane.rs",
     "lib.rs",
