@@ -118,6 +118,12 @@ const SCANNED_FILES: &[&str] = &[
     // tests/tonmana_token_fence.rs`)ので、ここで「走査ギャップ」は生まれない
     // (発注書「柵は緩めず・消さない」)。
     "lib.rs",
+    "menu.rs",
+    // M-menu MB-0+Edit(2026-08-22)で新設。header の "Edit" トリガー+
+    // dropdown を組み立てる(`button::Style`/`container::Style` の
+    // `background`/`border` を直接構築する) — `rail.rs` が TL-arch Phase 1で
+    // 追随した時と同じ理由でこの柵の対象に加える(柵は緩めず、新規ファイルも
+    // 追随させる)。
     "screenshot.rs",
     // `stage.rs` は裁定160 切片10で `motolii-stage-pane` crate へ抽出済み
     // (`next/ui/motolii-stage-pane/src/lib.rs`)——`settings_pane.rs`(切片9)と

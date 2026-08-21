@@ -132,9 +132,11 @@ fn atlas_includes_known_widgets_within_window_bounds() {
         "atlas が空 — dump 実装前(red)か walker が壊れている"
     );
 
-    // 既知 widget(header ボタンの文言、lib.rs 実測: Undo/Redo/+ Layer/Settings)が
-    // content 列に現れる — フル Shell::view を歩けていることの証拠。
-    for expected in ["Undo", "Redo", "+ Layer", "Settings"] {
+    // 既知 widget(header ボタンの文言、lib.rs 実測: Edit/Undo/Redo/+ Layer/
+    // Settings)が content 列に現れる — フル Shell::view を歩けていることの
+    // 証拠。"Edit" は M-menu MB-0+Edit(2026-08-22)で追加したメニューバー
+    // トップレベルの新規 target(発注書 RETURN「atlas に menubar が現れる」)。
+    for expected in ["Edit", "Undo", "Redo", "+ Layer", "Settings"] {
         assert!(
             rows.iter().any(|row| row[5] == expected),
             "atlas に既知 widget の content={expected:?} が無い — フル Shell::view を歩けていない疑い"
