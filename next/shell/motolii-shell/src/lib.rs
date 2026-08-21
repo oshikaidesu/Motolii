@@ -167,6 +167,18 @@ pub enum Message {
     /// (header の Undo/Redo ボタンと同じ即時操作の形)。
     InspectorToggleHidden,
 
+    // ---- Timeline レーンバー(裁定147・第2波T1) ----
+    /// レーンバーの M glyph クリック。`Intent::SetAttrs{hidden}` を1回出す
+    /// (`InspectorToggleHidden` と同じ形だが、対象は `Session::selection` では
+    /// なくクリックした行そのもの — 選択と無関係に M/S/L を操作できる)。
+    LaneBarToggleMute(LayerId),
+    /// レーンバーの S glyph クリック。`Intent::SetAttrs{solo}` を1回出す。
+    LaneBarToggleSolo(LayerId),
+    /// レーンバーの L glyph クリック。`Intent::SetAttrs{locked}` を1回出す。
+    /// **`locked` 自身の解除/再ロックだけは locked な行でも常に通る**
+    /// (`motolii_store::document::Intent::SetAttrs` 腕の規則、正典 §6)。
+    LaneBarToggleLock(LayerId),
+
     // ---- Inspector の drag-to-scrub ----
     /// 値セルの press。**まだ Document を書かない** — click か drag かは
     /// release まで未確定(`Shell::inspector_drag`)。
@@ -446,6 +458,9 @@ impl Shell {
             }
             Message::InspectorNameSubmit => self.commit_inspector_name(),
             Message::InspectorToggleHidden => self.toggle_inspector_hidden(),
+            Message::LaneBarToggleMute(layer) => self.toggle_layer_hidden(layer),
+            Message::LaneBarToggleSolo(layer) => self.toggle_layer_solo(layer),
+            Message::LaneBarToggleLock(layer) => self.toggle_layer_lock(layer),
             Message::InspectorValuePressed(field) => self.start_field_drag(field),
             Message::InspectorPointerMoved(point) => self.continue_field_drag(point),
             Message::InspectorPointerReleased => {
@@ -640,6 +655,24 @@ impl Shell {
         let Some(layer) = self.session.selection else {
             return;
         };
+        self.toggle_layer_hidden(layer);
+    }
+
+    // ---- Timeline レーンバー(裁定147・第2波T1) ----
+    //
+    // 3つとも同じ形: 現在値を読んで反転した `LayerAttrsPatch` を1回出す
+    // (`toggle_inspector_hidden` と同じ即時操作)。**対象は明示の `layer`**
+    // (`Session::selection` ではない) — レーンバーは選択と無関係にどの行の
+    // M/S/L も直接叩ける(裁定147「M/S/L もレーンバーで直接設定できる」)。
+    //
+    // 拒否の経路(M13)は書き口(`Document::write`)が既に持つ:
+    // `hidden`/`solo` は locked な行への書き込みを理由つき `Err` で拒む
+    // (`motolii_store::document::check`)。`locked` 自身は「解除/再ロックだけ
+    // 常に通す」規則があるので `toggle_layer_lock` だけは常に成功する。
+
+    /// M glyph。`LayerAttrs.hidden` をトグルする(`InspectorToggleHidden` と
+    /// 同じ書き口 — 対象の layer が違うだけ)。
+    fn toggle_layer_hidden(&mut self, layer: LayerId) {
         let current = self
             .doc
             .view()
@@ -654,6 +687,46 @@ impl Shell {
         };
         if let Err(error) = self.doc.apply(Intent::SetAttrs { layer, patch }) {
             self.status = Some(format!("hidden を書けない: {error}"));
+        }
+    }
+
+    /// S glyph。`LayerAttrs.solo` をトグルする。
+    fn toggle_layer_solo(&mut self, layer: LayerId) {
+        let current = self
+            .doc
+            .view()
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+            .solo;
+        let patch = LayerAttrsPatch {
+            solo: Some(!current),
+            ..Default::default()
+        };
+        if let Err(error) = self.doc.apply(Intent::SetAttrs { layer, patch }) {
+            self.status = Some(format!("solo を書けない: {error}"));
+        }
+    }
+
+    /// L glyph。`LayerAttrs.locked` をトグルする。locked 自身への書き込みは
+    /// `Document::write` が locked な行でも常に通す(先に触れなくなる詰みを
+    /// 作らない規則、`motolii_store::attrs::LayerAttrs::locked` の doc 参照)。
+    fn toggle_layer_lock(&mut self, layer: LayerId) {
+        let current = self
+            .doc
+            .view()
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+            .locked;
+        let patch = LayerAttrsPatch {
+            locked: Some(!current),
+            ..Default::default()
+        };
+        if let Err(error) = self.doc.apply(Intent::SetAttrs { layer, patch }) {
+            self.status = Some(format!("locked を書けない: {error}"));
         }
     }
 

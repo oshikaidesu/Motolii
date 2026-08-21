@@ -15,10 +15,13 @@
 //! ## 層の分担(第2波レーン分割時の write-set の割り当て先)
 //! - [`projection`] … 投影の純関数(`rows`/`frame_to_x`/`frame_at_x`/
 //!   `time_band_segment_frames`)。Document/Session を読むだけ
-//! - [`hit`] … `Hit` 型と `hit_test`(座標 → 当たり判定)
+//! - [`hit`] … `Hit` 型と `hit_test`(座標 → 当たり判定、クリップ面専用)
 //! - [`canvas`] … 絵(`draw`/`draw_ruler_ticks`/`draw_hairline`/`draw_time_bands`)
 //! - [`input`] … 入力(`update`/`mouse_interaction`)と drag 状態
 //!   ([`Interaction`])
+//! - [`lane_bar`] … レーンバー(行ヘッダ列、裁定147)専用の draw+hit。
+//!   スウォッチ・名前・M/S/L トグル。自分のゾーン(`x < rail_width`)だけを
+//!   自己完結で持ち、`hit`/`canvas` のクリップ面ロジックには触れない
 //!
 //! `canvas::Program` は1トレイトにつき1つの impl しか持てない(Rust の制約)ので、
 //! 本体の trait impl はここ(mod.rs)に置き、各メソッドは対応する層の関数へ
@@ -31,6 +34,7 @@
 mod canvas;
 mod hit;
 mod input;
+mod lane_bar;
 mod projection;
 
 pub use hit::{hit_test, Hit};
@@ -73,6 +77,13 @@ impl TimelinePane {
     /// 第1波は測定済みの行高をそのまま流用する(独自の寸法を発明しない)。
     fn ruler_height(&self) -> f32 {
         self.dims.row_height
+    }
+
+    /// レーンバー(行ヘッダ列)幅。座標シフトの唯一の出典 — ルーラ/クリップ面は
+    /// この値ぶん右へずらして描く(`projection::frame_to_x`/`frame_at_x` 自体は
+    /// 汚さない、mod doc 参照)。
+    fn rail_width(&self) -> f32 {
+        self.dims.timeline_lane_bar_width
     }
 
     fn content_height(&self) -> f32 {

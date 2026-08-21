@@ -168,8 +168,13 @@ fn clicking_the_ruler_band_publishes_scrub_to_via_raw_coordinates() {
     let x = 200.0_f32;
     // 期待値は timeline_pane 自身の純粋関数から出す(数値をここで再発明しない —
     // `frame_at_x` は drive.rs の `timeline_scrub_math_maps_pixel_to_frame` が
-    // 別途単体で見ている)。
-    let expected_frame = frame_at_x(x, DEFAULT_WIDTH, 300);
+    // 別途単体で見ている)。座標シフト(裁定147・レーンバー新設、EXACT TARGET 3):
+    // クリップ面はレーンバー幅ぶん右へずれるので、期待値もクリップ面ローカル
+    // 座標(`x - rail_width`)・クリップ面幅(`DEFAULT_WIDTH - rail_width`)で
+    // 計算する(`timeline/input.rs::update` が canvas click 座標に対して行う
+    // のと同じ引き算)。
+    let rail_width = tokens.dims.timeline_lane_bar_width;
+    let expected_frame = frame_at_x(x - rail_width, DEFAULT_WIDTH - rail_width, 300);
 
     let mut ui = iced_test::simulator(pane.view());
     ui.point_at(iced::Point::new(x, 5.0)); // ルーラー帯(高さ = row_height の内側)は常に scrub

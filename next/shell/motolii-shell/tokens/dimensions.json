@@ -52,6 +52,9 @@
   "inspector_glyph_width": 18,
   "_note_inspector_glyph_width": "同 mock の --hit(18)。Key/M/S glyph 列の幅。Key 列自体は空のまま(Q0: keyframe UI 未実装、列幅の予約だけ)",
 
+  "timeline_lane_bar_width": 150,
+  "_note_timeline_lane_bar_width": "視覚正本 ui-scale-and-z.html の `.thead{width:calc(150 * var(--s) * 1px)}`(Timeline の行ヘッダ列=レーンバー幅、裁定147)。M/S/L glyph 自体の幅は新トークンを増やさず inspector_glyph_width(--hit)を使い回す",
+
   "ui_scale": 1.00,
   "_note_ui_scale": "mock --s 相当の UI 拡大率(1.00 基準、0.01刻み)。適用点は Dimensions::scaled の1箇所だけ(Shell::dims が呼ぶ)。仮の置き場 — Workspace 永続機構がまだ無いため、暫定的にこの JSON トークンファイルへ置く(発注書の指示どおり)。Workspace 実装後はそちらへ移す"
 }

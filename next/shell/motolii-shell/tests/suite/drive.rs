@@ -237,6 +237,8 @@ fn timeline_rows_carry_hidden_flag_without_dropping_the_row() {
         id: motolii_store::LayerId(1),
         name: String::new(),
         hidden: true,
+        solo: false,
+        locked: false,
         start: 0,
         duration: 10,
         selected: false,
@@ -266,6 +268,8 @@ fn timeline_hit_test_distinguishes_bar_ruler_and_blank_row() {
         id: motolii_store::LayerId(1),
         name: "clip".to_owned(),
         hidden: false,
+        solo: false,
+        locked: false,
         start: 100,
         duration: 50,
         selected: false,
@@ -313,6 +317,93 @@ fn timeline_hit_test_distinguishes_bar_ruler_and_blank_row() {
         ),
         Hit::Blank,
         "同じ行でも bar の外は行の空白部(scrub)のはず"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Timeline レーンバー(裁定147・第2波T1)
+// ---------------------------------------------------------------------------
+
+/// **オラクル(a)**: M glyph クリックで Document の hidden(mute)が反転し、
+/// Undo 1回で戻る。
+#[test]
+fn lane_bar_mute_toggle_flips_hidden_and_undoes_in_one_step() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+    let id = shell.timeline_rows()[0].id;
+    assert!(!shell.timeline_rows()[0].hidden, "初期状態が hidden であってはいけない");
+
+    shell.update(Message::LaneBarToggleMute(id));
+    assert!(
+        shell.timeline_rows()[0].hidden,
+        "M glyph クリックで hidden が反転しない"
+    );
+
+    shell.update(Message::Undo);
+    assert!(
+        !shell.timeline_rows()[0].hidden,
+        "Undo 1回で hidden が元に戻らない(1操作=1undo、M10違反)"
+    );
+}
+
+/// **オラクル(b)**: locked な行への解除以外の書き込み(M/S)は理由つきで拒否
+/// される(M13)。`locked` 自身の解除/再ロックだけは locked な行でも常に通る
+/// (`motolii_store::attrs::LayerAttrs::locked` の規則)。
+#[test]
+fn lane_bar_lock_blocks_other_writes_with_a_reason_but_unlock_always_wins() {
+    let mut shell = shell();
+    shell.update(Message::AddLayer);
+    let id = shell.timeline_rows()[0].id;
+
+    shell.update(Message::LaneBarToggleLock(id));
+    assert!(shell.timeline_rows()[0].locked, "L glyph クリックで locked にならない");
+    assert_eq!(
+        shell.status(),
+        None,
+        "locked 自身の設定は常に通るはずなのに拒否理由が出ている"
+    );
+
+    shell.update(Message::LaneBarToggleMute(id));
+    assert!(
+        !shell.timeline_rows()[0].hidden,
+        "locked な行への M(hidden)書き込みが通ってしまっている"
+    );
+    assert!(
+        shell.status().is_some(),
+        "locked な行への拒否が status 帯に出ていない(M13: 無反応ゼロ違反)"
+    );
+
+    shell.update(Message::LaneBarToggleSolo(id));
+    assert!(
+        !shell.timeline_rows()[0].solo,
+        "locked な行への S(solo)書き込みが通ってしまっている"
+    );
+    assert!(
+        shell.status().is_some(),
+        "locked な行への S 拒否が status 帯に出ていない(M13)"
+    );
+
+    // 解除(locked 自身の書き込み)だけは常に通る — 二度と触れなくなる詰みを作らない。
+    shell.update(Message::LaneBarToggleLock(id));
+    assert!(
+        !shell.timeline_rows()[0].locked,
+        "locked の解除が locked な行自身の操作なのに拒否されている"
+    );
+}
+
+/// **オラクル(c、構造テスト)**: クリップ面(`timeline/canvas.rs`)がレイヤー名
+/// (`row.name`)を一切参照しないこと(裁定147「クリップ面にレイヤー名を描かない」)。
+/// canvas は headless では rasterize できない(モジュール doc 参照)ので、実際に
+/// 画素を読む代わりにソースを読む — 修正前はここが `row.name` を含んでいたので
+/// 赤から始まる。
+#[test]
+fn clip_face_source_no_longer_references_the_layer_name() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/timeline/canvas.rs");
+    let source = std::fs::read_to_string(&path).expect("timeline/canvas.rs を読めない");
+    assert!(
+        !source.contains("row.name"),
+        "クリップ面(canvas.rs)がまだレイヤー名(row.name)を参照している — \
+         裁定147: 名前の住所はレーンバー(lane_bar.rs)へ一本化したはず"
     );
 }
 
@@ -400,6 +491,10 @@ fn dimensions_json_source_of_truth_has_the_full_vocabulary() {
     assert!(
         dims.panel_header_height > dims.row_height,
         "panel header が行高より低い"
+    );
+    assert!(
+        dims.timeline_lane_bar_width > dims.inspector_glyph_width * 3.0,
+        "レーンバー幅が M/S/L glyph 3個ぶんより狭い(收まらない): {dims:?}"
     );
 }
 
