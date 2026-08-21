@@ -142,3 +142,13 @@ debug = "line-tables-only"
 
 [profile.test]
 debug = "line-tables-only"
+
+# ---------------------------------------------------------------------------
+# ローカル検証用 patch(裁定161 BL1b)— fork へ `ViewBuilder::main_target()`
+# accessor を追加したコミットをまだ push していないため、pin rev では検証できない。
+#
+# supervisor: 検収時にこの patch section を外し、上の re_renderer の rev を
+# accessor コミットの SHA へ差し替えて除去すること。供給 rev が push 前なので、
+# これが唯一の正直な形(隠すより明示)。
+[patch."https://github.com/oshikaidesu/rerun"]
+re_renderer = { path = "/Users/member_ottoto/rust_ae/rerun-s2-seam-20260818/crates/viewer/re_renderer" }

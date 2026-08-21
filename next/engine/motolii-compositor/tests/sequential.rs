@@ -45,19 +45,16 @@ fn placement(offset: [f32; 2], order: i16, opacity: f32) -> LayerPlacement {
 /// ORACLE(b): 代表 fixture(2 layer 重なり・alpha 半透明・pinned 混在)で
 /// `render` と `render_sequential` がバイト一致すること。
 ///
-/// **実測で赤(EVIDENCE_GAP)**: `render_sequential` のモジュール doc(`src/lib.rs`)が
-/// 理由を書いている——`ViewBuilder::composite` の render target format が
-/// `RenderContext::output_format_color()` に固定されていて srgb-tagged にできず、
-/// GPU 自動 srgb decode/encode(= linear 空間の alpha-over)を accumulator へ
-/// 持ち込めない。実測: 4096 画素中 1264 画素が不一致、最大チャンネル差49
-/// (`cargo test -p motolii-compositor --test sequential -- --nocapture` で再現)。
-/// `ignore`: このオラクルは「fork 手術なしには緑にできない」という**成果**を
-/// 固定するために残す(裁定160 BL1「止まる許可」)。plumbing 自体
-/// (単一 layer・空 comp)が壊れていないことは下の2試験が緑で縛っている。
+/// **裁定161 BL1b で緑化**: BL1(裁定160)では `ViewBuilder::composite` しか
+/// 使えず赤だった(`RenderContext::output_format_color()` に固定された
+/// non-srgb-tagged format にしか描けず、layer 毎にガンマ round-trip を踏んで
+/// いた)。fork へ `ViewBuilder::main_target()` read accessor を足し(BL1b)、
+/// `render_sequential` を「per-layer は srgb-tagged accumulator への
+/// blit-blend(GPU 自動 decode/encode 任せ、composite() 不使用)・最終変換は
+/// 全 layer を重ね終えた後に1回だけ」という形へ書き換えた結果、この fixture は
+/// バイト一致する(`src/lib.rs` の `Compositor::render_sequential` module doc
+/// 参照)。plumbing の健全性(単一 layer・空 comp)は下の2試験が別途縛る。
 #[test]
-#[ignore = "EVIDENCE_GAP: composite() は non-srgb-tagged 固定 format にしか描けず、\
-            accumulator へ linear 空間の over を持ち込めない(src/lib.rs の render_sequential doc 参照)。\
-            fork 側の ViewBuilder に main_target アクセサを足すか、rectangles.rs 相当を複製しない限り緑にならない。"]
 fn sequential_matches_render_for_overlapping_alpha_and_pinned_fixture() {
     let mut compositor = Compositor::headless().expect("headless GPU");
 
