@@ -9,7 +9,8 @@
 //! 歩いて得る(`iced_core::widget::Operation::text` 経由)。`text(..)` に
 //! 明示 `.width()` が無い(`Length::Shrink`)場合、`iced_core::widget::text::
 //! layout` は `layout::sized` で **layout 上のサイズだけ**を親の `Limits::max`
-//! (= このコードでは値セルの箱幅 38px)へ丸め込む(実測: `characterization_
+//! (= このコードでは値セルの箱幅、`dims.inspector_value_width` = I-tokens
+//! (2026-08-22)以降 64px)へ丸め込む(実測: `characterization_
 //! tests::a_shrink_text_widget_inside_a_fixed_width_container_reports_layout_
 //! bounds_clamped_to_the_container_width` 参照)。**しかし実描画(`draw()`)は
 //! `paragraph.min_bounds()` という自然サイズを基準に文字を配置する** ——
@@ -159,13 +160,16 @@ fn adjacent_value_cell_boxes_are_separated_by_the_expected_gap() {
 }
 
 /// **特性計測**(oracle ではなく実測記録): `.clip(true)` が実際に何を切る
-/// 必要があるかを数値で残す。「960.000」(値セルの実測フォント・サイズ)の
-/// 自然幅(制約なし)は既定 dims の箱幅(38px)より広い — これが「箱の gap は
-/// 0でないのに文字は重なる」の直接証拠。`iced_widget::text::layout` が
-/// `Length::Shrink` な `text(..)` を `Length::Fixed(38)` の `container` へ
-/// 収めると、報告される `Target::Text` の layout bounds は箱幅ちょうどへ
-/// 丸め込まれる(自然幅とは別物) — この2つの値の差が、`clip(true)` 無しでは
-/// 実描画時に隣へ滲む量。
+/// 必要があるかを数値で残す。**I-tokens(2026-08-22)で content を更新** —
+/// 旧アンカー「960.000」(自然幅38.83px)は旧セル幅38px時代の実例で、新セル幅
+/// 64px ではもう箱を超えない(collapsed の証拠にならない)。[`MAX_VALUE_CELL_
+/// CHARS`](crate ドキュメント参照)の再較正で見つけた新アンカーの外側
+/// 「12345678.000」(12字、自然幅64.922px)を使う — これは既定 dims の箱幅
+/// (64px)より広い、これが「箱の gap は0でないのに文字は重なる」の直接証拠。
+/// `iced_widget::text::layout` が `Length::Shrink` な `text(..)` を
+/// `Length::Fixed(64)` の `container` へ収めると、報告される `Target::Text`
+/// の layout bounds は箱幅ちょうどへ丸め込まれる(自然幅とは別物) — この2つの
+/// 値の差が、`clip(true)` 無しでは実描画時に隣へ滲む量。
 #[test]
 fn a_shrink_text_widget_inside_a_fixed_width_container_reports_layout_bounds_clamped_to_the_container_width(
 ) {
@@ -173,7 +177,7 @@ fn a_shrink_text_widget_inside_a_fixed_width_container_reports_layout_bounds_cla
     use iced::Length;
 
     let dims = Dimensions::default();
-    let content = "960.000";
+    let content = "12345678.000";
 
     let natural: iced::Element<'static, motolii_inspector_pane::Message> =
         text(content.to_owned()).size(dims.body_text).into();

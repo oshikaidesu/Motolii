@@ -69,26 +69,38 @@ pub struct Dimensions {
     /// (mock の `--section` が `.ptitle`/`.sec` 両方に効くのと同じ理由、下記参照)。
     pub panel_header_height: f32,
     /// Inspector pane の固定幅。出典は Ableton 実測ではなく**視覚正本 HTML/CSS 自体**
-    /// (旧 `docs/mocks-ui/public/inspector-library.css` `.inspectorShell { width:
-    /// min(100%, 496px) }`)。**496 のまま据え置き**(300 への変更は利用者裁定待ち、
-    /// CANON 記載)— 新 mock(`ui-scale-and-z.html`)の `--pane: 300` はこの pane 幅の
-    /// 出典として採らない。
+    /// — **I-tokens(2026-08-22)**: 出典を `next/reference/mocks/inspector-library.html`
+    /// v3.1(利用者合格・転写正本)へ更新(`.inspectorShell{width:min(100%,496px)}`)。
+    /// 値そのものは旧 `docs/mocks-ui/public/inspector-library.css` から不変(496) —
+    /// I-ratio 台帳が発見した二重モック構造(この値だけ inspector-library 由来、
+    /// row_height/value_width/glyph_width は ui-scale-and-z.html 由来)を、4値とも
+    /// inspector-library v3.1 へ揃えて解消した(300 への変更は不採用のまま確定)。
     pub inspector_panel_width: f32,
-    /// Inspector property 行 / column header 行の高さ。出典: 視覚正本
-    /// `ui-scale-and-z.html` `--row`(20)。旧値25(旧 CSS `.propertyRow
-    /// { min-height: 25px }` 由来)から新 mock へ更新。
+    /// Inspector property 行 / column header 行の高さ。**I-tokens(2026-08-22)**:
+    /// 出典を `next/reference/mocks/inspector-library.html` v3.1 へ統一
+    /// (`.propertyRow{min-height:25px}`)。旧値20(`ui-scale-and-z.html` `--row`
+    /// 由来、二重モック構造の片割れ)から更新 — I-ratio 台帳の FINDING
+    /// (`body_text`/`inspector_row_height` = 0.55 が裁定168 の帯 0.42±0.05 の外)
+    /// をこの書き換えで根治(11/25=0.44 は帯の内)。
     pub inspector_row_height: f32,
-    /// Inspector の `--section`(26)。**2箇所で共有**: panel タイトル帯(`.ptitle`、
-    /// 旧実装は `panel_header_height` を誤用していた)と section 見出し
-    /// (TRANSFORM/APPEARANCE、`.sec`)。mock 自身がこの2つに同じ変数を使っている
-    /// ので、token も1本のまま両方へ渡す。
+    /// Inspector の section 見出し帯高(26)。**2箇所で共有**: panel タイトル帯
+    /// (`.ptitle`、旧実装は `panel_header_height` を誤用していた)と section 見出し
+    /// (TRANSFORM/APPEARANCE、`.sec`)。inspector-library.css の `.tableSection h2`
+    /// (26)と旧 `ui-scale-and-z.html` の `--section`(26)が値として一致していたため
+    /// 変更なし — 出典だけ I-tokens(2026-08-22)で inspector-library v3.1 へ統一。
     pub inspector_section_header_height: f32,
-    /// Inspector 値セル(X/Y/Z)1つぶんの幅。出典: 視覚正本の
-    /// `grid-template-columns: 1fr repeat(3, 38px) hit` の `38px` 段。
-    /// 旧値64(旧 CSS 由来)から新 mock へ更新。
+    /// Inspector 値セル(X/Y/Z)1つぶんの幅。**I-tokens(2026-08-22)**: 出典を
+    /// `next/reference/mocks/inspector-library.html` v3.1 へ統一
+    /// (`grid-template-columns: minmax(132px,1fr) repeat(3,64px) 26px` の `64px` 段)。
+    /// 旧値38(`ui-scale-and-z.html` `--pane:300` 前提の別モック由来 — 300px pane へ
+    /// 正規化した時だけ旧64px値と辻褄が合っていた、I-ratio 台帳 §3.1)から更新。
     pub inspector_value_width: f32,
-    /// Inspector の Key/M/S glyph 列の幅。出典: 視覚正本 `--hit`(18)。
-    /// **Key 列自体は空のまま**(Q0: keyframe UI 未実装、列幅の予約だけ)。
+    /// Inspector の Key/M/S glyph 列の幅。**I-tokens(2026-08-22)**: 出典を
+    /// `next/reference/mocks/inspector-library.html` v3.1 へ統一(同 grid の末尾
+    /// `26px` 段)。旧値18(`ui-scale-and-z.html` `--hit` 由来)から更新。**Key 列
+    /// 自体は空のまま**(Q0: keyframe UI 未実装、列幅の予約だけ)。Timeline の
+    /// M/S/L glyph は T-rail(裁定172 §2)で既にこの token の借用をやめ独自比率
+    /// (`lane_bar::glyph_size_px`)へ転写済みなので、この値変更は Timeline に波及しない。
     #[serde(default = "default_inspector_glyph_width")]
     pub inspector_glyph_width: f32,
     /// Timeline のレーンバー(行ヘッダ列)幅。出典: 視覚正本
@@ -118,7 +130,7 @@ pub struct Dimensions {
 }
 
 fn default_inspector_glyph_width() -> f32 {
-    18.0
+    26.0
 }
 
 fn default_timeline_lane_bar_width() -> f32 {
@@ -153,10 +165,10 @@ impl Default for Dimensions {
             border_width: 1.0,
             panel_header_height: 29.0,
             inspector_panel_width: 496.0,
-            inspector_row_height: 20.0,
+            inspector_row_height: 25.0,
             inspector_section_header_height: 26.0,
-            inspector_value_width: 38.0,
-            inspector_glyph_width: 18.0,
+            inspector_value_width: 64.0,
+            inspector_glyph_width: 26.0,
             timeline_lane_bar_width: 150.0,
             timeline_param_row_height: 16.67,
             ui_scale: 1.0,
