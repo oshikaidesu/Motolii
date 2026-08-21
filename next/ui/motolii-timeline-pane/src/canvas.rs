@@ -238,7 +238,7 @@ fn draw_ruler_ticks(pane: &TimelinePane, frame: &mut canvas::Frame, x0: f32, wid
     if pane.duration_frames <= 0 || width <= 0.0 {
         return;
     }
-    let (minor, major) = tick_steps(pane.fps, pane.duration_frames, width);
+    let (minor, major) = tick_steps(pane.fps, pane.duration_frames, width, pane.dims.row_height);
     let last_frame = (pane.duration_frames - 1).max(0);
     let mut frame_no = 0i64;
     while frame_no <= last_frame {
@@ -310,7 +310,8 @@ fn draw_time_bands(
     if pane.duration_frames <= 0 || width <= 0.0 || bottom <= top {
         return;
     }
-    let segment_frames = time_band_segment_frames(pane.fps, pane.duration_frames, width);
+    let segment_frames =
+        time_band_segment_frames(pane.fps, pane.duration_frames, width, pane.dims.row_height);
 
     let mut segment_index: i64 = 0;
     let mut start_frame: i64 = 0;
@@ -354,7 +355,7 @@ fn draw_tick_lines(
     if pane.duration_frames <= 0 || width <= 0.0 || bottom <= top {
         return;
     }
-    let (minor, major) = tick_steps(pane.fps, pane.duration_frames, width);
+    let (minor, major) = tick_steps(pane.fps, pane.duration_frames, width, pane.dims.row_height);
     let last_frame = (pane.duration_frames - 1).max(0);
     let mut frame_no = minor;
     while frame_no <= last_frame {
