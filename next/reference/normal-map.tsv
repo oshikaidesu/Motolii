@@ -427,15 +427,15 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 426	color	Use Display Color Management	ディスプレイカラーマネジメントを使用	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ディスプレイカラーマネジメント切替は一般的な出力精度機能。除外根拠なし
 427	color	Video Scopes	ビデオスコープ表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	波形/ベクトルスコープは普通の動画ソフトが持つ標準QCツール(グレーディングスイート固有ではない)
 428	color	Video Scopes	Shift+Command+W	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	波形/ベクトルスコープは普通の動画ソフトが持つ標準QCツール(グレーディングスイート固有ではない)
-429	edit_basic	Copy	コピー	1	1	1	1	4	4:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF);単一(WebSearch要約経由・要一次確認)		採用済	U1
-430	edit_basic	Paste	貼り付け	1	1	1	1	4	4:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF);単一(同上)		採用済	U1
+429	edit_basic	Copy	コピー	1	1	1	1	4	4:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF);単一(WebSearch要約経由・要一次確認)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)
+430	edit_basic	Paste	貼り付け	1	1	1	1	4	4:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF);単一(同上)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)
 431	edit_basic	Clear / Delete	選択項目を削除	1	1	1	0	3	3:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	TimelineDeleteSelectedKeys(shell/lib.rs)
-432	edit_basic	Cut	切り取り	1	1	1	0	3	3:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	U1
-433	edit_basic	Deselect All	選択解除	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	U1
-434	edit_basic	Duplicate	複製	1	1	0	1	3	3:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);単一(同上・信頼度低)		採用済	U1
-435	edit_basic	Redo	やり直す	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	Message::Redo(shell/lib.rs)
-436	edit_basic	Select All	すべて選択	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	U1
-437	edit_basic	Undo	元に戻す	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	Message::Undo(shell/lib.rs)
+432	edit_basic	Cut	切り取り	1	1	1	0	3	3:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)
+433	edit_basic	Deselect All	選択解除	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)
+434	edit_basic	Duplicate	複製	1	1	0	1	3	3:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);単一(同上・信頼度低)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)
+435	edit_basic	Redo	やり直す	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)
+436	edit_basic	Select All	すべて選択	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)
+437	edit_basic	Undo	元に戻す	1	1	1	0	3	3:3:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(Adobe);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)
 438	edit_basic	Edit Original	元アプリで編集	1	1	0	0	2	2:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用予定	
 439	edit_basic	Find	検索	1	1	0	0	2	2:1:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用予定	
 440	edit_basic	Paste Attributes	属性・プロパティを貼り付け	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	
