@@ -68,6 +68,7 @@ pub use projection::{
 /// (`ruler_h = dims.row_height`・inset = `spacing_xs` 等)は、この export を
 /// 使うよう置き換えるのが次の一手(未着手、report で明記)。
 pub use canvas::{bar_corner_radius, bar_inset, major_tick_length, minor_tick_length, ruler_height};
+pub use lane_bar::glyph_size_px;
 pub use write::{Message, PaneState};
 
 use iced::{Element, Length, Rectangle};

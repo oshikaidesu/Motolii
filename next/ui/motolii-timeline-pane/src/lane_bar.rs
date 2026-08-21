@@ -114,7 +114,11 @@ fn swatch_color(row: &RowProjection, colors: &Colors) -> Rgba {
 /// (`--row=26px` = 0.4615…)を `round(0.462 × 行高)` へ丸めた比で転写
 /// (裁定172 §2 (2))。Inspector の `inspector_glyph_width`(18px 枠線箱)の
 /// 借用はここで終わる — Timeline 自身の mock 実測に切り替える。
-fn glyph_size_px(row_height: f32) -> f32 {
+/// pub の理由: shell 側テスト(`timeline_key_rows_drive.rs`)がグリフの
+/// クリック座標を**この関数から導出**する — 式の複製を持たせない
+/// (T-rail 検収で複製コピーが red になった実害への追随、canvas.rs の
+/// 比率関数 pub 化と同じ判断)。
+pub fn glyph_size_px(row_height: f32) -> f32 {
     (row_height * 0.462).round().max(1.0)
 }
 

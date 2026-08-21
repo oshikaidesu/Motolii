@@ -475,21 +475,24 @@ fn pushed_layer1_bar_point(dims: &motolii_shell::tokens::Dimensions) -> iced::Po
     iced::Point::new(x, y)
 }
 
-/// レーンバー内、layer1(押し下げ後)の M glyph 中心の画面座標。`lane_bar.rs::
-/// glyph_slots` と同じ式(rail 右端から `spacing_s` 空けて3個右詰め、M が先頭)。
+/// レーンバー内、layer1(押し下げ後)の M glyph 中心の画面座標。**幾何の式を
+/// 複製しない** — グリフ寸は正本([`timeline_pane::glyph_size_px`]、裁定172 の
+/// 12px 塗りチップ)・ruler 高も正本([`timeline_pane::ruler_height`]、裁定172 の
+/// 0.846×行高)から導出する。旧版は `inspector_glyph_width`(18px 箱)と
+/// 「ruler 高=行高」の複製コピーを固定しており、T-rail/T-canvas の転写で
+/// 実際に red になった(座標が新しい小さいグリフに当たらず Row hit へ落ちた)。
 fn pushed_layer1_mute_glyph_point(dims: &motolii_shell::tokens::Dimensions) -> iced::Point {
     let rail_width = dims.timeline_lane_bar_width;
-    let glyph_w = dims.inspector_glyph_width;
+    let glyph_w = timeline_pane::glyph_size_px(dims.row_height);
     let gap = dims.spacing_xs;
     let block_w = glyph_w * 3.0 + gap * 2.0;
     let mute_x0 = rail_width - dims.spacing_s - block_w;
 
-    let row_top =
-        dims.row_height + layer_row_top_mirror(dims.row_height, dims.timeline_param_row_height, 1, 0, 1);
-    let glyph_h = (dims.row_height - dims.spacing_xs).max(1.0);
-    let glyph_y0 = row_top + (dims.row_height - glyph_h) / 2.0;
+    let row_top = timeline_pane::ruler_height(dims.row_height)
+        + layer_row_top_mirror(dims.row_height, dims.timeline_param_row_height, 1, 0, 1);
+    let glyph_y0 = row_top + (dims.row_height - glyph_w) / 2.0;
 
-    iced::Point::new(mute_x0 + glyph_w / 2.0, glyph_y0 + glyph_h / 2.0)
+    iced::Point::new(mute_x0 + glyph_w / 2.0, glyph_y0 + glyph_w / 2.0)
 }
 
 /// **ORACLE (1/2)**: property 行が展開されている間、その下の layer1 の bar を
