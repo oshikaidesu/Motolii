@@ -7,8 +7,8 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| S3: engine 語彙変換 | 実装(cargo) | lane-engine | ResolvedEffect→EffectPass(translate_blend_mode と同型)。render を render_with_effects へ切替 |
-| Timeline 切片0: ファイル分割 | 実装(cargo) | lane-shell | timeline_pane.rs → timeline/ modules(挙動ゼロ変更・--list 一致検収・後続 write-set 割り表つき) |
+| S4: Glow 移植 | 実装(cargo) | lane-engine | M5 proof の5パス構成を EffectPass::Glow へ。plugin_id "motolii.glow"・param アニメが絵まで届く統合テスト込み |
+| T1: レーンバー | 実装(cargo) | lane-shell | 裁定147/148 — スウォッチ+名前+M/S/L、クリップ面から名前退去、座標系の rail シフト |
 
 ## 完了・main 着地済み(実装)
 
@@ -27,6 +27,8 @@
 | effect 縫い目調査 | 縫い目不在の確定・挿入点3案比較・5切片割り(→裁定153。保全: docs/reviews/2026-08-21-effect-seam-survey.md) |
 | S1: store resolve 拡張 | ResolvedEffect(ResolvedMask と同型)・時刻評価済み param・空 stack 早期 return。probe 平坦(r2 289〜300µs) |
 | S2: compositor 枠 | LayerWithPasses 別口(Layer 不変)・Identity=copy_texture_to_texture・scratch pool 再利用証明・同一 submission で第二パス禁止維持 |
+| S3: engine 語彙変換 | translate_effect_passes(空 match、S4 が腕を足す)・render_with_effects 切替・背景 pass なし。全経路開通 |
+| Timeline 切片0 | timeline/ 5分割(--list 131/131 一致・PNG バイト一致・柵は対象拡大)。後続 write-set 割り表つき |
 | (supervisor 直) 色 token 追随 fix / 市松レーン回収 / 引き継ぎ123コミット着地 | main 前提の整地 |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
