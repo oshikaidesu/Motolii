@@ -9,6 +9,8 @@
 |---|---|---|---|
 | α: blend Add 縦一本(BL2拡張) | 実装(cargo・sonnet) | lane-shell | store `BlendMode::Add`+engine 変換腕+Inspector **クリック巡回ボタン**(pick_list 前例なしにつき supervisor 決定)+shell `SetAttrs` 結線+store stale doc 掃除(R9 FINDING 1)+map 行75。oracle: store/engine 単体+shell drive(blend_drive.rs 新設) |
 | β: BL1 逐次合成の枠 | 実装(cargo・sonnet) | lane-engine | compositor 単独。`render_sequential` 新入口(既存入口無改変)・no-op で既存 `render` と**バイト一致証明**・EVIDENCE_GAP 1(ライフサイクル衝突)の実装検証。**「fork 手術が要る」の確定返却も成果扱い**(止まる許可明記) |
+| γ: MK1 mask ラスタ配線 | 実装(cargo・sonnet) | lane-store | 未配線 `motolii-vector` → engine。新規 `mask.rs`(Path→Shape 橋+coverage 純関数、CPU まで)・**lib.rs は `mod` 宣言行のみ**(α と同ファイルのため hunk 分離)。oracle=既知形状の決定論バイト+AA 縁有界。GPU 化は MK3 へ |
+| δ: speed 操作面の文法調査 | 調査(read-only・sonnet) | main checkout(書き込み禁止) | AE Time Stretch/Premiere Rate Stretch/Resolve Retime/CapCut の意味論+正典 modifier 台帳との整合+map 行 269/270/272/273/963 対応 → 候補案2〜3(推し1つ)。SP1 発注の前段 |
 
 ## 完了・main 着地済み(実装)
 
