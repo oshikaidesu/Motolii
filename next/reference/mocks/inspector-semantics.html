@@ -1,0 +1,211 @@
+<!doctype html>
+<!-- 意味論先出しモック 第4号: Inspector(2026-08-22、旧世界視覚正本の移植と対をなす)
+
+     救出元: docs/mocks-ui/public/inspector-library.html(899行)+ .css(524行)—
+     next/reference/mocks/inspector-library.html/.css(2026-08-22 移植、browser-library
+     と同じ型)。Q0 との両立: 製品では機能が付くまで置かないが、意味論モックには
+     全要素を「機能前提(解禁束)の注記つき」で描く。半透明=未解禁の予約地。
+
+     二重モック構造の宣言(docs/reviews/2026-08-22-inspector-ratio-ledger.md §0):
+     `next/ui/motolii-inspector-pane/src/lib.rs` が実際に転写元にしているのは
+     この inspector-library.* ではなく `next/reference/mocks/ui-scale-and-z.html`
+     (300px pane 前提の簡略版、行高20・値幅38・glyph幅18)。inspector-library 系は
+     旧世界の「意匠として完成した」広い版(496px pane・行高25・値幅64)。
+     **この移植より後は inspector-library 系が構造の正本**(旧世界の全要素が
+     ここにある)、**ui-scale-and-z.html は 300px pane 前提の scale/hit 検討用の
+     資料へ降格**(実装が現に従っている縮小写しとして残すが、新しい要素を
+     ここへ追加する時の一次資料ではない)。両者の数値不整合(φ FINDING
+     body_text/row_height = 0.55 実装 vs 0.44 モック)は台帳側の FINDING として
+     処理済み・このレーンでは転写しない(ALLOWLIST 外)。 -->
+<html lang="ja"><head><meta charset="utf-8"><title>Inspector 意味論モック</title>
+<style>
+:root{--surface-panel:#363636;--surface-raised:#3e3e3e;--surface-app:#242424;
+--text-muted:#757575;--text-secondary:#8c8c8c;--text-primary:#b8b8b8;
+--action-active:#d8b574;--way-inspector:#8eb086;--way-plugins:#9f9fcf;
+--data:#78b5b0;--shape:#aaa0d0;--hairline-weak:rgba(0,0,0,.35);--sem:#e8c35a;--ratio:#7fb4c9}
+body{background:#1a1a1a;color:var(--text-primary);font:12px/1.5 -apple-system,sans-serif;margin:24px}
+h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:900px}
+label.t{display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:8px 0 14px}
+.pane{position:relative;width:520px;background:var(--surface-panel);border:1px solid #101010;font-size:11px}
+.future{opacity:.38}   /* 未解禁の予約地 */
+/* panelHeader */
+.ph{display:flex;align-items:center;gap:7px;height:27px;padding:0 8px;border-bottom:1px solid #101010}
+.ph i{width:3px;height:12px;background:var(--way-inspector);display:inline-block}
+.ph b{font-size:12px}.ph span{margin-left:auto;color:var(--text-muted);font-size:9px}
+/* modeTabs */
+.mt{display:flex;height:24px;border-bottom:1px solid #101010}
+.mt span{flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:9px;font-weight:700;border-bottom:2px solid transparent}
+.mt span.on{border-bottom-color:var(--way-inspector);background:var(--surface-app);color:var(--text-primary)}
+/* selectionSummary */
+.ss{display:flex;align-items:center;gap:8px;height:40px;padding:6px 8px;background:var(--surface-raised);border-bottom:1px solid #101010}
+.glyph{width:24px;height:18px;border:2px solid var(--shape);background:#8a7a4a}
+.ss .id{display:grid;gap:2px}
+.ss b{font-size:11px}.ss small{color:var(--text-muted);font-size:9px}
+.ms{margin-left:auto;display:flex;gap:3px}
+.ms span{width:18px;height:17px;display:flex;align-items:center;justify-content:center;border:1px solid #101010;background:var(--surface-app);color:var(--text-muted);font-size:8px;font-weight:800}
+.ms span.on{border-color:var(--action-active);color:var(--action-active)}
+/* columnHeader */
+.ch{display:grid;grid-template-columns:1fr repeat(3,52px) 22px;height:18px;align-items:center;padding:0 8px;border-bottom:1px solid #101010;color:var(--text-muted);font-size:8px;text-align:center}
+.ch span:first-child{text-align:left}.ch span:last-child{color:var(--action-active)}
+/* section header */
+.sec{display:flex;align-items:center;height:22px;padding:0 8px;background:var(--surface-app);color:var(--text-secondary);font-size:8px;font-weight:800;letter-spacing:.08em;border-bottom:1px solid rgba(0,0,0,.4)}
+.sec span{margin-left:auto;color:var(--text-muted);font-weight:500;letter-spacing:0}
+/* propertyRow */
+.prow{position:relative;display:grid;grid-template-columns:1fr repeat(3,52px) 22px;align-items:center;height:22px;padding:0 8px;background:var(--surface-panel);border-bottom:1px solid rgba(0,0,0,.35);font-size:9px}
+.prow::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--pc,var(--text-secondary))}
+.prow .n{display:flex;align-items:center;gap:5px;padding-left:8px}
+.prow .n i{width:12px;height:12px;border:1px solid var(--pc,var(--text-secondary));display:inline-block}
+.prow .v{text-align:center;color:var(--text-primary);font-variant-numeric:tabular-nums}
+.prow .k{text-align:center;color:var(--text-muted)}
+.prow .k.on{color:var(--action-active)}
+/* Fill row (color) */
+.fill{grid-column:2/5;display:flex;align-items:center;gap:5px}
+.fill .sw{width:16px;height:13px;border:1px solid #686868;background:#d8c97f}
+.fill code{color:var(--text-secondary);font-size:8px}
+.fill .rc{display:flex;gap:2px;margin-left:auto}
+.fill .rc i{width:10px;height:10px;border:1px solid #686868;display:inline-block}
+/* effect stack toolbar */
+.fxbar{display:flex;align-items:center;gap:6px;height:20px;padding:0 8px;background:#1e1e1e;color:var(--text-muted);font-size:8px}
+.fxbar b{color:var(--text-secondary);font-family:monospace;letter-spacing:.1em}
+.fxbar input{margin-left:auto;width:44px;height:14px;background:var(--surface-panel);border:1px solid #101010}
+.fxbar button{height:14px;padding:0 4px;border:1px solid #101010;background:transparent;color:var(--text-secondary);font-size:8px}
+/* effectSection */
+.fx{border-bottom:1px solid #101010}
+.fxhd{display:flex;align-items:center;gap:4px;height:20px;padding:0 6px;box-shadow:inset 3px 0 0 var(--way-plugins);background:color-mix(in srgb,var(--way-plugins) 10%,var(--surface-app))}
+.fxhd .dh{color:var(--text-muted);font-family:monospace;font-size:9px;letter-spacing:-2px}
+.fxhd .sel{width:9px;height:9px;border-radius:50%;border:1px solid var(--text-muted)}
+.fxhd .badge{padding:0 3px;border:1px solid var(--way-plugins);color:var(--way-plugins);font-size:7px;font-weight:800}
+.fxhd .ttl{font-size:8px;font-weight:800;letter-spacing:.08em}
+.fxhd .src{margin-left:auto;color:var(--text-muted);font-size:7px}
+.fxhd .en{padding:0 4px;border:1px solid var(--way-plugins);color:var(--way-plugins);font-size:7px;font-weight:800}
+.fxadv{display:flex;align-items:center;gap:4px;height:18px;padding:0 8px 0 16px;background:color-mix(in srgb,var(--way-plugins) 5%,var(--surface-app));color:var(--text-muted);font-size:8px;font-weight:800;letter-spacing:.1em;border-bottom:1px solid rgba(0,0,0,.3)}
+.fxadv span{margin-left:auto;font-weight:500;letter-spacing:0}
+.fxgroup{margin:3px 5px;border:1px solid #4a4a4a;background:#1c1c1c}
+.fxgrouphd{display:flex;align-items:center;height:19px;padding:0 6px;background:color-mix(in srgb,var(--action-active) 8%,var(--surface-app));border-bottom:1px solid rgba(0,0,0,.4)}
+.fxgrouphd b{font-size:8px;font-weight:800;color:var(--text-secondary)}
+.fxgrouphd span{margin-left:auto;display:flex;gap:3px}
+.fxgrouphd span em{padding:0 4px;border:1px solid #101010;color:var(--text-muted);font-size:7px;font-style:normal}
+/* extensions */
+.et{display:flex;gap:4px;padding:6px;border-bottom:1px solid #101010}
+.et span{padding:3px 7px;border:1px solid #101010;color:var(--text-secondary);font-size:8px}
+.et span.on{border-color:var(--way-inspector);background:color-mix(in srgb,var(--way-inspector) 16%,transparent);color:var(--text-primary)}
+.ep{padding:10px}.ep b{font-size:11px}.ep p{margin:2px 0 0;color:var(--text-muted);font-size:9px}
+.tags{display:flex;gap:4px;margin-top:8px}.tags i{padding:3px 6px;border:1px solid #101010;border-radius:8px;background:var(--surface-raised);color:var(--text-secondary);font-size:8px;font-style:normal}
+/* footer */
+.ft{display:flex;align-items:center;gap:5px;height:20px;padding:0 8px;background:var(--surface-app);color:var(--text-muted);font-size:9px}
+.ft .dot{width:5px;height:5px;border-radius:50%;background:var(--way-inspector)}
+/* floating (context menus) */
+.float{position:absolute;background:#2c2c2c;border:1px solid #555;font-size:9px;padding:3px 0;color:var(--text-primary)}
+.float div{padding:2px 8px}
+.float div.mut{color:var(--text-muted)}
+/* 意味層 */
+#sem{display:none}
+.ann,.lb,.rt{display:none;position:absolute;z-index:9;pointer-events:none}
+#sem:checked ~ .pane .ann,#sem:checked ~ .pane .lb,#sem:checked ~ .pane .rt{display:block}
+.o{border:1.5px dashed var(--sem);border-radius:3px}
+.lb{background:#151515;color:var(--sem);font-size:10px;line-height:1.35;padding:3px 6px;border:1px solid var(--sem);border-radius:3px;max-width:250px}
+.rt{background:#101418;color:var(--ratio);font-size:9px;line-height:1.3;padding:2px 5px;border:1px solid var(--ratio);border-radius:2px;font-family:ui-monospace,monospace}
+#sem:checked ~ .legend{display:block}.legend{display:none;margin-top:14px;font-size:11px;color:var(--text-muted);max-width:940px}
+.legend b{color:var(--sem)}.legend table{border-collapse:collapse;margin-top:6px;width:100%}
+.legend td,.legend th{border:1px solid #444;padding:3px 8px;text-align:left;font-weight:400;vertical-align:top}
+.legend .rtcell{color:var(--ratio);font-family:ui-monospace,monospace}
+</style></head><body>
+<h1>Inspector — 意味論先出しモック(第4号、旧世界視覚正本の移植対)</h1>
+<div class="hint">実線=第一波(M01)で解禁。<b>半透明=意味の予約地</b>(要素ごとに解禁束を注記
+— 製品には機能と同時にしか入らない= Q0)。<b class="rt" style="position:static;display:inline;padding:1px 4px">比率</b>
+=分母 propertyRow(25px、docs/reviews/2026-08-22-inspector-ratio-ledger.md 実測基準)。
+一覧の正本は本ファイル下部の救出台帳。</div>
+<label class="t"><input type="checkbox" id="sem" checked> 意味層を表示(S 注記・比率注記)</label>
+
+<div class="pane">
+  <div class="ph"><i></i><b>Inspector</b><span>Rectangle · 3D</span></div>
+  <div class="mt future"><span class="on">Effect</span><span>Custom</span></div>
+  <div class="ss">
+    <div class="glyph"></div>
+    <div class="id"><b>Rectangle</b><small>Shape layer · 3D transform · 2 keys</small></div>
+    <div class="ms"><span class="on">M</span><span class="future">S</span></div>
+  </div>
+  <div class="ch"><span>Property</span><span>X</span><span>Y</span><span>Z</span><span>◇</span></div>
+  <div class="sec">TRANSFORM<span>3 · 2 keyed</span></div>
+  <div class="prow" style="--pc:var(--data)"><span class="n"><i></i>Position</span><span class="v">0.125</span><span class="v">−0.075</span><span class="v">0.000</span><span class="k on">◆</span></div>
+  <div class="prow" style="--pc:var(--action-active)"><span class="n"><i></i>Rotation</span><span class="v">0.0</span><span class="v">0.0</span><span class="v">24.0°</span><span class="k">◆</span></div>
+  <div class="prow" style="--pc:var(--shape)"><span class="n"><i></i>Scale</span><span class="v">1.000</span><span class="v">1.000</span><span class="v">1.000</span><span class="k">◇</span></div>
+  <div class="sec">APPEARANCE<span>2 · 1 keyed</span></div>
+  <div class="prow future" style="--pc:#c9a86a"><span class="n"><i></i>Fill</span><div class="fill"><span class="sw"></span><code>#D8C97F</code><span class="rc"><i></i><i></i><i></i></span></div><span class="k">—</span></div>
+  <div class="prow" style="--pc:var(--text-secondary)"><span class="n"><i></i>Opacity</span><span class="v"></span><span class="v"></span><span class="v">100%</span><span class="k on">◆</span></div>
+
+  <div class="fxbar future"><b>FX STACK</b><span style="color:var(--text-muted)">Select effects to group</span><input><button>Group ⌘G</button></div>
+  <div class="fx future">
+    <div class="fxhd"><span class="dh">⠿</span><span class="sel"></span><span class="badge">FX</span><span class="ttl">TURBULENT DISPLACE</span><span class="src"><b style="color:var(--text-secondary)">Turbulent Displace</b> · 8 params</span><span class="en">ON</span></div>
+    <div class="prow" style="--pc:var(--action-active)"><span class="n"><i></i>Displacement</span><span class="v" style="grid-column:2/5;text-align:right">Turbulent ⌄</span><span class="k">—</span></div>
+    <div class="prow" style="--pc:var(--data)"><span class="n"><i></i>Amount</span><span class="v" style="grid-column:2/5;text-align:right">42.0</span><span class="k">◇</span></div>
+    <div class="fxadv">ADVANCED<span>4 parameters</span></div>
+  </div>
+  <div class="fxgroup future">
+    <div class="fxgrouphd"><b>EFFECT GROUP 1 · 2 FX</b><span><em>✎</em><em>ON</em><em>Ungroup</em></span></div>
+  </div>
+
+  <div class="et future"><span class="on">Tags</span><span>Notes</span></div>
+  <div class="ep future"><b>Asset Tagging Extension</b><p>Registered from a separate TypeScript module</p><div class="tags"><i>Interview</i><i>B-roll</i></div></div>
+
+  <div class="ft"><span class="dot"></span><span>drag to scrub · click to type · Esc to cancel</span></div>
+
+  <div class="float future" style="left:270px;top:340px;width:130px"><div>Reset value</div></div>
+  <div class="float future" style="left:270px;top:170px;width:170px"><div>Rename effect <span style="float:right">F2</span></div><div>Copy effect <span style="float:right">⌘C</span></div><div class="mut">Paste copied effect after <span style="float:right">⌘V</span></div><div>Duplicate effect <span style="float:right">⌘D</span></div><div>Delete effect <span style="float:right">⌫</span></div></div>
+
+  <!-- 意味層(絵の上の宣言) -->
+  <div class="lb" style="right:8px;top:-46px;max-width:280px">S5 ヒーロー = propertyRow の列(値そのもの)。chrome(panelHeader/modeTabs/footer)は縁 — この枠内に最大コントラストを置かない(S5b)</div>
+  <div class="lb" style="left:-8px;top:56px;max-width:170px">panelHeader の縁バー(3px)= way-inspector アクセント。<b>現行実装: 対応なし</b>(ident_band が名前欄に統合、独立 panelHeader 帯は無い)</div>
+  <div class="lb" style="left:220px;top:-8px;max-width:200px">modeTabs(Effect⇄Custom)= 意味の別世界(browser の4タブ裁定143と同型)。<b>解禁束: 意味起草タスク#14 と同根</b>(Custom側の意味が起草されるまで予約地)</div>
+  <div class="lb" style="left:340px;top:56px;max-width:180px">selectionSummary: shapeGlyph(種別図像)+M/S。<b>現行: M のみ配線済み(ident_band、簡略形)</b>。S は幅予約のみ(reserved_glyph — solo 未実装、engine/store 側の別レーン)。shapeGlyph は救出台帳へ</div>
+  <div class="lb" style="left:-8px;top:180px;max-width:170px">propertyRow 左3px = 値型の色(--property-color)。FX 行では型(scalar/vector/angle/…)、TRANSFORM/APPEARANCE 行ではプロパティ個別色。M/S/L 相当の rail glyph は Timeline 側と同族(裁定164: 意味役割が新しい時は専用ロール)</div>
+  <div class="lb" style="left:250px;top:210px;max-width:190px">Fill 行(color picker + Recent swatches)。<b>現行実装: 対応なし</b>(parameterKind.color 型・色プロパティが実装に無い)。解禁束: 色プロパティ型+Recent色履歴(browser 側の Recent 束とは別モデル)</div>
+  <div class="lb" style="left:-8px;top:290px;max-width:190px">effectStackToolbar〜effectGroup: FX スタック全体。<b>現行実装: 対応なし</b>(I-ratio台帳で確定済み — effect stack/mode tabs/selection summary/extension tabs/notes panel は Q0 スコープ外)。drag reorder・複数選択→Group・rename(F2)・enable(ON/OFF)・advanced折りたたみ・ungroup、いずれも救出台帳へ</div>
+  <div class="lb" style="left:330px;top:400px;max-width:190px">parameterContextMenu/effectContextMenu(右クリック)。<b>解禁束: 右クリック基盤</b>(browser semantics の S6 併存原則と同じ束 — 唯一の入口にしない)。F2/⌘C/⌘V/⌘D/⌫ のキーボード等価は救出元 script に実装済み(意匠のみ未転写)</div>
+  <div class="lb" style="left:-8px;top:470px;max-width:170px">extensionTabs+extensionPanel(Tags/Notes)。<b>現行実装: 対応なし</b>(Custom mode 自体が無い)。解禁束: タグ束(map D、browser semantics の Collections/tag editor と同根)</div>
+  <div class="lb" style="left:250px;top:512px;max-width:190px">footer: 静的ヒント文のみ実装済み(hint_row)。statusDot と動的ステータス文(「Fill changed to … in this preview」等)は<b>解禁束: 局所プレビュー通知</b> — 現行は操作結果を文言化して返す口が無い</div>
+
+  <!-- 比率注記(分母=propertyRow 25px、docs/reviews/2026-08-22-inspector-ratio-ledger.md 1a/1b節) -->
+  <div class="rt" style="left:-8px;top:-2px">panelHeader 29/25=1.16</div>
+  <div class="rt" style="left:220px;top:22px">modeTabs 28/25=1.12</div>
+  <div class="rt" style="left:340px;top:118px">selectionSummary 46/25=1.84(実測はmock値。本モックは40pxで概形のみ縮小)</div>
+  <div class="rt" style="left:-8px;top:158px">columnHeader 21/25=0.84</div>
+  <div class="rt" style="left:220px;top:180px">tableSection h2 26/25=1.04</div>
+  <div class="rt" style="left:340px;top:204px;max-width:200px"><b style="color:var(--ratio)">φ本体</b>: propertyName span(11)/propertyRow(25)=<b style="color:var(--ratio)">0.44</b>(帯0.42±0.05内)。実装は 11/20=<b style="color:#e18a6d">0.55</b> — FINDING、ALLOWLIST外(tokens crate)</div>
+  <div class="rt" style="left:-8px;top:300px">effectStackToolbar/advancedToggle/effectGroupHeader 22/25=0.88</div>
+  <div class="rt" style="left:340px;top:530px">footer 26/25=1.04・値幅64/25=2.56・Key幅26/25=1.04</div>
+</div>
+
+<div class="legend">
+  <b>要素→現行実装→解禁束の対応(救出台帳 — 旧 inspector-library.html/.css 全要素、
+  出典: docs/reviews/2026-08-22-inspector-ratio-ledger.md §0/§5.4)</b>
+  <table>
+    <tr><th>要素</th><th>意味</th><th>現行実装</th><th>解禁束</th></tr>
+    <tr><td>ident_band(名前+kind+M glyph)</td><td>a/ヒーロー縁</td><td><b>実装済み(簡略形)</b> — selectionSummary の縮約、shapeGlyph 無し・S 未配線</td><td>—(既存)</td></tr>
+    <tr><td>columnHeader(Property/X/Y/Z/Key)</td><td>a</td><td><b>実装済み</b>(dims は ui-scale-and-z 系、行高20基準)</td><td>—(既存)</td></tr>
+    <tr><td>tableSection(TRANSFORM/APPEARANCE)+propertyRow</td><td>a/ヒーロー</td><td><b>実装済み</b>(Position/Rotation/Scale/Anchor/Opacity)。件数注記「3 · 2 keyed」は無し</td><td>件数集計表示(小束)</td></tr>
+    <tr><td>panelHeader(独立タイトル帯+way-inspectorアクセント)</td><td>a</td><td>対応なし</td><td>modeTabs 束と一体(タイトルが Effect/Custom を反映)</td></tr>
+    <tr><td>modeTabs(Effect⇄Custom)</td><td>―</td><td>対応なし</td><td>意味起草タスク#14(Custom側の意味起草待ち)</td></tr>
+    <tr><td>selectionSummary フル形(shapeGlyph・S glyph 配線)</td><td>a</td><td>部分対応(ident_band)</td><td>solo実装(engine/store、別レーン着手中)+shapeGlyph(種別図像)</td></tr>
+    <tr><td>Fill(color picker + Recent swatches)</td><td>a</td><td>対応なし</td><td>色プロパティ型(parameterKind.color)+Recent色履歴</td></tr>
+    <tr><td>effectStackToolbar(FX STACK・filter・Group)</td><td>a/b</td><td>対応なし</td><td>FX スタックモデル一式(下記5行と同根)</td></tr>
+    <tr><td>effectSection(drag reorder・複数選択・rename F2・enable ON/OFF・advanced折りたたみ)</td><td>b</td><td>対応なし</td><td>同上</td></tr>
+    <tr><td>effectGroup(rename/enable/ungroup)</td><td>b</td><td>対応なし</td><td>同上</td></tr>
+    <tr><td>parameterContextMenu(Reset value)</td><td>b</td><td>対応なし</td><td>右クリック基盤(S6併存原則)</td></tr>
+    <tr><td>effectContextMenu(Rename/Copy/Paste/Duplicate/Delete)</td><td>b</td><td>対応なし</td><td>右クリック基盤+FXスタックモデル</td></tr>
+    <tr><td>extensionTabs+extensionPanel(Tags/Notes)</td><td>―</td><td>対応なし(Custom mode自体が無い)</td><td>タグ束(map D)</td></tr>
+    <tr><td>footer statusDot+動的ステータス文</td><td>c</td><td>部分対応(hint_row=静的文のみ)</td><td>局所プレビュー通知(操作結果の言語化)</td></tr>
+  </table>
+  <b>未決(会話すべきこと)</b>: selectionSummary を46px フル形へ拡張するか ident_band の
+  簡略形を正とするか(shapeGlyph の要否含む)/ FX スタックの着手順序(effectSection単体
+  → group → context menu の順が自然か)/ Fill の色プロパティ型を先に汎用型として起こすか
+  Fill 専用のまま残すか / Custom mode(Tags/Notes)の意味(browser 側 PANELS タブとの重複
+  可能性 — 同じ拡張機構を指しているなら意味起草タスク#14 と統合すべきか)。
+  <br><br>
+  <b>二重モック構造の注記</b>: 本救出台帳とは別に、`ui-scale-and-z.html`(300px pane・
+  行高20)は実装が現に転写元にしている縮小資料として残る — <b>新しい Inspector 要素を
+  検討する時の一次資料はこの inspector-library 系(本ファイル+inspector-library.html/.css)
+  であり、ui-scale-and-z.html は scale/hit(1%刻みの寸法試験)専用の資料へ降格</b>
+  (docs/reviews/2026-08-22-inspector-ratio-ledger.md §0 の確定を踏まえた宣言)。
+</div>
+</body></html>
