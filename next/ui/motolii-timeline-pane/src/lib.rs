@@ -58,7 +58,9 @@ pub use projection::{
 /// pane split survey §2.5 — どの pane crate にも属さず assembler 側に残る)が
 /// これらを cross-crate で読む必要がある — 分割前は同一クレート内の
 /// `pub(crate)` で足りていたが、crate 境界を跨ぐには `pub` が要る。
-pub use projection::{frame_to_x, layer_row_top, selected_row_index, time_band_segment_frames};
+pub use projection::{
+    frame_to_x, layer_row_top, selected_row_index, tick_steps, time_band_segment_frames,
+};
 pub use write::{Message, PaneState};
 
 use iced::{Element, Length, Rectangle};
