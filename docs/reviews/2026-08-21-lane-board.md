@@ -10,12 +10,11 @@
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
 
-| **BL3: blend 分離可能11モード** | 実装 | worktree(発注時に追記) | α/BL1b の型で Multiply/Screen/Overlay 等11種 — store attrs.rs+engine 変換腕+Inspector 巡回リスト+golden。map blend_mode 束の大口。write-set= attrs.rs+engine+inspector(document.rs 禁止 — G1 並走) |
-
 ## 完了・main 着地済み(実装)
 
 | レーン | 結果 |
 |---|---|
+| BL3: blend 分離可能11モード(検収合格・merge `118cdbf4`、後任セッション回収) | W3C 3.6節の2枚読みWGSL(`compositor/src/blend.rs`)+engine変換表11値(`_`なし網羅match)+Inspector巡回13値+golden 11枚(tol::EXACT)+独立Rust実装照合oracle。store enum は既存17値で無改造。3経路を `accumulate_sequential` コアへ統合。**副産物: `background_rect` の `depth_offset: i16::MIN` 縮みバグ再発見・修正**(レーン B と同型・2度目 — 極端値禁止を doc 化)。conflict解決1件(SR の scratch プール返却を finalize_texture 後へ移植・「確保5→1」テストが正しさを捕捉)。**FINDING: render_to_texture が all-Normal でも layer 毎 submit+poll を払う構造退行 → run-batching レーンで最小コア復元(発注済)** |
 | A: shell テストバイナリ統合 | 10本→2本、フルリンク 45.5s→18〜26s(裁定138の本丸) |
 | B: 外周1px alpha=0 根治 | 真因= `order: i16::MIN` の depth_offset 縮み。`BACKGROUND_ORDER=-1` |
 | C: 線化第1弾 | tokens weight/ink 段・Inspector hairline 化・値セル横余白(裁定137/139) |
