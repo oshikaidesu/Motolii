@@ -477,6 +477,23 @@ fn draw_settings(
 // (rail + カード grid)を矩形近似で再現する。`--browser-open` フラグ
 // (`main.rs`)が立っている間だけ描く。**文字は描かない**(このファイル冒頭の
 // 「正直な限界」と同じ理由)。
+//
+// **既知の陳腐化(2026-08-22 shell pane_grid 化レーン)**: 実 `Shell::view`
+// では Browser は既に「header 直下の全幅の帯」ではなく「Inspector/Stage/
+// Timeline の左に並ぶ全高カラム」(`pane_layout.rs` 冒頭 doc、
+// `pane_layout::build_configuration`)。この instrument の下の
+// `render()`/`draw_browser` 呼び出しは**まだ旧位置(帯)のまま**——
+// `padding`(この関数内で「canvas 全体の外側余白」と「Stage/Timeline 列の
+// 左端 x」の**両方**を兼ねる変数、`render()` 冒頭〜末尾で150行超に渡って
+// 再利用)を Browser 開閉に応じて動かすのは、markers/ルーラー目盛/
+// レーンバー等の下流計算すべてに波及する非自明な変更で、この器具の
+// 「トンマナ照合」という狭いスコープに対して不釣り合いに大きい・かつ
+// この pane_grid 化レーン自身の red→green オラクル(`pane_layout.rs` の
+// 純関数試験、`tests/suite/q0_fence.rs` 等)の対象外(この instrument に
+// 対する自動 fence は無い——`tests/suite/fixture.rs` の geometry 試験は
+// Browser 閉状態しか検分していない)。**意図的に見送った**——直すなら
+// 専用のレーンで `padding` を「outer margin」と「content column left x」に
+// 分離してから着手すること(このコメントが唯一の記録)。
 // ---------------------------------------------------------------------------
 
 /// カード grid のカード1行ぶんの高さの近似(`motolii_browser_pane::card_view`
