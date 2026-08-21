@@ -610,12 +610,18 @@ impl Engine {
                 self.remember_frame(key, texture.clone());
                 Ok((Some(texture), natural))
             }
-            // layer-meta 束が足した3 variant。**まだ描画に繋いでいない** — null layer は
-            // 元々絵を持たず(裁定どおり)、shape/text は演算子/組版から RGBA を焼く経路が
-            // 未実装(`motolii-vector::render` はまだ engine から呼ばれていない)。
-            // texture 無し = 「この layer は今描かない」という既存の意味(素材の外の
-            // 時刻と同じ扱い)に乗せてあるので、フレーム全体は落ちない。
-            LayerSource::Null | LayerSource::Shape | LayerSource::Text => Ok((None, [0.0, 0.0])),
+            // layer-meta 束が足した3 variant + 裁定173 の `Group`。**まだ描画に
+            // 繋いでいない** — null layer は元々絵を持たず(裁定どおり)、shape/text は
+            // 演算子/組版から RGBA を焼く経路が未実装(`motolii-vector::render` はまだ
+            // engine から呼ばれていない)。`Group` も同じく絵を持たない(裁定173 —
+            // Group は「子を持てる」という印だけの layer、合成は世界合成
+            // (`motolii-store::view::world_affine`)が親 transform として使うだけで、
+            // Group 自身のピクセルは無い)。texture 無し = 「この layer は今描かない」
+            // という既存の意味(素材の外の時刻と同じ扱い)に乗せてあるので、フレーム
+            // 全体は落ちない。
+            LayerSource::Null | LayerSource::Shape | LayerSource::Text | LayerSource::Group => {
+                Ok((None, [0.0, 0.0]))
+            }
         }
     }
 }
