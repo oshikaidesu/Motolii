@@ -967,27 +967,40 @@ impl Compositor {
     /// 呼ぶ**その時**まで有効——ちょうど呼び出し側が新しい texture へ差し替える
     /// タイミングと一致するので、古い方が消えても実害が無い。
     ///
-    /// ## effect pass の scratch(`effect_scratch` を汚さない)
+    /// ## effect pass の scratch(2026-08-22 修理 — RB 調査発見3番)
     ///
     /// [`Self::render_with_effects`]の scratch 解放(`effect_scratch.release`)は
     /// 「GPU が読み終わってから」が前提(`effects::EffectScratch::release` の doc
-    /// 参照——読み終わりを `device.poll` で確認してから解放している)。この
-    /// メソッドは poll をしない(順序保証を queue の submission 順だけに置く
-    /// 設計、上記)ので、**取得した scratch は一度も `release` しない** ——
-    /// `effect_scratch.acquire` 自体は「空きが無ければ新規生成」なだけの
-    /// 安全な操作なので呼んでよいが(プールの再利用資産を消費するだけ)、
-    /// このメソッドが確保した scratch を `free` リストへ戻すと、まだ GPU が
-    /// 読み書き中かもしれない texture を次の `acquire` が上書き支給してしまう
-    /// (`effects::EffectScratch::release` の doc がまさにこの罠を警告している)。
-    /// 戻さなければ、その texture は関数を抜けた時点でこの関数のローカル変数
-    /// (`scratch_textures_kept_alive`)の drop に委ねられる——wgpu 自身が
-    /// 「GPU がその texture を参照するコマンドを使い終わるまで実体を残す」
-    /// (標準の refcount 付き Drop、fork の独自 `.destroy()` 即時破棄とは別物)
-    /// ので、poll なしでも安全。代償は「今回確保した scratch は次回使い回されない
-    /// (次のフレームでまた新規生成)」——effect 付き layer が動いている間だけ
-    /// 余分な確保が起きるが、`render_with_effects`(readback 経路、export/
-    /// screenshot が実際に使う)の scratch 資産とは別物なので、そちらの
-    /// oracle(`tests/effects.rs`)には一切影響しない。
+    /// 参照)——ただしそれは readback 経路が **CPU 側**でピクセルを読むために
+    /// `device.poll` を必要としているからであって(`ScreenshotProcessor` が
+    /// mapped buffer を読む)、poll 自体が release の安全条件ではない。
+    /// release が本当に必要としているのは「次の `acquire` がこの texture を
+    /// 新しい書き込み先として GPU へ積む時点で、前の利用(読み/書き)が GPU 上で
+    /// 先に完了していること」——これは **GPU 側の順序**の話であり、CPU が
+    /// 結果を見る/見ないとは独立している。
+    ///
+    /// このメソッドは CPU 読み戻しをしないので `device.poll` はしないが、
+    /// scratch の再利用は「同一 queue の submission 順で書いてから読む」
+    /// (上の「順序保証」節、裁定171 v2 §0-5 と同じ論法)で GPU 側の順序として
+    /// 成立する: `Compositor` は `&mut self` でしか呼べない(Rust の排他借用が
+    /// 並行呼び出しを構造的に禁止する)ので、`render_to_texture`/
+    /// `render_with_effects` の呼び出しは常に CPU 上で直列——scratch を
+    /// 使い回す2回目の `acquire`+書き込みコマンドは、必ず1回目の
+    /// `queue.submit` より**後**の `queue.submit` に載る。同一 `wgpu::Queue`
+    /// への複数回の submit は提出順に実行される(fork にも自前にも明示の
+    /// fence/semaphore は要らない——wgpu がリソースの生存/使用状態を
+    /// 内部で追跡し、同じ `wgpu::Texture` に対する後続コマンドの前に必要な
+    /// バリアを自動で挿む。これは「前フレームで書いたテクスチャを次フレームで
+    /// 読む/書く」という wgpu の標準的な用法そのもので、CPU 側の poll は
+    /// 元来 CPU が結果を読みたい時にしか要らない)。
+    ///
+    /// したがって: `acquire` した scratch は、この関数が `queue.submit` を
+    /// 終えた**直後**(readback 経路と同じタイミング、ただし poll を挟まない)
+    /// に `effect_scratch.release` へ返す——`render_with_effects` と同じ
+    /// プールを共有し、次回このメソッド(または `render_with_effects`)が
+    /// 呼ばれた時に再利用される。GPU がまだ前フレームのコマンドを実行中でも、
+    /// 次の書き込みは同一 queue の後続 submission として積まれるだけなので
+    /// 破綻しない(fence 不要、上の「順序保証」節と同一の根拠)。
     pub fn render_to_texture(
         &mut self,
         comp: CompSpec,
@@ -999,12 +1012,13 @@ impl Compositor {
 
         // 1) layer ごとに「合成へ渡す実効 texture」を決める。
         // [`Self::render_with_effects`] の step 1 と**同じ構造**——唯一の違いは
-        // `effect_scratch.release` を一度も呼ばないこと(上のモジュール doc 参照)。
+        // release を `device.poll` を挟まずに行うこと(上のモジュール doc
+        // 「effect pass の scratch」参照、根拠は同一 queue の submission 順)。
         let mut effective_textures: Vec<GpuTexture2D> = Vec::with_capacity(layers.len());
         let mut effective_paddings: Vec<u32> = Vec::with_capacity(layers.len());
-        // GPU が読み終わるまで実体を生かしておくための保持(release はしない —
-        // 単に drop に任せる、上のモジュール doc「effect pass の scratch」参照)。
-        let mut scratch_textures_kept_alive: Vec<wgpu::Texture> = Vec::new();
+        // `render_with_effects` の `checked_out` と同型: submit 後に
+        // `effect_scratch.release` へ返すための (幅, 高さ, format, texture) の控え。
+        let mut checked_out: Vec<(u32, u32, wgpu::TextureFormat, wgpu::Texture)> = Vec::new();
         let mut copy_encoder: Option<wgpu::CommandEncoder> = None;
 
         for lwp in layers {
@@ -1167,9 +1181,24 @@ impl Compositor {
                             *radius,
                         );
 
-                        scratch_textures_kept_alive.push(padded_source);
-                        scratch_textures_kept_alive.push(bloom);
-                        scratch_textures_kept_alive.push(blur_ping);
+                        checked_out.push((
+                            padded_width,
+                            padded_height,
+                            lwp.layer.texture.format(),
+                            padded_source,
+                        ));
+                        checked_out.push((
+                            padded_width,
+                            padded_height,
+                            effects::GLOW_INTERMEDIATE_FORMAT,
+                            bloom,
+                        ));
+                        checked_out.push((
+                            padded_width,
+                            padded_height,
+                            effects::GLOW_INTERMEDIATE_FORMAT,
+                            blur_ping,
+                        ));
                     }
                 }
             }
@@ -1184,7 +1213,7 @@ impl Compositor {
 
             effective_textures.push(imported);
             effective_paddings.push(padding);
-            scratch_textures_kept_alive.push(scratch);
+            checked_out.push((padded_width, padded_height, format, scratch));
         }
 
         // 2) 通常合成。[`Self::render_with_effects`] の step 2 と同じ組み立て。
@@ -1289,10 +1318,16 @@ impl Compositor {
         let texture = target.texture.clone();
         let view = target.default_view.clone();
 
-        // `scratch_textures_kept_alive`/`view_builder` はここで drop される——
-        // モジュール doc「effect pass の scratch」「main_target の生存期間」の
-        // 保証がここで効く(GPU がまだ使用中でも wgpu 自身が実体を残す)。
-        drop(scratch_textures_kept_alive);
+        // scratch をプールへ返す(2026-08-22 修理、RB 調査発見3番) — poll を
+        // 挟まない。安全性の根拠はモジュール doc「effect pass の scratch」参照
+        // (同一 queue の submission 順で、次の acquire+書き込みは必ず今回の
+        // submit より後に積まれる)。`view_builder` は `main_target` の
+        // texture/view を clone した後なので、ここで drop してよい——
+        // モジュール doc「main_target の生存期間」の保証がここで効く。
+        for (width, height, format, scratch_texture) in checked_out {
+            self.effect_scratch
+                .release(width, height, format, scratch_texture);
+        }
         drop(view_builder);
 
         Ok((texture, view))

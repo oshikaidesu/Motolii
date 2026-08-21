@@ -29,8 +29,8 @@
 //! という主張を tolerance なしで書ける。
 
 use motolii_compositor::{
-    BlendMode, CompSpec, Compositor, HeadlessGpu, Layer, LayerPlacement, LayerWithPasses,
-    ResolvedCamera,
+    BlendMode, CompSpec, Compositor, EffectPass, HeadlessGpu, Layer, LayerPlacement,
+    LayerWithPasses, ResolvedCamera,
 };
 
 const W: u32 = 64;
@@ -338,5 +338,116 @@ fn render_to_texture_is_deterministic_across_repeated_calls() {
     assert!(
         bytes_a.chunks_exact(4).any(|px| px != [0, 0, 0, 0]),
         "読み戻した絵が全ゼロ(blit_and_readback 自体が機能していない疑い)"
+    );
+}
+
+/// **RB 調査(`docs/reviews/2026-08-22-residual-bottleneck-survey.md` 発見3番)の
+/// 直接オラクル(red 先行)**: `render_to_texture` は `effect_scratch.acquire` を
+/// 呼ぶが一度も `.release` しない(修理前のモジュール doc が自認)ため、effect を
+/// 持つ layer が動くフレームは毎回新規 scratch texture を確保する。S2 の
+/// `identity_pass_reuses_the_scratch_texture_across_frames`(`tests/effects.rs`、
+/// `render_with_effects` に対する既存保証)と同水準の「確保回数は定数」を、
+/// GPU 直経路(zero-copy)にも要求する。
+#[test]
+fn render_to_texture_reuses_scratch_texture_across_frames() {
+    let (mut compositor, _device, _queue) = with_device_compositor();
+
+    let red = compositor
+        .upload_rgba("red", &solid([200, 40, 90, 255], W, H), W, H)
+        .unwrap();
+
+    assert_eq!(compositor.effect_passes_created_textures(), 0);
+
+    let _first = compositor
+        .render_to_texture(
+            comp(),
+            ResolvedCamera::default(),
+            &[LayerWithPasses {
+                layer: one_layer(red.clone()),
+                passes: vec![EffectPass::Identity],
+            }],
+        )
+        .unwrap();
+    assert_eq!(
+        compositor.effect_passes_created_textures(),
+        1,
+        "pass を持つ layer は少なくとも1枚のオフスクリーンを新規生成するはず"
+    );
+
+    // 連続 N フレーム(N=4)——確保回数が定数のままであることを縛る
+    // (修理前は poll なし再利用ができず、release されないので毎回+1 されて red)。
+    for _ in 0..4 {
+        let _next = compositor
+            .render_to_texture(
+                comp(),
+                ResolvedCamera::default(),
+                &[LayerWithPasses {
+                    layer: one_layer(red.clone()),
+                    passes: vec![EffectPass::Identity],
+                }],
+            )
+            .unwrap();
+    }
+
+    assert_eq!(
+        compositor.effect_passes_created_textures(),
+        1,
+        "render_to_texture 経由でも scratch はプールへ戻って使い回されるはず\
+         (RB 調査 発見3番: 毎フレーム新規確保の修理 — 定数のままでなければ red)"
+    );
+}
+
+/// **正しさの直接確認(修理の副作用チェック)**: scratch をフレームをまたいで
+/// 使い回すようになっても、前フレームの内容を引きずらない——Identity pass は
+/// 全画素を copy で上書きするので、色を変えた2フレーム目は前フレームの色を
+/// 見せないはず。poll なしの再利用が「同一 queue の submission 順で書いてから
+/// 読む」(裁定171 v2 §0-5 と同じ論法)を実際に守れているかの直接証拠——
+/// 同期が壊れていれば前フレームの色が透けて見えるか絵が乱れる。
+#[test]
+fn render_to_texture_reused_scratch_shows_the_new_frames_content_not_the_old_one() {
+    let (mut compositor, device, queue) = with_device_compositor();
+
+    let red = compositor
+        .upload_rgba("red", &solid([255, 0, 0, 255], W, H), W, H)
+        .unwrap();
+    let blue = compositor
+        .upload_rgba("blue", &solid([0, 0, 255, 255], W, H), W, H)
+        .unwrap();
+
+    let (_texture_a, view_a) = compositor
+        .render_to_texture(
+            comp(),
+            ResolvedCamera::default(),
+            &[LayerWithPasses {
+                layer: one_layer(red),
+                passes: vec![EffectPass::Identity],
+            }],
+        )
+        .unwrap();
+    let bytes_a = blit_and_readback(&device, &queue, &view_a, W, H);
+    assert_eq!(&bytes_a[0..4], &[255, 0, 0, 255], "1フレーム目は赤のはず");
+
+    let (_texture_b, view_b) = compositor
+        .render_to_texture(
+            comp(),
+            ResolvedCamera::default(),
+            &[LayerWithPasses {
+                layer: one_layer(blue),
+                passes: vec![EffectPass::Identity],
+            }],
+        )
+        .unwrap();
+    let bytes_b = blit_and_readback(&device, &queue, &view_b, W, H);
+    assert_eq!(
+        &bytes_b[0..4],
+        &[0, 0, 255, 255],
+        "scratch を使い回した2フレーム目は青のはず\
+         (前フレームの赤が透けて見えたら poll なし再利用の同期が壊れている)"
+    );
+
+    assert_eq!(
+        compositor.effect_passes_created_textures(),
+        1,
+        "同じ形の scratch は使い回されるはず(このテストの前提)"
     );
 }
