@@ -10,19 +10,25 @@
 //!   snapshot)がこのリポで既に持っている規約をそのまま借用
 //!   ([`motolii_testkit::assert_rgba_matches_golden_file`] 参照)。
 //!
-//! param は2組: 「既定」(threshold=0.5・intensity=0.6、255 に飽和しない程度の
-//! 控えめな明るみ)と「強め」(threshold=0.1・intensity=2.5、255 に飽和する
-//! 明確な bloom)。
+//! param は2組: 「既定」(threshold=0.5・intensity=0.6・radius=1.0、255 に飽和
+//! しない程度の控えめな明るみ)と「強め」(threshold=0.1・intensity=2.5・
+//! radius=2.0、255 に飽和する明確な bloom)。
 //!
-//! **`Compositor::render_with_effects` は glow を layer 自身の texture 実寸
-//! (`lwp.layer.texture.width_height()`)の上でだけ計算する**(`motolii-compositor/
-//! src/lib.rs` の `render_with_effects` 実装参照)——comp 実寸へは広がらない。
-//! つまり単色矩形 layer では bright-pass/blur の入力が全画素同値になり、
-//! 「縁が滲んで外へ広がる halo」ではなく「layer 矩形が一様に明るくなる」絵に
-//! なる(架空の広がりを golden の期待に書かない——実装の実際の挙動をそのまま
-//! 固定する)。**layer は comp より小さく中央に置く**(`Intent::SetTrack` で
-//! `position` を明示)ことで、layer 矩形の内と外(背景の黒)の境界がはっきり
-//! 見える golden にする。intensity をそのまま 1.0 以上にすると layer 内が
+//! ## 出力拡張(padding、既知の穴の根治、2026-08-21)
+//!
+//! 旧: `Compositor::render_with_effects` は glow を layer 自身の texture 実寸
+//! の上でだけ計算していたため、単色矩形の glow は「縁が滲んで外へ広がる halo」
+//! ではなく「layer 矩形が一様に明るくなる」絵になっていた(`next/reference/
+//! KNOWN.md` の既知の穴)。
+//!
+//! 新: [`EffectPass::padding`](motolii_compositor::EffectPass::padding) が
+//! pass ごとの出力拡張量(texel、`radius` 由来)を宣言し、`render_with_effects`
+//! はその分だけ scratch を layer 実寸より広く確保して source を中央へ置いてから
+//! blur を回す——**layer 矩形の外(背景の黒)へ実際に halo が滲み出す**ようになった
+//! (`brighter_pixels_appear_outside_the_original_layer_rect_bounds` がこれを
+//! 数値で縛る)。**layer は comp より小さく中央に置く**(`Intent::SetTrack` で
+//! `position` を明示)ことで、layer 矩形の内と外の境界と、外側へ滲んだ halo が
+//! はっきり見える golden にする。intensity をそのまま 1.0 以上にすると layer 内が
 //! 一様に 255 飽和し、「既定」「強め」の2枚が byte-for-byte 一致してしまう
 //! (最初の実装がこの罠に落ちた)ので、「既定」は飽和しない intensity を選ぶ。
 
@@ -131,6 +137,11 @@ fn golden_path(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
+fn pixel(buffer: &[u8], x: u32, y: u32) -> [u8; 4] {
+    let i = ((y * W + x) * 4) as usize;
+    [buffer[i], buffer[i + 1], buffer[i + 2], buffer[i + 3]]
+}
+
 /// 既定強度: 255 飽和を避け、控えめな明るみ(中間灰色→ほんのり明るいグレー)に
 /// 留める値。radius は proof の既定(1.0)。
 #[test]
@@ -168,5 +179,37 @@ fn glow_strong_matches_golden() {
         },
         &frame,
         tol::GPU_RASTER,
+    );
+}
+
+/// **落ちるテスト先行 → 既知の穴の根治**(`next/reference/KNOWN.md`「effect pass
+/// は layer 自身のテクスチャ境界内のみで計算」): 単色矩形 + glow の
+/// `render_frame` で、layer 矩形の**外側**(comp の黒背景)の画素に非ゼロ輝度の
+/// halo が出る。padding(`EffectPass::padding`、`motolii-compositor`)を実装する
+/// 前は、pass が layer 実寸の中でしか計算しないため、矩形の外側は常に
+/// `[0,0,0,255]`(赤)だった。
+#[test]
+fn brighter_pixels_appear_outside_the_original_layer_rect_bounds() {
+    let doc = doc_with_fixed_glow(0.1, 2.5, 2.0);
+    let mut engine = Engine::new().expect("engine");
+    let frame = engine.render_frame(&doc.view(), t(0)).unwrap();
+
+    // layer は `LAYER_SIZE`(24)四方、comp(64)中央 → x,y とも [20,44) を占める。
+    // すぐ外側の行(y=19、layer 矩形の1画素上)は旧実装だと常に黒のままだった。
+    let outside_top = pixel(&frame, W / 2, 19);
+    assert!(
+        outside_top[0] > 0 || outside_top[1] > 0 || outside_top[2] > 0,
+        "layer 矩形の外側(1画素上)に halo が出ていない(padding 未実装の症状): {outside_top:?}"
+    );
+
+    // 矩形からさらに離れた画素(comp の隅寄り)は radius=2.0 が宣言する
+    // padding(`step*2`=4)の届く範囲の外なので、依然として黒のはず——
+    // 「画面全体が明るくなっただけ」ではなく、halo が矩形の縁からの距離に
+    // 応じて減衰していることの対照点。
+    let far_from_layer = pixel(&frame, 4, 4);
+    assert_eq!(
+        far_from_layer,
+        [0, 0, 0, 255],
+        "layer から十分離れた画素まで明るくなっている(halo が無限に広がっている・別の回帰): {far_from_layer:?}"
     );
 }

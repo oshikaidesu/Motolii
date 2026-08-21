@@ -43,6 +43,33 @@ pub enum EffectPass {
     },
 }
 
+impl EffectPass {
+    /// この pass が layer 自身のテクスチャ境界の外へ出力を広げたい量(texel、
+    /// 上下左右均等)。**既知の穴の根治**(`next/reference/KNOWN.md`)—
+    /// `Compositor::render_with_effects` はこの値ぶんだけ scratch を layer 実寸より
+    /// 大きく確保し、source を中央へ置いてから pass を回す。
+    ///
+    /// [`Self::Identity`] は画素単位の copy なので 0。[`Self::Glow`] は
+    /// `blur_at`(`glow` サブモジュールの WGSL、`d2 = direction * step * 2`)が
+    /// 1回の blur pass で届く最大距離が `step*2`(`step = max(round(radius), 1)`)——
+    /// 水平 blur・垂直 blur は別々の pass で、片方が広げた軸をもう片方が再び
+    /// 広げることはない(水平 blur は x のみ、垂直 blur は y のみ動かす)ので、
+    /// x/y とも同じ `step*2` が上下左右の必要量になる(シェーダの `blur_at` と
+    /// 厳密に一致させる—5-tap の重み・間隔は変えない)。
+    pub fn padding(&self) -> u32 {
+        match self {
+            EffectPass::Identity => 0,
+            EffectPass::Glow { radius, .. } => {
+                // シェーダの `max(i32(round(params.radius)), 1)` と同じ丸め規約
+                // (先に 1.0 で下限を掛けてから丸めても結果は同じだが、ここは
+                // shader 側の「丸めてから下限」の順序をそのまま踏襲する)。
+                let step = radius.round().max(1.0) as u32;
+                step * 2
+            }
+        }
+    }
+}
+
 /// オフスクリーン texture のプール。**サイズ+フォーマットが同じ物は使い回す** —
 /// 新規生成は「そのサイズ/フォーマットの空き texture が無い時」だけ。
 #[derive(Default)]
