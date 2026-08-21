@@ -10,16 +10,16 @@ use re_entity_db::EntityDb;
 use re_log_types::{EntityPath, Timeline};
 
 use crate::components::{
-    descriptor_attrs, descriptor_composition, descriptor_effects, descriptor_markers,
-    descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes, descriptor_slots,
-    descriptor_text, descriptor_track, LayerPresent, TrackJson,
+    descriptor_assets, descriptor_attrs, descriptor_composition, descriptor_effects,
+    descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes,
+    descriptor_slots, descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
 use crate::document::{TrackCache, TransientKey};
 use crate::slot::PropertySource;
 use crate::{
-    property, Composition, Document, EffectInstance, LayerAttrs, LayerId, LayerMeta,
-    LayerPlacement, Marker, Mask, PropertyId, ResolvedEffect, ResolvedLayer, ResolvedMask,
-    Revision, Shape, Slot, SlotId, StoreError, TextDocument, EDIT_TIMELINE,
+    property, Asset, AssetId, AssetTable, Composition, Document, EffectInstance, LayerAttrs,
+    LayerId, LayerMeta, LayerPlacement, Marker, Mask, PropertyId, ResolvedEffect, ResolvedLayer,
+    ResolvedMask, Revision, Shape, Slot, SlotId, StoreError, TextDocument, EDIT_TIMELINE,
 };
 
 /// ある edit 時点の Document の姿。**query の投影であって、独自の状態を持たない**。
@@ -472,6 +472,37 @@ impl<'a> StoreView<'a> {
             return Ok(Vec::new());
         };
         serde_json::from_str(&json.0).map_err(StoreError::Encode)
+    }
+
+    /// 素材台帳(裁定162: bin-first — 取り込んだが未配置の素材。`Intent::AdmitAsset`/
+    /// `Intent::RemoveAsset` の書き口はこの台帳を読んでから丸ごと書き戻す)。**まだ
+    /// 一度も admit していない Document は空の台帳**(markers/slots と同じ「無い=空」
+    /// の扱い、component が無ければ壊れているのではなく単に空)。
+    pub(crate) fn assets_table(&self) -> Result<AssetTable, StoreError> {
+        let descriptor = descriptor_assets();
+        let path = Document::composition_path();
+        let results = self
+            .db
+            .latest_at(&self.query(), &path, [descriptor.component]);
+        let Some(json) = results
+            .component_batch::<TrackJson>(descriptor.component)
+            .and_then(|batch| batch.into_iter().next())
+        else {
+            return Ok(AssetTable::new());
+        };
+        serde_json::from_str(&json.0).map_err(StoreError::Encode)
+    }
+
+    /// 台帳の一覧。**`AssetId` 昇順**(`AssetTable` の内部が `BTreeMap`、旧台帳の
+    /// 意味そのまま)。Browser 等の front はここを読む(EXACT TARGET #3、裁定162)。
+    pub fn assets(&self) -> Result<Vec<Asset>, StoreError> {
+        Ok(self.assets_table()?.iter().cloned().collect())
+    }
+
+    /// 単体引き。台帳に無い id は `Ok(None)`(`markers`/`masks` の「無い=空」と同じ
+    /// 線引き — 該当 id が無いのは壊れた Document ではなく普通に有り得る)。
+    pub fn asset(&self, id: AssetId) -> Result<Option<Asset>, StoreError> {
+        Ok(self.assets_table()?.get(id).cloned())
     }
 
     pub fn meta(&self, layer: LayerId) -> Result<Option<LayerMeta>, StoreError> {

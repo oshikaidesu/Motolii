@@ -20,6 +20,7 @@
 //! - 書き口は [`Document::apply`] 1本だけ
 //! - **削除も append**(tombstone)。`drop_entity_path` を使うと undo で戻せなくなる
 
+mod asset;
 mod attrs;
 mod components;
 mod document;
@@ -32,6 +33,7 @@ mod slot;
 mod text;
 mod view;
 
+pub use asset::{Asset, AssetDraft, AssetError, AssetId, AssetTable};
 pub use attrs::{BlendMode, LayerAttrs, LayerAttrsPatch, Matte, MatteMode};
 pub use document::{DisplayRevision, Document, Intent, LayerId, PropertyId, Revision};
 pub use effect::{EffectId, EffectInstance, ResolvedEffect};

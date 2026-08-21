@@ -219,6 +219,18 @@ pub fn descriptor_slots() -> ComponentDescriptor {
     }
 }
 
+/// Document 所有の素材台帳(裁定162: bin-first — 取り込んだが未配置の素材)。
+/// `Composition:markers`/`Composition:slots` と同じく comp 設定とは別 component —
+/// 台帳への記帳は解像度/fps/尺の編集(`SetComposition`)とは別の操作なので、
+/// 差し替え口を巻き込まない(裁定108(c) と同じ理由)。
+pub fn descriptor_assets() -> ComponentDescriptor {
+    ComponentDescriptor {
+        archetype: Some(archetype_composition().into()),
+        component: "Composition:assets".into(),
+        component_type: Some(TrackJson::name()),
+    }
+}
+
 pub fn descriptor_present() -> ComponentDescriptor {
     ComponentDescriptor {
         archetype: Some(archetype_layer().into()),

@@ -14,9 +14,9 @@ use re_types_core::{Component, SerializedComponentBatch};
 use motolii_eval::Value;
 
 use crate::components::{
-    descriptor_attrs, descriptor_composition, descriptor_effects, descriptor_markers,
-    descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes, descriptor_slots,
-    descriptor_text, descriptor_track, LayerPresent, TrackJson,
+    descriptor_assets, descriptor_attrs, descriptor_composition, descriptor_effects,
+    descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes,
+    descriptor_slots, descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
 use crate::slot::PropertySource;
 use crate::view::StoreView;
@@ -351,6 +351,21 @@ pub enum Intent {
     /// 値の差し替えはすべてこれ1つ(`SetMasks`/`SetMarkers` と同じ考え方)。
     SetSlots {
         slots: Vec<Slot>,
+    },
+    /// 素材を台帳へ迎え入れる(裁定162: bin-first、取り込んだが未配置の素材)。
+    /// **同一 `content_hash` の draft は台帳を増やさず既存 id を使い回す**
+    /// (`crate::AssetTable::admit` の重複統合、旧台帳の意味そのまま)。呼び手が
+    /// 結果の id を知りたければ `StoreView::assets()`/`asset()` を admit 後に読む —
+    /// 他の Intent と同じく `apply` 自身は値を返さない(`AddLayer` が
+    /// `StoreView::next_layer_id` を先に呼ぶのと対の形: こちらは id を先に決めず、
+    /// 台帳自身に重複統合させてから読み手が引く)。
+    AdmitAsset {
+        draft: crate::AssetDraft,
+    },
+    /// 台帳から素材を取り除く。**この素材を指す layer が居るかは見ない**
+    /// (`LayerSource::Media` との参照統合は非目標、裁定162 の第一波)。
+    RemoveAsset {
+        asset: crate::AssetId,
     },
 }
 
@@ -982,6 +997,38 @@ impl Document {
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
                         descriptor: descriptor_slots(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::AdmitAsset { draft } => {
+                // read-modify-write — `SetTiming`/`SetSource` と同じ形(裁定162):
+                // 現在の台帳を読み、`admit` の重複統合を経てから丸ごと書き戻す。
+                let mut table = self.view().assets_table()?;
+                table
+                    .admit(draft)
+                    .map_err(|e| StoreError::Property(e.to_string()))?;
+                let json = serde_json::to_string(&table)?;
+                (
+                    Self::composition_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_assets(),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::RemoveAsset { asset } => {
+                let mut table = self.view().assets_table()?;
+                table
+                    .remove(asset)
+                    .map_err(|e| StoreError::Property(e.to_string()))?;
+                let json = serde_json::to_string(&table)?;
+                (
+                    Self::composition_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_assets(),
                         array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
