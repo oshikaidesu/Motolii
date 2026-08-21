@@ -71,15 +71,17 @@ fn src_dir() -> PathBuf {
 ///
 /// `timeline_pane.rs` は第2波第1切片(純粋なファイル分割)で `src/timeline/`
 /// (`mod.rs`/`projection.rs`/`hit.rs`/`canvas.rs`/`input.rs`)へ分かれ、
-/// 第2波T1(裁定147)で `lane_bar.rs` が加わった —
-/// 柵は緩めず、分割後の6ファイルへ対象を追随させる(色・寸法の直書きが
-/// 実際に発生し得るのは主に `canvas.rs`/`lane_bar.rs` だが、将来の混入も
-/// 拾えるよう分割後の全ファイルを対象にする)。
+/// 第2波T1(裁定147)で `lane_bar.rs` が加わり、第2波T2(単一クリップの
+/// move/trim)で `clip_gesture.rs` が加わった — 柵は緩めず、分割後の全7
+/// ファイルへ対象を追随させる(色・寸法の直書きが実際に発生し得るのは主に
+/// `canvas.rs`/`lane_bar.rs` だが、将来の混入も拾えるよう分割後の全ファイルを
+/// 対象にする)。
 const SCANNED_FILES: &[&str] = &[
     "inspector_pane.rs",
     "timeline/mod.rs",
     "timeline/projection.rs",
     "timeline/hit.rs",
+    "timeline/clip_gesture.rs",
     "timeline/canvas.rs",
     "timeline/input.rs",
     "timeline/lane_bar.rs",

@@ -179,6 +179,32 @@ pub enum Message {
     /// (`motolii_store::document::Intent::SetAttrs` 腕の規則、正典 §6)。
     LaneBarToggleLock(LayerId),
 
+    // ---- Timeline クリップの move/trim(第2波T2、正典 §2) ----
+    /// bar を掴んだ。`part` で move(本体)か trim(端)かが既に決まっている
+    /// (`timeline::input::update` が押した瞬間の座標だけで
+    /// `timeline::classify_bar_part` を1回呼んで確定 — 正典 §1「判定は押した
+    /// 瞬間の座標」)。`at_frame` は**スナップ前**の掴んだ点(掴んだ点と clip
+    /// 頭のズレを保つのに要る、`Shell::start_timeline_drag` 参照)。
+    TimelineBarGrabbed {
+        layer: LayerId,
+        part: timeline::BarPart,
+        at_frame: i64,
+    },
+    /// ドラッグ中のポインタ移動。canvas は掴んでいる間だけこれを出す。
+    /// `px_per_frame` はスナップの画面距離しきい値(`timeline::clip_gesture::
+    /// SNAP_PX`)をフレームへ直すのに要る実測値(窓幅依存) — Shell 自身は
+    /// 窓幅を知らないので、届いた値をそのまま使う。
+    TimelineDragMoved { at_frame: i64, px_per_frame: f32 },
+    /// 左クリック release = 進行中ジェスチャの確定。**ここで初めて
+    /// `Intent::SetTiming` を1回出す**(1 gesture = 1 undo、正典 §2)。
+    TimelineDragReleased,
+    /// 右クリック = 進行中ジェスチャの破棄(裁定151「キャンセルの一般化」)。
+    /// Esc も同じ意味だが、Esc は window 全体の subscription から届く
+    /// `Message::EscapePressed` が別経路で `cancel_timeline_drag` を直接呼ぶ
+    /// (この variant は経由しない — 二重定義を避ける)。**Document は最初から
+    /// 触っていない**ので、復元は preview を捨てるだけで成立する(正典 §2)。
+    TimelineDragCancelled,
+
     // ---- Inspector の drag-to-scrub ----
     /// 値セルの press。**まだ Document を書かない** — click か drag かは
     /// release まで未確定(`Shell::inspector_drag`)。
@@ -283,6 +309,30 @@ struct FieldDragState {
     last_value: Option<Value>,
 }
 
+/// Timeline クリップの move/trim、進行中の一時状態(第2波T2)。**Document では
+/// ない** — `FieldDragState` と同じ「pane 側の transient」の形だが、
+/// `LayerTiming` は `Document::set_transient` が持てる `Value`(animatable
+/// property の型)ではない(`speed`/`source_in` を持つ配置情報であって、
+/// キーを打てる値ではない)ので、overlay ではなくこの構造体自身が
+/// press〜release の橋渡しを持つ。**Document は release まで一切触らない**
+/// (`finish_timeline_drag` が1回だけ `Intent::SetTiming` を出す) — Esc/
+/// 右クリックでの復元(`cancel_timeline_drag`)は履歴に触れていないぶん、
+/// 単にこの構造体を捨てるだけで完全に無傷になる(inspector drag の
+/// `clear_transient` と同じ役目を、ここでは「何もしない」が担う)。
+#[derive(Clone, Copy)]
+struct TimelineDragState {
+    layer: LayerId,
+    part: timeline::BarPart,
+    /// 掴んだ瞬間に Document から読んだそのままの値。**move/trim の計算は毎回
+    /// これを基準に絶対値で出し直す**(delta 蓄積禁止、正典 §2)。
+    origin: LayerTiming,
+    /// 掴んだ瞬間のポインタ位置(comp frame、スナップ前)。
+    grab_at_frame: i64,
+    /// 直近の move/trim 計算結果。release がこれを(`origin` と違えば)1回
+    /// `apply` する。
+    preview: LayerTiming,
+}
+
 pub struct Shell {
     doc: Document,
     session: Session,
@@ -306,6 +356,9 @@ pub struct Shell {
     /// 直近の Shift 押下状態。`CursorMoved` は modifiers を運ばないので
     /// `ModifiersChanged` から別途追う(drag の1/10微調整に使う)。
     keyboard_modifiers: iced::keyboard::Modifiers,
+    /// Timeline クリップの move/trim、進行中の一時状態(第2波T2)。**Document
+    /// ではない** — 同上(`TimelineDragState` doc comment 参照)。
+    timeline_drag: Option<TimelineDragState>,
 
     // ---- Settings パネル(タスク#18) ----
     /// パネルの開閉。**表示だけの状態** — Document でも `Session`(選択・再生
@@ -353,6 +406,7 @@ impl Shell {
                 inspector_name_draft: None,
                 inspector_drag: None,
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
+                timeline_drag: None,
                 settings_panel_open: false,
                 checkerboard: false,
                 background_draft: None,
@@ -384,6 +438,7 @@ impl Shell {
             inspector_name_draft: None,
             inspector_drag: None,
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
+            timeline_drag: None,
             settings_panel_open: false,
             checkerboard: false,
             background_draft: None,
@@ -461,13 +516,30 @@ impl Shell {
             Message::LaneBarToggleMute(layer) => self.toggle_layer_hidden(layer),
             Message::LaneBarToggleSolo(layer) => self.toggle_layer_solo(layer),
             Message::LaneBarToggleLock(layer) => self.toggle_layer_lock(layer),
+            Message::TimelineBarGrabbed { layer, part, at_frame } => {
+                self.start_timeline_drag(layer, part, at_frame);
+            }
+            Message::TimelineDragMoved { at_frame, px_per_frame } => {
+                self.continue_timeline_drag(at_frame, px_per_frame);
+            }
+            Message::TimelineDragReleased => self.finish_timeline_drag(),
+            Message::TimelineDragCancelled => {
+                self.cancel_timeline_drag();
+            }
             Message::InspectorValuePressed(field) => self.start_field_drag(field),
             Message::InspectorPointerMoved(point) => self.continue_field_drag(point),
             Message::InspectorPointerReleased => {
                 task = self.finish_field_drag();
             }
             Message::KeyboardModifiersChanged(modifiers) => self.keyboard_modifiers = modifiers,
-            Message::EscapePressed => self.cancel_inspector_interaction(),
+            // Esc は Timeline ドラッグを優先してキャンセルする — 何も掴んで
+            // いなければ Inspector 側(drag/typing 下書き)を試す(排他、
+            // `cancel_timeline_drag` の doc comment 参照)。
+            Message::EscapePressed => {
+                if !self.cancel_timeline_drag() {
+                    self.cancel_inspector_interaction();
+                }
+            }
             Message::ToggleSettingsPanel => self.settings_panel_open = !self.settings_panel_open,
             Message::ToggleCheckerboard => self.checkerboard = !self.checkerboard,
             Message::SettingsBackgroundPreset(preset) => self.apply_background_preset(preset),
@@ -728,6 +800,146 @@ impl Shell {
         if let Err(error) = self.doc.apply(Intent::SetAttrs { layer, patch }) {
             self.status = Some(format!("locked を書けない: {error}"));
         }
+    }
+
+    // ---- Timeline クリップの move/trim(第2波T2、正典 §2) ----
+
+    /// bar を掴んだ瞬間。**ロック中は掴む前に断る**(正典 §2 拘束6・M13: 無反応
+    /// ゼロ) — `Intent::SetTiming` も `check_not_locked` で同じ理由を拒むが、
+    /// release まで待たせると「ドラッグは動いたのに戻る」という嘘になるので、
+    /// ここで先に断って理由を status 帯へ出す(`lane_bar` の M/S/L 拒否と同じ
+    /// 判断)。move(`Body`)は**未選択なら掴んだ瞬間に単独選択へ差し替える**
+    /// (正典 §2) — このソフトの選択は単一(`Session::selection`)なので、
+    /// 「差し替え」は常に「選ぶ」と同義。trim(`Edge*`)は選択を変えない
+    /// (旧 iced 実装 `crates/motolii-shell-iced` の egui 移植と同じ判断)。
+    fn start_timeline_drag(&mut self, layer: LayerId, part: timeline::BarPart, at_frame: i64) {
+        if self.timeline_drag.is_some() {
+            return; // 既に別のドラッグが進行中 — 多重起動しない
+        }
+        let Ok(Some(meta)) = self.doc.view().meta(layer) else {
+            return; // 素材が無い layer は掴めない(起こらないはずだが安全側)
+        };
+        let locked = self
+            .doc
+            .view()
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+            .locked;
+        if locked {
+            self.status = Some(format!("layer {} はロックされているので動かせない", layer.0));
+            return;
+        }
+        if matches!(part, timeline::BarPart::Body) {
+            self.session.selection = Some(layer);
+        }
+        self.timeline_drag = Some(TimelineDragState {
+            layer,
+            part,
+            origin: meta.timing,
+            grab_at_frame: at_frame,
+            preview: meta.timing,
+        });
+    }
+
+    /// ドラッグ中のポインタ移動。**掴んだ瞬間の値(`origin`)を基準に絶対値で
+    /// 出し直す**(delta 蓄積禁止、正典 §2) — 実際の計算は
+    /// `timeline::clip_gesture` の純関数(`hit.rs`/`clip_gesture.rs` と同じ
+    /// 「Document を持たない意味関数」の形)。**Document はまだ一切触らない**
+    /// (`preview` は `self` の transient な一時値、release まで `apply` しない)。
+    ///
+    /// スナップは既定 ON、**ドラッグ中の Cmd 押下で一時トグル**(正典 §2・
+    /// 裁定151)。候補(0秒・終端・playhead・他 clip の start/end)は
+    /// `timeline_rows()` から毎回引き直す — ドラッグ中に他の layer が動く
+    /// ことは無いので古くなる心配はない。
+    fn continue_timeline_drag(&mut self, at_frame: i64, px_per_frame: f32) {
+        let Some(drag) = self.timeline_drag else {
+            return;
+        };
+        let comp_duration = self.comp_duration();
+        let snap_enabled = !self.keyboard_modifiers.command();
+        let rows = self.timeline_rows();
+        let candidates = timeline::clip_gesture::snap_candidates(
+            &rows,
+            drag.layer,
+            self.session.playhead,
+            comp_duration,
+        );
+
+        let mut timing = drag.origin;
+        match drag.part {
+            timeline::BarPart::Body => {
+                timing.start = timeline::clip_gesture::moved_start(
+                    drag.origin.start,
+                    drag.origin.duration,
+                    drag.grab_at_frame,
+                    at_frame,
+                    comp_duration,
+                    &candidates,
+                    px_per_frame,
+                    snap_enabled,
+                );
+            }
+            timeline::BarPart::EdgeIn => {
+                let end = drag.origin.start + drag.origin.duration;
+                let new_start = timeline::clip_gesture::trimmed_in_start(
+                    end,
+                    at_frame,
+                    &candidates,
+                    px_per_frame,
+                    snap_enabled,
+                );
+                let delta = new_start - drag.origin.start;
+                timing.start = new_start;
+                timing.duration = drag.origin.duration - delta;
+                timing.source_in = drag.origin.source_in + delta;
+            }
+            timeline::BarPart::EdgeOut => {
+                let new_end = timeline::clip_gesture::trimmed_out_end(
+                    drag.origin.start,
+                    at_frame,
+                    comp_duration,
+                    &candidates,
+                    px_per_frame,
+                    snap_enabled,
+                );
+                timing.duration = new_end - drag.origin.start;
+            }
+        }
+
+        if let Some(drag) = self.timeline_drag.as_mut() {
+            drag.preview = timing;
+        }
+    }
+
+    /// release = 確定。**掴んだだけで未移動なら no-op**(正典 §2 Esc と同じ
+    /// 判断を release にも適用 — `preview == origin` は「何も変えていない」の
+    /// 意味そのもの)。動いていれば `Intent::SetTiming` を1回だけ出す
+    /// (1 gesture = 1 undo)。
+    fn finish_timeline_drag(&mut self) {
+        let Some(drag) = self.timeline_drag.take() else {
+            return;
+        };
+        if drag.preview == drag.origin {
+            return;
+        }
+        if let Err(error) = self.doc.apply(Intent::SetTiming {
+            layer: drag.layer,
+            timing: drag.preview,
+        }) {
+            self.status = Some(format!("timing を書けない: {error}"));
+        }
+    }
+
+    /// Esc / 右クリック = 進行中ジェスチャの破棄(正典 §2・裁定151「キャンセルの
+    /// 一般化」)。**Document は最初から触っていない**ので、復元は state を
+    /// 捨てるだけで成立する(履歴は完全に無傷 — `clear_transient` に相当する
+    /// 仕事が「何もしない」になっている、`TimelineDragState` doc comment 参照)。
+    /// 戻り値は「何か捨てたか」— `Message::EscapePressed` が Inspector 側の
+    /// cancel と排他に振り分けるのに使う。
+    fn cancel_timeline_drag(&mut self) -> bool {
+        self.timeline_drag.take().is_some()
     }
 
     // ---- Settings パネル(タスク#18) ----
