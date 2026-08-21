@@ -67,11 +67,14 @@ arrow = { version = "58.3", default-features = false }
 # ---------------------------------------------------------------------------
 # front
 # ---------------------------------------------------------------------------
-# **上流をそのまま引く**(fork ではない)。旧 workspace は fork を2 seam 抱えていたが、
-# seam 2(`max_bind_groups` の床)は「iced の device の上で re_renderer を回す」ための
-# ものだった。裁定44 で Stage を CPU 経路にしたので要らない。
-# seam 1(web-sys の完全一致解除)が要るかどうかは解決してみて決める。
-iced = { version = "0.14", features = ["wgpu", "advanced", "image", "canvas"] }
+# 裁定170(2026-08-22, M01)で fork `oshikaidesu/iced` branch `motolii/host-seams`
+# へ pin。fork base(= upstream `iced-rs/iced` master)は wgpu 29 系列へ揃っており、
+# re_renderer 経由の wgpu(既に 29.0.4)と単一版へ畳める
+# (survey: docs/reviews/2026-08-22-iced-015-wgpu29-migration-survey.md §3)。
+# seam1(web-sys 完全一致解除)/seam2(`max_bind_groups` の床)は fork に
+# 既に入っている(`docs/reviews/2026-08-18-iced-fork-seam-ledger.md`)ので
+# コード追加なし。feature 名は 0.14→0.15.0-dev で変更なし(実測)。
+iced = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c", features = ["wgpu", "advanced", "image", "canvas"] }
 # 依存グラフには re_renderer 経由で既に入っている(裁定117 が許す direct 昇格)。
 # デザイン値の外出しの debug watch(`motolii-shell/src/tokens.rs`)だけが使う。
 notify = "8"

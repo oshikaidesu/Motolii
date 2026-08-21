@@ -63,7 +63,9 @@ image.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true
-# タスク#15: iced_test spike + Q0横断柵。iced 0.14 と同一ラインの公式 crate
-# (upstream iced-rs/iced、workspace の fork 版ではない — fork は tester/test rev
-# 0.15.0-dev で next/ の iced 0.14 とは別線)。dev-only、shell の外へは出さない。
-iced_test = "0.14"
+# タスク#15: iced_test spike + Q0横断柵。裁定170(M01)で本体 `iced` と同じ fork
+# `oshikaidesu/iced` branch `motolii/host-seams`(rev 73e686ee)へ揃えた。
+# 別revで放置すると本体と iced_test が別々の Selector/Candidate 型を持つ
+# 2ライン共存事故になる(survey §2.4 item 4)ため、本体と常に同 rev で運用する。
+# dev-only、shell の外へは出さない。
+iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
