@@ -18,6 +18,7 @@ members = [
     "engine/motolii-media",
     "engine/motolii-vector",
     "shell/motolii-shell",
+    "ui/motolii-browser-pane",
     "ui/motolii-inspector-pane",
     "ui/motolii-settings-pane",
     "ui/motolii-tokens-rs",
@@ -126,6 +127,13 @@ motolii-inspector-pane = { path = "ui/motolii-inspector-pane" }
 # §4.2「stage レーン」・§6 切片10)。`motolii-shell` は `pub use` で `stage` path
 # 互換を保つ。
 motolii-stage-pane = { path = "ui/motolii-stage-pane" }
+# ζ 縫い目調査(docs/reviews/2026-08-21-browser-seam-survey.md)+裁定162 切片
+# B0: Browser pane の骨格 crate。**まだ何も描かない**(`Message` は空 enum、
+# `view()` は空 `column![]`)。`motolii-shell` は `Message::Browser(Message)`
+# を1本で畳む腕を持つが、`Shell::view` にはまだ組み込まない(描画ゼロ = 挙動
+# ゼロ変更の証明、B3 で視覚と一緒に配線)。`motolii-shell` 側は
+# `pub use motolii_browser_pane as browser_pane;` で他 pane と同じ命名口を張る。
+motolii-browser-pane = { path = "ui/motolii-browser-pane" }
 
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
