@@ -33,6 +33,14 @@ symphonia = { version = "0.6", default-features = false, features = [
 # デバイスレート≠素材レート時の固定比変換(プロデューサ側で使う。第1切片では
 # `to_canonical` が呼ぶ)。
 rubato = "0.16"
+# 実時間再生 第1切片(A1): `DeviceWaitLatency::update_from_output_callback` が
+# `cpal::OutputCallbackInfo` を読む(旧 `crates/motolii-audio/src/latency.rs` の
+# 移植)。デバイスは開かない — 型だけを読む pure 関数に使う。旧と同じ pin。
+cpal = "0.18"
+# `ring` モジュールの SPSC バッファ。旧 `crates/motolii-audio/src/ring.rs`(367行の
+# 自前実装、KNOWN.md「音声」節で再発明と判定済み)を置き換える — 上流にある実装を
+# 使い、フレーム境界の充填/無音補填ロジックだけをこの crate 側に残す。
+rtrb = "0.4"
 
 [dev-dependencies]
 motolii-testkit.workspace = true
