@@ -215,16 +215,17 @@ fn the_full_width_section_bars_span_the_entire_pane_at_the_mock_section_height()
 }
 
 /// column-header 行(Property/X/Y/Z/Key)+ Transform 5行(Position/Scale/
-/// Rotation/Anchor/Opacity)+ Blend 行 = 7本、すべて「pane 全幅 × row 高
-/// (20)」であること(mock `.cols`/`.prow` の box)。
+/// Rotation/Anchor/Opacity)+ Blend 行 + Speed 行(SP1 第一波、supervisor
+/// 決定1 — Blend の下に同じ `.prow` grammar で足した) = 8本、すべて
+/// 「pane 全幅 × row 高(20)」であること(mock `.cols`/`.prow` の box)。
 #[test]
 fn the_full_width_property_rows_span_the_entire_pane_at_the_mock_row_height() {
     let (targets, dims) = selected_inspector_targets();
     let rows = containers_matching(&targets, dims.inspector_panel_width, dims.inspector_row_height);
     assert_eq!(
         rows.len(),
-        7,
-        "pane 全幅×20px の行(cols見出し+Transform5行+Blend)が7本のはずが{}本: {rows:?}",
+        8,
+        "pane 全幅×20px の行(cols見出し+Transform5行+Blend+Speed)が8本のはずが{}本: {rows:?}",
         rows.len()
     );
 }
@@ -335,8 +336,8 @@ fn the_column_header_grid_matches_the_mock_gap_and_side_padding() {
 
 /// mock の2枚目(`--s:1.50`)と同じ倍率。`ui_scale_fence.rs` は「全寸法に
 /// 1.5 が掛かる」ことを `Dimensions` 単体で見ているが、ここでは実際に描いた
-/// widget 木でも 26px 高の帯が4本・20px 高の行が7本のまま(数が変わらない
-/// = grid の**形**が保たれる)ことを見る。
+/// widget 木でも 26px 高の帯が4本・20px 高の行が8本のまま(数が変わらない
+/// = grid の**形**が保たれる)ことを見る(SP1 で行数が7→8に増えた上での基準)。
 #[test]
 fn the_grid_shape_is_preserved_at_150_percent_scale() {
     let mut shell = Shell::new().0;
@@ -356,7 +357,7 @@ fn the_grid_shape_is_preserved_at_150_percent_scale() {
     assert_eq!(bars.len(), 4, "150%でも26px相当の帯が4本のはずが{}本", bars.len());
 
     let rows = containers_matching(&targets, dims.inspector_panel_width, dims.inspector_row_height);
-    assert_eq!(rows.len(), 7, "150%でも20px相当の行が7本のはずが{}本", rows.len());
+    assert_eq!(rows.len(), 8, "150%でも20px相当の行が8本のはずが{}本", rows.len());
 
     let value_height = dims.inspector_row_height - dims.spacing_s;
     let cells = containers_matching(&targets, dims.inspector_value_width, value_height);

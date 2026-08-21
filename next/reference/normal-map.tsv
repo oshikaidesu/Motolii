@@ -267,7 +267,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 266	clip_edit	Razor Tool	レーザーツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	
 267	clip_edit	Razor(split)	Command+B	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
 268	clip_edit	Render In to Out	In-Out間をレンダリング	0	1	0	0	1	1:0:0:0	二次(premiere全体注記)		採用予定	
-269	clip_edit	Reset Clip(speed)	Option+Command+R	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
+269	clip_edit	Reset Clip(speed)	Option+Command+R	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済	SP1第一波(Inspector Speed行 Reset ボタン)で消化 — 100%へ即 SetTiming、既に100%ならno-op(Undoを積まない)
 270	clip_edit	Reset Retime	リタイムをリセット	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 271	clip_edit	Resize	リサイズ	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済	clip_gesture.rs trimmed_in_start/trimmed_out_end
 272	clip_edit	Retime Clip	Command+R	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
@@ -961,7 +961,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 960	misc	Start or stop preview	プレビュー開始/停止	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	GOALS M8(未)
 961	misc	Still…	静止画プロキシを作成	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし
 962	misc	Stroke	境界線	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	レイヤースタイルは裁定71で全廃(境界線=Stroke layer style)
-963	misc	Time Stretch…	タイムストレッチ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	Speed実装済み(裁定112g)、UIダイアログは未
+963	misc	Time Stretch…	タイムストレッチ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	SP1第一波でUI到達 — Inspector ATTRS section の Speed数値欄(%、click→type)+ duration連動(clip_gesture::retimed_duration)。ダイアログ形式ではなくInspector欄形式で消化
 964	misc	Time-Reverse Layer	レイヤーを逆再生	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	935と同根拠
 965	misc	Toggle Mercury Transmit video preview	Mercury Transmitプレビュー切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		不採用	領域外: 外部プレビュー出力デバイス(Mercury Transmit相当、プロ入出力設定)
 966	misc	Toggle selection of layer by number (1-999)	番号でレイヤー選択切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし
