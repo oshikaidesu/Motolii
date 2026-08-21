@@ -20,20 +20,20 @@ Repository-specific agent *conduct* rules were archived in [docs/archive/agent-g
 
 ### 頻出コマンド(コピペ用 — 記憶から組み立てない。2026-08-22: cd 位置の誤り5連発の根治)
 
-正本 workspace は `next/`(リポ根の Cargo.toml は旧 workspace で `motolii-shell` を含まない)。**`--manifest-path` で cwd 依存を消す** — 背景実行はシェルの cd 履歴に関わらずリポ根で走るため、cd 前置は事故源:
+正本 workspace は `next/`(リポ根の Cargo.toml は旧 workspace で `motolii-shell` を含まない)。**`--manifest-path` で cwd 依存を消す** — 背景実行はシェルの cd 履歴に関わらずリポ根で走るため、cd 前置は事故源。パスは `$(git rev-parse --show-toplevel)` で**自分のいるツリーの根**に解決させる — レーンは自分の worktree・supervisor は main checkout と自動で正しく分かれ(絶対パス直書きだと worktree から main を誤ビルドする)、リポ移動にも生き残る。ハードコードは `next/` の1語のみ(構成が変われば本節を更新):
 
 ```bash
 # フル関門(merge 前最終)— 合否は $? 直取り
-cargo test --manifest-path /Users/member_ottoto/rust_ae/Motolii/next/Cargo.toml --workspace --locked --no-fail-fast -j 4 > /tmp/full.log 2>&1; echo "EXIT=$?"
+cargo test --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --workspace --locked --no-fail-fast -j 4 > /tmp/full.log 2>&1; echo "EXIT=$?"
 
 # release shell(fixture 窓)
-cargo build --manifest-path /Users/member_ottoto/rust_ae/Motolii/next/Cargo.toml --release -p motolii-shell -j 4
+cargo build --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --release -p motolii-shell -j 4
 
-# fixture 窓の起動(バイナリは絶対パス)
-/Users/member_ottoto/rust_ae/Motolii/next/target/release/motolii-shell --fixture
+# fixture 窓の起動(supervisor が main checkout から)
+"$(git rev-parse --show-toplevel)/next/target/release/motolii-shell" --fixture
 
 # storm/r2 の無罪確認(負荷 flake — release 単独)
-cargo test --manifest-path /Users/member_ottoto/rust_ae/Motolii/next/Cargo.toml --release -p motolii-store --test document edit_storm_with_the_real_track_type
+cargo test --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --release -p motolii-store --test document edit_storm_with_the_real_track_type
 ```
 
 ### 既知の構造ギャップと改善ルート(未着手 — 変更時はここを更新)
