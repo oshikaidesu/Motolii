@@ -121,6 +121,45 @@ pub fn trimmed_out_end(
     target.clamp(start + 1, comp_duration.max(start + 1))
 }
 
+/// speed 変更に伴う duration の再計算(SP1 第一波= Inspector 数値欄、第二波=
+/// Shift+bar端 rate stretch が共有する純関数、δ 採択理由・supervisor 決定4)。
+/// **start・source_in はここでは触らない**(呼び手が不変に保つ責務、
+/// `motolii-inspector-pane`/第二波どちらの呼び手も同じ契約)。
+///
+/// `new_duration = round(old_duration × old_speed / new_speed)`、**最低1フレーム**
+/// (0以下・尺なしへは潰さない、M13)。speed は `motolii_store::Speed` の
+/// `(num, den)` をそのまま tuple で受ける — `motolii-store` を import しない
+/// 自己完結を保つため(ファイル冒頭 doc の理由と同じ)。`den` は
+/// `Speed::try_new` の不変式により本来は常に正だが、ここでは呼び手の契約違反
+/// (0)を安全側で受け止め、0除算はせず `old_duration` をそのまま返す。
+///
+/// 丸めは四捨五入(round-half-away-from-zero、`f64` を経由しない — `i128` の
+/// 整数演算のみ、Speed 型自身の「f64 を経由しない」設計と合わせる)。
+pub fn retimed_duration(old_duration: i64, old_speed: (i64, i64), new_speed: (i64, i64)) -> i64 {
+    let (old_num, old_den) = old_speed;
+    let (new_num, new_den) = new_speed;
+    if old_den == 0 || new_den == 0 || new_num == 0 {
+        return old_duration.max(1);
+    }
+    let numerator = old_duration as i128 * old_num as i128 * new_den as i128;
+    let denominator = old_den as i128 * new_num as i128;
+    let rounded = round_div_i128(numerator, denominator);
+    rounded.clamp(1, i64::MAX as i128) as i64
+}
+
+/// `n / d` を四捨五入(round-half-away-from-zero)。`d == 0` は呼び手が既に
+/// 弾いている(`retimed_duration` 参照)。
+fn round_div_i128(n: i128, d: i128) -> i128 {
+    let d_abs = d.abs();
+    let n_abs = n.abs();
+    let q = (n_abs + d_abs / 2) / d_abs;
+    if (n < 0) != (d < 0) {
+        -q
+    } else {
+        q
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,5 +240,44 @@ mod tests {
         assert_eq!(trimmed_out_end(100, 50, 300, &[], 0.0, false), 101);
         // comp の外へは出ない。
         assert_eq!(trimmed_out_end(100, 1000, 300, &[], 0.0, false), 300);
+    }
+
+    // -----------------------------------------------------------------------
+    // SP1 第一波: speed 変更に伴う duration 再計算(ORACLE (a))
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn retimed_duration_halves_at_double_speed() {
+        assert_eq!(retimed_duration(100, (1, 1), (2, 1)), 50);
+    }
+
+    #[test]
+    fn retimed_duration_doubles_at_half_speed() {
+        assert_eq!(retimed_duration(100, (1, 1), (1, 2)), 200);
+    }
+
+    #[test]
+    fn retimed_duration_rounds_to_nearest_frame() {
+        // 5 frame を 1→3倍速(300%)にすると 5/3 = 1.666… → 2 frame に丸まる。
+        assert_eq!(retimed_duration(5, (1, 1), (3, 1)), 2);
+    }
+
+    #[test]
+    fn retimed_duration_clamps_to_a_minimum_of_one_frame() {
+        // 1 frame をさらに速くしても 0 以下には潰れない。
+        assert_eq!(retimed_duration(1, (1, 1), (100, 1)), 1);
+    }
+
+    #[test]
+    fn retimed_duration_is_a_no_op_at_the_same_speed() {
+        assert_eq!(retimed_duration(123, (1, 1), (1, 1)), 123);
+    }
+
+    #[test]
+    fn retimed_duration_never_divides_by_zero() {
+        // 契約違反(den=0/new_num=0)は起こらないはずだが、安全側で old_duration を返す。
+        assert_eq!(retimed_duration(50, (1, 0), (2, 1)), 50);
+        assert_eq!(retimed_duration(50, (1, 1), (0, 1)), 50);
+        assert_eq!(retimed_duration(50, (1, 1), (2, 0)), 50);
     }
 }

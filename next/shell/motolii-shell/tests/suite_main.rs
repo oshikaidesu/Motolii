@@ -40,6 +40,8 @@ mod playback_drive;
 mod q0_fence;
 #[path = "suite/settings_drive.rs"]
 mod settings_drive;
+#[path = "suite/speed_drive.rs"]
+mod speed_drive;
 #[path = "suite/theme_wiring_fence.rs"]
 mod theme_wiring_fence;
 #[path = "suite/timeline_key_gesture_drive.rs"]

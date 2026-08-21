@@ -138,6 +138,20 @@ pub enum Message {
     /// 直前の move が確定値(1 gesture = 1 undo)、動いていなければ click として
     /// type 編集へ切り替える。
     PointerReleased,
+
+    // ---- ATTRS: Speed 欄(SP1 第一波、supervisor 決定1-7) ----
+    /// Speed 欄への打鍵。**まだ Document を書かない** — 下書きを更新するだけ
+    /// (`FieldInput` と同じ形 — ただし Speed は `LayerTiming` の一部で
+    /// `TransformField`/track を経由しないので、下書きは `TransformField` に
+    /// 紐付かない単純な `String`)。
+    SpeedInput(String),
+    /// Speed 欄の Enter — ここで初めて1回の `Intent::SetTiming` を出す
+    /// (1 gesture = 1 undo、duration も同時に再計算する — 決定4)。
+    SpeedSubmit,
+    /// Speed 行の Reset ボタン。下書きを経由せず即 100% へ — 既に100%なら
+    /// no-op(`Intent` を出さない、決定7)。`ToggleHidden`/`CycleBlendMode` と
+    /// 同じ即時操作の形。
+    ResetSpeed,
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +243,46 @@ pub fn single_hold_track(value: Value) -> KeyframeTrack {
 
 pub fn format_number(value: f64, decimals: usize) -> String {
     format!("{value:.decimals$}")
+}
+
+// ---------------------------------------------------------------------------
+// Speed 欄(ATTRS、SP1 第一波)— %⇄`motolii_store::Speed` の写像だけをここに置く。
+// ---------------------------------------------------------------------------
+//
+// **`LayerTiming`/`Intent::SetTiming` の組み立て・duration 再計算はここでは
+// 行わない**: duration 再計算の純関数(`retimed_duration`、supervisor 決定4)は
+// `motolii-timeline-pane::clip_gesture` に住む(第二波 Shift+端drag と共有する
+// ため、δ 採択理由)が、この crate は `motolii-timeline-pane` へ依存できない
+// (`Cargo.toml` は今回の発注書 ALLOWLIST に含まれない — root→pane の一方向
+// 依存を保つ既存の判断を、新しい循環を作らずに守った結果)。**両方に依存できる
+// `motolii-shell` root がその組み立てを担う**(`Shell::apply_speed` —
+// `commit_inspector_field` が `Value`/`Intent::SetTrack` まで組むのと違う分担、
+// RETURN の FINDING 参照)。ここが持つのは「% ⇄ (num, den)」の純粋な往復だけ。
+
+/// 表示 % → `motolii_store::Speed` の `(num, den)`。**p は正の有限値のみ受理**
+/// (0・負・NaN・∞は `None` — supervisor 決定3「0 は拒否」)。**分母は 1000 固定**
+/// (表示の小数1桁をそのまま整数化できる最小の桁 — `Speed::try_new` の不変式
+/// 「分母は正」を機械的に満たす、値を約分はしない)。
+pub fn percent_to_speed_ratio(percent: f64) -> Option<(i64, i64)> {
+    if !percent.is_finite() || percent <= 0.0 {
+        return None;
+    }
+    let tenths = (percent * 10.0).round();
+    if tenths <= 0.0 {
+        // 丸めで0以下になる極小値(例: 0.04%)も同じ理由で拒む。
+        return None;
+    }
+    Some((tenths as i64, 1000))
+}
+
+/// `Speed` の `(num, den)` → 表示 %(逆算、[`percent_to_speed_ratio`] の逆写像)。
+/// `format_number(_, 1)` と組み合わせて小数1桁で表示する(view 側)。`den == 0`
+/// は `Speed::try_new` の不変式により本来起こらないが、安全側で 100.0 を返す。
+pub fn speed_percent(num: i64, den: i64) -> f64 {
+    if den == 0 {
+        return 100.0;
+    }
+    num as f64 / den as f64 * 100.0
 }
 
 /// Blend 巡回ボタンが回る mode の一覧。**engine 側の変換表
@@ -407,6 +461,9 @@ pub struct AttrsProjection {
     /// [`SUPPORTED_BLEND_MODES`] 参照)。`BlendMode` の `Debug` 表示をそのまま使う
     /// (`Normal`/`Add`/…)。
     pub blend_mode: String,
+    /// `LayerTiming.speed` の表示 %(100=等速、SP1 第一波)。`meta` が読めない
+    /// (起こらないはず)場合は等速(100.0)。[`speed_percent`] がこの写像の実体。
+    pub speed_percent: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -604,14 +661,20 @@ pub fn project(
     };
 
     let attrs = store.attrs(layer)?.unwrap_or_default();
+    // `kind`/`speed_percent` は同じ `meta()` から読む(2回叩かない)。
+    let meta = store.meta(layer)?;
     let attrs_projection = AttrsProjection {
         name: attrs.name,
         hidden: attrs.hidden,
         blend_mode: format!("{:?}", attrs.blend_mode),
+        speed_percent: meta
+            .as_ref()
+            .map(|meta| speed_percent(meta.timing.speed.num(), meta.timing.speed.den()))
+            .unwrap_or(100.0),
     };
 
-    let kind = store
-        .meta(layer)?
+    let kind = meta
+        .as_ref()
         .map(|meta| source_kind_label(&meta.source))
         .unwrap_or("layer");
 
@@ -941,6 +1004,24 @@ pub fn view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
+    view_with_speed_draft(projection, field_draft, name_draft, None, dims, colors)
+}
+
+/// [`view`] と同じだが、Speed 欄(ATTRS、SP1 第一波)の編集下書きも渡せる。
+/// `motolii_shell::Shell::view` はこちらを呼ぶ。**`view` 自身の4引数シグネチャは
+/// 変えていない** — 既存の呼び出し元(`tests/suite/inspector_pixel_fence.rs`・
+/// `ident_band_drive.rs`・`ui_scale_fence.rs`、いずれも今回の発注書 ALLOWLIST
+/// 外)を無改修のまま通すため(RETURN の FINDING 参照)。`view` はここへ
+/// `speed_draft: None` で委譲するだけ — Speed 行は常に確定値(下書き無し)を
+/// 表示する形で、挙動は変わらない。
+pub fn view_with_speed_draft(
+    projection: Option<&SelectionProjection>,
+    field_draft: Option<&FieldDraft>,
+    name_draft: Option<&str>,
+    speed_draft: Option<&str>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
     // **`--section`(26)**: mock の ptitle(パネルタイトル)は section 見出しと
     // 同じ高さトークンを共有する(`inspector_section_header_height`) — 旧実装は
     // Shell 全体の `panel_header_height`(29、Ableton実測)を誤って流用していた。
@@ -969,7 +1050,9 @@ pub fn view(
 
     let body: Element<'static, Message> = match projection {
         None => empty_state(dims, colors),
-        Some(selection) => selected_body(selection, field_draft, name_draft, dims, colors),
+        Some(selection) => {
+            selected_body(selection, field_draft, name_draft, speed_draft, dims, colors)
+        }
     };
 
     container(column![header, body])
@@ -1007,6 +1090,7 @@ fn selected_body(
     selection: &SelectionProjection,
     field_draft: Option<&FieldDraft>,
     name_draft: Option<&str>,
+    speed_draft: Option<&str>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -1022,7 +1106,7 @@ fn selected_body(
     for row_projection in selection.transform.iter().filter(|r| r.label == "Opacity") {
         rows = rows.push(transform_row(row_projection, field_draft, dims, colors));
     }
-    rows = rows.push(attrs_section(&selection.attrs, dims, colors));
+    rows = rows.push(attrs_section(&selection.attrs, speed_draft, dims, colors));
     rows = rows.push(hint_row(dims, colors));
 
     scrollable(rows).height(Length::Fill).into()
@@ -1435,7 +1519,12 @@ fn name_input_style(dims: Dimensions, colors: Colors, status: text_input::Status
 /// (現状 Normal→Add→Normal の2値、engine が対応する分だけ)。意匠は新規発明せず
 /// `motolii_settings_pane::chrome::button_style`(`checkerboard_row` と同じ「押すたび
 /// 即トグル」の形、他の意味色ロールは足さない)を流用する。
-fn attrs_section(attrs: &AttrsProjection, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+fn attrs_section(
+    attrs: &AttrsProjection,
+    speed_draft: Option<&str>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
     let blend_content = row_widget![
         text("Blend")
             .size(dims.body_text)
@@ -1453,7 +1542,54 @@ fn attrs_section(attrs: &AttrsProjection, dims: Dimensions, colors: Colors) -> E
     // ある「新しい視覚言語の発明」ではなく、既存 grammar の適用)。
     let blend_row = bordered_row(blend_content.into(), dims, colors.border_hairline_weak);
 
-    column![section_header("ATTRS", dims, colors), blend_row].into()
+    column![
+        section_header("ATTRS", dims, colors),
+        blend_row,
+        speed_row(attrs, speed_draft, dims, colors),
+    ]
+    .into()
+}
+
+/// Speed 行(SP1 第一波、supervisor 決定1-7)。**click→type**(drag-to-scrub は
+/// 第一波に含めない、NON-GOALS)— `text_input` は常に存在し、Name 欄
+/// ([`ident_band`])と同じ「フォーカスするだけで打鍵できる」形。Enter
+/// (`Message::SpeedSubmit`)で確定、下書きが無い間は投影の現在値を表示する。
+/// Reset ボタンは 100% でも常に出す(押せるが変わらない = 無反応ゼロより一貫を
+/// 優先、決定7)。
+fn speed_row(
+    attrs: &AttrsProjection,
+    speed_draft: Option<&str>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let displayed = speed_draft
+        .map(|text| text.to_owned())
+        .unwrap_or_else(|| format_number(attrs.speed_percent, 1));
+
+    let value_field = text_input("", &displayed)
+        .on_input(Message::SpeedInput)
+        .on_submit(Message::SpeedSubmit)
+        .size(dims.body_text)
+        .width(Length::Fixed(dims.inspector_value_width))
+        .padding(value_cell_padding(dims))
+        .align_x(iced::alignment::Horizontal::Center)
+        .style(move |_theme, status| value_input_style(dims, colors, status));
+
+    let content = row_widget![
+        text("Speed")
+            .size(dims.body_text)
+            .color(colors.text_primary)
+            .width(Length::Fill),
+        value_field,
+        text("%").size(dims.caption_text).color(colors.text_muted),
+        button(text("Reset").size(dims.caption_text))
+            .on_press(Message::ResetSpeed)
+            .style(move |_theme, status| button_style(dims, colors, status)),
+    ]
+    .spacing(dims.spacing_xs)
+    .align_y(iced::alignment::Vertical::Center);
+
+    bordered_row(content.into(), dims, colors.border_hairline_weak)
 }
 
 /// mock の hint 行。**「Drag to scrub」は実装済みなので復活させる**
@@ -1510,6 +1646,46 @@ mod tests {
     fn unsupported_current_value_falls_back_to_the_first_supported_mode() {
         use motolii_store::BlendMode;
         assert_eq!(next_blend_mode(BlendMode::Multiply), BlendMode::Normal);
+    }
+
+    // -----------------------------------------------------------------------
+    // SP1 第一波: %⇄Speed 写像(ORACLE (b))
+    // -----------------------------------------------------------------------
+
+    /// 往復: 表示 % → (num, den) → 表示 % が同じ値へ戻る(小数1桁)。
+    #[test]
+    fn percent_round_trips_through_speed_ratio() {
+        let (num, den) = percent_to_speed_ratio(200.0).unwrap();
+        assert_eq!(format_number(speed_percent(num, den), 1), "200.0");
+
+        let (num, den) = percent_to_speed_ratio(133.3).unwrap();
+        assert_eq!(format_number(speed_percent(num, den), 1), "133.3");
+
+        let (num, den) = percent_to_speed_ratio(50.0).unwrap();
+        assert_eq!(format_number(speed_percent(num, den), 1), "50.0");
+    }
+
+    /// 分母は常に正(`Speed::try_new` の不変式を機械的に満たす)。
+    #[test]
+    fn speed_ratio_denominator_is_always_positive() {
+        let (_, den) = percent_to_speed_ratio(100.0).unwrap();
+        assert!(den > 0);
+    }
+
+    /// **0 は拒否**(決定3)。負・NaN・無限大も同様。
+    #[test]
+    fn non_positive_or_non_finite_percent_is_rejected() {
+        assert_eq!(percent_to_speed_ratio(0.0), None);
+        assert_eq!(percent_to_speed_ratio(-5.0), None);
+        assert_eq!(percent_to_speed_ratio(f64::NAN), None);
+        assert_eq!(percent_to_speed_ratio(f64::INFINITY), None);
+    }
+
+    /// 100% は `Speed::NORMAL`(1/1)と同じ比。
+    #[test]
+    fn one_hundred_percent_is_normal_speed() {
+        let (num, den) = percent_to_speed_ratio(100.0).unwrap();
+        assert_eq!(num as f64 / den as f64, 1.0);
     }
 
     // -----------------------------------------------------------------------
@@ -1701,6 +1877,7 @@ mod tests {
                 name: String::new(),
                 hidden: false,
                 blend_mode: "Normal".to_owned(),
+                speed_percent: 100.0,
             },
         };
 
@@ -1737,6 +1914,7 @@ mod tests {
                 name: String::new(),
                 hidden: false,
                 blend_mode: "Normal".to_owned(),
+                speed_percent: 100.0,
             },
         };
         assert!(

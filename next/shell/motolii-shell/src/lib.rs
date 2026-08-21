@@ -19,7 +19,7 @@ use iced::{Element, Length, Task};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
     Composition, DisplayRevision, Document, Intent, LayerAttrsPatch, LayerId, LayerMeta,
-    LayerSource, LayerTiming, RationalTime, StoreView,
+    LayerSource, LayerTiming, RationalTime, Speed, StoreView,
 };
 
 pub mod clipboard;
@@ -375,6 +375,10 @@ pub struct Shell {
     inspector_field_draft: Option<FieldDraft>,
     /// Inspector の Name 欄、編集中の下書き。同上。
     inspector_name_draft: Option<String>,
+    /// Inspector の Speed 欄(ATTRS、SP1 第一波)、編集中の下書き。同上 —
+    /// `LayerTiming.speed` は `TransformField`/track を経由しないので
+    /// `inspector_field_draft` とは別の下書き(`inspector_name_draft` と同型)。
+    inspector_speed_draft: Option<String>,
     /// Inspector 値セルの drag-to-scrub。**Document ではない** — 同上
     /// (`inspector_pane::FieldDragState` doc comment 参照。型定義は裁定160
     /// 切片8で `motolii-inspector-pane` crate へ移設済み、置き場(この
@@ -455,6 +459,7 @@ impl Shell {
                 tokens: Tokens::load(),
                 inspector_field_draft: None,
                 inspector_name_draft: None,
+                inspector_speed_draft: None,
                 inspector_drag: None,
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
                 timeline: timeline_pane::PaneState::new(),
@@ -491,6 +496,7 @@ impl Shell {
             tokens: Tokens::load(),
             inspector_field_draft: None,
             inspector_name_draft: None,
+            inspector_speed_draft: None,
             inspector_drag: None,
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
             timeline: timeline_pane::PaneState::new(),
@@ -872,6 +878,18 @@ impl Shell {
                 Task::none()
             }
             inspector_pane::Message::PointerReleased => self.finish_field_drag(),
+            inspector_pane::Message::SpeedInput(text) => {
+                self.inspector_speed_draft = Some(text);
+                Task::none()
+            }
+            inspector_pane::Message::SpeedSubmit => {
+                self.commit_inspector_speed();
+                Task::none()
+            }
+            inspector_pane::Message::ResetSpeed => {
+                self.reset_inspector_speed();
+                Task::none()
+            }
         }
     }
 
@@ -942,6 +960,75 @@ impl Shell {
         };
         if let Err(error) = self.doc.apply(Intent::SetAttrs { layer, patch }) {
             self.status = Some(format!("blend_mode を書けない: {error}"));
+        }
+    }
+
+    /// Speed 欄(ATTRS、SP1 第一波、supervisor 決定1-7)— 下書きを確定して
+    /// 1回の `Intent::SetTiming` を出す(1 gesture = 1 undo)。**`LayerTiming`
+    /// の組み立て・duration 再計算はここで行う**(`inspector_pane` crate は
+    /// `motolii-timeline-pane::clip_gesture` へ依存できないため — `inspector_pane`
+    /// crate doc 参照)。数値として読めない・0以下は `Err` の理由文を status
+    /// 帯へ渡す(`commit_inspector_field` と同じ glue の形、M13)。
+    fn commit_inspector_speed(&mut self) {
+        let Some(text) = self.inspector_speed_draft.take() else {
+            return;
+        };
+        let Some(layer) = self.session.selection else {
+            return;
+        };
+        let Some(percent) = chrome::parse_number(&text) else {
+            self.status = Some(format!("数値として読めない: {text}"));
+            return;
+        };
+        let Some((new_num, new_den)) = inspector_pane::percent_to_speed_ratio(percent) else {
+            self.status = Some(format!("speed は正の値のみ: {text}"));
+            return;
+        };
+        self.apply_speed(layer, new_num, new_den);
+    }
+
+    /// Speed 行の Reset ボタン — 下書きを経由せず即 100%(`Speed::NORMAL`)へ。
+    /// [`commit_inspector_speed`] と同じ [`apply_speed`] を呼ぶので、既に100%
+    /// なら no-op(Undo を積まない、決定7)は自動的に成り立つ。
+    fn reset_inspector_speed(&mut self) {
+        let Some(layer) = self.session.selection else {
+            return;
+        };
+        self.apply_speed(layer, Speed::NORMAL.num(), Speed::NORMAL.den());
+    }
+
+    /// [`commit_inspector_speed`]/[`reset_inspector_speed`] 共通の書き口。
+    /// **start・source_in は不変**(決定4「source 窓が保存される」)、duration
+    /// だけ [`timeline_pane::clip_gesture::retimed_duration`](第二波
+    /// Shift+端drag と共有する純関数、δ 採択理由)で再計算する。**ロック
+    /// layer は `Document::apply` の `check_not_locked` がそのまま拒む**
+    /// (M13、move/trim と同じ理由文の型 — ここで重複判定しない)。**現在値と
+    /// 同じ speed なら `Intent` を出さない**(決定7 — reset の no-op と、
+    /// 打鍵で同値を submit した場合の両方をこの1箇所で満たす)。
+    fn apply_speed(&mut self, layer: LayerId, new_num: i64, new_den: i64) {
+        let Ok(new_speed) = Speed::try_new(new_num, new_den) else {
+            self.status = Some("speed の分母は正でなければならない".to_owned());
+            return;
+        };
+        let Ok(Some(meta)) = self.doc.view().meta(layer) else {
+            return; // 素材が無い layer(起こらないはず) — 安全側で無視。
+        };
+        let old_timing = meta.timing;
+        if old_timing.speed == new_speed {
+            return; // 決定7: 同値は Undo を積まない。
+        }
+        let new_duration = timeline_pane::clip_gesture::retimed_duration(
+            old_timing.duration,
+            (old_timing.speed.num(), old_timing.speed.den()),
+            (new_speed.num(), new_speed.den()),
+        );
+        let new_timing = LayerTiming {
+            duration: new_duration,
+            speed: new_speed,
+            ..old_timing
+        };
+        if let Err(error) = self.doc.apply(Intent::SetTiming { layer, timing: new_timing }) {
+            self.status = Some(format!("speed を書けない: {error}"));
         }
     }
 
@@ -1305,6 +1392,7 @@ impl Shell {
             return;
         }
         self.inspector_name_draft = None;
+        self.inspector_speed_draft = None;
         // Settings パネルの下書きも同じ Esc で破棄する(hint 文言との整合)。
         self.background_draft = None;
         self.ui_scale_draft = None;
@@ -1539,10 +1627,11 @@ impl Shell {
         let inspector_selection = inspector_pane::project(&store, &self.session)
             .ok()
             .flatten();
-        let inspector = inspector_pane::view(
+        let inspector = inspector_pane::view_with_speed_draft(
             inspector_selection.as_ref(),
             self.inspector_field_draft.as_ref(),
             self.inspector_name_draft.as_deref(),
+            self.inspector_speed_draft.as_deref(),
             dims,
             colors,
         )
