@@ -22,6 +22,8 @@ mod browser_drive;
 mod clipboard_drive;
 #[path = "suite/drive.rs"]
 mod drive;
+#[path = "suite/entrance_atlas_dump.rs"]
+mod entrance_atlas_dump;
 #[path = "suite/fixture.rs"]
 mod fixture;
 #[path = "suite/iced_test_spike.rs"]
@@ -48,6 +50,8 @@ mod shortcut_drive;
 mod speed_drive;
 #[path = "suite/stage_band_drive.rs"]
 mod stage_band_drive;
+#[path = "suite/target_walk.rs"]
+mod target_walk;
 #[path = "suite/theme_wiring_fence.rs"]
 mod theme_wiring_fence;
 #[path = "suite/timeline_key_gesture_drive.rs"]
