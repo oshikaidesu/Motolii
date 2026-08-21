@@ -10,6 +10,7 @@
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
 
+| **IB: 意図束の起案(裁定177)** | 起案(cargo なし) | worktree | 全行(採用予定+保留+拡張)を意図束 25〜45 へ割り付け・統合署名案・束単位 freq 再計算・**家の候補**(1意図=1つの家)。**束の命名は利用者が直す前提の草案** — 返却後に利用者の一瞥 |
 | **G1: グループ化動詞(裁定174)** | 実装 | worktree(発注時に追記) | ⌘G= Group 層+parent N 本 1 undo・⌘⇧G= world 位置保存の解除(焼き込み数値証明)。map 455-457/468-470。write-set= store document.rs+shell shortcut+timeline 反映(attrs.rs 禁止 — BL3 並走) |
 | **BL3: blend 分離可能11モード** | 実装 | worktree(発注時に追記) | α/BL1b の型で Multiply/Screen/Overlay 等11種 — store attrs.rs+engine 変換腕+Inspector 巡回リスト+golden。map blend_mode 束の大口。write-set= attrs.rs+engine+inspector(document.rs 禁止 — G1 並走) |
 | **MB-1: File 束(裁定176)** | 実装 | worktree(発注時に追記) | File メニュー+New Project/Save As/Save a Copy/Quit(rfd・dirty 確認・persist 汎用経路)+shortcut 併設(S6)。map 1221(freq4)/1223/1225/1227 |
