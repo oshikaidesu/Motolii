@@ -10,8 +10,9 @@
 //! テストが検分する)。
 
 use motolii_store::{
-    property, Composition, Document, Fps, Intent, Interp, Keyframe, KeyframeTrack, LayerAttrsPatch,
-    LayerId, LayerMeta, LayerSource, LayerTiming, Marker, PropertyId, RationalTime, Speed, Value,
+    property, Composition, Document, EffectId, EffectInstance, Fps, Intent, Interp, Keyframe,
+    KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, Marker,
+    PropertyId, RationalTime, Speed, Value,
 };
 
 /// fixture が組み立てた結果。`Shell::new_fixture` が `Document`/`Session`/status へ写す。
@@ -156,6 +157,7 @@ pub fn build() -> Fixture {
     let mut sabi_id = None;
     let mut logo_id = None;
     let mut vocal_id = None;
+    let mut waveform_id = None;
 
     for (index, spec) in LAYERS.iter().enumerate() {
         let id = LayerId((index + 1) as u64);
@@ -189,6 +191,7 @@ pub fn build() -> Fixture {
             "サビ歌詞" => sabi_id = Some(id),
             "タイトルロゴ" => logo_id = Some(id),
             "メインボーカル映像" => vocal_id = Some(id),
+            "波形ビジュアライザ" => waveform_id = Some(id),
             _ => {}
         }
     }
@@ -301,6 +304,49 @@ pub fn build() -> Fixture {
         layer: vocal_id,
         property: PropertyId::new(property::OPACITY).expect("opacity は予約語ではない"),
         track: vocal_opacity,
+    });
+
+    // 波形ビジュアライザ: 内蔵 vism 第1号 Glow(裁定153 S4)を積む
+    // (`"motolii.glow"` は既に main へ着地済み — 発注書 S5「利用者が見られる形」)。
+    // playhead(尺の半分=900frame)は波形ビジュアライザの表示区間 [810,1800) に
+    // 収まるので、既定 fixture 起動時点で Stage に halo が乗る。
+    // 既定 param(threshold=1.0)は 8bit SDR の layer では無反応
+    // (`motolii-engine/tests/effects.rs` の doc 参照)なので、bright-pass が
+    // 確実に起動する値を明示する — teal 矩形( rgba [90,180,170,255],
+    // luminance≈0.63)より低い threshold。
+    let waveform_id = waveform_id.expect("波形ビジュアライザ layer がある");
+    let glow = EffectId(0);
+    intents.push(Intent::SetEffects {
+        layer: waveform_id,
+        effects: vec![EffectInstance {
+            id: glow,
+            plugin_id: "motolii.glow".to_owned(),
+            enabled: true,
+        }],
+    });
+    let mut glow_threshold = KeyframeTrack::new();
+    glow_threshold.insert(Keyframe {
+        t: t(0),
+        value: Value::F64(0.35),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    intents.push(Intent::SetTrack {
+        layer: waveform_id,
+        property: PropertyId::effect_param(glow, "threshold").expect("threshold は予約語ではない"),
+        track: glow_threshold,
+    });
+    let mut glow_intensity = KeyframeTrack::new();
+    glow_intensity.insert(Keyframe {
+        t: t(0),
+        value: Value::F64(1.5),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    intents.push(Intent::SetTrack {
+        layer: waveform_id,
+        property: PropertyId::effect_param(glow, "intensity").expect("intensity は予約語ではない"),
+        track: glow_intensity,
     });
 
     doc.apply_all(intents).expect("fixture を1操作として置ける");
