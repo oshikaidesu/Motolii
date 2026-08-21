@@ -10,7 +10,6 @@
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
 | **M01: iced 0.15 pin 交換+full 緑** | 実装 | worktree(発注時に追記) | 裁定170 — `motolii/host-seams`(`73e686ee`)へ iced/iced_test pin・wgpu 29.0.4 単一化・workspace 全緑。PNG oracle 赤は意匠不変目視つき再較正のみ可 |
-| **M2: Compositor::with_device(不活性)** | 実装 | worktree(発注時に追記) | 裁定170 — 既存 `headless()` 無傷の第二コンストラクタ・配線ゼロ・unit test 1本。M01 と並走(write-set 互いに素) |
 
 ## 完了・main 着地済み(実装)
 
@@ -72,6 +71,7 @@
 | **ι: Browser B1(検収合格・merge `80577081`)** | drop が台帳へ記帳される — bin-first の下地開通。記帳と配置は独立(junk file も fingerprint が読めれば台帳に載る)・undo 粒は既存(1 drop batch=1 undo)に同居・dedup は η の content_hash 統合に一任。赤(E0599 5件)→緑 174/174。FINDING: multi-GB 素材の hash 時間未計測(KNOWN へ B7 リスクとして記録)・asset_type は拡張子の仮判定(意味起草タスク#14 待ち) |
 | **η: 素材台帳移植(検収合格・merge `d5370a0e`)** | 裁定162 の核心が着地 — 旧 asset.rs 740行を store へ(fingerprint は移植済みを参照)。`Intent::AdmitAsset/RemoveAsset`(read-modify-write、`Composition:assets` component の JSON blob = markers/slots と同じ流儀)・`StoreView::assets()/asset()`。persist は汎用経路が無改修で運ぶ。dedup の赤→緑実証あり((a)(c) は赤未保存 — 実装同時書きの逸脱として記録)。store 21 スイート+workspace 全緑 |
 | **θ: browser-pane B0 骨格(検収合格・merge `8a4e7ffb`)** | 新 crate(`//! wraps:` マーカー・空 Message enum・空 view)+shell 埋め込み(`Message::Browser` 腕のみ・view 未配線)。**PNG SHA `ee217ba2…` 前後一致を supervisor 再実測**(pane 分割以来の正準ハッシュ)。shell suite 170 全緑。B1 は η(素材台帳)着地後 |
+| **M2: Compositor::with_device(検収合格・merge `80707b4f`)** | 裁定170 M2 — `headless()` の device 構築後半を抽出した第二コンストラクタ(現 fork rev の `RenderContext::new` に素直な signature、adapter 落としは M3)。配線ゼロ・`headless()` はバイト一致素通し(既存 golden 全緑が証明)。red→緑(E0599)+同一フレームのバイト一致 oracle。compositor 27 全緑を main checkout 再実行 |
 | **ω: iced 0.15/wgpu29 移行調査(回収・merge `b139fe45`)** | 保全= `2026-08-22-iced-015-wgpu29-migration-survey.md`。**fork は upstream master と sha 同一(ドリフト0)・host-seams=+seam2本**。wgpu 統一を metadata 実験で実証(14パッケージ→単一29.0.4)。API 差分は使用面338箇所で実質ゼロ(iced_test も再export で無傷)。唯一のブロッカー= adapter gap → **裁定170 で案B強化版に決着**(wgpu29 Device が adapter_info/features/limits を公開する supervisor 実測が決め手)。EVIDENCE_GAP 7件中、#1 は裁定170 で焼却・#2(font スタックの見え方)は M01 着地時の利用者の目へ |
 | **φ: 文字の不衝突+文字余白(検収合格・merge `ca63dd1d`+supervisor 追い施工=裁定169)** | 裁定168 適用第1号 — (A) rail 名前の省略記号切詰(純関数 `truncate_to_width`+決定論近似測定器、実窓で衝突消滅を確認) (B) Inspector 値セル: 0.6em 横余白+0.075×行高 gap+**clip(true) が真の根治点**(text の paint が layout 幅を無視して隣へ滲む iced 実測をソース読みで特定)。検収の実画面検分で**次の欠陥を発見**: 38px セルに 7字「960.000」が入らず桁欠け → **裁定169**(表示はセル適合精度 `display_number`・編集 draft は全精度)を supervisor 直施工、「960.00/540.00」全桁可読を実画面確認。FINDING: body_text/行高=0.55 は裁定168 の 0.42±0.05 帯の外(未変更・裁定待ち)。timeline-pane 56+inspector 43+workspace 100 スイート 883 全緑 |
 | **ψ: Timeline 転写ギャップ台帳(回収・merge `e7ae27ba`)** | 保全= `2026-08-21-timeline-transcription-gap-survey.md`。25要素: **適合9/逸脱8/余剰2/欠落0/EVIDENCE_GAP6** — 欠落ゼロ=チグハグの実体は「機能の不在」でなく「別世代正典の混在」と確定(利用者知覚の白)。主因TOP3(画素根拠つき): (1) transport slider が無style の iced 既定(金玉つまみ — token 非経由の唯一の生 widget) (2) rail 文字衝突(φ 施工中) (3) M/S/L glyph が Inspector 側 mock からの借用で行比 0.90(mock 0.46 の約2倍)+スウォッチ色が bar 色と無関係の単色。転写束割り案 3 レーン(rail/canvas/transport)。EVIDENCE_GAP 6件は裁定待ちに積む。**唯一の転写完結ファイル= projection.rs(0.52 比率)** |
