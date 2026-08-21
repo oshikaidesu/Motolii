@@ -192,6 +192,27 @@ fn blend_mode_and_matte_reach_the_resolved_layer() {
     assert_eq!(base_resolved.matte, None);
 }
 
+/// **BL2**: `Add`(裁定67 が後回しにしていた値、`next/core/motolii-store/src/attrs.rs`
+/// の `BlendMode` doc 参照)も他の値と同じ経路で `resolve()` まで届く。
+#[test]
+fn add_blend_mode_reaches_the_resolved_layer() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place(&mut doc, layer, solid(), 0, 100);
+
+    doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch {
+            blend_mode: Some(BlendMode::Add),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    let resolved = doc.view().resolve(layer, t(0)).unwrap().expect("居る");
+    assert_eq!(resolved.blend_mode, BlendMode::Add);
+}
+
 // ---------------------------------------------------------------------------
 // nm (Name) / ao (Auto Orient)
 // ---------------------------------------------------------------------------

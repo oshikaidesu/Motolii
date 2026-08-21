@@ -859,6 +859,10 @@ impl Shell {
                 self.toggle_inspector_hidden();
                 Task::none()
             }
+            inspector_pane::Message::CycleBlendMode => {
+                self.cycle_inspector_blend_mode();
+                Task::none()
+            }
             inspector_pane::Message::ValuePressed(field) => {
                 self.start_field_drag(field);
                 Task::none()
@@ -912,6 +916,33 @@ impl Shell {
             return;
         };
         self.toggle_layer_hidden(layer);
+    }
+
+    /// Attrs の Blend 巡回ボタン — 即 `Intent::SetAttrs` を1回出す(下書きを経由
+    /// しない、[`toggle_inspector_hidden`] と同じ即時操作の形)。**lane bar には
+    /// 無い**(発注書 EXACT TARGET — 対象は Inspector の選択レイヤのみ)ので
+    /// `toggle_layer_hidden` のような cross-cutting な共有関数へは切り出さない。
+    /// 対応 mode の一覧([`inspector_pane::SUPPORTED_BLEND_MODES`])は Inspector
+    /// 側が持つ(発注書「決定済み事項」)。
+    fn cycle_inspector_blend_mode(&mut self) {
+        let Some(layer) = self.session.selection else {
+            return;
+        };
+        let current = self
+            .doc
+            .view()
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+            .blend_mode;
+        let patch = LayerAttrsPatch {
+            blend_mode: Some(inspector_pane::next_blend_mode(current)),
+            ..Default::default()
+        };
+        if let Err(error) = self.doc.apply(Intent::SetAttrs { layer, patch }) {
+            self.status = Some(format!("blend_mode を書けない: {error}"));
+        }
     }
 
     // ---- Timeline レーンバー(裁定147・第2波T1) ----

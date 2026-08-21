@@ -391,13 +391,16 @@ pub struct ResolvedLayer {
     /// この時刻の effect スタック。**スタックの順**(手前へ畳んでいく mask と違い、
     /// こちらは「上から下へ適用する」順、裁定70)で並ぶ。disabled な effect と
     /// track の無い param は含まれない(型の doc、`ResolvedEffect` 参照)。
-    /// **まだ合成器/engine は読んでいない**(裁定153 S1 — 縫い目調査
-    /// `docs/reviews/2026-08-21-effect-seam-survey.md` の「resolve() の外に出ていない」
-    /// 状態をここで解消する。S2/S3 が compositor/engine 側の消費を続ける)。
+    /// **合成器/engine まで消費済み**(裁定153 S1 が resolve() の外へ出す穴を塞ぎ、
+    /// S2/S3 で `motolii-compositor`/`motolii-engine` 側の消費が繋がった —
+    /// `motolii_engine` の `translate_effect_passes` 参照。ただし対応する pass は
+    /// `"motolii.glow"` 1本だけで、他の plugin_id は無音で skip される)。
     pub effects: Vec<ResolvedEffect>,
-    /// `layers/visual-layer/bm`。**まだ合成器は読んでいない**(`motolii-compositor` は
-    /// `re_renderer` の `multiplicative_tint` しか使っておらず、blend mode の合成式は
-    /// 未実装)。Document 側の意味はここで解決済みにしておき、engine が繋ぐ日を待つ。
+    /// `layers/visual-layer/bm`。**合成器/engine まで消費済み**(`motolii_engine` の
+    /// `translate_blend_mode` 参照)。ただし対応するのは `Normal`/`Add` の2値だけ
+    /// (`motolii-compositor` が固定式 blend equation で表現できる範囲、
+    /// モジュール doc 参照)— 対応外は engine が `EngineError::UnsupportedBlendMode`
+    /// で明示的に拒む。
     pub blend_mode: BlendMode,
     /// matte(裁定66)。**同上、まだ合成器は読んでいない**。
     pub matte: Option<Matte>,

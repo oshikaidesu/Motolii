@@ -14,6 +14,8 @@
 //! 汚染して間欠的に落ちることを実測した(このファイル単独なら常に緑)。
 //! バイナリを分ければプロセスが分かれ、static も分かれるので汚染源が消える。
 
+#[path = "suite/blend_drive.rs"]
+mod blend_drive;
 #[path = "suite/clipboard_drive.rs"]
 mod clipboard_drive;
 #[path = "suite/drive.rs"]

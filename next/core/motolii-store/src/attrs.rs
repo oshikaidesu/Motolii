@@ -14,9 +14,16 @@ use crate::LayerId;
 /// 手前までの覆いと、このマスクの覆いをどう重ねるか、ではなく——
 /// blend mode の16値(Lottie `constants/blend-mode` = AE / Photoshop / peniko / wgpu で
 /// 共通の語彙、裁定67)。発明の余地が無いのでそのまま採る。
+///
+/// **`Add` は Lottie の16値には無い**(裁定67「Add は velato も落としているので
+/// 後回し」— `motolii_compositor::BlendMode` のモジュール doc 参照)。合成器側は
+/// 無改造で出せる(`multiplicative_tint.a = 0` で `out = src + dst`)ことが先に
+/// わかっていたので、engine が対応できる分だけ後追いでここへ足す(BL2 縦一本)。
+/// 並びは Normal の直後(AE のメニュー順同型)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BlendMode {
     Normal,
+    Add,
     Multiply,
     Screen,
     Overlay,

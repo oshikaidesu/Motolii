@@ -97,7 +97,7 @@ use motolii_store::{
     LayerSource, PropertyId, StoreError, StoreView, Value,
 };
 
-use motolii_settings_pane::chrome::{parse_number, section_header, value_input_style};
+use motolii_settings_pane::chrome::{button_style, parse_number, section_header, value_input_style};
 use motolii_shell_state::Session;
 use motolii_tokens_rs::{Colors, Dimensions, Ink, TextWeight};
 
@@ -121,6 +121,11 @@ pub enum Message {
     /// Attrs の Hidden トグル。下書きを経由せず即 `Intent::SetAttrs` を1回出す
     /// (header の Undo/Redo ボタンと同じ即時操作の形)。
     ToggleHidden,
+    /// Attrs の Blend 巡回ボタン。`ToggleHidden` と同じ即時操作の形 — 下書きを
+    /// 経由せず即 `Intent::SetAttrs` を1回出す。巡回先は
+    /// [`SUPPORTED_BLEND_MODES`]/[`next_blend_mode`](発注書「決定済み事項」—
+    /// pick_list は導入しない、対応 mode だけを巡る)。
+    CycleBlendMode,
     /// 値セルの press。**まだ Document を書かない** — click か drag かは
     /// release まで未確定(`Shell::inspector_drag`)。
     ValuePressed(TransformField),
@@ -224,6 +229,28 @@ pub fn single_hold_track(value: Value) -> KeyframeTrack {
 
 pub fn format_number(value: f64, decimals: usize) -> String {
     format!("{value:.decimals$}")
+}
+
+/// Blend 巡回ボタンが回る mode の一覧。**engine 側の変換表
+/// (`next/engine/motolii-engine/src/lib.rs::translate_blend_mode`)と同期を保つ義務が
+/// ある**(発注書「決定済み事項」— 対応 mode の一覧を engine 側と同じ場所には置か
+/// ない、という決定に沿って Inspector 側にハードコードする)。現状2値なのでこの
+/// 二重化は許容し、将来 dropdown 化する時に解消する。
+pub const SUPPORTED_BLEND_MODES: &[motolii_store::BlendMode] = &[
+    motolii_store::BlendMode::Normal,
+    motolii_store::BlendMode::Add,
+];
+
+/// Blend 巡回ボタンの次の値。**現在値が [`SUPPORTED_BLEND_MODES`] に無い場合**
+/// (将来の下位互換 — engine がまだ対応していない mode が Document に既に入って
+/// いた時)は `Err` にしない — 現在値をそのまま表示し続け、次クリックで一覧の
+/// 先頭へ進む(発注書「決定済み事項」)。
+pub fn next_blend_mode(current: motolii_store::BlendMode) -> motolii_store::BlendMode {
+    let modes = SUPPORTED_BLEND_MODES;
+    match modes.iter().position(|mode| *mode == current) {
+        Some(i) => modes[(i + 1) % modes.len()],
+        None => modes[0],
+    }
 }
 
 /// [`project`] が組む行の decimals は field ごとに固定(Position/Scale/Anchor=3、
@@ -375,8 +402,10 @@ pub struct TransformRowProjection {
 pub struct AttrsProjection {
     pub name: String,
     pub hidden: bool,
-    /// **表示のみ**(KNOWN.md: 対応 mode が Normal だけ — 既知の穴であって新発見では
-    /// ない)。`BlendMode` の `Debug` 表示をそのまま使う(`Normal`/`Multiply`/…)。
+    /// **クリックで巡回するボタンの現在値**(BL2)。`Message::CycleBlendMode` を
+    /// 押すたび engine が対応する次の mode へ進む(現状 Normal→Add→Normal、
+    /// [`SUPPORTED_BLEND_MODES`] 参照)。`BlendMode` の `Debug` 表示をそのまま使う
+    /// (`Normal`/`Add`/…)。
     pub blend_mode: String,
 }
 
@@ -1401,16 +1430,20 @@ fn name_input_style(dims: Dimensions, colors: Colors, status: text_input::Status
 
 /// **ATTRS**: mock 断片には対応が無い行(Blend)だけ残す — Name は ident 帯へ、
 /// Hidden は M glyph へ移した(重複 chrome を残さない、supervisor 訂正 2026-08-20)。
-/// blend 自体は**表示のみ**(対応 mode が Normal だけなのは KNOWN の既知の穴)。
+/// blend は**クリックで巡回するボタン**(BL2、supervisor 決定済み — pick_list は
+/// next/ 全体に前例が無いので導入しない)。巡回先は [`SUPPORTED_BLEND_MODES`]
+/// (現状 Normal→Add→Normal の2値、engine が対応する分だけ)。意匠は新規発明せず
+/// `motolii_settings_pane::chrome::button_style`(`checkerboard_row` と同じ「押すたび
+/// 即トグル」の形、他の意味色ロールは足さない)を流用する。
 fn attrs_section(attrs: &AttrsProjection, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     let blend_content = row_widget![
         text("Blend")
             .size(dims.body_text)
             .color(colors.text_primary)
             .width(Length::Fill),
-        text(attrs.blend_mode.clone())
-            .size(dims.body_text)
-            .color(colors.text_muted),
+        button(text(attrs.blend_mode.clone()).size(dims.body_text))
+            .on_press(Message::CycleBlendMode)
+            .style(move |_theme, status| button_style(dims, colors, status)),
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
@@ -1459,6 +1492,25 @@ mod tests {
     // ..}` で読み込み済み、`use super::*;` 経由でここへ入る)。テストの
     // qualified name(`tests::parse_number_accepts_the_mock_minus_sign`)は
     // `--list` 完全一致のためここに残す — 呼ぶ本体だけ移設先を指す。
+
+    // -----------------------------------------------------------------------
+    // BL2: Blend 巡回ボタンの次の値
+    // -----------------------------------------------------------------------
+
+    /// Normal→Add→Normal と回る(現状 `SUPPORTED_BLEND_MODES` は2値)。
+    #[test]
+    fn cycles_through_supported_modes_and_wraps() {
+        use motolii_store::BlendMode;
+        assert_eq!(next_blend_mode(BlendMode::Normal), BlendMode::Add);
+        assert_eq!(next_blend_mode(BlendMode::Add), BlendMode::Normal);
+    }
+
+    /// 現在値が非対応(将来の下位互換ケース)なら、エラーにせず一覧の先頭へ。
+    #[test]
+    fn unsupported_current_value_falls_back_to_the_first_supported_mode() {
+        use motolii_store::BlendMode;
+        assert_eq!(next_blend_mode(BlendMode::Multiply), BlendMode::Normal);
+    }
 
     // -----------------------------------------------------------------------
     // 裁定139: value_cell/name_field は縦0を維持したまま横だけ内余白を戻す
