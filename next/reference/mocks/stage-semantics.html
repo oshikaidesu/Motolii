@@ -1,13 +1,13 @@
 <!doctype html>
-<!-- 意味論先出しモック 第2号 v2: Stage(2026-08-21、利用者指示「唯一モックが無い。
-     カメラフレームとか意外と大事」)
-     Stage の本体は「枠のシステム」: 枠線は全て状態の言葉であり、色=意味。
-       金(action_active 系の観測枠)= レンダリングカメラの範囲(観測中のみ)
-       ACCENT = 選択
-       hairline(予約地)= セーフエリア
-     操作 chrome は絵の内側に浮かべない(憲法)。トグルで状態を切替できる。
-     色値は tokens 実値の写し。比率の原則: 寸法注記は全て比率で書く。 -->
-<html lang="ja"><head><meta charset="utf-8"><title>Stage 意味論モック v2</title>
+<!-- 意味論先出しモック 第2号 v3: Stage(2026-08-21)
+     v3(利用者裁定): (1) 状態帯の言葉はアイコンで(市松等 — 文字で説明しない。
+     値そのものが意味の物[解像度倍率]だけ文字) (2) 視点は「タブ」— カメラボックス
+     (レンダリングカメラ)の視点と自由視点(旧称: 観測)を上縁タブで切替。
+     二画面利用にも直感的で、将来カメラレイヤーが増えるとタブが増える拡張性。
+     (3) 金枠=カメラボックスの写し(自由視点でのみ描画)。
+     AE 先例: 3D View popup(Active Camera/Custom View)+comp タブ+View レイアウト
+     (1/2/4画面)を「視点タブ」1語彙に畳む意図的設計(理由つき S0 逸脱)。 -->
+<html lang="ja"><head><meta charset="utf-8"><title>Stage 意味論モック v3</title>
 <style>
 :root{--surface-panel:#363636;--surface-raised:#3e3e3e;--text-muted:#757575;--text-primary:#cfcfcf;
 --action-active:#d8b574;--hairline-weak:rgba(0,0,0,.35);--sem:#e8c35a;
@@ -17,49 +17,52 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
 .togs{display:flex;gap:16px;margin:8px 0 14px}
 .togs label{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
 .pane{position:relative;width:880px;background:var(--void);border:1px solid #111}
-.void{position:relative;height:470px;display:flex;align-items:center;justify-content:center;overflow:hidden}
-/* comp(絵の領域)— 16:9。既定視点= pane に内接 fit(余白比率は現実装実測が正) */
+/* 上縁: 視点タブ(=「何の視点か」の identity — S5 上縁原則) */
+.vtabs{display:flex;gap:2px;height:22px;background:var(--surface-panel);border-bottom:1px solid #555;padding:2px 8px 0}
+.vt{padding:1px 12px;border-radius:2px 2px 0 0;color:var(--text-muted);cursor:pointer;font-size:11px}
+.vt.on{background:var(--void);color:var(--text-primary);border-bottom:1px solid var(--void);margin-bottom:-1px}
+.void{position:relative;height:448px;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .comp{position:relative;width:720px;height:405px;background:#000;overflow:hidden;transition:all .25s}
-.checker .comp{background:
-  repeating-conic-gradient(var(--checker-l) 0 25%,var(--checker-d) 0 50%) 0 0/16px 16px}
+.checker .comp{background:repeating-conic-gradient(var(--checker-l) 0 25%,var(--checker-d) 0 50%) 0 0/16px 16px}
 .solid{position:absolute;left:5%;top:6.9%;width:18%;height:20.7%;background:#8ff9ff}
 .solid2{position:absolute;left:41.7%;top:37%;width:30.6%;height:34.6%;background:hsl(210 32% 62%)}
 .sel{position:absolute;left:41.1%;top:36%;width:31.7%;height:36.6%;border:1.5px solid var(--action-active)}
-/* 観測モード: comp が縮み、金枠=レンダリングカメラの範囲 */
-.observe .comp{width:504px;height:283px}
-.goldframe{display:none;position:absolute;inset:-1px;border:1px solid var(--action-active);pointer-events:none}
-.observe .goldframe{display:block}
-/* セーフエリア(予約地): action 90% / title 80% */
+.free .comp{width:504px;height:283px}
+.camerabox{display:none;position:absolute;inset:-1px;border:1px solid var(--action-active);pointer-events:none}
+.camerabox::after{content:"◉";position:absolute;right:-1px;top:-16px;font-size:10px;color:var(--action-active)}
+.free .camerabox{display:block}
 .safe{display:none;position:absolute;pointer-events:none;border:1px dashed rgba(255,255,255,.28)}
-.safeon .safe{display:block}
-.safe.a{inset:5%}.safe.t{inset:10%}
-/* 下縁: 状態帯(μ 実装済み。帯高:pane 高 ≈ 0.04 — 比率注記) */
-.band{display:flex;gap:18px;align-items:center;height:20px;background:var(--surface-panel);
+.safeon .safe{display:block}.safe.a{inset:5%}.safe.t{inset:10%}
+/* 下縁: 状態帯 — アイコン化(v3)。値が意味の物だけ文字 */
+.band{display:flex;gap:14px;align-items:center;height:20px;background:var(--surface-panel);
   border-top:1px solid #555;padding:0 10px;font-size:11px;color:var(--text-muted)}
-.band .clickable{cursor:pointer;border-bottom:1px dotted #555}
-.band .obs{display:none;color:var(--text-primary)}
-.observe .band .obs{display:inline}
+.ic{width:16px;height:14px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;border-radius:2px;font-size:10px}
+.ic:hover{background:#454545}
+.ic.on{color:var(--text-primary);background:#454545}
+.band .obs{display:none}
+.free .band .obs{display:inline-flex;gap:8px;align-items:center;color:var(--text-primary)}
 /* 意味層 */
-#sem{position:absolute;left:-9999px}
 .ann,.lb{display:none;position:absolute;z-index:9;pointer-events:none}
 .semon .ann,.semon .lb{display:block}
-.o{border:1.5px dashed var(--sem);border-radius:3px}
 .lb{background:#151515;color:var(--sem);font-size:10px;line-height:1.35;padding:3px 6px;border:1px solid var(--sem);border-radius:3px;max-width:250px}
 .legend{display:none;margin-top:14px;font-size:11px;color:var(--text-muted);max-width:880px}
 .semon2 .legend{display:block}
 .legend b{color:var(--sem)}.legend table{border-collapse:collapse;margin-top:6px}
 .legend td,.legend th{border:1px solid #444;padding:3px 8px;text-align:left;font-weight:400}
 </style></head><body>
-<h1>Stage — 意味論先出しモック v2(枠のシステム)</h1>
-<div class="hint">枠線は全て<b>状態の言葉</b>(色=意味): 金=レンダリングカメラの範囲(観測中のみ)/ ACCENT=選択 / 破線 hairline=セーフエリア(予約地)。絵の内側に操作 chrome を浮かべない(憲法)。</div>
+<h1>Stage — 意味論先出しモック v3(視点タブ+カメラボックス+アイコン帯)</h1>
+<div class="hint">上縁タブ=<b>何の視点か</b>(カメラボックスの視点 ⇄ 自由視点)。帯の言葉はアイコン(文字で説明しない — 値が意味の物だけ文字)。枠線は状態の言葉。</div>
 <div class="togs">
   <label><input type="checkbox" id="sem" checked> 意味層</label>
-  <label><input type="checkbox" id="obs"> 観測モード</label>
-  <label><input type="checkbox" id="chk"> 市松</label>
   <label><input type="checkbox" id="safe"> セーフエリア(予約地)</label>
+  <span class="hint">視点はモック内のタブで・市松は帯のアイコンで切替(実操作の練習を兼ねる)</span>
 </div>
 
 <div class="pane" id="pane">
+  <div class="vtabs">
+    <span class="vt on" id="vtcam">◉ カメラ</span>
+    <span class="vt" id="vtfree">✥ 自由視点</span>
+  </div>
   <div class="void">
     <div class="comp">
       <div class="solid"></div>
@@ -67,47 +70,49 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
       <div class="sel"></div>
       <div class="safe a"></div>
       <div class="safe t"></div>
-      <div class="goldframe"></div>
+      <div class="camerabox"></div>
     </div>
   </div>
   <div class="band">
-    <span class="obs clickable">観測 0.7×(Shift+F で復帰)</span>
-    <span>Render View</span>
-    <span class="clickable">Auto (0.62×)</span>
-    <span class="clickable">市松</span>
+    <span class="obs">0.7× <span class="ic" title="カメラ視点へ復帰(Shift+F)">⌂</span></span>
+    <span title="実効プレビュー解像度(クリックで Auto/½/¼)">Auto (0.62×)</span>
+    <span class="ic" id="icchk" title="市松(透明の合図)">▦</span>
   </div>
 
   <!-- 意味層 -->
-  <div class="lb" style="left:8px;top:6px">S5 ヒーロー = 合成結果の絵。overlay は<b>状態表示のみ</b>(枠のシステム)— ボタン・ダイヤルを絵の内側に浮かべない(憲法)</div>
-  <div class="lb" style="left:8px;top:388px;max-width:170px">letterbox = カメラ外の暗幕(chrome ではない)。<b>既定視点では comp 枠線を引かない</b>(S0: AE/Resolve とも無枠 — 縁は明度差で語る)。ドロップは pane 全域で受ける(b: 台帳記帳+配置)</div>
-  <div class="lb" style="right:8px;top:6px;max-width:230px"><b>枠のシステム</b>: 金枠=レンダリングカメラの範囲 — <b>観測中のみ</b>現れる(既定視点では絵と一致していて枠は冗長)。将来のカメラレイヤーは「観測中の第2の枠」としてここに加わる(裁定156/157 の分離が土台)。セーフエリア= 予約地(解禁束: View 系トグル+caption 束、内接比率 90%/80% — 比率の原則)</div>
-  <div class="lb" style="left:560px;top:210px">選択枠 = ACCENT(S5b: pane 最大コントラストはヒーロー内のみ)。将来ギズモの家(スクラッチ既決・fork に概念を足さない柵)</div>
-  <div class="lb" style="left:290px;top:452px">状態帯(μ 済)= 「どう見えているか」の説明列(S6)。<b>帯高:pane高 ≈ 0.04</b>(比率の原則 — 実装実測で較正)。観測中はここに復帰口が現れる</div>
+  <div class="lb" style="left:8px;top:28px">上縁タブ = <b>視点の identity</b>(S5: 上縁=これは何か)。◉ カメラ=カメラボックスの視点(書き出しと同一)/ ✥ 自由視点=いじらず眺める視点(裁定156/157 の観測)。<b>カメラレイヤーが増えるとタブが増える</b>(拡張性がタブ採用の理由)。AE は 3D View popup+View レイアウト(1/2/4画面)— 二画面ニーズは将来「タブの分離表示」で受ける(予約地)</div>
+  <div class="lb" style="right:8px;top:120px;max-width:230px">金枠+◉ = <b>カメラボックスの写し</b>(自由視点でのみ描画 — カメラ視点では絵と一致していて冗長)。将来のカメラレイヤーは第2のボックスとしてここに現れる</div>
+  <div class="lb" style="left:560px;top:250px">選択枠 = ACCENT(S5b)。将来ギズモの家</div>
+  <div class="lb" style="left:8px;top:400px;max-width:170px">letterbox = カメラ外の暗幕。カメラ視点では comp 枠線を引かない(S0: AE/Resolve 無枠)</div>
+  <div class="lb" style="left:290px;top:470px">状態帯 = アイコンの言葉(v3)。▦=市松(AE の透明グリッドアイコンと同型= S0 適合)。解像度は<b>値が意味</b>なので文字のまま。自由視点中はここに倍率+⌂ 復帰</div>
 </div>
 
 <div class="legend" id="legend">
-  <b>枠と状態の対応(この面の意味台帳)</b>
+  <b>AE の Stage(Comp ビューア)に有る物 — S0 対応表(記憶ベース・要実機確認)</b>
   <table>
-    <tr><th>枠/表示</th><th>意味</th><th>出現条件</th><th>状態</th></tr>
-    <tr><td>金枠</td><td>レンダリングカメラの範囲</td><td>観測中のみ</td><td>実装済み(視覚合格)</td></tr>
-    <tr><td>ACCENT 枠</td><td>選択</td><td>選択中</td><td>実装済み</td></tr>
-    <tr><td>市松</td><td>透明の合図(専用 token 対)</td><td>トグル</td><td>実装済み(v2)</td></tr>
-    <tr><td>セーフエリア破線</td><td>放送安全域(action 90%/title 80%)</td><td>トグル(予約地)</td><td><b>解禁束: View トグル+caption 束(map 150 系)</b></td></tr>
-    <tr><td>カメラレイヤー枠</td><td>第2カメラの範囲</td><td>観測中(予約地)</td><td><b>解禁束: カメラレイヤー(次の議題・ギズモの前段)</b></td></tr>
-    <tr><td>グリッド/ガイド</td><td>整列補助</td><td>トグル(予約地)</td><td>解禁束: View 系束(map Grid/Guides 行)</td></tr>
+    <tr><th>AE</th><th>Motolii の対応</th></tr>
+    <tr><td>3D View popup(Active Camera / Custom View 1-3 / Front…)</td><td><b>視点タブ</b>(カメラ/自由視点。理由つき逸脱: popup→タブはカメラレイヤー増加時の一覧性と二画面直感のため)</td></tr>
+    <tr><td>View レイアウト(1 View / 2 Views / 4 Views)</td><td>予約地: タブの分離表示(二画面)</td></tr>
+    <tr><td>透明グリッド(市松)<b>アイコン</b></td><td>帯の ▦(同型)</td></tr>
+    <tr><td>倍率 popup・解像度 popup</td><td>帯の解像度 cap(Auto/½/¼)。倍率は自由視点の値表示</td></tr>
+    <tr><td>セーフエリア/グリッド/ガイド options アイコン</td><td>予約地(セーフ=View トグル束)</td></tr>
+    <tr><td>RoI・チャンネル表示・露出</td><td>対象外(現段階の非目標)</td></tr>
+    <tr><td>カメラのワイヤーフレーム(カメラ=オブジェクト)</td><td><b>カメラボックス</b>(金枠+◉。将来: カメラレイヤーで複数化)</td></tr>
   </table>
-  <b>比率の注記(検査は全て比率で)</b>: comp=16:9 固定(Document)/ 既定 fit の余白比率=現実装実測を正とし較正 / 帯高:pane高 ≈ 0.04 / セーフ内接 90%・80%
-  <br><b>未決</b>: 観測時の letterbox 濃度(現=void と同色。カメラ外がもっと暗い方が「外」が立つか)/ ドロップ中のホバー反応(Q3)/ 市松と観測の同時(既知境界: 観測中は市松非合成 — doc 明記済みを将来解くか)
+  <b>比率の注記</b>: comp=16:9 / 帯高:pane高 ≈ 0.04 / セーフ内接 90%・80%
+  <br><b>未決</b>: タブの命名(「カメラ/自由視点」で良いか)/ 自由視点の letterbox 濃度 / 市松×自由視点の併用(既知境界の解消時期)/ 二画面(タブ分離)の解禁束
 </div>
 
 <script>
-const pane=document.getElementById('pane'), legend=document.getElementById('legend');
-const bind=(id,cls,el)=>{const b=document.getElementById(id);
-  const f=()=>{el.classList.toggle(cls,b.checked)};b.addEventListener('change',f);f();};
-bind('sem','semon',pane);
+const pane=document.getElementById('pane');
+const bindChk=(id,cls,tgt)=>{const b=document.getElementById(id);
+  const f=()=>{tgt.classList.toggle(cls,b.checked)};b.addEventListener('change',f);f();};
+bindChk('sem','semon',pane);
 (()=>{const b=document.getElementById('sem');const f=()=>{document.body.classList.toggle('semon2',b.checked)};b.addEventListener('change',f);f();})();
-bind('obs','observe',pane);
-bind('chk','checker',pane);
-bind('safe','safeon',pane);
+bindChk('safe','safeon',pane);
+const cam=document.getElementById('vtcam'),free=document.getElementById('vtfree');
+cam.onclick=()=>{pane.classList.remove('free');cam.classList.add('on');free.classList.remove('on')};
+free.onclick=()=>{pane.classList.add('free');free.classList.add('on');cam.classList.remove('on')};
+document.getElementById('icchk').onclick=e=>{pane.classList.toggle('checker');e.target.classList.toggle('on')};
 </script>
 </body></html>
