@@ -5,7 +5,10 @@
 
 ## 走行中(未返却)
 
-(なし — 2026-08-21 後任セッション時点)
+| レーン | 種別 | 場所 | 中身 |
+|---|---|---|---|
+| α: blend Add 縦一本(BL2拡張) | 実装(cargo・sonnet) | lane-shell | store `BlendMode::Add`+engine 変換腕+Inspector **クリック巡回ボタン**(pick_list 前例なしにつき supervisor 決定)+shell `SetAttrs` 結線+store stale doc 掃除(R9 FINDING 1)+map 行75。oracle: store/engine 単体+shell drive(blend_drive.rs 新設) |
+| β: BL1 逐次合成の枠 | 実装(cargo・sonnet) | lane-engine | compositor 単独。`render_sequential` 新入口(既存入口無改変)・no-op で既存 `render` と**バイト一致証明**・EVIDENCE_GAP 1(ライフサイクル衝突)の実装検証。**「fork 手術が要る」の確定返却も成果扱い**(止まる許可明記) |
 
 ## 完了・main 着地済み(実装)
 
