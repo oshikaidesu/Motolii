@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- 意味論先出しモック 第2号 v3: Stage(2026-08-21)
+<!-- 意味論先出しモック 第2号 v4: Stage(2026-08-21)
      v3(利用者裁定): (1) 状態帯の言葉はアイコンで(市松等 — 文字で説明しない。
      値そのものが意味の物[解像度倍率]だけ文字) (2) 視点は「タブ」— カメラボックス
      (レンダリングカメラ)の視点と自由視点(旧称: 観測)を上縁タブで切替。
@@ -7,7 +7,7 @@
      (3) 金枠=カメラボックスの写し(自由視点でのみ描画)。
      AE 先例: 3D View popup(Active Camera/Custom View)+comp タブ+View レイアウト
      (1/2/4画面)を「視点タブ」1語彙に畳む意図的設計(理由つき S0 逸脱)。 -->
-<html lang="ja"><head><meta charset="utf-8"><title>Stage 意味論モック v3</title>
+<html lang="ja"><head><meta charset="utf-8"><title>Stage 意味論モック v4</title>
 <style>
 :root{--surface-panel:#363636;--surface-raised:#3e3e3e;--text-muted:#757575;--text-primary:#cfcfcf;
 --action-active:#d8b574;--hairline-weak:rgba(0,0,0,.35);--sem:#e8c35a;
@@ -27,9 +27,16 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
 .solid{position:absolute;left:5%;top:6.9%;width:18%;height:20.7%;background:#8ff9ff}
 .solid2{position:absolute;left:41.7%;top:37%;width:30.6%;height:34.6%;background:hsl(210 32% 62%)}
 .sel{position:absolute;left:41.1%;top:36%;width:31.7%;height:36.6%;border:1.5px solid var(--action-active)}
-.free .comp{width:504px;height:283px}
-.camerabox{display:none;position:absolute;inset:-1px;border:1px solid var(--action-active);pointer-events:none}
-.camerabox::after{content:"◉";position:absolute;right:-1px;top:-16px;font-size:10px;color:var(--action-active)}
+/* User View: 世界は縮めない — カメラのビューが破線ボックス(boxcam)として世界に浮かぶ。
+   ボックスの外にも世界(レイヤー)が続いて見える。ハンドル=将来のカメラ直接操作(予約地) */
+.free .comp{width:720px;height:405px;background:#141414}
+.free .comp .solid,.free .comp .solid2{opacity:.92}
+.camerabox{display:none;position:absolute;left:14%;top:12%;width:64%;height:64%;
+  border:1.5px dashed var(--action-active);pointer-events:none}
+.camerabox::after{content:"◉ Camera";position:absolute;left:0;top:-16px;font-size:10px;color:var(--action-active)}
+.camerabox i{position:absolute;width:8px;height:8px;background:var(--action-active)}
+.camerabox i:nth-child(1){left:-4px;top:-4px}.camerabox i:nth-child(2){right:-4px;top:-4px}
+.camerabox i:nth-child(3){left:-4px;bottom:-4px}.camerabox i:nth-child(4){right:-4px;bottom:-4px}
 .free .camerabox{display:block}
 .safe{display:none;position:absolute;pointer-events:none;border:1px dashed rgba(255,255,255,.28)}
 .safeon .safe{display:block}.safe.a{inset:5%}.safe.t{inset:10%}
@@ -50,7 +57,7 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
 .legend b{color:var(--sem)}.legend table{border-collapse:collapse;margin-top:6px}
 .legend td,.legend th{border:1px solid #444;padding:3px 8px;text-align:left;font-weight:400}
 </style></head><body>
-<h1>Stage — 意味論先出しモック v3(視点タブ+カメラボックス+アイコン帯)</h1>
+<h1>Stage — 意味論先出しモック v4(boxcam・User View・英語UI)</h1>
 <div class="hint">上縁タブ=<b>何の視点か</b>(カメラボックスの視点 ⇄ 自由視点)。帯の言葉はアイコン(文字で説明しない — 値が意味の物だけ文字)。枠線は状態の言葉。</div>
 <div class="togs">
   <label><input type="checkbox" id="sem" checked> 意味層</label>
@@ -60,8 +67,8 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
 
 <div class="pane" id="pane">
   <div class="vtabs">
-    <span class="vt on" id="vtcam">◉ カメラ</span>
-    <span class="vt" id="vtfree">✥ 自由視点</span>
+    <span class="vt on" id="vtcam">◉ Camera</span>
+    <span class="vt" id="vtfree">✥ User View</span>
   </div>
   <div class="void">
     <div class="comp">
@@ -70,37 +77,37 @@ h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
       <div class="sel"></div>
       <div class="safe a"></div>
       <div class="safe t"></div>
-      <div class="camerabox"></div>
+      <div class="camerabox"><i></i><i></i><i></i><i></i></div>
     </div>
   </div>
   <div class="band">
-    <span class="obs">0.7× <span class="ic" title="カメラ視点へ復帰(Shift+F)">⌂</span></span>
-    <span title="実効プレビュー解像度(クリックで Auto/½/¼)">Auto (0.62×)</span>
-    <span class="ic" id="icchk" title="市松(透明の合図)">▦</span>
+    <span class="obs">0.7× <span class="ic" title="Return to Camera (Shift+F)">⌂</span></span>
+    <span title="Preview resolution (click: Auto/½/¼)">Auto (0.62×)</span>
+    <span class="ic" id="icchk" title="Transparency grid">▦</span>
   </div>
 
   <!-- 意味層 -->
-  <div class="lb" style="left:8px;top:28px">上縁タブ = <b>視点の identity</b>(S5: 上縁=これは何か)。◉ カメラ=カメラボックスの視点(書き出しと同一)/ ✥ 自由視点=いじらず眺める視点(裁定156/157 の観測)。<b>カメラレイヤーが増えるとタブが増える</b>(拡張性がタブ採用の理由)。AE は 3D View popup+View レイアウト(1/2/4画面)— 二画面ニーズは将来「タブの分離表示」で受ける(予約地)</div>
-  <div class="lb" style="right:8px;top:120px;max-width:230px">金枠+◉ = <b>カメラボックスの写し</b>(自由視点でのみ描画 — カメラ視点では絵と一致していて冗長)。将来のカメラレイヤーは第2のボックスとしてここに現れる</div>
+  <div class="lb" style="left:8px;top:28px">上縁タブ = <b>視点の identity</b>(S5: 上縁=これは何か)。◉ Camera=カメラの視点(書き出しと同一)/ ✥ User View=世界を眺めるユーザーの視点(旧称: 観測/自由視点 — 利用者裁定で改名)。<b>UI 文字は英語</b>(english-first、注記だけ日本語)。<b>カメラレイヤーが増えるとタブが増える</b>(拡張性がタブ採用の理由)。AE は 3D View popup+View レイアウト(1/2/4画面)— 二画面ニーズは将来「タブの分離表示」で受ける(予約地)</div>
+  <div class="lb" style="right:8px;top:120px;max-width:230px"><b>boxcam</b>(AE 同型・利用者画像で確定): User View ではカメラのビューが<b>破線ボックス+コーナーハンドル</b>として世界に浮かぶ — 世界はボックスの外にも続いて見える(「カメラがどこを見ているか」をボックスが語る)。ハンドル=将来のカメラ直接操作(予約地・b 動詞)。カメラレイヤーは第2のボックス。3D 化の参考枠= Blender viewport(カメラオブジェクト文化)</div>
   <div class="lb" style="left:560px;top:250px">選択枠 = ACCENT(S5b)。将来ギズモの家</div>
-  <div class="lb" style="left:8px;top:400px;max-width:170px">letterbox = カメラ外の暗幕。カメラ視点では comp 枠線を引かない(S0: AE/Resolve 無枠)</div>
-  <div class="lb" style="left:290px;top:470px">状態帯 = アイコンの言葉(v3)。▦=市松(AE の透明グリッドアイコンと同型= S0 適合)。解像度は<b>値が意味</b>なので文字のまま。自由視点中はここに倍率+⌂ 復帰</div>
+  <div class="lb" style="left:8px;top:400px;max-width:170px">letterbox = カメラ外の暗幕。Camera 視点では comp 枠線を引かない(S0: AE/Resolve 無枠)</div>
+  <div class="lb" style="left:290px;top:470px">状態帯 = アイコンの言葉(v3)。▦=市松(AE の透明グリッドアイコンと同型= S0 適合)。解像度は<b>値が意味</b>なので文字のまま。User View 中はここに倍率+⌂ 復帰</div>
 </div>
 
 <div class="legend" id="legend">
   <b>AE の Stage(Comp ビューア)に有る物 — S0 対応表(記憶ベース・要実機確認)</b>
   <table>
     <tr><th>AE</th><th>Motolii の対応</th></tr>
-    <tr><td>3D View popup(Active Camera / Custom View 1-3 / Front…)</td><td><b>視点タブ</b>(カメラ/自由視点。理由つき逸脱: popup→タブはカメラレイヤー増加時の一覧性と二画面直感のため)</td></tr>
+    <tr><td>3D View popup(Active Camera / Custom View 1-3 / Front…)</td><td><b>視点タブ</b>(Camera / User View。理由つき逸脱: popup→タブはカメラ増加時の一覧性と二画面直感のため)</td></tr>
     <tr><td>View レイアウト(1 View / 2 Views / 4 Views)</td><td>予約地: タブの分離表示(二画面)</td></tr>
     <tr><td>透明グリッド(市松)<b>アイコン</b></td><td>帯の ▦(同型)</td></tr>
     <tr><td>倍率 popup・解像度 popup</td><td>帯の解像度 cap(Auto/½/¼)。倍率は自由視点の値表示</td></tr>
     <tr><td>セーフエリア/グリッド/ガイド options アイコン</td><td>予約地(セーフ=View トグル束)</td></tr>
     <tr><td>RoI・チャンネル表示・露出</td><td>対象外(現段階の非目標)</td></tr>
-    <tr><td>カメラのワイヤーフレーム(カメラ=オブジェクト)</td><td><b>カメラボックス</b>(金枠+◉。将来: カメラレイヤーで複数化)</td></tr>
+    <tr><td>カメラのワイヤーフレーム(カメラ=オブジェクト)</td><td><b>boxcam</b>(破線+ハンドル。将来: カメラレイヤーで複数化・3D は Blender viewport 参考)</td></tr>
   </table>
   <b>比率の注記</b>: comp=16:9 / 帯高:pane高 ≈ 0.04 / セーフ内接 90%・80%
-  <br><b>未決</b>: タブの命名(「カメラ/自由視点」で良いか)/ 自由視点の letterbox 濃度 / 市松×自由視点の併用(既知境界の解消時期)/ 二画面(タブ分離)の解禁束
+  <br><b>未決</b>: User View の初期倍率(等倍か fit か)/ boxcam ハンドルの解禁束(カメラ直接操作 — ギズモ束と同時か)/ 市松×User View の併用(既知境界の解消時期)/ 二画面(タブ分離)の解禁束
 </div>
 
 <script>
