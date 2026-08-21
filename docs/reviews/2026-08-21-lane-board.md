@@ -7,7 +7,6 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| μ: Stage 下縁状態帯 | 実装(cargo・sonnet) | lane-shell | **裁定163 適用第1号(ビタイチ実証台)**: 視点状態(観測中のみ表示・クリック復帰= S6/κ FINDING 4 根治)・プレビュー解像度 Auto/½/¼ 巡回(表示スケール cap 純関数)・市松の Settings→状態帯引っ越し。受入条件に S4/S5b/S6 を初引用 |
 
 ## 完了・main 着地済み(実装)
 
@@ -55,6 +54,8 @@
 | **β: BL1 逐次合成の枠(検収合格・merge `22f8e436`)** | **狙いどおり EVIDENCE_GAP の確定が成果**: 重なり半透明でバイト不一致(1264/4096px・maxΔ49)、真因= gamma 空間(`composite()` が layer 毎に srgb round-trip)。ライフサイクル・第二パス禁止柵は障害でないと実証。scaffold+`#[ignore]` 証拠テストを歴史証拠として merge。**→ 裁定161**(fork へ main_target accessor、BL1b へ) |
 | **γ: MK1 mask ラスタ配線(検収合格・merge `fe0724d7`)** | 未配線 `motolii-vector` を engine へ。`Path`→`Shape` 橋(単一輪郭を輪郭列に包むだけ・別型ではないと確定)+白 fill=coverage の純関数。oracle 4本(二値・AA 縁有界・面積・byte 決定論)。EVIDENCE_GAP: mask 座標系(comp 絶対 vs layer local)は Canvas を呼び手が組む設計で MK3 へ先送り |
 | **δ: speed 操作面の文法調査(回収)** | 保全= `2026-08-21-speed-ui-grammar-survey.md`。採択=2段構成(第一波 Inspector 数値欄・第二波 Shift+端drag は**利用者実機確認後**)。speed でキー時刻は動かさない(拘束7(a))。bar 文脈の空き modifier は Shift のみとコードで確定 |
+| **μ: Stage 下縁状態帯(検収合格・merge `3737d5c4`)** | **裁定163 適用第1号が着地**。視点状態(観測中のみ・クリック復帰= S6 違反第1号根治)・解像度 cap Auto/½/¼(既存 sqrt 予算と min 合成・RenderedFrame キャッシュ鍵へ追加)・市松の引っ越し(Settings から撤去)。赤→緑・216 全緑・S5b の PNG 実測つき。ALLOWLIST 逸脱2件(metrics fence・main.rs 追随)は理由正当で採択 |
+| **ξ: S 定数化の外部理論調査(回収)→ 裁定164** | 保全= `2026-08-21-spatial-score-constants-survey.md`。採用: KLM 秒数(S2 格上げ)・WCAG 比の ink 段・Rosenholtz/Miniukovich の画素判定基盤・ISO 9241-110 分類・ヒット寸の誤借用柵。棄却: F/Z(反証済)・黄金比(特定値の根拠なし)。S5a 占有率は外部定数なし=実測較正が正、と確定 |
 | **κ: UI 入口台帳(回収)→ 裁定163 S 空間スコア制定** | 保全= `2026-08-21-ui-entrance-atlas-survey.md`、正典= `docs/ui-spatial-score.md`。S0 慣習段差(辞書式最優先)〜S5 ヒーロー構図(pane ごとに主役を逆算・補完は縁へ・占有率/濃度序列は画素判定)+S4 視覚重み写像(発見依存度→tokens 段量子化)。初期在庫と器具計画込み。**次の適用第1号= Stage 下縁状態帯**(1/2 プレビュー入口+市松の引っ越し) |
 | **λ: 編集ショートカット8本配線(検収合格・merge `f8c34328`)** | κ FINDING 1 の根治 — Cmd+Z/Shift+Z/C/V/X/D/A/Shift+A。赤8本→緑 182/182・captured ガード試験込み。S0 群0 の shortcut 側を焼却(menu 側はメニューバー campaign 待ち・map verdict は据え置き) |
 | **BL1b: fork accessor+線形化(検収合格・merge `cbbe4f2b`)** | **裁定161 完了 — blend 逐次合成がバイト一致で開通**。fork 実質差分 +15行(accessor 1本、`856f597c3` GitHub push 済み・全 rev pin bump 済み)。Motolii 側は**新規 WGSL ゼロ**(既存 RectangleDrawData+import_gpu_premultiplied 再利用、「直前結果を背景 rect として同一 main_target 内で blend」の構成転換で 8bit 量子化往復も回避)。#[ignore] だった overlap テストが緑化。罠2件(texture pool の destroy / Nearest 固定)は doc 記録済み。**BL3(分離可能11モード)/BL4(非分離4)が発注可能になった**。seam 台帳追記済み |
