@@ -3609,7 +3609,7 @@ dependencies = [
  "motolii-vector",
  "proptest",
  "re_build_info",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "re_chunk",
  "re_chunk_store",
  "re_entity_db",
@@ -4972,7 +4972,7 @@ name = "r0-store-edit"
 version = "0.1.0"
 dependencies = [
  "arrow",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "re_chunk",
  "re_chunk_store",
  "re_entity_db",
@@ -5182,16 +5182,16 @@ dependencies = [
 [[package]]
 name = "re_arrow_util"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "anyhow",
  "arrow",
  "comfy-table",
  "half",
  "itertools",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_tuid 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_log",
+ "re_tracing",
+ "re_tuid",
  "serde_json",
  "thiserror 2.0.20",
 ]
@@ -5199,15 +5199,16 @@ dependencies = [
 [[package]]
 name = "re_build_info"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "serde",
 ]
 
 [[package]]
 name = "re_build_tools"
 version = "0.35.0-alpha.1+dev"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -5221,24 +5222,12 @@ dependencies = [
 [[package]]
 name = "re_byte_size"
 version = "0.35.0-alpha.1+dev"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "arrow",
  "half",
  "parking_lot",
- "re_byte_size_derive 0.35.0-alpha.1+dev",
- "smallvec",
- "vec1",
-]
-
-[[package]]
-name = "re_byte_size"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
-dependencies = [
- "arrow",
- "half",
- "parking_lot",
- "re_byte_size_derive 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size_derive",
  "smallvec",
  "vec1",
 ]
@@ -5246,17 +5235,7 @@ dependencies = [
 [[package]]
 name = "re_byte_size_derive"
 version = "0.35.0-alpha.1+dev"
-dependencies = [
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
-name = "re_byte_size_derive"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5267,7 +5246,7 @@ dependencies = [
 [[package]]
 name = "re_case"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "convert_case",
 ]
@@ -5275,7 +5254,7 @@ dependencies = [
 [[package]]
 name = "re_chunk"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5288,15 +5267,15 @@ dependencies = [
  "nohash-hasher",
  "rand 0.9.5",
  "re_arrow_util",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_error 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_format 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
+ "re_error",
+ "re_format",
+ "re_log",
  "re_log_types",
- "re_quota_channel 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_quota_channel",
  "re_sorbet",
- "re_span 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_span",
+ "re_tracing",
  "re_types_core",
  "thiserror 2.0.20",
 ]
@@ -5304,7 +5283,7 @@ dependencies = [
 [[package]]
 name = "re_chunk_store"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5315,15 +5294,15 @@ dependencies = [
  "nohash-hasher",
  "parking_lot",
  "re_arrow_util",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "re_chunk",
- "re_format 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_format",
+ "re_log",
  "re_log_encoding",
  "re_log_types",
  "re_sdk_types",
  "re_sorbet",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_tracing",
  "re_types_core",
  "saturating_cast",
  "thiserror 2.0.20",
@@ -5333,7 +5312,7 @@ dependencies = [
 [[package]]
 name = "re_entity_db"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "ahash",
  "arrow",
@@ -5344,18 +5323,18 @@ dependencies = [
  "nohash-hasher",
  "poll-promise",
  "re_arrow_util",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "re_chunk",
  "re_chunk_store",
- "re_format 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_format",
+ "re_log",
  "re_log_channel",
  "re_log_encoding",
  "re_log_types",
- "re_mutex 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_mutex",
  "re_query",
  "re_sorbet",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_tracing",
  "re_types_core",
  "re_uri",
  "serde",
@@ -5369,37 +5348,23 @@ dependencies = [
 [[package]]
 name = "re_error"
 version = "0.35.0-alpha.1+dev"
-
-[[package]]
-name = "re_error"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 
 [[package]]
 name = "re_format"
 version = "0.35.0-alpha.1+dev"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "half",
  "itertools",
  "num-traits",
- "re_log 0.35.0-alpha.1+dev",
-]
-
-[[package]]
-name = "re_format"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
-dependencies = [
- "half",
- "itertools",
- "num-traits",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_log",
 ]
 
 [[package]]
 name = "re_grpc_headers"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "http",
  "pin-project-lite",
@@ -5410,19 +5375,7 @@ dependencies = [
 [[package]]
 name = "re_log"
 version = "0.35.0-alpha.1+dev"
-dependencies = [
- "crossbeam",
- "log",
- "log-once",
- "parking_lot",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "re_log"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "crossbeam",
  "log",
@@ -5437,18 +5390,18 @@ dependencies = [
 [[package]]
 name = "re_log_channel"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "camino",
  "crossbeam",
  "futures",
  "parking_lot",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "re_log_encoding",
  "re_log_types",
  "re_protos",
- "re_quota_channel 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_quota_channel",
+ "re_tracing",
  "re_uri",
  "serde",
  "thiserror 2.0.20",
@@ -5457,7 +5410,7 @@ dependencies = [
 [[package]]
 name = "re_log_encoding"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "arrow",
  "bytes",
@@ -5467,15 +5420,15 @@ dependencies = [
  "parking_lot",
  "re_arrow_util",
  "re_build_info",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "re_chunk",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_log",
  "re_log_types",
  "re_protos",
- "re_quota_channel 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_quota_channel",
  "re_sorbet",
- "re_span 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_span",
+ "re_tracing",
  "re_types_core",
  "sha2",
  "thiserror 2.0.20",
@@ -5488,7 +5441,7 @@ dependencies = [
 [[package]]
 name = "re_log_types"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "ahash",
  "arrow",
@@ -5507,12 +5460,12 @@ dependencies = [
  "quiver",
  "re_arrow_util",
  "re_build_info",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_format 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
+ "re_format",
+ "re_log",
  "re_string_interner",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_tuid 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_tracing",
+ "re_tuid",
  "re_types_core",
  "serde",
  "static_assertions",
@@ -5540,26 +5493,17 @@ dependencies = [
 [[package]]
 name = "re_mutex"
 version = "0.35.0-alpha.1+dev"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "parking_lot",
- "re_byte_size 0.35.0-alpha.1+dev",
- "re_log 0.35.0-alpha.1+dev",
-]
-
-[[package]]
-name = "re_mutex"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
-dependencies = [
- "parking_lot",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
+ "re_log",
 ]
 
 [[package]]
 name = "re_protos"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "arrow",
  "http",
@@ -5572,13 +5516,13 @@ dependencies = [
  "quiver",
  "re_arrow_util",
  "re_build_info",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "re_chunk",
  "re_grpc_headers",
  "re_log_types",
  "re_sorbet",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_tuid 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_tracing",
+ "re_tuid",
  "re_types_core",
  "serde",
  "thiserror 2.0.20",
@@ -5592,7 +5536,7 @@ dependencies = [
 [[package]]
 name = "re_query"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5602,14 +5546,14 @@ dependencies = [
  "nohash-hasher",
  "parking_lot",
  "paste",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "re_chunk",
  "re_chunk_store",
- "re_error 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_format 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_error",
+ "re_format",
+ "re_log",
  "re_log_types",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_tracing",
  "re_types_core",
  "seq-macro",
  "thiserror 2.0.20",
@@ -5618,24 +5562,13 @@ dependencies = [
 [[package]]
 name = "re_quota_channel"
 version = "0.35.0-alpha.1+dev"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "crossbeam",
  "parking_lot",
- "re_byte_size 0.35.0-alpha.1+dev",
- "re_format 0.35.0-alpha.1+dev",
- "re_log 0.35.0-alpha.1+dev",
-]
-
-[[package]]
-name = "re_quota_channel"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
-dependencies = [
- "crossbeam",
- "parking_lot",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_format 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
+ "re_format",
+ "re_log",
 ]
 
 [[package]]
@@ -5664,6 +5597,7 @@ dependencies = [
 [[package]]
 name = "re_renderer"
 version = "0.35.0-alpha.1+dev"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "ahash",
  "anyhow",
@@ -5688,12 +5622,12 @@ dependencies = [
  "pathdiff",
  "profiling",
  "re_build_tools",
- "re_byte_size 0.35.0-alpha.1+dev",
- "re_error 0.35.0-alpha.1+dev",
- "re_log 0.35.0-alpha.1+dev",
- "re_mutex 0.35.0-alpha.1+dev",
- "re_quota_channel 0.35.0-alpha.1+dev",
- "re_tracing 0.35.0-alpha.1+dev",
+ "re_byte_size",
+ "re_error",
+ "re_log",
+ "re_mutex",
+ "re_quota_channel",
+ "re_tracing",
  "re_video",
  "regex-lite",
  "serde",
@@ -5711,15 +5645,7 @@ dependencies = [
 [[package]]
 name = "re_rvl"
 version = "0.35.0-alpha.1+dev"
-dependencies = [
- "byteorder",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "re_rvl"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "byteorder",
  "thiserror 2.0.20",
@@ -5728,7 +5654,7 @@ dependencies = [
 [[package]]
 name = "re_sdk_types"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "array-init",
  "arrow",
@@ -5742,14 +5668,14 @@ dependencies = [
  "ndarray",
  "nohash-hasher",
  "ply-rs-bw",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_error 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_format 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
+ "re_error",
+ "re_format",
+ "re_log",
  "re_log_types",
- "re_rvl 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_rvl",
  "re_sorbet",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_tracing",
  "re_types_core",
  "serde",
  "smallvec",
@@ -5760,17 +5686,17 @@ dependencies = [
 [[package]]
 name = "re_sorbet"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "arrow",
  "itertools",
  "nohash-hasher",
  "re_arrow_util",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
+ "re_log",
  "re_log_types",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_tuid 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_tracing",
+ "re_tuid",
  "re_types_core",
  "semver",
  "strum",
@@ -5782,14 +5708,7 @@ dependencies = [
 [[package]]
 name = "re_span"
 version = "0.35.0-alpha.1+dev"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "re_span"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "num-traits",
 ]
@@ -5797,13 +5716,13 @@ dependencies = [
 [[package]]
 name = "re_string_interner"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "ahash",
  "nohash-hasher",
  "parking_lot",
  "paste",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "serde",
  "static_assertions",
 ]
@@ -5811,15 +5730,7 @@ dependencies = [
 [[package]]
 name = "re_tracing"
 version = "0.35.0-alpha.1+dev"
-dependencies = [
- "parking_lot",
- "puffin",
-]
-
-[[package]]
-name = "re_tracing"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "parking_lot",
  "puffin",
@@ -5828,27 +5739,14 @@ dependencies = [
 [[package]]
 name = "re_tuid"
 version = "0.35.0-alpha.1+dev"
-dependencies = [
- "document-features",
- "getrandom 0.3.4",
- "quiver",
- "re_byte_size 0.35.0-alpha.1+dev",
- "re_log 0.35.0-alpha.1+dev",
- "serde",
- "web-time",
-]
-
-[[package]]
-name = "re_tuid"
-version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "bytemuck",
  "document-features",
  "getrandom 0.3.4",
  "quiver",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
+ "re_log",
  "serde",
  "web-time",
 ]
@@ -5856,7 +5754,7 @@ dependencies = [
 [[package]]
 name = "re_types_core"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "anyhow",
  "arrow",
@@ -5868,13 +5766,13 @@ dependencies = [
  "nohash-hasher",
  "quiver",
  "re_arrow_util",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
  "re_case",
- "re_error 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_error",
+ "re_log",
  "re_string_interner",
- "re_tracing 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_tuid 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_tracing",
+ "re_tuid",
  "serde",
  "thiserror 2.0.20",
 ]
@@ -5882,13 +5780,13 @@ dependencies = [
 [[package]]
 name = "re_uri"
 version = "0.35.0-alpha.1+dev"
-source = "git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c#483b855961c0ccab7ef3f3854a8f1b040422572c"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "percent-encoding",
- "re_byte_size 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
- "re_log 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_byte_size",
+ "re_log",
  "re_log_types",
- "re_tuid 0.35.0-alpha.1+dev (git+https://github.com/oshikaidesu/rerun?rev=483b855961c0ccab7ef3f3854a8f1b040422572c)",
+ "re_tuid",
  "re_types_core",
  "serde",
  "static_assertions",
@@ -5899,6 +5797,7 @@ dependencies = [
 [[package]]
 name = "re_video"
 version = "0.35.0-alpha.1+dev"
+source = "git+https://github.com/oshikaidesu/rerun?rev=856f597c3fd1402bad11903b25ec0b134d3a66ba#856f597c3fd1402bad11903b25ec0b134d3a66ba"
 dependencies = [
  "ahash",
  "bit-vec 0.9.1",
@@ -5913,16 +5812,16 @@ dependencies = [
  "itertools",
  "js-sys",
  "poll-promise",
- "re_byte_size 0.35.0-alpha.1+dev",
- "re_log 0.35.0-alpha.1+dev",
+ "re_byte_size",
+ "re_log",
  "re_mp4",
- "re_mutex 0.35.0-alpha.1+dev",
- "re_quota_channel 0.35.0-alpha.1+dev",
+ "re_mutex",
+ "re_quota_channel",
  "re_rav1d",
- "re_rvl 0.35.0-alpha.1+dev",
- "re_span 0.35.0-alpha.1+dev",
- "re_tracing 0.35.0-alpha.1+dev",
- "re_tuid 0.35.0-alpha.1+dev",
+ "re_rvl",
+ "re_span",
+ "re_tracing",
+ "re_tuid",
  "saturating_cast",
  "scuffle-av1",
  "scuffle-bytes-util",
