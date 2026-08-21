@@ -88,10 +88,15 @@ pub(crate) fn draw(
         }
         // 選択 layer の下に property 行が挿入されている間、後続の層行は押し下がる
         // (`TimelinePane::layer_row_top`、EXACT TARGET 1)。
+        //
+        // x は rail の右から(時間帯 `draw_time_bands` と同じ起点)。**rail は
+        // 時間カメラの外**(利用者知覚モデル 2026-08-21: 横スケールのジェスチャーは
+        // rail に効かず、縦スクロールだけが通る — rail は時間場の上に乗る別レイヤー
+        // であって、時間場の wash(ゼブラ・時間帯)を受けない)。
         let row_top = rows_top + pane.layer_row_top(index);
         frame.fill_rectangle(
-            Point::new(0.0, row_top),
-            Size::new(width, row_height),
+            Point::new(rail_width, row_top),
+            Size::new(clip_width, row_height),
             pane.colors.timeline_row_zebra,
         );
     }
