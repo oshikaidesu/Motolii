@@ -9,6 +9,7 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| **B3: Browser 絵+view 配線** | 実装 | worktree(発注時に追記) | カード grid(骨格まで — サムネは B5)+Shell::view 配線+開閉トグル+B1 記帳の端到端。map 980 完全消化。PNG/atlas 変化は理由つき追随。write-set= browser-pane+shell |
 | **H1: 親変換合成(store)** | 実装 | worktree(発注時に追記) | 裁定173 — resolve へ親合成挿入(単一再帰・メモ化=旧世界 spatial_resolve 移植)+`LayerSource::Group` marker。数値証明 oracle。write-set= store+engine「描かない」腕 |
 
 ## 完了・main 着地済み(実装)
