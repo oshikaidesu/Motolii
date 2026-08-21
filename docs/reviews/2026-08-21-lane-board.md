@@ -9,6 +9,8 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| BR-tabs | 実装 | worktree(browser-pane) | 4タブヘッダー(media/effects/create/panels)+preview-local カタログ — モック転写の取り残し回収(利用者実窓不合格 2026-08-22 昼)。write-set= `next/ui/motolii-browser-pane/` のみ |
+| PH-handle | 実装 | worktree(shell) | pane 題帯常設=drag ハンドル(裁定: 匿名8pxグリップ→可視の題帯へ。S6/S1/S4)+drop 先ハイライト+fixture 仮素材。write-set= `next/shell/motolii-shell/` のみ |
 
 ## 完了・main 着地済み(実装)
 
