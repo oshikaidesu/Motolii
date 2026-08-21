@@ -278,7 +278,11 @@ impl Widget<Message, iced::Theme, iced::Renderer> for SilentTrap {
         layout: Layout<'_>,
         cursor: mouse::Cursor,
         _renderer: &iced::Renderer,
-        _clipboard: &mut dyn iced::advanced::Clipboard,
+        // 裁定170 M01: fork(0.15.0-dev)で `Widget::update` から clipboard 引数が
+        // 消えた(`core::Clipboard` がトレイトから「読み書き要求の集合」を持つ
+        // 具象 struct へ再設計され、runtime 経由の別経路になった)。この引数は
+        // 元々 `_clipboard` で未使用だったため、シグネチャをトレイトへ合わせて
+        // 削るだけで挙動不変(この widget は clipboard を触っていない)。
         shell: &mut WidgetShell<'_, Message>,
         _viewport: &iced::Rectangle,
     ) {
