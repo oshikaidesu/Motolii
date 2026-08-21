@@ -1866,6 +1866,20 @@ impl Shell {
         self.frame.as_ref().map(|frame| frame.presenter_generation)
     }
 
+    /// **裁定171 v2 M4 / 残コスト調査(§1-4)の読み口**: 今の presenter が
+    /// GPU 高速路(`PresenterSource::Gpu`)か CPU フォールバック
+    /// (`PresenterSource::Cpu`)かを、実際に GPU device を動かさずに確かめる
+    /// (`metrics::presenter_blits()` は shader Pipeline の実描画時にしか
+    /// 増えない——`iced_test::simulator` は `Widget::draw` を叩かないため
+    /// headless 試験では観測できない、`STAGE_PRESENTER_WGSL` doc 参照。この
+    /// アクセサは `Shell::refresh_frame` が選んだ経路を `RenderedFrame` から
+    /// 直接読むだけなので headless でも確かな証拠になる)。
+    pub fn stage_presenter_is_gpu_backed(&self) -> Option<bool> {
+        self.frame
+            .as_ref()
+            .map(|frame| matches!(frame.presenter_source, PresenterSource::Gpu(_)))
+    }
+
     /// 今の Timeline の行。運転席が「層3枚の行が立つ」「選択が行と一致する」を
     /// 確かめる口(pane 自身が使う投影と同じ関数を呼ぶ)。
     pub fn timeline_rows(&self) -> Vec<timeline_pane::RowProjection> {
@@ -2234,29 +2248,37 @@ impl Shell {
 
             // ---------------------------------------------------------------
             // 裁定171 v2(M4)GPU 高速路 — playhead だけが動いた時
-            // (revision 不変・市松/観測/cap がどれもフォールバックを要求しない
-            // 組み合わせの時)。**ここでは `self.engine.render_frame` を一切
-            // 呼ばない**(CPU readback ゼロ、ORACLE (a) の核心)——
-            // `frame.rgba`(export 真値)は更新せず `rgba_stale` を立てるだけ
-            // (`Self::ensure_rgba_fresh` doc 参照)。
+            // (revision 不変・市松/観測がフォールバックを要求しない組み合わせの
+            // 時)。**ここでは `self.engine.render_frame` を一切呼ばない**
+            // (CPU readback ゼロ、ORACLE (a) の核心)—— `frame.rgba`(export
+            // 真値)は更新せず `rgba_stale` を立てるだけ(`Self::ensure_rgba_fresh`
+            // doc 参照)。
             //
-            // 除外条件(すべて裁定171 v2 §0-6 のフォールバックへ委ねる):
+            // 除外条件(いずれも裁定171 v2 §0-6 のフォールバックへ委ねる):
             // - `checkerboard`: CPU 合成フォールバック(市松の GPU 化は NON-GOAL)
             // - `observation.is_some()`: 観測視点は今回まだ zero-copy 経路に
             //   繋いでいない(NON-GOALS 外だが今回のスコープでもない、
             //   `render_resolved_to_texture` は camera を差し替えられる形なので
             //   将来はここを広げられる)
-            // - `resolution_cap != Auto`: ½/¼ は CPU 側の縮小(`stage_presenter_rgba`)
-            //   に依存しており、GPU 側の縮小はまだ実装していない
+            //
+            // **`resolution_cap`(½/¼)はもう除外条件ではない**(残コスト調査
+            // `docs/reviews/2026-08-22-residual-bottleneck-survey.md` §1-4 の
+            // 修理)。旧配線は cap≠Auto を理由にここを弾いて「フル再計算」
+            // (CPU readback)へフォールスルーしていた——「速くするための cap」が
+            // 実際には毎フレーム readback を払う遅い経路に自ら戻る bug だった。
+            // GPU 高速路はここでは常に comp ネイティブ解像度のまま描く(cap は
+            // GPU 側の描画コストを一切減らさない — r1 probe 実測「comp 出力の
+            // 縮小はほぼ効かない、律速は素材帯域」と整合させたまま、無駄な
+            // 縮小描画を足さない)。cap の見た目(粗さ)は presenter シェーダの
+            // fragment 側サンプリング粒度で表現する(`StagePresenterProgram`
+            // 構築側、`stage_pane` 関数の `pixel_scale` 参照)——CPU 側の
+            // `stage_presenter_rgba` 縮小と同じ「明示的な縮小」を、テクスチャの
+            // 実サイズは変えずに blit 時のサンプリングだけで再現する。
             //
             // 上のどれかに当たる、または snapshot が作れない(comp 消滅等)場合は
             // 下の「フル再計算」(既存、無改造)へフォールスルーする——
             // 「無反応より安全側」(M16)を保つ。
-            if frame.revision == revision
-                && !checkerboard
-                && observation.is_none()
-                && resolution_cap == stage::PreviewResolutionCap::Auto
-            {
+            if frame.revision == revision && !checkerboard && observation.is_none() {
                 if let Some(snapshot) = self.build_preview_snapshot(playhead) {
                     if let Some(frame) = self.frame.as_mut() {
                         frame.playhead = playhead;
@@ -2558,13 +2580,16 @@ fn build_stage_presenter_rgba(
 // 混ぜられない)。
 // ---------------------------------------------------------------------------
 
-/// letterbox uniform(vertex shader 側)のレイアウト。NDC 空間での
+/// uniform buffer のレイアウト: letterbox(vertex shader 側、NDC 空間での
 /// [offset_x, offset_y, scale_x, scale_y] — widget の `bounds` を viewport その
 /// ものとして扱う shader Primitive の性質上(`iced_wgpu-0.14.0/src/lib.rs` の
 /// render ループが `render_pass.set_viewport` を primitive の `bounds` へ
 /// 設定してから `draw` を呼ぶ、実測)、この4値だけで letterbox 矩形が NDC 上に
-/// 定まる。
-const STAGE_PRESENTER_UNIFORM_BYTES: u64 = 16;
+/// 定まる)16 byte + `pixel_scale`(fragment shader 側、残コスト調査 §1-4の
+/// 修理 — cap ½/¼ の「明示的な縮小」を GPU 高速路でも表現する fragment 側
+/// サンプリング粒度、`fs_main` 参照)4 byte + WGSL 構造体アラインメント
+/// (`vec2<f32>` の align=8 に揃えるための)4 byte padding = 24 byte。
+const STAGE_PRESENTER_UNIFORM_BYTES: u64 = 24;
 
 /// Stage 提示 shader の WGSL。頂点は `vertex_index`(0..6)から生成する
 /// full-screen quad(2三角形)——専用の vertex buffer は持たない(letterbox の
@@ -2594,6 +2619,7 @@ const STAGE_PRESENTER_WGSL: &str = r#"
 struct Uniforms {
     offset: vec2<f32>,
     scale: vec2<f32>,
+    pixel_scale: f32,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -2630,7 +2656,30 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let sampled = textureSample(stage_texture, stage_sampler, in.uv);
+    // 残コスト調査(§1-4)の修理: `pixel_scale` < 1.0(GPU 高速路 + cap ½/¼)の
+    // 間だけ、UV を「comp ネイティブ解像度 × pixel_scale」個のブロックへ量子化
+    // してからサンプルする——GPU 高速路(main_target はネイティブ解像度のまま、
+    // `Shell::refresh_frame` doc 参照)でも cap の「明示的な縮小」を、テクスチャ
+    // の実サイズは変えずに再現する(CPU 経路の nearest-neighbor 事前縮小と
+    // 同じ見た目、`stage_presenter_rgba` 参照)。
+    //
+    // `pixel_scale == 1.0`(CPU 経路は常にこれ——既にテクスチャ自体が cap
+    // 相当に縮小済み、`StagePresenterProgram` doc 参照。GPU 経路も cap=Auto
+    // の間は 1.0)の間は量子化を一切しない——素通しの `textureSample` のまま
+    // (裁定166 の見た目を無改変で保つ。仮に `grid == dims` として量子化しても
+    // 数学的にはテクセル中心へのスナップに退化するだけだが、それでも通常の
+    // bilinear 補間からわずかにズレるため、"変える理由が無い経路は本当に
+    // 何も変えない" を優先する)。
+    var uv = in.uv;
+    if (uniforms.pixel_scale < 1.0) {
+        let dims = vec2<f32>(textureDimensions(stage_texture));
+        let grid = max(dims * uniforms.pixel_scale, vec2<f32>(1.0));
+        // WGSL の `/` は vecN/vecN か T/T のみ(scalar/vector 混在は `*` だけ
+        // 許される) — `1.0 / grid` は無効なので `vec2<f32>(1.0) / grid` にする。
+        let cell = vec2<f32>(1.0) / grid;
+        uv = (floor(uv / cell) + vec2<f32>(0.5)) * cell;
+    }
+    let sampled = textureSample(stage_texture, stage_sampler, uv);
     // 裁定171 v2(M4、上のモジュール doc 参照): サンプル値は premultiplied
     // alpha。この pipeline の blend state は straight alpha を前提にしている
     // ので、ここで unmultiply する。alpha=1(不透明)では恒等。
@@ -2728,6 +2777,11 @@ struct StagePresenterProgram {
     width: u32,
     height: u32,
     generation: u64,
+    /// 残コスト調査(§1-4)の修理: fragment 側サンプリング粒度(`fs_main` の
+    /// `pixel_scale` uniform へそのまま渡す)。`1.0` = 通常サンプリング
+    /// (縮小無し)、`0.5`/`0.25` = ½/¼ cap 相当の粗さ。`stage_pane` 側が
+    /// `PresenterSource::Cpu`/`Gpu` を見て決める(doc 参照)。
+    pixel_scale: f32,
 }
 
 impl shader::Program<Message> for StagePresenterProgram {
@@ -2740,6 +2794,7 @@ impl shader::Program<Message> for StagePresenterProgram {
             width: self.width,
             height: self.height,
             generation: self.generation,
+            pixel_scale: self.pixel_scale,
             letterbox: stage_presenter_letterbox_ndc(bounds, self.width, self.height),
         }
     }
@@ -2758,6 +2813,11 @@ struct StagePresenterPrimitive {
     width: u32,
     height: u32,
     generation: u64,
+    /// `fs_main` の `pixel_scale` uniform(`StagePresenterProgram` doc 参照)。
+    /// letterbox と同じく世代ゲートの対象外 — cap を巡回するだけなら世代を
+    /// 進めない Message は無い(`CycleResolutionCap` は presenter_generation を
+    /// 進める側)が、万一ズレても軽い float 1個の書き込みなので実害は無い。
+    pixel_scale: f32,
     /// NDC 空間での letterbox 矩形 [offset_x, offset_y, scale_x, scale_y]
     /// (`stage_presenter_letterbox_ndc` 参照)。widget bounds が変わるたび
     /// (pane resize)再計算が要るので、世代ゲートの対象外(4 float の書き込み
@@ -2884,7 +2944,10 @@ impl shader::Pipeline for StagePresenterPipeline {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    // 残コスト調査(§1-4)の修理: `pixel_scale` を `fs_main` も
+                    // 読むようになったので FRAGMENT を足す(letterbox の
+                    // offset/scale は引き続き vertex 側専用)。
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -3011,6 +3074,11 @@ impl StagePresenterPipeline {
         uniform_bytes[4..8].copy_from_slice(&letterbox[1].to_ne_bytes());
         uniform_bytes[8..12].copy_from_slice(&letterbox[2].to_ne_bytes());
         uniform_bytes[12..16].copy_from_slice(&letterbox[3].to_ne_bytes());
+        // 残コスト調査(§1-4)の修理: `fs_main` の `pixel_scale`(WGSL 構造体
+        // `Uniforms.pixel_scale`、offset=16)。bytes[20..24] は WGSL 側の
+        // `vec2<f32>` アラインメント(8 byte)に揃えるための padding —
+        // ゼロのままで良い(`fs_main` は読まない)。
+        uniform_bytes[16..20].copy_from_slice(&primitive.pixel_scale.to_ne_bytes());
         queue.write_buffer(&self.uniform_buffer, 0, &uniform_bytes);
     }
 
@@ -3428,11 +3496,25 @@ fn stage_pane(
             // 消す)。letterbox は `Program::draw` が widget bounds を受け取った
             // 時点で `stage::letterboxed_rect` を呼んで組む(2箇所目の
             // letterbox 実装を作らない、EXACT TARGET 1)。
+            // 残コスト調査(§1-4)の修理: GPU 高速路(`PresenterSource::Gpu`)は
+            // テクスチャ自体を comp ネイティブ解像度のまま描く(§refresh_frame
+            // 参照)ので、cap の「明示的な縮小」は fragment 側のサンプリング
+            // 粒度で再現する(`pixel_scale` uniform、下記 WGSL `fs_main` 参照)。
+            // CPU 経路(`PresenterSource::Cpu`)は `build_stage_presenter_rgba`
+            // が既にテクスチャ自体を cap 相当の寸法へ縮めてアップロード済みな
+            // ので、ここでさらに縮小粒度を足すと二重適用になる——常に `1.0`
+            // (無 no-op、`fs_main` 側の grid はテクスチャ実寸そのものになり、
+            // 通常のサンプリングと事実上同じ)を渡す。
+            let pixel_scale = match &frame.presenter_source {
+                PresenterSource::Cpu(_) => 1.0,
+                PresenterSource::Gpu(_) => stage::effective_preview_scale(1.0, resolution_cap) as f32,
+            };
             let picture: Element<'_, Message> = Shader::new(StagePresenterProgram {
                 source: frame.presenter_source.clone(),
                 width: frame.presenter_width,
                 height: frame.presenter_height,
                 generation: frame.presenter_generation,
+                pixel_scale,
             })
             .width(Length::Fill)
             .height(Length::Fill)

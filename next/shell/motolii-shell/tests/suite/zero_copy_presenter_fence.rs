@@ -34,7 +34,7 @@ use std::sync::Arc;
 
 use motolii_audio::{DeviceWaitLatency, PlaybackClock, PlaybackCounters, PlaybackSession};
 use motolii_core::{Fps, RationalTime};
-use motolii_shell::{metrics, Message, Shell};
+use motolii_shell::{metrics, stage, Message, Shell};
 
 /// `metrics_main.rs` の crate root で定義された共有 lock(`metrics` はプロセス
 /// 共有 static なので、同バイナリ内で並列実行される `#[test]` 同士 — かつ
@@ -89,6 +89,72 @@ fn playback_ticks_do_not_trigger_cpu_readback_after_warmup() {
         warmup_calls,
         "裁定171 v2 EXACT TARGET 3/4: 再生中の Stage 経路は readback ゼロのはず\
          (warmup後は{warmup_calls}回で横ばいのはずが、10 tick 回して増えている)"
+    );
+}
+
+/// **残コスト調査(`docs/reviews/2026-08-22-residual-bottleneck-survey.md`
+/// §1-4)の修理**。旧配線は `resolution_cap != Auto` を理由に GPU 高速路
+/// (`refresh_frame` の早期 return 枝)を弾き、½/¼ cap を選ぶと再生 tick の
+/// たびに「フル再計算」(`Engine::render_frame` = CPU readback)へ
+/// フォールスルーしていた——「速くするための cap」が実際には readback を
+/// 毎フレーム払う遅い経路に自ら戻る bug だった(修理前は red)。
+///
+/// この試験は [`playback_ticks_do_not_trigger_cpu_readback_after_warmup`] の
+/// cap=½ 版: 起動直後の warmup 1回を除けば、cap=½ で再生中に
+/// `metrics::render_frame_calls()` が増えないこと、かつ
+/// `Shell::stage_presenter_is_gpu_backed()`(`refresh_frame` が実際に選んだ
+/// `PresenterSource` の中身)が `Gpu` であること——「たまたま何も描いていない
+/// から readback が無い」のではなく、GPU 高速路を実際に経由していることの
+/// 裏付け。**`metrics::presenter_blits()` はここでは使えない**——それは
+/// shader Pipeline が実際に GPU device 上で描いた時だけ増える計測器具で、
+/// `iced_test::simulator`/この統合試験のような headless 経路は
+/// `Widget::draw` を一切叩かないため常に0のまま(`STAGE_PRESENTER_WGSL` doc
+/// 参照)。`stage_presenter_is_gpu_backed` は `Shell::refresh_frame` が選んだ
+/// 経路を `RenderedFrame` から直接読むだけなので、GPU device 無しでも確かな
+/// 証拠になる。
+#[test]
+fn playback_ticks_at_half_cap_do_not_trigger_cpu_readback_after_warmup() {
+    let _guard = METRICS_LOCK.lock().unwrap();
+    metrics::reset();
+
+    let mut shell = Shell::new_fixture().0;
+    let warmup_calls = metrics::render_frame_calls();
+    assert!(warmup_calls >= 1, "起動直後に何も描いていない(M17 違反)");
+
+    // cap を Auto→½ へ(同一 revision/playhead 上の設定変更 — この1回だけは
+    // 既存の「cap 変更」分岐(CPU 経路)を通ってよい、readback 回数はここでは
+    // 見ない)。
+    let _ = shell.update(Message::Stage(stage::Message::CycleResolutionCap));
+    assert_eq!(shell.resolution_cap(), stage::PreviewResolutionCap::Half, "cap が ½ になっていない");
+
+    let calls_before_playback = metrics::render_frame_calls();
+
+    let (session, counters) = fake_session_at(900);
+    shell.debug_start_playback_with_session(session);
+
+    let start_playhead = shell.session().playhead;
+    for _ in 0..10 {
+        // 1,600サンプル@48kHz = 1/30秒 = comp 30fpsでちょうど1フレーム。
+        counters.advance_supplied_for_simulation(1_600);
+        let _ = shell.update(Message::PlaybackTick);
+    }
+
+    assert!(
+        shell.session().playhead > start_playhead,
+        "そもそもtickでplayheadが動いていない — 試験の前提が崩れている"
+    );
+    assert_eq!(
+        metrics::render_frame_calls(),
+        calls_before_playback,
+        "cap=½ で再生中も readback ゼロのはず\
+         (現状red: `resolution_cap != Auto` が GPU 高速路を弾いてフル再計算へ\
+         フォールスルーする配線バグ、残コスト調査 §1-4)"
+    );
+    assert_eq!(
+        shell.stage_presenter_is_gpu_backed(),
+        Some(true),
+        "GPU 高速路(`PresenterSource::Gpu`)を経由していない —\
+         readback が無いのは『たまたま何も描いていない』だけかもしれない"
     );
 }
 
