@@ -3470,9 +3470,7 @@ dependencies = [
  "motolii-media",
  "motolii-store",
  "motolii-testkit",
- "notify",
- "serde",
- "serde_json",
+ "motolii-tokens-rs",
 ]
 
 [[package]]
@@ -3505,6 +3503,16 @@ version = "0.1.0"
 dependencies = [
  "image",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "motolii-tokens-rs"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "notify",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

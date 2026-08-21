@@ -18,6 +18,7 @@ members = [
     "engine/motolii-media",
     "engine/motolii-vector",
     "shell/motolii-shell",
+    "ui/motolii-tokens-rs",
     "probes/r0-store-edit",
     "probes/r1-frame-throughput",
     "probes/r2-view-projection",
@@ -86,6 +87,10 @@ motolii-engine = { path = "engine/motolii-engine" }
 motolii-export = { path = "engine/motolii-export" }
 motolii-media = { path = "engine/motolii-media" }
 motolii-vector = { path = "engine/motolii-vector" }
+# 裁定160 切片1: `motolii-shell/src/tokens.rs` を抽出した leaf crate(依存ゼロ、
+# `notify`/`serde`/`serde_json` のみ)。`motolii-shell` は `pub use` で `tokens`
+# path 互換を保つ(docs/reviews/2026-08-21-pane-split-survey.md §2.2/§6 切片1)。
+motolii-tokens-rs = { path = "ui/motolii-tokens-rs" }
 
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"

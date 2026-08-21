@@ -1,0 +1,16 @@
+[package]
+name = "motolii-tokens-rs"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+iced.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# デザイン値の外出し(裁定117)。debug ビルドの `watch_subscription` だけが
+# 実際に使う — 依存グラフには re_renderer 経由で既に入っているので、direct
+# dependency への昇格として扱う(発注書の「新依存は notify の direct 昇格のみ可」)。
+# `motolii-shell` から本 crate へ抽出(裁定160 切片1)された、旧 tokens.rs と
+# 同じ依存宣言。
+notify = "8"
