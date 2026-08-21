@@ -192,6 +192,10 @@ pub struct Compositor {
     /// layer 単位オフスクリーンパスの中間 texture プール(裁定153 S2)。
     /// **Compositor 所有・フレームをまたいで再利用** — `effects` モジュール doc 参照。
     effect_scratch: effects::EffectScratch,
+    /// Glow の shader pipeline(裁定153 S4)。**初回生成して以後使い回す**
+    /// (`effects::glow` モジュール doc 参照)。他の pass 種別が増えても
+    /// pipeline はサイズ非依存なので、layer やフレームをまたいで作り直さない。
+    glow_pipelines: effects::GlowPipelines,
 }
 
 impl Compositor {
@@ -215,11 +219,14 @@ impl Compositor {
         )
         .map_err(|e| CompositorError::Context(e.to_string()))?;
 
+        let glow_pipelines = effects::GlowPipelines::new(&ctx.device);
+
         Ok(Self {
             ctx,
             next_readback: 1,
             next_effect_key: 1,
             effect_scratch: effects::EffectScratch::default(),
+            glow_pipelines,
         })
     }
 
@@ -514,7 +521,19 @@ impl Compositor {
             }
 
             let [width, height] = lwp.layer.texture.width_height();
-            let format = lwp.layer.texture.format();
+            // Glow を含む layer は中間・出力とも常に `Rgba16Float`(裁定153 S4、
+            // `effects::glow` モジュール doc 参照 — bright-pass の閾値判定と加算合成が
+            // 1.0 を超える値を扱う必要があるため、layer 本体の元 format とは独立)。
+            // Identity だけの layer は従来どおり元 format のまま(既存試験の期待を壊さない)。
+            let has_glow = lwp
+                .passes
+                .iter()
+                .any(|pass| matches!(pass, EffectPass::Glow { .. }));
+            let format = if has_glow {
+                effects::GLOW_INTERMEDIATE_FORMAT
+            } else {
+                lwp.layer.texture.format()
+            };
 
             let src_handle = lwp.layer.texture.handle();
             let src = self
@@ -539,8 +558,6 @@ impl Compositor {
             for pass in &lwp.passes {
                 match pass {
                     // 恒等 pass。画素単位の copy がそのまま「絵を変えない」を満たす。
-                    // S4 以降が実 shader pass(bright/blur/composite 等)をここへ足す時、
-                    // この match 腕を増やす(`crate::effects` モジュール doc 参照)。
                     EffectPass::Identity => {
                         encoder.copy_texture_to_texture(
                             wgpu::TexelCopyTextureInfo {
@@ -561,6 +578,59 @@ impl Compositor {
                                 depth_or_array_layers: 1,
                             },
                         );
+                    }
+                    // 内蔵 vism 第1号(裁定153 S4)。bright-pass→水平blur→垂直blur→
+                    // 加算合成の5パスを同じ encoder へ積む(`effects::glow` 参照)。
+                    // 中間2枚(bloom/blur_ping)は `scratch`(dst)と同じ
+                    // `GLOW_INTERMEDIATE_FORMAT` の scratch pool から借り、GPU が
+                    // 読み終わってから他の scratch と同じ経路でプールへ返す
+                    // (下の `checked_out` へ積む)。
+                    EffectPass::Glow {
+                        threshold,
+                        intensity,
+                        radius,
+                    } => {
+                        let bloom = self.effect_scratch.acquire(
+                            &self.ctx.device,
+                            width,
+                            height,
+                            effects::GLOW_INTERMEDIATE_FORMAT,
+                        );
+                        let blur_ping = self.effect_scratch.acquire(
+                            &self.ctx.device,
+                            width,
+                            height,
+                            effects::GLOW_INTERMEDIATE_FORMAT,
+                        );
+                        let bloom_view = bloom.create_view(&Default::default());
+                        let blur_ping_view = blur_ping.create_view(&Default::default());
+                        let dst_view = scratch.create_view(&Default::default());
+
+                        self.glow_pipelines.record(
+                            &self.ctx.device,
+                            &self.ctx.queue,
+                            encoder,
+                            &src.default_view,
+                            &bloom_view,
+                            &blur_ping_view,
+                            &dst_view,
+                            *threshold,
+                            *intensity,
+                            *radius,
+                        );
+
+                        checked_out.push((
+                            width,
+                            height,
+                            effects::GLOW_INTERMEDIATE_FORMAT,
+                            bloom,
+                        ));
+                        checked_out.push((
+                            width,
+                            height,
+                            effects::GLOW_INTERMEDIATE_FORMAT,
+                            blur_ping,
+                        ));
                     }
                 }
             }

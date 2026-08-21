@@ -407,39 +407,71 @@ fn translate_blend_mode(
 /// `translate_blend_mode` と**同型の語彙変換**だが、失敗のさせ方は逆にしてある:
 ///
 /// **未知 plugin_id は `Err` にしない。無音で skip する**(pass を1本も積まない)。
-/// 理由 — 2026-08-21 時点で `motolii_compositor::EffectPass` は `Identity`
-/// (絵を変えない pass、枠の正しさを固定するためだけの variant)しか持たない
-/// (`motolii_compositor::effects` モジュール doc 参照)。つまり**「対応している」
-/// plugin_id はこの時点で1つも存在せず、全ての effect が未知**である。
-/// `translate_blend_mode` のように未知を `Err` で fail-closed にすると、
-/// effect を1つでも積んだ layer が S3 のこのコミットから一律描画不能になる —
-/// それは S1 が「まだ合成器/engine は読んでいない」を解消しに行った意図にも、
-/// 「壊れているのではなくまだ描けない」という effect の実情にも反する。
+/// 理由 — `motolii_compositor::EffectPass` は今のところ `Identity`(絵を変えない pass、
+/// 枠の正しさを固定するためだけの variant)と `Glow`(裁定153 S4、最初の実 shader pass)
+/// しか持たない(`motolii_compositor::effects` モジュール doc 参照)。つまり
+/// **「対応している」plugin_id は `"motolii.glow"` 1本だけ**で、それ以外は全て未知
+/// である。`translate_blend_mode` のように未知を `Err` で fail-closed にすると、
+/// 対応外の effect を1つでも積んだ layer が一律描画不能になる — それは
+/// 「壊れているのではなくまだ描けない」という effect の実情に反する。
 /// blend mode(16値のうち対応外があれば明確に壊れている)と effect
-/// (対応する pass がまだ1つも実装されていないのが今の常態)とでは
+/// (対応する pass がまだ一部しか実装されていないのが今の常態)とでは
 /// 「未対応」の意味が違う、というのがこの非対称の理由。
 ///
-/// **plugin_id ⇄ EffectPass の対応表はまだ無い**。S4(Glow 等の最初の実 shader pass)が
-/// `motolii_compositor::EffectPass` へ variant を足す時に、ここへ match 腕を1本足す
-/// (`motolii_compositor::effects` モジュール doc の「S4 がこの enum へ変種を足す」と対)。
-/// それまでは常に empty(=その layer は `LayerWithPasses { passes: vec![] }` になり、
-/// `Compositor::render_with_effects` 内でオフスクリーンを一切作らない従来コストの分岐を通る
-/// — `tests/effects.rs`
-/// `passless_layer_matches_the_traditional_render_path_and_allocates_nothing` と同じ分岐)。
+/// **`"motolii.glow"` → `EffectPass::Glow` が最初の対応表エントリ**(裁定153 S4)。
+/// 名前つき param(`threshold`/`intensity`/`radius`)は `ResolvedEffect.params` から
+/// 探す — 無い param(track を触っていない)は proof の既定値で埋める
+/// (`translate_glow_params` 参照)。**型が合わない値が入っていたら pass を1本も
+/// 積まない**(EXACT TARGET #2 — パニックしない。fail-closed だが `Err` にはしない、
+/// この layer の他の effect や layer 自体は普通に描ける)。
 ///
-/// パニックしない: `effects` が空でも、全 plugin_id が未知でも、ここは常に正常終了する。
+/// パニックしない: `effects` が空でも、全 plugin_id が未知でも、param の型が
+/// 壊れていても、ここは常に正常終了する。
 fn translate_effect_passes(
     effects: &[motolii_store::ResolvedEffect],
 ) -> Vec<motolii_compositor::EffectPass> {
     effects
         .iter()
         .filter_map(|effect| match effect.plugin_id.as_str() {
-            // 既知 plugin_id はまだ無い。S4 が最初の腕(例: "motolii.glow" →
-            // `EffectPass::Glow(..)`)を足すまで、ここは常に `None`
-            // (= pass を積まない、未知 id を無音 skip)。
+            "motolii.glow" => translate_glow_params(&effect.params),
+            // それ以外の plugin_id はまだ対応する pass が無い。無音で skip する
+            // (= pass を積まない、`translate_blend_mode` とは非対称——上のdoc参照)。
             _ => None,
         })
         .collect()
+}
+
+/// proof(`spikes/m5-known-implementation/M5-R0/src/glow.rs`)の既定値。
+/// `threshold`/`intensity` は proof のハードコード値そのまま
+/// (`bright_fs` の `1.0`、`composite_fs` の `0.75`)。`radius` は proof に
+/// 名前つき param が無い(5-tap のオフセットが固定 1texel/2texel)ので、
+/// `motolii_compositor::effects::glow` が選んだ「`radius = 1.0` が proof の固定
+/// オフセットと厳密に一致する」写像に合わせた値(`EffectPass::Glow` の doc 参照)。
+const GLOW_DEFAULT_THRESHOLD: f64 = 1.0;
+const GLOW_DEFAULT_INTENSITY: f64 = 0.75;
+const GLOW_DEFAULT_RADIUS: f64 = 1.0;
+
+/// `"motolii.glow"` の named param map(`effect.{id}.param.{name}` track が実在する分
+/// だけ、裁定153 S1 `ResolvedEffect::params`)を `EffectPass::Glow` へ写す。
+/// track の無い param は proof の既定値(上記定数)。**値はあるが型が `Value::F64`
+/// でない**場合は `None` を返して pass を1本も積まない(EXACT TARGET #2、
+/// `translate_effect_passes` の doc 参照)。
+fn translate_glow_params(params: &[(String, motolii_store::Value)]) -> Option<motolii_compositor::EffectPass> {
+    let find = |name: &str, default: f64| -> Option<f64> {
+        match params.iter().find(|(param_name, _)| param_name == name) {
+            Some((_, motolii_store::Value::F64(v))) => Some(*v),
+            Some(_other_type) => None,
+            None => Some(default),
+        }
+    };
+    let threshold = find("threshold", GLOW_DEFAULT_THRESHOLD)?;
+    let intensity = find("intensity", GLOW_DEFAULT_INTENSITY)?;
+    let radius = find("radius", GLOW_DEFAULT_RADIUS)?;
+    Some(motolii_compositor::EffectPass::Glow {
+        threshold: threshold as f32,
+        intensity: intensity as f32,
+        radius: radius as f32,
+    })
 }
 
 #[cfg(test)]
