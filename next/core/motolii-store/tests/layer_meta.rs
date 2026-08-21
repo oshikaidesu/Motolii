@@ -690,3 +690,91 @@ fn duplicate_effect_ids_are_rejected() {
     });
     assert!(result.is_err(), "同じ id の effect が2枚置けてしまっている");
 }
+
+// ---------------------------------------------------------------------------
+// label_color — レイヤー差し色(index 保存、裁定は RETURN 参照)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn label_color_defaults_to_unassigned() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place(&mut doc, layer, solid(), 0, 100);
+
+    let attrs = doc.view().attrs(layer).unwrap().unwrap_or_default();
+    assert_eq!(attrs.label_color, None, "SetAttrs で一度も触っていない layer は未割当のはず");
+}
+
+#[test]
+fn set_attrs_writes_and_reads_back_label_color() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place(&mut doc, layer, solid(), 0, 100);
+
+    doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch {
+            label_color: Some(Some(5)),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    let attrs = doc.view().attrs(layer).unwrap().unwrap();
+    assert_eq!(attrs.label_color, Some(5), "label_color の patch が読み戻らない");
+}
+
+#[test]
+fn set_attrs_can_clear_label_color_back_to_unassigned() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place(&mut doc, layer, solid(), 0, 100);
+
+    doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch {
+            label_color: Some(Some(3)),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+    doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch {
+            label_color: Some(None),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    let attrs = doc.view().attrs(layer).unwrap().unwrap();
+    assert_eq!(attrs.label_color, None, "外側 Some(None) で未割当へ戻せるはず");
+}
+
+#[test]
+fn patching_an_unrelated_field_does_not_touch_label_color() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place(&mut doc, layer, solid(), 0, 100);
+
+    doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch {
+            label_color: Some(Some(7)),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+    doc.apply(Intent::SetAttrs {
+        layer,
+        patch: LayerAttrsPatch {
+            hidden: Some(true),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    let attrs = doc.view().attrs(layer).unwrap().unwrap();
+    assert_eq!(attrs.label_color, Some(7), "無関係な patch で label_color が黙って消えてはいけない");
+    assert!(attrs.hidden);
+}

@@ -686,8 +686,9 @@ impl Shell {
             Message::Browser(msg) => match msg {},
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
-                // **1操作 = 1 undo**。`AddLayer` と `SetMeta` を別々に書くと
-                // 利用者は Undo を2回押すことになる(ui-quality-bar Q2)。
+                // **1操作 = 1 undo**。`AddLayer`/`SetMeta`/`SetAttrs`(差し色の
+                // 自動割当)を別々に書くと利用者は Undo を複数回押すことになる
+                // (ui-quality-bar Q2)。
                 let placed = self.doc.apply_all([
                     Intent::AddLayer(id),
                     Intent::SetMeta {
@@ -705,6 +706,13 @@ impl Shell {
                                 None,
                                 self.comp_duration(),
                             ),
+                        },
+                    },
+                    Intent::SetAttrs {
+                        layer: id,
+                        patch: LayerAttrsPatch {
+                            label_color: Some(Some(Self::label_color_for_new_layer(id))),
+                            ..Default::default()
                         },
                     },
                 ]);
@@ -899,6 +907,15 @@ impl Shell {
                                 info.nb_frames,
                                 comp_duration,
                             ),
+                        },
+                    });
+                    // 差し色の自動割当(`Message::AddLayer` と同じ決定論、
+                    // `label_color_for_new_layer` 参照)。
+                    intents.push(Intent::SetAttrs {
+                        layer: id,
+                        patch: LayerAttrsPatch {
+                            label_color: Some(Some(Self::label_color_for_new_layer(id))),
+                            ..Default::default()
                         },
                     });
                 }
@@ -1891,6 +1908,17 @@ impl Shell {
     /// を返すので、削除した layer の id が再利用されない(2026-08-20 の敵対的レビュー修正)。
     fn next_layer_id(&self) -> u64 {
         self.doc.view().next_layer_id()
+    }
+
+    /// レイヤー差し色の自動割当(利用者裁定2026-08-21「色が足りない。Ableton は
+    /// レイヤー全部に色」)。**決定論**(`LayerId % パレット長`) — Session に依存
+    /// しない・undo/redo で結果が変わらない・同じ layer は常に同じ色になる。
+    /// パレットの実体色は `tokens::Colors::label_palette`(トンマナ従属パレット、
+    /// 発注書の候補C)にあり、ここは index を計算するだけ(色そのものはここに
+    /// 埋め込まない)。生成点(`Message::AddLayer` 腕・`admit`)専用 — 既存 layer
+    /// の色を後から変えるための関数ではない(その UI は後続波)。
+    fn label_color_for_new_layer(id: LayerId) -> u8 {
+        (id.0 % tokens::LABEL_PALETTE_LEN as u64) as u8
     }
 
     /// Document・再生位置・市松トグルのいずれかが変わった時だけ描き直す。

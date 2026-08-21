@@ -872,7 +872,8 @@ impl Document {
                         || patch.name.is_some()
                         || patch.auto_orient.is_some()
                         || patch.pinned.is_some()
-                        || patch.solo.is_some();
+                        || patch.solo.is_some()
+                        || patch.label_color.is_some();
                     if touches_other_than_locked {
                         return Err(StoreError::Property(format!(
                             "layer {} は locked なので attrs を変更できない(先に \

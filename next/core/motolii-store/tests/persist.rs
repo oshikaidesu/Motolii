@@ -1,8 +1,8 @@
 //! 保存と読込 — **形式は上流の `.rrd`**。自前形式を発明していない。
 
 use motolii_store::{
-    Composition, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack, LayerId, LayerMeta,
-    LayerSource, LayerTiming, PropertyId, RationalTime, Value, property,
+    Composition, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId,
+    LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value, property,
 };
 
 fn tmp(name: &str) -> std::path::PathBuf {
@@ -214,4 +214,49 @@ fn saving_folds_the_edit_history() {
         size < 256 * 1024,
         "200編集した後の保存が {size} bytes。履歴が畳まれていない"
     );
+}
+
+/// レイヤー差し色(`label_color`、index 保存)が保存往復で消えない。
+#[test]
+fn label_color_round_trips_through_save_and_load() {
+    let mut doc = authored();
+    doc.apply(Intent::SetAttrs {
+        layer: LayerId(1),
+        patch: LayerAttrsPatch {
+            label_color: Some(Some(9)),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    let path = tmp("label_color_roundtrip.motolii");
+    doc.save(&path).expect("保存できない");
+    let loaded = Document::load(&path).expect("読み込めない");
+
+    assert_eq!(
+        loaded.view().attrs(LayerId(1)).unwrap().unwrap().label_color,
+        Some(9),
+        "label_color が保存往復で消えた/変わった"
+    );
+}
+
+/// 旧保存ファイル(`label_color` component が無い版)を模した JSON でも読める —
+/// `#[serde(default)]` の後方互換確認。`composition_without_a_background_field_
+/// defaults_to_opaque_black` と同じ手口(JSON からキーを取り除いてから読み戻す)。
+#[test]
+fn attrs_without_a_label_color_field_defaults_to_unassigned() {
+    let current = motolii_store::LayerAttrs {
+        name: "旧ドキュメントの layer".to_owned(),
+        ..Default::default()
+    };
+    let mut value = serde_json::to_value(&current).unwrap();
+    value
+        .as_object_mut()
+        .expect("LayerAttrs は JSON object のはず")
+        .remove("label_color")
+        .expect("旧形式を模すには label_color キーが無いことが前提");
+
+    let loaded: motolii_store::LayerAttrs =
+        serde_json::from_value(value).expect("旧形式の JSON を読めない");
+    assert_eq!(loaded.label_color, None, "label_color 欠落時は未割当へ落ちるはず");
 }

@@ -23,6 +23,9 @@ pub struct RowProjection {
     pub solo: bool,
     /// locked(`LayerAttrs.locked`)。レーンバーの L トグルが読む(裁定147)。
     pub locked: bool,
+    /// レイヤー差し色の index(`LayerAttrs.label_color`)。`None` = 未割当 —
+    /// bar は既定色(`way_timeline`)のまま(`canvas::draw` 参照)。
+    pub label_color: Option<u8>,
     pub start: i64,
     pub duration: i64,
     pub selected: bool,
@@ -52,6 +55,7 @@ pub fn rows(store: &StoreView<'_>, session: &Session) -> Vec<RowProjection> {
             hidden: attrs.hidden,
             solo: attrs.solo,
             locked: attrs.locked,
+            label_color: attrs.label_color,
             start: meta.timing.start,
             duration: meta.timing.duration,
             selected: row_selected(session, id),
@@ -503,6 +507,7 @@ mod preview_tests {
             hidden: false,
             solo: false,
             locked: false,
+            label_color: None,
             start,
             duration,
             selected: false,

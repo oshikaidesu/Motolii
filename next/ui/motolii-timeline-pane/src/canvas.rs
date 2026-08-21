@@ -127,11 +127,20 @@ pub(crate) fn draw(
         // `projection::apply_clip_preview` が掴んでいる1行にだけ立てる —
         // R1 egui版実測「ドラッグ中のbarはACCENT色に変わる」を踏襲)。
         // hidden との優先順位: 掴んで動かしている最中は見えていることの方が
-        // 重要なので dragging が hidden より優先。
+        // 重要なので dragging が hidden より優先。レイヤー差し色(第1波)は
+        // 通常時だけ効く — dragging/hidden の優先順位はそのまま(既存テスト
+        // が守る)、`label_color` が `Some` で初めて `way_timeline` の代わりに
+        // パレット色を使う。index が万一パレット長を超えていたら(将来の
+        // パレット縮小等)既定色へ落ちる(panic しない、M16 と同じ姿勢)。
         let bar_color = if row.dragging {
             pane.colors.action_active
         } else if row.hidden {
             pane.colors.text_muted
+        } else if let Some(color) = row
+            .label_color
+            .and_then(|index| pane.colors.label_palette.get(index as usize))
+        {
+            *color
         } else {
             pane.colors.way_timeline
         };

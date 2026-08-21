@@ -840,8 +840,18 @@ pub fn render(shell: &Shell) -> RgbaImage {
         let end_x = (clip_x0
             + timeline_pane::frame_to_x(row.start + row.duration, clip_width, duration_frames))
         .max(start_x + 1.0);
+        // `timeline/canvas.rs::draw` の bar_color と同じ優先順位(この instrument は
+        // その再現なので追随する) — hidden が既定色より優先、label_color は
+        // Some の時だけ既定(way_timeline)の代わりに使う。dragging はこの静止画
+        // instrument には無い(row.dragging は常に false、`Shell::timeline_rows`
+        // が組む rows がドラッグ中の overlay を持たない)。
         let bar_color = if row.hidden {
             colors.text_muted
+        } else if let Some(color) = row
+            .label_color
+            .and_then(|index| colors.label_palette.get(index as usize))
+        {
+            *color
         } else {
             colors.way_timeline
         };

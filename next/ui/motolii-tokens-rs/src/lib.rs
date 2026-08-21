@@ -292,6 +292,64 @@ pub struct Colors {
     /// 市松の暗タイル。[`Colors::checkerboard_light`] と対。値は AE 実機準拠
     /// (暗 0.30 灰、`checkerboard_light` との差 Δ≈30/255)。
     pub checkerboard_dark: Color,
+    /// レイヤー差し色パレット(利用者裁定2026-08-21「色が足りない。Ableton は
+    /// レイヤー全部に色」)。[`motolii_store::LayerAttrs::label_color`] が保存する
+    /// index(`0..LABEL_PALETTE_LEN`)がこの配列を引く — DTCG 正本(`ui/motolii-tokens`)
+    /// にロールが無い新設ロール(裁定164 の S4 柵: 意味役割が新しいので
+    /// `surface`/`accent` 等の既存段を借用せず専用ロールを起こす。
+    /// [`Colors::checkerboard_light`] と同じ理由)。`Default`/`parse` の両方で
+    /// [`fixed_label_palette`] を使うので値は1箇所。
+    pub label_palette: [Color; LABEL_PALETTE_LEN],
+}
+
+/// [`Colors::label_palette`] の長さ。生成時の決定論自動割当(`motolii_shell` の
+/// `LayerId % LABEL_PALETTE_LEN`)と、表示側の index 境界チェックの両方が
+/// この定数を参照する(値を2箇所に持たない)。
+pub const LABEL_PALETTE_LEN: usize = 12;
+
+/// [`Colors::label_palette`] の固定値。HSL→RGB で 12色、hue は 0° から 30° 刻み
+/// (`i * 30.0`、昇順)。
+///
+/// **採択は候補C**(トンマナ従属・低彩度、`S=0.32, L=0.62` — 現行 bar 色
+/// `way_timeline` と同明度帯)。比較のために供覧した他候補(発注書 supervisor 指定、
+/// いずれも実装値は変えていない):
+/// - 候補A(Ableton 風・識別強): `S=0.55, L=0.60`
+/// - 候補B(AE ラベル風・伝統): `S=0.45, L=0.55`
+///
+/// 比較PNGは3候補それぞれでこの関数の `saturation`/`lightness` 引数を一時的に
+/// 差し替えて撮った(ゼブラ比較と同じ一時差し替え方式)。この commit に残るのは
+/// 採択前の既定である候補Cのみ。
+fn fixed_label_palette() -> [Color; LABEL_PALETTE_LEN] {
+    hsl_palette(0.32, 0.62)
+}
+
+/// hue を `0..LABEL_PALETTE_LEN` へ 30° 刻みで割り、`(saturation, lightness)` 固定で
+/// [`hsl_to_rgb`] へ渡す。
+fn hsl_palette(saturation: f32, lightness: f32) -> [Color; LABEL_PALETTE_LEN] {
+    let mut out = [Color::from_rgb(0.0, 0.0, 0.0); LABEL_PALETTE_LEN];
+    for (index, slot) in out.iter_mut().enumerate() {
+        let hue = index as f32 * 30.0;
+        *slot = hsl_to_rgb(hue, saturation, lightness);
+    }
+    out
+}
+
+/// 標準の HSL→RGB 変換(`hue` は度 `[0, 360)`、`saturation`/`lightness` は
+/// `[0.0, 1.0]`)。発明の余地が無い教科書アルゴリズムなのでそのまま採る。
+fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> Color {
+    let c = (1.0 - (2.0 * lightness - 1.0).abs()) * saturation;
+    let h_prime = (hue.rem_euclid(360.0)) / 60.0;
+    let x = c * (1.0 - (h_prime.rem_euclid(2.0) - 1.0).abs());
+    let (r1, g1, b1) = match h_prime as i32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x), // 5: h_prime in [5,6)
+    };
+    let m = lightness - c / 2.0;
+    Color::from_rgb(r1 + m, g1 + m, b1 + m)
 }
 
 /// [`Colors::border_hairline_weak`]/[`Colors::timeline_time_band`]/
@@ -350,6 +408,7 @@ impl Default for Colors {
             derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
         let (border_hairline_weak, timeline_time_band, timeline_row_zebra) = fixed_wash_colors();
         let (checkerboard_light, checkerboard_dark) = fixed_checkerboard_colors();
+        let label_palette = fixed_label_palette();
         Self {
             surface_app: Color::from_rgb(0.1412, 0.1412, 0.1412),
             surface_panel,
@@ -374,6 +433,7 @@ impl Default for Colors {
             timeline_row_zebra,
             checkerboard_light,
             checkerboard_dark,
+            label_palette,
         }
     }
 }
@@ -391,6 +451,7 @@ impl Colors {
             derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
         let (border_hairline_weak, timeline_time_band, timeline_row_zebra) = fixed_wash_colors();
         let (checkerboard_light, checkerboard_dark) = fixed_checkerboard_colors();
+        let label_palette = fixed_label_palette();
         Ok(Self {
             surface_app: color_at(color, &["surface", "app"])?,
             surface_panel,
@@ -415,6 +476,7 @@ impl Colors {
             timeline_row_zebra,
             checkerboard_light,
             checkerboard_dark,
+            label_palette,
         })
     }
 
@@ -1088,5 +1150,77 @@ mod checkerboard_role_tests {
         let parsed = Colors::parse(&json).expect("motolii-dark.json を parse できない");
         assert_eq!(parsed.checkerboard_light, default_colors.checkerboard_light);
         assert_eq!(parsed.checkerboard_dark, default_colors.checkerboard_dark);
+    }
+}
+
+#[cfg(test)]
+mod label_palette_tests {
+    use super::{hsl_to_rgb, Colors, LABEL_PALETTE_LEN};
+
+    /// 12色ちょうど(発注書指定)。
+    #[test]
+    fn label_palette_has_twelve_entries() {
+        assert_eq!(Colors::default().label_palette.len(), LABEL_PALETTE_LEN);
+        assert_eq!(LABEL_PALETTE_LEN, 12);
+    }
+
+    /// hue は index * 30° の昇順 — 隣接色が単純な HSL 数式で予測できること
+    /// (発明した並びではなく hue 昇順という機械的な規則であることの直接証拠)。
+    #[test]
+    fn label_palette_hues_ascend_in_thirty_degree_steps() {
+        let palette = Colors::default().label_palette;
+        for (index, color) in palette.iter().enumerate() {
+            let expected = hsl_to_rgb(index as f32 * 30.0, 0.32, 0.62);
+            assert_eq!(
+                *color, expected,
+                "index {index} の色が hue={}° の HSL 変換と一致しない",
+                index as f32 * 30.0
+            );
+        }
+    }
+
+    /// hue=0° (赤)の HSL→RGB を教科書どおりの数値で固定する — 変換式自体の
+    /// 正しさを、パレット生成とは独立に確かめる。S=0.32, L=0.62 の hue=0° は
+    /// C=(1-|2*0.62-1|)*0.32=0.2432、m=0.62-C/2=0.4984 なので
+    /// R=C+m=0.7416, G=B=m=0.4984。
+    #[test]
+    fn hsl_to_rgb_matches_the_textbook_formula_at_hue_zero() {
+        let color = hsl_to_rgb(0.0, 0.32, 0.62);
+        assert!((color.r - 0.7416).abs() < 1e-4, "R={}", color.r);
+        assert!((color.g - 0.4984).abs() < 1e-4, "G={}", color.g);
+        assert!((color.b - 0.4984).abs() < 1e-4, "B={}", color.b);
+    }
+
+    /// hue=120°(緑)でも同じ式が成り立つこと — 分岐(`match h_prime as i32`)の
+    /// 別セグメントも検分する。C/m は hue=0° と同じ(S/L 固定なので不変)、
+    /// G=C+m=0.7416, R=B=m=0.4984。
+    #[test]
+    fn hsl_to_rgb_matches_the_textbook_formula_at_hue_120() {
+        let color = hsl_to_rgb(120.0, 0.32, 0.62);
+        assert!((color.r - 0.4984).abs() < 1e-4, "R={}", color.r);
+        assert!((color.g - 0.7416).abs() < 1e-4, "G={}", color.g);
+        assert!((color.b - 0.4984).abs() < 1e-4, "B={}", color.b);
+    }
+
+    /// `Default`/`parse` の両経路が同じ固定パレットを使うこと(`checkerboard_*`
+    /// と同型の柵 — 正本 JSON にロールが無いので値の2重管理を許さない)。
+    #[test]
+    fn label_palette_matches_between_default_and_parse() {
+        let default_colors = Colors::default();
+        let json = std::fs::read_to_string(Colors::debug_source_path())
+            .expect("motolii-dark.json を読めない");
+        let parsed = Colors::parse(&json).expect("motolii-dark.json を parse できない");
+        assert_eq!(parsed.label_palette, default_colors.label_palette);
+    }
+
+    /// 12色すべてが異なる(同じ hue に潰れていないことの直接証拠)。
+    #[test]
+    fn label_palette_entries_are_all_distinct() {
+        let palette = Colors::default().label_palette;
+        for i in 0..palette.len() {
+            for j in (i + 1)..palette.len() {
+                assert_ne!(palette[i], palette[j], "index {i} と {j} の色が同じ");
+            }
+        }
     }
 }

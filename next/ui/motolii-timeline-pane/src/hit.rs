@@ -119,6 +119,7 @@ mod tests {
             hidden: false,
             solo: false,
             locked: false,
+            label_color: None,
             start,
             duration,
             selected: false,

@@ -56,6 +56,7 @@ fn doc_with_layer_and_attrs() -> (Document, LayerId) {
             pinned: Some(false),
             solo: Some(false),
             locked: Some(false),
+            label_color: Some(Some(3)),
         },
     })
     .unwrap();
@@ -79,6 +80,7 @@ fn flattened_carries_every_component_the_store_has_not_just_the_named_ones() {
     assert_eq!(attrs.name, "circle", "attrs.name が flatten で消えた");
     assert_eq!(attrs.blend_mode, BlendMode::Multiply, "attrs.blend_mode が flatten で消えた");
     assert!(attrs.auto_orient, "attrs.auto_orient が flatten で消えた");
+    assert_eq!(attrs.label_color, Some(3), "attrs.label_color が flatten で消えた");
 }
 
 /// 同じ柵を save/load(実ファイル)経由でも確かめる — `flattened()` は `save()` の
