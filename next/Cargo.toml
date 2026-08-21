@@ -18,6 +18,7 @@ members = [
     "engine/motolii-media",
     "engine/motolii-vector",
     "shell/motolii-shell",
+    "ui/motolii-settings-pane",
     "ui/motolii-tokens-rs",
     "probes/r0-store-edit",
     "probes/r1-frame-throughput",
@@ -91,6 +92,12 @@ motolii-vector = { path = "engine/motolii-vector" }
 # `notify`/`serde`/`serde_json` のみ)。`motolii-shell` は `pub use` で `tokens`
 # path 互換を保つ(docs/reviews/2026-08-21-pane-split-survey.md §2.2/§6 切片1)。
 motolii-tokens-rs = { path = "ui/motolii-tokens-rs" }
+# 裁定160 切片9: `motolii-shell/src/settings_pane.rs`(+ 切片5で吸い上げた
+# `chrome.rs`)を抽出した pane crate(`motolii-tokens-rs`/`motolii-store`
+# だけに依存、pane 同士には依存しない — pane split survey §5 layer 1)。
+# `motolii-shell` は `pub use` で `settings_pane` path 互換を保つ
+# (docs/reviews/2026-08-21-pane-split-survey.md §6 切片9)。
+motolii-settings-pane = { path = "ui/motolii-settings-pane" }
 
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"

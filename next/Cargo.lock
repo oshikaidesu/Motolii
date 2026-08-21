@@ -3458,6 +3458,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-settings-pane"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "motolii-store",
+ "motolii-tokens-rs",
+]
+
+[[package]]
 name = "motolii-shell"
 version = "0.1.0"
 dependencies = [
@@ -3468,6 +3477,7 @@ dependencies = [
  "motolii-core",
  "motolii-engine",
  "motolii-media",
+ "motolii-settings-pane",
  "motolii-store",
  "motolii-testkit",
  "motolii-tokens-rs",

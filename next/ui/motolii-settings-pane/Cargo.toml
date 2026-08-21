@@ -1,0 +1,12 @@
+[package]
+name = "motolii-settings-pane"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+iced.workspace = true
+motolii-store.workspace = true
+# デザイン値の外出し(裁定117)。裁定160 切片1 で抽出済みの leaf crate をそのまま
+# 依存する — `Colors`/`Dimensions`/`Tokens` は raw 値の直書き禁止の唯一の読み口。
+motolii-tokens-rs.workspace = true

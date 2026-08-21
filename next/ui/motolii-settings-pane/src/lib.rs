@@ -5,22 +5,38 @@
 //! `chrome::section_header` をそのまま再利用し、数値欄の枠色ロールは
 //! `chrome::value_input_style` を、ボタンの意味色ロールは
 //! `chrome::button_style` を共有する(2箇所で別の意匠を発明しない、裁定160
-//! 切片5で `inspector_pane`/`lib.rs` から `chrome` へ吸い上げ済み)。
+//! 切片5で `inspector_pane`/`lib.rs` から `chrome` へ吸い上げ済み。切片9で
+//! `chrome` ごとこの crate へ抽出——`chrome.rs` 冒頭 doc 参照)。
 //!
-//! **書ける物を持たない**(他 pane と同じ制約): [`view`] は `&Composition`・
-//! 下書き・`bool`・`Dimensions`・`Colors` しか受け取らない。書き口は
-//! `crate::Shell::update` の該当 arm だけ。
+//! ## 裁定160 切片9: crate 抽出(`motolii-shell` → `motolii-settings-pane`)
+//! `docs/reviews/2026-08-21-pane-split-survey.md` §6 切片9。**挙動ゼロ変更**。
+//!
+//! - **`Message` は pane ローカル**(この crate の [`Message`])。`motolii-shell`
+//!   root の `Message::Settings(settings_pane::Message)` が1本で畳む(iced
+//!   標準の「子 pane の Message を親が wrap する」形)。
+//! - **書ける物を持たない、が書き口(自由関数)は持つ**: [`view`] は他 pane と
+//!   同じく `&Composition`・下書き・`bool`・`Dimensions`・`Colors` しか受け
+//!   取らない。一方 [`apply_background_preset`]/[`commit_background_channel`]/
+//!   [`commit_ui_scale`] は「pane が自分の write ロジックを持つ」形の自由関数
+//!   ——`&mut Document`/`&mut Tokens`/下書きの `&mut Option<_>` を明示引数で
+//!   受け取る(`&mut self` の暗黙アクセスではない、pane crate は `Shell` を
+//!   持てないため)。呼び出し口は `motolii_shell::Shell::update_settings`
+//!   (`&mut self.doc` 等をそのまま貸すだけの glue)。
+//! - `Shell` 側の状態(`settings_panel_open`/`checkerboard`/`background_draft`/
+//!   `ui_scale_draft`)は**移設していない** — pane split survey §1.2 の
+//!   「Settings 小計 63行」は3関数の write ロジックだけを指しており、フィールド
+//!   の置き場は対象外(struct 分割は判断要の別問題、このぶんは動かさない)。
 //!
 //! ## 3項目の置き場(発注書どおり)
 //! - **Stage 背景色**: `Composition.background` そのもの(Document、undo が効く)。
-//!   `crate::Shell::apply_background_preset`/`commit_background_channel` が
+//!   [`apply_background_preset`]/[`commit_background_channel`] が
 //!   read-modify-write で `Intent::SetComposition` を出す。
 //! - **市松**: **表示専用**、Document には一切乗らない。仮の置き場は `Shell` 自身の
 //!   フィールド(`crate::Shell::checkerboard`) — 発注書は「Workspace 側」と指示して
 //!   いるが、`tokens.rs::Dimensions::ui_scale` の doc comment と同じ理由
 //!   (Workspace 永続機構がまだ無い、裁定127/128)で仮置きする。
-//! - **ui_scale(%)**: 既存 `tokens::Dimensions::ui_scale` をそのまま読み書きする —
-//!   ここでは新しい置き場を作らない。書き戻しは [`crate::tokens::save_ui_scale`]。
+//! - **ui_scale(%)**: 既存 `motolii_tokens_rs::Tokens::ui_scale` をそのまま読み書きする
+//!   — ここでは新しい置き場を作らない。書き戻しは [`motolii_tokens_rs::save_ui_scale`]。
 //!
 //! ## 市松 = AE型の透明可視化モード(裁定141)
 //! 市松 ON の間、Stage プレビューは `Composition.background` を敷かずに合成した
@@ -36,11 +52,42 @@
 use iced::widget::{button, column, container, row, text, text_input};
 use iced::{Element, Length};
 
-use motolii_store::Composition;
+use motolii_store::{Composition, Document, Intent};
+use motolii_tokens_rs::{Colors, Dimensions, Tokens};
 
-use crate::chrome::{button_style, section_header, value_input_style};
-use crate::tokens::{Colors, Dimensions};
-use crate::Message;
+pub mod chrome;
+
+use chrome::{button_style, section_header, value_input_style};
+
+// ---------------------------------------------------------------------------
+// pane ローカル Message(裁定160 切片9 — root `Message::Settings(Message)` が
+// 1本で畳む)。旧腕名の "Settings" prefix は pane 名前空間で二重になるので
+// 剥がした(`ToggleSettingsPanel`/`ToggleCheckerboard`/`UiScaleInput`/
+// `UiScaleSubmit` はもともと prefix が無いので無改名)。
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Message {
+    /// ヘッダの歯車ボタン。表示だけのトグル — Document にも undo 履歴にも乗らない。
+    ToggleSettingsPanel,
+    /// Stage の下に市松を敷くかどうか。**表示専用** — Document には一切乗らない
+    /// (書き出しに影響しない、本 crate doc 参照)。
+    ToggleCheckerboard,
+    /// 背景色プリセット(黒/白/グレー18%)。押した瞬間に確定する
+    /// (`Intent::SetComposition` を1回、1 gesture = 1 undo)。
+    BackgroundPreset(BackgroundPreset),
+    /// 背景 RGBA の1チャンネルへの打鍵。**まだ Document を書かない** —
+    /// 下書きを更新するだけ(Inspector の Transform 行入力と同じ形)。
+    BackgroundChannelInput(BackgroundChannel, String),
+    /// 背景 RGBA の1チャンネルの Enter — ここで初めて `Intent::SetComposition` を
+    /// 1回出す(read-modify-write、他チャンネルは現在値のまま)。
+    BackgroundChannelSubmit(BackgroundChannel),
+    /// ui_scale(%)欄への打鍵。まだ書かない。
+    UiScaleInput(String),
+    /// ui_scale(%)欄の Enter — 50..200 にクランプして `Tokens`/`Dimensions` を
+    /// 更新し、debug ビルドでは正本 JSON へも書き戻す(`save_ui_scale`)。
+    UiScaleSubmit,
+}
 
 // ---------------------------------------------------------------------------
 // 背景色
@@ -102,7 +149,7 @@ pub enum BackgroundPreset {
 }
 
 /// プリセットの実値。**丸め込み先はここ1箇所だけ**
-/// (`crate::Shell::apply_background_preset` は呼ぶだけ)。
+/// (`apply_background_preset` は呼ぶだけ)。
 pub fn preset_rgba(preset: BackgroundPreset) -> [f32; 4] {
     let channel = |v: u8| v as f32 / 255.0;
     match preset {
@@ -114,9 +161,9 @@ pub fn preset_rgba(preset: BackgroundPreset) -> [f32; 4] {
 }
 
 /// 数値入力欄の文字列 → 0..255 にクランプした値。読めなければ `None`
-/// (`crate::Shell::commit_background_channel` が status 帯へ理由を出す)。
+/// (`commit_background_channel` が status 帯へ理由を出す)。
 pub fn parse_channel_u8(text: &str) -> Option<f32> {
-    crate::chrome::parse_number(text).map(|value| value.clamp(0.0, 255.0) as f32)
+    chrome::parse_number(text).map(|value| value.clamp(0.0, 255.0) as f32)
 }
 
 // ---------------------------------------------------------------------------
@@ -126,10 +173,72 @@ pub fn parse_channel_u8(text: &str) -> Option<f32> {
 /// 入力文字列(%) → 50..200 にクランプ・1%刻みに丸めた `ui_scale`(1.00基準)。
 /// 読めなければ `None`。
 pub fn parse_ui_scale_percent(text: &str) -> Option<f32> {
-    crate::chrome::parse_number(text).map(|value| {
+    chrome::parse_number(text).map(|value| {
         let clamped_percent = value.clamp(50.0, 200.0).round();
         (clamped_percent / 100.0) as f32
     })
+}
+
+// ---------------------------------------------------------------------------
+// 書き口(裁定160 切片9で lib.rs から移設): `&mut Document`/`&mut Tokens`/
+// 下書きを明示引数で受け取る自由関数。呼び出し側(`motolii_shell::Shell::
+// update_settings`)が `self.doc` 等をそのまま貸す — pane crate は `Shell` を
+// 持てない(root → pane の一方向依存、循環禁止)ための形。
+// ---------------------------------------------------------------------------
+
+/// 背景色プリセット — 現在の `Composition` を読み、`background` だけ書き換えて
+/// 丸ごと書き戻す(read-modify-write、`Intent::SetComposition` は丸ごと置換の
+/// intent なので width/height/fps/duration_frames を巻き込まないよう毎回読む)。
+/// `Err` は status 帯へ出す理由文そのもの(呼び出し側が `self.status` へ渡す)。
+pub fn apply_background_preset(doc: &mut Document, preset: BackgroundPreset) -> Result<(), String> {
+    let Some(mut composition) = doc.view().composition().ok().flatten() else {
+        return Err("comp が無い".to_owned());
+    };
+    composition.background = preset_rgba(preset);
+    doc.apply(Intent::SetComposition(composition))
+        .map_err(|error| format!("背景を書けない: {error}"))
+}
+
+/// 背景 RGBA の1チャンネル — 下書きを確定して1回の `Intent::SetComposition`
+/// を出す(read-modify-write、他チャンネルは今の値のまま)。
+pub fn commit_background_channel(
+    doc: &mut Document,
+    draft: &mut Option<BackgroundFieldDraft>,
+    channel: BackgroundChannel,
+) -> Result<(), String> {
+    let Some(taken) = draft.take() else {
+        return Ok(());
+    };
+    if taken.channel != channel {
+        *draft = Some(taken);
+        return Ok(());
+    }
+    let Some(mut composition) = doc.view().composition().ok().flatten() else {
+        return Err("comp が無い".to_owned());
+    };
+    let Some(value_0_255) = parse_channel_u8(&taken.text) else {
+        return Err(format!("数値として読めない: {}", taken.text));
+    };
+    composition.background[channel.index()] = value_0_255 / 255.0;
+    doc.apply(Intent::SetComposition(composition))
+        .map_err(|error| format!("背景を書けない: {error}"))
+}
+
+/// ui_scale(%)欄 — 下書きを確定して 50..200 にクランプ、`Tokens`/`Dimensions`
+/// を更新する。**Document を経由しない**(`ui_scale` は既存の置き場どおり
+/// トークン扱い、undo 対象ではない)。debug ビルドでは正本 JSON へも書き戻す —
+/// 失敗しても in-memory の値は既に更新済みなので、画面上は反映される
+/// (書き込み失敗は status 帯へ理由を出すだけで機能は止めない、M16)。
+pub fn commit_ui_scale(tokens: &mut Tokens, draft: &mut Option<String>) -> Result<(), String> {
+    let Some(text) = draft.take() else {
+        return Ok(());
+    };
+    let Some(ui_scale) = parse_ui_scale_percent(&text) else {
+        return Err(format!("数値として読めない: {text}"));
+    };
+    tokens.dims.ui_scale = ui_scale;
+    tokens.ui_scale = ui_scale;
+    motolii_tokens_rs::save_ui_scale(ui_scale).map_err(|error| format!("ui_scale を保存できない: {error}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -151,11 +260,10 @@ const CHECKERBOARD_TILE_PX: u32 = 8;
 /// タイル色は `Colors::surface_raised`/`Colors::surface_panel`(意味色ロール
 /// 経由、raw 値の直書き禁止)。
 ///
-/// **`pub`(crate 内限定ではない)**: `screenshot.rs` が「実際に画面へ出る絵」を
+/// **`pub`**: `screenshot.rs`(`motolii-shell` root crate)が「実際に画面へ出る絵」を
 /// 再現するのに同じ組み合わせを使う(`lib.rs::build_stage_handle` と同じ形)のに
 /// 加えて、`tests/settings_drive.rs` が容疑2(このロジック自体のバグ)を
-/// `frame_rgba()` 生値に対して直接固定するのにも使う — integration test は
-/// 別クレート扱いなので `pub(crate)` では届かない。
+/// `frame_rgba()` 生値に対して直接固定するのにも使う。
 pub fn composite_checkerboard(width: u32, height: u32, rgba: &mut [u8], colors: Colors) {
     if width == 0 || height == 0 {
         return;
@@ -227,8 +335,8 @@ pub fn view(
             // 残余を全部 hairline へ置換する」を Settings へ展開)。旧実装は
             // 行同士の区切りを何も持たず(面色でも線でもない、無地のまま
             // 積んでいた)、Inspector の `.prow` と同格の情報行として同じ
-            // 弱い hairline ロール([`inspector_pane::border_hairline_weak`]、
-            // `tokens::Colors` 経由)を延長する — 新しい視覚言語の発明ではない。
+            // 弱い hairline ロール(`tokens::Colors` 経由)を延長する — 新しい
+            // 視覚言語の発明ではない。
             let rows: Vec<Element<'static, Message>> = vec![
                 hairline_bottom(background_row(composition, background_draft, dims, colors), dims, colors),
                 hairline_bottom(preset_row(dims, colors), dims, colors),
@@ -336,8 +444,8 @@ fn channel_cell(
             .align_x(iced::alignment::Horizontal::Center)
             .width(Length::Fixed(dims.inspector_value_width)),
         text_input("", &displayed)
-            .on_input(move |text| Message::SettingsBackgroundChannelInput(channel, text))
-            .on_submit(Message::SettingsBackgroundChannelSubmit(channel))
+            .on_input(move |text| Message::BackgroundChannelInput(channel, text))
+            .on_submit(Message::BackgroundChannelSubmit(channel))
             .size(dims.body_text)
             .width(Length::Fixed(dims.inspector_value_width))
             .padding(0.0)
@@ -369,14 +477,14 @@ fn preset_button(
     colors: Colors,
 ) -> Element<'static, Message> {
     button(text(label).size(dims.caption_text))
-        .on_press(Message::SettingsBackgroundPreset(preset))
+        .on_press(Message::BackgroundPreset(preset))
         .style(move |_theme, status| button_style(dims, colors, status))
         .into()
 }
 
 /// **表示専用**トグル。M glyph(`inspector_pane::mute_glyph`)と同じ「押すたび
 /// 即トグル」の形だが、glyph ではなく文言ボタン(専用の意味色ロールを新設せず
-/// 既存 `crate::button_style` を再利用する — 新しい状態色を1個のためだけに
+/// 既存 `chrome::button_style` を再利用する — 新しい状態色を1個のためだけに
 /// 発明しない)。
 fn checkerboard_row(checkerboard: bool, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     let label = if checkerboard { "Checkerboard: On" } else { "Checkerboard: Off" };
