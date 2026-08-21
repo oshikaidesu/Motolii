@@ -16,7 +16,7 @@
 | # | 事実 | なぜ疑うべきか |
 |---|---|---|
 | 0 | push は大区切り運用。**本引き継ぎ commit 時点で push 済み**(それ以前は origin より 20 commit 先行のまま作業) | こまめな push をしない。次も同運用 |
-| 1 | **pane_grid レーンが走行中のまま終了**(shell 全面改造: resize+drag+Browser 左ドック初期配置)。write-set= `next/shell/motolii-shell/` | 回収手順は前例どおり: worktree mtime+ListAgents 生存確認→検収(status→diff→テスト→merge→フル)。**shell を触る他レーンを回収前に発注しない** |
+| 1 | **pane_grid レーンは引き継ぎ直後に RETURN 済み・未検収**(worktree= `.claude/worktrees/agent-a35e526a86ce57fae`・commit `a9ea1e2c`・自己申告 status clean・shell suite 237 緑)。本セッションは前例(前任の BL3 引き取りと同型)に従い**検収していない** | 後任が検収の型で回収(status→diff→テスト再実行→merge→フル)。レーン申告の要点: (a) title_bar 無しでは drag 不能 → 8px グリップ帯を title_bar として追加 (b) PaneGrid が press を無条件 capture → q0_fence 偽陽性155件を on_click 実配線で解決 (c) Browser 開閉は Configuration 再構築 = **drag 並べ替えが開閉で失われる既知制限** (d) **screenshot.rs は旧・上帯 Browser のまま**(意図的先送り・task chip 化済み) (e) red ログ= レーン scratchpad の red1.log。分離レーンへの引き渡しメモ(daemon 化で Shell::view に window::Id が入る signature 変更・Stage の単一 surface 前提の検証要)も RETURN に含まれる |
 | 2 | **fixture 窓が stale**(release バイナリ・Browser 転写とカーソル修正が入っていない)。preview profile(`--profile preview`、release 同等 opt+incremental)は commit 済みだが**一度もビルドしていない**(利用者が拒否 — ビルド責任分割の議論が先) | 朝の一瞥をやる前に窓の作り直しが要る。ただし §0 の「違います」の対象次第で手段が変わる — 先に利用者確認 |
 | 3 | **朝の一瞥は 5件中1件だけ消化**(Browser=不合格→転写で対応済み・実窓再確認は未)。残り: Inspector 新寸法 / transport 新意匠 / ツリー行インデント / メニューバー Edit | 前任からの持ち越し。窓差し替え後に利用者の目 |
 | 4 | **IB 44束の赤入れは未着手のまま**(草案は利用者へ render 済み・見方も説明済み。赤ゼロ) | 沈黙=確定ではない。利用者が出すまで待ち |
