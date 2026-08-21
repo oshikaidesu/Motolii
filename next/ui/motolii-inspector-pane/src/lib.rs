@@ -2074,6 +2074,20 @@ mod tests {
     /// **固定(regression-lock)**する — どちらかの値が黙って動いたら red に
     /// なる。比が 0.42±0.05 に入る側への変更でこのテストが red になったら、
     /// それは意図的な是正(通すために許容帯へ assert を更新してよい)。
+    ///
+    /// **裁定172 §3 の追い施工(2026-08-22)**: 「帯は pane ごとにモック実測
+    /// から導出する」という pane 相対化の指示により、`docs/mocks-ui/public/
+    /// inspector-library.css` を実測して Inspector 固有の帯を求めた
+    /// (`docs/reviews/2026-08-22-inspector-ratio-ledger.md`)。結果:
+    /// `.propertyName span`(11px)/`.propertyRow`(min-height 25px)= **0.44**
+    /// で、これは裁定168 の帯の**内**。つまりこの 0.55 は「Timeline 由来の
+    /// 汎用の帯」だけでなく「Inspector 自身のモック実測」からも外れている
+    /// ことが確認できた — FINDING はより強い根拠を持つに至ったが、直す手段
+    /// (`inspector_row_height` の書き換え)は `next/ui/motolii-tokens-rs/
+    /// tokens/dimensions.json` にあり、Inspector 比率化レーンの ALLOWLIST
+    /// (`next/ui/motolii-inspector-pane/**`)の外 — 引き続き変更せず、
+    /// このテストは pin のまま維持する(両側チェックの詳細は
+    /// `tests/inspector_ratio_ledger.rs`)。
     #[test]
     fn inspector_character_size_ratio_is_locked_at_its_current_out_of_band_value() {
         let dims = Dimensions::default();
