@@ -98,6 +98,8 @@ Motolii は Ableton フォロワーであり、Ableton の情報密度が「読�
 
 ## 器具(実装計画)
 
+0. **モックからの書き起こし(利用者裁定 2026-08-21)**: 比率(形)+tokens(色)+意味注記(S)が揃った意味論モックは参照物ではなく**転写元** — 発注書はモックを視覚仕様の正本として指し、検収はモック実測比率との突き合わせで行う(σ/σ2 が前例)。Browser の視覚正本= `next/reference/mocks/browser-library.html`(旧世界からそのまま移植・色味のみ tokens 追随)+`browser-semantics.html`(意味層・要素→解禁束の救出台帳)の対
+
 1. **入口 atlas dump**: `q0_fence.rs::collect_targets` を汎用化し、フル Shell::view の `id/x/y/w/h/content` を TSV へ吐く dev 専用 test(`entrance_atlas_dump.rs`)— S1/S2 の座標源(κ 器具化材料。screenshot.rs の手計算実装は使わない — 二重保守)
 2. **S スコア計算スクリプト**: atlas TSV × 入口台帳 × normal-map entries → S0 適合表・S1 ランキング・S2 工程スコア(`scripts/` 配下、check-docs と同じ立ち位置)
 3. **S3/S5b 画素判定**: screenshot PNG から強調画素の重心・分散・pane 別最大コントラスト位置(fixture 前提の決定論)
