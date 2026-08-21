@@ -1,8 +1,15 @@
 //! 運転席 — Browser の一覧(裁定162 B1)。`AdmitPaths` が台帳へも記帳することを
 //! 見る(`drive.rs::dropping_a_video_puts_a_layer_on_the_stage` と対の試験 —
 //! あちらは layer 配置、こちらは台帳)。
+//!
+//! B3 EXACT TARGET(端到端): B1 の drop 記帳が Shell::view の rail/filter/
+//! カード grid に実際に映ることを、`Message`(B1/B2)ではなく `Shell::view()`
+//! を歩く atlas 側(`crate::target_walk::collect_targets`、`q0_fence.rs`/
+//! `entrance_atlas_dump.rs` と同じ手口)で確かめる。
 
 use motolii_shell::{Message, Shell};
+
+use crate::target_walk::collect_targets;
 
 fn shell() -> Shell {
     Shell::new().0
@@ -127,5 +134,65 @@ fn an_unopenable_file_still_gets_a_ledger_entry_without_being_placed() {
     assert!(
         shell.status().is_some(),
         "拒否理由が出ていない(M13: 無反応ゼロ違反)"
+    );
+}
+
+/// **B3 EXACT TARGET(端到端)**: `AdmitPaths` の drop 記帳が、Browser パネルを
+/// 開いた `Shell::view()` の rail/filter/カード grid に実際に映る。
+/// (a) デフォルト All media scope でカード名が atlas に現れる (b) Video scope
+/// でも現れる(video/mp4 のはず)(c) Audio scope へ切り替えると消える(rail の
+/// 絞り込みが実際に grid へ伝播する)。
+#[test]
+fn admitted_media_appears_in_the_open_browser_panel_and_narrows_with_the_rail() {
+    use motolii_testkit::ffmpeg_or_skip;
+
+    if !ffmpeg_or_skip() {
+        return;
+    }
+    let dir = motolii_testkit::tmp_dir("browser-e2e");
+    let clip = make_clip(&dir, "e2e-clip.mp4", "purple");
+
+    let mut shell = shell();
+    let _ = shell.update(Message::AdmitPaths(vec![clip]));
+    let _ = shell.update(Message::Browser(
+        motolii_shell::browser_pane::Message::ToggleBrowserPanel,
+    ));
+
+    let text_contents = |shell: &Shell| -> Vec<String> {
+        collect_targets(shell.view())
+            .into_iter()
+            .filter_map(|target| match target {
+                iced_test::selector::Target::Text { content, .. } => Some(content),
+                _ => None,
+            })
+            .collect()
+    };
+
+    let all_media_texts = text_contents(&shell);
+    assert!(
+        all_media_texts.iter().any(|t| t.contains("e2e-clip")),
+        "admit した素材名が Browser パネルの atlas に現れない(All media): {all_media_texts:?}"
+    );
+
+    let _ = shell.update(Message::Browser(
+        motolii_shell::browser_pane::Message::SelectScope(
+            motolii_shell::browser_pane::RailScope::Video,
+        ),
+    ));
+    let video_texts = text_contents(&shell);
+    assert!(
+        video_texts.iter().any(|t| t.contains("e2e-clip")),
+        "Video scope で admit した素材が消えた(video/mp4 のはず): {video_texts:?}"
+    );
+
+    let _ = shell.update(Message::Browser(
+        motolii_shell::browser_pane::Message::SelectScope(
+            motolii_shell::browser_pane::RailScope::Audio,
+        ),
+    ));
+    let audio_texts = text_contents(&shell);
+    assert!(
+        !audio_texts.iter().any(|t| t.contains("e2e-clip")),
+        "Audio scope へ切り替えても video 素材が消えない(rail の絞り込みが grid へ伝播していない): {audio_texts:?}"
     );
 }

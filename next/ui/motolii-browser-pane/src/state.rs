@@ -9,10 +9,17 @@
 //!
 //! `Shell` は `browser_pane::PaneState` を1個持ち、`Message::Browser` の腕を
 //! `PaneState::update` へそのまま委譲する(`timeline_pane::PaneState::update`
-//! と同型の委譲、`motolii-shell` 側の doc 参照)。**パネルの開閉トグル
-//! (`settings_pane::Message::ToggleSettingsPanel` 相当)はまだ無い** —
-//! `Shell::view` への組み込みは B3(絵と一緒に配線、crate 冒頭 doc 参照)の
-//! 範囲なので、この切片(B2)ではまだ要らない。
+//! と同型の委譲、`motolii-shell` 側の doc 参照)。**B3: パネルの開閉トグル**
+//! (`settings_pane::Message::ToggleSettingsPanel` 相当)を追加 — ただし
+//! Settings とは置き場が違う: Settings は `settings_panel_open` を `Shell`
+//! 自身に持つ(pane crate が `&mut self` を持てないため、Shell 側の専用 glue
+//! 関数が per-variant で分岐する)。Browser は B1/B2 から既に `PaneState` が
+//! transient 状態(scope/検索欄)を1個持つ形を確立済みなので、開閉フラグも
+//! **同じ `PaneState` の内側**へ足す方が「`Message::Browser` は
+//! `PaneState::update` への直委譲のまま」という B1/B2 の委譲形を崩さずに済む
+//! (`Shell::update` 側に per-variant 分岐を増やさない — crate 冒頭 doc の
+//! 「pane split 流儀」どおり)。`Shell::view` は [`PaneState::is_open`] を読んで
+//! 表示するかどうかだけ判断する。
 use crate::model::RailScope;
 
 /// pane ローカル Message(裁定160 切片以降の一貫した形 — root
@@ -32,16 +39,23 @@ pub enum Message {
     /// filter shelf の Clear ボタン(mock `.clearFilter`)。scope を
     /// `RailScope::AllMedia` へ、検索文字列を空へ戻す。
     ClearFilters,
+    /// header の "Browser" トグル(B3)。`settings_pane::Message::
+    /// ToggleSettingsPanel` と同格の表示専用フラグ — Document にも undo 履歴
+    /// にも乗らない。
+    ToggleBrowserPanel,
 }
 
-/// Browser pane 専用の transient 状態(rail scope + 検索欄の下書き)。
-/// **`Default` = 初期状態そのもの**(`RailScope::default()` = `AllMedia`・
-/// 検索欄は空 = mock の初期状態 `state = {source: 'all', tag: '', query: ''}`
-/// と一致)。
+/// Browser pane 専用の transient 状態(rail scope + 検索欄の下書き + パネル
+/// 開閉、B3 でopen を追加)。**`Default` = 初期状態そのもの**
+/// (`RailScope::default()` = `AllMedia`・検索欄は空 = mock の初期状態
+/// `state = {source: 'all', tag: '', query: ''}` と一致・`open` は `bool` の
+/// `Default` である `false` = 閉じた状態、`settings_panel_open`/
+/// `edit_menu_open` と同じ「既定は閉」)。
 #[derive(Default)]
 pub struct PaneState {
     scope: RailScope,
     query: String,
+    open: bool,
 }
 
 impl PaneState {
@@ -57,6 +71,13 @@ impl PaneState {
         &self.query
     }
 
+    /// パネルが開いているか(B3)。`Shell::view` がこれを読んで
+    /// `browser_pane::view` を木へ差し込むかどうかを決める(`settings_pane`
+    /// の `Shell::settings_panel_open()` と同格の口)。
+    pub fn is_open(&self) -> bool {
+        self.open
+    }
+
     /// pane 側の唯一の書き口。
     pub fn update(&mut self, message: Message) {
         match message {
@@ -66,6 +87,7 @@ impl PaneState {
                 self.scope = RailScope::AllMedia;
                 self.query.clear();
             }
+            Message::ToggleBrowserPanel => self.open = !self.open,
         }
     }
 }
@@ -105,5 +127,36 @@ mod tests {
         state.update(Message::ClearFilters);
         assert_eq!(state.scope(), RailScope::AllMedia);
         assert_eq!(state.query(), "");
+    }
+
+    // -----------------------------------------------------------------
+    // B3 EXACT TARGET: パネル開閉トグル。
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn panel_starts_closed() {
+        let state = PaneState::new();
+        assert!(!state.is_open());
+    }
+
+    #[test]
+    fn toggle_browser_panel_opens_then_closes() {
+        let mut state = PaneState::new();
+        state.update(Message::ToggleBrowserPanel);
+        assert!(state.is_open(), "1回目のトグルで開かない");
+        state.update(Message::ToggleBrowserPanel);
+        assert!(!state.is_open(), "2回目のトグルで閉じない");
+    }
+
+    /// scope/query の操作は開閉フラグに影響しない(独立した2軸)。
+    #[test]
+    fn toggling_the_panel_does_not_disturb_scope_or_query() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectScope(RailScope::Audio));
+        state.update(Message::QueryChanged("tone".to_owned()));
+        state.update(Message::ToggleBrowserPanel);
+        assert_eq!(state.scope(), RailScope::Audio);
+        assert_eq!(state.query(), "tone");
+        assert!(state.is_open());
     }
 }

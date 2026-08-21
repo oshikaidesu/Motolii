@@ -205,6 +205,29 @@ fn with_edit_menu_open() -> Shell {
     shell
 }
 
+/// **裁定162 切片 B3**: Browser パネルを開いた状態(header トグル)。rail
+/// 4行(All media/Video/Images/Audio)・filter shelf(検索欄+チップ3+Clear)・
+/// カード grid(素材1件を admit しておく — 空 grid だと「No matching media」
+/// の text しか木に無く、カード自体の Q0 は検分できない)が木に現れる —
+/// `with_settings_open`/`with_edit_menu_open` と同じ理由でこの柵に通す
+/// (パネル別知識をこのファイルへ増やさない、冒頭 doc の拡張方針どおり)。
+/// **ffmpeg 不使用**: 台帳への記帳は fingerprint が読めれば足りる
+/// (`browser_drive.rs::an_unopenable_file_still_gets_a_ledger_entry_without_being_placed`
+/// と同じ手口)ので、実動画は要らない — junk ファイル1本を書くだけ(この柵は
+/// `scan_state` が候補ごとに `build()` を再実行する構造上、ビルダーは軽い方が
+/// よい)。
+fn with_browser_open() -> Shell {
+    let mut shell = fresh();
+    let dir = motolii_testkit::tmp_dir("q0-fence-browser");
+    let junk = dir.join("q0-fence-clip.txt");
+    std::fs::write(&junk, b"q0 fence probe").expect("junk ファイルを書けない");
+    let _ = shell.update(Message::AdmitPaths(vec![junk]));
+    let _ = shell.update(Message::Browser(
+        motolii_shell::browser_pane::Message::ToggleBrowserPanel,
+    ));
+    shell
+}
+
 /// **本命**。3状態(空 / layer1枚で Undo が有効 / Undo 済みで Redo が有効)を
 /// 横断して、「見た目は反応したのに何も起きない」widget が無いことを見る。
 /// 状態を分けているのは、Undo/Redo が文脈disabled(=on_press無し=captureしない)
@@ -221,6 +244,7 @@ fn no_pane_leaves_a_captured_click_silent() {
     ));
     violations.extend(scan_state(with_settings_open, "Settingsパネル開"));
     violations.extend(scan_state(with_edit_menu_open, "Editメニュー開(M-menu MB-0+Edit)"));
+    violations.extend(scan_state(with_browser_open, "Browserパネル開(裁定162 切片B3)"));
 
     assert!(
         violations.is_empty(),

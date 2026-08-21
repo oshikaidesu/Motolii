@@ -57,6 +57,7 @@ fn item(id: u64, name: &str, kind: &str) -> AssetListItem {
         kind: kind.to_owned(),
         path: None,
         fingerprint: format!("sha256:{name}"),
+        duration: None,
     }
 }
 

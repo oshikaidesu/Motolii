@@ -472,6 +472,65 @@ fn draw_settings(
     total_h
 }
 
+// ---------------------------------------------------------------------------
+// Browser 領域(裁定162 切片 B3) — `motolii_browser_pane::view` と同じ構造
+// (rail + カード grid)を矩形近似で再現する。`--browser-open` フラグ
+// (`main.rs`)が立っている間だけ描く。**文字は描かない**(このファイル冒頭の
+// 「正直な限界」と同じ理由)。
+// ---------------------------------------------------------------------------
+
+/// カード grid のカード1行ぶんの高さの近似(`motolii_browser_pane::card_view`
+/// と同じ比: サムネ = `CARD_WIDTH_ROW_HEIGHT_RATIO × row_height` を
+/// `THUMB_ASPECT_W`:`THUMB_ASPECT_H` で割った高さ + 名前/caption 2行ぶんの
+/// `micro_text` + 内側 padding)。値そのものは複製しない(`motolii_browser_pane`
+/// の `pub const` 3本を読むだけ)。
+fn browser_card_row_height(dims: Dimensions) -> f32 {
+    let card_width = dims.row_height * motolii_browser_pane::CARD_WIDTH_ROW_HEIGHT_RATIO;
+    let thumb_h =
+        card_width * motolii_browser_pane::THUMB_ASPECT_H / motolii_browser_pane::THUMB_ASPECT_W;
+    thumb_h + dims.spacing_xs * 3.0 + dims.micro_text * 2.0
+}
+
+/// Browser 領域全体を描く。`area`(`Rect`、`draw_settings` と違い引数を
+/// 1つの struct へ畳んで clippy `too_many_arguments` を避ける — `Rect` 自身の
+/// doc「意味も無い8引数を並べない」と同じ理由)の `h` は
+/// `motolii_browser_pane::PANEL_HEIGHT_ROW_HEIGHT_RATIO × row_height`
+/// (呼び出し元と同じ値、`render` 参照)。**サムネ矩形は実データ由来** —
+/// `item_count` 件ぶん(上限あり、パネルの高さを超えて描いても見えないので
+/// 意味が無い)を rail の右側(カード grid 領域)へ実際に並べる。列数・幅比は
+/// `motolii_browser_pane::{GRID_COLUMNS,CARD_WIDTH_ROW_HEIGHT_RATIO}` と揃える。
+fn draw_browser(canvas: &mut RgbaImage, dims: Dimensions, colors: Colors, area: Rect, item_count: usize) {
+    fill_rect(canvas, area.x, area.y, area.w, area.h, to_rgba(colors.surface_panel, 1.0));
+    stroke_rect(canvas, area, dims.border_width, to_rgba(colors.border_default, 1.0));
+
+    // rail(mock `.librarySidebar` 相当、`browser_pane::rail_view` の
+    // `FillPortion(1)` を width 比で近似)。
+    let rail_w = area.w / 5.0;
+    fill_rect(canvas, area.x, area.y, rail_w, area.h, to_rgba(colors.surface_raised, 0.4));
+    stroke_v(canvas, area.x + rail_w, area.y, area.y + area.h, dims.border_width, to_rgba(colors.border_default, 1.0));
+
+    // カード grid(rail の右、`catalog_view` の `FillPortion(4)` 領域)。
+    let catalog_x = area.x + rail_w + dims.spacing_xs;
+    let catalog_w = (area.w - rail_w - dims.spacing_xs * 2.0).max(0.0);
+    let card_row_h = browser_card_row_height(dims);
+    let card_w = ((catalog_w - dims.spacing_s) / motolii_browser_pane::GRID_COLUMNS as f32).max(0.0);
+    let mut cy = area.y + dims.spacing_m;
+    let mut column = 0usize;
+    for _ in 0..item_count {
+        if cy + card_row_h > area.y + area.h {
+            break; // パネルの高さを超えたら描かない(実 widget もこの下は scroll で隠れる)。
+        }
+        let cx = catalog_x + column as f32 * (card_w + dims.spacing_s);
+        fill_rect(canvas, cx, cy, card_w, card_row_h, to_rgba(colors.surface_raised, 1.0));
+        stroke_rect(canvas, Rect { x: cx, y: cy, w: card_w, h: card_row_h }, dims.border_width, to_rgba(colors.border_default, 1.0));
+        column += 1;
+        if column == motolii_browser_pane::GRID_COLUMNS {
+            column = 0;
+            cy += card_row_h + dims.spacing_s;
+        }
+    }
+}
+
 /// `shell.view()` の並び(header/[settings]/stage/timeline/transport/status、
 /// `spacing_m` の間隔・`spacing_l` の全体 padding)を、Tokens の実値でそのまま
 /// 再現する。
@@ -538,24 +597,40 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     };
     let settings_gap_count = if settings_open { 1 } else { 0 };
 
+    // Browser パネル(`--browser-open`、裁定162 切片 B3)。Settings と同じ
+    // 「開いている間だけ差し込む」分岐 — `Shell::view` では Settings の**下**
+    // (header 直下ではなく)に積む(`lib.rs::Shell::view` の押し順どおり)。
+    let browser_open = shell.browser_panel_open();
+    let browser_h = if browser_open {
+        dims.row_height * motolii_browser_pane::PANEL_HEIGHT_ROW_HEIGHT_RATIO
+    } else {
+        0.0
+    };
+    let browser_gap_count = if browser_open { 1 } else { 0 };
+
     let total_h = padding * 2.0
         + header_h
         + settings_h
+        + browser_h
         + stage_h
         + timeline_h
         + transport_h
         + status_h
-        + gap * (4.0 + settings_gap_count as f32);
+        + gap * (4.0 + settings_gap_count as f32 + browser_gap_count as f32);
 
     // Inspector 領域(Stage/Timeline 列の右) — 幅・高さの両方で canvas を広げる。
     // `Shell::view` の実レイアウトでは Inspector は Stage と同じ行に同居する
     // (`row![inspector, stage_pane]`)が、この instrument は元々 Stage/Timeline を
     // 1列の手組み合成で描いており、その列を左に残したまま右へ新しい列を足す
-    // (発注書 EXACT TARGET 1「右側に」)。[`inspector_region_top`] は「Settings
-    // 閉」を前提にした固定式(既存 fixture テストの契約)なので、開いている分は
-    // ここで自前に足す。
+    // (発注書 EXACT TARGET 1「右側に」)。[`inspector_region_top`] は「Settings/
+    // Browser 閉」を前提にした固定式(既存 fixture テストの契約)なので、開いて
+    // いる分はここで自前に足す。
     let inspector_x = inspector_region_x(dims);
-    let inspector_top = inspector_region_top(dims) + settings_h + gap * settings_gap_count as f32;
+    let inspector_top = inspector_region_top(dims)
+        + settings_h
+        + gap * settings_gap_count as f32
+        + browser_h
+        + gap * browser_gap_count as f32;
     let inspector_h = inspector_content_height(dims, inspector_selection.as_ref());
     let canvas_width = (inspector_x + dims.inspector_panel_width).round().max(CANVAS_WIDTH as f32) as u32;
     let canvas_height = total_h.max(inspector_top + inspector_h + padding);
@@ -604,6 +679,15 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     if settings_open {
         draw_settings(&mut canvas, dims, colors, padding, y, content_width, composition.is_some());
         y += settings_h + gap;
+    }
+
+    // browser — 開いている時だけ(裁定162 切片 B3)。`Shell::view` の押し順
+    // どおり Settings の下・main row の上に積む。
+    if browser_open {
+        let item_count = shell.assets().len();
+        let area = Rect { x: padding, y, w: content_width, h: browser_h };
+        draw_browser(&mut canvas, dims, colors, area, item_count);
+        y += browser_h + gap;
     }
 
     // stage — neutral letterbox(D8)+ 実際に GPU 合成された RGBA。
