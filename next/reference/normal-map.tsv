@@ -746,22 +746,22 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 745	mask	Activate and cycle mask and shape tools	マスク/シェイプツールを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 746	mask	Activate and cycle Pen and Mask Feather tools	ペン/マスクフェザーツールを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 747	mask	Activate Roto Brush tool	ロトブラシツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
-748	mask	Add	マスクモード:加算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-749	mask	Add mode	マスクモード:加算	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
+748	mask	Add	マスクモード:加算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
+749	mask	Add mode	マスクモード:加算	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
 750	mask	Closed	パスを閉じる	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 751	mask	Create Masks from Text	テキストからマスク作成	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-752	mask	Darken	マスクモード:比較(暗)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-753	mask	Darken mode	マスクモード:比較(暗)	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
-754	mask	Difference	マスクモード:差	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-755	mask	Difference mode	マスクモード:差	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
+752	mask	Darken	マスクモード:比較(暗)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
+753	mask	Darken mode	マスクモード:比較(暗)	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
+754	mask	Difference	マスクモード:差	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
+755	mask	Difference mode	マスクモード:差	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
 756	mask	Enter free-transform mask editing mode	自由変形マスク編集モードへ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 757	mask	Free Transform Points	ポイントを自由変形	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 758	mask	Hide Locked Masks	ロック済マスクを隠す	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-759	mask	Intersect	マスクモード:交差	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-760	mask	Intersect mode	マスクモード:交差	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
+759	mask	Intersect	マスクモード:交差	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
+760	mask	Intersect mode	マスクモード:交差	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
 761	mask	Invert selected mask	選択マスクを反転	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 762	mask	Inverted	マスクを反転	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-763	mask	Lighten	マスクモード:比較(明)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
+763	mask	Lighten	マスクモード:比較(明)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
 764	mask	Linear	フェザー減衰:線形	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 765	mask	Lock Other Masks	他マスクをロック	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 766	mask	Locked	マスクをロック	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
@@ -792,8 +792,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 791	mask	Select next or previous mask	次/前のマスクを選択	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 792	mask	Set First Vertex	開始頂点を設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 793	mask	Smooth	フェザー減衰:滑らか	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-794	mask	Subtract	マスクモード:減算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
-795	mask	Subtract mode	マスクモード:減算	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
+794	mask	Subtract	マスクモード:減算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
+795	mask	Subtract mode	マスクモード:減算	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)
 796	mask	Toggle between smooth and corner points	スムーズ/コーナーポイント切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 797	mask	Track Mask	マスクトラッキング	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 798	mask	Unlock All Masks	全マスクのロック解除	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	

@@ -68,6 +68,7 @@
 - **iced 0.14 の image 同期アップロード予算は 2MiB**(実測 2026-08-20): それ以上の RGBA は背景スレッド行きになり、完了まで**何も描かれない**(= チラつきの真因。1080p フレーム 8.3MB は4倍超過)。対策: Handle は 1.5MB 以下へ縮小して同期経路に収める(柵テスト `render_pipeline_fence.rs` あり)。preview 縮小は裁定21(preview 1/2 既定)と整合。恒久解の候補は iced 上流修正 or GPU 埋め込み(裁定26)
 - **timeline_projection probe の慢性超過は根治済み**(裁定140 実装、2026-08-21): 真因 (a) `track()` コストの97%が serde_json 解析 → `Document::track_cache`(revision 鍵・自動無効化)で 15530µs→**495µs**(予算の12%)。意味等価は proptest 柵 `track_cache_equivalence.rs` が保証。真因 (b) の MotoliiRn 常駐は終了済み(2026-08-21 確認、不在)
 - **素材記帳の fingerprint はファイル全読みの hash**(B1、2026-08-21): 小ファイルでは無視できる実測だが**multi-GB 素材の drop では未計測** — `Shell::admit` は UI スレッド同期なので B7(4ms)違反の潜在リスク。大容量素材で実測して超えるなら hash の背景化 or 先頭+サイズの部分 fingerprint 化を裁定してから直す(黙って部分 hash に変えない — 重複統合の意味が変わる)
+- **`r2.rs::stage_projection_fits_a_frame` も同種の負荷依存予算 flake**(2026-08-22 MK2 検収で観測): 並列 workspace 実行時に予算超過で赤・単独再走行で緑。storm flake と同じ扱い(単独緑なら回帰ではない)
 - **`edit_storm_with_the_real_track_type` は負荷依存の予算縁 flake**(2026-08-21 実測): 静穏時 746〜851µs(予算1000µs)だが workspace 並列直後は超過して赤になる。単独再走行で緑なら回帰ではない。恒久処置の候補=予算テストの直列化 or release 計測(裁定要 — 黙って予算を緩めない)
 - **subagent は cargo を背景実行しない** — 完了通知との噛み合わせで自停止する実測2件(2026-08-21)。常に前景・timeout 600000
 - iced 0.14 の API 欠け(実測): text に letter-spacing 無し / Border は4辺一律(per-edge 無し)/ text_input の既定 padding は5px(固定高セルでは文字領域を圧縮する — 明示 padding(0) が要る)
