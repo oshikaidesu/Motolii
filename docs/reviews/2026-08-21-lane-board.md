@@ -9,6 +9,7 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| **H4: シェイプ入れ子(裁定173)** | 実装 | worktree(発注時に追記) | 旧世界 VectorContent::Group 先例 — Shape に入れ子グループ+H1 と同じ合成再帰・flatten して既存 rasterizer 無改修・serde 後方互換。write-set= vector+store shape+core 最小 |
 | **B3: Browser 絵+view 配線** | 実装 | worktree(発注時に追記) | カード grid(骨格まで — サムネは B5)+Shell::view 配線+開閉トグル+B1 記帳の端到端。map 980 完全消化。PNG/atlas 変化は理由つき追随。write-set= browser-pane+shell |
 
 ## 完了・main 着地済み(実装)
