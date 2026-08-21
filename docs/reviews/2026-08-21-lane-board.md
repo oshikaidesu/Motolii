@@ -13,6 +13,7 @@
 | **T-rail: rail 転写(裁定172)** | 実装 | worktree(発注時に追記) | スウォッチ(寸 0.308・角丸 0.25・色=label_color 復帰)+M/S/L 12px 塗りチップ化。write-set= timeline-pane lane_bar.rs 系のみ |
 | **T-canvas: canvas 転写(裁定172)** | 実装 | worktree(発注時に追記) | bar inset 0.154・bar 角丸 0.111・ruler 高 0.846・目盛り長比 0.227/0.5。write-set= timeline-pane canvas.rs/lib.rs 系のみ(lane_bar.rs 触らず) |
 | **I-ratio: Inspector 比率化(裁定172 §3)** | 実装+調査 | worktree(発注時に追記) | inspector mock 実測→比率台帳(行高:帯高:値セル幅:文字寸比)→実装照合→機械的差分の転写。φ FINDING 0.55 の白黒込み。write-set= inspector-pane+台帳 doc |
+| **TL-arch: canvas/widget 分割線調査** | 調査(読み取り専用・cargo なし) | worktree | 利用者の問い「canvas であるべき、の前提を見直せるか」— モック=DOM が参照アーキテクチャ・iced 0.15 の道具実在確認・3分類台帳(離散/連続/gesture)・先例・性能見積もり・Phase 1(rail widget 化)/2 の推奨判定。**T-rail の比率定数は widget 化しても流用可**(constants はどちらの実装にも載る) |
 
 ## 完了・main 着地済み(実装)
 
