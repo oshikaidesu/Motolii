@@ -23,7 +23,7 @@
 
 use std::sync::Arc;
 
-use iced::widget::{button, column, container, row, shader, slider, stack, text, Shader};
+use iced::widget::{button, column, container, pane_grid, row, shader, slider, stack, text, Shader};
 use iced::{wgpu, Element, Length, Task};
 
 use motolii_core::{CompSpec, ResolvedCamera};
@@ -44,6 +44,10 @@ pub mod fixture;
 /// `view()`/`header()`/`resolve_navigation_key` からしか呼ばないため `pub` に
 /// しない(`crate::menu::` で足りる)。
 mod menu;
+/// shell の pane_grid 化(2026-08-22 実装レーン)。`Shell::view()` の layout
+/// 状態と純粋な構成ロジック(`pane_layout.rs` 冒頭 doc 参照)。`screenshot.rs`
+/// も左カラム幅の近似に [`pane_layout::Ratios`] の既定値を読むため `pub`。
+pub mod pane_layout;
 pub mod screenshot;
 pub mod transport;
 
@@ -369,6 +373,30 @@ pub enum Message {
     /// の間だけ木へ現れる、`view()` 参照)。
     Browser(browser_pane::Message),
 
+    // ---- shell の pane_grid 化(2026-08-22 実装レーン、`pane_layout.rs`
+    // 冒頭 doc 参照) ----
+    /// pane 本体がクリックされた。`iced::widget::pane_grid::PaneGrid::
+    /// on_click` が発行する。**Q0 適合に必須**(`pane_layout::Layout::
+    /// focused` フィールド doc 参照): fork rev 73e686e の pane_grid は
+    /// `on_click`/`on_resize` の設定有無に関わらず、境界ドラッグ検出のため
+    /// 自分の bounds 内の `ButtonPressed` を無条件に capture する——
+    /// `on_click` を配線しないと「pane 本体のどこを押しても capture される
+    /// のに Message が出ない」という Q0 違反を pane_grid 内の全域で起こす
+    /// (実測: `tests/suite/q0_fence.rs` が155件検出)。フォーカス追跡は
+    /// この capture に正直な意味を与える最小機能として採用した。
+    PaneClicked(iced::widget::pane_grid::Pane),
+    /// 境界ドラッグでリサイズ。`iced::widget::pane_grid::PaneGrid::on_resize`
+    /// が発行する。`Shell::update` は `self.panes.apply_resize(event)` へ
+    /// そのまま委譲する(pane_grid 自身の決定論に乗る、`pane_layout::
+    /// Layout::apply_resize` doc 参照)。
+    PaneResized(iced::widget::pane_grid::ResizeEvent),
+    /// パネルのドラッグ並べ替え(ドッキング)。
+    /// `iced::widget::pane_grid::PaneGrid::on_drag` が発行する。`Shell::
+    /// update` は `self.panes.apply_drag(event)` へそのまま委譲する
+    /// (`Dropped` だけが実際に State を動かす、`pane_layout::Layout::
+    /// apply_drag` doc 参照)。
+    PaneDragged(iced::widget::pane_grid::DragEvent),
+
     // ---- layer クリップボード(普通地図 消化第1波 U1、正典 §4) ----
     // キーは Cmd+C/V/X/D/A・Cmd+Shift+A(`resolve_navigation_key` へ配線済み、S0
     // 段差 群0・κ 台帳 FINDING 1)。**割当自体はまだ仮**(keymap 層は未実装、
@@ -620,6 +648,17 @@ pub struct Shell {
     /// フラグもこの `PaneState` の内側にある)。
     browser: browser_pane::PaneState,
 
+    // ---- shell の pane_grid 化(2026-08-22 実装レーン) ----
+    /// リサイズ・ドッキングの layout 状態(`pane_layout.rs` 冒頭 doc 参照)。
+    /// **Session 水準** — `browser`/`checkerboard`/`observation` と同格の
+    /// 「意味を持たない純表示状態」、Document には乗らない。`browser.is_open()`
+    /// との同期は `Message::Browser` の腕(`update()`)が
+    /// `panes.set_browser_open(...)` を呼ぶことで保つ(2箇所の真実源に
+    /// 見えるが、`browser_pane::PaneState::is_open` が唯一の真実源で、
+    /// `panes` 側は常にそれへ追随するだけの写し——`browser_panel_open()`
+    /// アクセサが `browser` を読むのと同じ非対称)。
+    panes: pane_layout::Layout,
+
     // ---- Settings パネル(タスク#18) ----
     /// パネルの開閉。**表示だけの状態** — Document でも `Session`(選択・再生
     /// 位置)でもない。発注書は「Workspace 側」と指示しているが、Workspace 永続
@@ -720,6 +759,7 @@ impl Shell {
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
                 timeline: timeline_pane::PaneState::new(),
                 browser: browser_pane::PaneState::new(),
+                panes: pane_layout::Layout::new(),
                 settings_panel_open: false,
                 edit_menu_open: false,
                 file_menu_open: false,
@@ -785,6 +825,7 @@ impl Shell {
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
             timeline: timeline_pane::PaneState::new(),
             browser: browser_pane::PaneState::new(),
+            panes: pane_layout::Layout::new(),
             settings_panel_open: false,
             edit_menu_open: false,
             file_menu_open: false,
@@ -944,7 +985,18 @@ impl Shell {
             // 触らない pane-local 状態なので `&mut self.browser` だけで完結
             // する(引数を追加で貸す必要が無い、`browser_pane::state` crate
             // doc 参照)。
-            Message::Browser(msg) => self.browser.update(msg),
+            Message::Browser(msg) => {
+                self.browser.update(msg);
+                // pane_grid 側は `browser_pane::PaneState::is_open()` が唯一の
+                // 真実源(`panes` フィールド doc 参照)——ここで追随させる。
+                // `set_browser_open` は同値なら no-op(`pane_layout::Layout`
+                // doc)なので、`ToggleBrowserPanel` 以外の3腕(rail/検索欄)で
+                // 毎回呼んでも他 split の ratio・ドラッグ配置を潰さない。
+                self.panes.set_browser_open(self.browser.is_open());
+            }
+            Message::PaneClicked(pane) => self.panes.set_focused(pane),
+            Message::PaneResized(event) => self.panes.apply_resize(event),
+            Message::PaneDragged(event) => self.panes.apply_drag(event),
             Message::AddLayer => {
                 let id = LayerId(self.next_layer_id());
                 // **1操作 = 1 undo**。`AddLayer`/`SetMeta`/`SetAttrs`(差し色の
@@ -2245,22 +2297,6 @@ impl Shell {
         let dims = self.dims();
         let colors = self.tokens.colors;
         let store = self.doc.view();
-        let timeline = self.build_timeline_pane();
-        // Inspector は canvas を使わない標準 widget 構成(inspector_pane crate 冒頭の
-        // doc comment)なので、投影自体が `Element<'static, _>` を返す — Stage の
-        // `self.frame` を借りる `stage_pane` と同じ `row!` に同居できる(共変性)。
-        let inspector_selection = inspector_pane::project(&store, &self.session)
-            .ok()
-            .flatten();
-        let inspector = inspector_pane::view_with_speed_draft(
-            inspector_selection.as_ref(),
-            self.inspector_field_draft.as_ref(),
-            self.inspector_name_draft.as_deref(),
-            self.inspector_speed_draft.as_deref(),
-            dims,
-            colors,
-        )
-        .map(Message::Inspector);
 
         // Settings パネル(タスク#18)。**表示だけの分岐** — 開いていなければ
         // 木に一切現れない(Q0: 効かない chrome を並べない、閉じている間は
@@ -2294,62 +2330,111 @@ impl Shell {
                 .map(Message::Settings),
             );
         }
-        // Browser パネル(裁定162 切片 B3)。**表示だけの分岐**(Settings と
-        // 同型 — 開いていなければ木に一切現れない、Q0)。`browser_pane::view`
-        // 自身の内側は `Length::Fill` の scrollable を持つ(`card_grid_view`)
-        // ので、この位置で高さを明示的に区切る(`Length::Fixed`) — 区切らずに
-        // Shrink のまま積むと、内側の Fill が「無限に高くなりたい」要求として
-        // 上へ伝播し、下の Stage/Timeline/Transport/Status 帯を押し出してしまう
-        // (Settings の中身は Fill を一切使わないので、この問題は Settings には
-        // 無かった)。高さは `browser_pane::PANEL_HEIGHT_ROW_HEIGHT_RATIO`
-        // (`screenshot.rs` と共有する1つの値、doc 参照)。
-        if self.browser.is_open() {
-            let browser_height = dims.row_height * browser_pane::PANEL_HEIGHT_ROW_HEIGHT_RATIO;
-            let browser_items = browser_pane::model::assets(&store);
-            layout = layout.push(
-                container(
-                    browser_pane::view(
-                        &browser_items,
-                        self.browser.scope(),
-                        self.browser.query(),
+
+        // Browser/Inspector/Stage/Timeline は `pane_grid`(shell の pane_grid
+        // 化、2026-08-22 実装レーン、`pane_layout.rs` 冒頭 doc 参照)。
+        // Browser パネル(裁定162 切片 B3)は**表示だけの分岐ではなくなった**
+        // — `self.panes.state` 自体が「開いていれば木にある・閉じていれば
+        // 無い」を体現する(`pane_layout::build_configuration` doc、Q0)。
+        // 各 pane の内容は closure の中で組み立てる(`Element` は `Clone` が
+        // 無いので、外側で1回だけ作って使い回すことができない——`Fn` closure
+        // は `state.panes.iter()` の各エントリごとに1回ずつ呼ばれるので、
+        // 各腕がその場で組み立てれば十分・複製にはならない)。
+        let browser_items = browser_pane::model::assets(&store);
+        let grid = pane_grid::PaneGrid::new(&self.panes.state, |_pane, kind, _is_maximized| {
+            let content: Element<'_, Message> = match kind {
+                pane_layout::PaneKind::Browser => browser_pane::view(
+                    &browser_items,
+                    self.browser.scope(),
+                    self.browser.query(),
+                    dims,
+                    colors,
+                )
+                .map(Message::Browser),
+                pane_layout::PaneKind::Inspector => {
+                    // Inspector は canvas を使わない標準 widget 構成
+                    // (inspector_pane crate 冒頭の doc comment)なので、
+                    // 投影自体が `Element<'static, _>` を返す。
+                    let inspector_selection = inspector_pane::project(&store, &self.session)
+                        .ok()
+                        .flatten();
+                    inspector_pane::view_with_speed_draft(
+                        inspector_selection.as_ref(),
+                        self.inspector_field_draft.as_ref(),
+                        self.inspector_name_draft.as_deref(),
+                        self.inspector_speed_draft.as_deref(),
                         dims,
                         colors,
                     )
-                    .map(Message::Browser),
-                )
-                .width(Length::Fill)
-                .height(Length::Fixed(browser_height)),
-            );
-        }
+                    .map(Message::Inspector)
+                }
+                pane_layout::PaneKind::Stage => stage_pane(
+                    self.frame.as_ref(),
+                    self.stage_overlay(),
+                    self.observation,
+                    self.resolution_cap,
+                    self.checkerboard,
+                    dims,
+                    colors,
+                ),
+                pane_layout::PaneKind::Timeline => {
+                    // pane crate 化(裁定160 切片7)で `timeline.view()` は
+                    // `Element<'static, timeline_pane::Message>` を返す
+                    // (root の `Message` を pane crate から参照できないため
+                    // — 循環回避)。`.map(Message::Timeline)` で1回だけ畳む
+                    // (§3.1 の「pane-local Message を親が畳む」構成そのもの)。
+                    self.build_timeline_pane().view().map(Message::Timeline)
+                }
+            };
+            pane_grid::Content::new(content).title_bar(Self::pane_grip_bar(dims, colors))
+        })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        // フラット文法: リサイズグリップ = 8px(装飾余白としては使用不可、
+        // `docs/reviews/2026-08-19-flat-grammar-canon-revision.md`)。
+        // `spacing_m` が既にその値(8.0、`motolii-tokens-rs` 既定)——新しい
+        // token を作らず既存を読む。`on_resize` の leeway=0 なので掴める幅は
+        // `spacing + leeway` = `spacing_m` ちょうど(`PaneGrid::on_resize` doc)。
+        .spacing(dims.spacing_m)
+        // 退化(潰れて使えなくなる)パネルを防ぐ床(M13 無反応ゼロの一環)。
+        .min_size(dims.row_height * 3.0)
+        // Q0 適合に必須(`Message::PaneClicked` doc 参照) — pane_grid は
+        // これを配線しないと本体全域が「capture されるのに無反応」になる。
+        .on_click(Message::PaneClicked)
+        .on_resize(0.0, Message::PaneResized)
+        .on_drag(Message::PaneDragged);
 
         layout
-            .push(
-                row![
-                    inspector,
-                    stage_pane(
-                        self.frame.as_ref(),
-                        self.stage_overlay(),
-                        self.observation,
-                        self.resolution_cap,
-                        self.checkerboard,
-                        dims,
-                        colors
-                    )
-                ]
-                .spacing(dims.spacing_m)
-                .height(Length::FillPortion(3)),
-            )
-            // pane crate 化(裁定160 切片7)で `timeline.view()` は
-            // `Element<'static, timeline_pane::Message>` を返すようになった
-            // (root の `Message` を pane crate から参照できないため — 循環
-            // 回避)。`.map(Message::Timeline)` で1回だけ畳む(§3.1 の
-            // 「pane-local Message を親が畳む」構成そのもの)。
-            .push(timeline.view().map(Message::Timeline))
+            .push(container(grid).width(Length::Fill).height(Length::Fill))
             .push(transport(&self.session, &store, self.transport.is_running(), dims, colors))
             .push(status_band(self.status.as_deref(), &self.doc, dims, colors))
             .spacing(dims.spacing_m)
             .padding(dims.spacing_l)
             .into()
+    }
+
+    /// pane_grid の各 pane の掴み手(ドッキングの grip、`view()` から呼ぶ)。
+    ///
+    /// **必須である理由**(fork rev 73e686e の pane_grid を実測): `Content`
+    /// の `Draggable` 実装(`widget/src/pane_grid/content.rs::
+    /// can_be_dragged_at`)は `title_bar` が無いと常に `false` を返す —
+    /// `.on_drag(...)` を配線しただけではドラッグは一切始まらない(掴む
+    /// 場所が無い)。8px 帯(`spacing_m` — フラット文法のリサイズグリップと
+    /// 同じ値、`docs/reviews/2026-08-19-flat-grammar-canon-revision.md`)を
+    /// 全 pane の上端へ敷き、「掴めそうな境界は全部掴める」(2026-08-13
+    /// 裁定)を満たす。**pane 内部の意匠ではない** — Browser/Inspector/
+    /// Stage/Timeline それぞれの `view()` 自体は無改修のまま(発注書
+    /// NON-GOALS「pane 内部の意匠変更」)、この帯は shell 側が pane_grid の
+    /// 外から一律に足す薄い chrome。
+    fn pane_grip_bar<'a>(dims: Dimensions, colors: Colors) -> pane_grid::TitleBar<'a, Message> {
+        pane_grid::TitleBar::new(
+            iced::widget::Space::new().width(Length::Fill).height(Length::Fixed(dims.spacing_m)),
+        )
+        .padding(0)
+        .style(move |_theme| container::Style {
+            background: Some(iced::Background::Color(colors.surface_raised)),
+            ..container::Style::default()
+        })
     }
 
     /// shell chrome の線化(裁定137/139 の Inspector 以外の面への展開)。
