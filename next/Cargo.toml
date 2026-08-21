@@ -45,16 +45,16 @@ license = "MIT OR Apache-2.0"
 #
 # **ここに re_view_spatial / re_ui / re_viewer_context を足さないこと** —
 # それらは egui を引き、front が iced だけであるという軸が壊れる。
-re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
-re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
-re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
-re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
-re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
-re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
-re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba", features = ["encoder", "decoder"] }
-re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
-re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba" }
-re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "856f597c3fd1402bad11903b25ec0b134d3a66ba", default-features = false }
+re_chunk = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
+re_chunk_store = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
+re_entity_db = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
+re_log_types = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
+re_query = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
+re_types_core = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
+re_log_encoding = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3", features = ["encoder", "decoder"] }
+re_build_info = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
+re_byte_size = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3" }
+re_renderer = { git = "https://github.com/oshikaidesu/rerun", rev = "7cca401e6b1de652ab36bcf1652745986ca22cb3", default-features = false }
 
 # 版は rerun の workspace に合わせる。ずれると `IsoTransform` / `Vec3` が別型になる。
 wgpu = "29.0"

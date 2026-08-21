@@ -210,7 +210,6 @@ impl Compositor {
     pub fn headless() -> Result<Self, CompositorError> {
         let gpu = headless::HeadlessGpu::new()?;
         Self::with_device(
-            &gpu.adapter,
             gpu.device,
             gpu.queue,
             // 読み戻し形式に合わせる。窓へ出す時はここが surface の形式になる。
@@ -227,25 +226,26 @@ impl Compositor {
     }
 
     /// 外部から与えられた GPU device/queue の上に合成器を組む第二コンストラクタ
-    /// (裁定170 M2、2026-08-21)。**まだ誰も呼ばない** — iced 側の配線はここでは
-    /// やらない(配線ゼロ = 挙動ゼロ変更、browser B0 骨格と同じ手口)。
+    /// (裁定170 M2、2026-08-21。adapter 引数は M3 で落とした、2026-08-22)。
+    /// **まだ誰も呼ばない** — iced 側の配線はここではやらない(配線ゼロ = 挙動ゼロ
+    /// 変更、browser B0 骨格と同じ手口)。
     ///
     /// [`Self::headless`] が「device を建てた後」にやっていた共通部分をここへ
     /// 抽出しただけで、`headless()` 自身の挙動は一切変えていない
     /// (`tests/with_device.rs` の `with_device_matches_headless` が
     /// バイト一致で縛る)。
     ///
-    /// `adapter` を今も要求するのは、現行 fork rev(`Cargo.toml` の `[patch]` 参照)の
-    /// `RenderContext::new` がまだ `&wgpu::Adapter` を引数に取るため——fork へ
-    /// `new_from_device`(adapter 不要版)が入るのは M3 の仕事で、ここでは先取りしない。
+    /// `adapter` を要求しないのは、rerun fork(`Cargo.toml` の `[patch]` 参照、
+    /// 裁定170 M3)に足した `RenderContext::new_from_device` が adapter なしで
+    /// `DeviceCaps`/`AdapterInfo` を device 自身(`device.adapter_info()`)から
+    /// 導けるため——ここが「adapter なしで pipeline が実際に建つ」の実体。
     pub fn with_device(
-        adapter: &wgpu::Adapter,
         device: wgpu::Device,
         queue: wgpu::Queue,
         output_format: wgpu::TextureFormat,
         config_provider: impl FnOnce(&re_renderer::device_caps::DeviceCaps) -> re_renderer::RenderConfig,
     ) -> Result<Self, CompositorError> {
-        let ctx = RenderContext::new(adapter, device, queue, output_format, config_provider)
+        let ctx = RenderContext::new_from_device(device, queue, output_format, config_provider)
             .map_err(|e| CompositorError::Context(e.to_string()))?;
 
         let glow_pipelines = effects::GlowPipelines::new(&ctx.device);
