@@ -166,8 +166,12 @@ fn click_at(pane: TimelinePane, point: iced::Point) -> Vec<Message> {
     ui.into_messages().collect()
 }
 
+/// 第2波T4(正典 §3): 修飾キー無しの press は「単独選択への差し替え」と
+/// 「時刻ドラッグの開始」を1つの `Message::TimelineKeyGrabbed` が兼ねる
+/// (T3 時点の `TimelineKeySelect(Single)` から進化 — 選択の実際の確定は
+/// `Shell::start_timeline_key_drag` 側、`timeline_key_grab_drive.rs` 参照)。
 #[test]
-fn clicking_a_key_diamond_with_no_modifier_publishes_a_single_selection() {
+fn clicking_a_key_diamond_with_no_modifier_publishes_a_grab() {
     let (doc, session, layer, property) = one_layer_with_opacity_keys();
     let tokens = Tokens::default();
     let store = doc.view();
@@ -180,9 +184,9 @@ fn clicking_a_key_diamond_with_no_modifier_publishes_a_single_selection() {
     assert!(
         matches!(
             messages.as_slice(),
-            [Message::TimelineKeySelect(KeySelectionOp::Single(k))] if *k == expected
+            [Message::TimelineKeyGrabbed { key, at_frame: 100, retime: false }] if *key == expected
         ),
-        "菱形クリックが単独選択を出していない: {messages:?}"
+        "菱形クリックが grab(選択差し替え+drag開始)を出していない: {messages:?}"
     );
 }
 

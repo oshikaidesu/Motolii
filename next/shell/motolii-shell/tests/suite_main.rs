@@ -32,6 +32,8 @@ mod q0_fence;
 mod settings_drive;
 #[path = "suite/theme_wiring_fence.rs"]
 mod theme_wiring_fence;
+#[path = "suite/timeline_key_gesture_drive.rs"]
+mod timeline_key_gesture_drive;
 #[path = "suite/timeline_key_rows_drive.rs"]
 mod timeline_key_rows_drive;
 #[path = "suite/tonmana_token_fence.rs"]
