@@ -252,10 +252,36 @@ pub fn commit_ui_scale(tokens: &mut Tokens, draft: &mut Option<String>) -> Resul
 // 市松(表示専用 — 書き出しに乗らない)
 // ---------------------------------------------------------------------------
 
-/// 市松タイル1マスの一辺(px、`ui_scale` は掛けない — 罫線と同じ「装飾は
-/// 物理px床」扱い。Handle は既に `stage_handle_rgba` で画面解像度へ縮められた
-/// 後の複製なので、ここでの px は表示ピクセルそのもの)。
-const CHECKERBOARD_TILE_PX: u32 = 8;
+/// 市松タイル1マスの目標寸法(pt、`ui_scale=1`・縮小なしの表示空間基準)。
+/// AE 実機準拠(市松v2、利用者較正 2026-08-21「市松が見えない」— 実測タイル
+/// 約5px・2色 Δ8/255 が実質不可視だった根治)。旧 `CHECKERBOARD_TILE_PX`(8、
+/// comp 画素空間固定・`ui_scale` を掛けない「物理px床」扱い)から置き換え —
+/// 罫線と違い、市松タイルは視認合図なので他の UI 密度と同じく `ui_scale` に
+/// 追随させる([`checkerboard_tile_px`] 参照)。
+const CHECKERBOARD_TILE_TARGET_PT: f32 = 8.0;
+
+/// [`CHECKERBOARD_TILE_TARGET_PT`] を実際のタイル px へ変換する純関数
+/// (市松v2 ORACLE (b))。
+///
+/// - `ui_scale`: 他の UI 密度と同じ拡大率。市松タイルは視認合図であって
+///   hairline のような「装飾は物理px床」ではないので、ここでは掛ける
+///   (発注書 EXACT TARGET 2「表示上の目安 8pt 角(ui_scale 追随)」)。
+/// - `effective_scale`: 合成対象バッファが comp 画素空間からどれだけ縮小
+///   されているか(`motolii-shell::build_stage_handle` が Stage handle を
+///   sync アップロード予算内へ縮める `stage_auto_scale`×解像度上限の合成値。
+///   縮小されていなければ 1.0)。**タイルはこの逆数で膨らませる** —
+///   縮小後の handle 内でタイルが小さくなっても、表示空間(画面に引き伸ばして
+///   出す時点)では常に `CHECKERBOARD_TILE_TARGET_PT` に見えるようにする
+///   補正(根因1「comp 画素空間固定のタイルが Auto 縮小後にさらに痩せる」の
+///   直接の修正対象)。
+///
+/// `effective_scale <= 0.0` は呼び出し元([`stage::effective_preview_scale`]、
+/// 常に正)からは来ない想定だが、防波堤として `1.0` 扱いにする(縮小なし)。
+pub fn checkerboard_tile_px(ui_scale: f32, effective_scale: f64) -> u32 {
+    let scale = if effective_scale > 0.0 { effective_scale } else { 1.0 };
+    let target_pt = f64::from(CHECKERBOARD_TILE_TARGET_PT * ui_scale.max(0.0));
+    (target_pt / scale).round().max(1.0) as u32
+}
 
 /// Stage 画像の下に敷く市松。**フレームの実 rgba(engine の premultiplied alpha
 /// 出力そのもの、`../reference/KNOWN.md`「実 alpha が乗る」)を上書きする** —
@@ -264,19 +290,38 @@ const CHECKERBOARD_TILE_PX: u32 = 8;
 /// (「合成器が出せる」と「書き出しが吐く」は別問題)。
 ///
 /// 完全不透明(alpha=255)の画素はそのまま — 市松は「透明の可視化」だけが仕事。
-/// タイル色は `Colors::surface_raised`/`Colors::surface_panel`(意味色ロール
-/// 経由、raw 値の直書き禁止)。
+/// タイル色は `Colors::checkerboard_light`/`Colors::checkerboard_dark`(市松
+/// 専用ロール、市松v2で `surface_raised`/`surface_panel` の借用から独立させた
+/// — `Colors::checkerboard_light` doc 参照)。
 ///
-/// **`pub`**: `screenshot.rs`(`motolii-shell` root crate)が「実際に画面へ出る絵」を
-/// 再現するのに同じ組み合わせを使う(`lib.rs::build_stage_handle` と同じ形)のに
-/// 加えて、`tests/settings_drive.rs` が容疑2(このロジック自体のバグ)を
-/// `frame_rgba()` 生値に対して直接固定するのにも使う。
+/// **`pub`、シグネチャ不変**: `screenshot.rs`(`motolii-shell` root crate、
+/// このレーンでは非改変対象)が「実際に画面へ出る絵」を再現するのに同じ
+/// 呼び出しを使う(comp 画素空間のまま合成する経路なので `effective_scale`
+/// 補正は不要 — この関数を経由するだけで新ロールの色を自動的に受け取る)。
+/// `tests/settings_drive.rs` も容疑2(このロジック自体のバグ)を
+/// `frame_rgba()` 生値に対して直接固定するのにこの4引数版を使う。
+/// スケール補正込みのタイル寸を渡したい呼び出し側(`motolii-shell::
+/// build_stage_handle`)は [`composite_checkerboard_with_tile_px`] を使う。
 pub fn composite_checkerboard(width: u32, height: u32, rgba: &mut [u8], colors: Colors) {
+    composite_checkerboard_with_tile_px(width, height, rgba, colors, checkerboard_tile_px(1.0, 1.0));
+}
+
+/// [`composite_checkerboard`] のタイル寸指定版。実体はこちら — 呼び出し側が
+/// [`checkerboard_tile_px`] で算出した(または規定の)handle 空間タイル px を
+/// 明示的に渡す。
+pub fn composite_checkerboard_with_tile_px(
+    width: u32,
+    height: u32,
+    rgba: &mut [u8],
+    colors: Colors,
+    tile_px: u32,
+) {
     if width == 0 || height == 0 {
         return;
     }
-    let light = color_u8(colors.surface_raised);
-    let dark = color_u8(colors.surface_panel);
+    let tile_px = tile_px.max(1);
+    let light = color_u8(colors.checkerboard_light);
+    let dark = color_u8(colors.checkerboard_dark);
 
     for y in 0..height {
         for x in 0..width {
@@ -288,7 +333,7 @@ pub fn composite_checkerboard(width: u32, height: u32, rgba: &mut [u8], colors: 
             if alpha == 255 {
                 continue;
             }
-            let tile = if (x / CHECKERBOARD_TILE_PX + y / CHECKERBOARD_TILE_PX).is_multiple_of(2) {
+            let tile = if (x / tile_px + y / tile_px).is_multiple_of(2) {
                 light
             } else {
                 dark
@@ -582,8 +627,12 @@ mod tests {
 
         assert_eq!(&rgba[0..4], &[10, 20, 30, 255], "不透明画素が変わってしまった");
 
-        let light = color_u8(colors.surface_raised);
-        let dark = color_u8(colors.surface_panel);
+        // 市松v2(利用者較正 2026-08-21): タイル色はもう `surface_raised`/
+        // `surface_panel`(パネル面ロール)の借用ではなく、専用ロール
+        // `checkerboard_light`/`checkerboard_dark` を使う(`Colors::
+        // checkerboard_light` doc 参照)。
+        let light = color_u8(colors.checkerboard_light);
+        let dark = color_u8(colors.checkerboard_dark);
         let got = [rgba[4], rgba[5], rgba[6]];
         assert!(
             got == light || got == dark,
@@ -592,12 +641,13 @@ mod tests {
         assert_eq!(rgba[7], 255, "市松で埋めた画素は不透明になるはず");
     }
 
-    /// タイル境界(`CHECKERBOARD_TILE_PX`)で実際に色が切り替わること — 単なる
-    /// 塗りつぶしとの区別(「市松」を名乗るなら格子であるはず)。
+    /// タイル境界([`checkerboard_tile_px`])で実際に色が切り替わること —
+    /// 単なる塗りつぶしとの区別(「市松」を名乗るなら格子であるはず)。
     #[test]
     fn composite_checkerboard_alternates_tiles_across_the_grid() {
         let colors = Colors::default();
-        let width = CHECKERBOARD_TILE_PX * 2;
+        let tile_px = checkerboard_tile_px(1.0, 1.0);
+        let width = tile_px * 2;
         let mut rgba = vec![0u8; (width * 4) as usize];
         composite_checkerboard(width, 1, &mut rgba, colors);
 
@@ -607,7 +657,7 @@ mod tests {
         };
         assert_ne!(
             pixel(0),
-            pixel(CHECKERBOARD_TILE_PX),
+            pixel(tile_px),
             "タイル境界で市松の色が切り替わっていない — 単なる塗りつぶしになっている"
         );
     }
@@ -619,5 +669,71 @@ mod tests {
         let original = rgba.clone();
         composite_checkerboard(2, 1, &mut rgba, colors);
         assert_eq!(rgba, original, "全画素不透明なら市松は何も変えないはず");
+    }
+
+    // -----------------------------------------------------------------
+    // 市松v2 ORACLE (b): タイル寸は実効スケールで逆補正され、表示空間では
+    // 常に約8pt(±1px)に見える。
+    // -----------------------------------------------------------------
+
+    /// 縮小なし(`effective_scale=1.0`)・`ui_scale=1.0` の基準では、handle
+    /// 空間のタイル px がそのまま目標 pt(8)に一致する。
+    #[test]
+    fn checkerboard_tile_px_at_unit_scale_matches_the_target_pt() {
+        assert_eq!(checkerboard_tile_px(1.0, 1.0), 8);
+    }
+
+    /// **本命**: Auto 縮小で handle が縮んでも(`effective_scale=0.5` —
+    /// supervisor 実測の ~0.62 と同じ「1未満」領域)、`tile_px * effective_scale`
+    /// が表示空間で約8pt(±1px)に戻る — 縮小前と同じ大きさに見える、が
+    /// 発注書の要件そのもの。
+    #[test]
+    fn checkerboard_tile_px_compensates_for_handle_downscale() {
+        for effective_scale in [0.5, 0.62, 0.25, 0.9] {
+            let tile_px = checkerboard_tile_px(1.0, effective_scale);
+            let displayed_pt = tile_px as f64 * effective_scale;
+            assert!(
+                (displayed_pt - f64::from(CHECKERBOARD_TILE_TARGET_PT)).abs() <= 1.0,
+                "effective_scale={effective_scale}: tile_px={tile_px} → 表示 {displayed_pt}pt \
+                 が目標 {CHECKERBOARD_TILE_TARGET_PT}pt(±1px)から外れている"
+            );
+        }
+    }
+
+    /// `ui_scale` にも追随する(発注書 EXACT TARGET 2「表示上の目安 8pt 角
+    /// (ui_scale 追随)」)— 200% なら目標 pt 自体が2倍になる。
+    #[test]
+    fn checkerboard_tile_px_follows_ui_scale() {
+        assert_eq!(checkerboard_tile_px(2.0, 1.0), 16);
+        assert_eq!(checkerboard_tile_px(0.5, 1.0), 4);
+    }
+
+    /// 縮小率0以下(来ない想定の防波堤)は1.0扱い — panic もゼロ除算もしない。
+    #[test]
+    fn checkerboard_tile_px_treats_non_positive_effective_scale_as_unscaled() {
+        assert_eq!(checkerboard_tile_px(1.0, 0.0), checkerboard_tile_px(1.0, 1.0));
+        assert_eq!(checkerboard_tile_px(1.0, -1.0), checkerboard_tile_px(1.0, 1.0));
+    }
+
+    /// [`composite_checkerboard_with_tile_px`] が実際に渡した `tile_px` を
+    /// 使うこと([`composite_checkerboard`](既定 tile_px)と別の値になる、
+    /// つまり呼び出し側の補正が無視されずに効くことの直接証拠)。
+    #[test]
+    fn composite_checkerboard_with_tile_px_honors_the_caller_supplied_tile_size() {
+        let colors = Colors::default();
+        let tile_px = 4;
+        let width = tile_px * 2;
+        let mut rgba = vec![0u8; (width * 4) as usize];
+        composite_checkerboard_with_tile_px(width, 1, &mut rgba, colors, tile_px);
+
+        let pixel = |x: u32| -> [u8; 3] {
+            let i = (x * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2]]
+        };
+        assert_ne!(
+            pixel(0),
+            pixel(tile_px),
+            "呼び出し側が渡した tile_px でタイル境界が切り替わっていない"
+        );
     }
 }

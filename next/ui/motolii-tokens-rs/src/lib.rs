@@ -276,6 +276,22 @@ pub struct Colors {
     /// 合図)より弱い ambient な差にとどまるよう `timeline_time_band` と同じ
     /// 桁の値(0.05)を採る(発明ではなく上限からの逆算、2026-08-21)。
     pub timeline_row_zebra: Color,
+    /// 市松(透明の可視化、`motolii_settings_pane::composite_checkerboard`)の
+    /// 明タイル。**`surface_raised`/`surface_panel`(パネル面ロール)からの
+    /// 独立ロール** — 市松v2(利用者較正 2026-08-21「市松が見えない」)の
+    /// 根治対象。旧実装はこの2色を `surface_raised`/`surface_panel` から
+    /// 借用していたが、その2色は「パネルの面」という別の意味役割のために
+    /// 選ばれた値で、たまたま並べても Δ8/255(実測 54/62)しか差が無く実質
+    /// 不可視だった。市松は「透明の合図」という独自の意味役割を持つので、
+    /// `docs/ui-spatial-score.md` S4 の柵(裁定164:「意味役割が新しい時は
+    /// 段の借用でなく新ロールを起こす」— この事件が由来)に従い専用ロールを
+    /// 起こす。DTCG 正本にロールが無いので `border_hairline_weak` 等と同じ
+    /// 「固定値を1箇所に持つ」扱い([`fixed_checkerboard_colors`] 参照)。
+    /// 値は AE 実機準拠の視認差(明 0.42 灰、Δ≈30/255)。
+    pub checkerboard_light: Color,
+    /// 市松の暗タイル。[`Colors::checkerboard_light`] と対。値は AE 実機準拠
+    /// (暗 0.30 灰、`checkerboard_light` との差 Δ≈30/255)。
+    pub checkerboard_dark: Color,
 }
 
 /// [`Colors::border_hairline_weak`]/[`Colors::timeline_time_band`]/
@@ -287,6 +303,17 @@ fn fixed_wash_colors() -> (Color, Color, Color) {
     let timeline_time_band = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.035 };
     let timeline_row_zebra = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.05 };
     (border_hairline_weak, timeline_time_band, timeline_row_zebra)
+}
+
+/// [`Colors::checkerboard_light`]/[`Colors::checkerboard_dark`] の固定値。
+/// `Default`/`parse` の両方で同じ式にするための唯一の実装([`fixed_wash_colors`]
+/// と同じ理由)。**`surface_raised`/`surface_panel` を参照しない** — パネル面
+/// ロールからの独立を保つのがこの2色を新設した理由そのもの(市松v2、
+/// [`Colors::checkerboard_light`] doc 参照)。
+fn fixed_checkerboard_colors() -> (Color, Color) {
+    let checkerboard_light = Color::from_rgb(0.42, 0.42, 0.42);
+    let checkerboard_dark = Color::from_rgb(0.30, 0.30, 0.30);
+    (checkerboard_light, checkerboard_dark)
 }
 
 /// `surface.raised`/`text.muted`/`surface.panel`/`action.active` から
@@ -322,6 +349,7 @@ impl Default for Colors {
         let (state_selected, state_disabled) =
             derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
         let (border_hairline_weak, timeline_time_band, timeline_row_zebra) = fixed_wash_colors();
+        let (checkerboard_light, checkerboard_dark) = fixed_checkerboard_colors();
         Self {
             surface_app: Color::from_rgb(0.1412, 0.1412, 0.1412),
             surface_panel,
@@ -344,6 +372,8 @@ impl Default for Colors {
             border_hairline_weak,
             timeline_time_band,
             timeline_row_zebra,
+            checkerboard_light,
+            checkerboard_dark,
         }
     }
 }
@@ -360,6 +390,7 @@ impl Colors {
         let (state_selected, state_disabled) =
             derive_state_colors(surface_raised, surface_panel, text_muted, action_active);
         let (border_hairline_weak, timeline_time_band, timeline_row_zebra) = fixed_wash_colors();
+        let (checkerboard_light, checkerboard_dark) = fixed_checkerboard_colors();
         Ok(Self {
             surface_app: color_at(color, &["surface", "app"])?,
             surface_panel,
@@ -382,6 +413,8 @@ impl Colors {
             border_hairline_weak,
             timeline_time_band,
             timeline_row_zebra,
+            checkerboard_light,
+            checkerboard_dark,
         })
     }
 
@@ -1004,5 +1037,56 @@ mod hairline_and_rhythm_wash_tests {
             assert_eq!(wash.b, 1.0);
             assert!(wash.a > 0.0 && wash.a < 0.35, "hairline と紛れない薄さのはず");
         }
+    }
+}
+
+#[cfg(test)]
+mod checkerboard_role_tests {
+    use super::Colors;
+
+    /// **市松v2 の本命(ORACLE (a))**: `checkerboard_light`/`checkerboard_dark`
+    /// の2色コントラスト差が Δ≥24/255(単純差、WCAG式ではなく合図の視認性)。
+    /// 旧実装(`surface_raised`/`surface_panel` の借用)は Δ≈8/255 で
+    /// supervisor 実測「実質不可視」だった — 専用ロールが実際にその根治に
+    /// なっていることをここで固定する。
+    #[test]
+    fn checkerboard_tiles_have_a_visible_contrast_delta() {
+        let colors = Colors::default();
+        let to_255 = |c: f32| (c * 255.0).round();
+        let light = to_255(colors.checkerboard_light.r);
+        let dark = to_255(colors.checkerboard_dark.r);
+        assert_eq!(colors.checkerboard_light.r, colors.checkerboard_light.g);
+        assert_eq!(colors.checkerboard_light.g, colors.checkerboard_light.b);
+        assert_eq!(colors.checkerboard_dark.r, colors.checkerboard_dark.g);
+        assert_eq!(colors.checkerboard_dark.g, colors.checkerboard_dark.b);
+        assert!(
+            (light - dark).abs() >= 24.0,
+            "市松2色のコントラストが弱すぎる(旧根因の再発): light={light}, dark={dark}, Δ={}",
+            (light - dark).abs()
+        );
+    }
+
+    /// `checkerboard_light`/`checkerboard_dark` は `surface_raised`/
+    /// `surface_panel`(パネル面ロール)の値をそのまま指してはいない —
+    /// 借用ではなく独立した新ロールであることの直接証拠(裁定164 S4)。
+    #[test]
+    fn checkerboard_colors_are_independent_from_the_surface_roles() {
+        let colors = Colors::default();
+        assert_ne!(colors.checkerboard_light, colors.surface_raised);
+        assert_ne!(colors.checkerboard_light, colors.surface_panel);
+        assert_ne!(colors.checkerboard_dark, colors.surface_raised);
+        assert_ne!(colors.checkerboard_dark, colors.surface_panel);
+    }
+
+    /// `Default`/`parse` の両経路が同じ固定値を使うこと(`fixed_wash_colors`
+    /// と同型の柵、正本 JSON にロールが無いので値の2重管理を許さない)。
+    #[test]
+    fn checkerboard_colors_match_between_default_and_parse() {
+        let default_colors = Colors::default();
+        let json = std::fs::read_to_string(Colors::debug_source_path())
+            .expect("motolii-dark.json を読めない");
+        let parsed = Colors::parse(&json).expect("motolii-dark.json を parse できない");
+        assert_eq!(parsed.checkerboard_light, default_colors.checkerboard_light);
+        assert_eq!(parsed.checkerboard_dark, default_colors.checkerboard_dark);
     }
 }
