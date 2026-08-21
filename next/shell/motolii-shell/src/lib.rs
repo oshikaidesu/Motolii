@@ -257,6 +257,26 @@ pub enum Message {
     /// によりここでは frame 数だけを運ぶ)。
     NudgeKeyframe(i64),
 
+    // ---- Timeline playhead ナビゲーション動詞束(U2、正典 §5・§8.1) ----
+    /// Step Forward/Back(正典 §5「矢印キー」)。符号つき frame 数(素で ±1、
+    /// Shift で ±10 — `NudgeKeyframe` と同じ「歩幅はキー解決側が決める」役割
+    /// 分担)。選択も clip も動かさず playhead だけを動かす。
+    StepPlayhead(i64),
+    /// JumpToCompStart(正典 §8.1)。既定割当 Home。
+    JumpPlayheadToStart,
+    /// JumpToCompEnd(正典 §8.1)。既定割当 End。
+    JumpPlayheadToEnd,
+    /// JumpPrev/NextMeaningPoint(正典 §8.1)。既定割当 J(Prev)/K(Next)。
+    /// `layer_only` は Shift 付き — 選択 layer 自身のキーだけに絞る(marker は
+    /// comp 単位なので対象から外れる、`Shell::jump_meaning_point` 参照)。
+    JumpMeaningPoint {
+        direction: timeline::nav::JumpDirection,
+        layer_only: bool,
+    },
+    /// JumpToClipIn/Out(正典 §8.1)。既定割当 I(In)/O(Out)。選択 layer の
+    /// clip の In/Out へ — トリムではない(playhead だけが動く)。
+    JumpClipEdge(timeline::nav::ClipEdge),
+
     // ---- Inspector の drag-to-scrub ----
     /// 値セルの press。**まだ Document を書かない** — click か drag かは
     /// release まで未確定(`Shell::inspector_drag`)。
@@ -712,6 +732,16 @@ impl Shell {
                 self.cancel_timeline_key_drag();
             }
             Message::NudgeKeyframe(delta) => self.nudge_keyframe(delta),
+            Message::StepPlayhead(delta) => self.step_playhead(delta),
+            Message::JumpPlayheadToStart => self.session.playhead = 0,
+            Message::JumpPlayheadToEnd => {
+                let duration = self.composition().map(|c| c.duration_frames).unwrap_or(0);
+                self.session.playhead = timeline::nav::comp_end_frame(duration);
+            }
+            Message::JumpMeaningPoint { direction, layer_only } => {
+                self.jump_meaning_point(direction, layer_only);
+            }
+            Message::JumpClipEdge(edge) => self.jump_clip_edge(edge),
             Message::InspectorValuePressed(field) => self.start_field_drag(field),
             Message::InspectorPointerMoved(point) => self.continue_field_drag(point),
             Message::InspectorPointerReleased => {
@@ -1533,6 +1563,60 @@ impl Shell {
         let new_frames =
             timeline::key_gesture::nudge_key_group(&origin_frames, delta, clip_start, clip_end);
         self.commit_key_frames(&origins, &new_frames, delta);
+    }
+
+    /// Step Forward/Back(正典 §5・U2)。`delta` の符号・歩幅はキー解決側
+    /// (`resolve_navigation_key`)が既に決めている — ここは
+    /// `timeline::nav::step_playhead` の clamp をそのまま適用するだけ。
+    fn step_playhead(&mut self, delta: i64) {
+        let duration = self.composition().map(|c| c.duration_frames).unwrap_or(0);
+        self.session.playhead = timeline::nav::step_playhead(self.session.playhead, delta, duration);
+    }
+
+    /// JumpPrev/NextMeaningPoint(正典 §8.1・U2)。**見えている意味点**を集めて
+    /// `timeline::nav::nearest_meaning_point` へ渡すだけ:
+    /// - 常に: 選択 layer の表示中 property 行のキー菱形時刻(`timeline_property_rows`
+    ///   — 選択 layer 1本ぶんしか描かれない、`projection::property_rows` の
+    ///   EXACT TARGET 1 どおり)
+    /// - `layer_only` が false の時だけ追加: comp locator(`markers()`)。
+    ///   locator は layer に紐付かない(comp 単位)ので「選択レイヤー限定」
+    ///   (Shift 付き)では対象から外れる — これが `layer_only` の意味そのもの
+    ///
+    /// 渡る先が無ければ何もしない(`nearest_meaning_point` が `None` を返す =
+    /// no-op、既存の「拒否理由の無い no-op」と同じ形 — 意味点が無いのは
+    /// エラーではない)。
+    fn jump_meaning_point(&mut self, direction: timeline::nav::JumpDirection, layer_only: bool) {
+        let mut points: Vec<i64> = self
+            .timeline_property_rows()
+            .iter()
+            .flat_map(|row| row.keys.iter().map(|key| key.frame))
+            .collect();
+        if !layer_only {
+            if let Some(fps) = self.composition().map(|c| c.fps) {
+                points.extend(
+                    self.markers()
+                        .iter()
+                        .filter_map(|marker| marker.time.try_to_frame_floor(fps).ok()),
+                );
+            }
+        }
+        if let Some(frame) = timeline::nav::nearest_meaning_point(&points, self.session.playhead, direction) {
+            self.session.playhead = frame;
+        }
+    }
+
+    /// JumpToClipIn/Out(正典 §8.1・U2)。対象は `Session::selection`(単一
+    /// focus)の clip — 選択が無ければ何もしない(`nudge_keyframe` と同じ
+    /// 「選択が無ければ no-op」の形。跳ぶ先を持たない操作を理由つき拒否に
+    /// するほどの重さではない)。
+    fn jump_clip_edge(&mut self, edge: timeline::nav::ClipEdge) {
+        let Some(layer) = self.session.selection else {
+            return;
+        };
+        let Some(row) = self.timeline_rows().into_iter().find(|row| row.id == layer) else {
+            return;
+        };
+        self.session.playhead = timeline::nav::clip_edge_frame(row.start, row.duration, edge);
     }
 
     /// 選択キー群の移動結果を Document へ確定する(Move/retime/Nudge 共通の
@@ -2402,13 +2486,19 @@ fn build_stage_handle(
 /// — 実際に drag 中かどうかの判断・Shift の要否は `Shell::update` 側
 /// (`inspector_drag`/`keyboard_modifiers` の状態)。
 ///
-/// `iced::event::listen_with` を選んだ理由: `_status` を見ずに常に拾う。
-/// `iced::keyboard::listen()`(Ignored 限定)だと、typing 中の text_input は
+/// `iced::event::listen_with` を選んだ理由: `status` を見ずに常に拾える
+/// (`iced::keyboard::listen()`(Ignored 限定)だと、typing 中の text_input は
 /// Escape を自分で `shell.capture_event()` する(`iced_widget::text_input`
-/// 実測)ので、typing の Esc-cancel に使いたい場合に届かなくなる。
+/// 実測)ので、typing の Esc-cancel に使いたい場合に届かなくなる)。既存の
+/// Escape/Backspace/Delete/NudgeKeyframe/ResetToRenderCamera はその方針どおり
+/// `status` を無視する。**playhead ナビゲーション動詞束(U2)だけは逆**
+/// — `resolve_navigation_key` へ `status == Captured` を渡し、text_input が
+/// 既にそのキーを消費していれば一切出さない(正典 §5「テキスト入力中は
+/// 横取りしない」。Home/End/裸の j/k/i/o は text_input 内でもカーソル移動・
+/// 文字入力として意味を持つので、Escape 系と同じ「常に拾う」は採らない)。
 fn inspector_pointer_event(
     event: iced::Event,
-    _status: iced::event::Status,
+    status: iced::event::Status,
     _window: iced::window::Id,
 ) -> Option<Message> {
     match event {
@@ -2469,6 +2559,81 @@ fn inspector_pointer_event(
                 && matches!(key.as_ref(), iced::keyboard::Key::Character(c) if c.eq_ignore_ascii_case("f")) =>
         {
             Some(Message::ResetToRenderCamera)
+        }
+        // playhead ナビゲーション動詞束(U2、正典 §5・§8.1)。**この分岐だけ
+        // `status` を見る**(上の doc 参照)— キーそのものの解決は
+        // `resolve_navigation_key` へ委譲する(試験(`tests/suite/nav_drive.rs`)
+        // が `iced::Event`/`Status` を毎回組み立てずにその関数を直接叩ける
+        // ようにするための分割。既存の Alt+Arrow(NudgeKeyframe)/Shift+F
+        // (ResetToRenderCamera)は上の枝で先に確定しているのでここには落ちて
+        // 来ない)。
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed { key, modifiers, .. }) => {
+            resolve_navigation_key(&key, modifiers, status == iced::event::Status::Captured)
+        }
+        _ => None,
+    }
+}
+
+/// U2: playhead ナビゲーション動詞束のキー解決(正典 §5・§8.1)。**pure** —
+/// `key`/`modifiers`/`captured`(他の widget が既にこのキーを消費したか、
+/// `inspector_pointer_event` の `status == Captured` をそのまま渡す)だけを見て
+/// `Message` を返す。`inspector_pointer_event` から分離してあるのは、試験が
+/// `iced::Event`/`iced::event::Status` を毎回組み立てずにここを直接叩ける
+/// ようにするため(`tests/suite/nav_drive.rs` の (e)/(f))。
+///
+/// - `captured` の間は何も返さない(正典 §5「テキスト入力中は横取りしない」)。
+///   Home/End/裸の j/k/i/o は text_input 内でもカーソル移動・文字入力として
+///   意味を持つキーなので、renaming/InspectorField 編集中に奪ってはいけない
+/// - j/k/i/o は裸キー — `modifiers.command()` が立っていれば何も返さない
+///   (前任レーンの実測教訓: Cmd+O 等の既存/将来ショートカットを奪わない)
+/// - ←/→ は Alt 修飾時は対象外(`NudgeKeyframe` が既に使っている、二重発火
+///   防止)
+///
+/// **既定割当は仮**(拘束6・NudgeKeyframe と同じ「keymap 層が無い今だけ直結」
+/// の注記どおり) — アクション名(`Message::StepPlayhead`/`JumpPlayheadToStart`/
+/// `JumpPlayheadToEnd`/`JumpMeaningPoint`/`JumpClipEdge`)だけを正本として残す。
+pub fn resolve_navigation_key(
+    key: &iced::keyboard::Key,
+    modifiers: iced::keyboard::Modifiers,
+    captured: bool,
+) -> Option<Message> {
+    if captured {
+        return None;
+    }
+    use iced::keyboard::key::Named;
+    use iced::keyboard::Key;
+    match key.as_ref() {
+        // Step Forward/Back(素=1フレーム、Shift=10フレーム)。Alt 付きは
+        // NudgeKeyframe の領分なのでここでは扱わない(上の枝が先に取る)。
+        Key::Named(Named::ArrowLeft) if !modifiers.alt() => {
+            let step = if modifiers.shift() { 10 } else { 1 };
+            Some(Message::StepPlayhead(-step))
+        }
+        Key::Named(Named::ArrowRight) if !modifiers.alt() => {
+            let step = if modifiers.shift() { 10 } else { 1 };
+            Some(Message::StepPlayhead(step))
+        }
+        Key::Named(Named::Home) => Some(Message::JumpPlayheadToStart),
+        Key::Named(Named::End) => Some(Message::JumpPlayheadToEnd),
+        // JumpPrev/NextMeaningPoint。Shift 付きで選択レイヤー限定(§8.1)。
+        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("j") => {
+            Some(Message::JumpMeaningPoint {
+                direction: timeline::nav::JumpDirection::Prev,
+                layer_only: modifiers.shift(),
+            })
+        }
+        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("k") => {
+            Some(Message::JumpMeaningPoint {
+                direction: timeline::nav::JumpDirection::Next,
+                layer_only: modifiers.shift(),
+            })
+        }
+        // JumpToClipIn/Out。
+        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("i") => {
+            Some(Message::JumpClipEdge(timeline::nav::ClipEdge::In))
+        }
+        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("o") => {
+            Some(Message::JumpClipEdge(timeline::nav::ClipEdge::Out))
         }
         _ => None,
     }

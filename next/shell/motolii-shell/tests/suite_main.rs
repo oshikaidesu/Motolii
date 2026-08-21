@@ -28,6 +28,8 @@ mod ident_band_drive;
 mod inspector_drive;
 #[path = "suite/inspector_pixel_fence.rs"]
 mod inspector_pixel_fence;
+#[path = "suite/nav_drive.rs"]
+mod nav_drive;
 #[path = "suite/observation_camera_drive.rs"]
 mod observation_camera_drive;
 #[path = "suite/q0_fence.rs"]

@@ -502,8 +502,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 501	effects_animation	Move Selected Keyframes Left	選択キーフレームを左移動	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 502	effects_animation	Move Selected Keyframes Right	選択キーフレームを右移動	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
 503	effects_animation	Move Selected Keyframes Up	選択キーフレームを上移動	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	
-504	effects_animation	Next Keyframe	]	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
-505	effects_animation	Previous Keyframe	[	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
+504	effects_animation	Next Keyframe	]	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済	Message::JumpMeaningPoint{direction:Next}(shell/lib.rs、U2。既定割当K)
+505	effects_animation	Previous Keyframe	[	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済	Message::JumpMeaningPoint{direction:Prev}(shell/lib.rs、U2。既定割当J)
 506	effects_animation	Reveal Properties with Keyframes	キーフレーム付きプロパティを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	
 507	effects_animation	Reverse paste copied keyframes	コピーしたキーフレームを逆順貼り付け	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 508	effects_animation	RPF Camera Import	RPFカメラ読み込み	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	RPFカメラ読み込みは特定3D interchange形式のimport機能。除外根拠なし
@@ -720,8 +720,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 719	marker	Clear In	イン点を解除	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
 720	marker	Clear In and Out	イン/アウト点を両方解除	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
 721	marker	Clear Out	アウト点を解除	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
-722	marker	Go to Next Marker	次のマーカーへ移動	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
-723	marker	Go to Previous Marker	前のマーカーへ移動	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
+722	marker	Go to Next Marker	次のマーカーへ移動	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用済	Message::JumpMeaningPoint(shell/lib.rs、U2。既定割当K/J。locatorはlayer_only=false側)
+723	marker	Go to Previous Marker	前のマーカーへ移動	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用済	Message::JumpMeaningPoint(shell/lib.rs、U2。既定割当K/J。locatorはlayer_only=false側)
 724	marker	Mark Clip	クリップ全体をマーク	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
 725	marker	Mark In	イン点を設定	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
 726	marker	Mark Out	アウト点を設定	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし
@@ -1040,10 +1040,10 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1039	panel_window	Wiggler	キーフレームランダム化パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)	out-of-domain?	採用予定	
 1040	panel_window	Workspaces (submenu)	ワークスペース切替サブメニュー(パネル本体ではない)	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	裁定128のworkspace切替と関連
 1041	playback	Play / Pause	再生・一時停止	0	1	1	1	3	1:3:0:0	一致(2件);二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	
-1042	playback	Step Back 1 Frame	1フレーム戻る	1	1	1	0	3	0:3:0:0	二次(premiere全体注記);公式(Adobe);公式(BMD, v11時点)		採用予定	
-1043	playback	Step Forward 1 Frame	1フレーム進む	1	1	1	0	3	0:3:0:0	二次(premiere全体注記);公式(Adobe);公式(BMD, v11時点)		採用予定	
-1044	playback	Go to End / Timeline End	末尾へ移動	0	1	1	0	2	0:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用予定	
-1045	playback	Go to Start / Timeline Start	先頭へ移動	0	1	1	0	2	0:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用予定	
+1042	playback	Step Back 1 Frame	1フレーム戻る	1	1	1	0	3	0:3:0:0	二次(premiere全体注記);公式(Adobe);公式(BMD, v11時点)		採用済	Message::StepPlayhead(-1)(shell/lib.rs、U2。既定割当←)
+1043	playback	Step Forward 1 Frame	1フレーム進む	1	1	1	0	3	0:3:0:0	二次(premiere全体注記);公式(Adobe);公式(BMD, v11時点)		採用済	Message::StepPlayhead(1)(shell/lib.rs、U2。既定割当→)
+1044	playback	Go to End / Timeline End	末尾へ移動	0	1	1	0	2	0:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用済	Message::JumpPlayheadToEnd(shell/lib.rs、U2。既定割当End)
+1045	playback	Go to Start / Timeline Start	先頭へ移動	0	1	1	0	2	0:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用済	Message::JumpPlayheadToStart(shell/lib.rs、U2。既定割当Home)
 1046	playback	Add Edit	編集点追加	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	
 1047	playback	Add Edit to All Tracks	全トラック編集点追加	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	
 1048	playback	Cintel Scanner	Cintelスキャナー制御	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)	out-of-domain?	不採用	領域外(Cintelスキャナー、BMD専用ハードウェア)不採用 — 製品固有の深部機能(プロ入出力設定等)
@@ -1065,8 +1065,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1064	playback	Go to beginning or end of work area	ワークエリアの先頭/末尾へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 1065	playback	Go to end of composition, layer, or footage	コンポ/レイヤー/素材の末尾へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 1066	playback	Go to In	Shift+I	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
-1067	playback	Go to layer In point	レイヤーIn点へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
-1068	playback	Go to layer Out point	レイヤーOut点へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
+1067	playback	Go to layer In point	レイヤーIn点へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	Message::JumpClipEdge(In)(shell/lib.rs、U2。既定割当I)
+1068	playback	Go to layer Out point	レイヤーOut点へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	Message::JumpClipEdge(Out)(shell/lib.rs、U2。既定割当O)
 1069	playback	Go to next In or Out point	次のIn/Out点へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
 1070	playback	Go to Out	Shift+O	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	
 1071	playback	Go to previous In or Out point	前のIn/Out点へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	
