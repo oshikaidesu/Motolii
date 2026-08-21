@@ -17,7 +17,7 @@
 
 use motolii_store::{
     EffectInstance, Intent, LayerAttrs, LayerAttrsPatch, LayerId, LayerMeta, Mask, PropertyId,
-    PropertySource, Shape, StoreError, StoreView, TextDocument,
+    PropertySource, ShapeNode, StoreError, StoreView, TextDocument,
 };
 
 /// 1 layer 分の Document 表現の写し。**clipboard の中身の正本**。
@@ -30,7 +30,7 @@ pub struct LayerSnapshot {
     attrs: Option<LayerAttrs>,
     masks: Vec<Mask>,
     effects: Vec<EffectInstance>,
-    shapes: Vec<Shape>,
+    shapes: Vec<ShapeNode>,
     text: Option<TextDocument>,
     /// property ごとの生の出処(`Track` か `Slot` か)。**keyframe 込みで丸ごと**
     /// 保持する — mask の形状track・effect の param track も、この layer が持つ
@@ -190,7 +190,7 @@ mod tests {
     use motolii_store::{
         BlendMode, Composition, ContentKeyframe, ContentTrack, Document, EffectId, FontRef, Fps,
         Interp, Keyframe, KeyframeTrack, LayerSource, LayerTiming, MaskId, MaskMode, PathSource,
-        RationalTime, Slot, SlotId, TextAlignmentOptions, TextDocumentStyle, TextJustify,
+        RationalTime, Shape, Slot, SlotId, TextAlignmentOptions, TextDocumentStyle, TextJustify,
         TextStyleId, Value,
     };
 
@@ -328,9 +328,13 @@ mod tests {
             },
             Intent::SetShapes {
                 layer: source,
-                shapes: vec![Shape::new(PathSource::Rectangle {
+                // 裁定173 H4: `Layer:shapes` は `Vec<ShapeNode>`。既存の平坦 `Shape` は
+                // `ShapeNode::Leaf` として渡す(clipboard 自体は group を作らない —
+                // 中身をそのまま複製するだけの倉庫役なので、group の有無を問わず
+                // clone するだけで足りる)。
+                shapes: vec![ShapeNode::Leaf(Shape::new(PathSource::Rectangle {
                     size: motolii_store::VectorPoint { x: 10.0, y: 20.0 },
-                })],
+                }))],
             },
             Intent::SetTextDocument {
                 layer: source,

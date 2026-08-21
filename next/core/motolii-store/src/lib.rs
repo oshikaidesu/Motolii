@@ -54,7 +54,13 @@ pub use motolii_eval::{Interp, Keyframe, KeyframeTrack, Path, PathVertex, Spatia
 /// shape-layer(`layers/shape-layer/shapes`)の中身。語彙の正本は `motolii-vector`
 /// (shape-1/2/3 が既に決めた)— ここでは作り直さない(裁定10)。`Path` は再輸出しない
 /// (`motolii_eval::Path` と名前が衝突する — マスク形状の `Value::Path` が正本のまま)。
-pub use motolii_vector::{PathSource, Point as VectorPoint, Shape};
+///
+/// `ShapeNode`/`ShapeGroup`/`RepeaterTransform` は裁定173 H4(シェイプ内階層)で
+/// `Layer:shapes` の中身が `Vec<Shape>` から `Vec<ShapeNode>` へ広がった分。
+/// `Shape` 自体はそのまま(旧 flat JSON の着地点 = `ShapeNode::Leaf`)。
+pub use motolii_vector::{
+    PathSource, Point as VectorPoint, RepeaterTransform, Shape, ShapeGroup, ShapeNode,
+};
 
 /// `edit` timeline の名前。undo/redo はこの軸の移動である。
 pub const EDIT_TIMELINE: &str = "edit";
@@ -173,10 +179,14 @@ pub enum LayerSource {
     /// 絵を持たず transform だけ持つ(AE の Null Object)。親子の受け皿
     /// (`layers/null-layer/ty`、layer-meta 束)。
     Null,
-    /// ベクタ生成物(`layers/shape-layer/ty`)。中身(パス源+演算子スタック+fill/stroke)は
-    /// `Layer:shapes` component が `Vec<motolii_vector::Shape>` として持つ
-    /// (`layers/shape-layer/shapes`)。語彙の正本は `motolii-vector`(shape-1/2/3 が既に決めた)
-    /// — ここで作り直さない(裁定10)。
+    /// ベクタ生成物(`layers/shape-layer/ty`)。中身(パス源+演算子スタック+fill/stroke、
+    /// 裁定173 H4 で入れ子グループも)は `Layer:shapes` component が
+    /// `Vec<motolii_vector::ShapeNode>` として持つ(`layers/shape-layer/shapes`)。
+    /// 語彙の正本は `motolii-vector`(shape-1/2/3 が既に決めた)— ここで作り直さない
+    /// (裁定10)。`ShapeNode` は shape 粒度の入れ子で、layer 粒度の [`LayerSource::Group`]
+    /// (この enum の別 variant)とは別概念 — 旧世界 `VectorContent::Group` が
+    /// タイムライン `TrackItem::Group` と意図的に別概念だったのと同じ区別
+    /// (`docs/reviews/2026-08-22-transform-hierarchy-seam-survey.md` §3.1)。
     Shape,
     /// テキスト生成物(`layers/text-layer/ty`)。中身は `Layer:text` component。
     /// **今は素の文字列1本だけ**(`layers/text-layer/t`)— 範囲スタイル・アニメーターの

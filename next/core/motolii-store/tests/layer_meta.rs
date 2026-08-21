@@ -15,7 +15,7 @@
 use motolii_store::{
     BlendMode, Composition, Document, EffectId, EffectInstance, Fps, Intent, LayerAttrsPatch,
     LayerId, LayerMeta, LayerSource, LayerTiming, Matte, MatteMode, PropertyId, RationalTime,
-    Shape, Speed, Value, property,
+    Shape, ShapeNode, Speed, Value, property,
 };
 
 fn t(frame: i64) -> RationalTime {
@@ -607,18 +607,20 @@ fn shape_layer_holds_an_ordered_list_of_shapes() {
     assert!(doc.view().shapes(layer).unwrap().is_empty());
 
     // `Shape`/`PathSource` の語彙は shape-1/2/3 が既に決めた `motolii-vector` の正本
-    // (裁定10)。layer-meta 束はこれを Document へ乗せる線だけを足す。
+    // (裁定10)。layer-meta 束はこれを Document へ乗せる線だけを足す。裁定173 H4 で
+    // `Layer:shapes` は `Vec<ShapeNode>`(平坦な `Shape` は `ShapeNode::Leaf` として
+    // 混在する — `tests/shape_group.rs` が入れ子側の oracle を持つ)。
     let shape = Shape::new(motolii_vector::PathSource::Rectangle {
         size: motolii_vector::Point { x: 10.0, y: 10.0 },
     });
     doc.apply(Intent::SetShapes {
         layer,
-        shapes: vec![shape.clone()],
+        shapes: vec![ShapeNode::Leaf(shape.clone())],
     })
     .unwrap();
 
     let shapes = doc.view().shapes(layer).unwrap();
-    assert_eq!(shapes, vec![shape]);
+    assert_eq!(shapes, vec![ShapeNode::Leaf(shape)]);
 }
 
 #[test]

@@ -317,10 +317,15 @@ pub enum Intent {
         layer: LayerId,
         effects: Vec<crate::EffectInstance>,
     },
-    /// shape-layer の図形列。丸ごと差し替え。
+    /// shape-layer の図形列。丸ごと差し替え。裁定173 H4: `Vec<crate::ShapeNode>` —
+    /// 平坦な `Shape`(`ShapeNode::Leaf`)と入れ子グループ(`ShapeNode::Group`)を
+    /// 混在させられる。旧 `Vec<Shape>` を渡していた呼び手は
+    /// `shapes.into_iter().map(ShapeNode::Leaf).collect()` で移行する
+    /// (`shapes: Vec<crate::Shape>` という**旧型のまま渡す口は無い** — 二重の
+    /// SetShapes を持たせると shape schema の正本が2つになる)。
     SetShapes {
         layer: LayerId,
-        shapes: Vec<crate::Shape>,
+        shapes: Vec<crate::ShapeNode>,
     },
     /// text-layer の中身(content・組版既定値・フォント参照)。丸ごと差し替え —
     /// `SetShapes`/`SetEffects` と同じ形。`Layer:text` component はこの意味しか

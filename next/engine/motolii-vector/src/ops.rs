@@ -470,8 +470,12 @@ pub(crate) fn twist(path: &Path, degrees: f64, center: Point) -> Path {
 // (2Dアフィンの真の実数冪 = Lie群指数写像は要求されていないため、簡略近似と明示する)。
 // ---------------------------------------------------------------------------
 
+/// 裁定173 H4: `group.rs` がシェイプ内グループの world 合成にそのまま再利用する
+/// (`pub(crate)` へ上げただけで、式は1行も変えていない)。フィールドは private の
+/// まま — 呼び手はメソッド(`apply`/`apply_vector`/`mul`)と `IDENTITY`/`build_affine`
+/// だけを使う。
 #[derive(Clone, Copy)]
-struct Affine {
+pub(crate) struct Affine {
     a: f64,
     b: f64,
     c: f64,
@@ -481,7 +485,7 @@ struct Affine {
 }
 
 impl Affine {
-    const IDENTITY: Affine = Affine {
+    pub(crate) const IDENTITY: Affine = Affine {
         a: 1.0,
         b: 0.0,
         c: 0.0,
@@ -490,14 +494,14 @@ impl Affine {
         ty: 0.0,
     };
 
-    fn apply(&self, p: Point) -> Point {
+    pub(crate) fn apply(&self, p: Point) -> Point {
         Point {
             x: self.a * p.x + self.c * p.y + self.tx,
             y: self.b * p.x + self.d * p.y + self.ty,
         }
     }
 
-    fn apply_vector(&self, v: Point) -> Point {
+    pub(crate) fn apply_vector(&self, v: Point) -> Point {
         Point {
             x: self.a * v.x + self.c * v.y,
             y: self.b * v.x + self.d * v.y,
@@ -505,7 +509,7 @@ impl Affine {
     }
 
     /// self ∘ rhs (rhs を先に適用)。
-    fn mul(&self, rhs: &Affine) -> Affine {
+    pub(crate) fn mul(&self, rhs: &Affine) -> Affine {
         Affine {
             a: self.a * rhs.a + self.c * rhs.b,
             b: self.b * rhs.a + self.d * rhs.b,
@@ -551,7 +555,12 @@ impl Affine {
 
 /// 移植元との唯一の差: `rotation` を**度**で受ける(裁定58「rotation は度のまま」)。
 /// 行列を組む前にここで1度だけラジアンへ落とす。
-fn build_affine(t: &RepeaterTransform) -> Affine {
+///
+/// `pub(crate)`: 裁定173 H4 の `group.rs` がシェイプ内グループの transform キー
+/// (`RepeaterTransform` をそのまま再利用、§ 型を新設しない)から world 合成用の
+/// 行列を組むのに、この関数をそのまま呼ぶ(repeater の「k=1回だけ」の特殊ケースが
+/// group の変換そのものなので、二重にアフィン代数を持たせない)。
+pub(crate) fn build_affine(t: &RepeaterTransform) -> Affine {
     let (s, c) = t.rotation.to_radians().sin_cos();
     let rs_a = c * t.scale.x;
     let rs_b = s * t.scale.x;
@@ -606,7 +615,9 @@ fn affine_pow_real(m: &Affine, k: f64) -> Affine {
     m_lo.lerp(&m_hi, frac)
 }
 
-fn apply_matrix_to_contour(c: &Contour, m: &Affine) -> Contour {
+/// `pub(crate)`: 裁定173 H4 の `group.rs::flatten` がグループの world 変換を
+/// 子 leaf の頂点へ焼き込むのにそのまま呼ぶ(repeater と同じ「行列を頂点へ適用」)。
+pub(crate) fn apply_matrix_to_contour(c: &Contour, m: &Affine) -> Contour {
     let vertices = c
         .vertices
         .iter()
