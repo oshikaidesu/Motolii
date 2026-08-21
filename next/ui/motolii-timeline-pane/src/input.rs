@@ -158,9 +158,151 @@ pub(crate) fn update(
     }
 }
 
+#[cfg(test)]
+mod mouse_interaction_tests {
+    //! `mouse_interaction` の純関数テスト(hover 位置→Interaction の対応表、
+    //! 発注書「red 保存」の器具)。`TimelinePane` の各 field は crate root
+    //! (`lib.rs`)の定義に対して private だが、Rust の可視性は「定義モジュール
+    //! とその子孫モジュール」まで届くので、この `input` 子モジュールから
+    //! struct literal で直接組める(新しい pub API を増やさずに済む —
+    //! 発注書の write-set は `src+tests` のみ、新規 pub 面は増やさない)。
+
+    use iced::{mouse, Rectangle};
+
+    use super::super::projection::RowProjection;
+    use super::super::{Interaction, TimelinePane};
+    use motolii_store::LayerId;
+
+    /// duration_frames == bounds.width の 1px=1frame 縮尺(`hit.rs` の既存試験
+    /// と同じ約束、新しい縮尺を発明しない)。
+    const WIDTH: f32 = 300.0;
+    const DURATION: i64 = 300;
+    const ROW_HEIGHT: f32 = 26.0;
+
+    fn row(id: u64, start: i64, duration: i64, locked: bool) -> RowProjection {
+        RowProjection {
+            id: LayerId(id),
+            name: String::new(),
+            hidden: false,
+            solo: false,
+            locked,
+            label_color: None,
+            start,
+            duration,
+            selected: false,
+            dragging: false,
+            depth: 0,
+            has_children: false,
+            children_open: true,
+        }
+    }
+
+    fn pane(rows: Vec<RowProjection>) -> TimelinePane {
+        let mut dims = motolii_tokens_rs::Dimensions::default();
+        dims.row_height = ROW_HEIGHT;
+        TimelinePane {
+            rows,
+            property_rows: Vec::new(),
+            selected_row_index: None,
+            markers: Vec::new(),
+            playhead: 0,
+            duration_frames: DURATION,
+            fps: None,
+            dims,
+            colors: motolii_tokens_rs::Colors::default(),
+            modifiers: iced::keyboard::Modifiers::default(),
+            key_drag_active: false,
+            preview_active: false,
+        }
+    }
+
+    fn bounds() -> Rectangle {
+        Rectangle::new(iced::Point::ORIGIN, iced::Size::new(WIDTH, 300.0))
+    }
+
+    /// ルーラー下・行内の y。`TimelinePane::ruler_height()` は private だが
+    /// 式自体は `canvas::ruler_height` と同じ(`0.846 * row_height` の丸め、
+    /// モジュール冒頭 doc の「比率の出典」参照) — ここでは行0の中央を直接
+    /// 計算する(新しい式を発明せず、既存の比率をそのまま使う)。
+    fn row_y() -> f32 {
+        let ruler = (0.846 * ROW_HEIGHT).round();
+        ruler + ROW_HEIGHT / 2.0
+    }
+
+    fn point_at(x: f32) -> iced::Point {
+        iced::Point::new(x, row_y())
+    }
+
+    /// 対応表(1): 幅広 bar の本体 hover → Grab(掴める予告)。
+    #[test]
+    fn hovering_bar_body_shows_grab() {
+        let p = pane(vec![row(1, 100, 100, false)]);
+        let state = Interaction::default();
+        let cursor = mouse::Cursor::Available(point_at(150.0));
+        assert_eq!(
+            super::mouse_interaction(&p, &state, bounds(), cursor),
+            mouse::Interaction::Grab,
+        );
+    }
+
+    /// 対応表(2): 幅広 bar の端(trim 可能)hover → ResizingHorizontally。
+    #[test]
+    fn hovering_bar_edge_shows_resizing_horizontally() {
+        let p = pane(vec![row(1, 100, 100, false)]);
+        let state = Interaction::default();
+        let cursor = mouse::Cursor::Available(point_at(100.0)); // start_x ちょうど = EdgeIn
+        assert_eq!(
+            super::mouse_interaction(&p, &state, bounds(), cursor),
+            mouse::Interaction::ResizingHorizontally,
+        );
+    }
+
+    /// 対応表(3): ロック行の bar hover → NotAllowed(端/本体の区別より優先)。
+    #[test]
+    fn hovering_locked_bar_shows_not_allowed() {
+        let p = pane(vec![row(1, 100, 100, true)]);
+        let state = Interaction::default();
+        let cursor = mouse::Cursor::Available(point_at(150.0));
+        assert_eq!(
+            super::mouse_interaction(&p, &state, bounds(), cursor),
+            mouse::Interaction::NotAllowed,
+        );
+    }
+
+    /// 対応表(4): 空白面(ルーラー/playhead を含む scrub 対象)hover →
+    /// Crosshair(正典 §5.5「空白面=Crosshair」— 掴める/掴んでいる/端/禁止の
+    /// どれでもない場だが、クリックで scrub=playhead を動かせる以上「反応
+    /// ゼロ」の既定矢印のままではいけない、という §5.5 の明文どおり)。
+    #[test]
+    fn hovering_blank_field_shows_crosshair() {
+        let p = pane(vec![row(1, 100, 100, false)]);
+        let state = Interaction::default();
+        let cursor = mouse::Cursor::Available(point_at(10.0)); // bar の外(空白)
+        assert_eq!(
+            super::mouse_interaction(&p, &state, bounds(), cursor),
+            mouse::Interaction::Crosshair,
+        );
+    }
+
+    /// 対応表(5): ドラッグ中はどこにいても Grabbing(位置判定より優先)。
+    #[test]
+    fn dragging_shows_grabbing_regardless_of_position() {
+        let p = pane(vec![row(1, 100, 100, false)]);
+        let mut state = Interaction::default();
+        state.drag = Some(super::DragKind::Scrub);
+        let cursor = mouse::Cursor::Available(point_at(10.0));
+        assert_eq!(
+            super::mouse_interaction(&p, &state, bounds(), cursor),
+            mouse::Interaction::Grabbing,
+        );
+    }
+}
+
 /// カーソル形状は意味の予告(正典 §5.5)。**触れそうな物には必ず予告を出す**
 /// (Q0「触れそうで触れない物は不合格」の逆写像): 端=`ResizingHorizontally` /
-/// 本体 hover=`Grab` / ドラッグ中=`Grabbing` / ロック行=`NotAllowed`。
+/// 本体 hover=`Grab` / ドラッグ中=`Grabbing` / ロック行=`NotAllowed` /
+/// 空白面(ルーラー・playhead を含む scrub 対象)=`Crosshair`(正典 §5.5 の
+/// 5状態、実装済み調査 §4.4 のつけ得TOP5①)。
 pub(crate) fn mouse_interaction(
     pane: &TimelinePane,
     state: &Interaction,
@@ -201,6 +343,10 @@ pub(crate) fn mouse_interaction(
                 BarPart::EdgeIn | BarPart::EdgeOut => mouse::Interaction::ResizingHorizontally,
             }
         }
-        Hit::Blank => mouse::Interaction::default(),
+        // 正典 §5.5「空白面=Crosshair」: 空白部(ルーラー含む)は click-drag で
+        // scrub=playhead を動かせる操作面 — 反応ゼロの既定矢印のままにしない
+        // (Q0 の逆写像)。以前はここが `default()`(=`Interaction::None`、矢印)
+        // のままで、正典が定める5状態のうち唯一未配線だった。
+        Hit::Blank => mouse::Interaction::Crosshair,
     }
 }
