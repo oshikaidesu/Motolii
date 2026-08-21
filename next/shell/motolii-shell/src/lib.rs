@@ -22,6 +22,7 @@ use motolii_store::{
     LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, StoreView, Value,
 };
 
+pub mod clipboard;
 pub mod fixture;
 pub mod inspector_pane;
 pub mod screenshot;
@@ -120,6 +121,13 @@ pub struct Session {
     /// 再生位置(フレーム番号)。
     pub playhead: i64,
     pub selection: Option<LayerId>,
+    /// 複数 layer 選択(普通地図 消化第1波 U1: Select All / Deselect All が
+    /// 対象とする集合)。**`selection`(Inspector/Timeline が読む単一 focus)とは
+    /// 別の身分** — `Message::Select`/`AddLayer`/クリップボードの貼付/複製は
+    /// `select_single`(lib.rs)経由で両方を単一集合へ揃えるが、`timeline_pane`/
+    /// `inspector_pane` の行 UI 自体はまだこちらを読まない(multi-select の見た目
+    /// 表示は write-set 外、RETURN の finding 参照)。Document には乗らない。
+    pub selected_layers: Vec<LayerId>,
     /// Timeline property 行(キー行)の選択(第2波 T3・EXACT TARGET 3)。
     /// **Document には乗らない** — layer 選択と同じ Session の身分。
     pub selected_keys: Vec<timeline::KeySelector>,
@@ -134,6 +142,7 @@ impl Default for Session {
         Self {
             playhead: 0,
             selection: None,
+            selected_layers: Vec::new(),
             selected_keys: Vec::new(),
             key_anchor: None,
         }
@@ -298,6 +307,30 @@ pub enum Message {
     /// 「カメラへ戻る」— 1アクション(既定割当 Shift+F、仮)。観測カメラを破棄して
     /// `None`(カメラを通して見る)へ戻す。
     ResetToRenderCamera,
+
+    // ---- layer クリップボード(普通地図 消化第1波 U1、正典 §4) ----
+    // キーは全部仮の既定割当(Cmd+C/V/X/D/A・Cmd+Shift+A) — keymap 層は未実装なので
+    // ここではアクション名だけを固定する(`next/reference/timeline-grammar.md` 拘束6)。
+    /// `Session::selection` の layer をアプリ内クリップボードへ写す(`clipboard.rs`
+    /// doc 参照 — OS clipboard ではない)。**Document は触らない** — capture のみ
+    /// なので undo に乗らない。
+    CopyLayer,
+    /// クリップボードの layer を新規 layer として配置する。**元時刻のまま**
+    /// (playhead ペーストは今回作らない)。1 `apply_all` = 1 undo。配置後は
+    /// 増えた方を選ぶ。
+    PasteLayer,
+    /// Copy + 削除。**1 undo**(`Intent::RemoveLayer` 1つだけを apply する —
+    /// capture 自体は Document を触らないため)。locked な layer は理由つきで拒む
+    /// (M13、`Intent::RemoveLayer` の `check_not_locked` をそのまま使う)。
+    CutLayer,
+    /// クリップボードを経由しないその場複製(Cmd+D)。1 `apply_all` = 1 undo。
+    /// 複製後は増えた方を選ぶ(正典 §4)。
+    DuplicateLayer,
+    /// 見えている行を選択する(正典 §4「Cmd+A 正: 見えている行だけ」)。fold は
+    /// まだ shell に無いので、今は present な全 layer が「見えている」。
+    SelectAllLayers,
+    /// 選択を全解除する(正典: 空白クリックと同義のキーボード入口)。
+    DeselectAllLayers,
 }
 
 /// 描き上がった1フレーム。**Document の写しではなく、描画の成果物**。
@@ -501,6 +534,12 @@ pub struct Shell {
     /// `None` = 「カメラを通して見る」(既定 — レンダリングカメラの絵とバイト一致、
     /// `refresh_frame` が export 経路を一切汚さないことの直接の型的裏付け)。
     observation: Option<ObservationCamera>,
+
+    // ---- layer クリップボード(普通地図 消化第1波 U1) ----
+    /// アプリ内クリップボード(`clipboard.rs` doc 参照 — OS clipboard ではない)。
+    /// **表示専用の front 状態** — Document には乗らない、`Session` とも別の身分
+    /// (undo/redo に一切関わらない)。
+    clipboard: clipboard::Clipboard,
 }
 
 impl Shell {
@@ -540,6 +579,7 @@ impl Shell {
                 background_draft: None,
                 ui_scale_draft: None,
                 observation: None,
+                clipboard: clipboard::Clipboard::default(),
             },
             Task::none(),
         )
@@ -575,6 +615,7 @@ impl Shell {
             background_draft: None,
             ui_scale_draft: None,
             observation: None,
+            clipboard: clipboard::Clipboard::default(),
         };
         // `update()` を経由しないので、通常なら `update` の末尾が呼ぶ
         // `refresh_frame` をここで代わりに呼ぶ(Stage を空のまま起動しない、M17)。
@@ -623,7 +664,7 @@ impl Shell {
                 }
             }
             Message::ScrubTo(frame) => self.session.playhead = frame.max(0),
-            Message::Select(layer) => self.session.selection = Some(layer),
+            Message::Select(layer) => self.select_single(layer),
             Message::AdmitPaths(paths) => self.admit(paths),
             Message::DropReceived(path) => self.pending_drops.push(path),
             Message::FlushDrops => {
@@ -723,14 +764,125 @@ impl Shell {
                     },
                 ]);
                 match placed {
-                    Ok(()) => self.session.selection = Some(id),
+                    Ok(()) => self.select_single(id),
                     // 拒否は必ず出す。黙って消さない。
                     Err(error) => self.status = Some(format!("layer を置けない: {error}")),
                 }
             }
+            Message::CopyLayer => self.copy_layer(),
+            Message::PasteLayer => self.paste_layer(),
+            Message::CutLayer => self.cut_layer(),
+            Message::DuplicateLayer => self.duplicate_layer(),
+            Message::SelectAllLayers => self.select_all_layers(),
+            Message::DeselectAllLayers => self.deselect_all_layers(),
         }
         self.refresh_frame();
         task
+    }
+
+    /// 単一 layer を選ぶ(既存の `Session::selection` に加え、`selected_layers` も
+    /// 単一集合へ揃える — Select All(複数選択)から普通のクリックへ戻る時に
+    /// 古い複数選択が居座る事故を防ぐ)。
+    fn select_single(&mut self, layer: LayerId) {
+        self.session.selection = Some(layer);
+        self.session.selected_layers = vec![layer];
+    }
+
+    // ---- layer クリップボード(普通地図 消化第1波 U1、正典 §4) ----
+
+    /// Copy。**Document は触らない**(capture のみ)ので undo に一切乗らない。
+    fn copy_layer(&mut self) {
+        let Some(layer) = self.session.selection else {
+            self.status = Some("コピーする layer が選ばれていない".to_owned());
+            return;
+        };
+        match clipboard::LayerSnapshot::capture(&self.doc.view(), layer) {
+            Ok(snapshot) => self.clipboard.set(snapshot),
+            Err(error) => self.status = Some(format!("layer をコピーできない: {error}")),
+        }
+    }
+
+    /// Paste。**元時刻のまま**(playhead ペーストは今回作らない)。
+    /// `LayerSnapshot::instantiate` が組む intent 列を1回の `apply_all` で書くので
+    /// 1操作 = 1 undo。配置後は増えた方を選ぶ(正典 §4)。
+    fn paste_layer(&mut self) {
+        let Some(snapshot) = self.clipboard.get().cloned() else {
+            self.status = Some("クリップボードが空".to_owned());
+            return;
+        };
+        let new_id = LayerId(self.next_layer_id());
+        match self.doc.apply_all(snapshot.instantiate(new_id)) {
+            Ok(()) => self.select_single(new_id),
+            Err(error) => self.status = Some(format!("layer を貼り付けられない: {error}")),
+        }
+    }
+
+    /// Cut = Copy + 削除。**削除は `Intent::RemoveLayer` 1回だけ**(capture 自体は
+    /// Document を触らないので、apply 1回 = 1 undo)。locked な layer は
+    /// `Intent::RemoveLayer` の `check_not_locked` が理由つきで拒む(M13) —
+    /// 拒否された時はクリップボードも書き換えない(コピーだけ成立してしまう
+    /// 中途半端を作らない)。
+    fn cut_layer(&mut self) {
+        let Some(layer) = self.session.selection else {
+            self.status = Some("切り取る layer が選ばれていない".to_owned());
+            return;
+        };
+        let snapshot = match clipboard::LayerSnapshot::capture(&self.doc.view(), layer) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.status = Some(format!("layer をコピーできない: {error}"));
+                return;
+            }
+        };
+        match self.doc.apply(Intent::RemoveLayer(layer)) {
+            Ok(()) => {
+                self.clipboard.set(snapshot);
+                if self.session.selection == Some(layer) {
+                    self.session.selection = None;
+                }
+                self.session.selected_layers.retain(|&id| id != layer);
+            }
+            Err(error) => self.status = Some(format!("layer を切り取れない: {error}")),
+        }
+    }
+
+    /// Duplicate(Cmd+D)。**クリップボードを経由しないその場複製** — capture と
+    /// instantiate は clipboard.rs の同じ形を使い回すが、`self.clipboard` へは
+    /// 一切触らない(Copy の中身を上書きしない)。1 `apply_all` = 1 undo。
+    /// 複製後は増えた方を選ぶ(正典 §4)。
+    fn duplicate_layer(&mut self) {
+        let Some(layer) = self.session.selection else {
+            self.status = Some("複製する layer が選ばれていない".to_owned());
+            return;
+        };
+        let snapshot = match clipboard::LayerSnapshot::capture(&self.doc.view(), layer) {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                self.status = Some(format!("layer を複製できない: {error}"));
+                return;
+            }
+        };
+        let new_id = LayerId(self.next_layer_id());
+        match self.doc.apply_all(snapshot.instantiate(new_id)) {
+            Ok(()) => self.select_single(new_id),
+            Err(error) => self.status = Some(format!("layer を複製できない: {error}")),
+        }
+    }
+
+    /// Select All(正典 §4「Cmd+A 正: 見えている行だけ」)。fold はまだ shell に
+    /// 無いので、今は present な全 layer が「見えている」全部(`clipboard::select_all`
+    /// doc 参照)。複数選択に入るので単一 focus(`selection`)は持たない。
+    fn select_all_layers(&mut self) {
+        let visible = self.doc.view().layers();
+        self.session.selected_layers = clipboard::select_all(&visible);
+        self.session.selection = None;
+    }
+
+    /// Deselect All(正典: 空白クリックと同義のキーボード入口)。単一 focus・
+    /// 複数選択の両方を解除する。
+    fn deselect_all_layers(&mut self) {
+        self.session.selection = None;
+        self.session.selected_layers.clear();
     }
 
     /// 落ちてきた path を素材として受ける。
@@ -979,7 +1131,7 @@ impl Shell {
             return;
         }
         if matches!(part, timeline::BarPart::Body) {
-            self.session.selection = Some(layer);
+            self.select_single(layer);
         }
         self.timeline_drag = Some(TimelineDragState {
             layer,
