@@ -91,8 +91,9 @@ use motolii_shell::{Message, Shell};
 
 /// `ident_band_drive.rs`/`q0_fence.rs` と同じ手口(`Simulator` に `find_all` が
 /// 無いので `find` を「まだ拾っていない候補」で尽きるまで繰り返す)。共有
-/// ヘルパー化は発注範囲の外(既存2ファイルも複製している)。
-fn collect_targets(element: iced::Element<'_, Message>) -> Vec<Target> {
+/// ヘルパー化は発注範囲の外(既存2ファイルも複製している)。**`inspector_pane::
+/// view` を直叩きする**ので `Message` は pane ローカル(裁定160 切片8)。
+fn collect_targets(element: iced::Element<'_, inspector_pane::Message>) -> Vec<Target> {
     let mut ui = iced_test::simulator(element);
     let mut found: Vec<Target> = Vec::new();
     loop {

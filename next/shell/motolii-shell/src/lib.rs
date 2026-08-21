@@ -19,12 +19,11 @@ use iced::{Element, Length, Task};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
     Composition, DisplayRevision, Document, Intent, KeyframeTrack, LayerAttrsPatch, LayerId,
-    LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, StoreView, Value,
+    LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, StoreView,
 };
 
 pub mod clipboard;
 pub mod fixture;
-pub mod inspector_pane;
 pub mod screenshot;
 pub mod stage;
 
@@ -34,11 +33,26 @@ pub mod stage;
 /// 切片7)で `motolii-shell-state` crate へさらに抽出した — `motolii-timeline-pane`
 /// (pane crate)は `motolii-shell` へ依存できない(循環になる)ので、
 /// `Session`/`KeySelector` を両者の共通の親として leaf crate 化する必要が
-/// あった。`pub use timeline as timeline_pane;`(旧)と同じ「型 alias で
-/// 外部参照を壊さない」手口 — `crate::Session`/`motolii_shell::Session` を
-/// 読む既存参照(`inspector_pane.rs`・`tests/suite/*.rs`)は無改修で済む。
+/// あった。**`motolii-inspector-pane`(切片8、下記)も同じ理由でこの leaf
+/// crate へ依存する** — `inspector_pane::project` は `&Session` を直接取る
+/// (切片7以前は `Session` が root に残っていたため、切片8は一時的に
+/// `selection`/`playhead` の2引数へ分解する回避策を取っていたが、切片7の
+/// leaf crate 化でこの回避策は不要になったので、この rebase で `&Session` を
+/// 直接取る形へ戻した)。`pub use timeline as timeline_pane;`(旧)と同じ
+/// 「型 alias で外部参照を壊さない」手口 — `crate::Session`/
+/// `motolii_shell::Session` を読む既存参照(`tests/suite/*.rs`)は無改修で済む。
 pub use motolii_shell_state as state;
 pub use state::Session;
+
+/// `inspector_pane` は裁定160 切片8 で `motolii-inspector-pane` crate へ抽出
+/// 済み(pane split survey §6 切片8)。`pub use timeline as timeline_pane;` と
+/// 同じ「型 alias で外部参照を壊さない」手口 — 既存の `crate::inspector_pane::X`・
+/// `motolii_shell::inspector_pane::X` 参照(`screenshot.rs`・`tests/suite/*.rs`)
+/// は無改修のまま通る。書き口(`commit_inspector_field`/`commit_inspector_name`/
+/// `start_field_drag`/`continue_field_drag`/`finish_field_drag`/
+/// `cancel_field_interaction`)もこの crate 側へ移設済み — `Shell` 側は
+/// それらを呼ぶ薄い glue メソッドだけを持つ(下記参照)。
+pub use motolii_inspector_pane as inspector_pane;
 
 /// `tokens` は裁定160 切片1 で `motolii-tokens-rs` crate へ抽出済み(pane split
 /// survey §2.2/§6)。純粋な再配置 — `tokens.rs` 自体の値・シグネチャは無改変。
@@ -72,7 +86,7 @@ pub use motolii_settings_pane as settings_pane;
 /// 依存する側なので、新しい循環にはならない(root → pane の一方向)。
 pub(crate) use motolii_settings_pane::chrome;
 
-use chrome::{button_style, parse_number};
+use chrome::button_style;
 use inspector_pane::{FieldDraft, TransformField};
 use settings_pane::BackgroundFieldDraft;
 
@@ -173,20 +187,12 @@ pub enum Message {
     /// (裁定117)— release は [`tokens::watch_subscription`] が何も発行しない。
     TokensFileChanged,
 
-    // ---- Inspector pane(第1波) ----
-    /// Transform 行の値セルへの打鍵。**まだ Document を書かない** — 下書きを
-    /// 更新するだけ(`Shell::inspector_field_draft`、`pending_drops` と同じ形)。
-    InspectorFieldInput(TransformField, String),
-    /// Transform 行の Enter — **ここで初めて `Intent::SetTrack` を1回出す**
-    /// (1 gesture = 1 undo)。
-    InspectorFieldSubmit(TransformField),
-    /// Attrs の Name 欄への打鍵。同上、まだ書かない。
-    InspectorNameInput(String),
-    /// Attrs の Name 欄の Enter — `Intent::SetAttrs` を1回出す。
-    InspectorNameSubmit,
-    /// Attrs の Hidden トグル。下書きを経由せず即 `Intent::SetAttrs` を1回出す
-    /// (header の Undo/Redo ボタンと同じ即時操作の形)。
-    InspectorToggleHidden,
+    // ---- Inspector pane(第1波 + drag-to-scrub、裁定160 切片8で pane ローカル
+    // Message へ集約) ----
+    /// `motolii_inspector_pane::Message` を1本で畳む(iced 標準型 — 子 pane の
+    /// `Message` を親が wrap する形、切片9の `Settings(settings_pane::Message)`
+    /// と同じ)。腕ごとの doc は `inspector_pane::Message` 側を参照。
+    Inspector(inspector_pane::Message),
 
     // ---- Timeline pane(裁定160 切片7で `motolii-timeline-pane` crate へ
     // 抽出、pane split survey §6 切片7) ----
@@ -222,19 +228,8 @@ pub enum Message {
     /// clip の In/Out へ — トリムではない(playhead だけが動く)。
     JumpClipEdge(timeline::nav::ClipEdge),
 
-    // ---- Inspector の drag-to-scrub ----
-    /// 値セルの press。**まだ Document を書かない** — click か drag かは
-    /// release まで未確定(`Shell::inspector_drag`)。
-    InspectorValuePressed(TransformField),
-    /// window 全体の cursor 移動(`subscription()` の `inspector_pointer_event`
-    /// 経由)。`mouse_area` 自身の bounds を出た cursor は iced 0.14 に pointer
-    /// capture が無く追えない(実測)ので、drag 中の主経路はここ。drag が
-    /// armed/dragging でなければ即 no-op。
-    InspectorPointerMoved(iced::Point),
-    /// 左クリック release(同じく window 全体から)。drag が実際に動いていれば
-    /// 直前の move が確定値(1 gesture = 1 undo)、動いていなければ click として
-    /// type 編集へ切り替える。
-    InspectorPointerReleased,
+    // ---- cross-cutting(timeline drag と inspector drag 両方が読む、pane split
+    // survey §1.3「core 残留が妥当」) ----
     /// Shift の押下状態。`CursorMoved` 自体は modifiers を運ばないので
     /// `ModifiersChanged` を別途追って持つ(drag 中の1/10微調整に使う)。
     KeyboardModifiersChanged(iced::keyboard::Modifiers),
@@ -346,33 +341,6 @@ struct DisplaySource {
     observation_rgba: Option<Vec<u8>>,
 }
 
-/// Inspector 値セルの drag-to-scrub、進行中の一時状態。**Document ではない**
-/// (`FieldDraft` と同じ「pane が持つ transient」の形)。値そのものの置き場は
-/// `Document` の transient overlay(`Document::set_transient`)— ここは overlay
-/// の宛先と、click/drag 判定・確定時の Intent 組み立てに要る最小限だけを持つ。
-struct FieldDragState {
-    field: TransformField,
-    layer: LayerId,
-    /// press 時点の表示単位の値(`inspector_pane::drag_origin` が投影から読む)。
-    /// 確定 Intent・Esc(overlay を外すだけで使わない)双方が参照する起点。
-    start_value: f64,
-    /// Vec2 系(Position/Scale/Anchor)の動かさない方の成分。scalar 系では未使用。
-    current_vec2: [f64; 2],
-    /// 最初の `InspectorPointerMoved` で確定する基準 x(window 座標)。`None` の
-    /// 間は click か drag かまだ未確定 — 確定前に値を動かすと press 直後の
-    /// sub-pixel な揺れで値が動いてしまう。
-    origin_x: Option<f32>,
-    /// 少なくとも1回 `set_transient` を呼んだか。release 時の click/drag 判定と、
-    /// Esc で overlay を外す必要があるかどうかの両方に使う(`applied` に代わる —
-    /// 履歴には一切触れないので「squash」の意味は無くなった)。
-    moved: bool,
-    /// 直近の `set_transient` に渡した値。release の確定 Intent はこれをそのまま
-    /// 1回 `apply` する — pointer の最終座標を release 時に持っていない
-    /// (`InspectorPointerReleased` は位置を運ばない)ので、最後に計算した値を
-    /// ここへ持ち回す。`moved` が `false` の間は未使用。
-    last_value: Option<Value>,
-}
-
 pub struct Shell {
     doc: Document,
     session: Session,
@@ -385,14 +353,17 @@ pub struct Shell {
     /// デザイン値(裁定117)。全 pane がここ経由で寸法・色を読む — raw 値の直書き禁止。
     tokens: Tokens,
     /// Inspector の Transform 行、編集中の下書き。**Document ではない** —
-    /// `Message::InspectorFieldSubmit` が来るまで store に触らない
-    /// (`pending_drops` と同じ「確定するまで front だけが持つ一時状態」の形)。
+    /// `Message::Inspector(inspector_pane::Message::FieldSubmit)` が来るまで
+    /// store に触らない(`pending_drops` と同じ「確定するまで front だけが
+    /// 持つ一時状態」の形)。
     inspector_field_draft: Option<FieldDraft>,
     /// Inspector の Name 欄、編集中の下書き。同上。
     inspector_name_draft: Option<String>,
     /// Inspector 値セルの drag-to-scrub。**Document ではない** — 同上
-    /// (`FieldDragState` doc comment 参照)。
-    inspector_drag: Option<FieldDragState>,
+    /// (`inspector_pane::FieldDragState` doc comment 参照。型定義は裁定160
+    /// 切片8で `motolii-inspector-pane` crate へ移設済み、置き場(この
+    /// フィールド自身)は移設していない)。
+    inspector_drag: Option<inspector_pane::FieldDragState>,
     /// 直近の Shift 押下状態。`CursorMoved` は modifiers を運ばないので
     /// `ModifiersChanged` から別途追う(drag の1/10微調整に使う)。
     keyboard_modifiers: iced::keyboard::Modifiers,
@@ -567,15 +538,9 @@ impl Shell {
                 self.tokens = Tokens::load();
                 metrics::record_tokens_reload();
             }
-            Message::InspectorFieldInput(field, text) => {
-                self.inspector_field_draft = Some(FieldDraft { field, text });
+            Message::Inspector(msg) => {
+                task = self.update_inspector(msg);
             }
-            Message::InspectorFieldSubmit(field) => self.commit_inspector_field(field),
-            Message::InspectorNameInput(text) => {
-                self.inspector_name_draft = Some(text);
-            }
-            Message::InspectorNameSubmit => self.commit_inspector_name(),
-            Message::InspectorToggleHidden => self.toggle_inspector_hidden(),
             // pane split survey §3.2 exception 1/裁定160 切片7: `Select`/
             // `ScrubTo` は本来 core 腕、`ToggleMute`/`ToggleSolo`/`ToggleLock`
             // は `toggle_layer_hidden` が Inspector とも共有する Shell 側の
@@ -607,11 +572,6 @@ impl Shell {
                 self.jump_meaning_point(direction, layer_only);
             }
             Message::JumpClipEdge(edge) => self.jump_clip_edge(edge),
-            Message::InspectorValuePressed(field) => self.start_field_drag(field),
-            Message::InspectorPointerMoved(point) => self.continue_field_drag(point),
-            Message::InspectorPointerReleased => {
-                task = self.finish_field_drag();
-            }
             Message::KeyboardModifiersChanged(modifiers) => self.keyboard_modifiers = modifiers,
             // Esc は Timeline ドラッグを優先してキャンセルする(clip → key の順、
             // どちらも掴んでいなければ Inspector 側(drag/typing 下書き)を試す
@@ -838,75 +798,82 @@ impl Shell {
         RationalTime::try_from_frame(self.session.playhead, composition.fps).ok()
     }
 
-    /// Inspector の Transform 行 — 下書きを確定して1回の `Intent::SetTrack` を出す
-    /// (1 gesture = 1 undo)。数値として読めない・選択が無い等は**黙って消さず**
-    /// status 帯へ理由を出す(M13)。
-    fn commit_inspector_field(&mut self, field: TransformField) {
-        let Some(draft) = self.inspector_field_draft.take() else {
-            return;
-        };
-        if draft.field != field {
-            // 別の field の submit(起こらないはずだが、安全側で下書きを戻す)。
-            self.inspector_field_draft = Some(draft);
-            return;
-        }
-        let Some(layer) = self.session.selection else {
-            return;
-        };
-        let Some(input) = parse_number(&draft.text) else {
-            self.status = Some(format!("数値として読めない: {}", draft.text));
-            return;
-        };
-        let Ok(property) = inspector_pane::property_id(field) else {
-            self.status = Some("property を作れない".to_owned());
-            return;
-        };
-
-        // 編集不可(animated = 2キー以上)の field は、UI が control を出していない
-        // はずだが、**書き口自体でも二重に拒む**(M13/Q0 — chrome と書き口の食い違いを
-        // 構造的に作らない)。
-        let store = self.doc.view();
-        if let Ok(Some(track)) = store.track(layer, &property) {
-            if track.keys().len() > 1 {
-                self.status = Some("animated な property はこの第1波では編集できない".to_owned());
-                return;
+    /// [`Message::Inspector`] の唯一の分配口。腕ごとの意味は
+    /// `inspector_pane::Message` 側の doc を参照。書き込み本体は
+    /// `motolii-inspector-pane` crate 側の自由関数([`inspector_pane::
+    /// commit_inspector_field`] 等)が持ち、ここは `self.doc`/`self.session`/
+    /// 下書きフィールドをそのまま貸す glue だけ(裁定160 切片8、
+    /// `update_settings` と同じ形)。
+    fn update_inspector(&mut self, message: inspector_pane::Message) -> Task<Message> {
+        match message {
+            inspector_pane::Message::FieldInput(field, text) => {
+                self.inspector_field_draft = Some(FieldDraft { field, text });
+                Task::none()
             }
+            inspector_pane::Message::FieldSubmit(field) => {
+                self.commit_inspector_field(field);
+                Task::none()
+            }
+            inspector_pane::Message::NameInput(text) => {
+                self.inspector_name_draft = Some(text);
+                Task::none()
+            }
+            inspector_pane::Message::NameSubmit => {
+                self.commit_inspector_name();
+                Task::none()
+            }
+            inspector_pane::Message::ToggleHidden => {
+                self.toggle_inspector_hidden();
+                Task::none()
+            }
+            inspector_pane::Message::ValuePressed(field) => {
+                self.start_field_drag(field);
+                Task::none()
+            }
+            inspector_pane::Message::PointerMoved(point) => {
+                self.continue_field_drag(point);
+                Task::none()
+            }
+            inspector_pane::Message::PointerReleased => self.finish_field_drag(),
         }
+    }
 
+    /// Inspector の Transform 行 — 下書きを確定して1回の `Intent::SetTrack` を出す
+    /// (1 gesture = 1 undo)。書き込み本体は [`inspector_pane::
+    /// commit_inspector_field`](自由関数、`&mut self.doc`/`&mut self.
+    /// inspector_field_draft`/`self.session.selection` をそのまま貸す)——
+    /// ここは `Err` を status 帯へ渡す glue だけ(M13)。
+    fn commit_inspector_field(&mut self, field: TransformField) {
         let t = self.time_at_playhead().unwrap_or(RationalTime::ZERO);
-        let current_vec2 = match store.value_at(layer, &property, t) {
-            Ok(Some(motolii_store::Value::Vec2(v))) => v,
-            _ => inspector_pane::default_vec2(field),
-        };
-        let value = inspector_pane::next_value(field, input, current_vec2);
-        let track = inspector_pane::single_hold_track(value);
-        if let Err(error) = self.doc.apply(Intent::SetTrack {
-            layer,
-            property,
-            track,
-        }) {
-            self.status = Some(format!("値を書けない: {error}"));
+        if let Err(error) = inspector_pane::commit_inspector_field(
+            &mut self.doc,
+            &mut self.inspector_field_draft,
+            self.session.selection,
+            t,
+            field,
+        ) {
+            self.status = Some(error);
         }
     }
 
     /// Attrs の Name 欄 — 下書きを確定して1回の `Intent::SetAttrs` を出す。
+    /// [`commit_inspector_field`](上記)と同じ glue の形。
     fn commit_inspector_name(&mut self) {
-        let Some(text) = self.inspector_name_draft.take() else {
-            return;
-        };
-        let Some(layer) = self.session.selection else {
-            return;
-        };
-        let patch = LayerAttrsPatch {
-            name: Some(text),
-            ..Default::default()
-        };
-        if let Err(error) = self.doc.apply(Intent::SetAttrs { layer, patch }) {
-            self.status = Some(format!("名前を書けない: {error}"));
+        if let Err(error) = inspector_pane::commit_inspector_name(
+            &mut self.doc,
+            &mut self.inspector_name_draft,
+            self.session.selection,
+        ) {
+            self.status = Some(error);
         }
     }
 
     /// Attrs の Hidden トグル — 即 `Intent::SetAttrs` を1回出す(下書きを経由しない)。
+    /// **`motolii-inspector-pane` crate へは移設していない**: 対象を
+    /// `Session::selection` から引くだけで、書き込み自体は `LaneBarToggleMute`
+    /// とも共有する cross-cutting な [`toggle_layer_hidden`] へ委譲する —
+    /// Inspector 固有の write ロジックを1行も持たないため(RETURN の
+    /// write-set 外 finding 参照)。
     fn toggle_inspector_hidden(&mut self) {
         let Some(layer) = self.session.selection else {
             return;
@@ -926,8 +893,8 @@ impl Shell {
     // (`motolii_store::document::check`)。`locked` 自身は「解除/再ロックだけ
     // 常に通す」規則があるので `toggle_layer_lock` だけは常に成功する。
 
-    /// M glyph。`LayerAttrs.hidden` をトグルする(`InspectorToggleHidden` と
-    /// 同じ書き口 — 対象の layer が違うだけ)。
+    /// M glyph。`LayerAttrs.hidden` をトグルする(`inspector_pane::Message::
+    /// ToggleHidden` と同じ書き口 — 対象の layer が違うだけ)。
     fn toggle_layer_hidden(&mut self, layer: LayerId) {
         let current = self
             .doc
@@ -1172,117 +1139,60 @@ impl Shell {
     }
 
     // ---- Inspector の drag-to-scrub ----
+    //
+    // 5関数とも書き込み本体は `motolii-inspector-pane` crate 側の自由関数
+    // (裁定160 切片8)——ここは `self.doc`/`self.inspector_drag`/
+    // `self.session`/`self.keyboard_modifiers` をそのまま貸す glue だけ。
+    // `enter_field_editing` だけは focus task(`iced::widget::operation::
+    // focus`)の構築自体が Document を読み書きしない UI 純粋な orchestration
+    // なので、crate を跨いだ `Task` の型変換を増やさないよう root 側に残した
+    // (`inspector_pane` crate doc 参照)。
 
     /// 値セルの press — click か drag かはまだ未確定
-    /// (`FieldDragState::origin_x` が `None` のまま)。選択なし・animated(編集
-    /// 不可)・対応する field が投影に無い、のいずれも黙って無視
-    /// (`mouse_area` の `on_press` は常にこの Message を出すが、UI がそもそも
-    /// animated field には draggable なセルを出していない — `commit_inspector_field`
-    /// と同じ二重の柵)。
+    /// (`inspector_pane::FieldDragState::origin_x` が `None` のまま)。選択
+    /// なし・animated(編集不可)・対応する field が投影に無い、のいずれも
+    /// 黙って無視。
     fn start_field_drag(&mut self, field: TransformField) {
-        if self.inspector_drag.is_some() {
-            return; // 既に別の drag が進行中 — 多重起動しない
-        }
-        let Some(layer) = self.session.selection else {
-            return;
-        };
-        let Some(selection) = self.inspector_selection() else {
-            return;
-        };
-        let Some((start_value, current_vec2)) = inspector_pane::drag_origin(&selection, field)
-        else {
-            return;
-        };
-        self.inspector_drag = Some(FieldDragState {
+        let projection = self.inspector_selection();
+        inspector_pane::start_field_drag(
+            &mut self.inspector_drag,
+            self.session.selection,
+            projection.as_ref(),
             field,
-            layer,
-            start_value,
-            current_vec2,
-            origin_x: None,
-            moved: false,
-            last_value: None,
-        });
+        );
     }
 
     /// window 全体の cursor 移動。drag が armed/dragging でなければ即 no-op。
-    /// **1px = 感度表の刻み**(`inspector_pane::dragged_value`)。press 直後の
-    /// 最初の move は基準点を確定するだけで値は動かさない(そうしないと press
-    /// した瞬間の sub-pixel な揺れで値が動く)。
-    ///
-    /// **transient overlay(`Document::set_transient`)を毎 move 呼ぶだけ** —
-    /// `edit timeline` には一切触れないので、undo/redo の意味論(`revision()`)は
-    /// drag 中ずっと不変。Stage・Inspector セルの「ドラッグ中の即応」は
-    /// `refresh_frame` が `display_revision()`(履歴 + overlay 世代)を見て
-    /// 再描画することで出る。
+    /// **1px = 感度表の刻み**(`inspector_pane::dragged_value`)。
     fn continue_field_drag(&mut self, point: iced::Point) {
-        let Some(drag) = self.inspector_drag.as_mut() else {
-            return;
-        };
-        let Some(origin_x) = drag.origin_x else {
-            drag.origin_x = Some(point.x);
-            return;
-        };
-
-        let delta_px = point.x - origin_x;
-        if delta_px == 0.0 && !drag.moved {
-            return; // まだ実質的に動いていない — click 候補のまま据え置く
-        }
-
-        let field = drag.field;
-        let layer = drag.layer;
-        let start_value = drag.start_value;
-        let current_vec2 = drag.current_vec2;
         let fine = self.keyboard_modifiers.shift();
-
-        let Ok(property) = inspector_pane::property_id(field) else {
-            return;
-        };
-        let new_display = inspector_pane::dragged_value(field, start_value, delta_px, fine);
-        let value = inspector_pane::next_value(field, new_display, current_vec2);
-
-        self.doc.set_transient(layer, property, value.clone());
-        if let Some(drag) = self.inspector_drag.as_mut() {
-            drag.moved = true;
-            drag.last_value = Some(value);
-        }
+        inspector_pane::continue_field_drag(&mut self.doc, &mut self.inspector_drag, point, fine);
     }
 
     /// 左クリック release(window 全体から — `mouse_area` 自身の `on_release` は
     /// bounds を出た drag を捉えられないので使わない)。**drag が実際に動いて
     /// いたら確定**: 最後の transient 値そのものを1回の本編集 `Intent` として
     /// `apply` してから `clear_transient`(1 gesture = 1 undo、overlay を残さない)。
-    /// 動いていなければ click として type 編集へ切り替える。
+    /// 動いていなければ click として type 編集へ切り替える
+    /// (`inspector_pane::finish_field_drag` が `Ok(Some(field))` で知らせる)。
     fn finish_field_drag(&mut self) -> Task<Message> {
-        let Some(drag) = self.inspector_drag.take() else {
-            return Task::none();
-        };
-        if !drag.moved {
-            return self.enter_field_editing(drag.field);
-        }
-        let Ok(property) = inspector_pane::property_id(drag.field) else {
-            // 起こらないはず(`moved` は property_id が通った move でしか立たない)
-            // だが、安全側で overlay だけは残さず抜ける実害は無い(次の press で
-            // 上書きされる)。
-            return Task::none();
-        };
-        if let Some(value) = drag.last_value {
-            let track = inspector_pane::single_hold_track(value);
-            if let Err(error) = self.doc.apply(Intent::SetTrack {
-                layer: drag.layer,
-                property: property.clone(),
-                track,
-            }) {
-                self.status = Some(format!("値を書けない: {error}"));
+        match inspector_pane::finish_field_drag(&mut self.doc, &mut self.inspector_drag) {
+            Ok(Some(field)) => self.enter_field_editing(field),
+            Ok(None) => Task::none(),
+            Err(error) => {
+                self.status = Some(error);
+                Task::none()
             }
         }
-        self.doc.clear_transient(drag.layer, &property);
-        Task::none()
     }
 
     /// click(ドラッグせず release)→ type 編集。下書きを立て、text_input へ
     /// フォーカスを戻す(値セルは編集していない間は `mouse_area` + 静止
     /// `text` なので、click 直後にはまだ text_input が木に無く自動フォーカス
-    /// されない — 明示的な focus task が要る)。
+    /// されない — 明示的な focus task が要る)。**focus task の構築自体は
+    /// Document を触らない**ので、値の計算(`inspector_pane::drag_origin`/
+    /// `format_number`/`field_decimals`)以外はここへ移設していない
+    /// (`inspector_pane` crate doc 参照)。
     fn enter_field_editing(&mut self, field: TransformField) -> Task<Message> {
         let Some(selection) = self.inspector_selection() else {
             return Task::none();
@@ -1300,21 +1210,17 @@ impl Shell {
     /// Esc — 進行中の drag があれば復元、無ければ typing 下書き(値セル/名前欄)
     /// を破棄する(hint 行「Esc to cancel」を両方について正直にする)。
     ///
-    /// drag の復元は **`clear_transient` だけ**でよい — overlay は edit timeline に
-    /// 一切触れていないので、undo/redo 履歴は最初から無傷(旧実装が抱えていた
-    /// 「同じ値で1回上書きしてから undo」という無害化ワークアラウンドは不要になった
-    /// — `Document` に「squash」API が無いことが理由で存在した迂回であり、transient
-    /// overlay 自体が squash を要らなくする)。
+    /// drag/field_draft の分岐は [`inspector_pane::cancel_field_interaction`]
+    /// (自由関数)——`true` を返したらここで終わる(元実装の早期 return を
+    /// 保つ)。名前欄・Settings 下書きの破棄は Inspector pane の write-set 外
+    /// (`settings_pane` の下書きも同じ Esc で破棄する、hint 文言との整合)
+    /// なのでここに残した。
     fn cancel_inspector_interaction(&mut self) {
-        if let Some(drag) = self.inspector_drag.take() {
-            if drag.moved {
-                if let Ok(property) = inspector_pane::property_id(drag.field) {
-                    self.doc.clear_transient(drag.layer, &property);
-                }
-            }
-            return;
-        }
-        if self.inspector_field_draft.take().is_some() {
+        if inspector_pane::cancel_field_interaction(
+            &mut self.doc,
+            &mut self.inspector_drag,
+            &mut self.inspector_field_draft,
+        ) {
             return;
         }
         self.inspector_name_draft = None;
@@ -1546,7 +1452,7 @@ impl Shell {
         let colors = self.tokens.colors;
         let store = self.doc.view();
         let timeline = self.build_timeline_pane();
-        // Inspector は canvas を使わない標準 widget 構成(inspector_pane.rs 冒頭の
+        // Inspector は canvas を使わない標準 widget 構成(inspector_pane crate 冒頭の
         // doc comment)なので、投影自体が `Element<'static, _>` を返す — Stage の
         // `self.frame` を借りる `stage_pane` と同じ `row!` に同居できる(共変性)。
         let inspector_selection = inspector_pane::project(&store, &self.session)
@@ -1558,7 +1464,8 @@ impl Shell {
             self.inspector_name_draft.as_deref(),
             dims,
             colors,
-        );
+        )
+        .map(Message::Inspector);
 
         // Settings パネル(タスク#18)。**表示だけの分岐** — 開いていなければ
         // 木に一切現れない(Q0: 効かない chrome を並べない、閉じている間は
@@ -1903,10 +1810,10 @@ fn inspector_pointer_event(
 ) -> Option<Message> {
     match event {
         iced::Event::Mouse(iced::mouse::Event::CursorMoved { position }) => {
-            Some(Message::InspectorPointerMoved(position))
+            Some(Message::Inspector(inspector_pane::Message::PointerMoved(position)))
         }
         iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)) => {
-            Some(Message::InspectorPointerReleased)
+            Some(Message::Inspector(inspector_pane::Message::PointerReleased))
         }
         iced::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(modifiers)) => {
             Some(Message::KeyboardModifiersChanged(modifiers))
