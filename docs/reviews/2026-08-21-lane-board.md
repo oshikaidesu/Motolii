@@ -10,7 +10,6 @@
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
 | **B3: Browser 絵+view 配線** | 実装 | worktree(発注時に追記) | カード grid(骨格まで — サムネは B5)+Shell::view 配線+開閉トグル+B1 記帳の端到端。map 980 完全消化。PNG/atlas 変化は理由つき追随。write-set= browser-pane+shell |
-| **H1: 親変換合成(store)** | 実装 | worktree(発注時に追記) | 裁定173 — resolve へ親合成挿入(単一再帰・メモ化=旧世界 spatial_resolve 移植)+`LayerSource::Group` marker。数値証明 oracle。write-set= store+engine「描かない」腕 |
 
 ## 完了・main 着地済み(実装)
 
@@ -73,6 +72,7 @@
 | **η: 素材台帳移植(検収合格・merge `d5370a0e`)** | 裁定162 の核心が着地 — 旧 asset.rs 740行を store へ(fingerprint は移植済みを参照)。`Intent::AdmitAsset/RemoveAsset`(read-modify-write、`Composition:assets` component の JSON blob = markers/slots と同じ流儀)・`StoreView::assets()/asset()`。persist は汎用経路が無改修で運ぶ。dedup の赤→緑実証あり((a)(c) は赤未保存 — 実装同時書きの逸脱として記録)。store 21 スイート+workspace 全緑 |
 | **θ: browser-pane B0 骨格(検収合格・merge `8a4e7ffb`)** | 新 crate(`//! wraps:` マーカー・空 Message enum・空 view)+shell 埋め込み(`Message::Browser` 腕のみ・view 未配線)。**PNG SHA `ee217ba2…` 前後一致を supervisor 再実測**(pane 分割以来の正準ハッシュ)。shell suite 170 全緑。B1 は η(素材台帳)着地後 |
 | **M-menu: メニューバー基盤設計調査(回収・merge 済み)** | 保全= `2026-08-22-menubar-foundation-survey.md`。構造は map 分布から導出(AE 8トップレベルを Layer 語彙へ畳む・全項目に行 id+freq)・**アプリ内メニューバー推奨**(winit に NSMenu 統合なしの実測)・道具= iced の `overlay::menu` primitive が pub で流用可(wraps 層)、iced_aw は fork 互換未検証(GAP)。**S6 併存表の重要発見: New Project/Save As/Zoom In·Out/Paste Attributes/Find 等は現在入口ゼロ** — メニューだけ足すと S6 違反になるため、同切片で shortcut/直接操作の併設が義務。切片 MB-0(基盤 widget)→MB-1(File/Edit)→MB-2(Layer/View)→MB-3(右クリック基盤)。**MB-0 は TP 着地後**(shell write-set) |
+| **H1: 親変換合成(検収合格・merge `74da6c42`)— 「親が動くと子も動く」成立** | 裁定173 施工 — `StoreView::world_affine`(旧世界 spatial_resolve 移植・LookAt/Follow を落とし parent 1本へ単純化)+memo(3階層で計算4回の白箱証明)+循環は local 縮退の防衛ガードへ格下げ(書き込みガードが一次)。`LayerSource::Group` マーカー着地(members なし)。数値証明: 平行移動 (110,5)・回転スケール合成 (95,20) 手計算一致。engine は「描かない」腕合流のみ・compositor 無改修(H-survey 実測どおり)。red 本物(Group 未定義でコンパイル赤)→11/11 緑。**workspace 110 スイート 972 全緑**。残: H3(親を設定する UI — map 455-457/468-470/957) |
 | **MB-0: メニューバー基盤+Edit 束(検収合格・merge `2a145ddb`)** | **メニューバー初出現** — 逸脱採択: overlay::menu の Overlay は operate() を持たず simulator 不可視(実測)→ Settings パネル型(view-flag+通常 button)へ転回、dropdown 全項目が Target で見える。Edit=既存入口持ち8動詞のみ(S6 安全・shortcut 併記)。q0/atlas/tonmana 柵へ新状態を追加。**map 8行採用済= 消化132/1,551**。shell 211 緑 |
 | **MK2: mask 被覆代数(検収合格・merge `8fa92130`)** | 6 mode(Add/Subtract/Intersect/Lighten/Darken/Difference)+**mode 別単位元の設計**(AE 実機の「先頭 mask の mode で絵が変わる」に oracle 4本で一致)。serde 後方互換(mode 欠落=Add)。red 先行13本。**map 11行採用済= 消化124/1,551**。FINDING: r2 の負荷 flake 1件を新規観測(KNOWN へ supervisor 追記) |
 | **TP: transport 転写(検収合格・merge `b903eb73` — **朝の合否待ち**)** | ψ 主因1位根治 — slider tokens 化(2px トラック・方形つまみ・進捗強調なし= accent は playhead 専有)・counter ACCENT→text_primary+等幅。**実窓 before/after PNG で差分が transport 帯 31px 行に限定されることを画素証明**(evidence/tp-transport-transcription/)。mock へ transport 行追記(夜間導出案の注記つき)。tonmana fence 緑・shell 205 緑 |
