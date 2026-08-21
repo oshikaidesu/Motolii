@@ -1250,7 +1250,10 @@ fn transform_row(
 
     let content = row_widget![
         label,
-        row_widget(value_cells).spacing(dims.spacing_xs),
+        // 裁定168 施工: 値セル同士の gap は裁定167 下段(0.075×行高)へ —
+        // 違反(B)「960.000540.000」と読める密着の緩衝(値セル自体の幅
+        // 38px は変えない、[`value_cell`]/`inspector_pixel_fence.rs` 参照)。
+        row_widget(value_cells).spacing(sibling_gap_px(dims.inspector_row_height)),
         reserved_glyph(dims), // Key 列 — keyframe UI 未実装(Q0)。幅の予約だけ、空のまま。
     ]
     .spacing(dims.spacing_xs)
@@ -1298,8 +1301,9 @@ fn value_cell(
                         // `value_cell_height`(row-4 = 16px)を食い潰し、文字の描画領域が
                         // 16 - 2*5 = 6px まで押し潰される、実測: 修正前は text_input 内の
                         // paragraph 高が 6px)。**横だけ** [`value_cell_padding`] で戻す
-                        // (裁定139: セル幅38pxいっぱいに文字が縁へ接触しないよう最小段
-                        // トークン `spacing_xs` を左右に確保)。
+                        // (裁定139: セル幅38pxいっぱいに文字が縁へ接触しないよう内余白を
+                        // 確保 — 裁定168 施工でその横内余白の式を `spacing_xs` 固定から
+                        // `0.6em`(`single_row_horizontal_inset`)へ差し替えた)。
                         .padding(value_cell_padding(dims))
                         .align_x(iced::alignment::Horizontal::Center)
                         .style(move |_theme, status| value_input_style(dims, colors, status)),
@@ -1307,6 +1311,15 @@ fn value_cell(
                 .width(Length::Fixed(dims.inspector_value_width))
                 .height(Length::Fixed(value_cell_height(dims)))
                 .align_y(iced::alignment::Vertical::Center)
+                // 裁定168 施工(違反(B)の根治): セル幅38pxは変えない(グリッドの
+                // 形は不変)ので、桁数の多い値は依然としてこの箱より広く
+                // シェイプされ得る(実測: 例 "960.000" は自然幅38.83px。
+                // `text_input` は自前でスクロールするため通常はこの経路で
+                // はみ出さないが、padding が増えて内側が狭まる分の防波堤として
+                // 揃えて `clip(true)` を掛ける — 隣セルへの paint 越境を構造的に
+                // 断つ(padding/gap だけでは箱幅そのものは広がらないので、
+                // これが実際の「文字が隣へ滲む」ことへの根治点)。
+                .clip(true)
                 .into()
             } else {
                 // click せず(まだ)編集していない見た目 — drag-to-scrub の起点
@@ -1354,7 +1367,18 @@ fn draggable_value_cell(
                 radius: 0.0.into(),
             },
             ..container::Style::default()
-        }),
+        })
+        // 裁定168 施工(違反(B)の根治・実窓較正「960.000540.000」の再現点):
+        // 中の `text(..)` は明示 `.width()` を持たない(Shrink)ため、内容が
+        // 箱の名目幅(38px)より広ければ実際の描画は箱の外まで伸びる
+        // (`iced_core::widget::text::layout` は `layout::sized` で **layout上の
+        // サイズだけ**を箱の max へ丸め込むが、`draw()` は
+        // `paragraph.min_bounds()` という自然サイズを基準に文字を置くため、
+        // layout 上は重ならなくても paint は重なる — 実測 `debug_natural_
+        // text_width`/`value_cell_legibility.rs` 参照)。`clip(true)` で
+        // 隣接セルへの越境そのものを断つ — padding/gap の調整だけでは
+        // 箱幅を変えない以上この経路は塞がらない。
+        .clip(true),
     )
     .interaction(iced::mouse::Interaction::ResizingHorizontally)
     .on_press(Message::ValuePressed(field))
@@ -1368,21 +1392,34 @@ fn value_cell_height(dims: Dimensions) -> f32 {
     (dims.inspector_row_height - dims.spacing_s).max(1.0)
 }
 
-/// 値セル(`.prow .v`)の text_input 横内余白(裁定139)。**縦は0のまま** —
-/// 行高合わせの実測修正([`value_cell_height`] の doc 参照)。mock 自身の
-/// `.prow .v` は padding を持たない(flex center)ので実測値の直接転記では
-/// なく、grid gap の最小段トークン `spacing_xs`(mock `--sp1`=2px、cols/prow
-/// の X→Y→Z 間隔と同じ token)を左右に使う — セル幅38pxの縁へ数字グリフが
-/// 接触しない最小限の呼吸(セル幅自体は変えない、38px のまま)。
+/// 単行の横余白(裁定168): `0.6em`(`em` = その文字の size)の px 最近傍丸め。
+/// 値セル/名前欄はどちらも `dims.body_text` サイズの文字を持つので、`em` は
+/// `dims.body_text` を使う。
+fn single_row_horizontal_inset(text_size: f32) -> f32 {
+    (text_size * 0.6).round()
+}
+
+/// 値セル(`.prow .v`)の text_input 横内余白(裁定139・裁定168)。**縦は0の
+/// まま** — 行高合わせの実測修正([`value_cell_height`] の doc 参照)。旧実装は
+/// grid gap の最小段トークン `spacing_xs`(mock `--sp1`=2px)を転用していたが、
+/// 裁定168(「文字の余白」)は単行の横余白を `0.6em` と定めたので、そちらへ
+/// 差し替える(セル幅自体は変えない、38px のまま — 内側の呼吸だけが広がる)。
 fn value_cell_padding(dims: Dimensions) -> iced::Padding {
-    iced::Padding::from([0.0, dims.spacing_xs])
+    iced::Padding::from([0.0, single_row_horizontal_inset(dims.body_text)])
 }
 
 /// ident 帯の名前欄(`.ident b`)の横内余白。[`value_cell_padding`] と同じ
-/// 理由・同じトークンを使う(裁定139 は `value_cell`/`name_field` を並記して
-/// いる — 2箇所で別の値を発明しない)。
+/// 理由・同じ式を使う(裁定139 は `value_cell`/`name_field` を並記している —
+/// 2箇所で別の値を発明しない、裁定168 適用後もこの対称は保つ)。
 fn name_field_padding(dims: Dimensions) -> iced::Padding {
-    iced::Padding::from([0.0, dims.spacing_xs])
+    iced::Padding::from([0.0, single_row_horizontal_inset(dims.body_text)])
+}
+
+/// 兄弟要素間の gap(裁定167 の梯子下段: `0.075 × 行高`、px 最近傍丸め)。
+/// `motolii-timeline-pane::lane_bar::sibling_gap_px` と同型 — 別 crate なので
+/// 共有関数は置けない(式だけ揃える、値は pane ごとに token 経由で持つ)。
+fn sibling_gap_px(row_height: f32) -> f32 {
+    (row_height * 0.075).round()
 }
 
 fn boxed_value(
@@ -1406,6 +1443,9 @@ fn boxed_value(
         background: Some(iced::Background::Color(colors.surface_app)),
         ..container::Style::default()
     })
+    // 裁定168 施工(違反(B)の根治): `draggable_value_cell` と同じ理由 —
+    // absent(「—」)/animated 表示も同じ箱形を共有するので、越境の柵も揃える。
+    .clip(true)
     .into()
 }
 
@@ -1689,23 +1729,28 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // 裁定139: value_cell/name_field は縦0を維持したまま横だけ内余白を戻す
+    // 裁定139/裁定168: value_cell/name_field は縦0を維持したまま横だけ内余白
+    // (0.6em)を戻す
     // -----------------------------------------------------------------------
 
     /// **本命(red→green の柵)**: 旧実装は `.padding(0.0)` で縦横とも0だった
     /// (`git log` 参照 — このテストを旧コードに当てると
     /// `padding.left == 0.0`/`padding.right == 0.0` が真になり fail する)。
-    /// 縦は行高合わせのため0のまま、横だけ `spacing_xs`(mock `--sp1`)が
-    /// 入っていること。
+    /// 縦は行高合わせのため0のまま、横だけ 裁定168 の `0.6em`
+    /// (`dims.body_text * 0.6` の最近傍丸め)が入っていること。旧実装は
+    /// `spacing_xs`(mock `--sp1`=2px)を転用していたが、裁定168 施工で
+    /// この式へ差し替えた(既定 dims では 11*0.6=6.6→7.0px、旧値2pxより広い)。
     #[test]
     fn value_cell_padding_keeps_the_vertical_zero_and_restores_only_horizontal_inset() {
         let dims = Dimensions::default();
         let padding = value_cell_padding(dims);
+        let expected = single_row_horizontal_inset(dims.body_text);
         assert_eq!(padding.top, 0.0, "縦(上)は行高合わせのため0のはず");
         assert_eq!(padding.bottom, 0.0, "縦(下)は行高合わせのため0のはず");
-        assert_eq!(padding.left, dims.spacing_xs, "横(左)の内余白が戻っていない");
-        assert_eq!(padding.right, dims.spacing_xs, "横(右)の内余白が戻っていない");
+        assert_eq!(padding.left, expected, "横(左)の内余白が裁定168 の0.6emと違う");
+        assert_eq!(padding.right, expected, "横(右)の内余白が裁定168 の0.6emと違う");
         assert!(padding.left > 0.0, "横の内余白が0のまま(旧バグの再発)");
+        assert_eq!(expected, 7.0, "既定dims(body_text=11)での0.6em丸め値が想定と違う");
     }
 
     #[test]
@@ -1715,12 +1760,15 @@ mod tests {
     }
 
     /// 150%でも横内余白がスケールに追従すること(適用点は `Dimensions::scaled`
-    /// の1箇所だけ、という裁定117の不変量をここでも保つ)。
+    /// の1箇所だけ、という裁定117の不変量をここでも保つ)。**丸めは
+    /// スケール後の `body_text` に対して1回だけ行う** — 丸め前の値を先に
+    /// スケールしてから丸めるのと数値が一致するとは限らない(丸めの非線形性、
+    /// 既定 dims では 7.0*1.5=10.5 だが実際は round(16.5*0.6)=round(9.9)=10.0)。
     #[test]
     fn value_cell_padding_scales_with_ui_scale() {
         let dims = Dimensions::default().scaled(1.5);
         let padding = value_cell_padding(dims);
-        assert_eq!(padding.left, Dimensions::default().spacing_xs * 1.5);
+        assert_eq!(padding.left, single_row_horizontal_inset(dims.body_text));
     }
 
     // -----------------------------------------------------------------------
@@ -1930,5 +1978,71 @@ mod tests {
         assert_eq!(field_decimals(TransformField::AnchorX), 3);
         assert_eq!(field_decimals(TransformField::Rotation), 1);
         assert_eq!(field_decimals(TransformField::Opacity), 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // 裁定168 施工: 値セル間 gap(裁定167 下段)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn sibling_gap_px_matches_the_ladder_bottom_rung_rounded_to_the_nearest_pixel() {
+        // `motolii-timeline-pane::lane_bar::sibling_gap_px` と同じ式・同じ期待値
+        // (既定 inspector_row_height=20 でも一致する — 意図的に同じ token 段を
+        // 使っているため、値の一致は式が揃っている検算にもなる)。
+        assert_eq!(sibling_gap_px(20.0), 2.0);
+        assert_eq!(sibling_gap_px(40.0), 3.0);
+    }
+
+    #[test]
+    fn transform_row_widens_the_value_cell_gap_beyond_the_old_spacing_xs_token_at_a_larger_row_height() {
+        // 既定 dims(row_height=20)では旧 `spacing_xs`(2px)と新式(round(1.5)=2px)
+        // が偶然一致してしまい、この2つの違いを既定 dims だけでは検分できない
+        // (`sibling_gap_px` 自体は独立式であることを別テストで固定済み)。
+        // ここでは inspector_row_height を人為的に変えた `Dimensions` で
+        // 「gap は `inspector_row_height` に追従し、`spacing_xs` には追従しない」
+        // ことを確かめる — token 借用ではなく専用式になっている証拠。
+        let dims = Dimensions {
+            inspector_row_height: 40.0,
+            ..Dimensions::default()
+        };
+        assert_eq!(sibling_gap_px(dims.inspector_row_height), 3.0);
+        assert_ne!(
+            sibling_gap_px(dims.inspector_row_height),
+            dims.spacing_xs,
+            "gap が旧トークン(spacing_xs)のままでは inspector_row_height の変化に追従しない"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // 裁定168 EXACT TARGET 3: 文字寸検査(柵として固定・現値の乖離は FINDING)
+    // -----------------------------------------------------------------------
+
+    /// 裁定168 は「文字寸 = 0.42 × 行高」を単行の余白計算の前提に置く。
+    /// **現状の Inspector の実値はこの帯(0.42±0.05)の外にある**
+    /// (`body_text`=11 / `inspector_row_height`=20 → 比 0.55)— 発注書の指示
+    /// どおり、この不一致は**変更せず FINDING として報告するだけ**に留める
+    /// (寸法変更は別裁定)。このテストは「柵」として、その現状の比を
+    /// **固定(regression-lock)**する — どちらかの値が黙って動いたら red に
+    /// なる。比が 0.42±0.05 に入る側への変更でこのテストが red になったら、
+    /// それは意図的な是正(通すために許容帯へ assert を更新してよい)。
+    #[test]
+    fn inspector_character_size_ratio_is_locked_at_its_current_out_of_band_value() {
+        let dims = Dimensions::default();
+        let ratio = dims.body_text / dims.inspector_row_height;
+
+        const TARGET: f32 = 0.42;
+        const TOLERANCE: f32 = 0.05;
+        let in_band = (ratio - TARGET).abs() <= TOLERANCE;
+
+        assert_eq!(
+            ratio, 0.55,
+            "body_text/inspector_row_height の実測比が動いた(意図した是正なら \
+             このテストと FINDING の記載を両方更新すること)"
+        );
+        assert!(
+            !in_band,
+            "FINDING が古い: 比 {ratio} は既に裁定168 の帯(0.42±0.05)に入っている — \
+             このテストの前提(現状は帯の外)が崩れているので assert を差し替えること"
+        );
     }
 }

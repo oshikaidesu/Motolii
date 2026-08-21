@@ -68,6 +68,88 @@ fn glyph_height(dims: &Dimensions, row_height: f32) -> f32 {
     (row_height - dims.spacing_xs).max(1.0)
 }
 
+// ---------------------------------------------------------------------------
+// 名前の切り詰め(裁定168 施工・違反(A)の根治: 長いレイヤー名が M/S/L チップへ
+// 素通しで重なる)。
+// ---------------------------------------------------------------------------
+
+/// 兄弟要素間の gap(裁定167 の梯子下段: `0.075 × 行高`、px 最近傍丸め)。
+/// `inspector_pane.rs::sibling_gap_px` と同型(値そのものは pane ごとに token
+/// 経由で別々に持つ、式だけ揃える — Timeline と Inspector は別 crate なので
+/// 共有 fn は置けない)。ここでは名前列とチップ群の間の緩衝に使う。
+fn sibling_gap_px(row_height: f32) -> f32 {
+    (row_height * 0.075).round()
+}
+
+/// 全角相当(CJK 統合漢字・ひらがな・カタカナ・ハングル等)の判定。
+/// [`default_measure`] の等幅近似だけに使う簡易版 — 東アジア文字幅の一般実装
+/// ではなく、レーン名の切り詰めに要る最小限のブロックだけを対象にする。
+fn is_wide_char(ch: char) -> bool {
+    matches!(ch as u32,
+        0x1100..=0x115F   // ハングル字母
+        | 0x2E80..=0xA4CF // CJK 部首・記号・かな・カタカナ・ハングル音節手前まで
+        | 0xAC00..=0xD7A3 // ハングル音節
+        | 0xF900..=0xFAFF // CJK 互換漢字
+        | 0xFF00..=0xFF60 // 全角記号
+        | 0xFFE0..=0xFFE6
+        | 0x20000..=0x3FFFD // CJK 拡張(サロゲート外)
+    )
+}
+
+/// 等幅近似の文字幅測定器(既定の測定クロージャ)。**近似であることを明記** —
+/// `canvas::Text` は Simulator から実測できない(KNOWN.md 実測、
+/// `inspector_pane.rs` crate doc の同じ理由)ため、実描画側は決定論的な近似
+/// (半角=0.6em/文字・全角相当=1.0em/文字、`em` は呼び出し側が渡すフォント
+/// サイズ)で切り詰め幅を見積もる。実グリフ幅の代わりであって、正確な測定
+/// ではない。
+pub(crate) fn default_measure(em: f32) -> impl Fn(&str) -> f32 {
+    move |s: &str| {
+        s.chars()
+            .map(|ch| if is_wide_char(ch) { em } else { em * 0.6 })
+            .sum()
+    }
+}
+
+/// `name` を `max_width` 以内へ切り詰める純関数(EXACT TARGET 1)。全体が
+/// `max_width` に収まればそのまま返す。収まらなければ末尾から1文字ずつ削って
+/// 「…」を付けた候補を試し、最初に収まった物を返す。1文字も入らなければ
+/// 空文字列(呼び出し側は何も描かない判断になる)。
+///
+/// `measure` は幅測定クロージャ — 実描画側は [`default_measure`] を渡すが、
+/// 決定論的なテストは既知の測定器を注入できる(fixture 前提の柵にするため)。
+pub(crate) fn truncate_to_width(
+    name: &str,
+    max_width: f32,
+    measure: impl Fn(&str) -> f32,
+) -> String {
+    if max_width <= 0.0 {
+        return String::new();
+    }
+    if measure(name) <= max_width {
+        return name.to_owned();
+    }
+    let chars: Vec<char> = name.chars().collect();
+    for len in (0..chars.len()).rev() {
+        let candidate: String = chars[..len].iter().collect::<String>() + "…";
+        if measure(&candidate) <= max_width {
+            return candidate;
+        }
+    }
+    String::new()
+}
+
+/// 名前列の実効幅 — rail 幅から M/S/L チップ群と裁定167 の緩衝 gap を差し引いた
+/// 残り(EXACT TARGET 1: `fill_text` 前にこの幅で [`truncate_to_width`] へ渡す)。
+/// スウォッチ+左右余白ぶんの開始 x は `draw()` の名前描画位置(`dims.spacing_s
+/// * 2.0 + swatch_size`)と同じ式 — 2箇所で別の値を発明しない。
+fn name_column_width(dims: &Dimensions, rail_width: f32, row_height: f32) -> f32 {
+    let swatch_size = dims.spacing_m;
+    let name_start_x = dims.spacing_s * 2.0 + swatch_size;
+    let chip_start_x = glyph_slots(dims, rail_width)[0].x;
+    let gap = sibling_gap_px(row_height);
+    (chip_start_x - name_start_x - gap).max(0.0)
+}
+
 fn glyph_label(glyph: Glyph) -> &'static str {
     match glyph {
         Glyph::Mute => "M",
@@ -171,13 +253,17 @@ pub(crate) fn draw(pane: &TimelinePane, frame: &mut canvas::Frame, rail_width: f
             colors.way_timeline,
         );
 
-        // 名前(裁定147: クリップ面から退去した名前の住所)。
+        // 名前(裁定147: クリップ面から退去した名前の住所)。**裁定168 施工**:
+        // M/S/L チップへ素通しで重なっていた違反(A)の根治 — `fill_text` 前に
+        // 実効幅で切り詰める(はみ出す名前は末尾「…」)。
         let name_color = if row.hidden { colors.text_muted } else { colors.text_primary };
         let name = if row.name.is_empty() {
             format!("layer {}", row.id.0)
         } else {
             row.name.clone()
         };
+        let name_max_width = name_column_width(dims, rail_width, row_height);
+        let name = truncate_to_width(&name, name_max_width, default_measure(dims.caption_text));
         frame.fill_text(canvas::Text {
             content: name,
             position: Point::new(dims.spacing_s * 2.0 + swatch_size, row_top + row_height / 2.0),
@@ -219,5 +305,82 @@ pub(crate) fn draw(pane: &TimelinePane, frame: &mut canvas::Frame, rail_width: f
                 ..Default::default()
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 実窓較正で発覚した違反(A)の fixture 長名 — 全角(カタカナ)のみで、
+    /// 等幅近似(全角=1.0em/文字)でも十分に列幅を超える。
+    const LONG_CJK_NAME: &str = "グリッチトランジション";
+
+    #[test]
+    fn truncate_to_width_passes_a_short_name_through_unchanged() {
+        let measure = default_measure(9.0);
+        let name = "Layer 1";
+        assert_eq!(truncate_to_width(name, 100.0, measure), "Layer 1");
+    }
+
+    #[test]
+    fn truncate_to_width_shortens_a_long_cjk_name_with_an_ellipsis() {
+        let em = 9.0;
+        let measure = default_measure(em);
+        let full_width: f32 = LONG_CJK_NAME.chars().count() as f32 * em; // 全角=1.0em
+        assert!(full_width > 50.0, "fixture が列幅内に収まってしまう前提が崩れている");
+
+        let truncated = truncate_to_width(LONG_CJK_NAME, 50.0, default_measure(em));
+        assert!(truncated.ends_with('…'), "省略記号が付いていない: {truncated:?}");
+        assert!(
+            truncated.chars().count() < LONG_CJK_NAME.chars().count(),
+            "切り詰められていない: {truncated:?}"
+        );
+        assert!(
+            measure(&truncated) <= 50.0,
+            "切り詰め後も列幅を超えている: {truncated:?}"
+        );
+    }
+
+    #[test]
+    fn truncate_to_width_returns_empty_when_not_even_the_ellipsis_fits() {
+        let measure = default_measure(9.0);
+        assert_eq!(truncate_to_width(LONG_CJK_NAME, 0.5, measure), "");
+    }
+
+    #[test]
+    fn truncate_to_width_is_a_no_op_at_zero_or_negative_width() {
+        let measure = default_measure(9.0);
+        assert_eq!(truncate_to_width("x", 0.0, measure), "");
+        let measure = default_measure(9.0);
+        assert_eq!(truncate_to_width("x", -1.0, measure), "");
+    }
+
+    /// EXACT TARGET 1: 名前列の実効幅は rail 幅からチップ群+裁定167 の緩衝を
+    /// 引いた残りで、既定 dims では常に正でチップ群より手前に収まる。
+    #[test]
+    fn name_column_width_is_positive_and_ends_before_the_chip_block_at_default_dims() {
+        let dims = Dimensions::default();
+        let rail_width = dims.timeline_lane_bar_width;
+        let row_height = dims.row_height;
+
+        let width = name_column_width(&dims, rail_width, row_height);
+        assert!(width > 0.0, "既定 dims で名前列の実効幅が非正: {width}");
+
+        let name_start_x = dims.spacing_s * 2.0 + dims.spacing_m;
+        let chip_start_x = glyph_slots(&dims, rail_width)[0].x;
+        assert!(
+            name_start_x + width <= chip_start_x,
+            "名前列がチップ群の開始位置を超えている(緩衝gapが効いていない): \
+             name_start_x={name_start_x} width={width} chip_start_x={chip_start_x}"
+        );
+    }
+
+    #[test]
+    fn sibling_gap_px_matches_the_ladder_bottom_rung_rounded_to_the_nearest_pixel() {
+        // 裁定167 下段: 0.075 × 行高、px 最近傍丸め。既定 row_height=20 では
+        // 1.5 → 2.0(半丁は遠い方= away-from-zero 丸め、Rust の f32::round どおり)。
+        assert_eq!(sibling_gap_px(20.0), 2.0);
+        assert_eq!(sibling_gap_px(40.0), 3.0);
     }
 }
