@@ -1,12 +1,16 @@
 # レーンボード — 2026-08-21(このセッションの走行状態の正本)
 
-日付: 2026-08-21 / 状態: **後任セッション終了時点**(引き継ぎ= 2026-08-21-session-handoff-night-s-score.md。前任分= -ui-completion.md)
+日付: 2026-08-21 / 状態: **第3セッション(深夜)走行中**(引き継ぎ= 2026-08-21-session-handoff-night-s-score.md。前任分= -ui-completion.md)
 運転手順: レーンの完了・発注のたびにこの表を更新する。TaskList はセッション死で消えるため、この文書が正本。
+
+**実窓較正第1回の初回収(2026-08-21深夜)**: 利用者「イージングがガタつく」— release ビルドでも再現=構造確定 → **裁定166**(Stage presenter shader 化+tick vsync 整列)。残りのチェックリスト(音・状態帯・市松・差し色・目盛り)は τ 着地後に再開。
 
 ## 走行中(未返却)
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| **τ: Stage presenter shader 化+tick vsync 整列** | 実装 | worktree(発注時に追記) | 裁定166 の施工 — `lib.rs:2413` image widget 置換(永続テクスチャ・フル解像度復帰・1.5MB 柵撤去)+`transport.rs` tick を `window::frames()` へ。oracle: handle_creations 0・presenter 寸法=comp・PNG 不変 |
+| **υ: S 器具第一波(atlas dump+スコアスクリプト)** | 実装 | worktree(発注時に追記) | 正典「器具」節 1-2 — q0_fence `collect_targets` 汎用化→`entrance_atlas_dump.rs`(TSV)+スコアスクリプト(atlas×入口台帳×normal-map→S0/S1/S2 表) |
 
 ## 完了・main 着地済み(実装)
 
