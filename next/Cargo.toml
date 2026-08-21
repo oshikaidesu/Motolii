@@ -29,6 +29,7 @@ members = [
     "probes/r1-frame-throughput",
     "probes/r2-view-projection",
     "probes/r3-pointcloud",
+    "probes/r4-widget-timeline",
 ]
 
 [workspace.package]
