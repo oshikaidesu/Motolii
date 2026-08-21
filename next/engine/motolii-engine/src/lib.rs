@@ -17,6 +17,8 @@
 
 use std::collections::{HashMap, VecDeque};
 
+pub mod mask;
+
 use motolii_compositor::GpuTexture2D;
 use motolii_compositor::{Compositor, CompositorError, Layer, LayerWithPasses};
 use motolii_core::ResolvedCamera;

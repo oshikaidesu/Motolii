@@ -9,6 +9,7 @@ motolii-compositor.workspace = true
 motolii-core.workspace = true
 motolii-media.workspace = true
 motolii-store.workspace = true
+motolii-vector.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
