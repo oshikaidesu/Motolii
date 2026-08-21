@@ -1,6 +1,28 @@
-# 裁定171 — ゼロコピーの合流設計(M4 の縫い目): engine を iced の device へ遅延合流
+# 裁定171 — ゼロコピーの合流設計(M4 の縫い目)
 
-日付: 2026-08-22 / 状態: **決定** / 起点: 利用者裁定「もうゼロコピーまで行こう」。前提= 裁定170(wgpu 29 統一・M01/M2 済み・M3 走行中)
+日付: 2026-08-22 / 状態: **決定(v2 — 初版は §5 に保存)** / 起点: 利用者裁定「もうゼロコピーまで行こう」。前提= 裁定170(wgpu 29 統一・M01/M2 済み・M3 走行中)
+
+## 0. v2 — widget 内蔵(利用者指摘による簡約。初版の合流機構は全廃)
+
+**利用者の指摘「iced の中に re_renderer の view を入れるだけでは」が正しい。** これは rerun 自身の埋め込み型 — re_renderer は egui の paint callback(prepare で device/queue を受ける)の中で描く設計であり、iced の shader `Primitive::prepare(device, queue)` はその構造的同型。よって:
+
+1. **プレビューレンダラは stage presenter の `Pipeline` の中に住む**: `Pipeline::new(device, queue, format)` で `Compositor::with_device`(M3 の adapter 非依存版)を構築。device の受け渡し・engine 作り直し・OnceLock の口は**そもそも不要**(device が生まれる場所で描くから)
+2. **`Primitive::prepare` が描く**: Primitive は Document への共有ハンドル(iced は単一スレッドの event loop — update と描画は同一スレッドなので `Arc<RwLock<Document>>` 相当で足りる。世代キー= revision/playhead/cap は τ の generation gating をそのまま流用)+描画パラメータを運び、prepare で resolve→compositor render を回して内部 texture へ。メディアの decode/upload キャッシュも Pipeline 所有
+3. **`Primitive::render` が blit**: BL1b の `main_target` accessor から encoder で target_view へ。readback/`write_texture`/`presenter_rgba` は表示経路から消滅
+4. **真値 engine(headless)は常駐しない — オンデマンド構築**: export・`--screenshot`・テストは従来どおり `Engine::new()` を**その時だけ**建てる(export はバッチ操作なので構築コストは無視できる)。裁定166「器具・export 経路不変」を保ちつつ、初版が却下理由にした「2 engine 常駐の VRAM 二重化」も起きない
+5. 順序保証は同一 queue の submission 順(prepare の submit → iced の pass)で構造的に成立
+6. 市松 ON は当面 CPU 合成のフォールバック経路(静的検分モード・性能非目標)
+
+## 受入条件(v2 で改訂 — M4 レーンへ)
+
+- (a) 再生中の Stage 経路で readback 呼び出し 0(metrics red 先行)+ blit カウンタ
+- (b) `--screenshot` PNG バイト不変・(c) export golden バイト不変(オンデマンド headless の証明)
+- (d) 実窓で絵の断絶なし+fps 実測 / (e) 市松 ON フォールバック生存
+- 最終審判 = 利用者実窓
+
+---
+
+## §5 初版(遅延合流案 — v2 で全廃。誤りの記録として保存: 「engine は Shell に住む」前提を疑わず受け渡し機構を発明していた)
 
 ## 1. 問題の形
 
