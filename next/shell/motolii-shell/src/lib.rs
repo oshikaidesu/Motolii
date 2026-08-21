@@ -6,16 +6,27 @@
 //!   しか受け取らないので、**書ける物を持っていない**
 //! - `view(&self)` が `&self` を取るので、描画中に Document を触る道が無い
 //!
-//! Stage は **CPU 経路**(合成結果の RGBA を `image` widget へ渡す)。
-//! iced の device の上に `re_renderer` を建てる道は裁定44 で撤回した。
+//! Stage は **CPU 経路**(合成は CPU、`Engine::render_frame` の RGBA を作る所まで)
+//! だが、**表示だけは裁定166 で GPU 常駐テクスチャへ変えた** — 合成結果の RGBA を
+//! `iced::widget::shader` の自前 Program(永続 `wgpu::Texture` + 世代ゲート付き
+//! `queue.write_texture`)へ渡す。旧実装(`image::Handle::from_rgba` を毎フレーム
+//! 新規発行)は iced_wgpu の非同期アップロード境界(2MB)を超えると「その間
+//! 何も描かない」穴があり、実機のイージングのガタつきの一次原因だった
+//! (`docs/reviews/2026-08-21-stage-presenter-decision.md`)。永続テクスチャ経路
+//! にはその穴が無いので、フル解像度のまま描ける。iced の device の上に
+//! `re_renderer` を建てる道(合成そのものを GPU へ持ち込む道)は裁定44 で撤回
+//! したまま — ここで変わったのは「CPU が作った RGBA を GPU へどう見せるか」だけ。
 //!
 //! **front が持ってよい状態**は [`Session`] だけ — 選択と再生位置。これらは
 //! Document の写しではなく、undo の対象でもない(rerun も選択は blueprint store の
 //! 外に置いている)。**1箇所で持ち、全 pane がそこを読む**ので M14 は満たされる。
 
-use iced::widget::{button, column, container, image, row, slider, stack, text};
-use iced::{Element, Length, Task};
+use std::sync::Arc;
 
+use iced::widget::{button, column, container, row, shader, slider, stack, text, Shader};
+use iced::{wgpu, Element, Length, Task};
+
+use motolii_core::CompSpec;
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
     AssetDraft, Composition, DisplayRevision, Document, Intent, LayerAttrsPatch, LayerId,
@@ -122,10 +133,19 @@ pub mod metrics {
     pub fn record_handle_creation(_bytes: usize) {}
     pub fn record_render_frame(_elapsed: std::time::Duration) {}
     pub fn record_tokens_reload() {}
+    /// 裁定166: shader Pipeline が実際に `queue.write_texture` した時に呼ぶ
+    /// (debug の実体は `metrics.rs` 参照)。
+    pub fn record_presenter_upload(_bytes: usize) {}
     pub fn handle_creations() -> u64 {
         0
     }
     pub fn last_handle_bytes() -> usize {
+        0
+    }
+    pub fn presenter_uploads() -> u64 {
+        0
+    }
+    pub fn last_presenter_upload_bytes() -> usize {
         0
     }
     pub fn render_frame_calls() -> u64 {
@@ -140,46 +160,27 @@ pub mod metrics {
     pub fn reset() {}
 }
 
-/// iced(`next/` が実際に使う crates.io `iced 0.14.0`、`iced_wgpu-0.14.0/src/
-/// image/cache.rs::upload_raster`)が同期アップロードを選ぶ上限を**転記した
-/// 定数**(`MAX_SYNC_SIZE = 2 * 1024 * 1024`、実測済み)。これを超える RGBA を
-/// `image::Handle::from_rgba` に渡すと、iced はバックグラウンドスレッドへ
-/// 非同期アップロードへ回し、完了までの1フレーム以上 `draw_image` は何も
-/// 描かない(`iced_core-0.14.0/src/image.rs` の `Allocation` doc comment に
-/// 明記: "If you are animating images, this can cause undesirable flicker")。
+/// Stage 表示用に RGBA を縮める。**裁定166**: 旧 `stage_handle_rgba` の
+/// 置き換え——旧実装は iced の `image::Handle::from_rgba` が同期アップロード
+/// できる上限(`iced_wgpu-0.14.0/src/image/cache.rs::upload_raster`の
+/// `MAX_SYNC_SIZE = 2MB`)を超えないよう `stage_auto_scale`(sqrt 自動縮小)を
+/// 掛けていたが、Stage の絵を shader Program の永続テクスチャへ移したことで
+/// その非同期アップロード境界(「その間 draw_image は何も描かない」穴、
+/// `docs/reviews/2026-08-21-stage-presenter-decision.md` 事実2)自体が経路に
+/// 存在しなくなったので、`stage_auto_scale` は撤去した(常に `1.0` を渡す =
+/// フル解像度復帰)。
 ///
-/// fixture の comp は 1920×1080 = 8,294,400 byte(この上限の約4倍)。scrub の
-/// たびに新しい Handle → 非同期アップロード → 空白フレーム、が実機チラつきの
-/// 一次原因と特定した(2026-08-20)。上限ぴったりでなく余裕を持たせてある。
-const STAGE_HANDLE_SYNC_BUDGET_BYTES: usize = 1_500_000;
-
-/// 自動予算導出スケール(sync 予算を超える時だけ sqrt で縮める、超えなければ
-/// 無変更=1.0)。[`stage::effective_preview_scale`] へ渡す「auto」側の値
-/// そのもの(裁定163 Stage 下縁状態帯 ORACLE (a)) — 旧 `stage_handle_rgba`
-/// が抱えていた分岐をこの関数へ切り出しただけで、`width`/`height` が既に
-/// 予算内の時に1.0を返す挙動は無改変。
-fn stage_auto_scale(width: u32, height: u32) -> f64 {
-    let total_bytes = (width as usize) * (height as usize) * 4;
-    if width == 0 || height == 0 || total_bytes <= STAGE_HANDLE_SYNC_BUDGET_BYTES {
-        1.0
-    } else {
-        (STAGE_HANDLE_SYNC_BUDGET_BYTES as f64 / total_bytes as f64).sqrt()
-    }
-}
-
-/// Stage 表示用に RGBA を縮める。**画面には `Length::Fill` で引き伸ばして出す
-/// ので実素材解像度である必要が無い**(screenshot 器具は `frame_rgba()` が返す
-/// 元解像度の RGBA を別途持っている — 縮めるのは Handle 用のコピーだけで、
-/// pixel 精度が要る経路には触らない)。nearest-neighbor(プレビュー用途なので
-/// 品質は問わない — `screenshot.rs::blit_letterboxed` と同じ考え方)。
-///
-/// **裁定163 Stage 下縁状態帯**: `resolution_cap` はユーザーが明示的に選ぶ
-/// 上限(Auto/½/¼)——[`stage_auto_scale`] の自動導出値へ
-/// [`stage::effective_preview_scale`] で min 合成する。`Auto` は cap=1.0固定
-/// なので合成しても値が変わらず、旧来の「予算内なら無変更・超えたら sqrt
-/// スケール」の挙動と完全に同値(ORACLE (a) 「auto=1.0で½cap→0.5・auto=0.4で
-/// ½cap→0.4」のとおり、cap の方が緩ければ auto 側がそのまま勝つ)。
-fn stage_handle_rgba(
+/// 残るのは **裁定163 Stage 下縁状態帯**が持つ `resolution_cap`(ユーザーが
+/// 明示的に選ぶ上限、Auto/½/¼)だけ——[`stage::effective_preview_scale`] で
+/// auto 側 `1.0` と min 合成する。`Auto` は cap=1.0固定なので合成しても
+/// 値が変わらず、この関数は入力をそのまま返す(EXACT TARGET (b) 「presenter
+/// へ渡る寸法 == comp 寸法」)。½/¼ が選ばれている時だけ実際に縮む
+/// (nearest-neighbor — プレビュー用途なので品質は問わない、
+/// `screenshot.rs::blit_letterboxed` と同じ考え方)。**画面には
+/// `Length::Fill` で引き伸ばして出すので実素材解像度である必要が無い**
+/// (screenshot 器具は `frame_rgba()` が返す元解像度の RGBA を別途持っている
+/// — 縮めるのは presenter 用のコピーだけで、pixel 精度が要る経路には触らない)。
+fn stage_presenter_rgba(
     width: u32,
     height: u32,
     rgba: &[u8],
@@ -188,7 +189,7 @@ fn stage_handle_rgba(
     if width == 0 || height == 0 {
         return (width, height, rgba.to_vec());
     }
-    let scale = stage::effective_preview_scale(stage_auto_scale(width, height), resolution_cap);
+    let scale = stage::effective_preview_scale(1.0, resolution_cap);
     if scale >= 1.0 {
         return (width, height, rgba.to_vec());
     }
@@ -209,6 +210,51 @@ fn stage_handle_rgba(
         }
     }
     (dst_w, dst_h, out)
+}
+
+/// 純関数レベルの試験(裁定166 ORACLE (b) — 「presenter へ渡る寸法 ==
+/// comp 寸法」を GPU/Shell を一切介さずに確かめる)。`tests/suite/
+/// render_pipeline_fence.rs` は同じ主張を `Shell::stage_presenter_dims()`
+/// 経由で統合試験として重ねて見ている(二重の証拠、どちらか片方が偶然
+/// 通っただけではないことを示す)。
+#[cfg(test)]
+mod stage_presenter_rgba_tests {
+    use super::*;
+
+    /// fixture と同じ 1920×1080。**現状(裁定166 前)は red**: 旧
+    /// `stage_handle_rgba` は `stage_auto_scale` が sqrt 縮小を掛けるので
+    /// 816×459 になっていた — この関数はもう `stage_auto_scale` を呼ばない。
+    #[test]
+    fn auto_cap_passes_native_resolution_through_unchanged() {
+        let width = 1920u32;
+        let height = 1080u32;
+        let rgba = vec![0u8; (width as usize) * (height as usize) * 4];
+
+        let (out_w, out_h, out_rgba) =
+            stage_presenter_rgba(width, height, &rgba, stage::PreviewResolutionCap::Auto);
+
+        assert_eq!((out_w, out_h), (width, height), "Auto なのに縮んでいる");
+        assert_eq!(out_rgba.len(), rgba.len());
+    }
+
+    /// ½/¼ cap は「明示的な縮小」として維持する(EXACT TARGET 2)。
+    #[test]
+    fn half_and_quarter_caps_still_shrink_relative_to_native_resolution() {
+        let width = 1920u32;
+        let height = 1080u32;
+        let rgba = vec![0u8; (width as usize) * (height as usize) * 4];
+
+        let (half_w, half_h, _) =
+            stage_presenter_rgba(width, height, &rgba, stage::PreviewResolutionCap::Half);
+        assert!(half_w < width && half_h < height, "½ cap で縮んでいない");
+
+        let (quarter_w, quarter_h, _) =
+            stage_presenter_rgba(width, height, &rgba, stage::PreviewResolutionCap::Quarter);
+        assert!(
+            quarter_w < half_w && quarter_h < half_h,
+            "¼ cap が ½ よりさらに縮んでいない"
+        );
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -353,55 +399,67 @@ struct RenderedFrame {
     playhead: i64,
     width: u32,
     height: u32,
-    handle: image::Handle,
+    /// Stage 表示用 RGBA(市松合成済み・resolution cap 縮小適用済み)。
+    /// **裁定166**: 旧 `handle: image::Handle` の置き換え — shader Program の
+    /// `Primitive`(`StagePresenterPrimitive`)が毎フレーム `Arc::clone` するだけ
+    /// で、内容が変わらない限り複製しない(`Program::draw` は描画のたびに
+    /// 呼ばれる、`iced_widget::shader::Program` doc 参照)。
+    presenter_rgba: Arc<Vec<u8>>,
+    presenter_width: u32,
+    presenter_height: u32,
+    /// `presenter_rgba` を新しく作り直した回数(単調増加)。shader Pipeline
+    /// 側(`StagePresenterPipeline::upload`)が「前回アップロードした世代と
+    /// 同じか」をこれで比較し、違う時だけ `queue.write_texture` する
+    /// (EXACT TARGET 1 の核心 — oracle (a) の直接の鍵)。
+    presenter_generation: u64,
     /// `Engine::render_frame`(背景込み)の生 RGBA。**export/screenshot 真値専用**
-    /// (`screenshot.rs`・`frame_rgba()`)— 通常描画は `handle` だけで足りる
-    /// (iced の `image::Handle` から画素を取り戻す公開 API が無いため、この
-    /// 用途だけのために複製して持つ)。**市松は絶対にここへ乗せない**し、
-    /// 市松トグルで一切変わらない(`settings_pane` doc「合成器が出せる」と
-    /// 「書き出しが吐く」は別問題、参照)。
+    /// (`screenshot.rs`・`frame_rgba()`)— 通常描画は `presenter_rgba` だけで
+    /// 足りる。**市松は絶対にここへ乗せない**し、市松トグルで一切変わらない
+    /// (`settings_pane` doc「合成器が出せる」と「書き出しが吐く」は別問題、参照)。
     rgba: Vec<u8>,
     /// 市松 ON の間だけ `Some` — 裁定141「AE型の透明可視化モード」の入力
     /// (`Engine::render_frame_without_background`、背景 layer を省いた合成結果)。
-    /// `handle`(Stage 表示)と `screenshot.rs` は市松 ON の間、`rgba` の代わりに
-    /// これへ [`settings_pane::composite_checkerboard`] を当てる。市松 OFF の
-    /// 間は `None`(`rgba` をそのまま使う)。**export 真値(`rgba`)には一切
-    /// 影響しない** — 別フィールド。
+    /// `presenter_rgba`(Stage 表示)と `screenshot.rs` は市松 ON の間、`rgba` の
+    /// 代わりにこれへ [`settings_pane::composite_checkerboard`] を当てる。
+    /// 市松 OFF の間は `None`(`rgba` をそのまま使う)。**export 真値(`rgba`)
+    /// には一切影響しない** — 別フィールド。
     checkerboard_preview_rgba: Option<Vec<u8>>,
-    /// `handle` が市松込みで作られているか。**Document・playhead 非依存**の
-    /// 表示分岐なので、`revision()`/`playhead` が同じでもここが変わっていれば
-    /// `refresh_frame` は Document の再評価をせず Handle だけ作り直す(市松 ON
-    /// の間は `checkerboard_preview_rgba` を取り直すため engine を1回追加で
-    /// 回すが、`Document`/`StoreView` の評価が増えるわけではない)。
+    /// `presenter_rgba` が市松込みで作られているか。**Document・playhead
+    /// 非依存**の表示分岐なので、`revision()`/`playhead` が同じでもここが
+    /// 変わっていれば `refresh_frame` は Document の再評価をせず presenter
+    /// だけ作り直す(市松 ON の間は `checkerboard_preview_rgba` を取り直すため
+    /// engine を1回追加で回すが、`Document`/`StoreView` の評価が増える
+    /// わけではない)。
     checkerboard: bool,
-    /// この `handle` を作った時点の観測カメラ(裁定157)。`display_revision()`/
-    /// `playhead`/`checkerboard` と同じ「キャッシュを落とすかどうか」の鍵の
-    /// 一部 — `refresh_frame` の早期 return はこれも比較する(`checkerboard`
-    /// と同格の表示専用の鍵拡張)。
+    /// この `presenter_rgba` を作った時点の観測カメラ(裁定157)。
+    /// `display_revision()`/`playhead`/`checkerboard` と同じ「キャッシュを
+    /// 落とすかどうか」の鍵の一部 — `refresh_frame` の早期 return はこれも
+    /// 比較する(`checkerboard` と同格の表示専用の鍵拡張)。
     observation: Option<ObservationCamera>,
     /// 観測カメラ有効時の Stage 表示 RGBA(`Engine::render_frame_with_view_camera`
     /// の結果そのもの)。**`rgba`(export 真値)とは別物** — `checkerboard_preview_rgba`
     /// と同じ「表示専用の複製」の形。`observation` が `None` の間は常に `None`。
     observation_rgba: Option<Vec<u8>>,
-    /// この `handle` を作った時点のプレビュー解像度 cap(裁定163 Stage 下縁
-    /// 状態帯)。**`checkerboard`/`observation` と同格の鍵拡張** —
-    /// `stage_handle_rgba` へ渡す実効スケールを変えるだけの表示専用の値なので、
-    /// `revision()`/`playhead` が同じでもここが変わっていれば Handle だけ
-    /// 作り直す(Document・engine の再評価は増えない)。
+    /// この `presenter_rgba` を作った時点のプレビュー解像度 cap(裁定163 Stage
+    /// 下縁状態帯)。**`checkerboard`/`observation` と同格の鍵拡張** —
+    /// `stage_presenter_rgba` へ渡す実効スケールを変えるだけの表示専用の値
+    /// なので、`revision()`/`playhead` が同じでもここが変わっていれば
+    /// presenter だけ作り直す(Document・engine の再評価は増えない)。
     resolution_cap: stage::PreviewResolutionCap,
 }
 
-/// [`Shell::compute_display_source`] の戻り値。Stage 表示(`handle`)用の入力を
-/// 1箇所へまとめただけの内部型 — `RenderedFrame` のフィールドへの書き戻しと
-/// `build_stage_handle` への引数の両方をこれ1つから作る(呼び出し側の
+/// [`Shell::compute_display_source`] の戻り値。Stage 表示用の入力を1箇所へ
+/// まとめただけの内部型 — `RenderedFrame` のフィールドへの書き戻しと
+/// `build_stage_presenter_rgba` への引数の両方をこれ1つから作る(呼び出し側の
 /// `refresh_frame` が2箇所(キャッシュヒット/フル再計算)で同じ分岐を書かずに
 /// 済む)。
 struct DisplaySource {
-    /// `build_stage_handle` へ渡す実体。`None` なら呼び出し側は
+    /// `build_stage_presenter_rgba` へ渡す実体。`None` なら呼び出し側は
     /// `RenderedFrame::rgba`(export 真値)をそのまま使う(市松・観測カメラの
     /// どちらも効いていない既定の場合)。
     full_rgba: Option<Vec<u8>>,
-    /// `full_rgba` を市松タイルで覆うかどうか(`build_stage_handle` の第4引数)。
+    /// `full_rgba` を市松タイルで覆うかどうか(`build_stage_presenter_rgba` の
+    /// 第4引数)。
     checkerboard: bool,
     /// `RenderedFrame::checkerboard_preview_rgba` へそのまま書き戻す値。
     checkerboard_preview_rgba: Option<Vec<u8>>,
@@ -594,8 +652,8 @@ impl Shell {
         // `Shell::update` 側 = `inspector_drag` の有無)。
         let pointer = iced::event::listen_with(inspector_pointer_event);
         // 実時間再生(A2): 再生中だけtickを束ねる — Pause中はSubscriptionから
-        // 落ちるので`transport::tick_stream`のOSスレッドも後始末される
-        // (`transport.rs`のdoc参照)。
+        // 落ちる。裁定166: tickは`iced::window::frames()`(vsync由来)へ
+        // 置き換え済みで、OSスレッドのsleepは無い(`transport.rs`のdoc参照)。
         let ticks = if self.transport.is_running() {
             transport::tick_subscription().map(|()| Message::PlaybackTick)
         } else {
@@ -1608,7 +1666,8 @@ impl Shell {
     /// 市松トグルの今の状態。**screenshot 器具**が「実際に画面へ出る絵」を
     /// 再現するのに使う(`frame_rgba()` は市松を絶対に乗せない生値なので、
     /// この状態と `settings_pane::composite_checkerboard` を screenshot 側が
-    /// 自分で組み合わせる必要がある — `lib.rs::build_stage_handle` と同じ形)。
+    /// 自分で組み合わせる必要がある — `lib.rs::build_stage_presenter_rgba` と
+    /// 同じ形)。
     pub fn checkerboard_enabled(&self) -> bool {
         self.checkerboard
     }
@@ -1623,8 +1682,8 @@ impl Shell {
 
     /// 描き上がった Stage フレームの生 RGBA。**常に背景込みの export 真値**
     /// (`Engine::render_frame`)— 市松トグルで一切変わらない。**screenshot
-    /// 器具専用**(`screenshot.rs`)— 通常描画は `image::Handle` を持つ
-    /// `stage_pane` を通る。
+    /// 器具専用**(`screenshot.rs`)— 通常描画は shader Program(`stage_pane`)を
+    /// 通る(裁定166 — `presenter_rgba` を渡す、`image::Handle` はもう作らない)。
     pub fn frame_rgba(&self) -> Option<(u32, u32, &[u8])> {
         self.frame
             .as_ref()
@@ -1668,6 +1727,25 @@ impl Shell {
     /// 見るための口(`checkerboard_enabled`/`observation` と同じ形)。
     pub fn resolution_cap(&self) -> stage::PreviewResolutionCap {
         self.resolution_cap
+    }
+
+    /// **裁定166 EXACT TARGET (b) の読み口**: shader Primitive へ実際に渡る
+    /// RGBA の寸法。`frame_rgba()`(常に comp 解像度の export 真値)とは別に、
+    /// 「今 Stage へ upload する寸法」だけを独立に確かめられるようにする
+    /// (`resolution_cap()` と同じ形の試験用アクセサ)。
+    pub fn stage_presenter_dims(&self) -> Option<(u32, u32)> {
+        self.frame
+            .as_ref()
+            .map(|frame| (frame.presenter_width, frame.presenter_height))
+    }
+
+    /// Stage presenter の内容が変わった回数(裁定166 EXACT TARGET 1 の CPU 側
+    /// の鍵)。shader Pipeline はこれを「前回アップロードした世代」と比較して
+    /// `queue.write_texture` を省くかどうか決める(`StagePresenterPipeline::
+    /// upload` 参照)。運転席/試験が「同じ内容の再描画では世代が動かない」
+    /// ことを確かめる口。
+    pub fn stage_presenter_generation(&self) -> Option<u64> {
+        self.frame.as_ref().map(|frame| frame.presenter_generation)
     }
 
     /// 今の Timeline の行。運転席が「層3枚の行が立つ」「選択が行と一致する」を
@@ -1953,8 +2031,8 @@ impl Shell {
                 let width = frame.width;
                 let height = frame.height;
                 let display = self.compute_display_source(observation, checkerboard, playhead);
-                let (handle, handle_bytes) = match &display.full_rgba {
-                    Some(rgba) => build_stage_handle(
+                let (presenter_width, presenter_height, presenter_rgba) = match &display.full_rgba {
+                    Some(rgba) => build_stage_presenter_rgba(
                         width,
                         height,
                         rgba,
@@ -1965,12 +2043,21 @@ impl Shell {
                     ),
                     None => {
                         let frame = self.frame.as_ref().expect("直前の if let で確認済み");
-                        build_stage_handle(width, height, &frame.rgba, false, resolution_cap, colors, ui_scale)
+                        build_stage_presenter_rgba(width, height, &frame.rgba, false, resolution_cap, colors, ui_scale)
                     }
                 };
-                metrics::record_handle_creation(handle_bytes);
                 if let Some(frame) = self.frame.as_mut() {
-                    frame.handle = handle;
+                    frame.presenter_rgba = Arc::new(presenter_rgba);
+                    frame.presenter_width = presenter_width;
+                    frame.presenter_height = presenter_height;
+                    // 世代を進める(裁定166 EXACT TARGET 1) — shader Pipeline
+                    // 側の「前回アップロードした世代」との比較でこれが鍵になる。
+                    // ここへ来るのは中身が実際に変わった時だけ(市松/観測/cap の
+                    // いずれかが変わった時 = このブロック自体が「変化があった」
+                    // 早期return の否定側)なので、無条件に+1してよい
+                    // (`metrics::record_handle_creation`はもう呼ばない — Stage
+                    // 描画経路から `image::Handle` 生成そのものが無くなった)。
+                    frame.presenter_generation += 1;
                     frame.checkerboard = checkerboard;
                     frame.checkerboard_preview_rgba = display.checkerboard_preview_rgba;
                     frame.observation = observation;
@@ -2001,8 +2088,8 @@ impl Shell {
         match render_result {
             Ok(rgba) => {
                 let display = self.compute_display_source(observation, checkerboard, playhead);
-                let (handle, handle_bytes) = match &display.full_rgba {
-                    Some(preview) => build_stage_handle(
+                let (presenter_width, presenter_height, presenter_rgba) = match &display.full_rgba {
+                    Some(preview) => build_stage_presenter_rgba(
                         composition.width,
                         composition.height,
                         preview,
@@ -2011,7 +2098,7 @@ impl Shell {
                         colors,
                         ui_scale,
                     ),
-                    None => build_stage_handle(
+                    None => build_stage_presenter_rgba(
                         composition.width,
                         composition.height,
                         &rgba,
@@ -2021,13 +2108,23 @@ impl Shell {
                         ui_scale,
                     ),
                 };
-                metrics::record_handle_creation(handle_bytes);
+                // 世代は前フレームから引き継いで+1する(裁定166 EXACT TARGET 1)。
+                // **ここは scrub/edit のたびに毎回通る経路**(revision か
+                // playhead が変わった時点でこの分岐に落ちる — 「新規フレーム
+                // だから0にリセット」ではない、`self.frame` がまだ無い最初の
+                // 1回だけ0になる)。固定で0を書くと presenter_generation が
+                // 常に0のまま動かなくなる事故を踏んだので明示的に注意書きした。
+                let presenter_generation =
+                    self.frame.as_ref().map(|frame| frame.presenter_generation + 1).unwrap_or(0);
                 self.frame = Some(RenderedFrame {
                     revision,
                     playhead,
                     width: composition.width,
                     height: composition.height,
-                    handle,
+                    presenter_rgba: Arc::new(presenter_rgba),
+                    presenter_width,
+                    presenter_height,
+                    presenter_generation,
                     rgba,
                     checkerboard_preview_rgba: display.checkerboard_preview_rgba,
                     checkerboard,
@@ -2088,9 +2185,9 @@ impl Shell {
         }
     }
 
-    /// Stage 表示(`handle`)用の入力を決める。**`rgba`(export 真値)そのものには
-    /// 一切触れない** — ここが返す物は表示専用の複製(`build_stage_handle` へ
-    /// そのまま渡すか、`full_rgba: None` の時は呼び出し側が `RenderedFrame::rgba`
+    /// Stage 表示(presenter)用の入力を決める。**`rgba`(export 真値)そのものには
+    /// 一切触れない** — ここが返す物は表示専用の複製(`build_stage_presenter_rgba`
+    /// へそのまま渡すか、`full_rgba: None` の時は呼び出し側が `RenderedFrame::rgba`
     /// を使う、既存の市松分岐と同じ形)。
     ///
     /// **優先順位**(裁定157): 観測カメラが有効なら観測視点の再合成を最優先で
@@ -2139,8 +2236,10 @@ impl Shell {
     }
 }
 
-/// Stage 表示用の Handle を作る唯一の場所。`stage_handle_rgba` で縮め、
-/// **市松が有効なら display 用の複製にだけ**
+/// Stage 表示用の RGBA を作る唯一の場所(裁定166: 旧 `build_stage_handle` の
+/// 置き換え — 戻り値が `image::Handle` ではなく shader Primitive が直接使う
+/// `(width, height, rgba)` になった)。`stage_presenter_rgba` で縮め(resolution
+/// cap ½/¼ の時だけ)、**市松が有効なら display 用の複製にだけ**
 /// [`settings_pane::composite_checkerboard_with_tile_px`] を乗せる — 呼び出し
 /// 側が渡す `full_rgba` 自体は一切変更しない。
 ///
@@ -2151,13 +2250,13 @@ impl Shell {
 /// (`RenderedFrame::rgba`)自体はここでは一切変更しない。
 ///
 /// **市松v2(利用者較正 2026-08-21「市松が見えない」の根治)**: `ui_scale` を
-/// 明示的に受け取り、`stage_handle_rgba` と同じ縮小率
-/// (`stage::effective_preview_scale(stage_auto_scale(width, height),
-/// resolution_cap)`)を自分でも算出して
-/// [`settings_pane::checkerboard_tile_px`] に渡す — comp 画素空間固定だった
-/// 旧タイル寸(8px)が Auto 縮小後にさらに痩せて実質不可視になっていた
-/// 根因1をここで補正する(`settings_pane::checkerboard_tile_px` doc 参照)。
-fn build_stage_handle(
+/// 明示的に受け取り、`stage_presenter_rgba` と同じ縮小率
+/// (`stage::effective_preview_scale(1.0, resolution_cap)` — 裁定166 で auto 側
+/// は常に `1.0`)を自分でも算出して [`settings_pane::checkerboard_tile_px`] に
+/// 渡す — comp 画素空間固定だった旧タイル寸(8px)が縮小後にさらに痩せて実質
+/// 不可視になっていた根因1をここで補正する
+/// (`settings_pane::checkerboard_tile_px` doc 参照)。
+fn build_stage_presenter_rgba(
     width: u32,
     height: u32,
     full_rgba: &[u8],
@@ -2165,25 +2264,492 @@ fn build_stage_handle(
     resolution_cap: stage::PreviewResolutionCap,
     colors: Colors,
     ui_scale: f32,
-) -> (image::Handle, usize) {
-    let (handle_width, handle_height, mut handle_rgba) =
-        stage_handle_rgba(width, height, full_rgba, resolution_cap);
+) -> (u32, u32, Vec<u8>) {
+    let (presenter_width, presenter_height, mut presenter_rgba) =
+        stage_presenter_rgba(width, height, full_rgba, resolution_cap);
     if checkerboard {
-        let effective_scale = stage::effective_preview_scale(stage_auto_scale(width, height), resolution_cap);
+        let effective_scale = stage::effective_preview_scale(1.0, resolution_cap);
         let tile_px = settings_pane::checkerboard_tile_px(ui_scale, effective_scale);
         settings_pane::composite_checkerboard_with_tile_px(
-            handle_width,
-            handle_height,
-            &mut handle_rgba,
+            presenter_width,
+            presenter_height,
+            &mut presenter_rgba,
             colors,
             tile_px,
         );
     }
-    let handle_bytes = handle_rgba.len();
-    (
-        image::Handle::from_rgba(handle_width, handle_height, handle_rgba),
-        handle_bytes,
-    )
+    (presenter_width, presenter_height, presenter_rgba)
+}
+
+// ---------------------------------------------------------------------------
+// Stage presenter — shader widget の永続テクスチャ(裁定166)。
+//
+// `image(frame.handle.clone())` の置き換え。`iced::widget::shader::Program`
+// (`Shader<Message, P>` widget)を自前実装する — `P::Primitive` は毎フレーム
+// `Program::draw` が新しく作る軽い値(Arc の参照カウントを増やすだけ)、
+// `P::Primitive::Pipeline` が実際の `wgpu::Texture`/`wgpu::RenderPipeline` を
+// 持つ永続状態(`iced_wgpu::primitive::Storage` に `TypeId` 単位で1個だけ
+// 生きる、`iced_wgpu-0.14.0/src/primitive.rs::BlackBox::prepare` 実測)。
+//
+// wgpu 型はすべて `iced::wgpu`(`iced_wgpu` の re-export、workspace の
+// `wgpu 27.0.1` そのもの)を通す — 新規の wgpu 直接依存を足さない
+// (裁定166 決定文書、fork の re_renderer は wgpu 29.0.4 で型が別物のため
+// 混ぜられない)。
+// ---------------------------------------------------------------------------
+
+/// letterbox uniform(vertex shader 側)のレイアウト。NDC 空間での
+/// [offset_x, offset_y, scale_x, scale_y] — widget の `bounds` を viewport その
+/// ものとして扱う shader Primitive の性質上(`iced_wgpu-0.14.0/src/lib.rs` の
+/// render ループが `render_pass.set_viewport` を primitive の `bounds` へ
+/// 設定してから `draw` を呼ぶ、実測)、この4値だけで letterbox 矩形が NDC 上に
+/// 定まる。
+const STAGE_PRESENTER_UNIFORM_BYTES: u64 = 16;
+
+/// Stage 提示 shader の WGSL。頂点は `vertex_index`(0..6)から生成する
+/// full-screen quad(2三角形)——専用の vertex buffer は持たない(letterbox の
+/// 位置/大きさは uniform 側で表現する)。
+const STAGE_PRESENTER_WGSL: &str = r#"
+struct Uniforms {
+    offset: vec2<f32>,
+    scale: vec2<f32>,
+};
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(0) @binding(1) var stage_texture: texture_2d<f32>;
+@group(0) @binding(2) var stage_sampler: sampler;
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+    var corners = array<vec2<f32>, 6>(
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(0.0, 1.0),
+    );
+    let uv = corners[vertex_index];
+
+    var out: VertexOutput;
+    out.position = vec4<f32>(
+        uniforms.offset.x + uv.x * uniforms.scale.x,
+        uniforms.offset.y - uv.y * uniforms.scale.y,
+        0.0,
+        1.0,
+    );
+    out.uv = uv;
+    return out;
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    return textureSample(stage_texture, stage_sampler, in.uv);
+}
+"#;
+
+/// `bounds`(widget local、論理px)へ comp(`width`×`height`)を letterbox で
+/// 収めた矩形を、shader の viewport(=widget `bounds` そのもの)基準の NDC
+/// offset/scale へ変換する。letterbox の実際の幾何は
+/// [`stage::letterboxed_rect`](`image` widget の既定 `ContentFit::Contain` を
+/// Rust で再現した単一源、`screenshot.rs::blit_letterboxed` と共有)をそのまま
+/// 呼ぶ — 2箇所目の letterbox 実装を作らない(裁定166 EXACT TARGET 1)。
+///
+/// 退化(bounds/comp が 0 幅高)した時は `[0.0; 4]` を返す — 頂点が全て同じ
+/// NDC 点に潰れるだけで、`draw` 自体は panic せず何も見えない矩形を描いて
+/// 終わる(M16: 描けなくても panic しない)。
+fn stage_presenter_letterbox_ndc(bounds: iced::Rectangle, width: u32, height: u32) -> [f32; 4] {
+    if bounds.width <= 0.0 || bounds.height <= 0.0 {
+        return [0.0; 4];
+    }
+    let comp = CompSpec { width, height };
+    let Some(rect) = stage::letterboxed_rect(bounds, comp) else {
+        return [0.0; 4];
+    };
+
+    let rel_x = (rect.x - bounds.x) / bounds.width;
+    let rel_y = (rect.y - bounds.y) / bounds.height;
+    let rel_w = rect.width / bounds.width;
+    let rel_h = rect.height / bounds.height;
+
+    // NDC: x+ は右、y+ は上。widget 左上(rel_x, rel_y)が NDC の
+    // (offset_x, offset_y)、右下(rel_x+rel_w, rel_y+rel_h)が
+    // (offset_x + 2*rel_w, offset_y - 2*rel_h) になるよう解く。
+    [rel_x * 2.0 - 1.0, 1.0 - rel_y * 2.0, rel_w * 2.0, rel_h * 2.0]
+}
+
+#[cfg(test)]
+mod stage_presenter_letterbox_ndc_tests {
+    use super::*;
+
+    /// bounds と comp が同じアスペクト(16:9)なら letterbox 帯が無い —
+    /// widget いっぱいに描く、つまり NDC の [-1,1]×[-1,1] を丸ごと使う。
+    #[test]
+    fn matching_aspect_fills_the_full_ndc_range() {
+        let bounds = iced::Rectangle {
+            x: 0.0,
+            y: 0.0,
+            width: 1600.0,
+            height: 900.0,
+        };
+        let [offset_x, offset_y, scale_x, scale_y] = stage_presenter_letterbox_ndc(bounds, 1920, 1080);
+        assert!((offset_x - -1.0).abs() < 1e-6);
+        assert!((offset_y - 1.0).abs() < 1e-6);
+        assert!((scale_x - 2.0).abs() < 1e-6);
+        assert!((scale_y - 2.0).abs() < 1e-6);
+    }
+
+    /// 正方形の bounds へ 16:9 comp を収めると上下に帯ができる —
+    /// scale_y は 2.0 未満(全高は使わない)、offset_y は 1.0 未満(上端から
+    /// 少し内側)。
+    #[test]
+    fn narrower_bounds_letterbox_shrinks_the_vertical_scale() {
+        let bounds = iced::Rectangle {
+            x: 0.0,
+            y: 0.0,
+            width: 900.0,
+            height: 900.0,
+        };
+        let [_offset_x, offset_y, _scale_x, scale_y] = stage_presenter_letterbox_ndc(bounds, 1920, 1080);
+        assert!(scale_y < 2.0, "letterbox 帯があるのに scale_y が全高のまま: {scale_y}");
+        assert!(offset_y < 1.0, "letterbox 帯があるのに offset_y が上端のまま: {offset_y}");
+    }
+
+    /// 退化した bounds(幅0)では panic せず全ゼロを返す(M16)。
+    #[test]
+    fn degenerate_bounds_returns_all_zero_without_panicking() {
+        let bounds = iced::Rectangle {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 900.0,
+        };
+        assert_eq!(stage_presenter_letterbox_ndc(bounds, 1920, 1080), [0.0; 4]);
+    }
+}
+
+/// Stage の絵を描く shader widget の `Program`(裁定166)。**書ける状態を
+/// 持たない**(`State = ()`)— カメラ操作等は別 widget(`stage::StageOverlay`、
+/// `stack!` でこの上に重なる)が受ける、既存構造は無改変(`stage_pane` 参照)。
+#[derive(Debug)]
+struct StagePresenterProgram {
+    rgba: Arc<Vec<u8>>,
+    width: u32,
+    height: u32,
+    generation: u64,
+}
+
+impl shader::Program<Message> for StagePresenterProgram {
+    type State = ();
+    type Primitive = StagePresenterPrimitive;
+
+    fn draw(&self, _state: &Self::State, _cursor: iced::mouse::Cursor, bounds: iced::Rectangle) -> Self::Primitive {
+        StagePresenterPrimitive {
+            rgba: Arc::clone(&self.rgba),
+            width: self.width,
+            height: self.height,
+            generation: self.generation,
+            letterbox: stage_presenter_letterbox_ndc(bounds, self.width, self.height),
+        }
+    }
+}
+
+/// 1描画分の Stage 提示データ。**`Program::draw` が描画のたびに新しく作る**
+/// (`iced_widget::shader::Program::draw` の契約)——だが `rgba` は `Arc` を
+/// 貸すだけなので、内容が変わらない限り複製コストはゼロ。実際に GPU へ
+/// アップロードするかどうかは `generation` を `StagePresenterPipeline` 側の
+/// 記憶と比較して決める(裁定166 EXACT TARGET 1「フレーム内容が変わった時
+/// だけ `queue.write_texture`」)。
+#[derive(Debug)]
+struct StagePresenterPrimitive {
+    rgba: Arc<Vec<u8>>,
+    width: u32,
+    height: u32,
+    generation: u64,
+    /// NDC 空間での letterbox 矩形 [offset_x, offset_y, scale_x, scale_y]
+    /// (`stage_presenter_letterbox_ndc` 参照)。widget bounds が変わるたび
+    /// (pane resize)再計算が要るので、世代ゲートの対象外(4 float の書き込み
+    /// は軽い — `iced_wgpu::image::Layer::prepare` も transform uniform を
+    /// 毎フレーム書いている、同じ考え方)。
+    letterbox: [f32; 4],
+}
+
+impl shader::Primitive for StagePresenterPrimitive {
+    type Pipeline = StagePresenterPipeline;
+
+    fn prepare(
+        &self,
+        pipeline: &mut Self::Pipeline,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        _bounds: &iced::Rectangle,
+        _viewport: &shader::Viewport,
+    ) {
+        pipeline.upload(device, queue, self);
+    }
+
+    fn draw(&self, pipeline: &Self::Pipeline, render_pass: &mut wgpu::RenderPass<'_>) -> bool {
+        pipeline.draw(render_pass)
+    }
+}
+
+/// comp 寸法変化時だけ再作成する実体(裁定166 EXACT TARGET 1「永続
+/// `wgpu::Texture`」)。`bind_group` はテクスチャ view を束ねているので、
+/// テクスチャ再作成のたびに一緒に作り直す(`uniform_buffer`/`sampler` は
+/// `StagePresenterPipeline` 側で使い回す)。
+struct StagePresenterTexture {
+    width: u32,
+    height: u32,
+    texture: wgpu::Texture,
+    bind_group: wgpu::BindGroup,
+    /// 直近でこのテクスチャへ実際に書き込んだ世代。`None` = まだ一度も
+    /// 書いていない(テクスチャ再作成直後は必ず `None` に戻す — 新しい
+    /// テクスチャの中身は不定なので、世代が偶然一致しても再アップロードが
+    /// 要る)。
+    uploaded_generation: Option<u64>,
+}
+
+/// Stage 提示 shader の永続 GPU 状態。`iced_widget::shader::Storage` に
+/// `TypeId::of::<StagePresenterPrimitive>()` を鍵として1個だけ生きる
+/// (iced の仕組みそのもの、`shader::Program`/`Pipeline` の doc 参照)。
+struct StagePresenterPipeline {
+    render_pipeline: wgpu::RenderPipeline,
+    sampler: wgpu::Sampler,
+    texture_bind_group_layout: wgpu::BindGroupLayout,
+    uniform_buffer: wgpu::Buffer,
+    texture: Option<StagePresenterTexture>,
+}
+
+impl shader::Pipeline for StagePresenterPipeline {
+    fn new(device: &wgpu::Device, _queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("motolii-shell::stage_presenter sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("motolii-shell::stage_presenter uniforms"),
+            size: STAGE_PRESENTER_UNIFORM_BYTES,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("motolii-shell::stage_presenter bind group layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(STAGE_PRESENTER_UNIFORM_BYTES),
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("motolii-shell::stage_presenter pipeline layout"),
+            bind_group_layouts: &[&texture_bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("motolii-shell::stage_presenter shader"),
+            source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(STAGE_PRESENTER_WGSL)),
+        });
+
+        // blend state は `iced_wgpu::image` の pipeline(`src/image/mod.rs`)と
+        // 同じ非 premultiplied alpha "over" — Stage の絵は元々 image widget
+        // 経由でこの blend で描かれていたので、見た目のパリティをそのまま保つ。
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("motolii-shell::stage_presenter render pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader_module,
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader_module,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        Self {
+            render_pipeline,
+            sampler,
+            texture_bind_group_layout,
+            uniform_buffer,
+            texture: None,
+        }
+    }
+}
+
+impl StagePresenterPipeline {
+    /// comp 寸法変化時だけテクスチャを作り直し、世代が前回と違う時だけ
+    /// `queue.write_texture` する(裁定166 EXACT TARGET 1)。letterbox uniform
+    /// は世代に関わらず毎回書く(widget bounds は世代と無関係に変わりうる —
+    /// pane resize)。引数を `&StagePresenterPrimitive` 1本にまとめてあるのは
+    /// clippy `too_many_arguments`(既定閾値7)を素直に踏まえた形 — 個々の値は
+    /// 呼び出し元(`prepare`)がすでに1個の primitive として持っている。
+    fn upload(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, primitive: &StagePresenterPrimitive) {
+        let width = primitive.width;
+        let height = primitive.height;
+        let generation = primitive.generation;
+        let letterbox = primitive.letterbox;
+        let rgba = primitive.rgba.as_slice();
+        if width == 0 || height == 0 {
+            self.texture = None;
+            return;
+        }
+
+        let needs_new_texture = match &self.texture {
+            Some(existing) => existing.width != width || existing.height != height,
+            None => true,
+        };
+
+        if needs_new_texture {
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("motolii-shell::stage_presenter texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                // `iced_wgpu::image` の atlas と同じ sRGB フォーマット(`color::
+                // GAMMA_CORRECTION` が既定 true の時に選ぶ物、実測)— iced 全体が
+                // 線形空間で合成する前提と合わせておかないと、他 widget(背景色
+                // 等)と並んだ時に明るさがズレる。
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("motolii-shell::stage_presenter bind group"),
+                layout: &self.texture_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: self.uniform_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                ],
+            });
+            self.texture = Some(StagePresenterTexture {
+                width,
+                height,
+                texture,
+                bind_group,
+                uploaded_generation: None,
+            });
+        }
+
+        let presenter_texture = self.texture.as_mut().expect("直前で確実に作成済み");
+
+        if presenter_texture.uploaded_generation != Some(generation) {
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &presenter_texture.texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                rgba,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4 * width),
+                    rows_per_image: Some(height),
+                },
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+            );
+            presenter_texture.uploaded_generation = Some(generation);
+            metrics::record_presenter_upload(rgba.len());
+        }
+
+        let mut uniform_bytes = [0u8; STAGE_PRESENTER_UNIFORM_BYTES as usize];
+        uniform_bytes[0..4].copy_from_slice(&letterbox[0].to_ne_bytes());
+        uniform_bytes[4..8].copy_from_slice(&letterbox[1].to_ne_bytes());
+        uniform_bytes[8..12].copy_from_slice(&letterbox[2].to_ne_bytes());
+        uniform_bytes[12..16].copy_from_slice(&letterbox[3].to_ne_bytes());
+        queue.write_buffer(&self.uniform_buffer, 0, &uniform_bytes);
+    }
+
+    fn draw(&self, render_pass: &mut wgpu::RenderPass<'_>) -> bool {
+        let Some(texture) = &self.texture else {
+            return false;
+        };
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &texture.bind_group, &[]);
+        render_pass.draw(0..6, 0..1);
+        true
+    }
 }
 
 /// `Shell::subscription` が使う、Inspector drag-to-scrub 用の window 全体の
@@ -2410,13 +2976,24 @@ fn stage_pane(
 ) -> Element<'_, Message> {
     let body: Element<'_, Message> = match frame {
         Some(frame) => {
-            let picture: Element<'_, Message> = image(frame.handle.clone())
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into();
+            // 裁定166: Stage の絵は shader Program の永続テクスチャで提示する
+            // (旧 `image(frame.handle.clone())` の置き換え — image widget の
+            // 非同期アップロード「その間 draw_image は何も描かない」穴を構造で
+            // 消す)。letterbox は `Program::draw` が widget bounds を受け取った
+            // 時点で `stage::letterboxed_rect` を呼んで組む(2箇所目の
+            // letterbox 実装を作らない、EXACT TARGET 1)。
+            let picture: Element<'_, Message> = Shader::new(StagePresenterProgram {
+                rgba: Arc::clone(&frame.presenter_rgba),
+                width: frame.presenter_width,
+                height: frame.presenter_height,
+                generation: frame.presenter_generation,
+            })
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
             // 観測カメラの入力(ホイール/中ボタンドラッグ)とフレーム枠 overlay
-            // (裁定157)。`image` の上に重ねるだけ — `image` 自体は変形しない
-            // (Stage は image 貼りのまま、`stage.rs` モジュール doc 参照)。
+            // (裁定157)。shader widget の上に重ねるだけ — 変形はしない
+            // (Stage は letterbox 貼りのまま、`stage.rs` モジュール doc 参照)。
             match overlay {
                 // 裁定160 切片10: `StageOverlay::view()` は `stage::Message`
                 // (pane ローカル)を返すようになった — `.map(Message::Stage)`
@@ -2432,11 +3009,11 @@ fn stage_pane(
             .into(),
     };
 
-    // 自動導出スケール(`stage_auto_scale` — sync 予算内なら1.0、超えれば
-    // sqrt スケール)。frame が無ければ縮める対象自体が無いので1.0固定
-    // (Auto 表示は「1.00×」になるが、band 自体は comp が無くても常時表示 —
-    // 発注書 EXACT TARGET 2「常時表示」)。
-    let auto_scale = frame.map(|f| stage_auto_scale(f.width, f.height)).unwrap_or(1.0);
+    // 裁定166: Auto は 1.0 固定(iced 同期アップロード予算からの自動縮小柵は
+    // 撤去 — `stage_auto_scale` は無くなった、フル解像度復帰)。状態帯の
+    // 実効値表示は `effective_preview_scale(1.0, cap)` へそのまま追随する
+    // (発注書 EXACT TARGET 2「常時表示」・「実効値表示の追随を確認」)。
+    let auto_scale = 1.0;
     let band = stage::state_band_view(observation, resolution_cap, auto_scale, checkerboard, dims, colors)
         .map(Message::Stage);
 

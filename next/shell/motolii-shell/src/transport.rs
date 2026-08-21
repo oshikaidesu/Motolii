@@ -113,41 +113,22 @@ pub fn open_real_playback(doc: &Document, session: &Session) -> Result<PlaybackS
 }
 
 /// 再生中のtick購読(`Shell::subscription`が`transport.is_running()`の間だけ
-/// batchへ含める)。**`iced::time::every`は使わない** — この workspace の
-/// `iced`依存は`tokio`/`smol` featureを有効化していない(`thread-pool`
-/// executorのみ)ため`iced_futures::backend::native::thread_pool::time`は
-/// 空(`every`が無い、実測)。`tokens::watch_subscription`(notify監視)と同じ
-/// `iced::stream::channel` + 専用OSスレッドの形をtick用に踏襲する。
+/// batchへ含める)。**裁定166**:
+/// `iced::window::frames()`(`iced_runtime-0.14.0/src/window.rs::frames`、
+/// `RedrawRequested` = vsync由来)へ置き換えた
+/// (`docs/reviews/2026-08-21-stage-presenter-decision.md`)。
+///
+/// 旧実装はOSスレッドの`sleep(16ms)`で、30fps(33.33ms)の comp と噛み合わず
+/// フレーム表示時間が32/48msで揺れる2-3-2エイリアシング+sleepドリフトが
+/// あった(同決定文書 事実3、`toggle_playback`起点のガタつき調査)。`frames()`
+/// は表示の実タイミング(vsync)そのものを tick 源にするので、この揺れが構造で
+/// 消える。`Instant`(発火時刻)は使わない — `Session::playhead`はwall-clock
+/// 由来のまま(`PlaybackClock::position()`、`advance_playback_tick`のdoc参照)
+/// で、tick は「動いていることを知らせる」通知の意味しか持たない。
+///
+/// **既知の限界**: `frames()`はwindowがoccludedの間止まり得る(winitの
+/// `RedrawRequested`依存)。再生位置はwall-clock由来なので絵が止まっても時間は
+/// 正しく進む(復帰時に追いつく、決定文書§5)。
 pub fn tick_subscription() -> iced::Subscription<()> {
-    iced::Subscription::run(tick_stream)
-}
-
-/// 目標fps(~60)。playhead追随の粗さはこの間隔が上限になる — comp fpsより
-/// 十分細かければ「1フレームも飛ばさず見える」水準は満たす(正確な
-/// フレーム同期はStage描画側の責務で、tickは「動いていることを知らせる」
-/// だけ)。
-const TICK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(16);
-
-fn tick_stream() -> impl iced::futures::Stream<Item = ()> {
-    iced::stream::channel(
-        8,
-        |mut output: iced::futures::channel::mpsc::Sender<()>| async move {
-            std::thread::spawn(move || loop {
-                std::thread::sleep(TICK_INTERVAL);
-                if let Err(error) = output.try_send(()) {
-                    // 受け手(Shell)がもう無い(disconnected)なら見張りを終える
-                    // (`tokens::watch_stream`と同じ後始末)。詰まっているだけ
-                    // (容量超過)なら次のtickへ進めばよい。
-                    if error.is_disconnected() {
-                        return;
-                    }
-                }
-            });
-
-            // 実際の送信は上のOSスレッドが行う。この Future 自体は消費されない
-            // まま stream を生かしておくためだけに待ち続ける
-            // (`tokens::watch_stream`と同じ形)。
-            std::future::pending::<()>().await;
-        },
-    )
+    iced::window::frames().map(|_at| ())
 }
