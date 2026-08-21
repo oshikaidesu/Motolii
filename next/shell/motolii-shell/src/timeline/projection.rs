@@ -11,6 +11,10 @@ pub struct RowProjection {
     pub id: LayerId,
     pub name: String,
     pub hidden: bool,
+    /// solo(`LayerAttrs.solo`)。レーンバーの S トグルが読む(裁定147)。
+    pub solo: bool,
+    /// locked(`LayerAttrs.locked`)。レーンバーの L トグルが読む(裁定147)。
+    pub locked: bool,
     pub start: i64,
     pub duration: i64,
     pub selected: bool,
@@ -33,6 +37,8 @@ pub fn rows(store: &StoreView<'_>, session: &Session) -> Vec<RowProjection> {
             id,
             name: attrs.name,
             hidden: attrs.hidden,
+            solo: attrs.solo,
+            locked: attrs.locked,
             start: meta.timing.start,
             duration: meta.timing.duration,
             selected: session.selection == Some(id),

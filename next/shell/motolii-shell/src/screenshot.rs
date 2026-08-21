@@ -585,7 +585,13 @@ pub fn render(shell: &Shell) -> RgbaImage {
     y += stage_h + gap;
 
     // timeline — timeline_pane::draw と同じ位置関係(frame_to_x を共有)。
+    // レーンバー(行ヘッダ列、裁定147): クリップ面は `rail_width` ぶん右へ
+    // ずれる。`frame_to_x` 自体には触れず、呼び出し側(このブロック)で
+    // `padding + rail_width` を足す — `timeline/canvas.rs::draw` と同じ約束。
     let timeline_top = y;
+    let rail_width = dims.timeline_lane_bar_width;
+    let clip_width = (content_width - rail_width).max(0.0);
+    let clip_x0 = padding + rail_width;
     fill_rect(
         &mut canvas,
         padding,
@@ -595,16 +601,20 @@ pub fn render(shell: &Shell) -> RgbaImage {
         to_rgba(colors.surface_panel, 1.0),
     );
     let ruler_h = dims.row_height;
+    // ルーラー帯の地は rail を除いたクリップ面だけ(rail の corner は
+    // `surface_panel` の地のまま — `timeline/canvas.rs::draw` と同じ)。
     fill_rect(
         &mut canvas,
-        padding,
+        clip_x0,
         y,
-        content_width,
+        clip_width,
         ruler_h,
         to_rgba(colors.surface_raised, 1.0),
     );
-    // ルーラー帯とクリップ面の境界(`timeline_pane.rs::TimelinePane::draw` と
-    // 同じ hairline — 面色の塗り分け=`surface_raised` だけに頼らない)。
+    // ルーラー帯とクリップ面の境界(`timeline/canvas.rs::draw` と同じ
+    // hairline — 面色の塗り分け=`surface_raised` だけに頼らない)。**全幅**
+    // (rail 込み)で引く — レーンバーの corner とクリップ面のルーラーは同じ
+    // 横の区切りを共有する。
     stroke_rect(
         &mut canvas,
         Rect { x: padding, y, w: content_width, h: ruler_h },
@@ -631,16 +641,16 @@ pub fn render(shell: &Shell) -> RgbaImage {
             to_rgba(colors.timeline_row_zebra, colors.timeline_row_zebra.a),
         );
     }
-    if duration_frames > 0 && content_width > 0.0 && rows_bottom > rows_top {
+    if duration_frames > 0 && clip_width > 0.0 && rows_bottom > rows_top {
         let segment_frames = timeline_pane::time_band_segment_frames(fps, duration_frames);
         let mut segment_index: i64 = 0;
         let mut start_frame: i64 = 0;
         while start_frame < duration_frames {
             let end_frame = (start_frame + segment_frames).min(duration_frames);
             if segment_index % 2 == 1 {
-                let x0 = padding + timeline_pane::frame_to_x(start_frame, content_width, duration_frames);
-                let x1 = (padding
-                    + timeline_pane::frame_to_x(end_frame, content_width, duration_frames))
+                let x0 = clip_x0 + timeline_pane::frame_to_x(start_frame, clip_width, duration_frames);
+                let x1 = (clip_x0
+                    + timeline_pane::frame_to_x(end_frame, clip_width, duration_frames))
                 .max(x0 + 1.0);
                 fill_rect(
                     &mut canvas,
@@ -661,7 +671,7 @@ pub fn render(shell: &Shell) -> RgbaImage {
         let Ok(frame_no) = marker.time.try_to_frame_floor(fps) else {
             continue;
         };
-        let x = padding + timeline_pane::frame_to_x(frame_no, content_width, duration_frames);
+        let x = clip_x0 + timeline_pane::frame_to_x(frame_no, clip_width, duration_frames);
         stroke_v(
             &mut canvas,
             x,
@@ -675,6 +685,8 @@ pub fn render(shell: &Shell) -> RgbaImage {
     for (index, row) in rows.iter().enumerate() {
         let row_top = timeline_top + ruler_h + dims.row_height * index as f32;
         if row.selected {
+            // 全幅(rail 込み)— `timeline/canvas.rs::draw` と同じ理由
+            // (選択は行そのものの状態、クリップ面だけの状態ではない)。
             fill_rect(
                 &mut canvas,
                 padding,
@@ -685,9 +697,9 @@ pub fn render(shell: &Shell) -> RgbaImage {
             );
         }
         let start_x =
-            padding + timeline_pane::frame_to_x(row.start, content_width, duration_frames);
-        let end_x = (padding
-            + timeline_pane::frame_to_x(row.start + row.duration, content_width, duration_frames))
+            clip_x0 + timeline_pane::frame_to_x(row.start, clip_width, duration_frames);
+        let end_x = (clip_x0
+            + timeline_pane::frame_to_x(row.start + row.duration, clip_width, duration_frames))
         .max(start_x + 1.0);
         let bar_color = if row.hidden {
             colors.text_muted
@@ -704,7 +716,7 @@ pub fn render(shell: &Shell) -> RgbaImage {
         );
 
         // 行の区切り(裁定139: 面色の塗り分け=ゼブラの明暗だけに頼らず hairline
-        // を足す — `TimelinePane::draw` の行末 hairline と同じ)。
+        // を足す — `TimelinePane::draw` の行末 hairline と同じ)。全幅(rail 込み)。
         stroke_h(
             &mut canvas,
             padding,
@@ -713,10 +725,52 @@ pub fn render(shell: &Shell) -> RgbaImage {
             dims.border_width,
             to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
         );
+
+        // レーンバー(行ヘッダ列、裁定147): スウォッチ + M/S/L の枠
+        // (`timeline/lane_bar.rs::draw` と同じ幾何 — この instrument は文字を
+        // 描かないので枠と色面だけ再現する)。
+        let swatch_size = dims.spacing_m;
+        let swatch_y = row_top + (dims.row_height - swatch_size) / 2.0;
+        fill_rect(
+            &mut canvas,
+            padding + dims.spacing_s,
+            swatch_y,
+            swatch_size,
+            swatch_size,
+            to_rgba(colors.way_timeline, 1.0),
+        );
+
+        let glyph_w = dims.inspector_glyph_width;
+        let glyph_h = (dims.row_height - dims.spacing_xs).max(1.0);
+        let glyph_y = row_top + (dims.row_height - glyph_h) / 2.0;
+        let glyph_gap = dims.spacing_xs;
+        let block_w = glyph_w * 3.0 + glyph_gap * 2.0;
+        let mut glyph_x = padding + rail_width - dims.spacing_s - block_w;
+        for active in [row.hidden, row.solo, row.locked] {
+            let border_color = if active { colors.action_active } else { colors.border_default };
+            stroke_rect(
+                &mut canvas,
+                Rect { x: glyph_x, y: glyph_y, w: glyph_w, h: glyph_h },
+                dims.border_width,
+                to_rgba(border_color, 1.0),
+            );
+            glyph_x += glyph_w + glyph_gap;
+        }
     }
 
+    // rail とクリップ面の境界(強い hairline、`timeline/lane_bar.rs::draw` と
+    // 同じ)。行の縦積みぶん全体を通す。
+    stroke_v(
+        &mut canvas,
+        clip_x0,
+        timeline_top,
+        rows_bottom,
+        dims.border_width,
+        to_rgba(colors.border_default, 1.0),
+    );
+
     let playhead_x =
-        padding + timeline_pane::frame_to_x(session.playhead, content_width, duration_frames);
+        clip_x0 + timeline_pane::frame_to_x(session.playhead, clip_width, duration_frames);
     stroke_v(
         &mut canvas,
         playhead_x,

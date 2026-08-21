@@ -90,6 +90,13 @@ pub struct Dimensions {
     /// **Key 列自体は空のまま**(Q0: keyframe UI 未実装、列幅の予約だけ)。
     #[serde(default = "default_inspector_glyph_width")]
     pub inspector_glyph_width: f32,
+    /// Timeline のレーンバー(行ヘッダ列)幅。出典: 視覚正本
+    /// `ui-scale-and-z.html` の `.thead{width:calc(150 * var(--s) * 1px)}`
+    /// (裁定147「面の構成」— レーンバーの視覚正本はこの mock の行ヘッダ列)。
+    /// M/S/L glyph 幅は新トークンを増やさず `inspector_glyph_width` を使い回す
+    /// (Inspector の Key/M/S 列と同じ意味段、`timeline/lane_bar.rs` 参照)。
+    #[serde(default = "default_timeline_lane_bar_width")]
+    pub timeline_lane_bar_width: f32,
     /// mock `--s` 相当の UI 拡大率(1.00 基準、0.01 刻み)。**適用点は
     /// [`Dimensions::scaled`] の1箇所だけ** — 個々の pane はここを直接読まず、
     /// [`crate::Shell::dims`] が返す「掛け算済みの」`Dimensions` を読む。
@@ -104,6 +111,10 @@ pub struct Dimensions {
 
 fn default_inspector_glyph_width() -> f32 {
     18.0
+}
+
+fn default_timeline_lane_bar_width() -> f32 {
+    150.0
 }
 
 fn default_ui_scale() -> f32 {
@@ -134,6 +145,7 @@ impl Default for Dimensions {
             inspector_section_header_height: 26.0,
             inspector_value_width: 38.0,
             inspector_glyph_width: 18.0,
+            timeline_lane_bar_width: 150.0,
             ui_scale: 1.0,
         }
     }
@@ -184,6 +196,7 @@ impl Dimensions {
             inspector_section_header_height: self.inspector_section_header_height * s,
             inspector_value_width: self.inspector_value_width * s,
             inspector_glyph_width: self.inspector_glyph_width * s,
+            timeline_lane_bar_width: self.timeline_lane_bar_width * s,
             // 自分自身は「寸法」ではないので掛けない。この結果を再度 `scaled()`
             // に通す呼び出し側は無い(適用点は `Shell::dims` の1箇所だけ)。
             ui_scale: self.ui_scale,
