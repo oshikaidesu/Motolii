@@ -1,71 +1,130 @@
 <!doctype html>
-<!-- 意味論先出しモック 第3号: Browser(2026-08-21)
-     B2(rail/filter)・B3(絵)の発注仕様になる。一覧の正本= Document 素材台帳
-     (裁定162 bin-first)。Q0 実例集(旧 browser_pane の「機能が無い chrome は
-     置かない」判断列)を踏襲 — このモックに描いた物は全部実機能が付く前提。 -->
-<html lang="ja"><head><meta charset="utf-8"><title>Browser 意味論モック</title>
+<!-- 意味論先出しモック 第3号: Browser(2026-08-21、v2 = 旧世界モック全要素救出版)
+     救出元: docs/mocks-ui/public/browser-library.html(482行)— 利用者指示
+     「旧世界のモックから要素を全部救出」。Q0 との両立: 製品では機能が付くまで
+     置かないが、意味論モックには全要素を「機能前提(解禁束)の注記つき」で描く —
+     どの要素がどの束で解禁されるかの地図を兼ねる。半透明=未解禁の予約地。 -->
+<html lang="ja"><head><meta charset="utf-8"><title>Browser 意味論モック v2</title>
 <style>
 :root{--surface-panel:#363636;--surface-raised:#3e3e3e;--text-muted:#757575;--text-primary:#cfcfcf;
 --action-active:#d8b574;--hairline-weak:rgba(0,0,0,.35);--sem:#e8c35a}
 body{background:#282828;color:var(--text-primary);font:12px/1.5 -apple-system,sans-serif;margin:24px}
-h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted)}
+h1{font-size:14px;font-weight:600}.hint{color:var(--text-muted);max-width:880px}
 label.t{display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin:8px 0 14px}
-.pane{position:relative;width:880px;background:var(--surface-panel);border:1px solid #1d1d1d;display:grid;grid-template-columns:140px 1fr;grid-template-rows:26px 1fr}
-.filter{grid-column:2;display:flex;align-items:center;gap:10px;padding:0 10px;background:var(--surface-raised);border-bottom:1px solid #555;font-size:11px;color:var(--text-muted)}
-.filter .q{flex:0 0 180px;height:16px;background:#2e2e2e;border:1px solid #4a4a4a;border-radius:2px}
-.railhead{grid-column:1;background:var(--surface-panel);border-bottom:1px solid #555}
-.rail{grid-column:1;border-right:1px solid var(--hairline-weak);padding:8px 0;font-size:11px}
-.rail div{padding:4px 12px;color:var(--text-muted)}
-.rail .on{color:var(--text-primary);background:rgba(255,255,255,.05)}
-.grid{padding:12px;display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-content:start;min-height:330px}
+.pane{position:relative;width:920px;background:var(--surface-panel);border:1px solid #1d1d1d}
+.future{opacity:.38}   /* 未解禁の予約地 */
+/* header: 履歴+ツールバー+タブ */
+.hd{display:flex;align-items:center;gap:6px;height:26px;padding:0 8px;background:var(--surface-raised);border-bottom:1px solid #555;font-size:11px}
+.hbtn{width:18px;height:16px;text-align:center;background:#4a4a4a;border-radius:2px;color:var(--text-muted)}
+.tbtn{padding:1px 8px;background:#4a4a4a;border-radius:2px;color:var(--text-muted)}
+.tabs{display:flex;gap:2px;margin-left:14px}
+.tab{padding:2px 10px;border-radius:2px 2px 0 0;color:var(--text-muted)}
+.tab.on{background:var(--surface-panel);color:var(--text-primary)}
+.body{display:grid;grid-template-columns:150px 1fr}
+/* sidebar(rail) */
+.rail{border-right:1px solid var(--hairline-weak);padding:6px 0;font-size:11px;min-height:360px}
+.lr{padding:3px 12px;color:var(--text-muted);white-space:nowrap}
+.lr.on{color:var(--text-primary);background:rgba(255,255,255,.05)}
+.lr.ind{padding-left:24px}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
+/* catalog */
+.cat{display:flex;flex-direction:column}
+.chd{display:flex;align-items:center;gap:10px;height:24px;padding:0 10px;border-bottom:1px solid var(--hairline-weak);font-size:11px;color:var(--text-muted)}
+.vm{display:flex;gap:3px}.vm span{width:16px;height:14px;background:#4a4a4a;border-radius:2px;text-align:center;font-size:9px;line-height:14px}
+.vm .on{background:#5a5a5a;color:var(--text-primary)}
+.shelf{display:flex;align-items:center;gap:6px;height:22px;padding:0 10px;border-bottom:1px solid var(--hairline-weak);font-size:10px;color:var(--text-muted)}
+.chip{padding:0 7px;background:#424242;border-radius:8px}
+.grid{padding:12px;display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-content:start;flex:1}
 .card{position:relative}
-.thumb{height:84px;border-radius:3px;background:linear-gradient(135deg,#555,#333);display:flex;align-items:center;justify-content:center;color:#999;font-size:10px}
+.thumb{height:80px;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:10px}
 .card .nm{font-size:10px;color:var(--text-primary);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card .k{font-size:9px;color:var(--text-muted)}
 .badge{position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--action-active)}
+/* 下部: selection tray + tag editor + context menu(予約地) */
+.tray{display:flex;gap:5px;align-items:center;height:20px;padding:0 10px;border-top:1px solid var(--hairline-weak);font-size:10px;color:var(--text-muted)}
+.sdot{width:9px;height:9px;border-radius:50%}
+.float{position:absolute;background:#2c2c2c;border:1px solid #555;border-radius:3px;font-size:10px;padding:6px 8px;color:var(--text-muted)}
+.float .tg{display:inline-block;padding:0 6px;background:#424242;border-radius:8px;margin:2px}
+.menu{width:150px}.menu div{padding:2px 8px}
 /* 意味層 */
 #sem{display:none}
 .ann,.lb{display:none;position:absolute;z-index:9;pointer-events:none}
 #sem:checked ~ .pane .ann,#sem:checked ~ .pane .lb{display:block}
 .o{border:1.5px dashed var(--sem);border-radius:3px}
 .lb{background:#151515;color:var(--sem);font-size:10px;line-height:1.35;padding:3px 6px;border:1px solid var(--sem);border-radius:3px;max-width:250px}
-#sem:checked ~ .legend{display:block}.legend{display:none;margin-top:14px;font-size:11px;color:var(--text-muted)}
+#sem:checked ~ .legend{display:block}.legend{display:none;margin-top:14px;font-size:11px;color:var(--text-muted);max-width:920px}
 .legend b{color:var(--sem)}.legend table{border-collapse:collapse;margin-top:6px}
 .legend td,.legend th{border:1px solid #444;padding:3px 8px;text-align:left;font-weight:400}
 </style></head><body>
-<h1>Browser — 意味論先出しモック(第3号)</h1>
-<div class="hint">一覧の正本= <b>Document 素材台帳</b>(裁定162 bin-first)。描いた物は全部実機能つき(Q0)。第一波= MEDIA のみ(EFFECTS/CREATE はタブごと置かない — 意味起草タスク#14 空席)。</div>
+<h1>Browser — 意味論先出しモック v2(旧世界全要素救出版)</h1>
+<div class="hint">実線=第一波(B2/B3)で解禁。<b>半透明=意味の予約地</b>(要素ごとに解禁束を注記 — 製品には機能と同時にしか入らない= Q0)。一覧の正本= Document 素材台帳(裁定162)。</div>
 <label class="t"><input type="checkbox" id="sem" checked> 意味層を表示(S 注記)</label>
 
 <div class="pane">
-  <div class="railhead"></div>
-  <div class="filter"><div class="q"></div><span>種別: すべて</span></div>
-  <div class="rail">
-    <div class="on">All media</div>
-    <div>Project(配置済み)</div>
-    <div>Recent</div>
+  <div class="hd">
+    <span class="hbtn future">‹</span><span class="hbtn future">›</span>
+    <span class="tbtn">Filters</span><span class="tbtn future">Tags</span>
+    <div class="tabs">
+      <span class="tab on">MEDIA</span>
+      <span class="tab future">EFFECTS</span>
+      <span class="tab future">CREATE</span>
+      <span class="tab future">PANELS</span>
+    </div>
   </div>
-  <div class="grid" id="grid"></div>
+  <div class="body">
+    <div class="rail">
+      <div class="lr future"><span class="dot" style="background:#c9973f"></span>Collection</div>
+      <div class="lr future"><span class="dot" style="background:#4fa8b8"></span>Collection</div>
+      <div class="lr future"><span class="dot" style="background:#8d6fc0"></span>Collection</div>
+      <div class="lr on">▦ All media</div>
+      <div class="lr">▣ Video</div>
+      <div class="lr">▧ Images</div>
+      <div class="lr">♪ Audio</div>
+      <div class="lr">◎ Project(配置済み)</div>
+      <div class="lr">◷ Recent</div>
+      <div class="lr future">▾ Starter Media</div>
+      <div class="lr ind future">├ Project assets</div>
+      <div class="lr future">▸ Motion assets</div>
+      <div class="lr future">＋ Add folder</div>
+    </div>
+    <div class="cat">
+      <div class="chd">
+        <span>All media</span>
+        <div class="vm"><span class="on">▤</span><span>▦</span></div>
+        <span class="future" style="margin-left:auto">結果 8 件</span>
+      </div>
+      <div class="shelf"><span class="chip">種別: すべて</span><span class="chip future">タグ: —</span><span class="future">Clear</span></div>
+      <div class="grid" id="grid"></div>
+      <div class="tray future"><span>選択 3:</span><span class="sdot" style="background:hsl(200 32% 62%)"></span><span class="sdot" style="background:hsl(80 32% 62%)"></span><span class="sdot" style="background:hsl(320 32% 62%)"></span></div>
+    </div>
+  </div>
+  <div class="float future" style="right:14px;bottom:56px;width:170px">tag editor<br><span class="tg">intro</span><span class="tg">verse</span><span class="tg">+</span></div>
+  <div class="float menu future" style="left:400px;top:210px"><div>配置</div><div>置換…</div><div>プロキシ生成</div><div>削除</div><div style="border-top:1px solid #555;margin-top:2px;padding-top:3px">Finder で表示</div></div>
 
   <!-- 意味層 -->
-  <div class="ann o" style="left:146px;top:32px;right:6px;bottom:6px"></div>
-  <div class="lb" style="right:8px;top:-34px">S5 ヒーロー = 素材カード grid(S4 重み高 — 視覚発見が主経路の代表例: サムネ+名前+種別で「見て選ぶ」)</div>
-  <div class="lb" style="left:-8px;top:70px;max-width:150px">縁: rail = 台帳の <b>scope 切替(a: 視界状態)</b>。All media=台帳全件 / Project=配置済みのみ / Recent=記帳順。<b>台帳(AdmitAsset)が正本</b> — ファイルシステム走査は行わない(裁定点参照)</div>
-  <div class="lb" style="left:200px;top:22px">縁: filter = 検索+種別絞り(a)。tag/Collections は<b>機能が付くまで置かない</b>(Q0 実例集の踏襲)</div>
-  <div class="lb" style="left:250px;top:120px">カードの動詞(b): <b>drag= Stage/Timeline へ配置</b>(直接操作が第一階)。double-click の意味は裁定点。右クリック= 将来の対象動詞 menu(S6 併存原則つき — 唯一の入口にしない)</div>
-  <div class="lb" style="left:610px;top:196px">● バッジ = <b>配置済み</b>(bin-first の可視化= S6: 「取り込んだが未配置」が見て分かる)</div>
+  <div class="lb" style="right:8px;top:-34px">S5 ヒーロー = カード grid(S4 重み高)。●バッジ=配置済み(bin-first の可視化= S6)</div>
+  <div class="lb" style="left:8px;top:30px;max-width:180px">‹ › 履歴 = a(scope 遷移の undo)。<b>解禁束: ナビ履歴</b>(scope 変更の履歴 stack — 小)。Filters=B2 / Tags=タグ束(map D)</div>
+  <div class="lb" style="left:330px;top:-6px">タブ4種(裁定143)= 意味の別世界。MEDIA=第一波。<b>EFFECTS/CREATE/PANELS の解禁束: 意味起草タスク#14</b>(空席のまま — タブは意味が起草されるまで予約地)</div>
+  <div class="lb" style="left:-8px;top:120px;max-width:150px">rail = 台帳の scope(a)。種別行(Video/Images/Audio)=台帳 filter。<b>Collections/フォルダ族の解禁束: タグ束+「filesystem 走査の要否」裁定</b>(台帳純化 vs 旧 dedupe 方式 — 未決)</div>
+  <div class="lb" style="left:250px;top:118px">カード動詞(b): drag=配置(直接・第一階)。double-click の意味=未決。<b>context menu の解禁束: 右クリック基盤 campaign</b>(S6 併存原則: 唯一の入口にしない)。中身の動詞(置換/プロキシ/削除)= map C 束 9 行</div>
+  <div class="lb" style="left:620px;top:330px">selection tray = 素材の複数選択の可視化。<b>解禁束: asset multi-select</b>(layer 側 U1 と同じ型)</div>
+  <div class="lb" style="right:8px;top:392px">tag editor の解禁束: タグ束(map D: Keyword Dictionary 系)</div>
 </div>
 
 <div class="legend">
-  <b>この面の操作の家(種別)と裁定点</b>
+  <b>要素→解禁束の対応(救出台帳 — 旧 browser-library.html 全要素)</b>
   <table>
-    <tr><th>操作</th><th>種別</th><th>入口</th><th>S0 期待</th></tr>
-    <tr><td>Import</td><td>c</td><td>D&D(全 pane)+<b>メニュー(欠落中 — menubar campaign)</b></td><td>592: 4:1:0:0 menu 優勢 — 既知の S0 強違反</td></tr>
-    <tr><td>配置</td><td>b</td><td>カード drag(直接)</td><td>―</td></tr>
-    <tr><td>scope/filter</td><td>a</td><td>rail/filter(縁)</td><td>980 Project panel: freq3 適合</td></tr>
-    <tr><td>素材の削除/置換/プロキシ</td><td>b</td><td>将来: カード右クリック(併存で)</td><td>C 束 9 行(未着手)</td></tr>
+    <tr><th>要素</th><th>種別</th><th>状態</th><th>解禁束</th></tr>
+    <tr><td>カード grid・種別 rail・filter shelf・view modes・結果件数</td><td>a/ヒーロー</td><td><b>第一波(B2/B3)</b></td><td>台帳読み(η/ι 済み)+view</td></tr>
+    <tr><td>Project(配置済み)/Recent scope</td><td>a</td><td>第一波</td><td>台帳+LayerSource 照合</td></tr>
+    <tr><td>履歴 ‹ ›</td><td>a</td><td>予約地</td><td>scope 履歴 stack(小束)</td></tr>
+    <tr><td>Collections・tag editor・Tags ボタン</td><td>a/b</td><td>予約地</td><td>タグ束(map D: 1509 等)</td></tr>
+    <tr><td>Starter/Motion assets・Add folder・Project assets</td><td>a</td><td>予約地</td><td><b>裁定要</b>: filesystem 走査 vs 台帳純化</td></tr>
+    <tr><td>context menu(配置/置換/プロキシ/削除/Finder)</td><td>b</td><td>予約地</td><td>右クリック基盤+map C 束 9 行</td></tr>
+    <tr><td>selection tray</td><td>a</td><td>予約地</td><td>asset multi-select</td></tr>
+    <tr><td>EFFECTS/CREATE/PANELS タブ</td><td>―</td><td>予約地</td><td>意味起草タスク#14</td></tr>
   </table>
-  <b>未決(このモックで会話すべきこと)</b>: double-click の意味(既定位置へ配置 or プレビュー再生 — Resolve は再生・AE は footage パネル)/ filesystem 走査の要否(旧 browser.rs は台帳+走査の dedupe だった。新世界は台帳純化が筋か)/ 動画サムネの代表フレーム(0 か中央か)/ カード寸(旧実測 124×84 の踏襲か)
+  <b>未決(会話すべきこと)</b>: double-click の意味(Resolve=再生 / AE=footage パネル)/ filesystem 走査の要否(台帳純化が筋か)/ 動画サムネ代表フレーム / カード寸(旧 124×84 踏襲か)/ PANELS タブの中身(旧: Tags・Notes・Export — 裁定143 の「パレット」との対応も未起草)
 </div>
 
 <script>
