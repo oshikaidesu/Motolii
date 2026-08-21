@@ -7,7 +7,6 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| ρ: レイヤー差し色 第一波 | 実装(cargo・sonnet) | lane-shell | 利用者裁定「色が足りない」— `label_color: Option<u8>`(**index 保存**= AE 同型)+生成時 `id%12` 決定論割当+Timeline bar 塗り+**パレット候補 A/B/C(意図設計・同一 fixture)比較 PNG**。変更 UI は後続波 |
 
 ## 完了・main 着地済み(実装)
 
@@ -55,6 +54,9 @@
 | **β: BL1 逐次合成の枠(検収合格・merge `22f8e436`)** | **狙いどおり EVIDENCE_GAP の確定が成果**: 重なり半透明でバイト不一致(1264/4096px・maxΔ49)、真因= gamma 空間(`composite()` が layer 毎に srgb round-trip)。ライフサイクル・第二パス禁止柵は障害でないと実証。scaffold+`#[ignore]` 証拠テストを歴史証拠として merge。**→ 裁定161**(fork へ main_target accessor、BL1b へ) |
 | **γ: MK1 mask ラスタ配線(検収合格・merge `fe0724d7`)** | 未配線 `motolii-vector` を engine へ。`Path`→`Shape` 橋(単一輪郭を輪郭列に包むだけ・別型ではないと確定)+白 fill=coverage の純関数。oracle 4本(二値・AA 縁有界・面積・byte 決定論)。EVIDENCE_GAP: mask 座標系(comp 絶対 vs layer local)は Canvas を呼び手が組む設計で MK3 へ先送り |
 | **δ: speed 操作面の文法調査(回収)** | 保全= `2026-08-21-speed-ui-grammar-survey.md`。採択=2段構成(第一波 Inspector 数値欄・第二波 Shift+端drag は**利用者実機確認後**)。speed でキー時刻は動かさない(拘束7(a))。bar 文脈の空き modifier は Shift のみとコードで確定 |
+| **ρ: レイヤー差し色 第一波(検収合格・merge済み)** | `label_color` index(AE 同型)+`id%12` 決定論割当+bar 塗り+Copy/Paste/Duplicate の色継承。候補 A/B/C を同一 fixture で比較し**利用者裁定= C(トンマナ従属)確定**。ALLOWLIST 逸脱2件(fixture/screenshot — 比較 PNG 成立の必須)と clipboard 追随は理由正当で採択 |
+| **σ+σ2+梯子補充(検収合格・merge済み)** | **初のモック駆動発注**: 全目盛の縦線(帯=面・大/線=細・全目盛の周波数分担、新ロール `timeline_grid_minor/major`)→ **比率の原則**(利用者裁定: 形は比率で定数化)で梯子選択を `TARGET_CELL_RATIO=0.52` 最近傍へ(σ2)→ 梯子へ 2f・半秒を補充(supervisor 直、1426px で 15f=0.457)。S4 へ比率原則・器具節へ「モック=転写元」を正典化 |
+| **意味論モック4枚(利用者合格・main 資産)** | `next/reference/mocks/`: timeline(合格・転写元第1号)/ **browser-library.html=旧世界視覚正本の移植**(色のみ tokens 追随・CSS インライン)+browser-semantics(意味層・救出台帳)/ stage v4(**boxcam**=破線+ハンドルのカメラビュー・**User View** 改名・視点タブ・帯アイコン化・**UI 英語**・AE 対応表) |
 | **ν: 目盛り梯子+大目盛帯(検収合格・merge済み)** | 利用者裁定の根治 — 時間整列の梯子(小=px下限10で選ぶ最小ステップ・大=5/10倍)へ置換、全尺等分(7.5s級の半端)を撤去、**明暗帯の区間=大目盛周期**に一本化。canvas/projection/screenshot が単一 pub 関数 `tick_steps` を共有。timeline-pane 50+shell 189 全緑・PNG 検分済み(縦リズムがプレードから階層へ) |
 | **市松v2(検収合格・merge `75ab2b0c`)** | 利用者較正「市松が見えない」の根治 — 専用 token 対 `checkerboard_light/dark`(Δ8→**Δ30**、S4 新柵の初適用)+表示空間タイル 8pt 一定の純関数補正。器具 PNG はタイルが追加縮小される既知あり(色差は画素実測済み)。実窓の手触りは利用者チェックリストへ |
 | **(supervisor 直)行ゼブラの rail 退去** | 利用者知覚モデル「rail=時間カメラ外の上層」を doc 化し wash を時間場に限定(`947790a9`) |
