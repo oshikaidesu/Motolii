@@ -9,7 +9,7 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| **SS: 構造解決台帳の抽出** | 調査(読み取り専用・cargo なし) | worktree | map 精査(6レンズ)の前提 — 裁定台帳〜174 から「構造で解決した根」を抽出し、不要になる補償機能の型と**正直な境界**(未完部分)を1行1解決で台帳化。L2 レンズの一次資料 |
+| **SS: 構造解決台帳の抽出** | 調査(読み取り専用・cargo なし) | worktree | map 精査(6レンズ)の前提 — 裁定台帳〜174 から「構造で解決した根」を抽出+**委託技術の解決範囲**(iced/rerun/wgpu/Lottie/ffmpeg/音声束/cosmic-text — 今の範囲・境界・今後の見込みを一次資料つきで)。三層フィルタ(Motolii が解いた/委託が解く/どちらも解かない=真の判断対象)の一次資料 |
 | **H4: シェイプ入れ子(裁定173)** | 実装 | worktree(発注時に追記) | 旧世界 VectorContent::Group 先例 — Shape に入れ子グループ+H1 と同じ合成再帰・flatten して既存 rasterizer 無改修・serde 後方互換。write-set= vector+store shape+core 最小 |
 | **B3: Browser 絵+view 配線** | 実装 | worktree(発注時に追記) | カード grid(骨格まで — サムネは B5)+Shell::view 配線+開閉トグル+B1 記帳の端到端。map 980 完全消化。PNG/atlas 変化は理由つき追随。write-set= browser-pane+shell |
 
