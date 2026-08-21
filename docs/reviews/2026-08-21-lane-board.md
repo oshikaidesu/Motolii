@@ -55,6 +55,7 @@
 | **β: BL1 逐次合成の枠(検収合格・merge `22f8e436`)** | **狙いどおり EVIDENCE_GAP の確定が成果**: 重なり半透明でバイト不一致(1264/4096px・maxΔ49)、真因= gamma 空間(`composite()` が layer 毎に srgb round-trip)。ライフサイクル・第二パス禁止柵は障害でないと実証。scaffold+`#[ignore]` 証拠テストを歴史証拠として merge。**→ 裁定161**(fork へ main_target accessor、BL1b へ) |
 | **γ: MK1 mask ラスタ配線(検収合格・merge `fe0724d7`)** | 未配線 `motolii-vector` を engine へ。`Path`→`Shape` 橋(単一輪郭を輪郭列に包むだけ・別型ではないと確定)+白 fill=coverage の純関数。oracle 4本(二値・AA 縁有界・面積・byte 決定論)。EVIDENCE_GAP: mask 座標系(comp 絶対 vs layer local)は Canvas を呼び手が組む設計で MK3 へ先送り |
 | **δ: speed 操作面の文法調査(回収)** | 保全= `2026-08-21-speed-ui-grammar-survey.md`。採択=2段構成(第一波 Inspector 数値欄・第二波 Shift+端drag は**利用者実機確認後**)。speed でキー時刻は動かさない(拘束7(a))。bar 文脈の空き modifier は Shift のみとコードで確定 |
+| **ε: SP1 第一波 Speed 数値欄(検収合格・merge済み)** | Inspector ATTRS に Speed 行(%表示・click→type・Reset)。`retimed_duration` 純関数(i128 整数丸め・最低1フレーム・start/source_in 不変)は第二波と共有。1 gesture=1 undo・ロック M13 拒否・100% reset は no-op。map 963(Time Stretch)+269(Reset speed)採用済(**消化 112/1,551**)。pixel fence 7→8 行は実描画差分への正しい追随として採択。FINDING: Speed だけ Shell 側で Intent 組み立て(ALLOWLIST 制約の非対称 — 次の inspector 発注で統一余地) |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
 
