@@ -7,8 +7,9 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| T2: clip move/trim | 実装(cargo) | lane-shell | 正典 §2 — transient+SetTiming 1発・スナップ7px/Cmd トグル・Esc/RMB キャンセル |
-| T3: キー行+菱形 | 実装(cargo) | lane-shell2(新設) | params 行キー持ちのみ既定・菱形 8×8/hit 12×12・選択3種(key_rows.rs 自己完結) |
+| A2: 実時間再生 第2切片 | 実装(cargo・**前任セッションの subagent が走行継続中**、2026-08-21 15:30 後任実測) | lane-engine | cpal device/stream(update_from_output_callback+fill_or_silence)+producer(旧 PlaybackSession 移植)+shell transport(Space=Play/Pause・ドラッグ中無効・playhead 追随・scrub=seek・終端停止・soundtrack 無しは無音で clock のみ)。oracle=フェイク デバイスで (a)Play進行 (b)Pause停止 (c)scrub=seek (d)ドラッグ中Space無効 (e)終端停止。map の Play/Pause 系行更新まで発注済み。**検収・merge・ボード更新は後任セッションへ全面移管済み**(SendMessage 往復で合意)。後任側が branch 監視中 |
+
+(T2/T3 は着地済み — 下の完了表へ移動済み。前回終了時の書き残し)
 
 ## 完了・main 着地済み(実装)
 

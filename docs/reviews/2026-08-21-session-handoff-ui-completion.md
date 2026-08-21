@@ -8,7 +8,7 @@
 
 | # | 事実 | なぜ疑うべきか |
 |---|---|---|
-| 0 | **音声A2レーンが走行中のまま終了** | lane-engine の branch に途中成果が残る可能性(市松の前例と同じ回収手順: `git log lane-engine` と `git status` を見て、コミット済みなら検収・未コミットなら patch 保全→検収 or 再発注。capsule の要旨はボードの A2 行: cpal device/stream+producer(旧 PlaybackSession 移植)+shell transport(Space・playhead 追随・seek)、oracle はフェイクデバイスで(a)〜(e)) |
+| 0 | **音声A2レーンが走行中のまま終了** → **訂正(後任 2026-08-21 15:30 実測): 前任セッションは生きており、A2 subagent は lane-engine で施工継続中だった**(device.rs/producer.rs/session.rs をリアルタイム書き込み)。前任と SendMessage 往復で検収・merge・ボード更新の全面移管に合意済み。capsule 全容はボードの A2 行。**教訓: 「走行中のまま終了」の引き継ぎは、まずレーン worktree のファイル mtime と peer セッション生存(ListAgents)を見てから触る** — 後任は誤認のまま lane-engine へ `reset --hard main` を実行した(実害: branch 先端が docs 差分2ファイル分前進したのみ・untracked 実装3本は無傷・S5 残骸 .artifacts の PNG 削除。コード破壊ゼロは mtime 照合で確認済み) |
 | 1 | **実窓の目視合否がまだ一度も無い** | 視覚検収は全部 screenshot 器具(文字を描かない)経由。theme 結線(実窓の地色)以降、実窓は未起動。利用者の実機合否が最終審判(貯め一覧はボード「利用者の目待ち」) |
 | 2 | **採用済92 の中に過大判定が混じり得る** | J判定は grep 基準だが、重複39件の衝突11件を「J1優先」で機械解決した。消化レーンが該当行に触れる時は行単位で再確認 |
 | 3 | **backend 消費ギャップが本命の残り** | blend mode(Normal以外拒否)・mask(合成器未消費)・matte・parent変換・speed は**型だけ実在**。UI表層より先にこれらを埋めないと「メニューはあるが絵が変わらない」M13違反を量産する |
