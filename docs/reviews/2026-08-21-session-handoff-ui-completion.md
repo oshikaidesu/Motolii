@@ -1,6 +1,6 @@
 # セッション引き継ぎ — UI完成campaign始動日(常時更新)
 
-日付: 2026-08-21 / 状態: **運転中 — 落ちたらここから**(最終更新: **pane分割完了(裁定160)**・音声A1着地・A2走行中。台帳108/1551)
+日付: 2026-08-21 / 状態: **引き継ぎ(セッション終了)** — 利用者指示「分割完了で一区切り」。台帳消化 108/1,551
 セッション ID: `99f96467-73b7-419f-8bc9-4f7b44f5a5ae`(worktree: session-handoff-day2-e1fbd3)
 **走行状態の正本 = [レーンボード](2026-08-21-lane-board.md)**(このファイルは「疑うべきこと」と再開手順を持つ)
 
@@ -8,6 +8,7 @@
 
 | # | 事実 | なぜ疑うべきか |
 |---|---|---|
+| 0 | **音声A2レーンが走行中のまま終了** | lane-engine の branch に途中成果が残る可能性(市松の前例と同じ回収手順: `git log lane-engine` と `git status` を見て、コミット済みなら検収・未コミットなら patch 保全→検収 or 再発注。capsule の要旨はボードの A2 行: cpal device/stream+producer(旧 PlaybackSession 移植)+shell transport(Space・playhead 追随・seek)、oracle はフェイクデバイスで(a)〜(e)) |
 | 1 | **実窓の目視合否がまだ一度も無い** | 視覚検収は全部 screenshot 器具(文字を描かない)経由。theme 結線(実窓の地色)以降、実窓は未起動。利用者の実機合否が最終審判(貯め一覧はボード「利用者の目待ち」) |
 | 2 | **採用済92 の中に過大判定が混じり得る** | J判定は grep 基準だが、重複39件の衝突11件を「J1優先」で機械解決した。消化レーンが該当行に触れる時は行単位で再確認 |
 | 3 | **backend 消費ギャップが本命の残り** | blend mode(Normal以外拒否)・mask(合成器未消費)・matte・parent変換・speed は**型だけ実在**。UI表層より先にこれらを埋めないと「メニューはあるが絵が変わらない」M13違反を量産する |
@@ -26,8 +27,10 @@
 
 ## 3. 走行中と直近キュー(順序)
 
-1. ~~pane 分割~~ → **完了**(6 crate・PNG不変・レーン単体2.7〜7.4s)
-2. **音声A2(走行中)**: Play/Pause 結線 — 着地すれば「再生できる動画ソフト」。実機で鳴るかは朝の確認事項
+1. **A2 の回収**(疑うべきこと#0)→ 着地すれば「再生できる動画ソフト」
+2. **実窓の目視**(利用者): 線化トンマナ・値セル余白・市松・glow halo・観測カメラ(ホイールで金枠)・Timeline 手触り・(A2 済みなら)Space で再生
+3. **消化フェーズ再開**: freq≥2 残り(Split・Mark In/Out 族・Find 等)・backend 消費ギャップ(blend/mask/speed — Glow の S1〜S5 と同じ縫い目の型)・pane_grid/multiwindow 束(裁定143)・キーのコピペ・multi-select ハイライト
+4. レーンは pane crate 単位(2.7〜7.4s)で本格並列可 — worktree 4本(lane-shell/shell2/engine/store)は常設のまま
 3. 分割後: 採用予定1,195 の本格並列消化(レーン= pane crate 単位、`-p` 数秒級)。優先= freq≥2 の残り+backend 消費ギャップ(blend/mask/speed — effect S1〜S5 と同じ縫い目の型で)
 4. 保留中の玉: Split 動詞(SetTiming 土台あり)・Mark In/Out 族・multi-select ハイライト・New Project/Save As(ファイルダイアログ= rfd 依存裁定が要る)・音声クロック束・キーのコピペ
 
