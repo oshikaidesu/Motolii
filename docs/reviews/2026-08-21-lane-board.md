@@ -42,6 +42,7 @@
 | カメラ S0: engine 第二エントリ | ObservationCamera(pan+zoom)+render_frame_with_view_camera。既定視点=レンダリングカメラの**バイト一致証明**・export 経路不変を grep 再確認 |
 | 普通地図: 併合 | **単一台帳 normal-map.tsv 1,551行**(捨て行ゼロの機械検証)。freq=4 は6行(Copy/Paste/Import/Inspector/Timeline/New Project)・freq≥2=58行・長い尾は語彙源密度差由来 |
 | T4: キー時刻編集 | ドラッグ・nudge・Cmd リタイム(数値証明: scale 3/7 で 70→41)・衝突の決定論解決。逸脱4件は理由つき(Cmd 二役は click-vs-drag 分離)。finding: ライブプレビュー不在 → T5 へ |
+| T5: ライブプレビュー | §5.5 根治 — 投影段の純関数置換(赤→緑証明)・ACCENT 強調・タイムコードミニラベル。finding: fmt ドリフトは既存(未介入) |
 | (supervisor 直) 色 token 追随 fix / 市松レーン回収 / 引き継ぎ123コミット着地 | main 前提の整地 |
 
 ## 完了・保全済み(調査 — docs/reviews/2026-08-21-timeline-grammar-surveys/)
