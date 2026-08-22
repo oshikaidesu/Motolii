@@ -575,11 +575,25 @@ fn labeled_button(
         .into()
 }
 
-/// [`labeled_button`]/Clear ボタン共通のスタイル。選択中は `action_active`
-/// (accent、mock `.selected`/`.filterShelf button.selected` の金色枠と同じ
-/// 意味役割)で縁取る。`radius` は呼び出し側の mock 実測値
-/// ([`FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`]/rail の `0.0`)。
-fn chip_style(
+/// [`labeled_button`]/Clear ボタン共通のスタイル(裁定179「箱は状態の器」、
+/// chrome 監査 D4 の線化 — `docs/reviews/2026-08-22-chrome-grammar-audit.md`)。
+/// 輪郭は**選択の器**としてのみ描く:
+/// - 非選択= 素の文字(地なし)+ hover 面(`surface_hover`) —
+///   `tab_style`/[`card_style`]/transport と同じ既存文法。border は色だけ
+///   透明にし、幅は `dims.border_width` のまま(幾何不変 — レイアウトに
+///   効く値を動かさない)。mock が非選択チップへ宣言する常時
+///   `border-default` 輪郭(`browser-library.css:215-226`)はこの裁定が
+///   上書き(rail 行 `.locationRow` は mock 自体が非選択透明、css:135-152)。
+/// - 選択= 現行表現の維持: `state_selected` 地+`action_active` 縁/ink
+///   (mock `.filterShelf button.selected{border-color:#d8b574}` css:228 の
+///   宣言どおり — 選択状態の輪郭は mock が明示する部分)。
+///
+/// `radius` は呼び出し側の mock 実測値
+/// ([`FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`]/rail の `0.0`)を素通し。
+/// **pub**: `tests/chip_outline_fence.rs` が「非選択= border 透明・選択=
+/// 不透明」を style 関数レベルで固定する(`browser_ratio_ledger.rs` と同型の
+/// 両側チェック)。
+pub fn chip_style(
     dims: Dimensions,
     colors: Colors,
     selected: bool,
@@ -587,19 +601,18 @@ fn chip_style(
     radius: f32,
 ) -> button::Style {
     let background = if selected {
-        colors.state_selected
+        Some(colors.state_selected)
     } else {
         match status {
-            button::Status::Hovered => colors.surface_hover,
-            button::Status::Pressed => colors.state_selected,
-            button::Status::Disabled => colors.surface_panel,
-            button::Status::Active => colors.surface_raised,
+            button::Status::Hovered => Some(colors.surface_hover),
+            button::Status::Pressed => Some(colors.state_selected),
+            button::Status::Disabled | button::Status::Active => None,
         }
     };
     let border_color = if selected {
         colors.action_active
     } else {
-        colors.border_default
+        iced::Color::TRANSPARENT
     };
     let text_color = if status == button::Status::Disabled {
         colors.state_disabled
@@ -609,7 +622,7 @@ fn chip_style(
         colors.text_primary
     };
     button::Style {
-        background: Some(iced::Background::Color(background)),
+        background: background.map(iced::Background::Color),
         text_color,
         border: iced::Border {
             color: border_color,
