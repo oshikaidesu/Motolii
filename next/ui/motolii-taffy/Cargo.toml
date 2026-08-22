@@ -1,0 +1,33 @@
+# taffy 駆動 flex/grid container widget(裁定183 案A —
+# docs/reviews/2026-08-22-weblike-layout-survey.md)。
+#
+# モック(HTML/CSS)→ iced 転写の「手癖工程」を置換する: CSS の
+# display:flex/grid・gap・justify-content: space-between・wrap・
+# grid-template-columns: minmax(…)/repeat(…) がモックの語彙そのままで書ける。
+# 検証層(案C: motolii-css-metrics oracle)と組むと「taffy 対 taffy」の突き合わせになる。
+#
+# `iced_core` の git 依存は workspace の `iced` と**同一 repo・同一 rev** —
+# cargo は同一ソースへ単一 crate 実体として畳むので、依存の二重化は起きない
+# (motolii-menubar の Cargo.toml と同じ形)。rev は workspace pin(裁定170/M01)と
+# 常に同値に保つこと — bump する時は next/Cargo.toml と同時に。
+#
+# taffy の `parse` feature は style 値(`4px`/`space-between`/`minmax(132px,1fr)`)の
+# parser を upstream から借りるために有効化している(wraps>移植>スクラッチ —
+# CSS 値の解釈を自前で再実装しない)。宣言の分解と property 束縛だけがこちら側。
+[package]
+name = "motolii-taffy"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+iced_core = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+taffy = { version = "0.13", features = ["parse"] }
+
+[dev-dependencies]
+# Simulator oracle(click 到達)用。facade を dev で引くのは renderer backend
+# (wgpu+tiny-skia)の feature を test バイナリへ入れるため — lib 本体の依存は
+# 上の2つだけのまま(motolii-menubar の dev-dependencies と同じ運用)。
+iced.workspace = true
+iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+iced_widget = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }

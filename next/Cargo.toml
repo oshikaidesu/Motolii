@@ -22,6 +22,7 @@ members = [
     "ui/motolii-inspector-pane",
     "ui/motolii-menubar",
     "ui/motolii-settings-pane",
+    "ui/motolii-taffy",
     "ui/motolii-tokens-rs",
     "ui/motolii-shell-state",
     "ui/motolii-timeline-pane",
