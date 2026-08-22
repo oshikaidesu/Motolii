@@ -20,7 +20,7 @@
 //! (`Shell::update` 側に per-variant 分岐を増やさない — crate 冒頭 doc の
 //! 「pane split 流儀」どおり)。`Shell::view` は [`PaneState::is_open`] を読んで
 //! 表示するかどうかだけ判断する。
-use crate::model::{LibraryTab, RailScope};
+use crate::model::{CardKey, LibraryTab, PreviewScope, RailScope};
 
 /// pane ローカル Message(裁定160 切片以降の一貫した形 — root
 /// `motolii_shell::Message::Browser(Message)` が1本で畳む)。
@@ -32,6 +32,15 @@ pub enum Message {
     /// (Ableton可視性原理: 唯一の入口にしない、ユーザー記憶
     /// `ableton-visibility-principle.md`)。
     SelectScope(RailScope),
+    /// 非 media タブの rail 行、または filter shelf の同義チップ
+    /// (`model::preview_tags` — rail とチップが同ラベル・同 Message、
+    /// [`Message::SelectScope`] と同型の「2つの入口が同じ状態を書く」形。
+    /// 構造の対称化、利用者実窓指摘 2026-08-22)。
+    SelectPreviewScope(PreviewScope),
+    /// カタログのカード click(mock `selectCard` の単一選択のみ — Shift/⌘ の
+    /// 複数選択・selection tray は予約地のまま)。media/preview の2系統を
+    /// [`CardKey`] が型で分ける。
+    SelectCard(CardKey),
     /// タブ帯(mock `.libraryTabs`)のタブクリック。mock `chooseTab` の転写 —
     /// 非 media タブへ移る時は rail scope を `AllMedia` へ戻す(mock が
     /// `source='all'`/`tag=''` へ戻すのと同じ意味 — scope は media 種別の
@@ -61,6 +70,14 @@ pub struct PaneState {
     /// active なタブ(mock `state.tab`、既定 = `LibraryTab::Media`)。
     tab: LibraryTab,
     scope: RailScope,
+    /// 非 media タブの rail scope(mock `state.tag` の転写 — 既定 =
+    /// `PreviewScope::All` = mock `tag: ''`。media の `scope` と独立の軸:
+    /// mock は1本の `state.tag` を全タブで共有して混線し得るが、こちらは
+    /// media 台帳絞り込みへ決して漏れない型の壁)。
+    preview_scope: PreviewScope,
+    /// カタログの単一選択(mock `state.selected` の転写、`Option` = 未選択。
+    /// 複数選択・selection tray は予約地)。
+    selected: Option<CardKey>,
     query: String,
     open: bool,
 }
@@ -80,6 +97,17 @@ impl PaneState {
         self.scope
     }
 
+    /// 非 media タブの rail scope(`pane_view` が rail の選択表示と
+    /// [`crate::model::preview_visible`] の絞り込みに読む)。
+    pub fn preview_scope(&self) -> PreviewScope {
+        self.preview_scope
+    }
+
+    /// カタログの単一選択(`pane_view` がカードの選択意匠に読む)。
+    pub fn selected(&self) -> Option<CardKey> {
+        self.selected
+    }
+
     pub fn query(&self) -> &str {
         &self.query
     }
@@ -95,17 +123,28 @@ impl PaneState {
     pub fn update(&mut self, message: Message) {
         match message {
             Message::SelectScope(scope) => self.scope = scope,
+            Message::SelectPreviewScope(scope) => self.preview_scope = scope,
+            Message::SelectCard(key) => self.selected = Some(key),
             Message::SelectTab(tab) => {
                 self.tab = tab;
                 // mock `chooseTab`: `if (tab !== 'media') { state.source = 'all';
                 // state.tag = ''; }` の転写。query は mock 同様タブを跨いで保持。
+                // preview タグはタブ別の語彙なので、非 media タブへ入る度に
+                // 全件へ戻す(mock の `state.tag = ''` と同じ意味)。
                 if tab != LibraryTab::Media {
                     self.scope = RailScope::AllMedia;
+                    self.preview_scope = PreviewScope::All;
                 }
+                // mock `chooseTab` は移動先タブの先頭カードを選択し直すが、
+                // `PaneState` はカタログを持たない(view 引数で渡る)ため
+                // 「未選択」へ戻す(選択の持ち越しで前タブの selection が
+                // 亡霊として残るのを防ぐ — 逸脱として RETURN 記載)。
+                self.selected = None;
             }
             Message::QueryChanged(text) => self.query = text,
             Message::ClearFilters => {
                 self.scope = RailScope::AllMedia;
+                self.preview_scope = PreviewScope::All;
                 self.query.clear();
             }
             Message::ToggleBrowserPanel => self.open = !self.open,
@@ -237,5 +276,77 @@ mod tests {
         state.update(Message::ToggleBrowserPanel);
         state.update(Message::SelectTab(LibraryTab::Create));
         assert!(state.is_open());
+    }
+
+    // -----------------------------------------------------------------
+    // 構造の対称化(2026-08-22): 非 media タブの rail scope + カード選択。
+    // -----------------------------------------------------------------
+
+    use crate::model::PreviewTag;
+    use motolii_store::AssetId;
+
+    /// **ORACLE**: 初期 preview scope は全件(mock `state.tag: ''`)。
+    #[test]
+    fn initial_preview_scope_is_all() {
+        assert_eq!(PaneState::new().preview_scope(), PreviewScope::All);
+    }
+
+    #[test]
+    fn select_preview_scope_replaces_the_current_preview_scope() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectTab(LibraryTab::Effects));
+        state.update(Message::SelectPreviewScope(PreviewScope::Tag(
+            PreviewTag::Color,
+        )));
+        assert_eq!(state.preview_scope(), PreviewScope::Tag(PreviewTag::Color));
+    }
+
+    /// mock `chooseTab` の `state.tag = ''` 転写: 非 media タブへ入る度に
+    /// preview scope は全件へ戻る(タグはタブ別の語彙 — effects の Color を
+    /// create へ持ち越さない)。
+    #[test]
+    fn selecting_a_tab_resets_the_preview_scope() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectTab(LibraryTab::Effects));
+        state.update(Message::SelectPreviewScope(PreviewScope::Tag(
+            PreviewTag::Color,
+        )));
+        state.update(Message::SelectTab(LibraryTab::Create));
+        assert_eq!(state.preview_scope(), PreviewScope::All);
+    }
+
+    /// `Clear` は preview scope も併せて初期状態へ戻す(mock `data-clear-filter`
+    /// が `state.tag = ''` を書くのと同じ — media の scope/query と同時)。
+    #[test]
+    fn clear_filters_resets_the_preview_scope_too() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectTab(LibraryTab::Panels));
+        state.update(Message::SelectPreviewScope(PreviewScope::Tag(
+            PreviewTag::Notes,
+        )));
+        state.update(Message::ClearFilters);
+        assert_eq!(state.preview_scope(), PreviewScope::All);
+    }
+
+    /// **ORACLE**: カード click は単一選択を記録する(mock `selectCard` の
+    /// 単一選択パス)。
+    #[test]
+    fn select_card_records_the_selection() {
+        let mut state = PaneState::new();
+        assert_eq!(state.selected(), None, "初期状態は未選択のはず");
+        state.update(Message::SelectCard(CardKey::Media(AssetId::from_raw(3))));
+        assert_eq!(state.selected(), Some(CardKey::Media(AssetId::from_raw(3))));
+        state.update(Message::SelectCard(CardKey::Preview("glow")));
+        assert_eq!(state.selected(), Some(CardKey::Preview("glow")));
+    }
+
+    /// タブ切替で選択は未選択へ戻る(前タブの selection を亡霊として
+    /// 持ち越さない — `update` の doc 参照)。
+    #[test]
+    fn selecting_a_tab_clears_the_card_selection() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectCard(CardKey::Media(AssetId::from_raw(0))));
+        state.update(Message::SelectTab(LibraryTab::Effects));
+        assert_eq!(state.selected(), None);
     }
 }
