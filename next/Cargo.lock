@@ -788,7 +788,7 @@ dependencies = [
  "stylo_static_prefs",
  "stylo_taffy",
  "stylo_traits",
- "taffy",
+ "taffy 0.12.2",
  "thread_local",
  "url",
  "web-time",
@@ -3741,7 +3741,7 @@ dependencies = [
  "serde_json",
  "stylo",
  "stylo_traits",
- "taffy",
+ "taffy 0.12.2",
 ]
 
 [[package]]
@@ -3892,6 +3892,17 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 2.0.20",
+]
+
+[[package]]
+name = "motolii-taffy"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "iced_core",
+ "iced_test",
+ "iced_widget",
+ "taffy 0.13.0",
 ]
 
 [[package]]
@@ -7117,7 +7128,7 @@ checksum = "ba6f8e06f0038eb2e01c558b3004cb07c1ee1ab27f23aecbfbf629f55b0307e1"
 dependencies = [
  "stylo",
  "stylo_atoms",
- "taffy",
+ "taffy 0.12.2",
 ]
 
 [[package]]
@@ -7391,6 +7402,19 @@ dependencies = [
  "grid",
  "serde",
  "slotmap",
+]
+
+[[package]]
+name = "taffy"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c034e05f6ee85a12daa63863c2245797715075c70649947aa0da54f3f2ab1d0f"
+dependencies = [
+ "arrayvec",
+ "cssparser",
+ "serde",
+ "slotmap",
+ "smallvec",
 ]
 
 [[package]]
