@@ -1,3 +1,5 @@
+//! wraps: motolii-css-metrics の CLI の皮(ロジックは lib 側 — ここは引数解釈と JSON 出力だけ)。
+//!
 //! CSS 計算値の抽出器具の CLI の皮。中身([`extract`](motolii_css_metrics::extract))は
 //! lib 側(`src/lib.rs`)にある — pane の oracle テストが同じ関数を直接呼べる
 //! ようにするため、ロジックを bin に閉じ込めていない。この main.rs は引数を
