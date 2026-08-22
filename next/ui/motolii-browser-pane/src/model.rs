@@ -116,8 +116,12 @@ pub enum RailScope {
 
 /// rail 列の並び順(mock の `LIBRARY` 節の掲載順どおり — All media → Video →
 /// Images → Audio)。view 側・試験側の両方がこの1本の並びを共有する。
-pub const RAIL_SCOPES: [RailScope; 4] =
-    [RailScope::AllMedia, RailScope::Video, RailScope::Images, RailScope::Audio];
+pub const RAIL_SCOPES: [RailScope; 4] = [
+    RailScope::AllMedia,
+    RailScope::Video,
+    RailScope::Images,
+    RailScope::Audio,
+];
 
 /// filter shelf の種別チップ(mock `.filterGroup[data-filter-group="media"]`)。
 /// `AllMedia` はここに現れない(mock にも `Clear` はあるが `All media` チップは
@@ -143,6 +147,166 @@ impl RailScope {
             Self::Video => matches!(category, Category::Video),
             Self::Images => matches!(category, Category::Image),
             Self::Audio => matches!(category, Category::Audio),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// タブ4種+preview-local カタログ(mock `.libraryTabs`/`data-tab`、B3 転写の
+// 取り残し回収 — 利用者実窓不合格 2026-08-22 への対応)。
+// ---------------------------------------------------------------------------
+
+/// Browser のタブ(mock html:412-415 `data-tab="media"/"effects"/"create"/
+/// "panels"` の4値そのまま)。既定は media(mock `state = {tab: 'media'}`)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LibraryTab {
+    #[default]
+    Media,
+    Effects,
+    Create,
+    Panels,
+}
+
+/// タブ帯の並び順(mock の掲載順どおり — Media → Effects → Create → Panels)。
+/// view 側・試験側の両方がこの1本の並びを共有する(`RAIL_SCOPES` と同じ形)。
+pub const LIBRARY_TABS: [LibraryTab; 4] = [
+    LibraryTab::Media,
+    LibraryTab::Effects,
+    LibraryTab::Create,
+    LibraryTab::Panels,
+];
+
+impl LibraryTab {
+    /// mock のタブラベルそのまま(html:412-415)。
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Media => "Media",
+            Self::Effects => "Effects",
+            Self::Create => "Create",
+            Self::Panels => "Panels",
+        }
+    }
+}
+
+/// preview-local カタログ1枚ぶんの静的カード(mock `#thumbnail-grid` の
+/// `data-tab="effects"/"create"/"panels"` カードの転写)。**mock 冒頭コメント
+/// の宣言どおり preview 専用データ** — filesystem/Document/Host/intent/
+/// persistence のどの経路にも接続しない(`&'static` の定数リテラルのみ)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PreviewCard {
+    /// カード名(mock `.cardCopy strong`)。
+    pub name: &'static str,
+    /// caption(mock `.cardCopy small`、`種別 · 分類` の形)。
+    pub caption: &'static str,
+    /// thumb に載せるグリフ(mock `.libraryThumb b`)。
+    pub glyph: &'static str,
+}
+
+/// effects タブの preview カタログ。mock html:522-530 の3枚(Echo Bloom/
+/// Opacity/Sine)+ 実在 plugin の Glow(発注: 「effects は実在 plugin 名
+/// Glow を含めてよい」 — mock の並びを保ち末尾へ追加)。
+const EFFECTS_PREVIEW: [PreviewCard; 4] = [
+    PreviewCard {
+        name: "Echo Bloom",
+        caption: "effect · Color",
+        glyph: "FX",
+    },
+    PreviewCard {
+        name: "Opacity",
+        caption: "effect · Utility",
+        glyph: "FX",
+    },
+    PreviewCard {
+        name: "Sine",
+        caption: "effect · Animation",
+        glyph: "FX",
+    },
+    PreviewCard {
+        name: "Glow",
+        caption: "effect · Color",
+        glyph: "FX",
+    },
+];
+
+/// create タブの preview カタログ(mock html:532-537)。
+const CREATE_PREVIEW: [PreviewCard; 2] = [
+    PreviewCard {
+        name: "Rectangle",
+        caption: "shape · Built-in",
+        glyph: "□",
+    },
+    PreviewCard {
+        name: "Ellipse",
+        caption: "shape · Built-in",
+        glyph: "○",
+    },
+];
+
+/// panels タブの preview カタログ(mock html:539-547)。
+const PANELS_PREVIEW: [PreviewCard; 3] = [
+    PreviewCard {
+        name: "Asset tagging",
+        caption: "panel · Tags",
+        glyph: "#",
+    },
+    PreviewCard {
+        name: "Notes",
+        caption: "panel · Notes",
+        glyph: "✎",
+    },
+    PreviewCard {
+        name: "Export notes",
+        caption: "panel · Export",
+        glyph: "↗",
+    },
+];
+
+/// タブごとの preview-local 静的カタログ。**media は空**(media タブは
+/// Document 台帳投影([`assets`]/[`visible`])の経路であって静的データを
+/// 混ぜない — 発注の境界)。
+pub fn preview_catalog(tab: LibraryTab) -> &'static [PreviewCard] {
+    match tab {
+        LibraryTab::Media => &[],
+        LibraryTab::Effects => &EFFECTS_PREVIEW,
+        LibraryTab::Create => &CREATE_PREVIEW,
+        LibraryTab::Panels => &PANELS_PREVIEW,
+    }
+}
+
+/// catalog grid の1枚(タブ別投影の結果)。media タブ由来か preview-local
+/// 由来かを型で分ける — 2系統のデータが view の手前で混線しないための壁。
+#[derive(Debug, Clone, PartialEq)]
+pub enum CatalogCard {
+    /// Document 台帳投影(media タブのみ)。
+    Media(AssetListItem),
+    /// preview-local 静的カタログ(effects/create/panels タブのみ)。
+    Preview(PreviewCard),
+}
+
+/// タブ別のカタログ投影(純関数、IO なし)。
+/// - media: [`visible`](rail scope + 検索)をそのまま通した台帳投影のみ。
+/// - effects/create/panels: [`preview_catalog`] のみ。検索文字列は名前の
+///   部分一致・大小無視で効く(mock は `data-search` を全タブで照合する)が、
+///   rail scope(media 種別の語彙)は効かない(mock `chooseTab` が非 media
+///   タブで `source='all'` へ戻すのと同じ意味)。
+pub fn catalog(
+    tab: LibraryTab,
+    media: &[AssetListItem],
+    scope: RailScope,
+    query: &str,
+) -> Vec<CatalogCard> {
+    match tab {
+        LibraryTab::Media => visible(media, scope, query)
+            .into_iter()
+            .map(CatalogCard::Media)
+            .collect(),
+        tab => {
+            let query = query.trim().to_lowercase();
+            preview_catalog(tab)
+                .iter()
+                .filter(|card| query.is_empty() || card.name.to_lowercase().contains(&query))
+                .map(|card| CatalogCard::Preview(*card))
+                .collect()
         }
     }
 }
@@ -243,10 +407,7 @@ mod tests {
         assert_eq!(items.len(), 2, "台帳2件が projection に2件現れない");
         assert_eq!(items[0].name, "first");
         assert_eq!(items[1].name, "second");
-        assert!(
-            items[0].id < items[1].id,
-            "admit 順(id 昇順)を保っていない"
-        );
+        assert!(items[0].id < items[1].id, "admit 順(id 昇順)を保っていない");
     }
 
     /// 何も admit していない Document は空の projection(`markers`/`masks` と
@@ -267,7 +428,11 @@ mod tests {
         assert_eq!(category_of("image/svg+xml"), Category::Image);
         assert_eq!(category_of("audio/wav"), Category::Audio);
         assert_eq!(category_of("application/octet-stream"), Category::Other);
-        assert_eq!(category_of(""), Category::Other, "空文字列は Other へ丸まるはず");
+        assert_eq!(
+            category_of(""),
+            Category::Other,
+            "空文字列は Other へ丸まるはず"
+        );
     }
 
     // -----------------------------------------------------------------
@@ -295,7 +460,9 @@ mod tests {
         let items = mixed_ledger();
         let narrowed = visible(&items, RailScope::Video, "");
         assert_eq!(narrowed.len(), 2, "video 2件のはず: {narrowed:?}");
-        assert!(narrowed.iter().all(|item| category_of(&item.kind) == Category::Video));
+        assert!(narrowed
+            .iter()
+            .all(|item| category_of(&item.kind) == Category::Video));
     }
 
     #[test]
@@ -388,5 +555,122 @@ mod tests {
         // 4.6秒 → 丸めて5秒(切り捨てだと利用者に「短く見える」誤差になる)。
         let almost_five = RationalTime::try_new(23, 5).unwrap();
         assert_eq!(format_duration(Some(almost_five)), "0:05");
+    }
+
+    // -----------------------------------------------------------------
+    // タブ4種(mock `.libraryTabs`)+ preview-local カタログ(B3 転写の
+    // 取り残し回収、2026-08-22 実窓不合格対応)。
+    // -----------------------------------------------------------------
+
+    /// **ORACLE**: mock html:412-415 のタブ並び(`data-tab="media"/"effects"/
+    /// "create"/"panels"`)とラベルをそのまま転写している。
+    #[test]
+    fn library_tabs_follow_the_mock_order_and_labels() {
+        assert_eq!(
+            LIBRARY_TABS,
+            [
+                LibraryTab::Media,
+                LibraryTab::Effects,
+                LibraryTab::Create,
+                LibraryTab::Panels
+            ]
+        );
+        let labels: Vec<&str> = LIBRARY_TABS.into_iter().map(LibraryTab::label).collect();
+        assert_eq!(labels, ["Media", "Effects", "Create", "Panels"]);
+    }
+
+    /// media タブは Document 台帳投影の経路であって静的カタログを持たない
+    /// (発注: 「media タブは従来どおり Document 台帳投影で、静的データを
+    /// 混ぜない」)。
+    #[test]
+    fn media_tab_has_no_preview_catalog() {
+        assert!(preview_catalog(LibraryTab::Media).is_empty());
+    }
+
+    /// effects の preview カタログは mock html:522-530 の3枚+実在 plugin の
+    /// Glow(発注: 「effects は実在 plugin 名 Glow を含めてよい」)。
+    #[test]
+    fn effects_preview_catalog_contains_the_mock_cards_and_glow() {
+        let names: Vec<&str> = preview_catalog(LibraryTab::Effects)
+            .iter()
+            .map(|card| card.name)
+            .collect();
+        for expected in ["Echo Bloom", "Opacity", "Sine", "Glow"] {
+            assert!(
+                names.contains(&expected),
+                "effects カタログに {expected:?} が無い: {names:?}"
+            );
+        }
+    }
+
+    /// create/panels の preview カタログは mock html:532-547 のカードそのまま。
+    #[test]
+    fn create_and_panels_preview_catalogs_match_the_mock_cards() {
+        let create: Vec<&str> = preview_catalog(LibraryTab::Create)
+            .iter()
+            .map(|card| card.name)
+            .collect();
+        assert_eq!(create, ["Rectangle", "Ellipse"]);
+
+        let panels: Vec<&str> = preview_catalog(LibraryTab::Panels)
+            .iter()
+            .map(|card| card.name)
+            .collect();
+        assert_eq!(panels, ["Asset tagging", "Notes", "Export notes"]);
+    }
+
+    /// **ORACLE**: media タブの catalog は Document 台帳投影([`visible`] と
+    /// 同じ絞り込み)だけで組まれ、静的 preview データは1枚も混ざらない。
+    #[test]
+    fn media_catalog_projects_the_document_ledger_only() {
+        let items = mixed_ledger();
+        let cards = catalog(LibraryTab::Media, &items, RailScope::AllMedia, "");
+        assert_eq!(cards.len(), items.len());
+        assert!(
+            cards
+                .iter()
+                .all(|card| matches!(card, CatalogCard::Media(_))),
+            "media タブに Preview カードが混ざっている: {cards:?}"
+        );
+    }
+
+    /// media タブの catalog は scope/query の絞り込み([`visible`])をそのまま通す。
+    #[test]
+    fn media_catalog_still_narrows_by_scope_and_query() {
+        let items = mixed_ledger();
+        let cards = catalog(LibraryTab::Media, &items, RailScope::Video, "");
+        assert_eq!(cards.len(), 2, "video 2件へ絞れていない: {cards:?}");
+    }
+
+    /// **ORACLE**: effects タブの catalog は静的 preview カタログだけで組まれ、
+    /// Document 台帳の素材は1枚も混ざらない(タブ別のカタログ投影)。
+    #[test]
+    fn effects_catalog_ignores_the_media_ledger() {
+        let items = mixed_ledger();
+        let cards = catalog(LibraryTab::Effects, &items, RailScope::AllMedia, "");
+        assert_eq!(cards.len(), preview_catalog(LibraryTab::Effects).len());
+        assert!(
+            cards
+                .iter()
+                .all(|card| matches!(card, CatalogCard::Preview(_))),
+            "effects タブに台帳素材が混ざっている: {cards:?}"
+        );
+    }
+
+    /// preview タブでも検索文字列は効く(mock は `data-search` を全タブで
+    /// 照合する — 名前の部分一致・大小無視で転写)。
+    #[test]
+    fn preview_catalog_narrows_by_query_name_match() {
+        let cards = catalog(LibraryTab::Effects, &[], RailScope::AllMedia, "GLO");
+        assert_eq!(cards.len(), 1, "Glow 1件へ絞れていない: {cards:?}");
+    }
+
+    /// rail scope は media 種別(Video/Images/Audio)の語彙なので preview タブ
+    /// には効かない(mock でも `chooseTab` が非 media タブで `source='all'` へ
+    /// 戻す = scope は media 専用)。
+    #[test]
+    fn preview_catalog_ignores_the_media_rail_scope() {
+        let cards = catalog(LibraryTab::Create, &[], RailScope::Video, "");
+        assert_eq!(cards.len(), preview_catalog(LibraryTab::Create).len());
     }
 }

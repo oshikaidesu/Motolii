@@ -75,7 +75,13 @@ fn fixture_items() -> Vec<AssetListItem> {
 #[test]
 fn rail_and_filter_shelf_controls_are_atlas_targets() {
     let items = fixture_items();
-    let element = view(&items, RailScope::AllMedia, "", Dimensions::default(), Colors::default());
+    let element = view(
+        &items,
+        RailScope::AllMedia,
+        "",
+        Dimensions::default(),
+        Colors::default(),
+    );
     let targets = collect_targets(element);
 
     let texts = text_contents(&targets);
@@ -87,7 +93,9 @@ fn rail_and_filter_shelf_controls_are_atlas_targets() {
     }
 
     assert!(
-        targets.iter().any(|target| matches!(target, Target::TextInput { .. })),
+        targets
+            .iter()
+            .any(|target| matches!(target, Target::TextInput { .. })),
         "検索欄が Target::TextInput として atlas に現れない"
     );
 }
@@ -97,7 +105,15 @@ fn rail_and_filter_shelf_controls_are_atlas_targets() {
 #[test]
 fn clicking_a_scope_control_publishes_select_scope() {
     let items = fixture_items();
-    let build = || view(&items, RailScope::AllMedia, "", Dimensions::default(), Colors::default());
+    let build = || {
+        view(
+            &items,
+            RailScope::AllMedia,
+            "",
+            Dimensions::default(),
+            Colors::default(),
+        )
+    };
 
     let targets = collect_targets(build());
     let bounds = targets
@@ -107,13 +123,18 @@ fn clicking_a_scope_control_publishes_select_scope() {
             _ => None,
         })
         .expect("Audio ボタンの Target::Text が見つからない");
-    let point = iced::Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0);
+    let point = iced::Point::new(
+        bounds.x + bounds.width / 2.0,
+        bounds.y + bounds.height / 2.0,
+    );
 
     let mut ui = iced_test::simulator(build());
     ui.point_at(point);
     let _ = ui.simulate([
         iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
-        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)),
+        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+            iced::mouse::Button::Left,
+        )),
     ]);
     let messages: Vec<Message> = ui.into_messages().collect();
 
@@ -127,7 +148,15 @@ fn clicking_a_scope_control_publishes_select_scope() {
 #[test]
 fn clicking_clear_publishes_clear_filters() {
     let items = fixture_items();
-    let build = || view(&items, RailScope::Video, "clip", Dimensions::default(), Colors::default());
+    let build = || {
+        view(
+            &items,
+            RailScope::Video,
+            "clip",
+            Dimensions::default(),
+            Colors::default(),
+        )
+    };
 
     let targets = collect_targets(build());
     let bounds = targets
@@ -137,13 +166,18 @@ fn clicking_clear_publishes_clear_filters() {
             _ => None,
         })
         .expect("Clear ボタンの Target::Text が見つからない");
-    let point = iced::Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0);
+    let point = iced::Point::new(
+        bounds.x + bounds.width / 2.0,
+        bounds.y + bounds.height / 2.0,
+    );
 
     let mut ui = iced_test::simulator(build());
     ui.point_at(point);
     let _ = ui.simulate([
         iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
-        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)),
+        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+            iced::mouse::Button::Left,
+        )),
     ]);
     let messages: Vec<Message> = ui.into_messages().collect();
 
@@ -181,5 +215,9 @@ fn selecting_a_scope_narrows_the_rendered_result_count() {
     };
 
     assert_eq!(result_count(&all), "Results 3");
-    assert_eq!(result_count(&video_only), "Results 1", "Video scope で1件に絞れていない");
+    assert_eq!(
+        result_count(&video_only),
+        "Results 1",
+        "Video scope で1件に絞れていない"
+    );
 }

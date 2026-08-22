@@ -20,7 +20,7 @@
 //! (`Shell::update` 側に per-variant 分岐を増やさない — crate 冒頭 doc の
 //! 「pane split 流儀」どおり)。`Shell::view` は [`PaneState::is_open`] を読んで
 //! 表示するかどうかだけ判断する。
-use crate::model::RailScope;
+use crate::model::{LibraryTab, RailScope};
 
 /// pane ローカル Message(裁定160 切片以降の一貫した形 — root
 /// `motolii_shell::Message::Browser(Message)` が1本で畳む)。
@@ -32,6 +32,11 @@ pub enum Message {
     /// (Ableton可視性原理: 唯一の入口にしない、ユーザー記憶
     /// `ableton-visibility-principle.md`)。
     SelectScope(RailScope),
+    /// タブ帯(mock `.libraryTabs`)のタブクリック。mock `chooseTab` の転写 —
+    /// 非 media タブへ移る時は rail scope を `AllMedia` へ戻す(mock が
+    /// `source='all'`/`tag=''` へ戻すのと同じ意味 — scope は media 種別の
+    /// 語彙なので他タブでは意味を持たない)。検索文字列は mock 同様保持。
+    SelectTab(LibraryTab),
     /// 検索欄への打鍵。**即時反映**(Settings の下書き/Enter 確定とは違う —
     /// 検索は絞り込みのプレビューそのものなので Enter を待つ理由が無い、mock
     /// `search.addEventListener('input', ...)` と同じ即時反映)。
@@ -53,6 +58,8 @@ pub enum Message {
 /// `edit_menu_open` と同じ「既定は閉」)。
 #[derive(Default)]
 pub struct PaneState {
+    /// active なタブ(mock `state.tab`、既定 = `LibraryTab::Media`)。
+    tab: LibraryTab,
     scope: RailScope,
     query: String,
     open: bool,
@@ -61,6 +68,12 @@ pub struct PaneState {
 impl PaneState {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// active なタブ(mock `state.tab`)。`pane_view` がタブ帯の active 表示と
+    /// catalog 投影([`crate::model::catalog`])の分岐に読む。
+    pub fn tab(&self) -> LibraryTab {
+        self.tab
     }
 
     pub fn scope(&self) -> RailScope {
@@ -82,6 +95,14 @@ impl PaneState {
     pub fn update(&mut self, message: Message) {
         match message {
             Message::SelectScope(scope) => self.scope = scope,
+            Message::SelectTab(tab) => {
+                self.tab = tab;
+                // mock `chooseTab`: `if (tab !== 'media') { state.source = 'all';
+                // state.tag = ''; }` の転写。query は mock 同様タブを跨いで保持。
+                if tab != LibraryTab::Media {
+                    self.scope = RailScope::AllMedia;
+                }
+            }
             Message::QueryChanged(text) => self.query = text,
             Message::ClearFilters => {
                 self.scope = RailScope::AllMedia;
@@ -157,6 +178,64 @@ mod tests {
         state.update(Message::ToggleBrowserPanel);
         assert_eq!(state.scope(), RailScope::Audio);
         assert_eq!(state.query(), "tone");
+        assert!(state.is_open());
+    }
+
+    // -----------------------------------------------------------------
+    // タブ状態(mock `state.tab`、B3 転写の取り残し回収)。
+    // -----------------------------------------------------------------
+
+    /// **ORACLE**: 初期タブは media(mock `state = {tab: 'media', ...}`)。
+    #[test]
+    fn initial_tab_is_media() {
+        assert_eq!(PaneState::new().tab(), LibraryTab::Media);
+    }
+
+    #[test]
+    fn select_tab_switches_the_tab() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectTab(LibraryTab::Effects));
+        assert_eq!(state.tab(), LibraryTab::Effects);
+        state.update(Message::SelectTab(LibraryTab::Media));
+        assert_eq!(state.tab(), LibraryTab::Media);
+    }
+
+    /// mock `chooseTab`: 非 media タブへ移る時は `source='all'`/`tag=''` へ
+    /// 戻す(rail scope は media 専用の語彙)。検索文字列は mock 同様保持。
+    #[test]
+    fn selecting_a_non_media_tab_resets_the_rail_scope_but_keeps_the_query() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectScope(RailScope::Audio));
+        state.update(Message::QueryChanged("tone".to_owned()));
+        state.update(Message::SelectTab(LibraryTab::Panels));
+        assert_eq!(
+            state.scope(),
+            RailScope::AllMedia,
+            "非 media タブで scope が残っている"
+        );
+        assert_eq!(
+            state.query(),
+            "tone",
+            "検索文字列は mock 同様タブを跨いで保持のはず"
+        );
+    }
+
+    /// media タブへ戻る遷移は scope を触らない(mock も `tab === 'media'` では
+    /// source/tag を書かない)。
+    #[test]
+    fn returning_to_media_does_not_disturb_the_scope() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectScope(RailScope::Video));
+        state.update(Message::SelectTab(LibraryTab::Media));
+        assert_eq!(state.scope(), RailScope::Video);
+    }
+
+    /// タブ切替は開閉フラグに影響しない(独立した軸)。
+    #[test]
+    fn selecting_a_tab_does_not_disturb_the_open_flag() {
+        let mut state = PaneState::new();
+        state.update(Message::ToggleBrowserPanel);
+        state.update(Message::SelectTab(LibraryTab::Create));
         assert!(state.is_open());
     }
 }

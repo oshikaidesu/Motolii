@@ -101,7 +101,13 @@ fn filter_chip_corner_radius_ratio_matches_the_mock_pixel_value() {
 #[test]
 fn rail_and_filter_and_search_and_summary_text_render_at_the_same_size_as_card_copy() {
     let items = fixture_items();
-    let element = view(&items, RailScope::AllMedia, "", Dimensions::default(), Colors::default());
+    let element = view(
+        &items,
+        RailScope::AllMedia,
+        "",
+        Dimensions::default(),
+        Colors::default(),
+    );
     let targets = collect_targets(element);
 
     // card copy(既に `micro_text` = 8 が確定している基準、`card_view` 参照)。

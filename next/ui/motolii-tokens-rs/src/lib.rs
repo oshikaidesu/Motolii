@@ -127,6 +127,19 @@ pub struct Dimensions {
     /// 次第そちらへ移す。
     #[serde(default = "default_ui_scale")]
     pub ui_scale: f32,
+    /// Browser pane のタブ帯(Media/Effects/Create/Panels)の高さ。出典:
+    /// 視覚正本 `next/reference/mocks/browser-library.html` の
+    /// `.libraryTabs{height:26px}` 実測(`tokens/dimensions.json` の
+    /// `_note_browser_tab_bar_height` 参照、2026-08-22 利用者裁定
+    /// 「デザイン値の外出し徹底」で JSON 正本へ)。
+    #[serde(default = "default_browser_tab_bar_height")]
+    pub browser_tab_bar_height: f32,
+    /// Browser タブ帯の active タブ下線の太さ。出典: 同 mock
+    /// `.libraryTabs button{border-bottom:2px}` 実測(`_note_browser_tab_
+    /// underline` 参照)。`spacing_xs` と同値(2)だが意味は「選択状態の縁」 —
+    /// spacing の段を縁へ転用しない。
+    #[serde(default = "default_browser_tab_underline")]
+    pub browser_tab_underline: f32,
 }
 
 fn default_inspector_glyph_width() -> f32 {
@@ -143,6 +156,14 @@ fn default_timeline_param_row_height() -> f32 {
 
 fn default_ui_scale() -> f32 {
     1.0
+}
+
+fn default_browser_tab_bar_height() -> f32 {
+    26.0
+}
+
+fn default_browser_tab_underline() -> f32 {
+    2.0
 }
 
 impl Default for Dimensions {
@@ -172,6 +193,8 @@ impl Default for Dimensions {
             timeline_lane_bar_width: 150.0,
             timeline_param_row_height: 16.67,
             ui_scale: 1.0,
+            browser_tab_bar_height: 26.0,
+            browser_tab_underline: 2.0,
         }
     }
 }
@@ -223,6 +246,8 @@ impl Dimensions {
             inspector_glyph_width: self.inspector_glyph_width * s,
             timeline_lane_bar_width: self.timeline_lane_bar_width * s,
             timeline_param_row_height: self.timeline_param_row_height * s,
+            browser_tab_bar_height: self.browser_tab_bar_height * s,
+            browser_tab_underline: self.browser_tab_underline * s,
             // 自分自身は「寸法」ではないので掛けない。この結果を再度 `scaled()`
             // に通す呼び出し側は無い(適用点は `Shell::dims` の1箇所だけ)。
             ui_scale: self.ui_scale,
@@ -387,9 +412,24 @@ fn hsl_to_rgb(hue: f32, saturation: f32, lightness: f32) -> Color {
 /// `Default`/`parse` の両方で同じ式にするための唯一の実装
 /// ([`derive_state_colors`] と同じ理由)。
 fn fixed_wash_colors() -> (Color, Color, Color) {
-    let border_hairline_weak = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.35 };
-    let timeline_time_band = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.035 };
-    let timeline_row_zebra = Color { r: 1.0, g: 1.0, b: 1.0, a: 0.05 };
+    let border_hairline_weak = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.35,
+    };
+    let timeline_time_band = Color {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 0.035,
+    };
+    let timeline_row_zebra = Color {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 0.05,
+    };
     (border_hairline_weak, timeline_time_band, timeline_row_zebra)
 }
 
@@ -410,8 +450,18 @@ fn fixed_checkerboard_colors() -> (Color, Color) {
 /// (`rgba(0,0,0,${f%major===0?0.30:0.18})`)の実測写し — 黒(区切り hairline と
 /// 同じ色相)、α だけ2段(小=弱・大=わずかに強い確認線)。
 fn fixed_grid_colors() -> (Color, Color) {
-    let timeline_grid_minor = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.18 };
-    let timeline_grid_major = Color { r: 0.0, g: 0.0, b: 0.0, a: 0.30 };
+    let timeline_grid_minor = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.18,
+    };
+    let timeline_grid_major = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.30,
+    };
     (timeline_grid_minor, timeline_grid_major)
 }
 
@@ -743,7 +793,9 @@ impl Tokens {
 /// テキストとして置換し、それ以外の1バイトも変えない。
 pub fn replace_ui_scale(json: &str, ui_scale: f32) -> Result<String, String> {
     let key = "\"ui_scale\"";
-    let key_pos = json.find(key).ok_or_else(|| "ui_scale キーが無い".to_owned())?;
+    let key_pos = json
+        .find(key)
+        .ok_or_else(|| "ui_scale キーが無い".to_owned())?;
     let after_key = &json[key_pos + key.len()..];
     let colon_offset = after_key
         .find(':')
@@ -1056,14 +1108,23 @@ mod ui_scale_tests {
         assert_eq!(scaled.spacing_m, dims.spacing_m * 1.5);
         assert_eq!(scaled.spacing_l, dims.spacing_l * 1.5);
         assert_eq!(scaled.panel_header_height, dims.panel_header_height * 1.5);
-        assert_eq!(scaled.inspector_panel_width, dims.inspector_panel_width * 1.5);
+        assert_eq!(
+            scaled.inspector_panel_width,
+            dims.inspector_panel_width * 1.5
+        );
         assert_eq!(scaled.inspector_row_height, dims.inspector_row_height * 1.5);
         assert_eq!(
             scaled.inspector_section_header_height,
             dims.inspector_section_header_height * 1.5
         );
-        assert_eq!(scaled.inspector_value_width, dims.inspector_value_width * 1.5);
-        assert_eq!(scaled.inspector_glyph_width, dims.inspector_glyph_width * 1.5);
+        assert_eq!(
+            scaled.inspector_value_width,
+            dims.inspector_value_width * 1.5
+        );
+        assert_eq!(
+            scaled.inspector_glyph_width,
+            dims.inspector_glyph_width * 1.5
+        );
     }
 
     /// **罫線だけ物理1px床(クランプ)**: mock `--line: 1px` は `--s` の calc から
@@ -1110,9 +1171,18 @@ mod text_weight_and_ink_tests {
     /// (`Normal`=400/`Semibold`=600/`ExtraBold`=800)へ1:1で繋がっているかの柵。
     #[test]
     fn text_weight_maps_to_the_canonical_css_bands() {
-        assert_eq!(TextWeight::Regular.font().weight, iced::font::Weight::Normal);
-        assert_eq!(TextWeight::Semibold.font().weight, iced::font::Weight::Semibold);
-        assert_eq!(TextWeight::Bold.font().weight, iced::font::Weight::ExtraBold);
+        assert_eq!(
+            TextWeight::Regular.font().weight,
+            iced::font::Weight::Normal
+        );
+        assert_eq!(
+            TextWeight::Semibold.font().weight,
+            iced::font::Weight::Semibold
+        );
+        assert_eq!(
+            TextWeight::Bold.font().weight,
+            iced::font::Weight::ExtraBold
+        );
     }
 
     /// ink 3段は既存 `Colors::text_*` をそのまま返すだけ(新色を発明しない、
@@ -1152,7 +1222,10 @@ mod hairline_and_rhythm_wash_tests {
             assert_eq!(wash.r, 1.0);
             assert_eq!(wash.g, 1.0);
             assert_eq!(wash.b, 1.0);
-            assert!(wash.a > 0.0 && wash.a < 0.35, "hairline と紛れない薄さのはず");
+            assert!(
+                wash.a > 0.0 && wash.a < 0.35,
+                "hairline と紛れない薄さのはず"
+            );
         }
     }
 
@@ -1256,7 +1329,8 @@ mod label_palette_tests {
         for (index, color) in palette.iter().enumerate() {
             let expected = hsl_to_rgb(index as f32 * 30.0, 0.32, 0.62);
             assert_eq!(
-                *color, expected,
+                *color,
+                expected,
                 "index {index} の色が hue={}° の HSL 変換と一致しない",
                 index as f32 * 30.0
             );
