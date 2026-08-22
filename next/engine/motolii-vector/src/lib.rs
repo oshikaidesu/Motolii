@@ -5,6 +5,17 @@
 //!       持っている 2D crate は無い。旧 workspace `crates/motolii-doc/src/pathgeom.rs`
 //!       からの**移植**であって再実装ではない(裁定10)。
 //!
+//! OWNS-JUSTIFICATION(D): 立証不足 — パス演算子7種の**実装側**の借り先
+//! (`kurbo`/`lyon_algorithms` 等)を具体的に検討した記録が無い。裁定10(移植は
+//! 再実装より優先)は「旧 `pathgeom.rs` をコピーしてよい理由」であって「自前で
+//! 持つべき理由」の代わりにはならない(裁定215 棚卸し 2026-08-23 #16、発注書が
+//! 名指しした2件の1つ)。**捏造しない正直な記録**: `kurbo`(弧長計算・オフセット
+//! 曲線)・`lyon_algorithms`(弧長ウォーク)はどちらも既に Cargo.lock の
+//! dependency graph に(他crate経由で)存在し、新規依存追加なしで検討可能——
+//! ただし repeater/pucker-bloat/zig-zag/rounded-corners 一式をまとめて持つ2D
+//! crateがある見込みは薄い(部分借用止まりの可能性が高い、同棚卸し §4)。動いて
+//! いる実装は教義のために壊さない・借り換えない。
+//!
 //! **ラスタライズは自前で持っていない** — `raster.rs` は `tiny-skia` を包んだだけで、
 //! そちらの marker は module の doc が持つ(crate の根しか見ない `check.sh` の
 //! 空振りを避ける形は裁定34 と同じ)。選定理由も `raster.rs` に書いてある。

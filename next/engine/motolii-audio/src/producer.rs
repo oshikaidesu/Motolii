@@ -3,6 +3,10 @@
 //! 絶対にこのスレッドをブロックしない**(callback側は`ring.rs::fill_or_silence`
 //! で読むだけ、KNOWN.md「音声」節: audio callback内でallocしない)。
 //!
+//! OWNS-JUSTIFICATION(A): `next/reference/KNOWN.md`「音声」の明記された規律
+//! (audio callback内でallocしない)から、mixをバックグラウンドスレッドへ
+//! 追い出す必然性が直接導かれる(裁定215 棚卸し 2026-08-23 #8)。
+//!
 //! 旧 `crates/motolii-audio/src/producer.rs::MixProducer` の移植 — **旧との
 //! 構造上の違い**:
 //! - リング型 → 旧の自前`RingProducer`(`push_frames`/`free_frames`を持つ)から

@@ -7,6 +7,11 @@
 //! だからここは **header を実際にパースして stride を決める最小のバイナリ読み取り**
 //! だけを持つ — ASCII PLY・非 little-endian・可変長 property(list 型)は対象外。
 //! 利用者の実データ(PCL 出力の `fragment.ply`)が読めれば足りる probe である。
+//!
+//! OWNS-JUSTIFICATION(C-PROBE): 測定器具 — 意見/借用判定の対象外(裁定215 は実装
+//! 差し替えの話、これは実データ受入の合否を測る道具そのもの)。rerun本体の
+//! PLY loaderがviewer層(裁定3で引かない層)にしか無いことを名指しで確認済み
+//! (裁定215 棚卸し 2026-08-23 #22、別枠扱い)。
 
 use std::io::Read as _;
 use std::path::Path;

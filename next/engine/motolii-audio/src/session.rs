@@ -1,6 +1,9 @@
 //! owns: 実デバイス再生セッション(A2)— [`device`](実cpal結線) + [`producer`]
 //! (mixプロデューサスレッド) + [`clock::PlaybackClock`] を束ねる。
 //!
+//! OWNS-JUSTIFICATION(A): 発注書「旧PlaybackSessionの形を移植 — スクラッチ禁止」
+//! を直接引用した明示指示(裁定215 棚卸し 2026-08-23 #10)。
+//!
 //! 旧 `crates/motolii-transport/src/playback.rs::PlaybackSession` の形を移植
 //! (発注書「旧PlaybackSessionの形を移植 — スクラッチ禁止」)。**旧との違い**:
 //! 旧は`Transport`(DRS・映像フレームドロップ込み)と束ねていたが、この crate の

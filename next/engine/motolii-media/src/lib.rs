@@ -9,6 +9,10 @@
 //!   4. **encode / mux を持たない**(decode 専用)
 //! この4点が変わったら再裁定する。
 //!
+//! OWNS-JUSTIFICATION(B): 探索対象=上流 `re_video`(既に依存グラフに `re_renderer`
+//! 経由で存在) — 裁定24が上記4点の具体理由で名指しして却下し、再裁定条件まで
+//! 明記している(裁定215 棚卸し 2026-08-23 #14、32件中最も強い(b)の実例)。
+//!
 //! 旧 workspace `crates/motolii-media` からの移植(2026-08-20 リセット)。再実装ではない。
 //! **持ってこなかったもの**(軸4「保守をしたくない」):
 //! - `source_binding.rs` 202行 — `motolii-gpu` の `ResourceLedger`(予算 admission)に

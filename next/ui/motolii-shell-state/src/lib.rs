@@ -8,6 +8,10 @@
 //! あった(§2.3 の Session ⇄ timeline 循環解消と同じ理由を、pane crate 分割へ
 //! もう一段延長した形)。
 //!
+//! OWNS-JUSTIFICATION(A): 裁定160切片6/7 — pane crateとassemblerの循環依存を
+//! 避けるための共通の親(leaf)という構造上の必然性を、commit hash
+//! (`f69e709e`等)つきで具体的に引用(裁定215 棚卸し 2026-08-23 #30)。
+//!
 //! [`Session`] は [`KeySelector`] を持ち、`motolii_timeline_pane::rows`/
 //! `property_rows` は `&Session` を要求する — この2つを同じ leaf へ同居させて
 //! 依存方向を `motolii-timeline-pane`/`motolii-shell` → `motolii-shell-state`

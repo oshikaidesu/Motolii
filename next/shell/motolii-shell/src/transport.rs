@@ -7,6 +7,10 @@
 //! cpal/producer を束ねる型なので、`Transport` はハードウェアを一切知らない
 //! (`open_real_playback` — 本番の唯一の実デバイス起動経路 — だけがそれを知る)。
 //!
+//! OWNS-JUSTIFICATION(A): 発注書「旧PlaybackSessionの形を移植」+「デバイス抽象
+//! はフェイクで」の両方を1つの型で満たす明示指示。実体は
+//! `motolii_audio::PlaybackSession`への薄い委譲(裁定215 棚卸し 2026-08-23 #26)。
+//!
 //! - **Play**(停止中→再生): `Transport::start` が `open_real_playback`(本番)
 //!   または `PlaybackSession::for_simulation`(試験)で組んだセッションを採用する。
 //! - **Pause**: `Shell::freeze_playhead_from_transport`(呼び出し側)が

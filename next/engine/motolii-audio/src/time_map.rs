@@ -7,6 +7,12 @@
 //! グリッド上の有理数写像」を表せない。よってこの crate 自身が持つ(`program.rs` が
 //! `LayerTiming` から comp の fps を通してこの型を組み立てる)。
 //!
+//! OWNS-JUSTIFICATION(B): 探索対象=`motolii_store::LayerTiming`/`Speed` — 裁定63で
+//! compフレーム単位の整数写像と決まっていることを確認した上で、mixが要る
+//! 「48kHzサンプルグリッド上の有理数写像」を店側が表現できないことを具体的に
+//! 確かめた(裁定215 棚卸し 2026-08-23 #11、「上流に無い」を裁定番号付きで
+//! 実証した最良の例の1つ)。
+//!
 //! **落としたもの**: 旧型が持っていた `overrun_mode`(`OverrunMode` — Freeze/Black/
 //! Loop、D3 未着手のため常に Freeze 相当でしか使われていなかった)。`mix.rs` の
 //! 範囲外挙動は `AudioOutOfRange`(Silence/Loop)が別に持っており、`try_map` 自体は

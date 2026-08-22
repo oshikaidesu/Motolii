@@ -10,6 +10,11 @@
 //! 1回分」を表す pure に近い関数 — 実デバイス結線(cpal `build_output_stream`)は
 //! 第2切片(shell 結線)の仕事で、ここでは`rtrb::Consumer`を直接渡してテストできる
 //! (実デバイス不要)。
+//!
+//! OWNS-JUSTIFICATION(B): 探索対象=上流 `rtrb`(SPSCリングバッファ) — 旧367行の
+//! 自前SPSCは `next/reference/KNOWN.md`「音声(2026-08-20解析済み)」で再発明と
+//! 判定済みの上で、実際に `rtrb` へ切り替えた。残したのは `rtrb` に無い
+//! フレーム境界充填/無音補填ロジックのみ(裁定215 棚卸し 2026-08-23 #9)。
 
 use crate::clock::PlaybackCounters;
 

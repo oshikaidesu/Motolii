@@ -18,6 +18,11 @@
 //! 組む — `std::thread::sleep` は専用スレッド側で行い、async 側は
 //! `pending().await` で stream を生かしておくだけ(executor を止めない、
 //! `watch_stream` doc と同じ理由)。
+//!
+//! OWNS-JUSTIFICATION(B): 探索対象=`iced::time::every` — `next/reference/KNOWN.md`
+//! に「このworkspaceでは使えない」と具体的に明記(forkの`iced_futures`が
+//! tokio/smol featureを有効化していないため空モジュールに落ちる)。上流APIの
+//! 欠落を検証した上で自前タイマー購読を組んだ(裁定215 棚卸し 2026-08-23 #25)。
 
 use std::time::Duration;
 

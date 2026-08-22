@@ -1,6 +1,12 @@
 //! owns: cpal出力(A2: 実デバイスへ音を出す経路)。D4契約(旧 crate から継承):
 //! ここだけがハードウェアに触る。
 //!
+//! OWNS-JUSTIFICATION(A): `next/reference/KNOWN.md`「音声」D4契約(ハードウェアに
+//! 触るのはここだけ)の意図的な集約点。**ただし正直な記録**: 中身はcpalの薄い
+//! ラッパー(フォーマット交渉ロジックのみが自前)で `wraps:` 寄りの性質を持つ
+//! (裁定215 棚卸し 2026-08-23 §3・#7 で境界事例として記録済み。marker文言
+//! (`owns:`)自体は本発注では変更しない)。
+//!
 //! 旧 `crates/motolii-audio/src/device.rs` からの移植 — **型の読み替え**:
 //! - `RingConsumer`(自前SPSC、KNOWN.md「音声」節で再発明と判定済み)→
 //!   `rtrb::Consumer<f32>`(A1 の `ring.rs` doc 参照、上流 `rtrb` を直接使う)
