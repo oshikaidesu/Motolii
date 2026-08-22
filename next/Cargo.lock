@@ -3980,6 +3980,7 @@ dependencies = [
 name = "motolii-vector"
 version = "0.1.0"
 dependencies = [
+ "cosmic-text",
  "serde",
  "serde_json",
  "thiserror 2.0.20",

@@ -13,6 +13,14 @@ license.workspace = true
 # `png-format` を切ってあるのは、既存グラフの tiny-skia が png を引いていないため。
 # 既定のまま引くと png 0.17 が lock へ増える — 出す物は RGBA8 の生バイトなので要らない。
 tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
+# 字形シェイピング(`text.rs`、裁定190)。workspace.dependencies へ足さないのは
+# tiny-skia と同じ理由(軸4、この crate 以外に利用者が居ない)。
+#
+# **依存は1本も増えていない**: cosmic-text 0.19.0 は既に `next/Cargo.lock` に居る
+# (iced fork の `iced_graphics`/`iced_tiny_skia` が引いている) — この direct 指定は
+# Cargo.lock 上で同一 package に unify される(`next/probes/r6-text-shaping` probe が
+# 実測した本命の利点、裁定190)。
+cosmic-text = "0.19"
 thiserror.workspace = true
 # layer-meta 束: `Shape` を Document の component として保存するために足した。
 # 依存は増えない — `serde` は既に workspace 全体で引いている(`Cargo.lock` は変わらない)。
