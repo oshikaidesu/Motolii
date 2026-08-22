@@ -18,6 +18,11 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 pub mod mask;
+/// `Vec<ShapeNode>` → `motolii-vector::render_tree` → RGBA8(発注「シェイプが画に
+/// 出るようにする」、2026-08-22)。**`texture_for` の `LayerSource::Shape` 枝の
+/// 呼び手(`Engine::shape_texture_for`/`Engine::shape_texture_from_shapes`)から
+/// 繋がった** — module doc(`shape.rs`)参照。
+pub mod shape;
 /// TextDocument → 輪郭 → RGBA8(裁定190 切片2)。**BL4/切片3 で `texture_for` の
 /// 呼び手(`Engine::text_texture_for`)から繋がった** — module doc(`text.rs`)参照。
 pub mod text;
@@ -28,7 +33,7 @@ use motolii_core::{CompSpec, ResolvedCamera};
 
 use motolii_media::{probe, read_frame_at, MediaError, MediaInfo};
 use motolii_store::{
-    LayerId, LayerPlacement, LayerSource, Matte, RationalTime, ResolvedLayer, StoreView,
+    LayerId, LayerPlacement, LayerSource, Matte, RationalTime, ResolvedLayer, ShapeNode, StoreView,
     TextDocument,
 };
 
@@ -77,6 +82,12 @@ pub enum EngineError {
     /// エラーではないので、ここには乗らない([`crate::text`] module doc 参照)。
     #[error(transparent)]
     Text(#[from] crate::text::TextRenderError),
+    /// `LayerSource::Shape` のラスタライズ失敗(`crate::shape::rasterize_shapes` が
+    /// そのまま返す `motolii_vector::VectorError` を畳む)。text と違いシェイピング
+    /// 段(cosmic-text 相当)を持たないので失敗理由は1種類だけ——`TextRenderError`
+    /// のような複合型は要らない。
+    #[error(transparent)]
+    Shape(#[from] motolii_vector::VectorError),
 }
 
 /// 背景 layer の `LayerPlacement::order`(= `re_renderer::DepthOffset`、`i16`)。
@@ -169,6 +180,11 @@ pub struct Engine {
     /// ([`TextCacheKey`] の doc 参照——`LayerSource::Text` は中身を持たない unit
     /// variant なので、複数の text layer がそのまま使うと1つの鍵に衝突する)。
     text_textures: HashMap<TextCacheKey, GpuTexture2D>,
+    /// shape layer → GPU texture。`text_textures` と同じ理由で `textures`
+    /// (`LayerSource` 鍵)を再利用しない——`LayerSource::Shape` も中身を持たない
+    /// unit variant なので、複数の shape layer が同じ鍵に衝突する
+    /// ([`ShapeCacheKey`] の doc 参照)。
+    shape_textures: HashMap<ShapeCacheKey, GpuTexture2D>,
 }
 
 impl Engine {
@@ -180,6 +196,7 @@ impl Engine {
             frames: HashMap::new(),
             frame_order: VecDeque::new(),
             text_textures: HashMap::new(),
+            shape_textures: HashMap::new(),
         })
     }
 
@@ -200,6 +217,7 @@ impl Engine {
             frames: HashMap::new(),
             frame_order: VecDeque::new(),
             text_textures: HashMap::new(),
+            shape_textures: HashMap::new(),
         })
     }
 
@@ -461,6 +479,10 @@ impl Engine {
     /// Hold 評価(`content.eval(t)`)とキャッシュ鍵(`TextCacheKey`)の両方に要る。
     /// この関数自体は今も `Document`/`StoreView` を一切知らない
     /// (受け取るのは所有データの束だけ)。
+    ///
+    /// **`shape_documents` は2026-08-22(シェイプが画に出るようにする発注)で
+    /// 新設**——`text_documents` と同型(`Self::texture_for_resolved`/
+    /// `collect_shape_documents` の doc 参照)。
     fn layers_from_resolved(
         &mut self,
         comp: CompSpec,
@@ -469,6 +491,7 @@ impl Engine {
         t: RationalTime,
         resolved: &[ResolvedLayer],
         text_documents: &HashMap<LayerId, TextDocument>,
+        shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
     ) -> Result<Vec<LayerWithPasses>, EngineError> {
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
 
@@ -510,7 +533,8 @@ impl Engine {
             let blend_mode = translate_blend_mode(layer.blend_mode)?;
             let passes = translate_effect_passes(&layer.effects);
 
-            let (texture, natural) = self.texture_for_resolved(layer, text_documents, t, comp)?;
+            let (texture, natural) =
+                self.texture_for_resolved(layer, text_documents, shape_documents, t, comp)?;
             let Some(texture) = texture else {
                 continue;
             };
@@ -528,8 +552,13 @@ impl Engine {
                     let Some(source) = by_id.get(&matte.layer).copied() else {
                         continue;
                     };
-                    let (source_texture, source_natural) =
-                        self.texture_for_resolved(source, text_documents, t, comp)?;
+                    let (source_texture, source_natural) = self.texture_for_resolved(
+                        source,
+                        text_documents,
+                        shape_documents,
+                        t,
+                        comp,
+                    )?;
                     let Some(source_texture) = source_texture else {
                         continue;
                     };
@@ -578,6 +607,18 @@ impl Engine {
     /// `Shell::build_preview_snapshot`)はどちらも `resolved_layers(t)` を呼んだ
     /// その場で `StoreView` を持っているので、`text_document(id)` を添えるだけで
     /// 済む——この関数自体は相変わらず `Document`/`StoreView` を知らない。
+    ///
+    /// **公開シグネチャは無改造のまま固定**(2026-08-22、シェイプが画に出るように
+    /// する発注)——`motolii-shell` の presenter Pipeline が直接呼ぶ口であり、
+    /// この発注の EXACT TARGET は shell を触らない(別レーンが `create_from_card`
+    /// を施工中)。中身は空の `shape_documents` を添えて
+    /// [`Self::render_resolved_to_texture_with_shapes`]へ委譲するだけの後方互換
+    /// ラッパーへ変わった——shell 経由の zero-copy 経路は今まで通り shape を
+    /// 描かない(shell の `create_from_card` がまだ `Intent::SetShapes` を呼ばない
+    /// ので、実際に空の shape しか存在しない今の実態とも一致する)。zero-copy 経路で
+    /// 実際に shape を描かせたい呼び手は
+    /// [`Self::render_frame_to_texture`](`&StoreView` 版、shape_documents を自動収集)
+    /// か、[`Self::render_resolved_to_texture_with_shapes`]を直接呼ぶ。
     pub fn render_resolved_to_texture(
         &mut self,
         comp: CompSpec,
@@ -587,7 +628,42 @@ impl Engine {
         resolved: &[ResolvedLayer],
         text_documents: &HashMap<LayerId, TextDocument>,
     ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
-        let layers = self.layers_from_resolved(comp, background, camera, t, resolved, text_documents)?;
+        self.render_resolved_to_texture_with_shapes(
+            comp,
+            background,
+            camera,
+            t,
+            resolved,
+            text_documents,
+            &HashMap::new(),
+        )
+    }
+
+    /// [`Self::render_resolved_to_texture`]の拡張版(2026-08-22、シェイプが画に
+    /// 出るようにする発注)——`shape_documents: &HashMap<LayerId, Vec<ShapeNode>>`
+    /// を追加で受け取る点だけが違う(`text_documents` と同型、
+    /// `collect_shape_documents` 参照)。**公開 API を1本増やしただけ**——
+    /// `render_resolved_to_texture` の既存呼び手(shell)の呼び出しは1文字も
+    /// 変える必要が無い。
+    pub fn render_resolved_to_texture_with_shapes(
+        &mut self,
+        comp: CompSpec,
+        background: [f32; 4],
+        camera: ResolvedCamera,
+        t: RationalTime,
+        resolved: &[ResolvedLayer],
+        text_documents: &HashMap<LayerId, TextDocument>,
+        shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
+    ) -> Result<(wgpu::Texture, wgpu::TextureView), EngineError> {
+        let layers = self.layers_from_resolved(
+            comp,
+            background,
+            camera,
+            t,
+            resolved,
+            text_documents,
+            shape_documents,
+        )?;
         Ok(self.compositor.render_to_texture(comp, camera, &layers)?)
     }
 
@@ -606,6 +682,12 @@ impl Engine {
     /// (`layers_from_resolved` が `by_id` 越しにその layer を texture 化する時)
     /// 同じ map から引けるよう、`matte_sources`/対象を区別せず `resolved` 全体を
     /// 走査する。
+    ///
+    /// **shape も同じ形で集める**(2026-08-22、シェイプが画に出るようにする発注)
+    /// ——[`collect_shape_documents`]参照。`render_resolved_to_texture`(shell が
+    /// 直接呼ぶ、公開シグネチャ固定)ではなく
+    /// [`Self::render_resolved_to_texture_with_shapes`]へ渡すので、この
+    /// `&StoreView` 経由のゼロコピー入口は shape も実際に描く。
     pub fn render_frame_to_texture(
         &mut self,
         view: &StoreView<'_>,
@@ -623,13 +705,15 @@ impl Engine {
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
         let text_documents = collect_text_documents(view, &resolved)?;
-        self.render_resolved_to_texture(
+        let shape_documents = collect_shape_documents(view, &resolved)?;
+        self.render_resolved_to_texture_with_shapes(
             comp,
             composition.background,
             camera,
             t,
             &resolved,
             &text_documents,
+            &shape_documents,
         )
     }
 
@@ -687,6 +771,12 @@ impl Engine {
         self.text_textures.len()
     }
 
+    /// 実測用。抱えている shape texture の枚数([`ShapeCacheKey`] 鍵の数)——
+    /// `cached_text_texture_count` と同じ形の窓口。
+    pub fn cached_shape_texture_count(&self) -> usize {
+        self.shape_textures.len()
+    }
+
     fn remember_frame(&mut self, key: (String, i64), texture: GpuTexture2D) {
         if self.frames.insert(key.clone(), texture).is_none() {
             self.frame_order.push_back(key);
@@ -726,6 +816,8 @@ impl Engine {
     ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
         if layer.source == LayerSource::Text {
             self.text_texture_for(view, layer.id, t, comp)
+        } else if layer.source == LayerSource::Shape {
+            self.shape_texture_for(view, layer.id, comp)
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -736,15 +828,26 @@ impl Engine {
     /// 先に集めておいた `text_documents: &HashMap<LayerId, TextDocument>`
     /// (`collect_text_documents`/`Shell::build_preview_snapshot` 参照)から引く
     /// ことだけが違う——`Text` 以外の分岐は完全に同じ `texture_for` へ委譲する。
+    ///
+    /// **`shape_documents` は2026-08-22(シェイプが画に出るようにする発注)で新設**
+    /// ——`text_documents` と同型(`collect_shape_documents` 参照)。`Shape` も
+    /// 中身を運ばない unit variant なので、`ResolvedLayer` からは辿り着けない。
     fn texture_for_resolved(
         &mut self,
         layer: &ResolvedLayer,
         text_documents: &HashMap<LayerId, TextDocument>,
+        shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
         t: RationalTime,
         comp: CompSpec,
     ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
         if layer.source == LayerSource::Text {
             self.text_texture_from_document(text_documents.get(&layer.id), layer.id, t, comp)
+        } else if layer.source == LayerSource::Shape {
+            let shapes = shape_documents
+                .get(&layer.id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            self.shape_texture_from_shapes(shapes, layer.id, comp)
         } else {
             self.texture_for(&layer.source, layer.source_frame)
         }
@@ -834,6 +937,75 @@ impl Engine {
         Ok((Some(texture), [raster.width as f32, raster.height as f32]))
     }
 
+    /// `LayerSource::Shape` の texture 化(発注「シェイプが画に出るようにする」、
+    /// 2026-08-22)。`text_texture_for`/`text_texture_from_document` と同型の
+    /// 分割——`&StoreView` を持つ呼び手([`Self::texture_for_layer`])専用の薄い
+    /// 入口で、`view.shapes(layer_id)` を引いてから実体
+    /// ([`Self::shape_texture_from_shapes`])へ渡すだけ。
+    fn shape_texture_for(
+        &mut self,
+        view: &StoreView<'_>,
+        layer_id: LayerId,
+        comp: CompSpec,
+    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+        let shapes = view
+            .shapes(layer_id)
+            .map_err(|e| EngineError::Store(e.to_string()))?;
+        self.shape_texture_from_shapes(&shapes, layer_id, comp)
+    }
+
+    /// [`Self::shape_texture_for`]/[`Self::texture_for_resolved`]の共通実体
+    /// (`text_texture_from_document` と同型)。`shapes` が既に引けているかどうかを
+    /// 呼び手に委ね、以降のラスタライズ/キャッシュ処理は `&StoreView` の有無に
+    /// 関わらず完全に同じ——ゼロコピー経路(`layers_from_resolved`)と
+    /// `render_with_camera_override` が同じキャッシュ(`self.shape_textures`)を
+    /// 共有するので、Stage 表示(zero-copy)と export(CPU)が同じ内容の shape layer
+    /// を同じフレームで描いても再ラスタライズは1回で済む。
+    ///
+    /// canvas は **`Canvas::centered`**(`shape.rs` module doc の「canvas は
+    /// `Canvas::centered`」節参照 — text とは逆に、shape のパス源は局所原点
+    /// `(0,0)` を中心に生成されるため)。テキストと同じく layer の「板」を comp と
+    /// 同じ大きさに固定する(`declared_size`/folding box はこの発注の範囲外)。
+    ///
+    /// `t`(`RationalTime`)を取らない——`ShapeCacheKey`/`shape.rs` module doc の
+    /// 「時刻を取らない理由」節参照(shape 自身は時間評価を持たず、動くとしたら
+    /// layer の transform 側)。
+    fn shape_texture_from_shapes(
+        &mut self,
+        shapes: &[ShapeNode],
+        layer_id: LayerId,
+        comp: CompSpec,
+    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+        if shapes.is_empty() {
+            // `SetShapes` がまだ一度も書かれていない、または空配列——描く物が無い
+            // (エラーではない、`shape::rasterize_shapes` の doc と同じ扱い)。
+            return Ok((None, [0.0, 0.0]));
+        }
+
+        let canvas = motolii_vector::Canvas::centered(comp.width, comp.height);
+
+        let key = ShapeCacheKey::new(layer_id, shapes, canvas.width, canvas.height);
+        if let Some(texture) = self.shape_textures.get(&key) {
+            return Ok((
+                Some(texture.clone()),
+                [canvas.width as f32, canvas.height as f32],
+            ));
+        }
+
+        let Some(raster) = shape::rasterize_shapes(shapes, &canvas)? else {
+            return Ok((None, [0.0, 0.0]));
+        };
+
+        let texture = self.compositor.upload_rgba(
+            "shape",
+            &raster.premultiplied_rgba8,
+            raster.width,
+            raster.height,
+        )?;
+        self.shape_textures.insert(key, texture.clone());
+        Ok((Some(texture), [raster.width as f32, raster.height as f32]))
+    }
+
     fn texture_for(
         &mut self,
         source: &LayerSource,
@@ -902,30 +1074,22 @@ impl Engine {
                 self.remember_frame(key, texture.clone());
                 Ok((Some(texture), natural))
             }
-            // layer-meta 束が足した3 variant + 裁定173 の `Group`。**shape はまだ
-            // 描画に繋いでいない**(演算子/組版から RGBA を焼く経路が未実装)。
-            // null layer は元々絵を持たず(裁定どおり)、`Group` も同じく絵を持たない
-            // (裁定173 — Group は「子を持てる」という印だけの layer、合成は世界合成
-            // (`motolii-store::view::world_affine`)が親 transform として使うだけで、
-            // Group 自身のピクセルは無い)。
-            //
-            // **`Text` はここでは呼べない**(`&LayerSource`/`source_frame` しか
-            // 受け取らない口なので `TextDocument` へ辿り着けない、変わらぬ理由)——
-            // ただし2026-08-22 の結線でこの関数自体が `Text` の呼び手ではなくなった:
-            // `render_with_camera_override`/`layers_from_resolved` はどちらも
-            // `Text` の場合ここへは来ず [`Self::text_texture_for`](`Self::texture_for_layer`
-            // 経由)を呼ぶ——ここに来る `Text` は `texture_for` を直接呼ぶ他の呼び手
-            // (このモジュール内には現状無い)向けの安全側の既定値として残す。
-            LayerSource::Text => Ok((None, [0.0, 0.0])),
-            // 裁定173 の `Group`。**shape はまだ描画に繋いでいない**
-            // (演算子/組版から RGBA を焼く経路が未実装)。null layer は元々絵を持たず
-            // (裁定どおり)、`Group` も同じく絵を持たない(裁定173 — Group は「子を
-            // 持てる」という印だけの layer、合成は世界合成
-            // (`motolii-store::view::world_affine`)が親 transform として使うだけで、
-            // Group 自身のピクセルは無い)。
-            LayerSource::Null | LayerSource::Shape | LayerSource::Group => {
-                Ok((None, [0.0, 0.0]))
-            }
+            // **`Text`/`Shape` はここでは呼べない**(`&LayerSource`/`source_frame`
+            // しか受け取らない口なので、それぞれ `TextDocument`/`Vec<ShapeNode>` へ
+            // 辿り着けない)——`render_with_camera_override`/`layers_from_resolved`
+            // はどちらも `Text`/`Shape` の場合ここへは来ず、専用の枝
+            // ([`Self::text_texture_for`]/[`Self::shape_texture_for`]、
+            // `Self::texture_for_layer`/`Self::texture_for_resolved` 経由)を呼ぶ——
+            // ここに来る `Text`/`Shape` は `texture_for` を直接呼ぶ他の呼び手
+            // (このモジュール内には現状無い)向けの安全側の既定値として残す
+            // (2026-08-22、シェイプが画に出るようにする発注で `Shape` も `Text` と
+            // 同じ扱いへ揃えた)。
+            LayerSource::Text | LayerSource::Shape => Ok((None, [0.0, 0.0])),
+            // null layer は元々絵を持たず(裁定どおり)、`Group`(裁定173)も同じく
+            // 絵を持たない——Group は「子を持てる」という印だけの layer で、合成は
+            // 世界合成(`motolii-store::view::world_affine`)が親 transform として
+            // 使うだけ、Group 自身のピクセルは無い。
+            LayerSource::Null | LayerSource::Group => Ok((None, [0.0, 0.0])),
         }
     }
 }
@@ -951,6 +1115,28 @@ fn collect_text_documents(
             {
                 documents.insert(layer.id, document);
             }
+        }
+    }
+    Ok(documents)
+}
+
+/// [`Engine::render_frame_to_texture`]専用。`resolved` の中から `LayerSource::Shape`
+/// の layer だけ `view.shapes(id)` を引いて集める(2026-08-22、シェイプが画に
+/// 出るようにする発注)——[`collect_text_documents`]と同型。`StoreView::shapes`
+/// は「無ければ空 `Vec`」を返す(`text_document` の「無ければ `None`」とは違う形、
+/// `motolii-store` の `view.rs` 参照)ので、ここも空配列をそのまま積む——
+/// [`Engine::shape_texture_from_shapes`]が空配列を「描く物が無い」として扱う。
+fn collect_shape_documents(
+    view: &StoreView<'_>,
+    resolved: &[ResolvedLayer],
+) -> Result<HashMap<LayerId, Vec<ShapeNode>>, EngineError> {
+    let mut documents = HashMap::new();
+    for layer in resolved {
+        if layer.source == LayerSource::Shape {
+            let shapes = view
+                .shapes(layer.id)
+                .map_err(|e| EngineError::Store(e.to_string()))?;
+            documents.insert(layer.id, shapes);
         }
     }
     Ok(documents)
@@ -1062,6 +1248,76 @@ impl TextCacheKey {
             &document.styles,
         ))
         .unwrap_or_default();
+        Self {
+            layer,
+            canvas_width,
+            canvas_height,
+            content_snapshot,
+        }
+    }
+}
+
+/// shape texture のキャッシュ鍵(発注「シェイプが画に出るようにする」、
+/// 2026-08-22)。[`TextCacheKey`]と同じ考え方(`layer`+canvas 寸法+
+/// content snapshot)——ただし **`t` を引数に取らない**。
+///
+/// # なぜ `textures: HashMap<LayerSource, GpuTexture2D>` を再利用しないか
+///
+/// [`TextCacheKey`]の doc と同じ理由: `LayerSource::Shape` は中身を持たない unit
+/// variant なので、複数の shape layer がそのまま `textures` を使うと1つの鍵に
+/// 衝突する。
+///
+/// # なぜ `t`(`RationalTime`)を引数にも鍵にも持たないか
+///
+/// [`TextCacheKey`]は「`t` は取るが鍵には含めない」(Hold 評価後の内容が鍵)だが、
+/// `ShapeCacheKey` は**そもそも `t` を取らない**——`motolii_vector::Shape`/
+/// `ShapeNode`(`StoreView::shapes` が返す `Layer:shapes` component の中身)は
+/// `TextDocument::content`(`ContentTrack`、Hold 評価)のような時間評価の型を
+/// 一切持たない静的な記述で、`StoreView::shapes(layer)` 自体が時刻を引数に取らない
+/// (`motolii-store` の `view.rs` 参照)。つまり「評価後の形」は常に
+/// `shapes()` の返り値そのものであり、`t` を混ぜても区別が増えるどころか
+/// [`TextCacheKey`]が避けた落とし穴(毎フレーム別キャッシュ行になる)をそのまま
+/// 踏む——`shape.rs` module doc の「時刻を取らない理由」節も参照。shape の頂点が
+/// 時間で動く経路は、shape 自身の記述ではなく **layer の transform**
+/// (`ResolvedLayer.placement`)側にあり、そちらは `layers_from_resolved`/
+/// `render_with_camera_override` が(shape かどうかに関わらず)常に持ち回っている
+/// 既存の経路がそのまま担う。
+///
+/// # 鍵の中身
+///
+/// - **`layer: LayerId`** — [`TextCacheKey`]と同じ理由(layer 単位、
+///   `textures` が `LayerSource` を鍵にする「内容が同じなら共有する」設計とは
+///   意図的に非対称)。
+/// - **`canvas_width`/`canvas_height`** — ラスタライズ先の canvas 寸法
+///   (= [`Engine::shape_texture_for`]/[`Engine::shape_texture_from_shapes`]呼び出し
+///   時点の comp 解像度)。comp resize で同じ shape でも画素配置(`Canvas::centered`
+///   の中心)が変わりうるので鍵に含める。
+/// - **`content_snapshot`** — `shapes`(`&[ShapeNode]`)そのものを JSON 化した
+///   文字列。[`ShapeNode`]/[`crate::text`]と同じく`motolii-vector`側で既に
+///   `Serialize` を derive 済みなので、追加の型実装は要らない。
+///
+/// # 上限を持たない理由
+///
+/// [`TextCacheKey`]の doc「上限を持たない理由」節と同型 — shape layer の内容も
+/// キーフレームの数だけしか値を持たない(このレーンでは shape 自身は時間評価すら
+/// 持たないので、実質「layer の数だけ」)。増えて問題になったら `frames` と同じ
+/// FIFO を足せばよい。
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct ShapeCacheKey {
+    layer: LayerId,
+    canvas_width: u32,
+    canvas_height: u32,
+    content_snapshot: String,
+}
+
+impl ShapeCacheKey {
+    /// `shapes` から「この layer の絵を決める入力」を JSON 化した文字列へ畳む。
+    fn new(layer: LayerId, shapes: &[ShapeNode], canvas_width: u32, canvas_height: u32) -> Self {
+        // シリアライズ失敗は実質あり得ない(`Shape`/`ShapeNode` 内の全フィールドは
+        // 有限の f64/enum/String の組み合わせ)——万一失敗しても cache miss 扱いに
+        // なるだけで安全側(絵は壊れない、毎回描き直すだけ)なので
+        // `unwrap_or_default` で空文字列へ倒す([`TextCacheKey::new`] と同じ判断)。
+        let content_snapshot = serde_json::to_string(shapes).unwrap_or_default();
         Self {
             layer,
             canvas_width,
