@@ -63,6 +63,7 @@ pub mod shuttle;
 pub mod split;
 pub mod stacking;
 mod transport;
+pub mod waveform_view;
 pub mod work_area;
 mod write;
 
