@@ -3,7 +3,10 @@
 //! ここで固定するのは:
 //! - `ty`(Type)は plugin id 文字列であって閉じた int registry ではない(裁定70)。
 //!   first-party と third-party が同じ列に同居できる
-//! - `en`(Enabled)は消さずに切る — 無効化しても `SetEffects` の列からは消えない
+//! - **`en`(Enabled)は裁定213でキーフレームへ移した** — `EffectInstance` はもう
+//!   `enabled` フィールドを持たず、`PropertyId::effect_enabled` の平坦 track
+//!   (`Value::Bool`、Hold 補間)で表す。無効化しても `SetEffects` の列からは
+//!   消えない(「消す」と「一時的に切る」は別物のまま)
 //! - param(`ef`)は Document が専用フィールドで持たず、`effect.{id}.param.{name}` と
 //!   いう平坦 `PropertyId` の `KeyframeTrack` にそのまま乗る(裁定72「新機構ゼロ」)。
 //!   track の有無が「この param を触っているか」を表す(裁定20 の応用)
@@ -75,12 +78,10 @@ fn effect_type_is_a_plugin_id_string_shared_by_first_and_third_party() {
         EffectInstance {
             id: EffectId(0),
             plugin_id: "motolii.gaussian-blur".to_owned(),
-            enabled: true,
         },
         EffectInstance {
             id: EffectId(1),
             plugin_id: "thirdparty.acme.glow".to_owned(),
-            enabled: true,
         },
     ];
     doc.apply(Intent::SetEffects {
@@ -96,11 +97,12 @@ fn effect_type_is_a_plugin_id_string_shared_by_first_and_third_party() {
 }
 
 // ---------------------------------------------------------------------------
-// en (Enabled) — 消さずに切る
+// en (Enabled) — 裁定213: キーフレーム可能な track へ。消さずに切る
 // ---------------------------------------------------------------------------
 
-/// **`en` は消さずに切る。** 無効化しても `SetEffects` の列からは消えない —
-/// 列から取り除く(削除)とは別の操作。
+/// **`en` は消さずに切る。** 無効化(= `effect.{id}.enabled` の track に
+/// `Value::Bool(false)` を書く)しても `SetEffects` の列からは消えない ——
+/// 列から取り除く(削除)とは別の操作、という既存の意図(裁定213 でも変えない)。
 #[test]
 fn disabling_an_effect_keeps_it_in_the_list() {
     let (mut doc, layer) = doc_with_layer();
@@ -110,24 +112,98 @@ fn disabling_an_effect_keeps_it_in_the_list() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.gaussian-blur".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
 
-    doc.apply(Intent::SetEffects {
+    doc.apply(Intent::SetTrack {
         layer,
-        effects: vec![EffectInstance {
-            id: effect,
-            plugin_id: "motolii.gaussian-blur".to_owned(),
-            enabled: false,
-        }],
+        property: PropertyId::effect_enabled(effect),
+        track: still(Value::Bool(false)),
     })
     .unwrap();
 
     let effects = doc.view().effects(layer).unwrap();
     assert_eq!(effects.len(), 1, "無効化で列から消えてしまっている");
-    assert!(!effects[0].enabled);
+    assert_eq!(
+        doc.view().resolve(layer, t(0)).unwrap().expect("居る").effects.len(),
+        0,
+        "disabled な effect が resolve() に運ばれている"
+    );
+}
+
+/// **キーを打っていない = 既定で有効**(`mask_opacity` の「既定 1.0」と同じ判断) —
+/// effect を追加した直後は何もしなくても効いているはず、という利用者の直感。
+#[test]
+fn an_effect_with_no_enabled_track_defaults_to_enabled() {
+    let (mut doc, layer) = doc_with_layer();
+    doc.apply(Intent::SetEffects {
+        layer,
+        effects: vec![EffectInstance {
+            id: EffectId(0),
+            plugin_id: "motolii.gaussian-blur".to_owned(),
+        }],
+    })
+    .unwrap();
+
+    assert_eq!(
+        doc.view().resolve(layer, t(0)).unwrap().expect("居る").effects.len(),
+        1,
+        "enabled track を一度も書いていない effect が既定で無効になっている"
+    );
+}
+
+/// **`Value::Bool` の Hold 補間がそのまま on/off の意味になる** — 裁定213 の
+/// 核心。1本の track に複数キーを打てば、comp 時刻によって effect が
+/// 途中で切れたり戻ったりする(「一時的に切る」がキーフレーム可能になった)。
+#[test]
+fn enabling_and_disabling_can_be_keyframed_across_time() {
+    let (mut doc, layer) = doc_with_layer();
+    let effect = EffectId(0);
+    doc.apply(Intent::SetEffects {
+        layer,
+        effects: vec![EffectInstance {
+            id: effect,
+            plugin_id: "motolii.gaussian-blur".to_owned(),
+        }],
+    })
+    .unwrap();
+
+    let mut enabled_track = KeyframeTrack::new();
+    enabled_track.insert(Keyframe {
+        t: t(0),
+        value: Value::Bool(true),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    enabled_track.insert(Keyframe {
+        t: t(15),
+        value: Value::Bool(false),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::effect_enabled(effect),
+        track: enabled_track,
+    })
+    .unwrap();
+
+    assert_eq!(
+        doc.view().resolve(layer, t(0)).unwrap().expect("居る").effects.len(),
+        1,
+        "frame 0 では有効なはず"
+    );
+    assert_eq!(
+        doc.view().resolve(layer, t(10)).unwrap().expect("居る").effects.len(),
+        1,
+        "Hold 補間なので次のキーまでは前の値(有効)を保つはず"
+    );
+    assert_eq!(
+        doc.view().resolve(layer, t(20)).unwrap().expect("居る").effects.len(),
+        0,
+        "frame 15 以降は無効なはず"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +232,6 @@ fn slider_and_angle_params_are_plain_scalar_tracks() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.gaussian-blur".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
@@ -198,7 +273,6 @@ fn checkbox_param_is_bool_not_int_boolean() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.drop-shadow".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
@@ -226,7 +300,6 @@ fn color_param_round_trips() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.drop-shadow".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
@@ -254,7 +327,6 @@ fn point_param_round_trips() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "thirdparty.acme.displace".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
@@ -284,7 +356,6 @@ fn drop_down_param_is_an_enum_index_and_holds_between_keys() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.blend-mode-fx".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
@@ -333,7 +404,6 @@ fn layer_param_references_a_stable_layer_id_not_an_index() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "thirdparty.acme.displace".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
@@ -365,7 +435,6 @@ fn effect_param_tracks_appear_in_the_property_list() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.gaussian-blur".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
@@ -389,10 +458,10 @@ fn effect_param_tracks_appear_in_the_property_list() {
     );
 }
 
-/// **保存/読込を経ても effect の列(id・plugin id・enabled)と param track が両方残る**
-/// (裁定56 が畳む履歴の中で、新設フィールドが黙って消えないことの固定)。
+/// **保存/読込を経ても effect の列(id・plugin id)と enabled track・param track が
+/// 全部残る**(裁定56 が畳む履歴の中で、新設フィールドが黙って消えないことの固定)。
 #[test]
-fn effects_and_their_param_tracks_survive_a_save_and_load_round_trip() {
+fn effects_and_their_tracks_survive_a_save_and_load_round_trip() {
     let (mut doc, layer) = doc_with_layer();
     let effect = EffectId(3);
     doc.apply(Intent::SetEffects {
@@ -400,8 +469,13 @@ fn effects_and_their_param_tracks_survive_a_save_and_load_round_trip() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.gaussian-blur".to_owned(),
-            enabled: false,
         }],
+    })
+    .unwrap();
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::effect_enabled(effect),
+        track: still(Value::Bool(false)),
     })
     .unwrap();
     let radius = PropertyId::effect_param(effect, "radius").unwrap();
@@ -420,7 +494,11 @@ fn effects_and_their_param_tracks_survive_a_save_and_load_round_trip() {
 
     let effects = loaded.view().effects(layer).unwrap();
     assert_eq!(effects.len(), 1);
-    assert!(!effects[0].enabled, "enabled が保存で消えている/戻っている");
+    assert_eq!(
+        loaded.view().resolve(layer, t(0)).unwrap().expect("居る").effects.len(),
+        0,
+        "enabled=false が保存で消えている/戻っている"
+    );
     assert_eq!(
         loaded.view().value_at(layer, &radius, t(0)).unwrap(),
         Some(Value::F64(9.0)),
@@ -429,9 +507,9 @@ fn effects_and_their_param_tracks_survive_a_save_and_load_round_trip() {
 }
 
 /// 同じ id の effect が2枚あると param track の持ち主が決まらない
-/// (mask と同型の検査。`enabled` フィールドが増えても検査は id だけを見る)。
+/// (mask と同型の検査。`enabled` が track へ移っても id の検査は変わらない)。
 #[test]
-fn duplicate_effect_ids_are_still_rejected_with_the_enabled_field() {
+fn duplicate_effect_ids_are_still_rejected() {
     let (mut doc, layer) = doc_with_layer();
     let result = doc.apply(Intent::SetEffects {
         layer,
@@ -439,12 +517,10 @@ fn duplicate_effect_ids_are_still_rejected_with_the_enabled_field() {
             EffectInstance {
                 id: EffectId(0),
                 plugin_id: "a".to_owned(),
-                enabled: true,
             },
             EffectInstance {
                 id: EffectId(0),
                 plugin_id: "b".to_owned(),
-                enabled: false,
             },
         ],
     });
@@ -467,7 +543,6 @@ fn resolve_carries_the_enabled_effect_stack_with_evaluated_params() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.gaussian-blur".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
@@ -505,14 +580,18 @@ fn resolve_does_not_carry_disabled_effects() {
             EffectInstance {
                 id: EffectId(0),
                 plugin_id: "motolii.gaussian-blur".to_owned(),
-                enabled: false,
             },
             EffectInstance {
                 id: EffectId(1),
                 plugin_id: "motolii.drop-shadow".to_owned(),
-                enabled: true,
             },
         ],
+    })
+    .unwrap();
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::effect_enabled(EffectId(0)),
+        track: still(Value::Bool(false)),
     })
     .unwrap();
 
@@ -538,7 +617,6 @@ fn resolved_effect_params_interpolate_with_time() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.gaussian-blur".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
@@ -589,7 +667,6 @@ fn resolved_effect_omits_params_with_no_track() {
         effects: vec![EffectInstance {
             id: EffectId(0),
             plugin_id: "motolii.gaussian-blur".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();

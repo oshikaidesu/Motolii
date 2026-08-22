@@ -173,7 +173,7 @@ fn a_property_set_with_set_track_still_behaves_exactly_like_before() {
     );
     assert_eq!(
         doc.view().property_source(layer, &opacity).unwrap(),
-        Some(PropertySource::Track(still(Value::F64(0.5))))
+        Some(PropertySource::track(still(Value::F64(0.5))))
     );
 }
 
@@ -234,7 +234,7 @@ fn track_returns_none_for_a_slot_bound_property_even_though_value_at_resolves() 
     );
     assert_eq!(
         doc.view().property_source(layer, &prop).unwrap(),
-        Some(PropertySource::Slot(SlotId("s".to_owned()))),
+        Some(PropertySource::slot(SlotId("s".to_owned()))),
         "track() の None だけでは「スロット委譲」と「未設定」が区別できない"
     );
 }
@@ -293,7 +293,10 @@ fn set_track_after_set_property_slot_switches_back_to_a_track() {
     );
     assert!(matches!(
         doc.view().property_source(layer, &prop).unwrap(),
-        Some(PropertySource::Track(_))
+        Some(PropertySource {
+            base: Some(motolii_store::PropertyBase::Track(_)),
+            ..
+        })
     ));
 }
 
