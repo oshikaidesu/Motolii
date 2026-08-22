@@ -13,16 +13,14 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| GZ | 実装 | worktree(stage-pane) | Stage ギズモ第1弾(B44 キャンバス入口): bbox+8ハンドル+回転+anchor・Shift 修飾・Esc・カメラ変換下 oracle。行抽出は bundle 列から自走 |
-| TL+ | 実装 | worktree(timeline-pane) | B21+B18 第1切片: ループ・JKL シャトル・追従スクロール・作業範囲 drag。正典衝突は正典が正 |
-| INS-mask | 実装 | worktree(inspector-pane) | 裁定184 型別 section 第1号= MASK(B02 の Inspector 完結行のみ・編集文法は既存流用) |
-| SET+ | 実装 | worktree(settings-pane) | B12 第1切片: 実在状態に紐づく設定のみ(飾り禁止テスト付き)・section 分け |
+| WIRE-5 | 実装 | worktree(shell+icons1個) | 第5波の結線: TL+6点(keymap裁定: JKL=シャトル・意味点ジャンプ=,/.仮置き・ループ=Cmd+L)+GZ(overlay+transient/SetTrack)+SET+(sections差し替え)+repeat icon vendoring |
 
 
 ## 完了・main 着地済み(実装)
 
 | レーン | 結果 |
 |---|---|
+| 第5波4レーン(検収合格・merge) | **GZ**: Stage ギズモ(bbox+8ハンドル+回転+anchor・1drag=1commit 契約・FINDING= StageOverlay の pane 原点ずれ疑い→修理キュー)/ **TL+**: ループ・JKL・作業範囲(24行消化・keymap 衝突は拘束6 委任→WIRE-5 で裁定)/ **INS-mask**: 型別 section 第1号(B02、feather/expansion は store 型不在で正しく見送り)/ **SET+**: Composition 設定(W/H/fps/尺)+**飾り禁止柵が B12 の実態を暴露**(実在意味 3行・見送り40行超の理由台帳 — B12 の残りは機能実装が先という逆依存の証明)。map 消化 **176/1,551** |
 | MW-S12(検収合格・merge) | **浮かし着地(裁定182/188 完結)** — S1 daemon 骨格(view() 改形なし・main閉=exit・窓台帳同期先行記帳)+S2 Settings 窓移住(歯車=OS窓 open/close・480×400 リサイズ可・閉→再開で状態保持を drive 実測・器具は Settings 対象外へ明示)。題帯は OS titlebar が名札を担う整理。277緑 |
 | MW-probe(緑・merge) | r5-multiwindow — device/queue 全窓共有を実測確定(跨窓 write_buffer 生存)・zero-copy 無傷・Settings 窓最小形動作。注意2点(全窓閉 device 破棄・screenshot 器具)を S 発注書へ継承 |
 | LN-D5(検収合格・merge) | 区切り線→明度1段 — **chrome 監査 D1〜D6 完結**。棚卸し3分類台帳(置換/状態の器で残す/保留2件= screenshot 鏡・settings 値セル箱)。status 帯は面1段で可読性維持。fence 4本新設・427緑 |
