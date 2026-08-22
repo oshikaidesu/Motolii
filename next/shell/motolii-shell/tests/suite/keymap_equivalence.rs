@@ -14,6 +14,7 @@
 use iced::keyboard::{key::Named, Key as IcedKey, Modifiers as IcedModifiers};
 use motolii_keymap::{nav_bundle_keymap, Key as NeutralKey, Modifiers as NeutralModifiers, VerbId};
 use motolii_shell::timeline_pane::nav::{ClipEdge, JumpDirection};
+use motolii_shell::timeline_pane::{Message as TimelinePaneMessage, ShuttleCommand};
 use motolii_shell::{resolve_navigation_key, Message};
 
 /// `resolve_navigation_key` が実際に処理する候補キー全部
@@ -40,6 +41,13 @@ fn candidate_keys() -> Vec<(IcedKey, NeutralKey)> {
         (IcedKey::Character("s".into()), NeutralKey::character('s')),
         (IcedKey::Character("q".into()), NeutralKey::character('q')),
         (IcedKey::Character("g".into()), NeutralKey::character('g')),
+        // JKL シャトル移設後の新住所(裁定208 の無主レーンで追随、
+        // `defaults.rs::nav_bundle_bindings` 参照)。`<`/`>`(shift 付きで
+        // 実際に届きうる別文字)は候補に含めない——この試験の候補キー集合は
+        // 「1 IcedKey に1 NeutralKey」の1対1写像でしか組めず、shell 側だけが
+        // 持つ `,`/`<` の二重受理をここで再現する筋ではないため。
+        (IcedKey::Character(",".into()), NeutralKey::character(',')),
+        (IcedKey::Character(".".into()), NeutralKey::character('.')),
         // 対照実験: どのバインディングも持たないキー。両者とも常に `None` を
         // 返すはず(取りこぼしが無いことの負例)。
         (IcedKey::Character("p".into()), NeutralKey::character('p')),
@@ -71,6 +79,8 @@ fn expected_verb(message: &Message) -> VerbId {
         Message::StepPlayhead(-10) => VerbId::StepPlayheadBackFast,
         Message::JumpPlayheadToStart => VerbId::JumpPlayheadToStart,
         Message::JumpPlayheadToEnd => VerbId::JumpPlayheadToEnd,
+        Message::JumpToWorkAreaStart => VerbId::JumpToWorkAreaStart,
+        Message::JumpToWorkAreaEnd => VerbId::JumpToWorkAreaEnd,
         Message::JumpMeaningPoint { direction: JumpDirection::Prev, layer_only: false } => {
             VerbId::JumpMeaningPointPrev
         }
@@ -85,6 +95,11 @@ fn expected_verb(message: &Message) -> VerbId {
         }
         Message::JumpClipEdge(ClipEdge::In) => VerbId::JumpClipEdgeIn,
         Message::JumpClipEdge(ClipEdge::Out) => VerbId::JumpClipEdgeOut,
+        // JKL シャトル(裁定208 の無主レーンで追随、`VerbId::ShuttleReverse`
+        // 冒頭コメント参照)。
+        Message::Timeline(TimelinePaneMessage::Shuttle(ShuttleCommand::Reverse)) => VerbId::ShuttleReverse,
+        Message::Timeline(TimelinePaneMessage::Shuttle(ShuttleCommand::Stop)) => VerbId::ShuttleStop,
+        Message::Timeline(TimelinePaneMessage::SetWorkAreaOut) => VerbId::SetWorkAreaOut,
         Message::Undo => VerbId::Undo,
         Message::Redo => VerbId::Redo,
         Message::CopyLayer => VerbId::CopyLayer,

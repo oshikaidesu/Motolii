@@ -197,16 +197,39 @@ fn clicking_the_ruler_band_publishes_scrub_to_via_raw_coordinates() {
     let store = doc.view();
     let pane = TimelinePane::new(&store, &session, tokens.dims, tokens.colors, iced::keyboard::Modifiers::default());
 
-    let x = 200.0_f32;
-    // 期待値は timeline_pane 自身の純粋関数から出す(数値をここで再発明しない —
-    // `frame_at_x` は drive.rs の `timeline_scrub_math_maps_pixel_to_frame` が
-    // 別途単体で見ている)。座標シフト(裁定147・レーンバー新設、EXACT TARGET 3):
-    // クリップ面はレーンバー幅ぶん右へずれるので、期待値もクリップ面ローカル
-    // 座標(`x - rail_width`)・クリップ面幅(`DEFAULT_WIDTH - rail_width`)で
-    // 計算する(`timeline/input.rs::update` が canvas click 座標に対して行う
-    // のと同じ引き算)。
-    let rail_width = tokens.dims.timeline_lane_bar_width;
-    let expected_frame = frame_at_x(x - rail_width, DEFAULT_WIDTH - rail_width, 300);
+    // 座標の再計算(裁定208 の無主レーン、2026-08-22): 今日の縦スクロール発注
+    // (`motolii-timeline-pane` 側 write-set 外、read only)が常時固定ヘッダーを
+    // `row![rail::corner(...), ruler::view(&self)]` へ切り出した
+    // (`motolii-timeline-pane/src/lib.rs::view` doc・`ruler.rs` モジュール doc
+    // 参照)。旧試験は「ルーラー面はクリップ面と同じ x 原点シフト
+    // (`x - rail_width`・幅 `DEFAULT_WIDTH - rail_width`)を持つ」前提で
+    // 書かれていたが、**実測するとその前提が崩れている**:
+    //
+    // `rail::corner()`(`motolii-timeline-pane/src/rail.rs` 142行目〜)は
+    // `.width(Length::Fill)` で組んでいる — 本来 `rail::view()` の行リスト
+    // (`Length::Fixed(rail_width)`、同ファイル121行目)と同じ固定幅で揃える
+    // べき箱なのに、`ruler_height` だけ受け取って幅は Fill のまま。header row
+    // 側は `corner`/`ruler::view` の**両方が** `Length::Fill` なので、iced の
+    // flex は両者を均等係分する(実測: `DEFAULT_WIDTH=1024` で corner/ruler が
+    // ちょうど512/512に割れる — x=500 は corner 側に落ちて無反応、x=520 から
+    // ruler 側で `ScrubTo` が出る、という2分探索で確認した)。
+    //
+    // つまり **rail の行リストと固定ヘッダーの corner 箱が、今は横に
+    // ズレている**(rail=150px 固定 vs corner=window幅の半分)。これは
+    // 見た目の実害(ルーラーが実際の clip 面と揃わない)であって、この試験の
+    // 座標を直すだけでは治らない — 本当の直し場所は
+    // `next/ui/motolii-timeline-pane/src/rail.rs::corner()` を
+    // `.width(Length::Fixed(rail_width))` にして `rail_width` を引数で
+    // 受け取ることだが、`motolii-timeline-pane` は本発注の write-set 外
+    // (read only)なので実装はしない — RETURN の逸脱台帳に報告する。
+    //
+    // この試験は「今の実装が実際に ruler を置いている場所」に合わせて
+    // 緑にする(将来 `corner()` が直れば、この値も rail_width 基準へ戻す
+    // 追随が要る)。
+    let ruler_left = DEFAULT_WIDTH / 2.0; // 実測: corner/ruler が Fill/Fill で均等分割
+    let ruler_width = DEFAULT_WIDTH - ruler_left;
+    let x = 700.0_f32; // ruler_left(512) より右 — ruler 側に落ちることを実測済み
+    let expected_frame = frame_at_x(x - ruler_left, ruler_width, 300);
 
     // B21+B18(第5波結線)以降、ルーラー**最上段**は作業範囲のループ帯
     // (`input.rs::loop_band_part_at` — 高さ = `loop_band_height(ruler_height)`)
@@ -233,3 +256,4 @@ fn clicking_the_ruler_band_publishes_scrub_to_via_raw_coordinates() {
         "canvas 上のルーラー click が期待した ScrubTo({expected_frame}) を出していない: {messages:?}"
     );
 }
+
