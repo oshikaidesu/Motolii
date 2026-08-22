@@ -1,0 +1,45 @@
+#axis: A10 予告
+#question: hover・カーソル・中間表示が在るか(無反応ゼロ、Q0/Q3)
+#verdicts: 予告あり|hoverのみ|カーソルのみ|何も無い|触れそうだが機能しない(Q0違反)
+#sweep: grep -rn "on_press(" next/ui next/shell --include='*.rs' | grep -v /tests/   (38件、GESTURES.md §0 と同数)
+#sweep: grep -rln "mouse_area(" next/ui next/shell --include='*.rs' | grep -v /tests/   (4ファイル: browser-pane lib.rs/state.rs, timeline-pane rail.rs, inspector-pane chrome.rs)
+#sweep: grep -rln "pick_list(" next/ui next/shell --include='*.rs' | grep -v /tests/   (3ファイル: inspector-pane matte.rs/link.rs/text.rs。shell/lib.rs のヒットはコメントのみ)
+#sweep: grep -rn "Interaction::" next/ui next/shell --include='*.rs' | grep -v /tests/   (62件、GESTURES.md §0 と同数)
+#sweep: grep -rln "Status::Hovered\|button::Status" next/ui next/shell --include='*.rs' | grep -v /tests/   (13ファイル。browser-pane/export-pane/timeline-pane transport.rs/menubar/settings-pane chrome.rs/stage-pane(2)/inspector-pane(2)/shell/lib.rs)
+#sweep: grep -n "Status::Hovered\|button::Status" next/ui/motolii-inspector-pane/src/effects.rs next/ui/motolii-timeline-pane/src/rail.rs   (空振り = 両方とも独自hoverスタイルを持たない)
+#sweep: awk -F'\t' '$1==1441||$1==1442||$1==1490||$1==1491{print $1,$3}' next/reference/normal-map.tsv   (Zoom In/Out/to 100%/to fit の4行実在確認)
+#sweep: grep -n "zoom_step\|NamedZoomLevel" next/shell/motolii-shell/src/lib.rs   (空振り = 呼び手が無い)
+axis	map_id	対象	判定	証拠	穴	責任
+A10	-	Inspector 数値ドラッグ(transform.rs::start/continue/finish_field_drag)	カーソルのみ	Interaction::ResizeHorizontal(値セル全域、chrome.rs:382)。Status::Hovered配線はtransform.rs/chrome.rsのgrepに未ヒット=hover視覚変化は未確認	穴	next/ui/motolii-inspector-pane/src/transform.rs
+A10	-	Inspector click→type編集(field_input_id/enter_field_editing)	カーソルのみ	ResizeHorizontal→(切替後は通常text cursor)。ドラッグ列と同根、hover変化未確認	穴	next/ui/motolii-inspector-pane/src/transform.rs
+A10	-	ラベル色チップ巡回(chrome.rs::label_color_chip)	hoverのみ	chrome.rsはStatus::Hovered配線ありのファイル群に含まれる。明示Interactionは既定(Pointer相当)のみ	-	next/ui/motolii-inspector-pane/src/chrome.rs
+A10	-	Inspector M(Hidden)トグル(chrome.rs::mute_glyph)	hoverのみ	同上chrome.rs、既定カーソル	-	next/ui/motolii-inspector-pane/src/chrome.rs
+A10	-	Timeline rail M/S/L トグル(rail.rs::Message::ToggleMute/Solo/Lock)	何も無い	rail.rsはStatus::Hovered grepに未ヒット。カーソルも既定のまま(Interaction::カスタム配線なし)	穴	next/ui/motolii-timeline-pane/src/rail.rs
+A10	-	Timeline 行選択(rail.rsのmouse_area.on_press)	何も無い	rail.rs同上、hover視覚変化・カーソル予告とも未確認	穴	next/ui/motolii-timeline-pane/src/rail.rs
+A10	-	Timeline clip move(clip_gesture.rs::moved_start)	カーソルのみ	Interaction::Grab(body、input.rs)。hover変化はclip_gesture.rs/input.rsともgrep未ヒット	穴	next/ui/motolii-timeline-pane/src/clip_gesture.rs
+A10	-	Timeline clip trim(clip_gesture.rs::trimmed_in_start/trimmed_out_end)	カーソルのみ	Interaction::ResizeHorizontal(端)。hover変化未確認	穴	next/ui/motolii-timeline-pane/src/clip_gesture.rs
+A10	-	Playhead scrub(ruler.rs/input.rs、Message::ScrubTo)	カーソルのみ	Interaction::Crosshair(空白面、正典§5.5)。ドラッグ中の中間表示はplayhead自体の即時移動のみで数値readoutの明示配線は未確認	穴	next/ui/motolii-timeline-pane/src/input.rs
+A10	-	Timeline キー(菱形)クリック選択(key_rows.rs)	カーソルのみ	Interaction::Pointer(菱形上)。選択後の色変化はある想定だがhover単体の視覚変化はgrep未確認	-	next/ui/motolii-timeline-pane/src/key_rows.rs
+A10	-	Timeline キー(菱形)時刻ドラッグ(key_gesture.rs::dragged_group_frame)	カーソルのみ	Interaction::Grabbing。ドラッグ中のスナップ線等の中間表示は正典§3に記述あるが本ファイル調査では未確認	-	next/ui/motolii-timeline-pane/src/key_gesture.rs
+A10	-	Loop帯(作業範囲) body/edge drag(ruler.rs/work_area.rs::dragged_area)	カーソルのみ	Interaction::ResizeHorizontal(端)/Grab(本体)。hover変化未確認	穴	next/ui/motolii-timeline-pane/src/work_area.rs
+A10	-	Transport 再生/停止ボタン(transport.rs::transport_button)	hoverのみ	transport.rsはStatus::Hovered配線ありのファイル群に含まれる。カーソルは既定(Pointer相当)	-	next/ui/motolii-timeline-pane/src/transport.rs
+A10	-	マーカー/ロケータ ドラッグ(markers.rs::MarkerDrag::dragged)	カーソルのみ	Interaction::Grabbing。hover変化はmarkers.rsでgrep未確認	穴	next/ui/motolii-timeline-pane/src/markers.rs
+A10	-	メニュー項目(shortcut: Some、menu.rs)	hoverのみ	motolii-menubar配下(vendored/style/menu_bar.rs, status.rs)がStatus::Hovered配線群に含まれる。カーソルは既定	-	next/ui/motolii-menubar/src/vendored/style/menu_bar.rs
+A10	-	メニュー項目(shortcut: None、menu.rs)	hoverのみ	同上menubar。「飾りshortcut禁止」規律はあるがhover自体は共通	-	next/ui/motolii-menubar/src/vendored/style/menu_bar.rs
+A10	-	Stage gizmo move(gizmo.rs::move_value)	カーソルのみ	Interaction::Grabbing。hover変化はgizmo.rsでgrep未確認	穴	next/ui/motolii-stage-pane/src/gizmo.rs
+A10	-	Stage gizmo scale(gizmo.rs::scale_value)	カーソルのみ	Interaction::Grabbing/ResizeHorizontal系(角・辺で分岐)。中間表示(数値readout)はGESTURES.mdに記述なし=未確認	穴	next/ui/motolii-stage-pane/src/gizmo.rs
+A10	-	Stage gizmo rotate(gizmo.rs::rotation_value)	カーソルのみ	Interaction::Crosshair(回転ハンドル)。角度readoutの中間表示は未確認	穴	next/ui/motolii-stage-pane/src/gizmo.rs
+A10	-	Stage gizmo anchor drag(gizmo.rs、pan-behind型)	カーソルのみ	Interaction::Crosshair	穴	next/ui/motolii-stage-pane/src/gizmo.rs
+A10	-	Stage 矩形選択(marquee.rs::apply_selection)	カーソルのみ	Interaction::Crosshair(marquee.rs:523)。マーキー矩形自体の描画は中間表示に相当するが、hover(選択前)の予告は無い	-	next/ui/motolii-stage-pane/src/marquee.rs
+A10	-	Stage ズーム(wheel、zoom_at_screen_point)	何も無い	予告列は「—」(GESTURES.md)。wheel操作自体にhover/cursor予告は配線されていない	穴	next/ui/motolii-stage-pane/src/lib.rs
+A10	1441	Zoom In(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	normal-map.tsv id=1441「Zoom In」実在。zoom_step/NamedZoomLevelはpure関数実装済みだが`grep -rn "zoom_step|NamedZoomLevel" next/shell/src`空振り=呼び手が無い(GESTURES.md該当行と同一事実)	穴	next/shell/motolii-shell/src/lib.rs
+A10	1442	Zoom Out(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1442	穴	next/shell/motolii-shell/src/lib.rs
+A10	1490	Zoom to 100%(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1490	穴	next/shell/motolii-shell/src/lib.rs
+A10	1491	Zoom to fit(メニュー/呼び手)	触れそうだが機能しない(Q0違反)	同上、id=1491	穴	next/shell/motolii-shell/src/lib.rs
+A10	-	Stage パン(Middle-drag、lib.rs:599/615)	何も無い	予告列は「—」(GESTURES.md)。ドラッグ中もカーソル変化の配線なし	穴	next/ui/motolii-stage-pane/src/lib.rs
+A10	-	Browser カード ダブルクリック(Message::CreateFromCard)	hoverのみ	browser-pane(lib.rs/state.rs)はStatus::Hovered配線群に含まれる。カーソルは既定	-	next/ui/motolii-browser-pane/src/lib.rs
+A10	-	pane_grid 境界ドラッグ(iced標準、PaneGrid::spacing+ResizeEvent)	カーソルのみ	ResizeHorizontal/Vertical相当(iced既定、GESTURES.md §2)。アプリ側の独自hoverスタイルは配線なし	-	next/shell/motolii-shell/src/lib.rs
+A10	-	pane_grid 題帯ドラッグ(pane_title_bar、Draggable)	カーソルのみ	Interaction::Grab(content.rs::grid_interaction、追加配線なしで効く)。hover視覚変化は未確認	-	next/shell/motolii-shell/src/lib.rs
+A10	-	Inspector LINK/MATTE/font pick_list選択(link.rs/matte.rs/text.rs)	何も無い	既定カーソル(GESTURES.md)。3ファイルともStatus::Hovered/Interactionのgrepに未ヒット=独自のhover予告なし(iced標準pick_listの既定描画に依存)	穴	next/ui/motolii-inspector-pane/src/link.rs
+A10	-	効果 追加/削除/並べ替え/bypass(effects.rs)	何も無い	effects.rsはStatus::Hoveredのgrepに未ヒット(空振り確認済み)。カーソルも既定	穴	next/ui/motolii-inspector-pane/src/effects.rs
+A10	-	Mask/Matte/Blend の巡回ボタン(CycleMaskMode/CycleMatteMode/CycleBlendMode)	hoverのみ	chrome.rs配下でStatus::Hovered配線群に含まれる(推定、巡回系はchrome.rs同居)。カーソルは既定	-	next/ui/motolii-inspector-pane/src/chrome.rs

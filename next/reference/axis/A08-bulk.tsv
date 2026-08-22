@@ -1,0 +1,37 @@
+#axis: A08 一括
+#question: 複数選択に効くか
+#verdicts: 効く|単数のみ|複数選択の概念が無い|一括が無意味
+#sweep: grep -n "selected_layers" next/shell/motolii-shell/src/lib.rs
+#sweep: grep -n "self.session.selection\b" next/shell/motolii-shell/src/lib.rs
+#sweep: grep -rn "Intent::SetSource" next/ui next/shell --include="*.rs"
+#sweep: grep -n "fn toggle_layer_hidden\|fn toggle_layer_solo\|fn toggle_layer_lock\|fn copy_layer\|fn cut_layer\|fn paste_layer\|fn duplicate_layer\|fn group_selected_layers\|fn ungroup_selected_layers\|fn set_selected_groups_frozen\|fn add_mask_to_selected_layer\|fn apply_effect_to_selected_layer\|fn admit\(" next/shell/motolii-shell/src/lib.rs
+#sweep: grep -n "struct TimelineDragState\|struct TimelineKeyDragState" next/ui/motolii-timeline-pane/src/write.rs
+#sweep: grep -n "selected_keys" next/shell/motolii-shell/src/lib.rs
+#sweep: awk -F'\t' 'tolower($3) ~ /duplicate|copy|paste|cut|delete|remove|group|lock|solo|label|replace|font|mask|effect|select all/' next/reference/normal-map.tsv
+axis	map_id	対象	判定	証拠	穴	責任
+A08	-	選択の正本(Session)	一括が無意味	`next/ui/motolii-shell-state/src/lib.rs:38-56` — `selection: Option<LayerId>`(単数)/`selected_layers: Vec<LayerId>`(複数)/`selected_keys: Vec<KeySelector>`(キー複数)の**3本立て**。同ファイル doc「`timeline_pane`/`inspector_pane` の行 UI 自体はまだ`selected_layers`を読まない」と自認済み	穴	next/ui/motolii-shell-state/src/lib.rs:38(struct定義)だが実際に3本を1本の読み口へ畳む責任は呼び手側 next/shell/motolii-shell/src/lib.rs 全体 ※過積載(6228行)
+A08	-	Inspector 値ドラッグ/type入力(`SetTrack`経由の全プロパティ編集)	単数のみ	`next/shell/motolii-shell/src/lib.rs:2379-2915` 付近、Inspector dispatch 40箇所超が軒並み `self.session.selection`(単数)を読む。`selected_layers` は不参照	穴	next/shell/motolii-shell/src/lib.rs:2379 ※過積載(6228行)
+A08	805	Browser effects タブ「Glow を適用」(`apply_effect_to_selected_layer`)	単数のみ	`next/shell/motolii-shell/src/lib.rs:1788-1792` — `self.session.selected_layers.as_slice()` を `[only] => Some(*only), _ => None` で分岐し、複数だと status文言で拒否(`"effect を追加するレイヤーを1つ選んでください"`)。map 805 は AE 側で既に「selected layers」= 複数形の動詞として存在	穴	next/shell/motolii-shell/src/lib.rs:1785(apply_effect_to_selected_layer) ※過積載
+A08	773	Browser effects タブ「Mask を追加」(`add_mask_to_selected_layer`)	単数のみ	`next/shell/motolii-shell/src/lib.rs:1698-1702` — 同型の `[only] => Some(*only), _ => None` 分岐	穴	next/shell/motolii-shell/src/lib.rs:1697(add_mask_to_selected_layer) ※過積載
+A08	429	Layer Copy(`copy_layer`)	単数のみ	`next/shell/motolii-shell/src/lib.rs:1972` — `self.session.selection` のみ読む。`selected_layers` 不参照	穴	next/shell/motolii-shell/src/lib.rs:1971(copy_layer) ※過積載
+A08	432	Layer Cut(`cut_layer`)	単数のみ	`next/shell/motolii-shell/src/lib.rs:2003` — 同上	穴	next/shell/motolii-shell/src/lib.rs:2002(cut_layer) ※過積載
+A08	431	Layer Delete	単数のみ	Delete専用動詞が無く `cut_layer`(Cmd+X)を通るのが唯一の削除経路(`RETURN`参照)。よって同じ単数制約を継承 — 歌詞50枚を一度に消せない	穴	next/shell/motolii-shell/src/lib.rs:2002(cut_layer) ※過積載
+A08	430	Layer Paste(`paste_layer`)	単数のみ	`next/shell/motolii-shell/src/lib.rs:2031` — `clipboard.get()` が単一 `LayerSnapshot` しか保持しない(`copy_layer` が単一しか capture しない時点で複数ペーストの土台が無い)	穴	next/shell/motolii-shell/src/lib.rs:1972(copy_layer が単一capture) ※過積載
+A08	434	Layer Duplicate(`duplicate_layer`)	単数のみ	`next/shell/motolii-shell/src/lib.rs:2738` — `self.session.selection` のみ	穴	next/shell/motolii-shell/src/lib.rs:2736(duplicate_layer) ※過積載
+A08	455	Group(⌘G、`group_selected_layers`)	効く	`next/shell/motolii-shell/src/lib.rs:2072-2088` — `self.session.selected_layers` を丸ごと `doc.group_layers()` へ渡す	-	next/shell/motolii-shell/src/lib.rs:2072
+A08	468	Ungroup(`ungroup_selected_layers`)	効く	`next/shell/motolii-shell/src/lib.rs:2090-2103` — 同上、`selected_layers` を丸ごと処理	-	next/shell/motolii-shell/src/lib.rs:2090
+A08	-	Freeze/Unfreeze(`set_selected_groups_frozen`)	効く	`next/shell/motolii-shell/src/lib.rs:2111-2138` — `selected_layers` を filter して Group のみへ `apply_all` で一括 Intent 発行。map対応行なし(製品側に無い自製語彙)	-	next/shell/motolii-shell/src/lib.rs:2111
+A08	874	Timeline rail Lock トグル(L、`toggle_layer_lock`)	複数選択の概念が無い	`next/shell/motolii-shell/src/lib.rs:1318,2851` — `timeline_pane::Message::ToggleLock(layer)` はクリックした1行の `LayerId` だけを渡す。map 874「Lock selected layers」相当の**選択集合をまとめて lock する動詞そのものが存在しない**(`grep -rn "LockSelected\|lock_selected" next/shell next/ui` 空振り)	穴	next/shell/motolii-shell/src/lib.rs:2851(toggle_layer_lock) ※過積載
+A08	-	Timeline rail Hidden トグル(M、`toggle_layer_hidden`)	複数選択の概念が無い	`next/shell/motolii-shell/src/lib.rs:1316,2811` — 同上、押した1行だけ。選択集合を束ねて隠す動詞は無い	穴	next/shell/motolii-shell/src/lib.rs:2811(toggle_layer_hidden) ※過積載
+A08	314	Timeline rail Solo トグル(S、`toggle_layer_solo`)	複数選択の概念が無い	`next/shell/motolii-shell/src/lib.rs:1317,2830` — 同上	穴	next/shell/motolii-shell/src/lib.rs:2830(toggle_layer_solo) ※過積載
+A08	-	ラベル色巡回(`CycleLabelColor`)	単数のみ	`next/shell/motolii-shell/src/lib.rs:2447` — `self.session.selection` のみ	穴	next/shell/motolii-shell/src/lib.rs:2447 ※過積載
+A08	616	Browser「素材を置換」(`ReplaceSelectedLayerSource`→`Intent::SetSource`)	一括が無意味	A01 台帳の穴(結線ゼロ)そのもの。Message 名自体が単数形("Layer" 単数)なので配線が生きていたとしても単数のみだった見込み — 判定不能の前提が壊れている点を明記	穴	next/ui/motolii-browser-pane/src/state.rs:126 / next/shell/motolii-shell/src/lib.rs:1390(Message::Browser腕、SetSource未intercept) ※過積載(shell側)
+A08	-	Timeline clip move/trim(`TimelineDragState`)	単数のみ	`next/ui/motolii-timeline-pane/src/write.rs:296-307` — `struct TimelineDragState { layer: LayerId, ... }` は単一 layer のみ保持。複数選択 clip を同時に move/trim する経路が構造的に無い	穴	next/ui/motolii-timeline-pane/src/write.rs:296 ※過積載(motolii-timeline-pane crate)
+A08	-	Timeline キー(菱形)ドラッグ(`TimelineKeyDragState`/`key_gesture.rs::dragged_group_frame`)	効く	`next/ui/motolii-timeline-pane/src/write.rs:314-`・`key_gesture.rs` — `session.selected_keys` を束ねて相対間隔を保ったまま同時移動(裁定207・GESTURES.md 既載)	-	next/ui/motolii-timeline-pane/src/key_gesture.rs
+A08	482	選択キー削除(Backspace/Delete、`DeleteSelectedKeys`)	効く	`next/shell/motolii-shell/src/lib.rs:5781` — `timeline_pane::Message::DeleteSelectedKeys` 経由、`selected_keys` を丸ごと削除(GESTURES.md 既載)	-	next/shell/motolii-shell/src/lib.rs:5781
+A08	509	Timeline `SelectAllKeysOfProperty`(`write.rs:1419 select_all_keys_of_property`)	単数のみ	GESTURES.md の記載どおり「property 単位の全選択のみ実装済み」(1 property内は効くが、複数 property を跨いだ一括選択は無い — ここでの「単数」は「対象property単位」の意)	穴	next/ui/motolii-timeline-pane/src/write.rs:1419 ※過積載
+A08	436	SelectAll(⌘A、layers 全選択)	効く	`next/shell/motolii-shell/src/lib.rs:2054` — `clipboard::select_all(&visible)` を `selected_layers` へ丸ごと代入	-	next/shell/motolii-shell/src/lib.rs:2054
+A08	-	素材ドロップ取り込み(`admit(paths: Vec<PathBuf>)`)	効く	`next/shell/motolii-shell/src/lib.rs:2159-2193` — 複数ファイルを1回のドロップで `Intent::AdmitAsset` 列として一括 ingest し、1 `apply_all` = 1 undo	-	next/shell/motolii-shell/src/lib.rs:2159
+A08	-	SetOrder(z順並べ替え、`stacking.rs::restacked`)	単数のみ	`next/ui/motolii-timeline-pane/src/write.rs:1573-1610` — ドラッグした1行の移動が周辺行の `SetOrder` を連鎖させるだけで、「選択集合をまとめて最前面/最背面へ送る」動詞(map該当なし・AEにもBring/Send相当が別項目である)は存在しない	穴	next/ui/motolii-timeline-pane/src/write.rs:1573 ※過積載
+A08	-	テキスト justify巡回/line-height reset/tracking reset(`cycle_text_justify` 等)	単数のみ	`next/shell/motolii-shell/src/lib.rs:2477,2485,2493` — いずれも `self.session.selection` を渡す自由関数	穴	next/shell/motolii-shell/src/lib.rs:2477 ※過積載
+A08	-	Inspector matte 解除(`clear_inspector_matte`)	単数のみ	`next/shell/motolii-shell/src/lib.rs:2523` — `self.session.selection` のみ	穴	next/shell/motolii-shell/src/lib.rs:2523 ※過積載
