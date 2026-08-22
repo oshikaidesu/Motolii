@@ -48,16 +48,37 @@
 //! [`Compositor::render_with_effects`]/[`Compositor::render_to_texture`] がそれを使う
 //! ([`accumulate_sequential`] 参照)。数式の出典・gamma の扱いは `blend` モジュール doc。
 //!
-//! 非分離4種(Hue/Saturation/Color/Luminosity)は依然未実装(BL4、`motolii-engine` 側が
-//! 明示的に弾く)。
+//! ## 非分離(non-separable)blend 4 モード(BL4、2026-08-22)
 //!
-//! **[`Compositor::render`]/[`Compositor::render_with_timing`] は分離可能 blend を
-//! 実装しない** — この2つは「1つの ViewBuilder へ全 layer をまとめて描く」一括経路
-//! ([`Self::render_with_timing`] 参照)で、dst を読む2枚読みパスが構造的に乗らない
-//! (乗せるなら `render_sequential` と同じ逐次経路へ丸ごと作り替える必要があり、
-//! この2つの「昔からある一括経路」を無改造に保つ既存規律に反する)。分離可能
-//! blend を持つ layer をこの2つへ渡すと [`CompositorError::UnsupportedBlendMode`]
-//! を返す(黙って `Normal` へ近似しない、`translate_blend_mode` と同じ fail-closed)。
+//! Hue/Saturation/Color/Luminosity は W3C Compositing 3.7節(SetLum/SetSat/ClipColor
+//! の擬似コード)——分離可能11種と違い `B(Cb,Cs)` が RGB 全体を1単位として扱う
+//! (per-channel には分解できない)。**同じ [`blend`] サブモジュールへ相乗りさせる**
+//! (新規 pipeline を増やさない——2枚読みの土台(2 texture bind group・params uniform・
+//! fullscreen triangle)も一般合成式(3.5節)も分離可能11種と完全に同じで、違うのは
+//! `B(Cb,Cs)` の中身だけなので、[`blend::BlendPipelines`]/WGSL 内で
+//! `params.mode` の範囲を 0〜10(分離可能)から 11〜14(非分離)へ拡張しただけ——
+//! 数式・境界条件の出典は `blend` モジュール doc「非分離4種」節)。
+//! [`separable_mode_index`]/[`nonseparable_mode_index`] のどちらが `Some` を返すかで
+//! 分類の意味は保ったまま、[`accumulate_sequential`] の run 切り出し判定は
+//! [`two_texture_pass_mode_index`](両者の union)1本に集約する。
+//!
+//! **[`Compositor::render`]/[`Compositor::render_with_timing`] は分離可能/非分離
+//! どちらの2枚読み blend も実装しない** — この2つは「1つの ViewBuilder へ全 layer を
+//! まとめて描く」一括経路([`Self::render_with_timing`] 参照)で、dst を読む2枚読み
+//! パスが構造的に乗らない(乗せるなら `render_sequential` と同じ逐次経路へ丸ごと
+//! 作り替える必要があり、この2つの「昔からある一括経路」を無改造に保つ既存規律に
+//! 反する)。2枚読みを要る blend mode をこの2つへ渡すと
+//! [`CompositorError::UnsupportedBlendMode`] を返す(黙って `Normal` へ近似しない、
+//! `translate_blend_mode` と同じ fail-closed)。
+//!
+//! ## track matte(BL4、2026-08-22)
+//!
+//! AE 型(直上レイヤーを alpha/luma マットとして使う、`motolii_store::Matte`/`MatteMode`
+//! の4値)。[`matte`] サブモジュールが第三の新規 WGSL パイプライン([`matte::MattePipelines`]、
+//! `blend`/`effects::glow` と同じ「fork を触らず crate 内へ足す」手口)を持ち、
+//! [`Compositor::matte_layer`] がそれを使う——数式の出典・設計判断は `matte` モジュール
+//! doc 参照。**engine 側の消費経路はまだ「マット層を絵から除外」まで繋がっていない**
+//! (`motolii-engine` の `EngineError::UnsupportedMatte` doc 参照、store 側に要る形を記す)。
 //!
 //! **色空間の注意**: `ColormappedTexture::from_unorm_rgba`(一次確認)は
 //! `decode_srgb = !texture.format().is_srgb()` を立てる。`upload_rgba`/`upload_yuv420p`
@@ -81,6 +102,7 @@ use re_renderer::{GpuTexture, RenderContext, Rgba, ScreenshotProcessor, ViewBuil
 mod blend;
 mod effects;
 mod headless;
+mod matte;
 
 /// 合成器が表現できる blend mode。Document 側の `motolii_store::BlendMode`(17値
 /// — Lottie 16値 + `Add`)のうち、非分離4種(Hue/Saturation/Color/Luminosity、BL4)
@@ -120,11 +142,20 @@ pub enum BlendMode {
     Difference,
     /// `Cs + Cb − 2·Cs·Cb`。
     Exclusion,
+    /// `SetLum(SetSat(Cs, Sat(Cb)), Lum(Cb))`(非分離、`blend` モジュール doc「非分離
+    /// 4種」節参照)。
+    Hue,
+    /// `SetLum(SetSat(Cb, Sat(Cs)), Lum(Cb))`。
+    Saturation,
+    /// `SetLum(Cs, Lum(Cb))`。
+    Color,
+    /// `SetLum(Cb, Lum(Cs))`。
+    Luminosity,
 }
 
-/// [`BlendMode`] が分離可能 blend([`blend`] サブモジュールの2枚読みパス)に属すなら
-/// その WGSL `params.mode` index(`blend::SHADER` の `blend_channel` と1対1)を返す。
-/// `Normal`/`Add`(固定式で表現できる、モジュール doc 参照)は `None`。
+/// [`BlendMode`] が分離可能 blend([`blend`] サブモジュールの2枚読みパス、`params.mode`
+/// 0〜10)に属すならその WGSL index(`blend::SHADER` の `blend_channel` と1対1)を返す。
+/// `Normal`/`Add`(固定式)・非分離4種([`nonseparable_mode_index`] 参照)は `None`。
 ///
 /// **`_` を使わない**(全 variant を列挙)——将来 variant が増えた時にこの対応表を
 /// 更新し忘れるとコンパイルが落ちる(`translate_blend_mode` と同じ fail-closed の形)。
@@ -142,7 +173,45 @@ fn separable_mode_index(mode: BlendMode) -> Option<u32> {
         BlendMode::SoftLight => Some(8),
         BlendMode::Difference => Some(9),
         BlendMode::Exclusion => Some(10),
+        BlendMode::Hue | BlendMode::Saturation | BlendMode::Color | BlendMode::Luminosity => None,
     }
+}
+
+/// [`BlendMode`] が非分離 blend(BL4、[`blend`] サブモジュールの同じ2枚読みパスへ
+/// `params.mode` 11〜14 で相乗りする分)に属すならその index を返す。それ以外は `None`
+/// (`separable_mode_index` と対で、両者が `Some` を返す variant は無い——
+/// `two_texture_pass_mode_index` の union が構造的に排他になる)。
+///
+/// **`_` を使わない**(`separable_mode_index` と同じ fail-closed の形)。
+fn nonseparable_mode_index(mode: BlendMode) -> Option<u32> {
+    match mode {
+        BlendMode::Normal
+        | BlendMode::Add
+        | BlendMode::Multiply
+        | BlendMode::Screen
+        | BlendMode::Overlay
+        | BlendMode::Darken
+        | BlendMode::Lighten
+        | BlendMode::ColorDodge
+        | BlendMode::ColorBurn
+        | BlendMode::HardLight
+        | BlendMode::SoftLight
+        | BlendMode::Difference
+        | BlendMode::Exclusion => None,
+        BlendMode::Hue => Some(11),
+        BlendMode::Saturation => Some(12),
+        BlendMode::Color => Some(13),
+        BlendMode::Luminosity => Some(14),
+    }
+}
+
+/// [`separable_mode_index`] ∪ [`nonseparable_mode_index`] —— [`blend`] サブモジュールの
+/// 2枚読みパスへ回す全 blend mode(0〜14、合計15)の統一判定。[`accumulate_sequential`]
+/// の run 切り出しはこれ1本だけを見る(BL4 で非分離4種を追加した際、
+/// `separable_mode_index`/`nonseparable_mode_index` それぞれの「分離可能かどうか」の
+/// 意味の分類は保ったまま、呼び出し側の判定だけをここへ集約した)。
+fn two_texture_pass_mode_index(mode: BlendMode) -> Option<u32> {
+    separable_mode_index(mode).or_else(|| nonseparable_mode_index(mode))
 }
 
 /// [`Compositor::render`]/[`Compositor::render_with_timing`] だけが使う、固定式
@@ -178,6 +247,9 @@ pub use headless::{HeadlessError, HeadlessGpu};
 
 /// layer 単位オフスクリーンパスの枠(裁定153 S2)。`effects` モジュール doc 参照。
 pub use effects::EffectPass;
+
+/// track matte の重ね方(BL4、AE/Lottie の4値)。`matte` モジュール doc 参照。
+pub use matte::MatteMode;
 
 /// 素材ハンドル。上流の型をそのまま通す(包み直さない)。
 pub use re_renderer::resource_managers::GpuTexture2D;
@@ -281,9 +353,12 @@ pub struct Compositor {
     /// (`effects::glow` モジュール doc 参照)。他の pass 種別が増えても
     /// pipeline はサイズ非依存なので、layer やフレームをまたいで作り直さない。
     glow_pipelines: effects::GlowPipelines,
-    /// 分離可能 blend の shader pipeline(BL3)。`glow_pipelines` と同じ規律 —
+    /// 分離可能+非分離 blend(BL3/BL4)の shader pipeline。`glow_pipelines` と同じ規律 —
     /// 初回生成して以後使い回す(`blend` モジュール doc 参照)。
     blend_pipelines: blend::SeparableBlendPipelines,
+    /// track matte(BL4)の shader pipeline。同じ規律 — 初回生成して以後使い回す
+    /// (`matte` モジュール doc 参照)。
+    matte_pipelines: matte::MattePipelines,
     /// 試験専用の introspection 累計カウンタ(`effect_passes_created_textures` と
     /// 同じ規律)。[`Self::accumulate_sequential`] 内で `queue.submit` を呼ぶ毎に
     /// 増分する——run-batching(BL3 merge の構造退行の根治)が「blend の切れ目
@@ -340,6 +415,7 @@ impl Compositor {
 
         let glow_pipelines = effects::GlowPipelines::new(&ctx.device);
         let blend_pipelines = blend::SeparableBlendPipelines::new(&ctx.device);
+        let matte_pipelines = matte::MattePipelines::new(&ctx.device);
 
         Ok(Self {
             ctx,
@@ -348,6 +424,7 @@ impl Compositor {
             effect_scratch: effects::EffectScratch::default(),
             glow_pipelines,
             blend_pipelines,
+            matte_pipelines,
             sequential_submits: 0,
         })
     }
@@ -1309,9 +1386,10 @@ impl Compositor {
     /// 返す——CPU 読み戻しをするか([`Self::finalize_readback`])・GPU texture のまま
     /// 返すか([`Self::finalize_texture`])は呼び手が選ぶ(この関数自体はどちらもしない)。
     ///
-    /// ## run-batching(Normal/Add、`separable_mode_index` が `None`)
+    /// ## run-batching(Normal/Add、`two_texture_pass_mode_index` が `None`)
     ///
-    /// 分離可能 blend の layer の出現点**だけ**で「run」を切る——連続する Normal/Add
+    /// 2枚読みパスを要る blend(分離可能11種+非分離4種、BL4)の layer の出現点
+    /// **だけ**で「run」を切る——連続する Normal/Add
     /// の layer は1つの `ViewBuilder` へ「background rect(run に直前 accumulator が
     /// 有る時だけ) + run 内の全 layer rect」を深度順に積み、1回の submit+poll で
     /// まとめて描く(旧 `render_sequential` 本体は「layer 1枚 = background rect 1枚 +
@@ -1335,14 +1413,17 @@ impl Compositor {
     /// `render_sequential`/`render_with_effects`/`render_to_texture` のどの入口でも
     /// layer の並び順=order の並び順)ので、run 先頭の1回で sort 順は保たれる。
     ///
-    /// ## 分離可能 blend(`Some`、Multiply〜Exclusion)
+    /// ## 2枚読みパス(`Some`、分離可能11種 Multiply〜Exclusion + 非分離4種
+    /// Hue〜Luminosity、BL4)
     ///
-    /// 固定式では表現できない(`crate` module doc「分離可能 blend」節)ので2段
-    /// (この layer 単体で1つの run、run-batching の対象外——**変更なし**):
+    /// 固定式では表現できない(`crate` module doc「分離可能 blend」「非分離4種」節)
+    /// ので2段(この layer 単体で1つの run、run-batching の対象外——**変更なし**、
+    /// 分離可能/非分離のどちらでも同じ2段構造——違うのは `mode_index` の範囲だけ):
     /// 1. layer 単体を(dst 無しで)自分の main_target へ描く——「layer 単体を transparent
     ///    へ premultiplied-over した canvas」を得る。
     /// 2. 直前までの accumulator が有れば、[`blend::SeparableBlendPipelines`] で
-    ///    2枚読み混ぜて新しい accumulator を作る(`blend` モジュール doc の一般合成式)。
+    ///    2枚読み混ぜて新しい accumulator を作る(`blend` モジュール doc の一般合成式、
+    ///    `B(Cb,Cs)` の中身だけが mode で変わる)。
     ///    **無ければ**(1枚目)layer 単体の描画結果がそのまま新しい accumulator になる
     ///    ——`blend` モジュール doc が導出するとおり `αb=0` では `Co = αs·Cs` と数学的に
     ///    一致するので、混ぜる処理自体を省いてよい。
@@ -1387,7 +1468,7 @@ impl Compositor {
         while idx < inputs.len() {
             let input = &inputs[idx];
 
-            if let Some(mode_index) = separable_mode_index(input.blend_mode) {
+            if let Some(mode_index) = two_texture_pass_mode_index(input.blend_mode) {
                 self.ctx.begin_frame();
 
                 let (transform, z) = if input.pinned {
@@ -1522,7 +1603,7 @@ impl Compositor {
             self.ctx.begin_frame();
 
             let run_start = idx;
-            while idx < inputs.len() && separable_mode_index(inputs[idx].blend_mode).is_none() {
+            while idx < inputs.len() && two_texture_pass_mode_index(inputs[idx].blend_mode).is_none() {
                 idx += 1;
             }
             let run = &inputs[run_start..idx];
@@ -1550,11 +1631,11 @@ impl Compositor {
                 let a = match input.blend_mode {
                     BlendMode::Normal => input.opacity,
                     BlendMode::Add => 0.0,
-                    // `separable_mode_index` が `None` を返した mode(Normal/Add)のみ
-                    // run に入る——他の全 variant は上の `if let Some(...)` 側で
+                    // `two_texture_pass_mode_index` が `None` を返した mode(Normal/Add)
+                    // のみ run に入る——他の全 variant は上の `if let Some(...)` 側で
                     // 個別処理され、run を切る側になる。
                     _ => unreachable!(
-                        "separable_mode_index が None を返した blend_mode のみ run に入る"
+                        "two_texture_pass_mode_index が None を返した blend_mode のみ run に入る"
                     ),
                 };
                 rects.push(TexturedRect {
@@ -1626,9 +1707,13 @@ impl Compositor {
         Ok(background)
     }
 
-    /// 分離可能 blend パスの出力先。fork の texture pool(`effect_scratch`)には
-    /// **属さない**普通の `wgpu::Texture`——[`Self::accumulate_sequential`] doc の
-    /// 「fork pool の罠」が無いので、素の Rust 所有権(drop で破棄)だけで足りる。
+    /// 2枚読みパスの出力先。分離可能/非分離 blend([`Self::accumulate_sequential`])と
+    /// track matte([`Self::matte_layer`]、BL4)が共有する——どちらも「canvas サイズの
+    /// premultiplied Rgba8UnormSrgb を1枚作って結果を書く」という同じ要求なので、
+    /// 名前(`blend`)は歴史的だが挙動はどちらの呼び手にも過不足ない。fork の
+    /// texture pool(`effect_scratch`)には**属さない**普通の `wgpu::Texture`——
+    /// [`Self::accumulate_sequential`] doc の「fork pool の罠」が無いので、素の
+    /// Rust 所有権(drop で破棄)だけで足りる。
     fn create_blend_scratch_texture(&self, width: u32, height: u32) -> wgpu::Texture {
         self.ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("motolii-compositor-blend-output"),
@@ -1813,6 +1898,187 @@ impl Compositor {
 
         let background = self.accumulate_sequential(comp, camera, &inputs)?;
         self.finalize_readback(comp, camera, background)
+    }
+
+    /// [`Self::matte_layer`]/[`Self::accumulate_sequential`]の分離可能 blend「solo」
+    /// パス(旧実装、`SequentialInput` 経由)が使っているのと**同型**の「1 layer を
+    /// canvas 全体の premultiplied texture へ描く」処理を、`Layer` から直接組み立てる
+    /// 独立コピーとして持つ。
+    ///
+    /// **`accumulate_sequential` を改造して共有しない**——あちら側は `blend_mode` に
+    /// 応じて run を切る/切らないの分岐そのものであり、`sequential_submits` oracle
+    /// (`tests/run_batching.rs`)が「`queue.submit` の増分」を厳密に数えている。
+    /// track matte はどの `blend_mode` の layer にも適用できる必要がある(matte は
+    /// 「下の layer との混ざり方」より**前**の段階で消費される——`blend_mode` 自体は
+    /// 読まない)ため、`accumulate_sequential` の分岐条件に matte を混ぜ込むと
+    /// oracle の数え方まで変える改造になってしまう。BL3 の run-batching 修理を壊さない
+    /// ため、コード量は小さい(30行程度)ので複製する側を選んだ。
+    fn render_layer_to_canvas(
+        &mut self,
+        comp: CompSpec,
+        projection: motolii_core::CameraProjection,
+        view_from_world: macaw::IsoTransform,
+        pinned_cancel: glam::Affine2,
+        layer: &Layer,
+        label: &'static str,
+    ) -> Result<GpuTexture, CompositorError> {
+        self.ctx.begin_frame();
+
+        let (transform, z) = if layer.pinned {
+            (pinned_cancel * layer.placement.transform, 0.0)
+        } else {
+            (layer.placement.transform, layer.placement.z)
+        };
+
+        let rect = TexturedRect {
+            top_left_corner_position: to_point3(transform.transform_point2(glam::Vec2::ZERO), z),
+            extent_u: to_vector3(
+                transform.transform_vector2(glam::Vec2::new(layer.size[0], 0.0)),
+            ),
+            extent_v: to_vector3(
+                transform.transform_vector2(glam::Vec2::new(0.0, layer.size[1])),
+            ),
+            colormapped_texture: ColormappedTexture::from_unorm_rgba(layer.texture.clone()),
+            options: RectangleOptions {
+                multiplicative_tint: Rgba::from_rgba_premultiplied(
+                    layer.placement.opacity,
+                    layer.placement.opacity,
+                    layer.placement.opacity,
+                    layer.placement.opacity,
+                ),
+                depth_offset: 0,
+                ..Default::default()
+            },
+        };
+        let draw_data = RectangleDrawData::new(&self.ctx, &[rect])
+            .map_err(|e| CompositorError::Rectangles(e.to_string()))?;
+
+        let mut view_builder = ViewBuilder::new(
+            &self.ctx,
+            sequential_target_config(label, comp, view_from_world, projection),
+            ViewBuilderId::new(self.next_readback),
+        )
+        .map_err(|e| CompositorError::View(e.to_string()))?;
+        self.next_readback += 1;
+
+        view_builder.queue_draw(&self.ctx, draw_data);
+        let command_buffer = view_builder
+            .draw(&self.ctx, Rgba::TRANSPARENT)
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+        self.ctx.before_submit();
+        self.ctx.queue.submit([command_buffer]);
+        self.ctx.begin_frame();
+        self.ctx
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+        Ok(view_builder.main_target().clone())
+    }
+
+    /// **track matte 適用パス**(BL4)。`layer`(matte を持つ本体)と `matte_source`
+    /// (直上の matte 元、AE 型)をそれぞれ[`Self::render_layer_to_canvas`]で canvas
+    /// 全体の premultiplied texture へ描き(camera/transform/pinned/opacity は両方
+    /// 個別に反映される——matte 元が本体と違う位置/大きさに置かれていても、canvas
+    /// 空間で正しく整列した2枚として揃う)、[`matte::MattePipelines`]で
+    /// 「`layer` の premultiplied 値 × `matte_source` から導いた coverage」を計算する
+    /// (係数の出典・4モードの式は `matte` モジュール doc 参照)。
+    ///
+    /// 返り値は**すでに canvas 全体に正しく配置し終えた1枚の `Layer`**
+    /// (`pinned: true`・`size = comp`・`transform = IDENTITY`——[`background_rect`]が
+    /// 逐次 accumulator を「画面に張り付く full-canvas 板」として折り返しているのと
+    /// 同じ考え方)。呼び出し側はこれを他の layer と同様に
+    /// [`Self::render_sequential`]/[`Self::render_with_effects`]/[`Self::render_to_texture`]
+    /// の `layers` へそのまま混ぜてよい——`blend_mode` は `layer` のものをそのまま
+    /// 引き継ぐので、matte 消費後もその layer 自身の(下の layer との)混ざり方は
+    /// 変わらない。
+    ///
+    /// **layer 単位で solo 描画2回+combine 1回 = 3 submit**(`render_layer_to_canvas`
+    /// が2回、内部の `matte_pipelines.record` 提出が1回)。`accumulate_sequential` の
+    /// `sequential_submits` オラクルには乗らない(あのカウンタは
+    /// `accumulate_sequential` 内の submit だけを数える契約、関数 doc 参照)——
+    /// コストを隠さない旨をここに明記する。
+    pub fn matte_layer(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        layer: &Layer,
+        matte_source: &Layer,
+        mode: MatteMode,
+    ) -> Result<Layer, CompositorError> {
+        let projection = motolii_core::camera_projection(comp, camera);
+        let pinned_cancel = motolii_core::camera_screen_from_world_z0(comp, camera).inverse();
+        let view_from_world = macaw::IsoTransform::from_rotation_translation(
+            projection.rotation,
+            -(projection.rotation * projection.eye),
+        );
+
+        let layer_canvas = self.render_layer_to_canvas(
+            comp,
+            projection,
+            view_from_world,
+            pinned_cancel,
+            layer,
+            "motolii-comp-matte-layer",
+        )?;
+        let matte_canvas = self.render_layer_to_canvas(
+            comp,
+            projection,
+            view_from_world,
+            pinned_cancel,
+            matte_source,
+            "motolii-comp-matte-source",
+        )?;
+
+        let layer_view = layer_canvas.default_view.clone();
+        let matte_view = matte_canvas.default_view.clone();
+        let out_texture = self.create_blend_scratch_texture(comp.width, comp.height);
+        let out_view = out_texture.create_view(&Default::default());
+
+        let mut encoder = self
+            .ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("motolii-compositor-matte-pass-encoder"),
+            });
+        self.matte_pipelines.record(
+            &self.ctx.device,
+            &self.ctx.queue,
+            &mut encoder,
+            &layer_view,
+            &matte_view,
+            &out_view,
+            matte::matte_mode_index(mode),
+        );
+        self.ctx.before_submit();
+        self.ctx.queue.submit([encoder.finish()]);
+        self.ctx.begin_frame();
+        self.ctx
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .map_err(|e| CompositorError::Draw(e.to_string()))?;
+
+        self.next_effect_key += 1;
+        let key = self.next_effect_key;
+        let imported = self
+            .ctx
+            .texture_manager_2d
+            .import_gpu_premultiplied(key, &self.ctx, &out_texture)
+            .map_err(|e| CompositorError::Effect(e.to_string()))?;
+
+        Ok(Layer {
+            texture: imported,
+            size: [comp.width as f32, comp.height as f32],
+            placement: LayerPlacement {
+                transform: glam::Affine2::IDENTITY,
+                opacity: 1.0,
+                order: layer.placement.order,
+                z: 0.0,
+            },
+            pinned: true,
+            blend_mode: layer.blend_mode,
+        })
     }
 }
 

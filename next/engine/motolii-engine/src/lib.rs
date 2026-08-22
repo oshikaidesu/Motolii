@@ -38,16 +38,34 @@ pub enum EngineError {
     Store(String),
     #[error("comp の設定が Document に無い(解像度も fps も決まっていない)")]
     NoComposition,
-    /// `motolii_store::BlendMode` の16値のうち、合成器がまだ表現できない分
-    /// (`motolii_compositor::BlendMode` のモジュール doc 参照 — 固定式の
-    /// blend equation では出せず fork 改造が要る)。黙って Normal へ近似しない。
+    /// **BL4(2026-08-22)時点でもう構築されない**——`motolii_store::BlendMode` の17値
+    /// すべてが `translate_blend_mode` で `motolii_compositor::BlendMode` へ写せる
+    /// ようになった(非分離4種も `motolii-compositor` 側に実装が揃った)。型は
+    /// 将来 `motolii_compositor::BlendMode` に variant が増えた時の枠として残す。
     #[error("blend mode {0:?} はまだ合成器が対応していない(Normal のみ対応。fork 改造候補)")]
     UnsupportedBlendMode(motolii_store::BlendMode),
-    /// matte はまだ合成器に繋いでいない。単一 `TexturedRect` は自分の texture 1枚しか
-    /// 持てず、matte 元レイヤーの alpha/luma を per-pixel で参照するには2枚目の texture
-    /// を読む shader が要る(`rectangle_fs.wgsl` は現状1枚専用) — fork seam 候補。
-    /// 黙って型抜き前の絵を出すよりは、ここで明示的に止める。
-    #[error("matte はまだ合成器が対応していない({0:?}。fork seam 候補)")]
+    /// matte はまだ「絵から除外しつつマットとして消費」の経路まで engine から
+    /// 繋がっていない。
+    ///
+    /// **BL4(2026-08-22)時点の状況**: matte 適用の計算そのもの
+    /// (`motolii_compositor::Compositor::matte_layer`)と語彙変換
+    /// (`translate_matte_mode`)は実装済み——もう「合成器が表現できない」わけではない。
+    /// ここで依然 `Err` にしているのは、この関数(`render_with_camera_override` の
+    /// `for layer in resolved` ループ)が **`StoreView::resolved_layers` の返す
+    /// `Vec<ResolvedLayer>` から `LayerId` を復元できない**ため——`matte.layer`
+    /// (matte 元の `LayerId`)自体は `StoreView::resolve(matte.layer, t)` で個別に
+    /// 引けるが、逆に「今ループしているこの `ResolvedLayer` 自身が、他のどれかの
+    /// matte 元として消費されているか」は判定できない(`ResolvedLayer` が `LayerId`
+    /// を運ばない設計、`motolii-store` 側 doc 参照)。matte 元を通常描画リストから
+    /// **正しく除外**できない限り、matte 元自身がもう1枚の可視 layer として二重に
+    /// 描かれてしまう(AE の track matte 意味論と食い違う)——黙ってこの不正確な絵を
+    /// 出すよりは、ここで明示的に止める(既存文化)。
+    ///
+    /// **store 側にこの形が要る**(このレーンは store を触らない、RETURN 参照):
+    /// `StoreView::resolved_layers` が `Vec<(LayerId, ResolvedLayer)>` を返すか、
+    /// `ResolvedLayer` 自身に `id: LayerId` を持たせるかのどちらかが揃えば、この
+    /// ループを id 付きで回せるようになり、この `Err` を外して実消費へ繋げられる。
+    #[error("matte はまだ engine が絵から除外しつつ消費する経路に繋がっていない({0:?}。store 側の LayerId 相関待ち)")]
     UnsupportedMatte(Matte),
 }
 
@@ -504,6 +522,36 @@ impl Engine {
         self.render_resolved_to_texture(comp, composition.background, camera, &resolved)
     }
 
+    /// **BL4 track matte 消費**。`target`(matte を持つ本体、既に texture が乗った
+    /// [`Layer`])を `matte_source`(直上の matte 元、同じく既に texture が乗った
+    /// [`Layer`])と `mode` で合成し、「絵から除外しつつマットとして消費し終えた
+    /// 1枚の `Layer`」を返す(`translate_matte_mode` で語彙を写した上で
+    /// `motolii_compositor::Compositor::matte_layer` へそのまま委譲するだけの薄い
+    /// ラッパー)。
+    ///
+    /// **まだ [`Self::render_frame`] 等から自動では呼ばれない**
+    /// (`EngineError::UnsupportedMatte` の doc 参照 — `resolved: Vec<ResolvedLayer>`
+    /// から matte 元を「通常描画リストから除外する」判定に要る `LayerId` 相関が
+    /// store 側にまだ無い)。この関数**単体**は matte 適用の計算だけを正しく行う
+    /// ——呼び出し元が `target`/`matte_source` を正しく対応付けて渡す責務を持つ
+    /// (store が id 付きの形を返すようになった時に配線する差し込み口、RETURN 参照)。
+    pub fn apply_matte(
+        &mut self,
+        comp: CompSpec,
+        camera: ResolvedCamera,
+        target: &Layer,
+        matte_source: &Layer,
+        mode: motolii_store::MatteMode,
+    ) -> Result<Layer, EngineError> {
+        Ok(self.compositor.matte_layer(
+            comp,
+            camera,
+            target,
+            matte_source,
+            translate_matte_mode(mode),
+        )?)
+    }
+
     /// 素材の texture と、その実寸を返す。
     ///
     /// texture が `None` = **この時刻にこの layer は無い**(素材の外)。
@@ -640,13 +688,17 @@ fn to_u8_rgba(c: [f32; 4]) -> [u8; 4] {
 
 /// `motolii_store::BlendMode`(Document の17値、裁定67 + BL2 の `Add`)を
 /// `motolii_compositor::BlendMode`(合成器が表現できる分だけ、`motolii-compositor`
-/// のモジュール doc 参照)へ写す。対応外(非分離4種、BL4)は
-/// [`EngineError::UnsupportedBlendMode`] — 黙って `Normal` へ近似しない。
+/// のモジュール doc 参照)へ写す。
 ///
-/// **BL3(2026-08-22)**: Multiply〜Exclusion の11値(分離可能 blend、
-/// `motolii_compositor::separable_mode_index` が扱う分)を Normal/Add と同じ1対1で
-/// 追加。**`_` を使わない**(全 variant を列挙)——`motolii_store::BlendMode` に
-/// variant が増えた時、ここを更新し忘れるとコンパイルが落ちる。
+/// **BL4(2026-08-22)で17値全部が `Ok` になった**——非分離4種(Hue/Saturation/
+/// Color/Luminosity)も `motolii-compositor` 側に対応する variant が揃った
+/// (`motolii_compositor::nonseparable_mode_index` 参照)ので、BL3 の分離可能11値と
+/// 同じ1対1マッピングへ合流させた。[`EngineError::UnsupportedBlendMode`] 自体は
+/// 削らない(型としては残す——`motolii_compositor::BlendMode` に将来 variant が
+/// 増えた時にまたここが使う枠)が、**この関数からは現状もう構築されない**。
+///
+/// **`_` を使わない**(全 variant を列挙)——`motolii_store::BlendMode` に variant が
+/// 増えた時、ここを更新し忘れるとコンパイルが落ちる。
 fn translate_blend_mode(
     mode: motolii_store::BlendMode,
 ) -> Result<motolii_compositor::BlendMode, EngineError> {
@@ -666,18 +718,35 @@ fn translate_blend_mode(
         Src::SoftLight => Ok(Dst::SoftLight),
         Src::Difference => Ok(Dst::Difference),
         Src::Exclusion => Ok(Dst::Exclusion),
-        // 非分離4種(Hue/Saturation/Color/Luminosity、BL4)——`motolii-compositor` に
-        // 対応する variant が無い、まだ実装していない。
-        other @ (Src::Hue | Src::Saturation | Src::Color | Src::Luminosity) => {
-            Err(EngineError::UnsupportedBlendMode(other))
-        }
+        // 非分離4種(BL4、`motolii_compositor::nonseparable_mode_index` が扱う分)。
+        Src::Hue => Ok(Dst::Hue),
+        Src::Saturation => Ok(Dst::Saturation),
+        Src::Color => Ok(Dst::Color),
+        Src::Luminosity => Ok(Dst::Luminosity),
+    }
+}
+
+/// `motolii_store::MatteMode`(AE/Lottie の4値)を `motolii_compositor::MatteMode`
+/// (`motolii-compositor` の `matte` モジュール doc 参照)へ写す。**4値とも `Ok`**
+/// (`translate_blend_mode` と違い、matte mode 自体に対応外は無い——BL4 で
+/// `motolii-compositor` 側が4モード全部を実装した、`matte` モジュール doc 参照)。
+///
+/// **`_` を使わない**(全 variant を列挙、`translate_blend_mode` と同じ fail-closed
+/// の形)。
+fn translate_matte_mode(mode: motolii_store::MatteMode) -> motolii_compositor::MatteMode {
+    use motolii_compositor::MatteMode as Dst;
+    use motolii_store::MatteMode as Src;
+    match mode {
+        Src::Alpha => Dst::Alpha,
+        Src::InvertedAlpha => Dst::InvertedAlpha,
+        Src::Luma => Dst::Luma,
+        Src::InvertedLuma => Dst::InvertedLuma,
     }
 }
 
 #[cfg(test)]
 mod translate_blend_mode_tests {
     use super::translate_blend_mode;
-    use crate::EngineError;
 
     /// **BL2**: `Add` は `motolii-compositor` が無改造で出せる(モジュール doc
     /// 参照)ので `Ok` — `translate_effect_passes_tests` と同型の、private 関数への
@@ -707,15 +776,54 @@ mod translate_blend_mode_tests {
         );
     }
 
-    /// 非分離4種(BL4)は依然として明示的に `Err`(黙って近似しない)。
+    /// **BL4**: 非分離4値(Hue/Saturation/Color/Luminosity)も同じ1対1で `Ok`
+    /// (`motolii-compositor` 側が実装した——数値の正しさは
+    /// `tests/blend_nonseparable.rs` の独立オラクルが縛る)。
     #[test]
-    fn hue_is_still_rejected() {
-        assert!(matches!(
-            translate_blend_mode(motolii_store::BlendMode::Hue),
-            Err(EngineError::UnsupportedBlendMode(
-                motolii_store::BlendMode::Hue
-            ))
-        ));
+    fn nonseparable_modes_are_accepted() {
+        assert_eq!(
+            translate_blend_mode(motolii_store::BlendMode::Hue).unwrap(),
+            motolii_compositor::BlendMode::Hue
+        );
+        assert_eq!(
+            translate_blend_mode(motolii_store::BlendMode::Saturation).unwrap(),
+            motolii_compositor::BlendMode::Saturation
+        );
+        assert_eq!(
+            translate_blend_mode(motolii_store::BlendMode::Color).unwrap(),
+            motolii_compositor::BlendMode::Color
+        );
+        assert_eq!(
+            translate_blend_mode(motolii_store::BlendMode::Luminosity).unwrap(),
+            motolii_compositor::BlendMode::Luminosity
+        );
+    }
+}
+
+#[cfg(test)]
+mod translate_matte_mode_tests {
+    use super::translate_matte_mode;
+
+    /// **BL4**: matte mode 4値は対応外が無いので、4値とも1対1で写ることを
+    /// そのまま固定する(`translate_blend_mode_tests` と同型)。
+    #[test]
+    fn all_four_matte_modes_translate_one_to_one() {
+        assert_eq!(
+            translate_matte_mode(motolii_store::MatteMode::Alpha),
+            motolii_compositor::MatteMode::Alpha
+        );
+        assert_eq!(
+            translate_matte_mode(motolii_store::MatteMode::InvertedAlpha),
+            motolii_compositor::MatteMode::InvertedAlpha
+        );
+        assert_eq!(
+            translate_matte_mode(motolii_store::MatteMode::Luma),
+            motolii_compositor::MatteMode::Luma
+        );
+        assert_eq!(
+            translate_matte_mode(motolii_store::MatteMode::InvertedLuma),
+            motolii_compositor::MatteMode::InvertedLuma
+        );
     }
 }
 
