@@ -102,7 +102,7 @@ use crate::{Item, Menu};
 /// | 466 | Undo(アンドゥ履歴を消去) | 見送り | 履歴クリア(Undo単体とは別操作)の機構なし |
 /// | 831 | Edit in Adobe Audition | 見送り | サードパーティアプリ連携、対象外 |
 ///
-/// ### Layer — 消化5行(既存 shell 定義をそのまま移送)
+/// ### Layer — 消化9行(既存 shell 定義5行の移送 + 裁定195 で4行追加)
 ///
 /// | 順 | label | shortcut | 出典 | bundle |
 /// |---|---|---|---|---|
@@ -111,6 +111,10 @@ use crate::{Item, Menu};
 /// | 3 | Ungroup | Cmd+Shift+G | 468/469/470(同上) | B34 |
 /// | 4 | Freeze | None | 裁定119(意図動詞、normal-map出典ゼロ) | — |
 /// | 5 | Unfreeze | None | 同上 | — |
+/// | 6 | Hide | None | `timeline_pane::Message::ToggleMute` — rail の mute glyph(`rail.rs:337`)が唯一の入口だった(裁定195前提=`context.rs` 見送り表) | B32 |
+/// | 7 | Solo | None | `timeline_pane::Message::ToggleSolo` — 同上(`rail.rs:338`) | B32 |
+/// | 8 | Lock | None | `timeline_pane::Message::ToggleLock` — 同上(`rail.rs:339`) | B32 |
+/// | 9 | Label Color | None | `inspector_pane::Message::CycleLabelColor` — Inspector の色 swatch button(`inspector-pane/src/lib.rs:2827`)が唯一の入口だった | — |
 ///
 /// #### B34 採用予定行の消化/見送り(今回の抽出対象・新規追加ゼロ)
 ///
@@ -121,6 +125,38 @@ use crate::{Item, Menu};
 /// shortcut 併記は S6(実装済みのみ)。`Freeze`/`Unfreeze`/`New Layer` は
 /// normal-map 出典を持たない Motolii 固有動詞 — 存在しない shortcut を
 /// 発明しない(既存 shell コメントの規律をそのまま継承)。
+///
+/// #### 裁定195: Hide/Solo/Lock/Label Color を単一入口の穴埋めとして追加
+///
+/// 前レーンの S6 機械監査(`context.rs`)が、Lock/Hide/Solo(rail の glyph
+/// button のみ)とラベル色(Inspector の色 swatch のみ)を**単一入口の動詞**
+/// として検出した(S6 = 複数の入口を持て、Ableton 可視性原理)。処置は
+/// 「新しい意味を作る」ことではなく「既存 `Message` にメニュー側の第二の
+/// 入口を足す」こと — 4項目とも Message は完全に既存のまま
+/// (`ToggleMute`/`ToggleSolo`/`ToggleLock`/`CycleLabelColor`)。
+///
+/// - Hide/Solo/Lock は `Toggle*` 系(状態を反転するだけの1メッセージ)。
+///   ラベルは状態に応じて出し分けない — 既存 shell `menu.rs` の
+///   `Checkerboard`/`Grid`/`Thirds`(トグルだが常に同じ名詞ラベル、`Item` に
+///   checkmark 面が無いので「押すたびに反転する動詞」として露出する規律)と
+///   同じ扱い。ラベルは rail の glyph 命名(`rail.rs` doc「M/S/L」、
+///   `Glyph::Mute`→"Hide"/`Glyph::Solo`→"Solo"/`Glyph::Lock`→"Lock"、
+///   `context.rs` 見送り表のラベルとも一致)を踏襲し、並びも rail の
+///   描画順(Mute→Solo→Lock)に合わせた。
+/// - Label Color は `CycleLabelColor` が「次の色へ」1本しか無い(palette
+///   12色から任意の1色を選ぶ `Message` は存在しない)ので、発注書が想定した
+///   submenu は作らない — `motolii_menubar::Item`/`Menu` はそもそも入れ子
+///   submenu を持たない(crate doc「公開面は最小」、shell `menu.rs` の
+///   Interpolation 5項目と同じ理由でフラットな1項目に畳む)。ラベルは
+///   Inspector の chip と同じ対象を指す名詞 `Label Color`(`Checkerboard` と
+///   同じ「名詞+押すたびに動く」規律)。
+///
+/// レイヤー単位の操作(この4項目も含め Group/Freeze と同様)は「現在選択中の
+/// レイヤー」に対して働く — `LayerMenuMessages<M>` は具体 `Message` 値を
+/// フィールドに持つ形(ジェネリック `M`)なので、`LayerId` を引数に取る
+/// `ToggleMute(id)` 等は呼び手(shell)が選択レイヤーの `id` を埋めた具体値を
+/// 渡す(Group/Freeze が暗黙に選択へ効くのと同じパターン、この crate は
+/// `LayerId` を知らない)。
 pub struct EditMenuMessages<M> {
     /// 取り消し(normal-map 437/467)。
     pub undo: M,
@@ -175,10 +211,24 @@ pub struct LayerMenuMessages<M> {
     pub freeze: M,
     /// 選択グループの凍結解除(同上)。
     pub unfreeze: M,
+    /// 可視性トグル(`timeline_pane::Message::ToggleMute`、裁定195 —
+    /// rail の mute glyph のみが入口だった単一入口を穴埋め)。呼び手が
+    /// 選択レイヤーの `LayerId` を埋めた具体値を渡す。
+    pub toggle_hide: M,
+    /// ソロトグル(`timeline_pane::Message::ToggleSolo`、同上)。
+    pub toggle_solo: M,
+    /// ロックトグル(`timeline_pane::Message::ToggleLock`、同上)。
+    pub toggle_lock: M,
+    /// ラベル色を次の palette 色へ巡回(`inspector_pane::Message::
+    /// CycleLabelColor`、裁定195 — Inspector の色 swatch のみが入口
+    /// だった単一入口を穴埋め。12色個別選択の submenu ではなく「次へ」
+    /// 1項目 — 個別選択 `Message` が存在しない、モジュール冒頭 doc参照)。
+    pub cycle_label_color: M,
 }
 
 /// Layer メニュー本体を組む。shell `menu.rs` の `menus()` 内 Layer 定義は
-/// この関数呼び出しへ差し替える(RETURN 参照)。
+/// この関数呼び出しへ差し替える(RETURN 参照)。並びはモジュール冒頭 doc
+/// 「Layer — 消化9行」表と一致させること。
 pub fn layer_menu<M>(items: LayerMenuMessages<M>) -> Menu<M> {
     Menu {
         label: "Layer",
@@ -188,6 +238,15 @@ pub fn layer_menu<M>(items: LayerMenuMessages<M>) -> Menu<M> {
             Item { label: "Ungroup", shortcut: Some("Cmd+Shift+G"), message: items.ungroup },
             Item { label: "Freeze", shortcut: None, message: items.freeze },
             Item { label: "Unfreeze", shortcut: None, message: items.unfreeze },
+            // 裁定195: 単一入口の穴埋め(rail の glyph button のみだった
+            // 3トグル)。並びは rail の描画順(M/S/L = Mute→Solo→Lock、
+            // `rail.rs:273-275`)に合わせる。shortcut 出典ゼロ(飾り禁止)。
+            Item { label: "Hide", shortcut: None, message: items.toggle_hide },
+            Item { label: "Solo", shortcut: None, message: items.toggle_solo },
+            Item { label: "Lock", shortcut: None, message: items.toggle_lock },
+            // 裁定195: 単一入口の穴埋め(Inspector の色 swatch のみだった
+            // ラベル色巡回)。shortcut 出典ゼロ。
+            Item { label: "Label Color", shortcut: None, message: items.cycle_label_color },
         ],
     }
 }
@@ -278,6 +337,10 @@ mod tests {
             ungroup: FakeMessage("ungroup"),
             freeze: FakeMessage("freeze"),
             unfreeze: FakeMessage("unfreeze"),
+            toggle_hide: FakeMessage("toggle_hide"),
+            toggle_solo: FakeMessage("toggle_solo"),
+            toggle_lock: FakeMessage("toggle_lock"),
+            cycle_label_color: FakeMessage("cycle_label_color"),
         }
     }
 
@@ -322,14 +385,29 @@ mod tests {
         );
     }
 
-    /// Layer は5項目・並び固定(New Layer → Group/Ungroup → Freeze/Unfreeze)
-    /// — shell `menu.rs` 既存定義からの移送を固定する。
+    /// Layer は9項目・並び固定(New Layer → Group/Ungroup → Freeze/Unfreeze →
+    /// Hide/Solo/Lock(裁定195・rail の M/S/L 描画順) → Label Color(同上))
+    /// — 既存5項目は shell `menu.rs` からの移送、後半4項目は裁定195で追加した
+    /// 単一入口の穴埋め。
     #[test]
-    fn layer_menu_has_five_items_in_declared_order() {
+    fn layer_menu_has_nine_items_in_declared_order() {
         let menu = layer_menu(layer_messages());
         assert_eq!(menu.label, "Layer");
         let labels: Vec<&str> = menu.items.iter().map(|item| item.label).collect();
-        assert_eq!(labels, vec!["New Layer", "Group", "Ungroup", "Freeze", "Unfreeze"]);
+        assert_eq!(
+            labels,
+            vec![
+                "New Layer",
+                "Group",
+                "Ungroup",
+                "Freeze",
+                "Unfreeze",
+                "Hide",
+                "Solo",
+                "Lock",
+                "Label Color",
+            ]
+        );
     }
 
     #[test]
@@ -363,6 +441,10 @@ mod tests {
                 &FakeMessage("ungroup"),
                 &FakeMessage("freeze"),
                 &FakeMessage("unfreeze"),
+                &FakeMessage("toggle_hide"),
+                &FakeMessage("toggle_solo"),
+                &FakeMessage("toggle_lock"),
+                &FakeMessage("cycle_label_color"),
             ]
         );
     }
@@ -390,6 +472,12 @@ mod tests {
         );
     }
 
+    /// shortcut 併記は実装済み割当だけ(S6)。Layer は Group/Ungroup のみ
+    /// shortcut を持つ — New Layer/Freeze/Unfreeze に加え、裁定195で足した
+    /// Hide/Solo/Lock/Label Color も出典ゼロにつき `None`(rail の glyph
+    /// button・Inspector の swatch には shortcut が無い。飾り禁止 — この
+    /// menu 項目が「メニューバー」という第二の入口になるだけで、shortcut
+    /// という第三の入口は発明しない)。
     #[test]
     fn layer_menu_shortcuts_are_none_except_group_and_ungroup() {
         let menu = layer_menu(layer_messages());
@@ -397,7 +485,17 @@ mod tests {
             menu.items.iter().map(|item| item.shortcut).collect();
         assert_eq!(
             shortcuts,
-            vec![None, Some("Cmd+G"), Some("Cmd+Shift+G"), None, None]
+            vec![
+                None,
+                Some("Cmd+G"),
+                Some("Cmd+Shift+G"),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ]
         );
     }
 
