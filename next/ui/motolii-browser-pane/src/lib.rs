@@ -135,17 +135,14 @@ pub mod state;
 
 pub use model::{
     AssetListItem, CardKey, CatalogCard, Category, CreateKind, LibraryTab, PreviewCard,
-    PreviewScope, PreviewTag, RailScope, FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES,
+    PreviewScope, PreviewTag, RailScope, SortKey, ViewMode, FILTER_CHIPS, LIBRARY_TABS,
+    RAIL_SCOPES, SORT_KEYS,
 };
 pub use state::{Message, PaneState};
 
-use iced::widget::{button, column, container, mouse_area, row, scrollable, text, text_input};
-    AssetListItem, CardKey, CatalogCard, Category, LibraryTab, PreviewCard, PreviewScope,
-    PreviewTag, RailScope, SortKey, ViewMode, FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES, SORT_KEYS,
+use iced::widget::{
+    button, column, container, mouse_area, row, scrollable, text, text_input, tooltip,
 };
-pub use state::{Message, PaneState};
-
-use iced::widget::{button, column, container, row, scrollable, text, text_input, tooltip};
 use iced::{Element, Length};
 
 use motolii_tokens_rs::{Colors, Dimensions};
@@ -325,13 +322,6 @@ pub fn view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    media_body(items, scope, query, None, &[], false, dims, colors)
-}
-
-/// media タブの body(rail + カタログ)。B2/B3 の [`view`] と同一の木に、
-/// カード選択意匠(`selected`、mock `.libraryCard.selected`)+ 新規素材
-/// ハイライト(`recent`)+ drop 先ハイライト(`drop_hover`、B08 続編)を
-/// 足した形。
     media_body(
         items,
         scope,
@@ -339,6 +329,8 @@ pub fn view(
         model::SortKey::default(),
         model::ViewMode::default(),
         None,
+        &[],
+        false,
         dims,
         colors,
     )
@@ -347,6 +339,7 @@ pub fn view(
 /// media タブの body(rail + カタログ)。B2/B3 の [`view`] と同一の木に、
 /// カード選択意匠(`selected`、mock `.libraryCard.selected`)+ 並べ替え/
 /// 表示形式(B08 第4切片「素材の整理」、[`model::SortKey`]/[`model::ViewMode`])
+/// + 新規素材ハイライト(`recent`)+ drop 先ハイライト(`drop_hover`、B08 続編)
 /// を足した形。
 #[allow(clippy::too_many_arguments)]
 fn media_body(
@@ -361,13 +354,15 @@ fn media_body(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let filtered = model::visible(items, scope, query);
+    let filtered = model::sorted(&model::visible(items, scope, query), sort_key);
     let ledger_is_empty = items.is_empty();
 
     let rail = rail_view(scope, dims, colors);
     let catalog = catalog_view(
         scope,
         query,
+        sort_key,
+        view_mode,
         &filtered,
         ledger_is_empty,
         selected,
@@ -375,11 +370,6 @@ fn media_body(
         drop_hover,
         dims,
         colors,
-    let filtered = model::sorted(&model::visible(items, scope, query), sort_key);
-
-    let rail = rail_view(scope, dims, colors);
-    let catalog = catalog_view(
-        scope, query, sort_key, view_mode, &filtered, selected, dims, colors,
     );
 
     row![rail, catalog].spacing(dims.spacing_xs).into()
@@ -514,8 +504,15 @@ fn catalog_view(
         .size(dims.micro_text)
         .color(colors.text_muted);
 
-    let grid = card_grid_view(filtered, ledger_is_empty, selected, recent, dims, colors);
-    let grid = card_grid_view(filtered, selected, view_mode, dims, colors);
+    let grid = card_grid_view(
+        filtered,
+        ledger_is_empty,
+        selected,
+        recent,
+        view_mode,
+        dims,
+        colors,
+    );
 
     catalog_container(column![shelf, summary, grid], drop_hover, dims, colors)
 }
@@ -1167,8 +1164,9 @@ fn preview_body(
     colors: Colors,
 ) -> Element<'static, Message> {
     let rail = preview_rail_view(tab, scope, dims, colors);
-    let catalog = preview_catalog_view(tab, scope, query, selected, hovered, dims, colors);
-    let catalog = preview_catalog_view(tab, scope, query, view_mode, selected, dims, colors);
+    let catalog = preview_catalog_view(
+        tab, scope, query, view_mode, selected, hovered, dims, colors,
+    );
 
     row![rail, catalog].spacing(dims.spacing_xs).into()
 }
@@ -1177,7 +1175,6 @@ fn preview_body(
 /// [`catalog_view`] と同じ骨格を preview-local データで組む)。空状態の文言は
 /// media の「絞り込みで0件」と同じ「No matches」(B08 続編の文言整理 —
 /// preview カタログは静的なので「台帳が空」の面は存在しない)。
-/// [`catalog_view`] と同じ骨格を preview-local データで組む)。
 #[allow(clippy::too_many_arguments)]
 fn preview_catalog_view(
     tab: LibraryTab,

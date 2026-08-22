@@ -20,9 +20,8 @@
 //! (`Shell::update` 側に per-variant 分岐を増やさない — crate 冒頭 doc の
 //! 「pane split 流儀」どおり)。`Shell::view` は [`PaneState::is_open`] を読んで
 //! 表示するかどうかだけ判断する。
-use crate::model::{CardKey, CreateKind, LibraryTab, PreviewScope, RailScope};
+use crate::model::{CardKey, CreateKind, LibraryTab, PreviewScope, RailScope, SortKey, ViewMode};
 use motolii_store::AssetId;
-use crate::model::{CardKey, LibraryTab, PreviewScope, RailScope, SortKey, ViewMode};
 
 /// pane ローカル Message(裁定160 切片以降の一貫した形 — root
 /// `motolii_shell::Message::Browser(Message)` が1本で畳む)。
@@ -193,6 +192,8 @@ impl PaneState {
     /// 取り込み直後の新規素材 id 列(`pane_view` がカードのハイライトに読む)。
     pub fn recently_admitted(&self) -> &[AssetId] {
         &self.recent
+    }
+
     /// 並べ替えキー(`pane_view` が media catalog の並べ替えと sort チップの
     /// 選択表示に読む、B08 第4切片)。
     pub fn sort_key(&self) -> SortKey {
@@ -573,6 +574,9 @@ mod tests {
         state.update(Message::CardHovered(CardKey::Preview("solid")));
         state.update(Message::SelectTab(LibraryTab::Media));
         assert_eq!(state.hovered(), None);
+    }
+
+    // -----------------------------------------------------------------
     // B08 第4切片(素材の整理): SortKey/ViewMode の transient 状態。
     // -----------------------------------------------------------------
 
