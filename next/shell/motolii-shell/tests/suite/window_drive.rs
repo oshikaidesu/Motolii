@@ -76,7 +76,9 @@ fn closing_the_main_window_does_not_corrupt_the_ledger() {
 
 fn toggle_settings(shell: &mut Shell) -> iced::Task<Message> {
     shell.update(Message::Settings(
-        motolii_shell::settings_pane::Message::ToggleSettingsPanel,
+        motolii_shell::settings_pane::sections::Message::Legacy(
+            motolii_shell::settings_pane::Message::ToggleSettingsPanel,
+        ),
     ))
 }
 
@@ -147,17 +149,17 @@ fn a_background_draft_survives_closing_and_reopening_the_settings_window() {
 
     let (mut shell, _task) = Shell::boot();
     let _open = toggle_settings(&mut shell);
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelInput(
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundChannelInput(
         BackgroundChannel::A,
         "0".to_owned(),
-    )));
+    ))));
 
     let _close = toggle_settings(&mut shell);
     let _reopen = toggle_settings(&mut shell);
 
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelSubmit(
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundChannelSubmit(
         BackgroundChannel::A,
-    )));
+    ))));
     let background = shell.composition().expect("comp がある").background;
     assert_eq!(
         background,

@@ -67,10 +67,9 @@ pub struct TransportSpec {
     /// とは別身分の**状態の器**(裁定179 — Play‖Pause の active と同じ accent
     /// ink 文法)なので、`buttons` 配列(S0 の慣習順)には混ぜない。
     ///
-    /// **アイコンは暫定** — `motolii-icons` の既存37個に repeat/loop 系が無い
-    /// (発注書: 新規 vendoring 不可)ため、円弧矢印の [`Icon::Redo`] を仮の顔に
-    /// している。Material `repeat` の vendoring を RETURN で要求済み — 届いたら
-    /// ここ1箇所の差し替えで済む。
+    /// アイコンは [`Icon::Repeat`](Material `repeat`)。B21 実装時は repeat
+    /// 不在で [`Icon::Redo`] を暫定の顔にしていたが、第5波 shell 結線で
+    /// vendoring が届いたのでここ1箇所を差し替えた(RETURN 要求の消化)。
     pub loop_button: TransportButton,
     /// Timecode のフレーム番号部(等幅で描く数字部)。
     pub frames: String,
@@ -114,7 +113,7 @@ pub fn transport_spec(playhead: i64, fps: Option<Fps>, playing: bool, looping: b
             },
         ],
         loop_button: TransportButton {
-            icon: Icon::Redo, // 暫定(repeat 不在 — `TransportSpec::loop_button` doc 参照)
+            icon: Icon::Repeat, // 第5波結線で vendoring 済み(`TransportSpec::loop_button` doc 参照)
             message: Message::ToggleLoop,
             active: looping,
         },

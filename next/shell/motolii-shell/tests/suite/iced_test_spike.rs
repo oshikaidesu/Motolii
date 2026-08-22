@@ -208,8 +208,15 @@ fn clicking_the_ruler_band_publishes_scrub_to_via_raw_coordinates() {
     let rail_width = tokens.dims.timeline_lane_bar_width;
     let expected_frame = frame_at_x(x - rail_width, DEFAULT_WIDTH - rail_width, 300);
 
+    // B21+B18(第5波結線)以降、ルーラー**最上段**は作業範囲のループ帯
+    // (`input.rs::loop_band_part_at` — 高さ = `loop_band_height(ruler_height)`)
+    // で、そこを押すと `LoopBandGrabbed`(新規ドラッグ)になる。scrub の検分は
+    // 帯の**下**・ルーラーの内側を突く(帯下端とルーラー下端の中点)。
+    let ruler_h = motolii_shell::timeline_pane::ruler_height(tokens.dims.row_height);
+    let band_h = motolii_shell::timeline_pane::loop_band_height(ruler_h);
+    let y = (band_h + ruler_h) * 0.5;
     let mut ui = iced_test::simulator(pane.view());
-    ui.point_at(iced::Point::new(x, 5.0)); // ルーラー帯(高さ = row_height の内側)は常に scrub
+    ui.point_at(iced::Point::new(x, y)); // ループ帯より下のルーラー帯は常に scrub
     let _ = ui.simulate([
         iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
         iced::Event::Mouse(iced::mouse::Event::ButtonReleased(

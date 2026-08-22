@@ -244,9 +244,9 @@ fn with_one_layer_then_undo() -> Shell {
 /// 開いていても Q0 合格のまま」を同じビルダーで見る。
 fn with_settings_open() -> Shell {
     let mut shell = fresh();
-    let _ = shell.update(Message::Settings(
+    let _ = shell.update(Message::Settings(motolii_shell::settings_pane::sections::Message::Legacy(
         motolii_shell::settings_pane::Message::ToggleSettingsPanel,
-    ));
+    )));
     shell
 }
 

@@ -30,6 +30,8 @@ mod entrance_atlas_dump;
 mod file_drive;
 #[path = "suite/fixture.rs"]
 mod fixture;
+#[path = "suite/gizmo_drive.rs"]
+mod gizmo_drive;
 #[path = "suite/group_drive.rs"]
 mod group_drive;
 #[path = "suite/iced_test_spike.rs"]
@@ -58,6 +60,8 @@ mod q0_fence;
 mod settings_drive;
 #[path = "suite/shortcut_drive.rs"]
 mod shortcut_drive;
+#[path = "suite/shuttle_work_area_drive.rs"]
+mod shuttle_work_area_drive;
 #[path = "suite/speed_drive.rs"]
 mod speed_drive;
 #[path = "suite/stage_band_drive.rs"]

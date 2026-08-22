@@ -32,7 +32,7 @@ fn background_preset_changes_composition_and_undoes_in_one_step() {
     let before = shell.composition().expect("既定 comp がある").background;
     assert_eq!(before, [0.0, 0.0, 0.0, 1.0], "既定は不透明黒のはず");
 
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundPreset(BackgroundPreset::White)));
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundPreset(BackgroundPreset::White))));
     let after = shell.composition().expect("comp がある").background;
     assert_eq!(after, [1.0, 1.0, 1.0, 1.0], "White プリセットが反映されていない");
 
@@ -45,7 +45,7 @@ fn background_preset_changes_composition_and_undoes_in_one_step() {
 #[test]
 fn gray18_preset_is_a_neutral_gray_not_black_or_white() {
     let mut shell = shell();
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundPreset(BackgroundPreset::Gray18)));
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundPreset(BackgroundPreset::Gray18))));
     let background = shell.composition().expect("comp がある").background;
     assert!(background[0] > 0.0 && background[0] < 1.0, "Gray18 が中間値でない: {background:?}");
     assert_eq!(background[0], background[1]);
@@ -57,13 +57,13 @@ fn gray18_preset_is_a_neutral_gray_not_black_or_white() {
 fn background_channel_submit_writes_only_that_channel_and_undoes_in_one_step() {
     let mut shell = shell();
 
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelInput(
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundChannelInput(
         BackgroundChannel::A,
         "0".to_owned(),
-    )));
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelSubmit(
+    ))));
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundChannelSubmit(
         BackgroundChannel::A,
-    )));
+    ))));
 
     let background = shell.composition().expect("comp がある").background;
     assert_eq!(
@@ -85,13 +85,13 @@ fn background_channel_submit_writes_only_that_channel_and_undoes_in_one_step() {
 #[test]
 fn an_unreadable_channel_value_is_rejected_with_a_reason() {
     let mut shell = shell();
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelInput(
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundChannelInput(
         BackgroundChannel::R,
         "not a number".to_owned(),
-    )));
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelSubmit(
+    ))));
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundChannelSubmit(
         BackgroundChannel::R,
-    )));
+    ))));
 
     assert!(shell.status().is_some(), "拒否理由が出ていない = M13 違反");
     let background = shell.composition().expect("comp がある").background;
@@ -103,13 +103,13 @@ fn an_unreadable_channel_value_is_rejected_with_a_reason() {
 fn checkerboard_toggle_never_touches_the_raw_export_rgba() {
     let mut shell = shell();
     // 透明を作る(市松が効く条件、発注書「背景の alpha を 0 にした時に効く」)。
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelInput(
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundChannelInput(
         BackgroundChannel::A,
         "0".to_owned(),
-    )));
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundChannelSubmit(
+    ))));
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundChannelSubmit(
         BackgroundChannel::A,
-    )));
+    ))));
 
     let before = shell
         .frame_rgba()
@@ -205,7 +205,7 @@ fn checkerboard_toggle_does_not_touch_the_raw_export_rgba_when_background_is_opa
 #[test]
 fn checkerboard_toggle_changes_the_screenshot_pixels_when_background_is_transparent() {
     let mut shell = shell();
-    let _ = shell.update(Message::Settings(settings_pane::Message::BackgroundPreset(BackgroundPreset::Transparent)));
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::BackgroundPreset(BackgroundPreset::Transparent))));
     let background = shell.composition().expect("comp がある").background;
     assert_eq!(background, [0.0, 0.0, 0.0, 0.0], "Transparent プリセットが反映されていない");
 
@@ -227,7 +227,7 @@ fn settings_window_toggle_is_purely_a_view_side_effect() {
     let mut shell = shell();
     let layers_before = shell.layer_count();
 
-    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::ToggleSettingsPanel)));
     assert_eq!(
         shell.layer_count(),
         layers_before,
@@ -239,8 +239,8 @@ fn settings_window_toggle_is_purely_a_view_side_effect() {
     );
 
     // トグルなので、もう一度で閉じ、3回で再び開く。
-    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
-    let _ = shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::ToggleSettingsPanel)));
+    let _ = shell.update(Message::Settings(settings_pane::sections::Message::Legacy(settings_pane::Message::ToggleSettingsPanel)));
     // 3回押した = 開いている状態。main の絵(`view()`)と窓の絵
     // (`view_window`)が両方 panic せず組めることだけ見る(widget 単位の
     // 検分は q0_fence が担う)。
@@ -249,4 +249,63 @@ fn settings_window_toggle_is_purely_a_view_side_effect() {
         .settings_window()
         .expect("3回トグル後は Settings 窓が開いているはず");
     let _ = shell.view_window(id);
+}
+
+// ---------------------------------------------------------------------------
+// SET+(B12 第1切片)の結線: Composition 数値欄(W/H/FPS/尺)→
+// `Intent::SetComposition`(第5波 shell 結線)
+// ---------------------------------------------------------------------------
+
+/// **結線の本命**: `CompFieldInput` は下書きだけ(Document 不変)、
+/// `CompFieldSubmit` で初めて1回の `Intent::SetComposition` が出る —
+/// 背景チャンネル編集(`BackgroundChannelSubmit`)と同じ read-modify-write・
+/// 1操作 = 1 undo。
+#[test]
+fn comp_field_submit_writes_the_composition_and_undoes_in_one_step() {
+    use motolii_shell::settings_pane::sections::{self, CompField};
+
+    let mut shell = shell();
+    let before = shell.composition().expect("既定 comp がある");
+    assert_eq!((before.width, before.height), (640, 360), "既定 comp が想定と違う");
+
+    let _ = shell.update(Message::Settings(sections::Message::CompFieldInput(
+        CompField::Width,
+        "1024".to_owned(),
+    )));
+    assert_eq!(
+        shell.composition().expect("comp がある").width,
+        640,
+        "Input(下書き)の段階で Document が動いてしまっている"
+    );
+    assert!(!shell.can_undo(), "下書きが undo 履歴に乗っている");
+
+    let _ = shell.update(Message::Settings(sections::Message::CompFieldSubmit(CompField::Width)));
+    let after = shell.composition().expect("comp がある");
+    assert_eq!(after.width, 1024, "Submit が width を書いていない");
+    assert_eq!(after.height, 360, "read-modify-write が height を巻き込んだ");
+
+    let _ = shell.update(Message::Undo);
+    assert_eq!(
+        shell.composition().expect("comp がある").width,
+        640,
+        "comp 編集が1回の Undo で戻らない"
+    );
+}
+
+/// 読めない入力は**黙って消さず** status 帯へ理由を出す(M13 — 背景チャンネル
+/// 編集と同じ柵が comp 欄にも通っている)。
+#[test]
+fn an_unreadable_comp_field_value_is_rejected_with_a_reason() {
+    use motolii_shell::settings_pane::sections::{self, CompField};
+
+    let mut shell = shell();
+    let _ = shell.update(Message::Settings(sections::Message::CompFieldInput(
+        CompField::Fps,
+        "not a number".to_owned(),
+    )));
+    let _ = shell.update(Message::Settings(sections::Message::CompFieldSubmit(CompField::Fps)));
+
+    assert!(shell.status().is_some(), "拒否理由が出ていない = M13 違反");
+    let fps = shell.composition().expect("comp がある").fps;
+    assert_eq!((fps.num(), fps.den()), (30, 1), "読めない入力で fps が動いてしまった");
 }

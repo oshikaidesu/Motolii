@@ -233,9 +233,9 @@ fn the_header_icon_buttons_publish_browser_and_settings_toggles() {
                 Message::Browser(motolii_shell::browser_pane::Message::ToggleBrowserPanel) => {
                     saw_browser_toggle = true;
                 }
-                Message::Settings(
+                Message::Settings(motolii_shell::settings_pane::sections::Message::Legacy(
                     motolii_shell::settings_pane::Message::ToggleSettingsPanel,
-                ) => {
+                )) => {
                     saw_settings_toggle = true;
                 }
                 _ => {}

@@ -37,9 +37,13 @@ fn main() -> iced::Result {
     if let Some(path) = screenshot_path {
         let (mut shell, _task) = motolii_shell::Shell::new_fixture();
         if transparent_bg {
+            // SET+ 結線(第5波): 旧 `settings_pane::Message` は
+            // `sections::Message::Legacy` が包む(`Shell::update_settings` doc)。
             let _ = shell.update(motolii_shell::Message::Settings(
-                motolii_shell::settings_pane::Message::BackgroundPreset(
-                    motolii_shell::settings_pane::BackgroundPreset::Transparent,
+                motolii_shell::settings_pane::sections::Message::Legacy(
+                    motolii_shell::settings_pane::Message::BackgroundPreset(
+                        motolii_shell::settings_pane::BackgroundPreset::Transparent,
+                    ),
                 ),
             ));
         }

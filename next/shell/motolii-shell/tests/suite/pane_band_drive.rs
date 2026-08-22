@@ -62,9 +62,9 @@ fn every_pane_kind_has_a_title_label() {
 #[test]
 fn the_settings_window_carries_its_name_in_the_os_titlebar() {
     let mut shell = shell();
-    let _ = shell.update(Message::Settings(
+    let _ = shell.update(Message::Settings(motolii_shell::settings_pane::sections::Message::Legacy(
         motolii_shell::settings_pane::Message::ToggleSettingsPanel,
-    ));
+    )));
     let id = shell
         .settings_window()
         .expect("歯車トグルで Settings 窓が台帳に載るはず");
