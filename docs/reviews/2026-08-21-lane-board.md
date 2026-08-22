@@ -13,13 +13,13 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| MW-S12 | 実装 | worktree(shell) | 浮かし実装: S1 daemon 骨格(挙動不変・main閉=exit)→ S2 Settings 窓移住(浮かし第1号・screenshot 器具は Settings 対象外へ明示変更) |
 
 
 ## 完了・main 着地済み(実装)
 
 | レーン | 結果 |
 |---|---|
+| MW-S12(検収合格・merge) | **浮かし着地(裁定182/188 完結)** — S1 daemon 骨格(view() 改形なし・main閉=exit・窓台帳同期先行記帳)+S2 Settings 窓移住(歯車=OS窓 open/close・480×400 リサイズ可・閉→再開で状態保持を drive 実測・器具は Settings 対象外へ明示)。題帯は OS titlebar が名札を担う整理。277緑 |
 | MW-probe(緑・merge) | r5-multiwindow — device/queue 全窓共有を実測確定(跨窓 write_buffer 生存)・zero-copy 無傷・Settings 窓最小形動作。注意2点(全窓閉 device 破棄・screenshot 器具)を S 発注書へ継承 |
 | LN-D5(検収合格・merge) | 区切り線→明度1段 — **chrome 監査 D1〜D6 完結**。棚卸し3分類台帳(置換/状態の器で残す/保留2件= screenshot 鏡・settings 値セル箱)。status 帯は面1段で可読性維持。fence 4本新設・427緑 |
 | MB-2(検収合格・merge) | ヘッダー箱ボタン列→ menubar(File/Edit/Layer/View・shortcut 併記の実行照合 oracle)+右端 icon ボタン2(icon+tooltip ペア第1号)。**Freeze/Unfreeze 初露出**(新 Message 2本 — 逸脱受理・group_drive 3本)。menu.rs は意味台帳化(widget 自作 348行を撤去)。q0 除外は MenuBar 自己登録 bounds の最小面積のみ。267緑 |
