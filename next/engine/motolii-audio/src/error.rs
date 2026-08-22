@@ -50,6 +50,12 @@ pub enum AudioError {
     #[error("gain must be finite and >= 0, got {gain}")]
     InvalidGain { gain: f64 },
 
+    /// B42: panが有限でない(NaN/inf)。範囲外(-1..1超)自体はエラーにせず
+    /// clampする(W3C Web Audio API `StereoPannerNode` 仕様の挙動と同型 —
+    /// `mix.rs::apply_pan_stereo` docコメント参照)。
+    #[error("pan must be finite, got {pan}")]
+    InvalidPan { pan: f64 },
+
     /// AG-2: mix範囲またはTimeMap写像が不正。
     #[error("invalid mix timeline range or time map")]
     InvalidMixRange,
