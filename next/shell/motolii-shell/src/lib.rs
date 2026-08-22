@@ -642,6 +642,10 @@ pub struct Shell {
     /// `LayerTiming.speed` は `TransformField`/track を経由しないので
     /// `inspector_field_draft` とは別の下書き(`inspector_name_draft` と同型)。
     inspector_speed_draft: Option<String>,
+    /// Inspector の TEXT section(B46 第1切片、裁定184)、編集中の下書き。同上
+    /// — `TextDocumentStyle` は `TransformField`/track を経由しないので
+    /// `inspector_speed_draft` と同型の別下書き(`TextField` で対象を区別)。
+    inspector_text_field_draft: Option<inspector_pane::TextFieldDraft>,
     /// Inspector 値セルの drag-to-scrub。**Document ではない** — 同上
     /// (`inspector_pane::FieldDragState` doc comment 参照。型定義は裁定160
     /// 切片8で `motolii-inspector-pane` crate へ移設済み、置き場(この
@@ -780,6 +784,7 @@ impl Shell {
                 inspector_field_draft: None,
                 inspector_name_draft: None,
                 inspector_speed_draft: None,
+                inspector_text_field_draft: None,
                 inspector_drag: None,
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
                 timeline: timeline_pane::PaneState::new(),
@@ -880,6 +885,7 @@ impl Shell {
             inspector_field_draft: None,
             inspector_name_draft: None,
             inspector_speed_draft: None,
+            inspector_text_field_draft: None,
             inspector_drag: None,
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
             timeline: timeline_pane::PaneState::new(),
@@ -1614,6 +1620,49 @@ impl Shell {
                 }
                 Task::none()
             }
+            // TEXT section(B46 第1切片、裁定184)。書き込み本体は pane の
+            // 自由関数(MASK 腕と同じ「ここは Err を status 帯へ渡す glue
+            // だけ」の形、M13)。
+            inspector_pane::Message::TextFieldInput(field, text) => {
+                self.inspector_text_field_draft =
+                    Some(inspector_pane::TextFieldDraft { field, text });
+                Task::none()
+            }
+            inspector_pane::Message::TextFieldSubmit(field) => {
+                if let Err(error) = inspector_pane::commit_text_field(
+                    &mut self.doc,
+                    &mut self.inspector_text_field_draft,
+                    self.session.selection,
+                    field,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::CycleTextJustify => {
+                if let Err(error) =
+                    inspector_pane::cycle_text_justify(&mut self.doc, self.session.selection)
+                {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::ResetLineHeightAuto => {
+                if let Err(error) =
+                    inspector_pane::reset_text_line_height(&mut self.doc, self.session.selection)
+                {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::ResetTracking => {
+                if let Err(error) =
+                    inspector_pane::reset_text_tracking(&mut self.doc, self.session.selection)
+                {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
         }
     }
 
@@ -2221,6 +2270,7 @@ impl Shell {
         }
         self.inspector_name_draft = None;
         self.inspector_speed_draft = None;
+        self.inspector_text_field_draft = None;
         // Settings パネルの下書きも同じ Esc で破棄する(hint 文言との整合)。
         self.background_draft = None;
         self.ui_scale_draft = None;
@@ -2625,11 +2675,12 @@ impl Shell {
                     let inspector_selection = inspector_pane::project(&store, &self.session)
                         .ok()
                         .flatten();
-                    inspector_pane::view_with_speed_draft(
+                    inspector_pane::view_with_text_draft(
                         inspector_selection.as_ref(),
                         self.inspector_field_draft.as_ref(),
                         self.inspector_name_draft.as_deref(),
                         self.inspector_speed_draft.as_deref(),
+                        self.inspector_text_field_draft.as_ref(),
                         dims,
                         colors,
                     )

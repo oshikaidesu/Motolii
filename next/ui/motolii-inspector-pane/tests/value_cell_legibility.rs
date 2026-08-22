@@ -114,6 +114,7 @@ fn selection_with_position_row() -> SelectionProjection {
             speed_percent: 100.0,
         },
         masks: vec![],
+        text: None,
     }
 }
 
