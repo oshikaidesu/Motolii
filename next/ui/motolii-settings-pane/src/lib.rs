@@ -39,6 +39,13 @@
 //!   意味が移ったが、置き場(`Shell::checkerboard`)は無改変(状態帯・旧
 //!   Settings のどちらから触っても同じフィールドを書く)。
 //!
+//! ## B12 第1切片(2026-08-22): section 分けと新項目は [`sections`] module
+//! Composition 節(W/H/FPS/尺)+ Playback 節(キャッシュ表示)+
+//! COMPOSITION/APPEARANCE/PLAYBACK の section 構成は [`sections::view`] が持つ
+//! (結線互換のため Message は module ローカルの [`sections::Message`] —
+//! 経緯と supervisor の結線手順は `sections.rs` 冒頭 doc)。この [`view`] と
+//! [`Message`] は結線されるまでの現行経路で、結線後は撤去して良い。
+//!
 //! ## 2項目の置き場(発注書どおり、市松は裁定163で状態帯へ移設済み)
 //! - **Stage 背景色**: `Composition.background` そのもの(Document、undo が効く)。
 //!   [`apply_background_preset`]/[`commit_background_channel`] が
@@ -64,6 +71,7 @@ use motolii_store::{Composition, Document, Intent};
 use motolii_tokens_rs::{Colors, Dimensions, Tokens};
 
 pub mod chrome;
+pub mod sections;
 
 use chrome::{button_style, section_header, value_input_style};
 
@@ -415,7 +423,11 @@ pub fn view(
 /// `content` 側(row!)が自分の幅を宣言していなくても、外側 container が
 /// Fill を持てば行は pane 全幅に伸びる(Inspector の `header`/`hint_row` と
 /// 同じ実修正パターン)。
-fn hairline_bottom(
+/// `Message` generic は B12 第1切片で追加([`sections::view`] が
+/// [`sections::Message`] の行にも同じ器を使うため — `chrome::section_header`
+/// の generic 化と同じ理由・同じ形)。旧呼び出し(この file 内)は型推論で
+/// 無改変のまま通る。
+pub(crate) fn hairline_bottom<Message: 'static>(
     content: Element<'static, Message>,
     dims: Dimensions,
     _colors: Colors,
@@ -433,7 +445,7 @@ fn hairline_bottom(
         .into()
 }
 
-fn background_row(
+pub(crate) fn background_row(
     composition: &Composition,
     draft: Option<&BackgroundFieldDraft>,
     dims: Dimensions,
@@ -503,7 +515,7 @@ fn channel_cell(
     .into()
 }
 
-fn preset_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+pub(crate) fn preset_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     row![
         preset_button("Black", BackgroundPreset::Black, dims, colors),
         preset_button("White", BackgroundPreset::White, dims, colors),
@@ -532,7 +544,7 @@ fn preset_button(
 // `checkerboard_row` は裁定163で撤去した(Stage 下縁状態帯へ引っ越し —
 // crate 冒頭 doc・`motolii_stage_pane::state_band_view` 参照)。
 
-fn ui_scale_row(
+pub(crate) fn ui_scale_row(
     ui_scale: f32,
     draft: Option<&str>,
     dims: Dimensions,
@@ -567,7 +579,11 @@ fn ui_scale_row(
     .into()
 }
 
-fn hint_row(message: &'static str, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+pub(crate) fn hint_row(
+    message: &'static str,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
     container(
         text(message)
             .size(dims.caption_text)

@@ -10,3 +10,10 @@ motolii-store.workspace = true
 # デザイン値の外出し(裁定117)。裁定160 切片1 で抽出済みの leaf crate をそのまま
 # 依存する — `Colors`/`Dimensions`/`Tokens` は raw 値の直書き禁止の唯一の読み口。
 motolii-tokens-rs.workspace = true
+
+[dev-dependencies]
+# B12 第1切片(2026-08-22): sections::view の表示値/Message 発火を実 widget 木で
+# 照合する器具(`tests/sections_drive.rs`)。inspector-pane の
+# `value_cell_legibility.rs` と同じ手口・同じ fork 同 rev(裁定170 M01 — 別 rev
+# だと iced_core が2本入り型が衝突する、merge 後実測)。dev-only。
+iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
