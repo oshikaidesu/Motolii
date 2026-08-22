@@ -113,6 +113,7 @@ fn selection_with_position_row() -> SelectionProjection {
             blend_mode: "Normal".to_owned(),
             speed_percent: 100.0,
         },
+        masks: vec![],
     }
 }
 

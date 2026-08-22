@@ -96,7 +96,7 @@
 use motolii_core::{Fps, RationalTime};
 use motolii_store::{
     property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId,
-    LayerSource, PropertyId, StoreError, StoreView, Value,
+    LayerSource, Mask, MaskId, MaskMode, PropertyId, StoreError, StoreView, Value,
 };
 
 use motolii_settings_pane::chrome::{
@@ -164,6 +164,15 @@ pub enum Message {
     /// キー上→除去(最後の1個は値を保って静的化)/ track 有りキー無し→評価値で
     /// キー追加。
     KeyPressed(KeyRow),
+
+    // ---- MASK section(B02 第1切片、裁定184) ----
+    /// この mask の mode を宣言順の次へ巡回。`CycleBlendMode` と同じ即時操作の
+    /// 形(下書きを経由せず即1回の `Intent::SetMasks`)— pick_list は next/ に
+    /// 前例が無い(BL2 の決定)ので、既存の巡回ボタン文法をそのまま使う。
+    CycleMaskMode(MaskId),
+    /// この mask の inverted を裏返す。`ToggleHidden` と同じ即時操作の形
+    /// (即1回の `Intent::SetMasks`)。
+    ToggleMaskInverted(MaskId),
 }
 
 // ---------------------------------------------------------------------------
@@ -184,25 +193,29 @@ pub enum TransformField {
     Opacity,
     AnchorX,
     AnchorY,
+    /// この mask の不透明度(MASK section、B02 第1切片)。**新しい編集文法を
+    /// 発明しない** — 既存の値セル文法(`FieldDraft`/drag-to-scrub/
+    /// `commit_inspector_field` → `Intent::SetTrack`)へそのまま乗るために
+    /// `TransformField` を拡張する形を採る。track 名は id から決まる
+    /// (`PropertyId::mask_opacity`)ので、mask の並べ替え・削除で別の mask へ
+    /// 付き直さない(store の同一性設計そのまま)。
+    MaskOpacity(MaskId),
 }
 
-impl TransformField {
-    fn property_name(self) -> &'static str {
-        match self {
-            Self::PositionX | Self::PositionY => property::POSITION,
-            Self::PositionZ => property::POSITION_Z,
-            Self::ScaleX | Self::ScaleY => property::SCALE,
-            Self::Rotation => property::ROTATION,
-            Self::Opacity => property::OPACITY,
-            Self::AnchorX | Self::AnchorY => property::ANCHOR,
-        }
-    }
-}
-
-/// この field の store 上の property。標準 property は予約語でも空でもないので
-/// 失敗し得ない — `motolii_shell::Shell` はこの `Result` を「コードの誤り」として扱ってよい。
+/// この field の store 上の property。標準 property は予約語でも空でもなく、
+/// mask opacity も `PropertyId::mask_opacity`(構築が失敗し得ない形)なので
+/// 実質失敗し得ない — `motolii_shell::Shell` はこの `Result` を「コードの誤り」
+/// として扱ってよい。
 pub fn property_id(field: TransformField) -> Result<PropertyId, StoreError> {
-    PropertyId::new(field.property_name())
+    match field {
+        TransformField::PositionX | TransformField::PositionY => PropertyId::new(property::POSITION),
+        TransformField::PositionZ => PropertyId::new(property::POSITION_Z),
+        TransformField::ScaleX | TransformField::ScaleY => PropertyId::new(property::SCALE),
+        TransformField::Rotation => PropertyId::new(property::ROTATION),
+        TransformField::Opacity => PropertyId::new(property::OPACITY),
+        TransformField::AnchorX | TransformField::AnchorY => PropertyId::new(property::ANCHOR),
+        TransformField::MaskOpacity(id) => Ok(PropertyId::mask_opacity(id)),
+    }
 }
 
 /// 入力欄の下書き。**Document ではない** — commit(Enter)まで store に触らない。
@@ -225,7 +238,10 @@ pub fn next_value(field: TransformField, input: f64, current_vec2: [f64; 2]) -> 
         }
         TransformField::PositionZ | TransformField::Rotation => Value::F64(input),
         // 表示は % だが store は 0..1 の比(`property::OPACITY` の既定と同じ単位)。
-        TransformField::Opacity => Value::F64((input / 100.0).clamp(0.0, 1.0)),
+        // mask opacity も同じ単位(比、`motolii_store::mask` doc「不透明度は比」)。
+        TransformField::Opacity | TransformField::MaskOpacity(_) => {
+            Value::F64((input / 100.0).clamp(0.0, 1.0))
+        }
     }
 }
 
@@ -269,35 +285,49 @@ pub enum KeyRow {
     Rotation,
     Opacity,
     Anchor,
+    /// mask の不透明度行(MASK section、B02 第1切片)。既存 Key 列文法
+    /// (3状態 oracle・`toggled_key_track`)へそのまま乗る —
+    /// [`TransformField::MaskOpacity`] と同じ拡張の形。
+    MaskOpacity(MaskId),
 }
 
 impl KeyRow {
-    pub fn property_name(self) -> &'static str {
+    /// 標準 property 行の名前(旧 `property_name` — mask 行は id から動的に
+    /// 決まるので、この対応表には載らない。[`key_row_property_id`] が正本)。
+    fn static_property_name(self) -> Option<&'static str> {
         match self {
-            Self::Position => property::POSITION,
-            Self::Scale => property::SCALE,
-            Self::Rotation => property::ROTATION,
-            Self::Opacity => property::OPACITY,
-            Self::Anchor => property::ANCHOR,
+            Self::Position => Some(property::POSITION),
+            Self::Scale => Some(property::SCALE),
+            Self::Rotation => Some(property::ROTATION),
+            Self::Opacity => Some(property::OPACITY),
+            Self::Anchor => Some(property::ANCHOR),
+            Self::MaskOpacity(_) => None,
         }
     }
 }
 
-/// この行の store 上の property。標準 property なので失敗し得ない
-/// ([`property_id`] と同じ理由 — 呼び手は `Result` を「コードの誤り」として扱ってよい)。
+/// この行の store 上の property。標準 property・mask opacity のどちらも構築が
+/// 失敗し得ない([`property_id`] と同じ理由 — 呼び手は `Result` を
+/// 「コードの誤り」として扱ってよい)。
 pub fn key_row_property_id(row: KeyRow) -> Result<PropertyId, StoreError> {
-    PropertyId::new(row.property_name())
+    match row {
+        KeyRow::MaskOpacity(mask) => Ok(PropertyId::mask_opacity(mask)),
+        _ => PropertyId::new(
+            row.static_property_name()
+                .expect("mask 以外の行は静的な property 名を持つ"),
+        ),
+    }
 }
 
 /// track がまだ無い行の既定値(`project` の各行の default と同じ値 —
-/// Scale だけ等倍、Opacity は store 単位の 0..1 で 1.0、他は 0)。
-/// 静的値も無い行を初キー化する時の値の正本。
+/// Scale だけ等倍、Opacity(layer/mask とも)は store 単位の 0..1 で 1.0、
+/// 他は 0)。静的値も無い行を初キー化する時の値の正本。
 pub fn key_row_default_value(row: KeyRow) -> Value {
     match row {
         KeyRow::Position | KeyRow::Anchor => Value::Vec2([0.0, 0.0]),
         KeyRow::Scale => Value::Vec2([1.0, 1.0]),
         KeyRow::Rotation => Value::F64(0.0),
-        KeyRow::Opacity => Value::F64(1.0),
+        KeyRow::Opacity | KeyRow::MaskOpacity(_) => Value::F64(1.0),
     }
 }
 
@@ -621,13 +651,123 @@ pub fn next_blend_mode(current: motolii_store::BlendMode) -> motolii_store::Blen
     }
 }
 
+// ---------------------------------------------------------------------------
+// MASK section(B02 第1切片、裁定184)— mode 巡回・inverted トグルの意味と書き口。
+// 値(opacity)は `TransformField::MaskOpacity` 経由で既存の値セル文法が書くので、
+// ここに opacity の書き口は無い。
+// ---------------------------------------------------------------------------
+
+/// mask mode 巡回ボタンの次の値。並びは `motolii_store::MaskMode` の宣言順
+/// (= Lottie `mask-mode` から `None` を落とした6値、store の設計どおり)。
+/// [`next_blend_mode`] と同じ巡回ボタン文法 — pick_list は next/ に前例が無い
+/// (BL2 の決定)ので導入しない。blend と違い「engine 未対応の mode」は無い
+/// (MK2 被覆代数が6値全部を実装済み)ため、対応表の部分集合も持たない。
+pub fn next_mask_mode(mode: MaskMode) -> MaskMode {
+    match mode {
+        MaskMode::Add => MaskMode::Subtract,
+        MaskMode::Subtract => MaskMode::Intersect,
+        MaskMode::Intersect => MaskMode::Lighten,
+        MaskMode::Lighten => MaskMode::Darken,
+        MaskMode::Darken => MaskMode::Difference,
+        MaskMode::Difference => MaskMode::Add,
+    }
+}
+
+/// mode 巡回後の mask 一覧(純関数 — Document には触れない)。対象の mask が
+/// 居なければ `None`(呼び手は no-op — 選択が edit の合間に変わる稀なケースを
+/// 捨てる、`commit_inspector_field` と同じ安全側)。**他の mask・並び順・
+/// inverted は一切変えない**(`Intent::SetMasks` は一覧の丸ごと差し替えなので、
+/// ここが「対象だけを動かす」ことの正本)。
+pub fn masks_with_cycled_mode(masks: &[Mask], target: MaskId) -> Option<Vec<Mask>> {
+    masks.iter().any(|mask| mask.id == target).then(|| {
+        masks
+            .iter()
+            .map(|mask| {
+                if mask.id == target {
+                    Mask {
+                        mode: next_mask_mode(mask.mode),
+                        ..*mask
+                    }
+                } else {
+                    *mask
+                }
+            })
+            .collect()
+    })
+}
+
+/// inverted トグル後の mask 一覧([`masks_with_cycled_mode`] と同型の純関数)。
+pub fn masks_with_toggled_inverted(masks: &[Mask], target: MaskId) -> Option<Vec<Mask>> {
+    masks.iter().any(|mask| mask.id == target).then(|| {
+        masks
+            .iter()
+            .map(|mask| {
+                if mask.id == target {
+                    Mask {
+                        inverted: !mask.inverted,
+                        ..*mask
+                    }
+                } else {
+                    *mask
+                }
+            })
+            .collect()
+    })
+}
+
+/// MASK section の mode 巡回 — 即1回の `Intent::SetMasks` を出す(1 click =
+/// 1 undo、`ToggleHidden`/`CycleBlendMode` と同じ即時操作の形)。選択なし・
+/// 対象 mask なしは黙って no-op(`Ok(())`)。書き込み失敗だけ `Err` の理由文
+/// (M13、呼び出し側が status 帯へ渡す)。
+pub fn cycle_inspector_mask_mode(
+    doc: &mut Document,
+    selection: Option<LayerId>,
+    mask: MaskId,
+) -> Result<(), String> {
+    apply_mask_list_edit(doc, selection, mask, masks_with_cycled_mode)
+}
+
+/// MASK section の inverted トグル([`cycle_inspector_mask_mode`] と同型)。
+pub fn toggle_inspector_mask_inverted(
+    doc: &mut Document,
+    selection: Option<LayerId>,
+    mask: MaskId,
+) -> Result<(), String> {
+    apply_mask_list_edit(doc, selection, mask, masks_with_toggled_inverted)
+}
+
+/// mode 巡回・inverted トグル共通の書き口: 今の一覧を読み、純関数で編集後の
+/// 一覧を作り、1回の `Intent::SetMasks` で書く。
+fn apply_mask_list_edit(
+    doc: &mut Document,
+    selection: Option<LayerId>,
+    mask: MaskId,
+    edit: fn(&[Mask], MaskId) -> Option<Vec<Mask>>,
+) -> Result<(), String> {
+    let Some(layer) = selection else {
+        return Ok(());
+    };
+    let masks = doc
+        .view()
+        .masks(layer)
+        .map_err(|error| format!("mask を読めない: {error}"))?;
+    let Some(new_masks) = edit(&masks, mask) else {
+        return Ok(()); // 対象 mask が居ない(stale click)— 黙って捨てる。
+    };
+    doc.apply(Intent::SetMasks {
+        layer,
+        masks: new_masks,
+    })
+    .map_err(|error| format!("mask を書けない: {error}"))
+}
+
 /// [`project`] が組む行の decimals は field ごとに固定(Position/Scale/Anchor=3、
 /// Rotation=1、Opacity=0)。click→type 編集の下書き初期値を作るのに要る
 /// (`TransformRowProjection::decimals` を持つ行を毎回作り直さずに済む)。
 pub fn field_decimals(field: TransformField) -> usize {
     match field {
         TransformField::Rotation => 1,
-        TransformField::Opacity => 0,
+        TransformField::Opacity | TransformField::MaskOpacity(_) => 0,
         _ => 3,
     }
 }
@@ -657,7 +797,8 @@ fn drag_step_per_pixel(field: TransformField) -> f64 {
         | TransformField::AnchorY => 1.0,
         TransformField::ScaleX | TransformField::ScaleY => 0.01,
         TransformField::Rotation => 0.5,
-        TransformField::Opacity => 1.0,
+        // mask opacity は layer Opacity と同じ感度(0〜100% が 100px で動く)。
+        TransformField::Opacity | TransformField::MaskOpacity(_) => 1.0,
     }
 }
 
@@ -703,6 +844,14 @@ pub fn drag_origin(
             }
         }
     }
+    // MASK section の opacity 行(scalar のみ — mask に Vec2 の値セルは無い)。
+    for mask_row in &selection.masks {
+        if let RowValue::Scalar(slot) = &mask_row.opacity.value {
+            if slot.field == Some(field) {
+                return slot.editable.then_some((slot.value, [0.0, 0.0]));
+            }
+        }
+    }
     None
 }
 
@@ -711,6 +860,11 @@ pub fn drag_origin(
 /// (mouse_area は press を own できても、フォーカスは text_input 自身の仕事
 /// — click 直後にはまだ text_input が木に無いので自動フォーカスされない)。
 pub fn field_input_id(field: TransformField) -> iced::widget::Id {
+    // mask opacity だけ id が動的(mask の枚数は静的に決まらない)。fork の
+    // `Id::new` は `&'static str` 限定だが `From<String>`(Cow::Owned)がある。
+    if let TransformField::MaskOpacity(mask) = field {
+        return iced::widget::Id::from(format!("inspector-field-mask-{mask}-opacity"));
+    }
     let name: &'static str = match field {
         TransformField::PositionX => "inspector-field-position-x",
         TransformField::PositionY => "inspector-field-position-y",
@@ -721,6 +875,7 @@ pub fn field_input_id(field: TransformField) -> iced::widget::Id {
         TransformField::Opacity => "inspector-field-opacity",
         TransformField::AnchorX => "inspector-field-anchor-x",
         TransformField::AnchorY => "inspector-field-anchor-y",
+        TransformField::MaskOpacity(_) => unreachable!("上の early return が拾う"),
     };
     iced::widget::Id::new(name)
 }
@@ -799,6 +954,20 @@ pub struct AttrsProjection {
     pub speed_percent: f64,
 }
 
+/// mask 1枚ぶんの投影(MASK section、B02 第1切片・裁定184)。静止する部分
+/// (mode/inverted)は store の [`Mask`] の写し、動く部分(opacity)は既存の
+/// 値セル行文法([`TransformRowProjection`])をそのまま再利用する — view は
+/// opacity 行を [`transform_row`] と同じ関数で描く(新しい編集文法を発明しない)。
+#[derive(Clone, Debug, PartialEq)]
+pub struct MaskRowProjection {
+    pub id: MaskId,
+    pub mode: MaskMode,
+    pub inverted: bool,
+    /// `mask.{id}.opacity` track の値行(label="Opacity"・decimals=0・% 表示 —
+    /// layer Opacity 行と同じ形)。Key 列は [`KeyRow::MaskOpacity`]。
+    pub opacity: TransformRowProjection,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectionProjection {
     pub layer: LayerId,
@@ -809,6 +978,10 @@ pub struct SelectionProjection {
     pub kind: &'static str,
     pub transform: Vec<TransformRowProjection>,
     pub attrs: AttrsProjection,
+    /// MASK section の行(store の並びどおり)。**空なら section 自体を出さない**
+    /// (Q0: mask の無い layer に効かない chrome を並べない — `empty_state` と
+    /// 同じ判断)。裁定184「型別 section で拡張」の第1号。
+    pub masks: Vec<MaskRowProjection>,
 }
 
 /// [`SelectionProjection::kind`] の出典。`LayerSource` の variant 名をそのまま
@@ -1033,6 +1206,41 @@ pub fn project(
         .map(|meta| source_kind_label(&meta.source))
         .unwrap_or("layer");
 
+    // MASK section(B02 第1切片): store の並びどおり。opacity 行は layer
+    // Opacity 行と同じ組み方(track を読み、無ければ既定 1.0 → 表示 %)。
+    let mut mask_rows = Vec::new();
+    for mask in store.masks(layer)? {
+        let property = PropertyId::mask_opacity(mask.id);
+        let track = store.track(layer, &property)?;
+        let keyed = has_real_keys(track.as_ref());
+        let value = match store.value_at(layer, &property, t)? {
+            Some(Value::F64(v)) => v,
+            _ => 1.0, // `motolii-store::mask` の既定(比 1.0 = 全掩)。
+        };
+        let state = key_cell_state(track.as_ref(), session.playhead, composition.fps);
+        mask_rows.push(MaskRowProjection {
+            id: mask.id,
+            mode: mask.mode,
+            inverted: mask.inverted,
+            opacity: TransformRowProjection {
+                label: "Opacity",
+                value: RowValue::Scalar(ComponentSlot {
+                    axis: "Opacity",
+                    present: true,
+                    value: value * 100.0, // store は 0..1、表示は %(layer Opacity と同じ)。
+                    editable: true,
+                    keyed,
+                    field: Some(TransformField::MaskOpacity(mask.id)),
+                }),
+                decimals: 0,
+                key: KeyCellProjection {
+                    row: KeyRow::MaskOpacity(mask.id),
+                    state,
+                },
+            },
+        });
+    }
+
     Ok(Some(SelectionProjection {
         layer,
         kind,
@@ -1044,6 +1252,7 @@ pub fn project(
             anchor_row,
         ],
         attrs: attrs_projection,
+        masks: mask_rows,
     }))
 }
 
@@ -1463,9 +1672,74 @@ fn selected_body(
         rows = rows.push(transform_row(row_projection, field_draft, dims, colors));
     }
     rows = rows.push(attrs_section(&selection.attrs, speed_draft, dims, colors));
+    // MASK section(B02 第1切片、裁定184): mask を持つ layer でのみ現れる —
+    // 空の section header を出さない(Q0: 効かない chrome を並べない)。
+    // 既存 section 文法(fold 機構は無い = 常に開いている、既定開と同義)。
+    if !selection.masks.is_empty() {
+        rows = rows.push(mask_section(&selection.masks, field_draft, dims, colors));
+    }
     rows = rows.push(hint_row(dims, colors));
 
     scrollable(rows).height(Length::Fill).into()
+}
+
+/// MASK section: mask 1枚 = ident 行(id + mode 巡回 + Inverted トグル)+
+/// opacity 値行([`transform_row`] そのまま — 値セル/Key 列の文法を再利用)。
+/// section header・行高・余白はすべて既存トークン([`section_header`]/
+/// [`bordered_row`])— 新しい寸法・色ロールを発明しない(裁定179/S4)。
+fn mask_section(
+    masks: &[MaskRowProjection],
+    field_draft: Option<&FieldDraft>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let mut section = column![section_header("MASK", dims, colors)];
+    for mask_row in masks {
+        section = section.push(mask_ident_row(mask_row, dims, colors));
+        section = section.push(transform_row(&mask_row.opacity, field_draft, dims, colors));
+    }
+    section.into()
+}
+
+/// mask 1枚の ident 行: 「Mask {id}」ラベル + mode 巡回ボタン
+/// ([`flat_button_style`]、Blend 行と同じ文法)+ Inverted トグル
+/// ([`glyph_button_style`]、M glyph と同じ「状態の器」文法 — inverted=on の
+/// 時だけ accent 縁)。
+fn mask_ident_row(
+    mask_row: &MaskRowProjection,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let id = mask_row.id;
+    let inverted = mask_row.inverted;
+
+    let content = row_widget![
+        text(format!("Mask {id}"))
+            .size(dims.body_text)
+            .color(colors.text_primary)
+            .width(Length::Fill),
+        // mode 巡回(`CycleBlendMode` と同じ即時操作・同じ意匠)。表示は
+        // `MaskMode` の `Debug`(`Add`/`Subtract`/… — blend の表示と同じ流儀)。
+        button(text(format!("{:?}", mask_row.mode)).size(dims.body_text))
+            .on_press(Message::CycleMaskMode(id))
+            .style(move |_theme, status| flat_button_style(colors, status)),
+        // inverted トグル(M glyph と同じ「チップ輪郭=状態の器」文法 —
+        // 裁定179。glyph 幅1文字では意図が読めないので語で出す: 意図優先・裁定174)。
+        button(
+            text("Inverted")
+                .size(dims.caption_text)
+                .align_x(iced::alignment::Horizontal::Center)
+                .align_y(iced::alignment::Vertical::Center),
+        )
+        .height(Length::Fixed(glyph_height(dims)))
+        .padding([0.0, dims.spacing_s])
+        .on_press(Message::ToggleMaskInverted(id))
+        .style(move |_theme, status| glyph_button_style(dims, colors, status, inverted)),
+    ]
+    .spacing(dims.spacing_xs)
+    .align_y(iced::alignment::Vertical::Center);
+
+    bordered_row(content.into(), dims)
 }
 
 /// mock の `.ident` 帯: 名前(編集可)+ 種別(読み取り専用)+ M/S glyph。
@@ -2695,6 +2969,7 @@ mod tests {
                 blend_mode: "Normal".to_owned(),
                 speed_percent: 100.0,
             },
+            masks: vec![],
         };
 
         let (start, current_vec2) =
@@ -2740,6 +3015,7 @@ mod tests {
                 blend_mode: "Normal".to_owned(),
                 speed_percent: 100.0,
             },
+            masks: vec![],
         };
         let (start, _) = drag_origin(&selection, TransformField::Rotation)
             .expect("キー持ち field もドラッグを始められるはず(Q0)");
@@ -3059,17 +3335,162 @@ mod tests {
     /// の5行全部)。
     #[test]
     fn key_rows_map_to_their_properties_and_defaults() {
-        assert_eq!(KeyRow::Position.property_name(), property::POSITION);
-        assert_eq!(KeyRow::Scale.property_name(), property::SCALE);
-        assert_eq!(KeyRow::Rotation.property_name(), property::ROTATION);
-        assert_eq!(KeyRow::Opacity.property_name(), property::OPACITY);
-        assert_eq!(KeyRow::Anchor.property_name(), property::ANCHOR);
+        let name_of = |row: KeyRow| key_row_property_id(row).expect("標準 property は作れる");
+        assert_eq!(name_of(KeyRow::Position), PropertyId::new(property::POSITION).unwrap());
+        assert_eq!(name_of(KeyRow::Scale), PropertyId::new(property::SCALE).unwrap());
+        assert_eq!(name_of(KeyRow::Rotation), PropertyId::new(property::ROTATION).unwrap());
+        assert_eq!(name_of(KeyRow::Opacity), PropertyId::new(property::OPACITY).unwrap());
+        assert_eq!(name_of(KeyRow::Anchor), PropertyId::new(property::ANCHOR).unwrap());
+        // mask 行は id から動的に決まる(`PropertyId::mask_opacity` が正本)。
+        assert_eq!(
+            name_of(KeyRow::MaskOpacity(MaskId(7))),
+            PropertyId::mask_opacity(MaskId(7))
+        );
 
         assert_eq!(key_row_default_value(KeyRow::Position), Value::Vec2([0.0, 0.0]));
         assert_eq!(key_row_default_value(KeyRow::Scale), Value::Vec2([1.0, 1.0]));
         assert_eq!(key_row_default_value(KeyRow::Rotation), Value::F64(0.0));
         assert_eq!(key_row_default_value(KeyRow::Opacity), Value::F64(1.0));
         assert_eq!(key_row_default_value(KeyRow::Anchor), Value::Vec2([0.0, 0.0]));
+        assert_eq!(
+            key_row_default_value(KeyRow::MaskOpacity(MaskId(7))),
+            Value::F64(1.0),
+            "mask opacity の既定は layer Opacity と同じ比 1.0 のはず"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // MASK section(B02 第1切片): mode 巡回・inverted トグル・opacity field
+    // -----------------------------------------------------------------------
+
+    /// mode は宣言順の6値を一周して戻る(`next_blend_mode` のテストと同型)。
+    #[test]
+    fn mask_mode_cycles_through_all_six_modes_and_wraps() {
+        assert_eq!(next_mask_mode(MaskMode::Add), MaskMode::Subtract);
+        assert_eq!(next_mask_mode(MaskMode::Subtract), MaskMode::Intersect);
+        assert_eq!(next_mask_mode(MaskMode::Intersect), MaskMode::Lighten);
+        assert_eq!(next_mask_mode(MaskMode::Lighten), MaskMode::Darken);
+        assert_eq!(next_mask_mode(MaskMode::Darken), MaskMode::Difference);
+        assert_eq!(next_mask_mode(MaskMode::Difference), MaskMode::Add);
+    }
+
+    fn three_masks() -> Vec<Mask> {
+        vec![
+            Mask {
+                id: MaskId(1),
+                mode: MaskMode::Add,
+                inverted: false,
+            },
+            Mask {
+                id: MaskId(2),
+                mode: MaskMode::Darken,
+                inverted: true,
+            },
+            Mask {
+                id: MaskId(3),
+                mode: MaskMode::Difference,
+                inverted: false,
+            },
+        ]
+    }
+
+    /// mode 巡回は対象だけを動かし、並び・他の mask・inverted を保つ。
+    /// 居ない id は `None`(stale click は no-op)。
+    #[test]
+    fn masks_with_cycled_mode_touches_only_the_target_and_keeps_the_order() {
+        let masks = three_masks();
+        let new = masks_with_cycled_mode(&masks, MaskId(2)).expect("対象は居るはず");
+        assert_eq!(new.len(), 3);
+        assert_eq!(new[0], masks[0], "対象外(前)の mask が動いている");
+        assert_eq!(new[1].mode, MaskMode::Difference, "宣言順の次 mode のはず");
+        assert_eq!(new[1].id, MaskId(2));
+        assert!(new[1].inverted, "mode 巡回が inverted を巻き込んでいる");
+        assert_eq!(new[2], masks[2], "対象外(後)の mask が動いている");
+
+        assert_eq!(masks_with_cycled_mode(&masks, MaskId(99)), None);
+        assert_eq!(masks_with_cycled_mode(&[], MaskId(1)), None);
+    }
+
+    /// inverted トグルも同型(対象だけ・mode は保つ・stale は `None`)。
+    #[test]
+    fn masks_with_toggled_inverted_flips_only_the_target() {
+        let masks = three_masks();
+        let new = masks_with_toggled_inverted(&masks, MaskId(2)).expect("対象は居るはず");
+        assert!(!new[1].inverted, "true → false へ裏返るはず");
+        assert_eq!(new[1].mode, MaskMode::Darken, "トグルが mode を巻き込んでいる");
+        assert_eq!(new[0], masks[0]);
+        assert_eq!(new[2], masks[2]);
+
+        let back = masks_with_toggled_inverted(&new, MaskId(2)).expect("対象は居るはず");
+        assert_eq!(back, masks, "2回のトグルで元へ戻るはず");
+
+        assert_eq!(masks_with_toggled_inverted(&masks, MaskId(99)), None);
+    }
+
+    /// mask opacity field は既存の値セル文法の対応表(property/単位/精度/感度)へ
+    /// layer Opacity と同格で乗る。
+    #[test]
+    fn the_mask_opacity_field_joins_the_existing_value_cell_grammar() {
+        let field = TransformField::MaskOpacity(MaskId(4));
+        assert_eq!(
+            property_id(field).expect("mask opacity の property は作れる"),
+            PropertyId::mask_opacity(MaskId(4))
+        );
+        // 表示 % → store 比(clamp 込み — layer Opacity と同じ写像)。
+        assert_eq!(next_value(field, 50.0, [0.0, 0.0]), Value::F64(0.5));
+        assert_eq!(next_value(field, 150.0, [0.0, 0.0]), Value::F64(1.0));
+        assert_eq!(next_value(field, -10.0, [0.0, 0.0]), Value::F64(0.0));
+        assert_eq!(field_decimals(field), 0, "% 表示は整数(layer Opacity と同じ)");
+        assert_eq!(
+            dragged_value(field, 50.0, 20.0, false),
+            70.0,
+            "drag 感度は 1px = 1%(layer Opacity と同じ)のはず"
+        );
+    }
+
+    /// drag の起点は MASK section の opacity 行からも読める(drag-to-scrub が
+    /// mask opacity セルでも同じに効くための投影側の口)。
+    #[test]
+    fn drag_origin_finds_the_mask_opacity_slot() {
+        let field = TransformField::MaskOpacity(MaskId(1));
+        let selection = SelectionProjection {
+            layer: LayerId(1),
+            kind: "solid",
+            transform: vec![],
+            attrs: AttrsProjection {
+                name: String::new(),
+                hidden: false,
+                blend_mode: "Normal".to_owned(),
+                speed_percent: 100.0,
+            },
+            masks: vec![MaskRowProjection {
+                id: MaskId(1),
+                mode: MaskMode::Add,
+                inverted: false,
+                opacity: TransformRowProjection {
+                    label: "Opacity",
+                    value: RowValue::Scalar(ComponentSlot {
+                        axis: "Opacity",
+                        present: true,
+                        value: 80.0,
+                        editable: true,
+                        keyed: false,
+                        field: Some(field),
+                    }),
+                    decimals: 0,
+                    key: KeyCellProjection {
+                        row: KeyRow::MaskOpacity(MaskId(1)),
+                        state: KeyCellState::Static,
+                    },
+                },
+            }],
+        };
+        let (start, _) = drag_origin(&selection, field).expect("mask opacity は editable のはず");
+        assert_eq!(start, 80.0, "起点は投影の表示値(%)のはず");
+        assert!(
+            drag_origin(&selection, TransformField::MaskOpacity(MaskId(9))).is_none(),
+            "別の mask id の field では drag を始めないはず"
+        );
     }
 
     #[test]
