@@ -8,3 +8,10 @@ license.workspace = true
 # `Session`/`KeySelector`/`KeySelectionOp` は `LayerId`/`PropertyId` しか持たない —
 # leaf crate(依存ゼロに近い、motolii_store のみ)。
 motolii-store.workspace = true
+# `layout` モジュール(B26)の永続化口(serde ラウンドトリップ)専用。iced には
+# 依存しない — motolii-store が既に serde を workspace へ引いているため
+# Cargo.lock への新規追加は無い(motolii-vector Cargo.toml の同種コメント参照)。
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

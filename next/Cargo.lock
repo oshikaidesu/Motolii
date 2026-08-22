@@ -3897,6 +3897,8 @@ name = "motolii-shell-state"
 version = "0.1.0"
 dependencies = [
  "motolii-store",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

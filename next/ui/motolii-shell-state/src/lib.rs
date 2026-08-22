@@ -16,10 +16,16 @@
 //!
 //! 純粋な再配置: 型の定義・フィールド・ロジックは無改変、置き場所だけを
 //! `motolii-shell/src/state.rs` からここへ移した。
+//!
+//! [`layout`] モジュール(B26 発注書、2026-08-22)は上記2型とは独立した
+//! 追加——ワークスペースレイアウト(pane 分割木)の状態モデル。詳細は
+//! 同モジュールの doc 参照。
 
 use std::collections::HashSet;
 
 use motolii_store::{LayerId, PropertyId};
+
+pub mod layout;
 
 /// front だけが持つ状態。**Document の写しは1つも入れないこと**。
 #[derive(Debug, Clone)]
