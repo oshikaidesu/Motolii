@@ -95,15 +95,16 @@
 
 use motolii_core::{Fps, RationalTime};
 use motolii_store::{
-    property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId,
-    LayerSource, Mask, MaskId, MaskMode, PropertyId, StoreError, StoreView, Value,
+    property, Document, EffectId, EffectInstance, Intent, Interp, Keyframe, KeyframeTrack,
+    LayerAttrsPatch, LayerId, LayerSource, Mask, MaskId, MaskMode, PropertyId, StoreError,
+    StoreView, Value,
 };
 
 use motolii_settings_pane::chrome::{
     panel_container_style, parse_number, section_header, value_input_style,
 };
 use motolii_shell_state::Session;
-use motolii_tokens_rs::{Colors, Dimensions, Ink, TextWeight};
+use motolii_tokens_rs::{Colors, Dimensions, Ink, TextWeight, LABEL_PALETTE_LEN};
 
 // ---------------------------------------------------------------------------
 // pane ローカル Message(裁定160 切片8 — root `Message::Inspector(Message)` が
@@ -173,6 +174,30 @@ pub enum Message {
     /// この mask の inverted を裏返す。`ToggleHidden` と同じ即時操作の形
     /// (即1回の `Intent::SetMasks`)。
     ToggleMaskInverted(MaskId),
+
+    // ---- EFFECTS section(B38 編集側 第3切片、裁定184 型別 section 第2号) ----
+    /// この effect を適用済み stack から取り除く。即1回の `Intent::SetEffects`
+    /// (1 click = 1 undo — `CycleMaskMode` と同じ即時操作の形)。取り除いた
+    /// effect の param track(`effect.{id}.param.*`)は Document に残る(inert —
+    /// `StoreView::resolved_effects` は列に居る effect の分しか読まない)。track
+    /// まで同時に消すと Intent が複数になり 1 click = 1 undo が割れるので消さない
+    /// (undo で effect が戻れば param もそのまま戻る、という余得もある)。
+    RemoveEffect(EffectId),
+    /// この effect を1つ上(適用順の前)へ。既に先頭なら **Intent を出さない**
+    /// no-op(空 undo 段を作らない — [`effects_with_moved_up`] が `None` を返す)。
+    MoveEffectUp(EffectId),
+    /// この effect を1つ下(適用順の後)へ。既に末尾なら同じく no-op。
+    MoveEffectDown(EffectId),
+    /// この effect の enabled(`effects/effect/en`)を裏返す — bypass。
+    /// **消さずに切る**(`EffectInstance::enabled` の doc どおり、削除とは別物)。
+    /// `ToggleMaskInverted` と同じ即時操作の形(即1回の `Intent::SetEffects`)。
+    ToggleEffectBypass(EffectId),
+
+    // ---- ラベル色チップ(B03、ident 帯) ----
+    /// ident 帯の色チップ click — `LayerAttrs.label_color` の palette index を
+    /// 宣言順の次へ巡回(即1回の `Intent::SetAttrs`)。pick_list は next/ に
+    /// 前例が無い(BL2 の決定)ので、既存の巡回ボタン文法をそのまま使う。
+    CycleLabelColor,
 }
 
 // ---------------------------------------------------------------------------
@@ -200,11 +225,106 @@ pub enum TransformField {
     /// (`PropertyId::mask_opacity`)ので、mask の並べ替え・削除で別の mask へ
     /// 付き直さない(store の同一性設計そのまま)。
     MaskOpacity(MaskId),
+    /// この effect の param(EFFECTS section、B38 第3切片)。
+    /// [`TransformField::MaskOpacity`] と同型の拡張 — 既存の値セル文法
+    /// (`FieldDraft`/drag-to-scrub/`commit_inspector_field` → `Intent::SetTrack`)
+    /// へそのまま乗る。track 名は id + param 名から決まる
+    /// (`PropertyId::effect_param` — `effect.{id}.param.{name}`)ので、stack の
+    /// 並べ替え・削除で別の effect へ付き直さない。param は [`GlowParam`]
+    /// (既知 plugin のカタログ)に閉じる — store は plugin の param カタログを
+    /// 知らない(裁定70、`ResolvedEffect::params` doc)ので、既定値を埋める
+    /// 仕事はこの「plugin 定義を知っている層」の側([`GlowParam::default_value`])。
+    EffectParam(EffectId, GlowParam),
+}
+
+// ---------------------------------------------------------------------------
+// EFFECTS: 既知 plugin の param カタログ(B38 第3切片)
+// ---------------------------------------------------------------------------
+
+/// 内蔵 vism 第1号 Glow の plugin id(裁定153 S4)。**engine 側の変換表
+/// (`next/engine/motolii-engine/src/lib.rs::translate_effect_passes`)と同期を
+/// 保つ義務がある**([`SUPPORTED_BLEND_MODES`] と同じ二重化の形 — engine が
+/// 対応する plugin だけをここに書く)。
+pub const GLOW_PLUGIN_ID: &str = "motolii.glow";
+
+/// Glow の param カタログ(engine `translate_glow_params` が読む3つの named
+/// param)。**enum で閉じる** — [`TransformField`]/[`KeyRow`] は `Copy` なので
+/// param 名を `String` で運べない。既定値・小数桁・drag 感度もここに束ねる
+/// (型別 editor registry の考え方、crate doc 参照)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum GlowParam {
+    /// bright-pass 閾値(engine 既定 1.0 — proof `bright_fs` のハードコード値)。
+    Threshold,
+    /// composite の減衰率(engine 既定 0.75 — proof `composite_fs`)。
+    Intensity,
+    /// blur タップ間隔スケール(engine 既定 1.0 = proof の固定オフセット)。
+    Radius,
+}
+
+impl GlowParam {
+    /// 宣言順 = 表示順(engine `translate_glow_params` の読み出し順と同じ並び)。
+    pub const ALL: [GlowParam; 3] = [
+        GlowParam::Threshold,
+        GlowParam::Intensity,
+        GlowParam::Radius,
+    ];
+
+    /// track 名の断片(`effect.{id}.param.{name}` の `{name}`)。engine の
+    /// `find("threshold", ..)` 等と一致する義務がある(上記の同期義務と同じ)。
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Threshold => "threshold",
+            Self::Intensity => "intensity",
+            Self::Radius => "radius",
+        }
+    }
+
+    /// 行ラベル(表示)。`name` の頭を大文字化しただけ — 発明ではない。
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Threshold => "Threshold",
+            Self::Intensity => "Intensity",
+            Self::Radius => "Radius",
+        }
+    }
+
+    /// track の無い param の既定値。**engine の既定
+    /// (`GLOW_DEFAULT_THRESHOLD`/`INTENSITY`/`RADIUS`、private const)の写し** —
+    /// engine と同期を保つ義務([`GLOW_PLUGIN_ID`] と同じ)。表示既定が engine
+    /// 既定とズレると「値を出しただけで絵が変わって見える」誤読になるため。
+    pub fn default_value(self) -> f64 {
+        match self {
+            Self::Threshold => 1.0,
+            Self::Intensity => 0.75,
+            Self::Radius => 1.0,
+        }
+    }
+}
+
+/// plugin id → param カタログ。**未知 plugin は空**(store は catalog を知らず、
+/// engine も未知 plugin_id を無音 skip する — param 行を捏造しない、M13)。
+pub fn plugin_params(plugin_id: &str) -> &'static [GlowParam] {
+    if plugin_id == GLOW_PLUGIN_ID {
+        &GlowParam::ALL
+    } else {
+        &[]
+    }
+}
+
+/// plugin id → 表示名。既知 plugin だけ人間可読名、未知は plugin_id をそのまま
+/// (M13: 無い意味を有るふりで出さない — id を隠して汎用名を出す方が嘘になる)。
+pub fn plugin_display_name(plugin_id: &str) -> &str {
+    if plugin_id == GLOW_PLUGIN_ID {
+        "Glow"
+    } else {
+        plugin_id
+    }
 }
 
 /// この field の store 上の property。標準 property は予約語でも空でもなく、
-/// mask opacity も `PropertyId::mask_opacity`(構築が失敗し得ない形)なので
-/// 実質失敗し得ない — `motolii_shell::Shell` はこの `Result` を「コードの誤り」
+/// mask opacity は `PropertyId::mask_opacity`(構築が失敗し得ない形)、effect
+/// param も名前が [`GlowParam::name`](静的・非予約語)に閉じるので実質失敗
+/// し得ない — `motolii_shell::Shell` はこの `Result` を「コードの誤り」
 /// として扱ってよい。
 pub fn property_id(field: TransformField) -> Result<PropertyId, StoreError> {
     match field {
@@ -215,6 +335,7 @@ pub fn property_id(field: TransformField) -> Result<PropertyId, StoreError> {
         TransformField::Opacity => PropertyId::new(property::OPACITY),
         TransformField::AnchorX | TransformField::AnchorY => PropertyId::new(property::ANCHOR),
         TransformField::MaskOpacity(id) => Ok(PropertyId::mask_opacity(id)),
+        TransformField::EffectParam(id, param) => PropertyId::effect_param(id, param.name()),
     }
 }
 
@@ -237,6 +358,10 @@ pub fn next_value(field: TransformField, input: f64, current_vec2: [f64; 2]) -> 
             Value::Vec2([current_vec2[0], input])
         }
         TransformField::PositionZ | TransformField::Rotation => Value::F64(input),
+        // effect param は表示 = store 単位(換算なし)。clamp もしない — 値域は
+        // plugin(engine 側 shader)の意味で、editor が知ったかぶりしない
+        // (engine `translate_glow_params` も clamp しない)。
+        TransformField::EffectParam(_, _) => Value::F64(input),
         // 表示は % だが store は 0..1 の比(`property::OPACITY` の既定と同じ単位)。
         // mask opacity も同じ単位(比、`motolii_store::mask` doc「不透明度は比」)。
         TransformField::Opacity | TransformField::MaskOpacity(_) => {
@@ -289,6 +414,9 @@ pub enum KeyRow {
     /// (3状態 oracle・`toggled_key_track`)へそのまま乗る —
     /// [`TransformField::MaskOpacity`] と同じ拡張の形。
     MaskOpacity(MaskId),
+    /// effect param 行(EFFECTS section、B38 第3切片)。同上 —
+    /// [`TransformField::EffectParam`] と同じ拡張の形。
+    EffectParam(EffectId, GlowParam),
 }
 
 impl KeyRow {
@@ -301,20 +429,21 @@ impl KeyRow {
             Self::Rotation => Some(property::ROTATION),
             Self::Opacity => Some(property::OPACITY),
             Self::Anchor => Some(property::ANCHOR),
-            Self::MaskOpacity(_) => None,
+            Self::MaskOpacity(_) | Self::EffectParam(_, _) => None,
         }
     }
 }
 
-/// この行の store 上の property。標準 property・mask opacity のどちらも構築が
-/// 失敗し得ない([`property_id`] と同じ理由 — 呼び手は `Result` を
-/// 「コードの誤り」として扱ってよい)。
+/// この行の store 上の property。標準 property・mask opacity・effect param の
+/// いずれも構築が失敗し得ない([`property_id`] と同じ理由 — 呼び手は `Result`
+/// を「コードの誤り」として扱ってよい)。
 pub fn key_row_property_id(row: KeyRow) -> Result<PropertyId, StoreError> {
     match row {
         KeyRow::MaskOpacity(mask) => Ok(PropertyId::mask_opacity(mask)),
+        KeyRow::EffectParam(effect, param) => PropertyId::effect_param(effect, param.name()),
         _ => PropertyId::new(
             row.static_property_name()
-                .expect("mask 以外の行は静的な property 名を持つ"),
+                .expect("mask/effect 以外の行は静的な property 名を持つ"),
         ),
     }
 }
@@ -328,6 +457,8 @@ pub fn key_row_default_value(row: KeyRow) -> Value {
         KeyRow::Scale => Value::Vec2([1.0, 1.0]),
         KeyRow::Rotation => Value::F64(0.0),
         KeyRow::Opacity | KeyRow::MaskOpacity(_) => Value::F64(1.0),
+        // effect param の既定は plugin カタログ(= engine 既定の写し)から。
+        KeyRow::EffectParam(_, param) => Value::F64(param.default_value()),
     }
 }
 
@@ -761,6 +892,193 @@ fn apply_mask_list_edit(
     .map_err(|error| format!("mask を書けない: {error}"))
 }
 
+// ---------------------------------------------------------------------------
+// EFFECTS section(B38 編集側 第3切片、裁定184 型別 section 第2号)— stack の
+// remove / reorder / bypass の意味と書き口。param の値編集は
+// `TransformField::EffectParam` 経由で既存の値セル文法が書くので、ここに
+// param の書き口は無い(MASK section と同じ分担)。
+// ---------------------------------------------------------------------------
+
+/// 取り除いた後の effect 一覧(純関数 — [`masks_with_cycled_mode`] と同型)。
+/// 対象が居なければ `None`(stale click — 呼び手は no-op)。param track の
+/// 扱いは [`Message::RemoveEffect`] の doc(残す — 1 click = 1 undo を保つ)。
+pub fn effects_with_removed(
+    effects: &[EffectInstance],
+    target: EffectId,
+) -> Option<Vec<EffectInstance>> {
+    effects.iter().any(|effect| effect.id == target).then(|| {
+        effects
+            .iter()
+            .filter(|effect| effect.id != target)
+            .cloned()
+            .collect()
+    })
+}
+
+/// 1つ上(適用順の前)へ動かした後の一覧。対象が居ない**か既に先頭**なら
+/// `None` — 端での click に空の `Intent::SetEffects`(実質無変更の undo 段)を
+/// 積まないため(mask 系の「stale click は黙って捨てる」と同じ安全側の拡張)。
+pub fn effects_with_moved_up(
+    effects: &[EffectInstance],
+    target: EffectId,
+) -> Option<Vec<EffectInstance>> {
+    let index = effects.iter().position(|effect| effect.id == target)?;
+    if index == 0 {
+        return None;
+    }
+    let mut out = effects.to_vec();
+    out.swap(index - 1, index);
+    Some(out)
+}
+
+/// 1つ下(適用順の後)へ。[`effects_with_moved_up`] の対 — 末尾なら `None`。
+pub fn effects_with_moved_down(
+    effects: &[EffectInstance],
+    target: EffectId,
+) -> Option<Vec<EffectInstance>> {
+    let index = effects.iter().position(|effect| effect.id == target)?;
+    if index + 1 >= effects.len() {
+        return None;
+    }
+    let mut out = effects.to_vec();
+    out.swap(index, index + 1);
+    Some(out)
+}
+
+/// enabled を裏返した後の一覧([`masks_with_toggled_inverted`] と同型)。
+pub fn effects_with_toggled_enabled(
+    effects: &[EffectInstance],
+    target: EffectId,
+) -> Option<Vec<EffectInstance>> {
+    effects.iter().any(|effect| effect.id == target).then(|| {
+        effects
+            .iter()
+            .map(|effect| {
+                if effect.id == target {
+                    EffectInstance {
+                        enabled: !effect.enabled,
+                        ..effect.clone()
+                    }
+                } else {
+                    effect.clone()
+                }
+            })
+            .collect()
+    })
+}
+
+/// EFFECTS section の remove — 即1回の `Intent::SetEffects`
+/// ([`cycle_inspector_mask_mode`] と同じ即時操作の形)。選択なし・対象なしは
+/// 黙って no-op(`Ok(())`)、書き込み失敗だけ `Err` の理由文(M13)。
+pub fn remove_inspector_effect(
+    doc: &mut Document,
+    selection: Option<LayerId>,
+    effect: EffectId,
+) -> Result<(), String> {
+    apply_effect_list_edit(doc, selection, |effects| {
+        effects_with_removed(effects, effect)
+    })
+}
+
+/// EFFECTS section の上へ移動([`remove_inspector_effect`] と同型)。端は no-op。
+pub fn move_inspector_effect_up(
+    doc: &mut Document,
+    selection: Option<LayerId>,
+    effect: EffectId,
+) -> Result<(), String> {
+    apply_effect_list_edit(doc, selection, |effects| {
+        effects_with_moved_up(effects, effect)
+    })
+}
+
+/// EFFECTS section の下へ移動(同上)。
+pub fn move_inspector_effect_down(
+    doc: &mut Document,
+    selection: Option<LayerId>,
+    effect: EffectId,
+) -> Result<(), String> {
+    apply_effect_list_edit(doc, selection, |effects| {
+        effects_with_moved_down(effects, effect)
+    })
+}
+
+/// EFFECTS section の bypass トグル(同上)。
+pub fn toggle_inspector_effect_bypass(
+    doc: &mut Document,
+    selection: Option<LayerId>,
+    effect: EffectId,
+) -> Result<(), String> {
+    apply_effect_list_edit(doc, selection, |effects| {
+        effects_with_toggled_enabled(effects, effect)
+    })
+}
+
+/// remove/reorder/bypass 共通の書き口([`apply_mask_list_edit`] と同型):
+/// 今の一覧を読み、純関数で編集後の一覧を作り、1回の `Intent::SetEffects` で書く。
+/// `edit` が `None` を返したら Intent を出さない(stale click・端 reorder)。
+fn apply_effect_list_edit(
+    doc: &mut Document,
+    selection: Option<LayerId>,
+    edit: impl FnOnce(&[EffectInstance]) -> Option<Vec<EffectInstance>>,
+) -> Result<(), String> {
+    let Some(layer) = selection else {
+        return Ok(());
+    };
+    let effects = doc
+        .view()
+        .effects(layer)
+        .map_err(|error| format!("effect を読めない: {error}"))?;
+    let Some(new_effects) = edit(&effects) else {
+        return Ok(());
+    };
+    doc.apply(Intent::SetEffects {
+        layer,
+        effects: new_effects,
+    })
+    .map_err(|error| format!("effect を書けない: {error}"))
+}
+
+// ---------------------------------------------------------------------------
+// ラベル色チップ(B03)— 巡回の意味と書き口。
+// ---------------------------------------------------------------------------
+
+/// チップ click 後の palette index。未割当(`None` — 旧ドキュメントの読み戻し)
+/// は先頭(0)から始め、以後は宣言順で一周する([`next_blend_mode`] と同じ
+/// 巡回ボタン文法)。`LABEL_PALETTE_LEN` 以上の index が Document に入っていた
+/// 場合(起こらないはず — 書き手は全て `% LABEL_PALETTE_LEN` 済み)も
+/// 剰余で一覧内へ戻る(`next_blend_mode` の「非対応値は先頭へ」と同じ寛容)。
+pub fn next_label_color(current: Option<u8>) -> u8 {
+    match current {
+        None => 0,
+        Some(index) => ((index as usize + 1) % LABEL_PALETTE_LEN) as u8,
+    }
+}
+
+/// ラベル色チップ — 即1回の `Intent::SetAttrs`(`ToggleHidden` と同じ即時操作の
+/// 形、patch は `label_color` 1フィールドのみ)。選択なしは黙って no-op。
+/// `None`(未割当へ戻す)への巡回は持たない — 生成時に全 layer が自動割当
+/// (`motolii_shell::label_color_for_new_layer`)されるので「色を外す」意図は
+/// 束の採用行に無い(B03 の None 行は見送り、RETURN 参照)。
+pub fn cycle_inspector_label_color(
+    doc: &mut Document,
+    selection: Option<LayerId>,
+) -> Result<(), String> {
+    let Some(layer) = selection else {
+        return Ok(());
+    };
+    let attrs = doc
+        .view()
+        .attrs(layer)
+        .map_err(|error| format!("attrs を読めない: {error}"))?
+        .unwrap_or_default();
+    let patch = LayerAttrsPatch {
+        label_color: Some(Some(next_label_color(attrs.label_color))),
+        ..Default::default()
+    };
+    doc.apply(Intent::SetAttrs { layer, patch })
+        .map_err(|error| format!("ラベル色を書けない: {error}"))
+}
+
 /// [`project`] が組む行の decimals は field ごとに固定(Position/Scale/Anchor=3、
 /// Rotation=1、Opacity=0)。click→type 編集の下書き初期値を作るのに要る
 /// (`TransformRowProjection::decimals` を持つ行を毎回作り直さずに済む)。
@@ -768,6 +1086,8 @@ pub fn field_decimals(field: TransformField) -> usize {
     match field {
         TransformField::Rotation => 1,
         TransformField::Opacity | TransformField::MaskOpacity(_) => 0,
+        // Glow 既定(1.0/0.75/1.0)の桁がそのまま読める最小の桁。
+        TransformField::EffectParam(_, _) => 2,
         _ => 3,
     }
 }
@@ -797,6 +1117,9 @@ fn drag_step_per_pixel(field: TransformField) -> f64 {
         | TransformField::AnchorY => 1.0,
         TransformField::ScaleX | TransformField::ScaleY => 0.01,
         TransformField::Rotation => 0.5,
+        // effect param は Scale と同じ微調整域(既定 0.75〜1.0 前後の値 —
+        // 1px=1.0 では数 px で意味域を振り切る、Scale と同じ理由)。
+        TransformField::EffectParam(_, _) => 0.01,
         // mask opacity は layer Opacity と同じ感度(0〜100% が 100px で動く)。
         TransformField::Opacity | TransformField::MaskOpacity(_) => 1.0,
     }
@@ -852,6 +1175,16 @@ pub fn drag_origin(
             }
         }
     }
+    // EFFECTS section の param 行(scalar のみ — Glow カタログに Vec2 は無い)。
+    for effect_row in &selection.effects {
+        for param_row in &effect_row.params {
+            if let RowValue::Scalar(slot) = &param_row.value {
+                if slot.field == Some(field) {
+                    return slot.editable.then_some((slot.value, [0.0, 0.0]));
+                }
+            }
+        }
+    }
     None
 }
 
@@ -860,10 +1193,16 @@ pub fn drag_origin(
 /// (mouse_area は press を own できても、フォーカスは text_input 自身の仕事
 /// — click 直後にはまだ text_input が木に無いので自動フォーカスされない)。
 pub fn field_input_id(field: TransformField) -> iced::widget::Id {
-    // mask opacity だけ id が動的(mask の枚数は静的に決まらない)。fork の
+    // mask opacity / effect param は id が動的(枚数は静的に決まらない)。fork の
     // `Id::new` は `&'static str` 限定だが `From<String>`(Cow::Owned)がある。
     if let TransformField::MaskOpacity(mask) = field {
         return iced::widget::Id::from(format!("inspector-field-mask-{mask}-opacity"));
+    }
+    if let TransformField::EffectParam(effect, param) = field {
+        return iced::widget::Id::from(format!(
+            "inspector-field-effect-{effect}-{}",
+            param.name()
+        ));
     }
     let name: &'static str = match field {
         TransformField::PositionX => "inspector-field-position-x",
@@ -875,7 +1214,9 @@ pub fn field_input_id(field: TransformField) -> iced::widget::Id {
         TransformField::Opacity => "inspector-field-opacity",
         TransformField::AnchorX => "inspector-field-anchor-x",
         TransformField::AnchorY => "inspector-field-anchor-y",
-        TransformField::MaskOpacity(_) => unreachable!("上の early return が拾う"),
+        TransformField::MaskOpacity(_) | TransformField::EffectParam(_, _) => {
+            unreachable!("上の early return が拾う")
+        }
     };
     iced::widget::Id::new(name)
 }
@@ -952,6 +1293,27 @@ pub struct AttrsProjection {
     /// `LayerTiming.speed` の表示 %(100=等速、SP1 第一波)。`meta` が読めない
     /// (起こらないはず)場合は等速(100.0)。[`speed_percent`] がこの写像の実体。
     pub speed_percent: f64,
+    /// ラベル色の palette index(B03、`LayerAttrs.label_color` の写し)。
+    /// `None` = 未割当 — チップは timeline スウォッチと同じフォールバック
+    /// (`way_timeline`)で塗る(`lane_bar::swatch_color` と同じ源・同じ既定)。
+    pub label_color: Option<u8>,
+}
+
+/// effect 1本ぶんの投影(EFFECTS section、B38 第3切片・裁定184 型別 section
+/// 第2号)。静止する部分(名前・enabled)は store の [`EffectInstance`] の写し、
+/// 動く部分(param)は既存の値セル行文法([`TransformRowProjection`])を
+/// そのまま再利用する — [`MaskRowProjection`] と同じ分担。
+#[derive(Clone, Debug, PartialEq)]
+pub struct EffectRowProjection {
+    pub id: EffectId,
+    /// 表示名([`plugin_display_name`] — 既知 plugin は人間可読名、未知は
+    /// plugin_id そのまま)。
+    pub name: String,
+    /// `effects/effect/en`。false = bypass 中(消えてはいない)。
+    pub enabled: bool,
+    /// param 値行([`plugin_params`] のカタログ順)。未知 plugin は空 —
+    /// store は catalog を知らないので param 行を捏造しない(M13)。
+    pub params: Vec<TransformRowProjection>,
 }
 
 /// mask 1枚ぶんの投影(MASK section、B02 第1切片・裁定184)。静止する部分
@@ -982,6 +1344,9 @@ pub struct SelectionProjection {
     /// (Q0: mask の無い layer に効かない chrome を並べない — `empty_state` と
     /// 同じ判断)。裁定184「型別 section で拡張」の第1号。
     pub masks: Vec<MaskRowProjection>,
+    /// EFFECTS section の行(store の並び = 適用順どおり)。空なら section 自体を
+    /// 出さない(masks と同じ Q0 判断)。裁定184 型別 section の第2号。
+    pub effects: Vec<EffectRowProjection>,
 }
 
 /// [`SelectionProjection::kind`] の出典。`LayerSource` の variant 名をそのまま
@@ -1199,6 +1564,7 @@ pub fn project(
             .as_ref()
             .map(|meta| speed_percent(meta.timing.speed.num(), meta.timing.speed.den()))
             .unwrap_or(100.0),
+        label_color: attrs.label_color,
     };
 
     let kind = meta
@@ -1241,6 +1607,47 @@ pub fn project(
         });
     }
 
+    // EFFECTS section(B38 第3切片): store の並び = 適用順どおり。param 行は
+    // 既知 plugin のカタログ([`plugin_params`])分だけ — track を読み、無ければ
+    // engine 既定の写し([`GlowParam::default_value`])。表示 = store 単位
+    // (opacity 系と違い % 換算しない)。
+    let mut effect_rows = Vec::new();
+    for effect in store.effects(layer)? {
+        let mut param_rows = Vec::new();
+        for param in plugin_params(&effect.plugin_id) {
+            let property = PropertyId::effect_param(effect.id, param.name())?;
+            let track = store.track(layer, &property)?;
+            let keyed = has_real_keys(track.as_ref());
+            let value = match store.value_at(layer, &property, t)? {
+                Some(Value::F64(v)) => v,
+                _ => param.default_value(),
+            };
+            let state = key_cell_state(track.as_ref(), session.playhead, composition.fps);
+            param_rows.push(TransformRowProjection {
+                label: param.label(),
+                value: RowValue::Scalar(ComponentSlot {
+                    axis: param.label(),
+                    present: true,
+                    value,
+                    editable: true,
+                    keyed,
+                    field: Some(TransformField::EffectParam(effect.id, *param)),
+                }),
+                decimals: field_decimals(TransformField::EffectParam(effect.id, *param)),
+                key: KeyCellProjection {
+                    row: KeyRow::EffectParam(effect.id, *param),
+                    state,
+                },
+            });
+        }
+        effect_rows.push(EffectRowProjection {
+            id: effect.id,
+            name: plugin_display_name(&effect.plugin_id).to_owned(),
+            enabled: effect.enabled,
+            params: param_rows,
+        });
+    }
+
     Ok(Some(SelectionProjection {
         layer,
         kind,
@@ -1253,6 +1660,7 @@ pub fn project(
         ],
         attrs: attrs_projection,
         masks: mask_rows,
+        effects: effect_rows,
     }))
 }
 
@@ -1678,6 +2086,11 @@ fn selected_body(
     if !selection.masks.is_empty() {
         rows = rows.push(mask_section(&selection.masks, field_draft, dims, colors));
     }
+    // EFFECTS section(B38 第3切片、裁定184 型別 section 第2号): effect を持つ
+    // layer でのみ現れる(MASK section と同じ Q0 判断)。
+    if !selection.effects.is_empty() {
+        rows = rows.push(effects_section(&selection.effects, field_draft, dims, colors));
+    }
     rows = rows.push(hint_row(dims, colors));
 
     scrollable(rows).height(Length::Fill).into()
@@ -1735,6 +2148,86 @@ fn mask_ident_row(
         .padding([0.0, dims.spacing_s])
         .on_press(Message::ToggleMaskInverted(id))
         .style(move |_theme, status| glyph_button_style(dims, colors, status, inverted)),
+    ]
+    .spacing(dims.spacing_xs)
+    .align_y(iced::alignment::Vertical::Center);
+
+    bordered_row(content.into(), dims)
+}
+
+/// EFFECTS section: effect 1本 = ident 行(名前 + ↑↓ reorder + Bypass トグル +
+/// Remove)+ param 値行([`transform_row`] そのまま — 値セル/Key 列の文法を
+/// 再利用)。[`mask_section`] と同じ構成 — section header・行高・余白はすべて
+/// 既存トークン、新しい寸法・色ロールを発明しない(裁定179/S4)。
+fn effects_section(
+    effects: &[EffectRowProjection],
+    field_draft: Option<&FieldDraft>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let mut section = column![section_header("EFFECTS", dims, colors)];
+    for effect_row in effects {
+        section = section.push(effect_ident_row(effect_row, dims, colors));
+        for param_row in &effect_row.params {
+            section = section.push(transform_row(param_row, field_draft, dims, colors));
+        }
+    }
+    section.into()
+}
+
+/// effect 1本の ident 行: 名前ラベル(bypass 中は ink2 — 「効いていない」の
+/// 視覚合図、hidden layer の扱いと同型)+ ↑/↓(reorder、[`flat_button_style`])+
+/// Bypass トグル(mask の Inverted と同じ「チップ輪郭=状態の器」文法 —
+/// bypass=on の時だけ accent 縁)+ Remove([`flat_button_style`])。
+/// glyph 1文字では意図が読めない語(Bypass/Remove)は語で出す(意図優先・
+/// 裁定174、mask Inverted と同じ判断)。↑↓ は「上へ/下へ」の意図がそのまま
+/// 読める最小の記号なので語にしない。
+fn effect_ident_row(
+    effect_row: &EffectRowProjection,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let id = effect_row.id;
+    let bypassed = !effect_row.enabled;
+    let name_color = if bypassed {
+        Ink::Secondary.resolve(&colors)
+    } else {
+        colors.text_primary
+    };
+
+    let caption_button = |label: &'static str, message: Message| {
+        button(
+            text(label)
+                .size(dims.caption_text)
+                .align_x(iced::alignment::Horizontal::Center)
+                .align_y(iced::alignment::Vertical::Center),
+        )
+        .height(Length::Fixed(glyph_height(dims)))
+        .padding([0.0, dims.spacing_s])
+        .on_press(message)
+        .style(move |_theme, status| flat_button_style(colors, status))
+    };
+
+    let content = row_widget![
+        text(effect_row.name.clone())
+            .size(dims.body_text)
+            .color(name_color)
+            .width(Length::Fill),
+        caption_button("↑", Message::MoveEffectUp(id)),
+        caption_button("↓", Message::MoveEffectDown(id)),
+        // bypass トグル(mask Inverted と同じ「状態の器」文法 — on の時だけ
+        // accent 縁。押しても消えない = 「消さずに切る」を器で語る)。
+        button(
+            text("Bypass")
+                .size(dims.caption_text)
+                .align_x(iced::alignment::Horizontal::Center)
+                .align_y(iced::alignment::Vertical::Center),
+        )
+        .height(Length::Fixed(glyph_height(dims)))
+        .padding([0.0, dims.spacing_s])
+        .on_press(Message::ToggleEffectBypass(id))
+        .style(move |_theme, status| glyph_button_style(dims, colors, status, bypassed)),
+        caption_button("Remove", Message::RemoveEffect(id)),
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
@@ -1801,9 +2294,13 @@ fn ident_band(
     .align_y(iced::alignment::Vertical::Center);
 
     container(
-        row_widget![identity, glyphs]
-            .spacing(dims.spacing_s)
-            .align_y(iced::alignment::Vertical::Center),
+        row_widget![
+            label_color_chip(selection.attrs.label_color, dims, colors),
+            identity,
+            glyphs
+        ]
+        .spacing(dims.spacing_s)
+        .align_y(iced::alignment::Vertical::Center),
     )
     .padding([dims.spacing_s, dims.spacing_m])
     .style(move |_theme| container::Style {
@@ -1818,6 +2315,68 @@ fn ident_band(
         ..container::Style::default()
     })
     .into()
+}
+
+/// ラベル色チップ(B03、ident 帯)。正方形の色見本 — 塗りは timeline の行
+/// スウォッチ(`motolii-timeline-pane::lane_bar::swatch_color`)と同じ源・
+/// 同じ既定: `label_color` index → `colors.label_palette`、未割当は
+/// `way_timeline` へフォールバック(同じ意味役割の色を2箇所で別の式にしない)。
+/// click で palette を巡回([`Message::CycleLabelColor`] → [`next_label_color`]
+/// — 巡回ボタン文法、BL2 と同じ理由で pick_list は導入しない)。
+fn label_color_chip(
+    label_color: Option<u8>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let chip_color = label_color
+        .and_then(|index| colors.label_palette.get(index as usize))
+        .copied()
+        .unwrap_or(colors.way_timeline);
+    let side = label_chip_side(dims.inspector_row_height);
+    button(text(""))
+        .width(Length::Fixed(side))
+        .height(Length::Fixed(side))
+        .padding(0.0)
+        .on_press(Message::CycleLabelColor)
+        .style(move |_theme, status| label_chip_style(dims, colors, chip_color, status))
+        .into()
+}
+
+/// チップの1辺。timeline rail の正方形チップ
+/// (`motolii-timeline-pane::lane_bar::glyph_size_px` = `round(0.462 × 行高)`、
+/// 裁定172 §2 (2))と同じ式 — 別 crate なので共有関数は置けない(式だけ揃える、
+/// [`sibling_gap_px`] と同じ判断)。**`inspector_glyph_width`(26px)は使わない**
+/// — その寸法は shell 側 `inspector_pixel_fence` が「M 1個 + Key 5個 = 6個」を
+/// 数え上げる柵の対象なので、同寸の箱を足すと柵が壊れる(幾何を壊さない、
+/// 発注書の柵)。
+fn label_chip_side(row_height: f32) -> f32 {
+    (row_height * 0.462).round().max(1.0)
+}
+
+/// チップの style。面 = ラベル色そのもの(色見本 — 色が内容なので平常から
+/// 塗る。裁定179「箱は状態の器」の例外ではなく、これは箱ではなく swatch)。
+/// hover で `border_default` の縁(値セル hover と同じ「触れる」合図の文法 —
+/// 新しい意匠を発明しない)。
+fn label_chip_style(
+    dims: Dimensions,
+    colors: Colors,
+    chip_color: iced::Color,
+    status: button::Status,
+) -> button::Style {
+    let border_color = match status {
+        button::Status::Hovered | button::Status::Pressed => colors.border_default,
+        _ => iced::Color::TRANSPARENT,
+    };
+    button::Style {
+        background: Some(iced::Background::Color(chip_color)),
+        text_color: colors.text_primary,
+        border: iced::Border {
+            color: border_color,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        ..button::Style::default()
+    }
 }
 
 /// mock の `.cols` 行: 「Property X Y Z Key」を1度だけ出す。各 `.prow` 側は
@@ -2666,6 +3225,81 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
+    // B38 第3切片: Glow param カタログ(engine 同期義務の柵)
+    // -----------------------------------------------------------------------
+
+    /// カタログの3点固定: 名前は engine `translate_glow_params` の `find` 名、
+    /// 既定値は engine の `GLOW_DEFAULT_*`(private const)の写し —
+    /// [`SUPPORTED_BLEND_MODES`] と同じ二重化なので、engine 側を変えたら
+    /// ここが red になって同期漏れを拾う(値の正本は engine 側)。
+    #[test]
+    fn the_glow_param_catalog_mirrors_the_engine_names_and_defaults() {
+        assert_eq!(GlowParam::ALL.len(), 3);
+        assert_eq!(GlowParam::Threshold.name(), "threshold");
+        assert_eq!(GlowParam::Intensity.name(), "intensity");
+        assert_eq!(GlowParam::Radius.name(), "radius");
+        assert_eq!(GlowParam::Threshold.default_value(), 1.0);
+        assert_eq!(GlowParam::Intensity.default_value(), 0.75);
+        assert_eq!(GlowParam::Radius.default_value(), 1.0);
+    }
+
+    /// 既知 plugin(`motolii.glow`)だけカタログと表示名を持ち、未知は
+    /// param 行ゼロ + plugin_id そのまま(M13: 捏造しない)。
+    #[test]
+    fn plugin_catalog_and_display_name_are_honest_about_unknown_plugins() {
+        assert_eq!(plugin_params(GLOW_PLUGIN_ID).len(), 3);
+        assert!(plugin_params("third-party.sparkle").is_empty());
+        assert_eq!(plugin_display_name(GLOW_PLUGIN_ID), "Glow");
+        assert_eq!(
+            plugin_display_name("third-party.sparkle"),
+            "third-party.sparkle"
+        );
+    }
+
+    /// effect param の field/KeyRow → property の対応が
+    /// `effect.{id}.param.{name}` に落ちる(mask opacity の対応固定と同型)。
+    #[test]
+    fn effect_param_fields_and_key_rows_map_to_the_flat_effect_property() {
+        let expected =
+            PropertyId::effect_param(EffectId(7), "radius").expect("param 名は非予約語");
+        assert_eq!(
+            property_id(TransformField::EffectParam(EffectId(7), GlowParam::Radius))
+                .expect("作れるはず"),
+            expected
+        );
+        assert_eq!(
+            key_row_property_id(KeyRow::EffectParam(EffectId(7), GlowParam::Radius))
+                .expect("作れるはず"),
+            expected
+        );
+        assert_eq!(
+            key_row_default_value(KeyRow::EffectParam(EffectId(7), GlowParam::Intensity)),
+            Value::F64(0.75),
+            "Key 列の初キー値も engine 既定の写しのはず"
+        );
+    }
+
+    /// ラベル色チップの1辺は timeline rail のチップ式(`round(0.462 × 行高)`)
+    /// と同じで、**`inspector_glyph_width`(26px)とは一致しない** — shell 側
+    /// `inspector_pixel_fence` の glyph 数え上げ(M 1個 + Key 5個 = 6個)を
+    /// 壊さないための幾何の柵。
+    #[test]
+    fn the_label_chip_side_follows_the_timeline_swatch_formula_not_the_glyph_width() {
+        let dims = Dimensions::default();
+        let side = label_chip_side(dims.inspector_row_height);
+        assert_eq!(side, (dims.inspector_row_height * 0.462).round());
+        assert_ne!(
+            side, dims.inspector_glyph_width,
+            "チップが glyph 幅と同寸だと pixel fence の数え上げに紛れ込む"
+        );
+        assert_ne!(
+            side,
+            glyph_height(dims),
+            "チップ高が glyph 高と同じでも幅26px側の柵対象になり得る(正方形なので両辺を外す)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
     // SP1 第一波: %⇄Speed 写像(ORACLE (b))
     // -----------------------------------------------------------------------
 
@@ -2968,8 +3602,10 @@ mod tests {
                 hidden: false,
                 blend_mode: "Normal".to_owned(),
                 speed_percent: 100.0,
+                label_color: None,
             },
             masks: vec![],
+            effects: vec![],
         };
 
         let (start, current_vec2) =
@@ -3014,8 +3650,10 @@ mod tests {
                 hidden: false,
                 blend_mode: "Normal".to_owned(),
                 speed_percent: 100.0,
+                label_color: None,
             },
             masks: vec![],
+            effects: vec![],
         };
         let (start, _) = drag_origin(&selection, TransformField::Rotation)
             .expect("キー持ち field もドラッグを始められるはず(Q0)");
@@ -3462,6 +4100,7 @@ mod tests {
                 hidden: false,
                 blend_mode: "Normal".to_owned(),
                 speed_percent: 100.0,
+                label_color: None,
             },
             masks: vec![MaskRowProjection {
                 id: MaskId(1),
@@ -3484,6 +4123,7 @@ mod tests {
                     },
                 },
             }],
+            effects: vec![],
         };
         let (start, _) = drag_origin(&selection, field).expect("mask opacity は editable のはず");
         assert_eq!(start, 80.0, "起点は投影の表示値(%)のはず");
