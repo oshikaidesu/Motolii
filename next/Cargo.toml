@@ -19,6 +19,7 @@ members = [
     "engine/motolii-vector",
     "shell/motolii-shell",
     "ui/motolii-browser-pane",
+    "ui/motolii-css-metrics",
     "ui/motolii-inspector-pane",
     "ui/motolii-settings-pane",
     "ui/motolii-tokens-rs",

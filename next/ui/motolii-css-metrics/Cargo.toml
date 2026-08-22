@@ -1,0 +1,36 @@
+# wraps: blitz-dom+stylo(CSS 計算値抽出)。裁定183 検証層 — mock を機械で測り
+# 実装の実寸と照合する ±1px oracle の分母。移植元 = 旧 workspace
+# `crates/motolii-ui/src/css_metrics/`(不変・歴史証拠)。
+#
+# GPU 不要の構成: blitz-dom は default-features を切る(svg/woff/accessibility/
+# custom-widget=anyrender を落とす — 描画も widget 化もしない、layout+style の
+# 読み戻しだけ)。"system-fonts" だけ残す — 文字を含む箱の auto 高さが実フォント
+# の寸で解けないと oracle の分母として噓をつくため。
+#
+# 依存は workspace.dependencies に足さない — この器具だけが blitz/stylo を
+# 引く(発注: next/Cargo.toml へは members 1行のみ)。版は blitz-dom
+# 0.3.0-beta.1(2026-08-22 時点の crates.io 最新 — 旧 workspace の pin と同一)
+# が固定する stylo 0.19 / taffy 0.12 に揃える。stylo 0.20 は出ているが
+# blitz-dom が ^0.19 を要求するため上げられない(上げると ComputedValues が
+# 別型になり読み戻せない)。
+[package]
+name = "motolii-css-metrics"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "motolii-css-metrics"
+path = "src/main.rs"
+
+[dependencies]
+blitz-dom = { version = "=0.3.0-beta.1", default-features = false, features = ["system-fonts"] }
+blitz-html = { version = "=0.3.0-beta.1", default-features = false }
+blitz-traits = { version = "=0.3.0-beta.1", default-features = false }
+# blitz-dom (0.3.0-beta.1) が固定する版と揃える(移植元と同じ理由)。
+style = { version = "0.19.0", package = "stylo" }
+style_traits = { version = "0.19.0", package = "stylo_traits" }
+# `edges()` が `taffy::Rect<f32>` 型を名指すためだけの直接依存。feature は
+# blitz-dom 側の指定(grid ほか)と unify される。
+taffy = { version = "0.12", default-features = false, features = ["std"] }
+serde_json.workspace = true
