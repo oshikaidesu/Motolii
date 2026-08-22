@@ -2641,20 +2641,14 @@ impl Shell {
         .spacing(dims.spacing_m)
         .align_y(iced::alignment::Vertical::Center);
 
+        // 線化 D5(裁定179 文法1): 帯の輪郭線は廃止 — `surface_panel` の面が
+        // app 地から明度1段浮くことが帯の輪郭([`band_chrome_style`] doc 参照)。
         container(content)
             .width(Length::Fill)
             .height(Length::Fixed(dims.panel_header_height))
             .padding([0.0, dims.spacing_s])
             .align_y(iced::alignment::Vertical::Center)
-            .style(move |_theme| container::Style {
-                background: Some(iced::Background::Color(colors.surface_panel)),
-                border: iced::Border {
-                    color: colors.border_default,
-                    width: dims.border_width,
-                    radius: 0.0.into(),
-                },
-                ..container::Style::default()
-            })
+            .style(move |_theme| band_chrome_style(dims, colors))
             .into()
     }
 
@@ -4136,13 +4130,17 @@ fn stage_pane(
     // **高さは `Length::Fill`**(Inspector と並ぶ `row!` の中にいるため、以前の
     // `FillPortion(3)` は `Shell::view` 側のその `row!` 自身が持つ — 2箇所で
     // portion を重ねて割合をずらさない)。
+    // 線化 D5(裁定179 文法1): Stage 容器の輪郭線も透明化(幅だけ残す=幾何
+    // 不変)。letterbox は neutral dark(D8)のまま app 地と同族 — Stage の
+    // 範囲は上の pane 題帯(`surface_raised`)・下の状態帯・隣接 pane の
+    // `surface_panel` 明度段が読ませる(AE=「暗い隙間」の viewer と同文法)。
     container(column![container(body).width(Length::Fill).height(Length::Fill), band].spacing(0.0))
         .width(Length::Fill)
         .height(Length::Fill)
         .style(move |_theme| container::Style {
             background: Some(iced::Background::Color(colors.surface_app)),
             border: iced::Border {
-                color: colors.border_default,
+                color: iced::Color::TRANSPARENT,
                 width: dims.border_width,
                 radius: 0.0.into(),
             },
@@ -4152,11 +4150,28 @@ fn stage_pane(
 }
 
 
-/// shell chrome の線化(裁定137/139)。旧実装は帯に境界を一切持たない生の
-/// `text` で、Stage/Timeline との違いが `spacing_m` の gap だけに頼っていた。
-/// `inspector_pane.rs::hint_row`(footer 注記、border のみ・背景は塗らない)
-/// と同じ grammar をそのまま延長する — status 帯も「今どこからが summary か」
-/// を線で示す。
+/// header 帯・status 帯の共通スタイル。線化 D5(裁定179 文法1、
+/// `docs/reviews/2026-08-22-chrome-grammar-audit.md`): 帯は `surface_panel` の
+/// 面で app 地(`surface_app`)から**明度1段**浮く — 輪郭線は描かない(透明
+/// border で幅だけ残す=幾何不変)。参照3製品の「区切りは明度1段+間隔」の
+/// shell chrome への適用(旧: 裁定139 の hairline 縁)。`pub`:
+/// `tests/suite/band_line_fence.rs` が機械照合する。
+pub fn band_chrome_style(dims: Dimensions, colors: Colors) -> container::Style {
+    container::Style {
+        background: Some(iced::Background::Color(colors.surface_panel)),
+        border: iced::Border {
+            color: iced::Color::TRANSPARENT,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    }
+}
+
+/// shell chrome の status 帯。線化 D5(裁定179 文法1)で旧「border のみ・背景は
+/// 塗らない」(裁定139 の hairline grammar)を上書き — 帯は
+/// [`band_chrome_style`](`surface_panel` の明度1段+透明 border)で header と
+/// 同じ器になり、「今どこからが summary か」は線でなく面の段差が示す。
 fn status_band<'a>(
     status: Option<&str>,
     doc: &Document,
@@ -4176,14 +4191,7 @@ fn status_band<'a>(
     container(text(message).size(dims.caption_text).color(color))
         .width(Length::Fill)
         .padding([dims.spacing_xs, dims.spacing_m])
-        .style(move |_theme| container::Style {
-            border: iced::Border {
-                color: colors.border_default,
-                width: dims.border_width,
-                radius: 0.0.into(),
-            },
-            ..container::Style::default()
-        })
+        .style(move |_theme| band_chrome_style(dims, colors))
         .into()
 }
 

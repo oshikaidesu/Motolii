@@ -40,6 +40,12 @@ use motolii_tokens_rs::{Colors, Dimensions, Ink};
 /// `pub`: `settings_pane` のプリセット/市松トグルボタンに加え、`motolii-shell`
 /// root 側(header の Undo/Redo/+Layer/Settings ボタン)も同じ意味色ロールを
 /// 使う — 状態ごとに専用の色を新設しない。
+///
+/// 線化 D5(裁定179 文法1/4、`docs/reviews/2026-08-22-chrome-grammar-audit.md`):
+/// 常時輪郭は廃止 — 区別は面の明度段(`surface_raised` 地 vs `surface_panel`
+/// パネル地)が担い、border は**透明のまま幅だけ残す**(幾何不変の透明 border
+/// 方式、`chip_outline_fence` と同型)。フェンス=
+/// `tests/chrome_line_fence.rs`。
 pub fn button_style(dims: Dimensions, colors: Colors, status: button::Status) -> button::Style {
     let background = match status {
         button::Status::Hovered => colors.surface_hover,
@@ -56,11 +62,33 @@ pub fn button_style(dims: Dimensions, colors: Colors, status: button::Status) ->
         background: Some(iced::Background::Color(background)),
         text_color,
         border: iced::Border {
-            color: colors.border_default,
+            color: iced::Color::TRANSPARENT,
             width: dims.border_width,
             radius: 0.0.into(),
         },
         ..button::Style::default()
+    }
+}
+
+/// pane 容器(Settings/Inspector の root container)の共通スタイル。
+///
+/// 線化 D5(裁定179 文法1「枠は内容と同族色、段差は明度1段だけ」):
+/// パネルは `surface_panel` の面で app 地(`surface_app`、theme 経由の窓地)
+/// から**明度1段**浮く — 容器の輪郭線は描かない(透明 border で幅だけ残す=
+/// 幾何不変)。区切りは pane_grid の隙間(`spacing_m`、app 地が覗く)と
+/// この明度段が担う(AE=暗い隙間 / Figma=明度差のみ、と同文法)。
+/// `pub`: `settings_pane`(この crate)と `inspector_pane` が同じ容器意匠を
+/// 再利用する — 2箇所で別の意匠を発明しない。フェンス=
+/// `tests/chrome_line_fence.rs`。
+pub fn panel_container_style(dims: Dimensions, colors: Colors) -> container::Style {
+    container::Style {
+        background: Some(iced::Background::Color(colors.surface_panel)),
+        border: iced::Border {
+            color: iced::Color::TRANSPARENT,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
     }
 }
 

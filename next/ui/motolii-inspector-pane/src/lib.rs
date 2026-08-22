@@ -99,7 +99,9 @@ use motolii_store::{
     LayerSource, PropertyId, StoreError, StoreView, Value,
 };
 
-use motolii_settings_pane::chrome::{parse_number, section_header, value_input_style};
+use motolii_settings_pane::chrome::{
+    panel_container_style, parse_number, section_header, value_input_style,
+};
 use motolii_shell_state::Session;
 use motolii_tokens_rs::{Colors, Dimensions, Ink, TextWeight};
 
@@ -1337,38 +1339,39 @@ use iced::widget::{
 };
 use iced::{Element, Length};
 
-/// mock の `.cols`/`.prow` 系の行の border-bottom を模す共通ラッパー(裁定137
-/// 「区切りは面でなく線」・裁定139「面色の塗り分けで区切っている残余を
-/// hairline へ置換する」)。padding・固定高・pane 全幅は**ここ(外側
-/// container)だけ**が持つ — `content` 自身は spacing/align_y だけを持ち、
-/// 自分の width/height を宣言しない(`ident_band` と同じ構造。Fill な子孫
-/// [label 等]を持つ Shrink な row は祖先の container が与える Limits の上限
-/// までしか伸びないので、外側 container の bounds とは一致しない — 496幅
-/// ちょうど/20px高ちょうどの `Container` candidate が二重に現れて
-/// `tests/inspector_pixel_fence.rs` の数え上げを壊す事故を避けられる、実測)。
-///
-/// **既知の限界**(`tests/inspector_pixel_fence.rs` 冒頭に明記済みの限界と
-/// 同じ trade-off): mock は border-bottom のみだが `iced_core::Border`
-/// (0.14.0 実測)は4辺一律にしかできない(per-edge API 無し)。header/
-/// ident_band/section_header と同じ trade-off をここでも受け入れる。
-fn bordered_row(
-    content: Element<'static, Message>,
-    dims: Dimensions,
-    border_color: iced::Color,
-) -> Element<'static, Message> {
+/// `.cols`/`.prow` 系の行スタイル。線化 D5(裁定179 文法1、
+/// `docs/reviews/2026-08-22-chrome-grammar-audit.md`)で罫線は透明化した —
+/// 参照3製品(ableton/figma/AE)はプロパティ行を線で区切らず、区切りは
+/// **固定行高+間隔**が担う(旧: 裁定137/139 の hairline。mock の
+/// `.cols{border-bottom}`/`.prow{border-bottom}` は裁定179 が上書きする —
+/// `chip_outline_fence` の「沈黙部分の上書き」と同じ整理)。透明 border で
+/// 幅だけ残す=幾何不変。`pub`: `tests/row_line_fence.rs` が機械照合する。
+pub fn row_band_style(dims: Dimensions) -> container::Style {
+    container::Style {
+        border: iced::Border {
+            color: iced::Color::TRANSPARENT,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    }
+}
+
+/// `.cols`/`.prow` 系の行の共通ラッパー。padding・固定高・pane 全幅は
+/// **ここ(外側 container)だけ**が持つ — `content` 自身は spacing/align_y
+/// だけを持ち、自分の width/height を宣言しない(`ident_band` と同じ構造。
+/// Fill な子孫[label 等]を持つ Shrink な row は祖先の container が与える
+/// Limits の上限までしか伸びないので、外側 container の bounds とは一致
+/// しない — 496幅ちょうど/20px高ちょうどの `Container` candidate が二重に
+/// 現れて `tests/inspector_pixel_fence.rs` の数え上げを壊す事故を避けられる、
+/// 実測)。スタイルは [`row_band_style`](線化 D5 — 罫線なし・幾何不変)。
+fn bordered_row(content: Element<'static, Message>, dims: Dimensions) -> Element<'static, Message> {
     container(content)
         .width(Length::Fill)
         .height(Length::Fixed(dims.inspector_row_height))
         .padding([0.0, dims.spacing_m])
         .align_y(iced::alignment::Vertical::Center)
-        .style(move |_theme| container::Style {
-            border: iced::Border {
-                color: border_color,
-                width: dims.border_width,
-                radius: 0.0.into(),
-            },
-            ..container::Style::default()
-        })
+        .style(move |_theme| row_band_style(dims))
         .into()
 }
 
@@ -1413,18 +1416,13 @@ pub fn view_with_speed_draft(
         ),
     };
 
+    // 線化 D5(裁定179 文法1): 容器の輪郭線は廃止 — `surface_panel` の面が
+    // app 地から明度1段浮くことが pane の輪郭(`chrome::panel_container_style`
+    // doc 参照、透明 border で幅だけ残す=幾何不変)。
     container(body)
         .width(Length::Fixed(dims.inspector_panel_width))
         .height(Length::Fill)
-        .style(move |_theme| container::Style {
-            background: Some(iced::Background::Color(colors.surface_panel)),
-            border: iced::Border {
-                color: colors.border_default,
-                width: dims.border_width,
-                radius: 0.0.into(),
-            },
-            ..container::Style::default()
-        })
+        .style(move |_theme| panel_container_style(dims, colors))
         .into()
 }
 
@@ -1535,9 +1533,11 @@ fn ident_band(
     )
     .padding([dims.spacing_s, dims.spacing_m])
     .style(move |_theme| container::Style {
+        // 線化 D5(裁定179 文法1): `surface_raised` の面が `surface_panel`
+        // pane 地から明度1段浮く — 輪郭線は透明化(幅だけ残す=幾何不変)。
         background: Some(iced::Background::Color(colors.surface_raised)),
         border: iced::Border {
-            color: colors.border_default,
+            color: iced::Color::TRANSPARENT,
             width: dims.border_width,
             radius: 0.0.into(),
         },
@@ -1574,9 +1574,9 @@ fn column_header_row(dims: Dimensions, colors: Colors) -> Element<'static, Messa
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
 
-    // mock `.cols{border-bottom:var(--line) solid #1a1a1a}` — 不透明な hairline
-    // (`border_default` と同値)。
-    bordered_row(content.into(), dims, colors.border_default)
+    // mock `.cols{border-bottom:var(--line) solid #1a1a1a}` は線化 D5
+    // (裁定179 文法1)が上書き — 罫線なし([`row_band_style`] doc 参照)。
+    bordered_row(content.into(), dims)
 }
 
 // `section_header` は裁定160 切片5(pane split survey §2.4/§6)で
@@ -1620,10 +1620,9 @@ fn transform_row(
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
 
-    // mock `.prow{border-bottom:var(--line) solid rgba(0,0,0,.35)}` — `.cols`
-    // より薄い hairline(裁定142 の先行整備で `tokens::Colors::border_hairline_weak`
-    // へ昇格済み)。
-    bordered_row(content.into(), dims, colors.border_hairline_weak)
+    // mock `.prow{border-bottom:var(--line) solid rgba(0,0,0,.35)}` は線化 D5
+    // (裁定179 文法1)が上書き — 罫線なし([`row_band_style`] doc 参照)。
+    bordered_row(content.into(), dims)
 }
 
 /// 発注書「読み取り専用値は編集セルと同一形状で色だけ落とす」を1箇所で守る —
@@ -2262,7 +2261,7 @@ fn attrs_section(
     // `.prow` 系の行として同じ hairline を使う(mock 断片には Blend 行自体は
     // 無いが、`.prow` の row grammar をそのまま延長する — 発注書 NON-GOALS に
     // ある「新しい視覚言語の発明」ではなく、既存 grammar の適用)。
-    let blend_row = bordered_row(blend_content.into(), dims, colors.border_hairline_weak);
+    let blend_row = bordered_row(blend_content.into(), dims);
 
     column![
         section_header("ATTRS", dims, colors),
@@ -2316,7 +2315,7 @@ fn speed_row(
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
 
-    bordered_row(content.into(), dims, colors.border_hairline_weak)
+    bordered_row(content.into(), dims)
 }
 
 /// mock の hint 行。**「Drag to scrub」は実装済みなので復活させる**
@@ -2327,6 +2326,8 @@ fn speed_row(
 /// 今回初めて本当に効く(`motolii_shell::Shell::cancel_inspector_interaction`)。
 fn hint_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     // `.width(Length::Fill)`: 同上(柵で発見)— mock の `.hint` も pane 全幅の帯。
+    // 線化 D5(裁定179 文法1): hint 行の縁取りも罫線 — 透明化(幅だけ残す=
+    // 幾何不変)。注記は ink 段(`text_muted`)と間隔だけで区別する。
     container(
         text("drag to scrub · click to type · Esc to cancel")
             .size(dims.caption_text)
@@ -2336,7 +2337,7 @@ fn hint_row(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
     .padding([dims.spacing_xs, dims.spacing_m])
     .style(move |_theme| container::Style {
         border: iced::Border {
-            color: colors.border_default,
+            color: iced::Color::TRANSPARENT,
             width: dims.border_width,
             radius: 0.0.into(),
         },
