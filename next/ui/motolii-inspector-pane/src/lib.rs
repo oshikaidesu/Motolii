@@ -150,9 +150,9 @@ pub use projection::{
     TransformRowProjection,
 };
 pub use text::{
-    applied_text_field, commit_text_field, cycle_text_justify, default_text_document,
-    default_text_style, next_text_justify, reset_text_line_height, reset_text_tracking,
-    TextField, TextFieldDraft,
+    applied_text_field, commit_text_field, commit_text_font_pick, cycle_text_justify,
+    default_text_document, default_text_style, next_text_justify, reset_text_line_height,
+    reset_text_tracking, TextField, TextFieldDraft,
 };
 pub use transform::{
     cancel_field_interaction, commit_inspector_field, commit_inspector_name,
@@ -290,6 +290,15 @@ pub enum Message {
     /// Tracking を 0 へ戻すボタン。`ResetSpeed` と同じ即時操作の形(map
     /// 「Reset tracking to 0」、採用予定)。既に0なら no-op。
     ResetTracking,
+    /// 2026-08-22 追い発注「フォントが選べる・選ばなくても落ちない」:
+    /// `font_family_row` の pick_list からの選択(payload = 選んだ family)。
+    /// 手打ち欄(`TextFieldInput`/`TextFieldSubmit` with
+    /// `TextField::FontFamily`)とは別腕 — 下書きを経由しない即時操作
+    /// (`CycleBlendMode` と同じ形)。書き込み本体は
+    /// [`commit_text_font_pick`] — family と path を同時に書く(手打ち欄には
+    /// `path` を編集する手段が無かった穴への対処、
+    /// `text.rs::font_family_row` doc 参照)。
+    PickFont(String),
 
     // ---- 色エディタ(`crate::color`、2026-08-22 発注「歌詞が入れられる道を
     // 通す」で結線) ----

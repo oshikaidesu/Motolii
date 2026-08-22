@@ -19,7 +19,7 @@ use motolii_store::{
 };
 use motolii_tokens_rs::{Colors, Dimensions};
 
-use iced::widget::{button, column, row as row_widget, text, text_input};
+use iced::widget::{button, column, pick_list, row as row_widget, text, text_input};
 use iced::{Element, Length};
 
 use crate::projection::TextSectionProjection;
@@ -87,10 +87,14 @@ pub fn default_text_document() -> TextDocument {
 
 /// スタイル表の既定行(裁定98: `styles[0]` = document 既定値)。この切片は
 /// この1行だけを編集する(範囲スタイル表・アニメーターは次切片)。
+///
+/// **font は `FontRef::default()`(空 path)を使わない**(2026-08-22 追い発注
+/// 「フォントが選べる・選ばなくても落ちない」— `lyric_text_layer_drive.rs`
+/// FINDING の直接対処、[`default_font_ref`] 参照)。
 pub fn default_text_style() -> TextDocumentStyle {
     TextDocumentStyle {
         id: TextStyleId(0),
-        font: FontRef::default(),
+        font: default_font_ref(),
         size: 100.0,
         fill: [0.0, 0.0, 0.0, 1.0],
         line_height: None,
@@ -101,6 +105,28 @@ pub fn default_text_style() -> TextDocumentStyle {
         axes: Vec::new(),
         features: Vec::new(),
     }
+}
+
+/// 既定フォント。**必ず解決できる path を持つ** —
+/// [`motolii_font_catalog::default_font`] が返すのはシステムに実在するファイル
+/// だけ(その crate の契約)。文字を打った瞬間に空 path でのフォント読込へ
+/// 進んで `TextShapeError::FontFile` を出し `render_frame` 全体が `Err` になる
+/// 事故(`lyric_text_layer_drive.rs` モジュール doc の FINDING)は、既定値の
+/// 時点でこれを塞ぐことで発生源を断つ。
+///
+/// システムフォントが1つも見つからない環境(この crate では検出できない・
+/// 直せない)でだけ `FontRef::default()`(空 path)へ落ちる — その場合はそもそも
+/// 描く文字の材料が無い環境なので、これ以上の頑健化は engine 側の仕事
+/// (RETURN 参照)。
+fn default_font_ref() -> FontRef {
+    motolii_font_catalog::default_font()
+        .map(|entry| FontRef {
+            path: entry.path.clone(),
+            fingerprint: None,
+            family: entry.family.clone(),
+            style: entry.style.clone(),
+        })
+        .unwrap_or_default()
 }
 
 /// Justify 巡回ボタンの次の値。`TextJustify` の宣言順(Left → Right →
@@ -134,7 +160,19 @@ pub fn applied_text_field(
         TextField::Content => {
             unreachable!("TextField::Content は commit_text_field が先に分岐して弾く")
         }
-        TextField::FontFamily => next.font.family = input.to_owned(),
+        TextField::FontFamily => {
+            next.font.family = input.to_owned();
+            // 頑健化(2026-08-22 追い発注): 手打ちの family が既知のシステム
+            // フォントに一致すれば path/style も一緒に追従させる —
+            // 「family だけ書いて path が空/不一致のまま」という事故の再発を
+            // ここでも塞ぐ。一致しない自由入力(まだ無い/仮の名前)は path を
+            // **変えない**(前の値が有効な path のままなら描画は前のフォント
+            // の見た目で続く — 黙って壊すより M13「無反応ゼロ」に近い)。
+            if let Some(entry) = motolii_font_catalog::find_family(input) {
+                next.font.path = entry.path.clone();
+                next.font.style = entry.style.clone();
+            }
+        }
         TextField::Size => {
             let value =
                 parse_number(input).ok_or_else(|| format!("数値として読めない: {input}"))?;
@@ -273,6 +311,45 @@ pub fn commit_text_field(
     })
 }
 
+/// pick_list からの選択 — **family と path を同時に**書く(2026-08-22 追い
+/// 発注「フォントが選べる」の主要口、`font_family_row` 参照)。手打ち欄
+/// (`TextField::FontFamily` の `commit_text_field`)と違い下書きを経由しない
+/// 即時操作(`CycleBlendMode` と同じ形) — 選ぶ対象が[`motolii_font_catalog::
+/// system_fonts`]から選んだ1件そのものなので、確定を待つ理由(誤字の途中
+/// 状態)が無い。
+///
+/// **カタログに無い family が来たら Document には一切触らず `Err`**
+/// (頑健化の要石 — 呼び出し側のバグで options とカタログがずれても、
+/// 「解決できない path」を書いてしまう経路をここで断つ)。
+pub fn commit_text_font_pick(
+    doc: &mut Document,
+    selection: Option<LayerId>,
+    family: &str,
+) -> Result<(), String> {
+    let entry = motolii_font_catalog::find_family(family)
+        .ok_or_else(|| format!("フォントが見つからない: {family}"))?
+        .clone();
+    apply_text_document_edit(doc, selection, move |mut document| {
+        let mut style = document
+            .styles
+            .first()
+            .cloned()
+            .unwrap_or_else(default_text_style);
+        style.font = FontRef {
+            path: entry.path.clone(),
+            fingerprint: None,
+            family: entry.family.clone(),
+            style: entry.style.clone(),
+        };
+        if document.styles.is_empty() {
+            document.styles.push(style);
+        } else {
+            document.styles[0] = style;
+        }
+        Ok(document)
+    })
+}
+
 /// Justify の巡回 — 即1回の `Intent::SetTextDocument`(`CycleBlendMode`/
 /// `CycleMaskMode` と同じ即時操作の形)。選択なしは黙って no-op。
 pub fn cycle_text_justify(doc: &mut Document, selection: Option<LayerId>) -> Result<(), String> {
@@ -340,14 +417,7 @@ pub(crate) fn text_section(
             dims,
             colors,
         ),
-        text_field_row(
-            "Font",
-            TextField::FontFamily,
-            text_projection.font_family.clone(),
-            draft,
-            dims,
-            colors,
-        ),
+        font_family_row(text_projection, draft, dims, colors),
         text_field_row(
             "Size",
             TextField::Size,
@@ -416,6 +486,104 @@ fn text_field_row(
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
+}
+
+/// Font 行。手打ち欄(`text_input`、`TextField::FontFamily` — 既存文法、
+/// `applied_text_field` 参照)に加えて、実在するシステムフォントから選ぶ
+/// `pick_list` を並べる(2026-08-22 追い発注「フォントが選べる・選ばなくても
+/// 落ちない」)。選ぶと [`Message::PickFont`] → [`commit_text_font_pick`] が
+/// family と path を**同時に**書く — 手打ち欄だけでは `FontRef::path` を
+/// 編集する手段が無かった穴(`lyric_text_layer_drive.rs` FINDING)への直接の
+/// 対処。
+///
+/// **pick_list は次/ に前例が無い**(BL2 は blend/mask mode のような小さい
+/// 固定集合の巡回ボタン採用の決定 — `attrs.rs`/`mask.rs` 冒頭 doc 参照)が、
+/// フォント一覧は開放的で数十件になり得る集合なので同じ理由が当てはまらない
+/// (数十件を巡回ボタンで1つずつ送るのは Q0「触れそうで触れない」寄りの手触り
+/// になる)。本発注が pick_list を名指ししているのはこの区別に基づく —
+/// BL2 の対象外として扱う。
+fn font_family_row(
+    text_projection: &TextSectionProjection,
+    draft: Option<&TextFieldDraft>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let displayed = draft
+        .filter(|d| d.field == TextField::FontFamily)
+        .map(|d| d.text.clone())
+        .unwrap_or_else(|| text_projection.font_family.clone());
+
+    let value_field = text_input("", displayed)
+        .on_input(|text| Message::TextFieldInput(TextField::FontFamily, text))
+        .on_submit(Message::TextFieldSubmit(TextField::FontFamily))
+        .size(dims.body_text)
+        .width(Length::Fixed(dims.inspector_value_width))
+        .padding(value_cell_padding(dims))
+        .align_x(iced::alignment::Horizontal::Center)
+        .style(move |_theme, status| name_input_style(dims, colors, status));
+
+    // options はカタログの family 一覧そのまま([`motolii_font_catalog::
+    // system_fonts`] が既に family ごとに一意 — 重複除去済み)。選択中の値は
+    // 「カタログに実在する family の時だけ」ハイライトさせる(手打ちで
+    // カタログに無い自由文字列を打った直後に、pick_list が無関係な項目を
+    // ハイライトして見えるのを避ける)。
+    let options: Vec<String> = motolii_font_catalog::system_fonts()
+        .iter()
+        .map(|entry| entry.family.clone())
+        .collect();
+    let current_family = text_projection.font_family.clone();
+    let selected = options.contains(&current_family).then_some(current_family);
+    // 引数順は `pick_list(selected, options, to_string)`(helpers.rs 実測 —
+    // options を先に置く直感とは逆順)。選択の通知は `.on_select`(payload は
+    // そのまま `String`、`Message::PickFont` を直接渡せる — `.map(Message::
+    // Color)` と同じ「バリアントを関数として渡す」形)。
+    let picker = pick_list(selected, options, |family: &String| family.clone())
+        .on_select(Message::PickFont)
+        .text_size(dims.body_text)
+        .width(Length::Fixed(dims.inspector_value_width))
+        .padding(value_cell_padding(dims))
+        .placeholder("Pick…")
+        .style(move |_theme, status| font_pick_list_style(dims, colors, status));
+
+    let content = row_widget![
+        text("Font")
+            .size(dims.body_text)
+            .color(colors.text_primary)
+            .width(Length::Fill),
+        value_field,
+        picker,
+    ]
+    .spacing(dims.spacing_xs)
+    .align_y(iced::alignment::Vertical::Center);
+
+    bordered_row(content.into(), dims)
+}
+
+/// [`font_family_row`] の pick_list 配色。`name_input_style`/`flat_button_style`
+/// と同じ token(surface_hover/border_default/text_primary/text_muted)を使い、
+/// 新しい色を発明しない(裁定142)。
+fn font_pick_list_style(
+    dims: Dimensions,
+    colors: Colors,
+    status: pick_list::Status,
+) -> pick_list::Style {
+    let background = match status {
+        pick_list::Status::Hovered | pick_list::Status::Opened { is_hovered: true } => {
+            colors.surface_hover
+        }
+        _ => iced::Color::TRANSPARENT,
+    };
+    pick_list::Style {
+        text_color: colors.text_primary,
+        placeholder_color: colors.text_muted,
+        handle_color: colors.text_primary,
+        background: iced::Background::Color(background),
+        border: iced::Border {
+            color: colors.border_default,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+    }
 }
 
 /// Line Height 行。`None`(Auto)は「Auto」文字列で表示し、`Auto` ボタンで

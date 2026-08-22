@@ -1,0 +1,26 @@
+# 2026-08-22 追い発注「フォントが選べる・選ばなくても落ちない」
+# (`lyric_text_layer_drive.rs` FINDING — `TextField::FontFamily` は `family` しか
+# 編集できず `FontRef::path` を編集する入口がリポ全体に無いため、文字を打つと
+# 空 path でのフォント読込に進み `render_frame` 全体が `Err` になっていた)。
+#
+# **依存は1本も増えていない**: fontdb 0.23.0 は既に `next/Cargo.lock` に居る
+# (`engine/motolii-vector` が使う cosmic-text 0.19 の内部依存 — `cargo tree -p
+# motolii-vector` 実測で `cosmic-text v0.19.0 → fontdb v0.23.0` を確認済み)。
+# ここでの direct 指定は同一 package(同 version)に unify されるだけで、
+# `Cargo.lock` に新しい行は増えない(`engine/motolii-vector/Cargo.toml` の
+# cosmic-text コメントと同じ理屈)。
+#
+# feature を明示しているのは「この crate 単独でも `Database::load_system_fonts`/
+# `Source::File`(実在 path を持つ face の判別)が使える」ことを自己文書化する
+# ためで、cosmic-text 側が既定で有効化する feature(`std`→`fontdb/memmap`+
+# `fontdb/std`、`fontconfig`→`fontdb/fontconfig`)がどのみち同じ集合を workspace
+# 全体へ unify 済み(cargo feature unification — 同一 package version の feature
+# は依存グラフ全体で和集合になる)。
+[package]
+name = "motolii-font-catalog"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+fontdb = { version = "0.23", default-features = false, features = ["std", "fs", "memmap", "fontconfig"] }

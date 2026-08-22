@@ -3829,6 +3829,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-font-catalog"
+version = "0.1.0"
+dependencies = [
+ "fontdb",
+]
+
+[[package]]
 name = "motolii-icons"
 version = "0.1.0"
 dependencies = [
@@ -3846,6 +3853,7 @@ dependencies = [
  "iced_widget",
  "motolii-core",
  "motolii-css-metrics",
+ "motolii-font-catalog",
  "motolii-settings-pane",
  "motolii-shell-state",
  "motolii-store",
