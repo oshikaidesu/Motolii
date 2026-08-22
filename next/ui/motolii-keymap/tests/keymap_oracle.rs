@@ -12,9 +12,15 @@ use motolii_keymap::{default_bindings, default_keymap, global_bindings, nav_bund
 /// (`defaults.rs` 冒頭 doc のコメントに1行ずつ出典を書いてある)。
 #[test]
 fn binding_counts_match_the_transcribed_shell_allocation() {
+    // 裁定208 の無主レーンで shell 実装に追随(`defaults.rs::nav_bundle_bindings`
+    // 各コメント参照): (a) Shift+Home/End(JumpToWorkAreaStart/End)で Home/End
+    // がそれぞれ shift 分岐の2本に割れ 26→28 (b) JKL シャトルで旧 j/k の
+    // JumpMeaningPoint 4本を退役させ ShuttleReverse/Stop の2本(j/k 各1)へ
+    // 差し替え、退役した動詞は `,`/`.` の4本で受け直す(28-4+2+4=30) (c) bare
+    // n(SetWorkAreaOut)を1本追加(30→31)。
     assert_eq!(global_bindings().len(), 8, "global 側の行数が実測(8)とずれている");
-    assert_eq!(nav_bundle_bindings().len(), 26, "nav bundle 側の行数が実測(26)とずれている");
-    assert_eq!(default_bindings().len(), 34);
+    assert_eq!(nav_bundle_bindings().len(), 31, "nav bundle 側の行数が実測(31)とずれている");
+    assert_eq!(default_bindings().len(), 39);
 }
 
 #[test]

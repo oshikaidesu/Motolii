@@ -31,12 +31,28 @@ pub enum VerbId {
     StepPlayheadForwardFast,
     JumpPlayheadToStart,
     JumpPlayheadToEnd,
+    // 作業範囲の先頭/末尾(map 1064、B18 第5波結線): Shift+Home/End。
+    // `resolve_navigation_key` は Shift 修飾の有無で JumpPlayheadTo{Start,End}
+    // と分岐する(`defaults.rs::nav_bundle_bindings` 冒頭コメント参照)。
+    JumpToWorkAreaStart,
+    JumpToWorkAreaEnd,
     JumpMeaningPointPrev,
     JumpMeaningPointPrevLayerOnly,
     JumpMeaningPointNext,
     JumpMeaningPointNextLayerOnly,
     JumpClipEdgeIn,
     JumpClipEdgeOut,
+    // JKL シャトル(B21 第5波結線)。旧割当の bare j/k(意味点ジャンプ)は
+    // `,`/`.` へ移設された(`defaults.rs::nav_bundle_bindings` 冒頭コメント・
+    // `motolii_shell::resolve_navigation_key` 実測 2026-08-22 参照、裁定208 の
+    // 無主レーンで追随)。**bare `l`(ShuttleForward)・Cmd+L(ToggleLoop)は
+    // 未転写**(この試験が候補キーに `l` を含まないため未検出だっただけ —
+    // RETURN の逸脱台帳に報告、この crate では追わない)。
+    ShuttleReverse,
+    ShuttleStop,
+    // Mark Out(作業範囲の Out を playhead へ、B18 第5波結線)。**bare
+    // `b`(Mark In/SetWorkAreaIn)は同じ理由で未転写**(RETURN 参照)。
+    SetWorkAreaOut,
     Undo,
     Redo,
     CopyLayer,
@@ -73,12 +89,17 @@ impl VerbId {
         VerbId::StepPlayheadForwardFast,
         VerbId::JumpPlayheadToStart,
         VerbId::JumpPlayheadToEnd,
+        VerbId::JumpToWorkAreaStart,
+        VerbId::JumpToWorkAreaEnd,
         VerbId::JumpMeaningPointPrev,
         VerbId::JumpMeaningPointPrevLayerOnly,
         VerbId::JumpMeaningPointNext,
         VerbId::JumpMeaningPointNextLayerOnly,
         VerbId::JumpClipEdgeIn,
         VerbId::JumpClipEdgeOut,
+        VerbId::ShuttleReverse,
+        VerbId::ShuttleStop,
+        VerbId::SetWorkAreaOut,
         VerbId::Undo,
         VerbId::Redo,
         VerbId::CopyLayer,

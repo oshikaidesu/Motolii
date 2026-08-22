@@ -119,34 +119,77 @@ pub fn nav_bundle_bindings() -> Vec<Binding> {
             Scope::NavigationBundle,
             VerbId::StepPlayheadForwardFast,
         ),
-        // 4130: Home → JumpPlayheadToStart
-        Binding::new(Key::Named(NamedKey::Home), ModifierSpec::ANY, Scope::NavigationBundle, VerbId::JumpPlayheadToStart),
-        // 4131: End → JumpPlayheadToEnd
-        Binding::new(Key::Named(NamedKey::End), ModifierSpec::ANY, Scope::NavigationBundle, VerbId::JumpPlayheadToEnd),
-        // 4133-4138: j(Cmd無し、素) → JumpMeaningPoint{Prev, layer_only:false}
+        // Shift+Home(作業範囲の先頭、Shift+Home/End が素の Home/End より先に
+        // match される — 裁定208 の無主レーンで追随。shell 側の
+        // `resolve_navigation_key` 実測に合わせて表を割った) → JumpToWorkAreaStart
+        Binding::new(
+            Key::Named(NamedKey::Home),
+            ModifierSpec::ANY.shift_required(true),
+            Scope::NavigationBundle,
+            VerbId::JumpToWorkAreaStart,
+        ),
+        // 4130: Home(Shift無し) → JumpPlayheadToStart
+        Binding::new(
+            Key::Named(NamedKey::Home),
+            ModifierSpec::ANY.shift_required(false),
+            Scope::NavigationBundle,
+            VerbId::JumpPlayheadToStart,
+        ),
+        // Shift+End(作業範囲の末尾) → JumpToWorkAreaEnd
+        Binding::new(
+            Key::Named(NamedKey::End),
+            ModifierSpec::ANY.shift_required(true),
+            Scope::NavigationBundle,
+            VerbId::JumpToWorkAreaEnd,
+        ),
+        // 4131: End(Shift無し) → JumpPlayheadToEnd
+        Binding::new(
+            Key::Named(NamedKey::End),
+            ModifierSpec::ANY.shift_required(false),
+            Scope::NavigationBundle,
+            VerbId::JumpPlayheadToEnd,
+        ),
+        // JKL シャトル(B21 第5波結線、`resolve_navigation_key` 5631-5644行目
+        // 実測 2026-08-22・裁定208 の無主レーンで追随)。**旧割当だった
+        // bare j/k(意味点ジャンプ)は `,`/`.` へ移設済み**(shift はどちらも
+        // 見ない — 「連打相当」で同じ Message、下記 doc 参照)。
         Binding::new(
             Key::character('j'),
+            ModifierSpec::ANY.command_required(false),
+            Scope::NavigationBundle,
+            VerbId::ShuttleReverse,
+        ),
+        Binding::new(
+            Key::character('k'),
+            ModifierSpec::ANY.command_required(false),
+            Scope::NavigationBundle,
+            VerbId::ShuttleStop,
+        ),
+        // JumpPrev/NextMeaningPoint の新住所(5650-5661行目実測)。Shift 付きで
+        // 選択レイヤー限定(layer_only)。**shell は同じ物理キーの shift 別
+        // 文字 `<`/`>` も受ける(5650/5656行目 `c == "," || c == "<"`)が、
+        // この crate の `Key` は1 binding=1文字までしか持てないため
+        // `,`/`.` のみ転写する**(`<`/`>` 側は未転写 — RETURN の逸脱台帳)。
+        Binding::new(
+            Key::character(','),
             ModifierSpec::ANY.command_required(false).shift_required(false),
             Scope::NavigationBundle,
             VerbId::JumpMeaningPointPrev,
         ),
-        // 4133-4138: Shift+j(Cmd無し) → layer_only:true
         Binding::new(
-            Key::character('j'),
+            Key::character(','),
             ModifierSpec::ANY.command_required(false).shift_required(true),
             Scope::NavigationBundle,
             VerbId::JumpMeaningPointPrevLayerOnly,
         ),
-        // 4139-4144: k(Cmd無し、素) → JumpMeaningPoint{Next, layer_only:false}
         Binding::new(
-            Key::character('k'),
+            Key::character('.'),
             ModifierSpec::ANY.command_required(false).shift_required(false),
             Scope::NavigationBundle,
             VerbId::JumpMeaningPointNext,
         ),
-        // 4139-4144: Shift+k(Cmd無し) → layer_only:true
         Binding::new(
-            Key::character('k'),
+            Key::character('.'),
             ModifierSpec::ANY.command_required(false).shift_required(true),
             Scope::NavigationBundle,
             VerbId::JumpMeaningPointNextLayerOnly,
@@ -220,6 +263,16 @@ pub fn nav_bundle_bindings() -> Vec<Binding> {
             ModifierSpec::ANY.command_required(true).shift_required(true),
             Scope::NavigationBundle,
             VerbId::DeselectAllLayers,
+        ),
+        // Mark Out(作業範囲の Out を playhead へ、5672-5676行目実測・裁定208
+        // の無主レーンで追随)。**bare `b`(Mark In/SetWorkAreaIn)は未転写**
+        // (候補キーに含まれず未検出だった、`VerbId::ShuttleReverse` 冒頭
+        // コメント・RETURN 参照)。
+        Binding::new(
+            Key::character('n'),
+            ModifierSpec::ANY.command_required(false),
+            Scope::NavigationBundle,
+            VerbId::SetWorkAreaOut,
         ),
         // 4191-4193: Cmd+N(Shift無し) → NewProjectRequested
         Binding::new(
