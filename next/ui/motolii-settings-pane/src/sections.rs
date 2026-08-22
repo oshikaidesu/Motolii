@@ -35,11 +35,22 @@
 //!    `CompFieldSubmit` の2腕で書く(submit は [`commit_comp_field`] を呼ぶ
 //!    だけ — `commit_background_channel` の呼び形と同じ)。
 //! 3. その時点で旧 [`crate::view`] は撤去して良い(この節も一緒に畳む)。
+//!
+//! ## 裁定183 taffy 転写 第1号(2026-08-22)
+//! [`comp_cells_row`] の並べ方(flex/gap/justify)は `motolii-taffy::TaffyBox`
+//! (CSS 宣言の字面から `taffy::Style` を組む機構、
+//! `docs/reviews/2026-08-22-weblike-layout-survey.md` 案A)へ委譲した——
+//! 「モックを手で写す」工程を機械検証可能な転写へ置換する最初の適用例。
+//! 詳細・oracle の形は [`comp_cells_row`] 直前のコメントと
+//! `tests/comp_cells_row_taffy_oracle.rs` 冒頭 doc 参照。他の行
+//! (`background_row`/`ui_scale_row`/`preview_cache_row`)は今回のスコープ外
+//! (発注書「部分適用でよい」— 型を確立するのが目的)。
 
 use iced::widget::{column, container, row, scrollable, text, text_input};
 use iced::{Element, Length};
 
 use motolii_store::{Composition, Document, Fps, Intent};
+use motolii_taffy::{style_from_css_decl, TaffyBox};
 use motolii_tokens_rs::{Colors, Dimensions};
 
 use crate::chrome::{self, section_header, value_input_style};
@@ -342,7 +353,50 @@ pub fn view(model: ViewModel<'_>, dims: Dimensions, colors: Colors) -> Element<'
     .into()
 }
 
+// ---------------------------------------------------------------------------
+// taffy 転写 第1号(裁定183・weblike-layout 調査): [`comp_cells_row`] の
+// 並べ方(flex/gap/justify)だけを `motolii-taffy::TaffyBox` へ委譲する。
+// 寸法(gap/height/padding/セル幅)は引き続き `Dimensions`(tokens)が正本 —
+// ここは CSS 宣言の字面としてそれを taffy へ渡すだけ。
+//
+// 旧実装は「label(`Length::Fill`) + 内側 `row(cells).spacing(xs)`」の2段
+// 構造だったが、外側 `.spacing(dims.spacing_xs)` と内側
+// `row(cells).spacing(dims.spacing_xs)` が同値だったため、1段の flex row
+// (`gap` 一発)へフラット化しても見た目は不変 — label→セル0 の間隔・
+// セル間の間隔がどちらも同じ `gap` になる(2フィールドの行しか無いこの
+// section では区別が付かない=フラット化で失う情報が無い)。
+//
+// 正本はこの3つの CSS 宣言関数だけ — `tests/comp_cells_row_taffy_oracle.rs`
+// が同じ関数を呼んで taffy 直接解と ±1px で突き合わせる(Settings 用の mock
+// は `next/reference/mocks/` に無いため、分母は taffy 自身の直接計算 —
+// `motolii-taffy/tests/layout_oracle.rs` と同じ手口)。文字列の二重管理を
+// 避けるため、テスト側もこの関数を直接呼ぶ。
+// ---------------------------------------------------------------------------
+
+/// [`comp_cells_row`] の外枠(flex row)の CSS 宣言。
+pub fn comp_cells_row_css(dims: Dimensions) -> String {
+    format!(
+        "display:flex; align-items:center; gap:{gap}px; height:{height}px; padding:0px {pad}px",
+        gap = dims.spacing_xs,
+        height = dims.inspector_row_height,
+        pad = dims.spacing_m,
+    )
+}
+
+/// label セル(旧 `.width(Length::Fill)`)の CSS — 残り幅を占める。
+pub const COMP_CELLS_LABEL_CSS: &str = "flex:1";
+
+/// 値セル(caption+text_input の列、[`comp_field_cell`])の CSS — 固定幅
+/// (旧 `Length::Fixed(dims.inspector_value_width)`)。高さは指定しない —
+/// 旧実装も明示 height を持たず、`column!` の自然高のまま `align-items:center`
+/// (旧 `.align_y(Vertical::Center)`)で行高の中に中央寄せされていた。
+pub fn comp_cell_css(dims: Dimensions) -> String {
+    format!("width:{width}px", width = dims.inspector_value_width)
+}
+
 /// 「行ラベル左・数値セル右」の行([`background_row`] と同じ列グリッド文法)。
+/// 並べ方は `TaffyBox`([`comp_cells_row_css`]/[`COMP_CELLS_LABEL_CSS`]/
+/// [`comp_cell_css`])に委譲する — 冒頭の taffy 転写 doc 参照。
 fn comp_cells_row(
     label: &'static str,
     fields: &[CompField],
@@ -351,23 +405,28 @@ fn comp_cells_row(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let cells: Vec<Element<'static, Message>> = fields
-        .iter()
-        .map(|&field| comp_field_cell(field, composition, draft, dims, colors))
-        .collect();
+    let row_style = style_from_css_decl(&comp_cells_row_css(dims)).expect(
+        "comp_cells_row_css は固定テンプレート+dims の px 値のみを埋める — 解釈は必ず成功する",
+    );
+    let label_style = style_from_css_decl(COMP_CELLS_LABEL_CSS)
+        .expect("COMP_CELLS_LABEL_CSS は固定文字列 — 解釈は必ず成功する");
+    let cell_style = style_from_css_decl(&comp_cell_css(dims))
+        .expect("comp_cell_css は固定テンプレート+dims の px 値のみを埋める — 解釈は必ず成功する");
 
-    row![
-        text(label)
-            .size(dims.body_text)
-            .color(colors.text_primary)
-            .width(Length::Fill),
-        row(cells).spacing(dims.spacing_xs),
-    ]
-    .spacing(dims.spacing_xs)
-    .height(Length::Fixed(dims.inspector_row_height))
-    .align_y(iced::alignment::Vertical::Center)
-    .padding([0.0, dims.spacing_m])
-    .into()
+    let label_text: Element<'static, Message> = text(label)
+        .size(dims.body_text)
+        .color(colors.text_primary)
+        .into();
+
+    let mut taffy_row: TaffyBox<'static, Message, iced::Theme, iced::Renderer> =
+        TaffyBox::new(row_style).push(label_style, label_text);
+    for &field in fields {
+        taffy_row = taffy_row.push(
+            cell_style.clone(),
+            comp_field_cell(field, composition, draft, dims, colors),
+        );
+    }
+    taffy_row.into()
 }
 
 /// caption + 数値欄のセル([`crate::view`] の `channel_cell` と同じ形 —

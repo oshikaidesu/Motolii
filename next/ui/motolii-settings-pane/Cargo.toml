@@ -10,6 +10,11 @@ motolii-store.workspace = true
 # デザイン値の外出し(裁定117)。裁定160 切片1 で抽出済みの leaf crate をそのまま
 # 依存する — `Colors`/`Dimensions`/`Tokens` は raw 値の直書き禁止の唯一の読み口。
 motolii-tokens-rs.workspace = true
+# 裁定183 taffy 転写 第1号: `sections::comp_cells_row` の並べ方(flex/gap/
+# justify)を CSS 宣言の字面から `TaffyBox` で組む。workspace.dependencies には
+# 無い(members 登録のみ)ので、他 pane が今後追随する時と同じ形で path 直参照
+# する(`motolii-css-metrics`/`motolii-taffy` 自身の Cargo.toml と同じ運用)。
+motolii-taffy = { path = "../motolii-taffy" }
 
 [dev-dependencies]
 # B12 第1切片(2026-08-22): sections::view の表示値/Message 発火を実 widget 木で
@@ -17,3 +22,9 @@ motolii-tokens-rs.workspace = true
 # `value_cell_legibility.rs` と同じ手口・同じ fork 同 rev(裁定170 M01 — 別 rev
 # だと iced_core が2本入り型が衝突する、merge 後実測)。dev-only。
 iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+# 裁定183 taffy 転写 第1号の oracle(`tests/comp_cells_row_taffy_oracle.rs`):
+# `motolii-taffy/tests/layout_oracle.rs` と同じ手口(null renderer `()` + `Space`
+# の widget 経由解 vs taffy 直接解)を写す。同じ fork 同 rev(`motolii-taffy`
+# 自身の dev-dependencies と揃える — 別 rev だと iced_core が2本入る)。
+iced_core = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+iced_widget = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }

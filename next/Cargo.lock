@@ -3862,8 +3862,11 @@ name = "motolii-settings-pane"
 version = "0.1.0"
 dependencies = [
  "iced",
+ "iced_core",
  "iced_test",
+ "iced_widget",
  "motolii-store",
+ "motolii-taffy",
  "motolii-tokens-rs",
 ]
 
