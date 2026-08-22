@@ -75,6 +75,11 @@ use iced::{mouse, Point, Rectangle};
 pub mod gizmo;
 pub use gizmo::{gizmo_target, GizmoDrag, GizmoOverlay, GizmoPhase, GizmoProperty, GizmoTarget, GizmoValue};
 
+/// Stage 矩形選択(マーキー、B31 キャンバス側第1切片 — 発注 2026-08-22)。
+/// クリック選択・矩形選択・Shift 追加/トグル・空クリック解除。message は既存
+/// [`Message`] と独立([`marquee::SelectLayers`] — 理由はモジュール doc)。
+pub mod marquee;
+
 use motolii_core::{camera_screen_from_world_z0, CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{RationalTime, StoreView};
