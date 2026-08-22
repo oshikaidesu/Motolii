@@ -14,8 +14,8 @@
 
 use motolii_settings_pane::chrome::{parse_number, section_header};
 use motolii_store::{
-    ContentTrack, Document, FontRef, Intent, LayerId, TextAlignmentOptions, TextDocument,
-    TextDocumentStyle, TextJustify, TextStyleId,
+    ContentKeyframe, ContentTrack, Document, FontRef, Intent, LayerId, RationalTime,
+    TextAlignmentOptions, TextDocument, TextDocumentStyle, TextJustify, TextStyleId,
 };
 use motolii_tokens_rs::{Colors, Dimensions};
 
@@ -34,6 +34,13 @@ use crate::Message;
 /// 押し込まない。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TextField {
+    /// `text-document t`(Text、本文)。**他3腕とは書き先が違う** —
+    /// `TextDocumentStyle` ではなく `TextDocument::content`(`ContentTrack`)
+    /// 直下を書く(2026-08-22 発注「歌詞が入れられる道を通す」— 歌詞動画/MV
+    /// ペルソナ致命的欠落〈TEXT section に文字列本体の入力欄が無い〉への対処、
+    /// `docs/reviews/2026-08-22-persona-lyric-mv.md` 参照)。`commit_text_field`
+    /// がこの1腕だけ特別扱いする(下記 doc 参照)。
+    Content,
     /// `text-document f`(Font Family)。`FontRef::family` だけを書き換える
     /// (`path`/`fingerprint`/`style` はこの切片では触らない)。
     FontFamily,
@@ -111,6 +118,12 @@ pub fn next_text_justify(current: TextJustify) -> TextJustify {
 /// (`next_value` の Vec2 保存と同じ「他フィールドは保つ」考え方)。数値として
 /// 読めない入力は `Err` の理由文(M13)。`FontFamily` だけは数値変換をしない
 /// — 空文字列も許す(「フォント未指定」を表現できる、`FontRef` の既定と同型)。
+///
+/// **`TextField::Content` はここへ来ない** — 書き先が `TextDocumentStyle`
+/// ではなく `TextDocument::content` 直下([`applied_text_content`] 参照)なので、
+/// [`commit_text_field`] がこの関数を呼ぶ前に分岐して弾く。ここに来たら
+/// 呼び出し側のバグ(`commit_text_field` の分岐漏れ)なので `unreachable!` で
+/// 安全側に倒す(黙って空文字へ倒すと M13「無反応ゼロ」に反する)。
 pub fn applied_text_field(
     style: &TextDocumentStyle,
     field: TextField,
@@ -118,6 +131,9 @@ pub fn applied_text_field(
 ) -> Result<TextDocumentStyle, String> {
     let mut next = style.clone();
     match field {
+        TextField::Content => {
+            unreachable!("TextField::Content は commit_text_field が先に分岐して弾く")
+        }
         TextField::FontFamily => next.font.family = input.to_owned(),
         TextField::Size => {
             let value =
@@ -136,6 +152,47 @@ pub fn applied_text_field(
         }
     }
     Ok(next)
+}
+
+/// [`TextDocument::content`] の**現在値**を読む(表示専用)。裁定92の対象外
+/// (Content は `TextDocumentStyle` の静止フィールドではなく `TextDocument`
+/// 直下の Hold-keyed トラック)だが、この切片は v1 の「打鍵→Enter で1回の
+/// `Intent`」文法をそのまま流用するため、**アニメーション(複数キー)は
+/// 作らない** — 常に [`RationalTime::ZERO`] で評価する(`t` に関わらず同じ
+/// 文字列を返す、`[`applied_text_content`]` が常に単一キーしか書かないことの
+/// 対称)。将来の「歌詞を時間で切り替える」機能(range-selector/animator、
+/// text.rs crate doc 「第2/3切片」参照)は Content 欄とは別の入口になる。
+pub fn text_document_content(document: &TextDocument) -> String {
+    document.content.eval(RationalTime::ZERO).to_owned()
+}
+
+/// 下書き文字列を新しい `content`(`ContentTrack`)へ適用する。**単一の Hold
+/// キー(t=0)で丸ごと差し替える** — 複数行/改行はここでは分割しない
+/// (`content` 文字列そのものに `\n` が含まれていれば cosmic-text 側が行分割
+/// する、`motolii-vector::text::shape_text` doc「改行はそのまま行分割」参照)。
+///
+/// ## 複数行の扱い(発注の未決事項、ここで決めた)
+/// **1行の `text_input`(on_submit で確定、他の TEXT section 欄と同じ文法)を
+/// 採用し、Enter は改行ではなく確定にする** — この Inspector の全ての
+/// text_input(Name/Speed/Font/Size/Line Height/Tracking)が同じ「Enter=確定」
+/// 文法なので、Content だけ「Enter=改行」にすると同じ widget が欄によって
+/// 違う意味を持つことになり(Q0 一貫性違反)、新しい編集文法を発明しないと
+/// いう発注の指示にも反する。歌詞動画で2行以上を同時に見せたい場合は
+/// **レイヤーを複数(1行=1 text layer)に分ける**のが現状の道 —
+/// `next/DECISIONS.md` の「Split」等と同じく「1操作の代わりに複数レイヤーで
+/// 迂回できる」形(`docs/reviews/2026-08-22-persona-lyric-mv.md` 工程4の
+/// 迂回可能表と同じ考え方)。将来 `text_editor`(iced の複数行 widget)を
+/// 導入する日が来ても、この関数(`ContentTrack` 書き込みの形)自体は変わらない
+/// ── 変わるのは view 側の widget 選択だけ。
+pub fn applied_text_content(document: &TextDocument, input: &str) -> TextDocument {
+    let mut next = document.clone();
+    let mut content = ContentTrack::new();
+    content.insert(ContentKeyframe {
+        t: RationalTime::ZERO,
+        content: input.to_owned(),
+    });
+    next.content = content;
+    next
 }
 
 /// TEXT section 共通の書き口(`apply_mask_list_edit` と同型): 選択が無ければ
@@ -176,6 +233,10 @@ fn apply_text_document_edit(
 /// `Intent::SetTextDocument` を出す(1 gesture = 1 undo、`commit_inspector_field`
 /// と同じ形)。下書きが無い・別 field の submit・選択が無い、のいずれも
 /// `Ok(())`(何もしない)。
+///
+/// **`Content` はここで分岐する** — 書き先が `TextDocumentStyle`(`styles[0]`)
+/// ではなく `TextDocument::content` 直下なので、[`applied_text_field`]
+/// (style 専用)を経由せず [`applied_text_content`] を直接呼ぶ。
 pub fn commit_text_field(
     doc: &mut Document,
     draft: &mut Option<TextFieldDraft>,
@@ -190,6 +251,11 @@ pub fn commit_text_field(
         // `commit_inspector_field` と同じ判断)。
         *draft = Some(taken);
         return Ok(());
+    }
+    if field == TextField::Content {
+        return apply_text_document_edit(doc, selection, |document| {
+            Ok(applied_text_content(&document, &taken.text))
+        });
     }
     apply_text_document_edit(doc, selection, |mut document| {
         let style = document
@@ -241,21 +307,39 @@ pub fn reset_text_tracking(doc: &mut Document, selection: Option<LayerId>) -> Re
 /// TEXT section: テキストレイヤー選択時のみ現れる(裁定184 型別 section 第3号)。
 /// **Key 列は無い** — `TextDocumentStyle`/`TextDocument::justify` はどれも
 /// `KeyframeTrack` に乗らない静止フィールド(裁定92)なので、Position/Scale
-/// 行の3状態 oracle は適用対象外。Font/Size/Line Height/Tracking は
+/// 行の3状態 oracle は適用対象外。Content/Font/Size/Line Height/Tracking は
 /// [`speed_row`] と同じ「即時 text_input・on_submit で1回の Intent」文法、
 /// Justify は [`mask_ident_row`] の mode 巡回と同じ即時操作文法 — どちらも
 /// **既存の grammar の適用**であって新しい視覚言語の発明ではない(NON-GOALS)。
-/// 塗り色(`fc`)・線色(`sc`)は実在するが `Value::Color` 用の editor が
-/// まだ無い(crate doc「Color/Enum/Path/LayerId は Effect 束の仕事」)ため
-/// この切片では見送る(RETURN の見送り台帳参照)。
+///
+/// **Content が先頭行**(2026-08-22 発注「歌詞が入れられる道を通す」)——
+/// 「文字を打つ」がこの section の主目的で、Font/Size 等はその文字の見た目を
+/// 整える付随行という優先順位(利用者が最初に触る行を最初に置く)。
+///
+/// **塗り色(`fc`)・線色(`sc`)は [`crate::color::color_row`] で結線**
+/// (同じ発注、`crate::color` module 冒頭 doc 参照 — 以前の版のこのコメントが
+/// 「まだ無い editor」として見送っていた穴を今回埋めた)。`color_row` は
+/// 別の pane-local `Message` 型(`crate::color::Message`)を運ぶので、
+/// `.map(Message::Color)` でこの section の `Message` へ畳む
+/// (`Message::Timeline`/`Message::Settings` と同じ「子 pane の Message を
+/// 親が wrap する」形をこの crate 内でも踏襲)。
 pub(crate) fn text_section(
     text_projection: &TextSectionProjection,
     draft: Option<&TextFieldDraft>,
+    color_draft: Option<&crate::color::ColorFieldDraft>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
     column![
         section_header("TEXT", dims, colors),
+        text_field_row(
+            "Content",
+            TextField::Content,
+            text_projection.content.clone(),
+            draft,
+            dims,
+            colors,
+        ),
         text_field_row(
             "Font",
             TextField::FontFamily,
@@ -275,6 +359,22 @@ pub(crate) fn text_section(
         line_height_row(text_projection, draft, dims, colors),
         tracking_row(text_projection, draft, dims, colors),
         justify_row(text_projection.justify, dims, colors),
+        crate::color::color_row(
+            crate::color::ColorTarget::Fill,
+            &text_projection.style,
+            color_draft,
+            dims,
+            colors,
+        )
+        .map(Message::Color),
+        crate::color::color_row(
+            crate::color::ColorTarget::Stroke,
+            &text_projection.style,
+            color_draft,
+            dims,
+            colors,
+        )
+        .map(Message::Color),
     ]
     .into()
 }

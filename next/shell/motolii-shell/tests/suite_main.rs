@@ -58,6 +58,8 @@ mod marker_keymap_drive;
 mod marquee_drive;
 #[path = "suite/keymap_equivalence.rs"]
 mod keymap_equivalence;
+#[path = "suite/lyric_text_layer_drive.rs"]
+mod lyric_text_layer_drive;
 #[path = "suite/menu_drive.rs"]
 mod menu_drive;
 #[path = "suite/nav_drive.rs"]

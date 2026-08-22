@@ -153,6 +153,7 @@ fn a_text_layer_without_a_document_projects_display_only_defaults() {
         .text
         .as_ref()
         .expect("テキストレイヤーは Some のはず");
+    assert_eq!(text_projection.content, "", "既定 content は空文字列のはず");
     assert_eq!(text_projection.font_family, "", "既定 FontRef は空文字列のはず");
     assert_eq!(text_projection.size, 100.0, "既定サイズがずれている");
     assert_eq!(text_projection.line_height, None, "既定 Line Height は Auto のはず");
@@ -173,6 +174,7 @@ fn a_text_layer_without_a_document_projects_display_only_defaults() {
         Colors::default(),
     ));
     assert!(has_text(&targets, "TEXT"), "TEXT section header が出ない");
+    assert!(has_text(&targets, "Content"), "Content 行が出ない");
     assert!(has_text(&targets, "Font"), "Font 行が出ない");
     assert!(has_text(&targets, "Size"), "Size 行が出ない");
     assert!(has_text(&targets, "Line Height"), "Line Height 行が出ない");
@@ -180,11 +182,67 @@ fn a_text_layer_without_a_document_projects_display_only_defaults() {
     assert!(has_text(&targets, "Justify"), "Justify 行が出ない");
     assert!(has_text(&targets, "Auto"), "Line Height の Auto 表示が出ない");
     assert!(has_text(&targets, "Left"), "Justify の Left 表示が出ない");
+    assert!(has_text(&targets, "Fill Color"), "Fill Color 行が出ない(色エディタ未結線)");
+    assert!(has_text(&targets, "Stroke Color"), "Stroke Color 行が出ない(色エディタ未結線)");
 }
 
 // ---------------------------------------------------------------------------
 // 編集: text_input 系フィールドは下書き→Enter で `Intent::SetTextDocument` 1回
 // ---------------------------------------------------------------------------
+
+/// **本命(歌詞動画/MV ペルソナ、2026-08-22 発注「歌詞が入れられる道を通す」)**:
+/// Content の Enter は `TextDocument::content` を1回で書く(1 gesture = 1
+/// undo)。日本語の歌詞をそのまま通す — `docs/reviews/2026-08-22-persona-lyric-mv.md`
+/// が指摘した致命的欠落(本文の入力欄が無い)の直接の検収。
+#[test]
+fn committing_a_content_draft_writes_the_text_document_content() {
+    let (mut doc, layer) = text_layer();
+    let field = TextField::Content;
+    let mut draft = Some(TextFieldDraft {
+        field,
+        text: "サビ歌詞がここに出る".to_owned(),
+    });
+    commit_text_field(&mut doc, &mut draft, Some(layer), field)
+        .expect("content の確定は成功するはず");
+    assert!(draft.is_none(), "確定後も下書きが残っている");
+
+    let document = text_document_of(&doc, layer).expect("確定後は document が有るはず");
+    assert_eq!(
+        document.content.eval(motolii_core::RationalTime::ZERO),
+        "サビ歌詞がここに出る",
+        "content が書けていない"
+    );
+
+    doc.undo();
+    assert!(
+        text_document_of(&doc, layer).is_none(),
+        "1 undo で書く前(未着手)へ戻らない(1操作=1 undo 違反)"
+    );
+}
+
+/// Content の投影(`text_projection.content`)は書いた内容をそのまま表示する
+/// (プレイヘッド位置に関わらず — v1 は静止フィールド、`text.rs`
+/// `text_document_content` doc 参照)。
+#[test]
+fn committing_content_updates_the_projection() {
+    let (mut doc, layer) = text_layer();
+    let field = TextField::Content;
+    let mut draft = Some(TextFieldDraft {
+        field,
+        text: "Lyric line one".to_owned(),
+    });
+    commit_text_field(&mut doc, &mut draft, Some(layer), field)
+        .expect("content の確定は成功するはず");
+
+    let session = session_selecting(layer);
+    let projection = project(&doc.view(), &session)
+        .expect("投影は組めるはず")
+        .expect("選択ありなので Some のはず");
+    assert_eq!(
+        projection.text.expect("テキストレイヤーは Some のはず").content,
+        "Lyric line one"
+    );
+}
 
 /// Font Family の Enter は `styles[0].font.family` だけを書き換えた
 /// `TextDocument` を1回で書く(1 gesture = 1 undo)。
@@ -341,6 +399,13 @@ fn cycling_justify_advances_through_left_right_center_and_undoes_in_one_step() {
 #[test]
 fn text_field_edits_without_a_selection_are_silent_no_ops() {
     let mut doc = Document::new();
+    let mut content_draft = Some(TextFieldDraft {
+        field: TextField::Content,
+        text: "誰も見ない歌詞".to_owned(),
+    });
+    commit_text_field(&mut doc, &mut content_draft, None, TextField::Content)
+        .expect("選択なしは no-op のはず");
+
     let field = TextField::Tracking;
     let mut draft = Some(TextFieldDraft {
         field,
