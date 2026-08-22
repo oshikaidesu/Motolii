@@ -71,6 +71,13 @@ image.workspace = true
 # 破棄確認は native file dialog。`file_dialogs.rs` の `FileDialogs` trait の
 # production 実装(`RfdDialogs`)だけがこの crate を直接呼ぶ。
 rfd.workspace = true
+# 第6波 shell 結線(B09): Export 実行(`ExportJob`/`export_with_cancel`/
+# `Cancel`)。workspace.dependencies に既存の alias があるのでそのまま使う。
+motolii-export.workspace = true
+# 同上。`motolii-export-pane`(ui/、B09 第1切片)はまだ workspace.dependencies
+# に alias が無い(この波で初めて shell から使う)ので path 依存で足す —
+# workspace の Cargo.toml(EXACT TARGET 外)は触らない。
+motolii-export-pane = { path = "../../ui/motolii-export-pane" }
 
 [dev-dependencies]
 motolii-testkit.workspace = true
