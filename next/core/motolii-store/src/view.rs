@@ -44,6 +44,15 @@ pub struct StoreView<'a> {
     track_cache: &'a RefCell<TrackCache>,
 }
 
+/// [`StoreView::value_at_path_resolving_links`] の防御的な深さ上限。
+/// `Intent::SetPropertyLink` の書き込み時循環拒否をすり抜けた壊れた Document
+/// (手で書き換えた保存ファイル等)を読んでも無限再帰にならないための保険——
+/// `world_affine`/`frozen_ancestor` の `seen`/`visiting` と同じ役割だが、link は
+/// 呼び出し頻度が高い `value_at_path` の内側に居るのでハッシュ集合を毎回確保する
+/// コストを避け、単純な深さカウンタにしてある(正常な Document ではこの分岐に
+/// 一度も到達しない)。
+const MAX_LINK_DEPTH: u32 = 64;
+
 impl<'a> StoreView<'a> {
     pub(crate) fn new(
         db: &'a EntityDb,
@@ -258,11 +267,11 @@ impl<'a> StoreView<'a> {
             .map_err(StoreError::Encode)
     }
 
-    /// property の keyframe track。**`PropertySource::Slot` を指している property は
-    /// ここでは `None`** — この property 自身は track を持たない(値はスロット表の
-    /// 側にある)。「track が無い」と「スロットへ委譲している」を区別したい場合は
-    /// [`Self::property_source`] を使う。評価込みの値が欲しい場合は [`Self::value_at`]
-    /// (スロット参照も解決する)。
+    /// property の keyframe track。**`PropertySource::{Slot,Link}` を指している
+    /// property はここでは `None`** — この property 自身は track を持たない(値は
+    /// スロット表の側、または別 property の値にある)。「track が無い」と「委譲して
+    /// いる」を区別したい場合は [`Self::property_source`] を使う。評価込みの値が
+    /// 欲しい場合は [`Self::value_at`](スロット/link 参照も解決する)。
     fn track_at_path(
         &self,
         path: &EntityPath,
@@ -270,7 +279,7 @@ impl<'a> StoreView<'a> {
     ) -> Result<Option<KeyframeTrack>, StoreError> {
         Ok(match self.source_at_path(path, property)? {
             Some(PropertySource::Track(track)) => Some(track),
-            Some(PropertySource::Slot(_)) | None => None,
+            Some(PropertySource::Slot(_)) | Some(PropertySource::Link(_)) | None => None,
         })
     }
 
@@ -340,6 +349,22 @@ impl<'a> StoreView<'a> {
         property: &PropertyId,
         t: RationalTime,
     ) -> Result<Option<Value>, StoreError> {
+        self.value_at_path_resolving_links(path, property, t, 0)
+    }
+
+    /// [`Self::value_at_path`] の本体。`link_depth` は [`PropertySource::Link`] の
+    /// 参照鎖を辿った深さ——`Intent::SetPropertyLink` は書き込み時に循環を拒む
+    /// (`document::validate_no_link_cycle`)ので正常な Document ではここが伸び続ける
+    /// ことは無いはずだが、`world_affine`/`frozen_ancestor` と同じ「壊れた Document
+    /// を読んだ場合に備えた第二の防御」をここにも掛ける(手で書き換えた保存ファイル
+    /// 等、書き込み経路を通らずに循環が紛れ込む可能性を潰す)。
+    fn value_at_path_resolving_links(
+        &self,
+        path: &EntityPath,
+        property: &PropertyId,
+        t: RationalTime,
+        link_depth: u32,
+    ) -> Result<Option<Value>, StoreError> {
         // **overlay が最優先**(タスク#20 の恒久解)。track の評価より先に見る —
         // ドラッグ中は時刻に関わらずこの固定値を返す(overlay は「評価済みの値」を
         // 直接持つので、ここでは `track.eval(t)` を呼ばない)。`track()`/`camera_track()`
@@ -354,6 +379,31 @@ impl<'a> StoreView<'a> {
             // (`properties/property sid` の意味そのもの、地図の note どおり)。
             Some(PropertySource::Slot(slot_id)) => {
                 Ok(self.slot_track(&slot_id)?.map(|track| track.eval(t)))
+            }
+            // **link 参照もここで解決する**(裁定206、`slot` 発注単位の型付き link
+            // 拡張)。読むのは (a) `t + time_offset`(Document 由来の静的値) (b)
+            // 参照先 property を**同じ `value_at_path` 経路**で再帰的に解決した値
+            // (c) `params`(Document 由来の animatable 値)だけ——壁時計・ライブ音声・
+            // 乱数・OS入力を一切読まないので、`motolii-eval` の「時刻t→値の純関数」
+            // 契約(`motolii-eval/src/lib.rs:16`)にそのまま収まる。
+            Some(PropertySource::Link(link)) => {
+                if link_depth >= MAX_LINK_DEPTH {
+                    return Err(StoreError::Property(format!(
+                        "link の参照鎖が深すぎる({MAX_LINK_DEPTH}段以上) — 書き込み時の\
+                         循環拒否をすり抜けた壊れた Document の可能性がある"
+                    )));
+                }
+                let source_t = t.try_add(link.time_offset).map_err(|e| {
+                    StoreError::Property(format!("link の time_offset を適用できない: {e}"))
+                })?;
+                let source_value = self.value_at_path_resolving_links(
+                    &link.source_layer.entity_path(),
+                    &link.source_property,
+                    source_t,
+                    link_depth + 1,
+                )?;
+                Ok(source_value
+                    .and_then(|value| crate::slot::translate_link(&link.plugin_id, &link.params, value)))
             }
             None => Ok(None),
         }

@@ -73,17 +73,19 @@ fn doc_with_layer() -> (Document, LayerId) {
 }
 
 /// マスクを1つ足す(静止した形状つき)。**追加と形状は1操作 = 1 undo**。
+///
+/// **2026-08-22(裁定206 に続く壁7の恒久修正)**: 以前はここで `SetMasks`(一覧に
+/// push)→`SetTrack`(shape)の2 intent を `apply_all` で束ねていた。その順序
+/// (一覧を先に更新)は `Intent::SetMasks` 自身が「新しく現れる id は shape が
+/// 既に読めることを要求する」よう変わったため、今この順序のままだと
+/// `SetMasks` が `Err` を返す——`Intent::AddMask` 1本(一覧への追加と shape の
+/// 初期値を同じ `write()` 呼び出しで束ねる、順序に頼らない原子操作)に置き換えた。
 fn add_mask(doc: &mut Document, layer: LayerId, mask: Mask, x: f64) {
-    let mut masks = doc.view().masks(layer).unwrap();
-    masks.push(mask);
-    doc.apply_all([
-        Intent::SetMasks { layer, masks },
-        Intent::SetTrack {
-            layer,
-            property: PropertyId::mask_shape(mask.id),
-            track: still(Value::Path(marker_path(x))),
-        },
-    ])
+    doc.apply(Intent::AddMask {
+        layer,
+        mask,
+        shape: still(Value::Path(marker_path(x))),
+    })
     .unwrap();
 }
 
@@ -329,25 +331,81 @@ fn the_mask_shape_interpolates_between_keys() {
     );
 }
 
-/// 形状の無いマスクは**壊れた Document**。既定値へ静かに落とすと
-/// 利用者には「マスクが勝手に消えた」としか見えない(裁定37)。
+/// **2026-08-22(壁7の恒久修正)以前の挙動だった**: 以前は `SetMasks` に新規 id を
+/// 素通しさせ、`resolve()` の時になって初めて `Err` を返していた(既定値へ静かに
+/// 落とすと利用者には「マスクが勝手に消えた」としか見えない、裁定37)。今は
+/// `SetMasks` 自身が書き込み時にこの状態を作れなくする(`AddMask` が導入された
+/// 理由そのもの)——`resolved_masks` 自体の型検査(パスでない値が入っている等)は
+/// 従来どおり resolve 時のまま(ここが変わったのは「shape が無い」の一点だけ)。
 #[test]
-fn a_mask_without_a_shape_is_an_error_not_a_silent_skip() {
+fn set_masks_rejects_a_new_mask_without_a_shape_at_write_time() {
     let (mut doc, layer) = doc_with_layer();
-    doc.apply(Intent::SetMasks {
+    let result = doc.apply(Intent::SetMasks {
         layer,
         masks: vec![Mask {
             id: MaskId(0),
             mode: MaskMode::Add,
             inverted: false,
         }],
-    })
-    .unwrap();
+    });
 
     assert!(
-        doc.view().resolve(layer, t(0)).is_err(),
-        "形状の無いマスクを黙って飛ばしている"
+        result.is_err(),
+        "shape の無い新規マスクが SetMasks を素通りしている"
     );
+    // 拒まれた書き込みは何も残さない——マスクは1枚も置かれていないはず。
+    assert!(doc.view().masks(layer).unwrap().is_empty());
+}
+
+/// `AddMask` は「一覧への追加」と「shape の初期値」を1つの `write()` 呼び出しで
+/// 束ねるので、shape の無いマスクが生まれる中間状態が物理的に存在しない——
+/// 追加した直後から常に resolve が通る。
+#[test]
+fn add_mask_never_produces_a_shapeless_mask() {
+    let (mut doc, layer) = doc_with_layer();
+    add_mask(
+        &mut doc,
+        layer,
+        Mask {
+            id: MaskId(0),
+            mode: MaskMode::Add,
+            inverted: false,
+        },
+        0.0,
+    );
+    assert!(
+        doc.view().resolve(layer, t(0)).is_ok(),
+        "AddMask で足したマスクは shape を伴うので resolve が通るはず"
+    );
+}
+
+/// `SetMasks` で新規追加する場合でも、**同じ `apply_all` の中で先に shape の
+/// `SetTrack` を書けば通る**(§ `Intent::SetMasks` の doc 参照 — 各 intent は
+/// 同じ edit 刻みで逐次 ingest されるので、後続 intent の検査は先行 intent の
+/// 結果を見る)。`AddMask` の方が1回で済むが、`apply_all` での手動束ねも壊れて
+/// いないことを固定する。
+#[test]
+fn set_masks_accepts_a_new_mask_when_the_shape_is_written_first_in_the_same_batch() {
+    let (mut doc, layer) = doc_with_layer();
+    let mask = Mask {
+        id: MaskId(0),
+        mode: MaskMode::Add,
+        inverted: false,
+    };
+    doc.apply_all([
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::mask_shape(mask.id),
+            track: still(Value::Path(marker_path(0.0))),
+        },
+        Intent::SetMasks {
+            layer,
+            masks: vec![mask],
+        },
+    ])
+    .unwrap();
+
+    assert!(doc.view().resolve(layer, t(0)).is_ok());
 }
 
 /// マスクの編集も `edit` timeline 上の普通の刻み。自前の履歴機構を持たない。

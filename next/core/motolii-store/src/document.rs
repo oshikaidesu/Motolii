@@ -10,6 +10,7 @@ use re_log_types::{
     AbsoluteTimeRange, EntityPath, StoreId, StoreKind, TimePoint, Timeline, TimelineName,
 };
 use re_types_core::{Component, SerializedComponentBatch};
+use serde::{Deserialize, Serialize};
 
 use motolii_core::RationalTime;
 use motolii_eval::{Interp, Keyframe, KeyframeTrack, Value};
@@ -19,10 +20,11 @@ use crate::components::{
     descriptor_markers, descriptor_masks, descriptor_meta, descriptor_present, descriptor_shapes,
     descriptor_slots, descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
-use crate::slot::PropertySource;
+use crate::slot::{PropertyLink, PropertySource};
 use crate::view::StoreView;
 use crate::{
-    LayerAttrsPatch, LayerMeta, LayerSource, LayerTiming, Slot, SlotId, StoreError, EDIT_TIMELINE,
+    LayerAttrsPatch, LayerMeta, LayerSource, LayerTiming, Mask, Slot, SlotId, StoreError,
+    EDIT_TIMELINE,
 };
 
 /// layer の安定 ID。entity path はこれ1つから決まる。
@@ -258,6 +260,34 @@ impl PropertyId {
     }
 }
 
+/// **裸の文字列として符号化する**(`SlotId`/`crate::slot::translate_link` と同じ
+/// 「透過ニュータイプ」の流儀)。`link` 発注単位(裁定206)が
+/// [`crate::slot::PropertyLink::source_property`] を保存へ乗せる必要が出て初めて
+/// 要った実装 — それまで `PropertyId` は一度も Document の JSON へ直接埋め込まれた
+/// ことが無かった(常に `PropertyId::new(name)` で組み立て直す一時的な鍵としてのみ
+/// 使われていた)。`component`(interned `ComponentIdentifier`)は運ばない —
+/// 復元時に [`PropertyId::new`] を呼び直せば同じ値になるので、二重に持つ理由が無い。
+impl Serialize for PropertyId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.name)
+    }
+}
+
+/// 復元は [`PropertyId::new`] を呼び直すだけ — 予約語/空文字の柵も自動的に効く
+/// (壊れた JSON から `masks`/`meta` 等の予約名を持つ `PropertyId` が復活しない)。
+impl<'de> Deserialize<'de> for PropertyId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name = <String as Deserialize>::deserialize(deserializer)?;
+        PropertyId::new(&name).map_err(serde::de::Error::custom)
+    }
+}
+
 /// 編集の意図。**Document を書き換える道はこれだけ**。
 #[derive(Clone, Debug)]
 pub enum Intent {
@@ -279,6 +309,23 @@ pub enum Intent {
         property: PropertyId,
         slot: SlotId,
     },
+    /// この property を**型付き link**(`docs/reviews/2026-08-22-persona-touchdesigner-round2.md`
+    /// §1、裁定206)へ切り替える。`SetTrack`/`SetPropertySlot` と全く同じ形 —
+    /// `PropertySource::Link` を同じ component へ書くだけで、第二の差し替え機構を
+    /// 増やさない。`SetTrack`/`SetPropertySlot` を再び投げれば普通の track/slot へ
+    /// 戻せる(同じ場所を上書きするだけ、専用の「解除」variant は要らない)。
+    ///
+    /// **循環は書き込み時に拒否する**([`validate_no_link_cycle`]) — Blender の
+    /// driver 依存グラフのような実行時検出・事後警告(§1.1/§1.5、循環実測
+    /// [Blender Projects #64793](https://projects.blender.org/blender/blender/issues/64793))
+    /// より強い保証。`motolii-eval` の「時刻t→値の純関数」契約
+    /// (`motolii-eval/src/lib.rs:16`)を壊すと Preview=Export(裁定15)の保証が崩れるため、
+    /// 妥協ではなく必須の柵。
+    SetPropertyLink {
+        layer: LayerId,
+        property: PropertyId,
+        link: PropertyLink,
+    },
     /// 素材と重ね順の**新規配置専用**。
     ///
     /// **既に `meta` を持つ layer には使えない**(`write` が拒む、裁定108(c))。
@@ -299,14 +346,41 @@ pub enum Intent {
     },
     /// 既存 layer の重ね順を変える(`meta` を読んで `order` だけ書き換える)。
     SetOrder { layer: LayerId, order: i16 },
-    /// マスクの並びと重ね方。**追加・削除・並べ替え・モード変更はすべてこれ1つ**
+    /// マスクの並びと重ね方。**並べ替え・削除・モード変更はこれ1つ**
     /// (`LayerTiming` と同じ考え方で、操作ごとの専用 intent を足さない)。
     ///
-    /// 形状と不透明度は `SetTrack` が書く。「マスクを1枚足す」は
-    /// `SetMasks` + `SetTrack` を `apply_all` で束ねた **1操作 = 1 undo** になる。
+    /// 形状と不透明度は `SetTrack` が書く。
+    ///
+    /// **新しく現れる mask id は拒む**(2026-08-22 発見の欠陥の恒久修正、
+    /// `docs/reviews/2026-08-22-persona-motion-round2.md` §1 壁7): 以前はここで
+    /// `masks` へ新しい id を足すだけで通ってしまい、対応する `mask.{id}.shape` の
+    /// `SetTrack` を書き忘れても検査を素通りしていた——`resolved_masks` が実行時に
+    /// 初めて `Err` を返す壊れた Document を構造的に作れていた。今は
+    /// [`validate_masks_have_shapes`] が「現在の一覧に無い id は、この呼び出しの
+    /// 時点で `mask.{id}.shape` が既に読めること」を要求する。**同じ `apply_all` の
+    /// 中で先に `SetTrack`(shape)を書けば通る**(各 intent は同じ edit 刻みで
+    /// 逐次 ingest されるので、後続 intent の検査は先行 intent の結果を見る) ——
+    /// ただし1回で足りる [`Intent::AddMask`] の方を新規追加には使うこと。
     SetMasks {
         layer: LayerId,
         masks: Vec<crate::Mask>,
+    },
+    /// マスクを1枚**追加する専用の口**。`SetMasks`(一覧の並べ替え・削除・mode 変更)
+    /// と `SetTrack`(shape)を呼び手が2つの intent に分けて書くと、片方だけ書いて
+    /// 忘れる経路が構造的に残る(上記 `SetMasks` の doc 参照、壁7)。`AddMask` は
+    /// 「一覧への追加」と「shape の初期値」を**同じ `write()` 呼び出しの中で1つの
+    /// chunk として ingest する**——2つの intent の順序に頼らず、そもそも
+    /// 「マスクだけあって shape が無い」中間状態が物理的に存在しない。
+    ///
+    /// 既存マスクの並べ替え・削除・mode 変更は引き続き `SetMasks` を使う
+    /// (`AddMask` は新規追加専用 — 既に居る id を渡すと [`crate::mask::validate_unique_ids`]
+    /// が拒む)。
+    AddMask {
+        layer: LayerId,
+        mask: Mask,
+        /// 初期 shape。既定矩形の1キー Hold でも、複数キーのアニメーションでもよい
+        /// (`SetTrack` が受け取る形と同じ)。
+        shape: motolii_eval::KeyframeTrack,
     },
     /// comp 上の配置と、素材のどこを使うか。move / trim / split はすべてこれ1つ。
     SetTiming {
@@ -810,6 +884,7 @@ impl Document {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen(&self.view(), layer)?;
                 crate::mask::validate_unique_ids(&masks)?;
+                validate_masks_have_shapes(&self.view(), layer, &masks)?;
                 let json = serde_json::to_string(&masks)?;
                 (
                     layer.entity_path(),
@@ -818,6 +893,40 @@ impl Document {
                         array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
                             .map_err(|e| StoreError::Chunk(e.to_string()))?,
                     }],
+                )
+            }
+            Intent::AddMask { layer, mask, shape } => {
+                check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
+                let mut masks = self.view().masks(layer)?;
+                masks.push(mask);
+                crate::mask::validate_unique_ids(&masks)?;
+                let masks_json = serde_json::to_string(&masks)?;
+                let shape_property = crate::PropertyId::mask_shape(mask.id);
+                let shape_json = serde_json::to_string(&PropertySource::Track(shape))?;
+                // **1つの chunk として同時に ingest する**(下の `(path, batches)` を
+                // 呼び出し元の `write()` 末尾がまとめて1回で書く) — 「一覧だけ更新
+                // されて shape が無い」瞬間が物理的に存在しない(2つの intent の
+                // 順序に頼る `apply_all([SetMasks, SetTrack])` との違い、上記
+                // `Intent::SetMasks`/`Intent::AddMask` の doc 参照)。
+                (
+                    layer.entity_path(),
+                    vec![
+                        SerializedComponentBatch {
+                            descriptor: descriptor_masks(),
+                            array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(
+                                masks_json,
+                            )])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                        },
+                        SerializedComponentBatch {
+                            descriptor: descriptor_track(&shape_property),
+                            array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(
+                                shape_json,
+                            )])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                        },
+                    ],
                 )
             }
             Intent::SetTiming { layer, timing } => {
@@ -1049,6 +1158,24 @@ impl Document {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen(&self.view(), layer)?;
                 let json = serde_json::to_string(&PropertySource::Slot(slot))?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_track(&property),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetPropertyLink {
+                layer,
+                property,
+                link,
+            } => {
+                check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
+                validate_no_link_cycle(&self.view(), layer, &property, &link)?;
+                let json = serde_json::to_string(&PropertySource::Link(link))?;
                 (
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
@@ -1403,6 +1530,86 @@ fn validate_no_parent_cycle(
             .ok()
             .flatten()
             .and_then(|attrs| attrs.parent);
+    }
+    Ok(())
+}
+
+/// `new_link` の参照鎖を辿って `(layer, property)` 自身へ戻ってこないことを確かめる。
+/// [`validate_no_parent_cycle`] の `(LayerId, PropertyId)` 版 — 新しい検査手法では
+/// なく同型の複製(裁定206・`docs/reviews/2026-08-22-persona-touchdesigner-round2.md`
+/// §1.5 の設計どおり)。
+///
+/// **循環参照は絶対に作れない**(書き込み時拒否)。Blender の driver 依存グラフは
+/// 循環を実行時に検出し「ランダムな点で切って」評価を続ける([Blender Projects
+/// #64793](https://projects.blender.org/blender/blender/issues/64793) が報告する
+/// 「ジャンプ・チラつき」の原因そのもの)——ここは書き込み時に拒むので、その弱点を
+/// 生じさせない。`seen` は防御的な保険(`validate_no_parent_cycle` と同じ理由)。
+fn validate_no_link_cycle(
+    view: &StoreView,
+    layer: LayerId,
+    property: &PropertyId,
+    new_link: &PropertyLink,
+) -> Result<(), StoreError> {
+    let start = (layer, property.clone());
+    let mut current = Some((new_link.source_layer, new_link.source_property.clone()));
+    let mut seen = std::collections::HashSet::new();
+    while let Some(candidate) = current {
+        if candidate == start {
+            return Err(StoreError::Property(format!(
+                "layer {} の property `{}` を layer {} の property `{}` へ link すると \
+                 循環参照になる(参照鎖を辿ると自分自身へ戻ってくる)",
+                layer.0,
+                property.name(),
+                candidate.0 .0,
+                candidate.1.name()
+            )));
+        }
+        if !seen.insert(candidate.clone()) {
+            break; // 既に壊れた鎖(バグ由来)を無限に辿らない防御。
+        }
+        current = view
+            .property_source(candidate.0, &candidate.1)
+            .ok()
+            .flatten()
+            .and_then(|src| match src {
+                PropertySource::Link(l) => Some((l.source_layer, l.source_property)),
+                _ => None, // Track/Slot は鎖の終端。
+            });
+    }
+    Ok(())
+}
+
+/// **壁7の恒久修正**(2026-08-22、`docs/reviews/2026-08-22-persona-motion-round2.md`
+/// §1): `SetMasks` の一覧に**現在の一覧に無い id**(=新規追加)が混ざっていたら、
+/// その id の `mask.{id}.shape` が(この呼び出しの時点で)既に読めることを要求する。
+///
+/// 「読めること」だけを見る——形状の**型**(`Value::Path` かどうか)や実際の解決は
+/// 見ない。型検査は既存どおり `StoreView::resolved_masks` が resolve 時に行う
+/// (`mask.rs`/`view.rs` の既存の役割分担、裁定37「無い」と「壊れている」の非同義を
+/// そのまま踏襲——ここは「無い」だけを拒む)。
+///
+/// 既存 mask(並べ替え・削除・mode 変更で id が変わらない物)はここに引っかからない
+/// — shape は以前から存在するはずなので、再検査しても意味が無い。
+fn validate_masks_have_shapes(
+    view: &StoreView,
+    layer: LayerId,
+    masks: &[Mask],
+) -> Result<(), StoreError> {
+    let existing_ids: std::collections::HashSet<crate::MaskId> =
+        view.masks(layer)?.iter().map(|m| m.id).collect();
+    for mask in masks {
+        if existing_ids.contains(&mask.id) {
+            continue;
+        }
+        let shape_property = crate::PropertyId::mask_shape(mask.id);
+        if view.property_source(layer, &shape_property)?.is_none() {
+            return Err(StoreError::Property(format!(
+                "マスク {} を追加しようとしたが `mask.{}.shape` がまだ無い — 先に \
+                 (同じ apply_all の中で)shape の SetTrack を書くこと。1回で束ねたい \
+                 なら `Intent::AddMask` を使うこと",
+                mask.id, mask.id
+            )));
+        }
     }
     Ok(())
 }
