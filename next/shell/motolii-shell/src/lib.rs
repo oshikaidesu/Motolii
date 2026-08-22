@@ -1970,20 +1970,6 @@ impl Shell {
                     &mut self.doc,
                     self.session.selection,
                     effect,
-            // TEXT section(B46 第1切片、裁定184)。書き込み本体は pane の
-            // 自由関数(MASK 腕と同じ「ここは Err を status 帯へ渡す glue
-            // だけ」の形、M13)。
-            inspector_pane::Message::TextFieldInput(field, text) => {
-                self.inspector_text_field_draft =
-                    Some(inspector_pane::TextFieldDraft { field, text });
-                Task::none()
-            }
-            inspector_pane::Message::TextFieldSubmit(field) => {
-                if let Err(error) = inspector_pane::commit_text_field(
-                    &mut self.doc,
-                    &mut self.inspector_text_field_draft,
-                    self.session.selection,
-                    field,
                 ) {
                     self.status = Some(error);
                 }
@@ -1995,10 +1981,6 @@ impl Shell {
                     self.session.selection,
                     effect,
                 ) {
-            inspector_pane::Message::CycleTextJustify => {
-                if let Err(error) =
-                    inspector_pane::cycle_text_justify(&mut self.doc, self.session.selection)
-                {
                     self.status = Some(error);
                 }
                 Task::none()
@@ -2009,10 +1991,6 @@ impl Shell {
                     self.session.selection,
                     effect,
                 ) {
-            inspector_pane::Message::ResetLineHeightAuto => {
-                if let Err(error) =
-                    inspector_pane::reset_text_line_height(&mut self.doc, self.session.selection)
-                {
                     self.status = Some(error);
                 }
                 Task::none()
@@ -2033,6 +2011,45 @@ impl Shell {
                     &mut self.doc,
                     self.session.selection,
                 ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            // TEXT section(B46 第1切片、裁定184)。書き込み本体は pane の
+            // 自由関数(MASK 腕と同じ「ここは Err を status 帯へ渡す glue
+            // だけ」の形、M13)。
+            inspector_pane::Message::TextFieldInput(field, text) => {
+                self.inspector_text_field_draft =
+                    Some(inspector_pane::TextFieldDraft { field, text });
+                Task::none()
+            }
+            inspector_pane::Message::TextFieldSubmit(field) => {
+                if let Err(error) = inspector_pane::commit_text_field(
+                    &mut self.doc,
+                    &mut self.inspector_text_field_draft,
+                    self.session.selection,
+                    field,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::CycleTextJustify => {
+                if let Err(error) =
+                    inspector_pane::cycle_text_justify(&mut self.doc, self.session.selection)
+                {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::ResetLineHeightAuto => {
+                if let Err(error) =
+                    inspector_pane::reset_text_line_height(&mut self.doc, self.session.selection)
+                {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
             inspector_pane::Message::ResetTracking => {
                 if let Err(error) =
                     inspector_pane::reset_text_tracking(&mut self.doc, self.session.selection)

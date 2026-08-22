@@ -3841,12 +3841,17 @@ name = "motolii-inspector-pane"
 version = "0.1.0"
 dependencies = [
  "iced",
+ "iced_core",
  "iced_test",
+ "iced_widget",
  "motolii-core",
+ "motolii-css-metrics",
  "motolii-settings-pane",
  "motolii-shell-state",
  "motolii-store",
+ "motolii-taffy",
  "motolii-tokens-rs",
+ "serde_json",
 ]
 
 [[package]]
