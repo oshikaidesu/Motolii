@@ -78,6 +78,18 @@ impl PropertyId {
         Self::mask_property(mask, "opacity")
     }
 
+    /// マスクの膨張(px、単一スカラー)。**Lottie 実在語彙**
+    /// (`next/reference/lottie-coverage.tsv` 行197 `helpers mask x`(Expand)——
+    /// 旧 verdict は「不採用」だったが B02 で撤回、`mask.rs` 冒頭「2026-08-22」節参照)。
+    /// **キーフレーム可能**(AE 実機で Mask Opacity/Shape と同じくタイムラインで動く
+    /// property)。正で外側へ広げ、負で内側へ縮める(Lottie/AE と同じ符号)。
+    ///
+    /// キーを打っていない = **既定 `0.0`(無効)** — `mask_opacity` の「既定 1.0」と
+    /// 対になる「既定 0」。
+    pub fn mask_expansion(mask: crate::MaskId) -> Self {
+        Self::mask_property(mask, "expansion")
+    }
+
     fn mask_property(mask: crate::MaskId, attr: &str) -> Self {
         let name = format!("{}{mask}.{attr}", crate::property::MASK_PREFIX);
         Self::new(&name).expect("マスクの property 名は予約語でも空でもない")
