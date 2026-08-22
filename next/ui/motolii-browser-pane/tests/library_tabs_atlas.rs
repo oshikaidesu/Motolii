@@ -191,9 +191,11 @@ fn effects_tab_renders_the_preview_catalog_and_never_the_ledger() {
     );
 }
 
-/// filter shelf のチップ(media 語彙)は media タブでだけ現れる — 非 media
-/// タブは shelf 非表示(発注4項の許容逸脱: 中身未実装のタブは shelf を出さ
-/// ない)。検索欄(mock では toolbar 領域、全タブ共有)は非 media タブでも残る。
+/// filter shelf のチップは**タブ別の語彙**(mock `.filterGroup[data-filter-
+/// group=*]` — 構造の対称化 2026-08-22 で非 media タブにもタブ別チップが
+/// 入ったが、media 語彙のチップが他タブへ漏れないことは不変)。検索欄
+/// (mock では toolbar 領域、全タブ共有)は非 media タブでも残る。
+/// タブ別チップ自体の存在は `tab_rail_symmetry_atlas.rs` が固定する。
 #[test]
 fn media_filter_chips_are_hidden_outside_the_media_tab() {
     let items = fixture_items();

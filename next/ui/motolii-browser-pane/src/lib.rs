@@ -88,8 +88,8 @@ pub mod model;
 pub mod state;
 
 pub use model::{
-    AssetListItem, CatalogCard, Category, LibraryTab, PreviewCard, RailScope, FILTER_CHIPS,
-    LIBRARY_TABS, RAIL_SCOPES,
+    AssetListItem, CardKey, CatalogCard, Category, LibraryTab, PreviewCard, PreviewScope,
+    PreviewTag, RailScope, FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES,
 };
 pub use state::{Message, PaneState};
 
@@ -121,11 +121,15 @@ pub const PANEL_HEIGHT_ROW_HEIGHT_RATIO: f32 = 14.0;
 ///   裁定「デザイン値の外出し徹底」)。active/inactive は既存トークンの
 ///   ロール差のみ(S4: `action_active` 下線+`surface_app` 地+`text_primary`
 ///   vs 透明地+`text_muted` — 新ロールなし)。
-/// - media タブ: [`view`](Document 台帳投影の従来経路)。
-/// - effects/create/panels タブ: [`preview_catalog_view`](preview-local
-///   静的カタログ、[`model::preview_catalog`])。media 語彙の filter chips は
-///   出さない(shelf の中身が未実装のタブは shelf 非表示 — 発注4項の許容
-///   逸脱。検索欄は mock では toolbar 領域=全タブ共有なので残す)。
+/// - media タブ: [`media_body`](Document 台帳投影の従来経路 — [`view`] と
+///   同一の木+カード選択意匠)。
+/// - effects/create/panels タブ: [`preview_body`](preview-local 静的カタログ、
+///   [`model::preview_catalog`])。**media と同じ構造文法**(左 rail=スコープ
+///   選択 / 上=検索+フィルタチップ / 右=カタログ — 構造の対称化、利用者
+///   実窓指摘 2026-08-22「Browser の構造が media タブにしか適用されていない」
+///   への対応)。rail/チップの中身は mock がタブ別に宣言する語彙
+///   ([`model::preview_tags`])。検索欄は mock では toolbar 領域=全タブ共有
+///   なので従来どおり全タブに出す。
 pub fn pane_view(
     state: &PaneState,
     items: &[AssetListItem],
@@ -134,8 +138,22 @@ pub fn pane_view(
 ) -> Element<'static, Message> {
     let band = tab_band_view(state.tab(), dims, colors);
     let body: Element<'static, Message> = match state.tab() {
-        LibraryTab::Media => view(items, state.scope(), state.query(), dims, colors),
-        tab => preview_catalog_view(tab, state.query(), dims, colors),
+        LibraryTab::Media => media_body(
+            items,
+            state.scope(),
+            state.query(),
+            state.selected(),
+            dims,
+            colors,
+        ),
+        tab => preview_body(
+            tab,
+            state.preview_scope(),
+            state.query(),
+            state.selected(),
+            dims,
+            colors,
+        ),
     };
     column![band, body].spacing(dims.spacing_xs).into()
 }
@@ -237,10 +255,10 @@ fn tab_style(colors: Colors, selected: bool, status: button::Status) -> button::
 /// 投影 — 絞り込みはこの関数の中で [`model::visible`] を呼ぶ(呼び手は
 /// フィルタ済みリストを別途作らなくてよい)。
 ///
-/// **media タブの body 専用の旧入口**(タブ帯を含まない) — タブ帯込みの
-/// 全体は [`pane_view`]。`motolii-shell::Shell::view` がこのシグネチャを
-/// 直読みしている(write-set 外)ため残置、supervisor 側で `pane_view` へ
-/// 差し替え待ち。
+/// **media タブの body 専用の旧入口**(タブ帯を含まない・カード選択意匠なし)
+/// — タブ帯込みの全体は [`pane_view`](こちらが選択意匠も渡す)。既存試験
+/// (`rail_filter_atlas.rs`/`browser_ratio_ledger.rs`)が直読みするため
+/// シグネチャは据え置き([`media_body`] の `selected: None` 特殊形)。
 pub fn view(
     items: &[AssetListItem],
     scope: RailScope,
@@ -248,10 +266,23 @@ pub fn view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
+    media_body(items, scope, query, None, dims, colors)
+}
+
+/// media タブの body(rail + カタログ)。B2/B3 の [`view`] と同一の木に、
+/// カード選択意匠(`selected`、mock `.libraryCard.selected`)だけを足した形。
+fn media_body(
+    items: &[AssetListItem],
+    scope: RailScope,
+    query: &str,
+    selected: Option<model::CardKey>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
     let filtered = model::visible(items, scope, query);
 
     let rail = rail_view(scope, dims, colors);
-    let catalog = catalog_view(scope, query, &filtered, dims, colors);
+    let catalog = catalog_view(scope, query, &filtered, selected, dims, colors);
 
     row![rail, catalog].spacing(dims.spacing_xs).into()
 }
@@ -270,9 +301,10 @@ fn rail_view(scope: RailScope, dims: Dimensions, colors: Colors) -> Element<'sta
     let rows: Vec<Element<'static, Message>> = RAIL_SCOPES
         .into_iter()
         .map(|option| {
-            scope_button(
-                option,
+            labeled_button(
+                option.label(),
                 option == scope,
+                Message::SelectScope(option),
                 Length::Fill,
                 [dims.spacing_xs, dims.spacing_m],
                 0.0,
@@ -282,6 +314,54 @@ fn rail_view(scope: RailScope, dims: Dimensions, colors: Colors) -> Element<'sta
         })
         .collect();
 
+    rail_container(rows, dims, colors)
+}
+
+/// 非 media タブの rail 列(mock `.tabScoped-effects/-create/-panels` の
+/// カテゴリ節 — 構造の対称化)。行の構成は「All …」行([`model::LibraryTab::
+/// all_label`])+ タブ別カテゴリ([`model::preview_tags`]、mock 掲載順=S0)。
+/// 行の意匠・padding・容器は media の [`rail_view`] と完全に同一
+/// (`COLLECTIONS` 節は media 同様まだ描かない予約地 — crate 冒頭 doc 参照)。
+fn preview_rail_view(
+    tab: LibraryTab,
+    scope: PreviewScope,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let row_padding = [dims.spacing_xs, dims.spacing_m];
+    let mut rows: Vec<Element<'static, Message>> = vec![labeled_button(
+        tab.all_label(),
+        scope == PreviewScope::All,
+        Message::SelectPreviewScope(PreviewScope::All),
+        Length::Fill,
+        row_padding,
+        0.0,
+        dims,
+        colors,
+    )];
+    rows.extend(model::preview_tags(tab).iter().map(|&tag| {
+        labeled_button(
+            tag.label(),
+            scope == PreviewScope::Tag(tag),
+            Message::SelectPreviewScope(PreviewScope::Tag(tag)),
+            Length::Fill,
+            row_padding,
+            0.0,
+            dims,
+            colors,
+        )
+    }));
+
+    rail_container(rows, dims, colors)
+}
+
+/// rail 列の容器(media/preview 共通 — 台帳 1c 節の padding・地・枠は
+/// [`rail_view`] の doc 参照。2つの rail が同じ意匠を1箇所で共有する)。
+fn rail_container(
+    rows: Vec<Element<'static, Message>>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
     container(
         column(rows)
             .spacing(dims.spacing_xs)
@@ -306,6 +386,7 @@ fn catalog_view(
     scope: RailScope,
     query: &str,
     filtered: &[AssetListItem],
+    selected: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -318,24 +399,31 @@ fn catalog_view(
         .size(dims.micro_text)
         .color(colors.text_muted);
 
-    let grid = card_grid_view(filtered, dims, colors);
+    let grid = card_grid_view(filtered, selected, dims, colors);
 
-    container(
-        column![shelf, summary, grid]
-            .spacing(dims.spacing_xs)
-            .padding(dims.spacing_m),
-    )
-    .width(Length::FillPortion(4))
-    .style(move |_theme| container::Style {
-        background: Some(iced::Background::Color(colors.surface_panel)),
-        border: iced::Border {
-            color: colors.border_default,
-            width: dims.border_width,
-            radius: 0.0.into(),
-        },
-        ..container::Style::default()
-    })
-    .into()
+    catalog_container(column![shelf, summary, grid], dims, colors)
+}
+
+/// カタログ容器(media/preview 共通 — 地・枠・padding を1箇所で共有する。
+/// `FillPortion(4)` は rail の `FillPortion(1)` と対で mock
+/// `.librarySidebar{width:112px}` : `.catalog{flex:1}` の比を近似した既決値)。
+fn catalog_container(
+    content: iced::widget::Column<'static, Message>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    container(content.spacing(dims.spacing_xs).padding(dims.spacing_m))
+        .width(Length::FillPortion(4))
+        .style(move |_theme| container::Style {
+            background: Some(iced::Background::Color(colors.surface_panel)),
+            border: iced::Border {
+                color: colors.border_default,
+                width: dims.border_width,
+                radius: 0.0.into(),
+            },
+            ..container::Style::default()
+        })
+        .into()
 }
 
 /// filter chip/Clear の角丸 = `dims.row_height` の何倍か(裁定165「形は
@@ -367,9 +455,10 @@ fn filter_shelf_view(
     let chips: Vec<Element<'static, Message>> = FILTER_CHIPS
         .into_iter()
         .map(|option| {
-            scope_button(
-                option,
+            labeled_button(
+                option.label(),
                 option == scope,
+                Message::SelectScope(option),
                 Length::Shrink,
                 chip_padding,
                 chip_radius,
@@ -379,6 +468,54 @@ fn filter_shelf_view(
         })
         .collect();
 
+    shelf_row(query, chips, dims, colors)
+}
+
+/// 非 media タブの filter shelf(mock `.filterGroup[data-filter-group=
+/// "effects"/"create"/"panels"]` の転写 — 構造の対称化)。チップは
+/// [`model::preview_tags`](rail のカテゴリと同ラベル・同 Message — mock の
+/// filterGroup チップと `.tabScoped-*` 行が同じ `data-tag-filter` を書くのと
+/// 同型)。チップの意匠・Clear・検索欄は media の [`filter_shelf_view`] と
+/// 完全に同一。
+fn preview_filter_shelf_view(
+    tab: LibraryTab,
+    scope: PreviewScope,
+    query: &str,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let chip_radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
+    let chip_padding = [dims.spacing_xs, dims.spacing_s];
+    let chips: Vec<Element<'static, Message>> = model::preview_tags(tab)
+        .iter()
+        .map(|&tag| {
+            labeled_button(
+                tag.label(),
+                scope == PreviewScope::Tag(tag),
+                Message::SelectPreviewScope(PreviewScope::Tag(tag)),
+                Length::Shrink,
+                chip_padding,
+                chip_radius,
+                dims,
+                colors,
+            )
+        })
+        .collect();
+
+    shelf_row(query, chips, dims, colors)
+}
+
+/// filter shelf の骨格(media/preview 共通 — 検索欄+チップ列+Clear。mock
+/// `.filterShelf` の並びを1箇所で共有する)。Clear は両タブ群とも
+/// [`Message::ClearFilters`](従来 Message)を publish する。
+fn shelf_row(
+    query: &str,
+    chips: Vec<Element<'static, Message>>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let chip_radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
+    let chip_padding = [dims.spacing_xs, dims.spacing_s];
     row![
         search_field(query, dims, colors),
         row(chips).spacing(dims.spacing_xs),
@@ -411,30 +548,34 @@ fn search_field(query: &str, dims: Dimensions, colors: Colors) -> Element<'stati
 }
 
 /// rail 行/filter チップ、共通のボタン(選択状態を1箇所で塗り分ける —
-/// 2つの入口が同じ意匠を共有する、Ableton可視性原理どおり)。**台帳
-/// (1a節)**: 文字は mock 実測でどちらも8px — `micro_text`(旧
-/// `caption_text`=9 は自前判断だった)。`padding`/`radius` は呼び出し側
-/// (rail 行 vs filter チップ)で異なる mock 実測値を渡す([`rail_view`]/
-/// [`filter_shelf_view`] の doc 参照 — 色/選択状態の意匠だけを共有し、
-/// 形(padding・角丸)は mock どおり呼び出し側で分ける)。
-fn scope_button(
-    scope: RailScope,
+/// 2つの入口が同じ意匠を共有する、Ableton可視性原理どおり。media の
+/// `RailScope` と非 media の `PreviewScope` の両語彙が同じ1本を使う —
+/// 構造の対称化はこの関数の共有が実体)。**台帳(1a節)**: 文字は mock
+/// 実測でどちらも8px — `micro_text`(旧 `caption_text`=9 は自前判断だった)。
+/// `padding`/`radius` は呼び出し側(rail 行 vs filter チップ)で異なる mock
+/// 実測値を渡す([`rail_view`]/[`filter_shelf_view`] の doc 参照 — 色/選択
+/// 状態の意匠だけを共有し、形(padding・角丸)は mock どおり呼び出し側で
+/// 分ける)。
+#[allow(clippy::too_many_arguments)]
+fn labeled_button(
+    label: &'static str,
     selected: bool,
+    message: Message,
     width: Length,
     padding: [f32; 2],
     radius: f32,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    button(text(scope.label()).size(dims.micro_text))
-        .on_press(Message::SelectScope(scope))
+    button(text(label).size(dims.micro_text))
+        .on_press(message)
         .width(width)
         .padding(padding)
         .style(move |_theme, status| chip_style(dims, colors, selected, status, radius))
         .into()
 }
 
-/// [`scope_button`]/Clear ボタン共通のスタイル。選択中は `action_active`
+/// [`labeled_button`]/Clear ボタン共通のスタイル。選択中は `action_active`
 /// (accent、mock `.selected`/`.filterShelf button.selected` の金色枠と同じ
 /// 意味役割)で縁取る。`radius` は呼び出し側の mock 実測値
 /// ([`FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO`]/rail の `0.0`)。
@@ -535,6 +676,7 @@ pub const THUMB_ASPECT_H: f32 = 9.0;
 /// ことを1行で言う(B2 から不変の文言)。
 fn card_grid_view(
     filtered: &[AssetListItem],
+    selected: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -554,7 +696,10 @@ fn card_grid_view(
             let cards: Vec<Element<'static, Message>> = chunk
                 .iter()
                 .cloned()
-                .map(|item| card_view(item, dims, colors))
+                .map(|item| {
+                    let key = model::CardKey::Media(item.id);
+                    card_view(item, selected == Some(key), dims, colors)
+                })
                 .collect();
             row(cards).spacing(dims.spacing_s).into()
         })
@@ -570,7 +715,16 @@ fn card_grid_view(
 /// `Ellipsis::End`、`iced_test::simulator` 上の `canvas::Text` には効かない
 /// バグの回避 — この widget は実 `text()` なので影響しない、TL-arch §2.5
 /// 実測)で「隣の箱へ決して入らない」(裁定168 不衝突文法)。
-fn card_view(item: AssetListItem, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+///
+/// カードは mock どおり `<button>`(`.libraryCard{cursor:pointer}`) —
+/// click で [`Message::SelectCard`] を publish し(mock `selectCard` の
+/// 単一選択)、選択中は [`card_style`] の意匠(mock `.libraryCard.selected`)。
+fn card_view(
+    item: AssetListItem,
+    selected: bool,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
     let card_width = dims.row_height * CARD_WIDTH_ROW_HEIGHT_RATIO;
     let thumb_height = card_width * THUMB_ASPECT_H / THUMB_ASPECT_W;
     let category = model::category_of(&item.kind);
@@ -613,10 +767,38 @@ fn card_view(item: AssetListItem, dims: Dimensions, colors: Colors) -> Element<'
     .wrapping(iced::widget::text::Wrapping::None)
     .ellipsis(iced::widget::text::Ellipsis::End);
 
-    container(column![thumb, name, caption].spacing(dims.spacing_xs))
+    button(column![thumb, name, caption].spacing(dims.spacing_xs))
+        .on_press(Message::SelectCard(model::CardKey::Media(item.id)))
         .width(Length::Fixed(card_width))
         .padding(dims.spacing_xs)
+        .style(move |_theme, status| card_style(colors, selected, status))
         .into()
+}
+
+/// カード共通のスタイル(mock `.libraryCard{background:transparent}` /
+/// `.libraryCard.selected{background:白20%mix}` — 後者は既存の
+/// `state_selected` ロールと同役)。hover は rail 行と同じ `surface_hover`
+/// (mock は `.libraryCard:hover .libraryThumb` の枠色変化だが、iced の
+/// button style から子 container の枠へは届かないため、pane 内の既存 hover
+/// 文法へ読み替える — 逸脱として RETURN 記載)。
+fn card_style(colors: Colors, selected: bool, status: button::Status) -> button::Style {
+    let background = if selected {
+        Some(iced::Background::Color(colors.state_selected))
+    } else {
+        match status {
+            button::Status::Hovered => Some(iced::Background::Color(colors.surface_hover)),
+            _ => None,
+        }
+    };
+    button::Style {
+        background,
+        text_color: colors.text_primary,
+        border: iced::Border {
+            radius: 0.0.into(),
+            ..iced::Border::default()
+        },
+        ..button::Style::default()
+    }
 }
 
 /// カード thumb の塗り(種別ごとに既存 `Colors` ロールを再利用 — 新ロールは
@@ -633,26 +815,41 @@ fn thumb_fill(category: model::Category, colors: Colors) -> iced::Color {
 
 // ---------------------------------------------------------------------------
 // preview-local カタログ(effects/create/panels タブ、mock `data-tab` カード
-// の転写 — B3 取り残し回収)。
+// の転写 — 構造の対称化で media と同じ rail+shelf+catalog の3面構成)。
 // ---------------------------------------------------------------------------
 
-/// effects/create/panels タブの catalog(preview-local 静的カタログのみ、
-/// [`model::catalog`])。media 語彙の filter chips・rail は出さない
-/// (shelf/rail の中身(Color/Utility/… のタグ意味)が未実装のタブは非表示 —
-/// 発注4項の許容逸脱、RETURN 記載)。検索欄([`search_field`]、mock では
-/// toolbar 領域=全タブ共有)と結果件数・カード grid の構成は media タブの
-/// [`catalog_view`] と同じ骨格。
-fn preview_catalog_view(
+/// effects/create/panels タブの body(rail + カタログ — [`media_body`] と
+/// 同じ骨格、構造の対称化)。rail は [`preview_rail_view`]、カタログは
+/// [`preview_catalog_view`]。データは preview-local 静的カタログのみ
+/// ([`model::preview_visible`] — 台帳 items は渡らない、`model::catalog`
+/// doc の2系統の壁)。
+fn preview_body(
     tab: LibraryTab,
+    scope: PreviewScope,
     query: &str,
+    selected: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    // media 経路と混ぜない: 台帳 items は渡さず空、scope は非 media タブでは
-    // 意味を持たない(`model::catalog` doc 参照)。
-    let cards_data = model::catalog(tab, &[], RailScope::AllMedia, query);
+    let rail = preview_rail_view(tab, scope, dims, colors);
+    let catalog = preview_catalog_view(tab, scope, query, selected, dims, colors);
 
-    let shelf = row![search_field(query, dims, colors)];
+    row![rail, catalog].spacing(dims.spacing_xs).into()
+}
+
+/// 非 media タブの catalog(filter shelf + 結果件数 + カード grid —
+/// [`catalog_view`] と同じ骨格を preview-local データで組む)。
+fn preview_catalog_view(
+    tab: LibraryTab,
+    scope: PreviewScope,
+    query: &str,
+    selected: Option<model::CardKey>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let cards_data = model::preview_visible(tab, scope, query);
+
+    let shelf = preview_filter_shelf_view(tab, scope, query, dims, colors);
 
     let summary = text(format!("Results {}", cards_data.len()))
         .size(dims.micro_text)
@@ -672,14 +869,9 @@ fn preview_catalog_view(
             .map(|chunk| {
                 let cards: Vec<Element<'static, Message>> = chunk
                     .iter()
-                    .filter_map(|card| match card {
-                        // 型の壁([`model::CatalogCard`] doc): 非 media タブの
-                        // catalog に Media が混ざることは model 試験が禁じて
-                        // いるが、view 側でも黙って落とす(描き分け不能)。
-                        model::CatalogCard::Preview(preview) => {
-                            Some(preview_card_view(*preview, dims, colors))
-                        }
-                        model::CatalogCard::Media(_) => None,
+                    .map(|&card| {
+                        let key = model::CardKey::Preview(card.id);
+                        preview_card_view(card, selected == Some(key), dims, colors)
                     })
                     .collect();
                 row(cards).spacing(dims.spacing_s).into()
@@ -690,32 +882,19 @@ fn preview_catalog_view(
             .into()
     };
 
-    container(
-        column![shelf, summary, grid]
-            .spacing(dims.spacing_xs)
-            .padding(dims.spacing_m),
-    )
-    .width(Length::Fill)
-    .style(move |_theme| container::Style {
-        background: Some(iced::Background::Color(colors.surface_panel)),
-        border: iced::Border {
-            color: colors.border_default,
-            width: dims.border_width,
-            radius: 0.0.into(),
-        },
-        ..container::Style::default()
-    })
-    .into()
+    catalog_container(column![shelf, summary, grid], dims, colors)
 }
 
 /// preview-local カタログの1枚(mock `.libraryCard` と同じ thumb +
-/// `.cardCopy` 骨格 — [`card_view`] の静的データ版)。寸法・文字は media
-/// カードと同一(比率台帳3節の既決値をそのまま共有)。thumb の塗りは
+/// `.cardCopy` 骨格 — [`card_view`] の静的データ版で、click/選択意匠も同一
+/// ([`Message::SelectCard`]/[`card_style`])。寸法・文字は media カードと
+/// 同一(比率台帳3節の既決値をそのまま共有)。thumb の塗りは
 /// `surface_raised` 一律 — mock の装飾色(`.thumb-magenta` 等の直書き hex)は
 /// tokens に対応ロールが無く、S4「新ロールを起こさない」を優先して転写しない
 /// (逸脱として RETURN 記載)。
 fn preview_card_view(
     card: model::PreviewCard,
+    selected: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -755,8 +934,10 @@ fn preview_card_view(
         .wrapping(iced::widget::text::Wrapping::None)
         .ellipsis(iced::widget::text::Ellipsis::End);
 
-    container(column![thumb, name, caption].spacing(dims.spacing_xs))
+    button(column![thumb, name, caption].spacing(dims.spacing_xs))
+        .on_press(Message::SelectCard(model::CardKey::Preview(card.id)))
         .width(Length::Fixed(card_width))
         .padding(dims.spacing_xs)
+        .style(move |_theme, status| card_style(colors, selected, status))
         .into()
 }
