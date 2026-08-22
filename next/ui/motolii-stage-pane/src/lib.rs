@@ -75,6 +75,7 @@ use iced::{mouse, Point, Rectangle};
 /// message は既存 [`Message`] と独立([`gizmo::GizmoDrag`] — 理由はモジュール doc)。
 pub mod gizmo;
 pub use gizmo::{gizmo_target, GizmoDrag, GizmoOverlay, GizmoPhase, GizmoProperty, GizmoTarget, GizmoValue};
+pub mod zoom;
 
 /// Stage 方眼シート束+セーフマージン(B22 第1切片、発注 2026-08-22) —
 /// 方眼/三分割/黄金比/Safe areas の描画と表示トグル Message。視覚正本 =
