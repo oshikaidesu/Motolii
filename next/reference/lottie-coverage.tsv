@@ -321,7 +321,7 @@ properties	position-property	k	Keyframes	採用済	KeyframeTrack(Value::Vec2)。
 properties	position-property	l	Length	不採用	成分数は型が持つ			lottie
 properties	property	a	Animated	不採用	JSON の discriminator			lottie
 properties	property	ix	Property Index	不採用	番号台帳			lottie
-properties	property	sid	Slot ID	採用済	スロット参照。PropertySource::{Track,Slot} の2択(#[serde(untagged)]で既存track JSONと非互換を作らない)。descriptor_track(property)と同じcomponentに書く(第二の差し替え機構を作らない)	pub enum PropertySource {	slot	lottie
+properties	property	sid	Slot ID	採用済	スロット参照。`PropertySource` は base(Track|Slot の2択= `PropertyBase`)+ modulators へ拡張された(裁定213 の加算接続子・2026-08-23)。旧 JSON 3形(素の track / 素の文字列 slot / 旧 Link)は手書き Visitor で読める(`#[serde(untagged)]` は KeyframeTrack のゼロバッファ経路を壊し性能予算を1000µs→7023µs にしたため不採用)。descriptor_track(property)と同じ component に書く(第二の差し替え機構を作らない)	pub struct PropertySource {	slot	lottie
 properties	property	x	Expression	不採用	AE の JS 式。処理系を1本抱えることになり軸4に反する			lottie
 properties	scalar-property	@extends	properties/property	該当なし	継承元			lottie
 properties	scalar-property	a	Animated	不採用	JSON の discriminator			lottie
