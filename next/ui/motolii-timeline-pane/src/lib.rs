@@ -50,6 +50,9 @@ mod hit;
 mod input;
 pub mod key_gesture;
 mod key_rows;
+/// 第4切片(B15 キーフレーム束+B20 再生ヘッド移動束の残り)の部品。
+/// `key_gesture`/`nav` と同格の意味の純関数置き場 — モジュール doc 参照。
+pub mod keys2;
 mod lane_bar;
 pub mod nav;
 mod projection;
