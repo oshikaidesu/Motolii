@@ -78,3 +78,5 @@ mod timeline_tree_rows_drive;
 mod tonmana_token_fence;
 #[path = "suite/ui_scale_fence.rs"]
 mod ui_scale_fence;
+#[path = "suite/window_drive.rs"]
+mod window_drive;

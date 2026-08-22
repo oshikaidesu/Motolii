@@ -301,6 +301,20 @@ pub enum Message {
     /// (裁定117)— release は [`tokens::watch_subscription`] が何も発行しない。
     TokensFileChanged,
 
+    // ---- 窓台帳(S1 daemon 骨格、裁定182/188 —
+    // `docs/reviews/2026-08-22-multiwindow-probe.md`) ----
+    /// boot の `window::open`(`Shell::boot`/`boot_fixture`)が開いた main 窓。
+    /// 台帳(`Shell::main_window`)は boot 時点で**先行記帳**済み
+    /// (`window::open` は Id を同期で採番する — runtime 無しの headless 試験
+    /// でも台帳が読める)なので、この腕は runtime が実際に窓を開いた後の
+    /// 再記帳(冪等)。
+    MainWindowOpened(iced::window::Id),
+    /// どれかの窓が閉じた(`iced::window::close_events` 購読)。**main 窓なら
+    /// アプリ終了**(probe 注意点1: winit shell は全窓が閉じると compositor を
+    /// `None` 化 = device 破棄する — 「窓ゼロ状態を作らない(main 閉=exit)」を
+    /// 不変量として維持し、そこへ到達させない)。
+    WindowClosed(iced::window::Id),
+
     // ---- Inspector pane(第1波 + drag-to-scrub、裁定160 切片8で pane ローカル
     // Message へ集約) ----
     /// `motolii_inspector_pane::Message` を1本で畳む(iced 標準型 — 子 pane の
@@ -715,6 +729,13 @@ pub struct Shell {
     /// (transient overlay は含まない、`document.rs::Revision` doc)ので、
     /// drag 中の途中経過だけで dirty が揺れることはない。
     saved_revision: Revision,
+
+    // ---- 窓台帳(S1 daemon 骨格、裁定182/188) ----
+    /// main 窓の Id(窓台帳: Id → 種別 の main 側)。**表示専用の front 状態**
+    /// (`observation`/`clipboard` と同じ身分 — Document でも Session でもない)。
+    /// `Shell::boot`/`boot_fixture` が boot 時に先行記帳する。`None` = 窓を
+    /// 開いていない(headless 試験・`--screenshot` 一発ツール経路)。
+    main_window: Option<iced::window::Id>,
 }
 
 impl Shell {
@@ -766,9 +787,46 @@ impl Shell {
                 dialogs,
                 current_path: None,
                 saved_revision,
+                main_window: None,
             },
             Task::none(),
         )
+    }
+
+    // ---- daemon boot(S1、裁定182/188) ----
+
+    /// daemon の製品入口(`main.rs`)。[`Shell::new`] で組んだ Shell に main 窓を
+    /// 1枚開く Task を添える([`iced::daemon`] は自分では窓を開かない)。
+    /// 窓台帳(`main_window`)は open Task の完了を**待たずに先行記帳**する —
+    /// `iced::window::open` は Id を同期で採番する(fork
+    /// `runtime/src/window.rs:260`)ので、runtime 無しの headless 試験でも
+    /// 台帳が読める。
+    pub fn boot() -> (Self, Task<Message>) {
+        Self::with_main_window(Self::new())
+    }
+
+    /// `--fixture` 起動の daemon boot([`Shell::boot`] の fixture 版)。
+    pub fn boot_fixture() -> (Self, Task<Message>) {
+        Self::with_main_window(Self::new_fixture())
+    }
+
+    /// [`Shell::boot`]/[`Shell::boot_fixture`] の共通部: main 窓を開く Task を
+    /// 添え、台帳へ先行記帳する。窓の性質は従前の `iced::application` の既定
+    /// (`window::Settings::default()`)そのまま — S1 は挙動不変の骨格だけ。
+    fn with_main_window((mut shell, task): (Self, Task<Message>)) -> (Self, Task<Message>) {
+        let (id, open) = iced::window::open(iced::window::Settings::default());
+        shell.main_window = Some(id);
+        (
+            shell,
+            Task::batch([task, open.map(Message::MainWindowOpened)]),
+        )
+    }
+
+    /// 窓台帳の読み口(main 窓)。試験(`tests/suite/window_drive.rs`)が
+    /// 台帳の記帳を検分するための口 — `settings_panel_open()` 等の既存の
+    /// 「状態の読み口」と同じ形。
+    pub fn main_window(&self) -> Option<iced::window::Id> {
+        self.main_window
     }
 
     /// 既定 comp だけを持つ、空の Document を組む(`new_with_dialogs`/
@@ -835,6 +893,7 @@ impl Shell {
             dialogs: Box::new(RfdDialogs),
             current_path: None,
             saved_revision,
+            main_window: None,
         };
         // `update()` を経由しないので、通常なら `update` の末尾が呼ぶ
         // `refresh_frame` をここで代わりに呼ぶ(Stage を空のまま起動しない、M17)。
@@ -870,7 +929,12 @@ impl Shell {
         } else {
             iced::Subscription::none()
         };
-        iced::Subscription::batch([window, tokens, pointer, ticks])
+        // 窓台帳(S1 daemon 骨格): どの窓が閉じたかを台帳へ届ける。daemon は
+        // 窓が全部閉じても自分では終了しない(fork `src/daemon.rs` doc)ので、
+        // 「main 閉=exit」の判断を `Shell::update`(`Message::WindowClosed`)が
+        // 持つ — ここは規律どおり翻訳(map)だけ。
+        let closes = iced::window::close_events().map(Message::WindowClosed);
+        iced::Subscription::batch([window, tokens, pointer, ticks, closes])
     }
 
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
@@ -906,6 +970,18 @@ impl Shell {
             Message::TokensFileChanged => {
                 self.tokens = Tokens::load();
                 metrics::record_tokens_reload();
+            }
+            // ---- 窓台帳(S1 daemon 骨格、裁定182/188) ----
+            Message::MainWindowOpened(id) => self.main_window = Some(id),
+            Message::WindowClosed(id) => {
+                if self.main_window == Some(id) {
+                    // main 閉=アプリ終了(probe 注意点1)。daemon は放って
+                    // おくと窓ゼロで生き続け、winit shell が compositor を
+                    // `None` 化(device 破棄)する — zero-copy presenter
+                    // (裁定170/171)の単一 device 前提を守るため、窓ゼロ状態
+                    // そのものを作らない。
+                    task = iced::exit();
+                }
             }
             Message::Inspector(msg) => {
                 task = self.update_inspector(msg);
@@ -2380,6 +2456,22 @@ impl Shell {
             self.dims(),
             self.tokens.colors,
         ))
+    }
+
+    /// daemon の窓別 view dispatcher(S1、裁定182/188)。[`Shell::view`]
+    /// (main 窓の絵)は**改名も改形もしない** — 既存の `.view()` 呼び出し
+    /// (tests/`screenshot.rs`/`transport.rs` 等 78 箇所)を無傷に保つための
+    /// 薄い分岐だけをここに置く(probe §Q3 の設計どおり)。台帳に無い Id
+    /// (開閉の境目の1フレームで来うる)は main の絵 — probe の fallback と
+    /// 同じ扱い。
+    pub fn view_window(&self, _window: iced::window::Id) -> Element<'_, Message> {
+        self.view()
+    }
+
+    /// daemon の窓別 title(`main.rs` の `.title(...)`)。main 窓(と台帳に
+    /// 無い Id)は従来どおり [`Shell::title`]。
+    pub fn window_title(&self, _window: iced::window::Id) -> String {
+        self.title()
     }
 
     pub fn view(&self) -> Element<'_, Message> {

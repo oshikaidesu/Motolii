@@ -82,22 +82,32 @@ fn main() -> iced::Result {
         return Ok(());
     }
 
+    // S1(裁定182/188): `iced::application` → `iced::daemon` 形(窓の浮かしの
+    // 骨格 — `docs/reviews/2026-08-22-multiwindow-probe.md` §Q3)。daemon は
+    // 自分では窓を開かないので、boot(`Shell::boot`/`boot_fixture`)が main 窓を
+    // 1枚開く。main 窓1枚のときの挙動・見た目は従前どおり(窓の性質は
+    // `window::Settings::default()` のまま)。main 窓を閉じたら exit
+    // (`Message::WindowClosed` — probe 注意点1「窓ゼロ状態を作らない」)。
     let boot: fn() -> (motolii_shell::Shell, iced::Task<motolii_shell::Message>) = if fixture {
-        motolii_shell::Shell::new_fixture
+        motolii_shell::Shell::boot_fixture
     } else {
-        motolii_shell::Shell::new
+        motolii_shell::Shell::boot
     };
 
-    iced::application(
+    iced::daemon(
         boot,
         motolii_shell::Shell::update,
-        motolii_shell::Shell::view,
+        motolii_shell::Shell::view_window,
     )
-    .title(motolii_shell::Shell::title)
+    .title(motolii_shell::Shell::window_title)
     .subscription(motolii_shell::Shell::subscription)
     // `.theme(...)` が無いと `Program::theme` の既定実装が常に `None` を返し、
     // 実窓は tokens と無関係な iced 組み込み Light/Dark(OS 設定依存)へ落ちる
     // (`tokens::theme_from_colors` の doc comment に該当行の引用あり)。
-    .theme(|shell: &motolii_shell::Shell| motolii_shell::tokens::theme_from_colors(&shell.colors()))
+    // daemon 形では窓別引数が増えるだけ(probe §Q3)— 全窓同一 theme を
+    // そのまま表現する。
+    .theme(|shell: &motolii_shell::Shell, _window: iced::window::Id| {
+        motolii_shell::tokens::theme_from_colors(&shell.colors())
+    })
     .run()
 }
