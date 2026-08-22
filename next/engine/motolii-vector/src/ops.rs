@@ -687,7 +687,11 @@ pub(crate) fn repeater(
 // ---------------------------------------------------------------------------
 
 /// De Casteljau 分割: `t` で [start,end] を(先頭・分割点・末尾)の3頂点に割る。
-fn split_bezier(v0: &Vertex, v1: &Vertex, t: f64) -> (Vertex, Vertex, Vertex) {
+///
+/// `pub(crate)`: `edit.rs::split_segment` が「既存の `values/bezier`(`v`/`i`/`o`)
+/// 上に点を足す」(形を変えない挿入)にそのまま使う——trim の分割式を2つ目の
+/// 実装として持たない。
+pub(crate) fn split_bezier(v0: &Vertex, v1: &Vertex, t: f64) -> (Vertex, Vertex, Vertex) {
     if is_straight(v0, v1) {
         let m = lerp_point(v0.point, v1.point, t);
         return (
