@@ -223,10 +223,13 @@ fn the_pane_frame_uses_the_documented_width_and_source() {
 // box が pane 全幅で並ぶこと
 // ---------------------------------------------------------------------------
 
-/// **この柵が見つけたバグの回帰**: header(ptitle)/TRANSFORM/APPEARANCE/ATTRS
-/// の4本の帯は mock の block 要素どおり「pane 全幅 × section 高(26)」の箱で
-/// あること。修正前は文字幅ぶんの箱(67.552/65.401/68.191/40.813px)にしか
-/// なっていなかった(`.width(Length::Fill)` 付け忘れ)。
+/// **この柵が見つけたバグの回帰**: TRANSFORM/APPEARANCE/ATTRS の帯は mock の
+/// block 要素どおり「pane 全幅 × section 高(26)」の箱であること。修正前は
+/// 文字幅ぶんの箱にしかなっていなかった(`.width(Length::Fill)` 付け忘れ)。
+///
+/// 4本→3本(2026-08-22): mock v3.1 の ptitle("Inspector" header)は転写を
+/// やめた — pane 名の正本は shell の pane 題帯(pane_grid title_bar)へ移り、
+/// 内部 header は二重表示のため除去(題帯レーンの API 要求・supervisor 施工)。
 #[test]
 fn the_full_width_section_bars_span_the_entire_pane_at_the_mock_section_height() {
     let (targets, dims) = selected_inspector_targets();
@@ -237,8 +240,8 @@ fn the_full_width_section_bars_span_the_entire_pane_at_the_mock_section_height()
     );
     assert_eq!(
         bars.len(),
-        4,
-        "pane 全幅×26px の帯(header+TRANSFORM+APPEARANCE+ATTRS)が4本のはずが{}本: {bars:?}",
+        3,
+        "pane 全幅×26px の帯(TRANSFORM+APPEARANCE+ATTRS)が3本のはずが{}本: {bars:?}",
         bars.len()
     );
 }
@@ -273,11 +276,10 @@ fn the_ident_band_spans_the_full_pane_width() {
         .filter(|t| matches!(t, Target::Container { .. }))
         .find(|t| {
             let b = t.bounds();
-            b.x.abs() <= EPS
-                && (b.y - dims.inspector_section_header_height).abs() <= EPS
-                && b.height < dims.inspector_row_height * 3.0
+            // ptitle 除去(2026-08-22)後、ident 帯が pane 先頭(y=0)に来る
+            b.x.abs() <= EPS && b.y.abs() <= EPS && b.height < dims.inspector_row_height * 3.0
         })
-        .unwrap_or_else(|| panic!("ident 帯の Container が見つからない(header 直後、x=0)"));
+        .unwrap_or_else(|| panic!("ident 帯の Container が見つからない(pane 先頭、x=0)"));
     assert!(
         (ident.bounds().width - dims.inspector_panel_width).abs() <= EPS,
         "ident 帯が pane 全幅になっていない: {:?}",
@@ -393,7 +395,7 @@ fn the_grid_shape_is_preserved_at_150_percent_scale() {
     let targets = collect_targets(inspector_pane::view(Some(&selection), None, None, dims, colors));
 
     let bars = containers_matching(&targets, dims.inspector_panel_width, dims.inspector_section_header_height);
-    assert_eq!(bars.len(), 4, "150%でも26px相当の帯が4本のはずが{}本", bars.len());
+    assert_eq!(bars.len(), 3, "150%でも26px相当の帯が3本のはずが{}本(ptitle除去後)", bars.len());
 
     let rows = containers_matching(&targets, dims.inspector_panel_width, dims.inspector_row_height);
     assert_eq!(rows.len(), 8, "150%でも25px相当(I-tokens 再転写)の行が8本のはずが{}本", rows.len());
