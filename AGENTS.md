@@ -14,6 +14,7 @@ Repository-specific agent *conduct* rules were archived in [docs/archive/agent-g
 
 - 実測定数(next/ 22crate・`-j 4`): `cargo check --workspace` = **warm 1.4s / cold 50s**。フル `cargo test --workspace --locked --no-fail-fast` = **warm 100s / cold 607s**。壁時計はキャッシュ状態で6倍動くので**実行時間を合否の物差しにしない** — 段の使い分け(機会)で裁く
 - 段の使い分け: doc のみ=check-docs.sh だけ / pane 局所=check+該当pane と shell の suite / store・engine 跨り・fork pin bump・merge 境界=フル必須(判断表は調査 §6)
+- **追いつきターンの波運転(裁定189、2026-08-22)**: 意味既決の消化フェーズでは、レーンの検収線を `cargo check --tests -p <crate>` まで(テストは書くが実行は後送 — 落ちるテスト先行の「書く」は維持)。supervisor が波単位で merge を束ね**一括 cargo test を波末に1回**、赤は fix-forward。レーン毎の cold テスト税(〜10分)が波1回に集約される。新しい意味論・store/engine 跨りの束は従来の即検収に戻す
 - `-p` サブセットの素朴運用は warm フルより遅くなる(199s vs 100s — 上記「`-p` 集合固定」の再発見。**この節を読まずにビルド調査を始めるとこの再発見を繰り返す**)
 - 時間予算試験(storm・r2)は debug+並列で走らせる事自体が矛盾 — 合否確認は単独 or release で
 - **合否の exit code をパイプ越しに取らない**: `cargo … | tail` は合否を殺す(前任の check-docs 事故)。zsh では `$PIPESTATUS` は空(bash 綴り — zsh は `$pipestatus`)で「検証したつもり」になる(2026-08-22 に2回実測)。**リダイレクトで log へ落とし `$?` を直接見る**のが唯一安全
