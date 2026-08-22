@@ -1,0 +1,25 @@
+# r5-multiwindow — 裁定188 のゲート probe(merge 前提ではない・製品 shell 非接触)。
+#
+# 問い(docs/reviews/2026-08-22-multiwindow-probe.md):
+#   1. fork rev 73e686ee に `iced::daemon` があり、`view(&State, window::Id)` で
+#      窓別 UI を返す最小例が動くか
+#   2. 第2窓を開いた時 wgpu device/queue が窓間で共有されるか(Stage zero-copy
+#      presenter の単一 device 前提 — 裁定170/171)
+#   3. Settings 風の第2窓を閉じても本体窓と daemon State が生き残るか
+#
+# device 同一性の計測器は `shader` widget の `Primitive::prepare(device, queue)` —
+# 各窓の描画パスから届く device を突き合わせる(wgpu 29 の Device/Queue は
+# Eq — `impl_eq_ord_hash_proxy!` が inner dispatch handle を比較する)。
+[package]
+name = "r5-multiwindow"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+iced.workspace = true
+# 本体 lock の wgpu(29.0.4)と同一版へ畳まれる — iced fork の wgpu と単一版
+# (../../Cargo.toml L65 の workspace dep と同じ線)。probe が独自の版を
+# 引き込むと device 型が二重化して Eq 比較が成立しない。
+wgpu.workspace = true

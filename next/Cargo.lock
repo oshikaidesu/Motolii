@@ -5432,6 +5432,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "r5-multiwindow"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "wgpu",
+]
+
+[[package]]
 name = "rand"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
