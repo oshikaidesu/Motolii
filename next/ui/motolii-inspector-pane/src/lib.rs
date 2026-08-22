@@ -288,6 +288,21 @@ pub enum TransformField {
     /// 知らない(裁定70、`ResolvedEffect::params` doc)ので、既定値を埋める
     /// 仕事はこの「plugin 定義を知っている層」の側([`GlowParam::default_value`])。
     EffectParam(EffectId, GlowParam),
+
+    // ---- AUDIO section(B42、裁定184 型別 section 第4号) ----
+    /// `property::LEVEL`(clip の音量、gain)。**mask/effect と違い per-id
+    /// ではない** — layer につき高々1本の標準 property なので、
+    /// Position/Rotation/Opacity と同じ「静的な named field」の形で足す
+    /// (`TransformField::MaskOpacity`/`EffectParam` のような id 付き
+    /// variant にしない)。
+    Level,
+    /// `property::PAN`。W3C `StereoPannerNode` と同じ -1.0(全振り左)〜
+    /// 1.0(全振り右)、既定0.0(中央)。
+    Pan,
+    /// `property::FADE_IN`(秒)。0.0 = 無効。
+    FadeIn,
+    /// `property::FADE_OUT`(秒)。0.0 = 無効。
+    FadeOut,
 }
 
 // ---------------------------------------------------------------------------
@@ -389,6 +404,10 @@ pub fn property_id(field: TransformField) -> Result<PropertyId, StoreError> {
         TransformField::AnchorX | TransformField::AnchorY => PropertyId::new(property::ANCHOR),
         TransformField::MaskOpacity(id) => Ok(PropertyId::mask_opacity(id)),
         TransformField::EffectParam(id, param) => PropertyId::effect_param(id, param.name()),
+        TransformField::Level => PropertyId::new(property::LEVEL),
+        TransformField::Pan => PropertyId::new(property::PAN),
+        TransformField::FadeIn => PropertyId::new(property::FADE_IN),
+        TransformField::FadeOut => PropertyId::new(property::FADE_OUT),
     }
 }
 
@@ -420,6 +439,17 @@ pub fn next_value(field: TransformField, input: f64, current_vec2: [f64; 2]) -> 
         TransformField::Opacity | TransformField::MaskOpacity(_) => {
             Value::F64((input / 100.0).clamp(0.0, 1.0))
         }
+        // AUDIO(B42、裁定184 型別 section 第4号)。
+        // Level: 表示は %(Speed 欄と同じ慣習)、store は倍率(1.0=等倍)。
+        // Opacity と違い上限クランプはしない(ブースト = 100%超を許す、
+        // gain に上限を課す意味論は store 側に無い) — 下限だけ 0(mute)。
+        TransformField::Level => Value::F64((input / 100.0).max(0.0)),
+        // Pan: store 自体が -1.0..1.0 の人間可読単位(doc 参照)なので変換なし。
+        // engine `apply_pan_stereo` も clamp する(mix.rs doc)が、書き込み時点
+        // でも安全側にクランプしておく(Opacity と同じ「commit 側で範囲を守る」判断)。
+        TransformField::Pan => Value::F64(input.clamp(-1.0, 1.0)),
+        // Fade In/Out: 秒、負の尺は意味を持たない。
+        TransformField::FadeIn | TransformField::FadeOut => Value::F64(input.max(0.0)),
     }
 }
 
@@ -470,6 +500,15 @@ pub enum KeyRow {
     /// effect param 行(EFFECTS section、B38 第3切片)。同上 —
     /// [`TransformField::EffectParam`] と同じ拡張の形。
     EffectParam(EffectId, GlowParam),
+    /// AUDIO section の Level 行(B42、裁定184 型別 section 第4号)。
+    /// [`TransformField::Level`] と同じ「per-id ではない静的 field」の形。
+    Level,
+    /// AUDIO section の Pan 行。
+    Pan,
+    /// AUDIO section の Fade In 行。
+    FadeIn,
+    /// AUDIO section の Fade Out 行。
+    FadeOut,
 }
 
 impl KeyRow {
@@ -482,6 +521,10 @@ impl KeyRow {
             Self::Rotation => Some(property::ROTATION),
             Self::Opacity => Some(property::OPACITY),
             Self::Anchor => Some(property::ANCHOR),
+            Self::Level => Some(property::LEVEL),
+            Self::Pan => Some(property::PAN),
+            Self::FadeIn => Some(property::FADE_IN),
+            Self::FadeOut => Some(property::FADE_OUT),
             Self::MaskOpacity(_) | Self::EffectParam(_, _) => None,
         }
     }
@@ -512,6 +555,11 @@ pub fn key_row_default_value(row: KeyRow) -> Value {
         KeyRow::Opacity | KeyRow::MaskOpacity(_) => Value::F64(1.0),
         // effect param の既定は plugin カタログ(= engine 既定の写し)から。
         KeyRow::EffectParam(_, param) => Value::F64(param.default_value()),
+        // AUDIO(B42): Level は等倍・Pan は中央・Fade は無効、いずれも
+        // `property::LEVEL`/`PAN`/`FADE_IN`/`FADE_OUT` の store 既定と同じ
+        // (`motolii-store::property` doc 参照)。
+        KeyRow::Level => Value::F64(1.0),
+        KeyRow::Pan | KeyRow::FadeIn | KeyRow::FadeOut => Value::F64(0.0),
     }
 }
 
@@ -1326,6 +1374,10 @@ pub fn field_decimals(field: TransformField) -> usize {
         TransformField::Opacity | TransformField::MaskOpacity(_) => 0,
         // Glow 既定(1.0/0.75/1.0)の桁がそのまま読める最小の桁。
         TransformField::EffectParam(_, _) => 2,
+        // Level は Speed 欄と同じ1桁(% 表示)。Pan/Fade は store の生の刻み
+        // (-1.00..1.00・秒)がそのまま読める2桁。
+        TransformField::Level => 1,
+        TransformField::Pan | TransformField::FadeIn | TransformField::FadeOut => 2,
         _ => 3,
     }
 }
@@ -1347,6 +1399,9 @@ pub fn field_decimals(field: TransformField) -> usize {
 /// | Scale X/Y              | 0.01   | 既定1.0からの微調整域 — 1px=1.0では数pxで0や負へ振り切れる |
 /// | Rotation                | 0.5(度)| 720px の drag で1周(360度)分 — 粗すぎず細かすぎない |
 /// | Opacity                  | 1(%)   | 0〜100の全域が100pxの drag で動く |
+/// | Level(B42)              | 1(%)   | Opacity と同じ感度 |
+/// | Pan(B42)                | 0.01   | Scale と同じ微調整域(-1..1 の全域が100pxで動く) |
+/// | Fade In/Out(B42)        | 0.02(秒)| 100pxで2秒動く(目安値、実窓較正はこの発注の範囲外) |
 fn drag_step_per_pixel(field: TransformField) -> f64 {
     match field {
         TransformField::PositionX
@@ -1361,6 +1416,13 @@ fn drag_step_per_pixel(field: TransformField) -> f64 {
         TransformField::EffectParam(_, _) => 0.01,
         // mask opacity は layer Opacity と同じ感度(0〜100% が 100px で動く)。
         TransformField::Opacity | TransformField::MaskOpacity(_) => 1.0,
+        // Level は Opacity と同じ感度(% 表示、100px で100%動く)。
+        TransformField::Level => 1.0,
+        // Pan は Scale と同じ微調整域(-1..1 の全域が100pxで動く)。
+        TransformField::Pan => 0.01,
+        // Fade は秒。100pxで2秒動く(0〜数秒が典型域という想定、目安値 —
+        // 実窓較正はこの発注の範囲外、RETURN 参照)。
+        TransformField::FadeIn | TransformField::FadeOut => 0.02,
     }
 }
 
@@ -1424,6 +1486,17 @@ pub fn drag_origin(
             }
         }
     }
+    // AUDIO section の4行(scalar のみ — 4行とも per-id ではない layer 単位
+    // の標準 property、`Vec` ではなく named field なのでループは固定4回)。
+    if let Some(audio) = &selection.audio {
+        for row in [&audio.level, &audio.pan, &audio.fade_in, &audio.fade_out] {
+            if let RowValue::Scalar(slot) = &row.value {
+                if slot.field == Some(field) {
+                    return slot.editable.then_some((slot.value, [0.0, 0.0]));
+                }
+            }
+        }
+    }
     None
 }
 
@@ -1453,6 +1526,10 @@ pub fn field_input_id(field: TransformField) -> iced::widget::Id {
         TransformField::Opacity => "inspector-field-opacity",
         TransformField::AnchorX => "inspector-field-anchor-x",
         TransformField::AnchorY => "inspector-field-anchor-y",
+        TransformField::Level => "inspector-field-level",
+        TransformField::Pan => "inspector-field-pan",
+        TransformField::FadeIn => "inspector-field-fade-in",
+        TransformField::FadeOut => "inspector-field-fade-out",
         TransformField::MaskOpacity(_) | TransformField::EffectParam(_, _) => {
             unreachable!("上の early return が拾う")
         }
@@ -1591,6 +1668,44 @@ pub struct SelectionProjection {
     /// ない」判断、Q0)。`text_document` が未着手でも [`default_text_document`]
     /// で表示専用の既定値を作る(store には書かない、`default_vec2` と同じ形)。
     pub text: Option<TextSectionProjection>,
+    /// AUDIO section の投影(B42、裁定184 型別 section 第4号)。
+    /// `LayerSource::Media` の layer でのみ `Some`(TEXT section と同じ
+    /// 「型が合わない chrome を出さない」判断、Q0)。
+    pub audio: Option<AudioSectionProjection>,
+}
+
+/// AUDIO section の投影(B42、裁定184 型別 section 第4号)。4行とも
+/// per-id ではない layer 単位の標準 property(`property::LEVEL`/`PAN`/
+/// `FADE_IN`/`FADE_OUT`)で、既存の値セル行文法([`TransformRowProjection`])を
+/// そのまま再利用する — MASK/EFFECTS の「動く部分は既存文法を再利用」と
+/// 同じ分担だが、per-id の一覧ではなく layer につき常に高々1組固定なので、
+/// `Vec` ではなく named field の束(`AttrsProjection` と同じ形)で持つ。
+///
+/// **gate は `LayerSource::Media`**: 実際にその素材が音声を持つかは
+/// decode してみないと分からない(engine `layer_mix_source` も同じ理由で
+/// 「音声を持たない素材は mix 対象から除外」を実行時に判定する、
+/// `motolii-audio::program` doc 参照)。Inspector はここまで踏み込まず、
+/// 「音声を持ち得る素材種」で section の有無を決める(TEXT section が
+/// `LayerSource::Text` で決めるのと同じ粒度の判断)。
+#[derive(Clone, Debug, PartialEq)]
+pub struct AudioSectionProjection {
+    /// `property::LEVEL`(clip の音量、gain)。store は倍率(1.0=等倍)、
+    /// **表示は %**(Speed 欄と同じ「比をパーセントで見せる」慣習を踏襲 —
+    /// dB 換算はしない、store 自身が dB を持たないので変換を発明しない
+    /// という発注書「store の既存意味に従う」の帰結)。上限クランプは
+    /// しない(ブースト = 100%超を許す)。
+    pub level: TransformRowProjection,
+    /// `property::PAN`。store 自体が -1.0(全振り左)〜1.0(全振り右)の
+    /// 人間可読単位(W3C `StereoPannerNode` と同じ約束、`property::PAN` doc
+    /// 参照)なので、**表示も変換なしでそのまま**。L/R ラベルへの変換は
+    /// 新しい表示規約になり、既存の「数値のみ」の値セル文法と食い違う
+    /// ため見送った(先例: 他の値セル行はどれも生の数値表示。RETURN の
+    /// 見送り台帳参照)。
+    pub pan: TransformRowProjection,
+    /// `property::FADE_IN`(秒)。0.0 = 無効。
+    pub fade_in: TransformRowProjection,
+    /// `property::FADE_OUT`(秒)。0.0 = 無効。[`fade_in`](field)と対称。
+    pub fade_out: TransformRowProjection,
 }
 
 /// TEXT section の投影(裁定98: `styles[0]` = document 既定行のみを対象 —
@@ -1934,6 +2049,81 @@ pub fn project(
         _ => None,
     };
 
+    // AUDIO section(B42、裁定184 型別 section 第4号): `LayerSource::Media`
+    // の layer でのみ現れる(TEXT section と同じ「型が合わない」判断・
+    // AudioSectionProjection doc の gate 説明参照)。4行とも layer 単位の
+    // 標準 property なので、mask/effect のような id 起点のループは無い —
+    // Opacity 行(scalar_component + 手動 % 換算)と同じ組み方をそのまま
+    // 4回繰り返すだけ。
+    let audio = match meta.as_ref().map(|meta| &meta.source) {
+        Some(LayerSource::Media { .. }) => {
+            let mut level = scalar_component(
+                store,
+                layer,
+                property::LEVEL,
+                "Level",
+                TransformField::Level,
+                t,
+                1.0,
+            )?;
+            level.value *= 100.0; // store は倍率、表示は %(layer Opacity と同じ換算)。
+            let pan = scalar_component(
+                store,
+                layer,
+                property::PAN,
+                "Pan",
+                TransformField::Pan,
+                t,
+                0.0,
+            )?;
+            let fade_in = scalar_component(
+                store,
+                layer,
+                property::FADE_IN,
+                "Fade In",
+                TransformField::FadeIn,
+                t,
+                0.0,
+            )?;
+            let fade_out = scalar_component(
+                store,
+                layer,
+                property::FADE_OUT,
+                "Fade Out",
+                TransformField::FadeOut,
+                t,
+                0.0,
+            )?;
+            Some(AudioSectionProjection {
+                level: TransformRowProjection {
+                    label: "Level",
+                    value: RowValue::Scalar(level),
+                    decimals: field_decimals(TransformField::Level),
+                    key: key_cell(KeyRow::Level)?,
+                },
+                pan: TransformRowProjection {
+                    label: "Pan",
+                    value: RowValue::Scalar(pan),
+                    decimals: field_decimals(TransformField::Pan),
+                    key: key_cell(KeyRow::Pan)?,
+                },
+                fade_in: TransformRowProjection {
+                    label: "Fade In",
+                    value: RowValue::Scalar(fade_in),
+                    decimals: field_decimals(TransformField::FadeIn),
+                    key: key_cell(KeyRow::FadeIn)?,
+                },
+                fade_out: TransformRowProjection {
+                    label: "Fade Out",
+                    value: RowValue::Scalar(fade_out),
+                    decimals: field_decimals(TransformField::FadeOut),
+                    key: key_cell(KeyRow::FadeOut)?,
+                },
+            })
+        }
+        _ => None,
+    };
+
     Ok(Some(SelectionProjection {
         layer,
         kind,
@@ -1948,6 +2138,7 @@ pub fn project(
         masks: mask_rows,
         effects: effect_rows,
         text,
+        audio,
     }))
 }
 
@@ -2411,6 +2602,12 @@ fn selected_body(
     if let Some(text_projection) = &selection.text {
         rows = rows.push(text_section(text_projection, text_field_draft, dims, colors));
     }
+    // AUDIO section(B42、裁定184 型別 section 第4号): `LayerSource::Media`
+    // の layer でのみ現れる(`project` が `Some` を作るのも同じ layer 種別に
+    // 限る、TEXT section と同じ判断)。
+    if let Some(audio_projection) = &selection.audio {
+        rows = rows.push(audio_section(audio_projection, field_draft, dims, colors));
+    }
     rows = rows.push(hint_row(dims, colors));
 
     scrollable(rows).height(Length::Fill).into()
@@ -2735,6 +2932,27 @@ fn justify_row(justify: TextJustify, dims: Dimensions, colors: Colors) -> Elemen
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
+}
+
+/// AUDIO section: 音声を持ち得る layer(`LayerSource::Media`)選択時のみ現れる
+/// (裁定184 型別 section 第4号)。**ident 行は無い** — mask/effect と違い
+/// per-id の一覧ではなく、layer につき常に高々1組の固定4行(Level/Pan/
+/// Fade In/Fade Out)なので、[`transform_row`] を直接4回呼ぶだけで済む
+/// (Position/Rotation/Opacity と同じ組み方 — 新しい編集文法を発明しない)。
+fn audio_section(
+    audio: &AudioSectionProjection,
+    field_draft: Option<&FieldDraft>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    column![
+        section_header("AUDIO", dims, colors),
+        transform_row(&audio.level, field_draft, dims, colors),
+        transform_row(&audio.pan, field_draft, dims, colors),
+        transform_row(&audio.fade_in, field_draft, dims, colors),
+        transform_row(&audio.fade_out, field_draft, dims, colors),
+    ]
+    .into()
 }
 
 /// mock の `.ident` 帯: 名前(編集可)+ 種別(読み取り専用)+ M/S glyph。
@@ -4175,6 +4393,7 @@ mod tests {
             masks: vec![],
             effects: vec![],
             text: None,
+            audio: None,
         };
 
         let (start, current_vec2) =
@@ -4224,6 +4443,7 @@ mod tests {
             masks: vec![],
             effects: vec![],
             text: None,
+            audio: None,
         };
         let (start, _) = drag_origin(&selection, TransformField::Rotation)
             .expect("キー持ち field もドラッグを始められるはず(Q0)");
@@ -4739,12 +4959,111 @@ mod tests {
             }],
             effects: vec![],
             text: None,
+            audio: None,
         };
         let (start, _) = drag_origin(&selection, field).expect("mask opacity は editable のはず");
         assert_eq!(start, 80.0, "起点は投影の表示値(%)のはず");
         assert!(
             drag_origin(&selection, TransformField::MaskOpacity(MaskId(9))).is_none(),
             "別の mask id の field では drag を始めないはず"
+        );
+    }
+
+    /// drag の起点は AUDIO section の4行からも読める(B42、裁定184 型別
+    /// section 第4号 — mask opacity と同じ「専用 section の投影も
+    /// `drag_origin` が舐める」拡張、`lib.rs::drag_origin` の AUDIO ループ参照)。
+    #[test]
+    fn drag_origin_finds_the_audio_section_slots() {
+        let selection = SelectionProjection {
+            layer: LayerId(1),
+            kind: "media",
+            transform: vec![],
+            attrs: AttrsProjection {
+                name: String::new(),
+                hidden: false,
+                blend_mode: "Normal".to_owned(),
+                speed_percent: 100.0,
+                label_color: None,
+            },
+            masks: vec![],
+            effects: vec![],
+            text: None,
+            audio: Some(AudioSectionProjection {
+                level: TransformRowProjection {
+                    label: "Level",
+                    value: RowValue::Scalar(ComponentSlot {
+                        axis: "Level",
+                        present: true,
+                        value: 100.0,
+                        editable: true,
+                        keyed: false,
+                        field: Some(TransformField::Level),
+                    }),
+                    decimals: 1,
+                    key: KeyCellProjection {
+                        row: KeyRow::Level,
+                        state: KeyCellState::Static,
+                    },
+                },
+                pan: TransformRowProjection {
+                    label: "Pan",
+                    value: RowValue::Scalar(ComponentSlot {
+                        axis: "Pan",
+                        present: true,
+                        value: -0.3,
+                        editable: true,
+                        keyed: false,
+                        field: Some(TransformField::Pan),
+                    }),
+                    decimals: 2,
+                    key: KeyCellProjection {
+                        row: KeyRow::Pan,
+                        state: KeyCellState::Static,
+                    },
+                },
+                fade_in: TransformRowProjection {
+                    label: "Fade In",
+                    value: RowValue::Scalar(ComponentSlot {
+                        axis: "Fade In",
+                        present: true,
+                        value: 0.0,
+                        editable: true,
+                        keyed: false,
+                        field: Some(TransformField::FadeIn),
+                    }),
+                    decimals: 2,
+                    key: KeyCellProjection {
+                        row: KeyRow::FadeIn,
+                        state: KeyCellState::Static,
+                    },
+                },
+                fade_out: TransformRowProjection {
+                    label: "Fade Out",
+                    value: RowValue::Scalar(ComponentSlot {
+                        axis: "Fade Out",
+                        present: true,
+                        value: 0.0,
+                        editable: true,
+                        keyed: false,
+                        field: Some(TransformField::FadeOut),
+                    }),
+                    decimals: 2,
+                    key: KeyCellProjection {
+                        row: KeyRow::FadeOut,
+                        state: KeyCellState::Static,
+                    },
+                },
+            }),
+        };
+        let (level_start, _) =
+            drag_origin(&selection, TransformField::Level).expect("Level は editable のはず");
+        assert_eq!(level_start, 100.0);
+        let (pan_start, _) =
+            drag_origin(&selection, TransformField::Pan).expect("Pan は editable のはず");
+        assert_eq!(pan_start, -0.3);
+        assert!(
+            drag_origin(&selection, TransformField::Rotation).is_none(),
+            "AUDIO 投影に無い field では drag を始めないはず"
         );
     }
 
