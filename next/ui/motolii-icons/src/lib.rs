@@ -75,10 +75,9 @@ declare_icons! {
     ArrowRight => "arrow_right",
     ChevronLeft => "chevron_left",
     ChevronRight => "chevron_right",
-    // ループ再生トグル(B21 transport 帯)。`Icon::Redo` 暫定の解消
-    // (第5波 shell 結線 — timeline-pane `TransportSpec::loop_button` doc 参照)。
-    // NOTICE 記載の同一 rev(e083cc60)から vendoring。
-    Repeat => "repeat",
+    // ループ再生トグル(B21 transport 帯)の Repeat は第2弾セクション側で宣言。
+    // 第5波 shell 結線と先読み第2弾(IC3)が同じ rev から同一バイトを vendoring し、
+    // merge がテキスト上は綺麗に通って E0428 になった — 意味衝突を型が捕捉した実例。
     // -- 近い将来分(裁定186 発注書)---------------------------------------
     Search => "search",
     Close => "close",
