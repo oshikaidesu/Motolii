@@ -1,0 +1,17 @@
+[package]
+name = "motolii-icons"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# fork は svg widget を在庫していたが未点灯だった(在庫調査済み・未使用)。
+# ここで "svg" feature を点す — workspace の feature unification で全 crate の
+# iced が resvg 0.45(fork pin の版)を引くようになる(この crate が唯一の点灯元)。
+iced = { workspace = true, features = ["svg"] }
+
+[dev-dependencies]
+# 全 variant の SVG が parse 可能であることの試験用。iced の "svg" feature が
+# resvg 0.45 → usvg 0.45 を既に依存グラフへ引いているので、これは裁定117 が
+# 許す direct 昇格(新規依存ではない)。
+usvg = { version = "0.45", default-features = false }
