@@ -1,0 +1,21 @@
+# R6 probe: text 束の字形描画ルート裁定(2026-08-22 発注)。marker は src/lib.rs。
+#
+# cosmic-text は workspace.dependencies に足さない — iced fork(iced_graphics /
+# iced_tiny_skia)が既に 0.19.0 を引いており、この direct 指定は Cargo.lock 上で
+# 同一 package に unify される(依存の増分ゼロ = この probe が実測した本命の利点。
+# motolii-css-metrics が blitz を自分だけで引くのと同じ「器具だけが引く」形)。
+[package]
+name = "r6-text-shaping"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+cosmic-text = "0.19"
+motolii-store.workspace = true
+motolii-vector.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+image.workspace = true
