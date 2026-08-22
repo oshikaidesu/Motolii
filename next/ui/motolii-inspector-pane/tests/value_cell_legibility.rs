@@ -112,8 +112,10 @@ fn selection_with_position_row() -> SelectionProjection {
             hidden: false,
             blend_mode: "Normal".to_owned(),
             speed_percent: 100.0,
+            label_color: None,
         },
         masks: vec![],
+        effects: vec![],
     }
 }
 

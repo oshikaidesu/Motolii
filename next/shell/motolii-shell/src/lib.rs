@@ -1729,6 +1729,59 @@ impl Shell {
                 }
                 Task::none()
             }
+            // EFFECTS section(B38 第3切片、裁定184 型別 section 第2号)。
+            // 書き込み本体は pane の自由関数(MASK section と同じ即時操作の形)—
+            // ここは `Err` を status 帯へ渡す glue だけ(M13)。
+            inspector_pane::Message::RemoveEffect(effect) => {
+                if let Err(error) = inspector_pane::remove_inspector_effect(
+                    &mut self.doc,
+                    self.session.selection,
+                    effect,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::MoveEffectUp(effect) => {
+                if let Err(error) = inspector_pane::move_inspector_effect_up(
+                    &mut self.doc,
+                    self.session.selection,
+                    effect,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::MoveEffectDown(effect) => {
+                if let Err(error) = inspector_pane::move_inspector_effect_down(
+                    &mut self.doc,
+                    self.session.selection,
+                    effect,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::ToggleEffectBypass(effect) => {
+                if let Err(error) = inspector_pane::toggle_inspector_effect_bypass(
+                    &mut self.doc,
+                    self.session.selection,
+                    effect,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            // ラベル色チップ(B03、ident 帯)— 同上の glue のみ。
+            inspector_pane::Message::CycleLabelColor => {
+                if let Err(error) = inspector_pane::cycle_inspector_label_color(
+                    &mut self.doc,
+                    self.session.selection,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
         }
     }
 
