@@ -13,6 +13,9 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| MB-2 | 実装 | worktree(shell) | ヘッダー箱ボタン列→menubar 差し替え(D1 根治): File/Edit/Layer/View 4メニュー(既存 Message の露出のみ・Freeze/Unfreeze 初露出)+右端 icon ボタン(Browser/Settings、icon+tooltip ペア第1号) |
+| LN-D2 | 実装 | worktree(inspector-pane) | 値セルの常時輪郭廃止(幾何不変・style のみ): 平常=素の数字/hover=箱/編集=focus 縁。±1px 柵の緑=幾何不変の証明 |
+| LN-D4 | 実装 | worktree(browser-pane) | チップ/rail の輪郭を「選択の器」へ(非選択=素の文字+hover 面) |
 
 
 ## 完了・main 着地済み(実装)
