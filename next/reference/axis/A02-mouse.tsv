@@ -1,0 +1,63 @@
+#axis: A02 手(マウス完遂の再判定)
+#question: 各意図はマウスだけで完遂できるか(裁定217。キーボード到達性=Tabは穴に数えない)
+#verdicts: マウスで完遂できる|穴:マウスで完遂できない|穴:とんちで満たしている|穴:ポインタ入力を受け取れない|対象外(文字入力)|未確認
+#boundary: 裁定217 の3条件。(1) 連続性のあるデータ(数値・位置・尺・角度・色・時刻)はdragで完遂できなければ穴。数値入力は文字入力ではなく広義の増減。(2) 文字入力(任意文字列=名前・歌詞・path)は対象外。(3) とんち禁止=モーダル新設/専用ダイアログ/そのソフトにしか無い入力部品での「字面だけの到達」は穴のまま
+#sweep: cat next/reference/GESTURES.md (§1 主要ジェスチャ34行の判定転記元、2026-08-23)
+#sweep: grep -n "start_field_drag\|continue_field_drag\|finish_field_drag" next/ui/motolii-inspector-pane/src/*.rs (drag機構の生存範囲=transform.rsのみ、他へのimportで再利用箇所を特定)
+#sweep: grep -n "transform_row" next/ui/motolii-inspector-pane/src/*.rs (drag機構を継承しているsection= mask.rs/audio.rs/effects.rs)
+#sweep: grep -n "text_input(\"\", " next/ui/motolii-inspector-pane/src/*.rs next/ui/motolii-settings-pane/src/*.rs (drag機構を継承していない=text_inputのみのnumeric欄を洗い出し)
+#sweep: grep -n "hex\|Hex\|color_picker\|ColorPicker" next/ui/motolii-inspector-pane/src/*.rs (色専用ダイアログ/hex文字列強制の有無、0件)
+#sweep: grep -rn "Pinch\|Magnify\|TouchpadMagnify" ~/.cargo/git/checkouts/iced-1bbb4ed9d90ae4f8/73e686e/core/src (AX-5既知の再確認、0件。core/src/event.rsはEvent::Touch(touch::Event)のみ)
+#sweep: grep -rn "Button::Middle\|Button::Right\|on_double_click\|WheelScrolled" next/ui next/shell (ホイール/中ボタン/右ボタン/ダブルクリックの他の使用箇所を洗い出し)
+#sweep: grep -rln "modal\|Modal\|Dialog\|virtual_keyboard\|VirtualKeyboard" next/ui next/shell (とんち=専用ダイアログ/仮想キーボードの有無、file_dialogs以外0件)
+#sweep: grep -n "DeleteSelectedKeys\|CutLayer" next/shell/motolii-shell/src/lib.rs next/ui/motolii-keymap/src/verb.rs (削除系のマウス入口の有無)
+#sweep: grep -rn "Marquee\|marquee" next/ui/motolii-timeline-pane/src (Timeline側矩形選択の実装有無、0件)
+#sweep: grep -n "Delete\|Remove\|Clear" next/shell/motolii-shell/src/menu.rs (メニュー項目としての削除動詞の有無、0件)
+axis	map_id	対象	判定	証拠	穴	責任
+A02	-	Inspector 数値ドラッグ(Position/Scale/Rotation/Opacity/Anchor、transform.rs)	マウスで完遂できる	`start_field_drag`/`continue_field_drag`/`finish_field_drag`(press→drag→release)。GESTURES.md旧判定「マウスのみ」だがマウス列は○=旧基準の対象外項目であって新基準の穴ではない	-	-
+A02	-	Inspector click→type 編集(数値欄、transform.rs)	マウスで完遂できる	click→type→Enterで完結。数値のprimary経路は上記drag、この行はその代替入口(文字入力自体は広義の増減の一形態として許容)	-	-
+A02	-	ラベル色チップ 巡回(`chrome.rs::label_color_chip`)	マウスで完遂できる	固定パレット(`LABEL_PALETTE_LEN`)を巡回するclickボタン。enumはBL2巡回文法でdrag不要、色そのものの連続値ではなくindex	-	-
+A02	-	Inspector M(Hidden)トグル(`chrome.rs::mute_glyph`)	マウスで完遂できる	click(bool巡回)	-	-
+A02	-	Timeline rail M/S/L トグル(`rail.rs`)	マウスで完遂できる	click(bool巡回)	-	-
+A02	-	Timeline 行選択(`rail.rs`、mouse_area.on_press)	マウスで完遂できる	click単独。GESTURES旧判定はキーボード動詞欠如を理由に「マウスのみ」としていたが新基準はマウス側の完遂を見るだけ	-	-
+A02	-	Timeline clip move(`clip_gesture.rs::moved_start`)	マウスで完遂できる	press→drag→release、スナップ有(SNAP_PX=7px)	-	-
+A02	-	Timeline clip trim(`clip_gesture.rs::trimmed_in_start/trimmed_out_end`)	マウスで完遂できる	press→drag→release(TRIM_EDGE=8px)	-	-
+A02	-	Playhead scrub(`ruler.rs`/`input.rs`、ScrubTo)	マウスで完遂できる	press→drag→release、スナップ無し(生ピクセル)	-	-
+A02	-	JumpMeaningPointPrev/Next相当の手動スクラブ(playheadをkey/marker時刻へ合わせる)	マウスで完遂できる	理論上drag→exact時刻は達成可能(GESTURES自身「精度は別問題」と明記)。連続値=playhead位置自体はdragで動く、厳密一致精度の欠如は別の品質論点(迷った判断参照)	-	-
+A02	-	Timeline 矩形選択(marquee)	穴:マウスで完遂できない	Timeline に marquee 実装が無い(`grep -rn "Marquee\|marquee" next/ui/motolii-timeline-pane/src` 空振り)。意図の入口自体が存在せず、mouseでもkeyboardでも完遂できない	穴	next/ui/motolii-timeline-pane/src/rail.rs:1(現状複数選択の唯一入口=Cmd/Shiftクリック個別選択のみ)
+A02	-	Timeline キー(菱形)クリック選択(`key_rows.rs`)	マウスで完遂できる	click単独/Cmdトグル/Shift範囲、いずれもdrag不要のclick完結	-	-
+A02	-	Timeline キー(菱形)時刻ドラッグ(`key_gesture.rs::dragged_group_frame`)	マウスで完遂できる	press→drag→release	-	-
+A02	-	選択キーの削除(Backspace/Delete、`shell/lib.rs:5781`)	穴:マウスで完遂できない	削除の**実行**を行うボタン・右クリックメニュー項目が無い(`grep -n "Button::Right" next/ui/motolii-timeline-pane/src` の3ヒットは全てドラッグ取消の腕でDeleteメニュー項目ではない)。選択はclickで完結するが確定(削除)にはキーボードが必須	穴	next/ui/motolii-timeline-pane/src/key_rows.rs:317(選択の器。ここにcontext menuのDelete項目が無い)
+A02	-	レイヤー削除(実質 CutLayer、Cmd+X)	穴:マウスで完遂できない	削除専用ボタン・右クリックメニュー項目・drag-to-trashのいずれも無い(`grep -n "Delete\|Remove\|Clear" next/shell/motolii-shell/src/menu.rs` 空振り)。マウス側の入口がゼロで、キーボード(Cmd+X、意味はCutに間借り)にしか無い	穴	next/shell/motolii-shell/src/menu.rs:252(レイヤー操作メニューの正本)
+A02	-	NudgeKeyframe(既出キードラッグのキー等価)	マウスで完遂できる	ドラッグが上位互換	-	-
+A02	-	Loop帯(作業範囲)body/edge drag(`ruler.rs`/`work_area.rs::dragged_area`)	マウスで完遂できる	press→drag→release(LOOP_GRAB=8px)、In/Out両方をマウスで設定できる	-	-
+A02	-	Transport 再生/停止ボタン(`transport.rs::transport_button`)	マウスで完遂できる	click	-	-
+A02	-	マーカー/ロケータ ドラッグ(`markers.rs::MarkerDrag::dragged`)	マウスで完遂できる	press→drag→release	-	-
+A02	-	メニュー項目(shortcut有無問わず、`menu.rs`)	マウスで完遂できる	メニューを開いてclickで完結	-	-
+A02	-	Stage gizmo move/scale/rotate/anchor(`gizmo.rs`)	マウスで完遂できる	press→drag→release(Shift修飾は精度/スナップの補助でありmouse-onlyの完遂を妨げない)	-	-
+A02	-	Stage 矩形選択(`marquee.rs::apply_selection`)	マウスで完遂できる	press→drag→release	-	-
+A02	-	Stage ズーム(wheel、`zoom_at_screen_point`)	マウスで完遂できる	wheelイベントで完結(カーソル位置中心ズーム)	-	-
+A02	-	Stage パン(Middle-drag、`lib.rs:599/615`)	マウスで完遂できる	マウス3ボタン機がある前提ではpress→drag→releaseで完結。トラックパッド単体では中ボタンを直接発生させる標準ジェスチャがOS依存(macOSの3本指クリック割当は既定でオフの環境がある)。デバイス側の制約であってMotolii実装の穴ではないため判定は維持するが、備考として残す(迷った判断§参照)	-	next/ui/motolii-stage-pane/src/lib.rs:599
+A02	-	Browser カード ダブルクリック(`Message::CreateFromCard`)	マウスで完遂できる	on_double_click(buttonのpress captureを避けてmouse_areaへ乗り換え済み、`lib.rs:1572`)	-	-
+A02	-	pane_grid 境界ドラッグ(iced標準)	マウスで完遂できる	iced提供のResizeEvent、drag完結	-	-
+A02	-	pane_grid 題帯ドラッグ(`pane_title_bar`)	マウスで完遂できる	Draggable、drag完結	-	-
+A02	-	Inspector LINK/MATTE/font `pick_list` 選択(`link.rs`/`matte.rs`/`text.rs::font_family_row`)	マウスで完遂できる	click開閉+選択、Cmd+wheelで循環も可。enum/開放集合の選択でありdrag対象の連続値ではない	-	-
+A02	-	効果 追加/削除/並べ替え/bypass(`effects.rs`)	マウスで完遂できる	click(追加/削除/reorderボタン/bypassトグル)	-	-
+A02	-	Mask/Matte/Blend の巡回ボタン(`CycleMaskMode`/`CycleMatteMode`/`CycleBlendMode`)	マウスで完遂できる	click巡回、enumでdrag対象外	-	-
+A02	-	Effect Param(Threshold/Intensity/Radius、`effects.rs`が`transform_row`を再利用)	マウスで完遂できる	`transform.rs::{start,continue,finish}_field_drag`をそのまま継承(`effects.rs:23` import)	-	-
+A02	-	Mask Opacity(`mask.rs:149`)	マウスで完遂できる	`transform_row`をそのまま再利用(`mask.rs:22` import)	-	-
+A02	-	Audio Level/Pan/FadeIn/FadeOut(`audio.rs:40-43`)	マウスで完遂できる	`transform_row`を4回呼ぶだけ(`audio.rs:24` import)	-	-
+A02	-	Fill Color RGBA(TEXT section、`color.rs::channel_cell`)	穴:マウスで完遂できない	R/G/B/A(0-255)欄がすべて`text_input`のみ(`color.rs:318-350`)。`transform.rs`のdrag機構をimportしておらず、click→typeの文字入力でしか値を動かせない。色は裁定217が名指しした連続データの例そのもの(発注書「色が16進文字列でしか入れられないなら穴」と同型 — ここは16進ではなく10進4欄だが、drag完遂できない点は同じ)	穴	next/ui/motolii-inspector-pane/src/color.rs:318 ※過積載(689行)
+A02	-	Stroke Color RGBA(TEXT section、`color.rs::channel_cell`)	穴:マウスで完遂できない	Fill Colorと同じ`channel_cell`を共有(`ColorTarget::Stroke`)。同一関数・同一穴	穴	next/ui/motolii-inspector-pane/src/color.rs:318 ※過積載(689行)
+A02	-	Composition Background RGBA(Settings、`lib.rs::channel_cell`)	穴:マウスで完遂できない	R/G/B/A欄が`text_input`のみ(`lib.rs:483-511`)。`color.rs`と同型の穴が2crateに重複実装されている(「2箇所で別の意匠を発明しない」というdoc方針の一方で、drag機構だけがどちらにも無い)	穴	next/ui/motolii-settings-pane/src/lib.rs:483 ※過積載(764行)
+A02	-	Composition Width/Height/FPS/Duration(`sections.rs::comp_field_cell`)	穴:マウスで完遂できない	`text_input`のみ(`sections.rs:630-661`)。Durationは裁定217本文が連続データの例として名指しした「尺」そのもの。Width/Height/FPSも増減に意味がある数値だがdrag機構が無い	穴	next/ui/motolii-settings-pane/src/sections.rs:630 ※過積載(1130行)
+A02	-	AutoSave interval_secs/generations(`sections.rs::auto_save_field_cell`)	穴:マウスで完遂できない	`text_input`のみ(`sections.rs:729-758`)。同じ`comp_field_cell`の型をコピーしており同じ穴を継承	穴	next/ui/motolii-settings-pane/src/sections.rs:729 ※過積載(1130行)
+A02	-	Text Size(TEXT section、`text.rs::text_field_row`)	穴:マウスで完遂できない	`text_input`のみ(`text.rs:454-483`)。`speed_row`と同じ文法を踏襲しておりdrag機構は最初から範囲外(text.rs doc「新しい編集文法を発明しない」がtransform_rowのdrag機構ではなくtext_inputの文法を指している)	穴	next/ui/motolii-inspector-pane/src/text.rs:454 ※過積載(662行)
+A02	-	Line Height(TEXT section、`text.rs::line_height_row`)	穴:マウスで完遂できない	`text_input`のみ(`text.rs:565-598`)。`Auto`ボタン(値のクリア)は click で完結するが、数値そのものの増減はdrag不可	穴	next/ui/motolii-inspector-pane/src/text.rs:565 ※過積載(662行)
+A02	-	Tracking(TEXT section、`text.rs::tracking_row`)	穴:マウスで完遂できない	`text_input`のみ(`text.rs:608-641`)。`Reset`ボタンは0に戻すclickのみでdrag不可	穴	next/ui/motolii-inspector-pane/src/text.rs:608 ※過積載(662行)
+A02	-	Speed(ATTRS、`attrs.rs::speed_row`)	穴:マウスで完遂できない	`text_input`のみ(`attrs.rs:155-177`)。素材の再生速度=連続値だがdrag機構が無い	穴	next/ui/motolii-inspector-pane/src/attrs.rs:155
+A02	-	Justify(TEXT section、`text.rs::justify_row`)	マウスで完遂できる	enum(`TextJustify`)巡回ボタン、`mask_ident_row`と同型	-	-
+A02	-	Layer Name(ident帯、`chrome.rs`)	対象外(文字入力)	任意文字列。連続性のないデータ	-	-
+A02	-	Text Content(本文、`text.rs::text_field_row`、`TextField::Content`)	対象外(文字入力)	任意文字列(歌詞/本文相当)。裁定217が明示した「連続性のないデータ」の代表例	-	-
+A02	-	Font Family 手打ち欄(`text.rs::font_family_row`の`text_input`側)	対象外(文字入力)	任意文字列。ただし同じ行に`pick_list`(実在フォント一覧からの選択)が並置されており、選ぶだけならマウスで完遂できる代替入口が既にある(text_input側は自由入力の補助)	-	-
+A02	-	トラックパッド ピンチジェスチャ(Stage ズーム)	穴:ポインタ入力を受け取れない	iced fork の `core/src/event.rs` に `Event::Touch(touch::Event)` のみで `TouchpadMagnify`/`Pinch` 相当のAPIが無い(`grep -rn "Pinch\|Magnify\|TouchpadMagnify" ~/.cargo/git/checkouts/iced-1bbb4ed9d90ae4f8/73e686e/core/src` 空振り)。AX-5既実測(再発見不要、出発点)。M18(Zoom)実装時に直撃	穴	next/ui/motolii-stage-pane/src/zoom.rs:1(wheel入力の受け口はここ、pinch用の受け口が同型で無い)
