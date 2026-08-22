@@ -54,7 +54,9 @@ mod lane_bar;
 pub mod nav;
 mod projection;
 mod rail;
+pub mod shuttle;
 mod transport;
+pub mod work_area;
 mod write;
 
 pub use hit::{bar_span_x, classify_bar_part, hit_test, BarPart, Hit, TRIM_EDGE};
@@ -77,11 +79,18 @@ pub use projection::{
 /// (screenshot.rs は shell/M4 の領分)— screenshot 側が独自に持つ重複式
 /// (`ruler_h = dims.row_height`・inset = `spacing_xs` 等)は、この export を
 /// 使うよう置き換えるのが次の一手(未着手、report で明記)。
-pub use canvas::{bar_corner_radius, bar_inset, major_tick_length, minor_tick_length, ruler_height};
+pub use canvas::{
+    bar_corner_radius, bar_inset, loop_band_height, major_tick_length, minor_tick_length,
+    ruler_height,
+};
 pub use lane_bar::glyph_size_px;
+/// JKL シャトル(B21)と作業範囲/ループ帯(B18)の意味型 — shell の
+/// PlaybackClock/keymap 層がこの型で結線する(モジュール doc 参照)。
+pub use shuttle::{ShuttleCommand, ShuttleState, MAX_SHUTTLE_RATE};
 /// Transport 帯(map 1041-1045・1138)の宣言 spec — テスト(絵と意味の対応)
 /// と shell 側検分器具の両方が widget 木の代わりに読む継ぎ目。
 pub use transport::{transport_spec, TransportButton, TransportSpec};
+pub use work_area::{classify_loop_band, LoopBandPart, WorkArea, LOOP_GRAB};
 pub use write::{Message, PaneState};
 
 use iced::widget::row;
@@ -139,6 +148,13 @@ pub struct TimelinePane {
     /// `modifiers`/`key_drag_active` と同じ「Shell 状態を読み取り専用で pane へ
     /// 運ぶだけ」の形 — 既定 `false`([`Self::with_playing`] でしか立たない)。
     playing: bool,
+    /// 作業範囲(In-Out、B18 第1切片・正典 §5「ループ帯」)。`PaneState::work_area()`
+    /// を [`Self::with_work_area`] で運ぶだけ(`playing` と同じ形)。ルーラ最上段の
+    /// 帯の絵([`canvas`])と当たり([`input`])が読む。
+    work_area: Option<WorkArea>,
+    /// ループ on/off(map 1082/1083)。帯の ink(on=accent)と transport の
+    /// ループボタンの顔が読む。
+    loop_enabled: bool,
 }
 
 impl TimelinePane {
@@ -168,6 +184,8 @@ impl TimelinePane {
             key_drag_active: false,
             preview_active: false,
             playing: false,
+            work_area: None,
+            loop_enabled: false,
         }
     }
 
@@ -176,6 +194,15 @@ impl TimelinePane {
     /// (既存の呼び出し元・試験を1つも壊さない)。
     pub fn with_playing(mut self, playing: bool) -> Self {
         self.playing = playing;
+        self
+    }
+
+    /// `Shell::view` だけが呼ぶ(B21+B18 第1切片)。`PaneState::work_area()`/
+    /// `loop_enabled()` をそのまま渡すだけの薄い builder — `with_playing` と
+    /// 同じ形(既存の呼び出し元・試験を1つも壊さない)。
+    pub fn with_work_area(mut self, area: Option<WorkArea>, loop_enabled: bool) -> Self {
+        self.work_area = area;
+        self.loop_enabled = loop_enabled;
         self
     }
 

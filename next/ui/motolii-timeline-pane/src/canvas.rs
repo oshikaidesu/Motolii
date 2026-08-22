@@ -66,6 +66,16 @@ pub fn major_tick_length(ruler_height: f32) -> f32 {
     (0.5 * ruler_height).round()
 }
 
+/// ループ帯(作業範囲、正典 §5「ルーラ最上段が専用面」)の高さ。
+/// mock `timeline-semantics.html` にループ帯は無い(grep 済み)ので実測転写は
+/// できない — 独自比を発明する代わりに、**ルーラーの「大目盛りが届かない
+/// 残り」**(`ruler高 − 大目盛り長` = 上半分)を帯に充てる(裁定167: 既存
+/// 梯子からの導出。目盛り(下)と帯(上)が排他に住み分け、22px ルーラーで
+/// 11px — 実窓で見てから直す型、transport 帯の置き場と同じ姿勢)。
+pub fn loop_band_height(ruler_height: f32) -> f32 {
+    ruler_height - major_tick_length(ruler_height)
+}
+
 pub(crate) fn draw(
     pane: &TimelinePane,
     renderer: &iced::Renderer,
@@ -119,6 +129,22 @@ pub(crate) fn draw(
         ruler_height,
         pane.colors.border_default,
     );
+
+    // ループ帯(作業範囲、B21+B18 第1切片・正典 §5)。ルーラ最上段の専用面 —
+    // 目盛り(下半分)と住み分ける([`loop_band_height`] の導出参照)。
+    // ink は状態の器(裁定179: on = accent、off = 静かな gray — 帯は消えない
+    // (正典 §5)ので off でも「引いてある」ことは読める)。
+    if let Some(area) = pane.work_area {
+        let band_height = loop_band_height(ruler_height);
+        let x0 = frame_to_x(area.start, width, pane.duration_frames);
+        let x1 = frame_to_x(area.end, width, pane.duration_frames).max(x0 + 1.0);
+        let band_color = if pane.loop_enabled {
+            pane.colors.action_active
+        } else {
+            pane.colors.border_strong
+        };
+        frame.fill_rectangle(Point::new(x0, 0.0), Size::new(x1 - x0, band_height), band_color);
+    }
 
     // マーカー(comp 側の名前つきロケータ)。ルーラー帯へ縦線として重ねる。
     for marker in &pane.markers {
@@ -482,5 +508,14 @@ mod ratio_tests {
         assert_eq!(ruler, 22.0);
         assert_eq!(minor_tick_length(ruler), 5.0, "mock `.tick{{height:5px}}`");
         assert_eq!(major_tick_length(ruler), 11.0, "mock `.tick.major{{height:11px}}`");
+    }
+
+    /// ループ帯はルーラーの「大目盛りが届かない残り」(上半分)— 目盛りと
+    /// 排他に住み分ける(重なる帯を作らない)。
+    #[test]
+    fn loop_band_and_major_ticks_partition_the_ruler() {
+        let ruler = ruler_height(MOCK_ROW_HEIGHT);
+        assert_eq!(loop_band_height(ruler), 11.0);
+        assert_eq!(loop_band_height(ruler) + major_tick_length(ruler), ruler, "帯+大目盛=ルーラー全高");
     }
 }
