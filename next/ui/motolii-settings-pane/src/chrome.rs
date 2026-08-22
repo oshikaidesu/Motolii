@@ -30,7 +30,7 @@
 //! 生成する widget が無く、型パラメータの束縛を追加せずに generic化できる
 //! (呼び出し側の戻り値の型から単一化される)。他3関数は最初から `Message` に
 //! 触れていないため無改変。
-use iced::widget::{button, container, text, text_input};
+use iced::widget::{button, container, text, text_input, toggler};
 use iced::{Element, Length};
 
 use motolii_tokens_rs::{Colors, Dimensions, Ink};
@@ -154,4 +154,56 @@ pub fn value_input_style(
 /// (Transform 行)も同じパーサを使う(2箇所で別の意匠を発明しない)。
 pub fn parse_number(text: &str) -> Option<f64> {
     text.trim().replace('\u{2212}', "-").parse::<f64>().ok()
+}
+
+/// toggler の意味色ロール(裁定187 で `motolii-export-pane` が採択した二値選択
+/// widget の色決定を、この crate の AUTOSAVE 有効/無効トグルへも同じ形で適用)。
+/// crate 分割後は各 pane が自分の `chrome.rs` に決定を写す運用(このファイル
+/// 冒頭 doc の裁定160 切片9 と同じ「pane 間の import 障壁を増やさない」選択)
+/// なので、`motolii-export-pane::toggler_style` と字面は重複するが色ロールの
+/// 決定自体は単一(ON=`action_active`・OFF=`surface_raised`・hover=
+/// `surface_hover`・無効=`surface_panel`地+`state_disabled`つまみ、export-pane
+/// と同じ組)。
+pub fn toggler_style(colors: Colors, status: toggler::Status) -> toggler::Style {
+    let (background, knob) = match status {
+        toggler::Status::Active { is_toggled } => (
+            if is_toggled {
+                colors.action_active
+            } else {
+                colors.surface_raised
+            },
+            colors.text_primary,
+        ),
+        toggler::Status::Hovered { is_toggled } => (
+            if is_toggled {
+                colors.action_active
+            } else {
+                colors.surface_hover
+            },
+            colors.text_primary,
+        ),
+        toggler::Status::Disabled { is_toggled } => (
+            if is_toggled {
+                colors.state_selected
+            } else {
+                colors.surface_panel
+            },
+            colors.state_disabled,
+        ),
+    };
+    toggler::Style {
+        background: iced::Background::Color(background),
+        background_border_width: 0.0,
+        background_border_color: iced::Color::TRANSPARENT,
+        foreground: iced::Background::Color(knob),
+        foreground_border_width: 0.0,
+        foreground_border_color: iced::Color::TRANSPARENT,
+        // ラベルは行の text が担う(toggler 側にラベルを持たせない)ので不使用。
+        text_color: None,
+        // 角丸ゼロ = chrome の square 文法(裁定179)。`None` は真円 pill で
+        // ここだけ別意匠になるため使わない。
+        border_radius: Some(0.0.into()),
+        // つまみと地の間隔は upstream 既定値(0.1)— 寸法の発明をしない。
+        padding_ratio: 0.1,
+    }
 }
