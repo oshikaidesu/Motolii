@@ -35,6 +35,13 @@
 //! [`ShapeNode`]/[`ShapeGroup`]/[`flatten`] として足した(裁定173 H4、`group.rs`
 //! module doc 参照)。「1つの `Shape` の形」自体は変えていない。
 //!
+//! # 編集
+//!
+//! [`PathSource::Bezier`] の中身(`values/bezier` の `v`/`i`/`o`/`c` — Lottie 公式
+//! スキーマ、`reference/lottie-coverage.tsv` 参照。全4フィールド採用済)への
+//! 頂点単位の読み書き(追加/削除/移動・ハンドル設定・閉路の開閉・セグメント分割)は
+//! [`edit`] に集めた。UI 側のジェスチャがどれをどう呼ぶかは次波(`edit.rs`
+//! module doc「UI 側への口」参照)。
 //! # 保存(layer-meta 束)
 //!
 //! `Shape` とその内側の型に `serde` を足してある。**中身の語彙は増やしていない**
@@ -44,6 +51,12 @@
 //! 正本はここ1つのままで、store 側に別のパス表現を発明させない(裁定10 と同じ考え方)。
 //! `Canvas` / `Raster` / `VectorError` は描画専用の値なので保存の対象外(derive していない)。
 
+/// `values/bezier`(Lottie 公式スキーマ、全4フィールド採用済)に対する頂点編集。
+/// `insert_vertex`/`move_vertex`/`split_segment` 等は `coverage` と同じ理由
+/// (「1つの図形の記述」とは別の関心事 — こちらは**編集**であって**記述**ではない)で、
+/// crate 根の `pub use` には混ぜず独立した名前空間として公開する。
+/// module doc(`edit.rs`)参照。
+pub mod edit;
 mod geom;
 /// シェイプ内の入れ子グループ(裁定173 H4)。`ShapeNode`/`ShapeGroup`/`flatten`/
 /// `render_tree` は crate 根から `pub use` で直に公開する — `coverage` と違い
