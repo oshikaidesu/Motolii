@@ -290,6 +290,14 @@ pub enum Message {
     /// Tracking を 0 へ戻すボタン。`ResetSpeed` と同じ即時操作の形(map
     /// 「Reset tracking to 0」、採用予定)。既に0なら no-op。
     ResetTracking,
+
+    // ---- 色エディタ(`crate::color`、2026-08-22 発注「歌詞が入れられる道を
+    // 通す」で結線) ----
+    /// TEXT section の Fill/Stroke 色欄。`color` module は自己完結の
+    /// pane-local `Message` を持つ(`Message::Timeline`/`Message::Settings`
+    /// と同じ「子 pane の Message を親が wrap する」形、`color.rs` 冒頭 doc
+    /// 「まだ結線していない」の解消)。
+    Color(color::Message),
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +364,34 @@ pub fn view_with_text_draft(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
+    view_with_color_draft(
+        projection,
+        field_draft,
+        name_draft,
+        speed_draft,
+        text_field_draft,
+        None,
+        dims,
+        colors,
+    )
+}
+
+/// [`view_with_text_draft`] と同じだが、TEXT section の色エディタ
+/// (`crate::color`、2026-08-22 発注)の編集下書きも渡せる。
+/// `motolii_shell::Shell::view` はこちらを呼ぶ。**`view`/`view_with_speed_draft`/
+/// `view_with_text_draft` 自身のシグネチャは変えていない**(既存呼び出し元・
+/// ALLOWLIST 外のテストを無改修のまま通すため、上2つが導入された時と同じ
+/// 判断)— 3つとも `color_field_draft: None` でここへ委譲するだけ。
+pub fn view_with_color_draft(
+    projection: Option<&SelectionProjection>,
+    field_draft: Option<&FieldDraft>,
+    name_draft: Option<&str>,
+    speed_draft: Option<&str>,
+    text_field_draft: Option<&TextFieldDraft>,
+    color_field_draft: Option<&color::ColorFieldDraft>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
     // mock v3.1 の `.ptitle`("Inspector" 帯)は転写しない — pane 名の正本は
     // shell の pane 題帯(pane_grid title_bar、drag ハンドル兼任)へ移った。
     // 内部にも残すと "Inspector" が二重表示になる(題帯レーンの API 要求)。
@@ -368,6 +404,7 @@ pub fn view_with_text_draft(
             name_draft,
             speed_draft,
             text_field_draft,
+            color_field_draft,
             dims,
             colors,
         ),
@@ -405,6 +442,7 @@ fn selected_body(
     name_draft: Option<&str>,
     speed_draft: Option<&str>,
     text_field_draft: Option<&TextFieldDraft>,
+    color_field_draft: Option<&color::ColorFieldDraft>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -435,7 +473,13 @@ fn selected_body(
     // TEXT section(B46 第1切片、裁定184): `LayerSource::Text` の layer での
     // み現れる(`project` が `Some` を作るのも同じ layer 種別に限る)。
     if let Some(text_projection) = &selection.text {
-        rows = rows.push(text_section(text_projection, text_field_draft, dims, colors));
+        rows = rows.push(text_section(
+            text_projection,
+            text_field_draft,
+            color_field_draft,
+            dims,
+            colors,
+        ));
     }
     // AUDIO section(B42、裁定184 型別 section 第4号): `LayerSource::Media`
     // の layer でのみ現れる(`project` が `Some` を作るのも同じ layer 種別に

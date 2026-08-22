@@ -795,6 +795,11 @@ pub struct Shell {
     /// — `TextDocumentStyle` は `TransformField`/track を経由しないので
     /// `inspector_speed_draft` と同型の別下書き(`TextField` で対象を区別)。
     inspector_text_field_draft: Option<inspector_pane::TextFieldDraft>,
+    /// Inspector の TEXT section 色エディタ(`crate::color`、2026-08-22 発注
+    /// 「歌詞が入れられる道を通す」で結線)、編集中の下書き。同上 —
+    /// `inspector_text_field_draft` と同型の別下書き(対象は `ColorTarget`/
+    /// `ColorChannel` の組で区別する)。
+    inspector_color_field_draft: Option<inspector_pane::color::ColorFieldDraft>,
     /// Inspector 値セルの drag-to-scrub。**Document ではない** — 同上
     /// (`inspector_pane::FieldDragState` doc comment 参照。型定義は裁定160
     /// 切片8で `motolii-inspector-pane` crate へ移設済み、置き場(この
@@ -1012,6 +1017,7 @@ impl Shell {
                 inspector_name_draft: None,
                 inspector_speed_draft: None,
                 inspector_text_field_draft: None,
+                inspector_color_field_draft: None,
                 inspector_drag: None,
                 keyboard_modifiers: iced::keyboard::Modifiers::default(),
                 timeline: timeline_pane::PaneState::new(),
@@ -1129,6 +1135,7 @@ impl Shell {
             inspector_name_draft: None,
             inspector_speed_draft: None,
             inspector_text_field_draft: None,
+            inspector_color_field_draft: None,
             inspector_drag: None,
             keyboard_modifiers: iced::keyboard::Modifiers::default(),
             timeline: timeline_pane::PaneState::new(),
@@ -1539,12 +1546,25 @@ impl Shell {
     }
 
     /// create タブのカード実体化(B36、`browser_pane::model::CreateKind` →
-    /// `LayerSource::{Shape,Solid,Null}`、`Message::AddLayer` と同じ「AddLayer
-    /// 合成」の流儀 — 1 `apply_all` = 1 undo)。**Rectangle/Ellipse はどちらも
-    /// `LayerSource::Shape` のまま**(発注 EXACT TARGET 7 の文言どおり —
-    /// 図形の中身(`Layer:shapes` component の `ShapeNode`)を書き分ける差は
-    /// この波の範囲外、RETURN 参照)。生成後は選ぶ(`Message::AddLayer`/
-    /// `duplicate_layer` と同じ規律)。
+    /// `LayerSource::{Shape,Solid,Null,Text}`、`Message::AddLayer` と同じ
+    /// 「AddLayer 合成」の流儀 — 1 `apply_all` = 1 undo)。**Rectangle/Ellipse
+    /// はどちらも `LayerSource::Shape` のまま**(発注 EXACT TARGET 7 の文言
+    /// どおり — 図形の中身(`Layer:shapes` component の `ShapeNode`)を
+    /// 書き分ける差はこの波の範囲外、RETURN 参照)。生成後は選ぶ
+    /// (`Message::AddLayer`/`duplicate_layer` と同じ規律)。
+    ///
+    /// **Text**(2026-08-22 利用者裁定「追加するものは Browser の中に全部
+    /// 入れる」— 歌詞動画/MV ペルソナの致命的欠落への対処、
+    /// `docs/reviews/2026-08-22-persona-lyric-mv.md` 参照)は他3種と違い、
+    /// `LayerSource::Text` に加えて **`Intent::SetTextDocument` も同じ
+    /// `apply_all` へ積む** — text layer は `TextDocument` を持たなければ
+    /// Inspector の TEXT section が [`inspector_pane::default_text_document`]
+    /// を表示専用で仮組みするだけで store には何も無い状態になり(`text.rs`
+    /// `apply_text_document_edit` doc 参照)、engine が描く字形が無い(空
+    /// layer)。既定値は Inspector の投影が使うのと同じ関数
+    /// (`inspector_pane::default_text_document`)を呼ぶ ── 「既定値」の
+    /// 正本を2箇所で発明しない。1 `apply_all` = 1 undo は崩れない(AddLayer/
+    /// SetMeta/SetAttrs/SetTextDocument の4 Intent が1回の undo 段に入る)。
     fn create_from_card(&mut self, kind: browser_pane::model::CreateKind) {
         use browser_pane::model::CreateKind;
         let id = LayerId(self.next_layer_id());
@@ -1556,8 +1576,9 @@ impl Shell {
                 height: 135,
             },
             CreateKind::Null => LayerSource::Null,
+            CreateKind::Text => LayerSource::Text,
         };
-        let placed = self.doc.apply_all([
+        let mut intents = vec![
             Intent::AddLayer(id),
             Intent::SetMeta {
                 layer: id,
@@ -1574,7 +1595,14 @@ impl Shell {
                     ..Default::default()
                 },
             },
-        ]);
+        ];
+        if matches!(kind, CreateKind::Text) {
+            intents.push(Intent::SetTextDocument {
+                layer: id,
+                document: inspector_pane::default_text_document(),
+            });
+        }
+        let placed = self.doc.apply_all(intents);
         match placed {
             Ok(()) => self.select_single(id),
             Err(error) => self.status = Some(format!("layer を作れない: {error}")),
@@ -2255,6 +2283,36 @@ impl Shell {
                 if let Err(error) =
                     inspector_pane::reset_text_tracking(&mut self.doc, self.session.selection)
                 {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            // 色エディタ(`inspector_pane::color`、2026-08-22 発注「歌詞が
+            // 入れられる道を通す」で結線)。`TextFieldInput`/`TextFieldSubmit`
+            // と同じ「打鍵は下書きだけ・Enter で1回の Intent」の形 —
+            // 書き込み本体は pane の自由関数
+            // ([`inspector_pane::color::commit_text_style_color`])、ここは
+            // `Err` を status 帯へ渡す glue だけ(M13)。
+            inspector_pane::Message::Color(inspector_pane::color::Message::ChannelInput(
+                target,
+                channel,
+                text,
+            )) => {
+                self.inspector_color_field_draft =
+                    Some(inspector_pane::color::ColorFieldDraft { target, channel, text });
+                Task::none()
+            }
+            inspector_pane::Message::Color(inspector_pane::color::Message::ChannelSubmit(
+                target,
+                channel,
+            )) => {
+                if let Err(error) = inspector_pane::color::commit_text_style_color(
+                    &mut self.doc,
+                    &mut self.inspector_color_field_draft,
+                    self.session.selection,
+                    target,
+                    channel,
+                ) {
                     self.status = Some(error);
                 }
                 Task::none()
@@ -4008,12 +4066,13 @@ impl Shell {
                     let inspector_selection = inspector_pane::project(&store, &self.session)
                         .ok()
                         .flatten();
-                    inspector_pane::view_with_text_draft(
+                    inspector_pane::view_with_color_draft(
                         inspector_selection.as_ref(),
                         self.inspector_field_draft.as_ref(),
                         self.inspector_name_draft.as_deref(),
                         self.inspector_speed_draft.as_deref(),
                         self.inspector_text_field_draft.as_ref(),
+                        self.inspector_color_field_draft.as_ref(),
                         dims,
                         colors,
                     )

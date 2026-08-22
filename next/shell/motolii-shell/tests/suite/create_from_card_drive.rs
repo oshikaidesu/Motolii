@@ -5,7 +5,7 @@
 //! no-op のまま通す(`state.rs` の ORACLE)ので、実体化は shell 側のみで
 //! 完結していることも合わせて見る。
 
-use motolii_shell::{browser_pane, Message, Shell};
+use motolii_shell::{browser_pane, inspector_pane, Message, Shell};
 use motolii_store::LayerSource;
 
 fn create(shell: &mut Shell, kind: browser_pane::model::CreateKind) {
@@ -65,6 +65,60 @@ fn create_rectangle_and_ellipse_both_add_a_shape_layer() {
         "Ellipse カードが LayerSource::Shape を書いていない"
     );
     assert_ne!(rect_layer, ellipse_layer, "2回の create が同じ layer を指している");
+}
+
+/// **本命(歌詞動画/MV ペルソナ、2026-08-22 利用者裁定「追加するものは
+/// Browser の中に全部入れる」)**: Text カードが `LayerSource::Text` を書き、
+/// 生成直後から `TextDocument` を持つ(空 layer にならない — `create_from_card`
+/// doc 参照)。
+#[test]
+fn create_text_adds_a_text_layer_with_a_default_text_document() {
+    let mut shell = Shell::new_fixture().0;
+    let before = shell.layer_count();
+
+    create(&mut shell, browser_pane::model::CreateKind::Text);
+
+    assert_eq!(shell.layer_count(), before + 1, "Text カードが layer を増やしていない");
+    let selected = shell.session().selection.expect("生成後に選択されていない");
+    let source = shell
+        .store_view()
+        .meta(selected)
+        .ok()
+        .flatten()
+        .expect("生成した layer の meta が引けない")
+        .source;
+    assert!(matches!(source, LayerSource::Text), "Text カードが LayerSource::Text を書いていない");
+
+    let document = shell
+        .store_view()
+        .text_document(selected)
+        .ok()
+        .flatten()
+        .expect("Text カード生成直後に TextDocument が無い(空 layer になっている)");
+    assert_eq!(
+        document,
+        inspector_pane::default_text_document(),
+        "Text カードの既定 TextDocument が Inspector の既定値とずれている"
+    );
+    assert!(shell.can_undo());
+}
+
+/// Text の生成も他3種と同じ「1 apply_all = 1 undo」— AddLayer/SetMeta/
+/// SetAttrs/SetTextDocument の4 Intent が1回の Undo で丸ごと戻る。
+#[test]
+fn create_text_is_one_undo_step() {
+    let mut shell = Shell::new_fixture().0;
+    let before = shell.layer_count();
+
+    create(&mut shell, browser_pane::model::CreateKind::Text);
+    assert_eq!(shell.layer_count(), before + 1);
+
+    let _ = shell.update(Message::Undo);
+    assert_eq!(
+        shell.layer_count(),
+        before,
+        "1回の Undo で create 前の層数へ戻らない(1操作=1undoでない)"
+    );
 }
 
 #[test]

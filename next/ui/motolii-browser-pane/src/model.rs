@@ -347,6 +347,15 @@ pub enum CreateKind {
     Solid,
     /// ヌルレイヤー(map 898/903、`LayerSource::Null`)。
     Null,
+    /// テキストレイヤー(`LayerSource::Text` + 既定 `TextDocument`、
+    /// 2026-08-22 利用者裁定「追加するものは Browser の中に全部入れる」—
+    /// 歌詞動画/MV ペルソナの致命的欠落〈テキストレイヤーを作る入口が
+    /// リポ全体に存在しない〉への対処、`docs/reviews/2026-08-22-persona-lyric-mv.md`
+    /// 参照。Solid/Null と同じく normal-map 出典を持たない Motolii 側の
+    /// 判断で追加した1枚 — 既存4枚が全て「B36 map 行の消化」だったのと
+    /// 出自は異なるが、`CreateKind` 自体が「store の `LayerSource` 語彙へ
+    /// 1:1 で落ちる kind」という型の役目は変わらない。
+    Text,
 }
 
 /// preview-local カタログ1枚ぶんの静的カード(mock `#thumbnail-grid` の
@@ -422,8 +431,10 @@ const EFFECTS_PREVIEW: [PreviewCard; 4] = [
 /// 900/959/313=Solid・898/903=Null。store `LayerSource` に既にある語彙のみ)。
 /// タグは mock の `builtin` 語彙(Built-in)へ載せる — シェイプではないので
 /// Shapes には属さない。並びは mock 転写分を先頭に保ち、追加分を末尾へ
-/// (effects の Glow 追加と同じ形)。
-const CREATE_PREVIEW: [PreviewCard; 4] = [
+/// (effects の Glow 追加と同じ形)。**Text は2026-08-22 利用者裁定で末尾に
+/// 追加**(`CreateKind::Text` doc 参照 — 「追加するものは Browser の中に
+/// 全部入れる」、Layer メニュー等の別入口は作らない)。
+const CREATE_PREVIEW: [PreviewCard; 5] = [
     PreviewCard {
         id: "rectangle",
         name: "Rectangle",
@@ -455,6 +466,18 @@ const CREATE_PREVIEW: [PreviewCard; 4] = [
         glyph: "◇",
         tags: &[PreviewTag::BuiltIn],
         creates: Some(CreateKind::Null),
+    },
+    // 2026-08-22 利用者裁定「追加するものは Browser の中に全部入れる」—
+    // 歌詞動画/MV ペルソナの致命的欠落(テキストレイヤーを作る入口が
+    // リポ全体に存在しない、`docs/reviews/2026-08-22-persona-lyric-mv.md`)への
+    // 対処。Solid/Null と同じ「layer · Built-in」区分(シェイプではない)。
+    PreviewCard {
+        id: "text",
+        name: "Text",
+        caption: "layer · Built-in",
+        glyph: "T",
+        tags: &[PreviewTag::BuiltIn],
+        creates: Some(CreateKind::Text),
     },
 ];
 
@@ -983,7 +1006,7 @@ mod tests {
             .iter()
             .map(|card| card.name)
             .collect();
-        assert_eq!(create, ["Rectangle", "Ellipse", "Solid", "Null"]);
+        assert_eq!(create, ["Rectangle", "Ellipse", "Solid", "Null", "Text"]);
 
         let panels: Vec<&str> = preview_catalog(LibraryTab::Panels)
             .iter()
@@ -1173,7 +1196,7 @@ mod tests {
 
         let builtin =
             preview_visible(LibraryTab::Create, PreviewScope::Tag(PreviewTag::BuiltIn), "");
-        assert_eq!(builtin.len(), 4, "Built-in で create 全4枚が残らない");
+        assert_eq!(builtin.len(), 5, "Built-in で create 全5枚が残らない");
     }
 
     // -----------------------------------------------------------------
@@ -1185,11 +1208,12 @@ mod tests {
     /// 触れない物は不合格)。id → kind の対応も固定する。
     #[test]
     fn every_create_card_declares_its_create_kind() {
-        let expected: [(&str, CreateKind); 4] = [
+        let expected: [(&str, CreateKind); 5] = [
             ("rectangle", CreateKind::Rectangle),
             ("ellipse", CreateKind::Ellipse),
             ("solid", CreateKind::Solid),
             ("null", CreateKind::Null),
+            ("text", CreateKind::Text),
         ];
         let cards = preview_catalog(LibraryTab::Create);
         assert_eq!(cards.len(), expected.len());

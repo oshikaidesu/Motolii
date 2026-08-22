@@ -14,12 +14,12 @@ use motolii_core::{Fps, RationalTime};
 use motolii_shell_state::Session;
 use motolii_store::{
     property, EffectId, LayerId, LayerSource, MaskId, MaskMode, PropertyId, StoreError, StoreView,
-    TextJustify, Value,
+    TextDocumentStyle, TextJustify, Value,
 };
 
 use crate::attrs::speed_percent;
 use crate::effects::{plugin_display_name, plugin_params};
-use crate::text::{default_text_document, default_text_style};
+use crate::text::{default_text_document, default_text_style, text_document_content};
 use crate::transform::{
     field_decimals, has_real_keys, key_cell_state, key_row_property_id, KeyCellState, KeyRow,
     TransformField,
@@ -202,6 +202,12 @@ pub struct AudioSectionProjection {
 /// の3状態 oracle は適用対象外。
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextSectionProjection {
+    /// `text-document t`(Text、本文)。**Hold 評価済みの現在値**
+    /// (`text_document_content` — [`RationalTime::ZERO`] 固定、`text.rs`
+    /// `TextField::Content` doc「複数行の扱い」参照)。2026-08-22 発注「歌詞が
+    /// 入れられる道を通す」で追加(致命的欠落: TEXT section に本文の入力欄が
+    /// 無かった)。
+    pub content: String,
     /// `text-document f`(Font Family)。
     pub font_family: String,
     /// `text-document s`(Font Size)。
@@ -212,6 +218,15 @@ pub struct TextSectionProjection {
     pub tracking: f32,
     /// `text-document j`(Justify)。
     pub justify: TextJustify,
+    /// スタイル表の既定行そのもの(裁定98、`styles[0]`)。2026-08-22 発注で
+    /// 色エディタ([`crate::color::color_row`])へ渡すために追加 —
+    /// `fill`/`stroke_color` は個別フィールドへ分解せず、`color_row` が
+    /// 期待する `&TextDocumentStyle` の形のまま持つ(2箇所で同じ値を別の形に
+    /// 二重管理しない)。上の `font_family`/`size`/`line_height`/`tracking` は
+    /// 既存 UI 呼び出し口(`text_field_row` 等)の互換のため残す — 同じ値の
+    /// 冗長な保持だが、意味は完全に一致する(この `style` が正本、上4フィールドは
+    /// そこからの複写)。
+    pub style: TextDocumentStyle,
 }
 
 /// [`SelectionProjection::kind`] の出典。`LayerSource` の variant 名をそのまま
@@ -527,11 +542,13 @@ pub fn project(
                 .cloned()
                 .unwrap_or_else(default_text_style);
             Some(TextSectionProjection {
-                font_family: style.font.family,
+                content: text_document_content(&document),
+                font_family: style.font.family.clone(),
                 size: style.size,
                 line_height: style.line_height,
                 tracking: style.tracking,
                 justify: document.justify,
+                style,
             })
         }
         _ => None,

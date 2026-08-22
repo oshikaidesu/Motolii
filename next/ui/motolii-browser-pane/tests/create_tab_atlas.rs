@@ -116,9 +116,10 @@ fn press_text_times(
     ui.into_messages().collect()
 }
 
-/// **本命(S6)**: create タブに mock 転写2枚+B36 消化2枚の計4カードが並ぶ。
+/// **本命(S6)**: create タブに mock 転写2枚+B36 消化2枚+Text(2026-08-22
+/// 利用者裁定)の計5カードが並ぶ。
 #[test]
-fn create_tab_shows_all_four_create_cards() {
+fn create_tab_shows_all_five_create_cards() {
     let items = fixture_items();
     let state = create_state();
     let targets = collect_targets(pane_view(
@@ -129,20 +130,20 @@ fn create_tab_shows_all_four_create_cards() {
         Colors::default(),
     ));
     let texts = text_contents(&targets);
-    for expected in ["Rectangle", "Ellipse", "Solid", "Null"] {
+    for expected in ["Rectangle", "Ellipse", "Solid", "Null", "Text"] {
         assert!(
             texts.iter().any(|content| content == expected),
             "create タブに {expected:?} カードが無い: {texts:?}"
         );
     }
     assert!(
-        texts.iter().any(|content| content == "Results 4"),
-        "Results 4 が出ない: {texts:?}"
+        texts.iter().any(|content| content == "Results 5"),
+        "Results 5 が出ない: {texts:?}"
     );
 }
 
 /// **本命(B36)**: カードのダブルクリック(press 2連)が
-/// `Message::CreateFromCard` を publish する。カード4枚全て。
+/// `Message::CreateFromCard` を publish する。カード5枚全て。
 #[test]
 fn double_clicking_a_create_card_publishes_create_from_card() {
     let items = fixture_items();
@@ -152,6 +153,7 @@ fn double_clicking_a_create_card_publishes_create_from_card() {
         ("Ellipse", CreateKind::Ellipse),
         ("Solid", CreateKind::Solid),
         ("Null", CreateKind::Null),
+        ("Text", CreateKind::Text),
     ] {
         let messages = press_text_times(&state, &items, label, 2);
         assert!(
