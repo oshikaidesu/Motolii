@@ -69,21 +69,24 @@ use super::TimelinePane;
 use crate::tokens::{Colors, Dimensions};
 use crate::Message;
 
-/// rail 列。`TimelinePane::view` から `row![rail::view(&pane), canvas]` の
-/// 左腕として呼ばれる(`&pane` を借用するだけ — `pane` はこの後 `canvas(self)`
-/// へ move される、呼び出し側の doc 参照)。
+/// rail の行リスト(層行+property 行)。**縦スクロール発注(2026-08-22)**:
+/// `corner`(ルーラーと同じ高さの空白セル)はここには積まない —
+/// `TimelinePane::view` が `rail::corner` を常時固定ヘッダー側(ルーラーの
+/// 隣)で直接組む(`super::ruler` モジュール doc 参照)。この関数が返す列は
+/// **単独で `scrollable` の中身になる**(`super::canvas`(行だけの
+/// canvas)と対で、同じ1つの `scrollable` が両方を丸ごとスクロールする —
+/// 2つの scrollable を id で同期させない、モジュール doc「単一源」節と
+/// 同じ「複製コピー禁止」の精神を縦スクロールへ延長した)。
 pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
     let dims = pane.dims;
     let colors = pane.colors;
     let rail_width = pane.rail_width();
     let row_height = dims.row_height;
-    let ruler_height = pane.ruler_height();
     let param_row_height = pane.param_row_height();
-    let total_height = pane.content_height().max(ruler_height);
+    let rows_height = pane.rows_area_height();
 
     let mut children: Vec<Element<'static, Message>> =
-        Vec::with_capacity(pane.rows.len() + pane.property_rows.len() + 1);
-    children.push(corner(dims, colors, ruler_height));
+        Vec::with_capacity(pane.rows.len() + pane.property_rows.len());
 
     // **oracle「fold 既定=全展開で現行の見た目不変」の直接の実装**: 木が
     // 1つも無い Document(全 layer が `depth == 0 && !has_children`、
@@ -117,7 +120,7 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
 
     container(column(children).width(Length::Fixed(rail_width)))
         .width(Length::Fixed(rail_width))
-        .height(Length::Fixed(total_height))
+        .height(Length::Fixed(rows_height))
         .style(move |_theme| container::Style {
             background: Some(Background::Color(colors.surface_panel)),
             border: Border {
@@ -132,8 +135,11 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
 
 /// mock `.corner`(rail 上端、ルーラーと同じ高さ)。地のまま(スウォッチ・
 /// 名前・M/S/L は無い)— 下端の border が rail/クリップ面のルーラー境界
-/// (`super::canvas::draw` の `draw_hairline`)と同じ役目を rail 側で担う。
-fn corner(dims: Dimensions, colors: Colors, ruler_height: f32) -> Element<'static, Message> {
+/// (`super::canvas::draw_hairline`)と同じ役目を rail 側で担う。**`pub(crate)`
+/// (縦スクロール発注)**: `TimelinePane::view` が常時固定ヘッダー側
+/// (`row![rail::corner(...), ruler::view(...)]`)で直接呼ぶ — この行リスト
+/// (`view`)はもう corner を持たない、モジュール doc 参照。
+pub(crate) fn corner(dims: Dimensions, colors: Colors, ruler_height: f32) -> Element<'static, Message> {
     container(Space::new().width(Length::Fill).height(Length::Fill))
         .width(Length::Fill)
         .height(Length::Fixed(ruler_height))
