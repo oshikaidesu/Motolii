@@ -1136,7 +1136,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1135	playback	Stop	停止	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
 1136	playback	Stop	K	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
 1137	playback	Stop and Go to Last Position	停止して直前位置へ	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
-1138	playback	Timecode	タイムコード入力	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B20
+1138	playback	Timecode	タイムコード入力	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済		B20
 1139	playback	Timeline Proxy Resolution	タイムラインプロキシ解像度	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B13
 1140	playback	Trim Edit	トリムモード	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B39
 1141	playback	Turn snapping to grid on or off	グリッドスナップ切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B22

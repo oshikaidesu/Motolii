@@ -9,9 +9,8 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| IK-keyframe | 実装 | worktree(inspector+shell) | 利用者指摘「Inspector がキーを打てない」(Q0 違反: Key 列= reserved_glyph 空)。AE 文法3状態(hollow/filled/半)・既存 `SetTrack` 経路・新 Intent 禁止・枠の文法適用 |
-| iced-inventory | 調査 | worktree(読むだけ) | 利用者発注「目の届かない未使用の iced 標準機能の全網羅」— fork ソース mod 木から機械列挙・使用/未使用 grep 照合・束/課題へのつけ得評価・iced_aw 以外のエコシステム・Settings overlay 口の確認 |
-| weblike-layout | 調査 | worktree(probe可・merge不可) | 利用者発注「web みたいに iced でレイアウトしたい — モック再現が勝負」: taffy / CSS サブセット interpreter / モック→データのコンパイラ / Blitz 再評価(先行裁定=不採用の覆し実測があるかのみ)。判定軸= 保守最低限>機械検証可能な忠実度>手癖不要化>ホットリロード |
+| TF-container | 実装 | worktree(新 crate) | 裁定183 案A: taffy 0.13 駆動 flex container widget(`motolii-taffy` 新設・space-between/wrap/minmax 解禁・CSS 宣言→Style 変換 fail-closed・Simulator click 証明) |
+| CM-port | 実装 | worktree(新 crate) | 裁定183 検証層: 旧 workspace `css_metrics`(blitz-dom+stylo 466行)を `motolii-css-metrics` へ移植 — モックの計算済み CSS 値抽出・dimensions.json 突き合わせテスト込み。旧側は 1 バイトも変えない |
 | TL-transport | 実装 | worktree(timeline-pane) | 裁定180: transport 帯(1041〜1045 の顔+1138 Timecode)を timeline pane 上端へ。枠の文法(裁定179)適用第1号。write-set= timeline-pane+dimensions.json `timeline_transport` 節 |
 | MB-vendor | 実装 | worktree(新 crate) | 裁定181: iced_aw menu の fork API 移植(`motolii-menubar` 新設・E0308×2 追随・Simulator oracle)。write-set= 新 crate+members 1行+dimensions.json `menubar` 節 |
 | IB-const | データ | worktree(reference) | 利用者裁定: IB 44束の定数化 — intent-bundles.tsv 正本+normal-map へ bundle 列(1,285行自動割り付け・独立再検証)+check.sh 3検査+動線図(家の地図+編集動線 mermaid)。束名は仮名のまま(命名=利用者)。write-set= reference 2ファイル+check.sh+flow-map 文書 |
