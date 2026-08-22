@@ -48,14 +48,19 @@ fn shell() -> Shell {
 // ---------------------------------------------------------------------------
 
 /// **iced_test が iced 0.14 に対して実際に動くことの直接証拠**。壊れていれば
-/// この1本がコンパイルすら通らない。
+/// この1本がコンパイルすら通らない。MB-2 で旧 "+ Layer" 箱ボタンは Layer
+/// menu の "New Layer" 項目へ引っ越したので、menubar 経由(同一 Simulator 内
+/// で bar click → 項目 click、`menu_drive.rs` 冒頭 doc の手口)で同じ
+/// `Message::AddLayer` を踏む。
 #[test]
 fn finding_the_add_layer_button_by_label_and_clicking_it_publishes_add_layer() {
     let shell = shell();
     let mut ui = iced_test::simulator(shell.view());
 
-    ui.click("+ Layer")
-        .expect("\"+ Layer\" ボタンが text selector で見つからない");
+    ui.click("Layer")
+        .expect("menubar のトップレベル Layer が text selector で見つからない");
+    ui.click("New Layer")
+        .expect("Layer menu の \"New Layer\" 項目が text selector で見つからない");
 
     let messages: Vec<_> = ui.into_messages().collect();
     assert!(
@@ -68,12 +73,17 @@ fn finding_the_add_layer_button_by_label_and_clicking_it_publishes_add_layer() {
 /// 自体は on_press の有無に関係なく `Candidate::Container` として登録される
 /// — 実測)が、click しても Message は出ない。「見つかる = 押せる」ではない
 /// ことの実例(Q0 柵側の判定ルールがこの区別に依存している)。
+///
+/// MB-2 で header の Undo/Redo 箱ボタン(`on_press_maybe` の実 UI 例)は
+/// 廃止された — この事実は iced の widget 性質であって Shell の構成に依存
+/// しないので、最小の単体 element で固定し続ける。
 #[test]
 fn a_context_disabled_button_is_findable_but_silent() {
-    let shell = shell();
-    assert!(!shell.can_undo(), "この前提が崩れると次のassertが無意味");
-
-    let mut ui = iced_test::simulator(shell.view());
+    let element: iced::Element<'_, Message> =
+        iced::widget::button(iced::widget::text("Undo"))
+            .on_press_maybe(None)
+            .into();
+    let mut ui = iced_test::simulator(element);
     ui.click("Undo")
         .expect("Undo ボタンは on_press が無くても text selector で見つかる");
 

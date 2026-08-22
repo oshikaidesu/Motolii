@@ -118,12 +118,49 @@ fn point_is_over_a_text_input(targets: &[Target], point: iced::Point) -> bool {
     })
 }
 
+/// **MB-2 で見つかった柵の限界(text_input と同種)**: menubar のバー領域。
+/// vendored `MenuBar`(`motolii-menubar`)はバー上の click を無条件に capture
+/// して menu を開閉する — 応答は widget 内部状態(overlay の出現)であって
+/// `Message` ではないので、「captured なのに silent」がここでは**正しい挙動**
+/// (text_input の「click は focus するだけ」と同じ型)。この領域だけ判定から
+/// 除外する — メニュー項目の実配線(バー click → 項目が現れる → 項目 click →
+/// `Message` publish)は `menu_drive.rs` の oracle が全項目を別途踏む。
+///
+/// 領域の特定: トップレベル4ラベル(正本 `motolii_shell::menu::
+/// TOP_LEVEL_LABELS`)の中心を全部含む**最小面積**の候補 bounds — vendored
+/// `MenuBar` が `operate()` で自己登録する自身の bounds(バー全域)がこれに
+/// あたる(バーより小さい候補は個々の項目、より大きい候補は header/root の
+/// container)。
+fn menubar_bar_bounds(targets: &[Target]) -> Option<iced::Rectangle> {
+    let mut centers = Vec::new();
+    for label in motolii_shell::menu::TOP_LEVEL_LABELS {
+        let bounds = targets.iter().find_map(|target| match target {
+            Target::Text { content, .. } if content == label => target.visible_bounds(),
+            _ => None,
+        })?;
+        centers.push(iced::Point::new(
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        ));
+    }
+    targets
+        .iter()
+        .filter_map(|target| target.visible_bounds())
+        .filter(|bounds| centers.iter().all(|center| bounds.contains(*center)))
+        .min_by(|a, b| {
+            (a.width * a.height)
+                .partial_cmp(&(b.width * b.height))
+                .expect("bounds の面積が NaN にならない")
+        })
+}
+
 /// 1状態を Q0 で検査する。違反があれば理由つきで返す(空 = 合格)。
 fn scan_state(build: impl Fn() -> Shell, label: &str) -> Vec<String> {
     let seed = build();
     let targets = collect_targets(seed.view());
     drop(seed);
 
+    let menubar = menubar_bar_bounds(&targets);
     let mut violations = Vec::new();
     for target in &targets {
         let Some(bounds) = target.visible_bounds() else {
@@ -153,6 +190,12 @@ fn scan_state(build: impl Fn() -> Shell, label: &str) -> Vec<String> {
             // 「その点が TextInput の上か」で行うので、無関係な Container の
             // 繋ぎ忘れは従来どおり捕まる)。
             if point_is_over_a_text_input(&targets, point) {
+                continue;
+            }
+            // MB-2: menubar のバー領域(`menubar_bar_bounds` doc 参照)。バー
+            // click は「menu が開く」応答で正しく silent — 項目の実配線は
+            // `menu_drive.rs` が別途踏む。
+            if menubar.is_some_and(|bounds| bounds.contains(point)) {
                 continue;
             }
             violations.push(format!(
@@ -192,18 +235,13 @@ fn with_settings_open() -> Shell {
     shell
 }
 
-/// **M-menu MB-0+Edit**: Edit メニューを開いた状態(header トグル)。
-/// dropdown の8項目(Undo/Redo/Cut/Copy/Paste/Duplicate/Select All/
-/// Deselect All)が木に現れる — `with_settings_open` と同じ理由でこの柵に
-/// 通す(パネル別知識をこのファイルへ増やさない、冒頭 doc の拡張方針どおり)。
-/// layer を1枚足しておく(Undo/Cut/Copy/Duplicate/Select All が有効になる
-/// 状態を経由させ、`Redo`(disabled のまま)との両方を1状態で見る)。
-fn with_edit_menu_open() -> Shell {
-    let mut shell = fresh();
-    let _ = shell.update(Message::AddLayer);
-    let _ = shell.update(Message::ToggleEditMenu);
-    shell
-}
+// **旧 `with_edit_menu_open`(M-menu MB-0+Edit)は MB-2 で撤去** — menubar の
+// 開閉は widget 内部状態(`motolii_menubar::menu_bar` doc)になり、`Shell` の
+// `Message`/state からは開いた状態を作れない(この柵は「1状態の `Shell` を
+// 組んで view を歩く」構造)。開いた menu の項目の Q0(click → publish)は
+// `menu_drive.rs::every_menu_item_appears_with_its_shortcut_and_publishes_its_message`
+// が全項目を Simulator 内で直接踏む — さらに構造面では `motolii_menubar::Item::
+// message` が Option ではない必須フィールド(silent 項目ゼロを型で保証)。
 
 /// **裁定162 切片 B3**: Browser パネルを開いた状態(header トグル)。rail
 /// 4行(All media/Video/Images/Audio)・filter shelf(検索欄+チップ3+Clear)・
@@ -243,7 +281,6 @@ fn no_pane_leaves_a_captured_click_silent() {
         "layer追加→Undo(Redoが有効なはず)",
     ));
     violations.extend(scan_state(with_settings_open, "Settingsパネル開"));
-    violations.extend(scan_state(with_edit_menu_open, "Editメニュー開(M-menu MB-0+Edit)"));
     violations.extend(scan_state(with_browser_open, "Browserパネル開(裁定162 切片B3)"));
 
     assert!(

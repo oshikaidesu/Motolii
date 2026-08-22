@@ -23,12 +23,9 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use iced::keyboard::{Key, Modifiers};
-use iced_test::selector::Target;
 
 use motolii_shell::file_dialogs::FileDialogs;
 use motolii_shell::{resolve_navigation_key, Message, Shell};
-
-use crate::target_walk::collect_targets;
 
 // ---------------------------------------------------------------------------
 // fake FileDialogs — 缶詰応答 + 呼び出し回数の記録
@@ -249,29 +246,8 @@ fn save_a_copy_writes_a_file_without_touching_the_current_path_or_dirty_state() 
 // (e) S6 併存 — menu と shortcut が同じ Message へ収束する(構造証明)
 // ---------------------------------------------------------------------------
 
-fn text_targets<'a>(targets: &'a [Target], content: &str) -> Vec<&'a Target> {
-    targets
-        .iter()
-        .filter(|t| matches!(t, Target::Text { content: c, .. } if c == content))
-        .collect()
-}
-
-fn center(target: &Target) -> iced::Point {
-    let bounds = target
-        .visible_bounds()
-        .expect("target の bounds が見える(window 内にあるはず)");
-    iced::Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
-}
-
-fn click_at(element: iced::Element<'_, Message>, point: iced::Point) -> Vec<Message> {
-    let mut ui = iced_test::simulator(element);
-    ui.point_at(point);
-    let _ = ui.simulate([
-        iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
-        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)),
-    ]);
-    ui.into_messages().collect()
-}
+// (旧 text_targets/center/click_at ヘルパーは MB-2 の menubar 化で不要に
+// なった — 開いた menu へは同一 Simulator の `find`/`click` で届く。)
 
 /// shortcut 側: `resolve_navigation_key`(`nav_drive.rs`/`shortcut_drive.rs` と
 /// 同じ入口)が File 束4動詞を正しい `Message` へ解決する。**`Shell::update` は
@@ -317,60 +293,49 @@ fn file_shortcuts_resolve_to_the_expected_messages() {
     }
 }
 
-/// menu 側: File を開くと4項目が Target として現れ、クリックすると shortcut と
-/// **同じ** `Message` variant が publish される — S6 併存(menu と shortcut が
-/// 同じ入口)の直接証拠。`click_at` は `Simulator` から `Message` を読むだけで
-/// `shell.update` を呼ばない(このテストは「何が publish されるか」だけを見る
-/// — 実際に適用すると Save As/Quit が fake とはいえ状態を動かすので、他の
-/// テストと責務を分ける)。
+/// menu 側: File を開くと4項目が現れ、クリックすると shortcut と**同じ**
+/// `Message` variant が publish される — S6 併存(menu と shortcut が同じ
+/// 入口)の直接証拠。`shell.update` は呼ばない(このテストは「何が publish
+/// されるか」だけを見る — 実際に適用すると Save As/Quit が fake とはいえ
+/// 状態を動かすので、他のテストと責務を分ける)。
+///
+/// MB-2: menubar 化により開閉状態は widget 内部になった — 旧
+/// `ToggleFileMenu` → `update` → view 作り直しではなく、**同一 Simulator
+/// 内で** bar click → 項目 click を続ける(`menu_drive.rs` 冒頭 doc の手口)。
+/// 項目 click で menu が閉じる(vendored の `close_on_item_click` 既定)ため、
+/// 項目ごとに fresh な Simulator を作る。
 #[test]
 fn clicking_file_menu_items_publishes_the_same_messages_as_their_shortcuts() {
-    let (mut shell, _fake) = shell_with_fake();
+    let table: Vec<(&str, Option<&str>, fn(&Message) -> bool)> = vec![
+        ("New Project", Some("Cmd+N"), |m| matches!(m, Message::NewProjectRequested)),
+        ("Save As…", Some("Cmd+Shift+S"), |m| matches!(m, Message::SaveAsRequested)),
+        // Save a Copy は normal-map の shortcut 出典ゼロ — 併記なし(飾り
+        // shortcut を発明しない)。
+        ("Save a Copy…", None, |m| matches!(m, Message::SaveACopyRequested)),
+        ("Quit", Some("Cmd+Q"), |m| matches!(m, Message::QuitRequested)),
+    ];
 
-    let before = collect_targets(shell.view());
-    let file_trigger = text_targets(&before, "File");
-    assert_eq!(file_trigger.len(), 1, "header に \"File\" トリガーが1つだけ見えるはず: {file_trigger:?}");
-    let trigger_point = center(file_trigger[0]);
+    for (item, shortcut, is_expected) in table {
+        let (shell, _fake) = shell_with_fake();
+        let mut ui = iced_test::simulator(shell.view());
+        ui.click("File").expect("バー項目 File が見つからない");
+        if let Some(shortcut) = shortcut {
+            ui.find(shortcut).unwrap_or_else(|e| {
+                panic!("File > {item:?} の shortcut 表記 {shortcut:?} が見えない: {e:?}")
+            });
+        }
+        ui.click(item)
+            .unwrap_or_else(|e| panic!("File menu の項目 {item:?} へ届かない: {e:?}"));
 
-    let messages = click_at(shell.view(), trigger_point);
-    assert_eq!(messages.len(), 1, "File クリックが期待どおり1件の Message を出さない: {messages:?}");
-    assert!(
-        matches!(messages[0], Message::ToggleFileMenu),
-        "File クリックが ToggleFileMenu 以外を出している: {messages:?}"
-    );
-    for message in messages {
-        let _ = shell.update(message);
+        let messages: Vec<Message> = ui.into_messages().collect();
+        assert_eq!(
+            messages.len(),
+            1,
+            "File > {item:?} click が期待どおり1件の Message を出さない: {messages:?}"
+        );
+        assert!(
+            is_expected(&messages[0]),
+            "File > {item:?} click が shortcut と同じ Message を出していない: {messages:?}"
+        );
     }
-
-    let after = collect_targets(shell.view());
-
-    let new_project = text_targets(&after, "New Project");
-    assert_eq!(new_project.len(), 1, "dropdown に New Project が見えない: {after:?}");
-    let messages = click_at(shell.view(), center(new_project[0]));
-    assert_eq!(messages.len(), 1);
-    assert!(matches!(messages[0], Message::NewProjectRequested), "{messages:?}");
-
-    let save_as = text_targets(&after, "Save As…");
-    assert_eq!(save_as.len(), 1, "dropdown に Save As… が見えない: {after:?}");
-    let messages = click_at(shell.view(), center(save_as[0]));
-    assert_eq!(messages.len(), 1);
-    assert!(matches!(messages[0], Message::SaveAsRequested), "{messages:?}");
-
-    let save_a_copy = text_targets(&after, "Save a Copy…");
-    assert_eq!(save_a_copy.len(), 1, "dropdown に Save a Copy… が見えない: {after:?}");
-    let messages = click_at(shell.view(), center(save_a_copy[0]));
-    assert_eq!(messages.len(), 1);
-    assert!(matches!(messages[0], Message::SaveACopyRequested), "{messages:?}");
-
-    let quit = text_targets(&after, "Quit");
-    assert_eq!(quit.len(), 1, "dropdown に Quit が見えない: {after:?}");
-    let messages = click_at(shell.view(), center(quit[0]));
-    assert_eq!(messages.len(), 1);
-    assert!(matches!(messages[0], Message::QuitRequested), "{messages:?}");
-
-    // 各 shortcut 表記も併記されている(New Project/Save As/Quit の3本 —
-    // Save a Copy は上で確認済みのとおり出典ゼロ)。
-    assert_eq!(text_targets(&after, "Cmd+N").len(), 1, "New Project の shortcut 表記が見えない");
-    assert_eq!(text_targets(&after, "Cmd+Shift+S").len(), 1, "Save As の shortcut 表記が見えない");
-    assert_eq!(text_targets(&after, "Cmd+Q").len(), 1, "Quit の shortcut 表記が見えない");
 }

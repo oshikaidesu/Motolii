@@ -118,6 +118,9 @@ motolii-tokens-rs = { path = "ui/motolii-tokens-rs" }
 # 裁定186: SVG アイコン基盤(Material Symbols vendoring + iced svg widget の
 # 包み)。iced の "svg" feature はこの crate の Cargo.toml だけが点す。
 motolii-icons = { path = "ui/motolii-icons" }
+# MB-2(裁定179 D1 根治): header メニューバー(iced_aw menu の vendoring wraps、
+# `Item`/`Menu`/`menu_bar` の3口のみ)。
+motolii-menubar = { path = "ui/motolii-menubar" }
 # 裁定160 切片9: `motolii-shell/src/settings_pane.rs`(+ 切片5で吸い上げた
 # `chrome.rs`)を抽出した pane crate(`motolii-tokens-rs`/`motolii-store`
 # だけに依存、pane 同士には依存しない — pane split survey §5 layer 1)。
