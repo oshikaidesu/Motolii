@@ -13,6 +13,11 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| ST3 | 実装 | stage(viewer_bar.rs 新) | 視点タブB17+画質B23+チャンネル表示B05(Viewerの家) |
+| VEC | 意味 | vector | シェイプ/パス編集の意味 B28(頂点・ハンドル・分割) |
+| AUD | 意味 | audio | 音声整形の意味 B42(gain/pan/fade — 決定論mix維持) |
+| STORE2 | 意味 | store(mask.rs/attrs.rs) | mask feather/expansion(B02)+リンク(B32)の型。**persist.rs は AS が占有・不触** |
+| MENU2 | 実装 | menubar(menus.rs 新) | Window(B25 最大束)+Help(B06)のメニュー項目正本 |
 | WIRE-6 | 結線 | shell | 第6波全結線(マーカー/マーキー/方眼=Viewメニュー/anchor対書き/rename/補間・restack/create実体化/Export窓 Cmd+E) |
 | TL4 | 実装 | timeline(split.rs 新) | Split動詞(163/171・既存Intent合成列・1undo) |
 | TL5 | 実装 | timeline(rows.rs 新) | レイヤー行操作束 B52第2切片(範囲選択・一括M/S/L・fold) |
