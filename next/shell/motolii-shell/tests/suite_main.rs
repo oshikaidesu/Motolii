@@ -42,6 +42,8 @@ mod inspector_drive;
 mod inspector_key_drive;
 #[path = "suite/inspector_pixel_fence.rs"]
 mod inspector_pixel_fence;
+#[path = "suite/keymap_equivalence.rs"]
+mod keymap_equivalence;
 #[path = "suite/menu_drive.rs"]
 mod menu_drive;
 #[path = "suite/nav_drive.rs"]

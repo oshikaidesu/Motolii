@@ -22,6 +22,7 @@ members = [
     "ui/motolii-css-metrics",
     "ui/motolii-icons",
     "ui/motolii-inspector-pane",
+    "ui/motolii-keymap",
     "ui/motolii-menubar",
     "ui/motolii-settings-pane",
     "ui/motolii-taffy",
@@ -122,6 +123,11 @@ motolii-icons = { path = "ui/motolii-icons" }
 # MB-2(裁定179 D1 根治): header メニューバー(iced_aw menu の vendoring wraps、
 # `Item`/`Menu`/`menu_bar` の3口のみ)。
 motolii-menubar = { path = "ui/motolii-menubar" }
+# keymap 層(発注書「キーは仮置き(keymap 層未実装)」の実体化)。(キー+修飾キー
+# +文脈)→動詞id の対応をデータで持つ、依存ゼロの leaf crate。この波では
+# crate を建てるだけ——`motolii-shell` の match 文を実際に置き換える配線は
+# 次切片(`motolii-keymap` crate 冒頭 doc 参照)。
+motolii-keymap = { path = "ui/motolii-keymap" }
 # 裁定160 切片9: `motolii-shell/src/settings_pane.rs`(+ 切片5で吸い上げた
 # `chrome.rs`)を抽出した pane crate(`motolii-tokens-rs`/`motolii-store`
 # だけに依存、pane 同士には依存しない — pane split survey §5 layer 1)。

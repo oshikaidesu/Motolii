@@ -74,6 +74,13 @@ rfd.workspace = true
 
 [dev-dependencies]
 motolii-testkit.workspace = true
+# keymap 層(発注書、`motolii-keymap` crate 冒頭 doc 参照)。**dev-only** —
+# production の `resolve_navigation_key`/`inspector_pointer_event` はまだ
+# 何も変えない(shell への実配線は次切片)。ここでは
+# `tests/suite/keymap_equivalence.rs` が `motolii_shell::resolve_navigation_key`
+# と `motolii_keymap::nav_bundle_keymap()` を同じ入力で突き合わせ、移行の
+# 安全証明(現行割当との一致)を機械化するためだけに使う。
+motolii-keymap.workspace = true
 # タスク#15: iced_test spike + Q0横断柵。裁定170(M01)で本体 `iced` と同じ fork
 # `oshikaidesu/iced` branch `motolii/host-seams`(rev 73e686ee)へ揃えた。
 # 別revで放置すると本体と iced_test が別々の Selector/Candidate 型を持つ
