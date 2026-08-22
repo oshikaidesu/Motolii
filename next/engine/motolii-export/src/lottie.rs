@@ -273,6 +273,17 @@ fn build_layer(
             out["sw"] = serde_json::json!(width);
             out["sh"] = serde_json::json!(height);
             out["sc"] = serde_json::json!(rgb_hex(rgba));
+            if rgba[3] != 255 {
+                unsupported.push(UnsupportedForLottie {
+                    layer: Some(layer),
+                    category: "solid-alpha",
+                    detail: format!(
+                        "solid の alpha={} だが Lottie の solid-layer(`sc`)は \
+                         `#RRGGBB` のみで alpha を運べない — 不透明として書いた",
+                        rgba[3]
+                    ),
+                });
+            }
         }
         LayerSource::Media { path, .. } => {
             let (ty, asset) = build_media_asset(layer, path, unsupported);
