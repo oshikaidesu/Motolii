@@ -3989,6 +3989,7 @@ version = "0.1.0"
 dependencies = [
  "iced",
  "motolii-icons",
+ "motolii-media",
  "motolii-shell-state",
  "motolii-store",
  "motolii-tokens-rs",

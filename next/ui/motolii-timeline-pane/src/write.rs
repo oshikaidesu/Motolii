@@ -187,9 +187,33 @@ pub enum Message {
     /// ([`crate::shuttle::ShuttleState::apply`] の状態機械)だけを所有し、
     /// この腕は運搬役。[`PaneState::update`] では no-op。
     Shuttle(ShuttleCommand),
+
+    // ---- Split(レイヤー分割、B39 — `crate::split` モジュール doc「統合手順」) ----
+    /// Command+B(map 267)/メニュー Split(id 163/317 ほか)。選択レイヤー
+    /// (複数可)を playhead で割る。`crate::split::Message::SplitAtPlayhead`
+    /// (旧・宣言のみの pane-local message)をここへ畳んだ — `split.rs` 側の
+    /// 宣言は重複させないため削除済み(モジュール doc「統合手順1」参照)。
+    SplitAtPlayhead,
+
+    // ---- Timeline 音声波形(TL7 統合手順3・5、`crate::waveform_view`
+    //      モジュール doc「次波の統合手順」) ----
+    /// 非同期取得の完了。shell が(`PaneState::plan_waveforms` が返した要求を
+    /// `iced::Task::perform(motolii_media::waveform_peaks(path, buckets), ...)`
+    /// へ変換して実際に発火した後)結果をこの腕で送り返す想定 — **この
+    /// レーンでは発火自体はしない**(`waveform_view` モジュール doc 参照)。
+    /// `buckets` が現在の `Loading` と食い違えば(取得中に再ズームされ別要求が
+    /// 有効になっている)stale として捨てる — `waveform_view::plan` と同じ
+    /// 「今の要求と一致するかだけ見る」ヒステリシスの思想。
+    WaveformFetched { layer: LayerId, buckets: usize, peaks: Vec<(f32, f32)> },
+    /// 非同期取得の失敗(音声トラック無し・ffmpeg 不在 等)。`NotRequested` へ
+    /// 戻すと `plan` が次のフレームで即再要求してしまう(ヒステリシスが
+    /// 効かない無限リトライ)ので、空 peaks の `Ready` へ落とす —
+    /// `waveform_segments` は空 peaks を panic なく「何も描かない」に畳む
+    /// (`waveform_view.rs` の退化オラクル参照)。
+    WaveformFetchFailed { layer: LayerId, buckets: usize },
 }
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use motolii_store::{
     Composition, Document, Intent, Interp, KeyframeTrack, LayerAttrsPatch, LayerId, LayerTiming,
@@ -198,10 +222,15 @@ use motolii_store::{
 
 use crate::hit::BarPart;
 use crate::shuttle::ShuttleCommand;
+use crate::split;
 use crate::stacking::{self, StackDirection};
 use crate::state::Session;
+use crate::waveform_view::{self, WaveformAction, WaveformState};
 use crate::work_area::{self, LoopBandPart, WorkArea};
-use crate::{clip_gesture, key_gesture, key_order, property_rows, rows, KeySelectionOp, KeySelector};
+use crate::{
+    clip_gesture, key_gesture, key_order, property_rows, rows, AudioRowProjection, KeySelectionOp,
+    KeySelector,
+};
 
 /// Easy Ease(map 485/488): AE の既定 influence 33% を cubic-bezier へ写した
 /// プリセット。**区間モデルの注記**(拘束7(a)の構造差 — 逸脱理由): store の
@@ -311,6 +340,10 @@ pub struct PaneState {
     /// — `TimelineDragState` と同じ transient の形(確定まで Document 不接触・
     /// 取消は捨てるだけで履歴無傷)。
     rename: Option<RenameDraft>,
+    /// 波形取得状態(TL7 統合手順3)。key = layer。`work_area`/`loop_enabled`
+    /// と同じ「フレームを跨いで生きる」pane-local write-set(このレーンの
+    /// write-set は `next/ui/motolii-timeline-pane/src/**` のみ)。
+    waveforms: HashMap<LayerId, WaveformState>,
 }
 
 /// inline rename の一時状態(正典 §6「リネーム」)。掴んだ layer と毎打鍵の
@@ -371,6 +404,51 @@ impl PaneState {
     /// `TimelinePane::with_key_drag_active` へそのまま渡す読み取り専用フラグ。
     pub fn key_drag_active(&self) -> bool {
         self.key_drag.is_some()
+    }
+
+    /// 波形取得状態の全体(`TimelinePane::with_waveforms` へそのまま渡す
+    /// 読み取り専用、TL7 統合手順3)。空なら波形は1本も描かれない
+    /// (`canvas.rs` の bar 描画ループ参照)。
+    pub fn waveforms(&self) -> &HashMap<LayerId, WaveformState> {
+        &self.waveforms
+    }
+
+    /// 毎フレーム(`Shell::build_timeline_pane` が呼ぶ想定)判断(TL7 統合手順1)。
+    /// `audio_rows`(`crate::audio_rows`)の `has_audio` な layer それぞれについて、
+    /// `clip_width_px` で聞いた画面幅(comp フレーム→px の変換は呼び出し側 —
+    /// この pane crate の `frame_to_x`/`Dimensions` を知っている canvas/shell 側の
+    /// 責任)を [`waveform_view::plan`] へ渡し、[`WaveformAction::Fetch`] が
+    /// 返れば該当 layer を `Loading` へ遷移させて `(layer, path, buckets)` を
+    /// 要求列へ積む。
+    ///
+    /// **実際の非同期発火はしない**(`WaveformAction::Fetch` を pane-local な
+    /// 非同期要求として表現するだけ、発注書 EXACT TARGET 1) — 返した列を
+    /// 呼び出し側(shell)が `iced::Task::perform(motolii_media::
+    /// waveform_peaks(path, buckets), ...)` へ変換し、完了したら
+    /// `Message::WaveformFetched`/`WaveformFetchFailed` をこの pane へ送り返すのが
+    /// 次波(`crate::waveform_view` モジュール doc「次波の統合手順」節・
+    /// このレーンの RETURN 参照)。
+    pub fn plan_waveforms(
+        &mut self,
+        audio_rows: &[AudioRowProjection],
+        mut clip_width_px: impl FnMut(LayerId) -> f32,
+    ) -> Vec<(LayerId, String, usize)> {
+        let mut requests = Vec::new();
+        for row in audio_rows {
+            if !row.has_audio {
+                continue;
+            }
+            let Some(path) = row.source_path.clone() else {
+                continue; // has_audio だが path が無い(起こらないはずだが安全側)。
+            };
+            let width = clip_width_px(row.layer);
+            let state = self.waveforms.entry(row.layer).or_insert(WaveformState::NotRequested);
+            if let WaveformAction::Fetch(buckets) = waveform_view::plan(state, width, true) {
+                *state = WaveformState::Loading { buckets };
+                requests.push((row.layer, path, buckets));
+            }
+        }
+        requests
     }
 
     /// inline rename の進行中下書き(`TimelinePane::with_rename` へそのまま
@@ -528,6 +606,31 @@ impl PaneState {
             }
             Message::SetWorkAreaToSelection => self.set_work_area_to_selection(doc, session),
 
+            // ---- Split(B39、`crate::split` モジュール doc「統合手順2」) ----
+            Message::SplitAtPlayhead => self.split_at_playhead(doc, session),
+
+            // ---- Timeline 音声波形(TL7 統合手順5) ----
+            Message::WaveformFetched { layer, buckets, peaks } => {
+                if matches!(
+                    self.waveforms.get(&layer),
+                    Some(WaveformState::Loading { buckets: current }) if *current == buckets
+                ) {
+                    self.waveforms.insert(layer, WaveformState::Ready { buckets, peaks });
+                }
+                // stale(取得中に別のズームで再要求済み)な結果は黙って捨てる —
+                // `waveform_view::plan` と同じ「今の要求と一致するかだけ見る」思想。
+                None
+            }
+            Message::WaveformFetchFailed { layer, buckets } => {
+                if matches!(
+                    self.waveforms.get(&layer),
+                    Some(WaveformState::Loading { buckets: current }) if *current == buckets
+                ) {
+                    self.waveforms.insert(layer, WaveformState::Ready { buckets, peaks: Vec::new() });
+                }
+                None
+            }
+
             // transport 4腕+Shuttle も Select/ScrubTo と同じ「shell が先取り
             // する例外」— 実運用ではここに来ない(来ても no-op、`Message` の
             // doc 参照)。
@@ -626,6 +729,36 @@ impl PaneState {
         // clip 範囲を dragged_area(clamp・最短1フレーム)へ通して不変量を守る。
         self.work_area = Some(work_area::dragged_area(start, end, comp_duration(doc)));
         None
+    }
+
+    // ---- Split(レイヤー分割、B39 — `crate::split` モジュール doc「統合手順2」) ----
+
+    /// `Message::SplitAtPlayhead` の実処理。`session.selected_layers`(複数選択)が
+    /// 非空ならそれを、空なら `session.selection`(単一選択)を対象に、
+    /// [`split::split_selected_plan`] で playhead(`session.playhead`)で割れる
+    /// 分だけ割る Intent 列を組み、1回の `doc.apply_all(...)` で確定する
+    /// (**1操作 = 1 undo**、`split::split_selected_plan` の doc「設計判断」参照 —
+    /// 割れない layer は黙って skip、1つも割れなければ理由つき `Err`)。
+    /// 選択そのものが空なら、`split_selected_plan` を呼ぶ前に理由つき拒否
+    /// (M13 — `restack_layers`/`set_work_area_to_selection` と同じ柵)。
+    fn split_at_playhead(&mut self, doc: &mut Document, session: &Session) -> Option<String> {
+        let layers: Vec<LayerId> = if session.selected_layers.is_empty() {
+            session.selection.into_iter().collect()
+        } else {
+            session.selected_layers.clone()
+        };
+        if layers.is_empty() {
+            return Some("選択が無いので分割できない — layer を選んでから".into());
+        }
+        match split::split_selected_plan(&doc.view(), &layers, session.playhead) {
+            Ok(intents) => {
+                if let Err(error) = doc.apply_all(intents) {
+                    return Some(format!("分割を書けない: {error}"));
+                }
+                None
+            }
+            Err(reason) => Some(reason),
+        }
     }
 
     // ---- inline rename(第3切片、正典 §6「リネーム」) ----
@@ -1897,5 +2030,154 @@ mod fold_message_tests {
             pane.update(Message::ToggleFold(ghost), &mut doc, &mut session, iced::keyboard::Modifiers::default());
         assert!(reason.is_none());
         assert!(session.timeline_fold.is_folded(ghost));
+    }
+}
+
+/// Timeline 音声波形(TL7 統合手順3・5)。**未実行**(裁定189)。
+/// `plan_waveforms`/`Message::WaveformFetched`/`WaveformFetchFailed` は
+/// Document/Session を触らないので、以下は空 `Document::new()` +
+/// `Session::default()` を素通りさせるだけの最小 fixture を使う。
+#[cfg(test)]
+mod waveform_message_tests {
+    use super::*;
+    use motolii_store::Document;
+
+    fn no_mods() -> iced::keyboard::Modifiers {
+        iced::keyboard::Modifiers::default()
+    }
+
+    fn audio_row(layer: LayerId, path: &str) -> AudioRowProjection {
+        AudioRowProjection { layer, has_audio: true, source_path: Some(path.to_owned()) }
+    }
+
+    /// **オラクル(赤→緑)**: 未着手の音声 layer は `plan_waveforms` の初回呼び出しで
+    /// 要求列へ積まれ、内部状態は即 `Loading` へ遷移する(次フレームで重複発火
+    /// しないための下準備 — `waveform_view::plan` のヒステリシスと同じ思想)。
+    #[test]
+    fn plan_waveforms_requests_a_fetch_for_a_new_audio_layer_and_marks_it_loading() {
+        let mut pane = PaneState::new();
+        let layer = LayerId(1);
+        let rows = [audio_row(layer, "clip.mov")];
+
+        let requests = pane.plan_waveforms(&rows, |_| 500.0);
+
+        let expected_buckets = waveform_view::required_buckets(500.0);
+        assert_eq!(requests, vec![(layer, "clip.mov".to_owned(), expected_buckets)]);
+        assert_eq!(
+            pane.waveforms().get(&layer),
+            Some(&WaveformState::Loading { buckets: expected_buckets }),
+            "要求した layer が Loading へ遷移していない"
+        );
+    }
+
+    /// 音声を持たない layer(`has_audio == false`)は要求されず、内部状態にも
+    /// 現れない。
+    #[test]
+    fn plan_waveforms_skips_layers_without_audio() {
+        let mut pane = PaneState::new();
+        let layer = LayerId(1);
+        let rows = [AudioRowProjection { layer, has_audio: false, source_path: None }];
+
+        let requests = pane.plan_waveforms(&rows, |_| 500.0);
+
+        assert!(requests.is_empty(), "音声の無い layer が要求された");
+        assert!(pane.waveforms().get(&layer).is_none());
+    }
+
+    /// 同じ画面幅で2回呼んでも(`Loading` のまま)重複要求しない — 取得中の
+    /// bucket 数と一致する限り再要求は起きない(`waveform_view::plan` 参照)。
+    #[test]
+    fn plan_waveforms_does_not_refetch_while_already_loading_the_same_width() {
+        let mut pane = PaneState::new();
+        let layer = LayerId(1);
+        let rows = [audio_row(layer, "clip.mov")];
+
+        let first = pane.plan_waveforms(&rows, |_| 500.0);
+        assert_eq!(first.len(), 1);
+        let second = pane.plan_waveforms(&rows, |_| 500.0);
+        assert!(second.is_empty(), "取得中の同じ幅で重複要求している");
+    }
+
+    /// **オラクル(赤→緑)**: `Message::WaveformFetched` は一致する `Loading` を
+    /// `Ready` へ遷移させる。
+    #[test]
+    fn waveform_fetched_message_transitions_loading_to_ready() {
+        let mut doc = Document::new();
+        let mut session = Session::default();
+        let mut pane = PaneState::new();
+        let layer = LayerId(1);
+        let rows = [audio_row(layer, "clip.mov")];
+
+        let requests = pane.plan_waveforms(&rows, |_| 500.0);
+        let (_, _, buckets) = requests[0].clone();
+        let peaks = vec![(-0.5, 0.5); buckets];
+
+        let reason = pane.update(
+            Message::WaveformFetched { layer, buckets, peaks: peaks.clone() },
+            &mut doc,
+            &mut session,
+            no_mods(),
+        );
+        assert!(reason.is_none());
+        assert_eq!(pane.waveforms().get(&layer), Some(&WaveformState::Ready { buckets, peaks }));
+    }
+
+    /// stale な結果(取得中に別のズームで再要求が発火済み)は捨てる —
+    /// 現在の `Loading` の bucket 数と食い違う `WaveformFetched` は無視される。
+    #[test]
+    fn waveform_fetched_message_ignores_a_stale_result() {
+        let mut doc = Document::new();
+        let mut session = Session::default();
+        let mut pane = PaneState::new();
+        let layer = LayerId(1);
+        let rows = [audio_row(layer, "clip.mov")];
+
+        let first = pane.plan_waveforms(&rows, |_| 10.0);
+        let (_, _, stale_buckets) = first[0].clone();
+        // 大きくズームして新しい要求を発火させる(旧要求は now stale)。
+        let second = pane.plan_waveforms(&rows, |_| 100_000.0);
+        let (_, _, fresh_buckets) = second[0].clone();
+        assert_ne!(stale_buckets, fresh_buckets, "テスト前提: ズームで bucket 数が変わる");
+
+        let reason = pane.update(
+            Message::WaveformFetched { layer, buckets: stale_buckets, peaks: vec![(0.0, 0.0); stale_buckets] },
+            &mut doc,
+            &mut session,
+            no_mods(),
+        );
+        assert!(reason.is_none());
+        assert_eq!(
+            pane.waveforms().get(&layer),
+            Some(&WaveformState::Loading { buckets: fresh_buckets }),
+            "stale な結果で新しい Loading が上書きされてしまった"
+        );
+    }
+
+    /// **オラクル(赤→緑)**: `Message::WaveformFetchFailed` は空 peaks の
+    /// `Ready` へ落とす — `NotRequested` へ戻すと `plan_waveforms` が次の
+    /// 呼び出しで即再要求してしまう(ヒステリシス無しの無限リトライ)ため。
+    #[test]
+    fn waveform_fetch_failed_message_settles_into_an_empty_ready_state() {
+        let mut doc = Document::new();
+        let mut session = Session::default();
+        let mut pane = PaneState::new();
+        let layer = LayerId(1);
+        let rows = [audio_row(layer, "clip.mov")];
+
+        let requests = pane.plan_waveforms(&rows, |_| 500.0);
+        let (_, _, buckets) = requests[0].clone();
+
+        let reason = pane.update(
+            Message::WaveformFetchFailed { layer, buckets },
+            &mut doc,
+            &mut session,
+            no_mods(),
+        );
+        assert!(reason.is_none());
+        assert_eq!(pane.waveforms().get(&layer), Some(&WaveformState::Ready { buckets, peaks: Vec::new() }));
+
+        // 同じ画面幅で再度 plan しても再要求しない(無限リトライにならない)。
+        let after = pane.plan_waveforms(&rows, |_| 500.0);
+        assert!(after.is_empty(), "failed 後に同じ幅で即再要求してしまっている(無限リトライ)");
     }
 }

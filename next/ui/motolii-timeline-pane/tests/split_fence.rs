@@ -12,12 +12,17 @@
 //! - (e) locked 拒否(理由文つき `Err`)
 //! - (f) 複数選択(`split_selected_plan` — 割れる layer だけ割れる・1 apply_all
 //!   = 1 undo・複製 id が衝突しない)
+//! - (g) `Message::SplitAtPlayhead` の `write::Message` 統合(TL4 統合手順 —
+//!   `PaneState::update` 経由で単一選択/複数選択どちらも1回の undo で割れる、
+//!   選択が無ければ理由つき拒否)
 
+use motolii_shell_state::Session;
 use motolii_store::{
     Composition, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId,
     LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Speed, Value,
 };
-use motolii_timeline_pane::split::{split_plan, split_selected_plan, Message as SplitMessage};
+use motolii_timeline_pane::split::{split_plan, split_selected_plan};
+use motolii_timeline_pane::{Message, PaneState};
 
 fn fps30() -> Fps {
     Fps::try_new(30, 1).expect("30/1 は正の既約 fps")
@@ -310,11 +315,81 @@ fn split_selected_plan_errs_when_nothing_in_the_selection_can_split() {
 }
 
 // ---------------------------------------------------------------------------
-// Message(次波統合待ち)の smoke test — 宣言だけで終わらないことの検分。
+// (g) `Message::SplitAtPlayhead` の `write::Message` 統合(TL4 統合手順)。
 // ---------------------------------------------------------------------------
 
+fn no_mods() -> iced::keyboard::Modifiers {
+    iced::keyboard::Modifiers::default()
+}
+
+/// **オラクル(赤→緑)**: 単一選択(`session.selection`)を対象に、
+/// `PaneState::update(Message::SplitAtPlayhead, ...)` が1回の `apply_all` で
+/// split を成立させる(**1 undo**)。
 #[test]
-fn split_at_playhead_message_is_declared_for_next_wave_integration() {
-    let message = SplitMessage::SplitAtPlayhead;
-    assert_eq!(message, SplitMessage::SplitAtPlayhead);
+fn split_at_playhead_message_splits_the_single_selection_in_one_undo() {
+    let mut doc = doc_with_comp();
+    let layer = LayerId(1);
+    place_layer(&mut doc, layer, 10, 90, 0); // [10, 100)
+    doc.mark_undo_floor();
+
+    let mut session = Session { selection: Some(layer), playhead: 40, ..Session::default() };
+    let mut pane = PaneState::new();
+
+    let reason = pane.update(Message::SplitAtPlayhead, &mut doc, &mut session, no_mods());
+    assert!(reason.is_none(), "正常系の Split が拒否された: {reason:?}");
+
+    let mut layers = doc.view().layers();
+    layers.sort();
+    assert_eq!(layers, vec![LayerId(1), LayerId(2)], "Message 経由の split が2レイヤーを作っていない");
+
+    assert!(doc.undo(), "undo が効かない");
+    assert_eq!(doc.view().layers(), vec![layer], "undo 1回で split 前へ戻らない(1操作=1undo 違反)");
+}
+
+/// `session.selected_layers`(複数選択)が非空なら、単一 `selection` より
+/// そちらを優先する(`restack_layers`/`set_work_area_to_selection` と同じ
+/// 優先順位の形)。割れない layer(区間外)は黙って skip し、割れる layer だけ
+/// 1回の undo で割れる。
+#[test]
+fn split_at_playhead_message_prefers_multi_selection_over_single_selection() {
+    let mut doc = doc_with_comp();
+    let splittable = LayerId(1);
+    let out_of_range = LayerId(2);
+    place_layer(&mut doc, splittable, 10, 90, 0); // [10,100) — 40 の内側
+    place_layer(&mut doc, out_of_range, 200, 50, 0); // [200,250) — 40 の外側
+    doc.mark_undo_floor();
+
+    let mut session = Session {
+        selection: Some(out_of_range), // 単一 focus は区間外の layer
+        selected_layers: vec![splittable, out_of_range],
+        playhead: 40,
+        ..Session::default()
+    };
+    let mut pane = PaneState::new();
+
+    let reason = pane.update(Message::SplitAtPlayhead, &mut doc, &mut session, no_mods());
+    assert!(reason.is_none(), "selected_layers 側で割れる layer があるのに拒否された: {reason:?}");
+
+    let mut layers = doc.view().layers();
+    layers.sort();
+    assert_eq!(
+        layers,
+        vec![LayerId(1), LayerId(2), LayerId(3)],
+        "selected_layers 経由で splittable だけが割れていない"
+    );
+}
+
+/// 選択が空なら理由つき拒否(M13)— Document は無傷。
+#[test]
+fn split_at_playhead_message_with_no_selection_refuses_with_a_reason() {
+    let mut doc = doc_with_comp();
+    place_layer(&mut doc, LayerId(1), 10, 90, 0);
+    doc.mark_undo_floor();
+
+    let mut session = Session { playhead: 40, ..Session::default() };
+    let mut pane = PaneState::new();
+
+    let reason = pane.update(Message::SplitAtPlayhead, &mut doc, &mut session, no_mods());
+    assert!(reason.is_some(), "選択が無いのに黙って通った(M13 違反)");
+    assert!(!doc.can_undo(), "拒否したのに Document が動いた");
 }

@@ -262,6 +262,7 @@ mod mouse_interaction_tests {
             work_area: None,
             loop_enabled: false,
             rename: None,
+            waveforms: std::collections::HashMap::new(),
         }
     }
 

@@ -7,6 +7,11 @@ license.workspace = true
 [dependencies]
 iced.workspace = true
 motolii-store.workspace = true
+# TL7 統合手順1: 波形の意味の一次資料(`waveform_peaks`)への依存。**この crate
+# 自身は呼ばない**(`waveform_view.rs` モジュール doc 参照 — pane は Message/
+# 要求列を出すだけ、実際の呼び出しは shell の `iced::Task` 側)。型を触る
+# 予定は無いが、`Cargo.toml` への追加自体が発注書 EXACT TARGET の対象。
+motolii-media.workspace = true
 # デザイン値の外出し(裁定117)。`motolii-shell` と同じ `pub use motolii_tokens_rs
 # as tokens;` の手口(裁定160 切片1)。
 motolii-tokens-rs.workspace = true
