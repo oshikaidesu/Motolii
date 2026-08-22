@@ -35,7 +35,7 @@ use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
     AssetDraft, AssetId, Composition, DisplayRevision, Document, Fps, Intent, LayerAttrsPatch,
     LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, ResolvedLayer,
-    Revision, SourceFingerprintV1, Speed, StoreView, Value,
+    Revision, SourceFingerprintV1, Speed, StoreView, TextDocument, Value,
 };
 
 pub mod clipboard;
@@ -564,12 +564,22 @@ pub enum Message {
 /// `testing` feature 外では `Clone` を持たない)ので、`Shell::build_preview_snapshot`
 /// が `StoreView` から抜き出した**所有データ**をここへ積む——
 /// `motolii_engine::Engine::render_resolved_to_texture` の入力そのもの。
+///
+/// **`time`/`text_documents` は2026-08-22(ゼロコピー経路にも matte とテキストを
+/// 通す発注)で新設**——`render_resolved_to_texture` がテキストの Hold 評価と
+/// `TextDocument` 本体を要るようになったのに合わせた(`motolii_engine::Engine`
+/// の doc 参照)。`resolved` の中の `LayerSource::Text` layer(matte 元も含む)
+/// だけを対象に、その場で持っている `StoreView` から `text_document(id)` を
+/// 引いて詰める——`resolved_layers(t)` を呼ぶのと同じ `view` から取るので
+/// 追加の Document 走査は増えない。
 #[derive(Clone, Debug)]
 struct PreviewSnapshot {
     comp: CompSpec,
     background: [f32; 4],
     camera: ResolvedCamera,
+    time: RationalTime,
     resolved: Vec<ResolvedLayer>,
+    text_documents: HashMap<LayerId, TextDocument>,
 }
 
 /// Stage presenter shader へ渡す実体(裁定171 v2 M4)。
@@ -4229,17 +4239,34 @@ impl Shell {
     /// の入力そのもの)。comp が無い/時刻を写せない/camera・layer が解決でき
     /// ない、のいずれかなら `None` — 呼び出し側([`Self::refresh_frame`])は
     /// フル再計算(既存の CPU 経路)へ安全側フォールバックする。
+    ///
+    /// **2026-08-22 でテキストも集める**(`motolii_engine` の `collect_text_documents`
+    /// と同型の走査——`motolii-engine` は `Shell` の `view` を共有できないので、
+    /// ここで自前にもう一度やる)。`resolved` の中の `LayerSource::Text` layer
+    /// (matte 元も含めて区別しない——`layers_from_resolved` が `by_id` 越しに
+    /// どちらも同じ `text_documents` map から引く)だけ `view.text_document(id)`
+    /// を引く。
     fn build_preview_snapshot(&self, playhead: i64) -> Option<PreviewSnapshot> {
         let view = self.doc.view();
         let composition = view.composition().ok().flatten()?;
         let t = RationalTime::try_from_frame(playhead, composition.fps).ok()?;
         let camera = view.resolve_camera(t).ok()?;
         let resolved = view.resolved_layers(t).ok()?;
+        let mut text_documents = HashMap::new();
+        for layer in &resolved {
+            if layer.source == LayerSource::Text {
+                if let Ok(Some(document)) = view.text_document(layer.id) {
+                    text_documents.insert(layer.id, document);
+                }
+            }
+        }
         Some(PreviewSnapshot {
             comp: composition.spec(),
             background: composition.background,
             camera,
+            time: t,
             resolved,
+            text_documents,
         })
     }
 
@@ -5068,7 +5095,9 @@ impl StagePresenterPipeline {
             snapshot.comp,
             snapshot.background,
             snapshot.camera,
+            snapshot.time,
             &snapshot.resolved,
+            &snapshot.text_documents,
         ) else {
             return;
         };
