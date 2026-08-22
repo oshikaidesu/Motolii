@@ -12,8 +12,8 @@ use motolii_export::export_lottie;
 use motolii_store::{
     property, Composition, Document, EffectId, EffectInstance, Intent, Interp, Keyframe,
     KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, Mask, MaskId,
-    MaskMode, Matte, MatteMode, Path, PathVertex, PropertyId, PropertyLink, PropertySource,
-    ShapeNode, SlotId, Value,
+    MaskMode, Matte, MatteMode, Path, PathVertex, PropertyId, PropertyLink, ShapeNode, SlotId,
+    Value,
 };
 use motolii_vector::{Brush, Fill, FillRule, PathSource, Rgb, Shape as VecShape};
 
@@ -180,7 +180,7 @@ fn property_link_bakes_into_a_normal_keyframed_property() {
         .property_source(target_layer, &PropertyId::new(property::OPACITY).unwrap())
         .unwrap()
     {
-        Some(PropertySource::Link(_)) => {}
+        Some(source) if source.as_link_only().is_some() => {}
         other => panic!("SetPropertyLink 直後は Link のはず: {other:?}"),
     }
 
@@ -216,6 +216,89 @@ fn property_link_bakes_into_a_normal_keyframed_property() {
             .unwrap();
         assert_eq!(expected, sampled, "frame {frame} で link の評価値が source と一致しない");
     }
+}
+
+// ---------------------------------------------------------------------------
+// 加算 modulator の範囲外検出(裁定213 の RETURN follow-up)
+// ---------------------------------------------------------------------------
+
+/// **store は clamp しない**(`slot.rs` doc「範囲外に出た時」)ので、base(0.8=80%)
+/// + modulator(定数 +0.5=50%、`motolii.link.linear` を scale=0 で恒等関数化した
+/// 「値を読まない定数 modulator」)= 1.3 = 130% が焼かれる。export 側は**黙って
+/// clamp せず**この事実を `UnsupportedForLottie`(category
+/// `"value-out-of-range"`)で報告しつつ、JSON には un-clamped の 130.0 を
+/// そのまま書く——裁定206 の基準(「無損失で書けるか」)を測る道具としての
+/// 価値を保つための判断(`report_out_of_range` doc 参照)。
+#[test]
+fn a_modulator_sum_beyond_the_lottie_range_is_reported_not_silently_clamped() {
+    let mut doc = base_document();
+    let layer = LayerId(1);
+    add_layer(&mut doc, layer, LayerSource::Null);
+
+    let opacity = PropertyId::new(property::OPACITY).unwrap();
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: opacity.clone(),
+        track: hold_track(&[(0, 0.8)]),
+    })
+    .unwrap();
+
+    // modulator の source は無関係な別 property(ROTATION)—— scale=0 で
+    // その値を無視し、offset=0.5 だけを恒常的に足す「定数 modulator」にする
+    // (`translate_link` の `motolii.link.linear` doc 参照)。**source は track を
+    // 持っていないと `value_at` が `None` を返し、modulator は寄与しない**
+    // (`view.rs::value_at_path_resolving_links` の「参照先に値が無ければ寄与
+    // しない」)ので、値そのものは使わなくても track だけは立てる必要がある。
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::new(property::ROTATION).unwrap(),
+        track: hold_track(&[(0, 0.0)]),
+    })
+    .unwrap();
+    doc.apply(Intent::SetPropertyModulators {
+        layer,
+        property: opacity.clone(),
+        modulators: vec![PropertyLink {
+            source_layer: layer,
+            source_property: PropertyId::new(property::ROTATION).unwrap(),
+            time_offset: RationalTime::ZERO,
+            plugin_id: "motolii.link.linear".to_owned(),
+            params: vec![
+                ("scale".to_owned(), Value::F64(0.0)),
+                ("offset".to_owned(), Value::F64(0.5)),
+            ],
+        }],
+    })
+    .unwrap();
+
+    let view = doc.view();
+    // 焼く前提の確認: store 側の値は 0.8+0.5=1.3(clamp されていない)。
+    assert_eq!(
+        view.value_at(layer, &opacity, RationalTime::ZERO).unwrap(),
+        Some(Value::F64(1.3)),
+        "store が clamp してしまっている(裁定213 の前提が崩れている)"
+    );
+
+    let out = export_lottie(&view).unwrap();
+
+    let report = out
+        .unsupported
+        .iter()
+        .find(|item| item.category == "value-out-of-range")
+        .unwrap_or_else(|| panic!("範囲外が報告されていない: {:?}", out.unsupported));
+    assert_eq!(report.layer, Some(layer));
+    assert!(
+        report.detail.contains("130"),
+        "報告に実際の値(130)が含まれていない: {}",
+        report.detail
+    );
+
+    // **黙って clamp しない** — JSON には un-clamped の 130.0 がそのまま書かれる。
+    let target_json = &out.json["layers"][0];
+    assert_eq!(
+        target_json["ks"]["o"]["k"], 130.0,
+        "範囲外の値を勝手に clamp して書いている"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -360,7 +443,6 @@ fn effect_instance_is_reported_as_unsupported_not_silently_dropped() {
         effects: vec![EffectInstance {
             id: EffectId(1),
             plugin_id: "motolii.glow".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();

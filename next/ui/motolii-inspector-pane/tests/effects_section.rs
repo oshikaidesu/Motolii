@@ -12,14 +12,14 @@ use iced_test::selector::{Candidate, Target};
 use motolii_core::{Fps, RationalTime};
 use motolii_inspector_pane::{
     commit_inspector_field, effects_with_moved_down, effects_with_moved_up, effects_with_removed,
-    effects_with_toggled_enabled, move_inspector_effect_down, move_inspector_effect_up, project,
-    property_id, remove_inspector_effect, toggle_inspector_effect_bypass, view, FieldDraft,
-    GlowParam, KeyCellState, KeyRow, Message, RowValue, TransformField, GLOW_PLUGIN_ID,
+    move_inspector_effect_down, move_inspector_effect_up, project, property_id,
+    remove_inspector_effect, toggle_inspector_effect_bypass, view, FieldDraft, GlowParam,
+    KeyCellState, KeyRow, Message, RowValue, TransformField, GLOW_PLUGIN_ID,
 };
 use motolii_shell_state::Session;
 use motolii_store::{
-    Composition, Document, EffectId, EffectInstance, Intent, LayerId, LayerMeta, LayerSource,
-    LayerTiming, PropertyId, Value,
+    Composition, Document, EffectId, EffectInstance, Interp, Intent, Keyframe, KeyframeTrack,
+    LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, Value,
 };
 use motolii_tokens_rs::{Colors, Dimensions};
 
@@ -65,31 +65,67 @@ fn session_selecting(layer: LayerId) -> Session {
     }
 }
 
-/// Glow(既知 plugin・enabled)+ 未知 plugin(bypass 中)の2本 stack。
-/// bypass 中(enabled=false)の effect も `StoreView::effects` の生の列には
-/// 現れる(弾くのは resolve 側)— Inspector は生の stack を編集する側なので、
-/// bypass 中の行も出ることをこの fixture で固定する。
+/// **裁定213**: `enabled` は `effect.{id}.enabled` track の `t=0` 評価値
+/// (キーを打っていない = 既定で有効)。テスト側の assertion をこの1関数へ
+/// 集約する。
+fn enabled_at_zero(doc: &Document, layer: LayerId, effect: EffectId) -> bool {
+    match doc
+        .view()
+        .value_at(layer, &PropertyId::effect_enabled(effect), RationalTime::ZERO)
+        .expect("enabled を読めるはず")
+    {
+        Some(Value::Bool(v)) => v,
+        Some(other) => panic!("effect の enabled に真偽でない値: {other:?}"),
+        None => true,
+    }
+}
+
+/// Glow(既知 plugin)+ 未知 plugin(bypass 中)の2本 stack。**裁定213**:
+/// `enabled` はもう `EffectInstance` の静止フィールドではないので、この一覧
+/// 自体はどちらも「触っていない」状態(=既定で有効)を表す ——
+/// bypass 中(enabled=false)は [`doc_with_two_effects`] が `effect.{id}.enabled`
+/// の track を別途書いて表現する。bypass 中の effect も `StoreView::effects` の
+/// 生の列には現れる(弾くのは resolve 側)— Inspector は生の stack を編集する
+/// 側なので、bypass 中の行も出ることをこの fixture で固定する。
 fn two_effects() -> Vec<EffectInstance> {
     vec![
         EffectInstance {
             id: EffectId(1),
             plugin_id: GLOW_PLUGIN_ID.to_owned(),
-            enabled: true,
         },
         EffectInstance {
             id: EffectId(2),
             plugin_id: "third-party.sparkle".to_owned(),
-            enabled: false,
         },
     ]
 }
 
 fn doc_with_two_effects() -> (Document, LayerId) {
     let (mut doc, layer) = doc_with_layer();
-    doc.apply(Intent::SetEffects {
-        layer,
-        effects: two_effects(),
-    })
+    // EffectId(2) を bypass 中にする(裁定213: `effect.{id}.enabled` の track に
+    // `Value::Bool(false)` を1キー `Hold` で書く——`PropertyId::effect_enabled`
+    // doc の作法どおり)。**`SetEffects` と同じ `apply_all` 1回にまとめる**——
+    // 別々の `apply()` にすると fixture 構築だけで2段の undo 履歴ができてしまい、
+    // 「1 apply_all = 1 undo」という他の試験(`reordering_swaps_neighbours_…`
+    // の「初期 SetEffects まで一気に戻る」前提)を壊す。
+    let mut disabled = KeyframeTrack::new();
+    disabled.insert(Keyframe {
+        t: RationalTime::ZERO,
+        value: Value::Bool(false),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    doc.apply_all([
+        Intent::SetEffects {
+            layer,
+            effects: two_effects(),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::effect_enabled(EffectId(2)),
+            track: disabled,
+        },
+    ])
     .expect("effect を書けるはず");
     (doc, layer)
 }
@@ -340,20 +376,28 @@ fn reordering_swaps_neighbours_and_edge_moves_emit_no_intent() {
 fn toggling_bypass_flips_only_that_effect_and_undoes_in_one_step() {
     let (mut doc, layer) = doc_with_two_effects();
 
-    toggle_inspector_effect_bypass(&mut doc, Some(layer), EffectId(1))
+    toggle_inspector_effect_bypass(&mut doc, Some(layer), EffectId(1), 0, fps30())
         .expect("bypass トグルは成功するはず");
     let effects = doc.view().effects(layer).expect("effect を読めるはず");
     assert_eq!(effects.len(), 2, "bypass が effect を消している(削除とは別物)");
-    assert!(!effects[0].enabled, "対象の enabled が裏返っていない");
-    assert!(!effects[1].enabled, "対象外の effect が動いている");
+    assert!(
+        !enabled_at_zero(&doc, layer, EffectId(1)),
+        "対象の enabled が裏返っていない"
+    );
+    assert!(
+        !enabled_at_zero(&doc, layer, EffectId(2)),
+        "対象外の effect が動いている"
+    );
     assert_eq!(
         effects[0].plugin_id, GLOW_PLUGIN_ID,
         "bypass が plugin_id を巻き込んでいる"
     );
 
     doc.undo();
-    let effects = doc.view().effects(layer).expect("effect を読めるはず");
-    assert!(effects[0].enabled, "1 undo で戻らない(1操作=1 undo 違反)");
+    assert!(
+        enabled_at_zero(&doc, layer, EffectId(1)),
+        "1 undo で戻らない(1操作=1 undo 違反)"
+    );
 }
 
 /// 選択なし・存在しない effect id は黙って no-op(mask 系と同じ安全側)。
@@ -363,7 +407,7 @@ fn effect_edits_without_a_selection_or_with_a_stale_id_are_silent_no_ops() {
     let before = doc.view().effects(layer).expect("effect を読めるはず");
 
     remove_inspector_effect(&mut doc, None, EffectId(1)).expect("選択なしは no-op のはず");
-    toggle_inspector_effect_bypass(&mut doc, Some(layer), EffectId(99))
+    toggle_inspector_effect_bypass(&mut doc, Some(layer), EffectId(99), 0, fps30())
         .expect("居ない effect id は no-op のはず");
     move_inspector_effect_up(&mut doc, Some(layer), EffectId(99))
         .expect("居ない effect id は no-op のはず");
@@ -413,11 +457,15 @@ fn committing_a_glow_param_draft_writes_the_effect_param_track_raw() {
 // ---------------------------------------------------------------------------
 
 /// 純関数の境界: stale id は `None`、端の move も `None`(Intent を出させない)。
+/// **裁定213**: bypass はもう一覧を書き換える純関数ではなく
+/// `effect.{id}.enabled` track への書き込みなので、ここには載らない
+/// (`toggle_inspector_effect_bypass` の stale id no-op は
+/// `effect_edits_without_a_selection_or_with_a_stale_id_are_silent_no_ops` が
+/// 別途固定している)。
 #[test]
 fn pure_list_edits_return_none_for_stale_ids_and_edge_moves() {
     let effects = two_effects();
     assert!(effects_with_removed(&effects, EffectId(9)).is_none());
-    assert!(effects_with_toggled_enabled(&effects, EffectId(9)).is_none());
     assert!(effects_with_moved_up(&effects, EffectId(1)).is_none(), "先頭の上移動");
     assert!(effects_with_moved_down(&effects, EffectId(2)).is_none(), "末尾の下移動");
 

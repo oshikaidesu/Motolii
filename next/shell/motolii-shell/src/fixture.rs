@@ -337,7 +337,6 @@ pub fn build() -> Fixture {
         effects: vec![EffectInstance {
             id: glow,
             plugin_id: "motolii.glow".to_owned(),
-            enabled: true,
         }],
     });
     let mut glow_threshold = KeyframeTrack::new();

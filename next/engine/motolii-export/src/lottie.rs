@@ -46,9 +46,9 @@ use std::collections::HashSet;
 use motolii_core::{Fps, RationalTime, RationalTimeError};
 use motolii_store::{
     property, EffectInstance, LayerAttrs, LayerId, LayerMeta, LayerSource, Marker, Mask, MaskMode,
-    MatteMode, Path as BezierPath, PathSource, PropertyId, PropertySource, RepeaterTransform,
-    Shape as VecShape, ShapeGroup, ShapeNode, Slot, SlotId, StoreError, StoreView, TextDocument,
-    TextJustify, Value,
+    MatteMode, Path as BezierPath, PathSource, PropertyBase, PropertyId, PropertySource,
+    RepeaterTransform, Shape as VecShape, ShapeGroup, ShapeNode, Slot, SlotId, StoreError,
+    StoreView, TextDocument, TextJustify, Value,
 };
 use motolii_vector::{
     Brush, Composite, Contour, Dash, Fill, FillRule, GradientType, LineCap, LineJoin, OpKind,
@@ -336,6 +336,36 @@ fn effect_unsupported(layer: LayerId, effect: &EffectInstance) -> UnsupportedFor
     }
 }
 
+/// **加算接続子(裁定213)の範囲外検出**——`motolii-store`/`motolii-eval` は
+/// 意図して clamp しない(`slot.rs` モジュール doc「2026-08-23」節「1. 範囲外に
+/// 出た時」— `Value::lerp` の `Color` 実装も clamp していないので `add` だけ
+/// 特別扱いすると一貫しない挙動になる、という判断)。厳しい側(拒否・報告)は
+/// export 境界の仕事として明示的にここへ持ち込む——**黙って clamp して出さない**
+/// (裁定206 の基準を測る道具としての価値が消えるため)。`effect_unsupported`/
+/// `check_audio_settings_unsupported` と同じ「報告はするが値はそのまま書く」
+/// 作法(呼び手は clamp 済みの値を渡さない——このまま Lottie の JSON へ焼く)。
+fn report_out_of_range(
+    unsupported: &mut Vec<UnsupportedForLottie>,
+    layer: Option<LayerId>,
+    field: &str,
+    value: f64,
+    bounds: (f64, f64),
+) {
+    if value < bounds.0 || value > bounds.1 {
+        unsupported.push(UnsupportedForLottie {
+            layer,
+            category: "value-out-of-range",
+            detail: format!(
+                "`{field}` に Lottie の有効域 [{}, {}] を外れた値 {value} が焼かれた \
+                 (加算 modulator の和・またはベジェイージングの overshoot——store は \
+                 意図して clamp しない設計、`slot.rs` doc 参照)。値はそのまま書いた \
+                 ——黙って clamp すると裁定206 の基準を測れなくなるため報告する",
+                bounds.0, bounds.1
+            ),
+        });
+    }
+}
+
 /// `layers/audio-settings lv`(Level)相当。`property::LEVEL`/`PAN`/`FADE_IN`/
 /// `FADE_OUT` は `motolii-audio` が実際に mix する層単位の property だが、
 /// Lottie の `au`(Audio Settings)へ写す語彙をまだ持たない——**空の `au` を
@@ -441,10 +471,12 @@ fn build_transform(
         "a": vector_property(ctx, layer, property::ANCHOR, 1.0, [0.0, 0.0], unsupported)?,
         "p": build_position(ctx, layer, unsupported)?,
         "s": vector_property(ctx, layer, property::SCALE, 100.0, [100.0, 100.0], unsupported)?,
-        "r": scalar_property(ctx, layer, property::ROTATION, 1.0, 0.0, unsupported)?,
-        "o": scalar_property(ctx, layer, property::OPACITY, 100.0, 100.0, unsupported)?,
-        "sk": scalar_property(ctx, layer, property::SKEW, 1.0, 0.0, unsupported)?,
-        "sa": scalar_property(ctx, layer, property::SKEW_AXIS, 1.0, 0.0, unsupported)?,
+        "r": scalar_property(ctx, layer, property::ROTATION, 1.0, 0.0, None, unsupported)?,
+        // opacity は Lottie の有効域 0..100(% 換算後)——加算 modulator の和が
+        // それを外れたら報告する(`report_out_of_range` doc 参照)。
+        "o": scalar_property(ctx, layer, property::OPACITY, 100.0, 100.0, Some((0.0, 100.0)), unsupported)?,
+        "sk": scalar_property(ctx, layer, property::SKEW, 1.0, 0.0, None, unsupported)?,
+        "sa": scalar_property(ctx, layer, property::SKEW_AXIS, 1.0, 0.0, None, unsupported)?,
     }))
 }
 
@@ -466,25 +498,32 @@ fn build_position(
     if !has_split {
         return vector_property(ctx, layer, property::POSITION, 1.0, [0.0, 0.0], unsupported);
     }
-    let x = scalar_property(ctx, layer, property::POSITION_X, 1.0, 0.0, unsupported)?;
-    let y = scalar_property(ctx, layer, property::POSITION_Y, 1.0, 0.0, unsupported)?;
+    let x = scalar_property(ctx, layer, property::POSITION_X, 1.0, 0.0, None, unsupported)?;
+    let y = scalar_property(ctx, layer, property::POSITION_Y, 1.0, 0.0, None, unsupported)?;
     Ok(serde_json::json!({ "s": true, "x": x, "y": y }))
 }
 
 /// property の出処(Track/Slot/Link)を Lottie の scalar-property JSON へ。
-/// `scale` は Lottie の慣習(opacity/scale は 0..100)への換算係数。
+/// `scale` は Lottie の慣習(opacity/scale は 0..100)への換算係数。`bounds` は
+/// **スケール後の単位**での Lottie 有効域(`Some` の property だけ検査する
+/// ——opacity 系のみ、rotation/skew/expansion 等は無制限)、外れたら
+/// [`report_out_of_range`] が `unsupported` へ積む(値はそのまま書く、
+/// 裁定213/`slot.rs` doc「範囲外に出た時」参照)。
 fn scalar_property(
     ctx: &Ctx<'_, '_>,
     layer: LayerId,
     name: &str,
     scale: f64,
     default: f64,
+    bounds: Option<(f64, f64)>,
     unsupported: &mut Vec<UnsupportedForLottie>,
 ) -> Result<serde_json::Value, LottieExportError> {
     match resolve(ctx, layer, name, unsupported)? {
         Resolved::None => Ok(serde_json::json!({ "a": 0, "k": default })),
         Resolved::SlotRef(sid) => Ok(serde_json::json!({ "sid": sid })),
-        Resolved::Track(track) => encode_scalar_track(ctx, name, &track, scale),
+        Resolved::Track(track) => {
+            encode_scalar_track(ctx, Some(layer), name, &track, scale, bounds, unsupported)
+        }
     }
 }
 
@@ -513,7 +552,8 @@ fn scalar_property_percent0_100(
     default: f64,
     unsupported: &mut Vec<UnsupportedForLottie>,
 ) -> Result<serde_json::Value, LottieExportError> {
-    scalar_property(ctx, layer, name, 100.0, default, unsupported)
+    // mask opacity も layer opacity と同じ有効域 0..100(% 換算後)。
+    scalar_property(ctx, layer, name, 100.0, default, Some((0.0, 100.0)), unsupported)
 }
 
 fn bezier_property(
@@ -546,9 +586,22 @@ fn resolve(
     let property = PropertyId::new(name)?;
     match ctx.view.property_source(layer, &property)? {
         None => Ok(Resolved::None),
-        Some(PropertySource::Track(track)) => Ok(Resolved::Track(track)),
-        Some(PropertySource::Slot(SlotId(id))) => Ok(Resolved::SlotRef(id)),
-        Some(PropertySource::Link(_)) => {
+        // modulator が無ければ今までどおり base を素通しする(裁定213で
+        // `PropertySource` が enum から base+modulators の struct へ変わっただけで、
+        // base 無し・modulator 無しの組み合わせは元々作れない=旧 `None` 相当)。
+        Some(PropertySource {
+            base,
+            modulators,
+        }) if modulators.is_empty() => match base {
+            None => Ok(Resolved::None),
+            Some(PropertyBase::Track(track)) => Ok(Resolved::Track(track)),
+            Some(PropertyBase::Slot(SlotId(id))) => Ok(Resolved::SlotRef(id)),
+        },
+        // modulator が1本でもあれば(旧 `Link` 相当の base無し1本も、base+modulator
+        // の和も)その場で**焼く**(裁定206 の実地検証、モジュール doc 参照) ——
+        // 焼く経路は `StoreView::value_at` を直接サンプルするので、base の有無や
+        // modulator の本数を問わず同じ1本の経路で正しい。
+        Some(_) => {
             let baked = bake_property(ctx, layer, &property)?;
             let _ = unsupported; // link は焼けるので unsupported に積まない(裁定206)
             Ok(Resolved::Track(baked))
@@ -615,11 +668,18 @@ fn interp_easing(interp: motolii_store::Interp) -> Option<(serde_json::Value, se
     }
 }
 
+/// `bounds`(スケール後の単位)が `Some` なら、書く各値をその場で検査し、
+/// 外れていれば [`report_out_of_range`] へ積む(値そのものは clamp せず
+/// そのまま書く——`slot.rs` doc「範囲外に出た時」参照)。`layer` は
+/// `UnsupportedForLottie::layer`(comp 単位の呼び手 = slot は `None`)。
 fn encode_scalar_track(
     ctx: &Ctx<'_, '_>,
+    layer: Option<LayerId>,
     name: &str,
     track: &motolii_store::KeyframeTrack,
     scale: f64,
+    bounds: Option<(f64, f64)>,
+    unsupported: &mut Vec<UnsupportedForLottie>,
 ) -> Result<serde_json::Value, LottieExportError> {
     let keys = track.keys();
     if keys.len() <= 1 {
@@ -628,7 +688,11 @@ fn encode_scalar_track(
             .map(|k| &k.value)
             .and_then(Value::as_f64)
             .ok_or_else(|| LottieExportError::TypeMismatch(name.to_owned(), keys[0].value.clone()))?;
-        return Ok(serde_json::json!({ "a": 0, "k": v * scale }));
+        let scaled = v * scale;
+        if let Some(bounds) = bounds {
+            report_out_of_range(unsupported, layer, name, scaled, bounds);
+        }
+        return Ok(serde_json::json!({ "a": 0, "k": scaled }));
     }
     let mut out = Vec::with_capacity(keys.len());
     for (i, key) in keys.iter().enumerate() {
@@ -636,9 +700,13 @@ fn encode_scalar_track(
             .value
             .as_f64()
             .ok_or_else(|| LottieExportError::TypeMismatch(name.to_owned(), key.value.clone()))?;
+        let scaled = v * scale;
+        if let Some(bounds) = bounds {
+            report_out_of_range(unsupported, layer, name, scaled, bounds);
+        }
         let mut obj = serde_json::json!({
             "t": time_to_frame(ctx, key.t)?,
-            "s": [v * scale],
+            "s": [scaled],
         });
         if i + 1 < keys.len() {
             match interp_easing(key.interp) {
@@ -776,7 +844,7 @@ fn build_mask(
         "mode": mask_mode_to_str(mask.mode),
         "pt": bezier_property(ctx, layer, &shape_id, unsupported)?,
         "o": scalar_property_percent0_100(ctx, layer, &opacity_id, 100.0, unsupported)?,
-        "x": scalar_property(ctx, layer, &expansion_id, 1.0, 0.0, unsupported)?,
+        "x": scalar_property(ctx, layer, &expansion_id, 1.0, 0.0, None, unsupported)?,
     }))
 }
 
@@ -810,7 +878,7 @@ fn build_slots(
 ) -> Result<serde_json::Map<String, serde_json::Value>, LottieExportError> {
     let mut out = serde_json::Map::new();
     for slot in ctx.view.slots()? {
-        match slot_property_value(ctx, &slot) {
+        match slot_property_value(ctx, &slot, unsupported) {
             Ok(value) => {
                 out.insert(slot.id.0.clone(), serde_json::json!({ "p": value }));
             }
@@ -824,17 +892,21 @@ fn build_slots(
     Ok(out)
 }
 
-fn slot_property_value(ctx: &Ctx<'_, '_>, slot: &Slot) -> Result<serde_json::Value, String> {
+fn slot_property_value(
+    ctx: &Ctx<'_, '_>,
+    slot: &Slot,
+    unsupported: &mut Vec<UnsupportedForLottie>,
+) -> Result<serde_json::Value, String> {
     let keys = slot.track.keys();
     let first = keys.first().ok_or("track が空(値が無い)")?;
     match &first.value {
-        Value::F64(_) => encode_scalar_track(ctx, "slot", &slot.track, 1.0)
+        Value::F64(_) => encode_scalar_track(ctx, None, "slot", &slot.track, 1.0, None, unsupported)
             .map_err(|e| e.to_string()),
         Value::Vec2(_) => encode_vector_track(ctx, "slot", &slot.track, 1.0, false)
             .map_err(|e| e.to_string()),
         Value::Color(color) => {
             let _ = color;
-            encode_color_track(ctx, "slot", &slot.track).map_err(|e| e.to_string())
+            encode_color_track(ctx, None, "slot", &slot.track, unsupported).map_err(|e| e.to_string())
         }
         Value::Path(_) => encode_bezier_track(ctx, "slot", &slot.track).map_err(|e| e.to_string()),
         other => Err(format!(
@@ -843,11 +915,22 @@ fn slot_property_value(ctx: &Ctx<'_, '_>, slot: &Slot) -> Result<serde_json::Val
     }
 }
 
+/// 色成分(r/g/b)は Lottie/`motolii_eval::Value::Color` とも「各成分
+/// 0.0–1.0」が有効域(`value.rs` の型 doc)——加算 modulator の和がそこを外れたら
+/// [`report_out_of_range`] へ積む(値はそのまま clamp せず書く)。
 fn encode_color_track(
     ctx: &Ctx<'_, '_>,
+    layer: Option<LayerId>,
     name: &str,
     track: &motolii_store::KeyframeTrack,
+    unsupported: &mut Vec<UnsupportedForLottie>,
 ) -> Result<serde_json::Value, LottieExportError> {
+    const UNIT: (f64, f64) = (0.0, 1.0);
+    let check = |unsupported: &mut Vec<UnsupportedForLottie>, c: [f64; 4]| {
+        report_out_of_range(unsupported, layer, &format!("{name}.r"), c[0], UNIT);
+        report_out_of_range(unsupported, layer, &format!("{name}.g"), c[1], UNIT);
+        report_out_of_range(unsupported, layer, &format!("{name}.b"), c[2], UNIT);
+    };
     let keys = track.keys();
     if keys.len() <= 1 {
         let c = keys
@@ -855,6 +938,7 @@ fn encode_color_track(
             .map(|k| &k.value)
             .and_then(Value::as_color)
             .ok_or_else(|| LottieExportError::TypeMismatch(name.to_owned(), keys[0].value.clone()))?;
+        check(unsupported, c);
         return Ok(serde_json::json!({ "a": 0, "k": [c[0], c[1], c[2]] }));
     }
     let mut out = Vec::with_capacity(keys.len());
@@ -863,6 +947,7 @@ fn encode_color_track(
             .value
             .as_color()
             .ok_or_else(|| LottieExportError::TypeMismatch(name.to_owned(), key.value.clone()))?;
+        check(unsupported, c);
         let mut obj = serde_json::json!({
             "t": time_to_frame(ctx, key.t)?,
             "s": [c[0], c[1], c[2]],

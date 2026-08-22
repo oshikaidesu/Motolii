@@ -142,9 +142,8 @@ pub use attrs::{next_blend_mode, percent_to_speed_ratio, speed_percent, SUPPORTE
 pub use chrome::{cycle_inspector_label_color, next_label_color, property_row_css, row_band_style};
 pub use effects::{
     effects_with_moved_down, effects_with_moved_up, effects_with_removed,
-    effects_with_toggled_enabled, move_inspector_effect_down, move_inspector_effect_up,
-    plugin_display_name, plugin_params, remove_inspector_effect, toggle_inspector_effect_bypass,
-    GlowParam, GLOW_PLUGIN_ID,
+    move_inspector_effect_down, move_inspector_effect_up, plugin_display_name, plugin_params,
+    remove_inspector_effect, toggle_inspector_effect_bypass, GlowParam, GLOW_PLUGIN_ID,
 };
 pub use link::{
     clear_inspector_link, commit_inspector_link, LinkRowProjection, LinkSourceCandidate,

@@ -77,7 +77,6 @@ fn layer_with_unknown_effect_renders_identically_to_layer_without_effects() {
             effects: vec![EffectInstance {
                 id: EffectId(0),
                 plugin_id: "motolii.not-yet-implemented".to_owned(),
-                enabled: true,
             }],
         })
         .unwrap();
@@ -179,7 +178,6 @@ fn layer_with_known_glow_effect_renders_differently_from_layer_without_effects()
             effects: vec![EffectInstance {
                 id: effect,
                 plugin_id: "motolii.glow".to_owned(),
-                enabled: true,
             }],
         })
         .unwrap();
@@ -239,7 +237,6 @@ fn glow_intensity_animation_changes_the_frame_over_time() {
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.glow".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
@@ -286,16 +283,34 @@ fn glow_intensity_animation_changes_the_frame_over_time() {
 /// disabled な effect は `resolve()` の時点で `ResolvedLayer.effects` に現れない
 /// (`ResolvedEffect` の型 doc、`crate::effect` 参照)——engine 側の変換に届く前に
 /// store が弾いていることの対比確認。上の試験と同じ絵になるはず。
+///
+/// **裁定213**: `enabled` はもう `EffectInstance` の静止フィールドではなく
+/// `effect.{id}.enabled` の track(`Value::Bool`、Hold 補間)——disable するには
+/// `Intent::SetTrack` でその track へ `false` を書く(`PropertyId::effect_enabled`
+/// doc 参照)。
 #[test]
 fn disabled_effect_does_not_reach_the_frame_either() {
     let (mut doc, layer) = doc_with_solid_layer();
+    let effect = EffectId(0);
     doc.apply(Intent::SetEffects {
         layer,
         effects: vec![EffectInstance {
-            id: EffectId(0),
+            id: effect,
             plugin_id: "motolii.not-yet-implemented".to_owned(),
-            enabled: false,
         }],
+    })
+    .unwrap();
+    let mut disabled_track = KeyframeTrack::new();
+    disabled_track.insert(Keyframe {
+        t: t(0),
+        value: Value::Bool(false),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::effect_enabled(effect),
+        track: disabled_track,
     })
     .unwrap();
 

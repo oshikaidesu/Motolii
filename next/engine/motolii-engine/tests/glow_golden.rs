@@ -120,7 +120,6 @@ fn doc_with_fixed_glow(threshold: f64, intensity: f64, radius: f64) -> Document 
         effects: vec![EffectInstance {
             id: effect,
             plugin_id: "motolii.glow".to_owned(),
-            enabled: true,
         }],
     })
     .unwrap();
