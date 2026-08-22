@@ -24,6 +24,13 @@
 //!   - `LayerTiming.speed` が負(逆再生)の layer は `AudioError::InvalidMixRange` で
 //!     拒む — この crate の `TimeMap` が正の速度しか表現しない(旧
 //!     `motolii-core::TimeMap` も同じ制約だった、`time_map.rs` 参照)
+//!
+//! **B42(2026-08-22追記)**: `mix.rs` に `MixSource::pan`/`MixSource::fade`
+//! (pan・fade in/out)を実装したが、store に `property::LEVEL` に相当する
+//! pan/fade 標準 property がまだ無いため、ここでは `None`/`FadeSpec::NONE`
+//! (無変化)を渡すだけに留めた — **これも「足りない口」**。store 側が
+//! `property::PAN` 等を持てば `layer_mix_source` は1行足すだけで結線できる
+//! (`gain` と全く同じ形)。
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -37,7 +44,7 @@ use crate::convert::to_canonical;
 use crate::decode::decode_file_audio_ordinal;
 use crate::error::{AudioError, Result};
 use crate::meter::AudioMeter;
-use crate::mix::{mix_audio, AudioOutOfRange, MixReport, MixSource};
+use crate::mix::{mix_audio, AudioOutOfRange, FadeSpec, MixReport, MixSource};
 use crate::time_map::TimeMap;
 
 /// `StoreView` 由来の音声プログラム(正準mix入力)。
@@ -167,6 +174,13 @@ fn layer_mix_source(
         timeline_duration,
         time_map,
         gain,
+        // B42: store に pan/fade の標準 property がまだ無い(`property::LEVEL` に
+        // 相当する `PAN`/`FADE_IN`/`FADE_OUT` 未設 — 発注書の指示どおりこの crate
+        // からは新設しない、store 側への要求として終了報告に書く)。engine 側の
+        // 型・mix経路(`MixSource::pan`/`fade`)は既に実装済みなので、store が
+        // property を持てばここは1行足すだけで済む。
+        pan: None,
+        fade: FadeSpec::NONE,
         out_of_range: AudioOutOfRange::Silence,
         enabled: true,
     }))

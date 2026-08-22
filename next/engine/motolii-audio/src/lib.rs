@@ -9,7 +9,11 @@
 //! mux は `motolii-media` が解決済み(この crate は PCM を作るだけでよい)。
 //!
 //! **範囲**:
-//! - [`mix`] — 決定論的 `mix_audio`(preview/export同一意味の正準PCM境界)
+//! - [`mix`] — 決定論的 `mix_audio`(preview/export同一意味の正準PCM境界)。
+//!   B42(音声内容整形束、2026-08-22)でレイヤー単位の pan([`FadeSpec`]と対の
+//!   `MixSource::pan`)・fade in/out([`FadeSpec`]/[`FadeCurve`])・
+//!   正規化([`normalize_gain_for_peak`])を追加(gain/muteは既存の
+//!   `MixSource::gain`/`enabled` がそのままカバー、詳細は `mix.rs` モジュールdoc)
 //! - [`program`] — `motolii_store::StoreView` から `AudioProgram`(MixSource列)を組む
 //! - [`clock`] — 音声クロック([`PlaybackCounters`]/[`DeviceWaitLatency`]の骨 +
 //!   start/pause/seekの状態機械 [`PlaybackClock`]。供給済みフレーム − デバイス待ち、
@@ -67,7 +71,9 @@ pub use decode::{decode_file, decode_file_audio_ordinal, decode_stream, MAX_SAMP
 pub use device::{negotiate_output, select_device_sample_rate, NegotiatedOutput, OutputStream};
 pub use error::{AudioError, Result};
 pub use meter::{AudioMeter, ClipLatch, MeterSnapshot, CLIP_THRESHOLD};
-pub use mix::{mix_audio, AudioOutOfRange, MixReport, MixSource};
+pub use mix::{
+    mix_audio, normalize_gain_for_peak, AudioOutOfRange, FadeCurve, FadeSpec, MixReport, MixSource,
+};
 pub use producer::MixProducer;
 pub use program::{program_from_sources, AudioProgram};
 pub use resample::{source_frame_to_device, FixedRatioResampler};
