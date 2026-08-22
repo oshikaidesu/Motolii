@@ -26,6 +26,8 @@ use std::collections::HashSet;
 use motolii_store::{LayerId, PropertyId};
 
 pub mod layout;
+/// パネルのフォーカス/巡回状態(B25 の状態側、発注 2026-08-22)。
+pub mod focus;
 
 /// front だけが持つ状態。**Document の写しは1つも入れないこと**。
 #[derive(Debug, Clone)]
