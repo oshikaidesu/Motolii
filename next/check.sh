@@ -66,6 +66,43 @@ if [ -f reference/lottie-coverage.tsv ]; then
     reference/lottie-coverage.tsv | sort -k2 -rn
 fi
 
+# 意図束(IB 44束、裁定177 / 2026-08-22)。normal-map.tsv の bundle 列(15列目)が
+# 正本 reference/intent-bundles.tsv と噛み合っているかを3点で見る:
+#   (a) 採用済/採用予定/保留/拡張の全行に bundle があること(不採用は空欄)
+#   (b) 記入された bundle id が intent-bundles.tsv に実在すること
+#   (c) 束ごとの行数が intent-bundles.tsv の size 申告と一致すること
+if [ -f reference/intent-bundles.tsv ] && [ -f reference/normal-map.tsv ]; then
+  echo
+  echo "=== 意図束(normal-map bundle 列 ⇔ intent-bundles.tsv)==="
+  ib_out="$(awk -F'\t' '
+    FNR==NR { if ($1 !~ /^#/ && $1 != "id") size[$1]=$5; next }
+    FNR>1 {
+      v=$13; b=$15
+      if ((v=="採用済"||v=="採用予定"||v=="保留"||v=="拡張") && b=="")
+        printf "NG: bundle 未記入 — id=%s(%s)\n", $1, v
+      if (v=="不採用" && b!="")
+        printf "NG: 不採用行に bundle — id=%s(%s)\n", $1, b
+      if (b!="") { if (!(b in size)) printf "NG: 未定義の bundle id — 行%s が %s を指す\n", $1, b; else n[b]++ }
+    }
+    END { for (b in size) if (n[b]+0 != size[b]+0)
+      printf "NG: 束 %s の行数 %d ≠ size 申告 %s\n", b, n[b]+0, size[b] }
+  ' reference/intent-bundles.tsv reference/normal-map.tsv)"
+  if [ -n "$ib_out" ]; then
+    echo "$ib_out"
+    fail=1
+  else
+    awk -F'\t' '
+      FNR==NR { if ($1 !~ /^#/ && $1 != "id") nb++; next }
+      FNR>1 && $15!="" { na++ }
+      END { printf "  束 %d / 割付 %d行 — 記入完全性・id実在・size一致の3検査 全通過\n", nb, na }
+    ' reference/intent-bundles.tsv reference/normal-map.tsv
+  fi
+else
+  echo
+  echo "NG: reference/intent-bundles.tsv か reference/normal-map.tsv がない"
+  fail=1
+fi
+
 echo
 [ "$fail" -eq 0 ] && echo "OK: wraps/owns marker 全通過" || echo "NG: marker 未記入あり"
 exit $fail
