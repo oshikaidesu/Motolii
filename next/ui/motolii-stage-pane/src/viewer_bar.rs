@@ -31,9 +31,12 @@
 //!
 //! ## この module の契約(発注書「純関数+部品として完結」)
 //!
-//! - **`Engine`/`motolii-shell` に触れない**。`&mut Engine` を取る関数もゼロ
-//!   (`crate::observation_preview_source` のような書き口はここには無い —
-//!   `tests/viewer_bar_fence.rs` がソーステキストで縛る)。
+//! - **`Engine`/`motolii-shell` に触れない**。`Engine` を可変で取る関数も
+//!   ゼロ(`crate::observation_preview_source` のような書き口はここには無い —
+//!   `tests/viewer_bar_fence.rs` がソーステキストで縛る)。**この行自体が
+//!   禁止パターンの文字列を書くと柵の grep が自己参照で誤爆する
+//!   (実測 2026-08-22、既存赤テスト回収発注)ため、ここでは記号を割って
+//!   表現する — 意味は上と同じ「`&` + `mut` + ` Engine`」。**
 //! - **`Message` は pane 全体([`crate::Message`])から独立**
 //!   ([`gizmo::GizmoDrag`] と同じ理由: 既存 `crate::Message` へ variant を
 //!   足すと `motolii-shell` 側の exhaustive match が壊れる — このレーンの

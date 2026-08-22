@@ -703,6 +703,17 @@ pub fn anchor_value(start: &GizmoTarget, cursor_parent: Vec2) -> ([f64; 2], [f64
         start.skew_degrees,
         start.skew_axis_degrees,
     );
+    // `placement.inverse()` を退化行列(det=0、例: scale 0)へ呼ぶと、glam の
+    // `Mat2::inverse()` が `1.0/det` を計算した直後に `glam_assert!` で
+    // 有限性を検査する(`debug-glam-assert`/`glam-assert` feature — 依存側の
+    // どこかが有効化していれば workspace 全体で unify される)ため、
+    // 「呼んでから `is_finite()` で後始末する」だと**その場で panic**する
+    // (下の `is_finite` チェックへ辿り着けない)。det を先に見て、退化
+    // (0 または非有限)なら inverse を呼ばずに開始時の値を返す。
+    let det = placement.matrix2.determinant();
+    if !det.is_finite() || det == 0.0 {
+        return unchanged;
+    }
     let local_from_parent = placement.inverse();
     if !local_from_parent.is_finite() {
         return unchanged;
