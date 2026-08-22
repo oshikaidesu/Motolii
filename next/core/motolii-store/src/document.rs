@@ -107,6 +107,22 @@ impl PropertyId {
         Self::new(&property_name)
     }
 
+    /// effect の on/off(`effects/effect en` 相当)。**裁定213**で
+    /// `EffectInstance::enabled` という静止 `bool` フィールドをやめ、他の
+    /// animatable な param(`effect_param`)と同じ平坦 track へ寄せた ——
+    /// `motolii_eval::Value::Bool` は補間が Hold なので、途中の値が存在しない
+    /// on/off の意味とちょうど合う(`effect.rs` モジュール doc 参照)。
+    ///
+    /// キーを打っていない(track が無い)= **既定で有効**(`true`)——`mask_opacity`
+    /// の「既定 1.0」と同じ判断(effect を追加した直後は何もしなくても効いて
+    /// いるはず、という利用者の直感)。
+    ///
+    /// 標準 property と同じく予約語でも空でもないので、構築は失敗し得ない。
+    pub fn effect_enabled(effect: crate::EffectId) -> Self {
+        let name = format!("{}{effect}.enabled", crate::property::EFFECT_PREFIX);
+        Self::new(&name).expect("effect の property 名は予約語でも空でもない")
+    }
+
     /// アニメーターの selector が動かす値(`text-range-selector s`/Start)。**平坦な
     /// 名前**(`text_range.{id}.selector.{attr}`)にしてあるので、マスク/effect と
     /// 同じく新しい機構を足さずに `KeyframeTrack` へ乗る。
@@ -300,7 +316,7 @@ pub enum Intent {
         track: motolii_eval::KeyframeTrack,
     },
     /// この property をスロット参照へ切り替える(`properties/property sid`、`slot`
-    /// 発注単位)。**`SetTrack` と書く先は同じ component** — `PropertySource::Slot` を
+    /// 発注単位)。**`SetTrack` と書く先は同じ component** — `PropertySource::slot()` を
     /// そこへ書くだけで、新しい component は増やさない(地図の note「第二の差し替え
     /// 機構を作らない」)。`SetTrack` を再び投げれば普通の track へ戻せる(同じ場所を
     /// 上書きするだけなので、専用の「解除」variant は要らない)。
@@ -310,10 +326,12 @@ pub enum Intent {
         slot: SlotId,
     },
     /// この property を**型付き link**(`docs/reviews/2026-08-22-persona-touchdesigner-round2.md`
-    /// §1、裁定206)へ切り替える。`SetTrack`/`SetPropertySlot` と全く同じ形 —
-    /// `PropertySource::Link` を同じ component へ書くだけで、第二の差し替え機構を
-    /// 増やさない。`SetTrack`/`SetPropertySlot` を再び投げれば普通の track/slot へ
-    /// 戻せる(同じ場所を上書きするだけ、専用の「解除」variant は要らない)。
+    /// §1、裁定206。裁定213 で加算の特殊形として `PropertySource::link_only` へ
+    /// 移った)へ切り替える。`SetTrack`/`SetPropertySlot` と全く同じ形 —
+    /// `PropertySource::link_only()` を同じ component へ書くだけで、第二の差し替え
+    /// 機構を増やさない。`SetTrack`/`SetPropertySlot` を再び投げれば普通の
+    /// track/slot へ戻せる(同じ場所を上書きするだけ、専用の「解除」variant は
+    /// 要らない)。
     ///
     /// **循環は書き込み時に拒否する**([`validate_no_link_cycle`]) — Blender の
     /// driver 依存グラフのような実行時検出・事後警告(§1.1/§1.5、循環実測
@@ -325,6 +343,26 @@ pub enum Intent {
         layer: LayerId,
         property: PropertyId,
         link: PropertyLink,
+    },
+    /// この property の modulator 列を差し替える(裁定213「接続子は加算」)。
+    /// **`base`(現在の `Track`/`Slot`)は読んで保つ** — `SetPropertyLink` が
+    /// base ごと置き換えるのとは違い、これは「今の値の上に、これらを足す」を
+    /// 書く口(`SetAttrs` が現在の `attrs` を読んでから部分更新するのと同じ
+    /// 読み-書きの形)。空の `Vec` を渡せば modulator を全部外せる(専用の
+    /// 「解除」variant は要らない、既存の流儀のまま)。
+    ///
+    /// **循環は modulator 1本ごとに [`validate_no_link_cycle`] で拒否する**
+    /// (`SetPropertyLink` と同じ柵)。
+    SetPropertyModulators {
+        layer: LayerId,
+        property: PropertyId,
+        modulators: Vec<PropertyLink>,
+    },
+    /// カメラの property 版(同上、`SetCameraTrack`/`SetCameraPropertySlot` と
+    /// entity を分けているのと同じ形)。
+    SetCameraPropertyModulators {
+        property: PropertyId,
+        modulators: Vec<PropertyLink>,
     },
     /// 素材と重ね順の**新規配置専用**。
     ///
@@ -903,7 +941,7 @@ impl Document {
                 crate::mask::validate_unique_ids(&masks)?;
                 let masks_json = serde_json::to_string(&masks)?;
                 let shape_property = crate::PropertyId::mask_shape(mask.id);
-                let shape_json = serde_json::to_string(&PropertySource::Track(shape))?;
+                let shape_json = serde_json::to_string(&PropertySource::track(shape))?;
                 // **1つの chunk として同時に ingest する**(下の `(path, batches)` を
                 // 呼び出し元の `write()` 末尾がまとめて1回で書く) — 「一覧だけ更新
                 // されて shape が無い」瞬間が物理的に存在しない(2つの intent の
@@ -1126,10 +1164,16 @@ impl Document {
             } => {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen(&self.view(), layer)?;
-                // **`PropertySource::Track` でラップして書く**(`slot` 発注単位)。
-                // untagged なので wire 形は今までの `KeyframeTrack` の JSON と同じ —
-                // 既存の呼び手・読み手(`view.track()`)は何も変わらない。
-                let json = serde_json::to_string(&PropertySource::Track(track))?;
+                // **`PropertySource::track()` でラップして書く**(`slot` 発注単位)。
+                // 裁定213 で wire 形は明示的な `{"base":...,"modulators":[]}` に
+                // なった(bit単位で裸 `KeyframeTrack` と同じではない)が、読み口
+                // (`view.track()`)は旧形式ごと後方互換で読むので既存の呼び手は
+                // 変わらない。**丸ごと上書き**(modulator も含めて消える) —
+                // `Slot`/`Link` から普通の track へ戻す時に「専用の解除操作は
+                // 要らない」という既存の設計(このファイル各所の doc 参照)を
+                // modulator にもそのまま適用する。modulator だけを差し替えたい
+                // 呼び手は [`Intent::SetPropertyModulators`] を使うこと。
+                let json = serde_json::to_string(&PropertySource::track(track))?;
                 (
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
@@ -1140,7 +1184,7 @@ impl Document {
                 )
             }
             Intent::SetCameraTrack { property, track } => {
-                let json = serde_json::to_string(&PropertySource::Track(track))?;
+                let json = serde_json::to_string(&PropertySource::track(track))?;
                 (
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
@@ -1157,7 +1201,7 @@ impl Document {
             } => {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen(&self.view(), layer)?;
-                let json = serde_json::to_string(&PropertySource::Slot(slot))?;
+                let json = serde_json::to_string(&PropertySource::slot(slot))?;
                 (
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
@@ -1175,7 +1219,11 @@ impl Document {
                 check_not_locked(&self.view(), layer)?;
                 check_not_frozen(&self.view(), layer)?;
                 validate_no_link_cycle(&self.view(), layer, &property, &link)?;
-                let json = serde_json::to_string(&PropertySource::Link(link))?;
+                // **裁定213**: 加算が「置き換え」を包含する — base を持たず
+                // modulator 1本だけの形(`link_only`)は、旧 `PropertySource::Link`
+                // と全く同じ値を返す(`None` + x = x)。この Intent の見た目の
+                // 挙動(この property を丸ごと link の値にする)は変えない。
+                let json = serde_json::to_string(&PropertySource::link_only(link))?;
                 (
                     layer.entity_path(),
                     vec![SerializedComponentBatch {
@@ -1186,7 +1234,70 @@ impl Document {
                 )
             }
             Intent::SetCameraPropertySlot { property, slot } => {
-                let json = serde_json::to_string(&PropertySource::Slot(slot))?;
+                let json = serde_json::to_string(&PropertySource::slot(slot))?;
+                (
+                    Self::composition_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_track(&property),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetPropertyModulators {
+                layer,
+                property,
+                modulators,
+            } => {
+                check_not_locked(&self.view(), layer)?;
+                check_not_frozen(&self.view(), layer)?;
+                for link in &modulators {
+                    validate_no_link_cycle(&self.view(), layer, &property, link)?;
+                }
+                // **`base` は読んで保つ**(`SetAttrs` と同じ「現在を読んでから
+                // 該当フィールドだけ差し替える」形) — `SetPropertyLink`/
+                // `SetTrack`/`SetPropertySlot` の「丸ごと置き換え」とは違う口。
+                let mut source = self
+                    .view()
+                    .property_source(layer, &property)?
+                    .unwrap_or(PropertySource {
+                        base: None,
+                        modulators: Vec::new(),
+                    });
+                source.modulators = modulators;
+                let json = serde_json::to_string(&source)?;
+                (
+                    layer.entity_path(),
+                    vec![SerializedComponentBatch {
+                        descriptor: descriptor_track(&property),
+                        array: <TrackJson as re_types_core::Loggable>::to_arrow([TrackJson(json)])
+                            .map_err(|e| StoreError::Chunk(e.to_string()))?,
+                    }],
+                )
+            }
+            Intent::SetCameraPropertyModulators {
+                property,
+                modulators,
+            } => {
+                // カメラの property には layer が無いので、循環検査の起点は
+                // `Document::composition_path()` を指す仮想の layer id を持たない
+                // ——`validate_no_link_cycle` は `(LayerId, PropertyId)` を鍵にする
+                // ため、カメラ自身が modulator の参照先(source_layer/source_property)
+                // に選ばれることは無い(`PropertyLink::source_layer` は常に
+                // 実在 layer を指す設計、`SetCameraPropertyModulators` 自身は
+                // 「カメラの property を起点とする」循環しか気にする必要が無い)。
+                // カメラを指す循環は「カメラ自身が link 元になる」経路が無い
+                // ので構造的に発生しない——検査は省略してよい
+                // (`SetCameraTrack`/`SetCameraPropertySlot` も同様に検査を持たない)。
+                let mut source = self
+                    .view()
+                    .camera_property_source(&property)?
+                    .unwrap_or(PropertySource {
+                        base: None,
+                        modulators: Vec::new(),
+                    });
+                source.modulators = modulators;
+                let json = serde_json::to_string(&source)?;
                 (
                     Self::composition_path(),
                     vec![SerializedComponentBatch {
@@ -1544,6 +1655,11 @@ fn validate_no_parent_cycle(
 /// #64793](https://projects.blender.org/blender/blender/issues/64793) が報告する
 /// 「ジャンプ・チラつき」の原因そのもの)——ここは書き込み時に拒むので、その弱点を
 /// 生じさせない。`seen` は防御的な保険(`validate_no_parent_cycle` と同じ理由)。
+/// **裁定213 で分岐に対応した** — 排他的な `Link` 単鎖だった頃は「次の1点」を
+/// 辿るだけで足りたが、`modulators` は複数本になり得るので、これは DFS
+/// (スタック + 訪問済み集合)になった。`new_link` 自身の参照鎖に加えて、
+/// 参照先が既に持っている**全** modulator を枝として辿る——どの枝から辿っても
+/// `start` へ戻れば拒む。
 fn validate_no_link_cycle(
     view: &StoreView,
     layer: LayerId,
@@ -1551,9 +1667,10 @@ fn validate_no_link_cycle(
     new_link: &PropertyLink,
 ) -> Result<(), StoreError> {
     let start = (layer, property.clone());
-    let mut current = Some((new_link.source_layer, new_link.source_property.clone()));
-    let mut seen = std::collections::HashSet::new();
-    while let Some(candidate) = current {
+    let mut seen: std::collections::HashSet<(LayerId, PropertyId)> = std::collections::HashSet::new();
+    seen.insert(start.clone());
+    let mut stack = vec![(new_link.source_layer, new_link.source_property.clone())];
+    while let Some(candidate) = stack.pop() {
         if candidate == start {
             return Err(StoreError::Property(format!(
                 "layer {} の property `{}` を layer {} の property `{}` へ link すると \
@@ -1565,16 +1682,13 @@ fn validate_no_link_cycle(
             )));
         }
         if !seen.insert(candidate.clone()) {
-            break; // 既に壊れた鎖(バグ由来)を無限に辿らない防御。
+            continue; // 既に見た枝(合流点)は辿り直さない。
         }
-        current = view
-            .property_source(candidate.0, &candidate.1)
-            .ok()
-            .flatten()
-            .and_then(|src| match src {
-                PropertySource::Link(l) => Some((l.source_layer, l.source_property)),
-                _ => None, // Track/Slot は鎖の終端。
-            });
+        if let Some(source) = view.property_source(candidate.0, &candidate.1).ok().flatten() {
+            for modulator in &source.modulators {
+                stack.push((modulator.source_layer, modulator.source_property.clone()));
+            }
+        }
     }
     Ok(())
 }

@@ -15,7 +15,7 @@ use crate::components::{
     descriptor_slots, descriptor_text, descriptor_track, LayerPresent, TrackJson,
 };
 use crate::document::{TrackCache, TransientKey};
-use crate::slot::PropertySource;
+use crate::slot::{PropertyBase, PropertySource};
 use crate::{
     property, Asset, AssetId, AssetTable, Composition, Document, EffectInstance, LayerAttrs,
     LayerId, LayerMeta, LayerPlacement, LayerSource, Marker, Mask, PropertyId, ResolvedEffect,
@@ -278,8 +278,14 @@ impl<'a> StoreView<'a> {
         property: &PropertyId,
     ) -> Result<Option<KeyframeTrack>, StoreError> {
         Ok(match self.source_at_path(path, property)? {
-            Some(PropertySource::Track(track)) => Some(track),
-            Some(PropertySource::Slot(_)) | Some(PropertySource::Link(_)) | None => None,
+            Some(PropertySource {
+                base: Some(PropertyBase::Track(track)),
+                ..
+            }) => Some(track),
+            // base が Slot・base 無し(modulator だけ)・そもそも source が無い、
+            // のどれも「この property 自身の track」は持たない(裁定213 でも
+            // この非対称は変わらない——評価済みの値が欲しければ `value_at`)。
+            _ => None,
         })
     }
 
@@ -352,12 +358,18 @@ impl<'a> StoreView<'a> {
         self.value_at_path_resolving_links(path, property, t, 0)
     }
 
-    /// [`Self::value_at_path`] の本体。`link_depth` は [`PropertySource::Link`] の
-    /// 参照鎖を辿った深さ——`Intent::SetPropertyLink` は書き込み時に循環を拒む
-    /// (`document::validate_no_link_cycle`)ので正常な Document ではここが伸び続ける
-    /// ことは無いはずだが、`world_affine`/`frozen_ancestor` と同じ「壊れた Document
-    /// を読んだ場合に備えた第二の防御」をここにも掛ける(手で書き換えた保存ファイル
-    /// 等、書き込み経路を通らずに循環が紛れ込む可能性を潰す)。
+    /// [`Self::value_at_path`] の本体。`link_depth` は modulator の参照鎖を辿った
+    /// 深さ——`Intent::SetPropertyLink`/`Intent::SetPropertyModulators` は書き込み時に
+    /// 循環を拒む(`document::validate_no_link_cycle`)ので正常な Document ではここが
+    /// 伸び続けることは無いはずだが、`world_affine`/`frozen_ancestor` と同じ「壊れた
+    /// Document を読んだ場合に備えた第二の防御」をここにも掛ける(手で書き換えた
+    /// 保存ファイル等、書き込み経路を通らずに循環が紛れ込む可能性を潰す)。
+    ///
+    /// **裁定213**: 値 = `base` の評価値 + `modulators` の寄与の和。`Value::add`
+    /// (`motolii-eval`)が「変調できる型」の境界を持っている——`Bool`/`Enum`/
+    /// `LayerId` は常に `None` を返すので、そこでは**単一 source が勝つ**(最初に
+    /// 確定した値のまま、以降の modulator は無視される)。型不一致・`Path` の
+    /// 頂点数不一致も同じ理由で無視(近似しない、`translate_link` と同じ規約)。
     fn value_at_path_resolving_links(
         &self,
         path: &EntityPath,
@@ -372,41 +384,64 @@ impl<'a> StoreView<'a> {
         if let Some(value) = self.transient_value_at(path, property) {
             return Ok(Some(value));
         }
-        match self.source_at_path(path, property)? {
-            Some(PropertySource::Track(track)) => Ok(Some(track.eval(t))),
+        let Some(source) = self.source_at_path(path, property)? else {
+            return Ok(None);
+        };
+
+        // base の評価値(無ければ `None` — modulator の和だけが値になる)。
+        let mut acc: Option<Value> = match source.base {
+            Some(PropertyBase::Track(track)) => Some(track.eval(t)),
             // **スロット参照はここで解決する** — `value_at`/`camera_value_at` を
-            // 呼ぶ側は「この property がスロットへ委譲しているか」を意識しなくてよい
-            // (`properties/property sid` の意味そのもの、地図の note どおり)。
-            Some(PropertySource::Slot(slot_id)) => {
-                Ok(self.slot_track(&slot_id)?.map(|track| track.eval(t)))
+            // 呼ぶ側は「この property がスロットへ委譲しているか」を意識しなくて
+            // よい(`properties/property sid` の意味そのもの、地図の note どおり)。
+            Some(PropertyBase::Slot(slot_id)) => {
+                self.slot_track(&slot_id)?.map(|track| track.eval(t))
             }
-            // **link 参照もここで解決する**(裁定206、`slot` 発注単位の型付き link
-            // 拡張)。読むのは (a) `t + time_offset`(Document 由来の静的値) (b)
-            // 参照先 property を**同じ `value_at_path` 経路**で再帰的に解決した値
-            // (c) `params`(Document 由来の animatable 値)だけ——壁時計・ライブ音声・
-            // 乱数・OS入力を一切読まないので、`motolii-eval` の「時刻t→値の純関数」
-            // 契約(`motolii-eval/src/lib.rs:16`)にそのまま収まる。
-            Some(PropertySource::Link(link)) => {
-                if link_depth >= MAX_LINK_DEPTH {
-                    return Err(StoreError::Property(format!(
-                        "link の参照鎖が深すぎる({MAX_LINK_DEPTH}段以上) — 書き込み時の\
-                         循環拒否をすり抜けた壊れた Document の可能性がある"
-                    )));
-                }
-                let source_t = t.try_add(link.time_offset).map_err(|e| {
-                    StoreError::Property(format!("link の time_offset を適用できない: {e}"))
-                })?;
-                let source_value = self.value_at_path_resolving_links(
-                    &link.source_layer.entity_path(),
-                    &link.source_property,
-                    source_t,
-                    link_depth + 1,
-                )?;
-                Ok(source_value
-                    .and_then(|value| crate::slot::translate_link(&link.plugin_id, &link.params, value)))
+            None => None,
+        };
+
+        // **modulator の寄与を加算する**(裁定206 の型付き link 機構をそのまま
+        // 「和の1項」として再利用)。読むのは (a) `t + time_offset`(Document 由来の
+        // 静的値) (b) 参照先 property を**同じ経路**で再帰的に解決した値 (c)
+        // `params`(Document 由来の animatable 値)だけ——壁時計・ライブ音声・乱数・
+        // OS入力を一切読まないので、`motolii-eval` の「時刻t→値の純関数」契約
+        // (`motolii-eval/src/lib.rs:16`)にそのまま収まる。
+        for modulator in &source.modulators {
+            if link_depth >= MAX_LINK_DEPTH {
+                return Err(StoreError::Property(format!(
+                    "link/modulator の参照鎖が深すぎる({MAX_LINK_DEPTH}段以上) — \
+                     書き込み時の循環拒否をすり抜けた壊れた Document の可能性がある"
+                )));
             }
-            None => Ok(None),
+            let source_t = t.try_add(modulator.time_offset).map_err(|e| {
+                StoreError::Property(format!("modulator の time_offset を適用できない: {e}"))
+            })?;
+            let source_value = self.value_at_path_resolving_links(
+                &modulator.source_layer.entity_path(),
+                &modulator.source_property,
+                source_t,
+                link_depth + 1,
+            )?;
+            // 参照先に値が無ければ、この modulator は寄与しない(裁定20の応用 —
+            // ぶら下がった参照と同じ「無いだけ」の扱い)。
+            let Some(source_value) = source_value else {
+                continue;
+            };
+            let Some(contribution) =
+                crate::slot::translate_link(&modulator.plugin_id, &modulator.params, source_value)
+            else {
+                continue; // 型不一致・未知の plugin_id は近似せず寄与ゼロ。
+            };
+            acc = Some(match acc {
+                // **加算できなければ単一 source が勝つ**(`Value::add` が `None` を
+                // 返す=Hold型・型不一致・Path条件不成立)——先に確定していた値を
+                // そのまま保つ(base があれば base、無ければ先に確定した modulator)。
+                Some(current) => current.add(&contribution).unwrap_or(current),
+                None => contribution,
+            });
         }
+
+        Ok(acc)
     }
 
     /// `path` が指す entity(layer か `/composition`)に、`property` の overlay が
@@ -754,6 +789,11 @@ impl<'a> StoreView<'a> {
     /// フラグとして運ばず、入口で除く)。空スタックは `self.effects(layer)?` の1回の
     /// 読み出しだけで即 return し、`self.properties(layer)`(component 一覧の走査)
     /// までは踏まない — effect の無い layer の resolve コストを増やさないため。
+    ///
+    /// **裁定213**: 有効/無効はもう `EffectInstance::enabled` という静止フィールド
+    /// ではなく、`PropertyId::effect_enabled` の track(`Value::Bool`、Hold 補間)を
+    /// この comp 時刻 `t` で評価して読む——「切る」がキーフレーム可能になった
+    /// (`effect.rs` モジュール doc「2026-08-23」節参照)。
     fn resolved_effects(
         &self,
         layer: LayerId,
@@ -770,7 +810,20 @@ impl<'a> StoreView<'a> {
 
         let mut out = Vec::with_capacity(effects.len());
         for effect in effects {
-            if !effect.enabled {
+            let enabled_property = crate::PropertyId::effect_enabled(effect.id);
+            // キーを打っていない = 既定で有効(`mask_opacity` の「既定 1.0」と同じ
+            // 判断 — 裁定20 の応用)。「壊れている」(真偽でない値)は近似せず Err。
+            let enabled = match self.value_at(layer, &enabled_property, t)? {
+                Some(Value::Bool(v)) => v,
+                Some(other) => {
+                    return Err(StoreError::Property(format!(
+                        "effect {} の enabled に真偽でない値が入っている: {other:?}",
+                        effect.id
+                    )))
+                }
+                None => true,
+            };
+            if !enabled {
                 continue;
             }
             let prefix = format!("{}{}.param.", property::EFFECT_PREFIX, effect.id);

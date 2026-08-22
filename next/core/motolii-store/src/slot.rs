@@ -42,6 +42,65 @@
 //! v1 のスコープは閉じている(§1.2): 単一ソース→単一ターゲット・片方向のみ。
 //! LookAt(2入力から1つを作る)は範囲外——`next/GOALS.md` が親子(型付き
 //! Follow/LookAt)を link とは別に名指ししており、伸びる先として位置だけ示す。
+//!
+//! ## 2026-08-23: 排他的三択 → base + 加算する modulator へ(裁定213)
+//!
+//! 利用者裁定「接続子は加算・ゲートはキーフレーム」がここを作り直した。
+//! [`PropertySource`] は「`Track`/`Slot`/`Link` のどれか1つが勝つ」排他的な
+//! 三択をやめ、**`base`(`Track`/`Slot` のどちらか、無くてもよい) + `modulators`
+//! (加算で寄与する [`PropertyLink`] の列)**という構造化された形になった。
+//! 値は `base の評価値 + Σ(modulators の寄与)`。
+//!
+//! **`Link` は排他枝から modulator 側へ移した**(判断・根拠は下記)。加算が
+//! 「置き換え」を包含する——`base` を持たず modulator を1本だけ持てば、`None`
+//! (何も足されない)+ その modulator の値 = その modulator の値そのものなので、
+//! 旧 `PropertySource::Link` が表していた「この property を丸ごと別 property の
+//! 値にする」という用法は [`PropertySource::link_only`] で完全に同じ値を返す。
+//! 呼び手が1つ(`ui/motolii-inspector-pane::link`)しかいない今のうちに動かした
+//! ——2人目の利用者が現れてから両方の形を生かす理由が無い(裁定13 と同じ判断)。
+//!
+//! **変調できる型の境界は発明しない** — `motolii_eval::Value` が自分で書いている
+//! 「補間は Hold」の3型(`Bool`/`Enum`/`LayerId`)は加算も無意味なので変調不可
+//! (単一 source が勝つ、[`motolii_eval::Value::add`] が常に `None` を返す)。
+//! `F64`/`Vec2`/`Color`/`Path` は加算できる(`Color` はアルファ込みの4成分、
+//! `Path` は `lerp` と同じ「頂点数と `closed` が一致する時だけ」)。
+//!
+//! **概念の穴と判断**(利用者からの追加裁定、5点、勝手に据え置かない):
+//!
+//! 1. **範囲外に出た時**: eval 層(ここ・`motolii-eval`)は **clamp しない**。
+//!    `Value::lerp` の `Color` 実装が既に clamp していない(ベジェイージングの
+//!    overshoot で範囲外の中間値が今でも作れる)ので、`add` だけ特別に clamp すると
+//!    「lerp は素通し、add だけ丸める」という一貫しない挙動になる。**既存の
+//!    domain-specific な消費側**(`StoreView::resolve` の layer opacity・
+//!    `resolved_masks` の mask opacity、どちらも既に `.clamp(0.0, 1.0)` 済み)が
+//!    F64 opacity は最終的に丸める——modulator 由来でも同じ経路を通るので**この
+//!    2箇所は追加の変更なしで安全**。**`Value::Color` は今のところ resolve 側の
+//!    clamp が無い**——ここ(store/eval)にドメイン知識(どの property が
+//!    0..1 か)を埋めるのは裁定70 の思想(store は plugin/property の意味を知らない)
+//!    に反するので、**厳しい側 = 拒否・報告** は export 境界(`motolii-export`、
+//!    write-set 外)の仕事にする: 焼いた値が Lottie の妥当域を外れたら
+//!    `effect_unsupported`/`check_audio_settings_unsupported` と同じ
+//!    `UnsupportedForLottie` で**報告**し、黙って clamp/export しない
+//!    (RETURN にこの follow-up を明記)
+//! 2. **スケールが 0 を跨ぐ**: 意味のある表現(反転)なので潰さない。この
+//!    crate(`world_affine`/`local_transform`/`LayerPlacement::from_transform`)は
+//!    scale を**前向きに合成するだけ**で `.inverse()` を一度も呼ばない——
+//!    `glam` が自己アサートで落ちるのは逆行列を取る時だけ(`AGENTS.md`)なので、
+//!    ここでは 0 通過は無害。**危険なのは呼び手**(`ui/motolii-stage-pane` の
+//!    gizmo/hit-test、`checked_inverse` 経由)側だが、そちらは write-set 外
+//! 3. **override は表現できない**: 意図どおり——加算だけの機構では「base を
+//!    無視してこの値にする」は書けない。**Ableton も変調は常にツマミ位置からの
+//!    相対**なので、これは欠落ではなく仕様。base 自体を差し替えたければ
+//!    `Intent::SetTrack`/`SetPropertySlot` で base 自体を編集する(または
+//!    `link_only` のように base を持たない形にする)
+//! 4. **和に上限を設けない**: Ableton の macro assignment のような modulator
+//!    ごとの range は持たない——シンプルさを優先する判断。将来 2人目の利用者が
+//!    range を要求したら、その時に `PropertyLink` へ足す(裁定13)
+//! 5. **`time_offset` の負値は許可する**: `RationalTime`/`KeyframeTrack::eval`は
+//!    既に負の時刻を普通に扱う(`eval` は `t <= keys[0].t` を「先頭キーフレーム
+//!    より前」として先頭値を返すだけで符号を見ない)——source_t が comp 開始
+//!    より前に出ても、既存の「最初のキーフレームより前は Hold」がそのまま
+//!    適用される。新しい特別扱いは要らない(`tests/modulator.rs` で固定)
 
 use serde::{Deserialize, Serialize};
 
@@ -76,25 +135,260 @@ pub struct Slot {
     pub track: motolii_eval::KeyframeTrack,
 }
 
-/// property の値の出処。`properties/property sid` の note が指定した二択に、
-/// 2026-08-22(裁定206)で `Link` を足した三択。
+/// property の値の出処(裁定213)。**値 = `base` の評価値 + `modulators` の寄与の和**。
 ///
-/// **`Track`**: 今までどおりこの property 自身の `KeyframeTrack`。
-/// **`Slot`**: comp の [`Slot`] 表の該当行を指す参照 — 値はそこから引く(テンプレートの
-/// 差し替え口。同じ `sid` を持つ複数の property が、comp の1箇所を直せば揃って変わる)。
-/// **`Link`**: 別 layer の別 property の値を読んで決める片方向参照(モジュール doc
-/// 「2026-08-22」節参照)。
+/// `base` は今までどおり `Track`(この property 自身の `KeyframeTrack`)か
+/// `Slot`(comp の [`Slot`] 表への参照)のどちらか、または**無し**(=このproperty
+/// 自身は値を持たず、modulator の和だけが値になる——旧 `PropertySource::Link`
+/// 相当、[`Self::link_only`] 参照)。`modulators` は加算で寄与する
+/// [`PropertyLink`] の列(裁定213 の「接続子は加算」)。
 ///
-/// `#[serde(untagged)]` の理由はモジュール doc 参照——`Link` は3つ目のオブジェクト
-/// 形(`source_layer`/`source_property`/`time_offset`/`plugin_id`/`params` の5
-/// フィールド)なので、`Track` の `{"keys":[...]}` とも `Slot` の裸文字列とも構造的に
-/// 衝突しない。旧 Document(`Track`/`Slot` のみ)は無改造で読める。
+/// **書き込みは常にこの明示形**(`{"base": ..., "modulators": [...]}`)。
+/// **読み込みは3つの旧形式もそのまま受け付ける**(後方互換、`Deserialize` 実装
+/// 参照): 裸の `KeyframeTrack` オブジェクト(旧 `Track`)・裸の文字列(旧
+/// `Slot`)・`source_layer`/`source_property`/`time_offset`/`plugin_id`/`params`
+/// の5フィールドオブジェクト(裁定206当時の旧 `Link`、`base` キーを持たないので
+/// 新形式と構造的に衝突しない)。どの旧形式も [`PropertySource::track`]/
+/// [`PropertySource::slot`]/[`PropertySource::link_only`] のいずれかへ写る。
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct PropertySource {
+    /// この property 自身の値の由来。`None` = このproperty自身は何も持たない
+    /// (modulator の和だけが値になる)。
+    pub base: Option<PropertyBase>,
+    /// 加算で寄与する modulator の列(裁定213)。空なら `base` だけの値
+    /// (既存の全 Document と完全互換の意味)。
+    ///
+    /// **常に書く**(空でも `skip_serializing_if` しない) — `base: Option<_>` は
+    /// serde の既定で「キーが無ければ `None`」に落ちてしまい(`#[serde(default)]`
+    /// を付けていなくても serde_derive がそう扱う)、`base` の有無だけでは旧3形式
+    /// (裸 `Track`/裸 `Slot`/裁定206単独 `Link`、どれも `base`/`modulators` という
+    /// キーを持たない)と新形式を区別できない。**`modulators` キーの有無**で区別する
+    /// ([`Deserialize`] 実装の `Explicit` がこのキーを必須にしている)。
+    pub modulators: Vec<PropertyLink>,
+}
+
+/// [`PropertySource::base`] の中身。**排他的な二択**(`properties/property sid`
+/// の note どおり) — この2つは「この property 自身が持つ静止/アニメーション
+/// 値」の由来であって、modulator(他 property からの加算寄与)とは性質が違う
+/// ので混ぜない。
+///
+/// `#[serde(untagged)]`: `Track` の wire 形は `KeyframeTrack` の JSON
+/// (`{"keys":[...]}`)、`Slot` は裸の文字列——構造的に衝突しない。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum PropertySource {
+pub enum PropertyBase {
     Track(motolii_eval::KeyframeTrack),
     Slot(SlotId),
-    Link(PropertyLink),
+}
+
+impl PropertySource {
+    /// 普通の track を base に持つ形(modulator 無し)。
+    pub fn track(track: motolii_eval::KeyframeTrack) -> Self {
+        Self {
+            base: Some(PropertyBase::Track(track)),
+            modulators: Vec::new(),
+        }
+    }
+
+    /// スロット参照を base に持つ形(modulator 無し)。
+    pub fn slot(id: SlotId) -> Self {
+        Self {
+            base: Some(PropertyBase::Slot(id)),
+            modulators: Vec::new(),
+        }
+    }
+
+    /// 旧 `PropertySource::Link`(裁定206)に相当する形 — base を持たず
+    /// modulator 1本だけ。加算の特殊形として全く同じ値を返す(`None` に相当する
+    /// 「何も足さない」+ この modulator の値 = この modulator の値そのもの)。
+    pub fn link_only(link: PropertyLink) -> Self {
+        Self {
+            base: None,
+            modulators: vec![link],
+        }
+    }
+
+    /// この source が「旧 Link 相当」(base 無し・modulator 1本)なら、その
+    /// modulator を返す。呼び手(`ui/motolii-inspector-pane` の LINK section)が
+    /// 「これは実質 link だ」と判定したい時のための最小の互換アクセサ
+    /// (裁定213 で型が変わった呼び手への手当て)。
+    pub fn as_link_only(&self) -> Option<&PropertyLink> {
+        match (&self.base, self.modulators.as_slice()) {
+            (None, [link]) => Some(link),
+            _ => None,
+        }
+    }
+}
+
+/// 後方互換の核(裁定213): 旧3形式(裸 `Track`/裸 `Slot`/裁定206単独 `Link`)と
+/// 新形式(`{"base":...,"modulators":[...]}`)を1つの `PropertySource` へ写す。
+///
+/// **手書きの `Visitor`**(`#[serde(untagged)]` は使わない)。最初の実装は
+/// `#[serde(untagged)]` な `Wire` enum で4形式を順に試す形だったが、untagged は
+/// 「まず入力全体を汎用 `Content` へバッファし、そこから各 variant へ変換を
+/// 試す」という実装のため、大きな `KeyframeTrack`(数百 keyframe)を持つ
+/// property で二重コストになり、`tests/document.rs::edit_storm_with_the_real_track_type`
+/// (R0-1 の性能予算固定)を **1000µs → 7023µs** まで悪化させた(2026-08-23
+/// 実測・`cargo test` で発覚)。`KeyframeTrack` 自身は元々
+/// `#[serde(try_from = "KeyframeTrackDe")]` という**バッファ無しの直接変換**
+/// だった(`track()` コストの97%が serde_json 解析という裁定140の計測は、この
+/// 直接変換が前提)ので、`PropertySource` 側で untagged を挟むとその前提が崩れる。
+///
+/// ここでは **最初の1キーだけを見て**(ストリーミング、`Content` を作らない)
+/// 4形式のどれかへ即分岐する——`"keys"` なら `Track`(値をそのまま
+/// `Vec<Keyframe>` として直接読み、[`motolii_eval::KeyframeTrack::try_from_keys`]
+/// で検証込みで組む=`KeyframeTrackDe` と同じ経路)、`"base"`/`"modulators"` なら
+/// 新形式、それ以外(`source_layer` 等)なら旧 `Link`(5フィールド、小さいので
+/// 汎用の逐次読みで十分——性能問題が起きるのは大きい `Track` の側だけ)。
+impl<'de> Deserialize<'de> for PropertySource {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "snake_case")]
+        enum Field {
+            Keys,
+            Base,
+            Modulators,
+            SourceLayer,
+            SourceProperty,
+            TimeOffset,
+            PluginId,
+            Params,
+        }
+
+        struct PropertySourceVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for PropertySourceVisitor {
+            type Value = PropertySource;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(
+                    "a PropertySource: bare KeyframeTrack object, bare Slot string, \
+                     legacy Link object, or {\"base\":...,\"modulators\":[...]}",
+                )
+            }
+
+            // 旧 `PropertySource::Slot`(裸文字列)。
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(PropertySource::slot(SlotId(v.to_owned())))
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(PropertySource::slot(SlotId(v)))
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::MapAccess<'de>,
+            {
+                use serde::de::Error as _;
+
+                let Some(first_key) = map.next_key::<Field>()? else {
+                    return Err(A::Error::custom(
+                        "PropertySource: 空オブジェクトはどの形式にも合わない",
+                    ));
+                };
+
+                match first_key {
+                    // **旧 `Track`**: 唯一のフィールドを直接 `Vec<Keyframe>` として
+                    // 読む(`Content` を経由しない、`KeyframeTrackDe` と同じ形の
+                    // 直接変換)。
+                    Field::Keys => {
+                        let keys: Vec<motolii_eval::Keyframe> = map.next_value()?;
+                        // 想定外の追加キーが来ても寛容に読み捨てる(旧形式の
+                        // 寛容さをそのまま踏襲、deny_unknown_fields はしない)。
+                        while map
+                            .next_entry::<serde::de::IgnoredAny, serde::de::IgnoredAny>()?
+                            .is_some()
+                        {}
+                        let track = motolii_eval::KeyframeTrack::try_from_keys(keys)
+                            .map_err(A::Error::custom)?;
+                        Ok(PropertySource::track(track))
+                    }
+                    // **新形式**(`base`/`modulators`、どちらが先に来ても受ける)。
+                    // `base` は未指定でも `None`(=このproperty自身は値を持たない)
+                    // として妥当なので、専用の追跡フラグは要らない。
+                    Field::Base | Field::Modulators => {
+                        let mut base: Option<PropertyBase> = None;
+                        let mut modulators: Option<Vec<PropertyLink>> = None;
+                        let mut key = Some(first_key);
+                        loop {
+                            let field = match key.take() {
+                                Some(f) => f,
+                                None => match map.next_key::<Field>()? {
+                                    Some(f) => f,
+                                    None => break,
+                                },
+                            };
+                            match field {
+                                Field::Base => base = map.next_value()?,
+                                Field::Modulators => modulators = Some(map.next_value()?),
+                                _ => {
+                                    let _: serde::de::IgnoredAny = map.next_value()?;
+                                }
+                            }
+                        }
+                        let modulators = modulators
+                            .ok_or_else(|| A::Error::missing_field("modulators"))?;
+                        Ok(PropertySource { base, modulators })
+                    }
+                    // **旧 `Link`**(裁定206、5フィールド)。小さいので汎用の
+                    // 逐次読みで十分(性能問題は大きい `Track` の側だけ)。
+                    _ => {
+                        let mut source_layer = None;
+                        let mut source_property = None;
+                        let mut time_offset = None;
+                        let mut plugin_id = None;
+                        let mut params = None;
+                        let mut key = Some(first_key);
+                        loop {
+                            let field = match key.take() {
+                                Some(f) => f,
+                                None => match map.next_key::<Field>()? {
+                                    Some(f) => f,
+                                    None => break,
+                                },
+                            };
+                            match field {
+                                Field::SourceLayer => source_layer = Some(map.next_value()?),
+                                Field::SourceProperty => {
+                                    source_property = Some(map.next_value()?)
+                                }
+                                Field::TimeOffset => time_offset = Some(map.next_value()?),
+                                Field::PluginId => plugin_id = Some(map.next_value()?),
+                                Field::Params => params = Some(map.next_value()?),
+                                Field::Keys | Field::Base | Field::Modulators => {
+                                    let _: serde::de::IgnoredAny = map.next_value()?;
+                                }
+                            }
+                        }
+                        let link = PropertyLink {
+                            source_layer: source_layer
+                                .ok_or_else(|| A::Error::missing_field("source_layer"))?,
+                            source_property: source_property
+                                .ok_or_else(|| A::Error::missing_field("source_property"))?,
+                            time_offset: time_offset
+                                .ok_or_else(|| A::Error::missing_field("time_offset"))?,
+                            plugin_id: plugin_id
+                                .ok_or_else(|| A::Error::missing_field("plugin_id"))?,
+                            params: params.ok_or_else(|| A::Error::missing_field("params"))?,
+                        };
+                        Ok(PropertySource::link_only(link))
+                    }
+                }
+            }
+        }
+
+        deserializer.deserialize_any(PropertySourceVisitor)
+    }
 }
 
 /// **型付き link** 本体(`docs/reviews/2026-08-22-persona-touchdesigner-round2.md`
@@ -223,18 +517,28 @@ mod tests {
         track
     }
 
-    /// `Track` 側の wire 形が裸の `KeyframeTrack` と同じであることの固定
-    /// (移行コストゼロの根拠 — 既存の保存済み track JSON がそのまま
-    /// `PropertySource::Track` として読める)。
+    /// **裁定213 で書き込み形が変わった**: `PropertySource` は今は常に明示的な
+    /// `{"base":...,"modulators":[...]}` 形で書く(bit単位で裸 `KeyframeTrack` と
+    /// 同じではなくなった) — 読み込み側の後方互換は別途固定する
+    /// (`a_bare_keyframe_track_json_still_deserializes_as_a_track_base` 参照)。
+    /// ここでは新形式が自分自身と往復することだけを固定する。
     #[test]
-    fn property_source_track_serializes_identically_to_a_bare_keyframe_track() {
+    fn property_source_track_round_trips_through_the_explicit_wire_shape() {
+        let source = PropertySource::track(hold(Value::F64(1.0)));
+        let json = serde_json::to_string(&source).unwrap();
+        let back: PropertySource = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, source, "新形式の往復が一致しない: {json}");
+    }
+
+    /// **後方互換の核**: 裁定213 より前に書かれた裸の `KeyframeTrack` JSON
+    /// (`PropertySource::Track` の旧 wire 形)が、無改造でそのまま
+    /// `base: Some(Track(..))` として読める。
+    #[test]
+    fn a_bare_keyframe_track_json_still_deserializes_as_a_track_base() {
         let track = hold(Value::F64(1.0));
-        let bare = serde_json::to_string(&track).unwrap();
-        let wrapped = serde_json::to_string(&PropertySource::Track(track)).unwrap();
-        assert_eq!(
-            bare, wrapped,
-            "untagged Track が KeyframeTrack と別の形になっている"
-        );
+        let bare_json = serde_json::to_string(&track).unwrap();
+        let source: PropertySource = serde_json::from_str(&bare_json).unwrap();
+        assert_eq!(source, PropertySource::track(track));
     }
 
     /// `SlotId` の wire 形が裸の `String` と同じであることの固定
@@ -407,25 +711,57 @@ mod tests {
     // link — 保存形式(移行コストゼロ)
     // -----------------------------------------------------------------
 
-    /// `Link` は3つ目のオブジェクト形なので、`Track`(裸の `{"keys":[...]}`)とも
-    /// `Slot`(裸の文字列)とも構造的に衝突しない——`#[serde(untagged)]` の3択で
-    /// 元の型へ戻る。旧 Document(Track/Slot のみ)がこの変更で1つも壊れないことの
-    /// 直接証拠。
+    /// 新形式(明示的な `{"base":...,"modulators":[...]}`)の4パターン
+    /// (`track`/`slot`/`link_only`/base+modulator の和)が、それぞれ自分自身と
+    /// 往復すること——`base` キーが常に付くので、パターン同士が構造的に
+    /// 衝突しないことの直接証拠(裁定213)。
     #[test]
-    fn property_source_link_round_trips_without_colliding_with_track_or_slot() {
-        let track = PropertySource::Track(hold(Value::F64(1.0)));
-        let slot = PropertySource::Slot(SlotId("s".to_owned()));
-        let property_link = PropertySource::Link(link(
+    fn property_source_round_trips_for_every_shape() {
+        let track = PropertySource::track(hold(Value::F64(1.0)));
+        let slot = PropertySource::slot(SlotId("s".to_owned()));
+        let link_only = PropertySource::link_only(link(
             PropertyId::new("opacity").unwrap(),
             "motolii.link.identity",
             Vec::new(),
         ));
+        let summed = PropertySource {
+            base: Some(PropertyBase::Track(hold(Value::F64(2.0)))),
+            modulators: vec![link(
+                PropertyId::new("rotation").unwrap(),
+                "motolii.link.identity",
+                Vec::new(),
+            )],
+        };
 
-        for source in [track, slot, property_link] {
+        for source in [track, slot, link_only, summed] {
             let json = serde_json::to_string(&source).unwrap();
             let back: PropertySource = serde_json::from_str(&json).unwrap();
-            assert_eq!(back, source, "untagged 3択の往復が一致しない: {json}");
+            assert_eq!(back, source, "新形式の往復が一致しない: {json}");
         }
+    }
+
+    /// 裁定206 当時(裁定213 の前日)に書かれた「単独 Link」の裸5フィールド
+    /// オブジェクト——`base` キーを持たない旧形式——が、`base: None` ・
+    /// modulator 1本として読める(後方互換)。
+    #[test]
+    fn a_legacy_bare_link_object_still_deserializes_as_link_only() {
+        let l = link(
+            PropertyId::new("rotation").unwrap(),
+            "motolii.link.linear",
+            vec![("scale".to_owned(), Value::F64(2.0))],
+        );
+        let legacy_json = serde_json::to_string(&l).unwrap();
+        let source: PropertySource = serde_json::from_str(&legacy_json).unwrap();
+        assert_eq!(source, PropertySource::link_only(l));
+    }
+
+    /// 裸の `SlotId` 文字列(裁定213 より前の `PropertySource::Slot`)も同様に読める。
+    #[test]
+    fn a_bare_slot_id_string_still_deserializes_as_a_slot_base() {
+        let id = SlotId("brand".to_owned());
+        let bare_json = serde_json::to_string(&id).unwrap();
+        let source: PropertySource = serde_json::from_str(&bare_json).unwrap();
+        assert_eq!(source, PropertySource::slot(id));
     }
 
     /// `PropertyId` は裸の文字列として符号化される(`SlotId` と同じ透過ニュータイプの

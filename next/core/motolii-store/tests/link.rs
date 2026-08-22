@@ -194,10 +194,11 @@ fn track_returns_none_for_a_link_bound_property_even_though_value_at_resolves() 
         doc.view().value_at(b, &target, t(0)).unwrap(),
         Some(Value::F64(9.0))
     );
-    assert!(matches!(
-        doc.view().property_source(b, &target).unwrap(),
-        Some(PropertySource::Link(_))
-    ));
+    assert!(doc
+        .view()
+        .property_source(b, &target)
+        .unwrap()
+        .is_some_and(|source| source.as_link_only().is_some()));
 }
 
 /// `SetTrack` を再び投げれば、link から普通の track へ戻せる — 同じ component を
@@ -238,7 +239,10 @@ fn set_track_after_set_property_link_switches_back_to_a_track() {
     );
     assert!(matches!(
         doc.view().property_source(b, &target).unwrap(),
-        Some(PropertySource::Track(_))
+        Some(PropertySource {
+            base: Some(motolii_store::PropertyBase::Track(_)),
+            ..
+        })
     ));
 }
 
@@ -523,10 +527,11 @@ fn a_link_survives_a_save_and_load_round_trip() {
         Some(Value::F64(14.0)),
         "保存で畳む時に link が落ちている、または変換が消えている"
     );
-    assert!(matches!(
-        loaded.view().property_source(b, &target).unwrap(),
-        Some(PropertySource::Link(_))
-    ));
+    assert!(loaded
+        .view()
+        .property_source(b, &target)
+        .unwrap()
+        .is_some_and(|source| source.as_link_only().is_some()));
 }
 
 // ---------------------------------------------------------------------------

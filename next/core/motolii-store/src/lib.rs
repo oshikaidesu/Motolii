@@ -41,7 +41,7 @@ pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFin
 pub use marker::Marker;
 pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
 pub use persist::AutoSaveConfig;
-pub use slot::{PropertyLink, PropertySource, Slot, SlotId};
+pub use slot::{PropertyBase, PropertyLink, PropertySource, Slot, SlotId};
 pub use text::{
     ContentKeyframe, ContentTrack, FontRef, TextAlignmentOptions, TextBasedOn, TextDocument,
     TextDocumentStyle, TextGrouping, TextJustify, TextRandomize, TextRange, TextRangeId,

@@ -255,6 +255,18 @@ impl KeyframeTrack {
         Self::default()
     }
 
+    /// 生のキー列から検証込みで組む。`#[serde(try_from = "KeyframeTrackDe")]` が
+    /// 内部で行うのと同じ経路——`motolii-store::slot::PropertySource` の
+    /// カスタム `Deserialize`(裁定213 の性能修正、2026-08-23)が、`untagged` の
+    /// `Content` バッファリングを避けて `"keys"` フィールドを直接
+    /// `Vec<Keyframe>` として読んだ後、ここを呼んで検証込みで組み立て直す
+    /// ために公開した。
+    pub fn try_from_keys(keys: Vec<Keyframe>) -> Result<Self, TrackError> {
+        let track = Self { keys };
+        track.validate()?;
+        Ok(track)
+    }
+
     /// キーを挿入する。同時刻のキーが既にあれば置き換える。
     pub fn insert(&mut self, key: Keyframe) {
         match self.keys.binary_search_by(|k| k.t.cmp(&key.t)) {
