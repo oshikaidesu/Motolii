@@ -103,6 +103,14 @@ pub struct Dimensions {
     /// (`lane_bar::glyph_size_px`)へ転写済みなので、この値変更は Timeline に波及しない。
     #[serde(default = "default_inspector_glyph_width")]
     pub inspector_glyph_width: f32,
+    /// pane_grid の題帯(各 pane 上端の pane 名入り drag ハンドル、2026-08-22
+    /// 題帯レーン)の帯高。導出は `tokens/dimensions.json` の
+    /// `_note_pane_header_height` 参照 — 帯内文字 `micro_text`(8)を裁定168 の
+    /// 文字/帯 比率帯(0.42±0.05)へ入れる高さ(8/18=0.444、
+    /// `inspector_row_height` の 11/25=0.44 と同じ導出形)。左右 padding は
+    /// `spacing_m` を消費する(専用キーは起こさない)。
+    #[serde(default = "default_pane_header_height")]
+    pub pane_header_height: f32,
     /// Timeline のレーンバー(行ヘッダ列)幅。出典: 視覚正本
     /// `ui-scale-and-z.html` の `.thead{width:calc(150 * var(--s) * 1px)}`
     /// (裁定147「面の構成」— レーンバーの視覚正本はこの mock の行ヘッダ列)。
@@ -131,6 +139,10 @@ pub struct Dimensions {
 
 fn default_inspector_glyph_width() -> f32 {
     26.0
+}
+
+fn default_pane_header_height() -> f32 {
+    18.0
 }
 
 fn default_timeline_lane_bar_width() -> f32 {
@@ -169,6 +181,7 @@ impl Default for Dimensions {
             inspector_section_header_height: 26.0,
             inspector_value_width: 64.0,
             inspector_glyph_width: 26.0,
+            pane_header_height: 18.0,
             timeline_lane_bar_width: 150.0,
             timeline_param_row_height: 16.67,
             ui_scale: 1.0,
@@ -221,6 +234,7 @@ impl Dimensions {
             inspector_section_header_height: self.inspector_section_header_height * s,
             inspector_value_width: self.inspector_value_width * s,
             inspector_glyph_width: self.inspector_glyph_width * s,
+            pane_header_height: self.pane_header_height * s,
             timeline_lane_bar_width: self.timeline_lane_bar_width * s,
             timeline_param_row_height: self.timeline_param_row_height * s,
             // 自分自身は「寸法」ではないので掛けない。この結果を再度 `scaled()`

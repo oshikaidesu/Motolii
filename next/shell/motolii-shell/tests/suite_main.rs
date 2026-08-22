@@ -44,6 +44,8 @@ mod menu_drive;
 mod nav_drive;
 #[path = "suite/observation_camera_drive.rs"]
 mod observation_camera_drive;
+#[path = "suite/pane_band_drive.rs"]
+mod pane_band_drive;
 #[path = "suite/playback_drive.rs"]
 mod playback_drive;
 #[path = "suite/q0_fence.rs"]

@@ -10,9 +10,9 @@
 //! テストが検分する)。
 
 use motolii_store::{
-    property, Composition, Document, EffectId, EffectInstance, Fps, Intent, Interp, Keyframe,
-    KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, Marker,
-    PropertyId, RationalTime, Speed, Value,
+    property, AssetDraft, Composition, Document, EffectId, EffectInstance, Fps, Intent, Interp,
+    Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming,
+    Marker, PropertyId, RationalTime, SourceFingerprintV1, Speed, Value,
 };
 
 /// fixture が組み立てた結果。`Shell::new_fixture` が `Document`/`Session`/status へ写す。
@@ -141,6 +141,11 @@ const LAYERS: [LayerSpec; 15] = [
         rgba: [200, 200, 200, 255],
     },
 ];
+
+/// Browser media タブの fixture 仮素材(リポ内の既存テスト素材 — 上の記帳
+/// ループ参照)。3件は `tests/suite/fixture.rs::
+/// fixture_registers_browser_media_assets_in_the_ledger` の oracle と対。
+const FIXTURE_MEDIA: [&str; 3] = ["glow_default.png", "glow_strong.png", "blend_screen.png"];
 
 pub fn build() -> Fixture {
     let mut doc = Document::new();
@@ -359,6 +364,30 @@ pub fn build() -> Fixture {
         property: PropertyId::effect_param(glow, "intensity").expect("intensity は予約語ではない"),
         track: glow_intensity,
     });
+
+    // Browser の media タブへ映る仮素材(2026-08-22 題帯レーン — 発注書
+    // 「fixture 仮データ」)。drop 記帳 B1(`Shell::admit`)と同じ経路 —
+    // `SourceFingerprintV1::from_reader` → `AssetDraft::from_probed_source` →
+    // `Intent::AdmitAsset`。ファイル実体はリポ内の既存テスト素材
+    // (`next/engine/motolii-engine/tests/golden/` の PNG)で、新規バイナリは
+    // 増やさない(発注書)。path は compile time の `CARGO_MANIFEST_DIR` 起点 —
+    // fixture はリポ内で使う検分器具なのでこれで足りる(`Dimensions::
+    // debug_source_path` と同じ割り切り)。読めなければ記帳だけスキップする
+    // (B1 と同じ「記帳は読めるかだけを見る」— fixture 全体は壊さない)。
+    for file in FIXTURE_MEDIA {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../engine/motolii-engine/tests/golden")
+            .join(file);
+        let Ok(reader) = std::fs::File::open(&path) else {
+            continue;
+        };
+        let Ok(fingerprint) = SourceFingerprintV1::from_reader(reader) else {
+            continue;
+        };
+        let draft =
+            AssetDraft::from_probed_source("image/png".to_owned(), &fingerprint, &path, None);
+        intents.push(Intent::AdmitAsset { draft });
+    }
 
     doc.apply_all(intents).expect("fixture を1操作として置ける");
 

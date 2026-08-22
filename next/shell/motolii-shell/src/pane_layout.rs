@@ -49,6 +49,22 @@ pub enum PaneKind {
     Timeline,
 }
 
+/// 題帯(pane 上端の pane 名入り drag ハンドル、2026-08-22 題帯レーン)の
+/// ラベル正本。view(`Shell::pane_title_bar`)は全 pane 一律にこれを描く —
+/// S6(affordance を隠さない): 旧実装の匿名 8px grip は見えないためつかめず、
+/// さらに fork rev 73e686e の `TitleBar::is_over_pick_area` が title content の
+/// bounds を pick 対象から除外する実装(`title_bar.rs` 実測)により、全幅
+/// `Space` を content にしていた旧帯は pick 面積ゼロ=ドラッグ不能だった
+/// (利用者実窓検分「レイアウト変更ができない」の直接原因)。
+pub fn title(kind: PaneKind) -> &'static str {
+    match kind {
+        PaneKind::Browser => "Browser",
+        PaneKind::Inspector => "Inspector",
+        PaneKind::Stage => "Stage",
+        PaneKind::Timeline => "Timeline",
+    }
+}
+
 /// 3本の split 比率。Browser 開閉(`Configuration` からの作り直し)をまたいで
 /// [`extract_ratios`]/[`build_configuration`] の往復で保持する(モジュール
 /// 冒頭 doc の限界参照——保持するのは *比率* だけで、ドラッグによる *配置*

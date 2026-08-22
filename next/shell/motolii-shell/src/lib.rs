@@ -2318,16 +2318,22 @@ impl Shell {
             layout = layout.push(row![crate::menu::edit_dropdown(dims, colors)]);
         }
         if self.settings_panel_open {
+            // 題帯(2026-08-22 題帯レーン): pane 名の常設は5面すべて —
+            // Settings は pane_grid 外なので `panel_title_band`(名札のみ、
+            // drag なし)を pane 本体の上へ積む。
             layout = layout.push(
-                settings_pane::view(
-                    self.composition().as_ref(),
-                    self.background_draft.as_ref(),
-                    self.tokens.ui_scale,
-                    self.ui_scale_draft.as_deref(),
-                    dims,
-                    colors,
-                )
-                .map(Message::Settings),
+                column![
+                    Self::panel_title_band("Settings", dims, colors),
+                    settings_pane::view(
+                        self.composition().as_ref(),
+                        self.background_draft.as_ref(),
+                        self.tokens.ui_scale,
+                        self.ui_scale_draft.as_deref(),
+                        dims,
+                        colors,
+                    )
+                    .map(Message::Settings),
+                ],
             );
         }
 
@@ -2386,7 +2392,7 @@ impl Shell {
                     self.build_timeline_pane().view().map(Message::Timeline)
                 }
             };
-            pane_grid::Content::new(content).title_bar(Self::pane_grip_bar(dims, colors))
+            pane_grid::Content::new(content).title_bar(Self::pane_title_bar(*kind, dims, colors))
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -2402,7 +2408,33 @@ impl Shell {
         // これを配線しないと本体全域が「capture されるのに無反応」になる。
         .on_click(Message::PaneClicked)
         .on_resize(0.0, Message::PaneResized)
-        .on_drag(Message::PaneDragged);
+        .on_drag(Message::PaneDragged)
+        // drop 先の可視化(題帯レーン #3): drag 中、cursor が乗っている
+        // 受け入れ region を pane_grid 自身が塗る(`widget/src/pane_grid.rs::
+        // draw` の hovered_region 描画、fork rev 73e686e 実測)。色は既存
+        // ロールのみ(S4): 面=`surface_hover`(「hover」の意味役割そのもの —
+        // drag 中に cursor が乗っている受け入れ面)、縁=`focus`(操作が着地
+        // する場所の合図)。split 線(picked/hovered)も `focus` — 太さは
+        // `border_width * 2.0`(ln 器具の強調線と同じ導出、
+        // `tests/suite/tonmana_token_fence.rs` の許容形)。
+        .style(move |_theme| pane_grid::Style {
+            hovered_region: pane_grid::Highlight {
+                background: iced::Background::Color(colors.surface_hover),
+                border: iced::Border {
+                    color: colors.focus,
+                    width: dims.border_width * 2.0,
+                    radius: 0.0.into(),
+                },
+            },
+            picked_split: pane_grid::Line {
+                color: colors.focus,
+                width: dims.border_width * 2.0,
+            },
+            hovered_split: pane_grid::Line {
+                color: colors.focus,
+                width: dims.border_width * 2.0,
+            },
+        });
 
         layout
             .push(container(grid).width(Length::Fill).height(Length::Fill))
@@ -2413,28 +2445,77 @@ impl Shell {
             .into()
     }
 
-    /// pane_grid の各 pane の掴み手(ドッキングの grip、`view()` から呼ぶ)。
+    /// pane_grid の各 pane の題帯(pane 名入りの薄い常設帯 = drag ハンドル、
+    /// 2026-08-22 題帯レーン。`view()` から呼ぶ)。
     ///
     /// **必須である理由**(fork rev 73e686e の pane_grid を実測): `Content`
     /// の `Draggable` 実装(`widget/src/pane_grid/content.rs::
     /// can_be_dragged_at`)は `title_bar` が無いと常に `false` を返す —
     /// `.on_drag(...)` を配線しただけではドラッグは一切始まらない(掴む
-    /// 場所が無い)。8px 帯(`spacing_m` — フラット文法のリサイズグリップと
-    /// 同じ値、`docs/reviews/2026-08-19-flat-grammar-canon-revision.md`)を
-    /// 全 pane の上端へ敷き、「掴めそうな境界は全部掴める」(2026-08-13
-    /// 裁定)を満たす。**pane 内部の意匠ではない** — Browser/Inspector/
-    /// Stage/Timeline それぞれの `view()` 自体は無改修のまま(発注書
-    /// NON-GOALS「pane 内部の意匠変更」)、この帯は shell 側が pane_grid の
-    /// 外から一律に足す薄い chrome。
-    fn pane_grip_bar<'a>(dims: Dimensions, colors: Colors) -> pane_grid::TitleBar<'a, Message> {
+    /// 場所が無い)。
+    ///
+    /// **旧 grip 帯(匿名 8px `Space`)からの置き換え理由**: (1) S6 —
+    /// 見えない帯はつかめない(利用者実窓検分「レイアウト変更ができない。
+    /// ハンドルが無いせいか」)。(2) **旧帯は構造的にも死んでいた** —
+    /// `TitleBar::is_over_pick_area`(`title_bar.rs` 実測)は title content の
+    /// bounds を pick 対象から**除外**するため、全幅 `Space` を content に
+    /// していた旧帯は pick 面積ゼロ=ドラッグが一切始まらなかった
+    /// (`tests/suite/pane_band_drive.rs` が red→green で検分)。
+    ///
+    /// 新帯: pane 名(`pane_layout::title` 正本)を左端に置き、**残りの全幅が
+    /// pick area**(S1 — 帯全体が大きい的。ラベル矩形だけは上記実測理由で
+    /// pick 対象外という構造的限界が残る)。pick area の hover では pane_grid
+    /// 自身が `Interaction::Grab` を返す(`content.rs::grid_interaction`
+    /// 実測 — カーソル予告は追加配線なしで効く)。寸法は全て tokens 由来
+    /// (裁定 2026-08-22「デザイン値の外出し徹底」): 帯高=
+    /// `pane_header_height`(導出は `tokens/dimensions.json` の
+    /// `_note_pane_header_height`)、文字=`micro_text`(正典バンド最小段 —
+    /// 本帯が最初の消費者)、左右余白=`spacing_m`(ident/cols 帯と同段)。
+    /// 色は既存ロールのみ(S4): 地=`surface_raised`(旧 grip と同じ)、
+    /// 文字=`text_secondary`(章立ての控えめな見出し)。リサイズは従来どおり
+    /// pane 間の 8px 境界(`PaneGrid::spacing`)が担う — drag 責務はこの帯へ
+    /// 一本化。
+    fn pane_title_bar<'a>(
+        kind: pane_layout::PaneKind,
+        dims: Dimensions,
+        colors: Colors,
+    ) -> pane_grid::TitleBar<'a, Message> {
         pane_grid::TitleBar::new(
-            iced::widget::Space::new().width(Length::Fill).height(Length::Fixed(dims.spacing_m)),
+            container(
+                text(pane_layout::title(kind))
+                    .size(dims.micro_text)
+                    .color(colors.text_secondary),
+            )
+            .height(Length::Fixed(dims.pane_header_height))
+            .align_y(iced::alignment::Vertical::Center)
+            .padding([0.0, dims.spacing_m]),
         )
         .padding(0)
         .style(move |_theme| container::Style {
             background: Some(iced::Background::Color(colors.surface_raised)),
             ..container::Style::default()
         })
+    }
+
+    /// pane_grid 外のパネル(Settings — 全幅ストリップ)用の題帯。pane_grid の
+    /// 題帯([`Self::pane_title_bar`])と同じ文法(帯高・文字・余白・色)だが、
+    /// **drag ハンドルではない**(Settings は pane_grid の pane ではない —
+    /// grab カーソルも出ないため「掴めそうで掴めない」嘘はつかない。名札のみ)。
+    fn panel_title_band<'a>(label: &'a str, dims: Dimensions, colors: Colors) -> Element<'a, Message> {
+        container(
+            text(label)
+                .size(dims.micro_text)
+                .color(colors.text_secondary),
+        )
+        .width(Length::Fill)
+        .height(Length::Fixed(dims.pane_header_height))
+        .align_y(iced::alignment::Vertical::Center)
+        .padding([0.0, dims.spacing_m])
+        .style(move |_theme| container::Style {
+            background: Some(iced::Background::Color(colors.surface_raised)),
+            ..container::Style::default()
+        })
+        .into()
     }
 
     /// shell chrome の線化(裁定137/139 の Inspector 以外の面への展開)。
