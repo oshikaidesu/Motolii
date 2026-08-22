@@ -56,6 +56,7 @@ mod projection;
 mod rail;
 pub mod shuttle;
 mod transport;
+pub mod waveform_view;
 pub mod work_area;
 mod write;
 
