@@ -255,6 +255,40 @@ else
   fail=1
 fi
 
+# Inspector 時間軸監査(裁定214: Inspector に映る物は全て時間軸で評価できる、
+# 境界は identity/property)。棚卸し本体は
+# `docs/reviews/2026-08-23-inspector-time-axis-audit.md`(この check.sh からは
+# コード改変なしで届く範囲ではない — 理由は同ファイル §6 参照: Inspector の
+# 「欄」は `Intent` enum のような単一の列挙点を持たず、identity/property の
+# 判定も裁定214 の文面が要求する意味論的判断で型シグネチャから機械導出できない)。
+# ここで機械化できるのは唯一、ドキュメント内の**転記事故**の検出だけ ──
+# 「K の一覧(成果物、N件)」という見出しの N と、実際に並ぶ番号付き箇条書きの
+# 行数が一致するか(`intent-bundles.tsv`/`normal-map.tsv` の size 列不一致検査と
+# 同じ動機)。Lottie coverage 節・Intent 到達可能性節と同じ流儀 ──
+# **情報表示のみ、fail させない**(ドキュメントが無ければ黙って節ごと省く)。
+if [ -f ../docs/reviews/2026-08-23-inspector-time-axis-audit.md ]; then
+  audit_doc=../docs/reviews/2026-08-23-inspector-time-axis-audit.md
+  echo
+  echo "=== Inspector 時間軸監査(裁定214)— K一覧の自己整合性(情報表示のみ) ==="
+  claimed="$(grep -oE 'K の一覧\(成果物、[0-9]+件\)' "$audit_doc" | grep -oE '[0-9]+' || true)"
+  actual="$(awk '
+    /K の一覧/ { grab=1; next }
+    grab && /^## / { grab=0 }
+    grab && /^[0-9]+\. / { n++ }
+    END { print n+0 }
+  ' "$audit_doc")"
+  if [ -z "$claimed" ]; then
+    echo "  (見出し「K の一覧(成果物、N件)」が見つからない — 転記事故の検査を省く)"
+  elif [ "$claimed" != "$actual" ]; then
+    echo "  見出しの件数($claimed)と実際の箇条書き行数($actual)が不一致 — 転記事故の疑い"
+  else
+    echo "  K(乗せるべきなのに乗っていない)の一覧: 見出し記載 $claimed 件 = 実箇条書き $actual 件、一致"
+  fi
+  echo
+  echo "  限界: 拾えるのはドキュメント内の数値と本文のズレ(転記事故)だけ。Inspector"
+  echo "  が実際に描いている欄を静的に列挙する検査ではない(理由は監査doc §6)。"
+fi
+
 echo
 [ "$fail" -eq 0 ] && echo "OK: wraps/owns marker 全通過" || echo "NG: marker 未記入あり"
 exit $fail
