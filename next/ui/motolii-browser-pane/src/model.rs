@@ -316,6 +316,39 @@ pub enum CardKey {
     Preview(&'static str),
 }
 
+/// create タブのカードが「作る」もの(B36 新規コンテンツ作成束の消化、
+/// bundle canonical `create(kind: layer|comp|solid|null|shape)` の
+/// **pane-local に表現できる部分集合**)。実際のレイヤー生成は shell 結線
+/// (次波)— この enum は [`crate::state::Message::CreateFromCard`] が運ぶ
+/// 型付きの意図語彙で、store の `LayerSource` 語彙(`Solid`/`Null`/`Shape`)へ
+/// 1:1 で落ちる kind だけを持つ。
+///
+/// ## map 行の消化と見送り(B36、freq 降順=全行 freq 1)
+/// - **消化**: 952(Shape Layer)→ [`Self::Rectangle`]/[`Self::Ellipse`]
+///   (`LayerSource::Shape` — 矩形/楕円は `motolii-vector` の `ShapeNode` 語彙
+///   既存)・900/959/313(New solid layer / Solid…)→ [`Self::Solid`]
+///   (`LayerSource::Solid`)・898/903(New null layer / Null Object)→
+///   [`Self::Null`](`LayerSource::Null`)。
+/// - **見送り(store 拡張が要る)**: 175/176/243/244(Adjustment Layer —
+///   `LayerSource` に adjustment 語彙が無い)・684/896/658 等(Composition 系 —
+///   Document は単一 comp 構造で comp 台帳が無い)・645(直近コンポへ追加 —
+///   同前)。
+/// - **見送り(pane 外の領分)**: 654/664/665/666(Fit/Center — Stage の
+///   view 操作)・656/657(Flowchart)・672/683/807/808/882/883(外部アプリ
+///   連携)・691/713/716/943(保存/ポスター/AI/アスペクト比 — export・comp
+///   設定系)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateKind {
+    /// 矩形シェイプレイヤー(map 952、`LayerSource::Shape`)。
+    Rectangle,
+    /// 楕円シェイプレイヤー(map 952、`LayerSource::Shape`)。
+    Ellipse,
+    /// 単色レイヤー(map 900/959/313、`LayerSource::Solid`)。
+    Solid,
+    /// ヌルレイヤー(map 898/903、`LayerSource::Null`)。
+    Null,
+}
+
 /// preview-local カタログ1枚ぶんの静的カード(mock `#thumbnail-grid` の
 /// `data-tab="effects"/"create"/"panels"` カードの転写)。**mock 冒頭コメント
 /// の宣言どおり preview 専用データ** — filesystem/Document/Host/intent/
@@ -336,6 +369,12 @@ pub struct PreviewCard {
     /// Built-in の両方に属する。`favorite` は COLLECTIONS 予約地の語彙なので
     /// 転写しない、crate 冒頭 doc の予約地参照)。
     pub tags: &'static [PreviewTag],
+    /// このカードが「作る」kind(B36 実体化)。**create タブのカードだけが
+    /// `Some`** — effects/panels のカードは `None`(作るものが無い)。view は
+    /// `Some` のカードにだけダブルクリック=作成
+    /// ([`crate::state::Message::CreateFromCard`])を配線する(AE/Figma 慣習
+    /// S0: シングル=選択・ダブル=作成)。
+    pub creates: Option<CreateKind>,
 }
 
 /// effects タブの preview カタログ。mock html:522-530 の3枚(Echo Bloom/
@@ -349,6 +388,7 @@ const EFFECTS_PREVIEW: [PreviewCard; 4] = [
         caption: "effect · Color",
         glyph: "FX",
         tags: &[PreviewTag::Color],
+        creates: None,
     },
     PreviewCard {
         id: "opacity",
@@ -356,6 +396,7 @@ const EFFECTS_PREVIEW: [PreviewCard; 4] = [
         caption: "effect · Utility",
         glyph: "FX",
         tags: &[PreviewTag::Utility],
+        creates: None,
     },
     PreviewCard {
         id: "sine",
@@ -363,6 +404,7 @@ const EFFECTS_PREVIEW: [PreviewCard; 4] = [
         caption: "effect · Animation",
         glyph: "FX",
         tags: &[PreviewTag::Animation],
+        creates: None,
     },
     PreviewCard {
         id: "glow",
@@ -370,18 +412,25 @@ const EFFECTS_PREVIEW: [PreviewCard; 4] = [
         caption: "effect · Color",
         glyph: "FX",
         tags: &[PreviewTag::Color],
+        creates: None,
     },
 ];
 
-/// create タブの preview カタログ(mock html:532-537。`data-tags=
-/// "shape builtin"` — Shapes/Built-in の両カテゴリに属する)。
-const CREATE_PREVIEW: [PreviewCard; 2] = [
+/// create タブの preview カタログ。先頭2枚は mock html:532-537 の転写
+/// (`data-tags="shape builtin"` — Shapes/Built-in の両カテゴリ)。**Solid/
+/// Null の2枚は mock 外 — map B36 行の消化**([`CreateKind`] doc の消化台帳:
+/// 900/959/313=Solid・898/903=Null。store `LayerSource` に既にある語彙のみ)。
+/// タグは mock の `builtin` 語彙(Built-in)へ載せる — シェイプではないので
+/// Shapes には属さない。並びは mock 転写分を先頭に保ち、追加分を末尾へ
+/// (effects の Glow 追加と同じ形)。
+const CREATE_PREVIEW: [PreviewCard; 4] = [
     PreviewCard {
         id: "rectangle",
         name: "Rectangle",
         caption: "shape · Built-in",
         glyph: "□",
         tags: &[PreviewTag::Shapes, PreviewTag::BuiltIn],
+        creates: Some(CreateKind::Rectangle),
     },
     PreviewCard {
         id: "ellipse",
@@ -389,6 +438,23 @@ const CREATE_PREVIEW: [PreviewCard; 2] = [
         caption: "shape · Built-in",
         glyph: "○",
         tags: &[PreviewTag::Shapes, PreviewTag::BuiltIn],
+        creates: Some(CreateKind::Ellipse),
+    },
+    PreviewCard {
+        id: "solid",
+        name: "Solid",
+        caption: "layer · Built-in",
+        glyph: "■",
+        tags: &[PreviewTag::BuiltIn],
+        creates: Some(CreateKind::Solid),
+    },
+    PreviewCard {
+        id: "null",
+        name: "Null",
+        caption: "layer · Built-in",
+        glyph: "◇",
+        tags: &[PreviewTag::BuiltIn],
+        creates: Some(CreateKind::Null),
     },
 ];
 
@@ -400,6 +466,7 @@ const PANELS_PREVIEW: [PreviewCard; 3] = [
         caption: "panel · Tags",
         glyph: "#",
         tags: &[PreviewTag::Tags],
+        creates: None,
     },
     PreviewCard {
         id: "notes",
@@ -407,6 +474,7 @@ const PANELS_PREVIEW: [PreviewCard; 3] = [
         caption: "panel · Notes",
         glyph: "✎",
         tags: &[PreviewTag::Notes],
+        creates: None,
     },
     PreviewCard {
         id: "export-notes",
@@ -414,6 +482,7 @@ const PANELS_PREVIEW: [PreviewCard; 3] = [
         caption: "panel · Export",
         glyph: "↗",
         tags: &[PreviewTag::Export],
+        creates: None,
     },
 ];
 
@@ -774,14 +843,16 @@ mod tests {
         }
     }
 
-    /// create/panels の preview カタログは mock html:532-547 のカードそのまま。
+    /// create/panels の preview カタログ: create は mock html:532-537 の2枚を
+    /// 先頭に保ち、B36 消化分(Solid/Null — `CreateKind` doc の消化台帳)を
+    /// 末尾へ。panels は mock html:539-547 のカードそのまま。
     #[test]
     fn create_and_panels_preview_catalogs_match_the_mock_cards() {
         let create: Vec<&str> = preview_catalog(LibraryTab::Create)
             .iter()
             .map(|card| card.name)
             .collect();
-        assert_eq!(create, ["Rectangle", "Ellipse"]);
+        assert_eq!(create, ["Rectangle", "Ellipse", "Solid", "Null"]);
 
         let panels: Vec<&str> = preview_catalog(LibraryTab::Panels)
             .iter()
@@ -961,13 +1032,59 @@ mod tests {
         assert_eq!(notes, ["Notes"]);
     }
 
-    /// create の2枚は Shapes/Built-in の両カテゴリに属する(mock `data-tags=
-    /// "shape builtin"`)— どちらの scope でも全2枚が残る。
+    /// create のシェイプ2枚は Shapes/Built-in の両カテゴリに属する(mock
+    /// `data-tags="shape builtin"`)。B36 消化分(Solid/Null)は Built-in
+    /// のみ — `Shapes` scope は2枚のまま、`Built-in` scope は全4枚。
     #[test]
     fn create_cards_match_both_their_categories() {
-        for tag in [PreviewTag::Shapes, PreviewTag::BuiltIn] {
-            let cards = preview_visible(LibraryTab::Create, PreviewScope::Tag(tag), "");
-            assert_eq!(cards.len(), 2, "{tag:?} で create 2枚が残らない");
+        let shapes = preview_visible(LibraryTab::Create, PreviewScope::Tag(PreviewTag::Shapes), "");
+        assert_eq!(shapes.len(), 2, "Shapes でシェイプ2枚が残らない");
+
+        let builtin =
+            preview_visible(LibraryTab::Create, PreviewScope::Tag(PreviewTag::BuiltIn), "");
+        assert_eq!(builtin.len(), 4, "Built-in で create 全4枚が残らない");
+    }
+
+    // -----------------------------------------------------------------
+    // B36: create タブの実体化 — `CreateKind` の語彙と `creates` の壁。
+    // -----------------------------------------------------------------
+
+    /// **ORACLE**: create タブのカードは全枚が `creates: Some` を宣言する
+    /// (「作る」を発火できないカードを create タブに置かない — Q0 触れそうで
+    /// 触れない物は不合格)。id → kind の対応も固定する。
+    #[test]
+    fn every_create_card_declares_its_create_kind() {
+        let expected: [(&str, CreateKind); 4] = [
+            ("rectangle", CreateKind::Rectangle),
+            ("ellipse", CreateKind::Ellipse),
+            ("solid", CreateKind::Solid),
+            ("null", CreateKind::Null),
+        ];
+        let cards = preview_catalog(LibraryTab::Create);
+        assert_eq!(cards.len(), expected.len());
+        for (card, (id, kind)) in cards.iter().zip(expected) {
+            assert_eq!(card.id, id);
+            assert_eq!(
+                card.creates,
+                Some(kind),
+                "{:?} の creates が {kind:?} でない",
+                card.name
+            );
+        }
+    }
+
+    /// effects/panels のカードは `creates: None`(「作る」は create タブ
+    /// だけの語彙 — 型の壁が2系統の混線を防ぐのと同じ形)。
+    #[test]
+    fn non_create_cards_never_declare_a_create_kind() {
+        for tab in [LibraryTab::Effects, LibraryTab::Panels] {
+            for card in preview_catalog(tab) {
+                assert_eq!(
+                    card.creates, None,
+                    "{tab:?} の {:?} が creates を宣言している",
+                    card.name
+                );
+            }
         }
     }
 

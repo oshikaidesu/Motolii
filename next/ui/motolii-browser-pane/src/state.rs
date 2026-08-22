@@ -20,7 +20,8 @@
 //! (`Shell::update` 側に per-variant 分岐を増やさない — crate 冒頭 doc の
 //! 「pane split 流儀」どおり)。`Shell::view` は [`PaneState::is_open`] を読んで
 //! 表示するかどうかだけ判断する。
-use crate::model::{CardKey, LibraryTab, PreviewScope, RailScope};
+use crate::model::{CardKey, CreateKind, LibraryTab, PreviewScope, RailScope};
+use motolii_store::AssetId;
 
 /// pane ローカル Message(裁定160 切片以降の一貫した形 — root
 /// `motolii_shell::Message::Browser(Message)` が1本で畳む)。
@@ -57,6 +58,35 @@ pub enum Message {
     /// ToggleSettingsPanel` と同格の表示専用フラグ — Document にも undo 履歴
     /// にも乗らない。
     ToggleBrowserPanel,
+    /// create タブのカードの**ダブルクリック**=「作る」(B36 実体化 —
+    /// AE/Figma 慣習 S0: シングル=選択・ダブル=作成。view 側は
+    /// `mouse_area::on_double_click` が発火する)。**pane-local には状態を
+    /// 動かさない** — 実際のレイヤー生成は shell 結線(次波)で、`Shell` が
+    /// この variant を横取りして `Intent` へ落とす形になる(`SelectCard` は
+    /// ダブルクリックの1打目/2打目の press で別途 publish 済み)。drag で
+    /// Stage/Timeline へ落とす経路は将来切片(発注の見送り明記)。
+    CreateFromCard { kind: CreateKind },
+    /// OS の file-drag が窓に入っている/出た(B08 続編: drop 先ハイライト)。
+    /// shell 結線(次波)が `iced::window::Event::FileHovered`/
+    /// `FilesHoveredLeft` をこの1本へ翻訳する想定 — pane は真偽だけ持ち、
+    /// media タブの catalog 容器を drop 受け入れ面として塗り替える
+    /// (`pane_grid` の `hovered_region` と同じ文法、`crate::drop_target_style`)。
+    DropHoverChanged(bool),
+    /// 取り込み(admit)直後の新規素材 id 列(B08 続編: 新規素材ハイライト)。
+    /// shell 結線(次波)が `Shell::admit` の後に publish する想定。空 Vec は
+    /// 「ハイライト消灯」。**Document ではない** — 台帳はハイライトを知らず、
+    /// pane-local の一過性の光だけ(undo 履歴にも乗らない)。
+    RecentlyAdmitted(Vec<AssetId>),
+    /// create カードへの cursor 進入(`mouse_area::on_enter`)。create カード
+    /// は button でなく mouse_area(ダブルクリックが要るため — button は press
+    /// を capture して `on_double_click` へ届かない、fork `widget/src/
+    /// mouse_area.rs::update` 実測)なので、hover の意匠だけ pane が自前で
+    /// 持つ(Q0: 触れそうで触れない物は不合格 — hover 無反応にしない)。
+    CardHovered(CardKey),
+    /// create カードからの cursor 退出(`mouse_area::on_exit`)。隣カードへの
+    /// 進入と同一 event 内で順序が前後しても hover を取りこぼさないよう、
+    /// 「自分が hover 中の時だけ消す」(update 参照)。
+    CardUnhovered(CardKey),
 }
 
 /// Browser pane 専用の transient 状態(rail scope + 検索欄の下書き + パネル
@@ -80,6 +110,15 @@ pub struct PaneState {
     selected: Option<CardKey>,
     query: String,
     open: bool,
+    /// cursor が乗っている create カード(B36 — [`Message::CardHovered`] doc
+    /// 参照。button 経路のカードは iced の `button::Status::Hovered` が担う
+    /// ので、ここに乗るのは mouse_area 経路の create カードだけ)。
+    hovered: Option<CardKey>,
+    /// OS file-drag が窓に入っているか(B08 — [`Message::DropHoverChanged`])。
+    drop_hover: bool,
+    /// 取り込み直後の新規素材(B08 — [`Message::RecentlyAdmitted`])。カード
+    /// 選択かタブ切替で消灯する(「直後」の一過性 — 恒久の状態にしない)。
+    recent: Vec<AssetId>,
 }
 
 impl PaneState {
@@ -119,12 +158,33 @@ impl PaneState {
         self.open
     }
 
+    /// cursor が乗っている create カード(`pane_view` が hover 意匠に読む)。
+    pub fn hovered(&self) -> Option<CardKey> {
+        self.hovered
+    }
+
+    /// OS file-drag が窓に入っているか(`pane_view` が media タブの drop 先
+    /// ハイライトに読む)。
+    pub fn drop_hover(&self) -> bool {
+        self.drop_hover
+    }
+
+    /// 取り込み直後の新規素材 id 列(`pane_view` がカードのハイライトに読む)。
+    pub fn recently_admitted(&self) -> &[AssetId] {
+        &self.recent
+    }
+
     /// pane 側の唯一の書き口。
     pub fn update(&mut self, message: Message) {
         match message {
             Message::SelectScope(scope) => self.scope = scope,
             Message::SelectPreviewScope(scope) => self.preview_scope = scope,
-            Message::SelectCard(key) => self.selected = Some(key),
+            Message::SelectCard(key) => {
+                self.selected = Some(key);
+                // 新規素材ハイライトは「直後」の一過性 — カードへ触った時点で
+                // 消灯する(触った=気づいた、以降は通常の選択文法へ)。
+                self.recent.clear();
+            }
             Message::SelectTab(tab) => {
                 self.tab = tab;
                 // mock `chooseTab`: `if (tab !== 'media') { state.source = 'all';
@@ -140,6 +200,10 @@ impl PaneState {
                 // 「未選択」へ戻す(選択の持ち越しで前タブの selection が
                 // 亡霊として残るのを防ぐ — 逸脱として RETURN 記載)。
                 self.selected = None;
+                // hover/新規素材ハイライトもタブと一緒に流す(前タブの
+                // 一過性状態を亡霊として持ち越さない — selected と同じ理由)。
+                self.hovered = None;
+                self.recent.clear();
             }
             Message::QueryChanged(text) => self.query = text,
             Message::ClearFilters => {
@@ -148,6 +212,21 @@ impl PaneState {
                 self.query.clear();
             }
             Message::ToggleBrowserPanel => self.open = !self.open,
+            // 「作る」は pane-local に動かす状態が無い(選択はダブルクリックの
+            // press が `SelectCard` で別途書く)。実生成= shell 結線(次波)が
+            // この variant を `Shell::update` 側で横取りして `Intent` へ落とす。
+            Message::CreateFromCard { .. } => {}
+            Message::DropHoverChanged(hovering) => self.drop_hover = hovering,
+            Message::RecentlyAdmitted(ids) => self.recent = ids,
+            Message::CardHovered(key) => self.hovered = Some(key),
+            Message::CardUnhovered(key) => {
+                // 隣カードへの enter とこのカードの exit が同一 event 内で
+                // 前後しても hover を取りこぼさない — 自分が hover 中の時だけ
+                // 消す(stale unhover は no-op)。
+                if self.hovered == Some(key) {
+                    self.hovered = None;
+                }
+            }
         }
     }
 }
@@ -348,5 +427,118 @@ mod tests {
         state.update(Message::SelectCard(CardKey::Media(AssetId::from_raw(0))));
         state.update(Message::SelectTab(LibraryTab::Effects));
         assert_eq!(state.selected(), None);
+    }
+
+    // -----------------------------------------------------------------
+    // B36: CreateFromCard(pane-local には状態を動かさない — shell 結線待ち)。
+    // -----------------------------------------------------------------
+
+    /// **ORACLE**: `CreateFromCard` は pane-local の状態を一切動かさない
+    /// (tab/scope/選択/query 全て不変 — 実生成は shell の仕事、`Message::
+    /// CreateFromCard` doc 参照)。
+    #[test]
+    fn create_from_card_is_pane_inert() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectTab(LibraryTab::Create));
+        state.update(Message::SelectCard(CardKey::Preview("rectangle")));
+        state.update(Message::QueryChanged("rect".to_owned()));
+        state.update(Message::CreateFromCard {
+            kind: CreateKind::Rectangle,
+        });
+        assert_eq!(state.tab(), LibraryTab::Create);
+        assert_eq!(state.selected(), Some(CardKey::Preview("rectangle")));
+        assert_eq!(state.query(), "rect");
+    }
+
+    // -----------------------------------------------------------------
+    // B08 続編: drop 先ハイライト+新規素材ハイライト。
+    // -----------------------------------------------------------------
+
+    /// **ORACLE**: 初期状態は drop-hover なし・新規素材ハイライトなし。
+    #[test]
+    fn initial_state_has_no_drop_hover_and_no_recent_assets() {
+        let state = PaneState::new();
+        assert!(!state.drop_hover());
+        assert!(state.recently_admitted().is_empty());
+    }
+
+    /// `DropHoverChanged` は真偽をそのまま写す(file-drag の入/出)。
+    #[test]
+    fn drop_hover_follows_the_message() {
+        let mut state = PaneState::new();
+        state.update(Message::DropHoverChanged(true));
+        assert!(state.drop_hover());
+        state.update(Message::DropHoverChanged(false));
+        assert!(!state.drop_hover());
+    }
+
+    /// **ORACLE**: `RecentlyAdmitted` は id 列を記録し、次の便が丸ごと
+    /// 置き換える(累積しない — 「直後」だけの光)。
+    #[test]
+    fn recently_admitted_records_and_replaces() {
+        let mut state = PaneState::new();
+        state.update(Message::RecentlyAdmitted(vec![
+            AssetId::from_raw(1),
+            AssetId::from_raw(2),
+        ]));
+        assert_eq!(
+            state.recently_admitted(),
+            [AssetId::from_raw(1), AssetId::from_raw(2)]
+        );
+        state.update(Message::RecentlyAdmitted(vec![AssetId::from_raw(9)]));
+        assert_eq!(state.recently_admitted(), [AssetId::from_raw(9)]);
+    }
+
+    /// カードへ触ると新規素材ハイライトは消灯する(触った=気づいた)。
+    #[test]
+    fn selecting_a_card_clears_the_recent_highlight() {
+        let mut state = PaneState::new();
+        state.update(Message::RecentlyAdmitted(vec![AssetId::from_raw(1)]));
+        state.update(Message::SelectCard(CardKey::Media(AssetId::from_raw(1))));
+        assert!(state.recently_admitted().is_empty());
+    }
+
+    /// タブ切替でも消灯する(selected と同じ「一過性を持ち越さない」)。
+    #[test]
+    fn selecting_a_tab_clears_the_recent_highlight() {
+        let mut state = PaneState::new();
+        state.update(Message::RecentlyAdmitted(vec![AssetId::from_raw(1)]));
+        state.update(Message::SelectTab(LibraryTab::Effects));
+        assert!(state.recently_admitted().is_empty());
+    }
+
+    // -----------------------------------------------------------------
+    // B36: create カードの hover(mouse_area 経路の自前 hover)。
+    // -----------------------------------------------------------------
+
+    /// enter で hover が乗り、同じカードの exit で降りる。
+    #[test]
+    fn card_hover_enters_and_leaves() {
+        let mut state = PaneState::new();
+        state.update(Message::CardHovered(CardKey::Preview("solid")));
+        assert_eq!(state.hovered(), Some(CardKey::Preview("solid")));
+        state.update(Message::CardUnhovered(CardKey::Preview("solid")));
+        assert_eq!(state.hovered(), None);
+    }
+
+    /// **ORACLE**: 隣カードへの enter の後に届く古い exit は hover を消さない
+    /// (同一 event 内の enter/exit 順序が木順に依存するための防御 —
+    /// `Message::CardUnhovered` doc 参照)。
+    #[test]
+    fn a_stale_unhover_does_not_clear_the_new_hover() {
+        let mut state = PaneState::new();
+        state.update(Message::CardHovered(CardKey::Preview("solid")));
+        state.update(Message::CardHovered(CardKey::Preview("null")));
+        state.update(Message::CardUnhovered(CardKey::Preview("solid")));
+        assert_eq!(state.hovered(), Some(CardKey::Preview("null")));
+    }
+
+    /// タブ切替で hover も流す(亡霊防止 — selected/recent と同じ)。
+    #[test]
+    fn selecting_a_tab_clears_the_hover() {
+        let mut state = PaneState::new();
+        state.update(Message::CardHovered(CardKey::Preview("solid")));
+        state.update(Message::SelectTab(LibraryTab::Media));
+        assert_eq!(state.hovered(), None);
     }
 }
