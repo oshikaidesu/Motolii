@@ -256,3 +256,32 @@ fn screenshot_draws_the_inspector_region_with_hairlines_and_value_cell_insets() 
     );
     assert!(found_hairline, "hairline 色の画素が無い(区切り線が描かれていない)");
 }
+
+// ---------------------------------------------------------------------------
+// Browser fixture 素材(2026-08-22 題帯レーン — 発注書「fixture 仮データ」)
+// ---------------------------------------------------------------------------
+
+/// fixture は Browser の media タブへ映る仮素材を台帳(Document 素材台帳、
+/// drop 記帳 B1 と同じ `Intent::AdmitAsset` 経路)へ登録している。ファイル
+/// 実体はリポ内の既存テスト素材(`next/engine/motolii-engine/tests/golden/`
+/// の PNG)— 新規バイナリは増やさない(発注書)。
+#[test]
+fn fixture_registers_browser_media_assets_in_the_ledger() {
+    let shell = fixture();
+    let assets = shell.assets();
+    assert_eq!(
+        assets.len(),
+        3,
+        "fixture の素材台帳が3件でない: {:?}",
+        assets.iter().map(|a| a.name.clone()).collect::<Vec<_>>()
+    );
+    // 全件が image 種別(golden PNG 由来)— Browser の Images/All media scope に映る。
+    for asset in &assets {
+        assert!(
+            asset.kind.starts_with("image/"),
+            "fixture 素材の種別が image ではない: {} = {}",
+            asset.name,
+            asset.kind
+        );
+    }
+}

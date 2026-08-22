@@ -37,6 +37,9 @@
   "panel_header_height": 29,
   "_note_panel_header_height": "実測表『Browser ツールバー』の実測値(29)を転用。Shell 全体の header(Undo/Redo/+Layer 帯)専用 — Inspector 自身のタイトル帯(ptitle)は inspector_section_header_height を使う(mock の --section が両方に効くのと同じ理由)",
 
+  "pane_header_height": 18,
+  "_note_pane_header_height": "pane_grid の題帯(各 pane 上端の pane 名入り drag ハンドル、2026-08-22 題帯レーン)の帯高。導出: 帯内文字は正典バンド {8,9,11,12} の最小段 micro_text(8、ui-scale-and-z.html --t-micro — 本キーが最初の消費者)を使い、裁定168 の文字/帯 比率帯(0.42±0.05)から 8/18=0.444 で逆算(inspector_row_height の 11/25=0.44 と同じ導出形 — 独自比の発明ではない)。帯の左右 padding は spacing_m(--sp4、ident/cols 帯の左右 padding と同段)を消費するので専用キーは起こさない",
+
   "inspector_panel_width": 496,
   "_note_inspector_panel_width": "I-tokens(2026-08-22): 出典を next/reference/mocks/inspector-library.html v3.1(利用者合格・転写正本統一)の `.inspectorShell{width:min(100%,496px)}` へ更新。値そのものは旧 docs/mocks-ui/public/inspector-library.css から不変(496) — I-ratio 台帳が発見した二重モック構造(row_height/value_width/glyph_width だけ ui-scale-and-z.html 由来、panel_width だけ inspector-library 由来)を、4値とも同じ mock(inspector-library v3.1)へ揃えて解消(裁定172 §3 の後続裁定)。300 への変更は不採用として確定(v3.1 は 496 のまま利用者合格)",
 
