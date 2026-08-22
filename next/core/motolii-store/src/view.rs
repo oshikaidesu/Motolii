@@ -863,6 +863,7 @@ impl<'a> StoreView<'a> {
         let transform = self.world_affine(layer, t, present, memo, visiting)?;
 
         Ok(Some(ResolvedLayer {
+            id: layer,
             placement: LayerPlacement {
                 transform,
                 opacity: scalar(property::OPACITY, 1.0)?.clamp(0.0, 1.0),
