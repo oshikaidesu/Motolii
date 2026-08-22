@@ -1,0 +1,55 @@
+#axis: A09 可逆
+#question: 1つの利用者ジェスチャは undo 何回で戻るか。undo 対象外は正しく除外されているか
+#verdicts: 両方|1 undo|2 undo以上|undo できない|undo 対象外(正しい)
+#sweep: awk '/pub enum Intent/,/^}/' next/core/motolii-store/src/document.rs | grep -E "^\s{4}[A-Z][A-Za-z]+"
+#sweep: grep -n "TransformField::PositionX\|TransformField::PositionY\|TransformField::ScaleX\|TransformField::ScaleY\|TransformField::AnchorX\|TransformField::AnchorY" next/ui/motolii-inspector-pane/src/transform.rs
+#sweep: grep -n "fn commit_inspector_field\|fn finish_field_drag" next/ui/motolii-inspector-pane/src/transform.rs
+#sweep: grep -n "GizmoValue::Anchor\|GizmoValue::Scale\|GizmoValue::Position" next/ui/motolii-stage-pane/src/gizmo.rs next/shell/motolii-shell/src/lib.rs
+#sweep: grep -n "apply_all(\|doc.apply(" next/ui/motolii-timeline-pane/src/write.rs
+#sweep: grep -n "fn admit\b" -A 60 next/shell/motolii-shell/src/lib.rs | grep -n "apply_all"
+#sweep: grep -n "fn group_layers\|fn ungroup_layers" -A 35 next/core/motolii-store/src/document.rs | grep -n "apply_all"
+#sweep: grep -n "fn set_selected_groups_frozen" -A 15 next/shell/motolii-shell/src/lib.rs
+#sweep: grep -n "fn cut_layer\|fn duplicate_layer\|fn paste_layer" -A 25 next/shell/motolii-shell/src/lib.rs | grep -n "apply_all\|apply("
+#sweep: grep -n "fn split_at_playhead" -A 20 next/ui/motolii-timeline-pane/src/write.rs
+#sweep: grep -n "fn delete_selected_keys_removes_keys_across_properties_in_one_undo" -A 20 next/ui/motolii-timeline-pane/src/write.rs
+#sweep: grep -n "SetMarkers" next/shell/motolii-shell/src/lib.rs
+#note: `SetPropertySlot`/`SetPropertyModulators`/`SetCameraPropertyModulators`/`SetCameraTrack`/`SetCameraPropertySlot`/`SetSlots` の6 Intent枝は行に含めていない — A01棚卸し(2026-08-23)が「専用の呼び手UIが存在しない(複製/split経路の副産物のみ、または呼び手ゼロ)」と確定済みで、これらを主目的として起こせる利用者ジェスチャが無く、undo回数を判定する対象ジェスチャ自体が無い。`undo できない`(本来の意味=ジェスチャは起きるがCtrl+Zで戻らない欠陥)を誤って割り当てないための除外。ジェスチャが実装された時点でA09へ追加すること
+axis	map_id	対象	判定	証拠	穴	責任
+A09	-	Position を Inspector で編集(PositionX submit → PositionY submit の2動作)	2 undo以上	`next/ui/motolii-inspector-pane/src/transform.rs`: `TransformField::PositionX`/`PositionY` は別 variant で、`commit_inspector_field`/`finish_field_drag` は1回の呼び出しにつき1 `Intent::SetTrack` しか出さない(`transform.rs:98,748,908`)。2Dの「位置」という1つの意図を達成するのに2回の commit=2 undoが要る(既知事実、`docs/reviews/2026-08-22-plain-edit-3.md:15` が指摘)	穴	next/ui/motolii-inspector-pane/src/transform.rs:748(commit_inspector_field、X/Y分離の発生源) ※過積載(1021行)
+A09	-	Position を Stage gizmo で編集(body drag)	1 undo	`GizmoValue::Position([f64;2])` はX/Yを1つのVec2として運び、`Intent::SetTrack` 1回で確定(`gizmo.rs:825`)。同じ意図がInspector側は2 undo・gizmo側は1 undoに割れている非対称そのもの	-	-
+A09	-	Scale を Inspector で編集(ScaleX submit → ScaleY submit の2動作)	2 undo以上	`TransformField::ScaleX`/`ScaleY` も PositionX/Y と同型の分離(`transform.rs:100`)。Position の穴と同根で、先行棚卸し(plain-edit-3.md)が名指ししたのは Position だけだったが Scale にも同じ構造欠陥が及ぶ(新発見・全面拡張)	穴	next/ui/motolii-inspector-pane/src/transform.rs:748 ※過積載(1021行)
+A09	-	Scale を Stage gizmo で編集(角/辺ハンドル drag)	1 undo	`GizmoValue::Scale([f64;2])` を1つのVec2として運び、`Intent::SetTrack` 1回(`gizmo.rs:831`)	-	-
+A09	-	Anchor を Inspector で編集(AnchorX submit → AnchorY submit の2動作)	2 undo以上	`TransformField::AnchorX`/`AnchorY` も同型の分離(`transform.rs:103`)。Position/Scale と同じ穴が Anchor にも及ぶ(新発見)。Inspector 側の Anchor 編集はさらに gizmo 側が行う position 補償(pan-behind)も欠いており、見た目が跳ぶ副作用がある(A03/A09 双方に跨る別問題、本行は undo数のみ判定)	穴	next/ui/motolii-inspector-pane/src/transform.rs:748 ※過積載(1021行)
+A09	-	Anchor を Stage gizmo で編集(anchor drag)	1 undo	`GizmoValue::Anchor{anchor,position}` はanchor+補償済みpositionの2 propertyを対で運ぶが、確定は`doc.apply_all([...])`で1回にまとめる — `next/shell/motolii-shell/src/lib.rs:3281-3283` doc「2 property(anchor/position)を`apply_all`で1undoへ束ねる(1 gesture=1 commitの契約は変わらない)」と明記、正しく実装済み	-	-
+A09	-	Rotation/Opacity/MaskOpacity/EffectParam/Level/Pan/FadeIn/FadeOut(Inspectorの単一フィールド編集)	1 undo	いずれも `TransformField` の1 variant=1 `PropertyId` で X/Y分離が無いため、X/Y系のような分断は起きない(`transform.rs:98-109`)	-	-
+A09	-	Hidden トグル(Inspector M glyph / Timeline rail M glyph、`ToggleHidden`/`InspectorToggleHidden`)	1 undo	`next/ui/motolii-inspector-pane/src/chrome.rs:47`「即1回のIntent::SetAttrs」、`next/ui/motolii-timeline-pane/src/write.rs:13`。1 click=1 undo	-	-
+A09	-	Blend Mode 巡回(`CycleBlendMode`)	1 undo	`next/ui/motolii-inspector-pane/src/lib.rs:209`「`ToggleHidden`と同じ即時操作の形」	-	-
+A09	-	Label Color 巡回(`CycleLabelColor`)	1 undo	`chrome.rs:47`「即1回のIntent::SetAttrs」	-	-
+A09	-	Matte Mode 巡回(`CycleMatteMode`)	1 undo	`ToggleHidden`と同型の即時1フィールドpatch(`SetAttrs`)	-	-
+A09	-	Mask Mode/Inverted 巡回	1 undo	`next/ui/motolii-inspector-pane/src/mask.rs:91`「`ToggleHidden`/`CycleBlendMode`と同じ即時操作の形」	-	-
+A09	-	Effect Add/Remove/Reorder(↑↓)/Bypass	1 undo	`next/ui/motolii-inspector-pane/src/effects.rs:121`「1 click=1 undoを保つ」(Removeのdoc)。Bypassは2026-08-23に track化済みで`Intent::SetTrack`1回(A03参照)	-	-
+A09	-	Text field 編集(Content/Size/LineHeight/Tracking/Justify/Fill/Stroke、それぞれ単独の commit)	1 undo	各 field は個別に `Intent::SetTextDocument` を1回出す設計(track化されていない現状でも1編集=1確定)。ただし複数 style フィールドを「まとめて」変えたい場合(例: フォントプリセット1発適用)に相当するUIが無いため、その種のバンドル欠如自体は評価対象外(単発編集は正しく1 undo)	-	-
+A09	-	Link 元 選択(pick_list、`SetPropertyLink`)	1 undo	1回の選択で1 `Intent::SetPropertyLink`	-	-
+A09	-	Clip move drag(単一clip、`finish_drag`)	1 undo	`next/ui/motolii-timeline-pane/src/write.rs:981-993`「動いていれば`Intent::SetTiming`を1回だけ出す(1 gesture = 1 undo)」と明記済み。複数clip同時dragは実装が無い(単一clipのみ、A08範疇の別問題でありA09の穴ではない)	-	-
+A09	-	Clip trim drag(In/Out端)	1 undo	同上の `finish_drag` 経路、`SetTiming` 1回	-	-
+A09	-	Timeline key(菱形)drag(単一 or 複数選択キー、`finish_key_drag`)	1 undo	`next/ui/motolii-timeline-pane/src/write.rs:1307,1355`「`KeyframeTrack`を1回の`apply_all`で書き戻す(1操作=1undo)」と明記、複数property跨ぎでも1回	-	-
+A09	-	NudgeKeyframe(Alt+←/→)	1 undo	`nudge_keyframe`が選択キー全体に対して1回のtrack再構築+`apply_all`(`write.rs:1638`「property ごとにまとめて`KeyframeTrack`を再構築し、1回の`apply_all`」)	-	-
+A09	-	選択キーの削除(Backspace/Delete、`DeleteSelectedKeys`)	1 undo	試験名で明示的に保証: `delete_selected_keys_removes_keys_across_properties_in_one_undo`(`write.rs:2176`)。property跨ぎの複数キー削除でも1 undo	-	-
+A09	-	Split at Playhead(単一 or 複数選択layer、`SplitAtPlayhead`)	1 undo	`write.rs:811-833`「`split_selected_plan`で…1回の`doc.apply_all(...)`で確定する(1操作=1undo)」と明記、複数layer同時分割でも1 undo	-	-
+A09	-	Restack(Bring Forward/Send Backward/To Front/To Back、`RestackLayer`)	1 undo	`stacking::restacked`の結果を`write.rs:1600-1611`が`Vec<Intent>`へ写し`apply_all`で1回に束ねる。複数layer選択の重なり変更でも1 undo	-	-
+A09	-	Group(⌘G、`group_selected_layers`)	1 undo	`next/core/motolii-store/src/document.rs`の`group_layers`が内部で`apply_all`(1回)	-	-
+A09	-	Ungroup(⌘⇧G、`ungroup_selected_layers`)	1 undo	`ungroup_layers`も同型で`apply_all`	-	-
+A09	-	Freeze/Unfreeze(選択Group全部、`set_selected_groups_frozen`)	1 undo	`next/shell/motolii-shell/src/lib.rs:2133-2142`が対象group全部を1回の`apply_all`にまとめる(コメント「1`apply_all`=1undo(Q2)」明記)	-	-
+A09	-	Cut Layer(⌘X、単一選択のみ)	1 undo	`next/shell/motolii-shell/src/lib.rs:2002-2022`、`Intent::RemoveLayer`1回。`session.selected_layers`(複数選択)は読まず`session.selection`(単一)のみ対象 — 複数選択時の挙動が未定義な点はA08範疇の別問題	-	-
+A09	-	Duplicate(⌘D、単一選択)	1 undo	`duplicate_layer`が`snapshot.instantiate`の結果を`apply_all`1回で確定	-	-
+A09	-	Paste(⌘V)	1 undo	同型、`apply_all`1回	-	-
+A09	-	Create From Card(Browser、素材からlayer新規作成)	1 undo	既知事実(`plain-edit-3.md:8`): `AddLayer+SetMeta+SetAttrs+SetShapes`の4 Intentを1回の`apply_all`にまとめる	-	-
+A09	-	素材の複数ファイル同時ドロップ admit(`Shell::admit`)	1 undo	`next/shell/motolii-shell/src/lib.rs:2159-2202`: 複数pathの`Intent::AdmitAsset`(+配置分)を`intents`へ積み、最終`self.doc.apply_all(intents)`(:2243)で1回にまとめる。複数ファイル同時drop=1 gestureとして正しく1 undo	-	-
+A09	-	Marker 作成/移動/削除(`markers.rs`経由)	1 undo	`next/shell/motolii-shell/src/lib.rs:3421,3432,3456`いずれも単発の`Intent::SetMarkers{markers: next}`(丸ごと置換型)、1操作=1呼び出し=1 undo	-	-
+A09	-	Composition 数値欄(W/H/FPS/尺)の Enter 確定(`CompFieldSubmit`)	1 undo	`next/ui/motolii-settings-pane/src/sections.rs`: 1 field=1`Intent::SetComposition`(read-modify-write)。フィールドごとに個別確定なので複合操作の分断は起きない(4欄まとめて変えたい場合も4回の意図的操作であり穴ではない)	-	-
+A09	-	rename 確定(inline rename、`RenameCommit`)	1 undo	`write.rs:2313`実書き込みは`Intent::SetAttrs`1回	-	-
+A09	-	選択(`Select`/`SelectAllLayers`/`DeselectAllLayers`等)	undo 対象外(正しい)	`Session.selection`/`selected_layers`はDocumentを経由しない(裁定46/107)。Ctrl+Zで戻らないのが正しい設計	-	-
+A09	-	Playhead 移動(scrub/step/jump系全般)	undo 対象外(正しい)	`Session.playhead`、同上	-	-
+A09	-	作業範囲(Loop帯)の設定・ループon/off	undo 対象外(正しい)	`next/ui/motolii-timeline-pane/src/write.rs::work_area()`doc「こちらはDocumentでない」— pane-local。undo対象外が意図通り(A03監査でも同じ理由で乗るべきでないと判定)	-	-
+A09	-	Stage ViewTab/ResolutionCap/ChannelDisplay/Checkerboard/ObservationCamera(viewer状態全般)	undo 対象外(正しい)	viewer専用state、Document非経由。A03監査で「出力に現れない」と判定した項目と同一集合	-	-
+A09	-	AutoSave設定・ui_scale(Settings)	undo 対象外(正しい)	shell-local、Document非経由(A03監査と同根)	-	-
