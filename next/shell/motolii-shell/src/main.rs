@@ -6,12 +6,14 @@
 //! (既定起動は従来どおり空)。`--fixture --screenshot <path>` は窓を開かず
 //! 1フレームを PNG へ書いて終了する(`motolii_shell::screenshot`)。
 //!
-//! `--screenshot` と併用できる状態フラグ5本(実機報告の検分用): `--checkerboard`
+//! `--screenshot` と併用できる状態フラグ4本(実機報告の検分用): `--checkerboard`
 //! は Stage 下縁状態帯(裁定163)の市松トグルを ON にした状態を、`--transparent-bg` は背景
-//! プリセット「Transparent」(alpha=0)を適用した状態を、`--settings-open` は
-//! 歯車ボタンを押した状態を、`--observe` は観測カメラ(裁定157)を有効にした
-//! 状態を、**`--browser-open`(B3)は header の "Browser" ボタンを押した状態**
-//! を、それぞれ実際の `Message` 経由(`Shell::update`)で再現する —
+//! プリセット「Transparent」(alpha=0)を適用した状態を、`--observe` は観測カメラ
+//! (裁定157)を有効にした状態を、**`--browser-open`(B3)は header の "Browser"
+//! ボタンを押した状態**を、それぞれ実際の `Message` 経由(`Shell::update`)で再現する —
+//! (旧 `--settings-open` は S2(裁定182/188)で撤去: Settings は OS 窓へ移住し、
+//! 単窓オフスクリーン合成の screenshot 器具では写せない —
+//! `motolii_shell::screenshot` 冒頭 doc「Settings は器具対象外」参照)—
 //! ボタン/ホイール/中ボタンドラッグを実際に操作した時と同じ経路
 //! (`--observe` は `stage::StageOverlay` が計算するのと同じ形の
 //! `Message::Stage(stage::Message::Observe(_))` を1回出すだけ — Stage の
@@ -27,7 +29,6 @@ fn main() -> iced::Result {
         .cloned();
     let checkerboard = args.iter().any(|a| a == "--checkerboard");
     let transparent_bg = args.iter().any(|a| a == "--transparent-bg");
-    let settings_open = args.iter().any(|a| a == "--settings-open");
     let observe = args.iter().any(|a| a == "--observe");
     let browser_open = args.iter().any(|a| a == "--browser-open");
 
@@ -48,11 +49,6 @@ fn main() -> iced::Result {
             // もう存在しない — `motolii_shell::stage::Message` 側)。
             let _ = shell.update(motolii_shell::Message::Stage(
                 motolii_shell::stage::Message::ToggleCheckerboard,
-            ));
-        }
-        if settings_open {
-            let _ = shell.update(motolii_shell::Message::Settings(
-                motolii_shell::settings_pane::Message::ToggleSettingsPanel,
             ));
         }
         if browser_open {

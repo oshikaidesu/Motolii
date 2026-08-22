@@ -155,9 +155,23 @@ fn menubar_bar_bounds(targets: &[Target]) -> Option<iced::Rectangle> {
 }
 
 /// 1状態を Q0 で検査する。違反があれば理由つきで返す(空 = 合格)。
+/// main 窓の絵(`Shell::view`)を歩く従来形 — 窓別の絵は [`scan_view`]。
 fn scan_state(build: impl Fn() -> Shell, label: &str) -> Vec<String> {
+    scan_view(build, Shell::view, label)
+}
+
+/// [`scan_state`] の一般形(S2、裁定182/188): `view` が検査対象の絵を選ぶ —
+/// Settings が OS 窓へ移住したので、窓別の絵([`settings_window_view`])も
+/// **同じ判定ルール**で歩けるようにした。`view` は fn pointer
+/// (`for<'a> fn(&'a Shell) -> Element<'a, Message>` — lifetime elision)で
+/// 受ける: closure だと HRTB の推論が絡むので、名前つき fn で渡す。
+fn scan_view(
+    build: impl Fn() -> Shell,
+    view: fn(&Shell) -> iced::Element<'_, Message>,
+    label: &str,
+) -> Vec<String> {
     let seed = build();
-    let targets = collect_targets(seed.view());
+    let targets = collect_targets(view(&seed));
     drop(seed);
 
     let menubar = menubar_bar_bounds(&targets);
@@ -175,7 +189,7 @@ fn scan_state(build: impl Fn() -> Shell, label: &str) -> Vec<String> {
         );
 
         let probe = build();
-        let (captured, messages) = click_at(probe.view(), point);
+        let (captured, messages) = click_at(view(&probe), point);
 
         if captured && messages.is_empty() {
             // **Inspector pane が見つけた柵の限界**(Timeline の canvas/slider と同種、
@@ -223,16 +237,27 @@ fn with_one_layer_then_undo() -> Shell {
     shell
 }
 
-/// **タスク#18**: Settings パネルを開いた状態(歯車トグル)。プリセットボタン・
-/// 市松トグル・背景/ui_scale の数値欄が全部木に現れる — この柵がそのまま
-/// 「見えて押せそうなのに何も起きない」を検分する(パネル別の知識をこのファイルへ
-/// 増やさない、という冒頭 doc 通りの拡張)。
+/// **タスク#18 → S2(裁定182/188)**: Settings 窓を開いた状態(歯車トグル)。
+/// S2 で Settings は OS 窓へ移住した — プリセットボタン・背景/ui_scale の
+/// 数値欄は main の絵ではなく **Settings 窓の絵**([`settings_window_view`])に
+/// 現れるので、検分も窓別に行う([`scan_view`])。main の絵側は「Settings 窓が
+/// 開いていても Q0 合格のまま」を同じビルダーで見る。
 fn with_settings_open() -> Shell {
     let mut shell = fresh();
     let _ = shell.update(Message::Settings(
         motolii_shell::settings_pane::Message::ToggleSettingsPanel,
     ));
     shell
+}
+
+/// Settings 窓の絵を選ぶ(`scan_view` へ渡す fn — [`with_settings_open`] が
+/// 組んだ Shell 専用。台帳から窓 Id を読んで `view_window` を引く)。
+fn settings_window_view(shell: &Shell) -> iced::Element<'_, Message> {
+    shell.view_window(
+        shell
+            .settings_window()
+            .expect("with_settings_open が Settings 窓を開いているはず"),
+    )
 }
 
 // **旧 `with_edit_menu_open`(M-menu MB-0+Edit)は MB-2 で撤去** — menubar の
@@ -280,7 +305,17 @@ fn no_pane_leaves_a_captured_click_silent() {
         with_one_layer_then_undo,
         "layer追加→Undo(Redoが有効なはず)",
     ));
-    violations.extend(scan_state(with_settings_open, "Settingsパネル開"));
+    // S2(裁定182/188): Settings は OS 窓 — 窓の絵と、窓が開いた状態の main の
+    // 絵を両方歩く(旧「Settingsパネル開」1状態の後継)。
+    violations.extend(scan_view(
+        with_settings_open,
+        settings_window_view,
+        "Settings窓(S2)",
+    ));
+    violations.extend(scan_state(
+        with_settings_open,
+        "main(Settings窓が開いた状態)",
+    ));
     violations.extend(scan_state(with_browser_open, "Browserパネル開(裁定162 切片B3)"));
 
     assert!(

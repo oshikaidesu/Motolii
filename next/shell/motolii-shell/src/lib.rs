@@ -309,10 +309,16 @@ pub enum Message {
     /// でも台帳が読める)なので、この腕は runtime が実際に窓を開いた後の
     /// 再記帳(冪等)。
     MainWindowOpened(iced::window::Id),
+    /// `toggle_settings_window` の `window::open` が開いた Settings 窓(S2)。
+    /// `MainWindowOpened` と同型 — 台帳は open 時点で先行記帳済み、この腕は
+    /// runtime 側の再記帳(冪等)。
+    SettingsWindowOpened(iced::window::Id),
     /// どれかの窓が閉じた(`iced::window::close_events` 購読)。**main 窓なら
     /// アプリ終了**(probe 注意点1: winit shell は全窓が閉じると compositor を
     /// `None` 化 = device 破棄する — 「窓ゼロ状態を作らない(main 閉=exit)」を
-    /// 不変量として維持し、そこへ到達させない)。
+    /// 不変量として維持し、そこへ到達させない)。Settings 窓なら台帳から
+    /// 抹消するだけ — main は生き続ける(probe 実測
+    /// `main_alive_after_settings_close=true`)。
     WindowClosed(iced::window::Id),
 
     // ---- Inspector pane(第1波 + drag-to-scrub、裁定160 切片8で pane ローカル
@@ -658,8 +664,8 @@ pub struct Shell {
     /// `timeline` フィールドと同じ「pane 側の transient を1個の PaneState へ
     /// 集約する」形だが、Document/Session を触らないぶん更に薄い
     /// (`Message::Browser` の match 腕は `self.browser.update(msg)` だけで
-    /// 完結する — `settings_panel_open`/`edit_menu_open` と違い、パネル開閉
-    /// フラグもこの `PaneState` の内側にある)。
+    /// 完結する — `settings_window`(旧 `settings_panel_open`)/`edit_menu_open`
+    /// と違い、パネル開閉フラグもこの `PaneState` の内側にある)。
     browser: browser_pane::PaneState,
 
     // ---- shell の pane_grid 化(2026-08-22 実装レーン) ----
@@ -673,12 +679,15 @@ pub struct Shell {
     /// アクセサが `browser` を読むのと同じ非対称)。
     panes: pane_layout::Layout,
 
-    // ---- Settings パネル(タスク#18) ----
-    /// パネルの開閉。**表示だけの状態** — Document でも `Session`(選択・再生
-    /// 位置)でもない。発注書は「Workspace 側」と指示しているが、Workspace 永続
-    /// 機構がまだ無い(裁定127/128)ため、`tokens::Dimensions::ui_scale` の
-    /// 「仮の置き場」と同じ理由でここに仮置きする。
-    settings_panel_open: bool,
+    // ---- Settings 窓(タスク#18 → S2 で窓移住、裁定182/188) ----
+    /// Settings 窓の台帳(旧 `settings_panel_open`)。**表示だけの状態** —
+    /// Document でも `Session`(選択・再生位置)でもない(旧 doc の身分そのまま)。
+    /// S2(窓の浮かし第1号)で「レイアウト分岐の bool」→「OS 窓の Id」へ意味が
+    /// 変わった: `Some` = Settings 窓が開いている。`ToggleSettingsPanel` が
+    /// open/close の両方を駆動する([`Shell::toggle_settings_window`])。
+    /// Settings の**中身**の状態(`background_draft`/`ui_scale_draft`)は従来
+    /// どおり `Shell` に住むので、窓を閉じても何も失われない(probe §Q3)。
+    settings_window: Option<iced::window::Id>,
     // 旧 `edit_menu_open`/`file_menu_open`(MB-0/MB-1 の表示専用 view flag)は
     // MB-2 で廃止 — menubar の開閉は widget 内部状態(`menu.rs` 冒頭 doc)。
     /// Stage の下に市松を敷くか。**表示専用** — Document には一切乗らない
@@ -776,7 +785,7 @@ impl Shell {
                 timeline: timeline_pane::PaneState::new(),
                 browser: browser_pane::PaneState::new(),
                 panes: pane_layout::Layout::new(),
-                settings_panel_open: false,
+                settings_window: None,
                 checkerboard: false,
                 background_draft: None,
                 ui_scale_draft: None,
@@ -823,8 +832,7 @@ impl Shell {
     }
 
     /// 窓台帳の読み口(main 窓)。試験(`tests/suite/window_drive.rs`)が
-    /// 台帳の記帳を検分するための口 — `settings_panel_open()` 等の既存の
-    /// 「状態の読み口」と同じ形。
+    /// 台帳の記帳を検分するための口 — [`Shell::settings_window`] と同じ形。
     pub fn main_window(&self) -> Option<iced::window::Id> {
         self.main_window
     }
@@ -877,7 +885,7 @@ impl Shell {
             timeline: timeline_pane::PaneState::new(),
             browser: browser_pane::PaneState::new(),
             panes: pane_layout::Layout::new(),
-            settings_panel_open: false,
+            settings_window: None,
             checkerboard: false,
             background_draft: None,
             ui_scale_draft: None,
@@ -971,8 +979,9 @@ impl Shell {
                 self.tokens = Tokens::load();
                 metrics::record_tokens_reload();
             }
-            // ---- 窓台帳(S1 daemon 骨格、裁定182/188) ----
+            // ---- 窓台帳(S1 daemon 骨格 + S2 Settings 窓、裁定182/188) ----
             Message::MainWindowOpened(id) => self.main_window = Some(id),
+            Message::SettingsWindowOpened(id) => self.settings_window = Some(id),
             Message::WindowClosed(id) => {
                 if self.main_window == Some(id) {
                     // main 閉=アプリ終了(probe 注意点1)。daemon は放って
@@ -981,6 +990,11 @@ impl Shell {
                     // (裁定170/171)の単一 device 前提を守るため、窓ゼロ状態
                     // そのものを作らない。
                     task = iced::exit();
+                } else if self.settings_window == Some(id) {
+                    // OS の閉じるボタン経路(トグル経由の close は
+                    // `toggle_settings_window` が先行抹消済み — その場合
+                    // ここへ来る時点で台帳は既に None なので何もしない)。
+                    self.settings_window = None;
                 }
             }
             Message::Inspector(msg) => {
@@ -1035,7 +1049,7 @@ impl Shell {
                     self.cancel_inspector_interaction();
                 }
             }
-            Message::Settings(msg) => self.update_settings(msg),
+            Message::Settings(msg) => task = self.update_settings(msg),
             Message::Stage(msg) => self.update_stage(msg),
             // B2/B3: rail scope 選択/検索欄/Clear/ToggleBrowserPanel の4腕
             // (`browser_pane::Message`)を pane 側の唯一の書き口
@@ -2000,10 +2014,13 @@ impl Shell {
     /// 引数で受け取る形 — pane crate は `&mut self` を持てないため)。ここでは
     /// `self.doc`/`self.tokens`/下書きフィールドをそのまま貸すだけで、拒否理由
     /// (`Result::Err`)を `self.status` へ writeする以外の判断は持たない。
-    fn update_settings(&mut self, message: settings_pane::Message) {
+    fn update_settings(&mut self, message: settings_pane::Message) -> Task<Message> {
         match message {
             settings_pane::Message::ToggleSettingsPanel => {
-                self.settings_panel_open = !self.settings_panel_open;
+                // S2(裁定182/188): 意味が「レイアウト分岐」→「窓 open/close」
+                // へ変わった(probe §Q3)。トグル以外の腕は従来どおり
+                // Task を返さない。
+                return self.toggle_settings_window();
             }
             settings_pane::Message::BackgroundPreset(preset) => {
                 if let Err(error) = settings_pane::apply_background_preset(&mut self.doc, preset) {
@@ -2029,6 +2046,39 @@ impl Shell {
                 {
                     self.status = Some(error);
                 }
+            }
+        }
+        Task::none()
+    }
+
+    /// S2(裁定182/188): Settings の入口 — header の歯車が出す
+    /// `ToggleSettingsPanel` を OS 窓の open/close へ配線する(浮かし第1号、
+    /// 裁定188「Settings はだいたいポップアップだから」)。
+    ///
+    /// 台帳(`settings_window`)は**同期で先行記帳/先行抹消**する —
+    /// `window::open` は Id を同期で採番し(fork `runtime/src/window.rs:260`)、
+    /// close も「閉じるつもり」の時点で台帳から下ろす。runtime 無しの headless
+    /// 試験(Task は走らない)でも open/close/再open の状態遷移が読めるのは
+    /// この設計のため(`tests/suite/window_drive.rs` の oracle)。OS の閉じる
+    /// ボタン経由は `Message::WindowClosed`(`close_events` 購読)が同じ抹消を
+    /// 行う。
+    fn toggle_settings_window(&mut self) -> Task<Message> {
+        match self.settings_window.take() {
+            Some(id) => iced::window::close(id),
+            None => {
+                let (id, open) = iced::window::open(iced::window::Settings {
+                    // 小さめ・リサイズ可(発注どおり、probe 実証の形)。raw 値は
+                    // pane の意匠値ではなく**窓の初期ジオメトリ**(トンマナ柵
+                    // (裁定142)の対象マーカー外 — `Size::new` は widget 構築
+                    // 呼び出しではない): 幅はプリセット4ボタン+数値欄が
+                    // 折り返さない程度、高さは4行+見出し(probe の 420×320 と
+                    // 同桁)。リサイズ可なので初期値以上の拘束は持たない。
+                    size: iced::Size::new(480.0, 400.0),
+                    resizable: true,
+                    ..iced::window::Settings::default()
+                });
+                self.settings_window = Some(id);
+                open.map(Message::SettingsWindowOpened)
             }
         }
     }
@@ -2233,16 +2283,17 @@ impl Shell {
         self.checkerboard
     }
 
-    /// Settings パネルの開閉状態。**screenshot 器具専用**の読み口
-    /// (`checkerboard_enabled` と同じ形) — `--settings-open` CLI フラグ
-    /// (`main.rs`)経由で `Message::ToggleSettingsPanel` を実際に通した後の
-    /// 状態を screenshot.rs が読み、Settings 領域を描くかどうかを分岐する。
-    pub fn settings_panel_open(&self) -> bool {
-        self.settings_panel_open
+    /// Settings 窓の台帳の読み口(S2、裁定182/188)。旧 `settings_panel_open()`
+    /// (screenshot 器具専用の bool)は廃止 — Settings は OS 窓になり、単窓
+    /// オフスクリーン合成の screenshot 器具の**対象外**(`screenshot.rs` 冒頭
+    /// doc の明示コメント参照)。この口は窓台帳の検分
+    /// (`tests/suite/window_drive.rs`/`q0_fence.rs`)が使う。
+    pub fn settings_window(&self) -> Option<iced::window::Id> {
+        self.settings_window
     }
 
     /// Browser パネルの開閉状態(B3)。**screenshot 器具専用**の読み口
-    /// (`settings_panel_open` と同じ形) — `--browser-open` CLI フラグ
+    /// (`checkerboard_enabled` と同じ形) — `--browser-open` CLI フラグ
     /// (`main.rs`)経由で `Message::Browser(browser_pane::Message::
     /// ToggleBrowserPanel)` を実際に通した後の状態を screenshot.rs が読める
     /// ようにする。フラグそのものは `browser::PaneState::is_open` に住む
@@ -2464,14 +2515,50 @@ impl Shell {
     /// 薄い分岐だけをここに置く(probe §Q3 の設計どおり)。台帳に無い Id
     /// (開閉の境目の1フレームで来うる)は main の絵 — probe の fallback と
     /// 同じ扱い。
-    pub fn view_window(&self, _window: iced::window::Id) -> Element<'_, Message> {
-        self.view()
+    pub fn view_window(&self, window: iced::window::Id) -> Element<'_, Message> {
+        if self.settings_window == Some(window) {
+            self.view_settings_window()
+        } else {
+            self.view()
+        }
     }
 
     /// daemon の窓別 title(`main.rs` の `.title(...)`)。main 窓(と台帳に
-    /// 無い Id)は従来どおり [`Shell::title`]。
-    pub fn window_title(&self, _window: iced::window::Id) -> String {
-        self.title()
+    /// 無い Id)は従来どおり [`Shell::title`]、Settings 窓は "Settings"
+    /// (S2 — pane 名の常設(題帯レーン)の役は OS 窓の titlebar が担う)。
+    pub fn window_title(&self, window: iced::window::Id) -> String {
+        if self.settings_window == Some(window) {
+            "Settings".to_owned()
+        } else {
+            self.title()
+        }
+    }
+
+    /// Settings 窓の絵(S2、裁定182/188)。中身は既存 [`settings_pane::view`]
+    /// **そのまま**(投影のみ受ける純関数 — probe §Q4「第2窓の view へそのまま
+    /// 移せる」。スタイル改変なし)。root の余白は main 窓の [`Shell::view`] と
+    /// 同じ `spacing_l` — 窓が違っても余白文法は同じ。旧・全幅ストリップに
+    /// 積んでいた題帯(`panel_title_band`)は置かない: pane 名の名札の役は
+    /// OS 窓の titlebar("Settings"、[`Shell::window_title`])が担う —
+    /// 同じ名札を窓内へ重ねると二重表示になる。
+    fn view_settings_window(&self) -> Element<'_, Message> {
+        let dims = self.dims();
+        let colors = self.tokens.colors;
+        container(
+            settings_pane::view(
+                self.composition().as_ref(),
+                self.background_draft.as_ref(),
+                self.tokens.ui_scale,
+                self.ui_scale_draft.as_deref(),
+                dims,
+                colors,
+            )
+            .map(Message::Settings),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(dims.spacing_l)
+        .into()
     }
 
     pub fn view(&self) -> Element<'_, Message> {
@@ -2480,32 +2567,14 @@ impl Shell {
         let colors = self.tokens.colors;
         let store = self.doc.view();
 
-        // Settings パネル(タスク#18)。**表示だけの分岐** — 開いていなければ
-        // 木に一切現れない(Q0: 効かない chrome を並べない、閉じている間は
-        // 下書き入力欄も存在しないので誤操作の的にならない)。
-        let mut layout = column![self.header()];
+        // Settings は S2(裁定182/188)で OS 窓へ移住した — 旧「header 直下の
+        // 全幅ストリップ」の表示分岐はここから退去([`Shell::
+        // view_settings_window`] が窓の絵の正本)。main の絵は Settings 窓の
+        // 開閉と無関係(Q0: 閉じた道具は木に現れない、の窓版)。
+        let layout = column![self.header()];
         // 旧 MB-0/MB-1 のドロップダウン表示分岐(file_menu_open/edit_menu_open)
         // は MB-2 で廃止 — menubar の開いた menu は widget 自身の overlay
         // (`motolii_menubar` の vendored `MenuBarOverlay`)として木に現れる。
-        if self.settings_panel_open {
-            // 題帯(2026-08-22 題帯レーン): pane 名の常設は5面すべて —
-            // Settings は pane_grid 外なので `panel_title_band`(名札のみ、
-            // drag なし)を pane 本体の上へ積む。
-            layout = layout.push(
-                column![
-                    Self::panel_title_band("Settings", dims, colors),
-                    settings_pane::view(
-                        self.composition().as_ref(),
-                        self.background_draft.as_ref(),
-                        self.tokens.ui_scale,
-                        self.ui_scale_draft.as_deref(),
-                        dims,
-                        colors,
-                    )
-                    .map(Message::Settings),
-                ],
-            );
-        }
 
         // Browser/Inspector/Stage/Timeline は `pane_grid`(shell の pane_grid
         // 化、2026-08-22 実装レーン、`pane_layout.rs` 冒頭 doc 参照)。
@@ -2670,26 +2739,9 @@ impl Shell {
         })
     }
 
-    /// pane_grid 外のパネル(Settings — 全幅ストリップ)用の題帯。pane_grid の
-    /// 題帯([`Self::pane_title_bar`])と同じ文法(帯高・文字・余白・色)だが、
-    /// **drag ハンドルではない**(Settings は pane_grid の pane ではない —
-    /// grab カーソルも出ないため「掴めそうで掴めない」嘘はつかない。名札のみ)。
-    fn panel_title_band<'a>(label: &'a str, dims: Dimensions, colors: Colors) -> Element<'a, Message> {
-        container(
-            text(label)
-                .size(dims.micro_text)
-                .color(colors.text_secondary),
-        )
-        .width(Length::Fill)
-        .height(Length::Fixed(dims.pane_header_height))
-        .align_y(iced::alignment::Vertical::Center)
-        .padding([0.0, dims.spacing_m])
-        .style(move |_theme| container::Style {
-            background: Some(iced::Background::Color(colors.surface_raised)),
-            ..container::Style::default()
-        })
-        .into()
-    }
+    // 旧 `panel_title_band`(pane_grid 外の Settings 全幅ストリップ用の名札帯)
+    // は S2(裁定182/188)で撤去 — Settings は OS 窓になり、名札の役は窓の
+    // titlebar([`Shell::window_title`])が担う(`view_settings_window` doc)。
 
     /// shell chrome の線化(裁定137/139 の Inspector 以外の面への展開)。
     /// 旧実装はこの帯にコンテナが無く、地(背景)も境界(hairline)も持たない

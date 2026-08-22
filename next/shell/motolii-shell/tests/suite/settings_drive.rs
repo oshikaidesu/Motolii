@@ -10,7 +10,8 @@
 //!   (`settings_pane::composite_checkerboard`)は無改変なので、この試験は
 //!   引き続きここに置く(ピクセル合成の正しさを見る試験であって、発火元の
 //!   場所を見る試験ではない — 発火元の配線は `tests/stage_band_drive.rs` 側)。
-//! - パネルの開閉は表示だけの分岐 — Document にも undo 履歴にも乗らない。
+//! - 窓の開閉(S2、裁定182/188 で Settings は OS 窓へ移住)は表示だけの副作用
+//!   — Document にも undo 履歴にも乗らない。
 //!
 //! `ui_scale` の書き戻し(`tokens::write_ui_scale_to_path`)は `tests/
 //! ui_scale_fence.rs` 側で隔離した一時ファイルを使って検分する。ここでは
@@ -218,9 +219,11 @@ fn checkerboard_toggle_changes_the_screenshot_pixels_when_background_is_transpar
     );
 }
 
-/// パネルの開閉自体は表示分岐だけ — Document にも undo 履歴にも乗らない。
+/// 窓の開閉自体は表示だけの副作用(S2、裁定182/188 — 旧「パネルの開閉は表示
+/// 分岐だけ」の窓版)— Document にも undo 履歴にも乗らない。窓台帳の
+/// open/close/再open の遷移 oracle は `tests/suite/window_drive.rs` 側。
 #[test]
-fn settings_panel_toggle_is_purely_a_view_flag() {
+fn settings_window_toggle_is_purely_a_view_side_effect() {
     let mut shell = shell();
     let layers_before = shell.layer_count();
 
@@ -228,17 +231,22 @@ fn settings_panel_toggle_is_purely_a_view_flag() {
     assert_eq!(
         shell.layer_count(),
         layers_before,
-        "パネル開閉が Document を触っている"
+        "窓の開閉が Document を触っている"
     );
     assert!(
         !shell.can_undo(),
-        "パネル開閉が undo 履歴に乗ってしまっている"
+        "窓の開閉が undo 履歴に乗ってしまっている"
     );
 
-    // トグルなので、もう一度で元に戻る(座学的だが「トグル」の定義そのもの)。
+    // トグルなので、もう一度で閉じ、3回で再び開く。
     let _ = shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
     let _ = shell.update(Message::Settings(settings_pane::Message::ToggleSettingsPanel));
-    // 3回押した = 開いている状態のはず。ここでは直接の可視 API が無いので
-    // view() が panic しないことだけ見る(Q0 の他の柵が widget 単位の検分を担う)。
+    // 3回押した = 開いている状態。main の絵(`view()`)と窓の絵
+    // (`view_window`)が両方 panic せず組めることだけ見る(widget 単位の
+    // 検分は q0_fence が担う)。
     let _ = shell.view();
+    let id = shell
+        .settings_window()
+        .expect("3回トグル後は Settings 窓が開いているはず");
+    let _ = shell.view_window(id);
 }

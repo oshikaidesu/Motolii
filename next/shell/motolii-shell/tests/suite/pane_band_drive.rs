@@ -54,20 +54,30 @@ fn every_pane_kind_has_a_title_label() {
     assert_eq!(title(PaneKind::Timeline), "Timeline");
 }
 
-/// Settings パネル(pane_grid 外の全幅ストリップ)にも題帯が出る — pane 名の
-/// 常設は5面すべて(発注書)。Settings は pane_grid の pane ではないので
-/// drag ハンドルにはならない(題帯は名札のみ — grab カーソルも出ないため
-/// 「掴めそうで掴めない」嘘はつかない)。
+/// Settings は S2(裁定182/188)で OS 窓へ移住した — 「pane 名の常設は5面
+/// すべて」(題帯レーン)の Settings 分は、窓の titlebar
+/// (`Shell::window_title` = "Settings")が名札を担う。旧・全幅ストリップの
+/// 題帯(`panel_title_band`)は撤去(名札を窓内へ重ねると二重表示になる)。
+/// 窓の中身は `settings_pane::view` の絵そのまま(section header "SETTINGS")。
 #[test]
-fn the_settings_panel_carries_a_title_band_when_open() {
+fn the_settings_window_carries_its_name_in_the_os_titlebar() {
     let mut shell = shell();
     let _ = shell.update(Message::Settings(
         motolii_shell::settings_pane::Message::ToggleSettingsPanel,
     ));
+    let id = shell
+        .settings_window()
+        .expect("歯車トグルで Settings 窓が台帳に載るはず");
 
-    let mut ui = iced_test::simulator(shell.view());
-    ui.find("Settings")
-        .expect("Settings パネルの題帯ラベルが view に無い");
+    assert_eq!(
+        shell.window_title(id),
+        "Settings",
+        "Settings 窓の titlebar が pane 名を運んでいない"
+    );
+
+    let mut ui = iced_test::simulator(shell.view_window(id));
+    ui.find("SETTINGS")
+        .expect("Settings 窓に settings_pane::view の絵が出ていない");
 }
 
 /// **本命(red→green)**: 題帯のラベルの右隣(帯の空き部分)を press すると
