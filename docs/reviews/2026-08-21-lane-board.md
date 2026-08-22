@@ -13,6 +13,8 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| MW-probe | probe | worktree(probes/scratch) | 裁定188 のゲート: iced daemon/multiwindow 実測(単一 device 複数 Surface・view(window::Id) signature・Stage 単一 surface 前提・Settings 窓最小形)。verdict 緑/黄/黒 |
+| LN-D5 | 実装 | worktree(4 crate style) | 区切り線→明度1段(chrome 監査最終枚): 線の棚卸し3分類台帳つき・状態の器(focus/選択/編集)は線のまま・幾何不変 |
 
 
 ## 完了・main 着地済み(実装)
