@@ -51,6 +51,7 @@ mod input;
 pub mod key_gesture;
 mod key_rows;
 mod lane_bar;
+pub mod markers;
 pub mod nav;
 mod projection;
 mod rail;
