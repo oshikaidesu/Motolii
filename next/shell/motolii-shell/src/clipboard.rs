@@ -67,6 +67,22 @@ impl LayerSnapshot {
     /// **元の値をそのまま複製する**(order・timing・parent を含む) — Paste は
     /// 「元時刻のまま」(意味カプセルの拘束)、Duplicate は「その場複製」で、
     /// どちらも同じ複製規則になる。
+    ///
+    /// **`SetMasks` は property(`mask.{id}.shape`)の `SetTrack` 列より後に積む**
+    /// (2026-08-22、裁定205 施工第2号で `cargo test` 実行時に発覚・恒久修正)。
+    /// `masks`(一覧)と `mask.{id}.shape`(形状)は別 component で、後者は
+    /// `self.properties`(`view.properties` が拾う track 全部)の中に混ざって
+    /// 運ばれる——このメソッドが元々 `SetMasks` を properties ループより**前**に
+    /// 積んでいたため、`new_id` にとって「一覧にだけ現れて shape がまだ書かれて
+    /// いない新規 mask id」という中間状態を同じ `apply_all` の中で作ってしまい、
+    /// `Intent::SetMasks` の新設検査(壁7の恒久修正、
+    /// `motolii_store::document::Intent::SetMasks` doc)に引っかかっていた
+    /// (`clipboard::tests::capture_then_instantiate_...` が実測で検出)。
+    /// `SetMasks`/`SetTrack` は同じ `apply_all` の中でなら**先に shape を書けば
+    /// 通る**(同 doc 参照)ので、並びを入れ替えるだけで直る——`Intent::AddMask`
+    /// (1回で束ねる新設専用の口)は使わない: ここは新規追加ではなく複製なので、
+    /// 複製元の id をそのまま保つ必要があり、`AddMask` の「id を1つだけ受ける」
+    /// 形には合わない。
     pub fn instantiate(&self, new_id: LayerId) -> Vec<Intent> {
         let mut intents = vec![Intent::AddLayer(new_id)];
         if let Some(meta) = &self.meta {
@@ -79,12 +95,6 @@ impl LayerSnapshot {
             intents.push(Intent::SetAttrs {
                 layer: new_id,
                 patch: full_patch(attrs),
-            });
-        }
-        if !self.masks.is_empty() {
-            intents.push(Intent::SetMasks {
-                layer: new_id,
-                masks: self.masks.clone(),
             });
         }
         if !self.effects.is_empty() {
@@ -126,6 +136,13 @@ impl LayerSnapshot {
                     property: property.clone(),
                     link: link.clone(),
                 },
+            });
+        }
+        // `masks` の一覧は shape の SetTrack より後(直上 doc 参照)。
+        if !self.masks.is_empty() {
+            intents.push(Intent::SetMasks {
+                layer: new_id,
+                masks: self.masks.clone(),
             });
         }
         intents
@@ -319,14 +336,6 @@ mod tests {
                     ..Default::default()
                 },
             },
-            Intent::SetMasks {
-                layer: source,
-                masks: vec![Mask {
-                    id: mask_id,
-                    mode: MaskMode::Add,
-                    inverted: true,
-                }],
-            },
             Intent::SetEffects {
                 layer: source,
                 effects: vec![EffectInstance {
@@ -370,6 +379,18 @@ mod tests {
                 layer: source,
                 property: slotted.clone(),
                 slot: slot_id.clone(),
+            },
+            // **`mask_shape` の `SetTrack` より後**(2026-08-22、裁定205 施工
+            // 第2号で発覚・恒久修正——`Intent::SetMasks` の新設検査は「同じ
+            // `apply_all` の中で先に shape を書けば通る」を要求する、
+            // `motolii_store::document::Intent::SetMasks` doc 参照)。
+            Intent::SetMasks {
+                layer: source,
+                masks: vec![Mask {
+                    id: mask_id,
+                    mode: MaskMode::Add,
+                    inverted: true,
+                }],
             },
         ])
         .unwrap();

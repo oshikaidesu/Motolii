@@ -230,11 +230,17 @@ pub enum PreviewTag {
     Notes,
     /// panels(mock `data-tag-filter="export"`)。
     Export,
+    /// effects(mock に無い新規カテゴリ — 裁定205 施工第2号 §A。マスクは
+    /// mock 転写ではなく Motolii 独自の追加なので、Color/Utility/Animation の
+    /// どれにも属さない専用タグを1つ起こす、`EFFECTS_PREVIEW` の Mask カード
+    /// doc 参照)。
+    Masks,
 }
 
 impl PreviewTag {
     /// mock の表示文言そのまま(rail 行とチップで共通 — html:444-446/454-455/
-    /// 463-465 と html:487/490/493 は同ラベル)。
+    /// 463-465 と html:487/490/493 は同ラベル)。`Masks` は mock に無いので
+    /// 自然な英語の慣用句を採る(`SortKey::label` 等の新規 UI と同じ立場)。
     pub fn label(self) -> &'static str {
         match self {
             Self::Color => "Color",
@@ -245,6 +251,7 @@ impl PreviewTag {
             Self::Tags => "Tags",
             Self::Notes => "Notes",
             Self::Export => "Export",
+            Self::Masks => "Masks",
         }
     }
 
@@ -252,18 +259,20 @@ impl PreviewTag {
     /// 照合する口)。
     pub fn tab(self) -> LibraryTab {
         match self {
-            Self::Color | Self::Utility | Self::Animation => LibraryTab::Effects,
+            Self::Color | Self::Utility | Self::Animation | Self::Masks => LibraryTab::Effects,
             Self::Shapes | Self::BuiltIn => LibraryTab::Create,
             Self::Tags | Self::Notes | Self::Export => LibraryTab::Panels,
         }
     }
 }
 
-/// effects タブの rail カテゴリ並び(mock html:444-446 の掲載順 — S0 慣習順)。
-pub const EFFECTS_TAGS: [PreviewTag; 3] = [
+/// effects タブの rail カテゴリ並び(mock html:444-446 の掲載順 — S0 慣習順、
+/// 末尾の `Masks` は裁定205 施工第2号 §A で追加)。
+pub const EFFECTS_TAGS: [PreviewTag; 4] = [
     PreviewTag::Color,
     PreviewTag::Utility,
     PreviewTag::Animation,
+    PreviewTag::Masks,
 ];
 
 /// create タブの rail カテゴリ並び(mock html:454-455 の掲載順)。
@@ -358,6 +367,33 @@ pub enum CreateKind {
     Text,
 }
 
+/// カードが「新規レイヤーを作る」のではなく**選択中の単一レイヤーへ何かを
+/// 足す**時に運ぶ意図(裁定205 施工第2号 §A/§B — マスク追加・エフェクト適用)。
+///
+/// [`CreateKind`] とは別 enum にした理由: `CreateKind` は「store の
+/// `LayerSource` 語彙へ 1:1 で落ちる」という契約を doc で明示している
+/// (直上の doc 参照)。マスク/エフェクトはどちらも新しい layer を作らない
+/// (既存の選択レイヤーの component 列へ1件足すだけ)ので、その契約に混ぜると
+/// 「`CreateKind` は必ず新規レイヤーを作る」という `every_create_card_
+/// declares_its_create_kind` 系オラクルの前提が崩れる。**新しい grammar では
+/// ない** — [`PreviewCard::creates`] と全く同じ「ダブルクリックで Message を
+/// publish する」経路(`crate::preview_card_view`)を共有し、運ぶ payload の
+/// 型が違うだけ。単一選択でない時にどう振る舞うか(no-op か拒否か)は pane の
+/// 外(shell 側 supervisor)の責務 — この enum 自体は「何を足すか」しか運ばない
+/// (`model::can_replace_source` が置き先の是非を pane の外に置くのと同型)。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionAction {
+    /// 選択中レイヤーへマスクを1枚追加する(`Intent::AddMask` — 「一覧への
+    /// 追加」と「shape の初期値」を同じ `write()` で束ねる原子操作、
+    /// `motolii_store::document` の `Intent::AddMask` doc 参照。壁7の恒久修正
+    /// なので、これ以外の口(`SetMasks` 直呼び)を新たに作らない)。
+    AddMask,
+    /// 選択中レイヤーへ effect を1つ追加する。plugin id 文字列(裁定70)を
+    /// そのまま運ぶ — 2026-08-22 時点で実在する pass は `"motolii.glow"` の
+    /// 1つのみ(`motolii-compositor::effects::EffectPass::Glow`)。
+    ApplyEffect(&'static str),
+}
+
 /// preview-local カタログ1枚ぶんの静的カード(mock `#thumbnail-grid` の
 /// `data-tab="effects"/"create"/"panels"` カードの転写)。**mock 冒頭コメント
 /// の宣言どおり preview 専用データ** — filesystem/Document/Host/intent/
@@ -384,13 +420,24 @@ pub struct PreviewCard {
     /// ([`crate::state::Message::CreateFromCard`])を配線する(AE/Figma 慣習
     /// S0: シングル=選択・ダブル=作成)。
     pub creates: Option<CreateKind>,
+    /// このカードが「選択中の単一レイヤーへ足す」意図([`SelectionAction`]、
+    /// 裁定205 施工第2号)。`creates` とは排他(新規レイヤーを作るか、既存
+    /// レイヤーへ足すかのどちらか一方)——**両方 `Some` のカードは無い**、
+    /// `every_create_card_declares_its_create_kind`/`effects_action_cards_
+    /// declare_their_selection_action` の2オラクルがそれぞれ独立に確かめる。
+    /// 2026-08-22 時点では Effects タブの Glow(`ApplyEffect`)と Mask
+    /// (`AddMask`)の2枚だけが `Some`。
+    pub applies_to_selection: Option<SelectionAction>,
 }
 
 /// effects タブの preview カタログ。mock html:522-530 の3枚(Echo Bloom/
 /// Opacity/Sine)+ 実在 plugin の Glow(発注: 「effects は実在 plugin 名
 /// Glow を含めてよい」 — mock の並びを保ち末尾へ追加。分類は実分類=Color、
-/// caption `effect · Color` と同値)。
-const EFFECTS_PREVIEW: [PreviewCard; 4] = [
+/// caption `effect · Color` と同値)+ Mask(裁定205 施工第2号 §A — マスクは
+/// 新規レイヤーを作らないので Create タブの「新規レイヤー」語彙には属さず、
+/// Effects タブの「選択中レイヤーへ足す」語彙(Glow と同型)へ置く。**この
+/// 配置は判断であって台帳決定ではない** — 施工の RETURN に根拠を記載)。
+const EFFECTS_PREVIEW: [PreviewCard; 5] = [
     PreviewCard {
         id: "echo-bloom",
         name: "Echo Bloom",
@@ -398,6 +445,7 @@ const EFFECTS_PREVIEW: [PreviewCard; 4] = [
         glyph: "FX",
         tags: &[PreviewTag::Color],
         creates: None,
+        applies_to_selection: None,
     },
     PreviewCard {
         id: "opacity",
@@ -406,6 +454,7 @@ const EFFECTS_PREVIEW: [PreviewCard; 4] = [
         glyph: "FX",
         tags: &[PreviewTag::Utility],
         creates: None,
+        applies_to_selection: None,
     },
     PreviewCard {
         id: "sine",
@@ -414,7 +463,12 @@ const EFFECTS_PREVIEW: [PreviewCard; 4] = [
         glyph: "FX",
         tags: &[PreviewTag::Animation],
         creates: None,
+        applies_to_selection: None,
     },
+    // 裁定205 施工第2号 §B: Glow は実在 plugin(`"motolii.glow"`、
+    // `motolii-compositor::effects::EffectPass::Glow`)なので `applies_to_
+    // selection` を `Some` にして shell 結線を持てる — Echo Bloom/Opacity/
+    // Sine は mock 転写の見せ札(実在 plugin ではない)なので `None` のまま。
     PreviewCard {
         id: "glow",
         name: "Glow",
@@ -422,6 +476,19 @@ const EFFECTS_PREVIEW: [PreviewCard; 4] = [
         glyph: "FX",
         tags: &[PreviewTag::Color],
         creates: None,
+        applies_to_selection: Some(SelectionAction::ApplyEffect("motolii.glow")),
+    },
+    // 裁定205 施工第2号 §A: マスクは新規レイヤーを作らない(既存の選択レイヤーへ
+    // 1枚足すだけ)ので `creates` ではなく `applies_to_selection` を使う。置き場は
+    // Create タブではなく Effects タブ(`EFFECTS_PREVIEW` doc 冒頭の判断根拠参照)。
+    PreviewCard {
+        id: "mask",
+        name: "Mask",
+        caption: "mask · Layer",
+        glyph: "⬚",
+        tags: &[PreviewTag::Masks],
+        creates: None,
+        applies_to_selection: Some(SelectionAction::AddMask),
     },
 ];
 
@@ -442,6 +509,7 @@ const CREATE_PREVIEW: [PreviewCard; 5] = [
         glyph: "□",
         tags: &[PreviewTag::Shapes, PreviewTag::BuiltIn],
         creates: Some(CreateKind::Rectangle),
+        applies_to_selection: None,
     },
     PreviewCard {
         id: "ellipse",
@@ -450,6 +518,7 @@ const CREATE_PREVIEW: [PreviewCard; 5] = [
         glyph: "○",
         tags: &[PreviewTag::Shapes, PreviewTag::BuiltIn],
         creates: Some(CreateKind::Ellipse),
+        applies_to_selection: None,
     },
     PreviewCard {
         id: "solid",
@@ -458,6 +527,7 @@ const CREATE_PREVIEW: [PreviewCard; 5] = [
         glyph: "■",
         tags: &[PreviewTag::BuiltIn],
         creates: Some(CreateKind::Solid),
+        applies_to_selection: None,
     },
     PreviewCard {
         id: "null",
@@ -466,6 +536,7 @@ const CREATE_PREVIEW: [PreviewCard; 5] = [
         glyph: "◇",
         tags: &[PreviewTag::BuiltIn],
         creates: Some(CreateKind::Null),
+        applies_to_selection: None,
     },
     // 2026-08-22 利用者裁定「追加するものは Browser の中に全部入れる」—
     // 歌詞動画/MV ペルソナの致命的欠落(テキストレイヤーを作る入口が
@@ -478,6 +549,7 @@ const CREATE_PREVIEW: [PreviewCard; 5] = [
         glyph: "T",
         tags: &[PreviewTag::BuiltIn],
         creates: Some(CreateKind::Text),
+        applies_to_selection: None,
     },
 ];
 
@@ -490,6 +562,7 @@ const PANELS_PREVIEW: [PreviewCard; 3] = [
         glyph: "#",
         tags: &[PreviewTag::Tags],
         creates: None,
+        applies_to_selection: None,
     },
     PreviewCard {
         id: "notes",
@@ -498,6 +571,7 @@ const PANELS_PREVIEW: [PreviewCard; 3] = [
         glyph: "✎",
         tags: &[PreviewTag::Notes],
         creates: None,
+        applies_to_selection: None,
     },
     PreviewCard {
         id: "export-notes",
@@ -506,6 +580,7 @@ const PANELS_PREVIEW: [PreviewCard; 3] = [
         glyph: "↗",
         tags: &[PreviewTag::Export],
         creates: None,
+        applies_to_selection: None,
     },
 ];
 
@@ -982,14 +1057,16 @@ mod tests {
     }
 
     /// effects の preview カタログは mock html:522-530 の3枚+実在 plugin の
-    /// Glow(発注: 「effects は実在 plugin 名 Glow を含めてよい」)。
+    /// Glow(発注: 「effects は実在 plugin 名 Glow を含めてよい」)+ Mask
+    /// (裁定205 施工第2号 §A — 新規レイヤーを作らないので Create タブではなく
+    /// ここに置く判断、`EFFECTS_PREVIEW` doc 参照)。
     #[test]
     fn effects_preview_catalog_contains_the_mock_cards_and_glow() {
         let names: Vec<&str> = preview_catalog(LibraryTab::Effects)
             .iter()
             .map(|card| card.name)
             .collect();
-        for expected in ["Echo Bloom", "Opacity", "Sine", "Glow"] {
+        for expected in ["Echo Bloom", "Opacity", "Sine", "Glow", "Mask"] {
             assert!(
                 names.contains(&expected),
                 "effects カタログに {expected:?} が無い: {names:?}"
@@ -1105,7 +1182,8 @@ mod tests {
     // -----------------------------------------------------------------
 
     /// **ORACLE**: タブ別 rail カテゴリは mock `.tabScoped-*` の掲載順そのまま
-    /// (html:444-446 / 454-455 / 463-465 — S0 慣習順)。media は空
+    /// (html:444-446 / 454-455 / 463-465 — S0 慣習順)+ 末尾の `Masks`
+    /// (裁定205 施工第2号 §A で追加、mock に無い新規カテゴリ)。media は空
     /// (`RailScope` の語彙が正)。
     #[test]
     fn preview_tags_follow_the_mock_declaration_per_tab() {
@@ -1115,7 +1193,8 @@ mod tests {
             [
                 PreviewTag::Color,
                 PreviewTag::Utility,
-                PreviewTag::Animation
+                PreviewTag::Animation,
+                PreviewTag::Masks,
             ]
         );
         assert_eq!(
@@ -1229,7 +1308,10 @@ mod tests {
     }
 
     /// effects/panels のカードは `creates: None`(「作る」は create タブ
-    /// だけの語彙 — 型の壁が2系統の混線を防ぐのと同じ形)。
+    /// だけの語彙 — 型の壁が2系統の混線を防ぐのと同じ形)。Glow/Mask は
+    /// `applies_to_selection` が `Some` になる代わりに `creates` は `None` の
+    /// まま(2つの意図の型が混ざらない、[`PreviewCard::applies_to_selection`]
+    /// doc 参照)。
     #[test]
     fn non_create_cards_never_declare_a_create_kind() {
         for tab in [LibraryTab::Effects, LibraryTab::Panels] {
@@ -1243,12 +1325,37 @@ mod tests {
         }
     }
 
+    /// **ORACLE**(裁定205 施工第2号): Glow は `ApplyEffect("motolii.glow")`・
+    /// Mask は `AddMask` を宣言する。それ以外の effects カード(mock 転写の
+    /// 見せ札)は両方とも `None` のまま(`creates` も `applies_to_selection`
+    /// も無い = 何も発火できない、mock の「見せるだけ」の意図どおり)。
+    #[test]
+    fn effects_action_cards_declare_their_selection_action() {
+        let cards = preview_catalog(LibraryTab::Effects);
+        let by_id = |id: &str| cards.iter().find(|card| card.id == id).unwrap();
+        assert_eq!(
+            by_id("glow").applies_to_selection,
+            Some(SelectionAction::ApplyEffect("motolii.glow"))
+        );
+        assert_eq!(
+            by_id("mask").applies_to_selection,
+            Some(SelectionAction::AddMask)
+        );
+        for id in ["echo-bloom", "opacity", "sine"] {
+            assert_eq!(
+                by_id(id).applies_to_selection,
+                None,
+                "{id:?} は見せ札のはずなのに applies_to_selection を持っている"
+            );
+        }
+    }
+
     /// `All` は絞らない・並べ替えない(media の `AllMedia` と同じ意味)。
     #[test]
     fn preview_visible_all_keeps_the_declaration_order() {
         let cards = preview_visible(LibraryTab::Effects, PreviewScope::All, "");
         let names: Vec<&str> = cards.iter().map(|card| card.name).collect();
-        assert_eq!(names, ["Echo Bloom", "Opacity", "Sine", "Glow"]);
+        assert_eq!(names, ["Echo Bloom", "Opacity", "Sine", "Glow", "Mask"]);
     }
 
     /// scope と query は同時に効く(AND — media の `visible` と同じ形)。
