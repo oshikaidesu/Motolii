@@ -13,6 +13,9 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| TXT | 意味probe | worktree(probes) | 字形描画ルート裁定(cosmic-text 再利用が本命・lh/tr が数値で効く合格線) |
+| BL4 | 意味実装 | worktree(compositor/engine/store) | 非分離blend4+track matte(BL3 の型・即検収) |
+| AS | 意味実装 | worktree(store+shell) | 自動保存機構(世代ローテ・atomic・dirty時のみ・再生中スキップ) |
 | WIRE-5 | 実装 | worktree(shell+icons1個) | 第5波の結線: TL+6点(keymap裁定: JKL=シャトル・意味点ジャンプ=,/.仮置き・ループ=Cmd+L)+GZ(overlay+transient/SetTrack)+SET+(sections差し替え)+repeat icon vendoring |
 
 
@@ -20,6 +23,7 @@
 
 | レーン | 結果 |
 |---|---|
+| **第6波 顔9レーン(check緑merge・裁定189初運転)** | IC3(icon27)/ WIRE-5(JKL・ループ・ギズモ・Settings sections 全結線+keymap 移設 ,/.)/ TL-mark(マーカー部品)/ EXP(Export 顔・新crate)/ INS3(EFFECTS section+ラベル色 — 型別第2号)/ ST2(方眼3種+セーフ+anchor drag)/ ST-sel(マーキー)/ TL3(補間・Easy Ease・restack・rename)/ BR3(create 実体化 Shape/Solid/Null+取り込みUX)。**map 230/1,551(+54)**。未結線の統合手順(マーカー・マーキー・シート・rename・create・Export窓)は次結線波の発注仕様としてRETURN群に記載済み |
 | 第5波4レーン(検収合格・merge) | **GZ**: Stage ギズモ(bbox+8ハンドル+回転+anchor・1drag=1commit 契約・FINDING= StageOverlay の pane 原点ずれ疑い→修理キュー)/ **TL+**: ループ・JKL・作業範囲(24行消化・keymap 衝突は拘束6 委任→WIRE-5 で裁定)/ **INS-mask**: 型別 section 第1号(B02、feather/expansion は store 型不在で正しく見送り)/ **SET+**: Composition 設定(W/H/fps/尺)+**飾り禁止柵が B12 の実態を暴露**(実在意味 3行・見送り40行超の理由台帳 — B12 の残りは機能実装が先という逆依存の証明)。map 消化 **176/1,551** |
 | MW-S12(検収合格・merge) | **浮かし着地(裁定182/188 完結)** — S1 daemon 骨格(view() 改形なし・main閉=exit・窓台帳同期先行記帳)+S2 Settings 窓移住(歯車=OS窓 open/close・480×400 リサイズ可・閉→再開で状態保持を drive 実測・器具は Settings 対象外へ明示)。題帯は OS titlebar が名札を担う整理。277緑 |
 | MW-probe(緑・merge) | r5-multiwindow — device/queue 全窓共有を実測確定(跨窓 write_buffer 生存)・zero-copy 無傷・Settings 窓最小形動作。注意2点(全窓閉 device 破棄・screenshot 器具)を S 発注書へ継承 |
