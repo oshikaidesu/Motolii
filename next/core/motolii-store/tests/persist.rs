@@ -1,8 +1,9 @@
 //! 保存と読込 — **形式は上流の `.rrd`**。自前形式を発明していない。
 
 use motolii_store::{
-    Composition, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId,
-    LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value, property,
+    AutoSaveConfig, Composition, Document, Fps, Interp, Intent, Keyframe, KeyframeTrack,
+    LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, Value,
+    property,
 };
 
 fn tmp(name: &str) -> std::path::PathBuf {
@@ -287,5 +288,168 @@ fn mask_without_a_mode_field_defaults_to_add() {
         loaded.mode,
         motolii_store::MaskMode::Add,
         "mode 欠落時は Add へ落ちるはず"
+    );
+}
+
+// ---- 自動保存(発注: 自動保存機構、store 側の意味) ----
+
+fn timing_at(start: i64) -> LayerTiming {
+    LayerTiming {
+        start,
+        duration: 120,
+        source_in: 5,
+        ..Default::default()
+    }
+}
+
+/// **保存先が無い(一度も明示 Save していない新規 project)なら何もしない**
+/// (AE 先例: Auto-Save は保存済み project の隣にしか書けない)。dirty であっても
+/// `project_path` が `None` なら素通りする。
+#[test]
+fn auto_save_skips_when_there_is_no_project_path() {
+    let mut doc = authored();
+    let since = Document::new().revision(); // 現在の revision とは必ず異なる(dirty 相当)
+    doc.apply(Intent::SetTiming {
+        layer: LayerId(1),
+        timing: timing_at(42),
+    })
+    .unwrap();
+
+    let result = doc
+        .auto_save(None, &since, &AutoSaveConfig::default())
+        .expect("path 無しの自動保存判定自体は失敗しないはず");
+    assert!(result.is_none(), "project_path が無いのに自動保存が走った");
+}
+
+/// **dirty でなければ何もしない**(`since` == 現在の revision)。ディスクへ一切
+/// 触れない(auto-save ディレクトリすら作らない)ことまで確認する。
+#[test]
+fn auto_save_skips_when_not_dirty() {
+    let doc = authored();
+    let path = tmp("not-dirty-project.motolii");
+    let since = doc.revision();
+
+    let result = doc
+        .auto_save(Some(&path), &since, &AutoSaveConfig::default())
+        .expect("dirty 判定自体は失敗しないはず");
+    assert!(result.is_none(), "dirty ではないのに自動保存が走った");
+    assert!(
+        !Document::auto_save_dir(&path).exists(),
+        "何もしないはずが auto-save ディレクトリを作ってしまった"
+    );
+}
+
+/// **世代ローテーション上限**。`generations` を超えた古い世代は削除され、
+/// ディレクトリの中身は常に上限以下に保たれる。各世代の中身も正しく読める
+/// (最新の状態が正しく往復している)ことも確認する。
+#[test]
+fn auto_save_rotates_and_caps_at_generations() {
+    let mut doc = authored();
+    let path = tmp("rotation-project.motolii");
+    let config = AutoSaveConfig {
+        interval_secs: 1,
+        generations: 3,
+    };
+    let mut since = doc.revision();
+
+    for start in 0..5i64 {
+        doc.apply(Intent::SetTiming {
+            layer: LayerId(1),
+            timing: timing_at(start),
+        })
+        .unwrap();
+
+        let written = doc
+            .auto_save(Some(&path), &since, &config)
+            .expect("自動保存が失敗した")
+            .expect("dirty なのに自動保存されなかった");
+        since = doc.revision();
+
+        let loaded = Document::load(&written).expect("自動保存した世代が読めない");
+        assert_eq!(
+            loaded.view().meta(LayerId(1)).unwrap().unwrap().timing.start,
+            start,
+            "世代 {written:?} の中身が直前の編集と一致しない"
+        );
+    }
+
+    let dir = Document::auto_save_dir(&path);
+    let remaining: Vec<_> = std::fs::read_dir(&dir)
+        .expect("auto-save ディレクトリが無い")
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(
+        remaining.len(),
+        3,
+        "世代数上限(3)を超えて残っている: {remaining:?}"
+    );
+
+    // 生き残っているのは新しい3世代(start=2,3,4)のはず — 最新の状態が消えていない。
+    let mut starts: Vec<i64> = remaining
+        .iter()
+        .map(|p| Document::load(p).unwrap().view().meta(LayerId(1)).unwrap().unwrap().timing.start)
+        .collect();
+    starts.sort_unstable();
+    assert_eq!(starts, vec![2, 3, 4], "古い世代を消し損ねている/新しい世代を消してしまっている");
+}
+
+/// **atomic 書き込み**: 次に書くはずの世代の tmp スクラッチ位置に、クラッシュ痕を
+/// 模した残骸(ゴミバイト列)を仕込んでおいても、自動保存は正常に完了し、
+/// **既存の(直前に書いた)正本ファイルは無傷のまま**である。
+///
+/// tmp のファイル名は `Document::auto_save` の doc に明記した規約
+/// (`.{stem}.autosave-{seq}{ext}.tmp`)に基づく — 実装の内部詳細だが、この規約自体が
+/// atomic 書き込みの契約(rename 前は tmp、rename 後だけ正本を差し替える)なので
+/// ここで直接検証する。
+#[test]
+fn auto_save_survives_stray_tmp_debris_without_corrupting_the_prior_generation() {
+    let mut doc = authored();
+    let path = tmp("debris-project.motolii");
+    let config = AutoSaveConfig::default();
+    let since0 = doc.revision();
+
+    doc.apply(Intent::SetTiming {
+        layer: LayerId(1),
+        timing: timing_at(7),
+    })
+    .unwrap();
+    let first = doc
+        .auto_save(Some(&path), &since0, &config)
+        .unwrap()
+        .expect("1回目の自動保存が走らなかった");
+    let since1 = doc.revision();
+    let first_bytes_before = std::fs::read(&first).unwrap();
+
+    // 2回目が使うはずの tmp 位置へ、クラッシュ痕(ゴミ)を仕込む。
+    let dir = Document::auto_save_dir(&path);
+    let stray_tmp = dir.join(".debris-project.autosave-2.motolii.tmp");
+    std::fs::write(&stray_tmp, b"garbage left behind by a crashed auto-save").unwrap();
+
+    doc.apply(Intent::SetTiming {
+        layer: LayerId(1),
+        timing: timing_at(9),
+    })
+    .unwrap();
+    let second = doc
+        .auto_save(Some(&path), &since1, &config)
+        .unwrap()
+        .expect("2回目の自動保存が走らなかった(tmp 残骸に足を取られた)");
+
+    // 1世代目(正本)は巻き添えを食っていない。
+    assert_eq!(
+        std::fs::read(&first).unwrap(),
+        first_bytes_before,
+        "tmp 残骸のせいで既存の世代ファイルが変わった"
+    );
+    // 2世代目はゴミではなく、ちゃんと今の状態が読める(tmp を rename で正しく差し替えた)。
+    let loaded = Document::load(&second).expect("2世代目が読めない(tmp 残骸で壊れた)");
+    assert_eq!(
+        loaded.view().meta(LayerId(1)).unwrap().unwrap().timing.start,
+        9
+    );
+    // rename が起きたので、tmp の残骸はもう残っていない。
+    assert!(
+        !stray_tmp.exists(),
+        "tmp が rename されずに残骸のまま残っている"
     );
 }

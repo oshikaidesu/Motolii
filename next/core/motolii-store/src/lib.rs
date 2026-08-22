@@ -40,6 +40,7 @@ pub use effect::{EffectId, EffectInstance, ResolvedEffect};
 pub use fingerprint::{SourceFingerprintDecode, SourceFingerprintError, SourceFingerprintV1};
 pub use marker::Marker;
 pub use mask::{Mask, MaskId, MaskMode, ResolvedMask};
+pub use persist::AutoSaveConfig;
 pub use slot::{PropertySource, Slot, SlotId};
 pub use text::{
     ContentKeyframe, ContentTrack, FontRef, TextAlignmentOptions, TextBasedOn, TextDocument,
