@@ -84,16 +84,37 @@
 //! 記帳自体(`Intent::AdmitAsset` の発行)は `Shell::admit`(`motolii-shell`
 //! 側)が持つ — この crate は読み専用の projection+絞り込み+view しか持たない。
 
+//! ## Browser 第3切片(B36 create 実体化+B08 取り込み続編、この波)
+//! - **create タブの実体化(B36)**: create タブのカードは全枚が「作る」を
+//!   宣言する([`model::PreviewCard::creates`]/[`model::CreateKind`] — 消化した
+//!   map 行と見送りは `CreateKind` doc の台帳)。シングルクリック=選択・
+//!   **ダブルクリック=作成**(AE/Figma 慣習 S0、[`state::Message::
+//!   CreateFromCard`])。button は press を capture して `on_double_click` へ
+//!   届かない(fork `widget/src/mouse_area.rs::update` は content が capture
+//!   すると return する実測)ため、create カードだけ `mouse_area` 経路 —
+//!   hover 意匠は pane-local の [`state::Message::CardHovered`] で自前に持つ
+//!   (Q0: hover 無反応にしない)。実際のレイヤー生成= shell 結線(次波)。
+//!   drag で Stage/Timeline へ、は将来切片(見送り)。
+//! - **B08 続編(取り込み UX)**: drop 中は media タブの catalog 容器を
+//!   drop 受け入れ面として塗る([`drop_target_style`] — `motolii-shell` の
+//!   pane_grid `hovered_region` と同じ文法: 面=`surface_hover`+縁=`focus`
+//!   ×2)。取り込み直後の新規素材はカードの縁が `focus` で光る
+//!   ([`state::Message::RecentlyAdmitted`]、カード選択かタブ切替で消灯)。
+//!   Results の空状態は2値を区別する: 台帳自体が空=「Drop files here」
+//!   (取り込みの入口を最小の1句で言う)/絞り込みで0件=「No matches」。
+//!   `FileHovered`/`FilesHoveredLeft` → [`state::Message::DropHoverChanged`]、
+//!   admit 後 → `RecentlyAdmitted` の shell 結線は次波(write-set 外)。
+
 pub mod model;
 pub mod state;
 
 pub use model::{
-    AssetListItem, CardKey, CatalogCard, Category, LibraryTab, PreviewCard, PreviewScope,
-    PreviewTag, RailScope, FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES,
+    AssetListItem, CardKey, CatalogCard, Category, CreateKind, LibraryTab, PreviewCard,
+    PreviewScope, PreviewTag, RailScope, FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES,
 };
 pub use state::{Message, PaneState};
 
-use iced::widget::{button, column, container, row, scrollable, text, text_input};
+use iced::widget::{button, column, container, mouse_area, row, scrollable, text, text_input};
 use iced::{Element, Length};
 
 use motolii_tokens_rs::{Colors, Dimensions};
@@ -143,6 +164,8 @@ pub fn pane_view(
             state.scope(),
             state.query(),
             state.selected(),
+            state.recently_admitted(),
+            state.drop_hover(),
             dims,
             colors,
         ),
@@ -151,6 +174,7 @@ pub fn pane_view(
             state.preview_scope(),
             state.query(),
             state.selected(),
+            state.hovered(),
             dims,
             colors,
         ),
@@ -267,23 +291,39 @@ pub fn view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    media_body(items, scope, query, None, dims, colors)
+    media_body(items, scope, query, None, &[], false, dims, colors)
 }
 
 /// media タブの body(rail + カタログ)。B2/B3 の [`view`] と同一の木に、
-/// カード選択意匠(`selected`、mock `.libraryCard.selected`)だけを足した形。
+/// カード選択意匠(`selected`、mock `.libraryCard.selected`)+ 新規素材
+/// ハイライト(`recent`)+ drop 先ハイライト(`drop_hover`、B08 続編)を
+/// 足した形。
+#[allow(clippy::too_many_arguments)]
 fn media_body(
     items: &[AssetListItem],
     scope: RailScope,
     query: &str,
     selected: Option<model::CardKey>,
+    recent: &[motolii_store::AssetId],
+    drop_hover: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
     let filtered = model::visible(items, scope, query);
+    let ledger_is_empty = items.is_empty();
 
     let rail = rail_view(scope, dims, colors);
-    let catalog = catalog_view(scope, query, &filtered, selected, dims, colors);
+    let catalog = catalog_view(
+        scope,
+        query,
+        &filtered,
+        ledger_is_empty,
+        selected,
+        recent,
+        drop_hover,
+        dims,
+        colors,
+    );
 
     row![rail, catalog].spacing(dims.spacing_xs).into()
 }
@@ -394,11 +434,15 @@ fn rail_container(
 
 /// filter shelf(mock `.filterShelf`)+ 結果件数 + カード grid(mock
 /// `.thumbnailGrid`、B3 — [`card_grid_view`])。
+#[allow(clippy::too_many_arguments)]
 fn catalog_view(
     scope: RailScope,
     query: &str,
     filtered: &[AssetListItem],
+    ledger_is_empty: bool,
     selected: Option<model::CardKey>,
+    recent: &[motolii_store::AssetId],
+    drop_hover: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -411,23 +455,51 @@ fn catalog_view(
         .size(dims.micro_text)
         .color(colors.text_muted);
 
-    let grid = card_grid_view(filtered, selected, dims, colors);
+    let grid = card_grid_view(filtered, ledger_is_empty, selected, recent, dims, colors);
 
-    catalog_container(column![shelf, summary, grid], dims, colors)
+    catalog_container(column![shelf, summary, grid], drop_hover, dims, colors)
 }
 
 /// カタログ容器(media/preview 共通 — 地・枠・padding を1箇所で共有する。
 /// `FillPortion(4)` は rail の `FillPortion(1)` と対で mock
 /// `.librarySidebar{width:112px}` : `.catalog{flex:1}` の比を近似した既決値)。
+/// `drop_hover` は media タブの drop 中だけ真([`drop_target_style`] へ
+/// 切り替わる — preview タブは常に偽)。
 fn catalog_container(
     content: iced::widget::Column<'static, Message>,
+    drop_hover: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
     container(content.spacing(dims.spacing_xs).padding(dims.spacing_m))
         .width(Length::FillPortion(4))
-        .style(move |_theme| panel_container_style(dims, colors))
+        .style(move |_theme| {
+            if drop_hover {
+                drop_target_style(dims, colors)
+            } else {
+                panel_container_style(dims, colors)
+            }
+        })
         .into()
+}
+
+/// drop 受け入れ面のハイライト(B08 続編)。`motolii-shell` の pane_grid
+/// `hovered_region`(題帯レーン #3)と**同じ文法・同じロール**: 面=
+/// `surface_hover`(drag 中に cursor が乗っている受け入れ面)+ 縁=`focus`
+/// (操作が着地する場所の合図)× 太さ `border_width * 2.0`(強調線の既存
+/// 導出)。border は幅が [`panel_container_style`] と違うが、iced の border は
+/// layout に効かない(bounds 内へ描く)ので幾何不変。**pub**:
+/// `tests/drop_target_fence.rs` が pane_grid 文法との同型を機械照合する。
+pub fn drop_target_style(dims: Dimensions, colors: Colors) -> container::Style {
+    container::Style {
+        background: Some(iced::Background::Color(colors.surface_hover)),
+        border: iced::Border {
+            color: colors.focus,
+            width: dims.border_width * 2.0,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    }
 }
 
 /// filter chip/Clear の角丸 = `dims.row_height` の何倍か(裁定165「形は
@@ -689,22 +761,28 @@ pub const THUMB_ASPECT_H: f32 = 9.0;
 
 /// カード grid 本体。**サムネイルは代表フレーム抽出なし**(B5 境界、crate
 /// 冒頭 doc 参照)— thumb は種別グリフ+種別で塗り分けた色地のみ、名前+尺の
-/// 「カード骨格」まで(B3 OUTCOME (1))。`filtered` が空なら mock 同様「無い」
-/// ことを1行で言う(B2 から不変の文言)。
+/// 「カード骨格」まで(B3 OUTCOME (1))。空状態は2値を区別する(B08 続編、
+/// 説明文は最小の1句 — 裁定185 の精神):
+/// - 台帳自体が空(まだ何も取り込んでいない)= 「Drop files here」 —
+///   取り込みの入口(drop)を言う。
+/// - 台帳はあるが絞り込みで0件 = 「No matches」。
 fn card_grid_view(
     filtered: &[AssetListItem],
+    ledger_is_empty: bool,
     selected: Option<model::CardKey>,
+    recent: &[motolii_store::AssetId],
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
     if filtered.is_empty() {
-        return container(
-            text("No matching media")
-                .size(dims.caption_text)
-                .color(colors.text_muted),
-        )
-        .padding(dims.spacing_m)
-        .into();
+        let copy = if ledger_is_empty {
+            "Drop files here"
+        } else {
+            "No matches"
+        };
+        return container(text(copy).size(dims.caption_text).color(colors.text_muted))
+            .padding(dims.spacing_m)
+            .into();
     }
 
     let rows: Vec<Element<'static, Message>> = filtered
@@ -715,7 +793,8 @@ fn card_grid_view(
                 .cloned()
                 .map(|item| {
                     let key = model::CardKey::Media(item.id);
-                    card_view(item, selected == Some(key), dims, colors)
+                    let is_recent = recent.contains(&item.id);
+                    card_view(item, selected == Some(key), is_recent, dims, colors)
                 })
                 .collect();
             row(cards).spacing(dims.spacing_s).into()
@@ -739,6 +818,7 @@ fn card_grid_view(
 fn card_view(
     item: AssetListItem,
     selected: bool,
+    recent: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -790,7 +870,7 @@ fn card_view(
         .on_press(Message::SelectCard(model::CardKey::Media(item.id)))
         .width(Length::Fixed(card_width))
         .padding(dims.spacing_xs)
-        .style(move |_theme, status| card_style(colors, selected, status))
+        .style(move |_theme, status| card_style(dims, colors, selected, recent, status))
         .into()
 }
 
@@ -800,7 +880,18 @@ fn card_view(
 /// (mock は `.libraryCard:hover .libraryThumb` の枠色変化だが、iced の
 /// button style から子 container の枠へは届かないため、pane 内の既存 hover
 /// 文法へ読み替える — 逸脱として RETURN 記載)。
-fn card_style(colors: Colors, selected: bool, status: button::Status) -> button::Style {
+///
+/// `recent`(B08 続編: 取り込み直後の新規素材)は縁が `focus` で光る —
+/// [`drop_target_style`] と同じ「操作が着地した場所の合図」ロール(drop 先
+/// ハイライトの続きとして同族色で受け止める)。border は色だけ動かし幅は
+/// `dims.border_width` 固定(裁定179 の幾何不変 — 非 recent は透明)。
+fn card_style(
+    dims: Dimensions,
+    colors: Colors,
+    selected: bool,
+    recent: bool,
+    status: button::Status,
+) -> button::Style {
     let background = if selected {
         Some(iced::Background::Color(colors.state_selected))
     } else {
@@ -809,12 +900,18 @@ fn card_style(colors: Colors, selected: bool, status: button::Status) -> button:
             _ => None,
         }
     };
+    let border_color = if recent {
+        colors.focus
+    } else {
+        iced::Color::TRANSPARENT
+    };
     button::Style {
         background,
         text_color: colors.text_primary,
         border: iced::Border {
+            color: border_color,
+            width: dims.border_width,
             radius: 0.0.into(),
-            ..iced::Border::default()
         },
         ..button::Style::default()
     }
@@ -847,22 +944,26 @@ fn preview_body(
     scope: PreviewScope,
     query: &str,
     selected: Option<model::CardKey>,
+    hovered: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
     let rail = preview_rail_view(tab, scope, dims, colors);
-    let catalog = preview_catalog_view(tab, scope, query, selected, dims, colors);
+    let catalog = preview_catalog_view(tab, scope, query, selected, hovered, dims, colors);
 
     row![rail, catalog].spacing(dims.spacing_xs).into()
 }
 
 /// 非 media タブの catalog(filter shelf + 結果件数 + カード grid —
-/// [`catalog_view`] と同じ骨格を preview-local データで組む)。
+/// [`catalog_view`] と同じ骨格を preview-local データで組む)。空状態の文言は
+/// media の「絞り込みで0件」と同じ「No matches」(B08 続編の文言整理 —
+/// preview カタログは静的なので「台帳が空」の面は存在しない)。
 fn preview_catalog_view(
     tab: LibraryTab,
     scope: PreviewScope,
     query: &str,
     selected: Option<model::CardKey>,
+    hovered: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -876,7 +977,7 @@ fn preview_catalog_view(
 
     let grid: Element<'static, Message> = if cards_data.is_empty() {
         container(
-            text("No matching items")
+            text("No matches")
                 .size(dims.caption_text)
                 .color(colors.text_muted),
         )
@@ -890,7 +991,13 @@ fn preview_catalog_view(
                     .iter()
                     .map(|&card| {
                         let key = model::CardKey::Preview(card.id);
-                        preview_card_view(card, selected == Some(key), dims, colors)
+                        preview_card_view(
+                            card,
+                            selected == Some(key),
+                            hovered == Some(key),
+                            dims,
+                            colors,
+                        )
                     })
                     .collect();
                 row(cards).spacing(dims.spacing_s).into()
@@ -901,7 +1008,7 @@ fn preview_catalog_view(
             .into()
     };
 
-    catalog_container(column![shelf, summary, grid], dims, colors)
+    catalog_container(column![shelf, summary, grid], false, dims, colors)
 }
 
 /// preview-local カタログの1枚(mock `.libraryCard` と同じ thumb +
@@ -911,9 +1018,18 @@ fn preview_catalog_view(
 /// `surface_raised` 一律 — mock の装飾色(`.thumb-magenta` 等の直書き hex)は
 /// tokens に対応ロールが無く、S4「新ロールを起こさない」を優先して転写しない
 /// (逸脱として RETURN 記載)。
+///
+/// **B36**: `creates: Some` のカード(create タブ)は button でなく
+/// `mouse_area` 経路 — シングル(press)=選択・**ダブルクリック=作成**
+/// ([`Message::CreateFromCard`])。button は press を capture して
+/// `on_double_click` へ届かないための乗り換えで、hover 意匠は
+/// [`Message::CardHovered`]/[`Message::CardUnhovered`] の pane-local 状態が
+/// 担う(crate 冒頭 doc 参照)。cursor は `Interaction::Pointer`(mock
+/// `.libraryCard{cursor:pointer}` — button 経路と同じ手触り、文法§5.5)。
 fn preview_card_view(
     card: model::PreviewCard,
     selected: bool,
+    hovered: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -955,10 +1071,54 @@ fn preview_card_view(
         .wrapping(iced::widget::text::Wrapping::None)
         .ellipsis(iced::widget::text::Ellipsis::End);
 
-    button(column![thumb, name, caption].spacing(dims.spacing_xs))
-        .on_press(Message::SelectCard(model::CardKey::Preview(card.id)))
+    let key = model::CardKey::Preview(card.id);
+    let body = column![thumb, name, caption].spacing(dims.spacing_xs);
+
+    if let Some(kind) = card.creates {
+        // B36: create カードは mouse_area 経路(doc 冒頭参照)。意匠は
+        // [`create_card_face`] が button 経路の [`card_style`] と同じ文法を
+        // container で再現する(hover は pane-local 状態)。
+        let face = container(body)
+            .width(Length::Fixed(card_width))
+            .padding(dims.spacing_xs)
+            .style(move |_theme| create_card_face(colors, selected, hovered));
+        return mouse_area(face)
+            .on_press(Message::SelectCard(key))
+            .on_double_click(Message::CreateFromCard { kind })
+            .on_enter(Message::CardHovered(key))
+            .on_exit(Message::CardUnhovered(key))
+            .interaction(iced::mouse::Interaction::Pointer)
+            .into();
+    }
+
+    button(body)
+        .on_press(Message::SelectCard(key))
         .width(Length::Fixed(card_width))
         .padding(dims.spacing_xs)
-        .style(move |_theme, status| card_style(colors, selected, status))
+        .style(move |_theme, status| card_style(dims, colors, selected, false, status))
         .into()
+}
+
+/// create カード(mouse_area 経路)の面 — button 経路の [`card_style`] と
+/// 同じ状態文法を container で再現する: 選択=`state_selected` 地 / hover=
+/// `surface_hover` 地 / 通常=透明(裁定179「箱は状態の器」)。文字色は中身の
+/// `text()` が自前で持つ(`text_primary`/`text_muted`)ので指定不要。
+/// **pub**: `tests/create_card_fence.rs` が button 経路との同文法を機械照合する。
+pub fn create_card_face(colors: Colors, selected: bool, hovered: bool) -> container::Style {
+    let background = if selected {
+        Some(iced::Background::Color(colors.state_selected))
+    } else if hovered {
+        Some(iced::Background::Color(colors.surface_hover))
+    } else {
+        None
+    };
+    container::Style {
+        background,
+        border: iced::Border {
+            color: iced::Color::TRANSPARENT,
+            width: 0.0,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    }
 }
