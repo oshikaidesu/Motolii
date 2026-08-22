@@ -9,7 +9,9 @@
 //! 巡回の書き口([`next_label_color`]/`cycle_inspector_label_color`/
 //! `label_color_chip`)・寸法計算の小さな純関数群(`value_cell_height`/
 //! `sibling_gap_px`/…)・taffy 転写 CSS 宣言([`property_row_css`])・
-//! `column_header_row`/`hint_row`。
+//! `column_header_row`/`hint_row`・pick_list 共通配色([`pick_list_style`] —
+//! 2026-08-22 発注「レイヤーを指す」文法で `text.rs::font_family_row` の意匠を
+//! ここへ移設・共通化)。
 //!
 //! **持たない**: 各 section 固有の行組み立て(`transform_row`/`mask_section`/
 //! `effects_section`/`text_section`/`attrs_section`)や投影の中身の判断 ──
@@ -19,7 +21,7 @@ use motolii_settings_pane::chrome::value_input_style;
 use motolii_store::{Document, Intent, LayerAttrsPatch, LayerId};
 use motolii_tokens_rs::{Colors, Dimensions, Ink, TextWeight, LABEL_PALETTE_LEN};
 
-use iced::widget::{button, container, mouse_area, row as row_widget, text, text_input, Space};
+use iced::widget::{button, container, mouse_area, pick_list, row as row_widget, text, text_input, Space};
 use iced::{Element, Length};
 
 use crate::projection::{ComponentSlot, KeyCellProjection};
@@ -603,6 +605,36 @@ pub(crate) fn value_cell_padding(dims: Dimensions) -> iced::Padding {
 /// 2箇所で別の値を発明しない、裁定168 適用後もこの対称は保つ)。
 pub(crate) fn name_field_padding(dims: Dimensions) -> iced::Padding {
     iced::Padding::from([0.0, single_row_horizontal_inset(dims.body_text)])
+}
+
+/// pick_list 共通配色(`text.rs::font_family_row` が最初に建てた意匠を
+/// ここへ移設 — 2026-08-22 発注「レイヤーを指す」文法で MATTE/LINK にも
+/// pick_list が要るようになったため、3箇所目からは共通化する。裁定142
+/// どおり `name_input_style`/`flat_button_style` と同じ token
+/// (surface_hover/border_default/text_primary/text_muted)を使い、新しい色を
+/// 発明しない)。
+pub(crate) fn pick_list_style(
+    dims: Dimensions,
+    colors: Colors,
+    status: pick_list::Status,
+) -> pick_list::Style {
+    let background = match status {
+        pick_list::Status::Hovered | pick_list::Status::Opened { is_hovered: true } => {
+            colors.surface_hover
+        }
+        _ => iced::Color::TRANSPARENT,
+    };
+    pick_list::Style {
+        text_color: colors.text_primary,
+        placeholder_color: colors.text_muted,
+        handle_color: colors.text_primary,
+        background: iced::Background::Color(background),
+        border: iced::Border {
+            color: colors.border_default,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+    }
 }
 
 /// 兄弟要素間の gap(裁定167 の梯子下段: `0.075 × 行高`、px 最近傍丸め)。

@@ -113,11 +113,14 @@ fn selection_with_position_row() -> SelectionProjection {
             blend_mode: "Normal".to_owned(),
             speed_percent: 100.0,
             label_color: None,
+            matte: None,
+            matte_candidates: vec![],
         },
         masks: vec![],
         effects: vec![],
         text: None,
         audio: None,
+        links: vec![],
     }
 }
 

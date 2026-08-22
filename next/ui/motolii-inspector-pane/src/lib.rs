@@ -127,7 +127,13 @@ mod chrome;
 // 未結線でも crate の公開 API の一部にする、dead_code 警告を呼ばない形)。
 pub mod color;
 mod effects;
+// LINK section(2026-08-22 発注「レイヤーを指す」文法 第3号)。型付き
+// `PropertySource::Link` の参照先を選ぶ pick_list とその意味・書き口。
+mod link;
 mod mask;
+// MATTE 行(2026-08-22 発注「レイヤーを指す」文法 第1号)。`LayerAttrs.matte`
+// の元を選ぶ pick_list とその意味・書き口。
+mod matte;
 mod projection;
 mod text;
 mod transform;
@@ -140,14 +146,22 @@ pub use effects::{
     plugin_display_name, plugin_params, remove_inspector_effect, toggle_inspector_effect_bypass,
     GlowParam, GLOW_PLUGIN_ID,
 };
+pub use link::{
+    clear_inspector_link, commit_inspector_link, LinkRowProjection, LinkSourceCandidate,
+    LinkTarget,
+};
 pub use mask::{
     cycle_inspector_mask_mode, masks_with_cycled_mode, masks_with_toggled_inverted,
     next_mask_mode, toggle_inspector_mask_inverted,
 };
+pub use matte::{
+    clear_inspector_matte, cycle_inspector_matte_mode, next_matte_mode,
+    set_inspector_matte_source,
+};
 pub use projection::{
     project, AttrsProjection, AudioSectionProjection, ComponentSlot, EffectRowProjection,
-    KeyCellProjection, MaskRowProjection, RowValue, SelectionProjection, TextSectionProjection,
-    TransformRowProjection,
+    KeyCellProjection, LayerCandidate, MaskRowProjection, RowValue, SelectionProjection,
+    TextSectionProjection, TransformRowProjection,
 };
 pub use text::{
     applied_text_field, commit_text_field, commit_text_font_pick, cycle_text_justify,
@@ -167,6 +181,7 @@ use attrs::*;
 use audio::*;
 use chrome::*;
 use effects::*;
+use link::*;
 use mask::*;
 use projection::*;
 use text::*;
@@ -307,6 +322,30 @@ pub enum Message {
     /// と同じ「子 pane の Message を親が wrap する」形、`color.rs` 冒頭 doc
     /// 「まだ結線していない」の解消)。
     Color(color::Message),
+
+    // ---- MATTE(2026-08-22 発注「レイヤーを指す」文法 第1号 — engine は
+    // `MatteMode`/`Matte` の消費を既に開始しているのに、指定する UI が無
+    // かった) ----
+    /// MATTE 元の pick_list からの選択。`PickFont` と同じ即時操作の形(下書き
+    /// を経由しない、即1回の `Intent::SetAttrs`)。
+    PickMatteSource(LayerId),
+    /// MATTE mode 巡回ボタン。`CycleBlendMode`/`CycleMaskMode` と同じ即時
+    /// 操作の形。
+    CycleMatteMode,
+    /// MATTE を外す。`ResetSpeed` と同じ即時操作の形(matte が無ければ
+    /// no-op)。
+    ClearMatte,
+
+    // ---- LINK(2026-08-22 発注「レイヤーを指す」文法 第3号 — 型付き
+    // `PropertySource::Link` は本日着地したが呼び手がゼロだった) ----
+    /// LINK 元の pick_list からの選択(payload = 対象 property + 選んだ
+    /// 参照先)。`PickFont`/`PickMatteSource` と同じ即時操作の形(即1回の
+    /// `Intent::SetPropertyLink`)。
+    PickLinkSource(LinkTarget, LinkSourceCandidate),
+    /// LINK を外す(`Intent::SetTrack` を再び投げて static 値へ戻す —
+    /// `crate::slot` doc「専用の解除 variant は要らない」の実装)。
+    /// `ResetSpeed` と同じ即時操作の形(link でなければ no-op)。
+    ClearLink(LinkTarget),
 }
 
 // ---------------------------------------------------------------------------
@@ -496,6 +535,11 @@ fn selected_body(
     if let Some(audio_projection) = &selection.audio {
         rows = rows.push(audio_section(audio_projection, field_draft, dims, colors));
     }
+    // LINK section(2026-08-22 発注「レイヤーを指す」文法 第3号): masks/effects
+    // と違い「無ければ出さない」の Q0 判断は適用しない ── どの layer でも
+    // 他 layer の標準 property を指せて良いはずなので常に現れる
+    // (`selection.links` は `LinkTarget::ALL` 分、常に5行)。
+    rows = rows.push(link_section(&selection.links, dims, colors));
     rows = rows.push(hint_row(dims, colors));
 
     scrollable(rows).height(Length::Fill).into()
@@ -1007,11 +1051,14 @@ mod tests {
                 blend_mode: "Normal".to_owned(),
                 speed_percent: 100.0,
                 label_color: None,
+                matte: None,
+                matte_candidates: vec![],
             },
             masks: vec![],
             effects: vec![],
             text: None,
             audio: None,
+            links: vec![],
         };
 
         let (start, current_vec2) =
@@ -1057,11 +1104,14 @@ mod tests {
                 blend_mode: "Normal".to_owned(),
                 speed_percent: 100.0,
                 label_color: None,
+                matte: None,
+                matte_candidates: vec![],
             },
             masks: vec![],
             effects: vec![],
             text: None,
             audio: None,
+            links: vec![],
         };
         let (start, _) = drag_origin(&selection, TransformField::Rotation)
             .expect("キー持ち field もドラッグを始められるはず(Q0)");
@@ -1553,6 +1603,8 @@ mod tests {
                 blend_mode: "Normal".to_owned(),
                 speed_percent: 100.0,
                 label_color: None,
+                matte: None,
+                matte_candidates: vec![],
             },
             masks: vec![MaskRowProjection {
                 id: MaskId(1),
@@ -1578,6 +1630,7 @@ mod tests {
             effects: vec![],
             text: None,
             audio: None,
+            links: vec![],
         };
         let (start, _) = drag_origin(&selection, field).expect("mask opacity は editable のはず");
         assert_eq!(start, 80.0, "起点は投影の表示値(%)のはず");
@@ -1602,6 +1655,8 @@ mod tests {
                 blend_mode: "Normal".to_owned(),
                 speed_percent: 100.0,
                 label_color: None,
+                matte: None,
+                matte_candidates: vec![],
             },
             masks: vec![],
             effects: vec![],
@@ -1672,6 +1727,7 @@ mod tests {
                     },
                 },
             }),
+            links: vec![],
         };
         let (level_start, _) =
             drag_origin(&selection, TransformField::Level).expect("Level は editable のはず");

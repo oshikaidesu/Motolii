@@ -24,7 +24,7 @@ use iced::{Element, Length};
 
 use crate::projection::TextSectionProjection;
 use crate::transform::format_number;
-use crate::chrome::{bordered_row, flat_button_style, name_input_style, value_cell_padding};
+use crate::chrome::{bordered_row, flat_button_style, name_input_style, pick_list_style, value_cell_padding};
 use crate::Message;
 
 /// TEXT section の text_input 系フィールドの識別。**`TransformField` とは
@@ -543,7 +543,7 @@ fn font_family_row(
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .placeholder("Pick…")
-        .style(move |_theme, status| font_pick_list_style(dims, colors, status));
+        .style(move |_theme, status| pick_list_style(dims, colors, status));
 
     let content = row_widget![
         text("Font")
@@ -557,33 +557,6 @@ fn font_family_row(
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
-}
-
-/// [`font_family_row`] の pick_list 配色。`name_input_style`/`flat_button_style`
-/// と同じ token(surface_hover/border_default/text_primary/text_muted)を使い、
-/// 新しい色を発明しない(裁定142)。
-fn font_pick_list_style(
-    dims: Dimensions,
-    colors: Colors,
-    status: pick_list::Status,
-) -> pick_list::Style {
-    let background = match status {
-        pick_list::Status::Hovered | pick_list::Status::Opened { is_hovered: true } => {
-            colors.surface_hover
-        }
-        _ => iced::Color::TRANSPARENT,
-    };
-    pick_list::Style {
-        text_color: colors.text_primary,
-        placeholder_color: colors.text_muted,
-        handle_color: colors.text_primary,
-        background: iced::Background::Color(background),
-        border: iced::Border {
-            color: colors.border_default,
-            width: dims.border_width,
-            radius: 0.0.into(),
-        },
-    }
 }
 
 /// Line Height 行。`None`(Auto)は「Auto」文字列で表示し、`Auto` ボタンで
