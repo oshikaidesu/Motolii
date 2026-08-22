@@ -68,7 +68,7 @@ fi
 
 # 意図束(IB 44束、裁定177 / 2026-08-22)。normal-map.tsv の bundle 列(15列目)が
 # 正本 reference/intent-bundles.tsv と噛み合っているかを3点で見る:
-#   (a) 採用済/結線待ち/採用予定/保留/拡張の全行に bundle があること(不採用は空欄)
+#   (a) 採用済/採用予定/保留/拡張の全行に bundle があること(不採用は空欄)
 #   (b) 記入された bundle id が intent-bundles.tsv に実在すること
 #   (c) 束ごとの行数が intent-bundles.tsv の size 申告と一致すること
 if [ -f reference/intent-bundles.tsv ] && [ -f reference/normal-map.tsv ]; then
@@ -78,7 +78,7 @@ if [ -f reference/intent-bundles.tsv ] && [ -f reference/normal-map.tsv ]; then
     FNR==NR { if ($1 !~ /^#/ && $1 != "id") size[$1]=$5; next }
     FNR>1 {
       v=$13; b=$15
-      if ((v=="採用済"||v=="結線待ち"||v=="採用予定"||v=="保留"||v=="拡張") && b=="")
+      if ((v=="採用済"||v=="採用予定"||v=="保留"||v=="拡張") && b=="")
         printf "NG: bundle 未記入 — id=%s(%s)\n", $1, v
       if (v=="不採用" && b!="")
         printf "NG: 不採用行に bundle — id=%s(%s)\n", $1, b
@@ -100,6 +100,49 @@ if [ -f reference/intent-bundles.tsv ] && [ -f reference/normal-map.tsv ]; then
 else
   echo
   echo "NG: reference/intent-bundles.tsv か reference/normal-map.tsv がない"
+  fail=1
+fi
+
+# depends/weight 列(2026-08-22 裁定: 台帳の並べ替え軸に「粒の重み」を足す)。
+# depends = その行がまだ待っている機構名(空 = 待っていない)。weight = S/M/L の3値。
+# ここでの機械検出は1点だけ: **depends が空でない(=まだ機構待ちと申告している)のに
+# verdict が 採用済(=もう出来上がったと申告している)行**。これは「顔だけ実装」
+# (機構が無いのに UI だけ出た)の逆パターン — 機構が届く前に verdict を採用済へ
+# 進めてしまった行を機械的に捕まえる。運用規律: 機構が着地したら、verdict を
+# 採用済へ上げるのと**同じコミットで depends を空にする**。空にし忘れたらここが赤くなる。
+if [ -f reference/normal-map.tsv ]; then
+  echo
+  echo "=== depends/weight(裁定: 重みなき並べ替えの是正) ==="
+  dw_out="$(awk -F'\t' '
+    NR==1 { next }
+    {
+      v=$13; dep=$16; w=$17
+      if (dep!="" && v=="採用済")
+        printf "NG: depends が未達機構を指すのに verdict=採用済 — id=%s dep=%s\n", $1, dep
+      if (w!="" && w!="S" && w!="M" && w!="L")
+        printf "NG: weight が S/M/L 以外 — id=%s weight=%s\n", $1, w
+      if (dep!="" && w=="")
+        printf "NG: depends があるのに weight が空 — id=%s dep=%s\n", $1, dep
+      if (v=="不採用" && w!="")
+        printf "NG: 不採用行に weight(実装しないので対象外のはず) — id=%s weight=%s\n", $1, w
+      if (dep!="") { withdep++ }
+      total++
+    }
+    END { printf "  __STATS__ %d %d\n", withdep+0, total+0 }
+  ' reference/normal-map.tsv)"
+  stats_line="$(echo "$dw_out" | grep '__STATS__' || true)"
+  ng_lines="$(echo "$dw_out" | grep '^NG:' || true)"
+  if [ -n "$ng_lines" ]; then
+    echo "$ng_lines"
+    fail=1
+  else
+    withdep="$(echo "$stats_line" | awk '{print $2}')"
+    total="$(echo "$stats_line" | awk '{print $3}')"
+    printf "  depends 記入 %d / %d行 — 顔だけ実装(採用済なのに機構未達を自己申告)0件・weight値3値のみ・不採用行にweightなし の3検査 全通過\n" "$withdep" "$total"
+  fi
+else
+  echo
+  echo "NG: reference/normal-map.tsv がない"
   fail=1
 fi
 
