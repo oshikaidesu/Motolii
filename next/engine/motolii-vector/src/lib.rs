@@ -74,6 +74,11 @@ mod raster;
 /// 独立した名前空間として公開する — module doc(`coverage.rs`)参照。
 pub mod coverage;
 
+/// 字形→輪郭(裁定190 切片1)。`coverage` と同じ理由で独立した名前空間 —
+/// module doc(`text.rs`)参照。cosmic-text 0.19 を direct 依存として引く
+/// (Cargo.toml のコメント参照、依存増分ゼロ)。
+pub mod text;
+
 use serde::{Deserialize, Serialize};
 
 // パスの器は**入力の語彙**なので公開する。`rect` / `ellipse` は公開しない —

@@ -18,6 +18,9 @@
 use std::collections::{HashMap, VecDeque};
 
 pub mod mask;
+/// TextDocument → 輪郭 → RGBA8(裁定190 切片2)。**まだ `texture_for` からは
+/// 呼ばれていない** — module doc(`text.rs`)参照。
+pub mod text;
 
 use motolii_compositor::GpuTexture2D;
 use motolii_compositor::{Compositor, CompositorError, Layer, LayerWithPasses};
@@ -658,15 +661,27 @@ impl Engine {
                 self.remember_frame(key, texture.clone());
                 Ok((Some(texture), natural))
             }
-            // layer-meta 束が足した3 variant + 裁定173 の `Group`。**まだ描画に
-            // 繋いでいない** — null layer は元々絵を持たず(裁定どおり)、shape/text は
-            // 演算子/組版から RGBA を焼く経路が未実装(`motolii-vector::render` はまだ
-            // engine から呼ばれていない)。`Group` も同じく絵を持たない(裁定173 —
-            // Group は「子を持てる」という印だけの layer、合成は世界合成
+            // layer-meta 束が足した3 variant + 裁定173 の `Group`。**shape はまだ
+            // 描画に繋いでいない**(演算子/組版から RGBA を焼く経路が未実装)。
+            // null layer は元々絵を持たず(裁定どおり)、`Group` も同じく絵を持たない
+            // (裁定173 — Group は「子を持てる」という印だけの layer、合成は世界合成
             // (`motolii-store::view::world_affine`)が親 transform として使うだけで、
-            // Group 自身のピクセルは無い)。texture 無し = 「この layer は今描かない」
-            // という既存の意味(素材の外の時刻と同じ扱い)に乗せてあるので、フレーム
-            // 全体は落ちない。
+            // Group 自身のピクセルは無い)。
+            //
+            // **`Text` は裁定190 切片2 でラスタライズ経路自体は用意した**
+            // (`crate::text::rasterize_text_document` — `TextDocument` の既定行
+            // (裁定98)を読んで `motolii-vector::text` でシェイピング → render)。
+            // それでもここでは呼べない: `LayerSource::Text` はコンテンツを持たない印
+            // (unit variant)で、`ResolvedLayer` も `LayerId` を持たない
+            // (`motolii_store::ResolvedLayer::masks` の doc 参照)ため、どの layer の
+            // `TextDocument` を読むべきか `texture_for` の中だけでは決まらない。
+            // BL4(matte)が同じ壁に当たって同じ選択をしている
+            // (`02d5cec6`: 「matte の render_frame 結線は store 要求
+            // (ResolvedLayer に LayerId)待ちで明示 Err 維持」)。この発注は
+            // 「store 読み専用」なので、ここでも store 側の変更を待つ —
+            // `ResolvedLayer` が layer 識別子を持つ日に、ここは
+            // `crate::text::rasterize_text_document` を1回呼んで
+            // `self.compositor.upload_rgba` へ渡すだけで繋がる(`text.rs` module doc 参照)。
             LayerSource::Null | LayerSource::Shape | LayerSource::Text | LayerSource::Group => {
                 Ok((None, [0.0, 0.0]))
             }
