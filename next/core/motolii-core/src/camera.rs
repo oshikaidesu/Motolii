@@ -81,10 +81,47 @@ pub fn distance_from_camera(comp: CompSpec, z: f32) -> f32 {
     base_distance(comp) + z
 }
 
+/// `Quat::from_axis_angle` への**実行時角度を渡す唯一の口**(定数角度の
+/// `Quat::from_axis_angle` 直呼びは別途 `SAFE-GLAM-ASSERT` 注記で許可 — 下の
+/// `base` 参照)。
+///
+/// `axis` は呼び手が保証する定数単位ベクトルであること(`glam_assert!
+/// (axis.is_normalized())` は axis 側しか見ないので、ここでは angle だけを
+/// 気にすれば足りる)。`radians` が非有限(NaN/±inf)だと `sin`/`cos` が NaN を
+/// 返し、**その場は panic しない**(axis は定数のまま正規化されているため)が、
+/// 生成された quat 自体が非正規化(NaN)になる。この非正規化 quat が後段の
+/// 掛け算(`Quat` の `Mul` は入力を検査しない)を素通りし、`Mat4::from_quat`
+/// (`view_matrix()` 内)の `glam_assert!(rotation.is_normalized())` まで運ばれて
+/// **結果を返す前に**panic する(2026-08-22 実測: `roll_degrees: NaN` で
+/// `assertion failed: rotation.is_normalized()` @ `glam-0.30.10/src/f32/*/mat4.rs`
+/// の `quat_to_axes`。AGENTS.md「glam の `inverse()` は自己アサートする」と同型 —
+/// 「呼んでから `is_finite()` で後始末する」形はこの assert に間に合わない)。
+///
+/// **丸める、であって「無いことにする」ではない**: `ResolvedCamera` は
+/// `Option` を持たない構造で、キー無し(裁定20 の「無い」)は既にこの構造体が
+/// 作られる前の解決段で `roll_degrees: 0.0` へ変換済み。したがって、この関数へ
+/// 非有限値が来る状況はそもそも「値が無い」ケースではなく、上流のどこかで壊れた
+/// 値が作られたケースであり、両者を同一視しない(裁定37)。理想は壊れた入力を
+/// `Result`/`Option` で呼び手へ突き返すことだが、`camera_projection`/
+/// `CameraProjection` は `motolii-compositor` など複数 crate の公開契約で
+/// write-set(`next/core/motolii-core/` のみ)の外にまで戻り値変更が波及する
+/// ため今回は選ばない — 描画がここで丸ごと落ちるより、既定(回転無し)で
+/// 描き続けるほうが実害が小さいとも判断した。0 度へ丸めるのは、値が無い時の
+/// 既定(`ResolvedCamera::default().roll_degrees == 0.0`)と**たまたま同じ**
+/// だけで、両者を同義として設計したわけではない。
+fn safe_axis_angle(axis: glam::Vec3, radians: f32) -> glam::Quat {
+    let radians = if radians.is_finite() { radians } else { 0.0 };
+    // SAFE-GLAM-ASSERT: 直前で radians を有限へ丸め済み(axis は呼び手が定数単位
+    // ベクトルを渡す契約 — この関数の外で実行時角度に対する生 `from_axis_angle`
+    // を呼ばない)。
+    glam::Quat::from_axis_angle(axis, radians)
+}
+
 /// `comp`/`camera` から view + projection を組む。**投影の正本はここ1箇所**。
 pub fn camera_projection(comp: CompSpec, camera: ResolvedCamera) -> CameraProjection {
     let distance = base_distance(comp);
     // zoom<=0 は画角が発散する(定義できない)ので下限で止める。
+    // (`f32::max` は NaN を無視して他方を返す — zoom が非有限でもここで吸収される。)
     let zoom = camera.zoom.max(1e-3);
     let half_base_fov = (CAMERA_BASE_VERTICAL_FOV_DEGREES * 0.5).to_radians();
     let vertical_fov_radians = 2.0 * (half_base_fov.tan() / zoom).atan();
@@ -99,11 +136,17 @@ pub fn camera_projection(comp: CompSpec, camera: ResolvedCamera) -> CameraProjec
     // (x右, y下, z=カメラから見て奥)を re_renderer の view 規約
     // (x右, y上, camera は -Z を向く)へ揃えるための基準姿勢で、利用者からは
     // 動かせない(裁定115「向きの表現はまだ開けない」)。
+    // SAFE-GLAM-ASSERT: 角度は定数 PI(axis も定数 Vec3::X)— 実行時入力を
+    // 経由しないので常に有限・常に正規化された quat になる。`safe_axis_angle`
+    // を経由する必要はない。
     let base = glam::Quat::from_axis_angle(glam::Vec3::X, std::f32::consts::PI);
     // roll は基準姿勢の後、view の前方軸まわりに掛ける追加回転。時計回り正
     // (`property::ROTATION` と同じ約束)にするため角度を反転する
     // (view の Z 軸は画面手前を向くので、+Z まわりの数学的正回転は画面上は反時計回り)。
-    let roll = glam::Quat::from_axis_angle(glam::Vec3::Z, -camera.roll_degrees.to_radians());
+    // `camera.roll_degrees` は実行時値(store から解決された property)なので
+    // `safe_axis_angle` を経由する(`Quat::from_axis_angle` の生呼び出しはしない
+    // — 上の doc 参照)。
+    let roll = safe_axis_angle(glam::Vec3::Z, -camera.roll_degrees.to_radians());
     let rotation = roll * base;
 
     CameraProjection {
@@ -298,5 +341,39 @@ mod tests {
         // z が大きいほど遠い(AE と同じ符号)。
         assert!(distance_from_camera(COMP, 100.0) > d);
         assert!(distance_from_camera(COMP, -100.0) < d);
+    }
+
+    /// **再現試験(2026-08-22 発注)**: `roll_degrees` が非有限(NaN)だと、
+    /// `Quat::from_axis_angle` 自体は panic しない(axis が定数 `Vec3::Z` で
+    /// `glam_assert!(axis.is_normalized())` は素通りする)が、生成される quat が
+    /// 非正規化(NaN)になり、`view_matrix()` 内の `Mat4::from_quat` が
+    /// `glam_assert!(rotation.is_normalized())` で**結果を返す前に**panic する
+    /// (`checked_inverse` 系のガードと同型 — 「呼んでから `is_finite()` で
+    /// 後始末する」形はこの assert には届かない)。この試験は panic せず、かつ
+    /// 非有限 roll を安全な既定(回転無し = roll_degrees 0.0 と数学的に同一)へ
+    /// 丸めることを縛る。
+    #[test]
+    fn non_finite_roll_degrees_does_not_panic_and_falls_back_to_no_roll() {
+        for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let camera = ResolvedCamera {
+                roll_degrees: bad,
+                ..Default::default()
+            };
+            let projection = camera_projection(COMP, camera);
+            let view = projection.view_matrix(); // ここが修正前は panic していた
+            assert!(
+                view.is_finite(),
+                "roll_degrees={bad} で view_matrix() が非有限行列を返した"
+            );
+
+            let affine = camera_screen_from_world_z0(COMP, camera);
+            let default_affine = camera_screen_from_world_z0(COMP, ResolvedCamera::default());
+            let probe = glam::vec2(320.0, 180.0);
+            approx(
+                affine.transform_point2(probe),
+                default_affine.transform_point2(probe),
+                1e-2,
+            );
+        }
     }
 }
