@@ -7,6 +7,8 @@
 
 **実窓一瞥 第2回(2026-08-22・第5セッション)**: 利用者「ようやく動画ソフトっぽくなりました。UI は概ね OK」= **概ね合格**。不合格1点= Browser の構造文法が media タブのみ(他タブはサムネイル羅列)→ BR-sym レーン。UX 課題1点= キーフレームが1つしか打てない(AE 作法を習う UX へ — 機序仮説: keys<=1 編集可規則が track を静的に戻す)→ KF-ae レーン。以後**本格自走**(利用者宣言「では!よろしくお願いします」)。
 
+**第5セッション 全レーン着地(2026-08-22)**: pane_grid検収 / BR-tabs / PH-handle / IB-const / TL-transport / MB-vendor / IK-keyframe / iced-inventory / weblike-layout / TF-container(taffy widget — grid対応込み・実欠陥1件をテスト先行が事前捕獲)/ CM-port(css_metrics 移植 — dimensions 6値一致)。裁定178〜184。**taffy 三点照合(モック→css-metrics→dimensions→TaffyBox)が開通 — 転写の手癖工程は次の pane 書き換えから廃止可能**。走行中レーンなし
+
 ## 走行中(未返却)
 
 | レーン | 種別 | 場所 | 中身 |
@@ -14,13 +16,7 @@
 | BR-sym | 実装 | worktree(browser-pane) | 構造文法の全タブ対称化(rail/フィルタ/カタログ — モック宣言分は転写・沈黙分は S 導出1案) |
 | KF-ae | 実装 | worktree(inspector+shell) | AE 作法: キー持ち track の値編集= playhead へ upsert(静的化しない)・複数キー蓄積の再現テスト先行 |
 | IC-svg | 実装 | worktree(新 crate+timeline) | 裁定186: `motolii-icons`(Material Symbols vendoring・Apache 2.0)+transport 5ボタンの文字グリフ→SVG 置換 |
-**第5セッション 全レーン着地(2026-08-22)**: pane_grid検収 / BR-tabs / PH-handle / IB-const / TL-transport / MB-vendor / IK-keyframe / iced-inventory / weblike-layout / TF-container(taffy widget — grid対応込み・実欠陥1件をテスト先行が事前捕獲)/ CM-port(css_metrics 移植 — dimensions 6値一致)。裁定178〜184。**taffy 三点照合(モック→css-metrics→dimensions→TaffyBox)が開通 — 転写の手癖工程は次の pane 書き換えから廃止可能**。走行中レーンなし |
-| TL-transport | 実装 | worktree(timeline-pane) | 裁定180: transport 帯(1041〜1045 の顔+1138 Timecode)を timeline pane 上端へ。枠の文法(裁定179)適用第1号。write-set= timeline-pane+dimensions.json `timeline_transport` 節 |
-| MB-vendor | 実装 | worktree(新 crate) | 裁定181: iced_aw menu の fork API 移植(`motolii-menubar` 新設・E0308×2 追随・Simulator oracle)。write-set= 新 crate+members 1行+dimensions.json `menubar` 節 |
-| IB-const | データ | worktree(reference) | 利用者裁定: IB 44束の定数化 — intent-bundles.tsv 正本+normal-map へ bundle 列(1,285行自動割り付け・独立再検証)+check.sh 3検査+動線図(家の地図+編集動線 mermaid)。束名は仮名のまま(命名=利用者)。write-set= reference 2ファイル+check.sh+flow-map 文書 |
 
-**BR-tabs 返却済み・検収待ち**(commit `6e0891c3`・47テスト緑・寸法は dimensions.json 経由)— PH-handle と揃えて一括検収。shell の `pane_view` 1行差し替えは supervisor 統合時。
-**線化 pass 続編(D2/D4/D5: Inspector 値セル・チップ・罫線)**は PH-handle 返却後に発注(裁定179)。
 
 ## 完了・main 着地済み(実装)
 
