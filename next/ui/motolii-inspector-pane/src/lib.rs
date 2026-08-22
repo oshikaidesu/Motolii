@@ -120,6 +120,12 @@ use motolii_tokens_rs::{Colors, Dimensions, Ink, TextWeight, LABEL_PALETTE_LEN};
 mod attrs;
 mod audio;
 mod chrome;
+// 色エディタ(2026-08-22 発注)。crate 本体の `Message`/`view` へはまだ結線
+// していない自己完結モジュール(`motolii-settings-pane::sections` 第1切片と
+// 同じ「供覧」の形、`color.rs` 冒頭 doc 参照)——この `pub mod color;` の1行
+// だけがこの発注の `lib.rs` への変更点(`sections` と同じく `pub mod` —
+// 未結線でも crate の公開 API の一部にする、dead_code 警告を呼ばない形)。
+pub mod color;
 mod effects;
 mod mask;
 mod projection;
