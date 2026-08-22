@@ -56,6 +56,12 @@ pub enum AudioError {
     #[error("pan must be finite, got {pan}")]
     InvalidPan { pan: f64 },
 
+    /// STORE3結線: `property::FADE_IN`/`FADE_OUT` の評価値が有限かつ0以上でない
+    /// (負のフェード尺、または `Value::F64` でない値)。`FadeSpec::fade_in`/
+    /// `fade_out` は負の尺を表現できない(`mix.rs::fade_envelope` の前提)。
+    #[error("fade duration must be finite and >= 0 seconds, got {fade}")]
+    InvalidFade { fade: f64 },
+
     /// AG-2: mix範囲またはTimeMap写像が不正。
     #[error("invalid mix timeline range or time map")]
     InvalidMixRange,
