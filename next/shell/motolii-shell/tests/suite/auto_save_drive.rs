@@ -19,14 +19,21 @@ use std::sync::Arc;
 
 use motolii_audio::{DeviceWaitLatency, PlaybackClock, PlaybackCounters, PlaybackSession};
 use motolii_core::{Fps, RationalTime};
-use motolii_shell::file_dialogs::FileDialogs;
+use motolii_shell::file_dialogs::{DialogFuture, FileDialogs};
 use motolii_shell::settings_pane::sections;
 use motolii_shell::{Message, Shell};
 use motolii_store::Document;
 
+use crate::file_drive::drive;
+
 // ---------------------------------------------------------------------------
 // fake FileDialogs(`file_drive.rs` と同じ理由 — Save As の実 OS dialog を
-// 開かせない。ここでは `pick_save_path` の缶詰応答だけが要る)。
+// 開かせない。ここでは `pick_save_path` の缶詰応答だけが要る)。**非同期化
+// (2026-08-22 第2波)**: `FileDialogs` の全メソッドが `DialogFuture`(即完了の
+// `std::future::ready`)を返すようになったので、`Message::SaveAsRequested` の
+// 適用は `shell.update()` 直呼びではなく [`crate::file_drive::drive`]
+// (`Task<Message>` を同期に汲み取って後続の `Message` を流し込む)を使う
+// (`file_drive.rs` 冒頭 doc 参照)。
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone)]
@@ -35,12 +42,24 @@ struct FakeDialogs {
 }
 
 impl FileDialogs for FakeDialogs {
-    fn confirm_discard(&self) -> bool {
-        true
+    fn confirm_discard(&self) -> DialogFuture<bool> {
+        Box::pin(std::future::ready(true))
     }
 
-    fn pick_save_path(&self) -> Option<PathBuf> {
-        Some(self.save_path.clone())
+    fn pick_open_path(&self) -> DialogFuture<Option<PathBuf>> {
+        Box::pin(std::future::ready(None))
+    }
+
+    fn pick_save_path(&self) -> DialogFuture<Option<PathBuf>> {
+        Box::pin(std::future::ready(Some(self.save_path.clone())))
+    }
+
+    fn pick_import_paths(&self) -> DialogFuture<Vec<PathBuf>> {
+        Box::pin(std::future::ready(Vec::new()))
+    }
+
+    fn pick_export_path(&self, _default_file_name: String) -> DialogFuture<Option<PathBuf>> {
+        Box::pin(std::future::ready(None))
     }
 
     fn quit(&self) {}
@@ -65,7 +84,7 @@ fn shell_saved_and_dirty(tag: &str) -> (Shell, PathBuf) {
         Shell::new_with_dialogs(Box::new(FakeDialogs { save_path: path.clone() }));
 
     let _ = shell.update(Message::AddLayer);
-    let _ = shell.update(Message::SaveAsRequested);
+    drive(&mut shell, Message::SaveAsRequested);
     assert_eq!(shell.current_path(), Some(path.as_path()), "Save As が current_path を立てていない");
     assert!(!shell.is_project_dirty(), "Save As 直後なのに dirty のまま");
 
@@ -149,7 +168,7 @@ fn auto_save_tick_is_a_no_op_when_not_dirty_since_the_last_auto_save() {
     let (mut shell, _task) =
         Shell::new_with_dialogs(Box::new(FakeDialogs { save_path: path.clone() }));
     let _ = shell.update(Message::AddLayer);
-    let _ = shell.update(Message::SaveAsRequested);
+    drive(&mut shell, Message::SaveAsRequested);
     assert!(!shell.is_project_dirty(), "Save As 直後なのに dirty のまま");
 
     let auto_save_dir = Document::auto_save_dir(&path);

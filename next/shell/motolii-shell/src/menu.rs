@@ -13,8 +13,10 @@
 //!
 //! ## 全項目が「既存 `Message` の露出」(発注書 — 新しい意味は作らない)
 //!
-//! - **File** = MB-1(裁定176)の4動詞そのまま(New Project/Save As/
-//!   Save a Copy/Quit)。
+//! - **File** = MB-1(裁定176)の4動詞(New Project/Save As/Save a Copy/
+//!   Quit)+ 第2波(2026-08-22、rfd 非同期化と同時発注)の Open(id 1226)・
+//!   Import Media…(id 592「Import (media/file)」の第2の入口 ── 従来は
+//!   OS drop のみだった)。
 //! - **Edit** = MB-0+Edit の8動詞そのまま(Undo/Redo/Cut/Copy/Paste/
 //!   Duplicate/Select All/Deselect All)。旧 header の Undo/Redo 箱ボタンは
 //!   廃止 — 入口はメニューと shortcut の2本(S6 併存)。
@@ -47,7 +49,8 @@ pub const TOP_LEVEL_LABELS: [&str; 4] = ["File", "Edit", "Layer", "View"];
 /// `motolii_menubar::menu_bar(menus(), …)` へ渡す。
 pub fn menus() -> Vec<Menu<Message>> {
     vec![
-        // ---- File(MB-1、裁定176 — normal-map id 1221/1225/1227/1223) ----
+        // ---- File(MB-1、裁定176 — normal-map id 1221/1225/1227/1223 + 第2波
+        // id 1226/592) ----
         Menu {
             label: "File",
             items: vec![
@@ -56,6 +59,11 @@ pub fn menus() -> Vec<Menu<Message>> {
                     shortcut: Some("Cmd+N"),
                     message: Message::NewProjectRequested,
                 },
+                // id 1226「Open Project」。entries(menu:shortcut:panel:pref)=
+                // 2:0:0:0 — shortcut 出典ゼロなので発明しない(`KNOWN.md` の
+                // Cmd+O 教訓どおり、既に Cmd+O は空いているが出典が無い限り
+                // 埋めない)。
+                Item { label: "Open…", shortcut: None, message: Message::OpenRequested },
                 Item {
                     label: "Save As…",
                     shortcut: Some("Cmd+Shift+S"),
@@ -73,6 +81,15 @@ pub fn menus() -> Vec<Menu<Message>> {
                     label: "Export…",
                     shortcut: Some("Cmd+E"),
                     message: Message::Export(crate::export_pane::Message::ToggleExportDialog),
+                },
+                // id 592「Import (media/file)」の第2の入口(従来は OS drop
+                // のみ)。entries は 4:1(shortcut 出典が1件あるが、実際の割当
+                // キーの一次資料までは未確認 ── 誤った shortcut を発明する
+                // より併記しない方を採る、飾り shortcut 禁止の規律)。
+                Item {
+                    label: "Import Media…",
+                    shortcut: None,
+                    message: Message::ImportMediaRequested,
                 },
                 Item { label: "Quit", shortcut: Some("Cmd+Q"), message: Message::QuitRequested },
             ],
