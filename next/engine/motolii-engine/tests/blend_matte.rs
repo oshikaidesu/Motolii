@@ -5,11 +5,15 @@
 //! `Engine::render_frame` はどちらも一切読んでいなかった — どんな値を書いても黙って
 //! 無視されていた。ここでは:
 //! - `BlendMode::Normal`(既定)は今まで通り描ける
-//! - `Normal` 以外は `motolii-compositor` の固定 blend equation では表現できない
-//!   (`motolii-compositor` のモジュール doc 参照)ので、**黙って Normal へ近似せず**
-//!   `EngineError::UnsupportedBlendMode` を返す
-//! - `matte` は shader 拡張(2枚目の texture を読む)が要る(fork seam 候補)ので、
-//!   同じく**黙って型抜き前の絵を出さず** `EngineError::UnsupportedMatte` を返す
+//! - **BL3/BL4(2026-08-22)時点で `blend_mode` は17値全部が描ける**(分離可能11種+
+//!   非分離4種、`motolii-compositor` のモジュール doc 参照)——対応外の値は
+//!   もう無い
+//! - `matte` は依然 `EngineError::UnsupportedMatte` を返す。**理由が変わった**:
+//!   合成器側の matte 適用パス(`motolii_compositor::Compositor::matte_layer`)は
+//!   BL4 で実装済みだが、`render_frame` のループが「matte 元 layer を通常描画から
+//!   除外する」判定に要る `LayerId` 相関を store からまだ引けない
+//!   (`EngineError::UnsupportedMatte` の doc 参照)——黙って型抜き前の絵を出さず、
+//!   引き続き明示的に止める
 
 use motolii_engine::{Engine, EngineError};
 use motolii_store::{
@@ -98,20 +102,22 @@ fn explicit_normal_blend_mode_matches_the_default() {
     assert_eq!(before, after);
 }
 
-/// **落ちるテスト先行**: 非分離4種(Hue/Saturation/Color/Luminosity、BL4)はまだ
-/// 合成器が表現できないので、黙って近似せず明示的に `Err` を返す(KNOWN.md に
-/// 「未消費」と書かれていた穴を「読むが対応外は拒む」まで塞いだ、というのが
-/// この束の主張)。**分離可能11種(Multiply〜Exclusion)は BL3 で対応済み**——
-/// この不変式(対応外は拒む)を保つ代表として、まだ実装していない `Hue` を使う
-/// (数値検証は `tests/blend_separable.rs`)。
+/// **BL4(2026-08-22)**: 非分離4種(Hue/Saturation/Color/Luminosity)も
+/// `motolii-compositor` 側に実装が揃い、`translate_blend_mode` が全17値を `Ok` で
+/// 写すようになった——KNOWN.md の「bm/matte/ao 未消費」の bm 側はこれで閉じた
+/// (代表して `Hue` を使う。数値検証は `tests/blend_nonseparable.rs`)。
+/// この時点で `motolii_store::BlendMode` に「合成器が拒む」値は無い——
+/// `EngineError::UnsupportedBlendMode` は型として残るが、この関数からはもう
+/// 構築されない。
 #[test]
-fn unsupported_blend_modes_are_rejected_not_silently_approximated() {
+fn nonseparable_blend_mode_is_accepted_and_renders() {
     let mut doc = doc_with_comp();
-    let layer = LayerId(1);
-    place(&mut doc, layer, [255, 0, 0, 255], 0);
+    let (base, top) = (LayerId(1), LayerId(2));
+    place(&mut doc, base, [200, 60, 60, 255], 0);
+    place(&mut doc, top, [50, 90, 200, 255], 1);
 
     doc.apply(Intent::SetAttrs {
-        layer,
+        layer: top,
         patch: LayerAttrsPatch {
             blend_mode: Some(BlendMode::Hue),
             ..Default::default()
@@ -122,11 +128,8 @@ fn unsupported_blend_modes_are_rejected_not_silently_approximated() {
     let mut engine = Engine::new().expect("engine");
     let result = engine.render_frame(&doc.view(), t(0));
     assert!(
-        matches!(
-            result,
-            Err(EngineError::UnsupportedBlendMode(BlendMode::Hue))
-        ),
-        "Hue(非分離、BL4)は未対応のまま明示的に拒まれるはず: {result:?}"
+        result.is_ok(),
+        "Hue(非分離、BL4で対応済み)は拒まれてはいけない: {result:?}"
     );
 }
 
