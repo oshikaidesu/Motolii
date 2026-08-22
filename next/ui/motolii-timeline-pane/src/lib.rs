@@ -54,6 +54,7 @@ mod lane_bar;
 pub mod nav;
 mod projection;
 mod rail;
+mod transport;
 mod write;
 
 pub use hit::{bar_span_x, classify_bar_part, hit_test, BarPart, Hit, TRIM_EDGE};
@@ -78,6 +79,9 @@ pub use projection::{
 /// 使うよう置き換えるのが次の一手(未着手、report で明記)。
 pub use canvas::{bar_corner_radius, bar_inset, major_tick_length, minor_tick_length, ruler_height};
 pub use lane_bar::glyph_size_px;
+/// Transport 帯(map 1041-1045・1138)の宣言 spec — テスト(絵と意味の対応)
+/// と shell 側検分器具の両方が widget 木の代わりに読む継ぎ目。
+pub use transport::{transport_spec, TransportButton, TransportSpec};
 pub use write::{Message, PaneState};
 
 use iced::widget::row;
@@ -131,6 +135,10 @@ pub struct TimelinePane {
     /// (`key_drag_active` と同じ「Shell 状態を pane へ運ぶ」形だが、こちらは
     /// 2つの builder のどちらが立てても真になる)。
     preview_active: bool,
+    /// 実時間再生が進行中か(transport 帯の Play‖Pause の顔が読む)。
+    /// `modifiers`/`key_drag_active` と同じ「Shell 状態を読み取り専用で pane へ
+    /// 運ぶだけ」の形 — 既定 `false`([`Self::with_playing`] でしか立たない)。
+    playing: bool,
 }
 
 impl TimelinePane {
@@ -159,7 +167,16 @@ impl TimelinePane {
             modifiers,
             key_drag_active: false,
             preview_active: false,
+            playing: false,
         }
+    }
+
+    /// `Shell::view` だけが呼ぶ(transport 帯)。`Shell::is_playing()` 相当を
+    /// そのまま渡すだけの薄い builder — `with_key_drag_active` と同じ形
+    /// (既存の呼び出し元・試験を1つも壊さない)。
+    pub fn with_playing(mut self, playing: bool) -> Self {
+        self.playing = playing;
+        self
     }
 
     /// `Shell::view` だけが呼ぶ(第2波T4)。`PaneState::key_drag_active()`
@@ -278,6 +295,19 @@ impl TimelinePane {
             .width(Length::Fill)
             .height(Length::Fixed(height));
         row![rail, field].height(Length::Fixed(height)).into()
+    }
+
+    /// [`Self::view`] の上に transport 帯(map 1041-1045・1138、
+    /// [`transport`] モジュール doc)を積んだ版。**`view()` 自体は無改変で
+    /// 残す** — shell 側の既存検分(`iced_test_spike.rs` が `pane.view()` へ
+    /// 生座標で click する)は canvas の y 原点がルーラー上端であることを
+    /// 前提にしており、`view()` に帯を差し込むとその前提ごと壊れる。shell の
+    /// 統合(下部 Play バー撤去と同時)はこの `view_with_transport()` へ
+    /// 呼び出し1行を差し替えるだけ(supervisor、RETURN の結線一覧)。
+    pub fn view_with_transport(self) -> Element<'static, Message> {
+        let band = transport::view(&self);
+        let body = self.view();
+        iced::widget::column![band, body].into()
     }
 }
 

@@ -117,6 +117,22 @@ pub struct Dimensions {
     /// 参照)。
     #[serde(default = "default_timeline_param_row_height")]
     pub timeline_param_row_height: f32,
+    /// Timeline pane 上端の transport 帯の高さ(発注 2026-08-22: 「タイムライン
+    /// に再生ボタンが無いのは謎」— map 1041-1045/1138 の顔)。値は
+    /// `transport_band`(Ableton Control Bar 実測30)と同源 — 帯の意味が同一
+    /// なので同じ実測を写す。別キーな理由は `_note_timeline_transport_height`
+    /// (朝の合否で pane 内 transport だけを独立に直せるように)。
+    #[serde(default = "default_timeline_transport_height")]
+    pub timeline_transport_height: f32,
+    /// transport ボタン踏面の幅。高さは帯高いっぱい(S1)なので幅は帯高と
+    /// 同値の正方形踏面(裁定167 の梯子は余白の梯子で踏面の段を持たない —
+    /// 中間比を発明せず基準寸そのものを採る、`_note_*` 参照)。
+    #[serde(default = "default_timeline_transport_button_width")]
+    pub timeline_transport_button_width: f32,
+    /// transport のボタン間・タイムコードとの間隔。裁定167 梯子下段
+    /// `0.075×帯高30 = 2.25 → 2`(`lane_bar::sibling_gap_px` と同式・同段)。
+    #[serde(default = "default_timeline_transport_gap")]
+    pub timeline_transport_gap: f32,
     /// mock `--s` 相当の UI 拡大率(1.00 基準、0.01 刻み)。**適用点は
     /// [`Dimensions::scaled`] の1箇所だけ** — 個々の pane はここを直接読まず、
     /// [`crate::Shell::dims`] が返す「掛け算済みの」`Dimensions` を読む。
@@ -139,6 +155,18 @@ fn default_timeline_lane_bar_width() -> f32 {
 
 fn default_timeline_param_row_height() -> f32 {
     16.67
+}
+
+fn default_timeline_transport_height() -> f32 {
+    30.0
+}
+
+fn default_timeline_transport_button_width() -> f32 {
+    30.0
+}
+
+fn default_timeline_transport_gap() -> f32 {
+    2.0
 }
 
 fn default_ui_scale() -> f32 {
@@ -171,6 +199,9 @@ impl Default for Dimensions {
             inspector_glyph_width: 26.0,
             timeline_lane_bar_width: 150.0,
             timeline_param_row_height: 16.67,
+            timeline_transport_height: 30.0,
+            timeline_transport_button_width: 30.0,
+            timeline_transport_gap: 2.0,
             ui_scale: 1.0,
         }
     }
@@ -223,6 +254,9 @@ impl Dimensions {
             inspector_glyph_width: self.inspector_glyph_width * s,
             timeline_lane_bar_width: self.timeline_lane_bar_width * s,
             timeline_param_row_height: self.timeline_param_row_height * s,
+            timeline_transport_height: self.timeline_transport_height * s,
+            timeline_transport_button_width: self.timeline_transport_button_width * s,
+            timeline_transport_gap: self.timeline_transport_gap * s,
             // 自分自身は「寸法」ではないので掛けない。この結果を再度 `scaled()`
             // に通す呼び出し側は無い(適用点は `Shell::dims` の1箇所だけ)。
             ui_scale: self.ui_scale,

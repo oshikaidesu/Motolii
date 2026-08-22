@@ -213,6 +213,7 @@ mod mouse_interaction_tests {
             modifiers: iced::keyboard::Modifiers::default(),
             key_drag_active: false,
             preview_active: false,
+            playing: false,
         }
     }
 
