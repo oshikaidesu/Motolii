@@ -13,6 +13,7 @@
 |---|---|---|---|
 | BR-sym | 実装 | worktree(browser-pane) | 構造文法の全タブ対称化(rail/フィルタ/カタログ — モック宣言分は転写・沈黙分は S 導出1案) |
 | KF-ae | 実装 | worktree(inspector+shell) | AE 作法: キー持ち track の値編集= playhead へ upsert(静的化しない)・複数キー蓄積の再現テスト先行 |
+| IC-svg | 実装 | worktree(新 crate+timeline) | 裁定186: `motolii-icons`(Material Symbols vendoring・Apache 2.0)+transport 5ボタンの文字グリフ→SVG 置換 |
 **第5セッション 全レーン着地(2026-08-22)**: pane_grid検収 / BR-tabs / PH-handle / IB-const / TL-transport / MB-vendor / IK-keyframe / iced-inventory / weblike-layout / TF-container(taffy widget — grid対応込み・実欠陥1件をテスト先行が事前捕獲)/ CM-port(css_metrics 移植 — dimensions 6値一致)。裁定178〜184。**taffy 三点照合(モック→css-metrics→dimensions→TaffyBox)が開通 — 転写の手癖工程は次の pane 書き換えから廃止可能**。走行中レーンなし |
 | TL-transport | 実装 | worktree(timeline-pane) | 裁定180: transport 帯(1041〜1045 の顔+1138 Timecode)を timeline pane 上端へ。枠の文法(裁定179)適用第1号。write-set= timeline-pane+dimensions.json `timeline_transport` 節 |
 | MB-vendor | 実装 | worktree(新 crate) | 裁定181: iced_aw menu の fork API 移植(`motolii-menubar` 新設・E0308×2 追随・Simulator oracle)。write-set= 新 crate+members 1行+dimensions.json `menubar` 節 |
