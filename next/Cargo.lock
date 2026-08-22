@@ -4017,6 +4017,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-verbs"
+version = "0.1.0"
+dependencies = [
+ "motolii-menubar",
+]
+
+[[package]]
 name = "mp4ra-rust"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

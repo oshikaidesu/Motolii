@@ -27,6 +27,7 @@ members = [
     "ui/motolii-settings-pane",
     "ui/motolii-taffy",
     "ui/motolii-tokens-rs",
+    "ui/motolii-verbs",
     "ui/motolii-shell-state",
     "ui/motolii-timeline-pane",
     "ui/motolii-stage-pane",
