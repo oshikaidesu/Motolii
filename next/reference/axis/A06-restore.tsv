@@ -1,0 +1,28 @@
+#axis: A06 復帰
+#question: 落ちた・閉じた後に何が戻るか
+#verdicts: 戻る|戻らない|保存先が無い|Document に入れるべきでない(User Settings 行き)|未確認
+#sweep: grep -rn "fn save\|fn load" core/motolii-store/src/persist.rs
+#sweep: grep -rn "WindowClosed\|CloseRequested\|is_dirty\|is_project_dirty\|current_path" shell/motolii-shell/src/lib.rs
+#sweep: grep -rln "recent" next/reference/normal-map.tsv (このレーンの相対パスは next/ 起点。実行時は cd next && grep -in recent reference/normal-map.tsv)
+#sweep: grep -rn "dirs::\|ProjectDirs\|app_data\|UserSettings" --include=*.rs next/ | grep -v /target/  (0件)
+#sweep: grep -rn "WorkspaceBook\|pane_layout::Layout" shell/motolii-shell/src/lib.rs ui/motolii-shell-state/src/layout.rs
+#sweep: grep -n "auto_save_dir\|existing_generations\|recover\|crash" shell/motolii-shell/src/lib.rs (0件)
+#sweep: grep -rn "enum Tool\|active_tool\|current_tool\|ToolMode" --include=*.rs next/ | grep -v /target/ (0件)
+#sweep: cat ~/.cargo の外、iced fork winit/src/lib.rs:1015-1050(exit_on_close_request 既定値) — 実測パス /Users/member_ottoto/.cargo/git/checkouts/iced-1bbb4ed9d90ae4f8/73e686e/winit/src/lib.rs
+axis	map_id	対象	判定	証拠	穴	責任
+A06	1224	Document本体(comp設定・layer・shape/effect/text等property track・keyframe)	戻る	core/motolii-store/src/persist.rs:34-148(`flattened()`で履歴を畳んでrrd往復、bezier・NTSC fps込みでR0-3実測、GOALS M11「バックは済」)	-	core/motolii-store/src/persist.rs:20-298(既に充足)
+A06	1224	明示Save(Cmd+S、既存pathへの上書き保存)	戻らない	shell/motolii-shell/src/menu.rs:59-75(File menuは"Save As…"と"Save a Copy…"のみで平の"Save"項目が無い)+lib.rs:518-533(Message列挙にSaveAsRequested/SaveACopyRequestedはあるがSaveRequestedが無い)+lib.rs:5836-6048(resolve_navigation_keyの裸キー腕にCmd+Sが無い、5988行はCmd+Shift+Sのみ)。normal-map id1224の理由欄は「Document::save 実装済み」と書くが、UIからの到達口(Cmd+Sショートカットも平のSaveメニュー項目も)は存在しない — バック実装とUI到達を混同した verdict	穴	shell/motolii-shell/src/lib.rs(Message enum・perform_*系はここに集中、※過積載 6228行)
+A06	-	未保存●(dirty indicator、タイトルバー/status帯の可視表示)	戻らない	lib.rs:1187-1189(`title()`は常に固定文字列"Motolii"、pathやdirtyを一切見ない)+lib.rs:3721-3725(`is_project_dirty`はpublicだがgrep結果は`tests/suite/*.rs`の呼び出しのみ、view/title側からの呼び出し0件)	穴	shell/motolii-shell/src/lib.rs:1187(title()) ※過積載
+A06	-	閉じる確認(OSの赤信号/×ボタンでのwindow close)	戻らない	lib.rs:1284-1301(`Message::WindowClosed(main)`は無条件`task = iced::exit()`、`QuitRequested`が通る`confirm_then`/`confirm_discard`経路を通らない)+iced fork /Users/member_ottoto/.cargo/git/checkouts/iced-1bbb4ed9d90ae4f8/73e686e/winit/src/lib.rs:1031-1033(`CloseRequested`は`window.exit_on_close_request`既定trueならそのままAction::Window(Close)へ直結)+core/src/window/settings.rs:99-121(既定true、Motolii側で上書きしている箇所はgrep 0件)。Cmd+Q(QuitRequested)だけがdirty確認を持ち、赤信号ボタンは持たない非対称	穴	shell/motolii-shell/src/lib.rs:1284 ※過積載
+A06	-	再起動で続きが開く(直前に開いていたprojectを次回起動時に自動で開く)	戻らない	lib.rs:1047,1170(`Shell::new()`/`boot()`ともに`current_path: None`で起動、直前セッションのpathを読み込む経路が無い)	穴	shell/motolii-shell/src/lib.rs(boot()) ※過積載
+A06	918	最近使ったファイル(MRU、Open Recent)	保存先が無い	cd next && grep -in recent reference/normal-map.tsv → id918は"Recent Animation Presets"(エフェクトプリセットの意)でファイルMRUとは無関係。next/ 全体でrecent-file相当のコード・構造体はgrep 0件	穴	置き場所が未設計(責任を負うファイルが存在しない ── User Settings層自体が無い)
+A06	-	自動保存(データ本体、AutoSaveConfig)	戻る	core/motolii-store/src/persist.rs:150-224(`auto_save`、atomic書き込み+世代ローテーション)+shell/motolii-shell/src/auto_save.rs:1-58(tick購読、専用スレッド)。書く経路は実装済み	-	core/motolii-store/src/persist.rs:187-224(既に充足)
+A06	-	クラッシュ復帰(次回起動時にautosave世代を検出して復元を申し出る)	戻らない	shell/motolii-shell/src/lib.rs でauto_save_dir/existing_generations/crash/recover相当のgrep結果0件 ── auto_saveは書くだけで、起動時にそのディレクトリを読み返す経路が無い(persist.rsのdoc comment自体は「AE Auto-Save先例」を掲げるが、AEの「クラッシュ後に検出して開くか聞く」挙動は未移植)	穴	shell/motolii-shell/src/lib.rs(boot()) ※過積載
+A06	-	playhead位置(Session.playhead)	Document に入れるべきでない(User Settings 行き)	ui/motolii-shell-state/src/lib.rs:44-46(裁定46/107でundo対象外=Documentへ入れない設計判断は正しい、doc「Document には乗らない」)。ただし**「Documentに入れるべきでない」と「どこにも保存されていない」は別問題**(発注書の指示どおり区別) ── Session自体をdiskへ書く経路(User Settings的なsidecar)が無いので、再起動すれば必ず0へ戻る	穴	ui/motolii-shell-state/src/lib.rs(型は在るが永続化層が未設計)
+A06	-	選択レイヤー(Session.selection/selected_layers)	Document に入れるべきでない(User Settings 行き)	ui/motolii-shell-state/src/lib.rs:47-56(同上、doc「Documentには乗らない」)。永続化経路なし	穴	同上
+A06	-	Timelineキー選択(selected_keys)・Shift範囲基点(key_anchor)・行の折り畳み(timeline_fold)	Document に入れるべきでない(User Settings 行き)	ui/motolii-shell-state/src/lib.rs:58-72(裁定173 H2、旧世界思想を踏襲して意図的にDocument外)。永続化経路なし	穴	同上
+A06	-	paneレイアウト(実働側 `pane_layout::Layout` ── pane_grid分割比率・Browserパネル開閉)	戻らない	shell/motolii-shell/src/pane_layout.rs:191-260(`Layout`にSerialize/Deserialize無し)+lib.rs:1028,1146(`panes: pane_layout::Layout::new()`を起動のたび新規生成、既定値のみ)	穴	shell/motolii-shell/src/pane_layout.rs:191(578行、単体はまだ600行以内)
+A06	1517	名前付きワークスペース(WorkspaceBook、"New Workspace…"機能)	戻らない	ui/motolii-shell-state/src/layout.rs:405-446(`WorkspaceBook::save_as`/`switch`/`delete`/`names`の型は実装済み、serde round-trip試験も緑)だが`grep -n "WorkspaceBook" shell/motolii-shell/src/lib.rs`は0件 ── Shellが一切importしていない。型はあるが製品のどのpane_layoutとも結線されていない(pane_layout.rsの実働Layoutとは別物)	穴	ui/motolii-shell-state/src/layout.rs(型は完成、結線側=shell/motolii-shell/src/lib.rsが未着手)
+A06	-	zoom/スクロール位置(Timeline)	未確認	next/GOALS.md M18「Zoom(カーソル下の時刻を保つ)と Fit … 未」。zoom機能自体がコード上に存在しない(grep "zoom" ui/motolii-timeline-pane 0件相当) ── 保存対象がまだ無いので「戻るか」を問える段階にない	-	該当なし(機能実装後に持ち主を決める)
+A06	-	ツール選択(選択/ペン等のtoolモード切替)	未確認	grep -rn "enum Tool\|active_tool\|current_tool\|ToolMode" next/ 全体で0件 ── Motoliiに「ツール切替」という概念自体が無い(直接操作ジェスチャのみ)。前提が無いので判定不能	-	該当なし
+A06	-	UI scale(ui_scale)	Document に入れるべきでない(User Settings 行き)	ui/motolii-tokens-rs/src/lib.rs:960-975(`save_ui_scale`はdebugビルドのみ`tokens/dimensions.json`へ書き戻す ── これは複数worktree共有の正本JSONで個人設定ファイルではない。releaseビルドは`Ok(())`のno-opで実行時変更が次回起動に一切反映されない)	穴	ui/motolii-tokens-rs/src/lib.rs:960-975(release側の永続化が欠落)
