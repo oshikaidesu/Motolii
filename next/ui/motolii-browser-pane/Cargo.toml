@@ -23,6 +23,12 @@ motolii-tokens-rs.workspace = true
 # 許容構成に反しない(motolii-icons は widget を持たない値+embed のみの
 # leaf crate)。
 motolii-icons.workspace = true
+# B36 第5切片(List 表示の水平カード、この波): カード内の並べ方(flex row —
+# thumb 固定幅+テキスト flex:1)を CSS 宣言の字面のまま `TaffyBox` へ渡す
+# (裁定183 taffy 転写 — `motolii-settings-pane::sections::comp_cells_row` が
+# 確立した型と同じ手口。`motolii-settings-pane`/`motolii-taffy` 自身の
+# Cargo.toml と同じ運用で `path` 依存)。
+motolii-taffy = { path = "../motolii-taffy" }
 
 [dev-dependencies]
 # `inspector_pane`(`tests/value_cell_legibility.rs`)と同じ手口: pane crate

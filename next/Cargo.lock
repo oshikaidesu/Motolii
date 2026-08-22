@@ -3736,6 +3736,7 @@ dependencies = [
  "iced_test",
  "motolii-icons",
  "motolii-store",
+ "motolii-taffy",
  "motolii-tokens-rs",
 ]
 

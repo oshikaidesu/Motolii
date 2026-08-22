@@ -79,6 +79,9 @@
   "browser_tab_underline": 2,
   "_note_browser_tab_underline": "Browser タブ帯の active タブ下線の太さ。視覚正本 browser-library.html の `.libraryTabs button{border-bottom:2px solid transparent}` / `[aria-selected=true]{border-bottom-color:#d8b574}` 実測そのもの(2)。色は tokens の action_active ロール(mock #d8b574 と同役)。spacing_xs(2)と同値だが意味は『選択状態の縁』であって余白ではないため別キー(spacing の段を縁の太さへ転用しない)",
 
+  "browser_list_thumb_width": 46,
+  "_note_browser_list_thumb_width": "Browser 第5切片(List 表示の水平カード)。視覚正本 browser-library.css:306 `.libraryBrowser[data-view=\"list\"] .libraryThumb{width:46px;flex:0 0 46px}` 実測そのもの(46)。row_height(20)比 2.3。高さは THUMB_ASPECT_W/H(16/9、`motolii-browser-pane` 側の既存比)をこの幅へ適用して逆算する(専用の高さキーは起こさない — grid モードの thumb と同じ縦横比を保つ)。cardCopy 側の左 padding(css:307 `.cardCopy{padding-left:4px}`)は spacing_s(4)と同値なので新キーは起こさず流用する(裁定178 デザイン値の外出し徹底 — browser-pane の Rust 側に直書きしない)",
+
   "menubar_menu_width": 192,
   "_note_menubar_menu_width": "menubar 節(MB-2 上書き裁定 2026-08-22、iced_aw menu の vendoring 移植 — motolii-menubar crate)。開いた menu 面の幅。新規実測は無い — 既存 shell menu.rs の算術合成 inspector_value_width * 3.0(64×3=192、'Deselect All'+'Cmd+Shift+A' が1行に収まる幅)をそのまま採番しただけ(発明ではなく現状追認)",
 
