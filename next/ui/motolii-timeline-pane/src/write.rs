@@ -81,6 +81,13 @@ pub enum Message {
     /// `projection::property_rows`(選択 layer のキー持ち property 行)に
     /// 見えているキー全部 — 見えているとおりに採れる(正典 §4 Cmd+A と同じ思想)。
     SelectAllVisibleKeys,
+    /// Time-Reverse Keyframes(map 518)。選択キー集合を `(layer, property)`
+    /// ごとに独立して、それぞれ自身の `[min, max]` の中で鏡映する
+    /// ([`crate::keys2::reversed_key_group`] — 純関数はここより前から
+    /// 存在していたが結線されていなかった、この腕がその結線)。値・`interp`
+    /// は不変、frame の並びだけが入れ替わる。空選択・ロック層は理由つき拒否
+    /// (M13、`SetKeyInterp` と同じ形)。**1操作 = 1 undo**。
+    ReverseSelectedKeys,
 
     // ---- Stage 重なり(第3切片 — map B44 184/292/293・正典 §8.1
     //      ReorderLayerUp/Down(+ToEnd))----
@@ -221,6 +228,7 @@ use motolii_store::{
 };
 
 use crate::hit::BarPart;
+use crate::keys2;
 use crate::shuttle::ShuttleCommand;
 use crate::split;
 use crate::stacking::{self, StackDirection};
@@ -529,6 +537,7 @@ impl PaneState {
                 select_all_keys_of_property(doc, session, layer, property)
             }
             Message::SelectAllVisibleKeys => select_all_visible_keys(doc, session),
+            Message::ReverseSelectedKeys => reverse_selected_keys(doc, session),
             Message::RestackLayer(direction) => restack_layers(doc, session, direction),
             Message::RenameBegin(layer) => self.begin_rename(doc, layer),
             Message::RenameEdited(text) => {
@@ -1278,6 +1287,48 @@ fn select_all_visible_keys(doc: &mut Document, session: &mut Session) -> Option<
     None
 }
 
+/// Time-Reverse Keyframes(map 518)。選択キーを `(layer, property)` ごとに
+/// まとめ、それぞれ独立に [`keys2::reversed_key_group`] で鏡映する——複数
+/// property/複数 layer をまたぐ選択は、各グループが**それぞれ自分の
+/// `[min, max]`** の中で鏡映する(全選択をまたいだ1つの時間軸で鏡映するの
+/// ではない、[`keys2::reversed_key_group`] のモジュール doc「集合自身の
+/// 範囲」参照)。鏡映後の全グループ分をまとめて1回の
+/// [`commit_key_frames`](move/retime/nudge と共通の書き口、内部で
+/// property ごとに `Intent::SetTrack` を束ねる)へ渡す——**1操作 = 1 undo**
+/// (グループごとに別々の undo にはしない)。値・`interp` は動かさない
+/// (frame の並びだけが入れ替わる)。
+///
+/// 空選択・ロック層は理由つき拒否(M13、`set_key_interp` と同じ形)。
+fn reverse_selected_keys(doc: &mut Document, session: &mut Session) -> Option<String> {
+    if session.selected_keys.is_empty() {
+        return Some("キーが選ばれていないので時間反転できない — 菱形を選んでから".into());
+    }
+    let mut groups: BTreeMap<(LayerId, PropertyId), Vec<KeySelector>> = BTreeMap::new();
+    for key in &session.selected_keys {
+        groups.entry((key.layer, key.property.clone())).or_default().push(key.clone());
+    }
+
+    let store = doc.view();
+    for &(layer, _) in groups.keys() {
+        let locked = store.attrs(layer).ok().flatten().unwrap_or_default().locked;
+        if locked {
+            drop(store);
+            return Some(format!("layer {} はロックされているので時間反転できない", layer.0));
+        }
+    }
+    drop(store);
+
+    let mut origins: Vec<KeySelector> = Vec::new();
+    let mut news: Vec<i64> = Vec::new();
+    for group in groups.into_values() {
+        let origin_frames: Vec<i64> = group.iter().map(|k| k.frame).collect();
+        let new_frames = keys2::reversed_key_group(&origin_frames);
+        origins.extend(group);
+        news.extend(new_frames);
+    }
+    commit_key_frames(doc, session, &origins, &news, 0)
+}
+
 /// Stage 重なりの並べ替え(第3切片、map B44 184/292/293 + 正典 §8.1
 /// ReorderLayerUp/Down(+ToEnd))。意味計算は [`stacking::restacked`](純関数)、
 /// ここは選択の解決・ロック検分・`Intent::SetOrder` の束ね(1回の `apply_all`
@@ -1624,6 +1675,164 @@ mod key_interp_tests {
         let reason = pane.update(Message::SetKeyInterp(EASY_EASE), &mut doc, &mut session, no_mods());
         assert!(reason.is_none(), "Easy Ease の適用が拒否された: {reason:?}");
         assert_eq!(interps_of(&doc, layer, &property)[0], (0, EASY_EASE));
+    }
+}
+
+/// Time-Reverse Keyframes(map 518、`keys2::reversed_key_group` の結線)。
+#[cfg(test)]
+mod reverse_selected_keys_tests {
+    use super::third_slice_fixtures::*;
+    use super::*;
+
+    fn value_at(doc: &Document, layer: LayerId, property: &PropertyId, frame: i64) -> f64 {
+        let fps = doc.view().composition().unwrap().unwrap().fps;
+        let track = doc.view().track(layer, property).unwrap().unwrap();
+        let key = track
+            .keys()
+            .iter()
+            .find(|k| k.t.try_to_frame_round(fps) == Ok(frame))
+            .unwrap_or_else(|| panic!("frame={frame} にキーが無い"));
+        match key.value {
+            motolii_store::Value::F64(v) => v,
+            _ => panic!("F64 以外の value"),
+        }
+    }
+
+    fn set_track_with_values(doc: &mut Document, layer: LayerId, property: &PropertyId, points: &[(i64, f64)]) {
+        let mut track = KeyframeTrack::new();
+        for &(frame, value) in points {
+            track.insert(motolii_store::Keyframe {
+                t: RationalTime::try_new(frame, 30).expect("frame は収まる"),
+                value: motolii_store::Value::F64(value),
+                interp: Interp::Linear,
+                spatial: None,
+            });
+        }
+        doc.apply(Intent::SetTrack { layer, property: property.clone(), track }).expect("track を書ける");
+    }
+
+    /// **オラクル(赤→緑)**: 選択キー集合が自分自身の `[min,max]` の中で鏡映
+    /// する——値はキーに付いたまま frame だけ入れ替わる。確定は1回の
+    /// `apply_all` = **1 undo**。
+    #[test]
+    fn reverses_the_selected_keys_around_their_own_span_in_one_undo() {
+        let mut doc = doc_with_comp();
+        let layer = LayerId(1);
+        let property = opacity();
+        place(&mut doc, layer, 0);
+        set_track_with_values(&mut doc, layer, &property, &[(0, 0.0), (30, 0.5), (100, 1.0)]);
+        doc.mark_undo_floor();
+
+        let mut session = Session::default();
+        session.selection = Some(layer);
+        session.selected_keys =
+            vec![selector(layer, &property, 0), selector(layer, &property, 30), selector(layer, &property, 100)];
+        let mut pane = PaneState::new();
+
+        let reason = pane.update(Message::ReverseSelectedKeys, &mut doc, &mut session, no_mods());
+        assert!(reason.is_none(), "正常系で拒否理由が返った: {reason:?}");
+        // min=0, max=100 の鏡映: 0↔100 が入れ替わり、30 は70(0+100-30)へ動く。
+        assert_eq!(value_at(&doc, layer, &property, 100), 0.0, "元frame=0の値がframe=100へ");
+        assert_eq!(value_at(&doc, layer, &property, 0), 1.0, "元frame=100の値がframe=0へ");
+        assert_eq!(value_at(&doc, layer, &property, 70), 0.5, "中間キーは鏡映位置(70)へ");
+
+        assert!(doc.undo(), "1回目の undo が効かない");
+        assert_eq!(value_at(&doc, layer, &property, 0), 0.0, "undo 1回で確定前へ戻っていない(1操作=1undo 違反)");
+        assert!(!doc.can_undo(), "余分な undo 段がある(1操作=1undo 違反)");
+    }
+
+    /// 単独キー1本は鏡映の中心が自分自身になるので no-op(frame は動かない)
+    /// ——それでも `commit_key_frames` は「動いていない」と見て intent を
+    /// 出さない(1操作の粒度は保つが、undo 段は増えない)。
+    #[test]
+    fn a_single_selected_key_is_left_untouched() {
+        let mut doc = doc_with_comp();
+        let layer = LayerId(1);
+        let property = opacity();
+        place(&mut doc, layer, 0);
+        set_track_with_values(&mut doc, layer, &property, &[(42, 1.0)]);
+        doc.mark_undo_floor();
+
+        let mut session = Session::default();
+        session.selection = Some(layer);
+        session.selected_keys = vec![selector(layer, &property, 42)];
+        let mut pane = PaneState::new();
+
+        let reason = pane.update(Message::ReverseSelectedKeys, &mut doc, &mut session, no_mods());
+        assert!(reason.is_none());
+        assert_eq!(value_at(&doc, layer, &property, 42), 1.0, "単独キーは動かないはず");
+    }
+
+    /// 空選択は理由つき拒否(M13)— Document は無傷。
+    #[test]
+    fn reverse_selected_keys_with_no_selection_refuses_with_a_reason() {
+        let mut doc = doc_with_comp();
+        let layer = LayerId(1);
+        place(&mut doc, layer, 0);
+        doc.mark_undo_floor();
+        let mut session = Session::default();
+        let mut pane = PaneState::new();
+
+        let reason = pane.update(Message::ReverseSelectedKeys, &mut doc, &mut session, no_mods());
+        assert!(reason.is_some(), "空選択が黙って飲み込まれた(M13 違反)");
+        assert!(!doc.can_undo(), "拒否したのに Document が動いた");
+    }
+
+    /// ロック層は理由つき拒否 — track は不変。
+    #[test]
+    fn reverse_selected_keys_refuses_a_locked_layer() {
+        let mut doc = doc_with_comp();
+        let layer = LayerId(1);
+        let property = opacity();
+        place(&mut doc, layer, 0);
+        set_track_with_values(&mut doc, layer, &property, &[(0, 0.0), (100, 1.0)]);
+        lock(&mut doc, layer);
+        doc.mark_undo_floor();
+
+        let mut session = Session::default();
+        session.selection = Some(layer);
+        session.selected_keys = vec![selector(layer, &property, 0), selector(layer, &property, 100)];
+        let mut pane = PaneState::new();
+
+        let reason = pane.update(Message::ReverseSelectedKeys, &mut doc, &mut session, no_mods());
+        assert!(reason.is_some(), "ロック層への時間反転が黙って通った");
+        assert_eq!(value_at(&doc, layer, &property, 0), 0.0, "拒否したのに track が動いた");
+    }
+
+    /// 複数 property をまたぐ選択でも1回の undo で確定する——各 property は
+    /// それぞれ自分の `[min,max]` で独立に鏡映する。
+    #[test]
+    fn spans_multiple_properties_in_a_single_undo() {
+        let mut doc = doc_with_comp();
+        let layer = LayerId(1);
+        let opacity_p = opacity();
+        let position_p = position_x();
+        place(&mut doc, layer, 0);
+        set_track_with_values(&mut doc, layer, &opacity_p, &[(0, 0.0), (100, 1.0)]);
+        set_track_with_values(&mut doc, layer, &position_p, &[(10, 5.0), (50, 25.0)]);
+        doc.mark_undo_floor();
+
+        let mut session = Session::default();
+        session.selection = Some(layer);
+        session.selected_keys = vec![
+            selector(layer, &opacity_p, 0),
+            selector(layer, &opacity_p, 100),
+            selector(layer, &position_p, 10),
+            selector(layer, &position_p, 50),
+        ];
+        let mut pane = PaneState::new();
+
+        let reason = pane.update(Message::ReverseSelectedKeys, &mut doc, &mut session, no_mods());
+        assert!(reason.is_none(), "{reason:?}");
+        assert_eq!(value_at(&doc, layer, &opacity_p, 100), 0.0);
+        assert_eq!(value_at(&doc, layer, &opacity_p, 0), 1.0);
+        assert_eq!(value_at(&doc, layer, &position_p, 50), 5.0);
+        assert_eq!(value_at(&doc, layer, &position_p, 10), 25.0);
+
+        assert!(doc.undo(), "1回目の undo が効かない");
+        assert_eq!(value_at(&doc, layer, &opacity_p, 0), 0.0, "undo 1回で両property戻っていない");
+        assert_eq!(value_at(&doc, layer, &position_p, 10), 5.0, "undo 1回で両property戻っていない");
+        assert!(!doc.can_undo(), "余分な undo 段がある(1操作=1undo 違反、複数property跨ぎ)");
     }
 }
 
