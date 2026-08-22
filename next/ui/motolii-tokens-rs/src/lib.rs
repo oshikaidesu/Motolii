@@ -127,6 +127,17 @@ pub struct Dimensions {
     /// 次第そちらへ移す。
     #[serde(default = "default_ui_scale")]
     pub ui_scale: f32,
+    /// メニューバーの開いた menu 面の幅(menubar 節 — MB-2 上書き裁定 2026-08-22、
+    /// `motolii-menubar` crate が読む)。新規実測は無い — 既存 shell `menu.rs` の
+    /// 算術合成 `inspector_value_width * 3.0`(64×3=192)をトークンへ採番しただけ
+    /// (`tokens/dimensions.json` の `_note_menubar_menu_width` 参照)。
+    #[serde(default = "default_menubar_menu_width")]
+    pub menubar_menu_width: f32,
+    /// 枠の文法(裁定179)「開いた menu の面は明度1段+角丸」の角丸半径。
+    /// 実測正本に対応段が無いので `spacing_s`(4)と同値
+    /// (`_note_menubar_corner_radius` 参照 — 新しい寸法段を発明しない)。
+    #[serde(default = "default_menubar_corner_radius")]
+    pub menubar_corner_radius: f32,
 }
 
 fn default_inspector_glyph_width() -> f32 {
@@ -143,6 +154,14 @@ fn default_timeline_param_row_height() -> f32 {
 
 fn default_ui_scale() -> f32 {
     1.0
+}
+
+fn default_menubar_menu_width() -> f32 {
+    192.0
+}
+
+fn default_menubar_corner_radius() -> f32 {
+    4.0
 }
 
 impl Default for Dimensions {
@@ -172,6 +191,8 @@ impl Default for Dimensions {
             timeline_lane_bar_width: 150.0,
             timeline_param_row_height: 16.67,
             ui_scale: 1.0,
+            menubar_menu_width: 192.0,
+            menubar_corner_radius: 4.0,
         }
     }
 }
@@ -223,6 +244,8 @@ impl Dimensions {
             inspector_glyph_width: self.inspector_glyph_width * s,
             timeline_lane_bar_width: self.timeline_lane_bar_width * s,
             timeline_param_row_height: self.timeline_param_row_height * s,
+            menubar_menu_width: self.menubar_menu_width * s,
+            menubar_corner_radius: self.menubar_corner_radius * s,
             // 自分自身は「寸法」ではないので掛けない。この結果を再度 `scaled()`
             // に通す呼び出し側は無い(適用点は `Shell::dims` の1箇所だけ)。
             ui_scale: self.ui_scale,

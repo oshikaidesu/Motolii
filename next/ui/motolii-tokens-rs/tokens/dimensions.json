@@ -59,5 +59,11 @@
   "_note_timeline_param_row_height": "property 行(キー行、第2波T3)の行高。mock(ui-scale-and-z.html)に対応する段が無いので新設(裁定117の『mock/tokens に無ければ dimensions.json へ新ロール』どおり) — 出典は egui版 timeline_editor(crates/motolii-ui/src/timeline_editor/mod.rs)の ROW_H=24/PROP_H=20 比(0.8333…)を、この移植の row_height(20)へ適用した値(20 * 20/24 ≈ 16.67)。裁定150(意味論借用が既定)と同じ発想を寸法へも延長 — 独自の比を発明しない",
 
   "ui_scale": 1.00,
-  "_note_ui_scale": "mock --s 相当の UI 拡大率(1.00 基準、0.01刻み)。適用点は Dimensions::scaled の1箇所だけ(Shell::dims が呼ぶ)。仮の置き場 — Workspace 永続機構がまだ無いため、暫定的にこの JSON トークンファイルへ置く(発注書の指示どおり)。Workspace 実装後はそちらへ移す"
+  "_note_ui_scale": "mock --s 相当の UI 拡大率(1.00 基準、0.01刻み)。適用点は Dimensions::scaled の1箇所だけ(Shell::dims が呼ぶ)。仮の置き場 — Workspace 永続機構がまだ無いため、暫定的にこの JSON トークンファイルへ置く(発注書の指示どおり)。Workspace 実装後はそちらへ移す",
+
+  "menubar_menu_width": 192,
+  "_note_menubar_menu_width": "menubar 節(MB-2 上書き裁定 2026-08-22、iced_aw menu の vendoring 移植 — motolii-menubar crate)。開いた menu 面の幅。新規実測は無い — 既存 shell menu.rs の算術合成 inspector_value_width * 3.0(64×3=192、'Deselect All'+'Cmd+Shift+A' が1行に収まる幅)をそのまま採番しただけ(発明ではなく現状追認)",
+
+  "menubar_corner_radius": 4,
+  "_note_menubar_corner_radius": "menubar 節。枠の文法(裁定179)『開いた menu の面は明度1段+角丸』の角丸半径。実測正本(Ableton 実測・mock)に対応段が無いので spacing_s(4)と同値を採る — 新しい寸法段を発明しない(timeline_param_row_height と同じ近縁値導出の方針)"
 }

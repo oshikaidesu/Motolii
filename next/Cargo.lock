@@ -3462,6 +3462,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-menubar"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "iced_core",
+ "iced_test",
+ "iced_widget",
+ "motolii-tokens-rs",
+]
+
+[[package]]
 name = "motolii-settings-pane"
 version = "0.1.0"
 dependencies = [
