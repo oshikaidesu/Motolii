@@ -1,0 +1,24 @@
+# 動詞レジストリ crate(発注 2026-08-22 —「同じ動詞を4箇所に手書きするのをやめる」)。
+#
+# 現状、1つの動詞が (a) メニュー項目(`motolii-menubar/src/menus.rs`)・
+# (b) 右クリック項目(`motolii-menubar/src/context.rs`)・(c) keymap
+# (`motolii-shell::resolve_navigation_key`)・(d) `normal-map.tsv` の行、の
+# 4箇所に手書きされている。この crate はまず (a)/(b) の重複(ラベル文字列・
+# shortcut 表記・並び)を1箇所へ正本化する — (c)/(d) の統合は次切片。
+#
+# `motolii-menubar` を**読むだけ**(既存 crate は不触) — `Item`/`Menu` と
+# 各メニュー/文脈の `XxxMessages<M>` 構造体をそのまま再利用し、生成器が既存
+# `menus.rs`/`context.rs` と同じ形の関数(同じ引数型・返り値型)を出す。
+# 移行時(次切片)は呼び手(shell)のコードを変えず、`motolii-menubar::menus::edit_menu`
+# の呼び出しを `motolii-verbs::generate::edit_menu` へ差し替えるだけで済む形。
+[package]
+name = "motolii-verbs"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# `Item`/`Menu`/各 `XxxMessages<M>`(発注書の前提「4箇所」のうち (a)/(b) の
+# 既存正本)をそのまま使う。iced 自体には依存しない(この crate は動詞の
+# 記述データ+生成関数のみ、描画は持たない)。
+motolii-menubar.workspace = true
