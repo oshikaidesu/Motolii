@@ -30,6 +30,7 @@ mod decode;
 mod encode;
 mod mux;
 mod probe;
+mod waveform;
 
 use std::io::Read;
 use std::process::Command;
@@ -45,6 +46,7 @@ pub use probe::{
     probe, probe_container, require_supported_audio, select_audio_stream, select_video_stream,
     ContainerInfo, MediaInfo, MediaStreamKind, ProbedAudioStream, ProbedVideoStream,
 };
+pub use waveform::{waveform_peaks, WAVEFORM_CACHE_CAP, WAVEFORM_SAMPLE_RATE};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {
