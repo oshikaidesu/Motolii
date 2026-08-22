@@ -23,9 +23,11 @@
 //! - 回転ハンドル = 上辺中点から外側へ stem で繋いだ小円(Canva/PowerPoint/
 //!   Google Slides の慣習形 — Figma の「角の外側の不可視ゾーン」は Q0
 //!   (触れそうで触れない/触れるのに見えない)に反するので採らない)。
-//! - anchor = ⊕(円+十字、AE のアンカーポイントの慣習形)。**表示のみ**
-//!   (第1切片は drag 対象にしない — anchor drag は position 補償という別の意味
-//!   (AE の pan-behind)を持つため別切片)。
+//! - anchor = ⊕(円+十字、AE のアンカーポイントの慣習形)。第1切片は表示のみ
+//!   だったが、**第2切片(B22 波、2026-08-22)で drag 対象**: anchor drag =
+//!   anchor 変更+position 補償(AE の pan-behind と同じ「見た目不動」 —
+//!   [`anchor_value`] doc の導出参照)。2 property を [`GizmoValue::Anchor`] が
+//!   対で運ぶ(片方だけ書くと絵が跳ぶため、1 message に両方乗せる)。
 //!
 //! ## 座標系(このモジュール内は **bounds ローカル** で閉じる)
 //!
@@ -95,34 +97,52 @@ pub enum GizmoPhase {
     Cancel,
 }
 
-/// drag が書く先の property(第1切片は変形3種のみ)。shell 側の宛先:
-/// [`property::POSITION`] / [`property::SCALE`] / [`property::ROTATION`]。
+/// drag が書く先の property(第2切片で Anchor が加入)。shell 側の宛先:
+/// [`property::POSITION`] / [`property::SCALE`] / [`property::ROTATION`] /
+/// [`property::ANCHOR`]。**`Anchor` だけは2 property を書く**
+/// ([`GizmoValue::Anchor`] が anchor と補償済み position を対で運ぶ —
+/// `property_name` は主となる anchor 側の名前を返す)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GizmoProperty {
     Position,
     Scale,
     Rotation,
+    Anchor,
 }
 
 impl GizmoProperty {
     /// store の property 名(shell 結線用の読み口 — 文字列を二重に持たない)。
+    /// `Anchor` は主 property(anchor)の名前 — 補償の書き先は
+    /// [`property::POSITION`]([`GizmoValue::Anchor`] doc 参照)。
     pub fn property_name(self) -> &'static str {
         match self {
             Self::Position => property::POSITION,
             Self::Scale => property::SCALE,
             Self::Rotation => property::ROTATION,
+            Self::Anchor => property::ANCHOR,
         }
     }
 }
 
-/// drag が計算した新しい値(store の単位そのまま: position = comp/親空間 px、
-/// scale = 1.0 が等倍、rotation = 度・時計回り)。shell 側は
+/// drag が計算した新しい値(store の単位そのまま: position/anchor = comp/親空間
+/// /ローカル px、scale = 1.0 が等倍、rotation = 度・時計回り)。shell 側は
 /// `Value::Vec2`/`Value::F64` へ写すだけ。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GizmoValue {
     Position([f64; 2]),
     Scale([f64; 2]),
     Rotation(f64),
+    /// anchor drag(AE pan-behind 型)。**shell は両方を同時に書く**
+    /// (transient も commit も対で — 「見た目不動」の不変量は anchor と
+    /// position を同時に書けて初めて成立する。1 drag = 1 commit の契約は
+    /// 変わらない: 1 gesture で2 property に1回ずつの upsert を**1つの
+    /// history 段**として畳むのは shell 結線側の責務)。
+    Anchor {
+        /// レイヤーローカル px([`property::ANCHOR`] へ)。
+        anchor: [f64; 2],
+        /// 補償済みの親空間 px([`property::POSITION`] へ)。
+        position: [f64; 2],
+    },
 }
 
 impl GizmoValue {
@@ -131,6 +151,7 @@ impl GizmoValue {
             Self::Position(_) => GizmoProperty::Position,
             Self::Scale(_) => GizmoProperty::Scale,
             Self::Rotation(_) => GizmoProperty::Rotation,
+            Self::Anchor { .. } => GizmoProperty::Anchor,
         }
     }
 }
@@ -330,6 +351,8 @@ pub enum GizmoHandle {
     Scale(ScaleHandle),
     /// 回転ハンドル = rotate(rotation)。
     Rotate,
+    /// anchor ⊕ = anchor drag(第2切片 — anchor 変更+position 補償)。
+    Anchor,
 }
 
 impl GizmoHandle {
@@ -338,6 +361,7 @@ impl GizmoHandle {
             Self::Body => GizmoProperty::Position,
             Self::Scale(_) => GizmoProperty::Scale,
             Self::Rotate => GizmoProperty::Rotation,
+            Self::Anchor => GizmoProperty::Anchor,
         }
     }
 }
@@ -346,7 +370,9 @@ impl GizmoHandle {
 /// [`letterboxed_rect`] と同じ矩形を**原点0へ正規化した bounds** で組む
 /// (モジュール冒頭 doc「座標系」— `draw` のローカル Frame・`position_in` の
 /// ローカル cursor と同じ系に揃える)。退化(comp/bounds が 0)なら `None`。
-fn letterbox_screen_from_comp(bounds: Rectangle, comp: CompSpec) -> Option<Affine2> {
+/// `pub(crate)`: 方眼シート overlay([`crate::sheets`])が同じ原点正規化を
+/// 共有する(GZ FINDING を2箇所目で再発させない — 計算を複製しない)。
+pub(crate) fn letterbox_screen_from_comp(bounds: Rectangle, comp: CompSpec) -> Option<Affine2> {
     let local_bounds = Rectangle::new(Point::ORIGIN, bounds.size());
     let rect = letterboxed_rect(local_bounds, comp)?;
     if rect.width <= 0.0 || rect.height <= 0.0 {
@@ -505,6 +531,16 @@ pub fn gizmo_hit_test(layout: &GizmoLayout, cursor: Point) -> Option<GizmoHandle
         return Some(GizmoHandle::Scale(handle));
     }
 
+    // anchor ⊕(第2切片で drag 対象)。scale ハンドルの後・body の前 —
+    // 極小レイヤーでハンドル群と重なった時は2軸動かせる角/辺を残し、body に
+    // 飲み込まれて掴めなくなる事故は防ぐ(優先順位の原則は doc 冒頭と同じ
+    // 「小さい物が大きい物に勝つ」)。命中半径は他ハンドルと同じ
+    // `hit_radius` — 見た目(`gizmo_anchor_radius` = 4)より広い判定で
+    // Q0「見えている物は必ず触れる」を保つ。
+    if distance_squared(layout.anchor) <= radius_squared {
+        return Some(GizmoHandle::Anchor);
+    }
+
     // body: レイヤーローカルへ戻して内容矩形の中か(回転/skew/カメラ込みで正しい
     // 判定になる)。ローカルへ戻れない(scale 0 で潰れている)なら body は無い。
     let local_from_screen = layout.screen_from_local.inverse();
@@ -637,6 +673,60 @@ pub fn rotation_value(
     degrees
 }
 
+/// anchor drag(第2切片、AE pan-behind 型): anchor を cursor の下へ移し、
+/// **見た目は不動**になるよう position を補償する。
+///
+/// **導出**: 局所→親の写像は `M = T(pos)·R·K·S·T(-a)`
+/// ([`LayerPlacement::from_transform`] の適用順)。任意の局所点 `p` の像
+/// `M(p) = pos + RKS(p - a)` を全 `p` で不変に保ったまま `a0 → a1` へ変えると
+/// `pos1 = pos0 + RKS·(a1 - a0)` が唯一解。新しい anchor は「cursor の真下の
+/// 局所点」 `a1 = M0⁻¹(cursor_parent)` — このとき anchor の親空間の像は
+/// `M1(a1) = pos1 = pos0 + RKS(a1 - a0) = M0(a1) = cursor_parent`、つまり
+/// **⊕ が cursor に吸い付き、絵は1px も動かない**(AE の pan-behind と同じ
+/// 不変量)。`RKS` は正本 [`LayerPlacement::from_transform`]
+/// (anchor=0, pos=0)で組む — 行列をここへ複製しない。
+///
+/// `M0` が退化(scale 0)して逆行列が立たないなら開始時の値をそのまま返す
+/// (解けない drag は値を動かさない — [`GizmoDragState::begin`] の
+/// 「掴めない物は掴めないまま」と同じ判断)。修飾キーは第1弾では持たない
+/// (AE の pan-behind にも Shift の標準挙動は無い)。
+pub fn anchor_value(start: &GizmoTarget, cursor_parent: Vec2) -> ([f64; 2], [f64; 2]) {
+    let unchanged = (
+        [start.anchor[0] as f64, start.anchor[1] as f64],
+        [start.position[0] as f64, start.position[1] as f64],
+    );
+    let placement = LayerPlacement::from_transform(
+        start.anchor,
+        start.position,
+        start.scale,
+        start.rotation_degrees,
+        start.skew_degrees,
+        start.skew_axis_degrees,
+    );
+    let local_from_parent = placement.inverse();
+    if !local_from_parent.is_finite() {
+        return unchanged;
+    }
+    let new_anchor = local_from_parent.transform_point2(cursor_parent);
+    let rks = LayerPlacement::from_transform(
+        [0.0, 0.0],
+        [0.0, 0.0],
+        start.scale,
+        start.rotation_degrees,
+        start.skew_degrees,
+        start.skew_axis_degrees,
+    );
+    let compensation =
+        rks.transform_vector2(new_anchor - Vec2::new(start.anchor[0], start.anchor[1]));
+    (
+        [new_anchor.x as f64, new_anchor.y as f64],
+        [
+            (start.position[0] + compensation.x) as f64,
+            (start.position[1] + compensation.y) as f64,
+        ],
+    )
+}
+
 /// 進行中の drag。**Document でも Session でもない widget 内だけの一時状態**
 /// ([`crate::Interaction`] と同格)。開始時点の対象・座標系を凍結して持つ —
 /// drag 中に shell が transient で対象を動かしても解が発振しない
@@ -723,6 +813,10 @@ impl GizmoDragState {
                 cursor_parent,
                 shift,
             )),
+            GizmoHandle::Anchor => {
+                let (anchor, position) = anchor_value(&self.start, cursor_parent);
+                GizmoValue::Anchor { anchor, position }
+            }
         };
         self.last_value = Some(value);
         value
@@ -927,7 +1021,8 @@ impl canvas::Program<GizmoDrag> for GizmoOverlay {
             frame.stroke(&square, hairline.clone());
         }
 
-        // anchor ⊕(表示のみ、AE の慣習形)。
+        // anchor ⊕(AE の慣習形。第2切片から drag 対象 — 命中は hit_radius、
+        // 見た目の寸はトークンのまま: 変形の不動点はハンドルより一段軽い視覚重量)。
         let radius = self.dims.gizmo_anchor_radius;
         let ring = canvas::Path::circle(layout.anchor, radius);
         frame.stroke(&ring, hairline.clone());
@@ -967,6 +1062,16 @@ impl canvas::Program<GizmoDrag> for GizmoOverlay {
                         mouse::Interaction::Grabbing
                     } else {
                         mouse::Interaction::Grab
+                    }
+                }
+                // ⊕ グリフと同形の Crosshair(hover)— 「精密に置く物」の合図。
+                // 第1切片の「表示のみ」からの繰り上がりを、カーソルが最初に語る
+                // (Q0: 触れる物は触れそうに見せる)。
+                GizmoHandle::Anchor => {
+                    if dragging {
+                        mouse::Interaction::Grabbing
+                    } else {
+                        mouse::Interaction::Crosshair
                     }
                 }
                 GizmoHandle::Scale(scale_handle) => {
@@ -1085,12 +1190,22 @@ mod tests {
     /// 値の照合(f32 の逆行列を経由するので機械精度ではなく 1e-3 の帯で見る —
     /// screen px/scale/度のどの単位でも視認できない差)。
     fn approx_value(actual: GizmoValue, expected: GizmoValue) {
+        let vec2_close =
+            |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).abs() < 1e-3 && (a[1] - b[1]).abs() < 1e-3;
         let ok = match (actual, expected) {
             (GizmoValue::Position(a), GizmoValue::Position(b))
-            | (GizmoValue::Scale(a), GizmoValue::Scale(b)) => {
-                (a[0] - b[0]).abs() < 1e-3 && (a[1] - b[1]).abs() < 1e-3
-            }
+            | (GizmoValue::Scale(a), GizmoValue::Scale(b)) => vec2_close(a, b),
             (GizmoValue::Rotation(a), GizmoValue::Rotation(b)) => (a - b).abs() < 1e-3,
+            (
+                GizmoValue::Anchor {
+                    anchor: a1,
+                    position: p1,
+                },
+                GizmoValue::Anchor {
+                    anchor: a2,
+                    position: p2,
+                },
+            ) => vec2_close(a1, a2) && vec2_close(p1, p2),
             _ => false,
         };
         assert!(ok, "{actual:?} != {expected:?}");
@@ -1189,7 +1304,12 @@ mod tests {
         // 回転ハンドル。
         let rotate = layout.rotate_handle.unwrap();
         assert_eq!(gizmo_hit_test(&layout, rotate), Some(GizmoHandle::Rotate));
-        // 内部 = body。
+        // anchor ⊕(第2切片から drag 対象)。
+        assert_eq!(
+            gizmo_hit_test(&layout, layout.anchor),
+            Some(GizmoHandle::Anchor)
+        );
+        // 内部 = body(anchor の hit_radius の外)。
         assert_eq!(
             gizmo_hit_test(&layout, Point::new(300.0, 180.0)),
             Some(GizmoHandle::Body)
@@ -1474,9 +1594,139 @@ mod tests {
             GizmoProperty::Scale
         );
         assert_eq!(GizmoHandle::Rotate.property(), GizmoProperty::Rotation);
+        assert_eq!(GizmoHandle::Anchor.property(), GizmoProperty::Anchor);
         assert_eq!(GizmoProperty::Position.property_name(), property::POSITION);
         assert_eq!(GizmoProperty::Scale.property_name(), property::SCALE);
         assert_eq!(GizmoProperty::Rotation.property_name(), property::ROTATION);
+        assert_eq!(GizmoProperty::Anchor.property_name(), property::ANCHOR);
+        assert_eq!(
+            GizmoValue::Anchor {
+                anchor: [0.0, 0.0],
+                position: [0.0, 0.0]
+            }
+            .property(),
+            GizmoProperty::Anchor
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // anchor drag(第2切片 — AE pan-behind 型。未実行、波末一括)
+    // -----------------------------------------------------------------
+
+    /// **本命**: ⊕ が cursor の真下へ来て、position が補償される
+    /// (恒等変形なら anchor の移動量=position の移動量)。
+    #[test]
+    fn anchor_drag_lands_the_anchor_under_the_cursor_and_compensates_position() {
+        let target = target();
+        let (anchor, position) = anchor_value(&target, Vec2::new(330.0, 190.0));
+        // M0⁻¹(330,190) = (330,190) - (270,155) = (60,35)。
+        assert!((anchor[0] - 60.0).abs() < 1e-3 && (anchor[1] - 35.0).abs() < 1e-3);
+        // RKS = 恒等なので補償は anchor の差分そのまま: (320,180)+(10,10)。
+        assert!((position[0] - 330.0).abs() < 1e-3 && (position[1] - 190.0).abs() < 1e-3);
+    }
+
+    /// **不変量**: 回転+非等方 scale の下でも、anchor drag の前後で任意の
+    /// 局所点の親空間の像が動かない(見た目不動 — AE pan-behind の本体)。
+    #[test]
+    fn anchor_drag_keeps_the_image_stationary_under_rotation_and_scale() {
+        let mut twisted = target();
+        twisted.rotation_degrees = 30.0;
+        twisted.scale = [2.0, 0.5];
+        let cursor_parent = Vec2::new(300.0, 200.0);
+        let (anchor, position) = anchor_value(&twisted, cursor_parent);
+
+        let before = LayerPlacement::from_transform(
+            twisted.anchor,
+            twisted.position,
+            twisted.scale,
+            twisted.rotation_degrees,
+            twisted.skew_degrees,
+            twisted.skew_axis_degrees,
+        );
+        let after = LayerPlacement::from_transform(
+            [anchor[0] as f32, anchor[1] as f32],
+            [position[0] as f32, position[1] as f32],
+            twisted.scale,
+            twisted.rotation_degrees,
+            twisted.skew_degrees,
+            twisted.skew_axis_degrees,
+        );
+        for probe in [Vec2::new(0.0, 0.0), Vec2::new(100.0, 50.0), Vec2::new(37.0, 11.0)] {
+            let b = before.transform_point2(probe);
+            let a = after.transform_point2(probe);
+            assert!(
+                (a.x - b.x).abs() < 1e-2 && (a.y - b.y).abs() < 1e-2,
+                "絵が動いた: probe={probe:?} before={b:?} after={a:?}"
+            );
+        }
+        // ⊕ 自身は cursor の真下(M1(a1) = cursor_parent)。
+        let landed = after.transform_point2(Vec2::new(anchor[0] as f32, anchor[1] as f32));
+        assert!(
+            (landed.x - cursor_parent.x).abs() < 1e-2
+                && (landed.y - cursor_parent.y).abs() < 1e-2,
+            "⊕ が cursor に吸い付いていない: {landed:?}"
+        );
+    }
+
+    /// 観測カメラ zoom 2 の下でも drag 経路(screen → 親空間)ごと正しく解ける
+    /// (screen 10px = 親空間 5px)。
+    #[test]
+    fn anchor_drag_solves_under_the_observation_camera() {
+        let observation = ObservationCamera {
+            pan: [0.0, 0.0],
+            zoom: 2.0,
+        };
+        let target = target();
+        let layout = layout_with(Some(observation), &target);
+        let start = layout.anchor;
+        let mut drag = GizmoDragState::begin(target, &layout, GizmoHandle::Anchor, start)
+            .expect("drag が始まるはず");
+        let value = drag.update(Point::new(start.x + 10.0, start.y + 5.0), false);
+        approx_value(
+            value,
+            GizmoValue::Anchor {
+                anchor: [55.0, 27.5],
+                position: [325.0, 182.5],
+            },
+        );
+    }
+
+    /// scale 0 で写像が潰れている層は解かない — 開始時の値を返すだけ
+    /// (`begin` の「掴めない物は掴めないまま」と同じ判断)。
+    #[test]
+    fn anchor_drag_with_a_degenerate_scale_keeps_the_start_values() {
+        let mut flat = target();
+        flat.scale = [0.0, 1.0];
+        let (anchor, position) = anchor_value(&flat, Vec2::new(400.0, 300.0));
+        assert_eq!(anchor, [50.0, 25.0]);
+        assert_eq!(position, [320.0, 180.0]);
+    }
+
+    /// 優先順位: 極小レイヤーで anchor が scale ハンドルに飲まれても角が勝つ
+    /// (2軸動かせる方を残す — 既存の角>辺と同じ原則)。逆に body とは
+    /// anchor が勝つ(小さい物が大きい物に勝つ)。
+    #[test]
+    fn hit_test_ranks_the_anchor_between_scale_handles_and_the_body() {
+        // 通常寸: anchor(中央)は body の海の中 — anchor が勝つ。
+        let layout = layout_with(None, &target());
+        assert_eq!(
+            gizmo_hit_test(&layout, Point::new(layout.anchor.x + 3.0, layout.anchor.y)),
+            Some(GizmoHandle::Anchor)
+        );
+
+        // 極小 6x6: 角ハンドルと anchor が半径内で重なる — 角が勝つ。
+        let mut tiny = target();
+        tiny.size = [6.0, 6.0];
+        tiny.anchor = [3.0, 3.0];
+        let layout = layout_with(None, &tiny);
+        let top_left_index = SCALE_HANDLES
+            .iter()
+            .position(|h| *h == ScaleHandle::TopLeft)
+            .unwrap();
+        assert_eq!(
+            gizmo_hit_test(&layout, layout.scale_handles[top_left_index]),
+            Some(GizmoHandle::Scale(ScaleHandle::TopLeft))
+        );
     }
 
     // -----------------------------------------------------------------
