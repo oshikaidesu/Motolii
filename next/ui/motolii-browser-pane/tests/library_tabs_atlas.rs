@@ -91,6 +91,7 @@ fn all_four_tabs_are_always_visible() {
         let targets = collect_targets(pane_view(
             &state,
             &items,
+            None,
             Dimensions::default(),
             Colors::default(),
         ));
@@ -110,7 +111,7 @@ fn all_four_tabs_are_always_visible() {
 fn clicking_a_tab_publishes_select_tab() {
     let items = fixture_items();
     let state = PaneState::new();
-    let build = || pane_view(&state, &items, Dimensions::default(), Colors::default());
+    let build = || pane_view(&state, &items, None, Dimensions::default(), Colors::default());
 
     let targets = collect_targets(build());
     let bounds = targets
@@ -150,6 +151,7 @@ fn media_tab_renders_the_ledger_and_never_the_preview_catalog() {
     let targets = collect_targets(pane_view(
         &state,
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
@@ -174,6 +176,7 @@ fn effects_tab_renders_the_preview_catalog_and_never_the_ledger() {
     let targets = collect_targets(pane_view(
         &state,
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
@@ -203,6 +206,7 @@ fn media_filter_chips_are_hidden_outside_the_media_tab() {
     let media_targets = collect_targets(pane_view(
         &PaneState::new(),
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
@@ -217,6 +221,7 @@ fn media_filter_chips_are_hidden_outside_the_media_tab() {
     let effects_targets = collect_targets(pane_view(
         &effects_state,
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));

@@ -91,6 +91,7 @@ fn targets_on(state: &PaneState, items: &[AssetListItem]) -> Vec<Target> {
     collect_targets(pane_view(
         state,
         items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ))
@@ -108,7 +109,7 @@ fn count_text(targets: &[Target], content: &str) -> usize {
 /// クリック手口(`rail_filter_atlas.rs` と同じ): content の Text 中心を
 /// 押して publish された Message 列を返す。
 fn click_text(state: &PaneState, items: &[AssetListItem], content: &str) -> Vec<Message> {
-    let build = || pane_view(state, items, Dimensions::default(), Colors::default());
+    let build = || pane_view(state, items, None, Dimensions::default(), Colors::default());
     let targets = collect_targets(build());
     let bounds = targets
         .iter()

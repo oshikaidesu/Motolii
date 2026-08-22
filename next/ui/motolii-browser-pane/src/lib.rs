@@ -154,6 +154,46 @@
 //!   実装済みを指す)— この切片の EXACT TARGET(この crate のみ)の範囲外
 //!   (`CreateKind` の新 variant 追加は `motolii-shell::create_from_card` の
 //!   match 網羅性を壊す cross-crate 変更になるため、見送り・RETURN 参照)。
+//!
+//! ## Browser 第6切片(2026-08-22 発注、map B08 616/617 消化)
+//! `normal-map.tsv` B08 束の以下2行を消化: 616「Replace selected footage
+//! item」/617「Replace selected source footage for selected layers」—
+//! どちらも「store 側に `Intent::SetSource` 実装済み(裁定112c)だが UI
+//! (Browser 差替)は未」と注記済みの行(機構は実在、UI だけが空席 — 飾り禁止の
+//! 逆側で、作ってよい対象)。この波の範囲はボタン起点の置換のみ:
+//! [`model::asset_to_layer_source`](`Asset` → `LayerSource` の純関数)+
+//! [`model::can_replace_source`](単一選択のゲーティング)+
+//! [`state::Message::ReplaceSelectedLayerSource`](カードの affordance が
+//! publish する)+ [`pane_view`] への `single_selected_layer` 引数(export-pane
+//! の `WorkAreaFrames` と同型 — pane crate は他 pane/`motolii-shell-state` に
+//! 依存しないので、supervisor が `Session::selected_layers` から詰め替えた
+//! 値だけを受ける、下記「shell 結線」参照)。
+//!
+//! **対象外(この波では作らない)**:
+//! - **618「Replace source for selected layer(ドラッグ)」**: Stage/Timeline
+//!   側に drop target を作る必要があり、この crate の write-set
+//!   (`motolii-browser-pane` 単体)を越える cross-pane 機構 — 次波へ持ち越し。
+//! - B08/B36 の他行のうち、紐づく実装が無いため見送った物: B36 のドラッグ系
+//!   行(618 と同じ cross-pane drag target 不在)、B08 の Collections/Places
+//!   系行(タグ束・filesystem 走査裁定待ち、crate 冒頭「B3 の範囲」節の予約地
+//!   と同一理由)。実能力の無い選択肢へ顔を作らない(飾り禁止)。
+//!
+//! ## shell 結線(supervisor 手順)
+//! 1. `single_selected_layer: Option<motolii_store::LayerId>` を
+//!    `Session::selected_layers`(`motolii-shell-state`)から詰め替える —
+//!    `Some(id)` は `len() == 1` の時だけ(0件・2件以上は `None`、`model::
+//!    can_replace_source` doc 参照)。これを [`pane_view`] へ渡す(このパネル
+//!    は `motolii-shell-state` を引かない、crate 冒頭「この crate の依存」節
+//!    どおり — export-pane が `WorkAreaFrames` でやるのと同じ、値だけの写し)。
+//! 2. `Message::Browser(msg)` を受けた時、委譲(`self.browser.update(msg)`)は
+//!    今までどおり総委譲のまま変えない。その手前で
+//!    `if let Message::ReplaceSelectedLayerSource(asset_id) = &msg { .. }` を
+//!    1本足す: `Document::view().asset(asset_id)` で `Asset` を引き、
+//!    `Some(asset)` かつ `model::asset_to_layer_source(&asset)` が
+//!    `Some(source)` の時だけ、選択中 layer へ `Intent::SetSource { layer,
+//!    source }` を通常の `Document::apply` 経路で dispatch する。
+//!    ([`state::PaneState::update`] はこの腕を no-op 実装済み — 委譲は
+//!    そのまま呼んでよい、二重処理にはならない。)
 
 pub mod model;
 pub mod state;
@@ -204,9 +244,18 @@ pub const PANEL_HEIGHT_ROW_HEIGHT_RATIO: f32 = 14.0;
 ///   への対応)。rail/チップの中身は mock がタブ別に宣言する語彙
 ///   ([`model::preview_tags`])。検索欄は mock では toolbar 領域=全タブ共有
 ///   なので従来どおり全タブに出す。
+///
+/// `single_selected_layer`(第6切片、map B08 616/617): supervisor が
+/// `Session::selected_layers` から詰め替えた「単一選択」の写し(export-pane
+/// の `WorkAreaFrames` と同型 — この crate は `motolii-shell-state` を引かない
+/// ので値だけ受ける、crate 冒頭「shell 結線」参照)。`Some` かつカードの素材が
+/// 置換可能な時だけ [`media_body`] がカードへ Replace affordance を出す —
+/// preview タブ(effects/create/panels)には効かない(素材置換は media 台帳の
+/// 概念、[`preview_body`] は今までどおり受け取らない)。
 pub fn pane_view(
     state: &PaneState,
     items: &[AssetListItem],
+    single_selected_layer: Option<motolii_store::LayerId>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -221,6 +270,7 @@ pub fn pane_view(
             state.selected(),
             state.recently_admitted(),
             state.drop_hover(),
+            single_selected_layer,
             dims,
             colors,
         ),
@@ -347,6 +397,9 @@ pub fn view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
+    // 旧入口は選択 layer の情報を持たない呼び手向け — Replace affordance は
+    // 出さない(`None`、触れない物に触れそうな顔をさせない、crate 冒頭
+    // 「shell 結線」参照)。
     media_body(
         items,
         scope,
@@ -356,6 +409,7 @@ pub fn view(
         None,
         &[],
         false,
+        None,
         dims,
         colors,
     )
@@ -365,7 +419,7 @@ pub fn view(
 /// カード選択意匠(`selected`、mock `.libraryCard.selected`)+ 並べ替え/
 /// 表示形式(B08 第4切片「素材の整理」、[`model::SortKey`]/[`model::ViewMode`])
 /// + 新規素材ハイライト(`recent`)+ drop 先ハイライト(`drop_hover`、B08 続編)
-/// を足した形。
+/// + Replace affordance の元(`single_selected_layer`、第6切片)を足した形。
 #[allow(clippy::too_many_arguments)]
 fn media_body(
     items: &[AssetListItem],
@@ -376,6 +430,7 @@ fn media_body(
     selected: Option<model::CardKey>,
     recent: &[motolii_store::AssetId],
     drop_hover: bool,
+    single_selected_layer: Option<motolii_store::LayerId>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -393,6 +448,7 @@ fn media_body(
         selected,
         recent,
         drop_hover,
+        single_selected_layer,
         dims,
         colors,
     );
@@ -517,6 +573,7 @@ fn catalog_view(
     selected: Option<model::CardKey>,
     recent: &[motolii_store::AssetId],
     drop_hover: bool,
+    single_selected_layer: Option<motolii_store::LayerId>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -535,6 +592,7 @@ fn catalog_view(
         selected,
         recent,
         view_mode,
+        single_selected_layer,
         dims,
         colors,
     );
@@ -1169,12 +1227,14 @@ fn card_body(
 /// - 台帳自体が空(まだ何も取り込んでいない)= 「Drop files here」 —
 ///   取り込みの入口(drop)を言う。
 /// - 台帳はあるが絞り込みで0件 = 「No matches」。
+#[allow(clippy::too_many_arguments)]
 fn card_grid_view(
     filtered: &[AssetListItem],
     ledger_is_empty: bool,
     selected: Option<model::CardKey>,
     recent: &[motolii_store::AssetId],
     view_mode: model::ViewMode,
+    single_selected_layer: Option<motolii_store::LayerId>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -1198,7 +1258,15 @@ fn card_grid_view(
                 .map(|item| {
                     let key = model::CardKey::Media(item.id);
                     let is_recent = recent.contains(&item.id);
-                    card_view(item, selected == Some(key), is_recent, view_mode, dims, colors)
+                    card_view(
+                        item,
+                        selected == Some(key),
+                        is_recent,
+                        view_mode,
+                        single_selected_layer,
+                        dims,
+                        colors,
+                    )
                 })
                 .collect();
             row(cards).spacing(dims.spacing_s).into()
@@ -1216,11 +1284,16 @@ fn card_grid_view(
 /// カードは mock どおり `<button>`(`.libraryCard{cursor:pointer}`) —
 /// click で [`Message::SelectCard`] を publish し(mock `selectCard` の
 /// 単一選択)、選択中は [`card_style`] の意匠(mock `.libraryCard.selected`)。
+///
+/// `single_selected_layer`(第6切片、map B08 616/617): [`replace_affordance_row`]
+/// が `Some` を返す時だけ、カード本体の下へ Replace 行を足す(触れない物に
+/// 触れそうな顔をさせない — `None` の間は行ごと出さない)。
 fn card_view(
     item: AssetListItem,
     selected: bool,
     recent: bool,
     view_mode: model::ViewMode,
+    single_selected_layer: Option<motolii_store::LayerId>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -1230,6 +1303,11 @@ fn card_view(
         category.label(),
         model::format_duration(item.duration)
     );
+    // `item.name`/`item.id` を後段で move するため、Replace 行の判定に要る
+    // 面は先に抜いておく(`AssetId` は `Copy`、`path.is_some()` は bool へ
+    // 丸めて独立させる)。
+    let asset_id = item.id;
+    let has_usable_path = item.path.is_some();
     let body = card_body(
         category.glyph(),
         thumb_fill(category, colors),
@@ -1240,12 +1318,67 @@ fn card_view(
         colors,
     );
 
-    button(body)
-        .on_press(Message::SelectCard(model::CardKey::Media(item.id)))
+    let card_button = button(body)
+        .on_press(Message::SelectCard(model::CardKey::Media(asset_id)))
         .width(card_frame_width(view_mode, dims))
         .padding(dims.spacing_xs)
-        .style(move |_theme, status| card_style(dims, colors, selected, recent, status))
-        .into()
+        .style(move |_theme, status| card_style(dims, colors, selected, recent, status));
+
+    // 選択 layer 1件+パス有りの素材の時だけ Replace 行を足す(第6切片、map
+    // B08 616/617)。iced の button は入れ子にしない([`card_button`] とは
+    // 別の兄弟行にする — カード本体の選択クリックと Replace クリックが
+    // 干渉しない、`Message::ReplaceSelectedLayerSource` doc 参照)。
+    match replace_affordance_row(
+        single_selected_layer,
+        has_usable_path,
+        asset_id,
+        card_frame_width(view_mode, dims),
+        dims,
+        colors,
+    ) {
+        Some(replace_row) => column![card_button, replace_row]
+            .spacing(dims.spacing_xs)
+            .into(),
+        None => card_button.into(),
+    }
+}
+
+/// カードに Replace affordance を出すかのゲーティング(第6切片、map B08
+/// 616/617)。**authoritative な判定は [`model::can_replace_source`]**
+/// (supervisor が `Intent::SetSource` dispatch 直前に実 `Asset` で呼ぶ) —
+/// ここは view 側のミラーで、`AssetListItem` が運ぶ最小面(`has_usable_path`
+/// = `AssetListItem::path.is_some()`、= `Asset::path_absolute` のみ、
+/// `model.rs` 冒頭 doc「EXACT TARGET #1」参照。`path_project_relative` は
+/// 運ばない)から同じ形の判定をする。
+///
+/// **逸脱として RETURN 記載**: `path_absolute` が無く `path_project_relative`
+/// だけを持つ素材はこの近似では affordance が出ない(false negative)。
+/// 「押しても失敗するボタンを出す」方向の誤りより「出せる場面で一部出ない」
+/// 方向の誤りを選ぶ(Q0 の安全側 — supervisor 側の authoritative な判定は
+/// 正しく `path_project_relative` も見るので、実害は「ボタンが無い」だけで
+/// 誤動作は起きない)。
+fn replace_affordance_row(
+    single_selected_layer: Option<motolii_store::LayerId>,
+    has_usable_path: bool,
+    asset_id: motolii_store::AssetId,
+    card_width: Length,
+    dims: Dimensions,
+    colors: Colors,
+) -> Option<Element<'static, Message>> {
+    single_selected_layer?;
+    if !has_usable_path {
+        return None;
+    }
+
+    let radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
+    Some(
+        button(text("Replace").size(dims.micro_text))
+            .on_press(Message::ReplaceSelectedLayerSource(asset_id))
+            .width(card_width)
+            .padding([dims.spacing_xs, dims.spacing_s])
+            .style(move |_theme, status| chip_style(dims, colors, false, status, radius))
+            .into(),
+    )
 }
 
 /// カード共通のスタイル(mock `.libraryCard{background:transparent}` /

@@ -102,6 +102,7 @@ fn media_tab_shows_all_sort_chips() {
     let targets = collect_targets(pane_view(
         &state,
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
@@ -119,7 +120,7 @@ fn media_tab_shows_all_sort_chips() {
 fn clicking_a_sort_chip_publishes_select_sort_key() {
     let items = fixture_items();
     let state = PaneState::new();
-    let build = || pane_view(&state, &items, Dimensions::default(), Colors::default());
+    let build = || pane_view(&state, &items, None, Dimensions::default(), Colors::default());
 
     let targets = collect_targets(build());
     let bounds = targets
@@ -162,6 +163,7 @@ fn sort_chips_do_not_leak_into_preview_tabs() {
         let targets = collect_targets(pane_view(
             &state,
             &items,
+            None,
             Dimensions::default(),
             Colors::default(),
         ));
@@ -195,6 +197,7 @@ fn view_mode_toggle_changes_card_layout_from_row_to_stack() {
     let grid_targets = collect_targets(pane_view(
         &grid_state,
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
@@ -214,6 +217,7 @@ fn view_mode_toggle_changes_card_layout_from_row_to_stack() {
     let list_targets = collect_targets(pane_view(
         &list_state,
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
