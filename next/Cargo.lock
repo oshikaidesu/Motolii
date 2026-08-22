@@ -3803,6 +3803,7 @@ dependencies = [
 name = "motolii-export"
 version = "0.1.0"
 dependencies = [
+ "image",
  "motolii-compositor",
  "motolii-core",
  "motolii-engine",
