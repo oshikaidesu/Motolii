@@ -1,0 +1,36 @@
+#axis: A04 量
+#question: 50レイヤー・10分尺(5,400〜9,000フレーム)・4K で壊れないか(次GOALS.md D7・「歌詞50〜100枚」基準)
+#verdicts: 耐える|画面に収まらない|計算量で壊れる|上限がある|未計測
+#sweep: grep -rln "scrollable" next/ui next/shell
+#sweep: grep -n "widget::scrollable" next/ui/motolii-timeline-pane/src/lib.rs next/ui/motolii-browser-pane/src/lib.rs
+#sweep: for d in next/ui/*/src next/shell/*/src next/core/*/src next/engine/*/src; do n=$(grep -rn "for .* in" $d | wc -l); done  (ファイルごとの for 出現数を数えて3件以上の物を個別に読む)
+#sweep: grep -rn "\.clone()" next/core/motolii-store/src next/core/motolii-eval/src next/engine/motolii-compositor/src next/ui/motolii-timeline-pane/src
+#sweep: grep -n "fn draw" -A2 next/ui/motolii-timeline-pane/src/canvas.rs next/ui/motolii-timeline-pane/src/key_rows.rs
+#sweep: grep -n "fn flattened" -A30 next/core/motolii-store/src/persist.rs
+#sweep: grep -n "fn eval" -A20 next/core/motolii-eval/src/track.rs
+#sweep: grep -n "for lwp in layers" -A5 next/engine/motolii-compositor/src/lib.rs
+#sweep: sed -n '1,60p' next/probes/r1-frame-throughput/tests/r1.rs; grep -n "40枚\|document_with(4\|the_lever_is_proxy" next/probes/r1-frame-throughput/tests/r1.rs
+#sweep: grep -rin "lock_all\|LockAll\|unlock_all\|UnlockAll\|remove_all_text_animator\|RemoveAllAnimators" next/shell next/ui
+#sweep: sed -n '2155,2200p' next/shell/motolii-shell/src/lib.rs (AssetTable::admit のループ)
+#sweep: grep -n "fn view\|selected_layers\|selection\b" next/ui/motolii-inspector-pane/src/lib.rs | head -40
+#sweep: grep -n "fn duplicate_layer" -A20 next/shell/motolii-shell/src/lib.rs
+#sweep: grep -n "required_buckets\|fn waveform_segments" -A10 next/ui/motolii-timeline-pane/src/waveform_view.rs
+#sweep: wc -l next/ui/motolii-timeline-pane/src/*.rs next/shell/motolii-shell/src/lib.rs next/ui/motolii-inspector-pane/src/lib.rs next/ui/motolii-browser-pane/src/lib.rs next/core/motolii-store/src/*.rs next/engine/motolii-compositor/src/lib.rs
+axis	map_id	対象	判定	証拠	穴	責任
+A04	-	Timeline 縦スクロール(rail+行canvas)	耐える	lib.rs:403 `iced::widget::scrollable` が rail+canvas を1本の子として包む(commit 9340d9f6 2026-08-23、当日中に根治)。裁定207/KNOWN.md記載の「scrollable使用ゼロ・行高20px」は現状のmainと不一致(先行して直っていた) — 台帳作成時点の既知穴は失効	-	next/ui/motolii-timeline-pane/src/lib.rs:651(※過積載)
+A04	-	Timeline 行canvas draw(rows全件を毎フレーム構築)	未計測	canvas.rs:136 `for index in 0..pane.rows.len()`、canvas.rs:166 `for (index,row) in pane.rows.iter().enumerate()` — scrollableで可視域は絞られるが、canvas 自体は「自分の bounds がそのまま行の場」(lib.rs doc)前提で bounds=全content高。iced::widget::canvas は Program::draw に widget 全体の bounds を渡す設計なので、rows.len() が増えても呼び出しは1回だが内部走査はO(rows)。画面外カリング(可視行だけ描く分岐)は無い。50〜100行での実測なし	穴	next/ui/motolii-timeline-pane/src/canvas.rs:591
+A04	-	key_rows(展開したproperty行のキーフレーム)draw	計算量で壊れる	key_rows.rs:92 `for (index,row) in pane.property_rows.iter().enumerate()` の内側で key_rows.rs:118 `for key in &row.keys` — 展開済み全property行 × 全keyframeを毎draw呼び出しで二重走査。時間軸カリング(表示範囲外keyのスキップ)も画面外カリングも無い。10分尺(5,400〜9,000フレーム)で1propertyに数百keyが乗る運用は普通にあり得るため、property行を複数展開した状態でO(property行数×keyframe数)が毎フレーム発生する	穴	next/ui/motolii-timeline-pane/src/key_rows.rs:317
+A04	-	key_rows selected_frame_bounds(選択keyの範囲計算)	計算量で壊れる	key_rows.rs:138-139 `for row in &pane.property_rows { for key in &row.keys { ... } }` — draw と同型の二重走査。gesture中(drag)に毎フレーム呼ばれる経路かは未確認だが、update() 内から呼ばれる作りなら1入力イベントごとにO(property行×key数)	未計測	next/ui/motolii-timeline-pane/src/key_rows.rs:317
+A04	434	Duplicate(複製)	上限がある	shell/lib.rs:2030-2046 `duplicate_layer()` は `self.session.selection`(単一 `Option<LayerId>`)のみを読む。`selected_layers`(複数選択の正本、shell/lib.rs:2054でSelect Allが書く同じ場所)は無視される — 複数選択中にDuplicateしても1枚しか複製されない	穴	next/shell/motolii-shell/src/lib.rs:6228(※過積載)
+A04	-	Inspector 一括編集	上限がある	inspector-pane/src/lib.rs:448 `view()` は `Option<SelectionProjection>`(単数)を match するだけ。crate全体を grep しても `selected_layers` の読み出しは0件(生成規約 `motolii-shell::update_inspector` が単一selectionだけを渡す構造) — 複数選択時にInspectorへ複数枚分の値をまとめて反映・編集する経路が構造的に無い	穴	next/ui/motolii-inspector-pane/src/lib.rs:1899(※過積載)
+A04	875	Lock/Unlock All Video Tracks(一括ロック)	上限がある	normal-map.tsv 875行目の理由列に「一括ロック操作は未実装(個別lockは873参照)」と製品側の自己申告あり。コード側 grep(`lock_all`/`LockAll`/`unlock_all`/`UnlockAll`)も0件で、個別layerのhidden/solo/lockトグルはあるが一括操作のMessage/関数自体が存在しない	穴	next/shell/motolii-shell/src/lib.rs:6228(※過積載)
+A04	1290	Remove All Text Animators(アニメーター一括削除)	上限がある	normal-map.tsv 1290行目の理由列に「アニメーター一括削除…はUI利便機能」(未実装の含み)。grep(`remove_all_text_animator`/`RemoveAllAnimators`)は next/shell next/ui とも0件	穴	next/ui/motolii-inspector-pane/src/lib.rs:1899(※過積載)
+A04	608	Browser pane 資産一覧の縦スクロール	耐える	browser-pane/src/lib.rs:1276,1520 `scrollable(column(rows)...)` — 資産数Nに対しスクロールで画面に収まる構造は在る	-	-
+A04	-	AssetTable::admit(素材取り込み時のfingerprint hash)	未計測	shell/lib.rs:2159 `fn admit(paths: Vec<PathBuf>)` は `for path in paths { ... Self::fingerprint_source(&path) ... }` の直列ループ(UI thread同期、KNOWN.md既載事実の延長)。ここでの新規観点: **N件を一括ドロップした時の合計時間はNに線形**で、multi-GB素材×N件の合計はKNOWN既載の単一ファイル未計測よりさらに未計測。B7(4ms)超過の可能性はNが増えるほど上がる	穴	next/shell/motolii-shell/src/lib.rs:6228(※過積載)
+A04	-	Document::flattened()/save(保存時の直列化)	未計測	persist.rs:34-59 `for layer in view.layers() { ...; for (component,json) in view.track_json_components(...) { ... } }` — layer数×component数に線形(二重ループだが内側は定数程度のcomponent種別数)。50layer規模・10分尺のtrack量での実測(save所要時間)は無い。保存はgesture外の操作なのでB1〜B7直撃ではないが、UIスレッド同期(std::fs::File::create+書き込み)なので大きい台帳でフリーズ的に見える余地がある	穴	next/core/motolii-store/src/persist.rs:326
+A04	-	motolii-eval KeyframeTrack::eval(単一track評価)	耐える	track.rs:316 `keys.binary_search_by(...)` — O(log k)。keyframe数kが増えても壊れない。track_cache(KNOWN.md既載)と合わせ、eval経路はA04の壊れ方に該当しない	-	-
+A04	-	motolii-compositor 合成ループ(layer×pass)	未計測	構造は耐える形(compositor/lib.rs:742,1109 `for lwp in layers { ...; for pass in &lwp.passes { ... } }` — O(layers×passes)、passesは1layerあたり定数程度で二重ループはO(n²)ではない。ただしr1 probe(next/probes/r1-frame-throughput/tests/r1.rs)が実測しているのは**FHD・40枚**まで(`fullhd_forty_layers_does_not_regress`)で、A04が要求する4K・50枚は未計測。同fileの`the_lever_is_proxy_sources_not_comp_resolution`は「等倍40枚332MBを毎フレーム舐めるとcomp解像度を下げても効かない、素材proxy側を縮めて初めて効く」と既に実測済み(裁定21根拠)——4Kソースかつ50枚でこの結論が量的に保つかは未確認	未計測	next/engine/motolii-compositor/src/lib.rs:2221(※過積載)
+A04	-	motolii-timeline-pane waveform_view(音声波形の描画コスト)	耐える	waveform_view.rs:63 `required_buckets(clip_width_px)` — バケット数は画面幅由来で、10分尺・44.1kHzの生サンプル数には依存しない(motolii_media::waveform_peaks が事前に間引く設計、waveform_view.rs冒頭doc)。A04の「量」に対して構造的に安全な数少ない例	-	-
+A04	-	stage-pane marquee(矩形選択の複数レイヤーhit集計)	耐える	marquee.rs:112 `for id in hits { ... }` — hit集合(選択候補)に対して線形。ネストした2乗探索は無い	-	-
+A04	-	Timeline write.rs(編集操作 split/trim等)の量依存	未計測	write.rs は2,631行・grep`for .* in`が28箇所ヒット(このレーンの探索範囲では個々を全部は読み切れていない、代表箇所のみ確認)。編集操作がlayer数やkeyframe数に対しO(n)かO(n²)かは関数ごとに未確認 — 次レーンでの実測/個別確認が必要	穴	next/ui/motolii-timeline-pane/src/write.rs:2631(※過積載)
+A04	-	iced Elm-architecture: playback tick毎の全pane view()再構築	未計測	KNOWN.md既載: 再生tickは `iced::window::frames()`(vsync駆動、`transport.rs::tick_subscription`)。iced 0.14はimmediate-mode(1 Message = 1 view()呼び出し)なので、再生中は毎フレーム Shell::view() 全体(Timeline行N・Browser資産N・Inspector等)が作り直しになる構造上の帰結。これを測る器具は `next/probes/r4-widget-timeline` のみだが、対象は自作のダミー`bar`/`stacked_bars`widget(n=100/500/1000、FRAME_BUDGET_US=8_300)であって、実物の`motolii-timeline-pane`/`motolii-browser-pane`クレートではない(器具はあるが実物の葉に掛けていない、A11参照)	穴	next/probes/r4-widget-timeline/src/lib.rs(器具)・next/shell/motolii-shell/src/lib.rs:6228(結線元・※過積載)
