@@ -398,36 +398,33 @@ pub fn view(
         }
     };
 
+    // 線化 D5(裁定179 文法1): 容器の輪郭線は廃止 — `surface_panel` の面が
+    // app 地から明度1段浮くことが pane の輪郭(`chrome::panel_container_style`
+    // doc 参照、透明 border で幅だけ残す=幾何不変)。
     container(column![section_header("SETTINGS", dims, colors), body])
         .width(Length::Fill)
-        .style(move |_theme| container::Style {
-            background: Some(iced::Background::Color(colors.surface_panel)),
-            border: iced::Border {
-                color: colors.border_default,
-                width: dims.border_width,
-                radius: 0.0.into(),
-            },
-            ..container::Style::default()
-        })
+        .style(move |_theme| chrome::panel_container_style(dims, colors))
         .into()
 }
 
-/// 行の下 hairline(裁定139)。`inspector_pane.rs::bordered_row` と同じ
-/// trade-off(`iced_core::Border` は per-edge API が無く4辺一律にしかできない —
-/// border-bottom の近似として4辺を使う、同 doc 参照)。**`.width(Length::Fill)`
-/// をここで明示するのが本体**: `content` 側(row!)が自分の幅を宣言していなくても、
-/// 外側 container が Fill を持てば hairline は pane 全幅に伸びる(Inspector の
-/// `header`/`hint_row` と同じ実修正パターン)。
+/// 行の器(旧「行の下 hairline」、裁定139)。線化 D5(裁定179 文法1)で
+/// 罫線は透明化した — 行の区切りは線でなく行高+padding の**間隔**が担う
+/// (参照3製品とも情報行を線で区切らない、`docs/reviews/
+/// 2026-08-22-chrome-grammar-audit.md` 文法1)。透明 border で幅だけ残す
+/// (幾何不変)。**`.width(Length::Fill)` をここで明示するのが本体**:
+/// `content` 側(row!)が自分の幅を宣言していなくても、外側 container が
+/// Fill を持てば行は pane 全幅に伸びる(Inspector の `header`/`hint_row` と
+/// 同じ実修正パターン)。
 fn hairline_bottom(
     content: Element<'static, Message>,
     dims: Dimensions,
-    colors: Colors,
+    _colors: Colors,
 ) -> Element<'static, Message> {
     container(content)
         .width(Length::Fill)
         .style(move |_theme| container::Style {
             border: iced::Border {
-                color: colors.border_hairline_weak,
+                color: iced::Color::TRANSPARENT,
                 width: dims.border_width,
                 radius: 0.0.into(),
             },

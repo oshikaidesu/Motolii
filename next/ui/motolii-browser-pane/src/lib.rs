@@ -162,8 +162,9 @@ pub fn pane_view(
 /// - 帯高 = `dims.browser_tab_bar_height`(mock `height:26px` 実測、JSON 正本)
 /// - active 下線 = `dims.browser_tab_underline`(mock `border-bottom:2px` 実測)
 ///   × 色は `colors.action_active`(mock `#d8b574` と同役)
-/// - 帯下の罫線 = `dims.border_width` × `colors.border_default`(mock
-///   `border-bottom:1px solid border-default`)
+/// - 帯下の罫線 = 線化 D5(裁定179 文法1)で**塗らない** — `dims.border_width`
+///   ぶんの間隔だけ残す(mock `border-bottom:1px solid border-default` は
+///   「区切りは明度1段+間隔」が上書き。幾何不変)
 /// - 文字 = `dims.micro_text`(mock `.libraryTabs button{font-size:8px}`)
 /// - タブ幅 = 等分(mock `flex:1` → `Length::FillPortion(1)`)
 fn tab_band_view(
@@ -207,15 +208,15 @@ fn tab_band_view(
         })
         .collect();
 
+    // 線化 D5(裁定179 文法1): mock の帯下罫線(`border-bottom:1px solid
+    // border-default`)は「区切りは明度1段+間隔」が上書き — 塗らずに
+    // `border_width` ぶんの間隔だけ残す(幾何不変。帯と body の区切りは
+    // app 地の隙間と body 容器の `surface_panel` 明度段が担う)。
     let divider = container(
         iced::widget::Space::new()
             .width(Length::Fill)
             .height(Length::Fixed(dims.border_width)),
-    )
-    .style(move |_theme| container::Style {
-        background: Some(iced::Background::Color(colors.border_default)),
-        ..container::Style::default()
-    });
+    );
 
     column![row(tabs), divider].into()
 }
@@ -355,6 +356,25 @@ fn preview_rail_view(
     rail_container(rows, dims, colors)
 }
 
+/// rail/catalog 容器の共通スタイル。線化 D5(裁定179 文法1「枠は内容と同族色、
+/// 段差は明度1段だけ」): 容器の輪郭線は描かず、`surface_panel` の面が app 地
+/// (`surface_app`、theme 経由の窓地・pane 間隙間の色)から**明度1段**浮くこと
+/// が輪郭 — 透明 border で幅だけ残す(幾何不変)。
+/// `settings_pane::chrome::panel_container_style` と同文法だが、pane crate 間の
+/// 相互依存を作らないためここに小さく複製する([`search_input_style`] と同じ
+/// 判断)。`pub`: `tests/container_line_fence.rs` が機械照合する。
+pub fn panel_container_style(dims: Dimensions, colors: Colors) -> container::Style {
+    container::Style {
+        background: Some(iced::Background::Color(colors.surface_panel)),
+        border: iced::Border {
+            color: iced::Color::TRANSPARENT,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        ..container::Style::default()
+    }
+}
+
 /// rail 列の容器(media/preview 共通 — 台帳 1c 節の padding・地・枠は
 /// [`rail_view`] の doc 参照。2つの rail が同じ意匠を1箇所で共有する)。
 fn rail_container(
@@ -368,15 +388,7 @@ fn rail_container(
             .padding([dims.spacing_xs, 0.0]),
     )
     .width(Length::FillPortion(1))
-    .style(move |_theme| container::Style {
-        background: Some(iced::Background::Color(colors.surface_panel)),
-        border: iced::Border {
-            color: colors.border_default,
-            width: dims.border_width,
-            radius: 0.0.into(),
-        },
-        ..container::Style::default()
-    })
+    .style(move |_theme| panel_container_style(dims, colors))
     .into()
 }
 
@@ -414,15 +426,7 @@ fn catalog_container(
 ) -> Element<'static, Message> {
     container(content.spacing(dims.spacing_xs).padding(dims.spacing_m))
         .width(Length::FillPortion(4))
-        .style(move |_theme| container::Style {
-            background: Some(iced::Background::Color(colors.surface_panel)),
-            border: iced::Border {
-                color: colors.border_default,
-                width: dims.border_width,
-                radius: 0.0.into(),
-            },
-            ..container::Style::default()
-        })
+        .style(move |_theme| panel_container_style(dims, colors))
         .into()
 }
 
@@ -752,9 +756,11 @@ fn card_view(
     .align_x(iced::alignment::Horizontal::Center)
     .align_y(iced::alignment::Vertical::Center)
     .style(move |_theme| container::Style {
+        // 線化 D5(裁定179 文法1): thumb の輪郭線は透明化(幅だけ残す=幾何
+        // 不変)— 種別色の面自体が pane 地からの明度/色段差で読める。
         background: Some(iced::Background::Color(thumb_fill(category, colors))),
         border: iced::Border {
-            color: colors.border_default,
+            color: iced::Color::TRANSPARENT,
             width: dims.border_width,
             radius: 0.0.into(),
         },
@@ -924,9 +930,11 @@ fn preview_card_view(
     .align_x(iced::alignment::Horizontal::Center)
     .align_y(iced::alignment::Vertical::Center)
     .style(move |_theme| container::Style {
+        // 線化 D5(裁定179 文法1): thumb の輪郭線は透明化(幅だけ残す=幾何
+        // 不変)— `surface_raised` の面が pane 地から明度1段浮く。
         background: Some(iced::Background::Color(colors.surface_raised)),
         border: iced::Border {
-            color: colors.border_default,
+            color: iced::Color::TRANSPARENT,
             width: dims.border_width,
             radius: 0.0.into(),
         },
