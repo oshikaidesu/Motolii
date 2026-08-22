@@ -22,8 +22,15 @@
 //! (iced の `canvas::Frame` ではなく `image::RgbaImage` へ矩形・線を直接塗る —
 //! iced の canvas 描画パスは wgpu レンダラを要るため headless では使えない)。
 //! header/transport/status 帯は色面 + hairline 縁で再現する(裁定139 の
-//! shell chrome への展開)。Settings パネルは `--settings-open` フラグが立って
-//! いる間だけ、header の下へ Inspector と同じ hairline 積みで描く。
+//! shell chrome への展開)。
+//!
+//! **Settings は器具対象外(S2、裁定182/188)**: Settings は OS 窓へ移住した
+//! (`lib.rs::Shell::view_settings_window` — multiwindow probe 注意点2)。
+//! この器具は**単窓のオフスクリーン合成**(main 窓の絵の再現)なので、別窓に
+//! なった Settings はもう写らない — 旧 `--settings-open` フラグ・
+//! `draw_settings`/`settings_content_height` は撤去した(黙って壊さない、の
+//! 明示)。Settings の視覚検分が要る時は実窓のスクリーンショット
+//! (または将来の `window::screenshot` 窓別撮り — probe §Q3 の器具注意)で見る。
 //!
 //! **正直な限界**: 文字(層名・timecode・status 文言)は描かない。フォント
 //! ラスタライズには新しい依存(ab_glyph 等)が要り、発注書の「新依存禁止」に
@@ -405,72 +412,10 @@ fn draw_inspector(
 }
 
 // ---------------------------------------------------------------------------
-// Settings 領域 — `settings_pane.rs` と同じ行の並び(裁定139 の線化展開)。
-// `--settings-open` フラグ(`main.rs`)が立っている間だけ描く。
+// 旧 Settings 領域(`draw_settings`/`settings_content_height`)は S2
+// (裁定182/188)で撤去 — Settings は OS 窓へ移住し、この単窓オフスクリーン
+// 合成の器具ではもう写せない(モジュール冒頭 doc「Settings は器具対象外」)。
 // ---------------------------------------------------------------------------
-
-/// Settings の各行高の近似。実 widget は文字を含む自然高(`preset_row`)や
-/// `inspector_row_height` 固定高(background/checkerboard/ui_scale)が混在する
-/// — このインストゥルメントは文字を描かないので、`preset_row`(ボタン列)も
-/// 同じ `inspector_row_height` で近似する(`inspector_hint_height` と同じ
-/// 「正直な限界」の割り切り)。
-fn settings_content_height(dims: Dimensions, has_composition: bool) -> f32 {
-    let header_h = dims.inspector_section_header_height;
-    if !has_composition {
-        return header_h + dims.inspector_row_height; // 「comp が無い」文言1行ぶん。
-    }
-    let row_h = dims.inspector_row_height;
-    let hint_h = inspector_hint_height(dims);
-    // background・preset(近似)・hint・ui_scale の4行(市松は裁定163で Stage
-    // 下縁状態帯へ引っ越し済み — `settings_pane::view` からも撤去済み)。
-    header_h + row_h + row_h + hint_h + row_h
-}
-
-/// Settings 領域全体を描く。`(x, y)` は左上、返り値は描いた高さ
-/// (`settings_content_height` と同じ値)。`inspector_pane.rs::bordered_row`/
-/// `settings_pane.rs::hairline_bottom` と同じ「各行を hairline で区切る」を
-/// 矩形の枠(4辺一律の既知の近似、`draw_property_row` と同じ trade-off)で
-/// 再現する。
-fn draw_settings(
-    canvas: &mut RgbaImage,
-    dims: Dimensions,
-    colors: Colors,
-    x: f32,
-    y: f32,
-    width: f32,
-    has_composition: bool,
-) -> f32 {
-    let total_h = settings_content_height(dims, has_composition);
-
-    fill_rect(canvas, x, y, width, total_h, to_rgba(colors.surface_panel, 1.0));
-    stroke_rect(
-        canvas,
-        Rect { x, y, w: width, h: total_h },
-        dims.border_width,
-        to_rgba(colors.border_default, 1.0),
-    );
-
-    let header_h = dims.inspector_section_header_height;
-    let mut cy = y + header_h; // "SETTINGS" 見出しは背景/border 無し(裁定137/139)、高さだけ。
-
-    if !has_composition {
-        return total_h;
-    }
-
-    let row_h = dims.inspector_row_height;
-    let hint_h = inspector_hint_height(dims);
-    for row_h_i in [row_h, row_h, hint_h, row_h] {
-        stroke_rect(
-            canvas,
-            Rect { x, y: cy, w: width, h: row_h_i },
-            dims.border_width,
-            to_rgba(colors.border_hairline_weak, colors.border_hairline_weak.a),
-        );
-        cy += row_h_i;
-    }
-
-    total_h
-}
 
 // ---------------------------------------------------------------------------
 // Browser 領域(裁定162 切片 B3) — `motolii_browser_pane::view` と同じ構造
@@ -508,8 +453,8 @@ fn browser_card_row_height(dims: Dimensions) -> f32 {
     thumb_h + dims.spacing_xs * 3.0 + dims.micro_text * 2.0
 }
 
-/// Browser 領域全体を描く。`area`(`Rect`、`draw_settings` と違い引数を
-/// 1つの struct へ畳んで clippy `too_many_arguments` を避ける — `Rect` 自身の
+/// Browser 領域全体を描く。`area`(`Rect` — 引数を1つの struct へ畳んで
+/// clippy `too_many_arguments` を避ける、`Rect` 自身の
 /// doc「意味も無い8引数を並べない」と同じ理由)の `h` は
 /// `motolii_browser_pane::PANEL_HEIGHT_ROW_HEIGHT_RATIO × row_height`
 /// (呼び出し元と同じ値、`render` 参照)。**サムネ矩形は実データ由来** —
@@ -603,20 +548,14 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     let transport_h = dims.transport_band;
     let status_h = dims.row_height;
 
-    // Settings パネル(`--settings-open`)。開いている間だけ header の下へ差し込む
-    // — 実レイアウト(`Shell::view` の `column![header, [settings], row!, ...]`)
-    // と同じく、開いた分だけ gap が1本増える(header-settings 間も spacing_m)。
-    let settings_open = shell.settings_panel_open();
-    let settings_h = if settings_open {
-        settings_content_height(dims, composition.is_some())
-    } else {
-        0.0
-    };
-    let settings_gap_count = if settings_open { 1 } else { 0 };
+    // Settings は S2(裁定182/188)で OS 窓へ移住 — この器具の対象外
+    // (モジュール冒頭 doc)。旧 settings_h/settings_gap_count の項は撤去
+    // (= 常に「閉」相当。既定の fixture 画像は元々 Settings 閉で撮っていた
+    // ので、既存の geometry 検査(`tests/suite/fixture.rs`)は不変)。
 
-    // Browser パネル(`--browser-open`、裁定162 切片 B3)。Settings と同じ
-    // 「開いている間だけ差し込む」分岐 — `Shell::view` では Settings の**下**
-    // (header 直下ではなく)に積む(`lib.rs::Shell::view` の押し順どおり)。
+    // Browser パネル(`--browser-open`、裁定162 切片 B3)。
+    // 「開いている間だけ差し込む」分岐 — header の下へ積む
+    // (`lib.rs::Shell::view` の押し順どおり)。
     let browser_open = shell.browser_panel_open();
     let browser_h = if browser_open {
         dims.row_height * motolii_browser_pane::PANEL_HEIGHT_ROW_HEIGHT_RATIO
@@ -627,25 +566,22 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
 
     let total_h = padding * 2.0
         + header_h
-        + settings_h
         + browser_h
         + stage_h
         + timeline_h
         + transport_h
         + status_h
-        + gap * (4.0 + settings_gap_count as f32 + browser_gap_count as f32);
+        + gap * (4.0 + browser_gap_count as f32);
 
     // Inspector 領域(Stage/Timeline 列の右) — 幅・高さの両方で canvas を広げる。
     // `Shell::view` の実レイアウトでは Inspector は Stage と同じ行に同居する
     // (`row![inspector, stage_pane]`)が、この instrument は元々 Stage/Timeline を
     // 1列の手組み合成で描いており、その列を左に残したまま右へ新しい列を足す
-    // (発注書 EXACT TARGET 1「右側に」)。[`inspector_region_top`] は「Settings/
-    // Browser 閉」を前提にした固定式(既存 fixture テストの契約)なので、開いて
-    // いる分はここで自前に足す。
+    // (発注書 EXACT TARGET 1「右側に」)。[`inspector_region_top`] は「Browser 閉」
+    // を前提にした固定式(既存 fixture テストの契約)なので、開いている分は
+    // ここで自前に足す(Settings は S2 で窓へ移住 — この式からも退去)。
     let inspector_x = inspector_region_x(dims);
     let inspector_top = inspector_region_top(dims)
-        + settings_h
-        + gap * settings_gap_count as f32
         + browser_h
         + gap * browser_gap_count as f32;
     let inspector_h = inspector_content_height(dims, inspector_selection.as_ref());
@@ -692,14 +628,10 @@ pub fn render(shell: &mut Shell) -> RgbaImage {
     }
     y += header_h + gap;
 
-    // settings — 開いている時だけ(裁定139 の Settings 線化)。
-    if settings_open {
-        draw_settings(&mut canvas, dims, colors, padding, y, content_width, composition.is_some());
-        y += settings_h + gap;
-    }
+    // (旧 settings 領域は S2 で撤去 — モジュール冒頭 doc「Settings は器具対象外」)
 
     // browser — 開いている時だけ(裁定162 切片 B3)。`Shell::view` の押し順
-    // どおり Settings の下・main row の上に積む。
+    // どおり header の下・main row の上に積む。
     if browser_open {
         let item_count = shell.assets().len();
         let area = Rect { x: padding, y, w: content_width, h: browser_h };

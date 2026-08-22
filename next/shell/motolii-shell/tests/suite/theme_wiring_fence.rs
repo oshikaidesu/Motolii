@@ -14,21 +14,26 @@
 //! 由来ではない。
 //!
 //! `main.rs` は binary crate で公開関数を持たない(`Shell` を組み立てて
-//! `iced::application` へ渡すだけの「窓を開けるだけ」の薄い口 — ファイル冒頭の
+//! `iced::daemon` へ渡すだけの「窓を開けるだけ」の薄い口 — ファイル冒頭の
 //! doc comment 参照)ので、この柵は `.theme()` の**呼び出し漏れ**をソース走査で
 //! 固定する(KNOWN「柵は実装しやすい方で1本」)。`theme_from_colors` 自体が
 //! tokens から正しく Theme を組んでいることは下の3本で別途確かめる。
+//!
+//! S1(裁定182/188、multiwindow probe §Q3): `iced::application(...)` は
+//! `iced::daemon(...)` へ置き換わった — grep 対象を追随させる(probe の予告
+//! どおり柵が正しく赤になったのを確認して更新。fork の daemon builder でも
+//! `.theme()` 未結線時の既定は同じく `None` フォールバック)。
 
 const MAIN_RS: &str = include_str!("../../src/main.rs");
 
-/// **本命**: `iced::application(...)` から `.run()` までの builder chain に
+/// **本命**: `iced::daemon(...)` から `.run()` までの builder chain に
 /// `.theme(` が含まれること。無いと `Program::theme` の既定実装(常に `None`)
 /// のまま — 上のコメントの欠陥そのものへ逆戻りする。
 #[test]
-fn iced_application_builder_wires_theme_before_run() {
+fn iced_daemon_builder_wires_theme_before_run() {
     let app_start = MAIN_RS
-        .find("iced::application(")
-        .expect("main.rs から iced::application(...) の呼び出しが消えている");
+        .find("iced::daemon(")
+        .expect("main.rs から iced::daemon(...) の呼び出しが消えている");
     let after_app = &MAIN_RS[app_start..];
     let run_pos = after_app
         .find(".run()")
@@ -37,7 +42,7 @@ fn iced_application_builder_wires_theme_before_run() {
 
     assert!(
         builder_chain.contains(".theme("),
-        "iced::application(...) の組み立てに .theme(...) が結線されていない。\
+        "iced::daemon(...) の組み立てに .theme(...) が結線されていない。\
          未結線だと Program::theme の既定実装が常に None を返し、winit は \
          OS 設定依存の組み込み Light/Dark(tokens と無関係)へフォールバックする \
          — このファイル冒頭のコメント、tokens::theme_from_colors の doc comment 参照"
