@@ -91,7 +91,7 @@
 //!   移設していないが、型定義とそれを読み書きする自由関数はこの crate 側
 //!   (発注書「transient overlay 経由の drag はそのまま移動」— 挙動不変)。
 
-use motolii_core::RationalTime;
+use motolii_core::{Fps, RationalTime};
 use motolii_store::{
     property, Document, Intent, Interp, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId,
     LayerSource, PropertyId, StoreError, StoreView, Value,
@@ -154,6 +154,14 @@ pub enum Message {
     /// no-op(`Intent` を出さない、決定7)。`ToggleHidden`/`CycleBlendMode` と
     /// 同じ即時操作の形。
     ResetSpeed,
+
+    // ---- K1: Key 列(Inspector からキーフレームを打つ) ----
+    /// Transform 行の Key セル click。下書きを経由せず即1回の `Intent::SetTrack`
+    /// を出す(`ToggleHidden` と同じ即時操作の形 — 1 click = 1 undo)。3状態の
+    /// 意味は [`toggled_key_track`] のとおり: 静的→playhead にキー1個 /
+    /// キー上→除去(最後の1個は値を保って静的化)/ track 有りキー無し→評価値で
+    /// キー追加。
+    KeyPressed(KeyRow),
 }
 
 // ---------------------------------------------------------------------------
@@ -241,6 +249,185 @@ pub fn single_hold_track(value: Value) -> KeyframeTrack {
         spatial: None,
     });
     track
+}
+
+// ---------------------------------------------------------------------------
+// K1: Key 列 — 行→property の対応・3状態 oracle・click の意味(全部純関数)
+// ---------------------------------------------------------------------------
+
+/// Key セルが動かす行の識別。**行 = property 1本**(X/Y/Z 軸は現行モデルどおり
+/// 1 track に畳まれている — 軸別キーは対象外)。Position 行の Key は
+/// `property::POSITION`(Vec2)だけを対象にし、`POSITION_Z`(別 property)は
+/// 含めない — 1 click = 1 `SetTrack` = 1 undo を保つため(RETURN に仕様として
+/// 注記、逸脱ではない)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum KeyRow {
+    Position,
+    Scale,
+    Rotation,
+    Opacity,
+    Anchor,
+}
+
+impl KeyRow {
+    pub fn property_name(self) -> &'static str {
+        match self {
+            Self::Position => property::POSITION,
+            Self::Scale => property::SCALE,
+            Self::Rotation => property::ROTATION,
+            Self::Opacity => property::OPACITY,
+            Self::Anchor => property::ANCHOR,
+        }
+    }
+}
+
+/// この行の store 上の property。標準 property なので失敗し得ない
+/// ([`property_id`] と同じ理由 — 呼び手は `Result` を「コードの誤り」として扱ってよい)。
+pub fn key_row_property_id(row: KeyRow) -> Result<PropertyId, StoreError> {
+    PropertyId::new(row.property_name())
+}
+
+/// track がまだ無い行の既定値(`project` の各行の default と同じ値 —
+/// Scale だけ等倍、Opacity は store 単位の 0..1 で 1.0、他は 0)。
+/// 静的値も無い行を初キー化する時の値の正本。
+pub fn key_row_default_value(row: KeyRow) -> Value {
+    match row {
+        KeyRow::Position | KeyRow::Anchor => Value::Vec2([0.0, 0.0]),
+        KeyRow::Scale => Value::Vec2([1.0, 1.0]),
+        KeyRow::Rotation => Value::F64(0.0),
+        KeyRow::Opacity => Value::F64(1.0),
+    }
+}
+
+/// Key セルの3状態(AE 文法 — 意図優先・裁定174)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyCellState {
+    /// track 無し(または正準静的表現 = [`single_hold_track`] の形)。空菱形 ◇。
+    Static,
+    /// track 有り・playhead のフレームにキー有り。実菱形 ◆(accent・強い面)。
+    AtKey,
+    /// track 有り・playhead のフレームにキー無し。実菱形 ◆(accent・弱い面 —
+    /// mock `.keyButton.animated` の転写)。
+    Between,
+}
+
+/// この track が「静的値の正準表現」([`single_hold_track`] が書く 1キー
+/// `Hold` @`ZERO`)か。**キーが打たれているとは見なさない** — Inspector の
+/// 静的値編集が書いた track を Key セルが「キー有り」と誤読すると、値を
+/// 打っただけの行が playhead=0 で実菱形になってしまう。既知の限界: 利用者が
+/// 本当に frame 0 に `Hold` キーを1個だけ置いた track も同じ形なので静的と
+/// 読まれる(現行 UI にその作成経路は無い — Key click の先頭 insert は
+/// `Linear`。RETURN に注記)。
+fn is_canonical_static_track(track: &KeyframeTrack) -> bool {
+    track.keys().len() == 1
+        && matches!(track.keys()[0].interp, Interp::Hold)
+        && track.keys()[0].t == RationalTime::ZERO
+}
+
+/// playhead のフレームに載っているキーの添字。照合は timeline と同じ
+/// `try_to_frame_round`(frame 粒度 — `timeline_pane::write` の
+/// `commit_key_frames`/`delete_selected_keys` と同じ規約、RationalTime の
+/// 厳密一致にしない)。
+fn key_index_at_frame(track: &KeyframeTrack, frame: i64, fps: Fps) -> Option<usize> {
+    track
+        .keys()
+        .iter()
+        .position(|key| key.t.try_to_frame_round(fps) == Ok(frame))
+}
+
+/// **3状態 oracle**(表示と click 判定の共通正本 — view と
+/// [`toggled_key_track`] の両方がここを通るので、見た目と操作が食い違わない)。
+pub fn key_cell_state(
+    track: Option<&KeyframeTrack>,
+    playhead_frame: i64,
+    fps: Fps,
+) -> KeyCellState {
+    let Some(track) = track else {
+        return KeyCellState::Static;
+    };
+    if track.keys().is_empty() || is_canonical_static_track(track) {
+        return KeyCellState::Static;
+    }
+    if key_index_at_frame(track, playhead_frame, fps).is_some() {
+        KeyCellState::AtKey
+    } else {
+        KeyCellState::Between
+    }
+}
+
+/// **Key click の意味**: 今の track から、click 後に `Intent::SetTrack` で
+/// 書くべき新しい track を作る(純関数 — Document には触れない)。
+///
+/// - **Static** → 現在の静的値([`single_hold_track`] が有ればその値、無ければ
+///   呼び手が渡す `current_value`)で playhead 時刻にキー1個。track 先頭
+///   insert の interp 既定は `Linear`(発注書)。
+/// - **AtKey** → そのキーを除去。最後の1個なら track ごと静的化
+///   ([`single_hold_track`] に消したキーの値を移す — AE のストップウォッチ
+///   解除と等価、値は失わない。undo は `SetTrack` 経由なので効く)。
+/// - **Between** → その時刻の `KeyframeTrack::eval` 値でキー追加。interp は
+///   直前のキーの流儀を継ぎ、最初のキーより前への insert は `Linear`。
+///   `spatial` は `None`(空間タンジェントの分割は対象外 — RETURN に注記)。
+pub fn toggled_key_track(
+    track: Option<&KeyframeTrack>,
+    playhead_frame: i64,
+    fps: Fps,
+    current_value: Value,
+) -> Result<KeyframeTrack, String> {
+    let t = RationalTime::try_from_frame(playhead_frame, fps)
+        .map_err(|error| format!("playhead を時刻へ写せない: {error}"))?;
+    match key_cell_state(track, playhead_frame, fps) {
+        KeyCellState::Static => {
+            let value = track
+                .filter(|tr| !tr.keys().is_empty())
+                .map(|tr| tr.keys()[0].value.clone())
+                .unwrap_or(current_value);
+            let mut new_track = KeyframeTrack::new();
+            new_track.insert(Keyframe {
+                t,
+                value,
+                interp: Interp::Linear,
+                spatial: None,
+            });
+            Ok(new_track)
+        }
+        KeyCellState::AtKey => {
+            // state が AtKey なら track と添字は必ず有る(oracle と同じ判定)。
+            let track = track.expect("AtKey なら track が有る");
+            let index = key_index_at_frame(track, playhead_frame, fps)
+                .expect("AtKey なら playhead 上のキーが有る");
+            let removed_value = track.keys()[index].value.clone();
+            let mut new_track = KeyframeTrack::new();
+            for (i, key) in track.keys().iter().enumerate() {
+                if i != index {
+                    new_track.insert(key.clone());
+                }
+            }
+            if new_track.keys().is_empty() {
+                Ok(single_hold_track(removed_value))
+            } else {
+                Ok(new_track)
+            }
+        }
+        KeyCellState::Between => {
+            let track = track.expect("Between なら track が有る");
+            let value = track.eval(t);
+            let interp = track
+                .keys()
+                .iter()
+                .rev()
+                .find(|key| key.t < t)
+                .map(|key| key.interp)
+                .unwrap_or(Interp::Linear);
+            let mut new_track = track.clone();
+            new_track.insert(Keyframe {
+                t,
+                value,
+                interp,
+                spatial: None,
+            });
+            Ok(new_track)
+        }
+    }
 }
 
 pub fn format_number(value: f64, decimals: usize) -> String {
@@ -511,11 +698,21 @@ pub enum RowValue {
     Scalar(ComponentSlot),
 }
 
+/// Key セルの投影(K1)。`row` は click 時に `Message::KeyPressed` が運ぶ宛先、
+/// `state` は3状態 oracle([`key_cell_state`])の結果。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeyCellProjection {
+    pub row: KeyRow,
+    pub state: KeyCellState,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct TransformRowProjection {
     pub label: &'static str,
     pub value: RowValue,
     pub decimals: usize,
+    /// Key 列(K1)。5行全部が持つ — 「触れそうで触れない」空予約は残さない(Q0)。
+    pub key: KeyCellProjection,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -650,6 +847,17 @@ pub fn project(
     let t = RationalTime::try_from_frame(session.playhead, composition.fps)
         .unwrap_or(RationalTime::ZERO);
 
+    // Key 列(K1)の3状態を行ごとに読む(表示と click 判定の共通 oracle =
+    // `key_cell_state`)。playhead は timeline と同じ frame 粒度で照合する。
+    let key_cell = |row: KeyRow| -> Result<KeyCellProjection, StoreError> {
+        let property = key_row_property_id(row)?;
+        let track = store.track(layer, &property)?;
+        Ok(KeyCellProjection {
+            row,
+            state: key_cell_state(track.as_ref(), session.playhead, composition.fps),
+        })
+    };
+
     let position_xy = vec2_components(
         store,
         layer,
@@ -672,6 +880,7 @@ pub fn project(
         label: "Position",
         value: RowValue::Vector([position_xy[0], position_xy[1], position_z]),
         decimals: 3,
+        key: key_cell(KeyRow::Position)?,
     };
 
     let scale_xy = vec2_components(
@@ -687,6 +896,7 @@ pub fn project(
         label: "Scale",
         value: RowValue::Vector([scale_xy[0], scale_xy[1], absent_component("Z")]),
         decimals: 3,
+        key: key_cell(KeyRow::Scale)?,
     };
 
     let rotation_z = scalar_component(
@@ -702,6 +912,7 @@ pub fn project(
         label: "Rotation",
         value: RowValue::Vector([absent_component("X"), absent_component("Y"), rotation_z]),
         decimals: 1,
+        key: key_cell(KeyRow::Rotation)?,
     };
 
     let mut opacity = scalar_component(
@@ -718,6 +929,7 @@ pub fn project(
         label: "Opacity",
         value: RowValue::Scalar(opacity),
         decimals: 0,
+        key: key_cell(KeyRow::Opacity)?,
     };
 
     let anchor_xy = vec2_components(
@@ -733,6 +945,7 @@ pub fn project(
         label: "Anchor",
         value: RowValue::Vector([anchor_xy[0], anchor_xy[1], absent_component("Z")]),
         decimals: 3,
+        key: key_cell(KeyRow::Anchor)?,
     };
 
     let attrs = store.attrs(layer)?.unwrap_or_default();
@@ -1341,7 +1554,7 @@ fn transform_row(
         // 違反(B)「960.000540.000」と読める密着の緩衝(値セル自体の幅
         // 38px は変えない、[`value_cell`]/`inspector_pixel_fence.rs` 参照)。
         row_widget(value_cells).spacing(sibling_gap_px(dims.inspector_row_height)),
-        reserved_glyph(dims), // Key 列 — keyframe UI 未実装(Q0)。幅の予約だけ、空のまま。
+        key_glyph(row_projection.key, dims, colors), // Key 列(K1 — 結線済み)。
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
@@ -1581,9 +1794,61 @@ fn mute_glyph(dims: Dimensions, colors: Colors, hidden: bool) -> Element<'static
     .into()
 }
 
+/// **Key glyph — 結線済み(K1)**。視覚は mock(`next/reference/mocks/
+/// inspector-library.html` v3.1 `.keyButton`)の転写:
+/// - Static: ◇(text_muted)・面なし(`background: transparent`)、hover で
+///   accent 12% の面(mock `.keyButton:hover`)
+/// - Between: ◆(accent)・accent 12% の面(mock `.keyButton.animated` —
+///   CSS の後勝ちで hover でも面は据え置き)
+/// - AtKey: ◆(accent)・accent 20% の面(mock `.keyButton.current`)
+///
+/// 枠の文法 = 裁定179: **常時輪郭なし・hover で面・filled は accent**(mock も
+/// `border: 0`)。色ロールは `action_active`/`text_muted` の既存2つだけ
+/// (S4 — 新ロール禁止。「状態の瞬間」の filled=accent は正当)。セル全域が的
+/// (S1 — button が `inspector_glyph_width × glyph_height` の箱ごと押せる)。
+fn key_glyph(key: KeyCellProjection, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    let (glyph, text_color, base_alpha): (&str, iced::Color, f32) = match key.state {
+        KeyCellState::Static => ("◇", colors.text_muted, 0.0),
+        KeyCellState::Between => ("◆", colors.action_active, 0.12),
+        KeyCellState::AtKey => ("◆", colors.action_active, 0.20),
+    };
+    button(
+        text(glyph)
+            .size(dims.caption_text)
+            .align_x(iced::alignment::Horizontal::Center)
+            .align_y(iced::alignment::Vertical::Center),
+    )
+    .width(Length::Fixed(dims.inspector_glyph_width))
+    .height(Length::Fixed(glyph_height(dims)))
+    .padding(0.0)
+    .on_press(Message::KeyPressed(key.row))
+    .style(move |_theme, status| {
+        // mock の CSS 後勝ちどおり: hover の面(12%)は Static でだけ見える
+        // (animated/current は自分の面が勝つ)= `max` で写す。
+        let alpha = match status {
+            button::Status::Hovered | button::Status::Pressed => base_alpha.max(0.12),
+            _ => base_alpha,
+        };
+        // mock の `color-mix(accent 12%, transparent)` = accent のアルファ縮小
+        // (tokens の色を作り替えない — 裁定142、raw `Color` 構築はしない)。
+        let background = colors.action_active.scale_alpha(alpha);
+        button::Style {
+            background: Some(iced::Background::Color(background)),
+            text_color,
+            border: iced::Border {
+                color: iced::Color::TRANSPARENT,
+                width: 0.0,
+                radius: 0.0.into(),
+            },
+            ..button::Style::default()
+        }
+    })
+    .into()
+}
+
 /// 列幅の予約だけ(**空のまま** — Q0: 押せそうに見えて押せない chrome を作らない)。
-/// S glyph(solo、engine/store 未実装)と各行の Key 列(keyframe UI 未実装)の両方が
-/// これを使う — 内容も枠も無い、幅だけの `Space`。
+/// S glyph(solo、engine/store 未実装)がこれを使う — 内容も枠も無い、幅だけの
+/// `Space`(各行の Key 列は K1 で [`key_glyph`] へ結線済み、もう使わない)。
 fn reserved_glyph(dims: Dimensions) -> Element<'static, Message> {
     Space::new()
         .width(Length::Fixed(dims.inspector_glyph_width))
@@ -2095,6 +2360,10 @@ mod tests {
                     absent_component("Z"),
                 ]),
                 decimals: 3,
+                key: KeyCellProjection {
+                    row: KeyRow::Scale,
+                    state: KeyCellState::Static,
+                },
             }],
             attrs: AttrsProjection {
                 name: String::new(),
@@ -2132,6 +2401,10 @@ mod tests {
                     },
                 ]),
                 decimals: 1,
+                key: KeyCellProjection {
+                    row: KeyRow::Rotation,
+                    state: KeyCellState::Between,
+                },
             }],
             attrs: AttrsProjection {
                 name: String::new(),
@@ -2206,6 +2479,199 @@ mod tests {
     /// 「帯の内に入っている」ことを固定する regression lock へ更新した
     /// (どちらかの値が黙って動いて帯の外へ出たら red になる)。両側チェックの
     /// 詳細(モック実測 vs 実装値)は `tests/inspector_ratio_ledger.rs` 側。
+    // -----------------------------------------------------------------------
+    // K1: Key 列 — 3状態 oracle と click→SetTrack 内容の純関数(落ちるテスト先行)
+    // -----------------------------------------------------------------------
+
+    use motolii_core::Fps;
+
+    fn fps30() -> Fps {
+        Fps::try_new(30, 1).expect("30fps は正値")
+    }
+
+    fn key_at(frame: i64, value: f64, interp: Interp) -> Keyframe {
+        Keyframe {
+            t: RationalTime::try_from_frame(frame, fps30()).expect("frame→時刻"),
+            value: Value::F64(value),
+            interp,
+            spatial: None,
+        }
+    }
+
+    fn track_of(keys: Vec<Keyframe>) -> KeyframeTrack {
+        let mut track = KeyframeTrack::new();
+        for key in keys {
+            track.insert(key);
+        }
+        track
+    }
+
+    /// **状態1 oracle**: track 無し=静的。`single_hold_track`(1キー Hold @ZERO、
+    /// この crate の静的値の正準表現)も同じ「静的」— Inspector の静的値編集が
+    /// 書いた track を「キーが打たれている」と誤読しない。
+    #[test]
+    fn key_cell_state_is_static_without_a_track_and_for_the_canonical_static_track() {
+        assert_eq!(key_cell_state(None, 0, fps30()), KeyCellState::Static);
+        let static_track = single_hold_track(Value::F64(2.5));
+        assert_eq!(
+            key_cell_state(Some(&static_track), 0, fps30()),
+            KeyCellState::Static,
+            "正準静的表現(1キー Hold @ZERO)は playhead=0 でも静的のはず"
+        );
+        assert_eq!(key_cell_state(Some(&static_track), 10, fps30()), KeyCellState::Static);
+        // 空 track(SetTrack で空を書いた場合の防御)も静的。
+        assert_eq!(
+            key_cell_state(Some(&KeyframeTrack::new()), 0, fps30()),
+            KeyCellState::Static
+        );
+    }
+
+    /// **状態2/3 oracle**: playhead のフレームにキーが有れば AtKey、track は有るが
+    /// そのフレームにキーが無ければ Between。照合は timeline と同じ
+    /// `try_to_frame_round`(frame 粒度)。
+    #[test]
+    fn key_cell_state_distinguishes_at_key_and_between() {
+        let track = track_of(vec![
+            key_at(10, 0.0, Interp::Linear),
+            key_at(20, 5.0, Interp::Linear),
+        ]);
+        assert_eq!(key_cell_state(Some(&track), 10, fps30()), KeyCellState::AtKey);
+        assert_eq!(key_cell_state(Some(&track), 20, fps30()), KeyCellState::AtKey);
+        assert_eq!(key_cell_state(Some(&track), 15, fps30()), KeyCellState::Between);
+        assert_eq!(
+            key_cell_state(Some(&track), 0, fps30()),
+            KeyCellState::Between,
+            "track の範囲外でも track が有る限り Between(半表示)のはず"
+        );
+        // 1キーでも正準静的形(Hold @ZERO)でなければ本物のキー。
+        let single_linear = track_of(vec![key_at(10, 1.0, Interp::Linear)]);
+        assert_eq!(key_cell_state(Some(&single_linear), 10, fps30()), KeyCellState::AtKey);
+        assert_eq!(key_cell_state(Some(&single_linear), 11, fps30()), KeyCellState::Between);
+    }
+
+    /// **状態1 click**: 現在の静的値で playhead 時刻にキー1個(track 先頭 insert は
+    /// Linear)。静的 hold track が既に有ればその値、無ければ呼び手の現在値。
+    #[test]
+    fn toggling_from_static_creates_one_linear_key_at_the_playhead() {
+        // track 無し → 呼び手が渡す現在値(既定値)で作る。
+        let new = toggled_key_track(None, 12, fps30(), Value::Vec2([1.0, 1.0]))
+            .expect("toggle は成功するはず");
+        assert_eq!(new.keys().len(), 1);
+        assert_eq!(new.keys()[0].t, RationalTime::try_from_frame(12, fps30()).unwrap());
+        assert_eq!(new.keys()[0].value, Value::Vec2([1.0, 1.0]));
+        assert!(matches!(new.keys()[0].interp, Interp::Linear), "track 先頭 insert は Linear のはず");
+
+        // 正準静的 track 有り → その track の値(呼び手の現在値ではなく)。
+        let static_track = single_hold_track(Value::F64(2.5));
+        let new = toggled_key_track(Some(&static_track), 12, fps30(), Value::F64(999.0))
+            .expect("toggle は成功するはず");
+        assert_eq!(new.keys().len(), 1);
+        assert_eq!(new.keys()[0].value, Value::F64(2.5), "静的 hold track の値が正のはず");
+        assert!(matches!(new.keys()[0].interp, Interp::Linear));
+    }
+
+    /// **状態2 click(キー2個以上)**: playhead 上のキーだけを除去し、他は保つ。
+    #[test]
+    fn toggling_on_a_key_removes_only_that_key() {
+        let track = track_of(vec![
+            key_at(10, 0.0, Interp::Linear),
+            key_at(20, 5.0, Interp::Hold),
+        ]);
+        let new = toggled_key_track(Some(&track), 10, fps30(), Value::F64(0.0))
+            .expect("toggle は成功するはず");
+        assert_eq!(new.keys().len(), 1);
+        assert_eq!(new.keys()[0].t, RationalTime::try_from_frame(20, fps30()).unwrap());
+        assert_eq!(new.keys()[0].value, Value::F64(5.0));
+        assert!(matches!(new.keys()[0].interp, Interp::Hold), "残るキーの interp を変えない");
+    }
+
+    /// **状態2 click(最後の1個)**: track ごと静的化 — 消したキーの値を保った
+    /// 正準静的表現(1キー Hold @ZERO)へ(AE のストップウォッチ解除と等価、
+    /// 値は失わない)。
+    #[test]
+    fn removing_the_last_key_returns_a_static_hold_track_keeping_the_value() {
+        let track = track_of(vec![key_at(10, 7.5, Interp::Linear)]);
+        let new = toggled_key_track(Some(&track), 10, fps30(), Value::F64(0.0))
+            .expect("toggle は成功するはず");
+        assert_eq!(new, single_hold_track(Value::F64(7.5)), "値を保った静的化のはず");
+        assert_eq!(
+            key_cell_state(Some(&new), 10, fps30()),
+            KeyCellState::Static,
+            "静的化後の状態は Static へ戻るはず"
+        );
+    }
+
+    /// **状態3 click**: playhead 時刻の**評価値**でキー追加。Interp は直前の
+    /// キーの流儀に従い、track 先頭(最初のキーより前)への insert は Linear。
+    #[test]
+    fn toggling_between_keys_inserts_the_evaluated_value_with_the_neighbor_interp() {
+        // Linear 区間の中点 → 評価値は補間の中点、interp は前のキーと同じ Linear。
+        let track = track_of(vec![
+            key_at(0, 0.0, Interp::Linear),
+            key_at(20, 10.0, Interp::Linear),
+        ]);
+        let new = toggled_key_track(Some(&track), 10, fps30(), Value::F64(999.0))
+            .expect("toggle は成功するはず");
+        assert_eq!(new.keys().len(), 3);
+        assert_eq!(new.keys()[1].t, RationalTime::try_from_frame(10, fps30()).unwrap());
+        assert_eq!(new.keys()[1].value, Value::F64(5.0), "その時刻の eval 値のはず");
+        assert!(matches!(new.keys()[1].interp, Interp::Linear));
+
+        // Hold 区間 → 前のキーの値を保持したまま、interp も Hold を継ぐ。
+        let track = track_of(vec![
+            key_at(0, 3.0, Interp::Hold),
+            key_at(20, 10.0, Interp::Linear),
+        ]);
+        let new = toggled_key_track(Some(&track), 10, fps30(), Value::F64(999.0))
+            .expect("toggle は成功するはず");
+        assert_eq!(new.keys()[1].value, Value::F64(3.0), "Hold 区間の eval は前の値のはず");
+        assert!(matches!(new.keys()[1].interp, Interp::Hold), "隣接(前)キーの流儀を継ぐはず");
+
+        // 最初のキーより前への insert → Linear(track 先頭の既定)。
+        let track = track_of(vec![key_at(20, 10.0, Interp::Hold)]);
+        let new = toggled_key_track(Some(&track), 5, fps30(), Value::F64(999.0))
+            .expect("toggle は成功するはず");
+        assert_eq!(new.keys().len(), 2);
+        assert_eq!(new.keys()[0].t, RationalTime::try_from_frame(5, fps30()).unwrap());
+        assert_eq!(new.keys()[0].value, Value::F64(10.0), "範囲外 clamp は端の値のはず");
+        assert!(matches!(new.keys()[0].interp, Interp::Linear), "先頭 insert は Linear のはず");
+    }
+
+    /// undo 可逆の前提(純関数レベル): AtKey→toggle→(即)toggle で元の意味へ
+    /// 戻る(2キー以上)。Document レベルの undo 可逆は shell の drive
+    /// (`inspector_key_drive.rs`)が Intent 経由で確かめる。
+    #[test]
+    fn toggling_twice_on_a_key_round_trips_for_multi_key_tracks() {
+        let track = track_of(vec![
+            key_at(10, 0.0, Interp::Linear),
+            key_at(20, 5.0, Interp::Linear),
+        ]);
+        let removed = toggled_key_track(Some(&track), 10, fps30(), Value::F64(0.0)).unwrap();
+        let restored = toggled_key_track(Some(&removed), 10, fps30(), Value::F64(0.0)).unwrap();
+        // 値は eval(範囲外 clamp で端の 0.0…ではなく残キーの 5.0)なので、
+        // 復元されるのは「その時刻の評価値のキー」— 時刻集合は元どおり。
+        assert_eq!(restored.keys().len(), 2);
+        assert_eq!(restored.keys()[0].t, track.keys()[0].t);
+        assert_eq!(restored.keys()[1].t, track.keys()[1].t);
+    }
+
+    /// KeyRow → property / 既定値の対応表(Position/Scale/Rotation/Opacity/Anchor
+    /// の5行全部)。
+    #[test]
+    fn key_rows_map_to_their_properties_and_defaults() {
+        assert_eq!(KeyRow::Position.property_name(), property::POSITION);
+        assert_eq!(KeyRow::Scale.property_name(), property::SCALE);
+        assert_eq!(KeyRow::Rotation.property_name(), property::ROTATION);
+        assert_eq!(KeyRow::Opacity.property_name(), property::OPACITY);
+        assert_eq!(KeyRow::Anchor.property_name(), property::ANCHOR);
+
+        assert_eq!(key_row_default_value(KeyRow::Position), Value::Vec2([0.0, 0.0]));
+        assert_eq!(key_row_default_value(KeyRow::Scale), Value::Vec2([1.0, 1.0]));
+        assert_eq!(key_row_default_value(KeyRow::Rotation), Value::F64(0.0));
+        assert_eq!(key_row_default_value(KeyRow::Opacity), Value::F64(1.0));
+        assert_eq!(key_row_default_value(KeyRow::Anchor), Value::Vec2([0.0, 0.0]));
+    }
+
     #[test]
     fn inspector_character_size_ratio_is_locked_within_the_charter_168_band() {
         let dims = Dimensions::default();

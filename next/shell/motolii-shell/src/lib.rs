@@ -1423,6 +1423,10 @@ impl Shell {
                 self.reset_inspector_speed();
                 Task::none()
             }
+            inspector_pane::Message::KeyPressed(row) => {
+                self.toggle_inspector_key(row);
+                Task::none()
+            }
         }
     }
 
@@ -1453,6 +1457,58 @@ impl Shell {
             self.session.selection,
         ) {
             self.status = Some(error);
+        }
+    }
+
+    /// Key セル click(K1)— 即1回の `Intent::SetTrack` を出す(下書きを経由
+    /// しない、[`toggle_inspector_hidden`] と同じ即時操作の形 — 1 click = 1
+    /// undo)。3状態の意味と新 track の組み立ては純関数
+    /// [`inspector_pane::toggled_key_track`] が持ち、ここは playhead・track・
+    /// 現在の評価値を貸して `Err` を status 帯へ渡す glue だけ(M13)。
+    /// 選択なし・comp なしは黙って無視(`commit_inspector_field` と同じ柵)。
+    fn toggle_inspector_key(&mut self, row: inspector_pane::KeyRow) {
+        let Some(layer) = self.session.selection else {
+            return;
+        };
+        let Ok(Some(composition)) = self.doc.view().composition() else {
+            return;
+        };
+        let Ok(property) = inspector_pane::key_row_property_id(row) else {
+            return; // 標準 property なので起こらない — 安全側で無視。
+        };
+        let Some(t) = self.time_at_playhead() else {
+            return;
+        };
+        let store = self.doc.view();
+        let Ok(track) = store.track(layer, &property) else {
+            return;
+        };
+        // 初キー化(track 無し)の値の正本: 解決済みの現在値(スロット参照も
+        // ここで track へ戻る — `SetTrack` がスロットを普通の track に置き換える
+        // 既存の意味論)。値が読めなければ行の既定値。
+        let current_value = match store.value_at(layer, &property, t) {
+            Ok(Some(value)) => value,
+            _ => inspector_pane::key_row_default_value(row),
+        };
+        let new_track = match inspector_pane::toggled_key_track(
+            track.as_ref(),
+            self.session.playhead,
+            composition.fps,
+            current_value,
+        ) {
+            Ok(new_track) => new_track,
+            Err(error) => {
+                self.status = Some(error);
+                return;
+            }
+        };
+        drop(store);
+        if let Err(error) = self.doc.apply(Intent::SetTrack {
+            layer,
+            property,
+            track: new_track,
+        }) {
+            self.status = Some(format!("キーを書けない: {error}"));
         }
     }
 
