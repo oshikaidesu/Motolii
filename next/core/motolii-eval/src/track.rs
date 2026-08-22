@@ -615,6 +615,71 @@ mod tests {
         let key: Keyframe = serde_json::from_str(json).expect("旧形式の JSON が読めない");
         assert_eq!(key.spatial, None);
     }
+
+    /// **Hold は空間タンジェントより優先する。** Lottie の `h:1` キーは離散的に
+    /// 飛ぶだけで、`ti`/`to` が(壊れたデータ等で)同居していても曲線を辿らない
+    /// ―― [`interpolate_value`] は `u` を受け取って初めて空間ベジェへ分岐するが、
+    /// `Interp::Hold` の区間は `u` 自体を計算せず `a.value` をそのまま返す
+    /// ([`KeyframeTrack::eval`] の match 節)。この不変量を固定する。
+    #[test]
+    fn hold_ignores_spatial_tangent_even_if_present() {
+        let mut tr = KeyframeTrack::new();
+        tr.insert(Keyframe {
+            t: RationalTime::ZERO,
+            value: Value::Vec2([0.0, 0.0]),
+            interp: Interp::Hold,
+            spatial: Some(SpatialTangent {
+                out_tangent: [0.0, 1000.0],
+                in_tangent: [0.0, 0.0],
+            }),
+        });
+        tr.insert(vec2_key(RationalTime::from_seconds(1), [100.0, 100.0], None));
+        let just_before_next = tr.eval(RationalTime::try_new(999, 1000).unwrap());
+        assert_eq!(
+            just_before_next,
+            Value::Vec2([0.0, 0.0]),
+            "spatial tangent が Hold を突き破って値を曲げている"
+        );
+    }
+
+    /// **成分ごとに別イージングは採らない**(地図 `properties/easing-handle/y` の
+    /// 裁定)という決定を、Vec2 以外の多成分値(`Value::Color`、4成分)でも固定する。
+    /// 全チャンネルへ同じ `u`(=`cubic_bezier_ease` が1回だけ計算した値)が
+    /// 一律に効くので、どのチャンネルも「差分 × 同じ u」の比を保つ。
+    #[test]
+    fn bezier_easing_applies_one_shared_u_to_every_color_channel() {
+        let mut tr = KeyframeTrack::new();
+        tr.insert(Keyframe {
+            t: RationalTime::ZERO,
+            value: Value::Color([0.0, 0.0, 0.0, 0.0]),
+            interp: Interp::Bezier {
+                x1: 0.42,
+                y1: 0.0,
+                x2: 0.58,
+                y2: 1.0,
+            },
+            spatial: None,
+        });
+        tr.insert(Keyframe {
+            t: RationalTime::from_seconds(1),
+            value: Value::Color([10.0, 20.0, 30.0, 40.0]),
+            interp: Interp::Linear,
+            spatial: None,
+        });
+        let quarter = tr
+            .eval(RationalTime::try_new(1, 4).unwrap())
+            .as_color()
+            .expect("Color が返らない");
+        let expected_u = cubic_bezier_ease(0.42, 0.0, 0.58, 1.0, 0.25);
+        let deltas = [10.0, 20.0, 30.0, 40.0];
+        for (channel, delta) in quarter.iter().zip(deltas.iter()) {
+            assert!(
+                (channel - delta * expected_u).abs() < 1e-9,
+                "channel={channel} expected={} (delta={delta} 共有u={expected_u})",
+                delta * expected_u
+            );
+        }
+    }
 }
 
 #[cfg(test)]
