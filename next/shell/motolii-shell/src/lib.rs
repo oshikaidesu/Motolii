@@ -3991,6 +3991,12 @@ impl Shell {
                 pane_layout::PaneKind::Browser => browser_pane::pane_view(
                     &self.browser,
                     &browser_items,
+                    // 素材差替(map 616/617)は「単一選択の時だけ」意味を持つ
+                    // — 複数選択で差し替えると「どの層か」が決まらない。
+                    match self.session.selected_layers.as_slice() {
+                        [only] => Some(*only),
+                        _ => None,
+                    },
                     dims,
                     colors,
                 )
