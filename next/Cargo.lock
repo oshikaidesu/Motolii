@@ -3921,6 +3921,7 @@ dependencies = [
  "motolii-testkit",
  "motolii-timeline-pane",
  "motolii-tokens-rs",
+ "motolii-vector",
  "rfd",
 ]
 

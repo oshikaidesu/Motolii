@@ -14,8 +14,8 @@ use motolii_inspector_pane::{
 };
 use motolii_shell_state::Session;
 use motolii_store::{
-    Composition, Document, Intent, LayerId, LayerMeta, LayerSource, LayerTiming, Mask, MaskId,
-    MaskMode, PropertyId, Value,
+    Composition, Document, Interp, Intent, Keyframe, KeyframeTrack, LayerId, LayerMeta,
+    LayerSource, LayerTiming, Mask, MaskId, MaskMode, Path, PathVertex, PropertyId, Value,
 };
 use motolii_tokens_rs::{Colors, Dimensions};
 
@@ -74,6 +74,54 @@ fn two_masks() -> Vec<Mask> {
             inverted: true,
         },
     ]
+}
+
+/// 1点だけの目印パス(`motolii-store/tests/mask.rs::marker_path` と同型 —
+/// 中身の座標は本ファイルの試験にとって意味を持たない、shape が「有る」こと
+/// だけが要る)。
+fn placeholder_path_track() -> KeyframeTrack {
+    let mut track = KeyframeTrack::new();
+    track.insert(Keyframe {
+        t: RationalTime::ZERO,
+        value: Value::Path(Path {
+            vertices: vec![PathVertex {
+                point: [0.0, 0.0],
+                in_tangent: [0.0, 0.0],
+                out_tangent: [0.0, 0.0],
+            }],
+            closed: true,
+        }),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    track
+}
+
+/// `masks` を Document へ書く(旧: 裸の `Intent::SetMasks` 直呼び)。
+///
+/// **2026-08-22(裁定206 に続く壁7の恒久修正、`Intent::AddMask` 着地)**:
+/// `Intent::SetMasks` の新設検査は「新しく現れる id は `mask.{id}.shape` が
+/// 既に読めること」を書き込み時に要求するようになった(`motolii_store::
+/// document::Intent::SetMasks` doc)——このテストファイルは意図して
+/// **`SetMasks` 自体の投影/編集文法**(mode 巡回・inverted トグル・opacity
+/// 値セル)を検分するファイルなので、新設専用の `Intent::AddMask` へ丸ごと
+/// 置き換えるのではなく、柵が許すもう一方の書き方
+/// (`apply_all([SetTrack(shape), SetMasks(..)])` — 同じバッチの中で shape を
+/// 先に置けば通る、同 doc 参照)を使う。1回の `apply_all` = 1 undo に揃える
+/// (逐次 `AddMask` を複数回呼ぶと seed 自体が複数 undo 段に割れてしまい、
+/// 各テストの「1回の undo で戻る」検分の前提(seed は既に済んでいる状態)が
+/// 崩れる)。
+fn seed_masks(doc: &mut Document, layer: LayerId, masks: Vec<Mask>) {
+    let mut intents: Vec<Intent> = masks
+        .iter()
+        .map(|mask| Intent::SetTrack {
+            layer,
+            property: PropertyId::mask_shape(mask.id),
+            track: placeholder_path_track(),
+        })
+        .collect();
+    intents.push(Intent::SetMasks { layer, masks });
+    doc.apply_all(intents).expect("mask を書けるはず");
 }
 
 /// `value_cell_legibility.rs` と同じ「`find` を尽きるまで繰り返す」手口。
@@ -141,11 +189,7 @@ fn a_layer_without_masks_projects_no_mask_rows_and_shows_no_mask_section() {
 #[test]
 fn a_mask_bearing_layer_projects_one_row_per_mask_in_store_order() {
     let (mut doc, layer) = doc_with_layer();
-    doc.apply(Intent::SetMasks {
-        layer,
-        masks: two_masks(),
-    })
-    .expect("mask を書けるはず");
+    seed_masks(&mut doc, layer, two_masks());
     let session = session_selecting(layer);
     let projection = project(&doc.view(), &session)
         .expect("投影は組めるはず")
@@ -181,11 +225,7 @@ fn a_mask_bearing_layer_projects_one_row_per_mask_in_store_order() {
 #[test]
 fn cycling_a_mask_mode_advances_only_that_mask_and_undoes_in_one_step() {
     let (mut doc, layer) = doc_with_layer();
-    doc.apply(Intent::SetMasks {
-        layer,
-        masks: two_masks(),
-    })
-    .expect("mask を書けるはず");
+    seed_masks(&mut doc, layer, two_masks());
 
     cycle_inspector_mask_mode(&mut doc, Some(layer), MaskId(1)).expect("mode 巡回は成功するはず");
     let masks = doc.view().masks(layer).expect("mask を読めるはず");
@@ -202,11 +242,7 @@ fn cycling_a_mask_mode_advances_only_that_mask_and_undoes_in_one_step() {
 #[test]
 fn toggling_mask_inverted_flips_only_that_mask_and_undoes_in_one_step() {
     let (mut doc, layer) = doc_with_layer();
-    doc.apply(Intent::SetMasks {
-        layer,
-        masks: two_masks(),
-    })
-    .expect("mask を書けるはず");
+    seed_masks(&mut doc, layer, two_masks());
 
     toggle_inspector_mask_inverted(&mut doc, Some(layer), MaskId(1))
         .expect("inverted トグルは成功するはず");
@@ -225,11 +261,7 @@ fn toggling_mask_inverted_flips_only_that_mask_and_undoes_in_one_step() {
 #[test]
 fn mask_edits_without_a_selection_or_with_a_stale_id_are_silent_no_ops() {
     let (mut doc, layer) = doc_with_layer();
-    doc.apply(Intent::SetMasks {
-        layer,
-        masks: two_masks(),
-    })
-    .expect("mask を書けるはず");
+    seed_masks(&mut doc, layer, two_masks());
     let before = doc.view().masks(layer).expect("mask を読めるはず");
 
     cycle_inspector_mask_mode(&mut doc, None, MaskId(1)).expect("選択なしは no-op のはず");
@@ -253,11 +285,7 @@ fn mask_edits_without_a_selection_or_with_a_stale_id_are_silent_no_ops() {
 #[test]
 fn committing_a_mask_opacity_draft_writes_the_mask_opacity_track_as_a_ratio() {
     let (mut doc, layer) = doc_with_layer();
-    doc.apply(Intent::SetMasks {
-        layer,
-        masks: two_masks(),
-    })
-    .expect("mask を書けるはず");
+    seed_masks(&mut doc, layer, two_masks());
 
     let field = TransformField::MaskOpacity(MaskId(1));
     let mut draft = Some(FieldDraft {
@@ -288,11 +316,7 @@ fn the_projected_mask_opacity_row_reuses_the_value_cell_grammar() {
     use motolii_inspector_pane::{KeyCellState, KeyRow, RowValue};
 
     let (mut doc, layer) = doc_with_layer();
-    doc.apply(Intent::SetMasks {
-        layer,
-        masks: two_masks(),
-    })
-    .expect("mask を書けるはず");
+    seed_masks(&mut doc, layer, two_masks());
     let session = session_selecting(layer);
     let projection = project(&doc.view(), &session)
         .expect("投影は組めるはず")

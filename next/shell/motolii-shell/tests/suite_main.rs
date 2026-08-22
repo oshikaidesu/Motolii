@@ -56,6 +56,8 @@ mod inspector_pixel_fence;
 mod marker_keymap_drive;
 #[path = "suite/marquee_drive.rs"]
 mod marquee_drive;
+#[path = "suite/mask_effect_from_card_drive.rs"]
+mod mask_effect_from_card_drive;
 #[path = "suite/keymap_equivalence.rs"]
 mod keymap_equivalence;
 #[path = "suite/lyric_text_layer_drive.rs"]

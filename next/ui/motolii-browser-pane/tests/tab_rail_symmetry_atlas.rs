@@ -215,7 +215,9 @@ fn effects_rail_scope_color_narrows_the_catalog() {
     let items = fixture_items();
     let mut state = state_on(LibraryTab::Effects);
     let all = targets_on(&state, &items);
-    assert_eq!(result_count(&all), "Results 4");
+    // 裁定205 施工第2号 §A で Mask カード(`PreviewTag::Masks`)が末尾に増え、
+    // 全件は5枚(Echo Bloom/Opacity/Sine/Glow/Mask)。
+    assert_eq!(result_count(&all), "Results 5");
 
     state.update(Message::SelectPreviewScope(PreviewScope::Tag(
         PreviewTag::Color,

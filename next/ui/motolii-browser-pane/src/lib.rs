@@ -200,8 +200,8 @@ pub mod state;
 
 pub use model::{
     AssetListItem, CardKey, CatalogCard, Category, CreateKind, LibraryTab, PreviewCard,
-    PreviewScope, PreviewTag, RailScope, SortKey, ViewMode, FILTER_CHIPS, LIBRARY_TABS,
-    RAIL_SCOPES, SORT_KEYS,
+    PreviewScope, PreviewTag, RailScope, SelectionAction, SortKey, ViewMode, FILTER_CHIPS,
+    LIBRARY_TABS, RAIL_SCOPES, SORT_KEYS,
 };
 pub use state::{Message, PaneState};
 
@@ -1570,6 +1570,30 @@ fn preview_card_view(
         return mouse_area(face)
             .on_press(Message::SelectCard(key))
             .on_double_click(Message::CreateFromCard { kind })
+            .on_enter(Message::CardHovered(key))
+            .on_exit(Message::CardUnhovered(key))
+            .interaction(iced::mouse::Interaction::Pointer)
+            .into();
+    }
+
+    if let Some(action) = card.applies_to_selection {
+        // 裁定205 施工第2号: 「選択中レイヤーへ足す」カード(Effects タブの
+        // Glow/Mask)も create カードと**全く同じ** mouse_area 経路 — 新しい
+        // 見た目/文法は作らない(`create_card_face` をそのまま流用)。運ぶ
+        // Message だけが `SelectionAction` の payload で分かれる。
+        let message = match action {
+            model::SelectionAction::AddMask => Message::AddMaskFromCard,
+            model::SelectionAction::ApplyEffect(plugin_id) => {
+                Message::ApplyEffectFromCard { plugin_id }
+            }
+        };
+        let face = container(body)
+            .width(frame_width)
+            .padding(dims.spacing_xs)
+            .style(move |_theme| create_card_face(colors, selected, hovered));
+        return mouse_area(face)
+            .on_press(Message::SelectCard(key))
+            .on_double_click(message)
             .on_enter(Message::CardHovered(key))
             .on_exit(Message::CardUnhovered(key))
             .interaction(iced::mouse::Interaction::Pointer)

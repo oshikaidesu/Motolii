@@ -66,6 +66,20 @@ pub enum Message {
     /// ダブルクリックの1打目/2打目の press で別途 publish 済み)。drag で
     /// Stage/Timeline へ落とす経路は将来切片(発注の見送り明記)。
     CreateFromCard { kind: CreateKind },
+    /// effects タブの Mask カードのダブルクリック(裁定205 施工第2号 §A —
+    /// `model::SelectionAction::AddMask` を宣言するカードから発火)。
+    /// **pane-local には状態を動かさない**(`CreateFromCard` と同じ理由) —
+    /// 選択中の単一レイヤーへ `Intent::AddMask` を積むのは shell 側
+    /// (`Shell::add_mask_to_selected_layer`)の仕事。単一選択でない時にどう
+    /// 振る舞うか(拒否/no-op)も shell 側の判断——この Message 自体は
+    /// 「マスクを1枚足したい」という意図だけを運ぶ。
+    AddMaskFromCard,
+    /// effects タブの Glow カードのダブルクリック(裁定205 施工第2号 §B —
+    /// `model::SelectionAction::ApplyEffect` を宣言するカードから発火)。
+    /// plugin id はカード定義側の `&'static str`(`model::EFFECTS_PREVIEW` の
+    /// Glow カード)をそのまま運ぶ — 値の正本はそこ1箇所。**pane-local には
+    /// 状態を動かさない**(`AddMaskFromCard` と同型)。
+    ApplyEffectFromCard { plugin_id: &'static str },
     /// OS の file-drag が窓に入っている/出た(B08 続編: drop 先ハイライト)。
     /// shell 結線(次波)が `iced::window::Event::FileHovered`/
     /// `FilesHoveredLeft` をこの1本へ翻訳する想定 — pane は真偽だけ持ち、
@@ -279,6 +293,13 @@ impl PaneState {
             // (このメンバー doc・crate 冒頭 doc「shell 結線」参照) — pane-local
             // 状態には何も書かない。
             Message::ReplaceSelectedLayerSource(_) => {}
+            // マスク追加/effect 適用も「作る」と同じく pane-local に動かす状態が
+            // 無い(`CreateFromCard` と同型 — 選択は `SelectCard` が別途書く)。
+            // 実際の `Intent::AddMask`/`Intent::SetEffects` は shell 結線が
+            // この2 variant を `Shell::update` 側で横取りして落とす
+            // (裁定205 施工第2号 §A/§B)。
+            Message::AddMaskFromCard => {}
+            Message::ApplyEffectFromCard { .. } => {}
         }
     }
 }

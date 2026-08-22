@@ -17,6 +17,16 @@ motolii-core.workspace = true
 motolii-engine.workspace = true
 motolii-media.workspace = true
 motolii-store.workspace = true
+# 裁定205 施工第2号 §D: create タブの Rectangle/Ellipse カードに実際の shape
+# (`Intent::SetShapes`)を積む。`motolii-store` は `PathSource`/`Shape`/
+# `ShapeNode` こそ再輸出しているが `Fill`(塗り)は輸出していない
+# (`motolii-store::lib.rs` の re-export doc 参照 — shape の記述は
+# `motolii-vector` が正本で、`motolii-store` は必要な語彙だけを選んで運ぶ)。
+# 塗りの無い shape は「まだ塗り方が決まっていない」ため何も描かれない
+# (`motolii_vector::Shape::new` の doc)ので、既定 Fill を組むにはこの crate が
+# 要る。`motolii-engine` が既に依存グラフへ引いている crate で新規の依存
+# ではない(裁定117 が許す direct 昇格と同型)。
+motolii-vector.workspace = true
 # デザイン値の外出し(裁定117)。裁定160 切片1 で `tokens.rs` を crate 抽出、
 # `pub use motolii_tokens_rs as tokens;`(lib.rs)で既存 `crate::tokens::` path を
 # 維持する。`notify`/`serde`/`serde_json` は tokens.rs 専用の依存だったため、
