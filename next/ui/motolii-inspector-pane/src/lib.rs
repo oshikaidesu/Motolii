@@ -20,7 +20,9 @@
 //! **Document ではない一時状態**(`motolii_shell::Shell::pending_drops` と同じ形)を持ち、
 //! `on_submit`(Enter)で初めて1回の `Intent::SetTrack`/`SetAttrs` を出す — 1 gesture
 //! = 1 undo。**静的値の編集は `SetTrack` に1キー `Hold`** で書く([`single_hold_track`])
-//! — 発注書がその流儀を名指ししている。
+//! — 発注書がその流儀を名指ししている。**キー持ち track の値編集は playhead への
+//! キー upsert**([`edited_value_track`]、AE 作法 — 2026-08-22 発注): track を
+//! 静的に戻さず、playhead にキーが有れば値更新・無ければ新キー挿入。
 //!
 //! **型別 editor**(rerun `re_component_ui::create_component_ui_registry` の型→editor
 //! 登録表と同じ考え方、コードは引かず型だけ写す): この第1波で使うのは
@@ -430,6 +432,68 @@ pub fn toggled_key_track(
     }
 }
 
+/// この track が「実キーを持つ」か(空・track 無し・正準静的表現
+/// [`is_canonical_static_track`] はどれも実キー無し)。値編集の意味
+/// ([`edited_value_track`])と投影の `keyed`(accent 表示)の共通判定。
+fn has_real_keys(track: Option<&KeyframeTrack>) -> bool {
+    track.is_some_and(|tr| !tr.keys().is_empty() && !is_canonical_static_track(tr))
+}
+
+/// **値編集の意味**(AE 作法、2026-08-22 発注 — 利用者実窓指摘「キーが1つ
+/// しか打てない」の根治): 値セルの Enter 確定・数値ドラッグ確定が
+/// `Intent::SetTrack` で書くべき新しい track を作る(純関数)。
+///
+/// - **キー無し**(track 無し・空・正準静的表現)→ 従来どおり静的値の
+///   書き換え([`single_hold_track`] — キーは生えない。キー化は Key 列 click
+///   が明示的に行う)。
+/// - **キー持ち**(実キー >= 1)→ **playhead 位置へのキー upsert**:
+///   playhead のフレームにキーが有ればそのキーの値だけ更新(時刻・interp・
+///   spatial は保つ)、無ければ新キー挿入。interp は Between 挿入
+///   ([`toggled_key_track`])と同規則 — 直前キーの流儀を継ぎ、先頭は
+///   `Linear`。`spatial` は `None`。**track を静的に戻さない** — これが
+///   「値を変えるとキーが増える」の AE 文法。
+pub fn edited_value_track(
+    track: Option<&KeyframeTrack>,
+    playhead_frame: i64,
+    fps: Fps,
+    value: Value,
+) -> Result<KeyframeTrack, String> {
+    if !has_real_keys(track) {
+        return Ok(single_hold_track(value));
+    }
+    let track = track.expect("実キーが有るなら track も有る");
+    let t = RationalTime::try_from_frame(playhead_frame, fps)
+        .map_err(|error| format!("playhead を時刻へ写せない: {error}"))?;
+    let mut new_track = track.clone();
+    if let Some(index) = key_index_at_frame(track, playhead_frame, fps) {
+        // 既存キーの値更新(個数不変)。時刻は**既存キーのもの**を保つ —
+        // 照合は frame 丸め(`key_index_at_frame`)なので、丸め前の厳密時刻で
+        // insert し直すと同フレームに2個生える事故になる。
+        let existing = &track.keys()[index];
+        new_track.insert(Keyframe {
+            t: existing.t,
+            value,
+            interp: existing.interp,
+            spatial: existing.spatial.clone(),
+        });
+    } else {
+        let interp = track
+            .keys()
+            .iter()
+            .rev()
+            .find(|key| key.t < t)
+            .map(|key| key.interp)
+            .unwrap_or(Interp::Linear);
+        new_track.insert(Keyframe {
+            t,
+            value,
+            interp,
+            spatial: None,
+        });
+    }
+    Ok(new_track)
+}
+
 pub fn format_number(value: f64, decimals: usize) -> String {
     format!("{value:.decimals$}")
 }
@@ -612,9 +676,10 @@ pub fn dragged_value(field: TransformField, start_value: f64, delta_px: f32, fin
 
 /// drag(または click→type 編集)を始める前に読む、`field` の現在値。
 /// **投影から読むだけ** — `project` が計算した表示単位の値をそのまま使う
-/// (Opacity の % 換算などを2箇所に書かない)。animated(編集不可)/対応する
-/// field が投影に無い、のいずれも `None`(呼び手はドラッグも編集も始めない —
-/// `commit_inspector_field` と同じ二重の柵)。
+/// (Opacity の % 換算などを2箇所に書かない)。対応する field が投影に無い
+/// (または `editable=false` の穴)なら `None`(呼び手はドラッグも編集も
+/// 始めない)。present な成分は常に editable(Q0、2026-08-22 発注)なので、
+/// キー持ち track もここを通って drag/type 編集できる。
 ///
 /// 戻り値の第2要素は Vec2 系(Position/Scale/Anchor)の「動かさない方の成分」
 /// ([`next_value`] にそのまま渡す) — scalar 系(Z/Rotation/Opacity)では未使用
@@ -674,10 +739,14 @@ pub struct ComponentSlot {
     pub present: bool,
     /// 表示単位での値(Opacity だけ % — store は 0..1)。`present=false` なら無意味。
     pub value: f64,
-    /// track が 0〜1 キー(裁定20「キーを打っていない property は静止値」の範囲)なら
-    /// 編集可。2キー以上(animated)は**この第1波では表示のみ**(発注書の指示 —
-    /// 理由つきdisabledではなく、そもそも編集用 control を出さない)。
+    /// 編集可能か。**present な成分は常に `true`**(Q0: キー数で触れなくなる
+    /// 状態を作らない — 2026-08-22 発注で旧規則「keys.len()<=1 のみ編集可」を
+    /// 撤去した。キー持ち track の編集は playhead へのキー upsert =
+    /// [`edited_value_track`])。`present=false` の穴だけ `false`。
     pub editable: bool,
+    /// この track が実キーを持つか([`has_real_keys`])。表示は accent —
+    /// 「編集すると記録される」ことの視覚合図(AE のキー付き値と同型)。
+    pub keyed: bool,
     /// この成分が編集される時に動く field。`present=false` なら `None`。
     pub field: Option<TransformField>,
 }
@@ -688,6 +757,7 @@ fn absent_component(axis: &'static str) -> ComponentSlot {
         present: false,
         value: 0.0,
         editable: false,
+        keyed: false,
         field: None,
     }
 }
@@ -767,10 +837,7 @@ fn scalar_component(
 ) -> Result<ComponentSlot, StoreError> {
     let property = PropertyId::new(name)?;
     let track = store.track(layer, &property)?;
-    let editable = track
-        .as_ref()
-        .map(|tr| tr.keys().len() <= 1)
-        .unwrap_or(true);
+    let keyed = has_real_keys(track.as_ref());
     let value = match store.value_at(layer, &property, t)? {
         Some(Value::F64(v)) => v,
         _ => default,
@@ -779,7 +846,8 @@ fn scalar_component(
         axis,
         present: true,
         value,
-        editable,
+        editable: true,
+        keyed,
         field: Some(field),
     })
 }
@@ -795,10 +863,7 @@ fn vec2_components(
 ) -> Result<[ComponentSlot; 2], StoreError> {
     let property = PropertyId::new(name)?;
     let track = store.track(layer, &property)?;
-    let editable = track
-        .as_ref()
-        .map(|tr| tr.keys().len() <= 1)
-        .unwrap_or(true);
+    let keyed = has_real_keys(track.as_ref());
     let [x, y] = match store.value_at(layer, &property, t)? {
         Some(Value::Vec2(v)) => [v[0], v[1]],
         _ => default,
@@ -808,14 +873,16 @@ fn vec2_components(
             axis: "X",
             present: true,
             value: x,
-            editable,
+            editable: true,
+            keyed,
             field: Some(field_x),
         },
         ComponentSlot {
             axis: "Y",
             present: true,
             value: y,
-            editable,
+            editable: true,
+            keyed,
             field: Some(field_y),
         },
     ])
@@ -996,6 +1063,11 @@ pub fn project(
 pub struct FieldDragState {
     field: TransformField,
     layer: LayerId,
+    /// press 時点の playhead(frame)と fps。確定時のキー upsert
+    /// ([`edited_value_track`])の宛先 — drag の起点値は press 時点の
+    /// playhead で読んだ値なので、確定の宛先も同じ時刻に固定する。
+    playhead_frame: i64,
+    fps: Fps,
     /// press 時点の表示単位の値([`drag_origin`] が投影から読む)。確定
     /// Intent・Esc(overlay を外すだけで使わない)双方が参照する起点。
     start_value: f64,
@@ -1025,14 +1097,19 @@ pub struct FieldDragState {
 // ---------------------------------------------------------------------------
 
 /// Inspector の Transform 行 — 下書きを確定して1回の `Intent::SetTrack` を出す
-/// (1 gesture = 1 undo)。数値として読めない・animated・書き込み失敗は**黙って
-/// 消さず** `Err` の理由文を返す(M13、呼び出し側が status 帯へ渡す)。下書きが
-/// 無い・別 field の submit・選択が無い、のいずれも `Ok(())`(何もしない)。
+/// (1 gesture = 1 undo)。数値として読めない・書き込み失敗は**黙って消さず**
+/// `Err` の理由文を返す(M13、呼び出し側が status 帯へ渡す)。下書きが無い・
+/// 別 field の submit・選択が無い、のいずれも `Ok(())`(何もしない)。
+///
+/// **書く track の意味は [`edited_value_track`]**(AE 作法、2026-08-22 発注):
+/// キー無しなら静的値の書き換え、キー持ちなら playhead へのキー upsert。
+/// 旧規則「2キー以上は編集拒否」は撤去した(Q0 — 値セルは常に編集可能)。
 pub fn commit_inspector_field(
     doc: &mut Document,
     draft: &mut Option<FieldDraft>,
     selection: Option<LayerId>,
-    playhead_time: RationalTime,
+    playhead_frame: i64,
+    fps: Fps,
     field: TransformField,
 ) -> Result<(), String> {
     let Some(taken) = draft.take() else {
@@ -1052,27 +1129,21 @@ pub fn commit_inspector_field(
     let Ok(property) = property_id(field) else {
         return Err("property を作れない".to_owned());
     };
+    let playhead_time = RationalTime::try_from_frame(playhead_frame, fps)
+        .map_err(|error| format!("playhead を時刻へ写せない: {error}"))?;
 
-    // 編集不可(animated = 2キー以上)の field は、UI が control を出していない
-    // はずだが、**書き口自体でも二重に拒む**(M13/Q0 — chrome と書き口の食い違いを
-    // 構造的に作らない)。
     let store = doc.view();
-    if let Ok(Some(track)) = store.track(layer, &property) {
-        if track.keys().len() > 1 {
-            return Err("animated な property はこの第1波では編集できない".to_owned());
-        }
-    }
-
+    let track = store.track(layer, &property).ok().flatten();
     let current_vec2 = match store.value_at(layer, &property, playhead_time) {
         Ok(Some(Value::Vec2(v))) => v,
         _ => default_vec2(field),
     };
     let value = next_value(field, input, current_vec2);
-    let track = single_hold_track(value);
+    let new_track = edited_value_track(track.as_ref(), playhead_frame, fps, value)?;
     doc.apply(Intent::SetTrack {
         layer,
         property,
-        track,
+        track: new_track,
     })
     .map_err(|error| format!("値を書けない: {error}"))
 }
@@ -1099,14 +1170,17 @@ pub fn commit_inspector_name(
 }
 
 /// 値セルの press — click か drag かはまだ未確定(`FieldDragState::origin_x` が
-/// `None` のまま)。選択なし・animated(編集不可)・対応する field が投影に無い、
-/// のいずれも黙って無視([`commit_inspector_field`] と同じ二重の柵)。既に別の
-/// drag が進行中なら多重起動しない。
+/// `None` のまま)。選択なし・対応する field が投影に無い、のいずれも黙って
+/// 無視([`commit_inspector_field`] と同じ二重の柵)。既に別の drag が進行中
+/// なら多重起動しない。`playhead_frame`/`fps` は press 時点の物を捕まえて
+/// 確定([`finish_field_drag`] のキー upsert)の宛先に固定する。
 pub fn start_field_drag(
     drag: &mut Option<FieldDragState>,
     selection: Option<LayerId>,
     projection: Option<&SelectionProjection>,
     field: TransformField,
+    playhead_frame: i64,
+    fps: Fps,
 ) {
     if drag.is_some() {
         return; // 既に別の drag が進行中 — 多重起動しない
@@ -1123,6 +1197,8 @@ pub fn start_field_drag(
     *drag = Some(FieldDragState {
         field,
         layer,
+        playhead_frame,
+        fps,
         start_value,
         current_vec2,
         origin_x: None,
@@ -1206,13 +1282,22 @@ pub fn finish_field_drag(
     };
     let mut write_error = None;
     if let Some(value) = state.last_value {
-        let track = single_hold_track(value);
-        if let Err(error) = doc.apply(Intent::SetTrack {
-            layer: state.layer,
-            property: property.clone(),
-            track,
-        }) {
-            write_error = Some(format!("値を書けない: {error}"));
+        // 確定の track も値セル Enter と同じ意味([`edited_value_track`] —
+        // キー無しは静的書き換え・キー持ちは press 時点の playhead へ upsert)。
+        // transient overlay は `track()` には映らないので、ここで読むのは
+        // drag 開始前の本 track そのもの。
+        let base_track = doc.view().track(state.layer, &property).ok().flatten();
+        match edited_value_track(base_track.as_ref(), state.playhead_frame, state.fps, value) {
+            Ok(track) => {
+                if let Err(error) = doc.apply(Intent::SetTrack {
+                    layer: state.layer,
+                    property: property.clone(),
+                    track,
+                }) {
+                    write_error = Some(format!("値を書けない: {error}"));
+                }
+            }
+            Err(error) => write_error = Some(error),
         }
     }
     doc.clear_transient(state.layer, &property);
@@ -1605,12 +1690,24 @@ fn value_cell(
                 // click せず(まだ)編集していない見た目 — drag-to-scrub の起点
                 // ([`draggable_value_cell`])。表示する値は投影(`slot.value`)
                 // そのものなので、drag 中の transient 値もここが自動で映す。
-                draggable_value_cell(field, display_number(slot.value, decimals), dims, colors)
+                // キー持ち行は accent — 「編集すると(playhead へ)記録される」
+                // ことの視覚合図(AE 作法、2026-08-22 発注。旧実装の animated
+                // 表示専用セルと同じ色を、編集可能なまま引き継ぐ)。
+                let value_color = if slot.keyed {
+                    colors.action_active
+                } else {
+                    colors.text_primary
+                };
+                draggable_value_cell(
+                    field,
+                    display_number(slot.value, decimals),
+                    value_color,
+                    dims,
+                    colors,
+                )
             }
         }
-        // animated(2キー以上) — **表示のみと明示**(理由つきdisabledではなく、
-        // そもそも編集 control を出さない。accent 色で「動いている値」と分かる —
-        // 箱形自体は編集セルと同じ)。
+        // present なのに field が無い(起こらないはず)— 安全側の表示のみ fallback。
         _ => boxed_value(
             display_number(slot.value, decimals),
             colors.action_active,
@@ -1629,6 +1726,7 @@ fn value_cell(
 fn draggable_value_cell(
     field: TransformField,
     displayed: String,
+    value_color: iced::Color,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -1636,7 +1734,7 @@ fn draggable_value_cell(
         container(
             text(displayed)
                 .size(dims.body_text)
-                .color(colors.text_primary)
+                .color(value_color)
                 .align_x(iced::alignment::Horizontal::Center)
                 .align_y(iced::alignment::Vertical::Center),
         )
@@ -2326,6 +2424,7 @@ mod tests {
                         present: true,
                         value: 1.0,
                         editable: true,
+                        keyed: false,
                         field: Some(TransformField::ScaleX),
                     },
                     ComponentSlot {
@@ -2333,6 +2432,7 @@ mod tests {
                         present: true,
                         value: 2.0,
                         editable: true,
+                        keyed: false,
                         field: Some(TransformField::ScaleY),
                     },
                     absent_component("Z"),
@@ -2360,8 +2460,11 @@ mod tests {
         assert!(drag_origin(&selection, TransformField::Rotation).is_none());
     }
 
+    /// キー持ち(keyed)の field も drag/type 編集の起点になる(Q0 —
+    /// 2026-08-22 発注で旧規則「animated は編集不可」を撤去。編集の意味は
+    /// [`edited_value_track`] のキー upsert)。
     #[test]
-    fn drag_origin_refuses_animated_fields() {
+    fn drag_origin_accepts_keyed_fields() {
         let selection = SelectionProjection {
             layer: LayerId(1),
             kind: "solid",
@@ -2374,7 +2477,8 @@ mod tests {
                         axis: "Z",
                         present: true,
                         value: 45.0,
-                        editable: false, // animated(2キー以上)
+                        editable: true,
+                        keyed: true, // 実キー持ち(旧 animated)
                         field: Some(TransformField::Rotation),
                     },
                 ]),
@@ -2391,10 +2495,9 @@ mod tests {
                 speed_percent: 100.0,
             },
         };
-        assert!(
-            drag_origin(&selection, TransformField::Rotation).is_none(),
-            "animated な field はドラッグを始められないはず"
-        );
+        let (start, _) = drag_origin(&selection, TransformField::Rotation)
+            .expect("キー持ち field もドラッグを始められるはず(Q0)");
+        assert_eq!(start, 45.0, "起点は投影の評価値のはず");
     }
 
     #[test]
@@ -2631,6 +2734,79 @@ mod tests {
         assert_eq!(restored.keys().len(), 2);
         assert_eq!(restored.keys()[0].t, track.keys()[0].t);
         assert_eq!(restored.keys()[1].t, track.keys()[1].t);
+    }
+
+    // -----------------------------------------------------------------------
+    // 値編集の意味(AE 作法): `edited_value_track` — 静的は静的のまま・
+    // キー持ちは playhead へ upsert(2026-08-22 発注)
+    // -----------------------------------------------------------------------
+
+    /// キー無し(track 無し・正準静的表現)の値編集は従来どおり静的値の
+    /// 書き換え — キーは生えない。
+    #[test]
+    fn edited_value_track_keeps_static_tracks_static() {
+        let new = edited_value_track(None, 15, fps30(), Value::F64(4.0)).unwrap();
+        assert_eq!(new, single_hold_track(Value::F64(4.0)));
+
+        let static_track = single_hold_track(Value::F64(1.0));
+        let new =
+            edited_value_track(Some(&static_track), 15, fps30(), Value::F64(4.0)).unwrap();
+        assert_eq!(new, single_hold_track(Value::F64(4.0)), "静的編集でキーが生えている");
+        assert_eq!(key_cell_state(Some(&new), 15, fps30()), KeyCellState::Static);
+    }
+
+    /// キー持ち track の、playhead にキーが**無い**時刻での編集 = 新キー挿入
+    /// (既存キーは無傷・interp は Between 挿入と同規則)。
+    #[test]
+    fn edited_value_track_inserts_a_new_key_at_the_playhead() {
+        let track = track_of(vec![key_at(10, 1.0, Interp::Hold)]);
+        let new = edited_value_track(Some(&track), 20, fps30(), Value::F64(3.0)).unwrap();
+        assert_eq!(new.keys().len(), 2, "値編集でキーが増えるはず(AE 文法)");
+        assert_eq!(new.keys()[0].t, RationalTime::try_from_frame(10, fps30()).unwrap());
+        assert_eq!(new.keys()[0].value, Value::F64(1.0), "既存キーは無傷のはず");
+        assert_eq!(new.keys()[1].t, RationalTime::try_from_frame(20, fps30()).unwrap());
+        assert_eq!(new.keys()[1].value, Value::F64(3.0));
+        assert!(
+            matches!(new.keys()[1].interp, Interp::Hold),
+            "直前キー(Hold)の流儀を継ぐはず"
+        );
+        assert!(new.keys()[1].spatial.is_none());
+
+        // 最初のキーより前への挿入は Linear(track 先頭の既定)。
+        let new = edited_value_track(Some(&track), 5, fps30(), Value::F64(0.5)).unwrap();
+        assert_eq!(new.keys().len(), 2);
+        assert_eq!(new.keys()[0].t, RationalTime::try_from_frame(5, fps30()).unwrap());
+        assert!(matches!(new.keys()[0].interp, Interp::Linear), "先頭 insert は Linear のはず");
+    }
+
+    /// playhead にキーが**有る**時刻での編集 = そのキーの値だけ更新(個数
+    /// 不変・時刻/interp/spatial は保つ)。
+    #[test]
+    fn edited_value_track_updates_the_key_under_the_playhead_in_place() {
+        let track = track_of(vec![
+            key_at(10, 1.0, Interp::Hold),
+            key_at(20, 5.0, Interp::Linear),
+        ]);
+        let new = edited_value_track(Some(&track), 10, fps30(), Value::F64(9.0)).unwrap();
+        assert_eq!(new.keys().len(), 2, "playhead 上の編集はキー個数を変えないはず");
+        assert_eq!(new.keys()[0].value, Value::F64(9.0), "playhead 上のキーの値が更新されるはず");
+        assert!(matches!(new.keys()[0].interp, Interp::Hold), "interp は保つはず");
+        assert_eq!(new.keys()[1].value, Value::F64(5.0), "他のキーは無傷のはず");
+    }
+
+    /// 1キーでも実キー(正準静的表現でない)なら upsert — track を静的に
+    /// 戻さない(利用者実窓指摘「キーが1つしか打てない」の機序そのもの:
+    /// 旧実装はここで `single_hold_track` に置き換えてキーを消していた)。
+    #[test]
+    fn edited_value_track_never_collapses_a_real_single_key_track_to_static() {
+        let track = track_of(vec![key_at(10, 1.0, Interp::Linear)]);
+        let new = edited_value_track(Some(&track), 20, fps30(), Value::F64(2.0)).unwrap();
+        assert_eq!(new.keys().len(), 2, "キーが1個へ潰れている(旧バグの再発)");
+        assert_ne!(
+            key_cell_state(Some(&new), 20, fps30()),
+            KeyCellState::Static,
+            "実キー持ち track が静的化されている"
+        );
     }
 
     /// KeyRow → property / 既定値の対応表(Position/Scale/Rotation/Opacity/Anchor

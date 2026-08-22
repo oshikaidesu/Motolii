@@ -11,6 +11,7 @@
 
 use motolii_shell::inspector_pane::{self, RowValue, TransformField};
 use motolii_shell::{Message, Shell};
+use motolii_store::{property, PropertyId};
 
 fn shell() -> Shell {
     Shell::new().0
@@ -94,43 +95,69 @@ fn editing_a_static_scale_field_writes_a_single_hold_keyframe_and_undoes_in_one_
     assert_eq!(scale_reverted[0].value, 1.0, "Undo 1回で値が戻らない");
 }
 
-/// animated(2キー以上)な property は**表示のみ** — 発注書の指示どおり、
-/// 理由つき disabled ではなく「そもそも編集できない」ことを書き口自体でも守る。
+/// キー持ち(2キー以上)な property も**編集可能**(Q0、2026-08-22 発注 —
+/// 旧規則「animated は表示のみ」を撤去)。編集の意味は playhead へのキー
+/// upsert: fixture のサビ歌詞 position(キー 510/570、playhead=900)を編集
+/// すると frame 900 に3個目のキーが増え、既存キーは無傷。
 #[test]
-fn animated_position_gets_the_fixture_keys_and_stays_display_only() {
+fn editing_an_animated_position_upserts_a_key_at_the_playhead() {
     let (mut shell, _) = Shell::new_fixture();
     let selection = shell
         .inspector_selection()
         .expect("fixture は1層選択済みのはず");
+    let layer = selection.layer;
 
     let RowValue::Vector(position) = &selection.transform[0].value else {
         panic!("Position 行が Vector でない");
     };
     assert!(
-        !position[0].editable,
-        "fixture の選択層(サビ歌詞)は position に2キーあるので animated のはず"
+        position[0].editable,
+        "キー持ち(2キー)の position も編集可能のはず(Q0)"
     );
-    assert!(!position[1].editable);
+    assert!(position[1].editable);
+    assert!(position[0].keyed, "実キー持ちの投影は keyed のはず(accent 表示の合図)");
+    let before_y = position[1].value;
 
-    // 書き口自体も拒む(UI が control を出していなくても、二重の柵として)。
-    let before = position[0].value;
+    let position_property = PropertyId::new(property::POSITION).expect("position は予約語ではない");
+    let keys_before = shell
+        .store_view()
+        .track(layer, &position_property)
+        .expect("track を読めるはず")
+        .map(|track| track.keys().len())
+        .unwrap_or(0);
+    assert_eq!(keys_before, 2, "fixture の前提(position 2キー)が崩れている");
+
     let _ = shell.update(Message::Inspector(inspector_pane::Message::FieldInput(
         TransformField::PositionX,
         "999".to_owned(),
     )));
     let _ = shell.update(Message::Inspector(inspector_pane::Message::FieldSubmit(TransformField::PositionX)));
+    assert!(shell.status().is_none(), "編集が拒否されている: {:?}", shell.status());
+
+    let keys_after = shell
+        .store_view()
+        .track(layer, &position_property)
+        .expect("track を読めるはず")
+        .map(|track| track.keys().len())
+        .unwrap_or(0);
+    assert_eq!(keys_after, 3, "playhead(キーの無い時刻)の編集はキーを増やすはず");
+
     let after = shell.inspector_selection().expect("selection");
     let RowValue::Vector(position_after) = &after.transform[0].value else {
         panic!("Position 行が Vector でない");
     };
-    assert_eq!(
-        position_after[0].value, before,
-        "animated な property が書き込めてしまっている"
-    );
-    assert!(
-        shell.status().is_some(),
-        "拒否したのに理由が出ていない(M13)"
-    );
+    assert_eq!(position_after[0].value, 999.0, "playhead のキー値が編集値になっていない");
+    assert_eq!(position_after[1].value, before_y, "X の編集で Y まで動いた");
+
+    // 1編集 = 1 undo。
+    let _ = shell.update(Message::Undo);
+    let keys_reverted = shell
+        .store_view()
+        .track(layer, &position_property)
+        .expect("track を読めるはず")
+        .map(|track| track.keys().len())
+        .unwrap_or(0);
+    assert_eq!(keys_reverted, 2, "undo 1回で編集前(キー2個)へ戻らない");
 }
 
 /// **Attrs: Hidden トグル** — 即1回の Intent、undo 1回で戻る。
@@ -397,26 +424,53 @@ fn committing_a_drag_undoes_in_one_step_with_no_intermediate_value_in_history() 
     );
 }
 
-/// animated(2キー以上)な field は drag も始まらない(`commit_inspector_field`
-/// の書き口側の柵と同じ二重防御)。
+/// キー持ち(2キー以上)な field も drag できる(Q0、2026-08-22 発注 — 旧規則
+/// 「animated は drag も始まらない」を撤去)。確定は値セル Enter と同経路の
+/// キー upsert(`inspector_pane::edited_value_track`)— playhead(fixture=900、
+/// キーの無い時刻)へキーが増え、1 gesture = 1 undo。
 #[test]
-fn dragging_an_animated_field_is_refused() {
+fn dragging_a_keyed_field_commits_an_upserted_key() {
     let (mut shell, _) = Shell::new_fixture();
     let selection = shell.inspector_selection().expect("fixture は選択済みのはず");
+    let layer = selection.layer;
     let RowValue::Vector(position) = &selection.transform[0].value else {
         panic!("Position 行が Vector でない");
     };
-    assert!(!position[0].editable, "fixture の前提(animated)が崩れている");
+    assert!(position[0].editable, "キー持ち field も drag の起点になるはず(Q0)");
     let before = position[0].value;
 
     let _ = shell.update(Message::Inspector(inspector_pane::Message::ValuePressed(TransformField::PositionX)));
     let _ = shell.update(Message::Inspector(inspector_pane::Message::PointerMoved(iced::Point::new(0.0, 0.0))));
     let _ = shell.update(Message::Inspector(inspector_pane::Message::PointerMoved(iced::Point::new(50.0, 0.0))));
 
-    let RowValue::Vector(position_after) =
+    let RowValue::Vector(position_moved) =
         &shell.inspector_selection().unwrap().transform[0].value
     else {
         panic!("Position 行が Vector でない");
     };
-    assert_eq!(position_after[0].value, before, "animated な field が動いてしまった");
+    assert_eq!(
+        position_moved[0].value,
+        before + 50.0,
+        "キー持ち field の drag が動かない(旧規則の再発)"
+    );
+
+    let _ = shell.update(Message::Inspector(inspector_pane::Message::PointerReleased));
+    let position_property = PropertyId::new(property::POSITION).expect("position は予約語ではない");
+    let keys_after = shell
+        .store_view()
+        .track(layer, &position_property)
+        .expect("track を読めるはず")
+        .map(|track| track.keys().len())
+        .unwrap_or(0);
+    assert_eq!(keys_after, 3, "drag 確定は playhead へキーを増やすはず(2→3)");
+
+    // 1 gesture = 1 undo。
+    let _ = shell.update(Message::Undo);
+    let keys_reverted = shell
+        .store_view()
+        .track(layer, &position_property)
+        .expect("track を読めるはず")
+        .map(|track| track.keys().len())
+        .unwrap_or(0);
+    assert_eq!(keys_reverted, 2, "undo 1回で drag 前(キー2個)へ戻らない");
 }

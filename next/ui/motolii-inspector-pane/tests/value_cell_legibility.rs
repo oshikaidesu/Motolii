@@ -76,6 +76,7 @@ fn present_editable(axis: &'static str, value: f64) -> ComponentSlot {
         present: true,
         value,
         editable: true,
+        keyed: false,
         field: None, // この柵は表示 bounds だけを見るので field は使わない。
     }
 }

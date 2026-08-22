@@ -1497,12 +1497,18 @@ impl Shell {
     /// inspector_field_draft`/`self.session.selection` をそのまま貸す)——
     /// ここは `Err` を status 帯へ渡す glue だけ(M13)。
     fn commit_inspector_field(&mut self, field: TransformField) {
-        let t = self.time_at_playhead().unwrap_or(RationalTime::ZERO);
+        // comp が無い(= layer も選択も無い)なら下書きを捨てるだけ —
+        // 旧実装(選択なしで draft を消費して no-op)と同じ安全側。
+        let Ok(Some(composition)) = self.doc.view().composition() else {
+            self.inspector_field_draft = None;
+            return;
+        };
         if let Err(error) = inspector_pane::commit_inspector_field(
             &mut self.doc,
             &mut self.inspector_field_draft,
             self.session.selection,
-            t,
+            self.session.playhead,
+            composition.fps,
             field,
         ) {
             self.status = Some(error);
@@ -1972,15 +1978,21 @@ impl Shell {
 
     /// 値セルの press — click か drag かはまだ未確定
     /// (`inspector_pane::FieldDragState::origin_x` が `None` のまま)。選択
-    /// なし・animated(編集不可)・対応する field が投影に無い、のいずれも
-    /// 黙って無視。
+    /// なし・comp なし・対応する field が投影に無い、のいずれも黙って無視。
+    /// playhead(frame)と fps は press 時点の物を渡す — キー持ち track の
+    /// 確定(キー upsert、`inspector_pane::edited_value_track`)の宛先になる。
     fn start_field_drag(&mut self, field: TransformField) {
+        let Ok(Some(composition)) = self.doc.view().composition() else {
+            return; // comp が無ければ投影も無い — drag は始まらない。
+        };
         let projection = self.inspector_selection();
         inspector_pane::start_field_drag(
             &mut self.inspector_drag,
             self.session.selection,
             projection.as_ref(),
             field,
+            self.session.playhead,
+            composition.fps,
         );
     }
 
