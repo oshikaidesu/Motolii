@@ -387,8 +387,13 @@ impl TimelinePane {
         let rows_height = self.rows_area_height();
 
         // 常時固定ヘッダー(借用のみ — `self` はまだ生きている)。
-        let header = row![rail::corner(self.dims, self.colors, ruler_height), ruler::view(&self)]
-            .height(Length::Fixed(ruler_height));
+        // corner は rail 行リストと同じ固定幅 — ここを Fill にすると flex が
+        // ヘッダー行を等分し、ルーラーが下のクリップ面と揃わない(rail::corner doc)。
+        let header = row![
+            rail::corner(self.dims, self.colors, ruler_height, self.rail_width()),
+            ruler::view(&self)
+        ]
+        .height(Length::Fixed(ruler_height));
 
         // スクロール本体(rail 行リストも借用のみ、`canvas(self)` の直前)。
         let rail_rows = rail::view(&self);

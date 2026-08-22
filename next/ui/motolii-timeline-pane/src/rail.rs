@@ -139,9 +139,23 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
 /// (縦スクロール発注)**: `TimelinePane::view` が常時固定ヘッダー側
 /// (`row![rail::corner(...), ruler::view(...)]`)で直接呼ぶ — この行リスト
 /// (`view`)はもう corner を持たない、モジュール doc 参照。
-pub(crate) fn corner(dims: Dimensions, colors: Colors, ruler_height: f32) -> Element<'static, Message> {
+///
+/// **幅は `Length::Fixed(rail_width)`**(行リスト `view` の
+/// `Length::Fixed(rail_width)` と必ず一致させる)。ここが `Length::Fill` だと、
+/// ヘッダー行の子が corner と `ruler::view` の2つとも Fill になるため
+/// iced の flex が **50/50 に等分**し、corner がウィンドウの半分を占めて
+/// **ルーラーが下のクリップ面と横位置で揃わない**(縦スクロール改修で
+/// corner が行リストからヘッダー行へ移った時に入った欠陥 — 生座標クリック
+/// 試験がルーラー帯を `x >= 512`(既定幅 1024 の半分)でしか拾えないことで
+/// 検出された)。
+pub(crate) fn corner(
+    dims: Dimensions,
+    colors: Colors,
+    ruler_height: f32,
+    rail_width: f32,
+) -> Element<'static, Message> {
     container(Space::new().width(Length::Fill).height(Length::Fill))
-        .width(Length::Fill)
+        .width(Length::Fixed(rail_width))
         .height(Length::Fixed(ruler_height))
         .style(move |_theme| container::Style {
             border: Border {
