@@ -60,7 +60,7 @@ use motolii_core::{camera_screen_from_world_z0, CompSpec, ResolvedCamera};
 use motolii_engine::ObservationCamera;
 use motolii_tokens_rs::{Colors, Dimensions, Ink};
 
-use crate::gizmo::letterbox_screen_from_comp;
+use crate::gizmo::{checked_inverse, letterbox_screen_from_comp};
 use crate::observation_as_resolved;
 
 // ---------------------------------------------------------------------------
@@ -255,7 +255,11 @@ pub fn sheet_screen_from_frame(
     let render_affine = camera_screen_from_world_z0(comp, render_camera);
     let observation_affine =
         camera_screen_from_world_z0(comp, observation_as_resolved(observation));
-    let composite = observation_affine * render_affine.inverse();
+    // `checked_inverse`: det を先に見てから inverse を呼ぶ(退化行列への生
+    // `.inverse()` は glam の自己アサートで panic する — `gizmo::checked_inverse`
+    // doc 参照)。この製品での唯一の正解の形、新しい流儀を発明しない。
+    let render_inverse = checked_inverse(render_affine)?;
+    let composite = observation_affine * render_inverse;
     if !composite.is_finite() {
         return None;
     }

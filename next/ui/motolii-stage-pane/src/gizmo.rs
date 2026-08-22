@@ -64,6 +64,28 @@ use crate::{letterboxed_rect, observation_as_resolved};
 /// その軸は解けない(anchor がハンドルの線上にある)— 開始時の scale を保つ。
 const SOLVE_EPS: f32 = 1e-3;
 
+/// `Affine2::inverse()` への**唯一の生呼び出し口**(scale=0 の det=1 特例を除く —
+/// [`scale_value`] の `SAFE-INVERSE` 注記参照)。退化行列(det=0、例: scale 0)へ
+/// glam の `Mat2::inverse()` を呼ぶと、結果を返す前に `glam_assert!(det != 0.0)` で
+/// 自己アサートして panic する(`debug-glam-assert`/`glam-assert` feature が
+/// workspace のどこかで有効化され unify されているため) — 「呼んでから
+/// `is_finite()` で後始末する」だと**その場で panic**して後始末に辿り着けない。
+/// det を先に見て、退化(0 または非有限)なら inverse を呼ばずに `None` を返す。
+///
+/// この製品での「退化しうる `Affine2` の逆行列」の**唯一の正解の形**
+/// (`anchor_value` で最初に着地した形をここへ集約した)。新しい流儀を発明せず、
+/// 退化しうる `.inverse()` はここを経由すること — `tests/inverse_fence.rs` が
+/// この規律を縛る。
+pub(crate) fn checked_inverse(m: Affine2) -> Option<Affine2> {
+    let det = m.matrix2.determinant();
+    if !det.is_finite() || det == 0.0 {
+        return None;
+    }
+    // SAFE-INVERSE: 直前で det を検査済み(この関数の外では生 inverse を呼ばない)。
+    let inv = m.inverse();
+    inv.is_finite().then_some(inv)
+}
+
 // ---------------------------------------------------------------------------
 // pane ローカル Message(発注書「`GizmoDrag { target_property, phase }` 級」)。
 // 既存の [`crate::Message`] へ variant を足すと shell 側の exhaustive match が
@@ -543,8 +565,7 @@ pub fn gizmo_hit_test(layout: &GizmoLayout, cursor: Point) -> Option<GizmoHandle
 
     // body: レイヤーローカルへ戻して内容矩形の中か(回転/skew/カメラ込みで正しい
     // 判定になる)。ローカルへ戻れない(scale 0 で潰れている)なら body は無い。
-    let local_from_screen = layout.screen_from_local.inverse();
-    if local_from_screen.is_finite() {
+    if let Some(local_from_screen) = checked_inverse(layout.screen_from_local) {
         let local = local_from_screen.transform_point2(Vec2::new(cursor.x, cursor.y));
         if local.x >= 0.0 && local.x <= layout.size[0] && local.y >= 0.0 && local.y <= layout.size[1]
         {
@@ -596,7 +617,10 @@ pub fn scale_value(
         start.skew_degrees,
         start.skew_axis_degrees,
     );
-    // 回転+skew(shear)は det=1 で常に可逆。
+    // SAFE-INVERSE: 回転+skew(shear、scale は固定で [1,1])は det=1 で常に可逆
+    // (回転行列・shear 行列は共に det=1 — shear は `1*1 - 0*tan(skew)` で
+    // tan(skew) がどんな有限値でも打ち消える)。`checked_inverse` を経由しない
+    // 唯一の生 `.inverse()`(`tests/inverse_fence.rs` がこの注記を要求する)。
     let q = rot_skew
         .inverse()
         .transform_vector2(cursor_parent - Vec2::new(start.position[0], start.position[1]));
@@ -703,21 +727,12 @@ pub fn anchor_value(start: &GizmoTarget, cursor_parent: Vec2) -> ([f64; 2], [f64
         start.skew_degrees,
         start.skew_axis_degrees,
     );
-    // `placement.inverse()` を退化行列(det=0、例: scale 0)へ呼ぶと、glam の
-    // `Mat2::inverse()` が `1.0/det` を計算した直後に `glam_assert!` で
-    // 有限性を検査する(`debug-glam-assert`/`glam-assert` feature — 依存側の
-    // どこかが有効化していれば workspace 全体で unify される)ため、
-    // 「呼んでから `is_finite()` で後始末する」だと**その場で panic**する
-    // (下の `is_finite` チェックへ辿り着けない)。det を先に見て、退化
-    // (0 または非有限)なら inverse を呼ばずに開始時の値を返す。
-    let det = placement.matrix2.determinant();
-    if !det.is_finite() || det == 0.0 {
+    // 退化(scale 0 等)なら inverse を呼ばずに開始時の値を返す
+    // ([`checked_inverse`] doc 参照: glam の `Mat2::inverse()` は結果を返す前に
+    // 自己アサートするため、「呼んでから `is_finite()` で後始末する」は書けない)。
+    let Some(local_from_parent) = checked_inverse(placement) else {
         return unchanged;
-    }
-    let local_from_parent = placement.inverse();
-    if !local_from_parent.is_finite() {
-        return unchanged;
-    }
+    };
     let new_anchor = local_from_parent.transform_point2(cursor_parent);
     let rks = LayerPlacement::from_transform(
         [0.0, 0.0],
@@ -762,10 +777,7 @@ impl GizmoDragState {
         handle: GizmoHandle,
         cursor: Point,
     ) -> Option<Self> {
-        let parent_from_screen = layout.screen_from_parent.inverse();
-        if !parent_from_screen.is_finite() {
-            return None;
-        }
+        let parent_from_screen = checked_inverse(layout.screen_from_parent)?;
         let start_cursor_parent = parent_from_screen.transform_point2(Vec2::new(cursor.x, cursor.y));
         Some(Self {
             handle,
@@ -1711,6 +1723,44 @@ mod tests {
         let (anchor, position) = anchor_value(&flat, Vec2::new(400.0, 300.0));
         assert_eq!(anchor, [50.0, 25.0]);
         assert_eq!(position, [320.0, 180.0]);
+    }
+
+    // -----------------------------------------------------------------
+    // 退化行列の再現試験(2026-08-22 発注: anchor_value で実測された
+    // panic クラスが gizmo.rs 内に残していた同じ経路を閉じる)。
+    // -----------------------------------------------------------------
+
+    /// **再現試験**: 層自身の scale を 0 にすると `screen_from_local` が退化する。
+    /// 修正前は body 判定が生 `.inverse()` を呼んでいて、退化行列(det=0)へ
+    /// 呼んだ瞬間 glam の `glam_assert!` で panic していた(`is_finite` チェックへ
+    /// 辿り着けない)。`checked_inverse` 経由になった今は、どのハンドルにも
+    /// 当たらない遠方の点で呼んでも panic せず `None` を返す。
+    #[test]
+    fn hit_test_does_not_panic_when_the_targets_own_scale_is_degenerate() {
+        let mut flat = target();
+        flat.scale = [0.0, 1.0];
+        let layout = layout_with(None, &flat);
+        // bbox は scale.x=0 で x=anchor.x(320) の線に潰れる。原点はどの
+        // ハンドル/anchor からも十分離れている(hit_radius 内に入らない)。
+        assert_eq!(gizmo_hit_test(&layout, Point::new(0.0, 0.0)), None);
+    }
+
+    /// **再現試験**: 親鎖(`world_from_parent`)が退化(scale 0)していると
+    /// `screen_from_parent` も退化する。修正前は `begin` が生 `.inverse()` を
+    /// 呼んでいて同じ経路で panic していた。`checked_inverse` 経由になった今は
+    /// 「掴めない物は掴めないまま」どおり `None` を返し、drag を始めない。
+    #[test]
+    fn begin_returns_none_when_the_parent_chain_is_degenerate() {
+        let mut degenerate_parent = target();
+        degenerate_parent.world_from_parent = Affine2::from_scale(Vec2::new(0.0, 1.0));
+        let layout = layout_with(None, &degenerate_parent);
+        let drag = GizmoDragState::begin(
+            degenerate_parent,
+            &layout,
+            GizmoHandle::Body,
+            Point::new(320.0, 180.0),
+        );
+        assert!(drag.is_none(), "退化した親鎖では drag を始めないはず");
     }
 
     /// 優先順位: 極小レイヤーで anchor が scale ハンドルに飲まれても角が勝つ
