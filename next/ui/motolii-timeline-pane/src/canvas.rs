@@ -255,6 +255,35 @@ pub(crate) fn draw(
         // (`super::rail::view`)へ一本化した。クリップ上の余白は将来の
         // キーフレームオーバーレイのために空けておく。
 
+        // 音声波形(TL7 統合手順1: 「canvas.rs の bar 描画ループから
+        // waveform_segments/waveform_ink を呼ぶ」)。`pane.waveforms` に
+        // 何も無い(=波形取得が計画されていない/`Ready` でない)layer は
+        // 何も描かない — `waveform_state_segments` 自身が
+        // `NotRequested`/`Loading` を空列に落とす(`waveform_view.rs` の
+        // 3状態オラクル参照)ので、ここでは呼ぶだけで分岐を増やさない。
+        if let Some(state) = pane.waveforms.get(&row.id) {
+            let clip_rect = Rectangle {
+                x: start_x,
+                y: row_top + inset,
+                width: (end_x - start_x).max(1.0),
+                height: bar_height,
+            };
+            let segments = crate::waveform_view::waveform_state_segments(state, clip_rect);
+            if !segments.is_empty() {
+                let ink = crate::waveform_view::waveform_ink(pane.colors.data, bar_color);
+                for segment in &segments {
+                    let path = canvas::Path::line(
+                        Point::new(segment.x, segment.y_top),
+                        Point::new(segment.x, segment.y_bottom),
+                    );
+                    frame.stroke(
+                        &path,
+                        canvas::Stroke::default().with_color(ink).with_width(pane.dims.border_width),
+                    );
+                }
+            }
+        }
+
         // 行の区切り(裁定139: 面色の塗り分け=ゼブラの明暗だけに頼らず
         // hairline を足す — mock `.trow{border-bottom:...}` と同じ役目)。
         // 行同士は `.prow` と同じ弱い hairline ロール(区切り=線、

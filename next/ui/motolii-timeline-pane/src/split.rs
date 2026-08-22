@@ -112,44 +112,32 @@
 //!   3引数シグネチャ(発注書どおり)は変えず、複数呼び出しの間だけこの
 //!   module が帳尻を合わせる。
 //!
-//! ## pane-local `Message`(EXACT TARGET 4)
+//! ## `write::Message` への統合(TL4 統合手順、裁定189 追いつきターン)
 //!
-//! [`Message::SplitAtPlayhead`] を宣言するだけで、**`write::Message` へは
-//! まだ統合していない**(EXACT TARGET が `src/split.rs`+`lib.rs` の mod 1行+
-//! tests に限定されているため、`write.rs` は無改修)。
+//! `Message::SplitAtPlayhead` は **この module ではなく `crate::write::Message`**
+//! に住む(pane crate の唯一の公開 `Message` に統合済み — この module が
+//! 独自の pane-local `Message` を宣言していた旧版は削除した。重複させない)。
+//! `PaneState::update` の match arm(`PaneState::split_at_playhead`)が
+//! `session.selected_layers` が空でなければそれを、空なら
+//! `session.selection` の単一選択を `layers` として
+//! [`split_selected_plan`] を呼び、`Ok(intents)` なら `doc.apply_all(intents)`
+//! (失敗時は理由文字列をそのまま返す、既存腕と同じ形 —
+//! `delete_selected_keys`/`finish_drag` と同型)。選択が空なら「選択が無いので
+//! 分割できない」を理由つきで返す(M13)。
 //!
-//! ### 統合手順(次波)
-//!
-//! 1. `write::Message` に `SplitAtPlayhead` 腕を足す(この module の
-//!    [`Message`] は次波でそちらへ統合し、ここでの宣言は消してよい —
-//!    重複させない)。
-//! 2. `PaneState::update` に match arm を足す:
-//!    `session.selected_layers` が空でなければそれを、空なら
-//!    `session.selection` の単一選択を `layers` として
-//!    `split_selected_plan(&doc.view(), &layers, session.playhead)` を呼び、
-//!    `Ok(intents)` なら `doc.apply_all(intents)`(失敗時は理由文字列を
-//!    そのまま返す、既存腕と同じ形 — `delete_selected_keys`/`finish_drag`
-//!    と同型)。選択が空なら「選択が無いので分割できない」を理由つきで
-//!    返す(M13)。
-//! 3. shell 側(root)でキー割当(map id 267 `Command+B`)とメニュー項目
-//!    (id 163/317 相当)を `Message::Timeline(motolii_timeline_pane::Message::SplitAtPlayhead)`
-//!    へ結線する(`ToggleFold`/`ToggleLoop` と同じ「shell 先取りなしで
-//!    `PaneState::update` が完結する」形 — 5例外には数えない)。
-//! 4. id 172/804/1047(Add Edit to All Tracks)を将来採るなら、
-//!    `split_selected_plan(&doc.view(), &doc.view().layers(), at_frame)`
-//!    (選択の代わりに全 layer を渡す)で同じ関数を使い回せる — 新しい
-//!    関数は要らない(map 消化ノートの見送り理由と対で読むこと)。
+//! **shell 側の結線は未着手**(次波・このレーンの RETURN 参照): キー割当
+//! (map id 267 `Command+B`)とメニュー項目(id 163/317 相当)を
+//! `Message::Timeline(motolii_timeline_pane::Message::SplitAtPlayhead)` へ
+//! 結線するのは `motolii-shell` 側の仕事(`ToggleFold`/`ToggleLoop` と同じ
+//! 「shell 先取りなしで `PaneState::update` が完結する」形 — 5例外には
+//! 数えない)。id 172/804/1047(Add Edit to All Tracks)を将来採るなら、
+//! `split_selected_plan(&doc.view(), &doc.view().layers(), at_frame)`
+//! (選択の代わりに全 layer を渡す)で同じ関数を使い回せる — 新しい関数は
+//! 要らない(map 消化ノートの見送り理由と対で読むこと)。
 
 use motolii_store::{
     Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerTiming, PropertySource, StoreView,
 };
-
-/// pane-local message(次波で `write::Message` へ統合、モジュール doc「統合手順」参照)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Message {
-    /// Command+B 相当(map id 267)/メニュー Split(id 163/317 ほか)。
-    SplitAtPlayhead,
-}
 
 /// 1 layer を `at_frame` で split する Intent 列を組む(モジュール doc 「`split_plan`
 /// の契約」参照)。**純関数** — `doc_view` を読むだけで Document は書かない。

@@ -73,6 +73,10 @@ pub use projection::{
     frame_at_x, key_order, property_rows, rows, KeySelectionOp, KeySelector, PropertyKeyProjection,
     PropertyRowProjection, RowProjection,
 };
+/// 音声の有無 + ソース path(TL7 統合手順1)。`RowProjection` の兄弟型 —
+/// `projection.rs` の `AudioRowProjection` doc 参照(`RowProjection` 本体を
+/// 変えない理由)。
+pub use projection::{audio_rows, AudioRowProjection};
 /// **裁定160 切片7で `pub(crate)` → `pub` に緩めた**(`projection.rs` 側の
 /// 個々の宣言も同様)。`motolii-shell::screenshot`(cross-cutting な検分器具、
 /// pane split survey §2.5 — どの pane crate にも属さず assembler 側に残る)が
@@ -173,6 +177,12 @@ pub struct TimelinePane {
     /// を [`Self::with_rename`] で運ぶだけ(`work_area` と同じ形)。`Some` の間、
     /// rail の該当行の名前 text が `text_input` に差し替わる(`rail::layer_row`)。
     rename: Option<(LayerId, String)>,
+    /// 波形取得状態(TL7 統合手順1・3)。`PaneState::waveforms()` を
+    /// [`Self::with_waveforms`] で運ぶだけ(`work_area` と同じ形)。既定は空
+    /// (波形を1本も描かない) — `canvas::draw` の bar 描画ループがこの
+    /// `HashMap` を `row.id` で引き、`Ready` な layer だけ
+    /// `waveform_view::waveform_state_segments`/`waveform_ink` を呼ぶ。
+    waveforms: std::collections::HashMap<LayerId, crate::waveform_view::WaveformState>,
 }
 
 impl TimelinePane {
@@ -205,6 +215,7 @@ impl TimelinePane {
             work_area: None,
             loop_enabled: false,
             rename: None,
+            waveforms: std::collections::HashMap::new(),
         }
     }
 
@@ -231,6 +242,17 @@ impl TimelinePane {
     /// 壊さない)。
     pub fn with_rename(mut self, rename: Option<(LayerId, String)>) -> Self {
         self.rename = rename;
+        self
+    }
+
+    /// `Shell::view` だけが呼ぶ想定(TL7 統合手順1・3)。`PaneState::waveforms()`
+    /// をそのまま渡すだけの薄い builder — `with_work_area` と同じ形(既存の
+    /// 呼び出し元・試験を1つも壊さない、既定は空 = 波形を描かない)。
+    pub fn with_waveforms(
+        mut self,
+        waveforms: std::collections::HashMap<LayerId, crate::waveform_view::WaveformState>,
+    ) -> Self {
+        self.waveforms = waveforms;
         self
     }
 
