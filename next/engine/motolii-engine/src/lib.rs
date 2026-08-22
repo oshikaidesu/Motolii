@@ -15,11 +15,11 @@
 //! この crate 自身は意味を持たない。Document の意味は `motolii-store`、
 //! 補間は `motolii-eval`、描画は `re_renderer` にある。ここは繋ぐだけ。
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 pub mod mask;
-/// TextDocument → 輪郭 → RGBA8(裁定190 切片2)。**まだ `texture_for` からは
-/// 呼ばれていない** — module doc(`text.rs`)参照。
+/// TextDocument → 輪郭 → RGBA8(裁定190 切片2)。**BL4/切片3 で `texture_for` の
+/// 呼び手(`Engine::text_texture_for`)から繋がった** — module doc(`text.rs`)参照。
 pub mod text;
 
 use motolii_compositor::GpuTexture2D;
@@ -27,7 +27,10 @@ use motolii_compositor::{Compositor, CompositorError, Layer, LayerWithPasses};
 use motolii_core::{CompSpec, ResolvedCamera};
 
 use motolii_media::{probe, read_frame_at, MediaError, MediaInfo};
-use motolii_store::{LayerPlacement, LayerSource, Matte, RationalTime, ResolvedLayer, StoreView};
+use motolii_store::{
+    LayerId, LayerPlacement, LayerSource, Matte, RationalTime, ResolvedLayer, StoreView,
+    TextDocument,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
@@ -47,29 +50,30 @@ pub enum EngineError {
     /// 将来 `motolii_compositor::BlendMode` に variant が増えた時の枠として残す。
     #[error("blend mode {0:?} はまだ合成器が対応していない(Normal のみ対応。fork 改造候補)")]
     UnsupportedBlendMode(motolii_store::BlendMode),
-    /// matte はまだ「絵から除外しつつマットとして消費」の経路まで engine から
-    /// 繋がっていない。
+    /// **この発注(テキスト+matte 結線、2026-08-22)で `render_frame` 経路はもう
+    /// 構築しない**——`render_with_camera_override` の `for layer in &resolved`
+    /// ループは `ResolvedLayer.id`(BL4 で store 側に追加済み)から `LayerId → &ResolvedLayer`
+    /// の索引(`by_id`)を作り、`matte.layer` をそこで引いて `Engine::apply_matte`
+    /// (`motolii_compositor::Compositor::matte_layer` の薄いラッパー)へ実際に渡す
+    /// ようになった——matte 元は `matte_sources`(`HashSet<LayerId>`)で通常描画
+    /// リストから除外されるので、二重描画も起きない。
     ///
-    /// **BL4(2026-08-22)時点の状況**: matte 適用の計算そのもの
-    /// (`motolii_compositor::Compositor::matte_layer`)と語彙変換
-    /// (`translate_matte_mode`)は実装済み——もう「合成器が表現できない」わけではない。
-    /// ここで依然 `Err` にしているのは、この関数(`render_with_camera_override` の
-    /// `for layer in resolved` ループ)が **`StoreView::resolved_layers` の返す
-    /// `Vec<ResolvedLayer>` から `LayerId` を復元できない**ため——`matte.layer`
-    /// (matte 元の `LayerId`)自体は `StoreView::resolve(matte.layer, t)` で個別に
-    /// 引けるが、逆に「今ループしているこの `ResolvedLayer` 自身が、他のどれかの
-    /// matte 元として消費されているか」は判定できない(`ResolvedLayer` が `LayerId`
-    /// を運ばない設計、`motolii-store` 側 doc 参照)。matte 元を通常描画リストから
-    /// **正しく除外**できない限り、matte 元自身がもう1枚の可視 layer として二重に
-    /// 描かれてしまう(AE の track matte 意味論と食い違う)——黙ってこの不正確な絵を
-    /// 出すよりは、ここで明示的に止める(既存文化)。
-    ///
-    /// **store 側にこの形が要る**(このレーンは store を触らない、RETURN 参照):
-    /// `StoreView::resolved_layers` が `Vec<(LayerId, ResolvedLayer)>` を返すか、
-    /// `ResolvedLayer` 自身に `id: LayerId` を持たせるかのどちらかが揃えば、この
-    /// ループを id 付きで回せるようになり、この `Err` を外して実消費へ繋げられる。
-    #[error("matte はまだ engine が絵から除外しつつ消費する経路に繋がっていない({0:?}。store 側の LayerId 相関待ち)")]
+    /// **`layers_from_resolved`(裁定171 v2 M4、zero-copy GPU 出力の並走レーン)は
+    /// 依然この `Err` を返す**——技術的な壁ではなく**意図的なスコープの線引き**
+    /// (この発注の EXACT TARGET は `render_frame` 経路であって、`&StoreView` を
+    /// 持たずに動く M4 の別レーンへは踏み込まない、supervisor 裁定「additive のみ」
+    /// を尊重)。matte 自体は `TextDocument` を必要としない(`StoreView` が無くても
+    /// `resolved: &[ResolvedLayer]` の `id` だけで消費できる)ので、M4 レーン側が
+    /// 望めばここも同じ手口(`by_id`/`matte_sources`)でそのまま繋げる——次に触る人
+    /// 向けにその余地だけ書き残す。
+    #[error("matte はまだ engine が絵から除外しつつ消費する経路に繋がっていない({0:?}。zero-copy(M4)レーンは対象外)")]
     UnsupportedMatte(Matte),
+    /// `LayerSource::Text` のラスタライズ失敗(`crate::text::rasterize_text_document`
+    /// が返す2種の失敗をそのまま畳む——フォントが読めない/OpenType feature タグが
+    /// 不正、または canvas が描けない大きさ)。`Ok(None)`(styles 空/content 空)は
+    /// エラーではないので、ここには乗らない([`crate::text`] module doc 参照)。
+    #[error(transparent)]
+    Text(#[from] crate::text::TextRenderError),
 }
 
 /// 背景 layer の `LayerPlacement::order`(= `re_renderer::DepthOffset`、`i16`)。
@@ -158,6 +162,10 @@ pub struct Engine {
     frames: HashMap<(String, i64), GpuTexture2D>,
     /// `frames` の投入順。古い順に捨てるためだけに持つ。
     frame_order: VecDeque<(String, i64)>,
+    /// text layer → GPU texture。**`textures`(`LayerSource` 鍵)を再利用しない**
+    /// ([`TextCacheKey`] の doc 参照——`LayerSource::Text` は中身を持たない unit
+    /// variant なので、複数の text layer がそのまま使うと1つの鍵に衝突する)。
+    text_textures: HashMap<TextCacheKey, GpuTexture2D>,
 }
 
 impl Engine {
@@ -168,6 +176,7 @@ impl Engine {
             probes: HashMap::new(),
             frames: HashMap::new(),
             frame_order: VecDeque::new(),
+            text_textures: HashMap::new(),
         })
     }
 
@@ -187,6 +196,7 @@ impl Engine {
             probes: HashMap::new(),
             frames: HashMap::new(),
             frame_order: VecDeque::new(),
+            text_textures: HashMap::new(),
         })
     }
 
@@ -342,48 +352,76 @@ impl Engine {
             });
         }
 
-        for layer in resolved {
-            // matte/blend の判定を texture のアップロードより先にやる — 対応外なら
-            // 無駄な ffmpeg 起動/GPU アップロードをする前に落とす(裁定108(c) 系の
-            // 「素材の外なら描かない」と同じく、ここも早く判定する)。
-            if let Some(matte) = layer.matte {
-                return Err(EngineError::UnsupportedMatte(matte));
+        // BL4/切片3: `matte.layer` を突き合わせるための索引(`ResolvedLayer.id` が
+        // 運ばれるようになったので作れる、`EngineError::UnsupportedMatte` の doc 参照)。
+        let by_id: HashMap<LayerId, &ResolvedLayer> =
+            resolved.iter().map(|layer| (layer.id, layer)).collect();
+        // matte 元として指名されている layer 全部。**通常描画リストからは除外する**
+        // (AE/Lottie の track matte 意味論 — matte 元自身はもう1枚の可視 layer として
+        // 重ならない。「手前の兄弟に暗黙に効く」ではなく `matte.layer` に指名された
+        // layer だけが対象なので、除外も名指しの集合で行う)。
+        let matte_sources: HashSet<LayerId> = resolved
+            .iter()
+            .filter_map(|layer| layer.matte.map(|matte| matte.layer))
+            .collect();
+
+        for layer in &resolved {
+            if matte_sources.contains(&layer.id) {
+                continue;
             }
+
             let blend_mode = translate_blend_mode(layer.blend_mode)?;
             // store→compositor の effect 語彙変換(裁定153 S3、EXACT TARGET 1)。
             // texture のアップロードより前に計算しても副作用は無い(純関数)ので、
-            // 上の matte/blend と同じ「早く判定する」並びに合わせてここに置く。
+            // 上の blend 判定と同じ「早く判定する」並びに合わせてここに置く。
             let passes = translate_effect_passes(&layer.effects);
 
-            let (texture, natural) = self.texture_for(&layer.source, layer.source_frame)?;
+            let (texture, natural) = self.texture_for_layer(view, layer, t, comp)?;
             let Some(texture) = texture else {
-                // 素材の外の時刻。この layer は今フレームに居ない。
+                // 素材の外の時刻、または text layer に描く物が無い。この layer は
+                // 今フレームに居ない。
                 continue;
             };
-            // 素材の寸法は Document が知らないことがある(実素材は probe しないと
-            // 分からない)。その時だけ実寸で埋める。**大きさは transform の scale で
-            // 動く**ので、ここは「板のローカル矩形」を決めているだけ(裁定59)。
-            let size = [
-                if layer.declared_size[0] > 0.0 {
-                    layer.declared_size[0]
-                } else {
-                    natural[0]
-                },
-                if layer.declared_size[1] > 0.0 {
-                    layer.declared_size[1]
-                } else {
-                    natural[1]
-                },
-            ];
+            let built = Layer {
+                texture,
+                size: layer_size(layer, natural),
+                // **置き方はそのまま持ち回る** — 並べ直すとそこが翻訳層になる。
+                placement: layer.placement,
+                pinned: layer.pinned,
+                blend_mode,
+            };
+
+            let final_layer = match layer.matte {
+                None => built,
+                Some(matte) => {
+                    let Some(source) = by_id.get(&matte.layer).copied() else {
+                        // マット元がこの時刻の `resolved_layers()` に居ない(削除された、
+                        // または timing の外)。matte を適用できないので本体も描かない
+                        // (AE: track matte 対象はマット元が消えると一緒に消える —
+                        // 黙って matte 抜きの絵を出すと「勝手に露出した」ことになる)。
+                        continue;
+                    };
+                    let (source_texture, source_natural) =
+                        self.texture_for_layer(view, source, t, comp)?;
+                    let Some(source_texture) = source_texture else {
+                        // マット元自身がこの時刻に絵を持たない(素材の外、text なら
+                        // 空文字列等)——同じ理由で本体も描かない。
+                        continue;
+                    };
+                    let source_blend = translate_blend_mode(source.blend_mode)?;
+                    let source_layer = Layer {
+                        texture: source_texture,
+                        size: layer_size(source, source_natural),
+                        placement: source.placement,
+                        pinned: source.pinned,
+                        blend_mode: source_blend,
+                    };
+                    self.apply_matte(comp, camera, &built, &source_layer, matte.mode)?
+                }
+            };
+
             layers.push(LayerWithPasses {
-                layer: Layer {
-                    texture,
-                    size,
-                    // **置き方はそのまま持ち回る** — 並べ直すとそこが翻訳層になる。
-                    placement: layer.placement,
-                    pinned: layer.pinned,
-                    blend_mode,
-                },
+                layer: final_layer,
                 passes,
             });
         }
@@ -532,12 +570,12 @@ impl Engine {
     /// `motolii_compositor::Compositor::matte_layer` へそのまま委譲するだけの薄い
     /// ラッパー)。
     ///
-    /// **まだ [`Self::render_frame`] 等から自動では呼ばれない**
-    /// (`EngineError::UnsupportedMatte` の doc 参照 — `resolved: Vec<ResolvedLayer>`
-    /// から matte 元を「通常描画リストから除外する」判定に要る `LayerId` 相関が
-    /// store 側にまだ無い)。この関数**単体**は matte 適用の計算だけを正しく行う
-    /// ——呼び出し元が `target`/`matte_source` を正しく対応付けて渡す責務を持つ
-    /// (store が id 付きの形を返すようになった時に配線する差し込み口、RETURN 参照)。
+    /// **[`Self::render_frame`]/[`Self::render_frame_without_background`]/
+    /// [`Self::render_frame_with_view_camera`] から `render_with_camera_override` 経由で
+    /// 自動的に呼ばれる**(2026-08-22、テキスト+matte 結線)——`by_id`/`matte_sources`
+    /// で matte 元を突き合わせて除外した上でここへ委譲する(`EngineError::UnsupportedMatte`
+    /// の doc 参照)。この関数自体は今も「呼び出し元が `target`/`matte_source` を正しく
+    /// 対応付けて渡す」薄いラッパーのまま——対応付けの責務はループ側にある。
     pub fn apply_matte(
         &mut self,
         comp: CompSpec,
@@ -572,6 +610,13 @@ impl Engine {
         self.frames.len()
     }
 
+    /// 実測用。抱えている text texture の枚数([`TextCacheKey`] 鍵の数)——
+    /// 「同じ内容は再利用し、内容が変わったら増える」ことをテストが数で確かめられる
+    /// ようにするための窓口(`cached_frame_count` と同じ形)。
+    pub fn cached_text_texture_count(&self) -> usize {
+        self.text_textures.len()
+    }
+
     fn remember_frame(&mut self, key: (String, i64), texture: GpuTexture2D) {
         if self.frames.insert(key.clone(), texture).is_none() {
             self.frame_order.push_back(key);
@@ -591,6 +636,92 @@ impl Engine {
             let key = self.frame_order.remove(at).expect("position が指した要素");
             self.frame_order.push_back(key);
         }
+    }
+
+    /// `layer.source` を texture 化する共通口。**`Text` だけ特別扱い** —
+    /// `texture_for`(下記)は `&LayerSource`/`source_frame` しか受け取らず、
+    /// `LayerSource::Text` はコンテンツを持たない印(unit variant)なのでどの layer の
+    /// `TextDocument` を読むべきか `texture_for` の中だけでは決まらない
+    /// ([`text_texture_for`](Self::text_texture_for) の doc 参照)——それ以外の
+    /// variant は今まで通り `texture_for` へそのまま委譲する。
+    ///
+    /// `render_with_camera_override` のループが本体・matte 元の両方でこれを呼ぶ
+    /// (`matte.layer` を突き合わせた後の matte 元も、本体と同じ経路で texture 化する)。
+    fn texture_for_layer(
+        &mut self,
+        view: &StoreView<'_>,
+        layer: &ResolvedLayer,
+        t: RationalTime,
+        comp: CompSpec,
+    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+        if layer.source == LayerSource::Text {
+            self.text_texture_for(view, layer.id, t, comp)
+        } else {
+            self.texture_for(&layer.source, layer.source_frame)
+        }
+    }
+
+    /// `LayerSource::Text` の texture 化(裁定190 切片3、`texture_for` の
+    /// `LayerSource::Text` 枝の doc が示していた差し込み口そのもの)。
+    ///
+    /// **`view`/`layer_id` を追加で受け取る** — `ResolvedLayer` は自分の
+    /// `TextDocument` を運ばない(`LayerSource::Text` が中身を持たない unit variant
+    /// である理由と同じ、`motolii_store::LayerSource` のモジュール doc 参照)ので、
+    /// `StoreView::text_document(layer_id)` で store から直接引く。
+    ///
+    /// canvas は **comp 全域**(左上原点、`Canvas::centered` は使わない——`text.rs` の
+    /// 単体試験がそうしているのと同じ座標系)を使う。テキストの組版はまだ folding-box
+    /// (`declared_size`/anchor)を持たないので、layer の「板」を comp と同じ大きさに
+    /// 固定し、実際の字面の位置は raster 内の画素そのもの(ペン位置)で決まる —
+    /// これは今回の結線で選んだ最小の設計であって、`declared_size` で好きな矩形へ
+    /// 描かせる(folding box)機能はこの発注の範囲外(次切片候補)。
+    fn text_texture_for(
+        &mut self,
+        view: &StoreView<'_>,
+        layer_id: LayerId,
+        t: RationalTime,
+        comp: CompSpec,
+    ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+        let Some(document) = view
+            .text_document(layer_id)
+            .map_err(|e| EngineError::Store(e.to_string()))?
+        else {
+            // `SetTextDocument` がまだ一度も書かれていない — 描く物が無い
+            // (`StoreView::text_document` の doc と同じ「無い」≠「壊れている」)。
+            return Ok((None, [0.0, 0.0]));
+        };
+
+        let canvas = motolii_vector::Canvas {
+            width: comp.width,
+            height: comp.height,
+            origin_x: 0,
+            origin_y: 0,
+        };
+
+        let key = TextCacheKey::new(layer_id, &document, t, canvas.width, canvas.height);
+        if let Some(texture) = self.text_textures.get(&key) {
+            return Ok((
+                Some(texture.clone()),
+                [canvas.width as f32, canvas.height as f32],
+            ));
+        }
+
+        let Some(raster) = text::rasterize_text_document(&document, t, &canvas)? else {
+            // style 表が空、または今の内容(Hold 評価後)が空文字列 — 描く物が無い
+            // (エラーではない、`rasterize_text_document` の doc 参照)。どちらの分岐も
+            // cosmic-text のフォント読み込みへ進む前の早期 return なので、キャッシュ
+            // しなくても再計算コストは小さい。
+            return Ok((None, [0.0, 0.0]));
+        };
+
+        let texture = self.compositor.upload_rgba(
+            "text",
+            &raster.premultiplied_rgba8,
+            raster.width,
+            raster.height,
+        )?;
+        self.text_textures.insert(key, texture.clone());
+        Ok((Some(texture), [raster.width as f32, raster.height as f32]))
     }
 
     fn texture_for(
@@ -668,23 +799,138 @@ impl Engine {
             // (`motolii-store::view::world_affine`)が親 transform として使うだけで、
             // Group 自身のピクセルは無い)。
             //
-            // **`Text` は裁定190 切片2 でラスタライズ経路自体は用意した**
-            // (`crate::text::rasterize_text_document` — `TextDocument` の既定行
-            // (裁定98)を読んで `motolii-vector::text` でシェイピング → render)。
-            // それでもここでは呼べない: `LayerSource::Text` はコンテンツを持たない印
-            // (unit variant)で、`ResolvedLayer` も `LayerId` を持たない
-            // (`motolii_store::ResolvedLayer::masks` の doc 参照)ため、どの layer の
-            // `TextDocument` を読むべきか `texture_for` の中だけでは決まらない。
-            // BL4(matte)が同じ壁に当たって同じ選択をしている
-            // (`02d5cec6`: 「matte の render_frame 結線は store 要求
-            // (ResolvedLayer に LayerId)待ちで明示 Err 維持」)。この発注は
-            // 「store 読み専用」なので、ここでも store 側の変更を待つ —
-            // `ResolvedLayer` が layer 識別子を持つ日に、ここは
-            // `crate::text::rasterize_text_document` を1回呼んで
-            // `self.compositor.upload_rgba` へ渡すだけで繋がる(`text.rs` module doc 参照)。
-            LayerSource::Null | LayerSource::Shape | LayerSource::Text | LayerSource::Group => {
+            // **`Text` はここでは呼べない**(`&LayerSource`/`source_frame` しか
+            // 受け取らない口なので `TextDocument` へ辿り着けない、変わらぬ理由)——
+            // ただし2026-08-22 の結線でこの関数自体が `Text` の呼び手ではなくなった:
+            // `render_with_camera_override`/`layers_from_resolved` はどちらも
+            // `Text` の場合ここへは来ず [`Self::text_texture_for`](`Self::texture_for_layer`
+            // 経由)を呼ぶ——ここに来る `Text` は `texture_for` を直接呼ぶ他の呼び手
+            // (このモジュール内には現状無い)向けの安全側の既定値として残す。
+            LayerSource::Text => Ok((None, [0.0, 0.0])),
+            // 裁定173 の `Group`。**shape はまだ描画に繋いでいない**
+            // (演算子/組版から RGBA を焼く経路が未実装)。null layer は元々絵を持たず
+            // (裁定どおり)、`Group` も同じく絵を持たない(裁定173 — Group は「子を
+            // 持てる」という印だけの layer、合成は世界合成
+            // (`motolii-store::view::world_affine`)が親 transform として使うだけで、
+            // Group 自身のピクセルは無い)。
+            LayerSource::Null | LayerSource::Shape | LayerSource::Group => {
                 Ok((None, [0.0, 0.0]))
             }
+        }
+    }
+}
+
+/// `declared_size`(Document 側の指定)が無ければ(`<=0`)`natural`(実寸/素材由来)で埋める。
+/// **大きさは transform の scale で動く**ので、ここは「板のローカル矩形」を決めている
+/// だけ(裁定59)。`render_with_camera_override` の本体・matte 元の両方で使う共通式
+/// (以前は2箇所に手書きで複製されていた)。
+fn layer_size(layer: &ResolvedLayer, natural: [f32; 2]) -> [f32; 2] {
+    [
+        if layer.declared_size[0] > 0.0 {
+            layer.declared_size[0]
+        } else {
+            natural[0]
+        },
+        if layer.declared_size[1] > 0.0 {
+            layer.declared_size[1]
+        } else {
+            natural[1]
+        },
+    ]
+}
+
+/// テキスト texture のキャッシュ鍵(裁定190 切片3、EXACT TARGET 1「キャッシュ鍵に
+/// 何を使うか設計して doc に明記」への回答)。
+///
+/// # なぜ `textures: HashMap<LayerSource, GpuTexture2D>` を再利用しないか
+///
+/// `LayerSource` は `Eq + Hash` である必要がある(engine の texture cache キーである
+/// ため、`motolii_store::LayerSource` のモジュール doc 参照)——その代償として
+/// `Null`/`Shape`/`Text`/`Group` は中身を持たない unit variant になっている。
+/// つまり **`LayerSource::Text` は全部の text layer で同じ値**であり、`textures` を
+/// そのまま使うと2枚目の text layer を描いた瞬間に1枚目の texture が上書きされる
+/// (comp に text layer が2枚以上あると事故る)。text 専用の鍵型がここで要る理由。
+///
+/// # 鍵の中身
+///
+/// - **`layer: LayerId`** — どの layer の texture か。内容が完全に一致する2枚の
+///   text layer は理論上 texture を共有してもよいが、layer ごとに別枠にした方が
+///   「この layer が編集された」という直感と cache のライフサイクル(layer が
+///   消えても text_textures の他の entry は無関係)が一致する——`textures` が
+///   `LayerSource` を鍵にして「内容が同じなら共有する」設計を選んでいるのとは
+///   **意図的に非対称**(text は layer 単位、solid/media は内容単位)。
+/// - **`canvas_width`/`canvas_height`** — ラスタライズ先の canvas 寸法
+///   (= [`text_texture_for`](Engine::text_texture_for) 呼び出し時点の comp 解像度)。
+///   comp resize で同じ文字でも画素配置(組版の基準点)が変わりうるので鍵に含める。
+/// - **`content_snapshot`** — **時刻 `t` そのものではなく、`t` で評価した後の中身**
+///   を JSON 化した文字列。
+///
+/// # なぜ `t`(`RationalTime`)を鍵に使わないか
+///
+/// `TextDocument::content` は Hold 評価(裁定92 — 動くのは中身の文字列だけで組版は
+/// 静止する)。同じキーフレーム区間内の異なる `t` は**同じ絵になる**——`t` を鍵に
+/// 使うと「1フレームごとに別キャッシュ行」になり、静止テキストが毎フレーム
+/// 再ラスタライズされてこのキャッシュを作る意味が消える。逆に「評価後の中身」を
+/// 鍵にすれば、Hold 区間の全フレームが1つの cache hit に落ちる
+/// (`text_layer_reuses_cached_texture_across_frames_within_a_hold_span` が固定する)。
+///
+/// # なぜ `TextDocument`/`Revision` をそのまま鍵にできないか
+///
+/// `TextDocument`(`motolii_store::TextDocument`)は `PartialEq` はあるが `Eq`/`Hash`
+/// を derive できない(`TextDocumentStyle::fill: [f64; 4]` 等の浮動小数、`f64` は
+/// `Eq`/`Hash` 非実装)。`motolii_store::Document::revision()`/`DisplayRevision` は
+/// **Document 全体**の世代であって `ResolvedLayer` 単位の細粒度カウンタを持たない
+/// (`motolii-store` 側リサーチで確認済み——`re_chunk_store::ChunkStoreGeneration` を
+/// 私有フィールドに包むだけで `Hash` も無い)ので、そのままでは使えない。
+/// `serde_json::to_string`(`TextDocument` 内の全型は `motolii-store` 側で既に
+/// `Serialize` を derive 済み)で `Eq + Hash` を持つ `String` へ落とすのが最小の
+/// 追加コストで正しい鍵を作る道——`serde_json` は `next/Cargo.toml` の既存 workspace
+/// 依存(`motolii-store` が内部で使っている物と同じ)をこの crate へ配線するだけで、
+/// 新規の外部依存は増やさない(`Cargo.toml` 参照)。
+///
+/// # 上限を持たない理由
+///
+/// `frames`(実素材フレーム)と違う判断。`frames` に上限が要る理由は「秒間30枚 ×
+/// 分単位の書き出しで数千キーが生まれる」実測(`Engine::frames` の doc 参照)だが、
+/// text layer の内容はキーフレームの数だけしか値を持たない(編集者が打つ Hold
+/// キーフレームは通常フレーム数のオーダーにならない)——増えて問題になったら
+/// `frames` と同じ FIFO を足せばよい(先に最適化すると決まっていない形に合わせた
+/// 形になる、という既存文化と同じ判断)。
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct TextCacheKey {
+    layer: LayerId,
+    canvas_width: u32,
+    canvas_height: u32,
+    content_snapshot: String,
+}
+
+impl TextCacheKey {
+    /// `document`/`t` から「この layer の絵を決める入力」を JSON 化した文字列へ畳む。
+    /// `t` そのものは鍵に含めない(型 doc の「なぜ `t` を鍵に使わないか」節参照)。
+    fn new(
+        layer: LayerId,
+        document: &TextDocument,
+        t: RationalTime,
+        canvas_width: u32,
+        canvas_height: u32,
+    ) -> Self {
+        // Hold 評価(`rasterize_text_document` が読むのと同じ値)。
+        let content = document.content.eval(t);
+        // シリアライズ失敗は実質あり得ない(NaN も循環参照も持たない構造体の組み合わせ)
+        // ——万一失敗しても cache miss 扱いになるだけで安全側(絵は壊れない、毎回
+        // 描き直すだけ)なので `unwrap_or_default` で空文字列へ倒す。
+        let content_snapshot = serde_json::to_string(&(
+            &content,
+            document.justify,
+            document.wrap_size,
+            &document.styles,
+        ))
+        .unwrap_or_default();
+        Self {
+            layer,
+            canvas_width,
+            canvas_height,
+            content_snapshot,
         }
     }
 }

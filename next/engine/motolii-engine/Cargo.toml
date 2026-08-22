@@ -11,6 +11,10 @@ motolii-media.workspace = true
 motolii-store.workspace = true
 motolii-vector.workspace = true
 thiserror.workspace = true
+# テキスト texture のキャッシュ鍵(裁定190 切片3、`TextCacheKey` 参照)を作るためだけに
+# 使う。新規の外部依存ではない — `motolii-store` が内部で既に使っている
+# workspace 依存をこの crate へも配線するだけ(`wgpu` を M4 で足したのと同じ形)。
+serde_json.workspace = true
 # 裁定171 v2(M4、supervisor 裁定で ALLOWLIST 拡張): `Engine::with_device`/
 # `render_*_to_texture` の公開シグネチャが `wgpu::Device`/`Queue`/`Texture`/
 # `TextureView` を運ぶために要る。単一版(next/Cargo.toml の `[workspace.dependencies]`
