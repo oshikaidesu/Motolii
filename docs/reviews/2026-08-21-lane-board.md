@@ -13,13 +13,18 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| TXT | 意味probe | worktree(probes) | 字形描画ルート裁定(cosmic-text 再利用が本命・lh/tr が数値で効く合格線) |
-| BL4 | 意味実装 | worktree(compositor/engine/store) | 非分離blend4+track matte(BL3 の型・即検収) |
-| AS | 意味実装 | worktree(store+shell) | 自動保存機構(世代ローテ・atomic・dirty時のみ・再生中スキップ)。**shell 側は commit 分離指示済み(WIRE-6 衝突回避)** |
-| WIRE-6 | 結線 | worktree(shell) | 第6波全結線: マーカー/マーキー/方眼(Viewメニュー)/anchor対書き/rename/補間・restack keymap/create実体化/Export窓(Cmd+E) |
-| TL4 | 実装 | worktree(timeline-pane) | Split動詞(163/171 — 既存Intent合成列・1undo・キー時刻不変) |
-| EXP2 | 意味実装 | worktree(export) | 範囲付き実行口+静止画書き出し(530/663 — EXP顔の逆依存解消) |
-| WAVE | 意味実装 | worktree(media) | 音声波形peaks抽出(ストリーミング畳み+キャッシュ — timeline波形表示の意味側) |
+| WIRE-6 | 結線 | shell | 第6波全結線(マーカー/マーキー/方眼=Viewメニュー/anchor対書き/rename/補間・restack/create実体化/Export窓 Cmd+E) |
+| TL4 | 実装 | timeline(split.rs 新) | Split動詞(163/171・既存Intent合成列・1undo) |
+| TL5 | 実装 | timeline(rows.rs 新) | レイヤー行操作束 B52第2切片(範囲選択・一括M/S/L・fold) |
+| INS-text | 実装 | inspector | TEXT section(B46・型別section第3号・store実在プロパティのみ) |
+| BR4 | 実装 | browser | 素材整理 B08残り(並べ替え・表示形式・検索拡張) |
+| TFY | 実装 | settings | **taffy転写第1号**(CSS字面→TaffyBox+±1px oracle — 裁定183初適用) |
+| WS | 実装 | shell-state | ワークスペースレイアウト B26(開閉で分割木を失わない=既知の穴の根治) |
+| BL4 | 意味 | compositor+engine | 非分離blend4+track matte |
+| AS | 意味 | store(persist.rs) | 自動保存機構(世代ローテ・atomic) |
+| EXP2 | 意味 | export | 範囲付き実行口+静止画 |
+| WAVE | 意味 | media | 波形peaks(ストリーミング畳み+キャッシュ) |
+| TXT | 意味probe | probes | 字形描画ルート裁定(前任: cosmic-text/swash で英字成功→CJK検証) |
 | WIRE-5 | 実装 | worktree(shell+icons1個) | 第5波の結線: TL+6点(keymap裁定: JKL=シャトル・意味点ジャンプ=,/.仮置き・ループ=Cmd+L)+GZ(overlay+transient/SetTrack)+SET+(sections差し替え)+repeat icon vendoring |
 
 
