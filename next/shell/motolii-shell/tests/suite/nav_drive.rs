@@ -191,6 +191,9 @@ fn d_jump_to_clip_edge_is_a_no_op_without_a_selection() {
 fn e_navigation_keys_do_not_fire_while_a_text_field_has_already_captured_the_key() {
     use iced::keyboard::{key::Named, Key, Modifiers};
 
+    // 第5波結線(B21+B18): J/K はシャトルへ移設されたが「text 入力中は
+    // 横取りしない」対象であることは変わらない。移設先の `,`/`.` と新設の
+    // L(シャトル順)/B/N(Set Work Area In/Out)も同じ裸キー群として並べる。
     let candidates: Vec<Key> = vec![
         Key::Named(Named::ArrowLeft),
         Key::Named(Named::ArrowRight),
@@ -198,8 +201,13 @@ fn e_navigation_keys_do_not_fire_while_a_text_field_has_already_captured_the_key
         Key::Named(Named::End),
         Key::Character("j".into()),
         Key::Character("k".into()),
+        Key::Character("l".into()),
         Key::Character("i".into()),
         Key::Character("o".into()),
+        Key::Character(",".into()),
+        Key::Character(".".into()),
+        Key::Character("b".into()),
+        Key::Character("n".into()),
     ];
 
     for key in &candidates {
@@ -224,10 +232,14 @@ fn e_navigation_keys_do_not_fire_while_a_text_field_has_already_captured_the_key
 // ---------------------------------------------------------------------------
 
 #[test]
-fn f_command_modified_j_k_i_o_are_not_stolen() {
+fn f_command_modified_bare_keys_are_not_stolen() {
     use iced::keyboard::{Key, Modifiers};
 
-    for ch in ["j", "k", "i", "o"] {
+    // 第5波結線で裸キーが増えた(j/k/l = シャトル、,/. = 意味点ジャンプ移設先、
+    // b/n = Set Work Area In/Out)。Cmd 付きを奪わない柵は全員に同じく掛かる —
+    // ただし Cmd+L だけは意図した割当(ループトグル移設先)、Cmd+N は File 束
+    // (New Project)なので、この「奪わない」検査の対象から除く。
+    for ch in ["j", "k", "i", "o", ",", "."] {
         let key = Key::Character(ch.into());
         assert!(
             motolii_shell::resolve_navigation_key(&key, Modifiers::COMMAND, false).is_none(),
@@ -238,6 +250,96 @@ fn f_command_modified_j_k_i_o_are_not_stolen() {
             "裸の {ch} が発火しない"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// (g) 第5波結線の keymap 移設(B21+B18、supervisor 裁定・拘束6の仮置き)
+// ---------------------------------------------------------------------------
+
+/// **移設の差分表そのもの**: J/K/L = シャトル(逆/停止/順)、旧 J/K(意味点
+/// ジャンプ)は `,`/`.` へ、旧 L(ループトグル、正典 §5 既定)は Cmd+L へ。
+/// B/N = Set Work Area In/Out、Shift+Home/End = 作業範囲の先頭/末尾へ。
+#[test]
+fn g_the_fifth_wave_keymap_reassignments_resolve_to_the_new_verbs() {
+    use iced::keyboard::{key::Named, Key, Modifiers};
+    use motolii_shell::timeline_pane::{Message as TlMessage, ShuttleCommand};
+
+    let resolve = |key: &Key, modifiers: Modifiers| {
+        motolii_shell::resolve_navigation_key(key, modifiers, false)
+    };
+
+    // J/K/L = シャトル。
+    assert!(matches!(
+        resolve(&Key::Character("j".into()), Modifiers::default()),
+        Some(Message::Timeline(TlMessage::Shuttle(ShuttleCommand::Reverse)))
+    ));
+    assert!(matches!(
+        resolve(&Key::Character("k".into()), Modifiers::default()),
+        Some(Message::Timeline(TlMessage::Shuttle(ShuttleCommand::Stop)))
+    ));
+    assert!(matches!(
+        resolve(&Key::Character("l".into()), Modifiers::default()),
+        Some(Message::Timeline(TlMessage::Shuttle(ShuttleCommand::Forward)))
+    ));
+    // Shift+J/L(map 1056/1058 Fast)は「連打相当」— 同じ Message。
+    assert!(matches!(
+        resolve(&Key::Character("l".into()), Modifiers::SHIFT),
+        Some(Message::Timeline(TlMessage::Shuttle(ShuttleCommand::Forward)))
+    ));
+
+    // 意味点ジャンプは `,`/`.`(Shift = layer_only。Shift 押下で `<`/`>` が
+    // 届くレイアウトも同じ動詞)。
+    assert!(matches!(
+        resolve(&Key::Character(",".into()), Modifiers::default()),
+        Some(Message::JumpMeaningPoint { direction: JumpDirection::Prev, layer_only: false })
+    ));
+    assert!(matches!(
+        resolve(&Key::Character(".".into()), Modifiers::default()),
+        Some(Message::JumpMeaningPoint { direction: JumpDirection::Next, layer_only: false })
+    ));
+    assert!(matches!(
+        resolve(&Key::Character("<".into()), Modifiers::SHIFT),
+        Some(Message::JumpMeaningPoint { direction: JumpDirection::Prev, layer_only: true })
+    ));
+    assert!(matches!(
+        resolve(&Key::Character(">".into()), Modifiers::SHIFT),
+        Some(Message::JumpMeaningPoint { direction: JumpDirection::Next, layer_only: true })
+    ));
+
+    // ループトグルは Cmd+L へ。
+    assert!(matches!(
+        resolve(&Key::Character("l".into()), Modifiers::COMMAND),
+        Some(Message::Timeline(TlMessage::ToggleLoop))
+    ));
+
+    // B/N = Set Work Area In/Out(裸キー。Cmd+N は File 束のまま)。
+    assert!(matches!(
+        resolve(&Key::Character("b".into()), Modifiers::default()),
+        Some(Message::Timeline(TlMessage::SetWorkAreaIn))
+    ));
+    assert!(matches!(
+        resolve(&Key::Character("n".into()), Modifiers::default()),
+        Some(Message::Timeline(TlMessage::SetWorkAreaOut))
+    ));
+    assert!(matches!(
+        resolve(&Key::Character("n".into()), Modifiers::COMMAND),
+        Some(Message::NewProjectRequested)
+    ));
+
+    // Shift+Home/End = 作業範囲の先頭/末尾へ(素の Home/End は comp 先頭/末尾
+    // のまま)。
+    assert!(matches!(
+        resolve(&Key::Named(Named::Home), Modifiers::SHIFT),
+        Some(Message::JumpToWorkAreaStart)
+    ));
+    assert!(matches!(
+        resolve(&Key::Named(Named::End), Modifiers::SHIFT),
+        Some(Message::JumpToWorkAreaEnd)
+    ));
+    assert!(matches!(
+        resolve(&Key::Named(Named::Home), Modifiers::default()),
+        Some(Message::JumpPlayheadToStart)
+    ));
 }
 
 /// Alt+←/→ は既存の `NudgeKeyframe` の領分 — 新設の Step とここで衝突しては

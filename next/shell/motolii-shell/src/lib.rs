@@ -21,6 +21,8 @@
 //! Document の写しではなく、undo の対象でもない(rerun も選択は blueprint store の
 //! 外に置いている)。**1箇所で持ち、全 pane がそこを読む**ので M14 は満たされる。
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use iced::widget::{
@@ -31,9 +33,9 @@ use iced::{wgpu, Element, Length, Task};
 use motolii_core::{CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
-    AssetDraft, Composition, DisplayRevision, Document, Intent, LayerAttrsPatch, LayerId,
-    LayerMeta, LayerSource, LayerTiming, RationalTime, ResolvedLayer, Revision, SourceFingerprintV1,
-    Speed, StoreView,
+    AssetDraft, Composition, DisplayRevision, Document, Fps, Intent, LayerAttrsPatch, LayerId,
+    LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, ResolvedLayer, Revision,
+    SourceFingerprintV1, Speed, StoreView, Value,
 };
 
 pub mod clipboard;
@@ -361,6 +363,14 @@ pub enum Message {
     /// JumpToClipIn/Out(正典 §8.1)。既定割当 I(In)/O(Out)。選択 layer の
     /// clip の In/Out へ — トリムではない(playhead だけが動く)。
     JumpClipEdge(timeline::nav::ClipEdge),
+    /// JumpToLoopStart(map 1064「作業範囲の先頭へ」、B18/第5波結線)。既定割当
+    /// Shift+Home。着地点は [`timeline_pane::WorkArea::first_frame`] —
+    /// 作業範囲が無ければ no-op(`JumpClipEdge` と同じ「跳ぶ先が無ければ
+    /// 動かない」の形)。
+    JumpToWorkAreaStart,
+    /// JumpToLoopEnd(map 1064「作業範囲の末尾へ」)。既定割当 Shift+End。
+    /// 着地点は [`timeline_pane::WorkArea::last_frame`](半開の `end - 1`)。
+    JumpToWorkAreaEnd,
 
     // ---- cross-cutting(timeline drag と inspector drag 両方が読む、pane split
     // survey §1.3「core 残留が妥当」) ----
@@ -371,10 +381,13 @@ pub enum Message {
     EscapePressed,
 
     // ---- Settings パネル(タスク#18、裁定160 切片9で pane ローカル Message へ集約) ----
-    /// `motolii_settings_pane::Message` を1本で畳む(iced 標準型 — 子 pane の
-    /// `Message` を親が wrap する形)。腕ごとの doc は `settings_pane::Message`
-    /// 側を参照。
-    Settings(settings_pane::Message),
+    /// `motolii_settings_pane::sections::Message` を1本で畳む(iced 標準型 —
+    /// 子 pane の `Message` を親が wrap する形)。SET+(B12 第1切片)の結線で
+    /// 旧 `settings_pane::Message` 直持ちから section 版へ差し替えた — 旧腕は
+    /// [`settings_pane::sections::Message::Legacy`] が丸ごと包む(sections.rs
+    /// 冒頭 doc「結線互換の縫い目」の手順どおり)。腕ごとの doc は
+    /// `settings_pane::sections::Message` 側を参照。
+    Settings(settings_pane::sections::Message),
 
     // ---- Stage 観測カメラ(裁定157、裁定160 切片10で `motolii-stage-pane`
     // crate へ抽出、pane split survey §6 切片10) ----
@@ -382,6 +395,13 @@ pub enum Message {
     /// Message を親が wrap する」形、`Message::Settings`/`Message::Timeline`
     /// と同型)。腕ごとの doc は `stage::Message` 側を参照。
     Stage(stage::Message),
+    /// Stage ギズモの drag 事象(GZ 結線、第5波)。[`stage::GizmoDrag`] は
+    /// 既存 [`stage::Message`] と独立の pane-local message(exhaustive match を
+    /// 壊さないための独立型 — `gizmo.rs` 冒頭 doc)なので、root はこの腕で
+    /// `.map` して畳む。契約(1 drag = Start → Move* → Commit|Cancel)の
+    /// 意味づけは [`Shell::update_gizmo`] — Inspector の drag-to-scrub と同経路
+    /// (`Document::set_transient` → 確定時 `Intent::SetTrack` 1回 = 1 undo)。
+    Gizmo(stage::GizmoDrag),
 
     // ---- Browser pane(ζ 縫い目調査+裁定162 切片 B0/B1/B2/B3) ----
     /// `motolii_browser_pane::Message` を1本で畳む(`Message::Settings`/
@@ -620,6 +640,38 @@ struct DisplaySource {
     observation_rgba: Option<Vec<u8>>,
 }
 
+/// Stage ギズモ drag、shell 側の transient(GZ 結線、第5波)。**Document では
+/// ない** — Inspector の `FieldDragState` と同じ「確定まで front だけが持つ」
+/// 身分。ギズモの座標解(`stage::GizmoDragState`)は canvas 内部に住み、shell は
+/// 「どの layer のどの property を書いているか」と、確定のキー upsert の宛先
+/// (Start 時点の playhead/fps — Inspector drag と同じ press 時点固定)だけを
+/// 持つ。
+struct GizmoShellDrag {
+    layer: LayerId,
+    /// Start が申告した property(Esc 連鎖 [`Shell::cancel_gizmo_drag`] の
+    /// transient 掃除の宛先。Move/Commit は値側 [`stage::GizmoValue::property`]
+    /// を読む — 契約上 1 drag = 1 property なので同じ値)。
+    property: stage::GizmoProperty,
+    /// Start 時点の playhead(frame)と fps。確定のキー upsert
+    /// (`inspector_pane::edited_value_track`)の宛先 — drag の起点値は Start
+    /// 時点の絵から読まれているので、確定の宛先も同じ時刻に固定する
+    /// (`inspector_pane::FieldDragState::playhead_frame` と同じ判断)。
+    playhead_frame: i64,
+    fps: Fps,
+    /// 1回でも `set_transient` を書いたか(Cancel 時に overlay を外す要否)。
+    moved: bool,
+}
+
+/// [`stage::GizmoValue`](store の単位そのまま — `gizmo.rs` doc)→ store の
+/// [`Value`]。shell 側は写すだけ(GZ 契約「shell 側は `Value::Vec2`/`Value::F64`
+/// へ写すだけ」そのもの)。
+fn gizmo_store_value(value: stage::GizmoValue) -> Value {
+    match value {
+        stage::GizmoValue::Position(v) | stage::GizmoValue::Scale(v) => Value::Vec2(v),
+        stage::GizmoValue::Rotation(v) => Value::F64(v),
+    }
+}
+
 pub struct Shell {
     doc: Document,
     session: Session,
@@ -698,6 +750,11 @@ pub struct Shell {
     background_draft: Option<BackgroundFieldDraft>,
     /// ui_scale(%)欄の編集下書き。同上。
     ui_scale_draft: Option<String>,
+    /// Settings 窓の Composition 数値欄(W/H/FPS/尺、SET+ B12 第1切片)の編集
+    /// 下書き。**Document ではない**(`background_draft` の隣に住む同じ身分 —
+    /// Enter で `settings_pane::sections::commit_comp_field` が1回の
+    /// `Intent::SetComposition` を出すまで store に触らない)。
+    comp_draft: Option<settings_pane::sections::CompFieldDraft>,
 
     // ---- Stage 観測カメラ(裁定157) ----
     /// 「自由に見る」ときの作業視点。**Document には乗らない** — `checkerboard`
@@ -723,6 +780,25 @@ pub struct Shell {
     /// `Session` でもない** — undo に一切乗らない表示/デバイス専用の状態
     /// (`observation`/`clipboard` と同じ身分)。
     transport: Transport,
+    /// JKL シャトルの現在倍率(B21、第5波結線)。意味(1→2→4→8 の状態機械)は
+    /// [`timeline_pane::ShuttleState::apply`] が正本 — shell はこの値を持ち、
+    /// tick(`Message::PlaybackTick`)ごとに `rate` フレームを
+    /// [`timeline_pane::work_area::advanced_playhead`] で進めるだけ。
+    /// `transport` と同格の表示/再生専用状態(undo に乗らない)。実時間
+    /// transport とは相互排他([`Shell::apply_shuttle`] 参照)。
+    shuttle: timeline_pane::ShuttleState,
+    /// Stage ギズモ drag の shell 側 transient(GZ 結線 — [`GizmoShellDrag`]
+    /// doc 参照)。`inspector_drag` と同格。
+    gizmo_drag: Option<GizmoShellDrag>,
+    /// Media 素材の実寸 cache(path → probe 結果、GZ 結線)。ギズモの
+    /// [`stage::GizmoTarget::size`] は「Document が寸法を知らない素材は
+    /// 呼び出し側が実寸を渡す」契約 — engine の texture 実寸は公開 API が
+    /// 無いため、同じ実寸源(`motolii_media::probe`、engine も ffprobe 系で
+    /// 実寸を得る)を path ごとに1回だけ叩いて控える。`view(&self)` から
+    /// 読むため `RefCell`(表示専用 cache の interior mutability — Document
+    /// でも Session でもない)。probe 失敗も `None` で控える(失敗する path を
+    /// 毎フレーム叩き直さない)。
+    media_size_cache: RefCell<HashMap<String, Option<[f32; 2]>>>,
 
     // ---- File 束(MB-1、裁定176) ----
     /// OS 副作用の注入口(`file_dialogs.rs` 冒頭 doc 参照)。production は
@@ -789,10 +865,14 @@ impl Shell {
                 checkerboard: false,
                 background_draft: None,
                 ui_scale_draft: None,
+                comp_draft: None,
                 observation: None,
                 resolution_cap: stage::PreviewResolutionCap::default(),
                 clipboard: clipboard::Clipboard::default(),
                 transport: Transport::new(),
+                shuttle: timeline_pane::ShuttleState::stopped(),
+                gizmo_drag: None,
+                media_size_cache: RefCell::new(HashMap::new()),
                 dialogs,
                 current_path: None,
                 saved_revision,
@@ -889,10 +969,14 @@ impl Shell {
             checkerboard: false,
             background_draft: None,
             ui_scale_draft: None,
+            comp_draft: None,
             observation: None,
             resolution_cap: stage::PreviewResolutionCap::default(),
             clipboard: clipboard::Clipboard::default(),
             transport: Transport::new(),
+            shuttle: timeline_pane::ShuttleState::stopped(),
+            gizmo_drag: None,
+            media_size_cache: RefCell::new(HashMap::new()),
             // 器具は screenshot 検分専用(発注書「トンマナ検分の器具」)なので
             // production の rfd ではなく`RfdDialogs` をそのまま渡しておく ──
             // 器具経路は `Message::NewProjectRequested` 等を一切発行しない
@@ -932,7 +1016,10 @@ impl Shell {
         // 実時間再生(A2): 再生中だけtickを束ねる — Pause中はSubscriptionから
         // 落ちる。裁定166: tickは`iced::window::frames()`(vsync由来)へ
         // 置き換え済みで、OSスレッドのsleepは無い(`transport.rs`のdoc参照)。
-        let ticks = if self.transport.is_running() {
+        // JKL シャトル(B21、第5波結線)も同じ tick に乗る — シャトルは実時間
+        // clock を持たない(1 tick = `rate` フレーム、`advance_playback_tick`)
+        // ので、走っている間だけ購読が要るのは transport と同型。
+        let ticks = if self.transport.is_running() || !self.shuttle.is_stopped() {
             transport::tick_subscription().map(|()| Message::PlaybackTick)
         } else {
             iced::Subscription::none()
@@ -1022,6 +1109,11 @@ impl Shell {
                     let duration = self.composition().map(|c| c.duration_frames).unwrap_or(0);
                     self.session.playhead = timeline::nav::comp_end_frame(duration);
                 }
+                // JKL シャトル(B21、第5波結線)— transport 4腕と同じ「shell
+                // 先取りの例外」(`timeline_pane::Message::Shuttle` doc): 実時間
+                // 再生の clock は shell(A2)が持つので、状態遷移と tick 駆動を
+                // ここで畳む(`PaneState::update` では no-op)。
+                timeline_pane::Message::Shuttle(command) => self.apply_shuttle(command),
                 other => {
                     if let Some(reason) =
                         self.timeline.update(other, &mut self.doc, &mut self.session, self.keyboard_modifiers)
@@ -1040,17 +1132,40 @@ impl Shell {
                 self.jump_meaning_point(direction, layer_only);
             }
             Message::JumpClipEdge(edge) => self.jump_clip_edge(edge),
+            // map 1064(B18、第5波結線): 作業範囲の先頭/末尾へ。範囲が無ければ
+            // no-op(`jump_clip_edge` と同じ「跳ぶ先が無ければ動かない」)。
+            Message::JumpToWorkAreaStart => {
+                if let Some(area) = self.timeline.work_area() {
+                    self.session.playhead = area.first_frame();
+                }
+            }
+            Message::JumpToWorkAreaEnd => {
+                if let Some(area) = self.timeline.work_area() {
+                    self.session.playhead = area.last_frame();
+                }
+            }
             Message::KeyboardModifiersChanged(modifiers) => self.keyboard_modifiers = modifiers,
-            // Esc は Timeline ドラッグを優先してキャンセルする(clip → key の順、
-            // どちらも掴んでいなければ Inspector 側(drag/typing 下書き)を試す
-            // — 同時に成立するのは片方だけなので順序自体に意味は無い、排他)。
+            // Esc は Timeline ドラッグを優先してキャンセルする(clip → key →
+            // ループ帯 → gizmo の順、どれも掴んでいなければ Inspector 側
+            // (drag/typing 下書き)を試す — 同時に成立するのは1つだけなので
+            // 順序自体に意味は無い、排他)。ループ帯は捨てるだけでは戻らない
+            // (live 更新)ので `cancel_loop_drag` が origin を書き戻す
+            // (裁定151「キャンセルの一般化」の柵、B18 の supervisor 結線)。
+            // gizmo は canvas 側も Esc で `GizmoPhase::Cancel` を publish する
+            // (`gizmo.rs`)が、こちらの連鎖にも置く — どちらが先でも
+            // `cancel_gizmo_drag` は冪等。
             Message::EscapePressed => {
-                if !self.timeline.cancel_drag() && !self.timeline.cancel_key_drag() {
+                if !self.timeline.cancel_drag()
+                    && !self.timeline.cancel_key_drag()
+                    && !self.timeline.cancel_loop_drag()
+                    && !self.cancel_gizmo_drag()
+                {
                     self.cancel_inspector_interaction();
                 }
             }
             Message::Settings(msg) => task = self.update_settings(msg),
             Message::Stage(msg) => self.update_stage(msg),
+            Message::Gizmo(event) => self.update_gizmo(event),
             // B2/B3: rail scope 選択/検索欄/Clear/ToggleBrowserPanel の4腕
             // (`browser_pane::Message`)を pane 側の唯一の書き口
             // (`PaneState::update`)へそのまま委譲する(`timeline_pane::
@@ -1965,6 +2080,14 @@ impl Shell {
         if self.is_dragging() {
             return;
         }
+        // シャトル走行中の Space = 停止(B21 結線)。シャトルも「再生中」の
+        // 一種なので、Play‖Pause の「再生中→停止」の読みをそのまま延長する —
+        // 停止せず実時間 transport を重ねて起動しない(2つの clock を併走
+        // させない、`apply_shuttle` と対称の排他)。
+        if !self.shuttle.is_stopped() {
+            self.shuttle = timeline_pane::ShuttleState::stopped();
+            return;
+        }
         if self.transport.is_running() {
             self.freeze_playhead_from_transport();
             self.transport.stop();
@@ -1973,11 +2096,28 @@ impl Shell {
         }
     }
 
-    /// 進行中の掴みがあるか(Timeline clip/key ドラッグ + Inspector 値セル
-    /// ドラッグ)。`toggle_playback`(拘束5)専用の判定 — 個々の drag 状態は
-    /// それぞれの pane/フィールドの持ち物のまま(このメソッドは束ねて読むだけ)。
+    /// JKL シャトル(B21、第5波結線)。意味(1→2→4→8 の倍率状態機械)は
+    /// [`timeline_pane::ShuttleState::apply`] が正本 — ここが持つ判断は2つだけ:
+    /// 拘束5(再生と掴みは相互排他 — `toggle_playback` と同じ柵)と、実時間
+    /// transport との排他(シャトルへ乗る時は clock 側を位置 freeze してから
+    /// 畳む — 2つの再生源を併走させない)。
+    fn apply_shuttle(&mut self, command: timeline_pane::ShuttleCommand) {
+        if self.is_dragging() {
+            return;
+        }
+        if self.transport.is_running() {
+            self.freeze_playhead_from_transport();
+            self.transport.stop();
+        }
+        self.shuttle = self.shuttle.apply(command);
+    }
+
+    /// 進行中の掴みがあるか(Timeline clip/key/ループ帯ドラッグ + Inspector
+    /// 値セルドラッグ + Stage ギズモドラッグ)。`toggle_playback`(拘束5)専用の
+    /// 判定 — 個々の drag 状態はそれぞれの pane/フィールドの持ち物のまま
+    /// (このメソッドは束ねて読むだけ)。
     fn is_dragging(&self) -> bool {
-        self.timeline.is_dragging() || self.inspector_drag.is_some()
+        self.timeline.is_dragging() || self.inspector_drag.is_some() || self.gizmo_drag.is_some()
     }
 
     /// Pause の直前に呼ぶ: 今の再生位置を`Session::playhead`へ確定させる
@@ -1996,7 +2136,39 @@ impl Shell {
     /// `Session::playhead` へ写す。comp 終端に達したら位置を終端へ揃えて
     /// 自動 Pause する(`JumpPlayheadToEnd`と同じ`comp_end_frame`を使うので
     /// 「終端」の定義が二重にならない)。
+    ///
+    /// **第5波結線(B21+B18)**: playhead の1歩は
+    /// [`timeline_pane::work_area::advanced_playhead`] を通る — ループ on・
+    /// 作業範囲の中を再生している時だけ範囲内で折り返す(範囲外・ループ off は
+    /// 従来どおり clamp/自動 Pause)。JKL シャトル走行中は実時間 clock ではなく
+    /// tick 駆動(1 tick = `rate` フレーム — `shuttle.rs` doc「1 tick に進む
+    /// フレーム数 = rate」)で同じ関数を通す。
     fn advance_playback_tick(&mut self) {
+        let duration = self.comp_duration();
+        let area = self.timeline.work_area();
+        let loop_enabled = self.timeline.loop_enabled();
+
+        // ---- JKL シャトル(B21) — 実時間 clock を持たない tick 駆動 ----
+        if !self.shuttle.is_stopped() {
+            let current = self.session.playhead;
+            let next = timeline_pane::work_area::advanced_playhead(
+                current,
+                i64::from(self.shuttle.rate),
+                area,
+                loop_enabled,
+                duration,
+            );
+            if next == current {
+                // 端で clamp されて進めない(ループ捕捉外)— transport の
+                // 「終端で自動 Pause」と同型の自動停止。
+                self.shuttle = timeline_pane::ShuttleState::stopped();
+            } else {
+                self.session.playhead = next;
+            }
+            return;
+        }
+
+        // ---- 実時間 transport(A2) ----
         let Some(fps) = self.composition().map(|c| c.fps) else {
             self.transport.stop();
             return;
@@ -2004,7 +2176,17 @@ impl Shell {
         let Some(frame) = self.transport.position_frame(fps) else {
             return;
         };
-        let duration = self.comp_duration();
+        let current = self.session.playhead;
+        // ループ捕捉(B18): 範囲の中を再生している時だけ折り返す(外は普通に
+        // 通過 — `advanced_playhead` doc「罠にしない」)。clock は線形に進み
+        // 続けるので、「clock と playhead の差」を1歩として渡す — 折り返し後も
+        // `start + (clock - start) % len` に畳まれ、tick ごとに安定する
+        // (rem_euclid が範囲長で畳むため前回の折り返し位置に依存しない)。
+        if loop_enabled && area.is_some_and(|a| a.contains(current)) {
+            self.session.playhead =
+                timeline_pane::work_area::advanced_playhead(current, frame - current, area, true, duration);
+            return;
+        }
         let end = timeline::nav::comp_end_frame(duration);
         if frame >= end {
             self.session.playhead = end;
@@ -2031,13 +2213,37 @@ impl Shell {
 
     // ---- Settings パネル(タスク#18、裁定160 切片9) ----
 
-    /// pane ローカル `Message` を畳んで書き口へ渡す glue。write ロジックの実体は
-    /// `motolii_settings_pane::{apply_background_preset, commit_background_channel,
-    /// commit_ui_scale}`(自由関数、`&mut Document`/`&mut Tokens`/下書きを明示
-    /// 引数で受け取る形 — pane crate は `&mut self` を持てないため)。ここでは
-    /// `self.doc`/`self.tokens`/下書きフィールドをそのまま貸すだけで、拒否理由
-    /// (`Result::Err`)を `self.status` へ writeする以外の判断は持たない。
-    fn update_settings(&mut self, message: settings_pane::Message) -> Task<Message> {
+    /// pane ローカル `Message`(SET+ の [`settings_pane::sections::Message`])を
+    /// 畳んで書き口へ渡す glue。sections.rs 冒頭 doc「結線互換の縫い目」の手順
+    /// 2そのもの: 新項目2腕(`CompFieldInput`/`CompFieldSubmit` —
+    /// `commit_comp_field` が read-modify-write の `Intent::SetComposition` を
+    /// 1回出す)+ 旧腕は [`Self::update_settings_legacy`] へ丸ごと委譲。
+    fn update_settings(&mut self, message: settings_pane::sections::Message) -> Task<Message> {
+        use settings_pane::sections;
+        match message {
+            sections::Message::Legacy(legacy) => return self.update_settings_legacy(legacy),
+            sections::Message::CompFieldInput(field, text) => {
+                self.comp_draft = Some(sections::CompFieldDraft { field, text });
+            }
+            sections::Message::CompFieldSubmit(field) => {
+                if let Err(error) =
+                    sections::commit_comp_field(&mut self.doc, &mut self.comp_draft, field)
+                {
+                    self.status = Some(error);
+                }
+            }
+        }
+        Task::none()
+    }
+
+    /// 旧 `settings_pane::Message` の腕(SET+ 以前の全項目)。write ロジックの
+    /// 実体は `motolii_settings_pane::{apply_background_preset,
+    /// commit_background_channel, commit_ui_scale}`(自由関数、`&mut Document`/
+    /// `&mut Tokens`/下書きを明示引数で受け取る形 — pane crate は `&mut self` を
+    /// 持てないため)。ここでは `self.doc`/`self.tokens`/下書きフィールドを
+    /// そのまま貸すだけで、拒否理由(`Result::Err`)を `self.status` へ write
+    /// する以外の判断は持たない。
+    fn update_settings_legacy(&mut self, message: settings_pane::Message) -> Task<Message> {
         match message {
             settings_pane::Message::ToggleSettingsPanel => {
                 // S2(裁定182/188): 意味が「レイアウト分岐」→「窓 open/close」
@@ -2126,6 +2332,101 @@ impl Shell {
                 self.checkerboard = !self.checkerboard;
             }
         }
+    }
+
+    // ---- Stage ギズモ(GZ 結線、第5波) ----
+
+    /// ギズモ drag の契約(`stage::GizmoDrag` doc: 1 drag = Start → Move* →
+    /// Commit|Cancel)を Inspector の drag-to-scrub と同じ経路へ写す:
+    /// - Start: shell 側 transient([`GizmoShellDrag`])を立てるだけ(Document
+    ///   は触らない)。宛先時刻(playhead/fps)はこの時点で凍結。
+    /// - Move: `Document::set_transient`(edit timeline に触れない overlay —
+    ///   undo/redo の意味論は drag 中ずっと不変)。
+    /// - Commit: transient を外し、`Intent::SetTrack` を**1回**だけ出す
+    ///   (1 drag = 1 undo)。track の意味は値セル編集と同じ
+    ///   [`inspector_pane::edited_value_track`](キー無し=静的書き換え・
+    ///   キー持ち= playhead へのキー upsert、AE 作法)。
+    /// - Cancel: transient を外すだけ(Esc・空クリック)。
+    fn update_gizmo(&mut self, event: stage::GizmoDrag) {
+        match event.phase {
+            stage::GizmoPhase::Start { property } => {
+                let Ok(Some(composition)) = self.doc.view().composition() else {
+                    return;
+                };
+                self.gizmo_drag = Some(GizmoShellDrag {
+                    layer: event.layer,
+                    property,
+                    playhead_frame: self.session.playhead,
+                    fps: composition.fps,
+                    moved: false,
+                });
+            }
+            stage::GizmoPhase::Move { value } => {
+                let Some(drag) = self.gizmo_drag.as_mut() else {
+                    return;
+                };
+                let Ok(property) = PropertyId::new(value.property().property_name()) else {
+                    return;
+                };
+                let layer = drag.layer;
+                drag.moved = true;
+                self.doc.set_transient(layer, property, gizmo_store_value(value));
+            }
+            stage::GizmoPhase::Commit { value } => {
+                let Some(drag) = self.gizmo_drag.take() else {
+                    return;
+                };
+                let Ok(property) = PropertyId::new(value.property().property_name()) else {
+                    return;
+                };
+                // transient は `track()` に映らないので、ここで読むのは drag
+                // 開始前の本 track そのもの(`finish_field_drag` と同じ注記)。
+                let base_track = self.doc.view().track(drag.layer, &property).ok().flatten();
+                let mut write_error = None;
+                match inspector_pane::edited_value_track(
+                    base_track.as_ref(),
+                    drag.playhead_frame,
+                    drag.fps,
+                    gizmo_store_value(value),
+                ) {
+                    Ok(track) => {
+                        if let Err(error) = self.doc.apply(Intent::SetTrack {
+                            layer: drag.layer,
+                            property: property.clone(),
+                            track,
+                        }) {
+                            write_error = Some(format!("値を書けない: {error}"));
+                        }
+                    }
+                    Err(error) => write_error = Some(error),
+                }
+                // 書き込み失敗時も overlay は必ず外す(`finish_field_drag` と
+                // 同じ — overlay を残さない)。
+                self.doc.clear_transient(drag.layer, &property);
+                if let Some(error) = write_error {
+                    self.status = Some(error);
+                }
+            }
+            stage::GizmoPhase::Cancel => {
+                self.cancel_gizmo_drag();
+            }
+        }
+    }
+
+    /// Esc 連鎖用(clip/key/loop の並び — `Message::EscapePressed` 腕)。
+    /// transient overlay は edit timeline に触れていないので、外すだけで復元が
+    /// 成立する(`inspector_pane::cancel_field_interaction` と同型)。冪等 —
+    /// canvas 側の Esc(`GizmoPhase::Cancel`)と二重に届いても2回目は `false`。
+    fn cancel_gizmo_drag(&mut self) -> bool {
+        let Some(drag) = self.gizmo_drag.take() else {
+            return false;
+        };
+        if drag.moved {
+            if let Ok(property) = PropertyId::new(drag.property.property_name()) {
+                self.doc.clear_transient(drag.layer, &property);
+            }
+        }
+        true
     }
 
     // ---- Inspector の drag-to-scrub ----
@@ -2500,6 +2801,10 @@ impl Shell {
             .with_key_drag_active(self.timeline.key_drag_active())
             .with_clip_preview(self.timeline.clip_preview())
             .with_key_preview(self.timeline.key_preview())
+            // B21+B18(第5波結線): 作業範囲/ループの状態は `PaneState` が持ち
+            // (`work_area.rs` doc「型の置き場」)、絵と当たりへはこの読み口
+            // 経由で毎フレーム運ぶ(`with_playing` と同じ薄い builder)。
+            .with_work_area(self.timeline.work_area(), self.timeline.loop_enabled())
     }
 
     /// `stage::StageOverlay` の組み立て(裁定157・S1〜S3)。`Shell::view` が
@@ -2532,6 +2837,81 @@ impl Shell {
         ))
     }
 
+    /// `stage::GizmoOverlay` の組み立て(GZ 結線、第5波)。選択 layer の
+    /// [`stage::GizmoTarget`] が組めた時だけ `Some` — `stage_overlay` と同じ
+    /// 「毎フレーム不変な投影を作り直す」形で、`Shell::view` が `stack!` の
+    /// 最上段へ積む。
+    ///
+    /// `size` の出典(`GizmoTarget::size` の契約「Document が寸法を知らない
+    /// 素材は呼び出し側が実寸を渡す」):
+    /// - Solid = `declared_size`(Document が知っている)
+    /// - Media = 実寸([`Self::media_natural_size`] — path ごとに1回だけ probe)
+    /// - Null/Shape/Text/Group = 寸法の正本が shell から引けない(演算子・組版
+    ///   側が決める)ため**ギズモを出さない**(Q0「触れない物を描かない」の
+    ///   安全側 — RETURN 逸脱報告)。
+    pub fn stage_gizmo_overlay(&self) -> Option<stage::GizmoOverlay> {
+        let layer = self.session.selection?;
+        let composition = self.composition()?;
+        let store = self.doc.view();
+        let t = self.time_at_playhead()?;
+        // 「今この時刻に見えているか」+ source/declared_size の読みは resolve
+        // に任せる(`gizmo_target` 自身も resolve で門をかける — 二重だが読みは
+        // 安い、判定の再実装をしない)。
+        let resolved = store.resolve(layer, t).ok().flatten()?;
+        let size = if resolved.declared_size[0] > 0.0 && resolved.declared_size[1] > 0.0 {
+            resolved.declared_size
+        } else if let LayerSource::Media { path, .. } = &resolved.source {
+            self.media_natural_size(path)?
+        } else {
+            return None;
+        };
+        let target = stage::gizmo_target(&store, layer, self.session.playhead, size)?;
+        let comp = motolii_core::CompSpec {
+            width: composition.width,
+            height: composition.height,
+        };
+        let render_camera = self
+            .time_at_playhead()
+            .and_then(|t| store.resolve_camera(t).ok())
+            .unwrap_or_default();
+        Some(stage::GizmoOverlay::new(
+            comp,
+            render_camera,
+            self.observation,
+            target,
+            self.dims(),
+            self.tokens.colors,
+        ))
+    }
+
+    /// Media 素材の実寸(表示上の寸法 — 回転メタデータ適用後、
+    /// `motolii_media::MediaInfo` doc)。path ごとに1回だけ probe して
+    /// `media_size_cache` に控える(失敗も `None` で控え、毎フレーム叩き直さ
+    /// ない)。`Shell` 構造体フィールドの doc も参照。
+    fn media_natural_size(&self, path: &str) -> Option<[f32; 2]> {
+        let mut cache = self.media_size_cache.borrow_mut();
+        if let Some(cached) = cache.get(path) {
+            return *cached;
+        }
+        let probed = motolii_media::probe(path)
+            .ok()
+            .map(|info| [info.width as f32, info.height as f32]);
+        cache.insert(path.to_owned(), probed);
+        probed
+    }
+
+    /// 作業範囲の現在値(B18、第5波結線)。運転席(`tests/suite/`)が
+    /// 「B/N・ループ帯ドラッグ → 範囲が立つ」「Esc → 復元」を検分する読み口
+    /// (`timeline_rows`/`markers` と同じ「pane 自身が読むのと同じ状態」の形)。
+    pub fn timeline_work_area(&self) -> Option<timeline_pane::WorkArea> {
+        self.timeline.work_area()
+    }
+
+    /// ループ on/off の現在値(同上 — `advance_playback_tick` が読むのと同じ値)。
+    pub fn timeline_loop_enabled(&self) -> bool {
+        self.timeline.loop_enabled()
+    }
+
     /// daemon の窓別 view dispatcher(S1、裁定182/188)。[`Shell::view`]
     /// (main 窓の絵)は**改名も改形もしない** — 既存の `.view()` 呼び出し
     /// (tests/`screenshot.rs`/`transport.rs` 等 78 箇所)を無傷に保つための
@@ -2557,9 +2937,14 @@ impl Shell {
         }
     }
 
-    /// Settings 窓の絵(S2、裁定182/188)。中身は既存 [`settings_pane::view`]
-    /// **そのまま**(投影のみ受ける純関数 — probe §Q4「第2窓の view へそのまま
-    /// 移せる」。スタイル改変なし)。root の余白は main 窓の [`Shell::view`] と
+    /// Settings 窓の絵(S2、裁定182/188)。中身は SET+(B12 第1切片)の
+    /// [`settings_pane::sections::view`] — section 分け(COMPOSITION /
+    /// APPEARANCE / PLAYBACK)+ Composition の W/H/FPS/尺 編集。旧
+    /// `settings_pane::view` の直呼びは第5波結線で撤去済み(sections.rs 冒頭
+    /// doc の手順3 — 旧関数自体の撤去は settings-pane crate 側の後続)。
+    /// PLAYBACK 節の実測値(`Engine::cached_frame_count()` /
+    /// `Engine::FRAME_CACHE_LIMIT`)はここで注入する(sections が GPU 系依存を
+    /// 持たないための注入形)。root の余白は main 窓の [`Shell::view`] と
     /// 同じ `spacing_l` — 窓が違っても余白文法は同じ。旧・全幅ストリップに
     /// 積んでいた題帯(`panel_title_band`)は置かない: pane 名の名札の役は
     /// OS 窓の titlebar("Settings"、[`Shell::window_title`])が担う —
@@ -2567,12 +2952,20 @@ impl Shell {
     fn view_settings_window(&self) -> Element<'_, Message> {
         let dims = self.dims();
         let colors = self.tokens.colors;
+        let composition = self.composition();
         container(
-            settings_pane::view(
-                self.composition().as_ref(),
-                self.background_draft.as_ref(),
-                self.tokens.ui_scale,
-                self.ui_scale_draft.as_deref(),
+            settings_pane::sections::view(
+                settings_pane::sections::ViewModel {
+                    composition: composition.as_ref(),
+                    background_draft: self.background_draft.as_ref(),
+                    comp_draft: self.comp_draft.as_ref(),
+                    ui_scale: self.tokens.ui_scale,
+                    ui_scale_draft: self.ui_scale_draft.as_deref(),
+                    preview_cache: Some(settings_pane::sections::PreviewCacheStats {
+                        held_frames: self.engine.cached_frame_count(),
+                        limit: Engine::FRAME_CACHE_LIMIT,
+                    }),
+                },
                 dims,
                 colors,
             )
@@ -2638,6 +3031,7 @@ impl Shell {
                 pane_layout::PaneKind::Stage => stage_pane(
                     self.frame.as_ref(),
                     self.stage_overlay(),
+                    self.stage_gizmo_overlay(),
                     self.observation,
                     self.resolution_cap,
                     self.checkerboard,
@@ -2796,11 +3190,15 @@ impl Shell {
                 dims,
                 colors,
             ),
-            // **Settings**(歯車)。Icon::Settings+tooltip "Settings"。
+            // **Settings**(歯車)。Icon::Settings+tooltip "Settings"。旧腕は
+            // SET+ 結線で `sections::Message::Legacy` が包む(sections.rs 冒頭
+            // doc「結線互換の縫い目」)。
             Self::header_icon_action(
                 motolii_icons::Icon::Settings,
                 "Settings",
-                Message::Settings(settings_pane::Message::ToggleSettingsPanel),
+                Message::Settings(settings_pane::sections::Message::Legacy(
+                    settings_pane::Message::ToggleSettingsPanel,
+                )),
                 dims,
                 colors,
             ),
@@ -4085,10 +4483,14 @@ fn inspector_pointer_event(
 /// ようにするため(`tests/suite/nav_drive.rs` の (e)/(f))。
 ///
 /// - `captured` の間は何も返さない(正典 §5「テキスト入力中は横取りしない」)。
-///   Home/End/裸の j/k/i/o は text_input 内でもカーソル移動・文字入力として
-///   意味を持つキーなので、renaming/InspectorField 編集中に奪ってはいけない
-/// - j/k/i/o は裸キー — `modifiers.command()` が立っていれば何も返さない
-///   (前任レーンの実測教訓: Cmd+O 等の既存/将来ショートカットを奪わない)
+///   Home/End/裸の j/k/l/i/o/b/n/,/. は text_input 内でもカーソル移動・文字入力
+///   として意味を持つキーなので、renaming/InspectorField 編集中に奪ってはいけない
+/// - j/k/l/i/o/b/n/,/. は裸キー — `modifiers.command()` が立っていれば何も
+///   返さない(前任レーンの実測教訓: Cmd+O 等の既存/将来ショートカットを
+///   奪わない)。**第5波結線(B21+B18、supervisor 裁定・拘束6の仮置き)**:
+///   J/K/L = シャトル(逆/停止/順)、旧 J/K(意味点ジャンプ)は `,`/`.` へ、
+///   旧 L(ループトグル、正典 §5 既定)は Cmd+L へ移設。B/N = Set Work Area
+///   In/Out、Shift+Home/End = 作業範囲の先頭/末尾へ
 /// - ←/→ は Alt 修飾時は対象外(`NudgeKeyframe` が既に使っている、二重発火
 ///   防止)
 /// - Cmd+Z/Cmd+Shift+Z(Undo/Redo)・Cmd+C/V/X/D(Copy/Paste/Cut/Duplicate)・
@@ -4127,16 +4529,46 @@ pub fn resolve_navigation_key(
             let step = if modifiers.shift() { 10 } else { 1 };
             Some(Message::StepPlayhead(step))
         }
+        // 作業範囲の先頭/末尾へ(map 1064、B18 第5波結線 — supervisor 裁定の
+        // 仮置き、拘束6): Shift+Home/End。素の Home/End(comp 先頭/末尾)より
+        // 先に見る(修飾が厳しい方が先 — Undo/Redo の Shift 振り分けと同じ形)。
+        Key::Named(Named::Home) if modifiers.shift() => Some(Message::JumpToWorkAreaStart),
+        Key::Named(Named::End) if modifiers.shift() => Some(Message::JumpToWorkAreaEnd),
         Key::Named(Named::Home) => Some(Message::JumpPlayheadToStart),
         Key::Named(Named::End) => Some(Message::JumpPlayheadToEnd),
-        // JumpPrev/NextMeaningPoint。Shift 付きで選択レイヤー限定(§8.1)。
+        // ---- JKL シャトル(B21 第5波結線、map 1097/1098・1100/1101・
+        // 1125-1127・1135/1136 — supervisor 裁定済み・拘束6の仮置き)。J/K/L =
+        // 逆/停止/順は Premiere/Resolve/AE 共通の慣習(S0 辞書式)。旧割当の
+        // J/K(意味点ジャンプ)は `,`/`.` へ移設(下記)。Shift+J/L(map
+        // 1056/1058 Fast Forward/Reverse)は「連打相当」(`shuttle.rs` doc —
+        // keymap 層が同じ Forward/Reverse で解決する想定)なので Shift では
+        // 分岐しない — 同じ Message が倍率を進める。
         Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("j") => {
+            Some(Message::Timeline(timeline_pane::Message::Shuttle(
+                timeline_pane::ShuttleCommand::Reverse,
+            )))
+        }
+        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("k") => {
+            Some(Message::Timeline(timeline_pane::Message::Shuttle(
+                timeline_pane::ShuttleCommand::Stop,
+            )))
+        }
+        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("l") => {
+            Some(Message::Timeline(timeline_pane::Message::Shuttle(
+                timeline_pane::ShuttleCommand::Forward,
+            )))
+        }
+        // JumpPrev/NextMeaningPoint。Shift 付きで選択レイヤー限定(§8.1)。
+        // **旧 J/K から `,`/`.` へ移設**(B21 第5波結線 — JKL をシャトルへ
+        // 譲る supervisor 裁定。`,`/`.` は Shift で `<`/`>` を運ぶ同じ物理キー
+        // なので両方の字を受ける — layer_only の判定は modifiers 側)。
+        Key::Character(c) if !modifiers.command() && (c == "," || c == "<") => {
             Some(Message::JumpMeaningPoint {
                 direction: timeline::nav::JumpDirection::Prev,
                 layer_only: modifiers.shift(),
             })
         }
-        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("k") => {
+        Key::Character(c) if !modifiers.command() && (c == "." || c == ">") => {
             Some(Message::JumpMeaningPoint {
                 direction: timeline::nav::JumpDirection::Next,
                 layer_only: modifiers.shift(),
@@ -4148,6 +4580,20 @@ pub fn resolve_navigation_key(
         }
         Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("o") => {
             Some(Message::JumpClipEdge(timeline::nav::ClipEdge::Out))
+        }
+        // Mark In/Out = 作業範囲の In/Out を playhead へ(map 725/726・296/297、
+        // B18 第5波結線 — supervisor 裁定: B/N)。`!modifiers.command()` が
+        // Cmd+N(New Project)/将来の Cmd+B を守る(Cmd 系は下の File 束が取る)。
+        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("b") => {
+            Some(Message::Timeline(timeline_pane::Message::SetWorkAreaIn))
+        }
+        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("n") => {
+            Some(Message::Timeline(timeline_pane::Message::SetWorkAreaOut))
+        }
+        // ループトグル(map 1082/1083)。**旧割当 L(正典 §5 の既定)はシャトル
+        // (上記)へ譲り、Cmd+L へ移設**(supervisor 裁定・拘束6の仮置き)。
+        Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("l") => {
+            Some(Message::Timeline(timeline_pane::Message::ToggleLoop))
         }
         // ---- 編集ショートカット(S0 段差 群0、κ 台帳 FINDING 1)。`Message::Undo`/
         // `Redo`/`CopyLayer`/`PasteLayer`/`CutLayer`/`DuplicateLayer`/
@@ -4229,6 +4675,7 @@ pub fn resolve_navigation_key(
 fn stage_pane(
     frame: Option<&RenderedFrame>,
     overlay: Option<stage::StageOverlay>,
+    gizmo: Option<stage::GizmoOverlay>,
     observation: Option<ObservationCamera>,
     resolution_cap: stage::PreviewResolutionCap,
     checkerboard: bool,
@@ -4267,15 +4714,26 @@ fn stage_pane(
             .height(Length::Fill)
             .into();
             // 観測カメラの入力(ホイール/中ボタンドラッグ)とフレーム枠 overlay
-            // (裁定157)。shader widget の上に重ねるだけ — 変形はしない
-            // (Stage は letterbox 貼りのまま、`stage.rs` モジュール doc 参照)。
-            match overlay {
-                // 裁定160 切片10: `StageOverlay::view()` は `stage::Message`
-                // (pane ローカル)を返すようになった — `.map(Message::Stage)`
-                // で root `Message` へ畳んでから `picture` と同じ `stack!` へ
-                // 積む(`timeline.view().map(Message::Timeline)` と同じ形)。
-                Some(overlay) => stack![picture, overlay.view().map(Message::Stage)].into(),
-                None => picture,
+            // (裁定157)、その上にギズモ(GZ 結線、第5波)。shader widget の
+            // 上に重ねるだけ — 変形はしない(Stage は letterbox 貼りのまま、
+            // `stage.rs` モジュール doc 参照)。
+            // 裁定160 切片10: `StageOverlay::view()` は `stage::Message`
+            // (pane ローカル)を返す — `.map(Message::Stage)` で root
+            // `Message` へ畳んでから `picture` と同じ `stack!` へ積む
+            // (`timeline.view().map(Message::Timeline)` と同じ形)。ギズモは
+            // 既存 StageOverlay の**上**(GZ 契約 — 掴んでいない場所の
+            // イベントは capture しないので、ホイール/空クリックは下の
+            // StageOverlay へ素通しする)。`.map(Message::Gizmo)` で同様に畳む。
+            match (overlay, gizmo) {
+                (Some(overlay), Some(gizmo)) => stack![
+                    picture,
+                    overlay.view().map(Message::Stage),
+                    gizmo.view().map(Message::Gizmo)
+                ]
+                .into(),
+                (Some(overlay), None) => stack![picture, overlay.view().map(Message::Stage)].into(),
+                (None, Some(gizmo)) => stack![picture, gizmo.view().map(Message::Gizmo)].into(),
+                (None, None) => picture,
             }
         }
         None => text("comp がまだ無い")

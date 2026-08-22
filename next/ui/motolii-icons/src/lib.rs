@@ -75,6 +75,10 @@ declare_icons! {
     ArrowRight => "arrow_right",
     ChevronLeft => "chevron_left",
     ChevronRight => "chevron_right",
+    // ループ再生トグル(B21 transport 帯)。`Icon::Redo` 暫定の解消
+    // (第5波 shell 結線 — timeline-pane `TransportSpec::loop_button` doc 参照)。
+    // NOTICE 記載の同一 rev(e083cc60)から vendoring。
+    Repeat => "repeat",
     // -- 近い将来分(裁定186 発注書)---------------------------------------
     Search => "search",
     Close => "close",
