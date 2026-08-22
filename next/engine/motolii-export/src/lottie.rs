@@ -251,6 +251,22 @@ fn build_layer(
         });
     }
 
+    // `layers/precomposition-layer/tm`(Time Remap)相当。Motolii は
+    // `property::TIME_REMAP` をレイヤ種別を問わず一般化しているが(view.rs 参照)、
+    // Lottie の `tm` は precomposition-layer 専用フィールド——Motolii に precomp
+    // という LayerSource variant が無い(Group は Null layer へ寄せている、上記参照)
+    // ため、書ける layer 型が無い。
+    let time_remap = PropertyId::new(property::TIME_REMAP)?;
+    if view.property_source(layer, &time_remap)?.is_some() {
+        unsupported.push(UnsupportedForLottie {
+            layer: Some(layer),
+            category: "time-remap",
+            detail: "`property::TIME_REMAP` が使われているが、Lottie の `tm` は \
+                     precomposition-layer 専用で、Motolii に対応する LayerSource が無い"
+                .to_owned(),
+        });
+    }
+
     match &meta.source {
         LayerSource::Solid { rgba, width, height } => {
             out["ty"] = serde_json::json!(1);
@@ -266,6 +282,7 @@ fn build_layer(
             out["refId"] = serde_json::json!(ref_id);
             if ty == 6 {
                 out["au"] = serde_json::json!({});
+                check_audio_settings_unsupported(view, layer, unsupported)?;
             }
         }
         LayerSource::Null => {
@@ -306,6 +323,41 @@ fn effect_unsupported(layer: LayerId, effect: &EffectInstance) -> UnsupportedFor
             effect.plugin_id, effect.id
         ),
     }
+}
+
+/// `layers/audio-settings lv`(Level)相当。`property::LEVEL`/`PAN`/`FADE_IN`/
+/// `FADE_OUT` は `motolii-audio` が実際に mix する層単位の property だが、
+/// Lottie の `au`(Audio Settings)へ写す語彙をまだ持たない——**空の `au` を
+/// 書いて黙って落とす**ことは避け、実際に触られている物があれば報告する。
+fn check_audio_settings_unsupported(
+    view: &StoreView<'_>,
+    layer: LayerId,
+    unsupported: &mut Vec<UnsupportedForLottie>,
+) -> Result<(), LottieExportError> {
+    let names = [
+        property::LEVEL,
+        property::PAN,
+        property::FADE_IN,
+        property::FADE_OUT,
+    ];
+    let mut used = Vec::new();
+    for name in names {
+        let id = PropertyId::new(name)?;
+        if view.property_source(layer, &id)?.is_some() {
+            used.push(name);
+        }
+    }
+    if !used.is_empty() {
+        unsupported.push(UnsupportedForLottie {
+            layer: Some(layer),
+            category: "audio-settings",
+            detail: format!(
+                "property {used:?} が使われているが、`au`(audio-settings)へ写す \
+                 語彙をまだ実装していない(空の `au` を書いた)"
+            ),
+        });
+    }
+    Ok(())
 }
 
 /// solid の RGBA を Lottie の `#RRGGBB` へ(alpha は Lottie の solid-layer に無いので
@@ -1099,6 +1151,17 @@ fn build_text_data(
             category: "text-styling",
             detail: "複数スタイル行(runs)/アニメーター(ranges)/可変フォント軸(axes)/\
                      OpenType feature は未実装 — styles[0] 相当の1行だけを書き出した"
+                .to_owned(),
+        });
+    }
+
+    if document.slot_id.is_some() {
+        unsupported.push(UnsupportedForLottie {
+            layer: Some(layer),
+            category: "text-slot",
+            detail: "`animated-text-document sid`(TextDocument::slot_id)は comp の \
+                     slots 表で `d` プロパティ全体を差し替える口だが、この export は \
+                     まだ text の `d` に `sid` を立てる経路を実装していない"
                 .to_owned(),
         });
     }
