@@ -1591,6 +1591,29 @@ impl Shell {
                 self.toggle_inspector_key(row);
                 Task::none()
             }
+            // MASK section(B02 第1切片、裁定184)。書き込み本体は pane の
+            // 自由関数(`ToggleHidden`/`CycleBlendMode` と同じ即時操作の形)—
+            // ここは `Err` を status 帯へ渡す glue だけ(M13)。
+            inspector_pane::Message::CycleMaskMode(mask) => {
+                if let Err(error) = inspector_pane::cycle_inspector_mask_mode(
+                    &mut self.doc,
+                    self.session.selection,
+                    mask,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::ToggleMaskInverted(mask) => {
+                if let Err(error) = inspector_pane::toggle_inspector_mask_inverted(
+                    &mut self.doc,
+                    self.session.selection,
+                    mask,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
         }
     }
 
