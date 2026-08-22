@@ -33,11 +33,13 @@ use iced::{wgpu, Element, Length, Task};
 use motolii_core::{CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
-    AssetDraft, AssetId, Composition, DisplayRevision, Document, Fps, Intent, LayerAttrsPatch,
-    LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, ResolvedLayer,
-    Revision, SourceFingerprintV1, Speed, StoreView, TextDocument, Value,
+    AssetDraft, AssetId, AutoSaveConfig, Composition, DisplayRevision, Document, Fps, Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, ResolvedLayer, Revision, SourceFingerprintV1, Speed, StoreView, TextDocument, Value,
 };
 
+/// 自動保存(AUTOSAVE、SET+ B12 第2切片の結線)の tick 購読口(`auto_save.rs`
+/// 冒頭 doc 参照)。`transport`/`pane_layout` と同じ「意味は薄く、window/timer
+/// 事象の翻訳だけ」の module。
+pub mod auto_save;
 pub mod clipboard;
 /// File 束(MB-1、裁定176)の OS 副作用注入口([`FileDialogs`] trait +
 /// production 実装 [`RfdDialogs`])。`Shell::new_with_dialogs`/test の fake が
@@ -526,6 +528,14 @@ pub enum Message {
     /// comp 終端に達したら自動で Pause する(発注書 ORACLE (a)/(e))。
     PlaybackTick,
 
+    // ---- AUTOSAVE(SET+ B12 第2切片、shell 結線) ----
+    /// `auto_save::tick_subscription` が `auto_save_config.interval_secs` 秒
+    /// ごとに発行する tick。`Shell::run_auto_save` が受け口 —
+    /// **再生中・ドラッグ中はスキップ**(正典 §2 拘束5と同型、`run_auto_save`
+    /// doc 参照)。`auto_save_enabled=false` の間は `subscription()` がこの
+    /// tick 自体を発行しない。
+    AutoSaveTick,
+
     // ---- 第6波 shell 結線(2026-08-22 発注、EXACT TARGET 1〜8) ----
     /// Stage 方眼シート束(`stage::sheets` 冒頭 doc「結線は次波」— この波で
     /// 結線)。`stage::SheetMessage` は既存 [`Message`] と独立の pane-local
@@ -814,6 +824,26 @@ pub struct Shell {
     /// Enter で `settings_pane::sections::commit_comp_field` が1回の
     /// `Intent::SetComposition` を出すまで store に触らない)。
     comp_draft: Option<settings_pane::sections::CompFieldDraft>,
+    /// AUTOSAVE 有効/無効(SET+ B12 第2切片、`ToggleSettingsPanel` と同じ身分 —
+    /// Document/undo を経由しない shell-local bool)。既定 `true`(AE `Auto-Save`
+    /// の既定「有効」に合わせる)。`false` の間は `subscription()` が
+    /// `Message::AutoSaveTick` そのものを発行しない。
+    auto_save_enabled: bool,
+    /// 自動保存の間隔・世代数。**Document ではない**
+    /// (`motolii_store::persist::AutoSaveConfig` doc「Settings が読める形の
+    /// 置き場」参照 — `ui_scale`/`Tokens` と同じ「Settings が直接持ち回す値」)。
+    auto_save_config: AutoSaveConfig,
+    /// AUTOSAVE 数値欄(間隔・世代数)の編集下書き。`comp_draft` の隣に住む
+    /// 同じ身分(確定するまで front だけが持つ)。
+    auto_save_draft: Option<settings_pane::sections::AutoSaveFieldDraft>,
+    /// 最後に自動保存した時点の `Document::revision()`
+    /// (`motolii_store::Document::auto_save` の `since` 引数)。**`saved_revision`
+    /// とは別の鍵**: 自動保存は `current_path` の隣(`<name> auto-save/`)へ
+    /// 別ファイルを書くだけで、明示 Save(Save As)が指す本体は更新しない —
+    /// `saved_revision`(`is_dirty`/Quit確認の唯一の判定根拠、`saved_revision`
+    /// フィールド doc 参照)を自動保存の成否で動かすと「本体は未保存なのに
+    /// dirty 表示が消える」事故になる。
+    last_auto_saved: Revision,
 
     // ---- Stage 観測カメラ(裁定157) ----
     /// 「自由に見る」ときの作業視点。**Document には乗らない** — `checkerboard`
@@ -960,6 +990,10 @@ impl Shell {
                 background_draft: None,
                 ui_scale_draft: None,
                 comp_draft: None,
+                auto_save_enabled: true,
+                auto_save_config: AutoSaveConfig::default(),
+                auto_save_draft: None,
+                last_auto_saved: saved_revision.clone(),
                 observation: None,
                 resolution_cap: stage::PreviewResolutionCap::default(),
                 clipboard: clipboard::Clipboard::default(),
@@ -1073,6 +1107,10 @@ impl Shell {
             background_draft: None,
             ui_scale_draft: None,
             comp_draft: None,
+            auto_save_enabled: true,
+            auto_save_config: AutoSaveConfig::default(),
+            auto_save_draft: None,
+            last_auto_saved: saved_revision.clone(),
             observation: None,
             resolution_cap: stage::PreviewResolutionCap::default(),
             clipboard: clipboard::Clipboard::default(),
@@ -1145,12 +1183,22 @@ impl Shell {
         } else {
             iced::Subscription::none()
         };
+        // AUTOSAVE(SET+ B12 第2切片): `auto_save_enabled` の間だけ tick を
+        // 束ねる(`ticks` と同じ「無効ならそもそも購読しない」形)。実際の
+        // dirty 判定・再生中/ドラッグ中のスキップは `Shell::run_auto_save`
+        // (`Message::AutoSaveTick` の受け口)が持つ — ここは翻訳だけ。
+        let auto_save = if self.auto_save_enabled {
+            auto_save::tick_subscription(self.auto_save_config.interval_secs)
+                .map(|()| Message::AutoSaveTick)
+        } else {
+            iced::Subscription::none()
+        };
         // 窓台帳(S1 daemon 骨格): どの窓が閉じたかを台帳へ届ける。daemon は
         // 窓が全部閉じても自分では終了しない(fork `src/daemon.rs` doc)ので、
         // 「main 閉=exit」の判断を `Shell::update`(`Message::WindowClosed`)が
         // 持つ — ここは規律どおり翻訳(map)だけ。
         let closes = iced::window::close_events().map(Message::WindowClosed);
-        iced::Subscription::batch([window, tokens, pointer, ticks, closes])
+        iced::Subscription::batch([window, tokens, pointer, ticks, auto_save, closes])
     }
 
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
@@ -1389,6 +1437,7 @@ impl Shell {
             }
             Message::TogglePlayback => self.toggle_playback(),
             Message::PlaybackTick => self.advance_playback_tick(),
+            Message::AutoSaveTick => self.run_auto_save(),
 
             // ---- 第6波 shell 結線 ----
             Message::Sheet(msg) => self.sheet_toggles = self.sheet_toggles.apply(msg),
@@ -1508,6 +1557,7 @@ impl Shell {
         let mut doc = Self::default_document();
         doc.mark_undo_floor();
         self.saved_revision = doc.revision();
+        self.last_auto_saved = self.saved_revision.clone();
         self.doc = doc;
         self.current_path = None;
         self.session = Session::default();
@@ -1517,6 +1567,9 @@ impl Shell {
     /// `Document::save` = `flattened()` で履歴を畳んでから書く、`persist.rs`
     /// doc 参照)→成功したら `current_path`/`saved_revision` を更新して dirty を
     /// 解消する。キャンセル・書き込み失敗のどちらも `current_path` は不変。
+    /// **`last_auto_saved` も同じ revision へ揃える** — 本体そのものが今
+    /// この時点の内容で書けたので、次の tick が同じ revision のまま無駄な
+    /// 自動保存を起こさないようにする(`AutoSaveConfig` doc の「dirty 判定」)。
     fn perform_save_as(&mut self) {
         let Some(path) = self.dialogs.pick_save_path() else {
             return;
@@ -1525,6 +1578,7 @@ impl Shell {
             Ok(()) => {
                 self.current_path = Some(path);
                 self.saved_revision = self.doc.revision();
+                self.last_auto_saved = self.saved_revision.clone();
             }
             // 拒否は必ず出す。黙って消さない(M13 と同じ規律)。
             Err(error) => self.status = Some(format!("保存できない: {error}")),
@@ -1541,6 +1595,47 @@ impl Shell {
         };
         if let Err(error) = self.doc.save(&path) {
             self.status = Some(format!("コピーを保存できない: {error}"));
+        }
+    }
+
+    // ---- AUTOSAVE(SET+ B12 第2切片、shell 結線) ----
+
+    /// `Message::AutoSaveTick` の受け口。**再生中・ドラッグ中はスキップ**
+    /// (正典 §2 拘束5と同型 — `toggle_playback`/`apply_shuttle` と同じ
+    /// `is_dragging()` 判定 + 実時間 transport/JKL シャトルのどちらかが
+    /// 走っていれば見送る。ディスク I/O で1フレームでも巻き込むと再生の
+    /// コマ落ちに直結するため、掴み・再生の最中に自動保存を割り込ませない)。
+    /// tick そのものは `auto_save_enabled=false` の間は `subscription()` が
+    /// 発行しないが、念のためここでも確認する(二重の柵、`is_dirty` 等の他の
+    /// 判定と同じ「呼び口を絞るだけでなく受け口でも確認する」規律)。
+    ///
+    /// 実際の書き込みは `motolii_store::Document::auto_save` — dirty 判定
+    /// (`self.doc.revision() == *since` なら `Ok(None)`)も保存先のローテーション
+    /// (世代数超過分の削除)もそちら側の責務。ここは `current_path`/
+    /// `last_auto_saved`/`auto_save_config` を渡すだけの glue。
+    fn run_auto_save(&mut self) {
+        if !self.auto_save_enabled {
+            return;
+        }
+        if self.transport.is_running() || !self.shuttle.is_stopped() || self.is_dragging() {
+            return;
+        }
+        match self.doc.auto_save(
+            self.current_path.as_deref(),
+            &self.last_auto_saved,
+            &self.auto_save_config,
+        ) {
+            Ok(Some(path)) => {
+                self.last_auto_saved = self.doc.revision();
+                self.status = Some(format!("自動保存しました: {}", path.display()));
+            }
+            // `project_path` が無い(未保存の新規 project)か、前回の自動保存
+            // から未編集(dirty でない)のどちらか — 黙って何もしない
+            // (`Document::auto_save` doc「何もせず Ok(None)」、tick のたびに
+            // status を出すと逆に無反応ゼロの趣旨に反する雑音になる)。
+            Ok(None) => {}
+            // 拒否は必ず出す(M13 と同じ規律)。
+            Err(error) => self.status = Some(format!("自動保存できない: {error}")),
         }
     }
 
@@ -2568,6 +2663,21 @@ impl Shell {
                 if let Err(error) =
                     sections::commit_comp_field(&mut self.doc, &mut self.comp_draft, field)
                 {
+                    self.status = Some(error);
+                }
+            }
+            sections::Message::AutoSaveToggle(enabled) => {
+                self.auto_save_enabled = enabled;
+            }
+            sections::Message::AutoSaveFieldInput(field, text) => {
+                self.auto_save_draft = Some(sections::AutoSaveFieldDraft { field, text });
+            }
+            sections::Message::AutoSaveFieldSubmit(field) => {
+                if let Err(error) = sections::commit_auto_save_field(
+                    &mut self.auto_save_config,
+                    &mut self.auto_save_draft,
+                    field,
+                ) {
                     self.status = Some(error);
                 }
             }
@@ -3674,6 +3784,9 @@ impl Shell {
                         held_frames: self.engine.cached_frame_count(),
                         limit: Engine::FRAME_CACHE_LIMIT,
                     }),
+                    auto_save_enabled: self.auto_save_enabled,
+                    auto_save_config: self.auto_save_config,
+                    auto_save_draft: self.auto_save_draft.as_ref(),
                 },
                 dims,
                 colors,
