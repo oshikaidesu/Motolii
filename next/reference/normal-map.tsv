@@ -294,8 +294,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 293	clip_edit	Send Layer to Back	最背面へ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B44
 294	clip_edit	Set sampling method to Best/Bicubic	サンプリング:最高/バイキュービック	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B23
 295	clip_edit	Set sampling method to Best/Bilinear	サンプリング:最高/バイリニア	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B23
-296	clip_edit	Set Work Area In	ワークエリアイン点設定	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B18
-297	clip_edit	Set Work Area Out	ワークエリアアウト点設定	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B18
+296	clip_edit	Set Work Area In	ワークエリアイン点設定	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用済		B18
+297	clip_edit	Set Work Area Out	ワークエリアアウト点設定	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用済		B18
 298	clip_edit	Show All Video	全ビデオを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B32
 299	clip_edit	Show Current Clip With Handles	ハンドル付きで現在クリップ表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B40
 300	clip_edit	Show Curve Editor	カーブエディタ表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B15
@@ -677,8 +677,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 676	layer_transform	Increase or decrease Rotation by 1°	回転を1度増減	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B44
 677	layer_transform	Increase Scale by 1%	スケールを1%増加	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B44
 678	layer_transform	Increase Scale by 10%	スケールを10%増加	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B44
-679	layer_transform	Modify Rotation in 15° increments	回転を15度刻みで変更	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B44
-680	layer_transform	Modify Scale constrained to aspect ratio	縦横比を保ってスケール変更	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B44
+679	layer_transform	Modify Rotation in 15° increments	回転を15度刻みで変更	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B44
+680	layer_transform	Modify Scale constrained to aspect ratio	縦横比を保ってスケール変更	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B44
 681	layer_transform	Move layers so In point at composition beginning	In点をコンポ先頭に	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B18
 682	layer_transform	Move layers so Out point at composition end	Out点をコンポ末尾に	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B18
 683	layer_transform	New > After Effects Composition	AEコンポジションを新規作成しDynamic Linkで接続	0	1	0	0	1	1:0:0:0	二次(premiere全体注記)		採用予定		B36
@@ -717,15 +717,15 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 716	layer_transform	Upscale	AI高解像度化	0	0	0	1	1	1:0:0:0	公式		採用予定		B36
 717	marker	Add Marker	マーカーを追加	1	1	1	0	3	3:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	Intent::SetMarkers / Composition:markers component 実装済み(裁定111/149)	B19
 718	marker	Clear / Delete Marker(s)	マーカーを削除	0	1	1	0	2	4:3:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	Intent::SetMarkers / Composition:markers component 実装済み(裁定111/149)	B19
-719	marker	Clear In	イン点を解除	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
-720	marker	Clear In and Out	イン/アウト点を両方解除	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
-721	marker	Clear Out	アウト点を解除	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
+719	marker	Clear In	イン点を解除	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
+720	marker	Clear In and Out	イン/アウト点を両方解除	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
+721	marker	Clear Out	アウト点を解除	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
 722	marker	Go to Next Marker	次のマーカーへ移動	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用済	Message::JumpMeaningPoint(shell/lib.rs、U2。既定割当K/J。locatorはlayer_only=false側)	B19
 723	marker	Go to Previous Marker	前のマーカーへ移動	0	1	1	0	2	1:2:0:0	二次(premiere全体注記);公式(BMD, v11時点)		採用済	Message::JumpMeaningPoint(shell/lib.rs、U2。既定割当K/J。locatorはlayer_only=false側)	B19
-724	marker	Mark Clip	クリップ全体をマーク	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
-725	marker	Mark In	イン点を設定	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
-726	marker	Mark Out	アウト点を設定	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
-727	marker	Mark Selection	選択範囲をマーク	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
+724	marker	Mark Clip	クリップ全体をマーク	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
+725	marker	Mark In	イン点を設定	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
+726	marker	Mark Out	アウト点を設定	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
+727	marker	Mark Selection	選択範囲をマーク	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
 728	marker	Add and Modify Marker	マーカー追加/編集	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
 729	marker	Add Flag	フラグ追加	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
 730	marker	Add Flag	G	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
@@ -759,15 +759,15 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 758	mask	Hide Locked Masks	ロック済マスクを隠す	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
 759	mask	Intersect	マスクモード:交差	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)	B02
 760	mask	Intersect mode	マスクモード:交差	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)	B02
-761	mask	Invert selected mask	選択マスクを反転	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B02
-762	mask	Inverted	マスクを反転	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
+761	mask	Invert selected mask	選択マスクを反転	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B02
+762	mask	Inverted	マスクを反転	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済		B02
 763	mask	Lighten	マスクモード:比較(明)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)	B02
 764	mask	Linear	フェザー減衰:線形	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
 765	mask	Lock Other Masks	他マスクをロック	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
 766	mask	Locked	マスクをロック	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
 767	mask	Mask Expansion…	マスク拡張	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
 768	mask	Mask Feather…	マスクフェザー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
-769	mask	Mask Opacity…	マスク不透明度	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
+769	mask	Mask Opacity…	マスク不透明度	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済		B02
 770	mask	Mask Shape…	マスク形状	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
 771	mask	Move selected path points 1 pixel	選択パスポイントを1px移動	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B02
 772	mask	Move selected path points 10 pixels	選択パスポイントを10px移動	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B02
@@ -1054,15 +1054,15 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1053	playback	Extend Selected Edit to Playhead	選択編集点を延長	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		不採用	trim family(roll相当)不採用 — 拘束1	
 1054	playback	Extract	エクストラクト	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		不採用	裁定175: 跨カテゴリ重複(clip_edit 208-210/226-228が不採用済み)	
 1055	playback	Fast Forward	早送り	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
-1056	playback	Fast Forward	Shift+L	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
+1056	playback	Fast Forward	Shift+L	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済		B21
 1057	playback	Fast Reverse	早戻し	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
-1058	playback	Fast Reverse	Shift+J	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
+1058	playback	Fast Reverse	Shift+J	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済		B21
 1059	playback	Fast Review	高速レビュー	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
 1060	playback	First Frame	;(semicolon)	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B20
 1061	playback	Frame Step (arrow keys)	矢印キーで1フレーム移動	0	0	0	1	1	0:1:0:0	一致(2件)		採用予定		B21
 1062	playback	Go To	指定位置へ移動	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B20
 1063	playback	Go to beginning of composition, layer, or footage	コンポ/レイヤー/素材の先頭へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B20
-1064	playback	Go to beginning or end of work area	ワークエリアの先頭/末尾へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B18
+1064	playback	Go to beginning or end of work area	ワークエリアの先頭/末尾へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B18
 1065	playback	Go to end of composition, layer, or footage	コンポ/レイヤー/素材の末尾へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B20
 1066	playback	Go to In	Shift+I	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B18
 1067	playback	Go to layer In point	レイヤーIn点へ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	Message::JumpClipEdge(In)(shell/lib.rs、U2。既定割当I)	B18
@@ -1080,8 +1080,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1079	playback	Last Frame	'(apostrophe)	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B20
 1080	playback	Lift	リフト	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		不採用	裁定175: 跨カテゴリ重複(同上)	
 1081	playback	Lock or unlock guides	ガイドロック切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B22
-1082	playback	Loop/Unloop	ループ切替	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
-1083	playback	Loop/Unloop	Command+/	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
+1082	playback	Loop/Unloop	ループ切替	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済		B21
+1083	playback	Loop/Unloop	Command+/	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済		B21
 1084	playback	Make Subsequence	サブシーケンス作成	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		不採用	プリコンポ(ネスト/サブシーケンス)不採用 — docs/concept.md、GOALS D4	
 1085	playback	Match Frame	一致フレーム検索	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B40
 1086	playback	Match Frame	一致フレーム検索	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B40
@@ -1095,11 +1095,11 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1094	playback	Play Around In	Option+Space	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
 1095	playback	Play Around Out	Shift+Space	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
 1096	playback	Play Around/To	周辺/指定先まで再生	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
-1097	playback	Play Forward	順再生	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
-1098	playback	Play Forward	L	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
-1099	playback	Play In To Out	Option+/	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
-1100	playback	Play Reverse	逆再生	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
-1101	playback	Play Reverse	J	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
+1097	playback	Play Forward	順再生	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済		B21
+1098	playback	Play Forward	L	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済		B21
+1099	playback	Play In To Out	Option+/	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済		B21
+1100	playback	Play Reverse	逆再生	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済		B21
+1101	playback	Play Reverse	J	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済		B21
 1102	playback	Play Slow	スロー再生	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
 1103	playback	Play Still	Option+Command+F	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
 1104	playback	Play To Out	Option+Command+/	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
@@ -1123,9 +1123,9 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1122	playback	Show or hide proportional grid	比例グリッド表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B22
 1123	playback	Show or hide rulers	定規表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B22
 1124	playback	Show or hide safe zones	セーフゾーン表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B22
-1125	playback	Shuttle Left	シャトル逆再生	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B21
-1126	playback	Shuttle Right	シャトル順再生	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B21
-1127	playback	Shuttle Stop	シャトル停止	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B21
+1125	playback	Shuttle Left	シャトル逆再生	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用済		B21
+1126	playback	Shuttle Right	シャトル順再生	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用済		B21
+1127	playback	Shuttle Stop	シャトル停止	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用済		B21
 1128	playback	Slow Left	低速逆再生	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B21
 1129	playback	Slow Right	低速順再生	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B21
 1130	playback	Step Back Five Frames	5フレーム戻る	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B21
@@ -1133,8 +1133,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1132	playback	Step One	1コマ送り	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
 1133	playback	Step One Second Forward	Shift+Right Arrow	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
 1134	playback	Step One Second Reverse	Shift+Left Arrow	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
-1135	playback	Stop	停止	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
-1136	playback	Stop	K	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B21
+1135	playback	Stop	停止	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済		B21
+1136	playback	Stop	K	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済		B21
 1137	playback	Stop and Go to Last Position	停止して直前位置へ	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B21
 1138	playback	Timecode	タイムコード入力	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済		B20
 1139	playback	Timeline Proxy Resolution	タイムラインプロキシ解像度	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B13
@@ -1190,7 +1190,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1189	preferences	Labels	ラベル色とその割当の設定	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし	B12
 1190	preferences	Labels	ラベル色・既定ラベルの設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし	B12
 1191	preferences	Language	UI表示言語切替	0	0	0	1	1	0:0:0:1	"公式(原文: ""Go to the General > Language tab"")"		採用予定	既決との衝突なし	B12
-1192	preferences	Master Settings	タイムライン形式/ビデオモニタリング/最適化メディア/作業フォルダ	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B12
+1192	preferences	Master Settings	タイムライン形式/ビデオモニタリング/最適化メディア/作業フォルダ	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用済	既決との衝突なし	B12
 1193	preferences	Media	静止画スケーリング・プロキシ設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		採用予定	既決との衝突なし	B12
 1194	preferences	Media & Disk Cache	キャッシュ・メディアフォルダの場所、Enable Disk Cache、Maximum Disk Cache Size、Enable Compressed Frames等	1	0	0	0	1	0:0:0:1	公式(Adobe)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定	B13
 1195	preferences	Media Cache	メディアキャッシュファイルの自動削除設定	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		保留	RB調査(2026-08-22): 根は実在(decode=ffmpeg起動/miss+64枚LRU・永続なし)。対処は根(永続frame cache)が先 — prefs UIは意図優先で最小化してから再判定	B13

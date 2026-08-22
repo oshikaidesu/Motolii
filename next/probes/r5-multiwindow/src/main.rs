@@ -1,4 +1,6 @@
-//! r5-multiwindow — iced multiwindow(窓の浮かし)の gate probe(裁定188)。
+//! wraps: iced daemon/multiwindow API の gate probe(裁定188)— 製品コードに載る前の実測器具。
+//!
+//! r5-multiwindow — iced multiwindow(窓の浮かし)の gate probe。
 //!
 //! 実行: `cargo run -p r5-multiwindow -- --auto`
 //!   `--auto` は自走モード — 人手なしで
