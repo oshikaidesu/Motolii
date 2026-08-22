@@ -244,6 +244,13 @@ pub fn split_plan(
             Some(PropertySource::Slot(slot)) => {
                 intents.push(Intent::SetPropertySlot { layer: new_layer, property, slot });
             }
+            // link は**参照先を書き換えない**で複製する — 分割の後半分も
+            // 元と同じ source を追い続けるのが「切っても意味は変わらない」
+            // という分割の約束に合う(参照先を新 layer へ張り替えると、
+            // 後半分だけ別の物に追従し始めて意味が割れる)。
+            Some(PropertySource::Link(link)) => {
+                intents.push(Intent::SetPropertyLink { layer: new_layer, property, link });
+            }
             None => {}
         }
     }

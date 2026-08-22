@@ -117,6 +117,15 @@ impl LayerSnapshot {
                     property: property.clone(),
                     slot: slot.clone(),
                 },
+                // 貼り付け先でも参照先は元のまま — AE の pick-whip 付き
+                // レイヤーを複製した時と同じ挙動(複製が元の driver を
+                // 共有する)。相対参照にするかは link の UI が出来てから
+                // 実挙動を見て決める(今は呼び手ゼロなので観測できない)。
+                PropertySource::Link(link) => Intent::SetPropertyLink {
+                    layer: new_id,
+                    property: property.clone(),
+                    link: link.clone(),
+                },
             });
         }
         intents
