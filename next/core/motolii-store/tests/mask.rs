@@ -411,6 +411,226 @@ fn masks_survive_a_save_and_load_round_trip() {
     assert_eq!(resolved.masks[0].shape.vertices[0].point[0], 3.0);
 }
 
+/// 膨張は shape/opacity と同じ **property track**(B02、2026-08-22、Lottie
+/// `helpers/mask/x`)。キーを打っていない = 既定 0(無効)。`Mask` struct には
+/// フィールドを足していないので、これは `value_at` を直接読んで確かめる
+/// (`ResolvedMask` はまだ運ばない — `crate::mask` 冒頭の節参照)。
+#[test]
+fn mask_expansion_defaults_to_zero_until_a_track_is_written() {
+    let (mut doc, layer) = doc_with_layer();
+    add_mask(
+        &mut doc,
+        layer,
+        Mask {
+            id: MaskId(0),
+            mode: MaskMode::Add,
+            inverted: false,
+        },
+        0.0,
+    );
+
+    // キーを一度も打っていない = track が無い = 既定 0(無効)。
+    assert_eq!(
+        doc.view()
+            .value_at(layer, &PropertyId::mask_expansion(MaskId(0)), t(0))
+            .unwrap(),
+        None,
+        "expansion の track を書く前から値が生えている"
+    );
+
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::mask_expansion(MaskId(0)),
+        track: still(Value::F64(-5.0)),
+    })
+    .unwrap();
+
+    assert_eq!(
+        doc.view()
+            .value_at(layer, &PropertyId::mask_expansion(MaskId(0)), t(0))
+            .unwrap(),
+        Some(Value::F64(-5.0)),
+        "expansion は負(内側への収縮)も持てる — Lottie/AE と同じ符号"
+    );
+}
+
+/// 膨張は shape と同じ `KeyframeTrack` — キーを打てば動く(AE 実機のタイムライン
+/// 挙動と同じ、Mask Opacity/Shape とここが並ぶことが B02 の主張)。
+#[test]
+fn mask_expansion_interpolates_between_keys_like_any_other_track() {
+    let (mut doc, layer) = doc_with_layer();
+    add_mask(
+        &mut doc,
+        layer,
+        Mask {
+            id: MaskId(0),
+            mode: MaskMode::Add,
+            inverted: false,
+        },
+        0.0,
+    );
+
+    let mut track = KeyframeTrack::new();
+    track.insert(Keyframe {
+        t: t(0),
+        value: Value::F64(0.0),
+        interp: Interp::Linear,
+        spatial: None,
+    });
+    track.insert(Keyframe {
+        t: t(30),
+        value: Value::F64(100.0),
+        interp: Interp::Linear,
+        spatial: None,
+    });
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::mask_expansion(MaskId(0)),
+        track,
+    })
+    .unwrap();
+
+    let mid = doc
+        .view()
+        .value_at(layer, &PropertyId::mask_expansion(MaskId(0)), t(15))
+        .unwrap()
+        .expect("キーの間なので値が居るはず");
+    assert_eq!(mid, Value::F64(50.0), "膨張が補間されていない");
+}
+
+/// 保存は履歴を畳む(裁定56)。expansion も他の property track と同じ形
+/// (`Layer:mask.{id}.expansion` component)なので、`flattened`/`track_json_components`
+/// は component 名を列挙していない(`persist.rs` 参照)— **この試験を書かないと
+/// 退行が黙って通る**。
+#[test]
+fn mask_expansion_survives_a_save_and_load_round_trip() {
+    let (mut doc, layer) = doc_with_layer();
+    add_mask(
+        &mut doc,
+        layer,
+        Mask {
+            id: MaskId(0),
+            mode: MaskMode::Add,
+            inverted: false,
+        },
+        0.0,
+    );
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::mask_expansion(MaskId(0)),
+        track: still(Value::F64(3.5)),
+    })
+    .unwrap();
+
+    let dir = std::env::temp_dir().join(format!("motolii-mask-expansion-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("mask-expansion.rrd");
+    doc.save(&file).unwrap();
+    let loaded = Document::load(&file).unwrap();
+
+    assert_eq!(
+        loaded
+            .view()
+            .value_at(layer, &PropertyId::mask_expansion(MaskId(0)), t(0))
+            .unwrap(),
+        Some(Value::F64(3.5)),
+        "保存で畳む時に expansion が落ちている"
+    );
+}
+
+/// **旧 bit の読み込み**: expansion の track を一度も書いていない旧保存を読み戻しても、
+/// `Mask` struct 自体は形が変わっていないので普通に読める(`Mask` にフィールドを
+/// 足していない — shape/opacity と同じ形、B02)。
+#[test]
+fn documents_saved_before_expansion_existed_still_load() {
+    let (mut doc, layer) = doc_with_layer();
+    add_mask(
+        &mut doc,
+        layer,
+        Mask {
+            id: MaskId(7),
+            mode: MaskMode::Intersect,
+            inverted: true,
+        },
+        4.0,
+    );
+    // expansion の track を意図的に書かない — 旧保存の再現。
+
+    let dir = std::env::temp_dir().join(format!("motolii-mask-old-bit-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("mask-old-bit.rrd");
+    doc.save(&file).unwrap();
+    let loaded = Document::load(&file).unwrap();
+
+    let masks = loaded.view().masks(layer).unwrap();
+    assert_eq!(
+        masks,
+        vec![Mask {
+            id: MaskId(7),
+            mode: MaskMode::Intersect,
+            inverted: true,
+        }],
+        "旧保存(expansion なし)の Mask が変わってしまっている"
+    );
+    assert_eq!(
+        loaded
+            .view()
+            .value_at(layer, &PropertyId::mask_expansion(MaskId(7)), t(0))
+            .unwrap(),
+        None,
+        "旧保存に無い track が読み込みで生えてはいけない(既定は resolve 側が 0 として扱う)"
+    );
+    // resolve 自体は shape/opacity だけを見るので、expansion が無くても壊れない。
+    let resolved = loaded.view().resolve(layer, t(0)).unwrap().expect("居る");
+    assert_eq!(resolved.masks[0].shape.vertices[0].point[0], 4.0);
+}
+
+/// マスクの expansion 編集も `edit` timeline 上の普通の刻み。
+#[test]
+fn editing_mask_expansion_is_undoable_like_any_other_edit() {
+    let (mut doc, layer) = doc_with_layer();
+    add_mask(
+        &mut doc,
+        layer,
+        Mask {
+            id: MaskId(0),
+            mode: MaskMode::Add,
+            inverted: false,
+        },
+        0.0,
+    );
+
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::mask_expansion(MaskId(0)),
+        track: still(Value::F64(20.0)),
+    })
+    .unwrap();
+    assert_eq!(
+        doc.view()
+            .value_at(layer, &PropertyId::mask_expansion(MaskId(0)), t(0))
+            .unwrap(),
+        Some(Value::F64(20.0))
+    );
+
+    assert!(doc.undo());
+    assert_eq!(
+        doc.view()
+            .value_at(layer, &PropertyId::mask_expansion(MaskId(0)), t(0))
+            .unwrap(),
+        None,
+        "expansion の設定が undo で戻らない"
+    );
+    assert!(doc.redo());
+    assert_eq!(
+        doc.view()
+            .value_at(layer, &PropertyId::mask_expansion(MaskId(0)), t(0))
+            .unwrap(),
+        Some(Value::F64(20.0)),
+        "expansion の設定が redo で戻らない"
+    );
+}
+
 /// property の一覧は **store に聞く**(裁定57)。マスクの形状トラックもそこに並ぶ。
 /// 一方 `masks` は layer 自身の component なので property ではない(裁定35)。
 #[test]

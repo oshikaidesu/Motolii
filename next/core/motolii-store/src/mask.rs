@@ -2,17 +2,55 @@
 //!
 //! **matte とは別物**である(matte は他 layer の alpha で抜く、裁定66)。
 //!
-//! 意味は Lottie の `helpers/mask` から取る(発明しない)。ただし3点だけ寄せない:
+//! 意味は Lottie の `helpers/mask` から取る(発明しない)。ただし2点だけ寄せない:
 //!
 //! - **`None` を列挙へ混ぜない**。Lottie の `mask-mode` は `n`(無視)を持つが、
 //!   「消す」ことは「重ね方」ではない。混ぜると、マスクが1枚居るのに効いていない
 //!   という状態が保存でき、UI ではそれが2通りの消し方に見える
 //! - **不透明度は比**(1.0 基準)。Lottie のパーセントは採らない(裁定58/65)
-//! - **膨張(`x` / Expand)は持たない**。パスのオフセット演算なので、要る日に effect で足す
 //!
 //! 静止する部分(重ね方・反転・並び)だけがここにあり、**動く部分は property track**
-//! である。形状は `mask.{id}.shape`、不透明度は `mask.{id}.opacity` という名前で
-//! 普通の `KeyframeTrack` に載る — マスクのために新しい機構を1つも足していない。
+//! である。形状は `mask.{id}.shape`、不透明度は `mask.{id}.opacity`、膨張は
+//! `mask.{id}.expansion` という名前で普通の `KeyframeTrack` に載る — マスクのために
+//! 新しい機構を1つも足していない。
+//!
+//! ## 2026-08-22: 膨張の追加(B02、Lottie `helpers/mask/x`(Expand))
+//!
+//! **旧い棄却理由**(このセクションより上、当初の版): 「膨張(`x` / Expand)は持たない。
+//! パスのオフセット演算なので、要る日に effect で足す」。歴史として残すために文面は
+//! 消さずこの節を足す形にした。
+//!
+//! **意味の正本は Lottie**(利用者裁定「意味は全て Lottie が持っている」)。
+//! `next/reference/lottie-coverage.tsv` 行197(`helpers mask x Expand`)が実在する
+//! Lottie 語彙として既に載っており、旧版の verdict は「不採用」だった
+//! (地図ファイル自体は本発注の対象外なので verdict 欄は書き換えていない — RETURN 参照)。
+//! `next/reference/normal-map.tsv` 行767(`Mask Expansion…`)は AE 側の呼称として同じ
+//! 機能を指す。**フェザー(AE の Mask Feather、`normal-map.tsv` 行764/768/779/793)は
+//! Lottie の `helpers/mask` に対応する `f` 相当のキーが無い** — `lottie-coverage.tsv`
+//! を全文 grep しても `feather` は1件も出ない。Lottie に無い語彙を先に足すと発明になる
+//! ため、**フェザーは今回は追加していない**(RETURN の「消化予定行 id」参照 — 767 のみ
+//! 消化、768/779/793 は保留)。
+//!
+//! **なぜ今 expansion を入れるか**: 利用者裁定「普通の AE にする」(2026-08-17
+//! `docs/decision-index.md` full-delegation 系列)のもとで動いている INS-mask レーンが、
+//! 「store に型が無いので見送り」と報告した。**要る日が来た** — Lottie に実在する
+//! 語彙であり、AE 実機でも Mask Opacity/Shape と同じくタイムラインでキーを打てる
+//! 動く property なので、「effect で後付け」という旧い判断は「動く量は property track」
+//! という本ファイルの法則自体と矛盾していた(先送りの理由が薄かった、というのが
+//! 今回の評価)。
+//!
+//! **形**: [`crate::PropertyId::mask_expansion`](単一スカラー `Value::F64`、Lottie
+//! `x` も AE も同じくスカラーで正で外側・負で内側)。**`Mask` struct にはフィールドを
+//! 足していない** — shape/opacity と全く同じで、track の有無だけが「値を持つか」を
+//! 表す(裁定20)。キーを打っていない場合の読み戻しは `0.0` = 無効、AE の新規マスクの
+//! 既定と同型。
+//!
+//! **未完(次のレーンへ)**: [`ResolvedMask`] はまだ expansion を運ばない —
+//! `crate::view::StoreView::resolved_masks` が読むのは今も shape/opacity だけなので、
+//! `Intent::SetTrack` で書いた値は保存・undo・読み出し(`StoreView::value_at`)は効くが、
+//! 描画(compositor)へはまだ渡らない。実際にマスクを広げる幾何演算(パスのオフセット)を
+//! 持つのは compositor/engine 側の仕事で、この発注の範囲外(EXACT TARGET が
+//! `mask.rs`/`attrs.rs`/`document.rs` のみだったため、`view.rs` は意図して触っていない)。
 
 use serde::{Deserialize, Serialize};
 
@@ -58,8 +96,9 @@ impl Default for MaskMode {
 
 /// マスク1枚のうち、**キーを打たない部分**。
 ///
-/// 形状と不透明度はここに入れない — 動くので property track が持つ
-/// ([`crate::PropertyId::mask_shape`] / [`crate::PropertyId::mask_opacity`])。
+/// 形状・不透明度・膨張はここに入れない — 動くので property track が持つ
+/// ([`crate::PropertyId::mask_shape`] / [`crate::PropertyId::mask_opacity`] /
+/// [`crate::PropertyId::mask_expansion`]、2026-08-22 追加分は本ファイル冒頭の節参照)。
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Mask {
     pub id: MaskId,
@@ -74,6 +113,12 @@ pub struct Mask {
 }
 
 /// ある comp 時刻に解決済みのマスク。**描く側が要るのはこれだけ**。
+///
+/// **expansion をまだ持たない**(2026-08-22 時点)。`PropertyId::mask_expansion` の
+/// track は書ける・読める・保存できるが、`StoreView::resolved_masks` がまだこれを
+/// 引いていないので、ここには現れない。実際にマスクを広げる幾何演算を持つのは
+/// compositor/engine 側の仕事で、そちらが実装される回にこの struct へフィールドを足し、
+/// `resolved_masks` を対応させる(本ファイル冒頭の節参照)。
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedMask {
     pub mode: MaskMode,
