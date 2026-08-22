@@ -949,6 +949,15 @@ impl Shell {
                 timeline_pane::Message::ToggleMute(layer) => self.toggle_layer_hidden(layer),
                 timeline_pane::Message::ToggleSolo(layer) => self.toggle_layer_solo(layer),
                 timeline_pane::Message::ToggleLock(layer) => self.toggle_layer_lock(layer),
+                // transport 帯(裁定180)— 意味は shell の既存腕そのもの(5例外と
+                // 同じ先取りの型。pane 側 `PaneState::update` は no-op)。
+                timeline_pane::Message::TogglePlayback => self.toggle_playback(),
+                timeline_pane::Message::StepPlayhead(delta) => self.step_playhead(delta),
+                timeline_pane::Message::JumpPlayheadToStart => self.session.playhead = 0,
+                timeline_pane::Message::JumpPlayheadToEnd => {
+                    let duration = self.composition().map(|c| c.duration_frames).unwrap_or(0);
+                    self.session.playhead = timeline::nav::comp_end_frame(duration);
+                }
                 other => {
                     if let Some(reason) =
                         self.timeline.update(other, &mut self.doc, &mut self.session, self.keyboard_modifiers)
@@ -2444,7 +2453,12 @@ impl Shell {
                     // (root の `Message` を pane crate から参照できないため
                     // — 循環回避)。`.map(Message::Timeline)` で1回だけ畳む
                     // (§3.1 の「pane-local Message を親が畳む」構成そのもの)。
-                    self.build_timeline_pane().view().map(Message::Timeline)
+                    // transport 帯込み(裁定180 — 下部 Play バーは撤去済み、
+                    // 再生系の顔は timeline pane 上端の帯が正本)。
+                    self.build_timeline_pane()
+                        .with_playing(self.is_playing())
+                        .view_with_transport()
+                        .map(Message::Timeline)
                 }
             };
             pane_grid::Content::new(content).title_bar(Self::pane_title_bar(*kind, dims, colors))
@@ -2493,7 +2507,6 @@ impl Shell {
 
         layout
             .push(container(grid).width(Length::Fill).height(Length::Fill))
-            .push(transport(&self.session, &store, self.transport.is_running(), dims, colors))
             .push(status_band(self.status.as_deref(), &self.doc, dims, colors))
             .spacing(dims.spacing_m)
             .padding(dims.spacing_l)
@@ -4068,102 +4081,6 @@ fn stage_pane(
         .into()
 }
 
-/// `is_playing` は `Shell::transport`(Document/`Session`とは別の身分の
-/// front 状態、`transport.rs` doc 参照)から呼び出し側が渡す — pane 関数は
-/// `StoreView`/`&Session`/`Tokens` しか取らない制約(このファイル冒頭の
-/// doc)の例外を増やさないため、他の pane と同じ「呼び出し側が明示引数で
-/// 渡す」形(`stage_pane`の`overlay`と同じ)にした。
-/// scrub slider の意匠(ψ 転写ギャップ台帳 #23、チグハグ知覚 主因1位・裁定172
-/// §1「transport 系は M4 後の転写レーンへ」の本体)。無 `.style()` の iced
-/// 既定(太トラック+丸い大玉つまみ)は token を一切経由しない唯一の生 widget
-/// だった(ψ 実測: `transport_zoom.png`)。**モックに transport 自体が無い**
-/// ため転写ではなく導出 — supervisor 発注書の意匠案をそのまま実装する:
-/// - トラック: `border_strong`(既に ruler 大目盛=強い罫線ロールとして
-///   `canvas.rs::draw_ruler_ticks` が使う token、`canvas.rs:323` 参照)を
-///   進捗側/残り側の両方に同色で敷く — 進捗の強調はしない(S5c: pane 内外
-///   問わず playhead だけが時間のアクセントを語る)。太さ=
-///   `border_width * 2.0`(`canvas.rs` の hairline 倍率パターン — playhead=
-///   `*1.5`、ruler 上端=`*2.0` — と同型、新トークンは起こさない)。
-/// - つまみ: 角丸ゼロの縦長方形(Ableton 型)。寸法は既存トークンの算術合成
-///   のみ(新トークン新設なし): 幅=`spacing_m - spacing_xs`(8-2=6px 級)・
-///   高さは呼び出し側で `slider().height()` へ渡す `spacing_m * 2.0`
-///   (8*2=16px 級)と揃える。色=`text_secondary`、hover/dragged で
-///   `text_primary`(chrome の hover コントラスト強調と同じ方向)。
-fn transport_slider_style(
-    dims: Dimensions,
-    colors: Colors,
-    status: slider::Status,
-) -> slider::Style {
-    let rail_background = iced::Background::Color(colors.border_strong);
-    let handle_color = match status {
-        slider::Status::Active => colors.text_secondary,
-        slider::Status::Hovered | slider::Status::Dragged => colors.text_primary,
-    };
-    slider::Style {
-        rail: slider::Rail {
-            backgrounds: (rail_background, rail_background),
-            width: dims.border_width * 2.0,
-            border: iced::Border {
-                color: colors.border_strong,
-                width: 0.0,
-                radius: 0.0.into(),
-            },
-        },
-        handle: slider::Handle {
-            shape: slider::HandleShape::Rectangle {
-                width: (dims.spacing_m - dims.spacing_xs) as u16,
-                border_radius: 0.0.into(),
-            },
-            background: iced::Background::Color(handle_color),
-            border_width: 0.0,
-            border_color: colors.border_strong,
-        },
-    }
-}
-
-fn transport<'a>(
-    session: &Session,
-    store: &StoreView<'a>,
-    is_playing: bool,
-    dims: Dimensions,
-    colors: Colors,
-) -> Element<'a, Message> {
-    let last = store
-        .composition()
-        .ok()
-        .flatten()
-        .map(|c| (c.duration_frames - 1).max(0) as i32)
-        .unwrap_or(0);
-
-    // Play/Pause(A2)。**マウス完結**(ui-hand-feel-direction: 手触り方向 —
-    // Spaceキーだけに頼らない、クリックでも成立する)。ラベルは今の状態の
-    // 逆(ボタンは「次に何が起きるか」を示す慣習、多くの動画編集/音楽
-    // ソフトと同じ)。
-    let toggle_label = if is_playing { "Pause" } else { "Play" };
-
-    row![
-        button(text(toggle_label).size(dims.body_text))
-            .style(move |_theme, status| button_style(dims, colors, status))
-            .on_press(Message::TogglePlayback),
-        // ψ #24: ACCENT(`action_active`)は playhead 専用(S5b「pane内の最大
-        // コントラストはヒーロー内にのみ」)— transport は pane の外(世界の
-        // 縁)なので accent を語らせない。等幅数字(`Font::MONOSPACE`)は
-        // フレーム数字の桁ブレでラベル幅が揺れないようにする副次効果も持つ。
-        text(format!("frame {}", session.playhead))
-            .size(dims.body_text)
-            .font(iced::Font::MONOSPACE)
-            .color(colors.text_primary),
-        slider(0..=last, session.playhead as i32, |frame| {
-            Message::ScrubTo(i64::from(frame))
-        })
-        .height(dims.spacing_m * 2.0)
-        .style(move |_theme, status| transport_slider_style(dims, colors, status)),
-    ]
-    .spacing(dims.spacing_m)
-    .height(Length::Fixed(dims.transport_band))
-    .align_y(iced::alignment::Vertical::Center)
-    .into()
-}
 
 /// shell chrome の線化(裁定137/139)。旧実装は帯に境界を一切持たない生の
 /// `text` で、Stage/Timeline との違いが `spacing_m` の gap だけに頼っていた。
