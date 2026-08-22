@@ -13,15 +13,15 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| MB-2 | 実装 | worktree(shell) | ヘッダー箱ボタン列→menubar 差し替え(D1 根治): File/Edit/Layer/View 4メニュー(既存 Message の露出のみ・Freeze/Unfreeze 初露出)+右端 icon ボタン(Browser/Settings、icon+tooltip ペア第1号) |
-| LN-D2 | 実装 | worktree(inspector-pane) | 値セルの常時輪郭廃止(幾何不変・style のみ): 平常=素の数字/hover=箱/編集=focus 縁。±1px 柵の緑=幾何不変の証明 |
-| LN-D4 | 実装 | worktree(browser-pane) | チップ/rail の輪郭を「選択の器」へ(非選択=素の文字+hover 面) |
 
 
 ## 完了・main 着地済み(実装)
 
 | レーン | 結果 |
 |---|---|
+| MB-2(検収合格・merge) | ヘッダー箱ボタン列→ menubar(File/Edit/Layer/View・shortcut 併記の実行照合 oracle)+右端 icon ボタン2(icon+tooltip ペア第1号)。**Freeze/Unfreeze 初露出**(新 Message 2本 — 逸脱受理・group_drive 3本)。menu.rs は意味台帳化(widget 自作 348行を撤去)。q0 除外は MenuBar 自己登録 bounds の最小面積のみ。267緑 |
+| LN-D2(検収合格・merge) | Inspector 値セル/ボタンの常時輪郭廃止 — `HoverValueBox` wrapper(fork container が hover status を持たない実測への「迂回よりwrapper」)。幾何不変を ±1px 柵の緑で証明。drag 中視覚は hover 箱で代替(利用者チェックリスト行き)。66緑 |
+| LN-D4(検収合格・merge) | Browser チップ/rail 輪郭を選択の器へ — mock の非選択常時輪郭だけ裁定179 が上書き(衝突点の明示)。透明 border 方式で幾何不変。容器罫線は D5 の領分と線引き。74緑 |
 | KF-ae(検収合格・merge) | キーフレーム AE 作法 — 真因=「keys<=1 のみ編集可」規則が値編集で track を静的化しキーを消していた(利用者「1つしか打てない」の正体・仮説一致)。`edited_value_track` 純関数= キー持ちは playhead へ upsert(値更新 or 挿入・interp/spatial 保持)・静的は静的のまま。Q0 達成(値セル常時編集可)・1 undo=1 SetTrack・324緑 |
 | BR-sym(検収合格・merge) | Browser 構造文法の全タブ対称化 — モックはタブ別に宣言済み(tabScoped 節)だったので転写: effects=Color/Utility/Animation・create=Shapes/Built-in・panels=Tags/Notes/Export の rail+チップ+カード click。media 回帰なし・69緑。逸脱7件は理由つき(COLLECTIONS 予約地の対称留保等) |
 | IC-svg(検収合格・merge・第5セッション) | `motolii-icons` 新設 — Material Symbols 37個 vendoring(全24px outlined・1KB未満・Apache2.0/NOTICE同梱・rev固定)+transport 5ボタン SVG 化。`icon(Icon,size,color)`+`frame_px_for_glyph_px`。既知の限界: svg は押下瞬間の ink 変化が効かない(iced svg Status=Idle/Hovered のみ — 面浮き+再生中accentで裁定179の実質維持) |
