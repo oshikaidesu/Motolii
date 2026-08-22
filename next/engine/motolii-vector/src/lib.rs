@@ -57,6 +57,10 @@
 /// crate 根の `pub use` には混ぜず独立した名前空間として公開する。
 /// module doc(`edit.rs`)参照。
 pub mod edit;
+/// `Shape.ops`(演算子スタック — `shapes/*` modifier)に対する編集。`edit.rs` が
+/// `values/bezier` を編集単位にしたのと同じ理由(**編集**であって**記述**ではない)
+/// で、独立した名前空間として公開する。module doc(`stack_edit.rs`)参照。
+pub mod stack_edit;
 mod geom;
 /// シェイプ内の入れ子グループ(裁定173 H4)。`ShapeNode`/`ShapeGroup`/`flatten`/
 /// `render_tree` は crate 根から `pub use` で直に公開する — `coverage` と違い
