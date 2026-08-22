@@ -66,7 +66,7 @@ Copy / Paste / Import / Inspector / Timeline panel / New Project。
 |---|---|---|
 | `next/GOALS.md` M1〜M20 | 合否条件(観測可能な形) | **無し**。M5(drag/trim/snap)・M12(触れそうな物は全部機能する)・M13(無反応ゼロ)・M14(正本1つ)・M16(どの入力でも落ちない)・M17(空 project)・M20(IME を壊さない)は**台帳に1行も対応が無い** |
 | `docs/ui-quality-bar.md` Q0〜Q9 | 触達性・可逆性・沈黙禁止・単一の真実・頑健性・空状態・キーボード | **無し** |
-| 同 B1〜B7 | 時間予算(p99 8ms、gesture 中 16.7ms 連続2枚禁止 …) | **無し**。器具(telemetry probe)は在るが葉ごとに掛けていない |
+| 同 B1〜B7 | 時間予算(p99 8ms、gesture 中 16.7ms 連続2枚禁止 …) | **無し**。しかも器具が無い — B1 の正典器具 `[MotoliiRerunStage]`/`[MotoliiTimelineProbe]` は `next/` に存在せず、旧 egui ホスト(`ui/motolii-rn`)にしか無い。iced 移行で移植されていない(AX-4 実測 2026-08-23)。**B2/B4/B6 は試験ゼロ** |
 
 葉(1,551)と幹(20+10+7)を突き合わせる列も表も、いま存在しない。
 
@@ -102,7 +102,7 @@ Copy / Paste / Import / Inspector / Timeline panel / New Project。
 | A8 | **一括** | 複数選択に効くか | **未** | 裁定207 が1件検出(Inspector が単数選択しか読まない) |
 | A9 | **可逆** | 1 gesture = 1 undo か。undo 対象外は何か | **部分** | M10 は済だが葉ごとには掛けていない |
 | A10 | **予告** | hover・カーソル・中間表示が在るか(無反応ゼロ) | **部分** | GESTURES.md のカーソル列のみ |
-| A11 | **予算** | B1〜B7 をその操作が満たすか | **未** | 器具は在る |
+| A11 | **予算** | B1〜B7 をその操作が満たすか | **未** | 器具ごと `next/` に無い(AX-4 実測) |
 | A12 | **入力の物理** | IME・日本語・修飾キー・ホイール・トラックパッド | **未** | M20 |
 
 **未 or 部分 = 10本。** これが今日見つかった穴の全量。
