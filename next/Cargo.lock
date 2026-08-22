@@ -3813,6 +3813,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-export-pane"
+version = "0.1.0"
+dependencies = [
+ "iced",
+ "iced_test",
+ "motolii-icons",
+ "motolii-settings-pane",
+ "motolii-store",
+ "motolii-tokens-rs",
+]
+
+[[package]]
 name = "motolii-icons"
 version = "0.1.0"
 dependencies = [

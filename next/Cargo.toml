@@ -20,6 +20,7 @@ members = [
     "shell/motolii-shell",
     "ui/motolii-browser-pane",
     "ui/motolii-css-metrics",
+    "ui/motolii-export-pane",
     "ui/motolii-icons",
     "ui/motolii-inspector-pane",
     "ui/motolii-menubar",

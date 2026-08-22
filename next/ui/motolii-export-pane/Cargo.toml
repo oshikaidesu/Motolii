@@ -1,0 +1,27 @@
+[package]
+name = "motolii-export-pane"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+iced.workspace = true
+motolii-store.workspace = true
+# デザイン値の外出し(裁定117)。`Colors`/`Dimensions` は raw 値の直書き禁止の
+# 唯一の読み口。
+motolii-tokens-rs.workspace = true
+# chrome 共有ヘルパ(section 見出し・ボタン・容器の意匠)— inspector-pane と
+# 同じ「settings-pane → 他 pane」一方向の依存(pane split survey §2.4)。
+# `sections::{format_fps, MAX_COMP_DIMENSION_PX}` も再利用する(2箇所で別の
+# 表示文法・別の cap を発明しない)。
+motolii-settings-pane.workspace = true
+# 裁定187(icon-first): 中断ボタンの Close glyph。Export 動詞の glyph は
+# 未 vendoring(icons crate は本発注の write-set 外)— lib.rs 冒頭 doc の逸脱参照。
+motolii-icons.workspace = true
+
+[dev-dependencies]
+# Export ダイアログの表示値/Message 発火を実 widget 木で照合する器具
+# (`tests/export_dialog_drive.rs`)。settings-pane `sections_drive.rs` と同じ
+# 手口・同じ fork 同 rev(裁定170 M01 — 別 rev だと iced_core が2本入り型が
+# 衝突する)。dev-only。
+iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
