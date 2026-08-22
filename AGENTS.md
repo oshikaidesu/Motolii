@@ -44,3 +44,25 @@ cargo test --manifest-path "$(git rev-parse --show-toplevel)/next/Cargo.toml" --
 3. (完了済みの参考)shell test バイナリ統合 10本→2本はレーン A で着地済み(フルリンク 45.5s→18〜26s、[レーンボード](docs/reviews/2026-08-21-lane-board.md))。`depth_offset` 極端値による外周1px縮みはレーン B と BL3 で**2度**出た同型バグ — 極端値を使わない(`background_rect` doc)
 
 正本: [ビルド速度の調査](docs/reviews/2026-08-19-build-speed-investigation.md)・[静的検収調査](docs/reviews/2026-08-22-static-acceptance-survey.md)・[next/DECISIONS.md](next/DECISIONS.md) 裁定138。レーン運用の実測則は [next/reference/KNOWN.md](next/reference/KNOWN.md) の「レーン運用」節。**ビルド/検収の知見はこのファイルと上記正本にだけ追記する(新文書を増やさない)。ビルド系の調査・発注をする前に必ずこの節を読ませる。**
+
+### glam の `inverse()` は自己アサートする — 呼ぶ前に `determinant()` を見る(2026-08-22 実測)
+
+ワークスペースのどこかの依存が glam の `debug-glam-assert`/`glam-assert` feature を
+有効化しており、feature unification で**全体に効いている**。その結果:
+
+`Mat2::inverse()`(`glam-0.30.10`)は**結果を返す前に** `glam_assert!(...is_finite())`
+で自己アサートする。つまり「`inverse()` を呼んでから `is_finite()` で後始末する」形の
+ガードは、**そのガードへ到達する前に panic する**。実害の例:
+Scale X = 0 のレイヤーで Stage の Anchor Point ハンドルを掴むと debug ビルドで落ちた
+(release では `is_finite()` ガードが機能して「偶然」動いていた — 潜在的な地雷)。
+
+**正しい形**: `determinant()` を先に見て、非有限または 0 なら `inverse()` を**呼ばない**。
+
+```rust
+let det = m.determinant();
+if !det.is_finite() || det == 0.0 { return fallback; }
+let inv = m.inverse();
+```
+
+`Mat2` から回転/せん断だけを取り出した行列(det=1 が保証される物)は例外だが、
+**保証の根拠をその場に書くこと**。
