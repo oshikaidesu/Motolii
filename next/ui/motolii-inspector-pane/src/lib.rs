@@ -1101,32 +1101,10 @@ pub fn view_with_speed_draft(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    // **`--section`(26)**: mock の ptitle(パネルタイトル)は section 見出しと
-    // 同じ高さトークンを共有する(`inspector_section_header_height`) — 旧実装は
-    // Shell 全体の `panel_header_height`(29、Ableton実測)を誤って流用していた。
-    //
-    // **`.width(Length::Fill)` は柵で見つかった実修正**(`tests/inspector_pixel_fence.rs`):
-    // `container(text(...))` の既定幅は content の `size_hint` 追従(`Length::Shrink`)
-    // なので、これが無いと帯が "Inspector" の文字幅ぶんしか広がらず、mock の
-    // `.ptitle`(block要素、pane 全幅の帯)と食い違う(実測: 修正前は幅 67.5px)。
-    let header = container(
-        text("Inspector")
-            .size(dims.title_text)
-            .color(colors.text_primary),
-    )
-    .width(Length::Fill)
-    .height(Length::Fixed(dims.inspector_section_header_height))
-    .padding([0.0, dims.spacing_m])
-    .align_y(iced::alignment::Vertical::Center)
-    .style(move |_theme| container::Style {
-        border: iced::Border {
-            color: colors.border_default,
-            width: dims.border_width,
-            radius: 0.0.into(),
-        },
-        ..container::Style::default()
-    });
-
+    // mock v3.1 の `.ptitle`("Inspector" 帯)は転写しない — pane 名の正本は
+    // shell の pane 題帯(pane_grid title_bar、drag ハンドル兼任)へ移った。
+    // 内部にも残すと "Inspector" が二重表示になる(題帯レーンの API 要求)。
+    // mock 側の追随(ptitle 行の除去 or 注記)は supervisor キュー。
     let body: Element<'static, Message> = match projection {
         None => empty_state(dims, colors),
         Some(selection) => selected_body(
@@ -1139,7 +1117,7 @@ pub fn view_with_speed_draft(
         ),
     };
 
-    container(column![header, body])
+    container(body)
         .width(Length::Fixed(dims.inspector_panel_width))
         .height(Length::Fill)
         .style(move |_theme| container::Style {

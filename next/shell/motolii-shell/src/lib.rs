@@ -2349,10 +2349,9 @@ impl Shell {
         let browser_items = browser_pane::model::assets(&store);
         let grid = pane_grid::PaneGrid::new(&self.panes.state, |_pane, kind, _is_maximized| {
             let content: Element<'_, Message> = match kind {
-                pane_layout::PaneKind::Browser => browser_pane::view(
+                pane_layout::PaneKind::Browser => browser_pane::pane_view(
+                    &self.browser,
                     &browser_items,
-                    self.browser.scope(),
-                    self.browser.query(),
                     dims,
                     colors,
                 )
