@@ -56,6 +56,7 @@ pub mod nav;
 mod projection;
 mod rail;
 pub mod shuttle;
+pub mod stacking;
 mod transport;
 pub mod work_area;
 mod write;
@@ -92,6 +93,12 @@ pub use shuttle::{ShuttleCommand, ShuttleState, MAX_SHUTTLE_RATE};
 /// と shell 側検分器具の両方が widget 木の代わりに読む継ぎ目。
 pub use transport::{transport_spec, TransportButton, TransportSpec};
 pub use work_area::{classify_loop_band, LoopBandPart, WorkArea, LOOP_GRAB};
+/// Stage 重なり並べ替え(第3切片)の意味型 — shell の keymap/メニュー層が
+/// `Message::RestackLayer(StackDirection)` で結線する。
+pub use stacking::StackDirection;
+/// Easy Ease 系プリセット(map 485〜490)— keymap/メニュー層が
+/// `Message::SetKeyInterp(EASY_EASE)` 等で渡す定数(`write.rs` の doc 参照)。
+pub use write::{EASY_EASE, EASY_EASE_IN, EASY_EASE_OUT};
 pub use write::{Message, PaneState};
 
 use iced::widget::row;
@@ -156,6 +163,10 @@ pub struct TimelinePane {
     /// ループ on/off(map 1082/1083)。帯の ink(on=accent)と transport の
     /// ループボタンの顔が読む。
     loop_enabled: bool,
+    /// inline rename の進行中下書き(第3切片、正典 §6)。`PaneState::rename_draft()`
+    /// を [`Self::with_rename`] で運ぶだけ(`work_area` と同じ形)。`Some` の間、
+    /// rail の該当行の名前 text が `text_input` に差し替わる(`rail::layer_row`)。
+    rename: Option<(LayerId, String)>,
 }
 
 impl TimelinePane {
@@ -187,6 +198,7 @@ impl TimelinePane {
             playing: false,
             work_area: None,
             loop_enabled: false,
+            rename: None,
         }
     }
 
@@ -204,6 +216,15 @@ impl TimelinePane {
     pub fn with_work_area(mut self, area: Option<WorkArea>, loop_enabled: bool) -> Self {
         self.work_area = area;
         self.loop_enabled = loop_enabled;
+        self
+    }
+
+    /// `Shell::view` だけが呼ぶ(第3切片、正典 §6「リネーム」)。
+    /// `PaneState::rename_draft()` を owned へ写してそのまま渡すだけの薄い
+    /// builder — `with_work_area` と同じ形(既存の呼び出し元・試験を1つも
+    /// 壊さない)。
+    pub fn with_rename(mut self, rename: Option<(LayerId, String)>) -> Self {
+        self.rename = rename;
         self
     }
 

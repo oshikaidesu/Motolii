@@ -55,7 +55,7 @@
 //! 他段(0.15/0.075)の方が近ければ [`indent_step_px`] を直す(段の中間値は
 //! 発明しない、S4 段量子化柵と同型)。
 
-use iced::widget::{button, column, container, mouse_area, row, text, Space};
+use iced::widget::{button, column, container, mouse_area, row, text, text_input, Space};
 use iced::{Background, Border, Element, Length};
 
 use motolii_store::LayerId;
@@ -100,7 +100,14 @@ pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
     // 同じ順序・同じ挿入位置(選択 layer の直後)で積むだけ — 押し下げ量を
     // 計算する式はここには無い(iced のレイアウトが累計する)。
     for (index, proj) in pane.rows.iter().enumerate() {
-        children.push(layer_row(proj, dims, colors, row_height, rail_width, has_any_tree));
+        // inline rename 中の行だけ、名前 text を text_input へ差し替える
+        // (第3切片、正典 §6 — `TimelinePane::with_rename` が運ぶ下書き)。
+        let rename_draft = pane
+            .rename
+            .as_ref()
+            .filter(|(layer, _)| *layer == proj.id)
+            .map(|(_, draft)| draft.as_str());
+        children.push(layer_row(proj, dims, colors, row_height, rail_width, has_any_tree, rename_draft));
         if pane.selected_row_index == Some(index) {
             for (band_index, prow) in pane.property_rows.iter().enumerate() {
                 children.push(property_row(prow, dims, colors, param_row_height, band_index));
@@ -198,6 +205,7 @@ fn layer_row(
     row_height: f32,
     rail_width: f32,
     has_any_tree: bool,
+    rename_draft: Option<&str>,
 ) -> Element<'static, Message> {
     let id = proj.id;
     let indent_step = indent_step_px(row_height);
@@ -238,14 +246,28 @@ fn layer_row(
         proj.name.clone()
     };
     let name_max_width = (name_column_width(&dims, rail_width, row_height) - tree_prefix_width).max(0.0);
-    let name: Element<'static, Message> = text(name_content)
-        .size(dims.caption_text)
-        .color(name_color)
-        .width(Length::Fixed(name_max_width))
-        .align_y(iced::alignment::Vertical::Center)
-        .wrapping(iced::widget::text::Wrapping::None)
-        .ellipsis(iced::widget::text::Ellipsis::End)
-        .into();
+    // inline rename 中(正典 §6)は同じ幅の text_input へ差し替える —
+    // 毎打鍵は `Message::RenameEdited`、Enter は `RenameCommit`(空名拒否・
+    // 同名 no-op は `PaneState::commit_rename` の柵)。placeholder は静止表示と
+    // 同じ `layer {id}` の顔。padding は縦0(inspector `ident_band` と同じ柵 —
+    // 既定 padding が乗ると固定行高 26px の中で欄が縦に太る)。
+    let name: Element<'static, Message> = match rename_draft {
+        Some(draft) => text_input(format!("layer {}", id.0), draft.to_owned())
+            .on_input(Message::RenameEdited)
+            .on_submit(Message::RenameCommit)
+            .size(dims.caption_text)
+            .padding([0.0, dims.spacing_xs])
+            .width(Length::Fixed(name_max_width))
+            .into(),
+        None => text(name_content)
+            .size(dims.caption_text)
+            .color(name_color)
+            .width(Length::Fixed(name_max_width))
+            .align_y(iced::alignment::Vertical::Center)
+            .wrapping(iced::widget::text::Wrapping::None)
+            .ellipsis(iced::widget::text::Ellipsis::End)
+            .into(),
+    };
 
     let glyphs: Element<'static, Message> = row([
         glyph_button(id, Glyph::Mute, proj, dims, colors),
@@ -339,9 +361,14 @@ fn glyph_button(
 }
 
 /// property 行(キー行)の rail 側ラベル — property 名だけ(裁定147「名前の
-/// 住所はレーンバー」を property 行にも延長)。**非対話**(菱形/bar と違い
-/// property 名自体はクリック動詞を持たない、旧 `key_rows.rs::update` の
-/// 「rail 側は吸収だけ」踏襲)なので `mouse_area`/`button` は要らない。
+/// 住所はレーンバー」を property 行にも延長)。
+///
+/// **第3切片で対話化**(map 509・正典 §8.1 SelectAllKeysOfProperty
+/// 「property 名クリックでその property の全キー選択」): 行全体を `mouse_area`
+/// で包み `Message::SelectAllKeysOfProperty` を発火する。カーソルは Pointer
+/// (§5.5「カーソル形状は意味の予告」 — 押せる物には予告を出す、Q0)。
+/// 旧 doc の「非対話」は §8.1 の正典項目で上書きされた(採用済みの意味を
+/// rail 側の入口として結線した形)。
 fn property_row(
     prow: &PropertyRowProjection,
     dims: Dimensions,
@@ -355,7 +382,7 @@ fn property_row(
         .color(colors.text_secondary)
         .align_y(iced::alignment::Vertical::Center);
 
-    container(label)
+    let body = container(label)
         .width(Length::Fill)
         .height(Length::Fixed(param_row_height))
         .align_y(iced::alignment::Vertical::Center)
@@ -372,6 +399,13 @@ fn property_row(
                 radius: 0.0.into(),
             },
             ..container::Style::default()
+        });
+
+    mouse_area(body)
+        .on_press(Message::SelectAllKeysOfProperty {
+            layer: prow.layer,
+            property: prow.property.clone(),
         })
+        .interaction(iced::mouse::Interaction::Pointer)
         .into()
 }

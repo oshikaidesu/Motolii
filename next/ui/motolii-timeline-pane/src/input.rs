@@ -261,6 +261,7 @@ mod mouse_interaction_tests {
             playing: false,
             work_area: None,
             loop_enabled: false,
+            rename: None,
         }
     }
 
