@@ -237,9 +237,9 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 236	clip_edit	Move Edit Selection To	編集選択を移動	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B31
 237	clip_edit	Move selected items down/up in stacking order	選択項目を重ね順で上下に移動	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B44
 238	clip_edit	Move selected items to bottom/top of stacking order	選択項目を最上/最下へ移動	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B44
-239	clip_edit	Multicam	マルチカム編集コントロールを開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B40
-240	clip_edit	Multicam Cut	マルチカムカット	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B40
-241	clip_edit	Multicam Switch	マルチカム切替	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B40
+239	clip_edit	Multicam	マルチカム編集コントロールを開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		拡張	裁定193: vism圏(マルチカム)— 複数カメラ素材の同期・切替は単一timeline前提のコアを超える専門ワークフロー。継ぎ目=multicam providerプラグイン	B40
+240	clip_edit	Multicam Cut	マルチカムカット	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		拡張	裁定193: vism圏(マルチカム)— 複数カメラ素材の同期・切替は単一timeline前提のコアを超える専門ワークフロー。継ぎ目=multicam providerプラグイン	B40
+241	clip_edit	Multicam Switch	マルチカム切替	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		拡張	裁定193: vism圏(マルチカム)— 複数カメラ素材の同期・切替は単一timeline前提のコアを超える専門ワークフロー。継ぎ目=multicam providerプラグイン	B40
 242	clip_edit	Nest	選択クリップをネストシーケンス化	0	1	0	0	1	1:0:0:0	二次(premiere全体注記)		不採用	プリコンポ(ネスト)不採用 — docs/concept.md、GOALS D4	
 243	clip_edit	New > Adjustment Layer	調整レイヤーを新規作成	0	1	0	0	1	1:0:0:0	二次(premiere全体注記)		採用予定		B36
 244	clip_edit	New adjustment layer	新規調整レイヤー	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B36
@@ -387,7 +387,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 386	color	Preview Memory	Option+Shift+P	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		不採用	カラーグレーディングスイート級(Resolveノードカラーページの版管理/ノード操作そのもの)。領域外(裁定154/155の除外基準)	
 387	color	Previous Still	前のスティル	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	カラーグレーディングスイート級(Resolveノードカラーページの版管理/ノード操作そのもの)。領域外(裁定154/155の除外基準)	
 388	color	Previous Version	Command+B	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		不採用	カラーグレーディングスイート級(Resolveノードカラーページの版管理/ノード操作そのもの)。領域外(裁定154/155の除外基準)	
-389	color	Primaries/Log Color Wheels	Option+Z	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	基本的な色補正effectとして採用予定側(グレーディングスイートの深部機能ではない)(Primaries/Log Color Wheelsは基本補正UIそのもの)	B05
+389	color	Primaries/Log Color Wheels	Option+Z	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B05
 390	color	Printer Light Hotkeys	プリンターライトホットキー	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)	out-of-domain?	不採用	製品固有の深部機能(Fairlight/Dolby Vision/HDR規格/プロ入出力設定等)。領域外。Tracker/Resolve Live/Dolby Vision/HDR10+/printer light等	
 391	color	Printer Light Hotkeys	Option+Command+`	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)	out-of-domain?	不採用	製品固有の深部機能(Fairlight/Dolby Vision/HDR規格/プロ入出力設定等)。領域外。Tracker/Resolve Live/Dolby Vision/HDR10+/printer light等	
 392	color	Quarter Printer Light	クォータープリンターライト	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)	out-of-domain?	不採用	製品固有の深部機能(Fairlight/Dolby Vision/HDR規格/プロ入出力設定等)。領域外。Tracker/Resolve Live/Dolby Vision/HDR10+/printer light等	
@@ -413,10 +413,10 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 412	color	Show alpha overlay in Layer panel	Layerパネルでアルファオーバーレイ表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	アルファ/チャンネル表示・マット確認は一般的な診断可視化機能。除外根拠なし	B05
 413	color	Show colorized red, green, or blue channel	各チャンネルを色付き表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	アルファ/チャンネル表示・マット確認は一般的な診断可視化機能。除外根拠なし	B05
 414	color	Show red, green, blue, or alpha channel as grayscale	各チャンネルをグレースケール表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	アルファ/チャンネル表示・マット確認は一般的な診断可視化機能。除外根拠なし	B05
-415	color	Show Refine Edge X-ray	エッジ調整X線表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	アルファ/チャンネル表示・マット確認は一般的な診断可視化機能。除外根拠なし	B05
+415	color	Show Refine Edge X-ray	エッジ調整X線表示	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定193+裁定153: vism圏(個別エフェクト群)— Glow(vism第1号)と同型の単発専門エフェクト/アルゴリズムで、裁定153のeffect provider経路(compositor内layer単位オフスクリーンパス)で後から載せる。コアはeffect適用UIの器のみ持つ	B05
 416	color	Step Timeline Wipe	タイムラインワイプを段階送り	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	カラーグレーディングスイート級(Resolveノードカラーページの版管理/ノード操作そのもの)。領域外(裁定154/155の除外基準)	
 417	color	Stop Tracking	Option+Command+T	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		不採用	製品固有の深部機能(Fairlight/Dolby Vision/HDR規格/プロ入出力設定等)。領域外。Tracker/Resolve Live/Dolby Vision/HDR10+/printer light等	
-418	color	Swap paint background and foreground colors	背景色と前景色を入替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	スポイト/前景背景色入替は一般的なペイントツール機能。除外根拠なし	B05
+418	color	Swap paint background and foreground colors	背景色と前景色を入替	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: ペイント族(既存9行=989/1023/1374/1427-1430/1468/1519/1523と同族、拾い漏れ分)— vism抽象化候補・拡張として戸を残す(コア完成後・L8/L9継ぎ目候補)	B05
 419	color	Toggle showing straight RGB color	ストレートRGB表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	straight/premultiplied alpha表示切替は診断UI。除外根拠なし	B05
 420	color	Track Forward	Command+T	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		不採用	製品固有の深部機能(Fairlight/Dolby Vision/HDR規格/プロ入出力設定等)。領域外。Tracker/Resolve Live/Dolby Vision/HDR10+/printer light等	
 421	color	Track One Frame Forward	Option+Right Arrow	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		不採用	製品固有の深部機能(Fairlight/Dolby Vision/HDR規格/プロ入出力設定等)。領域外。Tracker/Resolve Live/Dolby Vision/HDR10+/printer light等	
@@ -425,8 +425,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 424	color	Tracker	トラッカーパレット	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	製品固有の深部機能(Fairlight/Dolby Vision/HDR規格/プロ入出力設定等)。領域外。Tracker/Resolve Live/Dolby Vision/HDR10+/printer light等	
 425	color	Turn display color management on or off	ディスプレイカラーマネジメント切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	ディスプレイカラーマネジメント切替は一般的な出力精度機能。除外根拠なし	B05
 426	color	Use Display Color Management	ディスプレイカラーマネジメントを使用	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ディスプレイカラーマネジメント切替は一般的な出力精度機能。除外根拠なし	B05
-427	color	Video Scopes	ビデオスコープ表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	波形/ベクトルスコープは普通の動画ソフトが持つ標準QCツール(グレーディングスイート固有ではない)	B05
-428	color	Video Scopes	Shift+Command+W	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	波形/ベクトルスコープは普通の動画ソフトが持つ標準QCツール(グレーディングスイート固有ではない)	B05
+427	color	Video Scopes	ビデオスコープ表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B05
+428	color	Video Scopes	Shift+Command+W	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B05
 429	edit_basic	Copy	コピー	1	1	1	1	4	4:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF);単一(WebSearch要約経由・要一次確認)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)	B33
 430	edit_basic	Paste	貼り付け	1	1	1	1	4	4:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF);単一(同上)		採用済	MB-0でEditメニュー結線(2026-08-22、既存shortcut併存=S6安全)	B33
 431	edit_basic	Clear / Delete	選択項目を削除	1	1	1	0	3	3:2:0:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	TimelineDeleteSelectedKeys(shell/lib.rs)	B33
@@ -592,12 +592,12 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 591	help	Welcome to DaVinci Resolve	ようこそ画面を開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	ヘルプドキュメント/クラッシュレポーター/ライセンス/フォーラム/更新確認/ようこそ画面等はMotolii自身の実装として一般的に妥当。除外根拠なし(ようこそ画面はGOALS M1が要求)	B06
 592	import_export	Import (media/file)	メディア/ファイルを読み込む	1	1	1	1	4	4:1:0:0	一致(2件);二次(premiere全体注記);二次(非公式技術抽出/2015時点);公式;公式(BMDマニュアルPDF)		採用済	GOALS M2実装済み: OSドロップで素材が入る(1操作、next/shell)	B08
 593	import_export	Export (media)	メディアを書き出す	0	1	1	1	3	3:0:0:0	二次(premiere全体注記);公式;公式(BMDマニュアルPDF)		採用済	next/engine/motolii-export実装済み(M9部分: 報告=現物・cancel済み、音声mux未結線)	B08
-594	import_export	Adobe Premiere Pro Project…	Premiereプロジェクトを読み込む	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし。他社プロジェクト形式importは将来の交換口として想定内(KNOWN.md)	B08
-595	import_export	Batch List From EDL	EDLからバッチリストをインポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B08
+594	import_export	Adobe Premiere Pro Project…	Premiereプロジェクトを読み込む	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定193: vism圏(特殊フォーマット/コーデック対応)— EDL/AAF/XML/PSD等の他製品向け相互運用フォーマットは普通の動画編集ソフトに不要な専門機能。継ぎ目=import/exportプラグイン	B08
+595	import_export	Batch List From EDL	EDLからバッチリストをインポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		拡張	裁定193: vism圏(特殊フォーマット/コーデック対応)— EDL/AAF/XML/PSD等の他製品向け相互運用フォーマットは普通の動画編集ソフトに不要な専門機能。継ぎ目=import/exportプラグイン	B08
 596	import_export	Bin	ビンをインポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし(Browserのフォルダ機構、裁定143と接続)	B08
 597	import_export	Delete footage item without warning	警告なしで素材を削除	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B08
 598	import_export	Edit selected footage in associated application	関連アプリで素材を編集	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B08
-599	import_export	Import AAF, EDL, XML	Shift+Command+I	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし。将来のプロジェクト交換口(KNOWN.md OTIO注記)	B08
+599	import_export	Import AAF, EDL, XML	Shift+Command+I	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		拡張	裁定193: vism圏(特殊フォーマット/コーデック対応)— EDL/AAF/XML/PSD等の他製品向け相互運用フォーマットは普通の動画編集ソフトに不要な専門機能。継ぎ目=import/exportプラグイン	B08
 600	import_export	Import from Media Browser	Media Browserから読み込み	0	1	0	0	1	1:0:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし(Browser裁定143)	B08
 601	import_export	Import Metadata To	CSVからメタデータをインポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B08
 602	import_export	Import multiple files or image sequences	複数ファイル読み込み	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	GOALS M2実装済み: 複数ファイルをまとめてドロップし1操作で取り込む(next/shell)	B08
@@ -605,13 +605,13 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 604	import_export	Import Project	プロジェクトファイル(.drp)をインポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済	Document::load実装済み(裁定103、GOALS M11部分)。プロジェクトを開く経路の中核は現存	B08
 605	import_export	Import Project	Command+I	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済	同上(ショートカット違いのみ)	B08
 606	import_export	Import…	読み込み時の既定動作設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B08
-607	import_export	Media from XML	XMLからメディアをインポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B08
+607	import_export	Media from XML	XMLからメディアをインポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		拡張	裁定193: vism圏(特殊フォーマット/コーデック対応)— EDL/AAF/XML/PSD等の他製品向け相互運用フォーマットは普通の動画編集ソフトに不要な専門機能。継ぎ目=import/exportプラグイン	B08
 608	import_export	Multiple Files…	複数ファイルを読み込む	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	602と同根拠(GOALS M2、next/shell)	B08
 609	import_export	Open Interpret Footage dialog	素材の解釈ダイアログを開く	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B08
 610	import_export	Open movie in After Effects Footage panel	Footageパネルで動画を開く	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし(Footageパネル自体は未実装)	B08
 611	import_export	Placeholder…	プレースホルダーを読み込む	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし(M2「開けない物は理由つきでskip」と親和)	B08
-612	import_export	Pre-conformed EDL	コンフォーム済みEDLをインポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B08
-613	import_export	Pro Import After Effects…	Premiere用インポータ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B08
+612	import_export	Pre-conformed EDL	コンフォーム済みEDLをインポート	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		拡張	裁定193: vism圏(特殊フォーマット/コーデック対応)— EDL/AAF/XML/PSD等の他製品向け相互運用フォーマットは普通の動画編集ソフトに不要な専門機能。継ぎ目=import/exportプラグイン	B08
+613	import_export	Pro Import After Effects…	Premiere用インポータ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定193: vism圏(特殊フォーマット/コーデック対応)— EDL/AAF/XML/PSD等の他製品向け相互運用フォーマットは普通の動画編集ソフトに不要な専門機能。継ぎ目=import/exportプラグイン	B08
 614	import_export	Reload selected footage items	選択素材を再読み込み	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B08
 615	import_export	Remember footage interpretation	素材の解釈を記憶	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B08
 616	import_export	Replace selected footage item	選択素材を置換	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	store側にIntent::SetSource実装済み(裁定112c)だがUI(Browser差替)は未	B08
@@ -689,7 +689,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 688	layer_transform	Open Rotation dialog	回転ダイアログを開く	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	inspector_pane.rs rotation_row	B44
 689	layer_transform	Open selected layer, composition, or footage item	選択項目を開く	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B25
 690	layer_transform	Orientation…	方向	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	3D系不採用 — 裁定65(採らないLottie由来のもの: 3D系)	
-691	layer_transform	Photoshop Layers…	フレームをPSDレイヤーとして保存	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B36
+691	layer_transform	Photoshop Layers…	フレームをPSDレイヤーとして保存	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定193: vism圏(特殊フォーマット/コーデック対応)— EDL/AAF/XML/PSD等の他製品向け相互運用フォーマットは普通の動画編集ソフトに不要な専門機能。継ぎ目=import/exportプラグイン	B36
 692	layer_transform	Position Objects to Bottom Title Safe Margin	下タイトルセーフに配置	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B22
 693	layer_transform	Position Objects to Left Title Safe Margin	左タイトルセーフに配置	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B22
 694	layer_transform	Position Objects to Top Title Safe Margin	上タイトルセーフに配置	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B22
@@ -709,7 +709,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 708	layer_transform	Scale and reposition to fit composition width	コンポ幅にフィット	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B44
 709	layer_transform	Scale…	スケール	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	inspector_pane.rs scale_row	B44
 710	layer_transform	Scroll to current time in Timeline panel	現在時刻までスクロール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B20
-711	layer_transform	Set opacity for paint tool	ペイントツールの不透明度を設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B27
+711	layer_transform	Set opacity for paint tool	ペイントツールの不透明度を設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: ペイント族(既存9行=989/1023/1374/1427-1430/1468/1519/1523と同族、拾い漏れ分)— vism抽象化候補・拡張として戸を残す(コア完成後・L8/L9継ぎ目候補)	B27
 712	layer_transform	Set opacity to 100%	不透明度を100%に	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B44
 713	layer_transform	Set Poster Time	ポスターフレーム時刻を設定	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B36
 714	layer_transform	Take Snapshot	該当なし(参考: PDFにはComposition関連のSnapshotは明記なし、Edit>Purge>Snapshotのみ確認)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B52
@@ -745,7 +745,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 744	marker	Synchronize > Clip Markers	クリップマーカーで同期	0	1	0	0	1	1:0:0:0	二次(premiere全体注記)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
 745	mask	Activate and cycle mask and shape tools	マスク/シェイプツールを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B02
 746	mask	Activate and cycle Pen and Mask Feather tools	ペン/マスクフェザーツールを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B02
-747	mask	Activate Roto Brush tool	ロトブラシツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B02
+747	mask	Activate Roto Brush tool	ロトブラシツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定193+裁定153: vism圏(個別エフェクト群)— Glow(vism第1号)と同型の単発専門エフェクト/アルゴリズムで、裁定153のeffect provider経路(compositor内layer単位オフスクリーンパス)で後から載せる。コアはeffect適用UIの器のみ持つ	B02
 748	mask	Add	マスクモード:加算	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)	B02
 749	mask	Add mode	マスクモード:加算	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	MK2で被覆代数として実装(2026-08-22、mode別単位元・serde後方互換)	B02
 750	mask	Closed	パスを閉じる	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
@@ -805,8 +805,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 804	misc	Add Edit to All Tracks	全トラックに編集点追加	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B39
 805	misc	Add effect to selected layers	選択レイヤーにエフェクトを追加	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	effect stackの型は裁定133等で決定済み、追加UIは未	B38
 806	misc	Add Footage to Comp	素材をコンポへ追加	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	GOALS M2/M3実装済み: ドロップでcompへ素材が入りStageに絵が出る(next/shell)	B36
-807	misc	Adobe Photoshop File…	新規Photoshopファイル作成	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B36
-808	misc	Adobe Photoshop File…	新規Photoshopレイヤー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B36
+807	misc	Adobe Photoshop File…	新規Photoshopファイル作成	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定193: vism圏(特殊フォーマット/コーデック対応)— EDL/AAF/XML/PSD等の他製品向け相互運用フォーマットは普通の動画編集ソフトに不要な専門機能。継ぎ目=import/exportプラグイン	B36
+808	misc	Adobe Photoshop File…	新規Photoshopレイヤー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定193: vism圏(特殊フォーマット/コーデック対応)— EDL/AAF/XML/PSD等の他製品向け相互運用フォーマットは普通の動画編集ソフトに不要な専門機能。継ぎ目=import/exportプラグイン	B36
 809	misc	Apply Animation Preset…	アニメーションプリセット適用	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B07
 810	misc	Apply Default Transition	既定トランジション適用	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B38
 811	misc	Apply Interpretation	記憶した解釈設定を適用	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B08
@@ -829,7 +829,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 828	misc	Delete Gaps	ギャップを削除	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	timeline-grammar拘束1: trim family(ripple等gapless詰め)不採用。Delete Gapsはgap詰め操作	
 829	misc	Drop Shadow	ドロップシャドウ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	レイヤースタイルは裁定71で全廃	
 830	misc	easyDCP	easyDCPツールセットを開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)	out-of-domain?	不採用	領域外: easyDCP(劇場配給DCPマスタリング、製品固有深部機能、既flag)	
-831	misc	Edit in Adobe Audition	Auditionで編集	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B33
+831	misc	Edit in Adobe Audition	Auditionで編集	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定193: vism圏(オーディオスイート=Fairlight級)— クリップ音量・フェード止まりでなく専用ミキサー/DAW機構が要る専門機能。継ぎ目=将来のaudio providerプラグイン	B33
 832	misc	Edit Point Type	U	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		不採用	timeline-grammar拘束1: trimモード種別選択はripple/roll等trim family専用ツール	
 833	misc	Effect	エフェクト有効切替	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	EffectInstance.enabled実装済み(裁定133)だがUIトグルは未	B38
 834	misc	Effects Controls	エフェクトコントロールを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	既決との衝突なし	B38
@@ -880,8 +880,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 879	misc	Manually preview video	ビデオを手動プレビュー	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	GOALS M8(未)	B21
 880	misc	Mark Video In	映像イン点設定	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B18
 881	misc	Mark Video Out	映像アウト点設定	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B18
-882	misc	MAXON CINEMA 4D File…	新規C4Dファイル作成	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B36
-883	misc	MAXON CINEMA 4D File…	新規C4Dレイヤー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B36
+882	misc	MAXON CINEMA 4D File…	新規C4Dファイル作成	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定193: vism圏(ノードコンポジット/3D合成=Fusion級・Cinema 4Dという他製品の内部機構に依存)— 単一comp前提のMotoliiコアには無い3D合成パイプライン。継ぎ目=外部ツール連携プラグイン	B36
+883	misc	MAXON CINEMA 4D File…	新規C4Dレイヤー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定193: vism圏(ノードコンポジット/3D合成=Fusion級・Cinema 4Dという他製品の内部機構に依存)— 単一comp前提のMotoliiコアには無い3D合成パイプライン。継ぎ目=外部ツール連携プラグイン	B36
 884	misc	Modify property value by 1/10 increments	1/10の増減幅でプロパティ変更	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	next/shell inspector_pane.rs dragged_valueのfine引数(Shift+drag=1/10、DRAG_SHIFT_FACTOR)実装済み	B45
 885	misc	Modify property value by 10x increments	10倍の増減幅でプロパティ変更	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	10倍刻みの明示modifierは未実装(fine=1/10のみ確認)	B45
 886	misc	Modify property value by default increments	既定の増減幅でプロパティ変更	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	inspector_pane.rs dragged_valueの既定係数(fine=false)が基本の増分挙動	B45
@@ -903,10 +903,10 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 902	misc	No Output Simulation	出力シミュレーションなし	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	領域外: Output Simulation(825と同根拠)	
 903	misc	Null Object	新規ヌルオブジェクト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち	898と同根拠	B36
 904	misc	Off	フレームブレンドOFF	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B37
-905	misc	Optical Flow	オプティカルフローによる滑らかなスロー	0	0	0	1	1	1:0:0:0	公式		採用予定	既決との衝突なし	B37
+905	misc	Optical Flow	オプティカルフローによる滑らかなスロー	0	0	0	1	1	1:0:0:0	公式		拡張	裁定193+裁定153: vism圏(個別エフェクト群)— Glow(vism第1号)と同型の単発専門エフェクト/アルゴリズムで、裁定153のeffect provider経路(compositor内layer単位オフスクリーンパス)で後から載せる。コアはeffect適用UIの器のみ持つ	B37
 906	misc	Outer Glow	光彩(外側)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	レイヤースタイルは裁定71で全廃	
 907	misc	Output Module…	出力モジュールテンプレート	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B09
-908	misc	Pixel Motion	ピクセルモーション	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B37
+908	misc	Pixel Motion	ピクセルモーション	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定193+裁定153: vism圏(個別エフェクト群)— Glow(vism第1号)と同型の単発専門エフェクト/アルゴリズムで、裁定153のeffect provider経路(compositor内layer単位オフスクリーンパス)で後から載せる。コアはeffect適用UIの器のみ持つ	B37
 909	misc	Pre-compose…	プリコンポーズ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	裁定173/174/175: グループレイヤー(G1)+freezeで意図を代替 — precomp機構は露出しない	
 910	misc	Precompose selected layers	選択レイヤーをプリコンポーズ	1	0	0	0	1	0:1:0:0	公式(Adobe)		不採用	裁定173/174/175: 同上	
 911	misc	Preserve Transparency	透明度を保持	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B05
@@ -984,21 +984,21 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 983	panel_window	Info panel	選択項目の情報パネル	1	1	0	0	2	0:0:2:0	二次(premiere全体注記);二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B25
 984	panel_window	Align	整列パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B25
 985	panel_window	Audio	オーディオレベル操作パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B25
-986	panel_window	Audio Clip Mixer	クリップ単位の音声ミキサーパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B25
+986	panel_window	Audio Clip Mixer	クリップ単位の音声ミキサーパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		拡張	裁定193: vism圏(オーディオスイート=Fairlight級)— クリップ音量・フェード止まりでなく専用ミキサー/DAW機構が要る専門機能。継ぎ目=将来のaudio providerプラグイン	B25
 987	panel_window	Audio Meters	音量VUメーターパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B25
-988	panel_window	Audio Track Mixer	トラック単位の音声ミキサーパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B25
+988	panel_window	Audio Track Mixer	トラック単位の音声ミキサーパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		拡張	裁定193: vism圏(オーディオスイート=Fairlight級)— クリップ音量・フェード止まりでなく専用ミキサー/DAW機構が要る専門機能。継ぎ目=将来のaudio providerプラグイン	B25
 989	panel_window	Brushes	ブラシ設定パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)	B27
 990	panel_window	Character	文字設定パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	text束は裁定121/122でほぼ完了だがCharacterパネルUI自体は未	B25
 991	panel_window	Color Page	ノードベースのカラーグレーディングを行うページ	0	0	1	0	1	0:0:1:0	公式(BMDマニュアルPDF)		不採用	GOALS要らないもの「ノードグラフUI—ユーザーに見せない」。Color Pageはノードベース合成	
 992	panel_window	Composition	コンポジションのプレビュー・編集パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用済	next/shell Stage実装済み(image widget + Engine::render_frame、裁定26/44)	B25
-993	panel_window	Content-Aware Fill	オブジェクト除去用パネル(2020年AE 17.5で追加)	1	0	0	0	1	0:0:1:0	公式(Adobe, 個別URL)		採用予定	既決との衝突なし	B25
+993	panel_window	Content-Aware Fill	オブジェクト除去用パネル(2020年AE 17.5で追加)	1	0	0	0	1	0:0:1:0	公式(Adobe, 個別URL)		拡張	裁定193+裁定153: vism圏(個別エフェクト群)— Glow(vism第1号)と同型の単発専門エフェクト/アルゴリズムで、裁定153のeffect provider経路(compositor内layer単位オフスクリーンパス)で後から載せる。コアはeffect適用UIの器のみ持つ	B25
 994	panel_window	Cut Page	簡略ツールで高速に編集するページ(Edit簡易版)	0	0	1	0	1	0:0:1:0	公式(BMDマニュアルPDF)		採用予定	裁定128のワークスペース/パネル配置方針に吸収可能	B25
 995	panel_window	Deliver Page	最終書き出し/レンダーキュー管理を行うページ	0	0	1	0	1	0:0:1:0	公式(BMDマニュアルPDF)		採用予定	Export設定UIは標準リストに含まれるが未実装	B25
 996	panel_window	Edit Index	EDL形式の編集イベント一覧	0	0	1	0	1	0:0:1:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B25
 997	panel_window	Effects Library	トランジション/タイトル/ジェネレータ/フィルタ収録	0	0	1	0	1	0:0:1:0	公式(BMDマニュアルPDF)		採用予定	Browserのエフェクトタブ相当(裁定143)	B25
 998	panel_window	Essential Graphics	Motion Graphicsテンプレート作成パネル(近年追加)	1	0	0	0	1	0:0:1:0	公式(Adobe, 個別URL)		採用予定	既決との衝突なし	B25
 999	panel_window	Essential Graphics	モーショングラフィックステンプレート編集パネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B25
-1000	panel_window	Essential Sound	音声カテゴリ別ワンクリック調整パネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B25
+1000	panel_window	Essential Sound	音声カテゴリ別ワンクリック調整パネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		拡張	裁定193: vism圏(オーディオスイート=Fairlight級)— クリップ音量・フェード止まりでなく専用ミキサー/DAW機構が要る専門機能。継ぎ目=将来のaudio providerプラグイン	B25
 1001	panel_window	Fairlight Page	音声のミキシング/編集/マスタリングを行うページ	0	0	1	0	1	0:0:1:0	公式(BMDマニュアルPDF)	out-of-domain?	不採用	領域外: Fairlight級の専用オーディオ制作ページ(裁定125で音声モデルはmix/program中心に意図的簡素化)	
 1002	panel_window	Floating Timecode Window	タイムコードのフローティング表示	0	0	1	0	1	0:0:1:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B25
 1003	panel_window	Flowchart	コンポ・レイヤー依存関係の図示パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		不採用	GOALS要らないもの「ノードグラフUI」相当。プリコンポ依存関係の図示はグループ+fold(裁定147)のレイヤーツリー表示へ代替	
@@ -1008,10 +1008,10 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1007	panel_window	Layer	個別レイヤーのプレビューパネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B25
 1008	panel_window	Libraries	Creative Cloud Librariesパネル(近年追加)	1	0	0	0	1	0:0:1:0	公式(Adobe)		採用予定	既決との衝突なし	B25
 1009	panel_window	Libraries	Creative Cloudライブラリアセットパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B25
-1010	panel_window	Lumetri Color	カラーグレーディングパネル(近年追加)	1	0	0	0	1	0:0:1:0	公式(Adobe, 個別URL)		採用予定	既決との衝突なし	B25
-1011	panel_window	Lumetri Color	カラーグレーディングパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B25
-1012	panel_window	Lumetri Scopes	波形・ベクトルスコープパネル(近年追加)	1	0	0	0	1	0:0:1:0	公式(Adobe, 個別URL)		採用予定	既決との衝突なし	B25
-1013	panel_window	Lumetri Scopes	波形・ベクトルスコープ等の映像スコープパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B25
+1010	panel_window	Lumetri Color	カラーグレーディングパネル(近年追加)	1	0	0	0	1	0:0:1:0	公式(Adobe, 個別URL)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B25
+1011	panel_window	Lumetri Color	カラーグレーディングパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B25
+1012	panel_window	Lumetri Scopes	波形・ベクトルスコープパネル(近年追加)	1	0	0	0	1	0:0:1:0	公式(Adobe, 個別URL)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B25
+1013	panel_window	Lumetri Scopes	波形・ベクトルスコープ等の映像スコープパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B25
 1014	panel_window	Markers panel	マーカー一覧パネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	マーカー実装済み(裁定111)、一覧パネルUIは未	B25
 1015	panel_window	Mask Interpolation	マスク補間設定パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	mask実装済み(裁定108/112)、補間設定パネルは未	B25
 1016	panel_window	Media & Assets panel	メディア/素材パネル(インポート・テキスト・ステッカー・フィルター・トランジションへのアクセス)	0	0	0	1	1	0:0:1:0	一致(2件、位置表現は「左上/左」で共通)		採用予定	既決との衝突なし	B25
@@ -1028,7 +1028,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1027	panel_window	Program Monitor	シーケンス出力プレビューパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用済	Stage実装済み(992と同根拠。Program Monitorは同義の出力ビューア)	B25
 1028	panel_window	Progress	処理進捗表示パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B25
 1029	panel_window	Properties	主要プロパティを集約したパネル(2022年AE 22.3で追加)	1	0	0	0	1	0:0:1:0	公式(Adobe)		採用済	next/shell inspector_pane.rs実装済み(978と同根拠。Propertiesは統合プロパティパネルとして同義)	B25
-1030	panel_window	Reference Monitor	精密モニタリング用参照モニターパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B25
+1030	panel_window	Reference Monitor	精密モニタリング用参照モニターパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		拡張	裁定193: vism圏(色補正スイート=Lumetri級)— 単発の色調整ではなく専用グレーディング/スコープ機構一式が要る専門機能でコアの範囲外。継ぎ目=将来のcolor providerプラグイン	B25
 1031	panel_window	Render Queue	レンダーキュー管理パネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B25
 1032	panel_window	Smoother	キーフレームスムージングパネル	1	0	0	0	1	0:0:1:0	二次(非公式技術抽出/2015時点)		採用予定		B25
 1033	panel_window	Source Monitor	素材クリッププレビューパネル	0	1	0	0	1	0:0:1:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B25
@@ -1166,7 +1166,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1165	preferences	Control Panels	カラーグレーディングパネル/MIDI接続設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		不採用	領域外: カラーグレーディング用ハードウェアパネル/MIDI接続(プロ制御機材)	
 1166	preferences	Control Panels	パネル感度/表示輝度等の設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		不採用	領域外: ハードウェアコントロールパネルの感度/輝度設定(プロ制御機材)	
 1167	preferences	Control Surface	外部コントロールサーフィス機器の登録	0	1	0	0	1	0:0:0:1	二次(premiere全体注記)		不採用	領域外: 外部コントロールサーフィス機器登録(プロ制御機材)	
-1168	preferences	Decode Options	RAW/H.264等のデコード方式設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B12
+1168	preferences	Decode Options	RAW/H.264等のデコード方式設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		拡張	裁定193: vism圏(特殊フォーマット/コーデック対応)— EDL/AAF/XML/PSD等の他製品向け相互運用フォーマットは普通の動画編集ソフトに不要な専門機能。継ぎ目=import/exportプラグイン	B12
 1169	preferences	Display	モーションパス表示、Projectパネルサムネイル、Infoパネルのレンダリング表示等	1	0	0	0	1	0:0:0:1	公式(Adobe)		採用予定	既決との衝突なし	B12
 1170	preferences	Editing	新規タイムライン既定/スマートビン等の編集設定	0	0	1	0	1	0:0:0:1	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B12
 1171	preferences	Enable JavaScript Debugger	ExtendScriptデバッガを有効化	1	0	0	0	1	0:0:0:1	公式(Adobe)		不採用	裁定6: 拡張の口はtrait1本	
@@ -1377,18 +1377,18 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1376	tool	Activate and cycle Type tools	文字ツールを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B29
 1377	tool	Activate Hand tool	手のひらツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B29
 1378	tool	Activate Pan Behind tool	アンカーポイントツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	Anchor X/Yは既にInspector実装済み、Stage上のビジュアルツールはギズモ実装待ち(裁定124)	B29
-1379	tool	Activate Refine Edge tool	エッジ調整ツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B29
+1379	tool	Activate Refine Edge tool	エッジ調整ツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定193+裁定153: vism圏(個別エフェクト群)— Glow(vism第1号)と同型の単発専門エフェクト/アルゴリズムで、裁定153のeffect provider経路(compositor内layer単位オフスクリーンパス)で後から載せる。コアはeffect適用UIの器のみ持つ	B29
 1380	tool	Activate Selection tool	選択ツール	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B29
-1381	tool	Activate specific Clone Stamp preset	コピースタンプのプリセットを呼び出す	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B27
-1382	tool	AI design	AIデザイン生成	0	0	0	1	1	1:0:0:0	公式		採用予定	既決との衝突なし	HOMELESS
-1383	tool	AI writer	AI文章生成	0	0	0	1	1	1:0:0:0	公式		採用予定	既決との衝突なし	HOMELESS
+1381	tool	Activate specific Clone Stamp preset	コピースタンプのプリセットを呼び出す	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: ペイント族(既存9行=989/1023/1374/1427-1430/1468/1519/1523と同族、拾い漏れ分)— vism抽象化候補・拡張として戸を残す(コア完成後・L8/L9継ぎ目候補)	B27
+1382	tool	AI design	AIデザイン生成	0	0	0	1	1	1:0:0:0	公式		拡張	裁定193: vism圏(AI生成系)— 素材のゼロからの生成(id2 Image to videoと同型、解析→調整路線ではなく新規生成)。継ぎ目=将来のgenerative providerプラグイン	HOMELESS
+1383	tool	AI writer	AI文章生成	0	0	0	1	1	1:0:0:0	公式		拡張	裁定193: vism圏(AI生成系)— 素材のゼロからの生成(id2 Image to videoと同型、解析→調整路線ではなく新規生成)。継ぎ目=将来のgenerative providerプラグイン	HOMELESS
 1384	tool	Append At End	Shift+F12	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし	B52
 1385	tool	Arc Tool	弧ツール(タイトル/グラフィック)	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	shape実装済み(裁定104)、UIツール化は未	B28
 1386	tool	Auto Removal	自動背景除去	0	0	0	1	1	1:0:0:0	公式		採用予定	既決との衝突なし	B02
 1387	tool	Bold	太字	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	text style span実装済み(裁定122)、toolbar UIは未	B46
-1388	tool	Chroma Key	クロマキー合成	0	0	0	1	1	1:0:0:0	公式		採用予定	既決との衝突なし	B38
+1388	tool	Chroma Key	クロマキー合成	0	0	0	1	1	1:0:0:0	公式		拡張	裁定193+裁定153: vism圏(個別エフェクト群)— Glow(vism第1号)と同型の単発専門エフェクト/アルゴリズムで、裁定153のeffect provider経路(compositor内layer単位オフスクリーンパス)で後から載せる。コアはeffect適用UIの器のみ持つ	B38
 1389	tool	Cycle through tools	ツールを巡回	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B29
-1390	tool	Duplicate Clone Stamp preset	コピースタンププリセットを複製	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B27
+1390	tool	Duplicate Clone Stamp preset	コピースタンププリセットを複製	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: ペイント族(既存9行=989/1023/1374/1427-1430/1468/1519/1523と同族、拾い漏れ分)— vism抽象化候補・拡張として戸を残す(コア完成後・L8/L9継ぎ目候補)	B27
 1391	tool	Ellipse Tool	楕円ツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B28
 1392	tool	Find Missing Effects	見つからないエフェクトを検索	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B10
 1393	tool	Find Missing Footage	見つからない素材を検索	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B10
@@ -1397,7 +1397,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1396	tool	Insert Registered Symbol	登録商標記号挿入	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B46
 1397	tool	Italic	斜体	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	1387と同根拠	B46
 1398	tool	Line Tool	直線ツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B28
-1399	tool	Momentarily activate Eraser with Last Stroke Only	直前ストロークのみ消しゴム化	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B27
+1399	tool	Momentarily activate Eraser with Last Stroke Only	直前ストロークのみ消しゴム化	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: ペイント族(既存9行=989/1023/1374/1427-1430/1468/1519/1523と同族、拾い漏れ分)— vism抽象化候補・拡張として戸を残す(コア完成後・L8/L9継ぎ目候補)	B27
 1400	tool	Nudge Selected Object Down by Five Pixels	選択オブジェクトを下へ5px	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B45
 1401	tool	Nudge Selected Object Down by One Pixel	選択オブジェクトを下へ1px	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B45
 1402	tool	Nudge Selected Object Left by Five Pixels	選択オブジェクトを左へ5px	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B45
@@ -1422,7 +1422,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1421	tool	Rectangle Tool	矩形ツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B28
 1422	tool	Remove background	AI背景除去	0	0	0	1	1	1:0:0:0	公式		採用予定	既決との衝突なし	B02
 1423	tool	Remove Unused Footage	未使用素材を削除	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B10
-1424	tool	Script to Video	台本から動画生成(AI)	0	0	0	1	1	1:0:0:0	公式		採用予定	既決との衝突なし	HOMELESS
+1424	tool	Script to Video	台本から動画生成(AI)	0	0	0	1	1	1:0:0:0	公式		拡張	裁定193: vism圏(AI生成系)— 素材のゼロからの生成(id2 Image to videoと同型、解析→調整路線ではなく新規生成)。継ぎ目=将来のgenerative providerプラグイン	HOMELESS
 1425	tool	Select Tool	選択ツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B29
 1426	tool	Selection Tool	選択ツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	既決との衝突なし	B29
 1427	tool	Set brush hardness	ブラシ硬さを設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)	B27
@@ -1526,7 +1526,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1525	workspace	Open or close Project panel	Projectパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B25
 1526	workspace	Open or close Render Queue panel	Render Queueパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B25
 1527	workspace	Open or close Tools panel	Toolsパネル開閉	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B25
-1528	workspace	Paint	ペイント用ワークスペース	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B27
+1528	workspace	Paint	ペイント用ワークスペース	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: ペイント族(既存9行=989/1023/1374/1427-1430/1468/1519/1523と同族、拾い漏れ分)— vism抽象化候補・拡張として戸を残す(コア完成後・L8/L9継ぎ目候補)	B27
 1529	workspace	People	人物ビン表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B26
 1530	workspace	Primary Display	プライマリディスプレイ	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B26
 1531	workspace	Remote Grading	リモートグレーディング	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	領域外: リモートグレーディング連携(プロpost制作インフラ、924と同根拠)	
