@@ -215,6 +215,8 @@ fn default_browser_tab_bar_height() -> f32 {
 
 fn default_browser_tab_underline() -> f32 {
     2.0
+}
+
 fn default_menubar_menu_width() -> f32 {
     192.0
 }
