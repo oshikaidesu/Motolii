@@ -13,6 +13,7 @@
 | PH-handle | 実装 | worktree(shell) | pane 題帯常設=drag ハンドル(裁定: 匿名8pxグリップ→可視の題帯へ。S6/S1/S4)+drop 先ハイライト+fixture 仮素材。write-set= `next/shell/motolii-shell/` のみ |
 | TL-transport | 実装 | worktree(timeline-pane) | 裁定180: transport 帯(1041〜1045 の顔+1138 Timecode)を timeline pane 上端へ。枠の文法(裁定179)適用第1号。write-set= timeline-pane+dimensions.json `timeline_transport` 節 |
 | MB-vendor | 実装 | worktree(新 crate) | 裁定181: iced_aw menu の fork API 移植(`motolii-menubar` 新設・E0308×2 追随・Simulator oracle)。write-set= 新 crate+members 1行+dimensions.json `menubar` 節 |
+| IB-const | データ | worktree(reference) | 利用者裁定: IB 44束の定数化 — intent-bundles.tsv 正本+normal-map へ bundle 列(1,285行自動割り付け・独立再検証)+check.sh 3検査+動線図(家の地図+編集動線 mermaid)。束名は仮名のまま(命名=利用者)。write-set= reference 2ファイル+check.sh+flow-map 文書 |
 
 **BR-tabs 返却済み・検収待ち**(commit `6e0891c3`・47テスト緑・寸法は dimensions.json 経由)— PH-handle と揃えて一括検収。shell の `pane_view` 1行差し替えは supervisor 統合時。
 **線化 pass 続編(D2/D4/D5: Inspector 値セル・チップ・罫線)**は PH-handle 返却後に発注(裁定179)。
