@@ -2490,6 +2490,60 @@ impl Shell {
                 }
                 Task::none()
             }
+            // MATTE(2026-08-22 発注「レイヤーを指す」文法 第1号)。書き込み
+            // 本体は pane の自由関数(MASK/EFFECTS 腕と同じ「ここは Err を
+            // status 帯へ渡す glue だけ」の形、M13)。
+            inspector_pane::Message::PickMatteSource(source) => {
+                if let Err(error) = inspector_pane::set_inspector_matte_source(
+                    &mut self.doc,
+                    self.session.selection,
+                    source,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::CycleMatteMode => {
+                if let Err(error) = inspector_pane::cycle_inspector_matte_mode(
+                    &mut self.doc,
+                    self.session.selection,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::ClearMatte => {
+                if let Err(error) =
+                    inspector_pane::clear_inspector_matte(&mut self.doc, self.session.selection)
+                {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            // LINK(2026-08-22 発注「レイヤーを指す」文法 第3号)。同上の glue
+            // のみ — 書き込み本体は `inspector_pane::commit_inspector_link`/
+            // `clear_inspector_link`。
+            inspector_pane::Message::PickLinkSource(target, candidate) => {
+                if let Err(error) = inspector_pane::commit_inspector_link(
+                    &mut self.doc,
+                    self.session.selection,
+                    target,
+                    candidate,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
+            inspector_pane::Message::ClearLink(target) => {
+                if let Err(error) = inspector_pane::clear_inspector_link(
+                    &mut self.doc,
+                    self.session.selection,
+                    target,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
             // フォント pick_list(2026-08-22 追い発注「フォントが選べる・
             // 選ばなくても落ちない」)。`TextFieldSubmit` と同じ「ここは Err を
             // status 帯へ渡す glue だけ」の形(M13) — 書き込み本体は

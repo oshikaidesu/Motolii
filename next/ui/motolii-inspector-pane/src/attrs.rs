@@ -1,4 +1,4 @@
-//! ATTRS section(blend/speed)。
+//! ATTRS section(blend/speed/matte)。
 //!
 //! **持つ**: Blend 巡回ボタンの対応表と次値([`SUPPORTED_BLEND_MODES`]/
 //! [`next_blend_mode`])・Speed 欄(SP1 第一波)の %⇄`motolii_store::Speed`
@@ -10,6 +10,11 @@
 //! blend/speed」と名指ししたとおり、ここでは扱わない。
 //! `LayerTiming`/`Intent::SetTiming` の組み立て・duration 再計算も
 //! `motolii-shell` root の仕事(crate doc 参照)で、ここには置かない。
+//! **Matte の意味と書き口は [`crate::matte`] の仕事**(2026-08-22 発注
+//! 「レイヤーを指す」文法) ── `attrs_section` は `crate::matte::matte_row` を
+//! 呼ぶだけで、`LayerAttrs.matte` そのものの巡回・書き込みロジックは持たない
+//! (`attrs.rs` 自身が持つのは blend/speed のまま、という発注書の名指しを
+//! 崩さない)。
 
 use motolii_tokens_rs::{Colors, Dimensions};
 
@@ -136,6 +141,7 @@ pub(crate) fn attrs_section(
         section_header("ATTRS", dims, colors),
         blend_row,
         speed_row(attrs, speed_draft, dims, colors),
+        crate::matte::matte_row(attrs.matte, &attrs.matte_candidates, dims, colors),
     ]
     .into()
 }

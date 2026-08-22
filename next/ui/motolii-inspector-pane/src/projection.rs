@@ -4,21 +4,39 @@
 //! **持つ**: [`SelectionProjection`]とその構成要素([`ComponentSlot`]/
 //! [`RowValue`]/[`TransformRowProjection`]/[`AttrsProjection`]/
 //! [`MaskRowProjection`]/[`EffectRowProjection`]/[`TextSectionProjection`]/
-//! [`KeyCellProjection`])・組み立て本体([`project`])。**読むだけ** ──
-//! Document には一切書かない。
+//! [`KeyCellProjection`]/[`LayerCandidate`])・組み立て本体([`project`])。
+//! **読むだけ** ── Document には一切書かない。
 //!
 //! **持たない**: 投影の中身をどう描くか(各 section の view 関数)・投影を
 //! 元にした書き口(`commit_inspector_field` 等、`crate::transform` の仕事)。
+//!
+//! ## 2026-08-22 発注「レイヤーを指す」文法(裁定177「1意図=1つの家」の適用)
+//! `LayerAttrs::matte`/型付き `PropertyLink` はどちらも「別レイヤーを指す」
+//! ことが唯一の共通の形——「指す」入力欄1つ(pick_list)を2箇所で使い回す。
+//! **候補の絞り込み(自分自身を選べない・循環しない)はここ([`project`])で
+//! 済ませる** — `&StoreView` を持つのはここだけで、view 側(`matte.rs`/
+//! `link.rs`)は「拒否される選択肢が最初から無い」投影を渡されるだけになる。
+//! matte の循環は書き込み時に store が拒む柵が無い(`LayerAttrs::matte` の doc
+//! 参照 — `parent`/`PropertyLink` と違い store 側に `validate_no_*_cycle` が
+//! 無い)ので、[`matte_would_cycle`] はここでしか行われない絞り込み。link の
+//! 循環は store 側に既に書き込み時拒否がある
+//! (`next/core/motolii-store/src/document.rs::validate_no_link_cycle`、
+//! private fn)——[`link_would_cycle`] はその**同じ絞り込みロジックの UI 側
+//! 複製**(`StoreView::property_source` という公開 API だけを使って書き直した、
+//! store 側 fn を呼べないので複製する以外の道が無い)。
+
+use std::collections::HashSet;
 
 use motolii_core::{Fps, RationalTime};
 use motolii_shell_state::Session;
 use motolii_store::{
-    property, EffectId, LayerId, LayerSource, MaskId, MaskMode, PropertyId, StoreError, StoreView,
-    TextDocumentStyle, TextJustify, Value,
+    property, EffectId, LayerId, LayerSource, MaskId, MaskMode, Matte, PropertyId, PropertySource,
+    StoreError, StoreView, TextDocumentStyle, TextJustify, Value,
 };
 
 use crate::attrs::speed_percent;
 use crate::effects::{plugin_display_name, plugin_params};
+use crate::link::{LinkRowProjection, LinkSourceCandidate, LinkTarget};
 use crate::text::{default_text_document, default_text_style, text_document_content};
 use crate::transform::{
     field_decimals, has_real_keys, key_cell_state, key_row_property_id, KeyCellState, KeyRow,
@@ -101,6 +119,14 @@ pub struct AttrsProjection {
     /// `None` = 未割当 — チップは timeline スウォッチと同じフォールバック
     /// (`way_timeline`)で塗る(`lane_bar::swatch_color` と同じ源・同じ既定)。
     pub label_color: Option<u8>,
+    /// `LayerAttrs.matte`(2026-08-22 発注「レイヤーを指す」文法)。engine は
+    /// 本日 `MatteMode`/`Matte` の消費を開始済み(`motolii_engine::Engine::
+    /// apply_matte`)——ここが初の書き口。`None` = マットにされていない。
+    pub matte: Option<Matte>,
+    /// [`Self::matte`] の元候補(pick_list の選択肢)。**自分自身を除外**し、
+    /// **matte 連鎖の循環も除外**(`matte_would_cycle` — store 側に書き込み時
+    /// 拒否が無いので、ここが唯一の絞り込み)。
+    pub matte_candidates: Vec<LayerCandidate>,
 }
 
 /// effect 1本ぶんの投影(EFFECTS section、B38 第3切片・裁定184 型別 section
@@ -134,6 +160,91 @@ pub struct MaskRowProjection {
     pub opacity: TransformRowProjection,
 }
 
+/// 「別レイヤーを指す」pick_list の1候補(2026-08-22 発注)。**id で区別でき、
+/// 人が読んで分かる**表示にする発注どおり — `label` は id を必ず含む
+/// (`layer_label` 参照。名前が同じレイヤーが複数在っても id で見分けられる)。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LayerCandidate {
+    pub id: LayerId,
+    pub label: String,
+}
+
+/// [`LayerCandidate::label`] の組み立て本体 — 名前があれば `"name (#id)"`、
+/// 無ければ [`crate::ident_band`] の placeholder と同じ `"layer {id}"`。
+pub(crate) fn layer_label(store: &StoreView<'_>, id: LayerId) -> String {
+    let name = store
+        .attrs(id)
+        .ok()
+        .flatten()
+        .map(|attrs| attrs.name)
+        .unwrap_or_default();
+    if name.is_empty() {
+        format!("layer {}", id.0)
+    } else {
+        format!("{name} (#{})", id.0)
+    }
+}
+
+/// `candidate` を matte 元として選ぶと、matte 連鎖を辿って `target` 自身へ
+/// 戻ってくるか。[`crate::document::validate_no_parent_cycle`]
+/// (`next/core/motolii-store`、private fn)と同型の複製 —
+/// **matte には store 側の書き込み時循環拒否が無い**(`LayerAttrs::matte` の
+/// doc 参照)ので、この絞り込みは UI 側でしか行われない。`seen` は防御的な保険
+/// (壊れた Document が既に循環していても無限に回らない)。
+fn matte_would_cycle(store: &StoreView<'_>, target: LayerId, candidate: LayerId) -> bool {
+    let mut current = Some(candidate);
+    let mut seen = HashSet::new();
+    while let Some(layer) = current {
+        if layer == target {
+            return true;
+        }
+        if !seen.insert(layer) {
+            break;
+        }
+        current = store
+            .attrs(layer)
+            .ok()
+            .flatten()
+            .and_then(|attrs| attrs.matte)
+            .map(|matte| matte.layer);
+    }
+    false
+}
+
+/// `(candidate_layer, candidate_property)` を `target` の link 元として選ぶと、
+/// link 参照鎖を辿って `target` 自身へ戻ってくるか。
+/// `next/core/motolii-store/src/document.rs::validate_no_link_cycle`
+/// (private fn)と**同じ絞り込みロジックの UI 側複製** — store 側 fn を直接
+/// 呼べない(private)ので、公開 API([`StoreView::property_source`])だけで
+/// 書き直した。store は書き込み時にこの循環を`Err`で拒むので、ここでの絞り込み
+/// は「拒否される選択肢を UI に最初から出さない」ための先回りに過ぎない
+/// (store 側の柵が最終防衛線のまま)。
+fn link_would_cycle(
+    store: &StoreView<'_>,
+    target: (LayerId, &PropertyId),
+    candidate: (LayerId, PropertyId),
+) -> bool {
+    let mut current = Some(candidate);
+    let mut seen = HashSet::new();
+    while let Some((layer, property)) = current {
+        if layer == target.0 && &property == target.1 {
+            return true;
+        }
+        if !seen.insert((layer, property.clone())) {
+            break;
+        }
+        current = store
+            .property_source(layer, &property)
+            .ok()
+            .flatten()
+            .and_then(|source| match source {
+                PropertySource::Link(link) => Some((link.source_layer, link.source_property)),
+                _ => None,
+            });
+    }
+    false
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectionProjection {
     pub layer: LayerId,
@@ -160,6 +271,11 @@ pub struct SelectionProjection {
     /// `LayerSource::Media` の layer でのみ `Some`(TEXT section と同じ
     /// 「型が合わない chrome を出さない」判断、Q0)。
     pub audio: Option<AudioSectionProjection>,
+    /// LINK section の行(2026-08-22 発注「レイヤーを指す」文法 第3号)。
+    /// 標準 property 5種([`LinkTarget::ALL`])を固定で持つ(mask/effect と違い
+    /// 「無ければ出さない」ではない — link は任意の layer の任意の標準
+    /// property に張れるので、選択層の種別を問わず常に現れる)。
+    pub links: Vec<LinkRowProjection>,
 }
 
 /// AUDIO section の投影(B42、裁定184 型別 section 第4号)。4行とも
@@ -436,6 +552,19 @@ pub fn project(
     let attrs = store.attrs(layer)?.unwrap_or_default();
     // `kind`/`speed_percent` は同じ `meta()` から読む(2回叩かない)。
     let meta = store.meta(layer)?;
+    // MATTE 元の候補(2026-08-22 発注「レイヤーを指す」文法): 自分自身を除外し
+    // (発注書「マット元は自分自身を選べてはいけない」)、matte 連鎖の循環も
+    // 除外する([`matte_would_cycle`] — store 側に書き込み時拒否が無いので
+    // ここが唯一の絞り込み)。
+    let matte_candidates: Vec<LayerCandidate> = store
+        .layers()
+        .into_iter()
+        .filter(|&candidate| candidate != layer && !matte_would_cycle(store, layer, candidate))
+        .map(|candidate| LayerCandidate {
+            id: candidate,
+            label: layer_label(store, candidate),
+        })
+        .collect();
     let attrs_projection = AttrsProjection {
         name: attrs.name,
         hidden: attrs.hidden,
@@ -445,6 +574,8 @@ pub fn project(
             .map(|meta| speed_percent(meta.timing.speed.num(), meta.timing.speed.den()))
             .unwrap_or(100.0),
         label_color: attrs.label_color,
+        matte: attrs.matte,
+        matte_candidates,
     };
 
     let kind = meta
@@ -629,6 +760,61 @@ pub fn project(
         _ => None,
     };
 
+    // LINK section(2026-08-22 発注「レイヤーを指す」文法 第3号)。標準
+    // property 5種([`LinkTarget::ALL`])を対象に固定する(発注書「plugin_id は
+    // 最小限で構わない——器が通ることが目的」の範囲、mask/effect param のような
+    // id 付き property は対象外)。候補は自分自身を除外し
+    // ([`link_would_cycle`] が同一 layer・同一 property を最初のホップで
+    // 検出するので、自己参照は循環判定に自然に含まれる)、循環する組も除外する
+    // — store 側の書き込み時拒否(`validate_no_link_cycle`)と**同じ判定**を
+    // 先回りするだけで、最終防衛線は store のまま。
+    let mut link_rows = Vec::new();
+    for target in LinkTarget::ALL {
+        let target_property = target.property_id();
+        let current = match store.property_source(layer, &target_property)? {
+            Some(PropertySource::Link(link)) => {
+                LinkTarget::from_property_name(link.source_property.name()).map(|property| {
+                    LinkSourceCandidate {
+                        layer: LayerCandidate {
+                            id: link.source_layer,
+                            label: layer_label(store, link.source_layer),
+                        },
+                        property,
+                    }
+                })
+            }
+            _ => None,
+        };
+        let mut candidates = Vec::new();
+        for candidate_layer in store.layers() {
+            if candidate_layer == layer {
+                continue; // 自分自身は選べない(発注書「参照先も同様」)。
+            }
+            for candidate_target in LinkTarget::ALL {
+                let candidate_property = candidate_target.property_id();
+                if link_would_cycle(
+                    store,
+                    (layer, &target_property),
+                    (candidate_layer, candidate_property),
+                ) {
+                    continue;
+                }
+                candidates.push(LinkSourceCandidate {
+                    layer: LayerCandidate {
+                        id: candidate_layer,
+                        label: layer_label(store, candidate_layer),
+                    },
+                    property: candidate_target,
+                });
+            }
+        }
+        link_rows.push(LinkRowProjection {
+            target,
+            current,
+            candidates,
+        });
+    }
+
     Ok(Some(SelectionProjection {
         layer,
         kind,
@@ -644,6 +830,7 @@ pub fn project(
         effects: effect_rows,
         text,
         audio,
+        links: link_rows,
     }))
 }
 

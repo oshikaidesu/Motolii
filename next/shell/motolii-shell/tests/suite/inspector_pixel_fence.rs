@@ -230,6 +230,11 @@ fn the_pane_frame_uses_the_documented_width_and_source() {
 /// 4本→3本(2026-08-22): mock v3.1 の ptitle("Inspector" header)は転写を
 /// やめた — pane 名の正本は shell の pane 題帯(pane_grid title_bar)へ移り、
 /// 内部 header は二重表示のため除去(題帯レーンの API 要求・supervisor 施工)。
+///
+/// 3本→4本(2026-08-22「レイヤーを指す」文法発注): LINK section
+/// (`crate::link::link_section`)を常設で足したので、TRANSFORM/APPEARANCE/
+/// ATTRS に LINK が加わり4本になった(`section_header` を再利用しているので
+/// 箱の形は他3本と同一 — この柵がそのまま拾う)。
 #[test]
 fn the_full_width_section_bars_span_the_entire_pane_at_the_mock_section_height() {
     let (targets, dims) = selected_inspector_targets();
@@ -240,8 +245,8 @@ fn the_full_width_section_bars_span_the_entire_pane_at_the_mock_section_height()
     );
     assert_eq!(
         bars.len(),
-        3,
-        "pane 全幅×26px の帯(TRANSFORM+APPEARANCE+ATTRS)が3本のはずが{}本: {bars:?}",
+        4,
+        "pane 全幅×26px の帯(TRANSFORM+APPEARANCE+ATTRS+LINK)が4本のはずが{}本: {bars:?}",
         bars.len()
     );
 }
@@ -251,14 +256,19 @@ fn the_full_width_section_bars_span_the_entire_pane_at_the_mock_section_height()
 /// 決定1 — Blend の下に同じ `.prow` grammar で足した) = 8本、すべて
 /// 「pane 全幅 × row 高(25、I-tokens 2026-08-22 再転写)」であること
 /// (mock `.columnHeader`/`.propertyRow` の box)。
+///
+/// 8本→14本(2026-08-22「レイヤーを指す」文法発注): ATTRS の末尾に Matte 行
+/// (`crate::matte::matte_row`)を1本、LINK section に標準 property 5種ぶんの
+/// 行(`crate::link::link_row`)を足した(いずれも既存の `bordered_row` 文法を
+/// そのまま使うので、箱の形は既存の Blend/Speed 行と同一 — 8 + 1 + 5 = 14)。
 #[test]
 fn the_full_width_property_rows_span_the_entire_pane_at_the_mock_row_height() {
     let (targets, dims) = selected_inspector_targets();
     let rows = containers_matching(&targets, dims.inspector_panel_width, dims.inspector_row_height);
     assert_eq!(
         rows.len(),
-        8,
-        "pane 全幅×{}px の行(cols見出し+Transform5行+Blend+Speed)が8本のはずが{}本: {rows:?}",
+        14,
+        "pane 全幅×{}px の行(cols見出し+Transform5行+Blend+Speed+Matte+Link5行)が14本のはずが{}本: {rows:?}",
         dims.inspector_row_height,
         rows.len()
     );
@@ -376,9 +386,11 @@ fn the_column_header_grid_matches_the_mock_gap_and_side_padding() {
 
 /// mock の2枚目(`--s:1.50`)と同じ倍率。`ui_scale_fence.rs` は「全寸法に
 /// 1.5 が掛かる」ことを `Dimensions` 単体で見ているが、ここでは実際に描いた
-/// widget 木でも 26px 高の帯が4本・25px 高(I-tokens 再転写)の行が8本のまま
-/// (数が変わらない = grid の**形**が保たれる)ことを見る(SP1 で行数が7→8に
-/// 増えた上での基準)。
+/// widget 木でも 26px 相当の帯が4本(TRANSFORM/APPEARANCE/ATTRS/LINK)・
+/// 25px 相当(I-tokens 再転写)の行が14本のまま(数が変わらない = grid の
+/// **形**が保たれる)ことを見る(SP1 で行数が7→8に増え、2026-08-22
+/// 「レイヤーを指す」文法発注で Matte 行+LINK 5行が足されて8→14になった
+/// 上での基準)。
 #[test]
 fn the_grid_shape_is_preserved_at_150_percent_scale() {
     let mut shell = Shell::new().0;
@@ -395,10 +407,10 @@ fn the_grid_shape_is_preserved_at_150_percent_scale() {
     let targets = collect_targets(inspector_pane::view(Some(&selection), None, None, dims, colors));
 
     let bars = containers_matching(&targets, dims.inspector_panel_width, dims.inspector_section_header_height);
-    assert_eq!(bars.len(), 3, "150%でも26px相当の帯が3本のはずが{}本(ptitle除去後)", bars.len());
+    assert_eq!(bars.len(), 4, "150%でも26px相当の帯が4本のはずが{}本(ptitle除去後・LINK section 追加後)", bars.len());
 
     let rows = containers_matching(&targets, dims.inspector_panel_width, dims.inspector_row_height);
-    assert_eq!(rows.len(), 8, "150%でも25px相当(I-tokens 再転写)の行が8本のはずが{}本", rows.len());
+    assert_eq!(rows.len(), 14, "150%でも25px相当(I-tokens 再転写)の行が14本のはずが{}本", rows.len());
 
     let value_height = dims.inspector_row_height - dims.spacing_s;
     let cells = containers_matching(&targets, dims.inspector_value_width, value_height);
