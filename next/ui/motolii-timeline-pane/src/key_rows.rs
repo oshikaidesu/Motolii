@@ -39,14 +39,17 @@ use crate::Message;
 const KEY_DIAMOND_SIZE: f32 = 8.0;
 const KEY_HIT: f32 = 12.0;
 
-/// property 行の帯が始まる y(ルーラー下相対)。選択 layer が無い/property 行が
-/// 1本も無ければ `None`(帯自体が存在しない)。
+/// property 行の帯が始まる y。**縦スクロール発注(2026-08-22)**: ルーラーは
+/// `super::ruler::RulerHeader` へ移設され、この canvas(body)の y=0 は
+/// もう「ルーラー下」ではなく「行0の上端」そのもの(`super::canvas`
+/// モジュール冒頭 doc 参照) — 旧 `ruler_height` の加算はここでは不要になった。
+/// 選択 layer が無い/property 行が1本も無ければ `None`(帯自体が存在しない)。
 fn band_top(pane: &TimelinePane) -> Option<f32> {
     if pane.property_rows.is_empty() {
         return None;
     }
     let selected = pane.selected_row_index?;
-    Some(pane.ruler_height() + pane.dims.row_height * (selected as f32 + 1.0))
+    Some(pane.dims.row_height * (selected as f32 + 1.0))
 }
 
 fn band_bottom(pane: &TimelinePane, top: f32) -> f32 {

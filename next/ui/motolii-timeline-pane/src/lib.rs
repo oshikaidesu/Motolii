@@ -59,6 +59,10 @@ pub mod nav;
 mod projection;
 mod rail;
 pub mod rows;
+/// 常時固定ヘッダー(ルーラー・ループ帯・マーカー・playhead のルーラー内
+/// 区間、縦スクロール発注 2026-08-22)。`rail`/`canvas`(行だけ)と対で
+/// `TimelinePane::view` が組む — モジュール doc 参照。
+mod ruler;
 pub mod shuttle;
 pub mod split;
 pub mod stacking;
@@ -341,46 +345,79 @@ impl TimelinePane {
         )
     }
 
-    fn content_height(&self) -> f32 {
-        self.ruler_height()
-            + self.dims.row_height * self.rows.len() as f32
+    /// 行(層行+property 行)だけの高さ、**ルーラーを含まない**
+    /// (縦スクロール発注 2026-08-22 — EXACT TARGET: ヘッダー(ルーラー)と
+    /// スクロールする本体(rail 行リスト+行だけの canvas)の境界そのもの)。
+    /// `rail::view` の container 高さ・本体 canvas の widget 高さの唯一の
+    /// 出典 — 2箇所で別の式を持たない([`Self::view`] 参照)。
+    fn rows_area_height(&self) -> f32 {
+        self.dims.row_height * self.rows.len() as f32
             + self.param_row_height() * self.property_rows.len() as f32
     }
 
-    /// マーカーの comp フレーム位置。fps が引けない(comp が無い)時は `None` —
-    /// 黙って誤った位置に描くより、描かない方がまし(M13 と同じ理由)。
-    fn marker_frame(&self, marker: &Marker) -> Option<i64> {
-        let fps = self.fps?;
-        marker.time.try_to_frame_floor(fps).ok()
-    }
-
-    /// **TL-arch Phase 1**(`docs/reviews/2026-08-22-timeline-canvas-widget-survey.md`
-    /// §6): rail(行ヘッダ列)を実 widget として左に置き、canvas は時間場
-    /// (bar・ルーラー・菱形)だけを描く。`rail::view` は `&self` の借用で
-    /// widget を組み立て終える(rows/property_rows/dims/colors を読むだけ) —
-    /// その後で `self` を `canvas(self)` へ move する(`Program` impl は
-    /// `self` を値で持つ、下の `impl canvas::Program` 参照)。
+    /// **縦スクロール発注(2026-08-22)**: `docs/reviews/2026-08-22-persona-lyric-mv-round2.md`
+    /// が実証した欠落(レーン一覧に縦スクロールが無く、歌詞レイヤー
+    /// 50〜100枚が物理的に見えない)の根治。
     ///
-    /// canvas の x 原点は rail の右端へ移る(旧: `rail_width` を各所で
-    /// 足していた/`bounds.width` から引いていた → 新: `canvas.rs`/`hit.rs`/
-    /// `input.rs`/`key_rows.rs` はどれも「自分の bounds がそのまま時間場」
-    /// という前提へ揃えた、意味は不変 — 発注書「座標系は関数境界で吸収」)。
+    /// 構造(`super::ruler` モジュール doc に詳細):
+    /// - **常時固定ヘッダー** `row![rail::corner, ruler::view]`(ルーラー・
+    ///   ループ帯・マーカー・playhead のルーラー内区間 — EXACT TARGET 4
+    ///   「playhead とルーラーは固定」)
+    /// - **スクロール本体** `scrollable(row![rail::view, canvas])`(rail の
+    ///   行リストと、行だけを描く canvas を**同じ1つの `scrollable`** で
+    ///   包む — rail と canvas の縦位置が構造的にずれ得ない、EXACT TARGET
+    ///   「当たり判定の追随」はこの1点に集約される: iced 自身の
+    ///   layout/clip/translate が両方の子へ同じオフセットを適用するので、
+    ///   `hit::hit_test`/`projection::layer_row_top` 自体は無改造のまま
+    ///   (呼び出し側が受け取る `bounds`/`cursor` は元から scroll 前後で
+    ///   意味が変わらない — 2つの scrollable を id 経由で同期させる案は
+    ///   不採用、`super::ruler` モジュール doc「経緯・構造」節に理由)
+    ///
+    /// **TL-arch Phase 1 からの継承**(`docs/reviews/2026-08-22-timeline-canvas-widget-survey.md`
+    /// §6): rail の行リストは `&self` の借用で組み立て終える(rows/
+    /// property_rows/dims/colors を読むだけ)— その後で `self` を
+    /// `canvas(self)` へ move する(`Program` impl は `self` を値で持つ、
+    /// 下の `impl canvas::Program` 参照)。canvas の x 原点は rail の右端の
+    /// まま不変(TL-arch Phase 1)、**y 原点はルーラー下→行0の上端へ移った**
+    /// (縦版の同じ手口 — `canvas.rs`/`hit.rs`/`input.rs`/`key_rows.rs` は
+    /// どれも「自分の bounds がそのまま行の場」という前提へ揃えた、意味は
+    /// 不変 — 発注書「座標系は関数境界で吸収」)。
     pub fn view(self) -> Element<'static, Message> {
-        let height = self.content_height().max(self.ruler_height());
-        let rail = rail::view(&self);
+        let ruler_height = self.ruler_height();
+        let rows_height = self.rows_area_height();
+
+        // 常時固定ヘッダー(借用のみ — `self` はまだ生きている)。
+        let header = row![rail::corner(self.dims, self.colors, ruler_height), ruler::view(&self)]
+            .height(Length::Fixed(ruler_height));
+
+        // スクロール本体(rail 行リストも借用のみ、`canvas(self)` の直前)。
+        let rail_rows = rail::view(&self);
         let field = iced::widget::canvas(self)
             .width(Length::Fill)
-            .height(Length::Fixed(height));
-        row![rail, field].height(Length::Fixed(height)).into()
+            .height(Length::Fixed(rows_height));
+        let body = iced::widget::scrollable(
+            row![rail_rows, field].height(Length::Fixed(rows_height)),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+        iced::widget::column![header, body].into()
     }
 
     /// [`Self::view`] の上に transport 帯(map 1041-1045・1138、
-    /// [`transport`] モジュール doc)を積んだ版。**`view()` 自体は無改変で
-    /// 残す** — shell 側の既存検分(`iced_test_spike.rs` が `pane.view()` へ
-    /// 生座標で click する)は canvas の y 原点がルーラー上端であることを
-    /// 前提にしており、`view()` に帯を差し込むとその前提ごと壊れる。shell の
-    /// 統合(下部 Play バー撤去と同時)はこの `view_with_transport()` へ
-    /// 呼び出し1行を差し替えるだけ(supervisor、RETURN の結線一覧)。
+    /// [`transport`] モジュール doc)を積んだ版。shell の統合(下部 Play バー
+    /// 撤去と同時)はこの `view_with_transport()` へ呼び出し1行を差し替える
+    /// だけ(supervisor、RETURN の結線一覧)。
+    ///
+    /// **既知の逸脱(縦スクロール発注 RETURN 参照)**: `view()` の内部構造
+    /// (`row![rail, field]` 単体 → `column![header, scrollable(...)]`)を
+    /// 今回変えた — 旧 doc はここを「shell 側の生座標 click 検分
+    /// (`iced_test_spike.rs`)を壊さないため無改変で残す」としていたが、
+    /// 縦スクロールの根治(EXACT TARGET)自体がこの内部構造の変更を要求する
+    /// ため、その制約より発注の目的を優先した。影響は
+    /// `next/shell/motolii-shell/tests/suite/iced_test_spike.rs` の生座標
+    /// click 試験2本(bar/ルーラー)— 座標の再計算が必要(この crate の
+    /// write-set 外、RETURN で報告)。
     pub fn view_with_transport(self) -> Element<'static, Message> {
         let band = transport::view(&self);
         let body = self.view();
@@ -423,5 +460,187 @@ impl iced::widget::canvas::Program<Message> for TimelinePane {
     ) -> iced::mouse::Interaction {
         key_rows::mouse_interaction(self, bounds, cursor)
             .unwrap_or_else(|| input::mouse_interaction(self, state, bounds, cursor))
+    }
+}
+
+/// 縦スクロール発注(2026-08-22、`docs/reviews/2026-08-22-persona-lyric-mv-round2.md`)
+/// の落ちるテスト先行(裁定189: 検収線は `cargo check --tests` 緑まで —
+/// テストは書くが**未実行**、実行は supervisor/後続レーン)。
+///
+/// **設計選択の直接の帰結としてのオラクル**: このレーンは
+/// `iced::widget::scrollable` を採用し(`super::ruler` モジュール doc
+/// 「経緯・構造」節)、canvas 側の自前スクロールオフセットは持たない —
+/// scrollable が rail+canvas を**同じ1つの子**として丸ごとスクロールする
+/// ので、当たり判定(`hit::hit_test`)・投影(`projection::layer_row_top`)
+/// 自体はスクロール量を一切知らない(知る必要が無い、iced が cursor/bounds
+/// を透過的に content 座標へ変換する)。よってここでの「当たり判定の追随」
+/// オラクルは、**行の並びが深くなっても(100行規模でも)draw と hit が同じ
+/// `layer_row_top` から同じ y を得ること**に帰着する — これは
+/// `hit.rs::tests::hit_test_accounts_for_expanded_property_row_band`
+/// (T3b)と同じ形の検収を、歌詞動画の実尺(50〜100レイヤー)へ延長したもの。
+#[cfg(test)]
+mod scroll_tests {
+    use super::*;
+    use motolii_store::LayerId;
+
+    fn row(id: u64) -> RowProjection {
+        RowProjection {
+            id: LayerId(id),
+            name: String::new(),
+            hidden: false,
+            solo: false,
+            locked: false,
+            label_color: None,
+            start: 0,
+            duration: 10,
+            selected: false,
+            dragging: false,
+            depth: 0,
+            has_children: false,
+            children_open: true,
+        }
+    }
+
+    fn pane_with_rows(count: u64) -> TimelinePane {
+        let rows: Vec<RowProjection> = (0..count).map(row).collect();
+        let mut dims = tokens::Dimensions::default();
+        dims.row_height = 26.0;
+        TimelinePane {
+            rows,
+            property_rows: Vec::new(),
+            selected_row_index: None,
+            markers: Vec::new(),
+            playhead: 0,
+            duration_frames: 300,
+            fps: None,
+            dims,
+            colors: tokens::Colors::default(),
+            modifiers: iced::keyboard::Modifiers::default(),
+            key_drag_active: false,
+            preview_active: false,
+            playing: false,
+            work_area: None,
+            loop_enabled: false,
+            rename: None,
+            waveforms: std::collections::HashMap::new(),
+        }
+    }
+
+    /// **オラクル(a)**: `rows_area_height` は行(層+property)だけの和 —
+    /// ルーラーを1px も含まない(ヘッダーとスクロール本体の境界そのもの、
+    /// [`TimelinePane::rows_area_height`] doc 参照)。この不変が崩れると
+    /// ヘッダーとスクロール本体の間に隙間/重なりが生まれる。
+    #[test]
+    fn rows_area_height_excludes_the_ruler_and_sums_row_heights_only() {
+        let pane = pane_with_rows(80);
+        let expected = pane.dims.row_height * 80.0;
+        assert_eq!(pane.rows_area_height(), expected);
+        assert_ne!(
+            pane.rows_area_height(),
+            pane.ruler_height() + expected,
+            "rows_area_height にルーラー分が紛れ込んでいる"
+        );
+    }
+
+    /// **オラクル(b、レイヤーが少ない時にスクロールしない)**: iced の
+    /// `scrollable` は content が viewport を超えた時だけスクロールバーを
+    /// 出す(この crate の外側の事実 — 発明も検証もしない)。この crate 側の
+    /// 責任は「content の高さがレイヤー数に単調に比例する」ことだけ —
+    /// 数枚なら小さく、歌詞動画の実尺(50〜100枚)なら大きくなることを保証
+    /// すれば、少数時に scrollable が無反応(=スクロールしない)になる。
+    #[test]
+    fn a_handful_of_layers_stay_far_smaller_than_the_full_lyric_mv_scale() {
+        let few = pane_with_rows(3).rows_area_height();
+        let many = pane_with_rows(80).rows_area_height();
+        assert!(few < many, "行数に応じて高さが単調に増えていない");
+        // 3行なら通常のウィンドウ内の1 pane に無理なく収まる代表値(実測では
+        // なく「桁が違う」ことを示す下限 — 780pxの窓に3行10pane分は余裕で入る)。
+        assert!(few < 200.0, "少数レイヤーの高さが想定より大きすぎる: {few}");
+    }
+
+    /// **オラクル(c、当たり判定の追随・端 = 先頭)**: 行0の bar は
+    /// `layer_row_top(0)`(=0、ルーラー移設後の body canvas 規約)から
+    /// `row_height` の範囲で当たる。`hit_test` の `ruler_height` 引数は
+    /// 本文(body canvas)の呼び出し規約どおり常に `0.0`
+    /// (`input.rs::update`/`mouse_interaction` の呼び出しと同じ値 —
+    /// 2箇所で別の値を渡さない)。
+    #[test]
+    fn hit_test_lands_on_the_first_row_at_the_top_of_a_long_list() {
+        let pane = pane_with_rows(80);
+        let width = 300.0;
+        let y = layer_row_top(pane.dims.row_height, pane.param_row_height(), 0, None, 0)
+            + pane.dims.row_height / 2.0;
+        let hit = hit_test(
+            iced::Point::new(5.0, y),
+            &pane.rows,
+            0.0,
+            pane.dims.row_height,
+            width,
+            pane.duration_frames,
+            pane.param_row_height(),
+            0,
+            None,
+        );
+        assert_eq!(hit, Hit::Bar(LayerId(0)), "80行の先頭(行0)への当たりがずれている");
+    }
+
+    /// **オラクル(d、当たり判定の追随・端 = 末尾)**: 歌詞動画の実尺
+    /// (80行、50〜100枚のレンジ内)の**最後の行**でも、`layer_row_top`と
+    /// `hit_test` が同じ y から同じ layer を指す — スクロールで深く沈んだ
+    /// 行ほど、絵と当たりがずれる古典的な事故(T3b と同型)が起きやすい
+    /// ため、意図してリストの深部をオラクルにする。
+    #[test]
+    fn hit_test_lands_on_the_last_row_deep_in_an_eighty_row_list() {
+        let pane = pane_with_rows(80);
+        let width = 300.0;
+        let last = pane.rows.len() - 1;
+        let y = layer_row_top(pane.dims.row_height, pane.param_row_height(), 0, None, last)
+            + pane.dims.row_height / 2.0;
+        let hit = hit_test(
+            iced::Point::new(5.0, y),
+            &pane.rows,
+            0.0,
+            pane.dims.row_height,
+            width,
+            pane.duration_frames,
+            pane.param_row_height(),
+            0,
+            None,
+        );
+        assert_eq!(
+            hit,
+            Hit::Bar(LayerId(last as u64)),
+            "80行の末尾(行79)への当たりがずれている — 深い行ほど事故りやすい(T3bと同型)"
+        );
+        // 隣の行(1つ手前)には当たらない — 押し下げ量が1行分ずれていないこと。
+        let neighbor = hit_test(
+            iced::Point::new(5.0, y - pane.dims.row_height),
+            &pane.rows,
+            0.0,
+            pane.dims.row_height,
+            width,
+            pane.duration_frames,
+            pane.param_row_height(),
+            0,
+            None,
+        );
+        assert_eq!(neighbor, Hit::Bar(LayerId(last as u64 - 1)), "1つ手前の行にずれて当たっている");
+    }
+
+    /// **オラクル(e)**: 0行(空 Document)・1行・80行のどのレイヤー数でも
+    /// `view()`/`view_with_transport()` が panic せず widget 木を組み終える
+    /// (`waveform_view_fence.rs`/`transport_fence.rs` の既存スモークと同じ
+    /// 型 — このレーンの直接の回帰ガードは「歌詞動画の実尺(80行)でも
+    /// view() が破綻しない」こと自体)。
+    #[test]
+    fn view_builds_at_zero_one_and_lyric_mv_scale_row_counts() {
+        for count in [0, 1, 80] {
+            let pane = pane_with_rows(count);
+            let _view = pane.view();
+        }
+        for count in [0, 1, 80] {
+            let pane = pane_with_rows(count).with_playing(true);
+            let _band_and_body = pane.view_with_transport();
+        }
     }
 }

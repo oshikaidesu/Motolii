@@ -30,8 +30,7 @@ use iced::Rectangle;
 use crate::Message;
 
 use super::hit::{bar_span_x, classify_bar_part, hit_test, BarPart, Hit};
-use super::projection::{frame_at_x, frame_to_x};
-use super::work_area::{classify_loop_band, LoopBandPart};
+use super::projection::frame_at_x;
 use super::TimelinePane;
 
 /// canvas の drag 状態。**Document でも Session でもない、widget 内だけの一時状態**
@@ -51,26 +50,13 @@ pub struct Interaction {
 enum DragKind {
     Scrub,
     Clip,
-    /// ループ帯(ルーラ最上段、B21+B18 第1切片)。新規/リサイズ/移動の区別は
-    /// `PaneState`(`LoopDragKind`)が正本 — ここは「今ループ帯ドラッグ中」
-    /// という種別だけを覚える(clip と同じ役割分担)。
-    Loop,
-}
-
-/// ループ帯の当たり判定(押した瞬間の座標1回だけ — 正典 §1)。帯の縦域
-/// (`loop_band_height`)内なら、作業範囲の画面 span に対し
-/// [`classify_loop_band`] で部位を返す。帯の外は `None`(既存の scrub/clip 経路へ)。
-fn loop_band_part_at(pane: &TimelinePane, position: iced::Point, width: f32) -> Option<LoopBandPart> {
-    let band_height = super::canvas::loop_band_height(pane.ruler_height());
-    if position.y >= band_height {
-        return None;
-    }
-    let span_x = pane.work_area.map(|area| {
-        let x0 = frame_to_x(area.start, width, pane.duration_frames);
-        let x1 = frame_to_x(area.end, width, pane.duration_frames).max(x0 + 1.0);
-        (x0, x1)
-    });
-    Some(classify_loop_band(position.x, span_x))
+    // **縦スクロール発注(2026-08-22)**: `Loop` 腕はここから撤去した。
+    // ループ帯はルーラー内区間の専用面(正典 §5)であって、この canvas
+    // (行だけ・y=0=行0の上端)はもうルーラーを持たない
+    // (`super::canvas` モジュール冒頭 doc 参照) — 押し下げ判定式を
+    // ここに残すと最初の行の上端 `loop_band_height` ぶんを誤ってループ帯
+    // として食ってしまう実害があるため、`super::ruler::HeaderDrag::Loop`
+    // へ丸ごと移設した(`super::ruler` モジュール doc「入力の移設」節)。
 }
 
 pub(crate) fn update(
@@ -88,21 +74,13 @@ pub(crate) fn update(
         mouse::Event::ButtonPressed(mouse::Button::Left) => {
             let position = cursor.position_in(bounds)?;
 
-            // ループ帯(ルーラ最上段)が scrub より先に取る(正典 §5 の専用面 —
-            // key_rows が property 帯を先に吸収するのと同じ優先順の型)。
-            if let Some(part) = loop_band_part_at(pane, position, clip_width) {
-                let at_frame = frame_at_x(position.x, clip_width, pane.duration_frames);
-                state.drag = Some(DragKind::Loop);
-                return Some(
-                    canvas::Action::publish(Message::LoopBandGrabbed { part, at_frame })
-                        .and_capture(),
-                );
-            }
-
+            // **縦スクロール発注**: ループ帯の先取りはここから撤去した
+            // (`super::ruler::RulerHeader::update` へ移設 — この canvas は
+            // もうルーラーを持たない、`DragKind` の doc 参照)。
             match hit_test(
                 position,
                 &pane.rows,
-                pane.ruler_height(),
+                0.0, // ルーラーはヘッダーへ移設済み — この canvas の y=0 が行0の上端。
                 pane.dims.row_height,
                 clip_width,
                 pane.duration_frames,
@@ -148,12 +126,6 @@ pub(crate) fn update(
                 state.drag = None;
                 Some(canvas::Action::publish(Message::DragCancelled).and_capture())
             }
-            // ループ帯も同じ「キャンセルの一般化」(裁定151)— 掴んだ瞬間の
-            // 範囲へ復元される(`PaneState::cancel_loop_drag`)。
-            Some(DragKind::Loop) => {
-                state.drag = None;
-                Some(canvas::Action::publish(Message::LoopDragCancelled).and_capture())
-            }
             _ => None,
         },
         mouse::Event::CursorMoved { .. } => match state.drag {
@@ -182,20 +154,12 @@ pub(crate) fn update(
                     .and_capture(),
                 )
             }
-            Some(DragKind::Loop) => {
-                let position = cursor.position_in(bounds)?;
-                let at_frame = frame_at_x(position.x, clip_width, pane.duration_frames);
-                Some(canvas::Action::publish(Message::LoopDragMoved { at_frame }).and_capture())
-            }
             None => None,
         },
         mouse::Event::ButtonReleased(mouse::Button::Left) => match state.drag.take() {
             Some(DragKind::Scrub) => Some(canvas::Action::capture()),
             Some(DragKind::Clip) => {
                 Some(canvas::Action::publish(Message::DragReleased).and_capture())
-            }
-            Some(DragKind::Loop) => {
-                Some(canvas::Action::publish(Message::LoopDragReleased).and_capture())
             }
             None => None,
         },
@@ -270,13 +234,13 @@ mod mouse_interaction_tests {
         Rectangle::new(iced::Point::ORIGIN, iced::Size::new(WIDTH, 300.0))
     }
 
-    /// ルーラー下・行内の y。`TimelinePane::ruler_height()` は private だが
-    /// 式自体は `canvas::ruler_height` と同じ(`0.846 * row_height` の丸め、
-    /// モジュール冒頭 doc の「比率の出典」参照) — ここでは行0の中央を直接
-    /// 計算する(新しい式を発明せず、既存の比率をそのまま使う)。
+    /// 行0の中央の y。**縦スクロール発注(2026-08-22)**: ルーラーは
+    /// `super::ruler::RulerHeader` へ移設され、この canvas(body)の y=0 は
+    /// もう「ルーラー下」ではなく「行0の上端」そのもの
+    /// (`super::canvas` モジュール冒頭 doc 参照) — 旧 `ruler_height` の
+    /// 加算はここでは不要になった。
     fn row_y() -> f32 {
-        let ruler = (0.846 * ROW_HEIGHT).round();
-        ruler + ROW_HEIGHT / 2.0
+        ROW_HEIGHT / 2.0
     }
 
     fn point_at(x: f32) -> iced::Point {
@@ -367,21 +331,14 @@ pub(crate) fn mouse_interaction(
     };
     let clip_width = bounds.width;
 
-    // ループ帯(ルーラ最上段)の予告(正典 §5.5 の5状態を帯にも適用):
-    // 端=ResizingHorizontally / 中=Grab / 空白=Crosshair(引けば新規の帯 —
-    // scrub の空白面と同じ「ドラッグで意味が生まれる面」の予告)。
-    if let Some(part) = loop_band_part_at(pane, position, clip_width) {
-        return match part {
-            LoopBandPart::EdgeIn | LoopBandPart::EdgeOut => mouse::Interaction::ResizingHorizontally,
-            LoopBandPart::Body => mouse::Interaction::Grab,
-            LoopBandPart::Blank => mouse::Interaction::Crosshair,
-        };
-    }
+    // **縦スクロール発注**: ループ帯の予告はここから撤去した
+    // (`super::ruler::RulerHeader::mouse_interaction` へ移設 — この canvas
+    // はもうルーラーを持たない)。
 
     match hit_test(
         position,
         &pane.rows,
-        pane.ruler_height(),
+        0.0, // ルーラーはヘッダーへ移設済み — この canvas の y=0 が行0の上端。
         pane.dims.row_height,
         clip_width,
         pane.duration_frames,

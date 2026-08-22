@@ -10,10 +10,18 @@
 //! `rail_width` を足し引きしていたが(x 原点が pane 左端=rail 左端だったため)、
 //! 今は canvas 自身の x=0 が既に「rail の右端 = 時間場の左端」なので、その
 //! 足し引きは全廃した。**意味は不変**(発注書「座標系は関数境界で吸収し、
-//! 意味は不変」) — bar/ルーラー/目盛り/プレイヘッドの見た目・当たり判定は
+//! 意味は不変」) — bar/目盛り/プレイヘッドの見た目・当たり判定は
 //! 1px も変わらない、変わったのは「どこが原点か」という関数境界の外側の
 //! 約束だけ。rail 側の見た目(スウォッチ・名前・M/S/L)はもうここでは描かない
 //! (`super::rail::view` が持つ)。
+//!
+//! **縦スクロール発注(2026-08-22)**: この canvas の y 軸原点もルーラー分
+//! 移動した — 以前は y=0 がルーラー上端で行0は `ruler_height` から始まった
+//! が、ルーラー(目盛り・ループ帯・マーカー・playhead のルーラー内区間)は
+//! `super::ruler::RulerHeader`(常時固定の別 canvas)へ丸ごと移設したので、
+//! この canvas の y=0 は**行0の上端**そのもの。`draw`/[`super::hit::hit_test`]/
+//! [`super::key_rows`] の呼び出し側は皆この1つの意味へ揃えた(x 軸の
+//! TL-arch Phase 1 と同じ「座標シフトは呼び出し側だけで吸収する」手口)。
 //!
 //! ## 比率の出典(裁定172 §1/§2、転写元 `next/reference/mocks/timeline-semantics.html`)
 //!
@@ -26,9 +34,13 @@
 use iced::widget::canvas;
 use iced::{Point, Rectangle, Size};
 
+use motolii_store::{Fps, Marker};
+
 use super::key_rows;
 use super::projection::{frame_at_x, frame_to_x, tick_steps, time_band_segment_frames};
+use super::work_area::WorkArea;
 use super::TimelinePane;
+use crate::tokens::{Colors, Dimensions};
 
 /// ルーラー帯の高さ(裁定172 §2: `0.846×行高`)。mock `.ruler{height:22px}` /
 /// `.row{height:26px}`(`22/26`)の実測。第1波の「行高をそのまま流用」
@@ -84,7 +96,6 @@ pub(crate) fn draw(
 ) -> Vec<canvas::Geometry> {
     let mut frame = canvas::Frame::new(renderer, bounds.size());
     let width = bounds.width;
-    let ruler_height = pane.ruler_height();
     let row_height = pane.dims.row_height;
     // 罫線幅の倍数で意味を分ける — 1x: ルーラー目盛り(hairline)、1.5x: playhead、
     // 2x: マーカー(最も強い accent)。新しい寸法トークンを増やさず、単一の
@@ -104,69 +115,24 @@ pub(crate) fn draw(
     // 複製ではなく分担)。
     frame.fill_rectangle(Point::ORIGIN, bounds.size(), pane.colors.surface_panel);
 
-    // ルーラー帯 + 目盛り。
-    frame.fill_rectangle(
-        Point::new(0.0, 0.0),
-        Size::new(width, ruler_height),
-        pane.colors.surface_raised,
-    );
-    draw_ruler_ticks(pane, &mut frame, 0.0, width, ruler_height);
-
-    // ルーラー帯とクリップ面の境界(裁定139: 面色の塗り分け=`surface_raised`
-    // だけに頼らず hairline を足す — `.tp`/`.ruler` が border-bottom を持つ
-    // mock と同じ扱い。ルーラーは「地」の第2段なので不透明な強い hairline
-    // (`border_default`、`.cols`/`.ptitle` と同じロール)を使う)。この canvas
-    // の全幅(= 時間場のみ)で引く — rail 側の corner が同じ境界線を
-    // `super::rail::view` の container border で独立に描く(TL-arch Phase 1、
-    // 元は同一 Frame 上の1本の線で「レーンバーの corner とクリップ面の
-    // ルーラーは同じ横の区切りを共有」していたが、描画先が2つの widget に
-    // 分かれたので、同じ y 位置に2本の等価な線を分担して引く形になった)。
-    draw_hairline(
-        pane,
-        &mut frame,
-        0.0,
-        width,
-        ruler_height,
-        pane.colors.border_default,
-    );
-
-    // ループ帯(作業範囲、B21+B18 第1切片・正典 §5)。ルーラ最上段の専用面 —
-    // 目盛り(下半分)と住み分ける([`loop_band_height`] の導出参照)。
-    // ink は状態の器(裁定179: on = accent、off = 静かな gray — 帯は消えない
-    // (正典 §5)ので off でも「引いてある」ことは読める)。
-    if let Some(area) = pane.work_area {
-        let band_height = loop_band_height(ruler_height);
-        let x0 = frame_to_x(area.start, width, pane.duration_frames);
-        let x1 = frame_to_x(area.end, width, pane.duration_frames).max(x0 + 1.0);
-        let band_color = if pane.loop_enabled {
-            pane.colors.action_active
-        } else {
-            pane.colors.border_strong
-        };
-        frame.fill_rectangle(Point::new(x0, 0.0), Size::new(x1 - x0, band_height), band_color);
-    }
-
-    // マーカー(comp 側の名前つきロケータ)。ルーラー帯へ縦線として重ねる。
-    for marker in &pane.markers {
-        if let Some(frame_no) = pane.marker_frame(marker) {
-            let x = frame_to_x(frame_no, width, pane.duration_frames);
-            let marker_path = canvas::Path::line(Point::new(x, 0.0), Point::new(x, ruler_height));
-            frame.stroke(
-                &marker_path,
-                canvas::Stroke::default()
-                    .with_color(pane.colors.way_timeline)
-                    .with_width(hairline * 2.0),
-            );
-        }
-    }
+    // **縦スクロール発注(2026-08-22)**: ルーラー帯(目盛り・ループ帯・
+    // マーカー・playhead のルーラー内区間)はこの canvas から丸ごと撤去した
+    // — `super::ruler::RulerHeader` が常時固定の別 canvas として持つ
+    // (`TimelinePane::view` が `column![header, scrollable(row![rail, this
+    // canvas])]` を組む、`super::ruler` モジュール doc 参照)。この canvas の
+    // y=0 はもう「ルーラー下」ではなく「行0の上端」そのもの —
+    // `projection::layer_row_top`/`hit::hit_test` の呼び出し側(この関数・
+    // `key_rows.rs`・`input.rs`)は皆この1つの意味へ揃えた(ヘッダー分離の
+    // 座標シフトは呼び出し側だけで吸収し、`layer_row_top`/`layer_row_at_y`
+    // 自体は無改造 — TL-arch Phase 1 の x 軸版と同じ手口)。
 
     // 明暗のリズム(裁定148・正典 §1.6): クリップ面の「地」に2方向の読解補助を
     // 重ねる。**区切りの手段ではない**(裁定137 との両立整理) — 区切りは
-    // 上の hairline と、行ごとの下 hairline([`draw`] 末尾)が担う。
+    // 行ごとの下 hairline([`draw`] 末尾)が担う。
     // 順序は 行方向ゼブラ → 時間方向 の順で薄い wash を積む(どちらも
     // token 経由の白 wash、raw 値直書きではない)。
-    let rows_top = ruler_height;
-    let rows_bottom = pane.content_height();
+    let rows_top = 0.0;
+    let rows_bottom = bounds.height;
     for index in 0..pane.rows.len() {
         if index % 2 == 0 {
             continue; // 偶数行は地のまま(奇数行だけへ wash を乗せる)。
@@ -196,9 +162,9 @@ pub(crate) fn draw(
     // 先にここへ置く。
     draw_tick_lines(pane, &mut frame, 0.0, width, rows_top, rows_bottom);
 
-    // 層の行。
+    // 層の行。y=0 は行0の上端(ヘッダー分離済み、上のモジュール doc 参照)。
     for (index, row) in pane.rows.iter().enumerate() {
-        let row_top = ruler_height + pane.layer_row_top(index);
+        let row_top = pane.layer_row_top(index);
 
         if row.selected {
             // 状態: 選択(`state_selected`)。hover(`surface_hover`、中立グレー)とは
@@ -292,7 +258,7 @@ pub(crate) fn draw(
         // `super::rail::view` が container の border で独立に描く
         // (EXACT TARGET 5 の意味は不変、描画先が分かれただけ)。
         draw_hairline(
-            pane,
+            hairline,
             &mut frame,
             0.0,
             width,
@@ -306,19 +272,13 @@ pub(crate) fn draw(
     // TL-arch Phase 1 で `super::rail::view` へ移設済み — mod doc 参照)。
     key_rows::draw(pane, &mut frame, width);
 
-    // playhead(Session が正本)。この canvas はもう時間場だけなので、
+    // playhead(Session が正本)。この canvas はもう時間場の行だけなので、
     // オフセットを足す必要は無い(TL-arch Phase 1、モジュール doc 参照)。
+    // ルーラー内区間は `super::ruler::RulerHeader` が同じ x から別途描く
+    // (常時固定ヘッダー、[`draw_playhead_line`] が唯一の出典 — 2箇所で
+    // 別の式にしない、縦スクロール発注 EXACT TARGET 4「playhead は固定」)。
     let playhead_x = frame_to_x(pane.playhead, width, pane.duration_frames);
-    let playhead_path = canvas::Path::line(
-        Point::new(playhead_x, 0.0),
-        Point::new(playhead_x, bounds.height),
-    );
-    frame.stroke(
-        &playhead_path,
-        canvas::Stroke::default()
-            .with_color(pane.colors.action_active)
-            .with_width(hairline * 1.5),
-    );
+    draw_playhead_line(pane.colors, hairline, playhead_x, 0.0, bounds.height, &mut frame);
 
     // レーンバー(行ヘッダ列、裁定147)は TL-arch Phase 1 で実 widget へ移設
     // 済み(`super::rail::view`、`super::TimelinePane::view` が `row![rail,
@@ -359,37 +319,52 @@ pub(crate) fn draw(
 /// 目盛りの長さは裁定172 §1: `spacing_m`/`spacing_s` の天引き式(token 経由
 /// だが mock 比とは無関係)を廃し、[`minor_tick_length`]/[`major_tick_length`]
 /// (ruler 高からの比率、モジュール冒頭「比率の出典」節)に一本化した。
-fn draw_ruler_ticks(pane: &TimelinePane, frame: &mut canvas::Frame, x0: f32, width: f32, height: f32) {
-    if pane.duration_frames <= 0 || width <= 0.0 {
+/// **`pub(crate)`(縦スクロール発注 2026-08-22)**: 本体は `&TimelinePane` では
+/// なく明示引数を取る — `super::ruler::RulerHeader`(常時固定ヘッダー、
+/// `TimelinePane` を持たない使い捨てスナップショット)もこの1関数から同じ
+/// 目盛りを描くため(2箇所で別の刻み方を持たない、モジュール冒頭「比率の
+/// 出典」節と同じ精神)。呼び出し元は今のところ本体の `draw`(削除済み —
+/// ルーラーはヘッダーへ移設)と `ruler::RulerHeader::draw` の1箇所のみ。
+pub(crate) fn draw_ruler_ticks(
+    fps: Option<Fps>,
+    duration_frames: i64,
+    dims: Dimensions,
+    colors: Colors,
+    frame: &mut canvas::Frame,
+    x0: f32,
+    width: f32,
+    height: f32,
+) {
+    if duration_frames <= 0 || width <= 0.0 {
         return;
     }
-    let (minor, major) = tick_steps(pane.fps, pane.duration_frames, width, pane.dims.row_height);
-    let last_frame = (pane.duration_frames - 1).max(0);
+    let (minor, major) = tick_steps(fps, duration_frames, width, dims.row_height);
+    let last_frame = (duration_frames - 1).max(0);
     let mut frame_no = 0i64;
     while frame_no <= last_frame {
         let is_major = frame_no % major == 0;
-        let x = x0 + frame_to_x(frame_no, width, pane.duration_frames);
+        let x = x0 + frame_to_x(frame_no, width, duration_frames);
         let top = if is_major {
             height - major_tick_length(height)
         } else {
             height - minor_tick_length(height)
         };
         let color = if is_major {
-            pane.colors.border_strong
+            colors.border_strong
         } else {
-            pane.colors.border_hairline_weak
+            colors.border_hairline_weak
         };
         let tick_path = canvas::Path::line(Point::new(x, top), Point::new(x, height));
         frame.stroke(
             &tick_path,
-            canvas::Stroke::default().with_color(color).with_width(pane.dims.border_width),
+            canvas::Stroke::default().with_color(color).with_width(dims.border_width),
         );
         if is_major {
             frame.fill_text(canvas::Text {
                 content: frame_no.to_string(),
-                position: Point::new(x + pane.dims.spacing_xs, 0.0),
-                color: pane.colors.text_secondary,
-                size: iced::Pixels(pane.dims.caption_text),
+                position: Point::new(x + dims.spacing_xs, 0.0),
+                color: colors.text_secondary,
+                size: iced::Pixels(dims.caption_text),
                 ..Default::default()
             });
         }
@@ -400,9 +375,11 @@ fn draw_ruler_ticks(pane: &TimelinePane, frame: &mut canvas::Frame, x0: f32, wid
 /// 水平の hairline を1本引く(`Point`/`Size` を毎回組まずに済む共通口)。
 /// `inspector_pane.rs::bordered_row` の canvas 版 — こちらは per-edge の
 /// border-bottom そのもの(canvas は4辺一律の制約が無いので、Inspector側の
-/// 「既知の限界」はここには適用されない)。
-fn draw_hairline(
-    pane: &TimelinePane,
+/// 「既知の限界」はここには適用されない)。**`pub(crate)`**: `super::ruler`
+/// も同じ hairline を引く(`border_width` だけの依存へ縮めた — `draw_ruler_ticks`
+/// と同じ理由)。
+pub(crate) fn draw_hairline(
+    border_width: f32,
     frame: &mut canvas::Frame,
     x0: f32,
     x1: f32,
@@ -412,9 +389,73 @@ fn draw_hairline(
     let path = canvas::Path::line(Point::new(x0, y), Point::new(x1, y));
     frame.stroke(
         &path,
-        canvas::Stroke::default()
-            .with_color(color)
-            .with_width(pane.dims.border_width),
+        canvas::Stroke::default().with_color(color).with_width(border_width),
+    );
+}
+
+/// ループ帯(作業範囲、B21+B18 第1切片・正典 §5)の塗り。ルーラ最上段の
+/// 専用面 — 目盛り(下半分)と住み分ける([`loop_band_height`] の導出参照)。
+/// ink は状態の器(裁定179: on = accent、off = 静かな gray — 帯は消えない
+/// (正典 §5)ので off でも「引いてある」ことは読める)。**縦スクロール発注**:
+/// ルーラー内区間の専用面なので `super::ruler::RulerHeader::draw` だけが呼ぶ
+/// (本体の行キャンバスはもうルーラーを持たない、モジュール冒頭 doc 参照)。
+pub(crate) fn draw_loop_band(
+    area: WorkArea,
+    loop_enabled: bool,
+    duration_frames: i64,
+    colors: Colors,
+    frame: &mut canvas::Frame,
+    width: f32,
+    ruler_height: f32,
+) {
+    let band_height = loop_band_height(ruler_height);
+    let x0 = frame_to_x(area.start, width, duration_frames);
+    let x1 = frame_to_x(area.end, width, duration_frames).max(x0 + 1.0);
+    let band_color = if loop_enabled { colors.action_active } else { colors.border_strong };
+    frame.fill_rectangle(Point::new(x0, 0.0), Size::new(x1 - x0, band_height), band_color);
+}
+
+/// マーカーの comp フレーム位置。fps が引けない(comp が無い)時は `None` —
+/// 黙って誤った位置に描くより、描かない方がまし(M13 と同じ理由)。**唯一の
+/// 出典**(旧 `TimelinePane::marker_frame` を吸収 — `super::ruler` も同じ関数を
+/// 呼ぶ、2箇所で別の丸めを持たない)。
+pub(crate) fn marker_frame(marker: &Marker, fps: Option<Fps>) -> Option<i64> {
+    let fps = fps?;
+    marker.time.try_to_frame_floor(fps).ok()
+}
+
+/// マーカー1本の縦線(ルーラー帯へ重ねる)。**縦スクロール発注**: ルーラー内
+/// 区間の専用面なので `super::ruler::RulerHeader::draw` だけが呼ぶ。
+pub(crate) fn draw_marker_line(
+    color: iced::Color,
+    hairline: f32,
+    x: f32,
+    ruler_height: f32,
+    frame: &mut canvas::Frame,
+) {
+    let marker_path = canvas::Path::line(Point::new(x, 0.0), Point::new(x, ruler_height));
+    frame.stroke(
+        &marker_path,
+        canvas::Stroke::default().with_color(color).with_width(hairline * 2.0),
+    );
+}
+
+/// playhead の縦線(1本)。**唯一の出典**(縦スクロール発注 EXACT TARGET 4
+/// 「playhead は固定」— 本体の行 canvas(`draw` 末尾)と
+/// `super::ruler::RulerHeader::draw` の両方が同じ x をこの1関数へ渡すので、
+/// 2箇所の playhead 線が同じ式からずれずに描かれる)。
+pub(crate) fn draw_playhead_line(
+    colors: Colors,
+    hairline: f32,
+    x: f32,
+    y0: f32,
+    y1: f32,
+    frame: &mut canvas::Frame,
+) {
+    let playhead_path = canvas::Path::line(Point::new(x, y0), Point::new(x, y1));
+    frame.stroke(
+        &playhead_path,
+        canvas::Stroke::default().with_color(colors.action_active).with_width(hairline * 1.5),
     );
 }
 
