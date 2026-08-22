@@ -1,0 +1,44 @@
+# メニューバー基盤 crate(利用者裁定 2026-08-22 — MB-2 案A を上書き:「iced_aw が
+# 使えないなら、使えるようにすべき。ヘッダー部分(menu)が欲しいだけ」)。
+#
+# iced_aw(rev 924be285)は fork の iced(rev 73e686ee)に対し `Shell::local` の
+# Bus/Vec 非互換で crate ごとは使えない(probe:
+# docs/reviews/2026-08-22-iced-aw-menu-probe.md)ため、menu モジュールだけを
+# `src/vendored/` へ移植した(wraps>移植>スクラッチの「移植」段)。
+#
+# `iced_core`/`iced_widget` の git 依存は workspace の `iced` と**同一 repo・同一 rev**
+# — cargo は同一ソースへ単一 crate 実体として畳むので、依存の二重化は起きない
+# (probe が踏んだ `[patch.crates-io]` の semver 罠は、crates-io 版 iced_aw を
+# 引かないこの形ではそもそも発生しない)。rev は workspace pin(裁定170/M01)と
+# 常に同値に保つこと — bump する時は next/Cargo.toml と同時に。
+[package]
+name = "motolii-menubar"
+version = "0.1.0"
+# workspace は 2021 だが、この crate だけ 2024 — vendored コード(upstream iced_aw は
+# edition 2024)が let-chain を使っており、2021 ではコンパイルできない(実測 E: "let
+# chains are only allowed in Rust 2024 or later")。書き換えるより edition を合わせる
+# 方が無改変 vendoring の原則に素直。
+edition = "2024"
+license.workspace = true
+
+[lints.rust]
+# vendored コードは upstream の `debug_log` feature 名で cfg を切っている。この crate
+# は feature 自体を持たない(常に off)ので、`unexpected_cfgs` に名前だけ教えて
+# 警告を黙らせる — vendored 側の cfg 行を書き換えない。
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("debug_log"))'] }
+
+[dependencies]
+iced.workspace = true
+# vendored コード(upstream iced_aw のまま `use iced_core::` で書かれている)が使う。
+# 上と同 rev — `iced` facade が内包する iced_core と同一実体。
+iced_core = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+# デザイン値の外出し(裁定117)— raw 値の直書き禁止の唯一の読み口。
+motolii-tokens-rs.workspace = true
+
+[dev-dependencies]
+# oracle(bar click → menu 開 → 項目 click → message 発火)を headless で回す。
+# motolii-shell の dev-dependencies と同じ fork 同 rev 運用(別 rev だと Selector/
+# Candidate 型が二重化する — shell 側 Cargo.toml の注記参照)。
+iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+# vendored の unit test(upstream 由来、無改変)が `iced_widget::Theme`/`Renderer` を使う。
+iced_widget = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
