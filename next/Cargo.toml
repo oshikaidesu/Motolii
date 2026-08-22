@@ -35,6 +35,7 @@ members = [
     "probes/r3-pointcloud",
     "probes/r4-widget-timeline",
     "probes/r5-multiwindow",
+    "probes/r6-text-shaping",
 ]
 
 [workspace.package]

@@ -5441,6 +5441,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "r6-text-shaping"
+version = "0.1.0"
+dependencies = [
+ "cosmic-text",
+ "image",
+ "motolii-store",
+ "motolii-vector",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "rand"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
