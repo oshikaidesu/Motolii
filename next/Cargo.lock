@@ -3855,6 +3855,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "motolii-keymap"
+version = "0.1.0"
+
+[[package]]
 name = "motolii-media"
 version = "0.1.0"
 dependencies = [
@@ -3906,6 +3910,7 @@ dependencies = [
  "motolii-export-pane",
  "motolii-icons",
  "motolii-inspector-pane",
+ "motolii-keymap",
  "motolii-media",
  "motolii-menubar",
  "motolii-settings-pane",

@@ -56,6 +56,8 @@ mod inspector_pixel_fence;
 mod marker_keymap_drive;
 #[path = "suite/marquee_drive.rs"]
 mod marquee_drive;
+#[path = "suite/keymap_equivalence.rs"]
+mod keymap_equivalence;
 #[path = "suite/menu_drive.rs"]
 mod menu_drive;
 #[path = "suite/nav_drive.rs"]
