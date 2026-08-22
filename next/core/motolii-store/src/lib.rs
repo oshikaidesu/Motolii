@@ -1,5 +1,14 @@
 //! owns: Document の意味(layer の同一性・素材の指紋・comp 時刻での解決)。
 //!
+//! OWNS-JUSTIFICATION(A): 意見1(`next/reference/OPINIONS.md` #1・有理時間)が強制する。
+//!       rerun の store は `TimeInt`(整数)前提で `30000/1001` を表せないため、
+//!       有理時間を採った時点で上流 store をそのまま使う道が消えた — これが
+//!       約19,000行の自前実装の出所(意見1のコスト列に記載)。併せて意見3
+//!       (`Intent` が唯一の書き口)と意見12(undo は `edit` timeline の時間移動)も
+//!       この crate に住む。**上流不在の裏取りも別途済み**: 下記の通り
+//!       `fingerprint.rs` と `resolve`/`ResolvedLayer` は敵対的レビュー(2026-08-20)で
+//!       「上流に無い物」と確認されている。
+//!
 //! **`wraps:` ではない**。当初 `wraps: re_entity_db::EntityDb` と名乗っていたが、
 //! 敵対的レビュー(2026-08-20)で「`fingerprint.rs` と `resolve`/`ResolvedLayer` は
 //! 上流に無い物 = `owns:` の中身」と指摘され、訂正した。**marker は crate の根しか
