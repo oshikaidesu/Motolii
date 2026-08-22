@@ -69,6 +69,12 @@
 use iced::widget::{button, canvas, row, text};
 use iced::{mouse, Point, Rectangle};
 
+/// Stage ギズモ第1弾(発注 2026-08-22、裁定124: スクラッチ・意味の手本=AE) —
+/// 選択レイヤーの bbox/ハンドル/回転ハンドル/anchor と move/scale/rotate drag。
+/// message は既存 [`Message`] と独立([`gizmo::GizmoDrag`] — 理由はモジュール doc)。
+pub mod gizmo;
+pub use gizmo::{gizmo_target, GizmoDrag, GizmoOverlay, GizmoPhase, GizmoProperty, GizmoTarget, GizmoValue};
+
 use motolii_core::{camera_screen_from_world_z0, CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{RationalTime, StoreView};
@@ -272,7 +278,7 @@ pub fn state_band_view(
 /// API を割る」よりましと判断した(engine 側は裁定157 で着地済み・この lane の
 /// write-set 外)。roll は常に0度(`ObservationCamera` は roll を持たない設計、
 /// module doc 参照)。
-fn observation_as_resolved(observation: ObservationCamera) -> ResolvedCamera {
+pub(crate) fn observation_as_resolved(observation: ObservationCamera) -> ResolvedCamera {
     ResolvedCamera {
         center: observation.pan,
         zoom: observation.zoom,
