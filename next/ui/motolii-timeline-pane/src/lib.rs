@@ -55,6 +55,7 @@ pub mod nav;
 mod projection;
 mod rail;
 pub mod shuttle;
+pub mod split;
 mod transport;
 pub mod work_area;
 mod write;
