@@ -14,7 +14,13 @@
 //! - **報告 = 現物**(書いたと言ったフレーム数と、出来た file のフレーム数が一致する)
 //! - **中断したら残骸を残さない**(途中の file を置いて「壊れた成果物」を作らない)
 //! - 音声は後段 mux(`motolii-media::mux_soundtrack`)
+//!
+//! 全範囲書き出し(`export`/`export_with_cancel`)は「範囲(半開 `start..end`)
+//! 書き出し」(`export_range`/`export_range_with_cancel`)の特殊形として実装する
+//! (`0..duration_frames` を渡すだけ) — 2本目のループを持たない。単一フレーム
+//! → PNG の静止画書き出しは `export_still`(alpha の既知限界は同関数の doc 参照)。
 
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -36,6 +42,8 @@ pub enum ExportError {
     Cancelled,
     #[error("comp の設定が Document に無い")]
     NoComposition,
+    #[error("静止画の書き出しに失敗: {0}")]
+    Still(String),
 }
 
 /// 書き出しの注文。
@@ -82,10 +90,41 @@ pub fn export(
     export_with_cancel(engine, view, job, &Cancel::new())
 }
 
+/// **署名不変**(既存呼び手互換)。中身は「comp の全区間」を
+/// [`export_range_with_cancel`] へ委譲するだけ — 全範囲書き出しは範囲書き出しの
+/// 特殊形であって、別のループを持たない。
 pub fn export_with_cancel(
     engine: &mut Engine,
     view: &StoreView<'_>,
     job: &ExportJob,
+    cancel: &Cancel,
+) -> Result<ExportReport, ExportError> {
+    let duration_frames = composition_duration_frames(view)?;
+    export_range_with_cancel(engine, view, job, 0..duration_frames, cancel)
+}
+
+/// [`export_range_with_cancel`] の中断口なし版(comp の全範囲書き出しに対する
+/// [`export`] と同じ関係)。
+pub fn export_range(
+    engine: &mut Engine,
+    view: &StoreView<'_>,
+    job: &ExportJob,
+    range: Range<i64>,
+) -> Result<ExportReport, ExportError> {
+    export_range_with_cancel(engine, view, job, range, &Cancel::new())
+}
+
+/// 範囲(半開 `start..end`)を指定した書き出し。**フレーム範囲の型は export 側の
+/// 自前**(`std::ops::Range<i64>`) — comp 側へ依存を逆向きに張らない。
+///
+/// `range` が空(`start >= end`)なら0フレーム書いた成功として報告する
+/// (`frames_written == 0`)。「報告 = 現物」を守るのはループの中身であって、
+/// 範囲そのものの妥当性検査ではない。
+pub fn export_range_with_cancel(
+    engine: &mut Engine,
+    view: &StoreView<'_>,
+    job: &ExportJob,
+    range: Range<i64>,
     cancel: &Cancel,
 ) -> Result<ExportReport, ExportError> {
     // 合成器が返すのは premultiplied RGBA8。
@@ -108,7 +147,7 @@ pub fn export_with_cancel(
     let mut encoder = Encoder::open(&job.out_path, &desc, fps, job.qp0)?;
     let mut written = 0i64;
 
-    for frame in 0..composition.duration_frames {
+    for frame in range {
         if cancel.is_cancelled() {
             drop(encoder);
             remove_partial(&job.out_path);
@@ -131,6 +170,56 @@ pub fn export_with_cancel(
         out_path: job.out_path.clone(),
         frames_written: written,
     })
+}
+
+/// 単一フレーム → PNG の薄い口。**動画書き出しと同じ評価経路
+/// (`Engine::render_frame`)を再利用する** — 静止画専用の速い道は作らない
+/// (背骨2 と同じ精神)。
+///
+/// **alpha の既知限界(裁定16)**: `render_frame` が返すのは premultiplied
+/// RGBA8。PNG は straight(non-premultiplied)alpha を前提にする形式なので、
+/// この口はその値を**そのまま**書く — premultiplied のバイト列を straight
+/// alpha PNG として書くのは、comp の背景が不透明(alpha=1 が敷き詰められる
+/// 通常の書き出し)なら実害が無いが、comp 背景が透明で覆われていない画素が
+/// 残る場合、その画素の RGB は「本来より暗い値」のまま alpha 付きで出る
+/// (un-premultiply していないため)。動画書き出しがそもそも alpha を運べない
+/// のと同根の限界であり、この口を直す(un-premultiply する)のは範囲外 —
+/// 直す口は裁定16 が特定した fork 2箇所と同じ並びで別途扱う。
+pub fn export_still(
+    engine: &mut Engine,
+    view: &StoreView<'_>,
+    frame: i64,
+    out_path: &Path,
+) -> Result<ExportReport, ExportError> {
+    let composition = view
+        .composition()
+        .map_err(|e| ExportError::Desc(e.to_string()))?
+        .ok_or(ExportError::NoComposition)?;
+    let comp = composition.spec();
+    let fps = composition.fps;
+
+    let t = RationalTime::try_from_frame(frame, fps)
+        .map_err(|e| ExportError::Desc(e.to_string()))?;
+    // **preview/動画書き出しと同じ関数**(上の doc 参照)。
+    let rgba = engine.render_frame(view, t)?;
+
+    image::save_buffer(out_path, &rgba, comp.width, comp.height, image::ColorType::Rgba8)
+        .map_err(|e| ExportError::Still(e.to_string()))?;
+
+    Ok(ExportReport {
+        out_path: out_path.to_path_buf(),
+        frames_written: 1,
+    })
+}
+
+/// comp の尺(フレーム数)だけを読む。[`export_with_cancel`] が「全範囲」を
+/// [`export_range_with_cancel`] へ言い換えるための下ごしらえ。
+fn composition_duration_frames(view: &StoreView<'_>) -> Result<i64, ExportError> {
+    let composition = view
+        .composition()
+        .map_err(|e| ExportError::Desc(e.to_string()))?
+        .ok_or(ExportError::NoComposition)?;
+    Ok(composition.duration_frames)
 }
 
 /// 中断時に「壊れた成果物」を残さない。消せなかったことは呼び手に伝えない —
