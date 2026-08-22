@@ -39,12 +39,16 @@
 //!   意味が移ったが、置き場(`Shell::checkerboard`)は無改変(状態帯・旧
 //!   Settings のどちらから触っても同じフィールドを書く)。
 //!
-//! ## B12 第1切片(2026-08-22): section 分けと新項目は [`sections`] module
-//! Composition 節(W/H/FPS/尺)+ Playback 節(キャッシュ表示)+
-//! COMPOSITION/APPEARANCE/PLAYBACK の section 構成は [`sections::view`] が持つ
-//! (結線互換のため Message は module ローカルの [`sections::Message`] —
-//! 経緯と supervisor の結線手順は `sections.rs` 冒頭 doc)。この [`view`] と
-//! [`Message`] は結線されるまでの現行経路で、結線後は撤去して良い。
+//! ## B12 第1切片(2026-08-22)+第2切片(同日、AUTOSAVE): section 分けと
+//! 新項目は [`sections`] module
+//! Composition 節(W/H/FPS/尺)+ Playback 節(キャッシュ表示)+ Autosave 節
+//! (間隔・世代数・有効/無効、AS レーンの `motolii_store::AutoSaveConfig` 着地で
+//! 意味が実在するようになった)+
+//! COMPOSITION/APPEARANCE/AUTOSAVE/PLAYBACK の section 構成は
+//! [`sections::view`] が持つ(結線互換のため Message は module ローカルの
+//! [`sections::Message`] — 経緯と supervisor の結線手順は `sections.rs` 冒頭
+//! doc)。この [`view`] と [`Message`] は結線されるまでの現行経路で、結線後は
+//! 撤去して良い。
 //!
 //! ## 2項目の置き場(発注書どおり、市松は裁定163で状態帯へ移設済み)
 //! - **Stage 背景色**: `Composition.background` そのもの(Document、undo が効く)。

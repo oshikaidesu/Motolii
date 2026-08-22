@@ -16,10 +16,39 @@
 //!   (GPU 系)依存を増やさないための注入形。**未結線(`None`)の間は行ごと
 //!   出さない** — 空の数字を飾らない(飾り禁止の徹底)。
 //!
-//! theme 既定・再生ループ既定・スナップ既定・ゼブラ・自動保存間隔などの候補は
+//! - **AUTOSAVE**(第2切片、2026-08-22): `motolii_store::AutoSaveConfig
+//!   {interval_secs, generations}`。AS レーンが `Document::auto_save` として
+//!   store 側の機構を着地させ、前切片で「機構なし」として見送っていた行が
+//!   実在するようになった(crate doc の第2切片 doc 参照)。書き口は
+//!   [`commit_auto_save_field`](Composition と違い `Document`/`Intent` を
+//!   経由しない — `AutoSaveConfig` は undo 対象の Document データではなく
+//!   `ui_scale`/`Tokens` と同じ「Settings が直接持つ値」、`persist.rs` の
+//!   `AutoSaveConfig` doc「Settings が読める形の置き場」参照)。
+//!   有効/無効は `bool`(`Message::AutoSaveToggle`)— タイマー自体を shell が
+//!   引くかどうかを決めるだけの shell-local フラグで、`ToggleSettingsPanel`
+//!   と同じ「Document を経由しないが実際に効果を持つ」身分(結線は supervisor、
+//!   下記 doc の結線手順参照)。
+//!
+//! theme 既定・再生ループ既定・スナップ既定・ゼブラなどの候補は
 //! **紐づく実装状態がまだ無い**(スナップは gesture ごとの修飾キー派生
 //! `!modifiers.command()` であって保存された既定値ではない、等)ため載せて
 //! いない — 意味が生まれた束で追加する。
+//!
+//! ### map 再走査(第2切片、AS 着地後): 消化/見送りの再判定
+//! B12 の「採用予定」59行を、AS 着地(`AutoSaveConfig`)を踏まえて再走査した。
+//! **自動保存関連の4行だけが「意味が実在するようになった」**行で、今回
+//! [`AutoSaveField`]/[`Message::AutoSaveToggle`] として消化する:
+//! id 1157(Auto Save/Premiere)・1158(Auto-Save/Adobe公式)・1206(Project Save
+//! and Load/BMD)・1231(Auto-Save…/After Effects) — いずれも「自動保存の
+//! 間隔・世代数(・BMD分は追加でライブセーブ/バックアップも束ねた1行)」で、
+//! 今回の interval_secs/generations/enabled の3項目でカバーされる範囲は消化、
+//! BMD の「ライブセーブ」(編集の度に別経路で保存し続ける Auto-Save とは別機構)
+//! は今回のスコープ外(紐づく実装が無い、見送りのまま)。
+//! **他55行(audio hardware/keyboard shortcuts/appearance highlight color/
+//! grid & guides/language/proxy/…)は AS の着地と無関係** — AS が足したのは
+//! 自動保存機構だけで、他の環境設定カテゴリに対応する実装状態は今回の着地で
+//! 何も増えていない。よってそれらは見送り台帳のまま(map 自体は不触 —
+//! 発注書「台帳類 不触」、この doc は判断理由の記録)。
 //!
 //! ## なぜ `Message` がもう1本あるのか(結線互換の縫い目)
 //! root(`motolii-shell::Shell::update_settings`)は旧 [`crate::Message`] を
@@ -46,14 +75,14 @@
 //! (`background_row`/`ui_scale_row`/`preview_cache_row`)は今回のスコープ外
 //! (発注書「部分適用でよい」— 型を確立するのが目的)。
 
-use iced::widget::{column, container, row, scrollable, text, text_input};
+use iced::widget::{column, container, row, scrollable, text, text_input, toggler};
 use iced::{Element, Length};
 
-use motolii_store::{Composition, Document, Fps, Intent};
+use motolii_store::{AutoSaveConfig, Composition, Document, Fps, Intent};
 use motolii_taffy::{style_from_css_decl, TaffyBox};
 use motolii_tokens_rs::{Colors, Dimensions};
 
-use crate::chrome::{self, section_header, value_input_style};
+use crate::chrome::{self, section_header, toggler_style, value_input_style};
 use crate::{
     background_row, hairline_bottom, hint_row, preset_row, ui_scale_row, BackgroundFieldDraft,
 };
@@ -75,6 +104,16 @@ pub enum Message {
     /// Composition 数値欄の Enter — ここで初めて `Intent::SetComposition` を
     /// 1回出す([`commit_comp_field`]、read-modify-write)。
     CompFieldSubmit(CompField),
+    /// AUTOSAVE 有効/無効トグル(裁定187 toggler)。**shell-local な bool**
+    /// (`ToggleSettingsPanel` と同じ身分 — Document/undo を経由しないが、
+    /// 結線後は実際に自動保存タイマーを引くかどうかを決める)。
+    AutoSaveToggle(bool),
+    /// 自動保存の数値欄(間隔[分]・世代数)への打鍵。**まだ `AutoSaveConfig` を
+    /// 書かない** — 下書きを更新するだけ([`CompFieldInput`] と同じ形)。
+    AutoSaveFieldInput(AutoSaveField, String),
+    /// 自動保存の数値欄の Enter — ここで初めて [`AutoSaveConfig`] の対応
+    /// フィールドを1つ更新する([`commit_auto_save_field`])。
+    AutoSaveFieldSubmit(AutoSaveField),
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +276,129 @@ pub fn commit_comp_field(
 }
 
 // ---------------------------------------------------------------------------
+// Autosave 節(第2切片、2026-08-22: AS レーンが `Document::auto_save`/
+// `AutoSaveConfig` を着地させたことで意味が実在するようになった — crate 冒頭
+// doc「AUTOSAVE」参照)。
+// ---------------------------------------------------------------------------
+
+/// `AutoSaveConfig` の編集対象フィールド。「有効/無効」は `bool` 単体
+/// (下書きを経由しない即時トグル、[`Message::AutoSaveToggle`])なのでここには
+/// 含めない — 数値の2フィールドだけがこの enum の対象(`CompField` が
+/// `background` を含めないのと同じ理由)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum AutoSaveField {
+    /// `AutoSaveConfig::interval_secs`。**欄には分単位で出す**(AE `Auto-Save`
+    /// の `Save Every __ Minutes` 慣習・[`format_auto_save_interval_minutes`]/
+    /// [`parse_auto_save_interval_secs`] が秒との往復を担う)。
+    IntervalMinutes,
+    /// `AutoSaveConfig::generations`。
+    Generations,
+}
+
+impl AutoSaveField {
+    /// 「全項目が実在識別子に紐づく」テストが回すための全列挙。
+    pub const ALL: [AutoSaveField; 2] = [Self::IntervalMinutes, Self::Generations];
+
+    fn caption(self) -> &'static str {
+        match self {
+            Self::IntervalMinutes => "Min",
+            Self::Generations => "Gens",
+        }
+    }
+}
+
+/// 自動保存数値欄、編集中の下書き。**`AutoSaveConfig` ではない**
+/// ([`CompFieldDraft`] と同じ形 — Enter まで確定しない)。置き場は `Shell`
+/// (supervisor 結線時に `comp_draft` の隣へ新設)。
+#[derive(Clone, Debug, PartialEq)]
+pub struct AutoSaveFieldDraft {
+    pub field: AutoSaveField,
+    pub text: String,
+}
+
+/// 間隔欄(分)の下限。0分連射は disk I/O を毎 tick 起こしかねないので、
+/// 「間隔」を名乗れる最小値として1分を床にする([`MAX_COMP_FPS`] 等と同じ
+/// 「入力欄側の頬」)。
+pub const MIN_AUTO_SAVE_INTERVAL_MINUTES: f64 = 1.0;
+/// 間隔欄(分)の上限。24時間 — これを超える値は実質「自動保存しない」と
+/// 変わらず、打ち間違いの桁暴れ(分のつもりで秒を打つ等)をここで吸収する。
+pub const MAX_AUTO_SAVE_INTERVAL_MINUTES: f64 = 24.0 * 60.0;
+/// 保持世代数欄の上限。AE 既定(5世代)の10倍で「多めに残したい」要求は
+/// 十分吸収しつつ、桁暴れ(世代数のつもりで別の値を打つ)を防ぐ床。
+pub const MAX_AUTO_SAVE_GENERATIONS: usize = 50;
+
+/// 間隔欄(分)の文字列 → [`AutoSaveConfig::interval_secs`](秒、整数)。
+/// [`MIN_AUTO_SAVE_INTERVAL_MINUTES`]..=[`MAX_AUTO_SAVE_INTERVAL_MINUTES`] に
+/// クランプしてから60倍する。読めなければ `None`。
+pub fn parse_auto_save_interval_secs(text: &str) -> Option<u64> {
+    chrome::parse_number(text).map(|value| {
+        let clamped_minutes =
+            value.clamp(MIN_AUTO_SAVE_INTERVAL_MINUTES, MAX_AUTO_SAVE_INTERVAL_MINUTES);
+        (clamped_minutes * 60.0).round() as u64
+    })
+}
+
+/// [`AutoSaveConfig::interval_secs`] の表示文字列(分、末尾ゼロを落とす —
+/// [`format_fps`] と同じ整形)。
+pub fn format_auto_save_interval_minutes(interval_secs: u64) -> String {
+    let minutes = interval_secs as f64 / 60.0;
+    format!("{minutes:.2}")
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_owned()
+}
+
+/// 保持世代数欄の文字列 → 1..=[`MAX_AUTO_SAVE_GENERATIONS`] にクランプした
+/// [`AutoSaveConfig::generations`]。読めなければ `None`。
+pub fn parse_auto_save_generations(text: &str) -> Option<usize> {
+    chrome::parse_number(text)
+        .map(|value| value.round().clamp(1.0, MAX_AUTO_SAVE_GENERATIONS as f64) as usize)
+}
+
+/// フィールドの現在値の表示文字列(下書きが無い時に欄へ出す値)。
+pub fn auto_save_field_display(field: AutoSaveField, config: &AutoSaveConfig) -> String {
+    match field {
+        AutoSaveField::IntervalMinutes => format_auto_save_interval_minutes(config.interval_secs),
+        AutoSaveField::Generations => config.generations.to_string(),
+    }
+}
+
+/// `AutoSaveConfig` の1フィールド — 下書きを確定して対応フィールドを書き換える。
+/// **`Document`/`Intent` を経由しない**([`crate::commit_ui_scale`] と同じ形 —
+/// `AutoSaveConfig` は undo 対象の Document データではなく、Settings が直接
+/// 持ち回して `Document::auto_save` へそのまま渡す値の置き場、
+/// `motolii_store::persist::AutoSaveConfig` doc「Settings が読める形の置き場」
+/// 参照)。`Err` は status 帯へ出す理由文そのもの。
+pub fn commit_auto_save_field(
+    config: &mut AutoSaveConfig,
+    draft: &mut Option<AutoSaveFieldDraft>,
+    field: AutoSaveField,
+) -> Result<(), String> {
+    let Some(taken) = draft.take() else {
+        return Ok(());
+    };
+    if taken.field != field {
+        *draft = Some(taken);
+        return Ok(());
+    }
+    match field {
+        AutoSaveField::IntervalMinutes => {
+            let Some(secs) = parse_auto_save_interval_secs(&taken.text) else {
+                return Err(format!("数値として読めない: {}", taken.text));
+            };
+            config.interval_secs = secs;
+        }
+        AutoSaveField::Generations => {
+            let Some(generations) = parse_auto_save_generations(&taken.text) else {
+                return Err(format!("数値として読めない: {}", taken.text));
+            };
+            config.generations = generations;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Playback 節(プレビューキャッシュ表示 — read-only)
 // ---------------------------------------------------------------------------
 
@@ -268,6 +430,20 @@ pub struct ViewModel<'a> {
     pub ui_scale_draft: Option<&'a str>,
     /// `None` = 未結線。その間 PLAYBACK 節は行ごと出さない(飾り禁止)。
     pub preview_cache: Option<PreviewCacheStats>,
+    /// AUTOSAVE 有効/無効(shell-local bool、`ToggleSettingsPanel` と同じ身分
+    /// — crate 冒頭 doc「AUTOSAVE」参照)。`AutoSaveConfig` と違い Option で
+    /// 包まない — `bool` は注入待ちの生成コストが無く(GPU 等の外部依存が無い)
+    /// [`PreviewCacheStats`] のような「未結線なら隠す」防波堤が要らない
+    /// (`Shell` 新設フィールドの既定値をそのまま渡せる、`comp_draft` と同じ
+    /// 「結線待ちだが値自体は実在」の身分)。
+    pub auto_save_enabled: bool,
+    /// `motolii_store::AutoSaveConfig`(間隔・世代数)。既定値は
+    /// `AutoSaveConfig::default()` — Shell が Document を持つかどうかとは
+    /// 無関係に値として実在する(`Composition` と違い外部注入を要らない)。
+    pub auto_save_config: AutoSaveConfig,
+    /// 自動保存数値欄(間隔・世代数)の下書き。`Shell` に新設(`comp_draft` の
+    /// 隣、同じ「確定するまで front だけが持つ」身分)。
+    pub auto_save_draft: Option<&'a AutoSaveFieldDraft>,
 }
 
 /// B12 第1切片の view(旧 [`crate::view`] の後継 — 結線されたら旧関数は撤去、
@@ -330,6 +506,26 @@ pub fn view(model: ViewModel<'_>, dims: Dimensions, colors: Colors) -> Element<'
                 hairline_bottom(
                     ui_scale_row(model.ui_scale, model.ui_scale_draft, dims, colors)
                         .map(Message::Legacy),
+                    dims,
+                    colors,
+                ),
+                // AUTOSAVE(第2切片): AutoSaveConfig は外部注入を要らない生の値
+                // なので PLAYBACK と違い Option 分岐を挟まない — 常に出す。
+                section_header("AUTOSAVE", dims, colors),
+                hairline_bottom(
+                    auto_save_toggle_row(model.auto_save_enabled, dims, colors),
+                    dims,
+                    colors,
+                ),
+                hairline_bottom(
+                    auto_save_cells_row(
+                        "Save Every",
+                        &AutoSaveField::ALL,
+                        model.auto_save_config,
+                        model.auto_save_draft,
+                        dims,
+                        colors,
+                    ),
                     dims,
                     colors,
                 ),
@@ -454,6 +650,104 @@ fn comp_field_cell(
         text_input("", displayed)
             .on_input(move |text| Message::CompFieldInput(field, text))
             .on_submit(Message::CompFieldSubmit(field))
+            .size(dims.body_text)
+            .width(Length::Fixed(dims.inspector_value_width))
+            .padding(0.0)
+            .align_x(iced::alignment::Horizontal::Center)
+            .style(move |_theme, status| value_input_style(dims, colors, status)),
+    ]
+    .spacing(0.0)
+    .into()
+}
+
+// ---------------------------------------------------------------------------
+// taffy 転写 第2適用(第2切片): [`auto_save_cells_row`] は新しい CSS 宣言を
+// 発明せず、[`comp_cells_row_css`]/[`COMP_CELLS_LABEL_CSS`]/[`comp_cell_css`]
+// (第1号で確立済みの正本)をそのまま再利用する — 「行ラベル左・固定幅の値
+// セルN個・右」という並べ方の CSS 宣言は Composition 節と AUTOSAVE 節の
+// どちらでも同じ形なので、文字列を複製せず関数そのものを共有する
+// (CSS 宣言が単一正本という裁定183の趣旨そのもの)。
+// ---------------------------------------------------------------------------
+
+/// AUTOSAVE 有効/無効の行(裁定187 toggler、[`crate::toggle_row`] に相当する
+/// 概念だが `motolii-export-pane` とは別 crate なので `chrome::toggler_style`
+/// 経由でこの crate に色ロールを持つ、chrome.rs doc 参照)。
+fn auto_save_toggle_row(enabled: bool, dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+    row![
+        text("Automatically Save Projects")
+            .size(dims.body_text)
+            .color(colors.text_primary)
+            .width(Length::Fill),
+        toggler(enabled)
+            .size(dims.body_text)
+            .on_toggle(Message::AutoSaveToggle)
+            .style(move |_theme, status| toggler_style(colors, status)),
+    ]
+    .spacing(dims.spacing_xs)
+    .height(Length::Fixed(dims.inspector_row_height))
+    .align_y(iced::alignment::Vertical::Center)
+    .padding([0.0, dims.spacing_m])
+    .into()
+}
+
+/// 「行ラベル左・数値セル右」の行(AUTOSAVE 版、[`comp_cells_row`] と同じ列
+/// グリッド文法 — 冒頭「taffy 転写 第2適用」doc 参照)。
+fn auto_save_cells_row(
+    label: &'static str,
+    fields: &[AutoSaveField],
+    config: AutoSaveConfig,
+    draft: Option<&AutoSaveFieldDraft>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let row_style = style_from_css_decl(&comp_cells_row_css(dims)).expect(
+        "comp_cells_row_css は固定テンプレート+dims の px 値のみを埋める — 解釈は必ず成功する",
+    );
+    let label_style = style_from_css_decl(COMP_CELLS_LABEL_CSS)
+        .expect("COMP_CELLS_LABEL_CSS は固定文字列 — 解釈は必ず成功する");
+    let cell_style = style_from_css_decl(&comp_cell_css(dims))
+        .expect("comp_cell_css は固定テンプレート+dims の px 値のみを埋める — 解釈は必ず成功する");
+
+    let label_text: Element<'static, Message> = text(label)
+        .size(dims.body_text)
+        .color(colors.text_primary)
+        .into();
+
+    let mut taffy_row: TaffyBox<'static, Message, iced::Theme, iced::Renderer> =
+        TaffyBox::new(row_style).push(label_style, label_text);
+    for &field in fields {
+        taffy_row = taffy_row.push(
+            cell_style.clone(),
+            auto_save_field_cell(field, config, draft, dims, colors),
+        );
+    }
+    taffy_row.into()
+}
+
+/// caption + 数値欄のセル([`comp_field_cell`] と同じ形 — 2箇所で別の意匠を
+/// 発明しない)。
+fn auto_save_field_cell(
+    field: AutoSaveField,
+    config: AutoSaveConfig,
+    draft: Option<&AutoSaveFieldDraft>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let displayed = draft
+        .filter(|draft| draft.field == field)
+        .map(|draft| draft.text.clone())
+        .unwrap_or_else(|| auto_save_field_display(field, &config));
+
+    column![
+        text(field.caption())
+            .size(dims.caption_text)
+            .color(colors.text_muted)
+            .align_x(iced::alignment::Horizontal::Center)
+            .width(Length::Fixed(dims.inspector_value_width)),
+        // 裁定170 M01: comp_field_cell と同じ理由(owned move で 'static を返す)。
+        text_input("", displayed)
+            .on_input(move |text| Message::AutoSaveFieldInput(field, text))
+            .on_submit(Message::AutoSaveFieldSubmit(field))
             .size(dims.body_text)
             .width(Length::Fixed(dims.inspector_value_width))
             .padding(0.0)
@@ -679,5 +973,158 @@ mod tests {
         assert_eq!(comp_field_display(CompField::Height, &composition), "1080");
         assert_eq!(comp_field_display(CompField::Fps, &composition), "29.97");
         assert_eq!(comp_field_display(CompField::DurationFrames, &composition), "300");
+    }
+
+    // -----------------------------------------------------------------
+    // AUTOSAVE(第2切片): 意味実在柵 — 全 AutoSaveField が
+    // motolii_store::AutoSaveConfig の実在フィールドを実際に動かす。
+    // 発注規律(裁定189): 書くが実行しない。検収線は
+    // `cargo check --tests -p motolii-settings-pane` 緑まで。
+    // -----------------------------------------------------------------
+
+    /// **本命**: [`AutoSaveField::ALL`] を尽くし、各 commit が対応フィールド
+    /// **だけ**を動かすこと(= どの欄も `AutoSaveConfig` の実在識別子に紐づき、
+    /// かつ他方の意味を巻き込まない)を1つずつ確かめる
+    /// ([`every_comp_field_commits_into_its_real_composition_field_and_nothing_else`]
+    /// と同じ形の柵)。
+    #[test]
+    fn every_auto_save_field_commits_into_its_real_config_field_and_nothing_else() {
+        for field in AutoSaveField::ALL {
+            let mut config = AutoSaveConfig::default();
+            let before = config;
+            let text = match field {
+                AutoSaveField::IntervalMinutes => "10",
+                AutoSaveField::Generations => "8",
+            };
+            let mut draft = Some(AutoSaveFieldDraft {
+                field,
+                text: text.to_owned(),
+            });
+            commit_auto_save_field(&mut config, &mut draft, field)
+                .unwrap_or_else(|error| panic!("{field:?} を書けない: {error}"));
+            assert!(draft.is_none(), "{field:?}: 確定後も下書きが残っている");
+
+            let expected_interval_secs = if field == AutoSaveField::IntervalMinutes {
+                600
+            } else {
+                before.interval_secs
+            };
+            let expected_generations = if field == AutoSaveField::Generations {
+                8
+            } else {
+                before.generations
+            };
+            assert_eq!(
+                config.interval_secs, expected_interval_secs,
+                "{field:?} 確定後の interval_secs"
+            );
+            assert_eq!(
+                config.generations, expected_generations,
+                "{field:?} 確定後の generations"
+            );
+        }
+    }
+
+    /// 別フィールドの下書きしか無い時の Enter は no-op で、下書きも消さない
+    /// ([`commit_with_a_mismatched_draft_is_a_no_op_and_keeps_the_draft`] と
+    /// 同じ意味論)。
+    #[test]
+    fn auto_save_commit_with_a_mismatched_draft_is_a_no_op_and_keeps_the_draft() {
+        let mut config = AutoSaveConfig::default();
+        let before = config;
+        let mut draft = Some(AutoSaveFieldDraft {
+            field: AutoSaveField::IntervalMinutes,
+            text: "10".to_owned(),
+        });
+        commit_auto_save_field(&mut config, &mut draft, AutoSaveField::Generations)
+            .expect("no-op のはず");
+        assert!(draft.is_some(), "無関係の Enter が下書きを消した");
+        assert_eq!(config.interval_secs, before.interval_secs);
+        assert_eq!(config.generations, before.generations);
+    }
+
+    /// 読めない入力は Err(status 帯行き)で `AutoSaveConfig` には触らない。
+    #[test]
+    fn auto_save_commit_rejects_garbage_without_touching_the_config() {
+        let mut config = AutoSaveConfig::default();
+        let before = config;
+        let mut draft = Some(AutoSaveFieldDraft {
+            field: AutoSaveField::Generations,
+            text: "not a number".to_owned(),
+        });
+        let error = commit_auto_save_field(&mut config, &mut draft, AutoSaveField::Generations)
+            .expect_err("読めない入力が通ってしまった");
+        assert!(
+            error.contains("not a number"),
+            "理由文に入力が引用されていない: {error}"
+        );
+        assert_eq!(config.generations, before.generations);
+    }
+
+    #[test]
+    fn parse_auto_save_interval_secs_clamps_into_1_to_1440_minutes() {
+        assert_eq!(parse_auto_save_interval_secs("0"), Some(60), "0分未満は1分へクランプ");
+        assert_eq!(parse_auto_save_interval_secs("-5"), Some(60));
+        assert_eq!(parse_auto_save_interval_secs("5"), Some(300));
+        assert_eq!(
+            parse_auto_save_interval_secs("999999"),
+            Some((MAX_AUTO_SAVE_INTERVAL_MINUTES * 60.0) as u64),
+            "24時間超は24時間へクランプ"
+        );
+        assert_eq!(parse_auto_save_interval_secs("not a number"), None);
+    }
+
+    #[test]
+    fn parse_auto_save_generations_clamps_into_1_to_50() {
+        assert_eq!(parse_auto_save_generations("0"), Some(1));
+        assert_eq!(parse_auto_save_generations("-5"), Some(1));
+        assert_eq!(parse_auto_save_generations("5"), Some(5));
+        assert_eq!(
+            parse_auto_save_generations("999"),
+            Some(MAX_AUTO_SAVE_GENERATIONS)
+        );
+        assert_eq!(parse_auto_save_generations("not a number"), None);
+    }
+
+    /// 表示→入力→確定の往復で値が動かない([`fps_display_round_trips_through_parse_unchanged`]
+    /// と同じ礼儀 — 秒↔分の単位変換をまたいでも安定する)。
+    #[test]
+    fn auto_save_interval_display_round_trips_through_parse_unchanged() {
+        for interval_secs in [60, 300, 600, 3600] {
+            let displayed = format_auto_save_interval_minutes(interval_secs);
+            assert_eq!(
+                parse_auto_save_interval_secs(&displayed),
+                Some(interval_secs),
+                "{interval_secs}秒 が往復で動いた(表示={displayed:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn auto_save_field_display_reads_the_real_config_values() {
+        let config = AutoSaveConfig {
+            interval_secs: 300,
+            generations: 5,
+        };
+        assert_eq!(auto_save_field_display(AutoSaveField::IntervalMinutes, &config), "5");
+        assert_eq!(auto_save_field_display(AutoSaveField::Generations, &config), "5");
+    }
+
+    /// [`AutoSaveConfig::default`](既定 5分/5世代、発注書指定)がそのまま
+    /// 欄の初期表示になること — 「顔だけの設定」ではなく AS の既定値が実際に
+    /// 見える(飾り禁止柵の裏返し)。
+    #[test]
+    fn default_auto_save_config_displays_ae_precedent_defaults() {
+        let config = AutoSaveConfig::default();
+        assert_eq!(
+            auto_save_field_display(AutoSaveField::IntervalMinutes, &config),
+            "5",
+            "既定 5分(AutoSaveConfig::DEFAULT_INTERVAL_SECS = 300秒)"
+        );
+        assert_eq!(
+            auto_save_field_display(AutoSaveField::Generations, &config),
+            "5",
+            "既定 5世代(AutoSaveConfig::DEFAULT_GENERATIONS)"
+        );
     }
 }
