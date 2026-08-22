@@ -76,6 +76,24 @@ pub enum Message {
     KeyDragCancelled,
     NudgeKeyframe(i64),
 
+    // ---- Timeline transport 帯(map 1041-1045 採用済・1138 Timecode) ----
+    /// transport の Play‖Pause(map 1041)。**Select/ScrubTo と同じ「例外」の
+    /// 形** — 意味の実装は shell 側の既存 `Message::TogglePlayback`
+    /// (`Shell::toggle_playback`、拘束5「再生と掴みは相互排他」の判断ごと)に
+    /// 既にあり、pane はボタンの顔だけを持つ。shell は
+    /// `Message::Timeline(TogglePlayback)` を5例外と同様に先取りして既存腕へ
+    /// 写す(実結線は supervisor 統合時)。[`PaneState::update`] では no-op。
+    TogglePlayback,
+    /// transport の 1コマ戻/進(map 1042/1043)。shell の既存
+    /// `Message::StepPlayhead(i64)`(`nav::step_playhead` 経由)へ素直に写る —
+    /// 符号と歩幅は呼び出し側が決める既存の役割分担どおり(ボタンは ±1 固定)。
+    StepPlayhead(i64),
+    /// transport の先頭へ(map 1045)。shell の既存 `Message::JumpPlayheadToStart`。
+    JumpPlayheadToStart,
+    /// transport の末尾へ(map 1044)。shell の既存 `Message::JumpPlayheadToEnd`
+    /// (`nav::comp_end_frame`)。
+    JumpPlayheadToEnd,
+
     // ---- Timeline ツリー行(裁定173 H2) ----
     /// rail の fold 三角(開閉ボタン)クリック。**Shell の5例外に含まれない**
     /// ので、`Message::Timeline(other)` の受け皿がそのまま
@@ -247,11 +265,17 @@ impl PaneState {
                 session.timeline_fold.toggle(layer);
                 None
             }
+            // transport 4腕も Select/ScrubTo と同じ「shell が先取りする例外」—
+            // 実運用ではここに来ない(来ても no-op、`Message` の doc 参照)。
             Message::Select(_)
             | Message::ScrubTo(_)
             | Message::ToggleMute(_)
             | Message::ToggleSolo(_)
-            | Message::ToggleLock(_) => None,
+            | Message::ToggleLock(_)
+            | Message::TogglePlayback
+            | Message::StepPlayhead(_)
+            | Message::JumpPlayheadToStart
+            | Message::JumpPlayheadToEnd => None,
         }
     }
 

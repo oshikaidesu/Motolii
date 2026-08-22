@@ -61,6 +61,15 @@
   "timeline_param_row_height": 16.67,
   "_note_timeline_param_row_height": "property 行(キー行、第2波T3)の行高。mock(ui-scale-and-z.html)に対応する段が無いので新設(裁定117の『mock/tokens に無ければ dimensions.json へ新ロール』どおり) — 出典は egui版 timeline_editor(crates/motolii-ui/src/timeline_editor/mod.rs)の ROW_H=24/PROP_H=20 比(0.8333…)を、この移植の row_height(20)へ適用した値(20 * 20/24 ≈ 16.67)。裁定150(意味論借用が既定)と同じ発想を寸法へも延長 — 独自の比を発明しない",
 
+  "timeline_transport_height": 30,
+  "_note_timeline_transport_height": "timeline_transport 節(発注 2026-08-22: Timeline pane 上端の transport 帯)。値は transport_band(Ableton Control Bar 実測30)と同源 — 帯の意味(transport)が同一なので同じ実測を写す。別キーにするのは朝の合否で pane 内 transport だけを独立に直せるようにするため(shell 下部帯の撤去後は transport_band 自体が退役候補)",
+
+  "timeline_transport_button_width": 30,
+  "_note_timeline_transport_button_width": "ボタン踏面の幅。高さは帯高いっぱい(S1: 踏面はグリフより大きく)なので、幅は高さと同値の正方形踏面 = 1.0×帯高。裁定167 の梯子は容器余白の梯子で踏面の段を持たないため、中間比を発明せず基準寸そのもの(帯高)を採る — rail の M/S/L 正方形チップ(glyph_size_px、1辺=基準寸×比)と同型の「正方形踏面」",
+
+  "timeline_transport_gap": 2,
+  "_note_timeline_transport_gap": "ボタン間・タイムコードとの間隔。裁定167 の容器余白梯子の下段 0.075×基準寸(帯高30)= 2.25 → px 最近傍丸め 2(lane_bar::sibling_gap_px と同式・同段 — 兄弟要素間 gap の既存段を借用、独自の中間値を発明しない)",
+
   "ui_scale": 1.00,
   "_note_ui_scale": "mock --s 相当の UI 拡大率(1.00 基準、0.01刻み)。適用点は Dimensions::scaled の1箇所だけ(Shell::dims が呼ぶ)。仮の置き場 — Workspace 永続機構がまだ無いため、暫定的にこの JSON トークンファイルへ置く(発注書の指示どおり)。Workspace 実装後はそちらへ移す",
 
