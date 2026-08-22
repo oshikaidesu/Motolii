@@ -55,6 +55,7 @@ pub mod markers;
 pub mod nav;
 mod projection;
 mod rail;
+pub mod rows;
 pub mod shuttle;
 pub mod split;
 pub mod stacking;
