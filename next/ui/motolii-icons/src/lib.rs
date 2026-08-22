@@ -106,6 +106,40 @@ declare_icons! {
     Warning => "warning",
     Error => "error",
     Info => "info",
+    // -- 第2弾(裁定186/187 — 走行中レーンの予想需要+次波の在庫)-----------
+    // メディア/アセット種別
+    Movie => "movie",
+    AudioFile => "audio_file",
+    Image => "image",
+    TextFields => "text_fields",
+    // マーキング/分類
+    Flag => "flag",
+    Bookmark => "bookmark",
+    Label => "label",
+    Palette => "palette",
+    // 変形/レイアウト
+    Crop => "crop",
+    Straighten => "straighten",
+    GridOn => "grid_on",
+    CenterFocusStrong => "center_focus_strong",
+    Layers => "layers",
+    LayersClear => "layers_clear",
+    // 窓/パネル
+    OpenInNew => "open_in_new",
+    DockToRight => "dock_to_right",
+    PictureInPicture => "picture_in_picture",
+    // ファイル I/O
+    Save => "save",
+    FileDownload => "file_download",
+    FileUpload => "file_upload",
+    // transport 続き
+    PlayCircle => "play_circle",
+    Stop => "stop",
+    FastForward => "fast_forward",
+    FastRewind => "fast_rewind",
+    Repeat => "repeat",
+    RepeatOne => "repeat_one",
+    Shuffle => "shuffle",
 }
 
 impl Icon {
