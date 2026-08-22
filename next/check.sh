@@ -68,7 +68,7 @@ fi
 
 # 意図束(IB 44束、裁定177 / 2026-08-22)。normal-map.tsv の bundle 列(15列目)が
 # 正本 reference/intent-bundles.tsv と噛み合っているかを3点で見る:
-#   (a) 採用済/採用予定/保留/拡張の全行に bundle があること(不採用は空欄)
+#   (a) 採用済/結線待ち/採用予定/保留/拡張の全行に bundle があること(不採用は空欄)
 #   (b) 記入された bundle id が intent-bundles.tsv に実在すること
 #   (c) 束ごとの行数が intent-bundles.tsv の size 申告と一致すること
 if [ -f reference/intent-bundles.tsv ] && [ -f reference/normal-map.tsv ]; then
@@ -78,7 +78,7 @@ if [ -f reference/intent-bundles.tsv ] && [ -f reference/normal-map.tsv ]; then
     FNR==NR { if ($1 !~ /^#/ && $1 != "id") size[$1]=$5; next }
     FNR>1 {
       v=$13; b=$15
-      if ((v=="採用済"||v=="採用予定"||v=="保留"||v=="拡張") && b=="")
+      if ((v=="採用済"||v=="結線待ち"||v=="採用予定"||v=="保留"||v=="拡張") && b=="")
         printf "NG: bundle 未記入 — id=%s(%s)\n", $1, v
       if (v=="不採用" && b!="")
         printf "NG: 不採用行に bundle — id=%s(%s)\n", $1, b
