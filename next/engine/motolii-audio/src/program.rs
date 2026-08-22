@@ -31,20 +31,45 @@
 //! (無変化)を渡すだけに留めた — **これも「足りない口」**。store 側が
 //! `property::PAN` 等を持てば `layer_mix_source` は1行足すだけで結線できる
 //! (`gain` と全く同じ形)。
+//!
+//! **STORE3結線(2026-08-22追記)**: store が `property::PAN`/`FADE_IN`/`FADE_OUT`
+//! を追加した(`motolii_store::property` docコメント参照)ので、上の「足りない口」
+//! を実際に結んだ。
+//!
+//! - **pan**: `property::PAN` は `LEVEL` と全く同じ形(-1.0..=1.0 の
+//!   `KeyframeTrack`、playback全体で連続的に評価される)なので、`gain` と同じ
+//!   `view.track(...)` を1行足すだけ(doc の予告どおり)。
+//! - **fade_in/fade_out**: `property::FADE_IN`/`FADE_OUT` の store 上の意味は
+//!   「クリップ先頭/末尾からの相対**秒**」(`f64`、`RationalTime` ではなく他の
+//!   property と同じ生の数値 — `motolii_store::property::FADE_IN` のdoc参照)。
+//!   対して [`FadeSpec::fade_in`]/`fade_out` は **1個の `RationalTime`**(track
+//!   ではない、静的な尺)なので、gain/pan のように track をそのまま渡せない —
+//!   `view.value_at(layer, &property, RationalTime::ZERO)` で1点評価してから
+//!   `RationalTime` へ変換する(`fade_seconds_at` 参照)。`RationalTime::ZERO`
+//!   で読む理由: この2 property は「アニメーションする量」ではなく「クリップに
+//!   固定の設定値」(store 側 test
+//!   `pan_fade_in_fade_out_are_plain_animatable_properties_with_no_track_meaning_disabled`
+//!   も常に `t(0)` へキーを置く) — `KeyframeTrack::eval` は `t <= keys[0].t` を
+//!   先頭値へclampするので、キーがどの時刻に置かれていても `RationalTime::ZERO`
+//!   評価で正しく拾える。秒 → `RationalTime` の変換は engine のサンプル精度
+//!   (`CANONICAL_SAMPLE_RATE` = 48kHz)を分母に採る(mix 自体が最終的にサンプル
+//!   格子で評価するため、それ以上細かい分数を持っても意味が無い)。
+//!   track が無ければ(`value_at` が `None`)0.0秒 = フェード無し(裁定20と同型)。
 
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
 use motolii_core::RationalTime;
+use motolii_eval::Value;
 use motolii_store::{property, LayerId, LayerSource, PropertyId, StoreView};
 
 use crate::cache::PcmCache;
-use crate::convert::to_canonical;
+use crate::convert::{to_canonical, CANONICAL_SAMPLE_RATE};
 use crate::decode::decode_file_audio_ordinal;
 use crate::error::{AudioError, Result};
 use crate::meter::AudioMeter;
-use crate::mix::{mix_audio, AudioOutOfRange, FadeSpec, MixReport, MixSource};
+use crate::mix::{mix_audio, AudioOutOfRange, FadeCurve, FadeSpec, MixReport, MixSource};
 use crate::time_map::TimeMap;
 
 /// `StoreView` 由来の音声プログラム(正準mix入力)。
@@ -167,6 +192,16 @@ fn layer_mix_source(
     };
 
     let gain = view.track(layer, &PropertyId::new(property::LEVEL)?)?;
+    // pan は gain と全く同じ形(playback全体で連続評価する `KeyframeTrack`) —
+    // track が無ければ `MixSource::pan` の `None`(裁定20: 静止値0.0=中央)。
+    let pan = view.track(layer, &PropertyId::new(property::PAN)?)?;
+    let fade = FadeSpec {
+        fade_in: fade_seconds_at(view, layer, property::FADE_IN)?,
+        fade_out: fade_seconds_at(view, layer, property::FADE_OUT)?,
+        // store はカーブ選択を持たない(`property::FADE_IN`/`FADE_OUT` は尺のみ)
+        // — `FadeSpec::default`/`NONE` と同じ既定(等パワー)を使う。
+        curve: FadeCurve::default(),
+    };
 
     Ok(Some(MixSource {
         pcm,
@@ -174,16 +209,46 @@ fn layer_mix_source(
         timeline_duration,
         time_map,
         gain,
-        // B42: store に pan/fade の標準 property がまだ無い(`property::LEVEL` に
-        // 相当する `PAN`/`FADE_IN`/`FADE_OUT` 未設 — 発注書の指示どおりこの crate
-        // からは新設しない、store 側への要求として終了報告に書く)。engine 側の
-        // 型・mix経路(`MixSource::pan`/`fade`)は既に実装済みなので、store が
-        // property を持てばここは1行足すだけで済む。
-        pan: None,
-        fade: FadeSpec::NONE,
+        pan,
+        fade,
         out_of_range: AudioOutOfRange::Silence,
         enabled: true,
     }))
+}
+
+/// `property::FADE_IN`/`FADE_OUT` を「クリップ端からの相対秒」として1点評価し
+/// `RationalTime` へ変換する(`FadeSpec::fade_in`/`fade_out` は track ではなく
+/// 1個の静的な尺 — module doc の「STORE3結線」節参照)。
+///
+/// `RationalTime::ZERO` で読む: この2 propertyは値がアニメーションする対象では
+/// なくクリップに固定の設定値なので、`KeyframeTrack::eval` の「`t <= keys[0].t`
+/// は先頭キーの値へclamp」という挙動を利用して、キーがどの時刻に置かれていても
+/// 同じ値を拾う。`view.value_at` を使う(track の生値ではなくスロット参照・
+/// overlay 込みの評価値) — gain/pan と違い、これは「playback中に動く量」では
+/// なく「単一のクリップ設定」で、他の scalar property(opacity 等)と同じ読み方
+/// が自然なため。
+///
+/// track が無ければ0秒(裁定20と同型、フェード無し)。値が有限かつ0以上でない
+/// 場合は `AudioError::InvalidFade` を返す(負のフェード尺は
+/// `mix.rs::fade_envelope` の前提を破る)。
+fn fade_seconds_at(
+    view: &StoreView<'_>,
+    layer: LayerId,
+    property_name: &str,
+) -> Result<RationalTime> {
+    let property = PropertyId::new(property_name)?;
+    let seconds = match view.value_at(layer, &property, RationalTime::ZERO)? {
+        None => 0.0,
+        Some(Value::F64(v)) => v,
+        Some(_) => return Err(AudioError::InvalidFade { fade: f64::NAN }),
+    };
+    if !seconds.is_finite() || seconds < 0.0 {
+        return Err(AudioError::InvalidFade { fade: seconds });
+    }
+    // engine のサンプル精度(48kHz)を分母に採る — mix自体が最終的にサンプル格子
+    // で評価するため、それ以上細かい分数を持っても意味が無い。
+    let samples = (seconds * f64::from(CANONICAL_SAMPLE_RATE)).round() as i64;
+    RationalTime::try_new(samples, CANONICAL_SAMPLE_RATE as i64).map_err(AudioError::Time)
 }
 
 fn load_canonical_stream(

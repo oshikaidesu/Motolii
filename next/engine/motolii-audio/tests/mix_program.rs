@@ -246,3 +246,179 @@ fn reverse_speed_is_rejected_not_silently_forward() {
     let mut caches = HashMap::new();
     assert!(AudioProgram::from_view(&view, &mut caches).is_err());
 }
+
+// ---------------------------------------------------------------------------
+// STORE3結線: `property::PAN`/`FADE_IN`/`FADE_OUT` が実際に `layer_mix_source`
+// を通って `MixSource.pan`/`fade` へ届くことの検収(program.rs doc の
+// 「STORE3結線」節参照)。
+// ---------------------------------------------------------------------------
+
+fn const_property_track(value: f64) -> KeyframeTrack {
+    let mut track = KeyframeTrack::new();
+    track.insert(Keyframe {
+        t: RationalTime::ZERO,
+        value: Value::F64(value),
+        interp: Interp::Hold,
+        spatial: None,
+    });
+    track
+}
+
+#[test]
+fn pan_track_from_store_routes_layer_hard_left() {
+    let dir = tempdir("pan");
+    let clip = dir.join("clip.wav");
+    // L=R=16000 なので pan 前は symmetric。pan=-1.0 で両ch が L へ合算されるはず
+    // (`apply_pan_stereo` の hard-left 挙動、`mix.rs::pan_hard_left_...` と同型)。
+    write_pcm16_wav(&clip, 48_000, 2, &[16_000, 16_000].repeat(480));
+
+    let mut doc = doc_with_comp(30);
+    let layer = LayerId(1);
+    doc.apply_all([
+        Intent::AddLayer(layer),
+        Intent::SetMeta {
+            layer,
+            meta: media_meta(&clip, 0, 30),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::new(property::PAN).unwrap(),
+            track: const_property_track(-1.0),
+        },
+    ])
+    .unwrap();
+
+    let view = doc.view();
+    let mut caches = HashMap::new();
+    let program = AudioProgram::from_view(&view, &mut caches).unwrap();
+    let (out, _report) = program.mix_audio(0, 1, None).unwrap();
+
+    let expected_l = 2.0 * (16_000.0 / 32_768.0);
+    assert!(
+        (out[0] as f64 - expected_l).abs() < 1e-3,
+        "hard-left pan should sum both channels into L: {out:?}"
+    );
+    assert!(out[1].abs() < 1e-6, "hard-left pan should silence R: {out:?}");
+}
+
+#[test]
+fn fade_in_track_from_store_attenuates_clip_start() {
+    let dir = tempdir("fade");
+    let clip = dir.join("clip.wav");
+    // 1秒ぶん(48000 frames)の一定振幅。fade_in=0.5s を store に置く。
+    write_pcm16_wav(&clip, 48_000, 2, &[16_000, 16_000].repeat(48_000));
+
+    let mut doc = doc_with_comp(30);
+    let layer = LayerId(1);
+    doc.apply_all([
+        Intent::AddLayer(layer),
+        Intent::SetMeta {
+            layer,
+            meta: media_meta(&clip, 0, 30), // 30 frames @30fps = 1s、clip全長と一致
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::new(property::FADE_IN).unwrap(),
+            track: const_property_track(0.5),
+        },
+    ])
+    .unwrap();
+
+    let view = doc.view();
+    let mut caches = HashMap::new();
+    let program = AudioProgram::from_view(&view, &mut caches).unwrap();
+
+    // frame 0: fade envelope の起点(等パワー則でも0)。
+    let (start, _) = program.mix_audio(0, 1, None).unwrap();
+    assert!(start[0].abs() < 1e-6, "clip先頭はfade_inでほぼ無音のはず: {start:?}");
+
+    // fade_in の中点(0.25s = 12000 samples @48kHz): 等パワー則で sin(pi/4) ≈ 0.7071。
+    let (mid, _) = program.mix_audio(12_000, 1, None).unwrap();
+    let full = 16_000.0 / 32_768.0;
+    let expected_mid = full * std::f64::consts::FRAC_1_SQRT_2;
+    assert!(
+        (mid[0] as f64 - expected_mid).abs() < 1e-3,
+        "fade_in中点は等パワー則のはず: {mid:?}, expected {expected_mid}"
+    );
+
+    // fade_in を過ぎた後(0.5s = 24000 samples @48kHz)は満音量。
+    let (after, _) = program.mix_audio(24_000, 1, None).unwrap();
+    assert!(
+        (after[0] as f64 - full).abs() < 1e-3,
+        "fade_in終了後は満音量のはず: {after:?}"
+    );
+}
+
+#[test]
+fn pan_and_fade_default_to_center_and_no_fade_without_tracks() {
+    let dir = tempdir("pan_fade_default");
+    let clip = dir.join("clip.wav");
+    // L != R の非対称な音で「pan=中央=無変化」を検収する(L==Rの対称fixtureだと
+    // pan=0 と pan=不定の区別がつかない)。
+    write_pcm16_wav(&clip, 48_000, 2, &[19_660, 6_553].repeat(480)); // 0.6 / 0.2
+
+    let mut doc = doc_with_comp(30);
+    let layer = LayerId(1);
+    doc.apply_all([
+        Intent::AddLayer(layer),
+        Intent::SetMeta {
+            layer,
+            meta: media_meta(&clip, 0, 30),
+        },
+    ])
+    .unwrap();
+    // PAN/FADE_IN/FADE_OUT のtrackは一切置かない。
+
+    let view = doc.view();
+    let mut caches = HashMap::new();
+    let program = AudioProgram::from_view(&view, &mut caches).unwrap();
+    let (out, _report) = program.mix_audio(0, 1, None).unwrap();
+
+    assert!((out[0] as f64 - 19_660.0 / 32_768.0).abs() < 1e-3, "L: {out:?}");
+    assert!((out[1] as f64 - 6_553.0 / 32_768.0).abs() < 1e-3, "R: {out:?}");
+}
+
+#[test]
+fn pan_and_fade_from_store_mix_deterministically() {
+    let dir = tempdir("pan_fade_determinism");
+    let clip = dir.join("clip.wav");
+    write_pcm16_wav(&clip, 48_000, 2, &[16_000, 16_000].repeat(48_000));
+
+    let mut doc = doc_with_comp(30);
+    let layer = LayerId(1);
+    doc.apply_all([
+        Intent::AddLayer(layer),
+        Intent::SetMeta {
+            layer,
+            meta: media_meta(&clip, 0, 30),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::new(property::PAN).unwrap(),
+            track: const_property_track(0.3),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::new(property::FADE_IN).unwrap(),
+            track: const_property_track(0.2),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::new(property::FADE_OUT).unwrap(),
+            track: const_property_track(0.2),
+        },
+    ])
+    .unwrap();
+
+    let view = doc.view();
+    let mut caches = HashMap::new();
+    let program = AudioProgram::from_view(&view, &mut caches).unwrap();
+
+    let (first, first_report) = program.mix_audio(0, 48_000, None).unwrap();
+    let (second, second_report) = program.mix_audio(0, 48_000, None).unwrap();
+    assert_eq!(
+        first, second,
+        "store由来のpan/fadeを通しても同一入力はbyte一致でなければならない"
+    );
+    assert_eq!(first_report, second_report);
+}
