@@ -71,9 +71,16 @@ use iced::{mouse, Point, Rectangle};
 
 /// Stage ギズモ第1弾(発注 2026-08-22、裁定124: スクラッチ・意味の手本=AE) —
 /// 選択レイヤーの bbox/ハンドル/回転ハンドル/anchor と move/scale/rotate drag。
+/// 第2切片(B22 波)で anchor drag(pan-behind 型)が加入。
 /// message は既存 [`Message`] と独立([`gizmo::GizmoDrag`] — 理由はモジュール doc)。
 pub mod gizmo;
 pub use gizmo::{gizmo_target, GizmoDrag, GizmoOverlay, GizmoPhase, GizmoProperty, GizmoTarget, GizmoValue};
+
+/// Stage 方眼シート束+セーフマージン(B22 第1切片、発注 2026-08-22) —
+/// 方眼/三分割/黄金比/Safe areas の描画と表示トグル Message。視覚正本 =
+/// `next/reference/mocks/stage-semantics.html` v5(結線は次波 — モジュール doc)。
+pub mod sheets;
+pub use sheets::{Sheet, SheetMessage, SheetOverlay, SheetToggles};
 
 use motolii_core::{camera_screen_from_world_z0, CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};

@@ -95,5 +95,5 @@
   "_note_gizmo_rotate_offset": "gizmo 節。回転ハンドル(stem つき小円、Canva/PowerPoint/Google Slides の慣習形)の、上辺中点から外側への距離。gizmo_handle_size×2 — 上辺の Top ハンドル(hit 半径8)と判定が重ならない最小段(8+8)で、独自の中間値を発明しない(算術合成 menubar_menu_width と同じ流儀)",
 
   "gizmo_anchor_radius": 4,
-  "_note_gizmo_anchor_radius": "gizmo 節。anchor 表示(⊕ = 円+十字、AE のアンカーポイントの慣習形)の円半径。十字はこの2倍径。gizmo_handle_size の半分 — ハンドル(掴める物)より一段小さい視覚重量にして『表示のみ・第1切片では掴めない』を大きさでも語る(触れそうで触れない Q0 違反を作らないための減量)"
+  "_note_gizmo_anchor_radius": "gizmo 節。anchor 表示(⊕ = 円+十字、AE のアンカーポイントの慣習形)の円半径。十字はこの2倍径。gizmo_handle_size の半分 — bbox ハンドルより一段小さい視覚重量(anchor は変形の不動点であって bbox の縁ではない)。第2切片(B22 波 2026-08-22)で drag 対象になった(AE pan-behind 型: anchor 変更+position 補償)— 命中は gizmo_hit_radius(8)を使い、見た目(4)より広い判定+hover の Crosshair カーソルで Q0『見えている物は必ず触れる』を保つ(第1切片の『表示のみ』注記はこの切片で失効)"
 }
