@@ -326,7 +326,17 @@ pub fn open_at<'a, Message: Clone + 'a>(
         left: anchor.x,
     });
 
-    stack(vec![base.into(), opaque(positioned)]).into()
+    // `Stack` の既定 size は `Length::Fit` — 自身の大きさを base layer(1層目)の
+    // 実寸に合わせて決める(upstream `stack.rs` doc「The first Element dictates
+    // the intrinsic Size」+ `layout()` 実装)。呼び手の `base` が独自の
+    // width/height を持たない(例: 素の `text` 等)場合、stack 自体がその小さい
+    // 実寸に潰れ、内側の `Length::Fill` overlay 層もろとも潰れる ——
+    // 冒頭 doc の「全面 `Length::Fill` の透明層」を実現するには stack 自身に
+    // 明示で Fill を指定する必要がある(base の sizing に依存しない)。
+    stack(vec![base.into(), opaque(positioned)])
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
 }
 
 #[cfg(test)]
