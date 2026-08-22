@@ -83,5 +83,17 @@
   "_note_menubar_menu_width": "menubar 節(MB-2 上書き裁定 2026-08-22、iced_aw menu の vendoring 移植 — motolii-menubar crate)。開いた menu 面の幅。新規実測は無い — 既存 shell menu.rs の算術合成 inspector_value_width * 3.0(64×3=192、'Deselect All'+'Cmd+Shift+A' が1行に収まる幅)をそのまま採番しただけ(発明ではなく現状追認)",
 
   "menubar_corner_radius": 4,
-  "_note_menubar_corner_radius": "menubar 節。枠の文法(裁定179)『開いた menu の面は明度1段+角丸』の角丸半径。実測正本(Ableton 実測・mock)に対応段が無いので spacing_s(4)と同値を採る — 新しい寸法段を発明しない(timeline_param_row_height と同じ近縁値導出の方針)"
+  "_note_menubar_corner_radius": "menubar 節。枠の文法(裁定179)『開いた menu の面は明度1段+角丸』の角丸半径。実測正本(Ableton 実測・mock)に対応段が無いので spacing_s(4)と同値を採る — 新しい寸法段を発明しない(timeline_param_row_height と同じ近縁値導出の方針)",
+
+  "gizmo_handle_size": 8,
+  "_note_gizmo_handle_size": "gizmo 節(Stage ギズモ第1弾発注 2026-08-22、裁定124: 見た目=先例の慣習形)。bbox の8ハンドル(正方形)の1辺と回転ハンドル(円)の直径。AE/Figma の selection handle 実寸帯(6〜8px)の上端 — S1『踏面はグリフより大きく』側へ寄せた。spacing_m(8)と同値だが意味は『掴む踏面』であって余白ではないため別キー(browser_tab_underline と同じ『同値別キー』の判断)。screen 固定寸 — ズームしてもハンドルの実寸は変えない(Figma/Canva と同じ)",
+
+  "gizmo_hit_radius": 8,
+  "_note_gizmo_hit_radius": "gizmo 節。ハンドル命中の半径(中心からの screen px)。gizmo_handle_size と同値 — 見た目の正方形(半辺4)より半径で4px 広い遊びを持たせ、Q0『見えている物は必ず触れる』を判定側の余白で保証する(見た目より狭い判定を作らない)",
+
+  "gizmo_rotate_offset": 16,
+  "_note_gizmo_rotate_offset": "gizmo 節。回転ハンドル(stem つき小円、Canva/PowerPoint/Google Slides の慣習形)の、上辺中点から外側への距離。gizmo_handle_size×2 — 上辺の Top ハンドル(hit 半径8)と判定が重ならない最小段(8+8)で、独自の中間値を発明しない(算術合成 menubar_menu_width と同じ流儀)",
+
+  "gizmo_anchor_radius": 4,
+  "_note_gizmo_anchor_radius": "gizmo 節。anchor 表示(⊕ = 円+十字、AE のアンカーポイントの慣習形)の円半径。十字はこの2倍径。gizmo_handle_size の半分 — ハンドル(掴める物)より一段小さい視覚重量にして『表示のみ・第1切片では掴めない』を大きさでも語る(触れそうで触れない Q0 違反を作らないための減量)"
 }

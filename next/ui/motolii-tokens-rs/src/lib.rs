@@ -175,6 +175,23 @@ pub struct Dimensions {
     /// (`_note_menubar_corner_radius` 参照 — 新しい寸法段を発明しない)。
     #[serde(default = "default_menubar_corner_radius")]
     pub menubar_corner_radius: f32,
+    /// gizmo 節(Stage ギズモ第1弾発注 2026-08-22)。bbox の8ハンドル(正方形)の
+    /// 1辺と回転ハンドル(円)の直径。AE/Figma のハンドル実寸帯(6〜8px)の上端 —
+    /// `spacing_m` と同値だが意味は「掴む踏面」(`_note_gizmo_handle_size` 参照)。
+    #[serde(default = "default_gizmo_handle_size")]
+    pub gizmo_handle_size: f32,
+    /// ギズモのハンドル命中半径(screen px)。見た目より広い判定側の遊びで
+    /// Q0「見えている物は必ず触れる」を保証する(`_note_gizmo_hit_radius`)。
+    #[serde(default = "default_gizmo_hit_radius")]
+    pub gizmo_hit_radius: f32,
+    /// 回転ハンドルの、bbox 上辺中点から外側への距離。`gizmo_handle_size × 2`
+    /// (Top ハンドルと判定が重ならない最小段、`_note_gizmo_rotate_offset`)。
+    #[serde(default = "default_gizmo_rotate_offset")]
+    pub gizmo_rotate_offset: f32,
+    /// anchor 表示(⊕)の円半径。ハンドルより一段小さい視覚重量
+    /// (`_note_gizmo_anchor_radius`)。
+    #[serde(default = "default_gizmo_anchor_radius")]
+    pub gizmo_anchor_radius: f32,
 }
 
 fn default_inspector_glyph_width() -> f32 {
@@ -225,6 +242,22 @@ fn default_menubar_corner_radius() -> f32 {
     4.0
 }
 
+fn default_gizmo_handle_size() -> f32 {
+    8.0
+}
+
+fn default_gizmo_hit_radius() -> f32 {
+    8.0
+}
+
+fn default_gizmo_rotate_offset() -> f32 {
+    16.0
+}
+
+fn default_gizmo_anchor_radius() -> f32 {
+    4.0
+}
+
 impl Default for Dimensions {
     fn default() -> Self {
         // ファイルが読めない・壊れている時の最終防波堤(M16: render 失敗でも画面を
@@ -260,6 +293,10 @@ impl Default for Dimensions {
             browser_tab_underline: 2.0,
             menubar_menu_width: 192.0,
             menubar_corner_radius: 4.0,
+            gizmo_handle_size: 8.0,
+            gizmo_hit_radius: 8.0,
+            gizmo_rotate_offset: 16.0,
+            gizmo_anchor_radius: 4.0,
         }
     }
 }
@@ -319,6 +356,10 @@ impl Dimensions {
             timeline_transport_gap: self.timeline_transport_gap * s,
             menubar_menu_width: self.menubar_menu_width * s,
             menubar_corner_radius: self.menubar_corner_radius * s,
+            gizmo_handle_size: self.gizmo_handle_size * s,
+            gizmo_hit_radius: self.gizmo_hit_radius * s,
+            gizmo_rotate_offset: self.gizmo_rotate_offset * s,
+            gizmo_anchor_radius: self.gizmo_anchor_radius * s,
             // 自分自身は「寸法」ではないので掛けない。この結果を再度 `scaled()`
             // に通す呼び出し側は無い(適用点は `Shell::dims` の1箇所だけ)。
             ui_scale: self.ui_scale,
