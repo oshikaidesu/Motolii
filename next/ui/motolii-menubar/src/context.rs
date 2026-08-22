@@ -42,7 +42,7 @@
 //! 直接呼べる分は関数呼び出しで実クロスチェック、shell 側にしか無い分は
 //! 転記+出典行で追跡可能にした)。
 //!
-//! ### クリップ右クリック(発注書の8項目 → 6項目採用・2項目見送り)
+//! ### クリップ右クリック(発注書の8項目 → 裁定195で7項目採用・1項目見送り)
 //!
 //! | label | message 出典 | S6 根拠 | 判定 |
 //! |---|---|---|---|
@@ -53,7 +53,7 @@
 //! | Group | 既存(`Message::GroupLayers`) | Layer メニュー(`crate::menus::layer_menu`)+ Cmd+G | 採用 |
 //! | Freeze | 既存(`Message::FreezeGroups`) | 同上(shortcut 無しだが menu bar 存在で足りる、OR 条件) | 採用 |
 //! | Split | **存在しない** — `motolii_timeline_pane::split::Message::SplitAtPlayhead` は宣言のみで `write::Message`/shell へ未統合(`split.rs` 冒頭 doc「統合手順(次波)」1〜3) | — | 見送り(次波の統合を待つ) |
-//! | ラベル色 | 既存だが `inspector_pane::Message::CycleLabelColor` は Inspector の色 swatch button 1本だけが入口(`next/ui/motolii-inspector-pane/src/lib.rs:2827`) — menu bar にも shortcut にも無い | — | S6 不成立につき見送り |
+//! | ラベル色(`Label Color`) | 既存(`inspector_pane::Message::CycleLabelColor`) | **裁定195で解禁**: `crate::menus::layer_menu` に `Label Color` 項目を追加した(Inspector の色 swatch button 1本だけだった単一入口を穴埋め) — 今は menu bar が2本目の入口 | 採用 |
 //!
 //! **「Delete」についての注記**: normal-map/shell の実装に「クリップボードを
 //! 汚さない削除」は存在しない — 唯一の削除動詞は `Message::CutLayer`
@@ -62,21 +62,21 @@
 //! (`Cut`)をそのまま出す — 意図優先の原則(裁定174)は「機構を語らない」であって
 //! 「存在しない動詞を語る」ことは許さない。
 //!
-//! ### レイヤー行右クリック(発注書の5カテゴリ → rename+restack 採用・
-//! lock/hide/solo 見送り)
+//! ### レイヤー行右クリック(発注書の5カテゴリ → 裁定195で全カテゴリ採用)
 //!
 //! | label | message 出典 | S6 根拠 | 判定 |
 //! |---|---|---|---|
 //! | Rename | 既存(`timeline_pane::Message::RenameBegin(layer)`) | shortcut Enter(`next/shell/motolii-shell/src/lib.rs:5391`) | 採用 |
 //! | Bring Forward / Send Backward / Bring to Front / Send to Back | 既存(`timeline_pane::Message::RestackLayer(StackDirection::_)`) | shortcut Cmd+Opt(+Shift)+Up/Down(`lib.rs:5399-5417`) | 採用(4項目) |
-//! | Lock(`ToggleLock`) | 既存 | **rail の鍵 glyph button のみ**(`next/ui/motolii-timeline-pane/src/rail.rs:339`)— menu bar・shortcut のどちらにも無い | S6 不成立につき見送り |
-//! | Hide(`ToggleMute`) | 既存 | 同上(`rail.rs:337`、mute glyph) | 見送り |
-//! | Solo(`ToggleSolo`) | 既存 | 同上(`rail.rs:338`) | 見送り |
+//! | Hide(`ToggleMute`) | 既存 | **裁定195で解禁**: `crate::menus::layer_menu` に `Hide` 項目を追加した(`rail.rs:337` の mute glyph button だけだった単一入口を穴埋め) | 採用 |
+//! | Solo(`ToggleSolo`) | 既存 | 同上(`layer_menu` `Solo` 項目、`rail.rs:338`) | 採用 |
+//! | Lock(`ToggleLock`) | 既存 | 同上(`layer_menu` `Lock` 項目、`rail.rs:339`) | 採用 |
 //!
-//! lock/hide/solo は「右クリックが唯一の入口になる」を作ってしまう
-//! (Ableton 可視性原理・S6 併存)ため、この波では見送る — 発注書が想定した
-//! 5カテゴリのうち機械検査を通るのは rename/restack の2本だけだった、
-//! という実測結果そのものを RETURN で報告する(裁定はしない、報告のみ)。
+//! 前レーンが見送った理由(rail の glyph button のみ = 単一入口、Ableton
+//! 可視性原理・S6 違反)は裁定195の発注そのもの — `menus.rs` の
+//! `layer_menu` に Hide/Solo/Lock を追加したことで S6 が成立し、この波で
+//! 右クリックへ復帰させた。並びは rail の描画順(M/S/L)を踏襲し、
+//! restack 系(並び替え)の後ろへ置く。
 //!
 //! ### キャンバス右クリック(発注書の3項目、全採用)
 //!
@@ -141,6 +141,10 @@ pub struct ClipContextMessages<M> {
     pub group: M,
     /// 裁定119、Layer メニュー Freeze と同じ動詞。
     pub freeze: M,
+    /// `inspector_pane::Message::CycleLabelColor`。裁定195で解禁 — Layer
+    /// メニュー `Label Color` と同じ動詞(モジュール冒頭 doc「クリップ
+    /// 右クリック」表参照)。
+    pub cycle_label_color: M,
 }
 
 /// クリップ右クリックの項目列を組む。並び・ラベルの正本はこの関数
@@ -153,12 +157,13 @@ pub fn clip_context_items<M>(items: ClipContextMessages<M>) -> Vec<Item<M>> {
         Item { label: "Cut", shortcut: Some("Cmd+X"), message: items.cut },
         Item { label: "Group", shortcut: Some("Cmd+G"), message: items.group },
         Item { label: "Freeze", shortcut: None, message: items.freeze },
+        // 裁定195: 単一入口の穴埋め(Inspector の色 swatch のみだった)。
+        Item { label: "Label Color", shortcut: None, message: items.cycle_label_color },
     ]
 }
 
-/// [`layer_row_context_items`] が必要とする message 一式(rename+restack の
-/// みが S6 を満たす — モジュール冒頭 doc「レイヤー行右クリック」表参照。
-/// lock/hide/solo は見送り、この struct にフィールドを持たない)。
+/// [`layer_row_context_items`] が必要とする message 一式(裁定195で
+/// lock/hide/solo も採用 — モジュール冒頭 doc「レイヤー行右クリック」表参照)。
 pub struct LayerRowContextMessages<M> {
     /// 正典 §6、shortcut Enter(`SHORTCUT_ONLY_REGISTRY`)。
     pub rename: M,
@@ -170,11 +175,19 @@ pub struct LayerRowContextMessages<M> {
     pub bring_to_front: M,
     /// `StackDirection::ToBack`、shortcut Cmd+Opt+Shift+Down。
     pub send_to_back: M,
+    /// `timeline_pane::Message::ToggleMute`。裁定195で解禁 — Layer メニュー
+    /// `Hide` と同じ動詞。
+    pub toggle_hide: M,
+    /// `timeline_pane::Message::ToggleSolo`。裁定195で解禁 — Layer メニュー
+    /// `Solo` と同じ動詞。
+    pub toggle_solo: M,
+    /// `timeline_pane::Message::ToggleLock`。裁定195で解禁 — Layer メニュー
+    /// `Lock` と同じ動詞。
+    pub toggle_lock: M,
 }
 
-/// レイヤー行右クリックの項目列を組む。lock/hide/solo は S6 不成立につき
-/// この関数には現れない(モジュール冒頭 doc 参照、発注書との差分は RETURN
-/// で報告する)。
+/// レイヤー行右クリックの項目列を組む。並びは rename → restack(4項目)→
+/// 可視性/ロック(rail の M/S/L 描画順、裁定195で追加)。
 pub fn layer_row_context_items<M>(items: LayerRowContextMessages<M>) -> Vec<Item<M>> {
     vec![
         Item { label: "Rename", shortcut: Some("Enter"), message: items.rename },
@@ -198,6 +211,10 @@ pub fn layer_row_context_items<M>(items: LayerRowContextMessages<M>) -> Vec<Item
             shortcut: Some("Cmd+Opt+Shift+Down"),
             message: items.send_to_back,
         },
+        // 裁定195: 単一入口の穴埋め(rail の glyph button のみだった)。
+        Item { label: "Hide", shortcut: None, message: items.toggle_hide },
+        Item { label: "Solo", shortcut: None, message: items.toggle_solo },
+        Item { label: "Lock", shortcut: None, message: items.toggle_lock },
     ]
 }
 
@@ -341,6 +358,10 @@ mod tests {
             ungroup: FakeMessage("ungroup"),
             freeze: FakeMessage("freeze"),
             unfreeze: FakeMessage("unfreeze"),
+            toggle_hide: FakeMessage("toggle_hide"),
+            toggle_solo: FakeMessage("toggle_solo"),
+            toggle_lock: FakeMessage("toggle_lock"),
+            cycle_label_color: FakeMessage("cycle_label_color"),
         }
     }
 
@@ -382,6 +403,7 @@ mod tests {
             cut: FakeMessage("cut"),
             group: FakeMessage("group"),
             freeze: FakeMessage("freeze"),
+            cycle_label_color: FakeMessage("cycle_label_color"),
         }
     }
 
@@ -392,6 +414,9 @@ mod tests {
             send_backward: FakeMessage("send_backward"),
             bring_to_front: FakeMessage("bring_to_front"),
             send_to_back: FakeMessage("send_to_back"),
+            toggle_hide: FakeMessage("toggle_hide"),
+            toggle_solo: FakeMessage("toggle_solo"),
+            toggle_lock: FakeMessage("toggle_lock"),
         }
     }
 
@@ -415,10 +440,13 @@ mod tests {
     }
 
     #[test]
-    fn clip_context_has_six_items_in_declared_order() {
+    fn clip_context_has_seven_items_in_declared_order() {
         let labels: Vec<&str> =
             clip_context_items(clip_fake_messages()).into_iter().map(|item| item.label).collect();
-        assert_eq!(labels, vec!["Copy", "Paste", "Duplicate", "Cut", "Group", "Freeze"]);
+        assert_eq!(
+            labels,
+            vec!["Copy", "Paste", "Duplicate", "Cut", "Group", "Freeze", "Label Color"]
+        );
     }
 
     #[test]
@@ -436,13 +464,16 @@ mod tests {
                 FakeMessage("cut"),
                 FakeMessage("group"),
                 FakeMessage("freeze"),
+                FakeMessage("cycle_label_color"),
             ]
         );
     }
 
     /// S6 機械検査: クリップ右クリックの全項目がメニューバーか shortcut に
-    /// 既に存在する(発注書の Split/ラベル色 は関数に現れないので検査対象
-    /// 自体に含まれない — モジュール冒頭 doc の見送り表参照)。
+    /// 既に存在する(発注書の Split は Message 未統合のためこの関数に現れず
+    /// 検査対象に含まれない。ラベル色は裁定195で `layer_menu` に
+    /// `Label Color` を足したことで S6 が成立し、この検査に含まれるように
+    /// なった — モジュール冒頭 doc の表参照)。
     #[test]
     fn clip_context_items_are_all_s6_compliant() {
         let menu_bar = menu_bar_labels();
@@ -452,14 +483,23 @@ mod tests {
     }
 
     #[test]
-    fn layer_row_context_has_five_items_in_declared_order() {
+    fn layer_row_context_has_eight_items_in_declared_order() {
         let labels: Vec<&str> = layer_row_context_items(layer_row_fake_messages())
             .into_iter()
             .map(|item| item.label)
             .collect();
         assert_eq!(
             labels,
-            vec!["Rename", "Bring Forward", "Send Backward", "Bring to Front", "Send to Back"]
+            vec![
+                "Rename",
+                "Bring Forward",
+                "Send Backward",
+                "Bring to Front",
+                "Send to Back",
+                "Hide",
+                "Solo",
+                "Lock",
+            ]
         );
     }
 
@@ -477,12 +517,17 @@ mod tests {
                 FakeMessage("send_backward"),
                 FakeMessage("bring_to_front"),
                 FakeMessage("send_to_back"),
+                FakeMessage("toggle_hide"),
+                FakeMessage("toggle_solo"),
+                FakeMessage("toggle_lock"),
             ]
         );
     }
 
-    /// S6 機械検査: レイヤー行右クリック(lock/hide/solo は関数に現れない
-    /// ので検査対象に含まれない — モジュール冒頭 doc の見送り表参照)。
+    /// S6 機械検査: レイヤー行右クリック。裁定195で `layer_menu` に
+    /// Hide/Solo/Lock を足したことで8項目全てが S6 を満たすようになった
+    /// (以前は lock/hide/solo が関数に現れず検査対象外だった — モジュール
+    /// 冒頭 doc の表参照)。
     #[test]
     fn layer_row_context_items_are_all_s6_compliant() {
         let menu_bar = menu_bar_labels();
