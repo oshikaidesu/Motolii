@@ -59,6 +59,9 @@ use motolii_engine::{Engine, EngineError};
 use motolii_media::{Encoder, MediaError};
 use motolii_store::StoreView;
 
+mod lottie;
+pub use lottie::{export_lottie, LottieExport, LottieExportError, UnsupportedForLottie};
+
 #[derive(Debug, thiserror::Error)]
 pub enum ExportError {
     #[error(transparent)]
