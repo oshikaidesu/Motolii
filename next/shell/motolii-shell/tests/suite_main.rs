@@ -36,6 +36,8 @@ mod iced_test_spike;
 mod ident_band_drive;
 #[path = "suite/inspector_drive.rs"]
 mod inspector_drive;
+#[path = "suite/inspector_key_drive.rs"]
+mod inspector_key_drive;
 #[path = "suite/inspector_pixel_fence.rs"]
 mod inspector_pixel_fence;
 #[path = "suite/menu_drive.rs"]

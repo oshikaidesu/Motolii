@@ -40,8 +40,8 @@
 use iced_test::selector::{Candidate, Target};
 
 use motolii_inspector_pane::{
-    display_number, view, AttrsProjection, ComponentSlot, RowValue, SelectionProjection,
-    TransformRowProjection,
+    display_number, view, AttrsProjection, ComponentSlot, KeyCellProjection, KeyCellState, KeyRow,
+    RowValue, SelectionProjection, TransformRowProjection,
 };
 use motolii_store::LayerId;
 use motolii_tokens_rs::{Colors, Dimensions};
@@ -94,6 +94,10 @@ fn position_row_matching_the_field_report() -> TransformRowProjection {
             present_editable("Z", 0.0),
         ]),
         decimals: 3,
+        key: KeyCellProjection {
+            row: KeyRow::Position,
+            state: KeyCellState::Static,
+        },
     }
 }
 

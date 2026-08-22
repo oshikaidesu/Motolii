@@ -310,20 +310,20 @@ fn the_value_cells_match_the_mock_64_by_row_minus_4_grid() {
 }
 
 /// mock グリッド末尾26px段(Key 列幅)・高さは旧 mock 由来の内部式
-/// `row - 2*spacing_xs` のまま(上記と同じ理由)。M(mute)glyph は結線済みなので
-/// `button` の `Container` candidate として見える(S/Key の予約枠は `Space` =
-/// `operate()` 未実装で不可視、`ident_band_drive.rs` doc のとおり)— ちょうど
-/// 1個のはず。
+/// `row - 2*spacing_xs` のまま(上記と同じ理由)。M(mute)glyph と、K1 で
+/// 結線された各行の Key glyph(Transform 5行)が `button` の `Container`
+/// candidate として見える(S の予約枠だけが `Space` = `operate()` 未実装で
+/// 不可視のまま、`ident_band_drive.rs` doc のとおり)— 1 + 5 = 6個のはず。
 #[test]
-fn the_mute_glyph_matches_the_mock_26_by_row_minus_2_square() {
+fn the_mute_and_key_glyphs_match_the_mock_26_by_row_minus_2_square() {
     let (targets, dims) = selected_inspector_targets();
     assert_eq!(dims.inspector_glyph_width, 26.0, "Key 列幅がずれている(I-tokens 再転写値)");
     let expected_height = dims.inspector_row_height - dims.spacing_xs; // mock の `2` = spacing_xs
     let glyphs = containers_matching(&targets, dims.inspector_glyph_width, expected_height);
     assert_eq!(
         glyphs.len(),
-        1,
-        "26×{expected_height}px の M glyph 箱が1個のはずが{}個: {glyphs:?}",
+        6,
+        "26×{expected_height}px の glyph 箱(M 1個 + Key 5個)が6個のはずが{}個: {glyphs:?}",
         glyphs.len()
     );
 }
