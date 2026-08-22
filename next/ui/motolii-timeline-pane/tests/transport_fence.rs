@@ -25,7 +25,7 @@ fn fps30() -> Fps {
 
 #[test]
 fn s0_the_five_buttons_run_start_back_play_forward_end() {
-    let spec = transport_spec(0, Some(fps30()), false);
+    let spec = transport_spec(0, Some(fps30()), false, false);
     assert_eq!(spec.buttons.len(), 5, "transport は5ボタン(|◀ ◂ ▶ ▸ ▶|)");
     assert!(
         matches!(spec.buttons[0].message, Message::JumpPlayheadToStart),
@@ -60,8 +60,8 @@ fn s0_the_five_buttons_run_start_back_play_forward_end() {
 /// グリフ→ SVG アイコン(`motolii-icons`)へ置換 — Message 写像は不変。
 #[test]
 fn the_play_button_face_flips_between_play_and_pause() {
-    let paused = transport_spec(0, Some(fps30()), false);
-    let playing = transport_spec(0, Some(fps30()), true);
+    let paused = transport_spec(0, Some(fps30()), false, false);
+    let playing = transport_spec(0, Some(fps30()), true, false);
     assert_ne!(
         paused.buttons[2].icon, playing.buttons[2].icon,
         "再生中と停止中で Play ボタンの顔が変わっていない"
@@ -80,11 +80,11 @@ fn the_play_button_face_flips_between_play_and_pause() {
 
 #[test]
 fn the_timecode_follows_the_playhead() {
-    let at_zero = transport_spec(0, Some(fps30()), false);
+    let at_zero = transport_spec(0, Some(fps30()), false, false);
     assert_eq!(at_zero.frames, "0");
     assert_eq!(at_zero.seconds.as_deref(), Some("0.00"));
 
-    let at_150 = transport_spec(150, Some(fps30()), false);
+    let at_150 = transport_spec(150, Some(fps30()), false, false);
     assert_eq!(at_150.frames, "150", "フレーム番号が playhead に追随しない");
     assert_eq!(at_150.seconds.as_deref(), Some("5.00"), "秒表示が playhead に追随しない");
 }
@@ -93,7 +93,7 @@ fn the_timecode_follows_the_playhead() {
 #[test]
 fn the_seconds_use_the_rational_fps() {
     let ntsc = Fps::try_new(30000, 1001).expect("29.97 fps");
-    let spec = transport_spec(300, Some(ntsc), false);
+    let spec = transport_spec(300, Some(ntsc), false, false);
     assert_eq!(spec.seconds.as_deref(), Some("10.01"), "300f / 29.97fps ≈ 10.01s");
 }
 
@@ -101,7 +101,7 @@ fn the_seconds_use_the_rational_fps() {
 /// 描かない方がまし(marker_frame の M13 と同じ姿勢)。フレーム番号は残る。
 #[test]
 fn without_a_composition_the_seconds_go_dark_but_frames_remain() {
-    let spec = transport_spec(42, None, false);
+    let spec = transport_spec(42, None, false, false);
     assert_eq!(spec.frames, "42");
     assert!(spec.seconds.is_none(), "fps 無しで秒をでっち上げている");
 }

@@ -102,6 +102,42 @@ pub enum Message {
     /// `TimelineFoldState::toggle` は黙って無視できる(fold 状態は LayerId の
     /// 存在に依存しない Session 側の集合)。
     ToggleFold(LayerId),
+
+    // ---- 作業範囲/ループ帯(B21+B18 第1切片、正典 §5「ループ帯」) ----
+    /// ループ on/off(map 1082/1083 Loop/Unloop・transport 帯のループボタン・
+    /// 既定割当 L は keymap 層)。**帯は消えない**(正典 §5 — 引き直さず戻せる)。
+    /// 帯が無い時は理由つき拒否(M13: 無反応ゼロ)。`ToggleFold` と同じ
+    /// 「shell 先取りなしで [`PaneState::update`] が完結する」腕。
+    ToggleLoop,
+    /// ループ帯(ルーラ最上段)を押した瞬間(正典 §5: 空白=新規・端=リサイズ・
+    /// 中=平行移動)。どこを押したかの判定は押した瞬間の座標で済ませてある
+    /// (正典 §1、`input.rs` が `classify_loop_band` を1回だけ呼ぶ)。
+    LoopBandGrabbed { part: LoopBandPart, at_frame: i64 },
+    /// ループ帯ドラッグ中のポインタ移動。スナップは持たない(正典 §2 の
+    /// スナップ対象は clip/キーのドラッグ側 — 帯自身は対象であって主体ではない)。
+    LoopDragMoved { at_frame: i64 },
+    LoopDragReleased,
+    LoopDragCancelled,
+    /// Mark In / Set Work Area In(map 725・296): In 点を playhead へ。
+    SetWorkAreaIn,
+    /// Mark Out / Set Work Area Out(map 726・297): Out 点を playhead へ。
+    SetWorkAreaOut,
+    /// Clear In(map 719): In 点だけ解除(先頭へ開く)。帯は残る。
+    ClearWorkAreaIn,
+    /// Clear Out(map 721): Out 点だけ解除(終端へ開く)。帯は残る。
+    ClearWorkAreaOut,
+    /// Clear In and Out(map 720): 作業範囲そのものを消す。
+    ClearWorkArea,
+    /// Mark Clip / Mark Selection(map 724/727): 選択 layer(複数選択は
+    /// その合併区間)の clip 範囲を作業範囲にする。選択が無ければ理由つき拒否。
+    SetWorkAreaToSelection,
+
+    // ---- JKL シャトル(B21、map 1097/1098・1100/1101・1125-1127・1135/1136) ----
+    /// transport 4腕(`TogglePlayback` 等)と同じ**shell 先取りの例外** —
+    /// 実時間再生の clock は shell(A2)が持つので、pane は意味
+    /// ([`crate::shuttle::ShuttleState::apply`] の状態機械)だけを所有し、
+    /// この腕は運搬役。[`PaneState::update`] では no-op。
+    Shuttle(ShuttleCommand),
 }
 
 use std::collections::{BTreeMap, HashSet};
@@ -109,7 +145,9 @@ use std::collections::{BTreeMap, HashSet};
 use motolii_store::{Composition, Document, Intent, KeyframeTrack, LayerId, LayerTiming, PropertyId, RationalTime};
 
 use crate::hit::BarPart;
+use crate::shuttle::ShuttleCommand;
 use crate::state::Session;
+use crate::work_area::{self, LoopBandPart, WorkArea};
 use crate::{clip_gesture, key_gesture, key_order, property_rows, rows, KeySelectionOp, KeySelector};
 
 /// Timeline クリップの move/trim、進行中の一時状態(第2波T2)。**Document では
@@ -162,13 +200,48 @@ enum TimelineKeyDragKind {
     Retime { anchor_frame: i64, edge_origin_frame: i64 },
 }
 
-/// Shell が持つ、Timeline pane 専用の transient 状態(旧 `Shell::timeline_drag`/
+/// ループ帯ドラッグ、進行中の一時状態(B21+B18 第1切片、正典 §5)。
+/// `TimelineDragState` と同じ transient の形だが、書き戻し先が Document では
+/// なく [`PaneState::work_area`](同じ struct 内)なので、**live に書き換えて
+/// よい**(undo の対象ではない — 正典 §5.5 の scroll/zoom/fold と同格)。
+/// キャンセル復元のために掴んだ瞬間の値(`origin_*`)だけ控える。
+#[derive(Clone, Copy)]
+struct LoopDragState {
+    kind: LoopDragKind,
+    /// 掴んだ瞬間の作業範囲(キャンセル復元用)。
+    origin_area: Option<WorkArea>,
+    /// 掴んだ瞬間のループ on/off(新規ドラッグは即 on にするので、これも戻す)。
+    origin_enabled: bool,
+}
+
+#[derive(Clone, Copy)]
+enum LoopDragKind {
+    /// 新規(anchor = 押した瞬間の frame)とリサイズ(anchor = 固定する反対端)
+    /// の共通形 — `work_area::dragged_area` 1本で済む(正典 §5「左右どちらから
+    /// 引いても同じ」「反対端は掴んだ瞬間の値で固定」)。
+    Span { anchor: i64 },
+    /// 平行移動(正典 §5「中=平行移動」)。
+    Move { origin: WorkArea, grab_at_frame: i64 },
+}
+
+/// Shell が持つ、Timeline pane 専用の状態(旧 `Shell::timeline_drag`/
 /// `timeline_key_drag` の2フィールドをまとめた形)。**Document ではない**
 /// (`TimelineDragState`/`TimelineKeyDragState` の doc comment 参照)。
+///
+/// `work_area`/`loop_enabled` だけは transient ではなくフレームを跨いで生きる
+/// (正典 §5.5 の scroll/zoom/fold と同じ Session 級の身分。本籍は `Session` が
+/// 自然だが、このレーンの write-set は pane crate のみ — `work_area.rs` の
+/// モジュール doc「型の置き場」参照。Session への昇格は supervisor 判断)。
 #[derive(Default)]
 pub struct PaneState {
     drag: Option<TimelineDragState>,
     key_drag: Option<TimelineKeyDragState>,
+    /// 作業範囲(In-Out)。`None` = 帯を一度も引いていない/Clear In and Out 済み。
+    work_area: Option<WorkArea>,
+    /// ループ on/off(map 1082/1083)。**帯が消えても値は残る**が、帯なしでは
+    /// 折り返しに効かない(`work_area::advanced_playhead` が両方を要求する)。
+    loop_enabled: bool,
+    loop_drag: Option<LoopDragState>,
 }
 
 impl PaneState {
@@ -190,16 +263,45 @@ impl PaneState {
         self.key_drag.take().is_some()
     }
 
+    /// 同上、ループ帯ドラッグ版(B21+B18 第1切片)。掴んだ瞬間の作業範囲と
+    /// ループ on/off へ**復元する**(clip/key と違い live に書いているので、
+    /// 捨てるだけでは戻らない — origin を書き戻す)。`Shell::update` の
+    /// `Message::EscapePressed` はこれも呼ぶこと(supervisor 結線 — 裁定151
+    /// 「キャンセルの一般化」の柵)。
+    pub fn cancel_loop_drag(&mut self) -> bool {
+        let Some(drag) = self.loop_drag.take() else {
+            return false;
+        };
+        self.work_area = drag.origin_area;
+        self.loop_enabled = drag.origin_enabled;
+        true
+    }
+
+    /// 作業範囲の現在値(`TimelinePane::with_work_area` へそのまま渡す読み取り
+    /// 専用)。ドラッグ中は live 更新済みの値がそのまま見える(正典 §5.5
+    /// 「プレビューは毎フレーム」— こちらは Document でないので preview と
+    /// 確定の区別自体が無い)。
+    pub fn work_area(&self) -> Option<WorkArea> {
+        self.work_area
+    }
+
+    /// ループ on/off の現在値(同上 + shell の PlaybackClock が
+    /// `work_area::advanced_playhead` へ渡す)。
+    pub fn loop_enabled(&self) -> bool {
+        self.loop_enabled
+    }
+
     /// `TimelinePane::with_key_drag_active` へそのまま渡す読み取り専用フラグ。
     pub fn key_drag_active(&self) -> bool {
         self.key_drag.is_some()
     }
 
-    /// clip drag/keyドラッグのどちらかが進行中か。実時間再生(A2、正典 §2
-    /// 拘束5「再生と掴みは相互排他: ドラッグ中に Space は効かない」)が
-    /// `Shell::toggle_playback` から読む。
+    /// clip drag/keyドラッグ/ループ帯ドラッグのどれかが進行中か。実時間再生
+    /// (A2、正典 §2 拘束5「再生と掴みは相互排他: ドラッグ中に Space は
+    /// 効かない」)が `Shell::toggle_playback` から読む — ループ帯も「掴み」
+    /// なので同じ排他に入る。
     pub fn is_dragging(&self) -> bool {
-        self.drag.is_some() || self.key_drag.is_some()
+        self.drag.is_some() || self.key_drag.is_some() || self.loop_drag.is_some()
     }
 
     /// `TimelinePane::with_clip_preview` へそのまま渡す。`TimelineDragState` は
@@ -265,8 +367,56 @@ impl PaneState {
                 session.timeline_fold.toggle(layer);
                 None
             }
-            // transport 4腕も Select/ScrubTo と同じ「shell が先取りする例外」—
-            // 実運用ではここに来ない(来ても no-op、`Message` の doc 参照)。
+
+            // ---- 作業範囲/ループ帯(B21+B18 第1切片) ----
+            Message::ToggleLoop => self.toggle_loop(),
+            Message::LoopBandGrabbed { part, at_frame } => {
+                self.start_loop_drag(doc, part, at_frame);
+                None
+            }
+            Message::LoopDragMoved { at_frame } => {
+                self.continue_loop_drag(doc, at_frame);
+                None
+            }
+            Message::LoopDragReleased => {
+                // 確定 = drag state を捨てるだけ(`work_area` は live 更新済み。
+                // 未移動 release でも最短1フレームの帯が残る — 正典 §5 の
+                // 「最短1フレーム保証」どおり)。
+                self.loop_drag = None;
+                None
+            }
+            Message::LoopDragCancelled => {
+                self.cancel_loop_drag();
+                None
+            }
+            Message::SetWorkAreaIn => {
+                self.work_area =
+                    Some(work_area::with_in(self.work_area, session.playhead, comp_duration(doc)));
+                None
+            }
+            Message::SetWorkAreaOut => {
+                self.work_area =
+                    Some(work_area::with_out(self.work_area, session.playhead, comp_duration(doc)));
+                None
+            }
+            Message::ClearWorkAreaIn => {
+                self.work_area = self.work_area.map(work_area::cleared_in);
+                None
+            }
+            Message::ClearWorkAreaOut => {
+                let duration = comp_duration(doc);
+                self.work_area = self.work_area.map(|area| work_area::cleared_out(area, duration));
+                None
+            }
+            Message::ClearWorkArea => {
+                self.work_area = None;
+                None
+            }
+            Message::SetWorkAreaToSelection => self.set_work_area_to_selection(doc, session),
+
+            // transport 4腕+Shuttle も Select/ScrubTo と同じ「shell が先取り
+            // する例外」— 実運用ではここに来ない(来ても no-op、`Message` の
+            // doc 参照)。
             Message::Select(_)
             | Message::ScrubTo(_)
             | Message::ToggleMute(_)
@@ -275,8 +425,93 @@ impl PaneState {
             | Message::TogglePlayback
             | Message::StepPlayhead(_)
             | Message::JumpPlayheadToStart
-            | Message::JumpPlayheadToEnd => None,
+            | Message::JumpPlayheadToEnd
+            | Message::Shuttle(_) => None,
         }
+    }
+
+    // ---- 作業範囲/ループ帯(B21+B18 第1切片、正典 §5) ----
+
+    /// ループ on/off(map 1082/1083)。帯が無い時は理由つき拒否(M13: 無反応
+    /// ゼロ — 何も起きないトグルを黙って飲み込まない)。
+    fn toggle_loop(&mut self) -> Option<String> {
+        if self.work_area.is_none() {
+            return Some(
+                "作業範囲が無いのでループできない — ルーラー上端の帯をドラッグして範囲を引く".into(),
+            );
+        }
+        self.loop_enabled = !self.loop_enabled;
+        None
+    }
+
+    /// ループ帯を掴んだ瞬間(正典 §5: 空白=新規・端=リサイズ・中=平行移動)。
+    /// **新規は引いたら即 on**(正典 §5 — 別キーで有効化させない)。リサイズ/
+    /// 移動は on/off を変えない。
+    fn start_loop_drag(&mut self, doc: &Document, part: LoopBandPart, at_frame: i64) {
+        if self.loop_drag.is_some() {
+            return; // 既に別のドラッグが進行中 — 多重起動しない(clip と同型)。
+        }
+        let duration = comp_duration(doc);
+        let origin_area = self.work_area;
+        let origin_enabled = self.loop_enabled;
+        let kind = match (part, self.work_area) {
+            (LoopBandPart::EdgeIn, Some(area)) => LoopDragKind::Span { anchor: area.end },
+            (LoopBandPart::EdgeOut, Some(area)) => LoopDragKind::Span { anchor: area.start },
+            (LoopBandPart::Body, Some(area)) => {
+                LoopDragKind::Move { origin: area, grab_at_frame: at_frame }
+            }
+            // 空白=新規(帯が無い時の Edge*/Body は classify が返さないが、
+            // 万一来ても新規へ倒す — 安全側)。
+            _ => {
+                self.loop_enabled = true; // 引いたら即 on(正典 §5)。
+                self.work_area = Some(work_area::dragged_area(at_frame, at_frame, duration));
+                LoopDragKind::Span { anchor: at_frame }
+            }
+        };
+        self.loop_drag = Some(LoopDragState { kind, origin_area, origin_enabled });
+    }
+
+    /// ループ帯ドラッグ中のポインタ移動。掴んだ瞬間の anchor/origin を基準に
+    /// **絶対値で出し直す**(delta 蓄積禁止 — 正典 §2 の思想)。
+    fn continue_loop_drag(&mut self, doc: &Document, at_frame: i64) {
+        let Some(drag) = self.loop_drag else {
+            return;
+        };
+        let duration = comp_duration(doc);
+        self.work_area = Some(match drag.kind {
+            LoopDragKind::Span { anchor } => work_area::dragged_area(anchor, at_frame, duration),
+            LoopDragKind::Move { origin, grab_at_frame } => {
+                work_area::moved_area(origin, grab_at_frame, at_frame, duration)
+            }
+        });
+    }
+
+    /// Mark Clip / Mark Selection(map 724/727): 選択 layer の clip 範囲
+    /// (複数選択は合併区間)を作業範囲へ。選択が無ければ理由つき拒否(M13)。
+    fn set_work_area_to_selection(&mut self, doc: &Document, session: &Session) -> Option<String> {
+        let targets: Vec<LayerId> = if session.selected_layers.is_empty() {
+            session.selection.into_iter().collect()
+        } else {
+            session.selected_layers.clone()
+        };
+        if targets.is_empty() {
+            return Some("選択が無いので作業範囲にできない — layer を選んでから".into());
+        }
+        let rows = rows(&doc.view(), session);
+        let spans: Vec<(i64, i64)> = rows
+            .iter()
+            .filter(|row| targets.contains(&row.id))
+            .map(|row| (row.start, row.start + row.duration))
+            .collect();
+        let (Some(start), Some(end)) = (
+            spans.iter().map(|(s, _)| *s).min(),
+            spans.iter().map(|(_, e)| *e).max(),
+        ) else {
+            return Some("選択 layer が見当たらないので作業範囲にできない".into());
+        };
+        // clip 範囲を dragged_area(clamp・最短1フレーム)へ通して不変量を守る。
+        self.work_area = Some(work_area::dragged_area(start, end, comp_duration(doc)));
+        None
     }
 
     // ---- Timeline クリップの move/trim(第2波T2、正典 §2) ----

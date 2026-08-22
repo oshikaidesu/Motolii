@@ -49,6 +49,31 @@ pub fn nearest_meaning_point(points: &[i64], current: i64, direction: JumpDirect
     }
 }
 
+/// 再生中の playhead 追従スクロール(B21 第1切片)。ビュー窓
+/// `[view_start, view_start + view_len)` から playhead がはみ出した時だけ、
+/// ページ送り(AE/Premiere 同型: 右へ抜けたら playhead を窓の左端へ、左へ
+/// 抜けたら窓の右端へ)の新しい `view_start` を返す。窓の中にいる間は `None`
+/// (呼び出し側はビューを動かさない — 再生のたびに絵が滑る connected-scroll は
+/// 採らない: ページ送りは「どこを見ていたか」の座標系を保つ)。
+///
+/// **現時点で結線先は無い**(pane は全尺を窓幅へ写す固定ビュー —
+/// `projection::frame_to_x` 参照。横 zoom/scroll ビューポートが入った時の
+/// ための意味の先置き。RETURN の逸脱報告参照)。
+pub fn follow_view_start(view_start: i64, view_len: i64, playhead: i64) -> Option<i64> {
+    if view_len <= 0 {
+        return None;
+    }
+    if playhead < view_start {
+        // 逆再生で左へ抜けた: playhead が窓の右端に乗る位置まで戻す。
+        return Some(playhead - view_len + 1);
+    }
+    if playhead >= view_start + view_len {
+        // 順再生で右へ抜けた: playhead が窓の左端に乗る位置へ送る。
+        return Some(playhead);
+    }
+    None
+}
+
 /// JumpToClipIn/Out(正典 §8.1)の対象端。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClipEdge {
@@ -119,6 +144,20 @@ mod tests {
             Some(150),
             "自分の真上の点には留まらず、渡った先を返すはず"
         );
+    }
+
+    #[test]
+    fn follow_view_start_pages_only_when_the_playhead_leaves_the_window() {
+        // 窓 [100, 200)。中にいる間は動かさない。
+        assert_eq!(follow_view_start(100, 100, 150), None);
+        assert_eq!(follow_view_start(100, 100, 100), None, "左端ちょうどは窓の中");
+        assert_eq!(follow_view_start(100, 100, 199), None, "右端の内側も窓の中");
+        // 右へ抜けたら playhead が窓の左端へ(ページ送り)。
+        assert_eq!(follow_view_start(100, 100, 200), Some(200));
+        // 左へ抜けたら playhead が窓の右端へ。
+        assert_eq!(follow_view_start(100, 100, 99), Some(0));
+        // 幅の無い窓では判断できない。
+        assert_eq!(follow_view_start(100, 0, 500), None);
     }
 
     #[test]

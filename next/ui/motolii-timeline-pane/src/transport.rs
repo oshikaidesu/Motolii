@@ -58,11 +58,20 @@ pub struct TransportButton {
     pub active: bool,
 }
 
-/// transport 帯の宣言全体: 5ボタン(S0 順)+ Timecode(1138)。
+/// transport 帯の宣言全体: 5ボタン(S0 順)+ ループトグル + Timecode(1138)。
 #[derive(Debug, Clone)]
 pub struct TransportSpec {
     /// S0: 先頭 / 1コマ戻 / Play‖Pause / 1コマ進 / 末尾 の業界慣習固定順。
     pub buttons: [TransportButton; 5],
+    /// ループ再生トグル(map 1082/1083、B21 第1切片)。5ボタン(瞬間の押し口)
+    /// とは別身分の**状態の器**(裁定179 — Play‖Pause の active と同じ accent
+    /// ink 文法)なので、`buttons` 配列(S0 の慣習順)には混ぜない。
+    ///
+    /// **アイコンは暫定** — `motolii-icons` の既存37個に repeat/loop 系が無い
+    /// (発注書: 新規 vendoring 不可)ため、円弧矢印の [`Icon::Redo`] を仮の顔に
+    /// している。Material `repeat` の vendoring を RETURN で要求済み — 届いたら
+    /// ここ1箇所の差し替えで済む。
+    pub loop_button: TransportButton,
     /// Timecode のフレーム番号部(等幅で描く数字部)。
     pub frames: String,
     /// Timecode の秒部(小数2桁)。comp が無く fps を引けない時は `None` —
@@ -72,7 +81,8 @@ pub struct TransportSpec {
 }
 
 /// 絵と意味の対応表を組む純関数([`view`] とテストの共通の正本)。
-pub fn transport_spec(playhead: i64, fps: Option<Fps>, playing: bool) -> TransportSpec {
+/// `looping` はループ on/off(`PaneState::loop_enabled()` — B21 第1切片で追加)。
+pub fn transport_spec(playhead: i64, fps: Option<Fps>, playing: bool, looping: bool) -> TransportSpec {
     TransportSpec {
         buttons: [
             TransportButton {
@@ -103,6 +113,11 @@ pub fn transport_spec(playhead: i64, fps: Option<Fps>, playing: bool) -> Transpo
                 active: false,
             },
         ],
+        loop_button: TransportButton {
+            icon: Icon::Redo, // 暫定(repeat 不在 — `TransportSpec::loop_button` doc 参照)
+            message: Message::ToggleLoop,
+            active: looping,
+        },
         frames: playhead.to_string(),
         seconds: seconds_label(playhead, fps),
     }
@@ -119,15 +134,19 @@ fn seconds_label(playhead: i64, fps: Option<Fps>) -> Option<String> {
 pub(crate) fn view(pane: &TimelinePane) -> Element<'static, Message> {
     let dims = pane.dims;
     let colors = pane.colors;
-    let spec = transport_spec(pane.playhead, pane.fps, pane.playing);
+    let spec = transport_spec(pane.playhead, pane.fps, pane.playing, pane.loop_enabled);
 
     let mut children: Vec<Element<'static, Message>> =
-        Vec::with_capacity(spec.buttons.len() + 6);
+        Vec::with_capacity(spec.buttons.len() + 8);
     for spec_button in spec.buttons {
         children.push(transport_button(spec_button, dims, colors));
     }
-    // Timecode(1138)。ボタン群との間は兄弟 gap より1段広い既存段
-    // (`spacing_m`)で「別の束」であることを示す(線を引かない — 裁定179)。
+    // ループトグル(B21)。瞬間の押し口5つとは別の束(状態の器)なので、
+    // Timecode と同じ「兄弟 gap より1段広い既存段」で区切る(線を引かない —
+    // 裁定179)。
+    children.push(Space::new().width(Length::Fixed(dims.spacing_m)).into());
+    children.push(transport_button(spec.loop_button, dims, colors));
+    // Timecode(1138)。同じく `spacing_m` で「別の束」であることを示す。
     children.push(Space::new().width(Length::Fixed(dims.spacing_m)).into());
     children.push(
         text(spec.frames)
