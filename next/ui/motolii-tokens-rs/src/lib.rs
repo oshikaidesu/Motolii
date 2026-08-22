@@ -164,6 +164,14 @@ pub struct Dimensions {
     /// spacing の段を縁へ転用しない。
     #[serde(default = "default_browser_tab_underline")]
     pub browser_tab_underline: f32,
+    /// Browser 第5切片(List 表示の水平カード)。list mode の thumb 幅。出典:
+    /// 視覚正本 `browser-library.css:306` `.libraryBrowser[data-view="list"]
+    /// .libraryThumb{width:46px;flex:0 0 46px}` 実測(`_note_browser_list_
+    /// thumb_width` 参照)。高さは呼び手側(`motolii-browser-pane`)が既存の
+    /// `THUMB_ASPECT_W`/`THUMB_ASPECT_H`(16/9)をこの幅へ適用して逆算する —
+    /// 専用の高さキーは起こさない。
+    #[serde(default = "default_browser_list_thumb_width")]
+    pub browser_list_thumb_width: f32,
     /// メニューバーの開いた menu 面の幅(menubar 節 — MB-2 上書き裁定 2026-08-22、
     /// `motolii-menubar` crate が読む)。新規実測は無い — 既存 shell `menu.rs` の
     /// 算術合成 `inspector_value_width * 3.0`(64×3=192)をトークンへ採番しただけ
@@ -234,6 +242,10 @@ fn default_browser_tab_underline() -> f32 {
     2.0
 }
 
+fn default_browser_list_thumb_width() -> f32 {
+    46.0
+}
+
 fn default_menubar_menu_width() -> f32 {
     192.0
 }
@@ -291,6 +303,7 @@ impl Default for Dimensions {
             ui_scale: 1.0,
             browser_tab_bar_height: 26.0,
             browser_tab_underline: 2.0,
+            browser_list_thumb_width: 46.0,
             menubar_menu_width: 192.0,
             menubar_corner_radius: 4.0,
             gizmo_handle_size: 8.0,
@@ -351,6 +364,7 @@ impl Dimensions {
             timeline_param_row_height: self.timeline_param_row_height * s,
             browser_tab_bar_height: self.browser_tab_bar_height * s,
             browser_tab_underline: self.browser_tab_underline * s,
+            browser_list_thumb_width: self.browser_list_thumb_width * s,
             timeline_transport_height: self.timeline_transport_height * s,
             timeline_transport_button_width: self.timeline_transport_button_width * s,
             timeline_transport_gap: self.timeline_transport_gap * s,

@@ -39,8 +39,9 @@
 //!   ([`model::preview_visible`] doc 参照)なので対象外。
 //! - **表示形式**([`model::ViewMode`]、`Icon::GridView`/`Icon::ViewList`
 //!   在庫)。media/preview 両方の catalog grid の列数に効く
-//!   ([`view_mode_toggle_view`])。List は mock の水平カードレイアウトまでは
-//!   実装せず列数の切替に留める([`columns_for`] doc 参照 — 逸脱)。
+//!   ([`view_mode_toggle_view`])。List の水平カードレイアウト(サムネ小+
+//!   テキスト右)は B36 第5切片で実装済み([`card_body`] 参照 — 当時の
+//!   「列数の切替に留める」逸脱は解消)。
 //! - **検索の対象拡張**([`model::visible`] が `path` も見るようになった —
 //!   `AssetListItem::path` は B1 から既に投影に乗っていた実在属性)。
 //!
@@ -129,23 +130,44 @@
 //!   (取り込みの入口を最小の1句で言う)/絞り込みで0件=「No matches」。
 //!   `FileHovered`/`FilesHoveredLeft` → [`state::Message::DropHoverChanged`]、
 //!   admit 後 → `RecentlyAdmitted` の shell 結線は次波(write-set 外)。
+//!
+//! ## Browser 第5切片(List 表示の水平カード+B36 残り点検、この波)
+//! - **List 表示の水平カード**(前切片 B08 が列数切替に留めていた分の消化)。
+//!   mock `browser-library.css:304-307`
+//!   `.libraryBrowser[data-view="list"]` の3宣言(`.libraryCard{display:flex;
+//!   align-items:center}`/`.libraryThumb{width:46px;flex:0 0 46px}`/
+//!   `.cardCopy{min-width:0;flex:1;padding-left:4px}`)を、CSS 宣言の字面の
+//!   まま `motolii_taffy::TaffyBox` へ渡して組む([`card_body`] — 裁定183
+//!   taffy 転写、この crate 初採用・型は `motolii-settings-pane::sections::
+//!   comp_cells_row`)。新設寸法は `dims.browser_list_thumb_width`
+//!   (JSON 正本 `tokens/dimensions.json`、裁定178)の1個だけ — cardCopy の
+//!   左 padding(4px)は既存 `spacing_s` と同値なので流用。media/preview の
+//!   両カード(button/mouse_area どちらの経路も)が [`card_body`]/
+//!   [`card_frame_width`] を共有する。
+//! - **B36(新規コンテンツ作成)の残り点検**: normal-map bundle B36 の
+//!   「採用予定」行を再点検したが、[`model::CreateKind`] doc の消化台帳
+//!   (Rectangle/Ellipse/Solid/Null、前切片で消化済み)+見送り2群(store 拡張
+//!   要/pane 外の領分)で全行を説明できており、追加で `LayerSource` へ
+//!   1:1で落ちる未消化行は無かった(見送り、RETURN 参照)。テキストレイヤー
+//!   作成の map 行(id 1284「New text layer」)は **B36 でなく B46** に属し
+//!   verdict も既に「採用済」(store 側 `LayerSource::Text`/`TextDocument`
+//!   実装済みを指す)— この切片の EXACT TARGET(この crate のみ)の範囲外
+//!   (`CreateKind` の新 variant 追加は `motolii-shell::create_from_card` の
+//!   match 網羅性を壊す cross-crate 変更になるため、見送り・RETURN 参照)。
 
 pub mod model;
 pub mod state;
 
 pub use model::{
     AssetListItem, CardKey, CatalogCard, Category, CreateKind, LibraryTab, PreviewCard,
-    PreviewScope, PreviewTag, RailScope, FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES,
+    PreviewScope, PreviewTag, RailScope, SortKey, ViewMode, FILTER_CHIPS, LIBRARY_TABS,
+    RAIL_SCOPES, SORT_KEYS,
 };
 pub use state::{Message, PaneState};
 
-use iced::widget::{button, column, container, mouse_area, row, scrollable, text, text_input};
-    AssetListItem, CardKey, CatalogCard, Category, LibraryTab, PreviewCard, PreviewScope,
-    PreviewTag, RailScope, SortKey, ViewMode, FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES, SORT_KEYS,
+use iced::widget::{
+    button, column, container, mouse_area, row, scrollable, text, text_input, tooltip,
 };
-pub use state::{Message, PaneState};
-
-use iced::widget::{button, column, container, row, scrollable, text, text_input, tooltip};
 use iced::{Element, Length};
 
 use motolii_tokens_rs::{Colors, Dimensions};
@@ -325,13 +347,6 @@ pub fn view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    media_body(items, scope, query, None, &[], false, dims, colors)
-}
-
-/// media タブの body(rail + カタログ)。B2/B3 の [`view`] と同一の木に、
-/// カード選択意匠(`selected`、mock `.libraryCard.selected`)+ 新規素材
-/// ハイライト(`recent`)+ drop 先ハイライト(`drop_hover`、B08 続編)を
-/// 足した形。
     media_body(
         items,
         scope,
@@ -339,6 +354,8 @@ pub fn view(
         model::SortKey::default(),
         model::ViewMode::default(),
         None,
+        &[],
+        false,
         dims,
         colors,
     )
@@ -347,6 +364,7 @@ pub fn view(
 /// media タブの body(rail + カタログ)。B2/B3 の [`view`] と同一の木に、
 /// カード選択意匠(`selected`、mock `.libraryCard.selected`)+ 並べ替え/
 /// 表示形式(B08 第4切片「素材の整理」、[`model::SortKey`]/[`model::ViewMode`])
+/// + 新規素材ハイライト(`recent`)+ drop 先ハイライト(`drop_hover`、B08 続編)
 /// を足した形。
 #[allow(clippy::too_many_arguments)]
 fn media_body(
@@ -361,13 +379,15 @@ fn media_body(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let filtered = model::visible(items, scope, query);
+    let filtered = model::sorted(&model::visible(items, scope, query), sort_key);
     let ledger_is_empty = items.is_empty();
 
     let rail = rail_view(scope, dims, colors);
     let catalog = catalog_view(
         scope,
         query,
+        sort_key,
+        view_mode,
         &filtered,
         ledger_is_empty,
         selected,
@@ -375,11 +395,6 @@ fn media_body(
         drop_hover,
         dims,
         colors,
-    let filtered = model::sorted(&model::visible(items, scope, query), sort_key);
-
-    let rail = rail_view(scope, dims, colors);
-    let catalog = catalog_view(
-        scope, query, sort_key, view_mode, &filtered, selected, dims, colors,
     );
 
     row![rail, catalog].spacing(dims.spacing_xs).into()
@@ -514,8 +529,15 @@ fn catalog_view(
         .size(dims.micro_text)
         .color(colors.text_muted);
 
-    let grid = card_grid_view(filtered, ledger_is_empty, selected, recent, dims, colors);
-    let grid = card_grid_view(filtered, selected, view_mode, dims, colors);
+    let grid = card_grid_view(
+        filtered,
+        ledger_is_empty,
+        selected,
+        recent,
+        view_mode,
+        dims,
+        colors,
+    );
 
     catalog_container(column![shelf, summary, grid], drop_hover, dims, colors)
 }
@@ -949,11 +971,9 @@ pub const GRID_COLUMNS: usize = 2;
 
 /// [`model::ViewMode`] に応じた grid の列数(B08 第4切片「表示形式」)。
 /// List は1列 — mock の list mode(`.libraryBrowser[data-view="list"]
-/// .thumbnailGrid{grid-template-columns:1fr}`、`browser-library.css:304`)は
-/// 加えてカードを水平レイアウト(サムネ小+テキスト右)へ変えるが、この波は
-/// 列数の切替までに留める(水平レイアウトは thumb 縮小サイズ等の新しい比率
-/// 定数を要求し、裁定165 の外側の値を発明することになるため — 次波の課題、
-/// RETURN 記載の逸脱)。
+/// .thumbnailGrid{grid-template-columns:1fr}`、`browser-library.css:304`)。
+/// カードそのものの水平レイアウト(サムネ小+テキスト右)は [`card_body`]/
+/// [`card_frame_width`] が担う(B36 第5切片でこの波から実装済み)。
 fn columns_for(mode: model::ViewMode) -> usize {
     match mode {
         model::ViewMode::Grid => GRID_COLUMNS,
@@ -967,12 +987,180 @@ fn columns_for(mode: model::ViewMode) -> usize {
 /// 既存 token への比率へ変換した値 — `6.0 × 20px(既定 row_height)= 120px`
 /// (旧値124との差3%は「絶対px正本を持たない」制約を比率丸めで解消した結果)。
 /// **`pub`**: [`GRID_COLUMNS`] と同じ理由(`motolii-shell::screenshot` 参照)。
+/// List モードのカード幅は [`card_frame_width`] — 行いっぱい(`Length::Fill`)
+/// で、この比率定数は使わない(mock の list mode が `grid-template-columns:
+/// 1fr` = 行幅そのものだから)。
 pub const CARD_WIDTH_ROW_HEIGHT_RATIO: f32 = 6.0;
 
 /// サムネの縦横比(mock `.libraryThumb{aspect-ratio:16/9}` の直接転写、
-/// 分母=9)。**`pub`**: [`GRID_COLUMNS`] と同じ理由。
+/// 分母=9)。**`pub`**: [`GRID_COLUMNS`] と同じ理由。Grid/List どちらの
+/// thumb 幅にもこの比率をそのまま適用する(縦横比は表示形式に依らず一定 —
+/// mock の `.libraryThumb{aspect-ratio:16/9}` 自体は list mode でも上書き
+/// されない、`browser-library.css:304-307` 参照)。
 pub const THUMB_ASPECT_W: f32 = 16.0;
 pub const THUMB_ASPECT_H: f32 = 9.0;
+
+// ---------------------------------------------------------------------------
+// B36 第5切片: List 表示の水平カード(mock `browser-library.css:304-307`
+// `.libraryBrowser[data-view="list"]` の転写、前切片(B08 第4切片)が列数
+// 切替までに留めていた分の消化)。並べ方(サムネ固定幅+テキスト flex:1)は
+// CSS 宣言の字面をほぼそのまま `motolii-taffy::TaffyBox` へ渡す(裁定183
+// taffy 転写 — `motolii-settings-pane::sections::comp_cells_row` が確立した
+// 型と同じ手口、この crate 初採用)。寸法は `dims.browser_list_thumb_width`
+// (JSON 正本 `tokens/dimensions.json` の `_note_browser_list_thumb_width`、
+// 裁定178「デザイン値は Rust に直書きしない」)+ 既存 `spacing_s`(cardCopy の
+// 左 padding、mock 4px と同値)— 新しい寸法は thumb 幅の1個だけ。
+// ---------------------------------------------------------------------------
+
+/// list カードの外枠(mock `.libraryCard{display:flex;align-items:center}`、
+/// `browser-library.css:305`)。定数寸法を含まない固定文字列なので JSON を
+/// 経由しない(裁定178 は「デザイン値」が対象 — 並べ方のキーワードは値では
+/// ない)。
+const LIST_CARD_ROW_CSS: &str = "display:flex; align-items:center";
+
+/// list カードの thumb セル(mock `.libraryThumb{width:46px;flex:0 0 46px}`、
+/// `browser-library.css:306` — 字面そのまま。`dims.browser_list_thumb_width`
+/// が JSON 正本)。
+fn list_card_thumb_css(dims: Dimensions) -> String {
+    format!(
+        "width:{w}px; flex:0 0 {w}px",
+        w = dims.browser_list_thumb_width
+    )
+}
+
+/// list カードのテキストセル(mock `.cardCopy{min-width:0;flex:1;
+/// padding-left:4px}`、`browser-library.css:307`)。**`padding-left` は
+/// `motolii-taffy` の対応 property に無い**(shorthand `padding` のみ対応、
+/// `motolii-taffy/src/css.rs` 冒頭 doc の対応サブセット参照)ため、4値
+/// padding shorthand の左辺だけを埋める形へ機械的に読み替える(値そのものは
+/// mock と不変 — subset の制約であって設計判断の逸脱ではない)。左 padding の
+/// 値は `dims.spacing_s`(4、mock の `4px` と同値の既存 token — cardCopy 専用の
+/// 新キーは起こさない、`tokens/dimensions.json` の `_note_browser_list_thumb_width`
+/// と同じ判断)。
+fn list_card_text_css(dims: Dimensions) -> String {
+    format!(
+        "min-width:0; flex:1; padding:0px 0px 0px {pad}px",
+        pad = dims.spacing_s
+    )
+}
+
+/// thumb の共通容器(media/preview 両カードで共有 — 種別グリフ+塗りだけが
+/// 呼び手ごとに違う、[`card_view`]/[`preview_card_view`] doc 参照)。線化 D5
+/// (裁定179 文法1): 輪郭線は透明化(幅だけ残す=幾何不変)— 塗りの面自体が
+/// pane 地から明度/色段差で読める。
+fn thumb_container(
+    glyph: &'static str,
+    fill: iced::Color,
+    width: f32,
+    height: f32,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    container(text(glyph).size(dims.micro_text).color(colors.text_primary))
+        .width(Length::Fixed(width))
+        .height(Length::Fixed(height))
+        .align_x(iced::alignment::Horizontal::Center)
+        .align_y(iced::alignment::Vertical::Center)
+        .style(move |_theme| container::Style {
+            background: Some(iced::Background::Color(fill)),
+            border: iced::Border {
+                color: iced::Color::TRANSPARENT,
+                width: dims.border_width,
+                radius: 0.0.into(),
+            },
+            ..container::Style::default()
+        })
+        .into()
+}
+
+/// 名前/caption 共通の native ellipsis 手口(`rail.rs`(Timeline)と同じ
+/// `Wrapping::None`+`Ellipsis::End` — 隣の箱へ決して入らない、裁定168
+/// 不衝突文法)。`width` は呼び手が渡す(grid= 固定カード幅・list=
+/// `Length::Fill`、[`card_body`] 参照)。
+fn ellipsis_text(
+    content: String,
+    size: f32,
+    color: iced::Color,
+    width: Length,
+) -> Element<'static, Message> {
+    text(content)
+        .size(size)
+        .color(color)
+        .width(width)
+        .wrapping(iced::widget::text::Wrapping::None)
+        .ellipsis(iced::widget::text::Ellipsis::End)
+        .into()
+}
+
+/// カードの外枠幅(mock の `data-view` 切替そのもの — grid= 固定カード幅
+/// ([`CARD_WIDTH_ROW_HEIGHT_RATIO`])・list= 行いっぱい(mock
+/// `grid-template-columns:1fr` = 1列が行幅そのもの)。media/preview の両カード
+/// (button/mouse_area どちらの経路も)がこの1本を共有する。
+fn card_frame_width(view_mode: model::ViewMode, dims: Dimensions) -> Length {
+    match view_mode {
+        model::ViewMode::Grid => Length::Fixed(dims.row_height * CARD_WIDTH_ROW_HEIGHT_RATIO),
+        model::ViewMode::List => Length::Fill,
+    }
+}
+
+/// カード本体(thumb + 名前/caption)。media/preview の両カードが共有する
+/// (呼び手は glyph/塗り/文言だけを渡す)。
+/// - grid: mock 既定表示の縦積み(`<button>` 内で thumb→name→caption を
+///   `column!` で積む、旧 [`card_view`]/[`preview_card_view`] のまま不変)。
+/// - list: mock `.libraryBrowser[data-view="list"]` の水平カード(サムネ
+///   小+テキスト右、`browser-library.css:304-307` — [`LIST_CARD_ROW_CSS`]/
+///   [`list_card_thumb_css`]/[`list_card_text_css`] を `TaffyBox` へ渡す)。
+fn card_body(
+    glyph: &'static str,
+    thumb_fill: iced::Color,
+    name: String,
+    caption: String,
+    view_mode: model::ViewMode,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    match view_mode {
+        model::ViewMode::Grid => {
+            let card_width = dims.row_height * CARD_WIDTH_ROW_HEIGHT_RATIO;
+            let thumb_height = card_width * THUMB_ASPECT_H / THUMB_ASPECT_W;
+            let thumb = thumb_container(glyph, thumb_fill, card_width, thumb_height, dims, colors);
+            let name = ellipsis_text(name, dims.micro_text, colors.text_primary, Length::Fixed(card_width));
+            let caption = ellipsis_text(
+                caption,
+                dims.micro_text,
+                colors.text_muted,
+                Length::Fixed(card_width),
+            );
+            column![thumb, name, caption].spacing(dims.spacing_xs).into()
+        }
+        model::ViewMode::List => {
+            let thumb_width = dims.browser_list_thumb_width;
+            let thumb_height = thumb_width * THUMB_ASPECT_H / THUMB_ASPECT_W;
+            let thumb = thumb_container(glyph, thumb_fill, thumb_width, thumb_height, dims, colors);
+            let name = ellipsis_text(name, dims.micro_text, colors.text_primary, Length::Fill);
+            let caption = ellipsis_text(caption, dims.micro_text, colors.text_muted, Length::Fill);
+            let text_block: Element<'static, Message> = column![name, caption]
+                .spacing(dims.spacing_xs)
+                .width(Length::Fill)
+                .into();
+
+            let row_style = motolii_taffy::style_from_css_decl(LIST_CARD_ROW_CSS)
+                .expect("LIST_CARD_ROW_CSS は固定文字列 — 解釈は必ず成功する");
+            let thumb_style = motolii_taffy::style_from_css_decl(&list_card_thumb_css(dims))
+                .expect(
+                    "list_card_thumb_css は固定テンプレート+dims の px 値のみ埋める — 解釈は必ず成功する",
+                );
+            let text_style = motolii_taffy::style_from_css_decl(&list_card_text_css(dims)).expect(
+                "list_card_text_css は固定テンプレート+dims の px 値のみ埋める — 解釈は必ず成功する",
+            );
+
+            motolii_taffy::TaffyBox::new(row_style)
+                .push(thumb_style, thumb)
+                .push(text_style, text_block)
+                .into()
+        }
+    }
+}
 
 /// カード grid 本体。**サムネイルは代表フレーム抽出なし**(B5 境界、crate
 /// 冒頭 doc 参照)— thumb は種別グリフ+種別で塗り分けた色地のみ、名前+尺の
@@ -1010,7 +1198,7 @@ fn card_grid_view(
                 .map(|item| {
                     let key = model::CardKey::Media(item.id);
                     let is_recent = recent.contains(&item.id);
-                    card_view(item, selected == Some(key), is_recent, dims, colors)
+                    card_view(item, selected == Some(key), is_recent, view_mode, dims, colors)
                 })
                 .collect();
             row(cards).spacing(dims.spacing_s).into()
@@ -1022,11 +1210,8 @@ fn card_grid_view(
         .into()
 }
 
-/// 1枚のカード(mock `.libraryCard` — thumb + `.cardCopy`)。名前/caption は
-/// `rail.rs`(Timeline)と同じ native ellipsis 手口(`Wrapping::None` +
-/// `Ellipsis::End`、`iced_test::simulator` 上の `canvas::Text` には効かない
-/// バグの回避 — この widget は実 `text()` なので影響しない、TL-arch §2.5
-/// 実測)で「隣の箱へ決して入らない」(裁定168 不衝突文法)。
+/// 1枚のカード(mock `.libraryCard` — thumb + `.cardCopy`、本体は
+/// [`card_body`] が grid/list 両表示形式を組む)。
 ///
 /// カードは mock どおり `<button>`(`.libraryCard{cursor:pointer}`) —
 /// click で [`Message::SelectCard`] を publish し(mock `selectCard` の
@@ -1035,56 +1220,29 @@ fn card_view(
     item: AssetListItem,
     selected: bool,
     recent: bool,
+    view_mode: model::ViewMode,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let card_width = dims.row_height * CARD_WIDTH_ROW_HEIGHT_RATIO;
-    let thumb_height = card_width * THUMB_ASPECT_H / THUMB_ASPECT_W;
     let category = model::category_of(&item.kind);
-
-    let thumb = container(
-        text(category.glyph())
-            .size(dims.micro_text)
-            .color(colors.text_primary),
-    )
-    .width(Length::Fixed(card_width))
-    .height(Length::Fixed(thumb_height))
-    .align_x(iced::alignment::Horizontal::Center)
-    .align_y(iced::alignment::Vertical::Center)
-    .style(move |_theme| container::Style {
-        // 線化 D5(裁定179 文法1): thumb の輪郭線は透明化(幅だけ残す=幾何
-        // 不変)— 種別色の面自体が pane 地からの明度/色段差で読める。
-        background: Some(iced::Background::Color(thumb_fill(category, colors))),
-        border: iced::Border {
-            color: iced::Color::TRANSPARENT,
-            width: dims.border_width,
-            radius: 0.0.into(),
-        },
-        ..container::Style::default()
-    });
-
-    let text_width = card_width;
-    let name = text(item.name)
-        .size(dims.micro_text)
-        .color(colors.text_primary)
-        .width(Length::Fixed(text_width))
-        .wrapping(iced::widget::text::Wrapping::None)
-        .ellipsis(iced::widget::text::Ellipsis::End);
-
-    let caption = text(format!(
+    let caption = format!(
         "{} · {}",
         category.label(),
         model::format_duration(item.duration)
-    ))
-    .size(dims.micro_text)
-    .color(colors.text_muted)
-    .width(Length::Fixed(text_width))
-    .wrapping(iced::widget::text::Wrapping::None)
-    .ellipsis(iced::widget::text::Ellipsis::End);
+    );
+    let body = card_body(
+        category.glyph(),
+        thumb_fill(category, colors),
+        item.name,
+        caption,
+        view_mode,
+        dims,
+        colors,
+    );
 
-    button(column![thumb, name, caption].spacing(dims.spacing_xs))
+    button(body)
         .on_press(Message::SelectCard(model::CardKey::Media(item.id)))
-        .width(Length::Fixed(card_width))
+        .width(card_frame_width(view_mode, dims))
         .padding(dims.spacing_xs)
         .style(move |_theme, status| card_style(dims, colors, selected, recent, status))
         .into()
@@ -1167,8 +1325,9 @@ fn preview_body(
     colors: Colors,
 ) -> Element<'static, Message> {
     let rail = preview_rail_view(tab, scope, dims, colors);
-    let catalog = preview_catalog_view(tab, scope, query, selected, hovered, dims, colors);
-    let catalog = preview_catalog_view(tab, scope, query, view_mode, selected, dims, colors);
+    let catalog = preview_catalog_view(
+        tab, scope, query, view_mode, selected, hovered, dims, colors,
+    );
 
     row![rail, catalog].spacing(dims.spacing_xs).into()
 }
@@ -1177,7 +1336,6 @@ fn preview_body(
 /// [`catalog_view`] と同じ骨格を preview-local データで組む)。空状態の文言は
 /// media の「絞り込みで0件」と同じ「No matches」(B08 続編の文言整理 —
 /// preview カタログは静的なので「台帳が空」の面は存在しない)。
-/// [`catalog_view`] と同じ骨格を preview-local データで組む)。
 #[allow(clippy::too_many_arguments)]
 fn preview_catalog_view(
     tab: LibraryTab,
@@ -1217,6 +1375,7 @@ fn preview_catalog_view(
                             card,
                             selected == Some(key),
                             hovered == Some(key),
+                            view_mode,
                             dims,
                             colors,
                         )
@@ -1234,12 +1393,11 @@ fn preview_catalog_view(
 }
 
 /// preview-local カタログの1枚(mock `.libraryCard` と同じ thumb +
-/// `.cardCopy` 骨格 — [`card_view`] の静的データ版で、click/選択意匠も同一
-/// ([`Message::SelectCard`]/[`card_style`])。寸法・文字は media カードと
-/// 同一(比率台帳3節の既決値をそのまま共有)。thumb の塗りは
-/// `surface_raised` 一律 — mock の装飾色(`.thumb-magenta` 等の直書き hex)は
-/// tokens に対応ロールが無く、S4「新ロールを起こさない」を優先して転写しない
-/// (逸脱として RETURN 記載)。
+/// `.cardCopy` 骨格 — 本体は [`card_body`] を [`card_view`] と共有する。
+/// 寸法・文字は media カードと同一(比率台帳3節の既決値をそのまま共有)。
+/// thumb の塗りは `surface_raised` 一律 — mock の装飾色(`.thumb-magenta` 等の
+/// 直書き hex)は tokens に対応ロールが無く、S4「新ロールを起こさない」を
+/// 優先して転写しない(逸脱として RETURN 記載)。
 ///
 /// **B36**: `creates: Some` のカード(create タブ)は button でなく
 /// `mouse_area` 経路 — シングル(press)=選択・**ダブルクリック=作成**
@@ -1252,56 +1410,28 @@ fn preview_card_view(
     card: model::PreviewCard,
     selected: bool,
     hovered: bool,
+    view_mode: model::ViewMode,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let card_width = dims.row_height * CARD_WIDTH_ROW_HEIGHT_RATIO;
-    let thumb_height = card_width * THUMB_ASPECT_H / THUMB_ASPECT_W;
-
-    let thumb = container(
-        text(card.glyph)
-            .size(dims.micro_text)
-            .color(colors.text_primary),
-    )
-    .width(Length::Fixed(card_width))
-    .height(Length::Fixed(thumb_height))
-    .align_x(iced::alignment::Horizontal::Center)
-    .align_y(iced::alignment::Vertical::Center)
-    .style(move |_theme| container::Style {
-        // 線化 D5(裁定179 文法1): thumb の輪郭線は透明化(幅だけ残す=幾何
-        // 不変)— `surface_raised` の面が pane 地から明度1段浮く。
-        background: Some(iced::Background::Color(colors.surface_raised)),
-        border: iced::Border {
-            color: iced::Color::TRANSPARENT,
-            width: dims.border_width,
-            radius: 0.0.into(),
-        },
-        ..container::Style::default()
-    });
-
-    let name = text(card.name)
-        .size(dims.micro_text)
-        .color(colors.text_primary)
-        .width(Length::Fixed(card_width))
-        .wrapping(iced::widget::text::Wrapping::None)
-        .ellipsis(iced::widget::text::Ellipsis::End);
-
-    let caption = text(card.caption)
-        .size(dims.micro_text)
-        .color(colors.text_muted)
-        .width(Length::Fixed(card_width))
-        .wrapping(iced::widget::text::Wrapping::None)
-        .ellipsis(iced::widget::text::Ellipsis::End);
-
     let key = model::CardKey::Preview(card.id);
-    let body = column![thumb, name, caption].spacing(dims.spacing_xs);
+    let body = card_body(
+        card.glyph,
+        colors.surface_raised,
+        card.name.to_owned(),
+        card.caption.to_owned(),
+        view_mode,
+        dims,
+        colors,
+    );
+    let frame_width = card_frame_width(view_mode, dims);
 
     if let Some(kind) = card.creates {
         // B36: create カードは mouse_area 経路(doc 冒頭参照)。意匠は
         // [`create_card_face`] が button 経路の [`card_style`] と同じ文法を
         // container で再現する(hover は pane-local 状態)。
         let face = container(body)
-            .width(Length::Fixed(card_width))
+            .width(frame_width)
             .padding(dims.spacing_xs)
             .style(move |_theme| create_card_face(colors, selected, hovered));
         return mouse_area(face)
@@ -1315,7 +1445,7 @@ fn preview_card_view(
 
     button(body)
         .on_press(Message::SelectCard(key))
-        .width(Length::Fixed(card_width))
+        .width(frame_width)
         .padding(dims.spacing_xs)
         .style(move |_theme, status| card_style(dims, colors, selected, false, status))
         .into()
