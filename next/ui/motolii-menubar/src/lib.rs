@@ -35,6 +35,7 @@ use iced::widget::{button, container, hover, row, text, Space};
 use iced::{Element, Length};
 use motolii_tokens_rs::{Colors, Dimensions};
 
+pub mod context;
 pub mod menus;
 pub mod vendored;
 
