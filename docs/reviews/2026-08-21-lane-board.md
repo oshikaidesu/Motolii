@@ -13,14 +13,14 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| BR-sym | 実装 | worktree(browser-pane) | 構造文法の全タブ対称化(rail/フィルタ/カタログ — モック宣言分は転写・沈黙分は S 導出1案) |
-| KF-ae | 実装 | worktree(inspector+shell) | AE 作法: キー持ち track の値編集= playhead へ upsert(静的化しない)・複数キー蓄積の再現テスト先行 |
 
 
 ## 完了・main 着地済み(実装)
 
 | レーン | 結果 |
 |---|---|
+| KF-ae(検収合格・merge) | キーフレーム AE 作法 — 真因=「keys<=1 のみ編集可」規則が値編集で track を静的化しキーを消していた(利用者「1つしか打てない」の正体・仮説一致)。`edited_value_track` 純関数= キー持ちは playhead へ upsert(値更新 or 挿入・interp/spatial 保持)・静的は静的のまま。Q0 達成(値セル常時編集可)・1 undo=1 SetTrack・324緑 |
+| BR-sym(検収合格・merge) | Browser 構造文法の全タブ対称化 — モックはタブ別に宣言済み(tabScoped 節)だったので転写: effects=Color/Utility/Animation・create=Shapes/Built-in・panels=Tags/Notes/Export の rail+チップ+カード click。media 回帰なし・69緑。逸脱7件は理由つき(COLLECTIONS 予約地の対称留保等) |
 | IC-svg(検収合格・merge・第5セッション) | `motolii-icons` 新設 — Material Symbols 37個 vendoring(全24px outlined・1KB未満・Apache2.0/NOTICE同梱・rev固定)+transport 5ボタン SVG 化。`icon(Icon,size,color)`+`frame_px_for_glyph_px`。既知の限界: svg は押下瞬間の ink 変化が効かない(iced svg Status=Idle/Hovered のみ — 面浮き+再生中accentで裁定179の実質維持) |
 | pane_grid 第1切片(検収合格・第5セッション回収・merge、suite 緑5本 log 直読) | shell の pane_grid 化 — リサイズ+ドッキング・Browser=左全高カラム・グリップ帯8px(title_bar 無しでは drag 不能のため)・q0_fence 偽陽性155件を on_click 実配線で解決。**既知制限: Browser 開閉= Configuration 再構築で drag 並べ替えが失われる**。screenshot.rs は旧・上帯 Browser のまま(task chip 化済み)。分離レーンへの引き渡しメモ(daemon 化の signature 変更・Stage 単一 surface 前提)は RETURN 参照 |
 | BL3: blend 分離可能11モード(検収合格・merge `118cdbf4`、後任セッション回収) | W3C 3.6節の2枚読みWGSL(`compositor/src/blend.rs`)+engine変換表11値(`_`なし網羅match)+Inspector巡回13値+golden 11枚(tol::EXACT)+独立Rust実装照合oracle。store enum は既存17値で無改造。3経路を `accumulate_sequential` コアへ統合。**副産物: `background_rect` の `depth_offset: i16::MIN` 縮みバグ再発見・修正**(レーン B と同型・2度目 — 極端値禁止を doc 化)。conflict解決1件(SR の scratch プール返却を finalize_texture 後へ移植・「確保5→1」テストが正しさを捕捉)。**FINDING: render_to_texture が all-Normal でも layer 毎 submit+poll を払う構造退行 → run-batching レーンで根治済(下記)** |
