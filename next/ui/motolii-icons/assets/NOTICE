@@ -18,3 +18,10 @@ open_in_new, dock_to_right, picture_in_picture, save, file_download,
 file_upload, play_circle, stop, fast_forward, fast_rewind, repeat,
 repeat_one, shuffle, straighten, grid_on, center_focus_strong, layers,
 layers_clear.
+Batch 3 (fetched 2026-08-22, same revision as above, unmodified): videocam,
+hd, sd, opacity, gradient, colorize, border_all, crop_free, fit_screen,
+zoom_out_map, center_focus_weak, vertical_align_center, format_align_left,
+format_align_center, format_align_right, format_bold, format_italic,
+line_weight, text_rotation_none, timer, schedule, history,
+settings_backup_restore, backup, cloud_done, link, link_off, lock_reset,
+flip, rotate_left, rotate_right.

@@ -143,6 +143,48 @@ declare_icons! {
     Repeat => "repeat",
     RepeatOne => "repeat_one",
     Shuffle => "shuffle",
+    // -- 第3弾(裁定189 — 走行中レーン ST3 の要求+波の需要先回り)-----------
+    // 映像品質/撮影
+    Videocam => "videocam",
+    Hd => "hd",
+    Sd => "sd",
+    // 色/合成
+    Opacity => "opacity",
+    Gradient => "gradient",
+    Colorize => "colorize",
+    // 枠/整形
+    BorderAll => "border_all",
+    CropFree => "crop_free",
+    FitScreen => "fit_screen",
+    ZoomOutMap => "zoom_out_map",
+    CenterFocusWeak => "center_focus_weak",
+    // 整列/文字組
+    VerticalAlignCenter => "vertical_align_center",
+    FormatAlignLeft => "format_align_left",
+    FormatAlignCenter => "format_align_center",
+    FormatAlignRight => "format_align_right",
+    FormatBold => "format_bold",
+    FormatItalic => "format_italic",
+    LineWeight => "line_weight",
+    TextRotationNone => "text_rotation_none",
+    // 時間/履歴
+    Timer => "timer",
+    Schedule => "schedule",
+    History => "history",
+    // "restore" は Material Symbols に単独名が無いため settings_backup_restore
+    // (循環矢印=restore の定番グリフ)で代替。対応表は発注 RETURN 参照。
+    Restore => "settings_backup_restore",
+    Backup => "backup",
+    CloudDone => "cloud_done",
+    // 結線/復帰
+    Link => "link",
+    LinkOff => "link_off",
+    LockReset => "lock_reset",
+    Flip => "flip",
+    RotateLeft => "rotate_left",
+    RotateRight => "rotate_right",
+    // tune_vertical は Material Symbols に存在しない(404実測)。代替指定の
+    // "tune" は既存 Icon::Tune と重複するため追加せずスキップ(対応表参照)。
 }
 
 impl Icon {
