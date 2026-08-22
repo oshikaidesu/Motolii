@@ -11,8 +11,13 @@
 //! 新しい規則は増やしていない。
 //!
 //! ## 走査対象
-//! この crate の `src/lib.rs`(旧 `motolii-shell/src/inspector_pane.rs` の全内容)
-//! だけ。`#[cfg(test)] mod tests { .. }` 以降は対象外([`scannable_prefix`])。
+//! この crate の `src/*.rs` 全部([`SCANNED_FILES`])。**2026-08-22 追記**:
+//! 利用者指摘(4,907行 lib.rs が merge 事故の原因)を受け、`lib.rs` 単一ファイル
+//! だった内容を section 単位モジュールへ分割した(裁定160 pane 分割と同じ
+//! 「積む前に割る」) — 柵は「lib.rs だけ」から「pane crate の全 `.rs`」へ
+//! 走査対象を広げて追随する(柵は緩めない・消さない、分割前と同じ検出力を保つ)。
+//! `#[cfg(test)] mod tests { .. }` 以降は対象外([`scannable_prefix`]、
+//! `lib.rs` の末尾に集約された唯一の inline test module に効く)。
 //!
 //! ## 何を「違反」とするか(境界線は元の柵と同一 — 詳細は
 //! `motolii-shell/tests/suite/tonmana_token_fence.rs` のモジュール doc 参照)
@@ -30,10 +35,23 @@ fn src_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
 }
 
-/// この crate は pane 1本ぶんの1ファイル crate なので `lib.rs` だけを見る
-/// (`motolii-shell` 側の `SCANNED_FILES` から `inspector_pane.rs` を落とし、
-/// この1エントリへ引き継いだ)。
-const SCANNED_FILES: &[&str] = &["lib.rs"];
+/// section 単位モジュール分割(2026-08-22)後の全ソースファイル。`lib.rs` は
+/// 組み立てと再輸出+末尾の inline test module だけ、実装本体は7つの section
+/// モジュールへ散った — 柵はどのファイルに書いても同じ検出力であるべきなので、
+/// 分割で増えたファイルをそのまま追加した(`motolii-shell` 側の
+/// `SCANNED_FILES` から `inspector_pane.rs` を落とし、この1エントリへ
+/// 引き継いだ経緯は変わらない)。
+const SCANNED_FILES: &[&str] = &[
+    "lib.rs",
+    "attrs.rs",
+    "audio.rs",
+    "chrome.rs",
+    "effects.rs",
+    "mask.rs",
+    "projection.rs",
+    "text.rs",
+    "transform.rs",
+];
 
 /// `#[cfg(test)]\nmod tests {` の手前までを返す(inline test module は対象外)。
 fn scannable_prefix(source: &str) -> &str {
@@ -293,8 +311,11 @@ struct Exclusion {
 
 const EXCLUSIONS: &[Exclusion] = &[
     // --- (1) 物理1px hairline 床 ---------------------------------------
+    // 2026-08-22 section 分割で `value_cell_height`/`glyph_height` は
+    // `lib.rs` → `chrome.rs`(値セル・共通 widget の意匠を持つモジュール)へ
+    // 移設した — 除外リストは実体の置き場に追随する(表を stale にしない)。
     Exclusion {
-        file: "lib.rs",
+        file: "chrome.rs",
         identifier: "fn value_cell_height",
         reason: "(dims.inspector_row_height - dims.spacing_s).max(1.0) — 物理1px床(裁定142除外1)。\
                  1.0はゼロ/負幅セルを防ぐ最小可視化の床であって独立した意匠値ではない \
@@ -302,7 +323,7 @@ const EXCLUSIONS: &[Exclusion] = &[
                  除外(1)の実例としてここに記録する)。",
     },
     Exclusion {
-        file: "lib.rs",
+        file: "chrome.rs",
         identifier: "fn glyph_height",
         reason: "(dims.inspector_row_height - dims.spacing_xs).max(1.0) — 同上(Key/M/S glyph 列の床)。",
     },
