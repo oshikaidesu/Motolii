@@ -25,6 +25,30 @@ motolii-settings-pane.workspace = true
 motolii-shell-state.workspace = true
 
 [dev-dependencies]
+# 裁定183 taffy 転写(部分適用 — `src/lib.rs::property_row_css` の doc
+# 「FINDING」参照): production の `transform_row` へはまだ配線していない
+# (`motolii-taffy` 既定の rounding が 150%実測で既存 shell 柵を壊すことを
+# 発見したため)ので dev-only。`property_row_css`(mock `.propertyRow` の
+# grid-template-columns 宣言)の CSS 文字列は crate 内 unit test
+# (`property_row_css_parses_and_declares_the_mock_grid_template`)と
+# `tests/property_row_taffy_oracle.rs` の両方が使う。settings-pane の第1号
+# (`motolii-settings-pane/Cargo.toml`)と同じ path 直参照(workspace.dependencies
+# には無い — members 登録のみ)。
+motolii-taffy = { path = "../motolii-taffy" }
+# 裁定183 検証層: `.propertyRow` の視覚正本(`next/reference/mocks/
+# inspector-library.html`)を blitz-dom+stylo で測り、`TaffyBox` の解と ±1px で
+# 突き合わせる oracle(`tests/property_row_taffy_oracle.rs`)。settings-pane の
+# oracle(mock 無し)と違い、Inspector は視覚正本を持つのでこの器具が要る —
+# `motolii-css-metrics/Cargo.toml` と同じ path 直参照(製品 dep にはしない)。
+motolii-css-metrics = { path = "../motolii-css-metrics" }
+# 同じ oracle(`tests/property_row_taffy_oracle.rs`)が `TaffyBox` を null
+# renderer `()` で直接 layout する手口(`motolii-taffy/tests/layout_oracle.rs`・
+# `comp_cells_row_taffy_oracle.rs` と同一)に要る。同じ fork 同 rev(裁定170
+# M01 — 別 rev だと iced_core が2本入り型が衝突する)。
+iced_core = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+iced_widget = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+# `motolii-css-metrics` が返す抽出値(`Vec<serde_json::Value>`)の box 幅を読むため。
+serde_json.workspace = true
 # 裁定168 施工: 値セルの文字が隣接セルへ重ならないことを実 widget bounds で
 # 照合する柵(`tests/value_cell_legibility.rs`)。`motolii-shell` の
 # `inspector_pixel_fence.rs` と同じ手口(`iced_test::simulator` で `view()` を

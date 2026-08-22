@@ -157,12 +157,15 @@ fn the_cycle_wraps_from_the_last_palette_index_to_the_first() {
 fn cycling_without_a_selection_is_a_silent_no_op() {
     let (mut doc, layer) = doc_with_layer();
     cycle_inspector_label_color(&mut doc, None).expect("選択なしは no-op のはず");
-    let attrs = doc
-        .view()
-        .attrs(layer)
-        .expect("attrs を読めるはず")
-        .expect("layer は居るはず");
-    assert_eq!(attrs.label_color, None, "no-op のはずが Document が動いている");
+    // `doc_with_layer` は `SetAttrs` を一度も呼ばない — `StoreView::attrs` の
+    // doc どおり「まだ一度も書かれていない」は `Ok(None)`(裁定37: 無いと空を
+    // 同義にしない)。no-op の証拠は「`Intent::SetAttrs` が一切出ていない」
+    // ことそのもの、すなわち attrs が最後まで未書き込み(`None`)であること。
+    let attrs = doc.view().attrs(layer).expect("attrs を読めるはず");
+    assert_eq!(
+        attrs, None,
+        "no-op のはずが Document が動いている(SetAttrs が出た形跡)"
+    );
 }
 
 /// 純関数の境界([`next_label_color`]): 未割当→0・宣言順+1・末尾→0・
