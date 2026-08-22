@@ -85,6 +85,10 @@ pub use sheets::{Sheet, SheetMessage, SheetOverlay, SheetToggles};
 /// クリック選択・矩形選択・Shift 追加/トグル・空クリック解除。message は既存
 /// [`Message`] と独立([`marquee::SelectLayers`] — 理由はモジュール doc)。
 pub mod marquee;
+/// Viewer の家(発注 2026-08-22)— 視点タブ(B17)+画質(B23)+チャンネル表示
+/// (B05 Viewer 側)。message は既存 [`Message`] と独立(理由はモジュール doc、
+/// `gizmo` と同型)。
+pub mod viewer_bar;
 
 use motolii_core::{camera_screen_from_world_z0, CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};

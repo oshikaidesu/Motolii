@@ -182,7 +182,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 181	clip_edit	Bilinear	サンプリング:バイリニア	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B23
 182	clip_edit	Blade Edit Mode	ブレード編集モード	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B39
 183	clip_edit	Blade tool	B	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B39
-184	clip_edit	Bring Layer Forward	前面へ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済		B44
+184	clip_edit	Bring Layer Forward	前面へ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち		B44
 185	clip_edit	Bring Layer to Front	最前面へ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B44
 186	clip_edit	Clip Enable	D	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済	LayerAttrs.hidden+LaneBarToggleMute(shell/lib.rs)	B32
 187	clip_edit	Clip Link	Option+Command+L	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B32
@@ -290,8 +290,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 289	clip_edit	Select Nearest Video Edit Point	最寄り映像編集点を選択	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B31
 290	clip_edit	Select next layer in stacking order	次のレイヤーを選択	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B31
 291	clip_edit	Select previous layer in stacking order	前のレイヤーを選択	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B31
-292	clip_edit	Send Layer Backward	背面へ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済		B44
-293	clip_edit	Send Layer to Back	最背面へ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済		B44
+292	clip_edit	Send Layer Backward	背面へ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち		B44
+293	clip_edit	Send Layer to Back	最背面へ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち		B44
 294	clip_edit	Set sampling method to Best/Bicubic	サンプリング:最高/バイキュービック	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B23
 295	clip_edit	Set sampling method to Best/Bilinear	サンプリング:最高/バイリニア	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B23
 296	clip_edit	Set Work Area In	ワークエリアイン点設定	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用済		B18
@@ -311,7 +311,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 310	clip_edit	Slip Opposite Eye Right	Option+Command+.	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		不採用	trim family(slip)+3D立体視 不採用 — 拘束1、裁定65(3D系不採用)	
 311	clip_edit	Slip Playhead To	プレイヘッドへスリップ	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	trim family(slip)不採用 — 拘束1	
 312	clip_edit	Slip Tool	スリップツール	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		不採用	trim family(slip)不採用 — 拘束1	
-313	clip_edit	Solid…	単色で置換	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済		B36
+313	clip_edit	Solid…	単色で置換	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち		B36
 314	clip_edit	Solo	ソロ切替	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	LaneBarToggleSolo(shell/lib.rs)	B32
 315	clip_edit	Source Clip/Source Tape	ソースクリップ/テープ切替	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B40
 316	clip_edit	Split Screen	Option+Command+W	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B23
@@ -442,7 +442,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 441	edit_basic	Paste Insert	挿入貼り付け	0	1	1	0	2	2:1:0:0	二次(premiere全体注記);公式(BMDマニュアルPDF)		不採用	裁定175: 跨カテゴリ重複(clip_edit側263が不採用済み)	
 442	edit_basic	Auto Select/Deselect All Video	Option+F9	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B31
 443	edit_basic	Auto Select/Deselect Video V1-V8(grouped, pattern)	Option+F1..Option+F8	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定		B31
-444	edit_basic	Clear Selection	選択消去	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用済		B31
+444	edit_basic	Clear Selection	選択消去	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		結線待ち		B31
 445	edit_basic	Clear Video In and Out	映像イン/アウト解除	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B18
 446	edit_basic	Copy Head	先頭側コピー	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	領域外(Fairlight音声編集固有、BMDマニュアル)不採用 — MVコンポジット製品命題外	
 447	edit_basic	Copy Tail	末尾側コピー	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	領域外(Fairlight音声編集固有、BMDマニュアル)不採用 — MVコンポジット製品命題外	
@@ -450,7 +450,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 449	edit_basic	Copy/Cut/Paste = Ctrl+C/X/V	コピー/切り取り/貼り付け	0	0	0	1	1	0:1:0:0	一致(2件)		採用予定		B33
 450	edit_basic	Cut Head	プレイヘッド前をカット(Fairlight)	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	領域外(Fairlight音声編集固有)不採用 — MVコンポジット製品命題外	
 451	edit_basic	Cut Tail	プレイヘッド後をカット(Fairlight)	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	領域外(Fairlight音声編集固有)不採用 — MVコンポジット製品命題外	
-452	edit_basic	Deselect all layers	全レイヤー選択解除	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B31
+452	edit_basic	Deselect all layers	全レイヤー選択解除	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B31
 453	edit_basic	Duplicate selected items	選択項目を複製	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B33
 454	edit_basic	Duplicate Selection	選択クリップを複製(Fairlight)	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	領域外(Fairlight音声編集固有)不採用 — MVコンポジット製品命題外	
 455	edit_basic	Group	グループ化	0	1	0	0	1	1:2:0:0	二次(premiere全体注記)		採用済	G1でグループ化動詞として実装(2026-08-22、⌘G/⌘⇧G・world位置保存・裁定174)	B34
@@ -482,18 +482,18 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 481	effects_animation	Delete All Keyframes	全キーフレーム削除	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B15
 482	effects_animation	Delete Keyframe	キーフレーム削除	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済	TimelineDeleteSelectedKeys	B15
 483	effects_animation	Delete Keyframe	Option+]	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済	TimelineDeleteSelectedKeys	B15
-484	effects_animation	Deselect all keyframes, properties, and groups	全キーフレーム・プロパティ・グループの選択解除	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B15
-485	effects_animation	Easy Ease	イージーイーズ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	Easy Ease系プリセットはBezier補間機構(motolii-eval)の上に載る一操作だが、プリセットボタンUIとしての結線は未実装	B15
-486	effects_animation	Easy Ease In	イージーイーズイン	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	Easy Ease系プリセットはBezier補間機構(motolii-eval)の上に載る一操作だが、プリセットボタンUIとしての結線は未実装	B15
-487	effects_animation	Easy Ease Out	イージーイーズアウト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	Easy Ease系プリセットはBezier補間機構(motolii-eval)の上に載る一操作だが、プリセットボタンUIとしての結線は未実装	B15
-488	effects_animation	Easy ease selected keyframes	選択キーフレームにイージーイーズ	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B15
-489	effects_animation	Easy ease selected keyframes in	イージーイーズイン	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B15
-490	effects_animation	Easy ease selected keyframes out	イージーイーズアウト	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B15
+484	effects_animation	Deselect all keyframes, properties, and groups	全キーフレーム・プロパティ・グループの選択解除	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B15
+485	effects_animation	Easy Ease	イージーイーズ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち	Easy Ease系プリセットはBezier補間機構(motolii-eval)の上に載る一操作だが、プリセットボタンUIとしての結線は未実装	B15
+486	effects_animation	Easy Ease In	イージーイーズイン	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち	Easy Ease系プリセットはBezier補間機構(motolii-eval)の上に載る一操作だが、プリセットボタンUIとしての結線は未実装	B15
+487	effects_animation	Easy Ease Out	イージーイーズアウト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち	Easy Ease系プリセットはBezier補間機構(motolii-eval)の上に載る一操作だが、プリセットボタンUIとしての結線は未実装	B15
+488	effects_animation	Easy ease selected keyframes	選択キーフレームにイージーイーズ	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B15
+489	effects_animation	Easy ease selected keyframes in	イージーイーズイン	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B15
+490	effects_animation	Easy ease selected keyframes out	イージーイーズアウト	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B15
 491	effects_animation	Exponential Scale	指数スケール	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	Exponential Scaleは旧AEのキーフレームアシスタント。未実装、除外根拠なし	B15
 492	effects_animation	Expression	エクスプレッションセレクタ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: vism抽象化候補・拡張として戸を残す(expression勢力は実在) — コアには入れない	B14
 493	effects_animation	Expression Reference…	エクスプレッションリファレンス	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		拡張	裁定175: vism抽象化候補・拡張として戸を残す(expression勢力は実在) — コアには入れない	B14
 494	effects_animation	Keyframe Animation and Motion Tracking	キーフレームアニメ/モーショントラッキング	0	0	0	1	1	1:0:0:0	公式		採用予定		B16
-495	effects_animation	Keyframe Interpolation…	キーフレーム補間法	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済		B15
+495	effects_animation	Keyframe Interpolation…	キーフレーム補間法	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち		B15
 496	effects_animation	Keyframe Timeline Mode	キーフレームタイムラインモード	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B15
 497	effects_animation	Keyframe Velocity…	キーフレーム速度	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B15
 498	effects_animation	Move keyframe 1 frame later or earlier	キーフレームを1フレーム前後移動	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	Message::NudgeKeyframe(shell/lib.rs)	B15
@@ -507,12 +507,12 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 506	effects_animation	Reveal Properties with Keyframes	キーフレーム付きプロパティを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B15
 507	effects_animation	Reverse paste copied keyframes	コピーしたキーフレームを逆順貼り付け	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B15
 508	effects_animation	RPF Camera Import	RPFカメラ読み込み	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	RPFカメラ読み込みは特定3D interchange形式のimport機能。除外根拠なし	B15
-509	effects_animation	Select all keyframes for property	プロパティの全キーフレームを選択	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B15
-510	effects_animation	Select all visible keyframes and properties	表示中の全キーフレーム・プロパティを選択	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B15
+509	effects_animation	Select all keyframes for property	プロパティの全キーフレームを選択	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B15
+510	effects_animation	Select all visible keyframes and properties	表示中の全キーフレーム・プロパティを選択	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B15
 511	effects_animation	Sequence Layers…	レイヤーをシーケンス化	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	レイヤーのシーケンス化(自動配置)ダイアログは未実装	B15
-512	effects_animation	Set interpolation for keyframes	キーフレーム補間法を設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B15
-513	effects_animation	Set interpolation to linear or Auto Bezier	補間をリニア/自動ベジェに設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	補間方式の設定UI(next/shellへの結線)は未実装。補間の型自体(Hold/Linear/Bezier)はmotolii-evalに実装済み	B15
-514	effects_animation	Set interpolation to linear or hold	補間をリニア/ホールドに設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	補間方式の設定UI(next/shellへの結線)は未実装。補間の型自体(Hold/Linear/Bezier)はmotolii-evalに実装済み	B15
+512	effects_animation	Set interpolation for keyframes	キーフレーム補間法を設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B15
+513	effects_animation	Set interpolation to linear or Auto Bezier	補間をリニア/自動ベジェに設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち	補間方式の設定UI(next/shellへの結線)は未実装。補間の型自体(Hold/Linear/Bezier)はmotolii-evalに実装済み	B15
+514	effects_animation	Set interpolation to linear or hold	補間をリニア/ホールドに設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち	補間方式の設定UI(next/shellへの結線)は未実装。補間の型自体(Hold/Linear/Bezier)はmotolii-evalに実装済み	B15
 515	effects_animation	Set keyframe interpolation to hold or Auto Bezier	補間をホールド/自動ベジェに設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B15
 516	effects_animation	Set velocity for selected keyframes	選択キーフレームの速度を設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B15
 517	effects_animation	Show Keyframe Editor	キーフレームエディタ表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定		B15
@@ -527,7 +527,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 526	export_render	Collect Files…	依存ファイルを収集	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B10
 527	export_render	Consolidate All Footage	重複素材を統合	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B10
 528	export_render	Copyright Check	著作権チェック	0	0	0	1	1	1:0:0:0	公式		不採用	Copyright Checkは外部著作権データベースへの照会を要するクラウドサービス依存機能で、ローカル完結設計に関する決定と整合しない	
-529	export_render	Ctrl+E = Export(droidcrunch)またはOpen effects(skillademia)	書き出し、またはエフェクトパネルを開く(出典間で矛盾)	0	0	0	1	1	0:1:0:0	単一×2(相互矛盾・未解決)		採用済	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B09
+529	export_render	Ctrl+E = Export(droidcrunch)またはOpen effects(skillademia)	書き出し、またはエフェクトパネルを開く(出典間で矛盾)	0	0	0	1	1	0:1:0:0	単一×2(相互矛盾・未解決)		結線待ち	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B09
 530	export_render	Current Frame as Still	現在フレームを静止画で書き出す	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B09
 531	export_render	Export AAF, XML	Shift+Command+O	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B09
 532	export_render	Export Metadata From	メタデータをCSVへ書き出す	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B09
@@ -536,7 +536,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 535	export_render	Extend selection to next item in Project/Render Queue/Effect Controls panel	次項目まで選択範囲を拡張	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B09
 536	export_render	MAXON CINEMA 4D Exporter…	C4D形式で書き出し	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	MAXON CINEMA 4D Exporterは3D DCC(Cinema 4D)専用interchangeで、Motoliiの2.5D合成モデル・3D DCC非搭載方針(generative-user-boundary.md)と不整合	
 537	export_render	Media Management	メディアマネジメントウィンドウを開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B10
-538	export_render	Quick Export	クイックエクスポートウィンドウを開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B09
+538	export_render	Quick Export	クイックエクスポートウィンドウを開く	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		結線待ち	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B09
 539	export_render	Reduce Project	プロジェクトを選択コンポのみに縮小	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	レンダーキュー/interchange書き出し/メディア管理/クイックエクスポート等は普通の動画ソフトの標準機能。除外根拠なし	B10
 540	export_render	Send to Media Encoder	Media Encoderへキューを送信	0	1	0	0	1	1:0:0:0	二次(premiere全体注記)		不採用	Send to Media EncoderはAdobe固有外部アプリ連携	
 541	fusion_vfx	Add Layer Node	Option+L	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		不採用	Fusionノード合成システムそのもの。裁定3(rerun viewer層を引かない)・GOALS「要らないもの: ノードグラフUI」・concept.mdの製品境界(Motoliiは合成ツールでノードコンポジタではない)に明示的に抵触。領域外	
@@ -726,7 +726,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 725	marker	Mark In	イン点を設定	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
 726	marker	Mark Out	アウト点を設定	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
 727	marker	Mark Selection	選択範囲をマーク	0	1	1	0	2	2:2:0:0	二次(premiere全体注記);公式(BMD, v11時点);公式(BMDマニュアルPDF)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B18
-728	marker	Add and Modify Marker	マーカー追加/編集	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
+728	marker	Add and Modify Marker	マーカー追加/編集	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		結線待ち	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
 729	marker	Add Flag	フラグ追加	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
 730	marker	Add Flag	G	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
 731	marker	Clear Flags	フラグ解除	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
@@ -736,8 +736,8 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 735	marker	Go to In	イン点へ	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
 736	marker	Go to Out	アウト点へ移動	0	1	0	0	1	1:0:0:0	二次(premiere全体注記)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
 737	marker	Go to Out	アウト点へ	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
-738	marker	Modify Marker	マーカー編集	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
-739	marker	Modify Marker	Shift+M	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用済	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
+738	marker	Modify Marker	マーカー編集	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		結線待ち	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
+739	marker	Modify Marker	Shift+M	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		結線待ち	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
 740	marker	Ripple Timeline Markers	タイムラインマーカーをリップル	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		不採用	裁定175: ripple編集不採用による空洞化	
 741	marker	Set In and Out from Duration Marker	尺マーカーからイン/アウト設定	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
 742	marker	Show Flags	フラグ表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー追加/表示の基盤(裁定111/120/149)の上に載るIn/Out・Flag・ナビゲーション・同期等の個別UI操作は未結線。除外根拠なし	B19
@@ -783,7 +783,7 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 782	mask	Redraw Bezier handles	ベジェハンドルを再描画	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B02
 783	mask	Remove All Masks	全マスクを削除	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
 784	mask	Remove Mask	マスクを削除	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
-785	mask	Rename selected layer, composition, folder, effect, group, or mask	選択項目の名前変更	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B02
+785	mask	Rename selected layer, composition, folder, effect, group, or mask	選択項目の名前変更	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B02
 786	mask	Reset Mask	マスクをリセット	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
 787	mask	RotoBezier	ロトベジエ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
 788	mask	Same As Layer	レイヤーに準拠	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定		B02
@@ -896,12 +896,12 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 895	misc	New Bin	Shift+Command+N	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし	B10
 896	misc	New Comp from Selection…	選択素材から新規コンポ作成	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B36
 897	misc	New Folder	新規フォルダ	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B10
-898	misc	New null layer	新規ヌルレイヤー	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	LayerSource::Null実装済み(裁定112i)、UI新規作成アクションは未	B36
+898	misc	New null layer	新規ヌルレイヤー	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち	LayerSource::Null実装済み(裁定112i)、UI新規作成アクションは未	B36
 899	misc	New Smart Bin	新規スマートビン作成	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B10
-900	misc	New solid layer	新規単色レイヤー	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済	既決との衝突なし	B36
+900	misc	New solid layer	新規単色レイヤー	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち	既決との衝突なし	B36
 901	misc	Next Still	Option+Command+N	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし	B21
 902	misc	No Output Simulation	出力シミュレーションなし	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	領域外: Output Simulation(825と同根拠)	
-903	misc	Null Object	新規ヌルオブジェクト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	898と同根拠	B36
+903	misc	Null Object	新規ヌルオブジェクト	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち	898と同根拠	B36
 904	misc	Off	フレームブレンドOFF	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B37
 905	misc	Optical Flow	オプティカルフローによる滑らかなスロー	0	0	0	1	1	1:0:0:0	公式		採用予定	既決との衝突なし	B37
 906	misc	Outer Glow	光彩(外側)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	レイヤースタイルは裁定71で全廃	
@@ -950,14 +950,14 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 949	misc	Set In or Out point by time-stretching	タイムストレッチでIn/Outを設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B18
 950	misc	Set rounded rectangle to maximum; increase outer roundness	角丸長方形を最大丸みに/外側の丸みを増加	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B28
 951	misc	Set rounded rectangle to sharp; decrease outer roundness	角丸長方形をシャープに/外側の丸みを減少	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B28
-952	misc	Shape Layer	新規シェイプレイヤー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	LayerSource::Shape実装済み(裁定112i)、UI新規作成アクションは未	B36
+952	misc	Shape Layer	新規シェイプレイヤー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち	LayerSource::Shape実装済み(裁定112i)、UI新規作成アクションは未	B36
 953	misc	Show All	全アプリ表示(macOS)	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし(OS標準機能)	B32
 954	misc	Show All	全レイヤースタイルを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	レイヤースタイル(裁定71で全廃)に依存する操作	
 955	misc	Show File Names	ファイル名表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	既決との衝突なし	B25
 956	misc	Show Layer Controls	レイヤーコントロールを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	ギズモは裁定124でスクラッチ実装進行中	B22
 957	misc	Show or hide Parent column	Parent列表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		不採用	裁定174: 機構露出のUIは作らない(意図優先) — グループ化動詞G1で代替	
 958	misc	Show Preview Marks	プレビューマーク表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用予定	マーカー実装済み(裁定111)だが、このプレビューマーク表示トグルは未	B18
-959	misc	Solid…	新規単色レイヤー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	既決との衝突なし	B36
+959	misc	Solid…	新規単色レイヤー	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち	既決との衝突なし	B36
 960	misc	Start or stop preview	プレビュー開始/停止	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	GOALS M8(未)	B21
 961	misc	Still…	静止画プロキシを作成	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B08
 962	misc	Stroke	境界線	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		不採用	レイヤースタイルは裁定71で全廃(境界線=Stroke layer style)	
@@ -1117,12 +1117,12 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1116	playback	Render Effects in Work Area	ワークエリア内エフェクトレンダリング	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B18
 1117	playback	Reverse Match Frame	逆方向一致フレーム検索	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B40
 1118	playback	Reverse Match Frame	逆一致フレーム検索	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用予定		B40
-1119	playback	Show or hide grid	グリッド表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B22
+1119	playback	Show or hide grid	グリッド表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B22
 1120	playback	Show or hide guides	ガイド表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B22
 1121	playback	Show or hide layer controls	レイヤーコントロール表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B22
-1122	playback	Show or hide proportional grid	比例グリッド表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B22
+1122	playback	Show or hide proportional grid	比例グリッド表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B22
 1123	playback	Show or hide rulers	定規表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定		B22
-1124	playback	Show or hide safe zones	セーフゾーン表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用済		B22
+1124	playback	Show or hide safe zones	セーフゾーン表示切替	1	0	0	0	1	0:1:0:0	公式(Adobe)		結線待ち		B22
 1125	playback	Shuttle Left	シャトル逆再生	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用済		B21
 1126	playback	Shuttle Right	シャトル順再生	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用済		B21
 1127	playback	Shuttle Stop	シャトル停止	0	1	0	0	1	0:1:0:0	二次(premiere全体注記)		採用済		B21
@@ -1463,11 +1463,11 @@ id	category	canonical	意味	ae	pr	dr	cc	freq	entries(menu:shortcut:panel:pref)	
 1462	view_display	Open View Options dialog for active Composition panel	表示オプションダイアログを開く	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B23
 1463	view_display	Quarter	解像度:1/4	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	既決との衝突なし	B23
 1464	view_display	Reference Wipe Mode	Option+Shift+W	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし	B23
-1465	view_display	Safe Area	セーフエリア表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		採用済	裁定155で明示: Stageのセーフエリアは回収対象	B22
+1465	view_display	Safe Area	セーフエリア表示	0	0	1	0	1	1:0:0:0	公式(BMDマニュアルPDF)		結線待ち	裁定155で明示: Stageのセーフエリアは回収対象	B22
 1466	view_display	Set Quality to Best, Draft, or Wireframe	画質を最高/下書き/ワイヤーフレームに設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B23
 1467	view_display	Set resolution to Full, Half, or Custom	解像度をフル/半分/カスタムに設定	1	0	0	0	1	0:1:0:0	公式(Adobe)		採用予定	既決との衝突なし	B23
 1468	view_display	Show and move Clone Stamp overlay	コピースタンプオーバーレイを表示・移動	1	0	0	0	1	0:1:0:0	公式(Adobe)		拡張	裁定175: コア完成後・継ぎ目候補(L8基盤=パス編集はマスクで既払い・L9島度低)	B27
-1469	view_display	Show Grid	グリッドを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用済	裁定155	B22
+1469	view_display	Show Grid	グリッドを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		結線待ち	裁定155	B22
 1470	view_display	Show Guides	ガイドを表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	裁定155	B22
 1471	view_display	Show Reference Wipe	Command+W	0	0	1	0	1	0:1:0:0	公式(BMD, v11時点)		採用予定	既決との衝突なし	B23
 1472	view_display	Show Rulers	定規を表示	1	0	0	0	1	1:0:0:0	二次(非公式技術抽出/2015時点)		採用予定	裁定155	B22
