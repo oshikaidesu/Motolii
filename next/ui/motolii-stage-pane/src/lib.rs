@@ -75,6 +75,11 @@ use iced::{mouse, Point, Rectangle};
 pub mod gizmo;
 pub use gizmo::{gizmo_target, GizmoDrag, GizmoOverlay, GizmoPhase, GizmoProperty, GizmoTarget, GizmoValue};
 
+/// Viewer の家(発注 2026-08-22)— 視点タブ(B17)+画質(B23)+チャンネル表示
+/// (B05 Viewer 側)。message は既存 [`Message`] と独立(理由はモジュール doc、
+/// `gizmo` と同型)。
+pub mod viewer_bar;
+
 use motolii_core::{camera_screen_from_world_z0, CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{RationalTime, StoreView};
