@@ -502,21 +502,53 @@ pub enum Message {
     /// New Project(Cmd+N・File メニュー、normal-map id 1221)。dirty なら
     /// [`file_dialogs::FileDialogs::confirm_discard`] を経由してから
     /// `Shell::reset_document` を呼ぶ ── dirty でなければ確認なしで即リセット。
+    /// **非同期(2026-08-22 再発注)**: 実際の確認は `Task::perform` で
+    /// `Message::NewProjectConfirmed` へ戻ってくる(`Shell::confirm_then`
+    /// 参照)── ネイティブ dialog はモーダルなので同期呼び出しは iced の
+    /// イベントループを塞ぐ、`file_dialogs.rs` 冒頭 doc 参照。
     NewProjectRequested,
+    /// `NewProjectRequested` の確認結果(true = 破棄して `reset_document`、
+    /// false = 何もしない)。dirty でなければ確認ダイアログ自体を出さず
+    /// `Task::perform` は即 `true` を運ぶ(`confirm_discard_calls` を増やさない
+    /// ── `tests/suite/file_drive.rs` の柵)。
+    NewProjectConfirmed(bool),
     /// Save As(Cmd+Shift+S・File メニュー、id 1225)。
-    /// [`file_dialogs::FileDialogs::pick_save_path`] で path を選び、既存の
-    /// 汎用 persist 経路(`Document::save`、履歴を畳んだ flattened 書き)で
-    /// 書く。成功したら以後の `current_path` はこの path になる。
+    /// [`file_dialogs::FileDialogs::pick_save_path`] で path を選び、
+    /// `Message::SaveAsPathChosen` へ戻ってきたら既存の汎用 persist 経路
+    /// (`Document::save`、履歴を畳んだ flattened 書き)で書く。成功したら
+    /// 以後の `current_path` はこの path になる。
     SaveAsRequested,
+    /// `SaveAsRequested` の path 選択結果。`None` = キャンセル(何もしない)。
+    SaveAsPathChosen(Option<std::path::PathBuf>),
     /// Save a Copy(File メニューのみ、id 1227 — normal-map の shortcut 出典が
     /// ゼロなので shortcut を発明しない)。path 選択は Save As と同じ入口だが
     /// **`current_path`/dirty 状態は据え置く**(「現 path 維持のまま別名へ
     /// 書く」── 別ファイルへの書き出しであって、開いているプロジェクトの
     /// 身分は変わらない)。
     SaveACopyRequested,
+    /// `SaveACopyRequested` の path 選択結果。`None` = キャンセル。
+    SaveACopyPathChosen(Option<std::path::PathBuf>),
+    /// Open(File メニュー、normal-map id 1226「Open Project」── shortcut 出典
+    /// ゼロ(entries 2:0:0:0)なので shortcut を発明しない。`KNOWN.md` の
+    /// 「Cmd+O 衝突の実測」の教訓どおり、裸の `o`(`JumpClipEdge(Out)`)が
+    /// `!modifiers.command()` で既に Cmd+O を空けているが、出典が無い以上
+    /// ここを埋めない)。dirty なら確認 → 確認できたら open dialog、を1本の
+    /// `Task` へ直列化する(`Shell::confirm_then_pick_open` 参照)。
+    OpenRequested,
+    /// `OpenRequested` の最終結果(確認キャンセル・path キャンセルのどちらも
+    /// `None` に畳まれる ── 呼び手は区別しない、`Shell::perform_open` 参照)。
+    OpenPathChosen(Option<std::path::PathBuf>),
+    /// File > Import Media…(normal-map id 592「Import (media/file)」の第2の
+    /// 入口 ── 従来は OS drop のみだった、`file_dialogs.rs::FileDialogs::
+    /// pick_import_paths` 冒頭 doc 参照)。複数選択可。選ばれた path はそのまま
+    /// 既存の `Message::AdmitPaths` へ渡す(新しい記帳経路を作らない)。
+    ImportMediaRequested,
     /// Quit(Cmd+Q・File メニュー、id 1223)。dirty なら confirm_discard を
     /// 経由してからプロセスを終了する([`file_dialogs::FileDialogs::quit`])。
     QuitRequested,
+    /// `QuitRequested` の確認結果(true = `self.dialogs.quit()`、
+    /// false = 何もしない)。`NewProjectConfirmed` と同じ形。
+    QuitConfirmed(bool),
 
     // ---- 実時間再生(A2、正典 §2 拘束5) ----
     /// Space。Play/Pause をトグルする。**ドラッグ中は無効**(拘束5「再生と
@@ -1423,15 +1455,31 @@ impl Shell {
             // MB-2: freeze 意図動詞(裁定119)の UI 初露出(Layer メニュー)。
             Message::FreezeGroups => self.set_selected_groups_frozen(true),
             Message::UnfreezeGroups => self.set_selected_groups_frozen(false),
-            Message::NewProjectRequested => {
-                if self.confirm_discard_if_dirty() {
+            Message::NewProjectRequested => task = self.confirm_then(Message::NewProjectConfirmed),
+            Message::NewProjectConfirmed(confirmed) => {
+                if confirmed {
                     self.reset_document();
                 }
             }
-            Message::SaveAsRequested => self.perform_save_as(),
-            Message::SaveACopyRequested => self.perform_save_a_copy(),
-            Message::QuitRequested => {
-                if self.confirm_discard_if_dirty() {
+            Message::SaveAsRequested => {
+                task = Task::perform(self.dialogs.pick_save_path(), Message::SaveAsPathChosen);
+            }
+            Message::SaveAsPathChosen(Some(path)) => self.perform_save_as(path),
+            Message::SaveAsPathChosen(None) => {}
+            Message::SaveACopyRequested => {
+                task = Task::perform(self.dialogs.pick_save_path(), Message::SaveACopyPathChosen);
+            }
+            Message::SaveACopyPathChosen(Some(path)) => self.perform_save_a_copy(path),
+            Message::SaveACopyPathChosen(None) => {}
+            Message::OpenRequested => task = self.confirm_then_pick_open(),
+            Message::OpenPathChosen(Some(path)) => self.perform_open(path),
+            Message::OpenPathChosen(None) => {}
+            Message::ImportMediaRequested => {
+                task = Task::perform(self.dialogs.pick_import_paths(), Message::AdmitPaths);
+            }
+            Message::QuitRequested => task = self.confirm_then(Message::QuitConfirmed),
+            Message::QuitConfirmed(confirmed) => {
+                if confirmed {
                     self.dialogs.quit();
                 }
             }
@@ -1542,10 +1590,45 @@ impl Shell {
         self.doc.revision() != self.saved_revision
     }
 
-    /// New Project/Quit の dirty ガード。dirty でなければ確認そのものを
-    /// 出さない(不要な dialog を挟まない)。true = 続行してよい。
-    fn confirm_discard_if_dirty(&self) -> bool {
-        !self.is_dirty() || self.dialogs.confirm_discard()
+    /// dirty でなければ確認そのものを出さない `DialogFuture` を作る
+    /// (`confirm_then`/`confirm_then_pick_open` 共通の下請け)。dirty で
+    /// なければ [`file_dialogs::FileDialogs::confirm_discard`] を一切呼ばず
+    /// `std::future::ready(true)` を返す ── `tests/suite/file_drive.rs` の
+    /// 「dirty ではないのに確認ダイアログを呼んでいる」柵はこの分岐で保たれる
+    /// (fake の呼び出し回数カウンタは `confirm_discard()` 自体を呼んだ時にしか
+    /// 増えない)。
+    fn confirm_discard_future(&self) -> file_dialogs::DialogFuture<bool> {
+        if self.is_dirty() {
+            self.dialogs.confirm_discard()
+        } else {
+            Box::pin(std::future::ready(true))
+        }
+    }
+
+    /// New Project/Quit の dirty ガード(非同期版)。`wrap` で結果を包んだ
+    /// `Message` を1つ運ぶ `Task` を返す ── ネイティブ dialog はモーダルなので
+    /// 同期呼び出しは iced のイベントループを塞ぐ(`file_dialogs.rs` 冒頭 doc)。
+    fn confirm_then(&self, wrap: fn(bool) -> Message) -> Task<Message> {
+        Task::perform(self.confirm_discard_future(), wrap)
+    }
+
+    /// Open(id 1226)の dirty ガード+path 選択を1本の `Task` へ直列化する。
+    /// dirty なら確認 → 確認できたら(または dirty でなければ即)path dialog を
+    /// 開く、を1つの `async move { … }` に包む ── 確認をキャンセルしたら
+    /// `pick_open_path` の future を一切 poll しない(await の早期 return)ので、
+    /// OS dialog は実際には出ない。
+    fn confirm_then_pick_open(&self) -> Task<Message> {
+        let confirm = self.confirm_discard_future();
+        let pick = self.dialogs.pick_open_path();
+        Task::perform(
+            async move {
+                if !confirm.await {
+                    return None;
+                }
+                pick.await
+            },
+            Message::OpenPathChosen,
+        )
     }
 
     /// New Project(id 1221)本体。**Document を丸ごと差し替える**
@@ -1570,10 +1653,7 @@ impl Shell {
     /// **`last_auto_saved` も同じ revision へ揃える** — 本体そのものが今
     /// この時点の内容で書けたので、次の tick が同じ revision のまま無駄な
     /// 自動保存を起こさないようにする(`AutoSaveConfig` doc の「dirty 判定」)。
-    fn perform_save_as(&mut self) {
-        let Some(path) = self.dialogs.pick_save_path() else {
-            return;
-        };
+    fn perform_save_as(&mut self, path: std::path::PathBuf) {
         match self.doc.save(&path) {
             Ok(()) => {
                 self.current_path = Some(path);
@@ -1589,12 +1669,28 @@ impl Shell {
     /// **`current_path`/`saved_revision` は据え置く**(`Message::
     /// SaveACopyRequested` doc「現 path 維持のまま別名へ書く」)——開いている
     /// project の身分(どの path と紐付いているか・dirty かどうか)は変わらない。
-    fn perform_save_a_copy(&mut self) {
-        let Some(path) = self.dialogs.pick_save_path() else {
-            return;
-        };
+    fn perform_save_a_copy(&mut self, path: std::path::PathBuf) {
         if let Err(error) = self.doc.save(&path) {
             self.status = Some(format!("コピーを保存できない: {error}"));
+        }
+    }
+
+    /// Open(id 1226)本体。既存の汎用 persist 経路(`Document::load`、
+    /// `persist.rs` doc 参照 — 読込直後は `mark_undo_floor` 済みで戻せない)で
+    /// 読み、成功したら Document を丸ごと差し替える(`reset_document` と同じ
+    /// 「身分を新しい対象へ揃える」規律 ── `current_path`/`saved_revision`/
+    /// `Session` の3点)。読み込みに失敗したら何も変えない(拒否は必ず出す、
+    /// M13 規律)。
+    fn perform_open(&mut self, path: std::path::PathBuf) {
+        match Document::load(&path) {
+            Ok(doc) => {
+                self.saved_revision = doc.revision();
+                self.last_auto_saved = self.saved_revision.clone();
+                self.doc = doc;
+                self.current_path = Some(path);
+                self.session = Session::default();
+            }
+            Err(error) => self.status = Some(format!("開けない: {error}")),
         }
     }
 
@@ -3058,6 +3154,17 @@ impl Shell {
             export_pane::Message::ToggleExportDialog => return self.toggle_export_window(),
             export_pane::Message::QualitySelect(quality) => self.export_quality = quality,
             export_pane::Message::RangeSelect(range) => self.export_range = range,
+            // 2026-08-22 第2波(File 束の rfd 非同期化と同時発注): 書き出し先の
+            // 選択。`file_dialogs.rs::FileDialogs::pick_export_path` を非同期に
+            // 呼び、結果を `OutputPathChosen` で畳んで戻す。
+            export_pane::Message::PickOutputPath => {
+                let default_name = self.export_default_file_name();
+                return Task::perform(self.dialogs.pick_export_path(default_name), |path| {
+                    Message::Export(export_pane::Message::OutputPathChosen(path))
+                });
+            }
+            export_pane::Message::OutputPathChosen(Some(path)) => self.export_out_path = Some(path),
+            export_pane::Message::OutputPathChosen(None) => {}
             export_pane::Message::Export => self.start_export(),
             export_pane::Message::CancelExport => {
                 if let Some(cancel) = &self.export_cancel {
@@ -3066,6 +3173,20 @@ impl Shell {
             }
         }
         Task::none()
+    }
+
+    /// Export 書き出し先 dialog の初期ファイル名。`current_path`(開いている
+    /// project)があればその stem を使う(`<name>.mp4`)、無ければ既定
+    /// `"untitled.mp4"`(`file_dialogs.rs::RfdDialogs::pick_save_path` の
+    /// 既定 file name と同じ考え方)。
+    fn export_default_file_name(&self) -> String {
+        let stem = self
+            .current_path
+            .as_deref()
+            .and_then(|path| path.file_stem())
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("untitled");
+        format!("{stem}.mp4")
     }
 
     /// Export 実行(crate doc「shell 結線」手順3「`Export` = `ExportJob` を
@@ -3355,6 +3476,13 @@ impl Shell {
     /// Export の範囲選択の読み口(B09、第6波)。同上。
     pub fn export_range(&self) -> export_pane::ExportRange {
         self.export_range
+    }
+
+    /// 書き出し先(`export_pane::Message::PickOutputPath` が
+    /// `FileDialogs::pick_export_path` の結果で埋める、2026-08-22 第2波)。
+    /// **運転席が見るための口**(`current_path`/`export_quality` と同じ形)。
+    pub fn export_out_path(&self) -> Option<&std::path::Path> {
+        self.export_out_path.as_deref()
     }
 
     /// 描き上がった Stage フレームの生 RGBA。**常に背景込みの export 真値**

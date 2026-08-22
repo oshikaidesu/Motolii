@@ -67,9 +67,11 @@ motolii-browser-pane.workspace = true
 # workspace の Cargo.toml 自身が既に明記している「裁定117 が許す direct 昇格」
 # (notify と同じ扱い、R3 probe が先行昇格済み)であって新規の依存ではない。
 image.workspace = true
-# MB-1(File 束、裁定176): New Project/Save As/Save a Copy/Quit の path 選択・
-# 破棄確認は native file dialog。`file_dialogs.rs` の `FileDialogs` trait の
-# production 実装(`RfdDialogs`)だけがこの crate を直接呼ぶ。
+# MB-1(File 束、裁定176)+第2波(2026-08-22、非同期化+Open/Import Media…/
+# 書き出し先選択): New Project/Save As/Save a Copy/Open/Quit の path 選択・
+# 破棄確認・素材取り込み/書き出し先の path 選択は native file dialog
+# (`rfd::Async*Dialog`)。`file_dialogs.rs` の `FileDialogs` trait の production
+# 実装(`RfdDialogs`)だけがこの crate を直接呼ぶ。
 rfd.workspace = true
 # 第6波 shell 結線(B09): Export 実行(`ExportJob`/`export_with_cancel`/
 # `Cancel`)。workspace.dependencies に既存の alias があるのでそのまま使う。
@@ -87,3 +89,14 @@ motolii-testkit.workspace = true
 # 2ライン共存事故になる(survey §2.4 item 4)ため、本体と常に同 rev で運用する。
 # dev-only、shell の外へは出さない。
 iced_test = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }
+# 第2波(2026-08-22、File 束の rfd 非同期化): `Message::Xxx` が返す
+# `iced::Task<Message>`(= `iced_runtime::task::Task`、`iced` crate は
+# `pub use crate::runtime::task::{Handle, Task};` で再輸出しているだけの同じ
+# 型)を試験から同期に汲み取るための `iced_runtime::task::into_stream`/
+# `iced_runtime::Action` だけを使う(`tests/suite/file_drive.rs::drain_task`
+# 冒頭 doc 参照)。`iced` 経由では `into_stream` が re-export されていない
+# (`iced::task` は `Handle`/`Task` のみ再輸出、フォーク `src/lib.rs` 実測)ため
+# 直接依存として足す ── 依存グラフには `iced`/`iced_test` 経由で既に同じ rev が
+# 入っているので新規の依存ではない(裁定117 が許す direct 昇格と同型)。
+# dev-only、shell の外へは出さない。
+iced_runtime = { git = "https://github.com/oshikaidesu/iced", rev = "73e686ee05efd7d1b61cfea2647186b336d9ab9c" }

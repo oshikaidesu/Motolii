@@ -23,8 +23,11 @@
 //!   646(AME キュー)。
 //!
 //! ## 実能力との対応(全項目が実在識別子に紐づく)
-//! - **出力先**: `motolii_export::ExportJob::out_path`。**表示のみ** — path 選択は
-//!   rfd(裁定176 の `FileDialogs` 経由)で**次波・見送り**(発注書どおり)。
+//! - **出力先**: `motolii_export::ExportJob::out_path`。path 選択は rfd
+//!   (裁定176 の `FileDialogs` 経由、[`Message::PickOutputPath`] →
+//!   `motolii-shell` が `FileDialogs::pick_export_path` を非同期に呼び
+//!   [`Message::OutputPathChosen`] で戻す ── File 束の rfd 非同期化と同時発注、
+//!   2026-08-22 第2波で消化)。
 //! - **フォーマット/コーデック**: `motolii_media::Encoder` の実対応は
 //!   **MP4 / H.264 の1種のみ**([`CONTAINER_CODEC_LABEL`])— 選べない物に選択
 //!   UI を飾らない(read-only 表示)。実在する唯一の選択肢は品質:
@@ -70,6 +73,10 @@
 //! 3. 腕: [`Message::ToggleExportDialog`] = open 反転(表示だけのトグル —
 //!    Document にも undo にも乗らない、歯車トグルと同格)/
 //!    [`Message::QualitySelect`]・[`Message::RangeSelect`] = 状態代入 /
+//!    [`Message::PickOutputPath`] = `Task::perform(dialogs.pick_export_path(..),
+//!    |p| Message::Export(Message::OutputPathChosen(p)))` /
+//!    [`Message::OutputPathChosen`] = `Some(path)` なら `export_out_path` へ
+//!    代入・`None`(キャンセル)は無視 /
 //!    [`Message::Export`] = `motolii_export::ExportJob { out_path, qp0:
 //!    quality.qp0() }` を組んで `export_with_cancel`(範囲は上記逸脱参照)/
 //!    [`Message::CancelExport`] = 保持している `Cancel` の `.cancel()`。
@@ -100,6 +107,14 @@ pub enum Message {
     QualitySelect(ExportQuality),
     /// 範囲の選択(全体 / 作業範囲のみ)。同じく即時確定。
     RangeSelect(ExportRange),
+    /// 書き出し先の選択(2026-08-22 第2波、File 束の rfd 非同期化と同時発注)。
+    /// shell が `FileDialogs::pick_export_path` を非同期に呼ぶだけの引き金 ──
+    /// この時点ではまだ path は確定しない(結果は [`Message::
+    /// OutputPathChosen`] で戻る)。
+    PickOutputPath,
+    /// [`Message::PickOutputPath`] の結果。`None` = キャンセル(現在の
+    /// `out_path` を変えない)。
+    OutputPathChosen(Option<std::path::PathBuf>),
     /// Export 実行(map 529 消化)。shell が `motolii_export::ExportJob` を
     /// 組んで `export_with_cancel` を回す(crate doc「shell 結線」)。
     Export,
@@ -333,8 +348,7 @@ pub fn view(model: ViewModel<'_>, dims: Dimensions, colors: Colors) -> Element<'
             let mut rows: Vec<Element<'static, Message>> = vec![
                 // OUTPUT: 出力先(表示のみ)+フォーマット+品質。
                 section_header("OUTPUT", dims, colors),
-                destination_row(model.out_path, dims, colors),
-                hint_row("出力先の選択は次波(rfd)— 今は表示のみ", dims, colors),
+                destination_row(model.out_path, !running, dims, colors),
                 info_row("Format", CONTAINER_CODEC_LABEL.to_owned(), dims, colors),
                 toggle_row(
                     "Lossless(qp0)",
@@ -425,10 +439,14 @@ fn info_row(
     .into()
 }
 
-/// 出力先行。path があれば表示、無ければ「未設定」を muted で(理由は直下の
-/// hint 行が言う)。
+/// 出力先行。path があれば表示、無ければ「未設定」を muted で。**Choose…**
+/// ボタン([`Message::PickOutputPath`])が rfd 経由の選択を引く(2026-08-22
+/// 第2波 — 従来は表示のみだった)。`can_pick = false`(実行中)の間は
+/// `on_press` を付けない(button が自分で Disabled の顔になる、run_row と
+/// 同じ規律)。
 fn destination_row(
     out_path: Option<&Path>,
+    can_pick: bool,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -436,12 +454,18 @@ fn destination_row(
         Some(path) => (path.display().to_string(), colors.text_primary),
         None => ("未設定".to_owned(), colors.text_muted),
     };
+    let mut choose = button(text("Choose…").size(dims.body_text))
+        .style(move |_theme, status| button_style(dims, colors, status));
+    if can_pick {
+        choose = choose.on_press(Message::PickOutputPath);
+    }
     row![
         text("Destination")
             .size(dims.body_text)
             .color(colors.text_primary)
             .width(Length::Fill),
         text(value).size(dims.body_text).color(color),
+        choose,
     ]
     .spacing(dims.spacing_xs)
     .height(Length::Fixed(dims.inspector_row_height))

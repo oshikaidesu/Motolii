@@ -126,11 +126,15 @@ fn clicking_edit_reveals_items_and_clicking_undo_publishes_undo() {
 fn every_menu_item_appears_with_its_shortcut_and_publishes_its_message() {
     // (トップレベル, 項目, shortcut 表記, publish される Message の判定)
     let table: Vec<(&str, &str, Option<&str>, fn(&Message) -> bool)> = vec![
-        // ---- File(MB-1 の4動詞そのまま) ----
+        // ---- File(MB-1 の4動詞+第2波の Open/Import Media…) ----
         ("File", "New Project", Some("Cmd+N"), |m| matches!(m, Message::NewProjectRequested)),
+        // id 1226「Open Project」— shortcut 出典ゼロ(menu.rs::menus doc)。
+        ("File", "Open…", None, |m| matches!(m, Message::OpenRequested)),
         ("File", "Save As…", Some("Cmd+Shift+S"), |m| matches!(m, Message::SaveAsRequested)),
         // Save a Copy は normal-map の shortcut 出典ゼロ — 飾り shortcut 禁止。
         ("File", "Save a Copy…", None, |m| matches!(m, Message::SaveACopyRequested)),
+        // id 592「Import (media/file)」の第2の入口 — 実キー未確認のため併記なし。
+        ("File", "Import Media…", None, |m| matches!(m, Message::ImportMediaRequested)),
         ("File", "Quit", Some("Cmd+Q"), |m| matches!(m, Message::QuitRequested)),
         // ---- Edit(既存 menu.rs の8動詞 — Undo/Redo 含む) ----
         ("Edit", "Undo", Some("Cmd+Z"), |m| matches!(m, Message::Undo)),
