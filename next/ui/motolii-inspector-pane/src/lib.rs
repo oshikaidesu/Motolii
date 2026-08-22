@@ -99,9 +99,7 @@ use motolii_store::{
     LayerSource, PropertyId, StoreError, StoreView, Value,
 };
 
-use motolii_settings_pane::chrome::{
-    button_style, parse_number, section_header, value_input_style,
-};
+use motolii_settings_pane::chrome::{parse_number, section_header, value_input_style};
 use motolii_shell_state::Session;
 use motolii_tokens_rs::{Colors, Dimensions, Ink, TextWeight};
 
@@ -1630,7 +1628,9 @@ fn transform_row(
 
 /// 発注書「読み取り専用値は編集セルと同一形状で色だけ落とす」を1箇所で守る —
 /// absent(muted)・editable(text_input)・animated(accent, 表示のみ)のどれでも
-/// 同じ箱(背景 `surface_app`・同じ幅高さ)を作る。
+/// 同じ形(同じ幅高さ)を作る。線化 D2(裁定179「箱は状態の器」)以降、
+/// 平常はどれも素の表示(面・輪郭なし)— 箱が現れるのは editable セルの
+/// hover([`value_box_style`])と編集中(`value_input_style`)だけ。
 fn value_cell(
     slot: &ComponentSlot,
     field_draft: Option<&FieldDraft>,
@@ -1723,6 +1723,9 @@ fn value_cell(
 /// の `mouse_area` は自分の bounds を出た cursor を追えない(pointer capture が
 /// 無い実測)ので、値セル自身の当たり判定は「drag を armed にする press」だけに
 /// 絞ってある — 感度どおりに動かすとすぐこの38px幅を出るため。
+///
+/// 線化 D2(裁定179): 箱は [`HoverValueBox`] — 平常は素の数字、hover で箱
+/// ([`value_box_style`])。幾何・clip・event 経路は旧 `container` と同一。
 fn draggable_value_cell(
     field: TransformField,
     displayed: String,
@@ -1730,42 +1733,212 @@ fn draggable_value_cell(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    mouse_area(
-        container(
-            text(displayed)
-                .size(dims.body_text)
-                .color(value_color)
-                .align_x(iced::alignment::Horizontal::Center)
-                .align_y(iced::alignment::Vertical::Center),
-        )
-        .width(Length::Fixed(dims.inspector_value_width))
-        .height(Length::Fixed(value_cell_height(dims)))
-        .align_x(iced::alignment::Horizontal::Center)
-        .align_y(iced::alignment::Vertical::Center)
-        .style(move |_theme| container::Style {
-            background: Some(iced::Background::Color(colors.surface_app)),
-            border: iced::Border {
-                color: colors.border_default,
-                width: dims.border_width,
-                radius: 0.0.into(),
-            },
-            ..container::Style::default()
-        })
-        // 裁定168 施工(違反(B)の根治・実窓較正「960.000540.000」の再現点):
-        // 中の `text(..)` は明示 `.width()` を持たない(Shrink)ため、内容が
-        // 箱の名目幅(38px)より広ければ実際の描画は箱の外まで伸びる
-        // (`iced_core::widget::text::layout` は `layout::sized` で **layout上の
-        // サイズだけ**を箱の max へ丸め込むが、`draw()` は
-        // `paragraph.min_bounds()` という自然サイズを基準に文字を置くため、
-        // layout 上は重ならなくても paint は重なる — 実測 `debug_natural_
-        // text_width`/`value_cell_legibility.rs` 参照)。`clip(true)` で
-        // 隣接セルへの越境そのものを断つ — padding/gap の調整だけでは
-        // 箱幅を変えない以上この経路は塞がらない。
-        .clip(true),
-    )
+    mouse_area(hover_value_box(
+        text(displayed)
+            .size(dims.body_text)
+            .color(value_color)
+            .align_x(iced::alignment::Horizontal::Center)
+            .align_y(iced::alignment::Vertical::Center)
+            .into(),
+        dims,
+        colors,
+    ))
     .interaction(iced::mouse::Interaction::ResizingHorizontally)
     .on_press(Message::ValuePressed(field))
     .into()
+}
+
+// ---------------------------------------------------------------------------
+// 線化 D2: hover を知る値セルの箱(`container` 同型の最小 widget)
+// ---------------------------------------------------------------------------
+
+use iced::advanced::layout::{self as adv_layout, Layout};
+use iced::advanced::renderer as adv_renderer;
+use iced::advanced::widget::{self as adv_widget, Widget};
+
+/// 値セル(表示状態)の箱。`container` と同型の最小 widget だが、style を
+/// **draw 時の cursor 実測**で選ぶ([`ValueBoxStatus`] → [`value_box_style`])。
+/// iced 0.15 の `container` は style closure に status を渡さない
+/// (`Fn(&Theme) -> Style`)ため、「hover でだけ箱が現れる」(裁定179)を
+/// container のままでは書けない — hover 状態を Shell に持たせて view へ配る
+/// 迂回より、自分の境界に素直な口を1本作る(wrapper>ハック、2026-08-18裁定。
+/// `button` が draw 時に `is_mouse_over` で `Status::Hovered` を決めるのと
+/// 同じ判定・同じ時点であり、状態は transient すら持たない)。
+///
+/// **幾何は旧 container と同一**(発注書「幾何を変えない」の施工点):
+/// - `operate` は `container::operate` と同じく自分の bounds を
+///   `operation.container(None, ..)` で1回だけ登録してから内容へ traverse —
+///   shell 側 `inspector_pixel_fence` の Container 数え上げ(値セル
+///   64×(row-4) が15個)はこの widget でも同じ1個として見える。
+/// - layout は公開ヘルパ `container::layout` を固定幅高・padding 0・中央寄せで
+///   そのまま呼ぶ(旧 `.width(Fixed)/.height(Fixed)/.align_*(Center)` と同値)。
+/// - draw は `container::draw_background` + clipped viewport(旧 `.clip(true)`
+///   と同じ越境遮断 — 裁定168 の根治点を維持)。
+/// - update/mouse_interaction/overlay は内容へ素通し(event 経路に触れない —
+///   press を own するのは外側の `mouse_area` のまま)。
+struct HoverValueBox {
+    content: Element<'static, Message>,
+    dims: Dimensions,
+    colors: Colors,
+}
+
+fn hover_value_box(
+    content: Element<'static, Message>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    Element::new(HoverValueBox {
+        content,
+        dims,
+        colors,
+    })
+}
+
+impl Widget<Message, iced::Theme, iced::Renderer> for HoverValueBox {
+    fn tag(&self) -> adv_widget::tree::Tag {
+        self.content.as_widget().tag()
+    }
+
+    fn state(&self) -> adv_widget::tree::State {
+        self.content.as_widget().state()
+    }
+
+    fn diff(&mut self, tree: &mut adv_widget::Tree) {
+        self.content.as_widget_mut().diff(tree);
+    }
+
+    fn size(&self) -> iced::Size<Length> {
+        iced::Size {
+            width: Length::Fixed(self.dims.inspector_value_width),
+            height: Length::Fixed(value_cell_height(self.dims)),
+        }
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut adv_widget::Tree,
+        renderer: &iced::Renderer,
+        limits: &adv_layout::Limits,
+    ) -> adv_layout::Node {
+        container::layout(
+            limits,
+            Length::Fixed(self.dims.inspector_value_width),
+            Length::Fixed(value_cell_height(self.dims)),
+            iced::Padding::ZERO,
+            iced::alignment::Horizontal::Center,
+            iced::alignment::Vertical::Center,
+            |limits| self.content.as_widget_mut().layout(tree, renderer, limits),
+        )
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut adv_widget::Tree,
+        layout: Layout<'_>,
+        renderer: &iced::Renderer,
+        operation: &mut dyn adv_widget::Operation,
+    ) {
+        operation.container(None, layout.bounds());
+        operation.traverse(&mut |operation| {
+            self.content.as_widget_mut().operate(
+                tree,
+                layout.children().next().unwrap(),
+                renderer,
+                operation,
+            );
+        });
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut adv_widget::Tree,
+        event: &iced::Event,
+        layout: Layout<'_>,
+        cursor: iced::mouse::Cursor,
+        renderer: &iced::Renderer,
+        shell: &mut iced::advanced::Shell<'_, Message>,
+        viewport: &iced::Rectangle,
+    ) {
+        self.content.as_widget_mut().update(
+            tree,
+            event,
+            layout.children().next().unwrap(),
+            cursor,
+            renderer,
+            shell,
+            viewport,
+        );
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &adv_widget::Tree,
+        layout: Layout<'_>,
+        cursor: iced::mouse::Cursor,
+        viewport: &iced::Rectangle,
+        renderer: &iced::Renderer,
+    ) -> iced::mouse::Interaction {
+        self.content.as_widget().mouse_interaction(
+            tree,
+            layout.children().next().unwrap(),
+            cursor,
+            viewport,
+            renderer,
+        )
+    }
+
+    fn draw(
+        &self,
+        tree: &adv_widget::Tree,
+        renderer: &mut iced::Renderer,
+        theme: &iced::Theme,
+        renderer_style: &adv_renderer::Style,
+        layout: Layout<'_>,
+        cursor: iced::mouse::Cursor,
+        viewport: &iced::Rectangle,
+    ) {
+        let bounds = layout.bounds();
+        let status = if cursor.is_over(bounds) {
+            ValueBoxStatus::Hovered
+        } else {
+            ValueBoxStatus::Idle
+        };
+        let style = value_box_style(self.dims, self.colors, status);
+
+        // 旧実装の `.clip(true)` と同値: 内容の paint は常に箱の bounds へ
+        // 切り詰める(裁定168 — 隣接セルへの文字の越境を構造的に断つ)。
+        if let Some(clipped_viewport) = bounds.intersection(viewport) {
+            container::draw_background(renderer, &style, bounds);
+            self.content.as_widget().draw(
+                tree,
+                renderer,
+                theme,
+                &adv_renderer::Style {
+                    text_color: style.text_color.unwrap_or(renderer_style.text_color),
+                },
+                layout.children().next().unwrap(),
+                cursor,
+                &clipped_viewport,
+            );
+        }
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut adv_widget::Tree,
+        layout: Layout<'b>,
+        renderer: &iced::Renderer,
+        viewport: &iced::Rectangle,
+        translation: iced::Vector,
+    ) -> Option<iced::advanced::overlay::Element<'b, Message, iced::Theme, iced::Renderer>> {
+        self.content.as_widget_mut().overlay(
+            tree,
+            layout.children().next().unwrap(),
+            renderer,
+            viewport,
+            translation,
+        )
+    }
 }
 
 /// mock `.prow .v { height: calc(var(--row) - 4*var(--s)*1px) }` の `4` は
@@ -1809,7 +1982,7 @@ fn boxed_value(
     content: String,
     color: iced::Color,
     dims: Dimensions,
-    colors: Colors,
+    _colors: Colors,
 ) -> Element<'static, Message> {
     container(
         text(content)
@@ -1822,10 +1995,10 @@ fn boxed_value(
     .height(Length::Fixed(value_cell_height(dims)))
     .align_x(iced::alignment::Horizontal::Center)
     .align_y(iced::alignment::Vertical::Center)
-    .style(move |_theme| container::Style {
-        background: Some(iced::Background::Color(colors.surface_app)),
-        ..container::Style::default()
-    })
+    // 線化 D2(裁定179): 面も輪郭も塗らない — 素の表示だけ。非対話セル
+    // (absent「—」・fallback)なので hover 箱も出さない(触れない物に
+    // 触れそうな箱を出さない — Q0 と同じ判断)。幾何(固定幅高)は不変。
+    .style(move |_theme| container::Style::default())
     // 裁定168 施工(違反(B)の根治): `draggable_value_cell` と同じ理由 —
     // absent(「—」)/animated 表示も同じ箱形を共有するので、越境の柵も揃える。
     .clip(true)
@@ -1834,14 +2007,14 @@ fn boxed_value(
 
 /// scalar 行(Opacity)の空き枠(X/Y列)。中身の無い箱 — grid の穴埋めであって
 /// 「このモデルに無い軸」ではない(`value_cell` の absent 表現とは別の意味)。
-fn blank_value_cell(dims: Dimensions, colors: Colors) -> Element<'static, Message> {
+/// 線化 D2(裁定179)で面(`surface_app`)を落とした — 穴は何も描かない。
+/// 幾何(固定幅高の Container)は不変(`inspector_pixel_fence` の数え上げに
+/// そのまま載る)。
+fn blank_value_cell(dims: Dimensions, _colors: Colors) -> Element<'static, Message> {
     container(text(""))
         .width(Length::Fixed(dims.inspector_value_width))
         .height(Length::Fixed(value_cell_height(dims)))
-        .style(move |_theme| container::Style {
-            background: Some(iced::Background::Color(colors.surface_app)),
-            ..container::Style::default()
-        })
+        .style(move |_theme| container::Style::default())
         .into()
 }
 
@@ -1940,10 +2113,20 @@ fn glyph_button_style(
 ) -> button::Style {
     // mock `.glyph{color:var(--ink2)}` — 非 active 状態は ink2(secondary)。
     // 旧実装は ink3(`text_muted`)を誤用していた(2026-08-21 更正)。
-    let (border_color, text_color) = if active {
-        (colors.action_active, colors.action_active)
+    //
+    // 線化 D2(裁定179「チップ輪郭=選択時のみ」): 輪郭は active(hidden=on)の
+    // 時だけ accent 縁で出す — 状態の器。非 active の平常は素の文字、hover は面。
+    let (border, text_color) = if active {
+        (
+            iced::Border {
+                color: colors.action_active,
+                width: dims.border_width,
+                radius: 0.0.into(),
+            },
+            colors.action_active,
+        )
     } else {
-        (colors.border_default, Ink::Secondary.resolve(&colors))
+        (iced::Border::default(), Ink::Secondary.resolve(&colors))
     };
     let background = match status {
         button::Status::Hovered => colors.surface_hover,
@@ -1952,11 +2135,70 @@ fn glyph_button_style(
     button::Style {
         background: Some(iced::Background::Color(background)),
         text_color,
-        border: iced::Border {
-            color: border_color,
-            width: dims.border_width,
-            radius: 0.0.into(),
+        border,
+        ..button::Style::default()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 線化 D2(裁定179「箱は状態の器」): 常時輪郭の廃止 — style 層だけ。
+// 正本= docs/reviews/2026-08-22-chrome-grammar-audit.md §文法4。
+// ---------------------------------------------------------------------------
+
+/// 値セル(表示状態)の箱の状態。**Shell に hover 状態を持たせない** —
+/// [`hover_value_box`] の widget が draw 時の cursor 実測
+/// (`Cursor::is_over`)からその場で決める(`button` が `Status::Hovered` を
+/// 作るのと同じ時点・同じ判定 — transient すら持たない、純粋な描画時判定)。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ValueBoxStatus {
+    /// 平常 — 素の数字(箱なし。AE 型、裁定179「値セル=素の数字+hover 箱」)。
+    Idle,
+    /// cursor が箱の上 — 箱が現れる(name 欄 hover と同じ
+    /// `surface_hover`+`border_default` の文法 — 2箇所で別の意匠を発明しない)。
+    Hovered,
+}
+
+/// 値セル(表示状態)の箱 style。編集中(typing draft)は従来どおり
+/// `chrome::value_input_style`(箱+focus 縁)、drag 中は cursor が
+/// セル上に居る間この Hovered 箱がそのまま見える(view は drag 状態を
+/// 受け取らない — 逸脱として RETURN に記録)。
+fn value_box_style(dims: Dimensions, colors: Colors, status: ValueBoxStatus) -> container::Style {
+    match status {
+        // 面も輪郭も無し — 素の数字だけ(数字の ink は呼び手が text 側で塗る:
+        // text_primary / キー持ち accent は従来のまま)。
+        ValueBoxStatus::Idle => container::Style::default(),
+        // name 欄 hover(`name_input_style` の Hovered)と同じ面+枠。
+        ValueBoxStatus::Hovered => container::Style {
+            background: Some(iced::Background::Color(colors.surface_hover)),
+            border: iced::Border {
+                color: colors.border_default,
+                width: dims.border_width,
+                radius: 0.0.into(),
+            },
+            ..container::Style::default()
         },
+    }
+}
+
+/// Inspector 内の button(Blend 巡回・Speed Reset)の style。枠の文法
+/// (裁定179): 輪郭なし・素の文字、hover/press で面だけが変わる —
+/// `motolii-menubar::leaf_style` と同じ文法(menubar レーンが先に施工した
+/// 裁定179 の正本転写。crate 境界を跨ぐので式だけ揃える、menubar と同じ判断)。
+fn flat_button_style(colors: Colors, status: button::Status) -> button::Style {
+    let background = match status {
+        button::Status::Hovered => Some(iced::Background::Color(colors.surface_hover)),
+        button::Status::Pressed => Some(iced::Background::Color(colors.state_selected)),
+        button::Status::Active | button::Status::Disabled => None,
+    };
+    let text_color = if status == button::Status::Disabled {
+        colors.state_disabled
+    } else {
+        colors.text_primary
+    };
+    button::Style {
+        background,
+        text_color,
+        border: iced::Border::default(),
         ..button::Style::default()
     }
 }
@@ -2012,7 +2254,7 @@ fn attrs_section(
             .width(Length::Fill),
         button(text(attrs.blend_mode.clone()).size(dims.body_text))
             .on_press(Message::CycleBlendMode)
-            .style(move |_theme, status| button_style(dims, colors, status)),
+            .style(move |_theme, status| flat_button_style(colors, status)),
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
@@ -2048,6 +2290,9 @@ fn speed_row(
 
     // 裁定170 M01: fork の text_input が借用寿命を返り値に縛るため
     // owned move(値不変)。
+    // 線化 D2(裁定179): 常設の text_input なので `value_input_style`(常時箱)
+    // ではなく name 欄と同じ [`name_input_style`](平常=素・hover=面+枠・
+    // focus=箱+focus 縁)へ合流 — 2箇所で別の意匠を発明しない。
     let value_field = text_input("", displayed)
         .on_input(Message::SpeedInput)
         .on_submit(Message::SpeedSubmit)
@@ -2055,7 +2300,7 @@ fn speed_row(
         .width(Length::Fixed(dims.inspector_value_width))
         .padding(value_cell_padding(dims))
         .align_x(iced::alignment::Horizontal::Center)
-        .style(move |_theme, status| value_input_style(dims, colors, status));
+        .style(move |_theme, status| name_input_style(dims, colors, status));
 
     let content = row_widget![
         text("Speed")
@@ -2066,7 +2311,7 @@ fn speed_row(
         text("%").size(dims.caption_text).color(colors.text_muted),
         button(text("Reset").size(dims.caption_text))
             .on_press(Message::ResetSpeed)
-            .style(move |_theme, status| button_style(dims, colors, status)),
+            .style(move |_theme, status| flat_button_style(colors, status)),
     ]
     .spacing(dims.spacing_xs)
     .align_y(iced::alignment::Vertical::Center);
@@ -2847,5 +3092,139 @@ mod tests {
              再転写(inspector_row_height=25)がこの根治の前提なので、\
              どちらかの値が意図せず動いた疑いがある"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // 線化 D2(裁定179「箱は状態の器」): style 関数レベルの柵。
+    // widget tree で hover の Status を作れない(iced_test の Simulator は
+    // cursor を置けるが container の style closure は status を受けない)ので、
+    // style fn を直接呼んで固定する(発注書の指定どおり)。
+    // -----------------------------------------------------------------------
+
+    /// 「輪郭が消えている」の判定: width 0 か色が完全透明のどちらかなら
+    /// 輪郭は描かれない(`container::draw_background` は `border.width > 0.0`
+    /// でだけ quad を出す、fork 実測)。
+    fn border_is_invisible(border: iced::Border) -> bool {
+        border.width == 0.0 || border.color.a == 0.0
+    }
+
+    /// 値セル(表示状態): 平常は素の数字(面なし・輪郭透明)、hover でだけ
+    /// 箱が現れる(既存 surface_hover 文法 — name 欄 hover と同じ)。
+    #[test]
+    fn the_value_box_is_bare_at_rest_and_boxed_on_hover() {
+        let dims = Dimensions::default();
+        let colors = Colors::default();
+
+        let idle = value_box_style(dims, colors, ValueBoxStatus::Idle);
+        assert!(
+            idle.background.is_none(),
+            "平常の値セルに面が残っている: {:?}",
+            idle.background
+        );
+        assert!(
+            border_is_invisible(idle.border),
+            "平常の値セルに不透明な輪郭が残っている: {:?}",
+            idle.border
+        );
+
+        let hovered = value_box_style(dims, colors, ValueBoxStatus::Hovered);
+        assert_eq!(
+            hovered.background,
+            Some(iced::Background::Color(colors.surface_hover)),
+            "hover の値セルに面(surface_hover)が現れない"
+        );
+        assert_eq!(hovered.border.color, colors.border_default);
+        assert!(
+            hovered.border.width > 0.0 && hovered.border.color.a > 0.0,
+            "hover の値セルに不透明な輪郭が現れない: {:?}",
+            hovered.border
+        );
+    }
+
+    /// Blend/Reset ボタン: 平常は素の文字(面なし・輪郭なし)、hover で面、
+    /// press で選択面(menubar `leaf_style` と同じ裁定179 文法)。
+    #[test]
+    fn the_inspector_buttons_are_bare_at_rest_and_faced_on_hover() {
+        let colors = Colors::default();
+
+        let rest = flat_button_style(colors, button::Status::Active);
+        assert!(
+            rest.background.is_none(),
+            "平常のボタンに面が残っている: {:?}",
+            rest.background
+        );
+        assert!(
+            border_is_invisible(rest.border),
+            "平常のボタンに輪郭が残っている: {:?}",
+            rest.border
+        );
+        assert_eq!(rest.text_color, colors.text_primary);
+
+        let hovered = flat_button_style(colors, button::Status::Hovered);
+        assert_eq!(
+            hovered.background,
+            Some(iced::Background::Color(colors.surface_hover))
+        );
+        assert!(border_is_invisible(hovered.border), "hover のボタンは面のみ(輪郭は出さない)");
+
+        let pressed = flat_button_style(colors, button::Status::Pressed);
+        assert_eq!(
+            pressed.background,
+            Some(iced::Background::Color(colors.state_selected))
+        );
+    }
+
+    /// M glyph: 輪郭は active(hidden=on)の時だけ(裁定179「チップ輪郭=
+    /// 選択時のみ」)。非 active の平常は素の文字、hover は面。
+    #[test]
+    fn the_mute_glyph_wears_its_outline_only_while_active() {
+        let dims = Dimensions::default();
+        let colors = Colors::default();
+
+        let off = glyph_button_style(dims, colors, button::Status::Active, false);
+        assert!(
+            border_is_invisible(off.border),
+            "非 active の M glyph に常時輪郭が残っている: {:?}",
+            off.border
+        );
+
+        let off_hover = glyph_button_style(dims, colors, button::Status::Hovered, false);
+        assert_eq!(
+            off_hover.background,
+            Some(iced::Background::Color(colors.surface_hover))
+        );
+
+        let on = glyph_button_style(dims, colors, button::Status::Active, true);
+        assert_eq!(on.border.color, colors.action_active, "active の M glyph は accent 縁(状態の器)");
+        assert!(on.border.width > 0.0);
+        assert_eq!(on.text_color, colors.action_active);
+    }
+
+    /// Speed 欄が採る text_input 文法(name 欄と同一の `name_input_style`):
+    /// 平常=素・hover=面+枠・focus=箱+focus 縁。既存文法の pin(この文法へ
+    /// Speed 欄を合流させるのが D2 の変更 — 文法そのものは name 欄で施工済み)。
+    #[test]
+    fn the_bare_input_grammar_shows_its_box_only_on_hover_or_focus() {
+        let dims = Dimensions::default();
+        let colors = Colors::default();
+
+        let rest = name_input_style(dims, colors, text_input::Status::Active);
+        assert_eq!(
+            rest.background,
+            iced::Background::Color(iced::Color::TRANSPARENT)
+        );
+        assert!(border_is_invisible(rest.border));
+
+        let hovered = name_input_style(dims, colors, text_input::Status::Hovered);
+        assert_eq!(hovered.background, iced::Background::Color(colors.surface_hover));
+        assert_eq!(hovered.border.color, colors.border_default);
+
+        let focused = name_input_style(
+            dims,
+            colors,
+            text_input::Status::Focused { is_hovered: false },
+        );
+        assert_eq!(focused.background, iced::Background::Color(colors.surface_app));
+        assert_eq!(focused.border.color, colors.action_active);
     }
 }
