@@ -13,14 +13,15 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| MW-probe | probe | worktree(probes/scratch) | 裁定188 のゲート: iced daemon/multiwindow 実測(単一 device 複数 Surface・view(window::Id) signature・Stage 単一 surface 前提・Settings 窓最小形)。verdict 緑/黄/黒 |
-| LN-D5 | 実装 | worktree(4 crate style) | 区切り線→明度1段(chrome 監査最終枚): 線の棚卸し3分類台帳つき・状態の器(focus/選択/編集)は線のまま・幾何不変 |
+| MW-S12 | 実装 | worktree(shell) | 浮かし実装: S1 daemon 骨格(挙動不変・main閉=exit)→ S2 Settings 窓移住(浮かし第1号・screenshot 器具は Settings 対象外へ明示変更) |
 
 
 ## 完了・main 着地済み(実装)
 
 | レーン | 結果 |
 |---|---|
+| MW-probe(緑・merge) | r5-multiwindow — device/queue 全窓共有を実測確定(跨窓 write_buffer 生存)・zero-copy 無傷・Settings 窓最小形動作。注意2点(全窓閉 device 破棄・screenshot 器具)を S 発注書へ継承 |
+| LN-D5(検収合格・merge) | 区切り線→明度1段 — **chrome 監査 D1〜D6 完結**。棚卸し3分類台帳(置換/状態の器で残す/保留2件= screenshot 鏡・settings 値セル箱)。status 帯は面1段で可読性維持。fence 4本新設・427緑 |
 | MB-2(検収合格・merge) | ヘッダー箱ボタン列→ menubar(File/Edit/Layer/View・shortcut 併記の実行照合 oracle)+右端 icon ボタン2(icon+tooltip ペア第1号)。**Freeze/Unfreeze 初露出**(新 Message 2本 — 逸脱受理・group_drive 3本)。menu.rs は意味台帳化(widget 自作 348行を撤去)。q0 除外は MenuBar 自己登録 bounds の最小面積のみ。267緑 |
 | LN-D2(検収合格・merge) | Inspector 値セル/ボタンの常時輪郭廃止 — `HoverValueBox` wrapper(fork container が hover status を持たない実測への「迂回よりwrapper」)。幾何不変を ±1px 柵の緑で証明。drag 中視覚は hover 箱で代替(利用者チェックリスト行き)。66緑 |
 | LN-D4(検収合格・merge) | Browser チップ/rail 輪郭を選択の器へ — mock の非選択常時輪郭だけ裁定179 が上書き(衝突点の明示)。透明 border 方式で幾何不変。容器罫線は D5 の領分と線引き。74緑 |
