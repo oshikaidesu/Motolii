@@ -3,9 +3,12 @@
 //! ここで固定するのは:
 //! - `hd`(Hidden)は present(削除)とは別に「今フレームは描かない」を作れる
 //! - `parent` は循環参照を作れない
-//! - `bm`(Blend Mode)/matte が resolve へ運ばれる
+//! - `bm`(Blend Mode)/matte が resolve へ運ばれる、`ResolvedLayer.id` で
+//!   `resolved_layers()` の中からマット元を突き合わせられる(BL4)
 //! - `nm`(Name)/`ao`(Auto Orient)が attrs に載る
 //! - `lv`(Level)/`tm`(Time Remap)は普通の property track として効く
+//! - `pan`/`fade_in`/`fade_out`(Lottie 圏外・motolii 独自)も `lv` と同型の
+//!   普通の property track(AUD レーンの音声整形が読む口)
 //! - `sr`(Time Stretch)が comp フレームの進みを比でスケールする
 //! - null layer は絵を持たない
 //! - shape-layer / text-layer は `LayerSource` の variant として存在し、中身は別 component
@@ -188,11 +191,48 @@ fn blend_mode_and_matte_reach_the_resolved_layer() {
             mode: MatteMode::Luma
         })
     );
+    assert_eq!(resolved.id, top, "ResolvedLayer は自分の LayerId を運ぶ(BL4)");
 
     // 属性を一度も書いていない layer は既定(Normal / matte 無し)。
     let base_resolved = doc.view().resolve(base, t(0)).unwrap().expect("居る");
     assert_eq!(base_resolved.blend_mode, BlendMode::Normal);
     assert_eq!(base_resolved.matte, None);
+    assert_eq!(base_resolved.id, base);
+}
+
+/// **BL4**: `resolved_layers()` が返す `Vec<ResolvedLayer>` の中から、`matte.layer`
+/// が指すマット元の layer を `id` 突き合わせで引ける。これが engine 側の欠けていた口
+/// (`Vec<ResolvedLayer>` に `LayerId` が無いので `matte.layer` を突き合わせられず、
+/// `render_frame` 経路が黙って `UnsupportedMatte` で止まっていた)を塞ぐ——
+/// store が最小限提供すべきなのは、この突き合わせが**別の resolve 呼び出しなしで**
+/// 1回の `resolved_layers()` の中だけで完結すること。
+#[test]
+fn resolved_layers_lets_the_matte_source_be_found_by_id() {
+    let mut doc = doc_with_comp(300);
+    let (base, top) = (LayerId(1), LayerId(2));
+    place(&mut doc, base, solid(), 0, 100);
+    place(&mut doc, top, solid(), 0, 100);
+
+    doc.apply(Intent::SetAttrs {
+        layer: top,
+        patch: LayerAttrsPatch {
+            matte: Some(Some(Matte {
+                layer: base,
+                mode: MatteMode::Luma,
+            })),
+            ..Default::default()
+        },
+    })
+    .unwrap();
+
+    let resolved = doc.view().resolved_layers(t(0)).unwrap();
+    let top_resolved = resolved.iter().find(|l| l.id == top).expect("top が居る");
+    let matte = top_resolved.matte.expect("matte を設定した");
+    let source = resolved
+        .iter()
+        .find(|l| l.id == matte.layer)
+        .expect("matte 元 layer が同じ resolved_layers() の中で引けるはず");
+    assert_eq!(source.id, base);
 }
 
 /// **BL2**: `Add`(裁定67 が後回しにしていた値、`next/core/motolii-store/src/attrs.rs`
@@ -545,6 +585,57 @@ fn level_is_a_plain_animatable_property() {
         doc.view().value_at(layer, &property, t(0)).unwrap(),
         Some(Value::F64(0.5))
     );
+}
+
+// ---------------------------------------------------------------------------
+// pan / fade_in / fade_out — Lottie 圏外の motolii 独自 audio property。
+// `lottie-coverage.tsv` の `layers/audio-settings` 束は `lv`(Level)1行だけで、
+// pan/fade に対応する語彙が無い(音声の空間配置・自動フェードは Lottie 仕様の
+// 対象外)。`LEVEL` と同じ「専用 component を作らず普通の property track に乗せる」
+// 形をそのまま踏襲するので、`level_is_a_plain_animatable_property` と同型の試験になる。
+// ---------------------------------------------------------------------------
+
+#[test]
+fn pan_fade_in_fade_out_are_plain_animatable_properties_with_no_track_meaning_disabled() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place(&mut doc, layer, solid(), 0, 100);
+
+    for (name, value) in [
+        (property::PAN, -0.5),
+        (property::FADE_IN, 1.5),
+        (property::FADE_OUT, 2.0),
+    ] {
+        let property = PropertyId::new(name).unwrap();
+        // track が無い間は「値が無い」— 「既定=無効」は Document ではなく読み手
+        // (engine/audio)が解釈する既定であって、store が勝手に埋めない
+        // (裁定20 と同じ、`level_is_a_plain_animatable_property` と同型)。
+        assert_eq!(
+            doc.view().value_at(layer, &property, t(0)).unwrap(),
+            None,
+            "{name} は track が無ければ値が無いはず"
+        );
+
+        let mut track = motolii_store::KeyframeTrack::new();
+        track.insert(motolii_store::Keyframe {
+            t: t(0),
+            value: Value::F64(value),
+            interp: motolii_store::Interp::Hold,
+            spatial: None,
+        });
+        doc.apply(Intent::SetTrack {
+            layer,
+            property: property.clone(),
+            track,
+        })
+        .unwrap();
+
+        assert_eq!(
+            doc.view().value_at(layer, &property, t(0)).unwrap(),
+            Some(Value::F64(value)),
+            "{name} が書いた値を読み戻さない"
+        );
+    }
 }
 
 #[test]

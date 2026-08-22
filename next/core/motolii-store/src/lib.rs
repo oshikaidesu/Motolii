@@ -130,6 +130,23 @@ pub mod property {
     /// GOALS 標準。専用の component にしない — 普通の property track で十分
     /// (裁定20「キーを打っていない property は静止値」がそのまま効く)。
     pub const LEVEL: &str = "level";
+    /// ステレオ pan。-1.0 が全振り左、0.0 が中央(既定)、1.0 が全振り右。
+    /// **Lottie 圏外**——`lottie-coverage.tsv` の `layers/audio-settings` 束は `lv`
+    /// (Level)1行だけで、pan に対応する語彙が無い(Lottie は音声の空間配置を
+    /// 持たない仕様)。GOALS を見ても他エディタの標準機能なので、`LEVEL` と同じ
+    /// 「専用 component を作らず普通の property track に乗せる」形をそのまま踏襲する
+    /// (裁定20 がここでも効く——track が無ければ中央 0.0)。
+    pub const PAN: &str = "pan";
+    /// clip 先頭からのフェードイン尺(秒、`RationalTime` ではなく `f64` — 他の
+    /// property と同じ生の数値。`KeyframeTrack` に乗せられる型に合わせた)。
+    /// 0.0(既定・無効)ならフェードなし。**Lottie 圏外・motolii 独自**——`lv` 以外の
+    /// audio-settings 語彙が地図に無いので、発明ではなく Lottie が扱わない領域を
+    /// 埋める必然(音声は Lottie の対象外、`docs` 側の音声整形要求から逆算した
+    /// GOALS 標準)。engine 側の適用は AUD レーンの仕事——ここは値の置き場だけ。
+    pub const FADE_IN: &str = "fade_in";
+    /// clip 末尾までのフェードアウト尺(秒)。0.0(既定・無効)ならフェードなし。
+    /// [`FADE_IN`] と対称、同じ理由で Lottie 圏外・motolii 独自。
+    pub const FADE_OUT: &str = "fade_out";
     /// `layers/precomposition-layer/tm`(Time Remap)。値がそのまま**素材のフレーム番号**
     /// (comp のフレームではない)。timing に混ぜない(裁定65 が `tm` を落とした理由の
     /// 裏返し — Time Remap は timing ではなく property)。track が無ければ通常どおり
@@ -400,6 +417,15 @@ pub struct LayerMeta {
 /// それが翻訳層の始まりになる。
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedLayer {
+    /// この layer 自身の同一性。**BL4(track matte)で新設**——`matte: Some(Matte {
+    /// layer, .. })` が指す先は `LayerId` なので、`resolved_layers()` が返す
+    /// `Vec<ResolvedLayer>` の中から「マット元の layer」を引くには、各要素が
+    /// 自分の `LayerId` を持っている必要がある(そうでないと `resolve_with_solo` を
+    /// もう一度 `LayerId` 付きで呼び直す=同じ layer を二重に resolve することになる)。
+    /// masks が「別の口にすると `LayerId` が引けず辿り着けない」という同じ理由で
+    /// 内側に埋め込まれているのと対称の話——今回は逆に「`LayerId` の方を運ぶ」形で
+    /// 同じ問題を塞ぐ。
+    pub id: LayerId,
     pub source: LayerSource,
     pub placement: LayerPlacement,
     /// Document が知っている素材の寸法。`[0,0]` = **probe しないと分からない**ので
@@ -427,7 +453,11 @@ pub struct ResolvedLayer {
     /// モジュール doc 参照)— 対応外は engine が `EngineError::UnsupportedBlendMode`
     /// で明示的に拒む。
     pub blend_mode: BlendMode,
-    /// matte(裁定66)。**同上、まだ合成器は読んでいない**。
+    /// matte(裁定66)。**まだ合成器は読んでいない**——`Matte.layer` が指す先を
+    /// `resolved_layers()` の結果から引けるようになった(上の `id` フィールド)分だけ
+    /// store 側の穴は塞いだが、`motolii-compositor` に2枚目の texture を読む
+    /// shader 拡張がまだ無いので、engine は今も `EngineError::UnsupportedMatte`
+    /// で明示的に拒む(`next/engine/motolii-engine/tests/blend_matte.rs` 参照)。
     pub matte: Option<Matte>,
     /// `LayerAttrs::pinned`(裁定113)。true ならカメラ変換を受けず画面に張り付く —
     /// 合成器が `placement.transform`/`z` をカメラで動かす前に打ち消す(裁定116 実装)。
