@@ -146,6 +146,115 @@ else
   fail=1
 fi
 
+# Intent 到達可能性(2026-08-22 追加発注: 「normal-map の採用済は自己申告」
+# 問題を Motolii 自身の閉じたスキーマで埋める)。
+#
+# 背景: normal-map.tsv の 採用済 は嘘をつける形をしている(実測: 2026-08-22 に
+# main が 395 コミット進んでも採用済 227 が丸1日動かなかった)。一方
+# lottie-coverage.tsv は嘘をつけない — 採用済 行が evidence 欄に**コード中に
+# 実在する識別子**を持ち、cargo test がそれを grep して確かめる(裁定は
+# lottie_coverage.rs の `adopted_rows_point_at_real_code` 参照)。
+#
+# 同じ精度を Motolii 自身の語彙(`Document` への唯一の書き口 `Intent`、
+# core/motolii-store/src/document.rs、背骨1)に適用する。ただし cargo は
+# 使わない(check.sh の write-set はここだけ・4レーン走行中でコード非改変)ので、
+# ここは grep だけで到達可能性を粗く測る——lottie 側の厳密な cargo test の
+# **簡易版**であって代替ではない。
+#
+# 「呼び手が在る」と「入口が在る」は別物。実測(2026-08-22)で見つかった罠:
+# `Intent::SetPropertyLink` は `ui/motolii-timeline-pane/src/split.rs` と
+# `shell/motolii-shell/src/clipboard.rs` に計2箇所現れるが、**両方とも
+# 「既存 layer が既に持っている property source を新しい layer id へ複製する」
+# match 腕**(split=layer分割、clipboard=copy/paste)——利用者がこの Intent を
+# **新規に**発火させる入口ではなく、そもそも起点が無いので複製もされない
+# 死んだ経路になる。単純な呼び手カウントはこれを「到達可能」と誤判定する。
+#
+# 除外リスト(この2ファイルは「複製/転送経路」であって起点にならないので、
+# 出現をカウントしない — 除外の理由をここに明記する):
+#   ui/motolii-timeline-pane/src/split.rs      … layer 分割: 既存 intent を
+#     両半分へ複製するだけ(新しい intent を発生させない)
+#   shell/motolii-shell/src/clipboard.rs       … copy/paste: 既存 layer の
+#     property source をそのまま複製するだけ(同上)
+# `#[cfg(test)]` mod の中身と `/tests/` 配下・コメント行も除外する(呼び手の
+# 「実在」を実コードだけで判定するため)。
+#
+# 曖昧なら厳しい側(=入口なし)へ倒す設計 — この検査で「入口あり」と出た枝は
+# 疑ってよいが、「入口なし」はほぼ確実に本当に無い。
+if [ -f core/motolii-store/src/document.rs ]; then
+  echo
+  echo "=== Intent 到達可能性(枝ごとに UI からの入口があるか、grep 簡易版) ==="
+  variants="$(awk '
+    /^pub enum Intent \{/ { grab=1; next }
+    grab && /^}/ { grab=0 }
+    grab {
+      line=$0
+      trimmed=line; gsub(/^[ \t]+/,"",trimmed)
+      if (trimmed ~ /^\/\//) next
+      if (trimmed == "") next
+      if (match(trimmed, /^[A-Z][A-Za-z0-9]*/)) print substr(trimmed, RSTART, RLENGTH)
+    }
+  ' core/motolii-store/src/document.rs | sort -u)"
+
+  files="$(find ui shell -name '*.rs' -not -path '*/tests/*' 2>/dev/null)"
+  zero_entry=""
+  n_variants=0
+  while IFS= read -r v; do
+    [ -z "$v" ] && continue
+    n_variants=$((n_variants + 1))
+    total=0
+    for f in $files; do
+      case "$f" in
+        */split.rs|*/clipboard.rs) continue ;;
+      esac
+      n=$(awk '
+        BEGIN { in_test=0; depth=0; pending=0 }
+        {
+          line=$0
+          if (in_test) {
+            no=gsub(/\{/,"{",line); nc=gsub(/\}/,"}",line)
+            depth += no - nc
+            if (depth <= 0) { in_test=0 }
+            next
+          }
+          if (line ~ /#\[cfg\(test\)\]/) { pending=1 }
+          trimmed=line
+          gsub(/^[ \t]+/,"",trimmed)
+          if (pending && trimmed ~ /^(pub[ \t]+)?mod[ \t]+[A-Za-z_0-9]+/) {
+            if (line ~ /\{/) { in_test=1; depth=1 }
+            pending=0
+            next
+          }
+          if (trimmed ~ /^\/\//) { next }
+          print line
+        }
+      ' "$f" | grep -c "Intent::$v\b")
+      total=$((total + n))
+    done
+    if [ "$total" -eq 0 ]; then
+      zero_entry="$zero_entry $v"
+    fi
+  done <<< "$variants"
+
+  n_zero=0
+  for v in $zero_entry; do n_zero=$((n_zero + 1)); done
+  printf "  Intent 全%d枝中、実UI入口ゼロ(除外後)= %d枝:\n" "$n_variants" "$n_zero"
+  for v in $zero_entry; do
+    printf "    入口ゼロ: Intent::%s\n" "$v"
+  done
+  echo "  (この検査は情報提供のみで fail にはしない — 未実装が悪いのではなく、"
+  echo "   台帳がそれを「採用済」と自己申告していないかは上の depends/weight 検査と"
+  echo "   normal-map.tsv 本体側の監査が担う)"
+  echo
+  echo "  限界: この検査が捕まえるのは「Intent 経由の到達可能性」の**類**だけ。"
+  echo "  裁定207(量に耐えるか — 縦スクロール・複数選択一括編集等)は Intent の"
+  echo "  枝に対応しないので原理的に映らない。この検査が緑(または枝の入口が"
+  echo "  揃っている)ことは「完成」を意味しない。"
+else
+  echo
+  echo "NG: core/motolii-store/src/document.rs がない(Intent 到達可能性検査をスキップできない)"
+  fail=1
+fi
+
 echo
 [ "$fail" -eq 0 ] && echo "OK: wraps/owns marker 全通過" || echo "NG: marker 未記入あり"
 exit $fail
