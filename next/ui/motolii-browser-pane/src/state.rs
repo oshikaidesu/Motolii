@@ -22,6 +22,7 @@
 //! 表示するかどうかだけ判断する。
 use crate::model::{CardKey, CreateKind, LibraryTab, PreviewScope, RailScope};
 use motolii_store::AssetId;
+use crate::model::{CardKey, LibraryTab, PreviewScope, RailScope, SortKey, ViewMode};
 
 /// pane ローカル Message(裁定160 切片以降の一貫した形 — root
 /// `motolii_shell::Message::Browser(Message)` が1本で畳む)。
@@ -87,6 +88,18 @@ pub enum Message {
     /// 進入と同一 event 内で順序が前後しても hover を取りこぼさないよう、
     /// 「自分が hover 中の時だけ消す」(update 参照)。
     CardUnhovered(CardKey),
+    /// 並べ替えキー選択(B08 第4切片「素材の整理」)。filter shelf のチップ
+    /// (mock に類例が無い新規 UI、[`crate::model::SORT_KEYS`])から publish
+    /// される。media タブのみ意味を持つ — 台帳 `AssetListItem` の実属性
+    /// (名前/`AssetId`/種別)を並べ替える。preview-local カタログは宣言順を
+    /// 保つ契約のまま([`crate::model::preview_visible`] doc 参照)なので、
+    /// このキーは preview 系の絞り込みには一切効かない。
+    SelectSortKey(SortKey),
+    /// grid/list 表示形式切替(B08 第4切片。`Icon::GridView`/`Icon::ViewList`
+    /// 在庫を使う icon+tooltip ペア、裁定187)。media/preview 両方の catalog
+    /// grid の列数に効く(見た目の切替のみ — Document にも undo 履歴にも
+    /// 乗らない、`ToggleBrowserPanel` と同格の表示専用フラグ)。
+    SelectViewMode(ViewMode),
 }
 
 /// Browser pane 専用の transient 状態(rail scope + 検索欄の下書き + パネル
@@ -119,6 +132,14 @@ pub struct PaneState {
     /// 取り込み直後の新規素材(B08 — [`Message::RecentlyAdmitted`])。カード
     /// 選択かタブ切替で消灯する(「直後」の一過性 — 恒久の状態にしない)。
     recent: Vec<AssetId>,
+    /// 並べ替えキー(B08 第4切片、既定 = `SortKey::Name`)。media タブ専用
+    /// (`Message::SelectSortKey` doc 参照)だが軸としてはタブに依存しない
+    /// 1個の transient 状態 — `open`/`view_mode` と同じ扱い(タブ切替で
+    /// 破棄しない、`update` の `SelectTab` 腕参照)。
+    sort_key: SortKey,
+    /// grid/list 表示形式(B08 第4切片、既定 = `ViewMode::Grid` — mock 既定
+    /// 表示 `data-view="grid"` に一致)。media/preview 両方の catalog に効く。
+    view_mode: ViewMode,
 }
 
 impl PaneState {
@@ -172,6 +193,16 @@ impl PaneState {
     /// 取り込み直後の新規素材 id 列(`pane_view` がカードのハイライトに読む)。
     pub fn recently_admitted(&self) -> &[AssetId] {
         &self.recent
+    /// 並べ替えキー(`pane_view` が media catalog の並べ替えと sort チップの
+    /// 選択表示に読む、B08 第4切片)。
+    pub fn sort_key(&self) -> SortKey {
+        self.sort_key
+    }
+
+    /// grid/list 表示形式(`pane_view` が catalog grid の列数と view mode
+    /// トグルの選択表示に読む、B08 第4切片)。
+    pub fn view_mode(&self) -> ViewMode {
+        self.view_mode
     }
 
     /// pane 側の唯一の書き口。
@@ -227,6 +258,8 @@ impl PaneState {
                     self.hovered = None;
                 }
             }
+            Message::SelectSortKey(key) => self.sort_key = key,
+            Message::SelectViewMode(mode) => self.view_mode = mode,
         }
     }
 }
@@ -540,5 +573,61 @@ mod tests {
         state.update(Message::CardHovered(CardKey::Preview("solid")));
         state.update(Message::SelectTab(LibraryTab::Media));
         assert_eq!(state.hovered(), None);
+    // B08 第4切片(素材の整理): SortKey/ViewMode の transient 状態。
+    // -----------------------------------------------------------------
+
+    /// **ORACLE**: 初期 sort key は `SortKey::Name`(mock に類例が無い新規
+    /// 状態の既定値、`state.rs` の `sort_key` フィールド doc 参照)。
+    #[test]
+    fn initial_sort_key_is_name() {
+        assert_eq!(PaneState::new().sort_key(), SortKey::Name);
+    }
+
+    #[test]
+    fn select_sort_key_replaces_the_current_sort_key() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectSortKey(SortKey::Kind));
+        assert_eq!(state.sort_key(), SortKey::Kind);
+    }
+
+    /// **ORACLE**: 初期表示形式は `ViewMode::Grid`(mock 既定表示
+    /// `data-view="grid"` に一致)。
+    #[test]
+    fn initial_view_mode_is_grid() {
+        assert_eq!(PaneState::new().view_mode(), ViewMode::Grid);
+    }
+
+    #[test]
+    fn select_view_mode_toggles_between_grid_and_list() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectViewMode(ViewMode::List));
+        assert_eq!(state.view_mode(), ViewMode::List);
+        state.update(Message::SelectViewMode(ViewMode::Grid));
+        assert_eq!(state.view_mode(), ViewMode::Grid);
+    }
+
+    /// sort key/view mode はタブ切替で破棄されない(`open` と同じ独立軸 —
+    /// `selecting_a_tab_does_not_disturb_the_open_flag` と同型)。
+    #[test]
+    fn selecting_a_tab_does_not_disturb_sort_key_or_view_mode() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectSortKey(SortKey::AddedDate));
+        state.update(Message::SelectViewMode(ViewMode::List));
+        state.update(Message::SelectTab(LibraryTab::Panels));
+        assert_eq!(state.sort_key(), SortKey::AddedDate);
+        assert_eq!(state.view_mode(), ViewMode::List);
+    }
+
+    /// `Clear` は scope/query/preview scope だけを戻す — sort key/view mode
+    /// は「フィルタ」ではなく「表示の好み」なので `ClearFilters` の対象外
+    /// (mock の `data-clear-filter` にも view mode/sort の記述は無い)。
+    #[test]
+    fn clear_filters_does_not_reset_sort_key_or_view_mode() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectSortKey(SortKey::Kind));
+        state.update(Message::SelectViewMode(ViewMode::List));
+        state.update(Message::ClearFilters);
+        assert_eq!(state.sort_key(), SortKey::Kind);
+        assert_eq!(state.view_mode(), ViewMode::List);
     }
 }
