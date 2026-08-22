@@ -450,14 +450,20 @@ pub fn pan_by_screen_delta(
 /// レンダリングカメラが既定(pan無し・zoom1・roll無し)なら `render_affine` は
 /// 恒等写像なので、1. は「出力キャンバスの4隅=world の4隅」に潰れる
 /// (`camera.rs::default_camera_matches_identity_pixel_mapping_at_z0` と同じ土台)。
+///
+/// `render_affine` は現状 `motolii_core::camera_projection` の `zoom.max(1e-3)`
+/// (画角が発散しない床)があるため退化しないはずだが、それはこの crate の
+/// write-set 外(`motolii-core`)にある不変量 — ここが破れても panic せず
+/// `None`(枠を描かない)で済むよう [`gizmo::checked_inverse`] を経由する
+/// (`anchor_value`/`gizmo_hit_test` と同じ形、新しい流儀を発明しない)。
 fn render_camera_frame_corners(
     comp: CompSpec,
     render_camera: ResolvedCamera,
     observation: ObservationCamera,
-) -> [[f32; 2]; 4] {
+) -> Option<[[f32; 2]; 4]> {
     let render_affine = camera_screen_from_world_z0(comp, render_camera);
     let observation_affine = camera_screen_from_world_z0(comp, observation_as_resolved(observation));
-    let render_inverse = render_affine.inverse();
+    let render_inverse = gizmo::checked_inverse(render_affine)?;
 
     let canvas_corners = [
         glam::Vec2::new(0.0, 0.0),
@@ -472,14 +478,14 @@ fn render_camera_frame_corners(
         let observed = observation_affine.transform_point2(world);
         out[index] = [observed.x, observed.y];
     }
-    out
+    Some(out)
 }
 
 /// [`render_camera_frame_corners`] を実際の Stage screen 座標(letterbox 込み)
 /// へさらに写す。overlay の描画(`StageOverlay::draw`)と `screenshot.rs` 器具
 /// (`motolii-shell`)が両方ここを呼ぶ(同じ絵になることを構造で保証する —
 /// 2箇所目の letterbox 実装を作らない)。letterbox が組めない(comp/bounds が
-/// 退化)なら `None`。
+/// 退化)、またはレンダリングカメラが退化していて逆行列が立たないなら `None`。
 pub fn render_camera_frame_corners_on_screen(
     bounds: Rectangle,
     comp: CompSpec,
@@ -490,7 +496,7 @@ pub fn render_camera_frame_corners_on_screen(
     if rect.width <= 0.0 || rect.height <= 0.0 {
         return None;
     }
-    let corners = render_camera_frame_corners(comp, render_camera, observation);
+    let corners = render_camera_frame_corners(comp, render_camera, observation)?;
     Some(corners.map(|c| {
         Point::new(
             rect.x + c[0] / comp.width as f32 * rect.width,
