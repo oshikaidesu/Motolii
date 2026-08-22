@@ -1,0 +1,48 @@
+# 意図束(IB 44束、裁定177準拠)の機械可読正本。束名は仮名(命名は利用者の直観が最上流 — 変えない)。
+# 正本ソース: docs/reviews/2026-08-22-intent-bundles-draft.md / 動線図: docs/reviews/2026-08-22-intent-flow-map.md
+id	name	signature	home	size	note
+B01	ブレンドモード束	set_blend_mode(mode)	Inspector blendタブ	33	L8基盤: blend束(BL3/BL4)そのもの
+B02	マスク/マット束	mask_op(mode|feather|expansion|shape) + generate_matte_from(source:text|photo)	Inspector maskセクション+キャンバスハンドル	55	L8基盤: MK1/MK2(裁定108/133)既払い; 統合(§4): Auto-trace(misc)・AI背景除去(tool)を合流 — コンテンツからマット/パスを生成する同型
+B03	ラベル色束	set_label_color(color)	クリップ右クリック/Inspector	19	L8基盤: ρ(label_color index)既決
+B04	字幕束	caption_op(add|nav|generate)	専用Captionパネル	13	
+B05	色/アルファ表示束	set_channel_display(mode) + color_correct(op)	Inspector color+Viewerオーバーレイ	30	
+B06	ヘルプ/診断束	open_help(target)	メニューバー Help	19	
+B07	プリセット束(MA L4例示)	preset_op(action:apply|save|browse|recent)	Inspector上部/専用Presetブラウザ	5	L8基盤: Intent背骨の薄い顔(§7 MA); MA L4吸収: preset 5クラスタ(Intent背骨の薄い顔、§7 MA)
+B08	素材取り込み束	import_media(source, interpret?)	Browserパネルdrop/File>Import	54	統合(§4): clip_editのreplace系(Subclip/Replace footage等)を合流 — 素材差し替えは輸入と同じ対象操作(replace顔)
+B09	書き出し束	export(target, format)	専用Exportダイアログ/Render Queue	16	
+B10	プロジェクト整理束	housekeep(op:collect|consolidate|reduce|find_missing)	Project Managerダイアログ	18	
+B11	File束(MB-1延長)	file_op(new|open|save|save_as|save_copy|quit|revert)	メニューバー File	15	L8基盤: File束(MB-1)そのもの
+B12	環境設定束	open_settings(tab)	専用Preferencesウィンドウ	59	
+B13	キャッシュ/メモリ管理束(継ぎ目)	cache_op(clear|configure)	未定(実測待ち)	18	L8基盤: SS台帳項目1(ゼロコピー)と衝突未解決
+B14	エクスプレッション束(保留)	bind_expression(property, source)	未定	6	L8基盤: D5未完(型付きlink)
+B15	キーフレーム束	keyframe_op(add|delete|move|interp) + apply_ease(scope,side)	Timelineキーフレームレーン+Graph Editor	47	L8基盤: Intentの薄い顔(store実装済); MA L4吸収: ease 6クラスタ
+B16	解析→自動キーフレーム束(新規発見)	analyze_and_generate(target:reframe|track|stabilize|scene_cut)	専用Analysis/Trackerパネル	10	L8基盤: Bake/Analysis provider経路(共通); 統合(§4): 7カテゴリ合流(ai_feature/effects_animation/panel_window/workspace/misc/timeline/mask) — 既存映像を解析→keyframe/transform/matteを生成する同一機構(Bake/Analysisプロバイダ経路)
+B17	カメラ/3Dビュー束	set_view(preset) + camera_op	Viewer視点タブ	33	L8基盤: カメラ束(裁定116)既払い。gizmo(141-144)は継ぎ目注記
+B18	作業範囲/イン・アウト点束(裁定177 headline例)	set_work_area{in?,out?} / clear_work_area{in?,out?} / goto_work_area_bound(edge)	Timeline帯+shortcut	35	統合(§4): 8カテゴリ合流(marker/clip_edit/layer_transform/misc/edit_basic/audio/playback) — 同一の作業範囲/イン・アウト点オブジェクトへの操作。MA L4 work_area 7行を吸収
+B19	マーカー/フラグ束	marker_op(add|clear|nav|flag)	Timelineマーカーレーン+Markersパネル	20	L8基盤: 裁定111/120/149既払い
+B20	再生ヘッド移動束	goto(target:time|edit|clip_bound|comp_bound)	Timeline transport	28	
+B21	再生/スクラブ束	transport(op:play|step|shuttle|loop, scope?:audio|video|work_area)	Timeline transport bar	56	L8基盤: A2(実時間再生、検収合格)既払い; 統合(§4): 3カテゴリ合流(playback/audio/misc) — transport語彙のスコープ限定版
+B22	ガイド/グリッド表示束	toggle_overlay(kind:grid|guide|safe_zone|snap)	Viewerオーバーレイ設定	24	
+B23	プレビュー解像度/画質束	set_preview_quality(resolution|mode)	Viewer下部画質メニュー	28	L8基盤: 裁定21実測(844-846は帯域律速で無効)と一部矛盾
+B24	ズーム束(MA L4例示)	zoom(target:viewer|timeline, direction|level)	各パネル右下ズームコントロール	24	MA L4吸収: zoom 2クラスタ
+B25	パネル可視性/フォーカス束(最大統合)	panel_op(id, action:open|close|focus|cycle)	パネルタブ自体+Windowメニュー	91	統合(§4): 7カテゴリ合流(panel_window/workspace/misc/tool/clip_edit/timeline/view_display) — パネルの存在と開閉は名詞/動詞の裏表
+B26	ワークスペースレイアウト束	apply_layout(preset)	専用Workspace切替UI	36	
+B27	ペイント束(MA L9継ぎ目候補)	paint_op(tool, param)	未定(継ぎ目)	18	L8基盤: mask基盤は再利用不可(出力=ラスタ、島度ゼロ近似)
+B28	シェイプ/パス描画束	draw_shape(kind, param)	ツールバー+キャンバス	23	L8基盤: mask基盤(パス編集)と部分共有
+B29	ツール切替束	activate_tool(id)	ツールバー	19	
+B31	選択束	select(scope, criterion)	キャンバス/Timeline共通	34	
+B32	ロック/可視性/リンク束	set_state(target, state:locked|hidden|muted|solo|linked)	レイヤー/トラック行アイコン列	38	統合(§4): 5カテゴリ合流(misc/clip_edit/timeline/audio/project) — 対象の状態フラグを切り替える同型操作
+B33	クリップボード/履歴束(MB-0延長)	edit_op(copy|cut|paste|undo|redo|find)	メニューバー Edit	24	L8基盤: MB-0(Edit束、検収合格)そのもの
+B34	グループ化束(裁定174 G1、未着手)	group_op(group|ungroup)	キャンバス右クリック+Layerメニュー	7	L8基盤: H1(親変換合成)着地済み・oracle型規定済み
+B36	新規コンテンツ作成束	create(kind:layer|comp|solid|null|shape)	New submenu	32	統合(§4): 4カテゴリ合流(clip_edit/misc/layer_transform/import_export) — 新しい構造的コンテンツをコンポへ挿入する意図
+B37	速度/リタイム束	retime(mode, value)	Inspector speedセクション	20	L8基盤: δ調査(speed UI文法)と連続
+B38	トランジション/エフェクト適用束	apply_op(kind:transition|effect, target)	Effects/Transitionsパネル	17	MA L4吸収: transition 2クラスタ
+B39	トリム/カット編集束	trim_op(mode, edge) + add_edit(scope)	Timeline編集ツール	30	統合(§4): Add Edit(171/172, 803/804, 1046/1047)の3カテゴリ三重複を1署名へ合流
+B40	ソース参照/マルチカム束	reveal_source(clip) + switch_multicam(angle)	Source Monitor	29	統合(§4): 4カテゴリ合流(clip_edit/playback/timeline/audio) — Match Frame三重複・Multicam・Synchronizeは全て別ソース/別アングル参照の意図
+B42	音声内容整形束	audio_shape(op:gain|isolate|enhance|normalize)	Audioパネル	13	MA L4吸収: batch_fade 2クラスタ
+B44	レイヤー変形束	set_transform(property, value)	Inspector transformセクション	46	
+B45	微調整(ナッジ)束	nudge(property, direction, amount)	キーボード修飾(パネル非依存)	29	統合(§4): 5カテゴリ合流(clip_edit/misc/tool/layer_transform/text) — キー修飾で固定量だけ動かす同型パターン
+B46	テキストプロパティ/アニメータ束	set_text_property(property, value) + text_animator_selector(...)	Character/Paragraphパネル	43	L8基盤: TextRange/TextRangeSelector(裁定121/122)既払い; 統合(§4): toolカテゴリに分散していたBold/Italic/Underline/著作権記号挿入を回収 — テキストスタイルプロパティそのもの
+B48	テキストカーソル/選択束(MA L4例示)	extend_text_selection(unit,dir) / move_text_cursor(target)	テキスト編集モード(インライン)	15	MA L4吸収: text選択5+カーソル3+line_break4クラスタ
+B52	トラック構造管理束	track_op(op:add|delete|resize|matte|snapshot)	Timelineトラックヘッダ	53	統合(§4): 3カテゴリ合流(timeline/audio/clip_edit) — トラック高増減の分散記載を合流
+HOMELESS	宿無し(verdict再審キュー)	—	未定(verdict再審待ち)	3	§3: 1382 AI design/1383 AI writer/1424 Script to Video — 純生成で docs/generative-user-boundary.md §2 と衝突、束の前に verdict 再審が要る。B16(解析→生成)とは別物(入力なしの新規コンテンツ生成)
