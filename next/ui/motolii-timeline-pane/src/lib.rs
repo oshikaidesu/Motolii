@@ -54,6 +54,7 @@ mod lane_bar;
 pub mod nav;
 mod projection;
 mod rail;
+pub mod rows;
 pub mod shuttle;
 mod transport;
 pub mod work_area;
