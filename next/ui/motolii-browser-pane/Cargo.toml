@@ -16,6 +16,13 @@ motolii-store.workspace = true
 # 読む — raw 値の直書き禁止(裁定117)。pane split survey の許容構成どおり
 # leaf crate をそのまま依存する(他 pane crate と同じ形)。
 motolii-tokens-rs.workspace = true
+# B08 第4切片(素材の整理、この波): grid/list 表示形式トグルの
+# `Icon::GridView`/`Icon::ViewList`(裁定187 icon+tooltip)。
+# `motolii-timeline-pane`(transport のアイコン化、裁定186)が既に同じ
+# leaf crate を pane crate から直接引いている前例があり、pane split survey の
+# 許容構成に反しない(motolii-icons は widget を持たない値+embed のみの
+# leaf crate)。
+motolii-icons.workspace = true
 
 [dev-dependencies]
 # `inspector_pane`(`tests/value_cell_legibility.rs`)と同じ手口: pane crate

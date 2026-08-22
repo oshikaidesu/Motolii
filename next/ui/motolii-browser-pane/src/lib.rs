@@ -24,6 +24,31 @@
 //!   pane 全体を Shell へつなぐ」ことが範囲で、rail/filter 自体の意匠は
 //!   変えない
 //!
+//! ## B08 第4切片(素材の整理、この波)
+//! 発注書「Browser 第4切片 — 素材の整理(B08 残り+タグ/コレクション)」への
+//! 対応。normal-map の bundle B08(素材取り込み束、`intent-bundles.tsv` 参照)
+//! の採用予定行を洗ったが、freq の上位行は import/replace/proxy/reload 系
+//! ばかりで「並べ替え/表示形式/タグ/お気に入り」に該当する行は1本も無かった
+//! (メニューコマンド抽出ベースの map にはツールバー慣習の sort/grid⇄list
+//! toggle が現れない)。発注書 step2 の明示リストに従い、`Asset` の実属性
+//! だけで組める2つを実装した:
+//! - **並べ替え**([`model::SortKey`]/[`model::sorted`] — 名前/追加日
+//!   (`AssetId` 昇順を代理指標に使う、store に wall-clock timestamp が無い
+//!   ため)/種別)。media タブの filter shelf にのみチップで現れる
+//!   ([`sort_control_view`])— preview-local カタログは宣言順を保つ契約
+//!   ([`model::preview_visible`] doc 参照)なので対象外。
+//! - **表示形式**([`model::ViewMode`]、`Icon::GridView`/`Icon::ViewList`
+//!   在庫)。media/preview 両方の catalog grid の列数に効く
+//!   ([`view_mode_toggle_view`])。List は mock の水平カードレイアウトまでは
+//!   実装せず列数の切替に留める([`columns_for`] doc 参照 — 逸脱)。
+//! - **検索の対象拡張**([`model::visible`] が `path` も見るようになった —
+//!   `AssetListItem::path` は B1 から既に投影に乗っていた実在属性)。
+//!
+//! COLLECTIONS(Favorite)節・タグチップは**予約地のまま**(飾り禁止) —
+//! `motolii_store::Asset` にタグ/お気に入り相当のフィールドが無いため
+//! (`asset.rs` のフィールド一覧参照)。store にこの形の属性が要る、という
+//! 要求としてこの doc に記録しておく(発注書 RETURN と同じ内容)。
+//!
 //! `Collections`/`Places`/selection tray/tag editor/context menu/履歴 ‹› は
 //! `browser-semantics.html` 救出台帳が明記する「予約地」のまま(タグ束・
 //! filesystem 走査裁定・意味起草タスク#14 待ち) — この波でも出さない(B2 の
@@ -89,11 +114,11 @@ pub mod state;
 
 pub use model::{
     AssetListItem, CardKey, CatalogCard, Category, LibraryTab, PreviewCard, PreviewScope,
-    PreviewTag, RailScope, FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES,
+    PreviewTag, RailScope, SortKey, ViewMode, FILTER_CHIPS, LIBRARY_TABS, RAIL_SCOPES, SORT_KEYS,
 };
 pub use state::{Message, PaneState};
 
-use iced::widget::{button, column, container, row, scrollable, text, text_input};
+use iced::widget::{button, column, container, row, scrollable, text, text_input, tooltip};
 use iced::{Element, Length};
 
 use motolii_tokens_rs::{Colors, Dimensions};
@@ -142,6 +167,8 @@ pub fn pane_view(
             items,
             state.scope(),
             state.query(),
+            state.sort_key(),
+            state.view_mode(),
             state.selected(),
             dims,
             colors,
@@ -150,6 +177,7 @@ pub fn pane_view(
             tab,
             state.preview_scope(),
             state.query(),
+            state.view_mode(),
             state.selected(),
             dims,
             colors,
@@ -267,23 +295,39 @@ pub fn view(
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    media_body(items, scope, query, None, dims, colors)
+    media_body(
+        items,
+        scope,
+        query,
+        model::SortKey::default(),
+        model::ViewMode::default(),
+        None,
+        dims,
+        colors,
+    )
 }
 
 /// media タブの body(rail + カタログ)。B2/B3 の [`view`] と同一の木に、
-/// カード選択意匠(`selected`、mock `.libraryCard.selected`)だけを足した形。
+/// カード選択意匠(`selected`、mock `.libraryCard.selected`)+ 並べ替え/
+/// 表示形式(B08 第4切片「素材の整理」、[`model::SortKey`]/[`model::ViewMode`])
+/// を足した形。
+#[allow(clippy::too_many_arguments)]
 fn media_body(
     items: &[AssetListItem],
     scope: RailScope,
     query: &str,
+    sort_key: model::SortKey,
+    view_mode: model::ViewMode,
     selected: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let filtered = model::visible(items, scope, query);
+    let filtered = model::sorted(&model::visible(items, scope, query), sort_key);
 
     let rail = rail_view(scope, dims, colors);
-    let catalog = catalog_view(scope, query, &filtered, selected, dims, colors);
+    let catalog = catalog_view(
+        scope, query, sort_key, view_mode, &filtered, selected, dims, colors,
+    );
 
     row![rail, catalog].spacing(dims.spacing_xs).into()
 }
@@ -394,15 +438,18 @@ fn rail_container(
 
 /// filter shelf(mock `.filterShelf`)+ 結果件数 + カード grid(mock
 /// `.thumbnailGrid`、B3 — [`card_grid_view`])。
+#[allow(clippy::too_many_arguments)]
 fn catalog_view(
     scope: RailScope,
     query: &str,
+    sort_key: model::SortKey,
+    view_mode: model::ViewMode,
     filtered: &[AssetListItem],
     selected: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
-    let shelf = filter_shelf_view(scope, query, dims, colors);
+    let shelf = filter_shelf_view(scope, query, sort_key, view_mode, dims, colors);
 
     // 台帳(1a節): `.resultSummary strong,span{font-size:8px}`
     // (`browser-library.css:225-226`)— `caption_text`(9)ではなく
@@ -411,7 +458,7 @@ fn catalog_view(
         .size(dims.micro_text)
         .color(colors.text_muted);
 
-    let grid = card_grid_view(filtered, selected, dims, colors);
+    let grid = card_grid_view(filtered, selected, view_mode, dims, colors);
 
     catalog_container(column![shelf, summary, grid], dims, colors)
 }
@@ -451,6 +498,8 @@ pub const FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO: f32 = 0.4;
 fn filter_shelf_view(
     scope: RailScope,
     query: &str,
+    sort_key: model::SortKey,
+    view_mode: model::ViewMode,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -472,7 +521,45 @@ fn filter_shelf_view(
         })
         .collect();
 
-    shelf_row(query, chips, dims, colors)
+    shelf_row(
+        query,
+        chips,
+        Some(sort_control_view(sort_key, dims, colors)),
+        view_mode,
+        dims,
+        colors,
+    )
+}
+
+/// 並べ替えチップ列(B08 第4切片、mock に類例が無い新規 UI —
+/// [`model::SORT_KEYS`] の3チップを filter チップと同じ意匠(選択= 器、
+/// 非選択= 素の文字+hover 面、[`chip_style`])で描く。media の filter shelf
+/// にのみ現れる([`preview_filter_shelf_view`] は呼ばない — sort は実属性を
+/// 持つ台帳データにしか意味を持たない、`state::Message::SelectSortKey` doc
+/// 参照)。
+fn sort_control_view(
+    sort_key: model::SortKey,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let chip_radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
+    let chip_padding = [dims.spacing_xs, dims.spacing_s];
+    let chips: Vec<Element<'static, Message>> = model::SORT_KEYS
+        .into_iter()
+        .map(|key| {
+            labeled_button(
+                key.label(),
+                key == sort_key,
+                Message::SelectSortKey(key),
+                Length::Shrink,
+                chip_padding,
+                chip_radius,
+                dims,
+                colors,
+            )
+        })
+        .collect();
+    row(chips).spacing(dims.spacing_xs).into()
 }
 
 /// 非 media タブの filter shelf(mock `.filterGroup[data-filter-group=
@@ -485,6 +572,7 @@ fn preview_filter_shelf_view(
     tab: LibraryTab,
     scope: PreviewScope,
     query: &str,
+    view_mode: model::ViewMode,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -506,7 +594,8 @@ fn preview_filter_shelf_view(
         })
         .collect();
 
-    shelf_row(query, chips, dims, colors)
+    // sort チップは media 専用 — `None`([`sort_control_view`] doc 参照)。
+    shelf_row(query, chips, None, view_mode, dims, colors)
 }
 
 /// filter shelf の骨格(media/preview 共通 — 検索欄+チップ列+Clear。mock
@@ -515,21 +604,120 @@ fn preview_filter_shelf_view(
 fn shelf_row(
     query: &str,
     chips: Vec<Element<'static, Message>>,
+    sort_control: Option<Element<'static, Message>>,
+    view_mode: model::ViewMode,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
     let chip_radius = FILTER_CHIP_CORNER_RADIUS_ROW_HEIGHT_RATIO * dims.row_height;
     let chip_padding = [dims.spacing_xs, dims.spacing_s];
-    row![
+
+    let mut controls: Vec<Element<'static, Message>> = vec![
         search_field(query, dims, colors),
-        row(chips).spacing(dims.spacing_xs),
+        row(chips).spacing(dims.spacing_xs).into(),
+    ];
+    // 並べ替えチップは media タブのみ([`sort_control_view`] doc 参照)。
+    if let Some(sort_control) = sort_control {
+        controls.push(sort_control);
+    }
+    controls.push(
         button(text("Clear").size(dims.micro_text))
             .on_press(Message::ClearFilters)
             .padding(chip_padding)
-            .style(move |_theme, status| chip_style(dims, colors, false, status, chip_radius)),
-    ]
-    .spacing(dims.spacing_xs)
-    .align_y(iced::alignment::Vertical::Center)
+            .style(move |_theme, status| chip_style(dims, colors, false, status, chip_radius))
+            .into(),
+    );
+    // grid/list 表示形式トグル(B08 第4切片)。全タブ共通(検索欄と同じ toolbar
+    // 領域の慣習)。
+    controls.push(view_mode_toggle_view(view_mode, dims, colors));
+
+    row(controls)
+        .spacing(dims.spacing_xs)
+        .align_y(iced::alignment::Vertical::Center)
+        .into()
+}
+
+/// grid/list 表示形式トグル(B08 第4切片、裁定187 icon+tooltip ペア —
+/// `motolii-shell::Shell::header_icon_action` と同じ形をこの pane 内に
+/// 小さく複製する。理由は [`search_input_style`]/[`panel_container_style`]
+/// と同じ: pane crate 間の相互依存を作らないため)。
+fn view_mode_toggle_view(
+    active: model::ViewMode,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let modes = [
+        (model::ViewMode::Grid, motolii_icons::Icon::GridView),
+        (model::ViewMode::List, motolii_icons::Icon::ViewList),
+    ];
+    let buttons: Vec<Element<'static, Message>> = modes
+        .into_iter()
+        .map(|(mode, glyph)| view_mode_button(mode, glyph, mode == active, dims, colors))
+        .collect();
+    row(buttons).spacing(dims.spacing_xs).into()
+}
+
+/// 1個の view mode icon ボタン(輪郭なし・hover/選択で面、裁定179)+ tooltip
+/// (裁定187)。アイコン枠寸は shelf の文字寸(`micro_text`)を
+/// [`motolii_icons::frame_px_for_glyph_px`](Material live area 比 24/20)で
+/// 写した視覚同等寸 — この shelf 行の他要素(検索欄/チップ)と字高を揃える。
+fn view_mode_button(
+    mode: model::ViewMode,
+    glyph: motolii_icons::Icon,
+    selected: bool,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'static, Message> {
+    let ink = if selected {
+        colors.action_active
+    } else {
+        colors.text_muted
+    };
+    let icon_element =
+        motolii_icons::icon(glyph, motolii_icons::frame_px_for_glyph_px(dims.micro_text), ink);
+    let action = button(icon_element)
+        .on_press(Message::SelectViewMode(mode))
+        .padding(dims.spacing_xs)
+        .style(move |_theme, status| {
+            let background = if selected {
+                Some(iced::Background::Color(colors.state_selected))
+            } else {
+                match status {
+                    button::Status::Hovered | button::Status::Pressed => {
+                        Some(iced::Background::Color(colors.surface_hover))
+                    }
+                    _ => None,
+                }
+            };
+            button::Style {
+                background,
+                // svg には効かない(tint が正)が、契約として ink を宣言して
+                // おく(`motolii_icons` module doc・`header_icon_action` と
+                // 同じ注記)。
+                text_color: ink,
+                ..button::Style::default()
+            }
+        });
+    tooltip(
+        action,
+        container(
+            text(mode.tooltip_label())
+                .size(dims.caption_text)
+                .color(colors.text_primary),
+        )
+        .padding([dims.spacing_xs, dims.spacing_s])
+        .style(move |_theme| container::Style {
+            background: Some(iced::Background::Color(colors.surface_raised)),
+            border: iced::Border {
+                color: colors.border_default,
+                width: dims.border_width,
+                radius: 0.0.into(),
+            },
+            ..container::Style::default()
+        }),
+        tooltip::Position::Bottom,
+    )
+    .gap(dims.spacing_xs)
     .into()
 }
 
@@ -674,6 +862,20 @@ fn search_input_style(
 /// 描くため、値を複製せずここから読む。
 pub const GRID_COLUMNS: usize = 2;
 
+/// [`model::ViewMode`] に応じた grid の列数(B08 第4切片「表示形式」)。
+/// List は1列 — mock の list mode(`.libraryBrowser[data-view="list"]
+/// .thumbnailGrid{grid-template-columns:1fr}`、`browser-library.css:304`)は
+/// 加えてカードを水平レイアウト(サムネ小+テキスト右)へ変えるが、この波は
+/// 列数の切替までに留める(水平レイアウトは thumb 縮小サイズ等の新しい比率
+/// 定数を要求し、裁定165 の外側の値を発明することになるため — 次波の課題、
+/// RETURN 記載の逸脱)。
+fn columns_for(mode: model::ViewMode) -> usize {
+    match mode {
+        model::ViewMode::Grid => GRID_COLUMNS,
+        model::ViewMode::List => 1,
+    }
+}
+
 /// カード幅 = `dims.row_height` の何倍か(裁定165「形は比率で定数化・分母
 /// 明記」)。**分母 = `Dimensions::row_height`**。旧世界のカード寸(意味論
 /// モック「未決」台帳が挙げる「旧124×84踏襲か」)を絶対px のまま転写せず、
@@ -694,6 +896,7 @@ pub const THUMB_ASPECT_H: f32 = 9.0;
 fn card_grid_view(
     filtered: &[AssetListItem],
     selected: Option<model::CardKey>,
+    view_mode: model::ViewMode,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
@@ -708,7 +911,7 @@ fn card_grid_view(
     }
 
     let rows: Vec<Element<'static, Message>> = filtered
-        .chunks(GRID_COLUMNS)
+        .chunks(columns_for(view_mode))
         .map(|chunk| {
             let cards: Vec<Element<'static, Message>> = chunk
                 .iter()
@@ -842,33 +1045,37 @@ fn thumb_fill(category: model::Category, colors: Colors) -> iced::Color {
 /// [`preview_catalog_view`]。データは preview-local 静的カタログのみ
 /// ([`model::preview_visible`] — 台帳 items は渡らない、`model::catalog`
 /// doc の2系統の壁)。
+#[allow(clippy::too_many_arguments)]
 fn preview_body(
     tab: LibraryTab,
     scope: PreviewScope,
     query: &str,
+    view_mode: model::ViewMode,
     selected: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
     let rail = preview_rail_view(tab, scope, dims, colors);
-    let catalog = preview_catalog_view(tab, scope, query, selected, dims, colors);
+    let catalog = preview_catalog_view(tab, scope, query, view_mode, selected, dims, colors);
 
     row![rail, catalog].spacing(dims.spacing_xs).into()
 }
 
 /// 非 media タブの catalog(filter shelf + 結果件数 + カード grid —
 /// [`catalog_view`] と同じ骨格を preview-local データで組む)。
+#[allow(clippy::too_many_arguments)]
 fn preview_catalog_view(
     tab: LibraryTab,
     scope: PreviewScope,
     query: &str,
+    view_mode: model::ViewMode,
     selected: Option<model::CardKey>,
     dims: Dimensions,
     colors: Colors,
 ) -> Element<'static, Message> {
     let cards_data = model::preview_visible(tab, scope, query);
 
-    let shelf = preview_filter_shelf_view(tab, scope, query, dims, colors);
+    let shelf = preview_filter_shelf_view(tab, scope, query, view_mode, dims, colors);
 
     let summary = text(format!("Results {}", cards_data.len()))
         .size(dims.micro_text)
@@ -884,7 +1091,7 @@ fn preview_catalog_view(
         .into()
     } else {
         let rows: Vec<Element<'static, Message>> = cards_data
-            .chunks(GRID_COLUMNS)
+            .chunks(columns_for(view_mode))
             .map(|chunk| {
                 let cards: Vec<Element<'static, Message>> = chunk
                     .iter()
