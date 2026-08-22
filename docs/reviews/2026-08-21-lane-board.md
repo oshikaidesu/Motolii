@@ -9,8 +9,7 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
-| TF-container | 実装 | worktree(新 crate) | 裁定183 案A: taffy 0.13 駆動 flex container widget(`motolii-taffy` 新設・space-between/wrap/minmax 解禁・CSS 宣言→Style 変換 fail-closed・Simulator click 証明) |
-| CM-port | 実装 | worktree(新 crate) | 裁定183 検証層: 旧 workspace `css_metrics`(blitz-dom+stylo 466行)を `motolii-css-metrics` へ移植 — モックの計算済み CSS 値抽出・dimensions.json 突き合わせテスト込み。旧側は 1 バイトも変えない |
+**第5セッション 全レーン着地(2026-08-22)**: pane_grid検収 / BR-tabs / PH-handle / IB-const / TL-transport / MB-vendor / IK-keyframe / iced-inventory / weblike-layout / TF-container(taffy widget — grid対応込み・実欠陥1件をテスト先行が事前捕獲)/ CM-port(css_metrics 移植 — dimensions 6値一致)。裁定178〜184。**taffy 三点照合(モック→css-metrics→dimensions→TaffyBox)が開通 — 転写の手癖工程は次の pane 書き換えから廃止可能**。走行中レーンなし |
 | TL-transport | 実装 | worktree(timeline-pane) | 裁定180: transport 帯(1041〜1045 の顔+1138 Timecode)を timeline pane 上端へ。枠の文法(裁定179)適用第1号。write-set= timeline-pane+dimensions.json `timeline_transport` 節 |
 | MB-vendor | 実装 | worktree(新 crate) | 裁定181: iced_aw menu の fork API 移植(`motolii-menubar` 新設・E0308×2 追随・Simulator oracle)。write-set= 新 crate+members 1行+dimensions.json `menubar` 節 |
 | IB-const | データ | worktree(reference) | 利用者裁定: IB 44束の定数化 — intent-bundles.tsv 正本+normal-map へ bundle 列(1,285行自動割り付け・独立再検証)+check.sh 3検査+動線図(家の地図+編集動線 mermaid)。束名は仮名のまま(命名=利用者)。write-set= reference 2ファイル+check.sh+flow-map 文書 |
