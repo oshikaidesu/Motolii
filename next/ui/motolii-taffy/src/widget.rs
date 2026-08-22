@@ -32,6 +32,7 @@ pub struct TaffyBox<'a, Message, Theme, Renderer> {
     style: taffy::Style,
     child_styles: Vec<taffy::Style>,
     children: Vec<Element<'a, Message, Theme, Renderer>>,
+    rounding: bool,
 }
 
 impl<'a, Message, Theme, Renderer> TaffyBox<'a, Message, Theme, Renderer>
@@ -39,12 +40,41 @@ where
     Renderer: renderer::Renderer,
 {
     /// container 自身の `taffy::Style` から空の [`TaffyBox`] を作る。
+    ///
+    /// 丸めは既定で有効(taffy 0.13 の既定挙動と同じ — 最近偶数丸めで解いた
+    /// 矩形を整数 px に落とす)。無効化するには [`Self::rounding`] か
+    /// [`Self::unrounded`] を使う。
     pub fn new(style: taffy::Style) -> Self {
         Self {
             style,
             child_styles: Vec::new(),
             children: Vec::new(),
+            rounding: true,
         }
+    }
+
+    /// 丸め無効の [`TaffyBox`] を作る([`Self::new`] + `.rounding(false)` の糖衣)。
+    ///
+    /// いつ使うか(INS-taffy 発注の背景): `inspector_row_height` のような基準寸法へ
+    /// 倍率(例: 150%)を掛けた半端値(37.5 等)は、丸め有効だと整数 px(38.0)へ
+    /// 落ちる。これは既存の ±1px 柵(`inspector_pixel_fence`、EPS=0.05 の実数比較)
+    /// と構造的に衝突する — 柵側は端数のままの値を期待しているため。柵へ載せる
+    /// 転写経路ではこちらを使い、taffy に丸めさせず端数を保持する。
+    ///
+    /// 逆に通常の pane 合成(画面へ実際に描く最終矩形)では [`Self::new`] の既定
+    /// (丸め有効)のままでよい — 整数 px に揃った方が視覚的に安定する。
+    pub fn unrounded(style: taffy::Style) -> Self {
+        Self::new(style).rounding(false)
+    }
+
+    /// 丸めの有無を選ぶ(既定は `true` — [`Self::new`] の既定挙動は変えない)。
+    ///
+    /// `false` にすると `taffy::TaffyTree::disable_rounding()` を呼び、解いた
+    /// 矩形が最近偶数丸めを経ずに端数のまま(例: 37.5)返る。使い分けの指針は
+    /// [`Self::unrounded`] のドキュメントを参照。
+    pub fn rounding(mut self, enabled: bool) -> Self {
+        self.rounding = enabled;
+        self
     }
 
     /// 子を、その子自身の `taffy::Style` と対にして追加する。
@@ -76,6 +106,9 @@ where
 
     fn layout(&mut self, tree: &mut Tree, renderer: &Renderer, limits: &Limits) -> Node {
         let mut taffy = taffy::TaffyTree::<usize>::new();
+        if !self.rounding {
+            taffy.disable_rounding();
+        }
 
         let kids: Vec<taffy::NodeId> = self
             .child_styles
