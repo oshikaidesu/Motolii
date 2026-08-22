@@ -99,6 +99,20 @@ pub enum Message {
     /// grid の列数に効く(見た目の切替のみ — Document にも undo 履歴にも
     /// 乗らない、`ToggleBrowserPanel` と同格の表示専用フラグ)。
     SelectViewMode(ViewMode),
+    /// 素材の置換(map 616「Replace selected footage item」/617「Replace
+    /// selected source footage for selected layers」の消化 — store 側は
+    /// `Intent::SetSource` が裁定112c で実装済み、UI だけが未着手だった行。
+    /// 618(ドラッグ版)は Stage/Timeline 側の drop target が要る別 write-set
+    /// のため対象外、`crate::model` 冒頭 doc 参照)。
+    ///
+    /// **この crate は `Intent::SetSource` を呼ばない**(`Settings`/`Export`
+    /// pane と同じ「pane は Intent を呼ばない」分業、crate 冒頭 doc「shell
+    /// 結線」参照)— supervisor が `AssetId` → `Asset` を引き、
+    /// [`crate::model::asset_to_layer_source`] を呼んで `Some(source)` なら
+    /// `Intent::SetSource { layer, source }` を dispatch する。
+    /// [`PaneState::update`] はこの腕を no-op として扱う(pane-local な状態は
+    /// 何も変わらない — supervisor が委譲の前後どちらかで副作用を差し込む)。
+    ReplaceSelectedLayerSource(AssetId),
 }
 
 /// Browser pane 専用の transient 状態(rail scope + 検索欄の下書き + パネル
@@ -261,6 +275,10 @@ impl PaneState {
             }
             Message::SelectSortKey(key) => self.sort_key = key,
             Message::SelectViewMode(mode) => self.view_mode = mode,
+            // 副作用(`Intent::SetSource` の dispatch)は supervisor の責務
+            // (このメンバー doc・crate 冒頭 doc「shell 結線」参照) — pane-local
+            // 状態には何も書かない。
+            Message::ReplaceSelectedLayerSource(_) => {}
         }
     }
 }
@@ -633,5 +651,24 @@ mod tests {
         state.update(Message::ClearFilters);
         assert_eq!(state.sort_key(), SortKey::Kind);
         assert_eq!(state.view_mode(), ViewMode::List);
+    }
+
+    // -----------------------------------------------------------------
+    // B08 map 616/617: ReplaceSelectedLayerSource は pane-local 状態への
+    // no-op(`Intent::SetSource` の dispatch は supervisor の責務、
+    // `Message::ReplaceSelectedLayerSource` doc 参照)。
+    // -----------------------------------------------------------------
+
+    /// **ORACLE**: この腕は scope/query/tab/selection のどれも動かさない。
+    #[test]
+    fn replace_selected_layer_source_does_not_touch_pane_local_state() {
+        let mut state = PaneState::new();
+        state.update(Message::SelectScope(RailScope::Audio));
+        state.update(Message::QueryChanged("tone".to_owned()));
+        state.update(Message::SelectCard(CardKey::Media(AssetId::from_raw(5))));
+        state.update(Message::ReplaceSelectedLayerSource(AssetId::from_raw(5)));
+        assert_eq!(state.scope(), RailScope::Audio);
+        assert_eq!(state.query(), "tone");
+        assert_eq!(state.selected(), Some(CardKey::Media(AssetId::from_raw(5))));
     }
 }

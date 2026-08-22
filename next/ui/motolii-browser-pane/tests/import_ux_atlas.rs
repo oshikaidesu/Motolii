@@ -51,6 +51,7 @@ fn texts_on(state: &PaneState, items: &[AssetListItem]) -> Vec<String> {
     text_contents(&collect_targets(pane_view(
         state,
         items,
+        None,
         Dimensions::default(),
         Colors::default(),
     )))

@@ -14,7 +14,7 @@
 //! `browser-semantics.html` 救出台帳で「予約地」(タグ束・filesystem 走査裁定
 //! 待ち)と明記済み — この切片では実装しない。
 
-use motolii_store::{AssetId, RationalTime, StoreView};
+use motolii_store::{Asset, AssetId, LayerId, LayerSource, RationalTime, StoreView};
 
 /// 一覧1行ぶんの投影。`Asset` から Browser が要る最小の面だけを切り出す
 /// (`AssetListItem { id, name, kind, path, fingerprint, duration }` — EXACT
@@ -605,6 +605,45 @@ pub fn visible(items: &[AssetListItem], scope: RailScope, query: &str) -> Vec<As
         })
         .cloned()
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// B08 map 616/617 消化: 素材置換(`Intent::SetSource` の UI 面 — store 側は
+// 裁定112c で実装済み、UI だけが未着手だった行)。618(ドラッグ版)は
+// Stage/Timeline 側の drop target が要る別 write-set のため対象外
+// (crate 冒頭 doc 参照)。
+// ---------------------------------------------------------------------------
+
+/// `Asset` → `Intent::SetSource { layer, source }` へ渡す `LayerSource` を
+/// 組む純関数。**IO なし** — この crate は `Intent` を発行しない
+/// (supervisor が `AssetId` → `Asset` を引いた後にこれを呼び、`Some` なら
+/// dispatch する、crate 冒頭 doc「shell 結線」参照)。
+///
+/// `path_absolute` を優先、無ければ `path_project_relative` へ落ちる —
+/// 両方無い(非ファイル素材)は `None`(置換できる実体が無い)。`fingerprint`
+/// は `Asset::content_hash`(admit 時から常に有る)をそのまま運ぶ —
+/// `motolii-shell` の raw-file-drop 経路(実ハッシュを持たないので
+/// `fingerprint: None`)とは事情が違う、ここは実ハッシュを持つので使う。
+pub fn asset_to_layer_source(asset: &Asset) -> Option<LayerSource> {
+    let path = asset
+        .path_absolute
+        .clone()
+        .or_else(|| asset.path_project_relative.clone())?;
+    Some(LayerSource::Media {
+        path,
+        fingerprint: Some(asset.content_hash.clone()),
+    })
+}
+
+/// 置換先 layer のゲーティング(map 616/617「選択素材を置換」)。呼び手
+/// (supervisor)は `Session::selected_layers` を `len() == 1` の時だけ
+/// `Some` へ畳んだ物を渡す — 0件・2件以上の選択(曖昧な置換先)は `None`
+/// のまま渡すこと(この codebase の既存慣習「曖昧な物には何もしない」)。
+/// [`asset_to_layer_source`] が `None` を返す素材(パスが無い)も同様に拒む。
+pub fn can_replace_source(single_selected_layer: Option<LayerId>, asset: &Asset) -> Option<LayerId> {
+    let layer = single_selected_layer?;
+    asset_to_layer_source(asset)?;
+    Some(layer)
 }
 
 // ---------------------------------------------------------------------------
@@ -1409,5 +1448,83 @@ mod tests {
         assert_eq!(ViewMode::default(), ViewMode::Grid);
         assert_eq!(ViewMode::Grid.tooltip_label(), "Grid view");
         assert_eq!(ViewMode::List.tooltip_label(), "List view");
+    }
+
+    // -----------------------------------------------------------------
+    // B08 map 616/617: asset_to_layer_source / can_replace_source(純関数)。
+    // -----------------------------------------------------------------
+
+    fn asset_with_paths(path_absolute: Option<&str>, path_project_relative: Option<&str>) -> Asset {
+        Asset {
+            id: AssetId::from_raw(0),
+            name: "clip".to_owned(),
+            asset_type: "video/mp4".to_owned(),
+            content_hash: "sha256:abc".to_owned(),
+            path_absolute: path_absolute.map(str::to_owned),
+            path_project_relative: path_project_relative.map(str::to_owned),
+            file_name: None,
+            size_bytes: None,
+            head_hash: None,
+            tail_hash: None,
+            duration: None,
+        }
+    }
+
+    /// **ORACLE**: `path_absolute` がある時はそちらを優先する。
+    #[test]
+    fn asset_to_layer_source_prefers_the_absolute_path() {
+        let asset = asset_with_paths(Some("/abs/clip.mp4"), Some("media/clip.mp4"));
+        let source = asset_to_layer_source(&asset).expect("path があるので Some のはず");
+        assert_eq!(
+            source,
+            LayerSource::Media {
+                path: "/abs/clip.mp4".to_owned(),
+                fingerprint: Some("sha256:abc".to_owned()),
+            }
+        );
+    }
+
+    /// `path_absolute` が無ければ `path_project_relative` へ落ちる。
+    #[test]
+    fn asset_to_layer_source_falls_back_to_the_project_relative_path() {
+        let asset = asset_with_paths(None, Some("media/clip.mp4"));
+        let source = asset_to_layer_source(&asset).expect("relative path があるので Some のはず");
+        assert_eq!(
+            source,
+            LayerSource::Media {
+                path: "media/clip.mp4".to_owned(),
+                fingerprint: Some("sha256:abc".to_owned()),
+            }
+        );
+    }
+
+    /// 両方無い(非ファイル素材)は `None` — 置換できる実体が無い。
+    #[test]
+    fn asset_to_layer_source_is_none_without_any_path() {
+        let asset = asset_with_paths(None, None);
+        assert_eq!(asset_to_layer_source(&asset), None);
+    }
+
+    /// 選択0件は拒む(曖昧な置換先を作らない)。
+    #[test]
+    fn can_replace_source_refuses_when_no_layer_is_selected() {
+        let asset = asset_with_paths(Some("/abs/clip.mp4"), None);
+        assert_eq!(can_replace_source(None, &asset), None);
+    }
+
+    /// **ORACLE**: 単一選択+有効な素材 → その layer を返す。
+    #[test]
+    fn can_replace_source_returns_the_single_selected_layer() {
+        let asset = asset_with_paths(Some("/abs/clip.mp4"), None);
+        let layer = LayerId(7);
+        assert_eq!(can_replace_source(Some(layer), &asset), Some(layer));
+    }
+
+    /// 単一選択があってもパスの無い素材は拒む。
+    #[test]
+    fn can_replace_source_refuses_an_asset_without_a_usable_path() {
+        let asset = asset_with_paths(None, None);
+        let layer = LayerId(7);
+        assert_eq!(can_replace_source(Some(layer), &asset), None);
     }
 }

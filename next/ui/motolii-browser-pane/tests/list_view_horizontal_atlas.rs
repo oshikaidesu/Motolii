@@ -95,6 +95,7 @@ fn list_mode_places_the_thumb_glyph_to_the_left_of_the_name() {
     let targets = collect_targets(pane_view(
         &state,
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
@@ -118,6 +119,7 @@ fn list_mode_keeps_the_name_and_caption_stacked_vertically() {
     let targets = collect_targets(pane_view(
         &state,
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
@@ -152,6 +154,7 @@ fn list_mode_name_field_is_much_wider_than_the_fixed_grid_card() {
     let grid_targets = collect_targets(pane_view(
         &PaneState::new(),
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
@@ -160,6 +163,7 @@ fn list_mode_name_field_is_much_wider_than_the_fixed_grid_card() {
     let list_targets = collect_targets(pane_view(
         &list_state(),
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
@@ -188,6 +192,7 @@ fn list_mode_horizontal_layout_also_applies_to_create_tab_cards() {
     let targets = collect_targets(pane_view(
         &state,
         &[],
+        None,
         Dimensions::default(),
         Colors::default(),
     ));

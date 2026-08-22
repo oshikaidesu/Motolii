@@ -86,7 +86,7 @@ fn press_text_times(
     content: &str,
     presses: usize,
 ) -> Vec<Message> {
-    let build = || pane_view(state, items, Dimensions::default(), Colors::default());
+    let build = || pane_view(state, items, None, Dimensions::default(), Colors::default());
     let targets = collect_targets(build());
     let bounds = targets
         .iter()
@@ -124,6 +124,7 @@ fn create_tab_shows_all_four_create_cards() {
     let targets = collect_targets(pane_view(
         &state,
         &items,
+        None,
         Dimensions::default(),
         Colors::default(),
     ));
