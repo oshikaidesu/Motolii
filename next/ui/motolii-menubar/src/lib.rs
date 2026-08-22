@@ -35,6 +35,7 @@ use iced::widget::{button, container, hover, row, text, Space};
 use iced::{Element, Length};
 use motolii_tokens_rs::{Colors, Dimensions};
 
+pub mod menus;
 pub mod vendored;
 
 // vendored コード(upstream iced_aw のまま)は `crate::style::…` で style catalog を
