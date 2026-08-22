@@ -3890,6 +3890,8 @@ dependencies = [
  "motolii-browser-pane",
  "motolii-core",
  "motolii-engine",
+ "motolii-export",
+ "motolii-export-pane",
  "motolii-icons",
  "motolii-inspector-pane",
  "motolii-media",

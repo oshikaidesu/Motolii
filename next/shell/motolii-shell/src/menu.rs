@@ -34,8 +34,9 @@
 //! `shortcut: None`(存在しない shortcut を発明しない — MB-1 からの規律)。
 
 use motolii_menubar::{Item, Menu};
+use motolii_store::Interp;
 
-use crate::Message;
+use crate::{timeline_pane, Message};
 
 /// トップレベル4本の正本(左から順)。`menus()` と同じ出典 — q0_fence の
 /// menubar 除外(bar click は「menu が開く」という widget 内部応答で、
@@ -66,6 +67,13 @@ pub fn menus() -> Vec<Menu<Message>> {
                     shortcut: None,
                     message: Message::SaveACopyRequested,
                 },
+                // 第6波(B09 書き出し束、map 538「Quick Export」消化)。
+                // S6 併存 — Cmd+E は `resolve_navigation_key` に実装済み。
+                Item {
+                    label: "Export…",
+                    shortcut: Some("Cmd+E"),
+                    message: Message::Export(crate::export_pane::Message::ToggleExportDialog),
+                },
                 Item { label: "Quit", shortcut: Some("Cmd+Q"), message: Message::QuitRequested },
             ],
         },
@@ -93,6 +101,44 @@ pub fn menus() -> Vec<Menu<Message>> {
                     label: "Deselect All",
                     shortcut: Some("Cmd+Shift+A"),
                     message: Message::DeselectAllLayers,
+                },
+                // 第6波(B15 補間束、`timeline::write` の `SetKeyInterp` 露出)。
+                // `motolii_menubar::Item`/`Menu` は入れ子 submenu を持たない
+                // (`motolii-menubar` crate doc「公開面は最小」)ので、「submenu
+                // 級」= Edit メニュー末尾にひとまとまりの Item 群として置く。
+                // 選択キーの track 全体へ一括適用(`write.rs::set_key_interp`
+                // — 空選択・選択キー無しは黙って no-op、既存柵のまま)。
+                // shortcut は未実装(飾り表記を書かない、S6 併存の規律どおり)。
+                Item {
+                    label: "Interpolation: Hold",
+                    shortcut: None,
+                    message: Message::Timeline(timeline_pane::Message::SetKeyInterp(Interp::Hold)),
+                },
+                Item {
+                    label: "Interpolation: Linear",
+                    shortcut: None,
+                    message: Message::Timeline(timeline_pane::Message::SetKeyInterp(Interp::Linear)),
+                },
+                Item {
+                    label: "Interpolation: Easy Ease",
+                    shortcut: None,
+                    message: Message::Timeline(timeline_pane::Message::SetKeyInterp(
+                        timeline_pane::EASY_EASE,
+                    )),
+                },
+                Item {
+                    label: "Interpolation: Easy Ease In",
+                    shortcut: None,
+                    message: Message::Timeline(timeline_pane::Message::SetKeyInterp(
+                        timeline_pane::EASY_EASE_IN,
+                    )),
+                },
+                Item {
+                    label: "Interpolation: Easy Ease Out",
+                    shortcut: None,
+                    message: Message::Timeline(timeline_pane::Message::SetKeyInterp(
+                        timeline_pane::EASY_EASE_OUT,
+                    )),
                 },
             ],
         },
@@ -135,6 +181,41 @@ pub fn menus() -> Vec<Menu<Message>> {
                     label: "Reset View",
                     shortcut: Some("Shift+F"),
                     message: Message::Stage(crate::stage::Message::ResetToRenderCamera),
+                },
+                // 第6波(B22 方眼シート束、`stage::sheets` 冒頭 doc「家(結線は
+                // 次波)— 表示トグルの家は Viewer(状態帯 or View メニュー)」)。
+                // 4項目とも `stage::SheetMessage::Toggle` — 状態
+                // (`Shell::sheet_toggles`)はトグル済みかどうかを見せない
+                // (`motolii_menubar::Item` に checkmark 面が無い、crate doc
+                // 「公開面は最小」)ので、押すたびに反転するだけの動詞として
+                // 露出する(Checkerboard と同格)。shortcut は未実装。
+                Item {
+                    label: "Grid",
+                    shortcut: None,
+                    message: Message::Sheet(crate::stage::SheetMessage::Toggle(
+                        crate::stage::Sheet::Grid,
+                    )),
+                },
+                Item {
+                    label: "Thirds",
+                    shortcut: None,
+                    message: Message::Sheet(crate::stage::SheetMessage::Toggle(
+                        crate::stage::Sheet::Thirds,
+                    )),
+                },
+                Item {
+                    label: "Golden Ratio",
+                    shortcut: None,
+                    message: Message::Sheet(crate::stage::SheetMessage::Toggle(
+                        crate::stage::Sheet::GoldenRatio,
+                    )),
+                },
+                Item {
+                    label: "Safe Margins",
+                    shortcut: None,
+                    message: Message::Sheet(crate::stage::SheetMessage::Toggle(
+                        crate::stage::Sheet::SafeMargins,
+                    )),
                 },
             ],
         },

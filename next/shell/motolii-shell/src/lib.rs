@@ -33,9 +33,9 @@ use iced::{wgpu, Element, Length, Task};
 use motolii_core::{CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
 use motolii_store::{
-    AssetDraft, Composition, DisplayRevision, Document, Fps, Intent, LayerAttrsPatch, LayerId,
-    LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, ResolvedLayer, Revision,
-    SourceFingerprintV1, Speed, StoreView, Value,
+    AssetDraft, AssetId, Composition, DisplayRevision, Document, Fps, Intent, LayerAttrsPatch,
+    LayerId, LayerMeta, LayerSource, LayerTiming, PropertyId, RationalTime, ResolvedLayer,
+    Revision, SourceFingerprintV1, Speed, StoreView, Value,
 };
 
 pub mod clipboard;
@@ -132,6 +132,12 @@ pub use motolii_stage_pane as stage;
 /// 参照)。開閉フラグは `PaneState::is_open`(`browser_pane` crate 冒頭 doc の
 /// 「B1/B2 からの委譲形を崩さない」設計選択)。
 pub use motolii_browser_pane as browser_pane;
+
+/// `export_pane` は B09 第1切片(2026-08-22 発注)で新規追加した骨格 crate
+/// (`motolii-export-pane`)。既存 pane と同じ命名口(`pub use X as Y;`)—
+/// こちらも新規追加なので壊す既存参照は無い。crate 冒頭 doc の「shell 結線」
+/// 節がそのままこの波の仕様書(第6波 EXACT TARGET 8)。
+pub use motolii_export_pane as export_pane;
 
 use file_dialogs::{FileDialogs, RfdDialogs};
 use inspector_pane::{FieldDraft, TransformField};
@@ -519,6 +525,38 @@ pub enum Message {
     /// 束ねる)。`Session::playhead` を `PlaybackClock::position()` へ追随させ、
     /// comp 終端に達したら自動で Pause する(発注書 ORACLE (a)/(e))。
     PlaybackTick,
+
+    // ---- 第6波 shell 結線(2026-08-22 発注、EXACT TARGET 1〜8) ----
+    /// Stage 方眼シート束(`stage::sheets` 冒頭 doc「結線は次波」— この波で
+    /// 結線)。`stage::SheetMessage` は既存 [`Message`] と独立の pane-local
+    /// message(`Message::Stage`/`Message::Gizmo` と同じ「独立 enum を root が
+    /// `.map` して畳む」形)。トグル状態(`stage::SheetToggles`)は
+    /// [`Shell::sheet_toggles`] が Session 水準で持つ(市松トグルと同格)。
+    Sheet(stage::SheetMessage),
+    /// Stage 矩形選択(`stage::marquee` 冒頭 doc「結線は supervisor」)。
+    /// `stage::marquee::SelectLayers` も同じ独立 enum の形。適用先は
+    /// [`Shell::apply_stage_selection`](`stage::marquee::apply_selection` を
+    /// 呼ぶだけ)。
+    Marquee(stage::marquee::SelectLayers),
+    /// Timeline マーカーレーン(B19、`timeline::markers` 冒頭 doc の統合手順)。
+    /// `timeline::markers::MarkerMessage` も同じ独立 enum の形 — canvas 差し替え・
+    /// input 優先順位・drag 状態は pane crate 側(`canvas.rs`/`input.rs`、
+    /// pub(crate))を触れないため未結線(RETURN 参照)。**keymap M=AddAtPlayhead
+    /// と JumpTo の先取りだけ、この腕で完結する**(`Shell::update_marker` 参照)。
+    Marker(timeline::markers::MarkerMessage),
+    /// Export ダイアログ(B09、`export_pane` crate doc「shell 結線」節)。
+    /// `motolii_export_pane::Message` を1本で畳む(`Message::Settings`/
+    /// `Message::Browser` と同型)。
+    Export(export_pane::Message),
+    /// `toggle_export_window` の `window::open` が開いた Export 窓。
+    /// `SettingsWindowOpened` と同型 — 台帳は open 時点で先行記帳済み、この腕は
+    /// runtime 側の再記帳(冪等)。
+    ExportWindowOpened(iced::window::Id),
+    /// Enter(単一選択時)= rename 開始(正典 §6、`timeline::write` 冒頭 doc)。
+    /// キー解決(`resolve_navigation_key`)は選択を知らないので、実際の
+    /// `LayerId` 解決とディスパッチは `Shell::update` 側(`self.session.selection`)
+    /// が行う。
+    RenameSelectedLayer,
 }
 
 /// 裁定171 v2(M4)。GPU zero-copy 経路で使う resolve 済みスナップショット。
@@ -664,11 +702,18 @@ struct GizmoShellDrag {
 
 /// [`stage::GizmoValue`](store の単位そのまま — `gizmo.rs` doc)→ store の
 /// [`Value`]。shell 側は写すだけ(GZ 契約「shell 側は `Value::Vec2`/`Value::F64`
-/// へ写すだけ」そのもの)。
+/// へ写すだけ」そのもの)。**`Anchor` はここへは来ない** — anchor drag は
+/// anchor と position の2 property を対で書く必要があるため、
+/// [`Shell::update_gizmo`] が `GizmoValue::Anchor { .. }` を専用の分岐で
+/// 個別に処理する(`gizmo.rs::GizmoValue::Anchor` doc「shell は両方を同時に
+/// 書く」参照)。
 fn gizmo_store_value(value: stage::GizmoValue) -> Value {
     match value {
         stage::GizmoValue::Position(v) | stage::GizmoValue::Scale(v) => Value::Vec2(v),
         stage::GizmoValue::Rotation(v) => Value::F64(v),
+        stage::GizmoValue::Anchor { .. } => {
+            unreachable!("Anchor は update_gizmo が個別分岐で処理する — ここへは来ない")
+        }
     }
 }
 
@@ -790,6 +835,12 @@ pub struct Shell {
     /// Stage ギズモ drag の shell 側 transient(GZ 結線 — [`GizmoShellDrag`]
     /// doc 参照)。`inspector_drag` と同格。
     gizmo_drag: Option<GizmoShellDrag>,
+    /// Timeline マーカーレーンの drag 進行中状態(第6波、
+    /// `timeline::markers::MarkerDrag` doc)。`gizmo_drag` と同格 — 現状は
+    /// canvas 側(pub(crate))から `MarkerMessage::Grabbed` を publish する道が
+    /// 無い(RETURN 参照)ため、実際には `None` のまま推移するが、意味の
+    /// 配線(`Shell::update_marker`)は完結させてある。
+    marker_drag: Option<timeline::markers::MarkerDrag>,
     /// Media 素材の実寸 cache(path → probe 結果、GZ 結線)。ギズモの
     /// [`stage::GizmoTarget::size`] は「Document が寸法を知らない素材は
     /// 呼び出し側が実寸を渡す」契約 — engine の texture 実寸は公開 API が
@@ -821,6 +872,34 @@ pub struct Shell {
     /// `Shell::boot`/`boot_fixture` が boot 時に先行記帳する。`None` = 窓を
     /// 開いていない(headless 試験・`--screenshot` 一発ツール経路)。
     main_window: Option<iced::window::Id>,
+
+    // ---- 第6波 shell 結線(2026-08-22 発注) ----
+    /// Stage 方眼シート束のトグル状態(B22、`stage::sheets` doc「shell が
+    /// Session 状態として持つ」)。**Document ではない** — `checkerboard` と
+    /// 同格の視界状態(κ台帳 a型)。
+    sheet_toggles: stage::SheetToggles,
+    /// Export 窓の台帳(B09、Settings 窓(S2)と同じ型 — `settings_window` doc
+    /// 参照)。`Some` = Export 窓が開いている。
+    export_window: Option<iced::window::Id>,
+    /// Export の品質選択(`export_pane::ExportQuality`)。窓を閉じても失われない
+    /// (Settings の `background_draft` 等と同じ「窓の外に住む状態」)。
+    export_quality: export_pane::ExportQuality,
+    /// Export の範囲選択(`export_pane::ExportRange`)。同上。
+    export_range: export_pane::ExportRange,
+    /// Export 先 path。`None` = 未設定(Export ボタンは押せない、
+    /// `export_pane::ViewModel::out_path` doc)。path 選択(rfd)は次波 — 見送り
+    /// (`export_pane` crate doc の逸脱参照)。
+    export_out_path: Option<std::path::PathBuf>,
+    /// 実行中の進捗(`export_pane::ExportProgress`)。`None` = 実行していない。
+    /// **型だけ**(`export_pane` crate doc「進捗の器」)—
+    /// `motolii_export::export_with_cancel` はフレーム単位のコールバックを
+    /// 持たない1回きりのバッチ呼び出しなので、実際に更新されるのは開始時
+    /// (0/total)と完了時(total/total)の2点だけ(RETURN 参照)。
+    export_progress: Option<export_pane::ExportProgress>,
+    /// 実行中の `motolii_export::Cancel` ハンドル。`Message::Export` が
+    /// export を始める時に発行し、`Message::Export(CancelExport)` が
+    /// `.cancel()` を呼ぶ。
+    export_cancel: Option<motolii_export::Cancel>,
 }
 
 impl Shell {
@@ -872,11 +951,19 @@ impl Shell {
                 transport: Transport::new(),
                 shuttle: timeline_pane::ShuttleState::stopped(),
                 gizmo_drag: None,
+                marker_drag: None,
                 media_size_cache: RefCell::new(HashMap::new()),
                 dialogs,
                 current_path: None,
                 saved_revision,
                 main_window: None,
+                sheet_toggles: stage::SheetToggles::default(),
+                export_window: None,
+                export_quality: export_pane::ExportQuality::Normal,
+                export_range: export_pane::ExportRange::Whole,
+                export_out_path: None,
+                export_progress: None,
+                export_cancel: None,
             },
             Task::none(),
         )
@@ -976,6 +1063,7 @@ impl Shell {
             transport: Transport::new(),
             shuttle: timeline_pane::ShuttleState::stopped(),
             gizmo_drag: None,
+            marker_drag: None,
             media_size_cache: RefCell::new(HashMap::new()),
             // 器具は screenshot 検分専用(発注書「トンマナ検分の器具」)なので
             // production の rfd ではなく`RfdDialogs` をそのまま渡しておく ──
@@ -986,6 +1074,13 @@ impl Shell {
             current_path: None,
             saved_revision,
             main_window: None,
+            sheet_toggles: stage::SheetToggles::default(),
+            export_window: None,
+            export_quality: export_pane::ExportQuality::Normal,
+            export_range: export_pane::ExportRange::Whole,
+            export_out_path: None,
+            export_progress: None,
+            export_cancel: None,
         };
         // `update()` を経由しないので、通常なら `update` の末尾が呼ぶ
         // `refresh_frame` をここで代わりに呼ぶ(Stage を空のまま起動しない、M17)。
@@ -1001,6 +1096,16 @@ impl Shell {
     pub fn subscription(&self) -> iced::Subscription<Message> {
         let window = iced::window::events().map(|(_id, event)| match event {
             iced::window::Event::FileDropped(path) => Message::DropReceived(path),
+            // 第6波(B08 取り込み UX 結線): OS file-drag の入/出をそのまま
+            // `browser_pane::state::Message::DropHoverChanged` へ翻訳する
+            // (`browser_pane` crate 冒頭 doc「shell 結線(次波)」— この波で
+            // 結線)。真偽の意味は pane 側で完結するので、ここは翻訳だけ。
+            iced::window::Event::FileHovered(_) => {
+                Message::Browser(browser_pane::Message::DropHoverChanged(true))
+            }
+            iced::window::Event::FilesHoveredLeft => {
+                Message::Browser(browser_pane::Message::DropHoverChanged(false))
+            }
             // winit は1ファイル1事象で送るので、描画要求を落下の区切りにする。
             // 3本まとめて落として1操作になるのはこのため。
             _ => Message::FlushDrops,
@@ -1069,6 +1174,7 @@ impl Shell {
             // ---- 窓台帳(S1 daemon 骨格 + S2 Settings 窓、裁定182/188) ----
             Message::MainWindowOpened(id) => self.main_window = Some(id),
             Message::SettingsWindowOpened(id) => self.settings_window = Some(id),
+            Message::ExportWindowOpened(id) => self.export_window = Some(id),
             Message::WindowClosed(id) => {
                 if self.main_window == Some(id) {
                     // main 閉=アプリ終了(probe 注意点1)。daemon は放って
@@ -1082,6 +1188,10 @@ impl Shell {
                     // `toggle_settings_window` が先行抹消済み — その場合
                     // ここへ来る時点で台帳は既に None なので何もしない)。
                     self.settings_window = None;
+                } else if self.export_window == Some(id) {
+                    // Export 窓の OS 閉じるボタン経路(`toggle_export_window`
+                    // と同じ扱い、Settings 窓と同型)。
+                    self.export_window = None;
                 }
             }
             Message::Inspector(msg) => {
@@ -1153,11 +1263,15 @@ impl Shell {
             // (裁定151「キャンセルの一般化」の柵、B18 の supervisor 結線)。
             // gizmo は canvas 側も Esc で `GizmoPhase::Cancel` を publish する
             // (`gizmo.rs`)が、こちらの連鎖にも置く — どちらが先でも
-            // `cancel_gizmo_drag` は冪等。
+            // `cancel_gizmo_drag` は冪等。第6波: rename も同じ連鎖へ足す
+            // (`timeline::write` 冒頭 doc「Esc は shell の EscapePressed が
+            // cancel_rename を直接呼ぶ」)— rename 中は drag 状態と排他なので
+            // 挿し込み位置に意味は無い(既存コメントと同じ理由)。
             Message::EscapePressed => {
                 if !self.timeline.cancel_drag()
                     && !self.timeline.cancel_key_drag()
                     && !self.timeline.cancel_loop_drag()
+                    && !self.timeline.cancel_rename()
                     && !self.cancel_gizmo_drag()
                 {
                     self.cancel_inspector_interaction();
@@ -1174,6 +1288,17 @@ impl Shell {
             // する(引数を追加で貸す必要が無い、`browser_pane::state` crate
             // doc 参照)。
             Message::Browser(msg) => {
+                // 第6波(create タブ実体化): `CreateFromCard` は pane-local の
+                // 状態を一切動かさない(`state.rs` の `Message::CreateFromCard
+                // => {}` — ORACLE)ので、Document への実体化は shell 側で
+                // 先取りする(`timeline_pane` の5例外と同じ「pane 委譲の前に
+                // supervisor が取る」形)。`&msg` で借りるのは、後段の
+                // `self.browser.update(msg)`(pane 側の唯一の書き口)へ
+                // 引き続き渡すため — `CreateFromCard` 自身は no-op なので
+                // 二重処理にはならない。
+                if let browser_pane::Message::CreateFromCard { kind } = &msg {
+                    self.create_from_card(*kind);
+                }
                 self.browser.update(msg);
                 // pane_grid 側は `browser_pane::PaneState::is_open()` が唯一の
                 // 真実源(`panes` フィールド doc 参照)——ここで追随させる。
@@ -1248,6 +1373,31 @@ impl Shell {
             }
             Message::TogglePlayback => self.toggle_playback(),
             Message::PlaybackTick => self.advance_playback_tick(),
+
+            // ---- 第6波 shell 結線 ----
+            Message::Sheet(msg) => self.sheet_toggles = self.sheet_toggles.apply(msg),
+            Message::Marquee(select) => {
+                let next = stage::marquee::apply_selection(
+                    &self.session.selected_layers,
+                    &select.ids,
+                    select.additive,
+                );
+                self.apply_stage_selection(next);
+            }
+            Message::Marker(msg) => self.update_marker(msg),
+            Message::Export(msg) => task = self.update_export(msg),
+            Message::RenameSelectedLayer => {
+                if let Some(layer) = self.session.selection {
+                    if let Some(reason) = self.timeline.update(
+                        timeline_pane::Message::RenameBegin(layer),
+                        &mut self.doc,
+                        &mut self.session,
+                        self.keyboard_modifiers,
+                    ) {
+                        self.status = Some(reason);
+                    }
+                }
+            }
         }
         self.refresh_frame();
         task
@@ -1259,6 +1409,63 @@ impl Shell {
     fn select_single(&mut self, layer: LayerId) {
         self.session.selection = Some(layer);
         self.session.selected_layers = vec![layer];
+    }
+
+    /// Stage 矩形選択/クリック選択の適用(第6波、`Message::Marquee` 腕)。
+    /// `stage::marquee::apply_selection` の結果を `Session` へ写すだけ —
+    /// `select_single`/`select_all_layers`/`deselect_all_layers` と同じ
+    /// 「単一なら `selection` も揃える・そうでなければ `None`」の規約
+    /// (`select_all_layers`/`deselect_all_layers` doc 参照 — gizmo は単一選択
+    /// にしか出ないので、複数選択では自動的に隠れる)。
+    fn apply_stage_selection(&mut self, ids: Vec<LayerId>) {
+        self.session.selection = match ids.as_slice() {
+            [only] => Some(*only),
+            _ => None,
+        };
+        self.session.selected_layers = ids;
+    }
+
+    /// create タブのカード実体化(B36、`browser_pane::model::CreateKind` →
+    /// `LayerSource::{Shape,Solid,Null}`、`Message::AddLayer` と同じ「AddLayer
+    /// 合成」の流儀 — 1 `apply_all` = 1 undo)。**Rectangle/Ellipse はどちらも
+    /// `LayerSource::Shape` のまま**(発注 EXACT TARGET 7 の文言どおり —
+    /// 図形の中身(`Layer:shapes` component の `ShapeNode`)を書き分ける差は
+    /// この波の範囲外、RETURN 参照)。生成後は選ぶ(`Message::AddLayer`/
+    /// `duplicate_layer` と同じ規律)。
+    fn create_from_card(&mut self, kind: browser_pane::model::CreateKind) {
+        use browser_pane::model::CreateKind;
+        let id = LayerId(self.next_layer_id());
+        let source = match kind {
+            CreateKind::Rectangle | CreateKind::Ellipse => LayerSource::Shape,
+            CreateKind::Solid => LayerSource::Solid {
+                rgba: [80, 160, 220, 255],
+                width: 240,
+                height: 135,
+            },
+            CreateKind::Null => LayerSource::Null,
+        };
+        let placed = self.doc.apply_all([
+            Intent::AddLayer(id),
+            Intent::SetMeta {
+                layer: id,
+                meta: LayerMeta {
+                    source,
+                    order: id.0 as i16,
+                    timing: LayerTiming::place(self.session.playhead, None, self.comp_duration()),
+                },
+            },
+            Intent::SetAttrs {
+                layer: id,
+                patch: LayerAttrsPatch {
+                    label_color: Some(Some(Self::label_color_for_new_layer(id))),
+                    ..Default::default()
+                },
+            },
+        ]);
+        match placed {
+            Ok(()) => self.select_single(id),
+            Err(error) => self.status = Some(format!("layer を作れない: {error}")),
+        }
     }
 
     // ---- File 束(MB-1、裁定176) ----
@@ -1522,6 +1729,12 @@ impl Shell {
         let start = self.session.playhead;
         let _ = start;
 
+        // 第6波(B08 取り込み UX 結線): 記帳前の台帳 id 集合を控え、記帳後との
+        // 差分で「今回新規に載った id」を出す(`Intent::AdmitAsset` 自体は
+        // 割り当てた id を呼び手へ返さないので、この差分が唯一の道)。
+        let before_admit: std::collections::HashSet<AssetId> =
+            self.assets().into_iter().map(|item| item.id).collect();
+
         for path in paths {
             let text = path.to_string_lossy().into_owned();
             let file_name = || {
@@ -1592,6 +1805,20 @@ impl Shell {
             if let Err(error) = self.doc.apply_all(intents) {
                 rejected.push(format!("置けなかった: {error}"));
             }
+        }
+        // 記帳後との差分 = 今回新規に載った id(`AdmitAsset` が失敗した分は
+        // 台帳に載っていないので自動的に含まれない)。`RecentlyAdmitted` は
+        // カード選択かタブ切替で消灯する表示専用状態(`browser_pane::state`
+        // doc 参照)— 空なら publish しない(no-op で pane 側の既存点灯を
+        // 消さない)。
+        let admitted: Vec<AssetId> = self
+            .assets()
+            .into_iter()
+            .map(|item| item.id)
+            .filter(|id| !before_admit.contains(id))
+            .collect();
+        if !admitted.is_empty() {
+            self.browser.update(browser_pane::Message::RecentlyAdmitted(admitted));
         }
         let mut notices = Vec::new();
         if !rejected.is_empty() {
@@ -2418,46 +2645,123 @@ impl Shell {
                 let Some(drag) = self.gizmo_drag.as_mut() else {
                     return;
                 };
-                let Ok(property) = PropertyId::new(value.property().property_name()) else {
-                    return;
-                };
                 let layer = drag.layer;
                 drag.moved = true;
-                self.doc.set_transient(layer, property, gizmo_store_value(value));
+                match value {
+                    // 第6波(anchor drag pairing): anchor と補償済み position を
+                    // 対で transient へ書く(`GizmoValue::Anchor` doc「shell は
+                    // 両方を同時に書く」— 片方だけ書くと絵が跳ぶ)。
+                    stage::GizmoValue::Anchor { anchor, position } => {
+                        if let Ok(anchor_property) =
+                            PropertyId::new(stage::GizmoProperty::Anchor.property_name())
+                        {
+                            self.doc.set_transient(layer, anchor_property, Value::Vec2(anchor));
+                        }
+                        if let Ok(position_property) =
+                            PropertyId::new(stage::GizmoProperty::Position.property_name())
+                        {
+                            self.doc.set_transient(layer, position_property, Value::Vec2(position));
+                        }
+                    }
+                    other => {
+                        let Ok(property) = PropertyId::new(other.property().property_name()) else {
+                            return;
+                        };
+                        self.doc.set_transient(layer, property, gizmo_store_value(other));
+                    }
+                }
             }
             stage::GizmoPhase::Commit { value } => {
                 let Some(drag) = self.gizmo_drag.take() else {
                     return;
                 };
-                let Ok(property) = PropertyId::new(value.property().property_name()) else {
-                    return;
-                };
-                // transient は `track()` に映らないので、ここで読むのは drag
-                // 開始前の本 track そのもの(`finish_field_drag` と同じ注記)。
-                let base_track = self.doc.view().track(drag.layer, &property).ok().flatten();
-                let mut write_error = None;
-                match inspector_pane::edited_value_track(
-                    base_track.as_ref(),
-                    drag.playhead_frame,
-                    drag.fps,
-                    gizmo_store_value(value),
-                ) {
-                    Ok(track) => {
-                        if let Err(error) = self.doc.apply(Intent::SetTrack {
-                            layer: drag.layer,
-                            property: property.clone(),
-                            track,
-                        }) {
-                            write_error = Some(format!("値を書けない: {error}"));
+                match value {
+                    // anchor drag の確定: 2 property(anchor/position)を
+                    // `Document::apply_all` で**1 undo**へ束ねる(1 gesture =
+                    // 1 commit の契約は変わらない — `GizmoValue::Anchor` doc)。
+                    stage::GizmoValue::Anchor { anchor, position } => {
+                        let (Ok(anchor_property), Ok(position_property)) = (
+                            PropertyId::new(stage::GizmoProperty::Anchor.property_name()),
+                            PropertyId::new(stage::GizmoProperty::Position.property_name()),
+                        ) else {
+                            return;
+                        };
+                        let store = self.doc.view();
+                        let anchor_base = store.track(drag.layer, &anchor_property).ok().flatten();
+                        let position_base =
+                            store.track(drag.layer, &position_property).ok().flatten();
+                        let mut write_error = None;
+                        match (
+                            inspector_pane::edited_value_track(
+                                anchor_base.as_ref(),
+                                drag.playhead_frame,
+                                drag.fps,
+                                Value::Vec2(anchor),
+                            ),
+                            inspector_pane::edited_value_track(
+                                position_base.as_ref(),
+                                drag.playhead_frame,
+                                drag.fps,
+                                Value::Vec2(position),
+                            ),
+                        ) {
+                            (Ok(anchor_track), Ok(position_track)) => {
+                                let intents = [
+                                    Intent::SetTrack {
+                                        layer: drag.layer,
+                                        property: anchor_property.clone(),
+                                        track: anchor_track,
+                                    },
+                                    Intent::SetTrack {
+                                        layer: drag.layer,
+                                        property: position_property.clone(),
+                                        track: position_track,
+                                    },
+                                ];
+                                if let Err(error) = self.doc.apply_all(intents) {
+                                    write_error = Some(format!("値を書けない: {error}"));
+                                }
+                            }
+                            (Err(error), _) | (_, Err(error)) => write_error = Some(error),
+                        }
+                        self.doc.clear_transient(drag.layer, &anchor_property);
+                        self.doc.clear_transient(drag.layer, &position_property);
+                        if let Some(error) = write_error {
+                            self.status = Some(error);
                         }
                     }
-                    Err(error) => write_error = Some(error),
-                }
-                // 書き込み失敗時も overlay は必ず外す(`finish_field_drag` と
-                // 同じ — overlay を残さない)。
-                self.doc.clear_transient(drag.layer, &property);
-                if let Some(error) = write_error {
-                    self.status = Some(error);
+                    other => {
+                        let Ok(property) = PropertyId::new(other.property().property_name()) else {
+                            return;
+                        };
+                        // transient は `track()` に映らないので、ここで読むのは drag
+                        // 開始前の本 track そのもの(`finish_field_drag` と同じ注記)。
+                        let base_track = self.doc.view().track(drag.layer, &property).ok().flatten();
+                        let mut write_error = None;
+                        match inspector_pane::edited_value_track(
+                            base_track.as_ref(),
+                            drag.playhead_frame,
+                            drag.fps,
+                            gizmo_store_value(other),
+                        ) {
+                            Ok(track) => {
+                                if let Err(error) = self.doc.apply(Intent::SetTrack {
+                                    layer: drag.layer,
+                                    property: property.clone(),
+                                    track,
+                                }) {
+                                    write_error = Some(format!("値を書けない: {error}"));
+                                }
+                            }
+                            Err(error) => write_error = Some(error),
+                        }
+                        // 書き込み失敗時も overlay は必ず外す(`finish_field_drag` と
+                        // 同じ — overlay を残さない)。
+                        self.doc.clear_transient(drag.layer, &property);
+                        if let Some(error) = write_error {
+                            self.status = Some(error);
+                        }
+                    }
                 }
             }
             stage::GizmoPhase::Cancel => {
@@ -2475,11 +2779,184 @@ impl Shell {
             return false;
         };
         if drag.moved {
-            if let Ok(property) = PropertyId::new(drag.property.property_name()) {
+            // anchor drag は2 property を対で transient へ書いている
+            // (`update_gizmo` の `Move` 分岐)ので、cancel も両方外す —
+            // 片方だけ残すと絵が跳んだまま止まる。
+            if matches!(drag.property, stage::GizmoProperty::Anchor) {
+                if let Ok(property) = PropertyId::new(stage::GizmoProperty::Anchor.property_name()) {
+                    self.doc.clear_transient(drag.layer, &property);
+                }
+                if let Ok(property) = PropertyId::new(stage::GizmoProperty::Position.property_name()) {
+                    self.doc.clear_transient(drag.layer, &property);
+                }
+            } else if let Ok(property) = PropertyId::new(drag.property.property_name()) {
                 self.doc.clear_transient(drag.layer, &property);
             }
         }
         true
+    }
+
+    // ---- Timeline マーカーレーン(B19、第6波、`timeline::markers` 冒頭 doc の
+    // 統合手順2「Message::Marker 畳み+JumpTo 先取り」) ----
+
+    /// `Message::Marker` の畳み。**canvas 差し替え・input 優先順位・実際の
+    /// mouse capture(`MarkerMessage::Grabbed`/`DragMoved`/`DragReleased`/
+    /// `DragCancelled` を publish する側)は未結線**(`motolii-timeline-pane`
+    /// の `canvas.rs`/`input.rs` が `pub(crate)` のため、EXACT TARGET
+    /// 「pane crate は読み専用」の範囲で shell からは触れない — RETURN の
+    /// API 要求参照)。この関数は Document 書き込みの意味だけを完結させる
+    /// (keymap M=AddAtPlayhead は実際に届く経路、他は将来 canvas 側が
+    /// publish するようになった時にそのまま機能する形で用意してある)。
+    fn update_marker(&mut self, message: timeline::markers::MarkerMessage) {
+        use timeline::markers::MarkerMessage;
+        match message {
+            MarkerMessage::AddAtPlayhead => {
+                let Some(fps) = self.composition().map(|c| c.fps) else {
+                    return;
+                };
+                let markers = self.markers();
+                if let Some(next) =
+                    timeline::markers::added_at_playhead(&markers, self.session.playhead, fps)
+                {
+                    if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
+                        self.status = Some(format!("マーカーを置けない: {error}"));
+                    }
+                }
+            }
+            // JumpTo は先取り(`ScrubTo`/`timeline_pane::Message::ScrubTo` と
+            // 同じ経路 — playhead を直接書く、正典 §5「K/J ナビの補完」)。
+            MarkerMessage::JumpTo(frame) => self.session.playhead = frame,
+            MarkerMessage::Remove(index) => {
+                let markers = self.markers();
+                if let Some(next) = timeline::markers::removed(&markers, index) {
+                    if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
+                        self.status = Some(format!("マーカーを削除できない: {error}"));
+                    }
+                }
+            }
+            MarkerMessage::Grabbed { index, at_frame } => {
+                let Some(fps) = self.composition().map(|c| c.fps) else {
+                    return;
+                };
+                let markers = self.markers();
+                self.marker_drag = timeline::markers::MarkerDrag::start(&markers, index, at_frame, fps);
+            }
+            MarkerMessage::DragMoved { at_frame } => {
+                let Some(fps) = self.composition().map(|c| c.fps) else {
+                    return;
+                };
+                let duration = self.comp_duration();
+                if let Some(drag) = self.marker_drag.as_mut() {
+                    drag.dragged(at_frame, fps, duration);
+                }
+            }
+            MarkerMessage::DragReleased => {
+                if let Some(drag) = self.marker_drag.take() {
+                    if let Some(next) = drag.finish() {
+                        if let Err(error) = self.doc.apply(Intent::SetMarkers { markers: next }) {
+                            self.status = Some(format!("マーカーを移動できない: {error}"));
+                        }
+                    }
+                }
+            }
+            MarkerMessage::DragCancelled => {
+                self.marker_drag = None;
+            }
+        }
+    }
+
+    // ---- Export 窓(B09、第6波、`export_pane` crate doc「shell 結線」節) ----
+
+    /// Export 窓の open/close(`toggle_settings_window` と同じ型)。
+    fn toggle_export_window(&mut self) -> Task<Message> {
+        match self.export_window.take() {
+            Some(id) => iced::window::close(id),
+            None => {
+                let (id, open) = iced::window::open(iced::window::Settings {
+                    size: iced::Size::new(420.0, 360.0),
+                    resizable: true,
+                    ..iced::window::Settings::default()
+                });
+                self.export_window = Some(id);
+                open.map(Message::ExportWindowOpened)
+            }
+        }
+    }
+
+    /// `Message::Export` の畳み(crate doc「shell 結線」手順3)。
+    fn update_export(&mut self, message: export_pane::Message) -> Task<Message> {
+        match message {
+            export_pane::Message::ToggleExportDialog => return self.toggle_export_window(),
+            export_pane::Message::QualitySelect(quality) => self.export_quality = quality,
+            export_pane::Message::RangeSelect(range) => self.export_range = range,
+            export_pane::Message::Export => self.start_export(),
+            export_pane::Message::CancelExport => {
+                if let Some(cancel) = &self.export_cancel {
+                    cancel.cancel();
+                }
+            }
+        }
+        Task::none()
+    }
+
+    /// Export 実行(crate doc「shell 結線」手順3「`Export` = `ExportJob` を
+    /// 組んで export 実行」)。**逸脱**: `motolii_export::export_with_cancel`
+    /// はフレーム単位の進捗コールバックを持たない同期の1回きりのバッチ呼び
+    /// 出し(engine crate 冒頭 doc)なので、`export_progress` は開始時
+    /// (0/total)と完了時(total/total)の2点だけ更新する「進捗 subscription」
+    /// の型だけの実装になっている(RETURN 参照 — 真の非同期進捗ストリームは
+    /// `motolii-export` 側にコールバック/チャンク実行を足す変更が要り、
+    /// EXACT TARGET(shell のみ)の外)。UI スレッドは export 完了まで
+    /// ブロックする(呼び出しは同期のまま — RETURN 逸脱)。
+    fn start_export(&mut self) {
+        let Some(out_path) = self.export_out_path.clone() else {
+            self.status = Some("書き出し先が未設定".to_owned());
+            return;
+        };
+        let Some(composition) = self.composition() else {
+            self.status = Some("comp が無いので書き出せない".to_owned());
+            return;
+        };
+        let duration = composition.duration_frames;
+        let range = export_pane::effective_range(
+            self.export_range,
+            self.timeline_work_area().map(|area| export_pane::WorkAreaFrames {
+                start: area.start,
+                end: area.end,
+            }),
+            duration,
+        );
+        let total = range.frame_count();
+        let cancel = motolii_export::Cancel::new();
+        self.export_cancel = Some(cancel.clone());
+        self.export_progress = Some(export_pane::ExportProgress {
+            frames_done: 0,
+            frames_total: total,
+        });
+        let job = motolii_export::ExportJob {
+            out_path,
+            qp0: self.export_quality.qp0(),
+        };
+        let store = self.doc.view();
+        let result = motolii_export::export_with_cancel(&mut self.engine, &store, &job, &cancel);
+        self.export_cancel = None;
+        match result {
+            Ok(report) => {
+                self.export_progress = Some(export_pane::ExportProgress {
+                    frames_done: report.frames_written,
+                    frames_total: total,
+                });
+                self.status = Some(format!(
+                    "書き出し完了: {} ({} frames)",
+                    report.out_path.display(),
+                    report.frames_written
+                ));
+            }
+            Err(error) => {
+                self.export_progress = None;
+                self.status = Some(format!("書き出しできない: {error}"));
+            }
+        }
     }
 
     // ---- Inspector の drag-to-scrub ----
@@ -2680,6 +3157,36 @@ impl Shell {
         self.browser.is_open()
     }
 
+    /// Export 窓の台帳の読み口(B09、第6波)。`settings_window()` と同型 —
+    /// 運転席(`tests/suite/export_drive.rs`)が open/close の状態遷移を読む。
+    pub fn export_window(&self) -> Option<iced::window::Id> {
+        self.export_window
+    }
+
+    /// Stage 方眼シート束のトグル状態の読み口(B22、第6波)。運転席が
+    /// 「View メニューを押す → トグルが反転する」を確かめる口。
+    pub fn sheet_toggles(&self) -> stage::SheetToggles {
+        self.sheet_toggles
+    }
+
+    /// Export の実行結果/実行中状態の読み口(B09、第6波)。`None` = 実行
+    /// していない。運転席が「Export → 完了して進捗が total/total になる」を
+    /// 確かめる口。
+    pub fn export_progress(&self) -> Option<export_pane::ExportProgress> {
+        self.export_progress
+    }
+
+    /// Export の品質選択の読み口(B09、第6波)。運転席が
+    /// `Message::Export(QualitySelect(_))` の反映を確かめる口。
+    pub fn export_quality(&self) -> export_pane::ExportQuality {
+        self.export_quality
+    }
+
+    /// Export の範囲選択の読み口(B09、第6波)。同上。
+    pub fn export_range(&self) -> export_pane::ExportRange {
+        self.export_range
+    }
+
     /// 描き上がった Stage フレームの生 RGBA。**常に背景込みの export 真値**
     /// (`Engine::render_frame`)— 市松トグルで一切変わらない。**screenshot
     /// 器具専用**(`screenshot.rs`)— 通常描画は shader Program(`stage_pane`)を
@@ -2858,6 +3365,14 @@ impl Shell {
             // (`work_area.rs` doc「型の置き場」)、絵と当たりへはこの読み口
             // 経由で毎フレーム運ぶ(`with_playing` と同じ薄い builder)。
             .with_work_area(self.timeline.work_area(), self.timeline.loop_enabled())
+            // 第6波(rename 統合手順1): inline rename の下書きを rail の
+            // `text_input` へ運ぶ(`rail.rs` の `pane.rename` 読み — 供給は
+            // supervisor の仕事、`write.rs` 冒頭 doc 参照)。
+            .with_rename(
+                self.timeline
+                    .rename_draft()
+                    .map(|(layer, draft)| (layer, draft.to_owned())),
+            )
     }
 
     /// `stage::StageOverlay` の組み立て(裁定157・S1〜S3)。`Shell::view` が
@@ -2937,6 +3452,82 @@ impl Shell {
         ))
     }
 
+    /// `stage::SheetOverlay` の組み立て(B22、第6波、`sheets.rs` 冒頭 doc
+    /// 「家(結線は次波)」— この波で結線)。`stage_overlay`/`stage_gizmo_overlay`
+    /// と同じ「毎フレーム不変な投影を作り直す」形。トグル状態
+    /// ([`Shell::sheet_toggles`])は View メニューが動かす。
+    pub fn stage_sheet_overlay(&self) -> Option<stage::SheetOverlay> {
+        let composition = self.composition()?;
+        let comp = motolii_core::CompSpec {
+            width: composition.width,
+            height: composition.height,
+        };
+        let render_camera = self
+            .time_at_playhead()
+            .and_then(|t| self.doc.view().resolve_camera(t).ok())
+            .unwrap_or_default();
+        Some(stage::SheetOverlay::new(
+            comp,
+            render_camera,
+            self.observation,
+            self.sheet_toggles,
+            self.dims(),
+            self.tokens.colors,
+        ))
+    }
+
+    /// `stage::marquee::MarqueeOverlay` の組み立て(B31、第6波、`marquee.rs`
+    /// 冒頭 doc)。候補は「今この時刻に見えている全レイヤー」を
+    /// `LayerMeta::order` 昇順(下→上、`marquee.rs` doc「候補列は可視レイヤー
+    /// 下→上」— `StoreView::resolved_layers` の並べ方と同じ規約)で並べる —
+    /// `stage_gizmo_overlay` と同じ「declared_size か media 実寸、どちらも
+    /// 無ければスキップ」の門(gizmo を出さない layer は marquee の候補にも
+    /// しない、Q0「触れない物を描かない」の対称)。
+    pub fn stage_marquee_overlay(&self) -> Option<stage::marquee::MarqueeOverlay> {
+        let composition = self.composition()?;
+        let store = self.doc.view();
+        let t = self.time_at_playhead()?;
+        let mut ordered: Vec<(i16, stage::GizmoTarget)> = Vec::new();
+        for layer in store.layers() {
+            let Some(resolved) = store.resolve(layer, t).ok().flatten() else {
+                continue;
+            };
+            let size = if resolved.declared_size[0] > 0.0 && resolved.declared_size[1] > 0.0 {
+                resolved.declared_size
+            } else if let LayerSource::Media { path, .. } = &resolved.source {
+                let Some(size) = self.media_natural_size(path) else {
+                    continue;
+                };
+                size
+            } else {
+                continue;
+            };
+            let Some(target) = stage::gizmo_target(&store, layer, self.session.playhead, size) else {
+                continue;
+            };
+            ordered.push((resolved.placement.order, target));
+        }
+        ordered.sort_by_key(|(order, _)| *order);
+        let candidates: Vec<stage::GizmoTarget> = ordered.into_iter().map(|(_, target)| target).collect();
+        let comp = motolii_core::CompSpec {
+            width: composition.width,
+            height: composition.height,
+        };
+        let render_camera = store.resolve_camera(t).ok().unwrap_or_default();
+        // 「今 gizmo を表示しているレイヤー」= 単一選択(gizmo は複数選択には
+        // 出ない、`stage_gizmo_overlay` の `self.session.selection?` 参照)。
+        let gizmo_layers: Vec<LayerId> = self.session.selection.into_iter().collect();
+        Some(stage::marquee::MarqueeOverlay::new(
+            comp,
+            render_camera,
+            self.observation,
+            candidates,
+            gizmo_layers,
+            self.dims(),
+            self.tokens.colors,
+        ))
+    }
+
     /// Media 素材の実寸(表示上の寸法 — 回転メタデータ適用後、
     /// `motolii_media::MediaInfo` doc)。path ごとに1回だけ probe して
     /// `media_size_cache` に控える(失敗も `None` で控え、毎フレーム叩き直さ
@@ -2974,6 +3565,8 @@ impl Shell {
     pub fn view_window(&self, window: iced::window::Id) -> Element<'_, Message> {
         if self.settings_window == Some(window) {
             self.view_settings_window()
+        } else if self.export_window == Some(window) {
+            self.view_export_window()
         } else {
             self.view()
         }
@@ -2982,9 +3575,12 @@ impl Shell {
     /// daemon の窓別 title(`main.rs` の `.title(...)`)。main 窓(と台帳に
     /// 無い Id)は従来どおり [`Shell::title`]、Settings 窓は "Settings"
     /// (S2 — pane 名の常設(題帯レーン)の役は OS 窓の titlebar が担う)。
+    /// Export 窓(B09、第6波)は同型で "Export"。
     pub fn window_title(&self, window: iced::window::Id) -> String {
         if self.settings_window == Some(window) {
             "Settings".to_owned()
+        } else if self.export_window == Some(window) {
+            "Export".to_owned()
         } else {
             self.title()
         }
@@ -3023,6 +3619,40 @@ impl Shell {
                 colors,
             )
             .map(Message::Settings),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(dims.spacing_l)
+        .into()
+    }
+
+    /// Export 窓の絵(B09、第6波、`export_pane` crate doc「shell 結線」手順2)。
+    /// Settings 窓(`view_settings_window`)と同型の第2窓 — 中身は
+    /// [`export_pane::view`](投影を受ける純関数)。作業範囲は TL+ の
+    /// `WorkArea`(`timeline_work_area()`)を `export_pane::WorkAreaFrames` へ
+    /// 座標だけ写す(pane 同士は依存しない、crate doc 参照)。
+    fn view_export_window(&self) -> Element<'_, Message> {
+        let dims = self.dims();
+        let colors = self.tokens.colors;
+        let composition = self.composition();
+        let work_area = self.timeline_work_area().map(|area| export_pane::WorkAreaFrames {
+            start: area.start,
+            end: area.end,
+        });
+        container(
+            export_pane::view(
+                export_pane::ViewModel {
+                    composition: composition.as_ref(),
+                    out_path: self.export_out_path.as_deref(),
+                    quality: self.export_quality,
+                    range: self.export_range,
+                    work_area,
+                    progress: self.export_progress,
+                },
+                dims,
+                colors,
+            )
+            .map(Message::Export),
         )
         .width(Length::Fill)
         .height(Length::Fill)
@@ -3084,6 +3714,8 @@ impl Shell {
                 pane_layout::PaneKind::Stage => stage_pane(
                     self.frame.as_ref(),
                     self.stage_overlay(),
+                    self.stage_sheet_overlay(),
+                    self.stage_marquee_overlay(),
                     self.stage_gizmo_overlay(),
                     self.observation,
                     self.resolution_cap,
@@ -4710,6 +5342,49 @@ pub fn resolve_navigation_key(
         // 判断(拘束5)はここでは持たない — `Shell::toggle_playback` 側
         // (`is_dragging()`)。
         Key::Named(Named::Space) => Some(Message::TogglePlayback),
+
+        // ---- 第6波 shell 結線(2026-08-22 発注) ----
+        // マーカー keymap(B19、`timeline::markers` 冒頭 doc 統合手順5
+        // 「keymap M=AddAtPlayhead」)。`!modifiers.command()` は j/k/i/o と
+        // 同じ「将来の Cmd+M に予約を残す」防衛ガード。
+        Key::Character(c) if !modifiers.command() && c.eq_ignore_ascii_case("m") => {
+            Some(Message::Marker(timeline::markers::MarkerMessage::AddAtPlayhead))
+        }
+        // rename 開始(正典 §6、`timeline::write` 冒頭 doc「Enter(単一選択)=
+        // RenameBegin」)。実際の選択解決(`LayerId`)は `resolve_navigation_key`
+        // が選択を知らないため `Shell::update` 側(`Message::RenameSelectedLayer`
+        // 腕)が行う。
+        Key::Named(Named::Enter) => Some(Message::RenameSelectedLayer),
+        // Stage 合成順の並べ替え(B44、`timeline::write::Message::RestackLayer`
+        // — 意味(`restack_layers`)は既に `PaneState::update` 側で完結して
+        // いる、`Message::Timeline` の「other」経路がそのまま拾う。ここは
+        // keymap の口を1本足すだけ)。Cmd+Alt+↑/↓ = 1歩前面/背面、+Shift =
+        // 最前面/最背面(`StackDirection` の4 variant にそのまま対応)。
+        Key::Named(Named::ArrowUp) if modifiers.command() && modifiers.alt() && !modifiers.shift() => {
+            Some(Message::Timeline(timeline_pane::Message::RestackLayer(
+                timeline::StackDirection::Forward,
+            )))
+        }
+        Key::Named(Named::ArrowDown) if modifiers.command() && modifiers.alt() && !modifiers.shift() => {
+            Some(Message::Timeline(timeline_pane::Message::RestackLayer(
+                timeline::StackDirection::Backward,
+            )))
+        }
+        Key::Named(Named::ArrowUp) if modifiers.command() && modifiers.alt() && modifiers.shift() => {
+            Some(Message::Timeline(timeline_pane::Message::RestackLayer(
+                timeline::StackDirection::ToFront,
+            )))
+        }
+        Key::Named(Named::ArrowDown) if modifiers.command() && modifiers.alt() && modifiers.shift() => {
+            Some(Message::Timeline(timeline_pane::Message::RestackLayer(
+                timeline::StackDirection::ToBack,
+            )))
+        }
+        // Export ダイアログ(B09、`export_pane` crate doc「shell 結線」・
+        // map 529「Ctrl+E = Export」消化 — Mac 表記は Cmd+E)。
+        Key::Character(c) if modifiers.command() && c.eq_ignore_ascii_case("e") => {
+            Some(Message::Export(export_pane::Message::ToggleExportDialog))
+        }
         _ => None,
     }
 }
@@ -4728,6 +5403,8 @@ pub fn resolve_navigation_key(
 fn stage_pane(
     frame: Option<&RenderedFrame>,
     overlay: Option<stage::StageOverlay>,
+    sheets: Option<stage::SheetOverlay>,
+    marquee: Option<stage::marquee::MarqueeOverlay>,
     gizmo: Option<stage::GizmoOverlay>,
     observation: Option<ObservationCamera>,
     resolution_cap: stage::PreviewResolutionCap,
@@ -4767,27 +5444,38 @@ fn stage_pane(
             .height(Length::Fill)
             .into();
             // 観測カメラの入力(ホイール/中ボタンドラッグ)とフレーム枠 overlay
-            // (裁定157)、その上にギズモ(GZ 結線、第5波)。shader widget の
+            // (裁定157)、その上に方眼シート(B22、描画のみ・入力ゼロ)、その上に
+            // マーキー(B31)、最上段にギズモ(GZ 結線、第5波)。shader widget の
             // 上に重ねるだけ — 変形はしない(Stage は letterbox 貼りのまま、
             // `stage.rs` モジュール doc 参照)。
             // 裁定160 切片10: `StageOverlay::view()` は `stage::Message`
             // (pane ローカル)を返す — `.map(Message::Stage)` で root
             // `Message` へ畳んでから `picture` と同じ `stack!` へ積む
-            // (`timeline.view().map(Message::Timeline)` と同じ形)。ギズモは
-            // 既存 StageOverlay の**上**(GZ 契約 — 掴んでいない場所の
-            // イベントは capture しないので、ホイール/空クリックは下の
-            // StageOverlay へ素通しする)。`.map(Message::Gizmo)` で同様に畳む。
-            match (overlay, gizmo) {
-                (Some(overlay), Some(gizmo)) => stack![
-                    picture,
-                    overlay.view().map(Message::Stage),
-                    gizmo.view().map(Message::Gizmo)
-                ]
-                .into(),
-                (Some(overlay), None) => stack![picture, overlay.view().map(Message::Stage)].into(),
-                (None, Some(gizmo)) => stack![picture, gizmo.view().map(Message::Gizmo)].into(),
-                (None, None) => picture,
+            // (`timeline.view().map(Message::Timeline)` と同じ形)。
+            // 第6波: sheets/marquee も同型の独立 message → `.map` 畳み。
+            // 積む順は各モジュール冒頭 doc の指定どおり
+            // (`sheets.rs`/`marquee.rs`「StageOverlay の上・GizmoOverlay の
+            // 下」) — gizmo が最優先で入力を capture し(GZ 契約「gizmo が
+            // 勝つ」)、marquee がその補集合(`press_starts_marquee`)、sheets
+            // は入力ゼロ(`pointer-events:none` の転写)なので順序は描画にしか
+            // 効かない。動的な組み合わせ(4 overlay 全部が Option)は
+            // `if let` を積み上げる形にした — `(Option, Option)` の全組み合わせ
+            // 網羅より読みやすい(見えない overlay を stack へ積まないのは
+            // 前波までと同じ「無い物は木に無い」Q0 の型)。
+            let mut layered: Element<'_, Message> = picture;
+            if let Some(overlay) = overlay {
+                layered = stack![layered, overlay.view().map(Message::Stage)].into();
             }
+            if let Some(sheets) = sheets {
+                layered = stack![layered, sheets.view().map(Message::Sheet)].into();
+            }
+            if let Some(marquee) = marquee {
+                layered = stack![layered, marquee.view().map(Message::Marquee)].into();
+            }
+            if let Some(gizmo) = gizmo {
+                layered = stack![layered, gizmo.view().map(Message::Gizmo)].into();
+            }
+            layered
         }
         None => text("comp がまだ無い")
             .size(dims.body_text)

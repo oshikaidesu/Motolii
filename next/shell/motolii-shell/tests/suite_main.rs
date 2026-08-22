@@ -14,6 +14,8 @@
 //! 汚染して間欠的に落ちることを実測した(このファイル単独なら常に緑)。
 //! バイナリを分ければプロセスが分かれ、static も分かれるので汚染源が消える。
 
+#[path = "suite/anchor_drag_drive.rs"]
+mod anchor_drag_drive;
 #[path = "suite/band_line_fence.rs"]
 mod band_line_fence;
 #[path = "suite/blend_drive.rs"]
@@ -22,10 +24,14 @@ mod blend_drive;
 mod browser_drive;
 #[path = "suite/clipboard_drive.rs"]
 mod clipboard_drive;
+#[path = "suite/create_from_card_drive.rs"]
+mod create_from_card_drive;
 #[path = "suite/drive.rs"]
 mod drive;
 #[path = "suite/entrance_atlas_dump.rs"]
 mod entrance_atlas_dump;
+#[path = "suite/export_drive.rs"]
+mod export_drive;
 #[path = "suite/file_drive.rs"]
 mod file_drive;
 #[path = "suite/fixture.rs"]
@@ -44,6 +50,10 @@ mod inspector_drive;
 mod inspector_key_drive;
 #[path = "suite/inspector_pixel_fence.rs"]
 mod inspector_pixel_fence;
+#[path = "suite/marker_keymap_drive.rs"]
+mod marker_keymap_drive;
+#[path = "suite/marquee_drive.rs"]
+mod marquee_drive;
 #[path = "suite/menu_drive.rs"]
 mod menu_drive;
 #[path = "suite/nav_drive.rs"]
@@ -56,8 +66,14 @@ mod pane_band_drive;
 mod playback_drive;
 #[path = "suite/q0_fence.rs"]
 mod q0_fence;
+#[path = "suite/rename_drive.rs"]
+mod rename_drive;
+#[path = "suite/restack_drive.rs"]
+mod restack_drive;
 #[path = "suite/settings_drive.rs"]
 mod settings_drive;
+#[path = "suite/sheet_drive.rs"]
+mod sheet_drive;
 #[path = "suite/shortcut_drive.rs"]
 mod shortcut_drive;
 #[path = "suite/shuttle_work_area_drive.rs"]
