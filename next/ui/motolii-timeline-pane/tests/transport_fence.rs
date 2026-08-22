@@ -55,14 +55,15 @@ fn s0_the_five_buttons_run_start_back_play_forward_end() {
 }
 
 /// Play ボタンは「次に何が起きるか」を示す(shell 旧 Play バーと同じ慣習):
-/// 停止中=▶(押すと再生)、再生中=‖(押すと停止)。再生中だけ状態 ink
-/// (accent、rail の M/S/L active と同じ器)が立つ。
+/// 停止中=▶(押すと再生)、再生中=⏸(押すと停止)。再生中だけ状態 ink
+/// (accent、rail の M/S/L active と同じ器)が立つ。絵は裁定186 で文字
+/// グリフ→ SVG アイコン(`motolii-icons`)へ置換 — Message 写像は不変。
 #[test]
 fn the_play_button_face_flips_between_play_and_pause() {
     let paused = transport_spec(0, Some(fps30()), false);
     let playing = transport_spec(0, Some(fps30()), true);
     assert_ne!(
-        paused.buttons[2].glyph, playing.buttons[2].glyph,
+        paused.buttons[2].icon, playing.buttons[2].icon,
         "再生中と停止中で Play ボタンの顔が変わっていない"
     );
     assert!(!paused.buttons[2].active, "停止中に active が立っている");

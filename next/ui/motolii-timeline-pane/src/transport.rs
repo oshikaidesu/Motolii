@@ -9,8 +9,10 @@
 //! について沈黙しているので、これは実測転写ではなく導出 — 実窓で見てから直す。
 //!
 //! ## 枠の文法(裁定179 — 箱は状態の器)
-//! - ボタンは**常時輪郭なし**(素のグリフ)。hover で面が浮き
-//!   (`surface_hover`)、押下で ink が accent(`action_active`)。
+//! - ボタンの絵は SVG アイコン(裁定186 で文字グリフ |◀ ◂ ▶ ▸ ▶| から置換 —
+//!   `motolii-icons` の Material Symbols)。**常時輪郭なし**(素のアイコン)。
+//!   hover で面が浮く(`surface_hover`)。押下 ink の詳細は
+//!   [`transport_button`] の doc(svg は button の text_color を継がない)。
 //! - 区切り線を引かない — 帯はクリップ面(地)との明度1段
 //!   (`surface_panel`、rail と同じ面)だけで分かれる。
 //! - グリフの ink は内容より1段静か(`text_secondary`)。Timecode の数字
@@ -32,6 +34,7 @@
 use iced::widget::{button, container, row, text, Space};
 use iced::{Background, Element, Length};
 
+use motolii_icons::{frame_px_for_glyph_px, Icon};
 use motolii_store::Fps;
 
 use super::TimelinePane;
@@ -43,11 +46,11 @@ use crate::Message;
 /// (`lane_bar` の比率純関数と同じ「検証可能な継ぎ目」の型)。
 #[derive(Debug, Clone)]
 pub struct TransportButton {
-    /// グリフ文字(アイコンフォント新規導入禁止 — 発注書)。step は fold
-    /// 三角と同族の小三角(◂/▸)、Play は大三角(▶)— 同じ ▶ を2つの動詞に
-    /// 使わないための1段差(発注書例示 |◀ ◀ ▶ ▶ ▶| からの明示的な逸脱、
-    /// RETURN に記載)。
-    pub glyph: &'static str,
+    /// SVG アイコン(裁定186 — 文字グリフ |◀ ◂ ▶ ▸ ▶| からの置換)。step は
+    /// Play の大三角と同じ ▶ を2つの動詞に使わないための1段差を保つ:
+    /// Play=`PlayArrow`(大三角)、step=`ArrowLeft`/`ArrowRight`(小三角 —
+    /// 旧 ◂/▸ の直訳。chevron 系は別動詞のための在庫)。
+    pub icon: Icon,
     /// 押下で発する pane-local Message(shell が既存の再生系 Message へ写す)。
     pub message: Message,
     /// 状態の器(裁定179)としての「今 on か」。Play‖Pause だけが持つ
@@ -73,29 +76,29 @@ pub fn transport_spec(playhead: i64, fps: Option<Fps>, playing: bool) -> Transpo
     TransportSpec {
         buttons: [
             TransportButton {
-                glyph: "|\u{25C0}", // |◀ 先頭
+                icon: Icon::SkipPrevious, // 旧 |◀ 先頭
                 message: Message::JumpPlayheadToStart,
                 active: false,
             },
             TransportButton {
-                glyph: "\u{25C2}", // ◂ 1コマ戻
+                icon: Icon::ArrowLeft, // 旧 ◂ 1コマ戻(小三角)
                 message: Message::StepPlayhead(-1),
                 active: false,
             },
             TransportButton {
                 // 「次に何が起きるか」を示す慣習(shell 旧 Play バーと同じ):
-                // 停止中=▶(押すと再生)、再生中=‖(押すと停止)。
-                glyph: if playing { "\u{2016}" } else { "\u{25B6}" }, // ‖ / ▶
+                // 停止中=▶(押すと再生)、再生中=⏸(押すと停止)。
+                icon: if playing { Icon::Pause } else { Icon::PlayArrow },
                 message: Message::TogglePlayback,
                 active: playing,
             },
             TransportButton {
-                glyph: "\u{25B8}", // ▸ 1コマ進
+                icon: Icon::ArrowRight, // 旧 ▸ 1コマ進(小三角)
                 message: Message::StepPlayhead(1),
                 active: false,
             },
             TransportButton {
-                glyph: "\u{25B6}|", // ▶| 末尾
+                icon: Icon::SkipNext, // 旧 ▶| 末尾
                 message: Message::JumpPlayheadToEnd,
                 active: false,
             },
@@ -170,9 +173,19 @@ fn unit_glyph(unit: &'static str, dims: Dimensions, colors: Colors) -> Element<'
     text(unit).size(dims.caption_text).color(colors.text_muted).into()
 }
 
-/// transport の1ボタン。常時輪郭なし・hover で面が浮く・押下で accent
-/// (裁定179)。踏面は帯高いっぱい×`timeline_transport_button_width`
-/// (S1: グリフより大きい)。
+/// transport の1ボタン。常時輪郭なし・hover で面が浮く(裁定179)。踏面は
+/// 帯高いっぱい×`timeline_transport_button_width`(S1: アイコンより大きい)。
+///
+/// ## アイコン化の寸法・ink(裁定186)
+/// - 枠寸は旧文字グリフの字寸(`body_text`)を [`frame_px_for_glyph_px`]
+///   (Material live area 比 24/20)で写した視覚同等寸 — 踏面・帯高は
+///   dimensions.json の `timeline_transport` 節のまま無改変。
+/// - ink は svg の tint(`motolii_icons::icon` へ渡す色)で塗る。svg は
+///   button の `text_color` を継がないため、**押下瞬間の accent ink は
+///   アイコンには効かない**(svg の style は Pressed 状態を持たない — fork
+///   `widget/src/svg.rs` の `Status` は Idle/Hovered のみ)。器としての
+///   accent(Play‖Pause の再生中)は spec 由来の tint で従来どおり立つ。
+///   hover の面浮きも従来どおり(押下フィードバックは面が担う)。
 fn transport_button(
     spec: TransportButton,
     dims: Dimensions,
@@ -180,36 +193,35 @@ fn transport_button(
 ) -> Element<'static, Message> {
     // 状態の器(Play‖Pause の再生中)は rail の M/S/L active と同じ accent ink。
     let idle_ink = if spec.active { colors.action_active } else { colors.text_secondary };
+    let glyph = motolii_icons::icon(
+        spec.icon,
+        frame_px_for_glyph_px(dims.body_text),
+        idle_ink,
+    );
     button(
-        text(spec.glyph)
-            .size(dims.body_text)
-            .color(idle_ink)
-            .align_x(iced::alignment::Horizontal::Center)
-            .align_y(iced::alignment::Vertical::Center)
+        container(glyph)
             .width(Length::Fill)
-            .height(Length::Fill),
+            .height(Length::Fill)
+            .align_x(iced::alignment::Horizontal::Center)
+            .align_y(iced::alignment::Vertical::Center),
     )
     .width(Length::Fixed(dims.timeline_transport_button_width))
     .height(Length::Fill)
     .padding(0)
     .on_press(spec.message)
     .style(move |_theme, status| {
-        let (background, text_color) = match status {
-            // 押下 = active: ink が accent(面は hover のまま — 器が2重に
-            // 語らない)。
-            button::Status::Pressed => {
-                (Some(Background::Color(colors.surface_hover)), colors.action_active)
+        let background = match status {
+            // 押下・hover: 面が浮く(輪郭は出さない — 裁定179)。
+            button::Status::Pressed | button::Status::Hovered => {
+                Some(Background::Color(colors.surface_hover))
             }
-            // hover: 面が浮く(輪郭は出さない)。
-            button::Status::Hovered => {
-                (Some(Background::Color(colors.surface_hover)), idle_ink)
-            }
-            // 常時: 素のグリフ(輪郭なし・面なし)。
-            _ => (None, idle_ink),
+            // 常時: 素のアイコン(輪郭なし・面なし)。
+            _ => None,
         };
         button::Style {
             background,
-            text_color,
+            // svg には効かない(tint が正)が、契約として ink を宣言しておく。
+            text_color: idle_ink,
             ..button::Style::default()
         }
     })

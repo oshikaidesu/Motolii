@@ -1,0 +1,13 @@
+Material Symbols (outlined, 24px)
+Copyright Google LLC.
+Licensed under the Apache License, Version 2.0 (see LICENSE in this directory).
+
+Source: https://github.com/google/material-design-icons
+Revision: e083cc60a0828fdd3b404cea0cb8a5b900e9c23e (master, fetched 2026-08-22)
+Path pattern in source repo:
+  symbols/web/<name>/materialsymbolsoutlined/<name>_24px.svg  ->  assets/<name>.svg
+
+The SVG files are vendored unmodified from the revision above. They carry no
+fixed `fill` attribute (implicit black), so the iced svg renderer's color
+filter (`svg::Style { color }`) tints them directly — no `currentColor`
+preprocessing was necessary.
