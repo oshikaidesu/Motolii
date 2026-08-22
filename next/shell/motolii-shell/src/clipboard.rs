@@ -16,8 +16,8 @@
 //! (書き口が1箇所という不変条件を崩さない)。
 
 use motolii_store::{
-    EffectInstance, Intent, LayerAttrs, LayerAttrsPatch, LayerId, LayerMeta, Mask, PropertyId,
-    PropertySource, ShapeNode, StoreError, StoreView, TextDocument,
+    EffectInstance, Intent, LayerAttrs, LayerAttrsPatch, LayerId, LayerMeta, Mask, PropertyBase,
+    PropertyId, PropertySource, ShapeNode, StoreError, StoreView, TextDocument,
 };
 
 /// 1 layer 分の Document 表現の写し。**clipboard の中身の正本**。
@@ -116,27 +116,38 @@ impl LayerSnapshot {
             });
         }
         for (property, source) in &self.properties {
-            intents.push(match source {
-                PropertySource::Track(track) => Intent::SetTrack {
-                    layer: new_id,
-                    property: property.clone(),
-                    track: track.clone(),
-                },
-                PropertySource::Slot(slot) => Intent::SetPropertySlot {
-                    layer: new_id,
-                    property: property.clone(),
-                    slot: slot.clone(),
-                },
+            // base(Track/Slot、無ければ何も書かない)と modulators(裁定213 の
+            // 加算列)は独立な軸——両方揃った property も、旧 Link 相当
+            // (base 無し・modulator 1本)の property も、同じ形で複製できる
+            // (`ui/motolii-timeline-pane/src/split.rs::split_plan` と同型の判断)。
+            match &source.base {
+                Some(PropertyBase::Track(track)) => {
+                    intents.push(Intent::SetTrack {
+                        layer: new_id,
+                        property: property.clone(),
+                        track: track.clone(),
+                    });
+                }
+                Some(PropertyBase::Slot(slot)) => {
+                    intents.push(Intent::SetPropertySlot {
+                        layer: new_id,
+                        property: property.clone(),
+                        slot: slot.clone(),
+                    });
+                }
+                None => {}
+            }
+            if !source.modulators.is_empty() {
                 // 貼り付け先でも参照先は元のまま — AE の pick-whip 付き
                 // レイヤーを複製した時と同じ挙動(複製が元の driver を
                 // 共有する)。相対参照にするかは link の UI が出来てから
                 // 実挙動を見て決める(今は呼び手ゼロなので観測できない)。
-                PropertySource::Link(link) => Intent::SetPropertyLink {
+                intents.push(Intent::SetPropertyModulators {
                     layer: new_id,
                     property: property.clone(),
-                    link: link.clone(),
-                },
-            });
+                    modulators: source.modulators.clone(),
+                });
+            }
         }
         // `masks` の一覧は shape の SetTrack より後(直上 doc 参照)。
         if !self.masks.is_empty() {
@@ -341,7 +352,6 @@ mod tests {
                 effects: vec![EffectInstance {
                     id: effect_id,
                     plugin_id: "vism.glow".to_owned(),
-                    enabled: true,
                 }],
             },
             Intent::SetShapes {
@@ -429,7 +439,7 @@ mod tests {
         // slot 参照はスロット表を複製せず、同じ id を指すだけ。
         assert_eq!(
             view.property_source(copy, &slotted).unwrap(),
-            Some(PropertySource::Slot(slot_id))
+            Some(PropertySource::slot(slot_id))
         );
     }
 

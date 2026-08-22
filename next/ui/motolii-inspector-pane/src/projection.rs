@@ -130,17 +130,25 @@ pub struct AttrsProjection {
 }
 
 /// effect 1本ぶんの投影(EFFECTS section、B38 第3切片・裁定184 型別 section
-/// 第2号)。静止する部分(名前・enabled)は store の [`EffectInstance`] の写し、
-/// 動く部分(param)は既存の値セル行文法([`TransformRowProjection`])を
-/// そのまま再利用する — [`MaskRowProjection`] と同じ分担。
+/// 第2号)。静止する部分(名前)は store の [`EffectInstance`] の写し、
+/// **`enabled` はもう静止フィールドではない**(裁定213/214) —
+/// `PropertyId::effect_enabled` の track をこの投影の時刻で評価した値と、
+/// 他の行と同じ3状態 Key oracle([`enabled_key`])を持つ。動く部分(param)は
+/// 既存の値セル行文法([`TransformRowProjection`])をそのまま再利用する —
+/// [`MaskRowProjection`] と同じ分担。
 #[derive(Clone, Debug, PartialEq)]
 pub struct EffectRowProjection {
     pub id: EffectId,
     /// 表示名([`plugin_display_name`] — 既知 plugin は人間可読名、未知は
     /// plugin_id そのまま)。
     pub name: String,
-    /// `effects/effect/en`。false = bypass 中(消えてはいない)。
+    /// `effects/effect/en` に相当する、この投影の時刻での評価値。
+    /// false = bypass 中(消えてはいない)。
     pub enabled: bool,
+    /// [`Self::enabled`] の Key 列(K1)— [`KeyRow::EffectEnabled`] 経由で
+    /// 他の行と同じ3状態 oracle・click 文法にそのまま乗る(裁定214「Inspector
+    /// に映る物は全て時間軸で評価できる」の帰結)。
+    pub enabled_key: KeyCellProjection,
     /// param 値行([`plugin_params`] のカタログ順)。未知 plugin は空 —
     /// store は catalog を知らないので param 行を捏造しない(M13)。
     pub params: Vec<TransformRowProjection>,
@@ -237,9 +245,10 @@ fn link_would_cycle(
             .property_source(layer, &property)
             .ok()
             .flatten()
-            .and_then(|source| match source {
-                PropertySource::Link(link) => Some((link.source_layer, link.source_property)),
-                _ => None,
+            .and_then(|source| {
+                source
+                    .as_link_only()
+                    .map(|link| (link.source_layer, link.source_property.clone()))
             });
     }
     false
@@ -624,6 +633,25 @@ pub fn project(
     // (opacity 系と違い % 換算しない)。
     let mut effect_rows = Vec::new();
     for effect in store.effects(layer)? {
+        // **裁定213/214**: `enabled` はもう静止フィールドではない —
+        // `PropertyId::effect_enabled` の track をこの投影の時刻 `t` で評価し、
+        // 他の行と同じ3状態 Key oracle も一緒に組む(`resolved_effects` が
+        // 同じ property を resolve 側で読むのと同じ形、`view.rs` 参照)。
+        let enabled_property = PropertyId::effect_enabled(effect.id);
+        let enabled_track = store.track(layer, &enabled_property)?;
+        let enabled = match store.value_at(layer, &enabled_property, t)? {
+            Some(Value::Bool(v)) => v,
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "effect {} の enabled に真偽でない値が入っている: {other:?}",
+                    effect.id
+                )))
+            }
+            None => true, // キーを打っていない = 既定で有効。
+        };
+        let enabled_state =
+            key_cell_state(enabled_track.as_ref(), session.playhead, composition.fps);
+
         let mut param_rows = Vec::new();
         for param in plugin_params(&effect.plugin_id) {
             let property = PropertyId::effect_param(effect.id, param.name())?;
@@ -654,7 +682,11 @@ pub fn project(
         effect_rows.push(EffectRowProjection {
             id: effect.id,
             name: plugin_display_name(&effect.plugin_id).to_owned(),
-            enabled: effect.enabled,
+            enabled,
+            enabled_key: KeyCellProjection {
+                row: KeyRow::EffectEnabled(effect.id),
+                state: enabled_state,
+            },
             params: param_rows,
         });
     }
@@ -771,8 +803,11 @@ pub fn project(
     let mut link_rows = Vec::new();
     for target in LinkTarget::ALL {
         let target_property = target.property_id();
-        let current = match store.property_source(layer, &target_property)? {
-            Some(PropertySource::Link(link)) => {
+        let current = store
+            .property_source(layer, &target_property)?
+            .as_ref()
+            .and_then(PropertySource::as_link_only)
+            .and_then(|link| {
                 LinkTarget::from_property_name(link.source_property.name()).map(|property| {
                     LinkSourceCandidate {
                         layer: LayerCandidate {
@@ -782,9 +817,7 @@ pub fn project(
                         property,
                     }
                 })
-            }
-            _ => None,
-        };
+            });
         let mut candidates = Vec::new();
         for candidate_layer in store.layers() {
             if candidate_layer == layer {

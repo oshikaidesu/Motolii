@@ -20,7 +20,7 @@
 
 use motolii_core::RationalTime;
 use motolii_store::{
-    property, Document, Intent, LayerId, PropertyId, PropertyLink, PropertySource, Value,
+    property, Document, Intent, LayerId, PropertyId, PropertyLink, Value,
 };
 
 use motolii_settings_pane::chrome::section_header;
@@ -179,7 +179,7 @@ pub fn clear_inspector_link(
         .property_source(layer, &property)
         .map_err(|error| format!("property の出処を読めない: {error}"))?
     {
-        Some(PropertySource::Link(_)) => {}
+        Some(source) if source.as_link_only().is_some() => {}
         _ => return Ok(()), // link でない(stale click)── 黙って捨てる。
     }
     let value = doc

@@ -199,6 +199,14 @@ pub enum KeyRow {
     /// effect param 行(EFFECTS section、B38 第3切片)。同上 —
     /// [`TransformField::EffectParam`] と同じ拡張の形。
     EffectParam(EffectId, GlowParam),
+    /// effect の on/off 行(EFFECTS section、裁定213/214 で `EffectInstance::
+    /// enabled` という静止 `bool` から `effect.{id}.enabled` の普通の track へ
+    /// 移った——**Inspector に映る物は全て時間軸で評価できる**という裁定214の
+    /// 帰結で、この行にも他の行と全く同じ3状態 Key oracle がそのまま乗る
+    /// (`crate::effects::toggle_inspector_effect_bypass` が値そのものの
+    /// 反転を書き、こちらは playhead へのキー打点/除去を書く——別の書き口
+    /// だが同じ property を狙う点は他の行と同型)。
+    EffectEnabled(EffectId),
     /// AUDIO section の Level 行(B42、裁定184 型別 section 第4号)。
     /// [`TransformField::Level`] と同じ「per-id ではない静的 field」の形。
     Level,
@@ -224,7 +232,7 @@ impl KeyRow {
             Self::Pan => Some(property::PAN),
             Self::FadeIn => Some(property::FADE_IN),
             Self::FadeOut => Some(property::FADE_OUT),
-            Self::MaskOpacity(_) | Self::EffectParam(_, _) => None,
+            Self::MaskOpacity(_) | Self::EffectParam(_, _) | Self::EffectEnabled(_) => None,
         }
     }
 }
@@ -236,6 +244,7 @@ pub fn key_row_property_id(row: KeyRow) -> Result<PropertyId, StoreError> {
     match row {
         KeyRow::MaskOpacity(mask) => Ok(PropertyId::mask_opacity(mask)),
         KeyRow::EffectParam(effect, param) => PropertyId::effect_param(effect, param.name()),
+        KeyRow::EffectEnabled(effect) => Ok(PropertyId::effect_enabled(effect)),
         _ => PropertyId::new(
             row.static_property_name()
                 .expect("mask/effect 以外の行は静的な property 名を持つ"),
@@ -254,6 +263,8 @@ pub fn key_row_default_value(row: KeyRow) -> Value {
         KeyRow::Opacity | KeyRow::MaskOpacity(_) => Value::F64(1.0),
         // effect param の既定は plugin カタログ(= engine 既定の写し)から。
         KeyRow::EffectParam(_, param) => Value::F64(param.default_value()),
+        // キーを打っていない = 既定で有効(`PropertyId::effect_enabled` doc)。
+        KeyRow::EffectEnabled(_) => Value::Bool(true),
         // AUDIO(B42): Level は等倍・Pan は中央・Fade は無効、いずれも
         // `property::LEVEL`/`PAN`/`FADE_IN`/`FADE_OUT` の store 既定と同じ
         // (`motolii-store::property` doc 参照)。

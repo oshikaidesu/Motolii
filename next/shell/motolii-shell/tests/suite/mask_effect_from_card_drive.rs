@@ -10,7 +10,7 @@
 
 use motolii_shell::stage::marquee::SelectLayers;
 use motolii_shell::{browser_pane, Message, Shell};
-use motolii_store::LayerId;
+use motolii_store::{LayerId, PropertyId, RationalTime};
 
 fn add_mask(shell: &mut Shell) {
     let _ = shell.update(Message::Browser(browser_pane::Message::AddMaskFromCard));
@@ -139,7 +139,18 @@ fn apply_effect_from_card_reaches_the_document() {
     let effects = shell.store_view().effects(layer).unwrap();
     assert_eq!(effects.len(), 1, "effect が1件増えていない");
     assert_eq!(effects[0].plugin_id, "motolii.glow");
-    assert!(effects[0].enabled, "追加直後は enabled のはず");
+    // **裁定213**: `enabled` は静止フィールドではなく `effect.{id}.enabled` の
+    // track へ移った——追加直後はまだ何も書いていないので track 自体が無い
+    // (`PropertyId::effect_enabled` doc「キーを打っていない = 既定で有効」)。
+    let enabled_property = PropertyId::effect_enabled(effects[0].id);
+    let enabled_value = shell
+        .store_view()
+        .value_at(layer, &enabled_property, RationalTime::ZERO)
+        .unwrap();
+    assert_eq!(
+        enabled_value, None,
+        "追加直後は enabled track が無い(既定で有効)はず"
+    );
 }
 
 /// effect 適用も undo が効く(通常の編集と同じ経路、専用の履歴機構を持たない)。

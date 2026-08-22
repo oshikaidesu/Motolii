@@ -17,7 +17,7 @@ use motolii_inspector_pane::{
 use motolii_shell_state::Session;
 use motolii_store::{
     property, Composition, Document, Intent, LayerId, LayerMeta, LayerSource, LayerTiming,
-    PropertyId, PropertySource, Value,
+    PropertyBase, PropertyId, Value,
 };
 
 fn fps30() -> Fps {
@@ -168,28 +168,30 @@ fn commit_inspector_link_writes_a_property_link_and_undoes_in_one_step() {
         .expect("link を書けるはず");
 
     let property = PropertyId::new(property::OPACITY).unwrap();
-    match doc
+    let source = doc
         .view()
         .property_source(a, &property)
         .expect("読めるはず")
-        .expect("link のはず")
-    {
-        PropertySource::Link(link) => {
+        .expect("link のはず");
+    match source.as_link_only() {
+        Some(link) => {
             assert_eq!(link.source_layer, b);
             assert_eq!(link.source_property.name(), property::POSITION);
             assert_eq!(link.plugin_id, "motolii.link.identity");
         }
-        other => panic!("Link のはずが {other:?}"),
+        None => panic!("Link のはずが {source:?}"),
     }
 
     doc.undo();
-    assert!(
-        matches!(
-            doc.view().property_source(a, &property).expect("読めるはず"),
-            None | Some(PropertySource::Track(_))
-        ),
-        "1 undo で戻らない(1操作=1 undo 違反)"
-    );
+    let after_undo = doc.view().property_source(a, &property).expect("読めるはず");
+    let reverted = match after_undo {
+        None => true,
+        Some(source) => {
+            source.modulators.is_empty()
+                && matches!(source.base, None | Some(PropertyBase::Track(_)))
+        }
+    };
+    assert!(reverted, "1 undo で戻らない(1操作=1 undo 違反)");
 }
 
 /// Clear は `Intent::SetTrack` を再び投げて、t=0 の評価値を保った static
@@ -210,13 +212,13 @@ fn clearing_a_link_reverts_to_a_static_track_holding_the_current_value() {
     clear_inspector_link(&mut doc, Some(a), LinkTarget::Scale).expect("clear は成功するはず");
 
     let property = PropertyId::new(property::SCALE).unwrap();
-    match doc
+    let source = doc
         .view()
         .property_source(a, &property)
         .expect("読めるはず")
-        .expect("clear 後も値は在るはず")
-    {
-        PropertySource::Track(track) => {
+        .expect("clear 後も値は在るはず");
+    match source.base {
+        Some(PropertyBase::Track(track)) => {
             assert_eq!(
                 track.eval(RationalTime::ZERO),
                 Value::Vec2([1.0, 1.0]),

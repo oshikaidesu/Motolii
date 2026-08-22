@@ -1805,7 +1805,6 @@ impl Shell {
         effects.push(EffectInstance {
             id,
             plugin_id: plugin_id.to_owned(),
-            enabled: true,
         });
         if let Err(error) = self.doc.apply(Intent::SetEffects { layer, effects }) {
             self.status = Some(format!("effect を追加できない: {error}"));
@@ -2428,10 +2427,17 @@ impl Shell {
                 Task::none()
             }
             inspector_pane::Message::ToggleEffectBypass(effect) => {
+                // `effect.{id}.enabled` は playhead 時刻での値編集(裁定213/214、
+                // `commit_inspector_field` と同じ「comp が無ければ何もしない」柵)。
+                let Ok(Some(composition)) = self.doc.view().composition() else {
+                    return Task::none();
+                };
                 if let Err(error) = inspector_pane::toggle_inspector_effect_bypass(
                     &mut self.doc,
                     self.session.selection,
                     effect,
+                    self.session.playhead,
+                    composition.fps,
                 ) {
                     self.status = Some(error);
                 }

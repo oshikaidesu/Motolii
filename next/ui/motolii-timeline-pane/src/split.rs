@@ -136,7 +136,7 @@
 //! 要らない(map 消化ノートの見送り理由と対で読むこと)。
 
 use motolii_store::{
-    Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerTiming, PropertySource, StoreView,
+    Intent, LayerAttrsPatch, LayerId, LayerMeta, LayerTiming, PropertyBase, StoreView,
 };
 
 /// 1 layer を `at_frame` で split する Intent 列を組む(モジュール doc 「`split_plan`
@@ -237,21 +237,38 @@ pub fn split_plan(
                 property.name()
             )
         })?;
-        match source {
-            Some(PropertySource::Track(track)) => {
-                intents.push(Intent::SetTrack { layer: new_layer, property, track });
+        // base(Track/Slot、無ければ何も書かない)と modulators(裁定213 の加算列、
+        // 空でなければ複製)は独立な軸——両方揃った property も、旧 Link 相当
+        // (base 無し・modulator 1本)の property も、同じ形で複製できる。
+        // modulator は**参照先を書き換えない**で複製する — 分割の後半分も
+        // 元と同じ source を追い続けるのが「切っても意味は変わらない」
+        // という分割の約束に合う(参照先を新 layer へ張り替えると、
+        // 後半分だけ別の物に追従し始めて意味が割れる)。
+        if let Some(source) = source {
+            match source.base {
+                Some(PropertyBase::Track(track)) => {
+                    intents.push(Intent::SetTrack {
+                        layer: new_layer,
+                        property: property.clone(),
+                        track,
+                    });
+                }
+                Some(PropertyBase::Slot(slot)) => {
+                    intents.push(Intent::SetPropertySlot {
+                        layer: new_layer,
+                        property: property.clone(),
+                        slot,
+                    });
+                }
+                None => {}
             }
-            Some(PropertySource::Slot(slot)) => {
-                intents.push(Intent::SetPropertySlot { layer: new_layer, property, slot });
+            if !source.modulators.is_empty() {
+                intents.push(Intent::SetPropertyModulators {
+                    layer: new_layer,
+                    property,
+                    modulators: source.modulators,
+                });
             }
-            // link は**参照先を書き換えない**で複製する — 分割の後半分も
-            // 元と同じ source を追い続けるのが「切っても意味は変わらない」
-            // という分割の約束に合う(参照先を新 layer へ張り替えると、
-            // 後半分だけ別の物に追従し始めて意味が割れる)。
-            Some(PropertySource::Link(link)) => {
-                intents.push(Intent::SetPropertyLink { layer: new_layer, property, link });
-            }
-            None => {}
         }
     }
 
