@@ -22,6 +22,7 @@ members = [
     "ui/motolii-css-metrics",
     "ui/motolii-export-pane",
     "ui/motolii-icons",
+    "ui/motolii-font-catalog",
     "ui/motolii-inspector-pane",
     "ui/motolii-keymap",
     "ui/motolii-menubar",
@@ -150,6 +151,10 @@ motolii-timeline-pane = { path = "ui/motolii-timeline-pane" }
 # `settings-pane → inspector-pane` の一方向のみ)。`motolii-shell` は `pub use`
 # で `inspector_pane` path 互換を保つ
 # (docs/reviews/2026-08-21-pane-split-survey.md §6 切片8)。
+# 2026-08-22 追い発注「フォントが選べる・選ばなくても落ちない」: システム
+# フォント一覧(family →実在 path)を返す leaf crate。依存ゼロ増分
+# (`ui/motolii-font-catalog/Cargo.toml` の fontdb コメント参照)。
+motolii-font-catalog = { path = "ui/motolii-font-catalog" }
 motolii-inspector-pane = { path = "ui/motolii-inspector-pane" }
 # 裁定160 切片10: `motolii-shell/src/stage.rs`(観測カメラ、裁定157)+ 対応する
 # write ロジック(`observation_preview_source`)を抽出した pane crate。他 pane

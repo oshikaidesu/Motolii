@@ -8,6 +8,10 @@ license.workspace = true
 iced.workspace = true
 motolii-core.workspace = true
 motolii-store.workspace = true
+# 2026-08-22 追い発注「フォントが選べる・選ばなくても落ちない」: システム
+# フォント一覧(family →実在 path)。`text.rs` の既定フォント解決/font pick_list
+# が使う(依存ゼロ増分 — `motolii-font-catalog/Cargo.toml` のコメント参照)。
+motolii-font-catalog.workspace = true
 # デザイン値の外出し(裁定117)。裁定160 切片1 で抽出済みの leaf crate をそのまま
 # 依存する — `Colors`/`Dimensions`/`Tokens` は raw 値の直書き禁止の唯一の読み口。
 motolii-tokens-rs.workspace = true

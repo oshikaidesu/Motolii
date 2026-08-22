@@ -8,7 +8,16 @@
 //! の中に全部入れる」で `browser_pane::Message::CreateFromCard` へ統一 —
 //! Layer メニュー等の別入口は作らない)。
 //!
-//! ## フォント選択 UI は本発注の範囲外(FINDING、RETURN 参照)
+//! ## フォント選択 UI は本発注の範囲外だった(FINDING) — 2026-08-22 追い発注
+//! 「フォントが選べる・選ばなくても落ちない」で解消済み
+//!
+//! 下の doc は発見時点(本発注)の記録としてそのまま残す。**その後**の追い発注
+//! (`motolii-font-catalog` crate 新設 + `inspector_pane::text::
+//! default_text_style`/`font_family_row`/`commit_text_font_pick`)がこの穴を
+//! 塞いだ ——
+//! [`lyrics_render_without_ever_touching_the_font_ui`] がそのまま解消の検収
+//! (Shell だけを経由し、フォント欄に一切触れずに Stage へ画素が届く)。
+//!
 //! `TextField::FontFamily` は `FontRef::family` しか編集しない —
 //! `FontRef::path` を編集する入口はリポ全体のどこにも無い(`text.rs` 実装・
 //! `motolii-inspector-pane` 全 grep で確認)。エンジンのラスタライズ
@@ -28,6 +37,11 @@
 //! (`inspector_pane::commit_text_field`/`inspector_pane::color::
 //! commit_text_style_color`)をそのまま適用し、フォントだけ試験側が直接
 //! 注入して、配線そのもの(content/color が実際に画素へ届くこと)を確かめる。
+//! (**注**: 追い発注後は「フォント path を差し込む Message」が
+//! `inspector_pane::Message::PickFont` として実在する。この2本目の試験は
+//! それでも生 `Document` のままにしてある——font pick_list を経由せず
+//! `commit_text_field`/`commit_text_style_color` という実発注の関数そのものが
+//! 画素まで届くことを確かめる、という元の試験意図を変えないため。)
 
 use motolii_shell::browser_pane;
 use motolii_shell::inspector_pane::{
@@ -250,4 +264,42 @@ fn lyric_content_and_color_reach_the_stage_once_a_font_is_present() {
         "Content(commit_text_field)/Color(commit_text_style_color)経由で書いた \
          日本語テキストが Stage に画素として出ていない"
     );
+}
+
+// ---------------------------------------------------------------------------
+// FINDING の解消固定(2026-08-22 追い発注「フォントが選べる・選ばなくても
+// 落ちない」)— モジュール冒頭 doc 参照。
+// ---------------------------------------------------------------------------
+
+/// **本命の解消固定**: Browser の Text カードで layer を作り、フォント欄
+/// (`Font` の text_input/pick_list)に一切触れず Content だけ打っても Stage が
+/// 描ける。以前は [`inspector_pane::default_text_document`] の font が空
+/// path のままだったため、この操作(Content の Enter)だけで
+/// `Engine::render_frame` が `Err` になっていた——`Shell::refresh_frame` は
+/// M16(「絵が出せなくても画面は空にしない」)により Stage 自体が消えることは
+/// 無いが、status 帯に「Stage を描けない」が出て**実際には文字が画素として
+/// 一切届かない**状態だった。追い発注(`motolii-font-catalog` による既定
+/// フォント解決)後は、フォント欄に触れなくても解決可能な `FontRef` が
+/// 最初から入っているので、この操作だけで正常に描ける。
+#[test]
+fn lyrics_render_without_ever_touching_the_font_ui() {
+    let mut shell = Shell::new_fixture().0;
+    create_text_layer(&mut shell);
+    set_text_field(
+        &mut shell,
+        inspector_pane::TextField::Content,
+        "フォント欄に触れずにここまで届く",
+    );
+
+    let status = shell.status().unwrap_or("").to_owned();
+    assert!(
+        !status.contains("Stage を描けない"),
+        "フォント欄に触れず Content を打っただけで Stage が描けなくなっている \
+         (FINDING の再発): {status}"
+    );
+
+    let (width, height, _rgba) = shell
+        .frame_rgba()
+        .expect("フレームが一度も描けていない(FINDING の再発)");
+    assert!(width > 0 && height > 0, "描けたフレームの寸法が0");
 }

@@ -2287,6 +2287,20 @@ impl Shell {
                 }
                 Task::none()
             }
+            // フォント pick_list(2026-08-22 追い発注「フォントが選べる・
+            // 選ばなくても落ちない」)。`TextFieldSubmit` と同じ「ここは Err を
+            // status 帯へ渡す glue だけ」の形(M13) — 書き込み本体は
+            // `inspector_pane::commit_text_font_pick`。
+            inspector_pane::Message::PickFont(family) => {
+                if let Err(error) = inspector_pane::commit_text_font_pick(
+                    &mut self.doc,
+                    self.session.selection,
+                    &family,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
             // 色エディタ(`inspector_pane::color`、2026-08-22 発注「歌詞が
             // 入れられる道を通す」で結線)。`TextFieldInput`/`TextFieldSubmit`
             // と同じ「打鍵は下書きだけ・Enter で1回の Intent」の形 —

@@ -15,8 +15,8 @@ use iced_test::selector::{Candidate, Target};
 
 use motolii_core::Fps;
 use motolii_inspector_pane::{
-    commit_text_field, cycle_text_justify, project, reset_text_line_height, reset_text_tracking,
-    view, Message, TextField, TextFieldDraft,
+    commit_text_field, commit_text_font_pick, cycle_text_justify, project, reset_text_line_height,
+    reset_text_tracking, view, Message, TextField, TextFieldDraft,
 };
 use motolii_shell_state::Session;
 use motolii_store::{
@@ -154,7 +154,24 @@ fn a_text_layer_without_a_document_projects_display_only_defaults() {
         .as_ref()
         .expect("テキストレイヤーは Some のはず");
     assert_eq!(text_projection.content, "", "既定 content は空文字列のはず");
-    assert_eq!(text_projection.font_family, "", "既定 FontRef は空文字列のはず");
+    // 2026-08-22 追い発注「フォントが選べる・選ばなくても落ちない」——
+    // 以前はここが空文字列だった(`FontRef::default()`)が、それこそが
+    // `lyric_text_layer_drive.rs` FINDING の発生源(文字を打った瞬間に空 path
+    // でのフォント読込へ進み `render_frame` 全体が `Err` になる)だった。
+    // 既定フォントは必ず解決できる family/path を持つ(`default_font_ref`)。
+    assert!(
+        !text_projection.font_family.is_empty(),
+        "既定フォントの family が空(フォント未解決 — FINDING の再発)"
+    );
+    assert!(
+        !text_projection.style.font.path.is_empty(),
+        "既定フォントの path が空(FINDING の再発 — 文字を打つと render_frame が Err になる)"
+    );
+    assert!(
+        std::path::Path::new(&text_projection.style.font.path).is_file(),
+        "既定フォントの path が実在しない: {}",
+        text_projection.style.font.path
+    );
     assert_eq!(text_projection.size, 100.0, "既定サイズがずれている");
     assert_eq!(text_projection.line_height, None, "既定 Line Height は Auto のはず");
     assert_eq!(text_projection.tracking, 0.0, "既定 Tracking は0のはず");
@@ -246,25 +263,96 @@ fn committing_content_updates_the_projection() {
 
 /// Font Family の Enter は `styles[0].font.family` だけを書き換えた
 /// `TextDocument` を1回で書く(1 gesture = 1 undo)。
+///
+/// **"Helvetica" は使わない**(2026-08-22 追い発注以降の既定値の副作用):
+/// 既定フォント([`motolii_inspector_pane::default_text_style`])が実機の
+/// システムフォントから解決されるようになったため、"Helvetica" が既定と
+/// 一致する環境では「既定と同値」判定([`apply_text_document_edit`] の
+/// 決定7)で Intent が出ず、この試験が意図する「実際に書き換わる」ことの
+/// 検収にならない。既定と衝突しない架空の family 名を使うことで、この試験を
+/// 実行環境(どの実フォントが入っているか)から独立させる。
 #[test]
 fn committing_a_font_family_draft_writes_the_text_document_style() {
     let (mut doc, layer) = text_layer();
     let field = TextField::FontFamily;
     let mut draft = Some(TextFieldDraft {
         field,
-        text: "Helvetica".to_owned(),
+        text: "Definitely Not The Default Font".to_owned(),
     });
     commit_text_field(&mut doc, &mut draft, Some(layer), field)
         .expect("font family の確定は成功するはず");
 
     let document = text_document_of(&doc, layer).expect("確定後は document が有るはず");
-    assert_eq!(document.styles[0].font.family, "Helvetica");
+    assert_eq!(document.styles[0].font.family, "Definitely Not The Default Font");
 
     doc.undo();
     assert!(
         text_document_of(&doc, layer).is_none(),
         "1 undo で書く前(未着手)へ戻らない(1操作=1 undo 違反)"
     );
+}
+
+// ---------------------------------------------------------------------------
+// フォント pick_list(2026-08-22 追い発注「フォントが選べる・選ばなくても
+// 落ちない」)— `commit_text_font_pick` は family と path を**同時に**書く。
+// ---------------------------------------------------------------------------
+
+/// 実在するシステムフォントを選ぶと、family と path が**両方**1回の
+/// `Intent::SetTextDocument` で書かれる(手打ち欄との違い — FINDING の
+/// 直接対処)。
+#[test]
+fn picking_a_known_system_font_writes_family_and_path_together() {
+    let (mut doc, layer) = text_layer();
+    let entry = motolii_font_catalog::system_fonts()
+        .first()
+        .expect("このマシンにシステムフォントが1つも無い");
+    let family = entry.family.clone();
+
+    commit_text_font_pick(&mut doc, Some(layer), &family)
+        .expect("既知の family の選択は成功するはず");
+
+    let document = text_document_of(&doc, layer).expect("確定後は document が有るはず");
+    assert_eq!(document.styles[0].font.family, family, "family が書けていない");
+    assert_eq!(document.styles[0].font.path, entry.path, "path が書けていない");
+    assert!(
+        std::path::Path::new(&document.styles[0].font.path).is_file(),
+        "書かれた path が実在しない"
+    );
+
+    doc.undo();
+    assert!(
+        text_document_of(&doc, layer).is_none(),
+        "1 undo で書く前(未着手)へ戻らない(1操作=1 undo 違反)"
+    );
+}
+
+/// カタログに存在しない family を選ぼうとしても(呼び出し側のバグで options
+/// とカタログがずれた形を想定)`Err` を返し、Document には一切触らない —
+/// 「壊れた path を書けない」頑健化の直接の検収。
+#[test]
+fn picking_an_unknown_font_family_fails_without_writing_a_broken_path() {
+    let (mut doc, layer) = text_layer();
+
+    let result = commit_text_font_pick(
+        &mut doc,
+        Some(layer),
+        "Definitely Not A Real Font Family 12345",
+    );
+    assert!(result.is_err(), "存在しない family の選択は Err のはず");
+    assert!(
+        text_document_of(&doc, layer).is_none(),
+        "失敗した選択で Document が書かれている(壊れた path 混入)"
+    );
+}
+
+/// 選択なしは黙って no-op(他の TEXT section 腕と同じ安全側の柵)。
+#[test]
+fn picking_a_font_without_a_selection_is_a_silent_no_op() {
+    let mut doc = Document::new();
+    let entry = motolii_font_catalog::system_fonts()
+        .first()
+        .expect("このマシンにシステムフォントが1つも無い");
+    commit_text_font_pick(&mut doc, None, &entry.family).expect("選択なしは no-op のはず");
 }
 
 /// Size の Enter は `styles[0].size` を書き換える。数値として読めない入力は
