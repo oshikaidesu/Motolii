@@ -16,6 +16,8 @@
 
 #[path = "suite/anchor_drag_drive.rs"]
 mod anchor_drag_drive;
+#[path = "suite/auto_save_drive.rs"]
+mod auto_save_drive;
 #[path = "suite/band_line_fence.rs"]
 mod band_line_fence;
 #[path = "suite/blend_drive.rs"]
