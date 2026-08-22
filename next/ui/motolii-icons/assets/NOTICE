@@ -11,3 +11,10 @@ The SVG files are vendored unmodified from the revision above. They carry no
 fixed `fill` attribute (implicit black), so the iced svg renderer's color
 filter (`svg::Style { color }`) tints them directly — no `currentColor`
 preprocessing was necessary.
+
+Batch 2 (fetched 2026-08-22, same revision as above, unmodified): flag,
+bookmark, label, palette, movie, audio_file, image, text_fields, crop,
+open_in_new, dock_to_right, picture_in_picture, save, file_download,
+file_upload, play_circle, stop, fast_forward, fast_rewind, repeat,
+repeat_one, shuffle, straighten, grid_on, center_focus_strong, layers,
+layers_clear.
