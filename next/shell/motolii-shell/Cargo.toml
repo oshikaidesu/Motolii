@@ -23,6 +23,13 @@ motolii-store.workspace = true
 # 抽出先の `motolii-tokens-rs/Cargo.toml` へ一緒に移した(motolii-shell からは
 # 直接使わなくなった)。
 motolii-tokens-rs.workspace = true
+# MB-2(裁定179 D1 根治): header の箱ボタン列を menubar へ差し替え。メニューの
+# 中身(意味)は `src/menu.rs::menus()`、widget は `motolii-menubar` の
+# `menu_bar`(iced_aw menu の vendoring wraps、Simulator oracle 済み)。
+motolii-menubar.workspace = true
+# MB-2+裁定187(icon+tooltip ペア第1号): header 右端の Browser トグル/
+# Settings を `Icon::GridView`/`Icon::Settings` の icon ボタンにする。
+motolii-icons.workspace = true
 # 裁定160 切片9 で `settings_pane.rs`(+ 切片5 の `chrome.rs`)を crate 抽出、
 # `pub use motolii_settings_pane as settings_pane;`(lib.rs)で既存
 # `crate::settings_pane::` path を維持する。`chrome` は

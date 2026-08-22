@@ -261,3 +261,78 @@ fn ungrouping_a_selection_with_no_group_in_it_is_a_no_op() {
     assert_eq!(shell.can_undo(), can_undo_before, "Group でない選択で undo 刻みが積まれた");
     assert!(shell.store_view().has_layer(a), "Group でない layer が消されている");
 }
+
+// ---------------------------------------------------------------------------
+// (e) Message::FreezeGroups / UnfreezeGroups(MB-2 — 裁定119 の意図動詞の
+// UI 初露出。store 側 oracle(冪等・locked 拒否・部分木の編集拒否)は
+// `motolii-store` の suite が固定済み — ここで見るのは Shell 経由の配線だけ)
+// ---------------------------------------------------------------------------
+
+/// Group を選んで Freeze → `LayerAttrs.frozen` が立つ → Unfreeze で戻る。
+/// 選択は動かさない(freeze は選択規則を持たない — Group/Ungroup と違い
+/// 層構造が変わらないため)。
+#[test]
+fn freeze_groups_freezes_the_selected_group_and_unfreeze_reverts_it() {
+    let mut shell = shell();
+    let _a = add_layer(&mut shell);
+    let _b = add_layer(&mut shell);
+    let _ = shell.update(Message::SelectAllLayers);
+    let _ = shell.update(Message::GroupLayers);
+    let group = shell.session().selection.expect("グループ化後は Group を選ぶはず");
+
+    let _ = shell.update(Message::FreezeGroups);
+    assert_eq!(shell.status(), None, "FreezeGroups が拒否されている: {:?}", shell.status());
+    assert!(
+        shell.store_view().attrs(group).unwrap().unwrap().frozen,
+        "Freeze 後も frozen が立っていない"
+    );
+    assert_eq!(
+        shell.session().selection,
+        Some(group),
+        "Freeze が選択を動かしている"
+    );
+
+    let _ = shell.update(Message::UnfreezeGroups);
+    assert_eq!(shell.status(), None);
+    assert!(
+        !shell.store_view().attrs(group).unwrap().unwrap().frozen,
+        "Unfreeze 後も frozen が残っている"
+    );
+}
+
+/// 凍結ゲートの拒否理由は**既存 status 経路**で出る(発注書)— frozen な
+/// Group の子への編集(Inspector の Transform field 実口)が理由つきで拒まれる。
+#[test]
+fn editing_inside_a_frozen_group_is_refused_with_a_reason_via_the_status_path() {
+    let mut shell = shell();
+    let child = add_layer(&mut shell);
+    let _ = shell.update(Message::SelectAllLayers);
+    let _ = shell.update(Message::GroupLayers);
+    let _ = shell.update(Message::FreezeGroups);
+    assert_eq!(shell.status(), None, "Freeze 自体が拒否されている");
+
+    let _ = shell.update(Message::Select(child));
+    set_field(&mut shell, TransformField::PositionX, "10");
+    assert!(
+        shell.status().is_some(),
+        "frozen な Group の子への編集が黙って通った(凍結ゲートの拒否理由が status に出ない)"
+    );
+}
+
+/// Group でない選択への Freeze は無視される(`ungrouping_a_selection_with_no_
+/// group_in_it_is_a_no_op` と同じ規律 — 対象になる Group だけを拾い、無ければ
+/// undo 刻みも積まない)。
+#[test]
+fn freezing_a_selection_with_no_group_in_it_is_a_no_op() {
+    let mut shell = shell();
+    let a = add_layer(&mut shell);
+    let can_undo_before = shell.can_undo();
+
+    let _ = shell.update(Message::FreezeGroups);
+    assert_eq!(shell.status(), None);
+    assert_eq!(shell.can_undo(), can_undo_before, "Group でない選択で undo 刻みが積まれた");
+    assert!(
+        !shell.store_view().attrs(a).unwrap().unwrap().frozen,
+        "Group でない layer に frozen が立っている"
+    );
+}

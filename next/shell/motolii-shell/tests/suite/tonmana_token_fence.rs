@@ -119,11 +119,11 @@ const SCANNED_FILES: &[&str] = &[
     // (発注書「柵は緩めず・消さない」)。
     "lib.rs",
     "menu.rs",
-    // M-menu MB-0+Edit(2026-08-22)で新設。header の "Edit" トリガー+
-    // dropdown を組み立てる(`button::Style`/`container::Style` の
-    // `background`/`border` を直接構築する) — `rail.rs` が TL-arch Phase 1で
-    // 追随した時と同じ理由でこの柵の対象に加える(柵は緩めず、新規ファイルも
-    // 追随させる)。
+    // M-menu MB-0+Edit(2026-08-22)で新設、MB-2 で menubar の意味定義のみ
+    // (`Menu`/`Item` 列 — style 構築ゼロ)へ畳んだ。widget 側の style は
+    // `motolii-menubar` crate(抽出先での柵は crate 側の責務)。ファイル自体は
+    // 残っているので走査対象からは外さない(柵は緩めない — 将来 style 構築が
+    // 混入したら従来どおり捕まる)。
     "screenshot.rs",
     // `stage.rs` は裁定160 切片10で `motolii-stage-pane` crate へ抽出済み
     // (`next/ui/motolii-stage-pane/src/lib.rs`)——`settings_pane.rs`(切片9)と

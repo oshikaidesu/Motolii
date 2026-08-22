@@ -1,211 +1,253 @@
-//! M-menu MB-0+Edit の運転席検分。
+//! MB-2(裁定179 D1 根治+181/187)の運転席検分 — header の箱ボタン列を
+//! `motolii-menubar::menu_bar` へ差し替えた後の oracle。
 //!
-//! ORACLE(発注書): 「Edit クリック→dropdown 項目が Target で見える→Undo
-//! 項目クリックで `Message::Undo`(等)が publish」を実際に `Shell::view()`
-//! 上で踏む。`ident_band_drive.rs`/`settings_drive.rs` と同じ手口
-//! (`collect_targets` → bounds 中心をクリック → `into_messages` で回収)。
+//! ORACLE(発注書):
+//! - menubar 化後も既存 menu_drive 相当(全動詞が shortcut 併記で現れ、click で
+//!   `Message` を publish)が通ること
+//! - 旧箱ボタン(File/Edit/Undo/Redo/+ Layer/Browser/Settings の輪郭 button 列)が
+//!   header から消えていること
 //!
-//! `crate::menu`(`motolii-shell/src/menu.rs`)冒頭 doc の経路変更(生の
-//! `overlay::menu::Menu` ではなく `settings_panel_open` と同型の表示分岐)を
-//! 踏まえ、`edit_menu_open` は実 `Message::ToggleEditMenu` → `Shell::update`
-//! を経由する通常の状態遷移 — pick_list 系のような「同一 Simulator インスタンス
-//! を跨いだ widget 内部 state」の制約は無いので、他の drive 系試験と同じく
-//! クリックごとに `shell.view()` を作り直してよい。
-
-use iced_test::selector::Target;
+//! ## 検分の手口(MB-0 からの変更点)
+//!
+//! menubar の開閉状態は widget 内部にある(`motolii_menubar::menu_bar` doc
+//! 「shell 側に Toggle 系 `Message` は要らない」)ので、旧 `ToggleEditMenu` →
+//! `Shell::update` → `view()` 作り直しの型は使えない。代わりに
+//! `next/ui/motolii-menubar/tests/menubar_oracle.rs` と同じ型 — **同一
+//! `Simulator` インスタンスの中で** bar 項目 click → 項目 click を続けて行い、
+//! `into_messages` で publish を照合する(overlay の項目へ selector が届くのは
+//! fork の `UserInterface::operate` が root の `overlay()` を辿るため —
+//! menubar_oracle 冒頭 doc 参照)。
 
 use motolii_shell::{Message, Shell};
 
 use crate::target_walk::collect_targets;
 
-fn click_at(element: iced::Element<'_, Message>, point: iced::Point) -> Vec<Message> {
-    let mut ui = iced_test::simulator(element);
-    ui.point_at(point);
-    let _ = ui.simulate([
-        iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
-        iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
-            iced::mouse::Button::Left,
-        )),
-    ]);
-    ui.into_messages().collect()
-}
-
-fn text_targets<'a>(targets: &'a [Target], content: &str) -> Vec<&'a Target> {
+fn text_count(targets: &[iced_test::selector::Target], content: &str) -> usize {
     targets
         .iter()
-        .filter(|t| matches!(t, Target::Text { content: c, .. } if c == content))
-        .collect()
+        .filter(|t| {
+            matches!(t, iced_test::selector::Target::Text { content: c, .. } if c == content)
+        })
+        .count()
 }
 
-fn center(target: &Target) -> iced::Point {
-    let bounds = target
-        .visible_bounds()
-        .expect("target の bounds が見える(window 内にあるはず)");
-    iced::Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0)
-}
-
-/// **MB-0 の本命**: header に "Edit" トリガーが常に見える(atlas の新規
-/// target)── メニューバー基盤そのものが `Shell::view()` へ現れていることの
-/// 最小の証拠。
+/// **MB-2 の骨格**: header に4本のトップレベル(File/Edit/Layer/View)が常に
+/// 見える — `menu.rs::TOP_LEVEL_LABELS` が正本(q0_fence の menubar 除外と
+/// 同じ出典を読む)。
 #[test]
-fn edit_trigger_is_visible_in_the_header() {
+fn the_header_shows_the_four_menubar_top_levels() {
     let shell = Shell::new().0;
     let targets = collect_targets(shell.view());
-    let edit = text_targets(&targets, "Edit");
     assert_eq!(
-        edit.len(),
-        1,
-        "header に \"Edit\" トリガーが1つだけ見えるはず: {edit:?}"
+        motolii_shell::menu::TOP_LEVEL_LABELS,
+        ["File", "Edit", "Layer", "View"],
+        "トップレベルの正本が発注書の4メニューと違う"
     );
+    for label in motolii_shell::menu::TOP_LEVEL_LABELS {
+        assert_eq!(
+            text_count(&targets, label),
+            1,
+            "header にトップレベル {label:?} が1つだけ見えるはず"
+        );
+    }
 }
 
-/// **ORACLE 本体**: Edit クリック→dropdown 項目(Undo とその Cmd+Z 表記)が
-/// Target として現れる→Undo 項目クリックで `Message::Undo` が publish。
+/// **旧箱ボタンの廃止**(発注書 oracle 後半): File/Edit トリガー以外の
+/// 旧文言 button(Undo/Redo/+ Layer/Browser/Settings)が閉じた既定状態の木に
+/// 存在しない。"Undo"/"Redo" は Edit menu の中へ、"+ Layer" は Layer menu の
+/// "New Layer" へ、Browser/Settings は右端の icon ボタン(文字なし・tooltip で
+/// 語る、裁定187)へ引っ越した — 閉じている menubar の項目は木に現れない
+/// (menubar_oracle「閉じている間は存在しない」)ので、既定状態でこれらの
+/// 文字が1件でも見えたら旧箱ボタンの残骸。
+#[test]
+fn the_legacy_box_buttons_are_gone_from_the_header() {
+    let shell = Shell::new().0;
+    let targets = collect_targets(shell.view());
+    for legacy in ["Undo", "Redo", "+ Layer"] {
+        assert_eq!(
+            text_count(&targets, legacy),
+            0,
+            "旧箱ボタンの文言 {legacy:?} がまだ木に見える(閉じた menubar の外に残骸がある)"
+        );
+    }
+    // Browser/Settings は pane 題帯のラベルとして残る(pane_layout::title /
+    // Settings パネル題帯)が、**header の文言ボタンとしては消えた** — 既定
+    // 状態(Browser pane 閉・Settings パネル閉)の木では0件になる。
+    for legacy in ["Browser", "Settings"] {
+        assert_eq!(
+            text_count(&targets, legacy),
+            0,
+            "header の旧 {legacy:?} 文言ボタンがまだ木に見える(icon+tooltip 化(裁定187)前の残骸)"
+        );
+    }
+}
+
+/// **ORACLE 本体**: Edit クリック→項目(Undo とその Cmd+Z 表記)が現れる→
+/// Undo 項目クリックで `Message::Undo` が publish。同一 Simulator 内で
+/// 開閉を跨ぐ(冒頭 doc の手口)。
 #[test]
 fn clicking_edit_reveals_items_and_clicking_undo_publishes_undo() {
     let mut shell = Shell::new().0;
-    // Undo を有効化する(disabled=on_press無しだと header 側の Undo ボタンが
-    // 一切 capture しない = 区別がそもそも要らなくなり検分として弱くなる)。
     let _ = shell.update(Message::AddLayer);
 
-    // 開く前: "Undo" の Target::Text は header ボタン内の1件だけ。
-    let before = collect_targets(shell.view());
-    let undo_before = text_targets(&before, "Undo");
-    assert_eq!(
-        undo_before.len(),
-        1,
-        "開く前から \"Undo\" が複数見える(前提が崩れている): {undo_before:?}"
-    );
-    let edit_before = text_targets(&before, "Edit");
-    assert_eq!(edit_before.len(), 1, "\"Edit\" トリガーが見つからない");
-    let edit_point = center(edit_before[0]);
-
-    // 1) Edit をクリック → `Message::ToggleEditMenu` が publish される。
-    let messages = click_at(shell.view(), edit_point);
-    assert_eq!(
-        messages.len(),
-        1,
-        "Edit クリックが期待どおり1件の Message を出さない: {messages:?}"
-    );
+    let mut ui = iced_test::simulator(shell.view());
+    // 閉じている間は項目が木に存在しない(Q0 と同型 — 旧 header の Undo 箱
+    // ボタンも消えたので、"Undo" は開くまで0件)。
     assert!(
-        matches!(messages[0], Message::ToggleEditMenu),
-        "Edit クリックが ToggleEditMenu 以外を出している: {messages:?}"
-    );
-    for message in messages {
-        let _ = shell.update(message);
-    }
-
-    // 2) 開いた後: dropdown 項目ぶんの "Undo" Target::Text が追加で見える
-    //    (ORACLE 前半 — 「dropdown 項目が Target で見える」)。
-    let after = collect_targets(shell.view());
-    let mut undo_after = text_targets(&after, "Undo");
-    assert_eq!(
-        undo_after.len(),
-        2,
-        "Edit を開いても dropdown の Undo 項目が Target として見えない \
-         (header 分1件 + dropdown 分1件 = 2件のはず): {undo_after:?}"
-    );
-    // ショートカット表記(Cmd+Z)も現れている —「唯一の入口ゼロ」の構造証明
-    // (`menu.rs` 冒頭 doc の S6 併存)。
-    assert_eq!(
-        text_targets(&after, "Cmd+Z").len(),
-        1,
-        "Undo 項目のショートカット表記(Cmd+Z)が見えない"
+        ui.find("Undo").is_err(),
+        "閉じているのに Undo 項目(または旧箱ボタンの残骸)が見えている"
     );
 
-    // dropdown は header の下に積まれる(`Shell::view` の縦積み) — y が
-    // 大きい方が dropdown 側の Undo 項目。
-    undo_after.sort_by(|a, b| {
-        a.visible_bounds()
-            .unwrap()
-            .y
-            .partial_cmp(&b.visible_bounds().unwrap().y)
-            .unwrap()
-    });
-    let dropdown_undo_point = center(undo_after[1]);
+    ui.click("Edit").expect("バー項目 Edit が見つからない");
+    ui.find("Cmd+Z")
+        .expect("Undo 項目の shortcut 表記(Cmd+Z)が見えない — S6 併記が崩れている");
+    ui.click("Undo").expect("Edit menu の Undo 項目へ届かない");
 
-    // 3) dropdown の Undo 項目をクリック → `Message::Undo` が publish
-    //    (ORACLE 後半)。
-    let messages = click_at(shell.view(), dropdown_undo_point);
+    let messages: Vec<Message> = ui.into_messages().collect();
     assert_eq!(
         messages.len(),
         1,
-        "dropdown の Undo 項目クリックが期待どおり1件の Message を出さない: {messages:?}"
+        "Edit を開いて Undo を押す操作が期待どおり1件の Message を出さない: {messages:?}"
     );
     assert!(
         matches!(messages[0], Message::Undo),
-        "dropdown の Undo 項目クリックが Message::Undo 以外を出している: {messages:?}"
+        "Undo 項目クリックが Message::Undo 以外を出している: {messages:?}"
     );
 }
 
-/// S6 併存表(調査 §4)の8項目全部が実際に配線されていることを1本で見る —
-/// 各項目のショートカット表記が Target として現れ、クリックで対応する
-/// `Message` が出る(型だけの一致、`matches!` の網羅性チェックも兼ねる)。
+/// 全メニュー・全項目の対応表(発注書「メニュー→Message 対応表」の実行可能な
+/// 正本)。各項目について
+/// - shortcut 併記(あれば)が menu を開いた木に現れる(S6 併存表 — 実装済み
+///   ショートカットのみ・飾り shortcut 禁止)
+/// - 項目 click で対応する既存 `Message` が publish される
+/// を1本で見る。項目ごとに fresh な `Simulator` を作る(1クリックで menu が
+/// 閉じるため)。
 #[test]
-fn all_eight_wired_verbs_appear_with_their_shortcut_and_publish_their_message() {
-    let mut shell = Shell::new().0;
-    let _ = shell.update(Message::AddLayer);
-    let _ = shell.update(Message::ToggleEditMenu);
-
-    let expectations: &[(&str, &str)] = &[
-        ("Undo", "Cmd+Z"),
-        ("Redo", "Cmd+Shift+Z"),
-        ("Cut", "Cmd+X"),
-        ("Copy", "Cmd+C"),
-        ("Paste", "Cmd+V"),
-        ("Duplicate", "Cmd+D"),
-        ("Select All", "Cmd+A"),
-        ("Deselect All", "Cmd+Shift+A"),
+fn every_menu_item_appears_with_its_shortcut_and_publishes_its_message() {
+    // (トップレベル, 項目, shortcut 表記, publish される Message の判定)
+    let table: Vec<(&str, &str, Option<&str>, fn(&Message) -> bool)> = vec![
+        // ---- File(MB-1 の4動詞そのまま) ----
+        ("File", "New Project", Some("Cmd+N"), |m| matches!(m, Message::NewProjectRequested)),
+        ("File", "Save As…", Some("Cmd+Shift+S"), |m| matches!(m, Message::SaveAsRequested)),
+        // Save a Copy は normal-map の shortcut 出典ゼロ — 飾り shortcut 禁止。
+        ("File", "Save a Copy…", None, |m| matches!(m, Message::SaveACopyRequested)),
+        ("File", "Quit", Some("Cmd+Q"), |m| matches!(m, Message::QuitRequested)),
+        // ---- Edit(既存 menu.rs の8動詞 — Undo/Redo 含む) ----
+        ("Edit", "Undo", Some("Cmd+Z"), |m| matches!(m, Message::Undo)),
+        ("Edit", "Redo", Some("Cmd+Shift+Z"), |m| matches!(m, Message::Redo)),
+        ("Edit", "Cut", Some("Cmd+X"), |m| matches!(m, Message::CutLayer)),
+        ("Edit", "Copy", Some("Cmd+C"), |m| matches!(m, Message::CopyLayer)),
+        ("Edit", "Paste", Some("Cmd+V"), |m| matches!(m, Message::PasteLayer)),
+        ("Edit", "Duplicate", Some("Cmd+D"), |m| matches!(m, Message::DuplicateLayer)),
+        ("Edit", "Select All", Some("Cmd+A"), |m| matches!(m, Message::SelectAllLayers)),
+        ("Edit", "Deselect All", Some("Cmd+Shift+A"), |m| matches!(m, Message::DeselectAllLayers)),
+        // ---- Layer(既存 Message のみ) ----
+        // 旧 "+ Layer" 箱ボタンの動詞(`Message::AddLayer`)。shortcut 出典
+        // ゼロ(keymap に AddLayer の腕は無い)なので併記しない。
+        ("Layer", "New Layer", None, |m| matches!(m, Message::AddLayer)),
+        ("Layer", "Group", Some("Cmd+G"), |m| matches!(m, Message::GroupLayers)),
+        ("Layer", "Ungroup", Some("Cmd+Shift+G"), |m| matches!(m, Message::UngroupLayers)),
+        // Freeze/Unfreeze(裁定119 の意図動詞、store 実装済み・UI 初露出)。
+        // shortcut 未実装 — 飾り表記は書かない。
+        ("Layer", "Freeze", None, |m| matches!(m, Message::FreezeGroups)),
+        ("Layer", "Unfreeze", None, |m| matches!(m, Message::UnfreezeGroups)),
+        // ---- View(既存 Message のみ — ui_scale は Settings に残す) ----
+        ("View", "Checkerboard", None, |m| {
+            matches!(m, Message::Stage(motolii_shell::stage::Message::ToggleCheckerboard))
+        }),
+        ("View", "Reset View", Some("Shift+F"), |m| {
+            matches!(m, Message::Stage(motolii_shell::stage::Message::ResetToRenderCamera))
+        }),
     ];
 
-    let targets = collect_targets(shell.view());
-    for (label, shortcut) in expectations {
-        // "Undo"/"Redo" は header 自身のボタンとも文言が同じ(text() は
-        // ボタンの有効/無効に関わらず登録される)ので、その2項目だけ2件
-        // (header 分+dropdown 分)を期待する。他6項目は dropdown 専用。
-        let expected_label_count = if *label == "Undo" || *label == "Redo" { 2 } else { 1 };
+    for (menu, item, shortcut, is_expected) in table {
+        let shell = Shell::new().0;
+        let mut ui = iced_test::simulator(shell.view());
+        ui.click(menu)
+            .unwrap_or_else(|e| panic!("バー項目 {menu:?} が見つからない: {e:?}"));
+        if let Some(shortcut) = shortcut {
+            ui.find(shortcut).unwrap_or_else(|e| {
+                panic!("{menu:?} > {item:?} の shortcut 表記 {shortcut:?} が見えない: {e:?}")
+            });
+        }
+        ui.click(item)
+            .unwrap_or_else(|e| panic!("{menu:?} menu の項目 {item:?} へ届かない: {e:?}"));
+
+        let messages: Vec<Message> = ui.into_messages().collect();
         assert_eq!(
-            text_targets(&targets, label).len(),
-            expected_label_count,
-            "dropdown 項目 {label:?} が期待件数だけ Target として見えない: {targets:?}"
-        );
-        assert_eq!(
-            text_targets(&targets, shortcut).len(),
+            messages.len(),
             1,
-            "dropdown 項目 {label:?} のショートカット表記 {shortcut:?} が見えない"
+            "{menu:?} > {item:?} click が期待どおり1件の Message を出さない: {messages:?}"
+        );
+        assert!(
+            is_expected(&messages[0]),
+            "{menu:?} > {item:?} click が期待した Message を出していない: {messages:?}"
         );
     }
 }
 
-/// G1(裁定174、2026-08-22 追加)の Group/Ungroup が同じ Edit dropdown に
-/// 現れ、クリックで対応する `Message` を出す — 上の8項目テストと同型
-/// (`Group`/`Ungroup` は header ボタンの文言と重ならないので期待件数は常に1)。
+/// header 右端の icon ボタン(裁定187 icon+tooltip ペア第1号): Browser トグルと
+/// Settings。文言 text を持たない(上の legacy テスト)ので、Message 経路で
+/// 実配線を見る — collect_targets が拾う候補の click 総当たりで
+/// `Browser(ToggleBrowserPanel)` と `Settings(ToggleSettingsPanel)` の両方が
+/// header 帯(最上段)から出ることを確かめる。
 #[test]
-fn group_and_ungroup_appear_with_their_shortcut_and_publish_their_message() {
-    let mut shell = Shell::new().0;
-    let _ = shell.update(Message::AddLayer);
-    let _ = shell.update(Message::ToggleEditMenu);
-
+fn the_header_icon_buttons_publish_browser_and_settings_toggles() {
+    let shell = Shell::new().0;
+    let dims = shell.dims();
     let targets = collect_targets(shell.view());
-    for (label, shortcut) in [("Group", "Cmd+G"), ("Ungroup", "Cmd+Shift+G")] {
-        assert_eq!(
-            text_targets(&targets, label).len(),
-            1,
-            "dropdown 項目 {label:?} が Target として見えない: {targets:?}"
-        );
-        assert_eq!(
-            text_targets(&targets, shortcut).len(),
-            1,
-            "dropdown 項目 {label:?} のショートカット表記 {shortcut:?} が見えない"
-        );
-    }
 
-    let group_target = text_targets(&targets, "Group");
-    let point = center(group_target[0]);
-    let messages = click_at(shell.view(), point);
-    assert_eq!(messages.len(), 1, "Group 項目クリックが期待どおり1件の Message を出さない: {messages:?}");
+    // header 帯の縦中心は "File" ラベル(menubar 最左)から読む — 窓の root
+    // padding を数値でここへ再発明しない。
+    let file_bounds = targets
+        .iter()
+        .find_map(|target| match target {
+            iced_test::selector::Target::Text { content, .. } if content == "File" => {
+                target.visible_bounds()
+            }
+            _ => None,
+        })
+        .expect("menubar の File ラベルが見つからない");
+    let band_center_y = file_bounds.y + file_bounds.height / 2.0;
+
+    let mut saw_browser_toggle = false;
+    let mut saw_settings_toggle = false;
+    for target in &targets {
+        let Some(bounds) = target.visible_bounds() else { continue };
+        // header 帯(File ラベルと同じ行)の候補だけを見る。
+        let center_y = bounds.y + bounds.height / 2.0;
+        if (center_y - band_center_y).abs() > dims.panel_header_height / 2.0 {
+            continue;
+        }
+        let point =
+            iced::Point::new(bounds.x + bounds.width / 2.0, bounds.y + bounds.height / 2.0);
+        let probe = Shell::new().0;
+        let mut ui = iced_test::simulator(probe.view());
+        ui.point_at(point);
+        let _ = ui.simulate([
+            iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)),
+            iced::Event::Mouse(iced::mouse::Event::ButtonReleased(iced::mouse::Button::Left)),
+        ]);
+        for message in ui.into_messages() {
+            match message {
+                Message::Browser(motolii_shell::browser_pane::Message::ToggleBrowserPanel) => {
+                    saw_browser_toggle = true;
+                }
+                Message::Settings(
+                    motolii_shell::settings_pane::Message::ToggleSettingsPanel,
+                ) => {
+                    saw_settings_toggle = true;
+                }
+                _ => {}
+            }
+        }
+    }
     assert!(
-        matches!(messages[0], Message::GroupLayers),
-        "Group 項目クリックが GroupLayers 以外を出している: {messages:?}"
+        saw_browser_toggle,
+        "header の Browser icon ボタン(Icon::GridView)が ToggleBrowserPanel を出さない"
+    );
+    assert!(
+        saw_settings_toggle,
+        "header の Settings icon ボタン(Icon::Settings)が ToggleSettingsPanel を出さない"
     );
 }

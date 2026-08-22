@@ -23,7 +23,9 @@
 
 use std::sync::Arc;
 
-use iced::widget::{button, column, container, pane_grid, row, shader, slider, stack, text, Shader};
+use iced::widget::{
+    button, column, container, pane_grid, row, shader, stack, text, tooltip, Shader, Space,
+};
 use iced::{wgpu, Element, Length, Task};
 
 use motolii_core::{CompSpec, ResolvedCamera};
@@ -40,10 +42,10 @@ pub mod clipboard;
 /// 外から参照するため `pub`(`file_dialogs.rs` 冒頭 doc 参照)。
 pub mod file_dialogs;
 pub mod fixture;
-/// header のメニューバー(M-menu MB-0+Edit、MB-1、`menu.rs` 冒頭 doc 参照)。
-/// `view()`/`header()`/`resolve_navigation_key` からしか呼ばないため `pub` に
-/// しない(`crate::menu::` で足りる)。
-mod menu;
+/// header のメニューバーの意味定義(MB-2、`menu.rs` 冒頭 doc 参照)。MB-2 で
+/// `pub` 化した — `TOP_LEVEL_LABELS`/`menus()` が対応表の正本で、q0_fence
+/// (menubar のバー領域除外)と menu_drive が外から読む。
+pub mod menu;
 /// shell の pane_grid 化(2026-08-22 実装レーン)。`Shell::view()` の layout
 /// 状態と純粋な構成ロジック(`pane_layout.rs` 冒頭 doc 参照)。`screenshot.rs`
 /// も左カラム幅の近似に [`pane_layout::Ratios`] の既定値を読むため `pub`。
@@ -129,7 +131,6 @@ pub use motolii_stage_pane as stage;
 /// 「B1/B2 からの委譲形を崩さない」設計選択)。
 pub use motolii_browser_pane as browser_pane;
 
-use chrome::button_style;
 use file_dialogs::{FileDialogs, RfdDialogs};
 use inspector_pane::{FieldDraft, TransformField};
 use settings_pane::BackgroundFieldDraft;
@@ -438,19 +439,18 @@ pub enum Message {
     /// の焼き込み)。解除後は旧子らを選ぶ(裁定174 選択規則)。
     UngroupLayers,
 
-    // ---- Edit メニュー(M-menu MB-0+Edit、`menu.rs` 冒頭 doc 参照) ----
-    /// header の "Edit" トリガー開閉。**表示専用の view flag**
-    /// (`settings_panel_open` と同格 — Document にも undo 履歴にも乗らない)。
-    /// メニュー項目自体は既存の `Message::Undo`/`CopyLayer`/... を直接
-    /// `on_press` へぶら下げるだけなので、この変種以外に新しい `Message` は
-    /// 増えない(意味の複製ゼロ、S6 は「唯一の入口」の話であって新動詞の話
-    /// ではない)。
-    ToggleEditMenu,
-
-    // ---- File メニュー(MB-1、裁定176、`menu.rs` 冒頭 doc 参照) ----
-    /// header の "File" トリガー開閉。`edit_menu_open` と同格の表示専用 view
-    /// flag。
-    ToggleFileMenu,
+    // ---- freeze 意図動詞(裁定119、MB-2 で UI 初露出) ----
+    // 旧 `ToggleEditMenu`/`ToggleFileMenu`(MB-0/MB-1 の表示専用 view flag)は
+    // MB-2 で廃止 — menubar の開閉は widget 内部状態(`motolii_menubar::
+    // menu_bar` doc「shell 側に Toggle 系 Message は要らない」)。
+    /// Layer メニューの Freeze。選択中の `LayerSource::Group` layer の
+    /// `frozen` を立てる(`Intent::Freeze` — 汎用 `SetAttrs` では触れない
+    /// 専用口、`motolii_store::attrs::LayerAttrs::frozen` doc 参照)。Group
+    /// でない選択は `UngroupLayers` と同じく黙って飛ばす。1 `apply_all` =
+    /// 1 undo。凍結ゲート(locked 等)の拒否理由は既存 status 経路で出る。
+    FreezeGroups,
+    /// Layer メニューの Unfreeze。`FreezeGroups` と対称(`Intent::Unfreeze`)。
+    UnfreezeGroups,
     /// New Project(Cmd+N・File メニュー、normal-map id 1221)。dirty なら
     /// [`file_dialogs::FileDialogs::confirm_discard`] を経由してから
     /// `Shell::reset_document` を呼ぶ ── dirty でなければ確認なしで即リセット。
@@ -665,13 +665,8 @@ pub struct Shell {
     /// 機構がまだ無い(裁定127/128)ため、`tokens::Dimensions::ui_scale` の
     /// 「仮の置き場」と同じ理由でここに仮置きする。
     settings_panel_open: bool,
-    /// header "Edit" メニューの開閉(M-menu MB-0+Edit)。**表示専用の view
-    /// flag** — `settings_panel_open` と同格(Document・undo 履歴に乗らない、
-    /// `menu.rs` 冒頭 doc 参照)。
-    edit_menu_open: bool,
-    /// header "File" メニューの開閉(MB-1、裁定176)。`edit_menu_open` と同格
-    /// の表示専用 view flag。
-    file_menu_open: bool,
+    // 旧 `edit_menu_open`/`file_menu_open`(MB-0/MB-1 の表示専用 view flag)は
+    // MB-2 で廃止 — menubar の開閉は widget 内部状態(`menu.rs` 冒頭 doc)。
     /// Stage の下に市松を敷くか。**表示専用** — Document には一切乗らない
     /// (`settings_pane::composite_checkerboard` 参照、書き出しに影響しない)。
     checkerboard: bool,
@@ -761,8 +756,6 @@ impl Shell {
                 browser: browser_pane::PaneState::new(),
                 panes: pane_layout::Layout::new(),
                 settings_panel_open: false,
-                edit_menu_open: false,
-                file_menu_open: false,
                 checkerboard: false,
                 background_draft: None,
                 ui_scale_draft: None,
@@ -827,8 +820,6 @@ impl Shell {
             browser: browser_pane::PaneState::new(),
             panes: pane_layout::Layout::new(),
             settings_panel_open: false,
-            edit_menu_open: false,
-            file_menu_open: false,
             checkerboard: false,
             background_draft: None,
             ui_scale_draft: None,
@@ -885,26 +876,9 @@ impl Shell {
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
     pub fn update(&mut self, message: Message) -> Task<Message> {
         self.status = None;
-        // M-menu MB-0+Edit: Edit メニュー項目(Undo 等)をクリックしたら
-        // メニュー自体は自動で閉じる(普通のメニューの慣習) —
-        // `Message::ToggleEditMenu` 自身(開く操作)だけは対象外にする。
-        // 生の overlay ではない今回の実装(`menu.rs` 冒頭 doc)には
-        // 「クリックが外へ外れたら閉じる」自動判定が無いため、ここで
-        // 「開いている間に他の Message が1本でも処理されたら閉じる」という
-        // 単純な形で代替する(不要な専用 wiring を各 8 動詞へ増やさない)。
-        if self.edit_menu_open && !matches!(message, Message::ToggleEditMenu) {
-            self.edit_menu_open = false;
-        }
-        // MB-1: File メニューも同じ自動クローズ規律(`ToggleFileMenu` 自身だけ
-        // 対象外)。**File/Edit は同時に開かない**(`ToggleFileMenu`/
-        // `ToggleEditMenu` のどちらの腕も、この2本より先に評価されるこの
-        // ブロックで「今開いている方のメニュー」が message 到達時点で先に
-        // 閉じる — 例: Edit が開いている間に File を押すと、上のブロックで
-        // まず `edit_menu_open` が false になり、その後の match 腕で
-        // `file_menu_open` が true になる)。
-        if self.file_menu_open && !matches!(message, Message::ToggleFileMenu) {
-            self.file_menu_open = false;
-        }
+        // 旧 MB-0/MB-1 の自動クローズ規律(edit_menu_open/file_menu_open)は
+        // MB-2 で不要になった — menubar の開閉・項目クリック後の自動クローズは
+        // widget 内部(vendored iced_aw menu の `close_on_item_click` 既定)。
         // click→type 編集への切り替え(`finish_field_drag`)だけがフォーカス
         // task を返す。他の枝は既定どおり `Task::none()`。
         let mut task = Task::none();
@@ -1052,11 +1026,9 @@ impl Shell {
             Message::DeselectAllLayers => self.deselect_all_layers(),
             Message::GroupLayers => self.group_selected_layers(),
             Message::UngroupLayers => self.ungroup_selected_layers(),
-            // M-menu MB-0+Edit: header "Edit" トリガーの開閉トグル。
-            // `settings_panel_open` と同格の表示専用状態(Document 非依存)。
-            Message::ToggleEditMenu => self.edit_menu_open = !self.edit_menu_open,
-            // MB-1: header "File" トリガーの開閉トグル。`ToggleEditMenu` と同格。
-            Message::ToggleFileMenu => self.file_menu_open = !self.file_menu_open,
+            // MB-2: freeze 意図動詞(裁定119)の UI 初露出(Layer メニュー)。
+            Message::FreezeGroups => self.set_selected_groups_frozen(true),
+            Message::UnfreezeGroups => self.set_selected_groups_frozen(false),
             Message::NewProjectRequested => {
                 if self.confirm_discard_if_dirty() {
                     self.reset_document();
@@ -1278,6 +1250,47 @@ impl Shell {
                 self.session.selection = None;
             }
             Err(error) => self.status = Some(format!("グループを解除できない: {error}")),
+        }
+    }
+
+    /// Freeze/Unfreeze(裁定119 の意図動詞、MB-2 で UI 初露出)。選択に含まれる
+    /// `LayerSource::Group` layer だけを対象にする(Group でない選択は
+    /// `ungroup_selected_layers` と同じく黙って飛ばす — store 側の
+    /// `freeze_attrs_batch` は非 Group を `Err` にするため、ここで先に絞る)。
+    /// 1 `apply_all` = 1 undo(Q2)。選択は動かさない(層構造が変わらない)。
+    /// 凍結ゲートの拒否(locked な Group 等)は既存 status 経路で理由つきで出す
+    /// (M13: 無反応ゼロ)。
+    fn set_selected_groups_frozen(&mut self, frozen: bool) {
+        if self.session.selected_layers.is_empty() {
+            return;
+        }
+        let groups: Vec<LayerId> = {
+            let view = self.doc.view();
+            self.session
+                .selected_layers
+                .iter()
+                .copied()
+                .filter(|&layer| {
+                    view.meta(layer)
+                        .ok()
+                        .flatten()
+                        .is_some_and(|meta| meta.source == LayerSource::Group)
+                })
+                .collect()
+        };
+        if groups.is_empty() {
+            return;
+        }
+        let intents = groups.into_iter().map(|group| {
+            if frozen {
+                Intent::Freeze { group }
+            } else {
+                Intent::Unfreeze { group }
+            }
+        });
+        if let Err(error) = self.doc.apply_all(intents) {
+            let verb = if frozen { "凍結できない" } else { "解凍できない" };
+            self.status = Some(format!("グループを{verb}: {error}"));
         }
     }
 
@@ -2379,21 +2392,9 @@ impl Shell {
         // 木に一切現れない(Q0: 効かない chrome を並べない、閉じている間は
         // 下書き入力欄も存在しないので誤操作の的にならない)。
         let mut layout = column![self.header()];
-        // MB-1: File ドロップダウン。Edit と同型の表示分岐(下記)——
-        // `file_menu_open`/`edit_menu_open` は `Shell::update` の自動クローズ
-        // 規律により同時に true にならない(両方 if を置いても2段重ねには
-        // ならない)。
-        if self.file_menu_open {
-            layout = layout.push(row![crate::menu::file_dropdown(dims, colors)]);
-        }
-        // M-menu MB-0+Edit: 開いている間だけ木へ現れる(`settings_panel_open`
-        // と同型の表示分岐、`menu.rs` 冒頭 doc「Q0: 開いていなければ木に一切
-        // 現れない」)。左寄せの `row!` で包み、残りの幅は埋めない — full
-        // width の settings パネルとは違い、ドロップダウンらしく内容幅で
-        // 止める。
-        if self.edit_menu_open {
-            layout = layout.push(row![crate::menu::edit_dropdown(dims, colors)]);
-        }
+        // 旧 MB-0/MB-1 のドロップダウン表示分岐(file_menu_open/edit_menu_open)
+        // は MB-2 で廃止 — menubar の開いた menu は widget 自身の overlay
+        // (`motolii_menubar` の vendored `MenuBarOverlay`)として木に現れる。
         if self.settings_panel_open {
             // 題帯(2026-08-22 題帯レーン): pane 名の常設は5面すべて —
             // Settings は pane_grid 外なので `panel_title_band`(名札のみ、
@@ -2605,45 +2606,42 @@ impl Shell {
     /// 帯自身が「パネル」だと分かる縁を持っていなかった。Timeline の `.tp`
     /// (transport 帯、background=panel + border-bottom hairline)と同じ
     /// grammar をここへも延長する — 新しい視覚言語の発明ではない。
+    /// MB-2(裁定179 D1 根治): 旧「輪郭箱ボタンの列」(File/Edit/Undo/Redo/
+    /// + Layer/Browser/Settings)を `motolii-menubar::menu_bar`(左)+icon
+    /// ボタン2つ(右端 — Browser トグル/Settings、裁定187 の icon+tooltip
+    /// ペア第1号)へ差し替えた。メニューの中身(全て既存 `Message` の露出)は
+    /// `menu.rs::menus()` が正本、見た目は menubar crate の「枠の文法」
+    /// (裁定179: 輪郭なし・hover で面)。旧 Undo/Redo 箱ボタンは廃止 —
+    /// 入口は Edit メニューと Cmd+Z/Cmd+Shift+Z の2本(S6 併存)。
     fn header(&self) -> Element<'_, Message> {
         let dims = self.dims();
         let colors = self.tokens.colors;
-        let buttons = row![
-            // MB-1: File はメニューバーの最左(`menu.rs` 冒頭 doc「MB-1」)。
-            crate::menu::file_trigger(dims, colors),
-            // M-menu MB-0+Edit: header メニューバーのトップレベル第2号
-            // (`menu.rs` 冒頭 doc)。
-            crate::menu::edit_trigger(dims, colors),
-            button(text("Undo").size(dims.body_text))
-                .style(move |_theme, status| button_style(dims, colors, status))
-                .on_press_maybe(self.doc.can_undo().then_some(Message::Undo)),
-            button(text("Redo").size(dims.body_text))
-                .style(move |_theme, status| button_style(dims, colors, status))
-                .on_press_maybe(self.doc.can_redo().then_some(Message::Redo)),
-            button(text("+ Layer").size(dims.body_text))
-                .style(move |_theme, status| button_style(dims, colors, status))
-                .on_press(Message::AddLayer),
-            // **Browser トグル**(裁定162 切片 B3、normal-map id980 Project/
-            // Media Pool panel — entries `0:0:3:0`=全出典が panel 型、menu/
-            // shortcut 出典ゼロなので S0 は「ヘッダボタン単独で適合」— Settings
-            // と同格の header トグル、S6 併設要件は無い)。他ボタンと同じく
-            // 文言ボタン(下の Settings ボタンの doc と同じ理由)。
-            button(text("Browser").size(dims.body_text))
-                .style(move |_theme, status| button_style(dims, colors, status))
-                .on_press(Message::Browser(browser_pane::Message::ToggleBrowserPanel)),
-            // **歯車ボタン**(発注書)。他3ボタンと同じく文言ボタン — この codebase
-            // は一貫してアイコンではなく文字で chrome を作る(M/S glyph も文字、
-            // `inspector_pane.rs` 冒頭 doc 参照)ので、絵文字/unicode グリフの
-            // フォント欠け(`../reference/KNOWN.md` の letter-spacing 欠けと同種の
-            // iced 0.14 の未確認リスク)を踏まない選択。
-            button(text("Settings").size(dims.body_text))
-                .style(move |_theme, status| button_style(dims, colors, status))
-                .on_press(Message::Settings(settings_pane::Message::ToggleSettingsPanel)),
+        let content = row![
+            motolii_menubar::menu_bar(crate::menu::menus(), dims, colors),
+            Space::new().width(Length::Fill),
+            // **Browser トグル**(裁定162 切片 B3、normal-map id980 — panel 型
+            // 出典のみなので S6 併設要件は無い)。Icon::GridView+tooltip
+            // "Browser"。
+            Self::header_icon_action(
+                motolii_icons::Icon::GridView,
+                "Browser",
+                Message::Browser(browser_pane::Message::ToggleBrowserPanel),
+                dims,
+                colors,
+            ),
+            // **Settings**(歯車)。Icon::Settings+tooltip "Settings"。
+            Self::header_icon_action(
+                motolii_icons::Icon::Settings,
+                "Settings",
+                Message::Settings(settings_pane::Message::ToggleSettingsPanel),
+                dims,
+                colors,
+            ),
         ]
         .spacing(dims.spacing_m)
         .align_y(iced::alignment::Vertical::Center);
 
-        container(buttons)
+        container(content)
             .width(Length::Fill)
             .height(Length::Fixed(dims.panel_header_height))
             .padding([0.0, dims.spacing_s])
@@ -2658,6 +2656,66 @@ impl Shell {
                 ..container::Style::default()
             })
             .into()
+    }
+
+    /// header 右端の icon ボタン(裁定187 icon+tooltip ペア第1号)。輪郭なし・
+    /// hover/press で面(裁定179 — `timeline_pane::transport` の
+    /// `transport_button` と同じ枠の文法)。アイコン枠寸は旧文言ボタンの字寸
+    /// (`body_text`)を [`motolii_icons::frame_px_for_glyph_px`](Material
+    /// live area 比 24/20)で写した視覚同等寸 — 中間比の発明ではなく上流定数の
+    /// 転写(transport のアイコン化と同じ判断)。tooltip が語(動詞名)を運ぶ
+    /// (裁定187「アイコンは tooltip と対で使うのが標準」)— 面は menubar の
+    /// 開いた menu と同じ `surface_raised`+hairline。
+    fn header_icon_action<'a>(
+        icon: motolii_icons::Icon,
+        label: &'a str,
+        message: Message,
+        dims: Dimensions,
+        colors: Colors,
+    ) -> Element<'a, Message> {
+        let glyph = motolii_icons::icon(
+            icon,
+            motolii_icons::frame_px_for_glyph_px(dims.body_text),
+            colors.text_secondary,
+        );
+        let action = button(glyph)
+            // 踏面はアイコンより大きく(S1、transport_button と同じ判断)。
+            .padding(dims.spacing_s)
+            .on_press(message)
+            .style(move |_theme, status| {
+                let background = match status {
+                    // hover/押下: 面が浮く(輪郭は出さない — 裁定179)。
+                    button::Status::Pressed | button::Status::Hovered => {
+                        Some(iced::Background::Color(colors.surface_hover))
+                    }
+                    // 常時: 素のアイコン(輪郭なし・面なし)。
+                    _ => None,
+                };
+                button::Style {
+                    background,
+                    // svg には効かない(tint が正)が、契約として ink を宣言しておく
+                    // (`transport_button` と同じ注記)。
+                    text_color: colors.text_secondary,
+                    ..button::Style::default()
+                }
+            });
+        tooltip(
+            action,
+            container(text(label).size(dims.caption_text).color(colors.text_primary))
+                .padding([dims.spacing_xs, dims.spacing_s])
+                .style(move |_theme| container::Style {
+                    background: Some(iced::Background::Color(colors.surface_raised)),
+                    border: iced::Border {
+                        color: colors.border_default,
+                        width: dims.border_width,
+                        radius: 0.0.into(),
+                    },
+                    ..container::Style::default()
+                }),
+            tooltip::Position::Bottom,
+        )
+        .gap(dims.spacing_xs)
+        .into()
     }
 
     /// 採番の正本は store 側([`StoreView::next_layer_id`])。**墓標を含む最大 id + 1**
