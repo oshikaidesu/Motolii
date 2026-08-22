@@ -13,6 +13,10 @@
 
 | レーン | 種別 | 場所 | 中身 |
 |---|---|---|---|
+| GZ | 実装 | worktree(stage-pane) | Stage ギズモ第1弾(B44 キャンバス入口): bbox+8ハンドル+回転+anchor・Shift 修飾・Esc・カメラ変換下 oracle。行抽出は bundle 列から自走 |
+| TL+ | 実装 | worktree(timeline-pane) | B21+B18 第1切片: ループ・JKL シャトル・追従スクロール・作業範囲 drag。正典衝突は正典が正 |
+| INS-mask | 実装 | worktree(inspector-pane) | 裁定184 型別 section 第1号= MASK(B02 の Inspector 完結行のみ・編集文法は既存流用) |
+| SET+ | 実装 | worktree(settings-pane) | B12 第1切片: 実在状態に紐づく設定のみ(飾り禁止テスト付き)・section 分け |
 
 
 ## 完了・main 着地済み(実装)
