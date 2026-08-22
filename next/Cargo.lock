@@ -3786,6 +3786,7 @@ dependencies = [
  "motolii-store",
  "motolii-testkit",
  "motolii-vector",
+ "serde_json",
  "thiserror 2.0.20",
  "wgpu",
 ]

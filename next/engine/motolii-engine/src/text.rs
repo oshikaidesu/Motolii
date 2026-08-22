@@ -1,24 +1,19 @@
 //! owns: `TextDocument`(store の意味)→ `motolii-vector::text` の輪郭 →
-//!       premultiplied RGBA8。裁定190 切片2 — `texture_for` の `LayerSource::Text`
-//!       枝を繋ぐ実体そのもの。
+//!       premultiplied RGBA8。裁定190 切片2 — [`rasterize_text_document`] がその実体。
 //!
-//! # まだ `texture_for` からは呼ばれていない
+//! # `render_frame` からの結線(2026-08-22、切片3)
 //!
-//! `ResolvedLayer`(`motolii-store`)は `LayerId` を持たない —
-//! [`motolii_store::ResolvedLayer::masks`] の doc がその理由を明示している:
-//! 「別の口にすると `ResolvedLayer` から `LayerId` が引けず、描く側がマスクへ
-//! 辿り着けない」。`texture_for` は `&LayerSource` と `source_frame` しか受け取らず、
-//! `LayerSource::Text` はコンテンツを持たない印(unit variant)なので、**どの layer の
-//! `TextDocument` を読むべきかを `texture_for` の中だけでは決められない**。
-//!
-//! **これは今回新しく見つかった穴ではない** — BL4(matte)レーンが全く同じ壁に
-//! 当たり、`render_frame` への結線を明示的に保留している
-//! (`02d5cec6 merge(engine): ...matteのrender_frame結線はstore要求
-//! (ResolvedLayerにLayerId)待ちで明示Err維持`)。この発注は「store 読み専用」
-//! (store の編集は範囲外)なので、ここでも同じ選択をする——`ResolvedLayer` に
-//! layer 識別子を足す store 側の変更が済んだ日に、`texture_for` の `LayerSource::Text`
-//! 枝は [`rasterize_text_document`] を1回呼ぶだけで繋がる形にしてある(黙って
-//! 迂回のハックを積まない、裁定37/`wrapper-over-hack` と同じ判断)。
+//! BL4 で `ResolvedLayer`(`motolii-store`)に `id: LayerId` が足された
+//! (`motolii_store::ResolvedLayer::id` の doc 参照)ことで、以前このモジュールが
+//! 抱えていた壁——「`texture_for` は `&LayerSource`/`source_frame` しか受け取らず、
+//! `LayerSource::Text` はコンテンツを持たない印(unit variant)なので、どの layer の
+//! `TextDocument` を読むべきか決められない」——が塞がった。今は
+//! `Engine::text_texture_for`(`lib.rs`)が `StoreView::text_document(layer_id)` で
+//! 直接引き、この関数(`rasterize_text_document`)を呼んで
+//! `Compositor::upload_rgba` へ渡す——`texture_for` 自身は今も `Text` を扱えない
+//! ままだが(呼び手が `Engine::texture_for_layer` で手前に分岐する)、`render_frame`
+//! を含む主経路からは実際に呼ばれるようになった(`lib.rs` の `Engine::text_texture_for`/
+//! `TextCacheKey` の doc に鍵設計の理由を記す)。
 //!
 //! # 変換の要点
 //!
