@@ -74,6 +74,7 @@ use iced::{mouse, Point, Rectangle};
 /// message は既存 [`Message`] と独立([`gizmo::GizmoDrag`] — 理由はモジュール doc)。
 pub mod gizmo;
 pub use gizmo::{gizmo_target, GizmoDrag, GizmoOverlay, GizmoPhase, GizmoProperty, GizmoTarget, GizmoValue};
+pub mod zoom;
 
 use motolii_core::{camera_screen_from_world_z0, CompSpec, ResolvedCamera};
 use motolii_engine::{Engine, ObservationCamera};
