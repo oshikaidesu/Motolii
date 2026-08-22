@@ -214,21 +214,24 @@ fn clicking_the_ruler_band_publishes_scrub_to_via_raw_coordinates() {
     // ちょうど512/512に割れる — x=500 は corner 側に落ちて無反応、x=520 から
     // ruler 側で `ScrubTo` が出る、という2分探索で確認した)。
     //
-    // つまり **rail の行リストと固定ヘッダーの corner 箱が、今は横に
-    // ズレている**(rail=150px 固定 vs corner=window幅の半分)。これは
-    // 見た目の実害(ルーラーが実際の clip 面と揃わない)であって、この試験の
-    // 座標を直すだけでは治らない — 本当の直し場所は
-    // `next/ui/motolii-timeline-pane/src/rail.rs::corner()` を
-    // `.width(Length::Fixed(rail_width))` にして `rail_width` を引数で
-    // 受け取ることだが、`motolii-timeline-pane` は本発注の write-set 外
-    // (read only)なので実装はしない — RETURN の逸脱台帳に報告する。
+    // **2026-08-23 追記: 上の記述は「修正前」の記録である。** 指摘どおり
+    // `rail::corner()` を `.width(Length::Fixed(rail_width))` へ直した
+    // (`rail.rs::corner()` の doc 参照)ので、ルーラーは rail の行リストと
+    // 横位置が揃い、**`rail_width` から始まる**。よってこの試験の座標も
+    // 上の注記が予告したとおり rail_width 基準へ戻す。
     //
-    // この試験は「今の実装が実際に ruler を置いている場所」に合わせて
-    // 緑にする(将来 `corner()` が直れば、この値も rail_width 基準へ戻す
-    // 追随が要る)。
-    let ruler_left = DEFAULT_WIDTH / 2.0; // 実測: corner/ruler が Fill/Fill で均等分割
+    // 直す前後の実測(この試験自体が corner 修正の検証器具になっている):
+    //   修正前 = ruler_left 512(Fill/Fill の均等分割)→ frame 110
+    //   修正後 = ruler_left 150(= `dims.timeline_lane_bar_width`)→ frame 189
+    // 修正後の 189 が正しい(クリップ面と同じ x 原点シフトを持つ、という
+    // 旧試験の前提がここで復活している)。
+    //
+    // `rail_width` は `TimelinePane::rail_width()` が private なので、その
+    // 唯一の出典である token を直接読む(`lib.rs:325` — `dims.timeline_lane_bar_width`
+    // をそのまま返すだけの関数。値の正本は1つのまま)。
+    let ruler_left = tokens.dims.timeline_lane_bar_width;
     let ruler_width = DEFAULT_WIDTH - ruler_left;
-    let x = 700.0_f32; // ruler_left(512) より右 — ruler 側に落ちることを実測済み
+    let x = 700.0_f32; // ruler_left(150)より右 — ルーラー帯の内側
     let expected_frame = frame_at_x(x - ruler_left, ruler_width, 300);
 
     // B21+B18(第5波結線)以降、ルーラー**最上段**は作業範囲のループ帯
