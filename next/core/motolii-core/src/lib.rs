@@ -2,6 +2,10 @@
 //!       i64 + TimeType(sequence/duration/timestamp)であって、30000/1001 のような
 //!       有理 fps を正確に持てない。映像編集はここを落とせないので Motolii が持つ。
 //!
+//! OWNS-JUSTIFICATION(A): 意見1(`next/reference/OPINIONS.md` #1・裁定10/32/64/78) —
+//! rerun の `TimeInt`(i64 + TimeType)は 30000/1001 のような有理 fps を正確に持てない
+//! という具体的な上流型の限界を名指しした上で持つ(裁定215 棚卸し 2026-08-23 #1)。
+//!
 //! 旧 workspace `crates/motolii-core` からの移植(2026-08-20 リセット)。再実装ではない。
 //!
 //! **持ってきたが落とした物**(同日、「スクラッチは最低限・保守はしたくない」の裁定):

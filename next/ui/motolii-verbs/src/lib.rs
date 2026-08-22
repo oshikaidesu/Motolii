@@ -19,6 +19,12 @@
 //!
 //! ## S6(Ableton 可視性原理)を construction time で保証
 //!
+//! OWNS-JUSTIFICATION(A): 裁定195(S6=Ableton可視性原理) — 右クリック/rail
+//! glyph/Inspector swatchのような「隠れた」入口が唯一の入口になるS6違反
+//! パターンを実測済みで、その違反を`entries`フィールドのconst評価で
+//! コンパイルエラーにする構造そのものが意見に直結している(裁定215 棚卸し
+//! 2026-08-23 #32、32件中最も明確な例)。
+//!
 //! [`裁定195`](../../../DECISIONS.md) が実測した通り、[`Entry::Context`]/
 //! [`Entry::PanelControl`](右クリック・rail glyph・Inspector swatch のような
 //! 「隠れた」入口)が**その動詞の唯一の入口**になっていると Ableton 可視性

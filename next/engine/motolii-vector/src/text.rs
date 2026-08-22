@@ -16,6 +16,11 @@
 //! 等)とは別の関心事(字形シェイピングの入力)なので、crate 根の `pub use` には
 //! 混ぜない。
 //!
+//! OWNS-JUSTIFICATION(B): 探索対象=`next/probes/r6-text-shaping` の実証(裁定190)
+//! — cosmic-text→swash→3次ベジエの1本道を probe で実際に検証済みの上で、自前分は
+//! 「次数上げ(quad→cubic)」の変換だけに絞っている(裁定215 棚卸し 2026-08-23
+//! #17、所有範囲を最小限に絞った模範例)。
+//!
 //! # この module が持つ語彙・持たない語彙
 //!
 //! **`motolii-store` を知らない**(`motolii-store` が `motolii-vector` を引く

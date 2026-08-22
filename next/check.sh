@@ -41,6 +41,44 @@ echo
 printf '  合計 %s行 — 自前で持っているコードの総量 = 保守の負債。**下がるべき数字**。\n' "$owns_total"
 echo '  上がった時は「上流に無い物を作った」か「使わない物を抱えた」かのどちらか。'
 
+# owns: の根拠 token(裁定215 の施工、2026-08-23 発注)。既定は「借りる」——
+# `owns:` を持ってよいのは (a) 意見を名指しできる時 (b) 上流不在を実際に
+# 確かめた時だけ。(c) probes/testkit は測定器具として別枠。(d) は「立証が
+# 足りない」ことを捏造せず正直に書いた記録(合格扱い)。
+# ここは Lottie 地図/Intent 到達可能性の節と同じ**情報表示のみ**(fail させない)
+# ——実際に fail する柵本体は
+# `core/motolii-testkit/tests/owns_justification_fence.rs`(cargo test で実行)。
+echo
+echo "=== owns: 根拠 token(裁定215 — (a)/(b)/(c)/(d) の内訳、fail は柵本体側)==="
+owns_files="$(find . -name '*.rs' -not -path './target/*' -exec grep -l -E '^\s*//! owns:' {} + 2>/dev/null | sort)"
+a=0; b=0; c=0; d=0; none=0; excluded=0
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  tok="$(grep -m1 -oE 'OWNS-JUSTIFICATION\([A-Z-]+\)' "$f" || true)"
+  case "$f" in
+    ./core/motolii-store/*|./core/motolii-eval/*)
+      # 別レーン走行中の write-set(このレーンでは触らない) — 未記入は
+      # ここで検出されて構わない(むしろ検出すべき、発注書の明記)。
+      [ -z "$tok" ] && excluded=$((excluded + 1))
+      continue
+      ;;
+  esac
+  case "$tok" in
+    *"(A)") a=$((a + 1)) ;;
+    *"(B)") b=$((b + 1)) ;;
+    *"(C-PROBE)"|*"(C-TESTKIT)") c=$((c + 1)) ;;
+    *"(D)") d=$((d + 1)) ;;
+    *) none=$((none + 1)) ;;
+  esac
+done <<< "$owns_files"
+printf '  (a) 意見を名指し           %3d\n' "$a"
+printf '  (b) 上流不在を実際に確認   %3d\n' "$b"
+printf '  (c) 測定器具(probes/testkit、別枠) %3d\n' "$c"
+printf '  (d) 立証不足(捏造せず正直に申告・合格) %3d\n' "$d"
+printf '  根拠 token 無し            %3d' "$none"
+[ "$none" -gt 0 ] && echo '  ← cargo test -p motolii-testkit --test owns_justification_fence が赤い' || echo
+printf '  除外(store/eval、別レーン走行中・未記入) %3d\n' "$excluded"
+
 echo
 echo "=== wraps: 上流の薄い口(中身を知りたければ上流を読む) ==="
 while IFS= read -r f; do

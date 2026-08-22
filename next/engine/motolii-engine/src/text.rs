@@ -15,6 +15,11 @@
 //! を含む主経路からは実際に呼ばれるようになった(`lib.rs` の `Engine::text_texture_for`/
 //! `TextCacheKey` の doc に鍵設計の理由を記す)。
 //!
+//! OWNS-JUSTIFICATION(A): 裁定190/BL4(`motolii_store::ResolvedLayer::id` 追加) —
+//! `texture_for` がTextコンテンツを持たないunit variantのため、どのlayerの
+//! `TextDocument` を読むべきか決められなかった具体的な穴を、決定番号つきで
+//! 塞いだ経緯を doc が追える(裁定215 棚卸し 2026-08-23 #13)。
+//!
 //! # 変換の要点
 //!
 //! - **既定行(`styles[0]`、裁定98)を読む** — `TextDocument::styles` の

@@ -3,6 +3,11 @@
 //! アプリ側の責務)。発注書「キーは仮置き(keymap 層未実装)」—
 //! `next/reference/timeline-grammar.md` 拘束6の実体化。
 //!
+//! OWNS-JUSTIFICATION(A): `next/reference/timeline-grammar.md` 拘束6 — iced は
+//! キーイベントを配るだけで、割当を意味づける層はアプリ側の責務という上流
+//! ツールキットの一般的な役割分担を具体的に確認した上で建てた(裁定215 棚卸し
+//! 2026-08-23 #28)。
+//!
 //! ## 何を建てたか
 //!
 //! これまで **ショートカットは `next/shell/motolii-shell/src/lib.rs` の match

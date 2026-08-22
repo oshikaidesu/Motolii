@@ -8,6 +8,10 @@
 //! headless renderer の `draw()` は primitive を記録するところまでで、実際の
 //! GPU submit/present は測れない(`iced_test` の既知の限界)。詳細は
 //! `tests/r4.rs` 冒頭のコメントと RETURN の EVIDENCE_GAP を参照。
+//!
+//! OWNS-JUSTIFICATION(C-PROBE): 測定器具 — 意見/借用判定の対象外(裁定215 は実装
+//! 差し替えの話、これはTL-arch surveyのEVIDENCE_GAPを埋める性能実測そのもの、
+//! 別枠扱い(裁定215 棚卸し 2026-08-23 #23)。
 
 use std::cell::Cell;
 use std::rc::Rc;

@@ -1,5 +1,10 @@
 //! owns: 音声クロック — 供給済みサンプル数をタイムライン時刻へ写す(D5)。
 //!
+//! OWNS-JUSTIFICATION(A): 意見17と同じ `next/reference/KNOWN.md`「音声」D4/D5契約
+//! — 新規部分(`PlaybackClock` の状態機械)と移植部分(旧
+//! `motolii-transport`/`motolii-audio` の演算)を切り分けた上で、ここに置く
+//! 必然性を doc 自身が明記している(裁定215 棚卸し 2026-08-23 #6)。
+//!
 //! 旧 `crates/motolii-transport/src/clock.rs`(pure 関数)+ 旧
 //! `crates/motolii-audio/src/ring.rs` の `PlaybackCounters` + 旧
 //! `crates/motolii-audio/src/latency.rs` の `DeviceWaitLatency::update_from_output_callback`

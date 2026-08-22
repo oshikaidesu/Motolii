@@ -7,6 +7,11 @@
 //! フォーカス・Cycle Panel・Close Panel の6項目、出典
 //! 1525/801/1317/1316/1503/1499)を menubar crate に作ったが、その**状態側**
 //! (今どの pane にフォーカスがあるか・巡回の次はどれか)がまだ無かった。
+//!
+//! OWNS-JUSTIFICATION(A): 裁定160切片6(pane split survey
+//! `docs/reviews/2026-08-21-pane-split-survey.md` §2.3) — `motolii-timeline-pane`
+//! が `motolii-shell` へ依存できない循環を避けるためleaf crate化する構造上の
+//! 必然性を具体的に引用(裁定215 棚卸し 2026-08-23 #29)。
 //! ここがその置き場——`next/ui/motolii-shell-state/src/layout.rs`(B26、
 //! パネル分割木+hidden葉、コミット `f69e709e`)の**隣**に置く: どちらも
 //! 「Session 水準の pane 状態」を iced 非依存の純データで表す同じ様式だが、

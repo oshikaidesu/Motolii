@@ -8,6 +8,11 @@
 //! 「音声(2026-08-20解析済み)」が調達を確定済み: rodio/kira は採らず cpal 直叩き、
 //! mux は `motolii-media` が解決済み(この crate は PCM を作るだけでよい)。
 //!
+//! OWNS-JUSTIFICATION(A): 意見17(`next/reference/OPINIONS.md` #17・裁定125)+
+//! `next/reference/KNOWN.md`「音声」D4/D5契約 — rodio/kira は cpal のような
+//! 生callbackタイムスタンプを露出せずクロック所有契約を守れないと具体的に
+//! 名指しで却下している(裁定215 棚卸し 2026-08-23 #5、音声7件で最も強い例)。
+//!
 //! **範囲**:
 //! - [`mix`] — 決定論的 `mix_audio`(preview/export同一意味の正準PCM境界)。
 //!   B42(音声内容整形束、2026-08-22)でレイヤー単位の pan([`FadeSpec`]と対の

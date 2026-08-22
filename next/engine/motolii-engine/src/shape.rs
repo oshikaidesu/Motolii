@@ -15,6 +15,12 @@
 //! 呼ぶだけの薄いラッパー。呼び手は `lib.rs` の
 //! [`Engine::shape_texture_from_shapes`](../struct.Engine.html)。
 //!
+//! OWNS-JUSTIFICATION(B): 探索対象=`motolii-vector::render_tree`(汎用
+//! ラスタライザ) — Document側の型(`Layer:shapes` component・`StoreView::shapes`)
+//! を汎用レンダラが知りようがないため橋渡しが要ることは自明だが、意見としての
+//! 名指しはこの中では弱い(裁定215 棚卸し 2026-08-23 #12、正直に記録)。より強い
+//! 根拠が見つかれば置き換えること。
+//!
 //! # canvas は `Canvas::centered`(text とは逆の選択)
 //!
 //! `text.rs` は左上原点の canvas を使う(組版のペン位置がそのまま画素の位置を

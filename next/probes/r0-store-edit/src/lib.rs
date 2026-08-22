@@ -6,6 +6,11 @@
 //!
 //! 表現は裁定4のとおり `re_types_core` の custom component として **Motolii 側に**建てる
 //! (`re_types` を fork しない)。この crate がその実証も兼ねる。
+//!
+//! OWNS-JUSTIFICATION(C-PROBE): 測定器具 — 意見/借用判定の対象外(裁定215 は実装
+//! 差し替えの話、これは合否を測る道具そのもの)。rerun の bench が測るのは
+//! 「観測ログの追記」であって「同じpropertyを何百回も書き換える」パターンでは
+//! ないことをdoc冒頭で確認済み(裁定215 棚卸し 2026-08-23 #18、別枠扱い)。
 
 use std::borrow::Cow;
 use std::sync::Arc;

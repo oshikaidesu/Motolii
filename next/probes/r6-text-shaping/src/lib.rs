@@ -6,6 +6,10 @@
 //!       閉じるための器具で、判定文書は
 //!       `docs/reviews/2026-08-22-text-rendering-route-probe.md`。
 //!
+//! OWNS-JUSTIFICATION(C-PROBE): 測定器具 — 意見/借用判定の対象外(裁定215 は実装
+//! 差し替えの話、これは1本道が通るかの実証そのもの)。別枠扱い(裁定215 棚卸し
+//! 2026-08-23 #24)。
+//!
 //! # なぜ cosmic-text か(この probe が確かめる仮説)
 //!
 //! iced fork(`iced_graphics`)が cosmic-text 0.19.0 を既に依存グラフへ引いている。
