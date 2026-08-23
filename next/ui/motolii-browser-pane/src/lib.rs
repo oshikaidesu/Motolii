@@ -1176,6 +1176,7 @@ fn card_body(
     view_mode: model::ViewMode,
     dims: Dimensions,
     colors: Colors,
+    status_badge: Option<Element<'static, Message>>,
 ) -> Element<'static, Message> {
     match view_mode {
         model::ViewMode::Grid => {
@@ -1189,7 +1190,13 @@ fn card_body(
                 colors.text_muted,
                 Length::Fixed(card_width),
             );
-            column![thumb, name, caption].spacing(dims.spacing_xs).into()
+            let mut children: Vec<Element<'static, Message>> = vec![thumb];
+            if let Some(badge) = status_badge {
+                children.push(badge);
+            }
+            children.push(name);
+            children.push(caption);
+            column(children).spacing(dims.spacing_xs).into()
         }
         model::ViewMode::List => {
             let thumb_width = dims.browser_list_thumb_width;
@@ -1197,7 +1204,11 @@ fn card_body(
             let thumb = thumb_container(glyph, thumb_fill, thumb_width, thumb_height, dims, colors);
             let name = ellipsis_text(name, dims.micro_text, colors.text_primary, Length::Fill);
             let caption = ellipsis_text(caption, dims.micro_text, colors.text_muted, Length::Fill);
-            let text_block: Element<'static, Message> = column![name, caption]
+            let mut text_children: Vec<Element<'static, Message>> = vec![name, caption];
+            if let Some(badge) = status_badge {
+                text_children.push(badge);
+            }
+            let text_block: Element<'static, Message> = column(text_children)
                 .spacing(dims.spacing_xs)
                 .width(Length::Fill)
                 .into();
@@ -1308,6 +1319,7 @@ fn card_view(
     // 丸めて独立させる)。
     let asset_id = item.id;
     let has_usable_path = item.path.is_some();
+    let status_badge = status_badge_view(&item.status, dims, colors);
     let body = card_body(
         category.glyph(),
         thumb_fill(category, colors),
@@ -1316,6 +1328,7 @@ fn card_view(
         view_mode,
         dims,
         colors,
+        status_badge,
     );
 
     let card_button = button(body)
@@ -1427,6 +1440,19 @@ fn card_style(
 /// カード thumb の塗り(種別ごとに既存 `Colors` ロールを再利用 — 新ロールは
 /// 起こさない。装飾的な塗り分けであって新しい意味役割ではないため、裁定164
 /// 「意味役割が新しい時は専用ロールを起こす」の対象外と判断)。
+///
+/// **Q0 判定(`A07-empty.tsv` 20行目、色面+glyph が実サムネイルの代用か)**:
+/// 違反ではないと判断する。根拠は Browser の視覚の正本
+/// `docs/mocks-ui/public/browser-library.html` — 冒頭コメント3行目
+/// 「Visual-review browser concept. It keeps the established thumbnail
+/// result modes.」が、色面+glyph(`.libraryThumb thumb-blue`〜
+/// `.libraryThumb thumb-cyan`、124-166行、実画像を1枚も持たない)を
+/// **「確立済みのサムネイル結果モード」として明示的に採用**している。
+/// つまり実データのサムネイル画像は最初からこの正本の設計に無い —
+/// `thumb_fill` は「実サムネイルが無いことを一時的に隠す代用品」ではなく、
+/// 正本が意図した最終形をそのまま実装している。裁定187(icon-first)とも
+/// 整合する(種別を色+glyph で即答する設計は「文字で説明しない」の系)。
+/// よって「触れそうで機能しない」(Q0)には該当せず、コード変更は不要。
 fn thumb_fill(category: model::Category, colors: Colors) -> iced::Color {
     match category {
         model::Category::Video => colors.way_timeline,
@@ -1434,6 +1460,66 @@ fn thumb_fill(category: model::Category, colors: Colors) -> iced::Color {
         model::Category::Audio => colors.data,
         model::Category::Other => colors.surface_raised,
     }
+}
+
+/// 素材の欠落表示(A05 の穴閉じ、この発注の本題)。**`Unchecked`/`Present`
+/// は何も返さない**(`None`)— 「在る」と偽らないが、大半を占める未確認状態を
+/// 「無い」と誤警告することもしない([`AssetStatus`] doc の既定値の意味を
+/// そのままカードへ持ち込む)。`Missing`/`Unreadable` の時だけ icon-first
+/// (裁定187 利用者裁定)の警告 glyph を返す。
+///
+/// 色は既存ロール `Colors::status_warning` を流用(専用ロールを新設しない
+/// 判断)。`motolii-export-pane` の cap 超過警告([`motolii_export_pane`]、
+/// `lib.rs:566` 付近)が同じロールを同じ理由(危険色の専用ロールが正本
+/// DTCG に無いため既存 `status.warning` を仮当てする、`motolii-tokens-rs`
+/// `derive_state_colors` doc 参照)で再利用している先例に揃える。
+///
+/// 理由文言(「なぜ見つからないか」)は裁定185(利用者裁定「文字で説明する
+/// のはクールではない」)に従いカード本体へベタ置きしない。この pane は
+/// カード内に自前の status 帯を持たない(`AssetListItem`/`card_body` は
+/// 一覧+grid骨格までの投影で、帯を描く箱がまだ無い) — 代わりに、この
+/// crate が既に持つ最小の在庫である `tooltip`([`view_mode_button`] と
+/// 同じ手口)へ理由を乗せる。tooltip はクリック可能物ではないので Q0
+/// (「触れそうで機能しない」)には抵触しない。理由帯そのもの(常設テキスト
+/// 行)の新設は次段(shell 側)の仕事として持ち出さない。
+fn status_badge_view(
+    status: &motolii_store::AssetStatus,
+    dims: Dimensions,
+    colors: Colors,
+) -> Option<Element<'static, Message>> {
+    use motolii_store::AssetStatus;
+
+    let reason = match status {
+        AssetStatus::Unchecked | AssetStatus::Present { .. } => return None,
+        AssetStatus::Missing => "Missing".to_owned(),
+        AssetStatus::Unreadable { reason } => reason.clone(),
+    };
+
+    let icon_element = motolii_icons::icon(
+        motolii_icons::Icon::Warning,
+        motolii_icons::frame_px_for_glyph_px(dims.micro_text),
+        colors.status_warning,
+    );
+
+    Some(
+        tooltip(
+            icon_element,
+            container(text(reason).size(dims.caption_text).color(colors.text_primary))
+                .padding([dims.spacing_xs, dims.spacing_s])
+                .style(move |_theme| container::Style {
+                    background: Some(iced::Background::Color(colors.surface_raised)),
+                    border: iced::Border {
+                        color: colors.border_default,
+                        width: dims.border_width,
+                        radius: 0.0.into(),
+                    },
+                    ..container::Style::default()
+                }),
+            tooltip::Position::Bottom,
+        )
+        .gap(dims.spacing_xs)
+        .into(),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1556,6 +1642,9 @@ fn preview_card_view(
         view_mode,
         dims,
         colors,
+        // preview カタログは静的カタログ由来(`model::PreviewCard`)で
+        // `AssetStatus` を持たない — 状態バッジは media カードのみ。
+        None,
     );
     let frame_width = card_frame_width(view_mode, dims);
 

@@ -14,7 +14,7 @@
 //! `browser-semantics.html` 救出台帳で「予約地」(タグ束・filesystem 走査裁定
 //! 待ち)と明記済み — この切片では実装しない。
 
-use motolii_store::{Asset, AssetId, LayerId, LayerSource, RationalTime, StoreView};
+use motolii_store::{Asset, AssetId, AssetStatus, LayerId, LayerSource, RationalTime, StoreView};
 
 /// 一覧1行ぶんの投影。`Asset` から Browser が要る最小の面だけを切り出す
 /// (`AssetListItem { id, name, kind, path, fingerprint, duration }` — EXACT
@@ -36,6 +36,12 @@ pub struct AssetListItem {
     /// (`Asset::duration` の doc と同じ「分かる時だけ入る」)— カード grid は
     /// [`format_duration`] で「—」へ丸める。
     pub duration: Option<RationalTime>,
+    /// `Asset::status` をそのまま運ぶ(A05: `Asset` が既に持っている値を
+    /// 転記するだけ — この投影は IO をしない純関数のままなので、ここで
+    /// `Asset::resolve_status` を呼び直すことは絶対にしない)。読み込み直後の
+    /// 大半は `motolii_store::AssetStatus::Unchecked` のまま — 「在る」とは
+    /// 一度も言っていない既定値。
+    pub status: AssetStatus,
 }
 
 /// rail/filter が読む粗い種別。`AssetListItem::kind` の prefix(`/` 区切りの
@@ -662,15 +668,24 @@ pub fn assets(store: &StoreView<'_>) -> Vec<AssetListItem> {
         .assets()
         .unwrap_or_default()
         .into_iter()
-        .map(|asset| AssetListItem {
-            id: asset.id,
-            name: asset.name,
-            kind: asset.asset_type,
-            path: asset.path_absolute,
-            fingerprint: asset.content_hash,
-            duration: asset.duration,
-        })
+        .map(asset_to_item)
         .collect()
+}
+
+/// `Asset` 1件 → `AssetListItem` 1件の写し(裁定218 検収条件のための
+/// 名前付き分離 — `assets()` の `.map` クロージャそのものと同じ中身だが、
+/// `StoreView`/`Document` を組み立てずに単独でテストできるよう外へ出した)。
+/// **IO なし・値を落とさない転記のみ**([`AssetListItem::status`] doc 参照)。
+fn asset_to_item(asset: Asset) -> AssetListItem {
+    AssetListItem {
+        id: asset.id,
+        name: asset.name,
+        kind: asset.asset_type,
+        path: asset.path_absolute,
+        fingerprint: asset.content_hash,
+        duration: asset.duration,
+        status: asset.status,
+    }
 }
 
 /// rail scope + 検索文字列で [`assets`] の一覧をさらに絞る純関数(B2
@@ -831,6 +846,36 @@ impl ViewMode {
 mod tests {
     use super::*;
     use motolii_store::{AssetDraft, Document, Intent};
+
+    /// **ORACLE**(裁定218 検収条件そのもの): `AssetStatus::Missing` を持つ
+    /// `Asset` から作った `AssetListItem` は `status` を落とさず `Missing` の
+    /// まま運ぶ — A05 の穴(Browser 投影が `Asset::status` を一度も見ていない
+    /// 問題)を閉じたことの検収。
+    #[test]
+    fn asset_to_item_projects_missing_status_without_dropping_it() {
+        let asset = Asset {
+            id: AssetId::from_raw(0),
+            name: "gone".to_owned(),
+            asset_type: "video/mp4".to_owned(),
+            content_hash: "sha256:gone".to_owned(),
+            path_absolute: Some("/mnt/gone.mp4".to_owned()),
+            path_project_relative: None,
+            file_name: Some("gone.mp4".to_owned()),
+            size_bytes: None,
+            status: AssetStatus::Missing,
+            head_hash: None,
+            tail_hash: None,
+            duration: None,
+        };
+
+        let item = asset_to_item(asset);
+
+        assert_eq!(
+            item.status,
+            AssetStatus::Missing,
+            "投影が Asset::status を落とした(A05 の穴が再発)"
+        );
+    }
 
     fn draft(content_hash: &str, name: &str) -> AssetDraft {
         draft_typed(content_hash, name, "video/mp4")
@@ -1408,6 +1453,7 @@ mod tests {
             path: Some("/mnt/archive/legacy-drive/tape-07.wav".to_owned()),
             fingerprint: "sha256:tape07".to_owned(),
             duration: None,
+            status: AssetStatus::Unchecked,
         }];
         let narrowed = visible(&items, RailScope::AllMedia, "tape-07");
         assert_eq!(narrowed.len(), 1, "path 部分一致で絞れない: {narrowed:?}");
@@ -1429,6 +1475,7 @@ mod tests {
             path: None,
             fingerprint: "sha256:noise".to_owned(),
             duration: None,
+            status: AssetStatus::Unchecked,
         }];
         assert!(visible(&items, RailScope::AllMedia, "mnt").is_empty());
         assert_eq!(visible(&items, RailScope::AllMedia, "generated").len(), 1);
@@ -1443,6 +1490,7 @@ mod tests {
                 path: None,
                 fingerprint: "sha256:0".to_owned(),
                 duration: None,
+                status: AssetStatus::Unchecked,
             },
             AssetListItem {
                 id: AssetId::from_raw(1),
@@ -1451,6 +1499,7 @@ mod tests {
                 path: None,
                 fingerprint: "sha256:1".to_owned(),
                 duration: None,
+                status: AssetStatus::Unchecked,
             },
             AssetListItem {
                 id: AssetId::from_raw(2),
@@ -1459,6 +1508,7 @@ mod tests {
                 path: None,
                 fingerprint: "sha256:2".to_owned(),
                 duration: None,
+                status: AssetStatus::Unchecked,
             },
         ]
     }
@@ -1512,6 +1562,7 @@ mod tests {
                 path: None,
                 fingerprint: "sha256:first".to_owned(),
                 duration: None,
+                status: AssetStatus::Unchecked,
             },
             AssetListItem {
                 id: AssetId::from_raw(1),
@@ -1520,6 +1571,7 @@ mod tests {
                 path: None,
                 fingerprint: "sha256:second".to_owned(),
                 duration: None,
+                status: AssetStatus::Unchecked,
             },
         ];
         let ids: Vec<u64> = sorted(&items, SortKey::Name)
@@ -1542,6 +1594,7 @@ mod tests {
                 path: None,
                 fingerprint: "sha256:5".to_owned(),
                 duration: None,
+                status: AssetStatus::Unchecked,
             },
             AssetListItem {
                 id: AssetId::from_raw(6),
@@ -1550,6 +1603,7 @@ mod tests {
                 path: None,
                 fingerprint: "sha256:6".to_owned(),
                 duration: None,
+                status: AssetStatus::Unchecked,
             },
         ];
         let ids: Vec<u64> = sorted(&same_kind, SortKey::Kind)

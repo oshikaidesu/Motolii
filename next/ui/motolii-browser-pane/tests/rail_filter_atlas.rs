@@ -58,6 +58,7 @@ fn item(id: u64, name: &str, kind: &str) -> AssetListItem {
         path: None,
         fingerprint: format!("sha256:{name}"),
         duration: None,
+        status: motolii_store::AssetStatus::Unchecked,
     }
 }
 
