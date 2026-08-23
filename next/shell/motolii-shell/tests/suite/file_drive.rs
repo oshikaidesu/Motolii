@@ -159,11 +159,11 @@ struct FakeDialogsState {
 pub(crate) struct FakeDialogs(Rc<FakeDialogsState>);
 
 impl FakeDialogs {
-    fn set_confirm_discard(&self, value: bool) {
+    pub(crate) fn set_confirm_discard(&self, value: bool) {
         self.0.confirm_discard_response.set(value);
     }
 
-    fn confirm_discard_calls(&self) -> u32 {
+    pub(crate) fn confirm_discard_calls(&self) -> u32 {
         self.0.confirm_discard_calls.get()
     }
 

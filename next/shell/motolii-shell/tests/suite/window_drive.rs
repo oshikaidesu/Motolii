@@ -9,6 +9,8 @@
 
 use motolii_shell::{Message, Shell};
 
+use crate::file_drive::{drive, FakeDialogs};
+
 /// boot(daemon の製品入口)は main 窓を台帳へ先行記帳する。`Shell::new`
 /// (運転席・試験の入口)は従来どおり窓を開かない — 台帳も空のまま。
 #[test]
@@ -68,6 +70,27 @@ fn closing_the_main_window_does_not_corrupt_the_ledger() {
         Some(main_id),
         "WindowClosed(main) が台帳を壊した"
     );
+}
+
+/// OS の CloseRequested は main 窓を直ちに消さず、dirty なら確認結果を待つ。
+/// fake dialog を使うことで、メニュー Quit だけでなく赤信号ボタンの経路も
+/// 同じ `confirm_discard` 契約を通ることを headless に固定する。
+#[test]
+fn dirty_main_window_close_requests_discard_confirmation() {
+    let fake = FakeDialogs::default();
+    let (mut shell, _boot_task) = Shell::boot_with_dialogs(Box::new(fake.clone()));
+    let main_id = shell.main_window().expect("boot 済みなら main 窓がある");
+    drive(&mut shell, Message::AddLayer);
+    assert!(shell.is_project_dirty(), "変更前から dirty になっている");
+
+    // 既定応答(false)では、赤信号を押しても編集内容を捨てない。
+    drive(&mut shell, Message::WindowCloseRequested(main_id));
+    assert_eq!(fake.confirm_discard_calls(), 1, "OS close が確認を通っていない");
+    assert!(shell.is_project_dirty(), "キャンセルしたのに dirty が消えた");
+
+    // 許可(true)後の `iced::exit()` は runtime の終了Actionなので、ここでは
+    // Task drainの対象にせず、`document_io.rs:545-548`のソース経路で確認する。
+    // このテストは「拒否しても窓を維持する」という利用者保護の検収を担当する。
 }
 
 // ---------------------------------------------------------------------------

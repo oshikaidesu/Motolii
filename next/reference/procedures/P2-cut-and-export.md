@@ -71,48 +71,48 @@
 | 61 | Level のスライダー/数値をドラッグして下げる | Inspector | Inspector 数値ドラッグ(`start_field_drag`/`continue_field_drag`/`finish_field_drag`、`next/ui/motolii-inspector-pane/src/transform.rs` 系。GESTURES 台帳の同名行) | 書ける |
 | 62 | 変更後にもう一度 Space で再生し、音量が下がったか耳で確認する | Transport | id 55-56 と同じ再生経路 | 書ける |
 | 63 | 気に入らなければ Cmd+Z で Level 変更だけを取り消す | — | Inspector の drag 確定は1操作=1 undo(store の transient overlay+確定 Intent 1発、正典 §5.5) | 書ける |
-| 64 | 一通り編集が終わったので保存しようとして Cmd+S を押す | メニュー/キー | `Message::Save`/`SaveRequested`(Cmd+S 単純上書き保存)に相当するメッセージ・メニュー項目が無い(`menu.rs`/`lib.rs` を「Save」で grep しても Save As(Cmd+Shift+S)・Save a Copy しか無い、`next/shell/motolii-shell/src/menu.rs:68-77`) | 【穴】入口が無い |
+| 64 | 一通り編集が終わったので保存しようとして Cmd+S を押す | メニュー/キー | `menu.rs:68-74`の`Save`/`Cmd+S`、`input.rs:337-343`の`Message::SaveRequested`。既知pathなら`document_io.rs:508-514`が無言で上書きする | 書ける |
 | 65 | 代わりに File > Save As… を選び、保存先ダイアログで場所とファイル名を選ぶ | メニュー/OS dialog | `Message::SaveAsRequested`(`next/shell/motolii-shell/src/lib.rs:518,1484`)、`pick_save_path`(`file_dialogs.rs:157-166`) | 書ける(迂回) |
 | 66 | 保存を確定する | OS dialog/Document | `Document::save`(履歴を畳んだ flattened 書き、`next/shell/motolii-shell/src/lib.rs:518` doc 参照) | 書ける |
-| 67 | さらに編集を続けた後、もう一度保存しようとする(2回目以降も毎回ダイアログが出る) | メニュー | Save As は毎回 `pick_save_path` を呼ぶ(`file_dialogs.rs:157-166`)——一度保存した path へ無言で上書きする「Save」動詞が無いので、2回目以降も毎回パスを選び直すことになる | 【穴】入口が無い |
+| 67 | さらに編集を続けた後、もう一度保存しようとする(2回目以降も毎回ダイアログが出る) | メニュー | `Message::SaveRequested`は`current_path`があれば`perform_save_as(path)`へ進み、`tests/suite/file_drive.rs:349-413`がダイアログを再表示せず同じpathを更新することを検分 | 書ける |
 | 68 | ウィンドウのタイトルバーやどこかに「未保存の変更がある」印(●等)が出ているか確認する | ウィンドウ chrome | `Shell::title()`(`next/shell/motolii-shell/src/lib.rs:1187`)の中身と `is_dirty()`(`lib.rs:1819`)の関係は確認したが、dirty マーカーを文字列へ埋め込む処理の有無は本切片で未読了 | 【未確認】 |
 | 69 | 保存せずに File > New Project を選ぶと、破棄確認ダイアログが出る | メニュー/OS dialog | `confirm_then`→`self.dialogs.confirm_discard()`(`next/shell/motolii-shell/src/lib.rs:1478,1841-1849`、dirty でなければ確認自体をスキップ) | 書ける |
 | 70 | 保存せずに File > Open… を選んでも同様に確認が出る | メニュー/OS dialog | `confirm_then_pick_open`(`next/shell/motolii-shell/src/lib.rs:1494,1850-1867`) | 書ける |
 | 71 | 保存せずに File > Quit(Cmd+Q)を選んでも同様に確認が出る | メニュー/OS dialog | `Message::QuitRequested`→`confirm_then(QuitConfirmed)`(`next/shell/motolii-shell/src/lib.rs:551,1500`) | 書ける |
-| 72 | 保存せずに、メニューではなく OS ウィンドウの閉じるボタン(赤信号)をクリックして閉じる | OS 窓 | `Message::WindowClosed(id)` の main window 分岐は `iced::exit()` を即座に呼ぶだけで、`confirm_discard` を一切経由しない(`next/shell/motolii-shell/src/lib.rs:1284-1292`、`main.rs:89` の doc コメント「main 窓を閉じたら exit」)——メニュー Quit とは異なる経路で確認なしに終了する | 【穴】意味が無い |
+| 72 | 保存せずに、メニューではなく OS ウィンドウの閉じるボタン(赤信号)をクリックして閉じる | OS 窓 | main窓は`with_main_window`で`exit_on_close_request: false`。`lib.rs:1254-1258`の`close_requests`→`WindowCloseRequested`、`document_io.rs:537-552`のdirty確認を通る。`tests/suite/window_drive.rs`が拒否/許可を検分 | 書ける |
 | 73 | File > Export… を選んで書き出し窓を開く | メニュー | `Message::Export(export_pane::Message::ToggleExportDialog)`(`next/shell/motolii-shell/src/menu.rs:81-83`) | 書ける |
 | 74 | 品質(qp0 等)を選ぶ | Export 窓 | `Message::QualitySelect`(`next/ui/motolii-export-pane/src/lib.rs:362`、`next/shell/motolii-shell/src/lib.rs:3490`) | 書ける |
 | 75 | 書き出し範囲を「全体」から「work area のみ」に切り替える | Export 窓 | `Message::RangeSelect`(`export-pane/src/lib.rs:388`、`lib.rs:3491`) | 書ける |
 | 76 | 書き出し先ファイルを選ぶボタンを押し、OS ダイアログで保存先を選ぶ | Export 窓/OS dialog | `Message::PickOutputPath`→`pick_export_path`(`next/shell/motolii-shell/src/lib.rs:3494-3500`、拡張子 mp4 固定フィルタ) | 書ける |
 | 77 | 縦(9:16)や正方形(1:1)のアスペクト比を選ぶ | Export 窓 | export 側に独立の crop/aspect プリセット UI は無い(`export-pane/src/lib.rs` に aspect/resolution 選択0件)。遡るとコンポジション自体の width/height を変更する UI(Settings 窓 COMPOSITION 節)が実在する(`next/ui/motolii-settings-pane/src/sections.rs:8,128-132,222-224,253-265`)ので**プロジェクト作成時点まで遡れば迂回できる**——ただし Export 窓の中だけでは選べない | 【穴】入口が無い |
 | 78 | Export ボタンを押して書き出しを開始する | Export 窓 | `Message::Export`→`start_export`(`next/shell/motolii-shell/src/lib.rs:3502,3536-3585`) | 書ける |
-| 79 | 進捗バーが少しずつ進むのを見る | Export 窓 | `start_export` は `motolii_export::export_with_cancel` を**同期・ブロッキングで1回だけ**呼ぶ(`next/shell/motolii-shell/src/lib.rs:3527-3539` doc「進捗 subscription は開始時(0/total)と完了時(total/total)の2点だけ更新」「UI スレッドは export 完了までブロックする」)——実際には0%のまま固まって見え、完了した瞬間に100%へ飛ぶ | 【穴】意味が無い |
-| 80 | 書き出しの途中で「取消」ボタンを押して中断する | Export 窓 | `Message::CancelExport`→`cancel.cancel()`(`next/shell/motolii-shell/src/lib.rs:3504-3507`)自体は書けているが、`start_export` が UI スレッドを完了までブロックする(id 79 の証拠と同じ)ため、書き出し中は `Shell::update` へ新しいメッセージが一切届かず、「取消」ボタンの press イベント自体が処理される機会がない——ボタンは押せても効かない | 【穴】入口が無い |
+| 79 | 進捗バーが少しずつ進むのを見る | Export 窓 | `export_ops.rs:199-243`が`Task::run(export_stream(...))`でUIを返し、`update_export_progressed`が背景スレッドのprogressを反映する | 書ける |
+| 80 | 書き出しの途中で「取消」ボタンを押して中断する | Export 窓 | `export_ops.rs:167-176`の`CancelExport`が保持中の`Cancel`を立て、`export_ops.rs:439-455`がフレーム境界で検出してpartial outputを削除する | 書ける |
 | 81 | 書き出しが完了した通知(status 帯)を見る | status 帯 | `self.status = Some(format!("書き出し完了: ..."))`(`next/shell/motolii-shell/src/lib.rs:3568-3572`) | 書ける |
 | 82 | 書き出したファイルを Finder で開き、映像が正しいか確かめる | OS | Motolii 範囲外(OS 標準機能) | 書ける |
-| 83 | 書き出したファイルを再生して、音が鳴るか確かめる | OS/Finder | `motolii-export` は `motolii_media::mux_soundtrack`/`mux_mixed_pcm`(`next/engine/motolii-media/src/mux.rs:130,208`)を**呼んでいない**——`next/engine/motolii-export/src/lib.rs` 全体を grep しても `mux` の出現は crate doc コメント(`:16`「音声は後段 mux」という願望的記述)だけで、実処理コードには1件も無い。書き出された mp4 は映像のみで無音 | 【穴】意味が無い |
-| 84 | 無音に気づいて、書き出しをやり直す前に Export 窓を閉じて設定を見直す | Export 窓 | `Message::ToggleExportDialog`(open 反転、`menu.rs:83` と同じメッセージ)。ただし品質/範囲/出力先のどれを変えても音声 mux 自体が存在しないので無音は直らない(id 83 と同一原因) | 書ける(ただし無音は解消しない) |
+| 83 | 書き出したファイルを再生して、音が鳴るか確かめる | OS/Finder | `export_ops.rs:465-536`が`AudioProgram`でmixし、`motolii_media::mux_mixed_pcm`で最終mp4へmux。`tests/suite/export_drive.rs:173-245`がAAC音声トラックをprobeする | 書ける |
+| 84 | 無音に気づいて、書き出しをやり直す前に Export 窓を閉じて設定を見直す | Export 窓 | `Message::ToggleExportDialog`(open 反転、`menu.rs:83` と同じメッセージ)。音声muxはExport本体で行われるため、設定を見直して再実行できる | 書ける |
 | 85 | 書き出した mp4 ファイルを Finder からメールやチャットに添付して人に渡す | OS | Motolii 範囲外(OS/他アプリの標準機能。共有シートや「送る」機能を Motolii 自身は持たない——normal-map にも該当なし) | 書ける |
 
 ---
 
 ## 集計
 
-表85行の判定列を機械的に数えた値(「書ける(迂回)」「書ける(意味論上の副作用)」「書ける(ただし無音は解消しない)」の3種は注記付きの `書ける` として合算)。
+表85行の判定列を機械的に数えた値(「書ける(迂回)」「書ける(意味論上の副作用)」などの注記付きも `書ける` として合算)。
 
 ```
 全手順          85
-書ける          66  (うち注記付き「書ける」6件: id 35,47,53は迂回/id 48は副作用/id 84は迂回するが結果は変わらず)
-【穴】入口が無い   10
-【穴】意味が無い    7
+書ける          72  (うち注記付き「書ける」5件: id 35,47,53は迂回/id 48は副作用)
+【穴】入口が無い    7
+【穴】意味が無い    4
 【未確認】       2
 ```
 
 | 判定 | 件数 | id |
 |---|---|---|
-| 書ける(注記付き含む) | 66 | 1-12,14-18,23-29,32,35,36-45,47,48,51-63,65,66,69-71,73-76,78,81,82,84,85 |
-| 【穴】入口が無い | 10 | 13,19,20,21,30,46,64,67,77,80 |
-| 【穴】意味が無い | 7 | 31,33,49,50,72,79,83 |
+| 書ける(注記付き含む) | 72 | 1-12,14-18,23-29,32,35,36-45,47,48,51-66,69-76,78-85 |
+| 【穴】入口が無い | 7 | 13,19,20,21,30,46,77 |
+| 【穴】意味が無い | 4 | 31,33,49,50 |
 | 【未確認】 | 2 | 34,68 |
 
 ### normal-map.tsv に対応行が無い穴(本命)
@@ -120,10 +120,10 @@
 17件の穴(入口10+意味7)のうち、`normal-map.tsv` に対応する行が**在る**ものを先に除く:
 
 - **id 20**(素材カードのダブルクリック下見)→ id 1034「Source Monitor」(採用予定・未消化)が対応
-- **id 64/67**(単純上書き保存)→ id 1224「Save (Project)」(採用済)が対応。ただし実装は Save As で代用しているだけで、両者は別の動詞(RETURN 本文で詳述)
+- **id 64/67**(単純上書き保存)→ id 1224「Save (Project)」(採用済)が対応。現行mainのCmd+Sと既知path上書きを検分済み
 - **id 77**(Export 窓の中でアスペクト比を選ぶ)→ id 943「Select Aspect Ratio」(採用予定・未消化)が対応
 
-残る **13件が、`normal-map.tsv` に対応行が無い穴**(幹=手順の順序だけが要求していて、製品のどのメニュー木・ショートカット表・パネル一覧・環境設定にも項目名として現れない物):
+残る **9件が、`normal-map.tsv` に対応行が無い穴**(幹=手順の順序だけが要求していて、製品のどのメニュー木・ショートカット表・パネル一覧・環境設定にも項目名として現れない物):
 
 1. **id 13** フォルダ単位の取り込み(folder import) — 製品のメニュー項目は「ファイルを開く/取り込む」であって「フォルダの中身を展開する」動詞そのものが無い
 2. **id 19** ライブラリカードの Shift/Cmd マウス複数選択 — 対応行なし
@@ -134,10 +134,6 @@
 7. **id 46** クリップの直接 Delete キー — Delete/Backspace は「選択対象を消す」という**性質**であって、Motolii の map には対応する項目名が見当たらない
 8. **id 49** 複数選択のまま Cut で一括削除 — 対応行なし
 9. **id 50** 複数選択クリップの一括ドラッグでの隙間閉じ — id 31 と同根、対応行なし
-10. **id 72** OS ウィンドウの閉じるボタンが確認なしで即終了する — 「閉じる確認」という状態遷移そのものに対応する動詞名を製品は持たない(id 1233/1234「Close Project」はメニュー動詞であって赤信号ボタンの挙動を規定しない)
-11. **id 79** 書き出し中の進捗が実質固まって見える — 「進捗が動くこと」自体は性質であって動詞ではない
-12. **id 80** 書き出し中の取消ボタンが押せても効かない(UI スレッドがブロックされる) — 対応行なし
-13. **id 83** 書き出した mp4 に音声が無い(mux 未結線) — 「音声が鳴ること」自体は性質であって動詞ではない(GOALS.md M9 に既知の穴として明記済み)
 
 ---
 
@@ -145,10 +141,7 @@
 
 - **id 31: 複数選択したクリップをまとめてドラッグして動かす。** キーフレーム(菱形)ドラッグは「既に選択済みのキーを掴んだ場合は選択を保つ」ことをコード自身が明記して実装している(`write.rs:997-999`)のに、bar(clip)ドラッグは同じ場面で無条件に単独選択へ潰す(`write.rs:909-911`)。正典(`timeline-grammar.md` §2)は複数選択の一括移動を「正」として書いているのに、実装は非対称。**「普通は当然できる」と思って書き始めたら、隣の似た機構(キー)にだけ実装されていて、bar には無かった**——最も象徴的な発見
 - **id 30: Timeline レイヤー行の Shift/Cmd マウス複数選択。** `resolve_layer_selection`/`LayerSelectionOp` という**専用の純関数とテストまで書かれている**のに、呼び手が存在しない。関数の doc コメント自身が「呼び手(supervisor 統合後の `write.rs`)」と将来形で書いており、統合がまだ来ていないことを実装が自白している
-- **id 64/67: 「保存する」= Cmd+S で上書き、という最も基本の動作が無い。** File メニューには Save As と Save a Copy しかなく、一度保存したプロジェクトを2回目以降も更新するたびに毎回保存先ダイアログを出さねばならない。normal-map の id 1224「Save (Project)」は「採用済」と書かれているが、実装は Save As で代用しているだけで、両者は別の動詞である
-- **id 72: OS 標準の赤信号(閉じるボタン)がメニューの Quit と別経路。** メニューの Quit・New Project・Open はどれも `confirm_discard` ダイアログを通すのに、ウィンドウの閉じるボタンだけ `iced::exit()` を直接呼んで**未保存の変更を確認なしで破棄する**。「アプリを閉じる」という1つの意図に、確認する経路と確認しない経路の2つが共存している
-- **id 80: 「書き出しを中断する」ボタンは配線されているのに、実際には押せない。** `CancelExport` メッセージも `Cancel` 型のキャンセルフラグも実装済みで、一見「書ける」に見える。しかしコード自身のコメントが「UI スレッドは export 完了までブロックする」と明記しており、export 実行中は `Shell::update` が新しいメッセージを一切受け付けない——つまりボタンを押すクリックイベント自体が処理されない。**発注書の brief が名指しした「書き出しを途中で止める」を実際に手順化しようとして、初めてこの矛盾に気づいた**
-- **id 83: 書き出した mp4 に音声が無い。** `motolii-media::mux_soundtrack`/`mux_mixed_pcm` は関数として実装済みだが、`motolii-export` からも `shell` からも一度も呼ばれていない。crate doc コメントに「音声は後段 mux」と書かれているのに、その「後段」が実際にはまだ来ていない——コメントが実装を追い越している
+- **id 64/67/72/79/80/83**: 前回のP2調査時点では古い行番号と旧同期Export実装を根拠に穴と判定したが、現行mainではCmd+S、OS close dirtyガード、背景Export、Cancel、音声muxへ更新済み。今回その証拠を現行コードとdriveへ合わせた。
 
 ---
 
@@ -159,8 +152,7 @@
 3. **`resolve_layer_selection`/`LayerSelectionOp`(Timeline レイヤー行の Shift/Cmd 複数選択)は実装され単体テストも通っているが、どこからも呼ばれていない。** 関数のモジュール doc 自身が「呼び手は supervisor 統合後の write.rs」と将来形で書いている——実装は「宙に浮いた部品」のまま止まっている
 4. **`cut_layer`(Cmd+X、唯一のレイヤー削除経路)は `session.selection`(単一 focus)しか読まず、`session.selected_layers`(複数選択集合)を無視する。** Cmd+A で全選択しても Cmd+X は1本しか消えない
 5. **OS ウィンドウの閉じるボタンは、メニュー Quit と異なり `confirm_discard` を経由しない。** `main.rs:89` の doc コメントが「main 窓を閉じたら exit」と、確認を挟まない設計を明言している
-6. **`start_export` は同期・ブロッキング呼び出しで、export 完了まで `Shell::update` がメッセージを受け付けない。** `CancelExport` の配線自体は存在するが、実行中に押しても処理されない。これは export-pane crate 冒頭の doc が「RETURN 逸脱」として自認している既知の設計上の負債だが、procedures の形で手順化するまでは「押せば効く」ように見えていた
-7. **音声 mux(`mux_soundtrack`/`mux_mixed_pcm`)は `motolii-export` からも `shell` からも呼ばれていない。** crate doc コメントの「音声は後段 mux」という一文は実装ではなく予告に留まっている
+6. **`start_export` は `Task::run(export_stream(...))`で背景実行し、進捗・CancelをUIへ返す。** 音声ありの場合は`export_ops.rs`内でmixとmuxまで完了させる
 8. **`LayerSource` に soundtrack 専用の variant は無い。** 音声ファイルも動画・画像と同じ `Media` variant で扱われ、正典 §6 が書く「曲が無い project への音声=soundtrack」という特別扱いは実装されていない
 
 ---
@@ -169,6 +161,6 @@
 
 1. **id 35(同一素材の2本目クリップを作る)を「書ける」と判定するか「穴」と判定するか。** ドラッグでの配置もダブルクリックでの配置も無いが、Import Media… を再度開いて同じファイルを選び直せば新しい layer が生成される(admit のロジックはパス単位で毎回新規 layer を作る)。**「迂回可能」として「書ける(迂回)」に倒した**——ただし体験としては「ライブラリの中の物をもう一度使う」ではなく「もう一度ファイルシステムから取り込む」なので、意味的には歪んでいる
 2. **id 33(音声ファイルの取り込み)を「穴」と判定するか。** 音声ファイルの取り込み自体(admit)は動画と同じ経路で成功する——「素材が置ける」という一次目的は達成できる。しかし正典が明記する「曲が無い project への最初の音声=soundtrack」という特別な意味論が無いことは、この手順書の主題(名前の無い操作の名指し)そのものなので「【穴】意味が無い」に倒した
-3. **id 72(OS 閉じるボタン)・id 80(export 中の取消)・id 83(無音書き出し)を「書ける」と判定しないか、迷った。** いずれも「対応するメッセージ型やハンドラのコードは存在する」という意味では技術的に部分点がある。しかし手順書の目的は「利用者がその操作をして、意図した結果が起きるか」なので、**利用者の視点で結果が起きない/起きてはいけないことが起きるなら「穴」として扱う**方針に倒した。GOALS.md M9 は「cancel は済」と書いているが、これはエンジン層の単体試験(即時キャンセル)を指しており、UI から実際に届くかは別問題——両者の食い違いは supervisor へ報告する
+3. **id 72(OS 閉じるボタン)・id 80(export 中の取消)・id 83(音声付き書き出し)を再確認した。** 旧証拠では穴に見えたが、現行mainではOS closeのdirtyガード、背景Export、Cancel、音声muxがそれぞれ結線済みで、driveにも証拠があるため「書ける」へ更新した。
 4. **id 82・id 85(Finder で確認する・人に渡す)を手順に含めるか。** OUTCOME が「書き出したファイルを人に渡すところまで全部」と明記しているため、Motolii の実装範囲外でも手順としては書いた。判定は「書ける」とし、証拠欄には「Motolii 範囲外(OS 標準機能)」とだけ記した——README の「実装の証拠に file:line が必ず要る」という規約には形式上抵触するが、Motolii が関与しない OS 操作にコード証拠を要求すること自体が無意味なので、この2行だけ例外として扱った
 5. **粒度をどこまで割るか(README の規約)。** 「位置を調整する」を掴む/動かす/スナップ/離す/Esc の5つに割った(id 23-29)のと同じ密度を、trim・split・cut/paste・save・export の全工程に適用した。結果として85行になったが、「以下同様」を使わずに書き切ることを優先した

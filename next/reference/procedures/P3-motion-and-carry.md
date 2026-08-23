@@ -134,15 +134,15 @@
 
 | # | 利用者は何をするか | どこで | 実装の証拠 | 判定 |
 |---|---|---|---|---|
-| 77 | ただの上書き保存(Cmd+S 相当)をしようとする | どこでも | 【穴】意味が無い — **プレーンな「Save」動詞自体が存在しない**。`grep -n "SaveRequested\b" next/ui/motolii-keymap/src/defaults.rs next/ui/motolii-keymap/src/verb.rs` = 0件(`SaveAsRequested`/`SaveACopyRequested` のみ)。GOALS M11 も「UI側(Cmd+S)が残り」と自己申告済み(`next/GOALS.md:22`)。「current_path が分かっている時は黙って同じ場所へ書く」という条件分岐そのものが無い | 【穴】意味が無い |
+| 77 | ただの上書き保存(Cmd+S 相当)をしようとする | どこでも | `menu.rs:68-74`の`Save`/`Cmd+S`、`input.rs:337-343`の`Message::SaveRequested`、`document_io.rs:508-514`の既知path上書き | 書ける |
 | 78 | Cmd+Shift+S で Save As を実行する | どこでも | `defaults.rs:284-289` Cmd+Shift+S → `VerbId::SaveAsRequested`、`menu.rs:58-67` | 書ける |
 | 79 | OS のファイル保存ダイアログでファイル名と保存先を選ぶ | OS ダイアログ | `shell/motolii-shell/src/file_dialogs.rs:66-72` `FileDialogs` トレイト、本番実装は `rfd`(`lib.rs:991`) | 書ける |
 | 80 | 保存が成功し、以後この path が「現在のプロジェクト」になったことを確かめる | どこでも | `perform_save_as`(`lib.rs:1878-1892`)が `current_path`/`saved_revision` を更新 | 書ける |
-| 81 | 保存成功を示す目に見える合図(トースト・チェックマーク等)を探す | どこでも | 【穴】意味が無い — 成功時は `status` に何も書かない(`perform_save_as` は `Err` 分岐だけ `self.status = Some(...)` を書く、成功分岐は無言)。失敗時のみ理由が出る | 【穴】意味が無い |
+| 81 | 保存成功を示す目に見える合図(トースト・チェックマーク等)を探す | どこでも | `document_io.rs:105-119`の成功分岐が`status = "保存しました: …"`を書き、sidecarも更新する | 書ける |
 | 82 | 別名で複製を保存する(Save a Copy) | メニュー | `menu.rs:58-67`、`perform_save_a_copy`(`lib.rs:1894-1900`)。**現在開いているプロジェクトの身分(current_path)は変わらない** | 書ける |
 | 83 | 保存に失敗した時(権限・ディスク満杯等)、理由がその場で分かる | どこでも | `perform_save_as` の `Err(error) => self.status = Some(format!("保存できない: {error}"))` | 書ける |
 | 84 | 自動保存の頻度・保持世代数を Settings で設定する | Settings | `core/motolii-store/src/persist.rs` の `auto_save`(AE 型、`<project隣>/<name> auto-save/` へ世代保存)。頻度・世代数は Settings で編集可(`sections::Message::AutoSaveToggle`/`AutoSaveFieldInput`、`shell/motolii-shell/src/lib.rs:3100-3106`) | 書ける |
-| 84b | 自動保存が「今この瞬間に走った」ことを示す視覚合図に気づく | どこでも | 【穴】意味が無い — 成功合図が無いのは手順81と同根。`run_auto_save`(`lib.rs:1508` 経由)には status への成功メッセージ書き込みが見当たらない | 【穴】意味が無い |
+| 84b | 自動保存が「今この瞬間に走った」ことを示す視覚合図に気づく | どこでも | `document_io.rs:207-229`の`run_auto_save`成功分岐が`status = "自動保存しました: …"`を書く | 書ける |
 | 85 | 一度も明示保存していない新規プロジェクトで自動保存が発動しないことを確かめる | どこでも | `auto_save` の `project_path` が `None` なら即 `Ok(None)`(persist.rs、doc「未保存の新規project」節) | 書ける |
 
 ### J. 閉じる
@@ -151,16 +151,16 @@
 |---|---|---|---|---|
 | 86 | Cmd+Q でアプリを終了する | どこでも | `Message::QuitRequested`(`lib.rs:1500`)、`menu.rs:73` | 書ける |
 | 87 | 未保存の変更がある状態で Cmd+Q すると、保存するか確認される | どこでも | `confirm_then(Message::QuitConfirmed)` → `confirm_discard_future`(`lib.rs:1831-1837`)が `is_dirty()` の時のみ `dialogs.confirm_discard()` を呼ぶ | 書ける |
-| 88 | ウィンドウの閉じるボタン(赤い×)をクリックして閉じる | OS ウィンドウ | `WindowClosed(main_window)` → `iced::exit()`(`lib.rs:1284-1300`) | 書ける |
-| 89 | ×ボタンで閉じる時も、未保存なら確認が出ることを期待する | OS ウィンドウ | 【穴】意味が無い — `WindowClosed` ハンドラは `is_dirty()` を一切見ず即 `iced::exit()` する(`lib.rs:1284-1300`)。**dirty ガードがあるのは Cmd+Q(手順87)経由だけで、実際に利用者が最も使うであろう赤い×ボタンには無い**。GOALS M11「閉じる確認」はこの2経路のうち片方にしか実装されていない | 【穴】意味が無い |
-| 90 | ×ボタンで未保存のまま閉じてしまい、変更が失われたことに後で気づく | 次回起動時 | 【穴】意味が無い — 手順89の帰結。自動保存(手順84)があれば直近世代までは `<name> auto-save/` に残るが、**それを見つけて開く導線が UI に無い**(手順93参照) | 【穴】意味が無い |
+| 88 | ウィンドウの閉じるボタン(赤い×)をクリックして閉じる | OS ウィンドウ | `lib.rs:1079-1083`で`exit_on_close_request:false`、`lib.rs:1254-1258`で`close_requests`を`WindowCloseRequested`へ翻訳 | 書ける |
+| 89 | ×ボタンで閉じる時も、未保存なら確認が出ることを期待する | OS ウィンドウ | `document_io.rs:537-552`が`WindowCloseRequested`をdirty確認へ通し、falseでは窓を維持。`tests/suite/window_drive.rs`が拒否側を検分 | 書ける |
+| 90 | ×ボタンで未保存のまま閉じてしまい、変更が失われたことに後で気づく | 次回起動時 | `document_io.rs:545-548`は確認結果trueの時だけ`iced::exit()`へ進む。破棄を選んだ場合の結果として扱い、確認なしの損失とは区別する | 書ける |
 
 ### K. 別の日に開き直して続きから作業する
 
 | # | 利用者は何をするか | どこで | 実装の証拠 | 判定 |
 |---|---|---|---|---|
 | 91 | アプリを起動する | OS | 手順1と同じ | 書ける |
-| 92 | 起動直後に「先週保存したプロジェクトが自動的に開いている」ことを期待する | 起動直後 | 【穴】意味が無い — 起動は常に `default_document()`(手順2)。`grep -rn "recent\|last_project\|session restore" next/shell next/ui/motolii-shell-state` = 0件。GOALS M11 の「再起動で続きが開く」はこの意味で**未実装**(GOALS.md 自身「UI 側が残り」と自己申告するが、その残りの中身がこれ) | 【穴】意味が無い |
+| 92 | 起動直後に「先週保存したプロジェクトが自動的に開いている」ことを期待する | 起動直後 | `document_io.rs:275-310`が保存済みpathをsidecarへ書き/読み、`lib.rs:1046-1060`がboot時に`LastProjectPathRead`を発行し、`document_io.rs:553-560`がDocumentを開く | 書ける |
 | 93 | File メニューの「最近使ったファイル」一覧から選ぶ | メニュー | 【穴】意味が無い — `grep -i "Open Recent\|Recent Project\|Recent File" next/reference/normal-map.tsv` = 0件(そもそも台帳にも対応する製品コマンド行が無い)。実装側も `recent_files` 系の識別子ゼロ | 【穴】意味が無い |
 | 94 | File → Open… でファイルダイアログを開き、先週保存したファイルを選ぶ | メニュー/OSダイアログ | `menu.rs:64` `Message::OpenRequested`、`perform_open`(`lib.rs:1902-1918`)、`Document::load`(`core/motolii-store/src/persist.rs:123`) | 書ける |
 | 95 | 開いたプロジェクトが正しく復元されたこと(レイヤー・キーフレーム・マスク・エフェクト)を確かめる | Stage/Timeline/Inspector | `Document::save`/`load` の往復(裁定55/56、bezier・NTSC fps 込み) | 書ける |
@@ -207,16 +207,16 @@
 
 ```
 全手順 117
-書ける              73
+書ける              79
 【穴】入口が無い     13
-【穴】意味が無い     26
+【穴】意味が無い     20
 【未確認】            5
 ```
 
 内訳(前半/後半):
 
 - 前半(A〜H、手順1〜76): 76手順 — 書ける 52 / 入口が無い 12 / 意味が無い 9 / 未確認 3
-- 後半(I〜N、手順77〜116+84b): 41手順 — 書ける 21 / 入口が無い 1 / 意味が無い 17 / 未確認 2
+- 後半(I〜N、手順77〜116+84b): 41手順 — 書ける 27 / 入口が無い 1 / 意味が無い 11 / 未確認 2
 
 ### 穴ごとの `normal-map.tsv` 対応行の有無
 
@@ -234,9 +234,9 @@
 | 55 次のキーフレームへジャンプ | あり | id 504/505「Next/Previous Keyframe」(採用済表示だが実装は別物 = 手順55のノート参照) |
 | 67 イージングのショートカット無し | なし | 「メニュー項目はあるがショートカットが割り当たっていない」という**割当の有無**は台帳の粒度(項目の存在)と別軸 |
 | 68 Graph Editor 不在 | あり | id 519「Toggle between Graph Editor and layer bar modes」 |
-| 77 プレーンな Save が無い | あり | id 1224「Save (Project)」(採用済表示。ただし GOALS M11 が「UI側が残り」と自己申告済みの穴と同一) |
+| 77 プレーンな Save が無い | あり | id 1224「Save (Project)」。現行mainのCmd+S/既知path上書きで結線済み |
 | 81 保存成功の可視合図が無い | **なし** | 「保存に成功した合図」という状態は製品メニューに現れない |
-| 88-90 ×ボタンに閉じる確認が無い | **なし** | `grep -i "unsaved\|before closing\|discard" next/reference/normal-map.tsv` = 0件。**ウィンドウ chrome の×ボタンという操作自体が、メニュー由来の抽出規則では1行も持てない** |
+| 88-90 ×ボタンに閉じる確認が無い | **なし** | normal-mapに対応する動詞は無いが、現行mainは`close_requests`→dirty確認へ結線済み。window driveで拒否を検分し、許可腕は`WindowCloseConfirmed(true)`にある |
 | 92 再起動で続きが開かない | **なし** | `grep -i "restore\|relaunch\|last session\|where you left" next/reference/normal-map.tsv` = 0件(ヒットは無関係な「フレーム最大化/復帰」のみ) |
 | 93 最近使ったファイル一覧が無い | **なし** | `grep -i "Open Recent\|Recent Project\|Recent File"` = 0件 |
 | 96, 98 セッション/レイアウト復元が無い | **なし** | 同上、「見ていた場所」「パネル配置」という状態自体に対応する行が無い |
@@ -247,18 +247,15 @@
 | 114 フォント埋め込みが無い | **なし** | 該当行を発見できず |
 | 116 整合性確認手段が無い | **なし** | 該当行を発見できず |
 
-**「対応行が無い」穴は 11件**(15, 16, 17, 18 は SHAPE section 不在という単一原因の重複なので実質1件として数えれば 8件): 20・81・88-90(1件)・92・93・96/98(1件)・108・114・116、および 15-18(SHAPE section 不在、1件として)。
+**「対応行が無い」穴は 7群**: 15-18(SHAPE section 不在)、20、93、96/98、108、114、116。
 純粋に**幹だけが要求していて葉に名前が無い物**として際立つのは:
 
 1. **色ピッカー部品の不在**(#20)
-2. **保存成功の可視合図が無い**(#81)
-3. **ウィンドウ×ボタンに閉じる確認が無い**(#88-90)— M11の「閉じる確認」の実体はここ
-4. **再起動で続きが開かない**(#92)— M11の「再起動で続きが開く」そのもの
-5. **最近使ったファイル一覧が無い**(#93)
-6. **前回のセッション状態(選択・再生ヘッド・パネルレイアウト)が保存も復元もされない**(#96/98)
-7. **別マシンでの絶対パス解決不能という状態そのものに名前が無い**(#108)
-8. **フォント埋め込みが無い**(#114)
-9. **プロジェクト受け渡し後の整合性確認手段が無い**(#116)
+2. **最近使ったファイル一覧が無い**(#93)
+3. **前回のセッション状態(選択・再生ヘッド・パネルレイアウト)が保存も復元もされない**(#96/98)
+4. **別マシンでの絶対パス解決不能という状態そのものに名前が無い**(#108)
+5. **フォント埋め込みが無い**(#114)
+6. **プロジェクト受け渡し後の整合性確認手段が無い**(#116)
+7. **SHAPE sectionが無く、シェイプ固有の操作を一覧化できない**(#15-18)
 
-すべて後半(続きを別の日に開く/別マシンで開く/人に渡す)に集中している —
-発注時の見立てどおりだった。
+残る穴は、前半のSHAPE/色表現と、後半の再利用・受け渡しに分かれている。

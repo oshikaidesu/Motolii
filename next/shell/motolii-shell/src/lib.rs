@@ -488,9 +488,7 @@ pub enum Message {
     /// `None`)は `SaveAsRequested` と同じ path 選択(`SaveAsPathChosen`)へ
     /// 合流する(先例: 初回保存はどの製品でもパスを聞くしかない)。
     ///
-    /// **既知の穴(RETURN 参照)**: keymap 経由の Cmd+S 割当は write-set
-    /// 境界(`input.rs` は C-4 の write-set)のためこのレーンでは配線して
-    /// いない。File メニューの「Save」項目(`shortcut: None`)からのみ届く。
+    /// File メニューと keymap の両方がこの Message へ届く。
     SaveRequested,
     /// Save As(Cmd+Shift+S・File メニュー、id 1225)。
     /// [`file_dialogs::FileDialogs::pick_save_path`] で path を選び、
@@ -885,14 +883,12 @@ pub struct Shell {
     /// Export の範囲選択(`export_pane::ExportRange`)。同上。
     export_range: export_pane::ExportRange,
     /// Export 先 path。`None` = 未設定(Export ボタンは押せない、
-    /// `export_pane::ViewModel::out_path` doc)。path 選択(rfd)は次波 — 見送り
-    /// (`export_pane` crate doc の逸脱参照)。
+    /// `export_pane::ViewModel::out_path` doc)。path 選択は
+    /// `FileDialogs::pick_export_path` から非同期に受け取る。
     export_out_path: Option<std::path::PathBuf>,
     /// 実行中の進捗(`export_pane::ExportProgress`)。`None` = 実行していない。
-    /// **型だけ**(`export_pane` crate doc「進捗の器」)—
-    /// `motolii_export::export_with_cancel` はフレーム単位のコールバックを
-    /// 持たない1回きりのバッチ呼び出しなので、実際に更新されるのは開始時
-    /// (0/total)と完了時(total/total)の2点だけ(RETURN 参照)。
+    /// `export_ops::export_stream` が背景スレッドからフレーム単位の通知を
+    /// 戻し、開始・進捗・完了の各段階で更新する。
     export_progress: Option<export_pane::ExportProgress>,
     /// 実行中の `motolii_export::Cancel` ハンドル。`Message::Export` が
     /// export を始める時に発行し、`Message::Export(CancelExport)` が
@@ -1044,7 +1040,14 @@ impl Shell {
     /// `runtime/src/window.rs:260`)ので、runtime 無しの headless 試験でも
     /// 台帳が読める。
     pub fn boot() -> (Self, Task<Message>) {
-        let (shell, task) = Self::with_main_window(Self::new());
+        Self::boot_with_dialogs(Box::new(RfdDialogs))
+    }
+
+    /// [`Shell::boot`] の dialog 注入版。production は [`Shell::boot`] を使い、
+    /// headless の窓検分は fake の `FileDialogs` を渡して dirty 確認まで駆動
+    /// できる。main 窓の設定と前回 project の再開経路は通常 boot と同じ。
+    pub fn boot_with_dialogs(dialogs: Box<dyn FileDialogs>) -> (Self, Task<Message>) {
+        let (shell, task) = Self::with_main_window(Self::new_with_dialogs(dialogs));
         // C-1 波C「再起動で続きが開く」: 前回プロジェクトの path を読む
         // だけの軽い I/O(小さな sidecar ファイル1本)なので同期でもよいが、
         // `Task::perform` に包む ── `tests/suite/window_drive.rs` は返って
@@ -1243,10 +1246,9 @@ impl Shell {
         } else {
             iced::Subscription::none()
         };
-        // 窓台帳(S1 daemon 骨格): どの窓が閉じたかを台帳へ届ける。daemon は
-        // 窓が全部閉じても自分では終了しない(fork `src/daemon.rs` doc)ので、
-        // 「main 閉=exit」の判断を `Shell::update`(`Message::WindowClosed`)が
-        // 持つ — ここは規律どおり翻訳(map)だけ。
+        // 窓台帳(S1 daemon 骨格): 既に閉じた窓を台帳へ届ける。main 窓の
+        // CloseRequested は下の `close_requests` が先に dirty ガードへ渡し、
+        // `close_events` は確認後に実際に閉じた場合の後段通知として残す。
         let closes = iced::window::close_events().map(Message::WindowClosed);
         // C-1 波C「閉じる確認」: main 窓は `exit_on_close_request: false`
         // (`Shell::with_main_window`)で開くので、赤信号ボタンは `Closed` では
@@ -1355,4 +1357,3 @@ impl Shell {
 
 
 }
-

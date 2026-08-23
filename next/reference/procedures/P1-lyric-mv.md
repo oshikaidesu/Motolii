@@ -6,8 +6,9 @@
 先行調査(`docs/reviews/2026-08-22-persona-lyric-mv.md`・`-round2.md`)が「致命的」と
 書いた壁の多く(テキストレイヤー作成入口・文字入力欄・色エディタ・Timeline縦スクロール・
 マスク新規追加)は、本調査の実測時点で**既に着地している**。round2 が挙げた壁のうち
-現行コアに残るのはごく一部(保存・終了確認・Export中断・音声mux)。グリッチ系エフェクトと
-Text AnimatorはVISM後段へ送り、トランジションはAE型のため現行コアでは作らない。
+現行コアに残っていた保存・終了確認・Export中断・音声muxの4件は、現行mainの結線を
+再確認して本表へ反映する。グリッチ系エフェクトとText AnimatorはVISM後段へ送り、
+トランジションはAE型のため現行コアでは作らない。
 この差分自体を「5. 新発見の事実」に記録する。
 
 想定シナリオ: 3〜5分の曲、歌詞100行、映像素材数本。新規プロジェクトを開くところから
@@ -197,13 +198,13 @@ Text AnimatorはVISM後段へ送り、トランジションはAE型のため現�
 
 | # | 利用者は何をするか | どこで | 実装の証拠 | 判定 |
 |---|---|---|---|---|
-| 124 | Cmd+Sで上書き保存しようとする | keymap/menu | File menuに「Save」(上書き保存)自体が無い。`menu.rs:66-76`は`Save As…`(Cmd+Shift+S)と`Save a Copy…`(shortcut無し)の2項目のみ | 【穴】入口が無い(初回保存後の再保存に「上書き」動詞が無い、毎回パスを選び直すSave Asしか無い) |
+| 124 | Cmd+Sで上書き保存しようとする | keymap/menu | `menu.rs:68-74`の`Save`/`Cmd+S`、`input.rs:337-343`の`Message::SaveRequested`、`document_io.rs:508-514`の既知path上書き。`tests/suite/file_drive.rs:349-413`が既知path/初回pathの双方を実書き込みで検分 | 書ける |
 | 125 | Cmd+Shift+Sで名前を付けて保存する | File menu | `menu.rs:70` `Message::SaveAsRequested` | 書ける |
 | 126 | 保存先パスを選ぶダイアログが開く | OS dialog | `lib.rs:1484` `SaveAsRequested`ハンドラ、`self.dialogs.pick_save_path()` | 書ける |
 | 127 | 保存が完了し、未保存マーカーが消える | UI | `lib.rs:947-950` `saved_revision`をdirty判定の唯一の鍵として更新 | 書ける |
 | 128 | 100行の歌詞・全キーフレーム・マスク・マットが保存に含まれているか確認する | ファイル | `Document::save`/`flattened()`(store全体を機械的に列挙、裁定108/118) | 書ける |
-| 129 | 続けて数行編集し、保存し忘れたままウィンドウの閉じるボタン(赤信号)を押す | OS window | `lib.rs:1242` `iced::window::close_events()`→`Message::WindowClosed` | 書ける |
-| 130 | 未保存の変更があるのに確認なしでアプリが即終了する | UI | `lib.rs:1284-1290` `WindowClosed`ハンドラは`main_window`一致時に`is_dirty`を見ずに無条件`iced::exit()`(dirty確認は`QuitRequested`=File>Quit経由のみで、OS赤信号ボタンはこの経路を通らない) | 【穴】意味が無い(Q2「未保存●・閉じる確認」がOSクローズボタン経路では機能しない設計の穴) |
+| 129 | 続けて数行編集し、保存し忘れたままウィンドウの閉じるボタン(赤信号)を押す | OS window | `lib.rs:1254-1258` `iced::window::close_requests()`→`Message::WindowCloseRequested`、main窓は`with_main_window`で`exit_on_close_request: false` | 書ける |
+| 130 | 未保存の変更があるのに確認なしでアプリが即終了する | UI | `document_io.rs:537-552`が`WindowCloseRequested`を`confirm_then(WindowCloseConfirmed)`へ通し、falseでは窓を維持。`tests/suite/window_drive.rs`の`dirty_main_window_close_requests_discard_confirmation`がfake dialogの拒否を検分 | 書ける |
 | 131 | 保存し忘れに気づき、青ざめて再度アプリを起動する | OS | 手順1と同型 | 【未確認】 |
 | 132 | File > Open… を選ぶ | File menu | `menu.rs:66` `Message::OpenRequested` | 書ける |
 | 133 | 直前に保存したファイルを選ぶ | OS dialog | `lib.rs:1494` `confirm_then_pick_open` | 書ける |
@@ -218,10 +219,10 @@ Text AnimatorはVISM後段へ送り、トランジションはAE型のため現�
 | 137 | 品質(Normal/Lossless)を選ぶ | Export window | `lib.rs:113` `QualitySelect(ExportQuality)` | 書ける |
 | 138 | 出力先パスを選ぶ | Export window | `lib.rs:120-123` `PickOutputPath`→`OutputPathChosen` | 書ける |
 | 139 | Exportボタンを押して書き出しを開始する | Export window | `next/shell/motolii-shell/src/lib.rs:3503` `export_pane::Message::Export => self.start_export()` | 書ける |
-| 140 | 進捗バーが動くのを見ながら待たされる | Export window | `lib.rs:3536-3570` `start_export`は`export_with_cancel`を**同期呼び出し**しており、`frames_done`は開始時0・完了時に一括更新のみ — UIスレッドが書き出し中ブロックされ、進捗バーが連続的に動く保証がコードから読めない | 【未確認】(実機での体感が必要、コード根拠は「同期呼び出し」まで) |
-| 141 | 書き出し中にCancelを押す | Export window | `export_pane::Message::CancelExport`、`motolii-export::Cancel` | 【穴】入口が無い(手順140の同期実行が真なら、UIスレッドブロック中はCancelボタンのクリック自体がイベントループに届かない可能性 — 実機必須につき判定を厳しい側へ倒す) |
+| 140 | 進捗バーが動くのを見ながら待たされる | Export window | `export_ops.rs:199-243`が`Task::run(export_stream(...))`でUIを返し、`export_ops.rs:245-255`が背景スレッドのprogressを`ExportProgress`へ反映する。進捗の見え方は実窓で確認する | 【未確認】(実機での体感が必要) |
+| 141 | 書き出し中にCancelを押す | Export window | `export_ops.rs:199-243`が`Task::run(export_stream(...))`でUIを返し、`export_ops.rs:167-176`の`CancelExport`が保持中の`Cancel`を立てる。`export_ops.rs:439-455`がフレーム境界で検出して残骸を消す | 書ける |
 | 142 | 完了し、書き出しファイルが作られたことを確認する | ファイル | `lib.rs:3568-3575` `report.out_path`/`report.frames_written`をstatusへ表示 | 書ける |
-| 143 | 書き出したmp4に音(曲)が入っているか確認する | 再生確認 | `motolii-export::ExportJob{out_path, qp0}`に音声パスの引数が無い(`lib.rs:3561`)。`motolii-media::mux_soundtrack`はKNOWN.mdで「解決済み」と記載されるが、`start_export`から`mux_soundtrack`/`mux_mixed_pcm`の呼び出しは`next/shell/motolii-shell/src/lib.rs`全体でgrep 0件 | 【穴】入口が無い(音声muxの意味は他crateに存在するがexport経路に結線されていない) |
+| 143 | 書き出したmp4に音(曲)が入っているか確認する | 再生確認 | `export_ops.rs:465-536`が`AudioProgram`でmixし、`motolii_media::mux_mixed_pcm`で最終mp4へmux。`tests/suite/export_drive.rs:173-245`がAAC音声トラックをprobeして検分 | 書ける |
 | 144 | 音が無いことに気づき、動画編集ソフトの外で音を合成する(迂回) | 別ソフト | — | 【未確認】(製品外) |
 | 145 | 書き出されたファイルをFinderで見つけて人に渡す | OS | — | 【未確認】(製品外の操作、Motolii機能の対象外) |
 
@@ -230,25 +231,17 @@ Text AnimatorはVISM後段へ送り、トランジションはAE型のため現�
 ## 末尾の集計
 
 ```
-全手順 145 / 書ける 119 / 【対象外】3 / 【穴】入口が無い 3 / 【穴】意味が無い 1 / 【未確認】19
+全手順 145 / 書ける 123 / 【対象外】3 / 【穴】入口が無い 0 / 【穴】意味が無い 0 / 【未確認】19
 ```
 
 機械集計(表の「判定」列を正規表現で走査、`python3`で照合済み)。「書ける(◯◯は【未確認】)」
 のような注記付きの行は無く、各行の判定列は単一の値のみを持つ。
 
-### 【穴】入口が無い(3件: #124, #141, #143)
+### 現行コアの静的な穴(0件)
 
 | # | 内容 | normal-map.tsv に対応行があるか |
 |---|---|---|
-| 124 | 「上書き保存」動詞そのものが無い(Save Asしか無い) | **対応行あり**(`normal-map.tsv`に「Save」相当の項目は複数製品のメニューに実在する語彙のはず — ただし本レーンはtsv非改変のため id 突合せは未実施、要再確認) |
-| 141 | Export中のCancelが実機で押せるか不明(同期実行の疑い) | 対応行なし |
-| 143 | Export音声muxがshellに未結線 | 対応行なし(「書き出し」自体は台帳語彙にあるが「音付きで書き出す」の粒度では無い) |
-
-### 【穴】意味が無い(1件)
-
-| # | 内容 | normal-map.tsv に対応行があるか |
-|---|---|---|
-| 130 | OSクローズボタン経路でdirty確認が効かない | 対応行なし(「閉じる確認」という動作自体が製品の自己申告リストに現れにくい性質) |
+| — | 124/130/141/143 | 現行mainに実装・結線・静的検収テストがある。残るのは実窓での操作確認のみ |
 
 ### 【対象外】(3件)
 
@@ -258,22 +251,17 @@ Text AnimatorはVISM後段へ送り、トランジションはAE型のため現�
 | 105 | トランジション | AE型のため現行コアでは作らない |
 | 110 | Text Animator | VISM後段へ送る |
 
-**現在残っている現行コアの静的な穴**: 本文の判定列から機械的に拾えるのは4件で、
-入口が #124/#141/#143、意味が #130。#103/#110はVISM後段、#105は現行コア不採用として
-対象外にした。
+**現在残っている現行コアの静的な穴**: 0件。#103/#110はVISM後段、#105は現行コア
+不採用として対象外にした。残る19件は実窓または製品外操作の【未確認】である。
 
 ## 3. 書いていて「これは書くまでもないと思ったが、実装が無かった」物
 
 - **「Enterで改行する」**(#46): text_inputに文字を打つのは当然できると思って書き始めたが、
   実際にはEnterが確定として奪われており、複数行の歌詞を1つのテキストレイヤーに入れる手段が
   構造的に無い。歌詞動画の芯である「1画面に2行以上の歌詞を出す」がレイヤー分割前提になる。
-- **「上書き保存」**(#124): Cmd+Sで保存できるのは当然だと思って書き始めたが、File menuに
-  「Save」という項目自体が無く、毎回Save Asでパスを選び直す(または既存パスへの明示的な
-  再保存動詞が無い)。
-- **「ウィンドウを閉じたら聞かれる」**(#130): 赤信号ボタンを押したら「保存しますか」と聞かれる
-  のは当然だと思って書き始めたが、その経路(`WindowClosed`)はdirtyチェックをしておらず、
-  File>Quit(Cmd+Q)を通った時だけ確認が出る。同じ「アプリを終わらせる」操作なのに経路によって
-  安全性が違う。
+- **「上書き保存/閉じる確認」**(#124/#130): 初回の静的調査ではメニューと`WindowClosed`
+  の古い証拠を読んで穴と判定したが、現行mainではCmd+Sと`close_requests`→dirty確認へ
+  更新済みだった。台帳の証拠を更新し、窓台帳テストでclose拒否を固定した。
 - **「複数選んで一度に直す」**(#87, #88): 100行という規模を要求されて初めて、
   「選ぶ」(Cmd+A・Shift+クリックは通る)と「選んだ状態で効く」(TEXT Size/Fill・Rename)が
   別の実装であることが分かった。#87/#88 は `selected_layers` → Inspector 投影 →
@@ -296,20 +284,9 @@ Text AnimatorはVISM後段へ送り、トランジションはAE型のため現�
   `text.rs:206-218`のdocコメント自身に明記されている。歌詞動画で複数行を同時表示したい場合、
   1行=1テキストレイヤーへ分割することが設計として最初から前提されている(将来の
   `text_editor`複数行widget導入まで)。
-- **File menuに「上書き保存」動詞が無い**(`menu.rs:66-76`はOpen/Save As/Save a Copyの3つ)。
-  Cmd+Sの割当自体も存在しない。
-- **OSのウィンドウ閉じるボタン(赤信号)経由のアプリ終了は、dirty状態を確認しない**
-  (`lib.rs:1284-1290`)。File>Quit(Cmd+Q)経由だけが`confirm_then`でdirty確認する
-  (`lib.rs:1500`)。同じ「終了する」という利用者の意図が、経路によって安全性が異なる。
-- **Export実行(`start_export`)がUIスレッドで同期的に`export_with_cancel`を呼んでいる**
-  (`lib.rs:3561-3567`、`Task::perform`ではなく直接呼び出し)。進捗は開始時と完了時の2点しか
-  更新されない設計に読め、進捗バーのアニメーションやCancelボタンの到達性が実機でどう
-  振る舞うか、コードだけでは判定できない。
-- **Export時の音声mux(`motolii-media::mux_soundtrack`/`mux_mixed_pcm`)がshellの
-  `start_export`から一度も呼ばれていない**(`ExportJob{out_path, qp0}`に音声関連フィールドが
-  無い)。KNOWN.mdの「exportの音声muxは現motolii-mediaで解決済み」は**関数が存在すること**を
-  指しており、**shell側が呼んでいること**は別問題(text layer作成入口と同種の、
-  「意味はあるが結線が無い」パターンがexportにも残っている)。
+- **保存・終了確認・Export中断・音声muxの4件は、古い台帳証拠が現行mainに追いついて
+  いなかった**。現在は`menu.rs`/`input.rs`のCmd+S、`close_requests`のdirtyガード、
+  `Task::run`によるExport、`mux_mixed_pcm`と各driveの証拠が揃っている。
 
 ## 6. 迷った判断と、どちらへ倒したか
 
@@ -319,14 +296,9 @@ Text AnimatorはVISM後段へ送り、トランジションはAE型のため現�
   として1行にまとめつつ、17行目・47行目・50行目という具体的なチェックポイント(スクロールが
   必要になる境界・実際の編集対象)は個別の手順として書く**方へ倒した。省略禁止の趣旨は
   「壁の手前で止まる」ことの禁止であり、恒等的な反復の機械的複製までは要求していないと判断した。
-- **「判定をどちらに倒すか迷った箇所(#130, #141, #143)」**: コード上は「呼ばれていない」
-  ことまでしか読めず、実機での見え方(クラッシュするのか・単に無音なのか)は分からない。
-  README の4値のうち「意味も入口も無い」に近いか「未確認」に近いか迷ったものは、
-  **「コードのgrep 0件という事実がある = 実装が存在しないと言い切れる」場合は【穴】、
-  「実装はあるが実機の挙動(同期ブロック中の入力到達性、UIスレッドの応答性)が読めない」
-  場合は【未確認】**という基準で分けた(#141は「Cancelという意味自体は存在する」ため
-  本来【未確認】寄りだが、同期実行という強い状況証拠があるため厳しい側の【穴】へ倒した — 
-  この1件だけは判断が割れる余地があることを明記する)。
+- **「判定をどちらに倒すか迷った箇所(#130, #141, #143)」**: 旧証拠では穴に見えたが、
+  現行mainのコードとテストを再読して「書ける」へ戻した。窓での体感や実ファイルの
+  再生確認は、引き続き【未確認】として残す。
 - **「normal-map.tsv対応行の有無をどこまで厳密に判定するか」**: 本レーンはtsv本体に触れない
   規律のため、grepでの語彙検索(`marquee`/`drag`/`scroll`/`rename`等)止まりで、id単位の
   突合せ表は作っていない。「対応行なし」と書いた項目は「該当しそうな語で全文検索して

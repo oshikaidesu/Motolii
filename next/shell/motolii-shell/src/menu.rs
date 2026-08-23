@@ -66,11 +66,7 @@ pub fn menus() -> Vec<Menu<Message>> {
                 // 埋めない)。
                 Item { label: "Open…", shortcut: None, message: Message::OpenRequested },
                 // C-1 波C(id 1224、A06「明示 Save が存在しない」の穴を塞ぐ)。
-                // **shortcut は敢えて None** — `resolve_navigation_key`
-                // (`input.rs`)は他レーン(C-4)の write-set で、このレーンは
-                // 触れない境界にある。出典の無い shortcut を書くと menu.rs
-                // 冒頭の規律(「出典ゼロの項目は shortcut: None」)に自ら反する
-                // ので、Cmd+S の実配線は別途(RETURN 参照)。
+                // Cmd+S のキーボード入口も `input.rs` に同じ Message で揃える。
                 Item { label: "Save", shortcut: Some("Cmd+S"), message: Message::SaveRequested },
                 Item {
                     label: "Save As…",

@@ -13,11 +13,10 @@
 //! テスト binary は `suite_main.rs` で1本に束ねられている sibling module
 //! なので、`crate::file_drive::` 経由でそのまま再利用できる。
 //!
-//! **未検分(RETURN 参照)**: `Message::Export(Export)` の実行(実際の
-//! encode)は `motolii_export::export_with_cancel` を同期に1回呼ぶだけ
-//! (フレーム単位の進捗コールバックが export 側に無い)。よってこの試験は
-//! 窓の開閉・品質/範囲選択・書き出し先選択・キーマップまでを見る — 実行
-//! そのもの(`start_export`)はここでは駆動できない。
+//! **実行の検収**: `start_export` は `export_ops::export_stream` を
+//! `Task::run` へ渡し、render/encode/mux と進捗を背景スレッドで処理する。
+//! この drive では長時間の実窓を開かず、`run_export_job_for_test` で音声muxの
+//! 現物と、別テストで Cancel の受け口を検分する。
 
 use motolii_shell::{export_pane, Message, Shell};
 
@@ -166,9 +165,8 @@ fn picking_output_path_again_replaces_the_previous_choice() {
 /// **機械で示す**: 音声を持つ media layer がある project を書き出すと、
 /// 出来た mp4 に実際の音声トラックが乗っている(`motolii_media::probe_audio`
 /// が音声ストリームを見つけられる)。`export_ops::run_export_job_for_test`
-/// (production の `start_export` が背景スレッドで呼ぶのと同じ
-/// `run_export_job` — `Task`/`iced::stream::channel` の非同期機構は経由しない、
-/// `export_ops.rs` module doc 参照)を直接呼ぶ。
+/// (production の `start_export` が背景スレッドで呼ぶ `run_export_job` と同じ
+/// 本体)を直接呼ぶ。
 #[test]
 fn exporting_a_project_with_a_media_layer_mux_es_its_audio_track() {
     use motolii_shell::export_ops;
@@ -240,7 +238,7 @@ fn exporting_a_project_with_a_media_layer_mux_es_its_audio_track() {
     assert!(out.exists(), "書き出し先に file が無い");
 
     let audio = motolii_media::probe_audio(&out)
-        .expect("書き出した mp4 に音声トラックが無い(mux が実際には呼ばれていない)");
+        .expect("書き出した mp4 に音声トラックが無い");
     assert_eq!(audio.codec_name, "aac", "muxed audio codec が想定と違う: {audio:?}");
 
     std::fs::remove_dir_all(&dir).ok();
