@@ -2,6 +2,24 @@
 
 Repository-specific agent *conduct* rules were archived in [docs/archive/agent-governance/](docs/archive/agent-governance/) and are not active. The only section below is build/test operations, kept here by user decision (2026-08-21) because every lane pays the cost of not knowing it.
 
+## 段階(`next/reference/generated/steps.md`)
+
+**「普通のモーショングラフィックが出来る」までの階段。** 手順書(`procedures/P*.md`)の
+節をそのまま段階とし、各手順の判定を数えたもの。**段階を発明していない。**
+
+```bash
+python3 scripts/plan_steps.py "$(git rev-parse --show-toplevel)"
+```
+
+**次にやる仕事は「まだ静通していない最も早い段階」から選ぶ。**
+これが「先回りで無い機能を作らない」の機械的な担保(利用者裁定 2026-08-23)。
+
+「通る」は2種類:
+- **静通** = 穴(入口が無い/意味が無い)がゼロ。**レーンが到達できる上限**
+- **実通** = `【未確認】` もゼロ。**窓を開けないと出ない = 利用者の検分でしか付かない**
+
+静通を先に全段階そろえ、**実機確認は最後にまとめて1回**にする。
+
 ## 入口の判定は導出する(`scripts/derive_entries.py`)
 
 `Intent` の各枝に**入口が在るか**は実コードから導ける — `next/ui`・`next/shell` の
