@@ -66,6 +66,21 @@ fn text_input_capture_disables_navigation_bundle_but_not_global() {
         keymap.resolve(Key::Named(NamedKey::Home), Modifiers::NONE, false),
         Some(VerbId::JumpPlayheadToStart)
     );
+
+    // Backspace/Delete(Timeline キー削除)は `inspector_pointer_event` の
+    // 早期 match 腕でありながら `Scope::NavigationBundle`(2026-08-23 修正の
+    // 回帰柵 — AX-5 実測の二重発火穴。captured=true で発火したら Document
+    // 側が text_input の文字削除と同時に選択キーフレームを消す)。
+    assert_eq!(keymap.resolve(Key::Named(NamedKey::Backspace), Modifiers::NONE, true), None);
+    assert_eq!(keymap.resolve(Key::Named(NamedKey::Delete), Modifiers::NONE, true), None);
+    assert_eq!(
+        keymap.resolve(Key::Named(NamedKey::Backspace), Modifiers::NONE, false),
+        Some(VerbId::DeleteSelectedKeys)
+    );
+    assert_eq!(
+        keymap.resolve(Key::Named(NamedKey::Delete), Modifiers::NONE, false),
+        Some(VerbId::DeleteSelectedKeys)
+    );
 }
 
 /// `Verb.shortcut` 生成の実演(発注書 やること4)。表示ラベルが `Cmd+…` 形式で

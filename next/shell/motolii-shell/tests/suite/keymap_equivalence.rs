@@ -8,14 +8,16 @@
 //! 次切片」)。この試験1本だけが両者を橋渡しする。
 //!
 //! `global_bindings`(Escape/Backspace・Delete/Alt+矢印/Shift+F)側は
-//! `inspector_pointer_event` が `pub` でないため直接は突き合わせられない
-//! (`motolii-keymap` crate 冒頭 doc の逸脱台帳・`tests/keymap_oracle.rs` 参照)。
+//! **本レーンで `inspector_pointer_event` が `pub` になったので直接突き
+//! 合わせる**(`backspace_delete_respect_capture_and_match_global_bindings`)。
+//! 旧 doc の「pub でないため対象外」という逸脱は解消済み — 残る自己無矛盾
+//! 検分は `motolii-keymap` crate 内 `tests/keymap_oracle.rs` を見よ。
 
 use iced::keyboard::{key::Named, Key as IcedKey, Modifiers as IcedModifiers};
-use motolii_keymap::{nav_bundle_keymap, Key as NeutralKey, Modifiers as NeutralModifiers, VerbId};
+use motolii_keymap::{global_bindings, nav_bundle_keymap, Key as NeutralKey, Keymap, Modifiers as NeutralModifiers, NamedKey, VerbId};
 use motolii_shell::timeline_pane::nav::{ClipEdge, JumpDirection};
 use motolii_shell::timeline_pane::{Message as TimelinePaneMessage, ShuttleCommand};
-use motolii_shell::{resolve_navigation_key, Message};
+use motolii_shell::{inspector_pointer_event, resolve_navigation_key, Message};
 
 /// `resolve_navigation_key` が実際に処理する候補キー全部
 /// (`motolii-keymap` の `nav_bundle_bindings()` が写した集合と同じ)。
@@ -160,4 +162,95 @@ fn resolver_output_matches_resolve_navigation_key_across_the_full_modifier_grid(
 
     // 総当たりが本当に回っていることの保険(検分自体が骨抜きになっていないか)。
     assert_eq!(checked, candidate_keys().len() * 2 * 2 * 2 * 2);
+}
+
+/// `iced::keyboard::Key::Named(Backspace/Delete)` の `KeyPressed` を組み立てる。
+/// `physical_key`/`location`/`text`/`modified_key` は `inspector_pointer_event`
+/// の Backspace/Delete 腕(および `resolve_navigation_key` 全体)が一切読まない
+/// フィールドなので、実イベントを模す必要のない既定値で埋める。
+fn key_pressed_event(key: IcedKey, modifiers: IcedModifiers) -> iced::Event {
+    iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+        key: key.clone(),
+        modified_key: key,
+        physical_key: iced::keyboard::key::Physical::Unidentified(
+            iced::keyboard::key::NativeCode::Unidentified,
+        ),
+        location: iced::keyboard::Location::Standard,
+        modifiers,
+        text: None,
+        repeat: false,
+    })
+}
+
+/// **本レーンの回帰柵**(AX-5 実測・M20「TextInput 中はテキスト優先」):
+/// `inspector_pointer_event` は本日 `pub` になった — `global_bindings` を
+/// 自己申告の自己無矛盾(`keymap_oracle.rs`)止まりにせず、実際の shell 関数と
+/// 直接突き合わせる。**captured=true(text_input にフォーカスがある)間は
+/// Backspace/Delete が `Message::Timeline(DeleteSelectedKeys)` を発火しては
+/// いけない**(でなければ rename 中の文字削除とキーフレーム削除が二重発火する
+/// — 旧実装の実害)。Escape は対照実験として引き続き captured を無視する
+/// (`Scope::Global` のまま、Esc-cancel は typing 中でも意味を持つ)。
+#[test]
+fn backspace_delete_respect_capture_and_match_global_bindings() {
+    let keymap = Keymap::build(global_bindings()).expect("global_bindings に衝突がある");
+    let window = iced::window::Id::unique();
+
+    let cases = [
+        (IcedKey::Named(Named::Backspace), NeutralKey::Named(NamedKey::Backspace)),
+        (IcedKey::Named(Named::Delete), NeutralKey::Named(NamedKey::Delete)),
+    ];
+
+    for (iced_key, neutral_key) in cases {
+        for captured in [false, true] {
+            let status = if captured {
+                iced::event::Status::Captured
+            } else {
+                iced::event::Status::Ignored
+            };
+            let shell_result = inspector_pointer_event(
+                key_pressed_event(iced_key.clone(), IcedModifiers::default()),
+                status,
+                window,
+            );
+            let keymap_result = keymap.resolve(neutral_key, NeutralModifiers::default(), captured);
+
+            match (shell_result, keymap_result) {
+                (None, None) => {}
+                (
+                    Some(Message::Timeline(TimelinePaneMessage::DeleteSelectedKeys)),
+                    Some(VerbId::DeleteSelectedKeys),
+                ) => {}
+                (shell_result, keymap_result) => panic!(
+                    "{iced_key:?}/captured={captured}: shell={shell_result:?} \
+                     keymap={keymap_result:?}(一致しない、または captured=true なのに発火した)"
+                ),
+            }
+        }
+    }
+
+    // 核心の1点(RETURN 参照): captured=true では Document 側が一切発火しない。
+    for iced_key in [IcedKey::Named(Named::Backspace), IcedKey::Named(Named::Delete)] {
+        let result = inspector_pointer_event(
+            key_pressed_event(iced_key.clone(), IcedModifiers::default()),
+            iced::event::Status::Captured,
+            window,
+        );
+        assert!(
+            result.is_none(),
+            "{iced_key:?}: captured=true(text_input 編集中)なのに Timeline 削除が発火している: {result:?}"
+        );
+    }
+
+    // 対照実験(境界の明示、追加テストではなく同じ試験内の1アサート):
+    // Escape は `Scope::Global` のまま、captured=true でも発火する — 今回
+    // 修正したのは Backspace/Delete だけであることを確認する。
+    let escape_result = inspector_pointer_event(
+        key_pressed_event(IcedKey::Named(Named::Escape), IcedModifiers::default()),
+        iced::event::Status::Captured,
+        window,
+    );
+    assert!(
+        matches!(escape_result, Some(Message::EscapePressed)),
+        "Escape は captured=true でも発火するはず(Esc-cancel は typing 中も意味を持つ): {escape_result:?}"
+    );
 }

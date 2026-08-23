@@ -66,13 +66,18 @@ impl Shell {
 /// `iced::event::listen_with` を選んだ理由: `status` を見ずに常に拾える
 /// (`iced::keyboard::listen()`(Ignored 限定)だと、typing 中の text_input は
 /// Escape を自分で `shell.capture_event()` する(`iced_widget::text_input`
-/// 実測)ので、typing の Esc-cancel に使いたい場合に届かなくなる)。既存の
-/// Escape/Backspace/Delete/NudgeKeyframe/ResetToRenderCamera はその方針どおり
-/// `status` を無視する。**playhead ナビゲーション動詞束(U2)だけは逆**
-/// — `resolve_navigation_key` へ `status == Captured` を渡し、text_input が
-/// 既にそのキーを消費していれば一切出さない(正典 §5「テキスト入力中は
-/// 横取りしない」。Home/End/裸の j/k/i/o は text_input 内でもカーソル移動・
-/// 文字入力として意味を持つので、Escape 系と同じ「常に拾う」は採らない)。
+/// 実測)ので、typing の Esc-cancel に使いたい場合に届かなくなる)。Escape/
+/// NudgeKeyframe/ResetToRenderCamera はその方針どおり `status` を無視する
+/// (Escape は text_input 編集中でも Esc-cancel として意味を持つ望ましい
+/// 二重発火、Alt+Arrow/Shift+F は text_input 内で衝突する意味を持たない)。
+/// **Backspace/Delete(Timeline キー削除)と playhead ナビゲーション動詞束
+/// (U2)は逆** — 前者は `status != Captured` をこの関数内で直接見て
+/// (2026-08-23 修正、下記コメント参照)、後者は `resolve_navigation_key` へ
+/// `status == Captured` を渡す。どちらも text_input が既にそのキーを
+/// 消費していれば Document 側を一切発火しない(正典 §5「テキスト入力中は
+/// 横取りしない」・M20)。Home/End/裸の j/k/i/o は text_input 内でも
+/// カーソル移動・文字入力として意味を持つので、Escape 系と同じ「常に拾う」
+/// は採らない。
 pub fn inspector_pointer_event(
     event: iced::Event,
     status: iced::event::Status,
@@ -95,10 +100,24 @@ pub fn inspector_pointer_event(
         // Timeline のキー削除(正典 §3)。**Mac の「Delete」キーラベルは
         // `Named::Backspace` として届く**(`iced_core::keyboard::key` の doc
         // コメント実測 — 主部の物理キーは Backspace、`Named::Delete` は
-        // `Fn+Delete`/外付けキーボードの forward-delete)。両方拾う —
-        // `Shell::delete_selected_keys` は選択が空なら no-op なので、text
-        // 編集中に Backspace で文字を消す操作とは(選択キーが無い限り)衝突
-        // しない。
+        // `Fn+Delete`/外付けキーボードの forward-delete)。両方拾う。
+        //
+        // **`status` を見る**(Cmd+Z 等の編集ショートカット腕と同じ形 —
+        // `resolve_navigation_key` の doc 参照)。**旧実装は `captured` を
+        // 一切見ていなかった**が、これは事情でなく漏れだった: fork
+        // `core/src/text/input.rs:181`(`apply` 内 `editor::Update::Action`
+        // 腕)が `editor.perform(action); shell.capture_event();` を
+        // **`Edit::Backspace` を含む全 `Action::Edit` に対して無条件に**
+        // 呼ぶ(Cmd+Z の `Update::Custom`/Copy/Paste と同じ
+        // `shell.capture_event()` 経路 — 実測: 分岐先で action 種別による
+        // 除外は無い)。つまり text_input にフォーカスがある間、Backspace は
+        // 既に iced 側で `Status::Captured` になっている。旧 doc の
+        // 「`delete_selected_keys` は選択が空なら no-op」という正当化は、
+        // **選択中のキーフレームがある場合には成立しない**(AX-5 実測 —
+        // Timeline でキー選択したまま rename の text_input で Backspace を
+        // 押すと文字削除とキー削除が同時に起きる)。M20「TextInput 中は
+        // テキスト優先」に従い、captured の間は Document 側を発火しない
+        // (判断が割れたら厳しい側 — 消えるより消えない方が安全)。
         iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
             key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Backspace),
             ..
@@ -106,7 +125,9 @@ pub fn inspector_pointer_event(
         | iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
             key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Delete),
             ..
-        }) => Some(Message::Timeline(timeline_pane::Message::DeleteSelectedKeys)),
+        }) if status != iced::event::Status::Captured => {
+            Some(Message::Timeline(timeline_pane::Message::DeleteSelectedKeys))
+        }
         // NudgeKeyframe(正典 §8.1)。**既定割当は仮**(拘束6・裁定146の隣接注記
         // どおり、キーの皮は keymap 層が無い今だけ直結) — アクション名
         // (`timeline_pane::Message::NudgeKeyframe`)だけを正本として残す。
