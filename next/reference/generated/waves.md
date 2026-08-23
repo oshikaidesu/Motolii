@@ -6,7 +6,7 @@
 責任ファイルを union-find で束ね、連結成分をそのまま1レーンにしている。
 成分どうしはファイルが交わらないので**同時に走れる**。
 
-- 穴 85件 / レーン 29本 / 責任ファイル未記入 2件
+- 穴 84件 / レーン 28本 / 責任ファイル未記入 2件
 
 ## 責任ファイルが実装に見当たらない(要確認)
 
@@ -35,7 +35,6 @@
 | `ui/motolii-stage-pane/src/zoom.rs` | 1 | `ui/motolii-stage-pane/src/zoom.rs` |  |
 | `core/motolii-store/src/lib.rs` | 1 | `core/motolii-store/src/lib.rs` |  |
 | `ui/motolii-inspector-pane/src/link.rs` | 1 | `ui/motolii-inspector-pane/src/link.rs` |  |
-| `core/motolii-store/src/attrs.rs` | 1 | `core/motolii-store/src/attrs.rs` |  |
 | `engine/motolii-engine/src/lib.rs` | 1 | `engine/motolii-engine/src/lib.rs` |  |
 | `core/motolii-store/src/asset.rs` | 1 | `core/motolii-store/src/asset.rs` |  |
 | `engine/motolii-compositor/src/blend.rs` | 1 | `engine/motolii-compositor/src/blend.rs` |  |
