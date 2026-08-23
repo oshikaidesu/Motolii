@@ -68,6 +68,10 @@ pub enum VerbId {
     GroupLayers,
     UngroupLayers,
     TogglePlayback,
+    // Split(レイヤー分割、B39/GOALS M6・E-1 結線)。Cmd+K
+    // (`defaults.rs::nav_bundle_bindings` 参照) →
+    // `timeline_pane::Message::SplitAtPlayhead`。
+    SplitAtPlayhead,
 }
 
 impl VerbId {
@@ -116,5 +120,6 @@ impl VerbId {
         VerbId::GroupLayers,
         VerbId::UngroupLayers,
         VerbId::TogglePlayback,
+        VerbId::SplitAtPlayhead,
     ];
 }

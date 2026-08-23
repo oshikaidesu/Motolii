@@ -238,8 +238,11 @@ fn f_command_modified_bare_keys_are_not_stolen() {
     // 第5波結線で裸キーが増えた(j/k/l = シャトル、,/. = 意味点ジャンプ移設先、
     // b/n = Set Work Area In/Out)。Cmd 付きを奪わない柵は全員に同じく掛かる —
     // ただし Cmd+L だけは意図した割当(ループトグル移設先)、Cmd+N は File 束
-    // (New Project)なので、この「奪わない」検査の対象から除く。
-    for ch in ["j", "k", "i", "o", ",", "."] {
+    // (New Project)、**Cmd+K は E-1 結線(GOALS M6・Split)で意図した割当**
+    // なので、この「奪わない」検査の対象から除く(下の
+    // `h_cmd_k_splits_the_layer_at_the_playhead` が Cmd+K の実際の割当を
+    // 検分する)。
+    for ch in ["j", "i", "o", ",", "."] {
         let key = Key::Character(ch.into());
         assert!(
             motolii_shell::resolve_navigation_key(&key, Modifiers::COMMAND, false).is_none(),
@@ -352,4 +355,22 @@ fn f_alt_modified_arrows_are_left_to_the_existing_nudge_keyframe_binding() {
     let right = Key::Named(Named::ArrowRight);
     assert!(motolii_shell::resolve_navigation_key(&left, Modifiers::ALT, false).is_none());
     assert!(motolii_shell::resolve_navigation_key(&right, Modifiers::ALT, false).is_none());
+}
+
+/// Cmd+K の割当(GOALS M6・E-1 結線)— `f_command_modified_bare_keys_are_not_stolen`
+/// の除外注記が指す本体。実際の split の意味論(2レイヤーになる・undo 1回で
+/// 戻る)は `motolii-timeline-pane` の `tests/split_fence.rs`
+/// `split_at_playhead_message_splits_the_single_selection_in_one_undo`
+/// (検収条件そのもの)が持つ — ここは「キーがその Message へ届く」ことだけを
+/// 押さえる(型が保証できない一点)。
+#[test]
+fn h_cmd_k_resolves_to_split_at_playhead() {
+    use iced::keyboard::{Key, Modifiers};
+    use motolii_shell::timeline_pane::Message as TlMessage;
+
+    let key = Key::Character("k".into());
+    assert!(matches!(
+        motolii_shell::resolve_navigation_key(&key, Modifiers::COMMAND, false),
+        Some(Message::Timeline(TlMessage::SplitAtPlayhead))
+    ));
 }

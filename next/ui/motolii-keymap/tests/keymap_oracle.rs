@@ -21,8 +21,10 @@ fn binding_counts_match_the_transcribed_shell_allocation() {
     assert_eq!(global_bindings().len(), 8, "global 側の行数が実測(8)とずれている");
     // (d) 2026-08-23 C-1: 平の Save(Cmd+S・Shift無し)を1本追加(31→32)。
     //     Cmd+Shift+S=SaveAs との振り分けは shell の `resolve_navigation_key` と同型。
-    assert_eq!(nav_bundle_bindings().len(), 32, "nav bundle 側の行数が実測(32)とずれている");
-    assert_eq!(default_bindings().len(), 40);
+    // (e) 2026-08-23 E-1: Split(Cmd+K → SplitAtPlayhead)を1本追加(32→33、
+    //     GOALS M6・`defaults.rs::nav_bundle_bindings` 末尾参照)。
+    assert_eq!(nav_bundle_bindings().len(), 33, "nav bundle 側の行数が実測(33)とずれている");
+    assert_eq!(default_bindings().len(), 41);
 }
 
 #[test]

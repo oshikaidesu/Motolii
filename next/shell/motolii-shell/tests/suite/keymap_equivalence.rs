@@ -102,6 +102,8 @@ fn expected_verb(message: &Message) -> VerbId {
         Message::Timeline(TimelinePaneMessage::Shuttle(ShuttleCommand::Reverse)) => VerbId::ShuttleReverse,
         Message::Timeline(TimelinePaneMessage::Shuttle(ShuttleCommand::Stop)) => VerbId::ShuttleStop,
         Message::Timeline(TimelinePaneMessage::SetWorkAreaOut) => VerbId::SetWorkAreaOut,
+        // Split(GOALS M6・E-1 結線)。Cmd+K → `SplitAtPlayhead`。
+        Message::Timeline(TimelinePaneMessage::SplitAtPlayhead) => VerbId::SplitAtPlayhead,
         Message::Undo => VerbId::Undo,
         Message::Redo => VerbId::Redo,
         Message::CopyLayer => VerbId::CopyLayer,
