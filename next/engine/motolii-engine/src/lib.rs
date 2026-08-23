@@ -185,6 +185,25 @@ pub struct Engine {
     /// unit variant なので、複数の shape layer が同じ鍵に衝突する
     /// ([`ShapeCacheKey`] の doc 参照)。
     shape_textures: HashMap<ShapeCacheKey, GpuTexture2D>,
+    /// probe に失敗した path → 理由(表示用文字列)。**`probes`(成功キャッシュ)と
+    /// 対称のキャッシュ**——素材が壊れている/削除されている間、再生中は毎フレーム
+    /// この layer の `texture_for` が呼ばれる。キャッシュが無いと壊れた素材1つで
+    /// 毎フレーム ffprobe プロセスを起動し続けることになる(`probes` のフィールド doc
+    /// が説明する「probe は毎フレーム回さない」規律の裏返し)。
+    failed_probes: HashMap<String, String>,
+    /// **A05(`next/reference/axis/A05-missing.tsv`)**: 直近の `render_frame`/
+    /// `render_frame_to_texture` 系呼び出し1回ぶんで、`texture_for` の
+    /// `LayerSource::Media` 枝が probe/decode 失敗を隔離した layer の理由。
+    ///
+    /// 呼び出しのたび(`render_with_camera_override`/`layers_from_resolved` の
+    /// 冒頭)に空へ戻す——「前フレームの理由を今のフレームのように見せない」
+    /// ため(Q0: 実データの無い状態を実データのように見せない、の裏返し)。
+    /// 黙って握りつぶさない(Q3)ための読み出し口は [`Self::layer_failures`]。
+    ///
+    /// **shell 側の表示配線はまだ無い**(この crate の write-set 外——本 doc の
+    /// 発注 RETURN 参照)。理由を UI の帯へ実際に出すには `motolii-shell` 側が
+    /// 毎フレームこれを読んで `self.status` 等へ書く配線が別途要る。
+    layer_failures: Vec<String>,
 }
 
 impl Engine {
@@ -197,6 +216,8 @@ impl Engine {
             frame_order: VecDeque::new(),
             text_textures: HashMap::new(),
             shape_textures: HashMap::new(),
+            failed_probes: HashMap::new(),
+            layer_failures: Vec::new(),
         })
     }
 
@@ -218,6 +239,8 @@ impl Engine {
             frame_order: VecDeque::new(),
             text_textures: HashMap::new(),
             shape_textures: HashMap::new(),
+            failed_probes: HashMap::new(),
+            layer_failures: Vec::new(),
         })
     }
 
@@ -236,6 +259,23 @@ impl Engine {
         t: RationalTime,
     ) -> Result<Vec<u8>, EngineError> {
         self.render(view, t, true)
+    }
+
+    /// **A05 隔離の読み出し口**(Q3: 黙って握りつぶさない)。直近の
+    /// `render_frame`/`render_frame_without_background`/`render_frame_with_view_camera`/
+    /// `render_frame_to_texture`/`render_resolved_to_texture*` 呼び出し1回ぶんで、
+    /// `Media` layer の probe/decode 失敗を「このlayerだけ落とす」形で隔離した理由の
+    /// 一覧(空なら1件も隔離していない)。
+    ///
+    /// 呼ぶたびに前フレームの内容を上書きする(`render_with_camera_override`/
+    /// `layers_from_resolved` の冒頭で `clear` する)——呼び出し側が毎フレーム
+    /// これを読まなくても内容が際限なく増え続けることはない。
+    ///
+    /// **この crate のどのレンダリング API 呼び出しからも自動で UI へは届かない**
+    /// ——読み出すかどうかは呼び手(`motolii-shell`)の仕事。現時点では
+    /// `motolii-shell` 側の配線はまだ無い(write-set 外、本発注 RETURN 参照)。
+    pub fn layer_failures(&self) -> &[String] {
+        &self.layer_failures
     }
 
     /// 市松「AE型の透明可視化モード」専用の入力(裁定141)。[`Self::render_frame`]と
@@ -303,6 +343,9 @@ impl Engine {
         include_background: bool,
         camera_override: Option<ResolvedCamera>,
     ) -> Result<Vec<u8>, EngineError> {
+        // A05隔離(モジュール doc/`Self::layer_failures` 参照)——このフレームで
+        // 新しく隔離した理由だけを持つ。前フレームの理由を持ち越さない(Q0)。
+        self.layer_failures.clear();
         let composition = view
             .composition()
             .map_err(|e| EngineError::Store(e.to_string()))?
@@ -493,6 +536,8 @@ impl Engine {
         text_documents: &HashMap<LayerId, TextDocument>,
         shape_documents: &HashMap<LayerId, Vec<ShapeNode>>,
     ) -> Result<Vec<LayerWithPasses>, EngineError> {
+        // A05隔離、`render_with_camera_override` と同じ規律(モジュール doc 参照)。
+        self.layer_failures.clear();
         let mut layers: Vec<LayerWithPasses> = Vec::with_capacity(resolved.len() + 1);
 
         let (background_texture, _) = self.texture_for(
@@ -1034,13 +1079,63 @@ impl Engine {
                 Ok((Some(texture), natural))
             }
             LayerSource::Media { path, .. } => {
+                // **A05隔離(`next/reference/axis/A05-missing.tsv`)**: この枝の
+                // 直上コメント(旧版)は「ここで Err を返すとフレーム全体が出なく
+                // なるので、この layer だけ落とす」と約束していたが、実装は
+                // 「素材の外の時刻」(下の out-of-range 分岐)しか局所化しておらず、
+                // probe/decode の実際の失敗(`probe(path)?`/`read_frame_at(...)?`)は
+                // `?` でそのまま外へ伝播していた——`render_with_camera_override`/
+                // `layers_from_resolved` のループはこの関数の `Err` を
+                // `self.texture_for_layer(..)?`/`self.texture_for_resolved(..)?` で
+                // 即座に上へ流すので、comp 全体の合成(他の正常な layer も含む)が
+                // その瞬間出せなくなっていた(実測: `tests/media_layer_isolation.rs`
+                // 修正前は `render_frame` 自体が `Err` で返り、健全な Solid layer も
+                // 一緒に消えていた)。
+                //
+                // ここでは probe/decode の失敗を**この layer だけ**に閉じる——
+                // 呼び出し元へは `Err` を返さず、下の out-of-range 分岐と同じ
+                // `Ok((None, ..))` で「今フレームは描く物が無い」として扱う。
+                // **フェイクのプレースホルダは描かない**(Q0: 実データの無い状態を
+                // あるように見せない)——`None` は「透明」ではなく「この layer は
+                // 今フレームに出さない」という texture_for 全体の既存語彙
+                // (Text/Shape の空、out-of-range と同じ)にそのまま乗る。
+                //
+                // **黙って握りつぶさない**(Q3)——理由は `self.layer_failures`
+                // (呼び出し1回ぶんの Vec<String>、[`Self::layer_failures`] 参照)へ
+                // 積む。新しいエラー機構は発明しない(裁定215)——既存の
+                // `MediaError`/`thiserror::Error` の `Display` をそのまま文字列化
+                // するだけ。
                 let info = match self.probes.get(path) {
-                    Some(info) => info.clone(),
-                    None => {
-                        let info = probe(path)?;
-                        self.probes.insert(path.clone(), info.clone());
-                        info
-                    }
+                    Some(info) => Some(info.clone()),
+                    None => match self.failed_probes.get(path) {
+                        // probe が失敗する素材(削除済み・非対応コーデック等)は
+                        // 再生中ずっと毎フレームこの枝を通る。キャッシュが無いと
+                        // 壊れた素材1つで毎フレーム ffprobe プロセスを起動し続ける
+                        // ことになる(`probes`成功キャッシュの doc と対称の理由)。
+                        // フレームが変わるたびに理由は改めて報告する(Q3: 沈黙禁止)。
+                        Some(reason) => {
+                            self.layer_failures.push(reason.clone());
+                            None
+                        }
+                        None => match probe(path) {
+                            Ok(info) => {
+                                self.probes.insert(path.clone(), info.clone());
+                                Some(info)
+                            }
+                            Err(err) => {
+                                let reason =
+                                    format!("素材を読めない(probe失敗): {path}: {err}");
+                                self.failed_probes.insert(path.clone(), reason.clone());
+                                self.layer_failures.push(reason);
+                                None
+                            }
+                        },
+                    },
+                };
+                let Some(info) = info else {
+                    // probe 自体ができていない ⇒ natural size も分からない
+                    // (Text/Shape の「描く物が無い」と同じ [0.0, 0.0])。
+                    return Ok((None, [0.0, 0.0]));
                 };
                 let natural = [info.width as f32, info.height as f32];
 
@@ -1063,7 +1158,24 @@ impl Engine {
                     return Ok((Some(texture), natural));
                 }
 
-                let cpu = read_frame_at(path, &info, frame)?;
+                // decode 失敗も同じ理由で局所化する(probe は通ったが、この特定の
+                // フレームだけ読めない場合もある——コンテナは開けてもフレーム個別の
+                // 破損等)。probe と違って path 単位でキャッシュしない:失敗するのは
+                // このフレーム番号だけかもしれない(隣のフレームは読めるかもしれない)
+                // ので、`(path, frame)` ごとに ffmpeg を起動し直す既存の律速構造
+                // (`frames`/コメント参照)をそのまま踏襲する——decode 失敗のたびに
+                // 再試行し続けることになるが、これは元から「フレームごとに reader を
+                // 開き直している」現状の暫定実装と同じコスト構造であり、この隔離
+                // 修正が新しく生む負荷ではない。
+                let cpu = match read_frame_at(path, &info, frame) {
+                    Ok(cpu) => cpu,
+                    Err(err) => {
+                        self.layer_failures.push(format!(
+                            "フレームを読めない(decode失敗): {path} frame={frame}: {err}"
+                        ));
+                        return Ok((None, natural));
+                    }
+                };
                 let texture = self.compositor.upload_yuv420p(
                     "media",
                     &cpu.data,
