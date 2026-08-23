@@ -45,6 +45,7 @@
 //! `motolii-store`・`iced` のみ。`motolii-shell`/他 pane crate への依存はゼロ。
 
 mod canvas;
+mod viewport_canvas;
 pub mod clip_gesture;
 mod hit;
 mod input;
@@ -397,7 +398,13 @@ impl TimelinePane {
 
         // スクロール本体(rail 行リストも借用のみ、`canvas(self)` の直前)。
         let rail_rows = rail::view(&self);
-        let field = iced::widget::canvas(self)
+        // **D-5(縦カリング)**: 標準の `iced::widget::canvas()` ではなく自前の
+        // [`viewport_canvas::ViewportCanvas`] を使う — `canvas()` は
+        // `Widget::draw`/`update` が受け取る `viewport: &Rectangle` を
+        // `canvas::Program` へ転送しない(fork 実測、`viewport_canvas` モジュール
+        // doc の「探索範囲」節)。差し替えは `canvas(self)` → `ViewportCanvas::new(self)`
+        // の1行のみ、`.width()`/`.height()`/`.into()` の形は不変。
+        let field = viewport_canvas::ViewportCanvas::new(self)
             .width(Length::Fill)
             .height(Length::Fixed(rows_height));
         let body = iced::widget::scrollable(
@@ -446,6 +453,15 @@ impl iced::widget::canvas::Program<Message> for TimelinePane {
         key_rows::update(self, event, bounds, cursor).or_else(|| input::update(self, state, event, bounds, cursor))
     }
 
+    /// **D-5(縦カリング)**: `view()` はもう標準の `iced::widget::canvas()`
+    /// ではなく [`viewport_canvas::ViewportCanvas`] を使う(下の
+    /// `impl viewport_canvas::ViewportProgram` 参照)ので、実際の描画は
+    /// `draw_viewport` 経由になり、この `Program::draw`(viewport を持たない
+    /// 標準シグネチャ)はもう呼ばれない。それでも `canvas::Program` トレイト
+    /// は満たす必要がある(`ViewportProgram: canvas::Program` — トレイトの
+    /// 意味自体は再実装しない、モジュール doc 参照)ので、`bounds` 全体を
+    /// 可視域として扱う安全側のフォールバック実装を残す(間引き無し=絵は
+    /// 常に不変、呼ばれないコードパスなので性能は問わない)。
     fn draw(
         &self,
         _state: &Interaction,
@@ -454,7 +470,7 @@ impl iced::widget::canvas::Program<Message> for TimelinePane {
         bounds: Rectangle,
         cursor: iced::mouse::Cursor,
     ) -> Vec<iced::widget::canvas::Geometry> {
-        canvas::draw(self, renderer, bounds, cursor)
+        canvas::draw(self, renderer, bounds, cursor, bounds)
     }
 
     fn mouse_interaction(
@@ -465,6 +481,27 @@ impl iced::widget::canvas::Program<Message> for TimelinePane {
     ) -> iced::mouse::Interaction {
         key_rows::mouse_interaction(self, bounds, cursor)
             .unwrap_or_else(|| input::mouse_interaction(self, state, bounds, cursor))
+    }
+}
+
+/// **D-5(Timeline 縦カリング)**: [`viewport_canvas::ViewportProgram`] の
+/// `draw_viewport` を上書きし、`viewport`(`ViewportCanvas` の `Widget::draw`
+/// が受け取る実際の可視矩形)を `canvas::draw` へ渡す。既定実装
+/// (`canvas::Program::draw` へ委譲するだけ)から変えたのはこの1点のみ —
+/// `update`/`mouse_interaction` は上の `impl canvas::Program` のまま不変
+/// (`viewport_canvas::ViewportCanvas::update`/`mouse_interaction` が
+/// `canvas::Program` を経由して呼ぶ)。
+impl viewport_canvas::ViewportProgram<Message> for TimelinePane {
+    fn draw_viewport(
+        &self,
+        _state: &Interaction,
+        renderer: &iced::Renderer,
+        _theme: &iced::Theme,
+        bounds: Rectangle,
+        cursor: iced::mouse::Cursor,
+        viewport: Rectangle,
+    ) -> Vec<iced::widget::canvas::Geometry> {
+        canvas::draw(self, renderer, bounds, cursor, viewport)
     }
 }
 

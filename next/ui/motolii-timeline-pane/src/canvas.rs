@@ -93,10 +93,19 @@ pub(crate) fn draw(
     renderer: &iced::Renderer,
     bounds: Rectangle,
     cursor: iced::mouse::Cursor,
+    viewport: Rectangle,
 ) -> Vec<canvas::Geometry> {
     let mut frame = canvas::Frame::new(renderer, bounds.size());
     let width = bounds.width;
     let row_height = pane.dims.row_height;
+    // **D-5(縦カリング)**: `viewport` は `ViewportCanvas::draw`(widget 層、
+    // `viewport_canvas.rs`)が運んできた実際の可視矩形 — window/絶対座標
+    // なので、この関数のローカル座標(`bounds` 左上が原点)へ合わせる
+    // (`bounds.x`/`bounds.y` を引く、fork の `Canvas::draw` が
+    // `renderer.with_translation(Vector::new(bounds.x, bounds.y), ...)` で
+    // 同じシフトを行っているのと対称)。境界の行は余裕を持って含める
+    // (`row_height` 1行分の余白 — [`row_visible`] doc 参照)。
+    let visible = visible_row_range(&viewport, bounds, row_height);
     // 罫線幅の倍数で意味を分ける — 1x: ルーラー目盛り(hairline)、1.5x: playhead、
     // 2x: マーカー(最も強い accent)。新しい寸法トークンを増やさず、単一の
     // `border_width` から比で導出する(裁定117 の「寸法は token 経由」の範囲内)。
@@ -147,6 +156,14 @@ pub(crate) fn draw(
         // wash(ゼブラ・時間帯)を受けない、という意味は canvas が rail 領域を
         // 描かなくなった今も不変)。
         let row_top = rows_top + pane.layer_row_top(index);
+        // **D-5(縦カリング)**: 可視域(+境界余白)の外なら地のまま(既に
+        // 偶数行と同じ「何もしない」— ゼブラの奇数行だけがこの wash を
+        // 持つので、可視域外の奇数行を飛ばしても最終ラスタは不変。可視域は
+        // scrollable のクリップが元々そこから外へは何も見せない、
+        // [`row_visible`] doc 参照)。
+        if !row_visible(row_top, row_height, visible) {
+            continue;
+        }
         frame.fill_rectangle(
             Point::new(0.0, row_top),
             Size::new(width, row_height),
@@ -165,6 +182,20 @@ pub(crate) fn draw(
     // 層の行。y=0 は行0の上端(ヘッダー分離済み、上のモジュール doc 参照)。
     for (index, row) in pane.rows.iter().enumerate() {
         let row_top = pane.layer_row_top(index);
+
+        // **D-5(縦カリング、AX-4「未計測」finding の本体)**: この行の帯
+        // (選択ハイライト・bar・波形・行区切り hairline)は全て
+        // `[row_top, row_top + row_height]` の内側にだけ描かれる(このループ
+        // の残り全部がその範囲の外へ絵を出さない、という不変は行自体の
+        // 定義そのもの — 行は互いに重ならない帯の積み重ね、EXACT TARGET 1)。
+        // その帯が可視域(+境界余白)と重ならないなら、何を描いても最終
+        // ラスタには1px も乗らない(scrollable が可視域の外を最初から
+        // 見せない)ので、経路ごと丸ごと飛ばして良い。[`row_visible`] の
+        // doc・`culling_tests` にオラクル(可視域と重なる行は必ず true に
+        // なる、という区間包含の証明)がある。
+        if !row_visible(row_top, row_height, visible) {
+            continue;
+        }
 
         if row.selected {
             // 状態: 選択(`state_selected`)。hover(`surface_hover`、中立グレー)とは
@@ -304,6 +335,134 @@ pub(crate) fn draw(
     }
 
     vec![frame.into_geometry()]
+}
+
+/// 可視域(ローカル座標、`[top, bottom]`)。**D-5(縦カリング)**の唯一の入力。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct VisibleRowRange {
+    top: f32,
+    bottom: f32,
+}
+
+/// `viewport`(window/絶対座標、`ViewportCanvas::draw` が運ぶ実際の可視矩形)
+/// をこの canvas のローカル座標(`bounds` 左上原点)へ変換し、境界の行を
+/// 余裕を持って含める(`row_height` 1行分の余白 — mock 実測でも drag 中の
+/// autoscroll でも、余白が row_height 未満のずれなら必ず吸収できる)。
+///
+/// `row_height <= 0.0`(pane 未計測・崩壊直後)なら余白計算そのものが無意味
+/// なので、全域を可視として扱う(安全側 — 何も間引かない)。
+pub(crate) fn visible_row_range(viewport: &Rectangle, bounds: Rectangle, row_height: f32) -> VisibleRowRange {
+    if row_height <= 0.0 {
+        return VisibleRowRange { top: f32::NEG_INFINITY, bottom: f32::INFINITY };
+    }
+    let margin = row_height;
+    let local_top = viewport.y - bounds.y;
+    let local_bottom = local_top + viewport.height;
+    VisibleRowRange {
+        top: local_top - margin,
+        bottom: local_bottom + margin,
+    }
+}
+
+/// この行(`[row_top, row_top + row_height]`)を描く必要があるか。
+///
+/// **絵が変わらないことのオラクル**(`culling_tests` 参照): 行は互いに
+/// 重ならない帯の積み重ね(EXACT TARGET 1)なので、ある行の絵は自分の
+/// `[row_top, row_top+row_height]` の外へは1px もはみ出さない。`visible`
+/// (可視域+境界余白)と区間が重ならない行は、可視域の**外側**でしか描かれ
+/// ないので何を描いても最終ラスタは不変 — scrollable のクリップが元々
+/// そこを一切見せない。余白(`visible_row_range` の `margin`)は可視域を
+/// 常に**広げる**方向にしか働かないので、「実際の可視矩形と重なる行は
+/// 必ず `row_visible` が true を返す」という一方向の保証(超集合)が
+/// `visible_row_range` の定義から直接従う([`culling_tests::row_visible_is_a_superset_of_actual_overlap`]
+/// が区間包含として実測)。
+pub(crate) fn row_visible(row_top: f32, row_height: f32, visible: VisibleRowRange) -> bool {
+    row_top + row_height >= visible.top && row_top <= visible.bottom
+}
+
+#[cfg(test)]
+mod culling_tests {
+    use super::*;
+
+    fn range(top: f32, bottom: f32) -> VisibleRowRange {
+        VisibleRowRange { top, bottom }
+    }
+
+    #[test]
+    fn row_fully_inside_viewport_is_visible() {
+        assert!(row_visible(100.0, 26.0, range(0.0, 500.0)));
+    }
+
+    #[test]
+    fn row_far_above_viewport_is_not_visible() {
+        // viewport 上端(margin 込み)より確実に上(1000px 離れている)。
+        assert!(!row_visible(-2000.0, 26.0, range(0.0, 500.0)));
+    }
+
+    #[test]
+    fn row_far_below_viewport_is_not_visible() {
+        assert!(!row_visible(2000.0, 26.0, range(0.0, 500.0)));
+    }
+
+    #[test]
+    fn row_straddling_the_visible_top_edge_is_kept() {
+        // visible.top ちょうどに下端が触れる行(境界は inclusive)。
+        assert!(row_visible(-26.0, 26.0, range(0.0, 500.0)));
+    }
+
+    #[test]
+    fn row_straddling_the_visible_bottom_edge_is_kept() {
+        assert!(row_visible(500.0, 26.0, range(0.0, 500.0)));
+    }
+
+    /// **区間包含の直接証明**: `visible_row_range` が返す `[top,bottom]` は
+    /// 実際の可視矩形(margin 適用前の `[actual_top, actual_bottom]`)を
+    /// 必ず包含する(`margin >= 0` を引く/足すだけなので)。よって「行が
+    /// 実際の可視矩形と重なる」ならば「行が `visible`(margin 込み)とも
+    /// 重なる」— これが `row_visible` を素通りさせて良い(絵を壊さない)
+    /// ことの根拠そのもの。総当たりで多数のケースを検査する。
+    #[test]
+    fn row_visible_is_a_superset_of_actual_overlap() {
+        let bounds = Rectangle { x: 0.0, y: 0.0, width: 400.0, height: 9999.0 };
+        let row_height = 26.0;
+
+        // 疑似乱数(LCG、外部依存を増やさない)で viewport/row の組を多数振る。
+        let mut seed: u64 = 0x2026_0823;
+        let mut next = move || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((seed >> 33) as u32 % 4000) as f32
+        };
+
+        for _ in 0..2000 {
+            let vp_y = next() - 1000.0;
+            let vp_h = next().max(1.0);
+            let row_top = next() - 1000.0;
+
+            let viewport = Rectangle { x: 0.0, y: vp_y, width: bounds.width, height: vp_h };
+            let visible = visible_row_range(&viewport, bounds, row_height);
+
+            let actual_top = vp_y - bounds.y;
+            let actual_bottom = actual_top + vp_h;
+            let overlaps_actual = row_top + row_height >= actual_top && row_top <= actual_bottom;
+
+            if overlaps_actual {
+                assert!(
+                    row_visible(row_top, row_height, visible),
+                    "実際の可視矩形と重なる行が間引かれた: row_top={row_top} vp_y={vp_y} vp_h={vp_h}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn zero_row_height_disables_culling_entirely() {
+        // pane 未計測・崩壊直後(row_height<=0)は安全側 — 何も間引かない。
+        let bounds = Rectangle { x: 0.0, y: 0.0, width: 400.0, height: 100.0 };
+        let viewport = Rectangle { x: 0.0, y: 0.0, width: 400.0, height: 50.0 };
+        let visible = visible_row_range(&viewport, bounds, 0.0);
+        assert!(row_visible(-1_000_000.0, 26.0, visible));
+        assert!(row_visible(1_000_000.0, 26.0, visible));
+    }
 }
 
 /// 小目盛/大目盛の階層(利用者裁定 2026-08-21 夜、`projection::tick_steps` が
