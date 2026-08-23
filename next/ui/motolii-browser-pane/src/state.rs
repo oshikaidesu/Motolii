@@ -20,7 +20,9 @@
 //! (`Shell::update` 側に per-variant 分岐を増やさない — crate 冒頭 doc の
 //! 「pane split 流儀」どおり)。`Shell::view` は [`PaneState::is_open`] を読んで
 //! 表示するかどうかだけ判断する。
-use crate::model::{CardKey, CreateKind, LibraryTab, PreviewScope, RailScope, SortKey, ViewMode};
+use crate::model::{
+    CardKey, CreateKind, LibraryTab, PreviewScope, RailScope, ShapeOpKind, SortKey, ViewMode,
+};
 use motolii_store::AssetId;
 
 /// pane ローカル Message(裁定160 切片以降の一貫した形 — root
@@ -80,6 +82,15 @@ pub enum Message {
     /// Glow カード)をそのまま運ぶ — 値の正本はそこ1箇所。**pane-local には
     /// 状態を動かさない**(`AddMaskFromCard` と同型)。
     ApplyEffectFromCard { plugin_id: &'static str },
+    /// effects タブの `OpKind` 演算子カードのダブルクリック(2026-08-24
+    /// 「ブラウザに8枚の札」発注 — `model::SelectionAction::ApplyOp` を宣言
+    /// するカードから発火)。**pane-local には状態を動かさない**
+    /// (`AddMaskFromCard`/`ApplyEffectFromCard` と同型) — 選択中の単一
+    /// レイヤーの shape へ演算子を1段積んで `Intent::SetShapes` で書き戻すのは
+    /// shell 側(`Shell::apply_op_to_selected_layer`)の仕事。どの演算子かは
+    /// `model::ShapeOpKind` の tag が運ぶ(具体的な既定パラメータは shell 側が
+    /// 組む — `model::ShapeOpKind` doc 参照)。
+    ApplyOpFromCard { op: ShapeOpKind },
     /// OS の file-drag が窓に入っている/出た(B08 続編: drop 先ハイライト)。
     /// shell 結線(次波)が `iced::window::Event::FileHovered`/
     /// `FilesHoveredLeft` をこの1本へ翻訳する想定 — pane は真偽だけ持ち、
@@ -319,6 +330,10 @@ impl PaneState {
             // (裁定205 施工第2号 §A/§B)。
             Message::AddMaskFromCard => {}
             Message::ApplyEffectFromCard { .. } => {}
+            // 演算子適用も「マスク追加/effect 適用」と同型 — pane-local に
+            // 動かす状態が無い。実際の `Intent::SetShapes` 書き戻しは shell
+            // 結線がこの variant を `Shell::update` 側で横取りして落とす。
+            Message::ApplyOpFromCard { .. } => {}
         }
     }
 }

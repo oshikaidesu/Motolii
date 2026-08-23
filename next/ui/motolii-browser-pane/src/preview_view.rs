@@ -163,6 +163,7 @@ fn preview_card_view(
             model::SelectionAction::ApplyEffect(plugin_id) => {
                 Message::ApplyEffectFromCard { plugin_id }
             }
+            model::SelectionAction::ApplyOp(op) => Message::ApplyOpFromCard { op },
         };
         let face = container(body)
             .width(frame_width)

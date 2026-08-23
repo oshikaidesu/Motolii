@@ -6,7 +6,7 @@
 //! 完結していることも合わせて見る。
 
 use motolii_shell::{browser_pane, inspector_pane, Message, Shell};
-use motolii_store::LayerSource;
+use motolii_store::{LayerSource, PathSource, ShapeNode};
 
 fn create(shell: &mut Shell, kind: browser_pane::model::CreateKind) {
     let _ = shell.update(Message::Browser(browser_pane::Message::CreateFromCard { kind }));
@@ -65,6 +65,32 @@ fn create_rectangle_and_ellipse_both_add_a_shape_layer() {
         "Ellipse カードが LayerSource::Shape を書いていない"
     );
     assert_ne!(rect_layer, ellipse_layer, "2回の create が同じ layer を指している");
+}
+
+/// **本命(2026-08-24「ブラウザに8枚の札」発注 §1)**: PolyStar カードも
+/// Rectangle/Ellipse と同じ `LayerSource::Shape` を書き、shape の中身が
+/// `PathSource::PolyStar` になっている(空 layer にならない)。
+#[test]
+fn create_poly_star_adds_a_shape_layer_with_a_polystar_path_source() {
+    let mut shell = Shell::new_fixture().0;
+
+    create(&mut shell, browser_pane::model::CreateKind::PolyStar);
+
+    let layer = shell.session().selection.expect("生成後に選択されていない");
+    let source = shell.store_view().meta(layer).ok().flatten().unwrap().source;
+    assert!(
+        matches!(source, LayerSource::Shape),
+        "PolyStar カードが LayerSource::Shape を書いていない"
+    );
+    let shapes = shell.store_view().shapes(layer).unwrap();
+    let ShapeNode::Leaf(shape) = &shapes[0] else {
+        panic!("PolyStar カードは Leaf を作るはず");
+    };
+    assert!(
+        matches!(shape.source, PathSource::PolyStar { .. }),
+        "PolyStar カードの shape source が PathSource::PolyStar でない: {:?}",
+        shape.source
+    );
 }
 
 /// **本命(歌詞動画/MV ペルソナ、2026-08-22 利用者裁定「追加するものは

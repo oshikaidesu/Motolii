@@ -89,6 +89,12 @@ pub enum PreviewTag {
     /// どれにも属さない専用タグを1つ起こす、`EFFECTS_PREVIEW` の Mask カード
     /// doc 参照)。
     Masks,
+    /// effects(mock に無い新規カテゴリ — 2026-08-24「ブラウザに8枚の札」発注。
+    /// `motolii_vector::OpKind` 7種(選択中シェイプへ積む演算子)専用タグ。
+    /// Masks と同じ理由で Color/Utility/Animation のどれにも属さない —
+    /// マスクと違い「シェイプの中身を演算子で加工する」語彙なので Masks とも
+    /// 別カテゴリにする(`SHAPE_OP_PREVIEW` doc 参照)。
+    ShapeOps,
 }
 
 impl PreviewTag {
@@ -106,6 +112,7 @@ impl PreviewTag {
             Self::Notes => "Notes",
             Self::Export => "Export",
             Self::Masks => "Masks",
+            Self::ShapeOps => "Shape ops",
         }
     }
 
@@ -113,7 +120,9 @@ impl PreviewTag {
     /// 照合する口)。
     pub fn tab(self) -> LibraryTab {
         match self {
-            Self::Color | Self::Utility | Self::Animation | Self::Masks => LibraryTab::Effects,
+            Self::Color | Self::Utility | Self::Animation | Self::Masks | Self::ShapeOps => {
+                LibraryTab::Effects
+            }
             Self::Shapes | Self::BuiltIn => LibraryTab::Create,
             Self::Tags | Self::Notes | Self::Export => LibraryTab::Panels,
         }
@@ -122,11 +131,12 @@ impl PreviewTag {
 
 /// effects タブの rail カテゴリ並び(mock html:444-446 の掲載順 — S0 慣習順、
 /// 末尾の `Masks` は裁定205 施工第2号 §A で追加)。
-pub const EFFECTS_TAGS: [PreviewTag; 4] = [
+pub const EFFECTS_TAGS: [PreviewTag; 5] = [
     PreviewTag::Color,
     PreviewTag::Utility,
     PreviewTag::Animation,
     PreviewTag::Masks,
+    PreviewTag::ShapeOps,
 ];
 
 /// create タブの rail カテゴリ並び(mock html:454-455 の掲載順)。
@@ -219,6 +229,12 @@ pub enum CreateKind {
     /// 出自は異なるが、`CreateKind` 自体が「store の `LayerSource` 語彙へ
     /// 1:1 で落ちる kind」という型の役目は変わらない。
     Text,
+    /// 星/正多角形シェイプレイヤー(`motolii_vector::PathSource::PolyStar`、
+    /// `LayerSource::Shape` — Rectangle/Ellipse と全く同じ形。2026-08-24
+    /// 「ブラウザに8枚の札を足す」発注: `scripts/check_browser_entries.py` が
+    /// 「型・描画・書き出しは在るのに札が無い」と検出した `PathSource` の
+    /// 最後の1バリアント)。
+    PolyStar,
 }
 
 /// カードが「新規レイヤーを作る」のではなく**選択中の単一レイヤーへ何かを
@@ -246,6 +262,40 @@ pub enum SelectionAction {
     /// そのまま運ぶ — 2026-08-22 時点で実在する pass は `"motolii.glow"` の
     /// 1つのみ(`motolii-compositor::effects::EffectPass::Glow`)。
     ApplyEffect(&'static str),
+    /// 選択中レイヤーの shape へ演算子を1段積む([`ShapeOpKind`] が運ぶのは
+    /// **どの演算子か**のタグだけ — 具体的な既定パラメータは shell 側
+    /// (`motolii_vector::OpKind` の対応する既定値を組む)の仕事。この crate は
+    /// `motolii-vector` を依存に引かない(背骨2「pane は engine 語彙の型を
+    /// 直接持たない」と同じ壁)ので、`OpKind` 自身ではなく軽い tag を運ぶ —
+    /// `ApplyEffect` が plugin id 文字列だけを運ぶのと同じ「型でなく識別子」
+    /// の形。
+    ApplyOp(ShapeOpKind),
+}
+
+/// [`SelectionAction::ApplyOp`] が運ぶ演算子タグ。`motolii_vector::OpKind` の
+/// 7バリアントと1:1 対応するが、**この crate はその型を知らない** — 名前だけ
+/// 揃えた独立の tag(`ShapeOpKind::TrimPath` → shell 側で
+/// `motolii_vector::OpKind::TrimPath { .. }` の既定値を組む)。`OpKind` 自体は
+/// `f64` フィールドを持つため `Eq`/`Copy` を導出できず(浮動小数は `Eq` 非実装)、
+/// カードの静的カタログ(`Copy`+`Eq` が要る、`PreviewCard` の derive 参照)へ
+/// そのまま埋め込めない——`ApplyEffect(&'static str)` が id 文字列を運ぶのと
+/// 同じ理由で、値そのものではなく識別子を運ぶ形にした。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShapeOpKind {
+    /// `motolii_vector::OpKind::TrimPath`。
+    TrimPath,
+    /// `motolii_vector::OpKind::Repeater`。
+    Repeater,
+    /// `motolii_vector::OpKind::RoundedCorners`。
+    RoundedCorners,
+    /// `motolii_vector::OpKind::PuckerBloat`。
+    PuckerBloat,
+    /// `motolii_vector::OpKind::ZigZag`。
+    ZigZag,
+    /// `motolii_vector::OpKind::OffsetPath`。
+    OffsetPath,
+    /// `motolii_vector::OpKind::Twist`。
+    Twist,
 }
 
 /// preview-local カタログ1枚ぶんの静的カード(mock `#thumbnail-grid` の
@@ -291,7 +341,7 @@ pub struct PreviewCard {
 /// 新規レイヤーを作らないので Create タブの「新規レイヤー」語彙には属さず、
 /// Effects タブの「選択中レイヤーへ足す」語彙(Glow と同型)へ置く。**この
 /// 配置は判断であって台帳決定ではない** — 施工の RETURN に根拠を記載)。
-const EFFECTS_PREVIEW: [PreviewCard; 5] = [
+const EFFECTS_PREVIEW: [PreviewCard; 12] = [
     PreviewCard {
         id: "echo-bloom",
         name: "Echo Bloom",
@@ -344,6 +394,74 @@ const EFFECTS_PREVIEW: [PreviewCard; 5] = [
         creates: None,
         applies_to_selection: Some(SelectionAction::AddMask),
     },
+    // 2026-08-24「ブラウザに8枚の札」発注 §2: `OpKind` 全7種の「選択へ適用
+    // する」札。配置は `EFFECTS_PREVIEW`(= 実質「選択へ適用する語彙」の
+    // タブ — `Mask` がエフェクトでないのにここに居るのが先例、発注書どおり)。
+    // 並びは `motolii_vector::OpKind` の宣言順(裁定10 の移植元 `pathgeom.rs`
+    // が踏襲した Lottie `shapes/*` 掲載順)をそのまま保つ。
+    PreviewCard {
+        id: "trim-path",
+        name: "Trim Path",
+        caption: "shape op · Shape ops",
+        glyph: "◗",
+        tags: &[PreviewTag::ShapeOps],
+        creates: None,
+        applies_to_selection: Some(SelectionAction::ApplyOp(ShapeOpKind::TrimPath)),
+    },
+    PreviewCard {
+        id: "repeater",
+        name: "Repeater",
+        caption: "shape op · Shape ops",
+        glyph: "≡",
+        tags: &[PreviewTag::ShapeOps],
+        creates: None,
+        applies_to_selection: Some(SelectionAction::ApplyOp(ShapeOpKind::Repeater)),
+    },
+    PreviewCard {
+        id: "rounded-corners",
+        name: "Rounded Corners",
+        caption: "shape op · Shape ops",
+        glyph: "▢",
+        tags: &[PreviewTag::ShapeOps],
+        creates: None,
+        applies_to_selection: Some(SelectionAction::ApplyOp(ShapeOpKind::RoundedCorners)),
+    },
+    PreviewCard {
+        id: "pucker-bloat",
+        name: "Pucker & Bloat",
+        caption: "shape op · Shape ops",
+        glyph: "✺",
+        tags: &[PreviewTag::ShapeOps],
+        creates: None,
+        applies_to_selection: Some(SelectionAction::ApplyOp(ShapeOpKind::PuckerBloat)),
+    },
+    PreviewCard {
+        id: "zig-zag",
+        name: "Zig Zag",
+        caption: "shape op · Shape ops",
+        glyph: "⌁",
+        tags: &[PreviewTag::ShapeOps],
+        creates: None,
+        applies_to_selection: Some(SelectionAction::ApplyOp(ShapeOpKind::ZigZag)),
+    },
+    PreviewCard {
+        id: "offset-path",
+        name: "Offset Path",
+        caption: "shape op · Shape ops",
+        glyph: "⧉",
+        tags: &[PreviewTag::ShapeOps],
+        creates: None,
+        applies_to_selection: Some(SelectionAction::ApplyOp(ShapeOpKind::OffsetPath)),
+    },
+    PreviewCard {
+        id: "twist",
+        name: "Twist",
+        caption: "shape op · Shape ops",
+        glyph: "☯",
+        tags: &[PreviewTag::ShapeOps],
+        creates: None,
+        applies_to_selection: Some(SelectionAction::ApplyOp(ShapeOpKind::Twist)),
+    },
 ];
 
 /// create タブの preview カタログ。先頭2枚は mock html:532-537 の転写
@@ -355,7 +473,7 @@ const EFFECTS_PREVIEW: [PreviewCard; 5] = [
 /// (effects の Glow 追加と同じ形)。**Text は2026-08-22 利用者裁定で末尾に
 /// 追加**(`CreateKind::Text` doc 参照 — 「追加するものは Browser の中に
 /// 全部入れる」、Layer メニュー等の別入口は作らない)。
-const CREATE_PREVIEW: [PreviewCard; 5] = [
+const CREATE_PREVIEW: [PreviewCard; 6] = [
     PreviewCard {
         id: "rectangle",
         name: "Rectangle",
@@ -372,6 +490,19 @@ const CREATE_PREVIEW: [PreviewCard; 5] = [
         glyph: "○",
         tags: &[PreviewTag::Shapes, PreviewTag::BuiltIn],
         creates: Some(CreateKind::Ellipse),
+        applies_to_selection: None,
+    },
+    // 2026-08-24「ブラウザに8枚の札」発注 §1: `PathSource::PolyStar` の
+    // Create 札。Rectangle/Ellipse と同じ Shapes+Built-in の2カテゴリ
+    // (`motolii_vector::PathSource` の3つ目のパス源 — Bezier はペン道具の
+    // Stage 側入口なので対象外、`scripts/check_browser_entries.py` doc 参照)。
+    PreviewCard {
+        id: "poly-star",
+        name: "Star",
+        caption: "shape · Built-in",
+        glyph: "★",
+        tags: &[PreviewTag::Shapes, PreviewTag::BuiltIn],
+        creates: Some(CreateKind::PolyStar),
         applies_to_selection: None,
     },
     PreviewCard {

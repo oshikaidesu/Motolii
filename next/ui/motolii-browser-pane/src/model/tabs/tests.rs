@@ -58,7 +58,10 @@ fn create_and_panels_preview_catalogs_match_the_mock_cards() {
         .iter()
         .map(|card| card.name)
         .collect();
-    assert_eq!(create, ["Rectangle", "Ellipse", "Solid", "Null", "Text"]);
+    assert_eq!(
+        create,
+        ["Rectangle", "Ellipse", "Star", "Solid", "Null", "Text"]
+    );
 
     let panels: Vec<&str> = preview_catalog(LibraryTab::Panels)
         .iter()
@@ -158,8 +161,9 @@ fn preview_catalog_ignores_the_media_rail_scope() {
 
 /// **ORACLE**: タブ別 rail カテゴリは mock `.tabScoped-*` の掲載順そのまま
 /// (html:444-446 / 454-455 / 463-465 — S0 慣習順)+ 末尾の `Masks`
-/// (裁定205 施工第2号 §A で追加、mock に無い新規カテゴリ)。media は空
-/// (`RailScope` の語彙が正)。
+/// (裁定205 施工第2号 §A で追加、mock に無い新規カテゴリ)+ 末尾の
+/// `ShapeOps`(2026-08-24「ブラウザに8枚の札」発注で追加、同じく mock に
+/// 無い新規カテゴリ)。media は空(`RailScope` の語彙が正)。
 #[test]
 fn preview_tags_follow_the_mock_declaration_per_tab() {
     assert!(preview_tags(LibraryTab::Media).is_empty());
@@ -170,6 +174,7 @@ fn preview_tags_follow_the_mock_declaration_per_tab() {
             PreviewTag::Utility,
             PreviewTag::Animation,
             PreviewTag::Masks,
+            PreviewTag::ShapeOps,
         ]
     );
     assert_eq!(
@@ -240,17 +245,18 @@ fn preview_visible_narrows_by_tag() {
     assert_eq!(notes, ["Notes"]);
 }
 
-/// create のシェイプ2枚は Shapes/Built-in の両カテゴリに属する(mock
-/// `data-tags="shape builtin"`)。B36 消化分(Solid/Null)は Built-in
-/// のみ — `Shapes` scope は2枚のまま、`Built-in` scope は全4枚。
+/// create のシェイプ3枚(Rectangle/Ellipse/Star)は Shapes/Built-in の両
+/// カテゴリに属する(mock `data-tags="shape builtin"` + 2026-08-24 追加の
+/// Star)。B36 消化分(Solid/Null)は Built-in のみ — `Shapes` scope は3枚、
+/// `Built-in` scope は全6枚。
 #[test]
 fn create_cards_match_both_their_categories() {
     let shapes = preview_visible(LibraryTab::Create, PreviewScope::Tag(PreviewTag::Shapes), "");
-    assert_eq!(shapes.len(), 2, "Shapes でシェイプ2枚が残らない");
+    assert_eq!(shapes.len(), 3, "Shapes でシェイプ3枚が残らない");
 
     let builtin =
         preview_visible(LibraryTab::Create, PreviewScope::Tag(PreviewTag::BuiltIn), "");
-    assert_eq!(builtin.len(), 5, "Built-in で create 全5枚が残らない");
+    assert_eq!(builtin.len(), 6, "Built-in で create 全6枚が残らない");
 }
 
 // -----------------------------------------------------------------
@@ -262,9 +268,10 @@ fn create_cards_match_both_their_categories() {
 /// 触れない物は不合格)。id → kind の対応も固定する。
 #[test]
 fn every_create_card_declares_its_create_kind() {
-    let expected: [(&str, CreateKind); 5] = [
+    let expected: [(&str, CreateKind); 6] = [
         ("rectangle", CreateKind::Rectangle),
         ("ellipse", CreateKind::Ellipse),
+        ("poly-star", CreateKind::PolyStar),
         ("solid", CreateKind::Solid),
         ("null", CreateKind::Null),
         ("text", CreateKind::Text),
@@ -300,9 +307,10 @@ fn non_create_cards_never_declare_a_create_kind() {
     }
 }
 
-/// **ORACLE**(裁定205 施工第2号): Glow は `ApplyEffect("motolii.glow")`・
-/// Mask は `AddMask` を宣言する。それ以外の effects カード(mock 転写の
-/// 見せ札)は両方とも `None` のまま(`creates` も `applies_to_selection`
+/// **ORACLE**(裁定205 施工第2号 + 2026-08-24「ブラウザに8枚の札」): Glow は
+/// `ApplyEffect("motolii.glow")`・Mask は `AddMask`・`OpKind` 7種の札は
+/// `ApplyOp(ShapeOpKind::_)` を宣言する。それ以外の effects カード(mock
+/// 転写の見せ札)は両方とも `None` のまま(`creates` も `applies_to_selection`
 /// も無い = 何も発火できない、mock の「見せるだけ」の意図どおり)。
 #[test]
 fn effects_action_cards_declare_their_selection_action() {
@@ -316,6 +324,21 @@ fn effects_action_cards_declare_their_selection_action() {
         by_id("mask").applies_to_selection,
         Some(SelectionAction::AddMask)
     );
+    for (id, kind) in [
+        ("trim-path", ShapeOpKind::TrimPath),
+        ("repeater", ShapeOpKind::Repeater),
+        ("rounded-corners", ShapeOpKind::RoundedCorners),
+        ("pucker-bloat", ShapeOpKind::PuckerBloat),
+        ("zig-zag", ShapeOpKind::ZigZag),
+        ("offset-path", ShapeOpKind::OffsetPath),
+        ("twist", ShapeOpKind::Twist),
+    ] {
+        assert_eq!(
+            by_id(id).applies_to_selection,
+            Some(SelectionAction::ApplyOp(kind)),
+            "{id:?} の applies_to_selection が ApplyOp({kind:?}) でない"
+        );
+    }
     for id in ["echo-bloom", "opacity", "sine"] {
         assert_eq!(
             by_id(id).applies_to_selection,
@@ -330,7 +353,23 @@ fn effects_action_cards_declare_their_selection_action() {
 fn preview_visible_all_keeps_the_declaration_order() {
     let cards = preview_visible(LibraryTab::Effects, PreviewScope::All, "");
     let names: Vec<&str> = cards.iter().map(|card| card.name).collect();
-    assert_eq!(names, ["Echo Bloom", "Opacity", "Sine", "Glow", "Mask"]);
+    assert_eq!(
+        names,
+        [
+            "Echo Bloom",
+            "Opacity",
+            "Sine",
+            "Glow",
+            "Mask",
+            "Trim Path",
+            "Repeater",
+            "Rounded Corners",
+            "Pucker & Bloat",
+            "Zig Zag",
+            "Offset Path",
+            "Twist",
+        ]
+    );
 }
 
 /// scope と query は同時に効く(AND — media の `visible` と同じ形)。

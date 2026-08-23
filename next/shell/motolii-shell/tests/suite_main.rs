@@ -58,6 +58,8 @@ mod marker_keymap_drive;
 mod marquee_drive;
 #[path = "suite/mask_effect_from_card_drive.rs"]
 mod mask_effect_from_card_drive;
+#[path = "suite/apply_op_from_card_drive.rs"]
+mod apply_op_from_card_drive;
 #[path = "suite/remove_asset_from_card_drive.rs"]
 mod remove_asset_from_card_drive;
 #[path = "suite/keymap_equivalence.rs"]

@@ -118,9 +118,10 @@ fn press_text_times(
 }
 
 /// **本命(S6)**: create タブに mock 転写2枚+B36 消化2枚+Text(2026-08-22
-/// 利用者裁定)の計5カードが並ぶ。
+/// 利用者裁定)+PolyStar(2026-08-24「ブラウザに8枚の札」発注)の計6カードが
+/// 並ぶ。
 #[test]
-fn create_tab_shows_all_five_create_cards() {
+fn create_tab_shows_all_six_create_cards() {
     let items = fixture_items();
     let state = create_state();
     let targets = collect_targets(pane_view(
@@ -131,15 +132,15 @@ fn create_tab_shows_all_five_create_cards() {
         Colors::default(),
     ));
     let texts = text_contents(&targets);
-    for expected in ["Rectangle", "Ellipse", "Solid", "Null", "Text"] {
+    for expected in ["Rectangle", "Ellipse", "Star", "Solid", "Null", "Text"] {
         assert!(
             texts.iter().any(|content| content == expected),
             "create タブに {expected:?} カードが無い: {texts:?}"
         );
     }
     assert!(
-        texts.iter().any(|content| content == "Results 5"),
-        "Results 5 が出ない: {texts:?}"
+        texts.iter().any(|content| content == "Results 6"),
+        "Results 6 が出ない: {texts:?}"
     );
 }
 

@@ -4,9 +4,12 @@ use motolii_store::{
     AssetStatus,
     EffectId,
     EffectInstance, Interp, Intent, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId,
-    LayerMeta, LayerSource, LayerTiming, Mask, MaskId, MaskMode, Path, PathSource, PathVertex, RationalTime, Shape as VectorShape, ShapeNode, Value, VectorPoint,
+    LayerMeta, LayerSource, LayerTiming, Mask, MaskId, MaskMode, Path, PathSource, PathVertex,
+    RationalTime, RepeaterTransform, Shape as VectorShape, ShapeNode, Value, VectorPoint,
 };
-use motolii_vector::{Brush, Fill, Rgb};
+use motolii_vector::{
+    Brush, Composite, Fill, LineJoin, OpKind, PointType, Rgb, ShapeOp, StarType, TrimMultiple,
+};
 
 use crate::{
     browser_pane, inspector_pane, tokens, Shell,
@@ -56,7 +59,9 @@ impl Shell {
         use browser_pane::model::CreateKind;
         let id = LayerId(self.next_layer_id());
         let source = match kind {
-            CreateKind::Rectangle | CreateKind::Ellipse => LayerSource::Shape,
+            CreateKind::Rectangle | CreateKind::Ellipse | CreateKind::PolyStar => {
+                LayerSource::Shape
+            }
             CreateKind::Solid => LayerSource::Solid {
                 rgba: [80, 160, 220, 255],
                 width: 240,
@@ -107,11 +112,18 @@ impl Shell {
         }
     }
 
-    /// [`Self::create_from_card`] の Rectangle/Ellipse 用パス源。**寸法は
-    /// Solid の既定 footprint(240×135)をそのまま使う**(直上の doc 参照)。
-    /// 局所原点中心は `PathSource::Rectangle`/`Ellipse` 自身の契約
-    /// (`motolii_vector::geom` doc)なのでここでは何もしない——中心を自前で
-    /// 計算しないことが「中心ずれを起こしようがない」の実体。
+    /// [`Self::create_from_card`] の Rectangle/Ellipse/PolyStar 用パス源。
+    /// **寸法は Solid の既定 footprint(240×135)をそのまま使う**(直上の doc
+    /// 参照)。局所原点中心は `PathSource::Rectangle`/`Ellipse`/`PolyStar`
+    /// 自身の契約(`motolii_vector::geom` doc)なのでここでは何もしない——
+    /// 中心を自前で計算しないことが「中心ずれを起こしようがない」の実体。
+    /// **PolyStar**(2026-08-24「ブラウザに8枚の札」発注 §1)は半径パラメータ
+    /// なので、Rectangle/Ellipse の 240×135 の半分(120×67.5)に収まる
+    /// `outer_radius`/`inner_radius` を既定にする——「新しく置いた物の大きさ」
+    /// の見え方を Rectangle/Ellipse と揃える判断であって、`motolii_vector`
+    /// 側に既定値の正本があるわけではない(`OpKind` 側の既定値と同じ立場、
+    /// [`Self::default_op_kind`] doc 参照)。5点の星(`StarType::Star` が
+    /// `#[default]`)を採る——多角形より「新しく置いた」ことが一目で分かる。
     pub(crate) fn default_shape_path_source(kind: browser_pane::model::CreateKind) -> Option<PathSource> {
         use browser_pane::model::CreateKind;
         let size = VectorPoint {
@@ -121,6 +133,12 @@ impl Shell {
         match kind {
             CreateKind::Rectangle => Some(PathSource::Rectangle { size }),
             CreateKind::Ellipse => Some(PathSource::Ellipse { size }),
+            CreateKind::PolyStar => Some(PathSource::PolyStar {
+                points: 5.0,
+                outer_radius: 67.0,
+                inner_radius: 33.0,
+                star_type: StarType::Star,
+            }),
             _ => None,
         }
     }
@@ -263,6 +281,102 @@ impl Shell {
         });
         if let Err(error) = self.doc.apply(Intent::SetEffects { layer, effects }) {
             self.status = Some(format!("effect を追加できない: {error}"));
+        }
+    }
+
+    /// effects タブ(`EFFECTS_PREVIEW`)の `OpKind` 演算子カード実体化
+    /// (2026-08-24「ブラウザに8枚の札」発注 §2)。単一選択の時だけ意味を持つ
+    /// ([`Self::add_mask_to_selected_layer`]/[`Self::apply_effect_to_selected_
+    /// layer`] と同じ選択ゲート)。**新しい原子 Intent は増やさない** —
+    /// 既存の `Intent::SetShapes`(丸ごと差し替え)を「選択レイヤーの現在の
+    /// shape を読んで演算子スタックへ1段積んで書き戻す」形で使う(発注書
+    /// どおり)。裁定73/裁定215 の柵(`OpKind` は `motolii-vector` の閉じた
+    /// enum・plugin_id+平坦params の受け口は `EffectInstance`/`PropertyLink`
+    /// だけ)を保つため、ここは `motolii_vector::OpKind` の具体的なバリアント
+    /// を直接組む——`EffectInstance` のような汎用ペイロードは経由しない。
+    ///
+    /// **shape が無いレイヤー(Solid/Text/Null や、まだ何も作っていない
+    /// Shape レイヤー)は拒否する**(M13「無反応ゼロ」— ダブルクリックして
+    /// 何も起きないのは黙った無視であって「何もしない」ではない)。同じ理由で
+    /// **複数の shape がある layer(`Vec<ShapeNode>` が2件以上、または
+    /// `ShapeNode::Group` を含む)も今回は拒否する** — 「どの shape へ積むか」
+    /// の選び方(先頭/末尾/選択中の shape)は発注の範囲外の判断で、黙って
+    /// 先頭を選ぶと利用者の意図と食い違う恐れがある。`create_from_card` が
+    /// 作る Rectangle/Ellipse/PolyStar はどれも `vec![ShapeNode::Leaf(_)]`
+    /// (1件だけ)なので、素直に「作って→積む」の経路は通る。
+    pub(crate) fn apply_op_to_selected_layer(&mut self, op: browser_pane::model::ShapeOpKind) {
+        let target = match self.session.selected_layers.as_slice() {
+            [only] => Some(*only),
+            _ => None,
+        };
+        let Some(layer) = target else {
+            self.status = Some("演算子を適用するレイヤーを1つ選んでください".to_owned());
+            return;
+        };
+        let mut shapes = match self.doc.view().shapes(layer) {
+            Ok(shapes) => shapes,
+            Err(error) => {
+                self.status = Some(format!("shape を読めません: {error}"));
+                return;
+            }
+        };
+        let [ShapeNode::Leaf(shape)] = shapes.as_mut_slice() else {
+            self.status = Some(
+                "このレイヤーには演算子を積める shape がありません(まず Rectangle/Ellipse/Star \
+                 などの shape レイヤーを選んでください)"
+                    .to_owned(),
+            );
+            return;
+        };
+        shape.ops.push(ShapeOp::new(Self::default_op_kind(op)));
+        if let Err(error) = self.doc.apply(Intent::SetShapes { layer, shapes }) {
+            self.status = Some(format!("演算子を適用できません: {error}"));
+        }
+    }
+
+    /// [`Self::apply_op_to_selected_layer`] の既定パラメータ。**恒等値は
+    /// 使わない** — `trim-path.s/e=0/1`・各種 amount/amplitude/angle=0 は
+    /// 見た目が変わらず「押しても何も起きていないように見える」(M13 違反)。
+    /// `default_new_object_fill`/`default_mask_shape` が「打った直後に何か
+    /// 置かれたと分かる」既定値を選んでいるのと同じ判断——具体的な数値の
+    /// 正本は `motolii_vector::OpKind` 自身には無いので(Lottie の
+    /// `shapes/*` スキーマも既定値を規定しない)、ここが Motolii 側の判断。
+    pub(crate) fn default_op_kind(op: browser_pane::model::ShapeOpKind) -> OpKind {
+        use browser_pane::model::ShapeOpKind;
+        match op {
+            ShapeOpKind::TrimPath => OpKind::TrimPath {
+                start: 0.0,
+                end: 0.75,
+                offset: 0.0,
+                multiple: TrimMultiple::Simultaneously,
+            },
+            ShapeOpKind::Repeater => OpKind::Repeater {
+                copies: 3.0,
+                offset: 0.0,
+                transform: RepeaterTransform {
+                    position: VectorPoint { x: 24.0, y: 0.0 },
+                    ..RepeaterTransform::IDENTITY
+                },
+                composite: Composite::Above,
+                start_opacity: 1.0,
+                end_opacity: 1.0,
+            },
+            ShapeOpKind::RoundedCorners => OpKind::RoundedCorners { radius: 20.0 },
+            ShapeOpKind::PuckerBloat => OpKind::PuckerBloat { amount: 0.3 },
+            ShapeOpKind::ZigZag => OpKind::ZigZag {
+                amplitude: 10.0,
+                frequency: 3.0,
+                point_type: PointType::Corner,
+            },
+            ShapeOpKind::OffsetPath => OpKind::OffsetPath {
+                amount: 10.0,
+                join: LineJoin::Miter,
+                miter_limit: 4.0,
+            },
+            ShapeOpKind::Twist => OpKind::Twist {
+                angle: 45.0,
+                center: VectorPoint { x: 0.0, y: 0.0 },
+            },
         }
     }
 
@@ -428,6 +542,7 @@ impl Shell {
             browser_pane::Message::ApplyEffectFromCard { plugin_id } => {
                 self.apply_effect_to_selected_layer(plugin_id)
             }
+            browser_pane::Message::ApplyOpFromCard { op } => self.apply_op_to_selected_layer(*op),
             browser_pane::Message::ReplaceSelectedLayerSource(asset_id) => {
                 self.replace_selected_layer_source(*asset_id)
             }

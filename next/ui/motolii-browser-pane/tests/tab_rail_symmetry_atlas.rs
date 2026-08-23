@@ -216,9 +216,12 @@ fn effects_rail_scope_color_narrows_the_catalog() {
     let items = fixture_items();
     let mut state = state_on(LibraryTab::Effects);
     let all = targets_on(&state, &items);
-    // 裁定205 施工第2号 §A で Mask カード(`PreviewTag::Masks`)が末尾に増え、
-    // 全件は5枚(Echo Bloom/Opacity/Sine/Glow/Mask)。
-    assert_eq!(result_count(&all), "Results 5");
+    // 裁定205 施工第2号 §A で Mask カード(`PreviewTag::Masks`)が、
+    // 2026-08-24「ブラウザに8枚の札」発注で `OpKind` 7種の演算子カード
+    // (`PreviewTag::ShapeOps`)が末尾に増え、全件は12枚(Echo Bloom/Opacity/
+    // Sine/Glow/Mask/Trim Path/Repeater/Rounded Corners/Pucker & Bloat/
+    // Zig Zag/Offset Path/Twist)。
+    assert_eq!(result_count(&all), "Results 12");
 
     state.update(Message::SelectPreviewScope(PreviewScope::Tag(
         PreviewTag::Color,
@@ -234,7 +237,7 @@ fn effects_rail_scope_color_narrows_the_catalog() {
     );
 }
 
-/// create タブ: `Shapes` scope は Rectangle/Ellipse の2枚(両方 shape タグ)。
+/// create タブ: `Shapes` scope は Rectangle/Ellipse/Star の3枚(shape タグ)。
 #[test]
 fn create_rail_scope_shapes_keeps_both_shape_cards() {
     let items = fixture_items();
@@ -243,7 +246,7 @@ fn create_rail_scope_shapes_keeps_both_shape_cards() {
         PreviewTag::Shapes,
     )));
     let targets = targets_on(&state, &items);
-    assert_eq!(result_count(&targets), "Results 2");
+    assert_eq!(result_count(&targets), "Results 3");
 }
 
 /// panels タブ: `Notes` scope で1枚へ絞れる。
