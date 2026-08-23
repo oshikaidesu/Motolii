@@ -398,6 +398,23 @@ pub enum Message {
     SelectAllLayers,
     /// 選択を全解除する(正典: 空白クリックと同義のキーボード入口)。
     DeselectAllLayers,
+    /// Delete(軸台帳 A08 id431)。Cut(`CutLayer`)の副作用としてしか存在
+    /// しなかった削除を独立させた専用動詞 — クリップボードを経由しないので
+    /// `selected_layers` を丸ごと1回の `apply_all`(= 1 undo)で消せる
+    /// (`selection.rs::delete_selected_layers` doc 参照)。**キーボード入口
+    /// (Backspace/Delete)はまだ無い** — `resolve_navigation_key` は
+    /// write-set 外(`input.rs`、波C C-4 レーン)なので配線できていない
+    /// (RETURN 参照)。
+    DeleteSelectedLayers,
+    /// Timeline rail M glyph 一括版(軸台帳 A08「Hidden トグル」の穴)。
+    /// 行ごとのクリック(`inspector_pane::Message::ToggleHidden`)とは併存
+    /// (裁定195・S6) — キーボード入口は同じく未配線(RETURN 参照)。
+    HideSelectedLayers,
+    /// Timeline rail S glyph 一括版(軸台帳 A08 id314 の穴)。
+    SoloSelectedLayers,
+    /// Timeline rail L glyph 一括版(軸台帳 A08 id874「Lock selected
+    /// layers」の穴 — 対応する動詞がゼロだった)。
+    LockSelectedLayers,
 
     // ---- G1 グループ化動詞(裁定174「意図優先の原則」) ----
     // キーは Cmd+G/Cmd+Shift+G(`resolve_navigation_key` へ配線済み)。parent
@@ -1375,6 +1392,10 @@ impl Shell {
             Message::DuplicateLayer => self.duplicate_layer(),
             Message::SelectAllLayers => self.select_all_layers(),
             Message::DeselectAllLayers => self.deselect_all_layers(),
+            Message::DeleteSelectedLayers => self.delete_selected_layers(),
+            Message::HideSelectedLayers => self.hide_selected_layers(),
+            Message::SoloSelectedLayers => self.solo_selected_layers(),
+            Message::LockSelectedLayers => self.lock_selected_layers(),
             Message::GroupLayers => self.group_selected_layers(),
             Message::UngroupLayers => self.ungroup_selected_layers(),
             // MB-2: freeze 意図動詞(裁定119)の UI 初露出(Layer メニュー)。
