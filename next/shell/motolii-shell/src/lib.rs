@@ -470,6 +470,17 @@ pub enum Message {
     /// `Task::perform` は即 `true` を運ぶ(`confirm_discard_calls` を増やさない
     /// ── `tests/suite/file_drive.rs` の柵)。
     NewProjectConfirmed(bool),
+    /// 平の Save(id 1224、C-1 波C 発注「保存と復帰」)。**`current_path` が
+    /// 既に分かっていれば確認もダイアログも出さず同じ場所へ黙って上書きする**
+    /// (先例: Photoshop/AE/Premiere/Figma いずれも「一度保存した後は毎回パスを
+    /// 聞かない」)。まだ一度も保存していない新規 project(`current_path` が
+    /// `None`)は `SaveAsRequested` と同じ path 選択(`SaveAsPathChosen`)へ
+    /// 合流する(先例: 初回保存はどの製品でもパスを聞くしかない)。
+    ///
+    /// **既知の穴(RETURN 参照)**: keymap 経由の Cmd+S 割当は write-set
+    /// 境界(`input.rs` は C-4 の write-set)のためこのレーンでは配線して
+    /// いない。File メニューの「Save」項目(`shortcut: None`)からのみ届く。
+    SaveRequested,
     /// Save As(Cmd+Shift+S・File メニュー、id 1225)。
     /// [`file_dialogs::FileDialogs::pick_save_path`] で path を選び、
     /// `Message::SaveAsPathChosen` へ戻ってきたら既存の汎用 persist 経路
@@ -507,6 +518,31 @@ pub enum Message {
     /// `QuitRequested` の確認結果(true = `self.dialogs.quit()`、
     /// false = 何もしない)。`NewProjectConfirmed` と同じ形。
     QuitConfirmed(bool),
+    /// OS の赤信号(×)ボタン(C-1 波C「保存と復帰」、A06「閉じる確認」の穴)。
+    /// **main 窓は `exit_on_close_request: false` で開く**(`Shell::
+    /// with_main_window` 参照)ので、winit fork は `CloseRequested` を自動で
+    /// `Action::Window(Close)` に変換しない ── ここで拾って `QuitRequested`
+    /// と同じ dirty ガード(`confirm_then`)へ通す。Settings/Export 窓は既定
+    /// (`exit_on_close_request: true`)のままなので、この Message は main 窓
+    /// のぶんしか届かない。
+    WindowCloseRequested(iced::window::Id),
+    /// `WindowCloseRequested` の確認結果(true = `iced::exit()`、false = 何も
+    /// しない ── 窓は `exit_on_close_request: false` のおかげでまだ閉じて
+    /// いないので、キャンセルすれば見た目どおり編集を続けられる)。
+    WindowCloseConfirmed(bool),
+    /// 起動直後、`document_io::read_last_project_path` が返した前回プロジェクト
+    /// の path(C-1 波C「再起動で続きが開く」)。`Shell::boot` だけが発行する
+    /// (`boot_fixture`/`new_fixture`/screenshot 器具経路は発行しない ── 器具の
+    /// 意図した Document を上書きしない)。`None` = 記録が無い/前回が新規未保存
+    /// project だった ── 既定 Document のまま何もしない。
+    LastProjectPathRead(Option<std::path::PathBuf>),
+    /// 前回プロジェクトを黙って再オープンした直後、autosave 世代の方が
+    /// 本体ファイルより新しいと分かった時の確認(C-1 波C「autosave の読み
+    /// 返し」、4製品先例「クラッシュ復帰は黙って上書きしない・聞く」)。
+    /// true = `Shell::perform_recover_autosave`(復元して dirty のまま止める
+    /// ── 確定は利用者の明示 Save)、false = 何もしない(黙って再オープンした
+    /// 状態のまま)。
+    AutoSaveRecoveryConfirmed(bool),
 
     // ---- 実時間再生(A2、正典 §2 拘束5) ----
     /// Space。Play/Pause をトグルする。**ドラッグ中は無効**(拘束5「再生と
@@ -904,6 +940,11 @@ pub struct Shell {
     /// (transient overlay は含まない、`document.rs::Revision` doc)ので、
     /// drag 中の途中経過だけで dirty が揺れることはない。
     saved_revision: Revision,
+    /// 起動時に見つかった、本体ファイルより新しい autosave 世代の path。
+    /// `Message::AutoSaveRecoveryConfirmed` を待っている間だけ `Some`
+    /// (`document_io::recoverable_autosave` が起動時に一度だけ埋める)。
+    /// 確認が届いたら(true/false どちらでも)`take()` して空にする。
+    pending_recovery: Option<std::path::PathBuf>,
 
     // ---- 窓台帳(S1 daemon 骨格、裁定182/188) ----
     /// main 窓の Id(窓台帳: Id → 種別 の main 側)。**表示専用の front 状態**
@@ -1001,6 +1042,7 @@ impl Shell {
                 dialogs,
                 current_path: None,
                 saved_revision,
+                pending_recovery: None,
                 main_window: None,
                 sheet_toggles: stage::SheetToggles::default(),
                 export_window: None,
@@ -1023,7 +1065,19 @@ impl Shell {
     /// `runtime/src/window.rs:260`)ので、runtime 無しの headless 試験でも
     /// 台帳が読める。
     pub fn boot() -> (Self, Task<Message>) {
-        Self::with_main_window(Self::new())
+        let (shell, task) = Self::with_main_window(Self::new());
+        // C-1 波C「再起動で続きが開く」: 前回プロジェクトの path を読む
+        // だけの軽い I/O(小さな sidecar ファイル1本)なので同期でもよいが、
+        // `Task::perform` に包む ── `tests/suite/window_drive.rs` は返って
+        // 来た `Task` を一切 poll しない(`let (booted, _task) = Shell::boot();`
+        // の形、`drain_task` を通さない)ので、この Task の中身は headless
+        // 試験では実行されない = 開発機のホームディレクトリを試験が触らない
+        // (production の runtime executor だけが実際に polling する)。
+        let reopen = Task::perform(
+            async { Self::read_last_project_path() },
+            Message::LastProjectPathRead,
+        );
+        (shell, Task::batch([task, reopen]))
     }
 
     /// `--fixture` 起動の daemon boot([`Shell::boot`] の fixture 版)。
@@ -1033,9 +1087,21 @@ impl Shell {
 
     /// [`Shell::boot`]/[`Shell::boot_fixture`] の共通部: main 窓を開く Task を
     /// 添え、台帳へ先行記帳する。窓の性質は従前の `iced::application` の既定
-    /// (`window::Settings::default()`)そのまま — S1 は挙動不変の骨格だけ。
+    /// (`window::Settings::default()`)からただ1点だけ変えてある —
+    /// **`exit_on_close_request: false`**(C-1 波C「閉じる確認」)。既定
+    /// (true)のままだと、winit fork(`winit/src/lib.rs:1031-1033`)は
+    /// `CloseRequested` を一切アプリへ渡さず直接 `Action::Window(Close)` へ
+    /// 変換する ── dirty ガードを挟む余地が無い(A06「OS の閉じるボタンが
+    /// 未保存確認を飛ばす」の実測どおり)。`false` にすると
+    /// `CloseRequested` がそのまま `Message`(`iced::window::close_requests`)
+    /// として届くので、`Message::WindowCloseRequested` が dirty ガードを
+    /// 挟んでから明示的に `iced::exit()` する形に変えられる(Cmd+Q の
+    /// `confirm_then` と同型)。
     fn with_main_window((mut shell, task): (Self, Task<Message>)) -> (Self, Task<Message>) {
-        let (id, open) = iced::window::open(iced::window::Settings::default());
+        let (id, open) = iced::window::open(iced::window::Settings {
+            exit_on_close_request: false,
+            ..iced::window::Settings::default()
+        });
         shell.main_window = Some(id);
         (
             shell,
@@ -1106,6 +1172,7 @@ impl Shell {
             dialogs: Box::new(RfdDialogs),
             current_path: None,
             saved_revision,
+            pending_recovery: None,
             main_window: None,
             sheet_toggles: stage::SheetToggles::default(),
             export_window: None,
@@ -1121,8 +1188,27 @@ impl Shell {
         (shell, Task::none())
     }
 
+    /// main 窓の titlebar 文言(C-1 波C「未保存●が無い」の穴を塞ぐ)。
+    /// **先例**: VS Code/Sublime Text は「`● filename`」(ファイル名の前に
+    /// 点)、AE/Premiere/Figma は「`filename*`」(末尾にアスタリスク)—
+    /// どちらも「未保存の変更がある」を常設のテキストで示す(ダイアログや
+    /// 別ボタンを開かせない、裁定185「説明は下部バーへ」と同じ「常設で
+    /// 読める」思想)。ここは前者(先頭の点)を採る ── ファイル名は右側が
+    /// 長くなりがちで、点を先頭に固定した方が窓が狭くても消えない。
+    /// `current_path` が無い(一度も保存していない新規 project)は
+    /// "Untitled" とする(先例: 全4製品共通)。
     pub fn title(&self) -> String {
-        "Motolii".to_owned()
+        let name = self
+            .current_path
+            .as_deref()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+            .unwrap_or("Untitled");
+        if self.is_dirty() {
+            format!("• {name} — Motolii")
+        } else {
+            format!("{name} — Motolii")
+        }
     }
 
     /// 窓の事象 → Message。**ここは翻訳だけで、判断を持たない**。
@@ -1177,7 +1263,14 @@ impl Shell {
         // 「main 閉=exit」の判断を `Shell::update`(`Message::WindowClosed`)が
         // 持つ — ここは規律どおり翻訳(map)だけ。
         let closes = iced::window::close_events().map(Message::WindowClosed);
-        iced::Subscription::batch([window, tokens, pointer, ticks, auto_save, closes])
+        // C-1 波C「閉じる確認」: main 窓は `exit_on_close_request: false`
+        // (`Shell::with_main_window`)で開くので、赤信号ボタンは `Closed` では
+        // なく `CloseRequested` を発行する ── ここを拾って dirty ガード
+        // (`Message::WindowCloseRequested` 腕)へ渡す。Settings/Export 窓は
+        // 既定のままなのでこの Subscription からは届かない。
+        let close_requests =
+            iced::window::close_requests().map(Message::WindowCloseRequested);
+        iced::Subscription::batch([window, tokens, pointer, ticks, auto_save, closes, close_requests])
     }
 
     /// **唯一の書き口**。ここ以外に `doc.apply` を呼ぶ場所を作らない。
@@ -1433,6 +1526,13 @@ impl Shell {
                     self.reset_document();
                 }
             }
+            Message::SaveRequested => {
+                if let Some(path) = self.current_path.clone() {
+                    self.perform_save_as(path);
+                } else {
+                    task = Task::perform(self.dialogs.pick_save_path(), Message::SaveAsPathChosen);
+                }
+            }
             Message::SaveAsRequested => {
                 task = Task::perform(self.dialogs.pick_save_path(), Message::SaveAsPathChosen);
             }
@@ -1453,6 +1553,53 @@ impl Shell {
             Message::QuitConfirmed(confirmed) => {
                 if confirmed {
                     self.dialogs.quit();
+                }
+            }
+            Message::WindowCloseRequested(id) => {
+                if self.main_window == Some(id) {
+                    task = self.confirm_then(Message::WindowCloseConfirmed);
+                }
+                // Settings/Export 窓は `exit_on_close_request: true`(既定)の
+                // ままなので、この Message は main 以外の id では実際には
+                // 届かない(防御的に無視するだけ)。
+            }
+            Message::WindowCloseConfirmed(confirmed) => {
+                if confirmed {
+                    task = iced::exit();
+                }
+                // false: 何もしない。main 窓は `exit_on_close_request: false`
+                // のおかげでまだ閉じていない(OS へ Close を送っていない)ので、
+                // 見た目どおり編集を続けられる。
+            }
+            Message::LastProjectPathRead(Some(path)) => {
+                match Document::load(&path) {
+                    Ok(doc) => {
+                        self.saved_revision = doc.revision();
+                        self.last_auto_saved = self.saved_revision.clone();
+                        self.doc = doc;
+                        self.current_path = Some(path.clone());
+                        self.session = Session::default();
+                    }
+                    // 拒否は必ず出す(M13)。既定 Document のまま起動を続ける
+                    // ── 黙って上書きしない/黙って落とさない、どちらも避ける。
+                    Err(error) => {
+                        self.status = Some(format!("前回のプロジェクトを開けない: {error}"));
+                    }
+                }
+                if let Some(autosave_path) = Self::recoverable_autosave(&path) {
+                    self.pending_recovery = Some(autosave_path);
+                    task = Task::perform(
+                        self.dialogs.confirm_recover_autosave(),
+                        Message::AutoSaveRecoveryConfirmed,
+                    );
+                }
+            }
+            Message::LastProjectPathRead(None) => {}
+            Message::AutoSaveRecoveryConfirmed(confirmed) => {
+                if let Some(autosave_path) = self.pending_recovery.take() {
+                    if confirmed {
+                        self.perform_recover_autosave(autosave_path);
+                    }
                 }
             }
             Message::TogglePlayback => self.toggle_playback(),

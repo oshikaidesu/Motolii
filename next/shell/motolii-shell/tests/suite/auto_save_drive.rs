@@ -46,6 +46,10 @@ impl FileDialogs for FakeDialogs {
         Box::pin(std::future::ready(true))
     }
 
+    fn confirm_recover_autosave(&self) -> DialogFuture<bool> {
+        Box::pin(std::future::ready(false))
+    }
+
     fn pick_open_path(&self) -> DialogFuture<Option<PathBuf>> {
         Box::pin(std::future::ready(None))
     }

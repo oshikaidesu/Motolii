@@ -104,9 +104,18 @@ impl Shell {
     pub(crate) fn perform_save_as(&mut self, path: std::path::PathBuf) {
         match self.doc.save(&path) {
             Ok(()) => {
-                self.current_path = Some(path);
+                self.current_path = Some(path.clone());
                 self.saved_revision = self.doc.revision();
                 self.last_auto_saved = self.saved_revision.clone();
+                // 保存成功の合図(C-1 波C「保存成功の合図が無い」、P3 手順81/
+                // Q3「沈黙禁止」)。失敗時は下の Err 枝が既に理由を書く —
+                // 成功時だけ無言だった非対称を消す。裁定185(説明は下部バー)
+                // どおり status 帯を使う、新しいダイアログ/トーストは作らない。
+                self.status = Some(format!("保存しました: {}", path.display()));
+                // C-1 波C「再起動で続きが開く」: 次回起動が黙って読み返せる
+                // ように、成功した path を sidecar へ書く(ベストエフォート ──
+                // 書けなくても保存自体は成功しているので失敗させない)。
+                Self::write_last_project_path(&path);
             }
             // 拒否は必ず出す。黙って消さない(M13 と同じ規律)。
             Err(error) => self.status = Some(format!("保存できない: {error}")),
@@ -118,8 +127,12 @@ impl Shell {
     /// SaveACopyRequested` doc「現 path 維持のまま別名へ書く」)——開いている
     /// project の身分(どの path と紐付いているか・dirty かどうか)は変わらない。
     pub(crate) fn perform_save_a_copy(&mut self, path: std::path::PathBuf) {
-        if let Err(error) = self.doc.save(&path) {
-            self.status = Some(format!("コピーを保存できない: {error}"));
+        match self.doc.save(&path) {
+            // 保存成功の合図(`perform_save_as` と同じ規律、Q3)。
+            // `current_path`/`saved_revision`/sidecar は据え置く ── 開いている
+            // project の身分はコピー保存では変わらない(doc 冒頭参照)。
+            Ok(()) => self.status = Some(format!("コピーを保存しました: {}", path.display())),
+            Err(error) => self.status = Some(format!("コピーを保存できない: {error}")),
         }
     }
 
@@ -135,8 +148,11 @@ impl Shell {
                 self.saved_revision = doc.revision();
                 self.last_auto_saved = self.saved_revision.clone();
                 self.doc = doc;
-                self.current_path = Some(path);
+                self.current_path = Some(path.clone());
                 self.session = Session::default();
+                // C-1 波C「再起動で続きが開く」: 明示 Open でも sidecar を
+                // 更新する(次回起動時にこの project を再度開く)。
+                Self::write_last_project_path(&path);
             }
             Err(error) => self.status = Some(format!("開けない: {error}")),
         }
@@ -180,6 +196,137 @@ impl Shell {
             Ok(None) => {}
             // 拒否は必ず出す(M13 と同じ規律)。
             Err(error) => self.status = Some(format!("自動保存できない: {error}")),
+        }
+    }
+
+    // ---- User Settings 相当の sidecar(C-1 波C「再起動で続きが開く」) ----
+    //
+    // A06「置き場所が未設計」の答え: **Document には入れない**(裁定46/107、
+    // 発注書の第一候補どおり)。`next/` に `dirs`/`ProjectDirs` 等の User
+    // Settings 層がまだ無い(KNOWN.md 実測 grep 0件)ので、新しい依存を足す
+    // 判断はこのレーンの裁量を超える ── 代わりに OS 標準のユーザー設定
+    // ディレクトリを `std::env` だけで組み、1行(path 文字列)だけを書く
+    // 最小の sidecar にした。**中身は path だけ**で Session(選択/playhead/
+    // pane レイアウト)は一切入れていない ── A06 が「Document に入れるべき
+    // でない」と別問題扱いした Session 永続化そのものは、置き場(User
+    // Settings 層)自体を新設する設計判断が要るため、このレーンでは着手
+    // せず未着手のまま残す(RETURN 参照)。
+
+    /// OS ごとのユーザー設定ディレクトリ(`~/Library/Application Support/
+    /// Motolii` / `$XDG_CONFIG_HOME or ~/.config/motolii` / `%APPDATA%\Motolii`)。
+    /// 環境変数が引けなければ `None`(sidecar 機能を無効化するだけ ── 書けない/
+    /// 読めない環境でも起動自体は既定 Document のまま続く)。
+    fn user_settings_dir() -> Option<std::path::PathBuf> {
+        #[cfg(target_os = "macos")]
+        {
+            let home = std::env::var_os("HOME")?;
+            Some(std::path::PathBuf::from(home).join("Library/Application Support/Motolii"))
+        }
+        #[cfg(target_os = "windows")]
+        {
+            let appdata = std::env::var_os("APPDATA")?;
+            Some(std::path::PathBuf::from(appdata).join("Motolii"))
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+                return Some(std::path::PathBuf::from(xdg).join("motolii"));
+            }
+            let home = std::env::var_os("HOME")?;
+            Some(std::path::PathBuf::from(home).join(".config/motolii"))
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+        {
+            None
+        }
+    }
+
+    fn last_project_sidecar_path() -> Option<std::path::PathBuf> {
+        Some(Self::user_settings_dir()?.join("last_project.txt"))
+    }
+
+    /// 直近に保存/開いた project の path を sidecar へ記録する
+    /// (`perform_save_as`/`perform_open` から呼ぶ)。**ベストエフォート** ──
+    /// 書けなくても呼び手の保存/読込自体は成功しているので、ここは何も
+    /// 返さず失敗を握りつぶす(sidecar が書けないことは M13 の「拒否」では
+    /// ない ── 明示保存の結果は変わらない、次回の自動再オープンが効かなく
+    /// なるだけ)。
+    pub(crate) fn write_last_project_path(path: &std::path::Path) {
+        let Some(sidecar) = Self::last_project_sidecar_path() else {
+            return;
+        };
+        if let Some(dir) = sidecar.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(&sidecar, path.to_string_lossy().as_bytes());
+    }
+
+    /// sidecar から前回の project path を読む。**存在確認込み**(path が
+    /// 記録されていても、削除/移動されていれば `None` ── 呼び手
+    /// (`Message::LastProjectPathRead`)はそのまま既定 Document で起動を
+    /// 続ける)。`Shell::boot` の Task からのみ呼ばれる(`new`/
+    /// `new_with_dialogs` からは呼ばない ── 試験がホームディレクトリの
+    /// 実ファイルに左右されないようにするための境界、`Shell::boot` doc
+    /// 参照)。
+    pub(crate) fn read_last_project_path() -> Option<std::path::PathBuf> {
+        let sidecar = Self::last_project_sidecar_path()?;
+        let content = std::fs::read_to_string(sidecar).ok()?;
+        let trimmed = content.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let path = std::path::PathBuf::from(trimmed);
+        path.exists().then_some(path)
+    }
+
+    // ---- クラッシュ復帰(C-1 波C「autosave が書くだけで読み返されない」) ----
+
+    /// autosave 世代のうち、本体ファイルより新しい物があれば返す(mtime 比較)。
+    /// **世代ファイルの命名規約(`{stem}.autosave-{seq}{ext}`)は
+    /// `persist.rs` 内部で非公開** — ここでは同じ規約を再実装せず、
+    /// `Document::auto_save_dir`(公開)が指すディレクトリの中で
+    /// **最新更新の1ファイル**を素直に拾う(`.`始まりの tmp 残骸は除く、
+    /// `persist.rs::save_atomic` の隠しファイル規約と同じ判定)。
+    pub(crate) fn recoverable_autosave(project_path: &std::path::Path) -> Option<std::path::PathBuf> {
+        let project_mtime = std::fs::metadata(project_path).ok()?.modified().ok()?;
+        let dir = Document::auto_save_dir(project_path);
+        let entries = std::fs::read_dir(&dir).ok()?;
+        let mut latest: Option<(std::path::PathBuf, std::time::SystemTime)> = None;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let is_hidden = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with('.'))
+                .unwrap_or(true);
+            if is_hidden {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else { continue };
+            let Ok(mtime) = meta.modified() else { continue };
+            if latest.as_ref().map(|(_, t)| mtime > *t).unwrap_or(true) {
+                latest = Some((path, mtime));
+            }
+        }
+        let (autosave_path, autosave_mtime) = latest?;
+        (autosave_mtime > project_mtime).then_some(autosave_path)
+    }
+
+    /// 利用者が復元を承諾した後の本体(`Message::AutoSaveRecoveryConfirmed(true)`)。
+    /// **黙って上書きしない**(4製品先例どおり)── `self.doc` だけを autosave
+    /// の内容へ差し替え、`current_path`/`saved_revision` は元のまま据え置く。
+    /// `saved_revision` を更新しないので `is_dirty()` は即座に真になり(未保存●
+    /// が点く)、明示 Save(Cmd+S/File>Save)を押すまで本体ファイルは一切
+    /// 書き換わらない ── 復元は「読み込むだけ」、確定は利用者の意思。
+    pub(crate) fn perform_recover_autosave(&mut self, autosave_path: std::path::PathBuf) {
+        match Document::load(&autosave_path) {
+            Ok(doc) => {
+                self.doc = doc;
+                self.session = Session::default();
+                self.status =
+                    Some("自動保存から復元しました(保存すると確定します)".to_owned());
+            }
+            Err(error) => self.status = Some(format!("自動保存を復元できない: {error}")),
         }
     }
 

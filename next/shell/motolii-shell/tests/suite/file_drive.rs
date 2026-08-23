@@ -195,6 +195,13 @@ impl FileDialogs for FakeDialogs {
         Box::pin(std::future::ready(response))
     }
 
+    // C-1 波C: `Shell::boot` の起動時チェックからしか呼ばれず、この drive の
+    // 試験は `Shell::new_with_dialogs`(boot を経由しない)しか使わないので、
+    // ここは呼ばれない前提の固定応答でよい(呼び出し回数を数える柵は無し)。
+    fn confirm_recover_autosave(&self) -> DialogFuture<bool> {
+        Box::pin(std::future::ready(false))
+    }
+
     fn pick_open_path(&self) -> DialogFuture<Option<PathBuf>> {
         Box::pin(std::future::ready(self.0.open_path_response.borrow().clone()))
     }
@@ -336,6 +343,74 @@ fn save_as_does_nothing_when_the_dialog_is_cancelled() {
 
     assert_eq!(shell.current_path(), None, "キャンセルしたのに current_path が設定されている");
     assert!(shell.is_project_dirty(), "キャンセルしたのに dirty が消えている");
+}
+
+// ---------------------------------------------------------------------------
+// (c-2) 平の Save(id 1224、C-1 波C) — current_path 既知なら無言で上書き
+// ---------------------------------------------------------------------------
+
+/// 検収条件そのもの(発注書 OUTCOME 1「平の Save が存在しない」)。
+/// `current_path` を確定させた後、別 path をダイアログ応答に仕込んでおく ──
+/// `SaveRequested` がもし内部で `pick_save_path` を呼んでいたら、保存先が
+/// その別 path へずれるはず。ずれない(= 元の path へ上書きされる)ことが
+/// 「ダイアログを一切開いていない」ことの直接証拠になる(呼び出し回数を
+/// 数える柵ではなく、観測可能な結果で確かめる)。
+#[test]
+fn save_requested_overwrites_the_known_path_without_opening_a_dialog() {
+    let (mut shell, fake) = shell_with_fake();
+    drive(&mut shell, Message::AddLayer);
+
+    let dir = motolii_testkit::tmp_dir("file-drive-save-requested");
+    let path = dir.join("plain-save.motolii");
+    fake.set_save_path(path.clone());
+    drive(&mut shell, Message::SaveAsRequested);
+    assert_eq!(shell.current_path(), Some(path.as_path()));
+    assert!(!shell.is_project_dirty());
+
+    // ダイアログを開いたら誤ってここへ書かれるはずの、別の path。
+    let decoy = dir.join("should-not-be-touched.motolii");
+    fake.set_save_path(decoy.clone());
+
+    drive(&mut shell, Message::AddLayer);
+    assert!(shell.is_project_dirty(), "追加編集の後なのに dirty になっていない");
+
+    drive(&mut shell, Message::SaveRequested);
+
+    assert_eq!(
+        shell.current_path(),
+        Some(path.as_path()),
+        "SaveRequested がダイアログ経由の別 path へ current_path を差し替えている \
+         = current_path が既知なのにパスを聞き直している"
+    );
+    assert!(
+        !decoy.exists(),
+        "SaveRequested がダイアログの応答先へ書いている(黙って同じ場所へ書くはずが確認している)"
+    );
+    assert!(!shell.is_project_dirty(), "SaveRequested の後も dirty のまま");
+
+    let loaded = motolii_store::Document::load(&path).expect("SaveRequested が既存 path を上書きしていない");
+    assert_eq!(loaded.view().layers().len(), 2, "SaveRequested が最新の編集を書いていない");
+}
+
+/// 一度も保存していない新規 project(`current_path` が `None`)は Save As と
+/// 同じ path 選択へ合流する(先例: 初回保存はどの製品でもパスを聞くしか
+/// ない)── ダイアログを一切出さない上の試験と対にして、両方の分岐を
+/// 1本ずつだけ押さえる。
+#[test]
+fn save_requested_falls_back_to_the_save_dialog_when_no_path_is_known_yet() {
+    let (mut shell, fake) = shell_with_fake();
+    drive(&mut shell, Message::AddLayer);
+    assert_eq!(shell.current_path(), None);
+
+    let dir = motolii_testkit::tmp_dir("file-drive-save-requested-first");
+    let path = dir.join("first-save.motolii");
+    fake.set_save_path(path.clone());
+
+    drive(&mut shell, Message::SaveRequested);
+
+    assert_eq!(shell.current_path(), Some(path.as_path()), "初回 SaveRequested が path を確定させていない");
+    assert!(!shell.is_project_dirty());
+    assert!(path.exists(), "初回 SaveRequested が実 file を書いていない");
 }
 
 // ---------------------------------------------------------------------------
