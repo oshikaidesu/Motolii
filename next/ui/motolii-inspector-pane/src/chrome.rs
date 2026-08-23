@@ -94,10 +94,23 @@ pub fn row_band_style(dims: Dimensions) -> container::Style {
 /// しない — 496幅ちょうど/20px高ちょうどの `Container` candidate が二重に
 /// 現れて `tests/inspector_pixel_fence.rs` の数え上げを壊す事故を避けられる、
 /// 実測)。スタイルは [`row_band_style`](線化 D5 — 罫線なし・幾何不変)。
-pub(crate) fn bordered_row(content: Element<'static, Message>, dims: Dimensions) -> Element<'static, Message> {
+pub(crate) fn bordered_row<'a>(content: Element<'a, Message>, dims: Dimensions) -> Element<'a, Message> {
+    bordered_row_sized(content, dims, dims.inspector_row_height)
+}
+
+/// [`bordered_row`] と同じ帯だが、高さを呼び出し元が選べる版(S4、#46 の
+/// 穴塞ぎ — Content 行の複数行 `text_editor` は既定の1行高では入らない)。
+/// 単一トークンの帯高を捨てるのではなく、「同じ帯の意匠を違う高さで使う」
+/// だけ(`text.rs::content_row` が `inspector_row_height * 3.0` を渡す —
+/// `inspector_value_width * 3.0` と同じ「既存トークンの算術合成」慣習)。
+pub(crate) fn bordered_row_sized<'a>(
+    content: Element<'a, Message>,
+    dims: Dimensions,
+    height: f32,
+) -> Element<'a, Message> {
     container(content)
         .width(Length::Fill)
-        .height(Length::Fixed(dims.inspector_row_height))
+        .height(Length::Fixed(height))
         .padding([0.0, dims.spacing_m])
         .align_y(iced::alignment::Vertical::Center)
         .style(move |_theme| row_band_style(dims))

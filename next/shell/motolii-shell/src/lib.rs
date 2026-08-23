@@ -856,6 +856,21 @@ pub struct Shell {
     /// `inspector_text_field_draft` と同型の別下書き(対象は `ColorTarget`/
     /// `ColorChannel` の組で区別する)。
     inspector_color_field_draft: Option<inspector_pane::color::ColorFieldDraft>,
+    /// Inspector TEXT section の Content 行(S4、#46 の穴塞ぎ)、**永続する**
+    /// `text_editor::Content`(cursor/selection/undo history を内部に持つ実体
+    /// — フレームごとに作り直すとカーソルが飛ぶ、`inspector_pane::text_section`
+    /// doc「なぜ2つの経路が要るか」参照)。他の下書き(`Option<...>`)と違い
+    /// **常に実在する**(空 = `Content::default()`)——`text_editor::new` が
+    /// `&Content` を要求するので、選択が無い間も widget を組める空バッファを
+    /// 切らさない。同期先レイヤーは [`Self::inspector_content_editor_layer`]。
+    inspector_content_editor: iced::widget::text_editor::Content,
+    /// 直近で [`Self::inspector_content_editor`] を同期した対象レイヤー。
+    /// `None` = 「テキストレイヤーが選ばれていない」。`Shell::update` の
+    /// 末尾(`sync_inspector_content_editor`)が選択と食い違えば再同期する —
+    /// 再同期の直前、**古いレイヤーに未確定の編集が残っていれば1回自動で
+    /// 確定する**(クリックで他レイヤーへ移る = blur-commit、マウス完遂路
+    /// 裁定216)。
+    inspector_content_editor_layer: Option<LayerId>,
     /// Inspector 値セルの drag-to-scrub。**Document ではない** — 同上
     /// (`inspector_pane::FieldDragState` doc comment 参照。型定義は裁定160
     /// 切片8で `motolii-inspector-pane` crate へ移設済み、置き場(この
@@ -1409,6 +1424,8 @@ impl Shell {
                 inspector_speed_draft: None,
                 inspector_text_field_draft: None,
                 inspector_color_field_draft: None,
+                inspector_content_editor: iced::widget::text_editor::Content::new(),
+                inspector_content_editor_layer: None,
                 inspector_drag: None,
                 inspector_text_style_drag: None,
                 value_drag: None,
@@ -1538,6 +1555,8 @@ impl Shell {
             inspector_speed_draft: None,
             inspector_text_field_draft: None,
             inspector_color_field_draft: None,
+            inspector_content_editor: iced::widget::text_editor::Content::new(),
+            inspector_content_editor_layer: None,
             inspector_drag: None,
             inspector_text_style_drag: None,
             value_drag: None,
@@ -2085,6 +2104,11 @@ impl Shell {
             }
         }
         self.refresh_frame();
+        // S4(#46 の穴塞ぎ): Content 行の永続 `text_editor::Content` を選択と
+        // 同期する(`inspector_ops::sync_inspector_content_editor` doc 参照)。
+        // 上のどの腕が選択を動かしても、ここで必ず1回チェックが通る
+        // (`self.session.selection` は上の match でもう更新済みの値)。
+        self.sync_inspector_content_editor();
         Task::batch([task, self.poll_waveform_fetches()])
     }
 

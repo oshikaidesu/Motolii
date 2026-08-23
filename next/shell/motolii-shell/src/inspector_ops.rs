@@ -339,6 +339,34 @@ impl Shell {
                 }
                 Task::none()
             }
+            // Content 行(S4、#46 の穴塞ぎ)。**まだ Document を書かない** —
+            // 永続バッファ(`self.inspector_content_editor`)へ `perform` する
+            // だけ(`inspector_pane::Message::ContentEditorAction` doc 参照)。
+            inspector_pane::Message::ContentEditorAction(action) => {
+                self.inspector_content_editor.perform(action);
+                Task::none()
+            }
+            // Cmd/Ctrl+Enter — ここで初めて確定(`ContentEditorCommit` doc
+            // 参照)。`commit_text_field` へ橋渡しするため、現在の編集
+            // バッファ全体を1回分の `TextFieldDraft` へ包み替える(`Content`
+            // の書き口は元から `TextFieldDraft` 経由なので、下書きの中身が
+            // どこから来たか(1行打鍵 vs 複数行 editor)は `commit_text_field`
+            // から見て区別が要らない)。
+            inspector_pane::Message::ContentEditorCommit => {
+                self.inspector_text_field_draft = Some(inspector_pane::TextFieldDraft {
+                    field: inspector_pane::TextField::Content,
+                    text: self.inspector_content_editor.text(),
+                });
+                if let Err(error) = inspector_pane::commit_text_field(
+                    &mut self.doc,
+                    &mut self.inspector_text_field_draft,
+                    self.session.selection,
+                    inspector_pane::TextField::Content,
+                ) {
+                    self.status = Some(error);
+                }
+                Task::none()
+            }
             // 色エディタ(`inspector_pane::color`、2026-08-22 発注「歌詞が
             // 入れられる道を通す」で結線)。`TextFieldInput`/`TextFieldSubmit`
             // と同じ「打鍵は下書きだけ・Enter で1回の Intent」の形 —
@@ -376,6 +404,16 @@ impl Shell {
             // (`lib.rs` 側のコメント参照)。
             inspector_pane::Message::Color(inspector_pane::color::Message::ChannelDragPressed(..)) => {
                 Task::none()
+            }
+            // 色見本(swatch)click(S4、#56 の穴塞ぎ)。`enter_field_editing`
+            // と同じ「press→focus task」形——Document は一切触らない、
+            // R channel 欄へ focus を移すだけ(`inspector_pane::color`
+            // crate doc「S4」節参照)。
+            inspector_pane::Message::Color(inspector_pane::color::Message::SwatchPressed(target)) => {
+                iced::widget::operation::focus(inspector_pane::color::channel_input_id(
+                    target,
+                    inspector_pane::color::ColorChannel::R,
+                ))
             }
         }
     }
@@ -784,5 +822,67 @@ impl Shell {
         self.ui_scale_draft = None;
     }
 
+    /// Content 行(S4、#46 の穴塞ぎ)の永続 `text_editor::Content` を選択と
+    /// 同期する。`Shell::update` の**末尾**(`self.session.selection` が
+    /// この message の処理を終えた後の値になってから)で毎回呼ぶ——選択が
+    /// 前回同期時と同じレイヤーなら何もしない(早期 return、毎 message
+    /// 呼んでもコストは `Option<LayerId>` 比較1回)。
+    ///
+    /// **選択が変われば2段**: (1) 直前のレイヤーに未確定の編集が残っていれば
+    /// [`inspector_pane::commit_text_field`] で1回だけ確定する(クリックで
+    /// 他レイヤーへ移る = blur-commit、マウス完遂路——裁定216「各意図に
+    /// マウス完遂路とキーボード完遂路の両方を要求」、キーボード側は
+    /// Cmd/Ctrl+Enter で既に満たしている)。(2) 新しい選択がテキストレイヤー
+    /// なら現在の `text_document` 内容でバッファを作り直す、そうでなければ
+    /// 空にする。
+    ///
+    /// **既知の穴**(RETURN 参照): undo/redo で `text_document` が外部から
+    /// 変わっても、選択レイヤーが変わらない限りここは再同期しない——
+    /// バッファが一時的に document と食い違う余地が残る。この節の write-set
+    /// では対処しない(実測ゼロの仮説的経路、後続レーンへ)。
+    pub(crate) fn sync_inspector_content_editor(&mut self) {
+        // **`text_document(layer).is_ok()` は「テキストレイヤーか」の判定に
+        // 使えない**(実測で発見・修正) — `StoreView::text_document` は
+        // component が無ければ `Ok(None)` を返すだけで、layer の
+        // `LayerSource` を一切見ない(裁定37「無い」と「壊れている」を同義に
+        // しない、の裏返しで「無い」は「型が違う」とも同義ではない)。正しい
+        // 判定は `meta.source == LayerSource::Text`(`projection.rs` の
+        // TEXT section 投影と同じ判断)——これを誤ると Solid 等の layer にも
+        // 空の `TextDocument` を書いてしまい、1操作が余分な undo 段を持つ
+        // (`clipboard_drive`/`file_drive` 系の「1操作=1 undo」試験が実際に
+        // これで落ちた、RETURN 参照)。
+        let target_layer = self.session.selection.filter(|&layer| {
+            matches!(
+                self.doc.view().meta(layer),
+                Ok(Some(motolii_store::LayerMeta {
+                    source: motolii_store::LayerSource::Text,
+                    ..
+                }))
+            )
+        });
+        if self.inspector_content_editor_layer == target_layer {
+            return;
+        }
+        if let Some(previous) = self.inspector_content_editor_layer {
+            self.inspector_text_field_draft = Some(inspector_pane::TextFieldDraft {
+                field: inspector_pane::TextField::Content,
+                text: self.inspector_content_editor.text(),
+            });
+            if let Err(error) = inspector_pane::commit_text_field(
+                &mut self.doc,
+                &mut self.inspector_text_field_draft,
+                Some(previous),
+                inspector_pane::TextField::Content,
+            ) {
+                self.status = Some(error);
+            }
+        }
+        let text = target_layer
+            .and_then(|layer| self.doc.view().text_document(layer).ok().flatten())
+            .map(|document| inspector_pane::text_document_content(&document))
+            .unwrap_or_default();
+        self.inspector_content_editor = iced::widget::text_editor::Content::with_text(&text);
+        self.inspector_content_editor_layer = target_layer;
+    }
 }
 

@@ -269,6 +269,46 @@ mod tests {
         assert!(visible_pixels(&tight_raster) > visible_pixels(&tall_raster));
     }
 
+    /// canvas 内で可視画素(alpha>0)を持つ最も下の行の index。無ければ `None`。
+    fn max_visible_row(raster: &Raster) -> Option<u32> {
+        (0..raster.height).rev().find(|&y| {
+            let row_start = (y * raster.width * 4) as usize;
+            let row_end = row_start + (raster.width * 4) as usize;
+            raster.premultiplied_rgba8[row_start..row_end]
+                .chunks_exact(4)
+                .any(|pixel| pixel[3] > 0)
+        })
+    }
+
+    /// **S4 検収点**(#46 の穴塞ぎ、`next/reference/procedures/P1-lyric-mv.md`
+    /// §4 手順46): Content に `\n` を含む2行の document は、同じ canvas・
+    /// 同じ style で1行の document より下まで描画が伸びる——Inspector 側
+    /// (`text_editor`、`next/ui/motolii-inspector-pane/src/text.rs`
+    /// `content_row`)が Enter で改行を打てるようになったことで初めて
+    /// 利用者が実際に辿れる経路になった、その土台がここ(engine の \n 分割)
+    /// に既にあったことの証拠。`line_height_from_style_...` は lh の効果を
+    /// 見る試験、これは「1行 vs 2行そのもの」を直接比較する試験。
+    #[test]
+    fn two_line_content_reaches_further_down_the_canvas_than_one_line() {
+        let one_line = document_with("A", style(64.0, None, 0.0, [1.0, 1.0, 1.0, 1.0]));
+        let two_line = document_with("A\nB", style(64.0, None, 0.0, [1.0, 1.0, 1.0, 1.0]));
+
+        let one_raster = rasterize_text_document(&one_line, t0(), &canvas(128, 256))
+            .expect("render")
+            .expect("1行は非空のはず");
+        let two_raster = rasterize_text_document(&two_line, t0(), &canvas(128, 256))
+            .expect("render")
+            .expect("2行は非空のはず");
+
+        let one_bottom = max_visible_row(&one_raster).expect("1行は可視画素を持つはず");
+        let two_bottom = max_visible_row(&two_raster).expect("2行は可視画素を持つはず");
+
+        assert!(
+            two_bottom > one_bottom,
+            "2行の Content が1行より下まで描かれていない(1行下端={one_bottom}, 2行下端={two_bottom})"
+        );
+    }
+
     #[test]
     fn empty_style_table_yields_no_texture() {
         let document = TextDocument {

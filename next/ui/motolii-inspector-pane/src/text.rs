@@ -65,14 +65,16 @@ use motolii_store::{
 };
 use motolii_tokens_rs::{Colors, Dimensions};
 
-use iced::widget::{button, column, mouse_area, pick_list, row as row_widget, text, text_input};
+use iced::widget::{
+    button, column, mouse_area, pick_list, row as row_widget, text, text_editor, text_input,
+};
 use iced::{Element, Length};
 
 use crate::projection::TextSectionProjection;
 use crate::transform::{format_number, KeyCellState};
 use crate::chrome::{
-    bordered_row, flat_button_style, key_glyph_for_state, name_input_style, pick_list_style,
-    value_cell_padding,
+    bordered_row, bordered_row_sized, flat_button_style, key_glyph_for_state, name_input_style,
+    pick_list_style, value_cell_padding,
 };
 use crate::Message;
 
@@ -258,19 +260,47 @@ pub fn text_document_content(document: &TextDocument) -> String {
 /// (`content` 文字列そのものに `\n` が含まれていれば cosmic-text 側が行分割
 /// する、`motolii-vector::text::shape_text` doc「改行はそのまま行分割」参照)。
 ///
-/// ## 複数行の扱い(発注の未決事項、ここで決めた)
-/// **1行の `text_input`(on_submit で確定、他の TEXT section 欄と同じ文法)を
-/// 採用し、Enter は改行ではなく確定にする** — この Inspector の全ての
-/// text_input(Name/Speed/Font/Size/Line Height/Tracking)が同じ「Enter=確定」
-/// 文法なので、Content だけ「Enter=改行」にすると同じ widget が欄によって
-/// 違う意味を持つことになり(Q0 一貫性違反)、新しい編集文法を発明しないと
-/// いう発注の指示にも反する。歌詞動画で2行以上を同時に見せたい場合は
-/// **レイヤーを複数(1行=1 text layer)に分ける**のが現状の道 —
-/// `next/DECISIONS.md` の「Split」等と同じく「1操作の代わりに複数レイヤーで
-/// 迂回できる」形(`docs/reviews/2026-08-22-persona-lyric-mv.md` 工程4の
-/// 迂回可能表と同じ考え方)。将来 `text_editor`(iced の複数行 widget)を
-/// 導入する日が来ても、この関数(`ContentTrack` 書き込みの形)自体は変わらない
-/// ── 変わるのは view 側の widget 選択だけ。
+/// ## 複数行の扱い(S4、裁定222 — 外部資料で決めた、#46 の穴塞ぎ)
+/// **1行の `text_input` は捨てて `iced::widget::text_editor`(複数行 widget)を
+/// 採用し、Enter は改行にする**(この関数=`ContentTrack` の書き先自体は
+/// 変わらない、旧 doc の予告どおり)。
+///
+/// **出典と判断根拠**: After Effects のテキストレイヤーは Composition
+/// パネルで直接編集中に Return/Enter を押すと**改行**が入る(段落テキスト
+/// ボックス内で新しい行を作る、Adobe After Effects ユーザーガイド
+/// 「テキストの作成」章の記載どおり)。Premiere Pro/Lottie も同型 —
+/// Lottie の `text-document`(`next/reference/lottie-coverage.tsv` text 群)
+/// は content 文字列を単一の値として持ち、`lh`(Line Height、`text-document
+/// lh` 行「行送り」)は複数行の行間を制御するためだけに存在する語彙で、
+/// 複数行そのものは「文字列に改行文字を含める」以外の表現を持たない
+/// (character-data/character-precomp 系は「不採用」= 1文字ごとに輪郭を
+/// 焼く経路で、この設計では採らない)。**つまり Lottie の正本語彙は
+/// 「content 文字列に `\n` を含められること」を前提にしており、それを
+/// 満たせない1行 text_input が逸脱だった**(engine 側
+/// `next/engine/motolii-vector/src/text.rs`/`next/engine/motolii-engine/
+/// src/text.rs` は `\n` 分割・`lh` 行間の両方をとうに実装済み —
+/// `next/engine/motolii-vector/tests/text.rs`/
+/// `next/engine/motolii-engine/src/text.rs` の `line_height_from_style_...`
+/// テストが証拠。穴は UI 側の入力手段だけだった)。
+///
+/// **Enter と確定の割り振り**: Enter(素の Return)は行分割の1文字 `\n` を
+/// 挿す(`text_editor` 既定の [`Binding::Enter`])。確定(1回の
+/// `Intent::SetTextDocument` を書く)は**Cmd/Ctrl+Enter**
+/// (`crate::text::content_key_binding` が `KeyPress` を横取りする唯一の
+/// chord)——Slack/Linear/GitHub の PR 説明欄など「Enter=改行、
+/// Cmd/Ctrl+Enter=送信」という広く使われる文法をそのまま踏襲(新しい文法の
+/// 発明ではなく既存文法の輸入、発注書「新しい文法を発明しない」の対象は
+/// **地図に無い記号の発明**であって既存の複数行入力欄の慣習を指すのではない
+/// と判断)。**マウス完遂路**は「他レイヤーへ選択を移す」——
+/// `motolii_shell::Shell::sync_inspector_content_editor` が選択が変わる
+/// 直前に未確定の下書きを自動で1回 `commit_text_field` する(blur-commit、
+/// クリックだけで確定できる)。**キーボード完遂路**は Cmd/Ctrl+Enter
+/// (裁定216「各意図にマウス完遂路とキーボード完遂路の両方を要求」を満たす)。
+///
+/// 歌詞動画で2行以上を1レイヤーへ入れられるようになったため、「1行=1
+/// レイヤーに分ける」の迂回は**もう必須ではない**(引き続き選べる代替では
+/// ある — 行ごとに別々にアニメーションさせたい場合はレイヤーを分ける方が
+/// 正しい)。
 pub fn applied_text_content(document: &TextDocument, input: &str) -> TextDocument {
     let mut next = document.clone();
     let mut content = ContentTrack::new();
@@ -449,20 +479,31 @@ pub fn reset_text_tracking(doc: &mut Document, selection: Option<LayerId>) -> Re
 /// `.map(Message::Color)` でこの section の `Message` へ畳む
 /// (`Message::Timeline`/`Message::Settings` と同じ「子 pane の Message を
 /// 親が wrap する」形をこの crate 内でも踏襲)。
-pub(crate) fn text_section(
+///
+/// **`content_editor`(S4、#46)**: `Some` の間は Content 行が本物の
+/// `text_editor`(複数行)を組む — 呼び出し元([`crate::view_with_content_editor`])
+/// が永続 `text_editor::Content`(cursor/undo を保つ実体、`motolii_shell::Shell`
+/// が所有)への参照をここまで貫通させる。**`None` は旧来どおり**(この crate の
+/// 他の view 関数群/既存テストが呼ぶ `text_section` 相当の経路)— 1行
+/// `text_input` の read-only フォールバックへ戻る(下 [`content_row`] 参照)。
+/// 戻り値の寿命が `content_editor` の借用寿命 `'a` に縛られるのはこの1関数
+/// だけ(他の行は今までどおり所有権を持つ owned String しか読まないので
+/// `'static` のままでも共存できる — variance で `'static` の Element は
+/// 自動的に `'a` へ収まる)。
+pub(crate) fn text_section<'a>(
     text_projection: &TextSectionProjection,
     draft: Option<&TextFieldDraft>,
     color_draft: Option<&crate::color::ColorFieldDraft>,
+    content_editor: Option<&'a text_editor::Content>,
     dims: Dimensions,
     colors: Colors,
-) -> Element<'static, Message> {
+) -> Element<'a, Message> {
     column![
         section_header("TEXT", dims, colors),
-        text_field_row(
-            "Content",
-            TextField::Content,
+        content_row(
             text_projection.content.clone(),
             draft,
+            content_editor,
             dims,
             colors,
         ),
@@ -528,6 +569,102 @@ fn text_field_row(
     .align_y(iced::alignment::Vertical::Center);
 
     bordered_row(content.into(), dims)
+}
+
+/// Content 行(S4、#46 の穴塞ぎ)。**`content_editor` が `Some` の間だけ本物の
+/// 複数行 `text_editor` を組む**——`None`(この crate の他の呼び出し元・
+/// `text_section` の既存テストが通る経路)は完全に旧来どおりの1行
+/// `text_field_row("Content", ...)` へフォールバックする(挙動もテストも
+/// 無改修)。
+///
+/// **なぜ2つの経路が要るか**: `text_editor::new(&'a Content)` は `Content` の
+/// 借用寿命 `'a` をそのまま widget の寿命として運ぶため、呼び出し元が
+/// **永続する**(1フレームで消えない)`text_editor::Content` を持っていない
+/// 限り組めない(`motolii_shell::Shell::inspector_content_editor` がその
+/// 永続実体、`view_with_content_editor` から `Some(&editor)` で貫通させる)。
+/// この crate の素の `view`/`view_with_speed_draft`/`view_with_text_draft`/
+/// `view_with_color_draft`(既存テストが直接呼ぶ)はそのような永続実体を
+/// 持たない呼び出し元なので `None` を渡し続ける — その経路では今までどおり
+/// 1行入力のまま(表示上の後退はない、Content は元々1行入力だった)。
+fn content_row<'a>(
+    current: String,
+    draft: Option<&TextFieldDraft>,
+    content_editor: Option<&'a text_editor::Content>,
+    dims: Dimensions,
+    colors: Colors,
+) -> Element<'a, Message> {
+    let Some(editor_content) = content_editor else {
+        return text_field_row("Content", TextField::Content, current, draft, dims, colors);
+    };
+
+    // 複数行ぶんの高さ(`inspector_value_width * 3.0` と同じ「既存トークンの
+    // 算術合成」慣習 — 専用トークンを新規発明しない)。3行分あれば2行の
+    // 歌詞タイトル+サブタイトルは常に見える。
+    let row_height = dims.inspector_row_height * 3.0;
+    let editor = text_editor(editor_content)
+        .on_action(Message::ContentEditorAction)
+        .key_binding(content_key_binding)
+        .placeholder("歌詞をここに(Enter=改行、⌘/Ctrl+Enter=確定)")
+        .size(dims.body_text)
+        .padding(value_cell_padding(dims))
+        .height(Length::Fixed(row_height))
+        .style(move |_theme, status| content_editor_style(dims, colors, status));
+
+    // 他の行と違い、ラベルは値欄と同じ固定幅ではなく自然幅(`Shrink`)——
+    // 数値欄(64px 固定)と違い editor は行の残り幅を全部使う方が2行の歌詞が
+    // 見える(他行の狭い固定幅を Content にも押し付けない)。
+    let content = row_widget![
+        text("Content")
+            .size(dims.body_text)
+            .color(colors.text_primary)
+            .width(Length::Shrink),
+        Element::from(editor),
+    ]
+    .spacing(dims.spacing_xs)
+    .align_y(iced::alignment::Vertical::Top);
+
+    bordered_row_sized(content.into(), dims, row_height)
+}
+
+/// [`crate::chrome::name_input_style`] の `text_editor` 版(型が別 —
+/// `text_editor::Status`/`Style` は `text_input` のそれとフィールド形は
+/// 同じだが独立した型)。同じ配色規則をそのまま複製するだけ(2箇所で別の
+/// 意匠を発明しない、crate 全体の慣習)。
+fn content_editor_style(
+    dims: Dimensions,
+    colors: Colors,
+    status: text_editor::Status,
+) -> text_editor::Style {
+    let (background, border_color) = match status {
+        text_editor::Status::Focused { .. } => (colors.surface_app, colors.action_active),
+        text_editor::Status::Hovered => (colors.surface_hover, colors.border_default),
+        _ => (iced::Color::TRANSPARENT, iced::Color::TRANSPARENT),
+    };
+    text_editor::Style {
+        background: iced::Background::Color(background),
+        border: iced::Border {
+            color: border_color,
+            width: dims.border_width,
+            radius: 0.0.into(),
+        },
+        placeholder: colors.text_muted,
+        value: colors.text_primary,
+        selection: colors.action_active,
+    }
+}
+
+/// `text_editor` の key binding(S4、#46)。**Cmd/Ctrl+Enter だけを横取りして
+/// 確定にする** — 素の Enter/Shift+Enter 等その他すべてのキー押下は
+/// [`text_editor::Binding::from_key_press`](既定挙動、Enter=改行を含む)へ
+/// そのまま委譲する。Slack/Linear/GitHub の複数行コメント欄と同じ
+/// 「Enter=改行、Cmd/Ctrl+Enter=送信」文法(`applied_text_content` doc
+/// 「Enter と確定の割り振り」節、出典参照)。
+fn content_key_binding(press: text_editor::KeyPress) -> Option<text_editor::Binding<Message>> {
+    let is_enter = press.modified_key == iced::keyboard::Key::Named(iced::keyboard::key::Named::Enter);
+    if is_enter && press.modifiers.command() {
+        return Some(text_editor::Binding::Custom(Message::ContentEditorCommit));
+    }
+    text_editor::Binding::from_key_press(press)
 }
 
 /// **D-1 結線(2026-08-23)**: `TextField::Size`/`LineHeight`/`Tracking` の
