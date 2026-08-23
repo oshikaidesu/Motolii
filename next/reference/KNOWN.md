@@ -39,6 +39,10 @@
 - 保存は `flattened()` が store に聞く(手列挙禁止、裁定108/118)。component 追加時は `flatten_fence.rs` が守る
 - ファイル地図: mask.rs / marker.rs / attrs.rs / text.rs / effect.rs(store)、frame.rs+camera.rs(core)、timeline/(旧timeline_pane.rs、5分割済み)+tokens.rs(shell)
 
+- **Inspector の drag 機構は「layer + PropertyId + track」に固く結合している**(2026-08-23 A-2 実測): `TransformField`/`start_field_drag`/`continue_field_drag`/`finish_field_drag` は `LayerId + PropertyId + Intent::SetTrack + Document::set_transient` 前提。よって **track を持たない値には既存機構を流用できない** — 色(`TextDocumentStyle` の read-modify-write)・Composition W/H/FPS/尺(`SetComposition`・**LayerId を持たない**)・AutoSave(Document を経由しない shell-local)。**帰結: A03(時間軸に乗せる)は A02(drag 化)の前提**。track に乗った値は既存機構で drag が付くが、乗らない値は別経路の設計が要る
+- **drag の状態と継続購読は Shell が所有している**(2026-08-23 A-2 実測): この fork の `mouse_area` は自分の bounds を出た cursor を追えない(pointer capture 無し)ため、press だけをセルが持ち、move/release は `Shell::subscription` の `listen_with(inspector_pointer_event)`= **window 全体購読**で拾う。状態は `Shell.inspector_drag`。**pane crate 内だけで新しい drag 対象を増やすことは構造的に不可能**
+- **pane の Message enum は shell が wildcard 無しで網羅 match している**(2026-08-23 A-2 実測): `color::Message`・`sections::Message`・`settings_pane::Message` はいずれも結線済みで、**バリアントを1本足すだけで shell が即コンパイル不能**になる(ネストしたパターンの網羅性が外側 enum に効く)。pane 単独レーンで Message を増やす発注は、shell を write-set に含めない限り成立しない
+
 ## 既知の穴(発見報告不要。直すのも別途裁定してから)
 - (失効 2026-08-21: 同日根治)~~effect pass は layer 境界内のみ~~ → `EffectPass::padding()` 宣言で halo あふれ実装済み(glow_golden の外側画素 assert が回帰柵)
 - **effect の複数 pass は連鎖しない(最後勝ち)**(2026-08-21 実測): `LayerWithPasses.passes` の各 pass は元 texture を独立に読み共有 scratch へ書く — 直列合成ではない。現在の呼び出しは全て単一 pass なので実害なし。複数 effect の stack を絵にする時(vism 第2号以降)に直列化が要る
