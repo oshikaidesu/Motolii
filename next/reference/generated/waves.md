@@ -6,7 +6,7 @@
 責任ファイルを union-find で束ね、連結成分をそのまま1レーンにしている。
 成分どうしはファイルが交わらないので**同時に走れる**。
 
-- 穴 88件 / レーン 29本 / 責任ファイル未記入 3件
+- 穴 85件 / レーン 29本 / 責任ファイル未記入 2件
 
 ## 責任ファイルが実装に見当たらない(要確認)
 
@@ -20,11 +20,10 @@
 |---|---|---|---|
 | `core/motolii-store/src/persist.rs` | 30 | `core/motolii-store/src/persist.rs`, `shell/motolii-shell/src/lib.rs`, `ui/motolii-browser-pane/src/state.rs`, `ui/motolii-shell-state/src/layout.rs` ほか1 | ※ |
 | `ui/motolii-inspector-pane/src/transform.rs` | 7 | `ui/motolii-inspector-pane/src/transform.rs` | ※ |
-| `ui/motolii-inspector-pane/src/lib.rs` | 6 | `ui/motolii-inspector-pane/src/lib.rs` | ※ |
+| `ui/motolii-inspector-pane/src/lib.rs` | 5 | `ui/motolii-inspector-pane/src/lib.rs` | ※ |
 | `ui/motolii-stage-pane/src/gizmo.rs` | 5 | `ui/motolii-stage-pane/src/gizmo.rs` |  |
 | `ui/motolii-timeline-pane/src/write.rs` | 4 | `ui/motolii-timeline-pane/src/write.rs` | ※ |
 | `core/motolii-store/src/document.rs` | 3 | `core/motolii-store/src/document.rs`, `core/motolii-store/src/view.rs`, `engine/motolii-compositor/src/lib.rs` | ※ |
-| `ui/motolii-inspector-pane/src/link.rs` | 2 | `ui/motolii-inspector-pane/src/link.rs` | ※ |
 | `ui/motolii-timeline-pane/src/key_rows.rs` | 2 | `ui/motolii-timeline-pane/src/key_rows.rs` |  |
 | `ui/motolii-inspector-pane/src/attrs.rs` | 2 | `ui/motolii-inspector-pane/src/attrs.rs` |  |
 | `ui/motolii-inspector-pane/src/matte.rs` | 2 | `ui/motolii-inspector-pane/src/matte.rs` |  |
@@ -35,6 +34,7 @@
 | `shell/motolii-shell/src/menu.rs` | 1 | `shell/motolii-shell/src/menu.rs` |  |
 | `ui/motolii-stage-pane/src/zoom.rs` | 1 | `ui/motolii-stage-pane/src/zoom.rs` |  |
 | `core/motolii-store/src/lib.rs` | 1 | `core/motolii-store/src/lib.rs` |  |
+| `ui/motolii-inspector-pane/src/link.rs` | 1 | `ui/motolii-inspector-pane/src/link.rs` |  |
 | `core/motolii-store/src/attrs.rs` | 1 | `core/motolii-store/src/attrs.rs` |  |
 | `engine/motolii-engine/src/lib.rs` | 1 | `engine/motolii-engine/src/lib.rs` |  |
 | `core/motolii-store/src/asset.rs` | 1 | `core/motolii-store/src/asset.rs` |  |
@@ -50,6 +50,5 @@
 
 ## 責任ファイルが書かれていない穴(発注できない)
 
-- A01 `SetSlots`
 - A06 最近使ったファイル(MRU、Open Recent)
 - A12 ピンチズーム(トラックパッド、2本指つまむ)

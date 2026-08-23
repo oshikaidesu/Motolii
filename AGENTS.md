@@ -2,6 +2,21 @@
 
 Repository-specific agent *conduct* rules were archived in [docs/archive/agent-governance/](docs/archive/agent-governance/) and are not active. The only section below is build/test operations, kept here by user decision (2026-08-21) because every lane pays the cost of not knowing it.
 
+## 入口の判定は導出する(`scripts/derive_entries.py`)
+
+`Intent` の各枝に**入口が在るか**は実コードから導ける — `next/ui`・`next/shell` の
+非テストコードが `Intent::X` を参照していれば入口あり。手書きに残すのは
+**「なぜ穴か」「どう直すか」「責任」**だけ。
+
+```bash
+python3 scripts/derive_entries.py "$(git rev-parse --show-toplevel)"
+```
+
+台帳(`next/reference/axis/A01-entry.tsv`)と食い違うと
+`next/core/motolii-testkit/tests/entries_fence.rs` が落ちる。**実コードが正**なので
+台帳側を直す。導入時に3件の腐りが出た(`SetPropertySlot`/`SetPropertyModulators`/
+`SetSlots` が「穴」のままだった)。
+
 ## 在庫表(`next/reference/generated/inventory.tsv`)
 
 Motolii が今持っている物の全在庫(5,134項目)。**手で編集しない。**

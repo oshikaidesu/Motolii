@@ -1,0 +1,27 @@
+kind	variant	判定	参照元(next/ui・next/shell の非テスト)
+Intent	AddLayer	入口あり	shell/motolii-shell/src/assets.rs;shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;shell/motolii-shell/src/fixture.rs;shell/motolii-shell/src/lib.rs;shell/motolii-shell/src/render.rs;ui/motolii-inspector-pane/src/text.rs;ui/motolii-stage-pane/src/gizmo.rs;ui/motolii-timeline-pane/src/projection.rs;ui/motolii-timeline-pane/src/split.rs;ui/motolii-timeline-pane/src/write.rs
+Intent	AddMask	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;ui/motolii-browser-pane/src/model.rs;ui/motolii-browser-pane/src/state.rs
+Intent	AdmitAsset	入口あり	shell/motolii-shell/src/assets.rs;shell/motolii-shell/src/fixture.rs;ui/motolii-browser-pane/src/lib.rs;ui/motolii-browser-pane/src/model.rs
+Intent	Freeze	入口あり	shell/motolii-shell/src/lib.rs;shell/motolii-shell/src/selection.rs;ui/motolii-timeline-pane/src/split.rs
+Intent	RemoveAsset	入口あり	shell/motolii-shell/src/create.rs;ui/motolii-browser-pane/src/lib.rs;ui/motolii-browser-pane/src/state.rs
+Intent	RemoveLayer	入口あり	shell/motolii-shell/src/lib.rs;shell/motolii-shell/src/selection.rs;ui/motolii-menubar/src/context.rs
+Intent	SetAttrs	入口あり	shell/motolii-shell/src/assets.rs;shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;shell/motolii-shell/src/fixture.rs;shell/motolii-shell/src/inspector_ops.rs;shell/motolii-shell/src/lib.rs;shell/motolii-shell/src/selection.rs;ui/motolii-inspector-pane/src/chrome.rs;ui/motolii-inspector-pane/src/lib.rs;ui/motolii-inspector-pane/src/matte.rs;ui/motolii-inspector-pane/src/transform.rs;ui/motolii-stage-pane/src/gizmo.rs;ui/motolii-timeline-pane/src/projection.rs;ui/motolii-timeline-pane/src/split.rs;ui/motolii-timeline-pane/src/write.rs
+Intent	SetCameraPropertyModulators	入口ゼロ	
+Intent	SetCameraPropertySlot	入口ゼロ	
+Intent	SetCameraTrack	入口ゼロ	
+Intent	SetComposition	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/document_io.rs;shell/motolii-shell/src/fixture.rs;shell/motolii-shell/src/lib.rs;ui/motolii-inspector-pane/src/text.rs;ui/motolii-settings-pane/src/lib.rs;ui/motolii-settings-pane/src/sections.rs;ui/motolii-stage-pane/src/gizmo.rs;ui/motolii-timeline-pane/src/projection.rs;ui/motolii-timeline-pane/src/write.rs
+Intent	SetEffects	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;shell/motolii-shell/src/fixture.rs;ui/motolii-browser-pane/src/state.rs;ui/motolii-inspector-pane/src/effects.rs;ui/motolii-inspector-pane/src/lib.rs;ui/motolii-timeline-pane/src/split.rs
+Intent	SetMarkers	入口あり	shell/motolii-shell/src/fixture.rs;shell/motolii-shell/src/lib.rs;ui/motolii-timeline-pane/src/markers.rs
+Intent	SetMasks	入口あり	shell/motolii-shell/src/clipboard.rs;ui/motolii-inspector-pane/src/lib.rs;ui/motolii-inspector-pane/src/mask.rs;ui/motolii-timeline-pane/src/split.rs
+Intent	SetMeta	入口あり	shell/motolii-shell/src/assets.rs;shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;shell/motolii-shell/src/fixture.rs;shell/motolii-shell/src/lib.rs;shell/motolii-shell/src/render.rs;ui/motolii-inspector-pane/src/text.rs;ui/motolii-stage-pane/src/gizmo.rs;ui/motolii-timeline-pane/src/projection.rs;ui/motolii-timeline-pane/src/split.rs;ui/motolii-timeline-pane/src/write.rs
+Intent	SetOrder	入口あり	ui/motolii-timeline-pane/src/stacking.rs;ui/motolii-timeline-pane/src/write.rs
+Intent	SetPropertyLink	入口あり	ui/motolii-inspector-pane/src/lib.rs;ui/motolii-inspector-pane/src/link.rs
+Intent	SetPropertyModulators	入口あり	shell/motolii-shell/src/clipboard.rs;ui/motolii-timeline-pane/src/split.rs
+Intent	SetPropertySlot	入口あり	shell/motolii-shell/src/clipboard.rs;ui/motolii-timeline-pane/src/split.rs
+Intent	SetShapes	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;ui/motolii-timeline-pane/src/split.rs
+Intent	SetSlots	入口あり	shell/motolii-shell/src/clipboard.rs
+Intent	SetSource	入口あり	shell/motolii-shell/src/create.rs;ui/motolii-browser-pane/src/lib.rs;ui/motolii-browser-pane/src/model.rs;ui/motolii-browser-pane/src/state.rs
+Intent	SetTextDocument	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/create.rs;shell/motolii-shell/src/render.rs;ui/motolii-font-catalog/src/lib.rs;ui/motolii-inspector-pane/src/color.rs;ui/motolii-inspector-pane/src/lib.rs;ui/motolii-inspector-pane/src/text.rs;ui/motolii-timeline-pane/src/split.rs
+Intent	SetTiming	入口あり	shell/motolii-shell/src/inspector_ops.rs;ui/motolii-inspector-pane/src/attrs.rs;ui/motolii-inspector-pane/src/lib.rs;ui/motolii-timeline-pane/src/input.rs;ui/motolii-timeline-pane/src/split.rs;ui/motolii-timeline-pane/src/write.rs
+Intent	SetTrack	入口あり	shell/motolii-shell/src/clipboard.rs;shell/motolii-shell/src/fixture.rs;shell/motolii-shell/src/inspector_ops.rs;shell/motolii-shell/src/lib.rs;shell/motolii-shell/src/render.rs;ui/motolii-inspector-pane/src/attrs.rs;ui/motolii-inspector-pane/src/effects.rs;ui/motolii-inspector-pane/src/lib.rs;ui/motolii-inspector-pane/src/link.rs;ui/motolii-inspector-pane/src/text.rs;ui/motolii-inspector-pane/src/transform.rs;ui/motolii-stage-pane/src/gizmo.rs;ui/motolii-timeline-pane/src/split.rs;ui/motolii-timeline-pane/src/write.rs
+Intent	Unfreeze	入口あり	shell/motolii-shell/src/lib.rs;shell/motolii-shell/src/selection.rs;ui/motolii-timeline-pane/src/split.rs

@@ -36,7 +36,6 @@ ui/motolii-inspector-pane/src/transform.rs	A09	-	Scale を Inspector で編集(S
 ui/motolii-inspector-pane/src/transform.rs	A09	-	Anchor を Inspector で編集(AnchorX submit → AnchorY submit の2動作)	2 undo以上		ui/motolii-inspector-pane/src/transform.rs
 ui/motolii-inspector-pane/src/transform.rs	A10	-	Inspector 数値ドラッグ(transform.rs::start/continue/finish_field_drag)	カーソルのみ		ui/motolii-inspector-pane/src/transform.rs
 ui/motolii-inspector-pane/src/transform.rs	A10	-	Inspector click→type編集(field_input_id/enter_field_editing)	カーソルのみ		ui/motolii-inspector-pane/src/transform.rs
-ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetPropertySlot`	呼び手はあるが入口ではない(複製/split経路のみ)		ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraPropertyModulators`(裁定213新設)	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraTrack`	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
 ui/motolii-inspector-pane/src/lib.rs	A01	-	`SetCameraPropertySlot`	入口ゼロ		ui/motolii-inspector-pane/src/lib.rs
@@ -54,8 +53,6 @@ ui/motolii-timeline-pane/src/write.rs	A08	-	SetOrder(z順並べ替え、`stackin
 core/motolii-store/src/document.rs	A04	-	motolii-compositor 合成ループ(layer×pass)	未計測		engine/motolii-compositor/src/lib.rs
 core/motolii-store/src/document.rs	A11	-	B5 Stageのリアルタイム追従(scrub中 p95≤16ms)	器具はあるが掛けていない		core/motolii-store/src/view.rs;engine/motolii-compositor/src/lib.rs
 core/motolii-store/src/document.rs	A11	-	時間予算試験2本の負荷依存flake(`edit_storm_with_the_real_track_type`/`r2::stage_projection_fits_a_frame`)	試験がある		core/motolii-store/src/document.rs;core/motolii-store/src/view.rs
-ui/motolii-inspector-pane/src/link.rs	A01	-	`SetPropertyModulators`(裁定213新設)	入口ゼロ		ui/motolii-inspector-pane/src/link.rs
-ui/motolii-inspector-pane/src/link.rs	A03	-	Link 元(source layer+property、LINK)	乗っていない		ui/motolii-inspector-pane/src/link.rs
 ui/motolii-timeline-pane/src/key_rows.rs	A02	-	選択キーの削除(Backspace/Delete、`shell/lib.rs:5781`)	穴:マウスで完遂できない		ui/motolii-timeline-pane/src/key_rows.rs
 ui/motolii-timeline-pane/src/key_rows.rs	A04	-	key_rows selected_frame_bounds(選択keyの範囲計算)	計算量で壊れる		ui/motolii-timeline-pane/src/key_rows.rs
 ui/motolii-inspector-pane/src/attrs.rs	A02	-	Speed(ATTRS、`attrs.rs::speed_row`)	穴:マウスで完遂できない		ui/motolii-inspector-pane/src/attrs.rs
@@ -72,6 +69,7 @@ ui/motolii-timeline-pane/src/rail.rs	A02	-	Timeline 矩形選択(marquee)	穴:�
 shell/motolii-shell/src/menu.rs	A02	-	レイヤー削除(実質 CutLayer、Cmd+X)	穴:マウスで完遂できない		shell/motolii-shell/src/menu.rs
 ui/motolii-stage-pane/src/zoom.rs	A02	-	トラックパッド ピンチジェスチャ(Stage ズーム)	穴:ポインタ入力を受け取れない		ui/motolii-stage-pane/src/zoom.rs
 core/motolii-store/src/lib.rs	A03	-	Speed(ATTRS)	乗っていない		core/motolii-store/src/lib.rs
+ui/motolii-inspector-pane/src/link.rs	A03	-	Link 元(source layer+property、LINK)	乗っていない		ui/motolii-inspector-pane/src/link.rs
 core/motolii-store/src/attrs.rs	A03	314	Timeline rail Solo(S glyph)	乗っていない	ソロ切替	core/motolii-store/src/attrs.rs
 engine/motolii-engine/src/lib.rs	A05	-	Stage合成中、1layerの素材(Media)がprobe/decode失敗(削除・非対応コーデック・破損)	理由つきで拒否する		engine/motolii-engine/src/lib.rs
 core/motolii-store/src/asset.rs	A05	-	`motolii_store::Asset`構造体そのものにoffline/missing/broken状態を持つフィールドが無い(裁定154台帳の`Find Missing Footage`はコマンド名のみで状態は台帳に無い、docs/reviews/2026-08-23-normal-map-trunk.md 節1と一致する実装側の裏付け)	黙って握りつぶす		core/motolii-store/src/asset.rs
@@ -84,6 +82,5 @@ ui/motolii-timeline-pane/src/markers.rs	A10	-	マーカー/ロケータ ドラ�
 ui/motolii-timeline-pane/src/canvas.rs	A11	711	Scroll to current time(既存verb、時間予算との関係)	測る手段が無い	ペイントツールの不透明度を設定	ui/motolii-timeline-pane/src/canvas.rs
 ui/motolii-stage-pane/src/marquee.rs	A11	-	marquee(矩形選択)drag中のフレーム予算	測る手段が無い		ui/motolii-stage-pane/src/marquee.rs
 probes/r6-text-shaping/src/lib.rs	A11	-	テキスト入力(キー毎の再shape)	測る手段が無い		probes/r6-text-shaping/src/lib.rs
-(責任ファイル未記入)	A01	-	`SetSlots`	呼び手はあるが入口ではない(複製/split経路のみ)		
 (責任ファイル未記入)	A06	918	最近使ったファイル(MRU、Open Recent)	保存先が無い	最近使ったプリセット	
 (責任ファイル未記入)	A12	-	ピンチズーム(トラックパッド、2本指つまむ)	入口が無い		
