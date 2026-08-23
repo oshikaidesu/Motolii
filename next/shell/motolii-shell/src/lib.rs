@@ -67,7 +67,7 @@ pub mod transport;
 pub(crate) mod assets;
 pub(crate) mod create;
 pub(crate) mod document_io;
-pub(crate) mod export_ops;
+pub mod export_ops;
 mod input;
 pub(crate) mod inspector_ops;
 pub(crate) mod playback;
@@ -520,6 +520,10 @@ pub enum Message {
     /// `SettingsWindowOpened` と同型 — 台帳は open 時点で先行記帳済み、この腕は
     /// runtime 側の再記帳(冪等)。
     ExportWindowOpened(iced::window::Id),
+    /// Export の実行が背景スレッドから届ける進捗/完了(C-3、
+    /// `export_ops.rs` module doc「非同期化」参照)。`start_export` が返す
+    /// `Task::run` の1本目の腕がこれへ翻訳する。
+    ExportProgressed(export_ops::ExportEvent),
     /// Enter(単一選択時)= rename 開始(正典 §6、`timeline::write` 冒頭 doc)。
     /// キー解決(`resolve_navigation_key`)は選択を知らないので、実際の
     /// `LayerId` 解決とディスパッチは `Shell::update` 側(`self.session.selection`)
@@ -1424,6 +1428,7 @@ impl Shell {
             }
             Message::Marker(msg) => self.update_marker(msg),
             Message::Export(msg) => task = self.update_export(msg),
+            Message::ExportProgressed(event) => self.update_export_progressed(event),
             Message::RenameSelectedLayer => {
                 if let Some(layer) = self.session.selection {
                     if let Some(reason) = self.timeline.update(
