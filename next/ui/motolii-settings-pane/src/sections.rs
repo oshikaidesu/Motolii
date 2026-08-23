@@ -75,7 +75,7 @@
 //! (`background_row`/`ui_scale_row`/`preview_cache_row`)は今回のスコープ外
 //! (発注書「部分適用でよい」— 型を確立するのが目的)。
 
-use iced::widget::{column, container, row, scrollable, text, text_input, toggler};
+use iced::widget::{column, container, mouse_area, row, scrollable, text, text_input, toggler};
 use iced::{Element, Length};
 
 use motolii_store::{AutoSaveConfig, Composition, Document, Fps, Intent};
@@ -114,6 +114,18 @@ pub enum Message {
     /// 自動保存の数値欄の Enter — ここで初めて [`AutoSaveConfig`] の対応
     /// フィールドを1つ更新する([`commit_auto_save_field`])。
     AutoSaveFieldSubmit(AutoSaveField),
+    /// Composition 数値欄のキャプション press(裁定217 連続量 drag 化、E-5)。
+    /// click か drag かはまだ未確定 — `motolii_shell::Shell::start_value_drag`
+    /// が投影を読んで下書きの起点値を確定する(`inspector_pane::Message::
+    /// ValuePressed` と同じ「press だけを own する」形、crate doc「A-2 実測」
+    /// 参照)。move/release は Inspector と同じ window 全体購読
+    /// (`inspector_pointer_event`)を共有する — この module は自己完結の
+    /// pane-local `Message` しか持てないため、続きは shell 側の状態
+    /// (`Shell::value_drag`)が持つ。
+    CompFieldDragPressed(CompField),
+    /// AUTOSAVE 数値欄のキャプション press。[`Message::CompFieldDragPressed`]
+    /// と同じ形。
+    AutoSaveFieldDragPressed(AutoSaveField),
 }
 
 // ---------------------------------------------------------------------------
@@ -640,11 +652,22 @@ fn comp_field_cell(
         .unwrap_or_else(|| comp_field_display(field, composition));
 
     column![
-        text(field.caption())
-            .size(dims.caption_text)
-            .color(colors.text_muted)
-            .align_x(iced::alignment::Horizontal::Center)
-            .width(Length::Fixed(dims.inspector_value_width)),
+        // 裁定217 連続量 drag 化(E-5): キャプション自体を drag ハンドルにする
+        // (AE のスクラブ精神論と同じ「パラメータ名の上を drag すると値が動く」
+        // 慣習 — 値そのものより先にラベルへドラッグの当たり判定を足す先例、
+        // RETURN 参照)。click か drag かは shell 側
+        // (`motolii_shell::Shell::value_drag`)が判定する — ここは press だけ
+        // own する(`inspector_pane::Message::ValuePressed` と同じ形)。
+        // text_input 自体は無改変なので click→type 編集は従来どおり効く。
+        mouse_area(
+            text(field.caption())
+                .size(dims.caption_text)
+                .color(colors.text_muted)
+                .align_x(iced::alignment::Horizontal::Center)
+                .width(Length::Fixed(dims.inspector_value_width))
+        )
+        .interaction(iced::mouse::Interaction::ResizingHorizontally)
+        .on_press(Message::CompFieldDragPressed(field)),
         // 裁定170 M01: fork の `text_input` は Fragment::Borrowed で借用寿命を
         // 縛るため、`'static` 返却には owned move が要る(`channel_cell` と同じ)。
         text_input("", displayed)
@@ -739,11 +762,17 @@ fn auto_save_field_cell(
         .unwrap_or_else(|| auto_save_field_display(field, &config));
 
     column![
-        text(field.caption())
-            .size(dims.caption_text)
-            .color(colors.text_muted)
-            .align_x(iced::alignment::Horizontal::Center)
-            .width(Length::Fixed(dims.inspector_value_width)),
+        // 裁定217 連続量 drag 化(E-5): `comp_field_cell` と同じキャプション
+        // drag ハンドル(冒頭コメント参照)。
+        mouse_area(
+            text(field.caption())
+                .size(dims.caption_text)
+                .color(colors.text_muted)
+                .align_x(iced::alignment::Horizontal::Center)
+                .width(Length::Fixed(dims.inspector_value_width))
+        )
+        .interaction(iced::mouse::Interaction::ResizingHorizontally)
+        .on_press(Message::AutoSaveFieldDragPressed(field)),
         // 裁定170 M01: comp_field_cell と同じ理由(owned move で 'static を返す)。
         text_input("", displayed)
             .on_input(move |text| Message::AutoSaveFieldInput(field, text))

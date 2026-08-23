@@ -309,3 +309,56 @@ fn an_unreadable_comp_field_value_is_rejected_with_a_reason() {
     let fps = shell.composition().expect("comp がある").fps;
     assert_eq!((fps.num(), fps.den()), (30, 1), "読めない入力で fps が動いてしまった");
 }
+
+// ---------------------------------------------------------------------------
+// 裁定217 連続量 drag 化(E-5)。**検収条件そのもの**(裁定218)— 「drag で
+// Composition の Width が変わり、下限を割らない」。press
+// (`Message::Settings`)→ move/release(`Message::Inspector`、Inspector と
+// 共有する window 全体購読、`Shell::value_drag` doc 参照)という2つの
+// `Message` 型をまたぐ経路そのものが根拠の外れうる一点 — 型は「press だけで
+// 完結しない」ことも「下限を割らない」ことも検査しない(下限クランプは
+// `f64::clamp` の呼び出し忘れがあっても普通にコンパイルが通るため、裁定220
+// 「下限のクランプだけは型に映らない」の対象)。
+#[test]
+fn dragging_the_comp_width_caption_changes_width_and_never_crosses_the_floor() {
+    use motolii_shell::inspector_pane;
+    use motolii_shell::settings_pane::sections::{self, CompField};
+
+    let mut shell = shell();
+    let before = shell.composition().expect("既定 comp がある").width;
+
+    // press → 実際に動く move(1px 未満は click 候補のまま据え置かれる —
+    // `ValueDragState::origin_x` の最初の move は基準点確定のみ)。
+    let _ = shell.update(Message::Settings(sections::Message::CompFieldDragPressed(
+        CompField::Width,
+    )));
+    let _ = shell.update(Message::Inspector(inspector_pane::Message::PointerMoved(
+        iced::Point::new(0.0, 0.0),
+    )));
+    let _ = shell.update(Message::Inspector(inspector_pane::Message::PointerMoved(
+        iced::Point::new(200.0, 0.0),
+    )));
+    let _ = shell.update(Message::Inspector(inspector_pane::Message::PointerReleased));
+
+    let after = shell.composition().expect("comp がある").width;
+    assert_ne!(after, before, "drag で Width が動いていない");
+    assert_eq!(after, before + 200, "1px=1px(value_drag_step_per_pixel)のはず");
+    assert!(shell.can_undo(), "drag 確定は Undo に乗るはず");
+
+    // 下限を割らない(裁定217「判断が割れたら厳しい側」、
+    // `sections::MAX_COMP_DIMENSION_PX`/床=1 と同じクランプ — 大きく負へ振っても
+    // 0 や負の px にはならない)。
+    let _ = shell.update(Message::Settings(sections::Message::CompFieldDragPressed(
+        CompField::Width,
+    )));
+    let _ = shell.update(Message::Inspector(inspector_pane::Message::PointerMoved(
+        iced::Point::new(0.0, 0.0),
+    )));
+    let _ = shell.update(Message::Inspector(inspector_pane::Message::PointerMoved(
+        iced::Point::new(-1_000_000.0, 0.0),
+    )));
+    let _ = shell.update(Message::Inspector(inspector_pane::Message::PointerReleased));
+
+    let floored = shell.composition().expect("comp がある").width;
+    assert_eq!(floored, 1, "大きく負へ drag しても床(1px)を割らないはず");
+}

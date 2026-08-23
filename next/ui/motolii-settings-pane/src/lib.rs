@@ -68,7 +68,7 @@
 //! 経緯は `next/DECISIONS.md` 裁定141 参照。[`BackgroundPreset::Transparent`] は
 //! 背景を実際に透明で書き出したい人向けとして引き続き残す。
 
-use iced::widget::{button, column, container, row, text, text_input};
+use iced::widget::{button, column, container, mouse_area, row, text, text_input};
 use iced::{Element, Length};
 
 use motolii_store::{Composition, Document, Intent};
@@ -106,6 +106,10 @@ pub enum Message {
     /// ui_scale(%)欄の Enter — 50..200 にクランプして `Tokens`/`Dimensions` を
     /// 更新し、debug ビルドでは正本 JSON へも書き戻す(`save_ui_scale`)。
     UiScaleSubmit,
+    /// 背景 RGBA 欄のキャプション press(裁定217 連続量 drag 化、E-5)。
+    /// `sections::Message::CompFieldDragPressed` と同じ「press だけ own する」
+    /// 形 — 続きは shell 側の window 全体購読 + `Shell::value_drag` が持つ。
+    BackgroundChannelDragPressed(BackgroundChannel),
 }
 
 // ---------------------------------------------------------------------------
@@ -496,11 +500,18 @@ fn channel_cell(
         .unwrap_or_else(|| current_u8.to_string());
 
     column![
-        text(channel.label())
-            .size(dims.caption_text)
-            .color(colors.text_muted)
-            .align_x(iced::alignment::Horizontal::Center)
-            .width(Length::Fixed(dims.inspector_value_width)),
+        // 裁定217 連続量 drag 化(E-5): `sections::comp_field_cell` と同じ
+        // キャプション drag ハンドル(そちら側の doc「AE のスクラブ精神論」
+        // 参照)。
+        mouse_area(
+            text(channel.label())
+                .size(dims.caption_text)
+                .color(colors.text_muted)
+                .align_x(iced::alignment::Horizontal::Center)
+                .width(Length::Fixed(dims.inspector_value_width))
+        )
+        .interaction(iced::mouse::Interaction::ResizingHorizontally)
+        .on_press(Message::BackgroundChannelDragPressed(channel)),
         // 裁定170 M01: fork(0.15.0-dev)の `text_input()` は `&str`/`&String`
         // を `Fragment::Borrowed` として受け、返り値のライフタイムを入力の
         // 借用に縛る。`displayed` はこの関数のローカルで `Element<'static, _>`
