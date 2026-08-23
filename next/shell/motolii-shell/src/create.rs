@@ -1,6 +1,7 @@
 
 
 use motolii_store::{
+    AssetStatus,
     EffectId,
     EffectInstance, Interp, Intent, Keyframe, KeyframeTrack, LayerAttrsPatch, LayerId,
     LayerMeta, LayerSource, LayerTiming, Mask, MaskId, MaskMode, Path, PathSource, PathVertex, RationalTime, Shape as VectorShape, ShapeNode, Value, VectorPoint,
@@ -314,6 +315,27 @@ impl Shell {
     /// 契約(「0件・2件以上の選択には何もしない」)をそのままここで踏襲する
     /// (pane 側の `Replace` ボタン自体が `single_selected_layer` 前提で描画
     /// されている、`replace_affordance_row` 参照)。
+    ///
+    /// **A-3 `Asset::resolve_status` の結線(D-3、2026-08-23)。API 分析の
+    /// 根拠(裁定199)**: シグネチャは
+    /// `fn resolve_status(&self, project_root: Option<&Path>) -> AssetStatus`
+    /// (`motolii_store::asset::Asset::resolve_status` doc 参照)——`canonicalize`
+    /// (syscall)を呼ぶ純粋でない関数なので**毎フレーム呼ばない**。ここでは
+    /// 「利用者が Replace を押した瞬間」に1回だけ呼ぶ——`resolve_status` の
+    /// doc が明言する想定読者そのもの(「Asset::resolve_status を呼んだ側
+    /// だけが更新する」)で、Replace は素材を選び直す操作だから「今その
+    /// パスに実体があるか」を確かめる最も自然な発火点(create-card や
+    /// timeline 描画のような毎フレーム経路とは違う、離散イベント)。
+    /// `project_root` は `current_path`(保存済み project ファイルの場所、
+    /// `document_io.rs` が唯一の書き手)の親ディレクトリ——`AssetDraft::
+    /// from_probed_source` が `path_project_relative` を作る時に使う起点と
+    /// 同じ規約に揃える。`AssetStatus::Missing`/`Unreadable` は理由付きで
+    /// `status` 帯へ出し早期 return(裁定185: 説明文は status 帯へ、
+    /// `add_mask_to_selected_layer` 等と同じ「拒否は必ず出す」規律)——
+    /// `Present`/`Unchecked`(パスを持たない生成系 asset)はそのまま置換を
+    /// 続行する(`Unchecked` を「無い」とみなさない、`AssetStatus` doc の
+    /// 「判断が割れたら厳しい側へ」は Missing/Unreadable の話であって
+    /// Unchecked を拒否理由にする根拠ではない)。
     pub(crate) fn replace_selected_layer_source(&mut self, asset_id: motolii_store::AssetId) {
         let target = match self.session.selected_layers.as_slice() {
             [only] => Some(*only),
@@ -334,6 +356,24 @@ impl Shell {
                 return;
             }
         };
+        let project_root = self
+            .current_path
+            .as_deref()
+            .and_then(std::path::Path::parent);
+        match asset.resolve_status(project_root) {
+            AssetStatus::Missing => {
+                self.status = Some(format!(
+                    "素材 \"{}\" が見つかりません(パスが動いたか削除された可能性)",
+                    asset.name
+                ));
+                return;
+            }
+            AssetStatus::Unreadable { reason } => {
+                self.status = Some(format!("素材 \"{}\" を読めません: {reason}", asset.name));
+                return;
+            }
+            AssetStatus::Present { .. } | AssetStatus::Unchecked => {}
+        }
         let Some(source) = browser_pane::model::asset_to_layer_source(&asset) else {
             self.status = Some("この素材はパスを持たないため置換できません".to_owned());
             return;
