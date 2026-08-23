@@ -125,6 +125,32 @@ pub enum TextJustify {
     Center,
 }
 
+impl TextJustify {
+    /// [`crate::PropertyId::text_justify`] の `Value::Enum` 表現(裁定214 同日訂正版
+    /// — 出力に現れる property は時間軸に乗る、`justify` もその1つ)。**補間は Hold**
+    /// (裁定213 の境界 — `Enum` は変調不可・単一 source が勝つ)。添字は保存形の一部に
+    /// なるので、既存の並び([`Self::Left`]=0/[`Self::Right`]=1/[`Self::Center`]=2)を
+    /// 変えてはいけない。
+    pub fn to_enum_value(self) -> i64 {
+        match self {
+            TextJustify::Left => 0,
+            TextJustify::Right => 1,
+            TextJustify::Center => 2,
+        }
+    }
+
+    /// [`Self::to_enum_value`] の逆写像。未知の値は `None`(壊れた track を近似しない —
+    /// 呼び手が `StoreError::Property` へ変える)。
+    pub fn from_enum_value(v: i64) -> Option<Self> {
+        match v {
+            0 => Some(TextJustify::Left),
+            1 => Some(TextJustify::Right),
+            2 => Some(TextJustify::Center),
+            _ => None,
+        }
+    }
+}
+
 /// text-document `t`(Text)の1ホールドキー。**i/o(補間ハンドル)を持たない** —
 /// Lottie 自身が構造でホールドを保証しており(`animated-text-document k`)、一般の
 /// `KeyframeTrack`(`motolii_eval::Value`)には乗らない — `Value` に文字列バリアントが

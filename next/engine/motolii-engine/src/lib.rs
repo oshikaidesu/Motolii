@@ -749,7 +749,7 @@ impl Engine {
         let resolved = view
             .resolved_layers(t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
-        let text_documents = collect_text_documents(view, &resolved)?;
+        let text_documents = collect_text_documents(view, &resolved, t)?;
         let shape_documents = collect_shape_documents(view, &resolved)?;
         self.render_resolved_to_texture_with_shapes(
             comp,
@@ -916,8 +916,12 @@ impl Engine {
         t: RationalTime,
         comp: CompSpec,
     ) -> Result<(Option<GpuTexture2D>, [f32; 2]), EngineError> {
+        // **`text_document` ではなく `resolved_text_document`**(A-1b、裁定214
+        // 同日訂正版)——`text_style.*`/`text_justify` track を時刻 `t` で重ねた
+        // 値を使う。`text_document` の生の静的値のままだと track を打っても画が
+        // 変わらない(store 側は在るが合成器が未消費、というA-1が残した穴)。
         let document = view
-            .text_document(layer_id)
+            .resolved_text_document(layer_id, t)
             .map_err(|e| EngineError::Store(e.to_string()))?;
         self.text_texture_from_document(document.as_ref(), layer_id, t, comp)
     }
@@ -1217,12 +1221,16 @@ impl Engine {
 fn collect_text_documents(
     view: &StoreView<'_>,
     resolved: &[ResolvedLayer],
+    t: RationalTime,
 ) -> Result<HashMap<LayerId, TextDocument>, EngineError> {
     let mut documents = HashMap::new();
     for layer in resolved {
         if layer.source == LayerSource::Text {
+            // **`resolved_text_document`**(A-1b)——`text_texture_for` と同じ理由、
+            // `t` を新規引数に足した(このゼロコピー経路もそれまでは track を
+            // 一切見ていなかった)。
             if let Some(document) = view
-                .text_document(layer.id)
+                .resolved_text_document(layer.id, t)
                 .map_err(|e| EngineError::Store(e.to_string()))?
             {
                 documents.insert(layer.id, document);

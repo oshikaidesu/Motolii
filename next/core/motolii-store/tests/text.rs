@@ -1539,3 +1539,148 @@ fn styles_runs_and_their_property_tracks_survive_save_and_load() {
         Some(Value::Vec2([0.0, -8.0]))
     );
 }
+
+// ---------------------------------------------------------------------------
+// A-1b(裁定214 同日訂正版、裁定218 適用): `StoreView::resolved_text_document`。
+//
+// A-1 が実装した `PropertyId::text_style_*`/`text_justify` は、この発注の前は
+// `StoreView::text_document` から見えなかった(`text_document` は `TextDocument`
+// を丸ごと static deserialize するだけ)。`resolved_text_document` は
+// `resolved_masks`/`value_at` と**同じ overlay 作法**(`value_at` で
+// overlay→track→slot→modulator を解決し、track が有ればその値、無ければ
+// 静的フィールドを使う)を texture に適用しただけ——新しい評価機構は無い
+// (詳細な説明は `view.rs::resolved_text_document` の doc と RETURN)。
+//
+// 裁定218(利用者裁定「根拠で示してからテスト」): ここに残すのは
+// **型が保証しない一点**だけ。
+// - 「track が無ければ静的値」という優先順位そのもの(design の柵)
+// - `size`/`tracking`/`fill_color` は素の値をそのまま代入するだけ(`Value::F64`
+//   → `f32`、`Value::Color` → `[f64;4]`)なので **画素で直接検分できる**
+//   (`next/engine/motolii-engine/tests/text_layer.rs` の2試験が検収条件
+//   そのもの——ここでは重複させない)
+// - **`line_height`/`stroke_color` だけ追加の一点がある**: 代入先が
+//   `Option` なので「`Some` へ昇格させ忘れる」という、型では防げない具体的な
+//   間違いが起こり得る——ここだけ store レベルで直接検分する
+// - `justify` は `Value::Enum(i64)` ⇄ `TextJustify` の変換が要る唯一の field
+//   (他は素通し)なので、成功と拒否(未知の enum 値)の対を検分する
+// ---------------------------------------------------------------------------
+
+#[test]
+fn resolved_text_document_falls_back_to_the_static_style_when_no_track_exists() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: lyric_document("歌詞1行目"),
+    })
+    .unwrap();
+
+    let view = doc.view();
+    assert_eq!(
+        view.resolved_text_document(layer, t(0)).unwrap(),
+        view.text_document(layer).unwrap(),
+        "track が無ければ resolved_text_document は静的値と同じであるはず"
+    );
+}
+
+/// `line_height`/`stroke_color` だけの一点: track の値が正しく `Some(..)` へ
+/// 昇格しているか(代入し忘れて `None` のまま、という型で防げない間違いの検分)。
+#[test]
+fn resolved_text_document_promotes_the_option_wrapped_fields_to_some_from_their_tracks() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: lyric_document("歌詞1行目"),
+    })
+    .unwrap();
+    assert_eq!(lyric_style().line_height, None, "この試験の前提(既定 Auto)");
+
+    let style_id = TextStyleId(0);
+    doc.apply_all([
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_style_line_height(style_id),
+            track: still(Value::F64(220.0)),
+        },
+        Intent::SetTrack {
+            layer,
+            property: PropertyId::text_style_stroke_color(style_id),
+            track: still(Value::Color([0.9, 0.1, 0.1, 1.0])),
+        },
+    ])
+    .unwrap();
+
+    let resolved = doc
+        .view()
+        .resolved_text_document(layer, t(0))
+        .unwrap()
+        .expect("document があるはず");
+    let style = &resolved.styles[0];
+    assert_eq!(style.line_height, Some(220.0), "line_height track が Some へ昇格していない");
+    assert_eq!(
+        style.stroke_color,
+        Some([0.9, 0.1, 0.1, 1.0]),
+        "stroke_color track が Some へ昇格していない"
+    );
+}
+
+#[test]
+fn resolved_text_document_overlays_justify_from_its_track() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: lyric_document("歌詞1行目"), // 既定 justify = Center
+    })
+    .unwrap();
+
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::text_justify(),
+        track: still(Value::Enum(TextJustify::Right.to_enum_value())),
+    })
+    .unwrap();
+
+    let resolved = doc
+        .view()
+        .resolved_text_document(layer, t(0))
+        .unwrap()
+        .expect("document があるはず");
+    assert_eq!(resolved.justify, TextJustify::Right, "text_justify track が反映されていない");
+    assert_eq!(
+        doc.view().text_document(layer).unwrap().unwrap().justify,
+        TextJustify::Center,
+        "静的値の justify が track 書き込みで巻き込まれて変わってしまった(二重帳簿の柵)"
+    );
+}
+
+#[test]
+fn resolved_text_document_rejects_a_text_justify_track_with_an_unknown_enum_value() {
+    let mut doc = doc_with_comp(300);
+    let layer = LayerId(1);
+    place_text_layer(&mut doc, layer, 0, 100);
+    doc.apply(Intent::SetTextDocument {
+        layer,
+        document: lyric_document("歌詞1行目"),
+    })
+    .unwrap();
+    doc.apply(Intent::SetTrack {
+        layer,
+        property: PropertyId::text_justify(),
+        track: still(Value::Enum(99)),
+    })
+    .unwrap();
+
+    let error = doc
+        .view()
+        .resolved_text_document(layer, t(0))
+        .expect_err("未知の enum 値は黙って近似せず Err のはず");
+    assert!(
+        error.to_string().contains("text_justify"),
+        "理由文に property 名が入っていない: {error}"
+    );
+}

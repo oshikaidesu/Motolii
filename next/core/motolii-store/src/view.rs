@@ -734,6 +734,122 @@ impl<'a> StoreView<'a> {
             .map_err(StoreError::Encode)
     }
 
+    /// comp 時刻での text-layer の中身。**[`Self::text_document`] の静的値の上に
+    /// `text_style.{id}.*`/`text_justify` の track(裁定214 同日訂正版で時間軸に
+    /// 乗った)を重ねる**——[`Self::resolved_masks`](形状/不透明度の overlay)と
+    /// 同じ形: 「track があればその値、無ければ静的値」を `value_at` 1本
+    /// (overlay→track→slot→modulator の解決を re-implement しない、裁定215)経由で
+    /// 読み、型が合わなければ黙って近似せず `Err` にする(`resolved_masks` と同じ
+    /// 「壊れた Document を静かに握り潰さない」規約)。
+    ///
+    /// **静的値と track の正本はどちらか**: track が正本、`TextDocumentStyle`/
+    /// `TextDocument::justify` の静的フィールドは「track が無い時の既定値」——
+    /// 二重帳簿にしないため、書き口([`crate::Intent::SetTextDocument`])は今も
+    /// 静的値だけを書く(track は Inspector の drag/Key 列が別途書く、write-set
+    /// 外の shell 配線が要る枝は RETURN 参照)。**読み出し側はこのメソッドを使う**
+    /// のが正——[`Self::text_document`] は「今も編集フォームに出す生の静的値」
+    /// (drag 開始前の初期値・保存フォーマットそのもの)用に残す。
+    ///
+    /// 性能: `value_at`→`source_at_path` は revision 鍵の `track_cache`(裁定140)を
+    /// 経由するので、毎フレーム JSON を再解析しない——track が無い(=既定値のまま)
+    /// layer では `source_at_path` が `Ok(None)` を返すだけで、パース済み値の
+    /// キャッシュ命中コストのみ。
+    pub fn resolved_text_document(
+        &self,
+        layer: LayerId,
+        t: RationalTime,
+    ) -> Result<Option<TextDocument>, StoreError> {
+        let Some(mut document) = self.text_document(layer)? else {
+            return Ok(None);
+        };
+
+        let justify_property = PropertyId::text_justify();
+        match self.value_at(layer, &justify_property, t)? {
+            Some(Value::Enum(v)) => {
+                document.justify = crate::TextJustify::from_enum_value(v).ok_or_else(|| {
+                    StoreError::Property(format!(
+                        "`text_justify` track に未知の enum 値が入っている: {v}"
+                    ))
+                })?;
+            }
+            Some(other) => {
+                return Err(StoreError::Property(format!(
+                    "`text_justify` に enum でない値が入っている(track が壊れている): {other:?}"
+                )))
+            }
+            None => {}
+        }
+
+        for style in &mut document.styles {
+            let size_property = PropertyId::text_style_size(style.id);
+            if let Some(value) = self.value_at(layer, &size_property, t)? {
+                match value {
+                    Value::F64(v) => style.size = v as f32,
+                    other => {
+                        return Err(StoreError::Property(format!(
+                            "text_style.{}.size に数値でない値が入っている: {other:?}",
+                            style.id
+                        )))
+                    }
+                }
+            }
+
+            let line_height_property = PropertyId::text_style_line_height(style.id);
+            if let Some(value) = self.value_at(layer, &line_height_property, t)? {
+                match value {
+                    Value::F64(v) => style.line_height = Some(v as f32),
+                    other => {
+                        return Err(StoreError::Property(format!(
+                            "text_style.{}.line_height に数値でない値が入っている: {other:?}",
+                            style.id
+                        )))
+                    }
+                }
+            }
+
+            let tracking_property = PropertyId::text_style_tracking(style.id);
+            if let Some(value) = self.value_at(layer, &tracking_property, t)? {
+                match value {
+                    Value::F64(v) => style.tracking = v as f32,
+                    other => {
+                        return Err(StoreError::Property(format!(
+                            "text_style.{}.tracking に数値でない値が入っている: {other:?}",
+                            style.id
+                        )))
+                    }
+                }
+            }
+
+            let fill_property = PropertyId::text_style_fill_color(style.id);
+            if let Some(value) = self.value_at(layer, &fill_property, t)? {
+                match value {
+                    Value::Color(c) => style.fill = c,
+                    other => {
+                        return Err(StoreError::Property(format!(
+                            "text_style.{}.fill_color に色でない値が入っている: {other:?}",
+                            style.id
+                        )))
+                    }
+                }
+            }
+
+            let stroke_property = PropertyId::text_style_stroke_color(style.id);
+            if let Some(value) = self.value_at(layer, &stroke_property, t)? {
+                match value {
+                    Value::Color(c) => style.stroke_color = Some(c),
+                    other => {
+                        return Err(StoreError::Property(format!(
+                            "text_style.{}.stroke_color に色でない値が入っている: {other:?}",
+                            style.id
+                        )))
+                    }
+                }
+            }
+        }
+
+        Ok(Some(document))
+    }
+
     /// comp 時刻でのマスク。形状も不透明度も普通の property track から取る。
     fn resolved_masks(
         &self,
